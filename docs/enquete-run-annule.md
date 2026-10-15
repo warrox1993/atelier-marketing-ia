@@ -149,7 +149,7 @@ Non exécuté ici (consigne de lecture seule et autre agent en cours sur le socl
    le défaut naît dans un seul run.
 3. Garder dans le lanceur la détection des réconciliations humaines (contrôle INFO actuel) comme filet.
 
-## Ce qui reste à décider (JB)
+## Ce qui reste à décider (l'opérateur)
 
 - Appliquer le correctif amont comme patch 0008 du socle (recommandé : il protège aussi les vrais
   agents Claude, qui perdraient tout travail fait après leur passage de main, ainsi que l'usage du run).

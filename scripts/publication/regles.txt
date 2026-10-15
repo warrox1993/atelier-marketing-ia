@@ -55,3 +55,4 @@ que [J]B aurait	que l'opérateur aurait
 \b[J]B ajouté comme	l'opérateur ajouté comme
 : [J]B visite une page	: l'opérateur visite une page
 [J]B n'a pas de fiche à lui	l'opérateur n'a pas de fiche propre
+\([J]B\)	(l'opérateur)
