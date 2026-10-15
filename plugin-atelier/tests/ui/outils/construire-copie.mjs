@@ -1,0 +1,33 @@
+// Construit le plugin dans une COPIE isolée (lot C), sans toucher `plugin-atelier/dist/`.
+//
+// Pourquoi : l'hôte Paperclip surveille le `dist/` d'un plugin installé depuis un
+// chemin local et recharge son worker à chaque reconstruction. Le lot A utilise
+// `plugin-atelier/dist/` dans sa propre instance ; reconstruire là-bas pendant
+// qu'il travaille rechargerait son worker. La copie sert à l'instance d'essai du
+// lot C (port 3140).
+//
+// Usage (depuis plugin-atelier/) : node tests/ui/outils/construire-copie.mjs <dossier cible absolu>
+import esbuild from "esbuild";
+import { cpSync, mkdirSync, rmSync } from "node:fs";
+import path from "node:path";
+import { createPluginBundlerPresets } from "@paperclipai/plugin-sdk/bundlers";
+
+const cible = process.argv[2];
+if (!cible || !path.isAbsolute(cible)) {
+  console.error("Usage : node tests/ui/outils/construire-copie.mjs <dossier cible absolu>");
+  process.exit(2);
+}
+
+const presets = createPluginBundlerPresets({ uiEntry: "src/ui/index.tsx" });
+const dist = path.join(cible, "dist");
+mkdirSync(dist, { recursive: true });
+rmSync(path.join(dist, "ui"), { recursive: true, force: true });
+
+await Promise.all([
+  esbuild.build({ ...presets.esbuild.worker, outdir: dist }),
+  esbuild.build({ ...presets.esbuild.manifest, outdir: dist }),
+  esbuild.build({ ...presets.esbuild.ui, outdir: path.join(dist, "ui") }),
+]);
+cpSync("package.json", path.join(cible, "package.json"));
+cpSync("migrations", path.join(cible, "migrations"), { recursive: true });
+console.log(`Copie construite : ${cible}`);

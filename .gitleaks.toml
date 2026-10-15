@@ -1,0 +1,18 @@
+# Configuration gitleaks du dépôt : règles par défaut, plus une liste d'exceptions ÉTROITE
+# pour des faux positifs constatés et vérifiés à la main (valeurs factices de tests).
+title = "Atelier Marketing IA"
+
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Identifiants (UUID) de secrets natifs dans les jeux d'essai de l'interface : ce sont des identifiants, pas des valeurs secrètes."
+targetRules = ["generic-api-key"]
+paths = ['''plugin-atelier/tests/ui/fixtures/[^/]+\.json''']
+regexTarget = "line"
+regexes = ['''"secretId": "[0-9a-f-]{36}"''']
+
+[[allowlists]]
+description = "Fausses plateformes de tests de la passerelle : jetons factices (valeur d'exemple, texte sans lien avec un compte réel)."
+targetRules = ["generic-api-key"]
+paths = ['''passerelle/tests/reel-social-crm/faux-plateformes\.ts''']

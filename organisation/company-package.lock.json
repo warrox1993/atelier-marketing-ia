@@ -1,0 +1,126 @@
+{
+  "schema": "atelier/company-package-lock/v1",
+  "note": "Fichier généré (spécification AgentCompanies §18, verrou facultatif). L'empreinte sha256 couvre chemins et contenus de chaque dossier de compétence ; elle sert d'identifiant de version vérifiable à l'exécution.",
+  "competences": {
+    "analyse-concurrentielle": {
+      "version": "1.0.0",
+      "sha256": "db472d77005ca480b25efa2515f1ef9100513c70aa83ff449f7f753c1b07db8c",
+      "fichiers": [
+        "SKILL.md"
+      ]
+    },
+    "audit-local-etablissements": {
+      "version": "1.1.0",
+      "sha256": "5dd1edcf1e8101830c0a614e4cf4da10bfc1ad341d11cdec835781e2f3e71537",
+      "fichiers": [
+        "SKILL.md"
+      ]
+    },
+    "audit-seo": {
+      "version": "1.1.0",
+      "sha256": "6747bbfd6b104b1333d3a5dfa8d046d8998aa232537406bbef961b018a94ed29",
+      "fichiers": [
+        "SKILL.md",
+        "references/liste-controles-seo.md"
+      ]
+    },
+    "cadrage-exigences": {
+      "version": "1.0.0",
+      "sha256": "f6b3ae3bcae4113e1dfefebdff5ea32fd175e7e161352079f0cc7fa73fab6ff7",
+      "fichiers": [
+        "SKILL.md",
+        "references/gabarit-brief.md"
+      ]
+    },
+    "charte-marque": {
+      "version": "1.0.0",
+      "sha256": "5c06def6240e30d99d38a49732a47114ce1e3c0dc69af04510be078e76d2d449",
+      "fichiers": [
+        "SKILL.md",
+        "references/grille-charte.md"
+      ]
+    },
+    "contenu-recherche-ia": {
+      "version": "1.0.0",
+      "sha256": "09715452b19c2041f784f26a08aa11fbbdbf2edb9dd72a45baa662468d8b713b",
+      "fichiers": [
+        "SKILL.md"
+      ]
+    },
+    "controle-couverture": {
+      "version": "1.0.0",
+      "sha256": "d463ae5f57f91301fc8841759c6c324d9a9da1b30b80f55ec370db0cac575fa7",
+      "fichiers": [
+        "SKILL.md",
+        "references/schema-verdict.md"
+      ]
+    },
+    "controles-techniques-liens": {
+      "version": "1.0.0",
+      "sha256": "5ed70f2055d67e46d2829edf28fbec473c98fb5030fa3f27cab0e26705d043d2",
+      "fichiers": [
+        "SKILL.md"
+      ]
+    },
+    "conversion-crm": {
+      "version": "1.1.0",
+      "sha256": "072b7022b6973c7a541f10f33e6fd2aa20f011216913f4ddd5c538735358ca06",
+      "fichiers": [
+        "SKILL.md"
+      ]
+    },
+    "dossier-validation-humaine": {
+      "version": "1.0.0",
+      "sha256": "c157019bcfb9c4755e5ea37c7e46e57c01192b8cc282ce10e5a32fdbb656b8d6",
+      "fichiers": [
+        "SKILL.md",
+        "references/gabarit-dossier.md"
+      ]
+    },
+    "mesure-experiences": {
+      "version": "1.1.0",
+      "sha256": "6a8d0bf8aeaf21bc49f228c4cdb0ead34c01bcc68a15d9af938e34fc5b28ebd4",
+      "fichiers": [
+        "SKILL.md"
+      ]
+    },
+    "planification-livrables": {
+      "version": "1.0.0",
+      "sha256": "94ac4795ccf64490da13275bc7e1f1c472919f8dee49ae53984a0960bf95334b",
+      "fichiers": [
+        "SKILL.md"
+      ]
+    },
+    "preparation-campagnes-sea": {
+      "version": "1.1.0",
+      "sha256": "e1469fe089ba578a912ca64ea3b475fdb15bc266d6c2c100eec8a668cbf4f19b",
+      "fichiers": [
+        "SKILL.md",
+        "references/structure-campagne.md"
+      ]
+    },
+    "recherche-sourcee": {
+      "version": "1.0.0",
+      "sha256": "a3426a1dddb223e2ad90cfd85546ae1c3aee552c0097bf3ea9f36ae43980945c",
+      "fichiers": [
+        "SKILL.md",
+        "references/fiche-source.md"
+      ]
+    },
+    "redaction-declinaison-canal": {
+      "version": "1.1.0",
+      "sha256": "b37f7969eedb46b71c62bff3226ab45316dc1b11bb5055663b9671f87444459c",
+      "fichiers": [
+        "SKILL.md"
+      ]
+    },
+    "relecture-independante": {
+      "version": "1.0.0",
+      "sha256": "bf41786e7ff45da50f2e044f4e28fbde8a06e2c2112c12a23205ac266d98091f",
+      "fichiers": [
+        "SKILL.md",
+        "references/grille-gravite.md"
+      ]
+    }
+  }
+}

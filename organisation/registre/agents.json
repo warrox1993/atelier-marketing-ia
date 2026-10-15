@@ -1,0 +1,720 @@
+{
+  "schema": "atelier/registre-agents/v1",
+  "version": "1.4.0",
+  "dateVersion": "2026-10-15",
+  "description": "Registre canonique des dix agents marketing de l'Atelier et de l'agent déterministe « Porte de contrôle » (deterministe: true, adaptateur process, aucun modèle). Source unique : le fichier .paperclip.yaml et l'en-tête des AGENTS.md en sont générés par « python3 -I scripts/bootstrap-organisation.py generer ». Les noms courts (champ nom) sont sans accent parce que Paperclip dérive l'identifiant d'un agent de son nom en supprimant les lettres accentuées ; le titre porte le libellé français complet.",
+  "adaptateur": {
+    "type": "claude_local",
+    "engine": "cli",
+    "dangerouslySkipPermissions": false,
+    "permissionMode": "dontAsk",
+    "timeoutSec": 1800,
+    "graceSec": 30,
+    "maxConcurrentRuns": 1,
+    "envPortable": {
+      "DISABLE_TELEMETRY": "1",
+      "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1"
+    },
+    "envSecrets": {
+      "CLAUDE_CODE_OAUTH_TOKEN": "Jeton longue durée produit par « claude setup-token » (abonnement Claude de l'opérateur, usage personnel). Stocké comme secret Paperclip, jamais dans un fichier."
+    },
+    "envLocal": {
+      "CLAUDE_CONFIG_DIR": "Dossier de configuration Claude dédié à l'agent, créé par le bootstrap sous instance/claude-config/<slug>. Jamais le ~/.claude de l'opérateur."
+    },
+    "reglagesConfigClaude": {
+      "claudeMdExcludes": [
+        "**/CLAUDE.md",
+        "**/CLAUDE.local.md",
+        "**/.claude/rules/**",
+        "**/AGENTS.md"
+      ]
+    }
+  },
+  "connexionsPasserelle": {
+    "description": "Connexions natives de Paperclip créées par les cartes de galerie de la passerelle marketing (patch socle 0004, slug atelier-<service>). Le bootstrap réserve chaque connexion existante aux seuls rôles qui la déclarent (installations natives par agent) et bloque les écritures d'un rôle en lecture (politique native « block »). Les écritures restent « Ask first » pour tous (patch socle 0005) et soumises à l'approbation humaine de l'atelier.",
+    "serveurOutils": "mcp__paperclip-assigned",
+    "outilsNatifs": [
+      "mcp__Paperclip_connections__connections_search",
+      "mcp__Paperclip_connections__connection_request"
+    ],
+    "services": {
+      "gsc": "atelier-google-search-console",
+      "ga4": "atelier-google-analytics",
+      "ads": "atelier-google-ads",
+      "gbp": "atelier-google-business-profile",
+      "facebook": "atelier-facebook",
+      "instagram": "atelier-instagram",
+      "linkedin": "atelier-linkedin",
+      "crm": "atelier-hubspot",
+      "pipedrive": "atelier-pipedrive",
+      "odoo": "atelier-odoo",
+      "teamleader": "atelier-teamleader"
+    },
+    "acces": {
+      "lecture": "lecture seule : toute écriture du service est bloquée pour ce rôle",
+      "ecriture_sur_accord": "lecture, et écriture seulement après « Ask first » natif et approbation humaine de l'atelier"
+    }
+  },
+  "agents": [
+    {
+      "slug": "coordinateur",
+      "nom": "Coordinateur",
+      "titre": "Coordinateur marketing",
+      "role": "cmo",
+      "rapporteA": null,
+      "mission": "Transforme la demande en brief et en exigences REQ-xxx, construit le graphe de tâches sans cycle, affecte, arbitre, organise les relectures et prépare le dossier humain.",
+      "entrees": [
+        "demande du client ou de l'opérateur",
+        "corpus de marque et sources de la campagne",
+        "verdicts des contrôleurs",
+        "réponses humaines aux questions ouvertes"
+      ],
+      "sorties": [
+        "brief structuré",
+        "liste d'exigences REQ-xxx avec critères",
+        "graphe de tâches avec dépendances",
+        "décisions d'arbitrage documentées",
+        "dossier de validation humaine"
+      ],
+      "competences": [
+        "cadrage-exigences",
+        "planification-livrables",
+        "dossier-validation-humaine"
+      ],
+      "competencesObligatoires": [
+        "cadrage-exigences",
+        "dossier-validation-humaine"
+      ],
+      "outils": {
+        "recherche": [
+          "Read",
+          "Grep",
+          "Glob"
+        ],
+        "mutation": [
+          "Bash(curl *)"
+        ],
+        "interdits": [
+          "WebSearch",
+          "WebFetch",
+          "Write",
+          "Edit",
+          "NotebookEdit"
+        ]
+      },
+      "connexions": {},
+      "modele": {
+        "id": "claude-opus-5-5",
+        "effort": "high"
+      },
+      "budgetMensuelCentimes": 3000,
+      "maxToursParExecution": 60,
+      "relit": [],
+      "roleRevue": null,
+      "criteresReussite": [
+        "chaque exigence du brief a un identifiant stable, son texte d'origine et son caractère obligatoire",
+        "le graphe de tâches est sans cycle et chaque tâche a un responsable et un livrable attendu",
+        "aucune hypothèse n'est présentée comme un fait",
+        "aucun dossier n'est déclaré prêt si un contrôle bloquant n'a pas réussi"
+      ]
+    },
+    {
+      "slug": "veille",
+      "nom": "Veille",
+      "titre": "Marché et veille concurrentielle",
+      "role": "researcher",
+      "rapporteA": "coordinateur",
+      "mission": "Recherche besoins, segments, concurrence et opportunités ; produit des observations sourcées, datées et bornées.",
+      "entrees": [
+        "brief et exigences",
+        "zone géographique et offres",
+        "corpus de sources autorisé"
+      ],
+      "sorties": [
+        "note de marché sourcée",
+        "fiches concurrents",
+        "liste des pages inaccessibles et des limites"
+      ],
+      "competences": [
+        "recherche-sourcee",
+        "analyse-concurrentielle"
+      ],
+      "competencesObligatoires": [
+        "recherche-sourcee"
+      ],
+      "outils": {
+        "recherche": [
+          "Read",
+          "Grep",
+          "Glob",
+          "WebSearch",
+          "WebFetch"
+        ],
+        "mutation": [
+          "Bash(curl *)",
+          "Write"
+        ],
+        "interdits": [
+          "Edit",
+          "NotebookEdit"
+        ]
+      },
+      "connexions": {},
+      "modele": {
+        "id": "claude-sonnet-5-5",
+        "effort": "medium"
+      },
+      "budgetMensuelCentimes": 1500,
+      "maxToursParExecution": 60,
+      "relit": [],
+      "roleRevue": null,
+      "criteresReussite": [
+        "chaque observation porte une source, une date de collecte et un statut d'accès",
+        "aucune généralisation à partir d'un échantillon incomplet sans le dire",
+        "les pages non consultées sont listées comme telles"
+      ]
+    },
+    {
+      "slug": "seo-local-geo",
+      "nom": "SEO local GEO",
+      "titre": "Référencement naturel, local et GEO",
+      "role": "general",
+      "rapporteA": "coordinateur",
+      "mission": "Audite contenu, structure technique accessible, intentions de recherche et cohérence locale ; propose des améliorations vérifiables pour la recherche classique et les réponses des moteurs d'IA, sans garantie de classement.",
+      "entrees": [
+        "brief et exigences",
+        "URLs du site",
+        "fiches des établissements",
+        "requêtes cibles"
+      ],
+      "sorties": [
+        "audit SEO hiérarchisé",
+        "audit des informations locales par établissement",
+        "recommandations GEO distinguant mesure, hypothèse et recommandation"
+      ],
+      "competences": [
+        "audit-seo",
+        "audit-local-etablissements",
+        "contenu-recherche-ia",
+        "recherche-sourcee"
+      ],
+      "competencesObligatoires": [
+        "audit-local-etablissements"
+      ],
+      "outils": {
+        "recherche": [
+          "Read",
+          "Grep",
+          "Glob",
+          "WebSearch",
+          "WebFetch",
+          "mcp__paperclip-assigned",
+          "mcp__Paperclip_connections__connections_search",
+          "mcp__Paperclip_connections__connection_request"
+        ],
+        "mutation": [
+          "Bash(curl *)",
+          "Write"
+        ],
+        "interdits": [
+          "Edit",
+          "NotebookEdit"
+        ]
+      },
+      "connexions": {
+        "gsc": "lecture",
+        "ga4": "lecture",
+        "gbp": "lecture"
+      },
+      "modele": {
+        "id": "claude-sonnet-5-5",
+        "effort": "medium"
+      },
+      "budgetMensuelCentimes": 1500,
+      "maxToursParExecution": 60,
+      "relit": [],
+      "roleRevue": null,
+      "criteresReussite": [
+        "chaque établissement du périmètre a sa propre ligne d'audit",
+        "aucune promesse de position, de classement ou de citation par une IA",
+        "chaque recommandation est vérifiable et rattachée à une exigence"
+      ]
+    },
+    {
+      "slug": "sea",
+      "nom": "SEA",
+      "titre": "Publicité et SEA",
+      "role": "general",
+      "rapporteA": "coordinateur",
+      "mission": "Prépare campagnes, groupes, mots-clés, exclusions, variantes et propositions budgétaires reliés à une offre validée et à une page cohérente ; n'active rien.",
+      "entrees": [
+        "brief et exigences",
+        "offres validées",
+        "pages de destination",
+        "budget maximal autorisé"
+      ],
+      "sorties": [
+        "plan de campagne en brouillon",
+        "groupes et mots-clés avec exclusions",
+        "variantes d'annonces reliées aux offres",
+        "proposition budgétaire bornée"
+      ],
+      "competences": [
+        "preparation-campagnes-sea",
+        "charte-marque"
+      ],
+      "competencesObligatoires": [
+        "preparation-campagnes-sea"
+      ],
+      "outils": {
+        "recherche": [
+          "Read",
+          "Grep",
+          "Glob",
+          "WebFetch",
+          "mcp__paperclip-assigned",
+          "mcp__Paperclip_connections__connections_search",
+          "mcp__Paperclip_connections__connection_request"
+        ],
+        "mutation": [
+          "Bash(curl *)",
+          "Write"
+        ],
+        "interdits": [
+          "WebSearch",
+          "Edit",
+          "NotebookEdit"
+        ]
+      },
+      "connexions": {
+        "ads": "lecture"
+      },
+      "modele": {
+        "id": "claude-sonnet-5-5",
+        "effort": "medium"
+      },
+      "budgetMensuelCentimes": 1500,
+      "maxToursParExecution": 60,
+      "relit": [],
+      "roleRevue": null,
+      "criteresReussite": [
+        "chaque annonce cite l'offre validée et la page de destination qu'elle promet",
+        "aucune activation ni hausse de budget, même implicite",
+        "le total proposé reste sous le budget maximal du brief"
+      ]
+    },
+    {
+      "slug": "contenus",
+      "nom": "Contenus",
+      "titre": "Contenus et création",
+      "role": "designer",
+      "rapporteA": "coordinateur",
+      "mission": "Produit articles, publications, pages et briefs de visuels selon la marque et le canal ; signale sources et droits ; n'invente ni avis, ni prix, ni certification.",
+      "entrees": [
+        "brief et exigences",
+        "charte de marque",
+        "sources validées",
+        "calendrier proposé"
+      ],
+      "sorties": [
+        "textes par canal en brouillon",
+        "briefs de visuels identifiés comme tels",
+        "liste des sources et droits à vérifier"
+      ],
+      "competences": [
+        "redaction-declinaison-canal",
+        "charte-marque",
+        "contenu-recherche-ia"
+      ],
+      "competencesObligatoires": [
+        "charte-marque"
+      ],
+      "outils": {
+        "recherche": [
+          "Read",
+          "Grep",
+          "Glob",
+          "WebFetch",
+          "mcp__paperclip-assigned",
+          "mcp__Paperclip_connections__connections_search",
+          "mcp__Paperclip_connections__connection_request"
+        ],
+        "mutation": [
+          "Bash(curl *)",
+          "Write",
+          "Edit"
+        ],
+        "interdits": [
+          "WebSearch",
+          "NotebookEdit"
+        ]
+      },
+      "connexions": {
+        "facebook": "lecture",
+        "instagram": "lecture",
+        "linkedin": "lecture"
+      },
+      "modele": {
+        "id": "claude-sonnet-5-5",
+        "effort": "medium"
+      },
+      "budgetMensuelCentimes": 1500,
+      "maxToursParExecution": 60,
+      "relit": [],
+      "roleRevue": null,
+      "criteresReussite": [
+        "aucun témoignage, avis, prix, certification ou subvention inventé",
+        "chaque affirmation commerciale renvoie à une source ou est marquée « à confirmer »",
+        "un visuel non généré est livré comme brief, jamais comme visuel final"
+      ]
+    },
+    {
+      "slug": "crm-conversion",
+      "nom": "CRM conversion",
+      "titre": "CRM et conversion",
+      "role": "general",
+      "rapporteA": "coordinateur",
+      "mission": "Conçoit pages de conversion, formulaires, segmentation et scénarios de suivi avec déclencheurs, exclusions et consentements ; aucune prospection réelle automatique.",
+      "entrees": [
+        "brief et exigences",
+        "offres validées",
+        "parcours client visé"
+      ],
+      "sorties": [
+        "structure de page de conversion",
+        "spécification de formulaire",
+        "scénarios de suivi avec conditions d'envoi"
+      ],
+      "competences": [
+        "conversion-crm",
+        "charte-marque"
+      ],
+      "competencesObligatoires": [
+        "conversion-crm"
+      ],
+      "outils": {
+        "recherche": [
+          "Read",
+          "Grep",
+          "Glob",
+          "mcp__Paperclip_connections__connections_search",
+          "mcp__Paperclip_connections__connection_request"
+        ],
+        "mutation": [
+          "Bash(curl *)",
+          "Write",
+          "Edit",
+          "mcp__paperclip-assigned"
+        ],
+        "interdits": [
+          "WebSearch",
+          "WebFetch",
+          "NotebookEdit"
+        ]
+      },
+      "connexions": {
+        "crm": "ecriture_sur_accord",
+        "pipedrive": "ecriture_sur_accord",
+        "odoo": "ecriture_sur_accord",
+        "teamleader": "ecriture_sur_accord"
+      },
+      "modele": {
+        "id": "claude-sonnet-5-5",
+        "effort": "medium"
+      },
+      "budgetMensuelCentimes": 1500,
+      "maxToursParExecution": 60,
+      "relit": [],
+      "roleRevue": null,
+      "criteresReussite": [
+        "chaque scénario documente entrée, déclencheur, exclusions, consentement et condition d'envoi",
+        "seuls des prospects fictifs apparaissent en démonstration",
+        "aucun envoi n'est programmé sans approbation humaine explicite"
+      ]
+    },
+    {
+      "slug": "mesure",
+      "nom": "Mesure",
+      "titre": "Mesure et optimisation",
+      "role": "researcher",
+      "rapporteA": "coordinateur",
+      "mission": "Vérifie données, conversions et doublons ; présente coûts, périodes, attribution et incertitudes ; propose des expériences avec hypothèse, métrique et condition d'arrêt ; répond « non mesurable » si les données manquent.",
+      "entrees": [
+        "exports de données importés avec période et provenance",
+        "objectifs de la campagne"
+      ],
+      "sorties": [
+        "tableau de mesures avec provenance",
+        "liste des connexions manquantes",
+        "plan d'expériences"
+      ],
+      "competences": [
+        "mesure-experiences"
+      ],
+      "competencesObligatoires": [
+        "mesure-experiences"
+      ],
+      "outils": {
+        "recherche": [
+          "Read",
+          "Grep",
+          "Glob",
+          "mcp__paperclip-assigned",
+          "mcp__Paperclip_connections__connections_search",
+          "mcp__Paperclip_connections__connection_request"
+        ],
+        "mutation": [
+          "Bash(curl *)",
+          "Write"
+        ],
+        "interdits": [
+          "WebSearch",
+          "WebFetch",
+          "Edit",
+          "NotebookEdit"
+        ]
+      },
+      "connexions": {
+        "ga4": "lecture",
+        "ads": "lecture",
+        "gsc": "lecture"
+      },
+      "modele": {
+        "id": "claude-sonnet-5-5",
+        "effort": "medium"
+      },
+      "budgetMensuelCentimes": 1000,
+      "maxToursParExecution": 40,
+      "relit": [],
+      "roleRevue": null,
+      "criteresReussite": [
+        "aucun chiffre sans période ni provenance",
+        "« non mesurable » plutôt qu'une performance inventée",
+        "chaque expérience a une hypothèse, une métrique et une condition d'arrêt"
+      ]
+    },
+    {
+      "slug": "exigences",
+      "nom": "Exigences",
+      "titre": "Contrôleur des exigences",
+      "role": "qa",
+      "rapporteA": null,
+      "mission": "Compare chaque livrable au brief original et à chaque exigence ; exige une preuve localisable pour tout point annoncé couvert ; signale établissements, canaux ou sections oubliés.",
+      "entrees": [
+        "brief original",
+        "liste des exigences",
+        "version précise du livrable",
+        "critères"
+      ],
+      "sorties": [
+        "verdict structuré",
+        "matrice exigence par exigence avec preuve localisée",
+        "constats avec gravité"
+      ],
+      "competences": [
+        "controle-couverture"
+      ],
+      "competencesObligatoires": [
+        "controle-couverture"
+      ],
+      "outils": {
+        "recherche": [
+          "Read",
+          "Grep",
+          "Glob"
+        ],
+        "mutation": [
+          "Bash(curl *)"
+        ],
+        "interdits": [
+          "WebSearch",
+          "WebFetch",
+          "Write",
+          "Edit",
+          "NotebookEdit"
+        ]
+      },
+      "connexions": {},
+      "modele": {
+        "id": "claude-opus-5-5",
+        "effort": "high"
+      },
+      "budgetMensuelCentimes": 2000,
+      "maxToursParExecution": 40,
+      "relit": [
+        "coordinateur",
+        "veille",
+        "seo-local-geo",
+        "sea",
+        "contenus",
+        "crm-conversion",
+        "mesure"
+      ],
+      "roleRevue": "exigences",
+      "criteresReussite": [
+        "chaque exigence obligatoire reçoit un état de couverture et une preuve localisable",
+        "une correspondance textuelle seule n'est jamais acceptée comme preuve",
+        "le verdict porte sur la version exacte du livrable"
+      ]
+    },
+    {
+      "slug": "relecteur",
+      "nom": "Relecteur",
+      "titre": "Relecteur métier et factuel",
+      "role": "qa",
+      "rapporteA": null,
+      "mission": "Vérifie raisonnement, informations, sources, cohérence entre canaux et respect de la marque ; chaque anomalie indique emplacement, preuve, gravité et correction attendue.",
+      "entrees": [
+        "brief original",
+        "exigences",
+        "version précise du livrable",
+        "sources citées",
+        "charte de marque"
+      ],
+      "sorties": [
+        "verdict structuré",
+        "constats factuels et métier"
+      ],
+      "competences": [
+        "relecture-independante",
+        "recherche-sourcee",
+        "charte-marque"
+      ],
+      "competencesObligatoires": [
+        "relecture-independante"
+      ],
+      "outils": {
+        "recherche": [
+          "Read",
+          "Grep",
+          "Glob",
+          "WebSearch",
+          "WebFetch"
+        ],
+        "mutation": [
+          "Bash(curl *)"
+        ],
+        "interdits": [
+          "Write",
+          "Edit",
+          "NotebookEdit"
+        ]
+      },
+      "connexions": {},
+      "modele": {
+        "id": "claude-opus-5-5",
+        "effort": "high"
+      },
+      "budgetMensuelCentimes": 2000,
+      "maxToursParExecution": 40,
+      "relit": [
+        "coordinateur",
+        "veille",
+        "seo-local-geo",
+        "sea",
+        "contenus",
+        "crm-conversion",
+        "mesure"
+      ],
+      "roleRevue": "metier",
+      "criteresReussite": [
+        "chaque affirmation invérifiable, contradiction ou promesse excessive est signalée",
+        "chaque constat a un emplacement, une preuve, une gravité et une correction attendue",
+        "l'autoévaluation du producteur n'est jamais prise comme preuve"
+      ]
+    },
+    {
+      "slug": "tests-techniques",
+      "nom": "Tests techniques",
+      "titre": "Vérificateur technique",
+      "role": "qa",
+      "rapporteA": null,
+      "mission": "Exécute les contrôles techniques adaptés : URLs, redirections, accessibilité, formulaires, suivi, formats, schémas et affichage ; un HTTP 200 sur une page d'erreur reste un échec.",
+      "entrees": [
+        "version précise du livrable",
+        "liste des URLs et formulaires",
+        "schémas attendus"
+      ],
+      "sorties": [
+        "rapport de contrôles par URL et par élément",
+        "constats techniques",
+        "liste des contrôles non exécutés"
+      ],
+      "competences": [
+        "controles-techniques-liens"
+      ],
+      "competencesObligatoires": [
+        "controles-techniques-liens"
+      ],
+      "outils": {
+        "recherche": [
+          "Read",
+          "Grep",
+          "Glob",
+          "WebFetch"
+        ],
+        "mutation": [
+          "Bash(curl *)"
+        ],
+        "interdits": [
+          "WebSearch",
+          "Write",
+          "Edit",
+          "NotebookEdit"
+        ]
+      },
+      "connexions": {},
+      "modele": {
+        "id": "claude-sonnet-5-5",
+        "effort": "medium"
+      },
+      "budgetMensuelCentimes": 1000,
+      "maxToursParExecution": 40,
+      "relit": [
+        "seo-local-geo",
+        "sea",
+        "contenus",
+        "crm-conversion"
+      ],
+      "roleRevue": "technique",
+      "criteresReussite": [
+        "chaque URL a un statut, une destination finale et un contrôle de contenu",
+        "un code 200 sur une page d'erreur est classé en échec",
+        "les contrôles non exécutés sont listés avec leur raison"
+      ]
+    },
+    {
+      "slug": "porte",
+      "nom": "Porte",
+      "titre": "Porte de contrôle",
+      "role": "qa",
+      "rapporteA": null,
+      "deterministe": true,
+      "mission": "Agent déterministe, sans modèle : tient l'unique étape native de revue (circuit 1.1). Il évalue la porte du plugin dans son run et décide : PASS → étape d'approbation humaine ; sinon retour au producteur. La garde P2 du serveur revérifie.",
+      "entrees": [
+        "tâche sous porte en étape de revue",
+        "évaluation déterministe du plugin (exigences, couvertures, verdicts, constats)"
+      ],
+      "sorties": [
+        "décision native de l'étape de revue (done ou retour au producteur) avec les motifs codés de la porte"
+      ],
+      "competences": [],
+      "competencesObligatoires": [],
+      "outils": {
+        "recherche": [],
+        "mutation": [],
+        "interdits": []
+      },
+      "connexions": {},
+      "modele": null,
+      "budgetMensuelCentimes": 100,
+      "maxToursParExecution": 1,
+      "relit": [],
+      "roleRevue": null,
+      "criteresReussite": [
+        "décide toujours dans son run (le moteur bloque une revue sans décision)",
+        "jamais de PASS sans évaluation PASS fraîche sur la révision courante"
+      ]
+    }
+  ]
+}

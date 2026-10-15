@@ -1,0 +1,9 @@
+# Socle Paperclip épinglé pour l'Atelier Marketing IA
+# Lu par scripts/preparer-socle.sh (format CLE=VALEUR, une par ligne).
+DEPOT=https://github.com/paperclipai/paperclip.git
+TAG=v2026.1012.0
+SHA=bba6a45f0d364cfd962ac59b3bdf2426a8222adb
+DATE_COMMIT=2026-10-12T18:20:52Z
+CANAL=stable
+BRANCHE_LOCALE=atelier-marketing
+# Patches locaux appliqués dans l'ordre (socle/patches/*.patch), jamais poussés.

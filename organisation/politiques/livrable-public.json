@@ -1,0 +1,48 @@
+{
+  "description": "Livrable destiné au public (article, page, publication, annonce). Circuit 1.1 (docs/contrats.md §6 bis) : trois revues indépendantes dans des tâches de revue liées, créées par le plugin à chaque révision (une par rôle), puis l'unique étape native de revue tenue par l'agent déterministe « Porte de contrôle », qui évalue et décide dans son run, puis l'approbation humaine. La garde P2 du serveur exige une évaluation PASS fraîche sur la révision courante du document « livrable » avant l'approbation.",
+  "responsibleUserId": "{{humain:responsable}}",
+  "porte": {
+    "obligatoire": true,
+    "cleLivrable": "livrable",
+    "route": "POST /api/plugins/atelier.marketing-ia/api/portes (portes.creer) à la création de la tâche",
+    "revuesRequises": [
+      {
+        "role": "exigences",
+        "agentId": "{{agent:exigences}}"
+      },
+      {
+        "role": "metier",
+        "agentId": "{{agent:relecteur}}"
+      },
+      {
+        "role": "technique",
+        "agentId": "{{agent:tests-techniques}}"
+      }
+    ]
+  },
+  "executionPolicy": {
+    "mode": "normal",
+    "commentRequired": true,
+    "maxReviewRounds": 3,
+    "stages": [
+      {
+        "type": "review",
+        "participants": [
+          {
+            "type": "agent",
+            "agentId": "{{agent:porte}}"
+          }
+        ]
+      },
+      {
+        "type": "approval",
+        "participants": [
+          {
+            "type": "user",
+            "userId": "{{humain:responsable}}"
+          }
+        ]
+      }
+    ]
+  }
+}

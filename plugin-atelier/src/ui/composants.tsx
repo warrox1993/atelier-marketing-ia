@@ -1,0 +1,274 @@
+/**
+ * Briques communes de l'interface : pastilles d'état, mention de démonstration,
+ * états vide / chargement / erreur / accès absent / interrompu / périmé,
+ * boutons dont la désactivation porte toujours une raison visible.
+ */
+import { cloneElement, useEffect, useId, useState, type ReactElement, type ReactNode } from "react";
+import { useHostNavigation, type PluginBridgeError } from "@paperclipai/plugin-sdk/ui";
+import { MENTION_DEMONSTRATION } from "../contrats/identifiants.js";
+import type { EtatConnexion } from "../contrats/communs.js";
+import type { StatutFonctionnel } from "../contrats/statuts.js";
+import { DELAI_PERIME_MS, useContexteDonnees } from "./donnees.js";
+import { classerErreur, dateHeure, dateSeule, decalageBruxelles, ETATS_CONNEXION, heureSeule, ilYA, libelleStatut, TON_STATUT, type Ton } from "./format.js";
+
+export function Pastille({ ton = "neutre", children, titre }: { ton?: Ton; children: ReactNode; titre?: string }) {
+  return (
+    <span className="atl-pastille" data-ton={ton} title={titre}>
+      {children}
+    </span>
+  );
+}
+
+export function PastilleConnexion({ etat }: { etat: EtatConnexion }) {
+  const e = ETATS_CONNEXION[etat];
+  return (
+    <Pastille ton={e.ton} titre={e.aide}>
+      {e.libelle}
+    </Pastille>
+  );
+}
+
+export function PastilleStatut({ statut, motif }: { statut: StatutFonctionnel; motif?: string }) {
+  return (
+    <Pastille ton={TON_STATUT[statut]} titre={motif}>
+      {libelleStatut(statut)}
+    </Pastille>
+  );
+}
+
+/** Mention obligatoire sur tout résultat de démonstration. */
+export function MentionDemo({ texte, compacte = false }: { texte?: string | null; compacte?: boolean }) {
+  if (compacte) {
+    return (
+      <Pastille ton="demo" titre={texte ?? MENTION_DEMONSTRATION}>
+        Démonstration
+      </Pastille>
+    );
+  }
+  return (
+    <p className="atl-demo" role="note">
+      <strong>Démonstration.</strong> {(texte ?? MENTION_DEMONSTRATION).replace(/^Démonstration\s*:\s*/u, "")}
+    </p>
+  );
+}
+
+export function Horodatage({ iso, seulementDate = false }: { iso: string | null | undefined; seulementDate?: boolean }) {
+  if (!iso) return <span className="atl-attenue">non renseignée</span>;
+  const texte = dateHeure(iso);
+  return (
+    <time dateTime={iso} title={`Heure de Bruxelles (${decalageBruxelles(iso)}) ; stocké en UTC : ${iso}`}>
+      {seulementDate ? dateSeule(iso) : texte}
+    </time>
+  );
+}
+
+export function Chargement({ libelle = "Chargement", lignes = 3 }: { libelle?: string; lignes?: number }) {
+  return (
+    <div className="atl-chargement" aria-busy="true" role="status">
+      <span className="atl-sr">{libelle}…</span>
+      {Array.from({ length: lignes }, (_, i) => (
+        <span key={i} className="atl-squelette" style={{ width: `${92 - i * 17}%` }} aria-hidden="true" />
+      ))}
+    </div>
+  );
+}
+
+export function EtatErreur({ erreur, onReessayer, contexte }: { erreur: PluginBridgeError | unknown; onReessayer?: () => void; contexte?: string }) {
+  const e = classerErreur(erreur);
+  return (
+    <div className="atl-encart" data-ton={e.categorie === "acces" || e.categorie === "erreur" ? "danger" : "attention"} role="alert">
+      <p className="atl-encart-titre">
+        {e.titre}
+        {contexte ? ` : ${contexte}` : ""}
+      </p>
+      <p>{e.message}</p>
+      {e.categorie === "acces" ? <p className="atl-attenue">Les droits sont vérifiés par le serveur ; l'interface ne peut pas les contourner.</p> : null}
+      <p className="atl-code">Code : {e.code}</p>
+      {onReessayer ? (
+        <button type="button" className="atl-bouton" onClick={onReessayer}>
+          Réessayer
+        </button>
+      ) : null}
+    </div>
+  );
+}
+
+export function Vide({ titre, children, action }: { titre: string; children?: ReactNode; action?: ReactNode }) {
+  return (
+    <div className="atl-vide">
+      <p className="atl-vide-titre">{titre}</p>
+      {children ? <div className="atl-vide-texte">{children}</div> : null}
+      {action ? <div className="atl-vide-action">{action}</div> : null}
+    </div>
+  );
+}
+
+/** Rendu standard d'une lecture : chargement, erreur, vide, puis contenu. */
+export function Lecture<T>({
+  r,
+  libelle,
+  estVide,
+  vide,
+  children,
+}: {
+  r: { data: T | null; loading: boolean; error: PluginBridgeError | null; refresh(): void };
+  libelle: string;
+  estVide?: (d: T) => boolean;
+  vide?: ReactNode;
+  children: (d: T) => ReactNode;
+}) {
+  if (r.error) return <EtatErreur erreur={r.error} onReessayer={r.refresh} contexte={libelle} />;
+  if (r.data === null) return r.loading ? <Chargement libelle={`Chargement : ${libelle}`} /> : <Vide titre="Aucune donnée reçue." />;
+  if (estVide?.(r.data)) return <>{vide}</>;
+  return <>{children(r.data)}</>;
+}
+
+/**
+ * Bouton d'action. Désactivé, il affiche sa raison sous lui (et la relie par
+ * aria-describedby) : aucune action d'apparence active ne reste muette.
+ */
+export function Bouton({
+  children,
+  onClick,
+  type = "button",
+  variante = "secondaire",
+  raisonDesactive,
+  enCours = false,
+  formulaire,
+}: {
+  children: ReactNode;
+  onClick?: () => void;
+  type?: "button" | "submit";
+  variante?: "principal" | "secondaire" | "danger" | "discret";
+  raisonDesactive?: string | null;
+  enCours?: boolean;
+  formulaire?: string;
+}) {
+  const id = useId();
+  const desactive = Boolean(raisonDesactive) || enCours;
+  return (
+    <span className="atl-bouton-groupe">
+      <button
+        type={type}
+        form={formulaire}
+        className="atl-bouton"
+        data-variante={variante}
+        onClick={(e) => {
+          if (desactive) {
+            e.preventDefault();
+            return;
+          }
+          onClick?.();
+        }}
+        aria-disabled={desactive || undefined}
+        disabled={enCours}
+        aria-describedby={raisonDesactive ? id : undefined}
+        aria-busy={enCours || undefined}
+      >
+        {enCours ? "Envoi…" : children}
+      </button>
+      {raisonDesactive ? (
+        <span id={id} className="atl-raison">
+          {raisonDesactive}
+        </span>
+      ) : null}
+    </span>
+  );
+}
+
+/** Lien interne à Paperclip (préfixe d'entreprise ajouté par l'hôte). */
+export function LienHote({ vers, children, className, courant }: { vers: string; children: ReactNode; className?: string; courant?: boolean }) {
+  const nav = useHostNavigation();
+  const props = nav.linkProps(vers);
+  return (
+    <a {...props} className={className ?? "atl-lien"} aria-current={courant ? "page" : undefined}>
+      {children}
+    </a>
+  );
+}
+
+export function Section({ titre, id, children, actions, aide }: { titre: string; id?: string; children: ReactNode; actions?: ReactNode; aide?: ReactNode }) {
+  const auto = useId();
+  const idTitre = id ?? auto;
+  return (
+    <section className="atl-section" aria-labelledby={idTitre}>
+      <div className="atl-section-tete">
+        <h2 id={idTitre}>{titre}</h2>
+        {actions ? <div className="atl-section-actions">{actions}</div> : null}
+      </div>
+      {aide ? <p className="atl-section-aide">{aide}</p> : null}
+      {children}
+    </section>
+  );
+}
+
+export function EnTete({ titre, description, actions, retour }: { titre: string; description?: ReactNode; actions?: ReactNode; retour?: ReactNode }) {
+  return (
+    <header className="atl-entete">
+      {retour ? <div className="atl-retour">{retour}</div> : null}
+      <div className="atl-entete-ligne">
+        <h1>{titre}</h1>
+        {actions ? <div className="atl-entete-actions">{actions}</div> : null}
+      </div>
+      {description ? <p className="atl-entete-description">{description}</p> : null}
+    </header>
+  );
+}
+
+/** Ligne de fraîcheur : heure du chargement, événements survenus depuis, actualisation. */
+export function Fraicheur({ chargeLe, actualisation }: { chargeLe: Date | null; actualisation: boolean }) {
+  const { nouveauxEvenements, actualiserTout, journalDisponible } = useContexteDonnees();
+  const [maintenant, setMaintenant] = useState(() => new Date());
+  useEffect(() => {
+    const m = setInterval(() => setMaintenant(new Date()), 30_000);
+    return () => clearInterval(m);
+  }, []);
+  const ancien = chargeLe ? maintenant.getTime() - chargeLe.getTime() > DELAI_PERIME_MS : false;
+  const perime = nouveauxEvenements > 0 || ancien;
+  return (
+    <div className="atl-fraicheur" data-perime={perime || undefined}>
+      <span>
+        {actualisation
+          ? "Actualisation…"
+          : chargeLe
+            ? `Données chargées à ${heureSeule(chargeLe)} (${ilYA(chargeLe, maintenant)})`
+            : "Données en cours de chargement"}
+        {nouveauxEvenements > 0 ? ` · ${nouveauxEvenements} nouvel${nouveauxEvenements > 1 ? "s" : ""} événement${nouveauxEvenements > 1 ? "s" : ""} depuis : affichage périmé` : ""}
+        {!nouveauxEvenements && ancien ? " · affichage ancien, à actualiser" : ""}
+        {!journalDisponible ? " · suivi des événements indisponible" : ""}
+      </span>
+      <span className="atl-sr" role="status">
+        {perime ? "Affichage périmé : de nouvelles données sont disponibles." : ""}
+      </span>
+      <button type="button" className="atl-bouton" data-variante={perime ? "principal" : "discret"} onClick={actualiserTout}>
+        Actualiser
+      </button>
+    </div>
+  );
+}
+
+/** Liste de valeurs ou mention explicite d'absence. */
+export function ListeOuAucun({ valeurs, aucun = "aucun" }: { valeurs: readonly string[]; aucun?: string }) {
+  if (!valeurs.length) return <span className="atl-attenue">{aucun}</span>;
+  return <>{valeurs.join(", ")}</>;
+}
+
+/**
+ * Champ de formulaire : le libellé seul donne le nom accessible ; l'aide est
+ * reliée par aria-describedby (elle ne pollue pas le nom du champ).
+ */
+export function Champ({ libelle, aide, className, children }: { libelle: ReactNode; aide?: ReactNode; className?: string; children: ReactElement<Record<string, unknown>> }) {
+  const id = useId();
+  const idAide = useId();
+  return (
+    <div className={`atl-champ${className ? ` ${className}` : ""}`}>
+      <label htmlFor={id}>{libelle}</label>
+      {cloneElement(children, { id, "aria-describedby": aide ? idAide : undefined })}
+      {aide ? (
+        <span id={idAide} className="atl-aide">
+          {aide}
+        </span>
+      ) : null}
+    </div>
+  );
+}

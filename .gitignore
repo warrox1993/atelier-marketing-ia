@@ -1,0 +1,19 @@
+# Socle Paperclip : clone séparé (dépôt git propre), reconstruit par
+# scripts/preparer-socle.sh à partir de socle/VERSION et socle/patches/.
+/paperclip/
+
+# Données de l'instance locale (base PostgreSQL embarquée, clé maîtresse des
+# secrets, journaux, stockage, sauvegardes). Jamais versionnées.
+/instance/
+
+# Configuration locale : seul l'exemple sans secret est suivi.
+/config/*.env
+!/config/*.env.example
+
+# Divers
+node_modules/
+*.log
+.DS_Store
+__pycache__/
+*.pyc
+.ruff_cache/

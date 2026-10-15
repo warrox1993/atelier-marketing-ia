@@ -1,0 +1,10 @@
+Copyright (c) 2026 Jean-Baptiste Dhondt. Tous droits réservés.
+
+Ce dépôt est publié pour consultation. Aucune licence d'utilisation, de copie,
+de modification ni de redistribution n'est accordée sur le code et les documents
+écrits par l'auteur : toute réutilisation nécessite son autorisation écrite
+préalable.
+
+Exception : les correctifs et extraits issus de Paperclip
+(https://github.com/paperclipai/paperclip) restent sous la licence MIT de
+Paperclip, reproduite dans socle/patches/LICENSE-Paperclip. Voir le fichier NOTICE.

@@ -1,0 +1,989 @@
+schema: "paperclip/v1"
+schemaVersion: 7
+company:
+  requireBoardApprovalForNewAgents: true
+agents:
+  coordinateur:
+    role: "cmo"
+    capabilities: "Transforme la demande en brief et en exigences REQ-xxx, construit le graphe de tâches sans cycle, affecte, arbitre, organise les relectures et prépare le dossier humain."
+    adapter:
+      type: "claude_local"
+      config:
+        engine: "cli"
+        model: "claude-opus-5-5"
+        effort: "high"
+        dangerouslySkipPermissions: false
+        maxTurnsPerRun: 60
+        timeoutSec: 1800
+        graceSec: 30
+        extraArgs:
+          - "--permission-mode"
+          - "dontAsk"
+          - "--allowedTools"
+          - "Read"
+          - "Grep"
+          - "Glob"
+          - "Bash(curl *)"
+          - "--disallowedTools"
+          - "WebSearch"
+          - "WebFetch"
+          - "Write"
+          - "Edit"
+          - "NotebookEdit"
+        env:
+          DISABLE_TELEMETRY:
+            type: "plain"
+            value: "1"
+          CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC:
+            type: "plain"
+            value: "1"
+    runtime:
+      heartbeat:
+        maxConcurrentRuns: 1
+    budgetMonthlyCents: 3000
+    metadata:
+      atelier:
+        registre: "atelier/registre-agents/v1"
+        versionRegistre: "1.4.0"
+        titre: "Coordinateur marketing"
+        entrees:
+          - "demande du client ou de l'opérateur"
+          - "corpus de marque et sources de la campagne"
+          - "verdicts des contrôleurs"
+          - "réponses humaines aux questions ouvertes"
+        sorties:
+          - "brief structuré"
+          - "liste d'exigences REQ-xxx avec critères"
+          - "graphe de tâches avec dépendances"
+          - "décisions d'arbitrage documentées"
+          - "dossier de validation humaine"
+        competencesObligatoires:
+          - "cadrage-exigences"
+          - "dossier-validation-humaine"
+        outilsRecherche:
+          - "Read"
+          - "Grep"
+          - "Glob"
+        outilsMutation:
+          - "Bash(curl *)"
+        outilsInterdits:
+          - "WebSearch"
+          - "WebFetch"
+          - "Write"
+          - "Edit"
+          - "NotebookEdit"
+        relit: []
+        roleRevue: null
+        connexions: {}
+        criteresReussite:
+          - "chaque exigence du brief a un identifiant stable, son texte d'origine et son caractère obligatoire"
+          - "le graphe de tâches est sans cycle et chaque tâche a un responsable et un livrable attendu"
+          - "aucune hypothèse n'est présentée comme un fait"
+          - "aucun dossier n'est déclaré prêt si un contrôle bloquant n'a pas réussi"
+    inputs:
+      env:
+        CLAUDE_CODE_OAUTH_TOKEN:
+          kind: "secret"
+          requirement: "optional"
+          description: "Jeton longue durée produit par « claude setup-token » (abonnement Claude de l'opérateur, usage personnel). Stocké comme secret Paperclip, jamais dans un fichier."
+        CLAUDE_CONFIG_DIR:
+          kind: "plain"
+          requirement: "optional"
+          portability: "system_dependent"
+          description: "Dossier de configuration Claude dédié à l'agent, créé par le bootstrap sous instance/claude-config/<slug>. Jamais le ~/.claude de l'opérateur."
+  veille:
+    role: "researcher"
+    capabilities: "Recherche besoins, segments, concurrence et opportunités ; produit des observations sourcées, datées et bornées."
+    adapter:
+      type: "claude_local"
+      config:
+        engine: "cli"
+        model: "claude-sonnet-5-5"
+        effort: "medium"
+        dangerouslySkipPermissions: false
+        maxTurnsPerRun: 60
+        timeoutSec: 1800
+        graceSec: 30
+        extraArgs:
+          - "--permission-mode"
+          - "dontAsk"
+          - "--allowedTools"
+          - "Read"
+          - "Grep"
+          - "Glob"
+          - "WebSearch"
+          - "WebFetch"
+          - "Bash(curl *)"
+          - "Write"
+          - "--disallowedTools"
+          - "Edit"
+          - "NotebookEdit"
+        env:
+          DISABLE_TELEMETRY:
+            type: "plain"
+            value: "1"
+          CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC:
+            type: "plain"
+            value: "1"
+    runtime:
+      heartbeat:
+        maxConcurrentRuns: 1
+    budgetMonthlyCents: 1500
+    metadata:
+      atelier:
+        registre: "atelier/registre-agents/v1"
+        versionRegistre: "1.4.0"
+        titre: "Marché et veille concurrentielle"
+        entrees:
+          - "brief et exigences"
+          - "zone géographique et offres"
+          - "corpus de sources autorisé"
+        sorties:
+          - "note de marché sourcée"
+          - "fiches concurrents"
+          - "liste des pages inaccessibles et des limites"
+        competencesObligatoires:
+          - "recherche-sourcee"
+        outilsRecherche:
+          - "Read"
+          - "Grep"
+          - "Glob"
+          - "WebSearch"
+          - "WebFetch"
+        outilsMutation:
+          - "Bash(curl *)"
+          - "Write"
+        outilsInterdits:
+          - "Edit"
+          - "NotebookEdit"
+        relit: []
+        roleRevue: null
+        connexions: {}
+        criteresReussite:
+          - "chaque observation porte une source, une date de collecte et un statut d'accès"
+          - "aucune généralisation à partir d'un échantillon incomplet sans le dire"
+          - "les pages non consultées sont listées comme telles"
+    inputs:
+      env:
+        CLAUDE_CODE_OAUTH_TOKEN:
+          kind: "secret"
+          requirement: "optional"
+          description: "Jeton longue durée produit par « claude setup-token » (abonnement Claude de l'opérateur, usage personnel). Stocké comme secret Paperclip, jamais dans un fichier."
+        CLAUDE_CONFIG_DIR:
+          kind: "plain"
+          requirement: "optional"
+          portability: "system_dependent"
+          description: "Dossier de configuration Claude dédié à l'agent, créé par le bootstrap sous instance/claude-config/<slug>. Jamais le ~/.claude de l'opérateur."
+  seo-local-geo:
+    role: "general"
+    capabilities: "Audite contenu, structure technique accessible, intentions de recherche et cohérence locale ; propose des améliorations vérifiables pour la recherche classique et les réponses des moteurs d'IA, sans garantie de classement."
+    adapter:
+      type: "claude_local"
+      config:
+        engine: "cli"
+        model: "claude-sonnet-5-5"
+        effort: "medium"
+        dangerouslySkipPermissions: false
+        maxTurnsPerRun: 60
+        timeoutSec: 1800
+        graceSec: 30
+        extraArgs:
+          - "--permission-mode"
+          - "dontAsk"
+          - "--allowedTools"
+          - "Read"
+          - "Grep"
+          - "Glob"
+          - "WebSearch"
+          - "WebFetch"
+          - "mcp__paperclip-assigned"
+          - "mcp__Paperclip_connections__connections_search"
+          - "mcp__Paperclip_connections__connection_request"
+          - "Bash(curl *)"
+          - "Write"
+          - "--disallowedTools"
+          - "Edit"
+          - "NotebookEdit"
+        env:
+          DISABLE_TELEMETRY:
+            type: "plain"
+            value: "1"
+          CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC:
+            type: "plain"
+            value: "1"
+    runtime:
+      heartbeat:
+        maxConcurrentRuns: 1
+    budgetMonthlyCents: 1500
+    metadata:
+      atelier:
+        registre: "atelier/registre-agents/v1"
+        versionRegistre: "1.4.0"
+        titre: "Référencement naturel, local et GEO"
+        entrees:
+          - "brief et exigences"
+          - "URLs du site"
+          - "fiches des établissements"
+          - "requêtes cibles"
+        sorties:
+          - "audit SEO hiérarchisé"
+          - "audit des informations locales par établissement"
+          - "recommandations GEO distinguant mesure, hypothèse et recommandation"
+        competencesObligatoires:
+          - "audit-local-etablissements"
+        outilsRecherche:
+          - "Read"
+          - "Grep"
+          - "Glob"
+          - "WebSearch"
+          - "WebFetch"
+          - "mcp__paperclip-assigned"
+          - "mcp__Paperclip_connections__connections_search"
+          - "mcp__Paperclip_connections__connection_request"
+        outilsMutation:
+          - "Bash(curl *)"
+          - "Write"
+        outilsInterdits:
+          - "Edit"
+          - "NotebookEdit"
+        relit: []
+        roleRevue: null
+        connexions:
+          gsc: "lecture"
+          ga4: "lecture"
+          gbp: "lecture"
+        criteresReussite:
+          - "chaque établissement du périmètre a sa propre ligne d'audit"
+          - "aucune promesse de position, de classement ou de citation par une IA"
+          - "chaque recommandation est vérifiable et rattachée à une exigence"
+    inputs:
+      env:
+        CLAUDE_CODE_OAUTH_TOKEN:
+          kind: "secret"
+          requirement: "optional"
+          description: "Jeton longue durée produit par « claude setup-token » (abonnement Claude de l'opérateur, usage personnel). Stocké comme secret Paperclip, jamais dans un fichier."
+        CLAUDE_CONFIG_DIR:
+          kind: "plain"
+          requirement: "optional"
+          portability: "system_dependent"
+          description: "Dossier de configuration Claude dédié à l'agent, créé par le bootstrap sous instance/claude-config/<slug>. Jamais le ~/.claude de l'opérateur."
+  sea:
+    role: "general"
+    capabilities: "Prépare campagnes, groupes, mots-clés, exclusions, variantes et propositions budgétaires reliés à une offre validée et à une page cohérente ; n'active rien."
+    adapter:
+      type: "claude_local"
+      config:
+        engine: "cli"
+        model: "claude-sonnet-5-5"
+        effort: "medium"
+        dangerouslySkipPermissions: false
+        maxTurnsPerRun: 60
+        timeoutSec: 1800
+        graceSec: 30
+        extraArgs:
+          - "--permission-mode"
+          - "dontAsk"
+          - "--allowedTools"
+          - "Read"
+          - "Grep"
+          - "Glob"
+          - "WebFetch"
+          - "mcp__paperclip-assigned"
+          - "mcp__Paperclip_connections__connections_search"
+          - "mcp__Paperclip_connections__connection_request"
+          - "Bash(curl *)"
+          - "Write"
+          - "--disallowedTools"
+          - "WebSearch"
+          - "Edit"
+          - "NotebookEdit"
+        env:
+          DISABLE_TELEMETRY:
+            type: "plain"
+            value: "1"
+          CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC:
+            type: "plain"
+            value: "1"
+    runtime:
+      heartbeat:
+        maxConcurrentRuns: 1
+    budgetMonthlyCents: 1500
+    metadata:
+      atelier:
+        registre: "atelier/registre-agents/v1"
+        versionRegistre: "1.4.0"
+        titre: "Publicité et SEA"
+        entrees:
+          - "brief et exigences"
+          - "offres validées"
+          - "pages de destination"
+          - "budget maximal autorisé"
+        sorties:
+          - "plan de campagne en brouillon"
+          - "groupes et mots-clés avec exclusions"
+          - "variantes d'annonces reliées aux offres"
+          - "proposition budgétaire bornée"
+        competencesObligatoires:
+          - "preparation-campagnes-sea"
+        outilsRecherche:
+          - "Read"
+          - "Grep"
+          - "Glob"
+          - "WebFetch"
+          - "mcp__paperclip-assigned"
+          - "mcp__Paperclip_connections__connections_search"
+          - "mcp__Paperclip_connections__connection_request"
+        outilsMutation:
+          - "Bash(curl *)"
+          - "Write"
+        outilsInterdits:
+          - "WebSearch"
+          - "Edit"
+          - "NotebookEdit"
+        relit: []
+        roleRevue: null
+        connexions:
+          ads: "lecture"
+        criteresReussite:
+          - "chaque annonce cite l'offre validée et la page de destination qu'elle promet"
+          - "aucune activation ni hausse de budget, même implicite"
+          - "le total proposé reste sous le budget maximal du brief"
+    inputs:
+      env:
+        CLAUDE_CODE_OAUTH_TOKEN:
+          kind: "secret"
+          requirement: "optional"
+          description: "Jeton longue durée produit par « claude setup-token » (abonnement Claude de l'opérateur, usage personnel). Stocké comme secret Paperclip, jamais dans un fichier."
+        CLAUDE_CONFIG_DIR:
+          kind: "plain"
+          requirement: "optional"
+          portability: "system_dependent"
+          description: "Dossier de configuration Claude dédié à l'agent, créé par le bootstrap sous instance/claude-config/<slug>. Jamais le ~/.claude de l'opérateur."
+  contenus:
+    role: "designer"
+    capabilities: "Produit articles, publications, pages et briefs de visuels selon la marque et le canal ; signale sources et droits ; n'invente ni avis, ni prix, ni certification."
+    adapter:
+      type: "claude_local"
+      config:
+        engine: "cli"
+        model: "claude-sonnet-5-5"
+        effort: "medium"
+        dangerouslySkipPermissions: false
+        maxTurnsPerRun: 60
+        timeoutSec: 1800
+        graceSec: 30
+        extraArgs:
+          - "--permission-mode"
+          - "dontAsk"
+          - "--allowedTools"
+          - "Read"
+          - "Grep"
+          - "Glob"
+          - "WebFetch"
+          - "mcp__paperclip-assigned"
+          - "mcp__Paperclip_connections__connections_search"
+          - "mcp__Paperclip_connections__connection_request"
+          - "Bash(curl *)"
+          - "Write"
+          - "Edit"
+          - "--disallowedTools"
+          - "WebSearch"
+          - "NotebookEdit"
+        env:
+          DISABLE_TELEMETRY:
+            type: "plain"
+            value: "1"
+          CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC:
+            type: "plain"
+            value: "1"
+    runtime:
+      heartbeat:
+        maxConcurrentRuns: 1
+    budgetMonthlyCents: 1500
+    metadata:
+      atelier:
+        registre: "atelier/registre-agents/v1"
+        versionRegistre: "1.4.0"
+        titre: "Contenus et création"
+        entrees:
+          - "brief et exigences"
+          - "charte de marque"
+          - "sources validées"
+          - "calendrier proposé"
+        sorties:
+          - "textes par canal en brouillon"
+          - "briefs de visuels identifiés comme tels"
+          - "liste des sources et droits à vérifier"
+        competencesObligatoires:
+          - "charte-marque"
+        outilsRecherche:
+          - "Read"
+          - "Grep"
+          - "Glob"
+          - "WebFetch"
+          - "mcp__paperclip-assigned"
+          - "mcp__Paperclip_connections__connections_search"
+          - "mcp__Paperclip_connections__connection_request"
+        outilsMutation:
+          - "Bash(curl *)"
+          - "Write"
+          - "Edit"
+        outilsInterdits:
+          - "WebSearch"
+          - "NotebookEdit"
+        relit: []
+        roleRevue: null
+        connexions:
+          facebook: "lecture"
+          instagram: "lecture"
+          linkedin: "lecture"
+        criteresReussite:
+          - "aucun témoignage, avis, prix, certification ou subvention inventé"
+          - "chaque affirmation commerciale renvoie à une source ou est marquée « à confirmer »"
+          - "un visuel non généré est livré comme brief, jamais comme visuel final"
+    inputs:
+      env:
+        CLAUDE_CODE_OAUTH_TOKEN:
+          kind: "secret"
+          requirement: "optional"
+          description: "Jeton longue durée produit par « claude setup-token » (abonnement Claude de l'opérateur, usage personnel). Stocké comme secret Paperclip, jamais dans un fichier."
+        CLAUDE_CONFIG_DIR:
+          kind: "plain"
+          requirement: "optional"
+          portability: "system_dependent"
+          description: "Dossier de configuration Claude dédié à l'agent, créé par le bootstrap sous instance/claude-config/<slug>. Jamais le ~/.claude de l'opérateur."
+  crm-conversion:
+    role: "general"
+    capabilities: "Conçoit pages de conversion, formulaires, segmentation et scénarios de suivi avec déclencheurs, exclusions et consentements ; aucune prospection réelle automatique."
+    adapter:
+      type: "claude_local"
+      config:
+        engine: "cli"
+        model: "claude-sonnet-5-5"
+        effort: "medium"
+        dangerouslySkipPermissions: false
+        maxTurnsPerRun: 60
+        timeoutSec: 1800
+        graceSec: 30
+        extraArgs:
+          - "--permission-mode"
+          - "dontAsk"
+          - "--allowedTools"
+          - "Read"
+          - "Grep"
+          - "Glob"
+          - "mcp__Paperclip_connections__connections_search"
+          - "mcp__Paperclip_connections__connection_request"
+          - "Bash(curl *)"
+          - "Write"
+          - "Edit"
+          - "mcp__paperclip-assigned"
+          - "--disallowedTools"
+          - "WebSearch"
+          - "WebFetch"
+          - "NotebookEdit"
+        env:
+          DISABLE_TELEMETRY:
+            type: "plain"
+            value: "1"
+          CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC:
+            type: "plain"
+            value: "1"
+    runtime:
+      heartbeat:
+        maxConcurrentRuns: 1
+    budgetMonthlyCents: 1500
+    metadata:
+      atelier:
+        registre: "atelier/registre-agents/v1"
+        versionRegistre: "1.4.0"
+        titre: "CRM et conversion"
+        entrees:
+          - "brief et exigences"
+          - "offres validées"
+          - "parcours client visé"
+        sorties:
+          - "structure de page de conversion"
+          - "spécification de formulaire"
+          - "scénarios de suivi avec conditions d'envoi"
+        competencesObligatoires:
+          - "conversion-crm"
+        outilsRecherche:
+          - "Read"
+          - "Grep"
+          - "Glob"
+          - "mcp__Paperclip_connections__connections_search"
+          - "mcp__Paperclip_connections__connection_request"
+        outilsMutation:
+          - "Bash(curl *)"
+          - "Write"
+          - "Edit"
+          - "mcp__paperclip-assigned"
+        outilsInterdits:
+          - "WebSearch"
+          - "WebFetch"
+          - "NotebookEdit"
+        relit: []
+        roleRevue: null
+        connexions:
+          crm: "ecriture_sur_accord"
+          pipedrive: "ecriture_sur_accord"
+          odoo: "ecriture_sur_accord"
+          teamleader: "ecriture_sur_accord"
+        criteresReussite:
+          - "chaque scénario documente entrée, déclencheur, exclusions, consentement et condition d'envoi"
+          - "seuls des prospects fictifs apparaissent en démonstration"
+          - "aucun envoi n'est programmé sans approbation humaine explicite"
+    inputs:
+      env:
+        CLAUDE_CODE_OAUTH_TOKEN:
+          kind: "secret"
+          requirement: "optional"
+          description: "Jeton longue durée produit par « claude setup-token » (abonnement Claude de l'opérateur, usage personnel). Stocké comme secret Paperclip, jamais dans un fichier."
+        CLAUDE_CONFIG_DIR:
+          kind: "plain"
+          requirement: "optional"
+          portability: "system_dependent"
+          description: "Dossier de configuration Claude dédié à l'agent, créé par le bootstrap sous instance/claude-config/<slug>. Jamais le ~/.claude de l'opérateur."
+  mesure:
+    role: "researcher"
+    capabilities: "Vérifie données, conversions et doublons ; présente coûts, périodes, attribution et incertitudes ; propose des expériences avec hypothèse, métrique et condition d'arrêt ; répond « non mesurable » si les données manquent."
+    adapter:
+      type: "claude_local"
+      config:
+        engine: "cli"
+        model: "claude-sonnet-5-5"
+        effort: "medium"
+        dangerouslySkipPermissions: false
+        maxTurnsPerRun: 40
+        timeoutSec: 1800
+        graceSec: 30
+        extraArgs:
+          - "--permission-mode"
+          - "dontAsk"
+          - "--allowedTools"
+          - "Read"
+          - "Grep"
+          - "Glob"
+          - "mcp__paperclip-assigned"
+          - "mcp__Paperclip_connections__connections_search"
+          - "mcp__Paperclip_connections__connection_request"
+          - "Bash(curl *)"
+          - "Write"
+          - "--disallowedTools"
+          - "WebSearch"
+          - "WebFetch"
+          - "Edit"
+          - "NotebookEdit"
+        env:
+          DISABLE_TELEMETRY:
+            type: "plain"
+            value: "1"
+          CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC:
+            type: "plain"
+            value: "1"
+    runtime:
+      heartbeat:
+        maxConcurrentRuns: 1
+    budgetMonthlyCents: 1000
+    metadata:
+      atelier:
+        registre: "atelier/registre-agents/v1"
+        versionRegistre: "1.4.0"
+        titre: "Mesure et optimisation"
+        entrees:
+          - "exports de données importés avec période et provenance"
+          - "objectifs de la campagne"
+        sorties:
+          - "tableau de mesures avec provenance"
+          - "liste des connexions manquantes"
+          - "plan d'expériences"
+        competencesObligatoires:
+          - "mesure-experiences"
+        outilsRecherche:
+          - "Read"
+          - "Grep"
+          - "Glob"
+          - "mcp__paperclip-assigned"
+          - "mcp__Paperclip_connections__connections_search"
+          - "mcp__Paperclip_connections__connection_request"
+        outilsMutation:
+          - "Bash(curl *)"
+          - "Write"
+        outilsInterdits:
+          - "WebSearch"
+          - "WebFetch"
+          - "Edit"
+          - "NotebookEdit"
+        relit: []
+        roleRevue: null
+        connexions:
+          ga4: "lecture"
+          ads: "lecture"
+          gsc: "lecture"
+        criteresReussite:
+          - "aucun chiffre sans période ni provenance"
+          - "« non mesurable » plutôt qu'une performance inventée"
+          - "chaque expérience a une hypothèse, une métrique et une condition d'arrêt"
+    inputs:
+      env:
+        CLAUDE_CODE_OAUTH_TOKEN:
+          kind: "secret"
+          requirement: "optional"
+          description: "Jeton longue durée produit par « claude setup-token » (abonnement Claude de l'opérateur, usage personnel). Stocké comme secret Paperclip, jamais dans un fichier."
+        CLAUDE_CONFIG_DIR:
+          kind: "plain"
+          requirement: "optional"
+          portability: "system_dependent"
+          description: "Dossier de configuration Claude dédié à l'agent, créé par le bootstrap sous instance/claude-config/<slug>. Jamais le ~/.claude de l'opérateur."
+  exigences:
+    role: "qa"
+    capabilities: "Compare chaque livrable au brief original et à chaque exigence ; exige une preuve localisable pour tout point annoncé couvert ; signale établissements, canaux ou sections oubliés."
+    adapter:
+      type: "claude_local"
+      config:
+        engine: "cli"
+        model: "claude-opus-5-5"
+        effort: "high"
+        dangerouslySkipPermissions: false
+        maxTurnsPerRun: 40
+        timeoutSec: 1800
+        graceSec: 30
+        extraArgs:
+          - "--permission-mode"
+          - "dontAsk"
+          - "--allowedTools"
+          - "Read"
+          - "Grep"
+          - "Glob"
+          - "Bash(curl *)"
+          - "--disallowedTools"
+          - "WebSearch"
+          - "WebFetch"
+          - "Write"
+          - "Edit"
+          - "NotebookEdit"
+        env:
+          DISABLE_TELEMETRY:
+            type: "plain"
+            value: "1"
+          CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC:
+            type: "plain"
+            value: "1"
+    runtime:
+      heartbeat:
+        maxConcurrentRuns: 1
+    budgetMonthlyCents: 2000
+    metadata:
+      atelier:
+        registre: "atelier/registre-agents/v1"
+        versionRegistre: "1.4.0"
+        titre: "Contrôleur des exigences"
+        entrees:
+          - "brief original"
+          - "liste des exigences"
+          - "version précise du livrable"
+          - "critères"
+        sorties:
+          - "verdict structuré"
+          - "matrice exigence par exigence avec preuve localisée"
+          - "constats avec gravité"
+        competencesObligatoires:
+          - "controle-couverture"
+        outilsRecherche:
+          - "Read"
+          - "Grep"
+          - "Glob"
+        outilsMutation:
+          - "Bash(curl *)"
+        outilsInterdits:
+          - "WebSearch"
+          - "WebFetch"
+          - "Write"
+          - "Edit"
+          - "NotebookEdit"
+        relit:
+          - "coordinateur"
+          - "veille"
+          - "seo-local-geo"
+          - "sea"
+          - "contenus"
+          - "crm-conversion"
+          - "mesure"
+        roleRevue: "exigences"
+        connexions: {}
+        criteresReussite:
+          - "chaque exigence obligatoire reçoit un état de couverture et une preuve localisable"
+          - "une correspondance textuelle seule n'est jamais acceptée comme preuve"
+          - "le verdict porte sur la version exacte du livrable"
+    inputs:
+      env:
+        CLAUDE_CODE_OAUTH_TOKEN:
+          kind: "secret"
+          requirement: "optional"
+          description: "Jeton longue durée produit par « claude setup-token » (abonnement Claude de l'opérateur, usage personnel). Stocké comme secret Paperclip, jamais dans un fichier."
+        CLAUDE_CONFIG_DIR:
+          kind: "plain"
+          requirement: "optional"
+          portability: "system_dependent"
+          description: "Dossier de configuration Claude dédié à l'agent, créé par le bootstrap sous instance/claude-config/<slug>. Jamais le ~/.claude de l'opérateur."
+  relecteur:
+    role: "qa"
+    capabilities: "Vérifie raisonnement, informations, sources, cohérence entre canaux et respect de la marque ; chaque anomalie indique emplacement, preuve, gravité et correction attendue."
+    adapter:
+      type: "claude_local"
+      config:
+        engine: "cli"
+        model: "claude-opus-5-5"
+        effort: "high"
+        dangerouslySkipPermissions: false
+        maxTurnsPerRun: 40
+        timeoutSec: 1800
+        graceSec: 30
+        extraArgs:
+          - "--permission-mode"
+          - "dontAsk"
+          - "--allowedTools"
+          - "Read"
+          - "Grep"
+          - "Glob"
+          - "WebSearch"
+          - "WebFetch"
+          - "Bash(curl *)"
+          - "--disallowedTools"
+          - "Write"
+          - "Edit"
+          - "NotebookEdit"
+        env:
+          DISABLE_TELEMETRY:
+            type: "plain"
+            value: "1"
+          CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC:
+            type: "plain"
+            value: "1"
+    runtime:
+      heartbeat:
+        maxConcurrentRuns: 1
+    budgetMonthlyCents: 2000
+    metadata:
+      atelier:
+        registre: "atelier/registre-agents/v1"
+        versionRegistre: "1.4.0"
+        titre: "Relecteur métier et factuel"
+        entrees:
+          - "brief original"
+          - "exigences"
+          - "version précise du livrable"
+          - "sources citées"
+          - "charte de marque"
+        sorties:
+          - "verdict structuré"
+          - "constats factuels et métier"
+        competencesObligatoires:
+          - "relecture-independante"
+        outilsRecherche:
+          - "Read"
+          - "Grep"
+          - "Glob"
+          - "WebSearch"
+          - "WebFetch"
+        outilsMutation:
+          - "Bash(curl *)"
+        outilsInterdits:
+          - "Write"
+          - "Edit"
+          - "NotebookEdit"
+        relit:
+          - "coordinateur"
+          - "veille"
+          - "seo-local-geo"
+          - "sea"
+          - "contenus"
+          - "crm-conversion"
+          - "mesure"
+        roleRevue: "metier"
+        connexions: {}
+        criteresReussite:
+          - "chaque affirmation invérifiable, contradiction ou promesse excessive est signalée"
+          - "chaque constat a un emplacement, une preuve, une gravité et une correction attendue"
+          - "l'autoévaluation du producteur n'est jamais prise comme preuve"
+    inputs:
+      env:
+        CLAUDE_CODE_OAUTH_TOKEN:
+          kind: "secret"
+          requirement: "optional"
+          description: "Jeton longue durée produit par « claude setup-token » (abonnement Claude de l'opérateur, usage personnel). Stocké comme secret Paperclip, jamais dans un fichier."
+        CLAUDE_CONFIG_DIR:
+          kind: "plain"
+          requirement: "optional"
+          portability: "system_dependent"
+          description: "Dossier de configuration Claude dédié à l'agent, créé par le bootstrap sous instance/claude-config/<slug>. Jamais le ~/.claude de l'opérateur."
+  tests-techniques:
+    role: "qa"
+    capabilities: "Exécute les contrôles techniques adaptés : URLs, redirections, accessibilité, formulaires, suivi, formats, schémas et affichage ; un HTTP 200 sur une page d'erreur reste un échec."
+    adapter:
+      type: "claude_local"
+      config:
+        engine: "cli"
+        model: "claude-sonnet-5-5"
+        effort: "medium"
+        dangerouslySkipPermissions: false
+        maxTurnsPerRun: 40
+        timeoutSec: 1800
+        graceSec: 30
+        extraArgs:
+          - "--permission-mode"
+          - "dontAsk"
+          - "--allowedTools"
+          - "Read"
+          - "Grep"
+          - "Glob"
+          - "WebFetch"
+          - "Bash(curl *)"
+          - "--disallowedTools"
+          - "WebSearch"
+          - "Write"
+          - "Edit"
+          - "NotebookEdit"
+        env:
+          DISABLE_TELEMETRY:
+            type: "plain"
+            value: "1"
+          CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC:
+            type: "plain"
+            value: "1"
+    runtime:
+      heartbeat:
+        maxConcurrentRuns: 1
+    budgetMonthlyCents: 1000
+    metadata:
+      atelier:
+        registre: "atelier/registre-agents/v1"
+        versionRegistre: "1.4.0"
+        titre: "Vérificateur technique"
+        entrees:
+          - "version précise du livrable"
+          - "liste des URLs et formulaires"
+          - "schémas attendus"
+        sorties:
+          - "rapport de contrôles par URL et par élément"
+          - "constats techniques"
+          - "liste des contrôles non exécutés"
+        competencesObligatoires:
+          - "controles-techniques-liens"
+        outilsRecherche:
+          - "Read"
+          - "Grep"
+          - "Glob"
+          - "WebFetch"
+        outilsMutation:
+          - "Bash(curl *)"
+        outilsInterdits:
+          - "WebSearch"
+          - "Write"
+          - "Edit"
+          - "NotebookEdit"
+        relit:
+          - "seo-local-geo"
+          - "sea"
+          - "contenus"
+          - "crm-conversion"
+        roleRevue: "technique"
+        connexions: {}
+        criteresReussite:
+          - "chaque URL a un statut, une destination finale et un contrôle de contenu"
+          - "un code 200 sur une page d'erreur est classé en échec"
+          - "les contrôles non exécutés sont listés avec leur raison"
+    inputs:
+      env:
+        CLAUDE_CODE_OAUTH_TOKEN:
+          kind: "secret"
+          requirement: "optional"
+          description: "Jeton longue durée produit par « claude setup-token » (abonnement Claude de l'opérateur, usage personnel). Stocké comme secret Paperclip, jamais dans un fichier."
+        CLAUDE_CONFIG_DIR:
+          kind: "plain"
+          requirement: "optional"
+          portability: "system_dependent"
+          description: "Dossier de configuration Claude dédié à l'agent, créé par le bootstrap sous instance/claude-config/<slug>. Jamais le ~/.claude de l'opérateur."
+  porte:
+    role: "qa"
+    capabilities: "Agent déterministe, sans modèle : tient l'unique étape native de revue (circuit 1.1). Il évalue la porte du plugin dans son run et décide : PASS → étape d'approbation humaine ; sinon retour au producteur. La garde P2 du serveur revérifie."
+    adapter:
+      type: "process"
+      config:
+        command: "node"
+        args:
+          - "demo/agent-demo.mjs"
+          - "porte"
+        timeoutSec: 300
+    runtime:
+      heartbeat:
+        maxConcurrentRuns: 1
+    budgetMonthlyCents: 100
+    metadata:
+      atelier:
+        registre: "atelier/registre-agents/v1"
+        versionRegistre: "1.4.0"
+        titre: "Porte de contrôle"
+        entrees:
+          - "tâche sous porte en étape de revue"
+          - "évaluation déterministe du plugin (exigences, couvertures, verdicts, constats)"
+        sorties:
+          - "décision native de l'étape de revue (done ou retour au producteur) avec les motifs codés de la porte"
+        competencesObligatoires: []
+        outilsRecherche: []
+        outilsMutation: []
+        outilsInterdits: []
+        relit: []
+        roleRevue: null
+        connexions: {}
+        criteresReussite:
+          - "décide toujours dans son run (le moteur bloque une revue sans décision)"
+          - "jamais de PASS sans évaluation PASS fraîche sur la révision courante"
+    inputs:
+      env: {}
+projects:
+  campagne-printemps-2027:
+    leadAgentSlug: "coordinateur"
+    status: "planned"
+    color: "#2f6f5e"
+    metadata:
+      atelier:
+        objectifs:
+          - "OBJ-1"
+          - "OBJ-2"
+          - "OBJ-3"
+  veille-continue:
+    leadAgentSlug: "veille"
+    status: "in_progress"
+    color: "#5a5f8f"
+    metadata:
+      atelier:
+        objectifs:
+          - "OBJ-2"
+          - "OBJ-3"
+routines:
+  veille-concurrentielle-hebdomadaire:
+    concurrencyPolicy: "skip_if_active"
+    catchUpPolicy: "skip_missed"
+    triggers:
+      -
+        kind: "schedule"
+        cronExpression: "0 8 * * 1"
+        timezone: "Europe/Brussels"
+  controle-liens-mensuel:
+    concurrencyPolicy: "skip_if_active"
+    catchUpPolicy: "skip_missed"
+    triggers:
+      -
+        kind: "schedule"
+        cronExpression: "0 7 1 * *"
+        timezone: "Europe/Brussels"
+  point-coordination-hebdomadaire:
+    concurrencyPolicy: "coalesce_if_active"
+    catchUpPolicy: "skip_missed"
+    triggers:
+      -
+        kind: "schedule"
+        cronExpression: "0 9 * * 5"
+        timezone: "Europe/Brussels"

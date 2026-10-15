@@ -1,0 +1,80 @@
+{
+  "schema": "atelier/registre-organisation/v1",
+  "version": "1.0.0",
+  "entreprise": {
+    "nom": "Rénovation Liège (démonstration)",
+    "slug": "renovation-liege-demonstration",
+    "marqueur": "atelier-demo:renovation-liege",
+    "description": "Entreprise fictive de rénovation à Liège, créée pour la démonstration de l'Atelier Marketing IA. Aucune coordonnée réelle. Marqueur de périmètre : atelier-demo:renovation-liege.",
+    "approbationHumainePourNouveauxAgents": true
+  },
+  "responsableHumain": {
+    "description": "Utilisateur humain responsable des escalades. En mode local_trusted, Paperclip ne connaît qu'un utilisateur : le board local. Le bootstrap le résout à l'exécution et l'inscrit dans les gabarits de politiques ; aucun identifiant n'est écrit dans le paquet.",
+    "role": "owner"
+  },
+  "objectifs": [
+    {
+      "cle": "OBJ-1",
+      "titre": "Obtenir des demandes de devis qualifiées en rénovation énergétique à Liège",
+      "description": "Mesuré uniquement à partir de données réellement importées (formulaires, appels suivis). Sans données : « non mesurable ».",
+      "niveau": "company",
+      "statut": "active",
+      "responsable": "coordinateur"
+    },
+    {
+      "cle": "OBJ-2",
+      "titre": "Rendre les trois établissements visibles et cohérents en recherche locale et dans les réponses des moteurs d'IA",
+      "description": "Informations identiques et vérifiées pour Liège-Centre, Liège-Outremeuse et Ans sur le site, les fiches et les contenus. Aucune promesse de classement.",
+      "niveau": "company",
+      "statut": "active",
+      "responsable": "seo-local-geo"
+    },
+    {
+      "cle": "OBJ-3",
+      "titre": "Ne diffuser que des contenus contrôlés et approuvés par un humain",
+      "description": "Chaque livrable passe par le contrôle des exigences, la relecture métier et les contrôles techniques applicables, puis par une décision humaine qui vise une version précise.",
+      "niveau": "company",
+      "statut": "active",
+      "responsable": "coordinateur"
+    }
+  ],
+  "projets": [
+    {
+      "slug": "campagne-printemps-2027",
+      "objectifs": ["OBJ-1", "OBJ-2", "OBJ-3"],
+      "responsable": "coordinateur",
+      "statut": "planned",
+      "couleur": "#2f6f5e"
+    },
+    {
+      "slug": "veille-continue",
+      "objectifs": ["OBJ-2", "OBJ-3"],
+      "responsable": "veille",
+      "statut": "in_progress",
+      "couleur": "#5a5f8f"
+    }
+  ],
+  "routines": [
+    {
+      "slug": "veille-concurrentielle-hebdomadaire",
+      "cron": "0 8 * * 1",
+      "fuseau": "Europe/Brussels",
+      "concurrence": "skip_if_active",
+      "rattrapage": "skip_missed"
+    },
+    {
+      "slug": "controle-liens-mensuel",
+      "cron": "0 7 1 * *",
+      "fuseau": "Europe/Brussels",
+      "concurrence": "skip_if_active",
+      "rattrapage": "skip_missed"
+    },
+    {
+      "slug": "point-coordination-hebdomadaire",
+      "cron": "0 9 * * 5",
+      "fuseau": "Europe/Brussels",
+      "concurrence": "coalesce_if_active",
+      "rattrapage": "skip_missed"
+    }
+  ]
+}

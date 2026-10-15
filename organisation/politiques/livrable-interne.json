@@ -1,0 +1,44 @@
+{
+  "description": "Livrable interne sans URL ni formulaire (note de marché, audit, plan). Circuit 1.1 : revues liées « exigences » et « métier » (tâches créées par le plugin), puis l'étape native de revue tenue par la Porte de contrôle, puis l'approbation humaine ; P2 exige la porte PASS sur la révision courante.",
+  "responsibleUserId": "{{humain:responsable}}",
+  "porte": {
+    "obligatoire": true,
+    "cleLivrable": "livrable",
+    "route": "POST /api/plugins/atelier.marketing-ia/api/portes (portes.creer) à la création de la tâche",
+    "revuesRequises": [
+      {
+        "role": "exigences",
+        "agentId": "{{agent:exigences}}"
+      },
+      {
+        "role": "metier",
+        "agentId": "{{agent:relecteur}}"
+      }
+    ]
+  },
+  "executionPolicy": {
+    "mode": "normal",
+    "commentRequired": true,
+    "maxReviewRounds": 3,
+    "stages": [
+      {
+        "type": "review",
+        "participants": [
+          {
+            "type": "agent",
+            "agentId": "{{agent:porte}}"
+          }
+        ]
+      },
+      {
+        "type": "approval",
+        "participants": [
+          {
+            "type": "user",
+            "userId": "{{humain:responsable}}"
+          }
+        ]
+      }
+    ]
+  }
+}

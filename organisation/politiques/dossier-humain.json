@@ -1,0 +1,40 @@
+{
+  "description": "Dossier de validation préparé par le coordinateur. Circuit 1.1 : revue liée « exigences » sur le dossier lui-même, puis l'étape native de revue tenue par la Porte de contrôle, puis la décision humaine ; P2 exige la porte PASS sur la révision courante du dossier.",
+  "responsibleUserId": "{{humain:responsable}}",
+  "porte": {
+    "obligatoire": true,
+    "cleLivrable": "livrable",
+    "route": "POST /api/plugins/atelier.marketing-ia/api/portes (portes.creer) à la création de la tâche",
+    "revuesRequises": [
+      {
+        "role": "exigences",
+        "agentId": "{{agent:exigences}}"
+      }
+    ]
+  },
+  "executionPolicy": {
+    "mode": "normal",
+    "commentRequired": true,
+    "maxReviewRounds": 3,
+    "stages": [
+      {
+        "type": "review",
+        "participants": [
+          {
+            "type": "agent",
+            "agentId": "{{agent:porte}}"
+          }
+        ]
+      },
+      {
+        "type": "approval",
+        "participants": [
+          {
+            "type": "user",
+            "userId": "{{humain:responsable}}"
+          }
+        ]
+      }
+    ]
+  }
+}

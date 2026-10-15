@@ -1,0 +1,21 @@
+Atelier Marketing IA
+Copyright (c) 2026 Jean-Baptiste Dhondt. Tous droits réservés (voir LICENSE).
+
+Ce dépôt contient des correctifs et des extraits de Paperclip
+(https://github.com/paperclipai/paperclip), Copyright (c) 2025 Paperclip AI,
+distribué sous licence MIT. Le texte complet de cette licence est dans
+socle/patches/LICENSE-Paperclip.
+
+Parties concernées :
+
+- socle/patches/*.patch : correctifs appliqués au code de Paperclip ; ils
+  modifient et contiennent des lignes de Paperclip et restent sous sa licence MIT.
+- plugin-atelier/esbuild.config.mjs : extrait adapté de la configuration de
+  construction des plugins de Paperclip.
+- scripts/bootstrap-organisation.py : la fonction normaliser_slug est un
+  portage en Python de normalizeAgentUrlKey (packages/shared/src/agent-url-key.ts)
+  de Paperclip.
+
+Le dossier paperclip/ (clone du socle, reconstruit par scripts/preparer-socle.sh)
+n'est pas versionné ici : il se télécharge depuis le dépôt amont à la version
+indiquée dans socle/VERSION.

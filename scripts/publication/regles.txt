@@ -1,0 +1,57 @@
+# Règles de nettoyage appliquées par scripts/publier.sh à l'arbre exporté (jamais à la copie de travail).
+# Format : motif (expression régulière Perl), UNE tabulation, remplacement littéral.
+# Les règles sont appliquées dans l'ordre, à tous les fichiers texte. Lignes vides et # ignorées.
+# Les motifs sont écrits avec un crochet autour d'une lettre ([a], [r], [-]) pour ne pas se
+# reconnaître eux-mêmes : ce fichier est publié et ne doit contenir aucun terme à retirer.
+
+# Adresse e-mail personnelle vers l'adresse noreply GitHub du compte public.
+[A-Za-z0-9._+-]*dhondt[A-Za-z0-9._+-]*@gm[a]il\.com	114347858+warrox1993@users.noreply.github.com
+
+# Chemins personnels (le plus spécifique d'abord).
+-home-jean[-]baptiste	-home-utilisateur
+/home/jean[-]baptiste	~
+
+# Nom de la machine de développement (tournures avec préposition d'abord).
+\bde JBsTowe[r]\b	du poste de développement
+à JBsTowe[r]\b	au poste de développement
+\bJBsTowe[r]\b	le poste de développement
+\bjbstowe[r]\b	poste-dev
+
+# Abonnement personnel de l'opérateur (descriptions de jetons dans le registre et le bootstrap).
+abonnement Max de [J]B	abonnement Claude de l'opérateur
+abonnement de [J]B	abonnement de l'opérateur
+
+# Règles et décisions personnelles de l'opérateur : formulations précises d'abord (celles dont le
+# sens technique doit rester lisible), puis les tournures à préposition. Un message et le test qui
+# le compare sont dans le même arbre : la même règle les change ensemble.
+# Choix explicite d'utiliser le système de plugins (qualifié d'alpha par l'amont).
+Dérogation explicite de [J]B\s+à sa règle « jamais d'alpha », limitée au système de plugins de ce projet\.	Choix explicite de l'opérateur, limité au système de plugins de ce projet.
+[Dd]érogation de [J]B limitée au système de plugins	choix explicite de l'opérateur limité au système de plugins
+Dérogation de [J]B \(15/10/2026\) : le système de plugins est qualifié	Le système de plugins est qualifié
+par l'amont ; [J]B autorise son usage pour ce projet	par l'amont ; son usage est un choix explicite de l'opérateur pour ce projet
+# Isolement des consignes personnelles : messages, commentaires et variables du test d'isolement.
+3\. Isolement des consignes de [J]B, sans	3. Isolement des consignes personnelles, sans
+\(doit contenir ~/\.claude/CLAUDE\.md\)	(doit contenir le fichier de consignes globales de l'utilisateur)
+témoin sans réglage : ~/\.claude/CLAUDE\.md présent	témoin sans réglage : fichier de consignes globales de l'utilisateur présent
+aucune consigne de [J]B dans la requête capturée	aucune consigne personnelle dans la requête capturée
+commande claude ou ~/\.claude/CLAUDE\.md absent	commande claude ou fichier de consignes globales absent
+\bn_[j]b\b	n_perso
+read -r req [j]b <<<	read -r req perso <<<
+\$\{[j]b\}	${perso}
+Fable est suspendu par [J]B \(10/10/2026\)	Fable est suspendu (décision de l'opérateur du 10/10/2026)
+Jamais le ~/\.claude de [J]B	Jamais le ~/.claude de l'opérateur
+que [J]B aurait	que l'opérateur aurait
+# Tournures à préposition (après les formulations précises).
+\bde [J]B\b	de l'opérateur
+\bpar [J]B\b	par l'opérateur
+à [J]B\b	à l'opérateur
+\bpour [J]B\b	pour l'opérateur
+[J]B fournit le jeton	L'opérateur fournit le jeton
+\* [J]B du 15/10/2026	* l'opérateur du 15/10/2026
+\bseul [J]B\b	seul l'opérateur
+\bque [J]B\b	que l'opérateur
+\bdont [J]B\b	dont l'opérateur
+\bsi [J]B\b	si l'opérateur
+\b[J]B ajouté comme	l'opérateur ajouté comme
+: [J]B visite une page	: l'opérateur visite une page
+[J]B n'a pas de fiche à lui	l'opérateur n'a pas de fiche propre

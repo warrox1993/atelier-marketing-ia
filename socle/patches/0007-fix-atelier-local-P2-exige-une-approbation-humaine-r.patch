@@ -1,0 +1,490 @@
+From e4cec9833701252658c65bbf954be3682519d2d7 Mon Sep 17 00:00:00 2001
+From: Jean-Baptiste Dhondt <114347858+warrox1993@users.noreply.github.com>
+Date: Thu, 15 Oct 2026 18:58:18 +0200
+Subject: [PATCH] =?UTF-8?q?fix(atelier,=20local):=20P2=20exige=20une=20app?=
+ =?UTF-8?q?robation=20humaine=20r=C3=A9elle=20et=20fige=20le=20livrable=20?=
+ =?UTF-8?q?(revue=20ind=C3=A9pendante=20H2,=20H3,=20M3,=20B2)?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+- H2 : done sous porte refusé à un agent, sans humain authentifié, hors de l'étape d'approbation,
+  ou sans décision « approuver » non invalidée sur la révision courante (decisions_humaines).
+- H3 : révision courante relue « for update » sur la ligne documents (sérialisation avec
+  l'écriture d'un document) ; livrable verrouillé (documents.locked_at, mécanisme de
+  lockIssueDocument) à l'entrée de l'approbation et déverrouillé au retour en correction ;
+  un verrou posé à la main par le board n'est jamais levé.
+- M3 : sources.date_collecte entre dans la fraîcheur de l'évaluation.
+- B2 : commentRequired dans la signature P1.
+- Tests : atelier-gardes.test.ts (23 tests, PostgreSQL embarqué), dont la course P2 / écriture.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01DP85vPq2MHkZg8VNtRvCzB
+---
+ server/src/__tests__/atelier-gardes.test.ts | 163 +++++++++++++++++++-
+ server/src/atelier/gardes-atelier.ts        | 158 +++++++++++++++++--
+ 2 files changed, 303 insertions(+), 18 deletions(-)
+
+diff --git a/server/src/__tests__/atelier-gardes.test.ts b/server/src/__tests__/atelier-gardes.test.ts
+index edc5d0693..1ef4c3eb2 100644
+--- a/server/src/__tests__/atelier-gardes.test.ts
++++ b/server/src/__tests__/atelier-gardes.test.ts
+@@ -11,6 +11,7 @@ import {
+   agents,
+   companies,
+   createDb,
++  documentRevisions,
+   documents,
+   heartbeatRuns,
+   issueDocuments,
+@@ -20,8 +21,11 @@ import {
+ } from "@paperclipai/db";
+ import { getEmbeddedPostgresTestSupport, startEmbeddedPostgresTestDatabase } from "./helpers/embedded-postgres.js";
+ import { issueService } from "../services/issues.js";
++import { documentService } from "../services/documents.js";
+ import {
++  deciderClotureHumaine,
+   deciderPorteServeur,
++  livrableFige,
+   signaturePolitiqueRelecture,
+   transitionSoumiseALaPorte,
+   verifierPolitiqueNonAffaiblie,
+@@ -97,6 +101,32 @@ describe("atelier : fonctions pures des gardes", () => {
+     expect(deciderPorteServeur({ porteActive: false, evaluation: null, revisionCourante: null }).autorise).toBe(true);
+   });
+ 
++  it("B2 : la signature P1 couvre l'obligation de commenter", () => {
++    const a = normalizeIssueExecutionPolicy(politique(relecteur));
++    expect(signaturePolitiqueRelecture(a)).not.toBe(signaturePolitiqueRelecture(a ? { ...a, commentRequired: false } : null));
++  });
++
++  it("H2 : clôture sous porte = humain authentifié, étape d'approbation, décision « approuver »", () => {
++    const faits = { porteActive: true, revisionCourante: "r2", evaluation: { decision: "PASS", perimee: false, revisionId: "r2", entreesPlusRecentes: false }, decisionCourante: { action: "approuver" } };
++    const approbation = { status: "pending", currentStageType: "approval" };
++    const humain = { actorAgentId: null, actorUserId: "local-board", etatExecution: approbation };
++    expect(deciderClotureHumaine(faits, humain).autorise).toBe(true);
++    expect(deciderClotureHumaine(faits, { ...humain, actorAgentId: relecteur, actorUserId: null }).motifs).toContain("un agent ne peut pas clore une tâche sous porte : l'approbation est humaine");
++    expect(deciderClotureHumaine(faits, { ...humain, actorUserId: null }).autorise).toBe(false);
++    expect(deciderClotureHumaine(faits, { ...humain, etatExecution: { status: "pending", currentStageType: "review" } }).motifs).toContain("clôture hors de l'étape d'approbation humaine");
++    expect(deciderClotureHumaine(faits, { ...humain, etatExecution: null }).autorise).toBe(false);
++    expect(deciderClotureHumaine({ ...faits, decisionCourante: null }, humain).autorise).toBe(false);
++    expect(deciderClotureHumaine({ ...faits, decisionCourante: { action: "demander_correction" } }, humain).autorise).toBe(false);
++    expect(deciderClotureHumaine({ ...faits, porteActive: false }, { ...humain, actorAgentId: relecteur }).autorise).toBe(true);
++  });
++
++  it("H3 : livrable figé en étape d'approbation et une fois terminé", () => {
++    expect(livrableFige("done", null)).toBe(true);
++    expect(livrableFige("in_review", { status: "pending", currentStageType: "approval" })).toBe(true);
++    expect(livrableFige("in_review", { status: "pending", currentStageType: "review" })).toBe(false);
++    expect(livrableFige("in_progress", { status: "changes_requested", currentStageType: "approval" })).toBe(false);
++  });
++
+   it("régulateur : plafond par variable et places restantes", () => {
+     expect(lirePlafondEnvironnement({ ATELIER_MAX_RUNS_ACTIFS_PAR_ENTREPRISE: "3" })).toBe(3);
+     expect(lirePlafondEnvironnement({ ATELIER_MAX_RUNS_ACTIFS_PAR_ENTREPRISE: "0" })).toBeNull();
+@@ -121,6 +151,7 @@ decrireAvecBase("atelier : gardes et régulateur contre PostgreSQL", () => {
+     await db.execute(sql.raw(`drop schema if exists ${NS} cascade`));
+     await db.delete(activityLog);
+     await db.delete(issueDocuments);
++    await db.delete(documentRevisions);
+     await db.delete(documents);
+     await db.delete(heartbeatRuns);
+     await db.delete(issues);
+@@ -155,6 +186,8 @@ decrireAvecBase("atelier : gardes et régulateur contre PostgreSQL", () => {
+       `create table ${NS}.verdicts (id uuid primary key, issue_id uuid not null, modifie_le timestamptz not null default now())`,
+       `create table ${NS}.constats (finding_id text primary key, issue_id uuid not null, modifie_le timestamptz not null default now())`,
+       `create table ${NS}.exigences (id uuid primary key, campagne_id uuid not null, modifie_le timestamptz not null default now())`,
++      `create table ${NS}.sources (id uuid primary key, issue_id uuid, date_collecte timestamptz not null default now())`,
++      `create table ${NS}.decisions_humaines (id uuid primary key, issue_id uuid not null, revision_id uuid not null, action text not null, invalidee boolean not null default false, cree_le timestamptz not null default clock_timestamp())`,
+     ]) {
+       await db.execute(sql.raw(ddl));
+     }
+@@ -209,6 +242,18 @@ decrireAvecBase("atelier : gardes et régulateur contre PostgreSQL", () => {
+     );
+   }
+ 
++  const ETAT_APPROBATION = { status: "pending", currentStageType: "approval", currentStageId: null, currentStageIndex: 1, currentParticipant: { type: "user", userId: "local-board", agentId: null }, returnAssignee: null, completedStageIds: [], lastDecisionId: null, lastDecisionOutcome: null };
++  const ETAT_REVUE = { ...ETAT_APPROBATION, currentStageType: "review", currentStageIndex: 0, currentParticipant: null };
++
++  async function decisionHumaine(issueId: string, revisionId: string, action = "approuver", invalidee = false) {
++    await db.execute(sql.raw(`insert into ${NS}.decisions_humaines (id, issue_id, revision_id, action, invalidee) values ('${randomUUID()}', '${issueId}', '${revisionId}', '${action}', ${invalidee})`));
++  }
++
++  async function verrouDocument(documentId: string) {
++    const [doc] = await db.select().from(documents).where(sql`${documents.id} = ${documentId}`);
++    return { lockedAt: doc?.lockedAt ?? null, lockedByUserId: doc?.lockedByUserId ?? null };
++  }
++
+   async function attendreActivite(action: string) {
+     for (let i = 0; i < 40; i++) {
+       const rangs = await db.select().from(activityLog);
+@@ -250,18 +295,132 @@ decrireAvecBase("atelier : gardes et régulateur contre PostgreSQL", () => {
+     expect(trace?.details).toMatchObject({ garde: "P2" });
+   });
+ 
+-  it("P2 : PASS sur la révision courante et fraîche autorise done", async () => {
++  it("P2 : PASS frais sur la révision courante + étape d'approbation + décision humaine autorisent done", async () => {
+     await installerEspaceAtelier();
+     const { companyId, relecteur } = await creerEntreprise();
+-    const issueId = await creerTache(companyId, relecteur);
++    const issueId = await creerTache(companyId, relecteur, { executionState: ETAT_APPROBATION as never });
+     const revision = randomUUID();
+     await poserLivrable(companyId, issueId, revision);
+     await mettreSousPorte(companyId, issueId);
+     await evaluation(issueId, revision, "PASS");
++    await decisionHumaine(issueId, revision, "approuver");
+     const maj = await issueService(db).update(issueId, { status: "done", actorUserId: "local-board" });
+     expect(maj?.status).toBe("done");
+   });
+ 
++  it("H2 : même avec PASS, done est refusé à un agent, hors étape d'approbation, sans décision « approuver » valide", async () => {
++    await installerEspaceAtelier();
++    const { companyId, relecteur } = await creerEntreprise();
++    const svc = issueService(db);
++    const preparer = async (etat: unknown, decision: { action: string; invalidee?: boolean } | null) => {
++      const issueId = await creerTache(companyId, relecteur, { executionState: etat as never });
++      const revision = randomUUID();
++      await poserLivrable(companyId, issueId, revision);
++      await mettreSousPorte(companyId, issueId);
++      await evaluation(issueId, revision, "PASS");
++      if (decision) await decisionHumaine(issueId, revision, decision.action, decision.invalidee ?? false);
++      return issueId;
++    };
++    // Politique « review » seule, agent « Porte de contrôle » qui décide done (scénario R2).
++    const parAgent = await preparer(ETAT_REVUE, { action: "approuver" });
++    await expect(svc.update(parAgent, { status: "done", actorAgentId: relecteur })).rejects.toMatchObject({ status: 422 });
++    const horsApprobation = await preparer(ETAT_REVUE, { action: "approuver" });
++    await expect(svc.update(horsApprobation, { status: "done", actorUserId: "local-board" })).rejects.toMatchObject({ status: 422 });
++    const sansDecision = await preparer(ETAT_APPROBATION, null);
++    await expect(svc.update(sansDecision, { status: "done", actorUserId: "local-board" })).rejects.toMatchObject({ status: 422 });
++    const correction = await preparer(ETAT_APPROBATION, { action: "demander_correction" });
++    await expect(svc.update(correction, { status: "done", actorUserId: "local-board" })).rejects.toMatchObject({ status: 422 });
++    const invalidee = await preparer(ETAT_APPROBATION, { action: "approuver", invalidee: true });
++    await expect(svc.update(invalidee, { status: "done", actorUserId: "local-board" })).rejects.toMatchObject({ status: 422 });
++    const trace = await attendreActivite("atelier.porte_refusee");
++    expect(JSON.stringify(trace?.details)).toMatch(/approbation/);
++    for (const id of [parAgent, horsApprobation, sansDecision, correction, invalidee]) {
++      expect((await db.select().from(issues).where(sql`${issues.id} = ${id}`))[0]?.status).toBe("in_review");
++    }
++  });
++
++  it("M3 : une source rattachée à la tâche après l'évaluation la rend périmée pour P2", async () => {
++    await installerEspaceAtelier();
++    const { companyId, relecteur } = await creerEntreprise();
++    const issueId = await creerTache(companyId, relecteur, { executionState: ETAT_APPROBATION as never });
++    const revision = randomUUID();
++    await poserLivrable(companyId, issueId, revision);
++    await mettreSousPorte(companyId, issueId);
++    await evaluation(issueId, revision, "PASS");
++    await decisionHumaine(issueId, revision, "approuver");
++    await db.execute(sql.raw(`insert into ${NS}.sources (id, issue_id, date_collecte) values ('${randomUUID()}', '${issueId}', clock_timestamp())`));
++    await expect(issueService(db).update(issueId, { status: "done", actorUserId: "local-board" })).rejects.toMatchObject({ status: 422 });
++  });
++
++  it("H3 : livrable verrouillé à l'entrée de l'approbation, conservé à done, déverrouillé au retour en correction", async () => {
++    await installerEspaceAtelier();
++    const { companyId, producteur, relecteur } = await creerEntreprise();
++    const svc = issueService(db);
++    const issueId = await creerTache(companyId, relecteur, { executionState: ETAT_REVUE as never, assigneeAgentId: producteur });
++    const revision = randomUUID();
++    const documentId = await poserLivrable(companyId, issueId, revision);
++    await mettreSousPorte(companyId, issueId);
++    await evaluation(issueId, revision, "PASS");
++    await svc.update(issueId, { executionState: ETAT_APPROBATION as never, actorAgentId: relecteur });
++    expect((await verrouDocument(documentId)).lockedAt).not.toBeNull();
++    // Retour en correction : déverrouillé.
++    await svc.update(issueId, { status: "in_progress", executionState: { ...ETAT_APPROBATION, status: "changes_requested" } as never, actorUserId: "local-board" });
++    expect((await verrouDocument(documentId)).lockedAt).toBeNull();
++    // Nouvelle entrée en approbation puis approbation : verrou conservé à done.
++    await db.update(issues).set({ status: "in_review", executionState: ETAT_REVUE as never }).where(sql`${issues.id} = ${issueId}`);
++    await evaluation(issueId, revision, "PASS");
++    await svc.update(issueId, { executionState: ETAT_APPROBATION as never, actorAgentId: relecteur });
++    await decisionHumaine(issueId, revision, "approuver");
++    expect((await svc.update(issueId, { status: "done", actorUserId: "local-board" }))?.status).toBe("done");
++    expect((await verrouDocument(documentId)).lockedAt).not.toBeNull();
++    // Un verrou posé à la main par le board n'est jamais levé par l'atelier.
++    await db.update(documents).set({ lockedByUserId: "local-board" }).where(sql`${documents.id} = ${documentId}`);
++    await svc.update(issueId, { status: "todo", actorUserId: "local-board" });
++    expect((await verrouDocument(documentId)).lockedByUserId).toBe("local-board");
++    expect((await verrouDocument(documentId)).lockedAt).not.toBeNull();
++  });
++
++  it("H3 : l'écriture native d'un livrable verrouillé est refusée (409)", async () => {
++    await installerEspaceAtelier();
++    const { companyId, relecteur } = await creerEntreprise();
++    const issueId = await creerTache(companyId, relecteur, { executionState: ETAT_REVUE as never });
++    const docs = documentService(db);
++    const cree = await docs.upsertIssueDocument({ issueId, key: "livrable", format: "markdown", body: "R1", createdByUserId: "local-board" });
++    const revision = (cree as { document: { latestRevisionId: string } }).document.latestRevisionId;
++    await mettreSousPorte(companyId, issueId);
++    await evaluation(issueId, revision, "PASS");
++    await issueService(db).update(issueId, { executionState: ETAT_APPROBATION as never, actorAgentId: relecteur });
++    await expect(docs.upsertIssueDocument({ issueId, key: "livrable", format: "markdown", body: "R2", baseRevisionId: revision, createdByAgentId: relecteur })).rejects.toMatchObject({ status: 409 });
++  });
++
++  it("H3 : P2 attend une écriture de document en cours (verrou for update) et voit la nouvelle révision", async () => {
++    await installerEspaceAtelier();
++    const { companyId, relecteur } = await creerEntreprise();
++    const issueId = await creerTache(companyId, relecteur, { executionState: ETAT_APPROBATION as never });
++    const r1 = randomUUID();
++    const documentId = await poserLivrable(companyId, issueId, r1);
++    await mettreSousPorte(companyId, issueId);
++    await evaluation(issueId, r1, "PASS");
++    await decisionHumaine(issueId, r1, "approuver");
++    // Une écriture de R2 est en cours (ligne documents verrouillée, non validée) quand le board demande done.
++    let libererEcriture!: () => void;
++    const ecritureTenue = new Promise<void>((r) => (libererEcriture = r));
++    let ecritureCommencee!: () => void;
++    const commencee = new Promise<void>((r) => (ecritureCommencee = r));
++    const ecriture = db.transaction(async (tx) => {
++      await tx.update(documents).set({ latestRevisionId: randomUUID(), latestRevisionNumber: 2 }).where(sql`${documents.id} = ${documentId}`);
++      ecritureCommencee();
++      await ecritureTenue;
++    });
++    await commencee;
++    const cloture = issueService(db).update(issueId, { status: "done", actorUserId: "local-board" });
++    await new Promise((r) => setTimeout(r, 200));
++    libererEcriture();
++    await ecriture;
++    await expect(cloture).rejects.toMatchObject({ status: 422 });
++    expect((await db.select().from(issues).where(sql`${issues.id} = ${issueId}`))[0]?.status).toBe("in_review");
++  });
++
+   it("P2 : PASS sur une ancienne révision, PASS périmé, REFUS ou entrée plus récente sont refusés", async () => {
+     await installerEspaceAtelier();
+     const { companyId, relecteur } = await creerEntreprise();
+diff --git a/server/src/atelier/gardes-atelier.ts b/server/src/atelier/gardes-atelier.ts
+index ef3e9edfe..d39624101 100644
+--- a/server/src/atelier/gardes-atelier.ts
++++ b/server/src/atelier/gardes-atelier.ts
+@@ -15,9 +15,18 @@
+  *      (quel que soit l'acteur, board compris) que si la DERNIÈRE évaluation
+  *      calculée par le plugin est `PASS`, non périmée, porte sur la révision
+  *      courante du livrable et a été calculée après la dernière modification
+- *      de ses entrées (couverture, verdicts, constats, exigences, porte).
+- *      Une sortie de modèle disant « PASS » ne suffit donc jamais.
+- *      Levée possible seulement par un humain, via le plugin (tracée).
++ *      de ses entrées (couverture, verdicts, constats, exigences, sources,
++ *      porte). Une sortie de modèle disant « PASS » ne suffit donc jamais.
++ *      Correctifs de la revue indépendante (patch 0007) :
++ *      - H2 : `done` exige en plus un HUMAIN authentifié, une tâche dans son
++ *        étape d'approbation, et une décision humaine « approuver » non
++ *        invalidée sur la révision courante (table `decisions_humaines`) ;
++ *      - H3 : la révision courante est relue `for update` sur la ligne
++ *        `documents` (sérialisation avec l'écriture d'un document), le livrable
++ *        est verrouillé (mécanisme natif `documents.locked_at`, celui de
++ *        `lockIssueDocument`) à l'entrée de l'étape d'approbation et
++ *        déverrouillé au retour en correction ;
++ *      - M3 : les sources de la tâche entrent dans la fraîcheur.
+  */
+ import { sql } from "drizzle-orm";
+ import type { IssueExecutionPolicy } from "@paperclipai/shared";
+@@ -41,6 +50,8 @@ export function signaturePolitiqueRelecture(politique: IssueExecutionPolicy | nu
+     reviewPreset: politique.reviewPreset ?? null,
+     authorizationPolicy: politique.authorizationPolicy ?? null,
+     maxReviewRounds: politique.maxReviewRounds ?? null,
++    // B2 (revue indépendante) : un agent ne retire pas non plus l'obligation de commenter.
++    commentRequired: politique.commentRequired ?? true,
+   });
+ }
+ 
+@@ -107,6 +118,11 @@ export interface FaitsPorte {
+     entreesPlusRecentes: boolean;
+   } | null;
+   revisionCourante: string | null;
++  /**
++   * H2 : dernière décision humaine NON invalidée sur la révision courante (null : aucune).
++   * Absente (undefined) quand la transition n'est pas `vers_done`.
++   */
++  decisionCourante?: { action: string } | null;
+ }
+ 
+ export interface DecisionGarde {
+@@ -131,8 +147,45 @@ export function deciderPorteServeur(faits: FaitsPorte): DecisionGarde {
+   return { autorise: motifs.length === 0, motifs };
+ }
+ 
+-/** Lit les faits de la porte pour une tâche (null si la tâche n'est pas sous porte). */
+-export async function lireFaitsPorte(executeur: ExecuteurSql, issueId: string): Promise<FaitsPorte | null> {
++/** Acteur et état natif de la tâche au moment d'une demande de clôture. */
++export interface ContexteCloture {
++  actorAgentId: string | null;
++  actorUserId: string | null;
++  /** État d'exécution AVANT la demande (lu sous verrou de ligne). */
++  etatExecution: unknown;
++}
++
++/**
++ * H2 (revue indépendante) : conditions propres à `done` sous porte, en plus de la
++ * porte elle-même. Une tâche sous porte ne se termine que par une approbation
++ * humaine réelle : un humain authentifié, dans l'étape d'approbation native, après
++ * une décision « approuver » enregistrée dans l'atelier sur la révision courante.
++ * Fonction pure, testée.
++ */
++export function deciderClotureHumaine(faits: FaitsPorte, contexte: ContexteCloture): DecisionGarde {
++  if (!faits.porteActive) return { autorise: true, motifs: [] };
++  const motifs: string[] = [];
++  if (contexte.actorAgentId) motifs.push("un agent ne peut pas clore une tâche sous porte : l'approbation est humaine");
++  else if (!contexte.actorUserId) motifs.push("clôture sans humain authentifié");
++  if (!estEtapeApprobationEnAttente(contexte.etatExecution)) motifs.push("clôture hors de l'étape d'approbation humaine");
++  if (faits.decisionCourante?.action !== "approuver") {
++    motifs.push("aucune décision humaine « approuver » valide sur la révision courante (atelier.decision)");
++  }
++  return { autorise: motifs.length === 0, motifs };
++}
++
++/** Le livrable est-il figé (tâche terminée ou dans son étape d'approbation humaine) ? Fonction pure. */
++export function livrableFige(statut: string, etatExecution: unknown): boolean {
++  return statut === "done" || estEtapeApprobationEnAttente(etatExecution);
++}
++
++/**
++ * Lit les faits de la porte pour une tâche (null si la tâche n'est pas sous porte).
++ * La ligne `documents` du livrable est lue `for update` : une écriture de document
++ * en cours (qui ne prend pas le verrou de la tâche) est attendue, ou attend la fin de
++ * cette transaction (H3, course entre P2 et l'écriture d'une révision).
++ */
++export async function lireFaitsPorte(executeur: ExecuteurSql, issueId: string, options: { avecDecision?: boolean } = {}): Promise<FaitsPorte | null> {
+   const schema = await schemaAtelier(executeur);
+   if (!schema) return null;
+   const portes = tableAtelier(schema, "portes");
+@@ -148,8 +201,10 @@ export async function lireFaitsPorte(executeur: ExecuteurSql, issueId: string):
+   const verdicts = tableAtelier(schema, "verdicts");
+   const constats = tableAtelier(schema, "constats");
+   const exigences = tableAtelier(schema, "exigences");
++  const sources = tableAtelier(schema, "sources");
+   // Fraîcheur comparée par PostgreSQL (précision microseconde) : une entrée
+-  // modifiée après l'évaluation la rend inutilisable.
++  // modifiée après l'évaluation la rend inutilisable. M3 : une source rattachée
++  // à la tâche (lecture d'URL, donnée de connexion, information humaine) en est une.
+   const evRangs = lignes<{ decision: string; perimee: boolean; revision_id: string | null; entrees_plus_recentes: boolean | null }>(
+     await executeur.execute(sql`select ev.decision, ev.perimee, ev.revision_id,
+         coalesce(greatest(
+@@ -157,6 +212,7 @@ export async function lireFaitsPorte(executeur: ExecuteurSql, issueId: string):
+           (select max(modifie_le) from ${verdicts} where issue_id = ${issueId}),
+           (select max(modifie_le) from ${constats} where issue_id = ${issueId}),
+           (select max(modifie_le) from ${exigences} where campagne_id = ${porte.campagne_id}),
++          (select max(date_collecte) from ${sources} where issue_id = ${issueId}),
+           (select modifie_le from ${portes} where issue_id = ${issueId})
+         ) > ev.entrees_jusqu_a, false) as entrees_plus_recentes
+       from ${evaluations} ev where ev.issue_id = ${issueId} order by ev.cree_le desc limit 1`),
+@@ -165,19 +221,67 @@ export async function lireFaitsPorte(executeur: ExecuteurSql, issueId: string):
+ 
+   const revRangs = lignes<{ latest_revision_id: string | null }>(
+     await executeur.execute(
+-      sql`select d.latest_revision_id from issue_documents idoc join documents d on d.id = idoc.document_id where idoc.issue_id = ${issueId} and idoc.key = ${porte.cle_livrable} limit 1`,
++      sql`select d.latest_revision_id from issue_documents idoc join documents d on d.id = idoc.document_id where idoc.issue_id = ${issueId} and idoc.key = ${porte.cle_livrable} limit 1 for update of d`,
+     ),
+   );
++  const revisionCourante = revRangs[0]?.latest_revision_id ?? null;
++
++  let decisionCourante: FaitsPorte["decisionCourante"];
++  if (options.avecDecision) {
++    decisionCourante = null;
++    if (revisionCourante) {
++      const decisions = tableAtelier(schema, "decisions_humaines");
++      const decRangs = lignes<{ action: string }>(
++        await executeur.execute(
++          sql`select action from ${decisions} where issue_id = ${issueId} and revision_id = ${revisionCourante} and invalidee = false order by cree_le desc limit 1`,
++        ),
++      );
++      decisionCourante = decRangs[0] ? { action: decRangs[0].action } : null;
++    }
++  }
+ 
+   return {
+     porteActive: true,
+     evaluation: ev
+       ? { decision: ev.decision, perimee: Boolean(ev.perimee), revisionId: ev.revision_id, entreesPlusRecentes: Boolean(ev.entrees_plus_recentes) }
+       : null,
+-    revisionCourante: revRangs[0]?.latest_revision_id ?? null,
++    revisionCourante,
++    ...(decisionCourante !== undefined ? { decisionCourante } : {}),
+   };
+ }
+ 
++/**
++ * H3 : verrou natif du livrable (colonnes `documents.locked_*`, celles de
++ * `lockIssueDocument`). Le verrou posé par l'atelier n'a ni utilisateur ni agent ;
++ * un verrou posé à la main par le board (utilisateur renseigné) n'est jamais levé ici.
++ * L'écriture native d'un document verrouillé est refusée (409 « Document is locked »).
++ */
++async function verrouillerLivrable(executeur: ExecuteurSql, issueId: string, cle: string): Promise<void> {
++  await executeur.execute(
++    sql`update documents set locked_at = now(), locked_by_agent_id = null, locked_by_user_id = null, updated_at = now()
++        where id = (select document_id from issue_documents where issue_id = ${issueId} and key = ${cle} limit 1) and locked_at is null`,
++  );
++}
++
++async function deverrouillerLivrable(executeur: ExecuteurSql, issueId: string, cle: string): Promise<void> {
++  await executeur.execute(
++    sql`update documents set locked_at = null, updated_at = now()
++        where id = (select document_id from issue_documents where issue_id = ${issueId} and key = ${cle} limit 1)
++          and locked_at is not null and locked_by_agent_id is null and locked_by_user_id is null`,
++  );
++}
++
++/** Clé du livrable d'une tâche sous porte ACTIVE, ou null. */
++async function cleLivrableActif(executeur: ExecuteurSql, issueId: string): Promise<string | null> {
++  const schema = await schemaAtelier(executeur);
++  if (!schema) return null;
++  const portes = tableAtelier(schema, "portes");
++  const rangs = lignes<{ actif: boolean; cle_livrable: string }>(
++    await executeur.execute(sql`select actif, cle_livrable from ${portes} where issue_id = ${issueId} limit 1`),
++  );
++  return rangs[0]?.actif ? rangs[0].cle_livrable : null;
++}
++
+ export interface ContexteGardes {
+   existant: { id: string; companyId: string; status: string; executionPolicy?: unknown; executionState?: unknown };
+   patch: { status?: unknown; executionState?: unknown; executionPolicy?: unknown };
+@@ -213,16 +317,38 @@ export async function appliquerGardesAtelier(executeur: ExecuteurSql, contexte:
+   }
+ 
+   const transition = transitionSoumiseALaPorte(existant, patch);
+-  if (!transition) return;
+-  const faits = await lireFaitsPorte(executeur, existant.id);
++  if (!transition) {
++    // H3 : retour en correction depuis l'étape d'approbation (ou réouverture d'une tâche
++    // terminée) : le livrable verrouillé par l'atelier redevient modifiable. Une tâche
++    // annulée garde son livrable figé.
++    const statutApres = typeof patch.status === "string" ? patch.status : existant.status;
++    const etatApres = patch.executionState !== undefined ? patch.executionState : existant.executionState;
++    if (livrableFige(existant.status, existant.executionState) && !livrableFige(statutApres, etatApres) && statutApres !== "cancelled") {
++      const cle = await cleLivrableActif(executeur, existant.id);
++      if (cle) await deverrouillerLivrable(executeur, existant.id, cle);
++    }
++    return;
++  }
++  const faits = await lireFaitsPorte(executeur, existant.id, { avecDecision: transition === "vers_done" });
+   if (!faits) return;
+-  const decision = deciderPorteServeur(faits);
+-  if (!decision.autorise) {
+-    signaler?.({ ...base, garde: "P2", motifs: decision.motifs });
++  const porte = deciderPorteServeur(faits);
++  const cloture = transition === "vers_done"
++    ? deciderClotureHumaine(faits, { actorAgentId: base.actorAgentId, actorUserId: base.actorUserId, etatExecution: existant.executionState })
++    : { autorise: true, motifs: [] };
++  const motifs = [...porte.motifs, ...cloture.motifs];
++  if (motifs.length > 0) {
++    signaler?.({ ...base, garde: "P2", motifs });
+     throw unprocessable(
+-      `Atelier (P2) : la porte déterministe n'est pas franchie (${decision.motifs.join(" ; ")}). ` +
+-        "Évaluez la porte sur la révision courante : POST /api/plugins/atelier.marketing-ia/api/taches/:issueId/porte/evaluer.",
+-      { code: "atelier_porte_refusee", transition, motifs: decision.motifs },
++      `Atelier (P2) : ${porte.autorise ? "approbation humaine requise" : "la porte déterministe n'est pas franchie"} (${motifs.join(" ; ")}). ` +
++        (porte.autorise
++          ? "Une tâche sous porte se termine par un humain, dans l'étape d'approbation, après atelier.decision « approuver » sur la révision courante."
++          : "Évaluez la porte sur la révision courante : POST /api/plugins/atelier.marketing-ia/api/taches/:issueId/porte/evaluer."),
++      { code: "atelier_porte_refusee", transition, motifs },
+     );
+   }
++  if (faits.porteActive) {
++    // H3 : le livrable approuvé (ou soumis à l'humain) ne change plus sans retour en correction.
++    const cle = await cleLivrableActif(executeur, existant.id);
++    if (cle) await verrouillerLivrable(executeur, existant.id, cle);
++  }
+ }
+-- 
+2.53.0
+

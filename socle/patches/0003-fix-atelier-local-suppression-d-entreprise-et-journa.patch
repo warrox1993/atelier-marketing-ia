@@ -1,0 +1,306 @@
+From bea3227b36dec673991b25ad8e285b7621350cc9 Mon Sep 17 00:00:00 2001
+From: Jean-Baptiste Dhondt <114347858+warrox1993@users.noreply.github.com>
+Date: Thu, 15 Oct 2026 14:57:07 +0200
+Subject: [PATCH 3/3] =?UTF-8?q?fix(atelier,=20local):=20suppression=20d'en?=
+ =?UTF-8?q?treprise=20et=20journal=20des=20comp=C3=A9tences=20par=20run?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Patch local de l'Atelier Marketing IA, non destiné à l'amont.
+- companies.remove : projets supprimés avant les objectifs (projects.goal_id
+  sans cascade faisait échouer la suppression, 500 constaté par le lot B).
+- Moteur : inventaire lisible des compétences transmises à chaque run (clé,
+  nom d'exécution, versions, SHA-256 du SKILL.md) dans le journal du run et
+  dans context_snapshot.atelierCompetences ; un run privé d'une compétence
+  obligatoire (metadata.atelier.competencesObligatoires) échoue avant
+  l'appel de l'adaptateur (configuration incomplète).
+- Tests : atelier-suppression-entreprise.test.ts, atelier-competences.test.ts.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01DP85vPq2MHkZg8VNtRvCzB
+---
+ .../src/__tests__/atelier-competences.test.ts | 48 ++++++++++
+ .../atelier-suppression-entreprise.test.ts    | 39 ++++++++
+ server/src/atelier/competences-run.ts         | 94 +++++++++++++++++++
+ server/src/services/companies.ts              |  6 +-
+ server/src/services/heartbeat.ts              | 36 +++++++
+ 5 files changed, 222 insertions(+), 1 deletion(-)
+ create mode 100644 server/src/__tests__/atelier-competences.test.ts
+ create mode 100644 server/src/__tests__/atelier-suppression-entreprise.test.ts
+ create mode 100644 server/src/atelier/competences-run.ts
+
+diff --git a/server/src/__tests__/atelier-competences.test.ts b/server/src/__tests__/atelier-competences.test.ts
+new file mode 100644
+index 000000000..b2c71b7a7
+--- /dev/null
++++ b/server/src/__tests__/atelier-competences.test.ts
+@@ -0,0 +1,48 @@
++/**
++ * Atelier Marketing IA (patch local) : inventaire des compétences d'un run et
++ * contrôle des compétences obligatoires.
++ */
++import { createHash } from "node:crypto";
++import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
++import os from "node:os";
++import path from "node:path";
++import { afterAll, beforeAll, describe, expect, it } from "vitest";
++import { competencesObligatoires, inventaireCompetencesRun } from "../atelier/competences-run.js";
++
++describe("atelier : compétences transmises à un run", () => {
++  let dossier = "";
++  beforeAll(async () => {
++    dossier = await mkdtemp(path.join(os.tmpdir(), "atelier-competences-"));
++    await mkdir(path.join(dossier, "cadrage"), { recursive: true });
++    await writeFile(path.join(dossier, "cadrage", "SKILL.md"), "# Cadrage\n");
++  });
++  afterAll(async () => {
++    await rm(dossier, { recursive: true, force: true });
++  });
++
++  it("lit les compétences obligatoires des métadonnées de l'agent", () => {
++    expect(competencesObligatoires({ atelier: { competencesObligatoires: ["a", "a", "b", 3, ""] } })).toEqual(["a", "b"]);
++    expect(competencesObligatoires(null)).toEqual([]);
++  });
++
++  it("journalise clé, versions et SHA-256 du SKILL.md matérialisé", async () => {
++    const inv = await inventaireCompetencesRun({
++      entrees: [{ key: "atelier/cadrage", runtimeName: "cadrage", source: path.join(dossier, "cadrage"), versionId: "v1", currentVersionId: "v2", sourceStatus: "available" }],
++      desirees: [{ key: "atelier/cadrage", versionId: null }],
++      metadata: { atelier: { competencesObligatoires: ["atelier/cadrage"] } },
++    });
++    expect(inv.manquantes).toEqual([]);
++    expect(inv.transmises[0]).toMatchObject({ cle: "atelier/cadrage", nomExecution: "cadrage", versionCourante: "v2", statutSource: "available" });
++    expect(inv.transmises[0]?.sha256).toBe(createHash("sha256").update("# Cadrage\n").digest("hex"));
++  });
++
++  it("signale une compétence obligatoire non désirée, absente ou indisponible", async () => {
++    const base = { key: "atelier/cadrage", runtimeName: "cadrage", source: path.join(dossier, "cadrage"), sourceStatus: "available" as const };
++    const nonDesiree = await inventaireCompetencesRun({ entrees: [base], desirees: [], metadata: { atelier: { competencesObligatoires: ["atelier/cadrage"] } } });
++    expect(nonDesiree.manquantes).toEqual(["atelier/cadrage"]);
++    const absente = await inventaireCompetencesRun({ entrees: [], desirees: [{ key: "atelier/revue", versionId: null }], metadata: { atelier: { competencesObligatoires: ["atelier/revue"] } } });
++    expect(absente.manquantes).toEqual(["atelier/revue"]);
++    const indisponible = await inventaireCompetencesRun({ entrees: [{ ...base, sourceStatus: "missing" }], desirees: [{ key: "atelier/cadrage", versionId: null }], metadata: { atelier: { competencesObligatoires: ["atelier/cadrage"] } } });
++    expect(indisponible.manquantes).toEqual(["atelier/cadrage"]);
++  });
++});
+diff --git a/server/src/__tests__/atelier-suppression-entreprise.test.ts b/server/src/__tests__/atelier-suppression-entreprise.test.ts
+new file mode 100644
+index 000000000..1d9ecd87d
+--- /dev/null
++++ b/server/src/__tests__/atelier-suppression-entreprise.test.ts
+@@ -0,0 +1,39 @@
++/**
++ * Atelier Marketing IA (patch local) : suppression d'une entreprise dont un
++ * projet est lié à un objectif (constat du lot B : 500 avant correction).
++ */
++import { randomUUID } from "node:crypto";
++import { eq } from "drizzle-orm";
++import { afterAll, beforeAll, describe, expect, it } from "vitest";
++import { companies, createDb, goals, projects } from "@paperclipai/db";
++import { getEmbeddedPostgresTestSupport, startEmbeddedPostgresTestDatabase } from "./helpers/embedded-postgres.js";
++import { companyService } from "../services/companies.js";
++
++const support = await getEmbeddedPostgresTestSupport();
++const decrire = support.supported ? describe : describe.skip;
++
++decrire("atelier : suppression d'entreprise avec projet lié à un objectif", () => {
++  let db!: ReturnType<typeof createDb>;
++  let base: Awaited<ReturnType<typeof startEmbeddedPostgresTestDatabase>> | null = null;
++
++  beforeAll(async () => {
++    base = await startEmbeddedPostgresTestDatabase("paperclip-atelier-suppression-");
++    db = createDb(base.connectionString);
++  }, 30_000);
++
++  afterAll(async () => {
++    await base?.cleanup();
++  });
++
++  it("supprime l'entreprise, ses projets et ses objectifs sans violer la clé étrangère", async () => {
++    const companyId = randomUUID();
++    await db.insert(companies).values({ id: companyId, name: "Suppression", issuePrefix: `S${companyId.slice(0, 6).toUpperCase().replace(/-/g, "")}`, requireBoardApprovalForNewAgents: false });
++    const goalId = randomUUID();
++    await db.insert(goals).values({ id: goalId, companyId, title: "Objectif" });
++    await db.insert(projects).values({ id: randomUUID(), companyId, name: "Projet lié", goalId });
++    const supprimee = await companyService(db).remove(companyId);
++    expect(supprimee?.id).toBe(companyId);
++    expect(await db.select().from(goals).where(eq(goals.companyId, companyId))).toEqual([]);
++    expect(await db.select().from(projects).where(eq(projects.companyId, companyId))).toEqual([]);
++  });
++});
+diff --git a/server/src/atelier/competences-run.ts b/server/src/atelier/competences-run.ts
+new file mode 100644
+index 000000000..1d4e3fe1e
+--- /dev/null
++++ b/server/src/atelier/competences-run.ts
+@@ -0,0 +1,94 @@
++/**
++ * Atelier Marketing IA (patch local, non amont) : journal lisible des
++ * compétences transmises à un run et contrôle des compétences OBLIGATOIRES.
++ *
++ * Cahier §5 : « Pour toute compétence obligatoire, implémente un chargement
++ * explicite vérifiable […] Journalise l'identifiant et la version effectivement
++ * transmis. » Le journal natif ne garde que la clé du paquet de compétences ;
++ * ce module consigne, pour chaque compétence désirée : clé, nom d'exécution,
++ * version demandée et courante, statut de la source et SHA-256 du SKILL.md
++ * matérialisé. Les compétences obligatoires d'un agent sont déclarées dans
++ * `agents.metadata.atelier.competencesObligatoires` (organisation du lot B) ;
++ * si l'une manque ou n'est pas disponible, le run échoue AVANT l'appel de
++ * l'adaptateur (configuration incomplète), au lieu de s'exécuter sans elle.
++ */
++import { createHash } from "node:crypto";
++import { readFile, stat } from "node:fs/promises";
++import path from "node:path";
++
++export interface EntreeCompetenceRun {
++  key: string;
++  runtimeName: string;
++  source: string;
++  versionId?: string | null;
++  currentVersionId?: string | null;
++  sourceStatus?: "available" | "missing";
++}
++
++export interface CompetenceTransmise {
++  cle: string;
++  nomExecution: string | null;
++  versionDemandee: string | null;
++  versionCourante: string | null;
++  statutSource: string;
++  sha256: string | null;
++}
++
++export interface InventaireCompetences {
++  transmises: CompetenceTransmise[];
++  obligatoires: string[];
++  manquantes: string[];
++}
++
++/** Clés obligatoires déclarées dans les métadonnées de l'agent. Fonction pure. */
++export function competencesObligatoires(metadata: unknown): string[] {
++  const atelier = (metadata as { atelier?: { competencesObligatoires?: unknown } } | null | undefined)?.atelier;
++  const liste = atelier?.competencesObligatoires;
++  return Array.isArray(liste) ? [...new Set(liste.filter((x): x is string => typeof x === "string" && x.trim().length > 0))] : [];
++}
++
++/** SHA-256 du SKILL.md matérialisé (dossier ou fichier), ou null s'il est illisible. */
++export async function empreinteCompetence(source: string): Promise<string | null> {
++  if (!source) return null;
++  try {
++    const infos = await stat(source);
++    const fichier = infos.isDirectory() ? path.join(source, "SKILL.md") : source;
++    const contenu = await readFile(fichier);
++    return createHash("sha256").update(contenu).digest("hex");
++  } catch {
++    return null;
++  }
++}
++
++/** Une clé désirée correspond-elle à une entrée (clé exacte ou nom d'exécution) ? */
++function correspond(entree: EntreeCompetenceRun, cle: string): boolean {
++  return entree.key === cle || entree.runtimeName === cle || entree.key.endsWith(`/${cle}`);
++}
++
++export async function inventaireCompetencesRun(input: {
++  entrees: EntreeCompetenceRun[];
++  desirees: ReadonlyArray<{ key: string; versionId?: string | null }>;
++  metadata: unknown;
++}): Promise<InventaireCompetences> {
++  const obligatoires = competencesObligatoires(input.metadata);
++  const cles = [...new Set([...input.desirees.map((d) => d.key), ...obligatoires])];
++  const transmises: CompetenceTransmise[] = [];
++  for (const cle of cles) {
++    const entree = input.entrees.find((e) => correspond(e, cle));
++    const demandee = input.desirees.find((d) => d.key === cle)?.versionId ?? null;
++    transmises.push({
++      cle,
++      nomExecution: entree?.runtimeName ?? null,
++      versionDemandee: demandee ?? entree?.versionId ?? null,
++      versionCourante: entree?.currentVersionId ?? null,
++      statutSource: entree ? (entree.sourceStatus ?? "available") : "absente",
++      sha256: entree && entree.sourceStatus !== "missing" ? await empreinteCompetence(entree.source) : null,
++    });
++  }
++  const manquantes = obligatoires.filter((cle) => {
++    const t = transmises.find((x) => x.cle === cle);
++    const desiree = input.desirees.some((d) => d.key === cle);
++    return !t || !desiree || t.statutSource !== "available" || !t.sha256;
++  });
++  return { transmises, obligatoires, manquantes };
++}
+diff --git a/server/src/services/companies.ts b/server/src/services/companies.ts
+index b0838f14a..2c6b02950 100644
+--- a/server/src/services/companies.ts
++++ b/server/src/services/companies.ts
+@@ -576,8 +576,12 @@ export function companyService(db: Db) {
+         await tx.delete(issues).where(eq(issues.companyId, id));
+         await tx.delete(companyLogos).where(eq(companyLogos.companyId, id));
+         await tx.delete(assets).where(eq(assets.companyId, id));
+-        await tx.delete(goals).where(eq(goals.companyId, id));
++        // Atelier Marketing IA (patch local) : les projets AVANT les objectifs.
++        // projects.goal_id référence goals sans cascade : dans l'ordre amont,
++        // supprimer une entreprise dont un projet est lié à un objectif échouait
++        // (500, contrainte projects_goal_id_goals_id_fk ; constat du lot B).
+         await tx.delete(projects).where(eq(projects.companyId, id));
++        await tx.delete(goals).where(eq(goals.companyId, id));
+         await tx.delete(agents).where(eq(agents.companyId, id));
+         const rows = await tx
+           .delete(companies)
+diff --git a/server/src/services/heartbeat.ts b/server/src/services/heartbeat.ts
+index 7285f628a..ba7fa5fc5 100644
+--- a/server/src/services/heartbeat.ts
++++ b/server/src/services/heartbeat.ts
+@@ -200,6 +200,7 @@ import { createHostDuplexObservabilityRecorder } from "./duplex-observability-re
+ import { incrementToolRuntimeMetricCounter } from "./tool-runtime-metrics.js";
+ import { logger } from "../middleware/logger.js";
+ import { creerRegulateurRuns } from "../atelier/regulateur-runs.js";
++import { inventaireCompetencesRun } from "../atelier/competences-run.js";
+ import {
+   createGitRemoteAuthProvider,
+   resolveManagedGitHubIdentitySelection,
+@@ -21877,6 +21878,41 @@ export function heartbeatService(
+       const connectorSkillConfig = await applyConnectorSkills(effectiveResolvedConfig, runtimeSkillEntries, connectorAssignments);
+       // Both CLI adapters and native context materialization use the same resolved set.
+       runtimeSkillEntries.splice(0, runtimeSkillEntries.length, ...connectorSkillConfig.paperclipRuntimeSkills);
++      // Atelier Marketing IA (patch local) : journal lisible des compétences transmises
++      // (clé, version, SHA-256) et refus d'un run privé d'une compétence obligatoire.
++      const inventaireAtelier = await inventaireCompetencesRun({
++        entrees: runtimeSkillEntries,
++        desirees: runtimeSkillPreference.desiredSkillEntries,
++        metadata: agent.metadata,
++      });
++      if (inventaireAtelier.transmises.length > 0) {
++        await appendRunEvent(run, {
++          eventType: "atelier.competences",
++          stream: "system",
++          level: inventaireAtelier.manquantes.length > 0 ? "error" : "info",
++          message: `atelier : compétences transmises ${inventaireAtelier.transmises
++            .map((c) => `${c.cle}@${c.versionCourante ?? c.versionDemandee ?? "sans-version"}#${c.sha256?.slice(0, 12) ?? "absente"}`)
++            .join(", ")}`,
++          payload: { ...inventaireAtelier },
++        });
++        await db.update(heartbeatRuns).set({
++          contextSnapshot: sql`coalesce(${heartbeatRuns.contextSnapshot}, '{}'::jsonb) || ${JSON.stringify({ atelierCompetences: inventaireAtelier })}::jsonb`,
++        }).where(eq(heartbeatRuns.id, run.id));
++      }
++      if (inventaireAtelier.manquantes.length > 0) {
++        throw new ConfigurationIncompleteFailure(
++          `Atelier : compétence(s) obligatoire(s) absente(s) ou indisponible(s) : ${inventaireAtelier.manquantes.join(", ")}. Le run n'est pas lancé sans elles.`,
++          {
++            configurationIncomplete: {
++              reason: "atelier_competence_obligatoire_absente",
++              companyId: agent.companyId,
++              agentId: agent.id,
++              actionUrl: `/agents/${agent.id}/skills`,
++              fingerprint: `atelier-competences:${agent.id}:${inventaireAtelier.manquantes.join(",")}`,
++            },
++          },
++        );
++      }
+       const connectorDelivery = await prepareConnectorSkillDelivery(connectorSkillConfig, agent.adapterType);
+       // Always replace this runtime-only field; caller wake data cannot supply skills.
+       context.paperclipWake = { ...parseObject(context.paperclipWake), connectorSkillInstructions: connectorDelivery.instructions };
+-- 
+2.53.0
+

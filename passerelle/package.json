@@ -1,0 +1,26 @@
+{
+  "name": "passerelle-marketing",
+  "version": "0.1.0",
+  "private": true,
+  "license": "UNLICENSED",
+  "description": "Passerelle marketing de l'Atelier : serveur MCP local (modes demonstration et reel) consommé par Paperclip comme connexion mcp_remote.",
+  "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "build": "tsc -p tsconfig.build.json",
+    "test": "vitest run",
+    "start": "node dist/src/demarrer.js"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "1.32.1",
+    "zod": "4.6.7"
+  },
+  "devDependencies": {
+    "@types/node": "24.19.2",
+    "typescript": "7.0.2",
+    "vitest": "4.1.11"
+  }
+}

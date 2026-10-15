@@ -1,0 +1,505 @@
+{
+    "connections": [
+        {
+            "id": "b47ac479-484c-45de-9bc5-5675d61067b1",
+            "companyId": "243be02f-bae1-401a-8a07-1502f7d375c1",
+            "applicationId": "dc24bde6-4301-453f-9a5f-4ad0df6dcead",
+            "name": "Facebook (d\u00e9monstration)",
+            "uid": "app-gallery:link:b86aff63-ae49-4685-966f-343a30723514/facebook-d-monstration-b47ac479",
+            "connectionKind": "managed",
+            "connectionPurpose": "tool",
+            "ownership": "dcr",
+            "transport": "mcp_remote",
+            "authKind": "oauth",
+            "credentialSource": "paperclip_vault",
+            "externalCredential": null,
+            "credentialPolicy": "shared",
+            "status": "draft",
+            "enabled": false,
+            "agentInstructions": null,
+            "config": {
+                "url": "http://127.0.0.1:3290/mcp/facebook",
+                "oauth": {
+                    "issuer": "http://127.0.0.1:3290",
+                    "scopes": [
+                        "demonstration"
+                    ],
+                    "clientId": "demo-H86b4iMAdF3TmqId0FkE2A",
+                    "provider": "127_0_0_1",
+                    "resource": "http://127.0.0.1:3290/mcp/facebook",
+                    "tokenUrl": "http://127.0.0.1:3290/oauth/token",
+                    "grantType": "authorization_code",
+                    "clientIdEnv": null,
+                    "metadataUrl": "http://127.0.0.1:3290/.well-known/oauth-protected-resource/mcp/facebook",
+                    "clientIssuer": "http://127.0.0.1:3290",
+                    "discoveredAt": "2026-10-15T14:51:55.820Z",
+                    "clientResource": "http://127.0.0.1:3290/mcp/facebook",
+                    "expectedIssuer": "http://127.0.0.1:3290",
+                    "clientCompanyId": "243be02f-bae1-401a-8a07-1502f7d375c1",
+                    "clientSecretEnv": null,
+                    "credentialScope": {
+                        "id": "local-board",
+                        "hash": "a1fe934c627071b05da5fe31df7fb7d59dd070f7489e67403cbca0fb5c727292",
+                        "type": "user"
+                    },
+                    "registrationUrl": "http://127.0.0.1:3290/oauth/register",
+                    "authorizationUrl": "http://127.0.0.1:3290/oauth/authorize",
+                    "clientIdIssuedAt": 1792075915,
+                    "clientRedirectUri": "http://localhost:3280/api/tools/oauth/callback",
+                    "grantTypesSupported": [
+                        "authorization_code",
+                        "refresh_token"
+                    ],
+                    "clientSecretExpiresAt": null,
+                    "offlineAccessSupported": false,
+                    "clientRegistrationSource": "dcr",
+                    "clientTokenEndpointAuthMethod": "none",
+                    "codeChallengeMethodsSupported": [
+                        "S256"
+                    ],
+                    "clientIdMetadataDocumentSupported": false,
+                    "tokenEndpointAuthMethodsSupported": [
+                        "none"
+                    ]
+                },
+                "unverifiedServer": true,
+                "quarantineNewEntries": false
+            },
+            "transportConfig": {
+                "url": "http://127.0.0.1:3290/mcp/facebook",
+                "oauth": {
+                    "issuer": "http://127.0.0.1:3290",
+                    "scopes": [
+                        "demonstration"
+                    ],
+                    "clientId": "demo-H86b4iMAdF3TmqId0FkE2A",
+                    "provider": "127_0_0_1",
+                    "resource": "http://127.0.0.1:3290/mcp/facebook",
+                    "tokenUrl": "http://127.0.0.1:3290/oauth/token",
+                    "grantType": "authorization_code",
+                    "clientIdEnv": null,
+                    "metadataUrl": "http://127.0.0.1:3290/.well-known/oauth-protected-resource/mcp/facebook",
+                    "clientIssuer": "http://127.0.0.1:3290",
+                    "discoveredAt": "2026-10-15T14:51:55.820Z",
+                    "clientResource": "http://127.0.0.1:3290/mcp/facebook",
+                    "expectedIssuer": "http://127.0.0.1:3290",
+                    "clientCompanyId": "243be02f-bae1-401a-8a07-1502f7d375c1",
+                    "clientSecretEnv": null,
+                    "credentialScope": {
+                        "id": "local-board",
+                        "hash": "a1fe934c627071b05da5fe31df7fb7d59dd070f7489e67403cbca0fb5c727292",
+                        "type": "user"
+                    },
+                    "registrationUrl": "http://127.0.0.1:3290/oauth/register",
+                    "authorizationUrl": "http://127.0.0.1:3290/oauth/authorize",
+                    "clientIdIssuedAt": 1792075915,
+                    "clientRedirectUri": "http://localhost:3280/api/tools/oauth/callback",
+                    "grantTypesSupported": [
+                        "authorization_code",
+                        "refresh_token"
+                    ],
+                    "clientSecretExpiresAt": null,
+                    "offlineAccessSupported": false,
+                    "clientRegistrationSource": "dcr",
+                    "clientTokenEndpointAuthMethod": "none",
+                    "codeChallengeMethodsSupported": [
+                        "S256"
+                    ],
+                    "clientIdMetadataDocumentSupported": false,
+                    "tokenEndpointAuthMethodsSupported": [
+                        "none"
+                    ]
+                },
+                "unverifiedServer": true,
+                "quarantineNewEntries": false
+            },
+            "credentialRefs": [],
+            "credentialSecretRefs": [],
+            "healthStatus": "error",
+            "healthMessage": "This app needs you to sign in.",
+            "healthCheckedAt": "2026-10-15T14:51:55.822Z",
+            "lastHealthAt": "2026-10-15T14:51:55.822Z",
+            "lastCatalogRefreshAt": null,
+            "lastError": "This app needs you to sign in.",
+            "createdByAgentId": null,
+            "createdByUserId": "local-board",
+            "createdAt": "2026-10-15T14:51:55.811Z",
+            "updatedAt": "2026-10-15T14:51:55.837Z",
+            "installs": [],
+            "lastUsedAt": null,
+            "hasSavedOAuthClientSecret": false
+        },
+        {
+            "id": "1f918fc5-603c-4837-9923-6d3066acdb83",
+            "companyId": "243be02f-bae1-401a-8a07-1502f7d375c1",
+            "applicationId": "7b03d299-a996-42fa-a81b-14b5b86c0160",
+            "name": "Analytics 4 (d\u00e9monstration)",
+            "uid": "app-gallery:link:035ae42a-2774-433e-8912-33a28a8d9536/analytics-4-d-monstration-1f918fc5",
+            "connectionKind": "managed",
+            "connectionPurpose": "tool",
+            "ownership": "dcr",
+            "transport": "mcp_remote",
+            "authKind": "oauth",
+            "credentialSource": "paperclip_vault",
+            "externalCredential": null,
+            "credentialPolicy": "shared",
+            "status": "active",
+            "enabled": true,
+            "agentInstructions": null,
+            "config": {
+                "url": "http://127.0.0.1:3290/mcp/ga4",
+                "oauth": {
+                    "scope": "demonstration",
+                    "issuer": "http://127.0.0.1:3290",
+                    "scopes": [
+                        "demonstration"
+                    ],
+                    "clientId": "demo-jaiQnGg3wGKkJ3zrsgP1mA",
+                    "provider": "127_0_0_1",
+                    "resource": "http://127.0.0.1:3290/mcp/ga4",
+                    "tokenUrl": "http://127.0.0.1:3290/oauth/token",
+                    "expiresAt": "2026-10-15T15:51:55.690Z",
+                    "grantType": "authorization_code",
+                    "tokenType": "Bearer",
+                    "clientIdEnv": null,
+                    "connectedAt": "2026-10-15T14:51:55.690Z",
+                    "metadataUrl": "http://127.0.0.1:3290/.well-known/oauth-protected-resource/mcp/ga4",
+                    "clientIssuer": "http://127.0.0.1:3290",
+                    "discoveredAt": "2026-10-15T14:51:55.655Z",
+                    "clientResource": "http://127.0.0.1:3290/mcp/ga4",
+                    "expectedIssuer": "http://127.0.0.1:3290",
+                    "clientCompanyId": "243be02f-bae1-401a-8a07-1502f7d375c1",
+                    "clientSecretEnv": null,
+                    "credentialScope": {
+                        "id": "local-board",
+                        "hash": "65b1c15c9901543062c95fe2bb19366cfb62d9829a93b0ad992f31c1a8ac46d4",
+                        "type": "user"
+                    },
+                    "registrationUrl": "http://127.0.0.1:3290/oauth/register",
+                    "authorizationUrl": "http://127.0.0.1:3290/oauth/authorize",
+                    "clientIdIssuedAt": 1792075915,
+                    "clientRedirectUri": "http://localhost:3280/api/tools/oauth/callback",
+                    "grantTypesSupported": [
+                        "authorization_code",
+                        "refresh_token"
+                    ],
+                    "clientSecretExpiresAt": null,
+                    "offlineAccessSupported": false,
+                    "clientRegistrationSource": "dcr",
+                    "clientTokenEndpointAuthMethod": "none",
+                    "codeChallengeMethodsSupported": [
+                        "S256"
+                    ],
+                    "clientIdMetadataDocumentSupported": false,
+                    "tokenEndpointAuthMethodsSupported": [
+                        "none"
+                    ]
+                },
+                "providerMetadata": {
+                    "oauth": {
+                        "scope": "demonstration",
+                        "expiresAt": "2026-10-15T15:51:55.690Z",
+                        "tokenType": "Bearer"
+                    }
+                },
+                "unverifiedServer": true,
+                "quarantineNewEntries": false
+            },
+            "transportConfig": {
+                "url": "http://127.0.0.1:3290/mcp/ga4",
+                "oauth": {
+                    "scope": "demonstration",
+                    "issuer": "http://127.0.0.1:3290",
+                    "scopes": [
+                        "demonstration"
+                    ],
+                    "clientId": "demo-jaiQnGg3wGKkJ3zrsgP1mA",
+                    "provider": "127_0_0_1",
+                    "resource": "http://127.0.0.1:3290/mcp/ga4",
+                    "tokenUrl": "http://127.0.0.1:3290/oauth/token",
+                    "expiresAt": "2026-10-15T15:51:55.690Z",
+                    "grantType": "authorization_code",
+                    "tokenType": "Bearer",
+                    "clientIdEnv": null,
+                    "connectedAt": "2026-10-15T14:51:55.690Z",
+                    "metadataUrl": "http://127.0.0.1:3290/.well-known/oauth-protected-resource/mcp/ga4",
+                    "clientIssuer": "http://127.0.0.1:3290",
+                    "discoveredAt": "2026-10-15T14:51:55.655Z",
+                    "clientResource": "http://127.0.0.1:3290/mcp/ga4",
+                    "expectedIssuer": "http://127.0.0.1:3290",
+                    "clientCompanyId": "243be02f-bae1-401a-8a07-1502f7d375c1",
+                    "clientSecretEnv": null,
+                    "credentialScope": {
+                        "id": "local-board",
+                        "hash": "65b1c15c9901543062c95fe2bb19366cfb62d9829a93b0ad992f31c1a8ac46d4",
+                        "type": "user"
+                    },
+                    "registrationUrl": "http://127.0.0.1:3290/oauth/register",
+                    "authorizationUrl": "http://127.0.0.1:3290/oauth/authorize",
+                    "clientIdIssuedAt": 1792075915,
+                    "clientRedirectUri": "http://localhost:3280/api/tools/oauth/callback",
+                    "grantTypesSupported": [
+                        "authorization_code",
+                        "refresh_token"
+                    ],
+                    "clientSecretExpiresAt": null,
+                    "offlineAccessSupported": false,
+                    "clientRegistrationSource": "dcr",
+                    "clientTokenEndpointAuthMethod": "none",
+                    "codeChallengeMethodsSupported": [
+                        "S256"
+                    ],
+                    "clientIdMetadataDocumentSupported": false,
+                    "tokenEndpointAuthMethodsSupported": [
+                        "none"
+                    ]
+                },
+                "providerMetadata": {
+                    "oauth": {
+                        "scope": "demonstration",
+                        "expiresAt": "2026-10-15T15:51:55.690Z",
+                        "tokenType": "Bearer"
+                    }
+                },
+                "unverifiedServer": true,
+                "quarantineNewEntries": false
+            },
+            "credentialRefs": [
+                {
+                    "key": "Authorization",
+                    "name": "oauth.access_token",
+                    "prefix": "Bearer ",
+                    "version": "latest",
+                    "secretId": "cbd547d5-52c6-451f-a052-238ace0331cb",
+                    "placement": "header"
+                }
+            ],
+            "credentialSecretRefs": [
+                {
+                    "label": "OAuth access token",
+                    "required": true,
+                    "secretId": "cbd547d5-52c6-451f-a052-238ace0331cb",
+                    "configPath": "oauth.access_token",
+                    "versionSelector": "latest"
+                },
+                {
+                    "label": "OAuth refresh token",
+                    "required": false,
+                    "secretId": "68565bb7-d9ac-4684-83bc-aed5bac12c85",
+                    "configPath": "oauth.refresh_token",
+                    "versionSelector": "latest"
+                }
+            ],
+            "healthStatus": "ok",
+            "healthMessage": "Tool catalog refreshed.",
+            "healthCheckedAt": "2026-10-15T14:51:55.735Z",
+            "lastHealthAt": "2026-10-15T14:51:55.735Z",
+            "lastCatalogRefreshAt": "2026-10-15T14:51:55.735Z",
+            "lastError": null,
+            "createdByAgentId": null,
+            "createdByUserId": "local-board",
+            "createdAt": "2026-10-15T14:51:55.640Z",
+            "updatedAt": "2026-10-15T14:51:55.773Z",
+            "installs": [
+                {
+                    "id": "a47f0bc1-6067-49b9-8907-dcbcf444506b",
+                    "companyId": "243be02f-bae1-401a-8a07-1502f7d375c1",
+                    "connectionId": "1f918fc5-603c-4837-9923-6d3066acdb83",
+                    "targetType": "company",
+                    "targetId": "243be02f-bae1-401a-8a07-1502f7d375c1",
+                    "createdByAgentId": null,
+                    "createdByUserId": "local-board",
+                    "createdAt": "2026-10-15T14:51:55.789Z"
+                }
+            ],
+            "lastUsedAt": null,
+            "hasSavedOAuthClientSecret": false
+        },
+        {
+            "id": "83a0bf6d-b3ad-4f80-ae60-e7ebb1b2773f",
+            "companyId": "243be02f-bae1-401a-8a07-1502f7d375c1",
+            "applicationId": "e9190667-9e29-4024-b042-40cc7babc5b2",
+            "name": "Search Console (d\u00e9monstration)",
+            "uid": "app-gallery:link:438faca4-f1bf-4117-b18e-9ff624c0315f/search-console-d-monstration-83a0bf6d",
+            "connectionKind": "managed",
+            "connectionPurpose": "tool",
+            "ownership": "dcr",
+            "transport": "mcp_remote",
+            "authKind": "oauth",
+            "credentialSource": "paperclip_vault",
+            "externalCredential": null,
+            "credentialPolicy": "shared",
+            "status": "active",
+            "enabled": true,
+            "agentInstructions": null,
+            "config": {
+                "url": "http://127.0.0.1:3290/mcp/gsc",
+                "oauth": {
+                    "scope": "demonstration",
+                    "issuer": "http://127.0.0.1:3290",
+                    "scopes": [
+                        "demonstration"
+                    ],
+                    "clientId": "demo-9nxcK40TV7r4DyaaPpOLJg",
+                    "provider": "127_0_0_1",
+                    "resource": "http://127.0.0.1:3290/mcp/gsc",
+                    "tokenUrl": "http://127.0.0.1:3290/oauth/token",
+                    "expiresAt": "2026-10-15T15:48:30.008Z",
+                    "grantType": "authorization_code",
+                    "tokenType": "Bearer",
+                    "clientIdEnv": null,
+                    "connectedAt": "2026-10-15T14:48:30.008Z",
+                    "metadataUrl": "http://127.0.0.1:3290/.well-known/oauth-protected-resource/mcp/gsc",
+                    "clientIssuer": "http://127.0.0.1:3290",
+                    "discoveredAt": "2026-10-15T14:48:00.240Z",
+                    "clientResource": "http://127.0.0.1:3290/mcp/gsc",
+                    "expectedIssuer": "http://127.0.0.1:3290",
+                    "clientCompanyId": "243be02f-bae1-401a-8a07-1502f7d375c1",
+                    "clientSecretEnv": null,
+                    "credentialScope": {
+                        "id": "local-board",
+                        "hash": "0466f2ed4dea730de910c5e16c7f3be6734ea4201d54e8bb5f73d6c057c9a046",
+                        "type": "user"
+                    },
+                    "registrationUrl": "http://127.0.0.1:3290/oauth/register",
+                    "authorizationUrl": "http://127.0.0.1:3290/oauth/authorize",
+                    "clientIdIssuedAt": 1792075680,
+                    "clientRedirectUri": "http://localhost:3280/api/tools/oauth/callback",
+                    "grantTypesSupported": [
+                        "authorization_code",
+                        "refresh_token"
+                    ],
+                    "clientSecretExpiresAt": null,
+                    "offlineAccessSupported": false,
+                    "clientRegistrationSource": "dcr",
+                    "clientTokenEndpointAuthMethod": "none",
+                    "codeChallengeMethodsSupported": [
+                        "S256"
+                    ],
+                    "clientIdMetadataDocumentSupported": false,
+                    "tokenEndpointAuthMethodsSupported": [
+                        "none"
+                    ]
+                },
+                "providerMetadata": {
+                    "oauth": {
+                        "scope": "demonstration",
+                        "expiresAt": "2026-10-15T15:48:30.008Z",
+                        "tokenType": "Bearer"
+                    }
+                },
+                "unverifiedServer": true,
+                "quarantineNewEntries": false
+            },
+            "transportConfig": {
+                "url": "http://127.0.0.1:3290/mcp/gsc",
+                "oauth": {
+                    "scope": "demonstration",
+                    "issuer": "http://127.0.0.1:3290",
+                    "scopes": [
+                        "demonstration"
+                    ],
+                    "clientId": "demo-9nxcK40TV7r4DyaaPpOLJg",
+                    "provider": "127_0_0_1",
+                    "resource": "http://127.0.0.1:3290/mcp/gsc",
+                    "tokenUrl": "http://127.0.0.1:3290/oauth/token",
+                    "expiresAt": "2026-10-15T15:48:30.008Z",
+                    "grantType": "authorization_code",
+                    "tokenType": "Bearer",
+                    "clientIdEnv": null,
+                    "connectedAt": "2026-10-15T14:48:30.008Z",
+                    "metadataUrl": "http://127.0.0.1:3290/.well-known/oauth-protected-resource/mcp/gsc",
+                    "clientIssuer": "http://127.0.0.1:3290",
+                    "discoveredAt": "2026-10-15T14:48:00.240Z",
+                    "clientResource": "http://127.0.0.1:3290/mcp/gsc",
+                    "expectedIssuer": "http://127.0.0.1:3290",
+                    "clientCompanyId": "243be02f-bae1-401a-8a07-1502f7d375c1",
+                    "clientSecretEnv": null,
+                    "credentialScope": {
+                        "id": "local-board",
+                        "hash": "0466f2ed4dea730de910c5e16c7f3be6734ea4201d54e8bb5f73d6c057c9a046",
+                        "type": "user"
+                    },
+                    "registrationUrl": "http://127.0.0.1:3290/oauth/register",
+                    "authorizationUrl": "http://127.0.0.1:3290/oauth/authorize",
+                    "clientIdIssuedAt": 1792075680,
+                    "clientRedirectUri": "http://localhost:3280/api/tools/oauth/callback",
+                    "grantTypesSupported": [
+                        "authorization_code",
+                        "refresh_token"
+                    ],
+                    "clientSecretExpiresAt": null,
+                    "offlineAccessSupported": false,
+                    "clientRegistrationSource": "dcr",
+                    "clientTokenEndpointAuthMethod": "none",
+                    "codeChallengeMethodsSupported": [
+                        "S256"
+                    ],
+                    "clientIdMetadataDocumentSupported": false,
+                    "tokenEndpointAuthMethodsSupported": [
+                        "none"
+                    ]
+                },
+                "providerMetadata": {
+                    "oauth": {
+                        "scope": "demonstration",
+                        "expiresAt": "2026-10-15T15:48:30.008Z",
+                        "tokenType": "Bearer"
+                    }
+                },
+                "unverifiedServer": true,
+                "quarantineNewEntries": false
+            },
+            "credentialRefs": [
+                {
+                    "key": "Authorization",
+                    "name": "oauth.access_token",
+                    "prefix": "Bearer ",
+                    "version": "latest",
+                    "secretId": "c6da6abb-fcac-4bfc-9275-b76a22ae6912",
+                    "placement": "header"
+                }
+            ],
+            "credentialSecretRefs": [
+                {
+                    "label": "OAuth access token",
+                    "required": true,
+                    "secretId": "c6da6abb-fcac-4bfc-9275-b76a22ae6912",
+                    "configPath": "oauth.access_token",
+                    "versionSelector": "latest"
+                },
+                {
+                    "label": "OAuth refresh token",
+                    "required": false,
+                    "secretId": "11be0f57-f87c-4523-b36f-fc1d0f7bd270",
+                    "configPath": "oauth.refresh_token",
+                    "versionSelector": "latest"
+                }
+            ],
+            "healthStatus": "ok",
+            "healthMessage": "Tool catalog refreshed.",
+            "healthCheckedAt": "2026-10-15T14:48:30.078Z",
+            "lastHealthAt": "2026-10-15T14:48:30.078Z",
+            "lastCatalogRefreshAt": "2026-10-15T14:48:30.078Z",
+            "lastError": null,
+            "createdByAgentId": null,
+            "createdByUserId": "local-board",
+            "createdAt": "2026-10-15T14:48:00.214Z",
+            "updatedAt": "2026-10-15T14:48:30.119Z",
+            "installs": [
+                {
+                    "id": "29890190-e7cf-4211-8e66-3f9b57c8880a",
+                    "companyId": "243be02f-bae1-401a-8a07-1502f7d375c1",
+                    "connectionId": "83a0bf6d-b3ad-4f80-ae60-e7ebb1b2773f",
+                    "targetType": "company",
+                    "targetId": "243be02f-bae1-401a-8a07-1502f7d375c1",
+                    "createdByAgentId": null,
+                    "createdByUserId": "local-board",
+                    "createdAt": "2026-10-15T14:48:30.124Z"
+                }
+            ],
+            "lastUsedAt": null,
+            "hasSavedOAuthClientSecret": false
+        }
+    ]
+}

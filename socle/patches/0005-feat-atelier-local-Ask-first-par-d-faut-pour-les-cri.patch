@@ -1,0 +1,278 @@
+From 41dfaed0d1e2abc9aa0ebdefc92ad3eb48fb78ca Mon Sep 17 00:00:00 2001
+From: Jean-Baptiste Dhondt <114347858+warrox1993@users.noreply.github.com>
+Date: Thu, 15 Oct 2026 17:22:07 +0200
+Subject: [PATCH] =?UTF-8?q?feat(atelier,=20local):=20Ask=20first=20par=20d?=
+ =?UTF-8?q?=C3=A9faut=20pour=20les=20=C3=A9critures=20des=20cartes=20de=20?=
+ =?UTF-8?q?la=20passerelle?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Les cartes atelier-* recommandent « Ask first » pour tout niveau de risque
+autre que read (recommendedDefaultsForApp), sur les deux chemins de
+finalisation (assistant de connexion et finalisation OAuth serveur).
+classifyRisk classe les verbes de mutation français de la passerelle
+(publier, envoyer, modifier, ecrire…) en write et supprimer en destructive,
+même sans annotation ou avec une annotation de lecture erronée.
+Tests : définitions partagées, classement, parcours complet jusqu'aux
+politiques require_approval ; compte de la galerie ajusté (59 amont + 11).
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01DP85vPq2MHkZg8VNtRvCzB
+---
+ packages/shared/src/app-definitions.test.ts   |  4 +-
+ packages/shared/src/app-definitions.ts        | 19 ++++++-
+ .../src/atelier-app-definitions.test.ts       | 18 ++++++
+ packages/shared/src/index.ts                  |  2 +
+ .../__tests__/atelier-marketing-apps.test.ts  | 57 ++++++++++++++++++-
+ .../src/__tests__/tool-access-service.test.ts |  5 +-
+ server/src/services/tool-access.ts            | 12 ++++
+ 7 files changed, 112 insertions(+), 5 deletions(-)
+
+diff --git a/packages/shared/src/app-definitions.test.ts b/packages/shared/src/app-definitions.test.ts
+index 627a57751..a0b66868a 100644
+--- a/packages/shared/src/app-definitions.test.ts
++++ b/packages/shared/src/app-definitions.test.ts
+@@ -628,7 +628,9 @@ describe("AppDefinition catalog", () => {
+         ?.defaults?.scopesHint,
+     ).toEqual(["read-mcp", "read-repos", "contribute-repos", "jobs"]));
+   it("defaults every action, reads and writes, to allowed", () => {
+-    for (const app of APP_DEFINITIONS)
++    // Atelier Marketing IA (local patch 0005): the gateway cards keep their
++    // writes behind Ask first; atelier-app-definitions.test.ts checks them.
++    for (const app of APP_DEFINITIONS.filter((entry) => !entry.slug.startsWith("atelier-")))
+       for (const method of app.methods)
+         expect(recommendedDefaultsForApp(app, method.key)).toEqual({
+           access: "all_agents",
+diff --git a/packages/shared/src/app-definitions.ts b/packages/shared/src/app-definitions.ts
+index 51453622a..11af129cc 100644
+--- a/packages/shared/src/app-definitions.ts
++++ b/packages/shared/src/app-definitions.ts
+@@ -2,6 +2,7 @@ import { APP_DEFINITIONS } from "./app-definitions.generated.js";
+ import { SELF_SERVE_MCP_CANDIDATES } from "./self-serve-mcp-research.js";
+ import type { AppDefinition, ConnectionMethodDef, FieldDef } from "./types/app-definition.js";
+ import type { ToolConnectionOwnership } from "./types/tool-access.js";
++import { TOOL_RISK_LEVELS } from "./constants.js";
+ 
+ export const CONNECTABLE_APP_SLUGS = new Set([
+   "anthropic", "openai", "openrouter", "xai",
+@@ -273,10 +274,26 @@ export function recommendedDefaultsForApp(app: AppDefinition, methodKey?: string
+   // an operator-selected policy for any action after the connection is made.
+   // The connect flow lands on the Permissions tab so that choice is the very
+   // next screen (PAP-659: agents get full permissions unless someone narrows them).
+-  void app;
+   void methodKey;
++  // Atelier Marketing IA (local patch 0005): the marketing gateway cards keep
++  // every tool that is not a plain read behind "Ask first" by default
++  // (publishing, messages, CRM writes). The operator can still allow an action
++  // afterwards on the Permissions tab; the atelier's own human approval stays
++  // required in addition.
++  if (app.slug.startsWith(ATELIER_APP_SLUG_PREFIX)) {
++    return {
++      access: "all_agents",
++      askFirstRiskLevels: ATELIER_ASK_FIRST_RISK_LEVELS,
++    };
++  }
+   return {
+     access: "all_agents",
+     askFirstRiskLevels: [],
+   };
+ }
++
++/** Atelier Marketing IA (local patch 0005): slug prefix of the marketing gateway cards. */
++export const ATELIER_APP_SLUG_PREFIX = "atelier-";
++
++/** Every risk level except `read`: what the gateway cards put behind "Ask first" by default. */
++export const ATELIER_ASK_FIRST_RISK_LEVELS: string[] = TOOL_RISK_LEVELS.filter((level) => level !== "read");
+diff --git a/packages/shared/src/atelier-app-definitions.test.ts b/packages/shared/src/atelier-app-definitions.test.ts
+index 370f3eb98..4d284c28f 100644
+--- a/packages/shared/src/atelier-app-definitions.test.ts
++++ b/packages/shared/src/atelier-app-definitions.test.ts
+@@ -7,7 +7,10 @@ import {
+   getAppDefinitionForUrl,
+   getRecommendedConnectionMethod,
+   getAvailableConnectionMethods,
++  getAppStoreDefinition,
++  recommendedDefaultsForApp,
+ } from "./app-definitions.js";
++import { TOOL_RISK_LEVELS } from "./constants.js";
+ import { GOOGLE_WORKSPACE_CONNECTOR_PROFILES } from "./google-workspace-connectors.js";
+ import { appDefinitionSchema } from "./validators/app-definition.js";
+ 
+@@ -71,4 +74,19 @@ describe("atelier marketing gateway cards", () => {
+     const app = atelier[0]!;
+     expect(() => appDefinitionSchema.parse({ ...app, categories: ["publicite"] })).toThrow();
+   });
++
++  // Local patch 0005: every tool of a gateway card that is not a plain read
++  // starts behind "Ask first", for both methods; other apps keep the upstream default.
++  it("puts every non-read action of a gateway card behind Ask first by default", () => {
++    for (const app of atelier) {
++      for (const method of app.methods) {
++        const defaults = recommendedDefaultsForApp(app, method.key);
++        expect(defaults.access, app.slug).toBe("all_agents");
++        const levels = defaults.askFirstRiskLevels as string[];
++        expect(levels, app.slug).not.toContain("read");
++        expect(new Set(levels), app.slug).toEqual(new Set(TOOL_RISK_LEVELS.filter((level) => level !== "read")));
++      }
++    }
++    expect(recommendedDefaultsForApp(getAppStoreDefinition("notion")!).askFirstRiskLevels).toEqual([]);
++  });
+ });
+diff --git a/packages/shared/src/index.ts b/packages/shared/src/index.ts
+index 511861df3..61fb96875 100644
+--- a/packages/shared/src/index.ts
++++ b/packages/shared/src/index.ts
+@@ -333,6 +333,8 @@ export {
+   isConnectableAppSlug,
+   isAppStoreVisibleSlug,
+   recommendedDefaultsForApp,
++  ATELIER_APP_SLUG_PREFIX,
++  ATELIER_ASK_FIRST_RISK_LEVELS,
+   resolveConnectionMethodServerUrl,
+ } from "./app-definitions.js";
+ export {
+diff --git a/server/src/__tests__/atelier-marketing-apps.test.ts b/server/src/__tests__/atelier-marketing-apps.test.ts
+index f4a3fab28..cc29a8d59 100644
+--- a/server/src/__tests__/atelier-marketing-apps.test.ts
++++ b/server/src/__tests__/atelier-marketing-apps.test.ts
+@@ -10,7 +10,7 @@ import { companies, companyMemberships, createDb, toolConnections } from "@paper
+ import { eq } from "drizzle-orm";
+ import { errorHandler } from "../middleware/index.js";
+ import { toolAccessRoutes } from "../routes/tool-access.js";
+-import { toolAccessService } from "../services/tool-access.js";
++import { classifyRisk, toolAccessService } from "../services/tool-access.js";
+ import {
+   ATELIER_GATEWAY_URL_ENV,
+   atelierGatewayBaseUrl,
+@@ -63,8 +63,19 @@ function fixtureGateway(mode: "demonstration" | "reel", services = ["gsc", "ga4"
+       if (body.method === "initialize") {
+         return Response.json({ jsonrpc: "2.0", id: body.id, result: { protocolVersion: "2025-06-18", capabilities: { tools: {} }, serverInfo: { name: "passerelle", version: "test" } } });
+       }
++      const identite = { name: "atelier_identite", description: "Mode de la passerelle", inputSchema: { type: "object", properties: {} }, annotations: { readOnlyHint: true } };
++      // Local patch 0005: the CRM path mirrors the gateway's write tools (one annotated,
++      // one without annotation) so the default "Ask first" is checked end to end.
++      if (u.pathname === "/mcp/crm") {
++        return Response.json({ jsonrpc: "2.0", id: body.id, result: { tools: [
++          identite,
++          { name: "crm_contacts", description: "Contacts", inputSchema: { type: "object", properties: {} }, annotations: { readOnlyHint: true } },
++          { name: "crm_modifier_contact", description: "Modifier un contact", inputSchema: { type: "object", properties: {} }, annotations: { readOnlyHint: false } },
++          { name: "crm_envoyer_message", description: "Message sans annotation", inputSchema: { type: "object", properties: {} } },
++        ] } });
++      }
+       return Response.json({ jsonrpc: "2.0", id: body.id, result: { tools: [
+-        { name: "atelier_identite", description: "Mode de la passerelle", inputSchema: { type: "object", properties: {} }, annotations: { readOnlyHint: true } },
++        identite,
+         { name: "gsc_requete_performances", description: "searchanalytics.query", inputSchema: { type: "object", properties: {} }, annotations: { readOnlyHint: true } },
+       ] } });
+     }
+@@ -113,6 +124,21 @@ describe("atelier gateway address", () => {
+     expect(isAtelierLoopbackGatewayUrl(new URL("http://[::1]:3190/mcp/gsc"), { [ATELIER_GATEWAY_URL_ENV]: "http://[::1]:3190" })).toBe(true);
+   });
+ 
++  it("never classifies a French mutation verb of a gateway card as a read (local patch 0005)", () => {
++    const tool = (name: string, annotations?: Record<string, boolean>) => ({ name, inputSchema: { type: "object" }, ...(annotations ? { annotations } : {}) });
++    for (const name of ["facebook_publier", "instagram_publier", "linkedin_publier", "facebook_envoyer_message", "crm_modifier_contact", "pipedrive_modifier_personne", "teamleader_modifier_contact", "odoo_ecrire_lead"]) {
++      expect(classifyRisk(tool(name), "atelier-hubspot"), name).toBe("write");
++      // A wrong read-only annotation does not downgrade the verb.
++      expect(classifyRisk(tool(name, { readOnlyHint: true }), "atelier-facebook"), name).toBe("write");
++    }
++    expect(classifyRisk(tool("crm_supprimer_contact"), "atelier-hubspot")).toBe("destructive");
++    for (const name of ["atelier_identite", "crm_contacts", "gsc_requete_performances", "odoo_leads_search_read", "facebook_insights_page"]) {
++      expect(classifyRisk(tool(name, { readOnlyHint: true }), "atelier-hubspot"), name).toBe("read");
++    }
++    // Outside the gateway cards, upstream classification is unchanged.
++    expect(classifyRisk(tool("facebook_publier"), "notion")).toBe("read");
++  });
++
+   it("restores the declared provider scopes outside demonstration mode", () => {
+     const gsc = getConnectableAppDefinition("atelier-google-search-console")!;
+     configureAtelierAppDefinitions(BASE, "demonstration");
+@@ -235,4 +261,31 @@ describe("atelier gateway address", () => {
+     await expect(service.startOAuth(c.id, read.connectionId, { redirectUri, actor, scopes: ["w_organization_social"] }))
+       .rejects.toMatchObject({ details: { code: "oauth_scope_widening_rejected" } });
+   });
++
++  it("puts the write tools of a card behind Ask first when the connection is finished with the suggested defaults (local patch 0005)", async () => {
++    const c = await company();
++    const service = toolAccessService(db, { remoteHttpRequest: fixtureGateway("demonstration"), remoteHttpEndpointLookup: lookup });
++    const connected = await service.connectGalleryApp(c.id, { galleryKey: "atelier-hubspot", connectionMethodKey: "publication" }, actor);
++    const start = await service.startOAuth(c.id, connected.connectionId, { redirectUri, actor });
++    const url = new URL(start.authorizationUrl);
++    const result = await service.completeOAuthCallback({ state: url.searchParams.get("state")!, code: "fixture-code", iss: BASE, redirectUri, actor });
++    const levels = new Set(result.suggestedDefaults.askFirstRiskLevels as string[]);
++    expect(levels.has("write") && levels.has("destructive") && !levels.has("read")).toBe(true);
++    const catalog = await service.listCatalog(connected.connectionId);
++    const byName = new Map(catalog.map((entry) => [entry.toolName, entry]));
++    expect(byName.get("crm_modifier_contact")?.riskLevel).toBe("write");
++    expect(byName.get("crm_envoyer_message")?.riskLevel).toBe("write");
++    expect(byName.get("crm_contacts")?.riskLevel).toBe("read");
++    // Same selection as the setup wizard (ui/src/features/connections/connection-defaults.ts).
++    const askFirst = catalog.filter((entry) => levels.has(entry.riskLevel)).map((entry) => entry.id);
++    const finished = await service.finishGalleryAppConnection(c.id, connected.connectionId, {
++      access: "all_agents",
++      enabledCatalogEntryIds: catalog.map((entry) => entry.id),
++      askFirstCatalogEntryIds: askFirst,
++    }, actor);
++    const gated = finished.policies
++      .filter((policy) => policy.policyType === "require_approval")
++      .map((policy) => (policy.selectors as { catalogEntryId?: string }).catalogEntryId);
++    expect(new Set(gated)).toEqual(new Set([byName.get("crm_modifier_contact")!.id, byName.get("crm_envoyer_message")!.id]));
++  });
+ });
+diff --git a/server/src/__tests__/tool-access-service.test.ts b/server/src/__tests__/tool-access-service.test.ts
+index c0412d866..2d66adc9a 100644
+--- a/server/src/__tests__/tool-access-service.test.ts
++++ b/server/src/__tests__/tool-access-service.test.ts
+@@ -5174,7 +5174,10 @@ describeEmbeddedPostgres("tool access service", () => {
+         "youcom",
+       ]),
+     );
+-    expect(res.body.apps).toHaveLength(59);
++    // Atelier Marketing IA (local patch 0004 adds 11 marketing gateway cards;
++    // count adjusted in patch 0005): 59 upstream apps plus the atelier cards.
++    expect(res.body.apps.filter((app: { slug: string }) => !app.slug.startsWith("atelier-"))).toHaveLength(59);
++    expect(res.body.apps.filter((app: { slug: string }) => app.slug.startsWith("atelier-"))).toHaveLength(11);
+     expect(
+       res.body.apps.find((app: { slug: string }) => app.slug === "gmail")
+         .ownershipAvailability,
+diff --git a/server/src/services/tool-access.ts b/server/src/services/tool-access.ts
+index 3422a3638..5cd6edf1d 100644
+--- a/server/src/services/tool-access.ts
++++ b/server/src/services/tool-access.ts
+@@ -186,6 +186,7 @@ import {
+   isGoogleWorkspaceConnectorProfileId,
+   isToolConnectionAttentionHealth,
+   recommendedDefaultsForApp,
++  ATELIER_APP_SLUG_PREFIX,
+   resolveConnectionMethodServerUrl,
+   type GitHubConnectorProfileId,
+   type GoogleWorkspaceConnectorProfileId,
+@@ -2370,6 +2371,10 @@ const AGGREGATOR_READ_TOOLS = new Map<string, ReadonlySet<string>>([
+   ["zapier", new Set()],
+ ]);
+ 
++/** Atelier Marketing IA (local patch 0005): French mutation verbs of the marketing gateway tools. */
++const ATELIER_DESTRUCTIVE_VERBS = "supprimer|effacer|retirer|desactiver|archiver";
++const ATELIER_WRITE_VERBS = "publier|envoyer|modifier|ecrire|creer|ajouter|repondre|programmer|planifier|mettre|lancer|activer|associer|changer|remplacer";
++
+ export function classifyRisk(
+   tool: McpToolDescriptor,
+   sourceTemplateKey?: string | null,
+@@ -2377,6 +2382,13 @@ export function classifyRisk(
+   const annotations = tool.annotations ?? {};
+   if (annotations.destructiveHint === true || annotations.destructive === true)
+     return "destructive";
++  // Atelier Marketing IA (local patch 0005): the marketing gateway names its
++  // tools in French. A mutation verb is never a read, whatever the provider
++  // annotates, so a missing or wrong `readOnlyHint` cannot skip "Ask first".
++  if (sourceTemplateKey?.startsWith(ATELIER_APP_SLUG_PREFIX)) {
++    if (verbMatches(tool.name, ATELIER_DESTRUCTIVE_VERBS)) return "destructive";
++    if (verbMatches(tool.name, ATELIER_WRITE_VERBS)) return "write";
++  }
+   const normalizedToolName = normalizedProviderToolName(tool.name);
+   if (isMemoryConnectorId(sourceTemplateKey)) {
+     if (verbMatches(tool.name, "delete|remove|destroy|forget|prune|reset")) return "destructive";
+-- 
+2.53.0
+

@@ -1,0 +1,938 @@
+From d29377ff36f477f58bbe682d6b68afcd64c0396a Mon Sep 17 00:00:00 2001
+From: Jean-Baptiste Dhondt <114347858+warrox1993@users.noreply.github.com>
+Date: Thu, 15 Oct 2026 14:06:45 +0200
+Subject: [PATCH 2/3] =?UTF-8?q?feat(atelier,=20local):=20gardes=20P1/P2=20?=
+ =?UTF-8?q?et=20r=C3=A9gulateur=20de=20runs=20par=20entreprise?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Patch local de l'Atelier Marketing IA, non destiné à l'amont.
+- P1 : un acteur agent ne peut ni retirer ni modifier la partie relecture
+  d'une executionPolicy à étapes (403, tracé dans le journal d'activité).
+- P2 : une tâche sous la porte de l'atelier n'entre en étape d'approbation
+  ni ne passe à done sans évaluation PASS fraîche sur la révision courante
+  du livrable (422 sous verrou de ligne, board compris).
+- Régulateur : plafond de runs actifs par entreprise (réglage du plugin ou
+  ATELIER_MAX_RUNS_ACTIFS_PAR_ENTREPRISE), réservation de place sans verrou
+  autour de la réclamation, relance des files de l'entreprise.
+- Tests : server/src/__tests__/atelier-gardes.test.ts (PostgreSQL embarqué).
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01DP85vPq2MHkZg8VNtRvCzB
+---
+ server/src/__tests__/atelier-gardes.test.ts | 359 ++++++++++++++++++++
+ server/src/atelier/espace-atelier.ts        |  51 +++
+ server/src/atelier/gardes-atelier.ts        | 228 +++++++++++++
+ server/src/atelier/regulateur-runs.ts       | 131 +++++++
+ server/src/services/heartbeat.ts            |  25 +-
+ server/src/services/issues.ts               |  25 ++
+ 6 files changed, 818 insertions(+), 1 deletion(-)
+ create mode 100644 server/src/__tests__/atelier-gardes.test.ts
+ create mode 100644 server/src/atelier/espace-atelier.ts
+ create mode 100644 server/src/atelier/gardes-atelier.ts
+ create mode 100644 server/src/atelier/regulateur-runs.ts
+
+diff --git a/server/src/__tests__/atelier-gardes.test.ts b/server/src/__tests__/atelier-gardes.test.ts
+new file mode 100644
+index 000000000..edc5d0693
+--- /dev/null
++++ b/server/src/__tests__/atelier-gardes.test.ts
+@@ -0,0 +1,359 @@
++/**
++ * Atelier Marketing IA (patch local) : gardes P1 et P2 et régulateur de runs,
++ * testés contre une vraie base PostgreSQL embarquée et le vrai
++ * `issueService.update()`.
++ */
++import { randomUUID } from "node:crypto";
++import { sql } from "drizzle-orm";
++import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
++import {
++  activityLog,
++  agents,
++  companies,
++  createDb,
++  documents,
++  heartbeatRuns,
++  issueDocuments,
++  issues,
++  pluginDatabaseNamespaces,
++  plugins,
++} from "@paperclipai/db";
++import { getEmbeddedPostgresTestSupport, startEmbeddedPostgresTestDatabase } from "./helpers/embedded-postgres.js";
++import { issueService } from "../services/issues.js";
++import {
++  deciderPorteServeur,
++  signaturePolitiqueRelecture,
++  transitionSoumiseALaPorte,
++  verifierPolitiqueNonAffaiblie,
++} from "../atelier/gardes-atelier.js";
++import { creerRegulateurRuns, lirePlafondEnvironnement, placesRestantes } from "../atelier/regulateur-runs.js";
++import { normalizeIssueExecutionPolicy } from "../services/issue-execution-policy.js";
++
++const NS = "plugin_atelier_f0322cc62c";
++const support = await getEmbeddedPostgresTestSupport();
++const decrireAvecBase = support.supported ? describe : describe.skip;
++
++describe("atelier : fonctions pures des gardes", () => {
++  const relecteur = "11111111-1111-4111-8111-111111111111";
++  const autre = "22222222-2222-4222-8222-222222222222";
++  const politique = (agentId: string, extra: Record<string, unknown> = {}) => ({
++    stages: [{ type: "review", participants: [{ type: "agent", agentId }] }],
++    ...extra,
++  });
++
++  it("P1 : un agent ne peut ni retirer ni modifier une politique à étapes", () => {
++    expect(() => verifierPolitiqueNonAffaiblie({ actorAgentId: autre, politiqueActuelle: politique(relecteur), politiqueDemandee: null })).toThrow(/P1/);
++    expect(() => verifierPolitiqueNonAffaiblie({ actorAgentId: autre, politiqueActuelle: politique(relecteur), politiqueDemandee: politique(autre) })).toThrow(/P1/);
++    expect(() =>
++      verifierPolitiqueNonAffaiblie({ actorAgentId: autre, politiqueActuelle: politique(relecteur), politiqueDemandee: politique(relecteur, { maxReviewRounds: 50 }) }),
++    ).toThrow(/P1/);
++    expect(() =>
++      verifierPolitiqueNonAffaiblie({ actorAgentId: autre, politiqueActuelle: politique(relecteur), politiqueDemandee: { stages: [] } }),
++    ).toThrow(/P1/);
++  });
++
++  it("P1 : un humain peut modifier ; un agent peut renvoyer la même politique ou en ajouter une", () => {
++    expect(() => verifierPolitiqueNonAffaiblie({ actorAgentId: null, politiqueActuelle: politique(relecteur), politiqueDemandee: null })).not.toThrow();
++    expect(() => verifierPolitiqueNonAffaiblie({ actorAgentId: autre, politiqueActuelle: politique(relecteur), politiqueDemandee: politique(relecteur) })).not.toThrow();
++    expect(() => verifierPolitiqueNonAffaiblie({ actorAgentId: autre, politiqueActuelle: null, politiqueDemandee: politique(relecteur) })).not.toThrow();
++    expect(() => verifierPolitiqueNonAffaiblie({ actorAgentId: autre, politiqueActuelle: politique(relecteur), politiqueDemandee: undefined })).not.toThrow();
++  });
++
++  it("P1 : la signature ignore les identifiants régénérés", () => {
++    const a = normalizeIssueExecutionPolicy(politique(relecteur));
++    const b = normalizeIssueExecutionPolicy(politique(relecteur));
++    expect(a?.stages[0]?.id).not.toBe(b?.stages[0]?.id);
++    expect(signaturePolitiqueRelecture(a)).toBe(signaturePolitiqueRelecture(b));
++  });
++
++  it("P2 : transitions soumises à la porte", () => {
++    expect(transitionSoumiseALaPorte({ status: "in_review" }, { status: "done" })).toBe("vers_done");
++    expect(transitionSoumiseALaPorte({ status: "done" }, { status: "done" })).toBeNull();
++    expect(
++      transitionSoumiseALaPorte(
++        { status: "in_review", executionState: { status: "pending", currentStageType: "review" } },
++        { executionState: { status: "pending", currentStageType: "approval" } },
++      ),
++    ).toBe("vers_approbation");
++    expect(
++      transitionSoumiseALaPorte(
++        { status: "in_review", executionState: { status: "pending", currentStageType: "approval" } },
++        { executionState: { status: "pending", currentStageType: "approval" } },
++      ),
++    ).toBeNull();
++    expect(transitionSoumiseALaPorte({ status: "in_review" }, { status: "in_progress" })).toBeNull();
++  });
++
++  it("P2 : décision serveur", () => {
++    const ok = { decision: "PASS", perimee: false, revisionId: "r2", entreesPlusRecentes: false };
++    const base = { porteActive: true, revisionCourante: "r2" };
++    expect(deciderPorteServeur({ ...base, evaluation: ok }).autorise).toBe(true);
++    expect(deciderPorteServeur({ ...base, evaluation: null }).autorise).toBe(false);
++    expect(deciderPorteServeur({ ...base, evaluation: { ...ok, decision: "REFUS" } }).autorise).toBe(false);
++    expect(deciderPorteServeur({ ...base, evaluation: { ...ok, perimee: true } }).autorise).toBe(false);
++    expect(deciderPorteServeur({ ...base, evaluation: { ...ok, revisionId: "r1" } }).autorise).toBe(false);
++    expect(deciderPorteServeur({ ...base, revisionCourante: null, evaluation: ok }).autorise).toBe(false);
++    expect(deciderPorteServeur({ ...base, evaluation: { ...ok, entreesPlusRecentes: true } }).autorise).toBe(false);
++    expect(deciderPorteServeur({ porteActive: false, evaluation: null, revisionCourante: null }).autorise).toBe(true);
++  });
++
++  it("régulateur : plafond par variable et places restantes", () => {
++    expect(lirePlafondEnvironnement({ ATELIER_MAX_RUNS_ACTIFS_PAR_ENTREPRISE: "3" })).toBe(3);
++    expect(lirePlafondEnvironnement({ ATELIER_MAX_RUNS_ACTIFS_PAR_ENTREPRISE: "0" })).toBeNull();
++    expect(lirePlafondEnvironnement({ ATELIER_MAX_RUNS_ACTIFS_PAR_ENTREPRISE: "abc" })).toBeNull();
++    expect(lirePlafondEnvironnement({})).toBeNull();
++    expect(placesRestantes(3, 2)).toBe(1);
++    expect(placesRestantes(3, 5)).toBe(0);
++    expect(placesRestantes(null, 99)).toBeNull();
++  });
++});
++
++decrireAvecBase("atelier : gardes et régulateur contre PostgreSQL", () => {
++  let db!: ReturnType<typeof createDb>;
++  let base: Awaited<ReturnType<typeof startEmbeddedPostgresTestDatabase>> | null = null;
++
++  beforeAll(async () => {
++    base = await startEmbeddedPostgresTestDatabase("paperclip-atelier-gardes-");
++    db = createDb(base.connectionString);
++  }, 30_000);
++
++  afterEach(async () => {
++    await db.execute(sql.raw(`drop schema if exists ${NS} cascade`));
++    await db.delete(activityLog);
++    await db.delete(issueDocuments);
++    await db.delete(documents);
++    await db.delete(heartbeatRuns);
++    await db.delete(issues);
++    await db.delete(agents);
++    await db.delete(pluginDatabaseNamespaces);
++    await db.delete(plugins);
++    await db.delete(companies);
++  });
++
++  afterAll(async () => {
++    await base?.cleanup();
++  });
++
++  /** Reproduit les colonnes gelées du contrat (docs/contrats.md §3) lues par le serveur. */
++  async function installerEspaceAtelier() {
++    const pluginId = randomUUID();
++    await db.insert(plugins).values({
++      id: pluginId,
++      pluginKey: "atelier.marketing-ia",
++      packageName: "@atelier/plugin-atelier",
++      version: "0.1.0",
++      manifestJson: {} as never,
++      status: "ready",
++    });
++    await db.insert(pluginDatabaseNamespaces).values({ pluginId, pluginKey: "atelier.marketing-ia", namespaceName: NS, status: "active" });
++    for (const ddl of [
++      `create schema ${NS}`,
++      `create table ${NS}.reglages_entreprise (company_id uuid primary key, max_runs_actifs integer not null default 3, modifie_le timestamptz not null default now())`,
++      `create table ${NS}.portes (issue_id uuid primary key, company_id uuid not null, campagne_id uuid not null, cle_livrable text not null default 'livrable', actif boolean not null default true, modifie_le timestamptz not null default now())`,
++      `create table ${NS}.evaluations_porte (id uuid primary key, issue_id uuid not null, revision_id uuid, decision text not null, perimee boolean not null default false, entrees_jusqu_a timestamptz not null, cree_le timestamptz not null default clock_timestamp())`,
++      `create table ${NS}.couvertures (id uuid primary key, issue_id uuid not null, modifie_le timestamptz not null default now())`,
++      `create table ${NS}.verdicts (id uuid primary key, issue_id uuid not null, modifie_le timestamptz not null default now())`,
++      `create table ${NS}.constats (finding_id text primary key, issue_id uuid not null, modifie_le timestamptz not null default now())`,
++      `create table ${NS}.exigences (id uuid primary key, campagne_id uuid not null, modifie_le timestamptz not null default now())`,
++    ]) {
++      await db.execute(sql.raw(ddl));
++    }
++  }
++
++  async function creerEntreprise() {
++    const companyId = randomUUID();
++    await db.insert(companies).values({
++      id: companyId,
++      name: "Atelier test",
++      issuePrefix: `A${companyId.replace(/-/g, "").slice(0, 6).toUpperCase()}`,
++      requireBoardApprovalForNewAgents: false,
++    });
++    const producteur = randomUUID();
++    const relecteur = randomUUID();
++    for (const [id, name] of [[producteur, "Producteur"], [relecteur, "Relecteur"]] as const) {
++      await db.insert(agents).values({ id, companyId, name, role: "general", status: "active", adapterType: "process", adapterConfig: {}, runtimeConfig: {}, permissions: {} });
++    }
++    return { companyId, producteur, relecteur };
++  }
++
++  async function creerTache(companyId: string, relecteur: string, champs: Partial<typeof issues.$inferInsert> = {}) {
++    const issueId = randomUUID();
++    await db.insert(issues).values({
++      id: issueId,
++      companyId,
++      title: "Livrable sous porte",
++      status: "in_review",
++      priority: "medium",
++      executionPolicy: normalizeIssueExecutionPolicy({ stages: [{ type: "review", participants: [{ type: "agent", agentId: relecteur }] }] }),
++      ...champs,
++    });
++    return issueId;
++  }
++
++  async function poserLivrable(companyId: string, issueId: string, revisionId: string) {
++    const documentId = randomUUID();
++    await db.insert(documents).values({ id: documentId, companyId, latestBody: "corps", latestRevisionId: revisionId, latestRevisionNumber: 1 });
++    await db.insert(issueDocuments).values({ companyId, issueId, documentId, key: "livrable" });
++    return documentId;
++  }
++
++  async function mettreSousPorte(companyId: string, issueId: string) {
++    const campagneId = randomUUID();
++    await db.execute(sql.raw(`insert into ${NS}.portes (issue_id, company_id, campagne_id) values ('${issueId}', '${companyId}', '${campagneId}')`));
++    return campagneId;
++  }
++
++  async function evaluation(issueId: string, revisionId: string, decision = "PASS", perimee = false) {
++    await db.execute(
++      sql.raw(`insert into ${NS}.evaluations_porte (id, issue_id, revision_id, decision, perimee, entrees_jusqu_a) values ('${randomUUID()}', '${issueId}', '${revisionId}', '${decision}', ${perimee}, clock_timestamp())`),
++    );
++  }
++
++  async function attendreActivite(action: string) {
++    for (let i = 0; i < 40; i++) {
++      const rangs = await db.select().from(activityLog);
++      const trouve = rangs.find((r) => r.action === action);
++      if (trouve) return trouve;
++      await new Promise((r) => setTimeout(r, 50));
++    }
++    return null;
++  }
++
++  it("P1 : le contournement de phase 1 (retrait de la politique par l'agent) est refusé et tracé", async () => {
++    await installerEspaceAtelier();
++    const { companyId, producteur, relecteur } = await creerEntreprise();
++    const issueId = await creerTache(companyId, relecteur, { status: "in_progress", assigneeAgentId: producteur });
++    await expect(issueService(db).update(issueId, { executionPolicy: null, actorAgentId: producteur })).rejects.toMatchObject({ status: 403 });
++    const apres = await db.select().from(issues).where(sql`${issues.id} = ${issueId}`);
++    expect(apres[0]?.executionPolicy).not.toBeNull();
++    const trace = await attendreActivite("atelier.politique_verrouillee");
++    expect(trace?.entityId).toBe(issueId);
++  });
++
++  it("P1 : un humain peut retirer la politique", async () => {
++    const { companyId, relecteur } = await creerEntreprise();
++    const issueId = await creerTache(companyId, relecteur, { status: "todo" });
++    const maj = await issueService(db).update(issueId, { executionPolicy: null, actorUserId: "local-board" });
++    expect(maj?.executionPolicy ?? null).toBeNull();
++  });
++
++  it("P2 : sans évaluation PASS, done est refusé même au board, et le refus est tracé", async () => {
++    await installerEspaceAtelier();
++    const { companyId, relecteur } = await creerEntreprise();
++    const issueId = await creerTache(companyId, relecteur);
++    await poserLivrable(companyId, issueId, randomUUID());
++    await mettreSousPorte(companyId, issueId);
++    await expect(issueService(db).update(issueId, { status: "done", actorUserId: "local-board" })).rejects.toMatchObject({ status: 422 });
++    const apres = await db.select().from(issues).where(sql`${issues.id} = ${issueId}`);
++    expect(apres[0]?.status).toBe("in_review");
++    const trace = await attendreActivite("atelier.porte_refusee");
++    expect(trace?.details).toMatchObject({ garde: "P2" });
++  });
++
++  it("P2 : PASS sur la révision courante et fraîche autorise done", async () => {
++    await installerEspaceAtelier();
++    const { companyId, relecteur } = await creerEntreprise();
++    const issueId = await creerTache(companyId, relecteur);
++    const revision = randomUUID();
++    await poserLivrable(companyId, issueId, revision);
++    await mettreSousPorte(companyId, issueId);
++    await evaluation(issueId, revision, "PASS");
++    const maj = await issueService(db).update(issueId, { status: "done", actorUserId: "local-board" });
++    expect(maj?.status).toBe("done");
++  });
++
++  it("P2 : PASS sur une ancienne révision, PASS périmé, REFUS ou entrée plus récente sont refusés", async () => {
++    await installerEspaceAtelier();
++    const { companyId, relecteur } = await creerEntreprise();
++    const svc = issueService(db);
++
++    const t1 = await creerTache(companyId, relecteur);
++    await poserLivrable(companyId, t1, randomUUID());
++    await mettreSousPorte(companyId, t1);
++    await evaluation(t1, randomUUID(), "PASS");
++    await expect(svc.update(t1, { status: "done", actorUserId: "local-board" })).rejects.toMatchObject({ status: 422 });
++
++    const t2 = await creerTache(companyId, relecteur);
++    const r2 = randomUUID();
++    await poserLivrable(companyId, t2, r2);
++    await mettreSousPorte(companyId, t2);
++    await evaluation(t2, r2, "PASS", true);
++    await expect(svc.update(t2, { status: "done", actorUserId: "local-board" })).rejects.toMatchObject({ status: 422 });
++
++    const t3 = await creerTache(companyId, relecteur);
++    const r3 = randomUUID();
++    await poserLivrable(companyId, t3, r3);
++    await mettreSousPorte(companyId, t3);
++    await evaluation(t3, r3, "REFUS");
++    await expect(svc.update(t3, { status: "done", actorUserId: "local-board" })).rejects.toMatchObject({ status: 422 });
++
++    const t4 = await creerTache(companyId, relecteur);
++    const r4 = randomUUID();
++    await poserLivrable(companyId, t4, r4);
++    await mettreSousPorte(companyId, t4);
++    await evaluation(t4, r4, "PASS");
++    await db.execute(sql.raw(`insert into ${NS}.verdicts (id, issue_id, modifie_le) values ('${randomUUID()}', '${t4}', clock_timestamp())`));
++    await expect(svc.update(t4, { status: "done", actorUserId: "local-board" })).rejects.toMatchObject({ status: 422 });
++  });
++
++  it("P2 : l'entrée dans l'étape d'approbation humaine exige la porte", async () => {
++    await installerEspaceAtelier();
++    const { companyId, relecteur } = await creerEntreprise();
++    const issueId = await creerTache(companyId, relecteur, {
++      executionState: { status: "pending", currentStageType: "review", currentStageId: null, currentStageIndex: 0, currentParticipant: null, returnAssignee: null, completedStageIds: [], lastDecisionId: null, lastDecisionOutcome: null },
++    });
++    const revision = randomUUID();
++    await poserLivrable(companyId, issueId, revision);
++    await mettreSousPorte(companyId, issueId);
++    const etatApprobation = { status: "pending", currentStageType: "approval", currentStageId: null, currentStageIndex: 1, currentParticipant: { type: "user", userId: "local-board", agentId: null }, returnAssignee: null, completedStageIds: [], lastDecisionId: null, lastDecisionOutcome: null };
++    await expect(
++      issueService(db).update(issueId, { executionState: etatApprobation as never, actorAgentId: relecteur }),
++    ).rejects.toMatchObject({ status: 422 });
++    await evaluation(issueId, revision, "PASS");
++    const maj = await issueService(db).update(issueId, { executionState: etatApprobation as never, actorAgentId: relecteur });
++    expect((maj?.executionState as { currentStageType?: string } | null)?.currentStageType).toBe("approval");
++  });
++
++  it("P2 : porte levée par un humain ou plugin absent = comportement natif", async () => {
++    const { companyId, relecteur } = await creerEntreprise();
++    const sansPlugin = await creerTache(companyId, relecteur);
++    expect((await issueService(db).update(sansPlugin, { status: "done", actorUserId: "local-board" }))?.status).toBe("done");
++
++    await installerEspaceAtelier();
++    const levee = await creerTache(companyId, relecteur);
++    await mettreSousPorte(companyId, levee);
++    await db.execute(sql.raw(`update ${NS}.portes set actif = false where issue_id = '${levee}'`));
++    expect((await issueService(db).update(levee, { status: "done", actorUserId: "local-board" }))?.status).toBe("done");
++  });
++
++  it("régulateur : jamais plus de N runs admis en parallèle dans une entreprise", async () => {
++    await installerEspaceAtelier();
++    const { companyId, producteur } = await creerEntreprise();
++    await db.execute(sql.raw(`insert into ${NS}.reglages_entreprise (company_id, max_runs_actifs) values ('${companyId}', 3)`));
++    const regulateur = creerRegulateurRuns(db, {});
++    const files = Array.from({ length: 6 }, () => randomUUID());
++    for (const id of files) {
++      await db.insert(heartbeatRuns).values({ id, companyId, agentId: producteur, status: "queued" });
++    }
++    // Réclamation simulée : passe le run à running après un délai (fenêtre de concurrence).
++    const reclamer = (id: string) => async () => {
++      await new Promise((r) => setTimeout(r, 20));
++      await db.update(heartbeatRuns).set({ status: "running" }).where(sql`${heartbeatRuns.id} = ${id}`);
++      return id;
++    };
++    const resultats = await Promise.all(files.map((id) => regulateur.admettre(companyId, reclamer(id))));
++    expect(resultats.filter((r) => r.admis)).toHaveLength(3);
++    expect(await regulateur.compterRunsActifs(companyId)).toBe(3);
++    expect(await regulateur.plafondEntreprise(companyId)).toBe(3);
++  });
++
++  it("régulateur : sans réglage ni variable, aucun plafond (natif) ; la variable sert de défaut", async () => {
++    const { companyId, producteur } = await creerEntreprise();
++    for (let i = 0; i < 4; i++) {
++      await db.insert(heartbeatRuns).values({ id: randomUUID(), companyId, agentId: producteur, status: "running" });
++    }
++    expect((await creerRegulateurRuns(db, {}).admettre(companyId, async () => "ok")).admis).toBe(true);
++    const avecVariable = await creerRegulateurRuns(db, { ATELIER_MAX_RUNS_ACTIFS_PAR_ENTREPRISE: "3" }).admettre(companyId, async () => "ok");
++    expect(avecVariable.admis).toBe(false);
++  });
++});
+diff --git a/server/src/atelier/espace-atelier.ts b/server/src/atelier/espace-atelier.ts
+new file mode 100644
+index 000000000..51778fd74
+--- /dev/null
++++ b/server/src/atelier/espace-atelier.ts
+@@ -0,0 +1,51 @@
++/**
++ * Atelier Marketing IA (patch local, non amont) : accès en lecture à
++ * l'espace de base du plugin `atelier.marketing-ia` depuis le serveur.
++ *
++ * Le plugin écrit ses tables dans un schéma dérivé par l'hôte ; le serveur
++ * patché les LIT seulement (porte P2, régulateur). Le nom du schéma est lu
++ * dans `plugin_database_namespaces` puis validé avant toute interpolation.
++ */
++import { sql, type SQL } from "drizzle-orm";
++
++export const CLE_PLUGIN_ATELIER = "atelier.marketing-ia";
++const IDENTIFIANT_SUR = /^[a-z_][a-z0-9_]{0,62}$/;
++
++/** Client minimal accepté : base racine ou transaction Drizzle. */
++export interface ExecuteurSql {
++  execute(query: SQL): Promise<unknown>;
++}
++
++export function lignes<T>(resultat: unknown): T[] {
++  if (Array.isArray(resultat)) return resultat as T[];
++  if (resultat && typeof resultat === "object" && Array.isArray((resultat as { rows?: unknown }).rows)) {
++    return (resultat as { rows: T[] }).rows;
++  }
++  return Array.from((resultat ?? []) as Iterable<T>);
++}
++
++/**
++ * Nom du schéma actif du plugin, ou null si le plugin n'a jamais été
++ * installé (aucune garde ne s'applique alors : comportement natif).
++ */
++export async function schemaAtelier(executeur: ExecuteurSql): Promise<string | null> {
++  const rangs = lignes<{ namespace_name: string }>(
++    await executeur.execute(
++      sql`select namespace_name from plugin_database_namespaces where plugin_key = ${CLE_PLUGIN_ATELIER} and status = 'active' limit 1`,
++    ),
++  );
++  const nom = rangs[0]?.namespace_name;
++  if (!nom) return null;
++  if (!IDENTIFIANT_SUR.test(nom)) {
++    throw new Error(`Nom de schéma de l'atelier refusé : ${nom}`);
++  }
++  return nom;
++}
++
++/** Référence SQL sûre à une table du schéma de l'atelier. */
++export function tableAtelier(schema: string, table: string): SQL {
++  if (!IDENTIFIANT_SUR.test(schema) || !IDENTIFIANT_SUR.test(table)) {
++    throw new Error("Identifiant SQL de l'atelier refusé");
++  }
++  return sql.raw(`"${schema}"."${table}"`);
++}
+diff --git a/server/src/atelier/gardes-atelier.ts b/server/src/atelier/gardes-atelier.ts
+new file mode 100644
+index 000000000..ef3e9edfe
+--- /dev/null
++++ b/server/src/atelier/gardes-atelier.ts
+@@ -0,0 +1,228 @@
++/**
++ * Atelier Marketing IA (patch local, non amont) : gardes serveur que le
++ * plugin ne peut pas assurer seul, appelées sous le verrou de ligne de
++ * `issueService.update()`.
++ *
++ * P1 — politique de relecture verrouillée : un acteur AGENT ne peut ni
++ *      retirer, ni vider, ni modifier la partie « relecture » (étapes,
++ *      participants, mode, préréglage, autorisation, limite de tours) d'une
++ *      `executionPolicy` qui comporte au moins une étape. Les humains (board)
++ *      gardent ce droit. Corrige le contournement prouvé en phase 1
++ *      (`PATCH executionPolicy: null` puis `done`).
++ *
++ * P2 — porte déterministe : une tâche placée sous la porte de l'atelier ne
++ *      peut entrer dans une étape d'approbation humaine ni passer à `done`
++ *      (quel que soit l'acteur, board compris) que si la DERNIÈRE évaluation
++ *      calculée par le plugin est `PASS`, non périmée, porte sur la révision
++ *      courante du livrable et a été calculée après la dernière modification
++ *      de ses entrées (couverture, verdicts, constats, exigences, porte).
++ *      Une sortie de modèle disant « PASS » ne suffit donc jamais.
++ *      Levée possible seulement par un humain, via le plugin (tracée).
++ */
++import { sql } from "drizzle-orm";
++import type { IssueExecutionPolicy } from "@paperclipai/shared";
++import { forbidden, unprocessable } from "../errors.js";
++import { normalizeIssueExecutionPolicy } from "../services/issue-execution-policy.js";
++import { lignes, schemaAtelier, tableAtelier, type ExecuteurSql } from "./espace-atelier.js";
++
++/* ------------------------------------------------------------------ */
++/* P1                                                                  */
++/* ------------------------------------------------------------------ */
++
++/** Signature de la partie « relecture » d'une politique (sans identifiants régénérés ni moniteur). */
++export function signaturePolitiqueRelecture(politique: IssueExecutionPolicy | null): string | null {
++  if (!politique || !Array.isArray(politique.stages) || politique.stages.length === 0) return null;
++  return JSON.stringify({
++    mode: politique.mode ?? "normal",
++    stages: politique.stages.map((etape) => ({
++      type: etape.type,
++      participants: etape.participants.map((p) => ({ type: p.type, agentId: p.agentId ?? null, userId: p.userId ?? null })),
++    })),
++    reviewPreset: politique.reviewPreset ?? null,
++    authorizationPolicy: politique.authorizationPolicy ?? null,
++    maxReviewRounds: politique.maxReviewRounds ?? null,
++  });
++}
++
++export interface EntreeP1 {
++  actorAgentId: string | null | undefined;
++  politiqueActuelle: unknown;
++  /** undefined = la requête ne touche pas à la politique. */
++  politiqueDemandee: unknown;
++}
++
++/** Lève 403 si un agent retire ou modifie une politique de relecture à étapes. Fonction pure. */
++export function verifierPolitiqueNonAffaiblie(entree: EntreeP1): void {
++  if (!entree.actorAgentId) return;
++  if (entree.politiqueDemandee === undefined) return;
++  const actuelle = signaturePolitiqueRelecture(normalizeIssueExecutionPolicy(entree.politiqueActuelle ?? null));
++  if (actuelle === null) return;
++  const demandee = signaturePolitiqueRelecture(normalizeIssueExecutionPolicy(entree.politiqueDemandee ?? null));
++  if (demandee !== actuelle) {
++    throw forbidden(
++      "Atelier (P1) : un agent ne peut ni retirer ni modifier la politique de relecture de cette tâche ; seul un humain le peut.",
++      { code: "atelier_politique_verrouillee" },
++    );
++  }
++}
++
++/* ------------------------------------------------------------------ */
++/* P2                                                                  */
++/* ------------------------------------------------------------------ */
++
++interface EtatExecutionLike {
++  status?: string | null;
++  currentStageType?: string | null;
++}
++
++function estEtapeApprobationEnAttente(etat: unknown): boolean {
++  if (!etat || typeof etat !== "object") return false;
++  const e = etat as EtatExecutionLike;
++  return e.status === "pending" && e.currentStageType === "approval";
++}
++
++/** La transition demandée doit-elle franchir la porte ? Fonction pure. */
++export function transitionSoumiseALaPorte(
++  existant: { status: string; executionState?: unknown },
++  patch: { status?: unknown; executionState?: unknown },
++): "vers_done" | "vers_approbation" | null {
++  if (patch.status === "done" && existant.status !== "done") return "vers_done";
++  if (
++    patch.executionState !== undefined &&
++    estEtapeApprobationEnAttente(patch.executionState) &&
++    !estEtapeApprobationEnAttente(existant.executionState)
++  ) {
++    return "vers_approbation";
++  }
++  return null;
++}
++
++export interface FaitsPorte {
++  porteActive: boolean;
++  evaluation: {
++    decision: string;
++    perimee: boolean;
++    revisionId: string | null;
++    /** Une entrée (couverture, verdict, constat, exigence, porte) a changé après l'évaluation (comparé en SQL, à la microseconde). */
++    entreesPlusRecentes: boolean;
++  } | null;
++  revisionCourante: string | null;
++}
++
++export interface DecisionGarde {
++  autorise: boolean;
++  motifs: string[];
++}
++
++/** Décision du serveur à partir des faits lus en base. Fonction pure, testée. */
++export function deciderPorteServeur(faits: FaitsPorte): DecisionGarde {
++  if (!faits.porteActive) return { autorise: true, motifs: [] };
++  const motifs: string[] = [];
++  const ev = faits.evaluation;
++  if (!ev) {
++    motifs.push("aucune évaluation de porte");
++  } else {
++    if (ev.decision !== "PASS") motifs.push(`dernière évaluation : ${ev.decision}`);
++    if (ev.perimee) motifs.push("évaluation périmée");
++    if (!faits.revisionCourante) motifs.push("aucun livrable");
++    else if (ev.revisionId !== faits.revisionCourante) motifs.push("évaluation portant sur une autre révision que la révision courante");
++    if (ev.entreesPlusRecentes) motifs.push("entrées modifiées après l'évaluation");
++  }
++  return { autorise: motifs.length === 0, motifs };
++}
++
++/** Lit les faits de la porte pour une tâche (null si la tâche n'est pas sous porte). */
++export async function lireFaitsPorte(executeur: ExecuteurSql, issueId: string): Promise<FaitsPorte | null> {
++  const schema = await schemaAtelier(executeur);
++  if (!schema) return null;
++  const portes = tableAtelier(schema, "portes");
++  const porteRangs = lignes<{ actif: boolean; cle_livrable: string; campagne_id: string }>(
++    await executeur.execute(sql`select actif, cle_livrable, campagne_id from ${portes} where issue_id = ${issueId} limit 1`),
++  );
++  const porte = porteRangs[0];
++  if (!porte) return null;
++  if (!porte.actif) return { porteActive: false, evaluation: null, revisionCourante: null };
++
++  const evaluations = tableAtelier(schema, "evaluations_porte");
++  const couvertures = tableAtelier(schema, "couvertures");
++  const verdicts = tableAtelier(schema, "verdicts");
++  const constats = tableAtelier(schema, "constats");
++  const exigences = tableAtelier(schema, "exigences");
++  // Fraîcheur comparée par PostgreSQL (précision microseconde) : une entrée
++  // modifiée après l'évaluation la rend inutilisable.
++  const evRangs = lignes<{ decision: string; perimee: boolean; revision_id: string | null; entrees_plus_recentes: boolean | null }>(
++    await executeur.execute(sql`select ev.decision, ev.perimee, ev.revision_id,
++        coalesce(greatest(
++          (select max(modifie_le) from ${couvertures} where issue_id = ${issueId}),
++          (select max(modifie_le) from ${verdicts} where issue_id = ${issueId}),
++          (select max(modifie_le) from ${constats} where issue_id = ${issueId}),
++          (select max(modifie_le) from ${exigences} where campagne_id = ${porte.campagne_id}),
++          (select modifie_le from ${portes} where issue_id = ${issueId})
++        ) > ev.entrees_jusqu_a, false) as entrees_plus_recentes
++      from ${evaluations} ev where ev.issue_id = ${issueId} order by ev.cree_le desc limit 1`),
++  );
++  const ev = evRangs[0];
++
++  const revRangs = lignes<{ latest_revision_id: string | null }>(
++    await executeur.execute(
++      sql`select d.latest_revision_id from issue_documents idoc join documents d on d.id = idoc.document_id where idoc.issue_id = ${issueId} and idoc.key = ${porte.cle_livrable} limit 1`,
++    ),
++  );
++
++  return {
++    porteActive: true,
++    evaluation: ev
++      ? { decision: ev.decision, perimee: Boolean(ev.perimee), revisionId: ev.revision_id, entreesPlusRecentes: Boolean(ev.entrees_plus_recentes) }
++      : null,
++    revisionCourante: revRangs[0]?.latest_revision_id ?? null,
++  };
++}
++
++export interface ContexteGardes {
++  existant: { id: string; companyId: string; status: string; executionPolicy?: unknown; executionState?: unknown };
++  patch: { status?: unknown; executionState?: unknown; executionPolicy?: unknown };
++  actorAgentId?: string | null;
++  actorUserId?: string | null;
++}
++
++export type SignalerRefus = (refus: { companyId: string; issueId: string; garde: "P1" | "P2"; motifs: string[]; actorAgentId: string | null; actorUserId: string | null }) => void;
++
++/**
++ * Point d'entrée appelé par `issueService.update()` sous verrou de ligne.
++ * `signaler` est appelé SANS attente (journal d'activité écrit hors de la
++ * transaction refusée).
++ */
++export async function appliquerGardesAtelier(executeur: ExecuteurSql, contexte: ContexteGardes, signaler?: SignalerRefus): Promise<void> {
++  const { existant, patch } = contexte;
++  const base = {
++    companyId: existant.companyId,
++    issueId: existant.id,
++    actorAgentId: contexte.actorAgentId ?? null,
++    actorUserId: contexte.actorUserId ?? null,
++  };
++
++  try {
++    verifierPolitiqueNonAffaiblie({
++      actorAgentId: contexte.actorAgentId,
++      politiqueActuelle: existant.executionPolicy ?? null,
++      politiqueDemandee: patch.executionPolicy,
++    });
++  } catch (err) {
++    signaler?.({ ...base, garde: "P1", motifs: ["modification de la politique de relecture par un agent"] });
++    throw err;
++  }
++
++  const transition = transitionSoumiseALaPorte(existant, patch);
++  if (!transition) return;
++  const faits = await lireFaitsPorte(executeur, existant.id);
++  if (!faits) return;
++  const decision = deciderPorteServeur(faits);
++  if (!decision.autorise) {
++    signaler?.({ ...base, garde: "P2", motifs: decision.motifs });
++    throw unprocessable(
++      `Atelier (P2) : la porte déterministe n'est pas franchie (${decision.motifs.join(" ; ")}). ` +
++        "Évaluez la porte sur la révision courante : POST /api/plugins/atelier.marketing-ia/api/taches/:issueId/porte/evaluer.",
++      { code: "atelier_porte_refusee", transition, motifs: decision.motifs },
++    );
++  }
++}
+diff --git a/server/src/atelier/regulateur-runs.ts b/server/src/atelier/regulateur-runs.ts
+new file mode 100644
+index 000000000..4e330670c
+--- /dev/null
++++ b/server/src/atelier/regulateur-runs.ts
+@@ -0,0 +1,131 @@
++/**
++ * Atelier Marketing IA (patch local, non amont) : régulateur des runs
++ * actifs par entreprise (cahier §4 : « plafond configurable de trois agents
++ * actifs au départ »). Paperclip ne plafonne que par agent
++ * (`maxConcurrentRuns`) ; ce module ajoute un plafond par entreprise.
++ *
++ * Plafond retenu, dans l'ordre :
++ *  1. `reglages_entreprise.max_runs_actifs` du plugin pour cette entreprise ;
++ *  2. sinon la variable `ATELIER_MAX_RUNS_ACTIFS_PAR_ENTREPRISE` de l'instance ;
++ *  3. sinon aucun plafond (comportement natif).
++ *
++ * Admission : sous un verrou court par entreprise (requêtes de comptage
++ * seulement), on compte les runs `running` en base PLUS les réservations en
++ * cours dans ce processus ; s'il reste une place, on la réserve, on relâche
++ * le verrou, puis on réclame le run. La réservation est rendue après la
++ * réclamation (le run est alors compté en base). Le verrou n'englobe jamais
++ * la réclamation : celle-ci peut annuler un run et relancer des files, ce
++ * qui provoquerait sinon un interblocage. Un run non admis reste `queued` ;
++ * il est relancé à la fin d'un run de l'entreprise ou par le passage
++ * périodique natif (`resumeQueuedRuns`).
++ */
++import { sql } from "drizzle-orm";
++import { lignes, schemaAtelier, tableAtelier, type ExecuteurSql } from "./espace-atelier.js";
++
++export const VARIABLE_PLAFOND = "ATELIER_MAX_RUNS_ACTIFS_PAR_ENTREPRISE";
++const PLAFOND_MIN = 1;
++const PLAFOND_MAX = 20;
++
++export function lirePlafondEnvironnement(env: NodeJS.ProcessEnv = process.env): number | null {
++  const brut = env[VARIABLE_PLAFOND]?.trim();
++  if (!brut) return null;
++  const n = Number(brut);
++  if (!Number.isInteger(n) || n < PLAFOND_MIN || n > PLAFOND_MAX) return null;
++  return n;
++}
++
++/** Nombre de places restantes ; null = pas de plafond. Fonction pure. */
++export function placesRestantes(plafond: number | null, runsActifs: number): number | null {
++  if (plafond === null) return null;
++  return Math.max(0, plafond - runsActifs);
++}
++
++/**
++ * Verrous par entreprise PARTAGÉS par tout le processus : plusieurs instances
++ * de `heartbeatService` peuvent coexister ; elles doivent toutes se sérialiser.
++ */
++const verrous = new Map<string, Promise<unknown>>();
++/** Places réservées (réclamation en cours) par entreprise, dans ce processus. */
++const reservations = new Map<string, number>();
++
++export function creerRegulateurRuns(executeur: ExecuteurSql, env: NodeJS.ProcessEnv = process.env) {
++
++  async function sousVerrou<T>(companyId: string, fn: () => Promise<T>): Promise<T> {
++    const precedent = verrous.get(companyId) ?? Promise.resolve();
++    let liberer!: () => void;
++    const courant = new Promise<void>((resolve) => {
++      liberer = resolve;
++    });
++    const chaine = precedent.then(() => courant);
++    verrous.set(companyId, chaine);
++    await precedent.catch(() => undefined);
++    try {
++      return await fn();
++    } finally {
++      liberer();
++      if (verrous.get(companyId) === chaine) verrous.delete(companyId);
++    }
++  }
++
++  async function plafondEntreprise(companyId: string): Promise<number | null> {
++    const schema = await schemaAtelier(executeur);
++    if (schema) {
++      const reglages = tableAtelier(schema, "reglages_entreprise");
++      const rangs = lignes<{ max_runs_actifs: number }>(
++        await executeur.execute(sql`select max_runs_actifs from ${reglages} where company_id = ${companyId} limit 1`),
++      );
++      const valeur = rangs[0]?.max_runs_actifs;
++      if (typeof valeur === "number" && valeur >= PLAFOND_MIN && valeur <= PLAFOND_MAX) return valeur;
++    }
++    return lirePlafondEnvironnement(env);
++  }
++
++  async function compterRunsActifs(companyId: string): Promise<number> {
++    const rangs = lignes<{ n: number | string }>(
++      await executeur.execute(sql`select count(*) as n from heartbeat_runs where company_id = ${companyId} and status = 'running'`),
++    );
++    return Number(rangs[0]?.n ?? 0);
++  }
++
++  /**
++   * Exécute `reclamer` seulement s'il reste une place dans l'entreprise.
++   * Retourne `{ admis: false }` sans appeler `reclamer` sinon.
++   */
++  async function admettre<T>(
++    companyId: string,
++    reclamer: () => Promise<T>,
++  ): Promise<{ admis: true; resultat: T } | { admis: false; plafond: number; actifs: number }> {
++    const decision = await sousVerrou(companyId, async () => {
++      const plafond = await plafondEntreprise(companyId);
++      if (plafond === null) return { reserve: false as const, refuse: false as const };
++      const actifs = (await compterRunsActifs(companyId)) + (reservations.get(companyId) ?? 0);
++      if (placesRestantes(plafond, actifs) === 0) return { reserve: false as const, refuse: true as const, plafond, actifs };
++      reservations.set(companyId, (reservations.get(companyId) ?? 0) + 1);
++      return { reserve: true as const, refuse: false as const };
++    });
++    if (decision.refuse) return { admis: false, plafond: decision.plafond, actifs: decision.actifs };
++    try {
++      return { admis: true, resultat: await reclamer() };
++    } finally {
++      if (decision.reserve) {
++        const restant = (reservations.get(companyId) ?? 1) - 1;
++        if (restant <= 0) reservations.delete(companyId);
++        else reservations.set(companyId, restant);
++      }
++    }
++  }
++
++  /** Agents de l'entreprise (autres que `exclure`) qui ont des runs en file. */
++  async function agentsEnFile(companyId: string, exclure: string | null): Promise<string[]> {
++    const rangs = lignes<{ agent_id: string }>(
++      await executeur.execute(
++        sql`select distinct agent_id from heartbeat_runs where company_id = ${companyId} and status = 'queued'`,
++      ),
++    );
++    return rangs.map((r) => r.agent_id).filter((id) => id && id !== exclure);
++  }
++
++  return { admettre, plafondEntreprise, compterRunsActifs, agentsEnFile };
++}
++
++export type RegulateurRuns = ReturnType<typeof creerRegulateurRuns>;
+diff --git a/server/src/services/heartbeat.ts b/server/src/services/heartbeat.ts
+index 8d5125600..7285f628a 100644
+--- a/server/src/services/heartbeat.ts
++++ b/server/src/services/heartbeat.ts
+@@ -199,6 +199,7 @@ import {
+ import { createHostDuplexObservabilityRecorder } from "./duplex-observability-recorder.js";
+ import { incrementToolRuntimeMetricCounter } from "./tool-runtime-metrics.js";
+ import { logger } from "../middleware/logger.js";
++import { creerRegulateurRuns } from "../atelier/regulateur-runs.js";
+ import {
+   createGitRemoteAuthProvider,
+   resolveManagedGitHubIdentitySelection,
+@@ -9564,6 +9565,8 @@ export function heartbeatService(
+ ) {
+   let shutdownInProgress = false;
+   const instanceSettings = instanceSettingsService(db);
++  // Atelier Marketing IA (patch local) : plafond de runs actifs par entreprise.
++  const regulateurAtelier = creerRegulateurRuns(db, options.runtimeEnv ?? process.env);
+   const getCurrentUserRedactionOptions = async () => ({
+     enabled: (await instanceSettings.getGeneral()).censorUsernameInLogs,
+   });
+@@ -20223,7 +20226,18 @@ export function heartbeatService(
+         if (claimedRuns.length >= availableSlots) break;
+         let claimed: typeof heartbeatRuns.$inferSelect | null;
+         try {
+-          claimed = await claimQueuedRun(queuedRun, companyAgents);
++          // Atelier Marketing IA (patch local) : admission sous plafond d'entreprise.
++          const admission = await regulateurAtelier.admettre(agent.companyId, () =>
++            claimQueuedRun(queuedRun, companyAgents),
++          );
++          if (!admission.admis) {
++            logger.info(
++              { companyId: agent.companyId, agentId, runId: queuedRun.id, plafond: admission.plafond, actifs: admission.actifs },
++              "atelier: run laissé en file, plafond de runs actifs de l'entreprise atteint",
++            );
++            break;
++          }
++          claimed = admission.resultat;
+         } catch (err) {
+           if (isPermanentClaimRejection(err)) {
+             rejectedClaims.push({ run: queuedRun, err });
+@@ -26926,6 +26940,15 @@ export function heartbeatService(
+             });
+         }
+         await startNextQueuedRunForAgent(run.agentId);
++        // Atelier Marketing IA (patch local) : une place s'est libérée dans
++        // l'entreprise ; relancer les autres agents qui attendaient.
++        try {
++          for (const autreAgentId of await regulateurAtelier.agentsEnFile(run.companyId, run.agentId)) {
++            await startNextQueuedRunForAgent(autreAgentId);
++          }
++        } catch (err) {
++          logger.warn({ err, runId: run.id }, "atelier: relance des files de l'entreprise impossible");
++        }
+       }
+     }
+   }
+diff --git a/server/src/services/issues.ts b/server/src/services/issues.ts
+index d9fec8106..771162ef9 100644
+--- a/server/src/services/issues.ts
++++ b/server/src/services/issues.ts
+@@ -197,6 +197,7 @@ import {
+   type ActivityPublication,
+ } from "./activity-log.js";
+ import { buildIssueChanges } from "./issue-change-receipt.js";
++import { appliquerGardesAtelier, type SignalerRefus } from "../atelier/gardes-atelier.js";
+ import { projectSafeChatPublication } from "./chat-publication-projection.js";
+ import { issueThreadInteractionAttentionAgentAllowed } from "./issue-thread-interaction-resolution.js";
+ 
+@@ -6622,6 +6623,22 @@ export async function readIssueCommentRunLogText(run: {
+ 
+ export function issueService(db: Db) {
+   const instanceSettings = instanceSettingsService(db);
++  // Atelier Marketing IA (patch local) : trace d'un refus des gardes P1/P2,
++  // écrite hors de la transaction refusée (sans attente : le verrou de ligne
++  // est relâché par le rollback avant l'insertion).
++  const signalerRefusAtelier: SignalerRefus = (refus) => {
++    void logActivity(db, {
++      companyId: refus.companyId,
++      actorType: refus.actorAgentId ? "agent" : refus.actorUserId ? "user" : "system",
++      actorId: refus.actorAgentId ?? refus.actorUserId ?? "atelier",
++      action: refus.garde === "P1" ? "atelier.politique_verrouillee" : "atelier.porte_refusee",
++      entityType: "issue",
++      entityId: refus.issueId,
++      agentId: refus.actorAgentId,
++      issueId: refus.issueId,
++      details: { garde: refus.garde, motifs: refus.motifs },
++    }).catch((err) => logger.warn({ err, issueId: refus.issueId }, "atelier: journalisation du refus impossible"));
++  };
+   const treeControlSvc = issueTreeControlService(db);
+ 
+   function provisionalTitleFromDescription(description: string) {
+@@ -10972,6 +10989,14 @@ export function issueService(db: Db) {
+             agentId: actorAgentId, runId: actorRunId, stopId: actorRunStopId,
+           });
+         }
++        // Atelier Marketing IA (patch local) : P1 politique verrouillée pour
++        // les agents, P2 porte déterministe, sous le verrou de ligne.
++        await appliquerGardesAtelier(tx, {
++          existant: receiptExisting,
++          patch: { status: patch.status, executionState: patch.executionState, executionPolicy: issueData.executionPolicy },
++          actorAgentId,
++          actorUserId,
++        }, signalerRefusAtelier);
+         if (actorAgentId && patch.status === "done") {
+           const [review] = await tx.select({ id: toolActionRequests.id }).from(toolActionRequests).where(and(eq(toolActionRequests.companyId, existing.companyId), eq(toolActionRequests.issueId, id), inArray(toolActionRequests.status, ["pending", "approved", "executing"]))).limit(1);
+           if (review) throw conflict("This task is waiting for a connection review. Finish unrelated work, then yield in_review without retrying the governed call.", { code: "tool_review_pending", actionRequestId: review.id });
+-- 
+2.53.0
+
