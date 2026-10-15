@@ -1,6 +1,6 @@
 {
   "schema": "atelier/registre-agents/v1",
-  "version": "1.4.0",
+  "version": "1.5.0",
   "dateVersion": "2026-10-15",
   "description": "Registre canonique des dix agents marketing de l'Atelier et de l'agent déterministe « Porte de contrôle » (deterministe: true, adaptateur process, aucun modèle). Source unique : le fichier .paperclip.yaml et l'en-tête des AGENTS.md en sont générés par « python3 -I scripts/bootstrap-organisation.py generer ». Les noms courts (champ nom) sont sans accent parce que Paperclip dérive l'identifiant d'un agent de son nom en supprimant les lettres accentuées ; le titre porte le libellé français complet.",
   "adaptateur": {
@@ -53,6 +53,21 @@
     "acces": {
       "lecture": "lecture seule : toute écriture du service est bloquée pour ce rôle",
       "ecriture_sur_accord": "lecture, et écriture seulement après « Ask first » natif et approbation humaine de l'atelier"
+    },
+    "depotReponses": {
+      "route": "tache.donnees.deposer (POST /taches/:issueId/donnees-connexion)",
+      "description": "Après chaque appel d'outil dont la réponse sert, l'agent dépose la réponse BRUTE avec les « arguments » exacts de l'appel (contrats v1.5). Une réponse de mode réel n'est retenue que si la passerelle l'a signée et qu'elle est liée au service, à l'outil, aux arguments et à une date de moins de 7 jours. La passerelle signe les arguments après application des valeurs par défaut de l'outil : l'agent les donne explicitement."
+    },
+    "diffusionReelle": {
+      "description": "Parcours d'une écriture réelle (publier, envoyer, modifier le CRM), décrit dans la section « Diffusion réelle : parcours complet » des consignes des rôles en « ecriture_sur_accord ». Aujourd'hui seul crm-conversion a cet accès ; les autres rôles restent en lecture et ne diffusent jamais.",
+      "etapes": [
+        "préparer l'écriture exacte dans le livrable ; l'humain l'approuve (version, canal, compte, durée)",
+        "tache.diffusions : demander la diffusion avec service, outil et arguments exacts, une clé d'idempotence stable",
+        "ne rien appeler sans preuveApprobation ; état refusee ou preparee sans preuve : rendre compte, ne pas contourner",
+        "appeler l'outil d'écriture avec les mêmes arguments et preuve_approbation = la preuve, sans la copier ailleurs",
+        "tache.diffusions.issue : rapporter la réponse BRUTE signée de la passerelle",
+        "issue ambiguë (ambigue_a_reconcilier, délai, coupure, 5xx) : ne jamais réessayer à l'aveugle, écrire au coordinateur"
+      ]
     }
   },
   "agents": [

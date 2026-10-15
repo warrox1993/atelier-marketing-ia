@@ -83,31 +83,43 @@ function TableServices({ lignes }: { lignes: LigneService[] }) {
                 {l.nom}
                 <span className="atl-sous">{l.capacites}</span>
               </th>
-              <td data-libelle="État">
-                <PastilleConnexion etat={l.etat} />
-                <span className="atl-sous">{l.detail}</span>
-              </td>
-              <td data-libelle="Mode et santé">
-                {l.mode && l.sante ? (
-                  <>
-                    Passerelle : {MODES[l.mode]}
-                    <span className="atl-sous">Santé : {LIBELLES_SANTE[l.sante]}</span>
-                  </>
-                ) : (
-                  <span className="atl-attenue" aria-label="sans objet">
-                    <span aria-hidden="true">–</span>
+              {l.connexionId === null ? (
+                // Aucune connexion native : une seule cellule, sans colonnes vides ni tirets répétés.
+                <td data-libelle="État" colSpan={3}>
+                  <span className="atl-pile-ligne">
+                    <PastilleConnexion etat={l.etat} />
+                    <span className="atl-attenue">{l.detail}</span>
                   </span>
-                )}
-              </td>
-              <td data-libelle="Dernière vérification">
-                {l.verifieLe ? (
-                  <Horodatage iso={l.verifieLe} />
-                ) : (
-                  <span className="atl-attenue" aria-label="aucune vérification">
-                    <span aria-hidden="true">–</span>
-                  </span>
-                )}
-              </td>
+                </td>
+              ) : (
+                <>
+                  <td data-libelle="État">
+                    <PastilleConnexion etat={l.etat} />
+                    <span className="atl-sous">{l.detail}</span>
+                  </td>
+                  <td data-libelle="Mode et santé">
+                    {l.mode && l.sante ? (
+                      <>
+                        Passerelle : {MODES[l.mode]}
+                        <span className="atl-sous">Santé : {LIBELLES_SANTE[l.sante]}</span>
+                      </>
+                    ) : (
+                      <span className="atl-attenue" aria-label="sans objet">
+                        <span aria-hidden="true">–</span>
+                      </span>
+                    )}
+                  </td>
+                  <td data-libelle="Dernière vérification">
+                    {l.verifieLe ? (
+                      <Horodatage iso={l.verifieLe} />
+                    ) : (
+                      <span className="atl-attenue" aria-label="aucune vérification">
+                        <span aria-hidden="true">–</span>
+                      </span>
+                    )}
+                  </td>
+                </>
+              )}
               <td data-libelle="Action">
                 <ActionConnexion ligne={l} />
               </td>

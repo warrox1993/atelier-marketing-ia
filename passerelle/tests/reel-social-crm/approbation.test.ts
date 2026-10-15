@@ -66,6 +66,18 @@ describe("vérification", () => {
     expect(r).toEqual({ ok: false, motif: expect.stringMatching(/PASSERELLE_APPROBATION_CLE_PUBLIQUE/) });
   });
 
+  it("rotation de la clé du plugin : ancienne et nouvelle clé acceptées ensemble, une clé retirée n'est plus acceptée", () => {
+    const nouvelle = generateKeyPairSync("ed25519");
+    const pemNouvelle = nouvelle.publicKey.export({ type: "spki", format: "pem" }).toString();
+    const double = new VerificateurPreuves(pem + pemNouvelle);
+    expect(double.verifier(signerPreuve(privateKey, charge()), attendu).ok).toBe(true);
+    expect(double.verifier(signerPreuve(nouvelle.privateKey, charge()), attendu).ok).toBe(true);
+    expect(double.verifier(signerPreuve(autre.privateKey, charge()), attendu).ok).toBe(false);
+    const seule = new VerificateurPreuves(pemNouvelle);
+    expect(seule.verifier(signerPreuve(privateKey, charge()), attendu).ok).toBe(false);
+    expect(seule.verifier(signerPreuve(nouvelle.privateKey, charge()), attendu).ok).toBe(true);
+  });
+
   it("refuse une clé publique qui n'est pas Ed25519", () => {
     const rsa = generateKeyPairSync("rsa", { modulusLength: 2048 }).publicKey.export({ type: "spki", format: "pem" }).toString();
     expect(() => new VerificateurPreuves(rsa)).toThrow(/Ed25519/);

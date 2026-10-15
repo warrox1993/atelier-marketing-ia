@@ -83,7 +83,7 @@ export function VueResultatsAtelier() {
                 </p>
                 <p className="atl-sous">{d.coutsIa.detail}</p>
                 <p>
-                  Ce mois : {euros(d.coutsIa.moisCents)} sur <strong>{d.coutsIa.budgetMensuelCents === 0 ? "sans limite" : euros(d.coutsIa.budgetMensuelCents)}</strong>
+                  Ce mois : {euros(d.coutsIa.moisCents)}, budget mensuel <strong>{d.coutsIa.budgetMensuelCents === 0 ? "sans limite" : euros(d.coutsIa.budgetMensuelCents)}</strong>
                   <span className="atl-sous">Budget mensuel natif de l'entreprise (Paramètres).</span>
                 </p>
               </Section>

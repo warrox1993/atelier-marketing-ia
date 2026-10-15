@@ -44,7 +44,7 @@ agents:
     metadata:
       atelier:
         registre: "atelier/registre-agents/v1"
-        versionRegistre: "1.4.0"
+        versionRegistre: "1.5.0"
         titre: "Coordinateur marketing"
         entrees:
           - "demande du client ou de l'opérateur"
@@ -132,7 +132,7 @@ agents:
     metadata:
       atelier:
         registre: "atelier/registre-agents/v1"
-        versionRegistre: "1.4.0"
+        versionRegistre: "1.5.0"
         titre: "Marché et veille concurrentielle"
         entrees:
           - "brief et exigences"
@@ -218,7 +218,7 @@ agents:
     metadata:
       atelier:
         registre: "atelier/registre-agents/v1"
-        versionRegistre: "1.4.0"
+        versionRegistre: "1.5.0"
         titre: "Référencement naturel, local et GEO"
         entrees:
           - "brief et exigences"
@@ -311,7 +311,7 @@ agents:
     metadata:
       atelier:
         registre: "atelier/registre-agents/v1"
-        versionRegistre: "1.4.0"
+        versionRegistre: "1.5.0"
         titre: "Publicité et SEA"
         entrees:
           - "brief et exigences"
@@ -403,7 +403,7 @@ agents:
     metadata:
       atelier:
         registre: "atelier/registre-agents/v1"
-        versionRegistre: "1.4.0"
+        versionRegistre: "1.5.0"
         titre: "Contenus et création"
         entrees:
           - "brief et exigences"
@@ -496,7 +496,7 @@ agents:
     metadata:
       atelier:
         registre: "atelier/registre-agents/v1"
-        versionRegistre: "1.4.0"
+        versionRegistre: "1.5.0"
         titre: "CRM et conversion"
         entrees:
           - "brief et exigences"
@@ -589,7 +589,7 @@ agents:
     metadata:
       atelier:
         registre: "atelier/registre-agents/v1"
-        versionRegistre: "1.4.0"
+        versionRegistre: "1.5.0"
         titre: "Mesure et optimisation"
         entrees:
           - "exports de données importés avec période et provenance"
@@ -677,7 +677,7 @@ agents:
     metadata:
       atelier:
         registre: "atelier/registre-agents/v1"
-        versionRegistre: "1.4.0"
+        versionRegistre: "1.5.0"
         titre: "Contrôleur des exigences"
         entrees:
           - "brief original"
@@ -768,7 +768,7 @@ agents:
     metadata:
       atelier:
         registre: "atelier/registre-agents/v1"
-        versionRegistre: "1.4.0"
+        versionRegistre: "1.5.0"
         titre: "Relecteur métier et factuel"
         entrees:
           - "brief original"
@@ -859,7 +859,7 @@ agents:
     metadata:
       atelier:
         registre: "atelier/registre-agents/v1"
-        versionRegistre: "1.4.0"
+        versionRegistre: "1.5.0"
         titre: "Vérificateur technique"
         entrees:
           - "version précise du livrable"
@@ -923,7 +923,7 @@ agents:
     metadata:
       atelier:
         registre: "atelier/registre-agents/v1"
-        versionRegistre: "1.4.0"
+        versionRegistre: "1.5.0"
         titre: "Porte de contrôle"
         entrees:
           - "tâche sous porte en étape de revue"

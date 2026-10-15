@@ -8,7 +8,7 @@ document les résume ; en cas d'écart, le code fait foi). Contrats d'échange :
 | Objet | Où il vit | Qui le change |
 | --- | --- | --- |
 | État de la **tâche** | statut natif Paperclip (`backlog`, `todo`, `in_progress`, `in_review`, `blocked`, `done`, `cancelled`) + `executionState` | le moteur Paperclip (agents, board, politiques d'exécution, gardes P1 et P2) |
-| État du **livrable** | révisions du document natif `livrable` de la tâche | le producteur (ou l'humain, levier « version corrigée ») ; chaque révision périme les évaluations et invalide les décisions antérieures |
+| État du **livrable** | révisions du document natif `livrable` de la tâche | le producteur (ou l'humain, levier « version corrigée ») ; chaque révision périme les évaluations et invalide les décisions antérieures ; v1.5 : verrouillé (verrou natif) pendant l'étape d'approbation et après `done` ; une révision écrite après `done` rouvre la tâche |
 | État de la **diffusion** | table `diffusions` du plugin | seulement une demande couverte par une décision humaine valide |
 
 ## 2. Statut fonctionnel d'une tâche (cahier §10)
@@ -27,7 +27,7 @@ copié en base.
 | `blocked_dependency` | Bloquée par une dépendance | bloqueurs natifs non résolus |
 | `blocked_budget` | Bloquée par le budget | agent assigné en pause pour budget |
 | `ready_for_human` | Prête pour validation humaine | `in_review`, étape `approval` : porte franchie, revérifiée par P2 |
-| `approved` | Approuvée par l'humain | `done` d'une tâche sous porte (P2 a exigé la porte) |
+| `approved` | Approuvée par l'humain | `done` d'une tâche sous porte ET décision « approuver » non invalidée sur la révision courante (v1.5) ; sinon `blocked_information` (« terminée sans approbation humaine valide ») |
 | `completed` | Terminée | `done` hors porte |
 | `failed` | Échec | dernier run en échec, tâche non terminée |
 | `cancelled` | Annulée | `cancelled` (dont le rejet humain, section 6) |
@@ -37,6 +37,10 @@ copié en base.
 - Exigence : code stable `REQ-001`, texte d'origine, interprétation, obligatoire, critères,
   dépendances, éléments attendus, exclusion (`aucune`, `demandee`, `autorisee`, `refusee` ;
   seul un humain autorise ou refuse).
+- v1.5 (décision de l'opérateur, H1) : un agent ne fait que **créer** une exigence ; toute modification d'une
+  exigence existante lui est refusée (`exigence.modification_refusee`). L'humain peut l'affaiblir
+  (facultative, éléments attendus ou critères retirés, texte d'origine changé) : tracé `exigence.affaiblie`.
+- `Hypothese.autoriseePar` (v1.5, B1) : `null` pour un agent, l'humain authentifié sinon.
 - Couverture déclarée par le producteur, par révision : `non_traite`, `partiel`, `couvert`,
   `bloque` (question précise obligatoire), `na_justifie`. Chaque preuve porte la révision,
   l'emplacement, l'élément et un extrait que le serveur retrouve DANS le livrable.
@@ -64,10 +68,14 @@ copié en base.
   localisable, l'emplacement (`section « … », ligne N`) et la source en cause,
   empreinte SHA-256 des entrées et horodatage de fraîcheur. Une évaluation est périmée dès
   qu'une entrée change.
-- Cycle consommé : une révision distincte refusée (verdict `CHANGES_REQUESTED` ou porte
-  `REFUS`). Maximum de départ : le plus petit du réglage de l'entreprise et de la porte
+- Cycle consommé : une révision distincte refusée sur le fond (verdict `CHANGES_REQUESTED`, ou porte
+  `REFUS` portant au moins un motif autre que `revue_requise_absente`, `revue_sur_ancienne_version`,
+  `cycles_epuises` : v1.5, M5). Maximum de départ : le plus petit du réglage de l'entreprise et de la porte
   (3 par défaut). **Cycles épuisés** : révisions refusées ≥ maximum effectif. Alors : plus de
-  nouvelles revues, escalade explicite (`blocked`, statut « décision humaine requise »).
+  nouvelles revues, escalade explicite (`blocked`, statut « décision humaine requise ») ; v1.5 (M4) :
+  toute évaluation d'une révision suivante rend `BLOQUE_INFORMATION` (`cycles_epuises`), jamais `PASS`,
+  et les verdicts sont refusés, jusqu'à une relance humaine.
+- Évaluer la porte (v1.5, M5) : humain, ou agent participant d'une étape de revue native de la tâche.
 - **Relance de correction** (décision de l'opérateur du 15/10/2026), action `atelier.correction.relancer`,
   réservée à l'humain (refusée à un agent par le pont ET par le service) : commentaire
   obligatoire et au moins un levier :
@@ -88,23 +96,27 @@ copié en base.
 - Action : `approuver` (exige une porte `PASS` fraîche sur la révision visée), `demander_correction`,
   `rejeter` ; commentaire obligatoire ; acteur : humain authentifié seulement.
 - Portée d'une approbation : révision, action (`aucune_action_externe`, `publier`, `envoyer`,
-  `programmer`, `activer_campagne_payante`), canal, compte, audience, montant maximal, durée.
-  Une nouvelle révision invalide la décision (`invalidee: true`).
+  `programmer`, `activer_campagne_payante`, `modifier_crm` en v1.5), canal, compte, audience, montant
+  maximal, durée. Une nouvelle révision invalide la décision (`invalidee: true`).
 - **Dépense publicitaire** : l'approbation `activer_campagne_payante` doit viser un montant maximal,
-  un canal et une durée précis, avec ou sans plafond (section 11). Le montant approuvé est un total
-  pour toutes les diffusions de cette décision.
+  un canal et une durée précis, avec ou sans plafond (section 11). v1.5 (décision de l'opérateur, B3) : le
+  montant approuvé est un total **par révision** ; une nouvelle approbation de la même révision ne
+  remet pas le cumul à zéro.
 - Effet natif : `approuver` puis `PATCH /api/issues/:id { status: "done" }` par le board (P2
-  revérifie) ; `demander_correction` puis `PATCH { status: "in_progress" }` ; **`rejeter` :
+  revérifie la porte et, v1.5, exige un humain, l'étape d'approbation et cette décision) ; `demander_correction` puis `PATCH { status: "in_progress" }` ; **`rejeter` :
   le worker annule la tâche native (`cancelled`) AVANT d'enregistrer la décision, puis
   ajoute le commentaire** (besoin B-2) : jamais de rejet enregistré sans transition.
 
 ## 7. Diffusion
 
 `refusee` (aucune décision couvrante ; en campagne réelle, aussi toute tâche qui porte une donnée de
-démonstration, section 12), `simulee` (démonstration, rien n'est envoyé),
-`preparee` (réel, aucun connecteur : rien n'est envoyé), `confirmee` (réservé à un futur
-connecteur), `ambigue_a_reconcilier`. Clé d'idempotence unique par entreprise : une même
-demande ne produit qu'un effet. Interface : bouton « Diffuser » visible ; désactivé en réel
+démonstration, section 12 ; v1.5 : même publication déjà diffusée sous cette approbation),
+`simulee` (démonstration, rien n'est envoyé), `preparee` (réel : rien n'est envoyé par le plugin ; v1.5 :
+avec une preuve d'approbation signée à joindre à l'appel d'outil de la passerelle, ou avec le motif qui
+empêche de la signer), `confirmee` (v1.5 : réponse « executee » signée par la passerelle et liée à la
+diffusion), `ambigue_a_reconcilier` (réponse signée « ambiguë »). Transitions à sens unique :
+`preparee` → `confirmee` | `ambigue_a_reconcilier` ; `ambigue_a_reconcilier` → `confirmee`. Clé d'idempotence
+unique par entreprise : une même demande ne produit qu'un effet. Interface : bouton « Diffuser » visible ; désactivé en réel
 avec la raison « aucun connecteur de publication » ; en démonstration, actif seulement après
 une approbation qui autorise une action externe sur la révision courante.
 
@@ -152,7 +164,9 @@ programmation réelle (`publicationProgrammee` reste `null` sans connecteur).
 - **Source de connexion** : réponse brute d'un outil de la passerelle déposée par un agent
   (`tache.donnees.deposer`). Mode **déduit** par le serveur : `demonstration` au moindre indice
   (enveloppe `_atelier.mode = demonstration`, mention en tête, identifiants fictifs connus,
-  enveloppes en désaccord), sinon `reel` ; sans enveloppe `_atelier` : refus. Le détail garde les
+  enveloppes en désaccord), sinon `reel` ; sans enveloppe `_atelier` : refus. v1.5 (§6 bis) : `reel`
+  exige la signature valide de la passerelle (clé publique configurée), liée au service, à l'outil,
+  aux arguments déclarés et à une date de moins de 7 jours ; sinon refus. Le détail garde les
   indices, le nombre de chiffres retenus et le mode effectif de la campagne au dépôt.
 - **Mode effectif** d'une tâche : `reel` si la campagne est réelle ou si l'entreprise est réglée en
   mode réel ; sinon `demonstration`.

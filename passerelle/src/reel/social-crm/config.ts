@@ -193,8 +193,12 @@ export function lireConfigSocialCrm(env: NodeJS.ProcessEnv, fichierEtatParDefaut
 
     let clePubliqueApprobation = lireSecret(env, "PASSERELLE_APPROBATION_CLE_PUBLIQUE");
     if (clePubliqueApprobation && !clePubliqueApprobation.includes("BEGIN PUBLIC KEY")) {
-      // Forme compacte tolérée : la clé SPKI DER en base64, sur une ligne.
-      clePubliqueApprobation = `-----BEGIN PUBLIC KEY-----\n${clePubliqueApprobation}\n-----END PUBLIC KEY-----\n`;
+      // Forme compacte tolérée : la clé SPKI DER en base64, une par ligne (plusieurs lignes : rotation de la clé du plugin).
+      clePubliqueApprobation = clePubliqueApprobation
+        .split(/\s+/)
+        .filter((ligne) => ligne !== "")
+        .map((ligne) => `-----BEGIN PUBLIC KEY-----\n${ligne}\n-----END PUBLIC KEY-----\n`)
+        .join("");
     }
 
     let urlRetourPublique: string | null = null;

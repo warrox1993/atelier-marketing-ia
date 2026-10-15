@@ -77,7 +77,12 @@ python3 -I scripts/bootstrap-organisation.py appliquer             # liaison ré
 python3 -I scripts/bootstrap-organisation.py jeton --confirmer     # coller le jeton : secret natif chiffré
 python3 -I scripts/bootstrap-organisation.py test-reel             # à blanc : agent, modèle, jeton
 python3 -I scripts/bootstrap-organisation.py test-reel --confirmer # un appel réel minimal (non exécuté à ce jour)
+python3 -I scripts/bootstrap-organisation.py cles --confirmer      # clés de signature (preuves d'approbation, réponses de la passerelle)
 ```
+
+La commande `cles` génère les deux paires Ed25519, range la clé privée du plugin comme secret natif, écrit les fichiers 0600 sous
+`instance/cles/` et `instance/passerelle.env` (à charger avant de relancer la passerelle) ; sans `--confirmer`, elle affiche l'état.
+Rotation, perte et sauvegarde des clés : `docs/exploitation.md` §11.
 
 Les agents restent en pause : les réveiller est une décision humaine. Avant un vrai client :
 `docs/checklist-usage-reel.md`.

@@ -610,6 +610,7 @@ function Historique({ decisions, dossier: d }: { decisions: DecisionHumaine[]; d
           {d.diffusions.map((f) => (
             <li key={f.id}>
               <Pastille ton={ETATS_DIFFUSION[f.etat]?.ton}>{ETATS_DIFFUSION[f.etat]?.libelle ?? f.etat}</Pastille> {ACTIONS_EXTERNES[f.action]} sur {f.canal}
+              {f.service || f.outil ? <span className="atl-sous">Appel visé : {[f.service ? `service ${f.service}` : null, f.outil ? `outil ${f.outil}` : null].filter(Boolean).join(", ")}</span> : null}
               {f.motifRefus ? <span className="atl-sous">{f.motifRefus}</span> : null}
             </li>
           ))}
@@ -908,50 +909,62 @@ function RelancePanneau({ dossier: d, onFait }: { dossier: DossierHumain; onFait
       ) : (
         <form className="atl-formulaire" onSubmit={(e) => void soumettre(e)} noValidate>
           <p className="atl-sous">
-            Cycles épuisés : {d.cycles?.consommes} sur {d.cycles?.maximum}. Choisissez au moins un levier ; de nouveaux cycles seront accordés et la version suivante repassera tous les contrôles.
+            Cycles épuisés : {d.cycles?.consommes} sur {d.cycles?.maximum}. Choisissez au moins un levier&nbsp;: la version suivante repassera tous les contrôles, avec de nouveaux cycles.
           </p>
           <Champ libelle="Commentaire (obligatoire)">
             <textarea value={s.commentaire} onChange={(e) => maj("commentaire", e.target.value)} rows={2} maxLength={4000} />
           </Champ>
-          <fieldset className="atl-champ atl-choix">
+          <fieldset className="atl-champ atl-leviers">
             <legend>Leviers</legend>
-            <label className="atl-case">
-              <input type="checkbox" checked={s.information} onChange={(e) => maj("information", e.target.checked)} /> Apporter l'information manquante
-            </label>
-            {s.information ? (
-              <div className="atl-grille-champs">
-                <Champ libelle="Question bloquante">
-                  <input value={s.question} onChange={(e) => maj("question", e.target.value)} maxLength={2000} />
-                </Champ>
-                <Champ libelle="Réponse" aide="Enregistrée comme source de provenance humaine.">
-                  <textarea value={s.reponse} onChange={(e) => maj("reponse", e.target.value)} rows={2} maxLength={3500} />
-                </Champ>
-              </div>
-            ) : null}
-            <label className="atl-case">
-              <input type="checkbox" checked={s.consigne} onChange={(e) => maj("consigne", e.target.checked)} /> Donner une consigne de correction
-            </label>
-            {s.consigne ? (
-              <Champ libelle="Consigne" aide="Transmise au producteur en plus des constats.">
-                <textarea value={s.texteConsigne} onChange={(e) => maj("texteConsigne", e.target.value)} rows={2} maxLength={4000} />
-              </Champ>
-            ) : null}
-            <label className="atl-case">
-              <input type="checkbox" checked={s.escalade} disabled={!p?.palierSuivant} onChange={(e) => maj("escalade", e.target.checked)} /> Monter le producteur d'un cran
-            </label>
-            <p className="atl-aide">
-              {p?.palierSuivant
-                ? `${p.nom} : ${p.modele} effort ${p.effort ?? "medium"} → ${p.palierSuivant.modele} effort ${p.palierSuivant.effort}.`
-                : (p?.raisonSansPalier ?? "Aucun producteur identifié.")}
-            </p>
-            <label className="atl-case">
-              <input type="checkbox" checked={s.version} onChange={(e) => maj("version", e.target.checked)} /> Corriger la version moi-même
-            </label>
-            {s.version ? (
-              <Champ libelle="Version corrigée (Markdown)" aide="Devient une nouvelle révision du livrable, relue comme les autres.">
-                <textarea value={s.corps} onChange={(e) => maj("corps", e.target.value)} rows={8} />
-              </Champ>
-            ) : null}
+            <div className="atl-levier">
+              <label className="atl-case">
+                <input type="checkbox" checked={s.information} onChange={(e) => maj("information", e.target.checked)} /> Apporter l'information manquante
+              </label>
+              {s.information ? (
+                <div className="atl-levier-champs">
+                  <Champ libelle="Question bloquante">
+                    <input value={s.question} onChange={(e) => maj("question", e.target.value)} maxLength={2000} />
+                  </Champ>
+                  <Champ libelle="Réponse" aide="Enregistrée comme source de provenance humaine.">
+                    <textarea value={s.reponse} onChange={(e) => maj("reponse", e.target.value)} rows={2} maxLength={3500} />
+                  </Champ>
+                </div>
+              ) : null}
+            </div>
+            <div className="atl-levier">
+              <label className="atl-case">
+                <input type="checkbox" checked={s.consigne} onChange={(e) => maj("consigne", e.target.checked)} /> Donner une consigne de correction
+              </label>
+              {s.consigne ? (
+                <div className="atl-levier-champs">
+                  <Champ libelle="Consigne" aide="Transmise au producteur en plus des constats.">
+                    <textarea value={s.texteConsigne} onChange={(e) => maj("texteConsigne", e.target.value)} rows={2} maxLength={4000} />
+                  </Champ>
+                </div>
+              ) : null}
+            </div>
+            <div className="atl-levier">
+              <label className="atl-case">
+                <input type="checkbox" checked={s.escalade} disabled={!p?.palierSuivant} onChange={(e) => maj("escalade", e.target.checked)} /> Monter le producteur d'un cran
+              </label>
+              <p className="atl-aide atl-levier-aide">
+                {p?.palierSuivant
+                  ? `${p.nom} : ${p.modele} effort ${p.effort ?? "medium"} → ${p.palierSuivant.modele} effort ${p.palierSuivant.effort}.`
+                  : (p?.raisonSansPalier ?? "Aucun producteur identifié.")}
+              </p>
+            </div>
+            <div className="atl-levier">
+              <label className="atl-case">
+                <input type="checkbox" checked={s.version} onChange={(e) => maj("version", e.target.checked)} /> Corriger la version moi-même
+              </label>
+              {s.version ? (
+                <div className="atl-levier-champs">
+                  <Champ libelle="Version corrigée (Markdown)" aide="Devient une nouvelle révision du livrable, relue comme les autres.">
+                    <textarea value={s.corps} onChange={(e) => maj("corps", e.target.value)} rows={8} />
+                  </Champ>
+                </div>
+              ) : null}
+            </div>
           </fieldset>
           <Bouton type="submit" variante="principal" raisonDesactive={raison} enCours={enCours}>
             Relancer la correction
@@ -989,6 +1002,11 @@ export function corpsReprise(d: DossierHumain, note: string, actionId: string | 
   };
 }
 
+/** Singulier pour 0 et 1, pluriel au-delà (règle française). */
+function accord(n: number, singulier: string, pluriel: string): string {
+  return n > 1 ? pluriel : singulier;
+}
+
 function ReprisePanneau({ dossier: d, onFait }: { dossier: DossierHumain; onFait(): void }) {
   const [note, setNote] = useState("");
   const [enCours, setEnCours] = useState(false);
@@ -1020,8 +1038,17 @@ function ReprisePanneau({ dossier: d, onFait }: { dossier: DossierHumain; onFait
         </p>
       ) : (
         <>
-          <p className="atl-sous">
-            Run {idCourt(d.interruption!.runId)} interrompu. Effets constatés : {d.interruption!.revisionsLivrable} révision(s) du livrable, {d.interruption!.couverturesDeclarees} déclaration(s) de couverture, {d.interruption!.diffusions} diffusion(s).
+          <p className="atl-sous">Run {idCourt(d.interruption!.runId)} interrompu. Effets déjà constatés :</p>
+          <p className="atl-resume">
+            <span>
+              <strong>{d.interruption!.revisionsLivrable}</strong> {accord(d.interruption!.revisionsLivrable, "révision du livrable", "révisions du livrable")}
+            </span>
+            <span>
+              <strong>{d.interruption!.couverturesDeclarees}</strong> {accord(d.interruption!.couverturesDeclarees, "déclaration de couverture", "déclarations de couverture")}
+            </span>
+            <span>
+              <strong>{d.interruption!.diffusions}</strong> {accord(d.interruption!.diffusions, "diffusion", "diffusions")}
+            </span>
           </p>
           <Champ libelle="Ce que vous avez vérifié">
             <textarea value={note} onChange={(e) => setNote(e.target.value)} rows={2} maxLength={2000} />
@@ -1087,11 +1114,12 @@ function DiffusionPanneau({ dossier: d, onFait }: { dossier: DossierHumain; onFa
     }
   };
   return (
-    <Section titre="Diffusion">
-      {d.mode === "demonstration" ? <p className="atl-aide">Démonstration : la diffusion est simulée et marquée comme telle, jamais envoyée.</p> : null}
-      <Bouton variante="principal" raisonDesactive={raison} enCours={enCours} onClick={() => void lancer()}>
-        Diffuser
-      </Bouton>
+    <Section titre="Diffusion" aide={d.mode === "demonstration" ? "Démonstration : la diffusion est simulée et marquée comme telle, jamais envoyée." : "La diffusion reprend la portée de votre approbation (canal, compte, montant)."}>
+      <div className="atl-bouton-plein">
+        <Bouton variante="principal" raisonDesactive={raison} enCours={enCours} onClick={() => void lancer()}>
+          Diffuser
+        </Bouton>
+      </div>
       {resultat ? (
         <p className="atl-succes" role="status">
           {resultat}

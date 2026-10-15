@@ -36,7 +36,7 @@ pid_ecoute() { ss -ltnpH "sport = :$1" 2>/dev/null | grep -o 'pid=[0-9]*' | head
 case "${ACTION}" in
   demarrer)
     if [[ -n "$(pid_ecoute "${PORT_HTTP}")" || -n "$(pid_ecoute "${PORT_PG}")" ]]; then
-      echo "Port ${PORT_HTTP} ou ${PORT_PG} déjà utilisé." >&2; exit 1
+      echo "Port ${PORT_HTTP} ou ${PORT_PG} déjà utilisé (reste d'une instance ? « $0 arreter ${ID} ${PORT_HTTP} ${PORT_PG} » nettoie un arrêt incomplet)." >&2; exit 1
     fi
     mkdir -p "${DOSSIER}"
     if [[ ! -f "${CONFIG}" ]]; then
@@ -71,20 +71,12 @@ PY
     exec pnpm paperclipai run
     ;;
   arreter)
-    PID="$(pid_ecoute "${PORT_HTTP}")"
-    if [[ -z "${PID}" ]]; then echo "Instance d'essai déjà arrêtée."; exit 0; fi
-    ENV_ID="$(tr '\0' '\n' < "/proc/${PID}/environ" 2>/dev/null | grep '^PAPERCLIP_INSTANCE_ID=' | cut -d= -f2-)"
-    if [[ "${ENV_ID}" != "${ID}" ]]; then
-      echo "Le PID ${PID} n'est pas l'instance ${ID} (trouvé : ${ENV_ID:-inconnu}) : abandon." >&2; exit 1
-    fi
-    kill -TERM "${PID}"
-    for _ in $(seq 1 60); do
-      if [[ -z "$(pid_ecoute "${PORT_HTTP}")" && -z "$(pid_ecoute "${PORT_PG}")" ]]; then
-        echo "Instance ${ID} arrêtée."; exit 0
-      fi
-      sleep 1
-    done
-    echo "L'instance ${ID} ne s'est pas arrêtée en 60 s." >&2; exit 1
+    # Arrêt complet (serveur ET PostgreSQL embarqué), y compris pendant un démarrage ou après un
+    # arrêt incomplet : voir scripts/lib-arret-instance.sh.
+    # shellcheck disable=SC1091
+    source "${RACINE}/scripts/lib-arret-instance.sh"
+    arreter_instance "${ID}" "${PORT_HTTP}" "${PORT_PG}" "${DOSSIER}/db" "${RACINE}"
+    exit $?
     ;;
   *) echo "Action inconnue : ${ACTION}" >&2; exit 2 ;;
 esac

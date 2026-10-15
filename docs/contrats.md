@@ -1,4 +1,4 @@
-# Contrats partagés de l'Atelier Marketing IA (v1, gelés à T0 ; version courante 1.4)
+# Contrats partagés de l'Atelier Marketing IA (v1, gelés à T0 ; version courante 1.5)
 
 Date : 15/10/2026. Propriétaire : intégrateur (lot A). Toute modification d'un fichier
 de `plugin-atelier/src/contrats/` ou de ce document passe par l'intégrateur ; les lots B
@@ -18,6 +18,9 @@ et C ne les modifient pas.
   - **P2** : porte déterministe ; le serveur refuse, sous verrou de ligne, tout passage
     d'une tâche sous porte vers l'étape d'approbation humaine ou vers `done` sans
     évaluation de porte `PASS`, fraîche, portant sur la révision courante du livrable ;
+    v1.5 (patch `0007`) : `done` exige en plus un humain authentifié, l'étape d'approbation
+    native et une décision « approuver » valide sur la révision courante ; le livrable est
+    verrouillé pendant l'approbation (§14) ;
   - **régulateur** : au plus N runs actifs par entreprise (3 par défaut).
 - Pourquoi : le SDK n'offre aucun crochet de veto avant transition
   (`packages/plugins/sdk/src/define-plugin.ts`) ; un plugin n'est donc pas une garantie.
@@ -69,7 +72,13 @@ et C ne les modifient pas.
 | `evaluations_porte` | `issue_id`, `revision_id`, `decision`, `perimee`, `entrees_jusqu_a`, `cree_le` | dernière évaluation |
 | `couvertures`, `verdicts`, `constats` | `issue_id`, `modifie_le` | fraîcheur |
 | `exigences` (jointure `portes.campagne_id`) | `modifie_le` | fraîcheur |
+| `sources` (v1.5) | `issue_id`, `date_collecte` | fraîcheur (M3) |
+| `decisions_humaines` (v1.5) | `issue_id`, `revision_id`, `action`, `invalidee`, `cree_le` | `done` : dernière décision non invalidée de la révision courante = `approuver` (H2) |
 | `reglages_entreprise` | `company_id`, `max_runs_actifs` | plafond de runs |
+
+Tables natives écrites par P2 (v1.5) : `documents.locked_at`, `locked_by_agent_id`, `locked_by_user_id`
+(colonnes du verrou natif `lockIssueDocument`), seulement pour le document du livrable d'une tâche sous
+porte active (§14).
 
 Le serveur trouve le schéma par `plugin_database_namespaces.plugin_key = 'atelier.marketing-ia'`.
 
@@ -85,7 +94,7 @@ Le serveur trouve le schéma par `plugin_database_namespaces.plugin_key = 'ateli
 | `statuts.ts` | `StatutFonctionnel` (13 états du §10), libellés français, `calculerStatutFonctionnel()` |
 | `messages.ts` | `MessageAgent` (messageId, companyId, projectId, campaignId, runId, taskId, sender, recipient, type, contenu, références, horodatage, état de traitement), `TypeMessage` (10 types), `ContenuMessage` (union discriminée), `EnvoyerMessageEntree` (strict : aucun expéditeur ni champ d'élévation accepté) |
 | `sources.ts` | `Source` (URL, date de collecte, statut d'accès, extrait, indices de page d'erreur, `nonFiable: true`, injections signalées ; v1.4 : provenance `connexion` et détail `connexion`), `DeposerDonneesConnexionEntree` (v1.4), `ResultatVerificationLien`, `ImporterDocumentEntree`, `DocumentImporte` |
-| `dossier.ts` | `ApprobationPortee` (révision, action, canal, compte, audience, montant, durée), `DecisionHumaine`, `Diffusion` (état séparé de la tâche, clé d'idempotence), `DossierHumain` |
+| `dossier.ts` | `ApprobationPortee` (révision, action, canal, compte, audience, montant, durée), `DecisionHumaine`, `Diffusion` (état séparé de la tâche, clé d'idempotence ; v1.5 : `service`, `outil`, `preuveApprobation`), `DossierHumain` ; v1.5 : action externe `modifier_crm`, `ServicePublication`, `DemanderDiffusionEntree` (`service`, `outil`, `arguments`), `RapporterIssueDiffusionEntree` |
 | `campagnes.ts` | `Campagne` (= projet natif), `TacheCampagne`, `ReglagesEntreprise`, `Connecteur`, `EvenementJournal`, `PageJournal`, `Diagnostic` |
 | `routes.ts`, `api.ts` | table des routes et corps des requêtes |
 | `ui-constantes.ts`, `ui.ts` | emplacements UI, rubriques, clés de données et d'actions |
@@ -104,7 +113,7 @@ Le serveur trouve le schéma par `plugin_database_namespaces.plugin_key = 'ateli
 | `blocked_dependency` | bloqueurs natifs non résolus |
 | `blocked_budget` | agent assigné en pause pour budget |
 | `ready_for_human` | `in_review`, étape `approval` (porte franchie, vérifiée par P2) |
-| `approved` | `done` d'une tâche sous porte (P2 a exigé la porte) |
+| `approved` | `done` d'une tâche sous porte ET décision humaine « approuver » non invalidée sur la révision courante (v1.5, H2) ; sans elle : `blocked_information` (« terminée sans approbation humaine valide ») |
 | `completed` | `done` hors porte |
 | `failed` | dernier run en échec, tâche non terminée |
 | `cancelled` | `cancelled` |
@@ -123,21 +132,22 @@ un agent), résout l'entreprise, vérifie l'accès (403 hors entreprise) avant l
 | `tache.couverture` | POST `/taches/:issueId/couverture` | board ou agent (producteur assigné, checkout exigé en `in_progress`) | tâche | `DeclarerCouvertureEntree` → `{ couvertures, revues: [{ role, issueId, identifier, statut }], cyclesConsommes, cyclesEpuises }` (crée les tâches de revue liées de la révision, §6 bis) |
 | `tache.planification` | POST `/taches/:issueId/planification` | board ou agent | tâche | `PlanifierEntree { canal, dateProposee }` → date PROPOSÉE (jamais une programmation réelle) |
 | `tache.verdict` | POST `/taches/:issueId/verdicts` | board ou agent désigné pour le rôle, jamais le producteur | tâche | `DeposerVerdictEntree` → `VerdictRevue` |
-| `tache.porte.evaluer` | POST `/taches/:issueId/porte/evaluer` | board ou agent | tâche | → `EvaluationPorte` |
+| `tache.porte.evaluer` | POST `/taches/:issueId/porte/evaluer` | board ou agent **participant d'une étape de revue native de la tâche** (v1.5, M5 : `role_non_autorise` sinon) | tâche | → `EvaluationPorte` |
 | `tache.porte.lire` | GET `/taches/:issueId/porte` | board ou agent | tâche | → `EvaluationPorte \| null` |
 | `tache.dossier` | GET `/taches/:issueId/dossier` | board ou agent | tâche | → `DossierHumain` |
 | `tache.messages.envoyer` | POST `/taches/:issueId/messages` | board ou agent | tâche | `EnvoyerMessageEntree` → `MessageAgent` |
 | `tache.messages.boite` | GET `/taches/:issueId/messages` | board ou agent | tâche | → `MessageAgent[]` adressés à l'appelant |
 | `tache.messages.etat` | POST `/taches/:issueId/messages/:messageId/etat` | destinataire | tâche | `{ etat }` → `MessageAgent` |
 | `tache.sources.lire` | POST `/taches/:issueId/sources` | board ou agent | tâche | `LireUrlEntree` → `Source` |
-| `tache.donnees.deposer` | POST `/taches/:issueId/donnees-connexion` | board ou agent | tâche | `DeposerDonneesConnexionEntree` → `{ source, mode, indices, chiffresRetenus, interdite, consigne }` (v1.4, §13) |
+| `tache.donnees.deposer` | POST `/taches/:issueId/donnees-connexion` | board ou agent | tâche | `DeposerDonneesConnexionEntree` (v1.5 : `arguments` facultatif) → `{ source, mode, indices, chiffresRetenus, interdite, consigne }` (v1.4, §13 ; signature vérifiée v1.5, §14) |
 | `tache.liens.verifier` | POST `/taches/:issueId/liens/verifier` | board ou agent | tâche | `VerifierLiensEntree` → `ResultatVerificationLien[]` |
-| `tache.diffusions` | POST `/taches/:issueId/diffusions` | board ou agent | tâche | `DemanderDiffusionEntree` → `Diffusion` ; 403 `diffusion_refusee` sans décision humaine valide |
+| `tache.diffusions` | POST `/taches/:issueId/diffusions` | board ou agent | tâche | `DemanderDiffusionEntree` → `Diffusion` ; 403 `diffusion_refusee` sans décision humaine valide, ou si la même publication est déjà diffusée sous cette approbation (v1.5, M1) ; en réel, `preuveApprobation` signée quand tout est vérifié (v1.5, §14) |
+| `tache.diffusions.issue` | POST `/taches/:issueId/diffusions/:diffusionId/issue` | board ou agent | tâche | `RapporterIssueDiffusionEntree` (réponse brute de l'outil, signée par la passerelle) → `Diffusion` (`confirmee`, `ambigue_a_reconcilier`, ou `preparee` avec le motif) (v1.5) |
 | `tache.decision` | POST `/taches/:issueId/decisions` | **board seulement** | tâche | `DeciderEntree` → `DecisionHumaine` |
-| `portes.creer` | POST `/portes` | board ou agent | corps `companyId` | `MettreSousPorteEntree` → `TacheSousPorte` |
+| `portes.creer` | POST `/portes` | board ou agent | corps `companyId` | `MettreSousPorteEntree` → `TacheSousPorte` ; v1.5 (H2) : la politique native doit avoir une étape `review` et se TERMINER par une étape `approval` dont tous les participants sont des utilisateurs |
 | `campagnes.creer` | POST `/campagnes` | board | corps | `CreerCampagneEntree` (avec `projectId` du projet natif créé avant par `POST /api/companies/:companyId/projects` : le SDK ne crée pas de projet) → `Campagne` |
 | `campagnes.lister` | GET `/campagnes?companyId=` | board ou agent | requête | → `Campagne[]` |
-| `campagnes.exigences` | POST `/campagnes/:campagneId/exigences` | board ou agent | corps | `EnregistrerExigencesEntree` → `Exigence[]` |
+| `campagnes.exigences` | POST `/campagnes/:campagneId/exigences` | board ou agent coordinateur (**création seulement**, v1.5, H1) | corps | `EnregistrerExigencesEntree` → `Exigence[]` ; un agent qui modifie une exigence existante : `elevation_refusee`, rien n'est écrit ; un affaiblissement par l'humain est tracé (`exigence.affaiblie`) |
 | `exigences.exclusion` | POST `/exigences/:exigenceId/exclusion` | agent : `demander` ; board : `autoriser`/`refuser` | corps | `ExclusionEntree` → `Exigence` |
 | `imports.creer` | POST `/imports` | board ou agent | corps | `ImporterDocumentEntree` → `DocumentImporte` |
 | `journal.lire` | GET `/journal?companyId=&afterSeq=` | board ou agent | requête | → `PageJournal` |
@@ -215,7 +225,7 @@ en pause que par budget et le SDK n'expose pas cette action (désactiver le bout
 
 ## 9. Évolution des contrats
 
-Version v1 ; ajouts compatibles v1.1 à v1.4 (§6 bis, §11, §12, §13). Ajout compatible (champ optionnel, nouvelle clé) : l'intégrateur met à jour ce
+Version v1 ; ajouts compatibles v1.1 à v1.5 (§6 bis, §11, §12, §13, §14). Ajout compatible (champ optionnel, nouvelle clé) : l'intégrateur met à jour ce
 document, les schémas et les exemples dans le même commit. Changement incompatible : nouvelle
 migration numérotée, jamais de modification d'une migration appliquée (l'hôte la refuserait).
 
@@ -388,3 +398,85 @@ mention à tort (sans conséquence hors démonstration) ; les empreintes de dém
 passerelle et doivent suivre ses fiches ; rien n'oblige un agent à déposer une réponse qu'il a reçue (le plugin
 ne voit pas les appels d'outils : un contrôle de l'audit natif `tools/runs/:runId/decisions` demanderait l'accès
 du worker à ces tables, refusé par l'hôte).
+
+## 14. Version 1.5 (15/10/2026) : corrections de la revue indépendante et signatures de la passerelle
+
+Sources : `docs/revue-independante.md` (constats H1 à B6, section « Suites données ») et
+`docs/revue-securite-passerelle.md` §6 et §6 bis. Décisions de l'opérateur du 15/10/2026 : H1, B3, et « aucun livrable
+qui n'a pas passé les contrôles n'est approuvé ni diffusé ; `done` sous porte exige une approbation humaine
+réelle ». Migration `005_diffusions_preuve.sql` ; patch socle `0007`.
+
+**Exigences (H1).** Un agent (le coordinateur) ne fait que CRÉER une exigence (`insert … on conflict do
+nothing`) ; le renvoi identique d'une exigence existante est sans effet ; toute différence est refusée
+(`elevation_refusee`, événement `exigence.modification_refusee`, aucune écriture du lot). L'humain peut tout
+modifier ; un affaiblissement (passage en facultatif, retrait d'éléments attendus ou de critères, texte
+d'origine changé) est journalisé `exigence.affaiblie` (avant, après, motifs, auteur) et dans l'activité native.
+L'exclusion reste « demandée » par l'agent, autorisée par l'humain.
+
+**Approbation humaine réelle (H2).** `portes.creer` exige une dernière étape `approval` tenue par des
+utilisateurs. P2 (`vers_done`) refuse : un agent, un acteur sans utilisateur, une tâche hors de l'étape
+d'approbation en attente, l'absence de décision « approuver » non invalidée sur la révision courante. Le
+statut `approved` exige la même décision (`FaitsComplementaires.approbationValide`).
+
+**Livrable figé (H3).** À l'entrée de l'étape d'approbation (transition autorisée par P2), le document du
+livrable est verrouillé par le mécanisme natif (`documents.locked_at`, sans utilisateur ni agent : signature
+du verrou de l'atelier) ; l'écriture native renvoie alors 409 « Document is locked ». Il est déverrouillé
+quand la tâche quitte l'approbation ou `done` vers un état de travail (correction, réouverture), jamais pour
+une annulation ; un verrou posé à la main par le board n'est jamais levé. P2 relit la révision courante
+`for update of d` (ligne `documents`) : une écriture en cours est attendue. Si le livrable d'une tâche `done`
+change quand même (déverrouillage par le board), le plugin rouvre la tâche (`todo`, producteur réaffecté et
+réveillé), invalide l'approbation et trace `livrable.modifie_apres_approbation`.
+
+**Diffusion (M1, B3).** `verifierDiffusion` reçoit obligatoirement `diffusionsAnterieures` (refus par prudence
+sinon). Une action non payante n'est acceptée qu'une fois par (décision, action, canal, compte) hors refus ;
+la clé d'idempotence rejoue la réponse d'origine. Le montant payant approuvé est un total PAR RÉVISION : tout
+ce qui a été diffusé sur la révision, sous n'importe quelle décision, compte (règle de diffusion et réserve du
+montant engagé).
+
+**Fraîcheur (M3).** `tache.sources.lire` touche la porte et périme les évaluations d'une tâche sous porte ; un
+changement de `modeParDefaut` touche toutes les portes de l'entreprise et périme toutes leurs évaluations ;
+`sources.date_collecte` entre dans le calcul `greatest(...)` côté plugin et côté serveur. `reglages_entreprise.modifie_le`
+n'y entre pas (il change aussi pour des réglages sans effet sur la porte).
+
+**Cycles (M4, M5).** Quand les révisions déjà refusées atteignent le maximum effectif, `evaluerPorte` rend
+`BLOQUE_INFORMATION` avec `cycles_epuises` (jamais `PASS`) et les verdicts sont refusés (`conflit`) jusqu'à une
+relance humaine. Un refus ne consomme un cycle que s'il porte un motif de fond (`refusDeFond` : autre que
+`revue_requise_absente`, `revue_sur_ancienne_version`, `cycles_epuises`). `tache.porte.evaluer` et l'action
+`atelier.porte.evaluer` sont réservées à l'humain et à l'agent participant d'une étape de revue native.
+
+**Autres.** M6 : `atelier.demo.reinitialiser` refusée si l'entreprise est réglée en réel ou garde une décision
+ou une diffusion réelle. B1 : `Hypothese.autoriseePar` vidé pour un agent, égal à l'humain authentifié sinon.
+B2 : `commentRequired` dans la signature P1. B4 : plafond contrôlé avant toute écriture des réglages. B5 :
+revues cherchées par `originId` exact.
+
+**Preuve d'approbation (§6 de la revue de sécurité).** Configuration du plugin par entreprise
+(`instanceConfigSchema`, fixée par l'administrateur) : `approbationClePrivee` (référence `secret_ref` vers un
+secret natif de Paperclip contenant la clé privée Ed25519 PEM PKCS#8 ; capacité `secrets.read-ref`, résolue à
+chaque usage, jamais en cache, jamais journalisée) et `passerelleClesPubliques` (liste de clés publiques de la
+passerelle, SPKI DER en base64). En mode réel, une diffusion acceptée est « préparée » et porte
+`preuveApprobation` (`apv1`, format de `passerelle/src/reel/social-crm/approbation.ts`) seulement si :
+`service`, `outil`, `arguments` fournis ; outil d'écriture connu, de ce service et de cette action (`publier` :
+`facebook_publier`, `instagram_publier`, `linkedin_publier` ; `envoyer` : `facebook_envoyer_message` ;
+`modifier_crm` : `crm_modifier_contact`, `pipedrive_modifier_personne`, `odoo_ecrire_lead`,
+`teamleader_modifier_contact`) ; canal approuvé lié au service par table explicite ; compte approuvé non nul et
+identique ; arguments exactement ceux du schéma de l'outil ; chaque texte publié (et lien, image) figure TEL
+QUEL dans la révision approuvée, chaque valeur écrite au CRM aussi ; clé disponible. Charge : `v`, `cle`
+(clé d'idempotence), `service`, `outil`, `empreinte` (SHA-256 du JSON canonique des arguments sans la preuve),
+`compte`, `diffusion`, `decision`, `emis`, `expire` = min(émission + 7 jours, fin de l'approbation). Sinon :
+« préparée » avec le motif. Jamais en démonstration, jamais pour `activer_campagne_payante`. La preuve n'est
+ni stockée ni journalisée (journal `diffusion.preuve_signee` : service, outil, empreinte, compte, expiration).
+Rejeu de la même clé : preuve re-signée pour la même charge après revérification ; autres arguments : `conflit`.
+Issue (`tache.diffusions.issue`) : la réponse brute de l'outil doit être signée par la passerelle (`_atelier`),
+en mode réel, du même service, du même outil, des mêmes arguments (empreinte), et pour `executee` ou
+`ambigue_a_reconcilier` de la même clé d'idempotence ; `executee` → `confirmee`, `ambigue_a_reconcilier` →
+même état, `preparee` ou erreur d'outil → reste `preparee` avec le motif ; transition à sens unique
+(`UPDATE … WHERE etat IN …`).
+
+**Signature de l'enveloppe au dépôt (§6 bis).** `deduireModeReponse` reçoit la vérification : une réponse dont
+une enveloppe dit `reel` n'est acceptée que si CHAQUE structure retenue porte une signature `aev1` valide d'une
+des clés configurées, avec la charge égale au mode, l'empreinte recalculée du contenu, le service et l'outil
+déclarés, `erreur: false`, `emis` pas dans le futur (120 s) et pas plus vieux que 7 jours, et, si le dépôt
+déclare `arguments`, la même empreinte d'arguments. Sinon : refus (`entree_invalide`, « Réponse non signée par
+la passerelle (ou modifiée) »). Sans clé configurée, aucune réponse n'est réelle. Une réponse de démonstration
+non signée reste acceptée comme démonstration.
+

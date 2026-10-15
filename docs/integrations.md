@@ -16,7 +16,7 @@ classement est affiché dans l'interface (Paramètres et diagnostic, `atelier.sa
 | Import texte, Markdown, CSV | **réel testé** | `tests/securite.spec.ts` ; scénario S (CSV accepté, formule neutralisée, `.exe` refusé, injection signalée) |
 | Information apportée par l'humain (relance) | **réel testé** | scénario G : source de provenance `humaine` |
 | Recherche Web | **partiel : outil natif de l'agent, non vérifié** | en mode réel, les agents `claude_local` dont `--allowedTools` contient `WebSearch` (Veille, SEO local GEO, Relecteur dans le registre) l'ont nativement ; aucun run réel n'a encore prouvé l'usage. Paramètres l'affiche « Disponible en mode réel (outil natif de l'agent), non vérifié » (lot L8) |
-| Diffusion (réseaux sociaux, e-mail, publication de site, publicité) | **absent (contrat seulement)** | en démonstration : `simulee` après approbation ; en réel : `preparee` (rien n'est envoyé) ; bouton « Diffuser » désactivé avec la raison « aucun connecteur de publication » ; côté passerelle, les outils de publication réels n'exécutent qu'avec une preuve d'approbation signée par le plugin (Ed25519), une seule fois par clé d'idempotence : **la signature côté plugin reste à faire** (`docs/passerelle.md`, « Changement attendu côté plugin ») |
+| Diffusion (réseaux sociaux, e-mail, publication de site, publicité) | **implémenté, non testé contre une vraie plateforme** | démonstration : `simulee` après approbation ; réel : le plugin signe une preuve d'approbation (Ed25519, clé dans le coffre de secrets natif, `docs/contrats.md` §14) et la passerelle ne publie qu'avec elle, une fois par clé d'idempotence ; sans les clés de l'opérateur (`bootstrap-organisation.py cles`), la diffusion reste `preparee`. Parcours prouvé sur l'instance d'essai `atelier-cles` (section « Clés de l'opérateur » ci-dessous) ; aucune écriture n'a touché une vraie plateforme ; bouton « Diffuser » désactivé tant qu'aucun agent n'a l'accès en écriture |
 | Google Search Console (`gsc_requete_performances`) | **implémenté, non testé en réel** | passerelle `src/reel/google/` (lot L4, `docs/passerelle.md` « Fournisseurs Google réels (L4) ») : tests contre un faux Google local (`tests/reel-google/`, 39 tests) et parcours prouvé sur l'instance d'essai `atelier-lot4` (connexion générique et carte L6, appel d'outil par Paperclip) ; aucun compte Google : rien n'a touché les vraies API |
 | Google Analytics 4 (`ga4_rapport`) | **implémenté, non testé en réel** | idem ; Data API `v1beta` (version de référence de la documentation, pas de `v1`) |
 | Google Ads (`ads_recherche`) | **implémenté, non testé en réel** | idem ; API `v26`, sans jeton développeur (supprimé par Google le 09/09/2026) ; niveau d'accès du projet Google Cloud à demander |
@@ -211,7 +211,7 @@ passerelle `passerelle/dist/src/demarrer.js` en démonstration sur 3391, `PAPERC
 | --- | --- | --- |
 | « Ask first » par défaut pour les écritures des cartes | patch socle `0005` (`recommendedDefaultsForApp`, `classifyRisk`) | **réel testé** (instance + tests serveur) |
 | Connexions réservées aux rôles, lecture seule imposée | registre `connexionsPasserelle` et `connexions` ; bootstrap `assurer_connexions` | **réel testé** (instance, deux passes) |
-| Consignes des agents réels (identité, dépôt, démonstration, aucun chiffre inventé, `connection_request`) | `organisation/agents/*/AGENTS.md`, six compétences 1.1.0 ; vérificateur | **fait** (contrôlé) ; **non testé en run réel** (jeton) |
+| Consignes des agents réels (identité, dépôt, démonstration, aucun chiffre inventé, `connection_request`) | `organisation/agents/*/AGENTS.md`, six compétences 1.2.0 (arguments exacts déposés, parcours de diffusion réelle) ; vérificateur | **fait** (contrôlé) ; **non testé en run réel** (jeton) |
 | Bouton « Connecter » vers la carte native | `plugin-atelier/src/ui/connecteurs.tsx` | **réel testé** (Playwright) |
 | Mode effectif (règle prudente L9) appliqué partout et affiché | `calculerModeEffectif`, `atelier.campagne.modeEffectif`, `NoteModeEffectif` | **réel testé** (scénario A, tests) |
 | Scénario A complet | `scripts/scenarios/atelier_scenarios.py A`, `scripts/scenarios/cartes.py` | **réel testé** (démonstration) |
@@ -234,7 +234,8 @@ connexion ni outil de connexion. `bootstrap-organisation.py appliquer` réserve 
 le même geste que l'onglet Permissions (`POST …/tools/apps/:id/finish`, actions activées et « Ask first » inchangés, `access: {agentIds}`),
 installations par agent (`PUT /tool-connections/:id/installs`, barrière de livraison d'un run), et politique native `block` sur les écritures
 (`risk.isWrite`) pour un rôle en lecture. Une connexion ajoutée ensuite par une carte arrive pour « tous les agents » (défaut natif) :
-**relancer `appliquer`** la resserre ; `bootstrap-organisation.py etat` signale l'écart.
+le Gardien des connexions la resserre seul au battement suivant (section suivante) ; `appliquer`, `assurer-connexions` à la main
+et `bootstrap-organisation.py etat` (qui signale l'écart) restent disponibles.
 
 **Outils autorisés aux agents réels.** Les agents tournent en `--permission-mode dontAsk` avec une liste `--allowedTools` : un outil MCP absent
 de la liste serait refusé. Les rôles avec connexions reçoivent `mcp__paperclip-assigned` (outils des connexions, livrés par Paperclip sous ce
@@ -253,6 +254,109 @@ vérifié dans le binaire Claude Code 2.1.292). Ce qui atteint réellement un ag
 5. Socle, tâches parallèles d'un même agent : un run qui avait déjà écrit peut être annulé (« Cancelled before issue reassignment ») quand une
    autre tâche de cet agent passe à l'humain ; la récupération native bloque alors la tâche sans rejeu (observé une fois sur quatre passages
    du scénario A). Le lanceur joue la réconciliation humaine documentée et la consigne ; dans l'interface : « Reprendre ».
-6. La preuve d'approbation signée (Ed25519) exigée par les fournisseurs réels réseaux sociaux et CRM pour une diffusion réelle n'est pas
-   implémentée dans le plugin (hors de ce lot, `docs/passerelle.md`).
+6. (Levée le 15/10/2026, contrats v1.5) La preuve d'approbation signée par le plugin est implémentée ; les clés se génèrent par
+   `bootstrap-organisation.py cles` (section « Clés de l'opérateur » ci-dessous).
 
+
+## Clés de l'opérateur et diffusion réelle (15/10/2026)
+
+Contrats : `docs/contrats.md` §14 ; conception : `docs/revue-securite-passerelle.md` §6 et §6 bis ; exploitation (emplacement, rotation,
+perte) : `docs/exploitation.md` §11 ; étape de la checklist : `docs/checklist-usage-reel.md`.
+
+**Un geste.** `python3 -I scripts/bootstrap-organisation.py cles --confirmer` génère (OpenSSL 3) la paire Ed25519 du plugin et celle de la
+passerelle si elles manquent : clé privée du plugin dans un secret natif de l'entreprise (référencé par `approbationClePrivee`, jamais
+sur disque), clé privée de la passerelle dans un fichier 0600 sous `instance/cles/`, clé publique de la passerelle dans
+`passerelleClesPubliques`, clés publiques d'approbation dans un fichier lu par la passerelle, variables `_FICHIER` dans
+`instance/passerelle.env` (non suivi). Idempotente ; rotation en trois temps (`--rotation`, `--basculer`, `--retirer-anciennes`) ; sans
+`--confirmer`, elle affiche l'état. Aucune clé privée n'est affichée ni journalisée (test hors ligne : aucune sortie ne contient de clé).
+Chaque entreprise a sa clé d'approbation (le secret est propre à l'entreprise) ; la passerelle accepte toutes celles du fichier, ce qui
+a exigé un petit changement de la passerelle : `PASSERELLE_APPROBATION_CLE_PUBLIQUE(_FICHIER)` accepte plusieurs clés (une par ligne en
+base64, ou plusieurs blocs PEM), pour la rotation et pour plusieurs entreprises (`approbation.ts`, `config.ts`, tests ajoutés).
+
+**Consignes des agents réels** (registre 1.5.0, `organisation/agents/*/AGENTS.md`, six compétences 1.2.0, vérificateur et cas négatifs) :
+- tous les rôles à connexions déposent, avec chaque réponse d'outil, les `arguments` exacts de l'appel ; une réponse de mode réel n'est
+  retenue que signée par la passerelle et liée au service, à l'outil, aux arguments et à une date de moins de 7 jours. **Piège constaté
+  sur la passerelle** : elle signe les arguments APRÈS application des valeurs par défaut de l'outil (par exemple `start` et `limit` de
+  `pipedrive_personnes`) ; un dépôt qui les omet est refusé comme réel. La consigne demande donc de donner explicitement chaque valeur ;
+- le rôle en écriture sur accord (CRM conversion) reçoit le parcours complet d'une diffusion réelle : écriture exacte préparée dans le
+  livrable et approuvée ; demande de diffusion avec `service`, `outil` et `arguments` exacts et une clé d'idempotence stable ; aucun outil
+  d'écriture sans `preuveApprobation` ; preuve jointe (`preuve_approbation`) sans la copier ailleurs ; réponse brute rapportée par
+  `tache.diffusions.issue` ; issue ambiguë (`ambigue_a_reconcilier`, délai, coupure, 5xx) : jamais de nouvel essai à l'aveugle, message au
+  coordinateur ; un refus certain n'est pas contourné par une autre clé ;
+- les rôles en lecture seule (SEO, SEA, Mesure, Contenus) ne diffusent jamais : leur livrable décrit l'écriture comme « préparée, non
+  exécutée ». **À décider par l'opérateur** : aujourd'hui aucun rôle n'a l'accès en écriture aux réseaux sociaux (Contenus lit Facebook,
+  Instagram et LinkedIn, écriture bloquée par une politique native), donc la publication réelle d'un texte n'est atteignable par aucun
+  agent ; seul le CRM l'est.
+
+**Preuve sur l'instance d'essai `atelier-cles`** (3440, PG 54640 ; passerelle de démonstration sur 3450 avec les clés générées ; commandes et
+sorties dans `docs/resultats-tests.md`) : réponse de la vraie passerelle vérifiée avec la clé publique que `cles` a mise dans le plugin puis
+déposée (201) ; réponse en mode réel signée avec la clé générée acceptée comme réelle, refusée si un chiffre change, si la signature
+manque, si une autre clé signe, si les arguments ou l'outil diffèrent, ou si l'entreprise n'a pas de clé ; campagne réelle jusqu'à
+l'approbation humaine (agents de démonstration, aucun modèle), puis diffusion demandée : **le worker du plugin lit la clé dans le coffre
+natif et signe la preuve, que la passerelle (chargeur de configuration et vérificateur réels) accepte** ; refus pour un texte modifié, un
+autre service, un autre compte, une passerelle sans clé ; rejeu de la même clé : preuve re-signée, autres arguments : 409 ; issue signée
+rapportée : `confirmee`, issues falsifiée, de démonstration ou pour d'autres arguments refusées, seconde issue 409 ; ni la preuve ni une
+clé privée dans le journal. Rotation des deux clés jouée sur l'instance.
+
+**Limites.** Aucun outil d'écriture n'a été appelé par HTTP sur une passerelle en mode réel (il faudrait un compte ou un faux serveur par
+plateforme : les tests de la passerelle couvrent le vérificateur et l'exécution contre de faux serveurs). Aucun run `claude_local` réel :
+l'usage de ces consignes par un vrai agent reste à observer. Les consignes sont vérifiées par lecture (vérificateur) et ne sont pas
+exécutées par un modèle.
+
+## Connexion ajoutée après le bootstrap : le Gardien des connexions (15/10/2026)
+
+**Problème (mesuré).** Une connexion créée par une carte après le dernier `appliquer` est finalisée avec « tous les agents » (défaut
+natif) : sur l'instance d'essai `atelier-conn`, **12 agents sur 12** (les 11 du registre et le Gardien) voyaient la connexion HubSpot
+dans leur profil effectif, installation « entreprise entière », tant que personne ne relançait `appliquer`.
+
+**Pistes natives étudiées** (code du socle `v2026.1012.0`, aucun patch retenu) :
+
+| Piste | Verdict |
+| --- | --- |
+| Défaut « aucun agent » pour les nouvelles connexions | **Aucun réglage n'existe.** Le défaut vient de la fiche de la carte (`suggestedDefaults.access = "all_agents"`, `services/tool-access.ts`). Seules les quatre connexions `mcp_remote` de fournisseurs codés en dur (Zapier, Arcade, Composio, Executor : `packages/shared/src/remote-mcp-connectors.ts`) reçoivent `{agentIds: []}` ; un défaut vide est d'ailleurs ramené à « tous » (`normalizedSuggestedAccess`). Un patch `0008` aurait modifié ce calcul, et « aucun agent » n'aurait pas donné les accès aux rôles prévus pour autant. Écartée. |
+| Événement natif | `tool_connection.created` n'est qu'une ligne du journal d'activité, publiée aux **plugins** (`services/activity-log.ts`) : aucun webhook sortant ni abonnement pour un script. L'écouter relèverait du plugin (hors de ce lot). Écartée. |
+| Routine native | Une routine crée une tâche pour un agent (modèle ou non) à chaque passage : une tâche par minute dans l'entreprise, et un agent à lui confier. Écartée. |
+| **Battement natif d'un agent `process`** | **Retenue.** Le planificateur de battements de Paperclip (`heartbeat.ts`, `tickTimers`, pas de 30 s) réveille un agent à intervalle fixe, sans tâche ni issue, et l'adaptateur `process` lance une commande. Mesuré : 0 tâche créée. |
+
+**Mise en œuvre.**
+- `bootstrap-organisation.py assurer-connexions [--detail]` : étape légère et idempotente (accès natif, installations, politiques
+  « block » des rôles en lecture ; la fonction est celle d'`appliquer`). Rien à faire = aucune écriture. Si `appliquer` tient le verrou,
+  elle passe (code 0) ; à l'inverse, un `appliquer` lancé à la main attend jusqu'à 30 s derrière elle.
+- « **Gardien des connexions** » : agent natif `process`, **sans modèle**, créé par `appliquer` hors du paquet (embauche native
+  `agent-hires`, puis approbation par l'humain qui lance `appliquer`, car l'entreprise exige l'approbation de tout nouvel agent).
+  Rôle `devops`, budget 0, aucun droit de créer des agents ni des compétences, battement de **60 s**, commande fixée
+  `python3 -I scripts/bootstrap-organisation.py assurer-connexions` (Paperclip refuse qu'une clé d'agent configure un adaptateur
+  `process`), API et dossier de données de l'`appliquer` qui l'a posé. `appliquer` le réaligne s'il dérive (empreinte rangée dans
+  ses métadonnées, l'API masquant l'environnement) ; il n'est jamais réactivé s'il a été mis en pause par un humain (signalé).
+  `etat` le décrit (ligne `gardien`), `exporter` ne l'exporte pas (chemins absolus), `ecarts_non_geres` ne le signale pas.
+- Il est le seul agent actif de l'entreprise (les onze autres restent en pause). Il n'appelle aucun modèle.
+
+**Délai annoncé : environ 90 s, 100 s au plus** en régime normal (intervalle de 60 s + pas du planificateur de 30 s + durée du run, environ une seconde).
+Il s'allonge si trois runs d'agents sont déjà actifs (plafond par entreprise de `ATELIER_MAX_RUNS_ACTIFS_PAR_ENTREPRISE`) : le run du Gardien
+attend alors une place.
+
+**Preuve** : `python3 -I scripts/scenarios/connexion_tardive.py <API> <carte>` (instance d'essai, passerelle de démonstration) : crée la
+connexion par la carte, mesure la fenêtre ouverte, attend sans aucune action humaine, puis contrôle installations, profils effectifs de
+chacun des 12 agents, politiques `block` et appel d'essai d'une écriture.
+
+Résultats (15/10/2026, instance `atelier-conn` 3360, passerelle de démonstration 3393, pas du planificateur par défaut de 30 s, aucun appel de
+modèle) : dans les quatre cas, **12 agents sur 12 voyaient la connexion à sa création**, puis, sans aucune action humaine, seuls les rôles prévus
+la voyaient, installations par agent comprises, le Gardien et les autres rôles exclus.
+
+| Carte | Rôles prévus (registre) | Conforme après | Contrôle d'écriture |
+| --- | --- | --- | --- |
+| `atelier-hubspot` | CRM conversion (écriture sur accord) | 27,1 s (juste après un redémarrage : battement déjà dû) | pas de politique `block` (voulu) |
+| `atelier-google-ads` | SEA, Mesure (lecture) | **90,1 s** (régime établi) | aucune écriture dans le catalogue |
+| `atelier-facebook` | Contenus (lecture) | 72,1 s | `block` créée ; `facebook_publier` et `facebook_envoyer_message` : `deny_policy_block` |
+| `atelier-instagram` | Contenus (lecture) | 75,1 s | `block` créée ; `instagram_publier` : `deny_policy_block` |
+
+Un premier passage Instagram a échoué sur mon propre contrôle (le script lisait `decision` au lieu du motif `deny_policy_block`, la décision
+native étant « off » avec ce motif) : le script lit maintenant le motif ; la mutation n'a pas changé le comportement du serveur.
+
+**Limites.** (1) Si le Gardien est en pause (« tout mettre en pause » de l'interface, par exemple), les nouvelles connexions restent
+ouvertes à tous jusqu'à sa reprise ; les agents réels sont alors en pause eux aussi. (2) Le script tourne sans jeton : valable en
+`local_trusted` (mode de l'atelier, `config/atelier.env`) ; un déploiement authentifié demanderait des identifiants au Gardien. (3) Un agent de plus
+apparaît dans la vue Équipe du plugin et l'organigramme (adaptateur `process`, libellé « démonstration » du plugin). (4) 1 440 runs par
+jour dans l'historique du Gardien. (5) La fenêtre n'est pas nulle : pendant environ 90 s, la connexion est visible de tous les agents ;
+aucun agent réel n'est actif par défaut, et les écritures restent « Ask first » (patch `0005`).
+(6) Le moment du battement dépend du pas de 30 s : la connexion peut tomber juste après un passage ; la mesure en régime établi est de 90 s.

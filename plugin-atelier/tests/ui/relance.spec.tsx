@@ -177,6 +177,16 @@ describe("dossier : relance, rejet et diffusion", () => {
     expect(c2.textContent).toContain("Diffusion simulée (démonstration) : rien n'a été envoyé.");
   });
 
+  it("diffusion déjà préparée : action CRM en français, service et outil visés affichés sobrement", async () => {
+    const diffusion = {
+      id: "99999999-9999-4999-8999-999999999991", companyId: base.companyId, issueId: T, revisionId: R2, decisionId: null, action: "modifier_crm" as const, canal: "crm", compte: "contact-12", montantCents: null,
+      etat: "preparee" as const, cleIdempotence: "interface-crm-0001", motifRefus: null, mode: "reel" as const, creeLe: "2026-10-15T10:00:00.000Z", service: "pipedrive", outil: "pipedrive_modifier_personne",
+    };
+    const c = await dossier({ ...base, mode: "reel", mentionDemonstration: null, diffusions: [diffusion] });
+    expect(c.textContent).toContain("Modifier des données du CRM sur crm");
+    expect(c.textContent).toContain("Appel visé : service pipedrive, outil pipedrive_modifier_personne");
+  });
+
   it("diffuser en réel : désactivé, raison « aucun connecteur de publication »", async () => {
     const c = await dossier({ ...base, mode: "reel", mentionDemonstration: null });
     const b = parTexte(c, "button", "Diffuser");

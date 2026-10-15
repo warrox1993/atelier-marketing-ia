@@ -48,6 +48,7 @@ export function ChoixPlafond({
   aideAucunChoix,
   sansAucunChoix = false,
   avertissement,
+  enregistre,
 }: {
   legende: string;
   valeur: SaisiePlafond;
@@ -58,10 +59,16 @@ export function ChoixPlafond({
   sansAucunChoix?: boolean;
   /** Texte de l'avertissement « aucune limite » si différent de celui des dépenses publicitaires. */
   avertissement?: string;
+  /**
+   * Choix déjà enregistré. L'avertissement « plus de garde-fou » ne s'affiche que lorsque le choix
+   * le retire : un état déjà enregistré est un état, pas une alerte (sinon il se répète sur chaque ligne).
+   */
+  enregistre?: SaisiePlafond["mode"];
 }) {
   const nom = useId();
   const idAvertissement = useId();
   const { raison } = plafondDepuisSaisie(valeur);
+  const avertir = valeur.mode === "aucune_limite" && enregistre !== "aucune_limite";
   return (
     <fieldset className="atl-champ atl-choix atl-plafond">
       <legend>{legende}</legend>
@@ -91,15 +98,15 @@ export function ChoixPlafond({
           name={nom}
           checked={valeur.mode === "aucune_limite"}
           onChange={() => onChange({ ...valeur, mode: "aucune_limite" })}
-          aria-describedby={valeur.mode === "aucune_limite" ? idAvertissement : undefined}
+          aria-describedby={avertir ? idAvertissement : undefined}
         />{" "}
         Aucune limite
       </label>
-      {valeur.mode === "aucune_limite" ? (
+      {avertir ? (
         <div className="atl-encart" data-ton="attention" role="note" id={idAvertissement}>
           <p className="atl-encart-titre">{avertissement ? "Plus de garde-fou sur les coûts IA" : "Plus de garde-fou global sur les dépenses publicitaires"}</p>
           <p>
-            {avertissement ?? "Chaque dépense restera soumise à une approbation humaine (montant, canal et durée précis), refusée par le serveur sinon. Mais aucun plafond ne limitera le total engagé."}
+            {avertissement ?? "Chaque dépense reste soumise à une approbation humaine (montant, canal et durée précis), refusée par le serveur sinon. Aucun plafond ne limitera le total engagé."}
           </p>
         </div>
       ) : null}
@@ -127,7 +134,7 @@ export function EngagementFaceLimite({ plafond, engagement }: { plafond: Plafond
   if (plafond?.type === "aucune_limite" || engagement.limiteCents === null) {
     return (
       <p>
-        {engage} engagés sur <strong>sans limite</strong>. <span className="atl-sous">{detail}.</span>
+        {engage} engagés, <strong>sans limite</strong>. <span className="atl-sous">{detail}.</span>
       </p>
     );
   }

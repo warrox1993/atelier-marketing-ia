@@ -501,6 +501,19 @@ CONSIGNES_CONNEXION = [
     ("démonstration", "mention « démonstration »"),
     ("non mesurable", "aucun chiffre inventé"),
     ("connection_request", "demande de connexion par l'outil natif"),
+    ('"arguments"', "arguments exacts de l'appel déposés avec la réponse"),
+    ("_atelier.signature", "réponse réelle signée par la passerelle, liée au dépôt"),
+]
+# Rôles avec écriture sur accord : parcours complet d'une diffusion réelle (contrats v1.5, §14).
+CONSIGNES_DIFFUSION = [
+    ("## Diffusion réelle : parcours complet", "section du parcours de diffusion réelle"),
+    ("/diffusions`", "demande de diffusion (tache.diffusions)"),
+    ('"service"', "service, outil et arguments exacts de la demande"),
+    ("preuveApprobation", "lecture de la preuve rendue par la demande"),
+    ("preuve_approbation", "preuve jointe à l'appel d'outil"),
+    ("AUCUN outil", "aucun outil d'écriture sans preuve"),
+    ("/diffusions/<diffusionId>/issue", "issue rapportée (tache.diffusions.issue)"),
+    ("ne réessaie jamais à l'aveugle", "aucun nouvel essai à l'aveugle sur une issue ambiguë"),
 ]
 
 
@@ -540,6 +553,12 @@ def controler_connexions():
             for motif, libelle in CONSIGNES_CONNEXION:
                 if motif not in corps:
                     erreur(f"agent {s} : consigne manquante dans AGENTS.md : {libelle}")
+            if ecrit:
+                for motif, libelle in CONSIGNES_DIFFUSION:
+                    if motif not in corps:
+                        erreur(f"agent {s} : consigne de diffusion réelle manquante dans AGENTS.md : {libelle}")
+            elif "## Diffusion réelle" in corps:
+                erreur(f"agent {s} : rôle en lecture seule, le parcours de diffusion réelle ne doit pas figurer dans ses consignes")
             for service in c:
                 if f"(`{service}`)" not in corps:
                     erreur(f"agent {s} : service {service} non nommé dans ses consignes")

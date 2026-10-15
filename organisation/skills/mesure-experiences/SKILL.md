@@ -2,7 +2,7 @@
 name: "mesure-experiences"
 description: "Vérifie des données marketing importées (périodes, provenance, doublons, conversions), présente coûts, attribution et incertitudes, et conçoit des expériences avec hypothèse, métrique et condition d'arrêt ; répond « non mesurable » quand les données manquent. À utiliser pour tout bilan chiffré, tableau de résultats ou test A/B."
 metadata:
-  version: "1.1.0"
+  version: "1.2.0"
   langue: "fr"
   domaine: "mesure"
 ---
@@ -23,10 +23,10 @@ savent quand s'arrêter.
 
 - Exports de données avec période et provenance. Sans données : « non mesurable ».
 - Chiffres d'une connexion de la passerelle marketing (Search Console, Analytics, Ads, fiche,
-  réseaux sociaux, CRM) : `atelier_identite` d'abord, chaque réponse d'outil déposée telle quelle
-  (`POST …/taches/<issueId>/donnees-connexion`), mention « démonstration » sur chaque chiffre de
-  démonstration, aucun chiffre absent d'une réponse déposée (section « Connexions de la passerelle
-  marketing » des consignes de l'agent).
+  réseaux sociaux, CRM) : `atelier_identite` d'abord, chaque réponse d'outil déposée telle quelle avec
+  les arguments exacts de l'appel (`POST …/taches/<issueId>/donnees-connexion`, champ `arguments`),
+  mention « démonstration » sur chaque chiffre de démonstration, aucun chiffre absent d'une réponse
+  déposée (section « Connexions de la passerelle marketing » des consignes de l'agent).
 
 ## Entrées
 

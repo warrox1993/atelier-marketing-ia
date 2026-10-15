@@ -79,7 +79,7 @@ export function VueParametres() {
           {(d) => <PlafondEntreprise reglages={d} onFait={reg.refresh} />}
         </Lecture>
       </Section>
-      <Section titre="Coûts IA" aide="Budget mensuel natif de Paperclip, au niveau de l'entreprise et de chaque agent : l'atelier ne crée pas de budget parallèle. À la limite, Paperclip met l'agent en pause.">
+      <Section titre="Coûts IA" aide="Budget mensuel natif de Paperclip, pour l'entreprise et pour chaque agent. L'atelier ne crée pas de budget parallèle. À la limite, Paperclip met l'agent en pause.">
         <BudgetsIa />
       </Section>
       <Section titre="Modèles, budgets et compétences" aide="Ces réglages appartiennent à Paperclip : l'atelier ne les duplique pas.">
@@ -251,6 +251,7 @@ function PlafondEntreprise({ reglages, onFait }: { reglages: ReglagesEntreprise;
           onChange={setSaisie}
           libelleAucunChoix="Pas de choix pour l'entreprise"
           aideAucunChoix="Sans choix ici ni sur la campagne, aucune dépense publicitaire n'est possible."
+          enregistre={saisieDepuisPlafond(reglages.plafondPub).mode}
         />
         {erreur ? <EtatErreur erreur={erreur} contexte="plafond non enregistré" /> : null}
         {fait ? (
@@ -296,26 +297,35 @@ function LigneBudgetIa({ cible, portee, onFait }: { cible: BudgetNatif; portee: 
       setEnCours(false);
     }
   };
+  const actuel = cible.budgetMonthlyCents === 0 ? "aucune limite" : `${euros(cible.budgetMonthlyCents)} par mois`;
   return (
     <form className="atl-formulaire atl-budget-ia" onSubmit={(e) => void soumettre(e)} noValidate>
-      <ChoixPlafond
-        legende={`${cible.nom} : ${cible.budgetMonthlyCents === 0 ? "aucune limite" : `${euros(cible.budgetMonthlyCents)} par mois`}`}
-        valeur={saisie.mode === "aucun" ? { ...saisie, mode: "aucune_limite" } : saisie}
-        onChange={setSaisie}
-        libelleAucunChoix=""
-        aideAucunChoix=""
-        sansAucunChoix
-        avertissement="Paperclip ne mettra plus cet agent en pause pour budget : les coûts IA ne seront plus limités ici."
-      />
-      {erreur ? <EtatErreur erreur={erreur} contexte="budget non enregistré" /> : null}
-      {fait ? (
-        <p className="atl-succes" role="status">
-          Budget enregistré dans Paperclip et tracé.
-        </p>
-      ) : null}
-      <Bouton type="submit" variante="principal" raisonDesactive={raison} enCours={enCours}>
-        Enregistrer le budget
-      </Bouton>
+      {/* Une ligne par périmètre ; le choix ne s'ouvre qu'à la demande (douze agents = douze formulaires sinon). */}
+      <details className="atl-details atl-budget-detail">
+        <summary>
+          <span className="atl-budget-nom">{cible.nom}</span>
+          <span className="atl-budget-valeur">{` : ${actuel}`}</span>
+        </summary>
+        <ChoixPlafond
+          legende={`Budget mensuel de ${cible.nom}`}
+          valeur={saisie.mode === "aucun" ? { ...saisie, mode: "aucune_limite" } : saisie}
+          onChange={setSaisie}
+          libelleAucunChoix=""
+          aideAucunChoix=""
+          sansAucunChoix
+          enregistre={cible.budgetMonthlyCents === 0 ? "aucune_limite" : "montant"}
+          avertissement={portee === "agent" ? "Paperclip ne mettra plus cet agent en pause pour budget : les coûts IA ne seront plus limités ici." : "Paperclip ne mettra plus de pause pour budget au niveau de l'entreprise : les coûts IA ne seront plus limités ici."}
+        />
+        {erreur ? <EtatErreur erreur={erreur} contexte="budget non enregistré" /> : null}
+        {fait ? (
+          <p className="atl-succes" role="status">
+            Budget enregistré dans Paperclip et tracé.
+          </p>
+        ) : null}
+        <Bouton type="submit" variante="principal" raisonDesactive={raison} enCours={enCours}>
+          Enregistrer le budget
+        </Bouton>
+      </details>
     </form>
   );
 }

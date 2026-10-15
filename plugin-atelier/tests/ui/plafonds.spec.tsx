@@ -38,7 +38,7 @@ describe("création de campagne : plafond publicitaire", () => {
     await cliquer(radio(c, "Aucune limite"));
     const avertissement = c.querySelector('[role="note"][data-ton="attention"]');
     expect(avertissement?.textContent).toContain("approbation humaine");
-    expect(avertissement?.textContent).toContain("aucun plafond ne limitera");
+    expect(avertissement?.textContent).toContain("Aucun plafond ne limitera");
     // Le bouton radio est décrit par l'avertissement (lecteur d'écran).
     expect(radio(c, "Aucune limite").getAttribute("aria-describedby")).toBe(avertissement?.id);
     await saisir(champParLibelle(c, "Nom de la campagne"), "Façades");
@@ -133,6 +133,28 @@ describe("paramètres : coûts IA = budgets natifs de Paperclip", () => {
   });
 });
 
+describe("paramètres : avertissement seulement quand le choix retire le garde-fou", () => {
+  it("un budget déjà sans limite n'affiche pas l'avertissement ; passer un budget chiffré à « Aucune limite » l'affiche", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string) => {
+        if (url === `/api/companies/${ENTREPRISE}`) return new Response(JSON.stringify({ id: ENTREPRISE, name: "Entreprise", budgetMonthlyCents: 0 }), { status: 200 });
+        if (url === `/api/companies/${ENTREPRISE}/agents`) return new Response(JSON.stringify([{ id: AGENT, name: "Contenus", budgetMonthlyCents: 1500, status: "idle" }]), { status: 200 });
+        return new Response("{}", { status: 200 });
+      }),
+    );
+    const c = await page("/RNO/atelier/parametres");
+    await vi.waitFor(() => expect(c.textContent).toContain("Contenus"));
+    const entreprise = Array.from(c.querySelectorAll("form.atl-budget-ia")).find((f) => f.textContent?.includes("Entreprise"))!;
+    expect(entreprise.textContent).toContain("Entreprise : aucune limite");
+    expect(entreprise.querySelector('[role="note"]')).toBeNull();
+    const agent = Array.from(c.querySelectorAll("form.atl-budget-ia")).find((f) => f.textContent?.includes("Contenus"))!;
+    expect(agent.querySelector('[role="note"]')).toBeNull();
+    await cliquer(radio(agent, "Aucune limite"));
+    expect(agent.querySelector('[role="note"]')?.textContent).toContain("Paperclip ne mettra plus cet agent en pause");
+  });
+});
+
 describe("résultats : montants engagés face à la limite", () => {
   it("affiche la limite par campagne et pour l'entreprise, ou « sans limite »", async () => {
     const base = EXEMPLES_DONNEES["atelier.resultats"] as { plafondsPub: { campagnes: Array<Record<string, unknown>> } } & Record<string, unknown>;
@@ -149,8 +171,8 @@ describe("résultats : montants engagés face à la limite", () => {
       error: null,
     };
     const c = await page("/RNO/atelier/resultats");
-    expect(c.textContent).toMatch(/70,00\s€ engagés sur sans limite/u);
+    expect(c.textContent).toMatch(/70,00\s€ engagés, sans limite/u);
     expect(c.textContent).toMatch(/70,00\s€ engagés sur 1\s500,00\s€/u);
-    expect(c.textContent).toMatch(/Ce mois : 8,00\s€ sur sans limite/u);
+    expect(c.textContent).toMatch(/Ce mois : 8,00\s€, budget mensuel sans limite/u);
   });
 });

@@ -925,9 +925,12 @@ def scenario_K():
     c_reel, r_reel = api("POST", f"{PLUGIN}/taches/{B}/donnees-connexion", {"service": "gsc", "outil": "gsc_requete_performances", "reponse": reponse_gsc("reel")}, jeton=jeton)
     verifier(c_mode == 400 and c_nue == 400 and "Provenance inconnue" in str((r_nue or {}).get("erreur")),
              "un agent ne déclare pas le mode (400) et ne dépose pas une réponse privée de son enveloppe (400)", {"mode_declare": c_mode, "sans_enveloppe": c_nue})
-    verifier(c_fal == 201 and (r_fal or {}).get("mode") == "demonstration" and c_reel == 201 and (r_reel or {}).get("mode") == "reel",
-             "enveloppe falsifiée en « reel » sur des données fictives : enregistrée en démonstration ; une réponse réelle sans indice reste « reel »",
-             {"falsifiee": (r_fal or {}).get("indices"), "reponse_reelle_fixture": (r_reel or {}).get("mode"), "indices_reelle": (r_reel or {}).get("indices")})
+    # Revue de sécurité §6 bis (15/10/2026) : une réponse qui se dit « reel » n'est acceptée que signée par la passerelle
+    # (clé publique configurée dans le plugin). Sans signature : refus, jamais réelle (avant : falsifiée enregistrée en
+    # démonstration, réponse réelle non signée acceptée comme « reel »).
+    verifier(c_fal == 400 and c_reel == 400 and "non signée par la passerelle" in str((r_fal or {}).get("erreur")) and "non signée par la passerelle" in str((r_reel or {}).get("erreur")),
+             "enveloppe « reel » falsifiée ou non signée : refusée (signature de la passerelle exigée), jamais tenue pour réelle",
+             {"falsifiee": c_fal, "reponse_reelle_non_signee": c_reel, "motif": (r_reel or {}).get("erreur")})
 
     # --- K2 : campagne RÉELLE ---
     S2, ids2, projet2 = preparer("K", nom=f"Scénario K réel (démonstration) {datetime.now(timezone.utc).strftime('%H%M%S')}")
@@ -1140,7 +1143,11 @@ def scenario_A():
              "mode effectif réel : diffusion du bilan refusée (données de démonstration)", {"code": c_r1, "motif": (d_r1 or {}).get("motifRefus")})
     rev_p = contexte(post["id"])["livrable"]["revisionId"]
     c_r2, d_r2 = api("POST", f"{PLUGIN}/taches/{post['id']}/diffusions", {"revisionId": rev_p, "action": "publier", "canal": "facebook", "cleIdempotence": f"a-{post['id']}-reel"})
-    verifier(c_r2 == 201 and (d_r2 or {}).get("etat") == "preparee", "mode effectif réel : diffusion préparée, jamais simulée (aucun connecteur de publication)", {"code": c_r2, "etat": (d_r2 or {}).get("etat")})
+    # Revue indépendante M3 et M1 (15/10/2026) : la porte franchie en démonstration est périmée par le passage
+    # en mode réel, et cette publication a déjà été diffusée (simulée) sous la même approbation : refus, jamais
+    # « préparée » ni « simulée ». (Avant ces corrections : 201 « préparée ».)
+    verifier(c_r2 == 403 and (d_r2 or {}).get("etat") == "refusee", "mode effectif réel : la porte franchie en démonstration ne vaut plus, la publication déjà simulée n'est pas rediffusée (refus serveur)",
+             {"code": c_r2, "etat": (d_r2 or {}).get("etat"), "motif": (d_r2 or {}).get("motifRefus")})
     note("INFO", "chronologie du bilan", {"evenements": resume_journal(journal(S, bilan["id"]))})
     return S
 

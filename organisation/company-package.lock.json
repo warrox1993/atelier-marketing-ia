@@ -10,15 +10,15 @@
       ]
     },
     "audit-local-etablissements": {
-      "version": "1.1.0",
-      "sha256": "5dd1edcf1e8101830c0a614e4cf4da10bfc1ad341d11cdec835781e2f3e71537",
+      "version": "1.2.0",
+      "sha256": "98b13787959fba8eddcd80f227fc979a7c13c5a3f4a3995d0bd105bb2c760107",
       "fichiers": [
         "SKILL.md"
       ]
     },
     "audit-seo": {
-      "version": "1.1.0",
-      "sha256": "6747bbfd6b104b1333d3a5dfa8d046d8998aa232537406bbef961b018a94ed29",
+      "version": "1.2.0",
+      "sha256": "4ad7eaca67cfb44eae24c2f8556e6ad614cd63dcbfef8b9e72c5a1b02314e76a",
       "fichiers": [
         "SKILL.md",
         "references/liste-controles-seo.md"
@@ -63,8 +63,8 @@
       ]
     },
     "conversion-crm": {
-      "version": "1.1.0",
-      "sha256": "072b7022b6973c7a541f10f33e6fd2aa20f011216913f4ddd5c538735358ca06",
+      "version": "1.2.0",
+      "sha256": "2c3860f5e79df230cd362eecabe0ce087e9479dfffb491560b880476aeb6801f",
       "fichiers": [
         "SKILL.md"
       ]
@@ -78,8 +78,8 @@
       ]
     },
     "mesure-experiences": {
-      "version": "1.1.0",
-      "sha256": "6a8d0bf8aeaf21bc49f228c4cdb0ead34c01bcc68a15d9af938e34fc5b28ebd4",
+      "version": "1.2.0",
+      "sha256": "141c1b1a9ba9c829081fa1741cd87649951a029a992d1f6498f35a68054fef46",
       "fichiers": [
         "SKILL.md"
       ]
@@ -92,8 +92,8 @@
       ]
     },
     "preparation-campagnes-sea": {
-      "version": "1.1.0",
-      "sha256": "e1469fe089ba578a912ca64ea3b475fdb15bc266d6c2c100eec8a668cbf4f19b",
+      "version": "1.2.0",
+      "sha256": "78f991283b3823fdbcbb688618423101b4b85dffdf05ba495d6f5a3c6eeb3de8",
       "fichiers": [
         "SKILL.md",
         "references/structure-campagne.md"
@@ -108,8 +108,8 @@
       ]
     },
     "redaction-declinaison-canal": {
-      "version": "1.1.0",
-      "sha256": "b37f7969eedb46b71c62bff3226ab45316dc1b11bb5055663b9671f87444459c",
+      "version": "1.2.0",
+      "sha256": "c9b2990feae545d9f3b1b1c7670d81b476af6ba4c7ad42a7e034504242399b8b",
       "fichiers": [
         "SKILL.md"
       ]

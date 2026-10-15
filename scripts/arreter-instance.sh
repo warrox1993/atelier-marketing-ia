@@ -1,51 +1,29 @@
 #!/usr/bin/env bash
-# Arrête proprement l'instance Paperclip de l'Atelier Marketing IA.
-# Méthode : identifier le PID qui écoute sur 127.0.0.1:${PORT}, vérifier que
-# c'est bien le serveur lancé depuis ce projet, lui envoyer SIGTERM (arrêt
-# gracieux : le serveur arrête lui-même son PostgreSQL embarqué), attendre la
-# libération des ports. Jamais de pkill -f.
+# Arrête proprement l'instance Paperclip de l'Atelier Marketing IA (serveur ET PostgreSQL embarqué).
+# Méthode : voir scripts/lib-arret-instance.sh. Le serveur à l'écoute reçoit SIGTERM (arrêt gracieux :
+# il arrête lui-même son PostgreSQL) ; un démarrage en cours est attendu ; un PostgreSQL resté actif
+# sans serveur (arrêt incomplet) est arrêté par son PID vérifié. Jamais de pkill ni de kill -9.
+# ATELIER_FICHIER_ENV (facultatif) : autre fichier de réglages que config/atelier.env, pour viser
+# une instance d'essai (mêmes variables : PORT, PAPERCLIP_HOME, PAPERCLIP_INSTANCE_ID).
 set -uo pipefail
 
 RACINE="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-FICHIER_ENV="${RACINE}/config/atelier.env"
+FICHIER_ENV="${ATELIER_FICHIER_ENV:-${RACINE}/config/atelier.env}"
+if [[ ! -r "${FICHIER_ENV}" ]]; then echo "Fichier de réglages illisible : ${FICHIER_ENV}" >&2; exit 2; fi
 set -a
 # shellcheck disable=SC1090
 source "${FICHIER_ENV}"
 set +a
+# shellcheck disable=SC1091
+source "${RACINE}/scripts/lib-arret-instance.sh"
 
-PORT_PG="$(python3 -I -c 'import json,sys; print(json.load(open(sys.argv[1]))["database"].get("embeddedPostgresPort",54329))' \
-  "${PAPERCLIP_HOME}/instances/${PAPERCLIP_INSTANCE_ID}/config.json" 2>/dev/null || echo 54329)"
+CONFIG="${PAPERCLIP_HOME}/instances/${PAPERCLIP_INSTANCE_ID}/config.json"
+# Port PostgreSQL et dossier de données lus dans la configuration de l'instance (défauts de Paperclip sinon).
+LECTURE="$(python3 -I -c 'import json,sys
+c = json.load(open(sys.argv[1]))["database"]
+print(c.get("embeddedPostgresPort", 54329)); print(c.get("embeddedPostgresDataDir", ""))' "${CONFIG}" 2>/dev/null)"
+PORT_PG="$(sed -n 1p <<<"${LECTURE}")"; PORT_PG="${PORT_PG:-54329}"
+DONNEES_PG="$(sed -n 2p <<<"${LECTURE}")"; DONNEES_PG="${DONNEES_PG:-${PAPERCLIP_HOME}/instances/${PAPERCLIP_INSTANCE_ID}/db}"
 
-pid_ecoute() {
-  ss -ltnpH "sport = :$1" 2>/dev/null | grep -o 'pid=[0-9]*' | head -1 | cut -d= -f2
-}
-
-PID="$(pid_ecoute "${PORT}")"
-if [[ -z "${PID}" ]]; then
-  echo "Aucun processus n'écoute sur le port ${PORT} : instance déjà arrêtée."
-  exit 0
-fi
-
-# Vérifie que le processus appartient bien à ce projet (répertoire courant ou
-# environnement PAPERCLIP_HOME de l'instance).
-CWD_PID="$(readlink -f "/proc/${PID}/cwd" 2>/dev/null || true)"
-HOME_PID="$(tr '\0' '\n' < "/proc/${PID}/environ" 2>/dev/null | grep '^PAPERCLIP_HOME=' | cut -d= -f2- || true)"
-if [[ "${CWD_PID}" != "${RACINE}"* && "${HOME_PID}" != "${PAPERCLIP_HOME}" ]]; then
-  echo "Le PID ${PID} sur le port ${PORT} n'appartient pas à ce projet (cwd=${CWD_PID}) : abandon." >&2
-  exit 1
-fi
-
-echo "Arrêt gracieux du serveur Paperclip (PID ${PID}, $(ps -o comm= -p "${PID}"))."
-kill -TERM "${PID}"
-
-for _ in $(seq 1 60); do
-  if [[ -z "$(pid_ecoute "${PORT}")" && -z "$(pid_ecoute "${PORT_PG}")" ]]; then
-    echo "Instance arrêtée : ports ${PORT} et ${PORT_PG} libérés."
-    exit 0
-  fi
-  sleep 1
-done
-echo "L'instance ne s'est pas arrêtée en 60 s. PID restants :" >&2
-echo "  serveur : $(pid_ecoute "${PORT}")  postgres : $(pid_ecoute "${PORT_PG}")" >&2
-echo "Vérifiez avec : ss -ltnp | grep -E ':(${PORT}|${PORT_PG})'" >&2
-exit 1
+arreter_instance "${PAPERCLIP_INSTANCE_ID}" "${PORT}" "${PORT_PG}" "${DONNEES_PG}" "${RACINE}"
+exit $?

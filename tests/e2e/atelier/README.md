@@ -30,6 +30,10 @@ node tests/e2e/atelier/node_modules/@playwright/test/cli.js test --config tests/
 node tests/e2e/atelier/captures.mjs http://127.0.0.1:3140 <PRÉFIXE> docs/captures [nom=chemin ...]
 ```
 
+`ATELIER_CAPTURES_FILTRE=<expression>` ne refait que les vues dont le nom correspond.
+Les captures ajustent la hauteur de la fenêtre au contenu (la page de Paperclip défile dans son propre
+conteneur : une capture « pleine page » serait tronquée).
+
 Résultats et traces d'échec : `instance/e2e-atelier-resultats/` (non versionné).
 
 ## Arrêter

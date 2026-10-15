@@ -321,7 +321,7 @@ de Page, statistiques Instagram, organisations administrées) et dans `EXPECTED`
 passerelle ne l'utilise qu'en lecture (`organizationAcls`, statistiques). Note : la passerelle demande de toute façon
 ses portées de lecture par défaut ; ces ajouts alignent l'écran et l'audit sur ce qui est réellement demandé.
 
-## 6. Changement attendu côté plugin : signature de la preuve (NON appliqué)
+## 6. Changement attendu côté plugin : signature de la preuve (appliqué le 15/10/2026 : `docs/contrats.md` §14, commit `1813928`)
 
 Suit `docs/passerelle.md`, « Changement attendu côté plugin », avec les exigences de sécurité de cette revue. Code de
 référence à reprendre tel quel : `passerelle/src/reel/social-crm/approbation.ts` (`jsonCanonique`,
@@ -399,7 +399,7 @@ référence à reprendre tel quel : `passerelle/src/reel/social-crm/approbation.
 6. **Tests côté plugin** : signature vérifiée par `VerificateurPreuves` de la passerelle (même fixture de clés) ;
    refus de signer pour chaque condition ci-dessus ; mode démonstration jamais signé ; preuve absente des journaux.
 
-## 6 bis. Changement attendu côté plugin : vérifier la signature de l'enveloppe au dépôt (S9, NON appliqué)
+## 6 bis. Changement attendu côté plugin : vérifier la signature de l'enveloppe au dépôt (S9 ; appliqué le 15/10/2026 : `docs/contrats.md` §14, commit `1813928`)
 
 Dans `plugin-atelier/src/serveur/regles-donnees-demo.ts` (`deduireModeReponse`) et la route `tache.donnees.deposer` :
 

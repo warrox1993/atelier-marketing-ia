@@ -13,6 +13,19 @@ ou à la procédure. Rien ici n'est fait automatiquement.
 - [ ] Budgets mensuels posés par agent et par entreprise (`docs/exploitation.md` §5).
 - [ ] Une entreprise Paperclip par client (frontière dure d'isolement ; deux projets d'une
       même entreprise ne sont pas isolés entre eux).
+- [ ] **Clés de signature générées** (une étape, un geste) :
+      `python3 -I scripts/bootstrap-organisation.py cles --confirmer`. Elle crée la paire Ed25519 du
+      plugin (preuves d'approbation : clé privée rangée comme secret natif de l'entreprise et référencée
+      par `approbationClePrivee`, jamais sur disque) et celle de la passerelle (signature des réponses :
+      clé privée dans un fichier 0600 sous `instance/cles/`, clé publique dans `passerelleClesPubliques`),
+      puis écrit `instance/passerelle.env` (non suivi). Relancer ensuite la passerelle avec ce fichier
+      (`set -a; source instance/passerelle.env; set +a; npm start`). Contrôle : la passerelle journalise
+      « réponses d'outils signées » avec l'empreinte de sa clé ; `bootstrap-organisation.py cles` (sans
+      `--confirmer`) affiche l'état sans rien écrire. Sans ces clés, aucune donnée de connexion n'est tenue
+      pour réelle et toute diffusion reste « préparée ». Rotation, perte et sauvegarde des clés :
+      `docs/exploitation.md` §11.
+- [ ] Les clés sont sauvegardées hors machine avec le reste (`instance/cles/` et le coffre de
+      Paperclip, `docs/exploitation.md` §11) : sans elles, il faut une rotation, pas une restauration.
 
 ## Contrôles techniques
 
@@ -28,8 +41,11 @@ ou à la procédure. Rien ici n'est fait automatiquement.
 
 ## Limites constatées à accepter ou à lever
 
-- Aucun connecteur de diffusion ni de mesure : rien n'est publié, envoyé ni mesuré
-  automatiquement ; une diffusion approuvée reste « préparée » (`docs/integrations.md`).
+- Diffusion réelle : le plugin signe la preuve d'approbation (contrats v1.5, §14) et la passerelle
+  la vérifie, mais aucune écriture n'a été exécutée contre une vraie plateforme (fournisseurs
+  réels testés contre de faux serveurs seulement) ; sans les clés de l'étape ci-dessus, une diffusion
+  approuvée reste « préparée ». Aujourd'hui seul le rôle CRM conversion a un accès en écriture
+  (registre `connexions`) : Contenus, SEO, SEA et Mesure sont en lecture seule (`docs/integrations.md`).
 - Recherche Web non connectée.
 - Pause et reprise de campagne indisponibles (limite du socle) : mettre en pause les agents.
 - Reprise après arrêt du serveur : la tâche interrompue reste bloquée jusqu'à la

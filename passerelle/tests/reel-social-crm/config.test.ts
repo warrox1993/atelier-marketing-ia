@@ -53,6 +53,14 @@ describe("lireConfigSocialCrm", () => {
   });
 });
 
+describe("rotation de la clé publique d'approbation", () => {
+  it("plusieurs clés base64, une par ligne, deviennent plusieurs blocs PEM", () => {
+    const lignes = [0, 1].map(() => generateKeyPairSync("ed25519").publicKey.export({ type: "spki", format: "pem" }).toString().replace(/-----[A-Z ]+-----|\s/g, ""));
+    const lu = lireConfigSocialCrm({ PASSERELLE_SOCIAL_CLE: CLE, PASSERELLE_APPROBATION_CLE_PUBLIQUE: `${lignes[0]}\n${lignes[1]}\n` }, "x");
+    expect(lu.ok && (lu.config.clePubliqueApprobation ?? "").match(/BEGIN PUBLIC KEY/g)?.length).toBe(2);
+  });
+});
+
 describe("adresses saisies par le client", () => {
   it("Pipedrive : domaine de société normalisé, toute autre forme refusée", () => {
     expect(societePipedrive("https://Acme-Renov.pipedrive.com/deals")).toBe("acme-renov");

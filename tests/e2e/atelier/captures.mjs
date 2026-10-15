@@ -30,6 +30,12 @@ for (const s of supplements) {
   if (nom && chemin) vues.push([nom, chemin]);
 }
 
+// Variable facultative ATELIER_CAPTURES_FILTRE : expression régulière sur le nom de la capture (refaire quelques vues seulement).
+if (process.env.ATELIER_CAPTURES_FILTRE) {
+  const filtre = new RegExp(process.env.ATELIER_CAPTURES_FILTRE, "u");
+  for (let i = vues.length - 1; i >= 0; i--) if (!filtre.test(vues[i][0])) vues.splice(i, 1);
+}
+
 const formats = [
   ["bureau", { width: 1440, height: 1400 }],
   ["mobile", { width: 390, height: 1600 }],
@@ -52,9 +58,17 @@ try {
         await page.goto(base + route, { waitUntil: "domcontentloaded" });
         await page.locator(".atl-page").first().waitFor({ timeout: 30_000 });
         await page.waitForFunction(() => !document.querySelector(".atl-page [aria-busy='true']"), null, { timeout: 30_000 }).catch(() => undefined);
+        // Lectures de l'hôte sans état « occupé » (budgets natifs, connexions natives) : attendre leur fin.
+        await page.waitForFunction(() => !/Chargement des budgets|Lecture des connexions natives|Lecture des agents natifs/u.test(document.body.innerText), null, { timeout: 30_000 }).catch(() => undefined);
         await page.waitForTimeout(400);
+        // La page de Paperclip défile dans son propre conteneur : une capture « pleine page » est tronquée à
+        // la hauteur de la fenêtre. On mesure donc la hauteur du contenu, puis on ajuste la fenêtre.
+        await page.setViewportSize({ width: viewport.width, height: 4000 });
+        const hauteur = await page.evaluate(() => Math.ceil((document.querySelector(".atl-page")?.getBoundingClientRect().bottom ?? 0) + window.scrollY) + 48);
+        await page.setViewportSize({ width: viewport.width, height: Math.min(Math.max(hauteur, 900), 12000) });
+        await page.waitForTimeout(150);
         const fichier = path.join(sortie, `${nom}-${format}-${theme}.png`);
-        await page.screenshot({ path: fichier, fullPage: true });
+        await page.screenshot({ path: fichier });
         console.log(fichier);
       }
       await contexte.close();

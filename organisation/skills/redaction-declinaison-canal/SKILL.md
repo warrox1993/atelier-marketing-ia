@@ -2,7 +2,7 @@
 name: "redaction-declinaison-canal"
 description: "Rédige un contenu principal puis le décline par canal (site, blog, réseaux sociaux, courriel, fiche d'établissement) en respectant les contraintes de chaque canal, la charte de marque et les sources. À utiliser pour produire articles, publications, pages, newsletters ou briefs de visuels."
 metadata:
-  version: "1.1.0"
+  version: "1.2.0"
   langue: "fr"
   domaine: "contenu"
 ---
@@ -23,10 +23,10 @@ aucune information inventée.
 
 - Brief, exigences, charte de marque (compétence `charte-marque`), sources validées.
 - Chiffres d'une connexion de la passerelle marketing (Search Console, Analytics, Ads, fiche,
-  réseaux sociaux, CRM) : `atelier_identite` d'abord, chaque réponse d'outil déposée telle quelle
-  (`POST …/taches/<issueId>/donnees-connexion`), mention « démonstration » sur chaque chiffre de
-  démonstration, aucun chiffre absent d'une réponse déposée (section « Connexions de la passerelle
-  marketing » des consignes de l'agent).
+  réseaux sociaux, CRM) : `atelier_identite` d'abord, chaque réponse d'outil déposée telle quelle avec
+  les arguments exacts de l'appel (`POST …/taches/<issueId>/donnees-connexion`, champ `arguments`),
+  mention « démonstration » sur chaque chiffre de démonstration, aucun chiffre absent d'une réponse
+  déposée (section « Connexions de la passerelle marketing » des consignes de l'agent).
 
 ## Entrées
 

@@ -2,7 +2,7 @@
 name: "audit-seo"
 description: "Audite le référencement technique accessible et éditorial d'un site : indexabilité, titres, structure, maillage, performance observable, intentions de recherche et qualité des contenus, avec des recommandations hiérarchisées et vérifiables. À utiliser pour un audit de site, avant de rédiger des pages ou quand une page perd en visibilité."
 metadata:
-  version: "1.1.0"
+  version: "1.2.0"
   langue: "fr"
   domaine: "seo"
 ---
@@ -27,10 +27,10 @@ effort.
 - Requêtes cibles ou thèmes du brief.
 - Accès éventuels (Search Console, analytics) ; sans accès, l'audit reste public.
 - Chiffres d'une connexion de la passerelle marketing (Search Console, Analytics, Ads, fiche,
-  réseaux sociaux, CRM) : `atelier_identite` d'abord, chaque réponse d'outil déposée telle quelle
-  (`POST …/taches/<issueId>/donnees-connexion`), mention « démonstration » sur chaque chiffre de
-  démonstration, aucun chiffre absent d'une réponse déposée (section « Connexions de la passerelle
-  marketing » des consignes de l'agent).
+  réseaux sociaux, CRM) : `atelier_identite` d'abord, chaque réponse d'outil déposée telle quelle avec
+  les arguments exacts de l'appel (`POST …/taches/<issueId>/donnees-connexion`, champ `arguments`),
+  mention « démonstration » sur chaque chiffre de démonstration, aucun chiffre absent d'une réponse
+  déposée (section « Connexions de la passerelle marketing » des consignes de l'agent).
 
 ## Entrées
 

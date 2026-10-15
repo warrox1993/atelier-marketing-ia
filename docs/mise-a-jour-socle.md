@@ -1,8 +1,8 @@
 # Mise à jour du socle Paperclip et retour arrière
 
 Document du lot B, rédigé le 15/10/2026. Socle actuel : tag stable `v2026.1012.0`
-(SHA `bba6a45f0d364cfd962ac59b3bdf2426a8222adb`), branche locale `atelier-marketing` = ce tag + 4 patches
-(`socle/patches/0001` à `0004`). Les chemins `paperclip/...` ci-dessous sont ceux du socle ; chaque affirmation
+(SHA `bba6a45f0d364cfd962ac59b3bdf2426a8222adb`), branche locale `atelier-marketing` = ce tag + 6 patches
+(`socle/patches/0001` à `0006`). Les chemins `paperclip/...` ci-dessous sont ceux du socle ; chaque affirmation
 cite le fichier et la ligne, ou une mesure faite ce jour.
 
 ## 0. Ce qu'il faut savoir avant de commencer
@@ -51,7 +51,7 @@ git -C paperclip rev-parse HEAD                      # à noter : c'est le point
 
 ## 3. Rejouer les patches sur le nouveau tag
 
-Les quatre patches sont des commits locaux (`git format-patch`). Procédure :
+Les six patches sont des commits locaux (`git format-patch`). Procédure :
 
 ```bash
 cd ~/Projets/atelier-marketing-ia/paperclip
@@ -71,7 +71,18 @@ régulateur de runs et le journal des compétences. Le patch `0004` (cartes de l
 le contrôle HTTPS et `appForConnectionSetup` de `server/src/services/tool-access.ts`, la route de galerie
 (`server/src/routes/tool-access.ts`) et `server/src/index.ts`. Si l'amont régénère son catalogue, **ajouter de nouveau
 les 11 imports `atelier-*`** à la fin de la liste générée ; le script d'ingestion amont ne connaît pas ces définitions
-(il exige un corpus `../../paperclip-content` absent du poste) et les supprimerait. Résoudre, `git add`, `git am --continue`. Si le défaut amont est
+(il exige un corpus `../../paperclip-content` absent du poste) et les supprimerait. Le patch `0006` (cartes Google en lecture seule, portées Facebook, Instagram et LinkedIn) ne retouche que les
+`atelier-*.json` (retrait de la méthode `publication` des quatre cartes Google, `scopesHint`), les revues de
+`doc/connections/tool-method-permission-reviews.json` et deux fichiers de test ; après un conflit, vérifier que les
+cartes Google n'ont toujours qu'une méthode et qu'il y a une revue par méthode (test « requires an explicit review for
+every tool method »). Le patch `0009` (correctif amont PR #13782 : un run qui passe la main sur sa propre tâche n'est plus
+annulé, `server/src/routes/issues.ts`, bloc « runToStopForReassignment », et quatre tests dans
+`server/src/__tests__/issue-agent-mutation-ownership-routes.test.ts`) est **à retirer si #13782 (ou un correctif équivalent
+de #13730) est fusionnée dans la nouvelle version** : vérifier avec `git apply --check` à l'envers, ou en cherchant
+`isSelfHandoff` dans `routes/issues.ts` du tag. Le patch `0010` (l'adaptateur `process` injecte `PAPERCLIP_TASK_ID` et
+`PAPERCLIP_WAKE_REASON`, `server/src/adapters/process/execute.ts` + test `process-adapter-wake-env.test.ts`) est un écart
+propre à l'atelier, sans équivalent amont repéré au 15/10/2026 : à retirer seulement si l'amont injecte ces deux variables.
+Résoudre, `git add`, `git am --continue`. Si le défaut amont est
 corrigé dans la nouvelle version, **supprimer le patch correspondant** au lieu de le forcer (vérifier avec
 `bootstrap-organisation.py reinitialiser` sur une instance d'essai : `DELETE /companies/:id` ne doit plus répondre 500).
 
@@ -86,6 +97,14 @@ git format-patch "$NOUVEAU"..HEAD -o ../socle/patches
 **Rejeu avec le patch `0004` (15/10/2026, lot L6)** : arbre de travail jetable `git worktree add --detach … v2026.1012.0`,
 `git am socle/patches/*.patch` (0001 à 0004) sans conflit ; empreinte d'arbre obtenue identique à celle de la branche
 `atelier-marketing` (`1691e75434451cd495318d823423797b44741cc0`).
+
+**Rejeu avec le patch `0006` (15/10/2026)** : arbre de travail jetable sur `v2026.1012.0`, `git am --3way` de 0001 à 0006
+sans conflit ; arbre `382dfbdb15e7b4e5069be4dce71fed34e68daa54`, identique à celui du commit `c66a5cf6e` de la branche
+`atelier-marketing`. Le patch `0007` (autre lot, `paperclip/server/src/atelier/`) s'ajoute après.
+
+**Rejeu avec les patches `0009` et `0010` (15/10/2026)** : arbre de travail jetable sur `v2026.1012.0`, `git am --3way` de
+0001 à 0007, 0009 et 0010 (0008 n'existe pas) sans conflit ; arbre `a4605be7940e8883526d98b505635e278b5987ca`, identique à
+celui de la branche `atelier-marketing` (commit `5729d9235`).
 
 **Mesure du rejeu sur le tag actuel (15/10/2026)** : clone local jetable, `git checkout -b essai-rejeu v2026.1012.0`,
 `git am --3way socle/patches/*.patch` : les trois patches s'appliquent sans conflit et l'arbre obtenu est

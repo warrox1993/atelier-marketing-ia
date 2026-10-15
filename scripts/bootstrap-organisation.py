@@ -17,6 +17,10 @@ Sous-commandes :
                          gabarits de politiques résolus. Deuxième lancement sans
                          changement : aucune écriture.
   etat                   affiche ce qui existe pour l'organisation de démonstration.
+  assurer-connexions     étape légère et idempotente : réserve aux rôles déclarés chaque connexion de la
+                         passerelle créée depuis le dernier « appliquer » (accès natif, installations,
+                         politiques « block » des rôles en lecture). Lancée toutes les minutes par le
+                         « Gardien des connexions » (agent natif sans modèle créé par « appliquer »).
   exporter --sortie DIR  export natif, nettoyage des valeurs propres à la machine,
                          contrôle, puis aperçu d'import du paquet exporté.
   reinitialiser --confirmer "<nom exact>"
@@ -25,6 +29,13 @@ Sous-commandes :
                          <PAPERCLIP_HOME>/instances/<instance>/companies/<id>/.
   jeton --confirmer      lit un jeton sur l'entrée standard (jamais en argument), le
                          range comme secret Paperclip natif et le lie aux agents.
+  cles [--confirmer] [--entreprise ID] [--rotation|--basculer passerelle|approbation | --retirer-anciennes]
+                         clés de l'opérateur en un geste : génère les paires Ed25519 du plugin (preuves
+                         d'approbation) et de la passerelle (signature des réponses) si elles manquent,
+                         range la clé privée du plugin comme secret natif, renseigne la configuration du
+                         plugin et celle de la passerelle (fichiers 0600 sous instance/). Idempotente ;
+                         rotation en trois temps. Sans --confirmer : état, rien n'est écrit. Jamais de
+                         clé privée affichée ni journalisée.
   test-reel [--agent SLUG] [--confirmer]
                          test réel minimal de claude_local (sonde « hello » native) ;
                          à blanc sans --confirmer.
@@ -46,6 +57,7 @@ ATELIER_DONNEES_LOCALES (défaut : dossier instance/ du dépôt).
 from __future__ import annotations
 
 import argparse
+import base64
 import contextlib
 import datetime as dt
 import fcntl
@@ -55,7 +67,9 @@ import json
 import os
 import re
 import shutil
+import subprocess
 import sys
+import time
 import unicodedata
 import urllib.error
 import urllib.parse
@@ -81,6 +95,12 @@ PLUGIN = RACINE / "plugin-atelier"
 # cwd = dossier du plugin et un chemin RELATIF vers le script déterministe.
 SCRIPT_DEMO = "demo/agent-demo.mjs"
 MODES = ("reel", "demonstration")
+# « Gardien des connexions » : agent natif SANS modèle (adaptateur process) créé par « appliquer »,
+# hors paquet. Son battement natif (heartbeat à intervalle) lance « assurer-connexions » : une
+# connexion créée par une carte après le bootstrap est réservée aux rôles prévus sans intervention.
+GARDIEN_NOM = "Gardien des connexions"
+GARDIEN_SLUG = "gardien-des-connexions"
+GARDIEN_INTERVALLE_SEC = 60
 
 # Fichiers du paquet AgentCompanies envoyés à Paperclip. Tout le reste
 # d'organisation/ (registre, politiques, corpus de démonstration, README) reste
@@ -431,11 +451,20 @@ def verrou_ecriture(operation: str):
     processus, même en cas de plantage : aucun fichier obsolète ne peut bloquer."""
     FICHIER_VERROU_EXECUTION.parent.mkdir(parents=True, exist_ok=True)
     with open(FICHIER_VERROU_EXECUTION, "a+", encoding="utf-8") as f:
-        try:
-            fcntl.flock(f.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
-        except BlockingIOError:
+        debut = time.monotonic()
+        while True:
+            try:
+                fcntl.flock(f.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+                break
+            except BlockingIOError:
+                pass
             f.seek(0)
             detenteur = f.read().strip() or "inconnu"
+            # Le Gardien des connexions tient le verrou une seconde par minute : une écriture
+            # lancée par un humain l'attend (30 s au plus) au lieu d'être refusée.
+            if detenteur.startswith("assurer-connexions") and operation != "assurer-connexions" and time.monotonic() - debut < 30:
+                time.sleep(0.5)
+                continue
             raise ErreurAtelier(
                 f"« {operation} » refusé : une autre écriture du bootstrap est déjà en cours "
                 f"(verrou {FICHIER_VERROU_EXECUTION}, détenteur : {detenteur}). "
@@ -917,7 +946,7 @@ def ecarts_non_geres(api: Api, company_id: str, reg_agents: dict, reg_orga: dict
     rien et le bootstrap non plus (décision humaine) : on les signale."""
     ecarts = []
     slugs = {a["slug"] for a in reg_agents["agents"]}
-    for slug in sorted(set(agents_par_slug(api, company_id)) - slugs):
+    for slug in sorted(set(agents_par_slug(api, company_id)) - slugs - {GARDIEN_SLUG}):
         ecarts.append(f"agent hors registre : {slug}")
     verrou = set(lire_json(ORGA / FICHIER_VERROU)["competences"])
     for s in api.get(f"/companies/{company_id}/skills"):
@@ -1131,7 +1160,8 @@ def assurer_connexions(api: Api, company_id: str, reg_agents: dict, agents: dict
     - Installations natives (`PUT /tool-connections/:id/installs`) : exactement les agents des
       rôles déclarés, jamais l'entreprise entière (c'est l'installation qui livre les outils à
       un run : `buildPaperclipRuntimeMcpServers`). Une connexion créée plus tard par une carte
-      arrive pour « tous les agents » : relancer `appliquer` la resserre.
+      arrive pour « tous les agents » : le Gardien des connexions (sous-commande `assurer-connexions`,
+      battement de 60 s) la resserre seul ; `appliquer` fait le même travail.
     - Rôle en `lecture` : politique native « block » sur les écritures (`risk.isWrite`) de la
       connexion pour cet agent ; une politique « block » l'emporte toujours. Créée si absente,
       jamais modifiée ni réactivée ensuite (un choix humain dans Paperclip est respecté).
@@ -1187,6 +1217,140 @@ def assurer_connexions(api: Api, company_id: str, reg_agents: dict, agents: dict
         detail = (", ".join(f"{s} ({a})" for s, a in roles) or "aucun rôle") + ("" if profil else " ; connexion non terminée : accès appliqué à sa finalisation")
         resume.append(f"{cle} « {cx.get('name')} » : {detail}")
     return ecritures, resume
+
+
+def corps_gardien(api: Api) -> dict:
+    """Définition voulue du « Gardien des connexions » : agent natif process, AUCUN modèle.
+    Le battement natif (runtimeConfig.heartbeat, intervalle en secondes) lance, sans tâche ni
+    issue créée, `bootstrap-organisation.py assurer-connexions`. L'API visée et le dossier de
+    données locales sont ceux du « appliquer » qui l'a posé ; la commande est fixée par l'humain
+    (Paperclip refuse qu'une clé d'agent configure un adaptateur process)."""
+    adaptateur = {
+        "command": "python3",
+        "args": ["-I", str(RACINE / "scripts" / "bootstrap-organisation.py"), "assurer-connexions"],
+        "cwd": str(RACINE),
+        "env": {"ATELIER_API": api.base, "ATELIER_DONNEES_LOCALES": str(INSTANCE)},
+        "timeoutSec": 120,
+    }
+    battement = {"enabled": True, "intervalSec": GARDIEN_INTERVALLE_SEC, "wakeOnDemand": False, "maxConcurrentRuns": 1}
+    # L'API masque les valeurs de l'environnement (***REDACTED***) : l'empreinte, rangée dans les
+    # métadonnées, sert à détecter un changement d'API ou de dossier de données.
+    empreinte = hashlib.sha256(json.dumps([adaptateur, battement], sort_keys=True).encode()).hexdigest()
+    return {
+        "name": GARDIEN_NOM,
+        "role": "devops",
+        "title": "Gardien des connexions (déterministe, sans modèle)",
+        "capabilities": (
+            "Agent déterministe, sans modèle : réserve aux rôles déclarés dans le registre chaque connexion de "
+            "la passerelle créée après le bootstrap (accès natif, installations, politiques de lecture seule)."
+        ),
+        "adapterType": "process",
+        "adapterConfig": adaptateur,
+        "runtimeConfig": {"heartbeat": battement},
+        "budgetMonthlyCents": 0,
+        "permissions": {"canCreateAgents": False, "canCreateSkills": False},
+        "metadata": {"atelier": {"gardien": {"empreinte": empreinte}}},
+    }
+
+
+def gardien_conforme(d: dict, voulu: dict) -> list[str]:
+    """Écarts entre l'agent existant et la définition voulue (liste vide = conforme)."""
+    ecarts = []
+    cfg = d.get("adapterConfig") or {}
+    for cle, valeur in voulu["adapterConfig"].items():
+        if cle != "env" and cfg.get(cle) != valeur:
+            ecarts.append(f"adapterConfig.{cle}")
+    meta_actuelle = (((d.get("metadata") or {}).get("atelier") or {}).get("gardien") or {}).get("empreinte")
+    if meta_actuelle != voulu["metadata"]["atelier"]["gardien"]["empreinte"]:
+        ecarts.append("empreinte (API, dossier de données ou réglages)")
+    if d.get("adapterType") != voulu["adapterType"]:
+        ecarts.append("adaptateur")
+    beat = ((d.get("runtimeConfig") or {}).get("heartbeat")) or {}
+    for cle, valeur in voulu["runtimeConfig"]["heartbeat"].items():
+        if beat.get(cle) != valeur:
+            ecarts.append(f"heartbeat.{cle}")
+    perms = d.get("permissions") or {}
+    for cle, valeur in voulu["permissions"].items():
+        if perms.get(cle) != valeur:
+            ecarts.append(f"permissions.{cle}")
+    return ecarts
+
+
+def assurer_gardien(api: Api, company_id: str) -> tuple[int, str]:
+    """Crée ou réaligne le « Gardien des connexions ». Création par l'embauche native
+    (`agent-hires`) puis approbation par l'humain qui lance « appliquer » : l'entreprise exige
+    une approbation pour tout nouvel agent, et cet agent n'a aucun modèle ni aucun droit.
+    Un agent mis en pause par un humain n'est jamais réactivé (choix humain respecté) : il est
+    seulement signalé, car les connexions restent alors ouvertes tant qu'il est en pause."""
+    voulu = corps_gardien(api)
+    agents = agents_par_slug(api, company_id)
+    existant = agents.get(GARDIEN_SLUG)
+    ecritures = 0
+    if existant is None:
+        rep = api.appel("POST", f"/companies/{company_id}/agent-hires", voulu)
+        ecritures += 1
+        approbation = (rep or {}).get("approval")
+        if (rep or {}).get("agent", {}).get("status") == "pending_approval" and approbation:
+            api.appel("POST", f"/approvals/{approbation['id']}/approve", {
+                "decisionNote": "Agent déterministe sans modèle posé par le bootstrap de l'atelier (assurer-connexions).",
+            })
+            ecritures += 1
+        return ecritures, "créé et approuvé"
+    d = detail_agent(api, existant["id"])
+    if d.get("status") == "pending_approval":
+        for ap in api.get(f"/companies/{company_id}/approvals?status=pending"):
+            if ap.get("type") == "hire_agent" and (ap.get("payload") or {}).get("agentId") == existant["id"]:
+                api.appel("POST", f"/approvals/{ap['id']}/approve", {
+                    "decisionNote": "Agent déterministe sans modèle posé par le bootstrap de l'atelier (assurer-connexions).",
+                })
+                ecritures += 1
+    ecarts = gardien_conforme(d, voulu)
+    if ecarts:
+        api.appel("PATCH", f"/agents/{existant['id']}", {
+            "adapterConfig": voulu["adapterConfig"], "replaceAdapterConfig": True,
+            "runtimeConfig": voulu["runtimeConfig"], "metadata": voulu["metadata"],
+        })
+        ecritures += 1
+        if any(e.startswith("permissions") for e in ecarts):
+            api.appel("PATCH", f"/agents/{existant['id']}/permissions", voulu["permissions"])
+            ecritures += 1
+    etat = d.get("status") or "inconnu"
+    if etat == "paused":
+        return ecritures, "EN PAUSE (choix humain respecté) : les nouvelles connexions restent ouvertes tant qu'il l'est"
+    return ecritures, ("réaligné (" + ", ".join(ecarts) + ")" if ecarts else "conforme")
+
+
+def cmd_assurer_connexions(args) -> int:
+    """Étape légère et idempotente, sans import ni écriture hors connexions : lancée par le
+    Gardien des connexions à chaque battement (60 s). Rien à faire = aucune écriture. Si un
+    « appliquer » tient le verrou, on passe : le battement suivant reprendra."""
+    try:
+        with verrou_ecriture("assurer-connexions"):
+            return _assurer_connexions(args)
+    except ErreurAtelier as e:
+        if "est déjà en cours" in str(e):
+            print("assurer-connexions : une autre écriture du bootstrap est en cours, passage au prochain battement.")
+            return 0
+        raise
+
+
+def _assurer_connexions(args) -> int:
+    reg_agents, reg_orga = registres()
+    api = Api(url_api())
+    entreprise = trouver_entreprise(api, reg_orga)
+    if entreprise is None:
+        print("assurer-connexions : aucune organisation de démonstration sur cette instance, rien à faire.")
+        return 0
+    agents = agents_par_slug(api, entreprise["id"])
+    manquants = [a["slug"] for a in reg_agents["agents"] if a["slug"] not in agents]
+    if manquants:
+        raise ErreurAtelier("agents du registre absents (lancer « appliquer » d'abord) : " + ", ".join(manquants))
+    ecritures, resume = assurer_connexions(api, entreprise["id"], reg_agents, agents)
+    print(f"assurer-connexions : {ecritures} écriture(s) sur {len(resume)} connexion(s) de la passerelle.")
+    if ecritures or args.detail:
+        for ligne in resume:
+            print(f"  {ligne}")
+    return 0
 
 
 def resoudre_politiques(agents: dict, responsable: str) -> dict:
@@ -1284,6 +1448,7 @@ def _appliquer(args) -> int:
     responsable = utilisateur_responsable(api)
     versions, ecr_versions = assurer_versions_competences(api, company_id)
     ecr_connexions, connexions = assurer_connexions(api, company_id, reg_agents, agents)
+    ecr_gardien, etat_gardien = assurer_gardien(api, company_id)
 
     politiques = resoudre_politiques(agents, responsable)
     etat = {
@@ -1317,6 +1482,7 @@ def _appliquer(args) -> int:
     print(f"Connexions de la passerelle réservées aux rôles : {ecr_connexions} écriture(s) sur {len(connexions)} connexion(s)")
     for ligne in connexions:
         print(f"  {ligne}")
+    print(f"« {GARDIEN_NOM} » (battement toutes les {GARDIEN_INTERVALLE_SEC} s) : {etat_gardien} ({ecr_gardien} écriture(s))")
     print(f"Réglages Claude dédiés écrits : {reglages_ecrits} fichier(s)")
     for ecart in ecarts_non_geres(api, company_id, reg_agents, reg_orga):
         print(f"  écart non géré (rien n'est supprimé automatiquement) : {ecart}")
@@ -1342,6 +1508,12 @@ def cmd_etat(args) -> int:
     for slug, a in sorted(agents.items()):
         d = detail_agent(api, a["id"])
         cfg = d.get("adapterConfig") or {}
+        if slug == GARDIEN_SLUG:
+            beat = (d.get("runtimeConfig") or {}).get("heartbeat") or {}
+            # Ligne distincte (« gardien », pas « agent ») : les onze agents du registre restent comptés seuls.
+            print(f"  gardien {slug} statut={a.get('status')} adaptateur={d.get('adapterType')} (sans modèle) battement={beat.get('intervalSec')} s "
+                  f"dernier={d.get('lastHeartbeatAt') or 'jamais'}")
+            continue
         print(f"  agent {slug:18} statut={str(a.get('status')):8} adaptateur={d.get('adapterType')} modèle={cfg.get('model')} rapporte_à={d.get('reportsTo')}")
     print(f"  compétences : {len(api.get(f'/companies/{cid}/skills'))}")
     print(f"  objectifs : {len(api.get(f'/companies/{cid}/goals'))}")
@@ -1355,7 +1527,10 @@ def cmd_etat(args) -> int:
         noms = {a["id"]: s for s, a in agents.items()}
         reel = sorted(noms.get(i["targetId"], "entreprise entière" if i["targetType"] == "company" else i["targetId"]) for i in installs)
         voulu = sorted(s for s, _ in besoins[cle] if s in agents)
-        ecart = "" if reel == voulu else f" ; ÉCART, attendu : {', '.join(voulu) or 'aucun'} (relancer appliquer)"
+        ecart = "" if reel == voulu else (
+            f" ; ÉCART, attendu : {', '.join(voulu) or 'aucun'} "
+            f"(le Gardien des connexions le corrige au prochain battement, sinon : assurer-connexions ou appliquer)"
+        )
         print(f"  connexion {cle:10} « {cx.get('name')} » : {', '.join(reel) or 'aucun agent'}{ecart}")
     for ecart in ecarts_non_geres(api, cid, reg_agents, reg_orga):
         print(f"  écart non géré : {ecart}")
@@ -1489,7 +1664,7 @@ def controler_export(fichiers: dict[str, str]) -> list[str]:
 
 
 def cmd_exporter(args) -> int:
-    _, reg_orga = registres()
+    reg_agents, reg_orga = registres()
     api = Api(url_api())
     e = trouver_entreprise(api, reg_orga)
     if not e:
@@ -1499,6 +1674,8 @@ def cmd_exporter(args) -> int:
         raise ErreurAtelier(f"le dossier de sortie n'est pas vide : {sortie}")
     resultat = api.appel("POST", f"/companies/{e['id']}/exports", {
         "include": {"company": True, "agents": True, "projects": True, "issues": True, "skills": True},
+        # Hors export : le Gardien des connexions (chemins absolus propres à la machine).
+        "agents": [a["slug"] for a in reg_agents["agents"]],
         "expandReferencedSkills": True,
     })
     fichiers = resultat.get("files") or {}
@@ -1667,6 +1844,424 @@ def cmd_test_reel(args) -> int:
     return 0
 
 
+# ---------------------------------------------------------------------------
+# Clés de l'opérateur : preuves d'approbation (plugin) et signatures (passerelle)
+# ---------------------------------------------------------------------------
+# Deux paires Ed25519 (docs/contrats.md §14, docs/revue-securite-passerelle.md §6 et §6 bis) :
+#  - approbation : le PLUGIN signe les preuves d'approbation, la passerelle les vérifie. La clé privée vit
+#    SEULEMENT dans le coffre de secrets natif de Paperclip (jamais sur disque, jamais affichée) et est
+#    référencée par la configuration du plugin (approbationClePrivee) ; la clé publique est écrite dans un
+#    fichier 0600 lu par la passerelle (PASSERELLE_APPROBATION_CLE_PUBLIQUE_FICHIER) ;
+#  - passerelle : la PASSERELLE signe l'enveloppe de chaque réponse d'outil, le plugin la vérifie. La clé
+#    privée est un fichier 0600 hors dépôt (PASSERELLE_SIGNATURE_CLE_PRIVEE_FICHIER) ; la clé publique est
+#    dans la configuration du plugin (passerelleClesPubliques, une liste pour la rotation).
+# Génération par « openssl » (OpenSSL 3, Ed25519), jamais de code cryptographique maison.
+PLUGIN_CLE = "atelier.marketing-ia"
+CLE_SECRET_APPROBATION = "atelier-approbation-cle-privee"
+DOSSIER_CLES = INSTANCE / "cles"
+FICHIER_SIGNATURE_PRIVEE = DOSSIER_CLES / "passerelle-signature.pem"
+FICHIER_SIGNATURE_SUIVANTE = DOSSIER_CLES / "passerelle-signature.suivante.pem"
+FICHIER_APPROBATION_PUBLIQUES = DOSSIER_CLES / "approbation-publiques.pub"
+FICHIER_ETAT_CLES = DOSSIER_CLES / "etat-cles.json"
+FICHIER_ENV_PASSERELLE = INSTANCE / "passerelle.env"
+PREFIXE_SPKI_ED25519 = bytes.fromhex("302a300506032b6570032100")
+MAX_CLES_PASSERELLE = 5  # maxItems de passerelleClesPubliques (manifeste du plugin)
+DELAI_RETRAIT_JOURS = 7  # âge maximal d'une réponse signée ou d'une preuve : au-delà, l'ancienne clé ne sert plus
+
+
+def _openssl(*args: str, entree: bytes | None = None) -> bytes:
+    """Appelle openssl ; en cas d'échec, un message sans sortie (elle pourrait contenir de la clé)."""
+    try:
+        r = subprocess.run(["openssl", *args], input=entree, capture_output=True, check=False, timeout=30)
+    except (OSError, subprocess.SubprocessError) as e:
+        raise ErreurAtelier(f"openssl indisponible ({type(e).__name__}) : le paquet « openssl » (OpenSSL 3, version stable) est requis") from None
+    if r.returncode != 0:
+        raise ErreurAtelier(f"openssl {args[0]} a échoué (code {r.returncode}) : aucune clé n'a été écrite")
+    return r.stdout
+
+
+def _verifier_spki(publique_b64: str) -> str:
+    try:
+        der = base64.b64decode(publique_b64, validate=True)
+    except ValueError:
+        raise ErreurAtelier("clé publique illisible (base64 attendu)") from None
+    if len(der) != 44 or not der.startswith(PREFIXE_SPKI_ED25519):
+        raise ErreurAtelier("clé publique : une clé Ed25519 (SPKI DER, 44 octets) est attendue")
+    return publique_b64
+
+
+def empreinte_publique(publique_b64: str) -> str:
+    """Empreinte courte (16 hexadécimaux), la même que celle du journal de démarrage de la passerelle."""
+    return hashlib.sha256(base64.b64decode(publique_b64)).hexdigest()[:16]
+
+
+def generer_paire() -> tuple[str, str]:
+    """(clé privée PEM PKCS#8, clé publique SPKI DER en base64). La privée ne quitte jamais la mémoire du processus."""
+    pem = _openssl("genpkey", "-algorithm", "ed25519")
+    publique = base64.b64encode(_openssl("pkey", "-pubout", "-outform", "DER", entree=pem)).decode("ascii")
+    return pem.decode("ascii"), _verifier_spki(publique)
+
+
+def publique_depuis_fichier_prive(chemin: Path) -> str:
+    return _verifier_spki(base64.b64encode(_openssl("pkey", "-in", str(chemin), "-pubout", "-outform", "DER")).decode("ascii"))
+
+
+def ecrire_0600(chemin: Path, contenu: str) -> None:
+    """Écriture atomique d'un fichier lisible par son seul propriétaire, dans un dossier 0700."""
+    chemin.parent.mkdir(parents=True, exist_ok=True)
+    if chemin.parent == DOSSIER_CLES:
+        os.chmod(chemin.parent, 0o700)
+    tmp = chemin.with_name(chemin.name + ".tmp")
+    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            f.write(contenu)
+        os.chmod(tmp, 0o600)
+        os.replace(tmp, chemin)
+    except BaseException:
+        with contextlib.suppress(OSError):
+            os.unlink(tmp)
+        raise
+
+
+def effacer_fichier_prive(chemin: Path) -> None:
+    """Écrase puis supprime une clé privée qui ne sert plus (au mieux sur un disque à journal)."""
+    if not chemin.exists():
+        return
+    with contextlib.suppress(OSError):
+        with open(chemin, "r+b") as f:
+            f.write(b"\0" * max(1, chemin.stat().st_size))
+            f.flush()
+            os.fsync(f.fileno())
+    chemin.unlink()
+
+
+def etat_cles_vide() -> dict:
+    # « passerelle » : une seule clé de signature pour la passerelle (donc commune à toutes les entreprises).
+    # « approbation » : une clé par entreprise (le secret natif est propre à l'entreprise), indexée par son identifiant.
+    return {"version": 2, "passerelle": {"actif": None, "suivant": None, "anciens": []}, "approbation": {}}
+
+
+def lire_etat_cles() -> dict:
+    if not FICHIER_ETAT_CLES.exists():
+        return etat_cles_vide()
+    try:
+        etat = json.loads(FICHIER_ETAT_CLES.read_text(encoding="utf-8"))
+        if etat["version"] != 2 or not isinstance(etat["approbation"], dict) or "passerelle" not in etat:
+            raise KeyError("version")
+        return etat
+    except (ValueError, KeyError):
+        raise ErreurAtelier(f"{FICHIER_ETAT_CLES} illisible : ne le recréez pas à la main (voir docs/exploitation.md, perte des clés)") from None
+
+
+def ecrire_etat_cles(etat: dict) -> None:
+    ecrire_0600(FICHIER_ETAT_CLES, json.dumps(etat, ensure_ascii=False, indent=2) + "\n")
+
+
+def section_approbation(etat: dict, cid: str) -> dict:
+    return etat["approbation"].setdefault(cid, {"actif": None, "suivant": None, "anciens": []})
+
+
+def lignes_publiques_approbation() -> list[str]:
+    """Clés publiques d'approbation de toutes les entreprises, une par ligne (la passerelle les accepte toutes)."""
+    if not FICHIER_APPROBATION_PUBLIQUES.exists():
+        return []
+    return [l.strip() for l in FICHIER_APPROBATION_PUBLIQUES.read_text(encoding="utf-8").splitlines() if l.strip()]
+
+
+def ecrire_publiques_approbation(lignes: list[str]) -> None:
+    ecrire_0600(FICHIER_APPROBATION_PUBLIQUES, "".join(f"{_verifier_spki(l)}\n" for l in lignes))
+
+
+def ecrire_env_passerelle(actuel_signature: Path, publiques: Path) -> bool:
+    """Renseigne les variables _FICHIER dans la configuration locale de la passerelle (non suivie) ;
+    les autres lignes de ce fichier sont conservées. Renvoie True si le fichier a changé."""
+    voulu = {
+        "PASSERELLE_SIGNATURE_CLE_PRIVEE_FICHIER": str(actuel_signature),
+        "PASSERELLE_APPROBATION_CLE_PUBLIQUE_FICHIER": str(publiques),
+    }
+    lignes = FICHIER_ENV_PASSERELLE.read_text(encoding="utf-8").splitlines() if FICHIER_ENV_PASSERELLE.exists() else [
+        "# Configuration locale de la passerelle marketing (non suivie par git, 0600).",
+        "# À charger avant « npm start » : set -a; source <ce fichier>; set +a",
+    ]
+    restantes = [l for l in lignes if l.split("=", 1)[0] not in voulu]
+    nouveau = "\n".join(restantes + [f"{k}={v}" for k, v in voulu.items()]) + "\n"
+    ancien = FICHIER_ENV_PASSERELLE.read_text(encoding="utf-8") if FICHIER_ENV_PASSERELLE.exists() else None
+    if ancien == nouveau and (FICHIER_ENV_PASSERELLE.stat().st_mode & 0o077) == 0:
+        return False
+    ecrire_0600(FICHIER_ENV_PASSERELLE, nouveau)
+    return True
+
+
+def masquer(texte: str, *secrets: str) -> str:
+    for s in secrets:
+        if s:
+            texte = texte.replace(s, "***")
+    return texte
+
+
+def entreprise_des_cles(api: Api, args) -> dict:
+    if getattr(args, "entreprise", None):
+        # Par la liste. Constaté le 15/10/2026 : juste après sa création, une entreprise n'apparaît pas tout de suite
+        # (liste et lecture par identifiant répondent « introuvable » pendant quelques secondes) : quelques essais.
+        for essai in range(6):
+            e = next((c for c in api.get("/companies") if c.get("id") == args.entreprise), None)
+            if e:
+                return e
+            time.sleep(2)
+        raise ErreurAtelier(f"entreprise introuvable : {args.entreprise}")
+    _, reg_orga = registres()
+    e = trouver_entreprise(api, reg_orga)
+    if not e:
+        raise ErreurAtelier("aucune organisation de démonstration : lancez d'abord « appliquer », ou donnez --entreprise <identifiant>")
+    return e
+
+
+def config_plugin(api: Api, cid: str) -> dict:
+    try:
+        rep = api.get(f"/plugins/{PLUGIN_CLE}/config?companyId={cid}")
+    except ErreurAtelier as e:
+        if "HTTP 404" in str(e):
+            raise ErreurAtelier(f"plugin {PLUGIN_CLE} introuvable : installez-le d'abord (scripts/preparer-plugin.sh puis installation depuis l'interface)") from None
+        raise
+    return dict((rep or {}).get("configJson") or {})
+
+
+def ecrire_config_plugin(api: Api, cid: str, config: dict) -> None:
+    api.appel("POST", f"/plugins/{PLUGIN_CLE}/config", {"companyId": cid, "configJson": config})
+
+
+def secret_par_cle(api: Api, cid: str, cle: str):
+    return next((s for s in api.get(f"/companies/{cid}/secrets") if s.get("key") == cle), None)
+
+
+def creer_secret_approbation(api: Api, cid: str, cle: str, pem: str, libelle: str) -> str:
+    try:
+        s = api.appel("POST", f"/companies/{cid}/secrets", {
+            "name": f"Clé privée d'approbation de l'atelier ({libelle})",
+            "key": cle,
+            "value": pem,
+            "description": "Clé privée Ed25519 (PEM PKCS#8) qui signe les preuves d'approbation des diffusions réelles. Générée par « bootstrap-organisation.py cles » ; jamais stockée ailleurs.",
+        })
+    except ErreurAtelier as e:
+        raise ErreurAtelier(masquer(str(e), pem)) from None
+    return s["id"]
+
+
+def fusionner_config(api: Api, cid: str, *, secret_id: str | None = None, publiques: list[str] | None = None) -> bool:
+    """Met la configuration du plugin à jour sans toucher aux autres clés ; True si elle a été écrite."""
+    actuelle = config_plugin(api, cid)
+    voulue = dict(actuelle)
+    if secret_id is not None:
+        ref = actuelle.get("approbationClePrivee") or {}
+        if not (isinstance(ref, dict) and ref.get("type") == "secret_ref" and ref.get("secretId") == secret_id):
+            voulue["approbationClePrivee"] = {"type": "secret_ref", "secretId": secret_id}
+    if publiques is not None:
+        if len(publiques) > MAX_CLES_PASSERELLE:
+            raise ErreurAtelier(f"{len(publiques)} clés publiques de la passerelle : le plugin en accepte {MAX_CLES_PASSERELLE} au plus (terminez la rotation par --retirer-anciennes)")
+        voulue["passerelleClesPubliques"] = publiques
+    if voulue == actuelle:
+        return False
+    ecrire_config_plugin(api, cid, voulue)
+    return True
+
+
+def cles_actuelles_plugin(api: Api, cid: str) -> list[str]:
+    liste = config_plugin(api, cid).get("passerelleClesPubliques")
+    return [c for c in liste if isinstance(c, str)] if isinstance(liste, list) else []
+
+
+def entreprises_suivies(etat: dict, cid: str) -> list[str]:
+    """Entreprises dont la configuration de plugin porte les clés publiques de la passerelle : celle visée plus
+    toutes celles déjà configurées par cette commande (la clé de la passerelle est commune)."""
+    return list(dict.fromkeys([cid, *etat["approbation"]]))
+
+
+def afficher_etat_cles(api: Api, cid: str, etat: dict) -> None:
+    """À blanc : lit seulement, n'écrit rien."""
+    print("Clés de l'opérateur (à blanc : rien n'est écrit ; ajoutez --confirmer pour agir).")
+    a, p = etat["approbation"].get(cid) or {"actif": None, "suivant": None, "anciens": []}, etat["passerelle"]
+    cfg = config_plugin(api, cid)
+    ref = cfg.get("approbationClePrivee") or {}
+    print(f"  approbation : clé active {a['actif']['empreinte'] if a['actif'] else 'ABSENTE'} ; "
+          f"secret natif {'référencé' if isinstance(ref, dict) and ref.get('type') == 'secret_ref' else 'NON référencé'} par la configuration du plugin ; "
+          f"clés publiques du fichier : {len(lignes_publiques_approbation())} ; suivante : {a['suivant']['empreinte'] if a['suivant'] else 'aucune'} ; anciennes : {len(a['anciens'])}")
+    print(f"  passerelle  : clé active {p['actif']['empreinte'] if p['actif'] else 'ABSENTE'} ; fichier privé "
+          f"{'présent' if FICHIER_SIGNATURE_PRIVEE.exists() else 'ABSENT'} ; clés publiques dans le plugin : {len(cles_actuelles_plugin(api, cid))} ; "
+          f"suivante : {p['suivant']['empreinte'] if p['suivant'] else 'aucune'} ; anciennes : {len(p['anciens'])}")
+    print(f"  configuration locale de la passerelle : {FICHIER_ENV_PASSERELLE} ({'présente' if FICHIER_ENV_PASSERELLE.exists() else 'ABSENTE'})")
+
+
+def cles_initialiser(api: Api, cid: str, etat: dict, faits: list[str]) -> None:
+    """Crée ce qui manque ; ne touche à rien de ce qui existe et est cohérent (idempotent)."""
+    a, p = section_approbation(etat, cid), etat["passerelle"]
+    # --- approbation (plugin) -------------------------------------------------
+    if a["actif"] is None:
+        existant = secret_par_cle(api, cid, CLE_SECRET_APPROBATION)
+        if existant:
+            raise ErreurAtelier(
+                f"un secret « {CLE_SECRET_APPROBATION} » existe déjà dans cette entreprise sans état local : la clé privée ne se relit pas, "
+                "la clé publique ne peut donc pas être retrouvée. Supprimez ce secret dans l'interface (Paramètres, Secrets) puis relancez, "
+                "ou voyez docs/exploitation.md (perte des clés)."
+            )
+        pem, publique = generer_paire()
+        secret_id = creer_secret_approbation(api, cid, CLE_SECRET_APPROBATION, pem, "active")
+        del pem
+        faits.append(f"secret natif « {CLE_SECRET_APPROBATION} » créé (clé privée d'approbation, jamais écrite sur disque)")
+        ecrire_publiques_approbation(lignes_publiques_approbation() + [publique])
+        a["actif"] = {"secretId": secret_id, "empreinte": empreinte_publique(publique), "publique": publique}
+        ecrire_etat_cles(etat)
+        faits.append(f"clé publique d'approbation ajoutée : {FICHIER_APPROBATION_PUBLIQUES} (0600)")
+    elif a["actif"]["publique"] not in lignes_publiques_approbation():
+        raise ErreurAtelier(f"{FICHIER_APPROBATION_PUBLIQUES} ne contient plus la clé d'approbation de cette entreprise : « cles --confirmer --rotation approbation » (docs/exploitation.md)")
+    # --- passerelle (signature des réponses) -------------------------------------
+    if p["actif"] is None:
+        if FICHIER_SIGNATURE_PRIVEE.exists():
+            publique = publique_depuis_fichier_prive(FICHIER_SIGNATURE_PRIVEE)
+            faits.append("clé de signature de la passerelle existante adoptée")
+        else:
+            pem, publique = generer_paire()
+            ecrire_0600(FICHIER_SIGNATURE_PRIVEE, pem)
+            del pem
+            faits.append(f"clé de signature de la passerelle écrite : {FICHIER_SIGNATURE_PRIVEE} (0600)")
+        p["actif"] = {"empreinte": empreinte_publique(publique), "publique": publique}
+        ecrire_etat_cles(etat)
+    elif not FICHIER_SIGNATURE_PRIVEE.exists():
+        raise ErreurAtelier(f"{FICHIER_SIGNATURE_PRIVEE} a disparu : « cles --confirmer --rotation passerelle » crée une nouvelle clé (docs/exploitation.md, perte des clés)")
+    elif publique_depuis_fichier_prive(FICHIER_SIGNATURE_PRIVEE) != p["actif"]["publique"]:
+        raise ErreurAtelier(f"{FICHIER_SIGNATURE_PRIVEE} ne correspond plus à la clé enregistrée : fichier remplacé ? Rien n'est modifié.")
+    if (FICHIER_SIGNATURE_PRIVEE.stat().st_mode & 0o077) != 0:
+        os.chmod(FICHIER_SIGNATURE_PRIVEE, 0o600)
+        faits.append(f"droits de {FICHIER_SIGNATURE_PRIVEE} ramenés à 0600")
+    # --- configuration du plugin et de la passerelle ------------------------------
+    publiques = list(cles_actuelles_plugin(api, cid))
+    for cle in [p["actif"]["publique"]] + ([p["suivant"]["publique"]] if p["suivant"] else []):
+        if cle not in publiques:
+            publiques.append(cle)
+    if fusionner_config(api, cid, secret_id=a["actif"]["secretId"], publiques=publiques):
+        faits.append("configuration du plugin renseignée (approbationClePrivee, passerelleClesPubliques)")
+    if ecrire_env_passerelle(FICHIER_SIGNATURE_PRIVEE, FICHIER_APPROBATION_PUBLIQUES):
+        faits.append(f"configuration locale de la passerelle écrite : {FICHIER_ENV_PASSERELLE} (0600)")
+
+
+def cles_rotation(api: Api, cid: str, etat: dict, quoi: str, faits: list[str]) -> None:
+    """Phase 1 : la nouvelle clé publique est AJOUTÉE à côté de l'ancienne ; rien n'est encore retiré."""
+    section = etat["passerelle"] if quoi == "passerelle" else section_approbation(etat, cid)
+    if section["actif"] is None:
+        raise ErreurAtelier("aucune clé active : lancez d'abord « cles --confirmer »")
+    if section["suivant"]:
+        raise ErreurAtelier(f"une rotation est déjà préparée (clé suivante {section['suivant']['empreinte']}) : terminez-la par --basculer {quoi}")
+    pem, publique = generer_paire()
+    empreinte = empreinte_publique(publique)
+    if quoi == "passerelle":
+        ecrire_0600(FICHIER_SIGNATURE_SUIVANTE, pem)
+        del pem
+        section["suivant"] = {"empreinte": empreinte, "publique": publique}
+        ecrire_etat_cles(etat)
+        for e in entreprises_suivies(etat, cid):
+            fusionner_config(api, e, publiques=[*cles_actuelles_plugin(api, e), publique])
+        faits.append(f"nouvelle clé de signature {empreinte} préparée ({FICHIER_SIGNATURE_SUIVANTE}) ; sa clé publique est ajoutée au plugin à côté de l'ancienne")
+    else:
+        secret_id = creer_secret_approbation(api, cid, f"{CLE_SECRET_APPROBATION}-{empreinte[:8]}", pem, f"suivante {empreinte[:8]}")
+        del pem
+        ecrire_publiques_approbation(lignes_publiques_approbation() + [publique])
+        section["suivant"] = {"secretId": secret_id, "empreinte": empreinte, "publique": publique}
+        ecrire_etat_cles(etat)
+        faits.append(f"nouvelle clé d'approbation {empreinte} créée (secret natif, pas encore utilisée) ; sa clé publique est ajoutée au fichier de la passerelle à côté de l'ancienne")
+
+
+def cles_basculer(api: Api, cid: str, etat: dict, quoi: str, faits: list[str]) -> None:
+    """Phase 2 : le signataire passe à la nouvelle clé ; l'ancienne reste vérifiable jusqu'au retrait."""
+    section = etat["passerelle"] if quoi == "passerelle" else section_approbation(etat, cid)
+    if not section["suivant"]:
+        raise ErreurAtelier(f"aucune rotation préparée pour {quoi} : « cles --confirmer --rotation {quoi} » d'abord")
+    suivant = section["suivant"]
+    if quoi == "passerelle":
+        if not FICHIER_SIGNATURE_SUIVANTE.exists():
+            raise ErreurAtelier(f"{FICHIER_SIGNATURE_SUIVANTE} introuvable : rotation à refaire")
+        if publique_depuis_fichier_prive(FICHIER_SIGNATURE_SUIVANTE) != suivant["publique"]:
+            raise ErreurAtelier(f"{FICHIER_SIGNATURE_SUIVANTE} ne correspond pas à la clé préparée : rien n'est modifié")
+        os.replace(FICHIER_SIGNATURE_SUIVANTE, FICHIER_SIGNATURE_PRIVEE)
+        os.chmod(FICHIER_SIGNATURE_PRIVEE, 0o600)
+    else:
+        if suivant["publique"] not in lignes_publiques_approbation():
+            raise ErreurAtelier("la nouvelle clé publique n'est plus dans le fichier de la passerelle : rotation à refaire")
+        fusionner_config(api, cid, secret_id=suivant["secretId"])
+    section["anciens"].append(section["actif"])
+    section["actif"], section["suivant"] = suivant, None
+    ecrire_etat_cles(etat)
+    faits.append(f"signataire basculé sur la clé {suivant['empreinte']} ({quoi}) ; l'ancienne reste vérifiable {DELAI_RETRAIT_JOURS} jours, puis « cles --confirmer --retirer-anciennes »")
+
+
+def cles_retirer_anciennes(api: Api, cid: str, etat: dict, faits: list[str]) -> None:
+    """Phase 3 : les anciennes clés publiques (et le secret de l'ancienne clé d'approbation) sont retirés."""
+    p, a = etat["passerelle"], section_approbation(etat, cid)
+    if p["anciens"]:
+        gardees = [p["actif"]["publique"]] + ([p["suivant"]["publique"]] if p["suivant"] else [])
+        anciennes = {x["publique"] for x in p["anciens"]}
+        for e in entreprises_suivies(etat, cid):
+            # Une clé du plugin inconnue de l'état (ajoutée à la main) n'est pas retirée.
+            fusionner_config(api, e, publiques=[c for c in cles_actuelles_plugin(api, e) if c not in anciennes or c in gardees])
+        faits.append(f"{len(p['anciens'])} ancienne(s) clé(s) publique(s) de la passerelle retirée(s) du plugin")
+        p["anciens"] = []
+        ecrire_etat_cles(etat)
+    if a["anciens"]:
+        anciennes = {x["publique"] for x in a["anciens"]}
+        ecrire_publiques_approbation([l for l in lignes_publiques_approbation() if l not in anciennes])
+        for ancien in a["anciens"]:
+            if ancien.get("secretId"):
+                try:
+                    api.appel("DELETE", f"/secrets/{ancien['secretId']}")
+                except ErreurAtelier as e:
+                    if "HTTP 404" not in str(e):
+                        raise
+        faits.append(f"{len(a['anciens'])} ancienne(s) clé(s) d'approbation retirée(s) (fichier public et secret natif)")
+        a["anciens"] = []
+        ecrire_etat_cles(etat)
+    if not faits:
+        faits.append("aucune ancienne clé à retirer")
+
+
+def cmd_cles(args) -> int:
+    api = Api(url_api())
+    e = entreprise_des_cles(api, args)
+    cid = e["id"]
+    etat = lire_etat_cles()
+    if not args.confirmer:
+        afficher_etat_cles(api, cid, etat)
+        return 0
+    faits: list[str] = []
+    with verrou_ecriture("cles"):
+        etat = lire_etat_cles()
+        if args.rotation:
+            cles_rotation(api, cid, etat, args.rotation, faits)
+        elif args.basculer:
+            cles_basculer(api, cid, etat, args.basculer, faits)
+        elif args.retirer_anciennes:
+            cles_retirer_anciennes(api, cid, etat, faits)
+        else:
+            cles_initialiser(api, cid, etat, faits)
+    etat = lire_etat_cles()
+    for f in faits:
+        print(f"  fait : {f}")
+    if not faits:
+        print("Rien à faire : les clés, la configuration du plugin et celle de la passerelle sont déjà en place.")
+    a, p = etat["approbation"].get(cid) or {"actif": None}, etat["passerelle"]
+    if a["actif"]:
+        print(f"Clé d'approbation active : {a['actif']['empreinte']} (secret natif {a['actif']['secretId']})")
+    if p["actif"]:
+        print(f"Clé de signature de la passerelle active : {p['actif']['empreinte']}")
+    print(f"Configuration locale de la passerelle : {FICHIER_ENV_PASSERELLE}")
+    redemarrer = bool(faits) and (
+        args.rotation == "approbation" or args.basculer == "passerelle"
+        or not (args.rotation or args.basculer or args.retirer_anciennes)
+        or (args.retirer_anciennes and any("approbation" in f for f in faits))
+    )
+    if redemarrer:
+        print("Redémarrez la passerelle pour qu'elle relise ses clés : set -a; source <ce fichier>; set +a; npm start (dans passerelle/).")
+    return 0
+
+
 def main(argv=None) -> int:
     p = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     sp = p.add_subparsers(dest="commande", required=True)
@@ -1676,6 +2271,8 @@ def main(argv=None) -> int:
     ap_.add_argument("--mode", choices=MODES, default="reel",
                      help="reel : claude_local prêt mais en pause (défaut) ; demonstration : agents process du lot A")
     sp.add_parser("etat")
+    ac = sp.add_parser("assurer-connexions")
+    ac.add_argument("--detail", action="store_true", help="affiche aussi le détail quand rien n'a été écrit")
     x = sp.add_parser("exporter")
     x.add_argument("--sortie", required=True)
     r = sp.add_parser("reinitialiser")
@@ -1685,15 +2282,24 @@ def main(argv=None) -> int:
     tr = sp.add_parser("test-reel")
     tr.add_argument("--agent", default="tests-techniques")
     tr.add_argument("--confirmer", action="store_true")
+    cl = sp.add_parser("cles")
+    cl.add_argument("--confirmer", action="store_true")
+    cl.add_argument("--entreprise", default=None, help="identifiant de l'entreprise (défaut : l'organisation de démonstration)")
+    groupe = cl.add_mutually_exclusive_group()
+    groupe.add_argument("--rotation", choices=("passerelle", "approbation"))
+    groupe.add_argument("--basculer", choices=("passerelle", "approbation"))
+    groupe.add_argument("--retirer-anciennes", action="store_true", dest="retirer_anciennes")
     args = p.parse_args(argv)
     commandes = {
         "generer": cmd_generer,
         "appliquer": cmd_appliquer,
         "etat": cmd_etat,
+        "assurer-connexions": cmd_assurer_connexions,
         "exporter": cmd_exporter,
         "reinitialiser": cmd_reinitialiser,
         "jeton": cmd_jeton,
         "test-reel": cmd_test_reel,
+        "cles": cmd_cles,
     }
     try:
         return commandes[args.commande](args)

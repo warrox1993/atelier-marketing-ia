@@ -65,6 +65,10 @@ async function mesTaches() {
   if (TACHE) {
     const { code, corps } = await api("GET", `/issues/${TACHE}`);
     if (code === 200 && corps?.assigneeAgentId === MOI) return [corps];
+    // Un run, une tâche : réveillé pour une tâche précise, l'agent ne touche pas aux autres
+    // (docs/enquete-run-annule.md). La liste complète ne sert que sans PAPERCLIP_TASK_ID.
+    trace("tache_reveil_non_assignee", { code });
+    return [];
   }
   const { code, corps } = await api("GET", `/companies/${SOC}/issues?assigneeAgentId=${MOI}&status=todo,in_progress,in_review,blocked`);
   if (code !== 200) {

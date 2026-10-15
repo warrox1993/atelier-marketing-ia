@@ -215,6 +215,19 @@ describe("rubriques", () => {
     });
   });
 
+  it("dossier : l'action « Modifier des données du CRM » est proposée et envoyée dans la portée", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ status: "done" }), { status: 200 })));
+    const c = await page(`/RNO/atelier/contenus/${T}`);
+    const select = champParLibelle(c, "Action autorisée") as HTMLSelectElement;
+    const options = Array.from(select.options).map((o) => [o.value, o.textContent]);
+    expect(options).toContainEqual(["modifier_crm", "Modifier des données du CRM"]);
+    await saisir(select, "modifier_crm");
+    await saisir(champParLibelle(c, "Commentaire"), "Mise à jour de la fiche contact validée.");
+    await cliquer(parTexte(c, "button", "Enregistrer : approuver"));
+    const appel = pont.appelsActions.find((a) => a.cle === "atelier.decision");
+    expect((appel?.params as { portee: { action: string } }).portee.action).toBe("modifier_crm");
+  });
+
   it("dossier : une décision refusée par le serveur est affichée, sans transition native", async () => {
     const fetchMock = vi.fn();
     vi.stubGlobal("fetch", fetchMock);

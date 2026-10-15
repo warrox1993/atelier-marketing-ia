@@ -2,7 +2,7 @@
 name: "audit-local-etablissements"
 description: "Audite, établissement par établissement, la cohérence des informations locales (nom, adresse, téléphone, horaires, zone desservie, services) entre le site, les fiches d'établissement publiques et les contenus. À utiliser dès qu'un brief cite des agences, magasins ou « tous les établissements », et avant toute campagne locale."
 metadata:
-  version: "1.1.0"
+  version: "1.2.0"
   langue: "fr"
   domaine: "seo"
 ---
@@ -25,10 +25,10 @@ informations sont exactes et identiques partout.
   commence par la question de périmètre.
 - Référentiel interne des établissements (en démonstration : `demo/etablissements.md`).
 - Chiffres d'une connexion de la passerelle marketing (Search Console, Analytics, Ads, fiche,
-  réseaux sociaux, CRM) : `atelier_identite` d'abord, chaque réponse d'outil déposée telle quelle
-  (`POST …/taches/<issueId>/donnees-connexion`), mention « démonstration » sur chaque chiffre de
-  démonstration, aucun chiffre absent d'une réponse déposée (section « Connexions de la passerelle
-  marketing » des consignes de l'agent).
+  réseaux sociaux, CRM) : `atelier_identite` d'abord, chaque réponse d'outil déposée telle quelle avec
+  les arguments exacts de l'appel (`POST …/taches/<issueId>/donnees-connexion`, champ `arguments`),
+  mention « démonstration » sur chaque chiffre de démonstration, aucun chiffre absent d'une réponse
+  déposée (section « Connexions de la passerelle marketing » des consignes de l'agent).
 
 ## Entrées
 

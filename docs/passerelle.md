@@ -636,10 +636,13 @@ début de la tentative ; modifications HubSpot, Pipedrive, Odoo, Teamleader = re
 valeurs ; **message privé Facebook : jamais renvoyé automatiquement** (non relisible avec cette connexion), vérification
 humaine. Réponse exécutée : `etat: "executee"`, `executee: true`, `rejeu`, `cle_idempotence`, `resultat` (identifiants).
 
-### Changement attendu côté plugin (`plugin-atelier/`, non fait : hors périmètre)
+### Changement attendu côté plugin (`plugin-atelier/`) : fait le 15/10/2026 (contrats v1.5, `docs/contrats.md` §14)
 
 1. Une paire de clés Ed25519 propre à l'instance ; la privée dans le coffre de Paperclip (secret natif), la publique
-   donnée à la passerelle (`PASSERELLE_APPROBATION_CLE_PUBLIQUE`).
+   donnée à la passerelle (`PASSERELLE_APPROBATION_CLE_PUBLIQUE`). Les deux paires se génèrent et se posent en un geste :
+   `python3 -I scripts/bootstrap-organisation.py cles --confirmer` (`docs/exploitation.md` §11). `PASSERELLE_APPROBATION_CLE_PUBLIQUE`
+   (ou `_FICHIER`) accepte **plusieurs clés** (une par ligne en base64, ou plusieurs blocs PEM) : rotation de la clé du plugin sans
+   coupure, et plusieurs entreprises (une clé d'approbation chacune) derrière la même passerelle.
 2. `DemanderDiffusionEntree` (`src/contrats/dossier.ts`) : champs facultatifs `service`, `outil` et `arguments` (l'appel
    d'outil exact que l'agent fera).
 3. Dans `demanderDiffusionSansVerrou` (`src/serveur/services.ts`), quand `verifierDiffusion` (regles-diffusion.ts)

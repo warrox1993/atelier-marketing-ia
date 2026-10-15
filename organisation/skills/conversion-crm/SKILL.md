@@ -2,7 +2,7 @@
 name: "conversion-crm"
 description: "Conçoit pages de conversion, formulaires, segments et scénarios de suivi en documentant entrées, déclencheurs, exclusions, consentements et conditions d'envoi, sans aucune prospection réelle automatique. À utiliser pour une page de demande de devis, un formulaire, une séquence de relance ou une segmentation de contacts."
 metadata:
-  version: "1.1.0"
+  version: "1.2.0"
   langue: "fr"
   domaine: "conversion"
 ---
@@ -23,10 +23,15 @@ peuvent rien envoyer sans consentement documenté et approbation humaine.
 
 - Offres validées, parcours visé, charte de marque.
 - Chiffres d'une connexion de la passerelle marketing (Search Console, Analytics, Ads, fiche,
-  réseaux sociaux, CRM) : `atelier_identite` d'abord, chaque réponse d'outil déposée telle quelle
-  (`POST …/taches/<issueId>/donnees-connexion`), mention « démonstration » sur chaque chiffre de
-  démonstration, aucun chiffre absent d'une réponse déposée (section « Connexions de la passerelle
-  marketing » des consignes de l'agent).
+  réseaux sociaux, CRM) : `atelier_identite` d'abord, chaque réponse d'outil déposée telle quelle avec
+  les arguments exacts de l'appel (`POST …/taches/<issueId>/donnees-connexion`, champ `arguments`),
+  mention « démonstration » sur chaque chiffre de démonstration, aucun chiffre absent d'une réponse
+  déposée (section « Connexions de la passerelle marketing » des consignes de l'agent).
+- Toute écriture réelle (modification d'un contact, d'un lead, d'une personne) suit le parcours de la
+  section « Diffusion réelle : parcours complet » des consignes de l'agent : approbation de l'humain sur la
+  version exacte, demande de diffusion avec service, outil et arguments exacts, preuve jointe à l'appel,
+  issue rapportée, jamais de nouvel essai à l'aveugle sur une issue ambiguë. Le livrable écrit donc, mot pour
+  mot, chaque valeur à écrire.
 
 ## Entrées
 

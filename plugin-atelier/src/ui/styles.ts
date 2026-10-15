@@ -219,8 +219,20 @@ export const STYLES_ATELIER = `
 .atl-choix label { display: block; }
 .atl-choix label .atl-aide { display: block; margin-left: 1.375rem; }
 .atl-plafond > .atl-champ-etroit, .atl-plafond > .atl-encart { margin-left: 1.375rem; }
-.atl-budget-ia { padding-bottom: 1rem; margin-bottom: 1rem; border-bottom: 1px solid var(--atl-trait); }
-.atl-budget-ia:last-child { border-bottom: 0; margin-bottom: 0; }
+.atl-budget-ia { gap: 0; border-bottom: 1px solid var(--atl-trait); }
+.atl-budget-ia:last-child { border-bottom: 0; }
+.atl-budget-detail > summary { padding: 0.5rem 0; min-height: 2.25rem; }
+.atl-budget-detail > summary::marker { color: var(--atl-attenue); }
+.atl-budget-nom { font-weight: 500; }
+.atl-budget-valeur { color: var(--atl-attenue-fort); font-weight: 400; }
+.atl-budget-detail[open] { padding-bottom: 1rem; }
+.atl-budget-detail[open] > summary { margin-bottom: 0.25rem; }
+.atl-budget-detail > :not(summary) { margin-top: 0.75rem; }
+.atl-budget-detail > .atl-bouton-groupe { display: flex; }
+.atl-leviers { gap: 0.25rem; }
+.atl-levier { display: flex; flex-direction: column; gap: 0.125rem; }
+.atl-levier-champs { display: flex; flex-direction: column; gap: 0.75rem; margin: 0.25rem 0 0.75rem 1.375rem; padding-left: 0.875rem; border-left: 1px solid var(--atl-trait); }
+.atl .atl-levier-aide { margin-left: 1.375rem; }
 .atl-portee { padding: 0.875rem 1rem; border: 1px solid var(--atl-trait); border-radius: var(--atl-rayon); gap: 0.75rem; }
 .atl-portee legend { padding: 0 0.25rem; }
 .atl-repeteur { display: grid; grid-template-columns: minmax(8rem, 1fr) minmax(10rem, 2fr) auto auto; gap: 0.5rem 0.75rem; align-items: end; padding-bottom: 0.75rem; }
@@ -230,6 +242,8 @@ export const STYLES_ATELIER = `
 .atl-decision .atl-bouton-groupe { width: 100%; }
 .atl-decision-fermee { color: var(--atl-attenue); padding: 0.75rem 1rem; border: 1px dashed var(--atl-trait); border-radius: var(--atl-rayon); }
 .atl-decision .atl-bouton { width: 100%; }
+/* Bouton unique d'une colonne latérale (Diffusion) : même gabarit que la décision. */
+.atl-bouton-plein .atl-bouton-groupe, .atl-bouton-plein .atl-bouton { width: 100%; }
 
 /* Filtres */
 .atl-filtres { display: flex; flex-wrap: wrap; align-items: center; gap: 0.75rem 1.5rem; }

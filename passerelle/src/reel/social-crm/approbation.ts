@@ -78,31 +78,36 @@ export interface AttenduPreuve {
 }
 
 export class VerificateurPreuves {
-  private readonly cle: KeyObject | null;
+  /** Clés publiques acceptées : plusieurs pendant une rotation (ancienne et nouvelle clé du plugin), une en régime normal. */
+  private readonly cles: KeyObject[];
 
+  /** `clePubliquePem` : un ou plusieurs blocs PEM « PUBLIC KEY » (concaténés), ou null (aucune mutation permise). */
   constructor(clePubliquePem: string | null) {
-    if (!clePubliquePem) {
-      this.cle = null;
-      return;
+    this.cles = [];
+    if (!clePubliquePem) return;
+    const blocs = clePubliquePem.match(/-----BEGIN PUBLIC KEY-----[\s\S]*?-----END PUBLIC KEY-----/g) ?? [clePubliquePem];
+    for (const bloc of blocs) {
+      const cle = createPublicKey(bloc);
+      if (cle.asymmetricKeyType !== "ed25519") throw new Error("PASSERELLE_APPROBATION_CLE_PUBLIQUE : une clé publique Ed25519 est attendue.");
+      this.cles.push(cle);
     }
-    const cle = createPublicKey(clePubliquePem);
-    if (cle.asymmetricKeyType !== "ed25519") throw new Error("PASSERELLE_APPROBATION_CLE_PUBLIQUE : une clé publique Ed25519 est attendue.");
-    this.cle = cle;
   }
 
   get configure(): boolean {
-    return this.cle !== null;
+    return this.cles.length > 0;
   }
 
   verifier(preuve: string | undefined, attendu: AttenduPreuve): VerdictPreuve {
     if (preuve === undefined || preuve.trim() === "") return { ok: false, motif: "aucune preuve d'approbation humaine n'accompagne la demande" };
-    if (!this.cle) return { ok: false, motif: "la passerelle n'a pas de clé de vérification des approbations (PASSERELLE_APPROBATION_CLE_PUBLIQUE) : aucune mutation réelle n'est permise" };
+    if (this.cles.length === 0) return { ok: false, motif: "la passerelle n'a pas de clé de vérification des approbations (PASSERELLE_APPROBATION_CLE_PUBLIQUE) : aucune mutation réelle n'est permise" };
     const morceaux = preuve.trim().split(".");
     if (morceaux.length !== 3 || morceaux[0] !== PREFIXE_PREUVE) return { ok: false, motif: "preuve d'approbation illisible" };
     const [prefixe, charge64, signature64] = morceaux as [string, string, string];
     let valide = false;
     try {
-      valide = verify(null, Buffer.from(`${prefixe}.${charge64}`, "utf8"), this.cle, Buffer.from(signature64, "base64url"));
+      const corps = Buffer.from(`${prefixe}.${charge64}`, "utf8");
+      const signature = Buffer.from(signature64, "base64url");
+      valide = this.cles.some((cle) => verify(null, corps, cle, signature));
     } catch {
       valide = false;
     }

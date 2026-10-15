@@ -255,6 +255,7 @@ export const ACTIONS_EXTERNES: Record<string, string> = {
   envoyer: "Envoyer",
   programmer: "Programmer",
   activer_campagne_payante: "Activer une campagne payante",
+  modifier_crm: "Modifier des données du CRM",
 };
 
 export const ETATS_DIFFUSION: Record<string, { libelle: string; ton: Ton }> = {

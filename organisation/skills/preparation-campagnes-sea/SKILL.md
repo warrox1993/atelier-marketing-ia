@@ -2,7 +2,7 @@
 name: "preparation-campagnes-sea"
 description: "Prépare en brouillon une campagne de liens sponsorisés : structure, groupes d'annonces, mots-clés et exclusions, variantes d'annonces reliées à une offre validée et à une page cohérente, proposition budgétaire bornée. À utiliser pour toute demande de campagne Google Ads ou équivalente ; ne sert jamais à activer ni à augmenter un budget."
 metadata:
-  version: "1.1.0"
+  version: "1.2.0"
   langue: "fr"
   domaine: "publicite"
 ---
@@ -24,10 +24,10 @@ sur une page qui la confirme, dans un budget borné, sans aucune action sur une 
 - Offres validées, pages de destination, budget maximal autorisé par l'humain.
 - Charte de marque.
 - Chiffres d'une connexion de la passerelle marketing (Search Console, Analytics, Ads, fiche,
-  réseaux sociaux, CRM) : `atelier_identite` d'abord, chaque réponse d'outil déposée telle quelle
-  (`POST …/taches/<issueId>/donnees-connexion`), mention « démonstration » sur chaque chiffre de
-  démonstration, aucun chiffre absent d'une réponse déposée (section « Connexions de la passerelle
-  marketing » des consignes de l'agent).
+  réseaux sociaux, CRM) : `atelier_identite` d'abord, chaque réponse d'outil déposée telle quelle avec
+  les arguments exacts de l'appel (`POST …/taches/<issueId>/donnees-connexion`, champ `arguments`),
+  mention « démonstration » sur chaque chiffre de démonstration, aucun chiffre absent d'une réponse
+  déposée (section « Connexions de la passerelle marketing » des consignes de l'agent).
 
 ## Entrées
 

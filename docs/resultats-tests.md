@@ -160,3 +160,60 @@ reste actif ; le redémarrage suivant refuse alors le port.
 **Organisation sur instance** : `ATELIER_API=http://localhost:3320/api PAPERCLIP_HOME=<dépôt>/instance scripts/bootstrap-tests.sh --instance
 --remise-a-zero` : **27/27** (passe 1 : 34 écritures, passe 2 : 0 ; 11 agents, 3 objectifs, 2 projets, 3 routines ; aller-retour 32
 compétences). Sans remise à zéro, 23/25 : les deux échecs venaient des projets ajoutés par mes essais dans l'organisation (5 au lieu de 2).
+
+## Corrections de la revue indépendante et signatures de la passerelle (15/10/2026)
+
+Instance d'essai `atelier-corr` (3340, PG 54540), socle `2026.1012.0+7.git.e4cec9833` (patches 0001 à 0007), passerelle de
+démonstration sur 3393 (`passerelle/dist`, état dans un dossier temporaire), `PAPERCLIP_ATELIER_GATEWAY_URL=http://127.0.0.1:3393`.
+Instance et passerelle arrêtées à la fin (ports libérés, vérifié). Aucun appel de modèle, aucune dépense, aucune diffusion réelle.
+
+| Vérification | Commande | Résultat |
+| --- | --- | --- |
+| Types du plugin | `cd plugin-atelier && npx tsc --noEmit` | 0 erreur |
+| Tests du plugin | `pnpm test` | **392 réussis, 2 ignorés** (réseau réel) ; nouveaux : `revue-independante.spec.ts` (30), `signatures.spec.ts` (36) |
+| Construction | `pnpm build` | `dist/` produit ; plugin installé sur l'instance (migration 005 acceptée par l'hôte) |
+| Reproductions d'origine (`instance/revue-repro/`) | `pnpm exec vitest run --config <copie>/vitest.repro.config.mjs` | **3 échecs attendus** : R1 (service) « Un agent ne peut que créer une exigence », R2 « …se terminer par une étape d'approbation… », R3 `expected false to be true` ; R1 pur passe (voir `docs/revue-independante.md`, Suites données) |
+| Mutations | vérification de signature neutralisée ; contrôle « tel quel » retiré ; non-répétition désactivée | détectées (2, 1 et 2 tests en échec) ; fichiers restaurés (`git checkout`, somme SHA-256 vérifiée) |
+| Tests serveur de l'atelier | `scripts/tests-serveur.sh` sur `atelier-gardes`, `atelier-competences`, `atelier-suppression-entreprise`, `atelier-marketing-apps` | **4 fichiers, 39/39** (`atelier-gardes` : 23, dont H2, H3 verrou, 409 natif, course P2 / écriture, M3, B2) |
+| Tests natifs voisins (verrou, politique, réouverture) | `scripts/tests-serveur.sh` sur `documents-service`, `issue-execution-policy`, `issue-comment-reopen-routes`, `issue-agent-mutation-ownership-routes` | **4 fichiers, 308/308** |
+| Rejeu des patches | arbre jetable sur `v2026.1012.0`, `git am --3way socle/patches/000*.patch` (0001 à 0007, 0006 compris) | sans conflit ; arbre `dbb192efbf857956b423827a5ccf094e3d60aafa` identique à la branche (`e4cec9833`) |
+| Scénario A | `python3 -I scripts/scenarios/atelier_scenarios.py A http://127.0.0.1:3340/api` | **33 OK, 0 écart** (`A-20261015T170145Z.json`) ; contrôle du passage en réel mis à jour : la publication déjà simulée et la porte franchie en démonstration donnent un refus (403), plus « préparée » (M1, M3) |
+| Tous les autres | `ATELIER_INSTANCE_ESSAI="atelier-corr 3340 54540" … tous …` | B 15, C 10, D 9, G 25, H 25, K 19 + 1 écart, S 9, J 3, F 8, E 10 (`TOUS-20261015T171742Z.json`) |
+| Scénario K rejoué | `… K …` | **20 OK, 0 écart** (`K-20261015T172018Z.json`) ; l'écart venait d'un attendu antérieur à §6 bis (réponse « reel » non signée acceptée) ; nouvel attendu : refus 400 « non signée par la passerelle » |
+| Bout en bout §6 et §6 bis sur l'instance | essai Vitest hors dépôt (dossier temporaire) : secret natif créé (`POST /companies/:id/secrets`), configuration du plugin (`approbationClePrivee`, `passerelleClesPubliques`), réévaluation, approbation liée au compte, diffusion réelle | **1/1** : diffusion « préparée » avec preuve acceptée par `VerificateurPreuves` de la passerelle ; preuve absente du journal ; seconde publication 403 ; issue « executee » signée → `confirmee` ; dépôt signé → `reel` ; dépôt non signé → 400 |
+
+## Clés de l'opérateur (`bootstrap-organisation.py cles`) et consignes de diffusion réelle (15/10/2026)
+
+Instance d'essai `atelier-cles` (3440, PG 54640, `scripts/instance-essai.sh demarrer atelier-cles 3440 54640`), plugin installé depuis
+`plugin-atelier/` (`POST /plugins/install`), passerelle de démonstration `passerelle/dist/src/demarrer.js` sur 3450 lancée avec
+`instance/essai-cles-donnees/passerelle.env` (écrit par `cles`), données locales du bootstrap isolées
+(`ATELIER_API=http://localhost:3440/api PAPERCLIP_INSTANCE_ID=atelier-cles ATELIER_DONNEES_LOCALES=<dépôt>/instance/essai-cles-donnees`).
+Instance et passerelle arrêtées à la fin (ports 3440, 54640 et 3450 libres, vérifié). Aucun appel de modèle (agents de démonstration
+`process`), aucune dépense, aucune diffusion vers une vraie plateforme.
+
+| Vérification | Commande | Résultat |
+| --- | --- | --- |
+| Organisation hors ligne | `scripts/bootstrap-tests.sh` | **23 réussis, 0 échec** (dont 4 cas négatifs de consignes : arguments, preuve jointe, nouvel essai à l'aveugle, parcours de diffusion dans un rôle en lecture ; et 1 bloc `cles` de 10 vérifications contre une fausse API et un vrai openssl) |
+| Organisation sur instance | `scripts/bootstrap-tests.sh --instance` (variables ci-dessus) | **31 réussis, 0 échec** : passe 1 : 36 écritures, passe 2 : 0 (idempotence) ; 11 agents, 3 objectifs, 2 projets, 3 routines ; dérives réalignées ; export contrôlé ; aller-retour d'import |
+| Vérificateur et fichiers générés | `python3 -I scripts/verifier-organisation.py` ; `python3 -I scripts/bootstrap-organisation.py generer --verifier` | 9 contrôles, 0 erreur ; 14 fichiers à jour (verrou régénéré : six compétences en 1.2.0) |
+| Mutations du bloc `cles` | sept mutants appliqués à une copie du script (droits 0644, clé privée affichée, rotation de la passerelle sans ajout préalable, rotation limitée à une entreprise, retrait qui efface les clés des autres entreprises, idempotence cassée, fichier public remplacé au lieu d'être complété) | tous tués |
+| Passerelle | `cd passerelle && npm run typecheck && npx vitest run` | 0 erreur ; **408 réussis** (25 fichiers) ; nouveaux : rotation de la clé du plugin (deux clés acceptées, clé retirée refusée) et lecture de plusieurs clés d'approbation |
+| Création des clés, instance | `cles --confirmer` | secret natif `atelier-approbation-cle-privee` créé (liste des secrets : `provider local_encrypted`, aucune valeur renvoyée), `instance/cles/` 0700, fichiers 0600, `approbationClePrivee` = `secret_ref`, `passerelleClesPubliques` = 1 clé ; second lancement : « Rien à faire » ; l'empreinte de la clé du journal de démarrage de la passerelle égale celle que `cles` affiche |
+| Clé privée jamais exposée | recherche de `BEGIN … PRIVATE KEY` dans les journaux du serveur et de la passerelle, dans les sorties de la commande et dans le journal de l'atelier | aucune occurrence (seul `passerelle-signature.pem` la contient, 0600) |
+| Réponse de la vraie passerelle | script d'essai (OAuth de démonstration, `tools/call gsc_requete_performances`) | signature `aev1` vérifiée avec la clé publique que `cles` a écrite dans le plugin ; dépôt `tache.donnees.deposer` : 201, mode « démonstration » |
+| Réponse « réelle » signée avec la clé générée | chargeur de clé de la passerelle (`signataireDepuisEnv`) et `emballer("reel", …)` | dépôt 201, mode « reel » ; refusée (400, « non signée par la passerelle ») si un chiffre change, si la signature manque, si une autre clé signe, si les arguments ou l'outil diffèrent, ou dans une entreprise sans clé configurée |
+| Valeurs par défaut | `pipedrive_personnes` appelé sans `start` ni `limit` | l'empreinte signée est celle des arguments AVEC `start=0` et `limit=100`, pas celle des arguments envoyés : d'où la consigne de donner chaque valeur explicitement |
+| Preuve d'approbation, bout en bout | campagne réelle (agents de démonstration) jusqu'à l'approbation humaine, décision (publier, `facebook`, compte, 30 jours), `POST …/diffusions` avec `service`, `outil`, `arguments` | `201`, `etat: preparee`, `preuveApprobation` rendue : **signée par le worker avec la clé lue dans le coffre natif, acceptée par le vérificateur réel de la passerelle** (configuration lue depuis le fichier de clés publiques) ; refusée pour un texte modifié, un autre service, un autre compte, une passerelle sans clé |
+| Rejeu et issue | même clé d'idempotence ; `POST …/diffusions/<id>/issue` | rejeu : preuve re-signée (200), autres arguments : 409 ; issue falsifiée, de démonstration ou pour d'autres arguments : 400 ; issue signée : `confirmee` ; seconde issue : 409 ; ni la preuve ni une clé privée dans le journal |
+| Rotation de la clé de la passerelle (deux entreprises) | `--rotation passerelle`, `--basculer passerelle`, `--retirer-anciennes` | avant bascule : anciennes et nouvelle clés acceptées (201/201) ; après bascule : encore 201/201 ; après retrait : ancienne 400, nouvelle 201, dans les deux entreprises |
+| Rotation de la clé d'approbation | `--rotation approbation`, `--basculer approbation`, `--retirer-anciennes` | preuve ancienne acceptée pendant toute la rotation ; preuve émise après la bascule signée par la nouvelle clé du coffre ; après retrait : ancienne refusée (« signature de la preuve d'approbation invalide »), nouvelle acceptée ; ancien secret supprimé |
+
+**Constats pendant ces essais.** (1) Une entreprise tout juste créée n'apparaît pas tout de suite dans `GET /companies` ni par identifiant
+(404 pendant quelques secondes) : `cles --entreprise` réessaie six fois. (2) Une rotation de la clé de la passerelle doit mettre à jour
+TOUTES les entreprises configurées (la clé est commune) : prouvé ci-dessus et couvert hors ligne. (3) Une clé publique de la passerelle
+ajoutée à la main dans le plugin n'est jamais retirée par `--retirer-anciennes` (seules les clés connues de l'état le sont).
+
+**Non exécuté (et pourquoi).** Aucun appel d'outil d'écriture par HTTP sur une passerelle en mode réel (il faudrait une plateforme ou un
+faux serveur par service : couvert par les 76 tests de `passerelle/tests/reel-social-crm/` contre de faux serveurs) ; aucun run
+`claude_local` : les nouvelles consignes sont contrôlées par le vérificateur, pas jouées par un modèle.
+

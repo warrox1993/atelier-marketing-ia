@@ -1,0 +1,112 @@
+From 5729d9235ea5c885f99fbc15c474891b9d55edd8 Mon Sep 17 00:00:00 2001
+From: Jean-Baptiste Dhondt <114347858+warrox1993@users.noreply.github.com>
+Date: Thu, 15 Oct 2026 19:20:47 +0200
+Subject: [PATCH 10/10] fix(local): l'adaptateur process injecte
+ PAPERCLIP_TASK_ID et PAPERCLIP_WAKE_REASON
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Comme claude-local, depuis le contexte du run (taskId, sinon issueId ; wakeReason).
+Sans eux un agent process traite toutes ses tâches dans un seul run.
+Test : process-adapter-wake-env.test.ts (processus enfant réel).
+
+Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01DP85vPq2MHkZg8VNtRvCzB
+---
+ .../process-adapter-wake-env.test.ts          | 50 +++++++++++++++++++
+ server/src/adapters/process/execute.ts        | 14 ++++++
+ 2 files changed, 64 insertions(+)
+ create mode 100644 server/src/__tests__/process-adapter-wake-env.test.ts
+
+diff --git a/server/src/__tests__/process-adapter-wake-env.test.ts b/server/src/__tests__/process-adapter-wake-env.test.ts
+new file mode 100644
+index 000000000..0e9c54fa1
+--- /dev/null
++++ b/server/src/__tests__/process-adapter-wake-env.test.ts
+@@ -0,0 +1,50 @@
++import { describe, expect, it } from "vitest";
++import { execute } from "../adapters/process/execute.js";
++
++// Lance un vrai processus enfant qui renvoie sur stdout les variables du réveil
++// (atelier : l'adaptateur « process » doit injecter la tâche et le motif du réveil).
++async function lancer(context: Record<string, unknown>, env: Record<string, string> = {}) {
++  const ctx = {
++    runId: "11111111-1111-4111-8111-111111111111",
++    agent: { id: "22222222-2222-4222-8222-222222222222", companyId: "33333333-3333-4333-8333-333333333333", name: "Agent essai" },
++    runtime: {},
++    config: {
++      command: process.execPath,
++      args: [
++        "-e",
++        "console.log(JSON.stringify({task: process.env.PAPERCLIP_TASK_ID ?? null, motif: process.env.PAPERCLIP_WAKE_REASON ?? null}))",
++      ],
++      env,
++    },
++    context,
++    onLog: async () => {},
++    onMeta: async () => {},
++    authToken: "jeton-essai",
++  };
++  const res = await execute(ctx as never);
++  expect(res.exitCode).toBe(0);
++  const stdout = String((res.resultJson as { stdout?: string } | undefined)?.stdout ?? "");
++  return JSON.parse(stdout.trim().split("\n").pop() ?? "{}") as { task: string | null; motif: string | null };
++}
++
++describe("adaptateur process : variables du réveil", () => {
++  it("injecte PAPERCLIP_TASK_ID (taskId) et PAPERCLIP_WAKE_REASON", async () => {
++    const sortie = await lancer({ taskId: "tache-1", issueId: "tache-2", wakeReason: "issue_assigned" });
++    expect(sortie).toEqual({ task: "tache-1", motif: "issue_assigned" });
++  });
++
++  it("retombe sur issueId quand taskId est absent", async () => {
++    const sortie = await lancer({ issueId: "tache-2", wakeReason: "issue_children_completed" });
++    expect(sortie).toEqual({ task: "tache-2", motif: "issue_children_completed" });
++  });
++
++  it("n'injecte rien sans contexte de tâche", async () => {
++    const sortie = await lancer({});
++    expect(sortie).toEqual({ task: null, motif: null });
++  });
++
++  it("la valeur du réveil l'emporte sur la configuration de l'agent", async () => {
++    const sortie = await lancer({ issueId: "tache-2" }, { PAPERCLIP_TASK_ID: "forcee" });
++    expect(sortie.task).toBe("tache-2");
++  });
++});
+diff --git a/server/src/adapters/process/execute.ts b/server/src/adapters/process/execute.ts
+index 0f0838157..886aa3d1c 100644
+--- a/server/src/adapters/process/execute.ts
++++ b/server/src/adapters/process/execute.ts
+@@ -17,6 +17,13 @@ import {
+   runChildProcess,
+ } from "../utils.js";
+ 
++function firstNonEmptyString(...values: unknown[]): string | null {
++  for (const value of values) {
++    if (typeof value === "string" && value.trim().length > 0) return value.trim();
++  }
++  return null;
++}
++
+ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExecutionResult> {
+   const { runId, agent, config, onLog, onMeta, authToken } = ctx;
+   const command = asString(config.command, "");
+@@ -29,6 +36,13 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
+     ...buildPaperclipEnv(agent),
+     ...buildRuntimeToolsEnv(ctx.runtimeTools),
+   };
++  // Tâche et motif du réveil, comme l'adaptateur claude-local : sans eux, un
++  // agent « process » ne sait pas quelle tâche a provoqué son run et les traite
++  // toutes dans un seul run (enquête docs/enquete-run-annule.md).
++  const wakeTaskId = firstNonEmptyString(ctx.context.taskId, ctx.context.issueId);
++  const wakeReason = firstNonEmptyString(ctx.context.wakeReason);
++  if (wakeTaskId) env.PAPERCLIP_TASK_ID = wakeTaskId;
++  if (wakeReason) env.PAPERCLIP_WAKE_REASON = wakeReason;
+   for (const [k, v] of Object.entries(envConfig)) {
+     if (typeof v !== "string") continue;
+     // Runtime PAPERCLIP_* always wins over config, and PAPERCLIP_API_KEY is
+-- 
+2.53.0
+

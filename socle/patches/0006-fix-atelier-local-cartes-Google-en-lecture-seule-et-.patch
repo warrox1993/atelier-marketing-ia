@@ -1,0 +1,571 @@
+From c66a5cf6ed5dc51717e2dbb03ae6eb6c6b07515d Mon Sep 17 00:00:00 2001
+From: Jean-Baptiste Dhondt <114347858+warrox1993@users.noreply.github.com>
+Date: Thu, 15 Oct 2026 18:26:50 +0200
+Subject: [PATCH] =?UTF-8?q?fix(atelier,=20local):=20cartes=20Google=20en?=
+ =?UTF-8?q?=20lecture=20seule=20et=20port=C3=A9es=20r=C3=A9elles=20des=20r?=
+ =?UTF-8?q?=C3=A9seaux=20sociaux?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Retire la méthode publication des quatre cartes Google (la passerelle Google
+est en lecture seule et refuse webmasters et analytics.edit). Ajoute
+read_insights et pages_messaging (Facebook), instagram_business_manage_insights
+(Instagram) et rw_organization_admin (LinkedIn). Revues de portées et tests alignés.
+
+Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01DP85vPq2MHkZg8VNtRvCzB
+---
+ .../tool-method-permission-reviews.json       | 92 ++++---------------
+ .../src/app-definitions/atelier-facebook.json |  7 +-
+ .../app-definitions/atelier-google-ads.json   | 30 ------
+ .../atelier-google-analytics.json             | 28 ------
+ .../atelier-google-business-profile.json      | 27 ------
+ .../atelier-google-search-console.json        | 27 ------
+ .../app-definitions/atelier-instagram.json    |  4 +-
+ .../src/app-definitions/atelier-linkedin.json |  4 +-
+ .../src/atelier-app-definitions.test.ts       | 41 ++++++---
+ .../__tests__/atelier-marketing-apps.test.ts  | 23 ++++-
+ 10 files changed, 75 insertions(+), 208 deletions(-)
+
+diff --git a/doc/connections/tool-method-permission-reviews.json b/doc/connections/tool-method-permission-reviews.json
+index fea104970..97a75f6bf 100644
+--- a/doc/connections/tool-method-permission-reviews.json
++++ b/doc/connections/tool-method-permission-reviews.json
+@@ -2213,22 +2213,6 @@
+       "reviewedAt": "2026-10-15",
+       "liveProof": "not-run"
+     },
+-    {
+-      "app": "atelier-google-search-console",
+-      "method": "publication",
+-      "auth": "oauth",
+-      "policy": "explicit",
+-      "requestedScopes": [
+-        "https://www.googleapis.com/auth/webmasters"
+-      ],
+-      "capability": "write",
+-      "supportedActions": "Read search analytics plus property and sitemap management allowed by the full Search Console scope.",
+-      "evidence": [
+-        "https://developers.google.com/webmaster-tools/v1/how-tos/authorizing"
+-      ],
+-      "reviewedAt": "2026-10-15",
+-      "liveProof": "not-run"
+-    },
+     {
+       "app": "atelier-google-analytics",
+       "method": "lecture",
+@@ -2246,24 +2230,6 @@
+       "reviewedAt": "2026-10-15",
+       "liveProof": "not-run"
+     },
+-    {
+-      "app": "atelier-google-analytics",
+-      "method": "publication",
+-      "auth": "oauth",
+-      "policy": "explicit",
+-      "requestedScopes": [
+-        "https://www.googleapis.com/auth/analytics.readonly",
+-        "https://www.googleapis.com/auth/analytics.edit"
+-      ],
+-      "capability": "write",
+-      "supportedActions": "Run GA4 reports and edit property configuration such as key events (Admin API analytics.edit).",
+-      "evidence": [
+-        "https://developers.google.com/analytics/devguides/reporting/data/v1/rest/v1beta/properties/runReport",
+-        "https://developers.google.com/analytics/devguides/config/admin/v1/rest/v1beta/properties.keyEvents/create"
+-      ],
+-      "reviewedAt": "2026-10-15",
+-      "liveProof": "not-run"
+-    },
+     {
+       "app": "atelier-google-ads",
+       "method": "lecture",
+@@ -2280,22 +2246,6 @@
+       "reviewedAt": "2026-10-15",
+       "liveProof": "not-run"
+     },
+-    {
+-      "app": "atelier-google-ads",
+-      "method": "publication",
+-      "auth": "oauth",
+-      "policy": "explicit",
+-      "requestedScopes": [
+-        "https://www.googleapis.com/auth/adwords"
+-      ],
+-      "capability": "write",
+-      "supportedActions": "Search metrics and change campaigns or budgets; the single adwords scope also permits spend changes, keep these actions on Ask first.",
+-      "evidence": [
+-        "https://developers.google.com/google-ads/api/docs/oauth/internals"
+-      ],
+-      "reviewedAt": "2026-10-15",
+-      "liveProof": "not-run"
+-    },
+     {
+       "app": "atelier-google-business-profile",
+       "method": "lecture",
+@@ -2313,23 +2263,6 @@
+       "reviewedAt": "2026-10-15",
+       "liveProof": "not-run"
+     },
+-    {
+-      "app": "atelier-google-business-profile",
+-      "method": "publication",
+-      "auth": "oauth",
+-      "policy": "explicit",
+-      "requestedScopes": [
+-        "https://www.googleapis.com/auth/business.manage"
+-      ],
+-      "capability": "write",
+-      "supportedActions": "List reviews and metrics and reply to reviews or update the profile under business.manage; keep replies on Ask first.",
+-      "evidence": [
+-        "https://developers.google.com/my-business/content/basic-setup",
+-        "https://developers.google.com/my-business/reference/rest/v4/accounts.locations.reviews/list"
+-      ],
+-      "reviewedAt": "2026-10-15",
+-      "liveProof": "not-run"
+-    },
+     {
+       "app": "atelier-facebook",
+       "method": "lecture",
+@@ -2338,10 +2271,11 @@
+       "requestedScopes": [
+         "pages_show_list",
+         "pages_read_engagement",
+-        "pages_read_user_engagement"
++        "pages_read_user_engagement",
++        "read_insights"
+       ],
+       "capability": "read",
+-      "supportedActions": "List the managed Pages and read their posts and engagement through the marketing gateway.",
++      "supportedActions": "List the managed Pages and read their posts, engagement and Page insights (statistics) through the marketing gateway.",
+       "evidence": [
+         "https://developers.facebook.com/docs/pages-api/posts"
+       ],
+@@ -2357,11 +2291,13 @@
+         "pages_show_list",
+         "pages_read_engagement",
+         "pages_read_user_engagement",
++        "read_insights",
+         "pages_manage_posts",
+-        "pages_manage_engagement"
++        "pages_manage_engagement",
++        "pages_messaging"
+       ],
+       "capability": "write",
+-      "supportedActions": "Read Page posts and publish or moderate posts and comments on the managed Pages.",
++      "supportedActions": "Read Page posts and insights, publish or moderate posts and comments, and send messages from the managed Pages (pages_messaging, replies inside the 24-hour window).",
+       "evidence": [
+         "https://developers.facebook.com/docs/pages-api/posts"
+       ],
+@@ -2374,10 +2310,11 @@
+       "auth": "oauth",
+       "policy": "explicit",
+       "requestedScopes": [
+-        "instagram_business_basic"
++        "instagram_business_basic",
++        "instagram_business_manage_insights"
+       ],
+       "capability": "read",
+-      "supportedActions": "Read the professional account profile, media and insights through the marketing gateway.",
++      "supportedActions": "Read the professional account profile, media and insights (instagram_business_manage_insights) through the marketing gateway.",
+       "evidence": [
+         "https://developers.facebook.com/docs/instagram-platform/content-publishing"
+       ],
+@@ -2391,6 +2328,7 @@
+       "policy": "explicit",
+       "requestedScopes": [
+         "instagram_business_basic",
++        "instagram_business_manage_insights",
+         "instagram_business_content_publish"
+       ],
+       "capability": "write",
+@@ -2407,10 +2345,11 @@
+       "auth": "oauth",
+       "policy": "explicit",
+       "requestedScopes": [
+-        "r_organization_social"
++        "r_organization_social",
++        "rw_organization_admin"
+       ],
+       "capability": "read",
+-      "supportedActions": "Retrieve organization posts, comments and likes for pages the member administers.",
++      "supportedActions": "Retrieve organization posts, comments and likes, list the organizations the member administers and read share statistics (rw_organization_admin, used read-only by the gateway).",
+       "evidence": [
+         "https://learn.microsoft.com/en-us/linkedin/marketing/community-management/shares/posts-api"
+       ],
+@@ -2424,10 +2363,11 @@
+       "policy": "explicit",
+       "requestedScopes": [
+         "r_organization_social",
++        "rw_organization_admin",
+         "w_organization_social"
+       ],
+       "capability": "write",
+-      "supportedActions": "Retrieve organization posts and post, comment and like on behalf of the organization.",
++      "supportedActions": "Retrieve organization posts and statistics and post, comment and like on behalf of the organization; rw_organization_admin also grants write access to the page administration by its name, the gateway only reads with it.",
+       "evidence": [
+         "https://learn.microsoft.com/en-us/linkedin/marketing/community-management/shares/posts-api"
+       ],
+diff --git a/packages/shared/src/app-definitions/atelier-facebook.json b/packages/shared/src/app-definitions/atelier-facebook.json
+index 629630002..8806a6fce 100644
+--- a/packages/shared/src/app-definitions/atelier-facebook.json
++++ b/packages/shared/src/app-definitions/atelier-facebook.json
+@@ -42,7 +42,8 @@
+         "scopesHint": [
+           "pages_show_list",
+           "pages_read_engagement",
+-          "pages_read_user_engagement"
++          "pages_read_user_engagement",
++          "read_insights"
+         ]
+       },
+       "guidanceMd": "Connexion par la passerelle marketing de l'atelier. Choisissez le compte et la propriété sur la page de consentement. En démonstration, les données sont fictives.",
+@@ -72,8 +73,10 @@
+           "pages_show_list",
+           "pages_read_engagement",
+           "pages_read_user_engagement",
++          "read_insights",
+           "pages_manage_posts",
+-          "pages_manage_engagement"
++          "pages_manage_engagement",
++          "pages_messaging"
+         ]
+       },
+       "guidanceMd": "Connexion par la passerelle marketing de l'atelier. Choisissez le compte et la propriété sur la page de consentement. En démonstration, les données sont fictives.",
+diff --git a/packages/shared/src/app-definitions/atelier-google-ads.json b/packages/shared/src/app-definitions/atelier-google-ads.json
+index 7bfd93fae..c96475415 100644
+--- a/packages/shared/src/app-definitions/atelier-google-ads.json
++++ b/packages/shared/src/app-definitions/atelier-google-ads.json
+@@ -48,36 +48,6 @@
+         "docs": "https://developers.google.com/google-ads/api/docs/oauth/internals"
+       },
+       "riskTier": "S3"
+-    },
+-    {
+-      "key": "publication",
+-      "label": "Lecture et publication",
+-      "transport": "mcp_remote",
+-      "auth": "oauth",
+-      "ownershipModes": [
+-        "dcr",
+-        "customer"
+-      ],
+-      "capabilityProfile": {
+-        "key": "publication",
+-        "label": "Lecture et publication",
+-        "description": "Les agents peuvent aussi publier ou modifier, après validation humaine dans l'atelier."
+-      },
+-      "whenToUse": "Ajouter la publication ou la modification, à valider dans l'atelier.",
+-      "defaults": {
+-        "serverUrl": "http://127.0.0.1:3190/mcp/ads",
+-        "scopesHint": [
+-          "https://www.googleapis.com/auth/adwords"
+-        ]
+-      },
+-      "guidanceMd": "Connexion par la passerelle marketing de l'atelier. Choisissez le compte et la propriété sur la page de consentement. En démonstration, les données sont fictives.",
+-      "consoleLinks": {
+-        "docs": "https://developers.google.com/google-ads/api/docs/oauth/internals"
+-      },
+-      "riskTier": "S4",
+-      "warnings": [
+-        "La publication peut engager des dépenses publicitaires : gardez ces actions sur « Ask first »."
+-      ]
+     }
+   ]
+ }
+diff --git a/packages/shared/src/app-definitions/atelier-google-analytics.json b/packages/shared/src/app-definitions/atelier-google-analytics.json
+index be6cc25dc..27330e12f 100644
+--- a/packages/shared/src/app-definitions/atelier-google-analytics.json
++++ b/packages/shared/src/app-definitions/atelier-google-analytics.json
+@@ -48,34 +48,6 @@
+         "docs": "https://developers.google.com/analytics/devguides/reporting/data/v1/rest/v1beta/properties/runReport"
+       },
+       "riskTier": "S2"
+-    },
+-    {
+-      "key": "publication",
+-      "label": "Lecture et publication",
+-      "transport": "mcp_remote",
+-      "auth": "oauth",
+-      "ownershipModes": [
+-        "dcr",
+-        "customer"
+-      ],
+-      "capabilityProfile": {
+-        "key": "publication",
+-        "label": "Lecture et publication",
+-        "description": "Les agents peuvent aussi publier ou modifier, après validation humaine dans l'atelier."
+-      },
+-      "whenToUse": "Ajouter la publication ou la modification, à valider dans l'atelier.",
+-      "defaults": {
+-        "serverUrl": "http://127.0.0.1:3190/mcp/ga4",
+-        "scopesHint": [
+-          "https://www.googleapis.com/auth/analytics.readonly",
+-          "https://www.googleapis.com/auth/analytics.edit"
+-        ]
+-      },
+-      "guidanceMd": "Connexion par la passerelle marketing de l'atelier. Choisissez le compte et la propriété sur la page de consentement. En démonstration, les données sont fictives.",
+-      "consoleLinks": {
+-        "docs": "https://developers.google.com/analytics/devguides/reporting/data/v1/rest/v1beta/properties/runReport"
+-      },
+-      "riskTier": "S3"
+     }
+   ]
+ }
+diff --git a/packages/shared/src/app-definitions/atelier-google-business-profile.json b/packages/shared/src/app-definitions/atelier-google-business-profile.json
+index 73f263932..47d18263d 100644
+--- a/packages/shared/src/app-definitions/atelier-google-business-profile.json
++++ b/packages/shared/src/app-definitions/atelier-google-business-profile.json
+@@ -48,33 +48,6 @@
+         "docs": "https://developers.google.com/my-business/content/basic-setup"
+       },
+       "riskTier": "S2"
+-    },
+-    {
+-      "key": "publication",
+-      "label": "Lecture et publication",
+-      "transport": "mcp_remote",
+-      "auth": "oauth",
+-      "ownershipModes": [
+-        "dcr",
+-        "customer"
+-      ],
+-      "capabilityProfile": {
+-        "key": "publication",
+-        "label": "Lecture et publication",
+-        "description": "Les agents peuvent aussi publier ou modifier, après validation humaine dans l'atelier."
+-      },
+-      "whenToUse": "Ajouter la publication ou la modification, à valider dans l'atelier.",
+-      "defaults": {
+-        "serverUrl": "http://127.0.0.1:3190/mcp/gbp",
+-        "scopesHint": [
+-          "https://www.googleapis.com/auth/business.manage"
+-        ]
+-      },
+-      "guidanceMd": "Connexion par la passerelle marketing de l'atelier. Choisissez le compte et la propriété sur la page de consentement. En démonstration, les données sont fictives.",
+-      "consoleLinks": {
+-        "docs": "https://developers.google.com/my-business/content/basic-setup"
+-      },
+-      "riskTier": "S3"
+     }
+   ]
+ }
+diff --git a/packages/shared/src/app-definitions/atelier-google-search-console.json b/packages/shared/src/app-definitions/atelier-google-search-console.json
+index 8623bce33..780917f29 100644
+--- a/packages/shared/src/app-definitions/atelier-google-search-console.json
++++ b/packages/shared/src/app-definitions/atelier-google-search-console.json
+@@ -48,33 +48,6 @@
+         "docs": "https://developers.google.com/webmaster-tools/v1/how-tos/authorizing"
+       },
+       "riskTier": "S2"
+-    },
+-    {
+-      "key": "publication",
+-      "label": "Lecture et publication",
+-      "transport": "mcp_remote",
+-      "auth": "oauth",
+-      "ownershipModes": [
+-        "dcr",
+-        "customer"
+-      ],
+-      "capabilityProfile": {
+-        "key": "publication",
+-        "label": "Lecture et publication",
+-        "description": "Les agents peuvent aussi publier ou modifier, après validation humaine dans l'atelier."
+-      },
+-      "whenToUse": "Ajouter la publication ou la modification, à valider dans l'atelier.",
+-      "defaults": {
+-        "serverUrl": "http://127.0.0.1:3190/mcp/gsc",
+-        "scopesHint": [
+-          "https://www.googleapis.com/auth/webmasters"
+-        ]
+-      },
+-      "guidanceMd": "Connexion par la passerelle marketing de l'atelier. Choisissez le compte et la propriété sur la page de consentement. En démonstration, les données sont fictives.",
+-      "consoleLinks": {
+-        "docs": "https://developers.google.com/webmaster-tools/v1/how-tos/authorizing"
+-      },
+-      "riskTier": "S3"
+     }
+   ]
+ }
+diff --git a/packages/shared/src/app-definitions/atelier-instagram.json b/packages/shared/src/app-definitions/atelier-instagram.json
+index a41b8c7e0..4d2cda068 100644
+--- a/packages/shared/src/app-definitions/atelier-instagram.json
++++ b/packages/shared/src/app-definitions/atelier-instagram.json
+@@ -40,7 +40,8 @@
+       "defaults": {
+         "serverUrl": "http://127.0.0.1:3190/mcp/instagram",
+         "scopesHint": [
+-          "instagram_business_basic"
++          "instagram_business_basic",
++          "instagram_business_manage_insights"
+         ]
+       },
+       "guidanceMd": "Connexion par la passerelle marketing de l'atelier. Choisissez le compte et la propriété sur la page de consentement. En démonstration, les données sont fictives.",
+@@ -68,6 +69,7 @@
+         "serverUrl": "http://127.0.0.1:3190/mcp/instagram",
+         "scopesHint": [
+           "instagram_business_basic",
++          "instagram_business_manage_insights",
+           "instagram_business_content_publish"
+         ]
+       },
+diff --git a/packages/shared/src/app-definitions/atelier-linkedin.json b/packages/shared/src/app-definitions/atelier-linkedin.json
+index b7b6458b0..3947198a5 100644
+--- a/packages/shared/src/app-definitions/atelier-linkedin.json
++++ b/packages/shared/src/app-definitions/atelier-linkedin.json
+@@ -40,7 +40,8 @@
+       "defaults": {
+         "serverUrl": "http://127.0.0.1:3190/mcp/linkedin",
+         "scopesHint": [
+-          "r_organization_social"
++          "r_organization_social",
++          "rw_organization_admin"
+         ]
+       },
+       "guidanceMd": "Connexion par la passerelle marketing de l'atelier. Choisissez le compte et la propriété sur la page de consentement. En démonstration, les données sont fictives.",
+@@ -68,6 +69,7 @@
+         "serverUrl": "http://127.0.0.1:3190/mcp/linkedin",
+         "scopesHint": [
+           "r_organization_social",
++          "rw_organization_admin",
+           "w_organization_social"
+         ]
+       },
+diff --git a/packages/shared/src/atelier-app-definitions.test.ts b/packages/shared/src/atelier-app-definitions.test.ts
+index 4d284c28f..0cc06d006 100644
+--- a/packages/shared/src/atelier-app-definitions.test.ts
++++ b/packages/shared/src/atelier-app-definitions.test.ts
+@@ -14,14 +14,14 @@ import { TOOL_RISK_LEVELS } from "./constants.js";
+ import { GOOGLE_WORKSPACE_CONNECTOR_PROFILES } from "./google-workspace-connectors.js";
+ import { appDefinitionSchema } from "./validators/app-definition.js";
+ 
+-const EXPECTED: Record<string, { service: string; name: string; read: string[]; write: string[] }> = {
+-  "atelier-google-search-console": { service: "gsc", name: "Google Search Console", read: ["https://www.googleapis.com/auth/webmasters.readonly"], write: ["https://www.googleapis.com/auth/webmasters"] },
+-  "atelier-google-analytics": { service: "ga4", name: "Google Analytics 4", read: ["https://www.googleapis.com/auth/analytics.readonly"], write: ["https://www.googleapis.com/auth/analytics.readonly", "https://www.googleapis.com/auth/analytics.edit"] },
+-  "atelier-google-ads": { service: "ads", name: "Google Ads", read: ["https://www.googleapis.com/auth/adwords"], write: ["https://www.googleapis.com/auth/adwords"] },
+-  "atelier-google-business-profile": { service: "gbp", name: "Fiche d'établissement Google", read: ["https://www.googleapis.com/auth/business.manage"], write: ["https://www.googleapis.com/auth/business.manage"] },
+-  "atelier-facebook": { service: "facebook", name: "Facebook (pages)", read: ["pages_show_list", "pages_read_engagement", "pages_read_user_engagement"], write: ["pages_show_list", "pages_read_engagement", "pages_read_user_engagement", "pages_manage_posts", "pages_manage_engagement"] },
+-  "atelier-instagram": { service: "instagram", name: "Instagram professionnel", read: ["instagram_business_basic"], write: ["instagram_business_basic", "instagram_business_content_publish"] },
+-  "atelier-linkedin": { service: "linkedin", name: "LinkedIn (pages)", read: ["r_organization_social"], write: ["r_organization_social", "w_organization_social"] },
++const EXPECTED: Record<string, { service: string; name: string; read: string[]; write: string[] | null }> = {
++  "atelier-google-search-console": { service: "gsc", name: "Google Search Console", read: ["https://www.googleapis.com/auth/webmasters.readonly"], write: null },
++  "atelier-google-analytics": { service: "ga4", name: "Google Analytics 4", read: ["https://www.googleapis.com/auth/analytics.readonly"], write: null },
++  "atelier-google-ads": { service: "ads", name: "Google Ads", read: ["https://www.googleapis.com/auth/adwords"], write: null },
++  "atelier-google-business-profile": { service: "gbp", name: "Fiche d'établissement Google", read: ["https://www.googleapis.com/auth/business.manage"], write: null },
++  "atelier-facebook": { service: "facebook", name: "Facebook (pages)", read: ["pages_show_list", "pages_read_engagement", "pages_read_user_engagement", "read_insights"], write: ["pages_show_list", "pages_read_engagement", "pages_read_user_engagement", "read_insights", "pages_manage_posts", "pages_manage_engagement", "pages_messaging"] },
++  "atelier-instagram": { service: "instagram", name: "Instagram professionnel", read: ["instagram_business_basic", "instagram_business_manage_insights"], write: ["instagram_business_basic", "instagram_business_manage_insights", "instagram_business_content_publish"] },
++  "atelier-linkedin": { service: "linkedin", name: "LinkedIn (pages)", read: ["r_organization_social", "rw_organization_admin"], write: ["r_organization_social", "rw_organization_admin", "w_organization_social"] },
+   "atelier-hubspot": { service: "crm", name: "HubSpot", read: ["crm.objects.contacts.read", "crm.objects.deals.read"], write: ["crm.objects.contacts.read", "crm.objects.deals.read", "crm.objects.contacts.write", "crm.objects.deals.write"] },
+   "atelier-pipedrive": { service: "pipedrive", name: "Pipedrive", read: ["contacts:read", "deals:read"], write: ["contacts:full", "deals:full"] },
+   "atelier-odoo": { service: "odoo", name: "Odoo CRM", read: [], write: [] },
+@@ -37,7 +37,7 @@ describe("atelier marketing gateway cards", () => {
+     for (const app of atelier) expect(store.has(app.slug), app.slug).toBe(true);
+   });
+ 
+-  it.each(Object.entries(EXPECTED))("%s points at its gateway path with separate read and write methods", (slug, expected) => {
++  it.each(Object.entries(EXPECTED))("%s points at its gateway path with its reviewed read (and write) methods", (slug, expected) => {
+     const app = atelier.find((entry) => entry.slug === slug)!;
+     expect(() => appDefinitionSchema.parse(app)).not.toThrow();
+     expect(app.name).toBe(expected.name);
+@@ -45,7 +45,8 @@ describe("atelier marketing gateway cards", () => {
+     expect(app.description.length).toBeLessThanOrEqual(120);
+     expect(app.branding.logoUrl).toMatch(/^\/brands\/apps\/atelier-[a-z-]+\.svg$/);
+     expect(app.agentInstructions?.text).toContain("atelier_identite");
+-    expect(app.methods.map((method) => method.key)).toEqual(["lecture", "publication"]);
++    // The Google gateway is read-only (no write tool, write scopes refused with invalid_scope): no "publication" method.
++    expect(app.methods.map((method) => method.key)).toEqual(expected.write === null ? ["lecture"] : ["lecture", "publication"]);
+     for (const method of app.methods) {
+       expect(method).toMatchObject({ transport: "mcp_remote", auth: "oauth" });
+       expect(method.ownershipModes).toEqual(["dcr", "customer"]);
+@@ -53,12 +54,30 @@ describe("atelier marketing gateway cards", () => {
+     }
+     const [read, write] = app.methods;
+     expect(read.defaults?.scopesHint ?? []).toEqual(expected.read);
+-    expect(write.defaults?.scopesHint ?? []).toEqual(expected.write);
++    if (expected.write === null) expect(write).toBeUndefined();
++    else expect(write!.defaults?.scopesHint ?? []).toEqual(expected.write);
+     expect(app.urlPatterns).toEqual([`http://127.0.0.1:3190/mcp/${expected.service}`]);
+     expect(getAppDefinitionForUrl(`http://127.0.0.1:3190/mcp/${expected.service}`)?.slug).toBe(slug);
+     expect(appSupportsAutomaticOAuth(app)).toBe(true);
+   });
+ 
++  it("offers no write method and no write scope on the four read-only Google cards", () => {
++    const google = atelier.filter((app) => /^atelier-google-/.test(app.slug));
++    expect(google.map((app) => app.slug).sort()).toEqual(["atelier-google-ads", "atelier-google-analytics", "atelier-google-business-profile", "atelier-google-search-console"]);
++    for (const app of google) {
++      expect(app.methods.map((method) => method.key), app.slug).toEqual(["lecture"]);
++      for (const scope of app.methods.flatMap((method) => method.defaults?.scopesHint ?? []))
++        expect(scope, app.slug).not.toMatch(/analytics\.edit$|\/auth\/webmasters$/);
++    }
++  });
++
++  it("keeps every write-only scope out of the read method of the social cards", () => {
++    for (const slug of ["atelier-facebook", "atelier-instagram", "atelier-linkedin"]) {
++      const read = atelier.find((app) => app.slug === slug)!.methods[0]!.defaults?.scopesHint ?? [];
++      for (const scope of read) expect(scope, slug).not.toMatch(/manage_posts|manage_engagement|messaging|content_publish|w_organization_social/);
++    }
++  });
++
+   it("defaults a click to the read-only method", () => {
+     for (const app of atelier)
+       expect(getRecommendedConnectionMethod(getAvailableConnectionMethods(app))?.key, app.slug).toBe("lecture");
+diff --git a/server/src/__tests__/atelier-marketing-apps.test.ts b/server/src/__tests__/atelier-marketing-apps.test.ts
+index cc29a8d59..72d03b9c8 100644
+--- a/server/src/__tests__/atelier-marketing-apps.test.ts
++++ b/server/src/__tests__/atelier-marketing-apps.test.ts
+@@ -101,7 +101,6 @@ describe("atelier gateway address", () => {
+     const gsc = getConnectableAppDefinition("atelier-google-search-console")!;
+     expect(gsc.methods.map((method) => method.defaults?.serverUrl)).toEqual([
+       "http://127.0.0.1:3291/mcp/gsc",
+-      "http://127.0.0.1:3291/mcp/gsc",
+     ]);
+     expect(gsc.urlPatterns).toEqual(["http://127.0.0.1:3291/mcp/gsc"]);
+     // Another definition is never rewritten.
+@@ -142,10 +141,16 @@ describe("atelier gateway address", () => {
+   it("restores the declared provider scopes outside demonstration mode", () => {
+     const gsc = getConnectableAppDefinition("atelier-google-search-console")!;
+     configureAtelierAppDefinitions(BASE, "demonstration");
+-    expect(gsc.methods.map((method) => method.defaults?.scopesHint)).toEqual([undefined, undefined]);
++    expect(gsc.methods.map((method) => method.key)).toEqual(["lecture"]);
++    expect(gsc.methods.map((method) => method.defaults?.scopesHint)).toEqual([undefined]);
+     configureAtelierAppDefinitions(BASE, "reel");
+     expect(gsc.methods[0]!.defaults?.scopesHint).toEqual(["https://www.googleapis.com/auth/webmasters.readonly"]);
+-    expect(gsc.methods[1]!.defaults?.scopesHint).toEqual(["https://www.googleapis.com/auth/webmasters"]);
++    expect(gsc.methods).toHaveLength(1);
++    // Social cards: the reviewed insight and messaging scopes are restored per method.
++    const fb = getConnectableAppDefinition("atelier-facebook")!;
++    expect(fb.methods[0]!.defaults?.scopesHint).toContain("read_insights");
++    expect(fb.methods[0]!.defaults?.scopesHint).not.toContain("pages_messaging");
++    expect(fb.methods[1]!.defaults?.scopesHint).toContain("pages_messaging");
+   });
+ });
+ 
+@@ -254,14 +259,22 @@ describe("atelier gateway address", () => {
+     const service = toolAccessService(db, { remoteHttpRequest: fixtureGateway("reel"), remoteHttpEndpointLookup: lookup });
+     const read = await service.connectGalleryApp(c.id, { galleryKey: "atelier-linkedin", connectionMethodKey: "lecture" }, actor);
+     const readUrl = new URL((await service.startOAuth(c.id, read.connectionId, { redirectUri, actor })).authorizationUrl);
+-    expect(readUrl.searchParams.get("scope")).toBe("r_organization_social");
++    expect(readUrl.searchParams.get("scope")?.split(" ").sort()).toEqual(["r_organization_social", "rw_organization_admin"]);
+     const write = await service.connectGalleryApp(c.id, { galleryKey: "atelier-linkedin", connectionMethodKey: "publication", name: "LinkedIn publication" }, actor);
+     const writeUrl = new URL((await service.startOAuth(c.id, write.connectionId, { redirectUri, actor })).authorizationUrl);
+-    expect(writeUrl.searchParams.get("scope")?.split(" ").sort()).toEqual(["r_organization_social", "w_organization_social"]);
++    expect(writeUrl.searchParams.get("scope")?.split(" ").sort()).toEqual(["r_organization_social", "rw_organization_admin", "w_organization_social"]);
+     await expect(service.startOAuth(c.id, read.connectionId, { redirectUri, actor, scopes: ["w_organization_social"] }))
+       .rejects.toMatchObject({ details: { code: "oauth_scope_widening_rejected" } });
+   });
+ 
++  it("refuses a publication connection on a read-only Google card (the gateway has no Google write tool)", async () => {
++    const c = await company();
++    const service = toolAccessService(db, { remoteHttpRequest: fixtureGateway("reel"), remoteHttpEndpointLookup: lookup });
++    await expect(service.connectGalleryApp(c.id, { galleryKey: "atelier-google-search-console", connectionMethodKey: "publication" }, actor))
++      .rejects.toBeDefined();
++    expect(await db.select().from(toolConnections).where(eq(toolConnections.companyId, c.id))).toHaveLength(0);
++  });
++
+   it("puts the write tools of a card behind Ask first when the connection is finished with the suggested defaults (local patch 0005)", async () => {
+     const c = await company();
+     const service = toolAccessService(db, { remoteHttpRequest: fixtureGateway("demonstration"), remoteHttpEndpointLookup: lookup });
+-- 
+2.53.0
+
