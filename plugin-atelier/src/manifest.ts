@@ -70,6 +70,22 @@ const manifest: PaperclipPluginManifestV1 = {
         description:
           "Secret natif de Paperclip contenant la clé privée Ed25519 (PEM PKCS#8) qui signe les preuves d'approbation des diffusions réelles. La clé publique correspondante va dans PASSERELLE_APPROBATION_CLE_PUBLIQUE_FICHIER de la passerelle.",
       },
+      // Lot P9a (prospection, §4.3) : deux secrets natifs DISTINCTS. Sans eux, en mode réel, aucune donnée
+      // personnelle n'est enregistrée ; en démonstration seulement, une clé dérivée sert à défaut.
+      donneesCleChiffrement: {
+        type: "object",
+        format: "secret-ref",
+        title: "Clé de chiffrement des coordonnées (AES-256)",
+        description:
+          "Secret natif de Paperclip contenant 32 octets aléatoires (base64 ou 64 caractères hexadécimaux), par exemple `openssl rand -base64 32`. Chiffre les noms, courriels, téléphones et adresses des prospects à la réception ; jamais en base.",
+      },
+      donneesCleHmac: {
+        type: "object",
+        format: "secret-ref",
+        title: "Clé des empreintes (HMAC-SHA-256)",
+        description:
+          "Secret natif DISTINCT de la clé de chiffrement, d'au moins 32 octets (base64 ou hexadécimal). Calcule les empreintes de dédoublonnage et d'opposition ; la changer rend les empreintes existantes inutilisables.",
+      },
       passerelleClesPubliques: {
         type: "array",
         title: "Clés publiques de la passerelle",
@@ -77,6 +93,27 @@ const manifest: PaperclipPluginManifestV1 = {
           "Clé(s) publique(s) Ed25519 de la passerelle (ligne « clé publique à donner au plugin » de son journal de démarrage, SPKI DER en base64). Plusieurs clés : rotation. Sans clé, aucune donnée de connexion n'est tenue pour réelle.",
         maxItems: 5,
         items: { type: "string", minLength: 40, maxLength: 4000 },
+      },
+      // Lot R7 (connaissances du client, docs/rag-conception.md §3.4) : vectorisation des passages.
+      connaissancesVectorisation: {
+        type: "string",
+        enum: ["aucun", "local", "voyage"],
+        default: "aucun",
+        title: "Vectorisation des connaissances",
+        description:
+          "« aucun » : recherche plein texte seule (défaut). « local » : modèle bge-m3 sur cette machine (dossier plugin-atelier/.modeles), rien ne sort. « voyage » : API Voyage AI (Europe), seulement si l'accord écrit du client est coché ci-dessous.",
+      },
+      connaissancesVoyageAccord: {
+        type: "boolean",
+        default: false,
+        title: "Accord écrit du client pour Voyage AI",
+        description: "À cocher seulement si le client a accepté PAR ÉCRIT l'envoi du texte de ses documents à Voyage AI. Sans cela, « voyage » retombe sur le plein texte.",
+      },
+      connaissancesVoyageCle: {
+        type: "object",
+        format: "secret-ref",
+        title: "Clé d'API Voyage AI",
+        description: "Secret natif de Paperclip contenant la clé d'API Voyage AI ; lue à chaque appel, jamais copiée en configuration.",
       },
     },
   },

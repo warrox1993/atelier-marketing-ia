@@ -63,8 +63,8 @@
       ]
     },
     "conversion-crm": {
-      "version": "1.2.0",
-      "sha256": "2c3860f5e79df230cd362eecabe0ce087e9479dfffb491560b880476aeb6801f",
+      "version": "1.3.0",
+      "sha256": "3777124c27c95c1088f0e77eee64838983cab57ad0580bebf479cec6b81635b6",
       "fichiers": [
         "SKILL.md"
       ]
@@ -99,6 +99,30 @@
         "references/structure-campagne.md"
       ]
     },
+    "qualification-prospects": {
+      "version": "1.0.0",
+      "sha256": "c65f45f5b3212083a5ca51923680356d41b12e1b96de0eb07c58b81d32b44b95",
+      "fichiers": [
+        "SKILL.md",
+        "references/fiche-qualification.md"
+      ]
+    },
+    "recherche-connaissances": {
+      "version": "1.0.0",
+      "sha256": "982a038cc1cb15ff6c78233e0e6f784776b61b82c048472768077ea3c5a2107e",
+      "fichiers": [
+        "SKILL.md",
+        "references/citation.md"
+      ]
+    },
+    "recherche-prospects": {
+      "version": "1.0.0",
+      "sha256": "fc7a41fec6b38e4a6b6f9c17eb1d4fe6912513889dfb6a432b4168580cba7d11",
+      "fichiers": [
+        "SKILL.md",
+        "references/journal-recherche.md"
+      ]
+    },
     "recherche-sourcee": {
       "version": "1.0.0",
       "sha256": "a3426a1dddb223e2ad90cfd85546ae1c3aee552c0097bf3ea9f36ae43980945c",
@@ -108,8 +132,8 @@
       ]
     },
     "redaction-declinaison-canal": {
-      "version": "1.2.0",
-      "sha256": "c9b2990feae545d9f3b1b1c7670d81b476af6ba4c7ad42a7e034504242399b8b",
+      "version": "1.4.0",
+      "sha256": "01cd4143bdcecd330170ba81002dc0651fe1a2ce90956ef90829a4ac43e310c7",
       "fichiers": [
         "SKILL.md"
       ]

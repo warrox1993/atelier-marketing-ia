@@ -2,7 +2,7 @@
 name: "conversion-crm"
 description: "Conçoit pages de conversion, formulaires, segments et scénarios de suivi en documentant entrées, déclencheurs, exclusions, consentements et conditions d'envoi, sans aucune prospection réelle automatique. À utiliser pour une page de demande de devis, un formulaire, une séquence de relance ou une segmentation de contacts."
 metadata:
-  version: "1.2.0"
+  version: "1.3.0"
   langue: "fr"
   domaine: "conversion"
 ---
@@ -28,9 +28,12 @@ peuvent rien envoyer sans consentement documenté et approbation humaine.
   mention « démonstration » sur chaque chiffre de démonstration, aucun chiffre absent d'une réponse
   déposée (section « Connexions de la passerelle marketing » des consignes de l'agent).
 - Toute écriture réelle (modification d'un contact, d'un lead, d'une personne) suit le parcours de la
-  section « Diffusion réelle : parcours complet » des consignes de l'agent : approbation de l'humain sur la
-  version exacte, demande de diffusion avec service, outil et arguments exacts, preuve jointe à l'appel,
-  issue rapportée, jamais de nouvel essai à l'aveugle sur une issue ambiguë. Le livrable écrit donc, mot pour
+  section « Diffusion réelle : parcours complet » des consignes de l'agent : appel exact proposé au serveur
+  (`POST …/taches/<issueId>/appels`), approbation humaine de son empreinte, demande de diffusion avec les mêmes
+  arguments, liste de révocation lue juste avant l'appel (`GET …/preuves/revocations`, valable 5 minutes),
+  appel de l'outil avec `preuve_approbation` et `revocations_approbation`, issue rapportée, jamais de nouvel essai à
+  l'aveugle sur une issue ambiguë. Une preuve expirée ou révoquée demande une nouvelle approbation. Les données lues
+  se déposent avec `arguments` et `compte`, jamais la réponse d'un outil d'écriture. Le livrable écrit donc, mot pour
   mot, chaque valeur à écrire.
 
 ## Entrées

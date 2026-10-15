@@ -3,7 +3,7 @@
 import { chmodSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { generateKeyPairSync } from "node:crypto";
+import { createPublicKey, generateKeyPairSync } from "node:crypto";
 import { afterAll, describe, expect, it } from "vitest";
 import { lireConfigSocialCrm, servicesServis } from "../../src/reel/social-crm/config.js";
 import { societePipedrive, verifierAdresseInstance, versionMajeureOdoo } from "../../src/reel/social-crm/connecteurs.js";
@@ -58,6 +58,53 @@ describe("rotation de la clé publique d'approbation", () => {
     const lignes = [0, 1].map(() => generateKeyPairSync("ed25519").publicKey.export({ type: "spki", format: "pem" }).toString().replace(/-----[A-Z ]+-----|\s/g, ""));
     const lu = lireConfigSocialCrm({ PASSERELLE_SOCIAL_CLE: CLE, PASSERELLE_APPROBATION_CLE_PUBLIQUE: `${lignes[0]}\n${lignes[1]}\n` }, "x");
     expect(lu.ok && (lu.config.clePubliqueApprobation ?? "").match(/BEGIN PUBLIC KEY/g)?.length).toBe(2);
+  });
+});
+
+describe("format de la clé publique d'approbation (validé au chargement, revue des signatures section 5)", () => {
+  const paire = generateKeyPairSync("ed25519").publicKey;
+  const pem = paire.export({ type: "spki", format: "pem" }).toString();
+  const ligne = pem.replace(/-----[A-Z ]+-----|\s/g, "");
+  const lire = (valeur: string) => lireConfigSocialCrm({ PASSERELLE_SOCIAL_CLE: CLE, PASSERELLE_APPROBATION_CLE_PUBLIQUE: valeur }, "x");
+
+  it("normalise le PEM et le base64 vers le même PEM, relisible", () => {
+    const a = lire(pem);
+    const b = lire(ligne);
+    expect(a.ok && b.ok && a.config.clePubliqueApprobation === b.config.clePubliqueApprobation).toBe(true);
+    expect(a.ok && createPublicKey(a.config.clePubliqueApprobation!).asymmetricKeyType).toBe("ed25519");
+  });
+
+  const refus: [string, string, RegExp][] = [
+    ["texte quelconque", "ceci n'est pas une clé", /illisible/],
+    ["base64 invalide", "AAAA", /illisible/],
+    ["base64 d'une autre structure que SPKI", Buffer.from("pas une clé spki du tout").toString("base64"), /illisible/],
+    ["PEM tronqué", pem.slice(0, 60), /illisible/],
+    ["PEM d'une clé privée", generateKeyPairSync("ed25519").privateKey.export({ type: "pkcs8", format: "pem" }).toString(), /illisible/],
+    ["PEM de clé publique suivi de texte parasite", `${pem}\nautre chose`, /illisible/],
+  ];
+  for (const [nom, valeur, motif] of refus) {
+    it(`refuse : ${nom}, sans citer la valeur`, () => {
+      const lu = lire(valeur);
+      expect(lu.ok).toBe(false);
+      if (!lu.ok) {
+        expect(lu.raison).toMatch(motif);
+        expect(lu.raison).toContain("PASSERELLE_APPROBATION_CLE_PUBLIQUE");
+        expect(lu.raison).not.toContain(valeur.slice(0, 20));
+      }
+    });
+  }
+
+  it("refuse une clé publique qui n'est pas Ed25519 (RSA, en PEM comme en base64)", () => {
+    const rsa = generateKeyPairSync("rsa", { modulusLength: 2048 }).publicKey.export({ type: "spki", format: "pem" }).toString();
+    for (const valeur of [rsa, rsa.replace(/-----[A-Z ]+-----|\s/g, "")]) {
+      const lu = lire(valeur);
+      expect(lu.ok).toBe(false);
+      if (!lu.ok) expect(lu.raison).toMatch(/Ed25519/);
+    }
+  });
+
+  it("une ligne invalide parmi plusieurs refuse l'ensemble (rotation)", () => {
+    expect(lire(`${ligne}\nAAAA`).ok).toBe(false);
   });
 });
 

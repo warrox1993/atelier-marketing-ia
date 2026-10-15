@@ -13,7 +13,27 @@ import { StatutFonctionnel } from "./statuts.js";
 export const ActionExterne = z.enum(["aucune_action_externe", "publier", "envoyer", "programmer", "activer_campagne_payante", "modifier_crm"]);
 export type ActionExterne = z.infer<typeof ActionExterne>;
 
-/** Portée exacte d'une approbation : version, canal, compte, audience, montant, durée, action. */
+/** Empreinte SHA-256 en hexadécimal (64 caractères). */
+const Empreinte = z.string().regex(/^[0-9a-f]{64}$/u);
+
+/**
+ * v1.6 (revue des signatures, S-1) : appel d'outil EXACT approuvé par l'humain. Recopié tel quel de
+ * l'aperçu (`AppelPropose`) que l'interface a montré ; le serveur vérifie chaque champ contre l'appel
+ * proposé enregistré. Aucune preuve n'est signée pour un autre appel (autre texte, lien, destinataire,
+ * contact, propriété CRM ou compte).
+ */
+export const AppelApprouve = z
+  .object({
+    id: IdNatif,
+    service: z.string().min(1).max(32),
+    outil: z.string().regex(/^[a-z][a-z0-9_]{0,63}$/u),
+    compte: z.string().min(1).max(200),
+    empreinte: Empreinte,
+  })
+  .strict();
+export type AppelApprouve = z.infer<typeof AppelApprouve>;
+
+/** Portée exacte d'une approbation : version, canal, compte, audience, montant, durée, action ; v1.6 : appel exact. */
 export const ApprobationPortee = z.object({
   revisionId: IdNatif,
   action: ActionExterne,
@@ -22,6 +42,11 @@ export const ApprobationPortee = z.object({
   audience: z.string().min(1).max(500).nullable().default(null),
   montantMaxCents: z.number().int().nonnegative().nullable().default(null),
   dureeJours: z.number().int().positive().max(365).nullable().default(null),
+  /**
+   * v1.6 (S-1) : appel d'outil exact approuvé (diffusion réelle par la passerelle). Null : aucune preuve
+   * d'approbation ne sera jamais signée sous cette décision (diffusion « préparée » seulement).
+   */
+  appel: AppelApprouve.nullable().optional(),
 });
 export type ApprobationPortee = z.infer<typeof ApprobationPortee>;
 
@@ -152,6 +177,10 @@ export type ProducteurVue = z.infer<typeof ProducteurVue>;
 export const EtatDiffusion = z.enum(["refusee", "simulee", "preparee", "confirmee", "ambigue_a_reconcilier"]);
 export type EtatDiffusion = z.infer<typeof EtatDiffusion>;
 
+/** v1.6 (S-7) : révocation d'une preuve d'approbation déjà remise (nouvelle révision, décision, ou humain). */
+export const RevocationPreuve = z.object({ le: Horodatage, motif: z.string() });
+export type RevocationPreuve = z.infer<typeof RevocationPreuve>;
+
 export const Diffusion = z.object({
   id: IdNatif,
   companyId: IdNatif,
@@ -176,8 +205,74 @@ export const Diffusion = z.object({
    * (`preuve_approbation`), en mode réel seulement. Renvoyée dans la réponse, JAMAIS stockée ni journalisée.
    */
   preuveApprobation: z.string().max(4000).nullable().optional(),
+  /**
+   * v1.6 (S-4) : expiration (secondes Unix) de LA preuve de cette diffusion, figée à la première
+   * signature ; un rejeu rend la même preuve, jamais une expiration plus lointaine. Null sans preuve.
+   */
+  preuveExpire: z.number().int().nonnegative().nullable().optional(),
+  /** v1.6 (S-7) : preuve révoquée (plus jamais rendue ; la passerelle la refuse via la liste signée). */
+  revocation: RevocationPreuve.nullable().optional(),
 });
 export type Diffusion = z.infer<typeof Diffusion>;
+
+/* ------------------------------------------------------------------ */
+/* v1.6 : appel d'outil proposé par l'agent, approuvé par l'humain       */
+/* ------------------------------------------------------------------ */
+
+/** Entrée de `tache.appels.proposer` (stricte) : l'appel EXACT que l'agent fera sur la passerelle. */
+export const ProposerAppelEntree = z
+  .object({
+    revisionId: IdNatif,
+    service: z.enum(["facebook", "instagram", "linkedin", "crm", "pipedrive", "odoo", "teamleader"]),
+    outil: z.string().regex(/^[a-z][a-z0-9_]{0,63}$/u),
+    compte: z.string().min(1).max(200),
+    arguments: z.record(z.string(), z.unknown()),
+  })
+  .strict();
+export type ProposerAppelEntree = z.infer<typeof ProposerAppelEntree>;
+
+/** Ligne d'aperçu : un champ de l'appel, nommé pour l'humain. */
+export const ChampApercu = z.object({
+  /** Chemin dans les arguments (`message`, `properties.hs_lead_status`…). */
+  champ: z.string(),
+  libelle: z.string(),
+  /** Valeur exacte, en texte (JSON pour une liste). */
+  valeur: z.string(),
+});
+export type ChampApercu = z.infer<typeof ChampApercu>;
+
+/**
+ * Appel proposé, avec l'aperçu que l'interface DOIT afficher avant l'approbation : outil, compte, cible
+ * (destinataire, contact, fiche), textes publiés et propriétés CRM (noms ET valeurs), plus l'empreinte.
+ * `approbation` est l'objet à recopier tel quel dans `portee.appel` de la décision.
+ */
+export const AppelPropose = z.object({
+  id: IdNatif,
+  issueId: IdNatif,
+  revisionId: IdNatif,
+  service: z.string(),
+  outil: z.string(),
+  action: z.enum(["publier", "envoyer", "modifier_crm"]),
+  compte: z.string(),
+  arguments: z.record(z.string(), z.unknown()),
+  empreinte: Empreinte,
+  apercu: z.object({
+    resume: z.string(),
+    cibles: z.array(ChampApercu),
+    textes: z.array(ChampApercu),
+    proprietes: z.array(ChampApercu),
+  }),
+  approbation: AppelApprouve,
+  /** Vrai si l'appel vise la révision courante du livrable (sinon il ne peut plus être approuvé). */
+  revisionCourante: z.boolean(),
+  proposePar: z.string(),
+  creeLe: Horodatage,
+});
+export type AppelPropose = z.infer<typeof AppelPropose>;
+
+/** Entrée de la révocation humaine d'une preuve (`tache.diffusions.revoquer`, `atelier.diffusion.revoquer`). */
+export const RevoquerPreuveEntree = z.object({ motif: z.string().trim().min(3).max(500) }).strict();
+export type RevoquerPreuveEntree = z.infer<typeof RevoquerPreuveEntree>;
 
 /** Services de la passerelle qui ont des outils d'écriture (revue de sécurité §6). */
 export const ServicePublication = z.enum(["facebook", "instagram", "linkedin", "crm", "pipedrive", "odoo", "teamleader"]);
@@ -254,6 +349,8 @@ export const DossierHumain = z.object({
   evaluationPorte: EvaluationPorte.nullable(),
   decisions: z.array(DecisionHumaine),
   diffusions: z.array(z.lazy(() => Diffusion)),
+  /** v1.6 (S-1) : appels d'outil proposés par l'agent, avec leur aperçu (la révision courante d'abord). */
+  appelsProposes: z.array(z.lazy(() => AppelPropose)).default([]),
   /** Cycles de correction (null hors porte). */
   cycles: EtatCycles.nullable().default(null),
   /** Relances de correction décidées par l'humain, la plus récente en premier. */

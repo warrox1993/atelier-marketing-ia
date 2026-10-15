@@ -6,7 +6,7 @@
  */
 import { useState, type FormEvent } from "react";
 import { MarkdownBlock } from "@paperclipai/plugin-sdk/ui";
-import type { DecisionHumaine, Diffusion, DossierHumain, LigneMatrice, RelanceCorrection } from "../../contrats/dossier.js";
+import type { AppelPropose, DecisionHumaine, Diffusion, DossierHumain, LigneMatrice, RelanceCorrection } from "../../contrats/dossier.js";
 import type { Constat, VerdictRevue } from "../../contrats/revues.js";
 import type { ChronologieExecution, ResumeDossier, VueContenusAValider } from "../../contrats/ui.js";
 import { Champ, Bouton, EnTete, EtatErreur, Fraicheur, Horodatage, LienHote, Lecture, ListeOuAucun, MentionDemo, Pastille, PastilleStatut, Section, Vide } from "../composants.js";
@@ -34,6 +34,7 @@ import { actionRecuperation, appliquerPalierAgent, ecrireVersionHumaine, reprend
 import { CLE_LIVRABLE_DEFAUT } from "../../contrats/identifiants.js";
 import { chemin } from "../route.js";
 import { centimesDepuisSaisie } from "./campagnes.js";
+import { ACTIONS_AVEC_APPEL, appelsApprouvables, canalDePasserelle, CANAUX_DU_SERVICE, porteeDepuisAppel, raisonDuree, SectionAppels, SuiviDiffusionReelle } from "./appels.js";
 
 export function VueContenus({ id }: { id: string | null }) {
   return id ? <Dossier issueId={id} /> : <ListeContenus />;
@@ -160,6 +161,7 @@ export function Dossier({ issueId, compact = false }: { issueId: string; compact
                   <p className="atl-attenue">Aucun livrable produit pour l'instant.</p>
                 )}
               </Section>
+              <SectionAppels dossier={d} />
               <Matrice lignes={d.matrice} revisionCourante={d.livrable?.revisionId ?? null} />
               <Constats titre="Constats restants" constats={d.constatsRestants} vide="Aucun constat ouvert." />
               <Constats titre="Constats résolus" constats={d.constatsResolus} vide="Aucun constat résolu pour l'instant." />
@@ -642,6 +644,8 @@ function DecisionPanneau({ dossier: d, onFait }: { dossier: DossierHumain; onFai
   const [choix, setChoix] = useState<Choix>("approuver");
   const [commentaire, setCommentaire] = useState("");
   const [portee, setPortee] = useState({ action: "aucune_action_externe", canal: d.perimetre.canaux[0] ?? "", compte: "", audience: "", montant: "", duree: "" });
+  // v1.6 : l'humain choisit l'appel exact proposé (null : pas encore choisi ; AUCUN_APPEL : choix explicite sans appel).
+  const [appelChoisi, setAppelChoisi] = useState<string | null>(null);
   const [enCours, setEnCours] = useState(false);
   const [erreur, setErreur] = useState<unknown>(null);
   const [resultat, setResultat] = useState<string | null>(null);
@@ -649,7 +653,13 @@ function DecisionPanneau({ dossier: d, onFait }: { dossier: DossierHumain; onFai
   const duree = portee.duree.trim() ? Number(portee.duree) : null;
   let raison = raisonDecision(d, choix, commentaire);
   const externe = portee.action !== "aucune_action_externe";
-  if (!raison && choix === "approuver" && externe) {
+  const proposes = externe && ACTIONS_AVEC_APPEL.includes(portee.action) ? appelsApprouvables(d, portee.action) : [];
+  const appel = proposes.find((a) => a.id === appelChoisi) ?? null;
+  if (!raison && choix === "approuver" && appel) {
+    raison = raisonDuree(portee.duree);
+  } else if (!raison && choix === "approuver" && proposes.length > 0 && appelChoisi !== AUCUN_APPEL) {
+    raison = "Choisissez l'appel exact à approuver (ou « sans appel »).";
+  } else if (!raison && choix === "approuver" && externe) {
     if (Number.isNaN(montant)) raison = "Montant maximal invalide.";
     else if (duree !== null && (!Number.isInteger(duree) || duree < 1 || duree > 365)) raison = "Durée : un nombre entier de jours entre 1 et 365.";
     else if (portee.action === "activer_campagne_payante" && montant === null) raison = "Une campagne payante exige un montant maximal.";
@@ -669,7 +679,9 @@ function DecisionPanneau({ dossier: d, onFait }: { dossier: DossierHumain; onFai
         action: choix,
         commentaire: commentaire.trim(),
         portee:
-          choix === "approuver"
+          choix === "approuver" && appel
+            ? porteeDepuisAppel(appel, { canal: portee.canal, audience: portee.audience, duree: portee.duree })
+            : choix === "approuver"
             ? {
                 revisionId,
                 action: portee.action,
@@ -709,7 +721,10 @@ function DecisionPanneau({ dossier: d, onFait }: { dossier: DossierHumain; onFai
     }
   };
 
-  const maj = (cle: keyof typeof portee) => (e: { target: { value: string } }) => setPortee((p) => ({ ...p, [cle]: e.target.value }));
+  const maj = (cle: keyof typeof portee) => (e: { target: { value: string } }) => {
+    if (cle === "action") setAppelChoisi(null);
+    setPortee((p) => ({ ...p, [cle]: e.target.value }));
+  };
   // Hors de l'étape humaine, le formulaire n'apparaît pas : seule la raison est donnée.
   const fermee = raisonDecision(d, "rejeter", "-");
   if (fermee && !resultat) {
@@ -751,7 +766,35 @@ function DecisionPanneau({ dossier: d, onFait }: { dossier: DossierHumain; onFai
                 ))}
               </select>
             </Champ>
-            {portee.action !== "aucune_action_externe" ? (
+            {appel ? <PorteeAppel appel={appel} portee={portee} maj={maj} /> : null}
+            {proposes.length > 0 ? (
+              <fieldset className="atl-champ atl-choix atl-choix-appel">
+                <legend>Appel exact à approuver</legend>
+                {proposes.map((a) => (
+                  <label key={a.id} className="atl-choix-appel-ligne">
+                    <input type="radio" name="appel" value={a.id} checked={appelChoisi === a.id} onChange={() => setAppelChoisi(a.id)} />
+                    <span>
+                      {a.apercu.resume}
+                      <span className="atl-sous">
+                        compte {a.compte}, empreinte <code>{a.empreinte}</code>
+                      </span>
+                    </span>
+                  </label>
+                ))}
+                <label className="atl-choix-appel-ligne">
+                  <input type="radio" name="appel" value={AUCUN_APPEL} checked={appelChoisi === AUCUN_APPEL} onChange={() => setAppelChoisi(AUCUN_APPEL)} />
+                  <span>
+                    Sans appel
+                    <span className="atl-sous">Aucune preuve ne pourra être signée : l'agent ne pourra pas diffuser par la passerelle.</span>
+                  </span>
+                </label>
+              </fieldset>
+            ) : externe && ACTIONS_AVEC_APPEL.includes(portee.action) ? (
+              <p className="atl-aide" data-sans-appel="true">
+                Aucun appel proposé : aucune preuve ne pourra être signée. L'agent doit d'abord proposer l'appel exact.
+              </p>
+            ) : null}
+            {portee.action !== "aucune_action_externe" && !appel && (proposes.length === 0 || appelChoisi === AUCUN_APPEL) ? (
               <div className="atl-grille-champs">
                 <Champ libelle="Canal">
                   <input value={portee.canal} onChange={maj("canal")} autoComplete="off" maxLength={100} />
@@ -784,6 +827,43 @@ function DecisionPanneau({ dossier: d, onFait }: { dossier: DossierHumain; onFai
         {erreur ? <EtatErreur erreur={erreur} contexte="décision refusée" /> : null}
       </form>
     </Section>
+  );
+}
+
+const AUCUN_APPEL = "__aucun__";
+
+/** Portée dérivée de l'appel choisi : action et compte imposés, canal du service, audience seulement hors CRM. */
+function PorteeAppel({ appel, portee, maj }: { appel: AppelPropose; portee: { canal: string; audience: string; duree: string }; maj(cle: "canal" | "audience" | "duree"): (e: { target: { value: string } }) => void }) {
+  const canaux = CANAUX_DU_SERVICE[appel.service] ?? [appel.service];
+  const canal = canaux.includes(portee.canal) ? portee.canal : canaux[0]!;
+  return (
+    <div className="atl-grille-champs" data-portee-appel="true">
+      <p className="atl-sous">
+        Action {(ACTIONS_EXTERNES[appel.action] ?? appel.action).toLowerCase()}, compte {appel.compte} : imposés par l'appel choisi.
+        {appel.action === "modifier_crm" ? " Une modification du CRM ne porte ni audience ni montant." : " Aucun montant : cette approbation ne dépense rien."}
+      </p>
+      <Champ libelle="Canal">
+        {canaux.length > 1 ? (
+          <select value={canal} onChange={maj("canal")}>
+            {canaux.map((c) => (
+              <option key={c} value={c}>
+                {c}
+              </option>
+            ))}
+          </select>
+        ) : (
+          <input value={canal} readOnly />
+        )}
+      </Champ>
+      {appel.action !== "modifier_crm" ? (
+        <Champ libelle="Audience">
+          <input value={portee.audience} onChange={maj("audience")} autoComplete="off" maxLength={500} />
+        </Champ>
+      ) : null}
+      <Champ libelle="Durée de la preuve (jours)">
+        <input value={portee.duree} onChange={maj("duree")} inputMode="numeric" autoComplete="off" />
+      </Champ>
+    </div>
   );
 }
 
@@ -1073,6 +1153,17 @@ export function approbationDiffusable(d: DossierHumain): DecisionHumaine | null 
   return d.decisions.find((x) => x.action === "approuver" && !x.invalidee && x.revisionId === rev && x.portee && x.portee.action !== "aucune_action_externe") ?? null;
 }
 
+/**
+ * En mode réel, une diffusion sur un canal de la passerelle part de l'AGENT, avec l'appel approuvé :
+ * l'interface ne propose pas « Diffuser » (le serveur répond `conflit`), elle montre l'état.
+ */
+export function diffusionParAgent(d: DossierHumain): boolean {
+  if (d.mode !== "reel") return false;
+  const a = approbationDiffusable(d);
+  if (a?.portee) return canalDePasserelle(a.portee.canal) || Boolean(a.portee.appel);
+  return d.diffusions.some((f) => f.mode === "reel" && canalDePasserelle(f.canal));
+}
+
 /** Raison de désactiver « Diffuser », ou null. Le serveur revérifie toujours. */
 export function raisonDiffusion(d: DossierHumain): string | null {
   if (d.mode === "reel" && !d.connecteurPublication) return "Aucun connecteur de publication : rien ne peut être diffusé.";
@@ -1086,6 +1177,13 @@ function DiffusionPanneau({ dossier: d, onFait }: { dossier: DossierHumain; onFa
   const [erreur, setErreur] = useState<unknown>(null);
   const [resultat, setResultat] = useState<string | null>(null);
   if (!d.livrable) return null;
+  if (diffusionParAgent(d)) {
+    return (
+      <Section titre="Diffusion" aide="En mode réel, c'est l'agent qui diffuse, avec la preuve de l'appel que vous avez approuvé. Vous gardez la main : une preuve se révoque tant que rien n'est confirmé.">
+        <SuiviDiffusionReelle dossier={d} onFait={onFait} />
+      </Section>
+    );
+  }
   const raison = raisonDiffusion(d);
   const approbation = approbationDiffusable(d);
   const lancer = async () => {

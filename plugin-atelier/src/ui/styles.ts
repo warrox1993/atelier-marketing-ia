@@ -67,6 +67,8 @@ export const STYLES_ATELIER = `
 /* Texte */
 .atl-attenue { color: var(--atl-attenue); }
 .atl-sous { display: block; color: var(--atl-attenue); font-size: 0.75rem; line-height: 1.4; font-weight: 400; margin-top: 0.125rem; }
+.atl-barre-export { display: flex; flex-wrap: wrap; gap: 0.75rem 1rem; align-items: flex-end; }
+.atl-export-prospects { padding-top: 0.5rem; }
 .atl-texte-danger { color: var(--atl-danger); }
 .atl-lien { color: inherit; text-decoration: underline; text-decoration-color: color-mix(in oklab, currentColor 35%, transparent); text-underline-offset: 3px; }
 .atl-lien:hover { text-decoration-color: currentColor; }
@@ -274,6 +276,35 @@ export const STYLES_ATELIER = `
 .atl-widget-ligne { display: flex; flex-wrap: wrap; gap: 0.5rem 1.25rem; }
 .atl-widget-ligne strong { font-size: 1.125rem; font-weight: 600; }
 
+/* Appels proposés (contrat v1.6) : tout ce qui partira, sans troncature */
+.atl-appels { display: flex; flex-direction: column; gap: 1rem; }
+.atl-appel { display: flex; flex-direction: column; gap: 0.625rem; padding: 0.875rem 1rem; border-radius: var(--atl-rayon); box-shadow: inset 0 0 0 1px var(--atl-trait); background: var(--atl-surface); }
+.atl-appel[data-ancien="true"] { opacity: 0.62; background: var(--atl-surface-2); }
+.atl-apercu-groupe { display: flex; flex-direction: column; gap: 0.25rem; }
+.atl-apercu-titre { margin: 0; font-size: 0.75rem; font-weight: 600; letter-spacing: 0.02em; text-transform: uppercase; color: var(--atl-attenue-fort); }
+.atl-apercu-liste { display: flex; flex-direction: column; gap: 0.375rem; }
+.atl-apercu-ligne { display: grid; grid-template-columns: minmax(8rem, 12rem) minmax(0, 1fr); gap: 0.125rem 0.75rem; align-items: baseline; }
+.atl-apercu-ligne dt { font-size: 0.8125rem; color: var(--atl-attenue-fort); }
+.atl-apercu-champ { font-size: 0.6875rem; color: var(--atl-attenue); }
+.atl-apercu-valeur { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; padding: 0.375rem 0.625rem; background: var(--atl-surface-2); border-radius: calc(var(--atl-rayon) - 2px); font-family: var(--font-mono, ui-monospace, monospace); font-size: 0.8125rem; }
+.atl-empreinte { margin: 0; overflow-wrap: anywhere; word-break: break-all; }
+.atl-choix-appel { display: flex; flex-direction: column; gap: 0.5rem; }
+.atl-choix-appel-ligne { display: flex; align-items: flex-start; gap: 0.5rem; }
+.atl-choix-appel-ligne code { overflow-wrap: anywhere; word-break: break-all; font-size: 0.6875rem; }
+.atl-suivi { display: flex; flex-direction: column; }
+.atl-suivi-ligne { display: flex; flex-direction: column; gap: 0.25rem; padding: 0.625rem 0; border-bottom: 1px solid var(--atl-trait); }
+.atl-suivi-ligne:last-child { border-bottom: 0; }
+.atl-revocation { display: flex; flex-direction: column; gap: 0.375rem; align-items: flex-start; margin-top: 0.375rem; }
+.atl-revocation textarea { width: 100%; }
+
+.atl-etapes { display: flex; flex-wrap: wrap; gap: 0.5rem 1.5rem; list-style: none; margin: 0 0 1rem; padding: 0; color: var(--atl-attenue-fort); }
+.atl-etapes li[aria-current="step"] { color: var(--atl-texte); font-weight: 600; }
+.atl-etape-num { display: inline-block; min-width: 1.25rem; text-align: center; border: 1px solid currentColor; border-radius: 999px; font-size: 0.75rem; line-height: 1.125rem; }
+.atl-etapes li[data-fait] .atl-etape-num { background: var(--atl-trait); }
+.atl-score { display: inline-flex; flex-direction: column; }
+.atl-filtres-prospects { max-width: none; }
+.atl-fiche { margin-top: 1.5rem; padding-top: 1.25rem; border-top: 1px solid var(--atl-trait); }
+.atl-table button.atl-lien { background: none; border: 0; padding: 0; font: inherit; font-weight: 500; cursor: pointer; text-align: left; }
 @media (max-width: 960px) {
   .atl-dossier { grid-template-columns: 1fr; }
   .atl-dossier-cote { position: static; order: -1; }
@@ -287,6 +318,7 @@ export const STYLES_ATELIER = `
   .atl-champs > div { grid-template-columns: 1fr; }
   .atl-chrono > li { grid-template-columns: 1fr; }
   .atl-chrono-meta { grid-column: 1; }
+  .atl-apercu-ligne { grid-template-columns: 1fr; }
 }
 @media (max-width: 640px) {
   .atl-table-cadre { border: 0; overflow: visible; }

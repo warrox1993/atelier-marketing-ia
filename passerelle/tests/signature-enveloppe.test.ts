@@ -69,7 +69,7 @@ describe("démonstration : chaque réponse d'outil porte une enveloppe signée",
     expect(verifierEnveloppe(sansSignature, PUBLIQUE)).toEqual({ ok: false, motif: "enveloppe non signée" });
 
     const autreCle = copie(s);
-    autreCle._atelier.signature = new SignataireEnveloppe(autre.privateKey).signer({ mode: "reel", service: "gsc", outil: "gsc_ping", erreur: false, compte: null, args: {}, structure: autreCle });
+    autreCle._atelier.signature = new SignataireEnveloppe(autre.privateKey).signer({ mode: "reel", service: "gsc", outil: "gsc_ping", erreur: false, compte: "compte-essai", args: {}, ecriture: false, structure: autreCle });
     autreCle._atelier.mode = "reel";
     expect(verifierEnveloppe(autreCle, PUBLIQUE)).toEqual({ ok: false, motif: "signature invalide" });
 
@@ -105,6 +105,33 @@ describe("réel : enveloppe signée en mode reel ; preuve d'approbation exclue d
     const v = verifierEnveloppe(r.structuredContent as Record<string, unknown>, PUBLIQUE);
     expect(v.ok && v.charge.arguments).toBe(empreinteArgumentsAppel({ message: "Bonjour" }));
     expect(JSON.stringify(r)).not.toContain("apv1.a.b");
+  });
+});
+
+describe("S-3 : seule une lecture explicitement annoncée peut valoir mesure (liste blanche)", () => {
+  const contexte = { service: "crm", mode: "reel" as const, identite: { compte: "Compte", propriete: null }, jetonPorteur: "x" };
+  const catalogue = construireCatalogue(FICHES_PAR_DEFAUT.find((f) => f.id === "gsc")!, "reel", {
+    ...fournisseurFactice("reel"),
+    outils: [
+      { nom: "lecture_ok", description: "l", schemaEntree: {}, annotations: { readOnlyHint: true }, executer: () => ({ chiffre: 1 }) },
+      { nom: "sans_annotation", description: "s", schemaEntree: {}, executer: () => ({ chiffre: 2 }) },
+      { nom: "ecriture_declaree", description: "e", schemaEntree: {}, annotations: { readOnlyHint: false }, executer: () => ({ etat: "preparee", executee: false }) },
+      { nom: "ecriture_executee", description: "x", schemaEntree: {}, annotations: { readOnlyHint: false }, executer: () => ({ etat: "executee", executee: true }) },
+    ],
+  });
+  const charge = async (nom: string): Promise<Record<string, unknown>> => {
+    const r = await appelerOutil(catalogue, nom, {}, contexte, signataire);
+    const v = verifierEnveloppe(r.structuredContent as Record<string, unknown>, PUBLIQUE);
+    if (!v.ok) throw new Error(v.motif);
+    return v.charge as unknown as Record<string, unknown>;
+  };
+
+  it("lecture : ecriture = faux ; tout le reste (sans annotation, écriture, outil inconnu) : ecriture = vrai", async () => {
+    expect(await charge("lecture_ok")).toMatchObject({ ecriture: false, executee: false });
+    expect(await charge("sans_annotation")).toMatchObject({ ecriture: true, executee: false });
+    expect(await charge("ecriture_declaree")).toMatchObject({ ecriture: true, executee: false });
+    expect(await charge("ecriture_executee")).toMatchObject({ ecriture: true, executee: true });
+    expect(await charge("outil_qui_n_existe_pas")).toMatchObject({ ecriture: true, executee: false, erreur: true });
   });
 });
 

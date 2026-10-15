@@ -18,7 +18,9 @@ Déroulé :
      installations et les profils effectifs correspondent au registre ;
   4. contrôles finals : seuls les rôles déclarés voient la connexion (jamais le Gardien),
      les rôles en lecture ont la politique « block » sur les écritures, appel d'essai d'une
-     écriture refusé pour eux.
+     écriture refusé pour eux ; pour les rôles en écriture sur accord, l'outil interdit de leur
+     champ « outilsBloques » (Contenus : facebook_envoyer_message) est refusé par sa politique
+     « block » et chaque autre écriture est retenue en « Ask first » (rien n'est exécuté).
 Sortie : un résumé lisible puis le JSON des mesures ; code 0 si tout est conforme, 1 sinon.
 Aucun appel de modèle, aucune dépense, aucun fournisseur réel.
 """
@@ -31,6 +33,12 @@ import urllib.request
 from pathlib import Path
 
 RACINE = Path(__file__).resolve().parent.parent.parent
+# Arguments valides des écritures de la passerelle (appel d'essai : la politique est évaluée, rien n'est publié).
+PARAMETRES_ESSAI = {
+    "facebook_publier": {"message": "Essai de politique (ne sera pas publié)"},
+    "instagram_publier": {"caption": "Essai de politique", "image_url": "https://exemple.invalid/essai.jpg"},
+    "linkedin_publier": {"commentary": "Essai de politique (ne sera pas publié)"},
+}
 GARDIEN_SLUG = "gardien-des-connexions"
 
 
@@ -153,8 +161,24 @@ def main(argv):
     catalogue = resume.get("catalogue") or {}
     ecritures = [nom for nom, risque in catalogue.items() if risque in ("write", "destructive")]
     mesures["appelsEssai"] = {}
+    bloques_par_role = {a["slug"]: (a.get("outilsBloques") or {}).get(cle_service, []) for a in reg["agents"]}
     for slug, acces in prevus.items():
         bloc = f"atelier-lecture-seule:{cx}:{slug}"
+        if acces == "ecriture_sur_accord":
+            for ecriture in ecritures:
+                interdit = ecriture in bloques_par_role.get(slug, [])
+                if interdit and f"atelier-outil-interdit:{cx}:{slug}:{ecriture}" not in noms:
+                    erreurs.append(f"politique « block » de l'outil interdit {ecriture} absente pour {slug}")
+                _, essai = api("POST", f"/tool-connections/{cx}/test-calls",
+                               {"agentId": agents[slug]["id"], "toolName": ecriture, "parameters": PARAMETRES_ESSAI.get(ecriture, {})})
+                essai = essai if isinstance(essai, dict) else {}
+                motif = (essai.get("error") or {}).get("reasonCode")
+                mesures["appelsEssai"][f"{slug}:{ecriture}"] = f"{essai.get('decision')} / {motif}"
+                if interdit and motif != "deny_policy_block":
+                    erreurs.append(f"{slug} : {ecriture} devrait être refusé par la politique block, obtenu {essai.get('decision')} / {motif}")
+                if not interdit and essai.get("decision") != "ask_first":
+                    erreurs.append(f"{slug} : {ecriture} devrait être retenu en « Ask first », obtenu {essai.get('decision')} / {motif}")
+            continue
         if acces != "lecture":
             continue
         if bloc not in noms:

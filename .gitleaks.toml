@@ -16,3 +16,10 @@ regexes = ['''"secretId": "[0-9a-f-]{36}"''']
 description = "Fausses plateformes de tests de la passerelle : jetons factices (valeur d'exemple, texte sans lien avec un compte réel)."
 targetRules = ["generic-api-key"]
 paths = ['''passerelle/tests/reel-social-crm/faux-plateformes\.ts''']
+
+[[allowlists]]
+description = "Empreintes SHA-256 publiques des fichiers du modèle bge-m3 (publiées par Hugging Face, vérifiées au chargement) : pas des secrets."
+targetRules = ["generic-api-key"]
+paths = ['''plugin-atelier/src/connaissances/vectoriseur-local\.ts''']
+regexTarget = "line"
+regexes = ['''^\s*"[A-Za-z_./]+": "[0-9a-f]{64}",$''']

@@ -2,6 +2,7 @@
 // mutations gardées par la preuve d'approbation humaine, idempotentes et réconciliées.
 //
 // Mutation, dans l'ordre :
+//   0. liste de révocation `arv1` récente (5 minutes) exigée avec la preuve (argument `revocations_approbation`) ;
 //   1. sans preuve (ou preuve refusée) : réponse « préparée, non exécutée », même forme qu'en démonstration
 //      (etat: "preparee", executee: false, approbation_humaine_requise: true) ; la plateforme n'est pas appelée ;
 //   2. preuve valide : la clé d'idempotence de la preuve est cherchée dans le journal :
@@ -89,7 +90,9 @@ export function mutationReelle<A extends Record<string, unknown>>(dep: Dependanc
   return {
     ...def.outil,
     async executer(brut, contexte) {
-      const { preuve_approbation: preuve, ...reste } = brut as A & { preuve_approbation?: string };
+      // Arguments de transport (preuve et liste de révocation) retirés AVANT tout usage : ils n'entrent ni dans l'empreinte,
+      // ni dans les paramètres rapportés, ni dans l'exécution.
+      const { preuve_approbation: preuve, revocations_approbation: revocations, ...reste } = brut as A & { preuve_approbation?: string; revocations_approbation?: string };
       const args = reste as unknown as A;
       def.verifier?.(args);
       const action = { service: contexte.service, outil: def.outil.nom, requete_reelle_visee: def.requeteReelle, parametres: { ...reste } };
@@ -103,11 +106,13 @@ export function mutationReelle<A extends Record<string, unknown>>(dep: Dependanc
       if (preuve === undefined || preuve.trim() === "") return preparee("aucune preuve d'approbation humaine n'accompagne la demande");
 
       let acces = await dep.autorisation.acces(contexte.jetonPorteur, contexte.service);
-      const verdict = dep.verificateur.verifier(preuve, { service: contexte.service, outil: def.outil.nom, args: reste, compte: acces.compte.id, maintenantS: Math.floor(maintenant() / 1000) });
+      const verdict = dep.verificateur.verifier(preuve, { service: contexte.service, outil: def.outil.nom, args: reste, compte: acces.compte.id, maintenantS: Math.floor(maintenant() / 1000), revocations });
       if (!verdict.ok) return preparee(verdict.motif);
       const cle = verdict.charge.cle;
       const empreinte = empreinteArguments(reste);
-      if (enCours.has(cle)) throw new ErreurFournisseur("indisponible", "Une exécution de cette approbation est déjà en cours : réessayer dans un instant.", null, false);
+      // Verrou par compte + service + outil + clé (revue S-5) : une exécution d'un compte ne bloque pas un autre compte.
+      const verrou = JSON.stringify([acces.compte.id, contexte.service, def.outil.nom, cle]);
+      if (enCours.has(verrou)) throw new ErreurFournisseur("indisponible", "Une exécution de cette approbation est déjà en cours : réessayer dans un instant.", null, false);
 
       const executee = (entree: EntreeMutation, rejeu: boolean): ReponseMutation => ({
         etat: "executee",
@@ -128,13 +133,20 @@ export function mutationReelle<A extends Record<string, unknown>>(dep: Dependanc
         cle_idempotence: cle,
       });
 
-      enCours.add(cle);
+      enCours.add(verrou);
       try {
-        const existante = dep.coffre.mutation(cle);
+        const existante = dep.coffre.mutation(cle, { compte: acces.compte.id, service: contexte.service, outil: def.outil.nom, octroi: acces.octroi });
         if (existante && (existante.empreinte !== empreinte || existante.outil !== def.outil.nom || existante.service !== contexte.service)) {
           return preparee("cette clé d'idempotence a déjà servi pour une autre action");
         }
-        if (existante?.etat === "executee") return executee(existante, true);
+        if (existante?.etat === "executee") {
+          // Défense en profondeur (revue S-4) : une preuve plus longue ne doit jamais survivre à l'entrée qui la rend
+          // inoffensive ; l'entrée n'est oubliée qu'après l'expiration de la preuve la plus longue présentée.
+          if (existante.expirePreuve === undefined || existante.expirePreuve < verdict.charge.expire * 1000) {
+            dep.coffre.ecrireMutation({ ...existante, expirePreuve: verdict.charge.expire * 1000 });
+          }
+          return executee(existante, true);
+        }
         if (existante && (existante.etat === "en_cours" || existante.etat === "ambigue")) {
           let rec: Reconciliation;
           try {
@@ -156,6 +168,7 @@ export function mutationReelle<A extends Record<string, unknown>>(dep: Dependanc
 
         const entree: EntreeMutation = {
           cle,
+          compte: acces.compte.id,
           service: contexte.service,
           outil: def.outil.nom,
           empreinte,
@@ -197,7 +210,7 @@ export function mutationReelle<A extends Record<string, unknown>>(dep: Dependanc
           }
         }
       } finally {
-        enCours.delete(cle);
+        enCours.delete(verrou);
       }
     },
   };

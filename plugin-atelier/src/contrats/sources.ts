@@ -43,8 +43,10 @@ export const Source = z.object({
    * `humaine` : information apportée par l'humain lors d'une relance de correction.
    * `connexion` (v1.4, lot L9) : réponse d'un outil de connexion (passerelle marketing)
    * déposée par un agent ; son mode est DÉDUIT de la réponse par le serveur.
+   * `connaissance` (v1.7, lot R1) : passage d'un document du client rendu par la recherche
+   * `tache.connaissances.rechercher` ; mode déduit de l'entreprise et du document.
    */
-  provenance: z.enum(["lecture_url", "import", "corpus_demonstration", "humaine", "connexion"]),
+  provenance: z.enum(["lecture_url", "import", "corpus_demonstration", "humaine", "connexion", "connaissance"]),
   /** Mode de la donnée, jamais déclaré par l'agent (transport du plugin ou réponse de la connexion). */
   mode: z.enum(["demonstration", "reel"]),
   /** Détail d'une source de provenance `connexion` (null pour les autres). */
@@ -58,9 +60,24 @@ export const Source = z.object({
       nombreChiffres: z.number().int().nonnegative(),
       /** Mode effectif de la campagne au dépôt : une donnée de démonstration y est interdite si `reel`. */
       modeCampagne: z.enum(["demonstration", "reel"]),
+      /** v1.6 (S-6) : compte (propriété) signé par la passerelle pour une donnée réelle ; null sinon. */
+      compte: z.string().nullable().optional(),
     })
     .nullable()
     .default(null),
+  /**
+   * v1.7 (lot R1) : passage cité d'une source de provenance `connaissance` (document, version, passage et
+   * adresse `connaissance://`) ; absent ou null pour les autres provenances.
+   */
+  connaissance: z
+    .object({
+      documentId: IdNatif,
+      version: z.number().int().positive(),
+      passageId: IdNatif,
+      adresse: z.string().max(120),
+    })
+    .nullable()
+    .optional(),
 });
 export type Source = z.infer<typeof Source>;
 
@@ -92,6 +109,12 @@ export const DeposerDonneesConnexionEntree = z
      * rejeu d'une ancienne réponse authentique présentée comme celle d'un autre appel).
      */
     arguments: z.record(z.string(), z.unknown()).optional(),
+    /**
+     * v1.6 (S-6) : compte ou propriété interrogés (`atelier_identite`). Facultatif ; fourni, il doit égaler
+     * le compte signé. En réel, `arguments` devient OBLIGATOIRE et le compte signé doit être celui déjà
+     * utilisé pour ce service dans la campagne (une seule propriété par service et par campagne).
+     */
+    compte: z.string().min(1).max(200).optional(),
   })
   .strict();
 export type DeposerDonneesConnexionEntree = z.infer<typeof DeposerDonneesConnexionEntree>;

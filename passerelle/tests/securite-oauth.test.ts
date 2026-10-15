@@ -293,6 +293,8 @@ describe("serveur d'autorisation réseaux sociaux et CRM : origine, redirections
 });
 
 describe("journal des mutations : une preuve encore valide n'est jamais oubliée (S5)", () => {
+  // Entrées d'avant S-5 (sans compte) : retrouvées par la clé, le service, l'outil et l'octroi.
+  const PORTEE = { compte: "c", service: "facebook", outil: "facebook_publier", octroi: "o" };
   const entree = (cle: string, expirePreuve: number | undefined, debut: number): EntreeMutation => ({
     cle, service: "facebook", outil: "facebook_publier", empreinte: "e".repeat(64), octroi: "o", etat: "executee",
     debut, fin: debut, resultat: { id: cle }, tentatives: 1, motif: null, ...(expirePreuve !== undefined ? { expirePreuve } : {}),
@@ -307,14 +309,14 @@ describe("journal des mutations : une preuve encore valide n'est jamais oubliée
       coffre.ecrireMutation(entree("cle-b", t + 3_600_000, 2));
       coffre.ecrireMutation(entree("cle-c", t + 3_600_000, 3));
       // Toutes les preuves sont valides : rien n'est oublié, le journal dépasse sa taille visée.
-      expect(coffre.mutation("cle-a")?.etat).toBe("executee");
-      expect(coffre.mutation("cle-b")?.etat).toBe("executee");
+      expect(coffre.mutation("cle-a", PORTEE)?.etat).toBe("executee");
+      expect(coffre.mutation("cle-b", PORTEE)?.etat).toBe("executee");
       t += 3_600_001;
       coffre.ecrireMutation(entree("cle-d", t + 3_600_000, 4));
       // Les preuves de a, b, c ont expiré : les plus anciennes sont oubliées pour revenir à la taille visée.
-      expect(coffre.mutation("cle-a")).toBeUndefined();
-      expect(coffre.mutation("cle-b")).toBeUndefined();
-      expect(coffre.mutation("cle-d")?.etat).toBe("executee");
+      expect(coffre.mutation("cle-a", PORTEE)).toBeUndefined();
+      expect(coffre.mutation("cle-b", PORTEE)).toBeUndefined();
+      expect(coffre.mutation("cle-d", PORTEE)?.etat).toBe("executee");
     } finally {
       rmSync(dossier, { recursive: true, force: true });
     }

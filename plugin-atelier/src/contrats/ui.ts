@@ -12,10 +12,11 @@ import { EtatConnexion, Horodatage, IdNatif, ModeExecution } from "./communs.js"
 import { Campagne, Connecteur, CreerCampagneEntree, Diagnostic, EnregistrerPlafondCampagneEntree, EnregistrerReglagesEntree, PageJournal, ReglagesEntreprise, TacheCampagne } from "./campagnes.js";
 import { Brief, Exigence } from "./exigences.js";
 import { EngagementPub, PlafondPub } from "./plafonds.js";
-import { DeciderEntree, DecisionHumaine, DemanderDiffusionEntree, Diffusion, DossierHumain, RelanceCorrection, RelancerCorrectionEntree } from "./dossier.js";
+import { DeciderEntree, DecisionHumaine, DemanderDiffusionEntree, Diffusion, DossierHumain, RelanceCorrection, RelancerCorrectionEntree, RevoquerPreuveEntree } from "./dossier.js";
 import { MessageAgent } from "./messages.js";
 import { DocumentImporte, ImporterDocumentEntree, Source } from "./sources.js";
 import { StatutFonctionnel } from "./statuts.js";
+import { ReferentielClient, ReferentielSaisie } from "./referentiel.js";
 
 /* ------------------------------------------------------------------ */
 /* Emplacements UI déclarés par le manifeste (exports attendus du lot C) */
@@ -142,25 +143,10 @@ export const VueResultats = z.object({
 });
 export type VueResultats = z.infer<typeof VueResultats>;
 
-export const Marque = z.object({
-  id: IdNatif,
-  companyId: IdNatif,
-  version: z.number().int().positive(),
-  identite: z.string(),
-  ton: z.string(),
-  offres: z.array(z.object({ nom: z.string(), description: z.string(), confirmee: z.boolean() })),
-  zones: z.array(z.string()),
-  etablissements: z.array(z.object({ nom: z.string(), adresse: z.string().nullable(), confirme: z.boolean() })),
-  affirmationsAutorisees: z.array(z.object({ texte: z.string(), sourceId: IdNatif.nullable() })),
-  informationsManquantes: z.array(z.string()),
-  creeLe: Horodatage,
-});
-export type Marque = z.infer<typeof Marque>;
-export const MarqueSaisie = Marque.omit({ id: true, companyId: true, version: true, creeLe: true });
-export type MarqueSaisie = z.infer<typeof MarqueSaisie>;
+export { Marque, MarqueSaisie } from "./marque.js";
 
 export const VueMarque = z.object({
-  marque: Marque.nullable(),
+  marque: ReferentielClient.nullable(),
   versions: z.array(z.object({ version: z.number().int(), creeLe: Horodatage })),
   sources: z.array(Source),
   imports: z.array(DocumentImporte),
@@ -225,7 +211,7 @@ export const ACTIONS_UI = {
    */
   "atelier.correction.relancer": { params: RelancerCorrectionEntree, resultat: RelanceCorrection, humainSeulement: true },
   "atelier.import": { params: ImporterDocumentEntree.omit({ companyId: true }), resultat: DocumentImporte, humainSeulement: true },
-  "atelier.marque.enregistrer": { params: MarqueSaisie, resultat: Marque, humainSeulement: true },
+  "atelier.marque.enregistrer": { params: ReferentielSaisie, resultat: ReferentielClient, humainSeulement: true },
   /** Plafond publicitaire d'une campagne : montant ou « aucune limite » (décision de l'opérateur du 15/10/2026). */
   "atelier.campagne.plafond": { params: EnregistrerPlafondCampagneEntree.omit({ companyId: true }).extend({ campagneId: IdNatif }), resultat: Campagne, humainSeulement: true },
   /**
@@ -239,6 +225,8 @@ export const ACTIONS_UI = {
   },
   "atelier.reglages.enregistrer": { params: EnregistrerReglagesEntree.omit({ companyId: true }), resultat: ReglagesEntreprise, humainSeulement: true },
   "atelier.diffusion.demander": { params: DemanderDiffusionEntree.extend({ issueId: IdNatif }), resultat: Diffusion, humainSeulement: true },
+  /** v1.6 (S-7) : révoquer la preuve d'une diffusion réelle préparée (elle n'est plus jamais rendue). */
+  "atelier.diffusion.revoquer": { params: RevoquerPreuveEntree.extend({ issueId: IdNatif, diffusionId: IdNatif }), resultat: Diffusion, humainSeulement: true },
   "atelier.planification": {
     params: z.object({ issueId: IdNatif, canal: z.string().min(1).max(100), dateProposee: Horodatage.nullable() }),
     resultat: z.object({ issueId: IdNatif, canal: z.string(), dateProposee: Horodatage.nullable(), fuseau: z.literal("Europe/Brussels"), publicationProgrammee: z.null() }),

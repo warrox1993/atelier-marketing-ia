@@ -1,4 +1,4 @@
-# Contrats partagés de l'Atelier Marketing IA (v1, gelés à T0 ; version courante 1.5)
+# Contrats partagés de l'Atelier Marketing IA (v1, gelés à T0 ; version courante 1.7)
 
 Date : 15/10/2026. Propriétaire : intégrateur (lot A). Toute modification d'un fichier
 de `plugin-atelier/src/contrats/` ou de ce document passe par l'intégrateur ; les lots B
@@ -94,9 +94,12 @@ Le serveur trouve le schéma par `plugin_database_namespaces.plugin_key = 'ateli
 | `statuts.ts` | `StatutFonctionnel` (13 états du §10), libellés français, `calculerStatutFonctionnel()` |
 | `messages.ts` | `MessageAgent` (messageId, companyId, projectId, campaignId, runId, taskId, sender, recipient, type, contenu, références, horodatage, état de traitement), `TypeMessage` (10 types), `ContenuMessage` (union discriminée), `EnvoyerMessageEntree` (strict : aucun expéditeur ni champ d'élévation accepté) |
 | `sources.ts` | `Source` (URL, date de collecte, statut d'accès, extrait, indices de page d'erreur, `nonFiable: true`, injections signalées ; v1.4 : provenance `connexion` et détail `connexion`), `DeposerDonneesConnexionEntree` (v1.4), `ResultatVerificationLien`, `ImporterDocumentEntree`, `DocumentImporte` |
-| `dossier.ts` | `ApprobationPortee` (révision, action, canal, compte, audience, montant, durée), `DecisionHumaine`, `Diffusion` (état séparé de la tâche, clé d'idempotence ; v1.5 : `service`, `outil`, `preuveApprobation`), `DossierHumain` ; v1.5 : action externe `modifier_crm`, `ServicePublication`, `DemanderDiffusionEntree` (`service`, `outil`, `arguments`), `RapporterIssueDiffusionEntree` |
+| `dossier.ts` | `ApprobationPortee` (révision, action, canal, compte, audience, montant, durée), `DecisionHumaine`, `Diffusion` (état séparé de la tâche, clé d'idempotence ; v1.5 : `service`, `outil`, `preuveApprobation`), `DossierHumain` ; v1.5 : action externe `modifier_crm`, `ServicePublication`, `DemanderDiffusionEntree` (`service`, `outil`, `arguments`), `RapporterIssueDiffusionEntree` ; v1.6 : `AppelApprouve` (`portee.appel`), `ProposerAppelEntree`, `AppelPropose` (aperçu), `RevocationPreuve`, `RevoquerPreuveEntree`, `Diffusion.preuveExpire` et `.revocation`, `DossierHumain.appelsProposes` |
 | `campagnes.ts` | `Campagne` (= projet natif), `TacheCampagne`, `ReglagesEntreprise`, `Connecteur`, `EvenementJournal`, `PageJournal`, `Diagnostic` |
 | `routes.ts`, `api.ts` | table des routes et corps des requêtes |
+| `referentiel.ts` (v1.7) | `ReferentielClient` = `Marque` étendue (offres et établissements enrichis, `entites`, `segments`, `ciblesProspection`, `modulesConformite`), `RenvoiReferentiel`, `CATALOGUE_MODULES_CONFORMITE` (`intermediaire_assurance`), `renvoiValide`, `moduleActif` |
+| `prospection.ts` (v1.7) | `Prospect` (B2B, B2C, partenaire), `VoletParticulier`, `PreuveConsentement`, `ScoreProspect`, `Etalonnage`, `BaseLegaleContact`, `MATRICE_BASES_LEGALES`, `Opposition`, `VersionListeDncm`, base de clients (`ImporterBaseClientsEntree`, `ImportBaseClients`, `ClientBase`, `ContratDetenu`, `RegleVenteCroisee`), `ExportCrm`, `ROUTES_PROSPECTION_PREVUES` |
+| `connaissances.ts` (v1.7) | `IndexConnaissances`, `DocumentConnaissance`, `VersionConnaissance`, `PassageConnaissance`, `VecteurBase64`, adresse `connaissance://`, `RechercherConnaissancesEntree`, `ResultatRechercheConnaissances`, `PassageRendu` (`nonFiable`), import, suppression, `ROUTES_CONNAISSANCES_PREVUES` |
 | `ui-constantes.ts`, `ui.ts` | emplacements UI, rubriques, clés de données et d'actions |
 | `exemples/index.ts` | une réponse d'exemple par clé de données, validée par test |
 
@@ -139,9 +142,12 @@ un agent), résout l'entreprise, vérifie l'accès (403 hors entreprise) avant l
 | `tache.messages.boite` | GET `/taches/:issueId/messages` | board ou agent | tâche | → `MessageAgent[]` adressés à l'appelant |
 | `tache.messages.etat` | POST `/taches/:issueId/messages/:messageId/etat` | destinataire | tâche | `{ etat }` → `MessageAgent` |
 | `tache.sources.lire` | POST `/taches/:issueId/sources` | board ou agent | tâche | `LireUrlEntree` → `Source` |
-| `tache.donnees.deposer` | POST `/taches/:issueId/donnees-connexion` | board ou agent | tâche | `DeposerDonneesConnexionEntree` (v1.5 : `arguments` facultatif) → `{ source, mode, indices, chiffresRetenus, interdite, consigne }` (v1.4, §13 ; signature vérifiée v1.5, §14) |
+| `tache.donnees.deposer` | POST `/taches/:issueId/donnees-connexion` | board ou agent | tâche | `DeposerDonneesConnexionEntree` (v1.5 : `arguments` facultatif ; v1.6 : obligatoire pour une réponse réelle, `compte` facultatif) → `{ source, mode, indices, chiffresRetenus, interdite, consigne }` (v1.4, §13 ; signature vérifiée v1.5, §14 ; outils d'écriture refusés v1.6, §15) |
 | `tache.liens.verifier` | POST `/taches/:issueId/liens/verifier` | board ou agent | tâche | `VerifierLiensEntree` → `ResultatVerificationLien[]` |
 | `tache.diffusions` | POST `/taches/:issueId/diffusions` | board ou agent | tâche | `DemanderDiffusionEntree` → `Diffusion` ; 403 `diffusion_refusee` sans décision humaine valide, ou si la même publication est déjà diffusée sous cette approbation (v1.5, M1) ; en réel, `preuveApprobation` signée quand tout est vérifié (v1.5, §14) |
+| `tache.appels.proposer` | POST `/taches/:issueId/appels` | board ou agent | tâche | `ProposerAppelEntree` → `AppelPropose` (201 ; 200 si la même empreinte est déjà proposée sur la révision) (v1.6, §15) |
+| `tache.diffusions.revoquer` | POST `/taches/:issueId/diffusions/:diffusionId/revoquer` | **board seulement** | tâche | `RevoquerPreuveEntree` → `Diffusion` (avec `revocation`) (v1.6, §15) |
+| `preuves.revocations` | GET `/preuves/revocations?companyId=` | board ou agent | requête | → `{ liste, emis, revoquees }` : liste signée `arv1` des preuves révoquées non expirées (v1.6, §15) |
 | `tache.diffusions.issue` | POST `/taches/:issueId/diffusions/:diffusionId/issue` | board ou agent | tâche | `RapporterIssueDiffusionEntree` (réponse brute de l'outil, signée par la passerelle) → `Diffusion` (`confirmee`, `ambigue_a_reconcilier`, ou `preparee` avec le motif) (v1.5) |
 | `tache.decision` | POST `/taches/:issueId/decisions` | **board seulement** | tâche | `DeciderEntree` → `DecisionHumaine` |
 | `portes.creer` | POST `/portes` | board ou agent | corps `companyId` | `MettreSousPorteEntree` → `TacheSousPorte` ; v1.5 (H2) : la politique native doit avoir une étape `review` et se TERMINER par une étape `approval` dont tous les participants sont des utilisateurs |
@@ -225,7 +231,7 @@ en pause que par budget et le SDK n'expose pas cette action (désactiver le bout
 
 ## 9. Évolution des contrats
 
-Version v1 ; ajouts compatibles v1.1 à v1.5 (§6 bis, §11, §12, §13, §14). Ajout compatible (champ optionnel, nouvelle clé) : l'intégrateur met à jour ce
+Version v1 ; ajouts compatibles v1.1 à v1.5 (§6 bis, §11, §12, §13, §14) ; v1.6 (§15) durcit des règles existantes (preuve, dépôt) et ajoute la migration `006_appels_approuves.sql` ; v1.7 (§16) ajoute référentiel, prospection et connaissances (migrations `007` et `008`). Ajout compatible (champ optionnel, nouvelle clé) : l'intégrateur met à jour ce
 document, les schémas et les exemples dans le même commit. Changement incompatible : nouvelle
 migration numérotée, jamais de modification d'une migration appliquée (l'hôte la refuserait).
 
@@ -480,3 +486,135 @@ déclare `arguments`, la même empreinte d'arguments. Sinon : refus (`entree_inv
 la passerelle (ou modifiée) »). Sans clé configurée, aucune réponse n'est réelle. Une réponse de démonstration
 non signée reste acceptée comme démonstration.
 
+## 15. Version 1.6 (15/10/2026) : revue de sécurité des signatures, côté serveur du plugin
+
+Source : `docs/revue-securite-signatures.md` (constats S-1 à S-8, section « Suites données (plugin) »). Migration
+`006_appels_approuves.sql` (table `appels_proposes` ; `diffusions.preuve_charge`, `revoquee_le`, `revocation_motif` ;
+`sources.compte`). Tests : `tests/revue-signatures.spec.ts` (preuves F-A à F-D en non-régression), `signatures.spec.ts`,
+`regles-donnees-demo.spec.ts`, `donnees-connexion.spec.ts` mis à jour.
+
+**L'humain approuve l'appel exact (S-1).** Parcours d'une diffusion réelle par la passerelle :
+1. l'agent propose l'appel EXACT sur la révision courante : `tache.appels.proposer` `{ revisionId, service, outil, compte,
+   arguments }` (strict ; arguments ≤ 16 Ko). Le serveur contrôle le schéma de l'outil d'écriture (`OUTILS_ECRITURE` : clés
+   exactes, obligatoires, cible non vide), le garde-fou « tel quel » (textes publiés, lien, image et valeurs CRM présents
+   dans la révision), calcule l'**empreinte d'appel** `SHA-256(jsonCanonique({ v: 1, service, outil, compte, arguments }))`
+   (arguments sans `preuve_approbation`) et l'enregistre (idempotent par révision et empreinte, événement `appel.propose`) ;
+2. l'interface affiche l'aperçu `AppelPropose.apercu` (`resume`, `cibles` : compte puis destinataire, contact ou fiches ;
+   `textes` : texte, lien, image ; `proprietes` : NOM et valeur de chaque propriété CRM) et l'empreinte ; le dossier le
+   fournit (`DossierHumain.appelsProposes`, révision courante d'abord, `revisionCourante`) ;
+3. l'humain approuve avec `portee.appel` = `AppelPropose.approbation` (`{ id, service, outil, compte, empreinte }`) recopié
+   tel quel. `atelier.decision` refuse (`entree_invalide`) un appel inconnu, d'une autre révision, dont un champ diffère de
+   l'appel proposé, dont l'empreinte recalculée diffère, ou incohérent avec la portée (action de l'outil, canal → service,
+   compte) ;
+4. l'agent demande la diffusion (`tache.diffusions`) avec ce même `service`, `outil`, `arguments` et `compte` : la preuve
+   n'est signée que si l'empreinte d'appel de la demande égale `portee.appel.empreinte` (sinon « préparée » avec le motif
+   « l'appel demandé n'est pas celui que l'humain a approuvé »). Une approbation sans `appel` ne produit plus jamais de
+   preuve. Tous les champs sont liés : texte, lien, image, `destinataire`, `contact_id`, `id`, `ids`, noms et valeurs des
+   propriétés CRM, compte. Le contrôle « tel quel » reste un garde-fou supplémentaire, jamais la garantie.
+
+En mode réel, l'action d'interface `atelier.diffusion.demander` sur un canal servi par la passerelle (`SERVICE_DU_CANAL`)
+sans appel est refusée (`conflit`) : la diffusion part de l'agent (sinon elle occuperait la diffusion unique de
+l'approbation, M1, sans jamais obtenir de preuve). En démonstration, rien ne change.
+
+**Portée d'une modification de CRM** : `audience` et `montantMaxCents` doivent être nuls (refus `entree_invalide`) ; la cible
+est le contact de l'appel approuvé. `dureeJours` garde son sens (borne l'expiration de la preuve).
+
+**Dépôt de données (S-2, S-3, S-6).**
+- S-3 : refus (`entree_invalide`, événement `donnees.refusees`) de tout outil d'écriture (`OUTILS_ECRITURE` ou nom d'action
+  d'écriture : `publier`, `envoyer`, `modifier`, `ecrire`, `creer`, `supprimer`, `programmer`), de toute charge `aev1` dont
+  `ecriture !== false` (champ signé par la passerelle depuis `cad1ac4` ; absent = écriture, par prudence) et de toute
+  structure qui porte les marques d'une réponse d'écriture (`cle_idempotence`, `executee`, ou `etat` préparée, exécutée ou
+  ambiguë avec `action`), quel que soit le mode.
+- S-2 : en réel, CHAQUE structure retenue (données structurées et JSON du texte) porte sa propre enveloppe signée ; le texte
+  doit contenir la structure signée et rien d'autre qu'une mention sans chiffre avant elle (aucun ajout après) ; le
+  dédoublonnage texte et données structurées compare le JSON canonique (ordre des clés indifférent).
+- S-6 : en réel, `arguments` est obligatoire (même empreinte que la charge signée) ; la charge doit porter un compte ; le
+  `compte` déclaré, s'il est fourni, doit l'égaler ; une campagne (ou, sans campagne, une tâche) n'interroge qu'un compte
+  par service : un compte signé différent de celui des données réelles déjà déposées pour ce service est refusé. Le compte
+  est gardé (`Source.connexion.compte`).
+
+**Preuve figée (S-4).** La charge de la première preuve signée est enregistrée sur la diffusion (`preuve_charge` ; le jeton
+n'est jamais stocké). Un rejeu revérifie tout puis re-signe la MÊME charge : même émission, même expiration, même jeton
+(Ed25519 est déterministe). Au-delà de `expire` : « préparée » avec « la preuve de cette diffusion a expiré : une nouvelle
+approbation est nécessaire ». `Diffusion.preuveExpire` expose l'expiration. Une diffusion antérieure sans charge la reçoit au
+premier rejeu signé.
+
+**Clé d'idempotence signée.** `charge.cle` = `atelier-diffusion-<id de la diffusion>` (`cleIdempotenceSignee`), jamais la
+valeur de l'agent (qui reste la clé de la DEMANDE côté plugin). La route d'issue compare `cle_idempotence` de la réponse à
+la clé de la charge figée (clé de la demande pour une diffusion sans charge).
+
+**Issue rapportée.** En plus du §14 : la charge doit venir d'un outil d'écriture (`ecriture` vrai) ; un état `executee` exige
+`executee: true` signé ; tout autre état exige qu'il ne le soit pas.
+
+**Révocation (S-7).** État `revocation { le, motif }` d'une diffusion réelle « préparée » dont la preuve a été remise :
+- automatique : toute nouvelle décision sur la tâche révoque les preuves des autres décisions (`approuver` : toutes sauf la
+  sienne ; `demander_correction`, `rejeter` : toutes) ; toute nouvelle révision du livrable révoque les preuves des
+  diffusions d'une autre révision ;
+- humaine : `tache.diffusions.revoquer` (board) ou l'action `atelier.diffusion.revoquer` (humain seulement), avec un motif ;
+  idempotente ;
+- effet : le rejeu ne rend plus aucune preuve (« preuve révoquée ») ; événement `diffusion.preuve_revoquee` et activité native ;
+- publication : `preuves.revocations` rend une liste SIGNÉE par la clé d'approbation, `arv1.<base64url(charge)>.<signature>`,
+  charge `{ v: 1, entreprise, emis, revoquees: [{ diffusion, cle, decision, expire }] }` (preuves non expirées seulement).
+  Le préfixe `arv1` est dans le corps signé : une liste ne vaut jamais preuve (`apv1`). Ce que la passerelle doit en faire :
+  `docs/revue-securite-signatures.md`, « Suites à donner ».
+
+**Clés distinctes (S-8).** Si la clé d'approbation lue du secret a la même empreinte qu'une des `passerelleClesPubliques`,
+rien n'est signé (« même paire que la clé de signature de la passerelle ») ni preuve ni liste de révocation, avec un
+avertissement au journal du worker.
+
+**Compatibilité.** Décisions antérieures (sans `appel`) : plus aucune preuve (sûr : aucune diffusion réelle en service).
+Dépôts réels sans `arguments` : refusés. Réponses d'une passerelle antérieure à `cad1ac4` (charge sans `ecriture`) :
+refusées comme mesure. Champs ajoutés aux schémas en lecture : facultatifs (`appel`, `preuveExpire`, `revocation`,
+`connexion.compte`) ou avec défaut (`appelsProposes`).
+
+## 16. Version 1.7 (15/10/2026) : référentiel du client, prospection (P1) et connaissances (R1)
+
+Contrats et migrations seulement : aucune route n'est servie, aucun service n'est écrit (lots P9 et R7). Fichiers :
+`src/contrats/referentiel.ts`, `prospection.ts`, `connaissances.ts`, exemples `src/contrats/exemples/prospection.ts`,
+migrations `007_prospection.sql` et `008_connaissances.sql`, tests `tests/contrats-prospection.spec.ts` et
+`tests/contrats-connaissances.spec.ts`. Conception : `docs/prospection-conception.md` et `docs/rag-conception.md` (§13.8).
+
+**Référentiel du client (paramètres, jamais de listes fixes).** L'usine sert plusieurs clients : offres, entités,
+segments (professions, secteurs NACE, types de particuliers), établissements ou bureaux avec leur zone et cibles de
+prospection sont saisis par chaque client. Le référentiel ÉTEND la marque versionnée (`Marque`, rubrique « Marque et
+sources ») : offres et établissements gagnent des champs facultatifs (code, cible `b2c`/`b2b`/`les_deux`, segments,
+besoins couverts, arguments validés, conditions, entité porteuse, fournisseur ; communes, codes postaux, entités), et
+quatre listes nouvelles (colonnes `marques.entites`, `segments`, `cibles_prospection`, `modules_conformite`). Une version
+antérieure se relit telle quelle. Les codes cités doivent exister (`superRefine`). Prospects, campagnes (colonne
+`campagnes.referentiel`), exports et clients s'y réfèrent par `RenvoiReferentiel` (version + codes) ; `renvoiValide`
+liste les codes inconnus.
+
+**Modules de conformité activables.** `intermediaire_assurance` (mentions de l'entité et numéro FSMA, aucun conseil
+personnalisé ni comparaison de garanties dans un contenu marketing, publicité équilibrée) ; actif seulement si le client
+l'active (`moduleActif`), jamais par défaut. Son application (porte, consignes) relève de P9 et R7.
+
+**Prospection.** Cibles `entreprise`, `particulier`, `partenaire`, au même rang. `forme` (personne morale ou physique) :
+l'adresse impersonnelle sans consentement n'existe que pour une personne morale ; une personne physique professionnelle
+ne vient jamais de la BCE. Particulier : `VoletParticulier` (origine légale : formulaire, publicité ciblée, simulateur ou
+devis, devis abandonné, prise de rendez-vous, point de vente, client existant, partenaire, parrainage, événement, lead
+acheté avec consentement prouvé, courrier adressé ; preuves de consentement avec texte accepté, source, canaux, retrait ;
+offres demandées ; pseudonyme `[client-xxxx]`). `MATRICE_BASES_LEGALES` (cible × canal) : particulier par courriel ou SMS
+= consentement ou client existant seulement ; téléphone = vérification « Ne m'appelez plus » obligatoire ; un consentement
+invoqué doit être prouvé, non retiré et couvrir le canal. Score = somme bornée des points des critères ; `estimation` sans
+étalonnage ; `probabilite_mesuree` seulement à partir de 300 prospects et 30 conversions (seuils proposés, à fixer par l'opérateur),
+avec une marge de Wilson à 95 % ; « certitude » n'existe pas. Isotonique à partir de 1 000 exemples. Aucun schéma d'entrée
+n'accepte `mode`. Coordonnées et identifiants directs : `ValeurChiffree` (`chv1.`, AES-256-GCM) et empreintes HMAC ; la
+table `clients` refuse toute valeur non chiffrée. Démonstration B2C : `FichePersonneDechiffree` exige en démonstration des
+coordonnées manifestement fictives (« (démonstration) », `@exemple.invalid`, `+32 4 000`, « Rue de la Démonstration »).
+Export vers le CRM : diffusion réelle ordinaire ; « préparée », « confirmée » ou « à réconcilier » exigent une diffusion ;
+jamais « confirmée » en démonstration ; entité obligatoire.
+
+**Connaissances.** Vecteur `bytea` de 4 096 octets (`SET STORAGE EXTERNAL`), transporté en base64 de 5 464 caractères ;
+langue `fr`/`nl` ; `texte_normalise` rempli par le code ; `tsv` générée (`french`/`dutch`) avec index GIN ; index
+trigramme ; index `(company_id, index_id, id)` pour charger le cache par pages ; un seul index actif par entreprise, une
+seule version active par document ; l'index local déclare modèle, révision, empreinte et dimension 1 024. Passage rendu :
+`nonFiable: true` et consigne fixe ; citation `connaissance://<document>/v<version>#<passage>`, marquée « périmé » hors
+vigueur. `Source.provenance` gagne `connaissance` (contrainte de la table étendue, détail `Source.connaissance`) ; supprimer
+un document supprime ses passages et les sources qui les citent (cascade). Motifs de porte prévus :
+`MOTIFS_PORTE_CONNAISSANCES` (ajout à `CodeMotifPorte` par R7). Type de document `retour_partenaire` (au lieu de
+`retour_courtier` de la conception : générique).
+
+**Compatibilité.** Ajouts seulement : `Source.provenance` élargie et `Source.connaissance` facultatif ; `Marque` inchangée
+(le référentiel l'étend dans un autre fichier). Marqueurs de démonstration de la prospection :
+`EMPREINTES_PROSPECTION_DEMONSTRATION`, égal à la liste de la passerelle (test) ; leur ajout à `EMPREINTES_DEMONSTRATION`
+(`src/serveur/regles-donnees-demo.ts`) revient à P9.

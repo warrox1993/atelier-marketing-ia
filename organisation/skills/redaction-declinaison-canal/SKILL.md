@@ -2,7 +2,7 @@
 name: "redaction-declinaison-canal"
 description: "Rédige un contenu principal puis le décline par canal (site, blog, réseaux sociaux, courriel, fiche d'établissement) en respectant les contraintes de chaque canal, la charte de marque et les sources. À utiliser pour produire articles, publications, pages, newsletters ou briefs de visuels."
 metadata:
-  version: "1.2.0"
+  version: "1.4.0"
   langue: "fr"
   domaine: "contenu"
 ---
@@ -43,6 +43,15 @@ aucune information inventée.
    incrusté, sources des images, droits à vérifier), marqué « brief, pas un visuel final ».
 5. Marquer « à confirmer » tout élément sans source et lister les droits à vérifier.
 6. Déposer chaque version comme révision du document de la tâche.
+7. Si une déclinaison doit être publiée (Facebook, Instagram, LinkedIn) et que ton rôle a l'accès en écriture sur accord :
+   écrire dans le livrable l'appel exact (service, outil, arguments mot pour mot, compte), le proposer au serveur
+   (`POST …/taches/<issueId>/appels`, révision courante), puis attendre l'approbation humaine de l'empreinte de CET appel.
+   La diffusion elle-même suit la section « Diffusion réelle : parcours complet » des consignes de l'agent : demande de
+   diffusion avec les mêmes arguments, liste de révocation lue juste avant (`GET …/preuves/revocations`, valable 5 minutes),
+   appel de l'outil avec `preuve_approbation` et `revocations_approbation`, issue rapportée. Un texte retouché après
+   proposition est un autre appel (nouvelle proposition, nouvelle approbation). Une preuve expirée ou révoquée ne se contourne
+   pas : nouvelle approbation de l'humain. Les données lues se déposent toujours avec `arguments` et `compte`, jamais la
+   réponse d'un outil d'écriture (son issue passe par la route d'issue de la diffusion).
 
 ## Livrable
 
@@ -58,7 +67,9 @@ briefs de visuels ; liste des points à confirmer.
 ## Limites
 
 - Sans outil de génération d'image connecté, aucun visuel final.
-- La publication n'est jamais faite par cette compétence.
+- Cette compétence rédige et prépare ; elle ne publie pas. La publication appartient au parcours « Diffusion réelle » des
+  consignes de l'agent, seulement après approbation humaine de l'empreinte de l'appel exact, avec la preuve signée et la liste de révocation récente.
+- Les messages privés Facebook (`facebook_envoyer_message`) ne sont jamais préparés comme une diffusion : ils sont interdits au rôle.
 
 ## Exemple
 

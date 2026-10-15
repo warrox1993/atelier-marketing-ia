@@ -217,3 +217,58 @@ ajoutée à la main dans le plugin n'est jamais retirée par `--retirer-ancienne
 faux serveur par service : couvert par les 76 tests de `passerelle/tests/reel-social-crm/` contre de faux serveurs) ; aucun run
 `claude_local` : les nouvelles consignes sont contrôlées par le vérificateur, pas jouées par un modèle.
 
+
+## Contenus peut publier : politique native par outil (15/10/2026)
+
+Décision de l'opérateur du 15/10/2026 : Contenus publie sur Facebook, Instagram et LinkedIn après approbation humaine de la publication exacte ;
+les messages privés Facebook restent exclus. Instance d'essai `atelier-cont` (3480, PG 54680,
+`PAPERCLIP_ATELIER_GATEWAY_URL=http://127.0.0.1:3495 scripts/instance-essai.sh demarrer atelier-cont 3480 54680`), passerelle de démonstration
+`node passerelle/dist/src/demarrer.js` sur 3495 (état dans un dossier temporaire), données locales du bootstrap isolées
+(`ATELIER_API=http://localhost:3480/api PAPERCLIP_INSTANCE_ID=atelier-cont ATELIER_DONNEES_LOCALES=<dossier temporaire>`). Instance et passerelle
+arrêtées à la fin. Aucun appel de modèle, aucune dépense, aucune publication réelle (les appels d'essai natifs évaluent la politique, rien n'est
+exécuté).
+
+| Vérification | Commande | Résultat |
+| --- | --- | --- |
+| Organisation hors ligne | `scripts/bootstrap-tests.sh` | **25 réussis, 0 échec** (dont 2 cas négatifs nouveaux : « message privé interdit pour Contenus » refusé pour `facebook_envoyer_message doit être bloqué`, et « Contenus : publication sans la preuve jointe à l'appel » ; l'assertion de la fausse API contrôle la politique `block` par outil : sélecteurs `{connectionId, toolName: facebook_envoyer_message}`, condition sur l'agent Contenus seul) |
+| Organisation sur instance | `scripts/bootstrap-tests.sh --instance` (variables ci-dessus) | **33 réussis, 0 échec** : passe 1 : 36 écritures, passe 2 : 0 (idempotence) ; 11 agents, 3 objectifs, 2 projets, 3 routines ; export contrôlé ; aller-retour d'import |
+| Vérificateur et fichiers générés | `python3 -I scripts/verifier-organisation.py` ; `python3 -I scripts/bootstrap-organisation.py generer --verifier` | 9 contrôles, 0 erreur ; 14 fichiers à jour (verrou régénéré : compétence `redaction-declinaison-canal` en 1.3.0) |
+| Connexions créées par les cartes, resserrées par le Gardien, puis appels d'essai natifs | `python3 -I scripts/scenarios/connexion_tardive.py http://localhost:3480/api <carte> publication` pour `atelier-facebook`, `atelier-instagram`, `atelier-linkedin` | voir le tableau suivant |
+
+| Carte | Conforme après (sans action humaine) | Appels d'essai natifs au nom de Contenus |
+| --- | --- | --- |
+| `atelier-facebook` | 42,1 s | `facebook_publier` : `ask_first` (retenu, rien publié) ; `facebook_envoyer_message` : `off` / `deny_policy_block` |
+| `atelier-instagram` | 90,1 s | `instagram_publier` : `ask_first` |
+| `atelier-linkedin` | 90,1 s | `linkedin_publier` : `ask_first` |
+
+Le vérificateur refuse maintenant, outre le parcours de diffusion dans un rôle en lecture seule (règle conservée pour tous les autres rôles), un
+rôle qui écrit sur Facebook sans `facebook_envoyer_message` dans `outilsBloques`, un outil bloqué non nommé dans les consignes et un
+`outilsBloques` sur un service où le rôle n'écrit pas.
+
+**Non exécuté.** Aucun run `claude_local` de Contenus (les nouvelles consignes sont contrôlées par le vérificateur, pas jouées par un modèle) ;
+aucune publication par une vraie plateforme ; l'appel de `facebook_publier` avec preuve d'approbation n'est pas rejoué ici (couvert par les essais de la
+section précédente et par l'agent qui change le modèle d'approbation).
+
+## Revue des signatures, côté serveur du plugin : contrat v1.6 (15/10/2026)
+
+Corrections S-1, S-2, S-3, S-4, S-6, S-7 et S-8 (plus le complément plugin de S-5) de `docs/revue-securite-signatures.md`,
+section « Suites données (plugin) » ; contrat `docs/contrats.md` §15. Instance d'essai `atelier-sig` (3460, PG 54660,
+`PAPERCLIP_ATELIER_GATEWAY_URL=http://127.0.0.1:3465 scripts/instance-essai.sh demarrer atelier-sig 3460 54660`),
+passerelle de démonstration `node passerelle/dist/src/demarrer.js` sur 3465 (état dans un dossier temporaire). L'instance 3100
+utilisant `plugin-atelier/dist`, le plugin a été construit et installé depuis une COPIE hors dépôt (`pnpm build` dans la
+copie ; `dist/` du dépôt inchangé) et les scénarios lancés depuis cette copie. Instance et passerelle arrêtées à la fin (ports
+3460, 54660 et 3465 libres, vérifié ; 3100 non touchée). Aucun appel de modèle, aucune dépense, aucune diffusion réelle.
+
+| Vérification | Commande | Résultat |
+| --- | --- | --- |
+| Types du plugin | `cd plugin-atelier && npx tsc --noEmit` | 0 erreur |
+| Tests du plugin | `pnpm test` | **431 réussis, 2 ignorés (réseau réel), 16 fichiers** ; nouveau : `revue-signatures.spec.ts` (35) ; `signatures.spec.ts`, `regles-donnees-demo.spec.ts`, `donnees-connexion.spec.ts` adaptés au contrat (arguments et compte au dépôt réel, appel approuvé, clé dérivée, nature d'outil signée), aucune assertion retirée |
+| Construction | `pnpm build` (copie hors dépôt) | `dist/` produit ; plugin `ready` sur l'instance, migration `006_appels_approuves.sql` acceptée par l'hôte (colonnes `appels_proposes.empreinte`, `diffusions.preuve_charge`, `revoquee_le`, `revocation_motif`, `sources.compte` présentes) |
+| Preuves d'origine | `bash instance/revue-repro/poc-signatures/lancer.sh` | F-A, F-B, F-C : « non reproduit » ; F-D s'arrête (plus aucune preuve sans appel approuvé) : rejoué par le service dans `revue-signatures.spec.ts` |
+| Mutants (copie hors dépôt) | 11 contrôles neutralisés un à un (empreinte non comparée, appel non exigé, structure non signée, chiffres hors JSON, nature d'outil, nom d'outil, charge figée, arguments, compte de campagne, révocation, même paire) | **11 tués** (les deux survivants du premier passage, nom d'outil et révocation, tués après ajout de deux tests) |
+| Scénarios | `python3 -I scripts/scenarios/atelier_scenarios.py <X> http://127.0.0.1:3460/api` | A **33 OK**, B **15**, C **10**, F **8**, H **25**, K **20**, S **9** ; 0 écart |
+| Routes v1.6 sur l'instance | essai par requêtes HTTP (entreprise du scénario B, tâche approuvée) | proposition 201 (aperçu, empreinte), même proposition 200, texte absent du livrable 400 ; `appelsProposes` dans le dossier ; décision avec empreinte forgée 400 ; `preuves/revocations` sans clé 409 |
+
+**Non exécuté.** Diffusion réelle de bout en bout sur l'instance avec le nouveau parcours (secret natif, clés, appel approuvé,
+preuve) : couverte par les tests de service avec le vérificateur réel de la passerelle, pas rejouée sur 3460 ; aucune
+consultation de la liste de révocation par la passerelle (lot passerelle à venir).

@@ -8,8 +8,8 @@ Aucun appel réseau, aucune écriture.
 
 Contrôles :
   1. fichiers générés à jour par rapport au registre (aucune dérive) ;
-  2. 16 compétences au format SKILL.md (Agent Skills + rubriques du cahier §5) ;
-  3. registre des 10 agents (champs, modèles acceptés par claude_local, efforts,
+  2. 19 compétences au format SKILL.md (Agent Skills + rubriques du cahier §5) ;
+  3. registre des 11 agents (champs, modèles acceptés par claude_local, efforts,
      outils de recherche séparés des outils de mutation, hiérarchie, indépendance des
      contrôleurs) ;
   4. dialecte YAML : chaque en-tête et .paperclip.yaml est lu à l'identique par le
@@ -22,7 +22,9 @@ Contrôles :
   9. connexions de la passerelle par rôle : services connus, outils MCP autorisés exactement
      aux rôles qui ont des connexions (serveur d'outils en mutation si une écriture est permise),
      consignes de l'agent complètes (identité, dépôt, démonstration, aucun chiffre inventé,
-     demande de connexion, accès).
+     demande de connexion, accès) ; pour les rôles qui écrivent, parcours de diffusion réelle complet et dans l'ordre
+     (appel proposé, approbation de l'empreinte, diffusion, liste de révocation récente, appel avec preuve et liste,
+     issue, nouvelle approbation si preuve expirée ou révoquée, dépôt avec arguments et compte).
 """
 
 from __future__ import annotations
@@ -45,6 +47,7 @@ COMPETENCES_ATTENDUES = [
     "audit-seo", "audit-local-etablissements", "contenu-recherche-ia", "preparation-campagnes-sea",
     "redaction-declinaison-canal", "charte-marque", "conversion-crm", "mesure-experiences",
     "controle-couverture", "relecture-independante", "controles-techniques-liens",
+    "recherche-prospects", "qualification-prospects", "recherche-connaissances",
     "dossier-validation-humaine",
 ]
 RUBRIQUES = [
@@ -284,8 +287,8 @@ def controler_registre(bootstrap):
     tous = reg["agents"]
     deterministes = [a for a in tous if a.get("deterministe")]
     agents = [a for a in tous if not a.get("deterministe")]
-    if len(agents) != 10:
-        erreur(f"registre : 10 agents marketing attendus, {len(agents)} trouvés")
+    if len(agents) != 11:
+        erreur(f"registre : 11 agents marketing attendus, {len(agents)} trouvés")
     # Circuit 1.1 (docs/contrats.md §6 bis) : un seul agent déterministe, la Porte de contrôle.
     if [a.get("slug") for a in deterministes] != ["porte"]:
         erreur(f"registre : un agent déterministe « porte » attendu, trouvé {[a.get('slug') for a in deterministes]}")
@@ -492,8 +495,15 @@ SERVICES_PASSERELLE = {
     "gbp": "atelier-google-business-profile", "facebook": "atelier-facebook", "instagram": "atelier-instagram",
     "linkedin": "atelier-linkedin", "crm": "atelier-hubspot", "pipedrive": "atelier-pipedrive",
     "odoo": "atelier-odoo", "teamleader": "atelier-teamleader",
+    "bce": "atelier-bce", "bnb": "atelier-bnb", "fsma": "atelier-fsma", "osm": "atelier-osm", "b2c": "atelier-b2c",
 }
+# Services de prospection (lot P10) : leurs réponses se déposent par tache.prospects.deposer (/prospects),
+# pas par tache.donnees.deposer (/donnees-connexion).
+SERVICES_PROSPECTION = {"bce", "bnb", "fsma", "osm", "b2c"}
 ACCES_CONNEXION = {"lecture", "ecriture_sur_accord"}
+# Outils d'écriture interdits à tout rôle qui écrit sur le service, même sur accord (politique native
+# « block » par outil, champ « outilsBloques » du registre) : message privé Facebook (décision de l'opérateur du 15/10/2026).
+OUTILS_INTERDITS_PAR_SERVICE = {"facebook": ["facebook_envoyer_message"]}
 CONSIGNES_CONNEXION = [
     ("## Connexions de la passerelle marketing", "section des connexions"),
     ("atelier_identite", "appel d'atelier_identite d'abord"),
@@ -504,16 +514,34 @@ CONSIGNES_CONNEXION = [
     ('"arguments"', "arguments exacts de l'appel déposés avec la réponse"),
     ("_atelier.signature", "réponse réelle signée par la passerelle, liée au dépôt"),
 ]
-# Rôles avec écriture sur accord : parcours complet d'une diffusion réelle (contrats v1.5, §14).
+# Rôles avec écriture sur accord : parcours complet d'une diffusion réelle (contrats v1.5, §14, puis v1.6, §15 : l'humain
+# approuve l'empreinte de l'appel exact, liste de révocation récente jointe à l'appel de la passerelle).
 CONSIGNES_DIFFUSION = [
     ("## Diffusion réelle : parcours complet", "section du parcours de diffusion réelle"),
+    ("/appels`", "proposition de l'appel exact (tache.appels.proposer)"),
+    ("empreinte de CET appel", "l'humain approuve l'empreinte de l'appel exact"),
     ("/diffusions`", "demande de diffusion (tache.diffusions)"),
     ('"service"', "service, outil et arguments exacts de la demande"),
     ("preuveApprobation", "lecture de la preuve rendue par la demande"),
     ("preuve_approbation", "preuve jointe à l'appel d'outil"),
+    ("/preuves/revocations", "liste de révocation récente lue juste avant l'appel (preuves.revocations)"),
+    ("revocations_approbation", "liste de révocation jointe à l'appel d'outil"),
+    ("5 minutes", "fraîcheur de la liste de révocation"),
     ("AUCUN outil", "aucun outil d'écriture sans preuve"),
     ("/diffusions/<diffusionId>/issue", "issue rapportée (tache.diffusions.issue)"),
+    ("Preuve expirée ou révoquée : nouvelle approbation", "preuve expirée ou révoquée : nouvelle approbation de l'humain"),
+    ("arguments` et `compte`", "dépôt de données avec arguments et compte"),
+    ("JAMAIS la réponse d'un outil d'écriture", "jamais le dépôt de la réponse d'un outil d'écriture"),
     ("ne réessaie jamais à l'aveugle", "aucun nouvel essai à l'aveugle sur une issue ambiguë"),
+]
+# Ordre du parcours (repère de chaque étape après le titre de la section) : proposer l'appel, demander la
+# diffusion, lire la liste de révocation, appeler l'outil avec la liste, rapporter l'issue.
+ORDRE_DIFFUSION = [
+    ("/appels`", "proposition de l'appel exact"),
+    ("/diffusions`", "demande de diffusion"),
+    ("/preuves/revocations", "lecture de la liste de révocation"),
+    ("revocations_approbation", "appel de l'outil avec la liste"),
+    ("/diffusions/<diffusionId>/issue", "issue rapportée"),
 ]
 
 
@@ -527,6 +555,8 @@ def controler_connexions():
         erreur("connexionsPasserelle : serveur d'outils ou outils natifs inattendus")
     if set(cp.get("acces") or {}) != ACCES_CONNEXION:
         erreur(f"connexionsPasserelle.acces : attendu {sorted(ACCES_CONNEXION)}")
+    if (cp.get("outilsBloques") or {}).get("interditsParService") != OUTILS_INTERDITS_PAR_SERVICE:
+        erreur(f"connexionsPasserelle.outilsBloques.interditsParService : attendu {OUTILS_INTERDITS_PAR_SERVICE}")
     avec = 0
     for a in reg["agents"]:
         s, c, o = a["slug"], a.get("connexions"), a.get("outils") or {}
@@ -551,12 +581,33 @@ def controler_connexions():
                 erreur(f"agent {s} : {OUTIL_SERVEUR_CONNEXIONS} doit être en {'mutation' if ecrit else 'recherche'} seulement")
             corps = (ORGA / "agents" / s / "AGENTS.md").read_text(encoding="utf-8")
             for motif, libelle in CONSIGNES_CONNEXION:
+                if motif == "/donnees-connexion" and set(c) <= SERVICES_PROSPECTION:
+                    motif, libelle = "/prospects`", "dépôt de chaque réponse de prospection (tache.prospects.deposer)"
                 if motif not in corps:
                     erreur(f"agent {s} : consigne manquante dans AGENTS.md : {libelle}")
+            bloques = a.get("outilsBloques") or {}
+            for service, outils in bloques.items():
+                if c.get(service) != "ecriture_sur_accord":
+                    erreur(f"agent {s} : outilsBloques pour {service}, où le rôle n'écrit pas (inutile : lecture = tout bloqué)")
+                for outil in outils:
+                    if not outil.startswith(f"{service}_"):
+                        erreur(f"agent {s} : outil bloqué {outil} étranger au service {service}")
+                    if f"`{outil}`" not in corps:
+                        erreur(f"agent {s} : l'outil bloqué {outil} n'est pas nommé dans ses consignes")
+            for service, c_acces in c.items():
+                if c_acces == "ecriture_sur_accord":
+                    for outil in OUTILS_INTERDITS_PAR_SERVICE.get(service, []):
+                        if outil not in (bloques.get(service) or []):
+                            erreur(f"agent {s} : {outil} doit être bloqué (outilsBloques) pour un rôle qui écrit sur {service}")
             if ecrit:
                 for motif, libelle in CONSIGNES_DIFFUSION:
                     if motif not in corps:
                         erreur(f"agent {s} : consigne de diffusion réelle manquante dans AGENTS.md : {libelle}")
+                section = corps[corps.index("## Diffusion réelle"):] if "## Diffusion réelle" in corps else ""
+                # Premier repère de chaque étape ; dernier pour l'issue (la route d'issue est aussi citée dans le paragraphe du dépôt).
+                positions = [(section.rfind(motif) if motif.endswith("/issue") else section.find(motif), libelle) for motif, libelle in ORDRE_DIFFUSION]
+                if all(p >= 0 for p, _ in positions) and [p for p, _ in positions] != sorted(p for p, _ in positions):
+                    erreur(f"agent {s} : parcours de diffusion réelle dans le désordre (attendu : " + " puis ".join(l for _, l in positions) + ")")
             elif "## Diffusion réelle" in corps:
                 erreur(f"agent {s} : rôle en lecture seule, le parcours de diffusion réelle ne doit pas figurer dans ses consignes")
             for service in c:

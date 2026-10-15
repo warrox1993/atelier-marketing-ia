@@ -35,6 +35,10 @@ export const CodeMotifPorte = z.enum([
   "donnee_demo_sans_mention",
   /** v1.4 (L9) : donnée de démonstration dans une campagne réelle (interdite). */
   "donnee_demo_campagne_reelle",
+  /** v1.7 (R7) : `MOTIFS_PORTE_CONNAISSANCES` (src/contrats/connaissances.ts), citations et chiffres d'offre. */
+  "citation_connaissance_inconnue",
+  "citation_connaissance_perimee",
+  "chiffre_offre_sans_source",
 ]);
 export type CodeMotifPorte = z.infer<typeof CodeMotifPorte>;
 

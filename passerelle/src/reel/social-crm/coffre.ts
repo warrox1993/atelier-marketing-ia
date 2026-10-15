@@ -39,7 +39,14 @@ export interface JetonPasserelle {
 export type EtatMutation = "en_cours" | "executee" | "ambigue" | "echouee";
 
 export interface EntreeMutation {
+  /** Clé d'idempotence choisie par l'agent (signée dans la preuve) : jamais unique à elle seule (revue S-5). */
   cle: string;
+  /**
+   * Compte (de l'octroi) pour lequel la mutation a été demandée. Le journal est indexé par compte + service + outil
+   * + clé. Absent : entrée d'avant la revue S-5, retrouvée seulement par la même clé, le même service, le même outil
+   * et le même octroi.
+   */
+  compte?: string;
   service: string;
   outil: string;
   empreinte: string;
@@ -173,22 +180,50 @@ export class Coffre {
 
   // --- Journal des mutations -------------------------------------------------------------------
 
-  mutation(cle: string): EntreeMutation | undefined {
-    return this.etat.mutations[cle];
+  /**
+   * Entrée de journal pour (compte, service, outil, clé). Jamais l'entrée d'un autre compte, service ou outil, même
+   * à clé identique (revue S-5). Repli pour les entrées d'avant S-5 (indexées par la clé seule, sans compte) : elles
+   * ne sont rendues qu'à l'octroi, au service et à l'outil qui les ont créées.
+   */
+  mutation(cle: string, portee: PorteeMutation): EntreeMutation | undefined {
+    const exacte = this.etat.mutations[indexMutation({ cle, compte: portee.compte, service: portee.service, outil: portee.outil })];
+    if (exacte) return exacte;
+    const ancienne = this.etat.mutations[cle];
+    if (ancienne && ancienne.compte === undefined && ancienne.service === portee.service && ancienne.outil === portee.outil && ancienne.octroi === portee.octroi) return ancienne;
+    return undefined;
   }
 
   ecrireMutation(entree: EntreeMutation): void {
+    const index = indexMutation(entree);
     const cles = Object.keys(this.etat.mutations);
-    if (!this.etat.mutations[entree.cle] && cles.length >= this.maxMutations) {
+    if (!this.etat.mutations[index] && cles.length >= this.maxMutations) {
       // On oublie les plus anciennes entrées closes dont la preuve a EXPIRÉ (jamais une entrée en cours ou ambiguë,
       // jamais une entrée dont la preuve pourrait encore être présentée). Au besoin, le journal dépasse sa taille visée.
       const t = this.maintenant();
       const oubliables = Object.values(this.etat.mutations)
         .filter((m) => (m.etat === "executee" || m.etat === "echouee") && m.expirePreuve !== undefined && m.expirePreuve <= t)
         .sort((a, b) => a.debut - b.debut);
-      for (const m of oubliables.slice(0, cles.length - this.maxMutations + 1)) delete this.etat.mutations[m.cle];
+      for (const m of oubliables.slice(0, cles.length - this.maxMutations + 1)) delete this.etat.mutations[indexMutation(m)];
     }
-    this.etat.mutations[entree.cle] = entree;
+    // Migration au fil de l'eau : l'entrée d'avant S-5 (clé seule) que celle-ci remplace est retirée.
+    if (entree.compte !== undefined) {
+      const ancienne = this.etat.mutations[entree.cle];
+      if (ancienne && ancienne.compte === undefined && ancienne.service === entree.service && ancienne.outil === entree.outil && ancienne.octroi === entree.octroi) delete this.etat.mutations[entree.cle];
+    }
+    this.etat.mutations[index] = entree;
     this.sauvegarder();
   }
+}
+
+/** Ce qui, avec la clé, identifie une mutation : l'agent ne choisit que la clé. */
+export interface PorteeMutation {
+  compte: string;
+  service: string;
+  outil: string;
+  octroi: string;
+}
+
+/** Index du journal : compte + service + outil + clé (JSON : aucune ambiguïté de séparateur). Sans compte : clé seule. */
+function indexMutation(m: { cle: string; compte?: string | undefined; service: string; outil: string }): string {
+  return m.compte === undefined ? m.cle : JSON.stringify([m.compte, m.service, m.outil, m.cle]);
 }

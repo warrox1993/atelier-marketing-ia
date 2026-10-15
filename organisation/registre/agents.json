@@ -1,8 +1,8 @@
 {
   "schema": "atelier/registre-agents/v1",
-  "version": "1.5.0",
+  "version": "1.6.0",
   "dateVersion": "2026-10-15",
-  "description": "Registre canonique des dix agents marketing de l'Atelier et de l'agent déterministe « Porte de contrôle » (deterministe: true, adaptateur process, aucun modèle). Source unique : le fichier .paperclip.yaml et l'en-tête des AGENTS.md en sont générés par « python3 -I scripts/bootstrap-organisation.py generer ». Les noms courts (champ nom) sont sans accent parce que Paperclip dérive l'identifiant d'un agent de son nom en supprimant les lettres accentuées ; le titre porte le libellé français complet.",
+  "description": "Registre canonique des onze agents marketing de l'Atelier et de l'agent déterministe « Porte de contrôle » (deterministe: true, adaptateur process, aucun modèle). Source unique : le fichier .paperclip.yaml et l'en-tête des AGENTS.md en sont générés par « python3 -I scripts/bootstrap-organisation.py generer ». Les noms courts (champ nom) sont sans accent parce que Paperclip dérive l'identifiant d'un agent de son nom en supprimant les lettres accentuées ; le titre porte le libellé français complet.",
   "adaptateur": {
     "type": "claude_local",
     "engine": "cli",
@@ -31,7 +31,7 @@
     }
   },
   "connexionsPasserelle": {
-    "description": "Connexions natives de Paperclip créées par les cartes de galerie de la passerelle marketing (patch socle 0004, slug atelier-<service>). Le bootstrap réserve chaque connexion existante aux seuls rôles qui la déclarent (installations natives par agent) et bloque les écritures d'un rôle en lecture (politique native « block »). Les écritures restent « Ask first » pour tous (patch socle 0005) et soumises à l'approbation humaine de l'atelier.",
+    "description": "Connexions natives de Paperclip créées par les cartes de galerie de la passerelle marketing (patch socle 0004, slug atelier-<service>). Le bootstrap réserve chaque connexion existante aux seuls rôles qui la déclarent (installations natives par agent), bloque les écritures d'un rôle en lecture (politique native « block ») et bloque, pour un rôle en écriture sur accord, chaque outil listé dans son champ « outilsBloques » (politique native « block » par outil). Les écritures restent « Ask first » pour tous (patch socle 0005) et soumises à l'approbation humaine de l'atelier.",
     "serveurOutils": "mcp__paperclip-assigned",
     "outilsNatifs": [
       "mcp__Paperclip_connections__connections_search",
@@ -48,26 +48,45 @@
       "crm": "atelier-hubspot",
       "pipedrive": "atelier-pipedrive",
       "odoo": "atelier-odoo",
-      "teamleader": "atelier-teamleader"
+      "teamleader": "atelier-teamleader",
+      "bce": "atelier-bce",
+      "bnb": "atelier-bnb",
+      "fsma": "atelier-fsma",
+      "osm": "atelier-osm",
+      "b2c": "atelier-b2c"
     },
     "acces": {
       "lecture": "lecture seule : toute écriture du service est bloquée pour ce rôle",
       "ecriture_sur_accord": "lecture, et écriture seulement après « Ask first » natif et approbation humaine de l'atelier"
     },
+    "outilsBloques": {
+      "description": "Champ « outilsBloques » d'un rôle : {service: [outils]}. Outil d'écriture que le rôle n'a jamais le droit d'appeler, même en écriture sur accord (politique native « block », nom atelier-outil-interdit:<connexion>:<rôle>:<outil>). Obligatoire pour tout rôle qui écrit sur Facebook : facebook_envoyer_message (message privé) lui est interdit (décision de l'opérateur du 15/10/2026).",
+      "interditsParService": {
+        "facebook": [
+          "facebook_envoyer_message"
+        ]
+      }
+    },
     "depotReponses": {
       "route": "tache.donnees.deposer (POST /taches/:issueId/donnees-connexion)",
-      "description": "Après chaque appel d'outil dont la réponse sert, l'agent dépose la réponse BRUTE avec les « arguments » exacts de l'appel (contrats v1.5). Une réponse de mode réel n'est retenue que si la passerelle l'a signée et qu'elle est liée au service, à l'outil, aux arguments et à une date de moins de 7 jours. La passerelle signe les arguments après application des valeurs par défaut de l'outil : l'agent les donne explicitement."
+      "description": "Après chaque appel d'outil dont la réponse sert, l'agent dépose la réponse BRUTE avec les « arguments » exacts de l'appel (contrats v1.5). Une réponse de mode réel n'est retenue que si la passerelle l'a signée et qu'elle est liée au service, à l'outil, aux arguments et à une date de moins de 7 jours. La passerelle signe les arguments après application des valeurs par défaut de l'outil : l'agent les donne explicitement. Toujours avec « arguments » et « compte » ; jamais la réponse d'un outil d'écriture (refusée : son issue passe par tache.diffusions.issue)."
     },
     "diffusionReelle": {
-      "description": "Parcours d'une écriture réelle (publier, envoyer, modifier le CRM), décrit dans la section « Diffusion réelle : parcours complet » des consignes des rôles en « ecriture_sur_accord ». Aujourd'hui seul crm-conversion a cet accès ; les autres rôles restent en lecture et ne diffusent jamais.",
+      "description": "Parcours d'une écriture réelle (publier, envoyer, modifier le CRM), décrit dans la section « Diffusion réelle : parcours complet » des consignes des rôles en « ecriture_sur_accord ». Aujourd'hui : crm-conversion (HubSpot, Pipedrive, Odoo, Teamleader) et contenus (facebook_publier, instagram_publier, linkedin_publier ; messages privés Facebook exclus) ; les autres rôles restent en lecture et ne diffusent jamais.",
       "etapes": [
-        "préparer l'écriture exacte dans le livrable ; l'humain l'approuve (version, canal, compte, durée)",
-        "tache.diffusions : demander la diffusion avec service, outil et arguments exacts, une clé d'idempotence stable",
+        "tache.appels.proposer : proposer l'appel exact (service, outil, compte, arguments) sur la révision courante ; l'humain approuve l'empreinte de CET appel, avec une durée",
+        "attendre l'approbation humaine de l'empreinte ; sans approbation, rien n'est demandé ni appelé",
+        "tache.diffusions : demander la diffusion avec les mêmes service, outil, compte et arguments et une clé d'idempotence stable",
         "ne rien appeler sans preuveApprobation ; état refusee ou preparee sans preuve : rendre compte, ne pas contourner",
-        "appeler l'outil d'écriture avec les mêmes arguments et preuve_approbation = la preuve, sans la copier ailleurs",
+        "preuves.revocations : lire juste avant l'appel la liste de révocation signée (valable 5 minutes) puis appeler l'outil d'écriture avec les mêmes arguments, preuve_approbation = la preuve et revocations_approbation = la liste, sans les copier ailleurs",
         "tache.diffusions.issue : rapporter la réponse BRUTE signée de la passerelle",
+        "preuve expirée ou révoquée : nouvelle approbation de l'humain, jamais de contournement",
         "issue ambiguë (ambigue_a_reconcilier, délai, coupure, 5xx) : ne jamais réessayer à l'aveugle, écrire au coordinateur"
       ]
+    },
+    "depotProspects": {
+      "route": "tache.prospects.deposer (POST /taches/:issueId/prospects)",
+      "description": "Services de prospection (bce, bnb, fsma, osm, b2c), en lecture seule pour le rôle prospection : chaque réponse brute et signée d'un outil est déposée par cette route, avec les « arguments » exacts de l'appel ; le serveur en tire les prospects, déduit le mode et applique les exclusions. Jamais de prospect recopié à la main. Chaque service a sa carte de galerie Paperclip atelier-<service> (atelier-bce, atelier-bnb, atelier-fsma, atelier-osm, atelier-b2c ; patch socle 0011, lecture seule) : le bootstrap réserve la connexion créée par la carte au seul rôle prospection ; une connexion générique vers l'adresse de boucle locale /mcp/<service> reste reconnue."
     }
   },
   "agents": [
@@ -75,7 +94,7 @@
       "slug": "coordinateur",
       "nom": "Coordinateur",
       "titre": "Coordinateur marketing",
-      "role": "cmo",
+      "role": "ceo",
       "rapporteA": null,
       "mission": "Transforme la demande en brief et en exigences REQ-xxx, construit le graphe de tâches sans cycle, affecte, arbitre, organise les relectures et prépare le dossier humain.",
       "entrees": [
@@ -94,7 +113,8 @@
       "competences": [
         "cadrage-exigences",
         "planification-livrables",
-        "dossier-validation-humaine"
+        "dossier-validation-humaine",
+        "recherche-connaissances"
       ],
       "competencesObligatoires": [
         "cadrage-exigences",
@@ -190,6 +210,73 @@
       ]
     },
     {
+      "slug": "prospection",
+      "nom": "Prospection",
+      "titre": "Recherche et qualification de prospects",
+      "role": "researcher",
+      "rapporteA": "coordinateur",
+      "mission": "Cherche et qualifie des prospects B2B (entreprises par secteur NACE et zone), B2C (origines légales seulement) et partenaires, à partir des réponses signées des connexions de prospection ; ne contacte jamais personne et n'écrit pas au CRM.",
+      "entrees": [
+        "brief et exigences",
+        "secteurs NACE, zone et type de prospects visés",
+        "base clients importée (exclusions, origines B2C légales)"
+      ],
+      "sorties": [
+        "liste de prospects déposée par la route du plugin (réponses brutes signées)",
+        "qualification sourcée de chaque prospect retenu, score présenté comme estimation",
+        "liste des recherches sans résultat et des limites"
+      ],
+      "competences": [
+        "recherche-prospects",
+        "qualification-prospects",
+        "recherche-sourcee"
+      ],
+      "competencesObligatoires": [
+        "recherche-prospects",
+        "qualification-prospects"
+      ],
+      "outils": {
+        "recherche": [
+          "Read",
+          "Grep",
+          "Glob",
+          "WebSearch",
+          "WebFetch",
+          "mcp__paperclip-assigned",
+          "mcp__Paperclip_connections__connections_search",
+          "mcp__Paperclip_connections__connection_request"
+        ],
+        "mutation": [
+          "Bash(curl *)",
+          "Write"
+        ],
+        "interdits": [
+          "Edit",
+          "NotebookEdit"
+        ]
+      },
+      "connexions": {
+        "bce": "lecture",
+        "bnb": "lecture",
+        "fsma": "lecture",
+        "osm": "lecture",
+        "b2c": "lecture"
+      },
+      "modele": {
+        "id": "claude-sonnet-5-5",
+        "effort": "medium"
+      },
+      "budgetMensuelCentimes": 1500,
+      "maxToursParExecution": 60,
+      "relit": [],
+      "roleRevue": null,
+      "criteresReussite": [
+        "chaque prospect provient d'une réponse d'outil signée et déposée, jamais d'une saisie à la main",
+        "aucune personne physique de la BCE, aucun particulier sans origine légale prouvée",
+        "aucun conseil d'assurance ni comparaison de garanties ; le score reste une « estimation » tant que l'étalonnage n'est pas mesuré"
+      ]
+    },
+    {
       "slug": "seo-local-geo",
       "nom": "SEO local GEO",
       "titre": "Référencement naturel, local et GEO",
@@ -211,7 +298,8 @@
         "audit-seo",
         "audit-local-etablissements",
         "contenu-recherche-ia",
-        "recherche-sourcee"
+        "recherche-sourcee",
+        "recherche-connaissances"
       ],
       "competencesObligatoires": [
         "audit-local-etablissements"
@@ -276,7 +364,8 @@
       ],
       "competences": [
         "preparation-campagnes-sea",
-        "charte-marque"
+        "charte-marque",
+        "recherche-connaissances"
       ],
       "competencesObligatoires": [
         "preparation-campagnes-sea"
@@ -324,7 +413,7 @@
       "titre": "Contenus et création",
       "role": "designer",
       "rapporteA": "coordinateur",
-      "mission": "Produit articles, publications, pages et briefs de visuels selon la marque et le canal ; signale sources et droits ; n'invente ni avis, ni prix, ni certification.",
+      "mission": "Produit articles, publications, pages et briefs de visuels selon la marque et le canal ; signale sources et droits ; n'invente ni avis, ni prix, ni certification. Peut publier sur Facebook, Instagram et LinkedIn, seulement sur approbation humaine de l'appel exact.",
       "entrees": [
         "brief et exigences",
         "charte de marque",
@@ -339,7 +428,8 @@
       "competences": [
         "redaction-declinaison-canal",
         "charte-marque",
-        "contenu-recherche-ia"
+        "contenu-recherche-ia",
+        "recherche-connaissances"
       ],
       "competencesObligatoires": [
         "charte-marque"
@@ -350,14 +440,14 @@
           "Grep",
           "Glob",
           "WebFetch",
-          "mcp__paperclip-assigned",
           "mcp__Paperclip_connections__connections_search",
           "mcp__Paperclip_connections__connection_request"
         ],
         "mutation": [
           "Bash(curl *)",
           "Write",
-          "Edit"
+          "Edit",
+          "mcp__paperclip-assigned"
         ],
         "interdits": [
           "WebSearch",
@@ -365,9 +455,14 @@
         ]
       },
       "connexions": {
-        "facebook": "lecture",
-        "instagram": "lecture",
-        "linkedin": "lecture"
+        "facebook": "ecriture_sur_accord",
+        "instagram": "ecriture_sur_accord",
+        "linkedin": "ecriture_sur_accord"
+      },
+      "outilsBloques": {
+        "facebook": [
+          "facebook_envoyer_message"
+        ]
       },
       "modele": {
         "id": "claude-sonnet-5-5",
@@ -380,7 +475,8 @@
       "criteresReussite": [
         "aucun témoignage, avis, prix, certification ou subvention inventé",
         "chaque affirmation commerciale renvoie à une source ou est marquée « à confirmer »",
-        "un visuel non généré est livré comme brief, jamais comme visuel final"
+        "un visuel non généré est livré comme brief, jamais comme visuel final",
+        "aucune publication sans approbation humaine de l'appel exact et sans preuve ; aucun message privé Facebook"
       ]
     },
     {
@@ -402,7 +498,8 @@
       ],
       "competences": [
         "conversion-crm",
-        "charte-marque"
+        "charte-marque",
+        "recherche-connaissances"
       ],
       "competencesObligatoires": [
         "conversion-crm"
@@ -559,6 +656,7 @@
       "relit": [
         "coordinateur",
         "veille",
+        "prospection",
         "seo-local-geo",
         "sea",
         "contenus",
@@ -625,6 +723,7 @@
       "relit": [
         "coordinateur",
         "veille",
+        "prospection",
         "seo-local-geo",
         "sea",
         "contenus",

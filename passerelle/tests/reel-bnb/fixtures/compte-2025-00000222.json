@@ -1,0 +1,35 @@
+{
+  "ReferenceNumber": "2025-00000222",
+  "EnterpriseName": "Entreprise Fictive d'Essai SRL",
+  "LegalForm": {
+    "LegalFormCode": "610"
+  },
+  "Rubrics": [
+    {
+      "Code": "9087",
+      "Period": "N",
+      "Value": "12.5",
+      "DataType": "decimal"
+    },
+    {
+      "Code": "9087",
+      "Period": "NM1",
+      "Value": "11"
+    },
+    {
+      "Code": "20/58",
+      "Period": "N",
+      "Value": "1850000.00"
+    },
+    {
+      "Code": "20/58",
+      "Period": "NM1",
+      "Value": "1700000.00"
+    },
+    {
+      "Code": "10/15",
+      "Period": "N",
+      "Value": "500"
+    }
+  ]
+}

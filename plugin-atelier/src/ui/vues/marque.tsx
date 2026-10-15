@@ -7,7 +7,8 @@
 import { useState, type FormEvent } from "react";
 import { LIMITES } from "../../contrats/identifiants.js";
 import type { DocumentImporte } from "../../contrats/sources.js";
-import type { Marque, VueMarque } from "../../contrats/ui.js";
+import { CATALOGUE_MODULES_CONFORMITE, type ReferentielClient } from "../../contrats/referentiel.js";
+import type { VueMarque } from "../../contrats/ui.js";
 import { Champ, Bouton, EnTete, EtatErreur, Fraicheur, Horodatage, Lecture, ListeOuAucun, MentionDemo, Pastille, Section, Vide } from "../composants.js";
 import { useAction, useDonnees } from "../donnees.js";
 import { STATUTS_ACCES_SOURCE } from "../format.js";
@@ -95,7 +96,7 @@ export function VueMarqueAtelier() {
   );
 }
 
-function FicheMarque({ marque: m, versions }: { marque: Marque; versions: VueMarque["versions"] }) {
+function FicheMarque({ marque: m, versions }: { marque: ReferentielClient; versions: VueMarque["versions"] }) {
   return (
     <Section titre={`Version ${m.version}`} aide={<>Enregistrée <Horodatage iso={m.creeLe} />{versions.length > 1 ? `, ${versions.length} versions au total` : ""}.</>}>
       <dl className="atl-champs atl-champs-grille">
@@ -164,6 +165,7 @@ function FicheMarque({ marque: m, versions }: { marque: Marque; versions: VueMar
           </dd>
         </div>
       </dl>
+      <ReferentielEtendu m={m} />
       {m.informationsManquantes.length ? (
         <div className="atl-encart" data-ton="attention">
           <p className="atl-encart-titre">Informations manquantes</p>
@@ -191,6 +193,71 @@ function FicheMarque({ marque: m, versions }: { marque: Marque; versions: VueMar
   );
 }
 
+/** Référentiel étendu du client, en lecture seule : entités, segments, cibles de prospection, modules actifs. */
+function ReferentielEtendu({ m: marque }: { m: ReferentielClient }) {
+  // Une ancienne version relue sans ces listes s'affiche comme une version sans référentiel étendu.
+  const m = { entites: marque.entites ?? [], segments: marque.segments ?? [], ciblesProspection: marque.ciblesProspection ?? [], modulesConformite: marque.modulesConformite ?? [] };
+  if (!m.entites.length && !m.segments.length && !m.ciblesProspection.length && !m.modulesConformite.length) return null;
+  const nomEntite = (code: string) => m.entites.find((e) => e.code === code)?.nom ?? code;
+  return (
+    <dl className="atl-champs atl-champs-grille">
+      <div>
+        <dt>Entités</dt>
+        <dd>
+          {m.entites.length ? (
+            <ul className="atl-liste-compacte">
+              {m.entites.map((e) => (
+                <li key={e.code}>
+                  <strong>{e.nom}</strong> <span className="atl-attenue">{e.type === "marque" && e.porteePar ? `marque de ${nomEntite(e.porteePar)}` : "entité juridique"}</span>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <span className="atl-attenue">aucune</span>
+          )}
+        </dd>
+      </div>
+      <div>
+        <dt>Segments</dt>
+        <dd>{m.segments.length ? <ul className="atl-liste-compacte">{m.segments.map((s) => <li key={s.code}>{s.libelle}</li>)}</ul> : <span className="atl-attenue">aucun</span>}</dd>
+      </div>
+      <div>
+        <dt>Cibles de prospection</dt>
+        <dd>
+          {m.ciblesProspection.length ? (
+            <ul className="atl-liste-compacte">
+              {m.ciblesProspection.map((c) => (
+                <li key={c.code}>
+                  {c.libelle} <span className="atl-attenue">{c.cible === "les_deux" ? "B2C et B2B" : c.cible.toUpperCase()}</span>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <span className="atl-attenue">aucune</span>
+          )}
+        </dd>
+      </div>
+      <div>
+        <dt>Modules de conformité actifs</dt>
+        <dd>
+          {m.modulesConformite.length ? (
+            <ul className="atl-liste-compacte">
+              {m.modulesConformite.map((x) => (
+                <li key={x.code}>
+                  {CATALOGUE_MODULES_CONFORMITE[x.code].libelle}{" "}
+                  <span className="atl-attenue">{x.entites.length ? x.entites.map(nomEntite).join(", ") : "toutes les entités"}</span>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <span className="atl-attenue">aucun</span>
+          )}
+        </dd>
+      </div>
+    </dl>
+  );
+}
+
 function lignesTexte(t: string): string[] {
   return t
     .split(/\r?\n/u)
@@ -198,8 +265,8 @@ function lignesTexte(t: string): string[] {
     .filter(Boolean);
 }
 
-function EditeurMarque({ initiale, onFait }: { initiale: Marque | null; onFait(): void }) {
-  const enregistrer = useAction<Marque>("atelier.marque.enregistrer");
+function EditeurMarque({ initiale, onFait }: { initiale: ReferentielClient | null; onFait(): void }) {
+  const enregistrer = useAction<ReferentielClient>("atelier.marque.enregistrer");
   const [identite, setIdentite] = useState(initiale?.identite ?? "");
   const [ton, setTon] = useState(initiale?.ton ?? "");
   const [zones, setZones] = useState((initiale?.zones ?? []).join("\n"));
@@ -221,11 +288,16 @@ function EditeurMarque({ initiale, onFait }: { initiale: Marque | null; onFait()
       await enregistrer({
         identite: identite.trim(),
         ton: ton.trim(),
-        offres: offres.filter((o) => o.nom.trim()).map((o) => ({ nom: o.nom.trim(), description: o.description.trim(), confirmee: o.confirmee })),
+        offres: offres.filter((o) => o.nom.trim()).map((o) => ({ ...o, nom: o.nom.trim(), description: o.description.trim(), confirmee: o.confirmee })),
         zones: lignesTexte(zones),
-        etablissements: etabs.filter((x) => x.nom.trim()).map((x) => ({ nom: x.nom.trim(), adresse: x.adresse.trim() || null, confirme: x.confirme })),
+        etablissements: etabs.filter((x) => x.nom.trim()).map((x) => ({ ...x, nom: x.nom.trim(), adresse: x.adresse.trim() || null, confirme: x.confirme })),
         affirmationsAutorisees: lignesTexte(affirmations).map((texte) => ({ texte, sourceId: anciennes.get(texte) ?? null })),
         informationsManquantes: lignesTexte(manquantes),
+        // Champs étendus du référentiel : non modifiables ici, conservés d'une version à l'autre.
+        entites: initiale?.entites ?? [],
+        segments: initiale?.segments ?? [],
+        ciblesProspection: initiale?.ciblesProspection ?? [],
+        modulesConformite: initiale?.modulesConformite ?? [],
       });
       onFait();
     } catch (err) {

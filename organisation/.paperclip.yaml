@@ -4,7 +4,7 @@ company:
   requireBoardApprovalForNewAgents: true
 agents:
   coordinateur:
-    role: "cmo"
+    role: "ceo"
     capabilities: "Transforme la demande en brief et en exigences REQ-xxx, construit le graphe de tâches sans cycle, affecte, arbitre, organise les relectures et prépare le dossier humain."
     adapter:
       type: "claude_local"
@@ -44,7 +44,7 @@ agents:
     metadata:
       atelier:
         registre: "atelier/registre-agents/v1"
-        versionRegistre: "1.5.0"
+        versionRegistre: "1.6.0"
         titre: "Coordinateur marketing"
         entrees:
           - "demande du client ou de l'opérateur"
@@ -132,7 +132,7 @@ agents:
     metadata:
       atelier:
         registre: "atelier/registre-agents/v1"
-        versionRegistre: "1.5.0"
+        versionRegistre: "1.6.0"
         titre: "Marché et veille concurrentielle"
         entrees:
           - "brief et exigences"
@@ -163,6 +163,101 @@ agents:
           - "chaque observation porte une source, une date de collecte et un statut d'accès"
           - "aucune généralisation à partir d'un échantillon incomplet sans le dire"
           - "les pages non consultées sont listées comme telles"
+    inputs:
+      env:
+        CLAUDE_CODE_OAUTH_TOKEN:
+          kind: "secret"
+          requirement: "optional"
+          description: "Jeton longue durée produit par « claude setup-token » (abonnement Claude de l'opérateur, usage personnel). Stocké comme secret Paperclip, jamais dans un fichier."
+        CLAUDE_CONFIG_DIR:
+          kind: "plain"
+          requirement: "optional"
+          portability: "system_dependent"
+          description: "Dossier de configuration Claude dédié à l'agent, créé par le bootstrap sous instance/claude-config/<slug>. Jamais le ~/.claude de l'opérateur."
+  prospection:
+    role: "researcher"
+    capabilities: "Cherche et qualifie des prospects B2B (entreprises par secteur NACE et zone), B2C (origines légales seulement) et partenaires, à partir des réponses signées des connexions de prospection ; ne contacte jamais personne et n'écrit pas au CRM."
+    adapter:
+      type: "claude_local"
+      config:
+        engine: "cli"
+        model: "claude-sonnet-5-5"
+        effort: "medium"
+        dangerouslySkipPermissions: false
+        maxTurnsPerRun: 60
+        timeoutSec: 1800
+        graceSec: 30
+        extraArgs:
+          - "--permission-mode"
+          - "dontAsk"
+          - "--allowedTools"
+          - "Read"
+          - "Grep"
+          - "Glob"
+          - "WebSearch"
+          - "WebFetch"
+          - "mcp__paperclip-assigned"
+          - "mcp__Paperclip_connections__connections_search"
+          - "mcp__Paperclip_connections__connection_request"
+          - "Bash(curl *)"
+          - "Write"
+          - "--disallowedTools"
+          - "Edit"
+          - "NotebookEdit"
+        env:
+          DISABLE_TELEMETRY:
+            type: "plain"
+            value: "1"
+          CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC:
+            type: "plain"
+            value: "1"
+    runtime:
+      heartbeat:
+        maxConcurrentRuns: 1
+    budgetMonthlyCents: 1500
+    metadata:
+      atelier:
+        registre: "atelier/registre-agents/v1"
+        versionRegistre: "1.6.0"
+        titre: "Recherche et qualification de prospects"
+        entrees:
+          - "brief et exigences"
+          - "secteurs NACE, zone et type de prospects visés"
+          - "base clients importée (exclusions, origines B2C légales)"
+        sorties:
+          - "liste de prospects déposée par la route du plugin (réponses brutes signées)"
+          - "qualification sourcée de chaque prospect retenu, score présenté comme estimation"
+          - "liste des recherches sans résultat et des limites"
+        competencesObligatoires:
+          - "recherche-prospects"
+          - "qualification-prospects"
+        outilsRecherche:
+          - "Read"
+          - "Grep"
+          - "Glob"
+          - "WebSearch"
+          - "WebFetch"
+          - "mcp__paperclip-assigned"
+          - "mcp__Paperclip_connections__connections_search"
+          - "mcp__Paperclip_connections__connection_request"
+        outilsMutation:
+          - "Bash(curl *)"
+          - "Write"
+        outilsInterdits:
+          - "Edit"
+          - "NotebookEdit"
+        relit: []
+        roleRevue: null
+        connexions:
+          bce: "lecture"
+          bnb: "lecture"
+          fsma: "lecture"
+          osm: "lecture"
+          b2c: "lecture"
+        criteresReussite:
+          - "chaque prospect provient d'une réponse d'outil signée et déposée, jamais d'une saisie à la main"
+          - "aucune personne physique de la BCE, aucun particulier sans origine légale prouvée"
+          - "aucun conseil d'assurance ni comparaison de garanties ; le score reste une « estimation » tant que l'étalonnage n'est pas mesuré"
     inputs:
       env:
         CLAUDE_CODE_OAUTH_TOKEN:
@@ -218,7 +313,7 @@ agents:
     metadata:
       atelier:
         registre: "atelier/registre-agents/v1"
-        versionRegistre: "1.5.0"
+        versionRegistre: "1.6.0"
         titre: "Référencement naturel, local et GEO"
         entrees:
           - "brief et exigences"
@@ -311,7 +406,7 @@ agents:
     metadata:
       atelier:
         registre: "atelier/registre-agents/v1"
-        versionRegistre: "1.5.0"
+        versionRegistre: "1.6.0"
         titre: "Publicité et SEA"
         entrees:
           - "brief et exigences"
@@ -361,7 +456,7 @@ agents:
           description: "Dossier de configuration Claude dédié à l'agent, créé par le bootstrap sous instance/claude-config/<slug>. Jamais le ~/.claude de l'opérateur."
   contenus:
     role: "designer"
-    capabilities: "Produit articles, publications, pages et briefs de visuels selon la marque et le canal ; signale sources et droits ; n'invente ni avis, ni prix, ni certification."
+    capabilities: "Produit articles, publications, pages et briefs de visuels selon la marque et le canal ; signale sources et droits ; n'invente ni avis, ni prix, ni certification. Peut publier sur Facebook, Instagram et LinkedIn, seulement sur approbation humaine de l'appel exact."
     adapter:
       type: "claude_local"
       config:
@@ -380,12 +475,12 @@ agents:
           - "Grep"
           - "Glob"
           - "WebFetch"
-          - "mcp__paperclip-assigned"
           - "mcp__Paperclip_connections__connections_search"
           - "mcp__Paperclip_connections__connection_request"
           - "Bash(curl *)"
           - "Write"
           - "Edit"
+          - "mcp__paperclip-assigned"
           - "--disallowedTools"
           - "WebSearch"
           - "NotebookEdit"
@@ -403,7 +498,7 @@ agents:
     metadata:
       atelier:
         registre: "atelier/registre-agents/v1"
-        versionRegistre: "1.5.0"
+        versionRegistre: "1.6.0"
         titre: "Contenus et création"
         entrees:
           - "brief et exigences"
@@ -421,26 +516,30 @@ agents:
           - "Grep"
           - "Glob"
           - "WebFetch"
-          - "mcp__paperclip-assigned"
           - "mcp__Paperclip_connections__connections_search"
           - "mcp__Paperclip_connections__connection_request"
         outilsMutation:
           - "Bash(curl *)"
           - "Write"
           - "Edit"
+          - "mcp__paperclip-assigned"
         outilsInterdits:
           - "WebSearch"
           - "NotebookEdit"
         relit: []
         roleRevue: null
         connexions:
-          facebook: "lecture"
-          instagram: "lecture"
-          linkedin: "lecture"
+          facebook: "ecriture_sur_accord"
+          instagram: "ecriture_sur_accord"
+          linkedin: "ecriture_sur_accord"
+        outilsBloques:
+          facebook:
+            - "facebook_envoyer_message"
         criteresReussite:
           - "aucun témoignage, avis, prix, certification ou subvention inventé"
           - "chaque affirmation commerciale renvoie à une source ou est marquée « à confirmer »"
           - "un visuel non généré est livré comme brief, jamais comme visuel final"
+          - "aucune publication sans approbation humaine de l'appel exact et sans preuve ; aucun message privé Facebook"
     inputs:
       env:
         CLAUDE_CODE_OAUTH_TOKEN:
@@ -496,7 +595,7 @@ agents:
     metadata:
       atelier:
         registre: "atelier/registre-agents/v1"
-        versionRegistre: "1.5.0"
+        versionRegistre: "1.6.0"
         titre: "CRM et conversion"
         entrees:
           - "brief et exigences"
@@ -589,7 +688,7 @@ agents:
     metadata:
       atelier:
         registre: "atelier/registre-agents/v1"
-        versionRegistre: "1.5.0"
+        versionRegistre: "1.6.0"
         titre: "Mesure et optimisation"
         entrees:
           - "exports de données importés avec période et provenance"
@@ -677,7 +776,7 @@ agents:
     metadata:
       atelier:
         registre: "atelier/registre-agents/v1"
-        versionRegistre: "1.5.0"
+        versionRegistre: "1.6.0"
         titre: "Contrôleur des exigences"
         entrees:
           - "brief original"
@@ -705,6 +804,7 @@ agents:
         relit:
           - "coordinateur"
           - "veille"
+          - "prospection"
           - "seo-local-geo"
           - "sea"
           - "contenus"
@@ -768,7 +868,7 @@ agents:
     metadata:
       atelier:
         registre: "atelier/registre-agents/v1"
-        versionRegistre: "1.5.0"
+        versionRegistre: "1.6.0"
         titre: "Relecteur métier et factuel"
         entrees:
           - "brief original"
@@ -796,6 +896,7 @@ agents:
         relit:
           - "coordinateur"
           - "veille"
+          - "prospection"
           - "seo-local-geo"
           - "sea"
           - "contenus"
@@ -859,7 +960,7 @@ agents:
     metadata:
       atelier:
         registre: "atelier/registre-agents/v1"
-        versionRegistre: "1.5.0"
+        versionRegistre: "1.6.0"
         titre: "Vérificateur technique"
         entrees:
           - "version précise du livrable"
@@ -923,7 +1024,7 @@ agents:
     metadata:
       atelier:
         registre: "atelier/registre-agents/v1"
-        versionRegistre: "1.5.0"
+        versionRegistre: "1.6.0"
         titre: "Porte de contrôle"
         entrees:
           - "tâche sous porte en étape de revue"

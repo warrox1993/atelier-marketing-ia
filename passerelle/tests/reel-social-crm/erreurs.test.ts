@@ -3,7 +3,7 @@
 
 import type { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { appeler, clientMcp, connecter, monter, preuve, type Montage } from "./aide.js";
+import { appeler, clientMcp, connecter, monter, preuve, type Montage, listeRevocations } from "./aide.js";
 import { CLE_API_ODOO, CLE_API_PIPEDRIVE, IDENTIFIANTS, SECRETS_EMIS } from "./faux-plateformes.js";
 
 let m: Montage;
@@ -97,7 +97,7 @@ describe("permissions et objets introuvables", () => {
 
   it("HubSpot : contact inexistant → introuvable, mutation close sans effet", async () => {
     const args = { contact_id: "999999", properties: { lifecyclestage: "customer" } };
-    const r = await appeler(clients.get("crm")!, "crm_modifier_contact", { ...args, preuve_approbation: preuve(m, "crm", "crm_modifier_contact", args) });
+    const r = await appeler(clients.get("crm")!, "crm_modifier_contact", { ...args, preuve_approbation: preuve(m, "crm", "crm_modifier_contact", args), revocations_approbation: listeRevocations(m) });
     expect(r.erreur).toBe(true);
     expect(r.texte).toMatch(/introuvable.*HubSpot.*999999/s);
   });

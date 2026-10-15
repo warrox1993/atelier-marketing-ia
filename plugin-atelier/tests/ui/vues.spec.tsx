@@ -52,7 +52,7 @@ describe("navigation", () => {
   it("la page porte aussi des onglets (téléphone) et chaque lien passe par la navigation de l'hôte", async () => {
     const c = await page("/RNO/atelier/equipe");
     const onglets = c.querySelector("nav.atl-onglets");
-    expect(onglets?.querySelectorAll("a")).toHaveLength(7);
+    expect(onglets?.querySelectorAll("a")).toHaveLength(9);
     await cliquer(parTexte(onglets!, "a", "Marque et sources"));
     expect(pont.navigations).toContain("/atelier/marque");
   });
@@ -334,5 +334,20 @@ describe("onglet de tâche et widget", () => {
     rendu = await rendre(createElement(WidgetAtelier, { context: contexte }));
     expect(rendu.conteneur.textContent).toContain("1 à valider");
     expect(rendu.conteneur.textContent).toContain("0 run actif sur 3");
+  });
+});
+
+describe("marque : référentiel étendu en lecture", () => {
+  it("affiche les entités, segments, cibles de prospection et modules actifs", async () => {
+    const donnees = (await import("../../src/contrats/exemples/index.js")).EXEMPLES_DONNEES["atelier.marque"] as unknown as { marque: Record<string, unknown> };
+    const { REFERENTIEL_COURTIER } = await import("../../src/contrats/exemples/prospection.js");
+    pont.donnees["atelier.marque"] = { data: { ...donnees, marque: { ...REFERENTIEL_COURTIER, companyId: ENTREPRISE } }, loading: false, error: null };
+    const c = await page("/RNO/atelier/marque");
+    expect(c.textContent).toContain("Entités");
+    expect(c.textContent).toContain("Courtage non-vie (démonstration)");
+    expect(c.textContent).toContain("marque de Courtage non-vie (démonstration)");
+    expect(c.textContent).toContain("Médecins");
+    expect(c.textContent).toContain("Cibles de prospection");
+    expect(c.textContent).toContain("Intermédiaire d'assurance");
   });
 });

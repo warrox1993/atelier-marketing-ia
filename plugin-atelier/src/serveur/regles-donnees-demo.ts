@@ -17,8 +17,8 @@
  * 4. `verifierDiffusionDonneesDemo` : une diffusion réelle est refusée dans les mêmes cas.
  */
 import type { KeyObject } from "node:crypto";
-import { MENTION_DONNEES_DEMONSTRATION, type MotifPorte } from "../contrats/index.js";
-import { DERIVE_HORLOGE_S, empreinteArgumentsAppel, verifierEnveloppe } from "./signatures.js";
+import { EMPREINTES_PROSPECTION_DEMONSTRATION, MENTION_DONNEES_DEMONSTRATION, type MotifPorte } from "../contrats/index.js";
+import { DERIVE_HORLOGE_S, chargeEcriture, empreinteArgumentsAppel, jsonCanonique, verifierEnveloppe } from "./signatures.js";
 
 export type ModeDonnee = "demonstration" | "reel";
 
@@ -43,6 +43,8 @@ export const EMPREINTES_DEMONSTRATION: readonly string[] = [
   "ig/17840000000000001",
   "portail/demo-0001",
   "(démonstration)",
+  // Lot P9a : marqueurs des simulateurs de prospection (bce, bnb, fsma), sans doublon.
+  ...EMPREINTES_PROSPECTION_DEMONSTRATION.filter((m) => m !== "(démonstration)"),
 ];
 
 export interface ReponseOutil {
@@ -51,7 +53,7 @@ export interface ReponseOutil {
 }
 
 export type ResultatDeduction =
-  | { ok: true; mode: ModeDonnee; indices: string[]; structures: Record<string, unknown>[] }
+  | { ok: true; mode: ModeDonnee; indices: string[]; structures: Record<string, unknown>[]; compte: string | null }
   | { ok: false; raison: string };
 
 function estObjet(v: unknown): v is Record<string, unknown> {
@@ -84,32 +86,51 @@ export interface VerificationSignature {
   /** Service et outil DÉCLARÉS par le dépôt : ils doivent égaler ceux qui sont signés. */
   service: string;
   outil: string;
-  /** Arguments de l'appel déclarés par le dépôt (facultatifs) : leur empreinte doit égaler celle qui est signée. */
+  /**
+   * Arguments de l'appel déclarés par le dépôt : leur empreinte doit égaler celle qui est signée.
+   * v1.6 (S-6) : OBLIGATOIRES pour une réponse réelle (sinon refus).
+   */
   arguments?: Record<string, unknown>;
+  /** v1.6 (S-6) : compte déclaré par le dépôt (facultatif) : fourni, il doit égaler le compte signé. */
+  compte?: string;
   maintenant: Date;
   ageMaxS?: number;
 }
 
-/** Contrôle d'une structure signée : null si elle est valide pour ce dépôt, sinon le motif. */
-function controlerSignature(structure: Record<string, unknown>, v: VerificationSignature): string | null {
+/** Contrôle d'une structure signée : le compte signé si elle est valide pour ce dépôt, sinon le motif. */
+function controlerSignature(structure: Record<string, unknown>, v: VerificationSignature): { compte: string | null } | string {
   const verdict = verifierEnveloppe(structure, v.clesPubliques);
   if (!verdict.ok) return verdict.motif;
   const c = verdict.charge;
   if (c.service !== v.service || c.outil !== v.outil) return `réponse signée pour ${c.service} · ${c.outil}, déposée comme ${v.service} · ${v.outil}`;
   if (c.erreur !== false) return "réponse d'erreur de l'outil : aucune donnée à retenir";
+  // S-3 : la passerelle signe la nature de l'outil ; une réponse d'outil d'écriture (préparée ou exécutée)
+  // recopie les arguments de l'agent : ce n'est jamais une mesure. Charge sans ce champ : écriture (prudence).
+  if (chargeEcriture(c)) return "réponse d'un outil d'écriture (ou charge sans nature d'outil) : ce n'est pas une donnée de mesure";
   const maintenantS = Math.floor(v.maintenant.getTime() / 1000);
   if (c.emis > maintenantS + DERIVE_HORLOGE_S) return "réponse signée dans le futur";
   if (maintenantS - c.emis > (v.ageMaxS ?? AGE_MAX_REPONSE_S)) return "réponse trop ancienne (rejeu d'une ancienne réponse) : refaire l'appel";
-  if (v.arguments !== undefined) {
-    let attendu: string;
-    try {
-      attendu = empreinteArgumentsAppel(v.arguments);
-    } catch {
-      return "arguments déclarés non représentables";
-    }
-    if (c.arguments !== attendu) return "arguments déclarés différents de ceux de l'appel signé (rejeu d'une autre réponse)";
+  // S-6 : une réponse réelle est toujours liée à SON appel (période, propriété) et à son compte.
+  if (v.arguments === undefined) return "arguments de l'appel non déclarés : une réponse réelle doit être déposée avec les arguments exacts de son appel (période, propriété)";
+  let attendu: string;
+  try {
+    attendu = empreinteArgumentsAppel(v.arguments);
+  } catch {
+    return "arguments déclarés non représentables";
   }
-  return null;
+  if (c.arguments !== attendu) return "arguments déclarés différents de ceux de l'appel signé (rejeu d'une autre réponse)";
+  if (typeof c.compte !== "string" || c.compte.trim() === "") return "réponse signée sans compte : impossible de la rattacher à une propriété";
+  if (v.compte !== undefined && v.compte !== c.compte) return `compte déclaré (${v.compte}) différent du compte signé (${c.compte})`;
+  return { compte: c.compte };
+}
+
+/** Clés qui ne trahissent qu'une réponse d'outil d'écriture (« préparée », exécutée) : jamais une mesure (S-3). */
+const MARQUES_ECRITURE = ["cle_idempotence", "executee"];
+const ETATS_ECRITURE = new Set(["preparee", "executee", "ambigue_a_reconcilier"]);
+
+/** La réponse est-elle celle d'un outil d'écriture (préparée ou exécutée) ? */
+export function reponseEcriture(structures: readonly Record<string, unknown>[]): boolean {
+  return structures.some((s) => MARQUES_ECRITURE.some((k) => Object.hasOwn(s, k)) || (typeof s.etat === "string" && ETATS_ECRITURE.has(s.etat) && Object.hasOwn(s, "action")));
 }
 
 export function deduireModeReponse(reponse: ReponseOutil, verification?: VerificationSignature): ResultatDeduction {
@@ -117,7 +138,15 @@ export function deduireModeReponse(reponse: ReponseOutil, verification?: Verific
   if (reponse.structuredContent) structures.push(reponse.structuredContent);
   const duTexte = reponse.texte ? jsonDuTexte(reponse.texte) : null;
   // Le texte reprend en général les mêmes données que `structuredContent` : on ne les compte qu'une fois.
-  if (duTexte && !(reponse.structuredContent && JSON.stringify(duTexte) === JSON.stringify(reponse.structuredContent))) structures.push(duTexte);
+  // Comparaison par JSON canonique (insensible à l'ordre des clés, revue des signatures S-2).
+  const canon = (v: unknown) => {
+    try {
+      return jsonCanonique(v);
+    } catch {
+      return null;
+    }
+  };
+  if (duTexte && !(reponse.structuredContent && canon(duTexte) !== null && canon(duTexte) === canon(reponse.structuredContent))) structures.push(duTexte);
 
   const enveloppes = structures.map((s) => s._atelier).filter((a) => a !== undefined);
   if (enveloppes.length === 0) {
@@ -140,16 +169,28 @@ export function deduireModeReponse(reponse: ReponseOutil, verification?: Verific
 
   // §6 bis : une réponse qui se dit réelle doit porter une signature valide de la passerelle, liée à
   // ce dépôt (service, outil, arguments, date). Sans clé configurée : jamais réel.
+  let compte: string | null = null;
   if (modes.has("reel")) {
+    const refus = (probleme: string): ResultatDeduction => ({
+      ok: false,
+      raison: `Réponse non signée par la passerelle (ou modifiée) : ${probleme}. Déposer la réponse brute de l'outil, sans la modifier.`,
+    });
+    // S-2 : TOUT contenu porteur de chiffres doit être couvert par une signature vérifiée. Une structure
+    // sans enveloppe ne profite jamais de la signature d'une autre ; le texte hors du JSON signé
+    // (mention en tête, ajout en fin) ne porte aucun chiffre.
+    if (structures.some((x) => x._atelier === undefined)) return refus("une partie de la réponse ne porte pas d'enveloppe « _atelier » signée");
+    if (reponse.texte !== undefined) {
+      const debut = reponse.texte.indexOf("{");
+      const horsJson = debut < 0 ? reponse.texte : reponse.texte.slice(0, debut);
+      if (debut < 0 || duTexte === null) return refus("le texte de la réponse ne contient pas la structure signée");
+      if (/\p{N}/u.test(horsJson)) return refus("le texte de la réponse porte des chiffres hors de la structure signée");
+    }
     const v: VerificationSignature = verification ?? { clesPubliques: [], service: "", outil: "", maintenant: new Date() };
-    for (const s of structures.filter((x) => x._atelier !== undefined)) {
-      const probleme = controlerSignature(s, v);
-      if (probleme) {
-        return {
-          ok: false,
-          raison: `Réponse non signée par la passerelle (ou modifiée) : ${probleme}. Déposer la réponse brute de l'outil, sans la modifier.`,
-        };
-      }
+    for (const s of structures) {
+      const r = controlerSignature(s, v);
+      if (typeof r === "string") return refus(r);
+      if (compte !== null && r.compte !== compte) return refus("structures signées pour des comptes différents");
+      compte = r.compte;
     }
   }
 
@@ -163,7 +204,7 @@ export function deduireModeReponse(reponse: ReponseOutil, verification?: Verific
   }
   const mode: ModeDonnee = indices.length > 0 ? "demonstration" : "reel";
   if (mode === "reel") indices.push("_atelier.mode = reel, signature de la passerelle vérifiée, aucun indice de démonstration");
-  return { ok: true, mode, indices: [...new Set(indices)], structures };
+  return { ok: true, mode, indices: [...new Set(indices)], structures, compte: mode === "reel" ? compte : null };
 }
 
 /* ------------------------------------------------------------------ */

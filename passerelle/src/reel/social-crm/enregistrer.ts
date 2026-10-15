@@ -5,6 +5,7 @@
 
 import { fileURLToPath } from "node:url";
 import type { FournisseurService, RegistreFournisseurs } from "../../fournisseurs.js";
+import { verifierSeparationDesCles, type SignataireEnveloppe } from "../../signature-enveloppe.js";
 import { VerificateurPreuves } from "./approbation.js";
 import { AutorisationSocialCrm } from "./autorisation.js";
 import { Coffre } from "./coffre.js";
@@ -37,6 +38,8 @@ export interface OptionsSocialCrmReel {
   maintenant?: () => number;
   /** Bornes de l'enregistrement dynamique (tests). */
   limites?: { maxClients?: number; enregistrementsParMinute?: number };
+  /** Signataire des réponses de la passerelle : sa clé doit différer de celle des approbations (revue S-8). */
+  signataire?: SignataireEnveloppe | null;
 }
 
 const FABRIQUES: Record<ServiceSocialCrm, (dep: DependancesOutils) => FournisseurService> = {
@@ -63,6 +66,8 @@ export function construireSocialCrmReel(registre: RegistreFournisseurs, env: Nod
   if (config.essai) journal("AVERTISSEMENT : réseaux sociaux et CRM réels branchés sur un FAUX serveur local (PASSERELLE_SOCIAL_FAUX_URL), essais seulement.");
   const services = servicesServis(config);
   for (const s of SERVICES_SOCIAL_CRM_REELS) if (!services.includes(s)) journal(`Service ${s} non servi en réel : application OAuth non configurée.`);
+  // Revue S-8 : refus de démarrer si la même paire sert à signer les réponses et à approuver (lève une erreur).
+  verifierSeparationDesCles(options.signataire, config.clePubliqueApprobation);
   const verificateur = new VerificateurPreuves(config.clePubliqueApprobation);
   if (!verificateur.configure) journal("Aucune clé de vérification des approbations (PASSERELLE_APPROBATION_CLE_PUBLIQUE) : les mutations réelles resteront « préparées, non exécutées ».");
 

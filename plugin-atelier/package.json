@@ -6,6 +6,8 @@
   "description": "Exigences, preuves, relectures, porte déterministe et vues marketing de l'Atelier Marketing IA.",
   "scripts": {
     "build": "node ./esbuild.config.mjs",
+    "modele": "node ./scripts/telecharger-modele.mjs",
+    "installer": "ONNXRUNTIME_NODE_INSTALL=skip pnpm install --frozen-lockfile",
     "dev": "node ./esbuild.config.mjs --watch",
     "dev:ui": "paperclip-plugin-dev-server --root . --ui-dir dist/ui --port 4177",
     "test": "vitest run --config ./vitest.config.ts",
@@ -28,12 +30,18 @@
     "node": ">=24.11.0"
   },
   "packageManager": "pnpm@9.15.4",
+  "//": "Installation : utiliser `pnpm run installer` (ONNXRUNTIME_NODE_INSTALL=skip), sinon le postinstall d'onnxruntime-node télécharge 272 Mo de fournisseurs CUDA inutiles (vectorisation sur processeur seul). Le modèle bge-m3 (560 Mo) se télécharge par `pnpm run modele` vers .modeles/ (ignoré par git).",
   "pnpm": {
     "overrides": {
       "@paperclipai/shared": "file:.paperclip-sdk/paperclipai-shared-0.3.1.tgz"
     }
   },
   "dependencies": {
+    "@huggingface/tokenizers": "0.2.0",
+    "mammoth": "1.13.0",
+    "onnxruntime-node": "1.30.0",
+    "pdfjs-dist": "6.4.299",
+    "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz",
     "zod": "4.4.3"
   },
   "devDependencies": {
@@ -44,6 +52,7 @@
     "@types/react-dom": "^19.2.3",
     "esbuild": "0.28.2",
     "jsdom": "30.0.1",
+    "jszip": "3.10.2",
     "react": "19.2.8",
     "react-dom": "19.2.8",
     "typescript": "7.0.2",

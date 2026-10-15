@@ -13,10 +13,17 @@
 //   service    service de la passerelle (gsc, ga4, facebook, crm…)
 //   outil      nom de l'outil appelé
 //   erreur     vrai si la réponse est une erreur d'outil (isError)
-//   compte     compte connecté (identifiant de la propriété ou libellé du compte), ou null
+//   compte     compte connecté (identifiant de la propriété ou libellé du compte) ; jamais null ni vide en mode réel (signer() refuse),
+//              null possible en démonstration seulement
 //   arguments  SHA-256 hexadécimal du JSON canonique des arguments validés de l'appel (période, propriété…)
 //   empreinte  SHA-256 hexadécimal du JSON canonique de la réponse SANS la clé `_atelier`
 //   emis       horodatage de signature (secondes Unix)
+//   ecriture   vrai si l'outil n'est pas annoncé en lecture seule (revue des signatures S-3) : la réponse d'un outil
+//              d'écriture (« préparée », « exécutée », erreur) recopie les arguments choisis par l'agent, ce n'est
+//              JAMAIS une mesure ; le plugin la refuse au dépôt de données et ne l'accepte que pour l'issue d'une
+//              diffusion. Champ facultatif pour un ancien jeton : absent = traité comme vrai par le plugin.
+//   executee   vrai seulement si l'outil d'écriture a réellement agi (`executee: true` dans sa réponse) ; faux pour
+//              « préparée, non exécutée », « ambiguë » et erreur ; toujours faux pour un outil de lecture
 // JSON canonique : celui de la preuve d'approbation (clés triées, aucun espace), appliqué aux données telles
 // qu'elles voyagent en JSON (après sérialisation puis relecture).
 
@@ -36,6 +43,8 @@ export interface ChargeEnveloppe {
   arguments: string;
   empreinte: string;
   emis: number;
+  ecriture: boolean;
+  executee: boolean;
 }
 
 const sha256 = (texte: string): string => createHash("sha256").update(texte, "utf8").digest("hex");
@@ -72,7 +81,11 @@ export class SignataireEnveloppe {
     this.empreinteCle = createHash("sha256").update(der).digest("hex").slice(0, 16);
   }
 
-  signer(p: { mode: ChargeEnveloppe["mode"]; service: string; outil: string; erreur: boolean; compte: string | null; args: unknown; structure: Record<string, unknown> }): string {
+  signer(p: { mode: ChargeEnveloppe["mode"]; service: string; outil: string; erreur: boolean; compte: string | null; args: unknown; ecriture: boolean; structure: Record<string, unknown> }): string {
+    // Revue S-6 : en réel, un compte non vide est toujours signé (le plugin le refuse sinon : défense des deux côtés).
+    if (p.mode === "reel" && (typeof p.compte !== "string" || p.compte.trim() === "")) {
+      throw new Error("signature refusée : une réponse réelle doit porter un compte non vide");
+    }
     const charge: ChargeEnveloppe = {
       v: 1,
       mode: p.mode,
@@ -83,6 +96,9 @@ export class SignataireEnveloppe {
       arguments: empreinteArgumentsAppel(p.args),
       empreinte: empreinteReponse(p.structure),
       emis: Math.floor(this.maintenant() / 1000),
+      ecriture: p.ecriture,
+      // `executee` n'est vrai que sur le témoignage de l'outil d'écriture lui-même, jamais pour une lecture ni une erreur.
+      executee: p.ecriture && !p.erreur && p.structure["executee"] === true,
     };
     const corps = `${PREFIXE_ENVELOPPE}.${Buffer.from(JSON.stringify(charge), "utf8").toString("base64url")}`;
     return `${corps}.${sign(null, Buffer.from(corps, "utf8"), this.clePrivee).toString("base64url")}`;
@@ -113,6 +129,29 @@ export function signataireDepuisEnv(env: NodeJS.ProcessEnv): SignataireEnveloppe
   } catch (e) {
     // Message sans la valeur de la clé.
     throw new Error(`PASSERELLE_SIGNATURE_CLE_PRIVEE illisible : ${e instanceof Error && /Ed25519/.test(e.message) ? e.message : "clé privée Ed25519 attendue (PEM PKCS#8 ou DER base64)"}`);
+  }
+}
+
+/**
+ * Revue des signatures S-8 : la clé de signature de la passerelle ne doit JAMAIS être l'une des clés publiques
+ * d'approbation. Sinon la passerelle détiendrait la clé privée qui fabrique les preuves d'approbation humaine, ce
+ * que le modèle exclut (« la passerelle ne peut pas fabriquer de preuve »). `clesApprobationPem` : le contenu de
+ * PASSERELLE_APPROBATION_CLE_PUBLIQUE tel que normalisé par la configuration (un ou plusieurs blocs PEM).
+ * Lève une erreur (la passerelle refuse de démarrer) ; ne cite jamais de clé dans le message.
+ */
+export function verifierSeparationDesCles(signataire: SignataireEnveloppe | null | undefined, clesApprobationPem: string | null | undefined): void {
+  if (!signataire || !clesApprobationPem) return;
+  const blocs = clesApprobationPem.match(/-----BEGIN PUBLIC KEY-----[\s\S]*?-----END PUBLIC KEY-----/g) ?? [];
+  for (const bloc of blocs) {
+    let der: string;
+    try {
+      der = createPublicKey(bloc).export({ type: "spki", format: "der" }).toString("base64");
+    } catch {
+      continue; // clé illisible : signalée ailleurs (le vérificateur d'approbation la refuse)
+    }
+    if (der === signataire.clePubliqueBase64) {
+      throw new Error("PASSERELLE_SIGNATURE_CLE_PRIVEE et PASSERELLE_APPROBATION_CLE_PUBLIQUE désignent la même paire de clés : générer deux paires distinctes (la passerelle ne doit pas pouvoir fabriquer de preuve d'approbation).");
+    }
   }
 }
 

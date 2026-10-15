@@ -15,6 +15,7 @@
 //   odoo       : toujours (adresse de l'instance + clé d'API du client)
 // Et, pour tous : PASSERELLE_SOCIAL_CLE (32 octets en base64, ou _FICHIER).
 
+import { createPublicKey, type KeyObject } from "node:crypto";
 import { readFileSync, statSync } from "node:fs";
 import { lireRedirectionsPermises } from "../../garde-oauth.js";
 
@@ -161,6 +162,42 @@ export function servicesServis(config: ConfigSocialCrmReel): ServiceSocialCrm[] 
   return SERVICES_SOCIAL_CRM_REELS.filter((s) => s === "odoo" || s === "pipedrive" || config.applications[s] !== undefined);
 }
 
+/**
+ * Valide et normalise PASSERELLE_APPROBATION_CLE_PUBLIQUE (revue des signatures, section 5) : un ou plusieurs blocs PEM
+ * « PUBLIC KEY », OU une clé SPKI DER en base64 par ligne (plusieurs lignes : rotation). Chaque clé doit être lisible et de
+ * type Ed25519. Renvoie du PEM normalisé. Lève une erreur claire qui ne cite JAMAIS la valeur de la clé.
+ */
+export function normaliserClePubliqueApprobation(valeur: string): string {
+  const nom = "PASSERELLE_APPROBATION_CLE_PUBLIQUE";
+  const enPem = (der: Buffer): string => `-----BEGIN PUBLIC KEY-----\n${der.toString("base64").replace(/(.{64})/g, "$1\n").replace(/\n$/, "")}\n-----END PUBLIC KEY-----\n`;
+  const lire = (cle: () => KeyObject): Buffer => {
+    let objet: KeyObject;
+    try {
+      objet = cle();
+    } catch {
+      throw new Error(`${nom} illisible : une clé publique Ed25519 est attendue (PEM « PUBLIC KEY », ou SPKI DER en base64 sur une ligne).`);
+    }
+    if (objet.type !== "public" || objet.asymmetricKeyType !== "ed25519") throw new Error(`${nom} : une clé publique Ed25519 est attendue.`);
+    return objet.export({ type: "spki", format: "der" });
+  };
+  const v = valeur.trim();
+  if (v.includes("-----")) {
+    const blocs = v.match(/-----BEGIN PUBLIC KEY-----[\s\S]*?-----END PUBLIC KEY-----/g) ?? [];
+    // Rien d'autre que des blocs « PUBLIC KEY » (pas de certificat, de clé privée ni de texte parasite).
+    if (blocs.length === 0 || v.replace(/-----BEGIN PUBLIC KEY-----[\s\S]*?-----END PUBLIC KEY-----/g, "").trim() !== "") {
+      throw new Error(`${nom} illisible : seuls des blocs PEM « PUBLIC KEY » sont acceptés.`);
+    }
+    return blocs.map((b) => enPem(lire(() => createPublicKey(b)))).join("");
+  }
+  const lignes = v.split(/\s+/).filter((l) => l !== "");
+  return lignes
+    .map((ligne) => {
+      if (!/^[A-Za-z0-9+/]+={0,2}$/.test(ligne)) throw new Error(`${nom} illisible : une clé en base64 (SPKI DER) par ligne est attendue.`);
+      return enPem(lire(() => createPublicKey({ key: Buffer.from(ligne, "base64"), format: "der", type: "spki" })));
+    })
+    .join("");
+}
+
 /** Lit la configuration réseaux sociaux et CRM du mode réel. */
 export function lireConfigSocialCrm(env: NodeJS.ProcessEnv, fichierEtatParDefaut: string): LectureConfigSocial {
   try {
@@ -191,15 +228,8 @@ export function lireConfigSocialCrm(env: NodeJS.ProcessEnv, fichierEtatParDefaut
       if (clientId && clientSecret) applications[service] = { clientId, clientSecret };
     }
 
-    let clePubliqueApprobation = lireSecret(env, "PASSERELLE_APPROBATION_CLE_PUBLIQUE");
-    if (clePubliqueApprobation && !clePubliqueApprobation.includes("BEGIN PUBLIC KEY")) {
-      // Forme compacte tolérée : la clé SPKI DER en base64, une par ligne (plusieurs lignes : rotation de la clé du plugin).
-      clePubliqueApprobation = clePubliqueApprobation
-        .split(/\s+/)
-        .filter((ligne) => ligne !== "")
-        .map((ligne) => `-----BEGIN PUBLIC KEY-----\n${ligne}\n-----END PUBLIC KEY-----\n`)
-        .join("");
-    }
+    const brute = lireSecret(env, "PASSERELLE_APPROBATION_CLE_PUBLIQUE");
+    const clePubliqueApprobation = brute ? normaliserClePubliqueApprobation(brute) : null;
 
     let urlRetourPublique: string | null = null;
     const retour = env["PASSERELLE_SOCIAL_URL_RETOUR"]?.trim();

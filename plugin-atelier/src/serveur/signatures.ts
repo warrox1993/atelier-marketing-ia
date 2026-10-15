@@ -45,8 +45,27 @@ const sha256 = (texte: string): string => createHash("sha256").update(texte, "ut
 
 /** Empreinte des arguments d'un outil de mutation, telle que la passerelle la recalcule (sans `preuve_approbation`). */
 export function empreinteArguments(args: Record<string, unknown>): string {
-  const { preuve_approbation: _ignoree, ...reste } = args;
+  // Arguments de transport, jamais dans l'empreinte (comme la passerelle).
+  const { preuve_approbation: _p, revocations_approbation: _r, ...reste } = args;
   return sha256(jsonCanonique(reste));
+}
+
+/** Appel d'outil d'écriture complet, tel que l'humain l'approuve (contrat v1.6, revue des signatures S-1). */
+export interface AppelOutil {
+  service: string;
+  outil: string;
+  compte: string;
+  arguments: Record<string, unknown>;
+}
+
+/**
+ * Empreinte canonique d'un APPEL (service, outil, compte, arguments complets sans la preuve) :
+ * c'est elle que la décision humaine vise. Tout champ (texte, lien, destinataire, contact, noms et
+ * valeurs des propriétés CRM) change l'empreinte ; l'ordre des clés ne la change pas.
+ */
+export function empreinteAppel(appel: AppelOutil): string {
+  const { preuve_approbation: _p, revocations_approbation: _r, ...args } = appel.arguments;
+  return sha256(jsonCanonique({ v: 1, service: appel.service, outil: appel.outil, compte: appel.compte, arguments: args }));
 }
 
 /** Forme exacte que voit le destinataire : sérialisation JSON puis relecture. */
@@ -117,11 +136,37 @@ export interface ChargePreuve {
   decision: string;
   emis: number;
   expire: number;
+  /** Entreprise Paperclip qui a approuvé : la passerelle la compare à celle de la liste de révocation (arv1). */
+  entreprise?: string;
 }
 
 /** Signe une preuve d'approbation (même format que `signerPreuve` de la passerelle). */
 export function signerPreuve(clePrivee: KeyObject, charge: ChargePreuve): string {
   const corps = `${PREFIXE_PREUVE}.${Buffer.from(JSON.stringify(charge), "utf8").toString("base64url")}`;
+  return `${corps}.${sign(null, Buffer.from(corps, "utf8"), clePrivee).toString("base64url")}`;
+}
+
+/* ------------------------------------------------------------------ */
+/* Liste de révocation des preuves (signée par le plugin, v1.6, S-7)    */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Préfixe distinct de `apv1` : une liste ne peut jamais servir de preuve (la passerelle vérifie le
+ * préfixe dans le corps signé avant tout), même signée par la même clé.
+ */
+export const PREFIXE_REVOCATIONS = "arv1";
+
+export interface ChargeRevocations {
+  v: 1;
+  /** Entreprise de Paperclip dont les preuves sont listées. */
+  entreprise: string;
+  emis: number;
+  /** Preuves révoquées encore non expirées : identifiants de la charge `apv1` (diffusion, clé, décision). */
+  revoquees: Array<{ diffusion: string; cle: string; decision: string; expire: number }>;
+}
+
+export function signerRevocations(clePrivee: KeyObject, charge: ChargeRevocations): string {
+  const corps = `${PREFIXE_REVOCATIONS}.${Buffer.from(JSON.stringify(charge), "utf8").toString("base64url")}`;
   return `${corps}.${sign(null, Buffer.from(corps, "utf8"), clePrivee).toString("base64url")}`;
 }
 
@@ -139,6 +184,24 @@ export interface ChargeEnveloppe {
   arguments: string;
   empreinte: string;
   emis: number;
+  /**
+   * Passerelle v1.6 (revue des signatures S-3) : vrai pour tout outil qui n'est pas annoncé en lecture
+   * seule. ABSENT (ancienne charge) : traité comme vrai (prudence).
+   */
+  ecriture?: boolean;
+  /** Vrai seulement si l'outil d'écriture a réellement agi. Absent : faux. */
+  executee?: boolean;
+}
+
+/** Une charge `aev1` vient-elle d'un outil d'écriture ? Absent : oui (prudence). */
+export const chargeEcriture = (c: ChargeEnveloppe): boolean => c.ecriture !== false;
+
+/**
+ * v1.6 (S-5, demande du lot passerelle) : clé d'idempotence SIGNÉE dans la preuve, dérivée de
+ * l'identifiant de diffusion (UUID unique) et jamais de la valeur choisie par l'agent.
+ */
+export function cleIdempotenceSignee(diffusionId: string): string {
+  return `atelier-diffusion-${diffusionId}`;
 }
 
 export type VerdictEnveloppe = { ok: true; charge: ChargeEnveloppe } | { ok: false; motif: string };

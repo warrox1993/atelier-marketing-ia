@@ -34,6 +34,13 @@ export interface OptionsServeur {
   /** Port d'écoute ; 0 = port libre choisi par le système (tests). */
   port?: number;
   registre?: RegistreFournisseurs;
+  /**
+   * Mélange (démonstration seulement) : services servis par leur fournisseur RÉEL pendant que les autres restent en
+   * démonstration (PASSERELLE_SERVICES_REELS). Un service listé sans fournisseur réel enregistré reste en démonstration.
+   * L'accès reste celui de la démonstration (OAuth local) ; seuls le fournisseur et le marquage des réponses (mode `reel`,
+   * signé, sans mention de démonstration) changent pour ces services.
+   */
+  servicesReels?: readonly string[];
   /** Démonstration seulement : désactive l'exigence de jeton (tests unitaires). Jamais en production. */
   sansAuthentification?: boolean;
   journal?: (message: string) => void;
@@ -109,8 +116,15 @@ export function creerServeur(options: OptionsServeur): ServeurPasserelle {
   let urlDeBase = "";
   const autorisation = new ServeurAutorisationDemo({ urlBase: () => urlDeBase, fiche: (nom) => registre.fiche(nom), ...(options.fichierEtat ? { fichierEtat: options.fichierEtat } : {}) });
 
+  const servicesReelsMelanges = new Set(mode === "demonstration" ? options.servicesReels ?? [] : []);
+
+  /** Mode effectif d'un service : `reel` pour un service du mélange qui a un fournisseur réel, sinon le mode de la passerelle. */
+  function modeDe(service: Service): ModePasserelle {
+    return servicesReelsMelanges.has(service) && registre.obtenir("reel", service) !== undefined ? "reel" : mode;
+  }
+
   function fournisseurDe(service: Service) {
-    return registre.obtenir(mode, service);
+    return registre.obtenir(modeDe(service), service);
   }
 
   /** Un service est servi en démonstration même sans fournisseur (atelier_identite seul) ; en réel, seulement avec fournisseur. */
@@ -175,8 +189,9 @@ export function creerServeur(options: OptionsServeur): ServeurPasserelle {
       return;
     }
 
-    const catalogue = construireCatalogue(registre.fiche(service)!, mode, fournisseurDe(service));
-    const contexte: ContexteAppel = { service, mode, identite, jetonPorteur };
+    const modeService = modeDe(service);
+    const catalogue = construireCatalogue(registre.fiche(service)!, modeService, fournisseurDe(service));
+    const contexte: ContexteAppel = { service, mode: modeService, identite, jetonPorteur };
 
     // Serveur MCP sans état : un par requête (modèle sans session du SDK).
     const serveurMcp = new ServeurMcp(
@@ -184,8 +199,8 @@ export function creerServeur(options: OptionsServeur): ServeurPasserelle {
       {
         capabilities: { tools: {} },
         instructions:
-          mode === "demonstration"
-            ? `Passerelle marketing en mode démonstration : ${enveloppeAtelier(mode).mention}. Chaque réponse porte cette mention.`
+          modeService === "demonstration"
+            ? `Passerelle marketing en mode démonstration : ${enveloppeAtelier(modeService).mention}. Chaque réponse porte cette mention.`
             : "Passerelle marketing en mode réel.",
       },
     );
@@ -217,7 +232,7 @@ export function creerServeur(options: OptionsServeur): ServeurPasserelle {
     const chemin = url.pathname;
 
     if (chemin === "/sante" && req.method === "GET") {
-      envoyerJson(res, 200, { ok: true, mode, version: VERSION_PASSERELLE, services: registre.fiches().map((f) => f.id).filter(serviceDisponible), _atelier: enveloppeAtelier(mode) });
+      envoyerJson(res, 200, { ok: true, mode, version: VERSION_PASSERELLE, services: registre.fiches().map((f) => f.id).filter(serviceDisponible), ...(servicesReelsMelanges.size > 0 ? { services_reels: registre.fiches().map((f) => f.id).filter((id) => modeDe(id) === "reel") } : {}), _atelier: enveloppeAtelier(mode) });
       return;
     }
 

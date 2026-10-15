@@ -32,6 +32,8 @@ export interface SignatureAppel {
   outil: string;
   compte: string | null;
   args: unknown;
+  /** Vrai pour tout outil qui n'est pas explicitement de lecture (revue S-3) : sa réponse n'est jamais une mesure. */
+  ecriture: boolean;
 }
 
 export function enveloppeAtelier(mode: ModePasserelle): EnveloppeAtelier {
@@ -51,7 +53,7 @@ export function emballer(mode: ModePasserelle, donnees: unknown, erreur = false,
   };
   if (signature) {
     // Revue S9 : le mode, le service, l'outil, les arguments et le contenu sont signés ; le plugin vérifie au dépôt.
-    atelier.signature = signature.signataire.signer({ mode, service: signature.service, outil: signature.outil, erreur, compte: signature.compte, args: signature.args, structure });
+    atelier.signature = signature.signataire.signer({ mode, service: signature.service, outil: signature.outil, erreur, compte: signature.compte, args: signature.args, ecriture: signature.ecriture, structure });
   }
   const debut = atelier.mention ? `${atelier.mention}\n\n` : `${MENTION_DONNEES_TIERCES}\n\n`;
   return {
@@ -121,11 +123,20 @@ export async function appelerOutil(
   contexte: ContexteAppel,
   signataire?: SignataireEnveloppe | null,
 ): Promise<CallToolResult> {
+  const outil = catalogue.outils.get(nom);
+  // Revue S-3 : liste blanche. Seul un outil annoncé en lecture seule (readOnlyHint === true) produit une réponse
+  // qui peut valoir mesure ; un outil d'écriture, sans annotation ou inconnu est signé « ecriture: true ».
+  const ecriture = outil?.annotations?.readOnlyHint !== true;
+  const compteSigne = contexte.identite.propriete?.id ?? contexte.identite.compte;
+  // Revue S-6 : en réel, aucune réponse n'est signée sans compte (une lecture « sans compte » ne désigne rien et ne prouve
+  // rien). La réponse d'erreur n'est alors PAS signée : le plugin ne la tiendra jamais pour une mesure réelle.
+  if (signataire && contexte.mode === "reel" && (typeof compteSigne !== "string" || compteSigne.trim() === "")) {
+    return emballer(contexte.mode, { erreur: "compte_absent", message: "Aucun compte n'est associé à cette connexion : la réponse ne peut pas être signée. Reconnecter le service dans Paperclip (Apps)." }, true);
+  }
   const signer = (argsSignes: unknown): SignatureAppel | undefined =>
     signataire
-      ? { signataire, service: contexte.service, outil: nom, compte: contexte.identite.propriete?.id ?? contexte.identite.compte, args: argsSignes }
+      ? { signataire, service: contexte.service, outil: nom, compte: compteSigne, args: argsSignes, ecriture }
       : undefined;
-  const outil = catalogue.outils.get(nom);
   if (!outil) return emballer(contexte.mode, { erreur: "outil_inconnu", message: `Outil inconnu : ${nom}` }, true, signer(args));
   const analyse = z.object(outil.schemaEntree).safeParse(args ?? {});
   if (!analyse.success) {
@@ -139,8 +150,9 @@ export async function appelerOutil(
       signer(args),
     );
   }
-  // Arguments signés : ceux validés par le schéma, sans la preuve d'approbation (secret à usage unique).
-  const { preuve_approbation: _preuve, ...argsValides } = analyse.data as Record<string, unknown>;
+  // Arguments signés : ceux validés par le schéma, sans les arguments de transport (preuve d'approbation, secret à usage
+  // unique, et liste de révocation) : le plugin compare cette empreinte à celle de la diffusion approuvée.
+  const { preuve_approbation: _preuve, revocations_approbation: _revocations, ...argsValides } = analyse.data as Record<string, unknown>;
   try {
     const donnees = await outil.executer(analyse.data as Record<string, unknown>, contexte);
     return emballer(contexte.mode, donnees, false, signer(argsValides));

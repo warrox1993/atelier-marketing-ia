@@ -22,6 +22,8 @@ classement est affiché dans l'interface (Paramètres et diagnostic, `atelier.sa
 | Google Ads (`ads_recherche`) | **implémenté, non testé en réel** | idem ; API `v26`, sans jeton développeur (supprimé par Google le 09/09/2026) ; niveau d'accès du projet Google Cloud à demander |
 | Fiche d'établissement (`gbp_avis`, `gbp_metriques`) | **implémenté, non testé en réel** | idem ; exige l'accès Business Profile accordé par Google (fiche vérifiée depuis plus de 60 jours) |
 | Réseaux sociaux (Facebook, Instagram, LinkedIn) et CRM (HubSpot, Pipedrive, Odoo, Teamleader) | **implémenté, non testé en réel** | passerelle `src/reel/social-crm/` (`docs/passerelle.md`, « Fournisseurs réseaux sociaux et CRM réels ») : mêmes outils que la démonstration L7, 76 tests contre des faux serveurs locaux (`tests/reel-social-crm/`), aucun compte réel ; connexion « en un clic » par le serveur d'autorisation de la passerelle (OAuth, ou adresse et clé d'API pour Odoo et Pipedrive) ; en démonstration, connectable comme avant. Sans connexion, la rubrique Résultats affiche « non mesurable » |
+| BCE Open Data (`bce_rechercher`, `bce_entreprise`, `bce_changements`) | **implémenté, non testé en réel** | passerelle `src/reel/prospection/bce/` (lot P3, `docs/passerelle.md` « Fournisseur BCE réel (P3) ») : index SQLite local construit à partir des fichiers officiels (complet puis mises à jour), personnes physiques jamais chargées (testé) ; 88 tests (avec le lot P3b) sur des fichiers de test au format officiel, entreprises fictives, et contre un faux portail local ; **ni le vrai portail ni le vrai fichier n'ont été touchés** : il faut l'inscription gratuite de l'opérateur ; formats **probables** (guide officiel derrière un CAPTCHA, recoupé sur trois outils publics) ; taille « inconnue » tant que le lot P4 (BNB) n'existe pas |
+| OpenStreetMap (`osm_commerces`, `osm_repartition`) | **implémenté, non testé sur l'extrait réel** | passerelle `src/reel/prospection/osm/` (lot P3b, `docs/passerelle.md` « OpenStreetMap (P3b) ») : extrait Geofabrik de la Belgique chargé hors ligne (664 Mo le 15/10/2026, **non téléchargé**), jamais d'instance publique d'Overpass ; licence ODbL (attribution dans chaque réponse) ; format de `osmium export` vérifié avec osmium-tool 1.19.0 sur un fichier d'essai fictif ; simulateur de démonstration cohérent avec `bce` (P2) |
 | Sauvegarde de la base (`pg_dump` 18.6) | **réel testé** | `docs/exploitation.md` §3.3 et §4 (cycle sauvegarde, sinistre, restauration du 15/10/2026) |
 | Pause et reprise de campagne | **absent (limite du socle)** | Paperclip ne met un projet en pause que par budget ; boutons désactivés avec la raison |
 | PostgreSQL externe, déploiement partagé, Azure | **non testé** | note séparée `docs/evolution-deploiement.md` ; aucune infrastructure créée |
@@ -210,7 +212,7 @@ passerelle `passerelle/dist/src/demarrer.js` en démonstration sur 3391, `PAPERC
 | Élément | Où | État |
 | --- | --- | --- |
 | « Ask first » par défaut pour les écritures des cartes | patch socle `0005` (`recommendedDefaultsForApp`, `classifyRisk`) | **réel testé** (instance + tests serveur) |
-| Connexions réservées aux rôles, lecture seule imposée | registre `connexionsPasserelle` et `connexions` ; bootstrap `assurer_connexions` | **réel testé** (instance, deux passes) |
+| Connexions réservées aux rôles, lecture seule imposée (ou outil interdit par rôle d'écriture) | registre `connexionsPasserelle` et `connexions` ; bootstrap `assurer_connexions` | **réel testé** (instance, deux passes) |
 | Consignes des agents réels (identité, dépôt, démonstration, aucun chiffre inventé, `connection_request`) | `organisation/agents/*/AGENTS.md`, six compétences 1.2.0 (arguments exacts déposés, parcours de diffusion réelle) ; vérificateur | **fait** (contrôlé) ; **non testé en run réel** (jeton) |
 | Bouton « Connecter » vers la carte native | `plugin-atelier/src/ui/connecteurs.tsx` | **réel testé** (Playwright) |
 | Mode effectif (règle prudente L9) appliqué partout et affiché | `calculerModeEffectif`, `atelier.campagne.modeEffectif`, `NoteModeEffectif` | **réel testé** (scénario A, tests) |
@@ -229,11 +231,11 @@ sans lui, l'appel échoue en 500 (`signing_secret_unconfigured`). L'onboarding d
 les instances d'essai ne l'avaient pas : `scripts/instance-essai.sh` le génère désormais (0600, propre à l'instance).
 
 **Connexions par rôle.** Registre 1.4.0 : SEO local GEO lit `gsc`, `ga4`, `gbp` ; SEA lit `ads` ; Mesure lit `ga4`, `ads`, `gsc` ;
-CRM conversion a les quatre CRM en `ecriture_sur_accord` ; Contenus lit `facebook`, `instagram`, `linkedin`. Les autres rôles n'ont aucune
+CRM conversion a les quatre CRM en `ecriture_sur_accord` ; Contenus a `facebook`, `instagram`, `linkedin` en `ecriture_sur_accord` depuis la décision de l'opérateur du 15/10/2026 (voir « Contenus peut publier » plus bas). Les autres rôles n'ont aucune
 connexion ni outil de connexion. `bootstrap-organisation.py appliquer` réserve chaque connexion EXISTANTE de la passerelle : accès natif par
 le même geste que l'onglet Permissions (`POST …/tools/apps/:id/finish`, actions activées et « Ask first » inchangés, `access: {agentIds}`),
 installations par agent (`PUT /tool-connections/:id/installs`, barrière de livraison d'un run), et politique native `block` sur les écritures
-(`risk.isWrite`) pour un rôle en lecture. Une connexion ajoutée ensuite par une carte arrive pour « tous les agents » (défaut natif) :
+(`risk.isWrite`) pour un rôle en lecture, et politique native `block` par outil (champ `outilsBloques` du registre) pour un rôle en écriture sur accord. Une connexion ajoutée ensuite par une carte arrive pour « tous les agents » (défaut natif) :
 le Gardien des connexions la resserre seul au battement suivant (section suivante) ; `appliquer`, `assurer-connexions` à la main
 et `bootstrap-organisation.py etat` (qui signale l'écart) restent disponibles.
 
@@ -283,10 +285,27 @@ base64, ou plusieurs blocs PEM), pour la rotation et pour plusieurs entreprises 
   d'écriture sans `preuveApprobation` ; preuve jointe (`preuve_approbation`) sans la copier ailleurs ; réponse brute rapportée par
   `tache.diffusions.issue` ; issue ambiguë (`ambigue_a_reconcilier`, délai, coupure, 5xx) : jamais de nouvel essai à l'aveugle, message au
   coordinateur ; un refus certain n'est pas contourné par une autre clé ;
-- les rôles en lecture seule (SEO, SEA, Mesure, Contenus) ne diffusent jamais : leur livrable décrit l'écriture comme « préparée, non
-  exécutée ». **À décider par l'opérateur** : aujourd'hui aucun rôle n'a l'accès en écriture aux réseaux sociaux (Contenus lit Facebook,
-  Instagram et LinkedIn, écriture bloquée par une politique native), donc la publication réelle d'un texte n'est atteignable par aucun
-  agent ; seul le CRM l'est.
+- les rôles en lecture seule (SEO, SEA, Mesure) ne diffusent jamais : leur livrable décrit l'écriture comme « préparée, non
+  exécutée » ;
+- **Contenus peut publier (décision de l'opérateur du 15/10/2026)** : voir la section suivante.
+
+**Contenus peut publier (15/10/2026).** Décision de l'opérateur : l'agent Contenus publie sur Facebook, Instagram et LinkedIn, toujours après
+l'approbation humaine de la publication EXACTE, avec la preuve signée. Les messages privés Facebook restent exclus.
+- Registre : `connexions` de `contenus` = `facebook`, `instagram`, `linkedin` en `ecriture_sur_accord` ; outils d'écriture concernés :
+  `facebook_publier`, `instagram_publier`, `linkedin_publier` ; `mcp__paperclip-assigned` passe de la recherche à la mutation (règle du
+  vérificateur pour tout rôle qui écrit). Les écritures restent « Ask first » (patch `0005`) puis approbation de l'atelier.
+- **Message privé exclu** : champ `outilsBloques: {"facebook": ["facebook_envoyer_message"]}`. `assurer_connexions` crée la politique
+  native `block` `atelier-outil-interdit:<connexion>:contenus:facebook_envoyer_message` (sélecteurs connexion et nom d'outil, condition sur
+  l'agent Contenus). Un « block » l'emporte toujours : même si l'humain approuvait l'appel, l'outil est refusé. Le vérificateur exige ce
+  champ pour tout rôle qui écrit sur Facebook et refuse un outil bloqué qui n'est pas nommé dans les consignes.
+- Consignes (`organisation/agents/contenus/AGENTS.md`, section « Diffusion réelle : parcours complet ») dans l'ordre du modèle d'approbation
+  de l'appel exact : 1. proposer l'appel exact dans le livrable (service, outil, arguments mot pour mot, compte) ; 2. attendre l'approbation
+  humaine de cet appel ; 3. demander la diffusion (`tache.diffusions`) avec ce même appel ; 4. joindre `preuve_approbation` à l'outil de
+  publication, sans appel sans preuve ; 5. rapporter l'issue brute signée ; issue ambiguë : aucun nouvel essai à l'aveugle. La compétence
+  `redaction-declinaison-canal` passe en 1.3.0 (étape 7 et limites).
+- Contrôles : `scripts/bootstrap-tests.sh` (cas négatifs « message privé interdit pour Contenus » et « Contenus : publication sans la
+  preuve jointe », assertion de la politique `block` par outil contre la fausse API) ; preuve par appels d'essai natifs sur l'instance
+  d'essai `atelier-cont` : `docs/resultats-tests.md`.
 
 **Preuve sur l'instance d'essai `atelier-cles`** (3440, PG 54640 ; passerelle de démonstration sur 3450 avec les clés générées ; commandes et
 sorties dans `docs/resultats-tests.md`) : réponse de la vraie passerelle vérifiée avec la clé publique que `cles` a mise dans le plugin puis
@@ -347,8 +366,8 @@ la voyaient, installations par agent comprises, le Gardien et les autres rôles 
 | --- | --- | --- | --- |
 | `atelier-hubspot` | CRM conversion (écriture sur accord) | 27,1 s (juste après un redémarrage : battement déjà dû) | pas de politique `block` (voulu) |
 | `atelier-google-ads` | SEA, Mesure (lecture) | **90,1 s** (régime établi) | aucune écriture dans le catalogue |
-| `atelier-facebook` | Contenus (lecture) | 72,1 s | `block` créée ; `facebook_publier` et `facebook_envoyer_message` : `deny_policy_block` |
-| `atelier-instagram` | Contenus (lecture) | 75,1 s | `block` créée ; `instagram_publier` : `deny_policy_block` |
+| `atelier-facebook` | Contenus (en lecture lors de cette mesure, avant la décision de publication) | 72,1 s | `block` créée ; `facebook_publier` et `facebook_envoyer_message` : `deny_policy_block` |
+| `atelier-instagram` | Contenus (en lecture lors de cette mesure) | 75,1 s | `block` créée ; `instagram_publier` : `deny_policy_block` |
 
 Un premier passage Instagram a échoué sur mon propre contrôle (le script lisait `decision` au lieu du motif `deny_policy_block`, la décision
 native étant « off » avec ce motif) : le script lit maintenant le motif ; la mutation n'a pas changé le comportement du serveur.
@@ -360,3 +379,19 @@ apparaît dans la vue Équipe du plugin et l'organigramme (adaptateur `process`,
 jour dans l'historique du Gardien. (5) La fenêtre n'est pas nulle : pendant environ 90 s, la connexion est visible de tous les agents ;
 aucun agent réel n'est actif par défaut, et les écritures restent « Ask first » (patch `0005`).
 (6) Le moment du battement dépend du pas de 30 s : la connexion peut tomber juste après un passage ; la mesure en régime établi est de 90 s.
+
+## Lot prospection réelle : BCE et OpenStreetMap (passerelle, 15/10/2026)
+
+Détail, niveaux de preuve, commandes et démarches d'opérateur : `docs/passerelle.md`, sections « Fournisseur BCE réel (P3) » et
+« OpenStreetMap (P3b) ». Ce qui change pour l'exploitation :
+
+- **Pas d'OAuth** : les données sont locales. Les services `bce` et `osm` s'ouvrent avec un **jeton porteur statique** partagé
+  (`PASSERELLE_PROSPECTION_JETON_FICHIER`, 0600) ; une connexion `mcp_remote` à clé d'API (`api_key`) est à déclarer dans Paperclip,
+  ce qui n'a pas encore été essayé sur une instance. Sans jeton, aucun des deux n'est servi en réel.
+- **Démarche de l'opérateur pour la BCE** : inscription gratuite sur le portail BCE Open Data et acceptation des conditions,
+  fichier d'identifiants 0600, premier import, puis une mise à jour quotidienne (les fichiers ne restent que 31 jours).
+- **OpenStreetMap** : aucune inscription ; installer `osmium-tool`, télécharger l'extrait Belgique (664 Mo), le filtrer, l'importer.
+- **Dépendances ajoutées à `passerelle/`** : `better-sqlite3` 13.0.3 et `yauzl` 3.4.0 (versions stables épinglées),
+  `npm audit` sans vulnérabilité.
+- Les index vivent dans `passerelle/etat/bce/` et `passerelle/etat/osm/` (ignorés par git) : ils font partie des données à sauvegarder
+  (ou à reconstruire depuis les fichiers officiels).

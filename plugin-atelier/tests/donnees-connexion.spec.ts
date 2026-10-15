@@ -81,7 +81,7 @@ function reponse(mode: "demonstration" | "reel", signer = mode === "reel") {
     rows: [{ keys: ["toiture"], clicks: 412, impressions: 9870, ctr: 0.0417, position: 3.42 }, { keys: ["diagnostic"], clicks: 280, impressions: 5120, ctr: 0.0547, position: 4.1 }],
   };
   void MENTION_DONNEES_DEMONSTRATION;
-  return emballer(signer ? SIGNATAIRE : null, mode, donnees, { service: "gsc", outil: "gsc_requete_performances", args: ARGS }) as { texte: string; structuredContent: Record<string, unknown> };
+  return emballer(signer ? SIGNATAIRE : null, mode, donnees, { service: "gsc", outil: "gsc_requete_performances", compte: donnees.siteUrl, args: ARGS }) as { texte: string; structuredContent: Record<string, unknown> };
 }
 
 async function deposer(f: ReturnType<typeof fausseBase>, corps: unknown) {

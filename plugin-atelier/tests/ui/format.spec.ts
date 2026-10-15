@@ -107,7 +107,7 @@ describe("chronologie", () => {
 
 describe("routes de la page", () => {
   it("couvre les six rubriques et les paramètres", () => {
-    expect(VUES.map((v) => v.cle)).toEqual([...RUBRIQUES.map((r) => r.cle), "parametres"]);
+    expect(VUES.map((v) => v.cle)).toEqual([...RUBRIQUES.map((r) => r.cle), "prospects", "connaissances", "parametres"]);
   });
   it("lit la rubrique et l'identifiant depuis le chemin de l'hôte", () => {
     expect(lireRoute("/RNO/atelier")).toEqual({ vue: "equipe", id: null });

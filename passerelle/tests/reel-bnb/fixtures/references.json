@@ -1,0 +1,157 @@
+[
+  {
+    "ReferenceNumber": "2025-00000111",
+    "DepositDate": "2026-06-10",
+    "ExerciseDates": {
+      "startDate": "2025-01-01",
+      "endDate": "2025-12-31"
+    },
+    "ModelType": "m02-f",
+    "DepositType": "Initial",
+    "Language": "FR",
+    "Currency": "EUR",
+    "EnterpriseNumber": "0123456749",
+    "EnterpriseName": "Entreprise Fictive d'Essai SRL",
+    "Address": {
+      "Box": null,
+      "City": "Ville Fictive",
+      "CountryCode": "BE",
+      "Number": "1",
+      "PostalCode": "4000",
+      "Street": "Rue Imaginaire"
+    },
+    "LegalForm": "610",
+    "LegalSituation": "000",
+    "FullFillLegalValidation": true,
+    "ActivityCode": null,
+    "GeneralAssemblyDate": null,
+    "AccountingDataURL": "https://ws.uat2.cbso.nbb.be/authentic/deposit/2025-00000111/accountingData",
+    "DataVersion": "Authentic",
+    "ImprovementDate": null,
+    "CorrectedData": null
+  },
+  {
+    "ReferenceNumber": "2025-00000222",
+    "DepositDate": "2026-07-02",
+    "ExerciseDates": {
+      "startDate": "2025-01-01",
+      "endDate": "2025-12-31"
+    },
+    "ModelType": "m02-f",
+    "DepositType": "Corrective",
+    "Language": "FR",
+    "Currency": "EUR",
+    "EnterpriseNumber": "0123456749",
+    "EnterpriseName": "Entreprise Fictive d'Essai SRL",
+    "Address": {
+      "Box": null,
+      "City": "Ville Fictive",
+      "CountryCode": "BE",
+      "Number": "1",
+      "PostalCode": "4000",
+      "Street": "Rue Imaginaire"
+    },
+    "LegalForm": "610",
+    "LegalSituation": "000",
+    "FullFillLegalValidation": true,
+    "ActivityCode": null,
+    "GeneralAssemblyDate": null,
+    "AccountingDataURL": "https://ws.uat2.cbso.nbb.be/authentic/deposit/2025-00000222/accountingData",
+    "DataVersion": "Authentic",
+    "ImprovementDate": null,
+    "CorrectedData": null
+  },
+  {
+    "ReferenceNumber": "2024-00000333",
+    "DepositDate": "2025-06-20",
+    "ExerciseDates": {
+      "startDate": "2024-01-01",
+      "endDate": "2024-12-31"
+    },
+    "ModelType": "m01-f",
+    "DepositType": "Initial",
+    "Language": "FR",
+    "Currency": "EUR",
+    "EnterpriseNumber": "0123456749",
+    "EnterpriseName": "Entreprise Fictive d'Essai SRL",
+    "Address": {
+      "Box": null,
+      "City": "Ville Fictive",
+      "CountryCode": "BE",
+      "Number": "1",
+      "PostalCode": "4000",
+      "Street": "Rue Imaginaire"
+    },
+    "LegalForm": "610",
+    "LegalSituation": "000",
+    "FullFillLegalValidation": true,
+    "ActivityCode": null,
+    "GeneralAssemblyDate": null,
+    "AccountingDataURL": "https://ws.uat2.cbso.nbb.be/authentic/deposit/2024-00000333/accountingData",
+    "DataVersion": "Authentic",
+    "ImprovementDate": null,
+    "CorrectedData": null
+  },
+  {
+    "ReferenceNumber": "2023-00000444",
+    "DepositDate": "2024-06-18",
+    "ExerciseDates": {
+      "startDate": "2023-01-01",
+      "endDate": "2023-12-31"
+    },
+    "ModelType": "m07-f",
+    "DepositType": "Initial",
+    "Language": "FR",
+    "Currency": "EUR",
+    "EnterpriseNumber": "0123456749",
+    "EnterpriseName": "Entreprise Fictive d'Essai SRL",
+    "Address": {
+      "Box": null,
+      "City": "Ville Fictive",
+      "CountryCode": "BE",
+      "Number": "1",
+      "PostalCode": "4000",
+      "Street": "Rue Imaginaire"
+    },
+    "LegalForm": "610",
+    "LegalSituation": "000",
+    "FullFillLegalValidation": true,
+    "ActivityCode": null,
+    "GeneralAssemblyDate": null,
+    "AccountingDataURL": "https://ws.uat2.cbso.nbb.be/authentic/deposit/2023-00000444/accountingData",
+    "DataVersion": "Authentic",
+    "ImprovementDate": null,
+    "CorrectedData": null
+  },
+  {
+    "ReferenceNumber": "2021-00000555",
+    "DepositDate": "2022-03-15",
+    "ExerciseDates": {
+      "startDate": "2021-01-01",
+      "endDate": "2021-12-31"
+    },
+    "ModelType": "m02-f",
+    "DepositType": "Initial",
+    "Language": "FR",
+    "Currency": "EUR",
+    "EnterpriseNumber": "0123456749",
+    "EnterpriseName": "Entreprise Fictive d'Essai SRL",
+    "Address": {
+      "Box": null,
+      "City": "Ville Fictive",
+      "CountryCode": "BE",
+      "Number": "1",
+      "PostalCode": "4000",
+      "Street": "Rue Imaginaire"
+    },
+    "LegalForm": "610",
+    "LegalSituation": "000",
+    "FullFillLegalValidation": true,
+    "ActivityCode": null,
+    "GeneralAssemblyDate": null,
+    "AccountingDataURL": "https://ws.uat2.cbso.nbb.be/authentic/deposit/2021-00000555/accountingData",
+    "DataVersion": "Authentic",
+    "ImprovementDate": null,
+    "CorrectedData": null
+  }
+]

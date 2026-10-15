@@ -11,10 +11,11 @@ import { join } from "node:path";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { RegistreFournisseurs } from "../../src/fournisseurs.js";
+import type { SignataireEnveloppe } from "../../src/signature-enveloppe.js";
 import { creerServeur, type ServeurPasserelle } from "../../src/serveur.js";
 import { adressesFaussesSocialCrm, type ConfigSocialCrmReel } from "../../src/reel/social-crm/config.js";
 import { construireSocialCrmReel, type SocialCrmReel } from "../../src/reel/social-crm/enregistrer.js";
-import { empreinteArguments, signerPreuve, type ChargePreuve } from "../../src/reel/social-crm/approbation.js";
+import { empreinteArguments, signerPreuve, signerRevocations, type ChargePreuve, type ChargeRevocations } from "../../src/reel/social-crm/approbation.js";
 import { FauxOdoo, FauxPlateformes, IDENTIFIANTS } from "./faux-plateformes.js";
 
 export const REDIRECTION_PAPERCLIP = "http://127.0.0.1:3300/api/tools/oauth/callback";
@@ -34,7 +35,7 @@ export interface Montage {
   arreter(): Promise<void>;
 }
 
-export async function monter(options: { sansClePublique?: boolean; delaiAppelMs?: number } = {}): Promise<Montage> {
+export async function monter(options: { sansClePublique?: boolean; delaiAppelMs?: number; signataire?: SignataireEnveloppe } = {}): Promise<Montage> {
   const faux = new FauxPlateformes();
   const urlFaux = await faux.demarrer();
   const odoo19 = new FauxOdoo(19);
@@ -75,7 +76,7 @@ export async function monter(options: { sansClePublique?: boolean; delaiAppelMs?
       attentes.push(ms);
     },
   })!;
-  passerelle = creerServeur({ mode: "reel", port: 0, registre, journal: (m) => journal.push(m) });
+  passerelle = creerServeur({ mode: "reel", port: 0, registre, ...(options.signataire ? { signataire: options.signataire } : {}), journal: (m) => journal.push(m) });
   const urlPasserelle = await passerelle.ecouter();
   await social.ecouter();
   return {
@@ -195,6 +196,13 @@ export async function appeler(c: Client, nom: string, args: Record<string, unkno
   return { donnees, erreur: r["isError"] === true, texte };
 }
 
+/** Compte que désigne la connexion d'essai de chaque réseau social (la passerelle refuse une preuve sans compte pour eux). */
+const COMPTE_PAR_DEFAUT: Record<string, string> = {
+  facebook: "100000000000001",
+  instagram: "17841400000000001",
+  linkedin: "urn:li:organization:2414183",
+};
+
 /** Preuve signée comme le ferait le plugin pour ces arguments exacts. */
 export function preuve(m: Montage, service: string, outil: string, args: Record<string, unknown>, extra: Partial<ChargePreuve> = {}): string {
   const maintenant = Math.floor(Date.now() / 1000);
@@ -204,13 +212,18 @@ export function preuve(m: Montage, service: string, outil: string, args: Record<
     service,
     outil,
     empreinte: empreinteArguments(args),
-    compte: null,
+    compte: COMPTE_PAR_DEFAUT[service] ?? null,
     diffusion: "diff-1",
     decision: "dec-1",
     emis: maintenant,
     expire: maintenant + 3600,
     ...extra,
   });
+}
+
+/** Liste de révocation `arv1` signée comme le ferait le plugin : vide et émise à l'instant, sauf précision. */
+export function listeRevocations(m: Montage, extra: Partial<ChargeRevocations> = {}): string {
+  return signerRevocations(m.clePrivee, { v: 1, entreprise: "entreprise-essai", emis: Math.floor(Date.now() / 1000), revoquees: [], ...extra });
 }
 
 /** Signature de forme : clés des objets (récursivement), premier élément des tableaux ; les valeurs sont ignorées. */

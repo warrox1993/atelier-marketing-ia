@@ -10,6 +10,7 @@ import { createHash } from "node:crypto";
 import type { CodeMotifPorte, DecisionPorte, MotifPorte, RoleRevue } from "../contrats/index.js";
 import { GRAVITES_BLOQUANTES } from "../contrats/index.js";
 import { verifierDonneesDemo, type EntreesDonneesDemo } from "./regles-donnees-demo.js";
+import { controlerCitationsConnaissances, type VersionPourValidite } from "./regles-connaissances.js";
 
 export interface PreuveEntree {
   revisionId: string;
@@ -78,6 +79,11 @@ export interface EntreesPorte {
    * livrable courant. Absente : la règle ne s'applique pas (compatibilité des appels existants).
    */
   donneesDemo?: EntreesDonneesDemo;
+  /**
+   * Connaissances du client (lot R7) : corps du livrable, adresses `connaissance://` rendues à la tâche,
+   * versions des documents cités, date de la porte. Absente : la règle ne s'applique pas.
+   */
+  connaissances?: { livrable: string; passagesRendus: string[]; versions: VersionPourValidite[]; date: string };
 }
 
 export interface ResultatPorte {
@@ -255,6 +261,12 @@ export function evaluerPorte(e: EntreesPorte): ResultatPorte {
   }
 
   if (e.donneesDemo) motifs.push(...verifierDonneesDemo(e.donneesDemo));
+  if (e.connaissances) {
+    const k = e.connaissances;
+    for (const c of controlerCitationsConnaissances(k.livrable, k.passagesRendus, k.versions, k.date)) {
+      motifs.push(motif(c.code, c.message, { emplacement: c.emplacement, element: c.adresse ?? c.extrait }));
+    }
+  }
 
   // M4 : cycles déjà épuisés AVANT cette révision (aucune relance humaine ne les a relevés) :
   // la révision courante n'a pas droit à une évaluation, l'escalade humaine est obligatoire.
@@ -295,6 +307,14 @@ export function evaluerPorte(e: EntreesPorte): ResultatPorte {
                 preuves: e.donneesDemo.preuves.filter((p) => p.sourceIds.length > 0).map((p) => ({ extrait: p.extrait, sourceIds: [...p.sourceIds].sort() })),
               }
             : undefined,
+        // Lot R7 : clé ajoutée seulement quand la règle des connaissances s'applique.
+        connaissances: e.connaissances
+          ? {
+              date: e.connaissances.date,
+              passagesRendus: [...e.connaissances.passagesRendus].map((a) => a.toLowerCase()).sort(),
+              versions: e.connaissances.versions.map((v) => ({ d: v.documentId, v: v.version, s: v.statut, du: v.valideDu, au: v.valideAu })).sort((a, b) => `${a.d}/${a.v}`.localeCompare(`${b.d}/${b.v}`)),
+            }
+          : undefined,
       }),
     )
     .digest("hex");

@@ -135,6 +135,8 @@ test("décision humaine sur un dossier prêt (porte franchie)", async ({ page, r
   const entreprises = (await (await request.get("/api/companies")).json()) as Array<{ id: string; issuePrefix: string; name: string }>;
   let cible: { prefixe: string; issueId: string } | null = null;
   for (const e of Array.isArray(entreprises) ? entreprises : []) {
+    // Les dossiers « appel exact » (campagne réelle, appels proposés) ont leur propre parcours : appel-exact.spec.ts.
+    if (e.name.startsWith("Dossier e2e appel")) continue;
     const v = await donnees<{ prets: Array<{ issueId: string }> }>(request, "atelier.contenus-a-valider", e.id);
     if (v.prets[0]) {
       cible = { prefixe: e.issuePrefix, issueId: v.prets[0].issueId };
@@ -271,7 +273,7 @@ interface DossierMin {
   interruption: unknown;
   connecteurPublication: boolean;
   livrable: { revisionId: string } | null;
-  decisions: Array<{ id: string; action: string; invalidee: boolean; revisionId: string; portee: { action: string } | null }>;
+  decisions: Array<{ id: string; action: string; invalidee: boolean; revisionId: string; portee: { action: string; canal?: string | null; appel?: unknown } | null }>;
   diffusions: Array<{ etat: string }>;
 }
 
@@ -292,6 +294,11 @@ async function chercherDossier(request: APIRequestContext, filtre: (d: DossierMi
   }
   return null;
 }
+
+const CANAUX_PASSERELLE = ["facebook", "instagram", "linkedin", "crm", "hubspot", "pipedrive", "odoo", "teamleader"];
+/** v1.6 : en réel, sur un canal de la passerelle, l'agent diffuse (l'interface n'affiche pas « Diffuser »). */
+const diffusionParAgent = (d: DossierMin) =>
+  d.mode === "reel" && d.decisions.some((x) => x.action === "approuver" && !x.invalidee && x.revisionId === d.livrable?.revisionId && x.portee && (x.portee.appel || CANAUX_PASSERELLE.includes((x.portee.canal ?? "").toLowerCase())));
 
 const approbationDiffusable = (d: DossierMin) =>
   d.decisions.some((x) => x.action === "approuver" && !x.invalidee && x.revisionId === d.livrable?.revisionId && x.portee && x.portee.action !== "aucune_action_externe");
@@ -329,7 +336,7 @@ test("diffuser un contenu approuvé en démonstration : diffusion simulée, rien
 });
 
 test("Diffuser est grisé en mode réel, avec la raison (aucun connecteur de publication)", async ({ page, request }) => {
-  const cible = await chercherDossier(request, (d) => d.mode === "reel" && !d.connecteurPublication && d.livrable !== null);
+  const cible = await chercherDossier(request, (d) => d.mode === "reel" && !d.connecteurPublication && d.livrable !== null && !diffusionParAgent(d));
   test.skip(!cible, "Aucun dossier en mode réel : jouer le scénario A (l'entreprise passe en mode réel à la fin).");
   await page.goto(`/${cible!.prefixe}/atelier/contenus/${cible!.dossier.issueId}`);
   const bouton = page.locator("section", { has: page.getByRole("heading", { level: 2, name: "Diffusion", exact: true }) }).getByRole("button", { name: "Diffuser" });

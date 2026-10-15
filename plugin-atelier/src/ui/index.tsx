@@ -29,6 +29,8 @@ import { Dossier, VueContenus } from "./vues/contenus.js";
 import { VueEquipeAtelier } from "./vues/equipe.js";
 import { VueMarqueAtelier } from "./vues/marque.js";
 import { VueParametres } from "./vues/parametres.js";
+import { VueProspects } from "./vues/prospects.js";
+import { VueConnaissances } from "./vues/connaissances.js";
 import { VueResultatsAtelier } from "./vues/resultats.js";
 
 /** Racine commune : styles (dédupliqués par React), langue, portée `.atl`. */
@@ -61,6 +63,10 @@ function Vue({ vue, id }: { vue: CleVue; id: string | null }) {
       return <VueResultatsAtelier />;
     case "marque":
       return <VueMarqueAtelier />;
+    case "prospects":
+      return <VueProspects />;
+    case "connaissances":
+      return <VueConnaissances />;
     case "parametres":
       return <VueParametres />;
   }

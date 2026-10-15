@@ -120,6 +120,21 @@ unique par entreprise : une même demande ne produit qu'un effet. Interface : bo
 avec la raison « aucun connecteur de publication » ; en démonstration, actif seulement après
 une approbation qui autorise une action externe sur la révision courante.
 
+v1.6 (revue des signatures) :
+- **Appel proposé** (table `appels_proposes`, sans état propre) : appel d'outil exact (service, outil, compte, arguments)
+  proposé par l'agent sur une révision, avec son empreinte d'appel ; `revisionCourante` faux dès qu'une nouvelle révision
+  existe (il ne peut plus être approuvé). L'humain approuve une empreinte (`portee.appel`) ; seule une demande de diffusion
+  de cette empreinte reçoit une preuve.
+- **Preuve d'une diffusion `preparee`** : absente (motif dans `motifRefus`), **remise** (charge figée, `preuveExpire`), puis
+  éventuellement **expirée** (au-delà de `preuveExpire` : plus rendue, nouvelle approbation nécessaire) ou **révoquée**
+  (`revocation { le, motif }` : nouvelle décision sur la tâche, nouvelle révision du livrable, ou révocation humaine ;
+  plus jamais rendue, publiée dans la liste signée `arv1`). Ces états n'ajoutent aucune valeur à `etat` : une diffusion
+  dont la preuve est révoquée reste `preparee` (rien n'a été envoyé par le plugin) ; une issue signée de la passerelle peut
+  encore la faire passer à `confirmee` si l'appel a eu lieu avant la révocation.
+- La clé d'idempotence signée dans la preuve est `atelier-diffusion-<id>` ; `cleIdempotence` reste la clé de la demande.
+- Interface en réel : « Diffuser » ne déclenche pas une diffusion sur un canal de la passerelle (refus `conflit`) ;
+  l'agent la demande avec l'appel approuvé.
+
 ## 8. Messages typés (cahier §6)
 
 Types : `demande_information`, `reponse`, `contrat_propose`, `contrat_accepte`,
@@ -167,7 +182,10 @@ programmation réelle (`publicationProgrammee` reste `null` sans connecteur).
   enveloppes en désaccord), sinon `reel` ; sans enveloppe `_atelier` : refus. v1.5 (§6 bis) : `reel`
   exige la signature valide de la passerelle (clé publique configurée), liée au service, à l'outil,
   aux arguments déclarés et à une date de moins de 7 jours ; sinon refus. Le détail garde les
-  indices, le nombre de chiffres retenus et le mode effectif de la campagne au dépôt.
+  indices, le nombre de chiffres retenus et le mode effectif de la campagne au dépôt. v1.6 : en réel,
+  arguments obligatoires, chaque structure signée, aucun chiffre hors de la structure signée, compte
+  signé gardé (un compte par service et par campagne) ; réponse d'outil d'écriture refusée dans tous
+  les modes.
 - **Mode effectif** d'une tâche : `reel` si la campagne est réelle ou si l'entreprise est réglée en
   mode réel ; sinon `demonstration`.
 - **Porte** : `donnee_demo_sans_mention` (démonstration : un chiffre, une source ou une preuve tirés
@@ -177,3 +195,19 @@ programmation réelle (`publicationProgrammee` reste `null` sans connecteur).
   étiquetée). Les deux sont des `REFUS` et consomment un cycle.
 - **Diffusion réelle** refusée dans le second cas. Journal : `donnees.deposees`,
   `donnees.demo_campagne_reelle`, `donnees.refusees`.
+
+## 13. Prospection et connaissances (v1.7)
+
+- **Prospect** : `nouveau` → `qualifie` → `exporte` ; `exclu` (par une règle, au moins un motif : doublon, numéro BCE
+  invalide, entreprise inactive, personne physique BCE, hors zone, courriel invalide ou nominatif sans consentement,
+  téléphone invalide, opposition, liste « Ne m'appelez plus », client actuel, donnée de démonstration en campagne réelle) ;
+  `refuse` (écarté par un humain).
+- **Score** : `estimation` (aucune probabilité affichée) ou `probabilite_mesuree` (étalonnage d'au moins 300 prospects et
+  30 conversions, marge de Wilson à 95 %). Jamais « certitude ».
+- **Étalonnage** : statut `estimation` ou `probabilite_mesuree` ; méthode `platt` ou `isotonique` (≥ 1 000 exemples).
+- **Export vers le CRM** : mêmes états qu'une diffusion (`refusee`, `simulee`, `preparee`, `confirmee`,
+  `ambigue_a_reconcilier`) ; jamais `confirmee` en démonstration.
+- **Import de base clients** : lignes lues = retenues + rejetées ; purge à `purgeLe` ; les oppositions survivent à la purge.
+- **Version d'un document de connaissances** : statut `en_vigueur`, `a_venir`, `perime`, `retire` ; indexation `en_file`,
+  `en_cours`, `indexe`, `refuse` (motif) ; `active` seulement si indexée, une seule active par document.
+- **Recherche** : `aucuneSource` vrai ⇔ aucun passage (motif obligatoire) ; tout passage hors vigueur est marqué « périmé ».

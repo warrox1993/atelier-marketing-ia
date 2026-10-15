@@ -129,7 +129,10 @@ coupée) démarre sinon en mode `auto` depuis Claude Code 2.1.285 (même page).
 `Bash(curl *)` sert aux échanges avec Paperclip (API native et routes du moteur de
 l'atelier). Les mutations dans Paperclip sont autorisées ou refusées par le serveur
 (un agent ne peut ni approuver, ni modifier une politique de revue grâce à la garde P1 du
-lot A). Aucune mutation externe n'est connectée (publication, régie, CRM). Limite : une
+lot A). Connexions de la passerelle : le serveur d'outils `mcp__paperclip-assigned` est en mutation pour les rôles qui écrivent
+sur accord (`crm-conversion` et, depuis le 15/10/2026, `contenus`, qui publie sur Facebook, Instagram et LinkedIn après approbation de
+l'appel exact, sans message privé : champ `outilsBloques` du registre, politique native `block`), en recherche pour les rôles en lecture.
+Aucune autre mutation externe n'est connectée (régie). Limite : une
 règle de permission Claude ne restreint pas l'hôte joint par `curl` ; la barrière réseau
 réelle serait `networkScope: "allowlist"` (moteur CLI et Bubblewrap), non activée et non
 testée. Une compétence n'ajoute aucune permission : le vérificateur refuse
@@ -147,7 +150,7 @@ testée. Une compétence n'ajoute aucune permission : le vérificateur refuse
 | `audit-local-etablissements` | une ligne par établissement du périmètre confirmé | seo-local-geo |
 | `contenu-recherche-ia` | contenu utile pour la recherche et les moteurs d'IA, sans promesse | seo-local-geo, contenus |
 | `preparation-campagnes-sea` | campagne en brouillon, budget borné, rien d'activé | sea |
-| `redaction-declinaison-canal` | contenu principal et déclinaisons, briefs de visuels | contenus |
+| `redaction-declinaison-canal` | contenu principal et déclinaisons, briefs de visuels, appel de publication à faire approuver (1.3.0) | contenus |
 | `charte-marque` | ton, vocabulaire, affirmations autorisées | sea, contenus, crm-conversion, relecteur |
 | `conversion-crm` | page, formulaire, scénarios avec consentement | crm-conversion |
 | `mesure-experiences` | données datées, « non mesurable », expériences bornées | mesure |

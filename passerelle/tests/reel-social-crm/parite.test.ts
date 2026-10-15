@@ -1,5 +1,5 @@
-// Parité des catalogues : en réel, mêmes noms d'outils, mêmes schémas d'entrée (au paramètre facultatif
-// `preuve_approbation` près, sur les mutations) et mêmes annotations qu'en démonstration (L7).
+// Parité des catalogues : en réel, mêmes noms d'outils, mêmes schémas d'entrée (aux paramètres facultatifs
+// `preuve_approbation` et `revocations_approbation` près, sur les mutations) et mêmes annotations qu'en démonstration (L7).
 
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -59,8 +59,13 @@ describe("parité démonstration / réel", () => {
           expect(schemaReel.properties?.["preuve_approbation"], d.name).toBeDefined();
           expect(schemaReel.required ?? [], d.name).not.toContain("preuve_approbation");
           delete schemaReel.properties!["preuve_approbation"];
+          // Revue S-7 : la liste de révocation voyage avec la preuve (facultative dans le schéma, exigée à l'exécution).
+          expect(schemaReel.properties?.["revocations_approbation"], d.name).toBeDefined();
+          expect(schemaReel.required ?? [], d.name).not.toContain("revocations_approbation");
+          delete schemaReel.properties!["revocations_approbation"];
         } else {
           expect(schemaReel.properties?.["preuve_approbation"], d.name).toBeUndefined();
+          expect(schemaReel.properties?.["revocations_approbation"], d.name).toBeUndefined();
         }
         expect(schemaReel, d.name).toEqual(d.inputSchema);
       }

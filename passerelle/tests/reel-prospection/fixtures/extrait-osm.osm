@@ -1,0 +1,24 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<osm version="0.6" generator="atelier-essai (donnees fictives)">
+  <node id="1" lat="50.6326" lon="5.5797" version="1" timestamp="2026-01-01T00:00:00Z"><tag k="shop" v="bakery"/><tag k="name" v="Boulangerie Fictive"/><tag k="addr:street" v="Rue Imaginaire"/><tag k="addr:housenumber" v="5"/><tag k="addr:postcode" v="4000"/><tag k="addr:city" v="Liège"/><tag k="phone" v="+32 4 000 00 21"/><tag k="email" v="contact@exemple.invalid"/><tag k="mobile" v="+32 470 00 00 00"/><tag k="opening_hours" v="Mo-Sa 07:00-18:00"/><tag k="brand" v="Pain Fictif"/></node>
+  <node id="2" lat="50.642" lon="5.585" version="1" timestamp="2026-01-01T00:00:00Z"><tag k="amenity" v="restaurant"/><tag k="name" v="Table Fictive"/><tag k="addr:street" v="Quai Imaginaire"/><tag k="addr:housenumber" v="7"/><tag k="addr:postcode" v="4020"/><tag k="addr:city" v="Liège"/><tag k="website" v="https://table.demo-prospection.example"/></node>
+  <node id="3" lat="50.6597" lon="5.5236" version="1" timestamp="2026-01-01T00:00:00Z"><tag k="craft" v="roofer"/><tag k="name" v="Couvreur Fictif"/><tag k="addr:postcode" v="4430"/><tag k="addr:city" v="Ans"/><tag k="contact:phone" v="+32 4 000 00 22"/></node>
+  <node id="4" lat="50.633" lon="5.568" version="1" timestamp="2026-01-01T00:00:00Z"><tag k="office" v="insurance"/><tag k="name" v="Courtage Fictif"/><tag k="addr:street" v="Rue des Exemples"/><tag k="addr:housenumber" v="12"/><tag k="addr:postcode" v="4000"/><tag k="addr:city" v="Liège"/></node>
+  <node id="5" lat="50.667" lon="5.625" version="1" timestamp="2026-01-01T00:00:00Z"><tag k="shop" v="car_repair"/><tag k="name" v="Garage Fictif"/><tag k="addr:postcode" v="4040"/><tag k="addr:city" v="Herstal"/></node>
+  <node id="6" lat="50.467" lon="4.872" version="1" timestamp="2026-01-01T00:00:00Z"><tag k="tourism" v="hotel"/><tag k="name" v="Hôtel Fictif"/><tag k="addr:postcode" v="5000"/><tag k="addr:city" v="Namur"/></node>
+  <node id="7" lat="50.583" lon="5.5" version="1" timestamp="2026-01-01T00:00:00Z"><tag k="amenity" v="pharmacy"/><tag k="name" v="Pharmacie Fictive"/><tag k="addr:postcode" v="4100"/><tag k="addr:city" v="Seraing"/></node>
+  <node id="8" lat="50.6" lon="5.5" version="1" timestamp="2026-01-01T00:00:00Z"><tag k="shop" v="vacant"/><tag k="name" v="Local Vide"/></node>
+  <node id="9" lat="50.6" lon="5.51" version="1" timestamp="2026-01-01T00:00:00Z"><tag k="shop" v="bakery"/><tag k="addr:postcode" v="4000"/></node>
+  <node id="10" lat="50.61" lon="5.52" version="1" timestamp="2026-01-01T00:00:00Z"><tag k="amenity" v="bench"/><tag k="name" v="Banc Public"/></node>
+  <node id="12" lat="51.054" lon="3.722" version="1" timestamp="2026-01-01T00:00:00Z"><tag k="shop" v="florist"/><tag k="name" v="Fleuriste Gantois"/><tag k="addr:postcode" v="9000"/><tag k="addr:city" v="Gand"/></node>
+  <node id="13" lat="50.62" lon="5.53" version="1" timestamp="2026-01-01T00:00:00Z"><tag k="shop" v="bakery"/><tag k="name" v="Boulangerie Sans Adresse"/></node>
+  <node id="14" lat="50.634" lon="5.569" version="1" timestamp="2026-01-01T00:00:00Z"><tag k="amenity" v="bank"/><tag k="name" v="Banque Fictive"/><tag k="addr:postcode" v="4000"/><tag k="addr:city" v="Liège"/></node>
+  <node id="15" lat="50.635" lon="5.57" version="1" timestamp="2026-01-01T00:00:00Z"><tag k="healthcare" v="physiotherapist"/><tag k="name" v="Kine Fictif"/><tag k="addr:postcode" v="4000"/><tag k="addr:city" v="Liège"/></node>
+  <node id="16" lat="50.636" lon="5.571" version="1" timestamp="2026-01-01T00:00:00Z"><tag k="office" v="lawyer"/><tag k="name" v="Cabinet Fictif"/><tag k="addr:postcode" v="4000"/><tag k="addr:city" v="Liège"/></node>
+  <node id="17" lat="50.637" lon="5.572" version="1" timestamp="2026-01-01T00:00:00Z"><tag k="shop" v="bakery"/><tag k="name" v="Boulangerie &quot;Guillemets&quot; &amp; &lt;Cie&gt;"/><tag k="addr:postcode" v="4000"/><tag k="addr:city" v="Liège"/></node>
+  <node id="101" lat="50.63" lon="5.57" version="1" timestamp="2026-01-01T00:00:00Z"/>
+  <node id="102" lat="50.63" lon="5.572" version="1" timestamp="2026-01-01T00:00:00Z"/>
+  <node id="103" lat="50.632" lon="5.572" version="1" timestamp="2026-01-01T00:00:00Z"/>
+  <node id="104" lat="50.632" lon="5.57" version="1" timestamp="2026-01-01T00:00:00Z"/>
+  <way id="20" version="1" timestamp="2026-01-01T00:00:00Z"><nd ref="101"/><nd ref="102"/><nd ref="103"/><nd ref="104"/><nd ref="101"/><tag k="amenity" v="cafe"/><tag k="name" v="Café Fictif Polygone"/><tag k="building" v="yes"/><tag k="addr:postcode" v="4000"/><tag k="addr:city" v="Liège"/></way>
+</osm>

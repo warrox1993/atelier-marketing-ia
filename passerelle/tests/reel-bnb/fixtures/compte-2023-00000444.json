@@ -1,0 +1,14 @@
+{
+  "ReferenceNumber": "2023-00000444",
+  "EnterpriseName": "Entreprise Fictive d'Essai SRL",
+  "LegalForm": {
+    "LegalFormCode": "610"
+  },
+  "Rubrics": [
+    {
+      "Code": "20/58",
+      "Period": "N",
+      "Value": "1500000"
+    }
+  ]
+}

@@ -7,6 +7,7 @@
 # copie, organisation de démonstration appliquée.
 #
 # Usage : tests/e2e/atelier/preparer.sh [id=atelier-lotc] [port=3140] [port_pg=54369]
+# Variable facultative ATELIER_COPIE : dossier de la copie du plugin (défaut instance/plugin-lotc), pour une instance à soi.
 # L'instance est lancée en arrière-plan ; journal : instance/e2e-atelier-instance.log.
 # Arrêt : scripts/instance-essai.sh arreter <id> <port> <port_pg>
 set -uo pipefail
@@ -14,7 +15,7 @@ set -uo pipefail
 ID="${1:-atelier-lotc}"; PORT="${2:-3140}"; PORT_PG="${3:-54369}"
 RACINE="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 ICI="${RACINE}/tests/e2e/atelier"
-COPIE="${RACINE}/instance/plugin-lotc"
+COPIE="${ATELIER_COPIE:-${RACINE}/instance/plugin-lotc}"
 API="http://127.0.0.1:${PORT}/api"
 
 # 1. Playwright et chromium headless du socle (aucune installation).

@@ -8,7 +8,7 @@ Serveur MCP local qui sert de connexion `mcp_remote` à Paperclip (spécificatio
 ```
 cd passerelle && npm ci && npm run build
 PASSERELLE_MODE=demonstration PASSERELLE_PORT=3190 npm start   # 127.0.0.1 seulement
-npm test                                                         # vitest, 265 tests (dont 39 pour Google réel, L4)
+npm test                                                         # vitest, 542 tests (dont 39 pour Google réel, L4, et 88 pour la BCE et OpenStreetMap réels, P3 et P3b)
 ```
 
 Variables : `PASSERELLE_MODE` (`demonstration` par défaut, ou `reel`), `PASSERELLE_HOTE`
@@ -39,7 +39,17 @@ Détail, preuves et diffs pour le socle et le plugin : `docs/revue-securite-pass
 - **`PASSERELLE_SIGNATURE_CLE_PRIVEE`** (ou `_FICHIER`, 0600 ; Ed25519 PKCS#8) : signe l'enveloppe `_atelier` de chaque
   réponse d'outil (`_atelier.signature`, mode, service, outil, arguments, contenu, horodatage). La clé publique à
   donner au plugin est écrite au journal de démarrage. Absente : réponses non signées, que le plugin ne doit pas tenir
-  pour réelles. Clé invalide : refus de démarrer.
+  pour réelles. Clé invalide : refus de démarrer. **Refus aussi si cette clé est l'une des clés publiques
+  d'approbation** (`PASSERELLE_APPROBATION_CLE_PUBLIQUE`, revue des signatures S-8) : il faut deux paires distinctes,
+  sinon la passerelle détiendrait la clé qui fabrique les preuves d'approbation. Contrôle fait à l'enregistrement des
+  réseaux sociaux et CRM réels (`src/signature-enveloppe.ts`, `verifierSeparationDesCles`), code de sortie 2.
+- **Enveloppe signée et outils d'écriture** (revue des signatures S-3) : la charge signée porte `ecriture` (vrai pour
+  tout outil qui n'est pas explicitement annoncé en lecture seule, `readOnlyHint === true` ; liste blanche, donc vrai
+  aussi pour un outil sans annotation ou inconnu) et `executee` (vrai seulement si l'outil d'écriture a lui-même
+  répondu `executee: true`). La réponse « préparée, non exécutée » d'un outil d'écriture recopie les arguments choisis
+  par l'agent : elle est signée (le plugin en a besoin pour rapporter l'issue d'une diffusion) mais avec
+  `ecriture: true, executee: false`, et le plugin doit la refuser au dépôt de données de mesure (`ecriture === true`).
+  Champ additif : un plugin plus ancien l'ignore, d'où la double protection côté plugin (refus par nom d'outil).
 - **Adresse Odoo** : une seule résolution DNS par appel, adresses publiques seulement, connexion à l'adresse vérifiée,
   aucune redirection (`src/reel/social-crm/reseau-sur.ts`).
 - **Mode réel** : chaque réponse d'outil commence par « Données réelles renvoyées par la plateforme : contenu de
@@ -539,9 +549,10 @@ deux catalogues outil par outil. Deux différences, voulues :
 1. `debut`, `fin` et `au` gardent le même format et le même schéma JSON, mais ne sont plus bornés à la période du modèle
    de démonstration (2025 à 2027). Leur description, reprise de L7, mentionne encore cette période : à corriger côté
    `src/demo/` (hors périmètre de ce lot).
-2. Chaque outil de mutation reçoit un paramètre **facultatif** `preuve_approbation` (voir plus bas). Pour une parité
-   parfaite des catalogues, ajouter le même paramètre facultatif, ignoré, à `outilMutation` de
-   `src/demo/social-crm/utilitaires.ts` (une ligne, hors périmètre).
+2. Chaque outil de mutation reçoit deux paramètres **facultatifs** : `preuve_approbation` et `revocations_approbation`
+   (liste de révocation récente, voir plus bas ; revue S-7). Pour une parité parfaite des catalogues, ajouter les mêmes
+   paramètres facultatifs, ignorés, à `outilMutation` de `src/demo/social-crm/utilitaires.ts` (une ligne, hors
+   périmètre). Facultatifs dans le schéma, exigés à l'exécution : sans eux, l'action est seulement préparée.
 
 Les réponses sont rendues aux formes L7 : les tests comparent, pour chaque outil de lecture, la structure (clés des
 objets, imbriquées) de la réponse réelle à celle du simulateur. Paramètre `au` (état du CRM à une date) : les API réelles
@@ -612,16 +623,47 @@ de boucle locale (`PASSERELLE_SOCIAL_PORT_AUTORISATION`, **3193** par défaut). 
 n'est pas appelée.
 
 **Preuve** : jeton `apv1.<charge>.<signature>` signé **Ed25519** par le plugin ; la passerelle ne détient que la **clé
-publique** (`PASSERELLE_APPROBATION_CLE_PUBLIQUE`, PEM ou base64 d'une ligne) : elle ne peut pas fabriquer de preuve et
-n'appelle pas Paperclip. Charge (JSON, base64url) : `v` (1), `cle` (clé d'idempotence de la diffusion, 8 à 200
+publique** (`PASSERELLE_APPROBATION_CLE_PUBLIQUE`, PEM « PUBLIC KEY » ou SPKI DER en base64 d'une ligne) : elle ne peut pas
+fabriquer de preuve et n'appelle pas Paperclip. **Le format est contrôlé au chargement** (`normaliserClePubliqueApprobation`,
+`config.ts`) : chaque clé doit être lisible et de type Ed25519 (ni RSA, ni clé privée, ni certificat, ni texte parasite) ;
+sinon la configuration est refusée avec un message qui nomme la variable sans jamais citer la valeur, et les services
+réseaux sociaux et CRM ne sont pas servis. Charge (JSON, base64url) : `v` (1), `cle` (clé d'idempotence de la diffusion, 8 à 200
 caractères), `service`, `outil`, `empreinte` (SHA-256 hexadécimal du **JSON canonique** des arguments de l'outil sans
 `preuve_approbation` : clés triées, aucun espace), `compte` (Page, organisation, portail… tel que la connexion le désigne,
-ou `null`), `diffusion`, `decision`, `emis`, `expire` (secondes Unix, 7 jours au plus). Implémentation de référence :
+ou `null`), `diffusion`, `decision`, `emis`, `expire` (secondes Unix, 7 jours au plus) et, **quand le plugin le fournit**,
+`entreprise` (champ additif signé, voir la liste de révocation). `compte: null` (« tout compte ») est refusé pour Facebook,
+Instagram et LinkedIn : l'approbation doit viser une Page ou une organisation précise. Implémentation de référence :
 `src/reel/social-crm/approbation.ts` (`signerPreuve`, `empreinteArguments`, `jsonCanonique`). Refus (préparée) : preuve
 absente, illisible, mal signée, expirée, émise dans le futur, d'un autre service, d'un autre outil, d'un autre contenu,
-d'un autre compte ; et toute preuve tant que la clé publique n'est pas configurée.
+d'un autre compte, sans compte pour un réseau social, révoquée, sans liste de révocation récente ; et toute preuve tant que
+la clé publique n'est pas configurée. `preuve_approbation` et `revocations_approbation` sont des **arguments de transport** :
+retirés avant le calcul de l'empreinte, des paramètres rapportés (`action.parametres`) et des arguments signés dans
+l'enveloppe `aev1` (c'est cette empreinte que la route d'issue du plugin compare).
 
-**Idempotence** (journal des mutations dans le fichier d'état, écrit de façon atomique) : une clé = un effet au plus.
+**Liste de révocation (revue S-7, contrat v1.6)** : le plugin publie, signée par la même clé d'approbation, la liste des
+preuves révoquées et non expirées (`GET /api/plugins/atelier.marketing-ia/api/preuves/revocations?companyId=…`, champ `liste`,
+préfixe `arv1`, charge `{ v: 1, entreprise, emis, revoquees: [{ diffusion, cle, decision, expire }] }`). La passerelle
+n'interroge jamais Paperclip : l'agent la joint à chaque mutation dans `revocations_approbation`. Contrôles, dans l'ordre :
+préfixe `arv1` dans le corps signé (une liste ne vaut jamais preuve, une preuve ne vaut jamais liste), signature par une clé
+d'approbation configurée, forme, `emis` pas dans le futur (120 s de dérive) et **vieux de 5 minutes au plus** (c'est le délai
+maximal d'effet d'une révocation ; `FRAICHEUR_REVOCATIONS_S`), même entreprise que la preuve quand celle-ci en porte une,
+et ni la `diffusion`, ni la `cle`, ni la `decision` de la preuve dans `revoquees`. **Absence de liste fraîche = refus** (action
+préparée avec le motif, plateforme non appelée) : il n'y a pas de repli. Tant que le plugin n'ajoute pas `entreprise` à la
+charge `apv1`, la liste ne peut pas être liée à l'entreprise (une liste vide d'une autre entreprise passerait) : le diff
+attendu côté plugin est dans `docs/revue-securite-signatures.md`, « Suites données (passerelle, consignes, v1.6) ».
+
+**Défense en profondeur S-4** : au rejeu d'une mutation déjà `executee`, `expirePreuve` de l'entrée du journal est
+prolongée jusqu'à l'expiration de la preuve présentée si celle-ci est plus longue (jamais raccourcie) : une entrée n'est
+pas oubliée tant qu'une preuve qui la vise peut encore être présentée.
+
+**Compte signé (revue S-6)** : en mode réel, toute réponse d'outil signée (`aev1`) porte un compte non nul et non vide ;
+`SignataireEnveloppe.signer` refuse sinon, et `appelerOutil` répond une erreur `compte_absent` NON signée (le plugin ne la
+tiendra jamais pour une mesure réelle).
+
+**Idempotence** (journal des mutations dans le fichier d'état, écrit de façon atomique) : une clé = un effet au plus,
+**par compte, service et outil** (revue S-5 : la clé est choisie par l'agent, elle n'identifie à elle seule aucune
+opération ; le verrou « déjà en cours » suit le même index). Les entrées d'avant ce correctif, sans compte, ne sont
+rendues qu'à la même clé, au même service, au même outil et au même octroi, puis migrées à leur prochaine écriture.
 
 | État de la clé | Nouvel appel avec la même preuve |
 | --- | --- |
@@ -629,7 +671,8 @@ d'un autre compte ; et toute preuve tant que la clé publique n'est pas configur
 | `executee` | le résultat enregistré est renvoyé (`rejeu: true`), aucun appel |
 | exécution en cours dans le processus | refus « déjà en cours » |
 | `ambigue` (réseau, délai, 5xx : effet possible) ou `en_cours` laissé par un arrêt | **réconciliation d'abord** : relecture chez la plateforme ; effet constaté → `executee` (`rejeu`) ; absence prouvée → un nouvel essai ; impossible à établir → réponse `ambigue_a_reconcilier`, **rien n'est renvoyé** |
-| clé déjà utilisée pour un autre contenu ou un autre outil | préparée, refus |
+| clé déjà utilisée pour un autre contenu sur le même compte, service et outil | préparée, refus |
+| même clé pour un autre compte, un autre service ou un autre outil | autre opération : le journal est indexé par **compte + service + outil + clé** (revue S-5), jamais le résultat d'un autre compte |
 
 Réconciliation : publication Facebook, Instagram et LinkedIn = recherche d'une publication au texte identique depuis le
 début de la tentative ; modifications HubSpot, Pipedrive, Odoo, Teamleader = relecture de l'objet et comparaison des
@@ -746,3 +789,367 @@ et HubSpot exigent HTTPS hors `localhost` ; Meta l'impose en mode « live ».
 - Cartes de galerie L6 en réel (`paperclip/`, patch `0004`, corrigé par `0006` le 15/10/2026) : portées ajoutées (`read_insights`, `pages_messaging`,
   `instagram_business_manage_insights`, `rw_organization_admin`), Odoo et Teamleader sans portée (normal : la passerelle
   ne les transmet pas) ; Odoo et Pipedrive par clé passent par le formulaire de la passerelle, ouvert par le même clic.
+
+## Simulateurs prospection (P2)
+
+Lot P2 de `docs/prospection-conception.md` §10. Trois services en mode `demonstration`, enregistrés au démarrage par
+`passerelle/src/demo/prospection/enregistrer.ts` (`enregistrerProspectionDemo`, une ligne dans `src/demarrer.ts`) ; les
+fiches `bce`, `bnb` et `fsma` viennent des fournisseurs (champ `fiche`), `src/services.ts` n'est pas modifié. Code :
+`passerelle/src/demo/prospection/` ; tests : `passerelle/tests/prospection/` (fonctions des outils, jeu de données, client
+MCP du SDK sur une passerelle lancée en test, enveloppe signée vérifiée sur chaque réponse).
+
+### Entreprise cliente simulée : un assureur belge, nom dans une variable locale
+
+La démonstration de prospection suppose que le client est un **assureur belge** ; ses cibles sont des PME, commerces,
+métiers du bâtiment, hôtellerie-restauration, transporteurs (flottes) et, pour `fsma`, des courtiers et agents fictifs.
+Son nom est lu dans la variable d'environnement **`ATELIER_DEMO_ASSUREUR_NOM`** (120 caractères au plus), à poser dans un
+fichier local non suivi. Absente ou vide : « Assurances Démo Liège (démonstration) ». **Aucun vrai nom de client n'est
+écrit dans le dépôt** (le script de publication le refuse). Le nom est rappelé dans le champ `client_demonstration` de
+chaque réponse ; il n'entre dans aucune graine : les chiffres ne changent pas avec lui. L'entreprise de démonstration
+« Rénovation Liège » reste intacte (modèle L3 non modifié, son empreinte figée aussi) ; les entreprises de prospection
+sont des prospects distincts, avec leurs propres coordonnées.
+
+### Outils exposés (tous `readOnlyHint: true`, 10 résultats par page)
+
+| Service | Outil | Entrée | Réponse |
+| --- | --- | --- | --- |
+| `bce` | `bce_rechercher` | `nace[]` (préfixes de 2 à 5 chiffres, point facultatif, 2008 ou 2025), zone (`communes[]`, `codes_postaux[]`, `provinces[]`, `regions[]`, `pays[]`), `formes[]`, `creees_depuis`, `taille[]` (extension d'atelier), `page` | `total`, `page`, `pages`, `entreprises[]` |
+| `bce` | `bce_entreprise` | `numero` (entreprise `0123.456.789` ou unité d'établissement `2.123.456.789`) | `trouve`, `entreprise` ou `etablissement` |
+| `bce` | `bce_changements` | `depuis`, `nace[]`, zone, `page` | `changements[]` : `creation`, `nouvel_etablissement`, `changement_adresse`, `changement_forme`, `radiation` |
+| `bnb` | `bnb_comptes` | `numero` d'entreprise | `references[]` : exercice, dépôt, modèle, rubriques `9087` (effectif, équivalents temps plein) et `20/58` (total du bilan) |
+| `fsma` | `fsma_intermediaire` | `numero` ou `nom` | `intermediaires[]` |
+| `fsma` | `fsma_rechercher` | `categorie`, `statut`, zone, `page` | `intermediaires[]` |
+
+Filtres : les critères donnés se cumulent (ET), plusieurs valeurs d'un même critère valent « l'une OU l'autre ». Pour la
+BCE, une entreprise correspond si son siège **ou** l'une de ses unités d'établissement est dans la zone. La **taille**
+est déduite de l'effectif des derniers comptes de la BNB (micro < 10, petite < 50, moyenne < 250, grande ≥ 250
+équivalents temps plein ; « inconnue » = aucun compte) : c'est une simplification des critères du Code des sociétés
+(qui ajoutent chiffre d'affaires et total du bilan) et une **extension d'atelier** de `bce_rechercher`, qui devra être
+portée par l'index local du lot P3 (jointure avec la BNB).
+
+### Formes de réponse
+
+- **`bce`** : noms de colonnes des fichiers BCE Open Data (`EnterpriseNumber`, `Status` `AC`, `JuridicalSituation`,
+  `TypeOfEnterprise`, `JuridicalForm`, `StartDate` au format `JJ-MM-AAAA`, puis `denominations`, `adresses` (`REGO` siège,
+  `BAET` établissement), `activites` (`NaceVersion` 2008 et 2025, `NaceCode` à 5 chiffres, `MAIN`/`SECO`), `contacts`
+  (`TEL`, `EMAIL`, `WEB`), `etablissements`). **Comme le fichier réel** : aucun effectif, aucun chiffre financier, aucun
+  historique. Les colonnes `Libelle` sont ajoutées pour la lisibilité (jointure avec `code.csv`).
+- **`bnb`** : fusion des deux appels de « Authentic Data Query » (références de dépôts, puis rubriques) ; entreprise sans
+  compte (petite entité non tenue au dépôt, création récente) : `references: []`.
+- **`fsma`** : hypothèse de travail (le format réel est inconnu, lot P15) : `numero_inscription`, `denomination`,
+  `numero_bce`, `categorie`, `statut` (`Inscrit`/`Radié`), `inscrit_le`, `radie_le`, `adresse`.
+
+Niveaux de preuve : les noms de champs BCE sont **probables** (dépôts publics, §2.1 de la conception), ceux de la BNB
+**probables**, ceux de la FSMA **hypothétiques** ; les codes NACE-BEL à 5 chiffres et leurs libellés, les codes de forme
+juridique (`610` SRL, `014` SA) et la correspondance NACE 2008 → 2025 (reprise à l'identique, simplification) sont
+**à confirmer** (Statbel, guide BCE) aux lots P3 et P4.
+
+### Jeu de données fictif et déterministe
+
+51 entreprises actives (dont 3 pièges), 10 inscriptions FSMA, 17 événements de mise à jour, tirés de `alea` (graine
+SHA-256 du modèle, première clé `prospection`) sans toucher au modèle L3 : mêmes paramètres, mêmes octets (empreinte du jeu
+figée dans `tests/prospection/jeu.test.ts`). Communes réelles de la province de Liège (Liège, Ans, Seraing, Herstal…), de
+Namur, de Bruxelles et de Gand.
+
+- **Numéros à chiffre de contrôle volontairement faux** : entreprises (`0xxx` ou `1xxx`) et unités d'établissement (`2.`)
+  échouent tous au contrôle modulo 97 (97 − base mod 97), donc ne peuvent désigner aucune vraie entreprise ; test
+  obligatoire sur 100 % des numéros du jeu et sur 10 000 numéros tirés. Les outils **refusent de répondre** pour un numéro
+  dont le contrôle est valide (`motif: numero_non_fictif`).
+- **Aucune personne physique** : toutes les entités sont des sociétés (`TypeOfEnterprise` 2, SRL ou SA), aucun nom de
+  personne. Écart assumé avec le §7 de la conception, qui prévoyait une personne physique « à rejeter » : la consigne du lot
+  l'interdit, et le fichier réel ne les charge jamais (lot P3) ; le piège est donc l'absence.
+- **Coordonnées** : dénominations suffixées « (démonstration) », sites `https://<nom>.demo-prospection.example`, courriels
+  impersonnels `info.<nom>@exemple.invalid`, téléphones `+32 4 000 00 NN` (NN de 10 à 99, disjoints de ceux du modèle).
+  Un test balaie toute la sortie des six outils. `EMPREINTES_PROSPECTION_DEMO` (`referentiel.ts`) liste les marqueurs à
+  ajouter à `EMPREINTES_DEMONSTRATION` du plugin (lot P9, non touché ici) : `(démonstration)` y figure déjà, les deux autres
+  sont `demo-prospection.example` et `@exemple.invalid`.
+- **Pièges** (`piegesProspection()`) : **doublon** (deux numéros, même adresse, dénominations identiques au suffixe `SRL`
+  près) ; **hors zone** (« Toitures Herstaliennes », Herstal 4040, hors des communes de Liège et d'Ans) ; **entreprise
+  radiée** (absente du fichier actif, signalée par `bce_changements`, encore inscrite à la FSMA, anciens comptes conservés
+  à la BNB) ; **FSMA radié mais BCE actif** ; **numéro BCE mal formé** publié par la FSMA (`0123.456.78`, 9 chiffres,
+  aucune entreprise correspondante). Le courriel nominatif du §7 n'est pas simulé (aucune personne) : il relève des règles
+  du lot P5.
+
+Vérification : `npx tsc --noEmit` et `npx vitest run` dans `passerelle/`.
+
+## Simulateur B2C (courtier)
+
+Extension de P2 aux **particuliers** : un quatrième service `b2c` en mode `demonstration`, fait comme les trois autres
+(`passerelle/src/demo/prospection/particuliers.ts`, ligne ajoutée à `FOURNISSEURS_PROSPECTION_DEMO` dans `enregistrer.ts` ;
+`SERVICES_PROSPECTION` reste celui des trois services d'entreprises). Le client simulé est un courtier multi-compagnies de la
+province de Liège (entités non-vie, vie, crédits ; marque « Devis en ligne (démonstration) » ; douze bureaux). Son nom vient de
+`ATELIER_DEMO_ASSUREUR_NOM`, comme en P2. Tests : `passerelle/tests/prospection/particuliers.test.ts`.
+
+| Outil | Entrée | Réponse |
+| --- | --- | --- |
+| `b2c_demandes_devis` | `produits[]` (auto, habitation, hospitalisation, familiale, animaux, obseques, epargne_pension, credit), `statuts[]` (abandonne, complete, rendez_vous_pris), `depuis`, `jusqu_au`, `consentement` (actif, retire, aucun), `canal`, `bureau`, `dans_zone`, zone, `page` | `demandes[]` : produit, commune, date, statut, consentement marketing (date, texte, canaux e-mail, téléphone, SMS), bureau le plus proche |
+| `b2c_clients` | `detient[]`, `ne_detient_pas[]` (contrats ACTIFS seulement), `entite`, `anciennete_min`, `anciennete_max`, `canal`, `dans_zone`, zone, `page` | `clients[]` : contrats actifs et résiliés, ancienneté, commune, consentements |
+| `b2c_oppositions` | `telephone`, `courriel` (vérification d'un contact), `canal`, `sources[]`, `depuis`, zone, `page` | `oppositions[]` : canaux refusés, date, source, correspondances avec les demandes et les clients |
+
+Vente croisée : `detient: ["auto"]` et `ne_detient_pas: ["habitation"]` donne « auto sans habitation ». Dans le consentement,
+`canaux` ne montre que les canaux **utilisables** (vides si aucun accord ou accord retiré) et `canaux_a_l_origine` ce qui avait
+été coché. `opposition_canaux` (demandes et clients) croise le téléphone et le courriel avec les oppositions.
+
+**Données** : 56 demandes, 70 clients et 22 oppositions tirés de la graine `alea` (clé « b2c », donc sans effet sur les autres
+jeux), plus des cas écrits à la main. Personnes 100 % fictives : noms « Prénom Nom (démonstration) », courriels
+`@exemple.invalid`, téléphones `+32 4 000 0X YY` (X de 1 à 9, disjoints des entreprises en `+32 4 000 00 NN`), « Rue des
+Exemples ». La liste « Ne m'appelez plus » est une **simulation** : le courtier ne peut pas interroger la vraie liste.
+**Pièges** (`piegesParticuliers()`) : doublon (demandes `dv901`/`dv902`, clients `cl901`/`cl902` sur deux entités),
+consentement retiré (`dv903`, `dv904`, `cl903`), hors zone (`dv905`, `dv906`, `cl904`, Namur et Bruxelles), client déjà
+équipé (`dv907`, `dv908`), habitation résiliée comptée comme « sans habitation » (`cl905`). Coordonnées des communes
+approximatives (bureau le plus proche à vol d'oiseau).
+
+## Fournisseur BCE réel (P3)
+
+Lot P3 de `docs/prospection-conception.md` §10. État : **implémenté, testé sur des fichiers de test au format officiel
+(entreprises fictives), jamais exécuté contre le vrai portail ni contre le vrai fichier** : le téléchargement exige
+l'inscription de l'opérateur (gratuite), que l'opérateur fera plus tard. Code : `passerelle/src/reel/prospection/bce/` ; tests :
+`passerelle/tests/reel-prospection/` ; enregistrement : une ligne dans `src/demarrer.ts`, en mode `reel` seulement.
+
+### Mêmes outils qu'en démonstration (P2)
+
+`bce_rechercher`, `bce_entreprise` et `bce_changements` ont **exactement** les noms, les schémas d'entrée (JSON Schema
+comparé par un test) et les annotations (`readOnlyHint: true`) du simulateur, et les mêmes formes de réponse (clés de chaque
+niveau comparées par un test) ; les réponses sont signées comme toutes les autres (`aev1`, `ecriture: false`,
+`executee: false`). Différences voulues, listées par le test de parité :
+
+- pas de `client_demonstration` ni de note sur les numéros fictifs ; à la place `source` (extraction du JJ-MM-AAAA),
+  `date_extraction` (ISO) et `conditions` (rappel : personnes physiques jamais chargées) ;
+- `bce_entreprise` ne refuse pas un numéro au contrôle modulo 97 valide (les vrais numéros sont l'objet du service) ; un numéro
+  **absent** dont le contrôle est faux est signalé `numero_invalide` (faute de frappe probable), sinon `absent_du_fichier_actif` ;
+- `bce_rechercher` ajoute `taille_note` et `bce_changements` ajoute `couverture` (voir ci-dessous).
+
+### Ce qui est prouvé, probable ou inconnu (sources lues le 15/10/2026)
+
+| Point | Niveau | Source |
+| --- | --- | --- |
+| La BCE publie gratuitement, après inscription, un fichier complet et des fichiers de mises à jour de toutes les entités actives ; personnes physiques exclues de la réutilisation à des fins de marketing direct | **prouvé** (portail) | https://kbopub.economie.fgov.be/kbo-open-data/login?lang=fr : « Cette application vous permet de vous inscrire afin d'obtenir le fichier Open Data […]. Ces fichiers sont disponibles gratuitement. » (page lue sans compte) ; interdiction de marketing direct : conditions déjà relevées dans `docs/prospection-conception.md` §2.1 |
+| Formulaire de connexion : `POST /kbo-open-data/static/j_spring_security_check`, champs `j_username` et `j_password`, cookies `JSESSIONID` et `KSESSIONID-KBOPUB-OPENDATA` | **prouvé** (HTML de la page publique) | même page |
+| Guide officiel du SPF Économie (« cookbook ») | **inaccessible** : CAPTCHA aux deux tentatives de lecture (15/10) | https://economie.fgov.be/en/themes/enterprises/crossroads-bank-enterprises/services-everyone/public-data-available-reuse/cbe-open-data |
+| Fichier complet et fichier de mises à jour, quotidiens, conservés 31 jours, portail ou SFTP sur demande par courriel | **probable** (extraits de recherche du site officiel, non relus dans la page) | recherche web du 15/10 sur la page ci-dessus |
+| Archives `KboOpenData_NNNN_AAAA_MM_Full.zip` et `…_Update.zip` ; CSV `meta`, `code`, `enterprise`, `establishment`, `denomination`, `address`, `contact`, `activity` (et `branch`, non chargé) ; colonnes de chaque CSV ; dates `JJ-MM-AAAA` ; marque d'ordre des octets possible | **probable** : trois outils publics qui lisent les vrais fichiers concordent | https://github.com/Azizo-B/CBE (`cbe/schema.sql`, `cbe/open_data.py`), https://github.com/JB-Analytica/kbo-open-data (`ingest/kbo_source.py`) |
+| Mises à jour : `<table>_delete.csv` puis `<table>_insert.csv` (par exemple `enterprise_delete.csv`, `establishment_delete.csv`) | **probable** : deux outils concordent ; **contenu exact des fichiers de suppression inconnu** (clé seule ou ligne entière) : l'importateur accepte les deux formes | https://github.com/Fedict/lod-cbe (`cbetools-updater/.../Main.java`), https://github.com/sebastiencarceles/companydata.co (`lib/tasks/kbo.rake`) |
+| `meta.csv` : colonnes `Variable` et `Value`, variables `SnapshotDate` et `ExtractType` (`full`) | **probable** (JB-Analytica) ; `ExtractNumber`, `ExtractTimestamp` et `Version` : **inconnus**, lus si présents, sinon le numéro vient du nom de l'archive | idem |
+| `TypeOfEnterprise` : « 2 » = personne morale, « 1 » = personne physique | **probable**, à confirmer sur le guide ; l'importateur est une **liste blanche** (seul « 2 » est chargé) : une autre valeur, y compris inconnue ou vide, est ignorée | tests `importer-bce.test.ts` |
+| Pays vide pour une adresse belge ; province et région **déduites du code postal** (tranches de la numérotation postale), car le fichier ne les porte pas | **probable** et **simplification à confirmer** (table bpost) | `src/reel/prospection/commun.ts` |
+| Page qui liste les archives après connexion | **inconnue** : hypothèse (page d'accueil du portail, puis liens « affiliation » ou « files ») ; arrêt avec un message clair si elle ne correspond pas | `bce/telechargement.ts` |
+
+Au premier import réel, l'importateur refuse un fichier dont il manque une colonne obligatoire et la nomme : un format
+différent se voit tout de suite, sans index à moitié rempli (l'ancien index reste en place).
+
+### Conformité : aucune personne physique dans l'index
+
+Les conditions de la BCE interdisent de réutiliser à des fins de marketing direct les données des entités personnes physiques.
+L'importateur ne les charge **jamais** :
+
+- une entité n'entre que si `TypeOfEnterprise` vaut « 2 » ; les établissements, dénominations, adresses, contacts et activités
+  ne sont retenus que si leur entité est déjà une personne morale de l'index (liste blanche), donc ceux d'une personne physique
+  et les lignes orphelines sont ignorés, et comptés dans le rapport (`personnes_physiques`, `hors_perimetre`) ;
+- une mise à jour qui fait passer un numéro au type personne physique le **purge** de l'index (établissements et données
+  enfants compris), avec `secure_delete` pour effacer le contenu des pages du fichier SQLite, sans événement de radiation ;
+- tests : `importer-bce.test.ts` vérifie, après un import complet puis des mises à jour, qu'aucune table ne contient la
+  personne physique de test, et que ni son nom, ni sa rue, ni son courriel n'apparaissent dans les **octets** du fichier SQLite.
+
+### Index local
+
+SQLite par `better-sqlite3` **13.0.3** (stable, épinglé) ; lecture des ZIP en flux par `yauzl` **3.4.0** (jamais d'extraction
+sur le disque). Emplacement : `PASSERELLE_BCE_INDEX`, sinon `passerelle/etat/bce/bce.sqlite` (dossier ignoré par git). Une
+table par CSV, avec les noms de colonnes des fichiers, plus des colonnes dérivées (dates ISO, commune normalisée, province,
+région, pays ISO) et une table `changement` (journal).
+
+- **Fichier complet** : chargé dans un fichier SQLite neuf, puis remplacement atomique de l'index (renommage) ; l'ancien index
+  reste intact en cas d'erreur, la passerelle rouvre le nouveau fichier à la requête suivante (sans redémarrage). Le journal
+  des changements de l'ancien index est repris.
+- **Mise à jour** : lue en mémoire (quelques dizaines de Mo au plus), appliquée dans **une transaction** : suppressions, puis
+  insertions, puis purge des entreprises supprimées et non réinsérées (radiations), événements, codes. La rejouer ne change rien :
+  une extraction déjà appliquée est ignorée (`deja_appliquee`) et, même forcée (`--forcer`), l'état reste identique (test).
+- **Trou de numérotation** : si le numéro d'extraction de la mise à jour dépasse de plus d'un celui de l'index, elle est
+  **refusée** (des changements ont pu être manqués, les fichiers ne restent que 31 jours) ; `--autoriser-trou` pour passer
+  outre. La règle de numérotation est une hypothèse (numéro lu dans `meta.csv` ou dans le nom de l'archive).
+- **Conservation** : le fichier de la BCE ne garde aucun historique ; l'atelier construit le sien : événements `creation`,
+  `nouvel_etablissement`, `changement_adresse`, `changement_forme`, `radiation`, conservés 400 jours par défaut
+  (`--conservation-jours`), repris à chaque nouvel import complet. `bce_changements` renvoie `couverture.journal_depuis`
+  (le journal ne remonte pas avant) : un agent ne prend donc pas l'absence d'événement avant cette date pour une absence de
+  changement.
+- **Taille** : la jointure avec la BNB (lot P4) n'existe pas encore. Sans données BNB, toute entreprise a la taille
+  « inconnue » : `taille: ["inconnue"]` retient tout, un filtre qui n'inclut pas « inconnue » ne retient rien, et chaque réponse
+  de recherche porte `taille_note` qui le dit. La jointure future se branchera sur `rechercher` sans changer les outils.
+- **Zone** : siège **ou** unité d'établissement (adresses `REGO` et `BAET`), tous les critères de zone s'appliquant à la même
+  adresse. Commune sans accent ni casse ; province et région déduites du code postal (voir ci-dessus).
+
+### Accès de la passerelle : jeton porteur statique
+
+Les données sont locales : aucun compte tiers à autoriser, donc pas de flux OAuth. L'accès est un **jeton porteur statique**
+(authentification `api_key` des connexions MCP de Paperclip, `docs/connecteurs-conception.md` §2.1), partagé par `bce` et
+`osm` : `PASSERELLE_PROSPECTION_JETON` ou fichier 0600 `PASSERELLE_PROSPECTION_JETON_FICHIER` (32 caractères au moins, par
+exemple `head -c 32 /dev/urandom | base64`). Seule son empreinte SHA-256 reste en mémoire, comparée à temps constant ; toute
+requête MCP sans le bon jeton reçoit 401. **Sans jeton, rien n'est servi** (journal explicite, jamais de valeur). Point à
+valider avec Paperclip : la connexion `mcp_remote` à jeton statique n'a pas été essayée sur une instance (seul le client MCP du
+SDK l'a été). Sans index, le service est servi et chaque outil répond « aucun fichier importé ».
+
+### Commandes d'exploitation
+
+```
+cd passerelle && npm ci && npm run build
+node dist/src/reel/prospection/cli.js bce-importer <KboOpenData_…_Full.zip | …_Update.zip> [--forcer] [--autoriser-trou]
+node dist/src/reel/prospection/cli.js bce-telecharger [--importer]      # télécharge ce qui manque (inscription requise)
+```
+
+Le type d'archive (complet ou mise à jour) est détecté d'après son fichier `meta.csv`. `bce-telecharger` lit les
+identifiants dans le fichier 0600 `PASSERELLE_BCE_IDENTIFIANTS_FICHIER` (lignes `identifiant=…` et `mot_de_passe=…`), se
+connecte, dresse le plan (sans index : dernier fichier complet puis mises à jour ; avec index : mises à jour de numéro
+supérieur ; trou : repartir du complet) et télécharge dans `passerelle/etat/bce/telechargements/`. Il ne suit aucune
+redirection hors du portail, vérifie la signature ZIP et ne laisse aucun fichier partiel. **Il n'a été exécuté que contre un faux
+portail local** (`tests/reel-prospection/faux-portail-bce.ts`) ; `PASSERELLE_BCE_PORTAIL_URL` (boucle locale seulement) sert
+aux essais. Planification suggérée une fois le compte créé : une exécution quotidienne de `bce-telecharger --importer`
+(timer systemd ou cron), les fichiers ne restant que 31 jours sur le portail.
+
+### Démarches de l'opérateur (une fois)
+
+1. **S'inscrire** sur https://kbopub.economie.fgov.be/kbo-open-data/signup?form (gratuit) et **accepter les conditions
+   d'utilisation** de la BCE. L'accès SFTP est possible sur demande par courriel au SPF Économie (non implémenté ici).
+2. Écrire les identifiants dans un fichier hors dépôt, `chmod 600`, et poser `PASSERELLE_BCE_IDENTIFIANTS_FICHIER`.
+3. Poser le jeton d'accès (`PASSERELLE_PROSPECTION_JETON_FICHIER`) et déclarer dans Paperclip la connexion `mcp_remote` vers
+   `<passerelle>/mcp/bce` avec ce jeton porteur.
+4. Lancer `bce-telecharger --importer`, puis **lire le rapport** : les compteurs de `enterprise` (`lues`,
+   `personnes_physiques`) doivent montrer une proportion plausible de personnes physiques refusées ; un `invalides` élevé
+   signale un format différent de celui supposé.
+5. **Validation en direct à faire au premier import réel** : une recherche NACE × commune sur le vrai fichier (critère du lot) ;
+   confirmer sur le guide officiel (lisible une fois inscrit) la valeur de `TypeOfEnterprise`, le contenu des fichiers de
+   suppression, le numéro d'extraction de `meta.csv`, et la page qui liste les archives ; corriger `schema.ts` ou
+   `telechargement.ts` au besoin.
+
+### Tests (`tests/reel-prospection/`)
+
+`importer-bce.test.ts` (28), `outils-bce.test.ts` (11), `telechargement-bce.test.ts` (16, dont les commandes), `parite-et-mcp.test.ts`
+(16, parité, simulateur `osm` et service par le client MCP du SDK), `osm.test.ts` (17) : 88 tests. Fichiers de test au format
+officiel écrits par `aide-bce.ts` (archive ZIP sans dépendance), toutes les entreprises fictives, **tous les numéros à contrôle
+modulo 97 faux** (test sur 100 % des numéros, comme en P2).
+
+### Limites (hors périmètre de ce lot)
+
+- Secteur : seules les versions NACE 2008 et 2025 sont cherchées (la 2003 donne des faux positifs), sur l'entreprise ou l'un de ses
+  établissements. Une mise à jour plus ancienne que l'index est refusée, même avec `--forcer`. Un établissement rattaché à une
+  personne physique, et le journal des changements d'une entreprise devenue personne physique, sont purgés (revue indépendante du
+  15/10/2026, constats corrigés et testés).
+- Jointure avec la BNB (lot P4) et rapprochement BCE et OpenStreetMap par nom et adresse : non faits.
+- Pas d'accès SFTP, pas de lecture du fichier `branch.csv` (succursales d'entités étrangères), pas de contacts nominatifs.
+- Les contacts déclarés d'une personne morale (`contact.csv`) sont chargés : la règle sur l'adresse nominative d'un salarié relève
+  des gardes du lot P5.
+- Volumétrie sur le vrai fichier non mesurée (le fichier complet n'est pas téléchargeable sans compte). **Mesure sur un jeu
+  synthétique** (15/10/2026, 300 000 entreprises dont 10 % de personnes physiques, 1,78 million de lignes CSV, archive de 6,6 Mo ;
+  script jetable hors dépôt) : import complet en **15 s**, pic de mémoire **523 Mo**, index de **191 Mo** ; recherche NACE × commune,
+  région × NACE ou province : de **0,1 à 0,4 s**. Le vrai fichier est bien plus gros (plusieurs millions d'entités, dizaines de
+  millions d'activités) : compter un import de l'ordre de la demi-heure et un index de plusieurs Go, **à mesurer au premier import réel**.
+
+## OpenStreetMap (P3b)
+
+Lot P3b de `docs/prospection-conception.md` §10. État : **implémenté, testé sur un petit extrait fabriqué, puis lancé sur l'extrait réel** le 15/10/2026 (voir « Mélange démonstration / réel »). Code : `passerelle/src/reel/prospection/osm/` (réel) et
+`passerelle/src/demo/prospection/osm.ts`, `osm-commun.ts` (simulateur et éléments communs) ; tests :
+`passerelle/tests/reel-prospection/osm.test.ts` et `parite-et-mcp.test.ts`.
+
+### Source, taille et mise à jour
+
+- Source : l'extrait de la Belgique de Geofabrik, `https://download.geofabrik.de/europe/belgium-latest.osm.pbf`, gratuit, sans
+  compte, mis à jour « normalement chaque jour » (https://download.geofabrik.de/). **Taille relevée le 15/10/2026 : 664 Mo**
+  (page https://download.geofabrik.de/europe/belgium.html ; « contient toutes les données OSM jusqu'au 2026-10-14T20:21:12Z »),
+  confirmée par une requête HEAD (redirection vers `belgium-261014.osm.pbf`). **Téléchargé le 15/10/2026** (696 841 996 octets, extrait du 14/10) dans `instance/donnees/osm/` (dossier ignoré par git).
+  `cli.js osm-verifier-taille` relit cette taille sans rien télécharger ; `cli.js osm-telecharger <destination> --confirmer`
+  télécharge (sans `--confirmer`, seule la taille est lue ; espace disque contrôlé ; un téléchargement par jour au plus).
+- **Pas d'instance publique d'Overpass** : sa documentation dit « Commercial use should use self-hosted or paid Overpass
+  servers » et fixe des plafonds (moins de 10 000 requêtes et 1 Go par jour, à diviser par 100 pour un usage régulier)
+  (https://wiki.openstreetmap.org/wiki/Overpass_API, lu le 15/10). L'atelier travaille donc **hors ligne** sur l'extrait.
+- Préparation (outils standard `osmium-tool`, à installer par l'opérateur : `sudo apt install osmium-tool`) :
+  ```
+  osmium tags-filter belgium-latest.osm.pbf nwr/shop nwr/craft nwr/office nwr/amenity nwr/tourism nwr/healthcare -o commerces.osm.pbf
+  osmium export commerces.osm.pbf -f geojsonseq --add-unique-id=type_id -o commerces.geojsonseq
+  node dist/src/reel/prospection/cli.js osm-importer commerces.geojsonseq --date 2026-10-14
+  ```
+  **Format vérifié** le 15/10/2026 avec osmium-tool 1.19.0 (installé sur la tour pour cela) : une entité GeoJSON par ligne
+  précédée du caractère RS (0x1E), `id` « n123 » (nœud), « w123 » (chemin), « a123 » (surface ; un chemin fermé est exporté deux
+  fois, `w20` et `a40`, ramenés à un seul établissement), étiquettes dans `properties`. Le fichier d'essai
+  `tests/reel-prospection/fixtures/extrait-osm.geojsonseq` a été produit par cette chaîne à partir d'un petit fichier fictif
+  (`extrait-osm.osm`).
+- **Mise à jour régulière** : relancer ces trois commandes selon le rythme voulu (une fois par semaine suffit pour des
+  commerces ; Geofabrik publie chaque jour). L'importateur remplace l'index de façon atomique ; la passerelle le rouvre seule.
+
+### Outils (lecture seule, `readOnlyHint: true`, 10 résultats par page)
+
+| Outil | Entrée | Réponse |
+| --- | --- | --- |
+| `osm_commerces` | `categories[]`, zone (`communes[]`, `codes_postaux[]`, `provinces[]`, `regions[]`), `nom` (fragment), `page` | `total`, `page`, `pages`, `commerces[]` : `id`, `type`, `nom`, `categorie`, `cle`, `valeur`, `adresse`, `telephone`, `site`, `horaires`, `marque`, `position`, `url_osm` |
+| `osm_repartition` | `categories[]`, zone | `repartition[]` : commune, catégorie, nombre (100 lignes au plus) |
+
+Catégories : `commerce` (clé OSM `shop`), `automobile`, `restauration`, `hebergement`, `artisanat` (`craft`), `sante`,
+`finance_assurance` (banques, assureurs, comptables), `bureau` (autres `office`). Un objet sans nom, ou sans clé retenue, n'est pas
+importé (comptés dans le rapport). **Minimisation** : on ne lit que le nom, la catégorie, l'adresse, le téléphone d'établissement
+(`phone`, `contact:phone`), le site, les horaires, la marque et la position ; **ni courriel ni mobile** (testé dans les octets
+du fichier SQLite). Chaque réponse porte `attribution`, `licence`, `source` et `date_extraction`.
+
+### Licence ODbL : ce que l'atelier respecte
+
+Les données OSM sont sous licence ODbL 1.0 (https://www.openstreetmap.org/copyright, https://opendatacommons.org/licenses/odbl/1-0/,
+lus le 15/10/2026).
+
+- **Attribution** : « © les contributeurs d'OpenStreetMap », avec renvoi à la licence ; elle est dans **chaque** réponse des deux
+  outils. Tout document ou écran qui reprend ces données doit la reprendre aussi (à vérifier lors du lot « Interface Prospects »).
+- **Partage à l'identique** (art. 4.4) : une **base dérivée** (l'index extrait de l'extrait, au sens d'une extraction d'une partie
+  substantielle) qui est **utilisée publiquement** doit rester sous ODbL. L'art. 4.5 exclut l'**usage interne** à une organisation
+  (« not to the public ») et les **œuvres produites** (listes, rapports, cartes issus de requêtes). L'atelier n'utilise l'index
+  qu'en interne : aucune obligation de publier l'index. **Si le client voulait publier ou revendre l'index lui-même**, il devrait
+  le faire sous ODbL (art. 4.6 : fournir la base modifiée ou le fichier des modifications). Cette lecture n'est pas un avis
+  juridique : à confirmer par le juriste du client.
+- Rapprochement avec la BCE (non fait) : une base **mélangée** avec des données sous une autre licence serait une « base
+  collective » ou dérivée selon le cas ; à instruire avec le juriste avant de le construire.
+- Données personnelles : un commerce d'indépendant peut figurer dans OSM avec un nom de personne ; la finalité de prospection,
+  la base légale et l'information (art. 14 du RGPD) restent traitées par `docs/prospection-conception.md` §3 et le lot P5.
+
+### Mélange démonstration / réel : `PASSERELLE_SERVICES_REELS`
+
+Une passerelle démarrée en `demonstration` peut servir **certains services en données réelles** pendant que tous les autres restent
+simulés. Réglage : `PASSERELLE_SERVICES_REELS=osm` (liste séparée par des virgules ou des espaces ; **seul `osm` est permis** :
+les autres fournisseurs réels exigent le mode `reel` complet, avec comptes et jetons de tiers ; toute autre valeur est refusée au
+démarrage). `PASSERELLE_OSM_INDEX` désigne l'index importé (sinon `passerelle/etat/osm/osm.sqlite`).
+
+- Pour `osm` seulement : le fournisseur réel répond (index SQLite local), `atelier_identite` annonce `reel`, l'enveloppe `_atelier`
+  porte `mode: "reel"` (signée si la passerelle a sa clé de signature), **sans** la mention de démonstration ; les autres services
+  gardent leur mention. `/sante` ajoute `services_reels: ["osm"]` ; son `mode` reste `demonstration`.
+- Un service listé mais sans fournisseur réel enregistré reste en démonstration (jamais de service « réel » fantôme). Sans index
+  importé, `osm` répond « aucun fichier importé » (erreur claire), jamais des données fictives.
+- **Accès : celui de la démonstration** (OAuth local, jeton exigé), pour que les connexions Paperclip déjà faites continuent de
+  marcher sans reconfiguration ; le jeton statique `PASSERELLE_PROSPECTION_JETON` n'est pas utilisé dans ce mode. La passerelle
+  n'écoute que sur la boucle locale. Le mode `reel` complet (jeton statique) reste inchangé.
+- **Partout** : `instance/passerelle.env` (non suivi, 0600 ; chargé par `set -a; source instance/passerelle.env; set +a; npm start`)
+  contient `PASSERELLE_SERVICES_REELS=osm` et le chemin de l'index ; l'instance de démonstration d'aperçu (3580) : passerelles
+  3581 et 3582 lancées avec le même réglage (`scripts/demo/peupler-prospects.py` le pose pour 3582).
+- Test : `passerelle/tests/reel-prospection/melange.test.ts` (osm réel et signé, `bce` en démonstration, témoin sans réglage).
+
+**Import réel du 15/10/2026** (mesuré) : `cli.js osm-telecharger` (697 Mo), `osmium tags-filter` (31 Mo), `osmium export`
+en `geojsonseq` (284 Mo), puis import : **843 070 entités lues, 147 190 retenues**, 18 097 sans nom écartées, 677 783 hors catégorie,
+aucune sans position ; index de 30 Mo. Fichiers dans `instance/donnees/osm/` (jamais commités).
+
+### Simulateur de démonstration
+
+`osm` en `demonstration` (`enregistrerOsmDemo`, une ligne dans `src/demarrer.ts`) : établissements entièrement fictifs et
+**cohérents avec `bce` (P2)** : les entreprises fictives des secteurs commerce, restauration, hôtellerie, garage, couverture,
+isolation, menuiserie et courtage ont leur établissement OSM avec le même nom, la même adresse, le même téléphone et le même site
+(test) ; 16 établissements sans entreprise correspondante complètent les communes. Noms suffixés « (démonstration) »,
+identifiants `demo/n0001`, sites `.demo-prospection.example`, téléphones `+32 4 000 00 NN`, aucun courriel, positions fictives
+autour du centre approximatif de chaque commune. Même graine que P2 : mêmes octets (empreinte figée dans
+`parite-et-mcp.test.ts`).
+
+### Limites et points à décider
+
+- Les filtres de zone reposent sur `addr:postcode` et `addr:city` du même objet : un commerce dont l'adresse est portée par un autre
+  nœud n'a pas de zone et n'apparaît pas dans les filtres commune, province ou région (pas de repli sur la position).
+- OSM n'est pas un registre : le nom d'un indépendant (médecin, artisan) peut être un nom de personne et `phone` un numéro personnel.
+  Les courriels et les clés `mobile` ne sont pas lus ; **à décider par l'opérateur** : écarter aussi le téléphone et le nom pour les catégories
+  `sante` et `artisanat`.
+- Le rapprochement BCE par nom et adresse n'est pas fait.
+
+### Démarches de l'opérateur
+
+Aucune inscription (Geofabrik et OSM sont ouverts). Installer `osmium-tool`, prévoir environ 1 Go de disque temporaire, poser
+le jeton d'accès (voir BCE), importer, puis déclarer dans Paperclip la connexion `mcp_remote` vers `<passerelle>/mcp/osm`.
+
+Vérification : `npx tsc --noEmit` et `npx vitest run` dans `passerelle/`.

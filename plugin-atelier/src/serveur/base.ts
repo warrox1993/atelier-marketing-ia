@@ -45,6 +45,19 @@ function tableau<T = unknown>(valeur: unknown): T[] {
   return [];
 }
 
+/** Objet JSON (colonne jsonb relue en objet ou en texte) ; {} sinon. */
+function objet(valeur: unknown): Record<string, unknown> {
+  let v = valeur;
+  if (typeof v === "string") {
+    try {
+      v = JSON.parse(v);
+    } catch {
+      return {};
+    }
+  }
+  return typeof v === "object" && v !== null && !Array.isArray(v) ? (v as Record<string, unknown>) : {};
+}
+
 export function creerBase(db: Db) {
   const ns = db.namespace;
   if (!IDENT.test(ns)) erreur("erreur_interne", "Espace de base du plugin invalide");
@@ -549,15 +562,26 @@ export function creerBase(db: Db) {
     id: string; companyId: string; campagneId: string | null; issueId: string | null; revisionId: string | null; url: string; urlFinale: string | null; titre: string | null;
     statutAcces: string; codeHttp: number | null; typeContenu: string | null; extrait: string | null; empreinte: string | null; indicesErreur: string[]; injections: string[]; provenance: string; mode: string;
     /** Source de connexion (lot L9, migration 004). */
-    connexion?: { service: string; outil: string; indicesMode: string[]; chiffres: Array<{ valeur: number; chemin: string }>; modeCampagne: "demonstration" | "reel" } | null;
+    connexion?: { service: string; outil: string; indicesMode: string[]; chiffres: Array<{ valeur: number; chemin: string }>; modeCampagne: "demonstration" | "reel"; compte?: string | null } | null;
   }) {
     const c = s.connexion ?? null;
     await x(
-      `insert into ${ns}.sources (id, company_id, campagne_id, issue_id, revision_id, url, url_finale, titre, statut_acces, code_http, type_contenu, extrait, empreinte, indices_erreur, injections_signalees, provenance, mode, service, outil, indices_mode, chiffres, mode_campagne)
-       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14::jsonb, $15::jsonb, $16, $17, $18, $19, $20::jsonb, $21::jsonb, $22)`,
+      `insert into ${ns}.sources (id, company_id, campagne_id, issue_id, revision_id, url, url_finale, titre, statut_acces, code_http, type_contenu, extrait, empreinte, indices_erreur, injections_signalees, provenance, mode, service, outil, indices_mode, chiffres, mode_campagne, compte)
+       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14::jsonb, $15::jsonb, $16, $17, $18, $19, $20::jsonb, $21::jsonb, $22, $23)`,
       [s.id, s.companyId, s.campagneId, s.issueId, s.revisionId, s.url, s.urlFinale, s.titre, s.statutAcces, s.codeHttp, s.typeContenu, s.extrait, s.empreinte, json(s.indicesErreur), json(s.injections), s.provenance, s.mode,
-        c?.service ?? null, c?.outil ?? null, json(c?.indicesMode ?? []), json(c?.chiffres ?? []), c?.modeCampagne ?? null],
+        c?.service ?? null, c?.outil ?? null, json(c?.indicesMode ?? []), json(c?.chiffres ?? []), c?.modeCampagne ?? null, c?.compte ?? null],
     );
+  }
+
+  /**
+   * v1.6 (S-6) : comptes signés des données RÉELLES déjà déposées pour ce service, dans la campagne
+   * (ou, sans campagne, dans la tâche). Une campagne n'interroge qu'une propriété par service.
+   */
+  async function comptesConnexion(companyId: string, campagneId: string | null, issueId: string, service: string) {
+    const lignes = campagneId
+      ? await q(`select distinct compte from ${ns}.sources where company_id = $1 and campagne_id = $2 and provenance = 'connexion' and mode = 'reel' and service = $3 and compte is not null`, [companyId, campagneId, service])
+      : await q(`select distinct compte from ${ns}.sources where company_id = $1 and issue_id = $2 and provenance = 'connexion' and mode = 'reel' and service = $3 and compte is not null`, [companyId, issueId, service]);
+    return [...new Set(lignes.map((r) => r.compte).filter((c): c is string => typeof c === "string" && c !== ""))];
   }
 
   function sourceDepuisLigne(r: Ligne) {
@@ -589,6 +613,7 @@ export function creerBase(db: Db) {
               indicesMode: tableau<string>(r.indices_mode),
               nombreChiffres: tableau(r.chiffres).length,
               modeCampagne: (r.mode_campagne === "reel" ? "reel" : "demonstration") as "demonstration" | "reel",
+              compte: (r.compte as string | null) ?? null,
             }
           : null,
     };
@@ -771,14 +796,79 @@ export function creerBase(db: Db) {
     montantCents: number | null; etat: string; cleIdempotence: string; motifRefus: string | null; mode: string; par: string;
     /** v1.5 : appel d'outil visé (mode réel) ; la preuve n'est jamais stockée. */
     service?: string | null; outil?: string | null; empreinteArguments?: string | null;
+    /** v1.6 (S-4) : charge de la première preuve signée (figée) ; le jeton n'est jamais stocké. */
+    preuveCharge?: unknown;
   }) {
     const { rowCount } = await x(
-      `insert into ${ns}.diffusions (id, company_id, issue_id, revision_id, decision_id, action, canal, compte, audience, montant_cents, etat, cle_idempotence, motif_refus, mode, demandee_par, service, outil, empreinte_arguments)
-       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18) on conflict (company_id, cle_idempotence) do nothing`,
+      `insert into ${ns}.diffusions (id, company_id, issue_id, revision_id, decision_id, action, canal, compte, audience, montant_cents, etat, cle_idempotence, motif_refus, mode, demandee_par, service, outil, empreinte_arguments, preuve_charge)
+       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19::jsonb) on conflict (company_id, cle_idempotence) do nothing`,
       [d.id, d.companyId, d.issueId, d.revisionId, d.decisionId, d.action, d.canal, d.compte, d.audience, d.montantCents, d.etat, d.cleIdempotence, d.motifRefus, d.mode, d.par,
-        d.service ?? null, d.outil ?? null, d.empreinteArguments ?? null],
+        d.service ?? null, d.outil ?? null, d.empreinteArguments ?? null, d.preuveCharge === undefined || d.preuveCharge === null ? null : json(d.preuveCharge)],
     );
     return rowCount === 1;
+  }
+
+  /** v1.6 (S-4) : fige la charge d'une diffusion qui n'en a pas encore (diffusion antérieure à la v1.6). */
+  async function figerPreuve(companyId: string, id: string, charge: unknown) {
+    const { rowCount } = await x(`update ${ns}.diffusions set preuve_charge = $3::jsonb where company_id = $1 and id = $2 and preuve_charge is null`, [companyId, id, json(charge)]);
+    return rowCount === 1;
+  }
+
+  /**
+   * v1.6 (S-7) : révoque les preuves remises de diffusions réelles encore « préparées » d'une tâche. Avec
+   * `diffusionId`, une seule ; avec `saufDecision`, toutes sauf celles de cette décision. Rend les identifiants.
+   */
+  async function revoquerPreuves(companyId: string, issueId: string, o: { diffusionId?: string; saufDecision?: string | null }, motif: string) {
+    const lignes = await q(
+      `select id from ${ns}.diffusions where company_id = $1 and issue_id = $2 and mode = 'reel' and etat = 'preparee' and preuve_charge is not null and revoquee_le is null
+         and ($3::uuid is null or id = $3::uuid) and ($4::uuid is null or decision_id is distinct from $4::uuid)`,
+      [companyId, issueId, o.diffusionId ?? null, o.saufDecision ?? null],
+    );
+    const ids: string[] = [];
+    for (const r of lignes) {
+      const { rowCount } = await x(`update ${ns}.diffusions set revoquee_le = now(), revocation_motif = $3 where company_id = $1 and id = $2 and revoquee_le is null`, [companyId, String(r.id), motif]);
+      if (rowCount === 1) ids.push(String(r.id));
+    }
+    return ids;
+  }
+
+  /** v1.6 (S-7) : preuves révoquées de l'entreprise (charges), pour la liste signée remise à la passerelle. */
+  async function listerRevocations(companyId: string) {
+    const lignes = await q(`select id, preuve_charge from ${ns}.diffusions where company_id = $1 and revoquee_le is not null and preuve_charge is not null order by revoquee_le asc`, [companyId]);
+    return lignes.map((r) => ({ id: String(r.id), charge: (typeof r.preuve_charge === "string" ? JSON.parse(r.preuve_charge) : r.preuve_charge) as Record<string, unknown> }));
+  }
+
+  /* ---------------- appels proposés (v1.6, S-1) ---------------- */
+  async function insererAppel(a: { id: string; companyId: string; issueId: string; revisionId: string; service: string; outil: string; action: string; compte: string; arguments: unknown; empreinte: string; empreinteArguments: string; par: string }) {
+    const { rowCount } = await x(
+      `insert into ${ns}.appels_proposes (id, company_id, issue_id, revision_id, service, outil, action, compte, arguments, empreinte, empreinte_arguments, propose_par)
+       values ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, $10, $11, $12) on conflict (company_id, issue_id, revision_id, empreinte) do nothing`,
+      [a.id, a.companyId, a.issueId, a.revisionId, a.service, a.outil, a.action, a.compte, json(a.arguments), a.empreinte, a.empreinteArguments, a.par],
+    );
+    return rowCount === 1;
+  }
+
+  function appelDepuisLigne(r: Ligne) {
+    return {
+      id: String(r.id), issueId: String(r.issue_id), revisionId: String(r.revision_id), service: String(r.service), outil: String(r.outil),
+      action: String(r.action) as "publier" | "envoyer" | "modifier_crm", compte: String(r.compte),
+      arguments: (typeof r.arguments === "string" ? JSON.parse(r.arguments) : r.arguments) as Record<string, unknown>,
+      empreinte: String(r.empreinte), empreinteArguments: String(r.empreinte_arguments), proposePar: String(r.propose_par), creeLe: iso(r.cree_le),
+    };
+  }
+
+  async function listerAppels(companyId: string, issueId: string) {
+    return (await q(`select * from ${ns}.appels_proposes where company_id = $1 and issue_id = $2 order by cree_le desc`, [companyId, issueId])).map(appelDepuisLigne);
+  }
+
+  async function lireAppel(companyId: string, issueId: string, id: string) {
+    const [r] = await q(`select * from ${ns}.appels_proposes where company_id = $1 and issue_id = $2 and id = $3`, [companyId, issueId, id]);
+    return r ? appelDepuisLigne(r) : null;
+  }
+
+  async function lireAppelParEmpreinte(companyId: string, issueId: string, revisionId: string, empreinte: string) {
+    const [r] = await q(`select * from ${ns}.appels_proposes where company_id = $1 and issue_id = $2 and revision_id = $3 and empreinte = $4`, [companyId, issueId, revisionId, empreinte]);
+    return r ? appelDepuisLigne(r) : null;
   }
 
   /**
@@ -812,13 +902,26 @@ export function creerBase(db: Db) {
       creeLe: iso(r.cree_le),
       service: (r.service as string | null) ?? null,
       outil: (r.outil as string | null) ?? null,
+      preuveExpire: chargeDe(r.preuve_charge)?.expire ?? null,
+      revocation: r.revoquee_le ? { le: iso(r.revoquee_le), motif: String(r.revocation_motif ?? "") } : null,
     };
   }
 
-  /** Données internes d'une diffusion (jamais renvoyées telles quelles) : audience et empreinte des arguments. */
+  function chargeDe(v: unknown): { expire: number } & Record<string, unknown> | null {
+    const c = typeof v === "string" ? (JSON.parse(v) as unknown) : v;
+    return c && typeof c === "object" && typeof (c as { expire?: unknown }).expire === "number" ? (c as { expire: number } & Record<string, unknown>) : null;
+  }
+
+  /** Données internes d'une diffusion (jamais renvoyées telles quelles) : audience, empreinte des arguments, charge figée, révocation. */
   async function lireDiffusionInterne(companyId: string, id: string) {
-    const [r] = await q(`select id, issue_id, audience, empreinte_arguments, service, outil from ${ns}.diffusions where company_id = $1 and id = $2`, [companyId, id]);
-    return r ? { id: String(r.id), issueId: String(r.issue_id), audience: (r.audience as string | null) ?? null, empreinteArguments: (r.empreinte_arguments as string | null) ?? null, service: (r.service as string | null) ?? null, outil: (r.outil as string | null) ?? null } : null;
+    const [r] = await q(`select id, issue_id, audience, empreinte_arguments, service, outil, preuve_charge, revoquee_le, revocation_motif from ${ns}.diffusions where company_id = $1 and id = $2`, [companyId, id]);
+    return r
+      ? {
+          id: String(r.id), issueId: String(r.issue_id), audience: (r.audience as string | null) ?? null, empreinteArguments: (r.empreinte_arguments as string | null) ?? null,
+          service: (r.service as string | null) ?? null, outil: (r.outil as string | null) ?? null, preuveCharge: chargeDe(r.preuve_charge),
+          revocation: r.revoquee_le ? { le: iso(r.revoquee_le), motif: String(r.revocation_motif ?? "") } : null,
+        }
+      : null;
   }
 
   async function lireDiffusionParCle(companyId: string, cle: string) {
@@ -831,13 +934,13 @@ export function creerBase(db: Db) {
   }
 
   /* ---------------- marque, planifications, mesures ---------------- */
-  async function insererMarque(m: { companyId: string; identite: string; ton: string; offres: unknown; zones: unknown; etablissements: unknown; affirmations: unknown; manquantes: unknown; par: string }) {
+  async function insererMarque(m: { companyId: string; identite: string; ton: string; offres: unknown; zones: unknown; etablissements: unknown; affirmations: unknown; manquantes: unknown; entites?: unknown; segments?: unknown; ciblesProspection?: unknown; modulesConformite?: unknown; par: string }) {
     const [d] = await q<{ v: number | null }>(`select max(version) as v from ${ns}.marques where company_id = $1`, [m.companyId]);
     const version = Number(d?.v ?? 0) + 1;
     const id = randomUUID();
     await x(
-      `insert into ${ns}.marques (id, company_id, version, identite, ton, offres, zones, etablissements, affirmations_autorisees, informations_manquantes, cree_par) values ($1, $2, $3, $4, $5, $6::jsonb, $7::jsonb, $8::jsonb, $9::jsonb, $10::jsonb, $11)`,
-      [id, m.companyId, version, m.identite, m.ton, json(m.offres), json(m.zones), json(m.etablissements), json(m.affirmations), json(m.manquantes), m.par],
+      `insert into ${ns}.marques (id, company_id, version, identite, ton, offres, zones, etablissements, affirmations_autorisees, informations_manquantes, entites, segments, cibles_prospection, modules_conformite, cree_par) values ($1, $2, $3, $4, $5, $6::jsonb, $7::jsonb, $8::jsonb, $9::jsonb, $10::jsonb, $11::jsonb, $12::jsonb, $13::jsonb, $14::jsonb, $15)`,
+      [id, m.companyId, version, m.identite, m.ton, json(m.offres), json(m.zones), json(m.etablissements), json(m.affirmations), json(m.manquantes), json(m.entites ?? []), json(m.segments ?? []), json(m.ciblesProspection ?? []), json(m.modulesConformite ?? []), m.par],
     );
     return { id, version };
   }
@@ -854,6 +957,10 @@ export function creerBase(db: Db) {
       etablissements: tableau(r.etablissements) as never[],
       affirmationsAutorisees: tableau(r.affirmations_autorisees) as never[],
       informationsManquantes: tableau<string>(r.informations_manquantes),
+      entites: tableau(r.entites) as never[],
+      segments: tableau(r.segments) as never[],
+      ciblesProspection: tableau(r.cibles_prospection) as never[],
+      modulesConformite: tableau(r.modules_conformite) as never[],
       creeLe: iso(r.cree_le),
     }));
   }
@@ -947,10 +1054,369 @@ export function creerBase(db: Db) {
     return { decisions: Number(r?.d ?? 0), diffusions: Number(r?.f ?? 0) };
   }
 
+  /* ---------------- prospection (lot P9a, migration 007) ---------------- */
+  // Toutes les requêtes filtrent `company_id`. Les listes passent en JSON (`$n::jsonb`), comme ailleurs
+  // dans ce fichier. Aucune valeur en clair n'arrive ici : coordonnées chiffrées (chv1), empreintes HMAC.
+
+  function ligneProspect(r: Ligne) {
+    return {
+      id: String(r.id),
+      companyId: String(r.company_id),
+      campagneId: (r.campagne_id as string | null) ?? null,
+      cible: r.cible as "entreprise" | "particulier" | "partenaire",
+      identifiant: { type: r.identifiant_type as "numero_bce" | "identifiant_reglementaire" | "empreinte", valeur: String(r.identifiant_valeur) },
+      numeroBce: (r.numero_bce as string | null) ?? null,
+      referentiel: objet(r.referentiel),
+      forme: r.forme as "personne_morale" | "personne_physique" | "inconnue",
+      denomination: (r.denomination as string | null) ?? null,
+      nomChiffre: (r.nom_chiffre as string | null) ?? null,
+      nace: tableau<string>(r.nace),
+      zone: objet(r.zone),
+      coordonnees: tableau(r.coordonnees),
+      sources: tableau(r.sources),
+      mode: r.mode as "demonstration" | "reel",
+      statut: r.statut as "nouveau" | "exclu" | "qualifie" | "exporte" | "refuse",
+      motifsExclusion: tableau(r.motifs_exclusion),
+      particulier: r.particulier == null ? null : objet(r.particulier),
+      creeLe: iso(r.cree_le),
+      modifieLe: iso(r.modifie_le),
+    };
+  }
+  type LigneProspect = ReturnType<typeof ligneProspect>;
+
+  async function prospectsParIdentifiants(companyId: string, identifiants: ReadonlyArray<{ type: string; valeur: string }>): Promise<LigneProspect[]> {
+    if (identifiants.length === 0) return [];
+    const cles = identifiants.map((i) => `${i.type}:${i.valeur}`);
+    return (await q(`select * from ${ns}.prospects where company_id = $1 and (identifiant_type || ':' || identifiant_valeur) in (select jsonb_array_elements_text($2::jsonb))`, [companyId, json(cles)])).map(ligneProspect);
+  }
+
+  async function lireProspect(companyId: string, id: string): Promise<LigneProspect | null> {
+    const [r] = await q(`select * from ${ns}.prospects where company_id = $1 and id = $2`, [companyId, id]);
+    return r ? ligneProspect(r) : null;
+  }
+
+  /** Empreintes déjà portées par des prospects de l'entreprise, parmi les valeurs données. */
+  async function empreintesProspectsEnBase(companyId: string, valeurs: readonly string[]) {
+    if (valeurs.length === 0) return [];
+    return (await q(`select prospect_id, type, empreinte from ${ns}.prospects_empreintes where company_id = $1 and empreinte in (select jsonb_array_elements_text($2::jsonb))`, [companyId, json(valeurs)])).map((r) => ({
+      prospectId: String(r.prospect_id), type: String(r.type), valeur: String(r.empreinte),
+    }));
+  }
+
+  async function oppositionsPour(companyId: string, valeurs: readonly string[]) {
+    if (valeurs.length === 0) return [];
+    return (await q(`select type, empreinte, canal from ${ns}.oppositions where company_id = $1 and empreinte in (select jsonb_array_elements_text($2::jsonb))`, [companyId, json(valeurs)])).map((r) => ({
+      type: String(r.type), valeur: String(r.empreinte), canal: String(r.canal),
+    }));
+  }
+
+  /** Empreintes des clients ACTIFS de la base de clients, parmi les valeurs données. */
+  async function clientsActuelsPour(companyId: string, valeurs: readonly string[]) {
+    if (valeurs.length === 0) return [];
+    return (await q(
+      `select e.type, e.empreinte from ${ns}.clients_empreintes e join ${ns}.clients c on c.id = e.client_id and c.company_id = e.company_id
+       where e.company_id = $1 and c.statut = 'actif' and e.empreinte in (select jsonb_array_elements_text($2::jsonb))`,
+      [companyId, json(valeurs)],
+    )).map((r) => ({ type: String(r.type), valeur: String(r.empreinte) }));
+  }
+
+  /** Numéros (empreintes) inscrits à la liste « Ne m'appelez plus » chargée, parmi les valeurs données ; null si aucun. */
+  async function dncmPour(companyId: string, valeurs: readonly string[]) {
+    if (valeurs.length === 0) return null;
+    const lignes = await q(
+      `select e.empreinte, l.version_du from ${ns}.dncm_empreintes e join ${ns}.listes_dncm l on l.id = e.liste_id and l.company_id = e.company_id
+       where e.company_id = $1 and e.empreinte in (select jsonb_array_elements_text($2::jsonb)) order by l.version_du desc`,
+      [companyId, json(valeurs)],
+    );
+    if (lignes.length === 0) return null;
+    return { empreintes: lignes.map((r) => ({ type: "telephone" as const, valeur: String(r.empreinte) })), verifieeLe: iso(lignes[0]!.version_du) };
+  }
+
+  async function clientExiste(companyId: string, clientId: string) {
+    return (await q(`select id from ${ns}.clients where company_id = $1 and id = $2`, [companyId, clientId])).length > 0;
+  }
+
+  /** Client de la base de clients désigné par une empreinte (ex. `identifiant_client`) ; null si absent. */
+  async function clientParEmpreinte(companyId: string, type: string, valeur: string): Promise<string | null> {
+    const [r] = await q(`select client_id from ${ns}.clients_empreintes where company_id = $1 and type = $2 and empreinte = $3 limit 1`, [companyId, type, valeur]);
+    return r ? String(r.client_id) : null;
+  }
+
+  /** Dernière version des poids du score choisis par le client ; null si aucune. */
+  async function poidsScoreCourant(companyId: string): Promise<{ version: number; poids: Record<string, number> } | null> {
+    const [r] = await q(`select version, poids from ${ns}.poids_score where company_id = $1 order by version desc limit 1`, [companyId]);
+    return r ? { version: Number(r.version), poids: objet(r.poids) as Record<string, number> } : null;
+  }
+
+  /** Renvoi au référentiel enregistré sur la campagne (ou null) et dernière version de la marque (ou null). */
+  async function referentielProspection(companyId: string, campagneId: string | null) {
+    const [c] = campagneId ? await q(`select referentiel from ${ns}.campagnes where company_id = $1 and id = $2`, [companyId, campagneId]) : [];
+    const [m] = await q(`select max(version) as version from ${ns}.marques where company_id = $1`, [companyId]);
+    return { renvoi: c?.referentiel == null ? null : objet(c.referentiel), versionMarque: m?.version == null ? null : Number(m.version) };
+  }
+
+  /** Prospect validé par le contrat `Prospect` (l'appelant le vérifie avant). Score et bases légales vont dans leurs tables. */
+  async function insererProspect(p: Omit<LigneProspect, "creeLe" | "modifieLe">) {
+    await x(
+      `insert into ${ns}.prospects (id, company_id, campagne_id, cible, identifiant_type, forme, referentiel, identifiant_valeur, numero_bce, denomination, nom_chiffre, nace, zone, coordonnees, sources, mode, statut, motifs_exclusion, particulier, origine_particulier)
+       values ($1, $2, $3, $4, $5, $6, $7::jsonb, $8, $9, $10, $11, $12::jsonb, $13::jsonb, $14::jsonb, $15::jsonb, $16, $17, $18::jsonb, $19::jsonb, $20)`,
+      [p.id, p.companyId, p.campagneId, p.cible, p.identifiant.type, p.forme, json(p.referentiel), p.identifiant.valeur, p.numeroBce, p.denomination, p.nomChiffre,
+        json(p.nace), json(p.zone), json(p.coordonnees), json(p.sources), p.mode, p.statut, json(p.motifsExclusion),
+        p.particulier === null ? null : json(p.particulier), (p.particulier as { origine?: string } | null)?.origine ?? null],
+    );
+  }
+
+  /** Mise à jour d'un prospect existant après un nouveau dépôt ou une nouvelle saisie (fusion faite par l'appelant). */
+  async function majProspect(companyId: string, id: string, p: Pick<LigneProspect, "nace" | "zone" | "coordonnees" | "sources" | "statut" | "motifsExclusion" | "particulier">) {
+    const { rowCount } = await x(
+      `update ${ns}.prospects set nace = $3::jsonb, zone = $4::jsonb, coordonnees = $5::jsonb, sources = $6::jsonb, statut = $7, motifs_exclusion = $8::jsonb, particulier = $9::jsonb, modifie_le = now()
+       where company_id = $1 and id = $2`,
+      [companyId, id, json(p.nace), json(p.zone), json(p.coordonnees), json(p.sources), p.statut, json(p.motifsExclusion), p.particulier === null ? null : json(p.particulier)],
+    );
+    return rowCount;
+  }
+
+  async function exclureProspect(companyId: string, id: string, motifs: unknown[]) {
+    const { rowCount } = await x(`update ${ns}.prospects set statut = 'exclu', motifs_exclusion = $3::jsonb, modifie_le = now() where company_id = $1 and id = $2`, [companyId, id, json(motifs)]);
+    return rowCount;
+  }
+
+  async function ajouterEmpreintesProspect(companyId: string, prospectId: string, empreintes: ReadonlyArray<{ type: string; valeur: string }>) {
+    if (empreintes.length === 0) return;
+    await x(
+      `insert into ${ns}.prospects_empreintes (company_id, prospect_id, type, empreinte) select $1, $2, e->>'type', e->>'valeur' from jsonb_array_elements($3::jsonb) as e on conflict do nothing`,
+      [companyId, prospectId, json(empreintes)],
+    );
+  }
+
+  async function prospectsAvecEmpreinte(companyId: string, type: string, valeur: string) {
+    return (await q(`select distinct prospect_id from ${ns}.prospects_empreintes where company_id = $1 and type = $2 and empreinte = $3`, [companyId, type, valeur])).map((r) => String(r.prospect_id));
+  }
+
+  async function insererScoreProspect(s: { id: string; companyId: string; prospectId: string; valeur: number; criteres: unknown; versionPoids: number; calculeLe: string }) {
+    await x(
+      `insert into ${ns}.prospects_scores (id, company_id, prospect_id, valeur, criteres, version_poids, nature, calcule_le) values ($1, $2, $3, $4, $5::jsonb, $6, 'estimation', $7::timestamptz)`,
+      [s.id, s.companyId, s.prospectId, s.valeur, json(s.criteres), s.versionPoids, s.calculeLe],
+    );
+  }
+
+  /** Empreintes, dernier score et bases légales des prospects donnés (affichage d'une page). */
+  async function detailsProspects(companyId: string, ids: readonly string[]) {
+    const empreintes = new Map<string, Array<{ type: string; valeur: string }>>();
+    const scores = new Map<string, { valeur: number; criteres: unknown[]; versionPoids: number; calculeLe: string; nature?: "estimation" | "probabilite_mesuree"; etalonnage?: { etalonnageId: string; probabilite: number; borneBasse: number; borneHaute: number; effectif: number; conversions: number; methode: string; date: string } | null }>();
+    const bases = new Map<string, Ligne[]>();
+    if (ids.length === 0) return { empreintes, scores, bases };
+    const liste = json(ids);
+    for (const r of await q(`select prospect_id, type, empreinte from ${ns}.prospects_empreintes where company_id = $1 and prospect_id::text in (select jsonb_array_elements_text($2::jsonb)) order by type, empreinte`, [companyId, liste])) {
+      const id = String(r.prospect_id);
+      (empreintes.get(id) ?? empreintes.set(id, []).get(id)!).push({ type: String(r.type), valeur: String(r.empreinte) });
+    }
+    // P9b : nature du score et, pour une probabilité mesurée, l'étalonnage appliqué (marge de Wilson).
+    for (const r of await q(
+      `select s.prospect_id, s.valeur, s.criteres, s.version_poids, s.calcule_le, s.nature, s.etalonnage_id, s.probabilite, s.borne_basse, s.borne_haute,
+              e.effectif, e.conversions, e.methode, e.calcule_le as etalonne_le
+       from ${ns}.prospects_scores s left join ${ns}.etalonnages e on e.id = s.etalonnage_id and e.company_id = s.company_id
+       where s.company_id = $1 and s.prospect_id::text in (select jsonb_array_elements_text($2::jsonb)) order by s.calcule_le asc`,
+      [companyId, liste],
+    )) {
+      const mesure = r.nature === "probabilite_mesuree" && r.etalonnage_id != null && r.effectif != null;
+      scores.set(String(r.prospect_id), {
+        valeur: Number(r.valeur), criteres: tableau(r.criteres), versionPoids: Number(r.version_poids), calculeLe: iso(r.calcule_le),
+        nature: mesure ? ("probabilite_mesuree" as const) : ("estimation" as const),
+        etalonnage: mesure
+          ? { etalonnageId: String(r.etalonnage_id), probabilite: Number(r.probabilite), borneBasse: Number(r.borne_basse), borneHaute: Number(r.borne_haute), effectif: Number(r.effectif), conversions: Number(r.conversions), methode: String(r.methode), date: iso(r.etalonne_le) }
+          : null,
+      });
+    }
+    for (const r of await q(`select * from ${ns}.bases_legales where company_id = $1 and prospect_id::text in (select jsonb_array_elements_text($2::jsonb)) order by canal`, [companyId, liste])) {
+      const id = String(r.prospect_id);
+      (bases.get(id) ?? bases.set(id, []).get(id)!).push(r);
+    }
+    return { empreintes, scores, bases };
+  }
+
+  /** Page de prospects filtrée (filtres cumulés ; plusieurs valeurs d'un filtre = l'une OU l'autre), triée par score décroissant. */
+  async function listerProspects(companyId: string, f: {
+    campagneId?: string | undefined; cibles?: string[] | undefined; nace?: string[] | undefined; codesPostaux?: string[] | undefined; communes?: string[] | undefined;
+    provinces?: string[] | undefined; regions?: string[] | undefined; statuts?: string[] | undefined; entites?: string[] | undefined; etablissements?: string[] | undefined;
+    segments?: string[] | undefined; offres?: string[] | undefined; origines?: string[] | undefined; scoreMin?: number | undefined; page: number; parPage: number;
+  }) {
+    const params: unknown[] = [companyId];
+    const p = (v: unknown) => `$${params.push(v)}`;
+    const dans = (expr: string, valeurs?: string[]) => (valeurs?.length ? [`${expr} in (select jsonb_array_elements_text(${p(json(valeurs))}::jsonb))`] : []);
+    const score = `(select s.valeur from ${ns}.prospects_scores s where s.company_id = p.company_id and s.prospect_id = p.id order by s.calcule_le desc limit 1)`;
+    const conditions = [
+      "p.company_id = $1",
+      ...(f.campagneId ? [`p.campagne_id = ${p(f.campagneId)}`] : []),
+      ...dans("p.cible", f.cibles),
+      ...dans("p.statut", f.statuts),
+      ...dans("p.origine_particulier", f.origines),
+      ...dans("(p.zone->>'codePostal')", f.codesPostaux),
+      ...dans("lower(p.zone->>'commune')", f.communes?.map((c) => c.toLowerCase())),
+      ...dans("lower(p.zone->>'province')", f.provinces?.map((c) => c.toLowerCase())),
+      ...dans("(p.zone->>'region')", f.regions),
+      ...dans("(p.referentiel->>'entite')", f.entites),
+      ...dans("(p.referentiel->>'etablissement')", f.etablissements),
+      ...(f.segments?.length ? [`exists (select 1 from jsonb_array_elements_text(p.referentiel->'segments') as sg where sg in (select jsonb_array_elements_text(${p(json(f.segments))}::jsonb)))`] : []),
+      ...(f.offres?.length ? [`exists (select 1 from jsonb_array_elements_text(p.referentiel->'offres') as o where o in (select jsonb_array_elements_text(${p(json(f.offres))}::jsonb)))`] : []),
+      // NACE : préfixe sans point (« 43 » couvre 43.910 et 43910).
+      ...(f.nace?.length
+        ? [`exists (select 1 from jsonb_array_elements_text(p.nace) as n, jsonb_array_elements_text(${p(json(f.nace.map((c) => `${c.replace(/\./gu, "")}%`)))}::jsonb) as m where replace(n, '.', '') like m)`]
+        : []),
+      ...(f.scoreMin !== undefined ? [`coalesce(${score}, -1) >= ${p(f.scoreMin)}`] : []),
+    ];
+    const ou = conditions.join(" and ");
+    const [c] = await q(`select count(*) as total from ${ns}.prospects p where ${ou}`, params);
+    const total = Number(c?.total ?? 0);
+    const limite = p(f.parPage);
+    const decalage = p((f.page - 1) * f.parPage);
+    const lignes = (await q(`select p.* from ${ns}.prospects p where ${ou} order by ${score} desc nulls last, p.cree_le desc, p.id limit ${limite} offset ${decalage}`, params)).map(ligneProspect);
+    return { total, lignes };
+  }
+
+  async function insererOpposition(o: { id: string; companyId: string; type: string; empreinte: string; canal: string; origine: string; par: string; recueillieLe: string | null }) {
+    const { rowCount } = await x(
+      `insert into ${ns}.oppositions (id, company_id, type, empreinte, canal, origine, enregistree_par, recueillie_le) values ($1, $2, $3, $4, $5, $6, $7, coalesce($8::timestamptz, now()))
+       on conflict (company_id, type, empreinte, canal) do nothing`,
+      [o.id, o.companyId, o.type, o.empreinte, o.canal, o.origine, o.par, o.recueillieLe],
+    );
+    return rowCount;
+  }
+
+  async function lireOpposition(companyId: string, type: string, empreinte: string, canal: string) {
+    const [r] = await q(`select * from ${ns}.oppositions where company_id = $1 and type = $2 and empreinte = $3 and canal = $4`, [companyId, type, empreinte, canal]);
+    return r
+      ? { id: String(r.id), companyId, type: String(r.type), empreinte: String(r.empreinte), canal: String(r.canal), origine: String(r.origine), recueillieLe: iso(r.recueillie_le), enregistreePar: String(r.enregistree_par) }
+      : null;
+  }
+
+  /* ---------------- lot P9b : base de clients, étalonnage, exports CRM ---------------- */
+
+  async function insererImportBaseClients(i: {
+    id: string; companyId: string; nomFichier: string; format: string; empreinteFichier: string; lignesLues: number; lignesRetenues: number; lignesRejetees: number;
+    rejets: unknown; correspondance: unknown; colonnesSensiblesRefusees: unknown; finalite: string; dureeConservationMois: number; purgeLe: string; mode: string; importePar: string; importeLe: string;
+  }) {
+    await x(
+      `insert into ${ns}.bases_clients_imports (id, company_id, nom_fichier, format, empreinte_fichier, lignes_lues, lignes_retenues, lignes_rejetees, rejets, correspondance, colonnes_sensibles_refusees, finalite, duree_conservation_mois, purge_le, mode, importe_par, importe_le)
+       values ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, $10::jsonb, $11::jsonb, $12, $13, $14::timestamptz, $15, $16, $17::timestamptz)`,
+      [i.id, i.companyId, i.nomFichier, i.format, i.empreinteFichier, i.lignesLues, i.lignesRetenues, i.lignesRejetees, json(i.rejets), json(i.correspondance), json(i.colonnesSensiblesRefusees),
+        i.finalite, i.dureeConservationMois, i.purgeLe, i.mode, i.importePar, i.importeLe],
+    );
+  }
+
+  /** Clients validés par le contrat `ClientBase` (l'appelant le vérifie), par lots : une instruction pour les clients, une pour leurs empreintes. */
+  async function insererClients(companyId: string, clients: ReadonlyArray<Record<string, unknown>>) {
+    for (let i = 0; i < clients.length; i += 500) {
+      const lot = json(clients.slice(i, i + 500));
+      await x(
+        `insert into ${ns}.clients (id, company_id, import_id, type_client, pseudonyme, contrats, etablissement, entites, segments, donnees_chiffrees, entreprise, numero_bce, code_postal, commune, produits_detenus, debut_contrat, statut, consentements, mode, cree_le)
+         select (c->>'id')::uuid, $1::uuid, (c->>'importId')::uuid, c->>'typeClient', c->>'pseudonyme', coalesce(c->'contrats', '[]'::jsonb), c->>'etablissement', coalesce(c->'entites', '[]'::jsonb),
+                coalesce(c->'segments', '[]'::jsonb), coalesce(c->'donneesChiffrees', '{}'::jsonb), c->>'entreprise', c->>'numeroBce', c->>'codePostal', c->>'commune',
+                coalesce(c->'produitsDetenus', '[]'::jsonb), (c->>'debutContrat')::date, c->>'statut', coalesce(c->'consentements', '{}'::jsonb), c->>'mode', (c->>'creeLe')::timestamptz
+         from jsonb_array_elements($2::jsonb) as c`,
+        [companyId, lot],
+      );
+      await x(
+        `insert into ${ns}.clients_empreintes (company_id, client_id, type, empreinte)
+         select $1::uuid, (c->>'id')::uuid, e->>'type', e->>'valeur' from jsonb_array_elements($2::jsonb) as c, jsonb_array_elements(c->'empreintes') as e on conflict do nothing`,
+        [companyId, lot],
+      );
+    }
+  }
+
+  /** Dernier import de la base de clients (ou null) et nombre de clients enregistrés. */
+  async function etatBaseClients(companyId: string) {
+    const [i] = await q(`select * from ${ns}.bases_clients_imports where company_id = $1 order by importe_le desc limit 1`, [companyId]);
+    const [c] = await q(`select count(*) as total, count(*) filter (where statut = 'actif') as actifs from ${ns}.clients where company_id = $1`, [companyId]);
+    return {
+      dernierImport: i
+        ? { id: String(i.id), nomFichier: String(i.nom_fichier), format: String(i.format), importeLe: iso(i.importe_le), importePar: String(i.importe_par), purgeLe: iso(i.purge_le), finalite: String(i.finalite), dureeConservationMois: Number(i.duree_conservation_mois), lignesRetenues: Number(i.lignes_retenues), lignesRejetees: Number(i.lignes_rejetees), mode: String(i.mode) }
+        : null,
+      clients: Number(c?.total ?? 0),
+      actifs: Number(c?.actifs ?? 0),
+    };
+  }
+
+  /** Suppression de la base de clients (clients, contrats, empreintes, imports) ; les oppositions restent. */
+  async function supprimerBaseClients(companyId: string) {
+    const clients = (await x(`delete from ${ns}.clients where company_id = $1`, [companyId])).rowCount;
+    const imports = (await x(`delete from ${ns}.bases_clients_imports where company_id = $1`, [companyId])).rowCount;
+    return { clients, imports };
+  }
+
+  async function insererEtalonnage(e: {
+    id: string; companyId: string; segment: unknown; methode: string; parametres: unknown; separation: string; horizonJours: number; effectif: number; conversions: number; brier: number;
+    tranches: unknown; statut: string; versionPoids: number; donnees: unknown; mode: string; calculePar: string; calculeLe: string;
+  }) {
+    await x(
+      `insert into ${ns}.etalonnages (id, company_id, segment, methode, parametres, separation, horizon_jours, effectif, conversions, brier, tranches, statut, version_poids, donnees, mode, calcule_par, calcule_le)
+       values ($1, $2, $3::jsonb, $4, $5::jsonb, $6, $7, $8, $9, $10, $11::jsonb, $12, $13, $14::jsonb, $15, $16, $17::timestamptz)`,
+      [e.id, e.companyId, json(e.segment), e.methode, e.parametres === null ? null : json(e.parametres), e.separation, e.horizonJours, e.effectif, e.conversions, e.brier,
+        json(e.tranches), e.statut, e.versionPoids, json(e.donnees), e.mode, e.calculePar, e.calculeLe],
+    );
+  }
+
+  /** Issues commerciales des prospects d'une cible, avec le dernier score attribué au plus tard le jour de l'issue. */
+  async function issuesPourEtalonnage(companyId: string, cible: string, mode: string) {
+    return (await q(
+      `select ic.issue, ic.date_issue, ic.origine, p.nace,
+              (select s.valeur from ${ns}.prospects_scores s where s.company_id = ic.company_id and s.prospect_id = ic.prospect_id and s.calcule_le < ic.date_issue + 1 order by s.calcule_le desc limit 1) as score
+       from ${ns}.issues_commerciales ic join ${ns}.prospects p on p.id = ic.prospect_id and p.company_id = ic.company_id
+       where ic.company_id = $1 and p.cible = $2 and ic.mode = $3 order by ic.date_issue`,
+      [companyId, cible, mode],
+    )).map((r) => ({ issue: String(r.issue), date: iso(r.date_issue).slice(0, 10), origine: String(r.origine), nace: tableau<string>(r.nace), score: r.score == null ? null : Number(r.score) }));
+  }
+
+  /** Prospects non exclus d'une cible avec leur dernier score (application d'un étalonnage). */
+  async function scoresCourantsCible(companyId: string, cible: string) {
+    return (await q(
+      `select p.id, p.nace, s.valeur, s.criteres, s.version_poids from ${ns}.prospects p
+       join lateral (select valeur, criteres, version_poids from ${ns}.prospects_scores where company_id = p.company_id and prospect_id = p.id order by calcule_le desc limit 1) s on true
+       where p.company_id = $1 and p.cible = $2 and p.statut <> 'exclu'`,
+      [companyId, cible],
+    )).map((r) => ({ prospectId: String(r.id), nace: tableau<string>(r.nace), valeur: Number(r.valeur), criteres: tableau(r.criteres), versionPoids: Number(r.version_poids) }));
+  }
+
+  /** Score avec probabilité mesurée (étalonnage appliqué, marge de Wilson). */
+  async function insererScoreMesure(s: { id: string; companyId: string; prospectId: string; valeur: number; criteres: unknown; versionPoids: number; etalonnageId: string; probabilite: number; borneBasse: number; borneHaute: number; calculeLe: string }) {
+    await x(
+      `insert into ${ns}.prospects_scores (id, company_id, prospect_id, valeur, criteres, version_poids, nature, etalonnage_id, probabilite, borne_basse, borne_haute, calcule_le)
+       values ($1, $2, $3, $4, $5::jsonb, $6, 'probabilite_mesuree', $7, $8, $9, $10, $11::timestamptz)`,
+      [s.id, s.companyId, s.prospectId, s.valeur, json(s.criteres), s.versionPoids, s.etalonnageId, s.probabilite, s.borneBasse, s.borneHaute, s.calculeLe],
+    );
+  }
+
+  function exportDepuisLigne(r: Ligne) {
+    return {
+      id: String(r.id), companyId: String(r.company_id), issueId: String(r.issue_id), diffusionId: (r.diffusion_id as string | null) ?? null, entite: String(r.entite),
+      referentielVersion: Number(r.referentiel_version), service: String(r.service), canal: String(r.canal), prospectIds: tableau<string>(r.prospect_ids), verifications: tableau(r.verifications),
+      etat: String(r.etat), motifRefus: (r.motif_refus as string | null) ?? null, cleIdempotence: String(r.cle_idempotence), mode: String(r.mode), demandePar: String(r.demande_par), creeLe: iso(r.cree_le),
+    };
+  }
+
+  async function lireExportCrmParCle(companyId: string, cle: string) {
+    const [r] = await q(`select * from ${ns}.exports_crm where company_id = $1 and cle_idempotence = $2`, [companyId, cle]);
+    return r ? exportDepuisLigne(r) : null;
+  }
+
+  async function insererExportCrm(e: {
+    id: string; companyId: string; issueId: string; diffusionId: string | null; entite: string; referentielVersion: number; service: string; canal: string; prospectIds: string[];
+    verifications: unknown; etat: string; motifRefus: string | null; cleIdempotence: string; mode: string; demandePar: string; creeLe: string;
+  }) {
+    await x(
+      `insert into ${ns}.exports_crm (id, company_id, issue_id, diffusion_id, entite, referentiel_version, service, canal, prospect_ids, verifications, etat, motif_refus, cle_idempotence, mode, demande_par, cree_le)
+       values ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, $10::jsonb, $11, $12, $13, $14, $15, $16::timestamptz)`,
+      [e.id, e.companyId, e.issueId, e.diffusionId, e.entite, e.referentielVersion, e.service, e.canal, json(e.prospectIds), json(e.verifications), e.etat, e.motifRefus, e.cleIdempotence, e.mode, e.demandePar, e.creeLe],
+    );
+  }
+
   /* ---------------- remise à zéro de la démonstration ---------------- */
   async function supprimerDonneesEntreprise(companyId: string) {
     const supprimes: Record<string, number> = {};
-    for (const table of ["relances_correction", "diffusions", "decisions_humaines", "constats", "verdicts", "couvertures", "evaluations_porte", "messages", "sources", "mesures", "imports", "planifications", "portes", "exigences", "briefs", "campagnes", "marques", "journal", "reglages_entreprise"]) {
+    // P9b : tables de prospection et de base clients d'abord (exports avant diffusions ; enfants avant parents).
+    for (const table of ["exports_crm", "issues_commerciales", "bases_legales", "prospects_scores", "prospects_empreintes", "prospects", "etalonnages", "poids_score",
+      "clients_empreintes", "clients", "bases_clients_imports", "regles_ventes_croisees", "dncm_empreintes", "listes_dncm", "oppositions",
+      "relances_correction", "appels_proposes", "diffusions", "decisions_humaines", "constats", "verdicts", "couvertures", "evaluations_porte", "messages", "sources", "mesures", "imports", "planifications", "portes", "exigences", "briefs", "campagnes", "marques", "journal", "reglages_entreprise"]) {
       const { rowCount } = await x(`delete from ${ns}.${table} where company_id = $1`, [companyId]);
       supprimes[table] = rowCount;
     }
@@ -969,10 +1435,16 @@ export function creerBase(db: Db) {
     insererMessage, lierCommentaire, listerMessages, messagesRecents, compterEnvoisRecents, changerEtatMessage,
     insererSource, listerSources, sourcesPourGarde, toucherPorte, insererImport, listerImports,
     insererDecision, invaliderDecisions, listerDecisions, insererRelance, listerRelances, insererDiffusion, lireDiffusionParCle, listerDiffusions,
-    rapporterIssueDiffusion, lireDiffusionInterne,
+    rapporterIssueDiffusion, lireDiffusionInterne, figerPreuve, revoquerPreuves, listerRevocations,
+    insererAppel, listerAppels, lireAppel, lireAppelParEmpreinte, comptesConnexion,
     insererMarque, marques, planifier, listerPlanifications, listerMesures,
     tachesDeProjet, bloqueursNonResolus, runsDeTaches, coutsEntreprise, coutsEntrepriseMois, competencesDernierRun,
     supprimerDonneesEntreprise,
+    prospectsParIdentifiants, lireProspect, empreintesProspectsEnBase, oppositionsPour, clientsActuelsPour, dncmPour, clientExiste, clientParEmpreinte, poidsScoreCourant,
+    referentielProspection, insererProspect, majProspect, exclureProspect, ajouterEmpreintesProspect, prospectsAvecEmpreinte, insererScoreProspect,
+    detailsProspects, listerProspects, insererOpposition, lireOpposition,
+    insererImportBaseClients, insererClients, etatBaseClients, supprimerBaseClients, insererEtalonnage, issuesPourEtalonnage, scoresCourantsCible, insererScoreMesure,
+    lireExportCrmParCle, insererExportCrm,
   };
 }
 

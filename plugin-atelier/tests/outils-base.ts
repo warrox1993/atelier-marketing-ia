@@ -26,7 +26,7 @@ export function creerBanc(o: { mode?: "demonstration" | "reel"; modeEntreprise?:
   const horloge = () => new Date(Date.UTC(2026, 9, 15, 10, 0, 0, 0) + ++tic).toISOString();
   const t = {
     reglages: [] as Ligne[], campagnes: [] as Ligne[], exigences: [] as Ligne[], portes: [] as Ligne[], evaluations: [] as Ligne[], decisions: [] as Ligne[],
-    diffusions: [] as Ligne[], sources: [] as Ligne[], journal: [] as Ligne[], couvertures: [] as Ligne[], verdicts: [] as Ligne[], constats: [] as Ligne[], relances: [] as Ligne[],
+    diffusions: [] as Ligne[], appels: [] as Ligne[], sources: [] as Ligne[], journal: [] as Ligne[], couvertures: [] as Ligne[], verdicts: [] as Ligne[], constats: [] as Ligne[], relances: [] as Ligne[],
   };
   if (o.modeEntreprise) t.reglages.push({ companyId: SOC, modeParDefaut: o.modeEntreprise, maxRunsActifs: 3, maxCyclesCorrection: 3, retentionJours: 365, plafondPub: null, modifieLe: horloge() });
   t.campagnes.push({ id: CAMP, companyId: SOC, projectId: PROJET, briefIssueId: BRIEF, nom: "Printemps", objectifs: [], cible: null, offre: null, canaux: [], perimetre: { etablissements: [], zones: [] }, budgetMaxCents: null, plafondPub: null, mode: o.mode ?? "demonstration", etatProjet: { statut: "in_progress", enPause: false, archive: false }, creeLe: horloge() });
@@ -125,7 +125,7 @@ export function creerBanc(o: { mode?: "demonstration" | "reel"; modeEntreprise?:
     listerDecisions: async (_c, issueId) => structuredClone([...t.decisions].filter((d) => d.issueId === issueId).sort((a, b) => (a.creeLe < b.creeLe ? 1 : -1))) as never,
     insererDiffusion: async (d) => {
       if (t.diffusions.some((x) => x.companyId === d.companyId && x.cleIdempotence === d.cleIdempotence)) return false;
-      t.diffusions.push({ ...d, creeLe: horloge(), issueMotif: null });
+      t.diffusions.push({ ...d, preuveCharge: d.preuveCharge ? structuredClone(d.preuveCharge) : null, creeLe: horloge(), issueMotif: null });
       return true;
     },
     lireDiffusionParCle: async (companyId, cle) => {
@@ -135,8 +135,41 @@ export function creerBanc(o: { mode?: "demonstration" | "reel"; modeEntreprise?:
     listerDiffusions: async (_c, issueId) => t.diffusions.filter((d) => d.issueId === issueId).map(vueDiffusion) as never,
     lireDiffusionInterne: async (_c, id) => {
       const d = t.diffusions.find((x) => x.id === id);
-      return d ? { id: d.id, issueId: d.issueId, audience: d.audience ?? null, empreinteArguments: d.empreinteArguments ?? null, service: d.service ?? null, outil: d.outil ?? null } : null;
+      return d
+        ? {
+            id: d.id, issueId: d.issueId, audience: d.audience ?? null, empreinteArguments: d.empreinteArguments ?? null, service: d.service ?? null, outil: d.outil ?? null,
+            preuveCharge: d.preuveCharge ? structuredClone(d.preuveCharge) : null, revocation: d.revoqueeLe ? { le: d.revoqueeLe, motif: d.revocationMotif } : null,
+          }
+        : null;
     },
+    figerPreuve: async (_c, id, charge) => {
+      const d = t.diffusions.find((x) => x.id === id && !x.preuveCharge);
+      if (d) d.preuveCharge = structuredClone(charge);
+      return Boolean(d);
+    },
+    revoquerPreuves: async (companyId, issueId, o, motif) => {
+      const visees = t.diffusions.filter((d) => d.companyId === companyId && d.issueId === issueId && d.mode === "reel" && d.etat === "preparee" && d.preuveCharge && !d.revoqueeLe
+        && (!o.diffusionId || d.id === o.diffusionId) && (!o.saufDecision || d.decisionId !== o.saufDecision));
+      for (const d of visees) Object.assign(d, { revoqueeLe: horloge(), revocationMotif: motif });
+      return visees.map((d) => d.id);
+    },
+    listerRevocations: async (companyId) => t.diffusions.filter((d) => d.companyId === companyId && d.revoqueeLe && d.preuveCharge).map((d) => ({ id: d.id, charge: structuredClone(d.preuveCharge) })),
+    insererAppel: async (a) => {
+      if (t.appels.some((x) => x.companyId === a.companyId && x.issueId === a.issueId && x.revisionId === a.revisionId && x.empreinte === a.empreinte)) return false;
+      t.appels.push({ ...structuredClone(a), proposePar: a.par, creeLe: horloge() });
+      return true;
+    },
+    listerAppels: async (companyId, issueId) => structuredClone(t.appels.filter((a) => a.companyId === companyId && a.issueId === issueId).reverse()).map(vueAppel) as never,
+    lireAppel: async (companyId, issueId, id) => {
+      const a = t.appels.find((x) => x.companyId === companyId && x.issueId === issueId && x.id === id);
+      return a ? (vueAppel(structuredClone(a)) as never) : null;
+    },
+    lireAppelParEmpreinte: async (companyId, issueId, revisionId, empreinte) => {
+      const a = t.appels.find((x) => x.companyId === companyId && x.issueId === issueId && x.revisionId === revisionId && x.empreinte === empreinte);
+      return a ? (vueAppel(structuredClone(a)) as never) : null;
+    },
+    comptesConnexion: async (companyId, campagneId, issueId, service) =>
+      [...new Set(t.sources.filter((x) => x.companyId === companyId && (campagneId ? x.campagneId === campagneId : x.issueId === issueId) && x.provenance === "connexion" && x.mode === "reel" && x.connexion?.service === service && x.connexion?.compte).map((x) => x.connexion.compte as string))],
     rapporterIssueDiffusion: async (_c, issueId, id, depuis, etat, motif) => {
       const d = t.diffusions.find((x) => x.id === id && x.issueId === issueId && depuis.includes(x.etat));
       if (!d) return 0;
@@ -158,7 +191,14 @@ export function creerBanc(o: { mode?: "demonstration" | "reel"; modeEntreprise?:
     return {
       id: d.id, companyId: d.companyId, issueId: d.issueId, revisionId: d.revisionId, decisionId: d.decisionId, action: d.action, canal: d.canal, compte: d.compte ?? null,
       montantCents: d.montantCents ?? null, etat: d.etat, cleIdempotence: d.cleIdempotence, motifRefus: d.issueMotif ?? d.motifRefus ?? null, mode: d.mode, creeLe: d.creeLe,
-      service: d.service ?? null, outil: d.outil ?? null,
+      service: d.service ?? null, outil: d.outil ?? null, preuveExpire: d.preuveCharge?.expire ?? null,
+      revocation: d.revoqueeLe ? { le: d.revoqueeLe, motif: d.revocationMotif } : null,
+    };
+  }
+  function vueAppel(a: Ligne) {
+    return {
+      id: a.id, issueId: a.issueId, revisionId: a.revisionId, service: a.service, outil: a.outil, action: a.action, compte: a.compte, arguments: a.arguments,
+      empreinte: a.empreinte, empreinteArguments: a.empreinteArguments, proposePar: a.proposePar, creeLe: a.creeLe,
     };
   }
   const base = new Proxy(impl, {

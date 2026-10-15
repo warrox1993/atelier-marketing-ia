@@ -106,7 +106,7 @@ def installer_plugin():
 
 AGENTS = [
     # (nom, rôle Paperclip, rôle de démonstration, supérieur)
-    ("Coordinateur marketing", "cmo", "coordinateur", None),
+    ("Coordinateur marketing", "ceo", "coordinateur", None),
     ("Contenus et création", "general", "producteur", "Coordinateur marketing"),
     ("Porte de contrôle", "qa", "porte", "Coordinateur marketing"),
     ("Contrôleur des exigences", "qa", "exigences", "Porte de contrôle"),

@@ -4,7 +4,8 @@
 // recopiés), à deux différences près, toutes deux invisibles ou explicites dans le catalogue MCP :
 //   1. les dates `debut`, `fin` et `au` gardent le même format, la même description et le même schéma JSON,
 //      mais ne sont plus bornées à la période du modèle de démonstration (2025 à 2027) ;
-//   2. les outils de mutation reçoivent un paramètre facultatif `preuve_approbation` (preuve signée par le plugin).
+//   2. les outils de mutation reçoivent deux paramètres facultatifs : `preuve_approbation` (preuve signée par le plugin) et
+//      `revocations_approbation` (liste de révocation `arv1` récente, signée par le plugin, exigée avec la preuve).
 
 import * as z from "zod";
 import type { FournisseurService, OutilPasserelle } from "../../fournisseurs.js";
@@ -26,6 +27,16 @@ export const PreuveApprobation = z
       "Sans elle, l'action est seulement préparée, jamais exécutée.",
   );
 
+export const RevocationsApprobation = z
+  .string()
+  .max(100_000)
+  .optional()
+  .describe(
+    "Liste de révocation des preuves d'approbation (arv1), signée par le plugin de l'atelier et émise depuis moins de 5 minutes " +
+      "(GET /preuves/revocations, champ « liste »), à lire juste avant l'appel. Exigée avec la preuve : sans elle, ou périmée, " +
+      "l'action est seulement préparée, jamais exécutée.",
+  );
+
 /** Reprend un outil de démonstration : nom, schéma et annotations identiques ; dates sans borne de modèle. */
 export function schemaReel(outil: OutilPasserelle, mutation: boolean): z.ZodRawShape {
   const forme: Record<string, z.ZodType> = {};
@@ -35,7 +46,10 @@ export function schemaReel(outil: OutilPasserelle, mutation: boolean): z.ZodRawS
     else if (cle === "au") forme[cle] = DateReelle.optional().describe(s.description ?? "");
     else forme[cle] = s;
   }
-  if (mutation) forme["preuve_approbation"] = PreuveApprobation;
+  if (mutation) {
+    forme["preuve_approbation"] = PreuveApprobation;
+    forme["revocations_approbation"] = RevocationsApprobation;
+  }
   return forme as z.ZodRawShape;
 }
 

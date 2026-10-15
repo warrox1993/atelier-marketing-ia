@@ -24,7 +24,8 @@ import { emballer, paireEd25519, passerelle } from "./outils-passerelle.js";
 const P = await passerelle();
 const CLES = paireEd25519();
 const SIGNATAIRE = new P.SignataireEnveloppe(CLES.privee);
-const VERIF = { clesPubliques: [CLES.publique], service: "gsc", outil: "gsc_requete_performances", maintenant: new Date() };
+// v1.6 (S-6) : une réponse réelle se dépose toujours avec les arguments exacts de son appel.
+const VERIF = { clesPubliques: [CLES.publique], service: "gsc", outil: "gsc_requete_performances", arguments: { debut: "2026-09-01", fin: "2026-09-30" }, maintenant: new Date() };
 
 /** Réponse GSC telle que la passerelle l'emballe (`passerelle/src/outils.ts`, `emballer`), signée en mode réel. */
 function reponseGsc(mode: "demonstration" | "reel", siteUrl = mode === "demonstration" ? "sc-domain:renovation-liege.example" : "sc-domain:client-reel.be", signer = mode === "reel") {

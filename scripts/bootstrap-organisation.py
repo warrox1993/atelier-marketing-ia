@@ -245,6 +245,7 @@ def metadata_atelier(agent: dict, reg_agents: dict) -> dict:
             "relit": agent["relit"],
             "roleRevue": agent["roleRevue"],
             "connexions": agent.get("connexions") or {},
+            **({"outilsBloques": agent["outilsBloques"]} if agent.get("outilsBloques") else {}),
             "criteresReussite": agent["criteresReussite"],
         }
     }
@@ -1125,6 +1126,10 @@ def nom_politique_lecture(connexion_id: str, slug: str) -> str:
     return f"atelier-lecture-seule:{connexion_id}:{slug}"
 
 
+def nom_politique_outil_interdit(connexion_id: str, slug: str, outil: str) -> str:
+    return f"atelier-outil-interdit:{connexion_id}:{slug}:{outil}"
+
+
 def politiques_outils(api: Api, company_id: str) -> list[dict]:
     rep = api.get(f"/companies/{company_id}/tools/policies")
     return rep.get("policies", []) if isinstance(rep, dict) else rep
@@ -1165,6 +1170,9 @@ def assurer_connexions(api: Api, company_id: str, reg_agents: dict, agents: dict
     - Rôle en `lecture` : politique native « block » sur les écritures (`risk.isWrite`) de la
       connexion pour cet agent ; une politique « block » l'emporte toujours. Créée si absente,
       jamais modifiée ni réactivée ensuite (un choix humain dans Paperclip est respecté).
+    - Rôle en `ecriture_sur_accord` avec `outilsBloques` (registre) : politique native « block » par
+      OUTIL (sélecteurs connexion + nom d'outil, condition sur l'agent) pour chaque outil interdit
+      du service, par exemple `facebook_envoyer_message` pour Contenus. Même règle de création.
     Les écritures des autres rôles restent « Ask first » (patch socle 0005).
     """
     services = reg_agents["connexionsPasserelle"]["services"]
@@ -1173,6 +1181,7 @@ def assurer_connexions(api: Api, company_id: str, reg_agents: dict, agents: dict
     existantes = {p.get("name") for p in toutes_politiques}
     rep_profils = api.get(f"/companies/{company_id}/tools/profiles")
     profils = {p.get("profileKey"): p for p in (rep_profils.get("profiles", []) if isinstance(rep_profils, dict) else rep_profils)}
+    interdits = {a["slug"]: a.get("outilsBloques") or {} for a in reg_agents["agents"]}
     ecritures, resume = 0, []
     for cle, cx in connexions_passerelle(api, company_id, services):
         roles = [(s, acces) for s, acces in besoins[cle] if s in agents]
@@ -1202,6 +1211,19 @@ def assurer_connexions(api: Api, company_id: str, reg_agents: dict, agents: dict
             api.appel("PUT", f"/tool-connections/{cx['id']}/installs", {"installs": [{"targetType": t, "targetId": i} for t, i in voulus]})
             ecritures += 1
         for slug, acces in roles:
+            for outil in interdits.get(slug, {}).get(cle, []):
+                nom_outil = nom_politique_outil_interdit(cx["id"], slug, outil)
+                if acces == "lecture" or nom_outil in existantes:
+                    continue  # un rôle en lecture a déjà le « block » de toutes les écritures
+                api.appel("POST", f"/companies/{company_id}/tools/policies", {
+                    "name": nom_outil,
+                    "description": f"Atelier : le rôle « {slug} » n'appelle jamais {outil} du service {cle} (registre des agents, champ outilsBloques).",
+                    "policyType": "block",
+                    "priority": 10,
+                    "selectors": {"connectionId": cx["id"], "toolName": outil},
+                    "conditions": {"actor": {"agentId": agents[slug]["id"]}},
+                })
+                ecritures += 1
             nom = nom_politique_lecture(cx["id"], slug)
             if acces != "lecture" or nom in existantes:
                 continue

@@ -4,14 +4,17 @@
 // PASSERELLE_ETAT (fichier d'état OAuth de démonstration, passerelle/etat/oauth-demo.json par défaut).
 
 import { fileURLToPath } from "node:url";
-import { lireReglages } from "./config.js";
+import { lireReglages, lireServicesReels } from "./config.js";
 import { RegistreFournisseurs } from "./fournisseurs.js";
 import { creerServeur } from "./serveur.js";
 import { signataireDepuisEnv, type SignataireEnveloppe } from "./signature-enveloppe.js";
 import { enregistrerGoogleDemo } from "./demo/google/enregistrer.js";
 import { enregistrerSocialCrm } from "./demo/social-crm/enregistrer.js";
+import { enregistrerProspectionDemo } from "./demo/prospection/enregistrer.js";
+import { enregistrerOsmDemo } from "./demo/prospection/osm.js";
 import { enregistrerGoogleReel } from "./reel/google/enregistrer.js";
 import { enregistrerSocialCrmReel } from "./reel/social-crm/enregistrer.js";
+import { enregistrerOsmReelSeul, enregistrerProspectionReel } from "./reel/prospection/enregistrer.js";
 
 // Par défaut : passerelle/etat/oauth-demo.json, quel que soit le répertoire de lancement
 // (ce fichier compilé vit dans passerelle/dist/src/).
@@ -20,8 +23,10 @@ const ETAT_PAR_DEFAUT = fileURLToPath(new URL("../../etat/oauth-demo.json", impo
 function principal(): void {
   let reglages;
   let signataire: SignataireEnveloppe | null;
+  let servicesReels: string[];
   try {
     reglages = lireReglages(process.env);
+    servicesReels = lireServicesReels(process.env);
     signataire = signataireDepuisEnv(process.env);
   } catch (erreur) {
     console.error(erreur instanceof Error ? erreur.message : String(erreur));
@@ -31,11 +36,22 @@ function principal(): void {
   const registre = new RegistreFournisseurs();
   enregistrerGoogleDemo(registre); // L5 : gsc, ga4, ads, gbp (démonstration)
   enregistrerSocialCrm(registre); // L7 : facebook, instagram, linkedin, crm (HubSpot), pipedrive, odoo, teamleader (démonstration)
+  enregistrerProspectionDemo(registre); // P2 : bce, bnb, fsma (démonstration)
+  enregistrerOsmDemo(registre); // P3b : osm (démonstration)
   if (reglages.mode === "reel") enregistrerGoogleReel(registre, process.env, { hote: reglages.hote, urlPasserelle: () => `http://${reglages.hote === "::1" ? "[::1]" : reglages.hote}:${reglages.port}`, journal: (m) => console.log(m) }); // L4 : gsc, ga4, ads, gbp (réel)
-  if (reglages.mode === "reel") enregistrerSocialCrmReel(registre, process.env, { hote: reglages.hote, urlPasserelle: () => `http://${reglages.hote === "::1" ? "[::1]" : reglages.hote}:${reglages.port}`, journal: (m) => console.log(m) }); // réseaux sociaux et CRM (réel)
+  if (reglages.mode === "reel") enregistrerProspectionReel(registre, process.env, { journal: (m) => console.log(m) }); // P3 et P3b : bce, osm (réel, index locaux)
+  // Mélange : en démonstration, PASSERELLE_SERVICES_REELS=osm sert `osm` en réel (index local) et le reste en démonstration.
+  if (reglages.mode === "demonstration" && servicesReels.includes("osm")) enregistrerOsmReelSeul(registre, process.env, { journal: (m) => console.log(m) });
+  try {
+    if (reglages.mode === "reel") enregistrerSocialCrmReel(registre, process.env, { hote: reglages.hote, urlPasserelle: () => `http://${reglages.hote === "::1" ? "[::1]" : reglages.hote}:${reglages.port}`, journal: (m) => console.log(m), signataire }); // réseaux sociaux et CRM (réel)
+  } catch (erreur) {
+    // Revue S-8 : même paire de clés pour signer et approuver, ou configuration invalide : refus de démarrer.
+    console.error(erreur instanceof Error ? erreur.message : String(erreur));
+    process.exit(2);
+  }
   if (signataire) console.log(`réponses d'outils signées (clé publique Ed25519 de la passerelle, empreinte ${signataire.empreinteCle}) ; clé publique à donner au plugin : ${signataire.clePubliqueBase64}`);
   else console.log("AVERTISSEMENT : aucune clé de signature (PASSERELLE_SIGNATURE_CLE_PRIVEE) : réponses non signées, le plugin ne doit pas les tenir pour réelles.");
-  const serveur = creerServeur({ ...reglages, registre, signataire, fichierEtat: process.env["PASSERELLE_ETAT"] ?? ETAT_PAR_DEFAUT, journal: (m) => console.log(m) });
+  const serveur = creerServeur({ ...reglages, registre, signataire, servicesReels, fichierEtat: process.env["PASSERELLE_ETAT"] ?? ETAT_PAR_DEFAUT, journal: (m) => console.log(m) });
   serveur.ecouter().catch((erreur: unknown) => {
     console.error(`Démarrage impossible : ${erreur instanceof Error ? erreur.message : String(erreur)}`);
     process.exit(1);

@@ -6,7 +6,7 @@
 import { ROUTE_ATELIER, RUBRIQUES } from "../contrats/ui-constantes.js";
 
 export type CleRubrique = (typeof RUBRIQUES)[number]["cle"];
-export type CleVue = CleRubrique | "parametres";
+export type CleVue = CleRubrique | "prospects" | "connaissances" | "parametres";
 
 export interface RouteAtelier {
   vue: CleVue;
@@ -16,6 +16,8 @@ export interface RouteAtelier {
 
 export const VUES: ReadonlyArray<{ cle: CleVue; libelle: string }> = [
   ...RUBRIQUES.map((r) => ({ cle: r.cle as CleVue, libelle: r.libelle })),
+  { cle: "prospects", libelle: "Prospects" },
+  { cle: "connaissances", libelle: "Connaissances" },
   { cle: "parametres", libelle: "Paramètres et diagnostic" },
 ];
 

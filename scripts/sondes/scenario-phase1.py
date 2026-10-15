@@ -106,7 +106,7 @@ def main():
     nom = sys.argv[2] if len(sys.argv) > 2 else "Sonde phase 1"
     _, soc = api("POST", "/companies", {"name": nom, "description": "Vérification du socle"}, attendu=(201,))
     S = soc["id"]
-    coord = agent(S, "Coordinateur (sonde)", "cmo", None)
+    coord = agent(S, "Coordinateur (sonde)", "ceo", None)
     prod = agent(S, "Producteur A (sonde)", "general", coord["id"], "producteur")
     prod2 = agent(S, "Producteur B (sonde)", "general", coord["id"], "producteur")
     contour = agent(S, "Contourneur (sonde)", "general", coord["id"], "contourneur")

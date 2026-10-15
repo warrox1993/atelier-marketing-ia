@@ -15,4 +15,7 @@ export * from "./escalier.js";
 export * from "./plafonds.js";
 export * from "./campagnes.js";
 export * from "./api.js";
+export * from "./referentiel.js";
+export * from "./prospection.js";
+export * from "./connaissances.js";
 export * from "./ui.js";

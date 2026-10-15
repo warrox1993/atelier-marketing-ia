@@ -45,3 +45,22 @@ export function lireReglages(env: NodeJS.ProcessEnv): ReglagesEnvironnement {
     port: lirePort(env["PASSERELLE_PORT"]),
   };
 }
+
+/**
+ * Lit PASSERELLE_SERVICES_REELS : liste de services (séparés par des virgules ou des espaces) servis par leur fournisseur
+ * RÉEL alors que la passerelle est en démonstration (mélange). Seuls les services de prospection à données locales
+ * (`osm`) sont permis : les autres fournisseurs réels exigent le mode réel complet (comptes et jetons de tiers).
+ */
+export const SERVICES_REELS_MELANGEABLES: readonly string[] = ["osm"];
+
+export function lireServicesReels(env: NodeJS.ProcessEnv): string[] {
+  const brut = env["PASSERELLE_SERVICES_REELS"]?.trim() ?? "";
+  if (brut === "") return [];
+  const noms = [...new Set(brut.split(/[\s,]+/).filter((n) => n !== ""))];
+  for (const nom of noms) {
+    if (!SERVICES_REELS_MELANGEABLES.includes(nom)) {
+      throw new Error(`PASSERELLE_SERVICES_REELS : service « ${nom} » non permis en mélange (permis : ${SERVICES_REELS_MELANGEABLES.join(", ")}).`);
+    }
+  }
+  return noms;
+}

@@ -149,6 +149,54 @@ sed -i "s|ne réessaie jamais à l'aveugle|réessaie si besoin|" "${d}/organisat
 "${PY[@]}" "${d}/scripts/bootstrap-organisation.py" generer > /dev/null
 attendre_refus "diffusion réelle sans l'interdiction de réessayer à l'aveugle" "${d}" "aucun nouvel essai à l'aveugle"
 
+# Contrats v1.6 (15/10/2026) : l'humain approuve l'empreinte de l'appel exact. Parcours complet exigé des rôles qui écrivent
+# (crm-conversion et contenus) : proposition par tache.appels.proposer, liste de révocation récente jointe à l'appel de la
+# passerelle, nouvelle approbation si la preuve est expirée ou révoquée, dépôt avec arguments et compte, jamais une réponse
+# d'écriture. Chaque cas retire UNE consigne dans une copie et attend le refus du vérificateur.
+cas_diffusion_v16() {
+  local nom="$1" agent="$2" expression="$3" motif="$4" d
+  d="$(copie "v16-${agent}-${nom// /-}")"
+  sed -i "${expression}" "${d}/organisation/agents/${agent}/AGENTS.md"
+  "${PY[@]}" "${d}/scripts/bootstrap-organisation.py" generer > /dev/null
+  attendre_refus "${agent} : ${nom}" "${d}" "agent ${agent} : consigne de diffusion réelle manquante dans AGENTS.md : ${motif}"
+}
+for agent in crm-conversion contenus; do
+  cas_diffusion_v16 "appel non proposé au serveur" "${agent}" 's|/appels`|/propositions`|g' "proposition de l'appel exact"
+  cas_diffusion_v16 "empreinte de l'appel non approuvée" "${agent}" 's|empreinte de CET appel|appel|g' "l'humain approuve l'empreinte"
+  cas_diffusion_v16 "liste de révocation non lue" "${agent}" 's|/preuves/revocations|/preuves/liste|g' "liste de révocation récente lue juste avant l'appel"
+  cas_diffusion_v16 "liste de révocation non jointe" "${agent}" 's|revocations_approbation|revocations|g' "liste de révocation jointe à l'appel d'outil"
+  cas_diffusion_v16 "fraîcheur de la liste non dite" "${agent}" 's|5 minutes|quelques minutes|g' "fraîcheur de la liste de révocation"
+  cas_diffusion_v16 "preuve expirée ou révoquée sans nouvelle approbation" "${agent}" 's|Preuve expirée ou révoquée : nouvelle approbation|Preuve expirée ou révoquée|g' "preuve expirée ou révoquée : nouvelle approbation de l'humain"
+  cas_diffusion_v16 "dépôt sans compte" "${agent}" 's|arguments` et `compte`|arguments`|g' "dépôt de données avec arguments et compte"
+  cas_diffusion_v16 "dépôt d'une réponse d'écriture permis" "${agent}" "s|JAMAIS la réponse d'un outil d'écriture|parfois la réponse d'un outil|g" "jamais le dépôt de la réponse d'un outil d'écriture"
+done
+
+# Ordre du parcours : la liste de révocation citée avant la proposition de l'appel est refusée.
+for agent in crm-conversion contenus; do
+  d="$(copie "v16-${agent}-desordre")"
+  sed -i '0,/^## Diffusion réelle : parcours complet$/s||## Diffusion réelle : parcours complet\n\nListe lue d'"'"'abord : /preuves/revocations puis revocations_approbation.|' "${d}/organisation/agents/${agent}/AGENTS.md"
+  "${PY[@]}" "${d}/scripts/bootstrap-organisation.py" generer > /dev/null
+  attendre_refus "${agent} : parcours de diffusion dans le désordre" "${d}" "agent ${agent} : parcours de diffusion réelle dans le désordre"
+done
+
+# Décision de l'opérateur du 15/10/2026 : Contenus publie (Facebook, Instagram, LinkedIn) sur approbation de l'appel exact,
+# mais jamais de message privé Facebook ; le parcours de diffusion est exigé pour lui comme pour crm-conversion.
+d="$(copie message-prive)"
+"${PY[@]}" - "${d}/organisation/registre/agents.json" <<'PY3'
+import json, sys
+p = sys.argv[1]
+r = json.load(open(p, encoding="utf-8"))
+del next(a for a in r["agents"] if a["slug"] == "contenus")["outilsBloques"]
+json.dump(r, open(p, "w", encoding="utf-8"), ensure_ascii=False, indent=2)
+PY3
+"${PY[@]}" "${d}/scripts/bootstrap-organisation.py" generer > /dev/null
+attendre_refus "message privé interdit pour Contenus" "${d}" "facebook_envoyer_message doit être bloqué"
+
+d="$(copie contenus-preuve)"
+sed -i 's|preuve_approbation|preuve|g' "${d}/organisation/agents/contenus/AGENTS.md"
+"${PY[@]}" "${d}/scripts/bootstrap-organisation.py" generer > /dev/null
+attendre_refus "Contenus : publication sans la preuve jointe à l'appel" "${d}" "agent contenus : consigne de diffusion réelle manquante dans AGENTS.md : preuve jointe"
+
 d="$(copie diffusion-lecture)"
 printf '\n## Diffusion réelle : parcours complet\n' >> "${d}/organisation/agents/mesure/AGENTS.md"
 "${PY[@]}" "${d}/scripts/bootstrap-organisation.py" generer > /dev/null
@@ -376,7 +424,7 @@ def lancer(*args):
     return code, sortie.getvalue()
 def ecritures(): n = len(etat["ecritures"]); return n
 
-# 1. Facebook (rôle Contenus, lecture) et HubSpot (CRM conversion, écriture sur accord) ouverts à tous.
+# 1. Facebook (rôle Contenus, écriture sur accord sauf message privé) et HubSpot (CRM conversion, écriture sur accord) ouverts à tous.
 connexion("cx-fb", "atelier-facebook", "Facebook (démonstration)")
 connexion("cx-crm", "atelier-hubspot", "HubSpot (démonstration)")
 connexion("cx-autre", "mcp-externe", "Connexion étrangère")  # ni carte ni boucle locale : ignorée
@@ -387,8 +435,12 @@ assert [i["targetId"] for i in etat["installs"]["cx-crm"]] == [ids["crm-conversi
 assert [x["targetId"] for x in etat["profils"]["cx-fb"]["bindings"]] == [ids["contenus"]], "accès natif non resserré"
 assert etat["installs"]["cx-autre"] == [{"targetType": "company", "targetId": CID}], "connexion étrangère modifiée"
 blocs = [p["name"] for p in etat["politiques"]]
-assert blocs == ["atelier-lecture-seule:cx-fb:contenus"], blocs  # CRM : écriture sur accord, pas de « block »
-print("1. connexions ouvertes à tous réservées aux rôles prévus (accès natif, installations, block de lecture) ; étrangère intacte")
+# Contenus écrit sur accord : seul le message privé est bloqué (par outil) ; CRM : écriture sur accord, aucun « block »
+assert blocs == ["atelier-outil-interdit:cx-fb:contenus:facebook_envoyer_message"], blocs
+bloc = etat["politiques"][0]
+assert bloc["policyType"] == "block" and bloc["selectors"] == {"connectionId": "cx-fb", "toolName": "facebook_envoyer_message"}, bloc
+assert bloc["conditions"] == {"actor": {"agentId": ids["contenus"]}}, bloc  # ne touche que Contenus, et pas facebook_publier
+print("1. connexions ouvertes à tous réservées aux rôles prévus (accès natif, installations, block par outil du message privé) ; étrangère intacte")
 # 2. Idempotence : le battement suivant n'écrit rien.
 avant = ecritures()
 code, sortie = lancer("assurer-connexions")
@@ -869,11 +921,11 @@ try:
     hierarchie = {a["name"]: a.get("reportsTo") for a in agents}
     if any(v not in (None, coord) for v in hierarchie.values()):
         raise SystemExit("hiérarchie : un agent rend compte à un autre que le coordinateur")
-    # 16 compétences du dépôt + 8 intégrées vendorisées par l'export + 8 réinstallées = 32.
-    ok = len(agents) == 11 and len(projets) == 2 and len(routines) == 3 and len(skills) == 32 \
+    # 19 compétences du dépôt + 8 intégrées vendorisées par l'export + 8 réinstallées = 35 (lot P10 : +3).
+    ok = len(agents) == 12 and len(projets) == 2 and len(routines) == 3 and len(skills) == 35 \
         and all(a.get("status") == "paused" for a in agents)
-    print("hiérarchie conservée :", sum(1 for v in hierarchie.values() if v) == 6)
-    if not ok or sum(1 for v in hierarchie.values() if v) != 6:
+    print("hiérarchie conservée :", sum(1 for v in hierarchie.values() if v) == 7)
+    if not ok or sum(1 for v in hierarchie.values() if v) != 7:
         raise SystemExit("aller-retour incomplet")
 finally:
     api.appel("DELETE", f"/companies/{cid}")
