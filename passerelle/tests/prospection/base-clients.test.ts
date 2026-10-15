@@ -136,6 +136,30 @@ describe("historique d'opportunités et étalonnage", () => {
     expect(e.find((s) => s.segment === "particulier_auto")?.etalonne).toBe(true);
     expect(e.find((s) => s.segment === "entreprise_rc_pro")?.etalonne).toBe(false);
   });
+
+  it("effectifs exacts par segment inchangés (auto 480 / 62, habitation 340 / 41, rc_pro 110 / 16)", () => {
+    const par = (nom: string) => e.find((s) => s.segment === nom);
+    expect([par("particulier_auto")?.prospects, par("particulier_auto")?.conversions]).toEqual([480, 62]);
+    expect([par("particulier_habitation")?.prospects, par("particulier_habitation")?.conversions]).toEqual([340, 41]);
+    expect([par("entreprise_rc_pro")?.prospects, par("entreprise_rc_pro")?.conversions]).toEqual([110, 16]);
+    expect(historique).toHaveLength(1_705);
+  });
+
+  it("le taux de conversion dépend du canal : bureau > devis en ligne > prospection par courriel", () => {
+    const taux = (canal: string): number => {
+      const l = historique.filter((h) => h.canal_origine === canal);
+      return l.filter((h) => h.issue === "gagnee").length / l.length;
+    };
+    expect(taux("bureau")).toBeGreaterThan(taux("devis_en_ligne"));
+    expect(taux("devis_en_ligne")).toBeGreaterThan(taux("prospection_courriel"));
+    // Ordre complet, croissant avec le score de démonstration du canal.
+    const ordre = ["prospection_courriel", "appel_sortant", "devis_en_ligne", "bureau", "recommandation"];
+    for (let i = 1; i < ordre.length; i++) expect(taux(ordre[i]!)).toBeGreaterThan(taux(ordre[i - 1]!));
+  });
+
+  it("déterminisme : deux constructions donnent exactement le même historique", () => {
+    expect(JSON.stringify(construireHistorique())).toBe(JSON.stringify(historique));
+  });
 });
 
 describe("variante « pièges »", () => {

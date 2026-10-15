@@ -186,20 +186,49 @@ const SEGMENTS: readonly SegmentHistorique[] = [
   { type: "entreprise", produit: "accidents_travail", total: 60, gagnees: 6 },
 ];
 const CANAUX_ORIGINE = ["devis_en_ligne", "recommandation", "prospection_courriel", "appel_sortant", "bureau"] as const;
+/**
+ * Taux de conversion FICTIFS par canal d'origine (démonstration uniquement), croissants avec le score de démonstration du canal
+ * (`SCORE_DEMO_CANAL` côté plugin : recommandation 70, bureau 60, devis en ligne 50, appel sortant 40, prospection par courriel 30).
+ * Ils servent de poids relatifs : le nombre de gagnées par segment reste exact (seuils d'étalonnage), mais les gagnées se
+ * répartissent entre canaux au prorata de ces taux (les taux mesurés sont donc proportionnels, à l'échelle du segment près). Aucune donnée réelle.
+ */
+export const TAUX_CONVERSION_DEMO_CANAL: Readonly<Record<(typeof CANAUX_ORIGINE)[number], number>> = {
+  recommandation: 0.30, bureau: 0.25, devis_en_ligne: 0.12, appel_sortant: 0.08, prospection_courriel: 0.05,
+};
 const MOTIFS_PERTE = ["prix", "concurrent", "pas_de_reponse", "pas_de_besoin", "delai_trop_long"] as const;
 const choisirDans = <T>(liste: readonly T[], ...cles: (string | number)[]): T => liste[Math.min(liste.length - 1, Math.floor(alea(...k(...cles)) * liste.length))]!;
+
+/**
+ * Répartit exactement `nombre` gagnées entre les canaux au prorata de (effectif du canal x taux fictif du canal), méthode du plus
+ * fort reste, puis choisit dans chaque canal les opportunités de plus petite clé pseudo-aléatoire (déterministe).
+ */
+function choisirGagnees(nombre: number, canaux: readonly (typeof CANAUX_ORIGINE)[number][], segment: string): Set<number> {
+  const poids = CANAUX_ORIGINE.map((c) => canaux.filter((x) => x === c).length * TAUX_CONVERSION_DEMO_CANAL[c]);
+  const somme = poids.reduce((t, p) => t + p, 0);
+  const brut = poids.map((p) => (p / somme) * nombre);
+  const quota = brut.map(Math.floor);
+  const parReste = brut.map((b, j) => ({ j, reste: b - Math.floor(b) })).sort((x, y) => y.reste - x.reste || x.j - y.j);
+  const manque = nombre - quota.reduce((t, q) => t + q, 0);
+  for (let r = 0; r < manque; r++) quota[parReste[r]!.j]!++;
+  const gagnees = new Set<number>();
+  CANAUX_ORIGINE.forEach((c, j) => {
+    const indices = canaux.flatMap((x, i) => (x === c ? [i] : [])).sort((a, b) => alea(...k("gagne", segment, a)) - alea(...k("gagne", segment, b)) || a - b);
+    indices.slice(0, quota[j]).forEach((i) => gagnees.add(i));
+  });
+  return gagnees;
+}
 
 export function construireHistorique(): LigneHistorique[] {
   const lignes: Omit<LigneHistorique, "identifiant_opportunite">[] = [];
   for (const s of SEGMENTS) {
     const segment = `${s.type}_${s.produit}`;
-    const rang = [...Array(s.total).keys()].sort((a, b) => alea(...k("gagne", segment, a)) - alea(...k("gagne", segment, b)));
-    const gagnees = new Set(rang.slice(0, s.gagnees));
+    const canaux = [...Array(s.total).keys()].map((i) => choisirDans(CANAUX_ORIGINE, "canal", segment, i));
+    const gagnees = choisirGagnees(s.gagnees, canaux, segment);
     for (let i = 0; i < s.total; i++) {
       const creation = jourAleatoire("2025-01-01", "2026-08-31", "creation", segment, i);
       const gagne = gagnees.has(i);
       lignes.push({
-        segment, type_cible: s.type, produit: s.produit, canal_origine: choisirDans(CANAUX_ORIGINE, "canal", segment, i), date_creation: creation,
+        segment, type_cible: s.type, produit: s.produit, canal_origine: canaux[i]!, date_creation: creation,
         date_cloture: plusJours(creation, 2 + Math.floor(alea(...k("duree", segment, i)) * 88)), issue: gagne ? "gagnee" : "perdue",
         motif_perte: gagne ? "" : choisirDans(MOTIFS_PERTE, "motif", segment, i),
       });

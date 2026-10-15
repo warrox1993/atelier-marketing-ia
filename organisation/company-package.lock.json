@@ -49,7 +49,7 @@
     },
     "controle-couverture": {
       "version": "1.0.0",
-      "sha256": "d463ae5f57f91301fc8841759c6c324d9a9da1b30b80f55ec370db0cac575fa7",
+      "sha256": "8d60e253de6c6931d24f78d6e71341bd4cb81ad6545ba11a2027f58ab3455dd2",
       "fichiers": [
         "SKILL.md",
         "references/schema-verdict.md"

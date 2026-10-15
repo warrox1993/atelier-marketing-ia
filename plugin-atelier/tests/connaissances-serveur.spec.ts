@@ -121,11 +121,16 @@ function stockMemoire() {
   return { stock, t };
 }
 
-function banc() {
+function banc(o: { sourcesWeb?: string[] } = {}) {
   const b = creerBanc({ modeEntreprise: "demonstration" });
   const k = stockMemoire();
   const base = new Proxy(b.base as unknown as Ligne, {
-    get: (cible, cle) => (cle === "lireReglages" ? async () => ({ modeParDefaut: "demonstration", maxRunsActifs: 3, maxCyclesCorrection: 3, retentionJours: 365, plafondPub: null }) : cible[cle as string]),
+    get: (cible, cle) =>
+      cle === "lireReglages"
+        ? async () => ({ modeParDefaut: "demonstration", maxRunsActifs: 3, maxCyclesCorrection: 3, retentionJours: 365, plafondPub: null })
+        : cle === "sourcesPourGarde" && o.sourcesWeb
+          ? async () => o.sourcesWeb!.map((url, i) => ({ id: `s${i}`, mode: "reel", provenance: "web", url, service: null, outil: null, chiffres: [] }))
+          : cible[cle as string],
   }) as unknown as BaseAtelier;
   const aiguillage = creerAiguillage(b.ctx, creerServices(b.ctx, { base, connaissances: { stock: k.stock, dossierDemo: DOSSIER_DEMO, maintenant: () => MAINTENANT } }));
   async function appeler(routeKey: string, o: { params?: Record<string, string>; query?: Record<string, string | string[]>; body?: unknown; companyId?: string; agent?: boolean }) {
@@ -300,6 +305,19 @@ describe("porte : controlerCitationsConnaissances branché sur l'évaluation", (
     expect(ev.decision).toBe("REFUS");
     const m = ev.motifs.find((x) => x.code === "chiffre_offre_sans_source");
     expect(m?.emplacement).toBeTruthy();
+  });
+
+  it("chiffre d'offre appuyé sur une source web ENREGISTRÉE pour la tâche : accepté ; URL non enregistrée : REFUS", async () => {
+    const enregistree = banc({ sourcesWeb: ["https://www.exemple-officiel.invalid/tarifs"] });
+    enregistree.tacheSousPorte();
+    await enregistree.importer({ texte: TARIF });
+    enregistree.livrable("# Offre auto\n\nLa prime moyenne du marché est de 648 € (https://www.exemple-officiel.invalid/tarifs).");
+    expect((await enregistree.evaluer()).motifs.map((m) => m.code)).not.toContain("chiffre_offre_sans_source");
+    const inventee = banc({ sourcesWeb: [] });
+    inventee.tacheSousPorte();
+    await inventee.importer({ texte: TARIF });
+    inventee.livrable("# Offre auto\n\nLa prime moyenne du marché est de 648 € (https://www.exemple-officiel.invalid/tarifs).");
+    expect((await inventee.evaluer()).motifs.map((m) => m.code)).toContain("chiffre_offre_sans_source");
   });
 
   it("entreprise sans connaissances ni citation : la règle ne s'applique pas (comportement antérieur)", async () => {

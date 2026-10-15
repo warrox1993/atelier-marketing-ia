@@ -613,6 +613,106 @@ function EtatBaseClients({ etat, erreur, chargement, onReessayer }: { etat: Etat
   );
 }
 
+/** Réponse de `ventes-croisees.lister` : opportunités sous pseudonyme, jamais de coordonnées. */
+export interface VentesCroisees {
+  mode: "demonstration" | "reel";
+  origineRegles: "client" | "demonstration" | "aucune";
+  regles: Array<{ typeClient: "particulier" | "entreprise"; detenue: string; proposee: string; decidePar: string }>;
+  clients: number;
+  opportunites: Array<{
+    pseudonyme: string;
+    typeClient: "particulier" | "entreprise";
+    detenus: string[];
+    proposes: string[];
+    codePostal: string | null;
+    commune: string | null;
+    canauxPermis: string[];
+    canaux: Array<{ canal: string; permis: boolean; motif: string }>;
+  }>;
+}
+
+const LIBELLES_CANAUX: Readonly<Record<string, string>> = { courriel: "Courriel", sms: "SMS", telephone: "Téléphone", courrier: "Courrier" };
+const offre = (code: string) => code.replace(/-/gu, " ");
+
+/** Opportunités de vente croisée de la base importée, avec le canal que les bases légales permettent. */
+function TableauVentesCroisees({ version }: { version: number }) {
+  const { companyId } = useHostContext();
+  const [etat, setEtat] = useState<{ data: VentesCroisees | null; erreur: unknown; chargement: boolean }>({ data: null, erreur: null, chargement: true });
+  const [essai, setEssai] = useState(0);
+
+  useEffect(() => {
+    if (!companyId) return;
+    let annule = false;
+    setEtat((e) => ({ ...e, erreur: null, chargement: true }));
+    appelRoute<VentesCroisees>("GET", `/ventes-croisees?companyId=${encodeURIComponent(companyId)}`)
+      .then((data) => !annule && setEtat({ data: data && Array.isArray(data.opportunites) ? data : null, erreur: null, chargement: false }))
+      .catch((erreur: unknown) => !annule && setEtat({ data: null, erreur, chargement: false }));
+    return () => {
+      annule = true;
+    };
+  }, [companyId, version, essai]);
+
+  const d = etat.data;
+  const regles = d?.regles.map((r) => `${offre(r.detenue)} sans ${offre(r.proposee)} (${r.typeClient})`).join(", ");
+  return (
+    <Section titre="Ventes croisées" aide="Clients qui détiennent un produit sans le produit complémentaire. Les clients restent sous pseudonyme ; le canal indiqué est celui que les bases légales permettent.">
+      {etat.erreur ? <EtatErreur erreur={etat.erreur} onReessayer={() => setEssai((x) => x + 1)} contexte="ventes croisées" /> : null}
+      {etat.chargement && !d && !etat.erreur ? <p className="atl-attenue">Calcul des ventes croisées.</p> : null}
+      {d ? (
+        <>
+          {d.mode === "demonstration" ? <MentionDemo compacte /> : null}
+          <p className="atl-sous">
+            {d.origineRegles === "client" ? `Règles du client : ${regles}.` : d.origineRegles === "demonstration" ? `Règles de démonstration : ${regles}.` : "Aucune règle de vente croisée enregistrée par le client."}
+          </p>
+          {d.opportunites.length === 0 ? (
+            <p>{d.clients === 0 ? "Aucune base clients chargée : importez-en une pour voir les ventes croisées." : "Aucune opportunité dans la base actuelle."}</p>
+          ) : (
+            <table className="atl-table">
+              <caption className="atl-sr">Opportunités de vente croisée, client sous pseudonyme</caption>
+              <thead>
+                <tr>
+                  <th scope="col">Client</th>
+                  <th scope="col">Détient</th>
+                  <th scope="col">À proposer</th>
+                  <th scope="col">Canal permis</th>
+                </tr>
+              </thead>
+              <tbody>
+                {d.opportunites.map((o) => (
+                  <tr key={`${o.pseudonyme}-${o.proposes.join("+")}`}>
+                    <th scope="row" data-libelle="Client">
+                      {o.pseudonyme}
+                      <span className="atl-sous">
+                        {o.typeClient === "particulier" ? "Particulier" : "Entreprise"}
+                        {o.commune ? `, ${o.commune}` : ""}
+                      </span>
+                    </th>
+                    <td data-libelle="Détient">{o.detenus.map(offre).join(", ")}</td>
+                    <td data-libelle="À proposer">{o.proposes.map(offre).join(", ")}</td>
+                    <td data-libelle="Canal permis">
+                      {o.canauxPermis.length > 0 ? (
+                        o.canauxPermis.map((c) => LIBELLES_CANAUX[c] ?? c).join(", ")
+                      ) : (
+                        <>
+                          Aucun
+                          <span className="atl-sous">{o.canaux.find((c) => c.canal === "courriel")?.motif ?? o.canaux[0]?.motif ?? ""}</span>
+                        </>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+          <p className="atl-sous">
+            {nombre(d.opportunites.length)} opportunité{d.opportunites.length > 1 ? "s" : ""} sur {nombre(d.clients)} clients.
+          </p>
+        </>
+      ) : null}
+    </Section>
+  );
+}
+
 export function BaseClients() {
   const { companyId } = useHostContext();
   const [version, setVersion] = useState(0);
@@ -635,6 +735,7 @@ export function BaseClients() {
     <>
       <EtatBaseClients etat={etat.data} erreur={etat.erreur} chargement={etat.chargement} onReessayer={rafraichir} />
       <ImportGuide etatBase={etat.data} onChange={rafraichir} />
+      <TableauVentesCroisees version={version} />
       <Opposition />
       <SuppressionBase onChange={rafraichir} />
     </>

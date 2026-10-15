@@ -25,13 +25,24 @@ const vectoriseurCtx = await esbuild.context({
   external: externesVectorisation,
   banner: banniereRequire,
 });
+// Fil isolé de l'extraction des documents (worker_threads, mémoire limitée, arrêt net à l'échéance) :
+// chargé par `extraireDocument` à côté du worker (dist/extraction-worker.js).
+const extractionCtx = await esbuild.context({
+  ...presets.esbuild.worker,
+  entryPoints: ["src/connaissances/extraction/extraction-worker.ts"],
+  outdir: undefined,
+  outfile: "dist/extraction-worker.js",
+  // pdfjs n'est pas empaqueté : son « fake worker » (pdf.worker.mjs) doit rester à côté de son fichier.
+  external: [...presets.esbuild.worker.external, ...externesVectorisation, "pdfjs-dist", "pdfjs-dist/*"],
+  banner: banniereRequire,
+});
 const manifestCtx = await esbuild.context(presets.esbuild.manifest);
 const uiCtx = await esbuild.context(presets.esbuild.ui);
 
 if (watch) {
-  await Promise.all([workerCtx.watch(), vectoriseurCtx.watch(), manifestCtx.watch(), uiCtx.watch()]);
-  console.log("esbuild watch mode enabled for worker, manifest, and ui");
+  await Promise.all([workerCtx.watch(), vectoriseurCtx.watch(), extractionCtx.watch(), manifestCtx.watch(), uiCtx.watch()]);
+  console.log("esbuild watch mode enabled for worker, extraction worker, manifest, and ui");
 } else {
-  await Promise.all([workerCtx.rebuild(), vectoriseurCtx.rebuild(), manifestCtx.rebuild(), uiCtx.rebuild()]);
-  await Promise.all([workerCtx.dispose(), vectoriseurCtx.dispose(), manifestCtx.dispose(), uiCtx.dispose()]);
+  await Promise.all([workerCtx.rebuild(), vectoriseurCtx.rebuild(), extractionCtx.rebuild(), manifestCtx.rebuild(), uiCtx.rebuild()]);
+  await Promise.all([workerCtx.dispose(), vectoriseurCtx.dispose(), extractionCtx.dispose(), manifestCtx.dispose(), uiCtx.dispose()]);
 }

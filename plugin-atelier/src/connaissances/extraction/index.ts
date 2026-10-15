@@ -3,11 +3,21 @@
  *
  * Entrée : un nom de fichier et ses octets. Sortie : des passages prêts à vectoriser (lots suivants),
  * ou un refus motivé. Rien n'est écrit, aucune base ni route n'est touchée.
+ *
+ * Isolement : l'analyse tourne dans un fil `worker_threads` (`extraction-worker.ts`) limité en
+ * mémoire et arrêté net à l'échéance. Un `Promise.race` dans le même fil n'interrompait pas un calcul
+ * synchrone (motif à retour arrière, décompression) : le délai était inopérant.
  */
+import { randomUUID } from "node:crypto";
+import { mkdirSync, renameSync } from "node:fs";
+import { createRequire } from "node:module";
+import { join } from "node:path";
+import { fileURLToPath } from "node:url";
+import { Worker } from "node:worker_threads";
 import { injectionsSignalees } from "../../serveur/contenu-externe.js";
 import { extraireDocx, extraireXlsx, verifierArchive } from "./bureautique.js";
 import { decouperEnPassages, type BlocTexte, type ParametresDecoupage, type Passage } from "./decoupage.js";
-import { type LimitesExtraction, RefusExtraction, resoudreLimites } from "./limites.js";
+import { type LimitesExtraction, type MotifRefus, RefusExtraction, resoudreLimites } from "./limites.js";
 import { detecterLangue, type Langue } from "./normalisation.js";
 import { extrairePdf } from "./pdf.js";
 import { extraireHtml, extraireMarkdown, extraireTexteBrut, type TexteStructure } from "./texte.js";
@@ -87,11 +97,8 @@ async function extraireBlocs(
   return { blocs: s.blocs, nbPages: null, commentaires: s.commentaires };
 }
 
-export async function extraireDocument(
-  doc: DocumentEntrant,
-  options: { limites?: Partial<LimitesExtraction>; decoupage?: Partial<ParametresDecoupage> } = {},
-): Promise<ResultatExtraction> {
-  const limites = resoudreLimites(options.limites);
+/** Contrôles rapides faits avant toute analyse : format, taille, signature. */
+function controlesPrealables(doc: DocumentEntrant, limites: LimitesExtraction): FormatDocument {
   const format = detecterFormat(doc.nom);
   if (!format) {
     throw new RefusExtraction("format_non_supporte", `Format non pris en charge : « ${doc.nom} ». Formats acceptés : PDF, DOCX, XLSX, Markdown, texte, HTML.`);
@@ -101,18 +108,135 @@ export async function extraireDocument(
     throw new RefusExtraction("fichier_trop_volumineux", `Fichier de ${(doc.contenu.byteLength / 1_048_576).toFixed(1)} Mo : la limite est de ${(limites.octetsMax / 1_048_576).toFixed(1)} Mo.`);
   }
   verifierSignature(format, doc.contenu);
+  return format;
+}
 
-  const echeance = Date.now() + limites.delaiMs;
-  let minuteur: NodeJS.Timeout | undefined;
-  const delai = new Promise<never>((_resolu, rejete) => {
-    minuteur = setTimeout(() => rejete(new RefusExtraction("delai_depasse", `Extraction interrompue : durée maximale de ${limites.delaiMs / 1000} s dépassée.`)), limites.delaiMs);
-  });
-  let extrait;
-  try {
-    extrait = await Promise.race([extraireBlocs(doc, format, limites, echeance), delai]);
-  } finally {
-    clearTimeout(minuteur);
+export interface OptionsExtraction {
+  limites?: Partial<LimitesExtraction>;
+  decoupage?: Partial<ParametresDecoupage>;
+}
+
+/** Données passées au fil isolé (`workerData`). */
+export interface TacheExtraction {
+  nom: string;
+  contenu: Uint8Array;
+  limites: LimitesExtraction;
+  decoupage: Partial<ParametresDecoupage> | undefined;
+}
+
+/** Message rendu par le fil isolé. */
+export type MessageExtraction =
+  | { type: "resultat"; resultat: ResultatExtraction }
+  | { type: "refus"; code: MotifRefus; message: string }
+  | { type: "erreur"; message: string };
+
+/** En-tête du fichier empaqueté : `require` natif pour les paquets CommonJS (mammoth…), comme `esbuild.config.mjs`. */
+const BANNIERE_REQUIRE = "import { createRequire as __creerRequire } from 'node:module'; const require = __creerRequire(import.meta.url);";
+
+/**
+ * Paquets jamais empaquetés dans le fil isolé : pdfjs charge son « fake worker » (`pdf.worker.mjs`)
+ * à côté de son propre fichier, ce qu'un paquet empaqueté ne retrouve plus. Résolu à l'exécution
+ * depuis `node_modules` (dépendance d'exécution du plugin).
+ */
+export const EXTERNES_FIL_EXTRACTION = ["pdfjs-dist", "pdfjs-dist/*"] as const;
+
+let cheminWorkerMemorise: string | null = null;
+
+/**
+ * Chemin du fil isolé, résolu depuis `import.meta.url` : `extraction-worker.js` à côté du module une
+ * fois empaqueté (`dist/`). Depuis les sources (tests), le même point d'entrée est empaqueté une fois
+ * par processus à la volée par esbuild (dépendance de développement) dans `node_modules/.cache/` du
+ * plugin (pour résoudre pdfjs) : le fil isolé tourne alors exactement comme en production.
+ */
+function cheminWorker(): string {
+  if (cheminWorkerMemorise) return cheminWorkerMemorise;
+  const courant = import.meta.url;
+  if (!courant.includes("/src/connaissances/extraction/")) {
+    cheminWorkerMemorise = fileURLToPath(new URL("./extraction-worker.js", courant));
+    return cheminWorkerMemorise;
   }
+  const dossier = fileURLToPath(new URL("../../../node_modules/.cache/atelier-extraction/", courant));
+  mkdirSync(dossier, { recursive: true });
+  const provisoire = join(dossier, `extraction-worker-${process.pid}-${randomUUID()}.mjs`);
+  const final = join(dossier, "extraction-worker.mjs");
+  // Nom calculé : esbuild n'essaie pas d'empaqueter esbuild lui-même dans `dist/worker.js`.
+  const esbuild = createRequire(courant)(["es", "build"].join("")) as typeof import("esbuild");
+  esbuild.buildSync({
+    entryPoints: [fileURLToPath(new URL("./extraction-worker.ts", courant))],
+    outfile: provisoire,
+    bundle: true,
+    format: "esm",
+    platform: "node",
+    target: "node24",
+    logLevel: "error",
+    external: [...EXTERNES_FIL_EXTRACTION],
+    banner: { js: BANNIERE_REQUIRE },
+  });
+  // Renommage atomique : un autre processus de test ne lit jamais un fichier à moitié écrit.
+  renameSync(provisoire, final);
+  cheminWorkerMemorise = final;
+  return final;
+}
+
+/**
+ * Extrait le texte d'un document et le découpe en passages, dans un fil isolé :
+ * - mémoire du fil limitée à `limites.memoireMaxMo` (un dépassement donne le refus `memoire_depassee`) ;
+ * - fil arrêté net (`terminate`) à `limites.delaiMs` (refus `delai_depasse`), même en plein calcul.
+ */
+export async function extraireDocument(doc: DocumentEntrant, options: OptionsExtraction = {}): Promise<ResultatExtraction> {
+  const limites = resoudreLimites(options.limites);
+  controlesPrealables(doc, limites);
+  const tache: TacheExtraction = { nom: doc.nom, contenu: doc.contenu, limites, decoupage: options.decoupage };
+  const chemin = cheminWorker();
+  return new Promise<ResultatExtraction>((resoudre, rejeter) => {
+    let fini = false;
+    const worker = new Worker(chemin, {
+      workerData: tache,
+      resourceLimits: { maxOldGenerationSizeMb: limites.memoireMaxMo, maxYoungGenerationSizeMb: 64, stackSizeMb: 4 },
+    });
+    const terminer = (issue: () => void): void => {
+      if (fini) return;
+      fini = true;
+      clearTimeout(minuteur);
+      void worker.terminate().catch(() => undefined);
+      issue();
+    };
+    const minuteur = setTimeout(() => {
+      terminer(() => rejeter(new RefusExtraction("delai_depasse", `Extraction interrompue : durée maximale de ${limites.delaiMs / 1000} s dépassée.`)));
+    }, limites.delaiMs);
+    worker.once("message", (m: MessageExtraction) => {
+      terminer(() => {
+        if (m.type === "resultat") resoudre(m.resultat);
+        else if (m.type === "refus") rejeter(new RefusExtraction(m.code, m.message));
+        else rejeter(new Error(m.message));
+      });
+    });
+    worker.once("error", (e: Error & { code?: string }) => {
+      terminer(() => {
+        if (e.code === "ERR_WORKER_OUT_OF_MEMORY") {
+          rejeter(new RefusExtraction("memoire_depassee", `Document trop lourd à analyser : mémoire maximale de ${limites.memoireMaxMo} Mo dépassée.`));
+        } else rejeter(new RefusExtraction("fichier_illisible", "Extraction impossible : le document a fait échouer l'analyse."));
+      });
+    });
+    worker.once("exit", (code) => {
+      terminer(() => rejeter(new RefusExtraction("fichier_illisible", `Extraction interrompue sans résultat (code ${code}).`)));
+    });
+  });
+}
+
+/**
+ * Extraction dans le fil courant. Réservée au fil isolé (`extraction-worker.ts`) : tout appelant
+ * passe par `extraireDocument`.
+ */
+export async function extraireDocumentDansLeFil(
+  doc: DocumentEntrant,
+  options: { limites?: Partial<LimitesExtraction>; decoupage?: Partial<ParametresDecoupage> } = {},
+): Promise<ResultatExtraction> {
+  const limites = resoudreLimites(options.limites);
+  const format = controlesPrealables(doc, limites);
+  // Les contrôles d'échéance internes (par page, par feuille) complètent l'arrêt net du fil isolé.
+  const echeance = Date.now() + limites.delaiMs;
+  const extrait = await extraireBlocs(doc, format, limites, echeance);
 
   const total = extrait.blocs.reduce((s, b) => s + b.texte.length, 0);
   if (total > limites.caracteresMax) {

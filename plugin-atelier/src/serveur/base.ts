@@ -1148,11 +1148,18 @@ export function creerBase(db: Db) {
     return r ? { version: Number(r.version), poids: objet(r.poids) as Record<string, number> } : null;
   }
 
-  /** Renvoi au référentiel enregistré sur la campagne (ou null) et dernière version de la marque (ou null). */
+  /**
+   * Renvoi au référentiel enregistré sur la campagne (ou null), dernière version de la marque (ou null) et
+   * zones de ses établissements (codes postaux, communes), pour le critère B2C « zone desservie ».
+   */
   async function referentielProspection(companyId: string, campagneId: string | null) {
     const [c] = campagneId ? await q(`select referentiel from ${ns}.campagnes where company_id = $1 and id = $2`, [companyId, campagneId]) : [];
-    const [m] = await q(`select max(version) as version from ${ns}.marques where company_id = $1`, [companyId]);
-    return { renvoi: c?.referentiel == null ? null : objet(c.referentiel), versionMarque: m?.version == null ? null : Number(m.version) };
+    const [m] = await q(`select version, etablissements from ${ns}.marques where company_id = $1 order by version desc limit 1`, [companyId]);
+    const etablissements = tableau<Record<string, unknown>>(m?.etablissements).map((e) => ({
+      codesPostaux: Array.isArray(e.codesPostaux) ? e.codesPostaux.filter((x): x is string => typeof x === "string") : [],
+      communes: Array.isArray(e.communes) ? e.communes.filter((x): x is string => typeof x === "string") : [],
+    }));
+    return { renvoi: c?.referentiel == null ? null : objet(c.referentiel), versionMarque: m?.version == null ? null : Number(m.version), etablissements };
   }
 
   /** Prospect validé par le contrat `Prospect` (l'appelant le vérifie avant). Score et bases légales vont dans leurs tables. */
@@ -1337,6 +1344,34 @@ export function creerBase(db: Db) {
     };
   }
 
+  /** Règles de vente croisée enregistrées par le client (table `regles_ventes_croisees`). */
+  async function reglesVentesCroisees(companyId: string) {
+    return (await q(`select type_client, detenue, proposee, decide_par, decide_le from ${ns}.regles_ventes_croisees where company_id = $1 order by type_client, detenue, proposee`, [companyId])).map((r) => ({
+      companyId, typeClient: String(r.type_client) as "particulier" | "entreprise", detenue: String(r.detenue), proposee: String(r.proposee), decidePar: String(r.decide_par), decideLe: iso(r.decide_le),
+    }));
+  }
+
+  /**
+   * Clients de la base (forme `ClientBase`, identifiants directs toujours chiffrés) avec leurs empreintes,
+   * pour les ventes croisées ; au plus `limite` clients, les plus anciens d'abord.
+   */
+  async function clientsPourVentesCroisees(companyId: string, limite = 5000) {
+    const lignes = await q(
+      `select c.*, c.debut_contrat::text as debut_contrat_texte, coalesce((select jsonb_agg(jsonb_build_object('type', e.type, 'valeur', e.empreinte)) from ${ns}.clients_empreintes e where e.client_id = c.id and e.company_id = c.company_id), '[]'::jsonb) as empreintes_client
+       from ${ns}.clients c where c.company_id = $1 order by c.cree_le, c.id limit $2`,
+      [companyId, limite],
+    );
+    return lignes.map((r) => ({
+      id: String(r.id), companyId, importId: r.import_id == null ? null : String(r.import_id), typeClient: String(r.type_client) as "particulier" | "entreprise",
+      etablissement: r.etablissement == null ? null : String(r.etablissement), entites: tableau<string>(r.entites), segments: tableau<string>(r.segments), pseudonyme: String(r.pseudonyme),
+      contrats: tableau(r.contrats) as never[], donneesChiffrees: objet(r.donnees_chiffrees) as Record<string, string>, empreintes: tableau<{ type: string; valeur: string }>(r.empreintes_client) as never[],
+      entreprise: r.entreprise == null ? null : String(r.entreprise), numeroBce: r.numero_bce == null ? null : String(r.numero_bce), codePostal: r.code_postal == null ? null : String(r.code_postal),
+      commune: r.commune == null ? null : String(r.commune), produitsDetenus: tableau<string>(r.produits_detenus), debutContrat: r.debut_contrat_texte == null ? null : String(r.debut_contrat_texte),
+      statut: String(r.statut) as "actif" | "ancien", consentements: objet(r.consentements) as { courriel: boolean | null; sms: boolean | null; telephone: boolean | null },
+      mode: String(r.mode) as "demonstration" | "reel", creeLe: iso(r.cree_le),
+    }));
+  }
+
   /** Suppression de la base de clients (clients, contrats, empreintes, imports) ; les oppositions restent. */
   async function supprimerBaseClients(companyId: string) {
     const clients = (await x(`delete from ${ns}.clients where company_id = $1`, [companyId])).rowCount;
@@ -1443,7 +1478,7 @@ export function creerBase(db: Db) {
     prospectsParIdentifiants, lireProspect, empreintesProspectsEnBase, oppositionsPour, clientsActuelsPour, dncmPour, clientExiste, clientParEmpreinte, poidsScoreCourant,
     referentielProspection, insererProspect, majProspect, exclureProspect, ajouterEmpreintesProspect, prospectsAvecEmpreinte, insererScoreProspect,
     detailsProspects, listerProspects, insererOpposition, lireOpposition,
-    insererImportBaseClients, insererClients, etatBaseClients, supprimerBaseClients, insererEtalonnage, issuesPourEtalonnage, scoresCourantsCible, insererScoreMesure,
+    insererImportBaseClients, insererClients, etatBaseClients, supprimerBaseClients, reglesVentesCroisees, clientsPourVentesCroisees, insererEtalonnage, issuesPourEtalonnage, scoresCourantsCible, insererScoreMesure,
     lireExportCrmParCle, insererExportCrm,
   };
 }

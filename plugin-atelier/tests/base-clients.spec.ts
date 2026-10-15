@@ -275,7 +275,9 @@ describe("préparation de l'import", () => {
     const r = preparerImportBaseClients(entree("csv", csv(COLONNES, LIGNES)), nouvellesCles(), ctx());
     expect(r.ok).toBe(true);
     if (!r.ok) return;
-    const json = JSON.stringify(r);
+    // Les valeurs chiffrées (chv1.…) et les empreintes (64 hex) sont aléatoires : « 0470 » peut y apparaître
+    // par hasard (environ 1 fois sur 70). On les retire avant de chercher une fuite EN CLAIR.
+    const json = JSON.stringify(r).replace(/chv1\.[A-Za-z0-9_.-]+/gu, "«chiffré»").replace(/[0-9a-f]{64}/gu, "«empreinte»");
     for (const secret of ["Dupuis", "Alice", "Alice.Dupuis@exemple.invalid", "alice.dupuis", "0470", "+32470", "rue Fictive", "C-001", "Bruno", "bruno@exemple", "222 33 44", "Inventée", "Claire", "pas-un-courriel"]) {
       expect(json, `fuite de « ${secret} »`).not.toContain(secret);
     }

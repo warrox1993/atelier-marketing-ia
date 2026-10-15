@@ -18,6 +18,10 @@ export interface LimitesExtraction {
   decompresseOctetsMax: number;
   /** Nombre maximal de lignes lues par feuille XLSX. */
   lignesParFeuilleMax: number;
+  /** Nombre maximal de caractères de texte lus sur une seule page de PDF. */
+  caracteresParPageMax: number;
+  /** Mémoire maximale (tas V8, en Mo) du fil d'exécution isolé qui fait l'extraction. */
+  memoireMaxMo: number;
 }
 
 export const LIMITES_PAR_DEFAUT: Readonly<LimitesExtraction> = Object.freeze({
@@ -25,8 +29,10 @@ export const LIMITES_PAR_DEFAUT: Readonly<LimitesExtraction> = Object.freeze({
   pagesMax: 300,
   delaiMs: 30_000,
   caracteresMax: 5_000_000,
-  decompresseOctetsMax: 100 * 1024 * 1024,
+  decompresseOctetsMax: 20 * 1024 * 1024,
   lignesParFeuilleMax: 20_000,
+  caracteresParPageMax: 200_000,
+  memoireMaxMo: 512,
 });
 
 export type MotifRefus =
@@ -39,7 +45,8 @@ export type MotifRefus =
   | "delai_depasse"
   | "pdf_scanne"
   | "document_protege"
-  | "fichier_illisible";
+  | "fichier_illisible"
+  | "memoire_depassee";
 
 export class RefusExtraction extends Error {
   readonly code: MotifRefus;

@@ -369,7 +369,7 @@ class H(BaseHTTPRequestHandler):
     def do_GET(self):
         u = urllib.parse.urlparse(self.path).path; q = u[len("/api"):]
         if q == "/companies":
-            return self.rep(200, [{"id": CID, "name": ent["nom"], "description": ent["description"]}] if etat["entreprise"] else [])
+            return self.rep(200, [{"id": CID, "name": etat.get("nom", ent["nom"]), "description": etat.get("description", ent["description"])}] if etat["entreprise"] else [])
         if q == f"/companies/{CID}/agents":
             return self.rep(200, [dict(a) for a in etat["agents"].values()])
         if q == f"/companies/{CID}/tools/policies": return self.rep(200, {"policies": etat["politiques"]})
@@ -479,6 +479,23 @@ code, sortie = lancer("assurer-connexions")
 assert code == 2 and "agents du registre absents" in sortie and "veille" in sortie, (code, sortie)
 etat["agents"]["veille"] = sauve
 print("6. sans organisation : rien à faire ; agent du registre absent : erreur claire (code 2)")
+# 6b. Lancée par le Gardien, la commande agit sur l'entreprise de l'agent (PAPERCLIP_COMPANY_ID),
+#     même si son nom n'est pas celui du registre (seconde entreprise de démonstration) ;
+#     une entreprise inconnue est une erreur claire, jamais un repli sur la recherche par nom.
+etat["nom"], etat["description"] = "Autre entreprise (démonstration)", "sans le marqueur du registre"
+code, sortie = lancer("assurer-connexions")
+assert code == 0 and "rien à faire" in sortie, (code, sortie)  # à la main : recherche par nom, rien trouvé
+os.environ["PAPERCLIP_COMPANY_ID"] = CID
+try:
+    code, sortie = lancer("assurer-connexions")
+    assert code == 0 and "écriture(s) sur 3 connexion(s)" in sortie, (code, sortie)
+    os.environ["PAPERCLIP_COMPANY_ID"] = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"
+    code, sortie = lancer("assurer-connexions")
+    assert code == 2 and "entreprise du Gardien introuvable" in sortie, (code, sortie)
+finally:
+    del os.environ["PAPERCLIP_COMPANY_ID"]
+    del etat["nom"], etat["description"]
+print("6b. depuis le Gardien : agit sur sa propre entreprise (PAPERCLIP_COMPANY_ID), quel que soit son nom")
 # 7. Définition du Gardien : process, aucun modèle, aucun droit, battement de 60 s, commande fixée.
 api = b.Api(os.environ["ATELIER_API"])
 voulu = b.corps_gardien(api)
@@ -509,7 +526,7 @@ assert not any(w[1].endswith("/resume") for w in etat["ecritures"]), "le Gardien
 print("8. Gardien : créé et approuvé, idempotent, dérive réalignée (battement, permissions), pause humaine respectée")
 # 9. Le Gardien n'est pas un « agent hors registre ».
 assert b.GARDIEN_SLUG not in {a["slug"] for a in reg_agents["agents"]}
-print("assurer-connexions et Gardien : 9 vérifications contre une fausse API, toutes réussies")
+print("assurer-connexions et Gardien : 10 vérifications contre une fausse API, toutes réussies")
 PY
 then
   ok "assurer-connexions et Gardien des connexions : $(tail -1 "${TRAVAIL}/gardien.txt")"

@@ -592,6 +592,8 @@ describe("SQL de prospection (base.ts réelle, règles de l'hôte)", () => {
     await base.clientExiste(SOC, id);
     await base.poidsScoreCourant(SOC);
     await base.referentielProspection(SOC, CAMP);
+    await base.reglesVentesCroisees(SOC);
+    await base.clientsPourVentesCroisees(SOC);
     await base.detailsProspects(SOC, [id]);
     await base.listerProspects(SOC, { page: 1, parPage: 10 });
     await base.listerProspects(SOC, {

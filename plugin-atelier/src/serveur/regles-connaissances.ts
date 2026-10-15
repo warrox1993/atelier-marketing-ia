@@ -153,15 +153,27 @@ export interface ConstatConnaissance {
 
 /** Repère large : tout ce qui commence par le préfixe, y compris une adresse mal formée. */
 const MOTIF_CITATION = /connaissance:\/\/[^\s)\]»"'<>,;]*/giu;
-/** Une URL web compte aussi comme source citée. */
-const MOTIF_URL = /https?:\/\/[^\s)\]»"'<>]+/iu;
+/** URL web : ne couvre un chiffre d'offre que si elle figure parmi les sources enregistrées de la tâche. */
+const MOTIF_URL = /https?:\/\/[^\s)\]»"'<>]{1,2048}/giu;
 
-/** Motifs des chiffres d'offre : montant en euros, pourcentage, franchise ou plafond chiffrés. */
+/** Au-delà de cette taille (en caractères), le livrable n'est pas analysé : constat explicite. */
+export const TAILLE_MAX_LIVRABLE_CONTROLE = 500_000;
+
+/** Nombres simples écrits en lettres (FR, et quelques formes NL), pour « cent cinquante euros ». */
+const NOMBRE_EN_LETTRES =
+  "(?:un|une|deux|trois|quatre|cinq|six|sept|huit|neuf|dix|onze|douze|treize|quatorze|quinze|seize|vingts?|trente|quarante|cinquante|soixante|septante|octante|huitante|nonante|cents?|mille|millions?|milliards?|een|twee|drie|vier|vijf|zes|zeven|acht|negen|tien|twintig|dertig|veertig|vijftig|honderd|duizend|miljoen)";
+
+/**
+ * Motifs des chiffres d'offre : montant en euros, pourcentage, franchise ou plafond chiffrés.
+ * Quantificateurs tous bornés : le temps reste linéaire quelle que soit l'entrée (ReDoS corrigé).
+ */
 const MOTIFS_CHIFFRE_OFFRE: ReadonlyArray<[RegExp, string]> = [
-  [/€\s?\d[\d \u00a0\u202f.,]*|\d(?:[\d \u00a0\u202f.,]*\d)?\s?(?:€|\bEUR\b|\beuros?\b)/iu, "montant en euros"],
-  [/\d+(?:[.,]\d+)?\s?(?:%|pour\s?cent\b|procent\b)/iu, "pourcentage"],
-  [/\b(?:franchise|eigen risico)\b[^\n]{0,40}?\d[\d \u00a0\u202f.,]*|\d[\d \u00a0\u202f.,]*[^\n\d]{0,40}?\b(?:franchise|eigen risico)\b/iu, "franchise"],
-  [/\bplafond\b[^\n]{0,40}?\d[\d \u00a0\u202f.,]*|\d[\d \u00a0\u202f.,]*[^\n\d]{0,40}?\bplafond\b/iu, "plafond"],
+  [/€[ \t]?\d[\d \u00a0\u202f.,]{0,30}|\bEUR[ \t]?\d[\d \u00a0\u202f.,]{0,30}|\d(?:[\d \u00a0\u202f.,]{0,30}\d)?[ \t]?(?:€|\bEUR\b|\beuros?\b)/iu, "montant en euros"],
+  [new RegExp(`\\b${NOMBRE_EN_LETTRES}(?:[ -](?:et[ -])?${NOMBRE_EN_LETTRES}){0,6}[ \\t]{1,2}(?:euros?|EUR)\\b`, "iu"), "montant en euros"],
+  [/\d{1,30}(?:[.,]\d{1,10})?[ \t]?(?:%|pour[ \t]?cent\b|procent\b)/iu, "pourcentage"],
+  [new RegExp(`\\b${NOMBRE_EN_LETTRES}(?:[ -]${NOMBRE_EN_LETTRES}){0,4}[ \\t]{1,2}(?:pour[ \\t]?cent|procent)\\b`, "iu"), "pourcentage"],
+  [/\b(?:franchise|eigen risico)\b[^\n]{0,40}?\d[\d \u00a0\u202f.,]{0,30}|\d[^\n\d]{0,40}?\b(?:franchise|eigen risico)\b/iu, "franchise"],
+  [/\bplafond\b[^\n]{0,40}?\d[\d \u00a0\u202f.,]{0,30}|\d[^\n\d]{0,40}?\bplafond\b/iu, "plafond"],
 ];
 
 function nettoyerAdresse(brute: string): string {
@@ -175,8 +187,8 @@ function cleVersion(documentId: string, version: number): string {
 interface Segment {
   texte: string;
   emplacement: string;
-  /** Texte qui « couvre » le segment pour la recherche d'une source (bloc + titres de section). */
-  couverture: string[];
+  /** Titres de la section du bloc (une adresse `connaissance://` rendue y couvre toute la section). */
+  titres: string[];
 }
 
 /** Blocs du livrable (règle de bloc de la garde L9) plus les lignes de titre, que les blocs excluent. */
@@ -184,24 +196,39 @@ function segmentsDuLivrable(corps: string): Segment[] {
   const segments: Segment[] = blocsDuLivrable(corps).map((b: BlocLivrable) => ({
     texte: b.texte,
     emplacement: emplacementDe(b),
-    couverture: [b.texte, ...b.titres],
+    titres: b.titres,
   }));
   corps.split(/\r?\n/u).forEach((ligne, i) => {
-    if (/^#{1,6}\s+/u.test(ligne.trim())) {
-      segments.push({ texte: ligne, emplacement: `titre, ligne ${i + 1}`, couverture: [ligne] });
+    if (/^#{1,6}[ \t]/u.test(ligne.trim())) {
+      segments.push({ texte: ligne, emplacement: `titre, ligne ${i + 1}`, titres: [] });
     }
   });
   return segments;
 }
 
-function citeUneSource(couverture: string[]): boolean {
-  return couverture.some((t) => {
-    if (MOTIF_URL.test(t)) return true;
+/** URL comparable : sans ponctuation finale ni barre oblique finale, en minuscules. */
+function normaliserUrl(url: string): string {
+  return url.trim().replace(/[.,;:!?]+$/u, "").replace(/\/+$/u, "").toLowerCase();
+}
+
+/**
+ * Vrai si le segment cite une source admise pour un chiffre d'offre :
+ * - une adresse `connaissance://` RENDUE à la tâche, dans le bloc ou dans un titre de sa section ;
+ * - une URL figurant parmi les sources enregistrées de la tâche, dans le bloc lui-même seulement
+ *   (une URL dans un titre ne couvre plus toute la section).
+ */
+function citeUneSource(segment: Segment, rendues: ReadonlySet<string>, urlsSources: ReadonlySet<string>): boolean {
+  const citeRendue = (t: string) => {
     for (const m of t.matchAll(MOTIF_CITATION)) {
-      if (lireAdresseConnaissance(nettoyerAdresse(m[0])) !== null) return true;
+      const lue = lireAdresseConnaissance(nettoyerAdresse(m[0]));
+      if (lue && rendues.has(adresseConnaissance(lue.documentId, lue.version, lue.passageId))) return true;
     }
     return false;
-  });
+  };
+  if (citeRendue(segment.texte) || segment.titres.some(citeRendue)) return true;
+  if (urlsSources.size === 0) return false;
+  for (const m of segment.texte.matchAll(MOTIF_URL)) if (urlsSources.has(normaliserUrl(m[0]))) return true;
+  return false;
 }
 
 /**
@@ -213,15 +240,35 @@ function citeUneSource(couverture: string[]): boolean {
  * - `versions` : les versions connues des documents cités. Une version rendue mais absente de cette
  *   liste est traitée comme périmée (sa validité ne peut pas être établie : refus par prudence).
  * - Une adresse mal formée est traitée comme inconnue.
+ * - Un chiffre d'offre exige une adresse `connaissance://` rendue à la tâche, ou une URL figurant
+ *   dans `options.urlsSourcesTache` (sources enregistrées de la tâche). Par défaut, aucune URL n'est
+ *   admise (comportement strict).
+ * - Au-delà de `TAILLE_MAX_LIVRABLE_CONTROLE` caractères, le livrable n'est pas analysé : un constat
+ *   explicite de refus est rendu.
  */
 export function controlerCitationsConnaissances(
   livrable: string | { corps: string },
   passagesRendusALaTache: Iterable<string | { adresse: string }>,
   versions: readonly VersionPourValidite[],
   dateDeLaPorte: string,
+  options: { urlsSourcesTache?: Iterable<string> } = {},
 ): ConstatConnaissance[] {
   exigerDateJour(dateDeLaPorte, "La date de la porte");
-  const corps = typeof livrable === "string" ? livrable : livrable.corps;
+  const corpsBrut = typeof livrable === "string" ? livrable : livrable.corps;
+  if (corpsBrut.length > TAILLE_MAX_LIVRABLE_CONTROLE) {
+    return [{
+      code: "chiffre_offre_sans_source",
+      decision: "refus",
+      message: `Livrable trop volumineux pour être contrôlé (${corpsBrut.length} caractères, maximum ${TAILLE_MAX_LIVRABLE_CONTROLE}) : citations et chiffres d'offre non vérifiables, refus par prudence.`,
+      emplacement: "livrable entier",
+      extrait: "",
+      adresse: null,
+    }];
+  }
+  // Forme NFKC : chiffres pleine chasse, « € » et espaces de compatibilité ramenés à leur forme simple.
+  const corps = corpsBrut.normalize("NFKC");
+  const urlsSources = new Set<string>();
+  for (const u of options.urlsSourcesTache ?? []) urlsSources.add(normaliserUrl(u));
   const rendues = new Set<string>();
   for (const p of passagesRendusALaTache) rendues.add((typeof p === "string" ? p : p.adresse).toLowerCase());
   const parVersion = new Map<string, VersionPourValidite>();
@@ -270,7 +317,7 @@ export function controlerCitationsConnaissances(
       }
     }
 
-    if (citeUneSource(segment.couverture)) continue;
+    if (citeUneSource(segment, rendues, urlsSources)) continue;
     for (const [motif, libelle] of MOTIFS_CHIFFRE_OFFRE) {
       const m = motif.exec(segment.texte);
       if (!m) continue;
@@ -326,7 +373,8 @@ export interface ResultatPseudonymisation {
 
 /** « police n° AB-123456 », « numéro de police : 12/345.678 », « polis nr. 123456 ». */
 export const MOTIFS_POLICE_PAR_DEFAUT: readonly RegExp[] = [
-  /\b(?:police|polis)\s*(?:d['’]assurance\s*)?(?:n[°o]\.?|nr\.?|num[ée]ro|nummer)?\s*:?\s*([A-Z]{0,4}[-/.]?\d[\dA-Z/.-]{4,})/giu,
+  // Séparateurs bornés et sans recouvrement : aucun retour arrière en cascade (ReDoS cubique corrigé).
+  /\b(?:police|polis)(?:[ \t]{1,3}d['’]assurance)?(?:[ \t]{0,3}(?:n[°o]\.?|nr\.?|num[ée]ro|nummer))?[ \t]{0,3}:?[ \t]{0,3}([A-Z]{0,4}[-/.]?\d[\dA-Z/.-]{4,40})/giu,
 ];
 
 /** Longueur de l'IBAN par pays (registre ISO 13616, pays SEPA et voisins courants). */
@@ -365,25 +413,34 @@ export function nissValide(niss: string): boolean {
   return controle === avant2000 || controle === depuis2000;
 }
 
-/** Repère les IBAN candidats (pays connu, longueur exacte, espaces simples entre groupes). */
+/**
+ * Repère les IBAN candidats (pays connu, longueur exacte), sans tenir compte de la casse, avec un ou
+ * deux séparateurs (espace, point, tiret) entre les groupes : « be71 0961… », « BE71-0961-… »,
+ * « BE71  0961 … ». La valeur rendue est en majuscules, sans séparateur.
+ */
 function candidatsIban(texte: string): Array<{ debut: number; fin: number; valeur: string }> {
   const trouves: Array<{ debut: number; fin: number; valeur: string }> = [];
-  const depart = /(?<![A-Za-z0-9])([A-Z]{2})\d{2}/gu;
+  const depart = /(?<![\p{L}\p{N}])([A-Za-z]{2})\d{2}/gu;
+  const alnum = (c: string | undefined) => c !== undefined && /[A-Za-z0-9]/u.test(c);
   for (let m = depart.exec(texte); m; m = depart.exec(texte)) {
-    const longueur = LONGUEURS_IBAN[m[1]!];
+    const longueur = LONGUEURS_IBAN[m[1]!.toUpperCase()];
     if (!longueur) continue;
     let i = m.index;
     let valeur = "";
     while (i < texte.length && valeur.length < longueur) {
       const c = texte[i]!;
-      if (/[A-Z0-9]/u.test(c)) {
-        valeur += c;
+      if (alnum(c)) {
+        valeur += c.toUpperCase();
         i += 1;
-      } else if (c === " " && valeur.length > 0 && /[A-Z0-9]/u.test(texte[i + 1] ?? "")) {
-        i += 1;
-      } else break;
+        continue;
+      }
+      // Un ou deux séparateurs entre deux groupes, jamais en tête ni en fin.
+      let n = 0;
+      while (n < 2 && /[ .-]/u.test(texte[i + n] ?? "")) n += 1;
+      if (n > 0 && valeur.length > 0 && alnum(texte[i + n])) i += n;
+      else break;
     }
-    if (valeur.length !== longueur || /[A-Za-z0-9]/u.test(texte[i] ?? "")) continue;
+    if (valeur.length !== longueur || /[\p{L}\p{N}]/u.test(texte[i] ?? "")) continue;
     if (!/^[A-Z]{2}\d{2}/u.test(valeur)) continue;
     trouves.push({ debut: m.index, fin: i, valeur });
     depart.lastIndex = i;
@@ -391,12 +448,24 @@ function candidatsIban(texte: string): Array<{ debut: number; fin: number; valeu
   return trouves;
 }
 
-const MOTIF_COURRIEL = /[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}/gu;
-/** NISS mis en forme (85.07.30-033.28) ou nu (11 chiffres). */
-const MOTIF_NISS = /(?<![\d.+-])(?:\d{2}\.\d{2}\.\d{2}-\d{3}\.\d{2}|\d{11})(?![\d])/gu;
+/**
+ * Courriel, lettres et chiffres de toutes les écritures compris. Le regard arrière impose de
+ * commencer au début d'une suite de caractères admis : la recherche reste linéaire (ReDoS corrigé).
+ */
+const MOTIF_COURRIEL = /(?<![\p{L}\p{N}._%+-])[\p{L}\p{N}._%+-]{1,64}@[\p{L}\p{N}-]{1,63}(?:\.[\p{L}\p{N}-]{1,63}){0,8}\.\p{L}{2,24}(?![\p{L}\p{N}])/gu;
+/** NISS mis en forme (85.07.30-033.28, 85 07 30 033 28, 850730-033-28) ou nu (11 chiffres). */
+const MOTIF_NISS = /(?<![\d.+-])\d{2}[ .]?\d{2}[ .]?\d{2}[ .-]?\d{3}[ .-]?\d{2}(?!\d)/gu;
 const MOTIF_NISS_MIS_EN_FORME = /^\d{2}\.\d{2}\.\d{2}-\d{3}\.\d{2}$/u;
-/** Téléphones belges : +32 / 0032 / 0, puis 8 (fixe) ou 9 (mobile) chiffres, séparateurs . / - espace. */
-const MOTIF_TELEPHONE_BE = /(?<![\w+])(?:(?:\+|00)32[ .\/-]?(?:\(0\)[ ]?)?|0)[1-9](?:[ .\/-]?\d){7,8}(?!\d)/gu;
+/**
+ * Téléphones belges : +32 / 0032 / 0, puis 8 (fixe) ou 9 (mobile) chiffres, séparateurs . / - espace
+ * (jusqu'à trois : « 0470 - 12 34 56 »). Collé à des lettres (« GSM0470… ») : repéré aussi ; un numéro
+ * d'entreprise « BE0… » ne l'est pas.
+ */
+const MOTIF_TELEPHONE_BE = /(?<![\d+]|\b[Bb][Ee][ .]?)(?:(?:\+|00)32[ .\/-]{0,3}(?:\(0\)[ ]?)?|0)[1-9](?:[ .\/-]{0,3}\d){7,8}(?!\d)/gu;
+/** Téléphones internationaux hors Belgique : « +33 6 12 34 56 78 », « +31 6 12345678 ». */
+const MOTIF_TELEPHONE_INTERNATIONAL = /(?<![\w+])\+\d{1,3}(?:[ .\/-]{0,2}\d){6,12}(?!\d)/gu;
+/** Caractères invisibles (largeur nulle, sens d'écriture, césure conditionnelle) qui cachent une valeur. */
+const MOTIF_INVISIBLES = /[\u00ad\u180e\u200b-\u200f\u202a-\u202e\u2060-\u2064\u2066-\u2069\ufeff]/gu;
 
 /**
  * Pseudonymise un texte : courriels, IBAN, registre national, numéros de police, téléphones belges
@@ -405,8 +474,17 @@ const MOTIF_TELEPHONE_BE = /(?<![\w+])(?:(?:\+|00)32[ .\/-]?(?:\(0\)[ ]?)?|0)[1-
  *
  * Choix documenté : un IBAN de pays et de longueur reconnus mais au contrôle modulo 97 faux, ou un
  * NISS mis en forme (85.07.30-033.28) au contrôle faux, est MASQUÉ quand même et signalé
- * (minimisation : une faute de frappe reste une donnée personnelle). Un nombre nu de 11 chiffres
- * au contrôle faux n'est pas un NISS et reste tel quel.
+ * (minimisation : une faute de frappe reste une donnée personnelle). Un nombre de 11 chiffres
+ * (nu, ou groupé par espaces ou tirets) au contrôle faux n'est pas un NISS et reste tel quel.
+ *
+ * Avant toute recherche, le texte est ramené en forme NFKC (chiffres et « ＠ » pleine chasse
+ * compris), débarrassé des caractères invisibles, et chaque suite d'espaces (hors saut de ligne)
+ * devient une espace simple.
+ *
+ * LIMITE documentée : les noms, adresses postales et dates de naissance ne sont PAS repérés
+ * (aucune règle fiable sans analyse linguistique) ; « Monsieur Jean Dupont, né le 12/03/1985,
+ * rue de la Loi 16 » reste en clair. Les courriels écrits en toutes lettres (« at », « point »)
+ * non plus.
  */
 export function pseudonymiser(texte: string, options: OptionsPseudonymisation): ResultatPseudonymisation {
   const cle = typeof options.cle === "string" ? Buffer.from(options.cle, "utf8") : Buffer.from(options.cle);
@@ -433,7 +511,11 @@ export function pseudonymiser(texte: string, options: OptionsPseudonymisation): 
   };
 
   // Les caractères d'usage privé du texte d'origine sont retirés : ils serviraient de faux repères.
-  let t = texte.replace(/[\ue000-\uf8ff]/gu, "");
+  let t = texte
+    .normalize("NFKC")
+    .replace(MOTIF_INVISIBLES, "")
+    .replace(/[^\S\n]+/gu, " ")
+    .replace(/[\ue000-\uf8ff]/gu, "");
 
   t = t.replace(MOTIF_COURRIEL, (m) => reserve(marquer("courriels", m.toLowerCase())));
 
@@ -469,6 +551,7 @@ export function pseudonymiser(texte: string, options: OptionsPseudonymisation): 
     const chiffres = m.replace(/\D/gu, "").replace(/^(?:00)?32/u, "0");
     return reserve(marquer("telephones", chiffres.startsWith("0") ? chiffres : `0${chiffres}`));
   });
+  t = t.replace(MOTIF_TELEPHONE_INTERNATIONAL, (m) => reserve(marquer("telephones", `+${m.replace(/\D/gu, "")}`)));
 
   const final = t.replace(/[\ue000-\uf8ff]/gu, (c) => marques[c.charCodeAt(0) - 0xe000]!);
   return { texte: final, rapport, signalements };
@@ -495,6 +578,13 @@ const ANNONCES_SANTE = [
   "medisch attest",
   "medische vragenlijst",
   "medisch verslag",
+  // Abréviations courantes (« rapport méd. », « certif. méd. »).
+  "rapport med",
+  "certificat med",
+  "certif med",
+  "attestation med",
+  "dossier med",
+  "questionnaire med",
 ];
 
 export interface DecisionImportSante {
@@ -513,8 +603,9 @@ export function refusDonneesSante(entree: { type: string; titre: string }): Deci
   if (type.includes("sante") || type.includes("medical") || type.includes("medisch")) {
     return { refus: true, motif: `Le type « ${entree.type} » annonce des données de santé : import refusé.` };
   }
-  const titre = sansAccents(entree.titre);
-  const trouvee = ANNONCES_SANTE.filter((a) => a !== "sante" && a !== "medical").find((a) => new RegExp(`\\b${a}\\b`, "u").test(titre));
+  // Ponctuation et séparateurs ramenés à une espace : « questionnaire-de-santé », « rapport méd. ».
+  const titre = ` ${sansAccents(entree.titre.normalize("NFKC")).replace(/[^a-z0-9]+/gu, " ").trim()} `;
+  const trouvee = ANNONCES_SANTE.filter((a) => a !== "sante" && a !== "medical").find((a) => titre.includes(` ${a} `));
   if (trouvee) return { refus: true, motif: `Le titre annonce des données de santé (« ${trouvee} ») : import refusé.` };
   return { refus: false, motif: null };
 }

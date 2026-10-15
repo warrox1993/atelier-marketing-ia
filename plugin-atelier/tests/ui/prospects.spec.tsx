@@ -313,6 +313,28 @@ describe("base clients", () => {
     const c = await ouvrirBase();
     expect(c.textContent).toContain("Aucune base clients n'est chargée pour l'instant.");
   });
+
+  it("tableau « Ventes croisées » : pseudonyme, produits, canal permis ou motif du refus, sans tiret cadratin", async () => {
+    const ventes = {
+      mode: "demonstration", origineRegles: "demonstration", clients: 105,
+      regles: [{ typeClient: "particulier", detenue: "auto", proposee: "habitation", decidePar: "démonstration" }],
+      opportunites: [
+        { pseudonyme: "[client-1a2b3c4d]", typeClient: "particulier", detenus: ["auto"], proposes: ["habitation"], codePostal: "4000", commune: "Liège", canauxPermis: ["courriel", "sms"], canaux: [], mode: "demonstration" },
+        { pseudonyme: "[client-5e6f7a8b]", typeClient: "entreprise", detenus: ["rc-pro"], proposes: ["multirisque"], codePostal: "4430", commune: "Ans", canauxPermis: [], canaux: [{ canal: "courriel", permis: false, motif: "Motif de refus lisible" }], mode: "demonstration" },
+      ],
+    };
+    serveur = (m, u) => (m === "GET" && u.includes("/ventes-croisees?") ? { statut: 200, corps: ventes } : { statut: 200, corps: page() });
+    const c = await ouvrirBase();
+    expect(appels.some((a) => a.methode === "GET" && a.url.includes(`/ventes-croisees?companyId=${ENTREPRISE}`))).toBe(true);
+    const tableau = c.querySelector("table")!;
+    expect(tableau).toBeTruthy();
+    expect(tableau.textContent).toContain("[client-1a2b3c4d]");
+    expect(tableau.textContent).toContain("Courriel, SMS");
+    expect(tableau.textContent).toContain("rc pro");
+    expect(tableau.textContent).toContain("Motif de refus lisible");
+    expect(c.textContent).toContain("Règles de démonstration : auto sans habitation (particulier).");
+    expect(c.textContent).not.toContain("\u2014");
+  });
 });
 
 describe("export fichier, étalonnage, probabilité mesurée", () => {

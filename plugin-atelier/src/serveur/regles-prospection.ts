@@ -77,10 +77,25 @@ const LOCAUX_IMPERSONNELS: ReadonlySet<string> = new Set([
 ]);
 
 /**
+ * Qualificatifs admis à côté d'une fonction dans une adresse impersonnelle (« info-liege@ »,
+ * « contact.bxl@ ») : lieux et zones, jamais des prénoms.
+ */
+const QUALIFICATIFS_IMPERSONNELS: ReadonlySet<string> = new Set([
+  "be", "fr", "nl", "en", "de", "belgique", "belgie", "belgium", "wallonie", "vlaanderen",
+  "liege", "luik", "namur", "namen", "bruxelles", "brussel", "bxl", "charleroi", "mons", "bergen",
+  "wavre", "waver", "arlon", "aarlen", "verviers", "huy", "hoei", "tournai", "doornik", "nivelles",
+  "nijvel", "waterloo", "spa", "dinant", "marche", "bastogne", "eupen", "malmedy", "gent", "gand",
+  "antwerpen", "anvers", "leuven", "louvain", "hasselt", "brugge", "bruges", "mechelen", "malines",
+  "nord", "sud", "est", "ouest", "centre", "siege",
+]);
+
+/**
  * Nature d'une adresse électronique d'après sa partie locale (heuristique du §3.2) :
- * - `impersonnelle` si le premier segment (séparé par `.`, `_` ou `-`, chiffres finaux ignorés)
- *   désigne une fonction (`info@`, `contact-liege@`, `secretariat@`…) ;
- * - `nominative` pour une forme `prenom.nom@` (ou `p.nom@`) ;
+ * - `impersonnelle` seulement si la partie locale ENTIÈRE désigne une fonction : chaque segment
+ *   (séparé par `.`, `_`, `-` ou `+`, chiffres finaux ignorés) est une fonction de la liste ou un
+ *   lieu (`info@`, `info2@`, `contact-liege@`, `secretariat@`) ; « info.jean.dupont@ » ou
+ *   « info+jean.dupont@ » ne le sont pas ;
+ * - `nominative` si elle a la forme prénom.nom (`jeanne.fictive@`, `j.fictive@`) ;
  * - `inconnue` sinon, y compris pour une adresse invalide ; l'appelant la traite comme nominative.
  */
 export function natureAdresse(courriel: string): NatureAdresse {
@@ -90,10 +105,11 @@ export function natureAdresse(courriel: string): NatureAdresse {
     .split("@")[0]!
     .toLowerCase()
     .normalize("NFD")
-    .replace(/\p{M}/gu, "")
-    .replace(/\+.*$/u, "");
-  const premier = (local.split(/[._-]/u)[0] ?? "").replace(/\d+$/u, "");
-  if (LOCAUX_IMPERSONNELS.has(premier) || LOCAUX_IMPERSONNELS.has(local.replace(/[._-]/gu, ""))) return "impersonnelle";
+    .replace(/\p{M}/gu, "");
+  const segments = local.split(/[._+-]/u).map((s) => s.replace(/\d+$/u, ""));
+  const fonction = segments.some((s) => LOCAUX_IMPERSONNELS.has(s));
+  const toutAdmis = segments.every((s) => s === "" || LOCAUX_IMPERSONNELS.has(s) || QUALIFICATIFS_IMPERSONNELS.has(s));
+  if ((fonction && toutAdmis) || LOCAUX_IMPERSONNELS.has(local.replace(/[._+-]|\d+$/gu, ""))) return "impersonnelle";
   if (/^[a-z]+[._-][a-z]{2,}$/u.test(local)) return "nominative";
   return "inconnue";
 }

@@ -106,14 +106,50 @@ export interface ImportPrepare {
 /* Colonnes sensibles                                                  */
 /* ------------------------------------------------------------------ */
 
+/** Mots sensibles ajoutés localement à la liste du contrat (numéros de compte, variantes NL). */
+const MOTS_COLONNES_SENSIBLES_LOCAUX = [
+  "num compte",
+  "numero compte",
+  "numero de compte",
+  "no compte",
+  "n compte",
+  "nr compte",
+  "compte bancaire",
+  "compte iban",
+  "bic",
+  "swift",
+  "rekeningnummer",
+  "rekening",
+  "bankrekening",
+  "bankkaart",
+  "kredietkaart",
+] as const;
+
+/** Lettres grecques et cyrilliques qui se confondent avec des lettres latines (« ІBAN » cyrillique). */
+const CONFUSABLES: Readonly<Record<string, string>> = {
+  "а": "a", "в": "b", "е": "e", "к": "k", "м": "m", "н": "h", "о": "o", "р": "p", "с": "c", "т": "t",
+  "у": "y", "х": "x", "і": "i", "ј": "j", "ѕ": "s", "ԁ": "d", "ӏ": "l", "ь": "b",
+  "А": "a", "В": "b", "Е": "e", "К": "k", "М": "m", "Н": "h", "О": "o", "Р": "p", "С": "c", "Т": "t",
+  "У": "y", "Х": "x", "І": "i", "Ј": "j", "Ѕ": "s",
+  "α": "a", "β": "b", "ε": "e", "ι": "i", "κ": "k", "ν": "v", "ο": "o", "ρ": "p", "τ": "t", "υ": "u", "χ": "x",
+  "Α": "a", "Β": "b", "Ε": "e", "Ζ": "z", "Η": "h", "Ι": "i", "Κ": "k", "Μ": "m", "Ν": "n", "Ο": "o",
+  "Ρ": "p", "Τ": "t", "Υ": "y", "Χ": "x",
+};
+const MOTIF_CONFUSABLES = new RegExp(`[${Object.keys(CONFUSABLES).join("")}]`, "gu");
+
 /**
  * Noms de colonnes qui ressemblent à une donnée de santé, de sinistre ou bancaire (§4.3). Comparaison
  * sans accents ni casse, par mots entiers (singulier ou pluriel) : « public » ne contient pas « bic ».
+ * Le nom est d'abord ramené en NFKC, les lettres grecques ou cyrilliques trompeuses en latin, et les
+ * points retirés (« I.B.A.N » = « IBAN ») ou lus comme séparateurs (« Num.compte »).
  */
 export function colonnesSensibles(colonnes: readonly string[]): string[] {
+  const mots: readonly string[] = [...MOTS_COLONNES_SENSIBLES, ...MOTS_COLONNES_SENSIBLES_LOCAUX];
+  const enMots = (t: string) => ` ${sansAccents(t).split(/[^a-z0-9]+/u).filter(Boolean).join(" ")} `;
   return colonnes.filter((c) => {
-    const texte = ` ${sansAccents(c).split(/[^a-z0-9]+/u).filter(Boolean).join(" ")} `;
-    return MOTS_COLONNES_SENSIBLES.some((mot) => texte.includes(` ${mot} `) || texte.includes(` ${mot}s `));
+    const base = c.normalize("NFKC").replace(MOTIF_CONFUSABLES, (l) => CONFUSABLES[l] ?? l);
+    const variantes = [enMots(base.replace(/\./gu, "")), enMots(base)];
+    return variantes.some((texte) => mots.some((mot) => texte.includes(` ${mot} `) || texte.includes(` ${mot}s `)));
   });
 }
 
@@ -229,7 +265,6 @@ export function lireFichierBaseClients(entree: EntreeLecture): FichierLu | Refus
   const empreinteFichier = createHash("sha256").update(entree.contenu).digest("hex");
 
   let matrice: string[][];
-  let texteComplet: string;
   if (entree.format === "csv") {
     let texte: string;
     try {
@@ -246,12 +281,10 @@ export function lireFichierBaseClients(entree: EntreeLecture): FichierLu | Refus
       return refus(`Séparateur détecté « ${analyse.separateur === "\t" ? "tabulation" : analyse.separateur} » différent du séparateur demandé.`);
     }
     matrice = analyse.lignes;
-    texteComplet = texte;
   } else {
     const m = matriceXlsx(entree.contenu);
     if ("erreur" in m) return refus(m.erreur);
     matrice = m;
-    texteComplet = m.map((l) => l.join(" ")).join("\n");
   }
 
   const [entete, ...lignes] = matrice;
@@ -287,7 +320,8 @@ export function lireFichierBaseClients(entree: EntreeLecture): FichierLu | Refus
     lignes,
     apercu,
     formulesNeutralisees: total,
-    injectionsSignalees: injectionsSignalees(texteComplet),
+    // Détection sur le contenu des cellules (une par ligne), jamais sur le fichier brut.
+    injectionsSignalees: injectionsSignalees(matrice.flatMap((l) => l.map((c) => c.trim()).filter(Boolean)).join("\n")),
   };
 }
 
@@ -377,6 +411,14 @@ export function aPurger(imp: Pick<ImportBaseClients, "importeLe" | "dureeConserv
   return Date.parse(maintenant) >= Date.parse(calculerPurge(imp.importeLe, imp.dureeConservationMois));
 }
 
+/**
+ * Valeur stockée en clair (commune, entreprise, produit) : un `=`, `+`, `-`, `@` ou une tabulation en
+ * tête serait lu comme une formule à la réexportation vers un tableur ; on la préfixe d'une apostrophe.
+ */
+export function neutraliserFormule(valeur: string): string {
+  return /^[=+\-@\t\r]/u.test(valeur) ? `'${valeur}` : valeur;
+}
+
 function construireClient(
   valeurs: Partial<Record<ColonneCible, string>>,
   cles: ClesImport,
@@ -397,8 +439,9 @@ function construireClient(
     ? (normaliserPourEmpreinte("numero_bce", bceBrut) ?? (ctx.mode === "demonstration" && /^[01]\d{9}$/u.test(bceForme) ? bceForme : null))
     : null;
   if (bceBrut && bce === null) rejeter("Numéro BCE invalide (10 chiffres, contrôle modulo 97).");
-  const entreprise = v("entreprise") || null;
-  if (entreprise !== null && entreprise.length > 300) rejeter("Dénomination d'entreprise trop longue (300 caractères maximum).");
+  const entrepriseBrute = v("entreprise");
+  const entreprise = entrepriseBrute ? neutraliserFormule(entrepriseBrute) : null;
+  if (entrepriseBrute.length > 300) rejeter("Dénomination d'entreprise trop longue (300 caractères maximum).");
 
   const typeBrut = sansAccents(v("type_client"));
   let typeClient: "particulier" | "entreprise";
@@ -415,8 +458,9 @@ function construireClient(
   if (telBrut && tel === null) rejeter("Numéro de téléphone belge invalide.");
   const cp = v("code_postal") || null;
   if (cp !== null && !/^\d{4}$/u.test(cp)) rejeter("Code postal belge à 4 chiffres attendu.");
-  const commune = v("commune") || null;
-  if (commune !== null && commune.length > 120) rejeter("Commune trop longue (120 caractères maximum).");
+  const communeBrute = v("commune");
+  const commune = communeBrute ? neutraliserFormule(communeBrute) : null;
+  if (communeBrute.length > 120) rejeter("Commune trop longue (120 caractères maximum).");
 
   const debutBrut = v("debut_contrat");
   const debut = debutBrut ? lireDate(debutBrut) : null;
@@ -435,9 +479,9 @@ function construireClient(
     else consentements[canal] = b;
   }
 
-  const produitsDetenus = [...new Set(v("produits_detenus").split(/[;|,]/u).map((p) => p.trim()).filter(Boolean))];
+  const produitsDetenus = [...new Set(v("produits_detenus").split(/[;|,]/u).map((p) => p.trim()).filter(Boolean).map(neutraliserFormule))];
   if (produitsDetenus.length > 50) rejeter("Plus de 50 produits détenus.");
-  if (produitsDetenus.some((p) => p.length > 120)) rejeter("Libellé de produit trop long (120 caractères maximum).");
+  if (produitsDetenus.some((p) => p.replace(/^'(?=[=+\-@\t\r])/u, "").length > 120)) rejeter("Libellé de produit trop long (120 caractères maximum).");
 
   // Empreintes (valeurs normalisées).
   const empreintes: Empreinte[] = [];
@@ -448,7 +492,7 @@ function construireClient(
   ajouter("numero_bce", bce);
   ajouter("courriel", courrielBrut ? normaliserPourEmpreinte("courriel", courrielBrut) : null);
   ajouter("telephone", tel);
-  const nomComplet = [v("prenom"), v("nom")].filter(Boolean).join(" ") || entreprise || "";
+  const nomComplet = [v("prenom"), v("nom")].filter(Boolean).join(" ") || entrepriseBrute;
   if (cp !== null && nomComplet) ajouter("nom_code_postal", normaliserPourEmpreinte("nom_code_postal", `${nomComplet}|${cp}`));
   if (empreintes.length === 0) rejeter("Aucun identifiant exploitable (identifiant client, BCE, courriel, téléphone, ou nom et code postal).");
 

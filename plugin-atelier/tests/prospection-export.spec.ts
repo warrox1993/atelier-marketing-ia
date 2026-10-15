@@ -83,7 +83,7 @@ function banc(o: { modeEntreprise?: "demonstration" | "reel"; config?: Record<st
   const b = creerBanc({ modeEntreprise: o.modeEntreprise ?? "demonstration", config: { passerelleClesPubliques: [CLES.publiqueBase64], ...o.config } });
   const t = {
     prospects: [] as Ligne[], empreintes: [] as Ligne[], oppositions: [] as Ligne[], scores: [] as Ligne[], bases: [] as Ligne[],
-    imports: [] as Ligne[], clients: [] as Ligne[], etalonnages: [] as Ligne[], exports: [] as Ligne[],
+    imports: [] as Ligne[], clients: [] as Ligne[], etalonnages: [] as Ligne[], exports: [] as Ligne[], regles: [] as Ligne[],
   };
   const copie = <T>(v: T): T => structuredClone(v);
   const ext: Record<string, unknown> = {
@@ -149,6 +149,8 @@ function banc(o: { modeEntreprise?: "demonstration" | "reel"; config?: Record<st
       t.imports = t.imports.filter((x) => x.companyId !== c);
       return { clients: avant.clients - t.clients.length, imports: avant.imports - t.imports.length };
     },
+    reglesVentesCroisees: async (c: string) => copie(t.regles.filter((x) => x.companyId === c)),
+    clientsPourVentesCroisees: async (c: string) => copie(t.clients.filter((x) => x.companyId === c)),
     insererEtalonnage: async (e: Ligne) => void t.etalonnages.push(copie(e)),
     issuesPourEtalonnage: async () => [],
     scoresCourantsCible: async () => [],
@@ -254,6 +256,83 @@ describe("base de clients", () => {
     expect(f.tp.oppositions).toHaveLength(1);
     expect(f.t.journal.map((j) => j.type)).toContain("base_clients.supprimee");
     expect((await f.appeler("base-clients.etat", { query: { companyId: SOC } })).body).toMatchObject({ existe: false, clients: 0 });
+  });
+});
+
+/* ------------------------------------------------------------------ */
+/* Ventes croisées                                                     */
+/* ------------------------------------------------------------------ */
+
+describe("ventes-croisees.lister", () => {
+  const lister = (f: ReturnType<typeof banc>, agent = false) => f.appeler("ventes-croisees.lister", { query: { companyId: SOC }, agent });
+
+  it("base de démonstration : règles fixes du courtier, opportunités sous pseudonyme, aucune coordonnée ni identifiant en clair ; humain seulement", async () => {
+    const f = banc();
+    const vide = await lister(f);
+    expect(vide.status).toBe(200);
+    expect(vide.body).toMatchObject({ clients: 0, opportunites: [], origineRegles: "demonstration" });
+    await f.appeler("base-clients.importer", { body: corpsImport() });
+    const r = await lister(f);
+    expect(r.status).toBe(200);
+    expect(r.body.regles.map((x: Ligne) => `${x.typeClient}:${x.detenue}>${x.proposee}`)).toEqual(["particulier:auto>habitation", "particulier:habitation>familiale", "entreprise:rc-pro>multirisque"]);
+    const ops = r.body.opportunites as Ligne[];
+    expect(ops.length).toBeGreaterThan(5);
+    expect(ops.some((o) => o.typeClient === "particulier" && o.detenus.includes("auto") && o.proposes.includes("habitation"))).toBe(true);
+    for (const o of ops) {
+      expect(o.pseudonyme).toMatch(/^\[client-[0-9a-f]{4,16}\]$/u);
+      expect(Object.keys(o).sort()).toEqual(["canaux", "canauxPermis", "codePostal", "commune", "detenus", "mode", "proposes", "pseudonyme", "typeClient"]);
+      expect(o.proposes.every((x: string) => !o.detenus.includes(x))).toBe(true);
+    }
+    // Aucune valeur en clair du fichier (nom, prénom, courriel, téléphone, identifiant) dans la réponse.
+    const texte = JSON.stringify(r.body);
+    for (const ligne of lireDemo("base-clients.csv").toString("utf8").trim().split("\n").slice(1, 40)) {
+      const v = ligne.split(";");
+      for (const clair of [v[0], v[2], v[3], v[6], v[7]].filter((x) => x && x.length > 3)) expect(texte).not.toContain(clair);
+    }
+    expect(texte).not.toContain("chv1.");
+    expect((await lister(f, true)).status).toBe(403);
+  });
+
+  it("canal permis par la matrice : consentement déclaré ou exception client existant pour le courriel ; téléphone jamais sans liste « Ne m'appelez plus »", async () => {
+    const f = banc();
+    await f.appeler("base-clients.importer", { body: corpsImport() });
+    const ops = (await lister(f)).body.opportunites as Ligne[];
+    const part = ops.filter((o) => o.typeClient === "particulier");
+    expect(part.some((o) => o.canauxPermis.includes("courriel"))).toBe(true);
+    for (const o of ops) {
+      const tel = o.canaux.find((c: Ligne) => c.canal === "telephone");
+      expect(tel.permis).toBe(false);
+      expect(o.canauxPermis).toEqual(o.canaux.filter((c: Ligne) => c.permis).map((c: Ligne) => c.canal));
+    }
+    // Un client qui a déclaré NON au courriel n'est jamais contacté par courriel.
+    const refusants = new Set(f.tp.clients.filter((c) => c.consentements.courriel === false).map((c) => c.pseudonyme as string));
+    const visees = ops.filter((o) => refusants.has(o.pseudonyme));
+    expect(visees.length).toBeGreaterThan(0);
+    for (const o of visees) expect(o.canaux.find((c: Ligne) => c.canal === "courriel")).toMatchObject({ permis: false, motif: expect.stringContaining("refusé") });
+    // Entreprises : la matrice actuelle ne couvre pas l'exception « client existant » en B2B, le refus reste, motif lisible.
+    const entreprises = ops.filter((o) => o.typeClient === "entreprise");
+    expect(entreprises.length).toBeGreaterThan(0);
+    for (const o of entreprises) {
+      expect(o.canauxPermis).toEqual([]);
+      expect(o.canaux.find((c: Ligne) => c.canal === "courriel").motif).toMatch(/B2B|refusé/u);
+    }
+  });
+
+  it("règles enregistrées par le client : elles remplacent les règles de démonstration", async () => {
+    const f = banc();
+    await f.appeler("base-clients.importer", { body: corpsImport() });
+    f.tp.regles.push({ companyId: SOC, typeClient: "particulier", detenue: "auto", proposee: "obseques", decidePar: "humain:local-board", decideLe: "2026-10-15T10:00:00.000Z" });
+    const r = await lister(f);
+    expect(r.body.origineRegles).toBe("client");
+    expect(new Set((r.body.opportunites as Ligne[]).flatMap((o) => o.proposes))).toEqual(new Set(["obseques"]));
+  });
+
+  it("mode réel sans règle du client : aucune règle inventée, aucune opportunité", async () => {
+    const f = banc({ modeEntreprise: "reel" });
+    f.tp.clients.push({ companyId: SOC, id: "x" });
+    const r = await lister(f);
+    expect(r.status).toBe(200);
+    expect(r.body).toMatchObject({ origineRegles: "aucune", regles: [], opportunites: [] });
   });
 });
 

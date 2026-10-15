@@ -80,6 +80,14 @@ RACINE = Path(__file__).resolve().parent.parent
 ORGA = RACINE / "organisation"
 REGISTRE_AGENTS = ORGA / "registre" / "agents.json"
 REGISTRE_ORGA = ORGA / "registre" / "organisation.json"
+# Consignes communes à tous les rôles claude_local (hors paquet), recopiées par
+# « generer » à la fin de chaque AGENTS.md après ce marqueur : tout ce qui suit le
+# marqueur est régénéré, le texte propre au rôle reste au-dessus.
+CONSIGNES_COMMUNES = ORGA / "registre" / "consignes-communes.md"
+MARQUEUR_CONSIGNES_COMMUNES = (
+    "<!-- Consignes communes : générées depuis organisation/registre/consignes-communes.md "
+    "par scripts/bootstrap-organisation.py generer ; ne pas modifier sous cette ligne. -->"
+)
 DOSSIER_POLITIQUES = ORGA / "politiques"
 # Dossier des données locales du bootstrap (espaces d'agents, configurations Claude dédiées,
 # état, verrou). ATELIER_DONNEES_LOCALES permet d'isoler une instance d'essai : sans elle,
@@ -369,11 +377,15 @@ def fichiers_generes(reg_agents: dict, reg_orga: dict) -> dict[Path, str]:
         corps,
     )
 
+    consignes_communes = CONSIGNES_COMMUNES.read_text(encoding="utf-8").strip("\n") + "\n"
     for agent in reg_agents["agents"]:
         chemin = ORGA / "agents" / agent["slug"] / "AGENTS.md"
         if not chemin.exists():
             raise ErreurAtelier(f"instructions manquantes : {chemin.relative_to(RACINE)}")
         _, corps = separer_frontmatter(chemin.read_text(encoding="utf-8"))
+        corps = corps.split(MARQUEUR_CONSIGNES_COMMUNES)[0].rstrip("\n") + "\n"
+        if not agent.get("deterministe"):
+            corps += "\n" + MARQUEUR_CONSIGNES_COMMUNES + "\n\n" + consignes_communes
         sortie[chemin] = avec_frontmatter(
             {
                 "kind": "agent",
@@ -1356,10 +1368,28 @@ def cmd_assurer_connexions(args) -> int:
         raise
 
 
+def entreprise_du_gardien(api: Api, reg_orga: dict):
+    """Entreprise sur laquelle agit « assurer-connexions ».
+
+    Lancée par le Gardien (adaptateur process), la commande reçoit de Paperclip
+    PAPERCLIP_COMPANY_ID, l'entreprise de l'agent, que la configuration de l'agent ne
+    peut pas remplacer : le Gardien agit sur SA propre entreprise. Sans cette variable
+    (appel à la main), on cherche l'entreprise par le nom et le marqueur du registre.
+    Chercher par le nom depuis le Gardien ferait agir le Gardien d'une seconde
+    entreprise de démonstration sur la première."""
+    cid = (os.environ.get("PAPERCLIP_COMPANY_ID") or "").strip()
+    if not cid:
+        return trouver_entreprise(api, reg_orga)
+    for c in api.get("/companies"):
+        if c.get("id") == cid:
+            return c
+    raise ErreurAtelier(f"entreprise du Gardien introuvable sur cette instance : {cid}")
+
+
 def _assurer_connexions(args) -> int:
     reg_agents, reg_orga = registres()
     api = Api(url_api())
-    entreprise = trouver_entreprise(api, reg_orga)
+    entreprise = entreprise_du_gardien(api, reg_orga)
     if entreprise is None:
         print("assurer-connexions : aucune organisation de démonstration sur cette instance, rien à faire.")
         return 0

@@ -83,7 +83,7 @@ export interface EntreesPorte {
    * Connaissances du client (lot R7) : corps du livrable, adresses `connaissance://` rendues à la tâche,
    * versions des documents cités, date de la porte. Absente : la règle ne s'applique pas.
    */
-  connaissances?: { livrable: string; passagesRendus: string[]; versions: VersionPourValidite[]; date: string };
+  connaissances?: { livrable: string; passagesRendus: string[]; versions: VersionPourValidite[]; date: string; urlsSourcesTache?: string[] };
 }
 
 export interface ResultatPorte {
@@ -263,7 +263,7 @@ export function evaluerPorte(e: EntreesPorte): ResultatPorte {
   if (e.donneesDemo) motifs.push(...verifierDonneesDemo(e.donneesDemo));
   if (e.connaissances) {
     const k = e.connaissances;
-    for (const c of controlerCitationsConnaissances(k.livrable, k.passagesRendus, k.versions, k.date)) {
+    for (const c of controlerCitationsConnaissances(k.livrable, k.passagesRendus, k.versions, k.date, { urlsSourcesTache: k.urlsSourcesTache ?? [] })) {
       motifs.push(motif(c.code, c.message, { emplacement: c.emplacement, element: c.adresse ?? c.extrait }));
     }
   }

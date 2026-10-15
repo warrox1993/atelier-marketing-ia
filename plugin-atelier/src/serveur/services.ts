@@ -404,7 +404,11 @@ export function creerServices(ctx: PluginContext, options: { transportReel?: Tra
       constats: constats.map((c) => ({ findingId: c.findingId, gravite: c.gravite, statutResolution: c.statutResolution, role: c.role })),
       revisionsDejaRefusees,
       donneesDemo,
-      connaissances: await connaissances.entreesPorte(companyId, issueId, liv),
+      connaissances: await (async () => {
+        const k = await connaissances.entreesPorte(companyId, issueId, liv);
+        // Un chiffre d'offre peut aussi s'appuyer sur une source web enregistrée pour CETTE tâche.
+        return k ? { ...k, urlsSourcesTache: (await base.sourcesPourGarde(companyId, issueId)).map((x) => x.url).filter((u): u is string => typeof u === "string" && /^https?:/u.test(u)) } : k;
+      })(),
     });
     const id = randomUUID();
     await base.insererEvaluation({

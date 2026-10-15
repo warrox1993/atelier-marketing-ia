@@ -1,0 +1,103 @@
+From b046dbcf4b0167657a20cbac7a9ddeea37f01650 Mon Sep 17 00:00:00 2001
+From: Jean-Baptiste Dhondt <114347858+warrox1993@users.noreply.github.com>
+Date: Thu, 15 Oct 2026 22:36:38 +0200
+Subject: [PATCH] =?UTF-8?q?fix(atelier,=20local):=20une=20comp=C3=A9tence?=
+ =?UTF-8?q?=20obligatoire=20d=C3=A9clar=C3=A9e=20par=20sa=20cl=C3=A9=20cou?=
+ =?UTF-8?q?rte=20est=20reconnue?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+L'organisation déclare les compétences obligatoires par leur clé courte
+(« cadrage-exigences ») alors que Paperclip range les compétences désirées
+sous la clé de l'entreprise (« company/<id>/cadrage-exigences »). La garde
+exigeait l'égalité exacte et refusait tout run réel du Coordinateur
+(configuration_incomplete, tâche bloquée).
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01DP85vPq2MHkZg8VNtRvCzB
+---
+ .../src/__tests__/atelier-competences.test.ts | 15 +++++++++++
+ server/src/atelier/competences-run.ts         | 26 +++++++++++++++----
+ 2 files changed, 36 insertions(+), 5 deletions(-)
+
+diff --git a/server/src/__tests__/atelier-competences.test.ts b/server/src/__tests__/atelier-competences.test.ts
+index b2c71b7a7..5b90becda 100644
+--- a/server/src/__tests__/atelier-competences.test.ts
++++ b/server/src/__tests__/atelier-competences.test.ts
+@@ -45,4 +45,19 @@ describe("atelier : compétences transmises à un run", () => {
+     const indisponible = await inventaireCompetencesRun({ entrees: [{ ...base, sourceStatus: "missing" }], desirees: [{ key: "atelier/cadrage", versionId: null }], metadata: { atelier: { competencesObligatoires: ["atelier/cadrage"] } } });
+     expect(indisponible.manquantes).toEqual(["atelier/cadrage"]);
+   });
++  it("reconnaît une obligatoire déclarée par sa clé courte quand la désirée porte la clé de l'entreprise", async () => {
++    const complete = "company/c1c5eb4f/cadrage";
++    const entree = { key: complete, runtimeName: "cadrage", source: path.join(dossier, "cadrage"), sourceStatus: "available" as const };
++    const inv = await inventaireCompetencesRun({ entrees: [entree], desirees: [{ key: complete, versionId: null }], metadata: { atelier: { competencesObligatoires: ["cadrage"] } } });
++    expect(inv.manquantes).toEqual([]);
++    expect(inv.transmises.map((c) => c.cle)).toEqual([complete]);
++    // Toujours refusée si elle n'est pas désirée, ou si sa source manque.
++    const nonDesiree = await inventaireCompetencesRun({ entrees: [entree], desirees: [], metadata: { atelier: { competencesObligatoires: ["cadrage"] } } });
++    expect(nonDesiree.manquantes).toEqual(["cadrage"]);
++    const indisponible = await inventaireCompetencesRun({ entrees: [{ ...entree, sourceStatus: "missing" }], desirees: [{ key: complete, versionId: null }], metadata: { atelier: { competencesObligatoires: ["cadrage"] } } });
++    expect(indisponible.manquantes).toEqual(["cadrage"]);
++    // Un simple suffixe de nom ne suffit pas : « pre-cadrage » n'est pas « cadrage ».
++    const voisine = await inventaireCompetencesRun({ entrees: [{ ...entree, key: "company/c1c5eb4f/pre-cadrage", runtimeName: "pre-cadrage" }], desirees: [{ key: "company/c1c5eb4f/pre-cadrage", versionId: null }], metadata: { atelier: { competencesObligatoires: ["cadrage"] } } });
++    expect(voisine.manquantes).toEqual(["cadrage"]);
++  });
+ });
+diff --git a/server/src/atelier/competences-run.ts b/server/src/atelier/competences-run.ts
+index 1d4e3fe1e..b9e5bf33c 100644
+--- a/server/src/atelier/competences-run.ts
++++ b/server/src/atelier/competences-run.ts
+@@ -60,9 +60,19 @@ export async function empreinteCompetence(source: string): Promise<string | null
+   }
+ }
+ 
++/**
++ * Une clé complète (`company/<id>/cadrage`, `atelier/cadrage`) désigne-t-elle la clé
++ * cherchée ? L'organisation déclare ses compétences obligatoires par leur clé courte
++ * (`cadrage`), alors que Paperclip range les compétences désirées sous leur clé
++ * complète préfixée par l'entreprise : les deux formes doivent se reconnaître.
++ */
++function memeCompetence(cleComplete: string, cle: string): boolean {
++  return cleComplete === cle || cleComplete.endsWith(`/${cle}`);
++}
++
+ /** Une clé désirée correspond-elle à une entrée (clé exacte ou nom d'exécution) ? */
+ function correspond(entree: EntreeCompetenceRun, cle: string): boolean {
+-  return entree.key === cle || entree.runtimeName === cle || entree.key.endsWith(`/${cle}`);
++  return memeCompetence(entree.key, cle) || entree.runtimeName === cle;
+ }
+ 
+ export async function inventaireCompetencesRun(input: {
+@@ -71,7 +81,12 @@ export async function inventaireCompetencesRun(input: {
+   metadata: unknown;
+ }): Promise<InventaireCompetences> {
+   const obligatoires = competencesObligatoires(input.metadata);
+-  const cles = [...new Set([...input.desirees.map((d) => d.key), ...obligatoires])];
++  // Une obligatoire déjà couverte par une désirée (clé courte ou complète) n'est pas
++  // inventoriée deux fois : on la suit sous la clé désirée.
++  const cles = [...new Set([
++    ...input.desirees.map((d) => d.key),
++    ...obligatoires.filter((cle) => !input.desirees.some((d) => memeCompetence(d.key, cle))),
++  ])];
+   const transmises: CompetenceTransmise[] = [];
+   for (const cle of cles) {
+     const entree = input.entrees.find((e) => correspond(e, cle));
+@@ -86,9 +101,10 @@ export async function inventaireCompetencesRun(input: {
+     });
+   }
+   const manquantes = obligatoires.filter((cle) => {
+-    const t = transmises.find((x) => x.cle === cle);
+-    const desiree = input.desirees.some((d) => d.key === cle);
+-    return !t || !desiree || t.statutSource !== "available" || !t.sha256;
++    const desiree = input.desirees.find((d) => memeCompetence(d.key, cle));
++    if (!desiree) return true;
++    const t = transmises.find((x) => x.cle === desiree.key);
++    return !t || t.statutSource !== "available" || !t.sha256;
+   });
+   return { transmises, obligatoires, manquantes };
+ }
+-- 
+2.53.0
+

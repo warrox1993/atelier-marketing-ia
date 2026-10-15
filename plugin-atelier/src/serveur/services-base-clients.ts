@@ -26,21 +26,24 @@ import {
   LIMITES_PROSPECTION,
   ListerProspectsEntree,
   SupprimerBaseClientsEntree,
+  type BaseLegaleContact,
   type CanalContact,
+  type ClientBase,
   type CleRouteApi,
   type ModeExecution,
   type Prospect,
+  type RegleVenteCroisee,
   type RenvoiReferentiel,
   type VerificationExport,
 } from "../contrats/index.js";
 import type { ActeurHote, GestionnaireRoute } from "./atelier.js";
 import type { BaseAtelier } from "./base.js";
-import { aPurger, colonnesSensibles, lireFichierBaseClients, preparerImportBaseClients } from "./base-clients.js";
+import { aPurger, colonnesSensibles, lireFichierBaseClients, opportunitesVenteCroisee, preparerImportBaseClients } from "./base-clients.js";
 import { dechiffrer } from "./chiffrement-donnees.js";
 import { erreur, erreurValidation } from "./erreurs.js";
 import { appliquerEtalonnage, etalonner, type ObservationEtalonnage } from "./etalonnage.js";
 import { controlerAppel } from "./preuve-approbation.js";
-import { contactPermis, type ContexteProspection } from "./regles-prospection.js";
+import { contactPermis, type ContexteContact, type ContexteProspection } from "./regles-prospection.js";
 import type { ClesDonnees, DependancesProspection } from "./services-prospection.js";
 
 type Campagne = { id: string; mode: "demonstration" | "reel"; canaux: string[]; perimetre: { zones: string[] } };
@@ -89,6 +92,12 @@ function ligneCsv(valeurs: readonly string[]): string {
 /**
  * Score de DÉMONSTRATION d'une opportunité de l'historique quand il n'a pas de colonne `score` : le
  * générateur de démonstration ne fournit que le canal d'origine. Barème fixe, jamais ajusté sur les issues.
+ *
+ * Il est sur la MÊME échelle que le score des particuliers (critères B2C de `criteresDuProspect`, poids de
+ * démonstration de `scripts/demo/peupler-prospects.py`) : origine consentie 25 + consentement actif 10 +
+ * produit demandé 5 + zone desservie 10 = 50 pour un devis en ligne (`devis_en_ligne`), + contact direct 10
+ * = 60 pour un rendez-vous ou une visite (`bureau`) ; hors zone, 40 (`appel_sortant`). Sans cette
+ * correspondance, l'étalonnage tiré de l'historique ne s'appliquerait à aucun prospect (tranches non observées).
  */
 export const SCORE_DEMO_CANAL: Readonly<Record<string, number>> = {
   recommandation: 70, bureau: 60, devis_en_ligne: 50, appel_sortant: 40, prospection_courriel: 30,
@@ -121,6 +130,101 @@ export function observationsHistorique(colonnes: readonly string[], lignes: read
 export function coupureParDefaut(observations: readonly ObservationEtalonnage[]): string {
   const dates = observations.map((o) => o.date).sort();
   return dates[Math.min(dates.length - 1, Math.floor(dates.length * 0.7))] ?? "1970-01-01";
+}
+
+/* ------------------------------------------------------------------ */
+/* Ventes croisées                                                     */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Règles de vente croisée de DÉMONSTRATION du courtier fictif, utilisées seulement en mode démonstration
+ * et seulement si le client n'a enregistré aucune règle (`regles_ventes_croisees`) : en réel, l'usine
+ * n'invente jamais une règle (contrat `RegleVenteCroisee`). Codes d'offres du référentiel de démonstration.
+ * - particulier : auto sans habitation → habitation ; habitation sans familiale → familiale ;
+ * - entreprise : RC professionnelle sans multirisque → multirisque.
+ */
+export const REGLES_VENTE_CROISEE_DEMO: ReadonlyArray<Pick<RegleVenteCroisee, "typeClient" | "detenue" | "proposee">> = [
+  { typeClient: "particulier", detenue: "auto", proposee: "habitation" },
+  { typeClient: "particulier", detenue: "habitation", proposee: "familiale" },
+  { typeClient: "entreprise", detenue: "rc-pro", proposee: "multirisque" },
+];
+
+/** Canaux examinés pour une opportunité de vente croisée. */
+export const CANAUX_VENTE_CROISEE: readonly CanalContact[] = ["courriel", "sms", "telephone", "courrier"];
+
+/**
+ * Prospect équivalent à un client de la base, pour appliquer TELLE QUELLE la matrice `contactPermis` :
+ * coordonnées chiffrées reprises de la base (jamais déchiffrées), empreintes du client, volet particulier
+ * « client existant » rattaché au client (vente croisée), consentements déclarés dans la base en preuves.
+ * Le numéro BCE n'est pas repris : le client est connu, ce n'est pas une prospection sur registre.
+ */
+export function prospectDuClient(c: ClientBase): Prospect {
+  const empreinte = (type: string) => c.empreintes.find((e) => e.type === type)?.valeur ?? null;
+  const coordonnees: Prospect["coordonnees"] = [];
+  const courriel = empreinte("courriel");
+  if (c.donneesChiffrees.courriel && courriel) coordonnees.push({ canal: "courriel", valeur: c.donneesChiffrees.courriel, empreinte: courriel, nature: "inconnue" });
+  const telephone = empreinte("telephone");
+  if (c.donneesChiffrees.telephone && telephone) coordonnees.push({ canal: "telephone", valeur: c.donneesChiffrees.telephone, empreinte: telephone, nature: "inconnue" });
+  if (c.donneesChiffrees.adresse) coordonnees.push({ canal: "courrier", valeur: c.donneesChiffrees.adresse, empreinte: c.empreintes[0]?.valeur ?? "0".repeat(64), nature: "inconnue" });
+  const consentis = (["courriel", "sms", "telephone"] as const).filter((k) => c.consentements[k] === true);
+  const particulier = c.typeClient === "particulier";
+  return {
+    id: c.id, companyId: c.companyId, campagneId: null, cible: particulier ? "particulier" : "entreprise",
+    identifiant: { type: "empreinte", valeur: c.empreintes[0]?.valeur ?? "0".repeat(64) }, numeroBce: null,
+    referentiel: { version: 1, entite: null, offres: [], segments: [], etablissement: c.etablissement, cibleProspection: null },
+    forme: particulier ? "personne_physique" : "personne_morale", denomination: null, nomChiffre: null, nace: [],
+    zone: { codePostal: c.codePostal, commune: c.commune, province: null, region: null, pays: "BE" },
+    coordonnees, empreintes: c.empreintes.slice(0, 20), sources: [{ type: "import", sourceId: null, service: null, outil: null, url: null, collecteLe: c.creeLe }],
+    mode: c.mode, statut: "nouveau", motifsExclusion: [], score: null, basesLegales: [],
+    particulier: particulier
+      ? {
+          origine: "client_existant", clientId: c.id, offresDemandees: [], pseudonyme: c.pseudonyme,
+          consentements: consentis.length === 0 ? [] : [{
+            date: c.creeLe, texteAccepte: "Consentement marketing déclaré dans la base clients importée par le client.", source: "base clients importée",
+            canauxAutorises: [...consentis], responsableNomme: "Client de l'atelier", reference: `base-clients:${c.importId ?? c.id}`, retireLe: null,
+          }],
+        }
+      : null,
+    creeLe: c.creeLe, modifieLe: c.creeLe,
+  } as Prospect;
+}
+
+/**
+ * Base légale examinée pour un client existant et un canal : consentement déclaré dans la base s'il existe ;
+ * sinon exception « client existant, produits analogues » (courriel, SMS), intérêt légitime sur la base
+ * clients comme source (courrier), et rien pour le téléphone (mise en balance et liste « Ne m'appelez plus »
+ * à documenter par l'humain). Un consentement déclaré NON vaut refus, sans autre examen.
+ */
+export function baseLegaleClient(c: ClientBase, canal: CanalContact, date: string): BaseLegaleContact | null | "refuse" {
+  const declare = canal === "courrier" ? null : c.consentements[canal];
+  if (declare === false) return "refuse";
+  const commun = {
+    prospectId: c.id, cible: c.typeClient === "particulier" ? "particulier" : "entreprise", forme: c.typeClient === "particulier" ? "personne_physique" : "personne_morale", canal,
+    natureAdresse: "inconnue",
+    information: { texteArt14: "Vous recevez ce message en tant que client : vos données viennent de votre dossier chez nous.", moyenOpposition: "Lien ou mention d'opposition dans chaque message" },
+    dncmVerifieLe: null, verifieLe: date, verifiePar: "atelier:ventes-croisees",
+  } as const;
+  const reference = `base-clients:${c.importId ?? c.id}`;
+  if (declare === true) return { ...commun, base: "consentement", preuve: { type: "consentement", reference, date: c.creeLe } } as BaseLegaleContact;
+  if (canal === "courriel" || canal === "sms") return { ...commun, base: "client_existant_produits_analogues", preuve: { type: "relation_client", reference, date: c.creeLe } } as BaseLegaleContact;
+  if (canal === "courrier") return { ...commun, base: "interet_legitime", preuve: { type: "source", reference, date: c.creeLe } } as BaseLegaleContact;
+  return null;
+}
+
+/** Décision par canal pour un client existant (matrice `contactPermis`, produits analogues par la règle de vente croisée). */
+export function canauxClient(c: ClientBase, ctx: ContexteContact): Array<{ canal: CanalContact; permis: boolean; motif: string }> {
+  const p = prospectDuClient(c);
+  return CANAUX_VENTE_CROISEE.map((canal) => {
+    const base = baseLegaleClient(c, canal, ctx.maintenant);
+    if (base === "refuse") return { canal, permis: false, motif: `Le client a refusé le canal ${canal} (consentement déclaré non)` };
+    const d = contactPermis(p, canal, base, { ...ctx, canaux: [canal], produitsAnalogues: true });
+    // La matrice ne reconnaît la vente croisée qu'avec le volet particulier : une entreprise cliente est
+    // exclue comme « client actuel ». Refus gardé tel quel, motif rendu lisible pour l'humain.
+    if (!d.permis && c.typeClient === "entreprise" && /client_actuel/u.test(d.motif)) {
+      return { canal, permis: false, motif: "Entreprise cliente : la matrice des bases légales ne prévoit pas encore l'exception « client existant » en B2B (à faire valider)" };
+    }
+    return { canal, permis: d.permis, motif: d.motif };
+  });
 }
 
 const OUTIL_EXPORT: Readonly<Record<string, string>> = {
@@ -216,6 +320,47 @@ export function routesBaseClients(d: DependancesProspection, o: OutilsProspectio
       await base.journaliser({ companyId: r.companyId, type: "base_clients.supprimee", entite: "base_clients", entiteId: r.companyId, acteur: r.acteur.id, donnees: { motif: entree.motif, ...res, oppositionsGardees: true } });
       return { corps: { clientsSupprimes: res.clients, importsSupprimes: res.imports, oppositionsGardees: true } };
     });
+
+  /* ---------------- ventes croisées ---------------- */
+
+  routes["ventes-croisees.lister"] = async (r) => {
+    exigerHumain(r.acteur, "La lecture des ventes croisées");
+    const mode = (await d.modeEffectif(r.companyId, null)).mode;
+    const enregistrees = await base.reglesVentesCroisees(r.companyId);
+    const origineRegles: "client" | "demonstration" | "aucune" = enregistrees.length > 0 ? "client" : mode === "demonstration" ? "demonstration" : "aucune";
+    const decideLe = maintenant().toISOString();
+    const regles: RegleVenteCroisee[] = origineRegles === "client"
+      ? enregistrees
+      : origineRegles === "demonstration"
+        ? REGLES_VENTE_CROISEE_DEMO.map((x) => ({ ...x, companyId: r.companyId, decidePar: "démonstration (règles fixes du courtier)", decideLe }))
+        : [];
+    const clients = await base.clientsPourVentesCroisees(r.companyId);
+    const parId = new Map(clients.map((c) => [c.id, c as unknown as ClientBase]));
+    const opportunites = opportunitesVenteCroisee(clients as unknown as ClientBase[], regles, maintenant().toISOString());
+    const date = maintenant().toISOString();
+    const empreintes = [...new Set(opportunites.flatMap((o) => (parId.get(o.clientId)?.empreintes ?? []).map((e) => e.valeur)))];
+    const [oppositions, dncm] = await Promise.all([base.oppositionsPour(r.companyId, empreintes), base.dncmPour(r.companyId, empreintes)]);
+    const lignes = opportunites.map((o) => {
+      const c = parId.get(o.clientId)!;
+      const ctx: ContexteContact = {
+        maintenant: date, modeCampagne: mode, canaux: [], zone: null,
+        oppositions: oppositions.map((x) => ({ type: x.type as never, valeur: x.valeur })), dncm,
+        clientsActuels: c.statut === "actif" ? c.empreintes : [],
+      };
+      const canaux = canauxClient(c, ctx);
+      // Jamais de coordonnée ni d'identifiant interne : pseudonyme, offres et zone seulement.
+      return {
+        pseudonyme: o.pseudonyme, typeClient: o.typeClient, detenus: o.detenus, proposes: o.proposes, codePostal: o.zone.codePostal, commune: o.zone.commune,
+        canauxPermis: canaux.filter((x) => x.permis).map((x) => x.canal), canaux, mode: o.mode,
+      };
+    });
+    return {
+      corps: {
+        mode, origineRegles, regles: regles.map((x) => ({ typeClient: x.typeClient, detenue: x.detenue, proposee: x.proposee, decidePar: x.decidePar })),
+        clients: clients.length, opportunites: lignes,
+      },
+    };
+  };
 
   /* ---------------- étalonnage ---------------- */
 

@@ -39,6 +39,10 @@ MAX_PAGES = 5  # pages de 10 résultats déposées au plus, par appel d'outil
 POIDS = {  # critères du score expliqué (plugin-atelier/src/serveur/services-prospection.ts)
     "source_registre_officiel": 30, "activite_nace_connue": 15, "courriel_impersonnel": 25,
     "telephone_present": 15, "site_present": 15,
+    # Critères B2C (particuliers) : même échelle que le barème SCORE_DEMO_CANAL de l'historique
+    # (plugin-atelier/src/serveur/services-base-clients.ts) : devis dans la zone = 50, rendez-vous = 60.
+    "origine_demande_personne": 25, "contact_direct": 10, "consentement_actif": 10,
+    "produit_demande": 5, "zone_desservie": 10,
 }
 # (service, outil, arguments) : B2B puis B2C. Les pages suivantes sont lues d'après `pages` de la réponse.
 APPELS = [
@@ -208,13 +212,19 @@ def configurer_cle(base, cid, publique):
 def enregistrer_poids(cid, port_pg):
     env = {"PATH": os.environ.get("PATH", ""), "PGPASSWORD": "paperclip"}
     base = ["psql", "-h", "127.0.0.1", "-p", str(port_pg), "-U", "paperclip", "-d", "paperclip", "-Atq", "-v", "ON_ERROR_STOP=1"]
-    n = subprocess.run(base + ["-c", f"select count(*) from plugin_atelier_f0322cc62c.poids_score where company_id='{cid}'"], env=env, capture_output=True, text=True)
+    # Dernière version des poids : une nouvelle version n'est écrite que si elle ne contient pas déjà POIDS
+    # (cas d'une instance peuplée avant l'ajout des critères B2C).
+    n = subprocess.run(base + ["-c", f"select version, poids::text from plugin_atelier_f0322cc62c.poids_score where company_id='{cid}' order by version desc limit 1"], env=env, capture_output=True, text=True)
     if n.returncode != 0:
         raise RuntimeError(f"base de l'instance d'aperçu illisible : {n.stderr.strip()[:200]}")
-    if int(n.stdout.strip() or 0) > 0:
-        return False
+    version = 0
+    if n.stdout.strip():
+        v, poids = n.stdout.strip().split("|", 1)
+        version = int(v)
+        if all(json.loads(poids).get(cle) == val for cle, val in POIDS.items()):
+            return False
     sql = ("insert into plugin_atelier_f0322cc62c.poids_score (company_id, version, poids, decide_par) "
-           f"values ('{cid}', 1, '{json.dumps(POIDS)}'::jsonb, 'démonstration (peupler-prospects.py)')")
+           f"values ('{cid}', {version + 1}, '{json.dumps(POIDS)}'::jsonb, 'démonstration (peupler-prospects.py)')")
     r = subprocess.run(base + ["-c", sql], env=env, capture_output=True, text=True)
     if r.returncode != 0:
         raise RuntimeError(f"insertion des poids : {r.stderr.strip()[:200]}")
@@ -235,7 +245,7 @@ def main():
     cle, publique = preparer_cle()
     print(lancer_passerelle(a.passerelle_port, cle))
     print("clé publique ajoutée au plugin" if configurer_cle(base, cid, publique) else "clé publique déjà configurée")
-    print("poids du score enregistrés" if enregistrer_poids(cid, a.pg_port) else "poids du score déjà présents")
+    print("poids du score enregistrés (nouvelle version)" if enregistrer_poids(cid, a.pg_port) else "poids du score déjà à jour")
     issue, cree = trouver_ou_creer_tache(base, cid)
     print(f"tâche {issue} ({'créée' if cree else 'existante'})")
 

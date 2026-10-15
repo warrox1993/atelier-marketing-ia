@@ -1,7 +1,7 @@
 # Reprise : Atelier Marketing IA
 
-Dernière mise à jour : 15/10/2026, corrections de la revue indépendante et signatures de la passerelle (après
-l'intégration des connecteurs dans l'usine).
+Dernière mise à jour : 15/10/2026 au soir (modules de prospection et de connaissances du client, passerelle OpenStreetMap
+réelle, rôle de tête du Coordinateur ; voir la dernière section).
 Seul responsable du code à cette date : l'intégrateur final. Historique : `git log`.
 
 ## État réel
@@ -149,3 +149,39 @@ Recharger le worker après `pnpm build` : `POST /api/plugins/atelier.marketing-i
   `docs/exploitation.md` §10). Cela remplace les lignes ci-dessus qui demandent de relancer `appliquer` après chaque connexion.
 - Arrêt d'instance : cause de l'orphelin PostgreSQL trouvée et corrigée (`scripts/lib-arret-instance.sh`, `docs/exploitation.md` §9) ;
   tests `scripts/arret-instance-tests.sh`. Essais `atelier-conn` (3360) et `atelier-arret` (3361) : arrêtés, données dans `instance/instances/`.
+
+## Prospection, connaissances du client et passerelle réelle (état du 15/10/2026 au soir)
+
+Historique : `git log --oneline 3ae1c79..HEAD` (44 commits).
+
+**Modules ajoutés**
+- Prospection B2B, B2C et partenaires : contrats v1.7 et migrations 007 et 008 ; règles légales pures (BCE modulo 97, E.164 belge,
+  nature d'adresse, dédoublonnage, exclusions, matrice canal × cible) ; score expliqué et étalonnage statistique (Platt, isotonique
+  à partir de 1 000 exemples) ; base clients importée en CSV ou XLSX, chiffrée (`chv1`) avec empreintes HMAC ; export CRM sous
+  approbation ; export fichier CSV ou XLSX ; écran « Prospects ». Les numéros BCE fictifs sont acceptés en démonstration (forme
+  seule), le contrôle modulo 97 reste entier en réel.
+- Connaissances du client (RAG) : extraction PDF, DOCX, XLSX, HTML, Markdown et texte ; vectorisation locale bge-m3 en
+  sous-processus, ou aucune ; recherche hybride (filtres, mots-clés, sens, fusion RRF, seuil) ; règles de citation, péremption,
+  pseudonymisation et passages non fiables ; écran « Connaissances » ; corpus de démonstration (16 documents, 2 CSV, 10 questions).
+- Organisation : rôle « Prospection » et compétences de prospection et de connaissances ; le Coordinateur prend le rôle de tête
+  `ceo` et reçoit par défaut les nouvelles tâches.
+- Socle : cinq cartes de galerie de la prospection (patch `0011`), puis patch `0012` (le Gardien des connexions agit sur sa
+  propre entreprise ; garde des compétences obligatoires corrigée).
+- Passerelle : simulateur B2C du courtier, fournisseur réel BNB (Centrale des bilans, lot P4) et mélange
+  `PASSERELLE_SERVICES_REELS=osm` (OpenStreetMap réel, index `instance/donnees/osm/osm.sqlite`, extrait Geofabrik du 14/10).
+
+**Pièges appris**
+- L'hôte étale les tableaux JavaScript en paramètres SQL : passer des listes en JSON.
+- Tests verts ne veut pas dire lancement réel : `mammoth` refusait de se charger sans `require` natif dans le worker.
+- Redépôt et doublons : un redépôt ne doit pas exclure la fiche d'origine comme doublon.
+- Changer les clés HMAC change toutes les empreintes : repartir de zéro.
+- `claude setup-token` ne marche pas via `!` : le lancer dans un terminal à part.
+- Le masqueur de secrets restitue la vraie valeur dans les commandes : ne rien coller de ces sorties.
+
+**Reste à faire**
+- Correctifs de la revue de sécurité (G1 à G4, M1 à M3 et mineurs), reportés après la présentation.
+- Évaluation R10 du RAG ; FSMA réel.
+- Comptes réels : fichier BCE, clé BNB, Google, Meta, LinkedIn, HubSpot.
+- Décision sur les données personnelles d'indépendants présentes dans OpenStreetMap.
+- Décisions de l'opérateur listées dans les messages des commits `78c96c8` et `a3ef5ec`.
+- Exploitation de l'instance (3100, passerelle 3190, clés de données, scripts) : `docs/exploitation.md` §12 et §13.

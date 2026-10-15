@@ -77,7 +77,9 @@ const MOTIFS_INJECTION: ReadonlyArray<[RegExp, string]> = [
   [/\b(?:approuve|valide)[rz]?\b.{0,30}\b(?:toi-m[eê]me|automatiquement|sans relecture)\b/iu, "auto-approbation demandée"],
   [/\b(?:curl|wget)\s+https?:\/\/|\brm\s+-rf\b|\bsudo\b|\bchmod\s+\d{3}\b/iu, "commande système"],
   [/<\s*script\b/iu, "balise script"],
-  [/(?:^|\n)\s*(?:assistant|system)\s*:/iu, "faux tour de dialogue"],
+  // Début de ligne (drapeau m) et espaces horizontaux seulement : « \s* » franchissait les sauts de
+  // ligne et rendait la recherche quadratique sur une suite de lignes vides (ReDoS corrigé).
+  [/^[ \t]*(?:assistant|system)[ \t]*:/imu, "faux tour de dialogue"],
 ];
 
 /** Instructions suspectes repérées dans un contenu externe (signalées, jamais suivies). */

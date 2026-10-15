@@ -36,14 +36,40 @@ export function blocsParTitres(elements: readonly Element[], meta: { page: numbe
   return blocs;
 }
 
+/**
+ * Retire les commentaires `<!-- … -->` par balayage linéaire (`indexOf`), sans expression régulière
+ * à retour arrière. Un commentaire jamais fermé court jusqu'à la fin du texte, comme dans un
+ * navigateur : son contenu est retiré du texte et renvoyé comme commentaire.
+ */
 function retirerCommentaires(texte: string): { texte: string; commentaires: string[] } {
   const commentaires: string[] = [];
-  const sans = texte.replace(/<!--([\s\S]*?)-->/gu, (_m, c: string) => {
-    const t = c.trim();
-    if (t) commentaires.push(t);
-    return " ";
-  });
-  return { texte: sans, commentaires };
+  const morceaux: string[] = [];
+  let i = 0;
+  for (;;) {
+    const debut = texte.indexOf("<!--", i);
+    if (debut < 0) {
+      morceaux.push(texte.slice(i));
+      break;
+    }
+    morceaux.push(texte.slice(i, debut), " ");
+    const fin = texte.indexOf("-->", debut + 4);
+    const contenu = (fin < 0 ? texte.slice(debut + 4) : texte.slice(debut + 4, fin)).trim();
+    if (contenu) commentaires.push(contenu);
+    if (fin < 0) break;
+    i = fin + 3;
+  }
+  return { texte: morceaux.join(""), commentaires };
+}
+
+/** Titre Markdown sans les `#` de fermeture, par opérations sur la chaîne (aucun motif ambigu). */
+function titreMarkdown(ligne: string): string | null {
+  const m = /^#{1,6}[ \t]+(.*)$/u.exec(ligne);
+  if (!m) return null;
+  const brut = (m[1] as string).trim();
+  let fin = brut.length;
+  while (fin > 0 && (brut[fin - 1] === "#" || brut[fin - 1] === " " || brut[fin - 1] === "\t")) fin -= 1;
+  const titre = brut.slice(0, fin);
+  return titre || brut || null;
 }
 
 export function extraireTexteBrut(texte: string): TexteStructure {
@@ -60,14 +86,15 @@ export function extraireMarkdown(brut: string): TexteStructure {
       code = !code;
       continue;
     }
-    const titre = code ? null : /^#{1,6}\s+(.+?)\s*#*\s*$/u.exec(ligne);
+    const titre = code ? null : titreMarkdown(ligne);
+    // Quantificateurs bornés et sans saut de ligne : temps linéaire même sur « [[[[… » (ReDoS corrigé).
     const nettoyee = ligne
-      .replace(/!\[([^\]]*)\]\([^)]*\)/gu, "$1")
-      .replace(/\[([^\]]+)\]\([^)]*\)/gu, "$1")
+      .replace(/!\[([^\]\n]{0,500})\]\([^)\n]{0,2000}\)/gu, "$1")
+      .replace(/\[([^\]\n]{1,500})\]\([^)\n]{0,2000}\)/gu, "$1")
       .replace(/(\*{1,3}|`)/gu, "")
       .replace(/^\s*(?:>\s?|[-*+]\s+)/u, "")
       .trim();
-    if (titre) elements.push({ type: "titre", texte: (titre[1] as string).replace(/(\*{1,3}|`)/gu, "").trim() });
+    if (titre) elements.push({ type: "titre", texte: titre.replace(/(\*{1,3}|`)/gu, "").trim() });
     else if (nettoyee) elements.push({ type: "texte", texte: nettoyee });
   }
   return { blocs: blocsParTitres(elements, { page: null, feuille: null }), commentaires };
@@ -80,7 +107,7 @@ const ENTITES: Readonly<Record<string, string>> = {
 };
 
 function decoderEntites(texte: string): string {
-  return texte.replace(/&(#x[0-9a-f]+|#\d+|[a-z]+);/giu, (m, e: string) => {
+  return texte.replace(/&(#x[0-9a-f]{1,8}|#\d{1,8}|[a-z]{1,32});/giu, (m, e: string) => {
     if (e.startsWith("#")) {
       const n = e[1]?.toLowerCase() === "x" ? Number.parseInt(e.slice(2), 16) : Number.parseInt(e.slice(1), 10);
       return Number.isInteger(n) && n > 0 && n <= 0x10ffff ? String.fromCodePoint(n) : " ";
@@ -108,21 +135,18 @@ export function extraireHtml(brut: string): TexteStructure {
     if (!t) return;
     for (const morceau of t.split("\n")) if (morceau.trim()) elements.push({ type: titreEnCours ? "titre" : "texte", texte: morceau.trim() });
   };
-  const jetons = /<(\/?)([a-zA-Z][a-zA-Z0-9]*)\b[^>]*?(\/?)>|<[^>]*>|[^<]+|</gu;
-  for (const m of texte.matchAll(jetons)) {
-    const [entier, fermante, nomBrut, autoFermante] = m;
-    if (nomBrut === undefined) {
-      if (!ignore && !entier.startsWith("<")) ligne += entier;
-      continue;
-    }
+  const texteBrut = (t: string): void => {
+    if (!ignore) ligne += t;
+  };
+  const balise = (fermante: boolean, nomBrut: string, autoFermante: boolean): void => {
     const nom = nomBrut.toLowerCase();
     if (ignore) {
       if (fermante && nom === ignore) ignore = null;
-      continue;
+      return;
     }
     if (!fermante && !autoFermante && BALISES_IGNOREES.has(nom)) {
       ignore = nom;
-      continue;
+      return;
     }
     if (BALISES_TITRE.test(nom)) {
       fermerLigne();
@@ -132,6 +156,26 @@ export function extraireHtml(brut: string): TexteStructure {
     } else if (nom === "td" || nom === "th") {
       ligne += " | ";
     }
+  };
+  // Balayage linéaire : chaque balise va du « < » au premier « > » (comme l'ancien motif), sans retour
+  // arrière ; sans « > » plus loin, le reste est du texte (les « < » isolés sont ignorés).
+  let i = 0;
+  while (i < texte.length) {
+    const lt = texte.indexOf("<", i);
+    if (lt < 0) {
+      texteBrut(texte.slice(i));
+      break;
+    }
+    if (lt > i) texteBrut(texte.slice(i, lt));
+    const gt = texte.indexOf(">", lt + 1);
+    if (gt < 0) {
+      texteBrut(texte.slice(lt + 1).split("<").join(""));
+      break;
+    }
+    const interieur = texte.slice(lt + 1, gt);
+    const m = /^(\/?)([a-zA-Z][a-zA-Z0-9]*)(?![\w])/u.exec(interieur);
+    if (m) balise(m[1] === "/", m[2] as string, interieur.endsWith("/"));
+    i = gt + 1;
   }
   fermerLigne();
   return { blocs: blocsParTitres(elements, { page: null, feuille: null }), commentaires };

@@ -19,6 +19,7 @@ import {
   AjouterOppositionEntree,
   BaseLegaleContact,
   CodeNace,
+  CodeReferentiel,
   DeposerProspectsEntree,
   EnregistrerParticulierEntree,
   ExclureProspectEntree,
@@ -246,6 +247,15 @@ export interface ParticulierBrut {
   consentements: PreuveConsentement[];
   /** Identifiant du client chez le client (fiche `b2c_clients`), à rapprocher de la base de clients ; null sinon. */
   clientRef: string | null;
+  /** Produit demandé (fiche `b2c_demandes_devis`), en code du référentiel (tirets) ; null si absent ou invalide. */
+  produit: string | null;
+}
+
+/** Code de produit d'une demande B2C ramené à la forme d'un code du référentiel (`epargne_pension` → `epargne-pension`). */
+function codeProduitB2c(v: unknown): string | null {
+  if (typeof v !== "string") return null;
+  const r = CodeReferentiel.safeParse(v.trim().toLowerCase().replace(/_/gu, "-"));
+  return r.success ? r.data : null;
 }
 
 export interface OppositionBrute {
@@ -329,7 +339,10 @@ export function extraireB2c(outil: string, structures: readonly Record<string, u
         ignores++;
         continue;
       }
-      particuliers.push({ reference: id, coordonnees: { nom, courriel, telephone, adresse }, zone, origine, consentements, clientRef: outil === "b2c_clients" ? id : null });
+      particuliers.push({
+        reference: id, coordonnees: { nom, courriel, telephone, adresse }, zone, origine, consentements, clientRef: outil === "b2c_clients" ? id : null,
+        produit: outil === "b2c_demandes_devis" ? codeProduitB2c(f.produit) : null,
+      });
     }
   }
   return { particuliers, oppositions, ignores };
@@ -357,8 +370,57 @@ export function canauxDeCampagne(canaux: readonly string[]): CanalContact[] {
   return connus.filter((c) => canaux.some((x) => sansAccents(x).trim() === c || (c === "courriel" && /^e-?mail$/iu.test(x.trim()))));
 }
 
-/** Critères du score expliqué tirés des faits du dépôt ; seuls ceux qui ont un poids chez le client comptent. */
-function criteresDuProspect(p: Prospect, site: string | null, source: string, date: string): CritereEvalue[] {
+/** Zone d'un établissement du référentiel (codes postaux et communes couverts). */
+export interface ZoneEtablissement {
+  codesPostaux?: readonly string[] | undefined;
+  communes?: readonly string[] | undefined;
+}
+
+/** Origines où la personne s'est adressée elle-même au client, ou est déjà sa cliente (aucune n'est « ciblée »). */
+const ORIGINES_SOLLICITEES: readonly OrigineParticulier[] = ["formulaire_entrant", "simulateur_devis", "devis_abandonne", "prise_rendez_vous", "point_de_vente", "client_existant"];
+/** Origines de contact direct : rendez-vous pris, visite au bureau ou client existant. */
+const ORIGINES_CONTACT_DIRECT: readonly OrigineParticulier[] = ["prise_rendez_vous", "point_de_vente", "client_existant"];
+
+/** Vrai si la zone du prospect est couverte par au moins un établissement (code postal, sinon commune). */
+export function zoneDesservie(zone: ZoneProspect, etablissements: readonly ZoneEtablissement[]): boolean {
+  const commune = zone.commune === null ? null : sansAccents(zone.commune).trim();
+  return etablissements.some((e) =>
+    (zone.codePostal !== null && (e.codesPostaux ?? []).includes(zone.codePostal)) ||
+    (commune !== null && (e.communes ?? []).some((c) => sansAccents(c).trim() === commune)));
+}
+
+/**
+ * Critères du score expliqué tirés des faits du dépôt ; seuls ceux qui ont un poids chez le client comptent.
+ *
+ * Entreprise : registre officiel, NACE, adresse impersonnelle, téléphone, site. Particulier (B2C) : ces
+ * critères B2B n'ont pas de sens pour une personne (ni BCE, ni NACE, ni site, adresse toujours nominative),
+ * ils sont remplacés par des critères B2C tirés de la seule base légale du contact, jamais d'une donnée
+ * sensible ni d'un profilage :
+ * - `origine_demande_personne` : la personne a demandé un devis ou un rendez-vous, rempli un formulaire,
+ *   visité un bureau, ou est déjà cliente (origine consentie) ;
+ * - `contact_direct` : rendez-vous pris, visite au bureau ou client existant ;
+ * - `consentement_actif` : consentement prouvé, non retiré, pour au moins un canal ;
+ * - `produit_demande` : au moins une offre demandée connue ;
+ * - `zone_desservie` : code postal ou commune couverts par un établissement du référentiel.
+ * Avec les poids de démonstration (`scripts/demo/peupler-prospects.py`), ces critères reproduisent le
+ * barème `SCORE_DEMO_CANAL` qui score l'historique d'opportunités (même échelle, donc étalonnage applicable) :
+ * un devis en ligne dans la zone vaut 50 (= `devis_en_ligne`), un rendez-vous 60 (= `bureau`).
+ */
+export function criteresDuProspect(p: Prospect, site: string | null, source: string, date: string, etablissements: readonly ZoneEtablissement[] = []): CritereEvalue[] {
+  if (p.cible === "particulier" && p.particulier !== null) {
+    const v = p.particulier;
+    const sollicitee = ORIGINES_SOLLICITEES.includes(v.origine);
+    const direct = ORIGINES_CONTACT_DIRECT.includes(v.origine);
+    const consentement = v.consentements.some((c) => c.retireLe === null && c.canauxAutorises.length > 0);
+    const desservie = zoneDesservie(p.zone, etablissements);
+    return [
+      { code: "origine_demande_personne", libelle: "Origine consentie : demande de devis ou de rendez-vous, ou client existant", valeur: v.origine, source, dateSource: date, satisfait: sollicitee },
+      { code: "contact_direct", libelle: "Contact direct : rendez-vous, visite au bureau ou client existant", valeur: direct, source, dateSource: date, satisfait: direct },
+      { code: "consentement_actif", libelle: "Consentement actif pour au moins un canal", valeur: consentement, source, dateSource: date, satisfait: consentement },
+      { code: "produit_demande", libelle: "Produit demandé connu", valeur: v.offresDemandees.join(", ") || null, source, dateSource: date, satisfait: v.offresDemandees.length > 0 },
+      { code: "zone_desservie", libelle: "Zone desservie par un bureau", valeur: p.zone.codePostal ?? p.zone.commune, source, dateSource: date, satisfait: desservie },
+    ];
+  }
   const courriels = p.coordonnees.filter((c) => c.canal === "courriel");
   return [
     { code: "source_registre_officiel", libelle: "Source : registre officiel (BCE, FSMA)", valeur: p.sources.some((s) => s.service === "bce" || s.service === "fsma"), source, dateSource: date, satisfait: p.sources.some((s) => s.service === "bce" || s.service === "fsma") },
@@ -497,6 +559,8 @@ export function routesProspection(d: DependancesProspection): Partial<Record<Cle
   function construireParticulier(o: {
     cles: ClesDonnees; companyId: string; campagneId: string | null; referentiel: RenvoiReferentiel; mode: ModeExecution; enClair: CoordonneesEnClair; zone: ZoneProspect;
     origine: OrigineParticulier; consentements: PreuveConsentement[]; clientId: string | null; source: SourceProspect; date: string;
+    /** Produits demandés par la personne, utilisés quand le renvoi au référentiel ne nomme aucune offre. */
+    produitsDemandes?: readonly string[];
   }): Prospect | null {
     const c = o.enClair;
     const coordonnees: Prospect["coordonnees"] = [];
@@ -515,7 +579,7 @@ export function routesProspection(d: DependancesProspection): Partial<Record<Cle
       referentiel: o.referentiel, forme: "personne_physique", denomination: null, nomChiffre: chiffrer(c.nom, o.cles.chiffrement), nace: [], zone: o.zone,
       coordonnees, empreintes: empreintesDuProspect({ empreintes, coordonnees }).slice(0, 20), sources: [o.source],
       mode: o.mode, statut: "nouveau", motifsExclusion: [], score: null, basesLegales: [],
-      particulier: { origine: o.origine, consentements: o.consentements, offresDemandees: o.referentiel.offres, clientId: o.clientId, pseudonyme: `[client-${cleIdentite.slice(0, 8)}]` },
+      particulier: { origine: o.origine, consentements: o.consentements, offresDemandees: o.referentiel.offres.length > 0 ? o.referentiel.offres : [...new Set(o.produitsDemandes ?? [])], clientId: o.clientId, pseudonyme: `[client-${cleIdentite.slice(0, 8)}]` },
       creeLe: o.date, modifieLe: o.date,
     });
   }
@@ -603,7 +667,12 @@ export function routesProspection(d: DependancesProspection): Partial<Record<Cle
     let particulier = existant.particulier as Prospect["particulier"];
     if (particulier && p.particulier) {
       const refs = new Set(particulier.consentements.map((c) => c.reference));
-      particulier = { ...particulier, consentements: [...particulier.consentements, ...p.particulier.consentements.filter((c) => !refs.has(c.reference))].slice(0, 10) };
+      particulier = {
+        ...particulier,
+        consentements: [...particulier.consentements, ...p.particulier.consentements.filter((c) => !refs.has(c.reference))].slice(0, 10),
+        // Une nouvelle demande peut nommer un produit : il s'ajoute aux offres déjà demandées.
+        offresDemandees: [...new Set([...particulier.offresDemandees, ...p.particulier.offresDemandees])].slice(0, 50),
+      };
     }
     const final = Prospect.parse({
       ...existant, coordonnees, sources, statut, motifsExclusion: fusion, particulier,
@@ -670,6 +739,8 @@ export function routesProspection(d: DependancesProspection): Partial<Record<Cle
     const existants = new Map((await base.prospectsParIdentifiants(companyId, uniques.map((x) => x.prospect.identifiant))).map((l) => [`${l.identifiant.type}:${l.identifiant.valeur}`, l]));
     const { contexte, enBase } = await contexteExclusions(companyId, campagne, modeCampagne, uniques.map((x) => x.prospect), date);
     const poids = await base.poidsScoreCourant(companyId);
+    // Zones des établissements (critère B2C « zone desservie ») : dernière version du référentiel.
+    const etablissements = (await base.referentielProspection(companyId, campagne?.id ?? null)).etablissements ?? [];
     const resultats: Array<{ prospect: Prospect; cree: boolean }> = [];
     for (const x of uniques) {
       const existant = existants.get(`${x.prospect.identifiant.type}:${x.prospect.identifiant.valeur}`) ?? null;
@@ -680,7 +751,7 @@ export function routesProspection(d: DependancesProspection): Partial<Record<Cle
       const motifs = existant ? motifsBruts.filter((m) => m.motif !== "doublon") : motifsBruts;
       const doublon = doublons.get(x.prospect.id);
       const r = await enregistrer(p, existant, doublon ? fusionnerMotifs([doublon], motifs) : motifs);
-      const score = await scorer(r.prospect, criteresDuProspect(r.prospect, x.site, x.libelleSource, date), poids, date);
+      const score = await scorer(r.prospect, criteresDuProspect(r.prospect, x.site, x.libelleSource, date, etablissements), poids, date);
       resultats.push({ prospect: score ? { ...r.prospect, score } : r.prospect, cree: r.cree });
     }
     return { resultats, fusionnes };
@@ -778,7 +849,7 @@ export function routesProspection(d: DependancesProspection): Partial<Record<Cle
         }
         const p = construireParticulier({
           cles: clesDonneesLot, companyId: r.companyId, campagneId: campagne?.id ?? null, referentiel, mode: deduction.mode, enClair: pb.coordonnees, zone: pb.zone,
-          origine: pb.origine, consentements: pb.consentements, clientId, source, date,
+          origine: pb.origine, consentements: pb.consentements, clientId, source, date, produitsDemandes: pb.produit === null ? [] : [pb.produit],
         });
         if (p === null) ignores++;
         else lot.push({ prospect: p, enClair: pb.coordonnees, site: null, libelleSource: `${entree.service} · ${entree.outil}` });

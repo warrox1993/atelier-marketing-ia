@@ -6,8 +6,8 @@ Le schéma qui fait autorité est celui du moteur de l'atelier :
 
 ## Route
 
-`POST /api/plugins/atelier.marketing-ia/api/taches/<issueId>/verdicts`, avec
-`Authorization: Bearer $PAPERCLIP_API_KEY` et `X-Paperclip-Run-Id: $PAPERCLIP_RUN_ID`.
+`POST /api/plugins/atelier.marketing-ia/api/taches/<issueId>/verdicts`, appelée sous la forme exacte
+de la section « Appeler l'API de Paperclip » de tes consignes (en-têtes d'autorisation et de run).
 Seul l'agent désigné pour le rôle peut déposer ; le producteur ne le peut jamais.
 
 | contrôleur | `role` |

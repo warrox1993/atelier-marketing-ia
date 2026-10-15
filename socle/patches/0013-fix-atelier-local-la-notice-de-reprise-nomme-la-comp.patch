@@ -1,0 +1,86 @@
+From 82a9261d72ec7ab904d05063bad14e8668d0e144 Mon Sep 17 00:00:00 2001
+From: Jean-Baptiste Dhondt <114347858+warrox1993@users.noreply.github.com>
+Date: Thu, 15 Oct 2026 22:53:37 +0200
+Subject: [PATCH] =?UTF-8?q?fix(atelier,=20local):=20la=20notice=20de=20rep?=
+ =?UTF-8?q?rise=20nomme=20la=20comp=C3=A9tence=20obligatoire=20absente?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Un run refusé faute de compétence obligatoire (raison atelier_competence_obligatoire_absente)
+affichait le texte générique « required secret/env bindings are missing ». La charge utile
+porte désormais la liste des compétences manquantes et la notice dit exactement
+« compétence obligatoire absente : … », avec l'action à faire. Test ciblé ajouté.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01DP85vPq2MHkZg8VNtRvCzB
+---
+ server/src/services/heartbeat.ts                  |  1 +
+ .../src/services/recovery/stranded-notice.test.ts | 15 +++++++++++++++
+ server/src/services/recovery/stranded-notice.ts   | 15 +++++++++++++++
+ 3 files changed, 31 insertions(+)
+
+diff --git a/server/src/services/heartbeat.ts b/server/src/services/heartbeat.ts
+index ba7fa5fc5..4aa5a58a2 100644
+--- a/server/src/services/heartbeat.ts
++++ b/server/src/services/heartbeat.ts
+@@ -21905,6 +21905,7 @@ export function heartbeatService(
+           {
+             configurationIncomplete: {
+               reason: "atelier_competence_obligatoire_absente",
++              competences: inventaireAtelier.manquantes,
+               companyId: agent.companyId,
+               agentId: agent.id,
+               actionUrl: `/agents/${agent.id}/skills`,
+diff --git a/server/src/services/recovery/stranded-notice.test.ts b/server/src/services/recovery/stranded-notice.test.ts
+index a4b838a74..4c7b74e9d 100644
+--- a/server/src/services/recovery/stranded-notice.test.ts
++++ b/server/src/services/recovery/stranded-notice.test.ts
+@@ -262,3 +262,18 @@ it("names the unavailable AI account instead of suggesting secret bindings", ()
+   expect(notice.body).toContain("Reconnect the account");
+   expect(notice.body).not.toContain("secret/env");
+ });
++
++it("names the missing mandatory atelier skill instead of suggesting secret bindings", () => {
++  const notice = buildConfigurationIncompleteRecoveryNoticeSeed({
++    reason: "atelier_competence_obligatoire_absente",
++    competences: ["recherche-sourcee", "analyse-concurrentielle"],
++  });
++  expect(notice.title).toBe("Compétence obligatoire absente");
++  expect(notice.body).toContain(
++    "compétence obligatoire absente : `recherche-sourcee`, `analyse-concurrentielle`.",
++  );
++  expect(notice.body).not.toContain("secret/env");
++  const sansListe = buildConfigurationIncompleteRecoveryNoticeSeed({ reason: "atelier_competence_obligatoire_absente" });
++  expect(sansListe.body).toContain("compétence obligatoire absente : non précisée.");
++  expect(sansListe.body).not.toContain("secret/env");
++});
+diff --git a/server/src/services/recovery/stranded-notice.ts b/server/src/services/recovery/stranded-notice.ts
+index 8d98ad3d8..6c48ef256 100644
+--- a/server/src/services/recovery/stranded-notice.ts
++++ b/server/src/services/recovery/stranded-notice.ts
+@@ -121,6 +121,21 @@ export function buildConfigurationIncompleteRecoveryNoticeSeed(
+       tone: "danger",
+     };
+   }
++  if (readNonEmptyStringField(configurationIncomplete, "reason") === "atelier_competence_obligatoire_absente") {
++    const brutes = configurationIncomplete?.competences;
++    const competences = Array.isArray(brutes)
++      ? brutes.filter((c): c is string => typeof c === "string" && c.trim().length > 0)
++      : [];
++    const liste = competences.length > 0 ? competences.map((c) => `\`${c}\``).join(", ") : "non précisée";
++    return {
++      title: "Compétence obligatoire absente",
++      body:
++        `compétence obligatoire absente : ${liste}. Paperclip n'a pas lancé l'agent sans elle. ` +
++        "La tâche passe en `blocked` : rattachez la compétence à l'agent (onglet Compétences), puis reprenez la tâche.",
++      nextAction: "Rattacher la compétence obligatoire à l'agent, puis reprendre la tâche.",
++      tone: "danger",
++    };
++  }
+   if (readNonEmptyStringField(configurationIncomplete, "reason") === SANDBOX_PROVIDER_PLUGIN_NOT_READY_REASON) {
+     const pluginKey = readNonEmptyStringField(configurationIncomplete, "pluginKey") ?? "the sandbox provider plugin";
+     const pluginStatus = readNonEmptyStringField(configurationIncomplete, "pluginStatus") ?? "not ready";
+-- 
+2.53.0
+

@@ -31,7 +31,9 @@ export function nettoyerTexte(texte: string): string {
     .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/gu, "")
     .replace(/[​-‏‪-‮⁠-⁤⁦-⁩﻿­]/gu, "")
     .replace(/[  -   　]/gu, " ")
-    .replace(/[ \t]+/gu, " ")
+    // Toute suite d'espaces hors saut de ligne (U+1680, U+2028, U+2029… compris) devient une espace :
+    // aucun motif aval ne peut buter sur un espace exotique répété.
+    .replace(/[^\S\n]+/gu, " ")
     .replace(/ ?\n ?/gu, "\n")
     .replace(/\n{3,}/gu, "\n\n")
     .trim();
