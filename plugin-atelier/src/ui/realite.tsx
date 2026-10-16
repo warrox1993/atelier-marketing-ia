@@ -80,10 +80,10 @@ export function fusionnerBranchements(serveur: readonly Branchement[], lignes: r
 /** Branchements qui ne sont pas encore en réel. */
 export const branchementsManquants = (b: readonly Branchement[]): Branchement[] => b.filter((x) => x.etat !== "reel");
 
-type LectureRealite = { etat: "chargement" } | { etat: "erreur"; erreur: unknown } | { etat: "pret"; realite: RealiteEtat; branchements: Branchement[] };
+export type LectureRealite = { etat: "chargement" } | { etat: "erreur"; erreur: unknown } | { etat: "pret"; realite: RealiteEtat; branchements: Branchement[] };
 
 /** Lit l'état serveur et les connexions natives à l'ouverture ; `relire` les lit de nouveau. */
-function useRealite(): [LectureRealite, () => void] {
+export function useRealite(): [LectureRealite, () => void] {
   const { companyId } = useHostContext();
   const [etat, setEtat] = useState<LectureRealite>({ etat: "chargement" });
   const charger = useCallback(async () => {
@@ -193,6 +193,33 @@ function Contenu({ realite, branchements }: { realite: RealiteEtat; branchements
         {realite.leads.tronque ? " (parcours arrêté au plafond : les nombres sont des minimums)" : ""}
         {realite.leads.illisibles > 0 ? ` ; ${pluriel(realite.leads.illisibles, "lead illisible ignoré", "leads illisibles ignorés")}` : ""}.
       </p>
+    </>
+  );
+}
+
+/**
+ * Récapitulatif du passage au réel pour le parcours de mise en place : ce qui manque, branchement par
+ * branchement, sans le tableau complet (qui reste dans l'onglet « Passage au réel »). La lecture est
+ * faite par l'appelant (`useRealite`) pour que l'état de l'étape et son contenu viennent de la même source.
+ */
+export function RecapPassageAuReel({ lecture, relire }: { lecture: LectureRealite; relire: () => void }) {
+  if (lecture.etat === "chargement") return <Chargement libelle="Chargement du passage au réel" />;
+  if (lecture.etat === "erreur") return <EtatErreur erreur={lecture.erreur} onReessayer={relire} contexte="le passage au réel" />;
+  const manquants = branchementsManquants(lecture.branchements);
+  return (
+    <>
+      <p className="atl-encart-titre" role="status">
+        {manquants.length === 0 ? "Tous les branchements sont en réel." : `Ce qui manque pour le réel : ${pluriel(manquants.length, "branchement", "branchements")} sur ${lecture.branchements.length}.`}
+      </p>
+      {manquants.length > 0 ? (
+        <ul className="atl-liste">
+          {manquants.map((b) => (
+            <li key={b.cle} data-branchement={b.cle}>
+              <strong>{b.nom}</strong> : {LIBELLES_ETAT[b.etat].libelle}. {b.detail}
+            </li>
+          ))}
+        </ul>
+      ) : null}
     </>
   );
 }

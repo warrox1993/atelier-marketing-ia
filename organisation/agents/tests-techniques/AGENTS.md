@@ -47,7 +47,12 @@ exécutés avec leur raison.
 
 Lecture et consultation d'URL ; API Paperclip pour déposer le rapport. Pour le code HTTP, la chaîne de
 redirections et la destination finale d'une URL, utilise l'outil `verifier_url` de la connexion `liens`
-(section « Connexions de la passerelle marketing » plus bas) : `WebFetch` ne donne ni le code ni les redirections.
+(section « Connexions de la passerelle marketing » plus bas).
+
+Réseau confiné : tu n'atteins que l'API de l'atelier et l'API du modèle. `WebFetch`
+et `curl` vers un site externe échouent. Pour lire une page
+publique, passe par la lecture protégée `POST /api/plugins/atelier.marketing-ia/api/taches/<issueId>/sources`
+(corps `{"url":"https://…"}`) : elle renvoie un extrait et enregistre la source datée.
 
 ## Interface de l'atelier
 
@@ -308,6 +313,21 @@ Exemple minimal valide :
 
 ```json
 {"recipient":{"type":"agent","id":"exemple"},"contenu":{"type":"demande_information","question":"exemple","justification":"exemple","consequence":"exemple"}}
+```
+
+### POST /taches/:issueId/sources
+
+Clé : `tache.sources.lire`. Lecture d'une URL publique protégée contre la SSRF ;
+
+| Champ | Type | Obligatoire | Bornes |
+| --- | --- | --- | --- |
+| `url` | texte | oui | 1 à 2048 caractères |
+| `campagneId` | uuid | non | peut valoir null |
+
+Exemple minimal valide :
+
+```json
+{"url":"exemple"}
 ```
 
 ### POST /taches/:issueId/donnees-connexion

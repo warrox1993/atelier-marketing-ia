@@ -127,3 +127,17 @@ Soyons clairs sur les limites actuelles.
 - Le bouton « Diffuser » est visible mais grisé : aucun connecteur de publication n'existe encore. Rien n'est publié ni envoyé sans votre décision.
 - La voix en direct n'a pas encore été essayée avec une vraie clé OpenAI sur ce poste. Elle est livrée et testée sans clé.
 - L'accès à distance (chapitre 6) n'est pas actif.
+
+## 8. Petit glossaire : les mots de l'atelier
+
+Le nom de l'entreprise active s'affiche en haut de chaque page (« Entreprise : … »), avec la mention « Démonstration » ou « Client réel ». Vérifiez-le avant d'agir.
+
+| Mot affiché | Ce que cela veut dire | Ancien mot technique |
+| --- | --- | --- |
+| Contrôle automatique | Vérification faite par le serveur, sans IA, avant qu'un livrable vous soit présenté : exigences couvertes, preuves, revues réussies. | porte, porte déterministe |
+| Passage | Une exécution d'un agent sur une tâche. | run |
+| Exigence (avec son titre) | Une demande précise tirée du brief. Le repère court (REQ-001) reste affiché en petit pour retrouver la ligne. | REQ-xxx affiché seul |
+| Politique de relecture verrouillée | Les relectures obligatoires ne peuvent pas être contournées. | P1 |
+| Contrôle automatique imposé par le serveur | Le serveur refuse de terminer une tâche sans contrôle réussi. | P2 |
+| Paperclip | La plateforme qui héberge l'atelier et fait tourner les agents. | moteur natif |
+| Données fictives fixes | Données de démonstration toujours identiques, sans IA ni appel extérieur. | fixtures déterministes |

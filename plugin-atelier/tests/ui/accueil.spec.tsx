@@ -236,11 +236,21 @@ const QUESTIONS = [
   ] },
 ];
 const E_QUESTIONS = { id: "question:i1", type: "information_manquante", urgence: "haute", enTete: true, titre: "L'équipe vous pose une question", raison: "Il manque une information.", lien: "/issues/DEM-9", action: "Répondre", issueId: "iss-9",
-  interaction: { id: "i1", kind: "ask_user_questions", invite: null, details: null, libelleAccepter: null, libelleRefuser: null, questions: QUESTIONS } };
+  interaction: { id: "i1", kind: "ask_user_questions", invite: null, details: null, libelleAccepter: null, libelleRefuser: null, refusRaisonObligatoire: false, natifSeulement: false, questions: QUESTIONS } };
 const E_CONFIRMATION = { id: "question:i2", type: "information_manquante", urgence: "haute", enTete: true, titre: "L'équipe attend votre confirmation", raison: "Une décision vous revient.", lien: "/issues/DEM-8", action: "Confirmer", issueId: "iss-8",
-  interaction: { id: "i2", kind: "request_confirmation", invite: "Lancer l'envoi à 120 contacts ?", details: null, libelleAccepter: "Lancer l'envoi", libelleRefuser: null, questions: [] } };
-const E_APPROBATION = { id: "approbation:a1", type: "approbation", urgence: "haute", titre: "Approbation en attente", raison: "L'équipe attend votre accord.", lien: "/approvals/a1", action: "Décider", approbationId: "a1" };
-const E_ACCES = { id: "approbation:a2", type: "demande_acces", urgence: "moyenne", titre: "Un nouvel agent demande à rejoindre l'équipe", raison: "L'agent attend.", lien: "/approvals/a2", action: "Examiner la demande", approbationId: "a2" };
+  interaction: { id: "i2", kind: "request_confirmation", invite: "Lancer l'envoi à 120 contacts ?", details: null, libelleAccepter: "Lancer l'envoi", libelleRefuser: null, refusRaisonObligatoire: false, natifSeulement: false, questions: [] } };
+const E_CONFIRMATION_OUTIL = { ...E_CONFIRMATION, id: "question:i3", titre: "Envoyer l'e-mail au client ?", issueId: "iss-7", lien: "/issues/DEM-7",
+  interaction: { ...E_CONFIRMATION.interaction, id: "i3", natifSeulement: true } };
+const E_CONFIRMATION_RAISON = { ...E_CONFIRMATION, id: "question:i4", titre: "Supprimer l'ancienne campagne ?", issueId: "iss-6", lien: "/issues/DEM-6",
+  interaction: { ...E_CONFIRMATION.interaction, id: "i4", invite: "Supprimer ?", refusRaisonObligatoire: true } };
+const E_APPROBATION = { id: "approbation:a1", type: "approbation", urgence: "haute", titre: "Approbation en attente", raison: "L'équipe attend votre accord.", lien: "/approvals/a1", action: "Décider", approbationId: "a1",
+  approbation: { type: "request_board_approval", surPlace: true, demandeur: "Un agent de l'équipe", lignes: [{ libelle: "Résumé", valeur: "Publier la page toiture dès demain" }, { libelle: "Risques", valeur: "Ton trop vendeur" }] } };
+const E_ACCES = { id: "approbation:a2", type: "demande_acces", urgence: "moyenne", titre: "Un nouvel agent demande à rejoindre l'équipe", raison: "L'agent attend.", lien: "/approvals/a2", action: "Examiner la demande", approbationId: "a2",
+  approbation: { type: "hire_agent", surPlace: false, demandeur: "Un agent de l'équipe", lignes: [{ libelle: "Titre", valeur: "Agent SEO" }] } };
+const E_BUDGET = { id: "approbation:a3", type: "approbation", urgence: "haute", titre: "Dépassement de budget à autoriser", raison: "Un agent a atteint son budget.", lien: "/approvals/a3", action: "Décider", approbationId: "a3",
+  approbation: { type: "budget_override_required", surPlace: false, demandeur: "Un agent de l'équipe", lignes: [] } };
+const E_INCONNU = { id: "approbation:a4", type: "approbation", urgence: "haute", titre: "Approbation d'un type nouveau", raison: "L'équipe attend.", lien: "/approvals/a4", action: "Décider", approbationId: "a4",
+  approbation: { type: "type_futur", surPlace: false, demandeur: "Un agent de l'équipe", lignes: [] } };
 const E_BLOQUEE = { id: "tache:t1", type: "tache_bloquee", urgence: "haute", titre: "DEM-3 · Rédiger", raison: "Elle attend qu'une autre tâche soit terminée.", lien: "/issues/DEM-3", action: "Voir la tâche", issueId: "t1" };
 const E_CONTENU = { ...ELEMENT, issueId: T };
 
@@ -264,7 +274,7 @@ describe("accueil : traitement sur place", () => {
 
   it("chaque type traitable propose « Traiter ici » et garde son lien d'ouverture ; les rappels simples n'ont que le lien", async () => {
     const c = await ouvrir();
-    for (const t of ["Page toiture", "L'équipe vous pose une question", "L'équipe attend votre confirmation", "Approbation en attente", "Un nouvel agent demande", "DEM-3 · Rédiger"]) {
+    for (const t of ["Page toiture", "L'équipe vous pose une question", "L'équipe attend votre confirmation", "Approbation en attente", "DEM-3 · Rédiger"]) {
       const l = ligne(c, t);
       expect(parTexte(l, "button", "Traiter ici").getAttribute("aria-expanded")).toBe("false");
       expect(l.querySelector("a")).toBeTruthy();
@@ -326,6 +336,33 @@ describe("accueil : traitement sur place", () => {
     expect(Array.from(c.querySelectorAll(".atl-afaire-titre")).some((t) => t.textContent === "L'équipe vous pose une question")).toBe(false);
   });
 
+  it("demande entre services : contenu complet affiché avant décision, puis route du plugin liaison.decider", async () => {
+    const LIAISON = {
+      id: "liaison:L1", type: "liaison_a_approuver", urgence: "haute", titre: "Demande au service juridique : Contrat à relire", raison: "Rien n'est envoyé tant que vous n'avez pas décidé.",
+      lien: "/issues/DEM-7", action: "Voir la tâche d'origine", issueId: "iss-7",
+      liaison: { liaisonId: "L1", serviceSource: "marketing", serviceCible: "juridique", objet: "Contrat à relire", question: "Le contrat est-il conforme ?", extraits: [{ titre: "Clause 4", texte: "Résiliation sous 30 jours." }] },
+    };
+    elements = [...elements, LIAISON];
+    const base = serveur;
+    serveur = (m, u, b) => {
+      if (m === "POST" && u.includes("/liaisons/decider")) {
+        elements = elements.filter((e) => e !== LIAISON);
+        return { statut: 200, corps: {} };
+      }
+      return base(m, u, b);
+    };
+    const c = await ouvrir();
+    const l = ligne(c, "Contrat à relire");
+    await cliquer(parTexte(l, "button", "Traiter ici"));
+    for (const attendu of ["Contrat à relire", "Le contrat est-il conforme ?", "Clause 4", "Résiliation sous 30 jours.", "juridique"]) expect(l.textContent).toContain(attendu);
+    await cliquer(parTexte(l, "button", "Transmettre"));
+    const decision = appels.find((a) => a.url.includes("/liaisons/decider"))!;
+    expect(decision.methode).toBe("POST");
+    expect(decision.corps).toMatchObject({ liaisonId: "L1", decision: "approuver" });
+    expect(natifs()).toHaveLength(0);
+    expect(Array.from(c.querySelectorAll(".atl-afaire-titre")).some((t) => t.textContent?.includes("Contrat à relire"))).toBe(false);
+  });
+
   it("question : une erreur de l'hôte reste affichée, l'élément reste dans la liste", async () => {
     const base = serveur;
     serveur = (m, u, b) => (m === "POST" && u.includes("/respond") ? { statut: 422, corps: { error: "Question q1 requires an answer" } } : base(m, u, b));
@@ -359,19 +396,81 @@ describe("accueil : traitement sur place", () => {
     expect(natifs()[0]!.corps).toEqual({ reason: "Pas avant lundi." });
   });
 
-  it("approbation native et demande d'accès : Approuver et Refuser appellent les routes natives", async () => {
+  it("approbation d'un type sûr : le contenu est affiché avant les boutons, Approuver et Refuser appellent les routes natives", async () => {
     const c = await ouvrir();
-    let l = ligne(c, "Approbation en attente");
+    const l = ligne(c, "Approbation en attente");
     await cliquer(parTexte(l, "button", "Traiter ici"));
+    const panneau = l.querySelector(".atl-surplace")!;
+    expect(panneau.textContent).toContain("Accord demandé à la direction");
+    expect(panneau.textContent).toContain("Un agent de l'équipe");
+    expect(panneau.textContent).toContain("Publier la page toiture dès demain");
+    expect(panneau.textContent).toContain("Ton trop vendeur");
+    // Le contenu précède les boutons de décision.
+    expect(panneau.innerHTML.indexOf("Publier la page toiture")).toBeLessThan(panneau.innerHTML.indexOf("Approuver"));
     await cliquer(parTexte(l, "button", "Approuver"));
     expect(natifs()[0]).toMatchObject({ url: "/api/approvals/a1/approve", corps: {} });
     expect(c.querySelector(".atl-afaire-confirmation")?.textContent).toContain("Approuvé");
-    l = ligne(c, "Un nouvel agent demande");
+    // Le focus passe sur le message de confirmation (le bouton cliqué a disparu avec son panneau).
+    expect(document.activeElement).toBe(c.querySelector(".atl-afaire-confirmation"));
+  });
+
+  it("aria-controls du bouton « Traiter ici » : absent tant que le panneau n'est pas rendu, présent et valide ensuite", async () => {
+    const c = await ouvrir();
+    const l = ligne(c, "L'équipe vous pose une question");
+    const bouton = parTexte(l, "button", "Traiter ici");
+    expect(bouton.hasAttribute("aria-controls")).toBe(false);
+    await cliquer(bouton);
+    const id = bouton.getAttribute("aria-controls");
+    expect(id).toBeTruthy();
+    expect(document.getElementById(id!)).toBeTruthy();
+    await cliquer(parTexte(l, "button", "Replier"));
+    expect(parTexte(l, "button", "Traiter ici").hasAttribute("aria-controls")).toBe(false);
+  });
+
+  it("approbation : Refuser transmet la note", async () => {
+    elements = [E_APPROBATION];
+    const c = await ouvrir();
+    const l = ligne(c, "Approbation en attente");
     await cliquer(parTexte(l, "button", "Traiter ici"));
-    await saisir(champParLibelle(l, "Note (facultative)"), "Inconnu de l'équipe.");
+    await saisir(champParLibelle(l, "Note (facultative)"), "Pas maintenant.");
     await cliquer(parTexte(l, "button", "Refuser"));
-    expect(natifs()[1]).toMatchObject({ url: "/api/approvals/a2/reject", corps: { decisionNote: "Inconnu de l'équipe." } });
-    expect(c.querySelector(".atl-afaire-confirmation")?.textContent).toContain("Demande refusée");
+    expect(natifs()[0]).toMatchObject({ url: "/api/approvals/a1/reject", corps: { decisionNote: "Pas maintenant." } });
+  });
+
+  it("demande d'accès (hire_agent), dépassement de budget et type inconnu : aucune décision sur place, seulement le lien vers la page native", async () => {
+    elements = [E_ACCES, E_BUDGET, E_INCONNU];
+    const c = await ouvrir();
+    for (const [titre, lien] of [["Un nouvel agent demande", "/approvals/a2"], ["Dépassement de budget", "/approvals/a3"], ["Approbation d'un type nouveau", "/approvals/a4"]] as const) {
+      const l = ligne(c, titre);
+      expect(l.querySelector("button")).toBeNull();
+      expect(l.querySelector(".atl-surplace")).toBeNull();
+      expect(l.querySelector("a")?.getAttribute("href")).toContain(lien);
+    }
+    expect(Array.from(c.querySelectorAll("button")).some((b) => /Approuver|Refuser/.test(b.textContent ?? ""))).toBe(false);
+  });
+
+  it("carte qui exécute un outil ou propose un secret : aucune décision sur place, lien vers la tâche seulement", async () => {
+    elements = [E_CONFIRMATION_OUTIL];
+    const c = await ouvrir();
+    const l = ligne(c, "Envoyer l'e-mail au client ?");
+    expect(l.querySelector("button")).toBeNull();
+    expect(l.querySelector("a")?.getAttribute("href")).toContain("/issues/DEM-7");
+    expect(natifs()).toHaveLength(0);
+  });
+
+  it("confirmation avec refus motivé obligatoire : le refus reste bloqué tant que la raison est vide", async () => {
+    elements = [E_CONFIRMATION_RAISON];
+    const c = await ouvrir();
+    const l = ligne(c, "Supprimer l'ancienne campagne ?");
+    await cliquer(parTexte(l, "button", "Traiter ici"));
+    expect(l.textContent).toContain("Raison (obligatoire pour refuser)");
+    expect(l.textContent).not.toContain("facultative");
+    await cliquer(parTexte(l, "button", "Refuser"));
+    expect(natifs()).toHaveLength(0);
+    expect(l.textContent).toContain("la raison du refus");
+    await saisir(champParLibelle(l, "Raison (obligatoire pour refuser)"), "Encore utile.");
+    await cliquer(parTexte(l, "button", "Refuser"));
+    expect(natifs()[0]).toMatchObject({ url: "/api/issues/iss-6/interactions/i4/reject", corps: { reason: "Encore utile." } });
   });
 
   it("tâche bloquée : la raison et le lien vers la tâche, rien d'envoyé", async () => {

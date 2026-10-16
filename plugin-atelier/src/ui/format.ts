@@ -125,7 +125,7 @@ export function idCourt(id: string | null | undefined): string {
 /* ------------------------------------------------------------------ */
 
 export const ETATS_CONNEXION: Record<EtatConnexion, { libelle: string; aide: string; ton: Ton }> = {
-  demonstration: { libelle: "Démonstration", aide: "Fixtures déterministes : aucune IA réelle, aucun appel externe.", ton: "demo" },
+  demonstration: { libelle: "Démonstration", aide: "Données fictives fixes : aucune IA réelle, aucun appel externe.", ton: "demo" },
   reel_teste: { libelle: "Réel testé", aide: "Fonctionnement réel vérifié par un appel effectif.", ton: "succes" },
   configure_non_verifie: { libelle: "Prêt, pas encore utilisé", aide: "La connexion est configurée et prête, mais aucun appel réel ne l'a encore utilisée : son fonctionnement n'est pas encore prouvé.", ton: "neutre" },
   non_connecte: { libelle: "Non connecté", aide: "Aucune connexion configurée.", ton: "neutre" },
@@ -205,8 +205,8 @@ export const COUVERTURES: Record<string, { libelle: string; ton: Ton }> = {
 };
 
 export const DECISIONS_PORTE: Record<string, { libelle: string; ton: Ton }> = {
-  PASS: { libelle: "Porte franchie", ton: "succes" },
-  REFUS: { libelle: "Porte refusée", ton: "danger" },
+  PASS: { libelle: "Contrôle automatique réussi", ton: "succes" },
+  REFUS: { libelle: "Contrôle automatique refusé", ton: "danger" },
   BLOQUE_INFORMATION: { libelle: "Bloquée : information manquante", ton: "attention" },
 };
 
@@ -329,13 +329,13 @@ const STATUTS_RUN: Record<string, string> = {
   timed_out: "délai dépassé",
 };
 
-/** « Run succeeded (agent x) » renvoyé par le serveur devient « Run réussi (agent x) ». */
+/** « Passage succeeded (agent x) » renvoyé par le serveur devient « Passage réussi (agent x) ». */
 export function libelleRun(libelle: string): string {
-  return libelle.replace(/^Run ([a-z_]+)/u, (tout, statut: string) => (STATUTS_RUN[statut] ? `Run ${STATUTS_RUN[statut]}` : tout));
+  return libelle.replace(/^(?:Run|Passage) ([a-z_]+)/u, (tout, statut: string) => (STATUTS_RUN[statut] ? `Passage ${STATUTS_RUN[statut]}` : tout));
 }
 
 export const SOURCES_CHRONOLOGIE: Record<string, string> = {
-  run_natif: "run Paperclip",
+  run_natif: "passage Paperclip",
   activite_native: "activité Paperclip",
   journal_atelier: "journal de l'atelier",
 };

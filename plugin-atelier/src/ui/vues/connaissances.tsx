@@ -136,7 +136,7 @@ interface Fichier {
   base64: string;
 }
 
-function Import({ companyId, onImporte }: { companyId: string; onImporte(): void }) {
+export function Import({ companyId, onImporte }: { companyId: string; onImporte(): void }) {
   const entree = useRef<HTMLInputElement>(null);
   const [survol, setSurvol] = useState(false);
   const [fichier, setFichier] = useState<Fichier | null>(null);
@@ -305,7 +305,7 @@ function Import({ companyId, onImporte }: { companyId: string; onImporte(): void
 /* Import d'une page web publique                                      */
 /* ------------------------------------------------------------------ */
 
-function ImportPageWeb({ companyId, onImporte }: { companyId: string; onImporte(): void }) {
+export function ImportPageWeb({ companyId, onImporte }: { companyId: string; onImporte(): void }) {
   const [ouvert, setOuvert] = useState(false);
   const [adresse, setAdresse] = useState("");
   const [titre, setTitre] = useState("");

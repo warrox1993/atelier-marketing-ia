@@ -9,7 +9,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { PROSPECT_B2B, PROSPECT_B2C } from "../../src/contrats/exemples/prospection.js";
 import { PageAtelier } from "../../src/ui/index.js";
 import { CompteRenduProspect, ConfianceQualification } from "../../src/contrats/prospection.js";
-import { EXPLICATION_STATUT_LEAD, familleMetier, FILTRES_VIDES, filtresExport, libelleScore, statutLead } from "../../src/ui/vues/prospects.js";
+import { adresseDepuisFiltres, EXPLICATION_STATUT_LEAD, familleMetier, filtresDepuisAdresse, FILTRES_VIDES, filtresExport, libelleScore, statutLead } from "../../src/ui/vues/prospects.js";
 import { act } from "react";
 import { champParLibelle, cliquer, ENTREPRISE, installerPont, parTexte, rendre, saisir, type Pont, type Rendu } from "./pont.js";
 
@@ -200,6 +200,58 @@ describe("liste des prospects", () => {
     serveur = () => ({ statut: 403, corps: { error: "Réservé à un humain." } });
     c = await ouvrir();
     expect(c.querySelector('[role="alert"]')!.textContent).toContain("Réservé à un humain.");
+  });
+});
+
+describe("filtres portés par l'adresse", () => {
+  afterEach(() => window.history.replaceState(null, "", "/"));
+
+  it("adresse → filtres appliqués : la liste est demandée déjà filtrée et la barre affiche les filtres actifs", async () => {
+    window.history.replaceState(null, "", "/RNO/atelier/prospects?statut=qualifie&segment=medecins&zone=Li%C3%A8ge&source=reelle&score=60");
+    const c = await ouvrir();
+    const q = new URL(requetesListe()[0]!.url, "http://x").searchParams;
+    expect(q.get("statuts")).toBe("qualifie");
+    expect(q.get("segments")).toBe("medecins");
+    expect(q.get("communes")).toBe("Liège");
+    expect(q.get("source")).toBe("reelle");
+    expect(q.get("scoreMin")).toBe("60");
+    expect(c.textContent).toContain("Filtres (5 actifs)");
+  });
+
+  it("valeurs invalides ignorées : statut inconnu, score hors bornes, balise, champ inconnu, valeur trop longue", () => {
+    expect(filtresDepuisAdresse("?statut=pirate&score=101&segment=%3Cscript%3E&zone=" + "a".repeat(81) + "&secteur=abc&source=autre&qualifies=1&x=1")).toEqual(FILTRES_VIDES);
+    expect(filtresDepuisAdresse("?statut=qualifie&score=abc&campagne=c-1")).toEqual({ ...FILTRES_VIDES, statut: "qualifie", campagneId: "c-1" });
+    expect(filtresDepuisAdresse("")).toEqual(FILTRES_VIDES);
+  });
+
+  it("filtre invalide dans l'adresse : la liste n'est pas filtrée", async () => {
+    window.history.replaceState(null, "", "/RNO/atelier/prospects?statut=pirate&score=999");
+    await ouvrir();
+    const q = new URL(requetesListe()[0]!.url, "http://x").searchParams;
+    expect(q.get("statuts")).toBeNull();
+    expect(q.get("scoreMin")).toBeNull();
+  });
+
+  it("changer un filtre met l'adresse à jour sans recharger, l'effacement la vide, les autres paramètres restent", async () => {
+    window.history.replaceState(null, "", "/RNO/atelier/prospects?autre=1#ancre");
+    const c = await ouvrir();
+    await saisir(champParLibelle(c, "Étape") as HTMLSelectElement, "qualifie");
+    await saisir(champParLibelle(c, "Zone (commune ou code postal)"), "Liège, 4000");
+    await cliquer(parTexte(c, "button", "Filtrer"));
+    const u = new URL(window.location.href);
+    expect(u.pathname).toBe("/RNO/atelier/prospects");
+    expect(u.searchParams.get("statut")).toBe("qualifie");
+    expect(u.searchParams.get("zone")).toBe("Liège, 4000");
+    expect(u.searchParams.get("autre")).toBe("1");
+    expect(u.hash).toBe("#ancre");
+    await cliquer(parTexte(c, "button", "Effacer les filtres"));
+    expect(window.location.search).toBe("?autre=1");
+  });
+
+  it("aller-retour : les filtres écrits dans l'adresse se relisent à l'identique", () => {
+    const f = { ...FILTRES_VIDES, statut: "qualifie" as const, segment: "medecins", zone: "Liège, 4000", scoreMin: "60", qualifies: true };
+    expect(filtresDepuisAdresse(adresseDepuisFiltres(f))).toEqual(f);
+    expect(adresseDepuisFiltres(FILTRES_VIDES)).toBe("");
   });
 });
 
@@ -699,6 +751,17 @@ describe("confiance de qualification", () => {
     expect(ligne.querySelector('td[data-libelle="Étape"]')!.textContent).toBe("Retenu");
     expect(ligne.querySelector('td[data-libelle="Statut du lead"]')!.textContent).toContain("À vérifier");
     expect(ligne.textContent).not.toContain("Qualifié");
+  });
+
+  it("explication de la confiance à côté du chiffre : critères vérifiés sur total, contraires, source qui manque surtout", async () => {
+    const contraire = { ...structuredClone(B2B), confiance: confiance(50, 0, { plafonnee: true, criteres: [critere("entreprise_active", "verifie", 20), critere("zone_cible", "contraire", 15), critere("taille_connue", "non_verifie", 10)] }) };
+    serveur = () => ({ statut: 200, corps: page(qualifie, aEnrichir, { ...contraire, id: "b2222222-2222-4222-8222-222222222222" }) });
+    const c = await ouvrir();
+    const textes = [...c.querySelectorAll(".atl-confiance-explication")].map((e) => e.textContent);
+    expect(textes).toContain("92 % : 1 critère vérifié sur 1");
+    expect(textes).toContain("64 % : 1 critère vérifié sur 3 ; manque surtout : comptes annuels BNB");
+    expect(textes).toContain("50 % : 1 critère vérifié sur 3, 1 contraire ; manque surtout : comptes annuels BNB");
+    expect(textes.join(" ")).not.toContain("\u2014");
   });
 
   it("un critère contraire est annoncé : non qualifié, pas « à enrichir »", async () => {

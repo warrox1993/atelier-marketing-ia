@@ -23,6 +23,7 @@ import {
   DeposerProspectsEntree,
   EnregistrerParticulierEntree,
   ExclureProspectEntree,
+  FusionnerDoublonsEntree,
   LIMITES,
   ListerProspectsEntree,
   NumeroBce,
@@ -60,6 +61,7 @@ import { AGE_MAX_REPONSE_S, deduireModeReponse, reponseEcriture, type ModeEffect
 import { construireCompteRendu, nomDuProspect, type FicheClientCompteRendu } from "./compte-rendu-prospect.js";
 import { ORIGINE_DEMANDE, titreDepuisTexte } from "./services-accueil.js";
 import { calculerConfiance, criteresManquants, type ContexteQualification } from "./qualification-prospects.js";
+import { fusionnerProspects, trouverPairesDoublons } from "./rapprochement-prospects.js";
 import { dedoublonner, empreintesDuProspect, exclusionsProspect, natureAdresse, type ContexteProspection, type ZoneChoisie } from "./regles-prospection.js";
 import { calculerScore, type CritereEvalue } from "./score-prospects.js";
 import { routesBaseClients } from "./services-base-clients.js";
@@ -1316,6 +1318,57 @@ export function routesProspection(d: DependancesProspection): Partial<Record<Cle
         donnees: { motif: entree.motif, detail: entree.detail, acteurType: r.acteur.type, deja },
       });
       return { corps: await relire(r.companyId, l.id) };
+    });
+
+  /* ---------------- rattrapage des doublons ---------------- */
+
+  /**
+   * Fiches qui désignent la même entreprise (BCE identique, ou nom sans forme juridique et code postal identiques).
+   * À blanc par défaut : rien n'est écrit. Fusion : sources et coordonnées réunies dans la fiche gardée, fiche
+   * absorbée écartée avec le motif `doublon` (jamais supprimée).
+   */
+  routes["prospects.fusionner-doublons"] = async (r) =>
+    d.exclusif(r.companyId, async () => {
+      exigerHumain(r.acteur, "La fusion des doublons de prospects");
+      const entree = analyser(FusionnerDoublonsEntree, r.corps, "Fusion des doublons");
+      if (entree.companyId !== r.companyId) erreur("hors_entreprise", "Entreprise incohérente : seule l'entreprise résolue par l'hôte est servie.");
+      const tous: Prospect[] = [];
+      for (let page = 1; ; page++) {
+        const { lignes } = await base.listerProspects(r.companyId, { page, parPage: 200, avecClientsActuels: true });
+        const det = await base.detailsProspects(r.companyId, lignes.map((l) => l.id));
+        tous.push(...lignes.map((l) => assembler(l, det)));
+        if (lignes.length < 200) break;
+      }
+      const paires = trouverPairesDoublons(tous);
+      const date = maintenant().toISOString();
+      if (!entree.aBlanc) {
+        // Une fiche gardée reçoit une fiche après l'autre : on repart de l'état déjà fusionné.
+        const etat = new Map(tous.map((p) => [p.id, p]));
+        for (const { garde, absorbe } of paires) {
+          const g = etat.get(garde.id)!;
+          const a = etat.get(absorbe.id)!;
+          const fusion = fusionnerProspects(g, a, egalProfond);
+          const motifs = fusionnerMotifs(g.motifsExclusion, a.motifsExclusion.filter((m) => m.motif !== "doublon"));
+          const statut = motifs.length > 0 ? "exclu" : g.statut;
+          await base.majProspect(r.companyId, g.id, { nace: fusion.nace, zone: g.zone, coordonnees: fusion.coordonnees, sources: fusion.sources, statut, motifsExclusion: motifs, particulier: g.particulier });
+          await base.ajouterEmpreintesProspect(r.companyId, g.id, fusion.empreintes);
+          await base.exclureProspect(r.companyId, a.id, fusionnerMotifs(a.motifsExclusion, [{ motif: "doublon", detail: `Fusionné dans ${g.id}`, constateLe: date }]));
+          etat.set(g.id, { ...g, ...fusion, statut, motifsExclusion: motifs });
+        }
+        await base.journaliser({
+          companyId: r.companyId, type: "prospects.doublons-fusionnes", entite: "prospect", entiteId: r.companyId, runId: r.acteur.runId, acteur: r.acteur.id,
+          donnees: { fusionnes: paires.length, paires: paires.map((p) => ({ garde: p.garde.id, absorbe: p.absorbe.id, raison: p.raison })).slice(0, 200) },
+        });
+      }
+      return {
+        corps: {
+          companyId: r.companyId,
+          aBlanc: entree.aBlanc,
+          examines: tous.length,
+          fusionnes: entree.aBlanc ? 0 : paires.length,
+          paires: paires.map((p) => ({ gardeId: p.garde.id, absorbeId: p.absorbe.id, gardee: p.garde.denomination, absorbee: p.absorbe.denomination, raison: p.raison })),
+        },
+      };
     });
 
   /* ---------------- opposition ---------------- */

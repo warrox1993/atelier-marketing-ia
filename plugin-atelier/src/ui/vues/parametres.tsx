@@ -11,6 +11,7 @@ import type { Diagnostic, ReglagesEntreprise, SourcesReelles } from "../../contr
 import { CRITERES_PERSONNALISES_MAX, SEUIL_QUALIFICATION_MAX, SEUIL_QUALIFICATION_MIN, type CriterePersonnalise, type ReglagesLeads, type ReglagesScore } from "../../contrats/prospection.js";
 import { Champ, Bouton, EnTete, EtatErreur, Fraicheur, Horodatage, LienHote, Lecture, Pastille, PastilleConnexion, Section } from "../composants.js";
 import { TableauConnecteurs } from "../connecteurs.js";
+import { ListeOnglets, PanneauOnglet, useAncre } from "../onglets.js";
 import { ANCRE_PASSAGE_AU_REEL, SectionPassageAuReel } from "../realite.js";
 import { useAction, useDonnees } from "../donnees.js";
 import { euros } from "../format.js";
@@ -18,139 +19,162 @@ import { ecrireBudgetNatif, lireBudgetEntreprise, lireBudgetsAgents, type Budget
 import { appelRoute } from "../routes-prospection.js";
 import { ChoixPlafond, EngagementFaceLimite, plafondDepuisSaisie, plafondModifie, saisieDepuisPlafond, type SaisiePlafond } from "../plafonds.js";
 
+/**
+ * Panneaux (onglets) de la vue : chaque section garde son contenu et son ancre `#param-…` ;
+ * l'ancre de l'adresse sélectionne l'onglet qui la porte. Les panneaux inactifs restent montés mais masqués.
+ */
+const PANNEAUX_PARAMETRES: ReadonlyArray<{ cle: string; libelle: string; ancres: readonly string[] }> = [
+  { cle: "diagnostic", libelle: "Diagnostic", ancres: ["param-diagnostic"] },
+  { cle: "sources", libelle: "Sources", ancres: ["param-sources"] },
+  { cle: "criteres", libelle: "Critères des leads", ancres: ["param-criteres"] },
+  { cle: "depenses", libelle: "Dépenses et coûts", ancres: ["param-depenses", "param-couts"] },
+  { cle: "modeles", libelle: "Modèles", ancres: ["param-modeles"] },
+  { cle: "avance", libelle: "Avancé", ancres: ["param-reglages", "param-recharger", "param-remise"] },
+];
+const BASE_PARAMETRES = "atl-param";
+
+/** Panneau qui porte une ancre ; « diagnostic » par défaut. */
+export function panneauParametres(ancre: string): string {
+  return PANNEAUX_PARAMETRES.find((p) => p.ancres.includes(ancre))?.cle ?? "diagnostic";
+}
+
 export function VueParametres() {
   const diag = useDonnees<Diagnostic>("atelier.sante");
   const reg = useDonnees<ReglagesEntreprise>("atelier.reglages");
+  const ancre = useAncre();
+  const surReel = ancre === ANCRE_PASSAGE_AU_REEL;
+  const [panneau, setPanneau] = useState(() => panneauParametres(ancre));
+  // Une ancre de l'adresse (lien, retour, saisie) sélectionne l'onglet qui la porte, puis amène la section dans la vue.
+  useEffect(() => {
+    if (!ancre) return;
+    if (!surReel) setPanneau(panneauParametres(ancre));
+    const t = window.setTimeout(() => document.getElementById(ancre)?.scrollIntoView?.(), 0);
+    return () => window.clearTimeout(t);
+  }, [ancre, surReel]);
+  const choisir = (cle: string) => {
+    setPanneau(cle);
+    try {
+      window.history.replaceState(window.history.state, "", `#${PANNEAUX_PARAMETRES.find((p) => p.cle === cle)?.ancres[0] ?? ""}`);
+      // `replaceState` ne signale rien : sans cet événement, la première section du panneau (repliée sur
+      // téléphone) resterait fermée, car `Section` ne se déplie que sur `hashchange`.
+      window.dispatchEvent(new HashChangeEvent("hashchange"));
+    } catch {
+      /* l'onglet reste choisi même si l'adresse ne se met pas à jour */
+    }
+  };
+  const actif = (cle: string) => !surReel && panneau === cle;
   return (
     <>
       <EnTete titre="Paramètres et diagnostic" description="État vérifié des gardes et des connecteurs ; une configuration enregistrée ne vaut pas preuve de fonctionnement." />
       <Fraicheur chargeLe={diag.chargeLe} actualisation={diag.loading && diag.data !== null} />
-      <SommaireParametres avecRechargement={reg.data?.modeParDefaut === "demonstration"} />
-      <SectionPassageAuReel />
-      <Section titre="Diagnostic" ancre="param-diagnostic" repliable>
-        <Lecture r={diag} libelle="diagnostic">
-          {(d) => (
-            <>
-              <dl className="atl-champs atl-champs-grille">
-                <div>
-                  <dt>Plugin</dt>
-                  <dd>
-                    {d.plugin.id} {d.plugin.version}
-                  </dd>
-                </div>
-                <div>
-                  <dt>Espace de base</dt>
-                  <dd>
-                    <code>{d.espaceBase}</code> {d.migrationsAppliquees ? "(migrations appliquées)" : "(migrations NON appliquées)"}
-                  </dd>
-                </div>
-                <div>
-                  <dt>Politique de relecture verrouillée (P1)</dt>
-                  <dd>
-                    <PastilleConnexion etat={d.gardeServeur.p1PolitiqueVerrouillee} />
-                  </dd>
-                </div>
-                <div>
-                  <dt>Porte déterministe côté serveur (P2)</dt>
-                  <dd>
-                    <PastilleConnexion etat={d.gardeServeur.p2PorteDeterministe} />
-                  </dd>
-                </div>
-                <div>
-                  <dt>Régulateur de runs</dt>
-                  <dd>
-                    <PastilleConnexion etat={d.gardeServeur.regulateurRuns} />
-                  </dd>
-                </div>
-                {d.destinataireHumain?.alerte ? (
+      <div hidden={!surReel}>
+        <SectionPassageAuReel />
+      </div>
+      <div hidden={surReel}>
+        <ListeOnglets etiquette="Sections des paramètres" base={BASE_PARAMETRES} secondaire actif={panneau} onglets={PANNEAUX_PARAMETRES.map((p) => ({ cle: p.cle, libelle: p.libelle }))} choisir={choisir} />
+      </div>
+      <PanneauOnglet base={BASE_PARAMETRES} cle="diagnostic" actif={actif("diagnostic")}>
+        <Section titre="Diagnostic" ancre="param-diagnostic" repliable>
+          <Lecture r={diag} libelle="diagnostic">
+            {(d) => (
+              <>
+                <dl className="atl-champs atl-champs-grille">
                   <div>
-                    <dt>Blocages de revue</dt>
-                    <dd role="alert">{d.destinataireHumain.alerte}</dd>
+                    <dt>Plugin</dt>
+                    <dd>
+                      {d.plugin.id} {d.plugin.version}
+                    </dd>
                   </div>
-                ) : null}
-                <div>
-                  <dt>Vérifié</dt>
-                  <dd>
-                    <Horodatage iso={d.verifieLe} />
-                  </dd>
-                </div>
-              </dl>
-              <TableauConnecteurs diagnostic={d.connecteurs} />
-            </>
-          )}
-        </Lecture>
-      </Section>
-      <Section titre="Sources de données réelles" ancre="param-sources" repliable aide="Mode lu sur la passerelle au moment du diagnostic ; rien n'est supposé.">
-        <Lecture r={diag} libelle="sources de données">
-          {(d) => <TableauSourcesReelles sources={d.sourcesReelles} />}
-        </Lecture>
-      </Section>
-      <Section titre="Réglages de l'entreprise" ancre="param-reglages" repliable>
-        <Lecture r={reg} libelle="réglages">
-          {(d) => <FormulaireReglages reglages={d} onFait={reg.refresh} />}
-        </Lecture>
-      </Section>
-      <Section titre="Critères des leads" ancre="param-criteres" repliable aide="Ces réglages décident sur quoi reposent la confiance et la priorité de vos leads. Un critère personnalisé se coche à la main dans la fiche d'un lead.">
-        <CriteresLeads />
-      </Section>
-      <Section titre="Dépenses publicitaires" ancre="param-depenses" repliable aide="Plafond choisi par le client pour toute l'entreprise. Chaque campagne peut avoir le sien. Même sans limite, chaque dépense exige une approbation humaine.">
-        <Lecture r={reg} libelle="plafond publicitaire">
-          {(d) => <PlafondEntreprise reglages={d} onFait={reg.refresh} />}
-        </Lecture>
-      </Section>
-      <Section titre="Coûts IA" ancre="param-couts" repliable aide="Budget mensuel natif de Paperclip, pour l'entreprise et pour chaque agent. L'atelier ne crée pas de budget parallèle. À la limite, Paperclip met l'agent en pause.">
-        <BudgetsIa />
-      </Section>
-      <Section titre="Modèles, budgets et compétences" ancre="param-modeles" repliable aide="Ces réglages appartiennent à Paperclip : l'atelier ne les duplique pas.">
-        <ul className="atl-liste">
-          <li>
-            <LienHote vers="/agents/all">Agents</LienHote> : modèle et adaptateur par rôle, compétences assignées, pause et reprise.
-          </li>
-          <li>
-            <LienHote vers="/costs">Coûts et budgets</LienHote> : plafonds par agent et par projet, usage déclaré par les fournisseurs.
-          </li>
-          <li>
-            <LienHote vers="/skills">Compétences</LienHote> : versions publiées et empreintes.
-          </li>
-        </ul>
-      </Section>
-      {reg.data?.modeParDefaut === "demonstration" ? <RechargerDemonstration /> : null}
-      <RemiseAZero />
+                  <div>
+                    <dt>Espace de base</dt>
+                    <dd>
+                      <code>{d.espaceBase}</code> {d.migrationsAppliquees ? "(migrations appliquées)" : "(migrations NON appliquées)"}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt>Politique de relecture verrouillée par le socle</dt>
+                    <dd>
+                      <PastilleConnexion etat={d.gardeServeur.p1PolitiqueVerrouillee} />
+                    </dd>
+                  </div>
+                  <div>
+                    <dt>Contrôle automatique imposé par le serveur</dt>
+                    <dd>
+                      <PastilleConnexion etat={d.gardeServeur.p2PorteDeterministe} />
+                    </dd>
+                  </div>
+                  <div>
+                    <dt>Régulateur de passages</dt>
+                    <dd>
+                      <PastilleConnexion etat={d.gardeServeur.regulateurRuns} />
+                    </dd>
+                  </div>
+                  {d.destinataireHumain?.alerte ? (
+                    <div>
+                      <dt>Blocages de revue</dt>
+                      <dd role="alert">{d.destinataireHumain.alerte}</dd>
+                    </div>
+                  ) : null}
+                  <div>
+                    <dt>Vérifié</dt>
+                    <dd>
+                      <Horodatage iso={d.verifieLe} />
+                    </dd>
+                  </div>
+                </dl>
+                <TableauConnecteurs diagnostic={d.connecteurs} />
+              </>
+            )}
+          </Lecture>
+        </Section>
+      </PanneauOnglet>
+      <PanneauOnglet base={BASE_PARAMETRES} cle="sources" actif={actif("sources")}>
+        <Section titre="Sources de données réelles" ancre="param-sources" repliable aide="Mode lu sur la passerelle au moment du diagnostic ; rien n'est supposé.">
+          <Lecture r={diag} libelle="sources de données">
+            {(d) => <TableauSourcesReelles sources={d.sourcesReelles} />}
+          </Lecture>
+        </Section>
+      </PanneauOnglet>
+      <PanneauOnglet base={BASE_PARAMETRES} cle="criteres" actif={actif("criteres")}>
+        <Section titre="Critères des leads" ancre="param-criteres" repliable aide="Ces réglages décident sur quoi reposent la confiance et la priorité de vos leads. Un critère personnalisé se coche à la main dans la fiche d'un lead.">
+          <CriteresLeads />
+        </Section>
+      </PanneauOnglet>
+      <PanneauOnglet base={BASE_PARAMETRES} cle="depenses" actif={actif("depenses")}>
+        <Section titre="Dépenses publicitaires" ancre="param-depenses" repliable aide="Plafond choisi par le client pour toute l'entreprise. Chaque campagne peut avoir le sien. Même sans limite, chaque dépense exige une approbation humaine.">
+          <Lecture r={reg} libelle="plafond publicitaire">
+            {(d) => <PlafondEntreprise reglages={d} onFait={reg.refresh} />}
+          </Lecture>
+        </Section>
+        <Section titre="Coûts IA" ancre="param-couts" repliable aide="Budget mensuel natif de Paperclip, pour l'entreprise et pour chaque agent. L'atelier ne crée pas de budget parallèle. À la limite, Paperclip met l'agent en pause.">
+          <BudgetsIa />
+        </Section>
+      </PanneauOnglet>
+      <PanneauOnglet base={BASE_PARAMETRES} cle="modeles" actif={actif("modeles")}>
+        <Section titre="Modèles, budgets et compétences" ancre="param-modeles" repliable aide="Ces réglages appartiennent à Paperclip : l'atelier ne les duplique pas.">
+          <ul className="atl-liste">
+            <li>
+              <LienHote vers="/agents/all">Agents</LienHote> : modèle et adaptateur par rôle, compétences assignées, pause et reprise.
+            </li>
+            <li>
+              <LienHote vers="/costs">Coûts et budgets</LienHote> : plafonds par agent et par projet, usage déclaré par les fournisseurs.
+            </li>
+            <li>
+              <LienHote vers="/skills">Compétences</LienHote> : versions publiées et empreintes.
+            </li>
+          </ul>
+        </Section>
+      </PanneauOnglet>
+      <PanneauOnglet base={BASE_PARAMETRES} cle="avance" actif={actif("avance")}>
+        <Section titre="Réglages de l'entreprise" ancre="param-reglages" repliable>
+          <Lecture r={reg} libelle="réglages">
+            {(d) => <FormulaireReglages reglages={d} onFait={reg.refresh} />}
+          </Lecture>
+        </Section>
+        {reg.data?.modeParDefaut === "demonstration" ? <RechargerDemonstration /> : null}
+        <RemiseAZero />
+      </PanneauOnglet>
     </>
-  );
-}
-
-const SECTIONS_PARAMETRES: ReadonlyArray<{ ancre: string; libelle: string; demoSeulement?: true }> = [
-  { ancre: ANCRE_PASSAGE_AU_REEL, libelle: "Passage au réel" },
-  { ancre: "param-diagnostic", libelle: "Diagnostic" },
-  { ancre: "param-sources", libelle: "Sources réelles" },
-  { ancre: "param-reglages", libelle: "Réglages" },
-  { ancre: "param-criteres", libelle: "Critères des leads" },
-  { ancre: "param-depenses", libelle: "Dépenses publicitaires" },
-  { ancre: "param-couts", libelle: "Coûts IA" },
-  { ancre: "param-modeles", libelle: "Modèles et compétences" },
-  { ancre: "param-recharger", libelle: "Recharger la démonstration", demoSeulement: true },
-  { ancre: "param-remise", libelle: "Remise à zéro" },
-];
-
-/** Sommaire des sections : un clic ouvre la section visée (repliée sur téléphone) avant le saut d'ancre. */
-export function SommaireParametres({ avecRechargement }: { avecRechargement: boolean }) {
-  const ouvrir = (ancre: string) => {
-    const detail = document.getElementById(ancre)?.querySelector("details");
-    if (detail) detail.open = true;
-  };
-  return (
-    <nav className="atl-sommaire" aria-label="Sections des paramètres">
-      <ul>
-        {SECTIONS_PARAMETRES.filter((x) => !x.demoSeulement || avecRechargement).map((x) => (
-          <li key={x.ancre}>
-            <a href={`#${x.ancre}`} onClick={() => ouvrir(x.ancre)}>
-              {x.libelle}
-            </a>
-          </li>
-        ))}
-      </ul>
-    </nav>
   );
 }
 
@@ -211,7 +235,7 @@ function FormulaireReglages({ reglages, onFait }: { reglages: ReglagesEntreprise
   const [fait, setFait] = useState(false);
   const entier = (v: string, min: number, max: number) => /^\d+$/u.test(v) && Number(v) >= min && Number(v) <= max;
   const raison = !entier(f.maxRunsActifs, LIMITES.maxRunsActifsMin, LIMITES.maxRunsActifsMax)
-    ? `Runs actifs : entre ${LIMITES.maxRunsActifsMin} et ${LIMITES.maxRunsActifsMax}.`
+    ? `Passages actifs : entre ${LIMITES.maxRunsActifsMin} et ${LIMITES.maxRunsActifsMax}.`
     : !entier(f.maxCyclesCorrection, LIMITES.maxCyclesCorrectionMin, LIMITES.maxCyclesCorrectionMax)
       ? `Cycles de correction : entre ${LIMITES.maxCyclesCorrectionMin} et ${LIMITES.maxCyclesCorrectionMax}.`
       : !entier(f.retentionJours, 1, 3650)
@@ -237,7 +261,7 @@ function FormulaireReglages({ reglages, onFait }: { reglages: ReglagesEntreprise
   return (
     <form className="atl-formulaire" onSubmit={(e) => void soumettre(e)} noValidate>
       <div className="atl-grille-champs">
-        <Champ libelle="Runs actifs simultanés au plus" aide="Appliqué par le serveur à toute l'entreprise.">
+        <Champ libelle="Passages actifs simultanés au plus" aide="Appliqué par le serveur à toute l'entreprise.">
           <input value={f.maxRunsActifs} onChange={maj("maxRunsActifs")} inputMode="numeric" />
         </Champ>
         <Champ libelle="Cycles de correction avant escalade">
@@ -363,7 +387,7 @@ function RemiseAZero() {
   );
 }
 
-function PlafondEntreprise({ reglages, onFait }: { reglages: ReglagesEntreprise; onFait(): void }) {
+export function PlafondEntreprise({ reglages, onFait }: { reglages: ReglagesEntreprise; onFait(): void }) {
   const enregistrer = useAction<ReglagesEntreprise>("atelier.reglages.enregistrer");
   const [saisie, setSaisie] = useState<SaisiePlafond>(saisieDepuisPlafond(reglages.plafondPub));
   const [enCours, setEnCours] = useState(false);
@@ -486,7 +510,7 @@ function LigneBudgetIa({ cible, portee, onFait }: { cible: BudgetNatif; portee: 
   );
 }
 
-function BudgetsIa() {
+export function BudgetsIa() {
   const contexte = useHostContext();
   const [entreprise, setEntreprise] = useState<BudgetNatif | null>(null);
   const [agents, setAgents] = useState<BudgetNatif[]>([]);

@@ -4,12 +4,12 @@
  * (la ligne `Object.assign` de `services.ts` est ajoutée à part).
  */
 import type { PluginContext } from "@paperclipai/plugin-sdk";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { ROUTES_API } from "../src/contrats/index.js";
 import type { ActeurHote, RequeteRoute } from "../src/serveur/atelier.js";
 import type { BaseAtelier } from "../src/serveur/base.js";
 import type { ErreurAtelier } from "../src/serveur/erreurs.js";
-import { ORIGINE_DISCUSSION, PREFIXE_HUMAIN, routesDiscussion } from "../src/serveur/services-discussion.js";
+import { ORIGINE_DISCUSSION, PREFIXE_HUMAIN, TTL_CARTES_MS, routesDiscussion } from "../src/serveur/services-discussion.js";
 import { SOC } from "./outils-base.js";
 
 type Ligne = Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
@@ -19,13 +19,15 @@ const AGENT: ActeurHote = { type: "agent", id: id(900), agentId: id(900), userId
 const COORD = id(1);
 const AUTRE_SOC = id(77);
 
-function faux(o: { reveilEchoue?: boolean } = {}) {
+function faux(o: { reveilEchoue?: boolean; cartesEchouent?: boolean } = {}) {
+  const cartes: Ligne[] = [];
   const issues: Ligne[] = [];
   const commentaires: Ligne[] = [];
   const reveils: Ligne[] = [];
   const miseAJour: Ligne[] = [];
   const journal: Ligne[] = [];
   let n = 0;
+  const lecturesCartes = { n: 0 };
   const o_reveilEchoue = () => o.reveilEchoue === true;
   let horloge = Date.parse("2026-10-16T10:00:00.000Z");
   const tic = () => new Date((horloge += 1000));
@@ -47,6 +49,11 @@ function faux(o: { reveilEchoue?: boolean } = {}) {
         miseAJour.push({ issueId, patch });
         Object.assign(issues.find((i) => i.id === issueId)!, patch);
       },
+      listInteractions: async (issueId: string, companyId: string) => {
+        lecturesCartes.n++;
+        if (o.cartesEchouent) throw new Error("hôte indisponible");
+        return cartes.filter((c) => c.issueId === issueId && c.companyId === companyId);
+      },
       listComments: async (issueId: string) => commentaires.filter((c) => c.issueId === issueId),
       createComment: async (issueId: string, body: string, companyId: string, o?: Ligne) => {
         const c = { id: id(500 + n++), issueId, companyId, body, authorType: o?.authorAgentId ? "agent" : "system", authorAgentId: o?.authorAgentId ?? null, authorUserId: null, createdAt: tic() };
@@ -67,7 +74,7 @@ function faux(o: { reveilEchoue?: boolean } = {}) {
   const refus = async (p: Promise<unknown>) => ((await p.then(() => null, (e: unknown) => e)) as ErreurAtelier | null);
   /** Réponse du Coordinateur dans le fil natif. */
   const repondreCoordinateur = (issueId: string, texte: string) => ctx.issues.createComment(issueId, texte, SOC, { authorAgentId: COORD });
-  return { appeler, refus, issues, commentaires, reveils, miseAJour, journal, repondreCoordinateur };
+  return { appeler, refus, issues, commentaires, reveils, miseAJour, journal, repondreCoordinateur, cartes, lecturesCartes };
 }
 
 const envoyer = (texte: unknown, companyId: string = SOC) => ({ corps: { companyId, texte } });
@@ -194,5 +201,157 @@ describe("discussion.messages", () => {
     const f = faux();
     expect((await f.refus(f.appeler("discussion.messages", { query: { depuis: "hier" } })))?.code).toBe("entree_invalide");
     expect((await f.refus(f.appeler("discussion.messages", { acteur: AGENT })))?.statut).toBe(403);
+  });
+});
+
+const bloc = (actions: unknown) => `Voici.\n\n\`\`\`atelier-actions\n${typeof actions === "string" ? actions : JSON.stringify(actions)}\n\`\`\``;
+const ouvrirMessages = async (f: ReturnType<typeof faux>) => ((await f.appeler("discussion.ouvrir")).corps as { messages: Ligne[]; cartes: Ligne[] });
+
+describe("discussion : actions du Coordinateur (télécommande)", () => {
+  it("valide les actions, retire le bloc du texte et rend `actions`", async () => {
+    const f = faux();
+    await f.appeler("discussion.ouvrir");
+    const issueId = f.issues[0]!.id as string;
+    await f.repondreCoordinateur(issueId, bloc([{ type: "ouvrir", cible: "prospects" }, { type: "ouvrir", cible: "prospects", filtre: { statut: "qualifie", segment: "medecins" } }, { type: "traiter", element: "contenu:abc-12" }]));
+    const m = (await ouvrirMessages(f)).messages[0]!;
+    expect(m.texte).toBe("Voici.");
+    expect(m.actions).toEqual([{ type: "ouvrir", cible: "prospects" }, { type: "ouvrir", cible: "prospects", filtre: { statut: "qualifie", segment: "medecins" } }, { type: "traiter", element: "contenu:abc-12" }]);
+    expect(f.journal.filter((j) => j.type === "discussion.action_ignoree")).toHaveLength(0);
+  });
+
+  it("rejette type inconnu, cible inconnue, URL libre, HTML, identifiant d'entreprise et élément mal formé, en journalisant une seule fois", async () => {
+    const f = faux();
+    await f.appeler("discussion.ouvrir");
+    const issueId = f.issues[0]!.id as string;
+    await f.repondreCoordinateur(
+      issueId,
+      bloc([
+        { type: "supprimer", cible: "prospects" },
+        { type: "ouvrir", cible: "https://evil.example" },
+        { type: "ouvrir", cible: "discussion" },
+        { type: "ouvrir", cible: "prospects", filtre: "<script>" },
+        { type: "ouvrir", cible: "prospects", companyId: AUTRE_SOC },
+        { type: "traiter", element: "contenu:../../x" },
+        { type: "traiter", element: "document:1" },
+        { type: "ouvrir", cible: "carte" },
+      ]),
+    );
+    await ouvrirMessages(f);
+    const m = (await ouvrirMessages(f)).messages[0]!;
+    expect(m.actions).toEqual([{ type: "ouvrir", cible: "carte" }]);
+    expect(m.texte).toBe("Voici.");
+    const ignorees = f.journal.filter((j) => j.type === "discussion.action_ignoree");
+    expect(ignorees).toHaveLength(1);
+    expect((ignorees[0]!.donnees.ignorees as string[]).length).toBe(7);
+  });
+
+  it("JSON illisible ou non tableau : aucune action, message conservé, journalisé", async () => {
+    const f = faux();
+    await f.appeler("discussion.ouvrir");
+    const issueId = f.issues[0]!.id as string;
+    await f.repondreCoordinateur(issueId, bloc("{pas du json"));
+    await f.repondreCoordinateur(issueId, bloc({ type: "ouvrir", cible: "prospects" }));
+    const { messages } = await ouvrirMessages(f);
+    expect(messages.map((m) => m.actions)).toEqual([[], []]);
+    expect(messages.map((m) => m.texte)).toEqual(["Voici.", "Voici."]);
+    expect(f.journal.filter((j) => j.type === "discussion.action_ignoree")).toHaveLength(2);
+  });
+
+  it("au plus 6 actions par message", async () => {
+    const f = faux();
+    await f.appeler("discussion.ouvrir");
+    await f.repondreCoordinateur(f.issues[0]!.id as string, bloc(["accueil", "prospects", "carte", "campagnes", "contenus", "calendrier", "resultats"].map((cible) => ({ type: "ouvrir", cible }))));
+    expect(((await ouvrirMessages(f)).messages[0]!.actions as unknown[]).length).toBe(6);
+  });
+
+  it("un message de l'humain ne porte jamais d'actions, même s'il contient un bloc", async () => {
+    const f = faux();
+    await f.appeler("discussion.envoyer", envoyer(bloc([{ type: "ouvrir", cible: "prospects" }])));
+    const m = (await ouvrirMessages(f)).messages[0]!;
+    expect(m.auteur).toBe("humain");
+    expect(m.actions).toEqual([]);
+    expect(m.texte).toContain("atelier-actions");
+  });
+
+  it("les actions d'un agent autre que le Coordinateur sont écartées (texte conservé, bloc retiré, motif journalisé)", async () => {
+    const f = faux();
+    await f.appeler("discussion.ouvrir");
+    const issueId = f.issues[0]!.id as string;
+    await f.repondreCoordinateur(issueId, bloc([{ type: "ouvrir", cible: "prospects" }]));
+    const autre = id(2);
+    const ctxIssues = (f as unknown as { commentaires: Ligne[] }).commentaires;
+    ctxIssues.push({ id: id(900), issueId, companyId: SOC, body: bloc([{ type: "traiter", element: "approbation:abc" }]), authorType: "agent", authorAgentId: autre, authorUserId: null, createdAt: new Date(Date.parse("2026-10-16T11:00:00.000Z")) });
+    const { messages } = await ouvrirMessages(f);
+    expect(messages).toHaveLength(2);
+    expect(messages[0]!.actions).toEqual([{ type: "ouvrir", cible: "prospects" }]);
+    expect(messages[1]!.actions).toEqual([]);
+    expect(messages[1]!.texte).toBe("Voici.");
+    expect(JSON.stringify(f.journal)).toContain("autre que le Coordinateur");
+  });
+
+  it("isolation : la discussion d'une autre entreprise ne rend ni ses messages, ni ses actions, ni ses cartes", async () => {
+    const f = faux();
+    await f.appeler("discussion.ouvrir");
+    await f.repondreCoordinateur(f.issues[0]!.id as string, bloc([{ type: "ouvrir", cible: "prospects" }]));
+    f.cartes.push({ id: "k1", issueId: f.issues[0]!.id, companyId: SOC, kind: "request_confirmation", status: "pending", title: "Confirmer ?", payload: { prompt: "Pause ?" } });
+    const autre = (await f.appeler("discussion.messages", { companyId: AUTRE_SOC })).corps as { messages: unknown[]; cartes: unknown[] };
+    expect(autre).toMatchObject({ messages: [], cartes: [] });
+  });
+});
+
+describe("discussion : cartes en attente dans le fil", () => {
+  it("rend les cartes en attente de la discussion et des demandes ouvertes, pas les autres", async () => {
+    const f = faux();
+    await f.appeler("discussion.ouvrir");
+    const disc = f.issues[0]!;
+    f.issues.push({ id: id(300), identifier: "DEM-9", title: "Demande de test", companyId: SOC, status: "in_progress", originKind: "plugin:atelier.marketing-ia:demande", originId: "demande:x", createdAt: new Date() });
+    f.issues.push({ id: id(301), identifier: "DEM-10", title: "Terminée", companyId: SOC, status: "done", originKind: "plugin:atelier.marketing-ia:demande", originId: "demande:y", createdAt: new Date() });
+    f.issues.push({ id: id(302), identifier: "ATL-1", title: "Sans lien", companyId: SOC, status: "in_progress", originKind: "manual", originId: null, createdAt: new Date() });
+    const carte = (n: string, issueId: string, o: Ligne = {}) => ({ id: n, issueId, companyId: SOC, kind: "request_confirmation", status: "pending", title: `Carte ${n}`, payload: { prompt: "OK ?" }, ...o });
+    f.cartes.push(carte("c1", disc.id), carte("c2", id(300)), carte("c3", id(301)), carte("c4", id(302)), carte("c5", disc.id, { status: "accepted" }));
+    const { cartes } = await ouvrirMessages(f);
+    expect(cartes.map((c) => c.id)).toEqual(["question:c1", "question:c2"]);
+    expect(cartes[0]).toMatchObject({ issueId: disc.id, interaction: { id: "c1", kind: "request_confirmation" } });
+  });
+
+  it("une lecture de cartes en panne n'empêche pas d'ouvrir le fil", async () => {
+    const f = faux({ cartesEchouent: true });
+    await f.appeler("discussion.ouvrir");
+    await f.appeler("discussion.envoyer", envoyer("Bonjour"));
+    const corps = (await f.appeler("discussion.ouvrir")).corps as { cartes: unknown[]; messages: unknown[] };
+    expect(corps.cartes).toEqual([]);
+    expect(corps.messages).toHaveLength(1);
+  });
+
+  it("une lecture de cartes en panne est signalée à l'interface (cartesIndisponibles), sans cache de la panne", async () => {
+    const f = faux({ cartesEchouent: true });
+    const o = (await f.appeler("discussion.ouvrir")).corps as { cartesIndisponibles: boolean };
+    expect(o.cartesIndisponibles).toBe(true);
+    const avant = f.lecturesCartes.n;
+    const m = (await f.appeler("discussion.messages")).corps as { cartesIndisponibles: boolean };
+    expect(m.cartesIndisponibles).toBe(true);
+    expect(f.lecturesCartes.n).toBeGreaterThan(avant);
+  });
+
+  describe("cache de 30 s", () => {
+    afterEach(() => vi.restoreAllMocks());
+    it("les interrogations du fil ne relisent les cartes qu'une fois par 30 s ; l'ouverture les relit toujours", async () => {
+      let t = Date.parse("2026-10-16T12:00:00Z");
+      vi.spyOn(Date, "now").mockImplementation(() => t);
+      const f = faux();
+      await f.appeler("discussion.ouvrir");
+      const apres = f.lecturesCartes.n;
+      for (let i = 0; i < 5; i++) {
+        t += 4000;
+        await f.appeler("discussion.messages");
+      }
+      expect(f.lecturesCartes.n).toBe(apres); // 20 s : cache
+      t += TTL_CARTES_MS;
+      await f.appeler("discussion.messages");
+      expect(f.lecturesCartes.n).toBeGreaterThan(apres); // cache expiré
+      const milieu = f.lecturesCartes.n;
+      await f.appeler("discussion.ouvrir");
+      expect(f.lecturesCartes.n).toBeGreaterThan(milieu); // ouverture : lecture fraîche
+    });
   });
 });

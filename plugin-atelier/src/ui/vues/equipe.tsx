@@ -17,7 +17,7 @@ export function VueEquipeAtelier({ agentId }: { agentId: string | null }) {
     <>
       <EnTete
         titre="Équipe et coordination"
-        description="Les agents Paperclip de cette entreprise, ce qu'ils font maintenant et ce qui les bloque. Les états viennent du moteur natif ; rien n'est animé sans événement réel."
+        description="Les agents Paperclip de cette entreprise, ce qu'ils font maintenant et ce qui les bloque. Les états viennent de Paperclip ; rien n'est animé sans événement réel."
       />
       <Fraicheur chargeLe={r.chargeLe} actualisation={r.loading && r.data !== null} />
       <Lecture r={r} libelle="équipe" estVide={(d) => d.agents.length === 0} vide={<Vide titre="Aucun agent dans cette entreprise.">Créez ou importez l'organisation de démonstration (scripts/bootstrap-organisation.py), puis actualisez.</Vide>}>
@@ -28,7 +28,7 @@ export function VueEquipeAtelier({ agentId }: { agentId: string | null }) {
                 <strong>{d.agents.length}</strong> agent{d.agents.length > 1 ? "s" : ""}
               </span>
               <span>
-                Runs actifs : <strong>{d.runsActifs}</strong> sur un plafond de <strong>{d.plafondRunsActifs}</strong>
+                Passages actifs : <strong>{d.runsActifs}</strong> sur un plafond de <strong>{d.plafondRunsActifs}</strong>
               </span>
               <span>
                 <strong>{d.agents.filter((a) => a.blocages.length > 0).length}</strong> avec blocage
@@ -42,7 +42,7 @@ export function VueEquipeAtelier({ agentId }: { agentId: string | null }) {
             <div className="atl-deux-colonnes">
               <Section titre="Dépendances non résolues">
                 {d.dependances.length === 0 ? (
-                  <p className="atl-attenue">Aucune tâche sous porte n'attend une autre tâche.</p>
+                  <p className="atl-attenue">Aucune tâche sous contrôle automatique n'attend une autre tâche.</p>
                 ) : (
                   <ul className="atl-liste">
                     {d.dependances.map((dep) => (
@@ -156,9 +156,9 @@ const RAISONS_PAUSE: Record<string, string> = {
 function EtatNatif({ agent }: { agent: AgentVue }) {
   if (agent.runActifId) {
     return (
-      <span className="atl-actif" title={`Run ${agent.runActifId}`}>
+      <span className="atl-actif" title={`Passage ${agent.runActifId}`}>
         <span className="atl-point-actif" aria-hidden="true" />
-        Run en cours
+        Passage en cours
       </span>
     );
   }
@@ -178,7 +178,7 @@ function Competences({ agent }: { agent: AgentVue }) {
     <span className="atl-pile">
       <span>{agent.competences.length} compétence{agent.competences.length > 1 ? "s" : ""}</span>
       <span className="atl-sous">
-        {transmises.length ? `${transmises.length} transmise(s) au dernier run` : "prêtes, pas encore utilisées"}
+        {transmises.length ? `${transmises.length} transmise(s) au dernier passage` : "prêtes, pas encore utilisées"}
       </span>
     </span>
   );
@@ -224,7 +224,7 @@ function DetailAgent({ agent, equipe }: { agent: AgentVue; equipe: VueEquipe }) 
                 {agent.competences.map((c) => (
                   <li key={c.cle}>
                     <code>{c.cle}</code>{" "}
-                    <span className="atl-attenue">{c.source === "dernier_run" ? `transmise au dernier run${c.empreinte ? `, empreinte ${c.empreinte.slice(0, 12)}` : ""}` : "configuration seulement (non prouvée par un run)"}</span>
+                    <span className="atl-attenue">{c.source === "dernier_run" ? `transmise au dernier passage${c.empreinte ? `, empreinte ${c.empreinte.slice(0, 12)}` : ""}` : "configuration seulement (non prouvée par un passage)"}</span>
                   </li>
                 ))}
               </ul>
@@ -251,7 +251,7 @@ function DetailAgent({ agent, equipe }: { agent: AgentVue; equipe: VueEquipe }) 
       <div className="atl-natif">
         <IssuesList companyId={contexte.companyId} filters={{ assigneeAgentId: agent.id }} viewStateKey={`atelier-agent-${agent.id}`} />
       </div>
-      {agent.mode === "demonstration" ? <p className="atl-attenue">Agent de démonstration : ses résultats viennent de fixtures déterministes.</p> : null}
+      {agent.mode === "demonstration" ? <p className="atl-attenue">Agent de démonstration : ses résultats viennent de données fictives fixes.</p> : null}
     </Section>
   );
 }

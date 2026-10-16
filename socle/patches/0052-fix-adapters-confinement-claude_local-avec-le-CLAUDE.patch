@@ -1,0 +1,131 @@
+From 540afc7eabaad3fe1cf2ce762d874f52116fcd18 Mon Sep 17 00:00:00 2001
+From: Jean-Baptiste Dhondt <114347858+warrox1993@users.noreply.github.com>
+Date: Fri, 16 Oct 2026 18:49:40 +0200
+Subject: [PATCH] fix(adapters): confinement claude_local avec le
+ CLAUDE_CONFIG_DIR de l'agent
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Avec filesystemScope "workspace", le dossier de configuration Claude monté en
+écriture dans le bac à sable (et exporté comme CLAUDE_CONFIG_DIR) était celui
+du processus serveur, ~/.claude par défaut, sauf connexion IA gérée. Un agent
+qui pose son propre CLAUDE_CONFIG_DIR voyait donc ses réglages remplacés, et la
+configuration personnelle de l'utilisateur du serveur (identifiants, réglages,
+hooks) devenait lisible et modifiable par l'agent confiné.
+
+Le dossier explicite de l'agent est désormais retenu ; le dossier du serveur
+reste le repli quand l'agent n'en pose aucun.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ .../src/server/claude-config.test.ts          | 37 ++++++++++++++++++-
+ .../claude-local/src/server/claude-config.ts  | 18 +++++++++
+ .../claude-local/src/server/execute.ts        |  7 +++-
+ 3 files changed, 60 insertions(+), 2 deletions(-)
+
+diff --git a/packages/adapters/claude-local/src/server/claude-config.test.ts b/packages/adapters/claude-local/src/server/claude-config.test.ts
+index 5eb0b701d..95125afa9 100644
+--- a/packages/adapters/claude-local/src/server/claude-config.test.ts
++++ b/packages/adapters/claude-local/src/server/claude-config.test.ts
+@@ -22,7 +22,42 @@ vi.mock("@paperclipai/adapter-utils/execution-target", async () => {
+   };
+ });
+ 
+-import { prepareClaudeConfigSeed, prepareSandboxClaudeProbeRuntime } from "./claude-config.js";
++import {
++  prepareClaudeConfigSeed,
++  prepareSandboxClaudeProbeRuntime,
++  resolveSandboxClaudeConfigDir,
++} from "./claude-config.js";
++
++describe("resolveSandboxClaudeConfigDir", () => {
++  it("keeps the agent's explicit CLAUDE_CONFIG_DIR instead of the server's", () => {
++    expect(resolveSandboxClaudeConfigDir({
++      managedAiConnection: undefined,
++      configEnv: { CLAUDE_CONFIG_DIR: " /srv/agents/a1/claude " },
++      env: { CLAUDE_CONFIG_DIR: "/home/server-user/.claude" },
++    })).toBe("/srv/agents/a1/claude");
++  });
++
++  it("falls back to the server directory only when the agent sets none", () => {
++    expect(resolveSandboxClaudeConfigDir({
++      managedAiConnection: undefined,
++      configEnv: {},
++      env: { CLAUDE_CONFIG_DIR: "/srv/shared/claude" },
++    })).toBe("/srv/shared/claude");
++    expect(resolveSandboxClaudeConfigDir({
++      managedAiConnection: undefined,
++      configEnv: { CLAUDE_CONFIG_DIR: "   " },
++      env: {},
++    })).toBe(path.join(os.homedir(), ".claude"));
++  });
++
++  it("keeps the managed AI connection directory unchanged", () => {
++    expect(resolveSandboxClaudeConfigDir({
++      managedAiConnection: { mode: "managed" },
++      configEnv: { CLAUDE_CONFIG_DIR: "/managed/claude" },
++      env: { CLAUDE_CONFIG_DIR: "/home/server-user/.claude" },
++    })).toBe("/managed/claude");
++  });
++});
+ 
+ describe("prepareClaudeConfigSeed", () => {
+   const cleanupDirs: string[] = [];
+diff --git a/packages/adapters/claude-local/src/server/claude-config.ts b/packages/adapters/claude-local/src/server/claude-config.ts
+index 1f9710ca2..cfa766e1b 100644
+--- a/packages/adapters/claude-local/src/server/claude-config.ts
++++ b/packages/adapters/claude-local/src/server/claude-config.ts
+@@ -127,6 +127,24 @@ export function resolveSharedClaudeConfigDir(
+   return fromEnv ? path.resolve(fromEnv) : path.join(os.homedir(), ".claude");
+ }
+ 
++/**
++ * Claude config directory mounted read-write in a local filesystem sandbox (and
++ * exported as CLAUDE_CONFIG_DIR inside it). An agent that sets its own
++ * CLAUDE_CONFIG_DIR keeps it: falling back to the server's directory would hand
++ * the server user's ~/.claude (credentials, settings, hooks) to the confined CLI
++ * and silently drop the agent's own settings.
++ */
++export function resolveSandboxClaudeConfigDir(input: {
++  managedAiConnection: unknown;
++  configEnv: Record<string, unknown>;
++  env?: NodeJS.ProcessEnv;
++}): string {
++  const explicit = typeof input.configEnv.CLAUDE_CONFIG_DIR === "string" ? input.configEnv.CLAUDE_CONFIG_DIR : "";
++  if (input.managedAiConnection) return explicit;
++  if (explicit.trim()) return path.resolve(explicit.trim());
++  return resolveSharedClaudeConfigDir(input.env ?? process.env);
++}
++
+ export function resolveManagedClaudeConfigSeedDir(
+   env: NodeJS.ProcessEnv,
+   companyId?: string,
+diff --git a/packages/adapters/claude-local/src/server/execute.ts b/packages/adapters/claude-local/src/server/execute.ts
+index 114cad4fa..c595e1f8f 100644
+--- a/packages/adapters/claude-local/src/server/execute.ts
++++ b/packages/adapters/claude-local/src/server/execute.ts
+@@ -80,6 +80,7 @@ import {
+   materializeRemoteClaudeConfig,
+   prepareClaudeConfigSeed,
+   resolveManagedClaudeRuntimeStateDir,
++  resolveSandboxClaudeConfigDir,
+   resolveSharedClaudeConfigDir,
+   writePaperclipClaudeMcpConfig,
+ } from "./claude-config.js";
+@@ -564,7 +565,11 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
+     servers: runtimeMcpServers,
+   });
+   const localMcpConfigDir = path.dirname(localMcpConfigPath);
+-  const sharedClaudeConfigDir = config.managedAiConnection ? asString(configEnv.CLAUDE_CONFIG_DIR, "") : resolveSharedClaudeConfigDir(process.env);
++  const sharedClaudeConfigDir = resolveSandboxClaudeConfigDir({
++    managedAiConnection: config.managedAiConnection,
++    configEnv,
++    env: process.env,
++  });
+   const networkScope = parseLocalProcessNetworkScope(config.networkScope);
+   const filesystemScope = parseLocalProcessFilesystemScope(config.filesystemScope);
+   const localProcessSandbox: LocalProcessSandboxOptions | null =
+-- 
+2.53.0
+

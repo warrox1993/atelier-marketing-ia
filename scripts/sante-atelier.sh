@@ -85,7 +85,16 @@ if [[ "${SANTE_OK}" -eq 1 ]]; then
     # Âge de la dernière sauvegarde (présent seulement dans la réponse complète, authentifiée).
     age="$(jq -r '.databaseBackup.latestBackup.ageHours // empty' <<<"${SANTE}")"
     if [[ -n "${age}" ]] && awk -v a="${age}" -v m="${AGE_MAX}" 'BEGIN{exit !(a>m)}'; then
-      alerte "dernière sauvegarde de base trop ancienne : ${age} h (maximum ${AGE_MAX} h)"
+      # Le serveur compte son heure de sauvegarde depuis son démarrage : après un redémarrage, la
+      # suivante peut tarder. On déclenche donc d'abord une sauvegarde (route native, même que le bouton
+      # de l'interface) et on n'alerte que si elle échoue. Jamais en simulation.
+      if [[ "${SIMULE}" -eq 0 ]] && reponse="$(curl -fsS --max-time 300 -X POST -H 'Content-Type: application/json' -d '{}' \
+          "http://127.0.0.1:${PORT}/api/instance/database-backups" 2>/dev/null)" \
+          && [[ -n "$(jq -r '.backupFile // empty' <<<"${reponse}" 2>/dev/null)" ]]; then
+        echo "Atelier (port ${PORT}) : sauvegarde de ${age} h, nouvelle sauvegarde faite : $(jq -r '.backupFile' <<<"${reponse}")"
+      else
+        alerte "dernière sauvegarde de base trop ancienne : ${age} h (maximum ${AGE_MAX} h), et la sauvegarde de rattrapage a échoué"
+      fi
     fi
   else
     alerte "réponse /api/health sans informations de sauvegarde de base : contrôle impossible"

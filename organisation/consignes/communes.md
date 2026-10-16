@@ -1,25 +1,4 @@
-## Faits du client : la fiche d'abord, jamais de mémoire
-
-Avant tout travail, lis la **fiche du client** (marque de l'atelier : identité, entités et leurs
-identifiants BCE et FSMA, marques, établissements, zones, segments, offres, ton, informations manquantes) :
-
-```
-curl -sS --variable %PAPERCLIP_API_URL --variable %PAPERCLIP_API_KEY --variable %PAPERCLIP_COMPANY_ID --expand-header 'Authorization: Bearer {{PAPERCLIP_API_KEY}}' --expand-url '{{PAPERCLIP_API_URL}}/api/plugins/atelier.marketing-ia/api/marque?companyId={{PAPERCLIP_COMPANY_ID}}'
-```
-
-et la liste des documents disponibles : `…/api/plugins/atelier.marketing-ia/api/connaissances/titres?companyId={{PAPERCLIP_COMPANY_ID}}`.
-
-- Identifiants légaux (BCE, FSMA, TVA, catégorie) : recopiés **uniquement** depuis les entités de la
-  fiche ; un numéro BCE n'est jamais un numéro FSMA. Une page du client qui affiche autre chose est un
-  écart à signaler, pas une source.
-- Une marque ou une entité de la fiche existe, même si une page ne la cite pas.
-- Recherche dans les connaissances : questions courtes par mots-clés, au moins trois reformulations avant
-  d'écrire qu'une information manque ; chaque chiffre ou condition d'offre porte son `connaissance://…`.
-- Tout livrable contient une courte **table des faits** (fait, source). La porte refuse un identifiant
-  légal incohérent avec la fiche.
-- Pour signaler un identifiant faux vu sur une page, écris dans la MÊME phrase le bon identifiant de
-  la fiche : « La page affiche 0123.456.789 comme numéro FSMA, alors que le FSMA de la fiche est
-  012345. » Sans le bon numéro, la porte refuse la phrase.
+[[marketing:faits-client]]
 
 ## Livrable en relecture : attendre tous les verdicts
 
@@ -51,10 +30,8 @@ avec `$PAPERCLIP_…` ailleurs (consignes, compétences, message de réveil) : t
 Lire une tâche (même forme pour tout `GET`, par exemple `…/taches/<issueId>/contexte` du plugin ; ce contexte est un
 résumé par défaut : le livrable se lit par pages avec `?partie=livrable&debut=<ligne>&lignes=<n>` d'après
 `livrable.sommaire`, le détail avec `?partie=verdicts|couvertures|donneesConnexion`, le schéma des clés par `pourAllerPlus`
-et `?vue=complete` seulement si le résumé ne suffit pas). Le dossier de la tâche (`…/taches/<issueId>/dossier`) et la
-liste des prospects (`…/prospects`) suivent la même règle : résumé par défaut, `?partie=` pour le détail (dossier :
-`livrable` paginé, `matrice`, `revues`, `sources`, `decisions`, `diffusions`, `appelsProposes` ; prospects :
-`?partie=detail&prospectId=<id>` et `page`), `?vue=complete` en dernier recours. Pour lire le livrable, utilise la partie
+et `?vue=complete` seulement si le résumé ne suffit pas). Le dossier de la tâche (`…/taches/<issueId>/dossier`)[[marketing:prospects-liste| suit]] la même règle : résumé par défaut, `?partie=` pour le détail (dossier :
+`livrable` paginé, `matrice`, `revues`, `sources`, `decisions`, `diffusions`, `appelsProposes`[[marketing:prospects-detail|]]), `?vue=complete` en dernier recours. Pour lire le livrable, utilise la partie
 `livrable` paginée du contexte de l'atelier (`…/contexte?partie=livrable&debut=<ligne>`) plutôt que de télécharger le
 document natif de la tâche : il tient en une seule ligne trop longue pour `Read` et pousse à des dizaines de `grep` :
 
@@ -82,17 +59,23 @@ pour remplacer un document existant, `baseRevisionId` reçoit son `latestRevisio
 curl -sS -w '\nHTTP %{http_code}\n' -X PUT --variable %PAPERCLIP_API_URL --variable %PAPERCLIP_API_KEY --variable %PAPERCLIP_RUN_ID --expand-header 'Authorization: Bearer {{PAPERCLIP_API_KEY}}' --expand-header 'X-Paperclip-Run-Id: {{PAPERCLIP_RUN_ID}}' -H 'Content-Type: application/json' --expand-url '{{PAPERCLIP_API_URL}}/api/issues/<issueId>/documents/<cle>' --data-raw '{"title":"Titre","format":"markdown","body":"# Titre\n\nTexte.","baseRevisionId":null}'
 ```
 
-Déposer une réponse signée d'un outil (corps décrit dans tes consignes : `service`, `outil`,
-`arguments`, `reponse`), route `/prospects` pour la prospection, `/donnees-connexion` pour les
-autres rôles ; la réponse brute est longue, donc passe par un fichier :
-
-```
-curl -sS -w '\nHTTP %{http_code}\n' -X POST --variable %PAPERCLIP_API_URL --variable %PAPERCLIP_API_KEY --variable %PAPERCLIP_RUN_ID --expand-header 'Authorization: Bearer {{PAPERCLIP_API_KEY}}' --expand-header 'X-Paperclip-Run-Id: {{PAPERCLIP_RUN_ID}}' -H 'Content-Type: application/json' --expand-url '{{PAPERCLIP_API_URL}}/api/plugins/atelier.marketing-ia/api/taches/<issueId>/donnees-connexion' --data-binary @<chemin absolu du fichier JSON>
-```
+[[marketing:depot-connexion]]
 
 Une commande refusée ne se contourne pas par un autre outil : corrige-la selon ces règles. Un code
 HTTP 4xx vient du serveur (lis son message), pas de la syntaxe.
 
+<!-- hors-marketing:début -->
+## Échanges entre services
+
+- Tu ne demandes jamais toi-même une information à un autre service : tu ne lis pas ses données et tu ne
+  lui confies aucune tâche.
+- Seul le coordinateur de ton service passe par le bureau de liaison, avec la route `liaison.demander` :
+  une demande au service concerné avec un objet, une question et seulement les extraits nécessaires,
+  jamais un dossier complet.
+- Spécialiste : si une information détenue ailleurs te manque, demande-la à ton coordinateur en
+  commentaire de ta tâche (l'information qui manque et pourquoi) ; c'est lui qui décide de la demander.
+
+<!-- hors-marketing:fin -->
 ## Fichiers temporaires et limites de lecture
 
 Écris tes fichiers temporaires dans ton répertoire de travail, jamais dans /tmp. N'essaie jamais de lire des fichiers hors de ton répertoire de travail.

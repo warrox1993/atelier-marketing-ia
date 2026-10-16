@@ -41,41 +41,34 @@ describe("contrat des exports", () => {
 });
 
 describe("navigation", () => {
-  it("la barre latérale liste les six rubriques et marque la courante", async () => {
+  it("la barre latérale liste les cinq rubriques et marque celle de la vue courante", async () => {
     pont.chemin = "/RNO/atelier/calendrier";
     rendu = await rendre(createElement(NavigationAtelier, { context: contexte }));
-    const liens = Array.from(rendu.conteneur.querySelectorAll("nav a"));
-    for (const r of RUBRIQUES) expect(liens.some((a) => a.textContent?.includes(r.libelle))).toBe(true);
-    expect(rendu.conteneur.querySelector('a[aria-current="page"]')?.textContent).toContain("Calendrier éditorial");
-    expect(rendu.conteneur.querySelector('a[aria-current="page"]')?.getAttribute("href")).toBe("/RNO/atelier/calendrier");
+    const liens = Array.from(rendu.conteneur.querySelectorAll("nav.atl-nav a"));
+    expect(liens.map((a) => a.querySelector("span")?.textContent)).toEqual(["Accueil", "Discussion", "Prospects", "Marketing", "Réglages"]);
+    expect(rendu.conteneur.querySelector('a[aria-current="page"]')?.textContent).toContain("Marketing");
+    expect(rendu.conteneur.querySelector('a[aria-current="page"]')?.getAttribute("href")).toBe("/RNO/atelier/campagnes");
   });
-  it("la barre latérale place Prospects et la carte juste après « À faire », sous l'intertitre « Prospection »", async () => {
-    pont.chemin = "/RNO/atelier/prospects";
+  it("la barre latérale marque Prospects pour la carte et Réglages pour la corbeille", async () => {
+    pont.chemin = "/RNO/atelier/carte";
     rendu = await rendre(createElement(NavigationAtelier, { context: contexte }));
-    const nav = rendu.conteneur.querySelector("nav.atl-nav")!;
-    // Premier <span> de chaque lien : le libellé, sans le compteur « à valider » de « Contenus ».
-    const textes = Array.from(nav.querySelectorAll("a")).map((a) => a.querySelector("span")?.textContent);
-    expect(textes.slice(0, 4)).toEqual(["Discussion", "À faire", "Prospects", "Carte des prospects"]);
-    expect(textes.slice(4, 4 + RUBRIQUES.length)).toEqual(RUBRIQUES.map((r) => r.libelle));
-    const groupe = nav.querySelector('[role="group"]')!;
-    expect(groupe.textContent).toContain("Prospection");
-    expect(Array.from(groupe.querySelectorAll("a")).map((a) => a.textContent)).toEqual(["Prospects", "Carte des prospects"]);
-    expect(groupe.getAttribute("aria-labelledby")).toBeTruthy();
-    expect(document.getElementById(groupe.getAttribute("aria-labelledby")!)?.textContent).toBe("Prospection");
-    expect(groupe.querySelector('a[aria-current="page"]')?.textContent).toBe("Prospects");
+    expect(rendu.conteneur.querySelector('a[aria-current="page"]')?.textContent).toBe("Prospects");
+    rendu.demonter();
+    pont.chemin = "/RNO/atelier/corbeille";
+    rendu = await rendre(createElement(NavigationAtelier, { context: contexte }));
+    expect(rendu.conteneur.querySelector('a[aria-current="page"]')?.textContent).toBe("Réglages");
   });
-  it("les onglets (téléphone) suivent le même ordre", async () => {
+  it("les rubriques (téléphone) suivent le même ordre", async () => {
     const c = await page("/RNO/atelier/equipe");
     const textes = Array.from(c.querySelectorAll("nav.atl-onglets a")).map((a) => a.textContent?.trim());
-    expect(textes.slice(0, 4)).toEqual(["Discussion", "À faire", "Prospects", "Carte des prospects"]);
-    expect(textes.slice(4, 4 + RUBRIQUES.length)).toEqual(RUBRIQUES.map((r) => r.libelle));
+    expect(textes).toEqual(["Accueil", "Discussion", "Prospects", "Marketing", "Réglages"]);
   });
-  it("la page porte aussi des onglets (téléphone) et chaque lien passe par la navigation de l'hôte", async () => {
+  it("la page porte les rubriques (téléphone) et chaque lien passe par la navigation de l'hôte", async () => {
     const c = await page("/RNO/atelier/equipe");
-    const onglets = c.querySelector("nav.atl-onglets");
-    expect(onglets?.querySelectorAll("a")).toHaveLength(14);
-    await cliquer(parTexte(onglets!, "a", "Marque et sources"));
-    expect(pont.navigations).toContain("/atelier/marque");
+    const rubriques = c.querySelector("nav.atl-onglets");
+    expect(rubriques?.querySelectorAll("a")).toHaveLength(5);
+    await cliquer(parTexte(rubriques!, "a", "Réglages"));
+    expect(pont.navigations).toContain("/atelier/mise-en-place");
   });
   it("l'entrée de la barre latérale mène à l'atelier", async () => {
     rendu = await rendre(createElement(EntreeAtelier, { context: contexte }));
@@ -189,7 +182,7 @@ describe("rubriques", () => {
     expect(c.textContent).toContain(MENTION_DEMONSTRATION.replace(/^Démonstration\s*:\s*/u, ""));
     expect(c.textContent).toContain("Chaque élément attendu a sa preuve.");
     expect(c.textContent).toContain("L'établissement de Seraing n'est pas présenté.");
-    expect(c.textContent).toContain("Porte franchie");
+    expect(c.textContent).toContain("Contrôle automatique réussi");
     expect(c.textContent).toContain("Contrôle échoué");
     expect(c.querySelector('[data-natif="MarkdownBlock"]')?.textContent).toContain("#### Seraing");
     expect(c.querySelectorAll("h1")).toHaveLength(1);
@@ -410,10 +403,10 @@ describe("onglet de tâche et widget", () => {
     expect(rendu.conteneur.textContent).toContain("Ouvrir le dossier complet");
     expect(rendu.conteneur.textContent).toContain("Décision humaine");
   });
-  it("le widget résume les contenus à valider et les runs actifs", async () => {
+  it("le widget résume les contenus à valider et les passages actifs", async () => {
     rendu = await rendre(createElement(WidgetAtelier, { context: contexte }));
     expect(rendu.conteneur.textContent).toContain("1 à valider");
-    expect(rendu.conteneur.textContent).toContain("0 run actif sur 3");
+    expect(rendu.conteneur.textContent).toContain("0 passage actif sur 3");
   });
   it("le widget envoie une demande au Coordinateur puis ouvre la tâche créée", async () => {
     const appels: Array<{ methode: string; url: string; corps: unknown }> = [];

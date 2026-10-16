@@ -49,7 +49,7 @@ function ListeContenus() {
     <>
       <EnTete
         titre="Contenus à valider"
-        description="Seuls les livrables dont la porte déterministe est franchie arrivent ici. Les livrables bloqués avant validation sont listés à part, avec leur motif."
+        description="Seuls les livrables dont le contrôle automatique est réussi arrivent ici. Les livrables bloqués avant validation sont listés à part, avec leur motif."
       />
       <Fraicheur chargeLe={r.chargeLe} actualisation={r.loading && r.data !== null} />
       <Lecture r={r} libelle="contenus à valider">
@@ -57,7 +57,7 @@ function ListeContenus() {
           <>
             <Section titre={`Prêts pour validation humaine (${d.prets.length})`} aide="Contrôles applicables réussis, aucune exigence bloquante.">
               {d.prets.length === 0 ? (
-                <Vide titre="Rien à valider pour l'instant.">Un livrable arrive ici quand ses revues sont réussies et que la porte est franchie sur sa révision courante.</Vide>
+                <Vide titre="Rien à valider pour l'instant.">Un livrable arrive ici quand ses revues sont réussies et que le contrôle automatique est réussi sur sa révision courante.</Vide>
               ) : (
                 <TableDossiers lignes={d.prets} />
               )}
@@ -81,7 +81,7 @@ function TableDossiers({ lignes, bloques = false }: { lignes: ResumeDossier[]; b
             <th scope="col">Livrable</th>
             <th scope="col">{bloques ? "Motif" : "Statut"}</th>
             <th scope="col">Révision</th>
-            <th scope="col">Porte</th>
+            <th scope="col">Contrôle automatique</th>
             <th scope="col" className="atl-num">Constats ouverts</th>
             <th scope="col">Modifié</th>
           </tr>
@@ -102,7 +102,7 @@ function TableDossiers({ lignes, bloques = false }: { lignes: ResumeDossier[]; b
                 </span>
               </td>
               <td data-libelle="Révision">{l.revisionNumber ?? <span className="atl-attenue">aucune</span>}</td>
-              <td data-libelle="Porte">
+              <td data-libelle="Contrôle automatique">
                 {l.decisionPorte ? <Pastille ton={DECISIONS_PORTE[l.decisionPorte]?.ton}>{DECISIONS_PORTE[l.decisionPorte]?.libelle}</Pastille> : <span className="atl-attenue">non évaluée</span>}
               </td>
               <td data-libelle="Constats ouverts" className="atl-num">
@@ -208,6 +208,17 @@ export function abaisserTitres(markdown: string): string {
     .join("\n");
 }
 
+/** Une exigence citée par son code (REQ-001) s'affiche par son titre ; le code reste en petit, pour retrouver la ligne. */
+function ExigenceNommee({ code, matrice }: { code: string; matrice: DossierHumain["matrice"] }) {
+  const titre = matrice.find((l) => l.exigence.code === code)?.exigence.interpretation;
+  return (
+    <span className="atl-marge-g">
+      {titre ? `${titre} ` : null}
+      <code className="atl-sous">{code}</code>
+    </span>
+  );
+}
+
 function SyntheseControles({ dossier: d }: { dossier: DossierHumain }) {
   const ev = d.evaluationPorte;
   const obligatoires = d.matrice.filter((l) => l.exigence.obligatoire);
@@ -216,7 +227,7 @@ function SyntheseControles({ dossier: d }: { dossier: DossierHumain }) {
     <Section titre="Contrôles">
       <dl className="atl-chiffres">
         <div>
-          <dt>Porte déterministe</dt>
+          <dt>Contrôle automatique</dt>
           <dd>
             {ev ? <Pastille ton={DECISIONS_PORTE[ev.decision]?.ton}>{DECISIONS_PORTE[ev.decision]?.libelle}</Pastille> : <span className="atl-attenue">non évaluée</span>}
             {ev?.perimee ? <Pastille ton="attention">Évaluation périmée</Pastille> : null}
@@ -245,7 +256,7 @@ function SyntheseControles({ dossier: d }: { dossier: DossierHumain }) {
           {ev.motifs.map((m, i) => (
             <li key={`${m.code}-${i}`}>
               {m.message}
-              {m.exigence ? <code className="atl-marge-g">{m.exigence}</code> : null}
+              {m.exigence ? <ExigenceNommee code={m.exigence} matrice={d.matrice} /> : null}
               {m.element ? <span className="atl-attenue"> ({m.element})</span> : null}
             </li>
           ))}
@@ -254,7 +265,7 @@ function SyntheseControles({ dossier: d }: { dossier: DossierHumain }) {
       {ev ? (
         <p className="atl-sous">
           Évaluée <Horodatage iso={ev.creeLe} /> par {ev.evalueePar} ; empreinte des entrées <code>{ev.empreinte.slice(0, 12)}</code>
-          {ev.revisionId && d.livrable && ev.revisionId !== d.livrable.revisionId ? " ; porte calculée sur une révision antérieure" : ""}.
+          {ev.revisionId && d.livrable && ev.revisionId !== d.livrable.revisionId ? " ; contrôle automatique calculé sur une révision antérieure" : ""}.
         </p>
       ) : null}
     </Section>
@@ -288,8 +299,10 @@ function Matrice({ lignes, revisionCourante }: { lignes: LigneMatrice[]; revisio
                 return (
                   <tr key={l.exigence.id}>
                     <th scope="row" data-libelle="Exigence">
-                      <code>{l.exigence.code}</code> {l.exigence.obligatoire ? null : <span className="atl-attenue">(facultative)</span>}
-                      <span className="atl-sous">{l.exigence.interpretation}</span>
+                      {l.exigence.interpretation} {l.exigence.obligatoire ? null : <span className="atl-attenue">(facultative)</span>}
+                      <span className="atl-sous">
+                        <code>{l.exigence.code}</code>
+                      </span>
                     </th>
                     <td data-libelle="Couverture">
                       {c ? <Pastille ton={COUVERTURES[c.etat]?.ton}>{COUVERTURES[c.etat]?.libelle ?? c.etat}</Pastille> : <Pastille ton="danger">Non déclarée</Pastille>}
@@ -499,7 +512,7 @@ function LimitesQuestions({ dossier: d }: { dossier: DossierHumain }) {
           <ul className="atl-liste">
             {d.questionsRestantes.map((q, i) => (
               <li key={i}>
-                {q.exigence ? <code>{q.exigence}</code> : null} {q.question}
+                {q.exigence ? <ExigenceNommee code={q.exigence} matrice={d.matrice} /> : null} {q.question}
               </li>
             ))}
           </ul>
@@ -726,7 +739,7 @@ function RelancePanneau({ dossier: d, onFait }: { dossier: DossierHumain; onFait
       }
       const r = await relancer(params);
       setResultat(
-        `Correction relancée : maximum de cycles porté de ${r.maximumAvant} à ${r.maximumApres}. La tâche repart chez le producteur ; la prochaine version repasse toutes les revues et la porte.` +
+        `Correction relancée : maximum de cycles porté de ${r.maximumAvant} à ${r.maximumApres}. La tâche repart chez le producteur ; la prochaine version repasse toutes les revues et le contrôle automatique.` +
           (d.mode === "demonstration" ? " Démonstration : aucune diffusion." : ""),
       );
       onFait();
@@ -834,7 +847,7 @@ export function corpsReprise(d: DossierHumain, note: string, actionId: string | 
       providerStopped: true,
       actionOutcome: effets > 0 ? "mixed" : "not_performed",
       outcomeEvidence:
-        `Run interrompu ${i.runId} : révisions du livrable ${i.revisionsLivrable}, déclarations de couverture ${i.couverturesDeclarees}, ` +
+        `Passage interrompu ${i.runId} : révisions du livrable ${i.revisionsLivrable}, déclarations de couverture ${i.couverturesDeclarees}, ` +
         `diffusions ${i.diffusions} (journal de l'atelier et révisions natives). Vérifié par l'humain dans l'atelier.`,
     },
   };
@@ -869,14 +882,14 @@ function ReprisePanneau({ dossier: d, onFait }: { dossier: DossierHumain; onFait
     }
   };
   return (
-    <Section titre="Reprendre après interruption" aide="Le serveur s'est arrêté pendant un run : Paperclip ne rejoue rien automatiquement. Vous seul pouvez lever le blocage après vérification.">
+    <Section titre="Reprendre après interruption" aide="Le serveur s'est arrêté pendant un passage : Paperclip ne rejoue rien automatiquement. Vous seul pouvez lever le blocage après vérification.">
       {resultat ? (
         <p className="atl-succes" role="status">
           {resultat}
         </p>
       ) : (
         <>
-          <p className="atl-sous">Run {idCourt(d.interruption!.runId)} interrompu. Effets déjà constatés :</p>
+          <p className="atl-sous">Passage {idCourt(d.interruption!.runId)} interrompu. Effets déjà constatés :</p>
           <p className="atl-resume">
             <span>
               <strong>{d.interruption!.revisionsLivrable}</strong> {accord(d.interruption!.revisionsLivrable, "révision du livrable", "révisions du livrable")}
@@ -993,7 +1006,7 @@ function DiffusionPanneau({ dossier: d, onFait }: { dossier: DossierHumain; onFa
 export function Chronologie({ issueId }: { issueId: string }) {
   const r = useDonnees<ChronologieExecution>("atelier.chronologie", { issueId });
   return (
-    <Section titre="Chronologie de l'exécution" aide="Actions observées (runs, journal de l'atelier) ; aucun raisonnement interne de modèle n'est affiché.">
+    <Section titre="Chronologie de l'exécution" aide="Actions observées (passages, journal de l'atelier) ; aucun raisonnement interne de modèle n'est affiché.">
       <Lecture r={r} libelle="chronologie" estVide={(c) => c.etapes.length === 0} vide={<p className="atl-attenue">Aucune étape enregistrée pour cette tâche.</p>}>
         {(c) => (
           <ol className="atl-chrono">

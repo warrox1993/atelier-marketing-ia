@@ -120,6 +120,7 @@ export const CODES_ERREUR = [
   "porte_absente",
   "elevation_refusee",
   "diffusion_refusee",
+  "liaison_refusee",
   "url_refusee",
   "import_refuse",
   "dictee_indisponible",

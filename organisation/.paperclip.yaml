@@ -36,6 +36,10 @@ agents:
           CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC:
             type: "plain"
             value: "1"
+        filesystemScope: "workspace"
+        networkScope: "allowlist"
+        networkAllowlist:
+          - "api.anthropic.com"
     runtime:
       heartbeat:
         maxConcurrentRuns: 1
@@ -125,6 +129,10 @@ agents:
           CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC:
             type: "plain"
             value: "1"
+        filesystemScope: "workspace"
+        networkScope: "allowlist"
+        networkAllowlist:
+          - "api.anthropic.com"
     runtime:
       heartbeat:
         maxConcurrentRuns: 1
@@ -212,6 +220,10 @@ agents:
           CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC:
             type: "plain"
             value: "1"
+        filesystemScope: "workspace"
+        networkScope: "allowlist"
+        networkAllowlist:
+          - "api.anthropic.com"
     runtime:
       heartbeat:
         maxConcurrentRuns: 1
@@ -308,6 +320,10 @@ agents:
           CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC:
             type: "plain"
             value: "1"
+        filesystemScope: "workspace"
+        networkScope: "allowlist"
+        networkAllowlist:
+          - "api.anthropic.com"
     runtime:
       heartbeat:
         maxConcurrentRuns: 1
@@ -402,6 +418,10 @@ agents:
           CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC:
             type: "plain"
             value: "1"
+        filesystemScope: "workspace"
+        networkScope: "allowlist"
+        networkAllowlist:
+          - "api.anthropic.com"
     runtime:
       heartbeat:
         maxConcurrentRuns: 1
@@ -494,6 +514,10 @@ agents:
           CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC:
             type: "plain"
             value: "1"
+        filesystemScope: "workspace"
+        networkScope: "allowlist"
+        networkAllowlist:
+          - "api.anthropic.com"
     runtime:
       heartbeat:
         maxConcurrentRuns: 1
@@ -591,6 +615,10 @@ agents:
           CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC:
             type: "plain"
             value: "1"
+        filesystemScope: "workspace"
+        networkScope: "allowlist"
+        networkAllowlist:
+          - "api.anthropic.com"
     runtime:
       heartbeat:
         maxConcurrentRuns: 1
@@ -685,6 +713,10 @@ agents:
           CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC:
             type: "plain"
             value: "1"
+        filesystemScope: "workspace"
+        networkScope: "allowlist"
+        networkAllowlist:
+          - "api.anthropic.com"
     runtime:
       heartbeat:
         maxConcurrentRuns: 1
@@ -774,6 +806,10 @@ agents:
           CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC:
             type: "plain"
             value: "1"
+        filesystemScope: "workspace"
+        networkScope: "allowlist"
+        networkAllowlist:
+          - "api.anthropic.com"
     runtime:
       heartbeat:
         maxConcurrentRuns: 1
@@ -867,6 +903,10 @@ agents:
           CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC:
             type: "plain"
             value: "1"
+        filesystemScope: "workspace"
+        networkScope: "allowlist"
+        networkAllowlist:
+          - "api.anthropic.com"
     runtime:
       heartbeat:
         maxConcurrentRuns: 1
@@ -963,6 +1003,10 @@ agents:
           CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC:
             type: "plain"
             value: "1"
+        filesystemScope: "workspace"
+        networkScope: "allowlist"
+        networkAllowlist:
+          - "api.anthropic.com"
     runtime:
       heartbeat:
         maxConcurrentRuns: 1

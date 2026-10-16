@@ -88,11 +88,10 @@ async function ouvrir(chemin: string) {
 const ligne = (c: HTMLElement, cle: string) => c.querySelector<HTMLElement>(`tr[data-branchement="${cle}"]`)!;
 
 describe("Paramètres : section « Passage au réel »", () => {
-  it("est la première section, avec son entrée en tête du sommaire", async () => {
+  it("est la section de l'onglet « Passage au réel » des Réglages", async () => {
     const c = await ouvrir("/RNO/atelier/parametres");
-    expect(c.querySelector("section.atl-section")?.id).toBe("param-reel");
     expect(c.querySelector("section#param-reel h2")?.textContent).toBe("Passage au réel");
-    expect(c.querySelector('nav[aria-label="Sections des paramètres"] a')?.textContent).toBe("Passage au réel");
+    expect(c.querySelector('[role="tablist"][aria-label="Réglages : sections"] [role="tab"]:nth-child(4)')?.textContent).toBe("Passage au réel");
     expect(pont.violations).toEqual([]);
   });
 

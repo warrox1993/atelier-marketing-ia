@@ -327,9 +327,9 @@ export interface LigneAgentNatif {
 export function etatClaude(agents: AgentClaude[]): LigneAgentNatif {
   if (agents.length === 0) return { etat: "non_connecte", detail: "Aucun agent claude_local configuré." };
   const sans = agents.filter((a) => !a.jetonPresent);
-  if (sans.length === agents.length) return { etat: "non_connecte", detail: `${agents.length} agent(s) claude_local, aucun jeton déclaré : aucun run réel possible.` };
-  if (sans.length > 0) return { etat: "configure_non_verifie", detail: `Jeton présent pour ${agents.length - sans.length} agent(s) sur ${agents.length} ; absent pour : ${sans.map((a) => a.nom).join(", ")}. Aucun run réel vérifié ici.` };
-  return { etat: "configure_non_verifie", detail: `${agents.length} agent(s) claude_local avec jeton présent (valeur jamais affichée). Aucun run réel vérifié ici.` };
+  if (sans.length === agents.length) return { etat: "non_connecte", detail: `${agents.length} agent(s) claude_local, aucun jeton déclaré : aucun passage réel possible.` };
+  if (sans.length > 0) return { etat: "configure_non_verifie", detail: `Jeton présent pour ${agents.length - sans.length} agent(s) sur ${agents.length} ; absent pour : ${sans.map((a) => a.nom).join(", ")}. Aucun passage réel vérifié ici.` };
+  return { etat: "configure_non_verifie", detail: `${agents.length} agent(s) claude_local avec jeton présent (valeur jamais affichée). Aucun passage réel vérifié ici.` };
 }
 
 /** Recherche Web : outil natif des agents claude_local en mode réel, jamais prouvé sans run réel. */

@@ -26,6 +26,22 @@ export const STYLES_DISCUSSION = `
 .atl-disc-bulle[data-auteur="humain"] .atl-disc-texte { background: var(--atl-accent); color: var(--atl-accent-texte); border-color: var(--atl-accent); border-bottom-right-radius: 0.25rem; }
 .atl-disc-bulle[data-auteur="agent"] .atl-disc-texte { border-bottom-left-radius: 0.25rem; }
 .atl-disc-texte a { color: inherit; text-decoration: underline; text-underline-offset: 2px; }
+.atl-disc-bulle[data-actions="oui"], .atl-disc-bulle[data-carte="oui"] { max-width: min(100%, 44rem); width: 100%; }
+.atl-disc-actions { display: flex; flex-direction: column; gap: 0.5rem; max-width: 100%; min-width: 0; }
+.atl-disc-actions-boutons { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+.atl-disc-actions .atl-bouton { min-height: 2.75rem; white-space: normal; text-align: left; }
+.atl-disc-fait { display: inline-flex; align-items: center; min-height: 2.75rem; padding: 0 0.25rem; color: var(--atl-attenue-fort); font-size: 0.875rem; }
+.atl-disc-panneau { padding: 0.5rem 0 0.25rem 0.75rem; border-left: 2px solid var(--atl-trait); min-width: 0; }
+.atl-disc-carte { display: flex; flex-direction: column; gap: 0.5rem; white-space: normal; width: 100%; }
+.atl-disc-carte-titre { margin: 0; font-weight: 600; }
+.atl-disc .atl-surplace { display: flex; flex-direction: column; gap: 0.75rem; max-width: 46rem; }
+.atl-disc .atl-surplace-apercu { max-height: 18rem; overflow: auto; padding: 0.625rem 0.75rem; border: 1px solid var(--atl-trait); border-radius: calc(var(--atl-rayon) * 0.8); background: var(--atl-fond); }
+.atl-disc .atl-surplace-actions { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+.atl-disc .atl-question { margin: 0; }
+.atl-disc .atl-surplace .atl-bouton, .atl-disc .atl-surplace .atl-lien { min-height: 2.75rem; }
+.atl-disc .atl-surplace .atl-lien { display: inline-flex; align-items: center; }
+.atl-disc .atl-surplace input[type="radio"], .atl-disc .atl-surplace input[type="checkbox"] { width: 1.25rem; height: 1.25rem; }
+.atl-disc-actions .atl-bouton:focus-visible { outline: 2px solid var(--atl-anneau); outline-offset: 2px; }
 .atl-disc-attente { align-self: flex-start; margin: 0; padding: 0 0.25rem; color: var(--atl-attenue-fort); font-size: 0.8125rem; }
 .atl-disc-attente::after { content: ""; display: inline-block; width: 0.375rem; height: 0.375rem; margin-left: 0.5rem; border-radius: 50%; background: currentColor; vertical-align: middle; animation: atl-disc-pouls 1.4s ease-in-out infinite; }
 @keyframes atl-disc-pouls { 0%, 100% { opacity: 0.25; } 50% { opacity: 1; } }
@@ -52,5 +68,7 @@ export const STYLES_DISCUSSION = `
   .atl-disc { --atl-nav-hote-mobile: calc(4rem + env(safe-area-inset-bottom, 0px)); height: calc(100dvh - 5.5rem); max-width: none; }
   .atl-disc-saisie { bottom: var(--atl-nav-hote-mobile); padding-bottom: 0.75rem; }
   .atl-disc-bulle { max-width: 92%; }
+  .atl-disc-bulle[data-actions="oui"], .atl-disc-bulle[data-carte="oui"] { max-width: 100%; }
+  .atl-disc-panneau { padding-left: 0.5rem; }
 }
 `;

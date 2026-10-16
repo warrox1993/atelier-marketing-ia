@@ -34,6 +34,7 @@ export const STYLES_ACCUEIL = `
 .atl-afaire-confirmation { margin-bottom: 0.75rem; }
 .atl-surplace { display: flex; flex-direction: column; gap: 0.75rem; max-width: 46rem; }
 .atl-surplace-apercu { max-height: 18rem; overflow: auto; padding: 0.625rem 0.75rem; border: 1px solid var(--atl-trait); border-radius: calc(var(--atl-rayon) * 0.8); background: var(--atl-fond); }
+.atl-surplace-texte { margin: 0; padding: 0.625rem 0.75rem; border: 1px solid var(--atl-trait); border-radius: calc(var(--atl-rayon) * 0.8); background: var(--atl-fond); white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; }
 .atl-surplace-actions { display: flex; flex-wrap: wrap; gap: 0.5rem; }
 .atl-question { margin: 0; }
 .atl-decision-integre { display: flex; flex-direction: column; gap: 0.75rem; }

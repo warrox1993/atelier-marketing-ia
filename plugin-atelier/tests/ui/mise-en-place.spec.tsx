@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 /**
- * Lot 2 : bandeau « entreprise courante », vue « Mise en place du client » (sept étapes lues sur les
+ * Lot 2 : bandeau « entreprise courante », vue « Mise en place du client » (parcours en six étapes lues sur les
  * routes existantes) et bouton « Recharger la démonstration » des paramètres. Les routes du plugin
  * et l'API native sont servies par un `fetch` simulé.
  */
@@ -8,9 +8,12 @@ import { readFileSync } from "node:fs";
 import { createElement } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { BandeauEntreprise } from "../../src/ui/composants.js";
-import { VueMiseEnPlace } from "../../src/ui/vues/mise-en-place.js";
+import type { ReglagesEntreprise } from "../../src/contrats/campagnes.js";
+import { EXEMPLES_DONNEES } from "../../src/contrats/exemples/index.js";
+import { calculerEtapes, indexEtapeCourante, VueMiseEnPlace, type EntreesParcours } from "../../src/ui/vues/mise-en-place.js";
+import { lireSegmentsSuivis } from "../../src/ui/vues/marque.js";
 import { VueParametres } from "../../src/ui/vues/parametres.js";
-import { cliquer, ENTREPRISE, installerPont, parTexte, rendre, type Pont, type Rendu } from "./pont.js";
+import { champParLibelle, cliquer, ENTREPRISE, installerPont, parTexte, rendre, saisir, type Pont, type Rendu } from "./pont.js";
 
 const fixture = (nom: string) => readFileSync(`${process.cwd()}/tests/ui/fixtures/${nom}`, "utf8");
 const REGLAGES_BASE = { companyId: ENTREPRISE, maxRunsActifs: 3, maxCyclesCorrection: 3, retentionJours: 365, engagementPub: { engageCents: 0, diffuseCents: 0, reserveCents: 0, limiteCents: null, choisi: false }, modifieLe: "2026-10-15T10:00:00.000Z" };
@@ -79,45 +82,245 @@ describe("bandeau de l'entreprise courante", () => {
   });
 });
 
-describe("mise en place du client", () => {
-  it("client neuf : sept étapes à faire, chacune avec un lien vers sa rubrique", async () => {
-    pont.donnees["atelier.marque"] = { data: { marque: null, versions: [], sources: [], imports: [] }, loading: false, error: null };
-    pont.donnees["atelier.reglages"] = reglages({ modeParDefaut: "demonstration" });
-    pont.donnees["atelier.campagnes"] = { data: [], loading: false, error: null };
-    pont.donnees["atelier.sante"] = SOURCES("injoignable", []);
-    serveur = (_m, u) =>
-      u.includes("/base-clients?") ? { statut: 200, corps: { existe: false, clients: 0 } } : u.includes("/connaissances/statut") ? { statut: 200, corps: { documents: 0, passages: 0 } } : { statut: 200, corps: {} };
-    rendu = await rendre(createElement(VueMiseEnPlace));
-    const c = rendu.conteneur;
-    await vi.waitFor(() => expect(c.querySelectorAll('[data-etat="a_faire"]')).toHaveLength(7));
-    expect(c.textContent).toContain("0 étape sur 7 faite");
-    expect(c.textContent).toContain("0 document de connaissances ; passerelle non vérifiée, aucune source tenue pour réelle.");
-    for (const t of ["Marque et offres", "Connexions de la passerelle", "Base clients", "Documents", "Connaissances et sources réelles", "Plafonds de dépense", "Premier brief"]) expect(c.textContent).toContain(t);
-    await cliquer(parTexte(c, "a", "Créer une campagne"));
-    await cliquer(parTexte(c, "a", "Ouvrir la base clients"));
-    await cliquer(parTexte(c, "a", "Ouvrir les documents"));
-    await cliquer(parTexte(c, "a", "Ouvrir la marque"));
-    await cliquer(parTexte(c, "a", "Voir les sources"));
-    expect(pont.navigations).toEqual(["/atelier/campagnes", "/atelier/prospects", "/atelier/connaissances", "/atelier/marque", "/atelier/parametres"]);
+const H = "2026-10-16T08:00:00.000Z";
+const br = (cle: string, etat: string) => ({ cle, nom: `Nom ${cle}`, etat, preuve: "mesure", detail: `Détail ${cle}.`, acteur: "nous", debloque: { criteres: [], fonctions: [`Fonction ${cle}`] }, leadsConcernes: null, verifieLe: H });
+const REALITE_COMPLETE = { companyId: ENTREPRISE, branchements: [br("bce", "reel"), br("osm", "reel")], synthese: [], leads: { analyses: 0, tronque: false, illisibles: 0 }, verifieLe: H };
+const REALITE_PARTIELLE = { ...REALITE_COMPLETE, branchements: [br("bce", "reel"), br("osm", "demonstration"), br("base_clients", "a_fournir_client")] };
+
+/** Fiche du client avec deux bureaux et un référentiel de segments (aucun bureau n'a encore de segments suivis). */
+function marqueAvecSegments(extra: Record<string, unknown> = {}) {
+  const base = (EXEMPLES_DONNEES["atelier.marque"] as unknown as { marque: Record<string, unknown> }).marque;
+  return {
+    data: {
+      marque: {
+        ...base,
+        etablissements: [
+          { nom: "Bureau A", adresse: null, confirme: true, code: "bureau-a" },
+          { nom: "Bureau B", adresse: null, confirme: true, code: "bureau-b", position: { lat: 50.6, lon: 5.5 }, segmentsSuivis: ["medecins"] },
+        ],
+        entites: [{ code: "entite", nom: "Entité du client", type: "entite_juridique", porteePar: null, identifiants: [{ type: "bce", libelle: null, valeur: "0123.456.789" }, { type: "fsma", libelle: null, valeur: "12345" }], mentionsLegales: "Mentions." }],
+        segments: [
+          { code: "medecins", libelle: "Médecins", type: "profession", nace: [] },
+          { code: "avocats", libelle: "Avocats", type: "profession", nace: [] },
+        ],
+        ...extra,
+      },
+      versions: [{ version: 1, creeLe: H }],
+      sources: [],
+      imports: [],
+    },
+    loading: false,
+    error: null,
+  };
+}
+
+/** Sert les routes lues par le parcours ; `realite` absent : la route répond une forme inconnue (état non lu). */
+function servir(o: { base?: { existe: boolean; clients: number }; documents?: number; realite?: unknown } = {}) {
+  serveur = (_m, u) =>
+    u.includes("/base-clients?")
+      ? { statut: 200, corps: o.base ?? { existe: false, clients: 0 } }
+      : u.includes("/connaissances/statut")
+        ? { statut: 200, corps: { documents: o.documents ?? 0, passages: 0 } }
+        : u.includes("/realite?")
+          ? { statut: 200, corps: o.realite ?? {} }
+          : { statut: 200, corps: {} };
+}
+
+const etatDe = (c: HTMLElement, cle: string) => c.querySelector(`.atl-parcours-pas[data-etape="${cle}"]`)?.getAttribute("data-etat");
+const barre = (c: HTMLElement) => c.querySelector('[role="progressbar"]')!;
+
+describe("calculerEtapes : état de chaque étape d'après les données lues", () => {
+  const vide: EntreesParcours = { marque: null, reglages: null, baseClients: null, connaissances: null, nbServices: null, sourcesReelles: null, realite: { etat: "chargement" } };
+  const etats = (e: EntreesParcours) => Object.fromEntries(calculerEtapes(e).map((x) => [x.cle, x.etat]));
+
+  it("rien n'est lu : six étapes dont l'état est inconnu, jamais « fait »", () => {
+    expect(etats(vide)).toEqual({ fiche: "inconnu", sources: "inconnu", "base-clients": "inconnu", documents: "inconnu", plafonds: "inconnu", reel: "inconnu" });
   });
 
-  it("client prêt : étapes faites d'après marque, base clients, documents, plafond et campagne", async () => {
-    serveur = (_m, u) =>
-      u.includes("/base-clients?") ? { statut: 200, corps: { existe: true, clients: 105 } } : u.includes("/connaissances/statut") ? { statut: 200, corps: { documents: 17, passages: 400 } } : { statut: 200, corps: {} };
-    pont.donnees["atelier.sante"] = SOURCES("joignable", ["osm", "liens"]);
-    pont.donnees["atelier.reglages"] = reglages({ modeParDefaut: "demonstration", plafondPub: { type: "aucune_limite", decidePar: "local-board", decideLe: "2026-10-15T10:00:00.000Z" } });
+  it("client neuf : fiche, sources et plafonds à faire ; base clients et documents facultatifs", () => {
+    const neuf: EntreesParcours = {
+      marque: { marque: null, versions: [], sources: [], imports: [] },
+      reglages: { plafondPub: null } as unknown as ReglagesEntreprise,
+      baseClients: { existe: false, clients: 0 },
+      connaissances: { documents: 0 },
+      nbServices: 0,
+      sourcesReelles: { passerelle: "injoignable", sources: [] },
+      realite: { etat: "pret", realite: REALITE_PARTIELLE as never, branchements: REALITE_PARTIELLE.branchements as never },
+    };
+    expect(etats(neuf)).toEqual({ fiche: "a_faire", sources: "a_faire", "base-clients": "facultatif", documents: "facultatif", plafonds: "a_faire", reel: "a_faire" });
+    expect(indexEtapeCourante(calculerEtapes(neuf))).toBe(0);
+  });
+
+  it("client prêt : tout est fait ; l'étape courante est alors la dernière", () => {
+    const pret: EntreesParcours = {
+      marque: marqueAvecSegments().data as never,
+      reglages: { plafondPub: { type: "aucune_limite" } } as unknown as ReglagesEntreprise,
+      baseClients: { existe: true, clients: 105 },
+      connaissances: { documents: 17 },
+      nbServices: 2,
+      sourcesReelles: { passerelle: "joignable", sources: [{ cle: "bce", nom: "BCE", reelle: true, detail: "d", verifieLe: H }] },
+      realite: { etat: "pret", realite: REALITE_COMPLETE as never, branchements: REALITE_COMPLETE.branchements as never },
+    };
+    const etapes = calculerEtapes(pret);
+    expect(etapes.every((x) => x.etat === "fait")).toBe(true);
+    expect(indexEtapeCourante(etapes)).toBe(5);
+  });
+
+  it("une source « réelle » n'est comptée que si la passerelle est joignable", () => {
+    const sources = (passerelle: "joignable" | "injoignable"): EntreesParcours["sourcesReelles"] => ({ passerelle, sources: [{ cle: "bce", nom: "BCE", reelle: true, detail: "d", verifieLe: H }] });
+    expect(etats({ ...vide, nbServices: 0, sourcesReelles: sources("injoignable") }).sources).toBe("a_faire");
+    expect(etats({ ...vide, nbServices: 0, sourcesReelles: sources("joignable") }).sources).toBe("fait");
+  });
+
+  it("l'étape courante est la première qui n'est pas faite, facultative comprise", () => {
+    expect(indexEtapeCourante([{ etat: "fait" }, { etat: "fait" }, { etat: "facultatif" }, { etat: "a_faire" }])).toBe(2);
+    expect(indexEtapeCourante([{ etat: "fait" }, { etat: "inconnu" }, { etat: "a_faire" }])).toBe(1);
+  });
+});
+
+describe("mise en place du client : parcours en étapes", () => {
+  it("client neuf : six étapes, première étape courante, progression à zéro et saisie de la fiche ouverte", async () => {
+    pont.donnees["atelier.marque"] = { data: { marque: null, versions: [], sources: [], imports: [] }, loading: false, error: null };
+    pont.donnees["atelier.reglages"] = reglages({ modeParDefaut: "demonstration" });
+    pont.donnees["atelier.sante"] = SOURCES("injoignable", []);
+    servir();
     rendu = await rendre(createElement(VueMiseEnPlace));
     const c = rendu.conteneur;
-    // Marque et campagne viennent des exemples du contrat (référentiel enregistré, une campagne).
-    await vi.waitFor(() => expect(c.querySelectorAll('[data-etat="fait"]').length).toBeGreaterThanOrEqual(6));
-    expect(c.textContent).toContain("17 documents de connaissances ; 2 sources réelles sur 4.");
-    expect(c.textContent).toContain("105 clients chargés.");
-    expect(c.textContent).toContain("17 documents importés.");
-    expect(c.textContent).toContain("Plafond publicitaire choisi par le client.");
-    // Les connexions natives sont vides dans ce test : seule cette étape reste à faire.
-    expect(c.querySelectorAll('[data-etat="a_faire"]')).toHaveLength(1);
-    expect(c.querySelector('[data-etat="a_faire"]')!.textContent).toContain("Connexions de la passerelle");
+    await vi.waitFor(() => expect(etatDe(c, "base-clients")).toBe("facultatif"));
+    expect(c.querySelectorAll(".atl-parcours-pas")).toHaveLength(6);
+    for (const t of ["Fiche du client", "Sources et connexions", "Base clients", "Documents", "Plafonds et budget", "Passage au réel"]) expect(c.querySelector(".atl-parcours-liste")!.textContent).toContain(t);
+    expect([etatDe(c, "fiche"), etatDe(c, "sources"), etatDe(c, "documents"), etatDe(c, "plafonds")]).toEqual(["a_faire", "a_faire", "facultatif", "a_faire"]);
+    expect(c.querySelector('.atl-parcours-pas[aria-current="step"]')!.getAttribute("data-etape")).toBe("fiche");
+    expect(c.querySelector(".atl-parcours-pas[data-courante]")!.getAttribute("data-etape")).toBe("fiche");
+    expect(barre(c).getAttribute("aria-valuenow")).toBe("0");
+    expect(barre(c).getAttribute("aria-valuemax")).toBe("6");
+    expect(c.textContent).toContain("0 étape sur 6 faite");
+    expect(c.textContent).toContain("Étape 1 sur 6 : Fiche du client");
+    expect(c.textContent).toContain("Première version de la marque");
+  });
+
+  it("client prêt : les étapes faites d'après les données, la progression et l'étape courante avancent", async () => {
+    pont.donnees["atelier.marque"] = marqueAvecSegments();
+    pont.donnees["atelier.sante"] = SOURCES("joignable", ["osm"]);
+    pont.donnees["atelier.reglages"] = reglages({ modeParDefaut: "demonstration", plafondPub: { type: "aucune_limite", decidePar: "local-board", decideLe: H } });
+    servir({ base: { existe: true, clients: 105 }, documents: 17, realite: REALITE_PARTIELLE });
+    rendu = await rendre(createElement(VueMiseEnPlace));
+    const c = rendu.conteneur;
+    // Les connexions natives sont vides ici, mais une source réelle suffit pour l'étape des sources.
+    await vi.waitFor(() => expect(etatDe(c, "reel")).toBe("a_faire"));
+    expect([etatDe(c, "fiche"), etatDe(c, "sources"), etatDe(c, "base-clients"), etatDe(c, "documents"), etatDe(c, "plafonds")]).toEqual(["fait", "fait", "fait", "fait", "fait"]);
+    expect(barre(c).getAttribute("aria-valuenow")).toBe("5");
+    expect(c.textContent).toContain("5 étapes sur 6 faites");
+    expect(c.querySelector(".atl-parcours-pas[data-courante]")!.getAttribute("data-etape")).toBe("reel");
+    expect(c.querySelector('.atl-parcours-pas[aria-current="step"]')!.getAttribute("data-etape")).toBe("reel");
+    // Récapitulatif du passage au réel : les branchements qui ne sont pas en réel, et le lien vers l'onglet.
+    // Les trois branchements du serveur, plus les deux lignes tirées des connexions natives (vides ici).
+    expect(c.textContent).toContain("Ce qui manque pour le réel : 4 branchements sur 5.");
+    expect(c.textContent).toContain("Nom base_clients : À fournir par le client.");
+    expect(c.textContent).not.toContain("Nom bce");
+    await cliquer(parTexte(c, "a", "Ouvrir le passage au réel"));
+    expect(pont.navigations).toEqual(["/atelier/parametres#param-reel"]);
     expect(pont.violations).toEqual([]);
+  });
+
+  it("on choisit une étape au clic, puis les boutons précédent et suivant naviguent", async () => {
+    pont.donnees["atelier.marque"] = marqueAvecSegments();
+    pont.donnees["atelier.sante"] = SOURCES("injoignable", []);
+    pont.donnees["atelier.reglages"] = reglages({ modeParDefaut: "demonstration" });
+    servir();
+    rendu = await rendre(createElement(VueMiseEnPlace));
+    const c = rendu.conteneur;
+    await vi.waitFor(() => expect(etatDe(c, "base-clients")).toBe("facultatif"));
+    // La fiche est faite : l'étape courante est celle des sources.
+    expect(c.querySelector('.atl-parcours-pas[aria-current="step"]')!.getAttribute("data-etape")).toBe("sources");
+    await cliquer(parTexte(c, "button.atl-parcours-pas", "Plafonds et budget"));
+    expect(c.textContent).toContain("Étape 5 sur 6 : Plafonds et budget");
+    expect(c.querySelector(".atl-parcours-pas[data-courante]")!.getAttribute("data-etape")).toBe("sources");
+    await cliquer(parTexte(c, "button", "Étape suivante"));
+    expect(c.textContent).toContain("Étape 6 sur 6 : Passage au réel");
+    expect(Array.from(c.querySelectorAll("button")).some((b) => b.textContent === "Étape suivante")).toBe(false);
+    await cliquer(parTexte(c, "button", "Étape précédente"));
+    await cliquer(parTexte(c, "button", "Étape précédente"));
+    expect(c.textContent).toContain("Étape 4 sur 6 : Documents");
+  });
+
+  it("étape Sources : état des sources et lien vers l'onglet qui règle les connexions", async () => {
+    pont.donnees["atelier.marque"] = marqueAvecSegments();
+    pont.donnees["atelier.sante"] = SOURCES("joignable", ["osm", "liens"]);
+    pont.donnees["atelier.reglages"] = reglages({ modeParDefaut: "demonstration" });
+    servir();
+    rendu = await rendre(createElement(VueMiseEnPlace));
+    const c = rendu.conteneur;
+    await vi.waitFor(() => expect(etatDe(c, "sources")).toBe("fait"));
+    await cliquer(parTexte(c, "button.atl-parcours-pas", "Sources et connexions"));
+    expect(c.textContent).toContain("2 sources réelles sur 4");
+    await cliquer(parTexte(c, "a", "Ouvrir les connexions et les sources"));
+    expect(pont.navigations).toEqual(["/atelier/parametres"]);
+  });
+});
+
+describe("mise en place : segments suivis des bureaux", () => {
+  async function ouvrirFiche() {
+    pont.donnees["atelier.marque"] = marqueAvecSegments();
+    pont.donnees["atelier.sante"] = SOURCES("injoignable", []);
+    pont.donnees["atelier.reglages"] = reglages({ modeParDefaut: "demonstration" });
+    pont.actions["atelier.marque.enregistrer"] = async () => ({});
+    servir();
+    rendu = await rendre(createElement(VueMiseEnPlace));
+    const c = rendu.conteneur;
+    await vi.waitFor(() => expect(etatDe(c, "base-clients")).toBe("facultatif"));
+    await cliquer(parTexte(c, "button.atl-parcours-pas", "Fiche du client"));
+    await cliquer(parTexte(c, "button", "Compléter la fiche"));
+    return c;
+  }
+  const envoyes = () => pont.appelsActions.filter((a) => a.cle === "atelier.marque.enregistrer");
+
+  it("résume les bureaux (position, segments suivis) et les identifiants BCE et FSMA", async () => {
+    const c = await ouvrirFiche();
+    expect(c.textContent).toContain("2 bureaux dont 1 avec position et 1 avec segments suivis");
+    expect(c.textContent).toContain("BCE 0123.456.789, FSMA 12345");
+    expect(c.textContent).toContain("Segments suivis : medecins");
+    expect(c.textContent).toContain("Segments suivis à saisir");
+  });
+
+  it("enregistre les segments suivis saisis par bureau, par la route d'écriture de la marque", async () => {
+    const c = await ouvrirFiche();
+    expect((champParLibelle(c, "Segments suivis par l'établissement 2") as HTMLInputElement).value).toBe("medecins");
+    await saisir(champParLibelle(c, "Segments suivis par l'établissement 1"), "avocats, medecins");
+    await cliquer(parTexte(c, "button", "Enregistrer une nouvelle version"));
+    expect(envoyes()).toHaveLength(1);
+    const e = (envoyes()[0]!.params as { etablissements: Array<Record<string, unknown>> }).etablissements;
+    expect(e[0]!.segmentsSuivis).toEqual(["avocats", "medecins"]);
+    expect(e[1]!.segmentsSuivis).toEqual(["medecins"]);
+    expect(e[0]).not.toHaveProperty("segmentsTexte");
+    expect(pont.violations).toEqual([]);
+  });
+
+  it("vider le champ retire les segments suivis du bureau", async () => {
+    const c = await ouvrirFiche();
+    await saisir(champParLibelle(c, "Segments suivis par l'établissement 2"), "");
+    await cliquer(parTexte(c, "button", "Enregistrer une nouvelle version"));
+    const e = (envoyes()[0]!.params as { etablissements: Array<Record<string, unknown>> }).etablissements;
+    expect(e[1]).not.toHaveProperty("segmentsSuivis");
+  });
+
+  it("refuse un segment inconnu du référentiel, avec la liste des codes possibles, et n'envoie rien", async () => {
+    const c = await ouvrirFiche();
+    await saisir(champParLibelle(c, "Segments suivis par l'établissement 1"), "notaires");
+    expect(c.textContent).toContain("Segment inconnu : notaires. Codes possibles : medecins, avocats.");
+    await cliquer(parTexte(c, "button", "Enregistrer une nouvelle version"));
+    expect(envoyes()).toHaveLength(0);
+  });
+});
+
+describe("lireSegmentsSuivis", () => {
+  it("découpe sur virgules, points-virgules et espaces, sans doublon", () => {
+    expect(lireSegmentsSuivis("a, b;c  a", ["a", "b", "c"])).toEqual({ codes: ["a", "b", "c"], erreur: null });
+    expect(lireSegmentsSuivis("  ", ["a"])).toEqual({ codes: [], erreur: null });
+  });
+  it("signale les codes inconnus, et l'absence de segments définis", () => {
+    expect(lireSegmentsSuivis("a, x", ["a", "b"]).erreur).toBe("Segment inconnu : x. Codes possibles : a, b.");
+    expect(lireSegmentsSuivis("a", []).erreur).toContain("Aucun segment n'est défini");
   });
 });
 

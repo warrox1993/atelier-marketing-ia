@@ -5,7 +5,13 @@
  * - contenu à valider : aperçu du livrable et décision partagée avec Contenus (`DecisionPanneau`) ;
  * - question de l'équipe (`ask_user_questions`) : les questions avec leurs choix, bouton Envoyer ;
  * - confirmation (`request_confirmation`) : Confirmer ou Refuser ;
- * - approbation native et demande d'accès : Approuver ou Refuser ;
+ * - approbation native : contenu affiché puis Approuver ou Refuser, seulement pour les types connus et
+ *   sans effet caché ; demande d'accès (`hire_agent`), dépassement de budget et type inconnu : lien vers la
+ *   page native uniquement ;
+ * - carte qui exécute un outil (`toolAction`) ou propose un secret (`secretProposal`) : lien vers la tâche
+ *   native uniquement ;
+ * - demande entre services (bureau de liaison) : objet, question et extraits affichés EN ENTIER, puis Transmettre ou
+ *   Ne pas transmettre (route du plugin `liaison.decider`, sans carte native ni capacité de plus) ;
  * - tâche bloquée : la raison et le lien vers la tâche.
  *
  * Réponses aux cartes et aux approbations natives : le SDK des plugins ne sait que « accepter ou
@@ -15,19 +21,28 @@
  * personne : `POST /api/issues/:id/interactions/:id/respond` (réponses), `/accept`, `/reject`, et
  * `POST /api/approvals/:id/approve` ou `/reject`. L'hôte contrôle les droits (réservé au board).
  */
-import { useState, type ReactNode } from "react";
-import { MarkdownBlock } from "@paperclipai/plugin-sdk/ui";
+import { Fragment, useState, type ReactNode } from "react";
+import { MarkdownBlock, useHostContext } from "@paperclipai/plugin-sdk/ui";
 import type { DossierHumain } from "../contrats/dossier.js";
-import type { ElementAccueil, InteractionAccueil, QuestionAccueil } from "../serveur/services-accueil.js";
+import type { DetailApprobation, ElementAccueil, InteractionAccueil, LiaisonAApprouver, QuestionAccueil } from "../serveur/services-accueil.js";
 import { Bouton, Champ, EtatErreur, Lecture, LienHote } from "./composants.js";
 import { DecisionPanneau } from "./decision-livrable.js";
 import { useDonnees } from "./donnees.js";
 import { appelHote } from "./hote.js";
+import { appelRoute } from "./routes-prospection.js";
 import { abaisserTitres } from "./vues/contenus.js";
 
 /** Vrai pour les éléments qu'on peut traiter sur place (les autres n'ont que le bouton d'ouverture). */
 export function traitableSurPlace(e: ElementAccueil): boolean {
-  return Boolean(e.interaction || e.approbationId || (e.type === "contenu_a_valider" && e.issueId) || (e.type === "tache_bloquee" && e.issueId));
+  if (e.liaison) return true;
+  if (e.interaction) return !e.interaction.natifSeulement;
+  if (e.approbationId) return e.approbation?.surPlace === true;
+  return Boolean((e.type === "contenu_a_valider" && e.issueId) || (e.type === "tache_bloquee" && e.issueId));
+}
+
+/** Vrai pour les cartes et approbations qui ne se décident jamais sur place : seul le lien natif est proposé. */
+export function natifSeulement(e: ElementAccueil): boolean {
+  return Boolean((e.interaction || e.approbationId) && !traitableSurPlace(e));
 }
 
 export interface PropsSurPlace {
@@ -37,12 +52,26 @@ export interface PropsSurPlace {
 }
 
 export function SurPlace({ element, onFait }: PropsSurPlace) {
+  if (element.liaison) return <Liaison liaison={element.liaison} onFait={onFait} />;
+  if (natifSeulement(element)) return <PageNative element={element} />;
   if (element.interaction?.kind === "ask_user_questions" && element.issueId) return <Questions element={element} interaction={element.interaction} issueId={element.issueId} onFait={onFait} />;
   if (element.interaction && element.issueId) return <Confirmation interaction={element.interaction} issueId={element.issueId} onFait={onFait} />;
-  if (element.approbationId) return <Approbation id={element.approbationId} demandeAcces={element.type === "demande_acces"} onFait={onFait} />;
+  if (element.approbationId && element.approbation) return <Approbation id={element.approbationId} detail={element.approbation} onFait={onFait} />;
   if (element.type === "contenu_a_valider" && element.issueId) return <Contenu issueId={element.issueId} onFait={onFait} />;
   if (element.type === "tache_bloquee") return <Bloquee element={element} />;
   return null;
+}
+
+/** Cartes et approbations dont la décision exige de voir le détail natif : aucun bouton de décision ici. */
+function PageNative({ element }: { element: ElementAccueil }) {
+  return (
+    <Encadre etiquette="Décision dans la page native">
+      <p>{element.interaction ? "Cette demande déclenche une action (envoi, accès ou secret) : son détail complet est dans la tâche." : "Cette décision se prend dans la page native, où tout son contenu est visible."}</p>
+      <LienHote vers={element.lien} className="atl-lien">
+        {element.interaction ? "Ouvrir la tâche" : "Ouvrir la page native"}
+      </LienHote>
+    </Encadre>
+  );
 }
 
 /** Exécute une action native et expose état, erreur et message de réussite. */
@@ -213,11 +242,12 @@ function Confirmation({ interaction, issueId, onFait }: { interaction: Interacti
   const [raison, setRaison] = useState("");
   const { enCours, erreur, lancer } = useActionNative();
   const base = `/issues/${encodeURIComponent(issueId)}/interactions/${encodeURIComponent(interaction.id)}`;
+  const obligatoire = interaction.refusRaisonObligatoire;
   return (
     <Encadre etiquette="Confirmation demandée">
       {interaction.invite ? <p>{interaction.invite}</p> : null}
       {interaction.details ? <MarkdownBlock content={abaisserTitres(interaction.details)} /> : null}
-      <Champ libelle="Raison (facultative, utile si vous refusez)">
+      <Champ libelle={obligatoire ? "Raison (obligatoire pour refuser)" : "Raison (facultative, utile si vous refusez)"}>
         <textarea value={raison} onChange={(e) => setRaison(e.target.value)} rows={2} maxLength={4000} />
       </Champ>
       <div className="atl-surplace-actions">
@@ -227,6 +257,7 @@ function Confirmation({ interaction, issueId, onFait }: { interaction: Interacti
         <Bouton
           variante="danger"
           enCours={enCours}
+          raisonDesactive={obligatoire && !raison.trim() ? "Indiquez la raison du refus : elle est obligatoire." : null}
           onClick={() => void lancer(() => appelHote("POST", `${base}/reject`, raison.trim() ? { reason: raison.trim() } : {}), () => onFait("Refusé : l'équipe en est informée."))}
         >
           {interaction.libelleRefuser ?? "Refuser"}
@@ -241,22 +272,93 @@ function Confirmation({ interaction, issueId, onFait }: { interaction: Interacti
 /* Approbation native et demande d'accès                                 */
 /* ------------------------------------------------------------------ */
 
-function Approbation({ id, demandeAcces, onFait }: { id: string; demandeAcces: boolean; onFait(message: string): void }) {
+function Approbation({ id, detail, onFait }: { id: string; detail: DetailApprobation; onFait(message: string): void }) {
   const [note, setNote] = useState("");
   const { enCours, erreur, lancer } = useActionNative();
   const corps = () => (note.trim() ? { decisionNote: note.trim() } : {});
   const base = `/approvals/${encodeURIComponent(id)}`;
   return (
-    <Encadre etiquette={demandeAcces ? "Demande d'accès" : "Approbation"}>
+    <Encadre etiquette="Approbation">
+      <dl className="atl-surplace-detail">
+        <dt>Type</dt>
+        <dd>{LIBELLES_TYPES_APPROBATION[detail.type] ?? detail.type}</dd>
+        <dt>Demandeur</dt>
+        <dd>{detail.demandeur}</dd>
+        {detail.lignes.map((l) => (
+          <Fragment key={l.libelle}>
+            <dt>{l.libelle}</dt>
+            <dd>{l.valeur}</dd>
+          </Fragment>
+        ))}
+      </dl>
       <Champ libelle="Note (facultative)">
         <textarea value={note} onChange={(e) => setNote(e.target.value)} rows={2} maxLength={4000} />
       </Champ>
       <div className="atl-surplace-actions">
-        <Bouton variante="principal" enCours={enCours} onClick={() => void lancer(() => appelHote("POST", `${base}/approve`, corps()), () => onFait(demandeAcces ? "Demande acceptée." : "Approuvé."))}>
+        <Bouton variante="principal" enCours={enCours} onClick={() => void lancer(() => appelHote("POST", `${base}/approve`, corps()), () => onFait("Approuvé."))}>
           Approuver
         </Bouton>
-        <Bouton variante="danger" enCours={enCours} onClick={() => void lancer(() => appelHote("POST", `${base}/reject`, corps()), () => onFait(demandeAcces ? "Demande refusée." : "Refusé."))}>
+        <Bouton variante="danger" enCours={enCours} onClick={() => void lancer(() => appelHote("POST", `${base}/reject`, corps()), () => onFait("Refusé."))}>
           Refuser
+        </Bouton>
+      </div>
+      {erreur ? <EtatErreur erreur={erreur} contexte="décision refusée" /> : null}
+    </Encadre>
+  );
+}
+
+const LIBELLES_TYPES_APPROBATION: Readonly<Record<string, string>> = {
+  approve_ceo_strategy: "Stratégie du Coordinateur",
+  request_board_approval: "Accord demandé à la direction",
+};
+
+/* ------------------------------------------------------------------ */
+/* Demande entre services (bureau de liaison)                            */
+/* ------------------------------------------------------------------ */
+
+/** Texte brut, jamais interprété : le contenu vient d'un autre service et s'affiche tel quel, en entier. */
+function TexteComplet({ texte, etiquette }: { texte: string; etiquette: string }) {
+  return (
+    <pre className="atl-surplace-texte" tabIndex={0} aria-label={etiquette}>
+      {texte}
+    </pre>
+  );
+}
+
+function Liaison({ liaison, onFait }: { liaison: LiaisonAApprouver; onFait(message: string): void }) {
+  const { companyId } = useHostContext();
+  const [raison, setRaison] = useState("");
+  const { enCours, erreur, lancer } = useActionNative();
+  const decider = (decision: "approuver" | "refuser") =>
+    lancer(
+      () => appelRoute("POST", "/liaisons/decider", { companyId, liaisonId: liaison.liaisonId, decision, ...(raison.trim() ? { raison: raison.trim() } : {}) }),
+      () => onFait(decision === "approuver" ? "Demande transmise au service." : "Demande refusée : le service demandeur en est informé."),
+    );
+  return (
+    <Encadre etiquette="Demande à un autre service">
+      <p>
+        Le service <strong>{liaison.serviceSource}</strong> veut envoyer ceci au service <strong>{liaison.serviceCible}</strong>. Ce texte partira tel quel, rien d'autre.
+      </p>
+      <h4>Objet</h4>
+      <TexteComplet texte={liaison.objet} etiquette="Objet de la demande" />
+      <h4>Question</h4>
+      <TexteComplet texte={liaison.question} etiquette="Question posée" />
+      {liaison.extraits.length > 0 ? <h4>{liaison.extraits.length === 1 ? "Extrait joint" : `${liaison.extraits.length} extraits joints`}</h4> : <p className="atl-attenue">Aucun extrait joint.</p>}
+      {liaison.extraits.map((x, i) => (
+        <div key={i}>
+          <p className="atl-livrable-titre">{x.titre}</p>
+          <TexteComplet texte={x.texte} etiquette={`Extrait ${i + 1}`} />
+        </div>
+      ))}
+      <Champ libelle="Raison (facultative, utile si vous refusez)">
+        <textarea value={raison} onChange={(e) => setRaison(e.target.value)} rows={2} maxLength={1000} />
+      </Champ>
+      <div className="atl-surplace-actions">
+        <Bouton variante="principal" enCours={enCours} onClick={() => void decider("approuver")}>
+          Transmettre
+        </Bouton>
+        <Bouton variante="danger" enCours={enCours} onClick={() => void decider("refuser")}>
+          Ne pas transmettre
         </Bouton>
       </div>
       {erreur ? <EtatErreur erreur={erreur} contexte="décision refusée" /> : null}

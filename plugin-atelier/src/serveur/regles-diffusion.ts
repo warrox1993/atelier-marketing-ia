@@ -57,7 +57,7 @@ export function verifierDiffusion(e: {
   if (!e.revisionCourante || d.revisionId !== e.revisionCourante) {
     return { ok: false, motif: "La version demandée n'est pas la version courante du livrable." };
   }
-  if (!e.porteFranchie) return { ok: false, motif: "La porte déterministe n'est pas franchie sur cette version." };
+  if (!e.porteFranchie) return { ok: false, motif: "Le contrôle automatique n'est pas réussi sur cette version." };
   if (e.statutNatif !== "done") return { ok: false, motif: "La tâche n'est pas approuvée nativement (étape humaine non terminée)." };
   const decision = [...e.decisions]
     .filter((x) => x.revisionId === d.revisionId && !x.invalidee)

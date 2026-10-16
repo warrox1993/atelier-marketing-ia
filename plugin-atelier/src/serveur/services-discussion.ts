@@ -14,13 +14,20 @@
  * - `discussion.envoyer` : ajoute le message, remet l'issue en `todo` si elle était terminée, en revue ou en
  *   attente, puis réveille le Coordinateur ;
  * - `discussion.messages` : messages strictement postérieurs à `depuis`, pour l'interrogation périodique.
+ *
+ * Télécommande (16/10/2026) : un message du Coordinateur peut porter des actions structurées (bloc
+ * `atelier-actions`, voir `discussion-actions.ts`), rendues en `actions` ; les cartes natives en attente
+ * (`ask_user_questions`, `request_confirmation`) de la discussion et des demandes à l'équipe sont rendues en
+ * `cartes`, pour être traitées dans le fil. Les messages de l'humain ne portent jamais d'actions.
  */
 import type { PluginContext } from "@paperclipai/plugin-sdk";
 import { z } from "zod";
 import { IdNatif, PLUGIN_ID, type CleRouteApi } from "../contrats/index.js";
 import type { ActeurHote, GestionnaireRoute } from "./atelier.js";
 import type { BaseAtelier } from "./base.js";
+import { extraireActions, type ActionDiscussion } from "./discussion-actions.js";
 import { erreur, erreurValidation } from "./erreurs.js";
+import { ORIGINE_DEMANDE, elementDepuisCarte, type ElementAccueil } from "./services-accueil.js";
 
 export const ORIGINE_DISCUSSION = `plugin:${PLUGIN_ID}:discussion` as const;
 export const TITRE_DISCUSSION = "Discussion avec le Coordinateur";
@@ -28,6 +35,10 @@ export const TITRE_DISCUSSION = "Discussion avec le Coordinateur";
 export const PREFIXE_HUMAIN = "**Message de l'humain (atelier)**\n\n";
 export const MAX_MESSAGES = 100;
 export const MAX_TEXTE = 4000;
+/** Tâches de demande à l'équipe examinées pour leurs cartes en attente (les plus récentes, non terminées). */
+const MAX_DEMANDES_CARTES = 5;
+/** Durée pendant laquelle les cartes en attente sont réutilisées entre deux interrogations du fil. */
+export const TTL_CARTES_MS = 30_000;
 
 export interface MessageDiscussion {
   id: string;
@@ -35,6 +46,8 @@ export interface MessageDiscussion {
   nom: string;
   texte: string;
   date: string;
+  /** Actions validées jointes par le Coordinateur (liste vide pour l'humain). */
+  actions: ActionDiscussion[];
 }
 
 type Issue = NonNullable<Awaited<ReturnType<PluginContext["issues"]["get"]>>>;
@@ -109,31 +122,94 @@ export function routesDiscussion(d: DependancesDiscussion): Partial<Record<CleRo
     return noms.get(cle) ?? "Coordinateur";
   }
 
-  async function versMessage(companyId: string, c: Commentaire): Promise<MessageDiscussion | null> {
+  /** Une action écartée est journalisée une seule fois par commentaire (le fil est relu toutes les 4 s). */
+  const dejaJournalees = new Set<string>();
+
+  async function versMessage(companyId: string, issueId: string, c: Commentaire, coordinateurId: string | null): Promise<MessageDiscussion | null> {
     if (c.deletedAt || c.body.trim() === "") return null;
     const deAgent = c.authorAgentId != null || c.authorType === "agent";
     if (!deAgent && (c.authorType === "user" || c.body.startsWith(PREFIXE_HUMAIN))) {
-      return { id: c.id, auteur: "humain", nom: "Vous", texte: c.body.startsWith(PREFIXE_HUMAIN) ? c.body.slice(PREFIXE_HUMAIN.length) : c.body, date: iso(c.createdAt) };
+      return { id: c.id, auteur: "humain", nom: "Vous", texte: c.body.startsWith(PREFIXE_HUMAIN) ? c.body.slice(PREFIXE_HUMAIN.length) : c.body, date: iso(c.createdAt), actions: [] };
     }
-    return { id: c.id, auteur: "agent", nom: await nomAgent(companyId, c.authorAgentId ?? null), texte: c.body, date: iso(c.createdAt) };
+    const extrait = extraireActions(c.body);
+    const { texte, ignorees } = extrait;
+    // Seules les actions du Coordinateur de l'entreprise sont des boutons : un autre agent peut commenter
+    // la tâche, mais ne pilote pas l'interface.
+    const duCoordinateur = coordinateurId !== null && c.authorAgentId === coordinateurId;
+    const actions = duCoordinateur ? extrait.actions : [];
+    if (!duCoordinateur && extrait.actions.length > 0) {
+      ignorees.push("actions d'un agent autre que le Coordinateur : écartées");
+    }
+    if (ignorees.length > 0 && !dejaJournalees.has(c.id)) {
+      dejaJournalees.add(c.id);
+      ctx.logger.warn("Discussion : actions du Coordinateur écartées", { issueId, commentaireId: c.id, ignorees });
+      try {
+        await base.journaliser({ companyId, type: "discussion.action_ignoree", entite: "tache", entiteId: issueId, issueId, acteur: "discussion", donnees: { commentaireId: c.id, ignorees } });
+      } catch (e) {
+        ctx.logger.warn("Discussion : journalisation des actions écartées impossible", { erreur: e instanceof Error ? e.message : String(e) });
+      }
+    }
+    return { id: c.id, auteur: "agent", nom: await nomAgent(companyId, c.authorAgentId ?? null), texte, date: iso(c.createdAt), actions };
   }
 
   async function lireMessages(companyId: string, issueId: string, depuis: string | null): Promise<MessageDiscussion[]> {
     const commentaires = await ctx.issues.listComments(issueId, companyId);
     const tries = [...commentaires].sort((a, b) => iso(a.createdAt).localeCompare(iso(b.createdAt)) || a.id.localeCompare(b.id));
     const sortie: MessageDiscussion[] = [];
+    const coordinateurId = (await coordinateur(companyId))?.id ?? null;
     for (const c of tries) {
       if (depuis && iso(c.createdAt) <= depuis) continue;
-      const m = await versMessage(companyId, c);
+      const m = await versMessage(companyId, issueId, c, coordinateurId);
       if (m) sortie.push(m);
     }
     return sortie.slice(-MAX_MESSAGES);
   }
 
+  /**
+   * Cartes natives en attente sur les tâches liées à la discussion : l'issue de discussion elle-même et les
+   * tâches de demande à l'équipe encore ouvertes. Une panne de lecture n'empêche jamais d'afficher le fil,
+   * mais elle est signalée (`indisponible`) pour que l'interface propose de réessayer.
+   */
+  async function lireCartes(companyId: string, discussion: Issue): Promise<{ cartes: ElementAccueil[]; indisponible: boolean }> {
+    try {
+      const demandes = (await ctx.issues.list({ companyId, originKind: ORIGINE_DEMANDE as never, limit: 50 }))
+        .filter((i) => i.companyId.toLowerCase() === companyId.toLowerCase() && i.status !== "done" && i.status !== "cancelled")
+        .sort((a, b) => iso(b.createdAt).localeCompare(iso(a.createdAt)))
+        .slice(0, MAX_DEMANDES_CARTES);
+      const elements: ElementAccueil[] = [];
+      for (const issue of [discussion, ...demandes]) {
+        for (const carte of await ctx.issues.listInteractions(issue.id, companyId)) {
+          const e = elementDepuisCarte(issue, carte);
+          if (e) elements.push(e);
+        }
+      }
+      return { cartes: elements, indisponible: false };
+    } catch (e) {
+      ctx.logger.warn("Discussion : cartes en attente illisibles", { erreur: e instanceof Error ? e.message : String(e) });
+      return { cartes: [], indisponible: true };
+    }
+  }
+
+  /**
+   * Le fil est relu toutes les 4 s mais les cartes coûtent jusqu'à 7 appels à l'hôte : lues au plus toutes les
+   * 30 s par entreprise (jamais mises en cache en cas de panne). L'ouverture de la discussion les relit toujours.
+   */
+  const cacheCartes = new Map<string, { a: number; valeur: { cartes: ElementAccueil[]; indisponible: boolean } }>();
+  async function cartesEnAttente(companyId: string, discussion: Issue, frais = false) {
+    const cle = companyId.toLowerCase();
+    const memo = cacheCartes.get(cle);
+    if (!frais && memo && Date.now() - memo.a < TTL_CARTES_MS) return memo.valeur;
+    const valeur = await lireCartes(companyId, discussion);
+    if (valeur.indisponible) cacheCartes.delete(cle);
+    else cacheCartes.set(cle, { a: Date.now(), valeur });
+    return valeur;
+  }
+
   routes["discussion.ouvrir"] = async (r) => {
     exigerHumain(r.acteur);
     const issue = await retrouverOuCreer(r.companyId, r.acteur);
-    return { corps: { issueId: issue.id, identifiant: issue.identifier ?? null, messages: await lireMessages(r.companyId, issue.id, null) } };
+    const { cartes, indisponible } = await cartesEnAttente(r.companyId, issue, true);
+    return { corps: { issueId: issue.id, identifiant: issue.identifier ?? null, messages: await lireMessages(r.companyId, issue.id, null), cartes, cartesIndisponibles: indisponible } };
   };
 
   routes["discussion.messages"] = async (r) => {
@@ -147,8 +223,9 @@ export function routesDiscussion(d: DependancesDiscussion): Partial<Record<CleRo
       depuis = t.toISOString();
     }
     const issue = await chercher(r.companyId);
-    if (!issue) return { corps: { issueId: null, identifiant: null, messages: [] } };
-    return { corps: { issueId: issue.id, identifiant: issue.identifier ?? null, messages: await lireMessages(r.companyId, issue.id, depuis) } };
+    if (!issue) return { corps: { issueId: null, identifiant: null, messages: [], cartes: [], cartesIndisponibles: false } };
+    const { cartes, indisponible } = await cartesEnAttente(r.companyId, issue);
+    return { corps: { issueId: issue.id, identifiant: issue.identifier ?? null, messages: await lireMessages(r.companyId, issue.id, depuis), cartes, cartesIndisponibles: indisponible } };
   };
 
   routes["discussion.envoyer"] = async (r) => {
@@ -176,7 +253,7 @@ export function routesDiscussion(d: DependancesDiscussion): Partial<Record<CleRo
       companyId: r.companyId, type: "discussion.message", entite: "tache", entiteId: issue.id, issueId: issue.id, acteur: r.acteur.id,
       donnees: { commentaireId: c.id, longueur: p.data.texte.length, reveil, ...(echec ? { erreurReveil: echec } : {}) },
     });
-    const message: MessageDiscussion = { id: c.id, auteur: "humain", nom: "Vous", texte: p.data.texte, date: iso(c.createdAt) };
+    const message: MessageDiscussion = { id: c.id, auteur: "humain", nom: "Vous", texte: p.data.texte, date: iso(c.createdAt), actions: [] };
     return { statut: 201, corps: { ...message, reveilDemande: echec == null } };
   };
 

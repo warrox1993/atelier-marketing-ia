@@ -495,3 +495,25 @@ Exemple minimal valide :
 ```json
 {"companyId":"123e4567-e89b-42d3-a456-426614174000","statut":"verifie","justification":"Page officielle consultée","sources":["https://exemple.be/page"]}
 ```
+
+## POST /taches/:issueId/liaisons
+
+Clé : `liaison.demander`. Demande d'un service à un autre par le bureau de liaison : tâche d'origine = celle du chemin (corps {tacheOrigineId, serviceCible, objet, question, extraits}).
+
+Aucun champ en plus de ceux listés (les champs inconnus sont refusés).
+
+| Champ | Type | Obligatoire | Bornes |
+| --- | --- | --- | --- |
+| `tacheOrigineId` | uuid | oui |  |
+| `serviceCible` | texte | oui | motif `^[a-z][a-z0-9-]{1,39}$` |
+| `objet` | texte | oui | 1 à 200 caractères |
+| `question` | texte | oui | 1 à 4000 caractères |
+| `extraits` | tableau d'objets | non | 0 à 10 éléments |
+| `extraits[].titre` | texte | oui | 1 à 200 caractères |
+| `extraits[].texte` | texte | oui | 1 à 4000 caractères |
+
+Exemple minimal valide :
+
+```json
+{"tacheOrigineId":"123e4567-e89b-42d3-a456-426614174000","serviceCible":"exemple","objet":"exemple","question":"exemple"}
+```

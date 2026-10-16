@@ -466,7 +466,7 @@ export function routesBaseClients(d: DependancesProspection, o: OutilsProspectio
 
       // Appel exact proposé à l'humain (S-1) : sur la révision courante du livrable de la tâche.
       const liv = await d.livrableCourant(r.companyId, issue.id);
-      if (!liv) erreur("porte_absente", "Tâche hors porte ou sans livrable : un export vers le CRM s'appuie sur un livrable approuvé.");
+      if (!liv) erreur("porte_absente", "Tâche hors contrôle automatique ou sans livrable : un export vers le CRM s'appuie sur un livrable approuvé.");
       let compte: string;
       if (effectif.mode === "demonstration") compte = `${entree.service}/demonstration`;
       else {

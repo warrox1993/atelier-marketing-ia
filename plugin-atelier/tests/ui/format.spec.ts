@@ -104,16 +104,17 @@ describe("messages typés", () => {
 
 describe("chronologie", () => {
   it("traduit les statuts de run et les événements connus, garde les inconnus", () => {
-    expect(libelleRun("Run succeeded (agent 8ff2e754)")).toBe("Run réussi (agent 8ff2e754)");
+    expect(libelleRun("Run succeeded (agent 8ff2e754)")).toBe("Passage réussi (agent 8ff2e754)");
     expect(libelleRun("Run inconnu_x")).toBe("Run inconnu_x");
-    expect(libelleEvenement("porte.refusee")).toBe("Porte déterministe refusée");
+    expect(libelleRun("Passage succeeded (agent 8ff2e754)")).toBe("Passage réussi (agent 8ff2e754)");
+    expect(libelleEvenement("porte.refusee")).toBe("Contrôle automatique refusé");
     expect(libelleEvenement("type.nouveau")).toBe("type.nouveau");
   });
 });
 
 describe("routes de la page", () => {
   it("couvre la discussion, l'accueil, la prospection (prospects et carte, juste après), les six rubriques, la mise en place et les paramètres", () => {
-    expect(VUES.map((v) => v.cle)).toEqual(["discussion", "accueil", "prospects", "carte", ...RUBRIQUES.map((r) => r.cle), "connaissances", "mise-en-place", "parametres", "corbeille"]);
+    expect(VUES.map((v) => v.cle)).toEqual(["discussion", "accueil", "prospects", "carte", ...RUBRIQUES.map((r) => r.cle), "connaissances", "mise-en-place", "parametres", "corbeille", "rapport"]);
   });
   it("lit la rubrique et l'identifiant depuis le chemin de l'hôte", () => {
     expect(lireRoute("/RNO/atelier")).toEqual({ vue: "accueil", id: null });
@@ -139,12 +140,12 @@ describe("calendrier", () => {
 
 describe("décision humaine", () => {
   const dossier = EXEMPLES_DONNEES["atelier.dossier"] as DossierHumain;
-  it("autorise l'approbation seulement porte franchie sur la révision courante, avec commentaire", () => {
+  it("autorise l'approbation seulement contrôle automatique réussi sur la révision courante, avec commentaire", () => {
     expect(raisonDecision(dossier, "approuver", "OK pour publication")).toBeNull();
     expect(raisonDecision(dossier, "approuver", "  ")).toMatch(/commentaire/u);
     expect(raisonDecision({ ...dossier, statut: { statut: "awaiting_review", motif: "" } }, "rejeter", "x")).toMatch(/prêt pour validation/u);
     const perimee = { ...dossier, evaluationPorte: { ...dossier.evaluationPorte!, perimee: true } };
-    expect(raisonDecision(perimee, "approuver", "x")).toMatch(/porte/u);
+    expect(raisonDecision(perimee, "approuver", "x")).toMatch(/contrôle automatique/u);
     expect(raisonDecision(perimee, "demander_correction", "Revoir le titre")).toBeNull();
     expect(raisonDecision({ ...dossier, livrable: null }, "approuver", "x")).toMatch(/Aucun livrable/u);
   });

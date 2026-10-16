@@ -264,9 +264,9 @@ export const EXEMPLES_DONNEES: Record<CleDonneesUi, unknown> = {
     etapes: [
       { horodatage: H, type: "tache_lancee", libelle: "Run du producteur démarré", source: "run_natif", reference: null },
       { horodatage: H, type: "livrable_cree", libelle: "Révision 1 du livrable", source: "activite_native", reference: R1 },
-      { horodatage: H, type: "controle_echoue", libelle: "Porte refusée : REQ-001, Seraing sans preuve", source: "journal_atelier", reference: null },
+      { horodatage: H, type: "controle_echoue", libelle: "Contrôle automatique refusé : REQ-001, Seraing sans preuve", source: "journal_atelier", reference: null },
       { horodatage: H2, type: "correction", libelle: "Révision 2 du livrable", source: "activite_native", reference: R2 },
-      { horodatage: H2, type: "controle_reussi", libelle: "Porte franchie", source: "journal_atelier", reference: null },
+      { horodatage: H2, type: "controle_reussi", libelle: "Contrôle automatique réussi", source: "journal_atelier", reference: null },
     ],
   },
   "atelier.reglages": { companyId: E, maxRunsActifs: 3, maxCyclesCorrection: 3, modeParDefaut: "demonstration", retentionJours: 365, plafondPub: { type: "montant", montantCents: 150000, decidePar: "local-board", decideLe: H }, engagementPub: { engageCents: 0, diffuseCents: 0, reserveCents: 0, limiteCents: 150000, choisi: true }, modifieLe: H },

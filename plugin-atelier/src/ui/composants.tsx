@@ -3,7 +3,7 @@
  * états vide / chargement / erreur / accès absent / interrompu / périmé,
  * boutons dont la désactivation porte toujours une raison visible.
  */
-import { cloneElement, useEffect, useId, useState, type ReactElement, type ReactNode } from "react";
+import { cloneElement, useEffect, useId, useRef, useState, type ReactElement, type ReactNode } from "react";
 import { useHostContext, useHostNavigation, type PluginBridgeError } from "@paperclipai/plugin-sdk/ui";
 import { MENTION_DEMONSTRATION } from "../contrats/identifiants.js";
 import type { EtatConnexion } from "../contrats/communs.js";
@@ -346,10 +346,14 @@ export function BandeauEntreprise() {
     };
   }, [companyId]);
   const mode = reglages.data?.modeParDefaut ?? null;
+  const affiche = nom ?? "Entreprise courante";
   return (
-    <p className="atl-bandeau-entreprise" aria-label="Entreprise courante">
-      <span className="atl-bandeau-etiquette">Entreprise</span>
-      <strong className="atl-bandeau-nom">{nom ?? "Entreprise courante"}</strong>
+    <p className="atl-bandeau-entreprise">
+      <span className="atl-bandeau-etiquette">Entreprise :</span>
+      {/* Une seule ligne : le nom se tronque avec des points de suspension, le nom complet reste dans l'infobulle et dans le texte lu. */}
+      <strong className="atl-bandeau-nom" title={affiche}>
+        {affiche}
+      </strong>
       {mode === "reel" ? (
         <Pastille ton="info" titre="Données réelles : chaque action externe exige une approbation humaine.">
           Client réel
@@ -377,5 +381,21 @@ export function BoutonAller({ cible, children }: { cible: string; children: Reac
     >
       {children}
     </Bouton>
+  );
+}
+
+/**
+ * Message de réussite d'une action : il reçoit le focus à son apparition (et à chaque nouveau texte), car le
+ * bouton cliqué a disparu avec son panneau et le focus retomberait sinon sur la page. Annoncé aussi comme `status`.
+ */
+export function MessageFait({ texte, className, element: Element = "p" }: { texte: string; className?: string; element?: "p" | "span" }) {
+  const ref = useRef<HTMLElement>(null);
+  useEffect(() => {
+    ref.current?.focus({ preventScroll: false });
+  }, [texte]);
+  return (
+    <Element ref={ref as never} className={className} role="status" tabIndex={-1}>
+      {texte}
+    </Element>
   );
 }

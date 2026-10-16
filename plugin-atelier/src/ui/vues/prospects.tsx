@@ -4,7 +4,7 @@
  * et l'usine ne contacte personne : aucune action d'envoi.
  */
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
-import { useHostContext, useHostNavigation } from "@paperclipai/plugin-sdk/ui";
+import { useHostContext, useHostLocation, useHostNavigation } from "@paperclipai/plugin-sdk/ui";
 import {
   CanalContact,
   CodeNace,
@@ -22,7 +22,9 @@ import {
   type Prospect,
 } from "../../contrats/prospection.js";
 import type { Campagne } from "../../contrats/campagnes.js";
+import { CLES_FILTRE_PROSPECTS, filtreDepuisAdresse, parametresDepuisFiltre, type FiltreProspects } from "../../contrats/filtre-prospects.js";
 import { naceDeduitOsm } from "../../serveur/categories-osm-nace.js";
+import { expliquerConfiance } from "./explication-confiance.js";
 import { useDonnees } from "../donnees.js";
 import { BaseClients, lireBase64 } from "../base-clients.js";
 import { Bouton, Champ, Chargement, ecranEtroit, EnTete, EtatErreur, Horodatage, LienHote, MentionDemo, Pastille, Section, Vide } from "../composants.js";
@@ -167,7 +169,13 @@ function ChiffresLead({ p }: { p: Prospect }) {
     ? `Priorité ${p.score.valeur}/100 ${mesuree ? "(mesurée)" : "(estimation)"}${mesuree && p.score.etalonnage?.marge ? ` : ${libelleScore(p.score)}` : ""}`
     : "Priorité non calculée";
   const cible = p.confiance ? `Cible prouvée à ${p.confiance.valeur} %` : "Cible non calculée";
-  return <span className="atl-sous atl-statut-chiffres">{priorite} · {cible}</span>;
+  const explication = expliquerConfiance(p);
+  return (
+    <>
+      <span className="atl-sous atl-statut-chiffres">{priorite} · {cible}</span>
+      {explication ? <span className="atl-sous atl-confiance-explication">{explication}</span> : null}
+    </>
+  );
 }
 
 export function BadgeStatutLead({ p, grand }: { p: Prospect; grand?: boolean }) {
@@ -268,6 +276,41 @@ export function requeteProspects(companyId: string, f: Filtres, page: number): s
   if (f.avecClients) q.set("avecClientsActuels", "true");
   if (page > 1) q.set("page", String(page));
   return `/prospects?${q.toString()}`;
+}
+
+/** Filtres initiaux lus dans l'adresse (`?statut=qualifie&segment=medecins`) : valeur invalide ou inconnue ignorée. */
+export function filtresDepuisAdresse(recherche: string): Filtres {
+  const a = filtreDepuisAdresse(recherche);
+  return {
+    ...FILTRES_VIDES,
+    ...(a.statut ? { statut: a.statut } : {}),
+    ...(a.segment ? { segment: a.segment } : {}),
+    ...(a.campagne ? { campagneId: a.campagne } : {}),
+    ...(a.zone ? { zone: a.zone } : {}),
+    ...(a.secteur ? { secteur: a.secteur } : {}),
+    ...(a.source ? { source: a.source } : {}),
+    ...(a.score ? { scoreMin: a.score } : {}),
+    ...(a.qualifies ? { qualifies: true } : {}),
+  };
+}
+
+/** Chaîne de recherche d'adresse (`?…`, ou vide) : les filtres exprimables dans l'adresse, les autres paramètres de `base` conservés. */
+export function adresseDepuisFiltres(f: Filtres, base = ""): string {
+  const filtre: FiltreProspects = {
+    ...(f.statut ? { statut: f.statut } : {}),
+    ...(f.segment ? { segment: f.segment } : {}),
+    ...(f.campagneId ? { campagne: f.campagneId } : {}),
+    ...(f.zone.trim() ? { zone: f.zone.trim() } : {}),
+    ...(f.secteur.trim() ? { secteur: f.secteur.trim() } : {}),
+    ...(f.source ? { source: f.source } : {}),
+    ...(f.scoreMin.trim() ? { score: f.scoreMin.trim() } : {}),
+    ...(f.qualifies ? { qualifies: "oui" as const } : {}),
+  };
+  const q = new URLSearchParams(base);
+  for (const cle of CLES_FILTRE_PROSPECTS) q.delete(cle);
+  for (const [cle, valeur] of parametresDepuisFiltre(filtre)) q.set(cle, valeur);
+  const texte = q.toString();
+  return texte ? `?${texte}` : "";
 }
 
 /** Filtres appliqués, sous la forme attendue par l'export (mêmes noms que la liste, sans pagination). */
@@ -1148,9 +1191,22 @@ function EtalonnerScore({ companyId, onTermine }: { companyId: string; onTermine
 /* Liste                                                               */
 /* ------------------------------------------------------------------ */
 
+/** Reflète les filtres dans l'adresse sans recharger ni ajouter d'entrée à l'historique. */
+function majAdresse(f: Filtres) {
+  if (typeof window === "undefined") return;
+  try {
+    const { pathname, search, hash } = window.location;
+    const suivante = adresseDepuisFiltres(f, search);
+    if (suivante !== search) window.history.replaceState(window.history.state, "", `${pathname}${suivante}${hash}`);
+  } catch {
+    // adresse non modifiable (contexte isolé) : les filtres restent appliqués à l'écran
+  }
+}
+
 function ListeProspects() {
   const { companyId } = useHostContext();
-  const [filtres, setFiltres] = useState<Filtres>(FILTRES_VIDES);
+  const { search } = useHostLocation();
+  const [filtres, setFiltres] = useState<Filtres>(() => filtresDepuisAdresse(search || (typeof window !== "undefined" ? window.location.search : "")));
   const [page, setPage] = useState(1);
   const [versionCharge, setVersionCharge] = useState(0);
   const [etat, setEtat] = useState<{ data: PageProspects | null; erreur: unknown; chargement: boolean }>({ data: null, erreur: null, chargement: true });
@@ -1186,6 +1242,7 @@ function ListeProspects() {
 
   const appliquer = useCallback((f: Filtres) => {
     setFiltres(f);
+    majAdresse(f);
     setPage(1);
     setChoisi(null);
   }, []);

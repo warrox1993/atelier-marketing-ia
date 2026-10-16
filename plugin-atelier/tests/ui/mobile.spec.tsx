@@ -41,18 +41,16 @@ async function ouvrir(chemin: string) {
 }
 
 describe("Paramètres : sommaire et sections repliables", () => {
-  it("le sommaire liste chaque section et chaque lien vise une section existante", async () => {
+  it("les onglets des paramètres couvrent chaque section et chaque ancre existe", async () => {
     simulerEcran(false);
     const c = await ouvrir("/RNO/atelier/parametres");
-    const liens = Array.from(c.querySelectorAll<HTMLAnchorElement>('nav[aria-label="Sections des paramètres"] a'));
-    expect(liens.length).toBeGreaterThanOrEqual(7);
-    for (const l of liens) {
-      const cible = c.querySelector(`section#${CSS.escape(l.getAttribute("href")!.slice(1))}`);
-      expect(cible, l.textContent ?? "").not.toBeNull();
+    const onglets = Array.from(c.querySelectorAll<HTMLElement>('[role="tablist"][aria-label="Sections des paramètres"] [role="tab"]'));
+    expect(onglets.map((o) => o.textContent)).toEqual(["Diagnostic", "Sources", "Critères des leads", "Dépenses et coûts", "Modèles", "Avancé"]);
+    for (const ancre of ["param-diagnostic", "param-sources", "param-criteres", "param-depenses", "param-couts", "param-modeles", "param-reglages", "param-remise"]) {
+      const cible = c.querySelector(`section#${CSS.escape(ancre)}`);
+      expect(cible, ancre).not.toBeNull();
       expect(cible!.querySelector("details > summary h2")).not.toBeNull();
     }
-    expect(liens.map((l) => l.textContent)).toContain("Diagnostic");
-    expect(liens.map((l) => l.textContent)).toContain("Remise à zéro");
   });
 
   it("sur grand écran, toutes les sections sont ouvertes", async () => {
@@ -71,13 +69,18 @@ describe("Paramètres : sommaire et sections repliables", () => {
     expect(ouvertes.map((d) => d.parentElement!.id)).toEqual(["param-couts"]);
   });
 
-  it("sur téléphone, un clic dans le sommaire ouvre la section visée", async () => {
+  it("sur téléphone, un clic sur un onglet affiche ses sections, ouvertes ou non selon l'ancre", async () => {
     simulerEcran(true);
     const c = await ouvrir("/RNO/atelier/parametres");
+    const panneau = c.querySelector<HTMLElement>("#atl-param-panneau-avance")!;
+    expect(panneau.hidden).toBe(true);
     const section = c.querySelector<HTMLElement>("section#param-reglages")!;
     expect(section.querySelector("details")!.open).toBe(false);
-    await cliquer(parTexte(c, 'nav[aria-label="Sections des paramètres"] a', "Réglages"));
+    await cliquer(parTexte(c, '[aria-label="Sections des paramètres"] [role="tab"]', "Avancé"));
+    expect(c.querySelector<HTMLElement>("#atl-param-panneau-avance")!.hidden).toBe(false);
+    // La première section du panneau choisi est dépliée (sinon l'onglet n'afficherait que des titres repliés).
     expect(section.querySelector("details")!.open).toBe(true);
+    expect(c.querySelector<HTMLElement>("#atl-param-panneau-diagnostic")!.hidden).toBe(true);
   });
 });
 
@@ -124,7 +127,7 @@ describe("Onglets de l'atelier", () => {
     try {
       const c = await ouvrir("/RNO/atelier/parametres");
       const actif = c.querySelector<HTMLElement>('nav.atl-onglets a[aria-current="page"]')!;
-      expect(actif.textContent).toBe("Paramètres et diagnostic");
+      expect(actif.textContent).toBe("Réglages");
       expect(defilement).toHaveBeenCalledWith({ inline: "nearest", block: "nearest" });
       expect(defilement.mock.contexts[0]).toBe(actif);
     } finally {

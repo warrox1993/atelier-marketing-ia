@@ -58,6 +58,11 @@ Recherche : lecture de fichiers, recherche web, consultation d'URL et outils de 
 lecture. Écriture : brouillons dans ton espace, dépôts et documents de tâche par l'API
 Paperclip.
 
+Réseau confiné : tu n'atteins que l'API de l'atelier et l'API du modèle. La recherche web
+(`WebSearch`) fonctionne ; `WebFetch` et `curl` vers un site externe échouent. Pour lire une page
+publique, passe par la lecture protégée `POST /api/plugins/atelier.marketing-ia/api/taches/<issueId>/sources`
+(corps `{"url":"https://…"}`) : elle renvoie un extrait et enregistre la source datée.
+
 ## Interface de l'atelier
 
 Requêtes authentifiées, toujours sous la forme exacte de la section « Appeler l'API de Paperclip » plus bas (contrats : `docs/contrats.md`).

@@ -1,0 +1,140 @@
+From c6e48d5e5f0aa3d16d402cb1f2b7cc30c77fa7b3 Mon Sep 17 00:00:00 2001
+From: Jean-Baptiste Dhondt <114347858+warrox1993@users.noreply.github.com>
+Date: Fri, 16 Oct 2026 18:45:38 +0200
+Subject: [PATCH] fix(adapters): confinement fichiers avec /bin lien symbolique
+ (Ubuntu)
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Sur les systèmes à /usr fusionné, /bin, /sbin, /lib et /lib64 sont des liens
+vers usr/. Le bac à sable posait des liens codés en dur puis montait /bin par
+dessus, ce que Bubblewrap refuse (« Can't bind mount /oldroot/usr/bin on
+/newroot/bin ») : filesystemScope "workspace" était inutilisable.
+
+Un chemin système qui est un lien vers une arborescence système montée est
+désormais recréé avec sa vraie cible ; les autres liens (ex. resolv.conf vers
+/run) gardent le montage de leur contenu résolu. Les liens codés en dur, faux
+sur les distributions où /lib64 pointe vers usr/lib, sont retirés.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ .../src/local-process-sandbox.test.ts         | 31 +++++++++++++
+ .../src/local-process-sandbox.ts              | 45 ++++++++++++++++---
+ 2 files changed, 69 insertions(+), 7 deletions(-)
+
+diff --git a/packages/adapter-utils/src/local-process-sandbox.test.ts b/packages/adapter-utils/src/local-process-sandbox.test.ts
+index cdb58cd92..5888ced17 100644
+--- a/packages/adapter-utils/src/local-process-sandbox.test.ts
++++ b/packages/adapter-utils/src/local-process-sandbox.test.ts
+@@ -123,6 +123,37 @@ describe("local process sandbox", () => {
+     expect(target.args).toEqual(expect.arrayContaining(["--bind", workspace, "/app"]));
+   });
+ 
++  it.runIf(process.platform === "linux")("recreates symlinked system paths instead of bind-mounting over them", async () => {
++    const workspace = await fs.mkdtemp(path.join(os.tmpdir(), "paperclip-fs-symlink-"));
++    cleanup.push(workspace);
++    const target = await buildLocalProcessSandboxSpawnTarget({
++      executable: process.execPath,
++      args: ["-e", "process.exit(0)"],
++      cwd: workspace,
++      options: { workspaceDir: workspace, filesystemScope: "workspace" },
++    });
++
++    const triples = (flag: string) =>
++      target.args.flatMap((arg, index) => (arg === flag ? [[target.args[index + 1], target.args[index + 2]]] : []));
++    for (const systemPath of ["/bin", "/sbin", "/lib", "/lib64"]) {
++      const stat = await fs.lstat(systemPath).catch(() => null);
++      if (!stat) {
++        expect(triples("--ro-bind")).not.toContainEqual([systemPath, systemPath]);
++        expect(triples("--symlink").map(([, destination]) => destination)).not.toContain(systemPath);
++        continue;
++      }
++      if (stat.isSymbolicLink()) {
++        // /bin -> usr/bin (Ubuntu) : un --ro-bind échouerait (« Can't bind mount /oldroot/usr/bin on /newroot/bin »).
++        expect(triples("--symlink")).toContainEqual([await fs.readlink(systemPath), systemPath]);
++        expect(triples("--ro-bind")).not.toContainEqual([systemPath, systemPath]);
++      } else {
++        expect(triples("--ro-bind")).toContainEqual([systemPath, systemPath]);
++        expect(triples("--symlink").map(([, destination]) => destination)).not.toContain(systemPath);
++      }
++    }
++    expect(triples("--ro-bind")).toContainEqual(["/usr", "/usr"]);
++  });
++
+   it.runIf(process.platform === "linux")("rejects writable out-of-tree paths without an outbound restore mapping", async () => {
+     const root = await fs.mkdtemp(path.join(os.tmpdir(), "paperclip-fs-outbound-"));
+     cleanup.push(root);
+diff --git a/packages/adapter-utils/src/local-process-sandbox.ts b/packages/adapter-utils/src/local-process-sandbox.ts
+index 95f6227a9..3da6f2fa2 100644
+--- a/packages/adapter-utils/src/local-process-sandbox.ts
++++ b/packages/adapter-utils/src/local-process-sandbox.ts
+@@ -83,6 +83,31 @@ async function pathExists(candidate: string): Promise<boolean> {
+   return fs.lstat(candidate).then(() => true).catch(() => false);
+ }
+ 
++function isWithinPath(parent: string, candidate: string): boolean {
++  const relative = path.relative(parent, candidate);
++  return relative === "" || (!relative.startsWith("..") && !path.isAbsolute(relative));
++}
++
++/**
++ * Pour un chemin système qui est un lien symbolique dont la cible réelle se trouve
++ * dans un autre chemin système monté tel quel (typiquement /bin -> usr/bin), renvoie
++ * la valeur du lien à recréer dans le bac à sable. Renvoie null s'il faut monter le
++ * chemin (répertoire ou fichier réel, ou lien vers un emplacement non monté, dont le
++ * contenu résolu est alors monté comme auparavant).
++ */
++async function coveredSystemSymlinkTarget(systemPath: string): Promise<string | null> {
++  const stat = await fs.lstat(systemPath).catch(() => null);
++  if (!stat?.isSymbolicLink()) return null;
++  const resolved = await fs.realpath(systemPath).catch(() => null);
++  if (!resolved) return null;
++  for (const other of SYSTEM_READ_PATHS) {
++    if (other === systemPath || !isWithinPath(other, resolved)) continue;
++    const otherStat = await fs.lstat(other).catch(() => null);
++    if (otherStat?.isDirectory()) return fs.readlink(systemPath);
++  }
++  return null;
++}
++
+ function parentDirectories(candidate: string): string[] {
+   const directories: string[] = [];
+   let current = path.dirname(candidate);
+@@ -386,12 +411,6 @@ export async function buildLocalProcessSandboxSpawnTarget(input: {
+ 
+   if (filesystemScope === "workspace") {
+     args.push("--tmpfs", "/", "--proc", "/proc", "--dev", "/dev", "--tmpfs", "/tmp");
+-    args.push(
+-      "--symlink", "usr/bin", "/bin",
+-      "--symlink", "usr/sbin", "/sbin",
+-      "--symlink", "usr/lib", "/lib",
+-      "--symlink", "usr/lib64", "/lib64",
+-    );
+     const created = new Set<string>(["/", "/proc", "/dev", "/tmp"]);
+     const mounted = new Set<string>();
+     const mount = async (source: string, access: LocalProcessSandboxAccess) => {
+@@ -402,7 +421,19 @@ export async function buildLocalProcessSandboxSpawnTarget(input: {
+       mounted.add(normalized);
+       created.add(normalized);
+     };
+-    for (const systemPath of SYSTEM_READ_PATHS) await mount(systemPath, "ro");
++    for (const systemPath of SYSTEM_READ_PATHS) {
++      const linkTarget = await coveredSystemSymlinkTarget(systemPath);
++      if (linkTarget === null) {
++        await mount(systemPath, "ro");
++        continue;
++      }
++      // Ubuntu, Debian, Fedora, Arch : /bin, /lib... sont des liens vers usr/.
++      // Bubblewrap ne sait pas monter par-dessus un tel lien : on le recrée tel quel.
++      addParentDirectories(args, created, systemPath);
++      args.push("--symlink", linkTarget, systemPath);
++      mounted.add(systemPath);
++      created.add(systemPath);
++    }
+     for (const executablePath of await executableReadPaths(input.executable)) await mount(executablePath, "ro");
+     if (networkScope === "allowlist") {
+       for (const nodePath of await executableReadPaths(process.execPath)) await mount(nodePath, "ro");
+-- 
+2.53.0
+

@@ -23,7 +23,9 @@ import { BandeauEntreprise, Bouton, Champ, Chargement, EtatErreur, LienHote } fr
 import { useNombreAFaire, useTitreOnglet } from "./compteur-afaire.js";
 import { useEnvoiDemande } from "./demande.js";
 import { FournisseurDonnees, useDonnees } from "./donnees.js";
-import { chemin, GROUPE_PROSPECTION, lireRoute, VUES, type CleVue } from "./route.js";
+import { ListeOnglets, PanneauOnglet, useAncre } from "./onglets.js";
+import { chemin, lireRoute, type CleVue } from "./route.js";
+import { cheminOnglet, rubriquesVisibles, rubriqueDe, type CleRubriqueNav, type RubriqueNav } from "./rubriques.js";
 import { STYLES_ATELIER } from "./styles.js";
 import { VueAccueil } from "./vues/accueil.js";
 import { VueCalendrier } from "./vues/calendrier.js";
@@ -39,6 +41,8 @@ import { VueConnaissances } from "./vues/connaissances.js";
 import { VueCorbeille } from "./vues/corbeille.js";
 import { VueDiscussion } from "./vues/discussion.js";
 import { VueResultatsAtelier } from "./vues/resultats.js";
+import { VueRapport } from "./vues/rapport.js";
+import { OngletEchanges, useAccesDirection, useLiaisonsTache, VueRegistre } from "./vues/echanges.js";
 
 /** Racine commune : styles (dédupliqués par React), langue, portée `.atl`. */
 function Racine({ children, className }: { children: ReactNode; className?: string }) {
@@ -86,19 +90,23 @@ function Vue({ vue, id }: { vue: CleVue; id: string | null }) {
       return <VueParametres />;
     case "corbeille":
       return <VueCorbeille />;
+    case "rapport":
+      return <VueRapport />;
+    case "echanges":
+      return <VueRegistre />;
   }
 }
 
-/** Onglets de rubriques affichés dans la page sur téléphone (la barre latérale y est repliée). */
-function Onglets({ courante }: { courante: CleVue }) {
+/** Rubriques affichées dans la page sur téléphone (la barre latérale y est repliée). */
+function Rubriques({ courante, rubriques }: { courante: CleRubriqueNav; rubriques: ReadonlyArray<RubriqueNav> }) {
   const barre = useRef<HTMLElement>(null);
   const [suite, setSuite] = useState(false);
-  // L'onglet actif est amené dans la vue au chargement et à chaque changement de rubrique.
+  // La rubrique active est amenée dans la vue au chargement et à chaque changement de rubrique.
   useEffect(() => {
     const actif = barre.current?.querySelector<HTMLElement>('a[aria-current="page"]');
     if (actif && typeof actif.scrollIntoView === "function") actif.scrollIntoView({ inline: "nearest", block: "nearest" });
   }, [courante]);
-  // L'ombre du bord droit reste tant qu'il y a des onglets à faire défiler.
+  // L'ombre du bord droit reste tant qu'il y a des rubriques à faire défiler.
   useEffect(() => {
     const el = barre.current;
     if (!el) return;
@@ -114,9 +122,9 @@ function Onglets({ courante }: { courante: CleVue }) {
   return (
     <div className="atl-onglets-cadre" data-suite={suite ? "oui" : undefined}>
       <nav className="atl-onglets" aria-label="Rubriques de l'atelier" ref={barre}>
-        {VUES.map((v) => (
-          <LienHote key={v.cle} vers={chemin(v.cle)} courant={v.cle === courante} className="">
-            {v.libelle}
+        {rubriques.map((r) => (
+          <LienHote key={r.cle} vers={cheminOnglet(r.onglets[0]!)} courant={r.cle === courante} className="">
+            {r.libelle}
           </LienHote>
         ))}
       </nav>
@@ -133,14 +141,32 @@ function TitreOnglet({ companyId }: { companyId: string | null | undefined }) {
 export function PageAtelier({ context }: PluginPageProps) {
   const { pathname } = useHostLocation();
   const route = lireRoute(pathname);
+  const { rubrique, onglet } = rubriqueDe(route.vue, useAncre());
+  const base = `atl-rub-${rubrique.cle}`;
+  const rubriques = rubriquesVisibles(useAccesDirection(context.companyId));
+  const vue = context.companyId ? <Vue key={`${route.vue}:${route.id ?? ""}`} vue={route.vue} id={route.id} /> : <SansEntreprise />;
   return (
     <Racine>
       <FournisseurDonnees>
         <TitreOnglet companyId={context.companyId} />
         <main className="atl-page">
-          <Onglets courante={route.vue} />
           {context.companyId && route.vue !== "mise-en-place" ? <BandeauEntreprise /> : null}
-          {context.companyId ? <Vue key={`${route.vue}:${route.id ?? ""}`} vue={route.vue} id={route.id} /> : <SansEntreprise />}
+          <Rubriques courante={rubrique.cle} rubriques={rubriques} />
+          {rubrique.onglets.length > 1 ? (
+            <ListeOnglets
+              etiquette={`${rubrique.libelle} : sections`}
+              base={base}
+              actif={onglet.cle}
+              onglets={rubrique.onglets.map((o) => ({ cle: o.cle, libelle: o.libelle, vers: cheminOnglet(o), suite: o.cle === "contenus" && context.companyId ? <CompteurContenus /> : undefined }))}
+            />
+          ) : null}
+          {rubrique.onglets.length > 1 ? (
+            <PanneauOnglet base={base} cle={onglet.cle} actif>
+              {vue}
+            </PanneauOnglet>
+          ) : (
+            vue
+          )}
         </main>
       </FournisseurDonnees>
     </Racine>
@@ -174,39 +200,28 @@ function CompteurContenus() {
 export function NavigationAtelier({ context }: PluginRouteSidebarProps) {
   const { pathname } = useHostLocation();
   const route = lireRoute(pathname);
+  const { rubrique } = rubriqueDe(route.vue, useAncre());
+  const rubriques = rubriquesVisibles(useAccesDirection(context.companyId));
   return (
     <Racine>
       <FournisseurDonnees veille={false}>
         <nav className="atl-nav" aria-label="Rubriques de l'atelier">
-          {VUES.filter((v) => v.cle !== "parametres").map((v) => {
+          {rubriques.map((r) => {
             const lien = (
-              <LienHote key={v.cle} vers={chemin(v.cle)} courant={route.vue === v.cle} className="">
-                <span>{v.libelle}</span>
-                {v.cle === "contenus" && context.companyId ? <CompteurContenus /> : null}
-                {v.cle === "accueil" && context.companyId ? <PastilleAFaire companyId={context.companyId} /> : null}
+              <LienHote key={r.cle} vers={cheminOnglet(r.onglets[0]!)} courant={rubrique.cle === r.cle} className="">
+                <span>{r.libelle}</span>
+                {r.cle === "marketing" && context.companyId ? <CompteurContenus /> : null}
+                {r.cle === "accueil" && context.companyId ? <PastilleAFaire companyId={context.companyId} /> : null}
               </LienHote>
             );
-            // Le groupe « Prospection » (deux entrées contiguës) est rendu d'un bloc, sous son intertitre.
-            if (v.groupe && VUES.find((x) => x.groupe)?.cle !== v.cle) return null;
-            if (!v.groupe) return lien;
-            return (
-              <div key="groupe-prospection" className="atl-nav-groupe" role="group" aria-labelledby="atl-nav-groupe-prospection">
-                <span id="atl-nav-groupe-prospection" className="atl-nav-intertitre">
-                  {GROUPE_PROSPECTION}
-                </span>
-                {VUES.filter((x) => x.groupe === v.groupe).map((x) => (
-                  <LienHote key={x.cle} vers={chemin(x.cle)} courant={route.vue === x.cle} className="">
-                    <span>{x.libelle}</span>
-                  </LienHote>
-                ))}
+            return r.cle === "reglages" ? (
+              <div key={r.cle} className="atl-nav-pied">
+                {lien}
               </div>
+            ) : (
+              lien
             );
           })}
-          <div className="atl-nav-pied">
-            <LienHote vers={chemin("parametres")} courant={route.vue === "parametres"} className="">
-              Paramètres et diagnostic
-            </LienHote>
-          </div>
         </nav>
       </FournisseurDonnees>
     </Racine>
@@ -235,10 +250,39 @@ export function OngletAtelierTache({ context }: PluginDetailTabProps) {
     <Racine className="atl-onglet">
       <FournisseurDonnees veille={false}>
         <div className="atl-page atl-page-onglet">
-          <Dossier issueId={context.entityId} compact />
+          <ContenuOngletTache issueId={context.entityId} />
         </div>
       </FournisseurDonnees>
     </Racine>
+  );
+}
+
+/** Dossier de la tâche ; si la tâche a des échanges avec d'autres services, un second onglet « Échanges » apparaît. */
+function ContenuOngletTache({ issueId }: { issueId: string }) {
+  const liaisons = useLiaisonsTache(issueId);
+  const [choix, setChoix] = useState<string | null>(null);
+  if (!liaisons || liaisons.length === 0) return <Dossier issueId={issueId} compact />;
+  // Une tâche reçue d'un autre service s'ouvre sur ses échanges ; une tâche d'origine, sur son dossier.
+  const actif = choix ?? (liaisons.every((l) => l.role === "cible") ? "echanges" : "dossier");
+  return (
+    <>
+      <ListeOnglets
+        etiquette="Sections de la tâche"
+        base="atl-tache"
+        actif={actif}
+        choisir={setChoix}
+        onglets={[
+          { cle: "dossier", libelle: "Dossier" },
+          { cle: "echanges", libelle: "Échanges", suite: <span className="atl-nav-compte">{liaisons.length}<span className="atl-sr"> échange{liaisons.length > 1 ? "s" : ""}</span></span> },
+        ]}
+      />
+      <PanneauOnglet base="atl-tache" cle="dossier" actif={actif === "dossier"}>
+        <Dossier issueId={issueId} compact />
+      </PanneauOnglet>
+      <PanneauOnglet base="atl-tache" cle="echanges" actif={actif === "echanges"}>
+        <OngletEchanges liaisons={liaisons} />
+      </PanneauOnglet>
+    </>
   );
 }
 
@@ -267,7 +311,7 @@ function ContenuWidget() {
         </span>
         {equipe.data ? (
           <span>
-            <strong>{equipe.data.runsActifs}</strong> run{equipe.data.runsActifs > 1 ? "s" : ""} actif{equipe.data.runsActifs > 1 ? "s" : ""} sur {equipe.data.plafondRunsActifs}
+            <strong>{equipe.data.runsActifs}</strong> passage{equipe.data.runsActifs > 1 ? "s" : ""} actif{equipe.data.runsActifs > 1 ? "s" : ""} sur {equipe.data.plafondRunsActifs}
           </span>
         ) : null}
       </div>

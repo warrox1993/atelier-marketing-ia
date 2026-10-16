@@ -17,10 +17,10 @@ export type Choix = "approuver" | "demander_correction" | "rejeter";
 
 export function raisonDecision(d: DossierHumain, choix: Choix, commentaire: string): string | null {
   if (!d.livrable) return "Aucun livrable : rien à décider.";
-  if (d.statut.statut !== "ready_for_human") return "Décision possible seulement quand le livrable est prêt pour validation humaine (porte franchie, étape d'approbation).";
+  if (d.statut.statut !== "ready_for_human") return "Décision possible seulement quand le livrable est prêt pour validation humaine (contrôle automatique réussi, étape d'approbation).";
   if (choix === "approuver") {
     const ev = d.evaluationPorte;
-    if (!ev || ev.decision !== "PASS" || ev.perimee || ev.revisionId !== d.livrable.revisionId) return "Approbation impossible : la porte n'est pas franchie sur la révision courante.";
+    if (!ev || ev.decision !== "PASS" || ev.perimee || ev.revisionId !== d.livrable.revisionId) return "Approbation impossible : le contrôle automatique n'est pas réussi sur la révision courante.";
   }
   if (!commentaire.trim()) return "Un commentaire est obligatoire.";
   return null;

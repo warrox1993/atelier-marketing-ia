@@ -1,0 +1,2328 @@
+From d81159d2d6fa44f9f459d76989c8c35fa3b42e14 Mon Sep 17 00:00:00 2001
+From: Jean-Baptiste Dhondt <114347858+warrox1993@users.noreply.github.com>
+Date: Fri, 16 Oct 2026 19:04:20 +0200
+Subject: [PATCH] =?UTF-8?q?feat(ui):=20libell=C3=A9s=20fran=C3=A7ais=20des?=
+ =?UTF-8?q?=20pages=20Routines,=20Agents,=20Bo=C3=AEte=20de=20r=C3=A9cepti?=
+ =?UTF-8?q?on,=20Tableau=20de=20bord=20et=20Activit=C3=A9?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01DP85vPq2MHkZg8VNtRvCzB
+---
+ ui/src/components/RoutineHistoryTab.test.tsx  |  14 +-
+ ui/src/components/RoutineHistoryTab.tsx       |  98 ++++++-------
+ ui/src/components/RoutineSaveBar.test.tsx     |   2 +-
+ ui/src/components/RoutineSaveBar.tsx          |   8 +-
+ ui/src/lib/activity-format.ts                 |  16 +++
+ ui/src/pages/Agents.production.tsx            |  22 +--
+ ui/src/pages/Agents.test.tsx                  |  12 +-
+ ui/src/pages/Agents.tsx                       |  28 ++--
+ ui/src/pages/DashboardLive.tsx                |   6 +-
+ ui/src/pages/Inbox.test.tsx                   |   2 +-
+ ui/src/pages/Inbox.tsx                        |   6 +-
+ ui/src/pages/LegacyInbox.tsx                  |  10 +-
+ ui/src/pages/RoutineDetail.production.tsx     |  22 +--
+ ui/src/pages/RoutineDetail.tsx                |  22 +--
+ ui/src/pages/Routines.production.tsx          |  10 +-
+ ui/src/pages/Routines.tsx                     |  14 +-
+ ui/src/pages/audit/AuditFeed.production.tsx   | 108 +++++++-------
+ ui/src/pages/audit/AuditFeed.test.tsx         | 106 +++++++-------
+ ui/src/pages/audit/AuditFeed.tsx              | 132 +++++++++---------
+ ui/src/pages/audit/AuditHub.tsx               |   6 +-
+ ui/src/pages/audit/AuditRuns.test.tsx         |   6 +-
+ ui/src/pages/audit/AuditRuns.tsx              |  59 ++++----
+ .../audit/CompanyActivity.production.tsx      |   2 +-
+ ui/src/pages/audit/CompanyActivity.tsx        |   2 +-
+ ui/src/pages/audit/RoutineAuditActivity.tsx   |  10 +-
+ 25 files changed, 372 insertions(+), 351 deletions(-)
+
+diff --git a/ui/src/components/RoutineHistoryTab.test.tsx b/ui/src/components/RoutineHistoryTab.test.tsx
+index efd653114..59b40d62e 100644
+--- a/ui/src/components/RoutineHistoryTab.test.tsx
++++ b/ui/src/components/RoutineHistoryTab.test.tsx
+@@ -211,7 +211,7 @@ describe("RoutineHistoryTab", () => {
+       routine: createRoutine({ latestRevisionId: "revision-1", latestRevisionNumber: 1 }),
+     });
+     expect(container.textContent).toContain("Aucune modification pour l'instant");
+-    expect(container.textContent).toContain("Revision 1 is the only history");
++    expect(container.textContent).toContain("La révision 1 est le seul historique");
+   });
+ 
+   it("renders the revision list with current and historical pills", async () => {
+@@ -376,7 +376,7 @@ describe("RoutineHistoryTab", () => {
+     ];
+     await render({ secrets });
+     expect(container.textContent).toContain("Environnement");
+-    expect(container.textContent).toContain("2 keys (1 secret ref)");
++    expect(container.textContent).toContain("2 clés (1 référence de secret)");
+ 
+     const oldRow = container.querySelector(
+       "[data-testid='revision-row-1']",
+@@ -393,9 +393,9 @@ describe("RoutineHistoryTab", () => {
+       restoreButtons[0].click();
+     });
+     await flush();
+-    expect(container.textContent).toContain("Routine secrets will revert");
+-    expect(container.textContent).toContain("1 key removed");
+-    expect(container.textContent).toContain("1 key changed");
++    expect(container.textContent).toContain("Les secrets de la routine reviendront en arrière");
++    expect(container.textContent).toContain("1 clé retirée");
++    expect(container.textContent).toContain("1 clé modifiée");
+   });
+ 
+   it("labels secret-ref env diffs by changed secret instead of binding kind", async () => {
+@@ -481,8 +481,8 @@ describe("RoutineHistoryTab", () => {
+     });
+     await flush();
+ 
+-    expect(container.textContent).toContain("Env GH_TOKEN secret");
+-    expect(container.textContent).not.toContain("Env GH_TOKEN binding kind");
++    expect(container.textContent).toContain("Variable GH_TOKEN : secret");
++    expect(container.textContent).not.toContain("Variable GH_TOKEN : type de liaison");
+   });
+ 
+   it("invokes onRestored with the restore response so the editor can rehydrate (PAP-3588)", async () => {
+diff --git a/ui/src/components/RoutineHistoryTab.tsx b/ui/src/components/RoutineHistoryTab.tsx
+index f94dcb357..2c4ff5106 100644
+--- a/ui/src/components/RoutineHistoryTab.tsx
++++ b/ui/src/components/RoutineHistoryTab.tsx
+@@ -126,8 +126,8 @@ export function RoutineHistoryTab({
+       pushToast({
+         title: `Révision ${restoredFromNumber} restaurée comme révision ${newNumber}`,
+         body: data.secretMaterials.length > 0
+-          ? "Trigger enabled state was restored from the snapshot. New webhook secrets are available in the banner above."
+-          : "Trigger enabled state was restored from the snapshot.",
++          ? "L'état activé des déclencheurs a été restauré depuis l'instantané. Les nouveaux secrets de webhook sont disponibles dans la bannière ci-dessus."
++          : "L'état activé des déclencheurs a été restauré depuis l'instantané.",
+         tone: "success",
+       });
+       onRestoreSecretMaterials(data);
+@@ -204,7 +204,7 @@ export function RoutineHistoryTab({
+           <p className="text-xs text-muted-foreground">
+             {revisionsQuery.error instanceof Error
+               ? revisionsQuery.error.message
+-              : "Unknown error loading revisions."}
++              : "Erreur inconnue lors du chargement des révisions."}
+           </p>
+         </div>
+         <Button size="sm" variant="outline" onClick={() => revisionsQuery.refetch()}>
+@@ -244,8 +244,8 @@ export function RoutineHistoryTab({
+               message="Aucune modification pour l'instant"
+             />
+             <p className="text-center text-xs text-muted-foreground">
+-              Revision 1 is the only history this routine has. Saving an edit creates the first
+-              additional revision.
++              La révision 1 est le seul historique de cette routine. Enregistrer une modification crée
++              la première révision supplémentaire.
+             </p>
+           </div>
+         ) : (
+@@ -369,7 +369,7 @@ function ConflictBanner({
+ }) {
+   const labels = dirtyFields.length > 0
+     ? dirtyFields.map((field) => field.label)
+-    : ["the routine"];
++    : ["la routine"];
+   const fieldsText = formatDirtyFieldList(labels);
+   return (
+     <div className="rounded-md border border-amber-500/30 bg-amber-500/5 px-4 py-3">
+@@ -377,8 +377,8 @@ function ConflictBanner({
+         <div className="space-y-1">
+           <p className="text-sm font-medium text-amber-800 dark:text-amber-200">Modifications de routine non enregistrées</p>
+           <p className="text-xs text-muted-foreground">
+-            You changed {fieldsText} but haven&apos;t saved yet. Save or discard before previewing or
+-            restoring an older revision.
++            Vous avez modifié {fieldsText} sans enregistrer. Enregistrez ou abandonnez avant de prévisualiser
++            ou de restaurer une ancienne révision.
+           </p>
+         </div>
+         <div className="flex flex-wrap items-center gap-2">
+@@ -541,7 +541,7 @@ function RevisionPreview({
+     },
+     {
+       key: "assigneeAgentId",
+-      label: "Default agent",
++      label: "Agent par défaut",
+       value: resolveAgentName(snapshot.assigneeAgentId, agents),
+       differs: !!currentSnapshot && currentSnapshot.assigneeAgentId !== snapshot.assigneeAgentId,
+     },
+@@ -559,7 +559,7 @@ function RevisionPreview({
+     },
+     {
+       key: "catchUpPolicy",
+-      label: "Catch-up",
++      label: "Rattrapage",
+       value: snapshot.catchUpPolicy.replaceAll("_", " "),
+       differs: !!currentSnapshot && currentSnapshot.catchUpPolicy !== snapshot.catchUpPolicy,
+     },
+@@ -662,7 +662,7 @@ function RevisionPreview({
+           </ul>
+         )}
+         <p className="text-xs text-muted-foreground">
+-          Webhook secrets are not stored in revisions. If a restored webhook trigger needs re-creation,
++          Les secrets de webhook ne sont pas stockés dans les révisions. Si un déclencheur webhook restauré doit être recréé,
+           Paperclip génère de nouveaux secrets au moment de la restauration.
+         </p>
+       </div>
+@@ -716,11 +716,11 @@ function RestoreConfirmDialog({
+     <Dialog open={open} onOpenChange={onOpenChange}>
+       <DialogContent className="sm:max-w-md">
+         <DialogHeader>
+-          <DialogTitle>Restore revision {target.revisionNumber}?</DialogTitle>
++          <DialogTitle>Restaurer la révision {target.revisionNumber} ?</DialogTitle>
+           <DialogDescription>
+-            This creates a new revision {newRevisionNumber} with the same content as revision{" "}
+-            {target.revisionNumber}. Revisions {target.revisionNumber}–{currentRevisionNumber} stay
+-            in history and are not modified.
++            Cela crée une nouvelle révision {newRevisionNumber} au même contenu que la révision{" "}
++            {target.revisionNumber}. Les révisions {target.revisionNumber} à {currentRevisionNumber} restent
++            dans l'historique et ne sont pas modifiées.
+           </DialogDescription>
+         </DialogHeader>
+         <ul className="space-y-2 text-sm">
+@@ -731,7 +731,7 @@ function RestoreConfirmDialog({
+           {envDiffCounts.total > 0 && (
+             <li className="flex items-start gap-2">
+               <span className="mt-1 inline-block h-1.5 w-1.5 rounded-full bg-emerald-400" />
+-              Routine secrets will revert: {formatEnvDiffCounts(envDiffCounts)}.
++              Les secrets de la routine reviendront en arrière : {formatEnvDiffCounts(envDiffCounts)}.
+             </li>
+           )}
+           <li className="flex items-start gap-2">
+@@ -741,8 +741,8 @@ function RestoreConfirmDialog({
+           {recreatedWebhookLabels.map((label) => (
+             <li key={label} className="flex items-start gap-2 text-amber-800 dark:text-amber-200">
+               <span className="mt-1 inline-block h-1.5 w-1.5 rounded-full bg-amber-400" />
+-              The webhook trigger {label} will be recreated with a new URL and secret. Paperclip will
+-              show the secret once after restore — copy it before closing.
++              Le déclencheur webhook {label} sera recréé avec une nouvelle URL et un nouveau secret. Paperclip
++              affichera le secret une seule fois après la restauration : copiez-le avant de fermer.
+             </li>
+           ))}
+         </ul>
+@@ -880,7 +880,7 @@ function RoutineRevisionDiffModal({
+         </div>
+         <DialogFooter className="justify-between sm:justify-between">
+           <Button variant="outline" onClick={() => onOpenChange(false)}>
+-            Close
++            Fermer
+           </Button>
+           {leftIsHistorical && left && (
+             <Button onClick={() => onRestore(left)}>
+@@ -988,12 +988,12 @@ function getActorLabel(revision: RoutineRevision): string {
+ }
+ 
+ function resolveAgentName(agentId: string | null, lookup: AgentLookup) {
+-  if (!agentId) return "Unassigned";
++  if (!agentId) return "Non assignée";
+   return lookup.get(agentId)?.name ?? agentId;
+ }
+ 
+ function resolveProjectName(projectId: string | null, lookup: ProjectLookup) {
+-  if (!projectId) return "No project";
++  if (!projectId) return "Aucun projet";
+   return lookup.get(projectId)?.name ?? projectId;
+ }
+ 
+@@ -1002,7 +1002,7 @@ function summarizeTriggerSnapshot(trigger: RoutineRevisionSnapshotTriggerV1): st
+     return [trigger.cronExpression, trigger.timezone].filter(Boolean).join(" · ");
+   }
+   if (trigger.kind === "webhook") {
+-    const replay = trigger.replayWindowSec != null ? `replay ${trigger.replayWindowSec}s` : "";
++    const replay = trigger.replayWindowSec != null ? `rejeu ${trigger.replayWindowSec} s` : "";
+     return [trigger.signingMode, replay].filter(Boolean).join(" · ");
+   }
+   return "API";
+@@ -1014,10 +1014,10 @@ function formatVariableDefault(variable: RoutineVariable): string {
+ }
+ 
+ function formatDirtyFieldList(labels: string[]): string {
+-  if (labels.length === 0) return "the routine";
++  if (labels.length === 0) return "la routine";
+   if (labels.length === 1) return labels[0];
+-  if (labels.length === 2) return `${labels[0]} and ${labels[1]}`;
+-  return `${labels.slice(0, -1).join(", ")}, and ${labels[labels.length - 1]}`;
++  if (labels.length === 2) return `${labels[0]} et ${labels[1]}`;
++  return `${labels.slice(0, -1).join(", ")} et ${labels[labels.length - 1]}`;
+ }
+ 
+ function collectWebhookTriggerDifferences(
+@@ -1061,7 +1061,7 @@ function computeFieldChanges(
+   compareScalar("priority", "Priorité", oldRoutine.priority, newRoutine.priority);
+   compareScalar(
+     "assigneeAgentId",
+-    "Default agent",
++    "Agent par défaut",
+     resolveAgentName(oldRoutine.assigneeAgentId, agents),
+     resolveAgentName(newRoutine.assigneeAgentId, agents),
+   );
+@@ -1072,7 +1072,7 @@ function computeFieldChanges(
+     resolveProjectName(newRoutine.projectId, projects),
+   );
+   compareScalar("concurrencyPolicy", "Concurrence", oldRoutine.concurrencyPolicy, newRoutine.concurrencyPolicy);
+-  compareScalar("catchUpPolicy", "Catch-up", oldRoutine.catchUpPolicy, newRoutine.catchUpPolicy);
++  compareScalar("catchUpPolicy", "Rattrapage", oldRoutine.catchUpPolicy, newRoutine.catchUpPolicy);
+   compareScalar("status", "Statut", oldRoutine.status, newRoutine.status);
+   if (JSON.stringify(oldRoutine.variables) !== JSON.stringify(newRoutine.variables)) {
+     changes.push({
+@@ -1108,7 +1108,7 @@ function asSecretRef(binding: EnvBinding): EnvSecretRefBinding | null {
+ }
+ 
+ function formatVersionSelector(version: SecretVersionSelector | undefined): string {
+-  if (version == null || version === "latest") return "latest";
++  if (version == null || version === "latest") return "dernière";
+   return `v${version}`;
+ }
+ 
+@@ -1121,17 +1121,17 @@ function describeSecretRef(ref: EnvSecretRefBinding, secrets: SecretLookup): str
+ function describeEnvBinding(binding: EnvBinding | undefined, secrets: SecretLookup): string {
+   if (binding === undefined) return "—";
+   const ref = asSecretRef(binding);
+-  if (ref) return `secret_ref → ${describeSecretRef(ref, secrets)}`;
+-  return "plain (set)";
++  if (ref) return `référence de secret → ${describeSecretRef(ref, secrets)}`;
++  return "valeur en clair (définie)";
+ }
+ 
+ function summarizeEnv(env: RoutineEnvConfig | null): string {
+   const entries = Object.entries(normalizeEnv(env));
+   if (entries.length === 0) return "";
+   const secretCount = entries.filter(([, binding]) => envBindingKind(binding) === "secret_ref").length;
+-  const keyLabel = entries.length === 1 ? "key" : "keys";
++  const keyLabel = entries.length === 1 ? "clé" : "clés";
+   if (secretCount === 0) return `${entries.length} ${keyLabel}`;
+-  return `${entries.length} ${keyLabel} (${secretCount} secret ${secretCount === 1 ? "ref" : "refs"})`;
++  return `${entries.length} ${keyLabel} (${secretCount} ${secretCount === 1 ? "référence de secret" : "références de secret"})`;
+ }
+ 
+ type EnvDiffCounts = {
+@@ -1171,9 +1171,9 @@ function summarizeEnvDiffCounts(
+ 
+ function formatEnvDiffCounts(counts: EnvDiffCounts): string {
+   const parts: string[] = [];
+-  if (counts.added > 0) parts.push(`${counts.added} ${counts.added === 1 ? "key" : "keys"} added`);
+-  if (counts.removed > 0) parts.push(`${counts.removed} ${counts.removed === 1 ? "key" : "keys"} removed`);
+-  if (counts.changed > 0) parts.push(`${counts.changed} ${counts.changed === 1 ? "key" : "keys"} changed`);
++  if (counts.added > 0) parts.push(`${counts.added} ${counts.added === 1 ? "clé ajoutée" : "clés ajoutées"}`);
++  if (counts.removed > 0) parts.push(`${counts.removed} ${counts.removed === 1 ? "clé retirée" : "clés retirées"}`);
++  if (counts.changed > 0) parts.push(`${counts.changed} ${counts.changed === 1 ? "clé modifiée" : "clés modifiées"}`);
+   return parts.join(", ");
+ }
+ 
+@@ -1194,7 +1194,7 @@ function compareEnv(
+     const inNew = key in newRec;
+     if (inNew && !inOld) {
+       changes.push({
+-        field: `Env added (${key})`,
++        field: `Variable d'environnement ajoutée (${key})`,
+         oldValue: "—",
+         newValue: describeEnvBinding(newBinding, secrets),
+       });
+@@ -1202,7 +1202,7 @@ function compareEnv(
+     }
+     if (!inNew && inOld) {
+       changes.push({
+-        field: `Env removed (${key})`,
++        field: `Variable d'environnement retirée (${key})`,
+         oldValue: describeEnvBinding(oldBinding, secrets),
+         newValue: "—",
+       });
+@@ -1213,7 +1213,7 @@ function compareEnv(
+     const newKind = envBindingKind(newBinding);
+     if (oldKind !== newKind) {
+       changes.push({
+-        field: `Env ${key} binding kind`,
++        field: `Variable ${key} : type de liaison`,
+         oldValue: describeEnvBinding(oldBinding, secrets),
+         newValue: describeEnvBinding(newBinding, secrets),
+       });
+@@ -1224,29 +1224,29 @@ function compareEnv(
+       const newRef = asSecretRef(newBinding)!;
+       if (oldRef.secretId !== newRef.secretId) {
+         changes.push({
+-          field: `Env ${key} secret`,
++          field: `Variable ${key} : secret`,
+           oldValue: describeEnvBinding(oldBinding, secrets),
+           newValue: describeEnvBinding(newBinding, secrets),
+         });
+         continue;
+       }
+       changes.push({
+-        field: `Env ${key} version`,
++        field: `Variable ${key} : version`,
+         oldValue: describeSecretRef(oldRef, secrets),
+         newValue: describeSecretRef(newRef, secrets),
+       });
+       continue;
+     }
+     changes.push({
+-      field: `Env ${key} value`,
+-      oldValue: "plain (set)",
+-      newValue: "plain (changed)",
++      field: `Variable ${key} : valeur`,
++      oldValue: "valeur en clair (définie)",
++      newValue: "valeur en clair (modifiée)",
+     });
+   }
+ }
+ 
+ function summarizeVariables(variables: RoutineVariable[]): string {
+-  if (variables.length === 0) return "(none)";
++  if (variables.length === 0) return "(aucune)";
+   return variables
+     .map((variable) => `${variable.name}=${formatVariableDefault(variable)}`)
+     .join(", ");
+@@ -1266,13 +1266,13 @@ function compareTriggers(
+   for (const [, pair] of byId) {
+     if (pair.old && !pair.next) {
+       changes.push({
+-        field: `Trigger removed (${pair.old.label ?? pair.old.kind})`,
++        field: `Déclencheur retiré (${pair.old.label ?? pair.old.kind})`,
+         oldValue: summarizeTriggerSnapshot(pair.old),
+         newValue: null,
+       });
+     } else if (!pair.old && pair.next) {
+       changes.push({
+-        field: `Trigger added (${pair.next.label ?? pair.next.kind})`,
++        field: `Déclencheur ajouté (${pair.next.label ?? pair.next.kind})`,
+         oldValue: null,
+         newValue: summarizeTriggerSnapshot(pair.next),
+       });
+@@ -1281,9 +1281,9 @@ function compareTriggers(
+       const newSummary = summarizeTriggerSnapshot(pair.next);
+       if (oldSummary !== newSummary || pair.old.enabled !== pair.next.enabled) {
+         changes.push({
+-          field: `Trigger ${pair.next.label ?? pair.next.kind}`,
+-          oldValue: `${oldSummary} (${pair.old.enabled ? "enabled" : "disabled"})`,
+-          newValue: `${newSummary} (${pair.next.enabled ? "enabled" : "disabled"})`,
++          field: `Déclencheur ${pair.next.label ?? pair.next.kind}`,
++          oldValue: `${oldSummary} (${pair.old.enabled ? "activé" : "désactivé"})`,
++          newValue: `${newSummary} (${pair.next.enabled ? "activé" : "désactivé"})`,
+         });
+       }
+     }
+diff --git a/ui/src/components/RoutineSaveBar.test.tsx b/ui/src/components/RoutineSaveBar.test.tsx
+index a05b5ce91..f5c2e4333 100644
+--- a/ui/src/components/RoutineSaveBar.test.tsx
++++ b/ui/src/components/RoutineSaveBar.test.tsx
+@@ -60,7 +60,7 @@ describe("RoutineSaveBar", () => {
+ 
+   it("shows the unsaved change count when dirty", () => {
+     renderBar({ dirtyFields: DIRTY });
+-    expect(container.textContent).toContain("2 unsaved changes");
++    expect(container.textContent).toContain("2 modifications non enregistrées");
+   });
+ 
+   it("invokes onSave on Cmd/Ctrl+S while dirty", () => {
+diff --git a/ui/src/components/RoutineSaveBar.tsx b/ui/src/components/RoutineSaveBar.tsx
+index bcf42f69e..d2a837611 100644
+--- a/ui/src/components/RoutineSaveBar.tsx
++++ b/ui/src/components/RoutineSaveBar.tsx
+@@ -92,7 +92,7 @@ export function RoutineSaveBar({
+               >
+                 <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
+                 <span className="font-medium">
+-                  {dirtyCount} unsaved {dirtyCount === 1 ? "change" : "changes"}
++                  {dirtyCount} {dirtyCount === 1 ? "modification non enregistrée" : "modifications non enregistrées"}
+                 </span>
+               </button>
+             </PopoverTrigger>
+@@ -168,8 +168,8 @@ export function RoutineSaveBar({
+           <DialogHeader>
+             <DialogTitle>Abandonner les modifications ?</DialogTitle>
+             <DialogDescription>
+-              This will revert {dirtyCount} unsaved{" "}
+-              {dirtyCount === 1 ? "change" : "changes"} in this section.
++              Cela annulera {dirtyCount}{" "}
++              {dirtyCount === 1 ? "modification non enregistrée" : "modifications non enregistrées"} dans cette section.
+             </DialogDescription>
+           </DialogHeader>
+           <DialogFooter>
+@@ -197,7 +197,7 @@ export function RoutineSaveBar({
+ export function RoutineReadOnlyStrip() {
+   return (
+     <div className="-mx-8 mt-6 border-t border-border bg-muted/20 px-8 py-3 text-xs text-muted-foreground">
+-      Read-only — you don't own this routine.
++      Lecture seule : cette routine ne vous appartient pas.
+     </div>
+   );
+ }
+diff --git a/ui/src/lib/activity-format.ts b/ui/src/lib/activity-format.ts
+index 07ed45207..201858648 100644
+--- a/ui/src/lib/activity-format.ts
++++ b/ui/src/lib/activity-format.ts
+@@ -461,6 +461,22 @@ export const LIBELLES_STATUTS_EXECUTION: Record<string, string> = {
+   error: "en erreur",
+ };
+ 
++/**
++ * Libellés français des origines d'une exécution (déclenchement d'une
++ * exécution d'agent ou d'une exécution de routine). Les clés sont les valeurs
++ * stockées : on ne traduit que l'affichage.
++ */
++export const LIBELLES_SOURCES_EXECUTION: Record<string, string> = {
++  timer: "minuteur",
++  assignment: "assignation",
++  on_demand: "à la demande",
++  automation: "automatisation",
++  schedule: "planification",
++  manual: "manuelle",
++  api: "API",
++  webhook: "webhook",
++};
++
+ /** Affichage d'un statut brut d'exécution ; repli lisible pour une valeur inconnue. */
+ export function humanizeRunStatus(value: unknown): string {
+   if (typeof value !== "string" || value.length === 0) return "inconnu";
+diff --git a/ui/src/pages/Agents.production.tsx b/ui/src/pages/Agents.production.tsx
+index 7edfe98e0..c30600290 100644
+--- a/ui/src/pages/Agents.production.tsx
++++ b/ui/src/pages/Agents.production.tsx
+@@ -122,7 +122,7 @@ function getSandboxProviderLabel(
+   const provider = typeof environment.config.provider === "string"
+     ? environment.config.provider.trim()
+     : "";
+-  if (!provider) return "Sandbox";
++  if (!provider) return "Bac à sable";
+   return capabilities?.sandboxProviders?.[provider]?.displayName ?? provider;
+ }
+ 
+@@ -131,11 +131,11 @@ function describeEnvironment(
+   capabilities?: EnvironmentCapabilities | null,
+ ): EnvironmentDescriptor {
+   const detail = isPlatformManagedEnvironment(environment)
+-    ? "Managed by Paperclip"
++    ? "Géré par Paperclip"
+     : environment.driver === "sandbox"
+-      ? `${getSandboxProviderLabel(environment, capabilities)} sandbox provider`
++      ? `Fournisseur de bac à sable ${getSandboxProviderLabel(environment, capabilities)}`
+       : environment.driver === "local"
+-        ? "Paperclip host"
++        ? "Hôte Paperclip"
+         : formatEnvironmentDriver(environment.driver);
+ 
+   return {
+@@ -149,7 +149,7 @@ function describeMissingEnvironment(environmentId: string): EnvironmentDescripto
+   return {
+     label: "Environnement inconnu",
+     detail: environmentId.slice(0, 8),
+-    title: `Unknown environment - ${environmentId}`,
++    title: `Environnement inconnu - ${environmentId}`,
+   };
+ }
+ 
+@@ -328,7 +328,7 @@ export function Agents() {
+   }, [builtInAgentsEnabled, instanceSettings, navigate, requestedTab, selectedCompanyId]);
+ 
+   if (!selectedCompanyId) {
+-    return <EmptyState icon={Bot} message="Select a company to view agents." />;
++    return <EmptyState icon={Bot} message="Sélectionnez une organisation pour voir les agents." />;
+   }
+ 
+   if (isLoading) {
+@@ -521,7 +521,7 @@ export function Agents() {
+           )}
+           <Button size="sm" variant="outline" onClick={openNewAgent}>
+             <Plus className="h-3.5 w-3.5 mr-1.5" />
+-            New Agent
++            Nouvel agent
+           </Button>
+         </div>
+       </div>
+@@ -535,8 +535,8 @@ export function Agents() {
+       {agents && agents.length === 0 && (
+         <EmptyState
+           icon={Bot}
+-          message="Create your first agent to get started."
+-          action="New Agent"
++          message="Créez votre premier agent pour commencer."
++          action="Nouvel agent"
+           onAction={openNewAgent}
+         />
+       )}
+@@ -550,7 +550,7 @@ export function Agents() {
+ 
+       {effectiveView === "list" && agents && agents.length > 0 && filtered.length === 0 && (
+         <p className="text-sm text-muted-foreground text-center py-8">
+-          No agents match the selected status.
++          Aucun agent ne correspond au statut sélectionné.
+         </p>
+       )}
+ 
+@@ -579,7 +579,7 @@ export function Agents() {
+ 
+       {effectiveView === "org" && orgTree && orgTree.length > 0 && filteredOrg.length === 0 && (
+         <p className="text-sm text-muted-foreground text-center py-8">
+-          No agents match the selected status.
++          Aucun agent ne correspond au statut sélectionné.
+         </p>
+       )}
+ 
+diff --git a/ui/src/pages/Agents.test.tsx b/ui/src/pages/Agents.test.tsx
+index 517997f33..ed6765c19 100644
+--- a/ui/src/pages/Agents.test.tsx
++++ b/ui/src/pages/Agents.test.tsx
+@@ -603,7 +603,7 @@ describe("Agents", () => {
+     await flushReact();
+ 
+     expect(container.textContent).toContain("Daytona Sandbox");
+-    expect(container.textContent).toContain("Daytona sandbox provider");
++    expect(container.textContent).toContain("Fournisseur de bac à sable Daytona");
+   });
+ 
+   it("uses configured names for local-driver environments", async () => {
+@@ -636,7 +636,7 @@ describe("Agents", () => {
+     await flushReact();
+ 
+     expect(container.textContent).toContain("Dev Laptop");
+-    expect(container.textContent).toContain("Paperclip host");
++    expect(container.textContent).toContain("Hôte Paperclip");
+   });
+ 
+   it("reserves the environment column while environment metadata is loading", async () => {
+@@ -703,7 +703,7 @@ describe("Agents", () => {
+     await flushReact();
+ 
+     expect(container.textContent).not.toContain("Daytona Sandbox");
+-    expect(container.textContent).not.toContain("Daytona sandbox provider");
++    expect(container.textContent).not.toContain("Fournisseur de bac à sable Daytona");
+   });
+ 
+   it("hides the environment column when environments are experimentally disabled", async () => {
+@@ -762,7 +762,7 @@ describe("Agents", () => {
+     await flushReact();
+ 
+     expect(container.textContent).not.toContain("Daytona Sandbox");
+-    expect(container.textContent).not.toContain("Daytona sandbox provider");
++    expect(container.textContent).not.toContain("Fournisseur de bac à sable Daytona");
+     expect(mockEnvironmentsApi.list).not.toHaveBeenCalled();
+     expect(mockEnvironmentsApi.capabilities).not.toHaveBeenCalled();
+   });
+@@ -870,7 +870,7 @@ describe("Agents", () => {
+     await flushReact();
+ 
+     expect(container.textContent).toContain("Custom Sandbox");
+-    expect(container.textContent).toContain("acme_sandbox sandbox provider");
++    expect(container.textContent).toContain("Fournisseur de bac à sable acme_sandbox");
+   });
+ 
+   it("does not show environment filter or grouping controls yet", async () => {
+@@ -1096,6 +1096,6 @@ describe("Agents", () => {
+     await flushReact();
+ 
+     expect(container.textContent).toContain("Alpha");
+-    expect(container.querySelector('[aria-label="Invalid reporting chain"]')).not.toBeNull();
++    expect(container.querySelector('[aria-label="Chaîne hiérarchique invalide"]')).not.toBeNull();
+   });
+ });
+diff --git a/ui/src/pages/Agents.tsx b/ui/src/pages/Agents.tsx
+index 72f8e3f8e..b78715c5f 100644
+--- a/ui/src/pages/Agents.tsx
++++ b/ui/src/pages/Agents.tsx
+@@ -125,7 +125,7 @@ function getSandboxProviderLabel(
+   const provider = typeof environment.config.provider === "string"
+     ? environment.config.provider.trim()
+     : "";
+-  if (!provider) return "Sandbox";
++  if (!provider) return "Bac à sable";
+   return capabilities?.sandboxProviders?.[provider]?.displayName ?? provider;
+ }
+ 
+@@ -134,11 +134,11 @@ function describeEnvironment(
+   capabilities?: EnvironmentCapabilities | null,
+ ): EnvironmentDescriptor {
+   const detail = isPlatformManagedEnvironment(environment)
+-    ? "Managed by Paperclip"
++    ? "Géré par Paperclip"
+     : environment.driver === "sandbox"
+-      ? `${getSandboxProviderLabel(environment, capabilities)} sandbox provider`
++      ? `Fournisseur de bac à sable ${getSandboxProviderLabel(environment, capabilities)}`
+       : environment.driver === "local"
+-        ? "Paperclip host"
++        ? "Hôte Paperclip"
+         : formatEnvironmentDriver(environment.driver);
+ 
+   return {
+@@ -152,7 +152,7 @@ function describeMissingEnvironment(environmentId: string): EnvironmentDescripto
+   return {
+     label: "Environnement inconnu",
+     detail: environmentId.slice(0, 8),
+-    title: `Unknown environment - ${environmentId}`,
++    title: `Environnement inconnu - ${environmentId}`,
+   };
+ }
+ 
+@@ -333,7 +333,7 @@ export function Agents({ initialView = "list" }: { initialView?: AgentsView } =
+   }, [builtInAgentsEnabled, instanceSettings, navigate, requestedTab, selectedCompanyId]);
+ 
+   if (!selectedCompanyId) {
+-    return <EmptyState icon={Bot} message="Select an organization to view agents." />;
++    return <EmptyState icon={Bot} message="Sélectionnez une organisation pour voir les agents." />;
+   }
+ 
+   if (isLoading) {
+@@ -399,7 +399,7 @@ export function Agents({ initialView = "list" }: { initialView?: AgentsView } =
+           resourceMembershipState(membershipsQuery.data, "agent", agent.id) === "left" ? "sm:text-foreground/55" : "",
+         )}
+         leading={hasInvalidOrgChain ? (
+-          <AlertTriangle className="h-3.5 w-3.5 text-amber-500" aria-label="Invalid reporting chain" />
++          <AlertTriangle className="h-3.5 w-3.5 text-amber-500" aria-label="Chaîne hiérarchique invalide" />
+         ) : (
+           <AgentAvatar agent={agent} size={32} />
+         )}
+@@ -492,7 +492,7 @@ export function Agents({ initialView = "list" }: { initialView?: AgentsView } =
+           />
+         </Tabs>
+         <div className="flex items-center gap-2">
+-          {!forceListView ? <div className="flex items-center overflow-hidden rounded-md border border-border" role="group" aria-label="Agent view">
++          {!forceListView ? <div className="flex items-center overflow-hidden rounded-md border border-border" role="group" aria-label="Mode d'affichage">
+               <Button
+                 type="button"
+                 size="icon-sm"
+@@ -520,7 +520,7 @@ export function Agents({ initialView = "list" }: { initialView?: AgentsView } =
+           </div> : null}
+           <Button size="sm" variant="outline" onClick={openNewAgent}>
+             <Plus className="h-3.5 w-3.5 mr-1.5" />
+-            New Agent
++            Nouvel agent
+           </Button>
+         </div>
+       </div>
+@@ -534,8 +534,8 @@ export function Agents({ initialView = "list" }: { initialView?: AgentsView } =
+       {agents && agents.length === 0 && (
+         <EmptyState
+           icon={Bot}
+-          message="Create your first agent to get started."
+-          action="New Agent"
++          message="Créez votre premier agent pour commencer."
++          action="Nouvel agent"
+           onAction={openNewAgent}
+         />
+       )}
+@@ -549,7 +549,7 @@ export function Agents({ initialView = "list" }: { initialView?: AgentsView } =
+ 
+       {effectiveView === "list" && agents && agents.length > 0 && filtered.length === 0 && (
+         <p className="text-sm text-muted-foreground text-center py-8">
+-          No agents match the selected status.
++          Aucun agent ne correspond au statut sélectionné.
+         </p>
+       )}
+ 
+@@ -560,7 +560,7 @@ export function Agents({ initialView = "list" }: { initialView?: AgentsView } =
+ 
+       {effectiveView === "org" && orgTree && orgTree.length > 0 && filteredOrg.length === 0 && (
+         <p className="text-sm text-muted-foreground text-center py-8">
+-          No agents match the selected status.
++          Aucun agent ne correspond au statut sélectionné.
+         </p>
+       )}
+ 
+@@ -635,7 +635,7 @@ function OrgTreeNode({
+         )}
+       >
+         {hasInvalidOrgChain ? (
+-          <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-amber-500" aria-label="Invalid reporting chain" />
++          <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-amber-500" aria-label="Chaîne hiérarchique invalide" />
+         ) : (
+           <AgentAvatar agent={agent ?? node} size={24} />
+         )}
+diff --git a/ui/src/pages/DashboardLive.tsx b/ui/src/pages/DashboardLive.tsx
+index ac257af3b..4f8cc5ac3 100644
+--- a/ui/src/pages/DashboardLive.tsx
++++ b/ui/src/pages/DashboardLive.tsx
+@@ -39,12 +39,12 @@ export function DashboardLive() {
+             <ArrowLeft className="h-3.5 w-3.5" />
+             Tableau de bord
+           </Link>
+-          <h1 className="mt-2 text-2xl font-semibold tracking-normal text-foreground">Live agent runs</h1>
++          <h1 className="mt-2 text-2xl font-semibold tracking-normal text-foreground">Exécutions d'agents en direct</h1>
+           <p className="mt-1 text-sm text-muted-foreground">
+             Les exécutions actives d'abord, puis les dernières exécutions terminées.
+           </p>
+         </div>
+-        <div className="text-sm text-muted-foreground">Showing up to {DASHBOARD_LIVE_RUN_LIMIT}</div>
++        <div className="text-sm text-muted-foreground">Jusqu'à {DASHBOARD_LIVE_RUN_LIMIT} affichées</div>
+       </div>
+ 
+       <ActiveAgentsPanel
+@@ -53,7 +53,7 @@ export function DashboardLive() {
+         minRunCount={DASHBOARD_LIVE_RUN_LIMIT}
+         fetchLimit={DASHBOARD_LIVE_RUN_LIMIT}
+         cardLimit={DASHBOARD_LIVE_RUN_LIMIT}
+-        emptyMessage="No active or recent agent runs."
++        emptyMessage="Aucune exécution d'agent active ou récente."
+         queryScope="dashboard-live"
+         showMoreLink={false}
+       />
+diff --git a/ui/src/pages/Inbox.test.tsx b/ui/src/pages/Inbox.test.tsx
+index 93ab0e35b..43be80fe6 100644
+--- a/ui/src/pages/Inbox.test.tsx
++++ b/ui/src/pages/Inbox.test.tsx
+@@ -458,7 +458,7 @@ describe("Inbox toolbar", () => {
+ 
+     expect(container.querySelector('[data-slot="collection-toolbar"]')).toBeNull();
+     expect(container.querySelector('[role="toolbar"][aria-label="Commandes : Boîte de réception"]')).toBeNull();
+-    expect(container.textContent).toContain("Mine");
++    expect(container.textContent).toContain("Les miens");
+     expect(container.querySelector('[data-slot="task-row"]')).toBeNull();
+     const issueLink = container.querySelector('[data-inbox-issue-link]');
+     // Production reads the legacy Inbox column key and must ignore the
+diff --git a/ui/src/pages/Inbox.tsx b/ui/src/pages/Inbox.tsx
+index 9eda4b355..3b61a8b04 100644
+--- a/ui/src/pages/Inbox.tsx
++++ b/ui/src/pages/Inbox.tsx
+@@ -3302,7 +3302,7 @@ function StreamlinedInbox({
+                     <AlertTriangle className="h-4 w-4 shrink-0 text-red-600 dark:text-red-400" />
+                     <span className="text-sm">
+                       <span className="font-medium">{dashboard!.agents.error}</span>{" "}
+-                      {dashboard!.agents.error === 1 ? "agent has" : "agents have"} errors
++                      {dashboard!.agents.error === 1 ? "agent est en erreur" : "agents sont en erreur"}
+                     </span>
+                   </Link>
+                   <button
+@@ -3323,9 +3323,9 @@ function StreamlinedInbox({
+                   >
+                     <AlertTriangle className="h-4 w-4 shrink-0 text-yellow-400" />
+                     <span className="text-sm">
+-                      Budget at{" "}
++                      Budget utilisé à{" "}
+                       <span className="font-medium">{dashboard!.costs.monthUtilizationPercent}%</span>{" "}
+-                      utilization this month
++                      ce mois-ci
+                     </span>
+                   </Link>
+                   <button
+diff --git a/ui/src/pages/LegacyInbox.tsx b/ui/src/pages/LegacyInbox.tsx
+index 8d6503594..b9dc009b5 100644
+--- a/ui/src/pages/LegacyInbox.tsx
++++ b/ui/src/pages/LegacyInbox.tsx
+@@ -2295,11 +2295,11 @@ export function Inbox() {
+             items={[
+               {
+                 value: "mine",
+-                label: "Mine",
++                label: "Les miens",
+               },
+               {
+                 value: "recent",
+-                label: "Recent",
++                label: "Récents",
+               },
+               { value: "unread", label: "Non lus" },
+               { value: "blocked", label: "Bloqués" },
+@@ -3113,7 +3113,7 @@ export function Inbox() {
+                     <AlertTriangle className="h-4 w-4 shrink-0 text-red-600 dark:text-red-400" />
+                     <span className="text-sm">
+                       <span className="font-medium">{dashboard!.agents.error}</span>{" "}
+-                      {dashboard!.agents.error === 1 ? "agent has" : "agents have"} errors
++                      {dashboard!.agents.error === 1 ? "agent est en erreur" : "agents sont en erreur"}
+                     </span>
+                   </Link>
+                   <button
+@@ -3134,9 +3134,9 @@ export function Inbox() {
+                   >
+                     <AlertTriangle className="h-4 w-4 shrink-0 text-yellow-400" />
+                     <span className="text-sm">
+-                      Budget at{" "}
++                      Budget utilisé à{" "}
+                       <span className="font-medium">{dashboard!.costs.monthUtilizationPercent}%</span>{" "}
+-                      utilization this month
++                      ce mois-ci
+                     </span>
+                   </Link>
+                   <button
+diff --git a/ui/src/pages/RoutineDetail.production.tsx b/ui/src/pages/RoutineDetail.production.tsx
+index 95479e8bd..eed4a8902 100644
+--- a/ui/src/pages/RoutineDetail.production.tsx
++++ b/ui/src/pages/RoutineDetail.production.tsx
+@@ -282,36 +282,36 @@ export function RoutineDetail() {
+   const dirtyFields = useMemo<RoutineHistoryDirtyFieldDescriptor[]>(() => {
+     if (!routineDefaults) return [];
+     const result: RoutineHistoryDirtyFieldDescriptor[] = [];
+-    if (editDraft.title !== routineDefaults.title) result.push({ key: "title", label: "the title" });
++    if (editDraft.title !== routineDefaults.title) result.push({ key: "title", label: "le titre" });
+     if (editDraft.description !== routineDefaults.description) {
+-      result.push({ key: "description", label: "the description" });
++      result.push({ key: "description", label: "la description" });
+     }
+     if (editDraft.projectId !== routineDefaults.projectId) {
+-      result.push({ key: "projectId", label: "the project" });
++      result.push({ key: "projectId", label: "le projet" });
+     }
+     if (editDraft.assigneeAgentId !== routineDefaults.assigneeAgentId) {
+-      result.push({ key: "assigneeAgentId", label: "the default agent" });
++      result.push({ key: "assigneeAgentId", label: "l'agent par défaut" });
+     }
+     if (editDraft.priority !== routineDefaults.priority) {
+-      result.push({ key: "priority", label: "the priority" });
++      result.push({ key: "priority", label: "la priorité" });
+     }
+     if (editDraft.concurrencyPolicy !== routineDefaults.concurrencyPolicy) {
+-      result.push({ key: "concurrencyPolicy", label: "the concurrency policy" });
++      result.push({ key: "concurrencyPolicy", label: "la politique de concurrence" });
+     }
+     if (editDraft.catchUpPolicy !== routineDefaults.catchUpPolicy) {
+-      result.push({ key: "catchUpPolicy", label: "the catch-up policy" });
++      result.push({ key: "catchUpPolicy", label: "la politique de rattrapage" });
+     }
+     if (editDraft.activityGatePolicy !== routineDefaults.activityGatePolicy) {
+-      result.push({ key: "activityGatePolicy", label: "the advanced run policy" });
++      result.push({ key: "activityGatePolicy", label: "la politique d'exécution avancée" });
+     }
+     if (editDraft.activityGateScope !== routineDefaults.activityGateScope) {
+-      result.push({ key: "activityGateScope", label: "the activity gate scope" });
++      result.push({ key: "activityGateScope", label: "la portée du contrôle d'activité" });
+     }
+     if (JSON.stringify(editDraft.variables) !== JSON.stringify(routineDefaults.variables)) {
+-      result.push({ key: "variables", label: "the variables" });
++      result.push({ key: "variables", label: "les variables" });
+     }
+     if (JSON.stringify(editDraft.env ?? null) !== JSON.stringify(routineDefaults.env ?? null)) {
+-      result.push({ key: "env", label: "the secrets" });
++      result.push({ key: "env", label: "les secrets" });
+     }
+     return result;
+   }, [editDraft, routineDefaults]);
+diff --git a/ui/src/pages/RoutineDetail.tsx b/ui/src/pages/RoutineDetail.tsx
+index 93c92a2f1..39498bed9 100644
+--- a/ui/src/pages/RoutineDetail.tsx
++++ b/ui/src/pages/RoutineDetail.tsx
+@@ -262,36 +262,36 @@ export function RoutineDetail() {
+   const dirtyFields = useMemo<RoutineHistoryDirtyFieldDescriptor[]>(() => {
+     if (!routineDefaults) return [];
+     const result: RoutineHistoryDirtyFieldDescriptor[] = [];
+-    if (editDraft.title !== routineDefaults.title) result.push({ key: "title", label: "the title" });
++    if (editDraft.title !== routineDefaults.title) result.push({ key: "title", label: "le titre" });
+     if (editDraft.description !== routineDefaults.description) {
+-      result.push({ key: "description", label: "the description" });
++      result.push({ key: "description", label: "la description" });
+     }
+     if (editDraft.projectId !== routineDefaults.projectId) {
+-      result.push({ key: "projectId", label: "the project" });
++      result.push({ key: "projectId", label: "le projet" });
+     }
+     if (editDraft.assigneeAgentId !== routineDefaults.assigneeAgentId) {
+-      result.push({ key: "assigneeAgentId", label: "the default agent" });
++      result.push({ key: "assigneeAgentId", label: "l'agent par défaut" });
+     }
+     if (editDraft.priority !== routineDefaults.priority) {
+-      result.push({ key: "priority", label: "the priority" });
++      result.push({ key: "priority", label: "la priorité" });
+     }
+     if (editDraft.concurrencyPolicy !== routineDefaults.concurrencyPolicy) {
+-      result.push({ key: "concurrencyPolicy", label: "the concurrency policy" });
++      result.push({ key: "concurrencyPolicy", label: "la politique de concurrence" });
+     }
+     if (editDraft.catchUpPolicy !== routineDefaults.catchUpPolicy) {
+-      result.push({ key: "catchUpPolicy", label: "the catch-up policy" });
++      result.push({ key: "catchUpPolicy", label: "la politique de rattrapage" });
+     }
+     if (editDraft.activityGatePolicy !== routineDefaults.activityGatePolicy) {
+-      result.push({ key: "activityGatePolicy", label: "the advanced run policy" });
++      result.push({ key: "activityGatePolicy", label: "la politique d'exécution avancée" });
+     }
+     if (editDraft.activityGateScope !== routineDefaults.activityGateScope) {
+-      result.push({ key: "activityGateScope", label: "the activity gate scope" });
++      result.push({ key: "activityGateScope", label: "la portée du contrôle d'activité" });
+     }
+     if (JSON.stringify(editDraft.variables) !== JSON.stringify(routineDefaults.variables)) {
+-      result.push({ key: "variables", label: "the variables" });
++      result.push({ key: "variables", label: "les variables" });
+     }
+     if (JSON.stringify(editDraft.env ?? null) !== JSON.stringify(routineDefaults.env ?? null)) {
+-      result.push({ key: "env", label: "the secrets" });
++      result.push({ key: "env", label: "les secrets" });
+     }
+     return result;
+   }, [editDraft, routineDefaults]);
+diff --git a/ui/src/pages/Routines.production.tsx b/ui/src/pages/Routines.production.tsx
+index bc8554800..3240606f1 100644
+--- a/ui/src/pages/Routines.production.tsx
++++ b/ui/src/pages/Routines.production.tsx
+@@ -697,7 +697,7 @@ export function Routines() {
+   const recentRunsIssueLinkState = useMemo(
+     () =>
+       createIssueDetailLocationState(
+-        "Recent Runs",
++        "Exécutions récentes",
+         buildRoutinesTabHref("runs"),
+         "issues",
+       ),
+@@ -759,7 +759,7 @@ export function Routines() {
+         queryClient.invalidateQueries({ queryKey: queryKeys.routines.list(selectedCompanyId!) }),
+         queryClient.invalidateQueries({ queryKey: queryKeys.folders.list(selectedCompanyId!, "routine") }),
+       ]);
+-      pushToast({ title: "Routines déplacées", body: `${ids.length} routine${ids.length === 1 ? "" : "s"} filed.`, tone: "success" });
++      pushToast({ title: "Routines déplacées", body: `${ids.length} routine${ids.length === 1 ? "" : "s"} classée${ids.length === 1 ? "" : "s"}.`, tone: "success" });
+     } catch (moveError) {
+       pushToast({
+         title: "Échec du déplacement des routines",
+@@ -1255,7 +1255,7 @@ export function Routines() {
+               {folderSelection === "all" ? <FolderIconHeader label="Toutes les routines" count={sortedRoutines.length} /> : (
+                 <div className="flex min-w-0 items-center gap-2 text-sm">
+                   <FolderSwatch color={activeFolder?.color} />
+-                  <span className="truncate font-medium">{folderSelection === "unfiled" ? "Sans dossier" : activeFolder?.name ?? "Folder"}</span>
++                  <span className="truncate font-medium">{folderSelection === "unfiled" ? "Sans dossier" : activeFolder?.name ?? "Dossier"}</span>
+                   <span className="text-muted-foreground">{sortedRoutines.length} routine{sortedRoutines.length === 1 ? "" : "s"}</span>
+                 </div>
+               )}
+@@ -1360,8 +1360,8 @@ export function Routines() {
+                                 pushToast({
+                                   title: "Routine déplacée",
+                                   body: folderId
+-                                    ? `Moved "${routine.title}" to ${routineFolders?.folders.find((folder) => folder.id === folderId)?.name ?? "folder"}.`
+-                                    : `Moved "${routine.title}" to Unfiled.`,
++                                    ? `« ${routine.title} » déplacée vers ${routineFolders?.folders.find((folder) => folder.id === folderId)?.name ?? "le dossier"}.`
++                                    : `« ${routine.title} » déplacée vers Sans dossier.`,
+                                   tone: "success",
+                                   action: {
+                                     label: "Annuler",
+diff --git a/ui/src/pages/Routines.tsx b/ui/src/pages/Routines.tsx
+index 7ef569fc8..82d4e4bcd 100644
+--- a/ui/src/pages/Routines.tsx
++++ b/ui/src/pages/Routines.tsx
+@@ -651,7 +651,7 @@ export function Routines() {
+     [liveRuns, routineExecutionIssues],
+   );
+   const recentRunsIssueLinkState = useMemo(
+-    () => createIssueDetailLocationState("Recent Runs", "/routines?tab=runs", "issues"),
++    () => createIssueDetailLocationState("Exécutions récentes", "/routines?tab=runs", "issues"),
+     [],
+   );
+   const updateIssue = useMutation({
+@@ -752,7 +752,7 @@ export function Routines() {
+         queryClient.invalidateQueries({ queryKey: queryKeys.routines.list(selectedCompanyId!) }),
+         queryClient.invalidateQueries({ queryKey: queryKeys.folders.list(selectedCompanyId!, "routine") }),
+       ]);
+-      pushToast({ title: "Routines déplacées", body: `${ids.length} routine${ids.length === 1 ? "" : "s"} filed.`, tone: "success" });
++      pushToast({ title: "Routines déplacées", body: `${ids.length} routine${ids.length === 1 ? "" : "s"} classée${ids.length === 1 ? "" : "s"}.`, tone: "success" });
+     } catch (moveError) {
+       pushToast({
+         title: "Échec du déplacement des routines",
+@@ -916,7 +916,7 @@ export function Routines() {
+                         <span>{label}</span>
+                         {routineViewState.sortField === field ? (
+                           <span className="text-xs text-muted-foreground">
+-                            {routineViewState.sortDir === "asc" ? "Asc" : "Desc"}
++                            {routineViewState.sortDir === "asc" ? "Croissant" : "Décroissant"}
+                           </span>
+                         ) : null}
+                       </button>
+@@ -963,7 +963,7 @@ export function Routines() {
+               ) : null}
+               {showFolderRail ? (
+                 <Button variant="ghost" size="sm" className="text-xs" onClick={() => setSelectMode((current) => !current)}>
+-                  {selectMode ? "Done" : "Select"}
++                  {selectMode ? "Terminé" : "Sélectionner"}
+                 </Button>
+               ) : null}
+           </div>
+@@ -1287,7 +1287,7 @@ export function Routines() {
+               {folderSelection === "all" ? <FolderIconHeader label="Toutes les routines" count={sortedRoutines.length} /> : (
+                 <div className="flex min-w-0 items-center gap-2 text-sm">
+                   <FolderSwatch color={activeFolder?.color} />
+-                  <span className="truncate font-medium">{folderSelection === "unfiled" ? "Sans dossier" : activeFolder?.name ?? "Folder"}</span>
++                  <span className="truncate font-medium">{folderSelection === "unfiled" ? "Sans dossier" : activeFolder?.name ?? "Dossier"}</span>
+                   <span className="text-muted-foreground">{sortedRoutines.length} routine{sortedRoutines.length === 1 ? "" : "s"}</span>
+                 </div>
+               )}
+@@ -1392,8 +1392,8 @@ export function Routines() {
+                                 pushToast({
+                                   title: "Routine déplacée",
+                                   body: folderId
+-                                    ? `Moved "${routine.title}" to ${routineFolders?.folders.find((folder) => folder.id === folderId)?.name ?? "folder"}.`
+-                                    : `Moved "${routine.title}" to Unfiled.`,
++                                    ? `« ${routine.title} » déplacée vers ${routineFolders?.folders.find((folder) => folder.id === folderId)?.name ?? "le dossier"}.`
++                                    : `« ${routine.title} » déplacée vers Sans dossier.`,
+                                   tone: "success",
+                                   action: {
+                                     label: "Annuler",
+diff --git a/ui/src/pages/audit/AuditFeed.production.tsx b/ui/src/pages/audit/AuditFeed.production.tsx
+index 470e4a525..d020d433a 100644
+--- a/ui/src/pages/audit/AuditFeed.production.tsx
++++ b/ui/src/pages/audit/AuditFeed.production.tsx
+@@ -31,26 +31,26 @@ const ALL = "__all";
+ 
+ /** Action-domain prefixes offered in the filter (server does a prefix match). */
+ const ACTION_DOMAINS: { value: string; label: string }[] = [
+-  { value: ALL, label: "All actions" },
+-  { value: "issue.", label: "Tasks" },
++  { value: ALL, label: "Toutes les actions" },
++  { value: "issue.", label: "Tâches" },
+   { value: "agent.", label: "Agents" },
+-  { value: "heartbeat.", label: "Runs" },
+-  { value: "approval.", label: "Approvals" },
+-  { value: "project.", label: "Projects" },
+-  { value: "goal.", label: "Goals" },
+-  { value: "tool_gateway.", label: "Tools" },
++  { value: "heartbeat.", label: "Exécutions" },
++  { value: "approval.", label: "Approbations" },
++  { value: "project.", label: "Projets" },
++  { value: "goal.", label: "Objectifs" },
++  { value: "tool_gateway.", label: "Outils" },
+   { value: "cost.", label: "Coûts" },
+-  { value: "company.", label: "Company" },
++  { value: "company.", label: "Organisation" },
+ ];
+ 
+ /** Entity types offered in the filter (server does an exact match). */
+ const ENTITY_TYPES: { value: string; label: string }[] = [
+-  { value: ALL, label: "All entities" },
+-  { value: "issue", label: "Task" },
++  { value: ALL, label: "Toutes les entités" },
++  { value: "issue", label: "Tâche" },
+   { value: "agent", label: "Agent" },
+-  { value: "project", label: "Project" },
+-  { value: "goal", label: "Goal" },
+-  { value: "company", label: "Company" },
++  { value: "project", label: "Projet" },
++  { value: "goal", label: "Objectif" },
++  { value: "company", label: "Organisation" },
+ ];
+ 
+ /**
+@@ -122,7 +122,7 @@ function AuditActor({
+     const profile = userProfileMap.get(record.actorId);
+     return (
+       <Identity
+-        name={profile?.label ?? "User"}
++        name={profile?.label ?? "Utilisateur"}
+         avatarUrl={profile?.image ?? null}
+         size="sm"
+         className="font-medium text-foreground"
+@@ -133,12 +133,12 @@ function AuditActor({
+   // deleted or authorization-filtered agents that are absent from the directory.
+   const label =
+     record.actorType === "plugin"
+-      ? "Plugin"
++      ? "Extension"
+       : record.actorType === "agent"
+         ? "Agent"
+         : record.actorType === "user"
+-          ? "User"
+-          : "System";
++          ? "Utilisateur"
++          : "Système";
+   return <Identity name={label} size="sm" className="font-medium text-foreground" />;
+ }
+ 
+@@ -156,7 +156,7 @@ function AuditEntityNode({ record }: { record: AuditActionRecord }) {
+   if (issueRef) {
+     return (
+       <Link to={`/issues/${issueRef}`} className="font-medium text-primary hover:underline">
+-        {issue?.identifier ? `${issue.identifier}${issue.title ? ` · ${issue.title}` : ""}` : "the task"}
++        {issue?.identifier ? `${issue.identifier}${issue.title ? ` · ${issue.title}` : ""}` : "la tâche"}
+       </Link>
+     );
+   }
+@@ -183,7 +183,7 @@ function AuditRow({
+     record.responsibleUserId
+       && !(record.actorType === "user" && record.actorId === record.responsibleUserId),
+   );
+-  const responsibleLabel = responsible?.label ?? (record.responsibleUserId ? "a user" : null);
++  const responsibleLabel = responsible?.label ?? (record.responsibleUserId ? "un utilisateur" : null);
+   const excerpt = record.entity.comment?.excerpt?.trim();
+   // Show the document key only when it isn't already the linked entity node.
+   const documentKey = record.entity.issue && record.entity.document ? record.entity.document.key : null;
+@@ -210,7 +210,7 @@ function AuditRow({
+           <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+             {showOnBehalf && responsibleLabel ? (
+               <span className="inline-flex items-center rounded-full bg-muted px-2 py-0.5">
+-                on behalf of {responsibleLabel}
++                au nom de {responsibleLabel}
+               </span>
+             ) : null}
+             {record.runId && record.agentId ? (
+@@ -218,7 +218,7 @@ function AuditRow({
+                 to={`/agents/${record.agentId}/runs/${record.runId}`}
+                 className="text-primary hover:underline"
+               >
+-                View run
++                Voir l'exécution
+               </Link>
+             ) : null}
+             <span className="font-mono text-(length:--text-micro) opacity-70">{record.action}</span>
+@@ -243,13 +243,13 @@ function AuditUpsell() {
+       <CardContent className="flex flex-col items-center gap-3 py-14 text-center">
+         <ShieldAlert className="h-10 w-10 text-muted-foreground/50" />
+         <div>
+-          <p className="text-sm font-medium text-foreground">Agent audit is a Paperclip Enterprise view</p>
++          <p className="text-sm font-medium text-foreground">Le journal d'audit des agents est une vue Paperclip Enterprise</p>
+           <p className="mx-auto mt-1 max-w-md text-sm text-muted-foreground">
+-            The agent audit log gives you a searchable, exportable record of everything your agents
+-            did — every comment, task change, approval, and run — with the responsible person for
+-            each action. Ask an administrator to grant you the{" "}
++            Le journal d'audit des agents offre un enregistrement consultable et exportable de tout ce que vos
++            agents ont fait (commentaires, changements de tâche, approbations et exécutions), avec la personne
++            responsable de chaque action. Demandez à un administrateur de vous accorder l'autorisation{" "}
+             <span className="font-mono text-(length:--text-micro)">audit:view_agent_actions</span>{" "}
+-            permission to view it.
++            pour le consulter.
+           </p>
+         </div>
+       </CardContent>
+@@ -359,7 +359,7 @@ export function AuditFeed({
+   // them, so `hasMixedAccessTiers` would stay true forever. Only call the feed
+   // "recovering" while that attempt is outstanding; once it has settled, fall
+   // through to normal rendering. Otherwise the banner permanently hides the
+-  // error state and its "Try again" button, with no way off the page. Falling
++  // error state and its "Réessayer" button, with no way off the page. Falling
+   // through is safe because `items` already excludes the privileged pages, so
+   // an unrecovered cache renders as a plain basic-tier feed.
+   const downgradeRecoveryExhausted = Boolean(
+@@ -444,11 +444,11 @@ export function AuditFeed({
+       // Browsers may read blob URLs lazily after click(), so keep the URL alive
+       // long enough for the download to start.
+       window.setTimeout(() => URL.revokeObjectURL(url), 5_000);
+-      pushToast({ title: "Audit exported", body: "Your CSV download has started.", tone: "success" });
++      pushToast({ title: "Audit exporté", body: "Le téléchargement du fichier CSV a commencé.", tone: "success" });
+     } catch (error) {
+       pushToast({
+-        title: "Export failed",
+-        body: error instanceof Error ? error.message : "Could not export the audit log.",
++        title: "Échec de l'export",
++        body: error instanceof Error ? error.message : "Impossible d'exporter le journal d'audit.",
+         tone: "error",
+       });
+     } finally {
+@@ -468,8 +468,8 @@ export function AuditFeed({
+             <h1 className="text-lg font-semibold text-foreground">Activité</h1>
+             <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
+               {resolvedMode === "agents"
+-                ? "Every recorded agent action, newest first — with the responsible person and run behind each one."
+-                : "Everything happening in your company, newest first — people, agents, and the system. Each line is one recorded action."}
++                ? "Toutes les actions d'agent enregistrées, les plus récentes d'abord, avec la personne responsable et l'exécution derrière chacune."
++                : "Tout ce qui se passe dans votre organisation, du plus récent au plus ancien : personnes, agents et système. Chaque ligne est une action enregistrée."}
+             </p>
+           </div>
+         </div>
+@@ -478,8 +478,8 @@ export function AuditFeed({
+       {showModeToggle ? (
+         <Tabs value={resolvedMode} onValueChange={(value) => onModeChange?.(value as AuditFeedMode)}>
+           <TabsList aria-label="Portée de l'activité">
+-            <TabsTrigger value="all">All activity</TabsTrigger>
+-            <TabsTrigger value="agents">Agent actions</TabsTrigger>
++            <TabsTrigger value="all">Toute l'activité</TabsTrigger>
++            <TabsTrigger value="agents">Actions des agents</TabsTrigger>
+           </TabsList>
+         </Tabs>
+       ) : null}
+@@ -492,7 +492,7 @@ export function AuditFeed({
+                 <SelectValue placeholder="Agent" />
+               </SelectTrigger>
+               <SelectContent>
+-                <SelectItem value={ALL}>All agents</SelectItem>
++                <SelectItem value={ALL}>Tous les agents</SelectItem>
+                 {(agents.data ?? []).map((a) => (
+                   <SelectItem key={a.id} value={a.id}>
+                     {a.name}
+@@ -502,12 +502,12 @@ export function AuditFeed({
+             </Select>
+           ) : null}
+           <Select value={responsibleUser} onValueChange={setResponsibleUser}>
+-            {/* Wide enough for "All responsible users" — w-44 truncated it. */}
++            {/* Wide enough for "Tous les utilisateurs responsables" — w-44 truncated it. */}
+             <SelectTrigger className="w-52">
+-              <SelectValue placeholder="Responsible user" />
++              <SelectValue placeholder="Utilisateur responsable" />
+             </SelectTrigger>
+             <SelectContent>
+-              <SelectItem value={ALL}>All responsible users</SelectItem>
++              <SelectItem value={ALL}>Tous les utilisateurs responsables</SelectItem>
+               {(userDirectory.data?.users ?? []).map((u) => (
+                 <SelectItem key={u.principalId} value={u.principalId}>
+                   {u.user?.name ?? u.user?.email ?? u.principalId.slice(0, 8)}
+@@ -529,7 +529,7 @@ export function AuditFeed({
+           </Select>
+           <Select value={entityType} onValueChange={setEntityType}>
+             <SelectTrigger className="w-36">
+-              <SelectValue placeholder="Entity" />
++              <SelectValue placeholder="Entité" />
+             </SelectTrigger>
+             <SelectContent>
+               {ENTITY_TYPES.map((e) => (
+@@ -541,7 +541,7 @@ export function AuditFeed({
+           </Select>
+           <Input
+             type="date"
+-            aria-label="From date"
++            aria-label="Date de début"
+             value={dateFrom}
+             max={dateTo || undefined}
+             onChange={(e) => setDateFrom(e.target.value)}
+@@ -549,7 +549,7 @@ export function AuditFeed({
+           />
+           <Input
+             type="date"
+-            aria-label="To date"
++            aria-label="Date de fin"
+             value={dateTo}
+             min={dateFrom || undefined}
+             onChange={(e) => setDateTo(e.target.value)}
+@@ -557,7 +557,7 @@ export function AuditFeed({
+           />
+           {hasActiveFilters ? (
+             <Button variant="ghost" size="sm" onClick={clearFilters}>
+-              Clear filters
++              Effacer les filtres
+             </Button>
+           ) : null}
+           <Button
+@@ -568,7 +568,7 @@ export function AuditFeed({
+             disabled={exporting || feed.isLoading || items.length === 0}
+           >
+             <Download className="mr-1.5 h-4 w-4" />
+-            {exporting ? "Exporting…" : "Export CSV"}
++            {exporting ? "Export en cours…" : "Exporter en CSV"}
+           </Button>
+         </div>
+       ) : null}
+@@ -576,21 +576,21 @@ export function AuditFeed({
+       {recoveringFromAccessDowngrade || fallingBackToAllActivity ? (
+         <Card>
+           <CardContent className="py-14 text-center text-sm text-muted-foreground">
+-            Refreshing audit access…
++            Actualisation de l'accès à l'audit…
+           </CardContent>
+         </Card>
+       ) : feed.isLoading ? (
+         <Card>
+-          <CardContent className="py-14 text-center text-sm text-muted-foreground">Loading…</CardContent>
++          <CardContent className="py-14 text-center text-sm text-muted-foreground">Chargement…</CardContent>
+         </Card>
+       ) : feed.error ? (
+         <Card>
+           <CardContent className="flex flex-col items-center gap-3 py-14 text-center">
+             <p className="text-sm text-muted-foreground">
+-              {feed.error instanceof Error ? feed.error.message : "Failed to load the audit log."}
++              {feed.error instanceof Error ? feed.error.message : "Impossible de charger le journal d'audit."}
+             </p>
+             <Button variant="outline" size="sm" onClick={() => feed.refetch()}>
+-              Try again
++              Réessayer
+             </Button>
+           </CardContent>
+         </Card>
+@@ -600,19 +600,19 @@ export function AuditFeed({
+             <ScrollText className="h-10 w-10 text-muted-foreground/40" />
+             <div>
+               <p className="text-sm font-medium text-foreground">
+-                {hasActiveFilters ? "No actions match these filters" : "Nothing here yet"}
++                {hasActiveFilters ? "Aucune action ne correspond à ces filtres" : "Rien ici pour le moment"}
+               </p>
+               <p className="mt-1 max-w-md text-sm text-muted-foreground">
+                 {hasActiveFilters
+-                  ? "Try a wider date range or different filters."
++                  ? "Essayez une période plus large ou d'autres filtres."
+                   : resolvedMode === "agents"
+-                    ? "As soon as your agents start doing things, their actions show up here."
+-                    : "As soon as anyone in your company does something, it shows up here."}
++                    ? "Dès que vos agents commenceront à agir, leurs actions apparaîtront ici."
++                    : "Dès que quelqu'un de votre organisation fera quelque chose, cela apparaîtra ici."}
+               </p>
+             </div>
+             {hasActiveFilters ? (
+               <Button variant="outline" size="sm" onClick={clearFilters}>
+-                Clear filters
++                Effacer les filtres
+               </Button>
+             ) : null}
+           </CardContent>
+@@ -642,13 +642,13 @@ export function AuditFeed({
+             onClick={() => feed.fetchNextPage()}
+             disabled={feed.isFetchingNextPage}
+           >
+-            {feed.isFetchingNextPage ? "Loading…" : "Load more"}
++            {feed.isFetchingNextPage ? "Chargement…" : "Charger la suite"}
+           </Button>
+         </div>
+       ) : null}
+ 
+       <p className="text-xs text-muted-foreground">
+-        Recorded by Paperclip — entries can't be edited. Sensitive values are never stored.
++        Enregistré par Paperclip : les entrées ne peuvent pas être modifiées et les valeurs sensibles ne sont jamais stockées.
+       </p>
+     </div>
+   );
+diff --git a/ui/src/pages/audit/AuditFeed.test.tsx b/ui/src/pages/audit/AuditFeed.test.tsx
+index a69ce99af..c7ee7debf 100644
+--- a/ui/src/pages/audit/AuditFeed.test.tsx
++++ b/ui/src/pages/audit/AuditFeed.test.tsx
+@@ -201,9 +201,9 @@ describe("AuditFeed", () => {
+     const taskLink = container.querySelector('a[href="/issues/PAP-1"]');
+     expect(taskLink?.textContent).toContain("PAP-1");
+     expect(container.textContent).toContain("Looks good to me");
+-    expect(container.textContent).toContain("on behalf of Dotta");
++    expect(container.textContent).toContain("au nom de Dotta");
+     expect(container.querySelector('a[href="/agents/agent-1/runs/run-1"]')).toBeTruthy();
+-    expect(container.textContent).toContain("Recorded by Paperclip");
++    expect(container.textContent).toContain("Enregistré par Paperclip");
+   });
+ 
+   it("filters and renders connection tests in the same audit row shape", async () => {
+@@ -241,10 +241,10 @@ describe("AuditFeed", () => {
+     );
+     await render();
+ 
+-    expect(container.textContent).toContain("Paperclip Enterprise view");
++    expect(container.textContent).toContain("vue Paperclip Enterprise");
+     expect(container.textContent).toContain("audit:view_agent_actions");
+     // The feed chrome (filters, footer) is not rendered in the denied state.
+-    expect(container.textContent).not.toContain("Recorded by Paperclip");
++    expect(container.textContent).not.toContain("Enregistré par Paperclip");
+   });
+ 
+   it("hides attribution filters and export for a basic all-actors reader", async () => {
+@@ -252,13 +252,13 @@ describe("AuditFeed", () => {
+     await render();
+ 
+     expect(container.textContent).toContain("a commenté");
+-    expect(container.textContent).not.toContain("All agents");
+-    expect(container.textContent).not.toContain("All responsible users");
+-    expect(container.textContent).not.toContain("Export CSV");
++    expect(container.textContent).not.toContain("Tous les agents");
++    expect(container.textContent).not.toContain("Tous les utilisateurs responsables");
++    expect(container.textContent).not.toContain("Exporter en CSV");
+     expect(container.textContent).toContain("Action");
+-    expect(container.textContent).toContain("Entity");
+-    expect(container.textContent).toContain("From");
+-    expect(container.textContent).toContain("To");
++    expect(container.textContent).toContain("Entité");
++    expect(container.textContent).toContain("Du");
++    expect(container.textContent).toContain("Au");
+   });
+ 
+   it("clears privileged filters and recovers the basic feed after an access downgrade", async () => {
+@@ -278,7 +278,7 @@ describe("AuditFeed", () => {
+     await render();
+ 
+     permissionRevoked = true;
+-    await clickButton("All agents");
++    await clickButton("Tous les agents");
+     const fableOption = Array.from(document.body.querySelectorAll<HTMLElement>('[role="option"]'))
+       .find((option) => option.textContent?.trim() === "Fable");
+     expect(fableOption).toBeTruthy();
+@@ -289,7 +289,7 @@ describe("AuditFeed", () => {
+       () =>
+         listAgentActionsMock.mock.calls.some(([, filters]) => filters.agentId)
+         && listAgentActionsMock.mock.calls.at(-1)?.[1]?.agentId === undefined
+-        && !container.textContent?.includes("All agents"),
++        && !container.textContent?.includes("Tous les agents"),
+       "the basic feed after the access downgrade",
+       20_000,
+     );
+@@ -300,9 +300,9 @@ describe("AuditFeed", () => {
+         expect.objectContaining({ actorScope: "all", agentId: undefined }),
+       );
+       expect(container.textContent).toContain("a commenté");
+-      expect(container.textContent).not.toContain("Paperclip Enterprise view");
+-      expect(container.textContent).not.toContain("All agents");
+-      expect(container.textContent).not.toContain("Export CSV");
++      expect(container.textContent).not.toContain("vue Paperclip Enterprise");
++      expect(container.textContent).not.toContain("Tous les agents");
++      expect(container.textContent).not.toContain("Exporter en CSV");
+     });
+   });
+ 
+@@ -333,17 +333,17 @@ describe("AuditFeed", () => {
+     });
+     await render();
+ 
+-    expect(container.textContent).toContain("on behalf of Dotta");
+-    expect(container.textContent).toContain("Export CSV");
++    expect(container.textContent).toContain("au nom de Dotta");
++    expect(container.textContent).toContain("Exporter en CSV");
+     permissionRevoked = true;
+-    await clickButton("Load more");
++    await clickButton("Charger la suite");
+     // The basic second page and the recovery refetch settle across several async
+     // steps. Wait for the recovery refetch and the dropped attribution instead of
+     // a fixed flush count.
+     await waitForCondition(
+       () =>
+         listAgentActionsMock.mock.calls.at(-1)?.[1]?.cursor === undefined
+-        && !container.textContent?.includes("on behalf of Dotta"),
++        && !container.textContent?.includes("au nom de Dotta"),
+       "the basic feed after the pagination downgrade",
+       20_000,
+     );
+@@ -352,16 +352,16 @@ describe("AuditFeed", () => {
+       expect.objectContaining({ actorScope: "all", cursor: undefined }),
+     );
+     expect(container.textContent).toContain("a commenté");
+-    expect(container.textContent).not.toContain("on behalf of Dotta");
++    expect(container.textContent).not.toContain("au nom de Dotta");
+     expect(container.querySelector('a[href="/agents/agent-1/runs/run-1"]')).toBeFalsy();
+-    expect(container.textContent).not.toContain("All agents");
+-    expect(container.textContent).not.toContain("Export CSV");
++    expect(container.textContent).not.toContain("Tous les agents");
++    expect(container.textContent).not.toContain("Exporter en CSV");
+   });
+ 
+   it("surfaces the retry UI when the access-downgrade recovery refetch fails", async () => {
+     // The downgrade recovery refetch can itself fail. React Query keeps the
+     // cached mixed-tier pages on failure, so without a guard the feed sits on
+-    // "Refreshing audit access…" forever with no way out.
++    // "Actualisation de l'accès à l'audit…" forever with no way out.
+     let downgraded = false;
+     let calls = 0;
+     listAgentActionsMock.mockImplementation((_companyId: string, filters: { cursor?: string }) => {
+@@ -378,16 +378,16 @@ describe("AuditFeed", () => {
+       return Promise.resolve({ items: [record()], nextCursor: "cursor-2", accessTier: "full" });
+     });
+     await render();
+-    await clickButton("Load more");
++    await clickButton("Charger la suite");
+     // The feed retries twice with backoff (~3s) before the query settles as
+     // errored, and it stays "fetching" throughout — so wait for the settled
+     // state rather than a fixed number of microtask flushes. The explicit test
+     // timeout below keeps that wait inside the budget on slower CI runners.
+-    await waitForText("Try again", 20_000);
++    await waitForText("Réessayer", 20_000);
+ 
+-    expect(container.textContent).not.toContain("Refreshing audit access…");
++    expect(container.textContent).not.toContain("Actualisation de l'accès à l'audit…");
+     expect(container.textContent).toContain("Network down");
+-    expect(container.textContent).toContain("Try again");
++    expect(container.textContent).toContain("Réessayer");
+ 
+     // And the recovery must not loop: no further refetches once it has failed.
+     const settledCalls = calls;
+@@ -409,17 +409,17 @@ describe("AuditFeed", () => {
+         : Promise.resolve({ items: [record()], nextCursor: "cursor-2", accessTier: "full" }),
+     );
+     await render();
+-    await clickButton("Load more");
++    await clickButton("Charger la suite");
+     await flushReact();
+     await flushReact();
+ 
+-    expect(container.textContent).not.toContain("Refreshing audit access…");
++    expect(container.textContent).not.toContain("Actualisation de l'accès à l'audit…");
+     expect(container.textContent).toContain("a commenté");
+     // Least-privileged page wins, so the privileged chrome stays hidden.
+-    expect(container.textContent).not.toContain("Export CSV");
++    expect(container.textContent).not.toContain("Exporter en CSV");
+     // And the cached full-tier page must not render revoked attribution beside
+     // the stripped rows just because the recovery has run out of attempts.
+-    expect(container.textContent).not.toContain("on behalf of Dotta");
++    expect(container.textContent).not.toContain("au nom de Dotta");
+     expect(container.querySelector('a[href="/agents/agent-1/runs/run-1"]')).toBeFalsy();
+ 
+     const settledCalls = listAgentActionsMock.mock.calls.length;
+@@ -432,8 +432,8 @@ describe("AuditFeed", () => {
+ 
+     const [, filters] = listAgentActionsMock.mock.calls[0];
+     expect(filters).toEqual(expect.objectContaining({ actorScope: "agents", agentId: "agent-1" }));
+-    // No "All agents" option means the agent filter is hidden on the per-agent tab.
+-    expect(container.textContent).not.toContain("All agents");
++    // No "Tous les agents" option means the agent filter is hidden on the per-agent tab.
++    expect(container.textContent).not.toContain("Tous les agents");
+   });
+ 
+   it("ignores the mode toggle on the per-agent tab", async () => {
+@@ -465,20 +465,20 @@ describe("AuditFeed", () => {
+     await flushReact();
+ 
+     expect(container.textContent).toContain("Activité");
+-    expect(container.textContent).toContain("Agent Actions");
++    expect(container.textContent).toContain("Actions des agents");
+     expect(listAgentActionsMock.mock.calls[0]?.[1]).toEqual(
+       expect.objectContaining({ actorScope: "all" }),
+     );
+ 
+-    await clickTab("Agent Actions");
++    await clickTab("Actions des agents");
+     await flushReact();
+ 
+     expect(listAgentActionsMock.mock.calls.at(-1)?.[1]).toEqual(
+       expect.objectContaining({ actorScope: "agents" }),
+     );
+     // The privileged scope keeps the attribution filters and the export.
+-    expect(container.textContent).toContain("All responsible users");
+-    expect(container.textContent).toContain("Export CSV");
++    expect(container.textContent).toContain("Tous les utilisateurs responsables");
++    expect(container.textContent).toContain("Exporter en CSV");
+   });
+ 
+   it("resolves a basic-tier agent name from the company-readable actorId", async () => {
+@@ -493,7 +493,7 @@ describe("AuditFeed", () => {
+ 
+     expect(container.textContent).toContain("Fable");
+     expect(container.textContent).not.toContain("Agent commented");
+-    expect(container.textContent).not.toContain("System");
++    expect(container.textContent).not.toContain("Système");
+   });
+ 
+   it("falls back to the actor type when an agent is absent from the readable directory", async () => {
+@@ -505,7 +505,7 @@ describe("AuditFeed", () => {
+     await render({ mode: "all", onModeChange: vi.fn() });
+ 
+     expect(container.textContent).toContain("Agent");
+-    expect(container.textContent).not.toContain("System");
++    expect(container.textContent).not.toContain("Système");
+   });
+ 
+   it("hides the mode toggle from a basic all-actors reader", async () => {
+@@ -513,8 +513,8 @@ describe("AuditFeed", () => {
+     await render({ mode: "all", onModeChange: vi.fn() });
+ 
+     const tabs = Array.from(container.querySelectorAll<HTMLButtonElement>('[role="tab"]'));
+-    expect(tabs.map((tab) => tab.textContent?.trim())).toEqual(["Activité", "Agent Actions"]);
+-    expect(tabs.find((tab) => tab.textContent?.trim() === "Agent Actions")?.disabled).toBe(true);
++    expect(tabs.map((tab) => tab.textContent?.trim())).toEqual(["Activité", "Actions des agents"]);
++    expect(tabs.find((tab) => tab.textContent?.trim() === "Actions des agents")?.disabled).toBe(true);
+     // The basic feed itself still renders.
+     expect(container.textContent).toContain("a commenté");
+   });
+@@ -527,8 +527,8 @@ describe("AuditFeed", () => {
+     await render({ mode: "agents", onModeChange });
+ 
+     expect(onModeChange).toHaveBeenCalledWith("all");
+-    expect(container.textContent).not.toContain("Paperclip Enterprise view");
+-    expect(container.textContent).toContain("Refreshing audit access…");
++    expect(container.textContent).not.toContain("vue Paperclip Enterprise");
++    expect(container.textContent).toContain("Actualisation de l'accès à l'audit…");
+   });
+ 
+   it("still upsells an uncontrolled agent-actions feed that 403s", async () => {
+@@ -537,19 +537,19 @@ describe("AuditFeed", () => {
+     );
+     await render({ mode: "agents" });
+ 
+-    expect(container.textContent).toContain("Paperclip Enterprise view");
++    expect(container.textContent).toContain("vue Paperclip Enterprise");
+   });
+ 
+   it("renders a flat activity list with clearly labeled filters", async () => {
+     await render();
+ 
+-    const list = container.querySelector('ul[aria-label="Audit activity"]');
++    const list = container.querySelector('ul[aria-label=\"Activité d\'audit\"]');
+     expect(list).toBeTruthy();
+     expect(list?.closest('[data-slot="card"]')).toBeFalsy();
+     expect(container.textContent).toContain("Agent");
+-    expect(container.textContent).toContain("Responsible user");
++    expect(container.textContent).toContain("Utilisateur responsable");
+     expect(container.textContent).toContain("Action");
+-    expect(container.textContent).toContain("Entity");
++    expect(container.textContent).toContain("Entité");
+   });
+ 
+   it("pins run and entity scopes into distinct audit requests", async () => {
+@@ -557,21 +557,21 @@ describe("AuditFeed", () => {
+     expect(listAgentActionsMock.mock.calls[0]?.[1]).toEqual(
+       expect.objectContaining({ actorScope: "agents", runId: "run-42" }),
+     );
+-    expect(container.textContent).toContain("Scoped to run run-42");
++    expect(container.textContent).toContain("Limité à l'exécution run-42");
+ 
+     flushSync(() => root.unmount());
+     await render({ lockedEntity: { type: "routine", id: "routine-7", label: "Nightly triage" } });
+     expect(listAgentActionsMock.mock.calls.at(-1)?.[1]).toEqual(
+       expect.objectContaining({ entityType: "routine", entityId: "routine-7" }),
+     );
+-    expect(container.textContent).toContain("Scoped to Nightly triage");
++    expect(container.textContent).toContain("Limité à Nightly triage");
+   });
+ 
+   it("only offers action domains present in the agent-action feed", async () => {
+     await render();
+ 
+-    await clickButton("All actions");
+-    expect(document.body.textContent).toContain("Tasks");
++    await clickButton("Toutes les actions");
++    expect(document.body.textContent).toContain("Tâches");
+     expect(document.body.textContent).not.toContain("Audit exports");
+   });
+ 
+@@ -585,7 +585,7 @@ describe("AuditFeed", () => {
+     await render();
+ 
+     expect(container.querySelector('a[href="/issues/PAP-2"]')).toBeFalsy();
+-    await clickButton("Load more");
++    await clickButton("Charger la suite");
+     await flushReact();
+     expect(container.querySelector('a[href="/issues/PAP-2"]')).toBeTruthy();
+   });
+@@ -600,7 +600,7 @@ describe("AuditFeed", () => {
+     await render();
+     const setTimeoutSpy = vi.spyOn(window, "setTimeout");
+ 
+-    await clickButton("Export CSV");
++    await clickButton("Exporter en CSV");
+     await flushReact();
+ 
+     expect(exportCsvMock).toHaveBeenCalledWith(
+diff --git a/ui/src/pages/audit/AuditFeed.tsx b/ui/src/pages/audit/AuditFeed.tsx
+index c2f7f4d84..a8a09e414 100644
+--- a/ui/src/pages/audit/AuditFeed.tsx
++++ b/ui/src/pages/audit/AuditFeed.tsx
+@@ -31,29 +31,29 @@ const ALL = "__all";
+ 
+ /** Action-domain prefixes offered in the filter (server does a prefix match). */
+ const ACTION_DOMAINS: { value: string; label: string }[] = [
+-  { value: ALL, label: "All actions" },
+-  { value: "issue.", label: "Tasks" },
++  { value: ALL, label: "Toutes les actions" },
++  { value: "issue.", label: "Tâches" },
+   { value: "agent.", label: "Agents" },
+-  { value: "heartbeat.", label: "Runs" },
+-  { value: "approval.", label: "Approvals" },
+-  { value: "project.", label: "Projects" },
+-  { value: "goal.", label: "Goals" },
+-  { value: "tool_", label: "Apps & tools" },
+-  { value: "cost.", label: "Costs" },
+-  { value: "company.", label: "Organization" },
++  { value: "heartbeat.", label: "Exécutions" },
++  { value: "approval.", label: "Approbations" },
++  { value: "project.", label: "Projets" },
++  { value: "goal.", label: "Objectifs" },
++  { value: "tool_", label: "Applications et outils" },
++  { value: "cost.", label: "Coûts" },
++  { value: "company.", label: "Organisation" },
+ ];
+ 
+ /** Entity types offered in the filter (server does an exact match). */
+ const ENTITY_TYPES: { value: string; label: string }[] = [
+-  { value: ALL, label: "All entities" },
+-  { value: "issue", label: "Task" },
++  { value: ALL, label: "Toutes les entités" },
++  { value: "issue", label: "Tâche" },
+   { value: "agent", label: "Agent" },
+-  { value: "heartbeat_run", label: "Run" },
++  { value: "heartbeat_run", label: "Exécution" },
+   { value: "routine", label: "Routine" },
+-  { value: "project", label: "Project" },
+-  { value: "goal", label: "Goal" },
+-  { value: "company", label: "Organization" },
+-  { value: "tool_connection", label: "Connection" },
++  { value: "project", label: "Projet" },
++  { value: "goal", label: "Objectif" },
++  { value: "company", label: "Organisation" },
++  { value: "tool_connection", label: "Connexion" },
+ ];
+ 
+ /**
+@@ -132,7 +132,7 @@ function AuditActor({
+     const profile = userProfileMap.get(record.actorId);
+     return (
+       <Identity
+-        name={profile?.label ?? "User"}
++        name={profile?.label ?? "Utilisateur"}
+         avatarUrl={profile?.image ?? null}
+         size="sm"
+         className="font-medium text-foreground"
+@@ -143,12 +143,12 @@ function AuditActor({
+   // deleted or authorization-filtered agents that are absent from the directory.
+   const label =
+     record.actorType === "plugin"
+-      ? "Plugin"
++      ? "Extension"
+       : record.actorType === "agent"
+         ? "Agent"
+         : record.actorType === "user"
+-          ? "User"
+-          : "System";
++          ? "Utilisateur"
++          : "Système";
+   return <Identity name={label} size="sm" className="font-medium text-foreground" />;
+ }
+ 
+@@ -166,7 +166,7 @@ function AuditEntityNode({ record }: { record: AuditActionRecord }) {
+   if (issueRef) {
+     return (
+       <Link to={`/issues/${issueRef}`} className="font-medium text-primary hover:underline">
+-        {issue?.identifier ? `${issue.identifier}${issue.title ? ` · ${issue.title}` : ""}` : "the task"}
++        {issue?.identifier ? `${issue.identifier}${issue.title ? ` · ${issue.title}` : ""}` : "la tâche"}
+       </Link>
+     );
+   }
+@@ -181,7 +181,7 @@ function AuditEntityNode({ record }: { record: AuditActionRecord }) {
+   if (connectionId) {
+     return (
+       <Link to={`/apps/${connectionId}/permissions`} className="font-medium text-primary hover:underline">
+-        the connection
++        la connexion
+       </Link>
+     );
+   }
+@@ -205,7 +205,7 @@ function AuditRow({
+     record.responsibleUserId
+       && !(record.actorType === "user" && record.actorId === record.responsibleUserId),
+   );
+-  const responsibleLabel = responsible?.label ?? (record.responsibleUserId ? "a user" : null);
++  const responsibleLabel = responsible?.label ?? (record.responsibleUserId ? "un utilisateur" : null);
+   const excerpt = record.entity.comment?.excerpt?.trim();
+   // Show the document key only when it isn't already the linked entity node.
+   const documentKey = record.entity.issue && record.entity.document ? record.entity.document.key : null;
+@@ -232,7 +232,7 @@ function AuditRow({
+           <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+             {showOnBehalf && responsibleLabel ? (
+               <span className="inline-flex items-center rounded-full bg-muted px-2 py-0.5">
+-                on behalf of {responsibleLabel}
++                au nom de {responsibleLabel}
+               </span>
+             ) : null}
+             {record.runId && record.agentId ? (
+@@ -240,7 +240,7 @@ function AuditRow({
+                 to={`/agents/${record.agentId}/runs/${record.runId}`}
+                 className="text-primary hover:underline"
+               >
+-                View run
++                Voir l'exécution
+               </Link>
+             ) : null}
+             <span className="font-mono text-(length:--text-micro) opacity-70">{record.action}</span>
+@@ -265,13 +265,13 @@ function AuditUpsell() {
+       <CardContent className="flex flex-col items-center gap-3 py-14 text-center">
+         <ShieldAlert className="h-10 w-10 text-muted-foreground/50" />
+         <div>
+-          <p className="text-sm font-medium text-foreground">Agent audit is a Paperclip Enterprise view</p>
++          <p className="text-sm font-medium text-foreground">Le journal d'audit des agents est une vue Paperclip Enterprise</p>
+           <p className="mx-auto mt-1 max-w-md text-sm text-muted-foreground">
+-            The agent audit log gives you a searchable, exportable record of everything your agents
+-            did — every comment, task change, approval, and run — with the responsible person for
+-            each action. Ask an administrator to grant you the{" "}
++            Le journal d'audit des agents offre un enregistrement consultable et exportable de tout ce que vos
++            agents ont fait (commentaires, changements de tâche, approbations et exécutions), avec la personne
++            responsable de chaque action. Demandez à un administrateur de vous accorder l'autorisation{" "}
+             <span className="font-mono text-(length:--text-micro)">audit:view_agent_actions</span>{" "}
+-            permission to view it.
++            pour le consulter.
+           </p>
+         </div>
+       </CardContent>
+@@ -398,7 +398,7 @@ export function AuditFeed({
+   // them, so `hasMixedAccessTiers` would stay true forever. Only call the feed
+   // "recovering" while that attempt is outstanding; once it has settled, fall
+   // through to normal rendering. Otherwise the banner permanently hides the
+-  // error state and its "Try again" button, with no way off the page. Falling
++  // error state and its "Réessayer" button, with no way off the page. Falling
+   // through is safe because `items` already excludes the privileged pages, so
+   // an unrecovered cache renders as a plain basic-tier feed.
+   const downgradeRecoveryExhausted = Boolean(
+@@ -480,11 +480,11 @@ export function AuditFeed({
+       // Browsers may read blob URLs lazily after click(), so keep the URL alive
+       // long enough for the download to start.
+       window.setTimeout(() => URL.revokeObjectURL(url), 5_000);
+-      pushToast({ title: "Audit exported", body: "Your CSV download has started.", tone: "success" });
++      pushToast({ title: "Audit exporté", body: "Le téléchargement du fichier CSV a commencé.", tone: "success" });
+     } catch (error) {
+       pushToast({
+-        title: "Export failed",
+-        body: error instanceof Error ? error.message : "Could not export the audit log.",
++        title: "Échec de l'export",
++        body: error instanceof Error ? error.message : "Impossible d'exporter le journal d'audit.",
+         tone: "error",
+       });
+     } finally {
+@@ -504,8 +504,8 @@ export function AuditFeed({
+             <h2 className="text-lg font-semibold text-foreground">Activité</h2>
+             <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
+               {resolvedMode === "agents"
+-                ? "Every recorded agent action, newest first — with the responsible person and run behind each one."
+-                : "Everything happening in your organization, newest first — people, agents, and the system. Each line is one recorded action."}
++                ? "Toutes les actions d'agent enregistrées, les plus récentes d'abord, avec la personne responsable et l'exécution derrière chacune."
++                : "Tout ce qui se passe dans votre organisation, du plus récent au plus ancien : personnes, agents et système. Chaque ligne est une action enregistrée."}
+             </p>
+           </div>
+         </div>
+@@ -518,9 +518,9 @@ export function AuditFeed({
+             <TabsTrigger
+               value="agents"
+               disabled={accessTier === "basic"}
+-              title={accessTier === "basic" ? "Agent Actions requires audit access" : undefined}
++              title={accessTier === "basic" ? "Les actions des agents demandent un accès à l'audit" : undefined}
+             >
+-              Agent Actions
++              Actions des agents
+             </TabsTrigger>
+           </TabsList>
+         </Tabs>
+@@ -529,10 +529,10 @@ export function AuditFeed({
+       {hasLockedScope ? (
+         <div className="border-y border-border px-1 py-2 text-xs text-muted-foreground">
+           {lockedRunId
+-            ? `Scoped to run ${lockedRunId.slice(0, 8)}`
++            ? `Limité à l'exécution ${lockedRunId.slice(0, 8)}`
+             : lockedAgentId
+-              ? "Scoped to one agent"
+-              : `Scoped to ${lockedEntity?.label ?? lockedEntity?.type ?? "entity"}`}
++              ? "Limité à un agent"
++              : `Limité à ${lockedEntity?.label ?? lockedEntity?.type ?? "l'entité"}`}
+         </div>
+       ) : null}
+ 
+@@ -545,7 +545,7 @@ export function AuditFeed({
+                 <SelectValue placeholder="Agent" />
+               </SelectTrigger>
+               <SelectContent>
+-                <SelectItem value={ALL}>All agents</SelectItem>
++                <SelectItem value={ALL}>Tous les agents</SelectItem>
+                 {(agents.data ?? []).map((a) => (
+                   <SelectItem key={a.id} value={a.id}>
+                     {a.name}
+@@ -557,14 +557,14 @@ export function AuditFeed({
+         ) : null}
+         {canUseAdvancedControls ? (
+           <label className="grid gap-1 text-(length:--text-micro) font-medium text-muted-foreground">
+-            <span>Responsible user</span>
++            <span>Utilisateur responsable</span>
+             <Select value={responsibleUser} onValueChange={setResponsibleUser}>
+-              {/* Wide enough for "All responsible users" — w-44 truncated it. */}
++              {/* Wide enough for "Tous les utilisateurs responsables" — w-44 truncated it. */}
+               <SelectTrigger className="w-52">
+-                <SelectValue placeholder="Responsible user" />
++                <SelectValue placeholder="Utilisateur responsable" />
+               </SelectTrigger>
+               <SelectContent>
+-                <SelectItem value={ALL}>All responsible users</SelectItem>
++                <SelectItem value={ALL}>Tous les utilisateurs responsables</SelectItem>
+                 {(userDirectory.data?.users ?? []).map((u) => (
+                   <SelectItem key={u.principalId} value={u.principalId}>
+                     {u.user?.name ?? u.user?.email ?? u.principalId.slice(0, 8)}
+@@ -591,10 +591,10 @@ export function AuditFeed({
+         </label>
+         {!lockedEntity ? (
+           <label className="grid gap-1 text-(length:--text-micro) font-medium text-muted-foreground">
+-            <span>Entity</span>
++            <span>Entité</span>
+             <Select value={entityType} onValueChange={setEntityType}>
+               <SelectTrigger className="w-40">
+-                <SelectValue placeholder="Entity" />
++                <SelectValue placeholder="Entité" />
+               </SelectTrigger>
+               <SelectContent>
+                 {ENTITY_TYPES.map((e) => (
+@@ -607,10 +607,10 @@ export function AuditFeed({
+           </label>
+         ) : null}
+         <label className="grid gap-1 text-(length:--text-micro) font-medium text-muted-foreground">
+-          <span>From</span>
++          <span>Du</span>
+           <Input
+             type="date"
+-            aria-label="From date"
++            aria-label="Date de début"
+             value={dateFrom}
+             max={dateTo || undefined}
+             onChange={(e) => setDateFrom(e.target.value)}
+@@ -618,10 +618,10 @@ export function AuditFeed({
+           />
+         </label>
+         <label className="grid gap-1 text-(length:--text-micro) font-medium text-muted-foreground">
+-          <span>To</span>
++          <span>Au</span>
+           <Input
+             type="date"
+-            aria-label="To date"
++            aria-label="Date de fin"
+             value={dateTo}
+             min={dateFrom || undefined}
+             onChange={(e) => setDateTo(e.target.value)}
+@@ -630,7 +630,7 @@ export function AuditFeed({
+         </label>
+         {hasActiveFilters ? (
+           <Button variant="ghost" size="sm" onClick={clearFilters}>
+-            Clear filters
++            Effacer les filtres
+           </Button>
+         ) : null}
+         {canUseAdvancedControls ? (
+@@ -642,7 +642,7 @@ export function AuditFeed({
+             disabled={exporting || feed.isLoading || items.length === 0}
+           >
+             <Download className="mr-1.5 h-4 w-4" />
+-            {exporting ? "Exporting…" : "Export CSV"}
++            {exporting ? "Export en cours…" : "Exporter en CSV"}
+           </Button>
+         ) : null}
+       </div>
+@@ -650,21 +650,21 @@ export function AuditFeed({
+       {recoveringFromAccessDowngrade || fallingBackToAllActivity ? (
+         <Card>
+           <CardContent className="py-14 text-center text-sm text-muted-foreground">
+-            Refreshing audit access…
++            Actualisation de l'accès à l'audit…
+           </CardContent>
+         </Card>
+       ) : feed.isLoading ? (
+         <Card>
+-          <CardContent className="py-14 text-center text-sm text-muted-foreground">Loading…</CardContent>
++          <CardContent className="py-14 text-center text-sm text-muted-foreground">Chargement…</CardContent>
+         </Card>
+       ) : feed.error ? (
+         <Card>
+           <CardContent className="flex flex-col items-center gap-3 py-14 text-center">
+             <p className="text-sm text-muted-foreground">
+-              {feed.error instanceof Error ? feed.error.message : "Failed to load the audit log."}
++              {feed.error instanceof Error ? feed.error.message : "Impossible de charger le journal d'audit."}
+             </p>
+             <Button variant="outline" size="sm" onClick={() => feed.refetch()}>
+-              Try again
++              Réessayer
+             </Button>
+           </CardContent>
+         </Card>
+@@ -674,26 +674,26 @@ export function AuditFeed({
+             <ScrollText className="h-10 w-10 text-muted-foreground/40" />
+             <div>
+               <p className="text-sm font-medium text-foreground">
+-                {hasActiveFilters ? "No actions match these filters" : "Nothing here yet"}
++                {hasActiveFilters ? "Aucune action ne correspond à ces filtres" : "Rien ici pour le moment"}
+               </p>
+               <p className="mt-1 max-w-md text-sm text-muted-foreground">
+                 {hasActiveFilters
+-                  ? "Try a wider date range or different filters."
++                  ? "Essayez une période plus large ou d'autres filtres."
+                   : resolvedMode === "agents"
+-                    ? "As soon as your agents start doing things, their actions show up here."
+-                    : "As soon as anyone in your organization does something, it shows up here."}
++                    ? "Dès que vos agents commenceront à agir, leurs actions apparaîtront ici."
++                    : "Dès que quelqu'un de votre organisation fera quelque chose, cela apparaîtra ici."}
+               </p>
+             </div>
+             {hasActiveFilters ? (
+               <Button variant="outline" size="sm" onClick={clearFilters}>
+-                Clear filters
++                Effacer les filtres
+               </Button>
+             ) : null}
+           </CardContent>
+         </Card>
+       ) : (
+         <div className="border-y border-border">
+-          <ul className={cn("divide-y divide-border")} aria-label="Audit activity">
++          <ul className={cn("divide-y divide-border")} aria-label="Activité d'audit">
+             {items.map((record) => (
+               <AuditRow
+                 key={record.id}
+@@ -714,13 +714,13 @@ export function AuditFeed({
+             onClick={() => feed.fetchNextPage()}
+             disabled={feed.isFetchingNextPage}
+           >
+-            {feed.isFetchingNextPage ? "Loading…" : "Load more"}
++            {feed.isFetchingNextPage ? "Chargement…" : "Charger la suite"}
+           </Button>
+         </div>
+       ) : null}
+ 
+       <p className="text-xs text-muted-foreground">
+-        Recorded by Paperclip — entries can't be edited. Sensitive values are never stored.
++        Enregistré par Paperclip : les entrées ne peuvent pas être modifiées et les valeurs sensibles ne sont jamais stockées.
+       </p>
+     </div>
+   );
+diff --git a/ui/src/pages/audit/AuditHub.tsx b/ui/src/pages/audit/AuditHub.tsx
+index bbd242df6..dc8c8e912 100644
+--- a/ui/src/pages/audit/AuditHub.tsx
++++ b/ui/src/pages/audit/AuditHub.tsx
+@@ -78,7 +78,7 @@ export function AuditHub({ section }: { section: AuditSection }) {
+   );
+ 
+   if (!selectedCompanyId) {
+-    return <EmptyState icon={History} message="Select an organization to view Audit." />;
++    return <EmptyState icon={History} message="Sélectionnez une organisation pour voir l'audit." />;
+   }
+ 
+   return (
+@@ -86,8 +86,8 @@ export function AuditHub({ section }: { section: AuditSection }) {
+       <div>
+         <h1 className="text-3xl font-semibold tracking-tight text-foreground">Audit</h1>
+         <p className="mt-2 max-w-3xl text-sm leading-6 text-muted-foreground">
+-          Review what happened, inspect agent runs, and understand the costs and budget controls
+-          behind your organization.
++          Passez en revue ce qui s'est passé, examinez les exécutions des agents et comprenez les coûts
++          et les contrôles budgétaires de votre organisation.
+         </p>
+       </div>
+ 
+diff --git a/ui/src/pages/audit/AuditRuns.test.tsx b/ui/src/pages/audit/AuditRuns.test.tsx
+index 78c3aeae4..ace2f0195 100644
+--- a/ui/src/pages/audit/AuditRuns.test.tsx
++++ b/ui/src/pages/audit/AuditRuns.test.tsx
+@@ -124,10 +124,10 @@ describe("AuditRuns", () => {
+ 
+     expect(listRunsMock).toHaveBeenCalledWith("company-1", undefined, 200, { summary: true });
+     expect(container.textContent).toContain("Agent");
+-    expect(container.textContent).toContain("Status");
++    expect(container.textContent).toContain("Statut");
+     expect(container.textContent).toContain("Reviewed the release checklist");
+     expect(container.textContent).toContain("1m 5s");
+-    const list = container.querySelector('ul[aria-label="Recent runs"]');
++    const list = container.querySelector('ul[aria-label="Exécutions récentes"]');
+     expect(list).toBeTruthy();
+     expect(list?.closest('[data-slot="card"]')).toBeFalsy();
+     expect(container.querySelector('a[href="/agents/agent-1/runs/run-12345678"]')).toBeTruthy();
+@@ -138,7 +138,7 @@ describe("AuditRuns", () => {
+     await render();
+ 
+     expect(listRunsMock).toHaveBeenCalledWith("company-1", "agent-1", 200, { summary: true });
+-    expect(container.textContent).toContain("Clear filters");
++    expect(container.textContent).toContain("Effacer les filtres");
+   });
+ 
+   it("loads routine runs directly when the Audit scope is a routine", async () => {
+diff --git a/ui/src/pages/audit/AuditRuns.tsx b/ui/src/pages/audit/AuditRuns.tsx
+index aada265e4..67b035f74 100644
+--- a/ui/src/pages/audit/AuditRuns.tsx
++++ b/ui/src/pages/audit/AuditRuns.tsx
+@@ -18,6 +18,7 @@ import {
+ import { queryKeys } from "@/lib/queryKeys";
+ import { Link, useSearchParams } from "@/lib/router";
+ import { relativeTime } from "@/lib/utils";
++import { LIBELLES_SOURCES_EXECUTION, humanizeRunStatus, libelleDepuisTable } from "@/lib/activity-format";
+ 
+ const ALL = "__all";
+ const RUN_LIMIT = 200;
+@@ -39,11 +40,15 @@ function runDuration(run: HeartbeatRun) {
+ }
+ 
+ function readableSource(source: string) {
+-  return source.replaceAll("_", " ");
++  return libelleDepuisTable(LIBELLES_SOURCES_EXECUTION, source);
++}
++
++function readableStatus(status: string) {
++  return humanizeRunStatus(status);
+ }
+ 
+ function routineRunTitle(run: RoutineRunSummary) {
+-  return run.linkedIssue?.title ?? run.trigger?.label ?? "Routine run";
++  return run.linkedIssue?.title ?? run.trigger?.label ?? "Exécution de routine";
+ }
+ 
+ function RoutineScopedRuns({
+@@ -60,7 +65,7 @@ function RoutineScopedRuns({
+   if (isLoading) {
+     return (
+       <div className="border-y border-border py-14 text-center text-sm text-muted-foreground">
+-        Loading routine runs…
++        Chargement des exécutions de la routine…
+       </div>
+     );
+   }
+@@ -69,24 +74,24 @@ function RoutineScopedRuns({
+     return (
+       <div className="flex flex-col items-center gap-3 border-y border-border py-14 text-center">
+         <p className="text-sm text-muted-foreground">{error.message}</p>
+-        <Button variant="outline" size="sm" onClick={onRetry}>Try again</Button>
++        <Button variant="outline" size="sm" onClick={onRetry}>Réessayer</Button>
+       </div>
+     );
+   }
+ 
+   if (runs.length === 0) {
+-    return <EmptyState icon={Activity} message="No routine runs yet." />;
++    return <EmptyState icon={Activity} message="Aucune exécution de routine pour le moment." />;
+   }
+ 
+   return (
+     <div className="space-y-4">
+       <div>
+-        <h2 className="text-lg font-semibold text-foreground">Routine runs</h2>
++        <h2 className="text-lg font-semibold text-foreground">Exécutions de la routine</h2>
+         <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
+-          Executions created by this routine, newest first.
++          Exécutions créées par cette routine, les plus récentes d'abord.
+         </p>
+       </div>
+-      <ul className="divide-y divide-border border-y border-border" aria-label="Routine runs">
++      <ul className="divide-y divide-border border-y border-border" aria-label="Exécutions de la routine">
+         {runs.map((run) => {
+           const content = (
+             <>
+@@ -121,7 +126,7 @@ function RoutineScopedRuns({
+           );
+         })}
+       </ul>
+-      <p className="text-xs text-muted-foreground">Showing the {RUN_LIMIT} most recent routine runs.</p>
++      <p className="text-xs text-muted-foreground">Affichage des {RUN_LIMIT} dernières exécutions de routine.</p>
+     </div>
+   );
+ }
+@@ -201,10 +206,10 @@ export function AuditRuns({ companyId, routineId }: { companyId: string; routine
+   return (
+     <div className="space-y-4">
+       <div>
+-        <h2 className="text-lg font-semibold text-foreground">Runs</h2>
++        <h2 className="text-lg font-semibold text-foreground">Exécutions</h2>
+         <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
+-          Recent agent executions across the organization. Open a run to inspect its transcript,
+-          output, and task context.
++          Dernières exécutions des agents dans l'organisation. Ouvrez une exécution pour consulter sa
++          transcription, sa sortie et le contexte de la tâche.
+         </p>
+       </div>
+ 
+@@ -213,10 +218,10 @@ export function AuditRuns({ companyId, routineId }: { companyId: string; routine
+           <span>Agent</span>
+           <Select value={agentId} onValueChange={(value) => updateFilter("agentId", value)}>
+             <SelectTrigger className="w-48">
+-              <SelectValue placeholder="All agents" />
++              <SelectValue placeholder="Tous les agents" />
+             </SelectTrigger>
+             <SelectContent>
+-              <SelectItem value={ALL}>All agents</SelectItem>
++              <SelectItem value={ALL}>Tous les agents</SelectItem>
+               {(agents.data ?? []).map((agent) => (
+                 <SelectItem key={agent.id} value={agent.id}>
+                   {agent.name}
+@@ -226,16 +231,16 @@ export function AuditRuns({ companyId, routineId }: { companyId: string; routine
+           </Select>
+         </label>
+         <label className="grid gap-1 text-(length:--text-micro) font-medium text-muted-foreground">
+-          <span>Status</span>
++          <span>Statut</span>
+           <Select value={status} onValueChange={(value) => updateFilter("runStatus", value)}>
+             <SelectTrigger className="w-40">
+-              <SelectValue placeholder="All statuses" />
++              <SelectValue placeholder="Tous les statuts" />
+             </SelectTrigger>
+             <SelectContent>
+-              <SelectItem value={ALL}>All statuses</SelectItem>
++              <SelectItem value={ALL}>Tous les statuts</SelectItem>
+               {statuses.map((value) => (
+                 <SelectItem key={value} value={value}>
+-                  {readableSource(value)}
++                  {readableStatus(value)}
+                 </SelectItem>
+               ))}
+             </SelectContent>
+@@ -243,31 +248,31 @@ export function AuditRuns({ companyId, routineId }: { companyId: string; routine
+         </label>
+         {agentId !== ALL || status !== ALL ? (
+           <Button variant="ghost" size="sm" onClick={clearFilters}>
+-            Clear filters
++            Effacer les filtres
+           </Button>
+         ) : null}
+       </div>
+ 
+       {runs.isLoading ? (
+         <div className="border-y border-border py-14 text-center text-sm text-muted-foreground">
+-          Loading runs…
++          Chargement des exécutions…
+         </div>
+       ) : runs.error ? (
+         <div className="flex flex-col items-center gap-3 border-y border-border py-14 text-center">
+           <p className="text-sm text-muted-foreground">
+-            {runs.error instanceof Error ? runs.error.message : "Failed to load runs."}
++            {runs.error instanceof Error ? runs.error.message : "Impossible de charger les exécutions."}
+           </p>
+           <Button variant="outline" size="sm" onClick={() => runs.refetch()}>
+-            Try again
++            Réessayer
+           </Button>
+         </div>
+       ) : visibleRuns.length === 0 ? (
+         <EmptyState
+           icon={agentId !== ALL || status !== ALL ? CircleDotDashed : Activity}
+-          message={agentId !== ALL || status !== ALL ? "No runs match these filters." : "No runs yet."}
++          message={agentId !== ALL || status !== ALL ? "Aucune exécution ne correspond à ces filtres." : "Aucune exécution pour le moment."}
+         />
+       ) : (
+-        <ul className="divide-y divide-border border-y border-border" aria-label="Recent runs">
++        <ul className="divide-y divide-border border-y border-border" aria-label="Exécutions récentes">
+           {visibleRuns.map((run) => {
+             const agent = agentById.get(run.agentId);
+             const summary = runSummary(run);
+@@ -281,7 +286,7 @@ export function AuditRuns({ companyId, routineId }: { companyId: string; routine
+                   <div className="min-w-0">
+                     <div className="flex flex-wrap items-center gap-2">
+                       <span className="font-medium text-foreground">
+-                        {agent?.name ?? "Unknown agent"}
++                        {agent?.name ?? "Agent inconnu"}
+                       </span>
+                       <span className="font-mono text-(length:--text-micro) text-muted-foreground">
+                         {run.id.slice(0, 8)}
+@@ -289,7 +294,7 @@ export function AuditRuns({ companyId, routineId }: { companyId: string; routine
+                       <StatusBadge status={run.status} />
+                     </div>
+                     <p className="mt-1 truncate text-sm text-muted-foreground">
+-                      {summary ?? `${readableSource(run.invocationSource)} run`}
++                      {summary ?? `Exécution ${readableSource(run.invocationSource)}`}
+                     </p>
+                   </div>
+                   <div className="flex shrink-0 items-center gap-2 text-xs text-muted-foreground sm:justify-end">
+@@ -306,7 +311,7 @@ export function AuditRuns({ companyId, routineId }: { companyId: string; routine
+         </ul>
+       )}
+ 
+-      <p className="text-xs text-muted-foreground">Showing the {RUN_LIMIT} most recent runs.</p>
++      <p className="text-xs text-muted-foreground">Affichage des {RUN_LIMIT} dernières exécutions.</p>
+     </div>
+   );
+ }
+diff --git a/ui/src/pages/audit/CompanyActivity.production.tsx b/ui/src/pages/audit/CompanyActivity.production.tsx
+index 7846ef97a..04fc7814f 100644
+--- a/ui/src/pages/audit/CompanyActivity.production.tsx
++++ b/ui/src/pages/audit/CompanyActivity.production.tsx
+@@ -42,7 +42,7 @@ export function CompanyActivity() {
+   );
+ 
+   if (!selectedCompanyId) {
+-    return <EmptyState icon={History} message="Select a company to view activity." />;
++    return <EmptyState icon={History} message="Sélectionnez une organisation pour voir l'activité." />;
+   }
+ 
+   return <AuditFeed companyId={selectedCompanyId} mode={mode} onModeChange={handleModeChange} />;
+diff --git a/ui/src/pages/audit/CompanyActivity.tsx b/ui/src/pages/audit/CompanyActivity.tsx
+index 77f39e956..617f3d4e9 100644
+--- a/ui/src/pages/audit/CompanyActivity.tsx
++++ b/ui/src/pages/audit/CompanyActivity.tsx
+@@ -67,7 +67,7 @@ export function CompanyActivity() {
+   if (streamlinedUiEnabled) return <AuditHub section="activity" />;
+ 
+   if (!selectedCompanyId) {
+-    return <EmptyState icon={History} message="Select an organization to view activity." />;
++    return <EmptyState icon={History} message="Sélectionnez une organisation pour voir l'activité." />;
+   }
+ 
+   return (
+diff --git a/ui/src/pages/audit/RoutineAuditActivity.tsx b/ui/src/pages/audit/RoutineAuditActivity.tsx
+index ed7a76e1b..33d62cacc 100644
+--- a/ui/src/pages/audit/RoutineAuditActivity.tsx
++++ b/ui/src/pages/audit/RoutineAuditActivity.tsx
+@@ -30,7 +30,7 @@ export function RoutineAuditActivity({
+   if (activity.isLoading) {
+     return (
+       <div className="border-y border-border py-14 text-center text-sm text-muted-foreground">
+-        Loading routine activity…
++        Chargement de l'activité de la routine…
+       </div>
+     );
+   }
+@@ -39,10 +39,10 @@ export function RoutineAuditActivity({
+     return (
+       <div className="flex flex-col items-center gap-3 border-y border-border py-14 text-center">
+         <p className="text-sm text-muted-foreground">
+-          {activity.error instanceof Error ? activity.error.message : "Failed to load routine activity."}
++          {activity.error instanceof Error ? activity.error.message : "Impossible de charger l'activité de la routine."}
+         </p>
+         <Button variant="outline" size="sm" onClick={() => activity.refetch()}>
+-          Try again
++          Réessayer
+         </Button>
+       </div>
+     );
+@@ -50,11 +50,11 @@ export function RoutineAuditActivity({
+ 
+   const events = activity.data ?? [];
+   if (events.length === 0) {
+-    return <EmptyState icon={Activity} message="No routine activity yet." />;
++    return <EmptyState icon={Activity} message="Aucune activité de routine pour le moment." />;
+   }
+ 
+   return (
+-    <div className="border-y border-border" aria-label="Routine activity">
++    <div className="border-y border-border" aria-label="Activité de la routine">
+       {events.map((event) => (
+         <RoutineActivityRow key={event.id} event={event} />
+       ))}
+-- 
+2.53.0
+

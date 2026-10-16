@@ -1,0 +1,672 @@
+From ea2aa2ed47f9de59839992251b23b2deee2981d4 Mon Sep 17 00:00:00 2001
+From: Jean-Baptiste Dhondt <114347858+warrox1993@users.noreply.github.com>
+Date: Fri, 16 Oct 2026 18:32:37 +0200
+Subject: [PATCH] feat(ui): mode simple quand l'atelier est actif, interrupteur
+ mode expert
+
+Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>
+---
+ ui/src/components/MobileBottomNav.test.tsx |  21 +-
+ ui/src/components/MobileBottomNav.tsx      |  21 +-
+ ui/src/components/Sidebar.test.tsx         |  71 +++++
+ ui/src/components/Sidebar.tsx              | 323 +++++++++++++--------
+ ui/src/hooks/useModeExpert.ts              |  73 +++++
+ 5 files changed, 389 insertions(+), 120 deletions(-)
+ create mode 100644 ui/src/hooks/useModeExpert.ts
+
+diff --git a/ui/src/components/MobileBottomNav.test.tsx b/ui/src/components/MobileBottomNav.test.tsx
+index 5e2d79125..1ed07778e 100644
+--- a/ui/src/components/MobileBottomNav.test.tsx
++++ b/ui/src/components/MobileBottomNav.test.tsx
+@@ -6,6 +6,7 @@ import { createRoot } from "react-dom/client";
+ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+ import { MobileBottomNav } from "./MobileBottomNav";
++import { ecrireModeExpert, reinitialiserModeExpertPourTests } from "../hooks/useModeExpert";
+ 
+ const mockNavigate = vi.hoisted(() => vi.fn());
+ const mockOpenNewIssue = vi.hoisted(() => vi.fn());
+@@ -87,6 +88,8 @@ describe("MobileBottomNav", () => {
+     [...container.querySelectorAll("button")].find((b) => b.textContent?.trim() === "Nouvelle tâche") as HTMLButtonElement;
+ 
+   beforeEach(() => {
++    window.localStorage.clear();
++    reinitialiserModeExpertPourTests();
+     container = document.createElement("div");
+     document.body.appendChild(container);
+     mockPluginsApi.listUiContributions.mockResolvedValue([]);
+@@ -108,18 +111,30 @@ describe("MobileBottomNav", () => {
+     flushSync(() => root.unmount());
+   });
+ 
+-  it("avec l'atelier : Atelier remplace Accueil et Nouvelle tâche ouvre la Discussion", async () => {
++  it("avec l'atelier en mode simple : Atelier, Nouvelle tâche, À faire", async () => {
+     mockPluginsApi.listUiContributions.mockResolvedValue([contributionAtelier]);
+     const root = await rendre();
+-    expect(libelles()).toEqual(["Atelier", "Tâches", "Nouvelle tâche", "Agents", "Boîte"]);
+-    expect(container.querySelector('a[href="/atelier"]')).not.toBeNull();
++    expect(libelles()).toEqual(["Atelier", "Nouvelle tâche", "À faire"]);
++    expect(container.querySelectorAll('a[href="/atelier"]').length).toBe(2);
+     expect(container.querySelector('a[href="/dashboard"]')).toBeNull();
++    expect(container.querySelector('a[href="/issues"]')).toBeNull();
++    expect(container.querySelector('a[href="/inbox"]')).toBeNull();
+     boutonNouvelleTache().click();
+     expect(mockNavigate).toHaveBeenCalledWith("/atelier/discussion");
+     expect(mockOpenNewIssue).not.toHaveBeenCalled();
+     flushSync(() => root.unmount());
+   });
+ 
++  it("avec l'atelier en mode expert : entrées d'origine, Atelier à la place d'Accueil", async () => {
++    mockPluginsApi.listUiContributions.mockResolvedValue([contributionAtelier]);
++    ecrireModeExpert("company-1", true);
++    const root = await rendre();
++    expect(libelles()).toEqual(["Atelier", "Tâches", "Nouvelle tâche", "Agents", "Boîte"]);
++    expect(container.querySelector('a[href="/issues"]')).not.toBeNull();
++    expect(container.querySelector('a[href="/inbox"]')).not.toBeNull();
++    flushSync(() => root.unmount());
++  });
++
+   it("garde le libellé complet de la boîte de réception pour les lecteurs d'écran", async () => {
+     const root = await rendre();
+     expect(container.querySelector('a[aria-label="Boîte de réception"]')).not.toBeNull();
+diff --git a/ui/src/components/MobileBottomNav.tsx b/ui/src/components/MobileBottomNav.tsx
+index 52771b2a1..847561642 100644
+--- a/ui/src/components/MobileBottomNav.tsx
++++ b/ui/src/components/MobileBottomNav.tsx
+@@ -15,6 +15,7 @@ import { useDialogActions } from "../context/DialogContext";
+ import { SIDEBAR_SCROLL_RESET_STATE } from "../lib/navigation-scroll";
+ import { cn } from "../lib/utils";
+ import { useInboxBadge } from "../hooks/useInboxBadge";
++import { useModeExpert } from "../hooks/useModeExpert";
+ import { useAgentChatEnabled } from "@/hooks/useAgentChatEnabled";
+ import { useCombinedInboxTasksEnabled } from "@/hooks/useCombinedInboxTasksEnabled";
+ import { Badge } from "@/components/ui/badge";
+@@ -58,6 +59,10 @@ export function MobileBottomNav({ visible }: MobileBottomNavProps) {
+   });
+   const atelierPret = atelierDisponible(contributionsPlugins);
+   const inboxBadge = useInboxBadge(selectedCompanyId);
++  // Mode simple de l'atelier : la barre se réduit à Atelier · Nouvelle tâche · À faire.
++  // Le mode expert (interrupteur de la barre latérale) rend les entrées d'origine.
++  const { expert: modeExpert } = useModeExpert(selectedCompanyId);
++  const modeSimple = atelierPret && !modeExpert;
+   const { enabled: agentChatEnabled } = useAgentChatEnabled();
+   const { enabled: combinedInboxTasksEnabled } = useCombinedInboxTasksEnabled();
+ 
+@@ -83,7 +88,19 @@ export function MobileBottomNav({ visible }: MobileBottomNavProps) {
+     [atelierPret, navigate, openNewIssue],
+   );
+   const items = useMemo<MobileNavItem[]>(
+-    () => !agentChatEnabled && !combinedInboxTasksEnabled ? [
++    () => modeSimple ? [
++      // « Atelier » prend la place de « Tâches » (c'est déjà l'accueil) ; « À faire »
++      // remplace « Boîte de réception » et mène aussi à l'accueil de l'atelier.
++      accueil,
++      nouvelleTache,
++      {
++        type: "link",
++        to: `/${CHEMIN_PAGE_ATELIER}`,
++        label: "À faire",
++        icon: Inbox,
++        badge: inboxBadge.inbox,
++      },
++    ] : !agentChatEnabled && !combinedInboxTasksEnabled ? [
+       accueil,
+       { type: "link", to: "/issues", label: "Tâches", icon: CircleCheck },
+       nouvelleTache,
+@@ -115,7 +132,7 @@ export function MobileBottomNav({ visible }: MobileBottomNavProps) {
+         ariaLabel: "Boîte de réception", icon: Inbox, badge: inboxBadge.inbox } as MobileNavItem]
+         : []),
+     ],
+-    [accueil, nouvelleTache, inboxBadge.inbox, agentChatEnabled, combinedInboxTasksEnabled],
++    [modeSimple, accueil, nouvelleTache, inboxBadge.inbox, agentChatEnabled, combinedInboxTasksEnabled],
+   );
+ 
+   return (
+diff --git a/ui/src/components/Sidebar.test.tsx b/ui/src/components/Sidebar.test.tsx
+index d6e1aec34..a8ae65461 100644
+--- a/ui/src/components/Sidebar.test.tsx
++++ b/ui/src/components/Sidebar.test.tsx
+@@ -7,6 +7,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+ import { Sidebar } from "./Sidebar";
+ import { TooltipProvider } from "@/components/ui/tooltip";
++import { reinitialiserModeExpertPourTests } from "../hooks/useModeExpert";
+ 
+ const mockHeartbeatsApi = vi.hoisted(() => ({
+   liveRunsForCompany: vi.fn(),
+@@ -162,6 +163,8 @@ describe("Sidebar", () => {
+   }
+ 
+   beforeEach(() => {
++    window.localStorage.clear();
++    reinitialiserModeExpertPourTests();
+     container = document.createElement("div");
+     document.body.appendChild(container);
+     mockHeartbeatsApi.liveRunsForCompany.mockResolvedValue([]);
+@@ -196,6 +199,74 @@ describe("Sidebar", () => {
+     return [...container.querySelectorAll("button")].find((b) => b.textContent?.trim() === "Nouvelle tâche") as HTMLButtonElement;
+   }
+ 
++  describe("mode simple de l'atelier", () => {
++    const libellesNav = () =>
++      [...container.querySelectorAll("nav a")].map((a) => a.textContent?.trim());
++    const interrupteur = () =>
++      container.querySelector('button[role="switch"][aria-label="Mode expert"]') as HTMLButtonElement | null;
++    const masques = ["Tableau de bord", "Boîte de réception", "Tâches", "Projets", "Agents", "Routines", "Compétences", "Connecteurs", "Journal d'audit", "Rechercher"];
++
++    it("masque les entrées du socle et garde le plugin et Nouvelle tâche", async () => {
++      mockPluginsApi.listUiContributions.mockResolvedValue([contributionAtelier]);
++      mockInstanceSettingsApi.getExperimental.mockResolvedValue({ enableStreamlinedUi: true });
++      const root = await renderSidebar();
++
++      const visibles = libellesNav();
++      for (const libelle of masques) expect(visibles).not.toContain(libelle);
++      expect(container.querySelector('[data-plugin-slot-types="sidebar"]')).not.toBeNull();
++      expect(boutonNouvelleTache()).toBeTruthy();
++      expect(interrupteur()?.getAttribute("aria-checked")).toBe("false");
++      flushSync(() => root.unmount());
++    });
++
++    it("l'interrupteur révèle tout le menu et la préférence persiste", async () => {
++      mockPluginsApi.listUiContributions.mockResolvedValue([contributionAtelier]);
++      mockInstanceSettingsApi.getExperimental.mockResolvedValue({ enableStreamlinedUi: true });
++      const root = await renderSidebar();
++
++      flushSync(() => interrupteur()!.click());
++      const visibles = libellesNav();
++      for (const libelle of masques) expect(visibles).toContain(libelle);
++      expect(interrupteur()?.getAttribute("aria-checked")).toBe("true");
++      expect(window.localStorage.getItem("atelier.mode-expert.company-1")).toBe("1");
++      flushSync(() => root.unmount());
++
++      // Nouveau montage : la préférence est relue.
++      const root2 = await renderSidebar();
++      expect(libellesNav()).toContain("Tâches");
++      // Retour au mode simple.
++      flushSync(() => interrupteur()!.click());
++      expect(libellesNav()).not.toContain("Tâches");
++      expect(window.localStorage.getItem("atelier.mode-expert.company-1")).toBe("0");
++      flushSync(() => root2.unmount());
++    });
++
++    it("sans l'atelier : menu d'origine inchangé, aucun interrupteur", async () => {
++      mockInstanceSettingsApi.getExperimental.mockResolvedValue({ enableStreamlinedUi: true });
++      const root = await renderSidebar();
++
++      const visibles = libellesNav();
++      for (const libelle of masques) expect(visibles).toContain(libelle);
++      expect(interrupteur()).toBeNull();
++      flushSync(() => root.unmount());
++    });
++
++    it("fonctionne même si le stockage local est inaccessible", async () => {
++      mockPluginsApi.listUiContributions.mockResolvedValue([contributionAtelier]);
++      mockInstanceSettingsApi.getExperimental.mockResolvedValue({ enableStreamlinedUi: true });
++      const lecture = vi.spyOn(Storage.prototype, "getItem").mockImplementation(() => { throw new Error("bloqué"); });
++      const ecriture = vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => { throw new Error("bloqué"); });
++      const root = await renderSidebar();
++
++      expect(libellesNav()).not.toContain("Tâches");
++      flushSync(() => interrupteur()!.click());
++      expect(libellesNav()).toContain("Tâches");
++      flushSync(() => root.unmount());
++      lecture.mockRestore();
++      ecriture.mockRestore();
++    });
++  });
++
+   it("ouvre la Discussion de l'atelier quand le plugin est prêt", async () => {
+     mockPluginsApi.listUiContributions.mockResolvedValue([contributionAtelier]);
+     const root = await renderSidebar();
+diff --git a/ui/src/components/Sidebar.tsx b/ui/src/components/Sidebar.tsx
+index 2126c0d06..63fca995f 100644
+--- a/ui/src/components/Sidebar.tsx
++++ b/ui/src/components/Sidebar.tsx
+@@ -22,6 +22,7 @@ import {
+   GanttChartSquare,
+   LayoutGrid,
+   Users,
++  SlidersHorizontal,
+ } from "lucide-react";
+ import { useState, type ReactNode } from "react";
+ import { useQuery } from "@tanstack/react-query";
+@@ -42,6 +43,7 @@ import { queryKeys } from "../lib/queryKeys";
+ import { attentionBadgeCount } from "../lib/attention";
+ import { useInboxBadge } from "../hooks/useInboxBadge";
+ import { useStreamlinedUiEnabled } from "../hooks/useStreamlinedUiEnabled";
++import { useModeExpert } from "../hooks/useModeExpert";
+ import { usePublishSharedQueryData, useSharedPollingQuery } from "../hooks/useSharedPolling";
+ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+ import { cn, SIDEBAR_RAIL_HIDDEN_LABEL } from "../lib/utils";
+@@ -72,6 +74,11 @@ export function Sidebar({ children }: { children?: ReactNode }) {
+   const { collapsed, peeking } = useSidebar();
+   const { enabled: streamlinedUiEnabled } = useStreamlinedUiEnabled();
+   const rail = collapsed && !peeking;
++  // Mode simple : quand l'atelier est actif, seules ses entrées (et « Nouvelle tâche »)
++  // restent visibles ; l'interrupteur « Mode expert » en bas de barre révèle le reste.
++  // Rien n'est bloqué : les URL des pages masquées restent accessibles.
++  const { expert: modeExpert, setExpert: definirModeExpert } = useModeExpert(selectedCompanyId);
++  const modeSimple = atelierPret && !modeExpert;
+   const inboxBadge = useInboxBadge(selectedCompanyId);
+   const { data: experimentalSettings } = useQuery({
+     queryKey: queryKeys.instance.experimentalSettings,
+@@ -200,129 +207,147 @@ export function Sidebar({ children }: { children?: ReactNode }) {
+               newTaskButton
+             );
+           })()}
+-          {/* Search moved out of the header so the workspace name keeps the
+-              width; a nav row also keeps search reachable from the
+-              collapsed rail, where the old header icon was dropped entirely.
+-              Cmd/Ctrl+K remains the keyboard path (command palette). */}
+-          <SidebarNavItem to="/search" label="Rechercher" icon={Search} />
+-          <SidebarNavItem to="/dashboard" label="Tableau de bord" icon={LayoutDashboard} liveCount={liveRunCount} />
+-          {!combinedInboxTasks ? (
+-            <SidebarNavItem
+-              to="/inbox"
+-              label="Boîte de réception"
+-              icon={Inbox}
+-              badge={inboxBadge.inbox}
+-              badgeLabel="unread"
+-              badgeTone={inboxBadge.failedRuns > 0 ? "danger" : "default"}
+-              alert={inboxBadge.failedRuns > 0}
+-            />
+-          ) : null}
+-          {agentChatEnabled && !chatRail ? <SidebarNavItem to="/chats" label="Chat" icon={MessageCircle} /> : null}
+-          {showDecisions ? (
+-            <SidebarNavItem
+-              to="/decisions"
+-              label="Decisions"
+-              icon={ListChecks}
+-              badge={attentionCount}
+-              badgeLabel="decisions"
+-            />
+-          ) : null}
+-          {showStatusCards ? (
+-            <SidebarNavItem to="/status" label="Status" icon={LayoutGrid} textBadge="beta" />
+-          ) : null}
+-          {conferenceRoomChatEnabled ? (
+-            <SidebarNavItem to="/board-chat" label="Conference Room" icon={MessagesSquare} />
++          {!modeSimple ? (
++            <>
++            {/* Search moved out of the header so the workspace name keeps the
++                width; a nav row also keeps search reachable from the
++                collapsed rail, where the old header icon was dropped entirely.
++                Cmd/Ctrl+K remains the keyboard path (command palette). */}
++            <SidebarNavItem to="/search" label="Rechercher" icon={Search} />
++            <SidebarNavItem to="/dashboard" label="Tableau de bord" icon={LayoutDashboard} liveCount={liveRunCount} />
++            {!combinedInboxTasks ? (
++              <SidebarNavItem
++                to="/inbox"
++                label="Boîte de réception"
++                icon={Inbox}
++                badge={inboxBadge.inbox}
++                badgeLabel="unread"
++                badgeTone={inboxBadge.failedRuns > 0 ? "danger" : "default"}
++                alert={inboxBadge.failedRuns > 0}
++              />
++            ) : null}
++            {agentChatEnabled && !chatRail ? <SidebarNavItem to="/chats" label="Chat" icon={MessageCircle} /> : null}
++            {showDecisions ? (
++              <SidebarNavItem
++                to="/decisions"
++                label="Decisions"
++                icon={ListChecks}
++                badge={attentionCount}
++                badgeLabel="decisions"
++              />
++            ) : null}
++            {showStatusCards ? (
++              <SidebarNavItem to="/status" label="Status" icon={LayoutGrid} textBadge="beta" />
++            ) : null}
++            {conferenceRoomChatEnabled ? (
++              <SidebarNavItem to="/board-chat" label="Conference Room" icon={MessagesSquare} />
++            ) : null}
++            </>
+           ) : null}
+         </div>
+ 
+-        <SidebarSection label="Travail" collapsible={{ open: workOpen, onOpenChange: setWorkOpen }}>
+-          {/* Agent Chat: Chat leads the Work group as a single row — the
+-              agents you talk to live in the Chat surface's own secondary rail
+-              (ChatContextualSidebar), not in the primary nav. */}
+-          {chatRail ? (
+-            <SidebarNavItem to="/chats" label="Chat" icon={MessageCircle} />
+-          ) : null}
+-          {/* Combined Inbox + Task List: Inbox is a view inside Tasks, so the
+-              unread/failed-run badge rides on Tasks. */}
+-          {combinedInboxTasks ? (
+-            <SidebarNavItem
+-              to="/issues"
+-              label="Tâches"
+-              icon={CircleCheck}
+-              badge={inboxBadge.inbox}
+-              badgeLabel="unread"
+-              badgeTone={inboxBadge.failedRuns > 0 ? "danger" : "default"}
+-              alert={inboxBadge.failedRuns > 0}
+-            />
+-          ) : (
+-            <SidebarNavItem to="/issues" label="Tâches" icon={CircleCheck} />
+-          )}
+-          {streamlinedUiEnabled ? (
+-            <>
+-              <SidebarNavItem to="/projects" label="Projets" icon={FolderOpen} />
+-              <SidebarStarredProjects />
+-            </>
+-          ) : null}
+-          <SidebarNavItem to="/routines" label="Routines" icon={Repeat} />
+-          <SidebarNavItem to="/artifacts" label="Productions" icon={Package} />
+-          {showCases ? (
+-            <SidebarNavItem to="/cases" label="Cases" icon={Layers} textBadge="beta" />
+-          ) : null}
+-          {showPipelines ? (
+-            <SidebarNavItem to="/pipelines" label="Pipelines" icon={GitBranch} />
+-          ) : null}
+-          {showGoalsLink ? (
+-            <SidebarNavItem to="/goals" label="Goals" icon={Target} />
+-          ) : goalsLinkPending ? (
+-            <div
+-              data-testid="sidebar-goals-placeholder"
+-              className="h-8 pointer-coarse:h-7"
+-              aria-hidden="true"
+-            />
+-          ) : null}
+-          {showWorkspacesLink ? (
+-            <SidebarNavItem to="/workspaces" label="Workspaces" icon={GitBranch} />
+-          ) : null}
+-          <PluginLauncherOutlet
++        {!modeSimple ? (
++          <>
++            <SidebarSection label="Travail" collapsible={{ open: workOpen, onOpenChange: setWorkOpen }}>
++              {/* Agent Chat: Chat leads the Work group as a single row — the
++                  agents you talk to live in the Chat surface's own secondary rail
++                  (ChatContextualSidebar), not in the primary nav. */}
++              {chatRail ? (
++                <SidebarNavItem to="/chats" label="Chat" icon={MessageCircle} />
++              ) : null}
++              {/* Combined Inbox + Task List: Inbox is a view inside Tasks, so the
++                  unread/failed-run badge rides on Tasks. */}
++              {combinedInboxTasks ? (
++                <SidebarNavItem
++                  to="/issues"
++                  label="Tâches"
++                  icon={CircleCheck}
++                  badge={inboxBadge.inbox}
++                  badgeLabel="unread"
++                  badgeTone={inboxBadge.failedRuns > 0 ? "danger" : "default"}
++                  alert={inboxBadge.failedRuns > 0}
++                />
++              ) : (
++                <SidebarNavItem to="/issues" label="Tâches" icon={CircleCheck} />
++              )}
++              {streamlinedUiEnabled ? (
++                <>
++                  <SidebarNavItem to="/projects" label="Projets" icon={FolderOpen} />
++                  <SidebarStarredProjects />
++                </>
++              ) : null}
++              <SidebarNavItem to="/routines" label="Routines" icon={Repeat} />
++              <SidebarNavItem to="/artifacts" label="Productions" icon={Package} />
++              {showCases ? (
++                <SidebarNavItem to="/cases" label="Cases" icon={Layers} textBadge="beta" />
++              ) : null}
++              {showPipelines ? (
++                <SidebarNavItem to="/pipelines" label="Pipelines" icon={GitBranch} />
++              ) : null}
++              {showGoalsLink ? (
++                <SidebarNavItem to="/goals" label="Goals" icon={Target} />
++              ) : goalsLinkPending ? (
++                <div
++                  data-testid="sidebar-goals-placeholder"
++                  className="h-8 pointer-coarse:h-7"
++                  aria-hidden="true"
++                />
++              ) : null}
++              {showWorkspacesLink ? (
++                <SidebarNavItem to="/workspaces" label="Workspaces" icon={GitBranch} />
++              ) : null}
++              <PluginLauncherOutlet
++                placementZones={["sidebar"]}
++                context={pluginContext}
++                className="flex flex-col gap-0.5"
++                itemClassName="text-(length:--text-compact) font-medium pointer-coarse:[&_a]:min-h-11 pointer-coarse:[&_a]:items-center"
++              />
++            </SidebarSection>
++
++            {streamlinedUiEnabled ? (
++              <SidebarSection
++                label="Organisation"
++                collapsible={{ open: organizationOpen, onOpenChange: setOrganizationOpen }}
++              >
++                <SidebarNavItem to="/agents" label="Agents" icon={Users} />
++                <SidebarNavItem to="/skills" label="Compétences" icon={Boxes} />
++                <SidebarNavItem to="/apps" label="Connecteurs" icon={Unplug} />
++                <SidebarNavItem to="/activity" label="Journal d'audit" icon={History} />
++              </SidebarSection>
++            ) : null}
++
++            {children}
++
++            {streamlinedUiEnabled ? (
++              <SidebarRecentTasks companyId={selectedCompanyId} liveIssueIds={liveIssueIds} />
++            ) : (
++              <>
++                <SidebarProjects />
++                <SidebarAgents />
++                <SidebarSection
++                  label="Organisation"
++                  collapsible={{ open: organizationOpen, onOpenChange: setOrganizationOpen }}
++                >
++                  <SidebarNavItem to="/org" label="Organigramme" icon={Network} />
++                  <SidebarNavItem to="/apps" label="Connecteurs" icon={Unplug} />
++                  <SidebarNavItem to="/timeline" label="Chronologie" icon={GanttChartSquare} />
++                  <SidebarNavItem to="/costs" label="Coûts" icon={DollarSign} />
++                  <SidebarNavItem to="/activity" label="Activité" icon={History} />
++                  <SidebarNavItem to="/company/settings" label="Paramètres" icon={Settings} />
++                </SidebarSection>
++              </>
++            )}
++
++          </>
++        ) : (
++          <div className={primarySidebarStyles.group}>
++            <PluginLauncherOutlet
+             placementZones={["sidebar"]}
+             context={pluginContext}
+             className="flex flex-col gap-0.5"
+             itemClassName="text-(length:--text-compact) font-medium pointer-coarse:[&_a]:min-h-11 pointer-coarse:[&_a]:items-center"
+           />
+-        </SidebarSection>
+-
+-        {streamlinedUiEnabled ? (
+-          <SidebarSection
+-            label="Organisation"
+-            collapsible={{ open: organizationOpen, onOpenChange: setOrganizationOpen }}
+-          >
+-            <SidebarNavItem to="/agents" label="Agents" icon={Users} />
+-            <SidebarNavItem to="/skills" label="Compétences" icon={Boxes} />
+-            <SidebarNavItem to="/apps" label="Connecteurs" icon={Unplug} />
+-            <SidebarNavItem to="/activity" label="Journal d'audit" icon={History} />
+-          </SidebarSection>
+-        ) : null}
+-
+-        {children}
+-
+-        {streamlinedUiEnabled ? (
+-          <SidebarRecentTasks companyId={selectedCompanyId} liveIssueIds={liveIssueIds} />
+-        ) : (
+-          <>
+-            <SidebarProjects />
+-            <SidebarAgents />
+-            <SidebarSection
+-              label="Organisation"
+-              collapsible={{ open: organizationOpen, onOpenChange: setOrganizationOpen }}
+-            >
+-              <SidebarNavItem to="/org" label="Organigramme" icon={Network} />
+-              <SidebarNavItem to="/apps" label="Connecteurs" icon={Unplug} />
+-              <SidebarNavItem to="/timeline" label="Chronologie" icon={GanttChartSquare} />
+-              <SidebarNavItem to="/costs" label="Coûts" icon={DollarSign} />
+-              <SidebarNavItem to="/activity" label="Activité" icon={History} />
+-              <SidebarNavItem to="/company/settings" label="Paramètres" icon={Settings} />
+-            </SidebarSection>
+-          </>
++          </div>
+         )}
+ 
+         <PluginSlotOutlet
+@@ -333,6 +358,74 @@ export function Sidebar({ children }: { children?: ReactNode }) {
+           missingBehavior="placeholder"
+         />
+       </nav>
++      {atelierPret ? (
++        <InterrupteurModeExpert
++          expert={modeExpert}
++          onChange={definirModeExpert}
++          rail={rail}
++        />
++      ) : null}
+     </aside>
+   );
+ }
++
++/**
++ * Interrupteur « Mode expert » en bas de la barre latérale : discret, libellé
++ * clair, cible tactile d'au moins 44 px, état annoncé aux lecteurs d'écran.
++ */
++function InterrupteurModeExpert({
++  expert,
++  onChange,
++  rail,
++}: {
++  expert: boolean;
++  onChange: (expert: boolean) => void;
++  rail: boolean;
++}) {
++  const aide = expert
++    ? "Mode expert actif : toutes les entrées du menu sont affichées. Désactiver pour revenir au menu simple."
++    : "Mode simple : seul l'atelier est affiché. Activer pour afficher tout le menu.";
++  const bouton = (
++    <button
++      type="button"
++      role="switch"
++      aria-checked={expert}
++      aria-label="Mode expert"
++      title={aide}
++      onClick={() => onChange(!expert)}
++      className="flex w-full min-h-9 pointer-coarse:min-h-11 items-center gap-2.5 rounded-lg px-2 py-1.5 text-(length:--text-compact) font-medium text-muted-foreground transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
++    >
++      <SlidersHorizontal className="h-4 w-4 shrink-0" aria-hidden="true" />
++      <span className={cn("flex-1 text-left", rail ? SIDEBAR_RAIL_HIDDEN_LABEL : "truncate")}>Mode expert</span>
++      {rail ? null : (
++        <span
++          aria-hidden="true"
++          data-slot="mode-expert-piste"
++          className={cn(
++            "relative h-5 w-9 shrink-0 rounded-full border border-border transition-colors",
++            expert ? "bg-foreground/80" : "bg-muted",
++          )}
++        >
++          <span
++            className={cn(
++              "absolute top-0.5 h-3.5 w-3.5 rounded-full bg-background shadow-sm transition-[left] motion-reduce:transition-none",
++              expert ? "left-[1.125rem]" : "left-0.5",
++            )}
++          />
++        </span>
++      )}
++    </button>
++  );
++  return (
++    <div className="shrink-0 border-t border-border/60 px-2 py-1.5" data-slot="mode-expert">
++      {rail ? (
++        <Tooltip>
++          <TooltipTrigger asChild>{bouton}</TooltipTrigger>
++          <TooltipContent side="right">{aide}</TooltipContent>
++        </Tooltip>
++      ) : (
++        bouton
++      )}
++    </div>
++  );
++}
+diff --git a/ui/src/hooks/useModeExpert.ts b/ui/src/hooks/useModeExpert.ts
+new file mode 100644
+index 000000000..f3a5eed60
+--- /dev/null
++++ b/ui/src/hooks/useModeExpert.ts
+@@ -0,0 +1,73 @@
++import { useCallback, useSyncExternalStore } from "react";
++
++/**
++ * Préférence « Mode expert » du menu quand l'atelier marketing est actif.
++ * Par défaut le menu est en mode simple ; l'interrupteur révèle toutes les
++ * entrées d'origine du socle. La valeur est mémorisée par entreprise dans le
++ * localStorage (enveloppé de try/catch : navigation privée, stockage bloqué),
++ * avec une copie en mémoire pour que l'interrupteur marche même sans stockage.
++ */
++const PREFIXE_CLE = "atelier.mode-expert.";
++
++const enMemoire = new Map<string, boolean>();
++const abonnes = new Set<() => void>();
++
++function cle(companyId: string | null | undefined): string {
++  return `${PREFIXE_CLE}${companyId ?? "aucune"}`;
++}
++
++export function lireModeExpert(companyId: string | null | undefined): boolean {
++  const k = cle(companyId);
++  const memoire = enMemoire.get(k);
++  if (memoire !== undefined) return memoire;
++  try {
++    return window.localStorage.getItem(k) === "1";
++  } catch {
++    return false;
++  }
++}
++
++export function ecrireModeExpert(companyId: string | null | undefined, expert: boolean): void {
++  const k = cle(companyId);
++  enMemoire.set(k, expert);
++  try {
++    window.localStorage.setItem(k, expert ? "1" : "0");
++  } catch {
++    // stockage indisponible : la préférence vaut pour cette session seulement
++  }
++  abonnes.forEach((notifier) => notifier());
++}
++
++function abonner(notifier: () => void): () => void {
++  abonnes.add(notifier);
++  // Synchronise aussi les autres onglets.
++  const surStockage = (event: StorageEvent) => {
++    if (event.key?.startsWith(PREFIXE_CLE)) {
++      enMemoire.delete(event.key);
++      notifier();
++    }
++  };
++  window.addEventListener("storage", surStockage);
++  return () => {
++    abonnes.delete(notifier);
++    window.removeEventListener("storage", surStockage);
++  };
++}
++
++/** Réservé aux tests : oublie la copie en mémoire. */
++export function reinitialiserModeExpertPourTests(): void {
++  enMemoire.clear();
++}
++
++export function useModeExpert(companyId: string | null | undefined): {
++  expert: boolean;
++  setExpert: (expert: boolean) => void;
++} {
++  const expert = useSyncExternalStore(
++    abonner,
++    () => lireModeExpert(companyId),
++    () => false,
++  );
++  const setExpert = useCallback((valeur: boolean) => ecrireModeExpert(companyId, valeur), [companyId]);
++  return { expert, setExpert };
++}
+-- 
+2.53.0
+

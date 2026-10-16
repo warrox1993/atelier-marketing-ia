@@ -1,0 +1,55 @@
+From 760f6d1a1e704ab2e9d9dac3b0c2cbbdce0619b0 Mon Sep 17 00:00:00 2001
+From: Jean-Baptiste Dhondt <114347858+warrox1993@users.noreply.github.com>
+Date: Fri, 16 Oct 2026 19:03:57 +0200
+Subject: [PATCH] =?UTF-8?q?fix(ui):=20la=20page=20du=20plugin=20atelier=20?=
+ =?UTF-8?q?est=20une=20racine=20de=20route=20du=20tableau=20de=20bord=20(l?=
+ =?UTF-8?q?iens=20=C2=AB=20/atelier=20=C2=BB=20de=20la=20barre=20du=20bas?=
+ =?UTF-8?q?=20lus=20comme=20pr=C3=A9fixe=20d'entreprise)?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01DP85vPq2MHkZg8VNtRvCzB
+---
+ ui/src/lib/company-routes.test.ts | 9 +++++++++
+ ui/src/lib/company-routes.ts      | 3 +++
+ 2 files changed, 12 insertions(+)
+
+diff --git a/ui/src/lib/company-routes.test.ts b/ui/src/lib/company-routes.test.ts
+index f478aaf59..33d2922be 100644
+--- a/ui/src/lib/company-routes.test.ts
++++ b/ui/src/lib/company-routes.test.ts
+@@ -7,6 +7,15 @@ import {
+ } from "./company-routes";
+ 
+ describe("company routes", () => {
++  it("prefixe les adresses de la page du plugin Atelier marketing au lieu de les lire comme un préfixe d'entreprise", () => {
++    expect(isBoardPathWithoutPrefix("/atelier")).toBe(true);
++    expect(extractCompanyPrefixFromPath("/atelier/discussion")).toBeNull();
++    expect(applyCompanyPrefix("/atelier", "RNO")).toBe("/RNO/atelier");
++    expect(applyCompanyPrefix("/atelier/discussion", "RNO")).toBe("/RNO/atelier/discussion");
++    expect(applyCompanyPrefix("/RNO/atelier/discussion", "RNO")).toBe("/RNO/atelier/discussion");
++    expect(toCompanyRelativePath("/RNO/atelier/prospects")).toBe("/atelier/prospects");
++  });
++
+   it("treats the task-list alias as an unprefixed board route", () => {
+     expect(isBoardPathWithoutPrefix("/tasks")).toBe(true);
+     expect(extractCompanyPrefixFromPath("/tasks")).toBeNull();
+diff --git a/ui/src/lib/company-routes.ts b/ui/src/lib/company-routes.ts
+index e42b1e7f1..013a2e18d 100644
+--- a/ui/src/lib/company-routes.ts
++++ b/ui/src/lib/company-routes.ts
+@@ -31,6 +31,9 @@ const BOARD_ROUTE_ROOTS = new Set([
+   "search",
+   "settings",
+   "timeline",
++  // Page du plugin « Atelier marketing » (routePath « atelier ») : sans cette racine, « /atelier » était lu comme
++  // le préfixe d'entreprise « ATELIER » et les liens de la barre du bas renvoyaient « Organization not found ».
++  "atelier",
+ ]);
+ 
+ const GLOBAL_ROUTE_ROOTS = new Set(["auth", "invite", "board-claim", "cli-auth", "mcp-connect", "assistant-connections", "docs", "instance"]);
+-- 
+2.53.0
+

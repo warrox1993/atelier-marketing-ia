@@ -10,9 +10,11 @@ import { definePlugin, runWorker } from "@paperclipai/plugin-sdk";
 import { creerAtelier } from "./serveur/atelier.js";
 import { creerBase } from "./serveur/base.js";
 import { creerVeilleur } from "./serveur/veilleur.js";
+import { creerFacteur, stockLiaisonsParesseux } from "./serveur/liaisons/index.js";
 
 let atelier: ReturnType<typeof creerAtelier> | null = null;
 let veilleur: ReturnType<typeof creerVeilleur> | null = null;
+let facteur: ReturnType<typeof creerFacteur> | null = null;
 
 const plugin = definePlugin({
   async setup(ctx) {
@@ -26,6 +28,10 @@ const plugin = definePlugin({
       config: async (companyId) => (await ctx.config.get(companyId)) as Record<string, unknown> | null,
     });
     veilleur.demarrer();
+    // Facteur du bureau de liaison (essai L9, 16/10/2026) : transmissions et réponses entre deux entreprises, que l'hôte
+    // refuse pendant une route ou un événement. Créé ICI, dans setup() : sa minuterie n'hérite d'aucune invocation.
+    facteur = creerFacteur({ ctx, base: creerBase(ctx.db), stock: stockLiaisonsParesseux(ctx) });
+    facteur.demarrer();
     ctx.logger.info("Atelier Marketing IA prêt", { espaceBase: ctx.db.namespace });
   },
 
@@ -36,6 +42,7 @@ const plugin = definePlugin({
 
   async onShutdown() {
     veilleur?.arreter();
+    facteur?.arreter();
   },
 
   async onHealth() {

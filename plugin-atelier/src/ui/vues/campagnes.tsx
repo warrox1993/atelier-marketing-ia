@@ -39,7 +39,7 @@ function ListeCampagnes() {
     <>
       <EnTete
         titre="Campagnes"
-        description="Chaque campagne est un projet Paperclip ; ses tâches et leur état viennent du moteur natif."
+        description="Chaque campagne est un projet Paperclip ; ses tâches et leur état viennent de Paperclip."
         actions={
           <LienHote vers={chemin("campagnes", "nouvelle")} className="atl-bouton">
             Nouvelle campagne
@@ -53,7 +53,7 @@ function ListeCampagnes() {
         estVide={(d) => d.length === 0}
         vide={
           <Vide titre="Aucune campagne pour l'instant." action={<LienHote vers={chemin("campagnes", "nouvelle")} className="atl-bouton">Créer une campagne depuis un brief</LienHote>}>
-            Une campagne part d'un brief : le coordinateur en extrait les exigences REQ-xxx, puis les agents produisent sous contrôle.
+            Une campagne part d'un brief : le coordinateur en extrait les exigences (chacune avec son titre), puis les agents produisent sous contrôle.
           </Vide>
         }
       >
@@ -183,7 +183,7 @@ function DetailCampagneVue({ campagneId }: { campagneId: string }) {
                     <tr>
                       <th scope="col">Tâche</th>
                       <th scope="col">Statut</th>
-                      <th scope="col">Porte</th>
+                      <th scope="col">Contrôle automatique</th>
                       <th scope="col">Dépendances</th>
                     </tr>
                   </thead>
@@ -200,15 +200,15 @@ function DetailCampagneVue({ campagneId }: { campagneId: string }) {
                             <span className="atl-sous">{t.motif}</span>
                           </span>
                         </td>
-                        <td data-libelle="Porte">
+                        <td data-libelle="Contrôle automatique">
                           {t.sousPorte ? (
                             t.decisionPorte ? (
                               <Pastille ton={DECISIONS_PORTE[t.decisionPorte]?.ton}>{DECISIONS_PORTE[t.decisionPorte]?.libelle ?? t.decisionPorte}</Pastille>
                             ) : (
-                              <span className="atl-attenue">sous porte, non évaluée</span>
+                              <span className="atl-attenue">sous contrôle automatique, non évalué</span>
                             )
                           ) : (
-                            <span className="atl-attenue">hors porte</span>
+                            <span className="atl-attenue">hors contrôle automatique</span>
                           )}
                         </td>
                         <td data-libelle="Dépendances">{t.bloqueePar.length ? `${t.bloqueePar.length} non résolue(s)` : <span className="atl-attenue">aucune</span>}</td>
@@ -303,7 +303,7 @@ function ExigenceLigne({ exigence: e, onFait }: { exigence: Exigence; onFait(): 
   return (
     <li className="atl-exigence">
       <div className="atl-exigence-tete">
-        <code>{e.code}</code>
+        <strong>{e.interpretation}</strong>
         {e.obligatoire ? <Pastille ton="info">Obligatoire</Pastille> : <Pastille>Facultative</Pastille>}
         {e.exclusion.etat !== "aucune" ? (
           <Pastille ton={e.exclusion.etat === "autorisee" ? "neutre" : e.exclusion.etat === "demandee" ? "attention" : "neutre"}>
@@ -311,8 +311,8 @@ function ExigenceLigne({ exigence: e, onFait }: { exigence: Exigence; onFait(): 
           </Pastille>
         ) : null}
       </div>
-      <p>{e.interpretation}</p>
-      <p className="atl-sous">Texte du brief : « {e.texteOriginal} »</p>
+      <p className="atl-sous">
+        Repère <code>{e.code}</code>. Texte du brief : « {e.texteOriginal} »</p>
       {e.elementsAttendus.length ? <p className="atl-sous">Éléments à prouver un par un : {e.elementsAttendus.join(", ")}</p> : null}
       {e.criteres.length ? <p className="atl-sous">Critères : {e.criteres.join(" ; ")}</p> : null}
       {e.exclusion.etat === "demandee" ? (
@@ -581,7 +581,7 @@ function NouvelleCampagne() {
           <legend>Mode</legend>
           <label>
             <input type="radio" name="mode" value="demonstration" checked={f.mode === "demonstration"} onChange={maj("mode")} /> Démonstration
-            <span className="atl-aide">Fixtures déterministes, aucun appel de modèle, aucune diffusion.</span>
+            <span className="atl-aide">Données fictives fixes, aucun appel de modèle, aucune diffusion.</span>
           </label>
           <label>
             <input type="radio" name="mode" value="reel" checked={f.mode === "reel"} onChange={maj("mode")} /> Réel

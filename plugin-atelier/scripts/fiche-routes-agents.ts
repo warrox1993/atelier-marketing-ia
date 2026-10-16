@@ -44,6 +44,7 @@ export const SCHEMAS_CORPS: Record<string, SchemaZod> = {
   "tache.connaissances.rechercher": C.RechercherConnaissancesEntree,
   "prospects.exclure": C.ExclureProspectEntree,
   "prospects.critere.evaluer": C.EvaluerCritereEntree,
+  "liaison.demander": C.DemandeLiaisonEntree,
 };
 
 /** Routes d'agent en écriture dont le serveur ne lit aucun corps. */

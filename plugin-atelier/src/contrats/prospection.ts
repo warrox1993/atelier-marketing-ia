@@ -1492,6 +1492,18 @@ export const ExclureProspectEntree = z
   .strict();
 export type ExclureProspectEntree = z.infer<typeof ExclureProspectEntree>;
 
+/**
+ * Entrée de `prospects.fusionner-doublons` (humain seulement) : rattrapage des fiches qui désignent la même
+ * entreprise. `aBlanc` (défaut) liste les paires sans rien écrire ; `aBlanc: false` fusionne.
+ */
+export const FusionnerDoublonsEntree = z
+  .object({
+    companyId: IdNatif,
+    aBlanc: z.boolean().default(true),
+  })
+  .strict();
+export type FusionnerDoublonsEntree = z.infer<typeof FusionnerDoublonsEntree>;
+
 /** Entrée de `etalonnage.calculer` (humain seulement). */
 export const CalculerEtalonnageEntree = z
   .object({

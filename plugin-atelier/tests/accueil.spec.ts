@@ -12,6 +12,9 @@ import { ErreurAtelier } from "../src/serveur/erreurs.js";
 import { creerServices } from "../src/serveur/services.js";
 import {
   ORIGINE_DEMANDE,
+  detailApprobation,
+  elementDepuisCarte,
+  interactionAccueil,
   raisonTacheBloquee,
   resumer,
   routesAccueil,
@@ -345,5 +348,54 @@ describe("aiguillage réel", () => {
     const suivi = await appel("mission.suivre", "GET", "/missions/x", humain, { params: { issueId: (demande.body as { issueId: string }).issueId } });
     expect(suivi.status).toBe(200);
     expect((suivi.body as { mere: Ligne }).mere.titre).toBe("Un post sur l'offre de printemps");
+  });
+});
+
+describe("accueil : approbations et cartes, décision sur place ou page native seulement", () => {
+  it("hire_agent, budget_override_required et type inconnu ne se décident jamais sur place", () => {
+    for (const type of ["hire_agent", "budget_override_required", "type_futur_inconnu", ""]) {
+      expect(detailApprobation({ type, payload: { adapterType: "process", adapterConfig: { command: "x" } } }).surPlace).toBe(false);
+    }
+  });
+
+  it("les types connus et sûrs se décident sur place, avec leur contenu, le demandeur et le montant", () => {
+    const d = detailApprobation({
+      type: "request_board_approval", requestedByAgentId: "ag-1",
+      payload: { title: "Publier", summary: "Page toiture", recommendedAction: "Approuver", nextActionOnApproval: "Mise en ligne", risks: ["Ton", "Délai"], amountCents: 12050 },
+    });
+    expect(d.surPlace).toBe(true);
+    expect(d.demandeur).toBe("Un agent de l'équipe");
+    expect(d.lignes).toEqual(expect.arrayContaining([
+      { libelle: "Titre", valeur: "Publier" }, { libelle: "Résumé", valeur: "Page toiture" }, { libelle: "Risques", valeur: "Ton ; Délai" }, { libelle: "Montant", valeur: "120.50 €" },
+    ]));
+    expect(detailApprobation({ type: "approve_ceo_strategy", payload: { plan: "x".repeat(5000) } }).lignes[0]!.valeur.length).toBeLessThanOrEqual(1201);
+  });
+
+  it("accueil.lister joint le détail à chaque approbation et dit où se décider", async () => {
+    const f = faux({ approbations: [
+      { id: "ap-1", type: "hire_agent", payload: { name: "Agent SEO" } },
+      { id: "ap-2", type: "budget_override_required", payload: {} },
+      { id: "ap-3", type: "request_board_approval", payload: { summary: "Accord" } },
+    ] });
+    const { elements } = (await f.appeler("accueil.lister")).corps as { elements: ElementAccueil[] };
+    const par = (a: string) => elements.find((e) => e.approbationId === a)!;
+    expect(par("ap-1").approbation?.surPlace).toBe(false);
+    expect(par("ap-1").raison).toContain("page native");
+    expect(par("ap-2").approbation?.surPlace).toBe(false);
+    expect(par("ap-3").approbation).toMatchObject({ surPlace: true, lignes: [{ libelle: "Résumé", valeur: "Accord" }] });
+  });
+
+  it("une carte avec toolAction ou secretProposal est marquée « natif seulement »", () => {
+    const base = { id: "i1", kind: "request_confirmation" };
+    expect(interactionAccueil({ ...base, payload: { prompt: "Envoyer ?", toolAction: { toolName: "gmail_send", previewMarkdown: "Bonjour" } } }).natifSeulement).toBe(true);
+    expect(interactionAccueil({ ...base, payload: { prompt: "Secret ?", secretProposal: { name: "CLE" } } }).natifSeulement).toBe(true);
+    expect(interactionAccueil({ ...base, payload: { prompt: "Lancer ?" } }).natifSeulement).toBe(false);
+  });
+
+  it("le refus motivé obligatoire est transmis à l'interface", () => {
+    expect(interactionAccueil({ id: "i", kind: "request_confirmation", payload: { prompt: "?", rejectRequiresReason: true } }).refusRaisonObligatoire).toBe(true);
+    expect(interactionAccueil({ id: "i", kind: "request_confirmation", payload: { prompt: "?" } }).refusRaisonObligatoire).toBe(false);
+    const e = elementDepuisCarte({ id: "t", identifier: "DEM-1", title: "T" }, { id: "i", kind: "request_confirmation", status: "pending", title: "Q", payload: { prompt: "?", rejectRequiresReason: true } } as never);
+    expect(e?.interaction?.refusRaisonObligatoire).toBe(true);
   });
 });

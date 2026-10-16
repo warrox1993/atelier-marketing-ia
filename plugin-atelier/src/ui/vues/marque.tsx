@@ -286,9 +286,26 @@ export function lirePosition(latTexte: string, lonTexte: string): { position: { 
   return { position: { lat, lon }, erreur: null };
 }
 
+/**
+ * Lit les segments suivis saisis pour un établissement (codes séparés par des virgules, points-virgules
+ * ou espaces). Chaque code doit exister parmi les segments du référentiel : le serveur refuse les autres.
+ */
+export function lireSegmentsSuivis(texte: string, codesConnus: readonly string[]): { codes: string[]; erreur: string | null } {
+  const codes = Array.from(new Set(texte.split(/[\s,;]+/u).map((c) => c.trim()).filter(Boolean)));
+  const inconnus = codes.filter((c) => !codesConnus.includes(c));
+  if (inconnus.length === 0) return { codes, erreur: null };
+  return {
+    codes: [],
+    erreur:
+      codesConnus.length === 0
+        ? "Aucun segment n'est défini dans le référentiel du client : videz ce champ ou définissez d'abord les segments."
+        : `Segment inconnu : ${inconnus.join(", ")}. Codes possibles : ${codesConnus.join(", ")}.`,
+  };
+}
+
 const virgule = (n: number) => String(n).replace(".", ",");
 
-function EditeurMarque({ initiale, onFait }: { initiale: ReferentielClient | null; onFait(): void }) {
+export function EditeurMarque({ initiale, onFait }: { initiale: ReferentielClient | null; onFait(): void }) {
   const enregistrer = useAction<ReferentielClient>("atelier.marque.enregistrer");
   const [identite, setIdentite] = useState(initiale?.identite ?? "");
   const [ton, setTon] = useState(initiale?.ton ?? "");
@@ -296,11 +313,13 @@ function EditeurMarque({ initiale, onFait }: { initiale: ReferentielClient | nul
   const [manquantes, setManquantes] = useState((initiale?.informationsManquantes ?? []).join("\n"));
   const [affirmations, setAffirmations] = useState((initiale?.affirmationsAutorisees ?? []).map((a) => a.texte).join("\n"));
   const [offres, setOffres] = useState(initiale?.offres.length ? initiale.offres : [{ nom: "", description: "", confirmee: false }]);
-  const [etabs, setEtabs] = useState(initiale?.etablissements.length ? initiale.etablissements.map((e) => ({ ...e, adresse: e.adresse ?? "", lat: e.position ? virgule(e.position.lat) : "", lon: e.position ? virgule(e.position.lon) : "" })) : [{ nom: "", adresse: "", confirme: false, lat: "", lon: "" }]);
+  const [etabs, setEtabs] = useState(initiale?.etablissements.length ? initiale.etablissements.map((e) => ({ ...e, adresse: e.adresse ?? "", lat: e.position ? virgule(e.position.lat) : "", lon: e.position ? virgule(e.position.lon) : "", segmentsTexte: (e.segmentsSuivis ?? []).join(", ") })) : [{ nom: "", adresse: "", confirme: false, lat: "", lon: "", segmentsTexte: "" }]);
   const [enCours, setEnCours] = useState(false);
   const [erreur, setErreur] = useState<unknown>(null);
   const erreursPosition = etabs.map((x) => (x.nom.trim() ? lirePosition(x.lat, x.lon).erreur : null));
-  const raison = !identite.trim() ? "L'identité est obligatoire." : !ton.trim() ? "Le ton est obligatoire." : erreursPosition.some(Boolean) ? "Une position d'établissement est invalide." : null;
+  const codesSegments = (initiale?.segments ?? []).map((sg) => sg.code);
+  const erreursSegments = etabs.map((x) => (x.nom.trim() ? lireSegmentsSuivis(x.segmentsTexte, codesSegments).erreur : null));
+  const raison = !identite.trim() ? "L'identité est obligatoire." : !ton.trim() ? "Le ton est obligatoire." : erreursPosition.some(Boolean) ? "Une position d'établissement est invalide." : erreursSegments.some(Boolean) ? "Les segments suivis d'un établissement sont invalides." : null;
 
   const soumettre = async (e: FormEvent) => {
     e.preventDefault();
@@ -314,7 +333,10 @@ function EditeurMarque({ initiale, onFait }: { initiale: ReferentielClient | nul
         ton: ton.trim(),
         offres: offres.filter((o) => o.nom.trim()).map((o) => ({ ...o, nom: o.nom.trim(), description: o.description.trim(), confirmee: o.confirmee })),
         zones: lignesTexte(zones),
-        etablissements: etabs.filter((x) => x.nom.trim()).map(({ lat, lon, ...x }) => ({ ...x, nom: x.nom.trim(), adresse: x.adresse.trim() || null, confirme: x.confirme, position: lirePosition(lat, lon).position })),
+        etablissements: etabs.filter((x) => x.nom.trim()).map(({ lat, lon, segmentsTexte, segmentsSuivis: _ancien, ...x }) => {
+          const segments = lireSegmentsSuivis(segmentsTexte, codesSegments).codes;
+          return { ...x, nom: x.nom.trim(), adresse: x.adresse.trim() || null, confirme: x.confirme, position: lirePosition(lat, lon).position, ...(segments.length > 0 ? { segmentsSuivis: segments } : {}) };
+        }),
         affirmationsAutorisees: lignesTexte(affirmations).map((texte) => ({ texte, sourceId: anciennes.get(texte) ?? null })),
         informationsManquantes: lignesTexte(manquantes),
         // Champs étendus du référentiel : non modifiables ici, conservés d'une version à l'autre.
@@ -381,6 +403,13 @@ function EditeurMarque({ initiale, onFait }: { initiale: ReferentielClient | nul
                 <input inputMode="decimal" value={x.lon} onChange={(e) => setEtabs((l) => l.map((y, j) => (j === i ? { ...y, lon: e.target.value } : y)))} />
               </Champ>
               {erreursPosition[i] ? <p className="atl-widget-erreur" role="alert">{erreursPosition[i]}</p> : null}
+              <Champ
+                libelle={<>Segments suivis<span className="atl-sr"> par l'établissement {i + 1}</span></>}
+                aide={codesSegments.length > 0 ? `Facultatif : codes séparés par des virgules, parmi ${codesSegments.join(", ")}. Sert au critère « bureau spécialisé proche ».` : "Facultatif. Aucun segment n'est encore défini dans le référentiel du client : il faut d'abord les définir pour les attribuer à un bureau."}
+              >
+                <input value={x.segmentsTexte} onChange={(e) => setEtabs((l) => l.map((y, j) => (j === i ? { ...y, segmentsTexte: e.target.value } : y)))} />
+              </Champ>
+              {erreursSegments[i] ? <p className="atl-widget-erreur" role="alert">{erreursSegments[i]}</p> : null}
               <label className="atl-case">
                 <input type="checkbox" checked={x.confirme} onChange={(e) => setEtabs((l) => l.map((y, j) => (j === i ? { ...y, confirme: e.target.checked } : y)))} /> Confirmé<span className="atl-sr"> (établissement {i + 1})</span>
               </label>
@@ -389,7 +418,7 @@ function EditeurMarque({ initiale, onFait }: { initiale: ReferentielClient | nul
               </Bouton>
             </div>
           ))}
-          <Bouton variante="discret" onClick={() => setEtabs((l) => [...l, { nom: "", adresse: "", confirme: false, lat: "", lon: "" }])}>
+          <Bouton variante="discret" onClick={() => setEtabs((l) => [...l, { nom: "", adresse: "", confirme: false, lat: "", lon: "", segmentsTexte: "" }])}>
             Ajouter un établissement
           </Bouton>
         </fieldset>

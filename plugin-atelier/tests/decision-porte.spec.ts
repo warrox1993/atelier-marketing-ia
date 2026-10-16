@@ -13,7 +13,7 @@ describe("renvoi de la Porte au producteur", () => {
       motifs: [{ code: "revue_bloquee_information", message: "Revue « metier » : information manquante." }],
     });
     expect(patch).toMatchObject({ status: "in_progress", awaitingInformation: true });
-    expect(patch.comment).toContain("bloquée (information manquante)");
+    expect(patch.comment).toContain("bloqué (information manquante)");
   });
 
   it("ne marque pas un refus de qualité", () => {
@@ -42,6 +42,14 @@ describe("renvoi de la Porte au producteur", () => {
 
   it("laisse la clôture PASS inchangée", () => {
     const patch = patchDecisionPorte({ ...base, decision: "PASS", motifs: [] });
-    expect(patch).toEqual({ status: "done", comment: "Porte déterministe franchie (évaluation ev-1, empreinte 0123456789ab)." });
+    expect(patch).toEqual({ status: "done", comment: "Contrôle automatique réussi (évaluation ev-1, empreinte 0123456789ab)." });
+  });
+
+  it("le vocabulaire des commentaires parle de « contrôle automatique », jamais de « porte »", () => {
+    const refus = patchDecisionPorte({ ...base, decision: "REFUS", motifs: [{ code: "x", message: "Motif." }] });
+    expect(refus.comment).toMatch(/^Contrôle automatique refusé :/u);
+    const bloque = patchDecisionPorte({ ...base, decision: "BLOQUE_INFORMATION", motifs: [{ code: "x", message: "Motif." }] });
+    expect(bloque.comment).toMatch(/^Contrôle automatique bloqué \(information manquante\) :/u);
+    expect(JSON.stringify([refus, bloque])).not.toMatch(/[Pp]orte/u);
   });
 });

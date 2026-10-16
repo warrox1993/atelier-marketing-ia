@@ -18,7 +18,7 @@ const manifest: PaperclipPluginManifestV1 = {
   version: "0.1.0",
   displayName: "Atelier Marketing IA",
   description:
-    "Exigences REQ-xxx, preuves, revues structurées, porte déterministe, messages typés, sources protégées et vues marketing en français.",
+    "Exigences, preuves, revues structurées, contrôle automatique, messages typés, sources protégées et vues marketing en français.",
   author: "Atelier Marketing IA (local)",
   categories: ["automation", "ui"],
   minimumHostVersion: "2026.1012.0",

@@ -415,6 +415,12 @@ def controler_extension():
             erreur(f"{slug} : cwd ou command ne doivent pas être dans le paquet (liaison locale)")
         if any(isinstance(x, str) and x.startswith("/") for x in cfg.get("extraArgs", [])):
             erreur(f"{slug} : chemin absolu dans extraArgs")
+        # Faille C1 (revue du 16/10/2026) : agent confiné (fichiers + réseau) ; l'API locale et la
+        # passerelle sont ajoutées d'office par l'adaptateur, seule l'API Anthropic est listée.
+        if (cfg.get("engine") != "cli" or cfg.get("filesystemScope") != "workspace"
+                or cfg.get("networkScope") != "allowlist" or cfg.get("networkAllowlist") != ["api.anthropic.com"]):
+            erreur(f"{slug} : confinement attendu : engine cli, filesystemScope workspace, "
+                   "networkScope allowlist, networkAllowlist [api.anthropic.com]")
         for cle, val in (cfg.get("env") or {}).items():
             if cle in ("CLAUDE_CONFIG_DIR", "CLAUDE_CODE_OAUTH_TOKEN", "ANTHROPIC_API_KEY"):
                 erreur(f"{slug} : {cle} ne doit pas avoir de valeur dans le paquet")
@@ -646,6 +652,19 @@ def controler_connexions():
     infos.append(f"connexions de la passerelle : {avec} rôles avec connexions, outils et consignes cohérents")
 
 
+def controler_services():
+    """Registre des services (lot L1) : validation par scripts/atelier_services.py."""
+    spec = importlib.util.spec_from_file_location("atelier_services", RACINE / "scripts" / "atelier_services.py")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    registre = module.charger_services(ORGA / "registre" / "services.json")
+    problemes = module.valider(registre)
+    for p in problemes:
+        erreur(f"services : {p}")
+    if not problemes:
+        infos.append(f"registre des services valide : {len(registre['services'])} service(s), {len(registre['flux'])} flux")
+
+
 def etape(fonction, *args):
     """Exécute un contrôle ; son message de réussite n'est gardé que s'il n'a ajouté aucune erreur."""
     avant_e, avant_i = len(erreurs), len(infos)
@@ -685,6 +704,7 @@ def main():
     etape(controler_competences)
     etape(controler_registre, bootstrap)
     etape(controler_connexions)
+    etape(controler_services)
     etape(controler_extension)
     etape(controler_entetes)
     etape(controler_politiques)

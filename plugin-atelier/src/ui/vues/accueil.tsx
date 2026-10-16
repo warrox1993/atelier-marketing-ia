@@ -8,7 +8,7 @@ import { useHostContext } from "@paperclipai/plugin-sdk/ui";
 import type { ElementAccueil, EtapeMission, MissionResumee, UrgenceAccueil } from "../../serveur/services-accueil.js";
 import { SurPlace, traitableSurPlace } from "../accueil-sur-place.js";
 import { compterAFaire, publierNombreAFaire } from "../compteur-afaire.js";
-import { Bouton, Champ, Chargement, EnTete, EtatErreur, Horodatage, LienHote, Pastille, Section, Vide } from "../composants.js";
+import { Bouton, Champ, Chargement, EnTete, EtatErreur, Horodatage, LienHote, MessageFait, Pastille, Section, Vide } from "../composants.js";
 import { MODELES_DEMANDE, useEnvoiDemande } from "../demande.js";
 import type { Ton } from "../format.js";
 import { appelRoute } from "../routes-prospection.js";
@@ -87,9 +87,7 @@ export function VueAccueil() {
         {etat.erreur ? <EtatErreur erreur={etat.erreur} onReessayer={recharger} contexte="l'accueil" /> : null}
         {etat.chargement && !etat.data ? <Chargement libelle="Chargement de l'accueil" /> : null}
         {confirmation ? (
-          <p className="atl-succes atl-afaire-confirmation" role="status">
-            {confirmation}
-          </p>
+          <MessageFait className="atl-succes atl-afaire-confirmation" texte={confirmation} />
         ) : null}
         {etat.data ? <AFaire elements={etat.data.elements.filter((e) => !traites.has(e.id))} onFait={surTraite} /> : null}
       </Section>
@@ -284,7 +282,7 @@ function LigneAFaire({ element: e, onFait }: { element: ElementAccueil; onFait(m
       </div>
       <div className="atl-afaire-actions">
         {surPlace ? (
-          <button type="button" className="atl-bouton" data-variante="principal" aria-expanded={ouvert} aria-controls={idPanneau} onClick={() => setOuvert((o) => !o)}>
+          <button type="button" className="atl-bouton" data-variante="principal" aria-expanded={ouvert} aria-controls={ouvert ? idPanneau : undefined} onClick={() => setOuvert((o) => !o)}>
             {ouvert ? "Replier" : "Traiter ici"}
           </button>
         ) : null}

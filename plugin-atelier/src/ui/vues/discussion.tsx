@@ -8,10 +8,13 @@
  */
 import { Fragment, useCallback, useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import { useHostContext } from "@paperclipai/plugin-sdk/ui";
+import type { ActionDiscussion } from "../../serveur/discussion-actions.js";
+import type { ElementAccueil } from "../../serveur/services-accueil.js";
 import { BoutonDicter } from "../composants/dictee.js";
 import { VoixEnDirect } from "../composants/voix-en-direct.js";
-import { Bouton, Chargement, EtatErreur, LienHote } from "../composants.js";
+import { Bouton, Chargement, EtatErreur, LienHote, MessageFait } from "../composants.js";
 import { dateHeure, classerErreur } from "../format.js";
+import { ActionsIndisponibles, ActionsMessage, CarteFil, elementsVises, useElementsAFaire } from "../discussion-telecommande.js";
 import { appelRoute } from "../routes-prospection.js";
 import { STYLES_DISCUSSION } from "../styles-discussion.js";
 
@@ -21,11 +24,17 @@ export interface MessageFil {
   nom: string;
   texte: string;
   date: string;
+  /** Actions validées par le serveur (télécommande) ; absentes pour l'humain. */
+  actions?: ActionDiscussion[];
 }
 interface Ouverture {
   issueId: string;
   identifiant: string | null;
   messages: MessageFil[];
+  /** Cartes natives en attente sur les tâches liées à la discussion. */
+  cartes?: ElementAccueil[];
+  /** La lecture des cartes natives a échoué côté serveur : proposer de réessayer. */
+  cartesIndisponibles?: boolean;
 }
 
 export const INTERVALLE_MS = 4000;
@@ -79,6 +88,16 @@ export function VueDiscussion() {
   /** Instant (ms) du dernier envoi sans réponse reçue ; `null` si le Coordinateur a répondu. */
   const [attenteDepuis, setAttenteDepuis] = useState<number | null>(null);
   const [version, setVersion] = useState(0);
+  const [cartes, setCartes] = useState<ElementAccueil[]>([]);
+  const [cartesIndisponibles, setCartesIndisponibles] = useState(false);
+  /** Actions et cartes déjà traitées (clé → message de confirmation), pour les retirer sans attendre l'interrogation. */
+  const [faits, setFaits] = useState<Record<string, string>>({});
+  const [versionElements, setVersionElements] = useState(0);
+  const { elements, erreur: erreurElements, reessayer: reessayerElements } = useElementsAFaire(companyId, elementsVises(messages), versionElements);
+  const traite = (cle: string, message: string) => {
+    setFaits((f) => ({ ...f, [cle]: message }));
+    setVersionElements((v) => v + 1);
+  };
   const fil = useRef<HTMLDivElement | null>(null);
   const messagesRef = useRef<MessageFil[]>([]);
   messagesRef.current = messages;
@@ -92,6 +111,8 @@ export function VueDiscussion() {
       .then((o) => {
         if (annule) return;
         setEtat({ ouverture: o, erreur: null, chargement: false });
+        setCartes(o.cartes ?? []);
+        setCartesIndisponibles(o.cartesIndisponibles === true);
         setMessages((actuels) => fusionner(actuels, o.messages));
       })
       .catch((erreur: unknown) => !annule && setEtat({ ouverture: null, erreur, chargement: false }));
@@ -105,7 +126,9 @@ export function VueDiscussion() {
     enVol.current = true;
     try {
       const derniere = messagesRef.current.at(-1)?.date;
-      const r = await appelRoute<{ messages: MessageFil[] }>("GET", `/discussion/messages?companyId=${encodeURIComponent(companyId)}${derniere ? `&depuis=${encodeURIComponent(derniere)}` : ""}`);
+      const r = await appelRoute<{ messages: MessageFil[]; cartes?: ElementAccueil[]; cartesIndisponibles?: boolean }>("GET", `/discussion/messages?companyId=${encodeURIComponent(companyId)}${derniere ? `&depuis=${encodeURIComponent(derniere)}` : ""}`);
+      if (r.cartes) setCartes(r.cartes);
+      setCartesIndisponibles(r.cartesIndisponibles === true);
       if (r.messages.length > 0) {
         setMessages((actuels) => fusionner(actuels, r.messages));
         if (r.messages.some((m) => m.auteur === "agent")) setAttenteDepuis(null);
@@ -148,7 +171,7 @@ export function VueDiscussion() {
   useEffect(() => {
     const el = fil.current;
     if (el) el.scrollTop = el.scrollHeight;
-  }, [messages.length, attenteDepuis]);
+  }, [messages.length, cartes.length, attenteDepuis]);
 
   const envoyer = useCallback(
     async (brut: string) => {
@@ -188,7 +211,7 @@ export function VueDiscussion() {
         {etat.ouverture?.identifiant ? <span className="atl-attenue">{etat.ouverture.identifiant}</span> : null}
       </div>
       <div ref={fil} className="atl-disc-fil" role="log" aria-live="polite" aria-label="Messages de la discussion">
-        {messages.length === 0 ? (
+        {messages.length === 0 && cartes.length === 0 ? (
           <div className="atl-disc-vide">
             <p>Demandez ce que vous voulez à l'équipe : état des missions, blocages, nouveaux leads, nouvelle prospection.</p>
             <div className="atl-disc-suggestions">
@@ -201,16 +224,39 @@ export function VueDiscussion() {
           </div>
         ) : (
           messages.map((m) => (
-            <div key={m.id} className="atl-disc-bulle" data-auteur={m.auteur}>
+            <div key={m.id} className="atl-disc-bulle" data-auteur={m.auteur} data-actions={m.actions && m.actions.length > 0 ? "oui" : undefined}>
               <span className="atl-disc-meta">
                 {m.nom} · <time dateTime={m.date}>{dateHeure(m.date)}</time>
               </span>
-              <p className="atl-disc-texte">
-                <TexteSur texte={m.texte} />
-              </p>
+              {m.texte.trim() !== "" ? (
+                <p className="atl-disc-texte">
+                  <TexteSur texte={m.texte} />
+                </p>
+              ) : null}
+              {m.auteur === "agent" && m.actions && m.actions.length > 0 ? (
+                <ActionsMessage idMessage={m.id} actions={m.actions} elements={elements} faits={faits} onFait={traite} />
+              ) : null}
             </div>
           ))
         )}
+        {cartes
+          .filter((c) => faits[`carte:${c.id}`])
+          .map((c) => (
+            <MessageFait key={c.id} className="atl-disc-attente" texte={faits[`carte:${c.id}`]!} />
+          ))}
+        {cartes
+          .filter((c) => !faits[`carte:${c.id}`])
+          .map((c) => (
+            <CarteFil key={c.id} element={c} onFait={(message) => traite(`carte:${c.id}`, message)} />
+          ))}
+        {erreurElements || cartesIndisponibles ? (
+          <ActionsIndisponibles
+            onReessayer={() => {
+              reessayerElements();
+              if (cartesIndisponibles) setVersion((v) => v + 1);
+            }}
+          />
+        ) : null}
         {attenteDepuis !== null ? (
           <p className="atl-disc-attente" role="status">
             Le Coordinateur réfléchit…

@@ -22,12 +22,12 @@ export function renvoiEnAttenteInformation(evaluation) {
 /** Corps du PATCH de la tâche selon la décision de la porte. */
 export function patchDecisionPorte(evaluation) {
   if (evaluation.decision === "PASS") {
-    return { status: "done", comment: `Porte déterministe franchie (évaluation ${evaluation.id}, empreinte ${evaluation.empreinte.slice(0, 12)}).` };
+    return { status: "done", comment: `Contrôle automatique réussi (évaluation ${evaluation.id}, empreinte ${evaluation.empreinte.slice(0, 12)}).` };
   }
   const motifs = (evaluation.motifs ?? []).map((m) => `- ${m.message}`).join("\n");
   const patch = {
     status: "in_progress",
-    comment: `Porte déterministe ${evaluation.decision === "REFUS" ? "refusée" : "bloquée (information manquante)"} :\n${motifs}`,
+    comment: `Contrôle automatique ${evaluation.decision === "REFUS" ? "refusé" : "bloqué (information manquante)"} :\n${motifs}`,
   };
   if (renvoiEnAttenteInformation(evaluation)) patch.awaitingInformation = true;
   return patch;

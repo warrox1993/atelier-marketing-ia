@@ -19,4 +19,6 @@ export * from "./referentiel.js";
 export * from "./prospection.js";
 export * from "./connaissances.js";
 export * from "./realite.js";
+export * from "./rapport.js";
+export * from "./liaisons.js";
 export * from "./ui.js";

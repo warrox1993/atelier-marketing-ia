@@ -88,7 +88,7 @@ export function calculerStatutFonctionnel(t: EtatNatifTache, f: FaitsComplementa
     case "done":
       if (!f.sousPorte) return { statut: "completed", motif: "Tâche terminée (statut natif done)." };
       return f.approbationValide === true
-        ? { statut: "approved", motif: "Porte franchie puis décision humaine d'approbation sur la révision courante." }
+        ? { statut: "approved", motif: "Contrôle automatique réussi puis décision humaine d'approbation sur la révision courante." }
         : { statut: "blocked_information", motif: "Terminée sans approbation humaine valide sur la révision courante (aucune décision, ou livrable modifié après l'approbation) : décision humaine requise." };
     case "blocked":
       if (f.bloqueursNonResolus > 0) {
@@ -111,15 +111,15 @@ export function calculerStatutFonctionnel(t: EtatNatifTache, f: FaitsComplementa
       if (etat?.status === "changes_requested") {
         return { statut: "changes_requested", motif: `Corrections demandées (cycle ${etat.changesRequestedCount ?? 0}).` };
       }
-      if (f.runActif) return { statut: "running", motif: "Un run est en cours." };
-      if (f.dernierRunEchoue) return { statut: "failed", motif: "Le dernier run a échoué ; reprise selon la politique native." };
-      return { statut: "ready", motif: "En cours, en attente du prochain run." };
+      if (f.runActif) return { statut: "running", motif: "Un passage est en cours." };
+      if (f.dernierRunEchoue) return { statut: "failed", motif: "Le dernier passage a échoué ; reprise selon la politique native." };
+      return { statut: "ready", motif: "En cours, en attente du prochain passage." };
     case "todo":
       if (f.agentEnPauseBudget) return { statut: "blocked_budget", motif: "Agent en pause : plafond de budget atteint." };
       if (f.bloqueursNonResolus > 0) {
         return { statut: "blocked_dependency", motif: `${f.bloqueursNonResolus} dépendance(s) non résolue(s).` };
       }
-      if (f.runActif) return { statut: "running", motif: "Un run est en cours." };
+      if (f.runActif) return { statut: "running", motif: "Un passage est en cours." };
       return t.assigneeAgentId || t.assigneeUserId
         ? { statut: "ready", motif: "Affectée, dépendances satisfaites." }
         : { statut: "queued", motif: "Non affectée." };

@@ -178,42 +178,43 @@ function phraseDemo(analyses: number, demo: number): string {
   return `${sujet}, mais ${quoi} : ce n'est pas une base légale réelle.`;
 }
 
+/** Lead relu comme l'affichage d'une page de prospects (mêmes champs, validé par le contrat) ; `null` si non conforme. */
+export function assemblerProspect(l: Awaited<ReturnType<BaseAtelier["listerProspects"]>>["lignes"][number], det: Awaited<ReturnType<BaseAtelier["detailsProspects"]>>): Prospect | null {
+  const basesLegales = (det.bases.get(l.id) ?? []).map((b) => ({
+    prospectId: l.id, cible: b.cible, forme: b.forme, canal: b.canal, base: b.base, natureAdresse: b.nature_adresse,
+    preuve: typeof b.preuve === "string" ? JSON.parse(b.preuve) : b.preuve, information: typeof b.information === "string" ? JSON.parse(b.information) : b.information,
+    dncmVerifieLe: b.dncm_verifie_le == null ? null : new Date(String(b.dncm_verifie_le)).toISOString(), verifieLe: new Date(String(b.verifie_le)).toISOString(), verifiePar: b.verifie_par,
+  }));
+  const parsees = basesLegales.map((b) => BaseLegaleContact.safeParse(b));
+  if (parsees.some((x) => !x.success)) return null;
+  const r = Prospect.safeParse({ ...l, empreintes: (det.empreintes.get(l.id) ?? []).slice(0, 20), score: null, basesLegales: parsees.map((x) => (x as { data: unknown }).data) });
+  return r.success ? r.data : null;
+}
+
+/** Contexte de qualification d'une entreprise, lu une fois (cibles, base clients, réglages, corrections). */
+export async function contexteQualification(base: BaseAtelier, stock: StockReglagesLeads, companyId: string, maintenant: Date): Promise<ContexteQualification> {
+  const [marque] = await base.marques(companyId);
+  const etat = await base.etatBaseClients(companyId);
+  const q = await lireQualification(stock, companyId);
+  return {
+    ...q,
+    cibles: (marque?.ciblesProspection ?? []) as ContexteQualification["cibles"],
+    segments: (marque?.segments ?? []) as ContexteQualification["segments"],
+    etablissements: (marque?.etablissements ?? []) as ContexteQualification["etablissements"],
+    offres: (marque?.offres ?? []) as NonNullable<ContexteQualification["offres"]>,
+    baseClientsImportee: etat.clients > 0,
+    maintenant: maintenant.toISOString(),
+  };
+}
+
 export function routesRealite(d: DependancesRealite): Partial<Record<CleRouteApi, GestionnaireRoute>> {
   const { ctx, base, stock } = d;
   const maintenant = () => (d.maintenant ? d.maintenant() : new Date());
   const routes: Partial<Record<CleRouteApi, GestionnaireRoute>> = {};
 
-  /** Lead relu comme l'affichage d'une page de prospects (mêmes champs, validé par le contrat) ; `null` si non conforme. */
-  function assembler(l: Awaited<ReturnType<BaseAtelier["listerProspects"]>>["lignes"][number], det: Awaited<ReturnType<BaseAtelier["detailsProspects"]>>): Prospect | null {
-    const basesLegales = (det.bases.get(l.id) ?? []).map((b) => ({
-      prospectId: l.id, cible: b.cible, forme: b.forme, canal: b.canal, base: b.base, natureAdresse: b.nature_adresse,
-      preuve: typeof b.preuve === "string" ? JSON.parse(b.preuve) : b.preuve, information: typeof b.information === "string" ? JSON.parse(b.information) : b.information,
-      dncmVerifieLe: b.dncm_verifie_le == null ? null : new Date(String(b.dncm_verifie_le)).toISOString(), verifieLe: new Date(String(b.verifie_le)).toISOString(), verifiePar: b.verifie_par,
-    }));
-    const parsees = basesLegales.map((b) => BaseLegaleContact.safeParse(b));
-    if (parsees.some((x) => !x.success)) return null;
-    const r = Prospect.safeParse({ ...l, empreintes: (det.empreintes.get(l.id) ?? []).slice(0, 20), score: null, basesLegales: parsees.map((x) => (x as { data: unknown }).data) });
-    return r.success ? r.data : null;
-  }
-
-  async function contexte(companyId: string): Promise<ContexteQualification> {
-    const [marque] = await base.marques(companyId);
-    const etat = await base.etatBaseClients(companyId);
-    const q = await lireQualification(stock, companyId);
-    return {
-      ...q,
-      cibles: (marque?.ciblesProspection ?? []) as ContexteQualification["cibles"],
-      segments: (marque?.segments ?? []) as ContexteQualification["segments"],
-      etablissements: (marque?.etablissements ?? []) as ContexteQualification["etablissements"],
-      offres: (marque?.offres ?? []) as NonNullable<ContexteQualification["offres"]>,
-      baseClientsImportee: etat.clients > 0,
-      maintenant: maintenant().toISOString(),
-    };
-  }
-
   /** Un seul parcours : pour chaque critère, leads « non vérifiés » ; pour chaque branchement, leads distincts concernés. */
   async function parcourir(companyId: string) {
-    const ctxQualif = await contexte(companyId);
+    const ctxQualif = await contexteQualification(base, stock, companyId, maintenant());
     const parCritere = new Map<string, { libelle: string; n: number }>();
     const parBranchement = new Map<CleBranchement, number>();
     let demonstration = 0;
@@ -229,7 +230,7 @@ export function routesRealite(d: DependancesRealite): Partial<Record<CleRouteApi
       if (lignes.length > 0) {
         const det = await base.detailsProspects(companyId, lignes.map((l) => l.id));
         for (const l of lignes) {
-          const p = assembler(l, det);
+          const p = assemblerProspect(l, det);
           if (p === null) {
             illisibles++;
             continue;

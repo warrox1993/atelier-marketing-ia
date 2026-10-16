@@ -26,6 +26,7 @@ export const ORIGINE_DEMANDE = `plugin:${PLUGIN_ID}:demande` as const;
 export type TypeElementAccueil =
   | "contenu_a_valider"
   | "approbation"
+  | "liaison_a_approuver"
   | "demande_acces"
   | "tache_bloquee"
   | "document_a_revoir"
@@ -54,7 +55,36 @@ export interface InteractionAccueil {
   details: string | null;
   libelleAccepter: string | null;
   libelleRefuser: string | null;
+  /** Le serveur exige une raison pour refuser (`rejectRequiresReason`). */
+  refusRaisonObligatoire: boolean;
+  /**
+   * La carte exécute un outil (`toolAction`, ex. envoi d'un e-mail) ou propose un secret (`secretProposal`) :
+   * jamais de décision sur place, seulement le lien vers la tâche native où le détail est visible.
+   */
+  natifSeulement: boolean;
   questions: QuestionAccueil[];
+}
+
+/** Approbation native réduite à ce que l'Accueil affiche avant toute décision. */
+export interface DetailApprobation {
+  /** Type natif (`hire_agent`, `budget_override_required`, …). */
+  type: string;
+  /** Vrai seulement pour les types connus et sans effet caché : sinon, page native uniquement. */
+  surPlace: boolean;
+  demandeur: string;
+  lignes: Array<{ libelle: string; valeur: string }>;
+}
+
+/** Demande d'un service à un autre (bureau de liaison) en attente d'approbation : tout son contenu, affiché AVANT décision. */
+export interface LiaisonAApprouver {
+  liaisonId: string;
+  /** Service qui demande (slug du registre). */
+  serviceSource: string;
+  /** Service visé (slug du registre). */
+  serviceCible: string;
+  objet: string;
+  question: string;
+  extraits: Array<{ titre: string; texte: string }>;
 }
 
 export interface ElementAccueil {
@@ -75,8 +105,12 @@ export interface ElementAccueil {
   issueId?: string;
   /** Approbation native en attente (approbation, demande d'accès). */
   approbationId?: string;
+  /** Contenu de l'approbation native (type, demandeur, détails) et possibilité de la décider sur place. */
+  approbation?: DetailApprobation;
   /** Carte native en attente (question ou confirmation). */
   interaction?: InteractionAccueil;
+  /** Liaison entre services en attente d'approbation (décision par `liaison.decider`). */
+  liaison?: LiaisonAApprouver;
 }
 
 export interface MissionResumee {
@@ -118,6 +152,8 @@ export interface DependancesAccueil {
   passerelleConnectee(companyId: string): Promise<boolean>;
   /** Documents de connaissances dont la revue est due. */
   documentsARevoir(companyId: string): Promise<Array<{ id: string; titre: string }>>;
+  /** Liaisons entre services de cette entreprise (source) qui attendent l'approbation d'un humain. Absent : aucune. */
+  liaisonsAApprouver?(companyId: string): Promise<Array<LiaisonAApprouver & { tacheOrigine: string }>>;
 }
 
 /* ------------------------------------------------------------------ */
@@ -128,10 +164,11 @@ const RANG_URGENCE: Readonly<Record<UrgenceAccueil, number>> = { haute: 0, moyen
 const RANG_TYPE: Readonly<Record<TypeElementAccueil, number>> = {
   contenu_a_valider: 0,
   approbation: 1,
-  demande_acces: 2,
-  tache_bloquee: 3,
-  document_a_revoir: 4,
-  information_manquante: 5,
+  liaison_a_approuver: 2,
+  demande_acces: 3,
+  tache_bloquee: 4,
+  document_a_revoir: 5,
+  information_manquante: 6,
 };
 
 /** Tri : questions de l'équipe d'abord, puis par urgence, par type et par titre (ordre stable et prévisible). */
@@ -203,6 +240,8 @@ export function interactionAccueil(carte: { id: string; kind: string; payload?: 
     details: texteOuNul(p.detailsMarkdown),
     libelleAccepter: texteOuNul(p.acceptLabel),
     libelleRefuser: texteOuNul(p.rejectLabel),
+    refusRaisonObligatoire: p.rejectRequiresReason === true,
+    natifSeulement: p.toolAction != null || p.secretProposal != null,
     questions: carte.kind !== "ask_user_questions" ? [] : questions.map((q) => ({
       id: String(q.id ?? ""),
       invite: texteOuNul(q.prompt) ?? "",
@@ -214,6 +253,47 @@ export function interactionAccueil(carte: { id: string; kind: string; payload?: 
         id: String(o.id ?? ""), libelle: texteOuNul(o.label) ?? "", description: texteOuNul(o.description), texteLibre: o.freeText === true,
       })),
     })),
+  };
+}
+
+/**
+ * Types d'approbation décidables sur place : leur approbation n'a aucun effet caché. `hire_agent` active un
+ * agent avec l'adaptateur et la configuration de la demande, `budget_override_required` s'approuve sans
+ * montant, et tout type inconnu est traité comme eux : page native uniquement.
+ */
+const TYPES_APPROBATION_SURS = new Set(["approve_ceo_strategy", "request_board_approval"]);
+
+const coupe = (v: unknown, max = 1200): string | null => {
+  const t = texteOuNul(v);
+  return t === null ? null : t.length > max ? `${t.slice(0, max)}…` : t;
+};
+
+/** Réduit une approbation native à son contenu lisible (lecture défensive : la charge vient d'un agent). */
+export function detailApprobation(a: { type: string; payload?: unknown; requestedByAgentId?: string | null }): DetailApprobation {
+  const p = (a.payload ?? {}) as Record<string, unknown>;
+  const lignes: Array<{ libelle: string; valeur: string }> = [];
+  const ajouter = (libelle: string, v: unknown) => {
+    const t = coupe(v);
+    if (t !== null) lignes.push({ libelle, valeur: t });
+  };
+  ajouter("Titre", p.title ?? p.name);
+  ajouter("Résumé", p.summary);
+  ajouter("Plan", p.plan ?? p.description ?? p.strategy ?? p.text);
+  ajouter("Action recommandée", p.recommendedAction);
+  ajouter("Suite si vous approuvez", p.nextActionOnApproval);
+  if (Array.isArray(p.risks)) {
+    const risques = p.risks.map((r) => coupe(r, 300)).filter((r): r is string => r !== null).slice(0, 8);
+    if (risques.length > 0) lignes.push({ libelle: "Risques", valeur: risques.join(" ; ") });
+  }
+  for (const [cle, libelle] of [["amountCents", "Montant"], ["budgetAmount", "Budget"], ["observedAmount", "Dépense constatée"]] as const) {
+    const v = p[cle];
+    if (typeof v === "number" && Number.isFinite(v)) lignes.push({ libelle, valeur: cle === "amountCents" ? `${(v / 100).toFixed(2)} €` : String(v) });
+  }
+  return {
+    type: a.type,
+    surPlace: TYPES_APPROBATION_SURS.has(a.type),
+    demandeur: a.requestedByAgentId ? "Un agent de l'équipe" : "Un membre de l'équipe humaine",
+    lignes,
   };
 }
 
@@ -254,6 +334,18 @@ async function enParallele<T, R>(elements: readonly T[], n: number, f: (e: T) =>
   };
   await Promise.all(Array.from({ length: Math.min(n, elements.length) }, ouvrier));
   return resultats;
+}
+
+/** Élément « À faire » d'une carte native en attente (question ou confirmation) ; `null` pour toute autre carte. */
+export function elementDepuisCarte(issue: Pick<Issue, "id" | "identifier" | "title">, carte: Awaited<ReturnType<PluginContext["issues"]["listInteractions"]>>[number]): ElementAccueil | null {
+  if (carte.status !== "pending" || (carte.kind !== "ask_user_questions" && carte.kind !== "request_confirmation")) return null;
+  const question = carte.kind === "ask_user_questions";
+  return {
+    id: `question:${carte.id}`, type: "information_manquante", urgence: "haute", enTete: true,
+    titre: carte.title?.trim() || (question ? "L'équipe vous pose une question" : "L'équipe attend votre confirmation"),
+    raison: `${question ? "Il manque une information que l'équipe ne peut pas obtenir seule" : "Une décision vous revient"} (${issue.identifier ?? "tâche"} · ${issue.title}). Le travail attend votre réponse.`,
+    lien: lienTache(issue), action: question ? "Répondre" : "Confirmer", issueId: issue.id, interaction: interactionAccueil(carte),
+  };
 }
 
 export function routesAccueil(d: DependancesAccueil): Partial<Record<CleRouteApi, GestionnaireRoute>> {
@@ -331,14 +423,8 @@ export function routesAccueil(d: DependancesAccueil): Partial<Record<CleRouteApi
       const cartes = await sansEchec("cartes", () => ctx.issues.listInteractions(issue.id, companyId), [] as Awaited<ReturnType<PluginContext["issues"]["listInteractions"]>>);
       const trouves: ElementAccueil[] = [];
       for (const carte of cartes) {
-        if (carte.status !== "pending" || (carte.kind !== "ask_user_questions" && carte.kind !== "request_confirmation")) continue;
-        const question = carte.kind === "ask_user_questions";
-        trouves.push({
-          id: `question:${carte.id}`, type: "information_manquante", urgence: "haute", enTete: true,
-          titre: carte.title?.trim() || (question ? "L'équipe vous pose une question" : "L'équipe attend votre confirmation"),
-          raison: `${question ? "Il manque une information que l'équipe ne peut pas obtenir seule" : "Une décision vous revient"} (${issue.identifier ?? "tâche"} · ${issue.title}). Le travail attend votre réponse.`,
-          lien: lienTache(issue), action: question ? "Répondre" : "Confirmer", issueId: issue.id, interaction: interactionAccueil(carte),
-        });
+        const element = elementDepuisCarte(issue, carte);
+        if (element) trouves.push(element);
       }
       return trouves;
     });
@@ -351,22 +437,40 @@ export function routesAccueil(d: DependancesAccueil): Partial<Record<CleRouteApi
     return attente.map((a) => {
       const acces = a.type === "hire_agent";
       const budget = a.type === "budget_override_required";
+      const detail = detailApprobation(a);
       const nom = typeof a.payload?.name === "string" && a.payload.name.trim() !== "" ? a.payload.name.trim() : null;
       return {
         id: `approbation:${a.id}`,
         type: acces ? "demande_acces" : "approbation",
         urgence: acces ? "moyenne" : "haute",
         titre: acces ? (nom ? `Un nouvel agent demande à rejoindre l'équipe : ${nom}` : "Un nouvel agent demande à rejoindre l'équipe") : budget ? "Dépassement de budget à autoriser" : "Approbation en attente",
-        raison: acces
+        raison: (acces
           ? "L'agent ne peut pas travailler tant que vous n'avez pas accepté ou refusé sa demande."
           : budget
             ? "Un agent a atteint son budget et demande l'autorisation de continuer."
-            : "L'équipe attend votre accord pour poursuivre.",
+            : "L'équipe attend votre accord pour poursuivre.") + (detail.surPlace ? "" : " Cette décision se prend dans la page native, où tout son contenu est visible."),
         lien: `/approvals/${a.id}`,
         action: acces ? "Examiner la demande" : "Décider",
         approbationId: a.id,
+        approbation: detail,
       } satisfies ElementAccueil;
     });
+  }
+
+  async function elementsLiaisons(companyId: string): Promise<ElementAccueil[]> {
+    if (!d.liaisonsAApprouver) return [];
+    const liaisons = (await d.liaisonsAApprouver(companyId)).slice(0, 20);
+    return Promise.all(
+      liaisons.map(async ({ tacheOrigine, ...l }) => {
+        const origine = await sansEchec("tâche d'origine de la liaison", () => ctx.issues.get(tacheOrigine, companyId), null);
+        return {
+          id: `liaison:${l.liaisonId}`, type: "liaison_a_approuver" as const, urgence: "haute" as const,
+          titre: `Demande au service ${l.serviceCible} : ${resumer(l.objet, 120)}`,
+          raison: `Le service ${l.serviceSource} veut envoyer une demande au service ${l.serviceCible}. Rien n'est envoyé tant que vous n'avez pas décidé : lisez le contenu complet avant de répondre.`,
+          lien: origine ? lienTache(origine) : `/issues/${tacheOrigine}`, action: "Voir la tâche d'origine", issueId: tacheOrigine, liaison: l,
+        };
+      }),
+    );
   }
 
   async function elementsConnaissances(companyId: string): Promise<ElementAccueil[]> {
@@ -422,9 +526,10 @@ export function routesAccueil(d: DependancesAccueil): Partial<Record<CleRouteApi
   routes["accueil.lister"] = async (r) => {
     exigerHumain(r.acteur, "L'accueil");
     const c = r.companyId;
-    const [taches, approbations, connaissances, manquants, demandes, questions] = await Promise.all([
+    const [taches, approbations, liaisons, connaissances, manquants, demandes, questions] = await Promise.all([
       sansEchec("tâches", () => elementsTaches(c), [] as ElementAccueil[]),
       sansEchec("approbations", () => elementsApprobations(c), [] as ElementAccueil[]),
+      sansEchec("liaisons", () => elementsLiaisons(c), [] as ElementAccueil[]),
       sansEchec("connaissances", () => elementsConnaissances(c), [] as ElementAccueil[]),
       elementsManquants(c),
       sansEchec("missions", () => ctx.issues.list({ companyId: c, originKind: ORIGINE_DEMANDE as never, includePluginOperations: true, limit: 50 }), [] as Issue[]),
@@ -454,7 +559,7 @@ export function routesAccueil(d: DependancesAccueil): Partial<Record<CleRouteApi
           };
         }),
     );
-    return { corps: { companyId: c, elements: trierElements([...questions, ...taches, ...approbations, ...connaissances, ...manquants]), missions } };
+    return { corps: { companyId: c, elements: trierElements([...questions, ...taches, ...approbations, ...liaisons, ...connaissances, ...manquants]), missions } };
   };
 
   routes["equipe.demander"] = async (r) => {

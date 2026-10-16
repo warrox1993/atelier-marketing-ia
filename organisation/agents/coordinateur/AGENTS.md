@@ -211,8 +211,13 @@ curl -sS -w '\nHTTP %{http_code}\n' -X POST --variable %PAPERCLIP_API_URL --vari
 ## Outils
 
 Lecture des fichiers de ton espace et API Paperclip (`curl` avec les variables
-`PAPERCLIP_*` injectées). Tu lis les pages publiques du client (WebFetch) pour cadrer ; la recherche
-web ouverte et la veille restent à l'agent Veille.
+`PAPERCLIP_*` injectées). Tu lis les pages publiques du client par la lecture protégée d'URL
+(ci-dessous) pour cadrer ; la recherche web ouverte et la veille restent à l'agent Veille.
+
+Réseau confiné : tu n'atteins que l'API de l'atelier et l'API du modèle. `WebFetch`
+et `curl` vers un site externe échouent. Pour lire une page
+publique, passe par la lecture protégée `POST /api/plugins/atelier.marketing-ia/api/taches/<issueId>/sources`
+(corps `{"url":"https://…"}`) : elle renvoie un extrait et enregistre la source datée.
 
 ## Interface de l'atelier
 
@@ -283,6 +288,43 @@ Carte de questions sur la tâche parente :
 ```
 curl -sS -w '\nHTTP %{http_code}\n' -X POST --variable %PAPERCLIP_API_URL --variable %PAPERCLIP_API_KEY --variable %PAPERCLIP_RUN_ID --expand-header 'Authorization: Bearer {{PAPERCLIP_API_KEY}}' --expand-header 'X-Paperclip-Run-Id: {{PAPERCLIP_RUN_ID}}' -H 'Content-Type: application/json' --expand-url '{{PAPERCLIP_API_URL}}/api/issues/<issueId de la tâche parente>/interactions' --data-raw '{"kind":"ask_user_questions","title":"Information introuvable","continuationPolicy":"wake_assignee","payload":{"version":1,"questions":[{"id":"q1","prompt":"<question précise>","helpText":"Déjà cherché : <sources et outils consultés>","selectionMode":"single","required":true,"options":[{"id":"autre","label":"Je réponds","freeText":true}]}]}}'
 ```
+
+## Discussion : actions
+
+Dans l'issue de discussion, tu peux joindre à ton commentaire des boutons que l'opérateur clique dans l'atelier. Ajoute à la fin
+du commentaire UN bloc de code `atelier-actions` contenant un tableau JSON (6 actions au plus) :
+
+```atelier-actions
+[{"type":"ouvrir","cible":"prospects","filtre":{"statut":"qualifie"}},{"type":"traiter","element":"contenu:<issueId>"}]
+```
+
+- `{"type":"ouvrir","cible":"<rubrique>"}` : bouton « Voir … ». Cibles permises : accueil, prospects, carte, campagnes,
+  contenus, calendrier, resultats, equipe, marque, connaissances, mise-en-place, parametres, corbeille. Rien d'autre.
+- `"filtre"` (facultatif, utile seulement avec `"cible":"prospects"`) : un objet qui ouvre la liste déjà filtrée. Champs
+  permis, tous facultatifs : `statut` (`nouveau`, `exclu`, `qualifie`, `exporte` ou `refuse`), `segment` (code de segment
+  de la fiche du client), `campagne` (identifiant de la campagne), `zone` (communes ou codes postaux séparés par des
+  virgules, 80 caractères au plus), `secteur` (codes NACE séparés par des virgules), `source` (`reelle` ou
+  `demonstration`), `score` (score minimal en chiffres, texte « 60 »), `qualifies` (`"oui"` pour les seuls qualifiés).
+  Un champ inconnu ou une valeur hors forme fait écarter l'action entière. Un texte libre à la place de l'objet est refusé.
+- `{"type":"traiter","element":"<id>"}` : bouton qui déplie le panneau de décision dans le fil. Identifiants permis :
+  `contenu:<issueId>` (contenu à valider), `question:<interactionId>` (carte `ask_user_questions` ou
+  `request_confirmation` en attente), `approbation:<approvalId>`, `tache:<issueId>` (tâche bloquée). Prends l'identifiant
+  dans l'API, ne l'invente jamais : un identifiant inconnu n'affiche aucun bouton.
+- Aucun libellé, aucune URL, aucun HTML, aucun `companyId` : le moindre champ en trop fait écarter l'action. Les boutons
+  complètent ton texte, ils ne le remplacent pas : écris toujours la phrase qui explique.
+
+Exemple 1 : « Vous avez 12 leads qualifiés (ATL-31). »
+```atelier-actions
+[{"type":"ouvrir","cible":"prospects","filtre":{"statut":"qualifie"}}]
+```
+
+Exemple 2 : « Le post de printemps est prêt, il attend votre accord. »
+```atelier-actions
+[{"type":"traiter","element":"contenu:00000000-0000-4000-8000-000000000001"}]
+```
+
+Une carte `request_confirmation` ou `ask_user_questions` posée sur l'issue de discussion apparaît d'elle-même dans le fil,
+avec son panneau de réponse : inutile d'y ajouter une action.
 
 <!-- Consignes communes : générées depuis organisation/registre/consignes-communes.md par scripts/bootstrap-organisation.py generer ; ne pas modifier sous cette ligne. -->
 
@@ -449,6 +491,21 @@ Exemple minimal valide :
 
 ```json
 {"recipient":{"type":"agent","id":"exemple"},"contenu":{"type":"demande_information","question":"exemple","justification":"exemple","consequence":"exemple"}}
+```
+
+### POST /taches/:issueId/sources
+
+Clé : `tache.sources.lire`. Lecture d'une URL publique protégée contre la SSRF ;
+
+| Champ | Type | Obligatoire | Bornes |
+| --- | --- | --- | --- |
+| `url` | texte | oui | 1 à 2048 caractères |
+| `campagneId` | uuid | non | peut valoir null |
+
+Exemple minimal valide :
+
+```json
+{"url":"exemple"}
 ```
 
 ### POST /portes

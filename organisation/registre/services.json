@@ -1,0 +1,675 @@
+{
+  "schema": "atelier/registre-services/v1",
+  "version": "1.0.0",
+  "dateVersion": "2026-10-16",
+  "description": "Registre des services de l'Atelier. Chaque service est une entreprise Paperclip distincte dans l'instance du client ; la Direction voit tout. Les services échangent uniquement par des demandes tracées entre coordinateurs (bureau de liaison, construit plus tard dans le plugin), selon la matrice « flux » : pas de flux déclaré, pas d'échange. Le service marketing renvoie à organisation/registre/agents.json (champ agentsRef) sans dupliquer ses agents. Un service « sensible » impose l'approbation humaine sur tous ses flux.",
+  "services": [
+    {
+      "slug": "marketing",
+      "nom": "Marketing",
+      "prefixe": "MKT",
+      "actif": true,
+      "description": "Visibilité locale, contenus, campagnes et mesure pour le courtier.\nLes agents sont ceux du registre existant (agents.json), non dupliqués ici.",
+      "coordinateur": "coordinateur",
+      "agentsRef": "agents.json",
+      "agents": [],
+      "humainSeul": [
+        "Publication réelle sur un canal externe",
+        "Budget publicitaire engagé",
+        "Message aux clients sur un produit d'assurance"
+      ],
+      "obligations": [
+        "RGPD",
+        "Prospection électronique (Code de droit économique, livre XII)",
+        "Règles de publicité en assurance (FSMA)"
+      ],
+      "donnees": [
+        "Site web et analytics",
+        "Fiches d'établissements",
+        "Réseaux sociaux",
+        "CRM (leads)"
+      ]
+    },
+    {
+      "slug": "direction",
+      "nom": "Direction",
+      "prefixe": "DIR",
+      "actif": true,
+      "description": "Vue d'ensemble de l'entreprise : voit tous les services, arbitre et tranche.\nReçoit les rapports et escalades de chaque service par des demandes tracées.",
+      "coordinateur": "coordinateur-direction",
+      "agents": [
+        "coordinateur-direction",
+        "synthese",
+        "tableau-de-bord"
+      ],
+      "humainSeul": [
+        "Toute décision stratégique",
+        "Budgets et investissements",
+        "Nominations et organisation"
+      ],
+      "obligations": [
+        "Responsabilité des administrateurs (Code des sociétés et des associations)"
+      ],
+      "donnees": [
+        "Rapports de tous les services",
+        "Indicateurs financiers",
+        "Registre des demandes entre services"
+      ]
+    },
+    {
+      "slug": "administratif",
+      "nom": "Administratif",
+      "prefixe": "ADM",
+      "actif": true,
+      "description": "Courrier, classement, suivi des dossiers et secrétariat.\nPrépare les pièces, ne signe ni n'engage rien.",
+      "coordinateur": "coordinateur-administratif",
+      "agents": [
+        "coordinateur-administratif",
+        "agenda-documents",
+        "courrier"
+      ],
+      "humainSeul": [
+        "Signature de tout document engageant",
+        "Envoi d'un courrier officiel"
+      ],
+      "obligations": [
+        "RGPD (durées de conservation, droits des personnes)"
+      ],
+      "donnees": [
+        "Messagerie",
+        "Gestion documentaire",
+        "Agenda"
+      ]
+    },
+    {
+      "slug": "juridique",
+      "nom": "Juridique",
+      "prefixe": "JUR",
+      "actif": true,
+      "description": "Veille juridique et première lecture de documents pour préparer le travail des juristes.\nAucun avis engageant : tout avis reste donné par un juriste ou un avocat humain.",
+      "coordinateur": "coordinateur-juridique",
+      "agents": [
+        "coordinateur-juridique",
+        "lecture-contrats",
+        "registre-rgpd"
+      ],
+      "humainSeul": [
+        "Tout avis juridique engageant",
+        "Position dans un litige",
+        "Signature d'un contrat",
+        "Saisine d'un tribunal"
+      ],
+      "obligations": [
+        "Code de droit économique",
+        "Profession d'avocat réservée aux avocats (aucun avis engageant par l'IA)",
+        "RGPD"
+      ],
+      "donnees": [
+        "Contrats",
+        "Veille législative et jurisprudence",
+        "Dossiers contentieux"
+      ],
+      "sensible": true
+    },
+    {
+      "slug": "commercial",
+      "nom": "Commercial",
+      "prefixe": "COM",
+      "actif": true,
+      "description": "Préparation des rendez-vous, propositions et suivi du portefeuille d'opportunités.\nLe conseil en assurance reste humain.",
+      "coordinateur": "coordinateur-commercial",
+      "agents": [
+        "coordinateur-commercial",
+        "preparation-rdv",
+        "propositions",
+        "renouvellements"
+      ],
+      "humainSeul": [
+        "Conseil en assurance au client (devoir de conseil)",
+        "Recommandation d'un produit",
+        "Remise commerciale hors barème",
+        "Signature d'une proposition"
+      ],
+      "obligations": [
+        "Directive IDD (UE) 2016/97 et loi du 4/04/2014 relative aux assurances",
+        "AssurMiFID (produits d'investissement d'assurance)",
+        "RGPD"
+      ],
+      "donnees": [
+        "CRM",
+        "Agenda",
+        "Catalogue produits et compagnies"
+      ]
+    },
+    {
+      "slug": "recouvrement",
+      "nom": "Recouvrement",
+      "prefixe": "REC",
+      "actif": true,
+      "description": "Suivi des impayés, relances graduées et balance âgée.\nLes relances amiables sont préparées, la mise en demeure et le contentieux restent humains.",
+      "coordinateur": "coordinateur-recouvrement",
+      "agents": [
+        "coordinateur-recouvrement",
+        "balance-agee",
+        "relances"
+      ],
+      "humainSeul": [
+        "Mise en demeure",
+        "Plan de paiement accordé",
+        "Passage au contentieux",
+        "Abandon ou réduction de créance"
+      ],
+      "obligations": [
+        "Code de droit économique, livre XIX (insolvabilité) et livre VII (paiement)",
+        "Loi du 20/12/2002 relative au recouvrement amiable des dettes du consommateur",
+        "Loi du 2/08/2002 concernant la lutte contre le retard de paiement",
+        "RGPD"
+      ],
+      "donnees": [
+        "Balance âgée clients",
+        "Facturation",
+        "Historique des relances"
+      ]
+    },
+    {
+      "slug": "sav-sinistres",
+      "nom": "Service après-vente et sinistres",
+      "prefixe": "SAV",
+      "actif": true,
+      "description": "Accueil des réclamations, suivi des sinistres et base de connaissances. Service prioritaire pour un courtier.\nPrépare les réponses et les suivis, la décision sur un sinistre reste humaine.",
+      "coordinateur": "coordinateur-sav",
+      "agents": [
+        "coordinateur-sav",
+        "faq",
+        "reclamations",
+        "sinistres"
+      ],
+      "humainSeul": [
+        "Décision de couverture ou de refus d'un sinistre",
+        "Acceptation d'une indemnité",
+        "Réponse à une plainte formelle",
+        "Dossier transmis à l'Ombudsman"
+      ],
+      "obligations": [
+        "Loi du 4/04/2014 relative aux assurances (gestion des sinistres)",
+        "Ombudsman des assurances (plaintes)",
+        "RGPD (données de santé éventuelles)"
+      ],
+      "donnees": [
+        "Messagerie",
+        "Dossiers sinistres des compagnies",
+        "CRM",
+        "Base de connaissances"
+      ]
+    },
+    {
+      "slug": "commerce-exterieur",
+      "nom": "Commerce extérieur",
+      "prefixe": "CEX",
+      "actif": true,
+      "description": "Formalités douanières, numéro EORI et veille des marchés à l'export.\nPrépare les dossiers, ne dépose ni ne signe aucune déclaration.",
+      "coordinateur": "coordinateur-export",
+      "agents": [
+        "coordinateur-export",
+        "dossiers-export"
+      ],
+      "humainSeul": [
+        "Dépôt d'une déclaration en douane",
+        "Choix du régime douanier ou de l'Incoterm",
+        "Engagement avec un nouveau marché ou partenaire étranger"
+      ],
+      "obligations": [
+        "Code des douanes de l'Union (règlement (UE) 952/2013)",
+        "Numéro EORI",
+        "AWEX (aides et information à l'export)",
+        "Sanctions et embargos"
+      ],
+      "donnees": [
+        "Documents de transport",
+        "Facturation export",
+        "Portail douanier"
+      ]
+    },
+    {
+      "slug": "conformite",
+      "nom": "Conformité",
+      "prefixe": "CNF",
+      "actif": true,
+      "description": "Lutte anti-blanchiment, registre RGPD et canal d'alerte. Service prioritaire pour un courtier.\nPrépare les analyses, les déclarations et les décisions restent humaines.",
+      "coordinateur": "coordinateur-conformite",
+      "agents": [
+        "coordinateur-conformite",
+        "veille-reglementaire",
+        "vigilance-clients"
+      ],
+      "humainSeul": [
+        "Déclaration de soupçon à la CTIF",
+        "Décision de refuser ou rompre une relation",
+        "Traitement d'un signalement du canal d'alerte",
+        "Notification d'une violation de données à l'APD"
+      ],
+      "obligations": [
+        "Loi du 18/09/2017 relative à la prévention du blanchiment (LCB-FT)",
+        "CTIF (déclarations de soupçon)",
+        "Loi du 28/11/2022 sur la protection des lanceurs d'alerte",
+        "RGPD (article 30, registre)"
+      ],
+      "donnees": [
+        "Dossiers clients (identification)",
+        "Registre des traitements",
+        "Canal d'alerte"
+      ]
+    },
+    {
+      "slug": "comptabilite-finance",
+      "nom": "Comptabilité et finance",
+      "prefixe": "CPT",
+      "actif": true,
+      "description": "Facturation, rapprochement bancaire, trésorerie et reporting financier.\nPrépare les écritures et les prévisions, la validation reste humaine.",
+      "coordinateur": "coordinateur-comptabilite",
+      "agents": [
+        "coordinateur-comptabilite",
+        "commissions",
+        "tresorerie"
+      ],
+      "humainSeul": [
+        "Validation des comptes et clôtures",
+        "Paiement d'une facture",
+        "Déclaration TVA",
+        "Décision de financement ou de placement"
+      ],
+      "obligations": [
+        "Facturation électronique Peppol obligatoire en B2B depuis le 1/01/2026",
+        "Code de droit économique, livre III (obligations comptables)",
+        "Code de la TVA"
+      ],
+      "donnees": [
+        "Logiciel comptable",
+        "Banque (extraits)",
+        "Réseau Peppol",
+        "Balance âgée"
+      ]
+    },
+    {
+      "slug": "ressources-humaines",
+      "nom": "Ressources humaines",
+      "prefixe": "RHU",
+      "actif": true,
+      "description": "Administration du personnel, rédaction d'offres et accueil des nouveaux arrivants.\nUsage à haut risque : aucune décision sur une personne n'est prise par l'IA.",
+      "coordinateur": "coordinateur-rh",
+      "agents": [
+        "coordinateur-rh",
+        "accueil",
+        "offres-emploi"
+      ],
+      "humainSeul": [
+        "Sélection de candidats",
+        "Évaluation d'un salarié",
+        "Licenciement ou sanction",
+        "Fixation d'une rémunération"
+      ],
+      "obligations": [
+        "Règlement (UE) 2024/1689 (AI Act) : usage à haut risque en emploi",
+        "CCT n° 39 (information sur l'introduction de nouvelles technologies)",
+        "Loi du 3/07/1978 relative aux contrats de travail",
+        "RGPD"
+      ],
+      "donnees": [
+        "Dossiers du personnel",
+        "Secrétariat social",
+        "Offres d'emploi"
+      ],
+      "sensible": true
+    },
+    {
+      "slug": "informatique",
+      "nom": "Informatique",
+      "prefixe": "INF",
+      "actif": true,
+      "description": "Support aux utilisateurs, gestion des accès et traitement des incidents de sécurité.\nLes changements en production et les accès privilégiés restent humains.",
+      "coordinateur": "coordinateur-informatique",
+      "agents": [
+        "coordinateur-informatique",
+        "documentation",
+        "procedures-incident"
+      ],
+      "humainSeul": [
+        "Attribution d'un accès privilégié",
+        "Changement en production",
+        "Déclaration d'un incident majeur à une autorité"
+      ],
+      "obligations": [
+        "Loi du 26/04/2024 (transposition NIS2)",
+        "RGPD (sécurité des traitements)"
+      ],
+      "donnees": [
+        "Annuaire et comptes",
+        "Journaux de sécurité",
+        "Inventaire du parc"
+      ]
+    },
+    {
+      "slug": "achats",
+      "nom": "Achats",
+      "prefixe": "ACH",
+      "actif": true,
+      "description": "Comparaison de fournisseurs, suivi des commandes et des livraisons.\nPrépare les comparatifs, l'engagement d'une dépense reste humain.",
+      "coordinateur": "coordinateur-achats",
+      "agents": [
+        "coordinateur-achats",
+        "comparaison-offres"
+      ],
+      "humainSeul": [
+        "Engagement d'une dépense",
+        "Choix d'un fournisseur",
+        "Signature d'un contrat d'achat"
+      ],
+      "obligations": [
+        "Loi du 2/08/2002 concernant la lutte contre le retard de paiement",
+        "RGPD (contacts fournisseurs)"
+      ],
+      "donnees": [
+        "Fournisseurs et contrats",
+        "Bons de commande",
+        "Factures fournisseurs"
+      ]
+    },
+    {
+      "slug": "qualite",
+      "nom": "Qualité",
+      "prefixe": "QUA",
+      "actif": true,
+      "description": "Audits internes, indicateurs de qualité et actions correctives.\nSuit les réclamations et l'amélioration continue sans modifier les procédures seul.",
+      "coordinateur": "coordinateur-qualite",
+      "agents": [
+        "coordinateur-qualite",
+        "procedures"
+      ],
+      "humainSeul": [
+        "Validation d'une nouvelle procédure",
+        "Clôture d'une non-conformité majeure"
+      ],
+      "obligations": [
+        "ISO 9001 (référentiel volontaire)",
+        "RGPD"
+      ],
+      "donnees": [
+        "Procédures",
+        "Réclamations",
+        "Indicateurs de qualité"
+      ]
+    }
+  ],
+  "flux": [
+    {
+      "source": "marketing",
+      "cible": "direction",
+      "objet": "Rapport périodique et escalade",
+      "approbationHumaine": false
+    },
+    {
+      "source": "administratif",
+      "cible": "direction",
+      "objet": "Rapport périodique et escalade",
+      "approbationHumaine": false
+    },
+    {
+      "source": "juridique",
+      "cible": "direction",
+      "objet": "Rapport périodique et escalade",
+      "approbationHumaine": true
+    },
+    {
+      "source": "commercial",
+      "cible": "direction",
+      "objet": "Rapport périodique et escalade",
+      "approbationHumaine": false
+    },
+    {
+      "source": "recouvrement",
+      "cible": "direction",
+      "objet": "Rapport périodique et escalade",
+      "approbationHumaine": false
+    },
+    {
+      "source": "sav-sinistres",
+      "cible": "direction",
+      "objet": "Rapport périodique et escalade",
+      "approbationHumaine": false
+    },
+    {
+      "source": "commerce-exterieur",
+      "cible": "direction",
+      "objet": "Rapport périodique et escalade",
+      "approbationHumaine": false
+    },
+    {
+      "source": "conformite",
+      "cible": "direction",
+      "objet": "Rapport périodique et escalade",
+      "approbationHumaine": false
+    },
+    {
+      "source": "comptabilite-finance",
+      "cible": "direction",
+      "objet": "Rapport périodique et escalade",
+      "approbationHumaine": false
+    },
+    {
+      "source": "ressources-humaines",
+      "cible": "direction",
+      "objet": "Rapport périodique et escalade",
+      "approbationHumaine": true
+    },
+    {
+      "source": "informatique",
+      "cible": "direction",
+      "objet": "Rapport périodique et escalade",
+      "approbationHumaine": false
+    },
+    {
+      "source": "achats",
+      "cible": "direction",
+      "objet": "Rapport périodique et escalade",
+      "approbationHumaine": false
+    },
+    {
+      "source": "qualite",
+      "cible": "direction",
+      "objet": "Rapport périodique et escalade",
+      "approbationHumaine": false
+    },
+    {
+      "source": "recouvrement",
+      "cible": "comptabilite-finance",
+      "objet": "Encaissements et créances à comptabiliser",
+      "approbationHumaine": false
+    },
+    {
+      "source": "comptabilite-finance",
+      "cible": "recouvrement",
+      "objet": "Balance âgée et factures échues",
+      "approbationHumaine": false
+    },
+    {
+      "source": "recouvrement",
+      "cible": "juridique",
+      "objet": "Dossier à transmettre en contentieux",
+      "approbationHumaine": true
+    },
+    {
+      "source": "sav-sinistres",
+      "cible": "juridique",
+      "objet": "Sinistre ou litige nécessitant un avis juridique",
+      "approbationHumaine": true
+    },
+    {
+      "source": "sav-sinistres",
+      "cible": "comptabilite-finance",
+      "objet": "Demande de règlement d'une indemnité",
+      "approbationHumaine": false
+    },
+    {
+      "source": "sav-sinistres",
+      "cible": "commercial",
+      "objet": "Opportunité détectée lors d'un échange avec le client",
+      "approbationHumaine": false
+    },
+    {
+      "source": "sav-sinistres",
+      "cible": "qualite",
+      "objet": "Réclamations à analyser",
+      "approbationHumaine": false
+    },
+    {
+      "source": "commercial",
+      "cible": "conformite",
+      "objet": "Identification du client et analyse de risque",
+      "approbationHumaine": false
+    },
+    {
+      "source": "commercial",
+      "cible": "comptabilite-finance",
+      "objet": "Demande de facturation",
+      "approbationHumaine": false
+    },
+    {
+      "source": "commercial",
+      "cible": "administratif",
+      "objet": "Pièces du dossier de souscription",
+      "approbationHumaine": false
+    },
+    {
+      "source": "commercial",
+      "cible": "juridique",
+      "objet": "Clause ou contrat à relire",
+      "approbationHumaine": true
+    },
+    {
+      "source": "marketing",
+      "cible": "commercial",
+      "objet": "Contacts qualifiés (leads)",
+      "approbationHumaine": false
+    },
+    {
+      "source": "marketing",
+      "cible": "conformite",
+      "objet": "Contenu à valider avant publication (règles d'assurance et RGPD)",
+      "approbationHumaine": false
+    },
+    {
+      "source": "conformite",
+      "cible": "juridique",
+      "objet": "Question juridique soulevée par un dossier",
+      "approbationHumaine": true
+    },
+    {
+      "source": "conformite",
+      "cible": "informatique",
+      "objet": "Exigences de sécurité et de conservation",
+      "approbationHumaine": false
+    },
+    {
+      "source": "conformite",
+      "cible": "marketing",
+      "objet": "Avis de conformité sur un contenu",
+      "approbationHumaine": false
+    },
+    {
+      "source": "juridique",
+      "cible": "conformite",
+      "objet": "Retour juridique sur un dossier de conformité",
+      "approbationHumaine": true
+    },
+    {
+      "source": "juridique",
+      "cible": "commercial",
+      "objet": "Retour sur une clause ou un contrat",
+      "approbationHumaine": true
+    },
+    {
+      "source": "juridique",
+      "cible": "recouvrement",
+      "objet": "Retour sur un dossier contentieux",
+      "approbationHumaine": true
+    },
+    {
+      "source": "juridique",
+      "cible": "sav-sinistres",
+      "objet": "Retour sur un sinistre ou un litige",
+      "approbationHumaine": true
+    },
+    {
+      "source": "ressources-humaines",
+      "cible": "comptabilite-finance",
+      "objet": "Éléments de paie et de rémunération",
+      "approbationHumaine": true
+    },
+    {
+      "source": "ressources-humaines",
+      "cible": "informatique",
+      "objet": "Arrivée ou départ d'un collaborateur (comptes et accès)",
+      "approbationHumaine": true
+    },
+    {
+      "source": "informatique",
+      "cible": "conformite",
+      "objet": "Incident de sécurité ou violation de données possible",
+      "approbationHumaine": false
+    },
+    {
+      "source": "informatique",
+      "cible": "ressources-humaines",
+      "objet": "Confirmation de création ou fermeture de comptes",
+      "approbationHumaine": true
+    },
+    {
+      "source": "achats",
+      "cible": "comptabilite-finance",
+      "objet": "Factures fournisseurs à traiter",
+      "approbationHumaine": false
+    },
+    {
+      "source": "achats",
+      "cible": "juridique",
+      "objet": "Contrat fournisseur à relire",
+      "approbationHumaine": true
+    },
+    {
+      "source": "achats",
+      "cible": "qualite",
+      "objet": "Évaluation des fournisseurs",
+      "approbationHumaine": false
+    },
+    {
+      "source": "qualite",
+      "cible": "achats",
+      "objet": "Non-conformités fournisseurs",
+      "approbationHumaine": false
+    },
+    {
+      "source": "commerce-exterieur",
+      "cible": "comptabilite-finance",
+      "objet": "TVA, droits de douane et factures export",
+      "approbationHumaine": false
+    },
+    {
+      "source": "commerce-exterieur",
+      "cible": "juridique",
+      "objet": "Contrat ou litige international",
+      "approbationHumaine": true
+    },
+    {
+      "source": "commerce-exterieur",
+      "cible": "conformite",
+      "objet": "Contrôle de sanctions et d'embargos",
+      "approbationHumaine": false
+    },
+    {
+      "source": "administratif",
+      "cible": "comptabilite-finance",
+      "objet": "Pièces comptables reçues",
+      "approbationHumaine": false
+    }
+  ]
+}

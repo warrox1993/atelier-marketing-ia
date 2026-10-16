@@ -16,6 +16,7 @@ const STATUT_PAR_CODE: Record<CodeErreur, number> = {
   porte_absente: 409,
   elevation_refusee: 403,
   diffusion_refusee: 403,
+  liaison_refusee: 403,
   url_refusee: 422,
   import_refuse: 422,
   dictee_indisponible: 503,

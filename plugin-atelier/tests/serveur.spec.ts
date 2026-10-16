@@ -18,7 +18,7 @@ describe("sérialisation et erreurs du pont (besoins du lot C)", () => {
     await expect(avecCode(async () => { throw new Error("autre"); })).rejects.toThrow(/^autre$/u);
   });
   it("B-6 : libellé français d'un événement, type brut s'il est inconnu", () => {
-    expect(libelleEvenement("porte.refusee")).toBe("Porte déterministe refusée");
+    expect(libelleEvenement("porte.refusee")).toBe("Contrôle automatique refusé");
     expect(libelleEvenement("type.inconnu")).toBe("type.inconnu");
   });
 });
