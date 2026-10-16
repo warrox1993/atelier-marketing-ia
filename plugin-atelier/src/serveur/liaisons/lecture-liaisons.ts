@@ -11,7 +11,8 @@ import { iso } from "../base.js";
 export interface LiaisonLue {
   id: string;
   entrepriseSource: string;
-  entrepriseCible: string;
+  /** Nulle si l'entreprise cible a été supprimée. */
+  entrepriseCible: string | null;
   tacheOrigine: string;
   tacheCible: string | null;
   serviceSource: string;
@@ -57,7 +58,7 @@ function extraitsDe(v: unknown): ExtraitLiaison[] {
 const enLue = (r: Ligne): LiaisonLue => ({
   id: String(r["id"]),
   entrepriseSource: String(r["company_id"]),
-  entrepriseCible: String(r["entreprise_cible_id"]),
+  entrepriseCible: r["entreprise_cible_id"] == null ? null : String(r["entreprise_cible_id"]),
   tacheOrigine: String(r["tache_origine_id"]),
   tacheCible: r["tache_cible_id"] == null ? null : String(r["tache_cible_id"]),
   serviceSource: String(r["service_source"]),

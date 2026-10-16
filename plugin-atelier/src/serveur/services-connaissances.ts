@@ -10,8 +10,6 @@
  *   passage rendu devient une source de la tâche (provenance `connaissance`, mode déduit), ce qui le fait
  *   entrer dans la fraîcheur et la porte. Passages marqués non fiables (`marquerPassages`).
  * - `connaissances.lister`, `connaissances.statut`, `connaissances.supprimer` (humain, journalisé).
- * - `connaissances.importer-demo` (humain, démonstration seulement) : importe d'un geste le corpus
- *   `organisation/demo/connaissances/`.
  * - `entreesPorte` : ce que la porte passe à `controlerCitationsConnaissances`.
  *
  * Les briques (extraction, vectorisation, recherche, règles) sont appelées telles quelles.
@@ -46,7 +44,7 @@ import { creerStockConnaissances, type LigneDocument, type LigneIndex, type Lign
 import { CacheVecteurs, dateDuJourBruxelles, empreinteAttendue, rechercherConnaissances } from "./connaissances/recherche.js";
 import { creerVectoriseurAucun, creerVectoriseurLocal, creerVectoriseurVoyage, type Vectoriseur } from "./connaissances/vectorisation.js";
 import { erreur, erreurValidation } from "./erreurs.js";
-import type { ModeEffectif } from "./regles-donnees-demo.js";
+import type { ModeEffectif } from "./regles-donnees.js";
 import { aRevoir, dateRevue, marquerPassages, pseudonymiser, refusDonneesSante, remplacerVersion, statutEffectif, type VersionPourValidite } from "./regles-connaissances.js";
 
 type Issue = NonNullable<Awaited<ReturnType<PluginContext["issues"]["get"]>>>;
@@ -64,8 +62,6 @@ export interface DependancesConnaissances {
   apresEntreeTache(companyId: string, issueId: string): Promise<void>;
   /** Tests : vectoriseur imposé (sinon : configuration `connaissancesVectorisation`). */
   vectoriseur?: (companyId: string) => Promise<Vectoriseur>;
-  /** Tests : dossier du corpus de démonstration. */
-  dossierDemo?: string;
   maintenant?: () => Date;
 }
 
@@ -441,67 +437,6 @@ export function creerConnaissances(d: DependancesConnaissances): ServicesConnais
     return { livrable: livrable.corps, passagesRendus: adresses, versions, date: aujourdhui() };
   }
 
-  /* ---------------- corpus de démonstration ---------------- */
-
-  function dossierDemo(): string | null {
-    if (d.dossierDemo) return d.dossierDemo;
-    const departs = [process.cwd(), path.dirname(fileURLToPath(import.meta.url))];
-    for (const depart of departs) {
-      let dossier = depart;
-      for (let i = 0; i < 8; i++) {
-        const candidat = path.join(dossier, "organisation", "demo", "connaissances");
-        if (existsSync(candidat) && statSync(candidat).isDirectory()) return candidat;
-        const parent = path.dirname(dossier);
-        if (parent === dossier) break;
-        dossier = parent;
-      }
-    }
-    return null;
-  }
-
-  /** En-tête YAML simple (`clé: valeur`) d'un fichier Markdown du corpus ; rend aussi le corps sans l'en-tête. */
-  function enTete(texte: string): { champs: Record<string, string>; corps: string } {
-    const m = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?/u.exec(texte);
-    if (!m) return { champs: {}, corps: texte };
-    const champs: Record<string, string> = {};
-    for (const ligne of m[1]!.split(/\r?\n/u)) {
-      const c = /^([a-z_]+):\s*(.*)$/u.exec(ligne.trim());
-      if (c) champs[c[1]!] = c[2]!.trim().replace(/^"(.*)"$/u, "$1");
-    }
-    return { champs, corps: texte.slice(m[0].length) };
-  }
-
-  /** Les .csv du corpus n'ont pas d'en-tête : métadonnées du LISEZ-MOI. */
-  const META_CSV: Record<string, { titre: string; produit: string | null }> = {
-    "grille-franchises-plafonds-2026.csv": { titre: "Grille des franchises et plafonds 2026 (démonstration)", produit: null },
-    "remises-flotte-2026.csv": { titre: "Remises de flotte 2026 (démonstration)", produit: "flotte_automobile" },
-  };
-
-  function metaDemo(fichier: string, texte: string): { meta: Meta; octets: Uint8Array } {
-    const jourValide = (v: string | undefined, defaut: string) => (v && /^\d{4}-\d{2}-\d{2}$/u.test(v) ? v : defaut);
-    if (fichier.endsWith(".csv")) {
-      const c = META_CSV[fichier] ?? { titre: `${fichier} (démonstration)`, produit: null };
-      return {
-        meta: { nomFichier: fichier, format: "csv", titre: c.titre, type: "tarif", produit: c.produit, langue: "fr", dateDocument: "2026-01-01", valideDu: "2026-01-01", valideAu: null, pseudonymiser: false },
-        octets: new TextEncoder().encode(texte),
-      };
-    }
-    const { champs, corps } = enTete(texte);
-    const type = TypeDocumentConnaissance.safeParse(champs.type).success ? (champs.type as TypeDocumentConnaissance) : "autre";
-    const dateDocument = jourValide(champs.date_document, "2026-01-01");
-    const valideDu = jourValide(champs.valide_du, dateDocument);
-    const valideAu = champs.valide_au && /^\d{4}-\d{2}-\d{2}$/u.test(champs.valide_au) && champs.valide_au > valideDu ? champs.valide_au : null;
-    const statut = champs.statut === "retire" || champs.statut === "perime" ? champs.statut : undefined;
-    return {
-      meta: {
-        nomFichier: fichier, format: "markdown", titre: (champs.titre || fichier).slice(0, LIMITES_CONNAISSANCES.titreMax), type,
-        produit: champs.produit ? champs.produit.slice(0, 120) : null, langue: champs.langue === "nl" ? "nl" : "fr",
-        dateDocument, valideDu, valideAu, pseudonymiser: pseudonymisationDemandee({ type }), ...(statut ? { statutForce: statut } : {}),
-      },
-      octets: new TextEncoder().encode(corps),
-    };
-  }
-
   /* ---------------- routes ---------------- */
 
   function exigerHumain(acteur: ActeurHote, quoi: string) {
@@ -526,35 +461,6 @@ export function creerConnaissances(d: DependancesConnaissances): ServicesConnais
       nomFichier: e.nomFichier, format: e.format, titre: e.titre, type: e.type, produit: e.produit, langue: e.langue, dateDocument: e.dateDocument,
       valideDu: e.valideDu, valideAu: e.valideAu, ...(e.documentId ? { documentId: e.documentId } : {}), pseudonymiser: pseudonymisationDemandee(e),
     }, new Uint8Array(octets));
-  };
-
-  routes["connaissances.importer-demo"] = async (r) => {
-    exigerHumain(r.acteur, "L'import du corpus de démonstration");
-    memeEntreprise(r.corps, r.companyId);
-    if ((await d.modeEffectif(r.companyId, null)).mode === "reel") erreur("conflit", "Entreprise en mode réel : le corpus de démonstration n'y est jamais importé.");
-    const dossier = dossierDemo();
-    if (!dossier) erreur("introuvable", "Corpus de démonstration introuvable (organisation/demo/connaissances/).");
-    const deja = new Set((await stock.listerVersions(r.companyId)).map((v) => v.empreinte));
-    const importes: Array<{ fichier: string; documentId: string; version: number; passages: number; etat: string; statut: string }> = [];
-    const refuses: Array<{ fichier: string; motif: string }> = [];
-    const dejaImportes: string[] = [];
-    const fichiers = readdirSync(dossier).filter((f) => /\.(md|csv)$/u.test(f) && f !== "LISEZ-MOI.md").sort();
-    for (const fichier of fichiers) {
-      const { meta, octets } = metaDemo(fichier, readFileSync(path.join(dossier, fichier), "utf8"));
-      if (deja.has(createHash("sha256").update(octets).digest("hex"))) {
-        dejaImportes.push(fichier);
-        continue;
-      }
-      try {
-        const res = await importer(r.companyId, r.acteur, meta, octets);
-        const c = res.corps as { document: DocumentConnaissance; version: VersionConnaissance };
-        if (c.version.etatIndexation === "refuse") refuses.push({ fichier, motif: c.version.motifRefus ?? "refusé" });
-        else importes.push({ fichier, documentId: c.document.id, version: c.version.version, passages: c.version.passages, etat: c.version.etatIndexation, statut: c.version.statut });
-      } catch (err) {
-        refuses.push({ fichier, motif: err instanceof Error ? err.message : "refusé" });
-      }
-    }
-    return { statut: 200, corps: { dossier: path.basename(dossier), importes, refuses, dejaImportes } };
   };
 
   routes["connaissances.lister"] = async (r) => {

@@ -48,8 +48,8 @@ describe("rubriques : table de correspondance", () => {
     }
     expect(RUBRIQUES_NAV.map((r) => r.libelle)).toEqual(["Accueil", "Discussion", "Prospects", "Marketing", "Réglages"]);
   });
-  it("Passage au réel et Paramètres partagent la vue et se distinguent par l'ancre", () => {
-    expect(rubriqueDe("parametres", "param-reel").onglet.libelle).toBe("Passage au réel");
+  it("Connexions et Paramètres partagent la vue et se distinguent par l'ancre", () => {
+    expect(rubriqueDe("parametres", "param-reel").onglet.libelle).toBe("Connexions");
     expect(rubriqueDe("parametres", "#param-couts").onglet.libelle).toBe("Paramètres");
     expect(cheminOnglet(rubriqueDe("parametres", "param-reel").onglet)).toBe("/atelier/parametres#param-reel");
   });
@@ -59,7 +59,7 @@ describe("rubriques : onglets et vues", () => {
   const cas: Array<[string, string, string[], string]> = [
     ["Prospects", "/RNO/atelier/prospects", ["Liste", "Carte"], "Liste"],
     ["Marketing", "/RNO/atelier/campagnes", ["Campagnes", "Contenus", "Calendrier", "Résultats", "Équipe", "Rapport du mois"], "Campagnes"],
-    ["Réglages", "/RNO/atelier/mise-en-place", ["Mise en place", "Marque et sources", "Connaissances", "Passage au réel", "Paramètres", "Corbeille"], "Mise en place"],
+    ["Réglages", "/RNO/atelier/mise-en-place", ["Mise en place", "Marque et sources", "Connaissances", "Connexions", "Paramètres", "Corbeille"], "Mise en place"],
   ];
   for (const [rubrique, chemin, attendus, premier] of cas) {
     it(`${rubrique} affiche ses onglets et la vue du premier`, async () => {
@@ -95,7 +95,7 @@ describe("rubriques : anciennes adresses", () => {
     ["/RNO/atelier/marque", "", "Réglages", "Marque et sources"],
     ["/RNO/atelier/connaissances", "", "Réglages", "Connaissances"],
     ["/RNO/atelier/parametres", "", "Réglages", "Paramètres"],
-    ["/RNO/atelier/parametres", "#param-reel", "Réglages", "Passage au réel"],
+    ["/RNO/atelier/parametres", "#param-reel", "Réglages", "Connexions"],
     ["/RNO/atelier/parametres", "#param-couts", "Réglages", "Paramètres"],
     ["/RNO/atelier/corbeille", "", "Réglages", "Corbeille"],
   ];
@@ -134,7 +134,7 @@ describe("Paramètres en onglets", () => {
     expect(panneaux.filter((p) => !p.hidden).map((p) => p.id)).toEqual(["atl-param-panneau-diagnostic"]);
     expect(panneaux).toHaveLength(6);
   });
-  it("#param-reel montre le passage au réel seul, sans onglets de paramètres visibles", async () => {
+  it("#param-reel montre les connexions seul, sans onglets de paramètres visibles", async () => {
     const c = await ouvrir("/RNO/atelier/parametres", "#param-reel");
     expect(c.querySelector<HTMLElement>("section#param-reel")!.closest<HTMLElement>("div[hidden]")).toBeNull();
     expect(c.querySelector<HTMLElement>('[aria-label="Sections des paramètres"]')!.closest<HTMLElement>("div[hidden]")).not.toBeNull();

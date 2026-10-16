@@ -6,7 +6,7 @@
  * - Actions : `usePluginAction(<clé de ACTIONS_UI>)` ; les droits sont contrôlés
  *   côté serveur, l'interface ne fait qu'expliquer pourquoi une action est
  *   indisponible.
- * - Tout en français, dates à l'heure de Bruxelles, mention « démonstration ».
+ * - Tout en français, dates à l'heure de Bruxelles, aucune mention de démonstration.
  */
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 import {

@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""Bootstrap de l'organisation de démonstration « Rénovation Liège (démonstration) ».
+"""Bootstrap de l'organisation modèle « Rénovation Liège (démonstration) » (nom historique, conservé : les instances
+installées la retrouvent par ce nom et son marqueur).
 
 À lancer avec « python3 -I » (mode isolé : aucun module local ni variable PYTHON*).
 Bibliothèque standard, plus PyYAML (paquet Ubuntu python3-yaml) pour la seule sous-commande
@@ -16,17 +17,17 @@ Sous-commandes :
                          liaison locale des agents, objectifs, liens projets-objectifs,
                          gabarits de politiques résolus. Deuxième lancement sans
                          changement : aucune écriture.
-  etat                   affiche ce qui existe pour l'organisation de démonstration.
+  etat                   affiche ce qui existe pour l'organisation modèle.
   nouveau-client --fiche F [--reel] [--a-blanc]
                          crée l'entreprise d'un NOUVEAU client à partir d'une fiche (.yaml ou .json ; modèle :
                          organisation/modeles/fiche-client.exemple.json) : entreprise marquée
                          « atelier-client:<slug> », organisation des agents (mêmes étapes que « appliquer »),
                          budget IA mensuel, référentiel de marque. Idempotent (entreprise retrouvée par
-                         marqueur) ; --a-blanc liste les écritures sans rien écrire ; démonstration par
-                         défaut, mode réel seulement avec --reel ; refus si l'entreprise appartient à la démonstration.
+                         marqueur) ; --a-blanc liste les écritures sans rien écrire ; tout est réel (--reel est accepté
+                         sans effet, avec un avertissement) ; refus si l'entreprise appartient à l'organisation modèle.
   nouveau-client --fiche F --ajouter-services --entreprise UUID [--slug S] [--reel] [--a-blanc]
-                         dote un client EXISTANT de tous ses services : l'entreprise UUID (même marquée « atelier-demo:* »)
-                         devient le service Marketing du client (marqueur migré vers « atelier-client:<slug> », « (démonstration) »
+                         dote un client EXISTANT de tous ses services : l'entreprise UUID (même portant l'ancien marqueur « atelier-demo:* »)
+                         devient le service Marketing du client (marqueur migré vers « atelier-client:<slug> », l'ancien suffixe « (démonstration) »
                          retiré du nom, registre local écrit) ; son organisation et son référentiel de marque ne sont pas
                          réécrits ; les autres services et la Direction sont créés par le chemin habituel (agents en pause).
                          Idempotent ; --a-blanc n'écrit rien. Le nom de la fiche doit être celui de l'entreprise sans « (démonstration) ».
@@ -37,8 +38,8 @@ Sous-commandes :
   exporter [--sortie DIR] [--entreprise UUID]
                          export natif, nettoyage des valeurs propres à la machine, contrôle, puis aperçu
                          d'import du paquet exporté, et manifeste « manifeste-export.json » (entreprise, date,
-                         empreinte SHA-256 de chaque fichier). Sans --entreprise : l'organisation de
-                         démonstration (--sortie obligatoire). Avec --entreprise : cette entreprise ; sans
+                         empreinte SHA-256 de chaque fichier). Sans --entreprise : l'organisation
+                         modèle (--sortie obligatoire). Avec --entreprise : cette entreprise ; sans
                          --sortie, l'export va dans instance/exports/<UUID>/<horodatage>/ ; les données du
                          plugin (route donnees.exporter, colonnes chiffrées laissées chiffrées) y sont écrites
                          table par table dans donnees-plugin/<table>.json, avec leurs empreintes au manifeste.
@@ -46,13 +47,13 @@ Sous-commandes :
                          fin de contrat / droit à l'effacement : supprime TOUTES les données d'un client, après
                          un export de moins de 24 h (manifeste vérifié, données du plugin présentes et de même
                          nombre de lignes que les comptes actuels). Refus sans --confirmer, pour l'entreprise
-                         de démonstration, sans export récent et complet, ou si aucun registre local
+                         modèle, sans export récent et complet, ou si aucun registre local
                          (instance/atelier-client/<slug>/entreprise.json) ne la désigne (sauf --hors-marqueur et --nom-confirme avec le nom exact). Étapes journalisées : données du
                          plugin (toutes les tables, connaissances comprises), entreprise côté socle, fichiers
                          Paperclip et espaces locaux. --a-blanc liste tout avec les comptes par table. Rapport
                          JSON horodaté à côté de l'export. Les sauvegardes existantes ne sont PAS modifiées.
   reinitialiser --confirmer "<nom exact>"
-                         supprime l'entreprise de démonstration, ses dossiers locaux et les
+                         supprime l'entreprise modèle, ses dossiers locaux et les
                          fichiers que Paperclip a rangés pour elle sous
                          <PAPERCLIP_HOME>/instances/<instance>/companies/<id>/.
   jeton --confirmer      lit un jeton sur l'entrée standard (jamais en argument), le
@@ -133,15 +134,18 @@ DOSSIER_POLITIQUES = ORGA / "politiques"
 # c'est le dossier « instance » du dépôt.
 INSTANCE = Path(os.environ.get("ATELIER_DONNEES_LOCALES") or (RACINE / "instance")).resolve()
 FICHIER_VERROU_EXECUTION = INSTANCE / ".bootstrap-ecriture.lock"
+# Nom historique, CONSERVÉ volontairement : le renommer sans migration ferait perdre l'état local des
+# instances déjà installées (registre des entreprises appliquées, empreintes). Il ne désigne plus aucun mode.
 ETAT_LOCAL = INSTANCE / "atelier-demo"
 ESPACES = INSTANCE / "agents-atelier"
 CONFIGS_CLAUDE = INSTANCE / "claude-config"
 FICHIER_VERROU = "company-package.lock.json"
 PLUGIN = RACINE / "plugin-atelier"
-# Contrat du lot A (docs/contrats.md §8) : agents de démonstration « process » lancés avec
-# cwd = dossier du plugin et un chemin RELATIF vers le script déterministe.
-SCRIPT_DEMO = "demo/agent-demo.mjs"
-MODES = ("reel", "demonstration")
+# Agents déterministes (Porte de contrôle) : adaptateur « process » lancé avec cwd = dossier du plugin
+# et un chemin RELATIF vers le script. Le chemin reste celui du registre généré (.paperclip.yaml).
+SCRIPT_AGENT_DETERMINISTE = "agents/porte.mjs"
+# Tout est réel : un seul mode, conservé comme paramètre pour garder des empreintes de liaison stables.
+MODES = ("reel",)
 # « Gardien des connexions » : agent natif SANS modèle (adaptateur process) créé par « appliquer »,
 # hors paquet. Son battement natif (heartbeat à intervalle) lance « assurer-connexions » : une
 # connexion créée par une carte après le bootstrap est réservée aux rôles prévus sans intervention.
@@ -150,7 +154,7 @@ GARDIEN_SLUG = "gardien-des-connexions"
 GARDIEN_INTERVALLE_SEC = 60
 
 # Fichiers du paquet AgentCompanies envoyés à Paperclip. Tout le reste
-# d'organisation/ (registre, politiques, corpus de démonstration, README) reste
+# d'organisation/ (registre, politiques, README) reste
 # hors du paquet.
 RACINES_PAQUET = ("COMPANY.md", ".paperclip.yaml", "agents", "skills", "projects")
 
@@ -342,7 +346,7 @@ def metadata_atelier(agent: dict, reg_agents: dict) -> dict:
 def config_deterministe(agent: dict) -> dict:
     """Agent déterministe (Porte de contrôle) : adaptateur natif process, aucun modèle.
     Chemin RELATIF du script ; le cwd (dossier du plugin) est posé par la liaison locale."""
-    return {"command": "node", "args": [SCRIPT_DEMO, agent["slug"]], "timeoutSec": 300}
+    return {"command": "node", "args": [SCRIPT_AGENT_DETERMINISTE], "timeoutSec": 300}
 
 
 def construire_extension(reg_agents: dict, reg_orga: dict) -> dict:
@@ -786,7 +790,7 @@ def porte_marqueur(description, marqueur: str) -> bool:
 
 
 def trouver_entreprise(api: Api, reg_orga: dict):
-    """Renvoie l'entreprise de démonstration ou None. Refuse toute ambiguïté."""
+    """Renvoie l'entreprise modèle ou None. Refuse toute ambiguïté."""
     entreprise = reg_orga["entreprise"]
     nom = unicodedata.normalize("NFC", entreprise["nom"])
     toutes = api.get("/companies")
@@ -810,7 +814,7 @@ def trouver_entreprise(api: Api, reg_orga: dict):
         )
     if len(marquees) > 1:
         ids = ", ".join(c["id"] for c in marquees)
-        raise ErreurAtelier(f"plusieurs entreprises de démonstration trouvées ({ids}) : rien n'est modifié.")
+        raise ErreurAtelier(f"plusieurs entreprises modèles trouvées ({ids}) : rien n'est modifié.")
     return marquees[0]
 
 
@@ -931,26 +935,14 @@ def env_voulu(company_id: str, reg_agents: dict, slug: str, jeton_id: str | None
 def liaison_voulue(company_id: str, reg_agents: dict, slug: str, jeton_id: str | None, mode: str) -> dict:
     """Configuration propre à la machine, jamais écrite dans le paquet.
 
-    reel : adaptateur claude_local du paquet + cwd et CLAUDE_CONFIG_DIR dédiés (+ jeton).
-    demonstration : adaptateur process du lot A (aucun modèle), cwd = dossier du plugin.
+    Adaptateur claude_local du paquet + cwd et CLAUDE_CONFIG_DIR dédiés (+ jeton) ; agents déterministes :
+    adaptateur process (aucun modèle), cwd = dossier du plugin.
     """
     espace, _ = dossiers_agent(company_id, slug)
     agent = next((a for a in reg_agents["agents"] if a["slug"] == slug), {})
     if agent.get("deterministe"):
-        # Même liaison dans les deux modes : un programme déterministe, jamais de modèle ni de jeton.
+        # Un programme déterministe, jamais de modèle ni de jeton.
         return {"adapterType": "process", "cwd": str(PLUGIN), "config": {**config_deterministe(agent), "cwd": str(PLUGIN)}}
-    if mode == "demonstration":
-        return {
-            "adapterType": "process",
-            "cwd": str(PLUGIN),
-            "config": {
-                "command": "node",
-                "args": [SCRIPT_DEMO, slug],
-                "cwd": str(PLUGIN),
-                "timeoutSec": 300,
-                "env": {"ATELIER_MODE": {"type": "plain", "value": "demonstration"}},
-            },
-        }
     return {
         "adapterType": reg_agents["adaptateur"]["type"],
         "cwd": str(espace),
@@ -1646,7 +1638,7 @@ def entreprise_du_gardien(api: Api, reg_orga: dict):
     peut pas remplacer : le Gardien agit sur SA propre entreprise. Sans cette variable
     (appel à la main), on cherche l'entreprise par le nom et le marqueur du registre.
     Chercher par le nom depuis le Gardien ferait agir le Gardien d'une seconde
-    entreprise de démonstration sur la première."""
+    entreprise modèle sur la première."""
     cid = (os.environ.get("PAPERCLIP_COMPANY_ID") or "").strip()
     if not cid:
         return trouver_entreprise(api, reg_orga)
@@ -1661,7 +1653,7 @@ def _assurer_connexions(args) -> int:
     api = Api(url_api())
     entreprise = entreprise_du_gardien(api, reg_orga)
     if entreprise is None:
-        print("assurer-connexions : aucune organisation de démonstration sur cette instance, rien à faire.")
+        print("assurer-connexions : aucune organisation modèle sur cette instance, rien à faire.")
         return 0
     agents = agents_par_slug(api, entreprise["id"])
     manquants = [a["slug"] for a in reg_agents["agents"] if a["slug"] not in agents]
@@ -1716,11 +1708,8 @@ def _appliquer(args) -> int:
 def appliquer_organisation(api: Api, reg_agents: dict, reg_orga: dict, fichiers: dict[str, str], mode: str,
                            dossier_etat: Path) -> str:
     """Applique l'organisation des agents à UNE entreprise, retrouvée par le nom et le marqueur de
-    reg_orga["entreprise"] : celle de démonstration pour « appliquer », celle d'un client pour
+    reg_orga["entreprise"] : celle de l'organisation modèle pour « appliquer », celle d'un client pour
     « nouveau-client » (mêmes étapes, mêmes fonctions). Renvoie l'identifiant de l'entreprise."""
-    if mode == "demonstration" and not (PLUGIN / SCRIPT_DEMO).exists():
-        print(f"Attention : {SCRIPT_DEMO} n'existe pas encore dans plugin-atelier/ (lot A) ; "
-              "les agents de démonstration restent en pause et ne pourront pas tourner avant sa livraison.")
     # L'empreinte couvre le paquet ET le mode : changer de mode relance l'import natif,
     # qui remet la configuration canonique avant la nouvelle liaison.
     empreinte = hashlib.sha256((empreinte_paquet(fichiers) + ":" + mode).encode()).hexdigest()
@@ -1830,7 +1819,7 @@ def cmd_etat(args) -> int:
     api = Api(url_api())
     e = trouver_entreprise(api, reg_orga)
     if not e:
-        print("Aucune organisation de démonstration sur cette instance.")
+        print("Aucune organisation modèle sur cette instance.")
         return 0
     cid = e["id"]
     agents = agents_par_slug(api, cid)
@@ -2068,7 +2057,7 @@ def cmd_exporter(args) -> int:
             raise ErreurAtelier("--sortie est obligatoire sans --entreprise")
         e = trouver_entreprise(api, reg_orga)
         if not e:
-            raise ErreurAtelier("aucune organisation de démonstration à exporter")
+            raise ErreurAtelier("aucune organisation modèle à exporter")
         sortie = Path(args.sortie).resolve()
     if sortie.exists() and any(sortie.iterdir()):
         raise ErreurAtelier(f"le dossier de sortie n'est pas vide : {sortie}")
@@ -2097,7 +2086,7 @@ def cmd_exporter(args) -> int:
             print(f"PROBLÈME : {p}", file=sys.stderr)
         print("Export refusé : rien n'a été écrit.", file=sys.stderr)
         return 1
-    # Données du plugin (seulement avec --entreprise : l'export de la démonstration n'en a pas besoin).
+    # Données du plugin (seulement avec --entreprise : l'export de l'organisation modèle n'en a pas besoin).
     donnees_plugin = exporter_donnees_plugin(api, e["id"]) if args.entreprise else {}
     sortie.mkdir(parents=True, exist_ok=True)
     ecrits: dict[str, bytes] = {}
@@ -2169,7 +2158,7 @@ def _reinitialiser(args) -> int:
         # synchronisation de fichiers des agents) : on les retire, pour cette entreprise seule.
         print(f"Fichiers de l'entreprise : {supprimer_fichiers_entreprise(e['id'])}")
     else:
-        print("Aucune entreprise de démonstration à supprimer.")
+        print("Aucune entreprise modèle à supprimer.")
     if e:
         # Dossiers de CETTE entreprise seulement (ceux que « appliquer » a créés). Les anciens dossiers
         # partagés par rôle (disposition d'avant le cloisonnement) ne sont jamais touchés.
@@ -2179,7 +2168,7 @@ def _reinitialiser(args) -> int:
                 shutil.rmtree(d)
     if ETAT_LOCAL.is_dir() and ETAT_LOCAL.parent == INSTANCE:
         shutil.rmtree(ETAT_LOCAL)
-    print("Dossiers locaux de la démonstration supprimés (espaces, configurations Claude dédiées, état).")
+    print("Dossiers locaux de l'organisation modèle supprimés (espaces, configurations Claude dédiées, état).")
     return 0
 
 
@@ -2211,10 +2200,7 @@ def cmd_jeton(args) -> int:
         print("Secret créé dans le coffre de Paperclip.")
     del valeur
     etat = lire_json(ETAT_LOCAL / "etat-bootstrap.json") if (ETAT_LOCAL / "etat-bootstrap.json").exists() else {}
-    mode = etat.get("mode", "reel")
-    if mode != "reel":
-        print("Mode démonstration actif : le secret est rangé ; il sera lié aux agents au passage en mode réel.")
-        return 0
+    mode = "reel"
     empreinte = etat.get("empreintePaquet") or ""
     n = lier_agents(api, cid, reg_agents, empreinte, secret_id, mode)
     print(f"Secret lié à {n} agent(s) par référence (secret_ref). Les agents restent en pause.")
@@ -2426,7 +2412,7 @@ def entreprise_des_cles(api: Api, args) -> dict:
     _, reg_orga = registres()
     e = trouver_entreprise(api, reg_orga)
     if not e:
-        raise ErreurAtelier("aucune organisation de démonstration : lancez d'abord « appliquer », ou donnez --entreprise <identifiant>")
+        raise ErreurAtelier("aucune organisation modèle : lancez d'abord « appliquer », ou donnez --entreprise <identifiant>")
     return e
 
 
@@ -2680,7 +2666,7 @@ def cmd_cles(args) -> int:
 # ---------------------------------------------------------------------------
 
 PREFIXE_MARQUEUR_CLIENT = "atelier-client:"
-PREFIXE_MARQUEUR_DEMO = "atelier-demo:"
+PREFIXE_MARQUEUR_ANCIEN = "atelier-demo:"
 LANGUES_CLIENT = ("FR", "NL", "EN")
 MODULE_ASSURANCE = "intermediaire_assurance"
 CODE_REFERENTIEL = re.compile(r"^[a-z0-9][a-z0-9-]{1,39}$")
@@ -2723,13 +2709,9 @@ def bce_valide(numero: str) -> bool:
     return int(brut[8:]) == 97 - (int(brut[:8]) % 97)
 
 
-def fsma_valide(numero: str, mode: str) -> bool:
-    """Numéro FSMA de 5 ou 6 chiffres ; les codes de démonstration « LETTRES-chiffres » (DEMO-0001) ne sont
-    admis qu'en mode démonstration (formes reconnues par plugin-atelier/src/serveur/services-faits.ts)."""
-    n = str(numero).strip()
-    if re.fullmatch(r"\d{5,6}", n):
-        return True
-    return mode == "demonstration" and re.fullmatch(r"[A-Z]{2,8}-\d{2,8}", n) is not None
+def fsma_valide(numero: str) -> bool:
+    """Numéro FSMA de 5 ou 6 chiffres (aucun code factice admis)."""
+    return re.fullmatch(r"\d{5,6}", str(numero).strip()) is not None
 
 
 def lire_fiche(chemin: Path) -> dict:
@@ -2809,7 +2791,7 @@ def valider_services_fiche(fiche: dict, erreurs: list[str]) -> tuple[list[str], 
     return choisis, dict(budgets)
 
 
-def valider_fiche(fiche: dict, reel: bool) -> dict:
+def valider_fiche(fiche: dict, reel: bool = True) -> dict:
     """Contrôle la fiche et rend la fiche normalisée (slug, mode, langues). Toutes les erreurs sont
     rassemblées dans un seul refus ; rien n'est écrit tant que la fiche n'est pas valide."""
     erreurs: list[str] = []
@@ -2825,13 +2807,10 @@ def valider_fiche(fiche: dict, reel: bool) -> dict:
         erreurs.append("nomCommercial : impossible d'en tirer un identifiant (slug) lisible")
     if len(slug) > 40:
         slug = slug[:40].rstrip("-")
-    mode = fiche.get("mode") or ("reel" if reel else "demonstration")
+    # Tout est réel : l'option --reel n'a plus d'effet (acceptée pour ne pas casser les appels existants).
+    mode = fiche.get("mode") or "reel"
     if mode not in MODES:
-        erreurs.append(f"mode : « demonstration » ou « reel » attendu (reçu : {mode!r})")
-    elif mode == "reel" and not reel:
-        erreurs.append("mode « reel » : refusé sans l'option --reel (le défaut est la démonstration)")
-    elif reel and mode != "reel":
-        erreurs.append("option --reel donnée alors que la fiche demande la démonstration : corrigez l'un des deux")
+        erreurs.append(f"mode : « reel » attendu ou champ absent (reçu : {mode!r}) ; il n'existe plus de mode démonstration")
     bce = fiche.get("numeroBce")
     if not isinstance(bce, str) or not bce_valide(bce):
         erreurs.append(f"numeroBce : numéro BCE invalide (10 chiffres, contrôle modulo 97) : {bce!r}")
@@ -2840,8 +2819,8 @@ def valider_fiche(fiche: dict, reel: bool) -> dict:
         erreurs.append("courtier : true ou false attendu")
         courtier = False
     fsma = fiche.get("numeroFsma")
-    if fsma is not None and (not isinstance(fsma, str) or not fsma_valide(fsma, mode)):
-        erreurs.append(f"numeroFsma : 5 ou 6 chiffres attendus (codes de démonstration seulement en mode démonstration) : {fsma!r}")
+    if fsma is not None and (not isinstance(fsma, str) or not fsma_valide(fsma)):
+        erreurs.append(f"numeroFsma : 5 ou 6 chiffres attendus : {fsma!r}")
     elif courtier and fsma is None:
         erreurs.append("numeroFsma : obligatoire pour un courtier (courtier = true)")
     langues = fiche.get("langues")
@@ -2920,7 +2899,7 @@ def valider_fiche(fiche: dict, reel: bool) -> dict:
 
 def organisation_client(reg_orga: dict, fiche: dict, nom: str | None = None, marqueur: str | None = None) -> dict:
     """Copie du registre d'organisation avec l'entreprise du client : nom, identifiant, marqueur
-    « atelier-client:<slug> », description neutre (aucune donnée de démonstration) et objectifs génériques
+    « atelier-client:<slug> », description neutre (aucune donnée de l'organisation modèle) et objectifs génériques
     à partir des offres et des bureaux de la fiche. Agents, projets et routines restent ceux du registre."""
     marqueur = marqueur or f"{PREFIXE_MARQUEUR_CLIENT}{fiche['slug']}"
     nom = nom or fiche["nomCommercial"]
@@ -3172,27 +3151,27 @@ def verifier_identite_client(slug: str, numero_bce: str, registre: dict | None, 
 
 
 def retrouver_entreprise_client(api: Api, reg_orga: dict, reg_orga_client: dict) -> dict | None:
-    """Entreprise du client retrouvée par son marqueur ; refus clair si elle touche à la démonstration."""
+    """Entreprise du client retrouvée par son marqueur ; refus clair si elle touche à l'organisation modèle."""
     e_demo, e_client = reg_orga["entreprise"], reg_orga_client["entreprise"]
     nom_demo = unicodedata.normalize("NFC", e_demo["nom"])
     if e_client["slug"] == e_demo["slug"] or unicodedata.normalize("NFC", e_client["nom"]) == nom_demo:
-        raise ErreurAtelier("le nom de la fiche est celui de l'organisation de démonstration : refusé, rien n'est écrit.")
+        raise ErreurAtelier("le nom de la fiche est celui de l'organisation modèle : refusé, rien n'est écrit.")
     for c in api.get("/companies"):
         description = c.get("description") or ""
-        if porte_marqueur(description, e_client["marqueur"]) and (e_demo["marqueur"] in description or PREFIXE_MARQUEUR_DEMO in description
+        if porte_marqueur(description, e_client["marqueur"]) and (e_demo["marqueur"] in description or PREFIXE_MARQUEUR_ANCIEN in description
                                                     or unicodedata.normalize("NFC", c.get("name") or "") == nom_demo):
             raise ErreurAtelier(
                 f"l'entreprise « {c.get('name')} » ({c.get('id')}) porte le marqueur {e_client['marqueur']} mais appartient "
-                "à l'organisation de démonstration : refusé, rien n'est modifié."
+                "à l'organisation modèle : refusé, rien n'est modifié."
             )
     return trouver_entreprise(api, reg_orga_client)
 
 
-def entreprise_de_demonstration(societe: dict, reg_orga: dict) -> bool:
-    """Vrai si l'entreprise est (ou se dit) celle de la démonstration : marqueur ou nom."""
+def entreprise_modele(societe: dict, reg_orga: dict) -> bool:
+    """Vrai si l'entreprise est (ou se dit) celle de l'organisation modèle : marqueur ou nom."""
     description = societe.get("description") or ""
     demo = reg_orga["entreprise"]
-    return (PREFIXE_MARQUEUR_DEMO in description or demo["marqueur"] in description
+    return (PREFIXE_MARQUEUR_ANCIEN in description or demo["marqueur"] in description
             or unicodedata.normalize("NFC", societe.get("name") or "") == unicodedata.normalize("NFC", demo["nom"]))
 
 
@@ -3204,7 +3183,7 @@ def bce_de_la_marque(marque: dict | None) -> set[str]:
 
 def enregistrer_existante(args, fiche: dict) -> int:
     """Migration : crée le registre local d'une entreprise cliente créée avant son introduction. Aucune écriture dans
-    l'API : le registre n'est créé qu'après contrôle (entreprise existante, hors démonstration, nom et marqueur de la
+    l'API : le registre n'est créé qu'après contrôle (entreprise existante, hors organisation modèle, nom et marqueur de la
     fiche, BCE du référentiel de marque enregistré dans le plugin égal à celui de la fiche)."""
     cid = (args.entreprise or "").strip().lower()
     if not RE_UUID.fullmatch(cid):
@@ -3215,8 +3194,8 @@ def enregistrer_existante(args, fiche: dict) -> int:
     societe = next((c for c in api.get("/companies") if c.get("id") == cid), None)
     if societe is None:
         raise ErreurAtelier(f"entreprise {cid} introuvable : rien n'est écrit.")
-    if entreprise_de_demonstration(societe, reg_orga):
-        raise ErreurAtelier("enregistrement refusé : c'est l'entreprise de démonstration. Rien n'est écrit.")
+    if entreprise_modele(societe, reg_orga):
+        raise ErreurAtelier("enregistrement refusé : c'est l'entreprise modèle. Rien n'est écrit.")
     if unicodedata.normalize("NFC", societe.get("name") or "") != fiche["nomCommercial"]:
         raise ErreurAtelier(f"enregistrement refusé : l'entreprise s'appelle « {societe.get('name')} », pas « {fiche['nomCommercial']} ». Rien n'est écrit.")
     if not porte_marqueur(societe.get("description"), marqueur):
@@ -3586,8 +3565,8 @@ def configurer_plugin_client(api: Api, slug: str) -> None:
     print(f"Configuration du plugin (bureau de liaison) : {len(creees)} entreprise(s) configurée(s), {len(ids) - len(creees)} déjà configurée(s)")
 
 
-RE_SUFFIXE_DEMONSTRATION = re.compile(r"\s*\((?:démonstration|demonstration)\)\s*$", re.I)
-RE_MARQUEUR_DEMO = re.compile(r"(?<![A-Za-z0-9_-])atelier-demo:[a-z0-9-]+(?![A-Za-z0-9_:-])")
+RE_SUFFIXE_ANCIEN = re.compile(r"\s*\((?:démonstration|demonstration)\)\s*$", re.I)
+RE_MARQUEUR_ANCIEN = re.compile(r"(?<![A-Za-z0-9_-])atelier-demo:[a-z0-9-]+(?![A-Za-z0-9_:-])")
 
 
 class ApiEntreprisesSimulees(Api):
@@ -3603,7 +3582,7 @@ class ApiEntreprisesSimulees(Api):
 
 def preparer_migration_marketing(args, api: Api, fiche: dict) -> dict:
     """Contrôles (aucune écriture) de « nouveau-client --ajouter-services » : l'entreprise existe, son nom est celui de la
-    fiche (sans « (démonstration) »), elle porte un marqueur de démonstration à migrer ou déjà le marqueur du client, aucun
+    fiche (sans « (démonstration) »), elle porte un ancien marqueur « atelier-demo: » à migrer ou déjà le marqueur du client, aucun
     registre local ne la rattache à un autre client, son BCE (référentiel de marque, s'il en a) est celui de la fiche.
     Rend le plan : société migrée, registre voulu, actions à faire (vide = déjà migrée)."""
     cid = (args.entreprise or "").strip().lower()
@@ -3615,16 +3594,16 @@ def preparer_migration_marketing(args, api: Api, fiche: dict) -> dict:
     if societe is None:
         raise ErreurAtelier(f"entreprise {cid} introuvable : rien n'est écrit.")
     nom_actuel = unicodedata.normalize("NFC", societe.get("name") or "")
-    nom_voulu = RE_SUFFIXE_DEMONSTRATION.sub("", nom_actuel).strip()
+    nom_voulu = RE_SUFFIXE_ANCIEN.sub("", nom_actuel).strip()
     if nom_voulu != fiche["nomCommercial"]:
         raise ErreurAtelier(f"ajout de services refusé : l'entreprise s'appelle « {nom_actuel} », la fiche « {fiche['nomCommercial']} » "
                             "(hors « (démonstration) »). Rien n'est écrit.")
     description = societe.get("description") or ""
-    marqueurs_demo = RE_MARQUEUR_DEMO.findall(description)
+    marqueurs_demo = RE_MARQUEUR_ANCIEN.findall(description)
     deja = porte_marqueur(description, marqueur)
     if not deja and (len(marqueurs_demo) != 1 or PREFIXE_MARQUEUR_CLIENT in description):
         raise ErreurAtelier(f"ajout de services refusé : la description de « {nom_actuel} » ne porte ni le marqueur {marqueur} ni un seul marqueur "
-                            f"« {PREFIXE_MARQUEUR_DEMO}… » à migrer (elle appartient peut-être à un autre client). Rien n'est écrit.")
+                            f"« {PREFIXE_MARQUEUR_ANCIEN}… » à migrer (elle appartient peut-être à un autre client). Rien n'est écrit.")
     registre = lire_registre_client(slug)
     entree_actuelle = ((registre or {}).get("entreprises") or {}).get("marketing")
     if entree_actuelle and entree_actuelle["entrepriseId"] != cid:
@@ -3641,7 +3620,7 @@ def preparer_migration_marketing(args, api: Api, fiche: dict) -> dict:
         bces = set()  # plugin absent ou référentiel illisible : pas de second contrôle possible
     if bces and normaliser_bce(fiche["numeroBce"]) not in bces:
         raise ErreurAtelier("ajout de services refusé : le BCE de la fiche ne correspond pas à celui du référentiel de marque de l'entreprise. Rien n'est écrit.")
-    nouvelle_description = description if deja else RE_MARQUEUR_DEMO.sub(marqueur, description)
+    nouvelle_description = description if deja else RE_MARQUEUR_ANCIEN.sub(marqueur, description)
     corps = {}
     if nom_actuel != nom_voulu:
         corps["name"] = nom_voulu
@@ -3688,7 +3667,9 @@ def cmd_nouveau_client(args) -> int:
         raise ErreurAtelier("--enregistrer-existante et --ajouter-services exigent --entreprise <UUID>.")
     if args.slug and not args.ajouter_services:
         raise ErreurAtelier("--slug ne s'utilise qu'avec --ajouter-services.")
-    fiche = valider_fiche(lire_fiche(Path(args.fiche)), args.reel)
+    if args.reel:
+        print("Avertissement : l'option --reel n'a plus d'effet (tout est réel) ; vous pouvez la retirer.", file=sys.stderr)
+    fiche = valider_fiche(lire_fiche(Path(args.fiche)))
     if args.slug:
         if not CODE_REFERENTIEL.fullmatch(args.slug):
             raise ErreurAtelier(f"--slug invalide (lettres minuscules, chiffres et tirets, 2 à 40 caractères) : {args.slug!r}")
@@ -3964,8 +3945,8 @@ def cmd_purger(args) -> int:
     # Garde-fou : un UUID ne suffit pas. L'identité d'un client est son registre local (écrit par « nouveau-client »,
     # hors de portée des agents) ; la description (marqueur) est modifiable par un agent et ne prouve rien.
     if slug_client_par_entreprise(cid) is None:
-        if entreprise_de_demonstration(societe, reg_orga):
-            raise ErreurAtelier("purge refusée : c'est l'entreprise de démonstration (utilisez « reinitialiser »). Rien n'a été supprimé.")
+        if entreprise_modele(societe, reg_orga):
+            raise ErreurAtelier("purge refusée : c'est l'entreprise modèle (utilisez « reinitialiser »). Rien n'a été supprimé.")
         nom_societe = unicodedata.normalize("NFC", societe.get("name") or "")
         if not args.hors_marqueur:
             raise ErreurAtelier(
@@ -4103,11 +4084,11 @@ def main(argv=None) -> int:
     g.add_argument("--verifier", action="store_true")
     ap_ = sp.add_parser("appliquer")
     ap_.add_argument("--mode", choices=MODES, default="reel",
-                     help="reel : claude_local prêt mais en pause (défaut) ; demonstration : agents process du lot A")
+                     help="reel (seul mode) : claude_local prêt mais en pause")
     sp.add_parser("etat")
     nc = sp.add_parser("nouveau-client")
     nc.add_argument("--fiche", required=True, help="fiche du client (.yaml, .yml ou .json) ; modèle : organisation/modeles/fiche-client.exemple.json")
-    nc.add_argument("--reel", action="store_true", help="autorise le mode réel (sans lui, démonstration seulement)")
+    nc.add_argument("--reel", action="store_true", help="sans effet (tout est réel) ; accepté pour ne pas casser les appels existants")
     nc.add_argument("--a-blanc", "--a_blanc", action="store_true", dest="a_blanc", help="liste les écritures prévues sans rien écrire")
     nc.add_argument("--enregistrer-existante", action="store_true", dest="enregistrer_existante",
                     help="migration : crée le registre local d'une entreprise cliente déjà créée (avec --entreprise et --fiche), après contrôle du BCE")
@@ -4119,7 +4100,7 @@ def main(argv=None) -> int:
     ac.add_argument("--detail", action="store_true", help="affiche aussi le détail quand rien n'a été écrit")
     x = sp.add_parser("exporter")
     x.add_argument("--sortie", default=None, help="dossier de sortie (vide ou absent) ; obligatoire sans --entreprise")
-    x.add_argument("--entreprise", default=None, help="UUID de l'entreprise à exporter (défaut : l'organisation de démonstration)")
+    x.add_argument("--entreprise", default=None, help="UUID de l'entreprise à exporter (défaut : l'organisation modèle)")
     pg = sp.add_parser("purger")
     pg.add_argument("--entreprise", required=True, help="UUID de l'entreprise dont toutes les données seront supprimées")
     pg.add_argument("--confirmer", action="store_true", help="obligatoire : la suppression est irréversible")
@@ -4138,7 +4119,7 @@ def main(argv=None) -> int:
     tr.add_argument("--confirmer", action="store_true")
     cl = sp.add_parser("cles")
     cl.add_argument("--confirmer", action="store_true")
-    cl.add_argument("--entreprise", default=None, help="identifiant de l'entreprise (défaut : l'organisation de démonstration)")
+    cl.add_argument("--entreprise", default=None, help="identifiant de l'entreprise (défaut : l'organisation modèle)")
     groupe = cl.add_mutually_exclusive_group()
     groupe.add_argument("--rotation", choices=("passerelle", "approbation"))
     groupe.add_argument("--basculer", choices=("passerelle", "approbation"))

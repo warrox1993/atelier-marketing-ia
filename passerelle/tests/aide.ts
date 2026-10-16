@@ -5,18 +5,26 @@ import { createHash, randomBytes } from "node:crypto";
 import * as z from "zod";
 import { RegistreFournisseurs, type FournisseurService } from "../src/fournisseurs.js";
 import { creerServeur, type OptionsServeur, type ServeurPasserelle } from "../src/serveur.js";
-import { calculerChallengeS256 } from "../src/oauth-demo.js";
+import { calculerChallengeS256 } from "../src/commun/pkce.js";
 
-/** Fournisseur factice minimal : prouve le point d'extension (L4, L5, L7 en feront de vrais). */
-export function fournisseurFactice(mode: "demonstration" | "reel" = "demonstration"): FournisseurService {
+/**
+ * Fournisseur factice minimal : prouve le point d'extension.
+ *   - « local » (défaut) : autorisation locale de la passerelle (parcours OAuth complet), comme osm, bce, bnb, liens ;
+ *   - « tiers » : le fournisseur apporte sa propre autorisation (seul « jeton-google-factice » est valide pour gsc).
+ */
+export function fournisseurFactice(autorisation: "local" | "tiers" = "local"): FournisseurService {
   return {
     service: "gsc",
-    mode,
-    serveursAutorisation: ["https://accounts.google.example"],
-    // Mode réel : seul « jeton-google-factice » est un jeton valide pour gsc (vérification au niveau HTTP).
-    ...(mode === "reel"
-      ? { verifierJeton: (jeton: string, service: string) => (jeton === "jeton-google-factice" && service === "gsc" ? { compte: "Compte factice (réel)", propriete: null } : null) }
-      : {}),
+    mode: "reel",
+    ...(autorisation === "tiers"
+      ? {
+          serveursAutorisation: ["https://accounts.google.example"],
+          verifierJeton: (jeton: string, service: string) => (jeton === "jeton-google-factice" && service === "gsc" ? { compte: "Compte factice (tiers)", propriete: null } : null),
+        }
+      : {
+          autorisationLocale: true,
+          fiche: { id: "gsc", libelle: "Search Console", portees: ["https://www.googleapis.com/auth/webmasters.readonly"], proprietes: [{ id: "sc-domain:essai.example", libelle: "essai.example (domaine d'essai)" }, { id: "https://www.essai.example/", libelle: "https://www.essai.example/" }] },
+        }),
     outils: [
       {
         nom: "gsc_ping",
@@ -55,8 +63,8 @@ export interface PasserelleDeTest {
 }
 
 export async function demarrer(options: Partial<OptionsServeur> = {}): Promise<PasserelleDeTest> {
-  const registre = options.registre ?? new RegistreFournisseurs().enregistrer(fournisseurFactice(options.mode ?? "demonstration"));
-  const serveur = creerServeur({ mode: "demonstration", port: 0, ...options, registre });
+  const registre = options.registre ?? new RegistreFournisseurs().enregistrer(fournisseurFactice());
+  const serveur = creerServeur({ port: 0, ...options, registre });
   const url = await serveur.ecouter();
   return { serveur, url, arreter: () => serveur.arreter() };
 }
@@ -106,7 +114,7 @@ export function urlAutorisation(
     code_challenge: pkce.challenge,
     code_challenge_method: "S256",
     resource: `${url}/mcp/${service}`,
-    scope: "demonstration",
+    scope: "local",
     ...extra,
   });
   return `${url}/oauth/authorize?${q.toString()}`;

@@ -636,7 +636,6 @@ function Liste({ companyId, version, onChange }: { companyId: string; version: n
                     </td>
                     <th scope="row">
                       {l.titre}
-                      {l.mode === "demonstration" ? <span className="atl-sous">donnée de démonstration</span> : null}
                     </th>
                     <td data-libelle="Type">{LIBELLES_TYPES[l.type] ?? l.type}</td>
                     <td data-libelle="Langue">{LANGUES[l.langue]}</td>

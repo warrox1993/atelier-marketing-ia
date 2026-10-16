@@ -9,7 +9,7 @@ import { useHostContext, useHostNavigation } from "@paperclipai/plugin-sdk/ui";
 import type { Campagne, Connecteur } from "../../contrats/campagnes.js";
 import type { Exigence } from "../../contrats/exigences.js";
 import type { DetailCampagne, VueEquipe } from "../../contrats/ui.js";
-import { Champ, Bouton, EnTete, EtatErreur, Fraicheur, Horodatage, LienHote, Lecture, ListeOuAucun, MentionDemo, Pastille, PastilleConnexion, PastilleStatut, Section, Vide } from "../composants.js";
+import { Champ, Bouton, EnTete, EtatErreur, Fraicheur, Horodatage, LienHote, Lecture, ListeOuAucun, Pastille, PastilleConnexion, PastilleStatut, Section, Vide } from "../composants.js";
 import { ConfirmationLot, type ElementLot } from "../decision-groupee.js";
 import { useAction, useDonnees } from "../donnees.js";
 import { DECISIONS_PORTE, euros, idCourt, NIVEAUX_INTEGRATION } from "../format.js";
@@ -64,7 +64,6 @@ function ListeCampagnes() {
               <thead>
                 <tr>
                   <th scope="col">Campagne</th>
-                  <th scope="col">Mode</th>
                   <th scope="col">État</th>
                   <th scope="col">Canaux</th>
                   <th scope="col">Plafond publicitaire</th>
@@ -79,7 +78,6 @@ function ListeCampagnes() {
                       <th scope="row" data-libelle="Campagne">
                         <LienHote vers={chemin("campagnes", c.id)}>{c.nom}</LienHote>
                       </th>
-                      <td data-libelle="Mode">{c.mode === "demonstration" ? <MentionDemo compacte /> : <Pastille ton="info">Réel</Pastille>}</td>
                       <td data-libelle="État">
                         <Pastille ton={e.ton}>{e.libelle}</Pastille>
                       </td>
@@ -116,14 +114,12 @@ function DetailCampagneVue({ campagneId }: { campagneId: string }) {
             retour={<LienHote vers={chemin("campagnes")}>Toutes les campagnes</LienHote>}
             description={
               <span className="atl-pile-ligne">
-                {d.modeEffectif.mode === "demonstration" ? <MentionDemo compacte /> : <Pastille ton="info">Réel</Pastille>}
                 <Pastille ton={etatProjet(d.campagne).ton}>{etatProjet(d.campagne).libelle}</Pastille>
                 <LienHote vers={`/projects/${d.campagne.projectId}`}>Projet Paperclip</LienHote>
               </span>
             }
           />
           <Fraicheur chargeLe={r.chargeLe} actualisation={r.loading} />
-          <NoteModeEffectif detail={d} />
           <ActionsCampagne campagne={d.campagne} onFait={r.refresh} />
           <Section titre="Cadre">
             <dl className="atl-champs atl-champs-grille">
@@ -152,15 +148,6 @@ function DetailCampagneVue({ campagneId }: { campagneId: string }) {
                 <dd><ListeOuAucun valeurs={d.campagne.perimetre.zones} aucun="aucune" /></dd>
               </div>
               <div>
-                <dt>Mode</dt>
-                <dd>
-                  {d.modeEffectif.mode === "reel" ? "Réel" : "Démonstration"}
-                  <span className="atl-sous">
-                    {d.campagne.mode === d.modeEffectif.mode ? "Déclaré pour la campagne" : `Déclaré : ${d.campagne.mode === "reel" ? "réel" : "démonstration"} ; appliqué : ${d.modeEffectif.raison.replace(/ \(.*\)$/u, "")}`}
-                  </span>
-                </dd>
-              </div>
-              <div>
                 <dt>Plafond publicitaire</dt>
                 <dd>{libellePlafond(d.campagne.plafondPub)}</dd>
               </div>
@@ -172,7 +159,7 @@ function DetailCampagneVue({ campagneId }: { campagneId: string }) {
           </Section>
           <PlafondCampagne campagne={d.campagne} onFait={r.refresh} />
           <Section titre="Connexions nécessaires">
-            <Connexions connecteurs={d.connexionsNecessaires} mode={d.modeEffectif.mode} />
+            <Connexions connecteurs={d.connexionsNecessaires} />
           </Section>
           <Section titre={`Tâches (${d.taches.length})`} aide="Statut calculé à la lecture depuis l'état natif de chaque tâche ; aucune copie n'est stockée.">
             {d.taches.length === 0 ? (
@@ -236,29 +223,11 @@ function DetailCampagneVue({ campagneId }: { campagneId: string }) {
   );
 }
 
-/**
- * Mode EFFECTIF de la campagne (règle prudente du lot L9) : c'est lui que la porte, la garde des
- * données et la diffusion appliquent. Quand il diffère du mode déclaré, l'écart est dit en clair.
- */
-export function NoteModeEffectif({ detail: d }: { detail: Pick<DetailCampagne, "campagne" | "modeEffectif"> }) {
-  if (d.modeEffectif.mode === "demonstration") return <MentionDemo />;
-  const ecart = d.campagne.mode !== "reel";
-  return (
-    <p className="atl-note-mode" role="note">
-      <strong>Mode réel{ecart ? " appliqué" : ""}.</strong>{" "}
-      {ecart ? "La campagne est déclarée en démonstration, mais l'entreprise est réglée en mode réel : la règle la plus prudente s'applique. " : ""}
-      Aucune donnée de démonstration n'est acceptée ; une diffusion approuvée est préparée, jamais simulée.
-    </p>
-  );
-}
-
-function Connexions({ connecteurs, mode }: { connecteurs: Connecteur[]; mode: string }) {
+function Connexions({ connecteurs }: { connecteurs: Connecteur[] }) {
   if (connecteurs.length === 0) {
     return (
       <p className="atl-attenue">
-        {mode === "demonstration"
-          ? "Mode démonstration : aucune connexion externe n'est utilisée ; les actions externes sont simulées."
-          : "Aucune connexion supplémentaire requise par cette campagne."}
+        Aucune connexion supplémentaire requise par cette campagne.
       </p>
     );
   }
@@ -661,17 +630,6 @@ function NouvelleCampagne() {
             </select>
           </Champ>
         </div>
-        <fieldset className="atl-champ atl-choix">
-          <legend>Mode</legend>
-          <label>
-            <input type="radio" name="mode" value="demonstration" checked={f.mode === "demonstration"} onChange={maj("mode")} /> Démonstration
-            <span className="atl-aide">Données fictives fixes, aucun appel de modèle, aucune diffusion.</span>
-          </label>
-          <label>
-            <input type="radio" name="mode" value="reel" checked={f.mode === "reel"} onChange={maj("mode")} /> Réel
-            <span className="atl-aide">Utilise les adaptateurs configurés ; rien n'est diffusé sans décision humaine et connecteur vérifié.</span>
-          </label>
-        </fieldset>
         <ChoixPlafond
           legende="Plafond des dépenses publicitaires"
           valeur={plafond}

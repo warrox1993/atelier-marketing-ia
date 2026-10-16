@@ -286,11 +286,10 @@ describe("S-6 : un compte non nul est signé sur toute réponse réelle", () => 
     expect(appels).toBe(0);
   });
 
-  it("signer() refuse un compte vide ou null en mode réel, l'accepte en démonstration", () => {
+  it("signer() refuse un compte vide ou null", () => {
     const base = { service: "gsc", outil: "gsc_ping", erreur: false, args: {}, ecriture: false, structure: {} };
     expect(() => signataire.signer({ ...base, mode: "reel", compte: null })).toThrow(/compte non vide/);
     expect(() => signataire.signer({ ...base, mode: "reel", compte: "" })).toThrow(/compte non vide/);
     expect(signataire.signer({ ...base, mode: "reel", compte: "page-1" })).toMatch(/^aev1\./);
-    expect(signataire.signer({ ...base, mode: "demonstration", compte: null })).toMatch(/^aev1\./);
   });
 });

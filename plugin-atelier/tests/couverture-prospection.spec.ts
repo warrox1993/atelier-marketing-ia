@@ -231,7 +231,7 @@ function banc(o: { marque?: Ligne | null; nomProducteur?: string } = {}) {
   /** Entrée de journal telle que le dépôt signé l'écrit (services-prospection.ts). */
   async function deposer(outil: string, args: Record<string, unknown>, total: number, companyId = SOC) {
     await b.base.journaliser({ companyId, type: "prospects.deposes", entite: "source", entiteId: "s", issueId: ISSUE, donnees: { service: outil.split("_")[0], outil, campagneId: CAMP, appel: { arguments: args, total, page: 1, pages: 1 } } });
-    b.t.sources.push({ id: `src-${b.t.sources.length}`, companyId, issueId: ISSUE, mode: "demonstration", provenance: "connexion", url: `connexion://osm/${outil}`, connexion: { service: "osm", outil, chiffres: [] } });
+    b.t.sources.push({ id: `src-${b.t.sources.length}`, companyId, issueId: ISSUE, mode: "reel", provenance: "connexion", url: `connexion://osm/${outil}`, connexion: { service: "osm", outil, chiffres: [] } });
   }
   const couverture = (companyId = SOC, agent = true) => appeler("prospection.couverture", { query: { companyId, campagneId: CAMP }, companyId, agent });
   return { ...b, appeler, deposer, couverture };
@@ -274,7 +274,7 @@ describe("route prospection.couverture", () => {
 describe("porte à travers les services", () => {
   it("tâche de prospection : refus qui nomme les zones manquantes, puis accord une fois tout interrogé", async () => {
     const f = banc();
-    f.tacheSousPorte({ corps: "# Prospects (démonstration)\n\nListe déposée (démonstration)." });
+    f.tacheSousPorte({ corps: "# Prospects\n\nListe déposée." });
     await f.deposer("osm_commerces", { codes_postaux: ["4000"] }, 10);
     const avant = (await f.appeler("tache.porte.evaluer", { params: { issueId: ISSUE }, agent: false })).body as { decision: string; motifs: Ligne[] };
     expect(avant.decision).toBe("REFUS");

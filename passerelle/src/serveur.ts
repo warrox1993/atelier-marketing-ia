@@ -3,12 +3,14 @@
 // Une adresse par service (/mcp/<service>), transport « Streamable HTTP » sans
 // session (ce que consomme la connexion native `mcp_remote` de Paperclip : un POST
 // JSON-RPC par requête, réponse JSON), authentification par jeton porteur.
-//   - mode demonstration : serveur d'autorisation de démonstration intégré
-//     (oauth-demo.ts), jeton lié à la ressource demandée ;
-//   - mode reel : le jeton porteur est vérifié par le fournisseur réel du service
-//     (FournisseurService.verifierJeton : validité, expiration, audience) AVANT toute
-//     requête MCP ; refus 401 avec WWW-Authenticate sinon. Le jeton est ensuite
-//     transmis au fournisseur (ContexteAppel.jetonPorteur), et les métadonnées
+//   - il n'y a qu'un seul mode : réel. Un service sans fournisseur enregistré répond
+//     « non_connecte » (HTTP 503), jamais des données simulées ;
+//   - services locaux (osm, bce, bnb, liens : `autorisationLocale`) : serveur
+//     d'autorisation local intégré (oauth-local.ts), jeton lié à la ressource demandée ;
+//   - autres services (Google, réseaux sociaux, CRM) : le jeton porteur est vérifié par
+//     le fournisseur (FournisseurService.verifierJeton : validité, expiration, audience)
+//     AVANT toute requête MCP ; refus 401 avec WWW-Authenticate sinon. Le jeton est
+//     ensuite transmis au fournisseur (ContexteAppel.jetonPorteur), et les métadonnées
 //     annoncent les serveurs d'autorisation du fournisseur (lots L4 et social-CRM).
 // Écoute uniquement sur la boucle locale ; en-tête Host et Origin contrôlés
 // (protection contre le rebond DNS).
@@ -20,38 +22,32 @@ import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/
 import { CallToolRequestSchema, ListToolsRequestSchema } from "@modelcontextprotocol/sdk/types.js";
 import { HOTE_PAR_DEFAUT, PORT_PAR_DEFAUT, verifierHoteEcoute } from "./config.js";
 import { RegistreFournisseurs, type ContexteAppel, type IdentiteAppel, type ModePasserelle } from "./fournisseurs.js";
-import { ServeurAutorisationDemo } from "./oauth-demo.js";
+import { ServeurAutorisationLocal } from "./oauth-local.js";
 import { appelerOutil, construireCatalogue, enveloppeAtelier, VERSION_PASSERELLE } from "./outils.js";
-import { COMPTE_DEMONSTRATION, MOTIF_SERVICE, type Service } from "./services.js";
+import { COMPTE_LOCAL, MOTIF_SERVICE, type Service } from "./services.js";
 import type { SignataireEnveloppe } from "./signature-enveloppe.js";
 
 const MAX_CORPS_MCP_OCTETS = 1024 * 1024;
 
+/** Mode porté par l'enveloppe signée `_atelier.mode` : toujours « reel » (il n'y a plus de mode démonstration). */
+const MODE: ModePasserelle = "reel";
+
 export interface OptionsServeur {
-  mode: ModePasserelle;
   /** Adresse d'écoute : 127.0.0.1 (défaut) ou ::1. Toute autre valeur est refusée. */
   hote?: string;
   /** Port d'écoute ; 0 = port libre choisi par le système (tests). */
   port?: number;
   registre?: RegistreFournisseurs;
-  /**
-   * Mélange (démonstration seulement) : services servis par leur fournisseur RÉEL pendant que les autres restent en
-   * démonstration (PASSERELLE_SERVICES_REELS). Un service listé sans fournisseur réel enregistré reste en démonstration.
-   * L'accès reste celui de la démonstration (OAuth local) ; seuls le fournisseur et le marquage des réponses (mode `reel`,
-   * signé, sans mention de démonstration) changent pour ces services.
-   */
-  servicesReels?: readonly string[];
-  /** Démonstration seulement : désactive l'exigence de jeton (tests unitaires). Jamais en production. */
+  /** Désactive l'exigence de jeton (tests unitaires seulement). Jamais en production. */
   sansAuthentification?: boolean;
   journal?: (message: string) => void;
-  /** Démonstration : fichier d'état OAuth (clients, empreintes de jetons) qui survit au redémarrage. */
+  /** Fichier d'état de l'autorisation locale (clients, empreintes de jetons) qui survit au redémarrage. */
   fichierEtat?: string;
   /** Signature de l'enveloppe `_atelier` de chaque réponse d'outil (revue S9) ; absente : réponses non signées. */
   signataire?: SignataireEnveloppe | null;
 }
 
 export interface ServeurPasserelle {
-  readonly mode: ModePasserelle;
   /** Démarre l'écoute et renvoie l'URL de base (http://127.0.0.1:<port>). */
   ecouter(): Promise<string>;
   arreter(): Promise<void>;
@@ -105,32 +101,41 @@ async function lireCorpsJson(req: IncomingMessage): Promise<{ ok: true; valeur: 
 }
 
 export function creerServeur(options: OptionsServeur): ServeurPasserelle {
-  const mode = options.mode;
+  const mode = MODE;
   const hote = verifierHoteEcoute(options.hote ?? HOTE_PAR_DEFAUT);
   const portDemande = options.port ?? PORT_PAR_DEFAUT;
   const registre = options.registre ?? new RegistreFournisseurs();
   const journal = options.journal ?? ((): void => undefined);
-  const exigerJeton = !(mode === "demonstration" && options.sansAuthentification === true);
+  const exigerJeton = options.sansAuthentification !== true;
 
   let portReel = portDemande;
   let urlDeBase = "";
-  const autorisation = new ServeurAutorisationDemo({ urlBase: () => urlDeBase, fiche: (nom) => registre.fiche(nom), ...(options.fichierEtat ? { fichierEtat: options.fichierEtat } : {}) });
-
-  const servicesReelsMelanges = new Set(mode === "demonstration" ? options.servicesReels ?? [] : []);
-
-  /** Mode effectif d'un service : `reel` pour un service du mélange qui a un fournisseur réel, sinon le mode de la passerelle. */
-  function modeDe(service: Service): ModePasserelle {
-    return servicesReelsMelanges.has(service) && registre.obtenir("reel", service) !== undefined ? "reel" : mode;
-  }
-
   function fournisseurDe(service: Service) {
-    return registre.obtenir(modeDe(service), service);
+    return registre.obtenir(service);
   }
 
-  /** Un service est servi en démonstration même sans fournisseur (atelier_identite seul) ; en réel, seulement avec fournisseur. */
-  function serviceDisponible(service: Service): boolean {
-    if (registre.fiche(service) === undefined) return false;
-    return mode === "demonstration" || fournisseurDe(service) !== undefined;
+  /** Service à autorisation locale (osm, bce, bnb, liens) : son accès est accordé par le serveur d'autorisation local. */
+  function estLocal(service: Service): boolean {
+    return fournisseurDe(service)?.autorisationLocale === true;
+  }
+
+  // Le serveur d'autorisation local ne connaît que les services locaux branchés : les autres ont leur propre autorisation.
+  const autorisation = new ServeurAutorisationLocal({
+    urlBase: () => urlDeBase,
+    fiche: (nom) => (estLocal(nom) ? registre.fiche(nom) : undefined),
+    ...(options.fichierEtat ? { fichierEtat: options.fichierEtat } : {}),
+  });
+
+  /** Un service est servi seulement s'il a un fournisseur réel enregistré ; sinon il répond « non_connecte ». */
+  function serviceConnecte(service: Service): boolean {
+    return registre.fiche(service) !== undefined && fournisseurDe(service) !== undefined;
+  }
+
+  function reponseNonConnecte(res: ServerResponse, service: Service): void {
+    envoyerJson(res, 503, {
+      error: "non_connecte",
+      message: `Le service ${service} n'est pas connecté : aucun fournisseur réel n'est configuré sur la passerelle. Aucune donnée simulée n'est jamais renvoyée.`,
+    });
   }
 
   function enteteChallenge(service: Service, erreur: boolean): string {
@@ -144,15 +149,15 @@ export function creerServeur(options: OptionsServeur): ServeurPasserelle {
       envoyerJson(res, 405, { jsonrpc: "2.0", error: { code: -32000, message: "Méthode non permise : POST seulement." }, id: null }, { allow: "POST" });
       return;
     }
-    if (!serviceDisponible(service)) {
-      envoyerJson(res, 404, { error: "service_indisponible", message: `Le service ${service} n'est pas disponible en mode ${mode}.` });
+    if (!serviceConnecte(service)) {
+      reponseNonConnecte(res, service);
       return;
     }
 
     // Authentification par jeton porteur.
     let identite: IdentiteAppel = {
-      compte: COMPTE_DEMONSTRATION,
-      propriete: registre.fiche(service)?.proprietesDemo[0] ?? null,
+      compte: COMPTE_LOCAL,
+      propriete: registre.fiche(service)?.proprietes?.[0] ?? null,
     };
     let jetonPorteur: string | null = null;
     if (exigerJeton) {
@@ -163,7 +168,7 @@ export function creerServeur(options: OptionsServeur): ServeurPasserelle {
         envoyerJson(res, 401, { error: "unauthorized", message: "Jeton porteur requis." }, { "www-authenticate": enteteChallenge(service, false) });
         return;
       }
-      if (mode === "demonstration") {
+      if (estLocal(service)) {
         const trouve = autorisation.verifierJeton(jetonPorteur, service);
         if (!trouve) {
           envoyerJson(res, 401, { error: "invalid_token", message: "Jeton invalide, expiré ou destiné à un autre service." }, { "www-authenticate": enteteChallenge(service, true) });
@@ -171,8 +176,8 @@ export function creerServeur(options: OptionsServeur): ServeurPasserelle {
         }
         identite = { compte: trouve.compte, propriete: trouve.propriete };
       } else {
-        // Mode réel : le fournisseur réel du service vérifie le jeton (validité, expiration, audience par
-        // service). Sans fonction de vérification, refus : jamais de jeton accepté par défaut (revue S1).
+        // Le fournisseur du service vérifie le jeton (validité, expiration, audience par service).
+        // Sans fonction de vérification, refus : jamais de jeton accepté par défaut (revue S1).
         const verifier = fournisseurDe(service)?.verifierJeton;
         const trouve = verifier ? verifier(jetonPorteur, service) : null;
         if (!trouve) {
@@ -189,19 +194,15 @@ export function creerServeur(options: OptionsServeur): ServeurPasserelle {
       return;
     }
 
-    const modeService = modeDe(service);
-    const catalogue = construireCatalogue(registre.fiche(service)!, modeService, fournisseurDe(service));
-    const contexte: ContexteAppel = { service, mode: modeService, identite, jetonPorteur };
+    const catalogue = construireCatalogue(registre.fiche(service)!, mode, fournisseurDe(service));
+    const contexte: ContexteAppel = { service, mode, identite, jetonPorteur };
 
     // Serveur MCP sans état : un par requête (modèle sans session du SDK).
     const serveurMcp = new ServeurMcp(
       { name: `passerelle-marketing-${service}`, version: VERSION_PASSERELLE },
       {
         capabilities: { tools: {} },
-        instructions:
-          modeService === "demonstration"
-            ? `Passerelle marketing en mode démonstration : ${enveloppeAtelier(modeService).mention}. Chaque réponse porte cette mention.`
-            : "Passerelle marketing en mode réel.",
+        instructions: "Passerelle marketing : données réelles uniquement (un service non connecté répond « non_connecte »).",
       },
     );
     serveurMcp.setRequestHandler(ListToolsRequestSchema, async () => ({ tools: catalogue.descripteurs }));
@@ -232,18 +233,24 @@ export function creerServeur(options: OptionsServeur): ServeurPasserelle {
     const chemin = url.pathname;
 
     if (chemin === "/sante" && req.method === "GET") {
-      envoyerJson(res, 200, { ok: true, mode, version: VERSION_PASSERELLE, services: registre.fiches().map((f) => f.id).filter(serviceDisponible), ...(servicesReelsMelanges.size > 0 ? { services_reels: registre.fiches().map((f) => f.id).filter((id) => modeDe(id) === "reel") } : {}), _atelier: enveloppeAtelier(mode) });
+      // `mode: "reel"` est conservé pour le plugin (il lit `mode` puis `services`) ; `services` = services connectés.
+      const tous = registre.fiches().map((f) => f.id);
+      envoyerJson(res, 200, { ok: true, mode, version: VERSION_PASSERELLE, services: tous.filter(serviceConnecte), services_non_connectes: tous.filter((id) => !serviceConnecte(id)), _atelier: enveloppeAtelier(mode) });
       return;
     }
 
     const metaRessource = /^\/\.well-known\/oauth-protected-resource\/mcp\/([a-z0-9]+)$/.exec(chemin);
     if (metaRessource && req.method === "GET") {
       const nom = metaRessource[1]!;
-      if (!MOTIF_SERVICE.test(nom) || !serviceDisponible(nom)) {
+      if (!MOTIF_SERVICE.test(nom) || registre.fiche(nom) === undefined) {
         envoyerJson(res, 404, { error: "service_inconnu" });
         return;
       }
-      if (mode === "demonstration") {
+      if (!serviceConnecte(nom)) {
+        reponseNonConnecte(res, nom);
+        return;
+      }
+      if (estLocal(nom)) {
         envoyerJson(res, 200, autorisation.metadonneesRessource(nom));
       } else {
         const serveurs = fournisseurDe(nom)?.serveursAutorisation ?? [];
@@ -262,13 +269,12 @@ export function creerServeur(options: OptionsServeur): ServeurPasserelle {
       return;
     }
 
-    if (mode === "demonstration") {
-      if (chemin === "/.well-known/oauth-authorization-server" && req.method === "GET") {
-        envoyerJson(res, 200, autorisation.metadonneesServeur());
-        return;
-      }
-      if (await autorisation.traiter(req, res, url)) return;
+    // Autorisation locale (services osm, bce, bnb, liens) : métadonnées du serveur et routes /oauth/*.
+    if (chemin === "/.well-known/oauth-authorization-server" && req.method === "GET") {
+      envoyerJson(res, 200, autorisation.metadonneesServeur());
+      return;
     }
+    if (await autorisation.traiter(req, res, url)) return;
 
     const route = /^\/mcp\/([a-z0-9]+)\/?$/.exec(chemin);
     if (route) {
@@ -298,7 +304,6 @@ export function creerServeur(options: OptionsServeur): ServeurPasserelle {
   });
 
   return {
-    mode,
     urlBase: () => urlDeBase,
     ecouter: () =>
       new Promise<string>((resolve, reject) => {
@@ -308,7 +313,7 @@ export function creerServeur(options: OptionsServeur): ServeurPasserelle {
           portReel = adresse.port;
           urlDeBase = hote === "::1" ? `http://[::1]:${portReel}` : `http://${hote}:${portReel}`;
           serveurHttp.off("error", reject);
-          journal(`passerelle ${mode} à l'écoute sur ${urlDeBase}`);
+          journal(`passerelle à l'écoute sur ${urlDeBase}`);
           resolve(urlDeBase);
         });
       }),

@@ -24,12 +24,12 @@ export const ANCRE_PASSAGE_AU_REEL = "param-reel";
 export const LIEN_PASSAGE_AU_REEL = `${chemin("parametres")}#${ANCRE_PASSAGE_AU_REEL}`;
 
 export const LIBELLES_ETAT: Readonly<Record<EtatBranchement, { libelle: string; ton: Ton }>> = {
-  reel: { libelle: "Branché en réel", ton: "succes" },
-  demonstration: { libelle: "En démonstration", ton: "demo" },
+  reel: { libelle: "Connecté", ton: "succes" },
+  demonstration: { libelle: "Non connecté", ton: "neutre" },
   configure_non_verifie: { libelle: "Configuré, non vérifié", ton: "neutre" },
   en_attente_acces: { libelle: "En attente d'accès", ton: "attention" },
   a_fournir_client: { libelle: "À fournir par le client", ton: "attention" },
-  non_branche: { libelle: "Non branché", ton: "neutre" },
+  non_branche: { libelle: "Non connecté", ton: "neutre" },
 };
 
 export const LIBELLES_ACTEUR: Readonly<Record<ActeurBranchement, string>> = {
@@ -49,8 +49,6 @@ function etatDeConnexion(e: EtatConnexion): EtatBranchement {
     case "configure_non_verifie":
       // Configuré mais jamais prouvé par un appel réel : ce n'est pas « réel », et il reste à faire.
       return "configure_non_verifie";
-    case "demonstration":
-      return "demonstration";
     default:
       return "non_branche";
   }
@@ -121,10 +119,10 @@ function TableauBranchements({ branchements }: { branchements: readonly Branchem
   return (
     <div className="atl-table-cadre">
       <table className="atl-table atl-table-realite">
-        <caption className="atl-sr">Branchements nécessaires pour passer au réel : état, ce qu'ils débloquent, qui doit agir, leads concernés</caption>
+        <caption className="atl-sr">Connexions de l'entreprise : état, ce qu'elles débloquent, qui doit agir, leads concernés</caption>
         <thead>
           <tr>
-            <th scope="col">Branchement</th>
+            <th scope="col">Connexion</th>
             <th scope="col">État</th>
             <th scope="col">Ce que cela débloque</th>
             <th scope="col">Qui doit agir</th>
@@ -173,7 +171,7 @@ function Contenu({ realite, branchements }: { realite: RealiteEtat; branchements
   return (
     <>
       <p className="atl-encart-titre" role="status">
-        Ce qui manque pour le réel : {pluriel(manquants.length, "branchement", "branchements")} sur {branchements.length}.
+        {manquants.length === 0 ? "Toutes les sources sont connectées." : `Connexions à établir : ${manquants.length} sur ${branchements.length}.`}
       </p>
       <TableauBranchements branchements={branchements} />
       <h3 className="atl-h3">Ce que les leads attendent</h3>
@@ -198,18 +196,18 @@ function Contenu({ realite, branchements }: { realite: RealiteEtat; branchements
 }
 
 /**
- * Récapitulatif du passage au réel pour le parcours de mise en place : ce qui manque, branchement par
- * branchement, sans le tableau complet (qui reste dans l'onglet « Passage au réel »). La lecture est
+ * Récapitulatif des connexions pour le parcours de mise en place : ce qui manque, branchement par
+ * branchement, sans le tableau complet (qui reste dans l'onglet « Connexions »). La lecture est
  * faite par l'appelant (`useRealite`) pour que l'état de l'étape et son contenu viennent de la même source.
  */
 export function RecapPassageAuReel({ lecture, relire }: { lecture: LectureRealite; relire: () => void }) {
-  if (lecture.etat === "chargement") return <Chargement libelle="Chargement du passage au réel" />;
-  if (lecture.etat === "erreur") return <EtatErreur erreur={lecture.erreur} onReessayer={relire} contexte="le passage au réel" />;
+  if (lecture.etat === "chargement") return <Chargement libelle="Chargement des connexions" />;
+  if (lecture.etat === "erreur") return <EtatErreur erreur={lecture.erreur} onReessayer={relire} contexte="les connexions" />;
   const manquants = branchementsManquants(lecture.branchements);
   return (
     <>
       <p className="atl-encart-titre" role="status">
-        {manquants.length === 0 ? "Tous les branchements sont en réel." : `Ce qui manque pour le réel : ${pluriel(manquants.length, "branchement", "branchements")} sur ${lecture.branchements.length}.`}
+        {manquants.length === 0 ? "Toutes les sources sont connectées." : `Connexions à établir : ${manquants.length} sur ${lecture.branchements.length}.`}
       </p>
       {manquants.length > 0 ? (
         <ul className="atl-liste">
@@ -233,13 +231,13 @@ export function SectionPassageAuReel() {
     document.getElementById(ANCRE_PASSAGE_AU_REEL)?.scrollIntoView?.();
   }, []);
   return (
-    <Section titre="Passage au réel" ancre={ANCRE_PASSAGE_AU_REEL} repliable aide="Ce qu'il faut encore brancher pour que l'entreprise travaille sur la réalité plutôt que sur la démonstration : où on en est, ce que cela débloque, et qui doit agir.">
-      {lecture.etat === "chargement" ? <Chargement libelle="Chargement du passage au réel" /> : null}
-      {lecture.etat === "erreur" ? <EtatErreur erreur={lecture.erreur} onReessayer={relire} contexte="le passage au réel" /> : null}
+    <Section titre="Connexions" ancre={ANCRE_PASSAGE_AU_REEL} repliable aide="Ce qui est branché et ce qui ne l'est pas encore : où on en est, ce que chaque connexion débloque, et qui doit agir. Une source sans accès réel s'affiche « Non connecté ».">
+      {lecture.etat === "chargement" ? <Chargement libelle="Chargement des connexions" /> : null}
+      {lecture.etat === "erreur" ? <EtatErreur erreur={lecture.erreur} onReessayer={relire} contexte="les connexions" /> : null}
       {lecture.etat === "pret" ? <Contenu realite={lecture.realite} branchements={lecture.branchements} /> : null}
       {lecture.etat === "pret" ? (
         <button type="button" className="atl-bouton" onClick={relire}>
-          Actualiser le passage au réel
+          Actualiser les connexions
         </button>
       ) : null}
     </Section>
@@ -252,23 +250,23 @@ export function EncartPassageAuReel() {
   if (lecture.etat === "chargement") return null;
   const lien = (
     <LienHote vers={LIEN_PASSAGE_AU_REEL} className="atl-bouton">
-      Voir le passage au réel
+      Voir les connexions
     </LienHote>
   );
   if (lecture.etat === "erreur") {
     return (
-      <Section titre="Passage au réel" id="accueil-reel">
-        <p className="atl-vide-texte">L'état des branchements n'a pas pu être lu.</p>
+      <Section titre="Connexions" id="accueil-reel">
+        <p className="atl-vide-texte">L'état des connexions n'a pas pu être lu.</p>
         {lien}
       </Section>
     );
   }
   const manquants = branchementsManquants(lecture.branchements);
   return (
-    <Section titre="Passage au réel" id="accueil-reel">
+    <Section titre="Connexions" id="accueil-reel">
       <div className="atl-encart" data-ton={manquants.length > 0 ? "attention" : undefined}>
         <p className="atl-encart-titre">
-          {manquants.length > 0 ? `Ce qui manque pour le réel : ${pluriel(manquants.length, "branchement", "branchements")}` : "Tous les branchements sont en réel."}
+          {manquants.length > 0 ? `Connexions à établir : ${manquants.length}` : "Toutes les sources sont connectées."}
         </p>
         {manquants.length > 0 ? (
           <p className="atl-vide-texte">

@@ -13,7 +13,7 @@ export interface OngletRubrique {
   libelle: string;
   /** Vue existante réutilisée telle quelle dans l'onglet. */
   vue: CleVue;
-  /** Ancre qui distingue deux onglets d'une même vue (Paramètres et Passage au réel). */
+  /** Ancre qui distingue deux onglets d'une même vue (Paramètres et Connexions). */
   ancre?: string;
 }
 
@@ -53,7 +53,7 @@ export const RUBRIQUES_NAV: ReadonlyArray<RubriqueNav> = [
       { cle: "mise-en-place", libelle: "Mise en place", vue: "mise-en-place" },
       { cle: "marque", libelle: "Marque et sources", vue: "marque" },
       { cle: "connaissances", libelle: "Connaissances", vue: "connaissances" },
-      { cle: "reel", libelle: "Passage au réel", vue: "parametres", ancre: ANCRE_PASSAGE_AU_REEL },
+      { cle: "reel", libelle: "Connexions", vue: "parametres", ancre: ANCRE_PASSAGE_AU_REEL },
       { cle: "parametres", libelle: "Paramètres", vue: "parametres" },
       { cle: "corbeille", libelle: "Corbeille", vue: "corbeille" },
     ],
@@ -77,7 +77,7 @@ export function cheminOnglet(o: OngletRubrique): string {
   return `${chemin(o.vue)}${o.ancre ? `#${o.ancre}` : ""}`;
 }
 
-/** Rubrique et onglet d'une vue ; `hash` (sans « # ») départage Passage au réel et Paramètres. */
+/** Rubrique et onglet d'une vue ; `hash` (sans « # ») départage Connexions et Paramètres. */
 export function rubriqueDe(vue: CleVue, hash = ""): { rubrique: RubriqueNav; onglet: OngletRubrique } {
   const ancre = hash.replace(/^#/u, "");
   const candidats = [...RUBRIQUES_NAV, RUBRIQUE_DIRECTION].flatMap((r) => r.onglets.filter((o) => o.vue === vue).map((onglet) => ({ rubrique: r, onglet })));

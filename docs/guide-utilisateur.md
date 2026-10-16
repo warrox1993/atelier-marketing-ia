@@ -122,8 +122,7 @@ Ce guide s'adresse à la personne qui pilote l'atelier au quotidien. Il ne deman
 Soyons clairs sur les limites actuelles.
 
 - Certains écrans de la plateforme qui héberge l'atelier (Routines, Agents, tâches, boîte de réception) contiennent encore de l'anglais. La traduction se fait écran par écran.
-- Les données de l'atelier sont des données de démonstration tant que le mode réel n'est pas activé. Les chiffres de démonstration sont signalés comme tels.
-- Les connexions aux outils extérieurs (Google, réseaux sociaux, CRM) sont simulées en mode démonstration. Les connexions réelles se mettent en place une par une.
+- Il n'y a plus de mode démonstration : les données sont réelles. Un outil extérieur (Google, réseaux sociaux, CRM) non branché est affiché « non connecté », sans donnée fictive. Les connexions se mettent en place une par une.
 - Le bouton « Diffuser » est visible mais grisé : aucun connecteur de publication n'existe encore. Rien n'est publié ni envoyé sans votre décision.
 - La voix en direct n'a pas encore été essayée avec une vraie clé OpenAI sur ce poste. Elle est livrée et testée sans clé.
 - L'accès à distance (chapitre 6) n'est pas actif.

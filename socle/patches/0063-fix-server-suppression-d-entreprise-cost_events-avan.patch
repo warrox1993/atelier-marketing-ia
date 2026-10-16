@@ -1,0 +1,72 @@
+From cb3bd4cef1aee5bbddc185877af3f09723e70bea Mon Sep 17 00:00:00 2001
+From: Jean-Baptiste Dhondt <114347858+warrox1993@users.noreply.github.com>
+Date: Fri, 16 Oct 2026 22:04:36 +0200
+Subject: [PATCH 63/64] =?UTF-8?q?fix(server):=20suppression=20d'entreprise?=
+ =?UTF-8?q?=20:=20cost=5Fevents=20avant=20heartbeat=5Fruns=20(contrainte?=
+ =?UTF-8?q?=20de=20cl=C3=A9=20=C3=A9trang=C3=A8re)?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01DP85vPq2MHkZg8VNtRvCzB
+---
+ .../atelier-suppression-entreprise.test.ts       | 16 +++++++++++++++-
+ server/src/services/companies.ts                 |  4 +++-
+ 2 files changed, 18 insertions(+), 2 deletions(-)
+
+diff --git a/server/src/__tests__/atelier-suppression-entreprise.test.ts b/server/src/__tests__/atelier-suppression-entreprise.test.ts
+index 76725ae10..d7895ed25 100644
+--- a/server/src/__tests__/atelier-suppression-entreprise.test.ts
++++ b/server/src/__tests__/atelier-suppression-entreprise.test.ts
+@@ -5,7 +5,7 @@
+ import { randomUUID } from "node:crypto";
+ import { eq } from "drizzle-orm";
+ import { afterAll, beforeAll, describe, expect, it } from "vitest";
+-import { budgetPolicies, companies, createDb, goals, projects } from "@paperclipai/db";
++import { agents, budgetPolicies, companies, costEvents, createDb, goals, heartbeatRuns, projects } from "@paperclipai/db";
+ import { getEmbeddedPostgresTestSupport, startEmbeddedPostgresTestDatabase } from "./helpers/embedded-postgres.js";
+ import { companyService } from "../services/companies.js";
+ 
+@@ -44,4 +44,18 @@ decrire("atelier : suppression d'entreprise avec projet lié à un objectif", ()
+     expect(supprimee?.id).toBe(companyId);
+     expect(await db.select().from(budgetPolicies).where(eq(budgetPolicies.companyId, companyId))).toEqual([]);
+   });
++  it("supprime une entreprise dont un run d'agent a des coûts enregistrés (cost_events avant heartbeat_runs)", async () => {
++    const companyId = randomUUID();
++    await db.insert(companies).values({ id: companyId, name: "Suppression coûts", issuePrefix: `C${companyId.slice(0, 6).toUpperCase().replace(/-/g, "")}`, requireBoardApprovalForNewAgents: false });
++    const agentId = randomUUID();
++    await db.insert(agents).values({ id: agentId, companyId, name: "Agent coûts", role: "general", adapterType: "process", adapterConfig: {} });
++    const runId = randomUUID();
++    await db.insert(heartbeatRuns).values({ id: runId, companyId, agentId, status: "succeeded" });
++    await db.insert(costEvents).values({ companyId, agentId, heartbeatRunId: runId, provider: "anthropic", model: "test", costCents: 12, occurredAt: new Date() });
++    const supprimee = await companyService(db).remove(companyId);
++    expect(supprimee?.id).toBe(companyId);
++    expect(await db.select().from(costEvents).where(eq(costEvents.companyId, companyId))).toEqual([]);
++    expect(await db.select().from(heartbeatRuns).where(eq(heartbeatRuns.companyId, companyId))).toEqual([]);
++    expect(await db.select().from(agents).where(eq(agents.companyId, companyId))).toEqual([]);
++  });
+ });
+diff --git a/server/src/services/companies.ts b/server/src/services/companies.ts
+index e3037033d..f51a3223d 100644
+--- a/server/src/services/companies.ts
++++ b/server/src/services/companies.ts
+@@ -554,12 +554,14 @@ export function companyService(db: Db) {
+         await tx.delete(agentTaskSessions).where(eq(agentTaskSessions.companyId, id));
+         await tx.delete(activityLog).where(eq(activityLog.companyId, id));
+         await tx.delete(runIdentityContexts).where(eq(runIdentityContexts.companyId, id));
++        // Atelier Marketing IA (patch local) : cost_events référence heartbeat_runs sans cascade ;
++        // ils doivent donc partir AVANT les runs (500 constaté le 16/10/2026).
++        await tx.delete(costEvents).where(eq(costEvents.companyId, id));
+         await tx.delete(heartbeatRuns).where(eq(heartbeatRuns.companyId, id));
+         await tx.delete(agentWakeupRequests).where(eq(agentWakeupRequests.companyId, id));
+         await tx.delete(agentApiKeys).where(eq(agentApiKeys.companyId, id));
+         await tx.delete(agentRuntimeState).where(eq(agentRuntimeState.companyId, id));
+         await tx.delete(issueComments).where(eq(issueComments.companyId, id));
+-        await tx.delete(costEvents).where(eq(costEvents.companyId, id));
+         await tx.delete(financeEvents).where(eq(financeEvents.companyId, id));
+         // Atelier Marketing IA (patch local) : incidents puis politiques de budget AVANT les approbations
+         // et l'entreprise. budget_incidents référence approvals et budget_policies sans cascade : une
+-- 
+2.53.0
+

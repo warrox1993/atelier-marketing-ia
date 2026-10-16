@@ -856,10 +856,10 @@ assert code != 0 and "numeroFsma" in s, (code, s); sans_appel()
 code, s = lancer("nouveau-client", "--fiche", ecrire_fiche("fsma2.json", lambda f: f.update(numeroFsma="12")))
 assert code != 0 and "numeroFsma" in s, (code, s); sans_appel()
 print("3. courtier sans numéro FSMA (ou numéro mal formé) : refus, aucun appel d'API")
-# 3 bis. Mode réel sans --reel, et code FSMA de démonstration en mode réel : refus ; autres défauts de fiche.
-code, s = lancer("nouveau-client", "--fiche", ecrire_fiche("reel.json", lambda f: f.update(mode="reel")))
-assert code != 0 and "--reel" in s, (code, s); sans_appel()
-code, s = lancer("nouveau-client", "--fiche", ecrire_fiche("reel2.json", lambda f: f.update(mode="reel")), "--reel", "--a-blanc")
+# 3 bis. Plus de mode démonstration : une fiche en mode « demonstration » ou un code FSMA de démonstration sont refusés, sans appel.
+code, s = lancer("nouveau-client", "--fiche", ecrire_fiche("demo-mode.json", lambda f: f.update(mode="demonstration")))
+assert code != 0 and "mode" in s and "démonstration" in s, (code, s); sans_appel()
+code, s = lancer("nouveau-client", "--fiche", ecrire_fiche("demo-fsma.json", lambda f: f.update(numeroFsma="DEMO-0100")), "--a-blanc")
 assert code != 0 and "numeroFsma" in s, (code, s); sans_appel()
 code, s = lancer("nouveau-client", "--fiche", ecrire_fiche("langue.json", lambda f: f.update(langues=["DE"])))
 assert code != 0 and "langues" in s, (code, s); sans_appel()
@@ -901,7 +901,7 @@ assert "atelier-client:courtage-exemple-fiche-fictive" in etat["societes"][0]["d
 assert [e for e in etat["ecritures"] if e[1].endswith("/budgets")] == [("PATCH", f"/companies/{cid}/budgets")] and etat["societes"][0]["budgetMonthlyCents"] == 5000
 marque = etat["marques"][cid]
 assert [e for e in etat["ecritures"] if "atelier.marque.enregistrer" in e[1]] and marque["version"] == 1
-assert marque["modulesConformite"][0]["code"] == "intermediaire_assurance" and marque["entites"][0]["identifiants"][1] == {"type": "fsma", "libelle": None, "valeur": "DEMO-0100"}
+assert marque["modulesConformite"][0]["code"] == "intermediaire_assurance" and marque["entites"][0]["identifiants"][1] == {"type": "fsma", "libelle": None, "valeur": "100100"}
 assert marque["entites"][0]["identifiants"][0]["valeur"] == "0123.456.749" and all(o["confirmee"] is False for o in marque["offres"]) and all(x["confirme"] is False for x in marque["etablissements"])
 assert marque["etablissements"][0]["position"] == {"lat": 50.0, "lon": 5.5} and marque["etablissements"][0]["segmentsSuivis"] == ["professions-liberales"]
 assert "rénovation" not in json.dumps(marque).lower() and "liège" not in json.dumps(marque).lower()
@@ -924,11 +924,11 @@ print("5 bis. fiche modifiée : nouvelle version du référentiel, toujours une 
 etat["societes"].append({"id": "dddddddd-0000-4000-8000-000000000000", "name": "Autre client", "description": f"atelier-client:autre-client {ent['marqueur']}", "budgetMonthlyCents": 0})
 avant = list(etat["ecritures"]); creations = etat["creations"]; coeur = etat["appels_coeur"]
 code, s = lancer("nouveau-client", "--fiche", ecrire_fiche("autre.json", lambda f: f.update(nomCommercial="Autre client")))
-assert code != 0 and "démonstration" in s and etat["ecritures"] == avant and etat["creations"] == creations and etat["appels_coeur"] == coeur, (code, s)
+assert code != 0 and "modèle" in s and etat["ecritures"] == avant and etat["creations"] == creations and etat["appels_coeur"] == coeur, (code, s)
 code, s = lancer("nouveau-client", "--fiche", ecrire_fiche("demo.json", lambda f: f.update(nomCommercial=ent["nom"])))
-assert code != 0 and "démonstration" in s and etat["ecritures"] == avant and etat["appels_coeur"] == coeur, (code, s)
+assert code != 0 and "modèle" in s and etat["ecritures"] == avant and etat["appels_coeur"] == coeur, (code, s)
 code, s = lancer("nouveau-client", "--fiche", ecrire_fiche("demo2.json", lambda f: f.update(nomCommercial=ent["nom"])), "--a-blanc")
-assert code != 0 and "démonstration" in s and etat["ecritures"] == avant, (code, s)
+assert code != 0 and "modèle" in s and etat["ecritures"] == avant, (code, s)
 print("6. entreprise du client appartenant à la démonstration (marqueur ou nom) : refus, rien d'écrit")
 # 7. M2 : registre local écrit à la création (hors de portée des agents : dossier 0700, fichier 0600).
 import shutil
@@ -988,7 +988,7 @@ etat["societes"].append({"id": "33333333-0000-4000-8000-0000000000cc", "name": "
 refus_enreg(["--enregistrer-existante", "--entreprise", "33333333-0000-4000-8000-0000000000cc", "--fiche", fiche_anc()], "marqueur")
 etat["societes"].pop()
 etat["societes"].append({"id": "44444444-0000-4000-8000-0000000000dd", "name": ent["nom"], "description": ent["marqueur"], "budgetMonthlyCents": 0})
-refus_enreg(["--enregistrer-existante", "--entreprise", "44444444-0000-4000-8000-0000000000dd", "--fiche", fiche_anc()], "démonstration")
+refus_enreg(["--enregistrer-existante", "--entreprise", "44444444-0000-4000-8000-0000000000dd", "--fiche", fiche_anc()], "modèle")
 etat["societes"].pop()
 code, s = lancer("nouveau-client", "--enregistrer-existante", "--entreprise", ANC, "--fiche", fiche_anc(), "--a-blanc")
 assert code == 0 and not reg_anc.exists() and etat["ecritures"] == avant, (code, s)
@@ -1549,10 +1549,10 @@ print("1 bis. entreprise sans marqueur atelier-client:<slug> : refus ; --hors-ma
 # 3. Démonstration (marqueur) refusée, même avec --confirmer et --a-blanc ; une entreprise portant le nom de la démonstration aussi.
 for extra in ((), ("--a-blanc",)):
     code, s = lancer("purger", "--entreprise", DEMO, "--confirmer", *extra)
-    assert code != 0 and "démonstration" in s, (code, s); rien_ecrit(0)
+    assert code != 0 and "modèle" in s, (code, s); rien_ecrit(0)
 societes.append({"id": "d0000000-0000-4000-8000-000000000004", "name": ent["nom"], "description": ""})
 code, s = lancer("purger", "--entreprise", "d0000000-0000-4000-8000-000000000004", "--confirmer")
-assert code != 0 and "démonstration" in s, s
+assert code != 0 and "modèle" in s, s
 societes.pop(); rien_ecrit(0)
 print("1. refus sans --confirmer, UUID invalide, entreprise inconnue, démonstration (marqueur et nom) : rien d'écrit")
 
@@ -1567,7 +1567,7 @@ autre_soc["description"] = desc_autre
 # b. Un marqueur de démonstration ajouté par un agent ne bloque plus la purge d'un client enregistré.
 societes[1]["description"] = "atelier-client:fictif atelier-demo:x"
 code, s = lancer("purger", "--entreprise", CLIENT, "--a-blanc"); assert code == 0 and "Entreprise à purger" in s, (code, s)
-code, s = lancer("purger", "--entreprise", CLIENT, "--confirmer"); assert "démonstration" not in s and "aucun export" in s, s
+code, s = lancer("purger", "--entreprise", CLIENT, "--confirmer"); assert "modèle" not in s and "aucun export" in s, s
 societes[1]["description"] = "atelier-client:fictif"; rien_ecrit(0)
 # c. Une entreprise qui porte le marqueur mais n'a aucun registre : refus ; seule la dérogation humaine passe le garde-fou.
 SANSREG = "f0000000-0000-4000-8000-000000000006"

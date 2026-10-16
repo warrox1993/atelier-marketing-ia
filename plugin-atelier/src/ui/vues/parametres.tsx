@@ -1,8 +1,8 @@
 /**
  * Paramètres et diagnostic (cahier §12 et §15) : gardes serveur, connecteurs,
- * réglages de l'entreprise (concurrence, cycles, mode, rétention), renvois vers
+ * réglages de l'entreprise (concurrence, cycles, rétention), renvois vers
  * les réglages natifs (modèles, budgets, compétences), remise à zéro de la
- * démonstration protégée par une confirmation saisie.
+ * données de l'atelier protégée par une confirmation saisie.
  */
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import { useHostContext } from "@paperclipai/plugin-sdk/ui";
@@ -171,7 +171,6 @@ export function VueParametres() {
             {(d) => <FormulaireReglages reglages={d} onFait={reg.refresh} />}
           </Lecture>
         </Section>
-        {reg.data?.modeParDefaut === "demonstration" ? <RechargerDemonstration /> : null}
         <RemiseAZero />
       </PanneauOnglet>
     </>
@@ -193,11 +192,11 @@ function TableauSourcesReelles({ sources }: { sources: SourcesReelles | undefine
       </p>
       <div className="atl-table-cadre">
         <table className="atl-table">
-          <caption className="atl-sr">Sources de données et mode lu sur la passerelle</caption>
+          <caption className="atl-sr">Sources de données et état lu sur la passerelle</caption>
           <thead>
             <tr>
               <th scope="col">Source</th>
-              <th scope="col">Mode</th>
+              <th scope="col">État</th>
               <th scope="col">Détail</th>
               <th scope="col">Vérifié le</th>
             </tr>
@@ -207,7 +206,7 @@ function TableauSourcesReelles({ sources }: { sources: SourcesReelles | undefine
               <tr key={l.cle}>
                 <th scope="row">{l.nom}</th>
                 <td>
-                  <Pastille ton={l.reelle ? "succes" : "neutre"}>{l.reelle ? "Réel" : "Démonstration"}</Pastille>
+                  <Pastille ton={l.reelle ? "succes" : "neutre"}>{l.reelle ? "Connecté" : "Non connecté"}</Pastille>
                 </td>
                 <td>{l.detail}</td>
                 <td>
@@ -267,12 +266,6 @@ function FormulaireReglages({ reglages, onFait }: { reglages: ReglagesEntreprise
         <Champ libelle="Cycles de correction avant escalade">
           <input value={f.maxCyclesCorrection} onChange={maj("maxCyclesCorrection")} inputMode="numeric" />
         </Champ>
-        <Champ libelle="Mode par défaut">
-          <select value={f.modeParDefaut} onChange={maj("modeParDefaut")}>
-            <option value="demonstration">Démonstration</option>
-            <option value="reel">Réel</option>
-          </select>
-        </Champ>
         <Champ libelle="Rétention des données (jours)">
           <input value={f.retentionJours} onChange={maj("retentionJours")} inputMode="numeric" />
         </Champ>
@@ -303,56 +296,8 @@ interface CompteRenduBase {
   lignesRejetees: number;
 }
 
-/**
- * Recharge les données de démonstration d'un geste : le corpus de connaissances puis la base clients.
- * Visible seulement quand l'entreprise est en démonstration (le serveur refuse de toute façon en réel).
- */
-function RechargerDemonstration() {
-  const { companyId } = useHostContext();
-  const [enCours, setEnCours] = useState(false);
-  const [erreur, setErreur] = useState<unknown>(null);
-  const [resultat, setResultat] = useState<string | null>(null);
-  const recharger = async () => {
-    if (!companyId) return;
-    setEnCours(true);
-    setErreur(null);
-    setResultat(null);
-    try {
-      const corpus = await appelRoute<CompteRenduCorpus>("POST", "/connaissances/demonstration", { companyId });
-      const base = await appelRoute<CompteRenduBase>("POST", "/base-clients/demonstration", { companyId });
-      setResultat(
-        `Documents : ${corpus.importes.length} importé(s), ${corpus.dejaImportes.length} déjà présent(s), ${corpus.refuses.length} refusé(s). Base clients : ${base.lignesRetenues} clients chargés, ${base.lignesRejetees} ligne(s) rejetée(s).`,
-      );
-    } catch (err) {
-      setErreur(err);
-    } finally {
-      setEnCours(false);
-    }
-  };
-  return (
-    <Section
-      titre="Recharger la démonstration"
-      ancre="param-recharger"
-      repliable
-      aide="Importe à nouveau les documents de démonstration et remplace la base clients par celle de démonstration. Les prospects se rechargent par le script peupler-prospects.py."
-    >
-      <div>
-        <Bouton variante="principal" enCours={enCours} onClick={() => void recharger()}>
-          Recharger la démonstration
-        </Bouton>
-      </div>
-      {erreur ? <EtatErreur erreur={erreur} contexte="rechargement de la démonstration" /> : null}
-      {resultat ? (
-        <p className="atl-succes" role="status">
-          {resultat}
-        </p>
-      ) : null}
-    </Section>
-  );
-}
-
 function RemiseAZero() {
-  const reinitialiser = useAction<{ supprimes: Record<string, number> }>("atelier.demo.reinitialiser");
+  const reinitialiser = useAction<{ supprimes: Record<string, number> }>("atelier.donnees.reinitialiser");
   const [saisie, setSaisie] = useState("");
   const [enCours, setEnCours] = useState(false);
   const [erreur, setErreur] = useState<unknown>(null);
@@ -370,7 +315,7 @@ function RemiseAZero() {
     }
   };
   return (
-    <Section titre="Remise à zéro de la démonstration" ancre="param-remise" repliable aide="Supprime les données de l'atelier de cette entreprise (campagnes, revues, journal…). Refusée par le serveur si une campagne réelle existe. Les tâches et agents Paperclip ne sont pas supprimés.">
+    <Section titre="Remise à zéro des données de l'atelier" ancre="param-remise" repliable aide="Supprime les données de l'atelier de cette entreprise (campagnes, revues, journal…). Refusée par le serveur si une campagne existe ou si l'entreprise garde une décision ou une diffusion. Les tâches et agents Paperclip ne sont pas supprimés.">
       <Champ libelle="Tapez REINITIALISER pour confirmer" className="atl-champ-etroit">
         <input value={saisie} onChange={(e) => setSaisie(e.target.value)} autoComplete="off" />
       </Champ>

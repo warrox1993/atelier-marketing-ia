@@ -11,7 +11,7 @@ import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ActeurHote } from "../src/serveur/atelier.js";
 import { controlerAppel, preparerPreuve, type EntreePreuve } from "../src/serveur/preuve-approbation.js";
-import { deduireModeReponse, extraireChiffres } from "../src/serveur/regles-donnees-demo.js";
+import { deduireModeReponse, extraireChiffres } from "../src/serveur/regles-donnees.js";
 import { creerServices } from "../src/serveur/services.js";
 import { cleIdempotenceSignee, empreinteAppel } from "../src/serveur/signatures.js";
 import { ISSUE, REV1, REV2, SOC, PRODUCTEUR, creerBanc } from "./outils-base.js";

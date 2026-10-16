@@ -18,7 +18,7 @@
 
 import type { IncomingMessage } from "node:http";
 import * as z from "zod";
-import { schemaEnregistrementClient, uriRedirectionAcceptable } from "./oauth-demo.js";
+import { schemaEnregistrementClient, uriRedirectionAcceptable } from "./commun/enregistrement-client.js";
 
 const HOTES_BOUCLE = new Set(["127.0.0.1", "localhost", "[::1]"]);
 

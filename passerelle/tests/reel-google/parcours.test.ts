@@ -7,7 +7,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { EXEMPLES } from "./faux-google.js";
 import { appeler, clientMcp, connecter, monter, nettoyer, sansEnveloppe, type Montage, type ResultatConnexion } from "./aide-reel.js";
-import { MENTION_DEMONSTRATION } from "../../src/services.js";
+import { MENTION_DONNEES_TIERCES } from "../../src/outils.js";
 
 const PORTEES: Record<string, string> = {
   gsc: "https://www.googleapis.com/auth/webmasters.readonly",
@@ -94,7 +94,7 @@ describe("Google réel : autorisation gardée par la passerelle et outils, contr
     const args = { siteUrl: "sc-domain:smidjan.be", startDate: "2026-09-01", endDate: "2026-09-30", dimensions: ["date", "query"], rowLimit: 100, dataState: "final" };
     const r = await appeler(clients.get("gsc")!, "gsc_requete_performances", args);
     expect(r.erreur).toBe(false);
-    expect(r.texte.startsWith(MENTION_DEMONSTRATION)).toBe(false);
+    expect(r.texte.startsWith(MENTION_DONNEES_TIERCES)).toBe(true);
     expect(r.donnees["_atelier"]).toEqual({ mode: "reel" });
     expect(sansEnveloppe(r.donnees)).toEqual(EXEMPLES.gsc);
     const q = m.faux.requetes.at(-1)!;

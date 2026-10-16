@@ -480,7 +480,7 @@ relance humaine. Un refus ne consomme un cycle que s'il porte un motif de fond (
 `revue_requise_absente`, `revue_sur_ancienne_version`, `cycles_epuises`). `tache.porte.evaluer` et l'action
 `atelier.porte.evaluer` sont réservées à l'humain et à l'agent participant d'une étape de revue native.
 
-**Autres.** M6 : `atelier.demo.reinitialiser` refusée si l'entreprise est réglée en réel ou garde une décision
+**Autres.** M6 : `atelier.donnees.reinitialiser` (ex-`atelier.demo.reinitialiser`) refusée si l entreprise contient une campagne ou garde une décision
 ou une diffusion réelle. B1 : `Hypothese.autoriseePar` vidé pour un agent, égal à l'humain authentifié sinon.
 B2 : `commentRequired` dans la signature P1. B4 : plafond contrôlé avant toute écriture des réglages. B5 :
 revues cherchées par `originId` exact.

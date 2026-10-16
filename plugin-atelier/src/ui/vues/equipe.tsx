@@ -20,7 +20,7 @@ export function VueEquipeAtelier({ agentId }: { agentId: string | null }) {
         description="Les agents Paperclip de cette entreprise, ce qu'ils font maintenant et ce qui les bloque. Les états viennent de Paperclip ; rien n'est animé sans événement réel."
       />
       <Fraicheur chargeLe={r.chargeLe} actualisation={r.loading && r.data !== null} />
-      <Lecture r={r} libelle="équipe" estVide={(d) => d.agents.length === 0} vide={<Vide titre="Aucun agent dans cette entreprise.">Créez ou importez l'organisation de démonstration (scripts/bootstrap-organisation.py), puis actualisez.</Vide>}>
+      <Lecture r={r} libelle="équipe" estVide={(d) => d.agents.length === 0} vide={<Vide titre="Aucun agent dans cette entreprise.">Créez ou importez l'organisation de l'entreprise (scripts/bootstrap-organisation.py), puis actualisez.</Vide>}>
         {(d) => (
           <>
             <p className="atl-resume">
@@ -251,7 +251,6 @@ function DetailAgent({ agent, equipe }: { agent: AgentVue; equipe: VueEquipe }) 
       <div className="atl-natif">
         <IssuesList companyId={contexte.companyId} filters={{ assigneeAgentId: agent.id }} viewStateKey={`atelier-agent-${agent.id}`} />
       </div>
-      {agent.mode === "demonstration" ? <p className="atl-attenue">Agent de démonstration : ses résultats viennent de données fictives fixes.</p> : null}
     </Section>
   );
 }

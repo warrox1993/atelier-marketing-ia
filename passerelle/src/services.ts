@@ -10,13 +10,11 @@ export type Service = string;
 
 export const MOTIF_SERVICE = /^[a-z][a-z0-9]{0,31}$/;
 
-/** Nom du compte de démonstration, repris dans le nom des connexions (§6.5). */
-export const COMPTE_DEMONSTRATION = "Rénovation Liège (démonstration)";
+/** Nom du compte affiché sur la page d'autorisation locale (services sans compte de tiers : osm, bce, bnb, liens). */
+export const COMPTE_LOCAL = "Poste local de la passerelle";
 
-/** Mention portée par chaque réponse en mode démonstration (§6.5). */
-export const MENTION_DEMONSTRATION = "Données de démonstration : aucune activité réelle";
-
-export interface ProprieteDemo {
+/** Propriété (source de données) proposée sur la page d'autorisation locale d'un service. */
+export interface Propriete {
   id: string;
   libelle: string;
 }
@@ -26,12 +24,14 @@ export interface FicheService {
   id: Service;
   libelle: string;
   /**
-   * Portées minimales de l'API du service (informatif ; annoncées en mode réel dans
-   * les métadonnées de ressource protégée). La démonstration n'a qu'une portée.
+   * Portées minimales de l'API du service (informatif ; annoncées dans les métadonnées de ressource protégée).
    */
   portees: readonly string[];
-  /** Propriétés proposées sur la page de consentement de démonstration (identifiants fictifs, domaine .example). */
-  proprietesDemo: readonly ProprieteDemo[];
+  /**
+   * Services à autorisation LOCALE seulement (osm, bce, bnb, liens) : sources proposées sur la page d'autorisation
+   * locale. Les services de tiers (Google, réseaux sociaux, CRM) n'en ont pas : leur compte vient de la plateforme.
+   */
+  proprietes?: readonly Propriete[];
 }
 
 export function verifierFiche(fiche: FicheService): void {
@@ -39,35 +39,56 @@ export function verifierFiche(fiche: FicheService): void {
     throw new Error(`Identifiant de service invalide : « ${fiche.id} » (minuscules et chiffres, 32 caractères au plus).`);
   }
   if (fiche.libelle.trim() === "") throw new Error(`Fiche ${fiche.id} : libellé vide.`);
-  if (fiche.proprietesDemo.length === 0) throw new Error(`Fiche ${fiche.id} : au moins une propriété de démonstration est requise.`);
 }
 
-const un = (id: string, libelle: string): ProprieteDemo[] => [{ id, libelle }];
+/**
+ * Fiches des services LOCAUX (osm, bce, bnb, liens : aucun compte de tiers, accès par l'autorisation locale de la
+ * passerelle). Déclarées ici pour qu'un service local non branché réponde « non_connecte » plutôt que « inconnu ».
+ */
+export const FICHE_OSM: FicheService = {
+  id: "osm",
+  libelle: "OpenStreetMap (commerces et activités)",
+  portees: ["osm:lecture"],
+  proprietes: [{ id: "extrait/osm-local", libelle: "Extrait OpenStreetMap local (index de la passerelle, licence ODbL)" }],
+};
 
-/** Jeu de fiches livré par défaut. Données de démonstration seulement ; le modèle détaillé est le lot L3. */
+export const FICHE_BCE: FicheService = {
+  id: "bce",
+  libelle: "BCE Open Data (entreprises belges)",
+  portees: ["bce:lecture"],
+  proprietes: [{ id: "registre/bce-local", libelle: "Fichier BCE Open Data local (index de la passerelle)" }],
+};
+
+export const FICHE_BNB: FicheService = {
+  id: "bnb",
+  libelle: "Centrale des bilans (BNB)",
+  portees: ["bnb:lecture"],
+  proprietes: [{ id: "centrale/bnb-cbso", libelle: "Centrale des bilans de la BNB (API CBSO, clé de la passerelle)" }],
+};
+
+export const FICHE_LIENS: FicheService = {
+  id: "liens",
+  libelle: "Vérification de liens (lecture d'URL protégée)",
+  portees: ["liens:lecture"],
+  proprietes: [{ id: "web/public", libelle: "Web public (lecture seule, adresses publiques uniquement)" }],
+};
+
+/** Jeu de fiches livré par défaut : services de tiers (comptes et jetons de la plateforme). Aucune donnée n'est simulée. */
 export const FICHES_PAR_DEFAUT: readonly FicheService[] = [
-  {
-    id: "gsc", libelle: "Search Console", portees: ["https://www.googleapis.com/auth/webmasters.readonly"],
-    proprietesDemo: [
-      { id: "sc-domain:renovation-liege.example", libelle: "renovation-liege.example (domaine)" },
-      { id: "https://www.renovation-liege.example/", libelle: "https://www.renovation-liege.example/" },
-    ],
-  },
-  { id: "ga4", libelle: "Google Analytics 4", portees: ["https://www.googleapis.com/auth/analytics.readonly"], proprietesDemo: un("properties/100000001", "Rénovation Liège : site web (properties/100000001)") },
-  { id: "ads", libelle: "Google Ads", portees: ["https://www.googleapis.com/auth/adwords"], proprietesDemo: un("customers/0000000001", "Rénovation Liège : compte Ads fictif (000-000-0001)") },
-  {
-    id: "gbp", libelle: "Fiche d'établissement", portees: ["https://www.googleapis.com/auth/business.manage"],
-    proprietesDemo: [
-      { id: "locations/9000000001", libelle: "Liège-Centre" },
-      { id: "locations/9000000002", libelle: "Liège-Outremeuse" },
-      { id: "locations/9000000003", libelle: "Ans" },
-    ],
-  },
-  { id: "facebook", libelle: "Facebook (Pages)", portees: ["pages_show_list", "pages_read_engagement"], proprietesDemo: un("page/100000000000001", "Rénovation Liège (page de démonstration)") },
-  { id: "instagram", libelle: "Instagram professionnel", portees: ["instagram_business_basic"], proprietesDemo: un("ig/17840000000000001", "@renovation.liege.demo") },
-  { id: "linkedin", libelle: "LinkedIn (pages)", portees: ["r_organization_social"], proprietesDemo: un("urn:li:organization:900000001", "Rénovation Liège (page de démonstration)") },
-  { id: "crm", libelle: "CRM (HubSpot)", portees: ["crm.objects.contacts.read"], proprietesDemo: un("portail/demo-0001", "Portail CRM de démonstration (0001)") },
-  { id: "pipedrive", libelle: "CRM (Pipedrive)", portees: ["contacts:read", "deals:read"], proprietesDemo: un("societe/demo-0001", "Compte Pipedrive de démonstration (0001)") },
-  { id: "odoo", libelle: "CRM (Odoo)", portees: ["crm.lead:read"], proprietesDemo: un("base/demo-0001", "Base Odoo de démonstration (0001)") },
-  { id: "teamleader", libelle: "CRM (Teamleader)", portees: ["contacts", "deals"], proprietesDemo: un("compte/demo-0001", "Compte Teamleader de démonstration (0001)") },
+  { id: "gsc", libelle: "Search Console", portees: ["https://www.googleapis.com/auth/webmasters.readonly"] },
+  { id: "ga4", libelle: "Google Analytics 4", portees: ["https://www.googleapis.com/auth/analytics.readonly"] },
+  { id: "ads", libelle: "Google Ads", portees: ["https://www.googleapis.com/auth/adwords"] },
+  { id: "gbp", libelle: "Fiche d'établissement", portees: ["https://www.googleapis.com/auth/business.manage"] },
+  { id: "facebook", libelle: "Facebook (Pages)", portees: ["pages_show_list", "pages_read_engagement"] },
+  { id: "instagram", libelle: "Instagram professionnel", portees: ["instagram_business_basic"] },
+  { id: "linkedin", libelle: "LinkedIn (pages)", portees: ["r_organization_social"] },
+  { id: "crm", libelle: "CRM (HubSpot)", portees: ["crm.objects.contacts.read"] },
+  { id: "pipedrive", libelle: "CRM (Pipedrive)", portees: ["contacts:read", "deals:read"] },
+  { id: "odoo", libelle: "CRM (Odoo)", portees: ["crm.lead:read"] },
+  { id: "fsma", libelle: "Registre FSMA des intermédiaires", portees: ["fsma:lecture"] },
+  { id: "teamleader", libelle: "CRM (Teamleader)", portees: ["contacts", "deals"] },
+  FICHE_OSM,
+  FICHE_BCE,
+  FICHE_BNB,
+  FICHE_LIENS,
 ];

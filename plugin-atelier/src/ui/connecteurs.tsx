@@ -41,8 +41,6 @@ function useLecture<T>(lire: (companyId: string) => Promise<T>): [Lecture<T>, ()
   return [lecture, () => void charger()];
 }
 
-const MODES = { demonstration: "Démonstration", reel: "Réel" } as const;
-
 /** Liens natifs : carte du service, reprise d'un brouillon, page de la connexion (onglet Permissions). */
 export function lienCarte(ligne: Pick<LigneService, "slug" | "etat" | "connexionId">): string {
   const p = new URLSearchParams({ source: ligne.slug });
@@ -71,7 +69,7 @@ function TableServices({ lignes }: { lignes: LigneService[] }) {
           <tr>
             <th scope="col">Service</th>
             <th scope="col">État</th>
-            <th scope="col">Mode et santé</th>
+            <th scope="col">Santé</th>
             <th scope="col">Dernière vérification</th>
             <th scope="col">Action</th>
           </tr>
@@ -97,12 +95,9 @@ function TableServices({ lignes }: { lignes: LigneService[] }) {
                     <PastilleConnexion etat={l.etat} />
                     <span className="atl-sous">{l.detail}</span>
                   </td>
-                  <td data-libelle="Mode et santé">
-                    {l.mode && l.sante ? (
-                      <>
-                        Passerelle : {MODES[l.mode]}
-                        <span className="atl-sous">Santé : {LIBELLES_SANTE[l.sante]}</span>
-                      </>
+                  <td data-libelle="Santé">
+                    {l.sante ? (
+                      <>Santé : {LIBELLES_SANTE[l.sante]}</>
                     ) : (
                       <span className="atl-attenue" aria-label="sans objet">
                         <span aria-hidden="true">–</span>

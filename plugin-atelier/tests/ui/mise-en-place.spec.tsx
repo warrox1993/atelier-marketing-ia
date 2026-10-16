@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 /**
  * Lot 2 : bandeau « entreprise courante », vue « Mise en place du client » (parcours en six étapes lues sur les
- * routes existantes) et bouton « Recharger la démonstration » des paramètres. Les routes du plugin
+ * routes existantes) et paramètres (sans rechargement de démonstration). Les routes du plugin
  * et l'API native sont servies par un `fetch` simulé.
  */
 import { readFileSync } from "node:fs";
@@ -57,21 +57,16 @@ const SOURCES = (passerelle: "joignable" | "injoignable" | "non_configuree", ree
 const reglages = (extra: Record<string, unknown>) => ({ data: { ...REGLAGES_BASE, plafondPub: null, ...extra }, loading: false, error: null });
 
 describe("bandeau de l'entreprise courante", () => {
-  it("affiche le nom complet et la pastille « Démonstration »", async () => {
-    pont.donnees["atelier.reglages"] = reglages({ modeParDefaut: "demonstration" });
-    rendu = await rendre(createElement(BandeauEntreprise));
-    await vi.waitFor(() => expect(rendu!.conteneur.textContent).toContain("Assurances Dupont & Fils SRL"));
-    expect(rendu.conteneur.textContent).toContain("Démonstration");
-    expect(rendu.conteneur.textContent).not.toContain("Client réel");
-    expect(rendu.conteneur.querySelector('[data-ton="demo"]')).not.toBeNull();
-  });
-
-  it("affiche « Client réel » quand l'entreprise est réglée en réel", async () => {
-    pont.donnees["atelier.reglages"] = reglages({ modeParDefaut: "reel" });
-    rendu = await rendre(createElement(BandeauEntreprise));
-    await vi.waitFor(() => expect(rendu!.conteneur.textContent).toContain("Assurances Dupont & Fils SRL"));
-    expect(rendu.conteneur.textContent).toContain("Client réel");
-    expect(rendu.conteneur.textContent).not.toContain("Démonstration");
+  it("affiche le nom complet sans aucune pastille de mode, quel que soit le réglage lu", async () => {
+    for (const mode of ["demonstration", "reel"]) {
+      pont.donnees["atelier.reglages"] = reglages({ modeParDefaut: mode });
+      rendu = await rendre(createElement(BandeauEntreprise));
+      await vi.waitFor(() => expect(rendu!.conteneur.textContent).toContain("Assurances Dupont & Fils SRL"));
+      expect(rendu.conteneur.textContent).not.toMatch(/démo|client réel/i);
+      expect(rendu.conteneur.querySelector(".atl-pastille")).toBeNull();
+      rendu.demonter();
+      rendu = null;
+    }
   });
 
   it("sans nom lisible, il reste utilisable et ne plante pas", async () => {
@@ -188,7 +183,7 @@ describe("mise en place du client : parcours en étapes", () => {
     const c = rendu.conteneur;
     await vi.waitFor(() => expect(etatDe(c, "base-clients")).toBe("facultatif"));
     expect(c.querySelectorAll(".atl-parcours-pas")).toHaveLength(6);
-    for (const t of ["Fiche du client", "Sources et connexions", "Base clients", "Documents", "Plafonds et budget", "Passage au réel"]) expect(c.querySelector(".atl-parcours-liste")!.textContent).toContain(t);
+    for (const t of ["Fiche du client", "Sources et connexions", "Base clients", "Documents", "Plafonds et budget", "Connexions"]) expect(c.querySelector(".atl-parcours-liste")!.textContent).toContain(t);
     expect([etatDe(c, "fiche"), etatDe(c, "sources"), etatDe(c, "documents"), etatDe(c, "plafonds")]).toEqual(["a_faire", "a_faire", "facultatif", "a_faire"]);
     expect(c.querySelector('.atl-parcours-pas[aria-current="step"]')!.getAttribute("data-etape")).toBe("fiche");
     expect(c.querySelector(".atl-parcours-pas[data-courante]")!.getAttribute("data-etape")).toBe("fiche");
@@ -213,12 +208,12 @@ describe("mise en place du client : parcours en étapes", () => {
     expect(c.textContent).toContain("5 étapes sur 6 faites");
     expect(c.querySelector(".atl-parcours-pas[data-courante]")!.getAttribute("data-etape")).toBe("reel");
     expect(c.querySelector('.atl-parcours-pas[aria-current="step"]')!.getAttribute("data-etape")).toBe("reel");
-    // Récapitulatif du passage au réel : les branchements qui ne sont pas en réel, et le lien vers l'onglet.
+    // Récapitulatif des connexions : les branchements qui ne sont pas en réel, et le lien vers l'onglet.
     // Les trois branchements du serveur, plus les deux lignes tirées des connexions natives (vides ici).
-    expect(c.textContent).toContain("Ce qui manque pour le réel : 4 branchements sur 5.");
+    expect(c.textContent).toContain("Connexions à établir : 4 sur 5.");
     expect(c.textContent).toContain("Nom base_clients : À fournir par le client.");
     expect(c.textContent).not.toContain("Nom bce");
-    await cliquer(parTexte(c, "a", "Ouvrir le passage au réel"));
+    await cliquer(parTexte(c, "a", "Ouvrir les connexions"));
     expect(pont.navigations).toEqual(["/atelier/parametres#param-reel"]);
     expect(pont.violations).toEqual([]);
   });
@@ -237,7 +232,7 @@ describe("mise en place du client : parcours en étapes", () => {
     expect(c.textContent).toContain("Étape 5 sur 6 : Plafonds et budget");
     expect(c.querySelector(".atl-parcours-pas[data-courante]")!.getAttribute("data-etape")).toBe("sources");
     await cliquer(parTexte(c, "button", "Étape suivante"));
-    expect(c.textContent).toContain("Étape 6 sur 6 : Passage au réel");
+    expect(c.textContent).toContain("Étape 6 sur 6 : Connexions");
     expect(Array.from(c.querySelectorAll("button")).some((b) => b.textContent === "Étape suivante")).toBe(false);
     await cliquer(parTexte(c, "button", "Étape précédente"));
     await cliquer(parTexte(c, "button", "Étape précédente"));
@@ -324,42 +319,17 @@ describe("lireSegmentsSuivis", () => {
   });
 });
 
-describe("recharger la démonstration (paramètres)", () => {
-  it("absent quand l'entreprise est réglée en réel", async () => {
-    pont.donnees["atelier.reglages"] = reglages({ modeParDefaut: "reel" });
-    rendu = await rendre(createElement(VueParametres));
-    await vi.waitFor(() => expect(rendu!.conteneur.textContent).toContain("Remise à zéro de la démonstration"));
-    expect(rendu.conteneur.textContent).not.toContain("Recharger la démonstration");
-  });
-
-  it("en démonstration : recharge le corpus puis la base clients et dit comment recharger les prospects", async () => {
-    pont.donnees["atelier.reglages"] = reglages({ modeParDefaut: "demonstration" });
-    serveur = (m, u) =>
-      m === "POST" && u.endsWith("/connaissances/demonstration")
-        ? { statut: 200, corps: { dossier: "connaissances", importes: [1, 2, 3], refuses: [1], dejaImportes: [] } }
-        : m === "POST" && u.endsWith("/base-clients/demonstration")
-          ? { statut: 201, corps: { lignesRetenues: 105, lignesRejetees: 0 } }
-          : { statut: 200, corps: {} };
-    rendu = await rendre(createElement(VueParametres));
-    const c = rendu.conteneur;
-    await vi.waitFor(() => expect(c.textContent).toContain("Recharger la démonstration"));
-    expect(c.textContent).toContain("Les prospects se rechargent par le script peupler-prospects.py.");
-    await cliquer(parTexte(c, "button", "Recharger la démonstration"));
-    await vi.waitFor(() => expect(c.textContent).toContain("Base clients : 105 clients chargés"));
-    expect(c.textContent).toContain("Documents : 3 importé(s)");
-    const posts = appels.filter((a) => a.methode === "POST").map((a) => a.url.replace(/^.*\/api\/plugins\/[^/]+\/api/u, ""));
-    expect(posts).toEqual(["/connaissances/demonstration", "/base-clients/demonstration"]);
-    expect(appels.filter((a) => a.methode === "POST").every((a) => (a.corps as { companyId: string }).companyId === ENTREPRISE)).toBe(true);
-  });
-
-  it("un refus du serveur est affiché, sans fausse réussite", async () => {
-    pont.donnees["atelier.reglages"] = reglages({ modeParDefaut: "demonstration" });
-    serveur = (m) => (m === "POST" ? { statut: 409, corps: { error: "Entreprise en mode réel : le corpus de démonstration n'y est jamais importé." } } : { statut: 200, corps: {} });
-    rendu = await rendre(createElement(VueParametres));
-    const c = rendu.conteneur;
-    await vi.waitFor(() => expect(c.textContent).toContain("Recharger la démonstration"));
-    await cliquer(parTexte(c, "button", "Recharger la démonstration"));
-    await vi.waitFor(() => expect(c.textContent).toContain("mode réel"));
-    expect(c.textContent).not.toContain("clients chargés");
+describe("paramètres : plus de rechargement de démonstration", () => {
+  it("aucun bouton de rechargement ni sélecteur de mode, quel que soit le réglage de l'entreprise", async () => {
+    for (const mode of ["reel", "demonstration"]) {
+      pont.donnees["atelier.reglages"] = reglages({ modeParDefaut: mode });
+      rendu = await rendre(createElement(VueParametres));
+      await vi.waitFor(() => expect(rendu!.conteneur.textContent).toContain("Remise à zéro des données de l'atelier"));
+      expect(rendu.conteneur.textContent).not.toMatch(/Recharger la d/);
+      expect(rendu.conteneur.textContent).not.toContain("Recharger");
+      expect(rendu.conteneur.textContent).not.toContain("Mode par défaut");
+      rendu.demonter();
+      rendu = null;
+    }
   });
 });

@@ -27,7 +27,7 @@ import { naceDeduitOsm } from "../../serveur/categories-osm-nace.js";
 import { expliquerConfiance } from "./explication-confiance.js";
 import { useDonnees } from "../donnees.js";
 import { BaseClients, lireBase64 } from "../base-clients.js";
-import { Bouton, Champ, Chargement, ecranEtroit, EnTete, EtatErreur, Horodatage, LienHote, MentionDemo, Pastille, Section, Vide } from "../composants.js";
+import { Bouton, Champ, Chargement, ecranEtroit, EnTete, EtatErreur, Horodatage, LienHote, Pastille, Section, Vide } from "../composants.js";
 import { idCourt, nombre, type Ton } from "../format.js";
 import { chemin } from "../route.js";
 import { appelRoute, telechargerBase64 } from "../routes-prospection.js";
@@ -56,7 +56,7 @@ export const LIBELLES_MOTIFS: Readonly<Record<MotifExclusion, string>> = {
   opposition_client: "Opposition enregistrée",
   liste_dncm: "Inscrit sur la liste « Ne m'appelez plus »",
   client_actuel: "Déjà client",
-  donnee_demonstration_campagne_reelle: "Donnée de démonstration dans une campagne réelle",
+  donnee_demonstration_campagne_reelle: "Donnée non réelle dans une campagne",
 };
 
 const LIBELLES_CANAUX: Readonly<Record<CanalContact, string>> = { courriel: "Courriel", sms: "SMS", telephone: "Téléphone", courrier: "Courrier postal" };
@@ -469,13 +469,6 @@ function BarreFiltres({ valeur, options, onAppliquer }: { valeur: Filtres; optio
                   {s.libelle}
                 </option>
               ))}
-            </select>
-          </Champ>
-          <Champ libelle="Source">
-            <select value={saisie.source} onChange={(e) => setSaisie({ ...saisie, source: e.target.value as Filtres["source"] })}>
-              <option value="">Réelle et démonstration</option>
-              <option value="reelle">Réelle</option>
-              <option value="demonstration">Démonstration</option>
             </select>
           </Champ>
           <Champ libelle="Score minimal (0 à 100)" className="atl-champ-etroit">
@@ -1113,7 +1106,7 @@ function ExportProspects({ companyId, filtres }: { companyId: string; filtres: F
       {erreur ? <EtatErreur erreur={erreur} contexte="export des prospects" /> : null}
       {resultat ? (
         <div role="status" className="atl-formulaire">
-          {resultat.mode === "demonstration" ? <MentionDemo compacte /> : null}
+         
           <p className="atl-resume">
             <span>
               <strong>{nombre(resultat.rapport.inclus)}</strong> inclus
@@ -1388,7 +1381,6 @@ function ListeProspects() {
                       <button type="button" className="atl-lien" onClick={() => setChoisi(p.id)} aria-label={`Ouvrir la fiche de ${nomProspect(p)}`}>
                         {nomProspect(p)}
                       </button>
-                      {p.mode === "demonstration" ? <span className="atl-sous">donnée de démonstration</span> : null}
                     </th>
                     <td data-libelle="Cible">{LIBELLE_CIBLE_UNIQUE[p.cible]}</td>
                     <td data-libelle="Famille de métier">{LIBELLES_FAMILLES[familleMetier(p)]}</td>

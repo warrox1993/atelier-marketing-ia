@@ -58,7 +58,7 @@ export async function monter(optionsFaux: OptionsFauxGoogle = {}, dossierExistan
       attentes.push(ms);
     },
   })!;
-  passerelle = creerServeur({ mode: "reel", port: 0, registre, journal: (m) => journal.push(m) });
+  passerelle = creerServeur({ port: 0, registre, journal: (m) => journal.push(m) });
   const urlPasserelle = await passerelle.ecouter();
   const urlAutorisation = await google.ecouter();
   return {

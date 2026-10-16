@@ -9,7 +9,7 @@ import { LIMITES } from "../../contrats/identifiants.js";
 import type { DocumentImporte } from "../../contrats/sources.js";
 import { CATALOGUE_MODULES_CONFORMITE, type ReferentielClient } from "../../contrats/referentiel.js";
 import type { VueMarque } from "../../contrats/ui.js";
-import { Champ, Bouton, EnTete, EtatErreur, Fraicheur, Horodatage, Lecture, ListeOuAucun, MentionDemo, Pastille, Section, Vide } from "../composants.js";
+import { Champ, Bouton, EnTete, EtatErreur, Fraicheur, Horodatage, Lecture, ListeOuAucun, Pastille, Section, Vide } from "../composants.js";
 import { useAction, useDonnees } from "../donnees.js";
 import { STATUTS_ACCES_SOURCE } from "../format.js";
 
@@ -61,7 +61,7 @@ export function VueMarqueAtelier() {
                           <th scope="row" data-libelle="Source">
                             <span className="atl-url">{s.titre ?? s.url}</span>
                             <span className="atl-sous atl-url">{s.urlFinale ?? s.url}</span>
-                            {s.mode === "demonstration" ? <MentionDemo compacte /> : null}
+                           
                           </th>
                           <td data-libelle="Accès">
                             <Pastille ton={STATUTS_ACCES_SOURCE[s.statutAcces]?.ton}>{STATUTS_ACCES_SOURCE[s.statutAcces]?.libelle ?? s.statutAcces}</Pastille>

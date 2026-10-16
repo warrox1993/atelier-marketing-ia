@@ -137,7 +137,7 @@ const diagnostic = {
   connecteurs: [
     { cle: "claude_local", nom: "Adaptateur Claude Code (Paperclip)", capacites: ["lecture"], etat: "configure_non_verifie", niveau: "implemente_non_teste", detail: "Jeton d'abonnement non fourni : aucun appel réel effectué.", verifieLe: null },
     { cle: "recherche_web", nom: "Recherche Web", capacites: ["lecture"], etat: "non_connecte", niveau: "non_implemente", detail: "Recherche Web non connectée.", verifieLe: null },
-    { cle: "lecture_url", nom: "Lecture d'URL protégée", capacites: ["lecture"], etat: "demonstration", niveau: "implemente_teste", detail: "Corpus de démonstration ; le mode réel suit les mêmes protections.", verifieLe: H },
+    { cle: "lecture_url", nom: "Lecture d'URL protégée", capacites: ["lecture"], etat: "demonstration", niveau: "implemente_teste", detail: "Lecture réseau protégée (anti-SSRF, redirections bornées).", verifieLe: H },
   ],
   verifieLe: H,
 };
@@ -187,11 +187,11 @@ const dossier = {
   relances: [],
   producteur: {
     agentId: AP, nom: "Contenus et création", adaptateur: "process", modele: null, effort: null, palierSuivant: null,
-    raisonSansPalier: "Agent de démonstration (adaptateur « process ») : aucun modèle à monter.",
+    raisonSansPalier: "Producteur sans modèle (adaptateur « process ») : aucun modèle à monter.",
   },
   interruption: null,
   connecteurPublication: false,
-  usage: { coutIaCents: 0, estimation: false, sourceUsage: "Démonstration : aucun appel de modèle.", depensesPublicitairesCents: null },
+  usage: { coutIaCents: 0, estimation: false, sourceUsage: "Coûts déclarés par Paperclip (cost_events, 0 événement(s)).", depensesPublicitairesCents: null },
 };
 
 export const EXEMPLES_DONNEES: Record<CleDonneesUi, unknown> = {
@@ -232,7 +232,7 @@ export const EXEMPLES_DONNEES: Record<CleDonneesUi, unknown> = {
   "atelier.resultats": {
     mesures: [],
     absenceDonnees: { nonMesurable: true, connexionsNecessaires: ["Google Search Console", "Analytics"], explication: "Aucune mesure importée : non mesurable." },
-    coutsIa: { totalCents: 0, estimation: false, detail: "Démonstration : aucun appel de modèle.", moisCents: 0, budgetMensuelCents: 0 },
+    coutsIa: { totalCents: 0, estimation: false, detail: "Coûts déclarés par Paperclip (cost_events, 0 événement(s)).", moisCents: 0, budgetMensuelCents: 0 },
     depensesPublicitaires: null,
     plafondsPub: {
       entreprise: { plafondPub: null, engagementPub: { engageCents: 0, diffuseCents: 0, reserveCents: 0, limiteCents: null, choisi: false } },

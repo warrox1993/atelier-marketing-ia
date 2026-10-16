@@ -8,8 +8,8 @@ Ce que fait l'atelier : une campagne (brief) devient des exigences numérotées,
 confiées à des agents, des livrables révisés, relus par trois contrôleurs indépendants puis par
 une porte déterministe côté serveur ; seul un livrable qui a passé tous les contrôles arrive à
 l'humain, qui approuve, demande une correction ou rejette. Rien n'est diffusé sans approbation
-humaine, et aucun connecteur de diffusion n'existe encore : en démonstration la diffusion est
-simulée, en réel elle reste « préparée ».
+humaine, et aucun connecteur de diffusion n'existe encore : la diffusion reste
+« préparée », jamais envoyée.
 
 ## 1. Installation propre (Ubuntu, Node.js 24, pnpm 9 par corepack)
 
@@ -25,23 +25,16 @@ Prérequis système vérifiés : `pg_dump` et `psql` 18 (paquet Ubuntu `postgres
 pour des sauvegardes fidèles (`docs/exploitation.md` §3.3) ; Python 3 avec `python3-yaml` pour
 l'export d'organisation seulement.
 
-## 2. Démonstration en une commande
+## 2. Fonctionnement réel (plus de mode démonstration)
 
-Décision de l'opérateur du 15/10/2026 : **priorité au mode réel**. La démonstration visée est celle des
-vrais agents Claude sur l'entreprise fictive, dès que le jeton est fourni (section 3). En
-attendant, la commande ci-dessous rejoue le banc de test déterministe (agents `process`, aucun
-modèle) dans le vrai moteur :
+Décision de l'opérateur du 15/10/2026 : **tout est réel**. Il n'y a plus de mode démonstration : un
+connecteur qui n'est pas branché est affiché « non connecté », sans donnée fictive ni résultat
+simulé. Les agents sont les vrais agents Claude (section 3), importés en pause et réveillés par
+décision humaine. Le bootstrap n'accepte plus que le mode `reel` (l'option `--reel` est tolérée
+sans effet, avec un avertissement).
 
-```bash
-scripts/demonstration.sh
-```
-
-Valide la configuration, prépare ce qui manque, démarre l'instance en arrière-plan, installe le
-plugin, applique l'organisation de démonstration et rejoue avec le vrai moteur un dossier
-« prêt pour validation humaine » (quelques minutes). L'adresse s'affiche à la fin
-(`http://127.0.0.1:3100/<préfixe>/atelier/contenus`). Aucun appel de modèle, aucune dépense,
-aucune diffusion. Pour ne pas toucher l'instance principale :
-`scripts/demonstration.sh lancer --essai atelier-demo 3190 54390`.
+Les anciens scripts de démonstration (`scripts/demonstration.sh`, `scripts/demo/`,
+`organisation/demo/`) sont conservés en attente de retrait : ne plus les utiliser.
 
 Scénarios rejouables contre une instance (résultats bruts dans `instance/scenarios/`) :
 
@@ -53,7 +46,7 @@ Le scénario A (parcours complet avec connexions créées par les cartes de gale
 marketing en démonstration et une instance d'essai qui la connaît :
 
 ```bash
-(cd passerelle && PASSERELLE_MODE=demonstration PASSERELLE_PORT=3391 PASSERELLE_ETAT=/tmp/oauth-demo.json node dist/src/demarrer.js) &
+(cd passerelle && PASSERELLE_PORT=3391 PASSERELLE_SERVICES_REELS=osm,liens PASSERELLE_ETAT=/tmp/oauth-local.json node dist/src/demarrer.js) &
 PAPERCLIP_ATELIER_GATEWAY_URL=http://127.0.0.1:3391 scripts/instance-essai.sh demarrer atelier-lotz 3320 54520 &
 tests/e2e/atelier/preparer.sh atelier-lotz 3320 54520
 python3 -I scripts/scenarios/atelier_scenarios.py A http://127.0.0.1:3320/api
@@ -90,7 +83,7 @@ Les agents restent en pause : les réveiller est une décision humaine. Avant un
 ## 4. Arrêt et reprise
 
 ```bash
-scripts/demonstration.sh arreter          # ou scripts/arreter-instance.sh (SIGTERM au bon PID, jamais pkill -f)
+scripts/arreter-instance.sh               # SIGTERM au bon PID, jamais pkill -f
 scripts/lancer-instance.sh                # relance au premier plan ; les données sont conservées
 ```
 

@@ -6,7 +6,7 @@
 import { useMemo, useState } from "react";
 import type { Campagne } from "../../contrats/campagnes.js";
 import type { EntreeCalendrier } from "../../contrats/ui.js";
-import { Bouton, Champ, EnTete, EtatErreur, Fraicheur, Horodatage, LienHote, Lecture, MentionDemo, Pastille, Vide } from "../composants.js";
+import { Bouton, Champ, EnTete, EtatErreur, Fraicheur, Horodatage, LienHote, Lecture, Pastille, Vide } from "../composants.js";
 import { useAction, useDonnees } from "../donnees.js";
 import { bruxellesVersIso, decalageBruxelles, enDate, ETATS_CALENDRIER, isoVersBruxelles, ORDRE_CALENDRIER } from "../format.js";
 import { chemin } from "../route.js";
@@ -129,11 +129,6 @@ export function VueCalendrier() {
                     <tr key={`${x.issueId}-${x.canal}`}>
                       <th scope="row" data-libelle="Contenu">
                         <LienHote vers={chemin("contenus", x.issueId)}>{x.titre}</LienHote>
-                        {x.mode === "demonstration" ? (
-                          <span className="atl-sous">
-                            <MentionDemo compacte />
-                          </span>
-                        ) : null}
                       </th>
                       <td data-libelle="Canal">{x.canal}</td>
                       <td data-libelle="État">

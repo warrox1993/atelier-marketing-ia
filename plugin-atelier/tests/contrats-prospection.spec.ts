@@ -6,7 +6,6 @@ import {
   CorrespondanceColonnes,
   DemanderExportCrmEntree,
   DeposerProspectsEntree,
-  EMPREINTES_PROSPECTION_DEMONSTRATION,
   ESPACE_BASE,
   EnregistrerParticulierEntree,
   Etalonnage,
@@ -230,12 +229,6 @@ describe("export vers le CRM sous preuve", () => {
 });
 
 describe("marqueurs de démonstration et routes prévues", () => {
-  it("les marqueurs recopiés égalent EMPREINTES_PROSPECTION_DEMO de la passerelle", () => {
-    const src = readFileSync(new URL("../../passerelle/src/demo/prospection/referentiel.ts", import.meta.url), "utf8");
-    const m = /EMPREINTES_PROSPECTION_DEMO[^=]*=\s*\[([^\]]*)\]/u.exec(src);
-    const valeurs = [...(m?.[1] ?? "").matchAll(/"([^"]+)"/gu)].map((x) => x[1]);
-    expect(valeurs).toEqual([...EMPREINTES_PROSPECTION_DEMONSTRATION]);
-  });
   it("les routes prévues ne recouvrent ni entre elles ni les routes déjà servies", () => {
     const toutes = [...ROUTES_API, ...ROUTES_PROSPECTION_PREVUES, ...ROUTES_CONNAISSANCES_PREVUES];
     expect(new Set(toutes.map((r) => r.cle)).size).toBe(toutes.length);

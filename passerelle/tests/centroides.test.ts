@@ -1,17 +1,15 @@
 // Position approximative (item 15) : centroïdes OSM par code postal puis par commune, et champ `position_approx`
-// des outils bce_rechercher / bce_entreprise (réel et démonstration).
+// des outils bce_rechercher / bce_entreprise .
 
 import { join } from "node:path";
 import Database from "better-sqlite3";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { OutilPasserelle } from "../src/fournisseurs.js";
-import { outilRechercher } from "../src/demo/prospection/bce.js";
 import { appliquerMiseAJour, importerComplet } from "../src/reel/prospection/bce/importer.js";
 import { IndexBce } from "../src/reel/prospection/bce/index.js";
 import { outilsBce } from "../src/reel/prospection/bce/outils.js";
 import { CentroidesOsm } from "../src/reel/prospection/osm/centroides.js";
 import { creerTablesOsm } from "../src/reel/prospection/osm/importer.js";
-import { appeler as appelerDemo } from "./prospection/aide.js";
 import { appeler, dossierTemporaire, E, ecrireZip, fichierComplet, miseAJour134, N } from "./reel-prospection/aide-bce.js";
 
 function creerOsmDeTest(chemin: string): void {
@@ -113,24 +111,6 @@ describe("position_approx dans les outils bce réels", () => {
   it("les descriptions annoncent une position approximative, pas l'adresse exacte", () => {
     for (const nom of ["bce_rechercher", "bce_entreprise"]) {
       expect(avec.find((o) => o.nom === nom)!.description).toContain("jamais l'adresse exacte");
-    }
-  });
-});
-
-describe("position_approx dans le simulateur", () => {
-  it("déterministe : deux appels donnent les mêmes positions", async () => {
-    const a = await appelerDemo(outilRechercher, {});
-    const b = await appelerDemo(outilRechercher, {});
-    expect((a["entreprises"] as any[]).map((e) => e.position_approx)).toEqual((b["entreprises"] as any[]).map((e) => e.position_approx));
-  });
-
-  it("bce_rechercher démo : chaque entreprise a position_approx {lat, lon, precision, source}", async () => {
-    const r = await appelerDemo(outilRechercher, {});
-    for (const e of r["entreprises"] as any[]) {
-      expect(e.position_approx).toMatchObject({ precision: "code_postal", source: "osm" });
-      expect(e.position_approx.lat).toBeGreaterThan(49);
-      expect(e.position_approx.lat).toBeLessThan(52);
-      for (const s of e.etablissements) expect(s.position_approx).not.toBeUndefined();
     }
   });
 });

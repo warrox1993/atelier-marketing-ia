@@ -30,13 +30,14 @@ afterEach(() => {
 });
 
 describe("bandeau d'entreprise en tête de l'atelier", () => {
-  it("vient avant la navigation, affiche « Entreprise : » et le nom complet en infobulle, avec « Démonstration »", async () => {
+  it("vient avant la navigation, affiche « Entreprise : » et le nom complet en infobulle, sans pastille de mode", async () => {
     rendu = await rendre(createElement(PageAtelier, { context: contexte }));
     const c = rendu.conteneur;
     await vi.waitFor(() => expect(c.querySelector(".atl-bandeau-nom")?.textContent).toBe(NOM));
     const bandeau = c.querySelector(".atl-bandeau-entreprise")!;
     expect(bandeau.textContent).toContain("Entreprise :");
-    expect(bandeau.textContent).toContain("Démonstration");
+    expect(bandeau.textContent).not.toMatch(/démo/i);
+    expect(bandeau.querySelector(".atl-pastille")).toBeNull();
     expect(c.querySelector(".atl-bandeau-nom")?.getAttribute("title")).toBe(NOM);
     const page = c.querySelector("main.atl-page")!;
     expect(page.firstElementChild).toBe(bandeau);

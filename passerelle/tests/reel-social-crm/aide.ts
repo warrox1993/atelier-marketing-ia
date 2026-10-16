@@ -76,7 +76,7 @@ export async function monter(options: { sansClePublique?: boolean; delaiAppelMs?
       attentes.push(ms);
     },
   })!;
-  passerelle = creerServeur({ mode: "reel", port: 0, registre, ...(options.signataire ? { signataire: options.signataire } : {}), journal: (m) => journal.push(m) });
+  passerelle = creerServeur({ port: 0, registre, ...(options.signataire ? { signataire: options.signataire } : {}), journal: (m) => journal.push(m) });
   const urlPasserelle = await passerelle.ecouter();
   await social.ecouter();
   return {

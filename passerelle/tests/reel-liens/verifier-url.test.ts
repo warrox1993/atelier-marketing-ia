@@ -176,13 +176,13 @@ describe("verifier_url : sécurité", () => {
   });
 });
 
-describe("service liens dans la passerelle (mélange)", () => {
+describe("service liens dans la passerelle (service local)", () => {
   let passerelle: PasserelleDeTest;
   let client: Client;
 
   beforeAll(async () => {
     const registre = new RegistreFournisseurs().enregistrer(fournisseurLiensReel());
-    passerelle = await demarrer({ registre, servicesReels: ["liens"] });
+    passerelle = await demarrer({ registre });
     const jeton = (await obtenirJetons(passerelle.url, "liens", "web/public")).access_token;
     client = new Client({ name: "essai-liens", version: "0.0.0" });
     await client.connect(new StreamableHTTPClientTransport(new URL(`${passerelle.url}/mcp/liens`), { requestInit: { headers: { authorization: `Bearer ${jeton}` } } }));
@@ -193,10 +193,10 @@ describe("service liens dans la passerelle (mélange)", () => {
     await passerelle.arreter();
   });
 
-  it("/sante liste liens parmi services et services_reels", async () => {
-    const sante = (await (await fetch(`${passerelle.url}/sante`)).json()) as { services: string[]; services_reels: string[] };
-    expect(sante.services).toContain("liens");
-    expect(sante.services_reels).toEqual(["liens"]);
+  it("/sante liste liens parmi les services connectés", async () => {
+    const sante = (await (await fetch(`${passerelle.url}/sante`)).json()) as { services: string[]; services_non_connectes: string[] };
+    expect(sante.services).toEqual(["liens"]);
+    expect(sante.services_non_connectes).not.toContain("liens");
   });
 
   it("expose atelier_identite et verifier_url (lecture seule), mode réel", async () => {

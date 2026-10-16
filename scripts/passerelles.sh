@@ -57,7 +57,7 @@ demarrer_un() {
     nohup env -i PATH="$PATH" HOME="$HOME" EXTRA="$EXTRA" PORT="$port" FICHIER="$fichier" NODE="$node_bin" \
       bash -c '
         set -a; . "$FICHIER"; set +a
-        export PASSERELLE_MODE="${PASSERELLE_MODE:-demonstration}" PASSERELLE_PORT="$PORT"
+        export PASSERELLE_PORT="$PORT"
         if [ -n "$EXTRA" ]; then export PASSERELLE_SERVICES_REELS="${PASSERELLE_SERVICES_REELS:+$PASSERELLE_SERVICES_REELS,}$EXTRA"; fi
         exec "$NODE" dist/src/demarrer.js
       ' >> "$DOSSIER/$port.log" 2>&1 < /dev/null &

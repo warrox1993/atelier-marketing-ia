@@ -103,7 +103,7 @@ function extraitsDe(v: unknown): ExtraitLiaison[] {
 const enLiaison = (r: Ligne): LiaisonStockee => ({
   id: String(r["id"]),
   entrepriseSource: String(r["company_id"]),
-  entrepriseCible: String(r["entreprise_cible_id"]),
+  entrepriseCible: r["entreprise_cible_id"] == null ? null : String(r["entreprise_cible_id"]),
   tacheOrigine: String(r["tache_origine_id"]),
   tacheCible: r["tache_cible_id"] == null ? null : String(r["tache_cible_id"]),
   statut: String(r["statut"]) as StatutLiaison,

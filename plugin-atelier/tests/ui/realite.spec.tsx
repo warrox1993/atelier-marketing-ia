@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 /**
- * « Passage au réel » : la section en tête des Paramètres (états, ce que chaque branchement débloque, qui agit,
+ * « Connexions » : la section en tête des Paramètres (états, ce que chaque branchement débloque, qui agit,
  * leads concernés, synthèse), l'encart de l'accueil et son lien, le rendu en cartes sur téléphone, les erreurs.
  * La route `realite.etat` et les connexions natives sont servies par un `fetch` simulé.
  */
@@ -87,11 +87,11 @@ async function ouvrir(chemin: string) {
 }
 const ligne = (c: HTMLElement, cle: string) => c.querySelector<HTMLElement>(`tr[data-branchement="${cle}"]`)!;
 
-describe("Paramètres : section « Passage au réel »", () => {
-  it("est la section de l'onglet « Passage au réel » des Réglages", async () => {
+describe("Paramètres : section « Connexions »", () => {
+  it("est la section de l'onglet « Connexions » des Réglages", async () => {
     const c = await ouvrir("/RNO/atelier/parametres");
-    expect(c.querySelector("section#param-reel h2")?.textContent).toBe("Passage au réel");
-    expect(c.querySelector('[role="tablist"][aria-label="Réglages : sections"] [role="tab"]:nth-child(4)')?.textContent).toBe("Passage au réel");
+    expect(c.querySelector("section#param-reel h2")?.textContent).toBe("Connexions");
+    expect(c.querySelector('[role="tablist"][aria-label="Réglages : sections"] [role="tab"]:nth-child(4)')?.textContent).toBe("Connexions");
     expect(pont.violations).toEqual([]);
   });
 
@@ -109,40 +109,39 @@ describe("Paramètres : section « Passage au réel »", () => {
     expect(bce.textContent).toContain("Critères des leads : Entreprise active");
     expect(bce.querySelector('td[data-libelle="Qui agit"]')?.textContent).toBe("Un accès officiel à obtenir");
     expect(bce.querySelector('td[data-libelle="Leads"]')?.textContent).toBe("219");
-    expect(ligne(c, "osm").querySelector(".atl-pastille")?.textContent).toBe("En démonstration");
+    expect(ligne(c, "osm").querySelector(".atl-pastille")?.textContent).toBe("Non connecté");
     expect(ligne(c, "base_clients").querySelector(".atl-pastille")?.textContent).toBe("À fournir par le client");
     expect(ligne(c, "base_clients").querySelector('td[data-libelle="Qui agit"]')?.textContent).toBe("Le client");
-    expect(ligne(c, "bureaux_segments").querySelector(".atl-pastille")?.textContent).toBe("Branché en réel");
-    expect(ligne(c, "moniteur_belge").querySelector(".atl-pastille")?.textContent).toBe("Non branché");
+    expect(ligne(c, "bureaux_segments").querySelector(".atl-pastille")?.textContent).toBe("Connecté");
+    expect(ligne(c, "moniteur_belge").querySelector(".atl-pastille")?.textContent).toBe("Non connecté");
     expect(ligne(c, "moniteur_belge").querySelector('td[data-libelle="Qui agit"]')?.textContent).toBe("Nous");
     // Leads non calculables : un tiret lisible par un lecteur d'écran, jamais un zéro.
     expect(ligne(c, "moniteur_belge").querySelector('td[data-libelle="Leads"] [aria-label="non calculable"]')).not.toBeNull();
   });
 
-  it("une clé seulement configurée est « Configuré, non vérifié » (pastille neutre), jamais « Branché en réel »", async () => {
+  it("une clé seulement configurée est « Configuré, non vérifié » (pastille neutre), jamais « Connecté »", async () => {
     const c = await ouvrir("/RNO/atelier/parametres");
     const voix = ligne(c, "voix");
     expect(voix.querySelector(".atl-pastille")?.textContent).toBe("Configuré, non vérifié");
     expect(voix.querySelector(".atl-pastille")?.getAttribute("data-ton")).toBe("neutre");
-    expect(voix.textContent).not.toContain("Branché en réel");
-    expect(ligne(c, "bureaux_segments").querySelector(".atl-pastille")?.textContent).toBe("Branché en réel");
+    expect(voix.textContent).not.toContain("Connecté");
+    expect(ligne(c, "bureaux_segments").querySelector(".atl-pastille")?.textContent).toBe("Connecté");
   });
 
   it("Google reprend l'état le plus faible des services du tableau des connecteurs, service par service", async () => {
     const c = await ouvrir("/RNO/atelier/parametres");
     const g = ligne(c, "google");
-    // Search Console et GA4 en démonstration, Ads et fiche d'établissement sans connexion : « Non branché ».
-    expect(g.querySelector(".atl-pastille")?.textContent).toBe("Non branché");
-    expect(g.textContent).toContain("En démonstration : Google Search Console, Google Analytics 4");
-    expect(g.textContent).toContain("Non branché : Google Ads, Fiche d'établissement Google");
+    // Search Console et GA4 sans accès réel, Ads et fiche d'établissement sans connexion : « Non connecté ».
+    expect(g.querySelector(".atl-pastille")?.textContent).toBe("Non connecté");
+    expect(g.textContent).toContain("Non connecté : Google Search Console, Google Analytics 4, Google Ads, Fiche d'établissement Google");
     // Aucune connexion de diffusion.
-    expect(ligne(c, "diffusion").querySelector(".atl-pastille")?.textContent).toBe("Non branché");
+    expect(ligne(c, "diffusion").querySelector(".atl-pastille")?.textContent).toBe("Non connecté");
   });
 
   it("annonce le nombre de branchements qui manquent et la synthèse des leads", async () => {
     const c = await ouvrir("/RNO/atelier/parametres");
     // 11 branchements, un seul en réel (la voix n'est que configurée, non vérifiée) : 10 manquent.
-    expect(c.querySelector("section#param-reel [role=status]")?.textContent).toBe("Ce qui manque pour le réel : 10 branchements sur 11.");
+    expect(c.querySelector("section#param-reel [role=status]")?.textContent).toBe("Connexions à établir : 10 sur 11.");
     const phrases = Array.from(c.querySelectorAll("section#param-reel ul.atl-liste li")).map((l) => l.textContent);
     expect(phrases).toEqual(REALITE.synthese.map((s) => s.phrase));
     expect(phrases[0]).toBe("219 leads attendent le registre BCE réel pour confirmer qu'ils sont actifs.");
@@ -153,7 +152,7 @@ describe("Paramètres : section « Passage au réel »", () => {
     stubReseau({ realite: { corps: {} } });
     const c = await ouvrir("/RNO/atelier/parametres");
     const alerte = c.querySelector("section#param-reel [role=alert]");
-    expect(alerte?.textContent).toContain("le passage au réel");
+    expect(alerte?.textContent).toContain("les connexions");
     expect(c.querySelector("tr[data-branchement]")).toBeNull();
   });
 
@@ -163,23 +162,23 @@ describe("Paramètres : section « Passage au réel »", () => {
     expect(c.querySelector("section#param-reel [role=alert]")?.textContent).toContain("Réservé à un humain");
   });
 
-  it("connexions natives illisibles : le serveur reste affiché, Google et la diffusion passent « Non branché » avec la cause", async () => {
+  it("connexions natives illisibles : le serveur reste affiché, Google et la diffusion passent « Non connecté » avec la cause", async () => {
     stubReseau({ connexions: { statut: 403, corps: {} } });
     const c = await ouvrir("/RNO/atelier/parametres");
     expect(ligne(c, "bce")).not.toBeNull();
     for (const cle of ["google", "diffusion"]) {
-      expect(ligne(c, cle).querySelector(".atl-pastille")?.textContent, cle).toBe("Non branché");
+      expect(ligne(c, cle).querySelector(".atl-pastille")?.textContent, cle).toBe("Non connecté");
       expect(ligne(c, cle).textContent, cle).toContain("Connexions de l'entreprise illisibles");
     }
   });
 });
 
 describe("Paramètres : actualisation", () => {
-  it("le bouton « Actualiser le passage au réel » relit l'état du serveur", async () => {
+  it("le bouton « Actualiser les connexions » relit l'état du serveur", async () => {
     const c = await ouvrir("/RNO/atelier/parametres");
     const nb = () => (fetch as unknown as { mock: { calls: unknown[][] } }).mock.calls.filter((a) => String(a[0]).includes("/realite?")).length;
     const avant = nb();
-    await cliquer(parTexte(c, "button", "Actualiser le passage au réel"));
+    await cliquer(parTexte(c, "button", "Actualiser les connexions"));
     await vi.waitFor(() => expect(nb()).toBe(avant + 1));
   });
 });
@@ -207,17 +206,17 @@ describe("Paramètres : rendu mobile", () => {
   });
 });
 
-describe("Accueil : encart « Passage au réel »", () => {
+describe("Accueil : encart « Connexions »", () => {
   it("annonce le nombre de branchements qui manquent et nomme les premiers", async () => {
     const c = await ouvrir("/RNO/atelier/accueil");
     const encart = c.querySelector("section[aria-labelledby=accueil-reel]")!;
-    expect(encart.textContent).toContain("Ce qui manque pour le réel : 10 branchements");
+    expect(encart.textContent).toContain("Connexions à établir : 10");
     expect(encart.textContent).toContain("Registre BCE ; Banque nationale ; OpenStreetMap ; Base clients ; et 6 autres.");
   });
 
   it("le lien mène à la section de Paramètres", async () => {
     const c = await ouvrir("/RNO/atelier/accueil");
-    const lien = parTexte(c.querySelector("section[aria-labelledby=accueil-reel]")!, "a", "Voir le passage au réel");
+    const lien = parTexte(c.querySelector("section[aria-labelledby=accueil-reel]")!, "a", "Voir les connexions");
     expect(lien.getAttribute("href")).toBe(`/RNO${LIEN_PASSAGE_AU_REEL}`);
     await cliquer(lien);
     expect(pont.navigations).toContain("/atelier/parametres#param-reel");
@@ -228,7 +227,7 @@ describe("Accueil : encart « Passage au réel »", () => {
     stubReseau({ realite: { corps: { ...REALITE, branchements: REALITE.branchements.map((b) => ({ ...b, etat: "reel" })) } }, connexions: { corps: { connections: [] } } });
     const c = await ouvrir("/RNO/atelier/accueil");
     // Les deux lignes de l'interface (sans connexion) manquent encore : l'encart compte AUSSI ce que seule l'interface lit.
-    expect(c.querySelector("section[aria-labelledby=accueil-reel]")?.textContent).toContain("Ce qui manque pour le réel : 2 branchements");
+    expect(c.querySelector("section[aria-labelledby=accueil-reel]")?.textContent).toContain("Connexions à établir : 2");
   });
 
   it("route illisible : une phrase et le lien, sans casser l'accueil", async () => {

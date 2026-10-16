@@ -9,7 +9,7 @@
 // le plugin ne détient que la clé publique. `_atelier.signature` = « aev1.<charge>.<signature> », charge = JSON en
 // base64url, signature = Ed25519(« aev1.<charge> »). Champs de la charge :
 //   v          1
-//   mode       « demonstration » ou « reel » (doit égaler `_atelier.mode`)
+//   mode       « reel » (seule valeur) (doit égaler `_atelier.mode`)
 //   service    service de la passerelle (gsc, ga4, facebook, crm…)
 //   outil      nom de l'outil appelé
 //   erreur     vrai si la réponse est une erreur d'outil (isError)
@@ -35,7 +35,7 @@ export const PREFIXE_ENVELOPPE = "aev1";
 
 export interface ChargeEnveloppe {
   v: 1;
-  mode: "demonstration" | "reel";
+  mode: "reel";
   service: string;
   outil: string;
   erreur: boolean;

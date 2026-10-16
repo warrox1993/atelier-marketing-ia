@@ -24,7 +24,7 @@ import {
   type VersionConnaissance,
 } from "../contrats/connaissances.js";
 import { injectionsSignalees } from "./contenu-externe.js";
-import { blocsDuLivrable, emplacementDe, type BlocLivrable } from "./regles-donnees-demo.js";
+import { blocsDuLivrable, emplacementDe, type BlocLivrable } from "./regles-donnees.js";
 
 /* ------------------------------------------------------------------ */
 /* Outils communs                                                      */

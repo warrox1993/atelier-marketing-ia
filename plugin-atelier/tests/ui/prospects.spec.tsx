@@ -113,7 +113,7 @@ describe("liste des prospects", () => {
     expect(derniere.searchParams.get("scoreMin")).toBe("60");
   });
 
-  it("filtres bureau, segment, source : la requête porte la zone du bureau, le segment et la source", async () => {
+  it("filtres bureau et segment : la requête porte la zone du bureau et le segment, sans filtre de source", async () => {
     serveur = (methode, url) =>
       methode === "GET" && url.includes("/marque")
         ? { statut: 200, corps: { marque: { etablissements: [{ nom: "Bureau de Liège", adresse: "Rue X 1, 4000 Liège", confirme: true }], segments: [{ code: "medecins", libelle: "Médecins", type: "profession", nace: [] }] } } }
@@ -121,12 +121,12 @@ describe("liste des prospects", () => {
     const c = await ouvrir();
     await saisir(champParLibelle(c, "Bureau") as HTMLSelectElement, "Bureau de Liège");
     await saisir(champParLibelle(c, "Segment") as HTMLSelectElement, "medecins");
-    await saisir(champParLibelle(c, "Source") as HTMLSelectElement, "reelle");
+    expect(() => champParLibelle(c, "Source")).toThrow();
     await cliquer(parTexte(c, "button", "Filtrer"));
     const derniere = new URL(requetesListe().at(-1)!.url, "http://x");
     expect(derniere.searchParams.get("zonesBureau")).toBe("4000,Liège");
     expect(derniere.searchParams.get("segments")).toBe("medecins");
-    expect(derniere.searchParams.get("source")).toBe("reelle");
+    expect(derniere.searchParams.get("source")).toBeNull();
     expect(derniere.searchParams.get("avecClientsActuels")).toBeNull();
   });
 
@@ -674,7 +674,7 @@ describe("base clients", () => {
     expect(tableau.textContent).toContain("Courriel, SMS");
     expect(tableau.textContent).toContain("rc pro");
     expect(tableau.textContent).toContain("Motif de refus lisible");
-    expect(c.textContent).toContain("Règles de démonstration : auto sans habitation (particulier).");
+    expect(c.textContent).toContain("Règles : auto sans habitation (particulier).");
     expect(c.textContent).not.toContain("\u2014");
   });
 });

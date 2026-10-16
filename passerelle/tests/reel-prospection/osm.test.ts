@@ -9,7 +9,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { OutilPasserelle } from "../../src/fournisseurs.js";
-import { ATTRIBUTION_OSM, LICENCE_OSM, typeEtUrlOsm } from "../../src/demo/prospection/osm-commun.js";
+import { ATTRIBUTION_OSM, LICENCE_OSM, typeEtUrlOsm } from "../../src/commun/prospection/osm-commun.js";
 import { classer } from "../../src/reel/prospection/osm/categories.js";
 import { identifiantOsm, importerOsm, positionDe } from "../../src/reel/prospection/osm/importer.js";
 import { IndexOsm, outilsOsm } from "../../src/reel/prospection/osm/outils.js";

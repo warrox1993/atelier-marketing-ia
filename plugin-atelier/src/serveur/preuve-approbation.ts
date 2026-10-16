@@ -13,7 +13,7 @@ import type { KeyObject } from "node:crypto";
 import type { ApprobationPortee } from "../contrats/index.js";
 import { DUREE_MAX_PREUVE_S, cleIdempotenceSignee, empreinteAppel, empreinteArguments, signerPreuve, type ChargePreuve } from "./signatures.js";
 
-/** Forme d'un outil d'écriture de la passerelle (schémas de `passerelle/src/demo/social-crm/*.ts`). */
+/** Forme d'un outil d'écriture de la passerelle (schémas des outils de `passerelle/src/`). */
 interface OutilEcriture {
   service: string;
   action: "publier" | "envoyer" | "modifier_crm";

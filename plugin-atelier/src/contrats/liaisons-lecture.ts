@@ -49,6 +49,9 @@ export function nomService(slug: string): string {
   return brut.charAt(0).toUpperCase() + brut.slice(1);
 }
 
+/** Nom affiché quand l'entreprise cible d'une liaison a été supprimée. */
+export const NOM_SERVICE_SUPPRIME = "Service supprimé";
+
 /** Libellé d'un statut. Sur la fiche d'une tâche, l'attente d'approbation s'adresse à l'humain de l'entreprise source. */
 export function libelleStatutLiaison(statut: StatutLiaison, contexte: "fiche" | "registre" = "fiche"): string {
   switch (statut) {
@@ -62,6 +65,8 @@ export function libelleStatutLiaison(statut: StatutLiaison, contexte: "fiche" | 
       return "Refusée";
     case "annulee":
       return "Annulée";
+    case "cible_supprimee":
+      return "Service supprimé";
   }
 }
 

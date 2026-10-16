@@ -8,7 +8,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { CreerCampagneEntree } from "../src/contrats/index.js";
-import { calculerModeEffectif } from "../src/serveur/regles-donnees-demo.js";
+import { calculerModeEffectif } from "../src/serveur/regles-donnees.js";
 
 const DOSSIER = join(dirname(fileURLToPath(import.meta.url)), "..", "migrations");
 
@@ -17,9 +17,11 @@ describe("migration 014 : mode réel par défaut", () => {
   const sql = readFileSync(join(DOSSIER, "014_mode_reel_par_defaut.sql"), "utf8");
   const instructions = sql.split("\n").filter((l) => !l.trimStart().startsWith("--")).join("\n");
 
-  it("est la dernière migration, numérotée à la suite de 013", () => {
-    expect(fichiers.at(-1)).toBe("014_mode_reel_par_defaut.sql");
-    expect(fichiers.at(-2)).toMatch(/^013_/u);
+  it("reste numérotée à la suite de 013 et immédiatement avant 015", () => {
+    const i = fichiers.indexOf("014_mode_reel_par_defaut.sql");
+    expect(i).toBeGreaterThan(0);
+    expect(fichiers[i - 1]).toMatch(/^013_/u);
+    expect(fichiers[i + 1]).toMatch(/^015_/u);
   });
 
   it("passe le défaut de mode_par_defaut à reel et migre les réglages existants", () => {

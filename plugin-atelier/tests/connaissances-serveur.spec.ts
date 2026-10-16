@@ -6,8 +6,7 @@
  * Un dernier bloc fait passer le SQL réel de `base-connaissances.ts` par les règles de l'hôte.
  */
 import type { PluginContext } from "@paperclipai/plugin-sdk";
-import { beforeAll, describe, expect, it, vi } from "vitest";
-import { extraireDocument } from "../src/connaissances/extraction/index.js";
+import { describe, expect, it, vi } from "vitest";
 import { ESPACE_BASE } from "../src/contrats/index.js";
 import { creerAiguillage } from "../src/serveur/atelier.js";
 import type { BaseAtelier } from "../src/serveur/base.js";
@@ -21,7 +20,6 @@ const SOC2 = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
 const AGENT = PORTE_AGENT;
 const HUMAIN = "local-board";
 const MAINTENANT = new Date("2026-10-15T10:00:00Z");
-const DOSSIER_DEMO = new URL("../../organisation/demo/connaissances", import.meta.url).pathname;
 
 type Ligne = Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
 
@@ -135,7 +133,7 @@ function banc(o: { sourcesWeb?: string[]; vectoriseur?: (companyId: string) => P
           ? async () => o.sourcesWeb!.map((url, i) => ({ id: `s${i}`, mode: "reel", provenance: "web", url, service: null, outil: null, chiffres: [] }))
           : cible[cle as string],
   }) as unknown as BaseAtelier;
-  const aiguillage = creerAiguillage(b.ctx, creerServices(b.ctx, { base, connaissances: { stock: k.stock, dossierDemo: DOSSIER_DEMO, maintenant: () => MAINTENANT, ...(o.vectoriseur ? { vectoriseur: o.vectoriseur } : {}) } }));
+  const aiguillage = creerAiguillage(b.ctx, creerServices(b.ctx, { base, connaissances: { stock: k.stock, maintenant: () => MAINTENANT, ...(o.vectoriseur ? { vectoriseur: o.vectoriseur } : {}) } }));
   /** Portée d'invocation de l'hôte : ouverte seulement pendant le traitement d'une requête. */
   const portee = { active: false };
   async function appeler(routeKey: string, o: { params?: Record<string, string>; query?: Record<string, string | string[]>; body?: unknown; companyId?: string; agent?: boolean }) {
@@ -427,42 +425,6 @@ describe("connaissances.supprimer, lister, statut", () => {
     expect(s.body).toMatchObject({ companyId: SOC, index: null, documents: 1, enFile: 0, refuses: 0 });
     expect(s.body.passages).toBeGreaterThan(0);
     expect((await f.appeler("connaissances.lister", { query: { companyId: SOC }, agent: true })).status).toBe(403);
-  });
-});
-
-/* ------------------------------------------------------------------ */
-/* Corpus de démonstration                                             */
-/* ------------------------------------------------------------------ */
-
-describe("connaissances.importer-demo", () => {
-  // Chauffe : le premier appel du processus empaquette le fil isolé d'extraction (esbuild, environ
-  // 1 s, bien plus sous la charge d'une suite complète) ; ce coût unique sort du délai du test.
-  beforeAll(async () => {
-    await extraireDocument({ nom: "chauffe.md", contenu: new TextEncoder().encode("Chauffe du fil isolé.") });
-  }, 60_000);
-
-  it("importe le corpus d'un geste, refuse le questionnaire de santé, ne réimporte rien au second appel", async () => {
-    const f = banc();
-    f.tacheSousPorte();
-    const r = await f.appeler("connaissances.importer-demo", { body: { companyId: SOC } });
-    expect(r.status).toBe(200);
-    console.log(`corpus de démonstration : ${r.body.importes.length} importés, ${r.body.refuses.length} refusés (${r.body.refuses.map((x: any) => x.fichier).join(", ")})`); // eslint-disable-line @typescript-eslint/no-explicit-any
-    expect(r.body.refuses.map((x: any) => x.fichier)).toEqual(["questionnaire-sante-modele.md"]); // eslint-disable-line @typescript-eslint/no-explicit-any
-    expect(r.body.importes).toHaveLength(17);
-    expect(r.body.importes.every((x: any) => x.etat === "indexe")).toBe(true); // eslint-disable-line @typescript-eslint/no-explicit-any
-    const statuts = Object.fromEntries(r.body.importes.map((x: any) => [x.fichier, x.statut])); // eslint-disable-line @typescript-eslint/no-explicit-any
-    expect(statuts).toMatchObject({ "tarif-auto-2025-perime.md": "perime", "tarif-auto-2027-a-venir.md": "a_venir", "offre-obseques-serenite-retiree.md": "retire", "tarif-auto-2026.md": "en_vigueur" });
-    // Données personnelles fictives pseudonymisées (notes de rendez-vous, réclamation, retour de partenaire).
-    expect(f.k.t.passages.map((p) => p.texte).join("\n")).not.toMatch(/@exemple\.invalid/u);
-    // Question 1 du jeu : la prime RC 2026 vient du tarif en vigueur, jamais du périmé ni de l'à venir.
-    const q = await f.rechercher("prime annuelle responsabilité civile seule auto");
-    const titres = q.body.passages.map((p: any) => p.citation.titre as string); // eslint-disable-line @typescript-eslint/no-explicit-any
-    expect(titres.some((t: string) => /2026/u.test(t))).toBe(true);
-    expect(q.body.passages.every((p: any) => p.citation.statut === "en_vigueur")).toBe(true); // eslint-disable-line @typescript-eslint/no-explicit-any
-    const encore = await f.appeler("connaissances.importer-demo", { body: { companyId: SOC } });
-    expect(encore.body.importes).toHaveLength(0);
-    expect(encore.body.dejaImportes).toHaveLength(17);
-    expect((await f.appeler("connaissances.importer-demo", { body: { companyId: SOC }, agent: true })).status).toBe(403);
   });
 });
 

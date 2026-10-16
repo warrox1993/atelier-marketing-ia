@@ -8,7 +8,7 @@
  * refus) dont le service cible n'a pas été informé.
  */
 import { IdNatif, type CleRouteApi } from "../../contrats/index.js";
-import { libelleStatutLiaison, nomService, type ReponseLireLiaisons, type VueLiaison } from "../../contrats/liaisons-lecture.js";
+import { libelleStatutLiaison, NOM_SERVICE_SUPPRIME, nomService, type ReponseLireLiaisons, type VueLiaison } from "../../contrats/liaisons-lecture.js";
 import type { ActeurHote, GestionnaireRoute } from "../atelier.js";
 import { erreur } from "../erreurs.js";
 import type { DependancesLiaisons } from "./transmission.js";
@@ -34,7 +34,7 @@ export function vueLiaison(l: LiaisonLue, companyId: string, issueId: string): V
     serviceSource: l.serviceSource,
     serviceCible: l.serviceCible,
     nomServiceSource: nomService(l.serviceSource),
-    nomServiceCible: nomService(l.serviceCible),
+    nomServiceCible: l.entrepriseCible === null ? NOM_SERVICE_SUPPRIME : nomService(l.serviceCible),
     objet: l.objet,
     question: l.question,
     extraits: l.extraits.map((e) => ({ titre: e.titre, texte: e.texte })),

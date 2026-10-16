@@ -125,7 +125,7 @@ export function idCourt(id: string | null | undefined): string {
 /* ------------------------------------------------------------------ */
 
 export const ETATS_CONNEXION: Record<EtatConnexion, { libelle: string; aide: string; ton: Ton }> = {
-  demonstration: { libelle: "Démonstration", aide: "Données fictives fixes : aucune IA réelle, aucun appel externe.", ton: "demo" },
+  demonstration: { libelle: "Sans accès réel", aide: "Aucun accès réel : la source doit être branchée.", ton: "neutre" },
   reel_teste: { libelle: "Réel testé", aide: "Fonctionnement réel vérifié par un appel effectif.", ton: "succes" },
   configure_non_verifie: { libelle: "Prêt, pas encore utilisé", aide: "La connexion est configurée et prête, mais aucun appel réel ne l'a encore utilisée : son fonctionnement n'est pas encore prouvé.", ton: "neutre" },
   non_connecte: { libelle: "Non connecté", aide: "Aucune connexion configurée.", ton: "neutre" },
@@ -260,7 +260,7 @@ export const ACTIONS_EXTERNES: Record<string, string> = {
 
 export const ETATS_DIFFUSION: Record<string, { libelle: string; ton: Ton }> = {
   refusee: { libelle: "Refusée par le serveur", ton: "danger" },
-  simulee: { libelle: "Simulée (démonstration)", ton: "demo" },
+  simulee: { libelle: "Non diffusée", ton: "neutre" },
   preparee: { libelle: "Préparée, non diffusée", ton: "info" },
   confirmee: { libelle: "Diffusée (confirmée)", ton: "succes" },
   ambigue_a_reconcilier: { libelle: "Ambiguë : à réconcilier", ton: "attention" },

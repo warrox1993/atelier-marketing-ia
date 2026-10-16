@@ -62,7 +62,7 @@ export function creerTransmission(d: DependancesLiaisons) {
   const coordinateurDe = (liste: Agent[]) => liste.find((a) => a.role === "ceo") ?? liste.find((a) => a.name.startsWith("Coordinateur")) ?? null;
 
   /** Tâche cible : retrouvée par `originId` si une transmission précédente l'a déjà créée, sinon créée. */
-  async function tacheCible(l: LiaisonStockee, serviceSource: string): Promise<string> {
+  async function tacheCible(l: LiaisonStockee & { entrepriseCible: string }, serviceSource: string): Promise<string> {
     const originId = `liaison:${l.cleIdempotence}`;
     const existantes = await ctx.issues.list({ companyId: l.entrepriseCible, originKind: ORIGINE_LIAISON as never, originId, includePluginOperations: true, limit: 5 });
     const trouvee = existantes.find((i) => i.companyId.toLowerCase() === l.entrepriseCible.toLowerCase() && i.originId === originId && i.status !== "cancelled");
@@ -79,7 +79,10 @@ export function creerTransmission(d: DependancesLiaisons) {
   }
 
   async function transmettre(l: LiaisonStockee, acteurId: string, runId: string | null): Promise<{ reveil: { queued: boolean; runId: string | null } | null; echecReveil: string | null }> {
-    const tache = l.tacheCible ?? (await tacheCible(l, l.serviceSource));
+    // Garde : une cible supprimee ne recoit jamais rien (le facteur la traite avant, ceci protege les autres appelants).
+    if (l.entrepriseCible === null) throw new Error("Entreprise cible supprimée : transmission impossible.");
+    const entrepriseCible = l.entrepriseCible;
+    const tache = l.tacheCible ?? (await tacheCible({ ...l, entrepriseCible }, l.serviceSource));
     if (!l.tacheCible) {
       await stock.attacher(l.entrepriseSource, l.id, { tacheCible: tache });
       l.tacheCible = tache;

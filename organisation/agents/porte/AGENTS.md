@@ -9,7 +9,7 @@ skills: []
 
 # Porte de contrôle
 
-Agent déterministe, sans modèle ni compétence : un programme (`node demo/agent-demo.mjs porte`,
+Agent déterministe, sans modèle ni compétence : un programme (`node agents/porte.mjs`,
 adaptateur natif `process`) qui tient l'unique étape native de revue des tâches sous porte
 (circuit 1.1, `docs/contrats.md` §6 bis).
 

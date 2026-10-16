@@ -3,7 +3,6 @@ import { readFileSync } from "node:fs";
 import { createElement } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { EXEMPLES_DONNEES } from "../../src/contrats/exemples/index.js";
-import { MENTION_DEMONSTRATION } from "../../src/contrats/identifiants.js";
 import { EXPORTS_UI, RUBRIQUES } from "../../src/contrats/ui-constantes.js";
 import * as ui from "../../src/ui/index.js";
 import { EntreeAtelier, NavigationAtelier, OngletAtelierTache, PageAtelier, WidgetAtelier } from "../../src/ui/index.js";
@@ -90,7 +89,7 @@ describe("rubriques", () => {
     const c = await page("/RNO/atelier/equipe");
     expect(c.querySelector("h1")?.textContent).toBe("Équipe et coordination");
     expect(c.textContent).toContain("Contenus et création");
-    expect(c.textContent).toContain("Démonstration");
+    expect(c.querySelector(".atl-demo")).toBeNull();
     expect(c.textContent).toContain("Correction demandée");
     rendu?.demonter();
     const AP = "66666666-6666-4666-8666-666666666661";
@@ -112,10 +111,10 @@ describe("rubriques", () => {
     await cliquer(pause);
     expect(pont.appelsActions).toHaveLength(0);
     expect(d.textContent).toContain("REQ-001");
-    expect(d.textContent).toContain(MENTION_DEMONSTRATION.replace(/^Démonstration\s*:\s*/u, ""));
+    expect(d.querySelector(".atl-demo")).toBeNull();
   });
 
-  it("campagne déclarée en démonstration dans une entreprise réelle : le mode réel appliqué est affiché en clair", async () => {
+  it("campagne déclarée en démonstration par le serveur : aucune note de mode, aucun champ « Mode »", async () => {
     const exemple = EXEMPLES_DONNEES["atelier.campagne"] as Record<string, unknown>;
     pont.donnees["atelier.campagne"] = {
       data: { ...exemple, modeEffectif: { mode: "reel", raison: "entreprise en mode réel (la campagne est déclarée en démonstration)" } },
@@ -123,15 +122,10 @@ describe("rubriques", () => {
       error: null,
     };
     const d = await page(`/RNO/atelier/campagnes/${C}`);
-    const note = d.querySelector(".atl-note-mode");
-    expect(note?.getAttribute("role")).toBe("note");
-    expect(note?.textContent).toContain("Mode réel appliqué.");
-    expect(note?.textContent).toContain("l'entreprise est réglée en mode réel");
-    expect(note?.textContent).toContain("préparée, jamais simulée");
-    // La bannière de démonstration n'est plus affichée : elle mentirait sur le mode appliqué.
+    expect(d.querySelector(".atl-note-mode")).toBeNull();
     expect(d.querySelector(".atl-demo")).toBeNull();
-    expect(d.textContent).toContain("Déclaré : démonstration ; appliqué : entreprise en mode réel");
-    expect(d.textContent).not.toContain("appliqué : entreprise en mode réel (");
+    expect(d.textContent).not.toContain("Mode réel appliqué");
+    expect(d.textContent).not.toContain("Déclaré :");
   });
 
   it("campagnes : création depuis un brief (projet natif puis action du plugin)", async () => {
@@ -185,10 +179,10 @@ describe("rubriques", () => {
     expect(bloques?.textContent).toContain("Certification non confirmée.");
   });
 
-  it("dossier : matrice, preuves par établissement, constats, mention démonstration, chronologie", async () => {
+  it("dossier : matrice, preuves par établissement, constats, chronologie", async () => {
     const c = await page(`/RNO/atelier/contenus/${T}`);
     expect(c.querySelector("h1")?.textContent).toContain("Nos établissements");
-    expect(c.textContent).toContain(MENTION_DEMONSTRATION.replace(/^Démonstration\s*:\s*/u, ""));
+    expect(c.querySelector(".atl-demo")).toBeNull();
     expect(c.textContent).toContain("Chaque élément attendu a sa preuve.");
     expect(c.textContent).toContain("L'établissement de Seraing n'est pas présenté.");
     expect(c.textContent).toContain("Contrôle automatique réussi");
@@ -213,7 +207,7 @@ describe("rubriques", () => {
     expect(appel?.params).toMatchObject({ issueId: T, revisionId: R2, action: "approuver", commentaire: "Conforme au brief.", portee: { revisionId: R2, action: "publier", canal: "site", dureeJours: 30, montantMaxCents: null } });
     expect(fetchMock).toHaveBeenCalledWith(`/api/issues/${T}`, expect.objectContaining({ method: "PATCH" }));
     expect(c.textContent).toContain("Décision enregistrée.");
-    expect(c.textContent).toContain("aucune diffusion n'a été déclenchée");
+    expect(c.textContent).not.toContain("aucune diffusion n'a été déclenchée");
   });
 
   it("dossier : « demander une correction » est transmise au Coordinateur, sans PATCH natif en in_progress", async () => {
@@ -335,7 +329,7 @@ describe("rubriques", () => {
     expect(parTexte(c, "button", "Remettre à zéro").getAttribute("aria-disabled")).toBe("true");
   });
 
-  it("paramètres : tableau « Sources de données réelles » (mode lu sur la passerelle)", async () => {
+  it("paramètres : tableau « Sources de données réelles » (état lu sur la passerelle)", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ id: ENTREPRISE, name: "Entreprise" }), { status: 200 })));
     const iso = "2026-10-16T08:00:00.000Z";
     pont.donnees["atelier.sante"] = {
@@ -353,9 +347,9 @@ describe("rubriques", () => {
     await vi.waitFor(() => expect(c.textContent).toContain("Sources de données réelles"));
     const lignes = [...c.querySelectorAll("table")].find((t) => t.textContent?.includes("OpenStreetMap"))!.querySelectorAll("tbody tr");
     expect(lignes).toHaveLength(2);
-    expect(lignes[0]!.textContent).toContain("Démonstration");
+    expect(lignes[0]!.textContent).toContain("Non connecté");
     expect(lignes[0]!.textContent).toContain("inscription au portail de la BCE à terminer");
-    expect(lignes[1]!.textContent).toContain("Réel");
+    expect(lignes[1]!.textContent).toContain("Connecté");
     expect(c.textContent).toContain("Passerelle joignable.");
   });
 });

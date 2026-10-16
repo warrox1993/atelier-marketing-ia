@@ -1,17 +1,16 @@
 // Points d'extension de la passerelle : un « fournisseur » apporte les outils d'un
-// service, dans un mode donné. Les mêmes noms d'outils, schémas d'entrée et formes
-// de réponse doivent exister en mode `demonstration` et en mode `reel`
-// (docs/connecteurs-conception.md §6.1). Le mode est choisi au démarrage, jamais
-// par l'agent.
-//
-// Lots suivants : L5 et L7 enregistrent des fournisseurs de démonstration, L4
-// enregistre des fournisseurs réels. Ce lot ne livre que le mécanisme et un
-// fournisseur factice pour les tests (tests/fournisseur-factice.ts).
+// service. Il n'existe que des fournisseurs RÉELS (docs/connecteurs-conception.md §6.1) :
+// un service sans fournisseur enregistré répond « non_connecte », jamais des données
+// simulées. Le fournisseur est choisi au démarrage, jamais par l'agent.
 
 import type * as z from "zod";
 import { FICHES_PAR_DEFAUT, verifierFiche, type FicheService, type Service } from "./services.js";
 
-export type ModePasserelle = "demonstration" | "reel";
+/**
+ * Valeur unique « reel » : la passerelle n'a plus de mode démonstration. Le champ est conservé parce que l'enveloppe
+ * signée `_atelier.mode` l'atteste au plugin (qui ne tient pour mesure qu'une réponse signée en mode « reel »).
+ */
+export type ModePasserelle = "reel";
 
 export interface AnnotationsOutil {
   readOnlyHint?: boolean;
@@ -24,11 +23,11 @@ export interface AnnotationsOutil {
 export interface ContexteAppel {
   service: Service;
   mode: ModePasserelle;
-  /** Identité du compte autorisé (démonstration : choisie sur la page de consentement). */
+  /** Identité du compte autorisé (services locaux : la source choisie sur la page d'autorisation locale). */
   identite: IdentiteAppel;
   /**
-   * Jeton porteur reçu de Paperclip. Mode réel : à relayer tel quel vers l'API du
-   * service, sans le stocker (la passerelle reste sans état). Jamais journalisé.
+   * Jeton porteur reçu de Paperclip : à relayer tel quel vers l'API du service, sans le stocker
+   * (la passerelle reste sans état). Jamais journalisé.
    */
   jetonPorteur: string | null;
 }
@@ -44,7 +43,7 @@ export interface OutilPasserelle {
   /** Forme brute Zod des paramètres d'entrée (comme l'attend le SDK MCP). */
   schemaEntree: z.ZodRawShape;
   annotations?: AnnotationsOutil;
-  /** Renvoie les données de l'outil ; la passerelle ajoute la mention de démonstration. */
+  /** Renvoie les données de l'outil ; la passerelle ajoute l'enveloppe `_atelier` (et la signature). */
   executer(args: Record<string, unknown>, contexte: ContexteAppel): Promise<unknown> | unknown;
 }
 
@@ -55,19 +54,25 @@ export interface FournisseurService {
   fiche?: FicheService;
   outils: readonly OutilPasserelle[];
   /**
-   * Mode réel seulement : serveurs d'autorisation annoncés dans les métadonnées de
-   * ressource protégée (par exemple https://accounts.google.com).
+   * Serveurs d'autorisation annoncés dans les métadonnées de ressource protégée (par exemple le serveur
+   * d'autorisation propre au fournisseur). Ignoré si `autorisationLocale` est vrai.
    */
   serveursAutorisation?: readonly string[];
   /**
-   * Mode réel : vérifie le jeton porteur reçu de Paperclip pour CE service (validité, expiration, audience =
+   * Vrai pour un service sans compte de tiers (osm, bce, bnb, liens) : l'accès est accordé par le serveur
+   * d'autorisation local de la passerelle (oauth-local.ts), qui vérifie lui-même le jeton. Sinon le fournisseur
+   * apporte sa propre autorisation (`verifierJeton`).
+   */
+  autorisationLocale?: boolean;
+  /**
+   * Vérifie le jeton porteur reçu de Paperclip pour CE service (validité, expiration, audience =
    * ressource <passerelle>/mcp/<service>). Appelé par le serveur MCP avant TOUTE requête (initialize, tools/list,
-   * tools/call) ; null = refus HTTP 401. Un fournisseur réel sans cette fonction n'est jamais servi (refus 401).
+   * tools/call) ; null = refus HTTP 401. Un fournisseur sans cette fonction (et sans `autorisationLocale`) n'est jamais servi (refus 401).
    */
   verifierJeton?(jeton: string, service: Service): IdentiteAppel | null;
 }
 
-/** Registre des fournisseurs, indexé par mode puis par service. */
+/** Registre des fournisseurs, indexé par service. */
 export class RegistreFournisseurs {
   private readonly lesFiches = new Map<Service, FicheService>();
 
@@ -90,10 +95,7 @@ export class RegistreFournisseurs {
     return [...this.lesFiches.values()];
   }
 
-  private readonly parMode: Record<ModePasserelle, Map<Service, FournisseurService>> = {
-    demonstration: new Map(),
-    reel: new Map(),
-  };
+  private readonly fournisseurs = new Map<Service, FournisseurService>();
 
   enregistrer(fournisseur: FournisseurService): this {
     if (fournisseur.fiche) {
@@ -116,11 +118,11 @@ export class RegistreFournisseurs {
       }
       noms.add(outil.nom);
     }
-    this.parMode[fournisseur.mode].set(fournisseur.service, fournisseur);
+    this.fournisseurs.set(fournisseur.service, fournisseur);
     return this;
   }
 
-  obtenir(mode: ModePasserelle, service: Service): FournisseurService | undefined {
-    return this.parMode[mode].get(service);
+  obtenir(service: Service): FournisseurService | undefined {
+    return this.fournisseurs.get(service);
   }
 }

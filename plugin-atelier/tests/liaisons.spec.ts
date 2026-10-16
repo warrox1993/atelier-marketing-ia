@@ -954,6 +954,36 @@ describe("facteur : gardes revérifiées et bornes", () => {
     expect(m.appels.some((a) => a.companyId === ETRANGER)).toBe(false);
   });
 
+  it("entreprise cible supprimée (cible NULL) : rien ne part, statut final cible_supprimee, la source est informée une fois", async () => {
+    const m = monde();
+    await m.declarer();
+    await m.demander(demande());
+    // Suppression de l'entreprise cible : ON DELETE SET NULL garde la liaison de la source, sa cible devient NULL.
+    Object.assign(m.stock.liaisons[0]!, { entrepriseCible: null });
+    const p = await m.poster();
+    expect(p.transmises).toHaveLength(0);
+    expect(p.echecs).toHaveLength(0);
+    expect(m.issues.some((i) => i.originKind === ORIGINE_LIAISON)).toBe(false);
+    expect(m.stock.liaisons[0]).toMatchObject({ statut: "cible_supprimee", entrepriseCible: null });
+    expect(m.commentaires.filter((c) => c.issueId === TACHE_MKT)).toEqual([expect.objectContaining({ companyId: MKT, body: expect.stringContaining("n'existe plus") })]);
+    expect(m.journal.find((j) => j.type === "liaison.non_transmise")?.donnees).toMatchObject({ raison: "cible_supprimee" });
+    m.avancer();
+    await m.poster();
+    expect(m.commentaires.filter((c) => c.issueId === TACHE_MKT)).toHaveLength(1);
+  });
+
+  it("réponse déjà donnée puis cible supprimée : la source est notifiée sans plantage ni journal chez la cible", async () => {
+    const m = monde();
+    await m.declarer();
+    await m.demander(demande());
+    await m.poster();
+    Object.assign(m.stock.liaisons[0]!, { statut: "repondue", reponse: "Budget validé.", entrepriseCible: null });
+    const p = await m.poster();
+    expect(p.echecs).toHaveLength(0);
+    expect(p.notifiees).toHaveLength(1);
+    expect(m.journal.filter((j) => j.type === "liaison.repondue")).toHaveLength(1);
+  });
+
   it("une liaison dont la cible n'est plus déclarée sous le même service n'est pas transmise", async () => {
     const m = monde();
     await m.declarer();

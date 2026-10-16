@@ -77,10 +77,10 @@ export function creerRetour(d: { ctx: PluginContext; base: BaseAtelier; stock: S
   const { agents, coordinateurDe } = creerTransmission(d);
 
   /** Dernier commentaire non supprimé du coordinateur cible sur la tâche cible, ou `null`. */
-  async function reponseDuCoordinateur(l: LiaisonStockee, assigneeAgentId: string | null): Promise<string | null> {
-    const coordId = coordinateurDe(await agents(l.entrepriseCible))?.id ?? assigneeAgentId;
+  async function reponseDuCoordinateur(l: LiaisonStockee, entrepriseCible: string, assigneeAgentId: string | null): Promise<string | null> {
+    const coordId = coordinateurDe(await agents(entrepriseCible))?.id ?? assigneeAgentId;
     if (!coordId) return null;
-    const commentaires = await ctx.issues.listComments(l.tacheCible!, l.entrepriseCible);
+    const commentaires = await ctx.issues.listComments(l.tacheCible!, entrepriseCible);
     const siens = commentaires
       .filter((c) => !c.deletedAt && c.authorType === "agent" && c.authorAgentId === coordId && c.body.trim() !== "")
       .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
@@ -94,13 +94,13 @@ export function creerRetour(d: { ctx: PluginContext; base: BaseAtelier; stock: S
       const vers = String((event.payload as { changes?: { status?: { to?: unknown } } } | null)?.changes?.status?.to ?? "");
       if (vers !== "done" && vers !== "cancelled") return;
       const l = await stock.lireParTacheCible(event.companyId, event.entityId);
-      if (!l || l.statut !== "ouverte" || l.entrepriseCible.toLowerCase() !== event.companyId.toLowerCase()) return;
+      if (!l || l.statut !== "ouverte" || l.entrepriseCible === null || l.entrepriseCible.toLowerCase() !== event.companyId.toLowerCase()) return;
       // On ne se fie pas seulement à la charge de l'événement : le statut réel de la tâche doit correspondre.
       const tache = await ctx.issues.get(event.entityId, event.companyId);
       if (!tache || tache.status !== vers) return;
 
       const annulee = vers === "cancelled";
-      const texte = annulee ? null : await reponseDuCoordinateur(l, tache.assigneeAgentId ?? null);
+      const texte = annulee ? null : await reponseDuCoordinateur(l, l.entrepriseCible, tache.assigneeAgentId ?? null);
       const reponse = texte === null ? null : borner(texte);
       // Seule écriture de l'événement : la liaison (base du plugin). Le facteur notifie la source et journalise.
       await stock.transiter(l.entrepriseSource, l.id, ["ouverte"], { statut: annulee ? "annulee" : "repondue", reponse, repondu: true });

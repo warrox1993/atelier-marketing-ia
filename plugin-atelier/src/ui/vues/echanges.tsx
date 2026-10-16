@@ -15,7 +15,7 @@ import { classerErreur, type Ton } from "../format.js";
 import { appelRoute, telechargerBase64 } from "../routes-prospection.js";
 import { STYLES_ECHANGES } from "../styles-echanges.js";
 
-const TON: Record<StatutLiaison, Ton> = { en_attente_approbation: "attention", ouverte: "info", repondue: "succes", refusee: "danger", annulee: "neutre" };
+const TON: Record<StatutLiaison, Ton> = { en_attente_approbation: "attention", ouverte: "info", repondue: "succes", refusee: "danger", annulee: "neutre", cible_supprimee: "neutre" };
 
 /** Liaisons d'une tâche ; une réponse inattendue (autre forme, erreur réseau) vaut « aucun échange ». */
 export async function lireLiaisonsTache(issueId: string): Promise<VueLiaison[]> {

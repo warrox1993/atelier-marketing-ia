@@ -45,7 +45,6 @@ function TableauChiffres({ chiffres }: { chiffres: readonly ChiffreRapport[] }) 
           <tr key={c.cle}>
             <th scope="row">
               {c.libelle}
-              {c.mode === "demonstration" ? <span className="atl-rapport-note">Démonstration : à ne pas confondre avec le réel.</span> : null}
               {c.note ? <span className="atl-rapport-note">{c.note}</span> : null}
             </th>
             <td className="atl-num">{c.valeur === null ? <span className="atl-rapport-non-mesure">Non mesuré</span> : nombre(c.valeur)}</td>

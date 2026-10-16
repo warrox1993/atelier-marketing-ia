@@ -7,7 +7,7 @@ import type { OutilPasserelle } from "../../src/fournisseurs.js";
 import { appliquerMiseAJour, importerComplet } from "../../src/reel/prospection/bce/importer.js";
 import { IndexBce } from "../../src/reel/prospection/bce/index.js";
 import { NOTE_TAILLE, outilsBce } from "../../src/reel/prospection/bce/outils.js";
-import { controleValide, formaterNumero } from "../../src/demo/prospection/numeros.js";
+import { controleValide, formaterNumero } from "../../src/commun/prospection/numeros.js";
 import { appeler, N, E, NOM_PERSONNE_PHYSIQUE, csv, dossierTemporaire, ecrireZip, fichierComplet, miseAJour134, numeroFictif } from "./aide-bce.js";
 
 const numeros = (r: Record<string, any>): string[] => (r["entreprises"] as any[]).map((e) => e.EnterpriseNumber).sort();

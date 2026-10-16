@@ -1,0 +1,178 @@
+From 113028265e740975b34566b0aa870f938711666f Mon Sep 17 00:00:00 2001
+From: Jean-Baptiste Dhondt <114347858+warrox1993@users.noreply.github.com>
+Date: Fri, 16 Oct 2026 22:21:20 +0200
+Subject: [PATCH] =?UTF-8?q?test(server):=20suppression=20d'entreprise=20:?=
+ =?UTF-8?q?=20isolation=20d'une=20entreprise=20B=20(empreinte=20par=20tabl?=
+ =?UTF-8?q?e),=20comp=C3=A9tence=20d=C3=A9riv=C3=A9e,=20=C3=A9valuation=20?=
+ =?UTF-8?q?inter-entreprises=20impossible?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Le générateur de lignes est extrait en remplirEntreprise(companyId). Trois cas ajoutés :
+supprimer A ne modifie aucune ligne de B, la compétence de B dérivée de A survit
+(forked_from_company_id NULL), une évaluation de B déclenchée par A est refusée par la
+contrainte CHECK work_assessments_trigger_actor_company_check (pas de migration nécessaire).
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01DP85vPq2MHkZg8VNtRvCzB
+---
+ .../atelier-suppression-entreprise.test.ts    | 109 ++++++++++++++++--
+ 1 file changed, 99 insertions(+), 10 deletions(-)
+
+diff --git a/server/src/__tests__/atelier-suppression-entreprise.test.ts b/server/src/__tests__/atelier-suppression-entreprise.test.ts
+index cc7cb46ef..e45836028 100644
+--- a/server/src/__tests__/atelier-suppression-entreprise.test.ts
++++ b/server/src/__tests__/atelier-suppression-entreprise.test.ts
+@@ -59,14 +59,23 @@ decrire("atelier : suppression d'entreprise avec projet lié à un objectif", ()
+     expect(await db.select().from(agents).where(eq(agents.companyId, companyId))).toEqual([]);
+   });
+ 
+-  it("supprime une entreprise ayant une ligne dans CHAQUE table qui porte une colonne company_id, sans ligne orpheline", async () => {
+-    const companyId = randomUUID();
+-    await db.insert(companies).values({ id: companyId, name: "Suppression totale", issuePrefix: `T${companyId.slice(0, 6).toUpperCase().replace(/-/g, "")}`, requireBoardApprovalForNewAgents: false });
++  const nomIssuePrefix = (lettre: string, id: string) => `${lettre}${id.slice(0, 6).toUpperCase().replace(/-/g, "")}`;
++  const creerEntreprise = async (nom: string, lettre: string): Promise<string> => {
++    const id = randomUUID();
++    await db.insert(companies).values({ id, name: nom, issuePrefix: nomIssuePrefix(lettre, id), requireBoardApprovalForNewAgents: false });
++    return id;
++  };
++  const lignes = async (requete: string): Promise<Record<string, any>[]> => {
++    const r: any = await db.execute(sql.raw(requete));
++    return (r.rows ?? r) as Record<string, any>[];
++  };
+ 
+-    const lignes = async (requete: string): Promise<Record<string, any>[]> => {
+-      const r: any = await db.execute(sql.raw(requete));
+-      return (r.rows ?? r) as Record<string, any>[];
+-    };
++  /**
++   * Remplit une entreprise (déjà créée) avec une ligne dans CHAQUE table qui porte une colonne company_id.
++   * Les lignes sont propres à l'entreprise ; seules les tables globales (sans company_id) sont partagées.
++   * Renvoie la liste des tables remplies.
++   */
++  const remplirEntreprise = async (companyId: string): Promise<string[]> => {
+     const litteral = (v: unknown) => (v === null || v === undefined ? "NULL" : `'${String(v).replace(/'/g, "''")}'`);
+ 
+     const colonnes = await lignes(`select table_name, column_name, is_nullable, column_default, data_type, udt_name, is_identity
+@@ -120,7 +129,8 @@ decrire("atelier : suppression d'entreprise avec projet lié à un objectif", ()
+       document_annotation_comments: ["issue_id"],
+     };
+     const valeursFixes: Record<string, Record<string, string>> = {
+-      chat_discord_command_owners: { application_id: "12345678901234567" },
++      // Clé primaire globale (pierre tombale qui survit) : identifiant unique par appel.
++      chat_discord_command_owners: { application_id: `1${Math.floor(Math.random() * 1e17).toString().padStart(17, "0")}` },
+       company_secret_proposals: { proposed_name: "secret-test", proposed_key: "SECRET_TEST" },
+     };
+ 
+@@ -153,13 +163,21 @@ decrire("atelier : suppression d'entreprise avec projet lié à un objectif", ()
+       ligne[colonne] = parent[lien.refcols[0]!];
+       await lignes(`update "${table}" set "${colonne}" = '${ligne[colonne]}' where id = '${ligne.id}'`);
+     };
++    const dependDUneEntreprise = (table: string, vus = new Set<string>()): boolean => {
++      if (vus.has(table)) return false;
++      vus.add(table);
++      if ((parTable.get(table) ?? []).some((c) => c.column_name === "company_id")) return true;
++      return (fksParTable.get(table) ?? []).some((f) => f.ref === "companies" || dependDUneEntreprise(f.ref, vus));
++    };
+     const creer = async (table: string, nouvelle = false): Promise<Record<string, any>> => {
+       const deja = creees.get(table);
+       if (deja && !nouvelle) return deja;
+       if (enCours.has(table)) throw new Error(`cycle de clés étrangères obligatoires sur ${table}`);
+       const cols = parTable.get(table) ?? [];
+-      if (!cols.some((c) => c.column_name === "company_id")) {
+-        // Table globale (sans entreprise) : on réutilise une ligne existante, sinon on en crée une.
++      if (!cols.some((c) => c.column_name === "company_id") && !dependDUneEntreprise(table)) {
++        // Table réellement globale (sans entreprise, ni directe ni par clé étrangère) : on réutilise
++        // une ligne existante, sinon on en crée une. Une table sans company_id mais rattachée à une
++        // entreprise par une clé étrangère (ex. pipeline_stages) reçoit des lignes propres à l'appel.
+         const existante = (await lignes(`select * from "${table}" limit 1`))[0];
+         if (existante) {
+           creees.set(table, existante);
+@@ -227,7 +245,12 @@ decrire("atelier : suppression d'entreprise avec projet lié à un objectif", ()
+       expect(r[0]!.n, `ligne de départ absente dans ${table}`).toBeGreaterThan(0);
+     }
+     expect(tablesEntreprise.length).toBeGreaterThan(50);
++    return tablesEntreprise;
++  };
+ 
++  it("supprime une entreprise ayant une ligne dans CHAQUE table qui porte une colonne company_id, sans ligne orpheline", async () => {
++    const companyId = await creerEntreprise("Suppression totale", "T");
++    const tablesEntreprise = await remplirEntreprise(companyId);
+     const supprimee = await companyService(db).remove(companyId);
+     expect(supprimee?.id).toBe(companyId);
+     // Pierre tombale volontaire, sans clé étrangère : elle survit à l'entreprise pour empêcher qu'un autre
+@@ -240,4 +263,70 @@ decrire("atelier : suppression d'entreprise avec projet lié à un objectif", ()
+     }
+     expect(orphelines, "tables où des lignes de l'entreprise subsistent").toEqual([]);
+   }, 120_000);
++  /** Empreinte d'une entreprise : pour chaque table, nombre de lignes et md5 des lignes triées. */
++  const empreinte = async (companyId: string, tables: string[]): Promise<Record<string, string>> => {
++    const res: Record<string, string> = {};
++    for (const table of [...tables, "companies"]) {
++      const colonne = table === "companies" ? "id" : "company_id";
++      const r = await lignes(`select count(*)::int as n, coalesce(md5(string_agg(t::text, '|' order by t::text)), '') as h
++        from "${table}" t where t."${colonne}" = '${companyId}'`);
++      res[table] = `${r[0]!.n}:${r[0]!.h}`;
++    }
++    return res;
++  };
++
++  it("supprimer A ne modifie aucune ligne d'une entreprise B remplie de la même façon", async () => {
++    const a = await creerEntreprise("Isolation A", "A");
++    const b = await creerEntreprise("Isolation B", "B");
++    const tablesA = await remplirEntreprise(a);
++    const tablesB = await remplirEntreprise(b);
++    expect(tablesB).toEqual(tablesA);
++    const avant = await empreinte(b, tablesB);
++    // Garde-fou : l'empreinte n'est pas vide (B a bien des lignes dans chaque table).
++    for (const table of tablesB) expect(avant[table]!.startsWith("0:"), `B vide dans ${table}`).toBe(false);
++
++    const supprimee = await companyService(db).remove(a);
++    expect(supprimee?.id).toBe(a);
++
++    const apres = await empreinte(b, tablesB);
++    expect(apres).toEqual(avant);
++    expect((await lignes(`select count(*)::int as n from companies where id = '${b}'`))[0]!.n).toBe(1);
++  }, 240_000);
++
++  it("une compétence de B dérivée de A survit à la suppression de A (forked_from_company_id remis à NULL)", async () => {
++    const a = await creerEntreprise("Fork A", "F");
++    const b = await creerEntreprise("Fork B", "G");
++    await remplirEntreprise(b);
++    const ligneB = (await lignes(`select id from company_skills where company_id = '${b}' limit 1`))[0]!;
++    await lignes(`update company_skills set forked_from_company_id = '${a}' where id = '${ligneB.id}'`);
++
++    await companyService(db).remove(a);
++
++    const apres = await lignes(`select id, company_id, forked_from_company_id from company_skills where id = '${ligneB.id}'`);
++    expect(apres).toHaveLength(1);
++    expect(apres[0]!.company_id).toBe(b);
++    expect(apres[0]!.forked_from_company_id).toBeNull();
++  }, 120_000);
++
++  it("une évaluation de B ne peut pas être déclenchée par A (contrainte CHECK) : la suppression de A n'est donc jamais bloquée", async () => {
++    // trigger_actor_company_id est NOT NULL sans action, mais la contrainte CHECK
++    // work_assessments_trigger_actor_company_check impose trigger_actor_company_id = company_id :
++    // une évaluation de B pointant vers A est impossible, aucune migration n'est nécessaire.
++    const a = await creerEntreprise("Éval A", "H");
++    const b = await creerEntreprise("Éval B", "J");
++    await remplirEntreprise(b);
++    const ligneB = (await lignes(`select id, trigger_actor_company_id from work_assessments where company_id = '${b}' limit 1`))[0]!;
++    expect(ligneB.trigger_actor_company_id).toBe(b);
++    await expect(
++      lignes(`update work_assessments set trigger_actor_company_id = '${a}' where id = '${ligneB.id}'`),
++    ).rejects.toThrow();
++    const motif = await db.execute(sql.raw(`select 1 from pg_constraint where conname = 'work_assessments_trigger_actor_company_check'`));
++    expect(((motif as any).rows ?? motif).length).toBe(1);
++
++    const supprimee = await companyService(db).remove(a);
++    expect(supprimee?.id).toBe(a);
++    const apres = await lignes(`select trigger_actor_company_id from work_assessments where id = '${ligneB.id}'`);
++    expect(apres).toHaveLength(1);
++    expect(apres[0]!.trigger_actor_company_id).toBe(b);
++  }, 120_000);
+ });
+-- 
+2.53.0
+

@@ -234,7 +234,7 @@ compétence obligatoire, le moteur doit assembler son contenu dans le contexte d
 vérifier son usage (contrat §8). Les instructions de chaque agent citent aussi leurs
 compétences obligatoires.
 
-## 7. Mode réel et mode démonstration
+## 7. Mode réel (seul mode)
 
 **Mode réel (défaut, prêt, non lancé).** Adaptateur `claude_local`, moteur `cli`
 (commande `claude` du PATH, 2.1.292 sur le poste de développement), `maxConcurrentRuns: 1`,
@@ -277,15 +277,10 @@ serveur les valeurs masquées de l'agent). **Non exécuté** : aucun appel de mo
 fait pendant le lot B. Les agents restent en pause : les réveiller relève d'une décision
 humaine (`POST /agents/:id/resume`).
 
-**Mode démonstration.** `python3 -I scripts/bootstrap-organisation.py appliquer --mode demonstration`
-remplace la liaison par l'adaptateur `process` du contrat §8 du lot A : `node
-demo/agent-demo.mjs <slug>`, `cwd` = `plugin-atelier/`, chemin relatif, `ATELIER_MODE=demonstration`.
-Le script `demo/agent-demo.mjs` (lot A) accepte ces identifiants courts (table `ALIAS`) et lit le
-scénario dans `ATELIER_SCENARIO` (B par défaut) ; les agents restent en pause tant que l'humain ne
-les réveille pas. La démonstration en une commande (`scripts/demonstration.sh`) rejoue, elle, une
-entreprise de scénario dédiée.
-`appliquer` sans option revient au mode réel (réimport, puis liaison réelle). Bascules
-testées dans les deux sens, chaque deuxième passe sans écriture.
+**Plus de mode démonstration.** `appliquer` n'accepte que le mode `reel` (`--mode reel`, ou sans option) ;
+`--reel` est accepté sans effet, avec un avertissement. Un connecteur non branché est « non connecté ». Les
+anciens scripts de démonstration (`scripts/demonstration.sh`, `scripts/demo/`, `organisation/demo/`) restent
+en place en attente de retrait ; l'agent automatique « porte » lance encore `demo/agent-demo.mjs`.
 
 ## 8. Bootstrap, remise à zéro, export
 
@@ -391,7 +386,7 @@ relevé par l'audit (chemins absolus dans les arguments) pour les agents réels.
 | `python3 -I scripts/verifier-organisation.py` | 8 contrôles réussis, 0 erreur |
 | `scripts/bootstrap-tests.sh --instance --remise-a-zero` | **19 réussis, 0 échec** : vérificateur ; 7 cas négatifs refusés (rubrique absente, contrôleur subordonné, Fable, outil de mutation classé en recherche, dérive d'un fichier généré, `allowed-tools`, adresse réelle) ; isolement des consignes (témoin puis réglages) ; remise à zéro ; passe 1 (33 écritures) puis passe 2 (0 écriture) ; état sans doublon ; agents en pause ; mise à jour en place (dérives simulées du modèle, d'un cron et d'instructions, détectées et corrigées, agent activé resté actif, passe suivante sans écriture) ; export contrôlé et aperçu sans erreur ; aller-retour d'import (10 agents, 32 compétences, 2 projets, 3 routines, hiérarchie vers le coordinateur) puis suppression |
 | `python3 -I scripts/bootstrap-sonde-competences.py --sortie <dossier vide>` | « SONDE : RÉUSSIE », code 0 : run `succeeded`, compétence montée identique au verrou, jeton remis par `secret_ref` et masqué, 3 politiques acceptées, entreprise jetable supprimée |
-| `appliquer --mode demonstration` puis `appliquer` (deux fois chacun), à la main | bascules réussies, deuxième passe sans écriture |
+| `appliquer --mode demonstration` puis `appliquer` (deux fois chacun), à la main | historique (mode retiré depuis) : bascules réussies, deuxième passe sans écriture |
 | modification temporaire d'une compétence puis retour, à la main | propagation détectée par empreinte, nouvelle version native, retour à l'identique |
 | `jeton --confirmer` avec une valeur factice, puis rotation, à la main | secret créé, lié aux 10 agents, renouvelé ; effacé ensuite par la remise à zéro |
 | `test-reel` (à blanc) | agent, modèle, jeton et requête affichés, rien envoyé ; `--confirmer` **non exécuté** |

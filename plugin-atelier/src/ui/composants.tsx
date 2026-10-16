@@ -1,14 +1,12 @@
 /**
- * Briques communes de l'interface : pastilles d'état, mention de démonstration,
+ * Briques communes de l'interface : pastilles d'état,
  * états vide / chargement / erreur / accès absent / interrompu / périmé,
  * boutons dont la désactivation porte toujours une raison visible.
  */
 import { cloneElement, useEffect, useId, useRef, useState, type ReactElement, type ReactNode } from "react";
 import { useHostContext, useHostNavigation, type PluginBridgeError } from "@paperclipai/plugin-sdk/ui";
-import { MENTION_DEMONSTRATION } from "../contrats/identifiants.js";
 import type { EtatConnexion } from "../contrats/communs.js";
 import type { StatutFonctionnel } from "../contrats/statuts.js";
-import type { ReglagesEntreprise } from "../contrats/campagnes.js";
 import { DELAI_PERIME_MS, useContexteDonnees, useDonnees } from "./donnees.js";
 import { appelHote } from "./hote.js";
 import { classerErreur, dateHeure, dateSeule, decalageBruxelles, ETATS_CONNEXION, heureSeule, ilYA, libelleStatut, TON_STATUT, type Ton } from "./format.js";
@@ -22,7 +20,8 @@ export function Pastille({ ton = "neutre", children, titre }: { ton?: Ton; child
 }
 
 export function PastilleConnexion({ etat }: { etat: EtatConnexion }) {
-  const e = ETATS_CONNEXION[etat];
+  // Une source sans accès réel s'affiche « Non connecté » : l'interface ne montre jamais d'état simulé.
+  const e = ETATS_CONNEXION[etat === "demonstration" ? "non_connecte" : etat];
   return (
     <Pastille ton={e.ton} titre={e.aide}>
       {e.libelle}
@@ -35,22 +34,6 @@ export function PastilleStatut({ statut, motif }: { statut: StatutFonctionnel; m
     <Pastille ton={TON_STATUT[statut]} titre={motif}>
       {libelleStatut(statut)}
     </Pastille>
-  );
-}
-
-/** Mention obligatoire sur tout résultat de démonstration. */
-export function MentionDemo({ texte, compacte = false }: { texte?: string | null; compacte?: boolean }) {
-  if (compacte) {
-    return (
-      <Pastille ton="demo" titre={texte ?? MENTION_DEMONSTRATION}>
-        Démonstration
-      </Pastille>
-    );
-  }
-  return (
-    <p className="atl-demo" role="note">
-      <strong>Démonstration.</strong> {(texte ?? MENTION_DEMONSTRATION).replace(/^Démonstration\s*:\s*/u, "")}
-    </p>
   );
 }
 
@@ -324,14 +307,11 @@ export function Champ({ libelle, aide, className, children }: { libelle: ReactNo
 }
 
 /**
- * Bandeau « entreprise courante » en tête de chaque vue : le nom complet de l'entreprise et son mode
- * (« Démonstration » ou « Client réel »), pour qu'on ne confonde jamais l'une avec l'autre.
- * Le mode est celui des réglages de l'entreprise (même règle que le serveur : réel dès que
- * l'entreprise est réglée en réel) ; tant qu'il n'est pas lu, aucune pastille n'est affichée.
+ * Bandeau « entreprise courante » en tête de chaque vue : le nom complet de l'entreprise,
+ * sans pastille de mode.
  */
 export function BandeauEntreprise() {
   const { companyId } = useHostContext();
-  const reglages = useDonnees<ReglagesEntreprise>("atelier.reglages");
   const [nom, setNom] = useState<string | null>(null);
   useEffect(() => {
     if (!companyId) return;
@@ -345,7 +325,6 @@ export function BandeauEntreprise() {
       annule = true;
     };
   }, [companyId]);
-  const mode = reglages.data?.modeParDefaut ?? null;
   const affiche = nom ?? "Entreprise courante";
   return (
     <p className="atl-bandeau-entreprise">
@@ -354,15 +333,6 @@ export function BandeauEntreprise() {
       <strong className="atl-bandeau-nom" title={affiche}>
         {affiche}
       </strong>
-      {mode === "reel" ? (
-        <Pastille ton="info" titre="Données réelles : chaque action externe exige une approbation humaine.">
-          Client réel
-        </Pastille>
-      ) : mode === "demonstration" ? (
-        <Pastille ton="demo" titre={MENTION_DEMONSTRATION}>
-          Démonstration
-        </Pastille>
-      ) : null}
     </p>
   );
 }

@@ -82,13 +82,13 @@ describe("Rapport du mois", () => {
     expect(c.textContent).toContain("Marque non décrite");
   });
 
-  it("écrit « Non mesuré » quand la valeur manque (jamais 0) et nomme la démonstration", async () => {
+  it("écrit « Non mesuré » quand la valeur manque (jamais 0) et n'ajoute aucune mention de démonstration", async () => {
     const c = await ouvrir();
     const ligne = parTexte(c, "tr", /Demandes de devis et conversions/);
     expect(ligne.querySelector(".atl-rapport-non-mesure")?.textContent).toBe("Non mesuré");
     expect(ligne.querySelector("td")?.textContent).not.toBe("0");
     const demo = parTexte(c, "tr", /Contenus publiés \(démonstration\)/);
-    expect(demo.textContent).toContain("Démonstration : à ne pas confondre avec le réel.");
+    expect(demo.textContent).not.toContain("Démonstration :");
   });
 
   it("le sélecteur de mois relit la route pour le mois choisi", async () => {

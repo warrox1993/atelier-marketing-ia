@@ -4,7 +4,6 @@ import { describe, expect, it } from "vitest";
 import { adresseInterdite, adressesResoluesAutorisees, developperIpv6, validerUrl } from "../src/serveur/ssrf.js";
 import { indicesPageErreur, injectionsSignalees } from "../src/serveur/contenu-externe.js";
 import { lireUrl, lookupControle, transportFixtures, transportReseau } from "../src/serveur/lecture-url.js";
-import { FIXTURES_DEMO, DOMAINE_DEMO } from "../src/serveur/corpus-demo.js";
 import { analyserImport } from "../src/serveur/imports.js";
 import { autoriserMessage, chercherClesInterdites, type ContexteMessage } from "../src/serveur/regles-messages.js";
 import { verifierDiffusion, type DiffusionConnue } from "../src/serveur/regles-diffusion.js";
@@ -62,21 +61,32 @@ describe("SSRF : URL", () => {
 });
 
 describe("lecture d'URL", () => {
-  const demo = transportFixtures(FIXTURES_DEMO);
+  // Jeu d'essai : site fictif sur un domaine réservé (RFC 2606), servi sans réseau par le transport de fixtures.
+  const DOMAINE_ESSAI = "https://site-essai.example";
+  const pageEssai = (titre: string, corps: string) =>
+    `<!doctype html><html lang="fr"><head><meta charset="utf-8"><title>${titre}</title></head><body><h1>${titre}</h1>${corps}</body></html>`;
+  const demo = transportFixtures(new Map([
+    [`${DOMAINE_ESSAI}/contact`, { statut: 200, corps: pageEssai("Contact", "<p>Formulaire de demande de diagnostic.</p><form><label>Nom <input name=nom></label></form>") }],
+    [`${DOMAINE_ESSAI}/diagnostic`, { statut: 200, corps: pageEssai("Diagnostic de toiture", "<p>Visite technique et rapport écrit. Tarif communiqué sur devis.</p>") }],
+    // HTTP 200 mais page d'erreur : un lien « 200 » n'est pas un lien valide.
+    [`${DOMAINE_ESSAI}/diagnostic-gratuit`, { statut: 200, corps: pageEssai("Page introuvable", "<p>Désolé, cette page n'existe plus.</p>") }],
+    [`${DOMAINE_ESSAI}/ancienne-offre`, { statut: 404, corps: pageEssai("404", "<p>Not found</p>") }],
+    [`${DOMAINE_ESSAI}/promo`, { statut: 301, location: "/diagnostic" }],
+  ]));
 
   it("HTTP 200 avec page d'erreur n'est pas un lien valide", async () => {
-    const r = await lireUrl(`${DOMAINE_DEMO}/diagnostic-gratuit`, demo, { pourLecture: false });
+    const r = await lireUrl(`${DOMAINE_ESSAI}/diagnostic-gratuit`, demo, { pourLecture: false });
     expect(r.codeHttp).toBe(200);
     expect(r.statut).toBe("page_erreur");
     expect(r.indicesErreur.length).toBeGreaterThan(0);
   });
 
   it("une page saine est accessible ; une 404 est inaccessible ; une redirection est suivie", async () => {
-    expect((await lireUrl(`${DOMAINE_DEMO}/contact`, demo, { pourLecture: false })).statut).toBe("accessible");
-    expect((await lireUrl(`${DOMAINE_DEMO}/ancienne-offre`, demo, { pourLecture: false })).statut).toBe("inaccessible");
-    const r = await lireUrl(`${DOMAINE_DEMO}/promo`, demo, { pourLecture: true });
+    expect((await lireUrl(`${DOMAINE_ESSAI}/contact`, demo, { pourLecture: false })).statut).toBe("accessible");
+    expect((await lireUrl(`${DOMAINE_ESSAI}/ancienne-offre`, demo, { pourLecture: false })).statut).toBe("inaccessible");
+    const r = await lireUrl(`${DOMAINE_ESSAI}/promo`, demo, { pourLecture: true });
     expect(r.statut).toBe("accessible");
-    expect(r.redirections).toEqual([`${DOMAINE_DEMO}/diagnostic`]);
+    expect(r.redirections).toEqual([`${DOMAINE_ESSAI}/diagnostic`]);
   });
 
   it("une redirection vers une adresse interne est bloquée au saut suivant", async () => {

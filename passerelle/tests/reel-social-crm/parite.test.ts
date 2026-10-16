@@ -1,13 +1,10 @@
-// Parité des catalogues : en réel, mêmes noms d'outils, mêmes schémas d'entrée (aux paramètres facultatifs
-// `preuve_approbation` et `revocations_approbation` près, sur les mutations) et mêmes annotations qu'en démonstration (L7).
+// Services réseaux sociaux et CRM : lesquels sont servis selon les applications configurées.
 
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
 import { RegistreFournisseurs } from "../../src/fournisseurs.js";
-import { construireCatalogue } from "../../src/outils.js";
-import { enregistrerSocialCrm } from "../../src/demo/social-crm/enregistrer.js";
 import { adressesFaussesSocialCrm, type ConfigSocialCrmReel } from "../../src/reel/social-crm/config.js";
 import { construireSocialCrmReel } from "../../src/reel/social-crm/enregistrer.js";
 import { IDENTIFIANTS } from "./faux-plateformes.js";
@@ -26,12 +23,11 @@ function config(applications: ConfigSocialCrmReel["applications"]): ConfigSocial
 
 const TOUTES = { facebook: IDENTIFIANTS.meta, instagram: IDENTIFIANTS.instagram, linkedin: IDENTIFIANTS.linkedin, crm: IDENTIFIANTS.hubspot, pipedrive: IDENTIFIANTS.pipedrive, teamleader: IDENTIFIANTS.teamleader };
 
-describe("parité démonstration / réel", () => {
-  const demo = enregistrerSocialCrm(new RegistreFournisseurs());
+describe("services servis selon la configuration", () => {
   const reel = new RegistreFournisseurs();
   const social = construireSocialCrmReel(reel, {}, { hote: "127.0.0.1", urlPasserelle: () => "http://127.0.0.1:3190", config: config(TOUTES) })!;
 
-  it("les sept services sont servis en réel quand toutes les applications sont configurées", () => {
+  it("les sept services sont servis quand toutes les applications sont configurées", () => {
     expect([...social.services].sort()).toEqual([...SERVICES].sort());
   });
 
@@ -40,35 +36,8 @@ describe("parité démonstration / réel", () => {
     const journal: string[] = [];
     const s = construireSocialCrmReel(r, {}, { hote: "127.0.0.1", urlPasserelle: () => "http://x", config: config({}), journal: (l) => journal.push(l) })!;
     expect([...s.services].sort()).toEqual(["odoo", "pipedrive"]);
-    expect(r.obtenir("reel", "facebook")).toBeUndefined();
+    expect(r.obtenir("facebook")).toBeUndefined();
     expect(journal.join("\n")).toMatch(/facebook non servi en réel/);
     expect(journal.join("\n")).toMatch(/mutations réelles resteront « préparées, non exécutées »/);
   });
-
-  for (const service of SERVICES) {
-    it(`${service} : mêmes outils, mêmes schémas JSON, mêmes annotations`, () => {
-      const fiche = demo.fiche(service)!;
-      const catDemo = construireCatalogue(fiche, "demonstration", demo.obtenir("demonstration", service)).descripteurs;
-      const catReel = construireCatalogue(fiche, "reel", reel.obtenir("reel", service)).descripteurs;
-      expect(catReel.map((d) => d.name).sort()).toEqual(catDemo.map((d) => d.name).sort());
-      for (const d of catDemo) {
-        const r = catReel.find((x) => x.name === d.name)!;
-        expect(r.annotations, d.name).toEqual(d.annotations);
-        const schemaReel = structuredClone(r.inputSchema) as { properties?: Record<string, unknown>; required?: string[] };
-        if (d.annotations?.readOnlyHint === false) {
-          expect(schemaReel.properties?.["preuve_approbation"], d.name).toBeDefined();
-          expect(schemaReel.required ?? [], d.name).not.toContain("preuve_approbation");
-          delete schemaReel.properties!["preuve_approbation"];
-          // Revue S-7 : la liste de révocation voyage avec la preuve (facultative dans le schéma, exigée à l'exécution).
-          expect(schemaReel.properties?.["revocations_approbation"], d.name).toBeDefined();
-          expect(schemaReel.required ?? [], d.name).not.toContain("revocations_approbation");
-          delete schemaReel.properties!["revocations_approbation"];
-        } else {
-          expect(schemaReel.properties?.["preuve_approbation"], d.name).toBeUndefined();
-          expect(schemaReel.properties?.["revocations_approbation"], d.name).toBeUndefined();
-        }
-        expect(schemaReel, d.name).toEqual(d.inputSchema);
-      }
-    });
-  }
 });

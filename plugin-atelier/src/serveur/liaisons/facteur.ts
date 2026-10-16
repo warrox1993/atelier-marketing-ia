@@ -55,6 +55,7 @@ export function creerFacteur(d: DependancesLiaisons) {
 
   /** Les règles qui ont autorisé la demande valent toujours (déclarations et matrice relues en base). */
   async function toujoursAutorisee(l: LiaisonStockee, s: Pick<StockLiaisons, "serviceDeEntreprise" | "lireFlux">): Promise<boolean> {
+    if (l.entrepriseCible === null) return false;
     const [source, cible] = await Promise.all([s.serviceDeEntreprise(l.entrepriseSource), s.serviceDeEntreprise(l.entrepriseCible)]);
     if (!source || !cible) return false;
     if (source.clientMarqueur !== cible.clientMarqueur || source.serviceSlug !== l.serviceSource || cible.serviceSlug !== l.serviceCible) return false;
@@ -78,6 +79,19 @@ export function creerFacteur(d: DependancesLiaisons) {
   async function transmissionUne(l: LiaisonStockee, r: ResultatFacteur) {
     if (!(await stock.reserverEssai(l.entrepriseSource, l.id, attenteFacteur(l.facteurEssais ?? 0), FACTEUR.essaisMax))) return;
     try {
+      if (l.entrepriseCible === null) {
+        // Entreprise cible supprimee : la liaison de la source survit, rien ne part, etat final explicite.
+        if (!(await stock.transiter(l.entrepriseSource, l.id, ["ouverte"], { statut: "cible_supprimee", repondu: true }))) return;
+        r.refusees.push(l.id);
+        const corps = `**Demande au service « ${l.serviceCible} » non transmise** : « ${l.objet.replace(/\s+/gu, " ")} ». Ce service n'existe plus (entreprise supprimée).`;
+        const { erreurCommentaire, erreurReveil } = await notifierSource(ctx, l, corps, "atelier_liaison_refusee");
+        if (!erreurCommentaire) await stock.marquerNotifiee(l.entrepriseSource, l.id);
+        await base.journaliser({
+          companyId: l.entrepriseSource, type: "liaison.non_transmise", entite: "liaison", entiteId: l.id, issueId: l.tacheOrigine, acteur: FACTEUR.acteur, runId: null,
+          donnees: { liaisonId: l.id, serviceCible: l.serviceCible, raison: "cible_supprimee", ...(erreurCommentaire ? { erreurCommentaire } : {}), ...(erreurReveil ? { erreurReveil } : {}) },
+        });
+        return;
+      }
       if (!(await toujoursAutorisee(l, stock))) {
         if (!(await stock.transiter(l.entrepriseSource, l.id, ["ouverte"], { statut: "refusee", repondu: true }))) return;
         r.refusees.push(l.id);
@@ -113,7 +127,8 @@ export function creerFacteur(d: DependancesLiaisons) {
     };
     const type = annulee ? "liaison.annulee" : "liaison.repondue";
     await base.journaliser({ companyId: l.entrepriseSource, type, entite: "liaison", entiteId: l.id, issueId: l.tacheOrigine, acteur: FACTEUR.acteur, runId: null, donnees });
-    await base.journaliser({ companyId: l.entrepriseCible, type, entite: "liaison", entiteId: l.id, issueId: l.tacheCible, acteur: FACTEUR.acteur, runId: null, donnees });
+    // Cible supprimee : pas de journal chez une entreprise qui n'existe plus.
+    if (l.entrepriseCible !== null) await base.journaliser({ companyId: l.entrepriseCible, type, entite: "liaison", entiteId: l.id, issueId: l.tacheCible, acteur: FACTEUR.acteur, runId: null, donnees });
   }
 
   /** Un passage : transmissions puis notifications dues. Un seul passage à la fois ; ne lève jamais. */

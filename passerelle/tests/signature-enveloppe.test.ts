@@ -19,12 +19,12 @@ const PUBLIQUE = signataire.clePubliqueBase64;
 
 const copie = <T>(v: T): T => JSON.parse(JSON.stringify(v)) as T;
 
-describe("démonstration : chaque réponse d'outil porte une enveloppe signée", () => {
+describe("chaque réponse d'outil porte une enveloppe signée", () => {
   let p: PasserelleDeTest;
   let jeton: string;
   beforeAll(async () => {
     p = await demarrer({ signataire });
-    jeton = (await obtenirJetons(p.url, "gsc", "sc-domain:renovation-liege.example")).access_token;
+    jeton = (await obtenirJetons(p.url, "gsc", "sc-domain:essai.example")).access_token;
   });
   afterAll(async () => {
     await p.arreter();
@@ -36,7 +36,7 @@ describe("démonstration : chaque réponse d'outil porte une enveloppe signée",
     const v = verifierEnveloppe(s, PUBLIQUE);
     expect(v.ok).toBe(true);
     if (!v.ok) return;
-    expect(v.charge).toMatchObject({ v: 1, mode: "demonstration", service: "gsc", outil: "gsc_ping", erreur: false, compte: "sc-domain:renovation-liege.example" });
+    expect(v.charge).toMatchObject({ v: 1, mode: "reel", service: "gsc", outil: "gsc_ping", erreur: false, compte: "sc-domain:essai.example" });
     expect(v.charge.arguments).toBe(empreinteArgumentsAppel({ texte: "bonjour" }));
     const texte = r.corps.result.content[0].text as string;
     expect(verifierEnveloppe(JSON.parse(texte.slice(texte.indexOf("{"))), PUBLIQUE).ok).toBe(true);
@@ -51,14 +51,13 @@ describe("démonstration : chaque réponse d'outil porte une enveloppe signée",
     }
   });
 
-  it("falsifications refusées : mode changé en « reel », données modifiées, signature retirée, autre clé", async () => {
+  it("falsifications refusées : mode changé en « demonstration », données modifiées, signature retirée, autre clé", async () => {
     const r = await rpc(p.url, "gsc", "tools/call", { name: "gsc_ping", arguments: { texte: "42" } }, jeton);
     const s = r.corps.result.structuredContent as Record<string, any>;
 
-    const versReel = copie(s);
-    versReel._atelier.mode = "reel";
-    delete versReel._atelier.mention;
-    expect(verifierEnveloppe(versReel, PUBLIQUE)).toEqual({ ok: false, motif: "mode de l'enveloppe différent du mode signé" });
+    const versDemo = copie(s);
+    versDemo._atelier.mode = "demonstration";
+    expect(verifierEnveloppe(versDemo, PUBLIQUE)).toEqual({ ok: false, motif: "mode de l'enveloppe différent du mode signé" });
 
     const chiffre = copie(s);
     chiffre.echo = "4200";
@@ -81,9 +80,9 @@ describe("démonstration : chaque réponse d'outil porte une enveloppe signée",
   });
 });
 
-describe("réel : enveloppe signée en mode reel ; preuve d'approbation exclue des arguments signés", () => {
+describe("enveloppe signée d'un service de tiers ; preuve d'approbation exclue des arguments signés", () => {
   it("mode reel signé", async () => {
-    const p = await demarrer({ mode: "reel", registre: new RegistreFournisseurs().enregistrer(fournisseurFactice("reel")), signataire });
+    const p = await demarrer({ registre: new RegistreFournisseurs().enregistrer(fournisseurFactice("tiers")), signataire });
     try {
       const r = await rpc(p.url, "gsc", "tools/call", { name: "gsc_ping", arguments: { texte: "x" } }, "jeton-google-factice");
       const v = verifierEnveloppe(r.corps.result.structuredContent, PUBLIQUE);
@@ -111,7 +110,7 @@ describe("réel : enveloppe signée en mode reel ; preuve d'approbation exclue d
 describe("S-3 : seule une lecture explicitement annoncée peut valoir mesure (liste blanche)", () => {
   const contexte = { service: "crm", mode: "reel" as const, identite: { compte: "Compte", propriete: null }, jetonPorteur: "x" };
   const catalogue = construireCatalogue(FICHES_PAR_DEFAUT.find((f) => f.id === "gsc")!, "reel", {
-    ...fournisseurFactice("reel"),
+    ...fournisseurFactice("tiers"),
     outils: [
       { nom: "lecture_ok", description: "l", schemaEntree: {}, annotations: { readOnlyHint: true }, executer: () => ({ chiffre: 1 }) },
       { nom: "sans_annotation", description: "s", schemaEntree: {}, executer: () => ({ chiffre: 2 }) },
@@ -137,7 +136,7 @@ describe("S-3 : seule une lecture explicitement annoncée peut valoir mesure (li
 
 describe("sans clé : réponses non signées (le plugin doit les refuser comme réelles)", () => {
   it("aucune signature", async () => {
-    const p = await demarrer({ mode: "reel", registre: new RegistreFournisseurs().enregistrer(fournisseurFactice("reel")) });
+    const p = await demarrer({ registre: new RegistreFournisseurs().enregistrer(fournisseurFactice("tiers")) });
     try {
       const r = await rpc(p.url, "gsc", "tools/call", { name: "gsc_ping", arguments: { texte: "x" } }, "jeton-google-factice");
       expect(r.corps.result.structuredContent._atelier.signature).toBeUndefined();

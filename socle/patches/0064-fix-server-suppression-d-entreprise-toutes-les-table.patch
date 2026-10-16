@@ -1,0 +1,409 @@
+From e07db03cf1cac1ecae2de950c7483a01a177cae8 Mon Sep 17 00:00:00 2001
+From: Jean-Baptiste Dhondt <114347858+warrox1993@users.noreply.github.com>
+Date: Fri, 16 Oct 2026 22:12:16 +0200
+Subject: [PATCH 64/64] =?UTF-8?q?fix(server):=20suppression=20d'entreprise?=
+ =?UTF-8?q?=20:=20toutes=20les=20tables=20d=C3=A9pendantes=20supprim=C3=A9?=
+ =?UTF-8?q?es=20dans=20l'ordre=20des=20cl=C3=A9s=20=C3=A9trang=C3=A8res?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01DP85vPq2MHkZg8VNtRvCzB
+---
+ .../atelier-suppression-entreprise.test.ts    | 184 +++++++++++++++++-
+ server/src/services/companies.ts              | 150 ++++++++++++--
+ 2 files changed, 316 insertions(+), 18 deletions(-)
+
+diff --git a/server/src/__tests__/atelier-suppression-entreprise.test.ts b/server/src/__tests__/atelier-suppression-entreprise.test.ts
+index d7895ed25..cc7cb46ef 100644
+--- a/server/src/__tests__/atelier-suppression-entreprise.test.ts
++++ b/server/src/__tests__/atelier-suppression-entreprise.test.ts
+@@ -3,7 +3,7 @@
+  * projet est lié à un objectif (constat du lot B : 500 avant correction).
+  */
+ import { randomUUID } from "node:crypto";
+-import { eq } from "drizzle-orm";
++import { eq, sql } from "drizzle-orm";
+ import { afterAll, beforeAll, describe, expect, it } from "vitest";
+ import { agents, budgetPolicies, companies, costEvents, createDb, goals, heartbeatRuns, projects } from "@paperclipai/db";
+ import { getEmbeddedPostgresTestSupport, startEmbeddedPostgresTestDatabase } from "./helpers/embedded-postgres.js";
+@@ -58,4 +58,186 @@ decrire("atelier : suppression d'entreprise avec projet lié à un objectif", ()
+     expect(await db.select().from(heartbeatRuns).where(eq(heartbeatRuns.companyId, companyId))).toEqual([]);
+     expect(await db.select().from(agents).where(eq(agents.companyId, companyId))).toEqual([]);
+   });
++
++  it("supprime une entreprise ayant une ligne dans CHAQUE table qui porte une colonne company_id, sans ligne orpheline", async () => {
++    const companyId = randomUUID();
++    await db.insert(companies).values({ id: companyId, name: "Suppression totale", issuePrefix: `T${companyId.slice(0, 6).toUpperCase().replace(/-/g, "")}`, requireBoardApprovalForNewAgents: false });
++
++    const lignes = async (requete: string): Promise<Record<string, any>[]> => {
++      const r: any = await db.execute(sql.raw(requete));
++      return (r.rows ?? r) as Record<string, any>[];
++    };
++    const litteral = (v: unknown) => (v === null || v === undefined ? "NULL" : `'${String(v).replace(/'/g, "''")}'`);
++
++    const colonnes = await lignes(`select table_name, column_name, is_nullable, column_default, data_type, udt_name, is_identity
++      from information_schema.columns where table_schema = 'public' order by table_name, ordinal_position`);
++    const parTable = new Map<string, typeof colonnes>();
++    for (const c of colonnes) parTable.set(c.table_name, [...(parTable.get(c.table_name) ?? []), c]);
++
++    // Clés étrangères : une entrée par contrainte, avec ses colonnes locales et distantes.
++    const fks = await lignes(`select c.conrelid::regclass::text as t, c.confrelid::regclass::text as ref,
++        (select array_agg(a.attname order by k.ord) from unnest(c.conkey) with ordinality k(attnum, ord) join pg_attribute a on a.attrelid = c.conrelid and a.attnum = k.attnum) as cols,
++        (select array_agg(a.attname order by k.ord) from unnest(c.confkey) with ordinality k(attnum, ord) join pg_attribute a on a.attrelid = c.confrelid and a.attnum = k.attnum) as refcols
++      from pg_constraint c where c.contype = 'f' and c.connamespace = 'public'::regnamespace`);
++    const nettoyer = (n: string) => n.replace(/"/g, "");
++    const fksParTable = new Map<string, { ref: string; cols: string[]; refcols: string[] }[]>();
++    for (const f of fks) {
++      const t = nettoyer(f.t);
++      const cols = Array.isArray(f.cols) ? f.cols : String(f.cols).replace(/[{}]/g, "").split(",");
++      const refcols = Array.isArray(f.refcols) ? f.refcols : String(f.refcols).replace(/[{}]/g, "").split(",");
++      fksParTable.set(t, [...(fksParTable.get(t) ?? []), { ref: nettoyer(f.ref), cols, refcols }]);
++    }
++
++    const valeursEnum = new Map<string, string>();
++    for (const e of await lignes(`select t.typname, (array_agg(e.enumlabel order by e.enumsortorder))[1] as premiere
++        from pg_type t join pg_enum e on e.enumtypid = t.oid group by t.typname`)) valeursEnum.set(e.typname, e.premiere);
++
++    // Contraintes CHECK simples : on en déduit une valeur valide pour les colonnes concernées
++    // (énumérations textuelles `col = ANY (ARRAY['a', ...])`, égalités `col = 'a'`, empreintes hexadécimales).
++    const valeursCheck = new Map<string, string>();
++    for (const c of await lignes(`select conrelid::regclass::text as t, pg_get_constraintdef(oid) as def
++        from pg_constraint where contype = 'c' and connamespace = 'public'::regnamespace`)) {
++      const table = nettoyer(c.t);
++      for (const m of String(c.def).matchAll(/\(?"?(\w+)"?\)?(?:::text)? = ANY \(\(?ARRAY\['([^']+)'/g)) {
++        if (!valeursCheck.has(`${table}.${m[1]}`)) valeursCheck.set(`${table}.${m[1]}`, m[2]!);
++      }
++      for (const m of String(c.def).matchAll(/\(\(?"?(\w+)"?(?:::text)? = '([^']+)'::text\)/g)) {
++        if (!valeursCheck.has(`${table}.${m[1]}`)) valeursCheck.set(`${table}.${m[1]}`, m[2]!);
++      }
++      for (const m of String(c.def).matchAll(/"?(\w+)"? ~ '\^\[a-f0-9\]\{64\}\$'/g)) {
++        valeursCheck.set(`${table}.${m[1]}`, "a".repeat(64));
++      }
++    }
++
++    // Cas où le schéma impose, hors clés étrangères évidentes, une forme précise de ligne :
++    // colonnes facultatives qu'une contrainte CHECK rend obligatoires, et valeurs fixes.
++    const colonnesForcees: Record<string, string[]> = {
++      decision_queues: ["created_by_agent_id"],
++      decision_queue_items: ["added_by_agent_id"],
++      decision_triage: ["set_by_agent_id"],
++      decision_triage_events: ["actor_agent_id"],
++      document_annotation_threads: ["issue_id"],
++      document_annotation_comments: ["issue_id"],
++    };
++    const valeursFixes: Record<string, Record<string, string>> = {
++      chat_discord_command_owners: { application_id: "12345678901234567" },
++      company_secret_proposals: { proposed_name: "secret-test", proposed_key: "SECRET_TEST" },
++    };
++
++    const creees = new Map<string, Record<string, any>>();
++    const enCours = new Set<string>();
++    const valeurPourType = (c: Record<string, any>): string => {
++      const t = c.data_type as string;
++      if (t === "uuid") return randomUUID();
++      if (t === "boolean") return "false";
++      if (["integer", "bigint", "smallint", "numeric", "real", "double precision"].includes(t)) return "1";
++      if (t === "jsonb" || t === "json") return "{}";
++      if (t === "ARRAY") return "{}";
++      if (t.startsWith("timestamp") || t === "date") return "2026-01-01T00:00:00Z";
++      if (t === "USER-DEFINED") return valeursEnum.get(c.udt_name) ?? "x";
++      if (t === "bytea") return "\\x00";
++      return `x-${randomUUID()}`;
++    };
++    const renseignerColonne = async (table: string, ligne: Record<string, any>, colonne: string): Promise<void> => {
++      const lien = (fksParTable.get(table) ?? []).find((f) => f.cols.length === 1 && f.cols[0] === colonne);
++      if (!lien) {
++        // Colonne uuid sans clé étrangère déclarée (ex. heartbeat_runs.native_issue_id) : on y met une demande réelle.
++        const cible = colonne.endsWith("issue_id") ? "issues" : colonne.endsWith("completion_contract_id") ? "completion_contracts" : null;
++        if (!cible) throw new Error(`colonne ${table}.${colonne} nulle et sans clé étrangère simple`);
++        const demande = await creer(cible);
++        ligne[colonne] = demande.id;
++        await lignes(`update "${table}" set "${colonne}" = '${demande.id}' where id = '${ligne.id}'`);
++        return;
++      }
++      const parent = await creer(lien.ref);
++      ligne[colonne] = parent[lien.refcols[0]!];
++      await lignes(`update "${table}" set "${colonne}" = '${ligne[colonne]}' where id = '${ligne.id}'`);
++    };
++    const creer = async (table: string, nouvelle = false): Promise<Record<string, any>> => {
++      const deja = creees.get(table);
++      if (deja && !nouvelle) return deja;
++      if (enCours.has(table)) throw new Error(`cycle de clés étrangères obligatoires sur ${table}`);
++      const cols = parTable.get(table) ?? [];
++      if (!cols.some((c) => c.column_name === "company_id")) {
++        // Table globale (sans entreprise) : on réutilise une ligne existante, sinon on en crée une.
++        const existante = (await lignes(`select * from "${table}" limit 1`))[0];
++        if (existante) {
++          creees.set(table, existante);
++          return existante;
++        }
++      }
++      enCours.add(table);
++      const nomsColonnes = new Set(cols.map((c) => c.column_name as string));
++      const valeurs = new Map<string, string>();
++      const liens = fksParTable.get(table) ?? [];
++      for (const f of liens) {
++        const obligatoire = f.cols.every((nom) => nom === "company_id" || cols.find((c) => c.column_name === nom)?.is_nullable === "NO" || colonnesForcees[table]?.includes(nom));
++        if (!obligatoire || f.cols.every((nom) => nom === "company_id")) continue;
++        const parent = f.ref === "companies" ? { id: companyId } : await creer(f.ref);
++        for (const nomRef of f.refcols) {
++          // Colonne nullable de la ligne parente qu'une clé composite exige : on la renseigne d'abord.
++          if (f.ref !== "companies" && parent[nomRef] === null) await renseignerColonne(f.ref, parent, nomRef);
++        }
++        f.cols.forEach((nom, i) => valeurs.set(nom, f.ref === "companies" ? companyId : String(parent[f.refcols[i]!])));
++      }
++      if (table === "pipeline_case_blockers") {
++        // La contrainte interdit qu'un dossier se bloque lui-même : deux dossiers distincts.
++        valeurs.set("case_id", String((await creer("pipeline_cases")).id));
++        valeurs.set("blocked_by_case_id", String((await creer("pipeline_cases", true)).id));
++      }
++      for (const [nom, valeur] of Object.entries(valeursFixes[table] ?? {})) valeurs.set(nom, valeur);
++      if (nomsColonnes.has("company_id")) valeurs.set("company_id", companyId);
++      for (const c of cols) {
++        if (valeurs.has(c.column_name)) continue;
++        if (c.is_nullable === "YES" || c.column_default !== null || c.is_identity === "YES") continue;
++        valeurs.set(c.column_name, valeursCheck.get(`${table}.${c.column_name}`) ?? valeurPourType(c));
++      }
++      const noms = [...valeurs.keys()];
++      const requete = noms.length === 0
++        ? `insert into "${table}" default values returning *`
++        : `insert into "${table}" (${noms.map((n) => `"${n}"`).join(", ")}) values (${noms.map((n) => litteral(valeurs.get(n))).join(", ")}) returning *`;
++      let ligne: Record<string, any>;
++      try {
++        ligne = (await lignes(requete))[0]!;
++      } catch (e) {
++        throw new Error(`insertion impossible dans ${table} : ${(e as Error).message} ${String((e as { cause?: unknown }).cause)}`);
++      }
++      enCours.delete(table);
++      if (!nouvelle) creees.set(table, ligne);
++      return ligne;
++    };
++
++    const tablesEntreprise = [...parTable.entries()]
++      .filter(([nom, cols]) => nom !== "companies" && cols.some((c) => c.column_name === "company_id"))
++      .map(([nom]) => nom)
++      .sort();
++    const echecs: string[] = [];
++    for (const table of tablesEntreprise) {
++      try {
++        await creer(table);
++      } catch (e) {
++        enCours.clear();
++        echecs.push((e as Error).message.replace(/Failed query: insert into "(\w+)".*?params:/s, "$1 :"));
++      }
++    }
++    expect(echecs, "tables impossibles à remplir").toEqual([]);
++    // Garde-fou : on a bien une ligne dans chaque table à risque.
++    for (const table of tablesEntreprise) {
++      const r = await lignes(`select count(*)::int as n from "${table}" where company_id = '${companyId}'`);
++      expect(r[0]!.n, `ligne de départ absente dans ${table}`).toBeGreaterThan(0);
++    }
++    expect(tablesEntreprise.length).toBeGreaterThan(50);
++
++    const supprimee = await companyService(db).remove(companyId);
++    expect(supprimee?.id).toBe(companyId);
++    // Pierre tombale volontaire, sans clé étrangère : elle survit à l'entreprise pour empêcher qu'un autre
++    // point d'accès ne revendique la même application Discord (voir schema/chat_discord_command_owners.ts).
++    const survivantesVoulues = new Set(["chat_discord_command_owners"]);
++    const orphelines: string[] = [];
++    for (const table of tablesEntreprise.filter((t) => !survivantesVoulues.has(t))) {
++      const r = await lignes(`select count(*)::int as n from "${table}" where company_id = '${companyId}'`);
++      if (r[0]!.n !== 0) orphelines.push(table);
++    }
++    expect(orphelines, "tables où des lignes de l'entreprise subsistent").toEqual([]);
++  }, 120_000);
+ });
+diff --git a/server/src/services/companies.ts b/server/src/services/companies.ts
+index f51a3223d..5af58b1f0 100644
+--- a/server/src/services/companies.ts
++++ b/server/src/services/companies.ts
+@@ -35,6 +35,66 @@ import {
+   routineTriggers,
+   routineRevisions,
+   routines,
++  agentConfigRevisions,
++  agentSessionGoalActions,
++  browserUseBrowsers,
++  browserUseRuns,
++  browserUseSessions,
++  browserUseSettings,
++  chatActions,
++  chatEndpoints,
++  chatGitHubReviews,
++  chatMessageLinks,
++  chatDeliveries,
++  chatConversations,
++  chatPublications,
++  chatTeamsFileTransfers,
++  companySecretBindings,
++  companySecretProposals,
++  companySkillTestRuns,
++  decisionArchiveNotificationOutbox,
++  decisionBundles,
++  decisionQueueItems,
++  decisionRetention,
++  decisionTargetIssues,
++  decisionTriage,
++  decisionTriageEvents,
++  decisionQueues,
++  decisions,
++  documentAnnotationAnchorSnapshots,
++  documentAnnotationComments,
++  documentAnnotationThreads,
++  feedbackExports,
++  feedbackVotes,
++  heartbeatRunWatchdogDecisions,
++  inboxDismissals,
++  issueApprovals,
++  issueAttachments,
++  issueDocuments,
++  issueExecutionDecisions,
++  issueInboxArchives,
++  issuePlanDecompositions,
++  issueRecoveryActions,
++  issueReferenceMentions,
++  issueRelations,
++  issueThreadInteractions,
++  issueTreeHoldMembers,
++  issueTreeHolds,
++  issueWatchdogs,
++  issueWorkProducts,
++  managedAgentProfiles,
++  nativeRunFinalizations,
++  projectGoals,
++  projectWorkspaces,
++  providerTraceRecords,
++  routineDocuments,
++  secretAccessEvents,
++  statusDecisionEffects,
++  statusDecisions,
++  workAssessments,
++  nativeRunResults,
++  completionContracts,
++  workspaceRuntimeServices,
+ } from "@paperclipai/db";
+ import { notFound, unprocessable } from "../errors.js";
+ import { isCloudManagedInstance } from "./cloud-instance.js";
+@@ -551,27 +611,22 @@ export function companyService(db: Db) {
+             .delete(heartbeatRunEvents)
+             .where(inArray(heartbeatRunEvents.runId, companyRunIds.map((run) => run.id)));
+         }
++        // Atelier Marketing IA (patch local) : TOUTES les tables rattachées à l'entreprise sont supprimées
++        // ici, enfants avant parents, dans l'ordre imposé par les clés étrangères sans cascade (ordre calculé
++        // depuis pg_constraint ; le test atelier-suppression-entreprise.test.ts le vérifie avec une ligne dans
++        // chaque table). Les auto-références (agents.reports_to, issues.parent_id, goals.parent_id…) tombent
++        // dans une seule instruction DELETE, contrôlée en fin d'instruction. Toute nouvelle table portant
++        // company_id sans cascade doit être ajoutée ici à sa place.
+         await tx.delete(agentTaskSessions).where(eq(agentTaskSessions.companyId, id));
+         await tx.delete(activityLog).where(eq(activityLog.companyId, id));
+         await tx.delete(runIdentityContexts).where(eq(runIdentityContexts.companyId, id));
+-        // Atelier Marketing IA (patch local) : cost_events référence heartbeat_runs sans cascade ;
+-        // ils doivent donc partir AVANT les runs (500 constaté le 16/10/2026).
+-        await tx.delete(costEvents).where(eq(costEvents.companyId, id));
+-        await tx.delete(heartbeatRuns).where(eq(heartbeatRuns.companyId, id));
+-        await tx.delete(agentWakeupRequests).where(eq(agentWakeupRequests.companyId, id));
+-        await tx.delete(agentApiKeys).where(eq(agentApiKeys.companyId, id));
+         await tx.delete(agentRuntimeState).where(eq(agentRuntimeState.companyId, id));
+-        await tx.delete(issueComments).where(eq(issueComments.companyId, id));
+         await tx.delete(financeEvents).where(eq(financeEvents.companyId, id));
+-        // Atelier Marketing IA (patch local) : incidents puis politiques de budget AVANT les approbations
+-        // et l'entreprise. budget_incidents référence approvals et budget_policies sans cascade : une
+-        // entreprise dont le budget mensuel avait été posé (PATCH /budgets) ne pouvait plus être
+-        // supprimée (500, contrainte budget_policies_company_id_companies_id_fk ; constat du 16/10/2026).
++        await tx.delete(costEvents).where(eq(costEvents.companyId, id));
+         await tx.delete(budgetIncidents).where(eq(budgetIncidents.companyId, id));
+         await tx.delete(budgetPolicies).where(eq(budgetPolicies.companyId, id));
+         await tx.delete(approvalComments).where(eq(approvalComments.companyId, id));
+         await tx.delete(approvals).where(eq(approvals.companyId, id));
+-        await tx.delete(companySecrets).where(eq(companySecrets.companyId, id));
+         await tx.delete(joinRequests).where(eq(joinRequests.companyId, id));
+         await tx.delete(invites).where(eq(invites.companyId, id));
+         await tx.delete(principalPermissionGrants).where(eq(principalPermissionGrants.companyId, id));
+@@ -583,16 +638,77 @@ export function companyService(db: Db) {
+         await tx.delete(routines).where(eq(routines.companyId, id));
+         await tx.delete(issueReadStates).where(eq(issueReadStates.companyId, id));
+         await tx.delete(documents).where(eq(documents.companyId, id));
+-        await tx.delete(issues).where(eq(issues.companyId, id));
+         await tx.delete(companyLogos).where(eq(companyLogos.companyId, id));
+         await tx.delete(assets).where(eq(assets.companyId, id));
+-        // Atelier Marketing IA (patch local) : les projets AVANT les objectifs.
+-        // projects.goal_id référence goals sans cascade : dans l'ordre amont,
+-        // supprimer une entreprise dont un projet est lié à un objectif échouait
+-        // (500, contrainte projects_goal_id_goals_id_fk ; constat du lot B).
++        await tx.delete(agentConfigRevisions).where(eq(agentConfigRevisions.companyId, id));
++        await tx.delete(agentSessionGoalActions).where(eq(agentSessionGoalActions.companyId, id));
++        await tx.delete(browserUseBrowsers).where(eq(browserUseBrowsers.companyId, id));
++        await tx.delete(browserUseRuns).where(eq(browserUseRuns.companyId, id));
++        await tx.delete(browserUseSessions).where(eq(browserUseSessions.companyId, id));
++        await tx.delete(browserUseSettings).where(eq(browserUseSettings.companyId, id));
++        await tx.delete(chatActions).where(eq(chatActions.companyId, id));
++        await tx.delete(chatEndpoints).where(eq(chatEndpoints.companyId, id));
++        await tx.delete(chatGitHubReviews).where(eq(chatGitHubReviews.companyId, id));
++        await tx.delete(chatMessageLinks).where(eq(chatMessageLinks.companyId, id));
++        await tx.delete(chatDeliveries).where(eq(chatDeliveries.companyId, id));
++        await tx.delete(chatConversations).where(eq(chatConversations.companyId, id));
++        await tx.delete(chatPublications).where(eq(chatPublications.companyId, id));
++        await tx.delete(issueComments).where(eq(issueComments.companyId, id));
++        await tx.delete(chatTeamsFileTransfers).where(eq(chatTeamsFileTransfers.companyId, id));
++        await tx.delete(companySecretBindings).where(eq(companySecretBindings.companyId, id));
++        await tx.delete(companySecretProposals).where(eq(companySecretProposals.companyId, id));
++        await tx.delete(companySkillTestRuns).where(eq(companySkillTestRuns.companyId, id));
++        await tx.delete(decisionArchiveNotificationOutbox).where(eq(decisionArchiveNotificationOutbox.companyId, id));
++        await tx.delete(decisionBundles).where(eq(decisionBundles.companyId, id));
++        await tx.delete(decisionQueueItems).where(eq(decisionQueueItems.companyId, id));
++        await tx.delete(decisionRetention).where(eq(decisionRetention.companyId, id));
++        await tx.delete(decisionTargetIssues).where(eq(decisionTargetIssues.companyId, id));
++        await tx.delete(decisionTriage).where(eq(decisionTriage.companyId, id));
++        await tx.delete(decisionTriageEvents).where(eq(decisionTriageEvents.companyId, id));
++        await tx.delete(decisionQueues).where(eq(decisionQueues.companyId, id));
++        await tx.delete(agentApiKeys).where(eq(agentApiKeys.companyId, id));
++        await tx.delete(decisions).where(eq(decisions.companyId, id));
++        await tx.delete(documentAnnotationAnchorSnapshots).where(eq(documentAnnotationAnchorSnapshots.companyId, id));
++        await tx.delete(documentAnnotationComments).where(eq(documentAnnotationComments.companyId, id));
++        await tx.delete(documentAnnotationThreads).where(eq(documentAnnotationThreads.companyId, id));
++        await tx.delete(feedbackExports).where(eq(feedbackExports.companyId, id));
++        await tx.delete(feedbackVotes).where(eq(feedbackVotes.companyId, id));
++        await tx.delete(heartbeatRunWatchdogDecisions).where(eq(heartbeatRunWatchdogDecisions.companyId, id));
++        await tx.delete(inboxDismissals).where(eq(inboxDismissals.companyId, id));
++        await tx.delete(issueApprovals).where(eq(issueApprovals.companyId, id));
++        await tx.delete(issueAttachments).where(eq(issueAttachments.companyId, id));
++        await tx.delete(issueDocuments).where(eq(issueDocuments.companyId, id));
++        await tx.delete(issueExecutionDecisions).where(eq(issueExecutionDecisions.companyId, id));
++        await tx.delete(issueInboxArchives).where(eq(issueInboxArchives.companyId, id));
++        await tx.delete(issuePlanDecompositions).where(eq(issuePlanDecompositions.companyId, id));
++        await tx.delete(issueRecoveryActions).where(eq(issueRecoveryActions.companyId, id));
++        await tx.delete(issueReferenceMentions).where(eq(issueReferenceMentions.companyId, id));
++        await tx.delete(issueRelations).where(eq(issueRelations.companyId, id));
++        await tx.delete(issueThreadInteractions).where(eq(issueThreadInteractions.companyId, id));
++        await tx.delete(issueTreeHoldMembers).where(eq(issueTreeHoldMembers.companyId, id));
++        await tx.delete(issueTreeHolds).where(eq(issueTreeHolds.companyId, id));
++        await tx.delete(issueWatchdogs).where(eq(issueWatchdogs.companyId, id));
++        await tx.delete(issueWorkProducts).where(eq(issueWorkProducts.companyId, id));
++        await tx.delete(managedAgentProfiles).where(eq(managedAgentProfiles.companyId, id));
++        await tx.delete(companySecrets).where(eq(companySecrets.companyId, id));
++        await tx.delete(nativeRunFinalizations).where(eq(nativeRunFinalizations.companyId, id));
++        await tx.delete(projectGoals).where(eq(projectGoals.companyId, id));
++        await tx.delete(projectWorkspaces).where(eq(projectWorkspaces.companyId, id));
++        await tx.delete(providerTraceRecords).where(eq(providerTraceRecords.companyId, id));
++        await tx.delete(routineDocuments).where(eq(routineDocuments.companyId, id));
++        await tx.delete(secretAccessEvents).where(eq(secretAccessEvents.companyId, id));
++        await tx.delete(statusDecisionEffects).where(eq(statusDecisionEffects.companyId, id));
++        await tx.delete(statusDecisions).where(eq(statusDecisions.companyId, id));
++        await tx.delete(workAssessments).where(eq(workAssessments.companyId, id));
++        await tx.delete(nativeRunResults).where(eq(nativeRunResults.companyId, id));
++        await tx.delete(heartbeatRuns).where(eq(heartbeatRuns.companyId, id));
++        await tx.delete(agentWakeupRequests).where(eq(agentWakeupRequests.companyId, id));
++        await tx.delete(completionContracts).where(eq(completionContracts.companyId, id));
++        await tx.delete(issues).where(eq(issues.companyId, id));
+         await tx.delete(projects).where(eq(projects.companyId, id));
+         await tx.delete(goals).where(eq(goals.companyId, id));
+         await tx.delete(agents).where(eq(agents.companyId, id));
++        await tx.delete(workspaceRuntimeServices).where(eq(workspaceRuntimeServices.companyId, id));
+         const rows = await tx
+           .delete(companies)
+           .where(eq(companies.id, id))
+-- 
+2.53.0
+

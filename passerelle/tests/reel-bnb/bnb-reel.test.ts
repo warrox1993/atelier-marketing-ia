@@ -7,7 +7,6 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { ClientBnb, configDepuisEnv, ErreurBnb, ENTETE_CLE, URL_BASE_PRODUCTION, URL_BASE_TEST, type ConfigBnb, type ReponseBnb, type RequeteBnb, type TransportBnb } from "../../src/reel/prospection/bnb/client.js";
 import { exercicesRetenus, fournisseurBnbReel, outilComptesReel } from "../../src/reel/prospection/bnb/outils.js";
-import { outilComptes as outilDemo } from "../../src/demo/prospection/bnb.js";
 import { RegistreFournisseurs } from "../../src/fournisseurs.js";
 import { enregistrerProspectionReel } from "../../src/reel/prospection/enregistrer.js";
 import { lireFichierSecret } from "../../src/reel/prospection/commun.js";
@@ -114,11 +113,11 @@ describe("bnb réel : réponses nominales", () => {
     }
   });
 
-  it("parité de forme avec le simulateur : mêmes noms d'outil et de schéma, mêmes clés d'un exercice", () => {
+  it("forme de l'outil : nom, paramètre unique `numero`, lecture seule", () => {
     const reel = outilComptesReel(new ClientBnb(CONFIG, faux({}).transport));
-    expect(reel.nom).toBe(outilDemo.nom);
-    expect(Object.keys(reel.schemaEntree)).toEqual(Object.keys(outilDemo.schemaEntree));
-    expect(reel.annotations).toEqual(outilDemo.annotations);
+    expect(reel.nom).toBe("bnb_comptes");
+    expect(Object.keys(reel.schemaEntree)).toEqual(["numero"]);
+    expect(reel.annotations?.readOnlyHint).toBe(true);
   });
 
   it("exercicesRetenus : ignore les dépôts sans date d'exercice, garde le plus récemment déposé", () => {
@@ -220,7 +219,7 @@ describe("bnb réel : configuration et enregistrement", () => {
     const p = enregistrerProspectionReel(registre, { PASSERELLE_PROSPECTION_JETON: jeton }, { journal: (m) => journal.push(m), dossierEtat: "/nonexistent-etat" });
     try {
       expect(p?.services).toContain("bnb");
-      const f = registre.obtenir("reel", "bnb");
+      const f = registre.obtenir("bnb");
       expect(f?.mode).toBe("reel");
       expect(f?.outils.map((o) => o.nom)).toEqual(["bnb_comptes"]);
       expect(f?.verifierJeton?.(jeton, "bnb")).not.toBeNull();

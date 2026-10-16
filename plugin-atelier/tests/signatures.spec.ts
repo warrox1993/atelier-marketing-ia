@@ -7,7 +7,7 @@
 import { describe, expect, it } from "vitest";
 import type { ActeurHote } from "../src/serveur/atelier.js";
 import { preparerPreuve, type EntreePreuve } from "../src/serveur/preuve-approbation.js";
-import { deduireModeReponse } from "../src/serveur/regles-donnees-demo.js";
+import { deduireModeReponse } from "../src/serveur/regles-donnees.js";
 import { creerServices } from "../src/serveur/services.js";
 import { cleIdempotenceSignee, empreinteAppel, empreinteArguments, lireClePrivee, verifierEnveloppe } from "../src/serveur/signatures.js";
 import { ISSUE, PRODUCTEUR, REV1, SOC, creerBanc } from "./outils-base.js";

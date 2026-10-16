@@ -119,6 +119,20 @@ describe("liaison.lire : isolation", () => {
     expect(v).toMatchObject({ role: "source", libelleStatut: "Répondue", reponse: "Budget validé.", reponduLe: "2026-10-12T09:30:00.000Z" });
   });
 
+  it("cible supprimée : pas de plantage, « Service supprimé » et statut final lisible", async () => {
+    const m = monde([liaison({ entrepriseCible: null, statut: "cible_supprimee", tacheCible: null })]);
+    const [v] = ((await m.lire(T_MKT, MKT)).corps as Ligne).liaisons;
+    expect(v).toMatchObject({ role: "source", nomServiceCible: "Service supprimé", statut: "cible_supprimee", libelleStatut: "Service supprimé" });
+    const [ligne] = ((await m.registre(DIR)).corps as Ligne).lignes;
+    expect(ligne).toMatchObject({ nomServiceCible: "Service supprimé", libelleStatut: "Service supprimé" });
+  });
+
+  it("cible supprimée : aucune entreprise ne la voit côté cible", async () => {
+    const m = monde([liaison({ entrepriseCible: null, tacheCible: T_DIR, statut: "ouverte" })]);
+    expect(((await m.lire(T_DIR, DIR)).corps as Ligne).liaisons).toEqual([]);
+    expect(((await m.lire(T_MKT, MKT)).corps as Ligne).liaisons[0]).toMatchObject({ nomServiceCible: "Service supprimé" });
+  });
+
   it("côté cible : ce qui a été transmis seulement, sans la tâche d'origine ni l'entreprise source", async () => {
     const m = monde([liaison({ reponse: "Budget validé.", statut: "repondue", reponduLe: "2026-10-12T09:30:00.000Z" })]);
     const r = await m.lire(T_DIR, DIR);

@@ -94,7 +94,6 @@ export function etatDiffusionReelle(f: Diffusion, maintenantMs: number): { libel
   if (f.etat === "confirmee") return { libelle: "Confirmée", ton: "succes", detail: "La passerelle a rapporté l'exécution de l'appel approuvé." };
   if (f.etat === "ambigue_a_reconcilier") return { libelle: "Ambiguë", ton: "attention", detail: "Le résultat est incertain : à réconcilier à la main avant toute nouvelle tentative." };
   if (f.etat === "refusee") return { libelle: "Refusée", ton: "danger", detail: f.motifRefus ?? "Refusée par le serveur." };
-  if (f.etat === "simulee") return { libelle: "Simulée", ton: "demo", detail: "Démonstration : rien n'a été envoyé." };
   const p = etatPreuve(f, maintenantMs);
   if (p === "revoquee") return { libelle: "Preuve révoquée", ton: "danger", detail: "La preuve ne sera plus rendue : une nouvelle approbation est nécessaire." };
   if (p === "expiree") return { libelle: "Preuve expirée", ton: "attention", detail: "Une nouvelle approbation est nécessaire." };

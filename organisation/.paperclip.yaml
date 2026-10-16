@@ -1074,8 +1074,7 @@ agents:
       config:
         command: "node"
         args:
-          - "demo/agent-demo.mjs"
-          - "porte"
+          - "agents/porte.mjs"
         timeoutSec: 300
     runtime:
       heartbeat:

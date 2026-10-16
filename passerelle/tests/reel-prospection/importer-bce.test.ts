@@ -11,7 +11,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { enregistrementsCsv, lireCsv } from "../../src/reel/prospection/csv.js";
 import { appliquerMiseAJour, dateIsoDeBce, detecterTypeArchive, importerComplet, normaliserNumeroBce } from "../../src/reel/prospection/bce/importer.js";
 import { IndexBce } from "../../src/reel/prospection/bce/index.js";
-import { controleModulo97Valide } from "../../src/demo/prospection/numeros.js";
+import { controleModulo97Valide } from "../../src/commun/prospection/numeros.js";
 import {
   COURRIEL_PERSONNE_PHYSIQUE, E, N, NOM_ETABLISSEMENT_PHYSIQUE, NOM_PERSONNE_PHYSIQUE, RUE_PERSONNE_PHYSIQUE,
   creerZip, csv, dossierTemporaire, ecrireZip, etatIndex, fichierComplet, miseAJour134, miseAJour135,

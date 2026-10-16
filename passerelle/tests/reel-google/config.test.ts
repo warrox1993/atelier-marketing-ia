@@ -19,7 +19,7 @@ describe("configuration Google réelle", () => {
     const registre = new RegistreFournisseurs();
     expect(construireGoogleReel(registre, {}, { hote: "127.0.0.1", urlPasserelle: () => "", journal: (m) => journal.push(m) })).toBeNull();
     expect(journal[0]).toContain("client OAuth Google non configuré");
-    expect(registre.obtenir("reel", "gsc")).toBeUndefined();
+    expect(registre.obtenir("gsc")).toBeUndefined();
   });
 
   it("clé absente ou de mauvaise taille : refus", () => {

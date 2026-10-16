@@ -9,7 +9,7 @@ import { MarkdownBlock } from "@paperclipai/plugin-sdk/ui";
 import type { DecisionHumaine, Diffusion, DossierHumain, LigneMatrice, RelanceCorrection } from "../../contrats/dossier.js";
 import type { Constat, VerdictRevue } from "../../contrats/revues.js";
 import type { ChronologieExecution, ResumeDossier, VueContenusAValider } from "../../contrats/ui.js";
-import { Champ, Bouton, EnTete, EtatErreur, Fraicheur, Horodatage, LienHote, Lecture, ListeOuAucun, MentionDemo, Pastille, PastilleStatut, Section, Vide } from "../composants.js";
+import { Champ, Bouton, EnTete, EtatErreur, Fraicheur, Horodatage, LienHote, Lecture, ListeOuAucun, Pastille, PastilleStatut, Section, Vide } from "../composants.js";
 import { useAction, useDonnees } from "../donnees.js";
 import {
   ACTIONS_EXTERNES,
@@ -94,7 +94,7 @@ function TableDossiers({ lignes, bloques = false }: { lignes: ResumeDossier[]; b
               <th scope="row" data-libelle="Livrable">
                 <LienHote vers={chemin("contenus", l.issueId)}>{l.titre}</LienHote>
                 <span className="atl-sous">
-                  {l.identifier ?? idCourt(l.issueId)} {l.mode === "demonstration" ? <MentionDemo compacte /> : null}
+                  {l.identifier ?? idCourt(l.issueId)}
                 </span>
               </th>
               <td data-libelle={bloques ? "Motif" : "Statut"}>
@@ -152,7 +152,6 @@ export function Dossier({ issueId, compact = false }: { issueId: string; compact
             />
           )}
           {!compact ? <Fraicheur chargeLe={r.chargeLe} actualisation={r.loading} /> : null}
-          {d.mode === "demonstration" ? <MentionDemo texte={d.mentionDemonstration} /> : null}
           <div className="atl-dossier">
             <div className="atl-dossier-principal">
               <SyntheseControles dossier={d} />
@@ -480,7 +479,7 @@ function Sources({ dossier: d }: { dossier: DossierHumain }) {
               <span className="atl-pile-ligne">
                 <span className="atl-url">{s.titre ?? s.url}</span>
                 <Pastille ton={STATUTS_ACCES_SOURCE[s.statutAcces]?.ton}>{STATUTS_ACCES_SOURCE[s.statutAcces]?.libelle ?? s.statutAcces}</Pastille>
-                {s.mode === "demonstration" ? <MentionDemo compacte /> : null}
+               
               </span>
               <span className="atl-sous">
                 {s.url} ; collectée <Horodatage iso={s.dateCollecte} />
@@ -578,7 +577,7 @@ function Historique({ decisions, dossier: d }: { decisions: DecisionHumaine[]; d
               <div className="atl-fil-tete">
                 <strong>{ACTIONS_HUMAINES[x.action]}</strong>
                 {x.invalidee ? <Pastille ton="attention">Invalidée par une nouvelle révision</Pastille> : null}
-                {x.mode === "demonstration" ? <MentionDemo compacte /> : null}
+               
               </div>
               <p className="atl-fil-texte">{x.commentaire}</p>
               {x.portee ? (
@@ -608,7 +607,7 @@ function Historique({ decisions, dossier: d }: { decisions: DecisionHumaine[]; d
                 <div className="atl-fil-tete">
                   <strong>Correction relancée</strong>
                   <Pastille ton="info">{`cycles ${x.maximumAvant} → ${x.maximumApres}`}</Pastille>
-                  {x.mode === "demonstration" ? <MentionDemo compacte /> : null}
+                 
                 </div>
                 <p className="atl-fil-texte">{x.commentaire}</p>
                 <p className="atl-sous">Leviers : {x.leviers.map((l) => LEVIERS[l]).join(", ")}</p>
@@ -741,8 +740,7 @@ function RelancePanneau({ dossier: d, onFait }: { dossier: DossierHumain; onFait
       }
       const r = await relancer(params);
       setResultat(
-        `Correction relancée : maximum de cycles porté de ${r.maximumAvant} à ${r.maximumApres}. La tâche repart chez le producteur ; la prochaine version repasse toutes les revues et le contrôle automatique.` +
-          (d.mode === "demonstration" ? " Démonstration : aucune diffusion." : ""),
+        `Correction relancée : maximum de cycles porté de ${r.maximumAvant} à ${r.maximumApres}. La tâche repart chez le producteur ; la prochaine version repasse toutes les revues et le contrôle automatique.`,
       );
       onFait();
     } catch (err) {
@@ -976,7 +974,7 @@ function DiffusionPanneau({ dossier: d, onFait }: { dossier: DossierHumain; onFa
         // Une clé par approbation : un second clic ne produit aucun second effet.
         cleIdempotence: `interface-${approbation.id}`,
       });
-      setResultat(r.etat === "simulee" ? "Diffusion simulée (démonstration) : rien n'a été envoyé." : `Diffusion : ${ETATS_DIFFUSION[r.etat]?.libelle ?? r.etat}.`);
+      setResultat(`Diffusion : ${ETATS_DIFFUSION[r.etat]?.libelle ?? r.etat}.`);
       onFait();
     } catch (err) {
       setErreur(err);
@@ -985,7 +983,7 @@ function DiffusionPanneau({ dossier: d, onFait }: { dossier: DossierHumain; onFa
     }
   };
   return (
-    <Section titre="Diffusion" aide={d.mode === "demonstration" ? "Démonstration : la diffusion est simulée et marquée comme telle, jamais envoyée." : "La diffusion reprend la portée de votre approbation (canal, compte, montant)."}>
+    <Section titre="Diffusion" aide={"La diffusion reprend la portée de votre approbation (canal, compte, montant)."}>
       <div className="atl-bouton-plein">
         <Bouton variante="principal" raisonDesactive={raison} enCours={enCours} onClick={() => void lancer()}>
           Diffuser

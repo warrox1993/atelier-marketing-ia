@@ -57,7 +57,7 @@ import { normaliserPourEmpreinte } from "./base-clients.js";
 import { chiffrer, empreinte, memeCle, TAILLE_CLE_CHIFFREMENT, TAILLE_CLE_HMAC_MIN } from "./chiffrement-donnees.js";
 import { erreur, erreurValidation } from "./erreurs.js";
 import { estOutilEcriture } from "./preuve-approbation.js";
-import { AGE_MAX_REPONSE_S, deduireModeReponse, reponseEcriture, type ModeEffectif } from "./regles-donnees-demo.js";
+import { AGE_MAX_REPONSE_S, deduireModeReponse, reponseEcriture, type ModeEffectif } from "./regles-donnees.js";
 import { construireCompteRendu, nomDuProspect, type FicheClientCompteRendu } from "./compte-rendu-prospect.js";
 import { ORIGINE_DEMANDE, titreDepuisTexte } from "./services-accueil.js";
 import { calculerConfiance, criteresManquants, type ContexteQualification } from "./qualification-prospects.js";

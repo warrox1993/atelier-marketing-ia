@@ -84,45 +84,45 @@ export function enregistrerProspectionReel(registre: RegistreFournisseurs, env: 
 }
 
 /**
- * Mélange (PASSERELLE_SERVICES_REELS=osm, passerelle en démonstration) : inscrit SEUL le fournisseur réel `osm`. L'accès est
- * celui de la démonstration (OAuth local, vérifié par le serveur) : aucun jeton statique n'est exigé ici, car les données
- * sont publiques (ODbL) et locales ; la vérification de jeton du fournisseur réel ne sert pas dans ce mode et refuse tout.
- * Sans index importé, le service répond « aucun fichier importé » (erreur claire), jamais de données fictives.
+ * Service local (PASSERELLE_SERVICES_REELS=osm) : inscrit SEUL le fournisseur réel `osm`. L'accès est accordé par le serveur
+ * d'autorisation local de la passerelle (`autorisationLocale`) : aucun jeton statique n'est exigé ici, car les données
+ * sont publiques (ODbL) et locales.
+ * Sans index importé, le service répond « aucun fichier importé » (erreur claire), jamais de données simulées.
  */
 export function enregistrerOsmReelSeul(registre: RegistreFournisseurs, env: NodeJS.ProcessEnv, options: OptionsProspectionReel = {}): IndexOsm {
   const journal = options.journal ?? ((): void => undefined);
   const chemin = cheminsIndex(env, options.dossierEtat).osm;
   const indexOsm = new IndexOsm(chemin);
-  registre.enregistrer(fournisseurOsmReel(() => indexOsm, () => null));
-  if (indexOsm.disponible()) journal(`osm RÉEL (mélange, passerelle en démonstration) : index ${chemin}`);
-  else journal(`osm RÉEL (mélange) : aucun index à ${chemin} (importer un extrait : voir docs/passerelle.md). Les outils répondent par une erreur claire d'ici là.`);
+  registre.enregistrer({ ...fournisseurOsmReel(() => indexOsm, () => null), autorisationLocale: true });
+  if (indexOsm.disponible()) journal(`osm (service local) : index ${chemin}`);
+  else journal(`osm (service local) : aucun index à ${chemin} (importer un extrait : voir docs/passerelle.md). Les outils répondent par une erreur claire d'ici là.`);
   return indexOsm;
 }
 
 /**
- * Mélange (PASSERELLE_SERVICES_REELS=bce, passerelle en démonstration) : inscrit SEUL le fournisseur réel `bce` (index SQLite
- * local, PASSERELLE_BCE_INDEX). Accès par le OAuth local de la démonstration, comme `osm` (données publiques, locales).
- * Index absent ou vide : le démarrage continue et chaque outil répond une erreur claire, jamais de données fictives.
+ * Service local (PASSERELLE_SERVICES_REELS=bce) : inscrit SEUL le fournisseur réel `bce` (index SQLite
+ * local, PASSERELLE_BCE_INDEX). Accès par l'autorisation locale, comme `osm` (données publiques, locales).
+ * Index absent ou vide : le démarrage continue et chaque outil répond une erreur claire, jamais de données simulées.
  */
 export function enregistrerBceReelSeul(registre: RegistreFournisseurs, env: NodeJS.ProcessEnv, options: OptionsProspectionReel = {}): IndexBce {
   const journal = options.journal ?? ((): void => undefined);
   const chemin = cheminsIndex(env, options.dossierEtat).bce;
   const indexBce = new IndexBce(chemin);
   const centroides = new CentroidesOsm(cheminsIndex(env, options.dossierEtat).osm);
-  registre.enregistrer(fournisseurBceReel(() => indexBce, () => null, () => centroides));
-  if (indexBce.disponible()) journal(`bce RÉEL (mélange, passerelle en démonstration) : index ${chemin}`);
-  else journal(`bce RÉEL (mélange) : index BCE absent à ${chemin} (lancer cli.js bce-telecharger --importer). Les outils répondent par une erreur claire d'ici là.`);
+  registre.enregistrer({ ...fournisseurBceReel(() => indexBce, () => null, () => centroides), autorisationLocale: true });
+  if (indexBce.disponible()) journal(`bce (service local) : index ${chemin}`);
+  else journal(`bce (service local) : index BCE absent à ${chemin} (lancer cli.js bce-telecharger --importer). Les outils répondent par une erreur claire d'ici là.`);
   return indexBce;
 }
 
 /**
- * Mélange (PASSERELLE_SERVICES_REELS=bnb, passerelle en démonstration) : inscrit SEUL le fournisseur réel `bnb` (API CBSO de la
+ * Service local (PASSERELLE_SERVICES_REELS=bnb) : inscrit SEUL le fournisseur réel `bnb` (API CBSO de la
  * BNB, clé PASSERELLE_BNB_CLE ou PASSERELLE_BNB_CLE_FICHIER). Aucun appel n'est fait au démarrage. Clé absente : l'outil répond
- * « Clé BNB invalide ou absente », jamais de données fictives.
+ * « Clé BNB invalide ou absente », jamais de données simulées.
  */
 export function enregistrerBnbReelSeul(registre: RegistreFournisseurs, env: NodeJS.ProcessEnv, options: OptionsProspectionReel = {}): void {
   const journal = options.journal ?? ((): void => undefined);
   const configBnb = lireConfigBnb(env, journal);
-  registre.enregistrer(fournisseurBnbReel(new ClientBnb(configBnb), () => null));
-  if (configBnb.cle) journal("bnb RÉEL (mélange, passerelle en démonstration) : API de la BNB, clé présente");
+  registre.enregistrer({ ...fournisseurBnbReel(new ClientBnb(configBnb), () => null), autorisationLocale: true });
+  if (configBnb.cle) journal("bnb (service local) : API de la BNB, clé présente");
 }

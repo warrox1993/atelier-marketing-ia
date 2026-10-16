@@ -142,9 +142,6 @@ details[open] > .atl-section-resume::after, details[open] > .atl-filtres-resume:
   .atl-parcours-panneau { flex: 1; }
 }
 
-/* Mention de démonstration, bandeau */
-.atl-demo { padding: 0.5rem 0.75rem; border-radius: var(--atl-rayon); color: var(--atl-texte); background: color-mix(in oklab, var(--atl-demo) 6%, var(--atl-fond)); box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--atl-demo) 40%, transparent); }
-.atl-demo strong { color: var(--atl-demo); font-weight: 600; }
 .atl-note-mode { padding: 0.5rem 0.75rem; border-radius: var(--atl-rayon); color: var(--atl-texte); background: color-mix(in oklab, var(--atl-info) 6%, var(--atl-fond)); box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--atl-info) 40%, transparent); }
 .atl-note-mode strong { color: var(--atl-info); font-weight: 600; }
 

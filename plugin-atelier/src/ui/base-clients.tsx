@@ -14,7 +14,7 @@ import {
   type AjouterOppositionEntree,
   type ImportBaseClients,
 } from "../contrats/prospection.js";
-import { Bouton, BoutonAller, Champ, EtatErreur, Horodatage, MentionDemo, Section, Vide } from "./composants.js";
+import { Bouton, BoutonAller, Champ, EtatErreur, Horodatage, Section, Vide } from "./composants.js";
 import { nombre } from "./format.js";
 import { appelRoute } from "./routes-prospection.js";
 
@@ -387,7 +387,7 @@ function ImportGuide({ etatBase, onChange }: { etatBase: EtatBase | null; onChan
 function ResultatImport({ r, onRecommencer }: { r: ImportBaseClients; onRecommencer(): void }) {
   return (
     <div className="atl-formulaire" role="status">
-      {r.mode === "demonstration" ? <MentionDemo compacte /> : null}
+     
       <p className="atl-resume">
         <span>
           <strong>{nombre(r.lignesRetenues)}</strong> lignes importées
@@ -587,7 +587,7 @@ function EtatBaseClients({ etat, erreur, chargement, onReessayer }: { etat: Etat
       ) : null}
       {etat?.existe ? (
         <div className="atl-formulaire" role="status">
-          {etat.mode === "demonstration" ? <MentionDemo compacte /> : null}
+         
           <p className="atl-resume">
             <span>
               <strong>{nombre(etat.clients)}</strong> clients
@@ -664,9 +664,9 @@ function TableauVentesCroisees({ version }: { version: number }) {
       {etat.chargement && !d && !etat.erreur ? <p className="atl-attenue">Calcul des ventes croisées.</p> : null}
       {d ? (
         <>
-          {d.mode === "demonstration" ? <MentionDemo compacte /> : null}
+         
           <p className="atl-sous">
-            {d.origineRegles === "client" ? `Règles du client : ${regles}.` : d.origineRegles === "demonstration" ? `Règles de démonstration : ${regles}.` : "Aucune règle de vente croisée enregistrée par le client."}
+            {d.origineRegles === "client" ? `Règles du client : ${regles}.` : d.origineRegles === "demonstration" ? `Règles : ${regles}.` : "Aucune règle de vente croisée enregistrée par le client."}
           </p>
           {d.opportunites.length === 0 ? (
             <p>{d.clients === 0 ? "Aucune base clients chargée : importez-en une pour voir les ventes croisées." : "Aucune opportunité dans la base actuelle."}</p>

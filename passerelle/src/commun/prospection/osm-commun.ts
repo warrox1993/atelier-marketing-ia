@@ -26,12 +26,8 @@ export const LIBELLES_CATEGORIES: Record<CategorieOsm, string> = {
   bureau: "Autres bureaux et services (clé OSM office)",
 };
 
-export const FICHE_OSM = {
-  id: "osm",
-  libelle: "OpenStreetMap (commerces et activités)",
-  portees: ["osm:lecture"],
-  proprietesDemo: [{ id: "extrait/demo-osm", libelle: "Extrait OpenStreetMap de démonstration (commerces fictifs)" }],
-} as const;
+// La fiche est déclarée dans services.ts (fiches livrées par défaut) ; ré-exportée ici pour les importations existantes.
+export { FICHE_OSM } from "../../services.js";
 
 export const PROPRIETE_OSM_REEL = { id: "extrait/osm-belgique", libelle: "Extrait OpenStreetMap de la Belgique (Geofabrik)" } as const;
 

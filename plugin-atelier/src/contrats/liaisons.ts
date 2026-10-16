@@ -50,7 +50,7 @@ export const DemandeLiaisonEntree = z
   .strict();
 export type DemandeLiaisonEntree = z.infer<typeof DemandeLiaisonEntree>;
 
-export const STATUTS_LIAISON = ["en_attente_approbation", "ouverte", "repondue", "annulee", "refusee"] as const;
+export const STATUTS_LIAISON = ["en_attente_approbation", "ouverte", "repondue", "annulee", "refusee", "cible_supprimee"] as const;
 export const StatutLiaison = z.enum(STATUTS_LIAISON);
 export type StatutLiaison = z.infer<typeof StatutLiaison>;
 
@@ -70,7 +70,8 @@ export const LiaisonEnregistree = z
   .object({
     id: IdNatif,
     entrepriseSource: IdNatif,
-    entrepriseCible: IdNatif,
+    /** Nulle quand l'entreprise cible a été supprimée : la liaison de la source survit (migration 015). */
+    entrepriseCible: IdNatif.nullable(),
     tacheOrigine: IdNatif,
     tacheCible: IdNatif.nullable(),
     statut: StatutLiaison,

@@ -1,7 +1,5 @@
 // Réglages de la passerelle et garde « boucle locale seulement ».
 
-import type { ModePasserelle } from "./fournisseurs.js";
-
 export const HOTE_PAR_DEFAUT = "127.0.0.1";
 export const PORT_PAR_DEFAUT = 3190;
 
@@ -17,10 +15,17 @@ export function verifierHoteEcoute(hote: string): string {
   return hote;
 }
 
-export function lireMode(valeur: string | undefined): ModePasserelle {
-  if (valeur === undefined || valeur === "" || valeur === "demonstration") return "demonstration";
-  if (valeur === "reel") return "reel";
-  throw new Error(`Mode inconnu : « ${valeur} » (valeurs permises : demonstration, reel).`);
+/**
+ * PASSERELLE_MODE n'existe plus : la passerelle n'a plus de mode démonstration, tout est réel. Une ancienne
+ * valeur « demonstration » est refusée avec un message clair (au lieu d'être ignorée en silence) ; « reel » et
+ * l'absence de valeur sont acceptées (ancien réglage devenu sans objet).
+ */
+export function verifierAncienMode(valeur: string | undefined): void {
+  if (valeur === undefined || valeur === "" || valeur === "reel") return;
+  if (valeur === "demonstration") {
+    throw new Error("PASSERELLE_MODE=demonstration : le mode démonstration a été retiré. Supprimer ce réglage ; un service sans fournisseur réel configuré répond « non_connecte ».");
+  }
+  throw new Error(`PASSERELLE_MODE : « ${valeur} » n'est plus un réglage reconnu (le mode a été supprimé). Supprimer ce réglage.`);
 }
 
 export function lirePort(valeur: string | undefined): number {
@@ -32,34 +37,35 @@ export function lirePort(valeur: string | undefined): number {
 }
 
 export interface ReglagesEnvironnement {
-  mode: ModePasserelle;
   hote: string;
   port: number;
 }
 
-/** Lit PASSERELLE_MODE, PASSERELLE_HOTE et PASSERELLE_PORT. */
+/** Lit PASSERELLE_HOTE et PASSERELLE_PORT (et refuse l'ancien PASSERELLE_MODE=demonstration). */
 export function lireReglages(env: NodeJS.ProcessEnv): ReglagesEnvironnement {
+  verifierAncienMode(env["PASSERELLE_MODE"]);
   return {
-    mode: lireMode(env["PASSERELLE_MODE"]),
     hote: verifierHoteEcoute(env["PASSERELLE_HOTE"] ?? HOTE_PAR_DEFAUT),
     port: lirePort(env["PASSERELLE_PORT"]),
   };
 }
 
 /**
- * Lit PASSERELLE_SERVICES_REELS : liste de services (séparés par des virgules ou des espaces) servis par leur fournisseur
- * RÉEL alors que la passerelle est en démonstration (mélange). Seuls les services sans compte de tiers
- * (`osm` et `bce` : index locaux ; `bnb` : API de la BNB par simple clé ; `liens` : lecture d'URL protégée) sont permis : les autres fournisseurs réels exigent le mode réel complet (comptes et jetons de tiers).
+ * Lit PASSERELLE_SERVICES_REELS : liste de services LOCAUX (séparés par des virgules ou des espaces) à brancher sur leur
+ * fournisseur réel. Seuls les services sans compte de tiers sont permis : `osm` et `bce` (index locaux), `bnb` (API de la
+ * BNB par simple clé) et `liens` (lecture d'URL protégée) ; l'accès y est accordé par le serveur d'autorisation local.
+ * Les autres services (Google, réseaux sociaux, CRM) se branchent par leurs propres réglages (comptes et jetons de tiers).
+ * Un service non listé et non configuré répond « non_connecte ».
  */
-export const SERVICES_REELS_MELANGEABLES: readonly string[] = ["osm", "liens", "bce", "bnb"];
+export const SERVICES_LOCAUX: readonly string[] = ["osm", "liens", "bce", "bnb"];
 
-export function lireServicesReels(env: NodeJS.ProcessEnv): string[] {
+export function lireServicesLocaux(env: NodeJS.ProcessEnv): string[] {
   const brut = env["PASSERELLE_SERVICES_REELS"]?.trim() ?? "";
   if (brut === "") return [];
   const noms = [...new Set(brut.split(/[\s,]+/).filter((n) => n !== ""))];
   for (const nom of noms) {
-    if (!SERVICES_REELS_MELANGEABLES.includes(nom)) {
-      throw new Error(`PASSERELLE_SERVICES_REELS : service « ${nom} » non permis en mélange (permis : ${SERVICES_REELS_MELANGEABLES.join(", ")}).`);
+    if (!SERVICES_LOCAUX.includes(nom)) {
+      throw new Error(`PASSERELLE_SERVICES_REELS : service « ${nom} » non permis (services locaux permis : ${SERVICES_LOCAUX.join(", ")}).`);
     }
   }
   return noms;

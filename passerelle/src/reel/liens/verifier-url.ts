@@ -17,12 +17,9 @@ export const MAX_OCTETS_CORPS = 512 * 1024;
 export const MAX_EXTRAIT = 500;
 export const USER_AGENT = "AtelierMarketingIA-VerificationLiens/1.0 (contrôle de liens en lecture seule)";
 
-export const FICHE_LIENS = {
-  id: "liens",
-  libelle: "Vérification de liens (lecture d'URL protégée)",
-  portees: ["liens:lecture"],
-  proprietesDemo: [{ id: "web/public", libelle: "Web public (lecture seule, adresses publiques uniquement)" }],
-} as const;
+// La fiche est déclarée dans services.ts (fiches livrées par défaut) ; ré-exportée ici pour les importations existantes.
+import { FICHE_LIENS } from "../../services.js";
+export { FICHE_LIENS };
 
 // --- Filtre d'adresses ---------------------------------------------------------------------------------------------------
 
@@ -247,5 +244,5 @@ export function outilsLiens(options: OptionsVerification = {}): OutilPasserelle[
 }
 
 export function fournisseurLiensReel(options: OptionsVerification = {}): FournisseurService {
-  return { service: "liens", mode: "reel", fiche: FICHE_LIENS, outils: outilsLiens(options), verifierJeton: () => null };
+  return { service: "liens", mode: "reel", fiche: FICHE_LIENS, outils: outilsLiens(options), autorisationLocale: true, verifierJeton: () => null };
 }

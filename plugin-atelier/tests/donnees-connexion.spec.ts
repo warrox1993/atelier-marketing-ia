@@ -93,14 +93,14 @@ async function deposer(f: ReturnType<typeof fausseBase>, corps: unknown) {
 }
 
 describe("route tache.donnees.deposer (service complet, fausse base)", () => {
-  it("réponse de démonstration : source enregistrée en démonstration, indices et chiffres conservés, porte périmée", async () => {
+  it("réponse simulée, même dans une entreprise réglée en démonstration : enregistrée pour la trace, signalée interdite, indices et chiffres conservés, porte périmée", async () => {
     const f = fausseBase({ modeEntreprise: "demonstration", sousPorte: true });
     const r = await deposer(f, { service: "gsc", outil: "gsc_requete_performances", reponse: reponse("demonstration") });
     expect(r.status).toBe(201);
     const corps = r.body as { source: unknown; mode: string; interdite: boolean; chiffresRetenus: number; consigne: string };
     expect(corps.mode).toBe("demonstration");
-    expect(corps.interdite).toBe(false);
-    expect(corps.consigne).toMatch(/mention « démonstration »/u);
+    expect(corps.interdite).toBe(true);
+    expect(corps.consigne).toMatch(/interdite ici/u);
     const source = Source.parse(corps.source);
     expect(source).toMatchObject({ provenance: "connexion", mode: "demonstration", url: "connexion://gsc/gsc_requete_performances", nonFiable: true });
     expect(source.connexion?.indicesMode).toContain("_atelier.mode = demonstration");
@@ -108,7 +108,7 @@ describe("route tache.donnees.deposer (service complet, fausse base)", () => {
     const ligne = f.tables.sources![0]!;
     expect(ligne.provenance).toBe("connexion");
     expect(JSON.parse(String(ligne.chiffres)).map((c: { valeur: number }) => c.valeur)).toEqual(expect.arrayContaining([412, 280, 692, 9870]));
-    expect(f.tables.journal!.map((j) => j.type)).toEqual(["donnees.deposees"]);
+    expect(f.tables.journal!.map((j) => j.type)).toEqual(["donnees.demo_campagne_reelle"]);
     expect(f.tables.evaluations_porte![0]!.perimee).toBe(true);
     expect(f.tables.portes![0]!.modifie_le).toBe("touchée");
   });
@@ -153,7 +153,7 @@ describe("route tache.donnees.deposer (service complet, fausse base)", () => {
     expect(r.body).toMatchObject({ mode: "demonstration", interdite: true });
     expect(f.tables.sources![0]!.mode_campagne).toBe("reel");
     expect(f.tables.journal!.map((j) => j.type)).toEqual(["donnees.demo_campagne_reelle"]);
-    expect(f.activite[0]).toMatch(/campagne réelle \(entreprise en mode réel\)/u);
+    expect(f.activite[0]).toMatch(/déposée \(entreprise en mode réel\)/u);
   });
 
   it("mode déclaré par l'agent : refusé (400), rien n'est enregistré", async () => {

@@ -371,27 +371,35 @@ describe("Cycles : une panne d'outil ou une révision périmée ne consomme aucu
 /* ------------------------------------------------------------------ */
 /* M6, B1, B4, B5                                                      */
 /* ------------------------------------------------------------------ */
-describe("M6 : la remise à zéro de démonstration n'efface jamais une trace réelle", () => {
+describe("M6 : la remise à zéro des données n'efface jamais une campagne ni une trace", () => {
   const reinitialiser = async (banc: ReturnType<typeof creerBanc>) => {
     const services = creerServices(banc.ctx, { base: banc.base });
     try {
-      return await services.actions["atelier.demo.reinitialiser"]!({ confirmation: "REINITIALISER" }, SOC, humain);
+      return await services.actions["atelier.donnees.reinitialiser"]!({ confirmation: "REINITIALISER" }, SOC, humain);
     } catch (err) {
       return err;
     }
   };
-  it("entreprise réglée en mode réel (campagnes restées en démonstration) : refusée", async () => {
+  it("campagne existante : refusée", async () => {
     const banc = creerBanc({ modeEntreprise: "reel" });
+    expect(banc.t.campagnes.length).toBeGreaterThan(0);
     expect(await reinitialiser(banc)).toMatchObject({ code: "conflit" });
   });
-  it("décision ou diffusion réelle présente : refusée", async () => {
-    const banc = creerBanc({ modeEntreprise: "demonstration" });
+  it("décision ou diffusion réelle présente (sans campagne) : refusée", async () => {
+    const banc = creerBanc({ modeEntreprise: "reel" });
+    banc.t.campagnes.length = 0;
     banc.decision({ mode: "reel" });
     expect(await reinitialiser(banc)).toMatchObject({ code: "conflit" });
   });
-  it("démonstration pure : acceptée", async () => {
-    const banc = creerBanc({ modeEntreprise: "demonstration" });
+  it("ni campagne ni trace : acceptée", async () => {
+    const banc = creerBanc({ modeEntreprise: "reel" });
+    banc.t.campagnes.length = 0;
     expect(await reinitialiser(banc)).toHaveProperty("supprimes");
+  });
+  it("l'ancien nom d'action n'existe plus", () => {
+    const banc = creerBanc();
+    const services = creerServices(banc.ctx, { base: banc.base });
+    expect(Object.keys(services.actions)).not.toContain("atelier.demo.reinitialiser");
   });
 });
 

@@ -9,7 +9,7 @@
 import { createHash } from "node:crypto";
 import type { CodeMotifPorte, DecisionPorte, MotifPorte, RoleRevue } from "../contrats/index.js";
 import { GRAVITES_BLOQUANTES } from "../contrats/index.js";
-import { verifierDonneesDemo, type EntreesDonneesDemo } from "./regles-donnees-demo.js";
+import { verifierDonneesDemo, type EntreesDonneesDemo } from "./regles-donnees.js";
 import { controlerIdentifiantsLegaux, type FaitsFiche } from "./services-faits.js";
 import { controlerCitationsConnaissances, type VersionPourValidite } from "./regles-connaissances.js";
 import { controlerLivrableProspection, type ResultatCouverture } from "./couverture-prospection.js";

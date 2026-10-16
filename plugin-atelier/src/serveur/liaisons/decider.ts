@@ -38,7 +38,7 @@ export function routeDecider(d: DependancesLiaisons): Partial<Record<CleRouteApi
       if (liaison.statut === "en_attente_approbation") {
         // Les règles qui ont autorisé la demande valent toujours : le flux et le client n'ont pas changé depuis.
         const source = await stock.serviceDeEntreprise(liaison.entrepriseSource);
-        const cible = await stock.serviceDeEntreprise(liaison.entrepriseCible);
+        const cible = liaison.entrepriseCible === null ? null : await stock.serviceDeEntreprise(liaison.entrepriseCible);
         if (!source || !cible || source.clientMarqueur !== cible.clientMarqueur || !(await stock.lireFlux(source.clientMarqueur, source.serviceSlug, cible.serviceSlug))) {
           erreur("liaison_refusee", "Le flux entre ces deux services n'est plus autorisé : la demande ne peut pas être transmise.", { garde: "b" });
         }

@@ -10,7 +10,7 @@ import { crc32, deflateRawSync } from "node:zlib";
 import Database from "better-sqlite3";
 import * as z from "zod";
 import type { ContexteAppel, OutilPasserelle } from "../../src/fournisseurs.js";
-import { controleValide } from "../../src/demo/prospection/numeros.js";
+import { controleValide } from "../../src/commun/prospection/numeros.js";
 
 // --- ZIP --------------------------------------------------------------------------------------------------------------
 

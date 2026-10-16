@@ -1,19 +1,21 @@
-// Tests unitaires et de parcours du serveur d'autorisation de démonstration :
+// Tests unitaires et de parcours du serveur d'autorisation local :
 // PKCE, enregistrement dynamique (DCR), page de consentement, code, jeton, rotation.
 
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { RegistreFournisseurs } from "../src/fournisseurs.js";
 import {
   calculerChallengeS256,
   schemaEnregistrementClient,
   uriRedirectionAcceptable,
   verifierPkceS256,
-} from "../src/oauth-demo.js";
+} from "../src/oauth-local.js";
 import {
   REDIRECTION_TEST,
   decider,
   demarrer,
   echangerCode,
   enregistrerClient,
+  fournisseurFactice,
   nouveauPkce,
   obtenirJetons,
   ouvrirConsentement,
@@ -77,7 +79,7 @@ describe("enregistrement dynamique de client (RFC 7591), schéma", () => {
   });
 });
 
-describe("parcours OAuth de démonstration", () => {
+describe("parcours OAuth local", () => {
   let p: PasserelleDeTest;
   beforeAll(async () => {
     p = await demarrer();
@@ -109,7 +111,7 @@ describe("parcours OAuth de démonstration", () => {
     });
     expect(rep.status).toBe(201);
     const corps = (await rep.json()) as Record<string, unknown>;
-    expect(corps["client_id"]).toMatch(/^demo-/);
+    expect(corps["client_id"]).toMatch(/^local-/);
     expect(corps["token_endpoint_auth_method"]).toBe("none");
     expect(corps["redirect_uris"]).toEqual([REDIRECTION_TEST]);
     expect(corps["client_secret"]).toBeUndefined();
@@ -132,10 +134,11 @@ describe("parcours OAuth de démonstration", () => {
     const client = await enregistrerClient(p.url);
     const pkce = nouveauPkce();
     const { transaction, html } = await ouvrirConsentement(urlAutorisation(p.url, client, pkce, "gsc"));
-    expect(html).toContain("Rénovation Liège (démonstration)");
-    expect(html).toContain("Aucune donnée réelle");
+    expect(html).toContain("Poste local de la passerelle");
+    expect(html).not.toMatch(/démonstration/i);
+    expect(html).toContain("aucun compte de tiers");
 
-    const rep = await decider(p.url, transaction, "autoriser", "https://www.renovation-liege.example/");
+    const rep = await decider(p.url, transaction, "autoriser", "https://www.essai.example/");
     expect(rep.status).toBe(302);
     const retour = new URL(rep.headers.get("location")!);
     expect(`${retour.origin}${retour.pathname}`).toBe(REDIRECTION_TEST);
@@ -152,12 +155,12 @@ describe("parcours OAuth de démonstration", () => {
 
     const identite = await rpc(p.url, "gsc", "tools/call", { name: "atelier_identite", arguments: {} }, corps.access_token);
     expect(identite.statut).toBe(200);
-    expect(identite.corps.result.structuredContent.propriete.id).toBe("https://www.renovation-liege.example/");
+    expect(identite.corps.result.structuredContent.propriete.id).toBe("https://www.essai.example/");
   });
 
   it("refus de l'utilisateur : redirection access_denied avec state et iss", async () => {
     const client = await enregistrerClient(p.url);
-    const { transaction } = await ouvrirConsentement(urlAutorisation(p.url, client, nouveauPkce(), "ga4"));
+    const { transaction } = await ouvrirConsentement(urlAutorisation(p.url, client, nouveauPkce(), "gsc"));
     const rep = await decider(p.url, transaction, "refuser");
     expect(rep.status).toBe(302);
     const retour = new URL(rep.headers.get("location")!);
@@ -175,7 +178,7 @@ describe("parcours OAuth de démonstration", () => {
     );
     expect(mauvaiseUri.status).toBe(400);
     expect(mauvaiseUri.headers.get("location")).toBeNull();
-    const inconnu = await fetch(urlAutorisation(p.url, { ...client, clientId: "demo-inconnu" }, pkce, "gsc"), { redirect: "manual" });
+    const inconnu = await fetch(urlAutorisation(p.url, { ...client, clientId: "local-inconnu" }, pkce, "gsc"), { redirect: "manual" });
     expect(inconnu.status).toBe(400);
     expect(inconnu.headers.get("location")).toBeNull();
   });
@@ -195,7 +198,7 @@ describe("parcours OAuth de démonstration", () => {
     const client = await enregistrerClient(p.url);
     const pkce = nouveauPkce();
     const { transaction } = await ouvrirConsentement(urlAutorisation(p.url, client, pkce, "gsc"));
-    const code = new URL((await decider(p.url, transaction, "autoriser", "sc-domain:renovation-liege.example")).headers.get("location")!).searchParams.get("code")!;
+    const code = new URL((await decider(p.url, transaction, "autoriser", "sc-domain:essai.example")).headers.get("location")!).searchParams.get("code")!;
     const faux = await echangerCode(p.url, client, code, nouveauPkce().verificateur);
     expect(faux.status).toBe(400);
     expect(((await faux.json()) as Record<string, unknown>)["error"]).toBe("invalid_grant");
@@ -207,7 +210,7 @@ describe("parcours OAuth de démonstration", () => {
     const client = await enregistrerClient(p.url);
     const pkce = nouveauPkce();
     const { transaction } = await ouvrirConsentement(urlAutorisation(p.url, client, pkce, "gsc"));
-    const code = new URL((await decider(p.url, transaction, "autoriser", "sc-domain:renovation-liege.example")).headers.get("location")!).searchParams.get("code")!;
+    const code = new URL((await decider(p.url, transaction, "autoriser", "sc-domain:essai.example")).headers.get("location")!).searchParams.get("code")!;
     const premier = await echangerCode(p.url, client, code, pkce.verificateur);
     const { access_token } = (await premier.json()) as { access_token: string };
     expect((await rpc(p.url, "gsc", "tools/list", {}, access_token)).statut).toBe(200);
@@ -221,7 +224,7 @@ describe("parcours OAuth de démonstration", () => {
     const pkce = nouveauPkce();
     const ouvrir = async () => {
       const { transaction } = await ouvrirConsentement(urlAutorisation(p.url, client, pkce, "gsc"));
-      return new URL((await decider(p.url, transaction, "autoriser", "sc-domain:renovation-liege.example")).headers.get("location")!).searchParams.get("code")!;
+      return new URL((await decider(p.url, transaction, "autoriser", "sc-domain:essai.example")).headers.get("location")!).searchParams.get("code")!;
     };
     const autreRedirection = await echangerCode(p.url, client, await ouvrir(), pkce.verificateur, { redirect_uri: "http://127.0.0.1:9/autre" });
     expect(autreRedirection.status).toBe(400);
@@ -240,8 +243,8 @@ describe("parcours OAuth de démonstration", () => {
       redirect: "manual",
     });
     expect(etrangere.status).toBe(403);
-    expect((await decider(p.url, transaction, "autoriser", "sc-domain:renovation-liege.example")).status).toBe(302);
-    expect((await decider(p.url, transaction, "autoriser", "sc-domain:renovation-liege.example")).status).toBe(400);
+    expect((await decider(p.url, transaction, "autoriser", "sc-domain:essai.example")).status).toBe(302);
+    expect((await decider(p.url, transaction, "autoriser", "sc-domain:essai.example")).status).toBe(400);
   });
 
   it("refuse une propriété qui n'appartient pas au service", async () => {
@@ -251,7 +254,7 @@ describe("parcours OAuth de démonstration", () => {
   });
 
   it("rafraîchissement : nouveau couple de jetons, ancien refresh_token inutilisable (rotation)", async () => {
-    const j = await obtenirJetons(p.url, "gsc", "sc-domain:renovation-liege.example");
+    const j = await obtenirJetons(p.url, "gsc", "sc-domain:essai.example");
     const demande = (refresh: string, extra: Record<string, string> = {}) =>
       fetch(`${p.url}/oauth/token`, {
         method: "POST",
@@ -287,18 +290,25 @@ describe("parcours OAuth de démonstration", () => {
     const inconnu = await fetch(`${p.url}/oauth/token`, {
       method: "POST",
       headers: { "content-type": "application/x-www-form-urlencoded" },
-      body: new URLSearchParams({ grant_type: "authorization_code", client_id: "demo-inconnu" }),
+      body: new URLSearchParams({ grant_type: "authorization_code", client_id: "local-inconnu" }),
     });
     expect(inconnu.status).toBe(401);
   });
 
   it("un jeton émis pour un service n'ouvre pas un autre service (audience, RFC 8707)", async () => {
-    const j = await obtenirJetons(p.url, "gsc", "sc-domain:renovation-liege.example");
-    expect((await rpc(p.url, "gsc", "tools/list", {}, j.access_token)).statut).toBe(200);
-    const autre = await rpc(p.url, "ga4", "tools/list", {}, j.access_token);
-    expect(autre.statut).toBe(401);
-    expect(autre.entetes.get("www-authenticate")).toContain(`resource_metadata="${p.url}/.well-known/oauth-protected-resource/mcp/ga4"`);
+    const autreService = { ...fournisseurFactice(), service: "ga4", fiche: { id: "ga4", libelle: "Google Analytics 4", portees: [], proprietes: [{ id: "properties/essai", libelle: "Propriété d'essai" }] }, outils: [] };
+    const deux = await demarrer({ registre: new RegistreFournisseurs().enregistrer(fournisseurFactice()).enregistrer(autreService) });
+    try {
+      const j = await obtenirJetons(deux.url, "gsc", "sc-domain:essai.example");
+      expect((await rpc(deux.url, "gsc", "tools/list", {}, j.access_token)).statut).toBe(200);
+      const autre = await rpc(deux.url, "ga4", "tools/list", {}, j.access_token);
+      expect(autre.statut).toBe(401);
+      expect(autre.entetes.get("www-authenticate")).toContain(`resource_metadata="${deux.url}/.well-known/oauth-protected-resource/mcp/ga4"`);
+    } finally {
+      await deux.arreter();
+    }
   });
+
 });
 
 describe("état OAuth persistant (redémarrage de la passerelle)", () => {
@@ -307,10 +317,10 @@ describe("état OAuth persistant (redémarrage de la passerelle)", () => {
     const { tmpdir } = await import("node:os");
     const { join } = await import("node:path");
     const dossier = mkdtempSync(join(tmpdir(), "passerelle-etat-"));
-    const fichier = join(dossier, "oauth-demo.json");
+    const fichier = join(dossier, "oauth-local.json");
     try {
       const premiere = await demarrer({ fichierEtat: fichier });
-      const j = await obtenirJetons(premiere.url, "gsc", "sc-domain:renovation-liege.example");
+      const j = await obtenirJetons(premiere.url, "gsc", "sc-domain:essai.example");
       const port = Number(new URL(premiere.url).port);
       await premiere.arreter();
       // Laisse le client HTTP du test écarter ses connexions persistantes vers l'ancien serveur.
@@ -344,7 +354,7 @@ describe("état OAuth persistant (redémarrage de la passerelle)", () => {
     const { tmpdir } = await import("node:os");
     const { join } = await import("node:path");
     const dossier = mkdtempSync(join(tmpdir(), "passerelle-etat-"));
-    const fichier = join(dossier, "oauth-demo.json");
+    const fichier = join(dossier, "oauth-local.json");
     writeFileSync(fichier, "{pas du json");
     try {
       const p = await demarrer({ fichierEtat: fichier });

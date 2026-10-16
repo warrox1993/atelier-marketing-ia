@@ -28,9 +28,9 @@ import { DeposerDonneesConnexionEntree } from "./sources.js";
 
 /**
  * Marqueurs que seuls les simulateurs `bce`, `bnb` et `fsma` de la passerelle produisent (lot P2,
- * `passerelle/src/demo/prospection/referentiel.ts`, `EMPREINTES_PROSPECTION_DEMO`). Recopiés ici (le
- * plugin n'importe pas la passerelle ; un test vérifie l'égalité). Le lot P9 les ajoute à
- * `EMPREINTES_DEMONSTRATION` (`src/serveur/regles-donnees-demo.ts`, hors du périmètre des contrats).
+ * marqueurs des jeux d'essai de prospection). Recopiés ici (le
+ * plugin n'importe pas la passerelle). Le lot P9 les ajoute à
+ * `EMPREINTES_DEMONSTRATION` (`src/serveur/regles-donnees.ts`, hors du périmètre des contrats).
  */
 export const EMPREINTES_PROSPECTION_DEMONSTRATION = ["(démonstration)", "demo-prospection.example", "@exemple.invalid"] as const;
 

@@ -16,12 +16,9 @@ import { analyserNumero } from "../../../commun/prospection/numeros.js";
 import type { CentroidesOsm, PositionApprox } from "../osm/centroides.js";
 import { IndexBce, TAILLE_PAGE } from "./index.js";
 
-export const FICHE_BCE = {
-  id: "bce",
-  libelle: "BCE Open Data (entreprises belges)",
-  portees: ["bce:lecture"],
-  proprietesDemo: [{ id: "registre/demo-bce", libelle: "Fichier BCE de démonstration (entreprises fictives)" }],
-} as const;
+// La fiche est déclarée dans services.ts (fiches livrées par défaut) ; ré-exportée ici pour les importations existantes.
+import { FICHE_BCE } from "../../../services.js";
+export { FICHE_BCE };
 
 export const PROPRIETE_BCE_REEL = { id: "registre/bce-local", libelle: "Index BCE local (BCE Open Data)" } as const;
 

@@ -76,6 +76,7 @@ export const LIBELLES_EVENEMENTS: Readonly<Record<string, string>> = {
   "approbation.refusee_plafond": "Approbation refusée par le serveur : plafond publicitaire",
   "budget_ia.modifie": "Budget IA natif modifié par l'humain",
   "demonstration.reinitialisee": "Démonstration remise à zéro",
+  "donnees.reinitialisees": "Données de l'atelier remises à zéro",
   "equipe.demande": "Demande envoyée au Coordinateur",
 };
 

@@ -1,6 +1,6 @@
 /**
  * Mise en place du client : un parcours en six étapes, avec barre de progression, qui remplace la mise
- * en place éparpillée (fiche, connexions, base clients, documents, plafonds, passage au réel).
+ * en place éparpillée (fiche, connexions, base clients, documents, plafonds, connexions).
  *
  * Aucune nouvelle source de vérité : l'état de chaque étape est lu sur les routes des écrans actuels,
  * et les formulaires sont ceux de ces écrans, réutilisés tels quels.
@@ -9,7 +9,7 @@
  * - base clients : `GET /base-clients` ;
  * - documents : `GET /connaissances/statut` ;
  * - plafonds et budget : `atelier.reglages` (plafond publicitaire choisi ou non) ;
- * - passage au réel : `GET /realite` (route `realite.etat`).
+ * - connexions : `GET /realite` (route `realite.etat`).
  *
  * L'étape courante est la première qui n'est pas faite. Une étape facultative non faite n'est pas
  * bloquante, mais elle reste « non faite » pour la progression.
@@ -55,7 +55,7 @@ export interface EntreesParcours {
   reglages: ReglagesEntreprise | null;
   baseClients: { existe: boolean; clients: number } | null;
   connaissances: Pick<StatutConnaissances, "documents"> | null;
-  /** Nombre de services de la passerelle reliés (ou en démonstration) ; `null` : connexions non lues. */
+  /** Nombre de services de la passerelle reliés ; `null` : connexions non lues. */
   nbServices: number | null;
   sourcesReelles: NonNullable<Diagnostic["sourcesReelles"]> | null;
   realite: LectureRealite;
@@ -109,7 +109,7 @@ export function calculerEtapes(e: EntreesParcours): EtapeCalculee[] {
     {
       cle: "sources",
       titre: "Sources et connexions",
-      pourquoi: "Sans service relié ni source réelle, les agents travaillent sur de la démonstration. Reliez au moins un service (analyse, réseaux sociaux ou CRM) pour qu'ils lisent de vraies données.",
+      pourquoi: "Sans service relié ni source réelle, les agents n'ont aucune donnée à lire. Reliez au moins un service (analyse, réseaux sociaux ou CRM) pour qu'ils lisent de vraies données.",
       detail: detailSources(e.nbServices, e.sourcesReelles),
       etat: lu(sourcesLues, (e.nbServices ?? 0) > 0 || nbSourcesReelles > 0),
     },
@@ -136,9 +136,9 @@ export function calculerEtapes(e: EntreesParcours): EtapeCalculee[] {
     },
     {
       cle: "reel",
-      titre: "Passage au réel",
-      pourquoi: "Vue d'ensemble de ce qui est encore en démonstration ou à fournir avant de travailler sur la réalité : qui doit agir et ce que chaque branchement débloque.",
-      detail: manquants ? (manquants.length === 0 ? "Tous les branchements sont en réel." : `${pluriel(manquants.length, "branchement manquant", "branchements manquants")} sur ${e.realite.etat === "pret" ? e.realite.branchements.length : 0}.`) : "État du passage au réel non lu.",
+      titre: "Connexions",
+      pourquoi: "Vue d'ensemble de ce qui est branché, de ce qui ne l'est pas encore et de ce qui est à fournir : qui doit agir et ce que chaque connexion débloque.",
+      detail: manquants ? (manquants.length === 0 ? "Toutes les sources sont connectées." : `${pluriel(manquants.length, "connexion à établir", "connexions à établir")} sur ${e.realite.etat === "pret" ? e.realite.branchements.length : 0}.`) : "État des connexions non lu.",
       etat: manquants ? (manquants.length === 0 ? "fait" : "a_faire") : "inconnu",
     },
   ];
@@ -328,7 +328,7 @@ function ContenuEtape(p: PropsContenu) {
           <RecapPassageAuReel lecture={p.realite} relire={p.onRelireRealite} />
           <p>
             <LienHote vers={LIEN_PASSAGE_AU_REEL} className="atl-bouton">
-              Ouvrir le passage au réel
+              Ouvrir les connexions
             </LienHote>
           </p>
         </>

@@ -298,7 +298,7 @@ export function etatDepuisConnexion(c: ConnexionNative): { etat: EtatConnexion; 
   if (c.sante === "failed" || c.sante === "error" || c.sante === "missing_secret") {
     return { etat: "erreur", detail: c.messageSante ? `Dernière vérification en échec : ${c.messageSante}` : "Dernière vérification en échec." };
   }
-  if (c.mode === "demonstration") return { etat: "demonstration", detail: "Passerelle en démonstration : aucune donnée réelle, aucun appel externe." };
+  if (c.mode === "demonstration") return { etat: "non_connecte", detail: "Aucun accès réel au service : terminez l'autorisation avec « Connecter » pour le brancher." };
   if (c.sante === "ok" && c.dernierUsage) return { etat: "reel_teste", detail: "Passerelle réelle : au moins un appel d'outil enregistré par Paperclip (l'issue de cet appel n'est pas relue ici)." };
   return { etat: "configure_non_verifie", detail: "Passerelle réelle connectée ; aucun appel d'outil enregistré à ce jour." };
 }

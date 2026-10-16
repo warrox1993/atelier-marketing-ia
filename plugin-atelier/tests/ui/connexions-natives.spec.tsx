@@ -157,13 +157,16 @@ describe("connexions créées par les cartes de galerie natives", () => {
     const ailleurs = { ...CARTES.connections[0], config: { ...(CARTES.connections[0]!.config as object), url: "https://passerelle.example/mcp/gsc" } };
     expect(analyserConnexion(ailleurs)?.service).toBe("gsc");
     const lignes = lignesServices(lues.filter((x): x is ConnexionNative => x !== null));
-    expect(lignes.find((l) => l.cle === "gsc")).toMatchObject({ etat: "demonstration", mode: "demonstration", connexionId: CARTES.connections[0]!.id });
+    expect(lignes.find((l) => l.cle === "gsc")).toMatchObject({ etat: "non_connecte", mode: "demonstration", connexionId: CARTES.connections[0]!.id });
   });
 });
 
 describe("module connexions-natives : correspondance avec les six états", () => {
   const base: ConnexionNative = { id: "x", nom: "x", statut: "active", activee: true, sante: "ok", messageSante: null, verifieLe: "2026-10-15T14:00:00.000Z", dernierUsage: null, service: "gsc", carte: false, mode: "demonstration" };
-  it("démonstration", () => expect(etatDepuisConnexion(base).etat).toBe("demonstration"));
+  it("sans accès réel : non connecté, jamais un état simulé", () => {
+    expect(etatDepuisConnexion(base).etat).toBe("non_connecte");
+    expect(etatDepuisConnexion(base).detail).not.toMatch(/démo|simul/i);
+  });
   it("réel : testé seulement après un appel d'outil enregistré, sinon configuré non vérifié", () => {
     expect(etatDepuisConnexion({ ...base, mode: "reel" }).etat).toBe("configure_non_verifie");
     expect(etatDepuisConnexion({ ...base, mode: "reel", dernierUsage: "2026-10-15T15:00:00.000Z" }).etat).toBe("reel_teste");
@@ -178,7 +181,7 @@ describe("module connexions-natives : correspondance avec les six états", () =>
   it("onze services, toujours dans le même ordre ; la meilleure connexion l'emporte", () => {
     const lignes = lignesServices([{ ...base, id: "vieille", statut: "draft", activee: false, sante: "error" }, { ...base, id: "bonne" }]);
     expect(lignes.map((l) => l.cle)).toEqual(["gsc", "ga4", "ads", "gbp", "facebook", "instagram", "linkedin", "crm", "pipedrive", "odoo", "teamleader"]);
-    expect(lignes[0]).toMatchObject({ etat: "demonstration", connexionId: "bonne" });
+    expect(lignes[0]).toMatchObject({ etat: "non_connecte", connexionId: "bonne" });
     expect(lignes[1]).toMatchObject({ etat: "non_connecte", connexionId: null });
   });
   it("recherche Web : disponible en mode réel, non vérifié ; jamais « non implémenté »", () => {
@@ -216,17 +219,17 @@ describe("page Paramètres : tableau des connexions natives", () => {
     expect(pont.navigations).toContain("/apps/connect?source=atelier-google-search-console");
   });
 
-  it("connexions réelles de l'instance : démonstration active, brouillon et services absents distingués", async () => {
+  it("connexions de l'instance : sans accès réel, brouillon et services absents distingués", async () => {
     stubReseau({ connexions: { corps: CONNEXIONS }, agents: { corps: AGENTS } });
     const c = await pageParametres();
     const gsc = ligne(c, "Google Search Console");
-    expect(gsc.textContent).toContain("Démonstration");
-    expect(gsc.textContent).toContain("Passerelle : Démonstration");
+    expect(gsc.textContent).toContain("Non connecté");
+    expect(gsc.textContent).not.toMatch(/démo/i);
     expect(gsc.textContent).toContain("Santé : Bonne");
     expect(gsc.querySelector("time")?.getAttribute("datetime")).toMatch(/^2026-10-15T/u);
     const idGsc = String(CONNEXIONS.connections.find((x) => String(x.name).startsWith("Search Console"))!.id);
-    expect(parTexte(gsc, "a", "Gérer").getAttribute("href")).toBe(`/RNO/apps/${idGsc}/permissions`);
-    expect(ligne(c, "Google Analytics 4").textContent).toContain("Démonstration");
+    expect(parTexte(gsc, "a", "Connecter").getAttribute("href")).toBe(`/RNO/apps/connect?source=atelier-google-search-console&resume=${idGsc}`);
+    expect(ligne(c, "Google Analytics 4").textContent).toContain("Non connecté");
     const fb = ligne(c, "Facebook");
     expect(fb.textContent).toContain("Non connecté");
     expect(fb.textContent).toContain("autorisation non terminée");
@@ -267,7 +270,7 @@ describe("page Paramètres : tableau des connexions natives", () => {
     const c = await pageParametres();
     const gsc = ligne(c, "Google Search Console");
     expect(gsc.textContent).toContain("Prêt, pas encore utilisé");
-    expect(gsc.textContent).toContain("Passerelle : Réel");
+    expect(gsc.textContent).not.toContain("Passerelle :");
   });
 
   it("recherche Web : disponible en mode réel (outil natif de l'agent), non vérifié ; jamais « non implémenté »", async () => {
@@ -295,7 +298,7 @@ describe("page Paramètres : tableau des connexions natives", () => {
     stubReseau({ connexions: { corps: CONNEXIONS }, agents: { corps: AGENTS } });
     const c = await pageParametres();
     expect(ligne(c, "Lecture d'URL protégée").textContent).toContain("Implémenté et testé");
-    expect(ligne(c, "Lecture d'URL protégée").textContent).toContain("Démonstration");
+    expect(ligne(c, "Lecture d'URL protégée").textContent).toContain("Non connecté");
     // L'exemple de diagnostic ne contient pas « diffusion » : rien n'est inventé par l'interface.
     expect(Array.from(c.querySelectorAll("tbody th")).some((t) => t.textContent?.startsWith("Diffusion"))).toBe(false);
   });

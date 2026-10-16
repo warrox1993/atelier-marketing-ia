@@ -2,8 +2,7 @@
 
 import { readFileSync } from "node:fs";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { donnees as donneesDemo } from "../social-crm/aide.js";
-import { appeler, clientMcp, connecter, forme, monter, type Montage } from "./aide.js";
+import { appeler, clientMcp, connecter, monter, type Montage } from "./aide.js";
 import { CLE_API_ODOO, CLE_API_PIPEDRIVE, SECRETS_EMIS } from "./faux-plateformes.js";
 
 let m: Montage;
@@ -13,12 +12,6 @@ beforeAll(async () => {
 afterAll(async () => {
   await m.arreter();
 });
-
-/** Les clés de la réponse réelle sont celles de L7 (mêmes objets imbriqués), valeurs ignorées. */
-async function memeForme(service: string, outil: string, argsDemo: Record<string, unknown>, reel: Record<string, unknown>): Promise<void> {
-  const demo = await donneesDemo(service, outil, argsDemo);
-  expect(forme(reel)).toEqual(forme(demo));
-}
 
 const SEPT = { debut: "2026-09-01", fin: "2026-09-30" };
 
@@ -88,7 +81,6 @@ describe("Facebook (Pages)", () => {
     expect(pub.erreur, pub.texte).toBe(false);
     expect(pub.donnees.data.map((p: { id: string }) => p.id)).toEqual(["1000_3", "1000_2"]);
     expect(pub.donnees.data[1].shares).toEqual({ count: 0 }); // Meta omet shares quand il n'y en a pas
-    await memeForme("facebook", "facebook_publications", { ...SEPT, limit: 2 }, pub.donnees);
     // Pagination : l'adresse next de Meta contient le jeton de Page ; la passerelle le retire.
     expect(pub.donnees.paging.next).toBeDefined();
     expect(pub.donnees.paging.next).not.toContain("access_token");
@@ -102,7 +94,6 @@ describe("Facebook (Pages)", () => {
     expect(ins.erreur, ins.texte).toBe(false);
     expect(ins.donnees.data[0].values).toHaveLength(120);
     expect(m.faux.appelsVers("GET /meta-graph/v26.0/100000000000001/insights")).toHaveLength(2);
-    await memeForme("facebook", "facebook_insights_page", { debut: "2026-09-01", fin: "2026-09-02" }, ins.donnees);
     await c.close();
   });
 });
@@ -115,11 +106,8 @@ describe("Instagram professionnel", () => {
     expect(medias.erreur, medias.texte).toBe(false);
     expect(medias.donnees.data).toHaveLength(3);
     expect(medias.donnees.data[2].caption).toBeNull();
-    await memeForme("instagram", "instagram_medias", SEPT, medias.donnees);
     const ins = await appeler(c, "instagram_insights_media", { media_id: "17900000000000" });
     expect(ins.erreur, ins.texte).toBe(false);
-    const idDemo = (await donneesDemo("instagram", "instagram_medias", SEPT)).data[0].id;
-    await memeForme("instagram", "instagram_insights_media", { media_id: idDemo }, ins.donnees);
     const absent = await appeler(c, "instagram_insights_media", { media_id: "404" });
     expect(absent.erreur).toBe(true);
     expect(absent.texte).toMatch(/introuvable/);
@@ -139,14 +127,11 @@ describe("LinkedIn (pages)", () => {
     const suite = await appeler(c, "linkedin_publications", { debut: "2026-05-04", fin: "2026-09-30", start: 100, count: 100 });
     expect(suite.donnees.elements).toHaveLength(50);
     expect(m.faux.appelsVers("GET /linkedin-api/rest/posts").length).toBeGreaterThanOrEqual(3);
-    await memeForme("linkedin", "linkedin_publications", { ...SEPT, start: 0, count: 2 }, { ...r.donnees, elements: r.donnees.elements.slice(0, 1) });
 
     const total = await appeler(c, "linkedin_statistiques", SEPT);
     expect(total.donnees.elements[0].totalShareStatistics).toMatchObject({ impressionCount: 3000, clickCount: 60, uniqueImpressionsCount: null });
-    await memeForme("linkedin", "linkedin_statistiques", SEPT, total.donnees);
     const jours = await appeler(c, "linkedin_statistiques", { ...SEPT, granularite: "DAY" });
     expect(jours.donnees.elements).toHaveLength(30);
-    await memeForme("linkedin", "linkedin_statistiques", { ...SEPT, granularite: "DAY" }, jours.donnees);
     const parPub = await appeler(c, "linkedin_statistiques", { ...SEPT, partages: ["urn:li:share:1000000"] });
     expect(parPub.donnees.elements[0]).toMatchObject({ share: "urn:li:share:1000000", totalShareStatistics: { likeCount: 14 } });
     await c.close();
@@ -161,7 +146,6 @@ describe("HubSpot (crm)", () => {
     expect(page1.erreur, page1.texte).toBe(false);
     expect(page1.donnees.results.map((x: { id: string }) => x.id)).toEqual(["101", "102"]);
     expect(page1.donnees.results[0].properties.etablissement).toBeNull();
-    await memeForme("crm", "crm_contacts", { ...SEPT, limit: 2 }, page1.donnees);
     const page2 = await appeler(c, "crm_contacts", { ...SEPT, limit: 2, after: page1.donnees.paging.next.after });
     expect(page2.donnees.results.map((x: { id: string }) => x.id)).toEqual(["103"]);
     expect(page2.donnees.paging).toBeUndefined();
@@ -170,7 +154,6 @@ describe("HubSpot (crm)", () => {
 
     const affaires = await appeler(c, "crm_transactions", SEPT);
     expect(affaires.donnees.results[0].associations).toEqual({ contacts: { results: [{ id: "101", type: "deal_to_contact" }] } });
-    await memeForme("crm", "crm_transactions", { ...SEPT, limit: 100 }, affaires.donnees);
 
     const passe = await appeler(c, "crm_contacts", { ...SEPT, au: "2026-09-30" });
     expect(passe.erreur).toBe(true);
@@ -188,7 +171,6 @@ describe("Pipedrive", () => {
     expect(r.donnees.data.map((p: { name: string }) => p.name)).toEqual(["Alice Dupont"]);
     expect(r.donnees.data[0]).toMatchObject({ add_time: "2026-09-02 09:00:00", email: [{ value: "alice@exemple.invalid", primary: true, label: "work" }], localite: "Liège" });
     expect(r.donnees.additional_data.pagination).toEqual({ start: 0, limit: 1, more_items_in_collection: true, next_start: 1 });
-    await memeForme("pipedrive", "pipedrive_personnes", { ...SEPT, start: 0, limit: 1 }, r.donnees);
     // updated_since au début de la période, tri par création, au moins deux pages de curseur.
     const appels = m.faux.appelsVers("GET /pipedrive-societe/acme/api/v2/persons");
     expect(appels[0]!.requete.get("updated_since")).toBe("2026-09-01T00:00:00Z");
@@ -196,7 +178,6 @@ describe("Pipedrive", () => {
     expect(appels[0]!.entetes.authorization).toBe(`Bearer ${SECRETS_EMIS.pipedrive}`);
     const affaires = await appeler(c, "pipedrive_affaires", { ...SEPT, start: 0, limit: 10 });
     expect(affaires.donnees.data[0]).toMatchObject({ status: "won", person_id: 2, won_time: "2026-09-20 10:00:00" });
-    await memeForme("pipedrive", "pipedrive_affaires", { ...SEPT, start: 0, limit: 500 }, affaires.donnees);
     await c.close();
   });
 
@@ -227,10 +208,6 @@ describe("Odoo", () => {
     expect(r.donnees.id).toBe(7);
     expect(r.donnees.result.map((l: { id: number }) => l.id)).toEqual([25, 26]); // le lead archivé est exclu, comme dans Odoo
     expect(r.donnees.result[0].stage_id).toEqual([3, "Proposition"]);
-    // Toute l'année : on y trouve des devis gagnés et perdus, donc tous les champs du simulateur (dont probability).
-    const demo = await donneesDemo("odoo", "odoo_leads_search_read", { debut: "2026-01-01", fin: "2026-09-30", limit: 500, domain: [["active", "in", [true, false]]] });
-    const clesDemo = new Set((demo.result as Record<string, unknown>[]).flatMap((l) => Object.keys(l)));
-    expect(Object.keys(r.donnees.result[0]).filter((k) => !clesDemo.has(k))).toEqual([]);
     const appel = m.odoo19.appels.find((a) => a.chemin === "/json/2/crm.lead/search_read")!;
     expect(JSON.parse(appel.corps).domain.slice(0, 2)).toEqual([["create_date", ">=", "2026-09-01 00:00:00"], ["create_date", "<", "2026-10-01 00:00:00"]]);
     const archives = await appeler(c, "odoo_leads_search_read", { ...SEPT, domain: [["active", "=", false]] });
@@ -260,12 +237,10 @@ describe("Teamleader Focus", () => {
     const r = await appeler(c, "teamleader_contacts", { ...SEPT, page: { size: 2, number: 1 } });
     expect(r.erreur, r.texte).toBe(false);
     expect(r.donnees.data).toHaveLength(2);
-    await memeForme("teamleader", "teamleader_contacts", SEPT, r.donnees);
     const p2 = await appeler(c, "teamleader_contacts", { ...SEPT, page: { size: 2, number: 2 } });
     expect(p2.donnees.data).toHaveLength(1);
     const d = await appeler(c, "teamleader_deals", SEPT);
     expect(d.donnees.data[0]).toMatchObject({ status: "open", estimated_value: { amount: 9300, currency: "EUR" } });
-    await memeForme("teamleader", "teamleader_deals", SEPT, d.donnees);
     await c.close();
   });
 });

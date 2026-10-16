@@ -16,12 +16,9 @@ import { outilLecture } from "../../../commun/prospection/commun.js";
 import { analyserNumero } from "../../../commun/prospection/numeros.js";
 import { ClientBnb, ErreurBnb, type ReferenceBnb, type RubriqueBnb } from "./client.js";
 
-export const FICHE_BNB = {
-  id: "bnb",
-  libelle: "Centrale des bilans (BNB)",
-  portees: ["bnb:lecture"],
-  proprietesDemo: [{ id: "centrale/demo-bnb", libelle: "Comptes annuels de démonstration (entreprises fictives)" }],
-} as const;
+// La fiche est déclarée dans services.ts (fiches livrées par défaut) ; ré-exportée ici pour les importations existantes.
+import { FICHE_BNB } from "../../../services.js";
+export { FICHE_BNB };
 
 export const PROPRIETE_BNB_REEL = { id: "centrale/bnb-reel", libelle: "Centrale des bilans de la BNB (service Query authentic data)" } as const;
 

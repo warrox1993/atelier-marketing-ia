@@ -37,8 +37,8 @@ describe("relance : règles de l'interface", () => {
     expect(raisonRelance(epuise(), { ...saisieVide, commentaire: "x" })).toBe("Choisissez au moins un levier.");
     expect(raisonRelance(epuise(), { ...saisieVide, commentaire: "x", consigne: true, texteConsigne: "Ajouter Seraing." })).toBeNull();
   });
-  it("montée impossible pour un agent de démonstration : raison du serveur affichée", () => {
-    expect(raisonRelance(epuise(), { ...saisieVide, commentaire: "x", escalade: true })).toContain("Agent de démonstration");
+  it("montée impossible pour un producteur sans modèle : raison du serveur affichée", () => {
+    expect(raisonRelance(epuise(), { ...saisieVide, commentaire: "x", escalade: true })).toContain("Producteur sans modèle");
   });
   it("une version corrigée identique à la révision courante est refusée", () => {
     expect(raisonRelance(epuise(), { ...saisieVide, commentaire: "x", version: true, corps: base.livrable!.corps })).toContain("identique");
@@ -166,7 +166,7 @@ describe("dossier : relance, rejet et diffusion", () => {
     expect(c.textContent).toContain("annulée dans la même opération");
   });
 
-  it("diffuser : visible et désactivé sans approbation ; simulé après approbation en démonstration", async () => {
+  it("diffuser : visible et désactivé sans approbation ; l'état renvoyé est dit sans vocabulaire de démonstration", async () => {
     const c1 = await dossier(base);
     const b1 = parTexte(c1, "button", "Diffuser");
     expect(b1.getAttribute("aria-disabled")).toBe("true");
@@ -179,7 +179,8 @@ describe("dossier : relance, rejet et diffusion", () => {
     const c2 = await dossier({ ...base, statut: { statut: "approved", motif: "" }, decisions: [approbation] });
     await cliquer(parTexte(c2, "button", "Diffuser"));
     expect(pont.appelsActions.find((a) => a.cle === "atelier.diffusion.demander")?.params).toMatchObject({ issueId: T, revisionId: R2, action: "publier", canal: "site", cleIdempotence: `interface-${approbation.id}` });
-    expect(c2.textContent).toContain("Diffusion simulée (démonstration) : rien n'a été envoyé.");
+    expect(c2.textContent).toContain("Diffusion : Non diffusée.");
+    expect(c2.textContent).not.toContain("Diffusion simulée");
   });
 
   it("diffusion déjà préparée : action CRM en français, service et outil visés affichés sobrement", async () => {

@@ -101,7 +101,6 @@ export function DecisionPanneau({ dossier: d, onFait, integre = false }: { dossi
           suite += ` La transition de la tâche Paperclip a été refusée par le serveur (${m}) : ouvrez la tâche native pour la traiter.`;
         }
       }
-      if (d.mode === "demonstration") suite += " Démonstration : aucune diffusion n'a été déclenchée.";
       setResultat(suite);
       setCommentaire("");
       onFait(suite);
@@ -206,7 +205,6 @@ export function DecisionPanneau({ dossier: d, onFait, integre = false }: { dossi
             ) : null}
           </fieldset>
         ) : null}
-        {d.mode === "demonstration" ? <p className="atl-aide">Démonstration : la décision est enregistrée, toute diffusion reste simulée.</p> : null}
         <Bouton type="submit" variante={choix === "rejeter" ? "danger" : "principal"} raisonDesactive={raison} enCours={enCours}>
           Enregistrer : {(ACTIONS_HUMAINES[choix] ?? choix).toLowerCase()}
         </Bouton>

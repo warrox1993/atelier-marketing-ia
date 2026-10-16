@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { lireMode, lirePort, lireReglages, lireServicesReels, verifierHoteEcoute } from "../src/config.js";
+import { lirePort, lireReglages, lireServicesLocaux, verifierAncienMode, verifierHoteEcoute } from "../src/config.js";
 import { creerServeur } from "../src/serveur.js";
 
 describe("garde « boucle locale seulement »", () => {
@@ -16,8 +16,8 @@ describe("garde « boucle locale seulement »", () => {
   );
 
   it("le serveur refuse de se construire sur une adresse non locale", () => {
-    expect(() => creerServeur({ mode: "demonstration", hote: "0.0.0.0", port: 0 })).toThrow(/boucle locale/);
-    expect(() => creerServeur({ mode: "demonstration", hote: "192.168.1.10", port: 0 })).toThrow(/boucle locale/);
+    expect(() => creerServeur({ hote: "0.0.0.0", port: 0 })).toThrow(/boucle locale/);
+    expect(() => creerServeur({ hote: "192.168.1.10", port: 0 })).toThrow(/boucle locale/);
   });
 
   it("lireReglages refuse PASSERELLE_HOTE hors boucle locale", () => {
@@ -26,13 +26,19 @@ describe("garde « boucle locale seulement »", () => {
 });
 
 describe("réglages par l'environnement", () => {
-  it("valeurs par défaut : démonstration, 127.0.0.1, 3190", () => {
-    expect(lireReglages({})).toEqual({ mode: "demonstration", hote: "127.0.0.1", port: 3190 });
+  it("valeurs par défaut : 127.0.0.1, 3190 (il n'y a plus de mode)", () => {
+    expect(lireReglages({})).toEqual({ hote: "127.0.0.1", port: 3190 });
   });
 
-  it("mode : demonstration ou reel seulement", () => {
-    expect(lireMode("reel")).toBe("reel");
-    expect(() => lireMode("test")).toThrow(/Mode inconnu/);
+  it("le mode démonstration est retiré : PASSERELLE_MODE=demonstration est refusé avec un message clair", () => {
+    expect(() => lireReglages({ PASSERELLE_MODE: "demonstration" })).toThrow(/mode démonstration a été retiré.*non_connecte/);
+    expect(() => verifierAncienMode("test")).toThrow(/n'est plus un réglage reconnu/);
+  });
+
+  it("ancien réglage PASSERELLE_MODE=reel (ou absent) : accepté et sans effet", () => {
+    expect(lireReglages({ PASSERELLE_MODE: "reel" })).toEqual({ hote: "127.0.0.1", port: 3190 });
+    expect(() => verifierAncienMode("")).not.toThrow();
+    expect(() => verifierAncienMode(undefined)).not.toThrow();
   });
 
   it("port : entier de 0 à 65535", () => {
@@ -43,20 +49,20 @@ describe("réglages par l'environnement", () => {
   });
 });
 
-describe("services réels en mélange : liens", () => {
+describe("services locaux : liens", () => {
   it("liens est permis, sans compte de tiers, seul ou avec osm", () => {
-    expect(lireServicesReels({ PASSERELLE_SERVICES_REELS: "liens" })).toEqual(["liens"]);
-    expect(lireServicesReels({ PASSERELLE_SERVICES_REELS: "osm liens" })).toEqual(["osm", "liens"]);
-    expect(() => lireServicesReels({ PASSERELLE_SERVICES_REELS: "liens,gsc" })).toThrow(/gsc.*non permis/);
+    expect(lireServicesLocaux({ PASSERELLE_SERVICES_REELS: "liens" })).toEqual(["liens"]);
+    expect(lireServicesLocaux({ PASSERELLE_SERVICES_REELS: "osm liens" })).toEqual(["osm", "liens"]);
+    expect(() => lireServicesLocaux({ PASSERELLE_SERVICES_REELS: "liens,gsc" })).toThrow(/gsc.*non permis/);
   });
 });
 
-describe("services réels en mélange : bce et bnb", () => {
-  it("bce et bnb sont permis en mélange avec osm et liens", () => {
-    expect(lireServicesReels({ PASSERELLE_SERVICES_REELS: "osm,liens,bce,bnb" })).toEqual(["osm", "liens", "bce", "bnb"]);
+describe("services locaux : bce et bnb", () => {
+  it("bce et bnb sont permis avec osm et liens", () => {
+    expect(lireServicesLocaux({ PASSERELLE_SERVICES_REELS: "osm,liens,bce,bnb" })).toEqual(["osm", "liens", "bce", "bnb"]);
   });
-  it("un service inconnu ou non mélangeable reste refusé", () => {
-    expect(() => lireServicesReels({ PASSERELLE_SERVICES_REELS: "bce,inconnu" })).toThrow(/inconnu.*non permis/);
-    expect(() => lireServicesReels({ PASSERELLE_SERVICES_REELS: "fsma" })).toThrow(/fsma.*non permis/);
+  it("un service inconnu ou de tiers reste refusé", () => {
+    expect(() => lireServicesLocaux({ PASSERELLE_SERVICES_REELS: "bce,inconnu" })).toThrow(/inconnu.*non permis/);
+    expect(() => lireServicesLocaux({ PASSERELLE_SERVICES_REELS: "fsma" })).toThrow(/fsma.*non permis/);
   });
 });
