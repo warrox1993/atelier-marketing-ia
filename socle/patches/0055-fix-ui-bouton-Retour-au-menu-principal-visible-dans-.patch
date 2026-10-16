@@ -1,0 +1,45 @@
+From 6ec0cbdce6aec732afbf88b73ec287ae2583f26b Mon Sep 17 00:00:00 2001
+From: Jean-Baptiste Dhondt <114347858+warrox1993@users.noreply.github.com>
+Date: Fri, 16 Oct 2026 20:14:42 +0200
+Subject: [PATCH] =?UTF-8?q?fix(ui):=20bouton=20=C2=AB=20Retour=20au=20menu?=
+ =?UTF-8?q?=20principal=20=C2=BB=20visible=20dans=20les=20barres=20context?=
+ =?UTF-8?q?uelles=20(atelier,=20r=C3=A9glages)?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01DP85vPq2MHkZg8VNtRvCzB
+---
+ ui/src/components/ContextualSidebarFrame.tsx | 8 +++++---
+ 1 file changed, 5 insertions(+), 3 deletions(-)
+
+diff --git a/ui/src/components/ContextualSidebarFrame.tsx b/ui/src/components/ContextualSidebarFrame.tsx
+index f7a48968a..3821e4a4e 100644
+--- a/ui/src/components/ContextualSidebarFrame.tsx
++++ b/ui/src/components/ContextualSidebarFrame.tsx
+@@ -51,16 +51,18 @@ export function ContextualSidebarFrame({
+             <button
+               type="button"
+               onClick={goBack}
+-              className="flex items-center gap-1.5 rounded-md px-2 py-1 text-left text-xs text-muted-foreground transition-colors hover:bg-background hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
++              className="flex items-center gap-1.5 rounded-md border border-border bg-background px-2 py-1.5 text-left text-sm font-medium text-foreground transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+               aria-label={`Back from ${title}`}
+             >
+-              <ChevronLeft className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+-              <span className="truncate">{selectedCompany?.name ?? "Organization"}</span>
++              {/* Seule sortie de la barre contextuelle : libellé explicite, l'ancien nom d'entreprise en gris passait inaperçu. */}
++              <ChevronLeft className="h-4 w-4 shrink-0" aria-hidden="true" />
++              <span className="truncate">Retour au menu principal</span>
+             </button>
+             <div className="flex min-w-0 items-center gap-2 px-2 py-1">
+               {Icon ? <Icon className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" /> : null}
+               <span className="min-w-0 flex-1 truncate text-sm font-bold text-foreground">{title}</span>
+             </div>
++            <span className="truncate px-2 text-xs text-muted-foreground">{selectedCompany?.name ?? "Organization"}</span>
+           </div>
+         ) : null}
+         {children}
+-- 
+2.53.0
+
