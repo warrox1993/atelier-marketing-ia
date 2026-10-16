@@ -106,52 +106,101 @@ describe("paramètres : plafond de l'entreprise", () => {
   });
 });
 
-describe("paramètres : coûts IA = budgets natifs de Paperclip", () => {
-  it("« aucune limite » écrit 0 dans l'API native puis est tracé par le plugin", async () => {
-    const appels: Array<{ methode: string; url: string; corps: unknown }> = [];
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async (url: string, init?: { method?: string; body?: string }) => {
-        appels.push({ methode: init?.method ?? "GET", url, corps: init?.body ? JSON.parse(init.body) : null });
-        if (url === `/api/companies/${ENTREPRISE}`) return new Response(JSON.stringify({ id: ENTREPRISE, name: "Entreprise", budgetMonthlyCents: 5000 }), { status: 200 });
-        if (url === `/api/companies/${ENTREPRISE}/agents`) return new Response(JSON.stringify([{ id: AGENT, name: "Contenus", budgetMonthlyCents: 1500, status: "idle" }]), { status: 200 });
-        return new Response("{}", { status: 200 });
-      }),
-    );
+const ligneTableau = (c: ParentNode, nom: string) => Array.from(c.querySelectorAll("tbody tr")).find((l) => l.querySelector("th")?.textContent === nom)!;
+const champBudget = (c: ParentNode, nom: string) => c.querySelector<HTMLInputElement>(`input[aria-label="Budget mensuel de ${nom} en euros"]`)!;
+
+function simulerHote(agents: Array<{ id: string; name: string; budgetMonthlyCents: number }>, entreprise = 5000, echecAgent?: string) {
+  const appels: Array<{ methode: string; url: string; corps: unknown }> = [];
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (url: string, init?: { method?: string; body?: string }) => {
+      appels.push({ methode: init?.method ?? "GET", url, corps: init?.body ? JSON.parse(init.body) : null });
+      if (url === `/api/companies/${ENTREPRISE}`) return new Response(JSON.stringify({ id: ENTREPRISE, name: "Entreprise", budgetMonthlyCents: entreprise }), { status: 200 });
+      if (url === `/api/companies/${ENTREPRISE}/agents`) return new Response(JSON.stringify(agents.map((a) => ({ ...a, status: "idle" }))), { status: 200 });
+      if (echecAgent && url === `/api/agents/${echecAgent}/budgets`) return new Response(JSON.stringify({ error: "refusé" }), { status: 403 });
+      return new Response("{}", { status: 200 });
+    }),
+  );
+  return appels;
+}
+
+describe("paramètres : coûts IA = budgets natifs de Paperclip, un seul tableau", () => {
+  it("affiche tous les budgets dans un tableau, sans <details>, et « aucune limite » écrit 0 puis est tracé", async () => {
+    const appels = simulerHote([{ id: AGENT, name: "Contenus", budgetMonthlyCents: 1500 }]);
     pont.actions["atelier.budget-ia.tracer"] = async () => ({ portee: "agent", agentId: AGENT, budgetMensuelCents: 0, illimite: true });
     const c = await page("/RNO/atelier/parametres");
     await vi.waitFor(() => expect(c.textContent).toContain("Contenus"));
-    expect(c.textContent).toMatch(/Contenus : 15,00\s€ par mois/u);
-    expect(c.textContent).toMatch(/Entreprise : 50,00\s€ par mois/u);
-    const ligne = Array.from(c.querySelectorAll("form.atl-budget-ia")).find((f) => f.textContent?.includes("Contenus"))!;
-    await cliquer(radio(ligne, "Aucune limite"));
-    expect(ligne.querySelector('[role="note"]')?.textContent).toContain("Paperclip ne mettra plus cet agent en pause");
-    await cliquer(parTexte(ligne, "button", "Enregistrer le budget"));
+    expect(c.querySelector(".atl-budget-ia details")).toBeNull();
+    expect(ligneTableau(c, "Contenus").textContent).toMatch(/15,00\s€/u);
+    expect(ligneTableau(c, "Entreprise").textContent).toMatch(/50,00\s€/u);
+    expect(champBudget(c, "Contenus").value).toBe("15");
+    expect(parTexte(c, "button", "Enregistrer les budgets (0 modifié)").getAttribute("aria-disabled")).toBe("true");
+    await saisir(champBudget(c, "Contenus"), "");
+    expect(c.querySelector('[role="note"]')?.textContent).toContain("Contenus");
+    await cliquer(parTexte(c, "button", "Enregistrer les budgets (1 modifié)"));
     expect(appels).toContainEqual({ methode: "PATCH", url: `/api/agents/${AGENT}/budgets`, corps: { budgetMonthlyCents: 0 } });
+    expect(appels.filter((a) => a.methode === "PATCH")).toHaveLength(1);
     const trace = pont.appelsActions.find((a) => a.cle === "atelier.budget-ia.tracer");
     expect(trace?.params).toEqual({ portee: "agent", agentId: AGENT, avantCents: 1500 });
   });
-});
 
-describe("paramètres : avertissement seulement quand le choix retire le garde-fou", () => {
-  it("un budget déjà sans limite n'affiche pas l'avertissement ; passer un budget chiffré à « Aucune limite » l'affiche", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async (url: string) => {
-        if (url === `/api/companies/${ENTREPRISE}`) return new Response(JSON.stringify({ id: ENTREPRISE, name: "Entreprise", budgetMonthlyCents: 0 }), { status: 200 });
-        if (url === `/api/companies/${ENTREPRISE}/agents`) return new Response(JSON.stringify([{ id: AGENT, name: "Contenus", budgetMonthlyCents: 1500, status: "idle" }]), { status: 200 });
-        return new Response("{}", { status: 200 });
-      }),
+  it("« Appliquer à tous » recopie la valeur dans les agents (pas l'entreprise) et n'envoie que les lignes modifiées", async () => {
+    const AUTRE = "55555555-5555-4555-8555-555555555552";
+    const appels = simulerHote([
+      { id: AGENT, name: "Contenus", budgetMonthlyCents: 1500 },
+      { id: AUTRE, name: "Veille", budgetMonthlyCents: 2000 },
+    ]);
+    pont.actions["atelier.budget-ia.tracer"] = async () => ({});
+    const c = await page("/RNO/atelier/parametres");
+    await vi.waitFor(() => expect(c.textContent).toContain("Veille"));
+    await saisir(champParLibelle(c, "Même budget mensuel pour tous les agents (en euros)"), "20");
+    await cliquer(parTexte(c, "button", "Appliquer à tous"));
+    expect(champBudget(c, "Contenus").value).toBe("20");
+    expect(champBudget(c, "Veille").value).toBe("20");
+    expect(champBudget(c, "Entreprise").value).toBe("50");
+    await cliquer(parTexte(c, "button", "Enregistrer les budgets (1 modifié)"));
+    const patchs = appels.filter((a) => a.methode === "PATCH");
+    expect(patchs).toEqual([{ methode: "PATCH", url: `/api/agents/${AGENT}/budgets`, corps: { budgetMonthlyCents: 2000 } }]);
+  });
+
+  it("un échec partiel est signalé sur la ligne concernée et sa saisie est conservée", async () => {
+    const AUTRE = "55555555-5555-4555-8555-555555555552";
+    simulerHote(
+      [
+        { id: AGENT, name: "Contenus", budgetMonthlyCents: 1500 },
+        { id: AUTRE, name: "Veille", budgetMonthlyCents: 2000 },
+      ],
+      5000,
+      AUTRE,
     );
+    pont.actions["atelier.budget-ia.tracer"] = async () => ({});
+    const c = await page("/RNO/atelier/parametres");
+    await vi.waitFor(() => expect(c.textContent).toContain("Veille"));
+    await saisir(champBudget(c, "Contenus"), "30");
+    await saisir(champBudget(c, "Veille"), "40");
+    await cliquer(parTexte(c, "button", "Enregistrer les budgets (2 modifiés)"));
+    await vi.waitFor(() => expect(c.textContent).toContain("1 enregistré, 1 en échec"));
+    expect(ligneTableau(c, "Veille").textContent).toContain("budget de Veille non enregistré");
+    expect(ligneTableau(c, "Contenus").textContent).not.toContain("non enregistré");
+    expect(champBudget(c, "Veille").value).toBe("40");
+  });
+
+  it("un montant invalide bloque l'enregistrement avec la raison sur la ligne", async () => {
+    simulerHote([{ id: AGENT, name: "Contenus", budgetMonthlyCents: 1500 }]);
     const c = await page("/RNO/atelier/parametres");
     await vi.waitFor(() => expect(c.textContent).toContain("Contenus"));
-    const entreprise = Array.from(c.querySelectorAll("form.atl-budget-ia")).find((f) => f.textContent?.includes("Entreprise"))!;
-    expect(entreprise.textContent).toContain("Entreprise : aucune limite");
-    expect(entreprise.querySelector('[role="note"]')).toBeNull();
-    const agent = Array.from(c.querySelectorAll("form.atl-budget-ia")).find((f) => f.textContent?.includes("Contenus"))!;
-    expect(agent.querySelector('[role="note"]')).toBeNull();
-    await cliquer(radio(agent, "Aucune limite"));
-    expect(agent.querySelector('[role="note"]')?.textContent).toContain("Paperclip ne mettra plus cet agent en pause");
+    await saisir(champBudget(c, "Contenus"), "abc");
+    expect(ligneTableau(c, "Contenus").textContent).toContain("Montant invalide");
+    expect(c.textContent).toContain("Corriger la ligne « Contenus »");
+  });
+
+  it("l'avertissement « plus de garde-fou » n'apparaît que pour une ligne qui passe à aucune limite", async () => {
+    simulerHote([{ id: AGENT, name: "Contenus", budgetMonthlyCents: 1500 }], 0);
+    const c = await page("/RNO/atelier/parametres");
+    await vi.waitFor(() => expect(c.textContent).toContain("Contenus"));
+    expect(c.querySelector('[role="note"]')).toBeNull();
+    await saisir(champBudget(c, "Contenus"), "");
+    expect(c.querySelector('[role="note"]')?.textContent).toContain("Paperclip ne mettra plus en pause");
   });
 });
 

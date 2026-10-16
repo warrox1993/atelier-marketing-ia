@@ -5,6 +5,8 @@
 import * as z from "zod";
 import { modeleDemo, type Publication } from "../modele/index.js";
 import type { FournisseurService } from "../../fournisseurs.js";
+import { definitionsLinkedin } from "../../commun/social-crm/linkedin.js";
+import { SchemaDate } from "../modele/index.js";
 import { ajouterJours, dateDepuisMs, formePeriode, msDepuisDate, outilLecture, outilMutation, verifierPeriode } from "./utilitaires.js";
 
 const ORGANISATION_PAR_DEFAUT = "urn:li:organization:900000001";
@@ -41,6 +43,8 @@ function cumuler(publications: readonly Publication[]): Cumul {
   };
 }
 
+const DEFS = definitionsLinkedin(SchemaDate);
+
 export function fournisseurLinkedin(): FournisseurService {
   const publications = outilLecture(
     {
@@ -49,12 +53,7 @@ export function fournisseurLinkedin(): FournisseurService {
         "Publications de la page (organisation) sur une période, forme de GET /rest/posts?q=author : elements[] (id, author, " +
         "commentary, createdAt, publishedAt, lastModifiedAt, lifecycleState, visibility, distribution...) et paging (start, count, links). " +
         "Les plus récentes d'abord.",
-      schemaEntree: {
-        ...formePeriode,
-        start: z.number().int().min(0).max(1_000_000).default(0).describe("Index du premier élément (0 par défaut)."),
-        count: z.number().int().min(1).max(100).default(10).describe("Éléments par page (10 par défaut, 100 au plus)."),
-        sortBy: z.enum(["LAST_MODIFIED", "CREATED"]).default("LAST_MODIFIED").describe("Tri décroissant (identique ici : une publication n'est jamais modifiée)."),
-      },
+      schemaEntree: DEFS.linkedin_publications.schemaEntree,
     },
     ({ debut, fin, start, count, sortBy }, contexte) => {
       verifierPeriode(debut, fin);
@@ -97,12 +96,7 @@ export function fournisseurLinkedin(): FournisseurService {
         "totalShareStatistics (clickCount, commentCount, engagement, impressionCount, likeCount, shareCount, uniqueImpressionsCount) " +
         "et organizationalEntity. Sans `granularite` ni `partages` : un seul total sur la période ; avec `granularite` : une ligne " +
         "par jour ou par mois (timeRange) ; avec `partages` : une ligne par publication (champ share).",
-      schemaEntree: {
-        ...formePeriode,
-        granularite: z.enum(["DAY", "MONTH"]).optional().describe("timeIntervals.timeGranularityType : DAY ou MONTH."),
-        partages: z.array(z.string().regex(/^urn:li:share:\d{1,30}$/, "URN de partage attendu (urn:li:share:...)")).min(1).max(20).optional()
-          .describe("Publications visées (champ `id` de linkedin_publications) ; incompatible avec `granularite`."),
-      },
+      schemaEntree: DEFS.linkedin_statistiques.schemaEntree,
     },
     ({ debut, fin, granularite, partages }, contexte) => {
       verifierPeriode(debut, fin);
@@ -147,8 +141,8 @@ export function fournisseurLinkedin(): FournisseurService {
   const publier = outilMutation({
     nom: "linkedin_publier",
     description: "Prépare la publication d'un texte au nom de la page LinkedIn (organisation).",
-    schemaEntree: { commentary: z.string().min(1).max(3000).describe("Texte de la publication (champ `commentary` de l'API Posts).") },
-    destructif: true,
+    schemaEntree: DEFS.linkedin_publier.schemaEntree,
+    destructif: DEFS.linkedin_publier.destructif,
     requeteReelle: "POST /rest/posts (author = urn:li:organization:..., lifecycleState PUBLISHED)",
     resume: (a) => `publication LinkedIn de ${a.commentary.length} caractères.`,
   });

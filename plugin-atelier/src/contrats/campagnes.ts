@@ -63,7 +63,7 @@ export const CreerCampagneEntree = z.object({
   plafondPub: PlafondEntree.nullable().default(null),
   /** Ancienne saisie en centimes, conservée pour compatibilité : équivaut à `plafondPub: { type: "montant" }`. 0 est refusé. */
   budgetMaxCents: z.number().int().nonnegative().nullable().default(null),
-  mode: ModeExecution.default("demonstration"),
+  mode: ModeExecution.default("reel"),
   /** Agent coordinateur à qui confier la tâche de brief (sinon non affectée). */
   coordinateurAgentId: IdNatif.nullable().default(null),
   /**

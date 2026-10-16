@@ -18,7 +18,7 @@ import { createReadStream, existsSync, renameSync, rmSync, statSync } from "node
 import { basename } from "node:path";
 import { createInterface } from "node:readline";
 import Database from "better-sqlite3";
-import { ATTRIBUTION_OSM, LICENCE_OSM, normaliserOsm } from "../../../demo/prospection/osm-commun.js";
+import { ATTRIBUTION_OSM, LICENCE_OSM, normaliserOsm } from "../../../commun/prospection/osm-commun.js";
 import { synchroniserFichier, zoneDuCodePostal } from "../commun.js";
 import { classer } from "./categories.js";
 

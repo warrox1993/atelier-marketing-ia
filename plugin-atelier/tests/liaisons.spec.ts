@@ -12,8 +12,9 @@
  */
 import { AsyncLocalStorage } from "node:async_hooks";
 import type { PluginContext } from "@paperclipai/plugin-sdk";
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { DemandeLiaisonEntree, LIMITES_LIAISON, ROUTES_API } from "../src/contrats/index.js";
+import { DemandeLiaisonEntree, DeclarerServicesEntree, LIMITES_LIAISON, ROUTES_API } from "../src/contrats/index.js";
 import type { ActeurHote, RequeteRoute } from "../src/serveur/atelier.js";
 import type { BaseAtelier } from "../src/serveur/base.js";
 import type { ErreurAtelier } from "../src/serveur/erreurs.js";
@@ -473,6 +474,26 @@ describe("liaison.demander : isolation et entrée", () => {
       expect(await m.refus(m.demander({ ...demande(), ...extra })), JSON.stringify(extra)).toMatchObject({ code: "entree_invalide" });
     }
     expect(m.stock.liaisons).toHaveLength(0);
+  });
+});
+
+describe("services.declarer : registre complet", () => {
+  it("accepte les 28 services et les 118 flux du registre réel (une paire source-cible déclarée une seule fois)", () => {
+    const reg = JSON.parse(readFileSync(new URL("../../organisation/registre/services.json", import.meta.url), "utf8")) as {
+      services: Array<{ slug: string }>;
+      flux: Array<{ source: string; cible: string; objet: string; approbationHumaine: boolean }>;
+    };
+    expect(reg.services.length).toBe(28);
+    expect(reg.flux.length).toBe(118);
+    // La déclaration refuse deux flux sur la même paire : le registre ne doit pas en contenir.
+    expect(new Set(reg.flux.map((f) => `${f.source}>${f.cible}`)).size).toBe(reg.flux.length);
+    const r = DeclarerServicesEntree.safeParse({
+      companyId: "11111111-1111-4111-8111-111111111111",
+      clientMarqueur: "client-test",
+      entreprises: reg.services.map((x, i) => ({ companyId: `22222222-2222-4222-8222-${String(i).padStart(12, "0")}`, serviceSlug: x.slug, estDirection: x.slug === "direction" })),
+      flux: reg.flux,
+    });
+    expect(r.success, JSON.stringify(r.success ? "" : r.error.issues.slice(0, 3))).toBe(true);
   });
 });
 

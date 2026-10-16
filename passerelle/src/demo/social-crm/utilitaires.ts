@@ -4,20 +4,16 @@
 
 import * as z from "zod";
 import { SchemaDate } from "../modele/index.js";
+import { ANNOTATIONS_LECTURE, annotationsMutation, formeAuAvec, formePeriodeAvec } from "../../commun/social-crm/outils.js";
 import type { AnnotationsOutil, ContexteAppel, OutilPasserelle } from "../../fournisseurs.js";
 
 // --- Paramètres communs -------------------------------------------------------------
 
 /** Période du modèle de démonstration : les deux dates sont obligatoires (aucune horloge cachée). */
-export const formePeriode = {
-  debut: SchemaDate.describe("Premier jour de la période, AAAA-MM-JJ (modèle de démonstration : 2025-01-01 à 2027-12-31)."),
-  fin: SchemaDate.describe("Dernier jour de la période, AAAA-MM-JJ, inclus."),
-};
+export const formePeriode = formePeriodeAvec(SchemaDate);
 
 /** Date d'observation du CRM (par défaut la fin de période) : état des étapes à ce jour. */
-export const formeAu = {
-  au: SchemaDate.optional().describe("Date à laquelle on observe l'état du CRM (par défaut : la fin de période)."),
-};
+export const formeAu = formeAuAvec(SchemaDate);
 
 export function verifierPeriode(debut: string, fin: string): void {
   if (debut > fin) throw new Error("La date de début doit précéder ou égaler la date de fin.");
@@ -102,12 +98,7 @@ export function dernierSegment(identifiant: string | undefined, secours: string)
 
 // --- Annotations et outils ----------------------------------------------------------
 
-export const ANNOTATIONS_LECTURE: AnnotationsOutil = { readOnlyHint: true, idempotentHint: true, openWorldHint: false };
-
-/** Écriture : l'agent la présente à l'approbation humaine du plugin avant tout effet réel. */
-export function annotationsMutation(destructive: boolean): AnnotationsOutil {
-  return { readOnlyHint: false, destructiveHint: destructive, idempotentHint: false, openWorldHint: true };
-}
+export { ANNOTATIONS_LECTURE, annotationsMutation };
 
 export function outilLecture<S extends z.ZodRawShape>(
   definition: { nom: string; description: string; schemaEntree: S },

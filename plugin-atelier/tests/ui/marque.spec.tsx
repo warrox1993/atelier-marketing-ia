@@ -7,7 +7,7 @@ import { createElement } from "react";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { EXEMPLES_DONNEES } from "../../src/contrats/exemples/index.js";
 import { PageAtelier } from "../../src/ui/index.js";
-import { lirePosition } from "../../src/ui/vues/marque.js";
+import { lirePosition, segmentsDejaUtilises } from "../../src/ui/vues/marque.js";
 import { champParLibelle, cliquer, ENTREPRISE, installerPont, parTexte, rendre, saisir, type Pont, type Rendu } from "./pont.js";
 
 const contexte = { companyId: ENTREPRISE, companyPrefix: "RNO", projectId: null, entityId: null, entityType: null, userId: "local-board" };
@@ -85,5 +85,48 @@ describe("marque : position des établissements", () => {
     expect((champParLibelle(c, "Latitude de l'établissement 1") as HTMLInputElement).value).toBe("50,6123");
     await cliquer(parTexte(c, "button", "Enregistrer une nouvelle version"));
     expect(etablissements()[0]?.position).toEqual({ lat: 50.6123, lon: 5.5612 });
+  });
+});
+
+describe("marque : saisie allégée des offres et des établissements", () => {
+  it("duplique un établissement juste en dessous, sans son code ni sa confirmation", async () => {
+    const c = await ouvrirEditeur();
+    const nom1 = (champParLibelle(c, "Nom de l'établissement 1") as HTMLInputElement).value;
+    const nom2 = (champParLibelle(c, "Nom de l'établissement 2") as HTMLInputElement).value;
+    await cliquer(parTexte(c, "button", "Dupliquer l'établissement 1"));
+    expect((champParLibelle(c, "Nom de l'établissement 2") as HTMLInputElement).value).toBe(`${nom1} (copie)`);
+    expect((champParLibelle(c, "Nom de l'établissement 3") as HTMLInputElement).value).toBe(nom2);
+    await cliquer(parTexte(c, "button", "Enregistrer une nouvelle version"));
+    const e = etablissements();
+    expect(e[1]).not.toHaveProperty("code");
+    expect(e[1]?.confirme).toBe(false);
+  });
+
+  it("duplique une offre juste en dessous, sans son code", async () => {
+    const c = await ouvrirEditeur();
+    const nom1 = (champParLibelle(c, "Nom de l'offre 1") as HTMLInputElement).value;
+    await cliquer(parTexte(c, "button", "Dupliquer l'offre 1"));
+    expect((champParLibelle(c, "Nom de l'offre 2") as HTMLInputElement).value).toBe(`${nom1} (copie)`);
+    await cliquer(parTexte(c, "button", "Enregistrer une nouvelle version"));
+    const offres = (envoyes()[0]?.params as { offres: Array<Record<string, unknown>> }).offres;
+    expect(offres[1]).not.toHaveProperty("code");
+    expect(offres[1]?.confirmee).toBe(false);
+  });
+
+  it("préremplit les segments d'un nouveau bureau avec ceux des autres, sans doublon", async () => {
+    const c = await ouvrirEditeur();
+    await saisir(champParLibelle(c, "Segments suivis par l'établissement 1"), "proprietaires, medecins");
+    await saisir(champParLibelle(c, "Segments suivis par l'établissement 2"), "medecins, avocats");
+    const avant = c.querySelectorAll('[role="group"][aria-label^="Établissement"]').length;
+    await cliquer(parTexte(c, "button", "Ajouter un établissement"));
+    const nouveau = champParLibelle(c, `Segments suivis par l'établissement ${avant + 1}`) as HTMLInputElement;
+    expect(nouveau.value).toBe("proprietaires, medecins, avocats");
+  });
+});
+
+describe("segmentsDejaUtilises", () => {
+  it("fusionne, nettoie et dédoublonne", () => {
+    expect(segmentsDejaUtilises(["a, b", "", "b;c", " d "])).toBe("a, b, c, d");
+    expect(segmentsDejaUtilises([])).toBe("");
   });
 });

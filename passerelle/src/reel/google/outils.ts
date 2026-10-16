@@ -22,11 +22,8 @@
 //                             correspondance HTTP de google.api.HttpRule)
 
 import type { ContexteAppel, OutilPasserelle } from "../../fournisseurs.js";
-import { schemaEntreeGsc } from "../../demo/google/gsc.js";
-import { schemaEntreeGa4 } from "../../demo/google/ga4.js";
-import { schemaEntreeAds } from "../../demo/google/ads.js";
-import { schemaEntreeAvis, schemaEntreeMetriques } from "../../demo/google/gbp.js";
-import { ANNOTATIONS_LECTURE } from "../../demo/google/commun.js";
+import { schemaEntreeAds, schemaEntreeAvis, schemaEntreeGa4, schemaEntreeGsc, schemaEntreeMetriques } from "../../commun/google/schemas.js";
+import { ANNOTATIONS_LECTURE } from "../../commun/google/commun.js";
 import { appelerGoogle, ErreurGoogle, type RequeteGoogle } from "./appel.js";
 import { VERSION_API_ADS, type ConfigGoogleReel } from "./config.js";
 

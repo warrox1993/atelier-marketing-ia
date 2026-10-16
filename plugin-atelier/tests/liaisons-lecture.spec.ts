@@ -4,6 +4,7 @@
  * et pour un agent, filtres, pagination, export CSV, requêtes SQL paramétrées. Faux hôte et lectures en mémoire.
  */
 import type { PluginContext } from "@paperclipai/plugin-sdk";
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { ESPACE_BASE, ROUTES_API } from "../src/contrats/index.js";
 import { FiltreRegistre, libelleStatutLiaison, nomService } from "../src/contrats/liaisons-lecture.js";
@@ -80,6 +81,12 @@ describe("contrats de lecture", () => {
     expect(ROUTES_API.find((r) => r.cle === "liaison.lire")).toMatchObject({ methode: "GET", chemin: "/taches/:issueId/liaisons", auth: "board", resolution: { from: "issue", param: "issueId" } });
     expect(ROUTES_API.find((r) => r.cle === "liaison.registre")).toMatchObject({ methode: "GET", chemin: "/liaisons/registre", auth: "board", resolution: { from: "query", key: "companyId" } });
     expect((manifest.apiRoutes ?? []).map((r) => r.routeKey)).toEqual(expect.arrayContaining(["liaison.lire", "liaison.registre"]));
+  });
+
+  it("connaît le nom exact de chacun des services du registre (28), sans repli sur le slug", () => {
+    const registre = JSON.parse(readFileSync(new URL("../../organisation/registre/services.json", import.meta.url), "utf8")) as { services: Array<{ slug: string; nom: string }>; flux: unknown[] };
+    expect(registre.services.length).toBe(28);
+    for (const x of registre.services) expect(nomService(x.slug), x.slug).toBe(x.nom);
   });
 
   it("donne des noms lisibles et les cinq libellés de statut", () => {

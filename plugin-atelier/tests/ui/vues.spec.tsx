@@ -45,9 +45,18 @@ describe("navigation", () => {
     pont.chemin = "/RNO/atelier/calendrier";
     rendu = await rendre(createElement(NavigationAtelier, { context: contexte }));
     const liens = Array.from(rendu.conteneur.querySelectorAll("nav.atl-nav a"));
-    expect(liens.map((a) => a.querySelector("span")?.textContent)).toEqual(["Accueil", "Discussion", "Prospects", "Marketing", "Réglages"]);
+    expect(liens.map((a) => a.querySelector("span")?.textContent)).toEqual(["Accueil", "Discussion", "Prospects", "Marketing", "Réglages", "Menu principal (tableau de bord)"]);
     expect(rendu.conteneur.querySelector('a[aria-current="page"]')?.textContent).toContain("Marketing");
     expect(rendu.conteneur.querySelector('a[aria-current="page"]')?.getAttribute("href")).toBe("/RNO/atelier/campagnes");
+  });
+  it("le pied de la barre latérale offre une sortie vers le tableau de bord de l'hôte", async () => {
+    pont.chemin = "/RNO/atelier/accueil";
+    rendu = await rendre(createElement(NavigationAtelier, { context: contexte }));
+    const sortie = parTexte(rendu.conteneur.querySelector(".atl-nav-pied")!, "a", "Menu principal (tableau de bord)");
+    expect(sortie.getAttribute("href")).toBe("/RNO/dashboard");
+    expect(sortie.hasAttribute("aria-current")).toBe(false);
+    await cliquer(sortie);
+    expect(pont.navigations).toContain("/dashboard");
   });
   it("la barre latérale marque Prospects pour la carte et Réglages pour la corbeille", async () => {
     pont.chemin = "/RNO/atelier/carte";
@@ -141,7 +150,7 @@ describe("rubriques", () => {
     await cliquer(envoyer);
     expect(fetchMock).toHaveBeenCalledWith(`/api/companies/${ENTREPRISE}/projects`, expect.objectContaining({ method: "POST" }));
     const appel = pont.appelsActions.find((a) => a.cle === "atelier.campagne.creer");
-    expect(appel?.params).toMatchObject({ projectId: "99999999-0000-4000-8000-000000000001", nom: "Façades printemps", etablissements: ["Herstal", "Seraing"], plafondPub: { type: "montant", montantCents: 80000 }, mode: "demonstration" });
+    expect(appel?.params).toMatchObject({ projectId: "99999999-0000-4000-8000-000000000001", nom: "Façades printemps", etablissements: ["Herstal", "Seraing"], plafondPub: { type: "montant", montantCents: 80000 }, mode: "reel" });
     expect(appel?.params).not.toHaveProperty("companyId");
     expect(pont.navigations).toContain(`/atelier/campagnes/${C}`);
   });

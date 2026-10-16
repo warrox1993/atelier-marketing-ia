@@ -10,9 +10,9 @@
 
 import * as z from "zod";
 import type { FournisseurService, OutilPasserelle } from "../../../fournisseurs.js";
-import { formeNace, formePage, formeZone, outilLecture, verifierDateIso } from "../../../demo/prospection/commun.js";
-import { PHRASE_POSITION_APPROX } from "../../../demo/prospection/bce.js";
-import { analyserNumero } from "../../../demo/prospection/numeros.js";
+import { formeNace, formePage, formeZone, outilLecture, verifierDateIso } from "../../../commun/prospection/commun.js";
+import { PHRASE_POSITION_APPROX } from "../../../commun/prospection/commun.js";
+import { analyserNumero } from "../../../commun/prospection/numeros.js";
 import type { CentroidesOsm, PositionApprox } from "../osm/centroides.js";
 import { IndexBce, TAILLE_PAGE } from "./index.js";
 

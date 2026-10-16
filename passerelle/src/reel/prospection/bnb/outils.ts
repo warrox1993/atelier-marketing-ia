@@ -12,8 +12,8 @@
 
 import * as z from "zod";
 import type { FournisseurService, OutilPasserelle } from "../../../fournisseurs.js";
-import { outilLecture } from "../../../demo/prospection/commun.js";
-import { analyserNumero } from "../../../demo/prospection/numeros.js";
+import { outilLecture } from "../../../commun/prospection/commun.js";
+import { analyserNumero } from "../../../commun/prospection/numeros.js";
 import { ClientBnb, ErreurBnb, type ReferenceBnb, type RubriqueBnb } from "./client.js";
 
 export const FICHE_BNB = {

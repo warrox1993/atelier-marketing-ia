@@ -1071,6 +1071,10 @@ class H(BaseHTTPRequestHandler):
         if m:
             for s_ in etat["societes"]:
                 if s_["id"] == m.group(1): s_["budgetMonthlyCents"] = c["budgetMonthlyCents"]; return self.rep(200, s_)
+        m = re.fullmatch(r"/companies/([^/]+)", q)
+        if m:  # PATCH d'une entreprise (nom, description), comme le socle
+            for s_ in etat["societes"]:
+                if s_["id"] == m.group(1): s_.update(c); return self.rep(200, s_)
         self.rep(200, {})
     def do_DELETE(self):
         q = self.chemin(); m = re.fullmatch(r"/companies/([^/]+)", q); etat["ecritures"].append(("DELETE", q))
@@ -1165,12 +1169,68 @@ reg_j = etat["agents"]["Client Trio · Juridique"]["agents"]
 assert [a["slug"] for a in reg_j] == services["juridique"]["agents"], reg_j
 assert reg_j[0]["role"] == "ceo" and reg_j[0]["rapporteA"] is None and all(a["rapporteA"] == "coordinateur-juridique" and a["role"] != "ceo" for a in reg_j[1:])
 paquet_j = etat["paquets"]["Client Trio · Juridique"]
-assert set(paquet_j) == {"COMPANY.md", ".paperclip.yaml"} | {f"agents/{a['slug']}/AGENTS.md" for a in reg_j}, sorted(paquet_j)
+fichiers_skills_j = {f.relative_to(racine / "organisation").as_posix() for a in reg_j for c in a["competences"] for f in (racine / "organisation/skills" / c).rglob("*") if f.is_file()}
+assert set(paquet_j) == {"COMPANY.md", ".paperclip.yaml"} | {f"agents/{a['slug']}/AGENTS.md" for a in reg_j} | fichiers_skills_j, sorted(paquet_j)
 assert 'filesystemScope: "workspace"' in paquet_j[".paperclip.yaml"] and 'networkScope: "allowlist"' in paquet_j[".paperclip.yaml"]
 assert paquet_j["agents/lecture-contrats/AGENTS.md"].count('reportsTo: "coordinateur-juridique"') == 1 and "Première lecture" in paquet_j["agents/lecture-contrats/AGENTS.md"]
 assert "Consigne à rédiger" not in "".join(paquet_j.values()) and b.MARQUEUR_CONSIGNES_COMMUNES in paquet_j["agents/lecture-contrats/AGENTS.md"]
 assert "Client Trio · Juridique" in paquet_j["COMPANY.md"] and "Client Solo" not in "".join(paquet_j.values())
 print("2. trois services + Direction : 4 entreprises (noms « client · service », marqueurs, registre), budgets, hiérarchie, consignes du dépôt, confinement")
+# Compétences des services : celles de l'en-tête « skills: » de chaque AGENTS.md du dépôt, livrées comme au marketing.
+def skills_depot(svc_, ag_):
+    return b.competences_entete((racine / "organisation/services" / svc_ / "agents" / ag_ / "AGENTS.md").read_text(encoding="utf-8"), svc_, ag_)
+skills_coord_d = skills_depot("direction", "coordinateur-direction")
+assert {"cadrage-exigences", "planification-livrables"} <= set(skills_coord_d) and len(skills_coord_d) == len(set(skills_coord_d)), skills_coord_d
+par_slug_d = {a["slug"]: a for a in etat["agents"]["Client Trio · Direction"]["agents"]}
+assert par_slug_d["coordinateur-direction"]["competences"] == skills_depot("direction", "coordinateur-direction")
+paquet_d = etat["paquets"]["Client Trio · Direction"]
+entete_d = paquet_d["agents/coordinateur-direction/AGENTS.md"].split("\n---\n")[0]
+assert "skills:\n" + "".join(f'  - "{c_}"\n' for c_ in skills_coord_d) in entete_d + "\n", entete_d
+for c_ in par_slug_d["coordinateur-direction"]["competences"]:
+    assert f"skills/{c_}/SKILL.md" in paquet_d, c_
+assert paquet_d["skills/cadrage-exigences/SKILL.md"] == (racine / "organisation/skills/cadrage-exigences/SKILL.md").read_text(encoding="utf-8")
+# Agent dont la liste est vide (« skills: [] ») : aucune compétence, aucun dossier skills/ superflu.
+par_slug_j = {a["slug"]: a for a in reg_j}
+# Le dépôt ne garantit plus d'agent juridique sans compétence (lecture-contrats en a une) : la liste vide est vérifiée
+# sur un en-tête synthétique, et sur les agents juridiques du dépôt qui déclarent « skills: [] » s'il en reste.
+assert b.competences_entete('---\nkind: "agent"\nskills: []\n---\n', "juridique", "x") == []
+for a_ in reg_j:
+    if "skills: []" in (racine / "organisation/services/juridique/agents" / a_["slug"] / "AGENTS.md").read_text(encoding="utf-8").split("\n---\n")[0]:
+        assert a_["competences"] == [] and skills_depot("juridique", a_["slug"]) == []
+        assert "skills: []" in paquet_j[f"agents/{a_['slug']}/AGENTS.md"].split("\n---\n")[0]
+for a_ in reg_j:  # chaque agent juridique livre exactement les compétences de son en-tête
+    assert a_["competences"] == skills_depot("juridique", a_["slug"]), a_["slug"]
+assert not any(c_.startswith("skills/") and c_.split("/")[1] not in {x for a in reg_j for x in a["competences"]} for c_ in paquet_j)
+assert b.competences_entete('---\nskills: ["cadrage-exigences", "audit-seo"]\n---\n', "direction", "x") == ["cadrage-exigences", "audit-seo"]  # liste en ligne
+assert skills_depot("commercial", "preparation-rdv") == ["preparation-rendez-vous-b2b"]
+# Sans clé « skills » : aucune compétence. Compétence inconnue ou nom suspect : refus qui nomme l'agent et la compétence.
+assert b.competences_entete('---\nkind: "agent"\nslug: "x"\n---\n\nCorps\n', "juridique", "x") == []
+assert b.competences_entete('Sans en-tête\n', "juridique", "x") == []
+for texte_, motif_ in (('---\nskills:\n  - "cadrage-exigences"\n  - "competence-fantome"\n---\n', "competence-fantome"),
+                       ('---\nskills:\n  - "../registre"\n---\n', "../registre"),
+                       ('---\nskills:\n  - "cadrage-exigences"\n  - "cadrage-exigences"\n---\n', "deux fois"),
+                       ('---\nskills: cadrage-exigences\n---\n', "liste YAML")):
+    try:
+        b.competences_entete(texte_, "direction", "agent-essai")
+    except b.ErreurAtelier as e_:
+        assert "agent-essai" in str(e_) and "direction" in str(e_) and motif_ in str(e_), str(e_)
+    else:
+        raise AssertionError(f"refus attendu : {motif_}")
+# Bout en bout : un AGENTS.md de service qui déclare une compétence absente fait refuser le plan, avec le nom de l'agent.
+racine_orga_ = b.ORGA
+faux_ = travail / "orga-fausse"; (faux_ / "services/direction/agents/synthese").mkdir(parents=True)
+(faux_ / "skills").mkdir()
+(faux_ / "services/direction/agents/synthese/AGENTS.md").write_text('---\nkind: "agent"\nskills:\n  - "inexistante"\n---\n\nCorps\n', encoding="utf-8")
+b.ORGA = faux_
+try:
+    b.agents_service(json.load(open(racine_orga_ / "registre/agents.json", encoding="utf-8")), services["direction"])
+except b.ErreurAtelier as e_:
+    assert "synthese" in str(e_) and "inexistante" in str(e_), str(e_)
+else:
+    raise AssertionError("compétence absente : refus attendu")
+finally:
+    b.ORGA = racine_orga_
+print("2a. compétences des services : liste « skills: » livrée (en-tête et dossiers skills/), liste vide ou absente = aucune, compétence inconnue = refus nommé")
 # Consignes communes : tronc commun à tous les agents, complément marketing aux seuls agents du marketing.
 communes_service, communes_marketing = b.consignes_communes(False), b.consignes_communes(True)
 termes_marketing_ = ("## Faits du client", "api/marque", "atelier.marketing-ia", "/prospects", "donnees-connexion", "marque de l'atelier")
@@ -1229,6 +1289,7 @@ print("5. client historique + nouveaux services : marketing inchangé (nom, marq
 
 # 6. Consigne manquante : avertissement et consigne minimale (services du dépôt copiés sans une consigne).
 faux_orga = travail / "orga-sans-consigne"; shutil.copytree(racine / "organisation" / "services", faux_orga / "services")
+shutil.copytree(racine / "organisation" / "skills", faux_orga / "skills")  # les compétences déclarées par les agents doivent exister
 manquante = services["qualite"]["agents"][1]
 (faux_orga / "services" / "qualite" / "agents" / manquante / "AGENTS.md").unlink()
 vrai_orga = b.ORGA; b.ORGA = faux_orga
@@ -1256,8 +1317,11 @@ for nom_, modif, motif in (("Refus A", {"services": ["inconnu"]}, "service incon
     assert code != 0 and motif in s and "rien n'est écrit" in s, (nom_, code, s)
 sans_appel(avant)
 code, s = lancer("nouveau-client", "--fiche", fiche("Client Tous", services="tous"), "--a-blanc")
-assert code == 0 and "14 entreprise(s)" in s, s
-print("7. service inconnu, liste vide ou en double, budget d'un service non choisi ou négatif : refus sans appel ; « tous » = 14 entreprises (à blanc)")
+# « tous » = tous les services actifs du registre (Direction comprise) : l'attendu est dérivé du registre, jamais figé.
+nb_tous = sum(1 for s_ in b.registre_services()["services"] if s_.get("actif"))
+assert nb_tous >= 2, nb_tous
+assert code == 0 and f"{nb_tous} entreprise(s)" in s, (nb_tous, s)
+print(f"7. service inconnu, liste vide ou en double, budget d'un service non choisi ou négatif : refus sans appel ; « tous » = {nb_tous} entreprises, nombre lu dans le registre (à blanc)")
 
 # 8. Purge de TOUTES les entreprises du client (Trio : 4). Un export manquant bloque tout avant la première suppression.
 avant_ecr = len(etat["ecritures"]); n_soc = len(etat["societes"])
@@ -1280,7 +1344,81 @@ for i in ids_trio.values():
 assert (donnees / "atelier-client" / "client-solo").is_dir() and (donnees / "agents-atelier" / etat["societes"][0]["id"]).is_dir(), "l'autre client est intact"
 assert len(list((donnees / "exports").glob("*/*/rapport-purge-*.json"))) == 4
 print("8. purge : un export manquant bloque tout (rien supprimé) ; à blanc liste les 4 entreprises ; purge réelle des 4, registre et dossiers locaux supprimés, autre client intact")
-print("services multiples : 8 groupes de vérifications contre une fausse API, tous réussis")
+
+# 9. --ajouter-services : une entreprise EXISTANTE (marquée atelier-demo:*) devient le service marketing du client ; les
+#    autres services sont créés par le chemin habituel ; son organisation n'est pas réappliquée ; idempotent.
+DEMO_ID = "eeeeeeee-0000-4000-8000-0000000000e1"
+etat["societes"].append({"id": DEMO_ID, "name": "Atelier Test (démonstration)", "budgetMonthlyCents": 0,
+                         "description": "Entreprise fictive. Marqueur de périmètre : atelier-demo:atelier-test."})
+f_aj = fiche("Atelier Test", services=["marketing", "juridique"])
+f_sans_marketing = str(travail / "sans-marketing.json")
+shutil.copy(fiche("Atelier Test", services=["juridique"]), f_sans_marketing)
+Path(f_aj).write_text(json.dumps({**json.load(open(racine / "organisation/modeles/fiche-client.exemple.json", encoding="utf-8")), "nomCommercial": "Atelier Test", "services": ["marketing", "juridique"]}, ensure_ascii=False), encoding="utf-8")
+def etat_ecr(): return (len(etat["appels"]), len(etat["ecritures"]), etat["creations"], [dict(c) for c in etat["societes"]])
+avant = etat_ecr()
+for args_, motif in ((["--ajouter-services", "--fiche", f_aj], "--entreprise"),
+                     (["--ajouter-services", "--entreprise", "pas-un-uuid", "--fiche", f_aj], "UUID"),
+                     (["--ajouter-services", "--entreprise", "99999999-0000-4000-8000-000000000009", "--fiche", f_aj], "introuvable"),
+                     (["--ajouter-services", "--entreprise", DEMO_ID, "--fiche", fiche("Autre Nom", services=["marketing", "juridique"])], "s'appelle"),
+                     (["--ajouter-services", "--enregistrer-existante", "--entreprise", DEMO_ID, "--fiche", f_aj], "s'excluent"),
+                     (["--slug", "x-y", "--fiche", f_aj], "--slug"),
+                     (["--ajouter-services", "--entreprise", DEMO_ID, "--slug", "Pas Valide", "--fiche", f_aj], "--slug invalide"),
+                     (["--ajouter-services", "--entreprise", DEMO_ID, "--fiche", f_sans_marketing], "marketing")):
+    code, s = lancer("nouveau-client", *args_)
+    assert code != 0 and motif in s and etat_ecr() == avant, (args_, code, s)
+# Entreprise marquée pour un autre client : refus. Sans marqueur : refus.
+for desc_ in ("Client voisin. Marqueur de périmètre : atelier-client:voisin.", "créée à la main", "atelier-demo:a atelier-demo:b"):
+    demo_ = next(c for c in etat["societes"] if c["id"] == DEMO_ID); demo_["description"] = desc_; avant = etat_ecr()
+    code, s = lancer("nouveau-client", "--ajouter-services", "--entreprise", DEMO_ID, "--fiche", f_aj)
+    assert code != 0 and "marqueur" in s and etat_ecr() == avant, (desc_, code, s)
+demo_["description"] = "Entreprise fictive. Marqueur de périmètre : atelier-demo:atelier-test."
+# Registre qui désigne déjà une autre entreprise marketing pour ce slug : refus.
+d_autre = donnees / "atelier-client" / "atelier-test"; d_autre.mkdir(parents=True)
+(d_autre / "entreprise.json").write_text(json.dumps({"version": 2, "entrepriseId": "ffffffff-0000-4000-8000-000000000000", "numeroBce": "0123456749", "slug": "atelier-test",
+    "creeLe": "2026-10-16T08:00:00Z", "entreprises": {"marketing": {"entrepriseId": "ffffffff-0000-4000-8000-000000000000", "nom": "Atelier Test", "marqueur": "atelier-client:atelier-test"}}}), encoding="utf-8")
+avant = etat_ecr()
+code, s = lancer("nouveau-client", "--ajouter-services", "--entreprise", DEMO_ID, "--fiche", f_aj)
+assert code != 0 and "autre entreprise marketing" in s and etat_ecr() == avant, (code, s)
+shutil.rmtree(d_autre)
+# À blanc : migration et créations annoncées, RIEN d'écrit (ni socle, ni registre).
+avant = etat_ecr()
+code, s = lancer("nouveau-client", "--ajouter-services", "--entreprise", DEMO_ID, "--fiche", f_aj, "--a-blanc")
+assert code == 0 and etat_ecr() == avant and not (donnees / "atelier-client" / "atelier-test").exists(), (code, s)
+assert "Atelier Test (démonstration)" in s and "atelier-client:atelier-test" in s and "non réappliqués" in s, s
+assert "[direction] créer l'entreprise" in s and "[juridique] créer l'entreprise" in s and "[marketing] créer l'entreprise" not in s, s
+# Réel.
+code, s = lancer("nouveau-client", "--ajouter-services", "--entreprise", DEMO_ID, "--fiche", f_aj)
+assert code == 0 and etat["creations"] == avant[2] + 2, (code, s)
+migree = next(c for c in etat["societes"] if c["id"] == DEMO_ID)
+assert migree["name"] == "Atelier Test" and "atelier-client:atelier-test" in migree["description"] and "atelier-demo" not in migree["description"], migree
+rg = registre("atelier-test")
+assert set(rg["entreprises"]) == {"marketing", "direction", "juridique"} and rg["entreprises"]["marketing"] == {"entrepriseId": DEMO_ID, "nom": "Atelier Test", "marqueur": "atelier-client:atelier-test"}, rg
+assert rg["entrepriseId"] == DEMO_ID and (donnees / "atelier-client/atelier-test/entreprise.json").stat().st_mode & 0o777 == 0o600
+assert not any(c[1] == "Atelier Test" for c in etat["appels"]), "l'organisation du marketing existant n'est pas réappliquée"
+assert {c["name"] for c in etat["societes"]} >= {"Atelier Test · Direction", "Atelier Test · Juridique"}
+assert DEMO_ID in etat["configs"], "le marketing existant reçoit aussi la configuration du plugin (bureau de liaison)"
+# Idempotence : rien de recréé, aucune écriture.
+avant = etat_ecr()
+code, s = lancer("nouveau-client", "--ajouter-services", "--entreprise", DEMO_ID, "--fiche", f_aj)
+assert code == 0 and etat_ecr()[1:3] == avant[1:3] and etat_ecr()[3] == avant[3] and "déjà migrée" in s, (code, s)
+code, s = lancer("nouveau-client", "--ajouter-services", "--entreprise", DEMO_ID, "--fiche", f_aj, "--a-blanc")
+assert code == 0 and "aucune écriture" in s and etat_ecr()[1:3] == avant[1:3], s
+# --slug : identifiant choisi pour le registre et les marqueurs des services.
+D2 = "eeeeeeee-0000-4000-8000-0000000000e2"
+etat["societes"].append({"id": D2, "name": "Atelier Bis (démonstration)", "budgetMonthlyCents": 0,
+                         "description": "Autre client. Marqueur de périmètre : atelier-demo:atelier-bis."})
+f_bis = fiche("Atelier Bis", services=["marketing", "juridique"])
+code, s = lancer("nouveau-client", "--ajouter-services", "--entreprise", D2, "--slug", "bis-perso", "--fiche", f_bis)
+assert code == 0, s
+assert registre("bis-perso")["entreprises"]["marketing"]["entrepriseId"] == D2 and registre("atelier-test")["entreprises"]["marketing"]["entrepriseId"] == DEMO_ID
+assert any(c["name"] == "Atelier Bis · Juridique" and "atelier-client:bis-perso:juridique" in c["description"] for c in etat["societes"])
+assert next(c for c in etat["societes"] if c["id"] == D2)["name"] == "Atelier Bis"
+# Une entreprise déjà rattachée à un autre client ne peut pas l'être à un second slug.
+avant = etat_ecr()
+code, s = lancer("nouveau-client", "--ajouter-services", "--entreprise", D2, "--slug", "autre-slug", "--fiche", f_bis)
+assert code != 0 and "refusé" in s and etat_ecr() == avant, (code, s)
+print("9. --ajouter-services : refus (UUID, inconnue, nom, marqueur étranger, registre étranger), à blanc sans écriture, migration du marqueur et du nom, registre, services créés, marketing non réappliqué, idempotent, --slug")
+print("services multiples : 9 groupes de vérifications contre une fausse API, tous réussis")
 PY
 then
   ok "services multiples : $(tail -1 "${TRAVAIL}/services.txt")"

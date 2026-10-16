@@ -4,7 +4,9 @@ slug: "courrier"
 name: "Courrier"
 title: "Administratif · Tri du courrier et brouillons de réponse"
 reportsTo: "coordinateur-administratif"
-skills: []
+skills:
+  - "courrier-officiel"
+  - "classement-archivage"
 ---
 
 # Tri du courrier et brouillons de réponse

@@ -18,7 +18,7 @@ import { fournisseurBceReel, PROPRIETE_BCE_REEL } from "./bce/outils.js";
 import { fournisseurOsmReel, IndexOsm } from "./osm/outils.js";
 import { ClientBnb, configDepuisEnv } from "./bnb/client.js";
 import { fournisseurBnbReel, PROPRIETE_BNB_REEL } from "./bnb/outils.js";
-import { PROPRIETE_OSM_REEL } from "../../demo/prospection/osm-commun.js";
+import { PROPRIETE_OSM_REEL } from "../../commun/prospection/osm-commun.js";
 
 export const SERVICES_PROSPECTION_REELS = ["bce", "osm", "bnb"] as const;
 

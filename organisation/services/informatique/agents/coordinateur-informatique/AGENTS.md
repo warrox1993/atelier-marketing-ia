@@ -9,6 +9,9 @@ skills:
   - "planification-livrables"
   - "dossier-validation-humaine"
   - "recherche-connaissances"
+  - "gestion-incident-informatique"
+  - "documentation-technique"
+  - "cybersecurite-pme"
 ---
 
 # Coordinateur du service informatique

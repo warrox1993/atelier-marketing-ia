@@ -10,6 +10,7 @@ import type { Campagne, Connecteur } from "../../contrats/campagnes.js";
 import type { Exigence } from "../../contrats/exigences.js";
 import type { DetailCampagne, VueEquipe } from "../../contrats/ui.js";
 import { Champ, Bouton, EnTete, EtatErreur, Fraicheur, Horodatage, LienHote, Lecture, ListeOuAucun, MentionDemo, Pastille, PastilleConnexion, PastilleStatut, Section, Vide } from "../composants.js";
+import { ConfirmationLot, type ElementLot } from "../decision-groupee.js";
 import { useAction, useDonnees } from "../donnees.js";
 import { DECISIONS_PORTE, euros, idCourt, NIVEAUX_INTEGRATION } from "../format.js";
 import { creerProjetNatif } from "../hote.js";
@@ -226,11 +227,7 @@ function DetailCampagneVue({ campagneId }: { campagneId: string }) {
             {d.exigences.length === 0 ? (
               <p className="atl-attenue">Pas encore d'exigence : le coordinateur ne les a pas encore enregistrées.</p>
             ) : (
-              <ul className="atl-exigences">
-                {d.exigences.map((e) => (
-                  <ExigenceLigne key={e.id} exigence={e} onFait={r.refresh} />
-                ))}
-              </ul>
+              <ExigencesListe exigences={d.exigences} onFait={r.refresh} />
             )}
           </Section>
         </>
@@ -281,7 +278,91 @@ function Connexions({ connecteurs, mode }: { connecteurs: Connecteur[]; mode: st
   );
 }
 
-function ExigenceLigne({ exigence: e, onFait }: { exigence: Exigence; onFait(): void }) {
+/**
+ * Liste des exigences avec décision groupée sur les demandes d'exclusion : on coche, puis
+ * « Autoriser la sélection (N) » ou « Refuser la sélection (N) » ouvre un récapitulatif et une
+ * confirmation unique. Chaque exigence est ensuite décidée avec la même action que la décision
+ * unitaire ; une erreur sur l'une n'arrête pas les autres.
+ */
+function ExigencesListe({ exigences, onFait }: { exigences: Exigence[]; onFait(): void }) {
+  const exclure = useAction("atelier.exigence.exclusion");
+  const demandees = exigences.filter((e) => e.exclusion.etat === "demandee");
+  const [cochees, setCochees] = useState<ReadonlySet<string>>(new Set());
+  const [lot, setLot] = useState<{ decision: "autoriser" | "refuser"; elements: ElementLot[] } | null>(null);
+  const [justification, setJustification] = useState("");
+  // Seules les demandes encore en attente restent cochées (une demande traitée disparaît de la sélection).
+  const selection = demandees.filter((e) => cochees.has(e.id));
+  const n = selection.length;
+  const bascule = (id: string) =>
+    setCochees((c) => {
+      const suite = new Set(c);
+      if (!suite.delete(id)) suite.add(id);
+      return suite;
+    });
+  const touteCochee = demandees.length > 0 && n === demandees.length;
+  const raisonSelection = n === 0 ? "Cochez au moins une demande d'exclusion." : lot ? "Une confirmation est déjà ouverte." : null;
+  const ouvrir = (decision: "autoriser" | "refuser") => setLot({ decision, elements: selection.map((e) => ({ id: e.id, titre: e.interpretation })) });
+  const raisonJustification = justification.trim().length < 10 ? "Justification d'au moins 10 caractères requise." : null;
+  return (
+    <>
+      {demandees.length > 0 ? (
+        <div className="atl-barre-actions" role="group" aria-label="Décision groupée sur les demandes d'exclusion">
+          <label>
+            <input
+              type="checkbox"
+              checked={touteCochee}
+              onChange={() => setCochees(touteCochee ? new Set() : new Set(demandees.map((e) => e.id)))}
+            />{" "}
+            Toutes les demandes d'exclusion ({demandees.length})
+          </label>
+          <Bouton variante="principal" raisonDesactive={raisonSelection} onClick={() => ouvrir("autoriser")}>
+            {`Autoriser la sélection (${n})`}
+          </Bouton>
+          <Bouton raisonDesactive={raisonSelection} onClick={() => ouvrir("refuser")}>
+            {`Refuser la sélection (${n})`}
+          </Bouton>
+          {lot ? (
+            <ConfirmationLot
+              titre={`${lot.decision === "autoriser" ? "Autoriser" : "Refuser"} l'exclusion de ${lot.elements.length > 1 ? `ces ${lot.elements.length} exigences` : "cette exigence"} ?`}
+              elements={lot.elements}
+              effet={
+                lot.decision === "autoriser"
+                  ? "L'exclusion demandée par l'agent est acceptée pour chacune de ces exigences."
+                  : "Ces exigences restent à prouver : l'exclusion demandée par l'agent est refusée."
+              }
+              libelleConfirmer={`${lot.decision === "autoriser" ? "Confirmer l'autorisation" : "Confirmer le refus"} (${lot.elements.length})`}
+              variante={lot.decision === "autoriser" ? "principal" : "danger"}
+              raisonDesactive={raisonJustification}
+              traiter={async (element) => {
+                await exclure({ exigenceId: element.id, decision: lot.decision, justification });
+              }}
+              onBilan={(b) => {
+                const faits = new Set(b.reussis.map((r) => r.element.id));
+                setCochees((c) => new Set([...c].filter((id) => !faits.has(id))));
+                onFait();
+              }}
+              onFermer={() => {
+                setLot(null);
+                setJustification("");
+              }}
+            >
+              <Champ libelle="Votre justification commune">
+                <textarea value={justification} onChange={(ev) => setJustification(ev.target.value)} rows={2} maxLength={2000} />
+              </Champ>
+            </ConfirmationLot>
+          ) : null}
+        </div>
+      ) : null}
+      <ul className="atl-exigences">
+        {exigences.map((e) => (
+          <ExigenceLigne key={e.id} exigence={e} onFait={onFait} coche={e.exclusion.etat === "demandee" ? cochees.has(e.id) : undefined} onCoche={() => bascule(e.id)} />
+        ))}
+      </ul>
+    </>
+  );
+}
+
+function ExigenceLigne({ exigence: e, onFait, coche, onCoche }: { exigence: Exigence; onFait(): void; coche?: boolean; onCoche?(): void }) {
   const exclure = useAction("atelier.exigence.exclusion");
   const [justification, setJustification] = useState("");
   const [enCours, setEnCours] = useState(false);
@@ -303,6 +384,9 @@ function ExigenceLigne({ exigence: e, onFait }: { exigence: Exigence; onFait(): 
   return (
     <li className="atl-exigence">
       <div className="atl-exigence-tete">
+        {coche !== undefined ? (
+          <input type="checkbox" checked={coche} onChange={onCoche} aria-label={`Sélectionner l'exigence : ${e.interpretation}`} />
+        ) : null}
         <strong>{e.interpretation}</strong>
         {e.obligatoire ? <Pastille ton="info">Obligatoire</Pastille> : <Pastille>Facultative</Pastille>}
         {e.exclusion.etat !== "aucune" ? (
@@ -469,7 +553,7 @@ function NouvelleCampagne() {
   const nav = useHostNavigation();
   const creer = useAction<Campagne>("atelier.campagne.creer");
   const equipe = useDonnees<VueEquipe>("atelier.equipe");
-  const [f, setF] = useState({ nom: "", brief: "", objectifs: "", cible: "", offre: "", canaux: "", etablissements: "", zones: "", mode: "demonstration", coordinateur: "" });
+  const [f, setF] = useState({ nom: "", brief: "", objectifs: "", cible: "", offre: "", canaux: "", etablissements: "", zones: "", mode: "reel", coordinateur: "" });
   const [plafond, setPlafond] = useState<SaisiePlafond>(SAISIE_PLAFOND_VIDE);
   const [projetId, setProjetId] = useState<string | null>(null);
   // Une clé par formulaire : un nouvel essai après une réponse perdue ne crée pas un second projet.

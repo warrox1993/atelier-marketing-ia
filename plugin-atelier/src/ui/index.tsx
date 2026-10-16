@@ -217,6 +217,9 @@ export function NavigationAtelier({ context }: PluginRouteSidebarProps) {
             return r.cle === "reglages" ? (
               <div key={r.cle} className="atl-nav-pied">
                 {lien}
+                <LienHote vers="/dashboard" className="atl-nav-sortie">
+                  <span>Menu principal (tableau de bord)</span>
+                </LienHote>
               </div>
             ) : (
               lien

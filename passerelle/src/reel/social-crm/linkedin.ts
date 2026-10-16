@@ -13,9 +13,9 @@
 //   linkedin_publier       POST /rest/posts → 201, identifiant dans l'en-tête x-restli-id (w_organization_social)
 
 import type { FournisseurService, OutilPasserelle } from "../../fournisseurs.js";
-import { fournisseurLinkedin } from "../../demo/social-crm/linkedin.js";
+import { definitionsLinkedin } from "../../commun/social-crm/linkedin.js";
 import type { AccesPlateforme } from "./autorisation.js";
-import { gabarit, lendemain, liste, MAX_PAGES_PARCOURUES, msDate, nombre, objet, texte, tropDeResultats, verifierPeriode } from "./commun.js";
+import { DateReelle, gabarit, lendemain, liste, MAX_PAGES_PARCOURUES, msDate, nombre, objet, texte, tropDeResultats, verifierPeriode } from "./commun.js";
 import { VERSION_LINKEDIN } from "./config.js";
 import { lire, mutationReelle, type Reconciliation } from "./execution.js";
 import { envoyer, ErreurFournisseur, verifierReponse } from "./http.js";
@@ -81,8 +81,9 @@ function cumuler(lignes: Stat[]): Stat {
   };
 }
 
+const DEFS = definitionsLinkedin(DateReelle);
+
 export function fournisseurLinkedinReel(dep: DependancesOutils): FournisseurService {
-  const demo = fournisseurLinkedin();
 
   async function publicationsPeriode(acces: AccesPlateforme, debut: string, fin: string): Promise<Record<string, unknown>[]> {
     const auteur = encodeURIComponent(acces.compte.id);
@@ -104,7 +105,7 @@ export function fournisseurLinkedinReel(dep: DependancesOutils): FournisseurServ
     throw tropDeResultats("LinkedIn");
   }
 
-  const g1 = gabarit(demo, "linkedin_publications", "Publications de la page (organisation) sur une période (GET /rest/posts?q=author) : elements[] (id, author, commentary, createdAt, publishedAt, lastModifiedAt, lifecycleState, visibility, distribution...) et paging (start, count, links). Les plus récentes d'abord.");
+  const g1 = gabarit(DEFS.linkedin_publications, "Publications de la page (organisation) sur une période (GET /rest/posts?q=author) : elements[] (id, author, commentary, createdAt, publishedAt, lastModifiedAt, lifecycleState, visibility, distribution...) et paging (start, count, links). Les plus récentes d'abord.");
   const publications: OutilPasserelle = {
     ...g1,
     executer: (brut, contexte) =>
@@ -122,7 +123,7 @@ export function fournisseurLinkedinReel(dep: DependancesOutils): FournisseurServ
       }),
   };
 
-  const g2 = gabarit(demo, "linkedin_statistiques", "Statistiques de partage organiques (GET /rest/organizationalEntityShareStatistics, 12 derniers mois) : sans `granularite` ni `partages`, un total sur la période ; avec `granularite`, une ligne par jour ou par mois (timeRange) ; avec `partages`, les statistiques totales de chaque publication (sans période, comme l'API).");
+  const g2 = gabarit(DEFS.linkedin_statistiques, "Statistiques de partage organiques (GET /rest/organizationalEntityShareStatistics, 12 derniers mois) : sans `granularite` ni `partages`, un total sur la période ; avec `granularite`, une ligne par jour ou par mois (timeRange) ; avec `partages`, les statistiques totales de chaque publication (sans période, comme l'API).");
   const statistiques: OutilPasserelle = {
     ...g2,
     executer: (brut, contexte) =>
@@ -153,7 +154,7 @@ export function fournisseurLinkedinReel(dep: DependancesOutils): FournisseurServ
 
   type ArgsPublier = { commentary: string };
   const publier = mutationReelle<ArgsPublier>(dep, {
-    outil: { ...gabarit(demo, "linkedin_publier", "Publie un texte au nom de la page LinkedIn (POST /rest/posts, auteur = l'organisation connectée)."), executer: () => undefined },
+    outil: { ...gabarit(DEFS.linkedin_publier, "Publie un texte au nom de la page LinkedIn (POST /rest/posts, auteur = l'organisation connectée)."), executer: () => undefined },
     requeteReelle: "POST /rest/posts (author = urn:li:organization:..., lifecycleState PUBLISHED)",
     resume: (a) => `publication LinkedIn de ${a.commentary.length} caractères.`,
     executer: async (acces, a) => {

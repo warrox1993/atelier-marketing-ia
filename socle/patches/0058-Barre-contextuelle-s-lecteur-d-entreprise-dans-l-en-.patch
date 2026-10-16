@@ -1,0 +1,79 @@
+From 0e85c695d691069cbdd6c5e4f402beccceec2516 Mon Sep 17 00:00:00 2001
+From: Jean-Baptiste Dhondt <114347858+warrox1993@users.noreply.github.com>
+Date: Fri, 16 Oct 2026 20:26:31 +0200
+Subject: [PATCH 58/62] =?UTF-8?q?Barre=20contextuelle=20:=20s=C3=A9lecteur?=
+ =?UTF-8?q?=20d'entreprise=20dans=20l'en-t=C3=AAte,=20sans=20passer=20par?=
+ =?UTF-8?q?=20Retour?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01DP85vPq2MHkZg8VNtRvCzB
+---
+ .../components/ContextualSidebarFrame.test.tsx  | 17 +++++++++++++++++
+ ui/src/components/ContextualSidebarFrame.tsx    |  6 +++++-
+ 2 files changed, 22 insertions(+), 1 deletion(-)
+
+diff --git a/ui/src/components/ContextualSidebarFrame.test.tsx b/ui/src/components/ContextualSidebarFrame.test.tsx
+index 3da625a5f..97dad8d48 100644
+--- a/ui/src/components/ContextualSidebarFrame.test.tsx
++++ b/ui/src/components/ContextualSidebarFrame.test.tsx
+@@ -17,6 +17,14 @@ vi.mock("@/context/SidebarContext", () => ({
+   useSidebar: () => ({ isMobile: false, setSidebarOpen: vi.fn(), collapsed: true, peeking: false }),
+ }));
+ 
++// Le vrai menu a besoin de React Query et des contextes d'application : on le remplace par un
++// déclencheur qui affiche le nom de l'entreprise, comme le vrai.
++vi.mock("./SidebarCompanyMenu", () => ({
++  SidebarCompanyMenu: () => (
++    <button type="button" aria-label="Open Paperclip organization switcher">Paperclip</button>
++  ),
++}));
++
+ // eslint-disable-next-line @typescript-eslint/no-explicit-any
+ (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
+ 
+@@ -58,6 +66,15 @@ describe("ContextualSidebarFrame", () => {
+     act(() => root.unmount());
+   });
+ 
++  it("expose le sélecteur d'entreprise dans l'en-tête, nom de l'entreprise visible", () => {
++    const root = render();
++    const switcher = container.querySelector('[data-testid="contextual-company-switcher"]');
++    expect(switcher).not.toBeNull();
++    const trigger = switcher?.querySelector<HTMLButtonElement>('button[aria-label*="organization switcher"]');
++    expect(trigger?.textContent).toContain("Paperclip");
++    act(() => root.unmount());
++  });
++
+   it("returns to the same-company route that opened the contextual surface", () => {
+     rememberContextualSidebarOrigin({
+       surface: "settings",
+diff --git a/ui/src/components/ContextualSidebarFrame.tsx b/ui/src/components/ContextualSidebarFrame.tsx
+index ea583e30c..922df9662 100644
+--- a/ui/src/components/ContextualSidebarFrame.tsx
++++ b/ui/src/components/ContextualSidebarFrame.tsx
+@@ -10,6 +10,7 @@ import {
+   type ContextualSidebarSurface,
+ } from "@/lib/shell-navigation";
+ import { cn } from "@/lib/utils";
++import { SidebarCompanyMenu } from "./SidebarCompanyMenu";
+ import { SidebarNavExpandedProvider } from "./SidebarNavItem";
+ 
+ export function ContextualSidebarFrame({
+@@ -69,7 +70,10 @@ export function ContextualSidebarFrame({
+               {Icon ? <Icon className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" /> : null}
+               <span className="min-w-0 flex-1 truncate text-sm font-bold text-foreground">{title}</span>
+             </div>
+-            <span className="truncate px-2 text-xs text-muted-foreground">{selectedCompany?.name ?? "Organization"}</span>
++            {/* Le sélecteur d'entreprise de la barre principale, réutilisé tel quel : sans lui, changer d'entreprise obligeait à repasser par « Retour ». */}
++            <div data-testid="contextual-company-switcher" className="-mx-3 flex min-w-0">
++              <SidebarCompanyMenu />
++            </div>
+           </div>
+         ) : null}
+         {children}
+-- 
+2.53.0
+

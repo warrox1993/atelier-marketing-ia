@@ -4,10 +4,11 @@
  * (`atelier.decision`), même transmission au Coordinateur, mêmes gardes (porte franchie sur la
  * révision courante, commentaire obligatoire).
  */
-import { useState, type FormEvent, type ReactNode } from "react";
+import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 import type { AppelPropose, DecisionHumaine, DossierHumain } from "../contrats/dossier.js";
 import { Bouton, Champ, EtatErreur, Section } from "./composants.js";
-import { useAction } from "./donnees.js";
+import { ConfirmationLot, type ElementLot } from "./decision-groupee.js";
+import { useAction, useDonnees } from "./donnees.js";
 import { ACTIONS_EXTERNES, ACTIONS_HUMAINES, idCourt } from "./format.js";
 import { transitionTache } from "./hote.js";
 import { centimesDepuisSaisie } from "./vues/campagnes.js";
@@ -263,3 +264,98 @@ function PorteeAppel({ appel, portee, maj }: { appel: AppelPropose; portee: { ca
   );
 }
 
+
+/* ------------------------------------------------------------------ */
+/* Approbation groupée                                                   */
+/* ------------------------------------------------------------------ */
+
+/** Lit le dossier d'un livrable et le signale au parent (les lectures sont des hooks : un petit composant par livrable). */
+function ChargeurDossier({ issueId, onDossier }: { issueId: string; onDossier(issueId: string, dossier: DossierHumain | null): void }) {
+  const r = useDonnees<DossierHumain>("atelier.dossier", { issueId });
+  const signale = useRef(onDossier);
+  signale.current = onDossier;
+  useEffect(() => {
+    if (r.data) signale.current(issueId, r.data);
+    else if (r.error) signale.current(issueId, null);
+  }, [issueId, r.data, r.error]);
+  return null;
+}
+
+/**
+ * « Approuver tout ce qui a passé le contrôle automatique (N) ». Ne prend QUE les livrables dont le
+ * contrôle automatique est réussi sur la révision courante (mêmes gardes que la décision unitaire :
+ * `raisonDecision`) ; les autres restent à traiter un par un. L'approbation ne porte que sur le contenu :
+ * aucune action externe (pas de publication, d'envoi ni de dépense). Récapitulatif puis confirmation unique.
+ */
+export function ApprobationGroupee({ elements, onFait }: { elements: ReadonlyArray<{ issueId: string; titre: string }>; onFait(issueIds: string[]): void }) {
+  const decider = useAction<DecisionHumaine>("atelier.decision");
+  const [dossiers, setDossiers] = useState<Record<string, DossierHumain | null>>({});
+  const [lot, setLot] = useState<ElementLot[] | null>(null);
+  const [commentaire, setCommentaire] = useState("");
+  const recu = (issueId: string, d: DossierHumain | null) => setDossiers((x) => (x[issueId] === d ? x : { ...x, [issueId]: d }));
+  const lus = elements.filter((e) => e.issueId in dossiers).length;
+  const eligibles = elements.filter((e) => {
+    const d = dossiers[e.issueId];
+    return d ? raisonDecision(d, "approuver", "-") === null : false;
+  });
+  const enAttente = lus < elements.length;
+
+  const approuver = async (element: ElementLot): Promise<string | void> => {
+    const d = dossiers[element.id];
+    if (!d || !d.livrable) throw new Error("Dossier non chargé.");
+    const revisionId = d.livrable.revisionId;
+    await decider({
+      issueId: d.issueId,
+      revisionId,
+      action: "approuver",
+      commentaire: commentaire.trim(),
+      portee: { revisionId, action: "aucune_action_externe", canal: null, compte: null, audience: null, montantMaxCents: null, dureeJours: null },
+    });
+    try {
+      await transitionTache(d.issueId, "done", `Approuvé dans l'atelier (approbation groupée) : ${commentaire.trim()}`);
+    } catch (err) {
+      const m = (err as { message?: string }).message ?? "";
+      return `décision enregistrée, mais la transition de la tâche Paperclip a été refusée (${m}) : ouvrez la tâche native pour la traiter.`;
+    }
+  };
+
+  return (
+    <div>
+      {elements.map((e) => (
+        <ChargeurDossier key={e.issueId} issueId={e.issueId} onDossier={recu} />
+      ))}
+      {lot ? (
+        <ConfirmationLot
+          titre={`Approuver ${lot.length > 1 ? `ces ${lot.length} contenus` : "ce contenu"} ?`}
+          elements={lot}
+          effet="Seul le contenu est approuvé, sur la révision affichée. Aucune publication, aucun envoi et aucune dépense ne sont autorisés : ils restent à décider un par un. Une nouvelle révision invaliderait l'approbation."
+          libelleConfirmer={`Confirmer l'approbation (${lot.length})`}
+          raisonDesactive={commentaire.trim() ? null : "Un commentaire commun est obligatoire."}
+          traiter={approuver}
+          onBilan={(b) => onFait(b.reussis.map((r) => r.element.id))}
+          onFermer={() => {
+            setLot(null);
+            setCommentaire("");
+          }}
+        >
+          <Champ libelle="Commentaire commun (enregistré avec chaque approbation)">
+            <textarea value={commentaire} onChange={(e) => setCommentaire(e.target.value)} rows={2} maxLength={4000} />
+          </Champ>
+        </ConfirmationLot>
+      ) : enAttente && elements.length > 0 ? (
+        <Bouton raisonDesactive="Vérification des contrôles automatiques en cours.">Approuver tout ce qui a passé le contrôle automatique</Bouton>
+      ) : eligibles.length > 0 ? (
+        <>
+          <Bouton variante="principal" onClick={() => setLot(eligibles.map((e) => ({ id: e.issueId, titre: e.titre })))}>
+            {`Approuver tout ce qui a passé le contrôle automatique (${eligibles.length})`}
+          </Bouton>
+          {eligibles.length < elements.length ? (
+            <p className="atl-sous">Les {elements.length - eligibles.length} autres restent à traiter un par un.</p>
+          ) : null}
+        </>
+      ) : elements.length > 0 ? (
+        <p className="atl-sous">Aucun de ces contenus n'a un contrôle automatique réussi sur sa révision courante : à traiter un par un.</p>
+      ) : null}
+    </div>
+  );
+}

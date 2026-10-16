@@ -398,6 +398,370 @@
         "Réclamations",
         "Indicateurs de qualité"
       ]
+    },
+    {
+      "slug": "logistique",
+      "nom": "Logistique",
+      "prefixe": "LOG",
+      "actif": true,
+      "description": "Prévision de la demande, transport et formalités douanières.\nPrépare les commandes et les expéditions, tout engagement reste humain.",
+      "coordinateur": "coordinateur-logistique",
+      "agents": [
+        "coordinateur-logistique",
+        "prevision-demande",
+        "transport-douane"
+      ],
+      "humainSeul": [
+        "Passation d'une commande",
+        "Choix d'un transporteur",
+        "Déclaration en douane"
+      ],
+      "obligations": [
+        "Code des douanes de l'Union",
+        "RGPD (contacts transporteurs)"
+      ],
+      "donnees": [
+        "Stocks et prévisions",
+        "Commandes et expéditions",
+        "Documents de transport"
+      ]
+    },
+    {
+      "slug": "production",
+      "nom": "Production",
+      "prefixe": "PRD",
+      "actif": true,
+      "description": "Ordonnancement de la production et amélioration continue.\nPropose les plannings et les gains, le lancement reste humain.",
+      "coordinateur": "coordinateur-production",
+      "agents": [
+        "coordinateur-production",
+        "ordonnancement",
+        "amelioration-continue"
+      ],
+      "humainSeul": [
+        "Lancement d'un ordre de fabrication",
+        "Modification d'un planning validé"
+      ],
+      "obligations": [
+        "Règlement général pour la protection du travail (RGPT)",
+        "RGPD"
+      ],
+      "donnees": [
+        "Ordres de fabrication",
+        "Plannings de production",
+        "Indicateurs de rendement"
+      ]
+    },
+    {
+      "slug": "recherche-innovation",
+      "nom": "Recherche et innovation",
+      "prefixe": "RDI",
+      "actif": true,
+      "description": "Veille de brevets et dossiers de subsides.\nPrépare les analyses et les dossiers, le dépôt et la signature restent humains.",
+      "coordinateur": "coordinateur-rdi",
+      "agents": [
+        "coordinateur-rdi",
+        "veille-brevets",
+        "dossiers-subsides"
+      ],
+      "humainSeul": [
+        "Dépôt d'un brevet",
+        "Introduction d'une demande de subside",
+        "Engagement d'un budget de recherche"
+      ],
+      "obligations": [
+        "Code de droit économique (propriété intellectuelle)",
+        "RGPD"
+      ],
+      "donnees": [
+        "Veille brevets",
+        "Dossiers de subsides",
+        "Projets de recherche"
+      ]
+    },
+    {
+      "slug": "communication",
+      "nom": "Communication",
+      "prefixe": "CMN",
+      "actif": true,
+      "description": "Relations presse et communication interne.\nToute diffusion, interne ou externe, est soumise à approbation humaine.",
+      "coordinateur": "coordinateur-communication",
+      "agents": [
+        "coordinateur-communication",
+        "relations-presse",
+        "communication-interne"
+      ],
+      "humainSeul": [
+        "Toute diffusion externe ou interne",
+        "Réponse à un journaliste"
+      ],
+      "obligations": [
+        "RGPD",
+        "Droit à l'image et droit d'auteur"
+      ],
+      "donnees": [
+        "Communiqués",
+        "Annonces internes",
+        "Contacts presse"
+      ]
+    },
+    {
+      "slug": "service-client",
+      "nom": "Service client",
+      "prefixe": "SCL",
+      "actif": true,
+      "description": "Tri des tickets et base de connaissances.\nPrépare les réponses, les gestes commerciaux et les réclamations sensibles restent humains.",
+      "coordinateur": "coordinateur-service-client",
+      "agents": [
+        "coordinateur-service-client",
+        "tri-tickets",
+        "base-connaissances"
+      ],
+      "humainSeul": [
+        "Geste commercial",
+        "Réponse à une réclamation engageant l'entreprise"
+      ],
+      "obligations": [
+        "Code de droit économique (droit des consommateurs)",
+        "RGPD"
+      ],
+      "donnees": [
+        "Tickets clients",
+        "Base de connaissances",
+        "Indicateurs de satisfaction"
+      ]
+    },
+    {
+      "slug": "fiscalite",
+      "nom": "Fiscalité",
+      "prefixe": "FIS",
+      "actif": true,
+      "description": "Calendrier fiscal et échéances déclaratives.\nPrépare les échéances, toute déclaration ou position fiscale reste humaine.",
+      "coordinateur": "coordinateur-fiscalite",
+      "agents": [
+        "coordinateur-fiscalite",
+        "calendrier-fiscal"
+      ],
+      "humainSeul": [
+        "Dépôt d'une déclaration fiscale",
+        "Prise de position fiscale",
+        "Réponse à l'administration fiscale"
+      ],
+      "obligations": [
+        "Code des impôts sur les revenus 1992",
+        "Code de la TVA",
+        "RGPD"
+      ],
+      "donnees": [
+        "Calendrier fiscal",
+        "Déclarations",
+        "Correspondance avec l'administration"
+      ],
+      "sensible": true
+    },
+    {
+      "slug": "gestion-projets",
+      "nom": "Gestion de projets",
+      "prefixe": "PMO",
+      "actif": true,
+      "description": "Suivi du portefeuille de projets.\nConsolide l'avancement et les risques, les arbitrages restent humains.",
+      "coordinateur": "coordinateur-pmo",
+      "agents": [
+        "coordinateur-pmo",
+        "suivi-portefeuille"
+      ],
+      "humainSeul": [
+        "Lancement ou arrêt d'un projet",
+        "Arbitrage de budget ou de ressources"
+      ],
+      "obligations": [
+        "RGPD"
+      ],
+      "donnees": [
+        "Portefeuille de projets",
+        "Plannings et jalons",
+        "Registre des risques"
+      ]
+    },
+    {
+      "slug": "hse",
+      "nom": "Hygiène, sécurité et environnement",
+      "prefixe": "HSE",
+      "actif": true,
+      "description": "Analyse des risques et prévention.\nPrépare les analyses, toute décision de sécurité reste humaine.",
+      "coordinateur": "coordinateur-hse",
+      "agents": [
+        "coordinateur-hse",
+        "analyse-risques"
+      ],
+      "humainSeul": [
+        "Arrêt d'une activité dangereuse",
+        "Déclaration d'un accident du travail",
+        "Validation du plan de prévention"
+      ],
+      "obligations": [
+        "Code du bien-être au travail",
+        "Loi du 4/08/1996 sur le bien-être des travailleurs",
+        "RGPD (données de santé)"
+      ],
+      "donnees": [
+        "Analyses de risques",
+        "Registre des accidents",
+        "Plans de prévention"
+      ],
+      "sensible": true
+    },
+    {
+      "slug": "formation",
+      "nom": "Formation",
+      "prefixe": "FOR",
+      "actif": true,
+      "description": "Ingénierie de formation et plans de développement.\nPrépare les parcours, l'inscription et la dépense restent humaines.",
+      "coordinateur": "coordinateur-formation",
+      "agents": [
+        "coordinateur-formation",
+        "ingenierie-formation"
+      ],
+      "humainSeul": [
+        "Engagement d'une dépense de formation",
+        "Validation du plan de formation"
+      ],
+      "obligations": [
+        "Congé-éducation et formation (droit belge)",
+        "RGPD"
+      ],
+      "donnees": [
+        "Plan de formation",
+        "Catalogue de formations",
+        "Suivi des compétences"
+      ]
+    },
+    {
+      "slug": "juridique-social",
+      "nom": "Juridique social",
+      "prefixe": "JSO",
+      "actif": true,
+      "description": "Contrats de travail et droit social.\nPrépare les projets de contrats, aucun avis engageant ni signature par l'IA.",
+      "coordinateur": "coordinateur-juridique-social",
+      "agents": [
+        "coordinateur-juridique-social",
+        "contrats-travail"
+      ],
+      "humainSeul": [
+        "Signature d'un contrat de travail",
+        "Licenciement ou rupture de contrat",
+        "Avis juridique engageant"
+      ],
+      "obligations": [
+        "Loi du 3/07/1978 relative aux contrats de travail",
+        "RGPD (données des travailleurs)"
+      ],
+      "donnees": [
+        "Contrats de travail",
+        "Règlement de travail",
+        "Dossiers sociaux"
+      ],
+      "sensible": true
+    },
+    {
+      "slug": "donnees-bi",
+      "nom": "Données et BI",
+      "prefixe": "DAT",
+      "actif": true,
+      "description": "Analyse de données et tableaux de bord.\nTout traitement de données personnelles est soumis à approbation humaine.",
+      "coordinateur": "coordinateur-donnees",
+      "agents": [
+        "coordinateur-donnees",
+        "analyste-donnees"
+      ],
+      "humainSeul": [
+        "Traitement de données personnelles",
+        "Diffusion d'un jeu de données hors de l'entreprise"
+      ],
+      "obligations": [
+        "RGPD",
+        "Registre des traitements (article 30)"
+      ],
+      "donnees": [
+        "Entrepôt de données",
+        "Tableaux de bord",
+        "Catalogue de données"
+      ]
+    },
+    {
+      "slug": "evenementiel",
+      "nom": "Événementiel",
+      "prefixe": "EVT",
+      "actif": true,
+      "description": "Organisation d'événements et logistique associée.\nPrépare le déroulé, l'engagement des dépenses et des contrats reste humain.",
+      "coordinateur": "coordinateur-evenementiel",
+      "agents": [
+        "coordinateur-evenementiel",
+        "logistique-evenement"
+      ],
+      "humainSeul": [
+        "Engagement d'une dépense événementielle",
+        "Signature d'un contrat de prestataire"
+      ],
+      "obligations": [
+        "RGPD (listes d'invités)",
+        "Droit à l'image"
+      ],
+      "donnees": [
+        "Calendrier d'événements",
+        "Prestataires",
+        "Listes d'invités"
+      ]
+    },
+    {
+      "slug": "services-generaux",
+      "nom": "Services généraux",
+      "prefixe": "SGX",
+      "actif": true,
+      "description": "Énergie et gestion des bâtiments.\nSuit les consommations et l'entretien, les travaux et contrats restent humains.",
+      "coordinateur": "coordinateur-services-generaux",
+      "agents": [
+        "coordinateur-services-generaux",
+        "energie-batiments"
+      ],
+      "humainSeul": [
+        "Engagement de travaux",
+        "Signature d'un contrat d'énergie ou de bail"
+      ],
+      "obligations": [
+        "Réglementation PEB (performance énergétique des bâtiments)",
+        "RGPD"
+      ],
+      "donnees": [
+        "Consommations d'énergie",
+        "Registre des bâtiments",
+        "Contrats de maintenance"
+      ]
+    },
+    {
+      "slug": "partenariats",
+      "nom": "Partenariats",
+      "prefixe": "PAR",
+      "actif": true,
+      "description": "Suivi des partenaires et des conventions.\nPrépare les dossiers, la signature d'une convention reste humaine.",
+      "coordinateur": "coordinateur-partenariats",
+      "agents": [
+        "coordinateur-partenariats",
+        "suivi-partenaires"
+      ],
+      "humainSeul": [
+        "Signature d'une convention de partenariat",
+        "Engagement financier envers un partenaire"
+      ],
+      "obligations": [
+        "Code de droit économique",
+        "RGPD"
+      ],
+      "donnees": [
+        "Partenaires",
+        "Conventions",
+        "Suivi des relations"
+      ]
     }
   ],
   "flux": [
@@ -670,6 +1034,444 @@
       "cible": "comptabilite-finance",
       "objet": "Pièces comptables reçues",
       "approbationHumaine": false
+    },
+    {
+      "source": "logistique",
+      "cible": "direction",
+      "objet": "Rapport périodique et escalade",
+      "approbationHumaine": false
+    },
+    {
+      "source": "production",
+      "cible": "direction",
+      "objet": "Rapport périodique et escalade",
+      "approbationHumaine": false
+    },
+    {
+      "source": "recherche-innovation",
+      "cible": "direction",
+      "objet": "Rapport périodique et escalade",
+      "approbationHumaine": false
+    },
+    {
+      "source": "communication",
+      "cible": "direction",
+      "objet": "Rapport périodique et escalade ; Projet de communication à valider",
+      "approbationHumaine": false
+    },
+    {
+      "source": "service-client",
+      "cible": "direction",
+      "objet": "Rapport périodique et escalade",
+      "approbationHumaine": false
+    },
+    {
+      "source": "fiscalite",
+      "cible": "direction",
+      "objet": "Rapport périodique et escalade",
+      "approbationHumaine": true
+    },
+    {
+      "source": "gestion-projets",
+      "cible": "direction",
+      "objet": "Rapport périodique et escalade ; Portefeuille, risques et arbitrages demandés",
+      "approbationHumaine": false
+    },
+    {
+      "source": "hse",
+      "cible": "direction",
+      "objet": "Rapport périodique et escalade",
+      "approbationHumaine": true
+    },
+    {
+      "source": "formation",
+      "cible": "direction",
+      "objet": "Rapport périodique et escalade",
+      "approbationHumaine": false
+    },
+    {
+      "source": "juridique-social",
+      "cible": "direction",
+      "objet": "Rapport périodique et escalade",
+      "approbationHumaine": true
+    },
+    {
+      "source": "donnees-bi",
+      "cible": "direction",
+      "objet": "Rapport périodique et escalade ; Indicateurs et analyses",
+      "approbationHumaine": true
+    },
+    {
+      "source": "evenementiel",
+      "cible": "direction",
+      "objet": "Rapport périodique et escalade",
+      "approbationHumaine": false
+    },
+    {
+      "source": "services-generaux",
+      "cible": "direction",
+      "objet": "Rapport périodique et escalade",
+      "approbationHumaine": false
+    },
+    {
+      "source": "partenariats",
+      "cible": "direction",
+      "objet": "Rapport périodique et escalade",
+      "approbationHumaine": false
+    },
+    {
+      "source": "logistique",
+      "cible": "achats",
+      "objet": "Commande à passer, livraison attendue",
+      "approbationHumaine": true
+    },
+    {
+      "source": "achats",
+      "cible": "logistique",
+      "objet": "Commande validée, délais fournisseurs",
+      "approbationHumaine": false
+    },
+    {
+      "source": "logistique",
+      "cible": "commerce-exterieur",
+      "objet": "Expédition hors UE, besoin de formalités",
+      "approbationHumaine": false
+    },
+    {
+      "source": "commerce-exterieur",
+      "cible": "logistique",
+      "objet": "Documents et règles douanières",
+      "approbationHumaine": false
+    },
+    {
+      "source": "logistique",
+      "cible": "sav-sinistres",
+      "objet": "Livraison endommagée ou perdue",
+      "approbationHumaine": false
+    },
+    {
+      "source": "sav-sinistres",
+      "cible": "logistique",
+      "objet": "Retour ou remplacement à organiser",
+      "approbationHumaine": false
+    },
+    {
+      "source": "production",
+      "cible": "qualite",
+      "objet": "Lot ou procédé à contrôler",
+      "approbationHumaine": false
+    },
+    {
+      "source": "qualite",
+      "cible": "production",
+      "objet": "Non-conformité et action corrective",
+      "approbationHumaine": false
+    },
+    {
+      "source": "production",
+      "cible": "logistique",
+      "objet": "Besoin en matières et expéditions",
+      "approbationHumaine": false
+    },
+    {
+      "source": "logistique",
+      "cible": "production",
+      "objet": "Disponibilité des stocks et transport",
+      "approbationHumaine": false
+    },
+    {
+      "source": "production",
+      "cible": "achats",
+      "objet": "Besoin d'approvisionnement",
+      "approbationHumaine": false
+    },
+    {
+      "source": "achats",
+      "cible": "production",
+      "objet": "Délais et prix fournisseurs",
+      "approbationHumaine": false
+    },
+    {
+      "source": "recherche-innovation",
+      "cible": "juridique",
+      "objet": "Question de propriété intellectuelle",
+      "approbationHumaine": true
+    },
+    {
+      "source": "juridique",
+      "cible": "recherche-innovation",
+      "objet": "Analyse juridique des brevets et contrats",
+      "approbationHumaine": true
+    },
+    {
+      "source": "recherche-innovation",
+      "cible": "comptabilite-finance",
+      "objet": "Budget de recherche et justification de subsides",
+      "approbationHumaine": false
+    },
+    {
+      "source": "comptabilite-finance",
+      "cible": "recherche-innovation",
+      "objet": "Disponibilité budgétaire et pièces comptables",
+      "approbationHumaine": false
+    },
+    {
+      "source": "direction",
+      "cible": "communication",
+      "objet": "Message et ligne de la direction",
+      "approbationHumaine": false
+    },
+    {
+      "source": "communication",
+      "cible": "marketing",
+      "objet": "Cohérence des messages de marque",
+      "approbationHumaine": true
+    },
+    {
+      "source": "marketing",
+      "cible": "communication",
+      "objet": "Contenus et campagnes à coordonner",
+      "approbationHumaine": false
+    },
+    {
+      "source": "communication",
+      "cible": "ressources-humaines",
+      "objet": "Annonces internes à diffuser",
+      "approbationHumaine": true
+    },
+    {
+      "source": "ressources-humaines",
+      "cible": "communication",
+      "objet": "Informations RH à communiquer",
+      "approbationHumaine": true
+    },
+    {
+      "source": "service-client",
+      "cible": "sav-sinistres",
+      "objet": "Dossier client à traiter",
+      "approbationHumaine": false
+    },
+    {
+      "source": "sav-sinistres",
+      "cible": "service-client",
+      "objet": "Statut et décision sur le dossier",
+      "approbationHumaine": false
+    },
+    {
+      "source": "service-client",
+      "cible": "commercial",
+      "objet": "Demande commerciale détectée",
+      "approbationHumaine": false
+    },
+    {
+      "source": "commercial",
+      "cible": "service-client",
+      "objet": "Informations sur l'offre et le client",
+      "approbationHumaine": false
+    },
+    {
+      "source": "service-client",
+      "cible": "informatique",
+      "objet": "Incident technique signalé par un client",
+      "approbationHumaine": false
+    },
+    {
+      "source": "informatique",
+      "cible": "service-client",
+      "objet": "Résolution et information client",
+      "approbationHumaine": false
+    },
+    {
+      "source": "fiscalite",
+      "cible": "comptabilite-finance",
+      "objet": "Échéances fiscales et besoins de pièces",
+      "approbationHumaine": true
+    },
+    {
+      "source": "comptabilite-finance",
+      "cible": "fiscalite",
+      "objet": "Écritures et chiffres pour les déclarations",
+      "approbationHumaine": true
+    },
+    {
+      "source": "fiscalite",
+      "cible": "juridique",
+      "objet": "Question d'interprétation fiscale",
+      "approbationHumaine": true
+    },
+    {
+      "source": "juridique",
+      "cible": "fiscalite",
+      "objet": "Analyse juridique d'une position",
+      "approbationHumaine": true
+    },
+    {
+      "source": "direction",
+      "cible": "gestion-projets",
+      "objet": "Décisions et priorités",
+      "approbationHumaine": false
+    },
+    {
+      "source": "hse",
+      "cible": "ressources-humaines",
+      "objet": "Accident, formation sécurité, aptitude",
+      "approbationHumaine": true
+    },
+    {
+      "source": "ressources-humaines",
+      "cible": "hse",
+      "objet": "Informations sur le personnel et les postes",
+      "approbationHumaine": true
+    },
+    {
+      "source": "hse",
+      "cible": "production",
+      "objet": "Risque ou mesure de prévention sur la ligne",
+      "approbationHumaine": true
+    },
+    {
+      "source": "production",
+      "cible": "hse",
+      "objet": "Données sur les postes et les incidents",
+      "approbationHumaine": true
+    },
+    {
+      "source": "hse",
+      "cible": "qualite",
+      "objet": "Incident à traiter en action corrective",
+      "approbationHumaine": true
+    },
+    {
+      "source": "qualite",
+      "cible": "hse",
+      "objet": "Constat qualité à intégrer à l'analyse de risques",
+      "approbationHumaine": true
+    },
+    {
+      "source": "formation",
+      "cible": "ressources-humaines",
+      "objet": "Besoins et plan de formation",
+      "approbationHumaine": true
+    },
+    {
+      "source": "ressources-humaines",
+      "cible": "formation",
+      "objet": "Besoins de compétences et budgets",
+      "approbationHumaine": true
+    },
+    {
+      "source": "juridique-social",
+      "cible": "ressources-humaines",
+      "objet": "Projet de contrat ou de rupture",
+      "approbationHumaine": true
+    },
+    {
+      "source": "ressources-humaines",
+      "cible": "juridique-social",
+      "objet": "Situation du travailleur et faits",
+      "approbationHumaine": true
+    },
+    {
+      "source": "juridique-social",
+      "cible": "juridique",
+      "objet": "Question de droit à examiner",
+      "approbationHumaine": true
+    },
+    {
+      "source": "juridique",
+      "cible": "juridique-social",
+      "objet": "Analyse juridique générale",
+      "approbationHumaine": true
+    },
+    {
+      "source": "direction",
+      "cible": "donnees-bi",
+      "objet": "Questions de pilotage",
+      "approbationHumaine": false
+    },
+    {
+      "source": "donnees-bi",
+      "cible": "informatique",
+      "objet": "Accès aux sources de données",
+      "approbationHumaine": true
+    },
+    {
+      "source": "informatique",
+      "cible": "donnees-bi",
+      "objet": "Droits d'accès et sécurité des données",
+      "approbationHumaine": false
+    },
+    {
+      "source": "evenementiel",
+      "cible": "marketing",
+      "objet": "Événement à promouvoir",
+      "approbationHumaine": false
+    },
+    {
+      "source": "marketing",
+      "cible": "evenementiel",
+      "objet": "Objectifs et cibles marketing",
+      "approbationHumaine": false
+    },
+    {
+      "source": "evenementiel",
+      "cible": "communication",
+      "objet": "Invitations et annonces d'événement",
+      "approbationHumaine": false
+    },
+    {
+      "source": "communication",
+      "cible": "evenementiel",
+      "objet": "Messages et calendrier de communication",
+      "approbationHumaine": true
+    },
+    {
+      "source": "services-generaux",
+      "cible": "achats",
+      "objet": "Besoin de prestations ou d'énergie",
+      "approbationHumaine": false
+    },
+    {
+      "source": "achats",
+      "cible": "services-generaux",
+      "objet": "Offres et contrats",
+      "approbationHumaine": false
+    },
+    {
+      "source": "services-generaux",
+      "cible": "hse",
+      "objet": "Travaux ou installation à risque",
+      "approbationHumaine": true
+    },
+    {
+      "source": "hse",
+      "cible": "services-generaux",
+      "objet": "Exigences de sécurité des bâtiments",
+      "approbationHumaine": true
+    },
+    {
+      "source": "partenariats",
+      "cible": "commercial",
+      "objet": "Opportunités partenaires et apporteurs",
+      "approbationHumaine": false
+    },
+    {
+      "source": "commercial",
+      "cible": "partenariats",
+      "objet": "Pipeline et besoins commerciaux",
+      "approbationHumaine": false
+    },
+    {
+      "source": "partenariats",
+      "cible": "juridique",
+      "objet": "Convention de partenariat à relire",
+      "approbationHumaine": true
+    },
+    {
+      "source": "juridique",
+      "cible": "partenariats",
+      "objet": "Analyse juridique de la convention",
+      "approbationHumaine": true
     }
   ]
 }

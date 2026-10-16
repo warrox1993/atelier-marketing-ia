@@ -303,6 +303,20 @@ export function lireSegmentsSuivis(texte: string, codesConnus: readonly string[]
   };
 }
 
+/** Copie la ligne `i` juste en dessous d'elle, transformée par `adapter` (nom suffixé, confirmation retirée, code retiré car il doit rester unique). */
+function dupliquerApres<T>(liste: T[], i: number, adapter: (ligne: T) => T): T[] {
+  const ligne = liste[i];
+  if (ligne === undefined) return liste;
+  return [...liste.slice(0, i + 1), adapter(ligne), ...liste.slice(i + 1)];
+}
+
+/** Segments déjà suivis par les autres bureaux (sans doublon, dans l'ordre), pour préremplir un nouveau bureau. */
+export function segmentsDejaUtilises(textes: string[]): string {
+  const vus = new Set<string>();
+  for (const t of textes) for (const code of t.split(/[,;\n]/u).map((c) => c.trim()).filter(Boolean)) vus.add(code);
+  return [...vus].join(", ");
+}
+
 const virgule = (n: number) => String(n).replace(".", ",");
 
 export function EditeurMarque({ initiale, onFait }: { initiale: ReferentielClient | null; onFait(): void }) {
@@ -377,6 +391,9 @@ export function EditeurMarque({ initiale, onFait }: { initiale: ReferentielClien
               <label className="atl-case">
                 <input type="checkbox" checked={o.confirmee} onChange={(e) => setOffres((l) => l.map((x, j) => (j === i ? { ...x, confirmee: e.target.checked } : x)))} /> Confirmée<span className="atl-sr"> (offre {i + 1})</span>
               </label>
+              <Bouton variante="discret" onClick={() => setOffres((l) => dupliquerApres(l, i, ({ code: _code, ...x }) => ({ ...x, nom: `${x.nom} (copie)`, confirmee: false })))}>
+                Dupliquer<span className="atl-sr"> l'offre {i + 1}</span>
+              </Bouton>
               <Bouton variante="discret" onClick={() => setOffres((l) => l.filter((_, j) => j !== i))}>
                 Retirer<span className="atl-sr"> l'offre {i + 1}</span>
               </Bouton>
@@ -413,12 +430,15 @@ export function EditeurMarque({ initiale, onFait }: { initiale: ReferentielClien
               <label className="atl-case">
                 <input type="checkbox" checked={x.confirme} onChange={(e) => setEtabs((l) => l.map((y, j) => (j === i ? { ...y, confirme: e.target.checked } : y)))} /> Confirmé<span className="atl-sr"> (établissement {i + 1})</span>
               </label>
+              <Bouton variante="discret" onClick={() => setEtabs((l) => dupliquerApres(l, i, ({ code: _code, ...y }) => ({ ...y, nom: `${y.nom} (copie)`, confirme: false })))}>
+                Dupliquer<span className="atl-sr"> l'établissement {i + 1}</span>
+              </Bouton>
               <Bouton variante="discret" onClick={() => setEtabs((l) => l.filter((_, j) => j !== i))}>
                 Retirer<span className="atl-sr"> l'établissement {i + 1}</span>
               </Bouton>
             </div>
           ))}
-          <Bouton variante="discret" onClick={() => setEtabs((l) => [...l, { nom: "", adresse: "", confirme: false, lat: "", lon: "", segmentsTexte: "" }])}>
+          <Bouton variante="discret" onClick={() => setEtabs((l) => [...l, { nom: "", adresse: "", confirme: false, lat: "", lon: "", segmentsTexte: segmentsDejaUtilises(l.map((x) => x.segmentsTexte)) }])}>
             Ajouter un établissement
           </Bouton>
         </fieldset>

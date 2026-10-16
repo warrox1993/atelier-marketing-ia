@@ -1,0 +1,72 @@
+From 7503d61b53a73a287cd223d8994e40fdaf8e80de Mon Sep 17 00:00:00 2001
+From: Jean-Baptiste Dhondt <114347858+warrox1993@users.noreply.github.com>
+Date: Fri, 16 Oct 2026 20:27:30 +0200
+Subject: [PATCH 59/62] =?UTF-8?q?fix(ui):=20la=20garde=20anti-boucle=20du?=
+ =?UTF-8?q?=20retour=20reconna=C3=AEt=20la=20surface=20du=20plugin=20par?=
+ =?UTF-8?q?=20la=20page=20affich=C3=A9e=20(cr=C3=A9neau=20atelier-navigati?=
+ =?UTF-8?q?on=20=E2=89=A0=20route=20atelier)?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01DP85vPq2MHkZg8VNtRvCzB
+---
+ .../ContextualSidebarFrame.test.tsx           | 22 +++++++++++++++++++
+ ui/src/components/ContextualSidebarFrame.tsx  |  7 +++++-
+ 2 files changed, 28 insertions(+), 1 deletion(-)
+
+diff --git a/ui/src/components/ContextualSidebarFrame.test.tsx b/ui/src/components/ContextualSidebarFrame.test.tsx
+index 97dad8d48..008adb75c 100644
+--- a/ui/src/components/ContextualSidebarFrame.test.tsx
++++ b/ui/src/components/ContextualSidebarFrame.test.tsx
+@@ -124,4 +124,26 @@ describe("ContextualSidebarFrame", () => {
+     expect(mockNavigate).toHaveBeenCalledWith("/dashboard");
+     act(() => root.unmount());
+   });
++
++  it("ne boucle pas avec le vrai nom de créneau du plugin (atelier-navigation) : la page affichée fait foi", () => {
++    window.history.pushState({}, "", "/PAP/atelier/accueil");
++    window.sessionStorage.setItem(
++      "paperclip.contextualSidebar.origin:PAP:plugin:atelier-navigation",
++      "/PAP/atelier/prospects",
++    );
++    const root = createRoot(container);
++    act(() => {
++      root.render(
++        <ContextualSidebarFrame surface="plugin:atelier-navigation" title="Atelier marketing" fallbackTo="/dashboard">
++          <nav>Atelier links</nav>
++        </ContextualSidebarFrame>,
++      );
++    });
++    act(() => {
++      container.querySelector<HTMLButtonElement>('button[aria-label="Back from Atelier marketing"]')?.click();
++    });
++    expect(mockNavigate).toHaveBeenCalledWith("/dashboard");
++    act(() => root.unmount());
++    window.history.pushState({}, "", "/");
++  });
+ });
+diff --git a/ui/src/components/ContextualSidebarFrame.tsx b/ui/src/components/ContextualSidebarFrame.tsx
+index 922df9662..6e12e540d 100644
+--- a/ui/src/components/ContextualSidebarFrame.tsx
++++ b/ui/src/components/ContextualSidebarFrame.tsx
+@@ -41,9 +41,14 @@ export function ContextualSidebarFrame({
+     // surface courante ne sort de rien, les deux fabriquent une boucle ; on prend alors le repli.
+     const segments = getCompanyPathSegments(target, companyPrefix);
+     const surfaceSegment = surface.startsWith("plugin:") ? surface.slice("plugin:".length).toLowerCase() : null;
++    // Le nom du créneau (« atelier-navigation ») diffère de la route (« atelier ») : on compare donc
++    // aussi au premier segment de la page affichée, qui appartient forcément à la surface courante.
++    const currentSegment = getCompanyPathSegments(window.location.pathname, companyPrefix)[0]?.toLowerCase();
++    const targetSegment = segments[0]?.toLowerCase();
+     const isLoop = target !== fallbackTo
+       && (isCompanyRootPath(target, companyPrefix)
+-        || (surfaceSegment !== null && segments[0]?.toLowerCase() === surfaceSegment));
++        || (targetSegment !== undefined
++          && ((surfaceSegment !== null && targetSegment === surfaceSegment) || targetSegment === currentSegment)));
+     navigate(isLoop ? fallbackTo : target);
+     if (isMobile) setSidebarOpen(false);
+   }
+-- 
+2.53.0
+

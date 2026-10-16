@@ -4,7 +4,9 @@ slug: "veille-reglementaire"
 name: "Veille reglementaire"
 title: "Conformité · Veille réglementaire"
 reportsTo: "coordinateur-conformite"
-skills: []
+skills:
+  - "veille-reglementaire"
+  - "controle-communications-reglementees"
 ---
 
 # Veille réglementaire

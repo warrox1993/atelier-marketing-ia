@@ -4,7 +4,9 @@ slug: "synthese"
 name: "Synthese"
 title: "Direction · Note de synthèse et de décision"
 reportsTo: "coordinateur-direction"
-skills: []
+skills:
+  - "synthese-direction"
+  - "pilotage-strategique"
 ---
 
 # Note de synthèse et de décision

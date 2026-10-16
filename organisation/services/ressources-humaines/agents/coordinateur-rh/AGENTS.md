@@ -9,6 +9,7 @@ skills:
   - "planification-livrables"
   - "dossier-validation-humaine"
   - "recherche-connaissances"
+  - "entretien-evaluation"
 ---
 
 # Coordinateur du service ressources humaines

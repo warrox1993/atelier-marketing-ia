@@ -1,6 +1,6 @@
 /**
  * Nouvelle interface de l'atelier dans un vrai navigateur (chromium sans interface), contre l'instance d'essai
- * jetable « atelier-e2e » (HTTP 3590, PostgreSQL 54790) : mode simple / mode expert du menu du socle, cinq
+ * jetable « atelier-e2e » (HTTP 3590, PostgreSQL 54790) : menu complet du socle toujours visible (plus de mode simple), cinq
  * rubriques à onglets (clavier compris), anciennes adresses, Accueil « À faire » traité sur place, Discussion
  * avec boutons d'action, bandeau d'entreprise, aucune erreur de console. Bureau 1440x900 ET téléphone 390x844.
  *
@@ -133,51 +133,36 @@ for (const f of FORMATS) {
       return page.getByRole("navigation").filter({ hasText: "Atelier marketing" }).first();
     }
 
-    test("menu du socle : mode simple à l'arrivée, bascule en mode expert et retour", async ({ page }) => {
+    test("menu du socle : toujours complet, aucun interrupteur", async ({ page }) => {
       const erreurs = surveillerConsole(page);
       await page.goto(`/${prefixe}/dashboard`);
-      await page.evaluate(() => Object.keys(localStorage).filter((k) => k.startsWith("atelier.mode-expert.")).forEach((k) => localStorage.removeItem(k)));
-      await page.reload();
       const menu = await menuSocle(page);
       await expect(menu.getByRole("link", { name: /Atelier marketing/u })).toBeVisible({ timeout: 30_000 });
-      const interrupteur = page.getByRole("switch", { name: "Mode expert" });
-      await expect(interrupteur).toBeVisible();
-      await expect(interrupteur).toHaveAttribute("aria-checked", "false");
-      // Menu réduit : l'atelier, « Nouvelle tâche » et l'interrupteur ; pas les entrées d'origine du socle.
-      const liensSimple = await menu.getByRole("link").count();
-      expect(liensSimple, "entrées du menu en mode simple").toBeLessThanOrEqual(2);
-      await capturer(page, `${f.nom}-1-menu-simple`);
-
-      await interrupteur.click();
-      await expect(interrupteur).toHaveAttribute("aria-checked", "true");
-      await expect.poll(async () => page.getByRole("navigation").first().getByRole("link").count(), { timeout: 10_000 }).toBeGreaterThan(liensSimple + 3);
-      await capturer(page, `${f.nom}-2-menu-expert`);
-
-      // La préférence survit au rechargement, puis le retour au mode simple est possible.
-      await page.reload();
-      if (f.mobile) await page.getByRole("button", { name: /^(Open sidebar|Ouvrir le menu)$/iu }).first().tap();
-      await expect(page.getByRole("switch", { name: "Mode expert" })).toHaveAttribute("aria-checked", "true", { timeout: 30_000 });
-      await page.getByRole("switch", { name: "Mode expert" }).click();
-      await expect(page.getByRole("switch", { name: "Mode expert" })).toHaveAttribute("aria-checked", "false");
-      await expect.poll(async () => page.getByRole("navigation").first().getByRole("link").count(), { timeout: 10_000 }).toBeLessThanOrEqual(2);
+      await expect(page.getByRole("switch", { name: "Mode expert" })).toHaveCount(0);
+      for (const entree of ["Tâches", "Agents", "Routines", "Projets"]) {
+        await expect(menu.getByRole("link", { name: entree, exact: true }), `${entree} visible`).toBeVisible();
+      }
+      await capturer(page, `${f.nom}-1-menu-complet`);
       await sansDebordement(page);
 
       expect(erreurs, erreurs.join("\n")).toEqual([]);
     });
 
     if (f.mobile) {
-      test("barre du bas en mode simple : Atelier, Nouvelle tâche, À faire", async ({ page }) => {
+      test("barre du bas : Atelier, Tâches, Nouvelle tâche, Boîte, Menu", async ({ page }) => {
         const erreurs = surveillerConsole(page);
         await page.goto(`/${prefixe}/dashboard`);
         const barre = page.getByRole("navigation", { name: "Navigation mobile" });
         await expect(barre).toBeVisible({ timeout: 30_000 });
         const textes = (await barre.locator("a, button").allInnerTexts()).map((t) => t.replace(/\s+/gu, " ").trim());
-        expect(textes.length, `éléments de la barre : ${textes.join(" | ")}`).toBe(3);
+        expect(textes.length, `éléments de la barre : ${textes.join(" | ")}`).toBe(5);
         expect(textes[0]).toContain("Atelier");
-        expect(textes[1]).toContain("Nouvelle tâche");
-        expect(textes[2]).toContain("À faire");
+        expect(textes[1]).toContain("Tâches");
+        expect(textes[2]).toContain("Nouvelle tâche");
+        expect(textes[3]).toContain("Boîte");
+        expect(textes[4]).toContain("Menu");
         await capturer(page, "mobile-3-barre-du-bas");
-        for (const lien of [/Atelier/u, /À faire/u]) {
+        for (const lien of [/Atelier/u]) {
           await page.goto(`/${prefixe}/dashboard`);
           await barre.getByRole("link", { name: lien }).tap();
           await expect(page).toHaveURL(new RegExp(`/${prefixe}/atelier$`, "u"), { timeout: 30_000 });

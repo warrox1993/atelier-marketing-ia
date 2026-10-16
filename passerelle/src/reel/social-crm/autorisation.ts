@@ -17,7 +17,7 @@
 import { createHash, randomBytes } from "node:crypto";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import type { AddressInfo } from "node:net";
-import { calculerChallengeS256, verifierPkceS256 } from "../../oauth-demo.js";
+import { calculerChallengeS256, verifierPkceS256 } from "../../commun/pkce.js";
 import {
   bornerTable,
   ENREGISTREMENTS_PAR_MINUTE,

@@ -404,7 +404,7 @@ export interface ModeEffectif {
 
 /**
  * Règle prudente du lot L9 : RÉEL si la campagne est réelle OU si l'entreprise est réglée en
- * mode réel (une campagne laissée au défaut « démonstration » dans une entreprise réelle
+ * mode réel, y compris sans réglages enregistrés puisque le défaut est « réel » depuis le lot G1 (une campagne déclarée en « démonstration » dans une entreprise réelle
  * n'accueille pas de données simulées et ne simule pas sa diffusion) ; sinon démonstration.
  */
 export function calculerModeEffectif(
@@ -412,7 +412,7 @@ export function calculerModeEffectif(
   reglages: { existe: boolean; modeParDefaut: ModeDonnee },
 ): ModeEffectif {
   if (campagne?.mode === "reel") return { mode: "reel", raison: "campagne en mode réel" };
-  if (reglages.existe && reglages.modeParDefaut === "reel") {
+  if (reglages.modeParDefaut === "reel") {
     return { mode: "reel", raison: campagne ? "entreprise en mode réel (la campagne est déclarée en démonstration)" : "entreprise en mode réel" };
   }
   return { mode: "demonstration", raison: campagne ? "campagne et entreprise en démonstration" : "entreprise en démonstration" };

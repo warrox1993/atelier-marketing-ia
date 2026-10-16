@@ -4,7 +4,7 @@ slug: "renouvellements"
 name: "Renouvellements"
 title: "Commercial · Suivi et préparation des renouvellements"
 reportsTo: "coordinateur-commercial"
-skills: []
+skills: ["renouvellement-fidelisation"]
 ---
 
 # Suivi et préparation des renouvellements

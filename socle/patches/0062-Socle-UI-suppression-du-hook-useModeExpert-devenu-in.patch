@@ -1,0 +1,95 @@
+From c55cb81d601f98ef2ffe31b3eda41b31af8699a5 Mon Sep 17 00:00:00 2001
+From: Jean-Baptiste Dhondt <114347858+warrox1993@users.noreply.github.com>
+Date: Fri, 16 Oct 2026 20:52:12 +0200
+Subject: [PATCH 62/62] Socle UI : suppression du hook useModeExpert devenu
+ inutile
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01DP85vPq2MHkZg8VNtRvCzB
+---
+ ui/src/hooks/useModeExpert.ts | 73 -----------------------------------
+ 1 file changed, 73 deletions(-)
+ delete mode 100644 ui/src/hooks/useModeExpert.ts
+
+diff --git a/ui/src/hooks/useModeExpert.ts b/ui/src/hooks/useModeExpert.ts
+deleted file mode 100644
+index f3a5eed60..000000000
+--- a/ui/src/hooks/useModeExpert.ts
++++ /dev/null
+@@ -1,73 +0,0 @@
+-import { useCallback, useSyncExternalStore } from "react";
+-
+-/**
+- * Préférence « Mode expert » du menu quand l'atelier marketing est actif.
+- * Par défaut le menu est en mode simple ; l'interrupteur révèle toutes les
+- * entrées d'origine du socle. La valeur est mémorisée par entreprise dans le
+- * localStorage (enveloppé de try/catch : navigation privée, stockage bloqué),
+- * avec une copie en mémoire pour que l'interrupteur marche même sans stockage.
+- */
+-const PREFIXE_CLE = "atelier.mode-expert.";
+-
+-const enMemoire = new Map<string, boolean>();
+-const abonnes = new Set<() => void>();
+-
+-function cle(companyId: string | null | undefined): string {
+-  return `${PREFIXE_CLE}${companyId ?? "aucune"}`;
+-}
+-
+-export function lireModeExpert(companyId: string | null | undefined): boolean {
+-  const k = cle(companyId);
+-  const memoire = enMemoire.get(k);
+-  if (memoire !== undefined) return memoire;
+-  try {
+-    return window.localStorage.getItem(k) === "1";
+-  } catch {
+-    return false;
+-  }
+-}
+-
+-export function ecrireModeExpert(companyId: string | null | undefined, expert: boolean): void {
+-  const k = cle(companyId);
+-  enMemoire.set(k, expert);
+-  try {
+-    window.localStorage.setItem(k, expert ? "1" : "0");
+-  } catch {
+-    // stockage indisponible : la préférence vaut pour cette session seulement
+-  }
+-  abonnes.forEach((notifier) => notifier());
+-}
+-
+-function abonner(notifier: () => void): () => void {
+-  abonnes.add(notifier);
+-  // Synchronise aussi les autres onglets.
+-  const surStockage = (event: StorageEvent) => {
+-    if (event.key?.startsWith(PREFIXE_CLE)) {
+-      enMemoire.delete(event.key);
+-      notifier();
+-    }
+-  };
+-  window.addEventListener("storage", surStockage);
+-  return () => {
+-    abonnes.delete(notifier);
+-    window.removeEventListener("storage", surStockage);
+-  };
+-}
+-
+-/** Réservé aux tests : oublie la copie en mémoire. */
+-export function reinitialiserModeExpertPourTests(): void {
+-  enMemoire.clear();
+-}
+-
+-export function useModeExpert(companyId: string | null | undefined): {
+-  expert: boolean;
+-  setExpert: (expert: boolean) => void;
+-} {
+-  const expert = useSyncExternalStore(
+-    abonner,
+-    () => lireModeExpert(companyId),
+-    () => false,
+-  );
+-  const setExpert = useCallback((valeur: boolean) => ecrireModeExpert(companyId, valeur), [companyId]);
+-  return { expert, setExpert };
+-}
+-- 
+2.53.0
+

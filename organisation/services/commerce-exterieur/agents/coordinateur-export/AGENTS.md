@@ -9,6 +9,8 @@ skills:
   - "planification-livrables"
   - "dossier-validation-humaine"
   - "recherche-connaissances"
+  - "prospection-marche-etranger"
+  - "classement-douanier-origine"
 ---
 
 # Coordinateur du service commerce extérieur

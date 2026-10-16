@@ -9,6 +9,7 @@ import type { ElementAccueil, EtapeMission, MissionResumee, UrgenceAccueil } fro
 import { SurPlace, traitableSurPlace } from "../accueil-sur-place.js";
 import { compterAFaire, publierNombreAFaire } from "../compteur-afaire.js";
 import { Bouton, Champ, Chargement, EnTete, EtatErreur, Horodatage, LienHote, MessageFait, Pastille, Section, Vide } from "../composants.js";
+import { ApprobationGroupee } from "../decision-livrable.js";
 import { MODELES_DEMANDE, useEnvoiDemande } from "../demande.js";
 import type { Ton } from "../format.js";
 import { appelRoute } from "../routes-prospection.js";
@@ -88,6 +89,16 @@ export function VueAccueil() {
         {etat.chargement && !etat.data ? <Chargement libelle="Chargement de l'accueil" /> : null}
         {confirmation ? (
           <MessageFait className="atl-succes atl-afaire-confirmation" texte={confirmation} />
+        ) : null}
+        {etat.data ? (
+          <ApprobationGroupee
+            elements={etat.data.elements.filter((e) => e.type === "contenu_a_valider" && e.issueId && !traites.has(e.id)).map((e) => ({ issueId: e.issueId as string, titre: e.titre }))}
+            onFait={(ids) => {
+              const elementsTraites = (etat.data?.elements ?? []).filter((e) => e.issueId && ids.includes(e.issueId) && e.type === "contenu_a_valider");
+              setTraites((t) => new Set([...t, ...elementsTraites.map((e) => e.id)]));
+              recharger();
+            }}
+          />
         ) : null}
         {etat.data ? <AFaire elements={etat.data.elements.filter((e) => !traites.has(e.id))} onFait={surTraite} /> : null}
       </Section>

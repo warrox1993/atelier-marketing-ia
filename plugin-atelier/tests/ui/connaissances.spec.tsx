@@ -265,6 +265,64 @@ describe("mise à la corbeille", () => {
   });
 });
 
+describe("mise à la corbeille groupée", () => {
+  const casePar = (c: HTMLElement, titre: string) => c.querySelector(`input[type="checkbox"][aria-label="Sélectionner « ${titre} »"]`) as HTMLInputElement;
+  const caseTout = (c: HTMLElement) => Array.from(c.querySelectorAll("label")).find((l) => l.textContent === "Tout sélectionner")!.querySelector("input") as HTMLInputElement;
+
+  it("chaque case est étiquetée et le bouton groupé n'apparaît qu'avec une sélection", async () => {
+    const c = await ouvrir();
+    expect(casePar(c, "Tarifs 2026")).not.toBeNull();
+    expect(casePar(c, "Tarifs 2024")).not.toBeNull();
+    expect(c.textContent).not.toContain("Mettre à la corbeille (");
+    await cliquer(casePar(c, "Tarifs 2026"));
+    expect(c.textContent).toContain("Mettre à la corbeille (1)");
+    await cliquer(caseTout(c));
+    expect(c.textContent).toContain("Mettre à la corbeille (2)");
+    await cliquer(caseTout(c));
+    expect(c.textContent).not.toContain("Mettre à la corbeille (");
+  });
+
+  it("une seule confirmation liste les titres, puis une requête par document", async () => {
+    const c = await ouvrir();
+    await cliquer(caseTout(c));
+    await cliquer(parTexte(c, "button", "Mettre à la corbeille (2)"));
+    expect(posts()).toHaveLength(0);
+    const groupe = c.querySelector('[role="group"][aria-label^="Confirmation de la mise à la corbeille des documents"]')!;
+    expect(groupe.textContent).toContain("Tarifs 2026");
+    expect(groupe.textContent).toContain("Tarifs 2024");
+    await cliquer(parTexte(c, "button", "Confirmer pour 2 documents"));
+    expect(posts().map((p) => p.corps)).toEqual([
+      { companyId: ENTREPRISE, type: "document", id: DOC_A },
+      { companyId: ENTREPRISE, type: "document", id: DOC_B },
+    ]);
+    expect(c.querySelector('[role="status"].atl-succes')?.textContent).toContain("2 documents mis à la corbeille");
+  });
+
+  it("« Ne rien faire » abandonne sans rien envoyer", async () => {
+    const c = await ouvrir();
+    await cliquer(casePar(c, "Tarifs 2026"));
+    await cliquer(parTexte(c, "button", "Mettre à la corbeille (1)"));
+    await cliquer(parTexte(c, "button", "Ne rien faire"));
+    expect(posts()).toHaveLength(0);
+  });
+
+  it("échec partiel : les autres continuent et le récapitulatif nomme le document en échec", async () => {
+    serveur = (m, u, corps) =>
+      m === "POST" && corps?.id === DOC_A ? { statut: 403, corps: { error: "Réservé à un humain." } } : m === "GET" && u.includes("/connaissances?") ? { statut: 200, corps: lignes } : { statut: 200, corps: {} };
+    const c = await ouvrir();
+    await cliquer(caseTout(c));
+    await cliquer(parTexte(c, "button", "Mettre à la corbeille (2)"));
+    await cliquer(parTexte(c, "button", "Confirmer pour 2 documents"));
+    expect(posts()).toHaveLength(2);
+    const alerte = c.querySelector('[role="alert"]')!;
+    expect(alerte.textContent).toContain("1 document mis à la corbeille, 1 en échec");
+    expect(alerte.textContent).toContain("Tarifs 2026");
+    expect(alerte.textContent).not.toContain("« Tarifs 2024 »");
+    expect(casePar(c, "Tarifs 2026").checked).toBe(true);
+    expect(casePar(c, "Tarifs 2024").checked).toBe(false);
+  });
+});
+
 describe("suppression", () => {
   it("exige la confirmation explicite et le motif avant d'envoyer", async () => {
     const c = await ouvrir();

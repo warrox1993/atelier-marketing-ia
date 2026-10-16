@@ -7,43 +7,20 @@
 import * as z from "zod";
 import type { OutilPasserelle } from "../../fournisseurs.js";
 import type { LigneGsc } from "../modele/index.js";
+import { DIMENSIONS_API, OPERATEURS_API, schemaEntreeGsc } from "../../commun/google/schemas.js";
 import { ANNOTATIONS_LECTURE, lirePeriode, modeleDemo, refuserNonModelise } from "./commun.js";
 
 /** Propriétés de la fiche du service (src/services.ts) ; le modèle ne distingue pas « avec ou sans www ». */
 export const SITES_GSC = ["sc-domain:renovation-liege.example", "https://www.renovation-liege.example/"] as const;
 
-/** Toutes les dimensions de la vraie API, pour que le schéma d'entrée soit identique ; seules certaines sont servies. */
-const DIMENSIONS_API = ["country", "device", "page", "query", "date", "hour", "searchAppearance"] as const;
+// Schéma d'entrée (schemaEntreeGsc), dimensions et opérateurs de l'API : src/commun/google/schemas.ts (partagés avec le réel).
 const DIMENSIONS_SERVIES = ["date", "query", "page"] as const;
 type DimensionServie = (typeof DIMENSIONS_SERVIES)[number];
 const VERS_MODELE: Record<DimensionServie, "date" | "requete" | "page"> = { date: "date", query: "requete", page: "page" };
 
-const OPERATEURS_API = ["equals", "contains", "notEquals", "notContains", "includingRegex", "excludingRegex"] as const;
 const OPERATEURS_SERVIS = ["equals", "contains", "notEquals", "notContains"] as const;
 
-const LIMITE_LIGNES_MAX = 25_000;
-
-const schemaFiltre = z.object({
-  dimension: z.enum(DIMENSIONS_API),
-  operator: z.enum(OPERATEURS_API).optional(),
-  expression: z.string(),
-});
-
-export const schemaEntreeGsc = {
-  siteUrl: z.string().describe("Propriété : « sc-domain:renovation-liege.example » ou « https://www.renovation-liege.example/ »."),
-  startDate: z.string().describe("AAAA-MM-JJ (fuseau Pacifique dans l'API réelle)."),
-  endDate: z.string().describe("AAAA-MM-JJ."),
-  dimensions: z.array(z.enum(DIMENSIONS_API)).optional().describe("Regroupements ; servis en démonstration : date, query, page."),
-  type: z.enum(["web", "discover", "googleNews", "news", "image", "video"]).optional().describe("Type de recherche ; seul « web » est servi."),
-  dimensionFilterGroups: z
-    .array(z.object({ groupType: z.enum(["and"]).optional(), filters: z.array(schemaFiltre) }))
-    .optional()
-    .describe("Filtres sur query ou page (equals, contains, notEquals, notContains)."),
-  aggregationType: z.enum(["auto", "byPage", "byProperty", "byNewsShowcasePanel"]).optional(),
-  rowLimit: z.number().int().min(1).max(LIMITE_LIGNES_MAX).optional().describe("1 à 25 000 (1 000 par défaut)."),
-  startRow: z.number().int().min(0).optional().describe("Décalage de pagination, à partir de 0."),
-  dataState: z.enum(["final", "all", "hourly_all"]).optional(),
-};
+export { schemaEntreeGsc };
 
 interface ArgsGsc {
   siteUrl: string;

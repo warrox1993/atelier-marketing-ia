@@ -8,7 +8,8 @@
 //      `revocations_approbation` (liste de révocation `arv1` récente, signée par le plugin, exigée avec la preuve).
 
 import * as z from "zod";
-import type { FournisseurService, OutilPasserelle } from "../../fournisseurs.js";
+import type { OutilPasserelle } from "../../fournisseurs.js";
+import type { DefinitionOutil } from "../../commun/social-crm/outils.js";
 
 const MOTIF_DATE = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -38,7 +39,7 @@ export const RevocationsApprobation = z
   );
 
 /** Reprend un outil de démonstration : nom, schéma et annotations identiques ; dates sans borne de modèle. */
-export function schemaReel(outil: OutilPasserelle, mutation: boolean): z.ZodRawShape {
+export function schemaReel(outil: Pick<DefinitionOutil, "schemaEntree">, mutation: boolean): z.ZodRawShape {
   const forme: Record<string, z.ZodType> = {};
   for (const [cle, schema] of Object.entries(outil.schemaEntree)) {
     const s = schema as z.ZodType;
@@ -53,11 +54,17 @@ export function schemaReel(outil: OutilPasserelle, mutation: boolean): z.ZodRawS
   return forme as z.ZodRawShape;
 }
 
-/** Outil de démonstration d'un fournisseur L7, par son nom (lève si absent : les noms doivent rester identiques). */
-export function outilDemo(fournisseur: FournisseurService, nom: string): OutilPasserelle {
-  const outil = fournisseur.outils.find((o) => o.nom === nom);
-  if (!outil) throw new Error(`Outil de démonstration introuvable : ${nom}.`);
-  return outil;
+/** Gabarit d'un outil réel tiré de sa définition neutre (src/commun/social-crm/) : nom, schéma et annotations de l'outil, dates sans borne de modèle. */
+export function gabarit(def: DefinitionOutil, description: string): Gabarit {
+  const mutation = def.annotations.readOnlyHint === false;
+  return {
+    nom: def.nom,
+    description: mutation
+      ? `MUTATION (exécutée seulement avec une preuve d'approbation humaine valide ; sinon préparée, non exécutée). ${description}`
+      : `LECTURE. ${description}`,
+    schemaEntree: schemaReel(def, mutation),
+    annotations: { ...def.annotations },
+  };
 }
 
 export interface Gabarit {
@@ -65,20 +72,6 @@ export interface Gabarit {
   description: string;
   schemaEntree: z.ZodRawShape;
   annotations: NonNullable<OutilPasserelle["annotations"]>;
-}
-
-/** Gabarit d'un outil réel tiré de son jumeau de démonstration. */
-export function gabarit(fournisseur: FournisseurService, nom: string, description: string): Gabarit {
-  const demo = outilDemo(fournisseur, nom);
-  const mutation = demo.annotations?.readOnlyHint === false;
-  return {
-    nom,
-    description: mutation
-      ? `MUTATION (exécutée seulement avec une preuve d'approbation humaine valide ; sinon préparée, non exécutée). ${description}`
-      : `LECTURE. ${description}`,
-    schemaEntree: schemaReel(demo, mutation),
-    annotations: { ...(demo.annotations ?? {}) },
-  };
 }
 
 // --- Dates ---------------------------------------------------------------------------------------

@@ -9,6 +9,9 @@ skills:
   - "planification-livrables"
   - "dossier-validation-humaine"
   - "recherche-connaissances"
+  - "plan-tresorerie"
+  - "cloture-mensuelle"
+  - "analyse-rentabilite"
 ---
 
 # Coordinateur du service comptabilité

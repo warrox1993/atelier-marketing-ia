@@ -4,7 +4,8 @@ slug: "lecture-contrats"
 name: "Lecture contrats"
 title: "Juridique · Première lecture de contrats"
 reportsTo: "coordinateur-juridique"
-skills: []
+skills:
+  - "revue-contrat-commercial"
 ---
 
 # Première lecture de contrats

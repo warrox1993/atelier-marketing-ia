@@ -34,6 +34,8 @@ export function VueCorbeille() {
   const [version, setVersion] = useState(0);
   const [confirmation, setConfirmation] = useState(false);
   const [enCours, setEnCours] = useState<string | null>(null);
+  const [selection, setSelection] = useState<ReadonlySet<string>>(new Set());
+  const [bilanGroupe, setBilanGroupe] = useState<{ reussis: number; echecs: Array<{ titre: string; message: string }> } | null>(null);
   const [retour, setRetour] = useState<{ ton: "ok" | "erreur"; texte: string } | null>(null);
 
   useEffect(() => {
@@ -54,6 +56,7 @@ export function VueCorbeille() {
     if (!companyId || enCours) return;
     setEnCours(ligne.id);
     setRetour(null);
+    setBilanGroupe(null);
     try {
       await appelRoute("POST", "/corbeille/restauration", { companyId, type: ligne.type, id: ligne.elementId });
       setRetour({ ton: "ok", texte: `« ${ligne.titre} » est restauré.` });
@@ -65,10 +68,41 @@ export function VueCorbeille() {
     }
   }
 
+  function basculer(id: string) {
+    setSelection((s) => {
+      const suivante = new Set(s);
+      if (suivante.has(id)) suivante.delete(id);
+      else suivante.add(id);
+      return suivante;
+    });
+  }
+
+  /** Une requête par élément : si l'un échoue, les autres continuent et le bilan dit lesquels. */
+  async function restaurerSelection(cibles: LigneCorbeille[]) {
+    if (!companyId || enCours) return;
+    setEnCours("groupe");
+    setRetour(null);
+    const echecs: Array<{ id: string; titre: string; message: string }> = [];
+    let reussis = 0;
+    for (const ligne of cibles) {
+      try {
+        await appelRoute("POST", "/corbeille/restauration", { companyId, type: ligne.type, id: ligne.elementId });
+        reussis += 1;
+      } catch (e) {
+        echecs.push({ id: ligne.id, titre: ligne.titre, message: classerErreur(e).message });
+      }
+    }
+    setSelection(new Set(echecs.map((e) => e.id)));
+    setBilanGroupe({ reussis, echecs });
+    setEnCours(null);
+    recharger();
+  }
+
   async function vider() {
     if (!companyId || enCours) return;
     setEnCours("vider");
     setRetour(null);
+    setBilanGroupe(null);
     try {
       await appelRoute("POST", "/corbeille/vidage", { companyId, confirmer: true });
       setConfirmation(false);
@@ -82,6 +116,8 @@ export function VueCorbeille() {
   }
 
   const elements = etat.data?.elements ?? [];
+  const choisis = elements.filter((l) => selection.has(l.id));
+  const toutChoisi = elements.length > 0 && choisis.length === elements.length;
 
   return (
     <>
@@ -100,10 +136,44 @@ export function VueCorbeille() {
         {etat.data && elements.length === 0 ? <Vide titre="La corbeille est vide.">Les tâches, documents et prospects que vous supprimez apparaissent ici.</Vide> : null}
         {elements.length > 0 ? (
           <>
+            <div className="atl-actions">
+              <label className="atl-case">
+                <input type="checkbox" checked={toutChoisi} onChange={() => setSelection(toutChoisi ? new Set() : new Set(elements.map((l) => l.id)))} />
+                <span>Tout sélectionner</span>
+              </label>
+              {choisis.length > 0 ? (
+                <Bouton variante="secondaire" enCours={enCours === "groupe"} onClick={() => void restaurerSelection(choisis)}>
+                  {`Restaurer (${choisis.length})`}
+                </Bouton>
+              ) : null}
+            </div>
+            {bilanGroupe ? (
+              bilanGroupe.echecs.length === 0 ? (
+                <p role="status" className="atl-succes">
+                  {bilanGroupe.reussis} élément{bilanGroupe.reussis > 1 ? "s restaurés" : " restauré"}.
+                </p>
+              ) : (
+                <div role="alert" className="atl-erreur">
+                  <p>
+                    {bilanGroupe.reussis} élément{bilanGroupe.reussis > 1 ? "s restaurés" : " restauré"}, {bilanGroupe.echecs.length} en échec (ils restent cochés pour un nouvel essai) :
+                  </p>
+                  <ul>
+                    {bilanGroupe.echecs.map((e) => (
+                      <li key={e.titre}>
+                        « {e.titre} » : {e.message}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )
+            ) : null}
             <div className="atl-table-cadre">
               <table className="atl-table">
                 <thead>
                   <tr>
+                    <th scope="col">
+                      <span className="atl-sr">Sélection</span>
+                    </th>
                     <th scope="col">Élément</th>
                     <th scope="col">Type</th>
                     <th scope="col">Supprimé</th>
@@ -115,7 +185,10 @@ export function VueCorbeille() {
                 </thead>
                 <tbody>
                   {elements.map((l) => (
-                    <tr key={l.id}>
+                    <tr key={l.id} data-choisi={selection.has(l.id)}>
+                      <td data-libelle="Sélection">
+                        <input type="checkbox" aria-label={`Sélectionner « ${l.titre} »`} checked={selection.has(l.id)} onChange={() => basculer(l.id)} />
+                      </td>
                       <th scope="row">{l.titre}</th>
                       <td data-libelle="Type">{l.typeLibelle}</td>
                       <td data-libelle="Supprimé">

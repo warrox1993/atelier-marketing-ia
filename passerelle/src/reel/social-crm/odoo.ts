@@ -15,9 +15,9 @@
 //   odoo_ecrire_lead        write(ids, vals) ; réconciliation par read
 
 import type { FournisseurService, OutilPasserelle } from "../../fournisseurs.js";
-import { fournisseurOdoo } from "../../demo/social-crm/odoo.js";
+import { definitionsOdoo } from "../../commun/social-crm/odoo.js";
 import type { AccesPlateforme } from "./autorisation.js";
-import { gabarit, lendemain, liste, objet, texte, verifierAu, verifierPeriode } from "./commun.js";
+import { DateReelle, gabarit, lendemain, liste, objet, texte, verifierAu, verifierPeriode } from "./commun.js";
 import { lire, mutationReelle, type Reconciliation } from "./execution.js";
 import { envoyer, ErreurFournisseur, verifierReponse } from "./http.js";
 import type { DependancesOutils } from "./meta.js";
@@ -75,10 +75,11 @@ async function champsInstance(dep: DependancesOutils, acces: AccesPlateforme): P
   return champs;
 }
 
-export function fournisseurOdooReel(dep: DependancesOutils): FournisseurService {
-  const demo = fournisseurOdoo();
+const DEFS = definitionsOdoo(DateReelle);
 
-  const g1 = gabarit(demo, "odoo_leads_search_read", "Leads et opportunités Odoo (crm.lead) créés sur une période, par search_read (API JSON-2 d'Odoo 19, repli JSON-RPC pour les versions antérieures), rendus à la forme { jsonrpc, id, result: [enregistrements] }. Les champs vides valent false, stage_id vaut [id, nom] ; les enregistrements archivés sont exclus sauf si le domaine filtre `active`. État actuel du CRM.");
+export function fournisseurOdooReel(dep: DependancesOutils): FournisseurService {
+
+  const g1 = gabarit(DEFS.odoo_leads_search_read, "Leads et opportunités Odoo (crm.lead) créés sur une période, par search_read (API JSON-2 d'Odoo 19, repli JSON-RPC pour les versions antérieures), rendus à la forme { jsonrpc, id, result: [enregistrements] }. Les champs vides valent false, stage_id vaut [id, nom] ; les enregistrements archivés sont exclus sauf si le domaine filtre `active`. État actuel du CRM.");
   const leads: OutilPasserelle = {
     ...g1,
     executer: (brut, contexte) =>
@@ -98,7 +99,7 @@ export function fournisseurOdooReel(dep: DependancesOutils): FournisseurService 
 
   type ArgsEcrire = { ids: number[]; values: Record<string, string | number | boolean> };
   const ecrire = mutationReelle<ArgsEcrire>(dep, {
-    outil: { ...gabarit(demo, "odoo_ecrire_lead", "Écrit des valeurs sur des leads Odoo (méthode write du modèle crm.lead)."), executer: () => undefined },
+    outil: { ...gabarit(DEFS.odoo_ecrire_lead, "Écrit des valeurs sur des leads Odoo (méthode write du modèle crm.lead)."), executer: () => undefined },
     requeteReelle: "POST /json/2/crm.lead/write { ids, vals } (repli : execute_kw(..., 'crm.lead', 'write', [ids, vals]))",
     resume: (a) => `écriture de ${Object.keys(a.values).length} champ(s) sur ${a.ids.length} lead(s).`,
     verifier: (a) => {

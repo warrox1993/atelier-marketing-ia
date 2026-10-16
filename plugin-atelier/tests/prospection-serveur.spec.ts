@@ -834,6 +834,10 @@ describe("SQL de prospection (base.ts réelle, règles de l'hôte)", () => {
       namespace: ESPACE_BASE,
       async query(sql: string, params: unknown[] = []) {
         controlerSql(sql, params, true);
+        // Lot G1 : sans réglages, l'entreprise est en mode réel par défaut ; ce dépôt de démonstration suppose une entreprise réglée en démonstration.
+        if (/from \S+\.reglages_entreprise/u.test(sql)) {
+          return [{ company_id: params[0], max_runs_actifs: 3, max_cycles_correction: 3, mode_par_defaut: "demonstration", retention_jours: 365, modifie_le: new Date(0).toISOString(), plafond_pub_type: null, plafond_pub_cents: null, plafond_pub_decide_par: null, plafond_pub_decide_le: null }];
+        }
         return [];
       },
       async execute(sql: string, params: unknown[] = []) {

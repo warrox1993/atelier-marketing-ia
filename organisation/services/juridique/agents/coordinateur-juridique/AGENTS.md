@@ -9,6 +9,9 @@ skills:
   - "planification-livrables"
   - "dossier-validation-humaine"
   - "recherche-connaissances"
+  - "revue-contrat-commercial"
+  - "registre-traitements-rgpd"
+  - "mentions-legales-site"
 ---
 
 # Coordinateur du service juridique

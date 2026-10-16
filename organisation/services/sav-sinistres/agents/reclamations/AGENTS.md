@@ -4,7 +4,8 @@ slug: "reclamations"
 name: "Reclamations"
 title: "SAV · Réponses aux réclamations"
 reportsTo: "coordinateur-sav"
-skills: []
+skills:
+  - "traitement-reclamation"
 ---
 
 # Réponses aux réclamations

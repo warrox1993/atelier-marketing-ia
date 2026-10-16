@@ -12,6 +12,7 @@
 import * as z from "zod";
 import type { OutilPasserelle } from "../../fournisseurs.js";
 import { DEBUT_MODELE, ETABLISSEMENTS, FIN_MODELE, type LigneFiche } from "../modele/index.js";
+import { schemaEntreeAvis, schemaEntreeMetriques } from "../../commun/google/schemas.js";
 import { ANNOTATIONS_LECTURE, dateDepuisGoogle, dateGoogle, lirePeriode, modeleDemo, refuserNonModelise } from "./commun.js";
 
 /** Compte de la fiche : identifiant manifestement fictif (les établissements sont ceux de la fiche du service). */
@@ -30,14 +31,7 @@ function etablissementDe(location: string): (typeof ETABLISSEMENTS)[number] {
 
 // --- Avis -------------------------------------------------------------------------------
 
-export const schemaEntreeAvis = {
-  parent: z.string().describe("« accounts/9000000000/locations/9000000001 » (ou 2, 3) ; la forme courte « locations/9000000001 » est tolérée."),
-  pageSize: z.number().int().min(1).max(50).optional().describe("Avis par page, 50 au plus (20 par défaut)."),
-  pageToken: z.string().optional(),
-  orderBy: z.enum(["rating", "rating desc", "updateTime desc"]).optional().describe("Tri ; « updateTime desc » par défaut."),
-  debut: z.string().optional().describe("Extension de démonstration : première date d'avis (AAAA-MM-JJ). Absent : toute la période du modèle."),
-  fin: z.string().optional().describe("Extension de démonstration : dernière date d'avis (AAAA-MM-JJ)."),
-};
+export { schemaEntreeAvis };
 
 interface ArgsAvis {
   parent: string;
@@ -100,19 +94,6 @@ export const outilAvis: OutilPasserelle = {
 
 // --- Métriques de performance -------------------------------------------------------------
 
-const METRIQUES_API = [
-  "BUSINESS_IMPRESSIONS_DESKTOP_MAPS",
-  "BUSINESS_IMPRESSIONS_DESKTOP_SEARCH",
-  "BUSINESS_IMPRESSIONS_MOBILE_MAPS",
-  "BUSINESS_IMPRESSIONS_MOBILE_SEARCH",
-  "BUSINESS_CONVERSATIONS",
-  "BUSINESS_DIRECTION_REQUESTS",
-  "CALL_CLICKS",
-  "WEBSITE_CLICKS",
-  "BUSINESS_BOOKINGS",
-  "BUSINESS_FOOD_ORDERS",
-  "BUSINESS_FOOD_MENU_CLICKS",
-] as const;
 
 const VERS_LIGNE: Record<string, (l: LigneFiche) => number> = {
   BUSINESS_IMPRESSIONS_DESKTOP_MAPS: (l) => l.impressionsMapsOrdinateur,
@@ -124,13 +105,7 @@ const VERS_LIGNE: Record<string, (l: LigneFiche) => number> = {
   WEBSITE_CLICKS: (l) => l.clicsSite,
 };
 
-const schemaDate = z.object({ year: z.number().int().min(1).max(9999), month: z.number().int().min(1).max(12), day: z.number().int().min(1).max(31) });
-
-export const schemaEntreeMetriques = {
-  location: z.string().describe("« locations/9000000001 » (ou 2, 3)."),
-  dailyMetrics: z.array(z.enum(METRIQUES_API)).min(1).describe("Servies : impressions (4 variantes), CALL_CLICKS, WEBSITE_CLICKS, BUSINESS_DIRECTION_REQUESTS."),
-  dailyRange: z.object({ startDate: schemaDate, endDate: schemaDate }),
-};
+export { schemaEntreeMetriques };
 
 interface ArgsMetriques {
   location: string;

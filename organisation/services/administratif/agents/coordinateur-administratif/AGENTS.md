@@ -9,6 +9,9 @@ skills:
   - "planification-livrables"
   - "dossier-validation-humaine"
   - "recherche-connaissances"
+  - "courrier-officiel"
+  - "classement-archivage"
+  - "agenda-echeances-legales"
 ---
 
 # Coordinateur du service administratif

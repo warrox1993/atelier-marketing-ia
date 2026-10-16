@@ -54,6 +54,8 @@ RUBRIQUES = [
     "Quand l'utiliser", "Objectif", "Prérequis", "Entrées", "Étapes", "Livrable",
     "Critères de réussite", "Limites", "Exemple",
 ]
+# Rubriques facultatives (compétences des services).
+RUBRIQUES_FACULTATIVES = ["Sources officielles", "À vérifier par un professionnel"]
 # Outils MCP des connexions natives (livrés par Paperclip à un run claude_local) : serveur
 # « paperclip-assigned » (outils des connexions, gouvernés par les installations et politiques
 # natives) et serveur « Paperclip connections » (connections_search, connection_request), noms
@@ -222,10 +224,30 @@ def controler_generation(bootstrap):
         infos.append("fichiers générés conformes au registre")
 
 
+def competences_des_services():
+    """Compétences déclarées par l'en-tête `skills:` des AGENTS.md des services."""
+    noms = set()
+    for chemin in sorted((ORGA / "services").glob("*/agents/*/AGENTS.md")):
+        texte = chemin.read_text(encoding="utf-8")
+        fin = texte.find("\n---\n", 4) if texte.startswith("---\n") else -1
+        if fin < 0:
+            continue  # en-tête invalide : signalé par les contrôles des services
+        try:
+            fm = yaml.safe_load(texte[4:fin]) or {}
+        except yaml.YAMLError:
+            continue
+        for nom in fm.get("skills") or []:
+            if isinstance(nom, str):
+                noms.add(nom)
+    return noms
+
+
 def controler_competences():
     dossiers = sorted(p.name for p in (ORGA / "skills").iterdir() if p.is_dir())
-    if dossiers != sorted(COMPETENCES_ATTENDUES):
-        erreur(f"compétences : attendu {sorted(COMPETENCES_ATTENDUES)}, trouvé {dossiers}")
+    attendues = sorted(set(COMPETENCES_ATTENDUES) | competences_des_services())
+    if dossiers != attendues:
+        erreur(f"compétences : attendu {attendues}, trouvé {dossiers} "
+               "(marketing du registre + compétences déclarées par les services ; un dossier orphelin est une erreur)")
     for nom in dossiers:
         dossier = ORGA / "skills" / nom
         chemin = dossier / "SKILL.md"
@@ -251,8 +273,11 @@ def controler_competences():
         elif not re.fullmatch(r"\d+\.\d+\.\d+", meta.get("version", "")):
             erreur(f"{nom} : metadata.version (x.y.z) absente")
         titres = re.findall(r"^## (.+?)\s*$", corps, re.M)
-        if titres[: len(RUBRIQUES)] != RUBRIQUES:
-            erreur(f"{nom} : rubriques attendues dans l'ordre {RUBRIQUES}, trouvé {titres}")
+        # « Sources officielles » et « À vérifier par un professionnel » sont facultatives (n'importe où
+        # après « Critères de réussite ») ; toutes les autres rubriques restent obligatoires et ordonnées.
+        obligatoires = [t for t in titres if t not in RUBRIQUES_FACULTATIVES]
+        if obligatoires[: len(RUBRIQUES)] != RUBRIQUES:
+            erreur(f"{nom} : rubriques attendues dans l'ordre {RUBRIQUES} (facultatives : {RUBRIQUES_FACULTATIVES}), trouvé {titres}")
         sections = re.split(r"^## ", corps, flags=re.M)
         for section in sections[1:]:
             titre, _, contenu = section.partition("\n")
@@ -477,7 +502,7 @@ def controler_corpus():
 
 MOTIFS = [
     (re.compile("—"), "tiret cadratin"),
-    (re.compile(r"/home/|/root/|/Users/|/tmp/|/mnt/|/media/"), "chemin local absolu"),
+    (re.compile(r"(?<![A-Za-z0-9.-])/(?:home|root|Users|tmp|mnt|media)/"), "chemin local absolu"),
     (re.compile(r"sk-ant-[A-Za-z0-9_\-]{8,}"), "clé Anthropic"),
     (re.compile(r"-----BEGIN [A-Z ]*PRIVATE KEY-----"), "clé privée"),
     (re.compile(r"[A-Za-z0-9._%+-]+@(?!exemple\.invalid\b|example\.invalid\b)[A-Za-z0-9.-]+\.[a-z]{2,}"), "adresse électronique non fictive"),

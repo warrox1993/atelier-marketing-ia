@@ -13,9 +13,9 @@
 // Aucun filtre sur la date de création : la période est reconstituée par updated_since et un tri croissant.
 
 import type { FournisseurService, OutilPasserelle } from "../../fournisseurs.js";
-import { fournisseurTeamleader } from "../../demo/social-crm/teamleader.js";
+import { definitionsTeamleader } from "../../commun/social-crm/teamleader.js";
 import type { AccesPlateforme } from "./autorisation.js";
-import { gabarit, liste, MAX_PAGES_PARCOURUES, objet, texte, tropDeResultats, verifierAu, verifierPeriode } from "./commun.js";
+import { DateReelle, gabarit, liste, MAX_PAGES_PARCOURUES, objet, texte, tropDeResultats, verifierAu, verifierPeriode } from "./commun.js";
 import { lire, mutationReelle, type Reconciliation } from "./execution.js";
 import { envoyer, ErreurFournisseur, verifierReponse } from "./http.js";
 import type { DependancesOutils } from "./meta.js";
@@ -60,8 +60,9 @@ function affaire(d: Record<string, unknown>) {
   };
 }
 
+const DEFS = definitionsTeamleader(DateReelle);
+
 export function fournisseurTeamleaderReel(dep: DependancesOutils): FournisseurService {
-  const demo = fournisseurTeamleader();
 
   async function creesDansPeriode(acces: AccesPlateforme, action: "contacts.list" | "deals.list", champDate: "added_at" | "created_at", debut: string, fin: string) {
     const retenus: Record<string, unknown>[] = [];
@@ -78,7 +79,7 @@ export function fournisseurTeamleaderReel(dep: DependancesOutils): FournisseurSe
     throw tropDeResultats("Teamleader");
   }
 
-  const g1 = gabarit(demo, "teamleader_contacts", "Contacts Teamleader créés sur une période (POST /contacts.list) : { data: [{ id, first_name, last_name, emails[], telephones[], added_at, updated_at }] }. Pagination par page.size et page.number. État actuel du CRM.");
+  const g1 = gabarit(DEFS.teamleader_contacts, "Contacts Teamleader créés sur une période (POST /contacts.list) : { data: [{ id, first_name, last_name, emails[], telephones[], added_at, updated_at }] }. Pagination par page.size et page.number. État actuel du CRM.");
   const contacts: OutilPasserelle = {
     ...g1,
     executer: (brut, contexte) =>
@@ -92,7 +93,7 @@ export function fournisseurTeamleaderReel(dep: DependancesOutils): FournisseurSe
       }),
   };
 
-  const g2 = gabarit(demo, "teamleader_deals", "Affaires Teamleader créées sur une période (POST /deals.list) : { data: [{ id, title, status open|won|lost, lead, estimated_value{amount, currency}, current_phase, closed_at, created_at, updated_at }] }. État actuel du CRM.");
+  const g2 = gabarit(DEFS.teamleader_deals, "Affaires Teamleader créées sur une période (POST /deals.list) : { data: [{ id, title, status open|won|lost, lead, estimated_value{amount, currency}, current_phase, closed_at, created_at, updated_at }] }. État actuel du CRM.");
   const deals: OutilPasserelle = {
     ...g2,
     executer: (brut, contexte) =>
@@ -118,7 +119,7 @@ export function fournisseurTeamleaderReel(dep: DependancesOutils): FournisseurSe
     return corps;
   };
   const modifier = mutationReelle<ArgsModifier>(dep, {
-    outil: { ...gabarit(demo, "teamleader_modifier_contact", "Modifie un contact Teamleader (POST /contacts.update ; « email » et « telephone » remplacent les listes d'adresses et de numéros)."), executer: () => undefined },
+    outil: { ...gabarit(DEFS.teamleader_modifier_contact, "Modifie un contact Teamleader (POST /contacts.update ; « email » et « telephone » remplacent les listes d'adresses et de numéros)."), executer: () => undefined },
     requeteReelle: "POST /contacts.update",
     resume: (a) => `modification de ${Object.keys(a.modifications).length} champ(s) du contact ${a.id}.`,
     verifier: (a) => {

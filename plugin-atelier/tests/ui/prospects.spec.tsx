@@ -45,6 +45,7 @@ const COMPTE_RENDU: CompteRenduProspect = {
 };
 
 beforeEach(() => {
+  window.localStorage.clear();
   pont = installerPont();
   appels = [];
   serveur = (methode, url) => (methode === "GET" && url.includes("/compte-rendu") ? { statut: 200, corps: COMPTE_RENDU } : { statut: 200, corps: page(B2B, B2C) });
@@ -177,7 +178,7 @@ describe("liste des prospects", () => {
     await cliquer([...c.querySelectorAll<HTMLInputElement>('input[type="checkbox"]')].find((i) => i.parentElement?.textContent?.includes("Afficher aussi les clients actuels"))!);
     await cliquer(parTexte(c, "button", "Filtrer"));
     expect(new URL(requetesListe().at(-1)!.url, "http://x").searchParams.get("avecClientsActuels")).toBe("true");
-    await cliquer(parTexte(c, "button", "Effacer les filtres"));
+    await cliquer(parTexte(c, "button", "Réinitialiser les filtres"));
     expect(new URL(requetesListe().at(-1)!.url, "http://x").searchParams.get("avecClientsActuels")).toBeNull();
   });
 
@@ -244,7 +245,7 @@ describe("filtres portés par l'adresse", () => {
     expect(u.searchParams.get("zone")).toBe("Liège, 4000");
     expect(u.searchParams.get("autre")).toBe("1");
     expect(u.hash).toBe("#ancre");
-    await cliquer(parTexte(c, "button", "Effacer les filtres"));
+    await cliquer(parTexte(c, "button", "Réinitialiser les filtres"));
     expect(window.location.search).toBe("?autre=1");
   });
 
@@ -252,6 +253,73 @@ describe("filtres portés par l'adresse", () => {
     const f = { ...FILTRES_VIDES, statut: "qualifie" as const, segment: "medecins", zone: "Liège, 4000", scoreMin: "60", qualifies: true };
     expect(filtresDepuisAdresse(adresseDepuisFiltres(f))).toEqual(f);
     expect(adresseDepuisFiltres(FILTRES_VIDES)).toBe("");
+  });
+});
+
+describe("moins de clics : cibles, filtres mémorisés, taille de page", () => {
+  afterEach(() => window.history.replaceState(null, "", "/"));
+  const cle = `atelier.prospects.filtres.${ENTREPRISE}`;
+
+  it("« Tout » coche les trois cibles, « Aucun » les décoche", async () => {
+    const c = await ouvrir();
+    await cliquer(parTexte(c, "button", "Tout"));
+    await cliquer(parTexte(c, "button", "Filtrer"));
+    expect(new URL(requetesListe().at(-1)!.url, "http://x").searchParams.get("cibles")).toBe("entreprise,particulier,partenaire");
+    await cliquer(parTexte(c, "button", "Aucun"));
+    await cliquer(parTexte(c, "button", "Filtrer"));
+    expect(new URL(requetesListe().at(-1)!.url, "http://x").searchParams.get("cibles")).toBeNull();
+  });
+
+  it("les derniers filtres sont mémorisés, restaurés à l'ouverture et oubliés par la réinitialisation", async () => {
+    let c = await ouvrir();
+    await saisir(champParLibelle(c, "Zone (commune ou code postal)"), "Liège");
+    await cliquer(parTexte(c, "button", "Filtrer"));
+    expect(JSON.parse(window.localStorage.getItem(cle)!).zone).toBe("Liège");
+    rendu?.demonter();
+    window.history.replaceState(null, "", "/");
+    c = await ouvrir();
+    expect(new URL(requetesListe().at(-1)!.url, "http://x").searchParams.get("communes")).toBe("Liège");
+    expect(window.location.search).toBe("?zone=Li%C3%A8ge");
+    await cliquer(parTexte(c, "button", "Réinitialiser les filtres"));
+    expect(window.localStorage.getItem(cle)).toBeNull();
+  });
+
+  it("l'adresse prime sur la mémoire", async () => {
+    window.localStorage.setItem(cle, JSON.stringify({ ...FILTRES_VIDES, zone: "Namur" }));
+    window.history.replaceState(null, "", "/RNO/atelier/prospects?zone=Mons");
+    await ouvrir();
+    expect(new URL(requetesListe()[0]!.url, "http://x").searchParams.get("communes")).toBe("Mons");
+  });
+
+  it("sans stockage ou avec une mémoire corrompue, la page marche et ignore les valeurs inattendues", async () => {
+    window.localStorage.setItem(cle, JSON.stringify({ zone: "Namur", statut: "pirate", scoreMin: "999", cibles: ["x"] }));
+    await ouvrir();
+    const q = new URL(requetesListe()[0]!.url, "http://x").searchParams;
+    expect(q.get("communes")).toBe("Namur");
+    expect(q.get("statuts")).toBeNull();
+    expect(q.get("scoreMin")).toBeNull();
+    expect(q.get("cibles")).toBeNull();
+    rendu?.demonter();
+    vi.spyOn(Storage.prototype, "getItem").mockImplementation(() => {
+      throw new Error("stockage refusé");
+    });
+    vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
+      throw new Error("stockage refusé");
+    });
+    const c = await ouvrir();
+    await cliquer(parTexte(c, "button", "Filtrer"));
+    expect(requetesListe().length).toBeGreaterThan(1);
+    vi.restoreAllMocks();
+  });
+
+  it("la taille de page 25 / 50 / 100 est envoyée au serveur (50 est le défaut, non envoyé)", async () => {
+    serveur = () => ({ statut: 200, corps: { total: 120, page: 1, pages: 3, prospects: [B2B, B2C] } });
+    const c = await ouvrir();
+    expect(new URL(requetesListe()[0]!.url, "http://x").searchParams.get("parPage")).toBeNull();
+    await saisir(c.querySelector<HTMLSelectElement>('select[aria-label="Prospects par page"]')!, "100");
+    expect(new URL(requetesListe().at(-1)!.url, "http://x").searchParams.get("parPage")).toBe("100");
+    await saisir(c.querySelector<HTMLSelectElement>('select[aria-label="Prospects par page"]')!, "25");
+    expect(new URL(requetesListe().at(-1)!.url, "http://x").searchParams.get("parPage")).toBe("25");
   });
 });
 
@@ -820,7 +888,7 @@ describe("confiance de qualification", () => {
     await cliquer(case_);
     await cliquer(parTexte(c, "button", "Filtrer"));
     expect(new URL(requetesListe().at(-1)!.url, "http://x").searchParams.get("qualifiesSeulement")).toBe("true");
-    await cliquer(parTexte(c, "button", "Effacer les filtres"));
+    await cliquer(parTexte(c, "button", "Réinitialiser les filtres"));
     expect(new URL(requetesListe().at(-1)!.url, "http://x").searchParams.get("qualifiesSeulement")).toBeNull();
   });
 });

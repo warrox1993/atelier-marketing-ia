@@ -4,7 +4,10 @@ slug: "tresorerie"
 name: "Tresorerie"
 title: "Comptabilité · Synthèse et prévision de trésorerie"
 reportsTo: "coordinateur-comptabilite"
-skills: []
+skills:
+  - "plan-tresorerie"
+  - "cloture-mensuelle"
+  - "analyse-rentabilite"
 ---
 
 # Synthèse et prévision de trésorerie

@@ -4,7 +4,10 @@ slug: "procedures"
 name: "Procedures"
 title: "Qualité · Procédures et modes opératoires"
 reportsTo: "coordinateur-qualite"
-skills: []
+skills:
+  - "procedure-qualite"
+  - "non-conformite-action-corrective"
+  - "audit-interne"
 ---
 
 # Procédures et modes opératoires

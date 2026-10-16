@@ -16,6 +16,7 @@ import * as z from "zod";
 import type { OutilPasserelle } from "../../fournisseurs.js";
 import { CAMPAGNES_ADS, COMPTE_ADS, DEBUT_MODELE, FIN_MODELE, type LigneAds } from "../modele/index.js";
 import { ANNOTATIONS_LECTURE, modeleDemo, refuserNonModelise } from "./commun.js";
+import { schemaEntreeAds } from "../../commun/google/schemas.js";
 import { analyserGaql, type Condition, type Valeur } from "./gaql.js";
 
 export const COMPTE_ADS_NUMERO = COMPTE_ADS.replace("customers/", "");
@@ -148,13 +149,7 @@ function lirePage(jeton: string | undefined): number {
   return Number(n[1]);
 }
 
-export const schemaEntreeAds = {
-  customerId: z.string().describe("Compte Google Ads : « 0000000001 » ou « 000-000-0001 »."),
-  query: z.string().min(1).describe("Requête GAQL : SELECT … FROM campaign | ad_group [WHERE …] [ORDER BY …] [LIMIT n]."),
-  pageSize: z.number().int().min(1).max(10_000).optional().describe("Lignes par page (10 000 par défaut)."),
-  pageToken: z.string().optional(),
-  returnTotalResultsCount: z.boolean().optional(),
-};
+export { schemaEntreeAds };
 
 interface ArgsAds {
   customerId: string;

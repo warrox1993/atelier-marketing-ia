@@ -19,9 +19,9 @@
 //       https://developers.hubspot.com/docs/api-reference/crm-contacts-v3/guide
 
 import type { FournisseurService, OutilPasserelle } from "../../fournisseurs.js";
-import { fournisseurHubspot } from "../../demo/social-crm/hubspot.js";
+import { definitionsHubspot } from "../../commun/social-crm/hubspot.js";
 import type { AccesPlateforme } from "./autorisation.js";
-import { gabarit, lendemain, liste, msDate, objet, texte, verifierAu, verifierPeriode } from "./commun.js";
+import { DateReelle, gabarit, lendemain, liste, msDate, objet, texte, verifierAu, verifierPeriode } from "./commun.js";
 import { lire, mutationReelle, type Reconciliation } from "./execution.js";
 import { envoyer, ErreurFournisseur, verifierReponse } from "./http.js";
 import type { DependancesOutils } from "./meta.js";
@@ -56,15 +56,16 @@ function recherche(debut: string, fin: string, cles: readonly string[], limit: n
   };
 }
 
+const DEFS = definitionsHubspot(DateReelle);
+
 export function fournisseurHubspotReel(dep: DependancesOutils): FournisseurService {
-  const demo = fournisseurHubspot();
   const pagination = (objetCrm: string, r: Record<string, unknown>, limit: number) => {
     const after = texte(objet(objet(r["paging"])["next"])["after"]);
     if (!after) return {};
     return { paging: { next: { after, link: `${dep.config.adresses.hubspotApi}/crm/v3/objects/${objetCrm}?limit=${limit}&after=${after}` } } };
   };
 
-  const g1 = gabarit(demo, "crm_contacts", "Contacts HubSpot créés sur une période (POST /crm/v3/objects/contacts/search, filtre createdate) : results[] (id, properties dont lifecyclestage, hs_lead_status, hs_analytics_source, createdAt, updatedAt, archived) et paging.next.after. État actuel du CRM.");
+  const g1 = gabarit(DEFS.crm_contacts, "Contacts HubSpot créés sur une période (POST /crm/v3/objects/contacts/search, filtre createdate) : results[] (id, properties dont lifecyclestage, hs_lead_status, hs_analytics_source, createdAt, updatedAt, archived) et paging.next.after. État actuel du CRM.");
   const contacts: OutilPasserelle = {
     ...g1,
     executer: (brut, contexte) =>
@@ -84,7 +85,7 @@ export function fournisseurHubspotReel(dep: DependancesOutils): FournisseurServi
       }),
   };
 
-  const g2 = gabarit(demo, "crm_transactions", "Affaires HubSpot créées sur une période (POST /crm/v3/objects/deals/search, filtre createdate) : results[] (id, properties dont dealname, amount, dealstage, pipeline, createdate, closedate ; associations.contacts) et paging.next.after. État actuel du CRM.");
+  const g2 = gabarit(DEFS.crm_transactions, "Affaires HubSpot créées sur une période (POST /crm/v3/objects/deals/search, filtre createdate) : results[] (id, properties dont dealname, amount, dealstage, pipeline, createdate, closedate ; associations.contacts) et paging.next.after. État actuel du CRM.");
   const transactions: OutilPasserelle = {
     ...g2,
     executer: (brut, contexte) =>
@@ -116,7 +117,7 @@ export function fournisseurHubspotReel(dep: DependancesOutils): FournisseurServi
 
   type ArgsModifier = { contact_id: string; properties: Record<string, string> };
   const modifier = mutationReelle<ArgsModifier>(dep, {
-    outil: { ...gabarit(demo, "crm_modifier_contact", "Modifie des propriétés d'un contact HubSpot (PATCH /crm/v3/objects/contacts/{id})."), executer: () => undefined },
+    outil: { ...gabarit(DEFS.crm_modifier_contact, "Modifie des propriétés d'un contact HubSpot (PATCH /crm/v3/objects/contacts/{id})."), executer: () => undefined },
     requeteReelle: "PATCH /crm/v3/objects/contacts/{contactId}",
     resume: (a) => `modification de ${Object.keys(a.properties).length} propriété(s) du contact ${a.contact_id}.`,
     verifier: (a) => {

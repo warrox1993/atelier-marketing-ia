@@ -4,7 +4,10 @@ slug: "agenda-documents"
 name: "Agenda documents"
 title: "Administratif · Agenda, convocations et classement"
 reportsTo: "coordinateur-administratif"
-skills: []
+skills:
+  - "classement-archivage"
+  - "agenda-echeances-legales"
+  - "courrier-officiel"
 ---
 
 # Agenda, convocations et classement

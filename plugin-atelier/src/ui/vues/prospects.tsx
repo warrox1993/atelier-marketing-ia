@@ -255,8 +255,12 @@ export function raisonFiltres(f: Filtres): string | null {
   return null;
 }
 
+/** Tailles de page proposées ; 50 est la valeur par défaut du serveur (maximum 100). */
+export const TAILLES_PAGE = [25, 50, 100] as const;
+const PAR_PAGE_DEFAUT = 50;
+
 /** Chemin de la requête `GET /prospects` : codes postaux et communes sont séparés selon la forme saisie. */
-export function requeteProspects(companyId: string, f: Filtres, page: number): string {
+export function requeteProspects(companyId: string, f: Filtres, page: number, parPage: number = PAR_PAGE_DEFAUT): string {
   const q = new URLSearchParams({ companyId });
   if (f.campagneId) q.set("campagneId", f.campagneId);
   if (f.cibles.length) q.set("cibles", f.cibles.join(","));
@@ -275,6 +279,7 @@ export function requeteProspects(companyId: string, f: Filtres, page: number): s
   if (f.source) q.set("source", f.source);
   if (f.avecClients) q.set("avecClientsActuels", "true");
   if (page > 1) q.set("page", String(page));
+  if (parPage !== PAR_PAGE_DEFAUT) q.set("parPage", String(parPage));
   return `/prospects?${q.toString()}`;
 }
 
@@ -292,6 +297,50 @@ export function filtresDepuisAdresse(recherche: string): Filtres {
     ...(a.score ? { scoreMin: a.score } : {}),
     ...(a.qualifies ? { qualifies: true } : {}),
   };
+}
+
+/** Clé de la mémoire locale des derniers filtres, par entreprise. */
+const cleMemoireFiltres = (companyId: string) => `atelier.prospects.filtres.${companyId}`;
+
+/** Mémorise les filtres (ou les oublie s'ils sont vides). Sans stockage disponible, la page marche quand même. */
+export function memoriserFiltres(companyId: string, f: Filtres): void {
+  try {
+    if (JSON.stringify(f) === JSON.stringify(FILTRES_VIDES)) window.localStorage.removeItem(cleMemoireFiltres(companyId));
+    else window.localStorage.setItem(cleMemoireFiltres(companyId), JSON.stringify(f));
+  } catch {
+    // stockage absent ou refusé : rien n'est mémorisé
+  }
+}
+
+/** Derniers filtres mémorisés pour cette entreprise ; toute valeur illisible ou inattendue est ignorée champ par champ. */
+export function filtresMemorises(companyId: string | null): Filtres {
+  if (!companyId) return FILTRES_VIDES;
+  try {
+    const brut: unknown = JSON.parse(window.localStorage.getItem(cleMemoireFiltres(companyId)) ?? "null");
+    if (typeof brut !== "object" || brut === null) return FILTRES_VIDES;
+    const m = brut as Record<string, unknown>;
+    const texte = (v: unknown, max = 80) => (typeof v === "string" && v.length <= max ? v : "");
+    const statut = texte(m["statut"]);
+    const source = texte(m["source"]);
+    const bureau = m["bureau"] as { nom?: unknown; zones?: unknown } | null | undefined;
+    const cibles = Array.isArray(m["cibles"]) ? (m["cibles"] as unknown[]).filter((c): c is CibleProspect => typeof c === "string" && c in LIBELLES_CIBLES) : [];
+    const score = texte(m["scoreMin"], 3);
+    return {
+      campagneId: texte(m["campagneId"], 80),
+      cibles,
+      secteur: texte(m["secteur"]),
+      zone: texte(m["zone"]),
+      statut: (StatutProspect.options as readonly string[]).includes(statut) ? (statut as Filtres["statut"]) : "",
+      scoreMin: /^\d{1,3}$/u.test(score) && Number(score) <= 100 ? score : "",
+      qualifies: m["qualifies"] === true,
+      bureau: bureau && typeof bureau.nom === "string" && Array.isArray(bureau.zones) && bureau.zones.every((z) => typeof z === "string") ? { nom: bureau.nom, zones: bureau.zones as string[] } : null,
+      segment: texte(m["segment"]),
+      source: source === "reelle" || source === "demonstration" ? source : "",
+      avecClients: m["avecClients"] === true,
+    };
+  } catch {
+    return FILTRES_VIDES;
+  }
 }
 
 /** Chaîne de recherche d'adresse (`?…`, ou vide) : les filtres exprimables dans l'adresse, les autres paramètres de `base` conservés. */
@@ -368,6 +417,12 @@ function BarreFiltres({ valeur, options, onAppliquer }: { valeur: Filtres; optio
               {LIBELLES_CIBLES[c]}
             </button>
           ))}
+          <button type="button" className="atl-segment" onClick={() => setSaisie({ ...saisie, cibles: Object.keys(LIBELLES_CIBLES) as CibleProspect[] })}>
+            Tout
+          </button>
+          <button type="button" className="atl-segment" onClick={() => setSaisie({ ...saisie, cibles: [] })}>
+            Aucun
+          </button>
         </div>
         <div className="atl-grille-champs">
           <Champ libelle="Mission" aide="Ne montre que les prospects trouvés par cette mission.">
@@ -450,7 +505,7 @@ function BarreFiltres({ valeur, options, onAppliquer }: { valeur: Filtres; optio
               onAppliquer(FILTRES_VIDES);
             }}
           >
-            Effacer les filtres
+            Réinitialiser les filtres
           </Bouton>
         </div>
         </div>
@@ -1206,8 +1261,13 @@ function majAdresse(f: Filtres) {
 function ListeProspects() {
   const { companyId } = useHostContext();
   const { search } = useHostLocation();
-  const [filtres, setFiltres] = useState<Filtres>(() => filtresDepuisAdresse(search || (typeof window !== "undefined" ? window.location.search : "")));
+  const [filtres, setFiltres] = useState<Filtres>(() => {
+    const adresse = filtresDepuisAdresse(search || (typeof window !== "undefined" ? window.location.search : ""));
+    // L'adresse garde la priorité ; sans filtre dans l'adresse, on reprend les derniers filtres mémorisés.
+    return adresseDepuisFiltres(adresse) !== "" ? adresse : filtresMemorises(companyId);
+  });
   const [page, setPage] = useState(1);
+  const [parPage, setParPage] = useState<number>(PAR_PAGE_DEFAUT);
   const [versionCharge, setVersionCharge] = useState(0);
   const [etat, setEtat] = useState<{ data: PageProspects | null; erreur: unknown; chargement: boolean }>({ data: null, erreur: null, chargement: true });
   const [choisi, setChoisi] = useState<string | null>(null);
@@ -1232,20 +1292,31 @@ function ListeProspects() {
     if (!companyId) return;
     let annule = false;
     setEtat((e) => ({ ...e, chargement: true, erreur: null }));
-    appelRoute<PageProspects>("GET", `${requeteProspects(companyId, filtres, page)}&vue=complete`) // prospects entiers : le résumé est pour les agents
+    appelRoute<PageProspects>("GET", `${requeteProspects(companyId, filtres, page, parPage)}&vue=complete`) // prospects entiers : le résumé est pour les agents
       .then((data) => !annule && setEtat({ data, erreur: null, chargement: false }))
       .catch((erreur: unknown) => !annule && setEtat({ data: null, erreur, chargement: false }));
     return () => {
       annule = true;
     };
-  }, [companyId, filtres, page, versionCharge]);
+  }, [companyId, filtres, page, parPage, versionCharge]);
 
-  const appliquer = useCallback((f: Filtres) => {
-    setFiltres(f);
-    majAdresse(f);
-    setPage(1);
-    setChoisi(null);
+  // Filtres repris de la mémoire : l'adresse les reflète aussi (remplacement, sans entrée d'historique).
+  useEffect(() => {
+    majAdresse(filtres);
+    // une seule fois à l'ouverture
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  const appliquer = useCallback(
+    (f: Filtres) => {
+      setFiltres(f);
+      majAdresse(f);
+      if (companyId) memoriserFiltres(companyId, f);
+      setPage(1);
+      setChoisi(null);
+    },
+    [companyId],
+  );
 
   const cleTri = (p: Prospect) => (tri === "famille" ? FAMILLES_METIER.indexOf(familleMetier(p)) : tri === "confiance" ? p.confiance?.valeur : p.score?.valeur) ?? -1;
   // Par famille, à égalité : le meilleur score d'abord.
@@ -1336,14 +1407,36 @@ function ListeProspects() {
             </table>
           </div>
           <p className="atl-sous">Tri sur la page affichée. La priorité dit par qui commencer ; la cible prouvée dit si le lead correspond à votre cible.</p>
-          {etat.data.pages > 1 ? (
+          {etat.data.pages > 1 || etat.data.total > TAILLES_PAGE[0] ? (
             <div className="atl-actions">
-              <Bouton raisonDesactive={page <= 1 ? "Première page." : null} onClick={() => setPage(page - 1)}>
-                Page précédente
-              </Bouton>
-              <Bouton raisonDesactive={page >= etat.data.pages ? "Dernière page." : null} onClick={() => setPage(page + 1)}>
-                Page suivante
-              </Bouton>
+              {etat.data.pages > 1 ? (
+                <>
+                  <Bouton raisonDesactive={page <= 1 ? "Première page." : null} onClick={() => setPage(page - 1)}>
+                    Page précédente
+                  </Bouton>
+                  <Bouton raisonDesactive={page >= etat.data.pages ? "Dernière page." : null} onClick={() => setPage(page + 1)}>
+                    Page suivante
+                  </Bouton>
+                </>
+              ) : null}
+              <label className="atl-sous">
+                Prospects par page{" "}
+                <select
+                  aria-label="Prospects par page"
+                  value={parPage}
+                  onChange={(e) => {
+                    setParPage(Number(e.target.value));
+                    setPage(1);
+                    setChoisi(null);
+                  }}
+                >
+                  {TAILLES_PAGE.map((t) => (
+                    <option key={t} value={t}>
+                      {t}
+                    </option>
+                  ))}
+                </select>
+              </label>
             </div>
           ) : null}
         </>

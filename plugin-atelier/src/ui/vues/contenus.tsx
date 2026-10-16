@@ -30,7 +30,7 @@ import {
   STATUTS_ACCES_SOURCE,
   VERDICTS,
 } from "../format.js";
-import { DecisionPanneau, raisonDecision } from "../decision-livrable.js";
+import { ApprobationGroupee, DecisionPanneau, raisonDecision } from "../decision-livrable.js";
 
 /** Gardes de la décision : définies dans le composant partagé, ré-exportées pour les tests existants. */
 export { raisonDecision };
@@ -56,6 +56,8 @@ function ListeContenus() {
         {(d) => (
           <>
             <Section titre={`Prêts pour validation humaine (${d.prets.length})`} aide="Contrôles applicables réussis, aucune exigence bloquante.">
+              {/* Toujours monté : le bilan d'une approbation groupée reste affiché quand la liste se recharge. */}
+              <ApprobationGroupee elements={d.prets.filter((l) => l.decisionPorte === "PASS")} onFait={() => r.refresh()} />
               {d.prets.length === 0 ? (
                 <Vide titre="Rien à valider pour l'instant.">Un livrable arrive ici quand ses revues sont réussies et que le contrôle automatique est réussi sur sa révision courante.</Vide>
               ) : (

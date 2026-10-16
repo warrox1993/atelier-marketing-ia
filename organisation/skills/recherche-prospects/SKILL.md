@@ -78,6 +78,10 @@ exclus, recherches sans résultat et limites.
 - Une zone large peut dépasser le plafond de pagination : le dire au lieu de conclure.
 - Aucun contact, aucun export : la liste reste « préparée, non exportée ».
 
+## Sources officielles
+
+Aucune source consultée pour cette compétence ; les règles de consentement, de prospection et les obligations légales citées (RGPD articles 6 et 7, Code de droit économique livre XII) sont à vérifier par le juriste ou le DPO avant tout usage.
+
 ## Exemple
 
 | service | outil | arguments | résultats | dépôt |

@@ -2,9 +2,72 @@
   "schema": "atelier/company-package-lock/v1",
   "note": "Fichier généré (spécification AgentCompanies §18, verrou facultatif). L'empreinte sha256 couvre chemins et contenus de chaque dossier de compétence ; elle sert d'identifiant de version vérifiable à l'exécution.",
   "competences": {
+    "accident-du-travail": {
+      "version": "1.0.0",
+      "sha256": "d3c2894ce9df423b88b8b5dfd2ce5ab1f955a86463e57d19cb6e7f9c84e538ba",
+      "fichiers": [
+        "SKILL.md"
+      ]
+    },
+    "accord-de-partenariat": {
+      "version": "1.0.0",
+      "sha256": "8fe7b0ccef9468ff96529a4bb843a90232a8cb014a45065ba5c7c9a005d788db",
+      "fichiers": [
+        "SKILL.md"
+      ]
+    },
+    "accueil-nouveau-collaborateur": {
+      "version": "1.0.0",
+      "sha256": "198d9773e5329ecc1fcf6f0bec8fcd45f2bd4c36f1175463628ac1338b8f0327",
+      "fichiers": [
+        "SKILL.md"
+      ]
+    },
+    "agenda-echeances-legales": {
+      "version": "1.0.0",
+      "sha256": "8bd93328dedf5addf2c66419c2aba3af4a8b25c407d7b3a9a893147055759b6a",
+      "fichiers": [
+        "SKILL.md"
+      ]
+    },
+    "amelioration-continue-lean": {
+      "version": "1.0.0",
+      "sha256": "23aadf6205a0a646656fc80b348aab925d4ebde886bbbae0483c04bfde1159cd",
+      "fichiers": [
+        "SKILL.md"
+      ]
+    },
     "analyse-concurrentielle": {
       "version": "1.0.0",
       "sha256": "e1364b7828d7cf05f1323d2b70630cc626f9c5d90213f7a55217a7290d2fd9d9",
+      "fichiers": [
+        "SKILL.md"
+      ]
+    },
+    "analyse-donnees-decision": {
+      "version": "1.0.0",
+      "sha256": "3950d9168425234b56f92bb95c67609aa7f2ef06e6365f9e99daae86d865100f",
+      "fichiers": [
+        "SKILL.md"
+      ]
+    },
+    "analyse-rentabilite": {
+      "version": "1.0.0",
+      "sha256": "bbe6474f5655181053665c647ec5324d36d767bc2dad75f75a24b9b4e71f9ed1",
+      "fichiers": [
+        "SKILL.md"
+      ]
+    },
+    "analyse-risques-poste": {
+      "version": "1.0.0",
+      "sha256": "9b07ddc03fb6c785e0eceb9481c1dcebb999b59ce4bcd383a8a25d13aba5a255",
+      "fichiers": [
+        "SKILL.md"
+      ]
+    },
+    "audit-interne": {
+      "version": "1.0.0",
+      "sha256": "29dfb56cdb2af0086a68dd05b2e57638d07b13da2a811002df254f795ae40fe5",
       "fichiers": [
         "SKILL.md"
       ]
@@ -24,12 +87,47 @@
         "references/liste-controles-seo.md"
       ]
     },
+    "balance-agee-creances": {
+      "version": "1.0.0",
+      "sha256": "39bfe2391f3020ad10b0783ae1effe3cda88fd3c510fb837764d4cf00d275e23",
+      "fichiers": [
+        "SKILL.md"
+      ]
+    },
+    "base-connaissances-faq": {
+      "version": "1.0.0",
+      "sha256": "6abd430a497024325fe5d085762d17a821a8dce451485f457b5c26050aee5631",
+      "fichiers": [
+        "SKILL.md"
+      ]
+    },
+    "bilan-evenement": {
+      "version": "1.0.0",
+      "sha256": "824a68c0e9feea64814b2df17dcb1b24b4fcf57dea95dab217a6d025ba594452",
+      "fichiers": [
+        "SKILL.md"
+      ]
+    },
     "cadrage-exigences": {
       "version": "1.0.0",
       "sha256": "38c60510f9730a29816f3a98c2a39fe1c957564159aa0d6e417de9a889547d8e",
       "fichiers": [
         "SKILL.md",
         "references/gabarit-brief.md"
+      ]
+    },
+    "cadrage-projet": {
+      "version": "1.0.0",
+      "sha256": "40f5f91e952ac483606afd6c1f81308f7e720b154f1c1d2921237d3dba5b2b78",
+      "fichiers": [
+        "SKILL.md"
+      ]
+    },
+    "cahier-des-charges-achat": {
+      "version": "1.0.0",
+      "sha256": "b4dd1e6bc2e228bf06518df8722fcac1a9d95f449ff27ae0674f4d3c150a642b",
+      "fichiers": [
+        "SKILL.md"
       ]
     },
     "charte-marque": {
@@ -40,9 +138,86 @@
         "references/grille-charte.md"
       ]
     },
+    "classement-archivage": {
+      "version": "1.0.0",
+      "sha256": "b04b10204eb7778c5047b3d14fd1f34985e2edf4efb69609f3c7648b113d82a4",
+      "fichiers": [
+        "SKILL.md"
+      ]
+    },
+    "classement-douanier-origine": {
+      "version": "1.0.0",
+      "sha256": "473608ffc6ecb4e51dd9ea69c160aa5ec31e803556f38c99d11a4d76a3d0b2df",
+      "fichiers": [
+        "SKILL.md"
+      ]
+    },
+    "cloture-mensuelle": {
+      "version": "1.0.0",
+      "sha256": "6b898522eb071460edac65e3667dd3ed4bda13bba41efbb639cbefc7ac7d979c",
+      "fichiers": [
+        "SKILL.md"
+      ]
+    },
+    "communication-de-crise": {
+      "version": "1.0.0",
+      "sha256": "6af99f345372ecc9478fa1714fe88131baa64cf51c3ff25494f4cddb2b5af221",
+      "fichiers": [
+        "SKILL.md"
+      ]
+    },
+    "communication-interne": {
+      "version": "1.0.0",
+      "sha256": "279d7cc3d498a7ad4f8204d486a998b4777f70caf245b4522201b95d42ba334a",
+      "fichiers": [
+        "SKILL.md"
+      ]
+    },
+    "communique-de-presse": {
+      "version": "1.0.0",
+      "sha256": "e21fc336392364ad8e3cbde0873e07019911cb0f7a13edb87d64eff910f0706a",
+      "fichiers": [
+        "SKILL.md"
+      ]
+    },
+    "comparaison-offres-fournisseurs": {
+      "version": "1.0.0",
+      "sha256": "92da42b5408ee3cb90d1eb435f248c3728de578b8c65710828567864edea89cf",
+      "fichiers": [
+        "SKILL.md"
+      ]
+    },
+    "conception-module-formation": {
+      "version": "1.0.0",
+      "sha256": "c679cc33ed7ab7bc11839f5ee994584c3a4ea9dc4da94ca847c1e5f4e04bd539",
+      "fichiers": [
+        "SKILL.md"
+      ]
+    },
+    "conformite-environnementale": {
+      "version": "1.0.0",
+      "sha256": "4e5f6833227b2936d780aa284fa6ab0b1b65ea99230a86641d79144face1461f",
+      "fichiers": [
+        "SKILL.md"
+      ]
+    },
     "contenu-recherche-ia": {
       "version": "1.0.0",
       "sha256": "9b27d6b9749965b444477ff0309af5e88d6ff8c26fb2662100cdfc24278d2d37",
+      "fichiers": [
+        "SKILL.md"
+      ]
+    },
+    "contrat-fournisseur": {
+      "version": "1.0.0",
+      "sha256": "db249f8f6eacc3a87fea9dcedb92cbdedab5327930cf25bd0281e1fbe4c6eb3f",
+      "fichiers": [
+        "SKILL.md"
+      ]
+    },
+    "controle-communications-reglementees": {
+      "version": "1.0.0",
+      "sha256": "b7b2e960c8231d85f0927062787046d605350d0144c065bede9cf81ae61e9666",
       "fichiers": [
         "SKILL.md"
       ]
@@ -64,7 +239,42 @@
     },
     "conversion-crm": {
       "version": "1.3.0",
-      "sha256": "9b0726ea61740fb5debe78a3f0c20c380cbc5ccd8d02aa0105c6eb618af3c17e",
+      "sha256": "66f00833d572e6f42fc26d11e2545e167fe364cb36abaccb147caad056e5fe08",
+      "fichiers": [
+        "SKILL.md"
+      ]
+    },
+    "courrier-officiel": {
+      "version": "1.0.0",
+      "sha256": "b2944a1f5f64e2e3eb6704a75b2ccf9b17929bf4a380e232358e79bf23866bba",
+      "fichiers": [
+        "SKILL.md"
+      ]
+    },
+    "cybersecurite-pme": {
+      "version": "1.0.0",
+      "sha256": "177620ee01d8e2983c44ad683748f8cb6bfc1d7cf9b50ebffd49bd763e2d4aec",
+      "fichiers": [
+        "SKILL.md"
+      ]
+    },
+    "documentation-technique": {
+      "version": "1.0.0",
+      "sha256": "65194c685a2f2680fe7ac31d6302f2c742dd6f13fc16ec987e577e0d88880dde",
+      "fichiers": [
+        "SKILL.md"
+      ]
+    },
+    "dossier-export": {
+      "version": "1.0.0",
+      "sha256": "157968fcfcf45d83719c574b908bb40a7c9f5621c8e2a7f0547bf9831b1acf62",
+      "fichiers": [
+        "SKILL.md"
+      ]
+    },
+    "dossier-subside-innovation": {
+      "version": "1.0.0",
+      "sha256": "a66b77d49ea117dba31c9e858dfbf98121d050694943edaecfbb75dc7b3df8a1",
       "fichiers": [
         "SKILL.md"
       ]
@@ -77,6 +287,97 @@
         "references/gabarit-dossier.md"
       ]
     },
+    "entretien-evaluation": {
+      "version": "1.0.0",
+      "sha256": "4c944f4fde1371516e72a8992d9d31abc53ee5d50ed519481a576dc6f056c0ff",
+      "fichiers": [
+        "SKILL.md"
+      ]
+    },
+    "fin-contrat-travail": {
+      "version": "1.0.0",
+      "sha256": "0667b52a71427e6f545e2d86dc1096d5684a76650bbd331551186173466fef9d",
+      "fichiers": [
+        "SKILL.md"
+      ]
+    },
+    "financement-formation": {
+      "version": "1.0.0",
+      "sha256": "d22d6deace36197d2ee88efa3671d4019ae9b8a452f0023b304f4bc6d8d4e19f",
+      "fichiers": [
+        "SKILL.md"
+      ]
+    },
+    "gestion-bail-commercial": {
+      "version": "1.0.0",
+      "sha256": "a80ec0b7b3478fcb3a9a77805f373932d5e56f4c522a1fb49204b3b90d99da0c",
+      "fichiers": [
+        "SKILL.md"
+      ]
+    },
+    "gestion-dossier-sinistre": {
+      "version": "1.0.0",
+      "sha256": "f108556730146d7be13c6198701d8be4444ed83f0c8737ed35d07fc5ad8c9ebe",
+      "fichiers": [
+        "SKILL.md"
+      ]
+    },
+    "gestion-incident-informatique": {
+      "version": "1.0.0",
+      "sha256": "58262b4e08a4ca63c09e9df33e0a828517ec1b610ca8eaed204f4745fe697ee1",
+      "fichiers": [
+        "SKILL.md"
+      ]
+    },
+    "gestion-retours-logistique": {
+      "version": "1.0.0",
+      "sha256": "b7720ff42f28ff32e834e1562e82086a0a5d16f064fcac88e45958dfcf4ee890",
+      "fichiers": [
+        "SKILL.md"
+      ]
+    },
+    "gouvernance-donnees": {
+      "version": "1.0.0",
+      "sha256": "b2371a718fd321cf346b12339d08abbe375b87096220abcb50f1b5318584f261",
+      "fichiers": [
+        "SKILL.md"
+      ]
+    },
+    "impot-des-societes": {
+      "version": "1.0.0",
+      "sha256": "9b1c0c4822f39830927af97b0ee5b08a3e1dc6cea0716a65f49db9a7c1e6e7db",
+      "fichiers": [
+        "SKILL.md"
+      ]
+    },
+    "incitants-fiscaux-rd": {
+      "version": "1.0.0",
+      "sha256": "fc68ea215b41289796e7513960f4a516873390cac9f57f5142846a357e2111c8",
+      "fichiers": [
+        "SKILL.md"
+      ]
+    },
+    "indicateurs-trs": {
+      "version": "1.0.0",
+      "sha256": "0fb3e48ed65c427f5801e330b94785740ef7b10d4ac4c120a227b6f7c2682a5a",
+      "fichiers": [
+        "SKILL.md"
+      ]
+    },
+    "maintenance-batiment": {
+      "version": "1.0.0",
+      "sha256": "f1be4c6d81946dfb3f9937ac8646abfce5441ba5104efcd34fc62a37216424e8",
+      "fichiers": [
+        "SKILL.md"
+      ]
+    },
+    "mentions-legales-site": {
+      "version": "1.0.0",
+      "sha256": "191d4f39a220c6ea4d204bf7a8199224927e969160130b0bd0e8503648cc4416",
+      "fichiers": [
+        "SKILL.md"
+      ]
+    },
     "mesure-experiences": {
       "version": "1.2.0",
       "sha256": "141c1b1a9ba9c829081fa1741cd87649951a029a992d1f6498f35a68054fef46",
@@ -84,9 +385,86 @@
         "SKILL.md"
       ]
     },
+    "mesure-satisfaction": {
+      "version": "1.0.0",
+      "sha256": "34b8d7162830609e3d35e66cdfb5bdedfd3b4c979bdb6910b994296ae010e877",
+      "fichiers": [
+        "SKILL.md"
+      ]
+    },
+    "non-conformite-action-corrective": {
+      "version": "1.0.0",
+      "sha256": "63441791fbd40ff894c6f576c42df585ef85eab61a8964f28b11d6c8d1a53062",
+      "fichiers": [
+        "SKILL.md"
+      ]
+    },
+    "offre-emploi-non-discriminante": {
+      "version": "1.0.0",
+      "sha256": "6745ee0f286335834ca49e26c4657050ad98f112e8d8e9b72b1360bb1a28099d",
+      "fichiers": [
+        "SKILL.md"
+      ]
+    },
+    "organisation-evenement": {
+      "version": "1.0.0",
+      "sha256": "344ed3c7a30fc0afb079be6eb17e294d3031eb951f1d9a1c250a5c7cd63945b4",
+      "fichiers": [
+        "SKILL.md"
+      ]
+    },
+    "organisation-transport": {
+      "version": "1.0.0",
+      "sha256": "253130a5037390dc8f9c9ad3b8785b2d4db191d007a11e08abca00ae28eb4dfb",
+      "fichiers": [
+        "SKILL.md"
+      ]
+    },
+    "pilotage-partenaires": {
+      "version": "1.0.0",
+      "sha256": "2ecefbc6215cb32a32702766f780b759aca4ab0448298830188f7da0a1ff0609",
+      "fichiers": [
+        "SKILL.md"
+      ]
+    },
+    "pilotage-strategique": {
+      "version": "1.0.0",
+      "sha256": "fd69004d3f8653b4ff35d94b4c24b42a5c8773f0652c51e379217cb99dfacebd",
+      "fichiers": [
+        "SKILL.md"
+      ]
+    },
+    "plan-formation": {
+      "version": "1.0.0",
+      "sha256": "e61be4a850524f3cca47ae8eb2f31bdc7b164602d31c0dce0278eb062c937da8",
+      "fichiers": [
+        "SKILL.md"
+      ]
+    },
+    "plan-tresorerie": {
+      "version": "1.0.0",
+      "sha256": "3abaa83f546c58c8d25856a630582dd646ca70d9f6069a0669df5e1884a3e6fa",
+      "fichiers": [
+        "SKILL.md"
+      ]
+    },
     "planification-livrables": {
       "version": "1.0.0",
       "sha256": "e76894b8bf977f847da8189a5ade2f05f9a465ae1fa1900e82470f1e405d3dff",
+      "fichiers": [
+        "SKILL.md"
+      ]
+    },
+    "planification-production": {
+      "version": "1.0.0",
+      "sha256": "c5c3f51af4c12b39c8366ab79787092a1f18a111e95225399ef36748ffa9dcf0",
+      "fichiers": [
+        "SKILL.md"
+      ]
+    },
+    "precompte-professionnel": {
+      "version": "1.0.0",
+      "sha256": "713c2149c20a1f59e39b39630f39feb0878df20c1fd8f975d55db95d1dd1e2f6",
       "fichiers": [
         "SKILL.md"
       ]
@@ -99,12 +477,68 @@
         "references/structure-campagne.md"
       ]
     },
+    "preparation-rendez-vous-b2b": {
+      "version": "1.0.0",
+      "sha256": "9f2ddea368f444cfe2b7602681eca0b46f99ae56b222cc03d476ef280c787787",
+      "fichiers": [
+        "SKILL.md"
+      ]
+    },
+    "preparation-tva": {
+      "version": "1.0.0",
+      "sha256": "019df9b71a233b99369450a0786d531d8993ff951a83c86cefd07dc664a3fdcc",
+      "fichiers": [
+        "SKILL.md"
+      ]
+    },
+    "prevision-demande-stocks": {
+      "version": "1.0.0",
+      "sha256": "dd6b8381c9ead83ce1be2f6851dcdecd5b2663cdcb83530af10d83df934f374c",
+      "fichiers": [
+        "SKILL.md"
+      ]
+    },
+    "procedure-qualite": {
+      "version": "1.0.0",
+      "sha256": "16dec6fbe24d4d769c2ebf13205f85064d9ef98178adf7184a72978b3d41c568",
+      "fichiers": [
+        "SKILL.md"
+      ]
+    },
+    "procedure-recouvrement-judiciaire": {
+      "version": "1.0.0",
+      "sha256": "62ff628a23146baa9e259ceca756fcec4245e7275640e7f9f0de85fbd7668f7a",
+      "fichiers": [
+        "SKILL.md"
+      ]
+    },
+    "proposition-commerciale": {
+      "version": "1.0.0",
+      "sha256": "e76ddee3411134607a8992fd0be06ac39ace0de1a6b61a0eaf0a5b93642ee602",
+      "fichiers": [
+        "SKILL.md"
+      ]
+    },
+    "prospection-marche-etranger": {
+      "version": "1.0.0",
+      "sha256": "f0b1510744f08008cbf8f96bf7697f9ebb26298852b84a17153849c8d9292d54",
+      "fichiers": [
+        "SKILL.md"
+      ]
+    },
     "qualification-prospects": {
       "version": "1.0.0",
       "sha256": "42801c8c8fff6ebd1c9a07e4d86c2773c8a111f7f3b617eaa3ac3cbea575ee88",
       "fichiers": [
         "SKILL.md",
         "references/fiche-qualification.md"
+      ]
+    },
+    "qualite-donnees": {
+      "version": "1.0.0",
+      "sha256": "3ab24b24aefa2976cdce23eabc9058c4fee8e650f6ae462f427862639f3e1c04",
+      "fichiers": [
+        "SKILL.md"
       ]
     },
     "recherche-connaissances": {
@@ -117,7 +551,7 @@
     },
     "recherche-prospects": {
       "version": "1.0.0",
-      "sha256": "fc7a41fec6b38e4a6b6f9c17eb1d4fe6912513889dfb6a432b4168580cba7d11",
+      "sha256": "d8ee477d6c78b256f1638f083877f9e1cee842f2f6445503fd34838ac398dd64",
       "fichiers": [
         "SKILL.md",
         "references/journal-recherche.md"
@@ -131,9 +565,37 @@
         "references/fiche-source.md"
       ]
     },
+    "redaction-contrat-travail": {
+      "version": "1.0.0",
+      "sha256": "0e9fef31bc9dfa432f74623abfcd7157f152911447fb1c7c90bd6448982ffe72",
+      "fichiers": [
+        "SKILL.md"
+      ]
+    },
     "redaction-declinaison-canal": {
       "version": "1.4.0",
       "sha256": "11100ff1ea2061c710b078ef305d526b6c90ab4f73a93dfc0f09474cd048ebff",
+      "fichiers": [
+        "SKILL.md"
+      ]
+    },
+    "registre-risques-projet": {
+      "version": "1.0.0",
+      "sha256": "1133b1694dad411ca55f0a535e232037da2b1485c5b94e8e704d7f3083de3304",
+      "fichiers": [
+        "SKILL.md"
+      ]
+    },
+    "registre-traitements-rgpd": {
+      "version": "1.0.0",
+      "sha256": "dfbd6b5be941939daa9d423da79a278ad0050e30847c24c65521940262dcba38",
+      "fichiers": [
+        "SKILL.md"
+      ]
+    },
+    "relance-amiable-b2b-b2c": {
+      "version": "1.0.0",
+      "sha256": "ff17f0ad244d3836013c19c6c1c7ff500bdb3979d1a8d8c1af1b3c02ae69b340",
       "fichiers": [
         "SKILL.md"
       ]
@@ -144,6 +606,111 @@
       "fichiers": [
         "SKILL.md",
         "references/grille-gravite.md"
+      ]
+    },
+    "renouvellement-fidelisation": {
+      "version": "1.0.0",
+      "sha256": "5a8bc6bdf64cd35dea3d91df848cbbb2c239a10001a2ce7d3ab6cdc613af9b07",
+      "fichiers": [
+        "SKILL.md"
+      ]
+    },
+    "reponse-client-multicanal": {
+      "version": "1.0.0",
+      "sha256": "813342c732d14cad598808539c67c90151ab7001f81d0f11a4c6ea159610f07d",
+      "fichiers": [
+        "SKILL.md"
+      ]
+    },
+    "revue-contrat-commercial": {
+      "version": "1.0.0",
+      "sha256": "80c38ecb25f3a1218adb0aa17f6d92370dd922bd82f067ef910061e5d0da2f3e",
+      "fichiers": [
+        "SKILL.md"
+      ]
+    },
+    "salon-professionnel": {
+      "version": "1.0.0",
+      "sha256": "a008ee7a99b746c39d35114076a00916a7b629f254faa88ac739d90ef2454367",
+      "fichiers": [
+        "SKILL.md"
+      ]
+    },
+    "selection-partenaire": {
+      "version": "1.0.0",
+      "sha256": "3eed4ba18fdd830e0cb30f15d41229f9143731fcb4c9b1ddf25506332a2bbc85",
+      "fichiers": [
+        "SKILL.md"
+      ]
+    },
+    "suivi-avancement-projet": {
+      "version": "1.0.0",
+      "sha256": "e2be4613e53fd3ec37f18e7bb1f2d7542cd6b9e01017708b983d63ffa406760e",
+      "fichiers": [
+        "SKILL.md"
+      ]
+    },
+    "suivi-energie-batiment": {
+      "version": "1.0.0",
+      "sha256": "7e24325c850355279303fd22a8975ecc90b12c81475493abd10c2f360ccdb925",
+      "fichiers": [
+        "SKILL.md"
+      ]
+    },
+    "synthese-direction": {
+      "version": "1.0.0",
+      "sha256": "922e9589a53daebdf095fa012e0198a4650fd575dfd00082d9fb7ceb0d3dff10",
+      "fichiers": [
+        "SKILL.md"
+      ]
+    },
+    "tableau-de-bord-pme": {
+      "version": "1.0.0",
+      "sha256": "7a79cc1ddf128f903082587cc2e66290180d4517dfe138cdc79f3dd1dfbde3b9",
+      "fichiers": [
+        "SKILL.md"
+      ]
+    },
+    "temps-travail-conges": {
+      "version": "1.0.0",
+      "sha256": "391bf93780e8290cd7bae9b81aa3dfbdff475a13321b98d3427a0bc5adc9c608",
+      "fichiers": [
+        "SKILL.md"
+      ]
+    },
+    "traitement-reclamation": {
+      "version": "1.0.0",
+      "sha256": "100467f55ee9a8fe6b7292a20cc70d0a56d935555e3ec0a234e6a69e06d7bc55",
+      "fichiers": [
+        "SKILL.md"
+      ]
+    },
+    "tri-tickets-support": {
+      "version": "1.0.0",
+      "sha256": "5c9f1bdeea7caba60295eab5cd5e3e9032bfa7b109e6a987901323ff03fb8d5f",
+      "fichiers": [
+        "SKILL.md"
+      ]
+    },
+    "veille-brevets-anteriorite": {
+      "version": "1.0.0",
+      "sha256": "94d73cfeb53b061859d852febd543485195eb27c50c7af20e2c8e84697a3f064",
+      "fichiers": [
+        "SKILL.md"
+      ]
+    },
+    "veille-reglementaire": {
+      "version": "1.0.0",
+      "sha256": "202000264c59d799ca874a5954c5364fd1dc00c3cc6bf72119c98f4ea3da5eb2",
+      "fichiers": [
+        "SKILL.md"
+      ]
+    },
+    "vigilance-clientele-lbc": {
+      "version": "1.0.0",
+      "sha256": "5876b96ed82eef686affad04b7fde721fc69970e0bf256d992eda3d5e04a2e9f",
+      "fichiers": [
+        "SKILL.md"
       ]
     }
   }

@@ -35,7 +35,17 @@ class TestFichierReel(unittest.TestCase):
 
     def test_contenu_attendu(self):
         reg = svc.charger_services()
-        self.assertEqual(len(reg["services"]), 14)
+        # Usine complète (16/10/2026) : 14 services d'origine + 14 ajoutés, liste exacte.
+        attendus = {
+            "marketing", "direction", "administratif", "juridique", "commercial", "recouvrement",
+            "sav-sinistres", "commerce-exterieur", "conformite", "comptabilite-finance",
+            "ressources-humaines", "informatique", "achats", "qualite",
+            "logistique", "production", "recherche-innovation", "communication", "service-client",
+            "fiscalite", "gestion-projets", "hse", "formation", "juridique-social", "donnees-bi",
+            "evenementiel", "services-generaux", "partenariats",
+        }
+        self.assertEqual(len(reg["services"]), 28)
+        self.assertEqual({s["slug"] for s in reg["services"]}, attendus)
         self.assertTrue(all(s["actif"] is True for s in reg["services"]))
         marketing = next(s for s in reg["services"] if s["slug"] == "marketing")
         with open(RACINE / "organisation/registre/agents.json", encoding="utf-8") as f:
@@ -100,6 +110,15 @@ class TestRefus(unittest.TestCase):
 
     def test_flux_double(self):
         e = self.erreurs(lambda r: r["flux"].append(copy.deepcopy(r["flux"][0])))
+        self.contient(e, "flux en double")
+
+    def test_flux_meme_paire_objet_different(self):
+        # La route services.declarer du plugin refuse deux flux sur la même paire : le registre aussi.
+        def ajout(r):
+            f = copy.deepcopy(r["flux"][0])
+            f["objet"] = "Autre objet"
+            r["flux"].append(f)
+        e = self.erreurs(ajout)
         self.contient(e, "flux en double")
 
     def test_flux_sensible_sans_approbation(self):

@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Déploie le plugin de l'Atelier Marketing IA sur les instances locales (recette appliquée à la main jusqu'ici).
 # Étapes : vérifications préalables, construction du plugin, copie vers instance/plugin-jb et l'aperçu,
-# construction de l'interface du socle, redémarrage, attente de « ready », puis « appliquer ».
+# construction de l'interface du socle, redémarrage, attente de « ready », puis liste des clients réels
+# (aucun « appliquer » : plus de mode démonstration, les objectifs sur mesure ne sont jamais écrasés).
 # Voir docs/exploitation.md, section « Déployer ». Jamais de pkill : on passe par les scripts d'arrêt existants.
 set -uo pipefail
 
@@ -15,7 +16,7 @@ aide() {
   cat <<'AIDE'
 Usage : scripts/deployer.sh [options]
   --cible 3100|3580|toutes   instances à redémarrer (défaut : toutes)
-  --apercu <dossier>         dossier d'aperçu (copie du plugin + courtier.sh) ; absent : aperçu ignoré
+  --apercu <dossier>         dossier d'aperçu (copie du plugin) ; absent : aperçu ignoré
   --journaux <dossier>       dossier des journaux de démarrage (obligatoire sauf avec --essai)
   --sans-tests               saute tsc et vitest (avertissement affiché)
   --essai                    affiche chaque commande sans l'exécuter (aucun effet)
@@ -148,34 +149,21 @@ attendre() {
 }
 for p in 3100 3580; do veut "${p}" && { attendre "${p}" || exit 1; }; done
 
-# ---------- 7. Appliquer ----------
-etape "7. appliquer --mode reel"
-ECRITURES=0
-appliquer() {   # <libellé> <api> <commande...>
-  local lib="$1" api="$2"; shift 2
-  if [[ "${ESSAI}" -eq 1 ]]; then echo "+ ATELIER_API=${api} $*  # ${lib}"; return 0; fi
-  local sortie; sortie="$(ATELIER_API="${api}" "$@" 2>&1)"; local code=$?
-  echo "${sortie}" | tail -5
-  [[ "${code}" -eq 0 ]] || { erreur "appliquer en échec (${lib}, code ${code})"; return 1; }
-  local n; n="$(grep -oE 'Écritures API totales : [0-9]+' <<<"${sortie}" | grep -oE '[0-9]+$' | tail -1)"
-  ECRITURES=$((ECRITURES + ${n:-0}))
-}
-DEMO_ORG="${RACINE}/instance/demo-client/organisation.sh"
-if veut 3580 && [[ -x "${DEMO_ORG}" || "${ESSAI}" -eq 1 && -f "${DEMO_ORG}" ]]; then
-  appliquer "organisation hors dépôt, 3580" "http://127.0.0.1:3580/api" "${DEMO_ORG}" appliquer --mode reel || exit 1
-else
-  veut 3580 && echo "Script hors dépôt de l'instance de démonstration absent ou non exécutable : ignoré."
-fi
-if [[ -n "${APERCU}" && ( -x "${APERCU}/courtier.sh" || "${ESSAI}" -eq 1 ) ]]; then
-  veut 3580 && { appliquer "courtier, 3580" "http://127.0.0.1:3580/api" "${APERCU}/courtier.sh" appliquer --mode reel || exit 1; }
-  veut 3100 && { appliquer "courtier, 3100" "http://127.0.0.1:3100/api" "${APERCU}/courtier.sh" appliquer --mode reel || exit 1; }
-else
-  echo "courtier.sh de l'aperçu absent : appliquer du courtier ignoré."
-fi
+# ---------- 7. Clients réels ----------
+# Plus de mode démonstration : rien n'est réappliqué automatiquement (les objectifs sur mesure
+# des clients ne doivent pas être écrasés, et les anciens scripts recréeraient des entreprises de démo).
+etape "7. Clients réels (liste seulement, aucun appliquer)"
+CLIENTS=0
+for fiche in "${RACINE}"/instance/atelier-client/*/entreprise.json; do
+  [[ -f "${fiche}" ]] || continue
+  echo "Client trouvé : $(basename "$(dirname "${fiche}")")"
+  CLIENTS=$((CLIENTS + 1))
+done
+[[ "${CLIENTS}" -gt 0 ]] || echo "Aucun client trouvé dans instance/atelier-client/*/entreprise.json."
 
 # ---------- 8. Résumé ----------
 etape "8. Résumé"
 echo "Version du plugin : $(git -C "${RACINE}" rev-parse --short HEAD)"
 echo "Tests : ${NB_TESTS}"
 if [[ "${ESSAI}" -eq 1 ]]; then echo "Instances prêtes : (essai, rien lancé)"; else echo "Instances prêtes : ${PRETES[*]:-aucune}"; fi
-echo "Écritures de appliquer : ${ECRITURES}"
+echo "Clients réels listés : ${CLIENTS} (aucune écriture : rien n'est réappliqué)"

@@ -1849,6 +1849,9 @@ export function creerServices(ctx: PluginContext, options: { transportReel?: Tra
   async function creerCampagne(companyId: string, brute: unknown, acteur: ActeurHote) {
     const entree = analyser(CreerCampagneEntree, brute, "Campagne");
     if (entree.companyId !== companyId) erreur("hors_entreprise", "Entreprise incohérente.");
+    // Lot G1 : le défaut du contrat est « reel », mais le mode réel reste une décision humaine. Un agent qui ne demande
+    // aucun mode crée donc une campagne déclarée en démonstration (le mode effectif suit l'entreprise) ; un « reel » explicite reste refusé.
+    if (acteur.type === "agent" && !(typeof brute === "object" && brute !== null && "mode" in brute)) entree.mode = "demonstration";
     const issueOrigineId = acteur.type === "agent" ? await verifierCreationParAgent(companyId, entree, acteur) : null;
     // Un agent coordonne la campagne qu'il crée : sans cela le brief resterait sans assigné et il ne pourrait pas enregistrer ses exigences.
     if (acteur.type === "agent" && entree.coordinateurAgentId === null) entree.coordinateurAgentId = acteur.agentId;

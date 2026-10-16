@@ -9,6 +9,7 @@ skills:
   - "planification-livrables"
   - "dossier-validation-humaine"
   - "recherche-connaissances"
+  - "pilotage-strategique"
 ---
 
 # Coordinateur du service direction

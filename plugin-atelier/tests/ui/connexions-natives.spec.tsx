@@ -74,6 +74,12 @@ async function pageParametres() {
   return rendu.conteneur;
 }
 
+/** Tableaux de la zone connexions (légendes « Services marketing… » et « Autres connecteurs… »), indépendamment des autres tableaux de la page. */
+function tableauxConnexions(c: HTMLElement): HTMLTableElement[] {
+  return Array.from(c.querySelectorAll<HTMLTableElement>("table")).filter((t) =>
+    /^(Services marketing de la passerelle|Autres connecteurs)/.test(t.querySelector("caption")?.textContent ?? ""));
+}
+
 function ligne(c: HTMLElement, nom: string): HTMLElement {
   const th = Array.from(c.querySelectorAll<HTMLElement>("tbody th")).find((t) => t.textContent?.startsWith(nom));
   if (!th) throw new Error(`Ligne introuvable : ${nom}`);
@@ -317,7 +323,10 @@ describe("page Paramètres : tableau des connexions natives", () => {
     stubReseau({ connexions: { statut: 500, corps: { error: "Boom" } }, agents: { corps: AGENTS } });
     const c = await pageParametres();
     expect(parTexte(c, '[role="alert"]', "connexions natives illisibles").textContent).toContain("Boom");
-    expect(c.querySelectorAll("table")).toHaveLength(1);
+    // Cible les tableaux de connexions par leur légende (la page Paramètres porte d'autres tableaux, ex. budgets IA).
+    const legendes = tableauxConnexions(c).map((t) => t.querySelector("caption")?.textContent ?? "");
+    expect(legendes).toHaveLength(1);
+    expect(legendes[0]).toContain("Autres connecteurs");
   });
 
   it("forme native inconnue : Fonction indisponible, et état Indisponible pour les lignes d'agents", async () => {
@@ -348,7 +357,7 @@ describe("page Paramètres : tableau des connexions natives", () => {
   it("accessibilité : tableaux légendés, en-têtes de colonne, boutons nommés par le service", async () => {
     stubReseau({ connexions: { corps: VIDE }, agents: { corps: [] } });
     const c = await pageParametres();
-    const tableaux = Array.from(c.querySelectorAll("table"));
+    const tableaux = tableauxConnexions(c);
     expect(tableaux).toHaveLength(2);
     for (const t of tableaux) {
       expect(t.querySelector("caption")?.textContent).toBeTruthy();

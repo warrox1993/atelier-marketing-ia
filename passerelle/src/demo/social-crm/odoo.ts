@@ -7,6 +7,8 @@
 import * as z from "zod";
 import { LIBELLES_METIERS, type ContactCrm } from "../modele/index.js";
 import type { FournisseurService } from "../../fournisseurs.js";
+import { definitionsOdoo, SchemaClause } from "../../commun/social-crm/odoo.js";
+import { SchemaDate } from "../modele/index.js";
 import { dossiersPeriode, exigerContact, derniereModification, type DossierCrm } from "./crm-commun.js";
 import { formeAu, formePeriode, horodatageEspace, outilLecture, outilMutation } from "./utilitaires.js";
 
@@ -71,8 +73,6 @@ const CHAMPS_CONNUS = new Set([
 
 // --- Domaine de recherche : triplets [champ, opérateur, valeur] -------------------------
 
-const OPERATEURS = ["=", "!=", ">", ">=", "<", "<=", "in", "not in", "ilike", "like"] as const;
-const SchemaClause = z.tuple([z.string().max(64), z.enum(OPERATEURS), z.union([z.string().max(200), z.number(), z.boolean(), z.array(z.union([z.string().max(200), z.number(), z.boolean()])).max(50)])]);
 type Clause = z.output<typeof SchemaClause>;
 
 /** Valeur comparable d'un champ : un champ many2one se compare par son identifiant, comme dans Odoo. */
@@ -120,6 +120,8 @@ function trier(liste: Enregistrement[], ordre: string): Enregistrement[] {
   });
 }
 
+const DEFS = definitionsOdoo(SchemaDate);
+
 export function fournisseurOdoo(): FournisseurService {
   const leads = outilLecture(
     {
@@ -129,16 +131,7 @@ export function fournisseurOdoo(): FournisseurService {
         "{ jsonrpc, id, result: [enregistrements] }. Champs : id, name, type, contact_name, email_from, phone, city, zip, stage_id " +
         "([id, nom]), expected_revenue, create_date, date_closed, won_status, active ; les champs vides valent false. " +
         "Comme dans Odoo, les enregistrements archivés (devis perdus) sont exclus sauf si le domaine filtre `active`.",
-      schemaEntree: {
-        ...formePeriode,
-        ...formeAu,
-        domain: z.array(SchemaClause).max(20).default([]).describe('Domaine Odoo en triplets [champ, opérateur, valeur], par exemple [["type","=","lead"]]. Seul le « et » implicite est pris en charge.'),
-        fields: z.array(z.string().max(64)).max(30).default([]).describe("Champs demandés (tous si vide) ; `id` est toujours renvoyé."),
-        offset: z.number().int().min(0).max(1_000_000).default(0).describe("Décalage (offset) de la pagination."),
-        limit: z.number().int().min(1).max(500).default(80).describe("Nombre maximal d'enregistrements (limit)."),
-        order: z.string().max(200).default("id desc").describe('Ordre de tri, par exemple "create_date desc".'),
-        id: z.number().int().default(1).describe("Identifiant de la requête JSON-RPC, renvoyé tel quel."),
-      },
+      schemaEntree: DEFS.odoo_leads_search_read.schemaEntree,
     },
     ({ debut, fin, au, domain, fields, offset, limit, order, id }) => {
       for (const champ of fields) if (!CHAMPS_CONNUS.has(champ)) throw new Error(`Champ invalide « ${champ} » pour le modèle crm.lead.`);
@@ -160,11 +153,8 @@ export function fournisseurOdoo(): FournisseurService {
     {
       nom: "odoo_ecrire_lead",
       description: "Prépare l'écriture de valeurs sur des leads Odoo (execute_kw, méthode write du modèle crm.lead).",
-      schemaEntree: {
-        ids: z.array(z.number().int().positive()).min(1).max(50).describe("Identifiants des leads (champ `id` de odoo_leads_search_read)."),
-        values: z.record(z.string().regex(/^[a-z][a-z0-9_]{0,63}$/), z.union([z.string().max(500), z.number(), z.boolean()])).describe("Valeurs à écrire, par nom de champ."),
-      },
-      destructif: false,
+      schemaEntree: DEFS.odoo_ecrire_lead.schemaEntree,
+      destructif: DEFS.odoo_ecrire_lead.destructif,
       requeteReelle: "execute_kw(db, uid, clé, 'crm.lead', 'write', [ids, valeurs])",
       resume: (a) => `écriture de ${Object.keys(a.values).length} champ(s) sur ${a.ids.length} lead(s).`,
     },

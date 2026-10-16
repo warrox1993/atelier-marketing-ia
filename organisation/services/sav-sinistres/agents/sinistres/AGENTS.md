@@ -4,7 +4,8 @@ slug: "sinistres"
 name: "Sinistres"
 title: "SAV · Suivi des sinistres"
 reportsTo: "coordinateur-sav"
-skills: []
+skills:
+  - "gestion-dossier-sinistre"
 ---
 
 # Suivi des sinistres

@@ -4,7 +4,8 @@ slug: "offres-emploi"
 name: "Offres emploi"
 title: "RH · Offres d'emploi"
 reportsTo: "coordinateur-rh"
-skills: []
+skills:
+  - "offre-emploi-non-discriminante"
 ---
 
 # Offres d'emploi

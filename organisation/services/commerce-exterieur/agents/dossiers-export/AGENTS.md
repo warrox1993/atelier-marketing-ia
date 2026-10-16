@@ -4,7 +4,9 @@ slug: "dossiers-export"
 name: "Dossiers export"
 title: "Commerce extérieur · Dossiers d'exportation"
 reportsTo: "coordinateur-export"
-skills: []
+skills:
+  - "dossier-export"
+  - "classement-douanier-origine"
 ---
 
 # Dossiers d'exportation

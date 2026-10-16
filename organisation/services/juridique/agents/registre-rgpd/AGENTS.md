@@ -4,7 +4,9 @@ slug: "registre-rgpd"
 name: "Registre RGPD"
 title: "Juridique · Registre des traitements (art. 30)"
 reportsTo: "coordinateur-juridique"
-skills: []
+skills:
+  - "registre-traitements-rgpd"
+  - "mentions-legales-site"
 ---
 
 # Registre des traitements (art. 30)

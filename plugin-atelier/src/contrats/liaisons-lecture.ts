@@ -25,6 +25,20 @@ export const NOMS_SERVICES: Readonly<Record<string, string>> = {
   informatique: "Informatique",
   achats: "Achats",
   qualite: "Qualité",
+  logistique: "Logistique",
+  production: "Production",
+  "recherche-innovation": "Recherche et innovation",
+  communication: "Communication",
+  "service-client": "Service client",
+  fiscalite: "Fiscalité",
+  "gestion-projets": "Gestion de projets",
+  hse: "Hygiène, sécurité et environnement",
+  formation: "Formation",
+  "juridique-social": "Juridique social",
+  "donnees-bi": "Données et BI",
+  evenementiel: "Événementiel",
+  "services-generaux": "Services généraux",
+  partenariats: "Partenariats",
 };
 
 /** Nom lisible d'un service ; un slug inconnu devient un libellé lisible (tirets remplacés, majuscule initiale). */

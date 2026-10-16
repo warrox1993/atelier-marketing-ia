@@ -289,16 +289,10 @@ details[open] > .atl-section-resume::after, details[open] > .atl-filtres-resume:
 .atl-choix label { display: block; }
 .atl-choix label .atl-aide { display: block; margin-left: 1.375rem; }
 .atl-plafond > .atl-champ-etroit, .atl-plafond > .atl-encart { margin-left: 1.375rem; }
-.atl-budget-ia { gap: 0; border-bottom: 1px solid var(--atl-trait); }
-.atl-budget-ia:last-child { border-bottom: 0; }
-.atl-budget-detail > summary { padding: 0.5rem 0; min-height: 2.25rem; }
-.atl-budget-detail > summary::marker { color: var(--atl-attenue); }
-.atl-budget-nom { font-weight: 500; }
-.atl-budget-valeur { color: var(--atl-attenue-fort); font-weight: 400; }
-.atl-budget-detail[open] { padding-bottom: 1rem; }
-.atl-budget-detail[open] > summary { margin-bottom: 0.25rem; }
-.atl-budget-detail > :not(summary) { margin-top: 0.75rem; }
-.atl-budget-detail > .atl-bouton-groupe { display: flex; }
+.atl-budget-ia { display: flex; flex-direction: column; gap: 1rem; }
+.atl-budget-ia > .atl-formulaire { max-width: 28rem; }
+.atl-budget-ia .atl-table tbody th { min-width: 9rem; }
+.atl-budget-ia .atl-table td:nth-child(2) { color: var(--atl-attenue-fort); white-space: nowrap; }
 .atl-leviers { gap: 0.25rem; }
 .atl-levier { display: flex; flex-direction: column; gap: 0.125rem; }
 .atl-levier-champs { display: flex; flex-direction: column; gap: 0.75rem; margin: 0.25rem 0 0.75rem 1.375rem; padding-left: 0.875rem; border-left: 1px solid var(--atl-trait); }
@@ -306,7 +300,10 @@ details[open] > .atl-section-resume::after, details[open] > .atl-filtres-resume:
 .atl-portee { padding: 0.875rem 1rem; border: 1px solid var(--atl-trait); border-radius: var(--atl-rayon); gap: 0.75rem; }
 .atl-portee legend { padding: 0 0.25rem; }
 .atl-repeteur { display: grid; grid-template-columns: minmax(8rem, 1fr) minmax(10rem, 2fr) auto auto; gap: 0.5rem 0.75rem; align-items: end; padding-bottom: 0.75rem; }
+/* Offres : case, Dupliquer et Retirer tiennent sur la même rangée que le nom et la description. */
+.atl-repeteur[aria-label^="Offre"] { grid-template-columns: minmax(8rem, 1fr) minmax(10rem, 2fr) auto auto auto; }
 .atl-case { display: inline-flex; align-items: center; min-height: 2.25rem; }
+.atl-actions > .atl-case { align-self: center; }
 .atl-details > summary { cursor: pointer; font-weight: 500; padding: 0.25rem 0; }
 .atl-details[open] > summary { margin-bottom: 0.75rem; }
 .atl-decision .atl-bouton-groupe { width: 100%; }
@@ -333,6 +330,8 @@ details[open] > .atl-section-resume::after, details[open] > .atl-filtres-resume:
 .atl-nav a:hover { background: var(--atl-surface-2); }
 .atl-nav a[aria-current="page"] { background: var(--atl-surface-2); box-shadow: inset 0 0 0 1px var(--atl-trait); }
 .atl-nav-pied { margin-top: auto; padding-top: 0.5rem; border-top: 1px solid var(--atl-trait); }
+.atl-nav-pied { display: flex; flex-direction: column; gap: 0.25rem; }
+.atl-nav a.atl-nav-sortie { justify-content: flex-start; color: var(--atl-attenue-fort); font-weight: 400; }
 .atl-nav-compte { font-size: 0.6875rem; min-width: 1.25rem; text-align: center; padding: 0 0.375rem; border-radius: 999px; background: var(--atl-accent); color: var(--atl-accent-texte); }
 .atl-onglets-cadre, .atl-onglets { display: none; }
 .atl-entree { display: flex; align-items: center; gap: 0.625rem; padding: 0.5rem 0.75rem; font-size: 0.8125rem; font-weight: 500; color: inherit; text-decoration: none; border-radius: calc(var(--atl-rayon) * 0.8); }
@@ -390,6 +389,10 @@ details[open] > .atl-section-resume::after, details[open] > .atl-filtres-resume:
 .atl-onglets-rub-2 [role="tab"][aria-selected="true"] { font-weight: 500; }
 .atl-panneau:focus-visible { outline: 2px solid var(--atl-anneau); outline-offset: 4px; border-radius: 2px; }
 .atl-panneau[hidden], .atl-page div[hidden] { display: none; }
+/* Colonne de cases à cocher des tableaux : étroite, sans étirer le contenu */
+@media (min-width: 641px) {
+  .atl-table td[data-libelle="Sélection"] { width: 2.5rem; padding-right: 0; }
+}
 @media (max-width: 960px) {
   .atl-dossier { grid-template-columns: 1fr; }
   .atl-dossier-cote { position: static; order: -1; }
@@ -402,7 +405,7 @@ details[open] > .atl-section-resume::after, details[open] > .atl-filtres-resume:
   .atl-onglets { display: flex; gap: 0.25rem; overflow-x: auto; scrollbar-width: none; margin: -0.25rem -1rem 0; padding: 0.25rem 1rem; border-bottom: 1px solid var(--atl-trait); }
   .atl-onglets a { flex: none; display: inline-flex; align-items: center; min-height: 2.75rem; white-space: nowrap; padding: 0 0.75rem; font-size: 0.8125rem; font-weight: 500; color: var(--atl-attenue); text-decoration: none; border-bottom: 2px solid transparent; }
   .atl-onglets a[aria-current="page"] { color: var(--atl-texte); border-bottom-color: var(--atl-texte); }
-  .atl-repeteur { grid-template-columns: 1fr; }
+  .atl-repeteur, .atl-repeteur[aria-label^="Offre"] { grid-template-columns: 1fr; }
   .atl-champs > div { grid-template-columns: 1fr; }
   .atl-chrono > li { grid-template-columns: 1fr; }
   .atl-chrono-meta { grid-column: 1; }

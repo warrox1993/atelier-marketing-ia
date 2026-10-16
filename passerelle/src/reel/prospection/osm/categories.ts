@@ -3,7 +3,7 @@
 // Un objet sans nom n'est pas retenu (inutilisable pour la prospection). Attention : le nom d'un indépendant peut être un nom de personne
 // (voir la minimisation dans importer.ts).
 
-import type { CategorieOsm } from "../../../demo/prospection/osm-commun.js";
+import type { CategorieOsm } from "../../../commun/prospection/osm-commun.js";
 
 export interface Classement {
   categorie: CategorieOsm;

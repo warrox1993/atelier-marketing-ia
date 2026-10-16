@@ -8,7 +8,7 @@ import { closeSync, fsyncSync, openSync, readFileSync, statSync } from "node:fs"
 import { fileURLToPath } from "node:url";
 import type { IdentiteAppel } from "../../fournisseurs.js";
 
-export { normaliser } from "../../demo/prospection/commun.js";
+export { normaliser } from "../../commun/prospection/commun.js";
 
 /** Dossier d'instance par défaut : passerelle/etat/ (ignoré par git, comme le reste de l'état de la passerelle). */
 export const DOSSIER_ETAT_PAR_DEFAUT = fileURLToPath(new URL("../../../../etat/", import.meta.url));

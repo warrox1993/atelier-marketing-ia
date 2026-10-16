@@ -19,7 +19,7 @@ import {
   type StatutVersionConnaissance,
 } from "../../contrats/connaissances.js";
 import { Bouton, BoutonAller, Champ, Chargement, EnTete, EtatErreur, Horodatage, Pastille, Section, Vide } from "../composants.js";
-import { nombre, type Ton } from "../format.js";
+import { classerErreur, nombre, type Ton } from "../format.js";
 import { appelRoute } from "../routes-prospection.js";
 import { cheminAvecEntreprise, ROUTES_UI_CONNAISSANCES } from "../routes-connaissances.js";
 import { STYLES_CONNAISSANCES } from "../styles-connaissances.js";
@@ -462,6 +462,41 @@ function Liste({ companyId, version, onChange }: { companyId: string; version: n
   const [aMettreAuRebut, setAMettreAuRebut] = useState<string | null>(null);
   const [corbeilleEnCours, setCorbeilleEnCours] = useState(false);
   const [erreurCorbeille, setErreurCorbeille] = useState<unknown>(null);
+  const [selection, setSelection] = useState<ReadonlySet<string>>(new Set());
+  const [confirmationGroupe, setConfirmationGroupe] = useState(false);
+  const [groupeEnCours, setGroupeEnCours] = useState(false);
+  const [bilanGroupe, setBilanGroupe] = useState<{ reussis: number; echecs: Array<{ titre: string; message: string }> } | null>(null);
+
+  function basculer(id: string) {
+    setConfirmationGroupe(false);
+    setSelection((s) => {
+      const suivante = new Set(s);
+      if (suivante.has(id)) suivante.delete(id);
+      else suivante.add(id);
+      return suivante;
+    });
+  }
+
+  /** Une requête par document : si l'un échoue, les autres continuent et le bilan dit lesquels. */
+  async function mettreSelectionALaCorbeille(cibles: LigneDocument[]) {
+    setGroupeEnCours(true);
+    setBilanGroupe(null);
+    const echecs: Array<{ titre: string; id: string; message: string }> = [];
+    let reussis = 0;
+    for (const doc of cibles) {
+      try {
+        await appelRoute("POST", "/corbeille/suppression", { companyId, type: "document", id: doc.id });
+        reussis += 1;
+      } catch (e) {
+        echecs.push({ titre: doc.titre, id: doc.id, message: classerErreur(e).message });
+      }
+    }
+    setBilanGroupe({ reussis, echecs: echecs.map(({ titre, message }) => ({ titre, message })) });
+    setSelection(new Set(echecs.map((e) => e.id)));
+    setConfirmationGroupe(false);
+    setGroupeEnCours(false);
+    onChange();
+  }
 
   async function mettreALaCorbeille(id: string) {
     setCorbeilleEnCours(true);
@@ -490,6 +525,8 @@ function Liste({ companyId, version, onChange }: { companyId: string; version: n
 
   const cible = etat.lignes?.find((l) => l.id === aSupprimer) ?? null;
   const nbRevoir = etat.lignes?.filter((l) => l.aRevoir).length ?? 0;
+  const choisis = (etat.lignes ?? []).filter((l) => selection.has(l.id));
+  const toutChoisi = (etat.lignes?.length ?? 0) > 0 && choisis.length === etat.lignes?.length;
 
   return (
     <Section titre="Documents du client">
@@ -515,10 +552,70 @@ function Liste({ companyId, version, onChange }: { companyId: string; version: n
               <strong>{nombre(etat.lignes.length)}</strong> document{etat.lignes.length > 1 ? "s" : ""}
             </span>
           </p>
+          <div className="atl-actions">
+            <label className="atl-case">
+              <input
+                type="checkbox"
+                checked={toutChoisi}
+                onChange={() => {
+                  setConfirmationGroupe(false);
+                  setSelection(toutChoisi ? new Set() : new Set((etat.lignes ?? []).map((l) => l.id)));
+                }}
+              />
+              <span>Tout sélectionner</span>
+            </label>
+            {choisis.length > 0 ? (
+              <Bouton variante="secondaire" onClick={() => setConfirmationGroupe(true)}>
+                {`Mettre à la corbeille (${choisis.length})`}
+              </Bouton>
+            ) : null}
+          </div>
+          {confirmationGroupe && choisis.length > 0 ? (
+            <div className="atl-encart atl-confirmation" data-ton="attention" role="group" aria-label="Confirmation de la mise à la corbeille des documents choisis">
+              <p className="atl-encart-titre">Mettre {choisis.length} document{choisis.length > 1 ? "s" : ""} à la corbeille ?</p>
+              <ul>
+                {choisis.map((d) => (
+                  <li key={d.id}>{d.titre}</li>
+                ))}
+              </ul>
+              <p>Ils restent récupérables 30 jours dans la Corbeille.</p>
+              <div className="atl-actions">
+                <Bouton variante="danger" enCours={groupeEnCours} onClick={() => void mettreSelectionALaCorbeille(choisis)}>
+                  {`Confirmer pour ${choisis.length} document${choisis.length > 1 ? "s" : ""}`}
+                </Bouton>
+                <Bouton variante="discret" onClick={() => setConfirmationGroupe(false)}>
+                  Ne rien faire
+                </Bouton>
+              </div>
+            </div>
+          ) : null}
+          {bilanGroupe ? (
+            bilanGroupe.echecs.length === 0 ? (
+              <p role="status" className="atl-succes">
+                {bilanGroupe.reussis} document{bilanGroupe.reussis > 1 ? "s mis" : " mis"} à la corbeille.
+              </p>
+            ) : (
+              <div role="alert" className="atl-erreur">
+                <p>
+                  {bilanGroupe.reussis} document{bilanGroupe.reussis > 1 ? "s mis" : " mis"} à la corbeille, {bilanGroupe.echecs.length} en échec (ils restent cochés pour un nouvel essai) :
+                </p>
+                <ul>
+                  {bilanGroupe.echecs.map((e) => (
+                    <li key={e.titre}>
+                      « {e.titre} » : {e.message}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )
+          ) : null}
           <div className="atl-table-cadre">
             <table className="atl-table">
               <thead>
                 <tr>
+                  <th scope="col">
+                    <span className="atl-sr">Sélection</span>
+                  </th>
                   <th scope="col">Document</th>
                   <th scope="col">Type</th>
                   <th scope="col">Langue</th>
@@ -533,7 +630,10 @@ function Liste({ companyId, version, onChange }: { companyId: string; version: n
               </thead>
               <tbody>
                 {etat.lignes.map((l) => (
-                  <tr key={l.id}>
+                  <tr key={l.id} data-choisi={selection.has(l.id)}>
+                    <td data-libelle="Sélection">
+                      <input type="checkbox" aria-label={`Sélectionner « ${l.titre} »`} checked={selection.has(l.id)} onChange={() => basculer(l.id)} />
+                    </td>
                     <th scope="row">
                       {l.titre}
                       {l.mode === "demonstration" ? <span className="atl-sous">donnée de démonstration</span> : null}

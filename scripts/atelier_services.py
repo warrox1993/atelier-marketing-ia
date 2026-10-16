@@ -145,9 +145,11 @@ def valider(registre) -> list[str]:
             for valeur in (source, cible):
                 if valeur in slugs and slugs[valeur].get("sensible") is True:
                     erreurs.append(f"{pre}le service sensible « {valeur} » impose l'approbation humaine")
-        cle = (source, cible, x.get("objet"))
+        # Une seule déclaration par paire source → cible, comme l'exige la route services.declarer du plugin
+        # (plusieurs objets se regroupent dans le champ « objet », séparés par « ; »).
+        cle = (source, cible)
         if cle in vus:
-            erreurs.append(f"{pre}flux en double")
+            erreurs.append(f"{pre}flux en double (paire {source} → {cible} déjà déclarée)")
         vus.add(cle)
     return erreurs
 

@@ -11,6 +11,7 @@
 import * as z from "zod";
 import type { OutilPasserelle } from "../../fournisseurs.js";
 import { ANNOTATIONS_LECTURE, dateCompacte, lirePeriode, modeleDemo, refuserNonModelise } from "./commun.js";
+import { schemaEntreeGa4 } from "../../commun/google/schemas.js";
 import { type LigneGa4 } from "../modele/index.js";
 
 export const PROPRIETE_GA4 = "properties/100000001";
@@ -39,29 +40,7 @@ const METRIQUES: Record<string, (l: LigneGa4) => number> = {
  */
 const METRIQUES_UTILISATEURS = new Set(["totalUsers", "activeUsers"]);
 
-const nomObjet = z.object({ name: z.string() });
-
-export const schemaEntreeGa4 = {
-  property: z.string().describe("Propriété GA4 : « properties/100000001 »."),
-  dateRanges: z
-    .array(z.object({ startDate: z.string(), endDate: z.string(), name: z.string().optional() }))
-    .min(1)
-    .describe("Une seule plage en démonstration, au format AAAA-MM-JJ."),
-  dimensions: z.array(nomObjet).optional().describe("Servies : date, sessionSource, sessionMedium, sessionSourceMedium, sessionDefaultChannelGroup."),
-  metrics: z.array(nomObjet).min(1).describe("Servies : sessions, engagedSessions, totalUsers, activeUsers (avec la dimension date), keyEvents, keyEvents:demande_diagnostic."),
-  limit: z.number().int().min(1).max(250_000).optional().describe("10 000 par défaut."),
-  offset: z.number().int().min(0).optional(),
-  orderBys: z
-    .array(
-      z.object({
-        metric: z.object({ metricName: z.string() }).optional(),
-        dimension: z.object({ dimensionName: z.string() }).optional(),
-        desc: z.boolean().optional(),
-      }),
-    )
-    .optional(),
-  keepEmptyRows: z.boolean().optional(),
-};
+export { schemaEntreeGa4 };
 
 interface ArgsGa4 {
   property: string;

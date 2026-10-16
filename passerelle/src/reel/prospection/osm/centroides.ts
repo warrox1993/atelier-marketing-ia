@@ -6,7 +6,7 @@
 
 import { existsSync, statSync } from "node:fs";
 import Database from "better-sqlite3";
-import { normaliserOsm } from "../../../demo/prospection/osm-commun.js";
+import { normaliserOsm } from "../../../commun/prospection/osm-commun.js";
 
 export interface PositionApprox {
   lat: number;

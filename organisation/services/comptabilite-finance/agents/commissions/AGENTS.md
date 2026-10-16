@@ -4,7 +4,9 @@ slug: "commissions"
 name: "Commissions"
 title: "Comptabilité · Contrôle des commissions"
 reportsTo: "coordinateur-comptabilite"
-skills: []
+skills:
+  - "cloture-mensuelle"
+  - "analyse-rentabilite"
 ---
 
 # Contrôle des commissions

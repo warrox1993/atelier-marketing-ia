@@ -4,7 +4,7 @@
  * les réglages natifs (modèles, budgets, compétences), remise à zéro de la
  * démonstration protégée par une confirmation saisie.
  */
-import { useCallback, useEffect, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import { useHostContext } from "@paperclipai/plugin-sdk/ui";
 import { LIMITES } from "../../contrats/identifiants.js";
 import type { Diagnostic, ReglagesEntreprise, SourcesReelles } from "../../contrats/campagnes.js";
@@ -14,7 +14,7 @@ import { TableauConnecteurs } from "../connecteurs.js";
 import { ListeOnglets, PanneauOnglet, useAncre } from "../onglets.js";
 import { ANCRE_PASSAGE_AU_REEL, SectionPassageAuReel } from "../realite.js";
 import { useAction, useDonnees } from "../donnees.js";
-import { euros } from "../format.js";
+import { centimesDepuisSaisie, euros } from "../format.js";
 import { ecrireBudgetNatif, lireBudgetEntreprise, lireBudgetsAgents, type BudgetNatif } from "../hote.js";
 import { appelRoute } from "../routes-prospection.js";
 import { ChoixPlafond, EngagementFaceLimite, plafondDepuisSaisie, plafondModifie, saisieDepuisPlafond, type SaisiePlafond } from "../plafonds.js";
@@ -447,80 +447,48 @@ export function PlafondEntreprise({ reglages, onFait }: { reglages: ReglagesEntr
   );
 }
 
-/** Budget IA natif d'un périmètre : montant mensuel ou aucune limite (0 côté Paperclip). */
-function LigneBudgetIa({ cible, portee, onFait }: { cible: BudgetNatif; portee: "entreprise" | "agent"; onFait(): void }) {
-  const tracer = useAction("atelier.budget-ia.tracer");
-  const initial: SaisiePlafond = cible.budgetMonthlyCents === 0 ? { mode: "aucune_limite", montant: "" } : { mode: "montant", montant: String(cible.budgetMonthlyCents / 100).replace(".", ",") };
-  const [saisie, setSaisie] = useState<SaisiePlafond>(initial);
-  const [enCours, setEnCours] = useState(false);
-  const [erreur, setErreur] = useState<unknown>(null);
-  const [fait, setFait] = useState(false);
-  useEffect(() => setSaisie(initial), [cible.budgetMonthlyCents]); // eslint-disable-line react-hooks/exhaustive-deps
-  const choix = plafondDepuisSaisie({ ...saisie, mode: saisie.mode === "aucun" ? "aucune_limite" : saisie.mode });
-  const cents = choix.plafond?.type === "montant" ? choix.plafond.montantCents : 0;
-  const modifie = cents !== cible.budgetMonthlyCents;
-  const raison = choix.raison ?? (modifie ? null : "Aucun changement à enregistrer.");
-  const soumettre = async (e: FormEvent) => {
-    e.preventDefault();
-    if (raison) return;
-    setEnCours(true);
-    setErreur(null);
-    setFait(false);
-    try {
-      await ecrireBudgetNatif(portee, cible.id, cents);
-      await tracer({ portee, ...(portee === "agent" ? { agentId: cible.id } : {}), avantCents: cible.budgetMonthlyCents });
-      setFait(true);
-      onFait();
-    } catch (err) {
-      setErreur(err);
-    } finally {
-      setEnCours(false);
-    }
-  };
-  const actuel = cible.budgetMonthlyCents === 0 ? "aucune limite" : `${euros(cible.budgetMonthlyCents)} par mois`;
-  return (
-    <form className="atl-formulaire atl-budget-ia" onSubmit={(e) => void soumettre(e)} noValidate>
-      {/* Une ligne par périmètre ; le choix ne s'ouvre qu'à la demande (douze agents = douze formulaires sinon). */}
-      <details className="atl-details atl-budget-detail">
-        <summary>
-          <span className="atl-budget-nom">{cible.nom}</span>
-          <span className="atl-budget-valeur">{` : ${actuel}`}</span>
-        </summary>
-        <ChoixPlafond
-          legende={`Budget mensuel de ${cible.nom}`}
-          valeur={saisie.mode === "aucun" ? { ...saisie, mode: "aucune_limite" } : saisie}
-          onChange={setSaisie}
-          libelleAucunChoix=""
-          aideAucunChoix=""
-          sansAucunChoix
-          enregistre={cible.budgetMonthlyCents === 0 ? "aucune_limite" : "montant"}
-          avertissement={portee === "agent" ? "Paperclip ne mettra plus cet agent en pause pour budget : les coûts IA ne seront plus limités ici." : "Paperclip ne mettra plus de pause pour budget au niveau de l'entreprise : les coûts IA ne seront plus limités ici."}
-        />
-        {erreur ? <EtatErreur erreur={erreur} contexte="budget non enregistré" /> : null}
-        {fait ? (
-          <p className="atl-succes" role="status">
-            Budget enregistré dans Paperclip et tracé.
-          </p>
-        ) : null}
-        <Bouton type="submit" variante="principal" raisonDesactive={raison} enCours={enCours}>
-          Enregistrer le budget
-        </Bouton>
-      </details>
-    </form>
-  );
+/** Saisie d'un budget mensuel en euros : vide = aucune limite (0 côté Paperclip). */
+function saisieDepuisCents(cents: number): string {
+  return cents === 0 ? "" : String(cents / 100).replace(".", ",");
 }
 
+/** Centimes d'une saisie, ou une raison lisible si elle est invalide (vide = aucune limite, donc 0). */
+function centsDepuisSaisieBudget(saisie: string): { cents: number; raison: null } | { cents: null; raison: string } {
+  const c = centimesDepuisSaisie(saisie);
+  if (c === null) return { cents: 0, raison: null };
+  if (Number.isNaN(c) || c <= 0) return { cents: null, raison: "Montant invalide : saisir des euros supérieurs à 0 (exemple : 1500 ou 1500,50), ou laisser vide pour aucune limite." };
+  return { cents: c, raison: null };
+}
+
+const libelleBudget = (cents: number) => (cents === 0 ? "Aucune limite" : euros(cents));
+
+/** Budgets IA natifs de l'entreprise et de tous les agents dans un seul tableau, avec un seul enregistrement. */
 export function BudgetsIa() {
   const contexte = useHostContext();
+  const tracer = useAction("atelier.budget-ia.tracer");
   const [entreprise, setEntreprise] = useState<BudgetNatif | null>(null);
   const [agents, setAgents] = useState<BudgetNatif[]>([]);
+  const [saisies, setSaisies] = useState<Record<string, string>>({});
+  const [pourTous, setPourTous] = useState("");
   const [erreur, setErreur] = useState<unknown>(null);
+  const [enCours, setEnCours] = useState(false);
+  const [echecs, setEchecs] = useState<Record<string, unknown>>({});
+  const [bilan, setBilan] = useState<string | null>(null);
+  // Lignes dont l'enregistrement a échoué : leur saisie est conservée au rechargement.
+  const aGarder = useRef<Set<string>>(new Set());
   const charger = useCallback(async () => {
     if (!contexte.companyId) return;
     try {
       const [e, a] = await Promise.all([lireBudgetEntreprise(contexte.companyId), lireBudgetsAgents(contexte.companyId)]);
       setEntreprise(e);
       setAgents(a);
+      const gardees = aGarder.current;
+      aGarder.current = new Set();
+      setSaisies((prec) => {
+        const suivant: Record<string, string> = {};
+        for (const c of [{ ...e, nom: "Entreprise" }, ...a]) suivant[c.id] = gardees.has(c.id) && c.id in prec ? prec[c.id]! : saisieDepuisCents(c.budgetMonthlyCents);
+        return suivant;
+      });
       setErreur(null);
     } catch (err) {
       setErreur(err);
@@ -531,12 +499,106 @@ export function BudgetsIa() {
   }, [charger]);
   if (erreur) return <EtatErreur erreur={erreur} onReessayer={() => void charger()} contexte="budgets natifs illisibles" />;
   if (!entreprise) return <p className="atl-attenue">Chargement des budgets…</p>;
+
+  const lignes: Array<{ cible: BudgetNatif; portee: "entreprise" | "agent" }> = [
+    { cible: { ...entreprise, nom: "Entreprise" }, portee: "entreprise" },
+    ...agents.map((cible) => ({ cible, portee: "agent" as const })),
+  ];
+  const etat = lignes.map((l) => {
+    const saisie = saisies[l.cible.id] ?? saisieDepuisCents(l.cible.budgetMonthlyCents);
+    const lu = centsDepuisSaisieBudget(saisie);
+    return { ...l, saisie, lu, modifie: lu.cents === null || lu.cents !== l.cible.budgetMonthlyCents };
+  });
+  const modifiees = etat.filter((l) => l.modifie);
+  const invalide = modifiees.find((l) => l.lu.raison !== null);
+  const retraits = modifiees.filter((l) => l.lu.cents === 0 && l.cible.budgetMonthlyCents !== 0);
+  const raison = modifiees.length === 0 ? "Aucun budget modifié." : invalide ? `Corriger la ligne « ${invalide.cible.nom} » avant d'enregistrer.` : null;
+  const lecturePourTous = centsDepuisSaisieBudget(pourTous);
+  const raisonPourTous = !pourTous.trim() ? "Saisir d'abord un montant." : lecturePourTous.raison;
+
+  const enregistrer = async () => {
+    if (raison) return;
+    setEnCours(true);
+    setBilan(null);
+    const nouveauxEchecs: Record<string, unknown> = {};
+    let reussies = 0;
+    for (const l of modifiees) {
+      const cents = l.lu.cents ?? 0;
+      try {
+        await ecrireBudgetNatif(l.portee, l.cible.id, cents);
+        await tracer({ portee: l.portee, ...(l.portee === "agent" ? { agentId: l.cible.id } : {}), avantCents: l.cible.budgetMonthlyCents });
+        reussies++;
+      } catch (err) {
+        nouveauxEchecs[l.cible.id] = err;
+        aGarder.current.add(l.cible.id);
+      }
+    }
+    setEchecs(nouveauxEchecs);
+    const nbEchecs = Object.keys(nouveauxEchecs).length;
+    setBilan(nbEchecs === 0 ? `${reussies} budget${reussies > 1 ? "s enregistrés" : " enregistré"} dans Paperclip et tracé${reussies > 1 ? "s" : ""}.` : `${reussies} enregistré${reussies > 1 ? "s" : ""}, ${nbEchecs} en échec (voir les lignes concernées).`);
+    setEnCours(false);
+    await charger();
+  };
+
   return (
-    <>
-      <LigneBudgetIa cible={{ ...entreprise, nom: "Entreprise" }} portee="entreprise" onFait={() => void charger()} />
-      <h3 className="atl-h3">Agents</h3>
-      {agents.length === 0 ? <p className="atl-attenue">Aucun agent.</p> : agents.map((a) => <LigneBudgetIa key={a.id} cible={a} portee="agent" onFait={() => void charger()} />)}
-    </>
+    <div className="atl-budget-ia">
+      <div className="atl-formulaire">
+        <Champ libelle="Même budget mensuel pour tous les agents (en euros)" aide="Recopie la valeur dans chaque ligne agent ; chaque ligne reste modifiable ensuite. Rien n'est enregistré avant le bouton du bas.">
+          <input type="text" inputMode="decimal" value={pourTous} onChange={(e) => setPourTous(e.target.value)} />
+        </Champ>
+        <Bouton
+          raisonDesactive={raisonPourTous}
+          onClick={() => setSaisies((prec) => ({ ...prec, ...Object.fromEntries(agents.map((a) => [a.id, pourTous])) }))}
+        >
+          Appliquer à tous
+        </Bouton>
+      </div>
+      <div className="atl-table-cadre">
+        <table className="atl-table">
+          <caption className="atl-sr">Budgets mensuels de l'entreprise et des agents</caption>
+          <thead>
+            <tr>
+              <th scope="col">Nom</th>
+              <th scope="col">Budget actuel</th>
+              <th scope="col">Nouveau budget (€ par mois)</th>
+            </tr>
+          </thead>
+          <tbody>
+            {etat.map((l) => (
+              <tr key={l.cible.id} data-choisi={l.modifie ? "true" : undefined}>
+                <th scope="row">{l.cible.nom}</th>
+                <td data-libelle="Budget actuel">{libelleBudget(l.cible.budgetMonthlyCents)}</td>
+                <td data-libelle="Nouveau budget (€ par mois)">
+                  <input
+                    type="text"
+                    inputMode="decimal"
+                    style={{ minWidth: "8rem", width: "100%" }}
+                    aria-label={`Budget mensuel de ${l.cible.nom} en euros`}
+                    aria-invalid={l.lu.raison !== null && l.modifie ? true : undefined}
+                    placeholder="Aucune limite"
+                    value={l.saisie}
+                    onChange={(e) => setSaisies((prec) => ({ ...prec, [l.cible.id]: e.target.value }))}
+                  />
+                  {l.lu.raison !== null && l.modifie ? <p className="atl-aide" role="alert">{l.lu.raison}</p> : null}
+                  {l.cible.id in echecs ? <EtatErreur erreur={echecs[l.cible.id]} contexte={`budget de ${l.cible.nom} non enregistré`} /> : null}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      {agents.length === 0 ? <p className="atl-attenue">Aucun agent.</p> : null}
+      {retraits.length > 0 ? (
+        <div className="atl-encart" data-ton="attention" role="note">
+          <p className="atl-encart-titre">Plus de garde-fou sur les coûts IA</p>
+          <p>Paperclip ne mettra plus en pause pour budget : {retraits.map((l) => l.cible.nom).join(", ")}. Les coûts IA ne seront plus limités ici.</p>
+        </div>
+      ) : null}
+      {bilan ? <p className="atl-succes" role="status">{bilan}</p> : null}
+      <Bouton variante="principal" raisonDesactive={raison} enCours={enCours} onClick={() => void enregistrer()}>
+        {`Enregistrer les budgets (${modifiees.length} modifié${modifiees.length > 1 ? "s" : ""})`}
+      </Bouton>
+    </div>
   );
 }
 

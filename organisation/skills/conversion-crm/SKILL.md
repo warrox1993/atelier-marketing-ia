@@ -68,6 +68,10 @@ scénarios, approbations requises.
 - Aucun CRM n'est connecté : les scénarios sont des spécifications.
 - La conformité RGPD est signalée pour vérification, jamais certifiée.
 
+## Sources officielles
+
+Aucune source consultée pour cette compétence ; les règles de consentement, de prospection et les obligations légales citées (RGPD articles 6 et 7, Code de droit économique livre XII) sont à vérifier par le juriste ou le DPO avant tout usage.
+
 ## Exemple
 
 Scénario « Relance devis non signé » : entrée = devis envoyé depuis 10 jours ; déclencheur

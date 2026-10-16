@@ -4,7 +4,8 @@ slug: "documentation"
 name: "Documentation"
 title: "Informatique · Documentation technique"
 reportsTo: "coordinateur-informatique"
-skills: []
+skills:
+  - "documentation-technique"
 ---
 
 # Documentation technique

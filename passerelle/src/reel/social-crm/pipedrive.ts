@@ -12,9 +12,9 @@
 // personnel (en-tête x-api-token, base = https://{societe}.pipedrive.com).
 
 import type { FournisseurService, OutilPasserelle } from "../../fournisseurs.js";
-import { fournisseurPipedrive } from "../../demo/social-crm/pipedrive.js";
+import { definitionsPipedrive } from "../../commun/social-crm/pipedrive.js";
 import type { AccesPlateforme } from "./autorisation.js";
-import { gabarit, liste, MAX_PAGES_PARCOURUES, nombre, objet, texte, tropDeResultats, verifierAu, verifierPeriode } from "./commun.js";
+import { DateReelle, gabarit, liste, MAX_PAGES_PARCOURUES, nombre, objet, texte, tropDeResultats, verifierAu, verifierPeriode } from "./commun.js";
 import { lire, mutationReelle, type Reconciliation } from "./execution.js";
 import { envoyer, ErreurFournisseur, verifierReponse } from "./http.js";
 import type { DependancesOutils } from "./meta.js";
@@ -76,8 +76,9 @@ function affaire(d: Record<string, unknown>) {
   };
 }
 
+const DEFS = definitionsPipedrive(DateReelle);
+
 export function fournisseurPipedriveReel(dep: DependancesOutils): FournisseurService {
-  const demo = fournisseurPipedrive();
 
   /** Éléments créés dans la période, triés par date de création croissante. */
   async function creesDansPeriode(acces: AccesPlateforme, objetCrm: "persons" | "deals", debut: string, fin: string): Promise<Record<string, unknown>[]> {
@@ -104,7 +105,7 @@ export function fournisseurPipedriveReel(dep: DependancesOutils): FournisseurSer
     return { success: true, data: page, additional_data: { pagination: { start, limit, more_items_in_collection: suivant !== null, ...(suivant !== null ? { next_start: suivant } : {}) } } };
   }
 
-  const g1 = gabarit(demo, "pipedrive_personnes", "Personnes Pipedrive créées sur une période (API v2 GET /api/v2/persons, rendue à la forme v1) : success, data[] (id, name, first_name, last_name, email[], phone[], add_time, update_time) et additional_data.pagination (start, limit, more_items_in_collection, next_start). État actuel du CRM.");
+  const g1 = gabarit(DEFS.pipedrive_personnes, "Personnes Pipedrive créées sur une période (API v2 GET /api/v2/persons, rendue à la forme v1) : success, data[] (id, name, first_name, last_name, email[], phone[], add_time, update_time) et additional_data.pagination (start, limit, more_items_in_collection, next_start). État actuel du CRM.");
   const personnes: OutilPasserelle = {
     ...g1,
     executer: (brut, contexte) =>
@@ -116,7 +117,7 @@ export function fournisseurPipedriveReel(dep: DependancesOutils): FournisseurSer
       }),
   };
 
-  const g2 = gabarit(demo, "pipedrive_affaires", "Affaires Pipedrive créées sur une période (API v2 GET /api/v2/deals, rendue à la forme v1) : success, data[] (id, title, value, currency, status open|won|lost, stage_id, person_id, add_time, update_time, close_time, won_time, lost_time) et additional_data.pagination. État actuel du CRM.");
+  const g2 = gabarit(DEFS.pipedrive_affaires, "Affaires Pipedrive créées sur une période (API v2 GET /api/v2/deals, rendue à la forme v1) : success, data[] (id, title, value, currency, status open|won|lost, stage_id, person_id, add_time, update_time, close_time, won_time, lost_time) et additional_data.pagination. État actuel du CRM.");
   const affaires: OutilPasserelle = {
     ...g2,
     executer: (brut, contexte) =>
@@ -140,7 +141,7 @@ export function fournisseurPipedriveReel(dep: DependancesOutils): FournisseurSer
     return corps;
   };
   const modifier = mutationReelle<ArgsModifier>(dep, {
-    outil: { ...gabarit(demo, "pipedrive_modifier_personne", "Modifie une personne Pipedrive (PATCH /api/v2/persons/{id} ; « email » et « phone » remplacent l'adresse et le numéro principaux)."), executer: () => undefined },
+    outil: { ...gabarit(DEFS.pipedrive_modifier_personne, "Modifie une personne Pipedrive (PATCH /api/v2/persons/{id} ; « email » et « phone » remplacent l'adresse et le numéro principaux)."), executer: () => undefined },
     requeteReelle: "PATCH /api/v2/persons/{id}",
     resume: (a) => `modification de ${Object.keys(a.champs).length} champ(s) de la personne ${a.id}.`,
     verifier: (a) => {

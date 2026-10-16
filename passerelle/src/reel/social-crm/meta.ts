@@ -21,9 +21,9 @@
 
 import { ajouterMention, MENTION_IA_PAR_DEFAUT } from "../../mention-ia.js";
 import type { FournisseurService, OutilPasserelle } from "../../fournisseurs.js";
-import { fournisseurFacebook, fournisseurInstagram } from "../../demo/social-crm/meta.js";
+import { definitionsMeta } from "../../commun/social-crm/meta.js";
 import type { AccesPlateforme } from "./autorisation.js";
-import { gabarit, lendemain, liste, msDate, nombre, objet, secondesDate, texte, urlSansJeton, verifierPeriode } from "./commun.js";
+import { DateReelle, gabarit, lendemain, liste, msDate, nombre, objet, secondesDate, texte, urlSansJeton, verifierPeriode } from "./commun.js";
 import { VERSION_GRAPH_META, type ConfigSocialCrmReel } from "./config.js";
 import { lire, mutationReelle, type DependancesExecution, type Reconciliation } from "./execution.js";
 import { envoyer, ErreurFournisseur, verifierReponse, type Plateforme } from "./http.js";
@@ -75,10 +75,11 @@ const resumeVide = (v: unknown, defaut: Record<string, unknown>): Record<string,
 
 // --- Facebook ------------------------------------------------------------------------------------
 
-export function fournisseurFacebookReel(dep: DependancesOutils): FournisseurService {
-  const demo = fournisseurFacebook();
+const DEFS = definitionsMeta(DateReelle);
 
-  const g1 = gabarit(demo, "facebook_publications", "Publications de la Page sur une période (GET /{page-id}/feed de l'API Graph) : data[] (id, message, created_time, link, reactions, comments, shares) et paging (cursors, next). Les plus récentes d'abord.");
+export function fournisseurFacebookReel(dep: DependancesOutils): FournisseurService {
+
+  const g1 = gabarit(DEFS.facebook_publications, "Publications de la Page sur une période (GET /{page-id}/feed de l'API Graph) : data[] (id, message, created_time, link, reactions, comments, shares) et paging (cursors, next). Les plus récentes d'abord.");
   const publications: OutilPasserelle = {
     ...g1,
     executer: (brut, contexte) =>
@@ -109,7 +110,7 @@ export function fournisseurFacebookReel(dep: DependancesOutils): FournisseurServ
       }),
   };
 
-  const g2 = gabarit(demo, "facebook_insights_page", "Statistiques quotidiennes de la Page (GET /{page-id}/insights) : data[] (name, period, values[{value, end_time}], title, description, id). Métriques : page_media_view et page_total_media_view_unique.");
+  const g2 = gabarit(DEFS.facebook_insights_page, "Statistiques quotidiennes de la Page (GET /{page-id}/insights) : data[] (name, period, values[{value, end_time}], title, description, id). Métriques : page_media_view et page_total_media_view_unique.");
   const insights: OutilPasserelle = {
     ...g2,
     executer: (brut, contexte) =>
@@ -145,7 +146,7 @@ export function fournisseurFacebookReel(dep: DependancesOutils): FournisseurServ
 
   type ArgsPublier = { message: string; link?: string };
   const publier = mutationReelle<ArgsPublier>(dep, {
-    outil: { ...gabarit(demo, "facebook_publier", "Publie un message sur la Page Facebook (POST /{page-id}/feed)."), executer: () => undefined },
+    outil: { ...gabarit(DEFS.facebook_publier, "Publie un message sur la Page Facebook (POST /{page-id}/feed)."), executer: () => undefined },
     requeteReelle: "POST /{page-id}/feed",
     resume: (a) => `publication Facebook de ${a.message.length} caractères.`,
     executer: async (acces, a) => {
@@ -164,7 +165,7 @@ export function fournisseurFacebookReel(dep: DependancesOutils): FournisseurServ
   const LONGUEUR_MAX_MESSAGE = 2000;
   type ArgsMessage = { destinataire: string; texte: string };
   const message = mutationReelle<ArgsMessage>(dep, {
-    outil: { ...gabarit(demo, "facebook_envoyer_message", "Envoie un message privé depuis la Page (POST /{page-id}/messages, type RESPONSE : réponse dans la fenêtre de messagerie standard)."), executer: () => undefined },
+    outil: { ...gabarit(DEFS.facebook_envoyer_message, "Envoie un message privé depuis la Page (POST /{page-id}/messages, type RESPONSE : réponse dans la fenêtre de messagerie standard)."), executer: () => undefined },
     requeteReelle: "POST /{page-id}/messages",
     resume: (a) => `message privé de ${a.texte.length} caractères.`,
     // Article 50 du règlement européen sur l'IA : la mention est ajoutée à la préparation, donc visible dans ce que l'humain approuve
@@ -187,10 +188,9 @@ export function fournisseurFacebookReel(dep: DependancesOutils): FournisseurServ
 // --- Instagram -------------------------------------------------------------------------------------
 
 export function fournisseurInstagramReel(dep: DependancesOutils): FournisseurService {
-  const demo = fournisseurInstagram();
   const attendre = dep.attendre ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)));
 
-  const g1 = gabarit(demo, "instagram_medias", "Médias du compte professionnel sur une période (GET /{ig-user-id}/media) : data[] (id, caption, timestamp, like_count, comments_count) et paging (cursors, next). Les plus récents d'abord.");
+  const g1 = gabarit(DEFS.instagram_medias, "Médias du compte professionnel sur une période (GET /{ig-user-id}/media) : data[] (id, caption, timestamp, like_count, comments_count) et paging (cursors, next). Les plus récents d'abord.");
   const medias: OutilPasserelle = {
     ...g1,
     executer: (brut, contexte) =>
@@ -219,7 +219,7 @@ export function fournisseurInstagramReel(dep: DependancesOutils): FournisseurSer
       }),
   };
 
-  const g2 = gabarit(demo, "instagram_insights_media", "Statistiques d'un média (GET /{ig-media-id}/insights) : data[] (name, period, values[{value}], title, description, id).");
+  const g2 = gabarit(DEFS.instagram_insights_media, "Statistiques d'un média (GET /{ig-media-id}/insights) : data[] (name, period, values[{value}], title, description, id).");
   const insights: OutilPasserelle = {
     ...g2,
     executer: (brut, contexte) =>
@@ -241,7 +241,7 @@ export function fournisseurInstagramReel(dep: DependancesOutils): FournisseurSer
 
   type ArgsPublier = { caption: string; image_url: string };
   const publier = mutationReelle<ArgsPublier>(dep, {
-    outil: { ...gabarit(demo, "instagram_publier", "Publie une image (JPEG à une adresse publique) sur le compte Instagram professionnel : conteneur, puis media_publish."), executer: () => undefined },
+    outil: { ...gabarit(DEFS.instagram_publier, "Publie une image (JPEG à une adresse publique) sur le compte Instagram professionnel : conteneur, puis media_publish."), executer: () => undefined },
     requeteReelle: "POST /{ig-user-id}/media puis POST /{ig-user-id}/media_publish",
     resume: (a) => `publication Instagram avec une légende de ${a.caption.length} caractères.`,
     executer: async (acces, a) => {

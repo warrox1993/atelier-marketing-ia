@@ -5,11 +5,11 @@
 import { existsSync, statSync } from "node:fs";
 import Database from "better-sqlite3";
 import type { FournisseurService, OutilPasserelle } from "../../../fournisseurs.js";
-import { outilLecture } from "../../../demo/prospection/commun.js";
+import { outilLecture } from "../../../commun/prospection/commun.js";
 import {
   ATTRIBUTION_OSM, DESCRIPTION_COMMERCES, DESCRIPTION_REPARTITION, FICHE_OSM, LICENCE_OSM, TAILLE_PAGE_OSM, normaliserOsm, schemaCommerces, schemaRepartition,
   typeEtUrlOsm, type CommerceOsm,
-} from "../../../demo/prospection/osm-commun.js";
+} from "../../../commun/prospection/osm-commun.js";
 
 interface Filtre {
   categories?: string[] | undefined;

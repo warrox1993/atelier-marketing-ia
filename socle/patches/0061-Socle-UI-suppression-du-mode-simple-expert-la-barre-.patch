@@ -1,0 +1,563 @@
+From 501282565a00bdb8d47d4b9bca5193f7cb84cdab Mon Sep 17 00:00:00 2001
+From: Jean-Baptiste Dhondt <114347858+warrox1993@users.noreply.github.com>
+Date: Fri, 16 Oct 2026 20:52:07 +0200
+Subject: [PATCH 61/62] =?UTF-8?q?Socle=20UI=20:=20suppression=20du=20mode?=
+ =?UTF-8?q?=20simple/expert,=20la=20barre=20de=20l'atelier=20s'affiche=20?=
+ =?UTF-8?q?=C3=A0=20c=C3=B4t=C3=A9=20de=20la=20barre=20principale?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Rien n'est masqué : menu complet toujours visible, barre du bas unique,
+surfaces de plugin gardent la barre principale, en-tête contextuel avec le nom
+de l'entreprise en texte simple.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01DP85vPq2MHkZg8VNtRvCzB
+---
+ .../ContextualSidebarFrame.test.tsx           | 18 +---
+ ui/src/components/ContextualSidebarFrame.tsx  |  8 +-
+ ui/src/components/Layout.test.tsx             | 13 ++-
+ ui/src/components/Layout.tsx                  |  3 +
+ ui/src/components/MobileBottomNav.test.tsx    | 29 +++---
+ ui/src/components/MobileBottomNav.tsx         | 27 +++---
+ ui/src/components/Sidebar.test.tsx            | 58 ++----------
+ ui/src/components/Sidebar.tsx                 | 92 -------------------
+ 8 files changed, 49 insertions(+), 199 deletions(-)
+
+diff --git a/ui/src/components/ContextualSidebarFrame.test.tsx b/ui/src/components/ContextualSidebarFrame.test.tsx
+index 2746d38b3..110d70a74 100644
+--- a/ui/src/components/ContextualSidebarFrame.test.tsx
++++ b/ui/src/components/ContextualSidebarFrame.test.tsx
+@@ -17,14 +17,6 @@ vi.mock("@/context/SidebarContext", () => ({
+   useSidebar: () => ({ isMobile: false, setSidebarOpen: vi.fn(), collapsed: true, peeking: false }),
+ }));
+ 
+-// Le vrai menu a besoin de React Query et des contextes d'application : on le remplace par un
+-// déclencheur qui affiche le nom de l'entreprise, comme le vrai.
+-vi.mock("./SidebarCompanyMenu", () => ({
+-  SidebarCompanyMenu: () => (
+-    <button type="button" aria-label="Open Paperclip organization switcher">Paperclip</button>
+-  ),
+-}));
+-
+ // eslint-disable-next-line @typescript-eslint/no-explicit-any
+ (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
+ 
+@@ -56,7 +48,6 @@ describe("ContextualSidebarFrame", () => {
+ 
+   it("renders the contextual identity and uses a safe fallback", () => {
+     const root = render();
+-    expect(container.querySelector('[data-testid="contextual-company-switcher"]')?.textContent).toContain("Paperclip");
+     expect(container.textContent).toContain("Settings");
+ 
+     act(() => {
+@@ -66,12 +57,11 @@ describe("ContextualSidebarFrame", () => {
+     act(() => root.unmount());
+   });
+ 
+-  it("expose le sélecteur d'entreprise dans l'en-tête, nom de l'entreprise visible", () => {
++  it("affiche le nom de l'entreprise en texte simple, sans sélecteur", () => {
+     const root = render();
+-    const switcher = container.querySelector('[data-testid="contextual-company-switcher"]');
+-    expect(switcher).not.toBeNull();
+-    const trigger = switcher?.querySelector<HTMLButtonElement>('button[aria-label*="organization switcher"]');
+-    expect(trigger?.textContent).toContain("Paperclip");
++    expect(container.textContent).toContain("Paperclip");
++    expect(container.querySelector('[data-testid="contextual-company-switcher"]')).toBeNull();
++    expect(container.querySelector('button[aria-label*="organization switcher"]')).toBeNull();
+     act(() => root.unmount());
+   });
+ 
+diff --git a/ui/src/components/ContextualSidebarFrame.tsx b/ui/src/components/ContextualSidebarFrame.tsx
+index 72ba605e8..c0dad0bdd 100644
+--- a/ui/src/components/ContextualSidebarFrame.tsx
++++ b/ui/src/components/ContextualSidebarFrame.tsx
+@@ -10,7 +10,6 @@ import {
+   type ContextualSidebarSurface,
+ } from "@/lib/shell-navigation";
+ import { cn } from "@/lib/utils";
+-import { SidebarCompanyMenu } from "./SidebarCompanyMenu";
+ import { SidebarNavExpandedProvider } from "./SidebarNavItem";
+ 
+ export function ContextualSidebarFrame({
+@@ -75,14 +74,13 @@ export function ContextualSidebarFrame({
+               <ChevronLeft className="h-4 w-4 shrink-0" aria-hidden="true" />
+               <span className="truncate">Retour au menu principal</span>
+             </button>
++            {selectedCompany?.name ? (
++              <span className="truncate px-2 text-xs text-muted-foreground">{selectedCompany.name}</span>
++            ) : null}
+             <div className="flex min-w-0 items-center gap-2 px-2 py-1">
+               {Icon ? <Icon className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" /> : null}
+               <span className="min-w-0 flex-1 truncate text-sm font-bold text-foreground">{title}</span>
+             </div>
+-            {/* Le sélecteur d'entreprise de la barre principale, réutilisé tel quel : sans lui, changer d'entreprise obligeait à repasser par « Retour ». */}
+-            <div data-testid="contextual-company-switcher" className="-mx-3 flex min-w-0">
+-              <SidebarCompanyMenu />
+-            </div>
+           </div>
+         ) : null}
+         {children}
+diff --git a/ui/src/components/Layout.test.tsx b/ui/src/components/Layout.test.tsx
+index 04e1d1975..cf3e0545a 100644
+--- a/ui/src/components/Layout.test.tsx
++++ b/ui/src/components/Layout.test.tsx
+@@ -41,9 +41,6 @@ const mockSidebarState = vi.hoisted(() => ({
+ let currentPathname = "/PAP/dashboard";
+ 
+ vi.mock("@/lib/router", () => ({
+-  Link: ({ to, children, ...props }: { to: string; children?: React.ReactNode } & Record<string, unknown>) => (
+-    <a href={typeof to === "string" ? to : "#"} {...props}>{children}</a>
+-  ),
+   Outlet: () => <div>Outlet content</div>,
+   useLocation: () => ({
+     pathname: currentPathname,
+@@ -752,7 +749,9 @@ describe("Layout", () => {
+     await flushReact();
+ 
+     expect(container.textContent).toContain("Apps sidebar");
++    // La barre du plugin s'affiche À CÔTÉ de la barre principale, jamais à sa place.
+     expect(container.textContent).toContain("Main company nav");
++    expect(container.querySelector("[data-secondary-sidebar]")).not.toBeNull();
+     expect(container.textContent).not.toContain("Company settings sidebar");
+ 
+     await act(async () => {
+@@ -1112,7 +1111,7 @@ describe("Layout", () => {
+     }
+   });
+ 
+-  it("renders a route-scoped plugin sidebar for a matching plugin page route", async () => {
++  it("renders a route-scoped plugin sidebar next to the main sidebar for a matching plugin page route", async () => {
+     currentPathname = "/PAP/wiki";
+     mockPluginSlots.slots = [
+       {
+@@ -1159,7 +1158,7 @@ describe("Layout", () => {
+     expect(
+       container.querySelector("[data-plugin-slot-class='min-h-0 flex-1']"),
+     ).not.toBeNull();
+-    expect(container.textContent).not.toContain("Main company nav");
++    expect(container.textContent).toContain("Main company nav");
+     expect(container.textContent).not.toContain("Company settings sidebar");
+     expect(container.textContent).not.toContain("Instance sidebar");
+ 
+@@ -1168,7 +1167,7 @@ describe("Layout", () => {
+     });
+   });
+ 
+-  it("keeps the route-scoped plugin sidebar on nested plugin page routes", async () => {
++  it("keeps the route-scoped plugin sidebar next to the main sidebar on nested plugin page routes", async () => {
+     currentPathname = "/PAP/wiki/page/templates";
+     mockPluginSlots.slots = [
+       {
+@@ -1218,7 +1217,7 @@ describe("Layout", () => {
+     expect(container.textContent).toContain(
+       "Plugin route sidebar: Wiki Sidebar",
+     );
+-    expect(container.textContent).not.toContain("Main company nav");
++    expect(container.textContent).toContain("Main company nav");
+ 
+     await act(async () => {
+       root.unmount();
+diff --git a/ui/src/components/Layout.tsx b/ui/src/components/Layout.tsx
+index 85461ec6a..368395b97 100644
+--- a/ui/src/components/Layout.tsx
++++ b/ui/src/components/Layout.tsx
+@@ -224,6 +224,9 @@ export function Layout({ sidebarSections }: { sidebarSections?: ReactNode }) {
+     || shellRoute.builtInContextualSurface === "routine"
+     || isAppsRoute
+     || isToolsRoute
++    // Surface d'un plugin (ex. « Atelier marketing ») : sa barre s'affiche À CÔTÉ de la
++    // barre principale, jamais à sa place ; rien du menu principal n'est masqué.
++    || (routeSidebarSlot != null && !shellRoute.builtInContextualSurface)
+   );
+   const replacesPrimarySidebar = streamlinedUiEnabled && hasSecondarySidebar && !keepsPrimarySidebar;
+   const showsAdjacentSecondarySidebar = hasSecondarySidebar && (!streamlinedUiEnabled || keepsPrimarySidebar);
+diff --git a/ui/src/components/MobileBottomNav.test.tsx b/ui/src/components/MobileBottomNav.test.tsx
+index c9f862e20..afcf55a48 100644
+--- a/ui/src/components/MobileBottomNav.test.tsx
++++ b/ui/src/components/MobileBottomNav.test.tsx
+@@ -6,7 +6,6 @@ import { createRoot } from "react-dom/client";
+ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+ import { MobileBottomNav } from "./MobileBottomNav";
+-import { ecrireModeExpert, reinitialiserModeExpertPourTests } from "../hooks/useModeExpert";
+ 
+ const mockNavigate = vi.hoisted(() => vi.fn());
+ const mockOpenNewIssue = vi.hoisted(() => vi.fn());
+@@ -98,7 +97,6 @@ describe("MobileBottomNav", () => {
+   beforeEach(() => {
+     mockLocation.pathname = "/";
+     window.localStorage.clear();
+-    reinitialiserModeExpertPourTests();
+     container = document.createElement("div");
+     document.body.appendChild(container);
+     mockPluginsApi.listUiContributions.mockResolvedValue([]);
+@@ -120,40 +118,37 @@ describe("MobileBottomNav", () => {
+     flushSync(() => root.unmount());
+   });
+ 
+-  it("avec l'atelier en mode simple : Atelier, Nouvelle tâche, À faire, Menu", async () => {
++  it("avec l'atelier : une seule barre, Atelier, Tâches, Nouvelle tâche, Boîte, Menu", async () => {
+     mockPluginsApi.listUiContributions.mockResolvedValue([contributionAtelier]);
+     const root = await rendre();
+-    expect(libelles()).toEqual(["Atelier", "Nouvelle tâche", "À faire", "Menu"]);
++    expect(libelles()).toEqual(["Atelier", "Tâches", "Nouvelle tâche", "Boîte", "Menu"]);
+     const hrefs = [...container.querySelectorAll("nav a")].map((a) => a.getAttribute("href"));
+-    expect(hrefs).toEqual(["/atelier", "/atelier/accueil", "/dashboard"]);
++    expect(hrefs).toEqual(["/atelier", "/issues", "/inbox", "/dashboard"]);
+     expect(new Set(hrefs).size).toBe(hrefs.length);
+-    expect(hrefs.some((h) => !h?.startsWith("/atelier"))).toBe(true);
+-    expect(container.querySelector('a[href="/dashboard"]')).not.toBeNull();
+-    expect(container.querySelector('a[href="/issues"]')).toBeNull();
+-    expect(container.querySelector('a[href="/inbox"]')).toBeNull();
++    expect(container.querySelector('a[aria-label="Menu : tableau de bord"]')).not.toBeNull();
+     boutonNouvelleTache().click();
+     expect(mockNavigate).toHaveBeenCalledWith("/atelier/discussion");
+     expect(mockOpenNewIssue).not.toHaveBeenCalled();
+     flushSync(() => root.unmount());
+   });
+ 
+-  it("en mode simple sur /COU/atelier/accueil : un seul onglet actif, À faire", async () => {
++  it("avec l'atelier sur /COU/atelier : un seul onglet actif, Atelier", async () => {
+     mockPluginsApi.listUiContributions.mockResolvedValue([contributionAtelier]);
+-    mockLocation.pathname = "/COU/atelier/accueil";
++    mockLocation.pathname = "/COU/atelier";
+     const root = await rendre();
+     const actifs = [...container.querySelectorAll('nav a[data-active="true"]')];
+     expect(actifs.length).toBe(1);
+-    expect(actifs[0].getAttribute("href")).toBe("/atelier/accueil");
++    expect(actifs[0].getAttribute("href")).toBe("/atelier");
+     flushSync(() => root.unmount());
+   });
+ 
+-  it("avec l'atelier en mode expert : entrées d'origine, Atelier à la place d'Accueil", async () => {
++  it("avec l'atelier sur /COU/issues : un seul onglet actif, Tâches", async () => {
+     mockPluginsApi.listUiContributions.mockResolvedValue([contributionAtelier]);
+-    ecrireModeExpert("company-1", true);
++    mockLocation.pathname = "/COU/issues";
+     const root = await rendre();
+-    expect(libelles()).toEqual(["Atelier", "Tâches", "Nouvelle tâche", "Agents", "Boîte"]);
+-    expect(container.querySelector('a[href="/issues"]')).not.toBeNull();
+-    expect(container.querySelector('a[href="/inbox"]')).not.toBeNull();
++    const actifs = [...container.querySelectorAll('nav a[data-active="true"]')];
++    expect(actifs.length).toBe(1);
++    expect(actifs[0].getAttribute("href")).toBe("/issues");
+     flushSync(() => root.unmount());
+   });
+ 
+diff --git a/ui/src/components/MobileBottomNav.tsx b/ui/src/components/MobileBottomNav.tsx
+index e1a6b4e9a..17fbf0021 100644
+--- a/ui/src/components/MobileBottomNav.tsx
++++ b/ui/src/components/MobileBottomNav.tsx
+@@ -16,7 +16,6 @@ import { useDialogActions } from "../context/DialogContext";
+ import { SIDEBAR_SCROLL_RESET_STATE } from "../lib/navigation-scroll";
+ import { cn } from "../lib/utils";
+ import { useInboxBadge } from "../hooks/useInboxBadge";
+-import { useModeExpert } from "../hooks/useModeExpert";
+ import { useAgentChatEnabled } from "@/hooks/useAgentChatEnabled";
+ import { useCombinedInboxTasksEnabled } from "@/hooks/useCombinedInboxTasksEnabled";
+ import { Badge } from "@/components/ui/badge";
+@@ -62,10 +61,6 @@ export function MobileBottomNav({ visible }: MobileBottomNavProps) {
+   });
+   const atelierPret = atelierDisponible(contributionsPlugins);
+   const inboxBadge = useInboxBadge(selectedCompanyId);
+-  // Mode simple de l'atelier : la barre se réduit à Atelier · Nouvelle tâche · À faire · Menu.
+-  // Le mode expert (interrupteur de la barre latérale) rend les entrées d'origine.
+-  const { expert: modeExpert } = useModeExpert(selectedCompanyId);
+-  const modeSimple = atelierPret && !modeExpert;
+   const { enabled: agentChatEnabled } = useAgentChatEnabled();
+   const { enabled: combinedInboxTasksEnabled } = useCombinedInboxTasksEnabled();
+ 
+@@ -91,19 +86,21 @@ export function MobileBottomNav({ visible }: MobileBottomNavProps) {
+     [atelierPret, navigate, openNewIssue],
+   );
+   const items = useMemo<MobileNavItem[]>(
+-    () => modeSimple ? [
+-      // « Atelier » prend la place de « Tâches » ; « À faire » remplace « Boîte de
+-      // réception » (rubrique À faire de l'atelier) ; « Menu » sort de l'atelier
+-      // vers le tableau de bord. Un seul onglet est actif à la fois.
++    () => atelierPret ? [
++      // Atelier actif : une seule barre, rien de masqué. « Atelier » mène à l'atelier,
++      // « Menu » au tableau de bord ; un seul onglet est actif à la fois.
+       accueil,
+-      nouvelleTache,
+       {
+         type: "link",
+-        to: `/${CHEMIN_PAGE_ATELIER}/accueil`,
+-        label: "À faire",
+-        icon: Inbox,
+-        badge: inboxBadge.inbox,
++        to: "/issues",
++        label: "Tâches",
++        icon: CircleCheck,
++        badge: combinedInboxTasksEnabled ? inboxBadge.inbox : undefined,
+       },
++      nouvelleTache,
++      ...(!combinedInboxTasksEnabled
++        ? [{ type: "link", to: "/inbox", label: "Boîte", ariaLabel: "Boîte de réception", icon: Inbox, badge: inboxBadge.inbox } as MobileNavItem]
++        : []),
+       { type: "link", to: "/dashboard", label: "Menu", ariaLabel: "Menu : tableau de bord", icon: LayoutDashboard },
+     ] : !agentChatEnabled && !combinedInboxTasksEnabled ? [
+       accueil,
+@@ -137,7 +134,7 @@ export function MobileBottomNav({ visible }: MobileBottomNavProps) {
+         ariaLabel: "Boîte de réception", icon: Inbox, badge: inboxBadge.inbox } as MobileNavItem]
+         : []),
+     ],
+-    [modeSimple, accueil, nouvelleTache, inboxBadge.inbox, agentChatEnabled, combinedInboxTasksEnabled],
++    [atelierPret, accueil, nouvelleTache, inboxBadge.inbox, agentChatEnabled, combinedInboxTasksEnabled],
+   );
+ 
+   return (
+diff --git a/ui/src/components/Sidebar.test.tsx b/ui/src/components/Sidebar.test.tsx
+index a8ae65461..40c10a45a 100644
+--- a/ui/src/components/Sidebar.test.tsx
++++ b/ui/src/components/Sidebar.test.tsx
+@@ -7,7 +7,6 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+ import { Sidebar } from "./Sidebar";
+ import { TooltipProvider } from "@/components/ui/tooltip";
+-import { reinitialiserModeExpertPourTests } from "../hooks/useModeExpert";
+ 
+ const mockHeartbeatsApi = vi.hoisted(() => ({
+   liveRunsForCompany: vi.fn(),
+@@ -164,7 +163,6 @@ describe("Sidebar", () => {
+ 
+   beforeEach(() => {
+     window.localStorage.clear();
+-    reinitialiserModeExpertPourTests();
+     container = document.createElement("div");
+     document.body.appendChild(container);
+     mockHeartbeatsApi.liveRunsForCompany.mockResolvedValue([]);
+@@ -199,72 +197,34 @@ describe("Sidebar", () => {
+     return [...container.querySelectorAll("button")].find((b) => b.textContent?.trim() === "Nouvelle tâche") as HTMLButtonElement;
+   }
+ 
+-  describe("mode simple de l'atelier", () => {
++  describe("atelier actif : le menu complet reste toujours affiché", () => {
+     const libellesNav = () =>
+       [...container.querySelectorAll("nav a")].map((a) => a.textContent?.trim());
+-    const interrupteur = () =>
+-      container.querySelector('button[role="switch"][aria-label="Mode expert"]') as HTMLButtonElement | null;
+-    const masques = ["Tableau de bord", "Boîte de réception", "Tâches", "Projets", "Agents", "Routines", "Compétences", "Connecteurs", "Journal d'audit", "Rechercher"];
++    const entrees = ["Tableau de bord", "Boîte de réception", "Tâches", "Projets", "Agents", "Routines", "Productions", "Compétences", "Connecteurs", "Journal d'audit", "Rechercher"];
+ 
+-    it("masque les entrées du socle et garde le plugin et Nouvelle tâche", async () => {
++    it("affiche l'entrée de l'atelier ET toutes les entrées du socle, sans interrupteur", async () => {
+       mockPluginsApi.listUiContributions.mockResolvedValue([contributionAtelier]);
+       mockInstanceSettingsApi.getExperimental.mockResolvedValue({ enableStreamlinedUi: true });
+       const root = await renderSidebar();
+ 
+       const visibles = libellesNav();
+-      for (const libelle of masques) expect(visibles).not.toContain(libelle);
++      for (const libelle of entrees) expect(visibles).toContain(libelle);
+       expect(container.querySelector('[data-plugin-slot-types="sidebar"]')).not.toBeNull();
+       expect(boutonNouvelleTache()).toBeTruthy();
+-      expect(interrupteur()?.getAttribute("aria-checked")).toBe("false");
++      expect(container.querySelector('button[role="switch"]')).toBeNull();
++      expect(container.textContent).not.toContain("Mode expert");
+       flushSync(() => root.unmount());
+     });
+ 
+-    it("l'interrupteur révèle tout le menu et la préférence persiste", async () => {
+-      mockPluginsApi.listUiContributions.mockResolvedValue([contributionAtelier]);
+-      mockInstanceSettingsApi.getExperimental.mockResolvedValue({ enableStreamlinedUi: true });
+-      const root = await renderSidebar();
+-
+-      flushSync(() => interrupteur()!.click());
+-      const visibles = libellesNav();
+-      for (const libelle of masques) expect(visibles).toContain(libelle);
+-      expect(interrupteur()?.getAttribute("aria-checked")).toBe("true");
+-      expect(window.localStorage.getItem("atelier.mode-expert.company-1")).toBe("1");
+-      flushSync(() => root.unmount());
+-
+-      // Nouveau montage : la préférence est relue.
+-      const root2 = await renderSidebar();
+-      expect(libellesNav()).toContain("Tâches");
+-      // Retour au mode simple.
+-      flushSync(() => interrupteur()!.click());
+-      expect(libellesNav()).not.toContain("Tâches");
+-      expect(window.localStorage.getItem("atelier.mode-expert.company-1")).toBe("0");
+-      flushSync(() => root2.unmount());
+-    });
+-
+-    it("sans l'atelier : menu d'origine inchangé, aucun interrupteur", async () => {
++    it("sans l'atelier : mêmes entrées, aucun interrupteur", async () => {
+       mockInstanceSettingsApi.getExperimental.mockResolvedValue({ enableStreamlinedUi: true });
+       const root = await renderSidebar();
+ 
+       const visibles = libellesNav();
+-      for (const libelle of masques) expect(visibles).toContain(libelle);
+-      expect(interrupteur()).toBeNull();
++      for (const libelle of entrees) expect(visibles).toContain(libelle);
++      expect(container.querySelector('button[role="switch"]')).toBeNull();
+       flushSync(() => root.unmount());
+     });
+-
+-    it("fonctionne même si le stockage local est inaccessible", async () => {
+-      mockPluginsApi.listUiContributions.mockResolvedValue([contributionAtelier]);
+-      mockInstanceSettingsApi.getExperimental.mockResolvedValue({ enableStreamlinedUi: true });
+-      const lecture = vi.spyOn(Storage.prototype, "getItem").mockImplementation(() => { throw new Error("bloqué"); });
+-      const ecriture = vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => { throw new Error("bloqué"); });
+-      const root = await renderSidebar();
+-
+-      expect(libellesNav()).not.toContain("Tâches");
+-      flushSync(() => interrupteur()!.click());
+-      expect(libellesNav()).toContain("Tâches");
+-      flushSync(() => root.unmount());
+-      lecture.mockRestore();
+-      ecriture.mockRestore();
+-    });
+   });
+ 
+   it("ouvre la Discussion de l'atelier quand le plugin est prêt", async () => {
+diff --git a/ui/src/components/Sidebar.tsx b/ui/src/components/Sidebar.tsx
+index 63fca995f..7b3be7f0a 100644
+--- a/ui/src/components/Sidebar.tsx
++++ b/ui/src/components/Sidebar.tsx
+@@ -22,7 +22,6 @@ import {
+   GanttChartSquare,
+   LayoutGrid,
+   Users,
+-  SlidersHorizontal,
+ } from "lucide-react";
+ import { useState, type ReactNode } from "react";
+ import { useQuery } from "@tanstack/react-query";
+@@ -43,7 +42,6 @@ import { queryKeys } from "../lib/queryKeys";
+ import { attentionBadgeCount } from "../lib/attention";
+ import { useInboxBadge } from "../hooks/useInboxBadge";
+ import { useStreamlinedUiEnabled } from "../hooks/useStreamlinedUiEnabled";
+-import { useModeExpert } from "../hooks/useModeExpert";
+ import { usePublishSharedQueryData, useSharedPollingQuery } from "../hooks/useSharedPolling";
+ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+ import { cn, SIDEBAR_RAIL_HIDDEN_LABEL } from "../lib/utils";
+@@ -74,11 +72,6 @@ export function Sidebar({ children }: { children?: ReactNode }) {
+   const { collapsed, peeking } = useSidebar();
+   const { enabled: streamlinedUiEnabled } = useStreamlinedUiEnabled();
+   const rail = collapsed && !peeking;
+-  // Mode simple : quand l'atelier est actif, seules ses entrées (et « Nouvelle tâche »)
+-  // restent visibles ; l'interrupteur « Mode expert » en bas de barre révèle le reste.
+-  // Rien n'est bloqué : les URL des pages masquées restent accessibles.
+-  const { expert: modeExpert, setExpert: definirModeExpert } = useModeExpert(selectedCompanyId);
+-  const modeSimple = atelierPret && !modeExpert;
+   const inboxBadge = useInboxBadge(selectedCompanyId);
+   const { data: experimentalSettings } = useQuery({
+     queryKey: queryKeys.instance.experimentalSettings,
+@@ -207,8 +200,6 @@ export function Sidebar({ children }: { children?: ReactNode }) {
+               newTaskButton
+             );
+           })()}
+-          {!modeSimple ? (
+-            <>
+             {/* Search moved out of the header so the workspace name keeps the
+                 width; a nav row also keeps search reachable from the
+                 collapsed rail, where the old header icon was dropped entirely.
+@@ -242,12 +233,8 @@ export function Sidebar({ children }: { children?: ReactNode }) {
+             {conferenceRoomChatEnabled ? (
+               <SidebarNavItem to="/board-chat" label="Conference Room" icon={MessagesSquare} />
+             ) : null}
+-            </>
+-          ) : null}
+         </div>
+ 
+-        {!modeSimple ? (
+-          <>
+             <SidebarSection label="Travail" collapsible={{ open: workOpen, onOpenChange: setWorkOpen }}>
+               {/* Agent Chat: Chat leads the Work group as a single row — the
+                   agents you talk to live in the Chat surface's own secondary rail
+@@ -338,17 +325,6 @@ export function Sidebar({ children }: { children?: ReactNode }) {
+               </>
+             )}
+ 
+-          </>
+-        ) : (
+-          <div className={primarySidebarStyles.group}>
+-            <PluginLauncherOutlet
+-            placementZones={["sidebar"]}
+-            context={pluginContext}
+-            className="flex flex-col gap-0.5"
+-            itemClassName="text-(length:--text-compact) font-medium pointer-coarse:[&_a]:min-h-11 pointer-coarse:[&_a]:items-center"
+-          />
+-          </div>
+-        )}
+ 
+         <PluginSlotOutlet
+           slotTypes={["sidebarPanel"]}
+@@ -358,74 +334,6 @@ export function Sidebar({ children }: { children?: ReactNode }) {
+           missingBehavior="placeholder"
+         />
+       </nav>
+-      {atelierPret ? (
+-        <InterrupteurModeExpert
+-          expert={modeExpert}
+-          onChange={definirModeExpert}
+-          rail={rail}
+-        />
+-      ) : null}
+     </aside>
+   );
+ }
+-
+-/**
+- * Interrupteur « Mode expert » en bas de la barre latérale : discret, libellé
+- * clair, cible tactile d'au moins 44 px, état annoncé aux lecteurs d'écran.
+- */
+-function InterrupteurModeExpert({
+-  expert,
+-  onChange,
+-  rail,
+-}: {
+-  expert: boolean;
+-  onChange: (expert: boolean) => void;
+-  rail: boolean;
+-}) {
+-  const aide = expert
+-    ? "Mode expert actif : toutes les entrées du menu sont affichées. Désactiver pour revenir au menu simple."
+-    : "Mode simple : seul l'atelier est affiché. Activer pour afficher tout le menu.";
+-  const bouton = (
+-    <button
+-      type="button"
+-      role="switch"
+-      aria-checked={expert}
+-      aria-label="Mode expert"
+-      title={aide}
+-      onClick={() => onChange(!expert)}
+-      className="flex w-full min-h-9 pointer-coarse:min-h-11 items-center gap-2.5 rounded-lg px-2 py-1.5 text-(length:--text-compact) font-medium text-muted-foreground transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+-    >
+-      <SlidersHorizontal className="h-4 w-4 shrink-0" aria-hidden="true" />
+-      <span className={cn("flex-1 text-left", rail ? SIDEBAR_RAIL_HIDDEN_LABEL : "truncate")}>Mode expert</span>
+-      {rail ? null : (
+-        <span
+-          aria-hidden="true"
+-          data-slot="mode-expert-piste"
+-          className={cn(
+-            "relative h-5 w-9 shrink-0 rounded-full border border-border transition-colors",
+-            expert ? "bg-foreground/80" : "bg-muted",
+-          )}
+-        >
+-          <span
+-            className={cn(
+-              "absolute top-0.5 h-3.5 w-3.5 rounded-full bg-background shadow-sm transition-[left] motion-reduce:transition-none",
+-              expert ? "left-[1.125rem]" : "left-0.5",
+-            )}
+-          />
+-        </span>
+-      )}
+-    </button>
+-  );
+-  return (
+-    <div className="shrink-0 border-t border-border/60 px-2 py-1.5" data-slot="mode-expert">
+-      {rail ? (
+-        <Tooltip>
+-          <TooltipTrigger asChild>{bouton}</TooltipTrigger>
+-          <TooltipContent side="right">{aide}</TooltipContent>
+-        </Tooltip>
+-      ) : (
+-        bouton
+-      )}
+-    </div>
+-  );
+-}
+-- 
+2.53.0
+

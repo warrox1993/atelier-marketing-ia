@@ -24,6 +24,12 @@ Sous-commandes :
                          budget IA mensuel, référentiel de marque. Idempotent (entreprise retrouvée par
                          marqueur) ; --a-blanc liste les écritures sans rien écrire ; démonstration par
                          défaut, mode réel seulement avec --reel ; refus si l'entreprise appartient à la démonstration.
+  nouveau-client --fiche F --ajouter-services --entreprise UUID [--slug S] [--reel] [--a-blanc]
+                         dote un client EXISTANT de tous ses services : l'entreprise UUID (même marquée « atelier-demo:* »)
+                         devient le service Marketing du client (marqueur migré vers « atelier-client:<slug> », « (démonstration) »
+                         retiré du nom, registre local écrit) ; son organisation et son référentiel de marque ne sont pas
+                         réécrits ; les autres services et la Direction sont créés par le chemin habituel (agents en pause).
+                         Idempotent ; --a-blanc n'écrit rien. Le nom de la fiche doit être celui de l'entreprise sans « (démonstration) ».
   assurer-connexions     étape légère et idempotente : réserve aux rôles déclarés chaque connexion de la
                          passerelle créée depuis le dernier « appliquer » (accès natif, installations,
                          politiques « block » des rôles en lecture). Lancée toutes les minutes par le
@@ -3255,6 +3261,46 @@ def libelle_agent(slug: str) -> str:
     return slug.replace("-", " ").capitalize()
 
 
+RE_NOM_COMPETENCE = re.compile(r"^[a-z0-9][a-z0-9-]*$")
+
+
+def competences_entete(texte: str, service: str, agent: str) -> list[str]:
+    """Liste « skills: » de l'en-tête d'un AGENTS.md de service (absente ou « [] » : aucune compétence). Chaque nom doit
+    être un dossier organisation/skills/<nom>/ avec son SKILL.md : sinon erreur explicite (agent et compétence nommés),
+    jamais d'échec silencieux."""
+    fm, _ = separer_frontmatter(texte)
+    noms: list[str] = []
+    dans_liste = False
+    for ligne in (fm or "").splitlines():
+        if dans_liste:
+            m = re.match(r"^\s+-\s*(.+?)\s*$", ligne)
+            if m:
+                noms.append(m.group(1).strip("\"'"))
+                continue
+            if ligne.strip():
+                dans_liste = False
+        m = re.match(r"^skills:\s*(.*?)\s*$", ligne)
+        if m:
+            reste = m.group(1)
+            if reste in ("", "[]"):
+                dans_liste = reste == ""
+            elif reste.startswith("[") and reste.endswith("]"):
+                try:  # liste en ligne : skills: ["a", "b"]
+                    noms = [str(x) for x in json.loads(reste)]
+                except ValueError:
+                    raise ErreurAtelier(f"agent {agent} du service {service} : la liste « skills » de son AGENTS.md est illisible : {reste}") from None
+            else:
+                raise ErreurAtelier(f"agent {agent} du service {service} : la clé « skills » de son AGENTS.md doit être une liste YAML (« - nom »)")
+    for nom in noms:
+        if not RE_NOM_COMPETENCE.match(nom) or not (ORGA / "skills" / nom / "SKILL.md").is_file():
+            raise ErreurAtelier(
+                f"agent {agent} du service {service} : compétence « {nom} » déclarée dans son AGENTS.md "
+                f"mais absente du dépôt (organisation/skills/{nom}/SKILL.md)")
+    if len(set(noms)) != len(noms):
+        raise ErreurAtelier(f"agent {agent} du service {service} : compétence déclarée deux fois dans son AGENTS.md")
+    return noms
+
+
 def consigne_minimale(svc: dict, agent: dict) -> str:
     """Consigne de repli d'un agent dont le fichier organisation/services/<service>/agents/<agent>/AGENTS.md manque."""
     humain = "\n".join(f"- {x}" for x in svc["humainSeul"])
@@ -3278,7 +3324,9 @@ def agents_service(reg_agents: dict, svc: dict) -> tuple[list[dict], dict[str, s
         nom, titre = libelle_agent(slug), f"{svc['nom']} · {libelle_agent(slug)}"
         fichier = ORGA / "services" / svc["slug"] / "agents" / slug / "AGENTS.md"
         corps = None
+        competences: list[str] = []
         if fichier.is_file():
+            competences = competences_entete(fichier.read_text(encoding="utf-8"), svc["slug"], slug)
             entete, corps_brut = entete_simple(fichier.read_text(encoding="utf-8"))
             if isinstance(entete.get("name"), str) and normaliser_slug(entete["name"]) == slug:
                 nom = entete["name"]
@@ -3293,7 +3341,7 @@ def agents_service(reg_agents: dict, svc: dict) -> tuple[list[dict], dict[str, s
                         "et prépare le dossier de validation humaine." if coordinateur
                         else f"{titre} : traite les tâches que le coordinateur du service {svc['nom']} lui affecte."),
             "entrees": list(ENTREES_SERVICE), "sorties": list(SORTIES_SERVICE), "criteresReussite": list(CRITERES_SERVICE),
-            "competences": [], "competencesObligatoires": [], "connexions": {}, "relit": [], "roleRevue": None,
+            "competences": competences, "competencesObligatoires": [], "connexions": {}, "relit": [], "roleRevue": None,
         })
         if not coordinateur:
             a["outils"]["recherche"] = [o for o in a["outils"]["recherche"] if o != "WebSearch"]
@@ -3368,19 +3416,24 @@ def fichiers_service(reg_agents_s: dict, reg_s: dict, svc: dict, corps_par_slug:
         ".paperclip.yaml": yaml_texte(construire_extension(reg_agents_s, reg_s)),
     }
     communes = consignes_communes(svc["slug"] == "marketing")
+    # Compétences déclarées par les agents du service : leurs dossiers entrent dans le paquet (comme pour le marketing).
+    for nom in sorted({c for a in reg_agents_s["agents"] for c in a["competences"]}):
+        dossier = ORGA / "skills" / nom
+        for f in sorted(p for p in dossier.rglob("*") if p.is_file()):
+            fichiers[f.relative_to(ORGA).as_posix()] = f.read_text(encoding="utf-8")
     for a in reg_agents_s["agents"]:
         corps = corps_par_slug[a["slug"]]
         fiche = fiche_routes_agent(a, corps)
         corps += "\n" + MARQUEUR_CONSIGNES_COMMUNES + "\n\n" + communes + ("\n" + fiche if fiche else "")
         fichiers[f"agents/{a['slug']}/AGENTS.md"] = avec_frontmatter(
-            {"kind": "agent", "slug": a["slug"], "name": a["nom"], "title": a["titre"], "reportsTo": a["rapporteA"], "skills": []}, corps)
+            {"kind": "agent", "slug": a["slug"], "name": a["nom"], "title": a["titre"], "reportsTo": a["rapporteA"], "skills": a["competences"]}, corps)
     return fichiers
 
 
 def etat_service_a_jour(api: Api, company_id: str, reg_agents: dict, fichiers: dict[str, str], empreinte: str,
                         jeton_id: str | None, mode: str) -> list[str]:
-    """Raisons pour lesquelles l'entreprise d'un service n'est pas à jour (vide = à jour) : comme etat_a_jour, sans
-    les compétences du dépôt (un service n'en a pas) ; les instructions sont comparées au paquet du service."""
+    """Raisons pour lesquelles l'entreprise d'un service n'est pas à jour (vide = à jour) : comme etat_a_jour, avec
+    les compétences déclarées par ses agents (champ « skills » de leur AGENTS.md) ; les instructions sont comparées au paquet du service."""
     raisons = []
     agents = agents_par_slug(api, company_id)
     for agent in reg_agents["agents"]:
@@ -3533,12 +3586,113 @@ def configurer_plugin_client(api: Api, slug: str) -> None:
     print(f"Configuration du plugin (bureau de liaison) : {len(creees)} entreprise(s) configurée(s), {len(ids) - len(creees)} déjà configurée(s)")
 
 
+RE_SUFFIXE_DEMONSTRATION = re.compile(r"\s*\((?:démonstration|demonstration)\)\s*$", re.I)
+RE_MARQUEUR_DEMO = re.compile(r"(?<![A-Za-z0-9_-])atelier-demo:[a-z0-9-]+(?![A-Za-z0-9_:-])")
+
+
+class ApiEntreprisesSimulees(Api):
+    """Lectures réelles, sauf la liste des entreprises : celle d'après la migration (planification et --a-blanc)."""
+
+    def __init__(self, base: str, entreprises: list[dict]):
+        super().__init__(base)
+        self.simulees = entreprises
+
+    def get(self, chemin):
+        return self.simulees if chemin == "/companies" else super().get(chemin)
+
+
+def preparer_migration_marketing(args, api: Api, fiche: dict) -> dict:
+    """Contrôles (aucune écriture) de « nouveau-client --ajouter-services » : l'entreprise existe, son nom est celui de la
+    fiche (sans « (démonstration) »), elle porte un marqueur de démonstration à migrer ou déjà le marqueur du client, aucun
+    registre local ne la rattache à un autre client, son BCE (référentiel de marque, s'il en a) est celui de la fiche.
+    Rend le plan : société migrée, registre voulu, actions à faire (vide = déjà migrée)."""
+    cid = (args.entreprise or "").strip().lower()
+    if not RE_UUID.fullmatch(cid):
+        raise ErreurAtelier("--entreprise doit être l'UUID de l'entreprise existante à doter de ses services")
+    slug, marqueur = fiche["slug"], f"{PREFIXE_MARQUEUR_CLIENT}{fiche['slug']}"
+    societes = api.get("/companies")
+    societe = next((c for c in societes if c.get("id") == cid), None)
+    if societe is None:
+        raise ErreurAtelier(f"entreprise {cid} introuvable : rien n'est écrit.")
+    nom_actuel = unicodedata.normalize("NFC", societe.get("name") or "")
+    nom_voulu = RE_SUFFIXE_DEMONSTRATION.sub("", nom_actuel).strip()
+    if nom_voulu != fiche["nomCommercial"]:
+        raise ErreurAtelier(f"ajout de services refusé : l'entreprise s'appelle « {nom_actuel} », la fiche « {fiche['nomCommercial']} » "
+                            "(hors « (démonstration) »). Rien n'est écrit.")
+    description = societe.get("description") or ""
+    marqueurs_demo = RE_MARQUEUR_DEMO.findall(description)
+    deja = porte_marqueur(description, marqueur)
+    if not deja and (len(marqueurs_demo) != 1 or PREFIXE_MARQUEUR_CLIENT in description):
+        raise ErreurAtelier(f"ajout de services refusé : la description de « {nom_actuel} » ne porte ni le marqueur {marqueur} ni un seul marqueur "
+                            f"« {PREFIXE_MARQUEUR_DEMO}… » à migrer (elle appartient peut-être à un autre client). Rien n'est écrit.")
+    registre = lire_registre_client(slug)
+    entree_actuelle = ((registre or {}).get("entreprises") or {}).get("marketing")
+    if entree_actuelle and entree_actuelle["entrepriseId"] != cid:
+        raise ErreurAtelier(f"ajout de services refusé : le registre local du client {slug} désigne déjà une autre entreprise marketing "
+                            f"({entree_actuelle['entrepriseId']}). Rien n'est écrit.")
+    autre = slug_client_par_entreprise(cid)
+    if autre and autre != slug:
+        raise ErreurAtelier(f"ajout de services refusé : l'entreprise {cid} appartient déjà au client {autre}. Rien n'est écrit.")
+    if registre is not None and normaliser_bce(registre["numeroBce"]) != normaliser_bce(fiche["numeroBce"]):
+        raise ErreurAtelier(f"ajout de services refusé : le BCE de la fiche diffère de celui du registre local du client {slug}. Rien n'est écrit.")
+    try:
+        bces = bce_de_la_marque(marque_actuelle(api, cid))
+    except ErreurAtelier:
+        bces = set()  # plugin absent ou référentiel illisible : pas de second contrôle possible
+    if bces and normaliser_bce(fiche["numeroBce"]) not in bces:
+        raise ErreurAtelier("ajout de services refusé : le BCE de la fiche ne correspond pas à celui du référentiel de marque de l'entreprise. Rien n'est écrit.")
+    nouvelle_description = description if deja else RE_MARQUEUR_DEMO.sub(marqueur, description)
+    corps = {}
+    if nom_actuel != nom_voulu:
+        corps["name"] = nom_voulu
+    if nouvelle_description != description:
+        corps["description"] = nouvelle_description
+    entree = {"entrepriseId": cid, "nom": nom_voulu, "marqueur": marqueur}
+    actions = []
+    if corps:
+        actions.append(f"entreprise {cid} : " + ", ".join(
+            [f"nom « {nom_actuel} » -> « {nom_voulu} »"] * ("name" in corps) + [f"marqueur -> {marqueur}"] * ("description" in corps)) + " (PATCH /companies/<id>)")
+    if entree_actuelle != entree or (registre or {}).get("_ancienFormat"):
+        actions.append(f"registre local : {dossier_client(slug) / FICHIER_REGISTRE_CLIENT} (service marketing -> {cid})")
+    entreprises = dict((registre or {}).get("entreprises") or {})
+    entreprises["marketing"] = entree
+    virtuel = {"version": 2, "entrepriseId": cid, "numeroBce": normaliser_bce(fiche["numeroBce"]), "slug": slug,
+               "creeLe": (registre or {}).get("creeLe"), "entreprises": entreprises}
+    migree = {**societe, "name": nom_voulu, "description": nouvelle_description}
+    return {"cid": cid, "corps": corps, "entree": entree, "actions": actions, "registre": virtuel,
+            "api": ApiEntreprisesSimulees(api.base, [migree if c.get("id") == cid else c for c in societes]),
+            "registre_reel": registre}
+
+
+def executer_migration_marketing(api: Api, fiche: dict, migration: dict) -> None:
+    """Écrit la migration préparée (nom et marqueur côté socle, puis registre local). Idempotent : sans action, rien n'est écrit."""
+    cid = migration["cid"]
+    if migration["corps"]:
+        api.appel("PATCH", f"/companies/{cid}", migration["corps"])
+        print(f"Entreprise {cid} migrée : {', '.join(migration['corps'])} mis à jour.")
+    registre = migration["registre_reel"]
+    if (registre or {}).get("entreprises", {}).get("marketing") != migration["entree"] or (registre or {}).get("_ancienFormat"):
+        chemin_registre = dossier_client(fiche["slug"]) / FICHIER_REGISTRE_CLIENT
+        noter_entreprise_registre(fiche["slug"], fiche["numeroBce"], registre, "marketing", migration["entree"])
+        print(f"Registre local écrit : {chemin_registre}")
+    if not migration["actions"]:
+        print("Entreprise marketing déjà migrée : rien à faire pour elle.")
+
+
 def cmd_nouveau_client(args) -> int:
-    if args.entreprise and not args.enregistrer_existante:
-        raise ErreurAtelier("--entreprise ne s'utilise qu'avec --enregistrer-existante.")
-    if args.enregistrer_existante and not args.entreprise:
-        raise ErreurAtelier("--enregistrer-existante exige --entreprise <UUID>.")
+    if args.ajouter_services and args.enregistrer_existante:
+        raise ErreurAtelier("--ajouter-services et --enregistrer-existante s'excluent.")
+    if args.entreprise and not (args.enregistrer_existante or args.ajouter_services):
+        raise ErreurAtelier("--entreprise ne s'utilise qu'avec --enregistrer-existante ou --ajouter-services.")
+    if (args.enregistrer_existante or args.ajouter_services) and not args.entreprise:
+        raise ErreurAtelier("--enregistrer-existante et --ajouter-services exigent --entreprise <UUID>.")
+    if args.slug and not args.ajouter_services:
+        raise ErreurAtelier("--slug ne s'utilise qu'avec --ajouter-services.")
     fiche = valider_fiche(lire_fiche(Path(args.fiche)), args.reel)
+    if args.slug:
+        if not CODE_REFERENTIEL.fullmatch(args.slug):
+            raise ErreurAtelier(f"--slug invalide (lettres minuscules, chiffres et tirets, 2 à 40 caractères) : {args.slug!r}")
+        fiche["slug"] = args.slug
     if args.enregistrer_existante:
         return enregistrer_existante(args, fiche)
     reg_agents, reg_orga = registres()
@@ -3556,18 +3710,36 @@ def cmd_nouveau_client(args) -> int:
                 raise ErreurAtelier(f"plugin {PLUGIN_CLE} introuvable : installez-le d'abord (scripts/preparer-plugin.sh puis installation depuis l'interface)") from None
             raise
     slug, nom = fiche["slug"], fiche["nomCommercial"]
-    registre = lire_registre_client(slug)
+    migration = None
+    if args.ajouter_services:
+        if not avec_marketing:
+            raise ErreurAtelier("--ajouter-services exige que la fiche contienne le service marketing (services: \"tous\").")
+        migration = preparer_migration_marketing(args, api, fiche)
+        api_reelle, api = api, migration["api"]  # planification sur l'état d'après la migration
+        registre = migration["registre"]
+        referentiel = None  # le référentiel de marque de l'entreprise existante n'est jamais réécrit
+    else:
+        registre = lire_registre_client(slug)
     # Tous les contrôles d'identité passent avant la moindre écriture : un refus sur un service n'en laisse aucun créé.
     plans = [plan_service(api, reg_agents, reg_orga, fiche, svc, registre) for svc in services]
     for plan in plans:
         plan["marque"] = marque_actuelle(api, plan["existante"]["id"]) if plan["svc"]["slug"] == "marketing" and plan["existante"] else None
 
     ecritures = []
-    if registre is None:
+    if migration:
+        ecritures.extend(f"[marketing] {a}" for a in migration["actions"])
+        if not migration["actions"]:
+            ecritures.append("[marketing] entreprise déjà migrée (nom, marqueur et registre à jour) : aucune écriture")
+    if migration:
+        pass
+    elif registre is None:
         ecritures.append(f"registre local d'identité : {dossier_client(slug) / FICHIER_REGISTRE_CLIENT} (écrit à la création)")
     elif registre.get("_ancienFormat"):
         ecritures.append(f"registre local d'identité {dossier_client(slug) / FICHIER_REGISTRE_CLIENT} : migré vers le format « une entreprise par service »")
     for plan in plans:
+        if migration and plan["svc"]["slug"] == "marketing":
+            ecritures.append("[marketing] organisation, agents et référentiel de marque existants conservés : non réappliqués")
+            continue
         lignes = ecritures_service(plan, fiche, referentiel, plan["marque"])
         ecritures.extend(f"[{plan['svc']['slug']}] {l}" if multiple else l for l in lignes)
     if args.a_blanc:
@@ -3583,10 +3755,17 @@ def cmd_nouveau_client(args) -> int:
         for avert in plan["avertissements"]:
             print(avert)
     with verrou_ecriture("nouveau-client"):
+        if migration:
+            api = api_reelle
+            executer_migration_marketing(api, fiche, migration)
+            registre = lire_registre_client(slug)
         for plan in plans:
             svc, reg_s = plan["svc"], plan["reg_s"]
             if multiple:
                 print(f"=== Service {svc['nom']} : « {plan['nom']} » ===")
+            if migration and svc["slug"] == "marketing":
+                plan["cid"] = migration["cid"]
+                continue
             if avec_marketing and svc["slug"] == "marketing":
                 fichiers = fichiers_paquet()
                 fichiers["COMPANY.md"] = company_md_client(reg_s)
@@ -3933,6 +4112,9 @@ def main(argv=None) -> int:
     nc.add_argument("--enregistrer-existante", action="store_true", dest="enregistrer_existante",
                     help="migration : crée le registre local d'une entreprise cliente déjà créée (avec --entreprise et --fiche), après contrôle du BCE")
     nc.add_argument("--entreprise", default=None, help="UUID de l'entreprise à enregistrer (avec --enregistrer-existante)")
+    nc.add_argument("--ajouter-services", action="store_true", dest="ajouter_services",
+                    help="dote une entreprise EXISTANTE (avec --entreprise) de tous les services de la fiche : elle devient le service marketing du client")
+    nc.add_argument("--slug", default=None, help="identifiant du client à la place de celui tiré du nom (avec --ajouter-services)")
     ac = sp.add_parser("assurer-connexions")
     ac.add_argument("--detail", action="store_true", help="affiche aussi le détail quand rien n'a été écrit")
     x = sp.add_parser("exporter")

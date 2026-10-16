@@ -4,7 +4,8 @@ slug: "faq"
 name: "FAQ"
 title: "SAV · Base de questions-réponses"
 reportsTo: "coordinateur-sav"
-skills: []
+skills:
+  - "base-connaissances-faq"
 ---
 
 # Base de questions-réponses

@@ -9,6 +9,9 @@ skills:
   - "planification-livrables"
   - "dossier-validation-humaine"
   - "recherche-connaissances"
+  - "procedure-qualite"
+  - "non-conformite-action-corrective"
+  - "audit-interne"
 ---
 
 # Coordinateur du service qualité

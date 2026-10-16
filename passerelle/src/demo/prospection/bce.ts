@@ -10,16 +10,13 @@ import type { FournisseurService, OutilPasserelle } from "../../fournisseurs.js"
 import {
   adresseDansZone, codesNaceCorrespondent, formeNace, formePage, formeZone, outilLecture, paginer, pointNace, verifierDateIso, zoneDonnee, type FiltreZone,
 } from "./commun.js";
+import { PHRASE_POSITION_APPROX } from "../../commun/prospection/commun.js";
 import { dateBce, jeuProspection, tailleDe, type AdresseDemo, type EntrepriseDemo, type EtablissementDemo } from "./jeu.js";
 import { analyserNumero } from "./numeros.js";
 import { libelleForme, libelleNace, nomAssureurDemo } from "./referentiel.js";
 
 export const SOURCE_BCE = "BCE Open Data (simulateur de démonstration : entreprises entièrement fictives)";
 const NOTE_NUMEROS = "Numéros à chiffre de contrôle volontairement faux (modulo 97) : aucune entreprise réelle ne peut y correspondre.";
-
-/** Phrase ajoutée aux descriptions des outils qui renvoient `position_approx` (identique en démonstration et en réel). */
-export const PHRASE_POSITION_APPROX =
-  "Chaque entité et chaque unité d'établissement porte `position_approx` (lat, lon, précision code_postal ou commune, source osm, ou null) : position approximative déduite du code postal ou de la commune, jamais l'adresse exacte.";
 
 /** Position fictive déterministe d'une adresse de démonstration (même code postal, même point), située en Belgique. */
 function positionApproxDemo(a: AdresseDemo): Record<string, unknown> | null {

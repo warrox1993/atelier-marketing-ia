@@ -551,7 +551,7 @@ Clé : `campagnes.creer`. Crée une campagne (projet natif + tâche de brief).
 | `plafondPub{type=montant}.montantCents` | entier | oui | -∞ à 10000000000 |
 | `plafondPub{type=aucune_limite}` | variante | oui |  |
 | `budgetMaxCents` | entier | non | 0 à ∞ ; peut valoir null |
-| `mode` | énumération | non | "demonstration" \| "reel" ; défaut "demonstration" |
+| `mode` | énumération | non | "demonstration" \| "reel" ; défaut "reel" |
 | `coordinateurAgentId` | uuid | non | peut valoir null |
 | `issueId` | uuid | non |  |
 

@@ -90,6 +90,34 @@ describe("corbeille", () => {
     expect(c.textContent).toContain("La corbeille est vide.");
   });
 
+  it("restauration groupée : cases étiquetées, « Restaurer (N) », une requête par élément", async () => {
+    const c = await ouvrir();
+    expect([...c.querySelectorAll("button")].some((b) => /^Restaurer \(/u.test(b.textContent ?? ""))).toBe(false);
+    expect(c.querySelector('input[aria-label="Sélectionner « Tarifs 2026 »"]')).not.toBeNull();
+    await cliquer(Array.from(c.querySelectorAll("label")).find((l) => l.textContent === "Tout sélectionner")!.querySelector("input")!);
+    await cliquer(parTexte(c, "button", "Restaurer (2)"));
+    const posts = appels.filter((a) => a.methode === "POST");
+    expect(posts.map((p) => p.corps)).toMatchObject([
+      { type: "document", id: "e1" },
+      { type: "tache", id: "e2" },
+    ]);
+    expect(c.querySelector('[role="status"]')?.textContent).toContain("2 éléments restaurés");
+  });
+
+  it("restauration groupée : un échec n'arrête pas les autres et le récapitulatif le nomme", async () => {
+    const base = serveur;
+    serveur = (m, u, b) => (u.endsWith("/restauration") && (b as { id: string }).id === "e1" ? { statut: 404, corps: { erreur: "Cet élément n'est pas à la corbeille." } } : base(m, u, b));
+    const c = await ouvrir();
+    await cliquer(Array.from(c.querySelectorAll("label")).find((l) => l.textContent === "Tout sélectionner")!.querySelector("input")!);
+    await cliquer(parTexte(c, "button", "Restaurer (2)"));
+    expect(appels.filter((a) => a.methode === "POST")).toHaveLength(2);
+    const alerte = c.querySelector('[role="alert"]')!;
+    expect(alerte.textContent).toContain("1 élément restauré, 1 en échec");
+    expect(alerte.textContent).toContain("Tarifs 2026");
+    expect(alerte.textContent).toContain("pas à la corbeille");
+    expect((c.querySelector('input[aria-label="Sélectionner « Tarifs 2026 »"]') as HTMLInputElement).checked).toBe(true);
+  });
+
   it("affiche l'erreur du serveur si la restauration échoue", async () => {
     const base = serveur;
     serveur = (m, u, b) => (u.endsWith("/restauration") ? { statut: 404, corps: { erreur: "Cet élément n'est pas à la corbeille." } } : base(m, u, b));

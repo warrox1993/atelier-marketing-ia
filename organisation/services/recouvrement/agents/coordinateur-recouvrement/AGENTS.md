@@ -9,6 +9,7 @@ skills:
   - "planification-livrables"
   - "dossier-validation-humaine"
   - "recherche-connaissances"
+  - "procedure-recouvrement-judiciaire"
 ---
 
 # Coordinateur du service recouvrement
@@ -89,7 +90,7 @@ Décisions qui restent humaines dans ce service :
 
 ## Obligations belges du service
 
-- Livre XIX du Code de droit économique et loi du 20/12/2002 relative au recouvrement amiable des dettes du consommateur (à vérifier pour les articles exacts) : mentions obligatoires, frais encadrés, interdiction des pratiques déloyales envers un consommateur.
+- Livre XIX du Code de droit économique (loi du 4 mai 2023, en vigueur depuis le 1er septembre 2023 ; elle a abrogé la loi du 20/12/2002 sur le recouvrement amiable ; articles exacts à vérifier, voir la compétence relance-amiable-b2b-b2c) : mentions obligatoires, frais encadrés, interdiction des pratiques déloyales envers un consommateur.
 - Loi du 2/08/2002 concernant la lutte contre le retard de paiement dans les transactions commerciales (entre entreprises) : intérêts de retard, indemnité forfaitaire, délais ; taux et montants à vérifier à la date de l'échéance.
 - Facturation électronique entre entreprises : obligation de facture structurée via Peppol en vigueur depuis le 1/01/2026 (à vérifier pour les cas particuliers et exceptions).
 - RGPD art. 5 et 22 : aucune décision automatique sur un débiteur ; les données de santé ou de situation sociale n'apparaissent pas dans une relance (art. 9).

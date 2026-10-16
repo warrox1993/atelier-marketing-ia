@@ -9,6 +9,9 @@ skills:
   - "planification-livrables"
   - "dossier-validation-humaine"
   - "recherche-connaissances"
+  - "preparation-rendez-vous-b2b"
+  - "proposition-commerciale"
+  - "renouvellement-fidelisation"
 ---
 
 # Coordinateur du service commercial

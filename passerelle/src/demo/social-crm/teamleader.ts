@@ -5,18 +5,13 @@
 import * as z from "zod";
 import type { ContactCrm, TransactionCrm } from "../modele/index.js";
 import type { FournisseurService } from "../../fournisseurs.js";
+import { definitionsTeamleader } from "../../commun/social-crm/teamleader.js";
+import { SchemaDate } from "../modele/index.js";
 import {
   contactsPeriode, derniereModification, exigerContact, horodatageTeamleader, numeroDepuisUuid, STATUT_PAR_ETAPE,
   transactionsPeriode, uuidDepuis,
 } from "./crm-commun.js";
 import { formeAu, formePeriode, minuitIso, outilLecture, outilMutation } from "./utilitaires.js";
-
-const formePage = {
-  page: z.object({
-    size: z.number().int().min(1).max(100).default(20).describe("Éléments par page (20 par défaut, 100 au plus)."),
-    number: z.number().int().min(1).max(100_000).default(1).describe("Numéro de page, à partir de 1."),
-  }).default({ size: 20, number: 1 }).describe("Pagination : page.size et page.number."),
-};
 
 function contact(c: ContactCrm) {
   return {
@@ -46,6 +41,8 @@ function affaire(t: TransactionCrm) {
   };
 }
 
+const DEFS = definitionsTeamleader(SchemaDate);
+
 export function fournisseurTeamleader(): FournisseurService {
   const contacts = outilLecture(
     {
@@ -53,7 +50,7 @@ export function fournisseurTeamleader(): FournisseurService {
       description:
         "Contacts Teamleader créés sur une période, forme de POST /contacts.list : { data: [{ id, first_name, last_name, emails[], " +
         "telephones[], added_at, updated_at }] }. Pagination par page.size et page.number.",
-      schemaEntree: { ...formePeriode, ...formeAu, ...formePage },
+      schemaEntree: DEFS.teamleader_contacts.schemaEntree,
     },
     ({ debut, fin, au, page }) => {
       const liste = contactsPeriode(debut, fin, au);
@@ -68,7 +65,7 @@ export function fournisseurTeamleader(): FournisseurService {
       description:
         "Affaires Teamleader (devis) créées sur une période, forme de POST /deals.list : { data: [{ id, title, status open|won|lost, " +
         "lead, estimated_value{amount, currency}, current_phase, closed_at, created_at, updated_at }] }.",
-      schemaEntree: { ...formePeriode, ...formeAu, ...formePage },
+      schemaEntree: DEFS.teamleader_deals.schemaEntree,
     },
     ({ debut, fin, au, page }) => {
       const liste = transactionsPeriode(debut, fin, au);
@@ -81,11 +78,8 @@ export function fournisseurTeamleader(): FournisseurService {
     {
       nom: "teamleader_modifier_contact",
       description: "Prépare la modification d'un contact Teamleader (prénom, nom, e-mails, téléphones).",
-      schemaEntree: {
-        id: z.string().regex(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/, "UUID attendu").describe("Identifiant du contact (champ `id` de teamleader_contacts)."),
-        modifications: z.record(z.string().regex(/^[a-z][a-z0-9_]{0,63}$/), z.union([z.string().max(500), z.number(), z.boolean()])).describe("Champs à modifier (POST /contacts.update)."),
-      },
-      destructif: false,
+      schemaEntree: DEFS.teamleader_modifier_contact.schemaEntree,
+      destructif: DEFS.teamleader_modifier_contact.destructif,
       requeteReelle: "POST /contacts.update",
       resume: (a) => `modification de ${Object.keys(a.modifications).length} champ(s) du contact ${a.id}.`,
     },

@@ -4,15 +4,7 @@
 // les mettre à la forme des API Google.
 
 import { SchemaDate, modeleDemo } from "../modele/index.js";
-import type { AnnotationsOutil } from "../../fournisseurs.js";
-
-/** Tous les outils Google de démonstration sont en lecture seule, comme les vraies API de reporting. */
-export const ANNOTATIONS_LECTURE: AnnotationsOutil = {
-  readOnlyHint: true,
-  destructiveHint: false,
-  idempotentHint: true,
-  openWorldHint: false,
-};
+import { ANNOTATIONS_LECTURE } from "../../commun/google/commun.js";
 
 /** Valide une date AAAA-MM-JJ dans la période du modèle ; message clair en français. */
 export function lireDate(valeur: string, nom: string): string {
@@ -51,4 +43,4 @@ export function dateDepuisGoogle(d: { year: number; month: number; day: number }
   return `${String(d.year).padStart(4, "0")}-${String(d.month).padStart(2, "0")}-${String(d.day).padStart(2, "0")}`;
 }
 
-export { modeleDemo };
+export { ANNOTATIONS_LECTURE, modeleDemo };

@@ -1,0 +1,187 @@
+From 18dcf64379ad43e45e3637acceec52c5689e6c14 Mon Sep 17 00:00:00 2001
+From: Jean-Baptiste Dhondt <114347858+warrox1993@users.noreply.github.com>
+Date: Fri, 16 Oct 2026 20:25:51 +0200
+Subject: [PATCH 57/62] Barre mobile (mode simple) : sortie de l'atelier et
+ onglet actif unique
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+À faire pointe vers /atelier/accueil, Atelier en correspondance exacte,
+nouvelle entrée Menu vers /dashboard. Tests mis à jour.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01DP85vPq2MHkZg8VNtRvCzB
+---
+ ui/src/components/MobileBottomNav.test.tsx | 52 +++++++++++++++-------
+ ui/src/components/MobileBottomNav.tsx      | 16 ++++---
+ 2 files changed, 48 insertions(+), 20 deletions(-)
+
+diff --git a/ui/src/components/MobileBottomNav.test.tsx b/ui/src/components/MobileBottomNav.test.tsx
+index 1ed07778e..c9f862e20 100644
+--- a/ui/src/components/MobileBottomNav.test.tsx
++++ b/ui/src/components/MobileBottomNav.test.tsx
+@@ -11,26 +11,34 @@ import { ecrireModeExpert, reinitialiserModeExpertPourTests } from "../hooks/use
+ const mockNavigate = vi.hoisted(() => vi.fn());
+ const mockOpenNewIssue = vi.hoisted(() => vi.fn());
+ const mockPluginsApi = vi.hoisted(() => ({ listUiContributions: vi.fn() }));
++const mockLocation = vi.hoisted(() => ({ pathname: "/" }));
+ const mockInboxBadge = vi.hoisted(() => ({ inbox: 0, failedRuns: 0 }));
+ 
+ vi.mock("../api/plugins", () => ({ pluginsApi: mockPluginsApi }));
+ 
+ vi.mock("@/lib/router", () => ({
+   useNavigate: () => mockNavigate,
+-  useLocation: () => ({ pathname: "/" }),
+-  NavLink: ({ to, children, className, ...props }: {
++  useLocation: () => mockLocation,
++  NavLink: ({ to, children, className, end, ...props }: {
+     to: string;
++    end?: boolean;
+     children: ReactNode | ((state: { isActive: boolean }) => ReactNode);
+     className?: string | ((state: { isActive: boolean }) => string);
+-  }) => (
+-    <a
+-      href={to}
+-      className={typeof className === "function" ? className({ isActive: false }) : className}
+-      {...props}
+-    >
+-      {typeof children === "function" ? children({ isActive: false }) : children}
+-    </a>
+-  ),
++  }) => {
++    // Imite react-router : le préfixe d'entreprise est ignoré, `end` impose l'égalité exacte.
++    const chemin = mockLocation.pathname.replace(/^\/COU(?=\/|$)/, "") || "/";
++    const isActive = end ? chemin === to : chemin === to || chemin.startsWith(`${to}/`);
++    return (
++      <a
++        href={to}
++        data-active={isActive}
++        className={typeof className === "function" ? className({ isActive }) : className}
++        {...props}
++      >
++        {typeof children === "function" ? children({ isActive }) : children}
++      </a>
++    );
++  },
+ }));
+ 
+ vi.mock("../context/DialogContext", () => ({
+@@ -88,6 +96,7 @@ describe("MobileBottomNav", () => {
+     [...container.querySelectorAll("button")].find((b) => b.textContent?.trim() === "Nouvelle tâche") as HTMLButtonElement;
+ 
+   beforeEach(() => {
++    mockLocation.pathname = "/";
+     window.localStorage.clear();
+     reinitialiserModeExpertPourTests();
+     container = document.createElement("div");
+@@ -111,12 +120,15 @@ describe("MobileBottomNav", () => {
+     flushSync(() => root.unmount());
+   });
+ 
+-  it("avec l'atelier en mode simple : Atelier, Nouvelle tâche, À faire", async () => {
++  it("avec l'atelier en mode simple : Atelier, Nouvelle tâche, À faire, Menu", async () => {
+     mockPluginsApi.listUiContributions.mockResolvedValue([contributionAtelier]);
+     const root = await rendre();
+-    expect(libelles()).toEqual(["Atelier", "Nouvelle tâche", "À faire"]);
+-    expect(container.querySelectorAll('a[href="/atelier"]').length).toBe(2);
+-    expect(container.querySelector('a[href="/dashboard"]')).toBeNull();
++    expect(libelles()).toEqual(["Atelier", "Nouvelle tâche", "À faire", "Menu"]);
++    const hrefs = [...container.querySelectorAll("nav a")].map((a) => a.getAttribute("href"));
++    expect(hrefs).toEqual(["/atelier", "/atelier/accueil", "/dashboard"]);
++    expect(new Set(hrefs).size).toBe(hrefs.length);
++    expect(hrefs.some((h) => !h?.startsWith("/atelier"))).toBe(true);
++    expect(container.querySelector('a[href="/dashboard"]')).not.toBeNull();
+     expect(container.querySelector('a[href="/issues"]')).toBeNull();
+     expect(container.querySelector('a[href="/inbox"]')).toBeNull();
+     boutonNouvelleTache().click();
+@@ -125,6 +137,16 @@ describe("MobileBottomNav", () => {
+     flushSync(() => root.unmount());
+   });
+ 
++  it("en mode simple sur /COU/atelier/accueil : un seul onglet actif, À faire", async () => {
++    mockPluginsApi.listUiContributions.mockResolvedValue([contributionAtelier]);
++    mockLocation.pathname = "/COU/atelier/accueil";
++    const root = await rendre();
++    const actifs = [...container.querySelectorAll('nav a[data-active="true"]')];
++    expect(actifs.length).toBe(1);
++    expect(actifs[0].getAttribute("href")).toBe("/atelier/accueil");
++    flushSync(() => root.unmount());
++  });
++
+   it("avec l'atelier en mode expert : entrées d'origine, Atelier à la place d'Accueil", async () => {
+     mockPluginsApi.listUiContributions.mockResolvedValue([contributionAtelier]);
+     ecrireModeExpert("company-1", true);
+diff --git a/ui/src/components/MobileBottomNav.tsx b/ui/src/components/MobileBottomNav.tsx
+index 847561642..e1a6b4e9a 100644
+--- a/ui/src/components/MobileBottomNav.tsx
++++ b/ui/src/components/MobileBottomNav.tsx
+@@ -9,6 +9,7 @@ import {
+   MessageCircle,
+   Inbox,
+   Sparkles,
++  LayoutDashboard,
+ } from "lucide-react";
+ import { useCompany } from "../context/CompanyContext";
+ import { useDialogActions } from "../context/DialogContext";
+@@ -35,6 +36,8 @@ interface MobileNavLinkItem {
+   ariaLabel?: string;
+   icon: typeof House;
+   badge?: number;
++  /** Correspondance exacte : évite que /atelier reste actif sur /atelier/accueil. */
++  end?: boolean;
+ }
+ 
+ interface MobileNavActionItem {
+@@ -59,7 +62,7 @@ export function MobileBottomNav({ visible }: MobileBottomNavProps) {
+   });
+   const atelierPret = atelierDisponible(contributionsPlugins);
+   const inboxBadge = useInboxBadge(selectedCompanyId);
+-  // Mode simple de l'atelier : la barre se réduit à Atelier · Nouvelle tâche · À faire.
++  // Mode simple de l'atelier : la barre se réduit à Atelier · Nouvelle tâche · À faire · Menu.
+   // Le mode expert (interrupteur de la barre latérale) rend les entrées d'origine.
+   const { expert: modeExpert } = useModeExpert(selectedCompanyId);
+   const modeSimple = atelierPret && !modeExpert;
+@@ -73,7 +76,7 @@ export function MobileBottomNav({ visible }: MobileBottomNavProps) {
+   // tracks the live count, so the bar stays evenly divided in every mix.
+   const accueil = useMemo<MobileNavLinkItem>(
+     () => atelierPret
+-      ? { type: "link", to: `/${CHEMIN_PAGE_ATELIER}`, label: "Atelier", icon: Sparkles }
++      ? { type: "link", to: `/${CHEMIN_PAGE_ATELIER}`, label: "Atelier", icon: Sparkles, end: true }
+       : { type: "link", to: "/dashboard", label: "Accueil", icon: House },
+     [atelierPret],
+   );
+@@ -89,17 +92,19 @@ export function MobileBottomNav({ visible }: MobileBottomNavProps) {
+   );
+   const items = useMemo<MobileNavItem[]>(
+     () => modeSimple ? [
+-      // « Atelier » prend la place de « Tâches » (c'est déjà l'accueil) ; « À faire »
+-      // remplace « Boîte de réception » et mène aussi à l'accueil de l'atelier.
++      // « Atelier » prend la place de « Tâches » ; « À faire » remplace « Boîte de
++      // réception » (rubrique À faire de l'atelier) ; « Menu » sort de l'atelier
++      // vers le tableau de bord. Un seul onglet est actif à la fois.
+       accueil,
+       nouvelleTache,
+       {
+         type: "link",
+-        to: `/${CHEMIN_PAGE_ATELIER}`,
++        to: `/${CHEMIN_PAGE_ATELIER}/accueil`,
+         label: "À faire",
+         icon: Inbox,
+         badge: inboxBadge.inbox,
+       },
++      { type: "link", to: "/dashboard", label: "Menu", ariaLabel: "Menu : tableau de bord", icon: LayoutDashboard },
+     ] : !agentChatEnabled && !combinedInboxTasksEnabled ? [
+       accueil,
+       { type: "link", to: "/issues", label: "Tâches", icon: CircleCheck },
+@@ -176,6 +181,7 @@ export function MobileBottomNav({ visible }: MobileBottomNavProps) {
+             <NavLink
+               key={item.label}
+               to={item.to}
++              end={item.end}
+               aria-label={item.ariaLabel}
+               state={SIDEBAR_SCROLL_RESET_STATE}
+               className={({ isActive }) =>
+-- 
+2.53.0
+

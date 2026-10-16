@@ -4,7 +4,10 @@ slug: "comparaison-offres"
 name: "Comparaison offres"
 title: "Achats · Comparaison d'offres fournisseurs"
 reportsTo: "coordinateur-achats"
-skills: []
+skills:
+  - "comparaison-offres-fournisseurs"
+  - "cahier-des-charges-achat"
+  - "contrat-fournisseur"
 ---
 
 # Comparaison d'offres fournisseurs

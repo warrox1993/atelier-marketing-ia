@@ -1,0 +1,405 @@
+From f2aa184b9dda5b7380fa277a15ee31bf4185249e Mon Sep 17 00:00:00 2001
+From: Jean-Baptiste Dhondt <114347858+warrox1993@users.noreply.github.com>
+Date: Fri, 16 Oct 2026 20:44:41 +0200
+Subject: [PATCH 60/62] =?UTF-8?q?UI=20:=20traductions=20fran=C3=A7aises=20?=
+ =?UTF-8?q?(statuts,=20fil=20d'Ariane),=20bouton=20Retour=20accessible=20(?=
+ =?UTF-8?q?WCAG=202.5.3),=20garde=20de=20boucle=20limit=C3=A9e=20aux=20sur?=
+ =?UTF-8?q?faces=20plugin?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01DP85vPq2MHkZg8VNtRvCzB
+---
+ .../components/BreadcrumbBar.production.tsx   |  2 +-
+ ui/src/components/BreadcrumbBar.test.tsx      |  4 +-
+ ui/src/components/BreadcrumbBar.tsx           |  2 +-
+ ui/src/components/CaseChildrenTree.test.tsx   |  2 +-
+ .../CompanySettingsSidebar.test.tsx           |  2 +-
+ .../ContextualSidebarFrame.test.tsx           | 35 +++++++++--
+ ui/src/components/ContextualSidebarFrame.tsx  | 12 ++--
+ ui/src/components/IssueCasesPanel.test.tsx    |  2 +-
+ ui/src/components/Layout.test.tsx             |  3 +
+ .../SkillsContextualSidebar.test.tsx          |  2 +-
+ ui/src/components/StatusBadge.test.tsx        | 12 ++--
+ ui/src/components/StatusBadge.tsx             | 61 ++++++++++++++++---
+ ui/src/components/StatusIcon.test.tsx         |  4 +-
+ 13 files changed, 110 insertions(+), 33 deletions(-)
+
+diff --git a/ui/src/components/BreadcrumbBar.production.tsx b/ui/src/components/BreadcrumbBar.production.tsx
+index 19f8c4698..a140c1ff2 100644
+--- a/ui/src/components/BreadcrumbBar.production.tsx
++++ b/ui/src/components/BreadcrumbBar.production.tsx
+@@ -76,7 +76,7 @@ export function BreadcrumbBar() {
+       size="icon-sm"
+       className="mr-2 size-11 shrink-0"
+       onClick={toggleSidebar}
+-      aria-label="Open sidebar"
++      aria-label="Ouvrir le menu"
+     >
+       <Menu className="h-5 w-5" />
+     </Button>
+diff --git a/ui/src/components/BreadcrumbBar.test.tsx b/ui/src/components/BreadcrumbBar.test.tsx
+index dccbd437a..4329af745 100644
+--- a/ui/src/components/BreadcrumbBar.test.tsx
++++ b/ui/src/components/BreadcrumbBar.test.tsx
+@@ -156,9 +156,9 @@ describe("BreadcrumbBar", () => {
+     expect(identifier?.textContent).toBe("TES-3");
+     expect(identifier?.previousElementSibling?.textContent).toBe("Hire your first engineer and create a hiring plan");
+     expect(identifier?.previousElementSibling?.className).toContain("truncate");
+-    expect(container.querySelector('button[aria-label="Open sidebar"]')).not.toBeNull();
++    expect(container.querySelector('button[aria-label="Ouvrir le menu"]')).not.toBeNull();
+     // Cible tactile : 44 px (size-11) au lieu des 36 px de size-9.
+-    const burger = container.querySelector('button[aria-label="Open sidebar"]') as HTMLElement;
++    const burger = container.querySelector('button[aria-label="Ouvrir le menu"]') as HTMLElement;
+     expect(burger.className).toContain("size-11");
+     expect(burger.className).not.toContain("size-9");
+   });
+diff --git a/ui/src/components/BreadcrumbBar.tsx b/ui/src/components/BreadcrumbBar.tsx
+index 6b4625e7a..f16b2075f 100644
+--- a/ui/src/components/BreadcrumbBar.tsx
++++ b/ui/src/components/BreadcrumbBar.tsx
+@@ -102,7 +102,7 @@ export function BreadcrumbBar({ taskDetailLayout = false }: { taskDetailLayout?:
+       size="icon-sm"
+       className="mr-2 size-11 shrink-0"
+       onClick={toggleSidebar}
+-      aria-label="Open sidebar"
++      aria-label="Ouvrir le menu"
+     >
+       <Menu className="h-5 w-5" />
+     </Button>
+diff --git a/ui/src/components/CaseChildrenTree.test.tsx b/ui/src/components/CaseChildrenTree.test.tsx
+index 317d49ba6..bdd2e8aa6 100644
+--- a/ui/src/components/CaseChildrenTree.test.tsx
++++ b/ui/src/components/CaseChildrenTree.test.tsx
+@@ -74,7 +74,7 @@ describe("CaseChildrenTree", () => {
+     expect(text).not.toContain("launch/post");
+     expect(text).toContain("blog_post");
+     // StatusBadge renders the status with underscores as spaces.
+-    expect(text).toContain("in review");
++    expect(text).toContain("En revue");
+     expect(text).toContain("Hero image");
+     expect(container.querySelector('a[href="/PAP/cases/PAP-C8"]')).not.toBeNull();
+     expect(container.querySelector('a[href="/PAP/cases/PAP-C9"]')).not.toBeNull();
+diff --git a/ui/src/components/CompanySettingsSidebar.test.tsx b/ui/src/components/CompanySettingsSidebar.test.tsx
+index 0c3cb7682..5aa82e420 100644
+--- a/ui/src/components/CompanySettingsSidebar.test.tsx
++++ b/ui/src/components/CompanySettingsSidebar.test.tsx
+@@ -142,7 +142,7 @@ describe("CompanySettingsSidebar", () => {
+ 
+     expect(container.textContent).not.toContain("Paperclip");
+     expect(container.textContent).not.toContain("Paramètres");
+-    expect(container.querySelector('[aria-label="Back from Settings"]')).toBeNull();
++    expect(container.querySelector('[aria-label="Retour au menu principal (quitter Settings)"]')).toBeNull();
+     const settingsSurface = container.querySelector('[data-contextual-sidebar="settings"]');
+     expect(settingsSurface?.classList).toContain("primary-sidebar-surface");
+     expect(container.querySelector('[data-slot="contextual-sidebar-nav"]')?.className).toBe(
+diff --git a/ui/src/components/ContextualSidebarFrame.test.tsx b/ui/src/components/ContextualSidebarFrame.test.tsx
+index 008adb75c..2746d38b3 100644
+--- a/ui/src/components/ContextualSidebarFrame.test.tsx
++++ b/ui/src/components/ContextualSidebarFrame.test.tsx
+@@ -56,11 +56,11 @@ describe("ContextualSidebarFrame", () => {
+ 
+   it("renders the contextual identity and uses a safe fallback", () => {
+     const root = render();
+-    expect(container.textContent).toContain("Paperclip");
++    expect(container.querySelector('[data-testid="contextual-company-switcher"]')?.textContent).toContain("Paperclip");
+     expect(container.textContent).toContain("Settings");
+ 
+     act(() => {
+-      container.querySelector<HTMLButtonElement>('button[aria-label="Back from Settings"]')?.click();
++      container.querySelector<HTMLButtonElement>('button[aria-label="Retour au menu principal (quitter Settings)"]')?.click();
+     });
+     expect(mockNavigate).toHaveBeenCalledWith("/dashboard");
+     act(() => root.unmount());
+@@ -84,12 +84,35 @@ describe("ContextualSidebarFrame", () => {
+     const root = render();
+ 
+     act(() => {
+-      container.querySelector<HTMLButtonElement>('button[aria-label="Back from Settings"]')?.click();
++      container.querySelector<HTMLButtonElement>('button[aria-label="Retour au menu principal (quitter Settings)"]')?.click();
+     });
+     expect(mockNavigate).toHaveBeenCalledWith("/PAP/issues/task-1");
+     act(() => root.unmount());
+   });
+ 
++  it("depuis la fiche d'un agent, Retour renvoie à la liste filtrée d'origine, pas au repli", () => {
++    rememberContextualSidebarOrigin({
++      surface: "agent",
++      companyPrefix: "PAP",
++      previousPathname: "/PAP/agents/paused",
++    });
++    window.history.pushState({}, "", "/PAP/agents/x");
++    const root = createRoot(container);
++    act(() => {
++      root.render(
++        <ContextualSidebarFrame surface="agent" title="Agent">
++          <nav>Agent links</nav>
++        </ContextualSidebarFrame>,
++      );
++    });
++    act(() => {
++      container.querySelector<HTMLButtonElement>('button[aria-label="Retour au menu principal (quitter Agent)"]')?.click();
++    });
++    expect(mockNavigate).toHaveBeenCalledWith("/PAP/agents/paused");
++    window.history.pushState({}, "", "/");
++    act(() => root.unmount());
++  });
++
+   it("can omit contextual identity when the breadcrumb already provides it", () => {
+     const root = createRoot(container);
+     act(() => {
+@@ -101,7 +124,7 @@ describe("ContextualSidebarFrame", () => {
+     });
+ 
+     expect(container.textContent).toBe("Skill links");
+-    expect(container.querySelector('[aria-label="Back from Skills"]')).toBeNull();
++    expect(container.querySelector('[aria-label="Retour au menu principal (quitter Skills)"]')).toBeNull();
+     act(() => root.unmount());
+   });
+ 
+@@ -119,7 +142,7 @@ describe("ContextualSidebarFrame", () => {
+       );
+     });
+     act(() => {
+-      container.querySelector<HTMLButtonElement>('button[aria-label="Back from Atelier"]')?.click();
++      container.querySelector<HTMLButtonElement>('button[aria-label="Retour au menu principal (quitter Atelier)"]')?.click();
+     });
+     expect(mockNavigate).toHaveBeenCalledWith("/dashboard");
+     act(() => root.unmount());
+@@ -140,7 +163,7 @@ describe("ContextualSidebarFrame", () => {
+       );
+     });
+     act(() => {
+-      container.querySelector<HTMLButtonElement>('button[aria-label="Back from Atelier marketing"]')?.click();
++      container.querySelector<HTMLButtonElement>('button[aria-label="Retour au menu principal (quitter Atelier marketing)"]')?.click();
+     });
+     expect(mockNavigate).toHaveBeenCalledWith("/dashboard");
+     act(() => root.unmount());
+diff --git a/ui/src/components/ContextualSidebarFrame.tsx b/ui/src/components/ContextualSidebarFrame.tsx
+index 6e12e540d..72ba605e8 100644
+--- a/ui/src/components/ContextualSidebarFrame.tsx
++++ b/ui/src/components/ContextualSidebarFrame.tsx
+@@ -41,9 +41,13 @@ export function ContextualSidebarFrame({
+     // surface courante ne sort de rien, les deux fabriquent une boucle ; on prend alors le repli.
+     const segments = getCompanyPathSegments(target, companyPrefix);
+     const surfaceSegment = surface.startsWith("plugin:") ? surface.slice("plugin:".length).toLowerCase() : null;
+-    // Le nom du créneau (« atelier-navigation ») diffère de la route (« atelier ») : on compare donc
+-    // aussi au premier segment de la page affichée, qui appartient forcément à la surface courante.
+-    const currentSegment = getCompanyPathSegments(window.location.pathname, companyPrefix)[0]?.toLowerCase();
++    // Le nom du créneau (« atelier-navigation ») diffère de la route (« atelier ») : pour les surfaces
++    // `plugin:*` seulement, on compare aussi au premier segment de la page affichée, qui appartient
++    // forcément à la surface. Ailleurs (fiche d'un agent ouverte depuis une liste filtrée), le même
++    // segment est légitime : « agents/paused » est une vraie origine, pas une boucle.
++    const currentSegment = surfaceSegment !== null
++      ? getCompanyPathSegments(window.location.pathname, companyPrefix)[0]?.toLowerCase()
++      : undefined;
+     const targetSegment = segments[0]?.toLowerCase();
+     const isLoop = target !== fallbackTo
+       && (isCompanyRootPath(target, companyPrefix)
+@@ -65,7 +69,7 @@ export function ContextualSidebarFrame({
+               type="button"
+               onClick={goBack}
+               className="flex items-center gap-1.5 rounded-md border border-border bg-background px-2 py-1.5 text-left text-sm font-medium text-foreground transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+-              aria-label={`Back from ${title}`}
++              aria-label={`Retour au menu principal (quitter ${title})`}
+             >
+               {/* Seule sortie de la barre contextuelle : libellé explicite, l'ancien nom d'entreprise en gris passait inaperçu. */}
+               <ChevronLeft className="h-4 w-4 shrink-0" aria-hidden="true" />
+diff --git a/ui/src/components/IssueCasesPanel.test.tsx b/ui/src/components/IssueCasesPanel.test.tsx
+index b9d88c9a5..46b43f246 100644
+--- a/ui/src/components/IssueCasesPanel.test.tsx
++++ b/ui/src/components/IssueCasesPanel.test.tsx
+@@ -89,7 +89,7 @@ describe("IssueCasesPanel", () => {
+     expect(text).toContain("PAP-C7");
+     expect(text).toContain("Launch post");
+     expect(text).toContain("work");
+-    expect(text).toContain("in review");
++    expect(text).toContain("En revue");
+     expect(container.querySelector('a[href="/PAP/cases/PAP-C7"]')).not.toBeNull();
+     act(() => root.unmount());
+   });
+diff --git a/ui/src/components/Layout.test.tsx b/ui/src/components/Layout.test.tsx
+index 02930a70e..04e1d1975 100644
+--- a/ui/src/components/Layout.test.tsx
++++ b/ui/src/components/Layout.test.tsx
+@@ -41,6 +41,9 @@ const mockSidebarState = vi.hoisted(() => ({
+ let currentPathname = "/PAP/dashboard";
+ 
+ vi.mock("@/lib/router", () => ({
++  Link: ({ to, children, ...props }: { to: string; children?: React.ReactNode } & Record<string, unknown>) => (
++    <a href={typeof to === "string" ? to : "#"} {...props}>{children}</a>
++  ),
+   Outlet: () => <div>Outlet content</div>,
+   useLocation: () => ({
+     pathname: currentPathname,
+diff --git a/ui/src/components/SkillsContextualSidebar.test.tsx b/ui/src/components/SkillsContextualSidebar.test.tsx
+index e934a2ffd..60697d993 100644
+--- a/ui/src/components/SkillsContextualSidebar.test.tsx
++++ b/ui/src/components/SkillsContextualSidebar.test.tsx
+@@ -59,7 +59,7 @@ describe("SkillsContextualSidebar", () => {
+     expect(container.textContent).toContain("My Skills");
+     expect(container.textContent).toContain("Skills you create, edit, and test.");
+     expect(container.textContent).not.toContain("Paperclip");
+-    expect(container.querySelector('[aria-label="Back from Skills"]')).toBeNull();
++    expect(container.querySelector('[aria-label="Retour au menu principal (quitter Skills)"]')).toBeNull();
+     expect(container.querySelector('[aria-current="page"]')?.textContent).toBe("Installed");
+ 
+     act(() => root.unmount());
+diff --git a/ui/src/components/StatusBadge.test.tsx b/ui/src/components/StatusBadge.test.tsx
+index 532cf4e92..747bc15b2 100644
+--- a/ui/src/components/StatusBadge.test.tsx
++++ b/ui/src/components/StatusBadge.test.tsx
+@@ -25,10 +25,10 @@ describe("IssueStatusBadge", () => {
+     expect(renderToStaticMarkup(<IssueStatusBadge status="todo" />)).toContain("var(--status-task-todo)");
+   });
+ 
+-  it("sentence-cases the label and uses regular weight", () => {
++  it("affiche le libellé français et utilise le poids normal", () => {
+     const html = renderToStaticMarkup(<IssueStatusBadge status="in_review" />);
+-    expect(html).toContain("In review");
+-    expect(html).not.toContain("In Review"); // sentence case, not title case
++    expect(html).toContain("En revue");
++    expect(html).not.toContain("In review");
+     expect(html).toContain("font-normal");
+     expect(html).not.toContain("font-medium");
+   });
+@@ -45,7 +45,7 @@ describe("IssueStatusBadge", () => {
+     const html = renderToStaticMarkup(<IssueStatusBadge status="todo" />);
+     expect(html).toContain("status-chip");
+     expect(html).toContain('viewBox="0 0 24 24"');
+-    expect(html).toContain("Todo");
++    expect(html).toContain("À faire");
+   });
+ });
+ 
+@@ -59,8 +59,8 @@ describe("AgentStatusBadge", () => {
+     }
+   });
+ 
+-  it('renders "active" as the idle label', () => {
+-    expect(renderToStaticMarkup(<AgentStatusBadge status="active" />)).toContain("idle");
++  it('affiche "active" avec le libellé du repos', () => {
++    expect(renderToStaticMarkup(<AgentStatusBadge status="active" />)).toContain("Au repos");
+   });
+ });
+ 
+diff --git a/ui/src/components/StatusBadge.tsx b/ui/src/components/StatusBadge.tsx
+index b514dd9bd..c09f10131 100644
+--- a/ui/src/components/StatusBadge.tsx
++++ b/ui/src/components/StatusBadge.tsx
+@@ -16,10 +16,57 @@ function scStyle(cssVar: string): CSSProperties {
+   return { "--sc": `var(${cssVar})` } as CSSProperties;
+ }
+ 
+-/** "in_review" → "In review" (sentence case). */
+-function sentenceCaseStatus(status: string): string {
+-  const s = status.replace(/_/g, " ");
+-  return s.charAt(0).toUpperCase() + s.slice(1);
++/** Libellés français des états affichés (les valeurs d'état envoyées à l'API ne changent pas). */
++const LIBELLES_STATUT: Record<string, string> = {
++  backlog: "À planifier",
++  todo: "À faire",
++  in_progress: "En cours",
++  in_review: "En revue",
++  blocked: "Bloqué",
++  done: "Terminé",
++  cancelled: "Annulé",
++  active: "Actif",
++  running: "En cours d'exécution",
++  scheduled_retry: "Nouvel essai planifié",
++  paused: "En pause",
++  idle: "Au repos",
++  archived: "Archivé",
++  planned: "Planifié",
++  achieved: "Atteint",
++  completed: "Terminé",
++  failed: "Échec",
++  timed_out: "Délai dépassé",
++  succeeded: "Réussi",
++  ok: "OK",
++  warning: "Avertissement",
++  error: "Erreur",
++  info: "Information",
++  terminated: "Arrêté",
++  pending: "En attente",
++  queued: "En file d'attente",
++  pending_approval: "En attente d'approbation",
++  revision_requested: "Révision demandée",
++  approved: "Approuvé",
++  rejected: "Refusé",
++  draft: "Brouillon",
++  allowed: "Autorisé",
++  denied: "Refusé",
++  block: "Bloqué",
++  "require-approval": "Approbation requise",
++  redacted: "Masqué",
++  "rate-limit": "Limite de débit",
++  deferred: "Différé",
++  hidden: "Caché",
++  quarantined: "En quarantaine",
++  "runtime-error": "Erreur d'exécution",
++  healthy: "En bonne santé",
++  degraded: "Dégradé",
++  unchecked: "Non vérifié",
++};
++
++/** "in_progress" → "En cours" ; état inconnu : valeur brute sans soulignés. */
++function libelleStatut(status: string): string {
++  return LIBELLES_STATUT[status] ?? status.replace(/[_-]/g, " ");
+ }
+ 
+ /**
+@@ -35,7 +82,7 @@ export function StatusBadge({ status, label }: { status: string; label?: string
+         statusBadge[status] ?? statusBadgeDefault
+       )}
+     >
+-      {label ?? status.replace(/[_-]/g, " ")}
++      {label ?? libelleStatut(status)}
+     </span>
+   );
+ }
+@@ -53,7 +100,7 @@ export function AgentStatusBadge({ status }: { status: string }) {
+       className="status-chip inline-flex items-center rounded-full border px-3 py-1 text-xs font-medium leading-none whitespace-nowrap shrink-0"
+       style={scStyle(cssVar)}
+     >
+-      {label.replace(/_/g, " ")}
++      {libelleStatut(label)}
+     </span>
+   );
+ }
+@@ -95,7 +142,7 @@ export function IssueStatusBadge({ status: taskStatus, externalConversationState
+       style={scStyle(cssVar)}
+     >
+       <StatusGlyph status={status} size="sm" />
+-      {sentenceCaseStatus(status)}
++      {libelleStatut(status)}
+     </span>
+   );
+ }
+diff --git a/ui/src/components/StatusIcon.test.tsx b/ui/src/components/StatusIcon.test.tsx
+index 14a3a64d8..985e141a1 100644
+--- a/ui/src/components/StatusIcon.test.tsx
++++ b/ui/src/components/StatusIcon.test.tsx
+@@ -126,7 +126,7 @@ describe("Slack idle status presentation", () => {
+     const props = { status: "in_review", externalConversationState: "waiting" as const };
+     expect(renderToStaticMarkup(<StatusIcon {...props} showLabel />)).toContain(">Idle<");
+     expect(renderToStaticMarkup(<StatusIcon {...props} onChange={() => {}} />)).toContain('current: Idle');
+-    expect(renderToStaticMarkup(<IssueStatusBadge {...props} />)).toContain(">Idle<");
++    expect(renderToStaticMarkup(<IssueStatusBadge {...props} />)).toContain(">Au repos<");
+   });
+ 
+   it.each(["in_review", "blocked", "done", "cancelled"])("preserves %s without verified waiting", (status) => {
+@@ -135,7 +135,7 @@ describe("Slack idle status presentation", () => {
+   });
+ 
+   it("preserves an explicit terminal outcome even with stale waiting data", () => {
+-    expect(renderToStaticMarkup(<IssueStatusBadge status="done" externalConversationState="waiting" />)).toContain(">Done<");
++    expect(renderToStaticMarkup(<IssueStatusBadge status="done" externalConversationState="waiting" />)).toContain(">Terminé<");
+   });
+ 
+   it("donne une zone tactile de 44 px sous md au bouton de statut, sans changer l'icône", () => {
+-- 
+2.53.0
+

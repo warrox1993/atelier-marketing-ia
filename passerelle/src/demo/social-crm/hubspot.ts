@@ -5,16 +5,10 @@
 import * as z from "zod";
 import type { ContactCrm, TransactionCrm } from "../modele/index.js";
 import type { FournisseurService } from "../../fournisseurs.js";
+import { definitionsHubspot } from "../../commun/social-crm/hubspot.js";
+import { SchemaDate } from "../modele/index.js";
 import { contactsPeriode, derniereModification, exigerContact, transactionsPeriode } from "./crm-commun.js";
 import { decoderDecalage, formeAu, formePeriode, minuitIso, outilLecture, outilMutation, trancher } from "./utilitaires.js";
-
-const LIMITE_DEFAUT = 10;
-const LIMITE_MAX = 100;
-
-const formePagination = {
-  limit: z.number().int().min(1).max(LIMITE_MAX).default(LIMITE_DEFAUT).describe("Résultats par page (10 par défaut, 100 au plus)."),
-  after: z.string().max(20).optional().describe("Curseur `paging.next.after` de la page précédente."),
-};
 
 /** Statut de prospect HubSpot déduit de l'étape du cycle de vie (hs_lead_status, valeurs internes par défaut). */
 const STATUT_PROSPECT: Record<ContactCrm["cycleDeVie"], string | null> = {
@@ -82,6 +76,8 @@ function pagination(chemin: string, suivant: number | null, limite: number): { p
   return { paging: { next: { after: String(suivant), link: `https://api.hubapi.com/crm/v3/objects/${chemin}?limit=${limite}&after=${suivant}` } } };
 }
 
+const DEFS = definitionsHubspot(SchemaDate);
+
 export function fournisseurHubspot(): FournisseurService {
   const contacts = outilLecture(
     {
@@ -90,7 +86,7 @@ export function fournisseurHubspot(): FournisseurService {
         "Contacts HubSpot créés sur une période, forme de GET /crm/v3/objects/contacts : results[] (id, properties dont " +
         "lifecyclestage, hs_lead_status, hs_analytics_source, createdAt, updatedAt, archived) et paging.next.after. " +
         "Chaque contact est une demande de diagnostic ; les contacts hors zone (Herstal) restent au stade lead.",
-      schemaEntree: { ...formePeriode, ...formeAu, ...formePagination },
+      schemaEntree: DEFS.crm_contacts.schemaEntree,
     },
     ({ debut, fin, au, limit, after }) => {
       const tranche = trancher(contactsPeriode(debut, fin, au), decoderDecalage(after), limit);
@@ -105,7 +101,7 @@ export function fournisseurHubspot(): FournisseurService {
         "Affaires HubSpot (devis) créées sur une période, forme de GET /crm/v3/objects/deals : results[] (id, properties dont " +
         "dealname, amount, dealstage, pipeline, createdate, closedate ; associations.contacts) et paging.next.after. " +
         "Étapes : contractsent (devis envoyé), closedwon, closedlost.",
-      schemaEntree: { ...formePeriode, ...formeAu, ...formePagination },
+      schemaEntree: DEFS.crm_transactions.schemaEntree,
     },
     ({ debut, fin, au, limit, after }) => {
       const tranche = trancher(transactionsPeriode(debut, fin, au), decoderDecalage(after), limit);
@@ -118,11 +114,8 @@ export function fournisseurHubspot(): FournisseurService {
     {
       nom: "crm_modifier_contact",
       description: "Prépare la modification de propriétés d'un contact HubSpot (par exemple lifecyclestage ou hs_lead_status).",
-      schemaEntree: {
-        contact_id: z.string().regex(/^\d{1,20}$/, "identifiant numérique attendu").describe("Identifiant du contact (champ `id` de crm_contacts)."),
-        properties: z.record(z.string().regex(/^[a-z][a-z0-9_]{0,63}$/), z.string().max(500)).describe("Propriétés à modifier, valeurs en texte (comme PATCH /crm/v3/objects/contacts/{id})."),
-      },
-      destructif: false,
+      schemaEntree: DEFS.crm_modifier_contact.schemaEntree,
+      destructif: DEFS.crm_modifier_contact.destructif,
       requeteReelle: "PATCH /crm/v3/objects/contacts/{contactId}",
       resume: (a) => `modification de ${Object.keys(a.properties).length} propriété(s) du contact ${a.contact_id}.`,
     },

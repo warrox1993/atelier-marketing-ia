@@ -12,7 +12,7 @@
 // `fichierEtat`, les clients enregistrés et les EMPREINTES SHA-256 des jetons
 // (jamais les jetons eux-mêmes) survivent au redémarrage ; le fichier est en 0600.
 
-import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import { chmodSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import type { IncomingMessage, ServerResponse } from "node:http";
@@ -34,20 +34,9 @@ export const PORTEE_DEMONSTRATION = "demonstration";
 // PKCE (RFC 7636)
 // ---------------------------------------------------------------------------
 
-const MOTIF_VERIFICATEUR = /^[A-Za-z0-9\-._~]{43,128}$/;
-const MOTIF_CHALLENGE = /^[A-Za-z0-9\-_]{43}$/;
-
-export function calculerChallengeS256(verificateur: string): string {
-  return createHash("sha256").update(verificateur, "ascii").digest("base64url");
-}
-
-/** Vrai si `verificateur` correspond à `challenge` selon la méthode S256 (comparaison à temps constant). */
-export function verifierPkceS256(verificateur: string, challenge: string): boolean {
-  if (!MOTIF_VERIFICATEUR.test(verificateur) || !MOTIF_CHALLENGE.test(challenge)) return false;
-  const attendu = Buffer.from(calculerChallengeS256(verificateur), "utf8");
-  const recu = Buffer.from(challenge, "utf8");
-  return attendu.length === recu.length && timingSafeEqual(attendu, recu);
-}
+// Définies dans src/commun/pkce.ts (partagées avec les connecteurs réels), ré-exportées ici.
+export { calculerChallengeS256, verifierPkceS256 } from "./commun/pkce.js";
+import { calculerChallengeS256, MOTIF_CHALLENGE, verifierPkceS256 } from "./commun/pkce.js";
 
 // ---------------------------------------------------------------------------
 // Enregistrement dynamique de client (RFC 7591)

@@ -215,7 +215,7 @@ export function creerBase(db: Db) {
       companyId,
       maxRunsActifs: r ? Number(r.max_runs_actifs) : LIMITES.maxRunsActifsParDefaut,
       maxCyclesCorrection: r ? Number(r.max_cycles_correction) : LIMITES.maxCyclesCorrectionParDefaut,
-      modeParDefaut: (r?.mode_par_defaut as "demonstration" | "reel" | undefined) ?? "demonstration",
+      modeParDefaut: (r?.mode_par_defaut as "demonstration" | "reel" | undefined) ?? "reel",
       retentionJours: r ? Number(r.retention_jours) : 365,
       plafondPub: r ? plafondDepuisLigne(r.plafond_pub_type, r.plafond_pub_cents, r.plafond_pub_decide_par, r.plafond_pub_decide_le) : null,
       modifieLe: r ? iso(r.modifie_le) : new Date(0).toISOString(),

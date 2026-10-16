@@ -4,7 +4,8 @@ slug: "accueil"
 name: "Accueil"
 title: "RH · Accueil et intégration"
 reportsTo: "coordinateur-rh"
-skills: []
+skills:
+  - "accueil-nouveau-collaborateur"
 ---
 
 # Accueil et intégration

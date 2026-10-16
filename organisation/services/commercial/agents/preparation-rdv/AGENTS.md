@@ -4,7 +4,7 @@ slug: "preparation-rdv"
 name: "Preparation rdv"
 title: "Commercial · Préparation de rendez-vous"
 reportsTo: "coordinateur-commercial"
-skills: []
+skills: ["preparation-rendez-vous-b2b"]
 ---
 
 # Préparation de rendez-vous

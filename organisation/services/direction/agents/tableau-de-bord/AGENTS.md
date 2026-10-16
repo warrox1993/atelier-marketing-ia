@@ -4,7 +4,8 @@ slug: "tableau-de-bord"
 name: "Tableau de bord"
 title: "Direction · Tableau de bord de pilotage"
 reportsTo: "coordinateur-direction"
-skills: []
+skills:
+  - "tableau-de-bord-pme"
 ---
 
 # Tableau de bord de pilotage

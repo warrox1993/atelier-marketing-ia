@@ -1,0 +1,167 @@
+From 3722f2d3301df3879e4504436aadb24317f47a44 Mon Sep 17 00:00:00 2001
+From: Jean-Baptiste Dhondt <114347858+warrox1993@users.noreply.github.com>
+Date: Fri, 16 Oct 2026 20:25:32 +0200
+Subject: [PATCH 56/62] Corrige la boucle du bouton Retour au menu principal de
+ l'atelier
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+La racine d'entreprise (/COU, /COU/, /) n'est plus mémorisée ni relue comme origine,
+et goBack prend le repli si la cible est la racine ou un chemin de la surface courante.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01DP85vPq2MHkZg8VNtRvCzB
+---
+ .../ContextualSidebarFrame.test.tsx           | 20 +++++++++++
+ ui/src/components/ContextualSidebarFrame.tsx  | 17 +++++++---
+ ui/src/lib/shell-navigation.test.ts           | 33 +++++++++++++++++++
+ ui/src/lib/shell-navigation.ts                | 12 ++++++-
+ 4 files changed, 76 insertions(+), 6 deletions(-)
+
+diff --git a/ui/src/components/ContextualSidebarFrame.test.tsx b/ui/src/components/ContextualSidebarFrame.test.tsx
+index c19684755..3da625a5f 100644
+--- a/ui/src/components/ContextualSidebarFrame.test.tsx
++++ b/ui/src/components/ContextualSidebarFrame.test.tsx
+@@ -87,4 +87,24 @@ describe("ContextualSidebarFrame", () => {
+     expect(container.querySelector('[aria-label="Back from Skills"]')).toBeNull();
+     act(() => root.unmount());
+   });
++
++  it("ne boucle pas : une origine dans la surface atelier donne le repli", () => {
++    window.sessionStorage.setItem(
++      "paperclip.contextualSidebar.origin:PAP:plugin:atelier",
++      "/PAP/atelier/prospects",
++    );
++    const root = createRoot(container);
++    act(() => {
++      root.render(
++        <ContextualSidebarFrame surface="plugin:atelier" title="Atelier" fallbackTo="/dashboard">
++          <nav>Atelier links</nav>
++        </ContextualSidebarFrame>,
++      );
++    });
++    act(() => {
++      container.querySelector<HTMLButtonElement>('button[aria-label="Back from Atelier"]')?.click();
++    });
++    expect(mockNavigate).toHaveBeenCalledWith("/dashboard");
++    act(() => root.unmount());
++  });
+ });
+diff --git a/ui/src/components/ContextualSidebarFrame.tsx b/ui/src/components/ContextualSidebarFrame.tsx
+index 3821e4a4e..ea583e30c 100644
+--- a/ui/src/components/ContextualSidebarFrame.tsx
++++ b/ui/src/components/ContextualSidebarFrame.tsx
+@@ -4,6 +4,8 @@ import { useCompany } from "@/context/CompanyContext";
+ import { useSidebar } from "@/context/SidebarContext";
+ import { useNavigate } from "@/lib/router";
+ import {
++  getCompanyPathSegments,
++  isCompanyRootPath,
+   readContextualSidebarOrigin,
+   type ContextualSidebarSurface,
+ } from "@/lib/shell-navigation";
+@@ -32,11 +34,16 @@ export function ContextualSidebarFrame({
+   const { isMobile, setSidebarOpen } = useSidebar();
+ 
+   function goBack() {
+-    navigate(readContextualSidebarOrigin({
+-      surface,
+-      companyPrefix: selectedCompany?.issuePrefix,
+-      fallbackTo,
+-    }));
++    const companyPrefix = selectedCompany?.issuePrefix;
++    const target = readContextualSidebarOrigin({ surface, companyPrefix, fallbackTo });
++    // Ceinture de sécurité : la racine d'entreprise redirige vers l'atelier et un chemin de la
++    // surface courante ne sort de rien, les deux fabriquent une boucle ; on prend alors le repli.
++    const segments = getCompanyPathSegments(target, companyPrefix);
++    const surfaceSegment = surface.startsWith("plugin:") ? surface.slice("plugin:".length).toLowerCase() : null;
++    const isLoop = target !== fallbackTo
++      && (isCompanyRootPath(target, companyPrefix)
++        || (surfaceSegment !== null && segments[0]?.toLowerCase() === surfaceSegment));
++    navigate(isLoop ? fallbackTo : target);
+     if (isMobile) setSidebarOpen(false);
+   }
+ 
+diff --git a/ui/src/lib/shell-navigation.test.ts b/ui/src/lib/shell-navigation.test.ts
+index 648626adc..7997ef4db 100644
+--- a/ui/src/lib/shell-navigation.test.ts
++++ b/ui/src/lib/shell-navigation.test.ts
+@@ -82,4 +82,37 @@ describe("shell navigation", () => {
+       fallbackTo: "/dashboard",
+     })).toBe("/dashboard");
+   });
++
++  it("refuse une origine réduite à la racine d'entreprise", () => {
++    for (const previousPathname of ["/PAP", "/PAP/", "/"]) {
++      rememberContextualSidebarOrigin({ surface: "settings", companyPrefix: "PAP", previousPathname });
++      expect(readContextualSidebarOrigin({
++        surface: "settings",
++        companyPrefix: "PAP",
++        fallbackTo: "/dashboard",
++      })).toBe("/dashboard");
++    }
++  });
++
++  it("rend le repli si la racine d'entreprise est déjà stockée", () => {
++    window.sessionStorage.setItem("paperclip.contextualSidebar.origin:PAP:settings", "/PAP");
++    expect(readContextualSidebarOrigin({
++      surface: "settings",
++      companyPrefix: "PAP",
++      fallbackTo: "/dashboard",
++    })).toBe("/dashboard");
++  });
++
++  it("conserve une origine profonde de l'entreprise", () => {
++    rememberContextualSidebarOrigin({
++      surface: "settings",
++      companyPrefix: "PAP",
++      previousPathname: "/PAP/issues/x",
++    });
++    expect(readContextualSidebarOrigin({
++      surface: "settings",
++      companyPrefix: "PAP",
++      fallbackTo: "/dashboard",
++    })).toBe("/PAP/issues/x");
++  });
+ });
+diff --git a/ui/src/lib/shell-navigation.ts b/ui/src/lib/shell-navigation.ts
+index c5fadd49c..4981830cf 100644
+--- a/ui/src/lib/shell-navigation.ts
++++ b/ui/src/lib/shell-navigation.ts
+@@ -65,6 +65,13 @@ function isCompanyPath(pathname: string, companyPrefix: string) {
+   return first?.toUpperCase() === companyPrefix.toUpperCase();
+ }
+ 
++/** Vrai si le chemin se réduit à la racine d'entreprise (`/COU`, `/COU/`) ou à `/` : la racine redirige vers l'atelier, donc elle ne peut pas servir d'origine. */
++export function isCompanyRootPath(pathname: string, companyPrefix: string | null | undefined) {
++  const segments = pathname.split("/").filter(Boolean);
++  if (segments.length === 0) return true;
++  return segments.length === 1 && !!companyPrefix && segments[0]?.toUpperCase() === companyPrefix.toUpperCase();
++}
++
+ export function rememberContextualSidebarOrigin({
+   surface,
+   companyPrefix,
+@@ -75,6 +82,7 @@ export function rememberContextualSidebarOrigin({
+   previousPathname: string;
+ }) {
+   if (typeof window === "undefined" || !isCompanyPath(previousPathname, companyPrefix)) return;
++  if (isCompanyRootPath(previousPathname, companyPrefix)) return;
+ 
+   try {
+     window.sessionStorage.setItem(
+@@ -99,7 +107,9 @@ export function readContextualSidebarOrigin({
+ 
+   try {
+     const stored = window.sessionStorage.getItem(contextualOriginStorageKey(surface, companyPrefix));
+-    return stored && isCompanyPath(stored, companyPrefix) ? stored : fallbackTo;
++    return stored && isCompanyPath(stored, companyPrefix) && !isCompanyRootPath(stored, companyPrefix)
++      ? stored
++      : fallbackTo;
+   } catch {
+     return fallbackTo;
+   }
+-- 
+2.53.0
+

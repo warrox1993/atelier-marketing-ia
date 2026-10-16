@@ -4,7 +4,8 @@ slug: "vigilance-clients"
 name: "Vigilance clients"
 title: "Conformité · Dossiers de vigilance clients"
 reportsTo: "coordinateur-conformite"
-skills: []
+skills:
+  - "vigilance-clientele-lbc"
 ---
 
 # Dossiers de vigilance clients

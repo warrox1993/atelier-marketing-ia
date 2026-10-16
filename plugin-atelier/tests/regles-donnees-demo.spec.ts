@@ -271,9 +271,10 @@ describe("mode effectif (règle prudente du lot L9, affichée dans la campagne)"
     expect(r.raison).toContain("entreprise en mode réel");
     expect(r.raison).toContain("déclarée en démonstration");
   });
-  it("démonstration seulement si les deux le sont ; des réglages absents ne rendent pas réel", () => {
+  it("démonstration seulement si les deux le sont ; des réglages absents suivent le défaut réel (lot G1)", () => {
     expect(calculerModeEffectif({ mode: "demonstration" }, reglages("demonstration")).mode).toBe("demonstration");
-    expect(calculerModeEffectif(null, reglages("reel", false)).mode).toBe("demonstration");
+    expect(calculerModeEffectif(null, reglages("demonstration", false)).mode).toBe("demonstration");
+    expect(calculerModeEffectif(null, reglages("reel", false)).mode).toBe("reel");
     expect(calculerModeEffectif(null, reglages("reel")).mode).toBe("reel");
   });
 });

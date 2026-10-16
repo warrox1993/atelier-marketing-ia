@@ -9,6 +9,9 @@ skills:
   - "planification-livrables"
   - "dossier-validation-humaine"
   - "recherche-connaissances"
+  - "vigilance-clientele-lbc"
+  - "veille-reglementaire"
+  - "controle-communications-reglementees"
 ---
 
 # Coordinateur du service conformité

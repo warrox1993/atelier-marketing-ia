@@ -4,7 +4,9 @@ slug: "procedures-incident"
 name: "Procedures incident"
 title: "Informatique · Procédures d'incident"
 reportsTo: "coordinateur-informatique"
-skills: []
+skills:
+  - "gestion-incident-informatique"
+  - "cybersecurite-pme"
 ---
 
 # Procédures d'incident

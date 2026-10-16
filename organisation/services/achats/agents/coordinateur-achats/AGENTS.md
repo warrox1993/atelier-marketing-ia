@@ -9,6 +9,8 @@ skills:
   - "planification-livrables"
   - "dossier-validation-humaine"
   - "recherche-connaissances"
+  - "cahier-des-charges-achat"
+  - "contrat-fournisseur"
 ---
 
 # Coordinateur du service achats
