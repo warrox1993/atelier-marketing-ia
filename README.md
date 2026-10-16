@@ -117,6 +117,7 @@ producteur reprend alors à l'étape suivante sans double effet (scénario E).
 | Matrice de traçabilité du cahier (§0 à §19) | `docs/tracabilite.md` |
 | Checklist avant utilisation réelle | `docs/checklist-usage-reel.md` |
 | Mise à jour du socle, évolution du déploiement | `docs/mise-a-jour-socle.md`, `docs/evolution-deploiement.md` |
+| Usine d'agents : 28 services, matrice des échanges, compétences, mise en place chez un client | `docs/usine-services.md` |
 
 `paperclip/` (clone amont) et `instance/` (données) ne sont pas versionnés ici. Droits :
 tous droits réservés (`LICENSE`) ; les correctifs et extraits issus de Paperclip restent sous
