@@ -7,12 +7,13 @@
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { useHostContext } from "@paperclipai/plugin-sdk/ui";
 import { LIMITES } from "../../contrats/identifiants.js";
-import type { Diagnostic, ReglagesEntreprise } from "../../contrats/campagnes.js";
-import { Champ, Bouton, EnTete, EtatErreur, Fraicheur, Horodatage, LienHote, Lecture, PastilleConnexion, Section } from "../composants.js";
+import type { Diagnostic, ReglagesEntreprise, SourcesReelles } from "../../contrats/campagnes.js";
+import { Champ, Bouton, EnTete, EtatErreur, Fraicheur, Horodatage, LienHote, Lecture, Pastille, PastilleConnexion, Section } from "../composants.js";
 import { TableauConnecteurs } from "../connecteurs.js";
 import { useAction, useDonnees } from "../donnees.js";
 import { euros } from "../format.js";
 import { ecrireBudgetNatif, lireBudgetEntreprise, lireBudgetsAgents, type BudgetNatif } from "../hote.js";
+import { appelRoute } from "../routes-prospection.js";
 import { ChoixPlafond, EngagementFaceLimite, plafondDepuisSaisie, plafondModifie, saisieDepuisPlafond, type SaisiePlafond } from "../plafonds.js";
 
 export function VueParametres() {
@@ -69,6 +70,11 @@ export function VueParametres() {
           )}
         </Lecture>
       </Section>
+      <Section titre="Sources de données réelles" aide="Mode lu sur la passerelle au moment du diagnostic ; rien n'est supposé.">
+        <Lecture r={diag} libelle="sources de données">
+          {(d) => <TableauSourcesReelles sources={d.sourcesReelles} />}
+        </Lecture>
+      </Section>
       <Section titre="Réglages de l'entreprise">
         <Lecture r={reg} libelle="réglages">
           {(d) => <FormulaireReglages reglages={d} onFait={reg.refresh} />}
@@ -95,7 +101,52 @@ export function VueParametres() {
           </li>
         </ul>
       </Section>
+      {reg.data?.modeParDefaut === "demonstration" ? <RechargerDemonstration /> : null}
       <RemiseAZero />
+    </>
+  );
+}
+
+const ETAT_PASSERELLE: Record<SourcesReelles["passerelle"], string> = {
+  joignable: "Passerelle joignable.",
+  injoignable: "Passerelle injoignable depuis le worker : le mode réel n'a pas pu être vérifié.",
+  non_configuree: "Adresse de la passerelle non configurée dans le plugin : le mode réel n'a pas pu être vérifié.",
+};
+
+function TableauSourcesReelles({ sources }: { sources: SourcesReelles | undefined }) {
+  if (!sources) return <p className="atl-vide">Le diagnostic ne contient pas encore les sources de données (worker plus ancien que cette vue).</p>;
+  return (
+    <>
+      <p className="atl-aide" role="status">
+        {ETAT_PASSERELLE[sources.passerelle]}
+      </p>
+      <div className="atl-table-cadre">
+        <table className="atl-table">
+          <caption className="atl-sr">Sources de données et mode lu sur la passerelle</caption>
+          <thead>
+            <tr>
+              <th scope="col">Source</th>
+              <th scope="col">Mode</th>
+              <th scope="col">Détail</th>
+              <th scope="col">Vérifié le</th>
+            </tr>
+          </thead>
+          <tbody>
+            {sources.sources.map((l) => (
+              <tr key={l.cle}>
+                <th scope="row">{l.nom}</th>
+                <td>
+                  <Pastille ton={l.reelle ? "succes" : "neutre"}>{l.reelle ? "Réel" : "Démonstration"}</Pastille>
+                </td>
+                <td>{l.detail}</td>
+                <td>
+                  <Horodatage iso={l.verifieLe} />
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </>
   );
 }
@@ -168,6 +219,62 @@ function FormulaireReglages({ reglages, onFait }: { reglages: ReglagesEntreprise
         Enregistrer les réglages
       </Bouton>
     </form>
+  );
+}
+
+interface CompteRenduCorpus {
+  importes: unknown[];
+  refuses: unknown[];
+  dejaImportes: unknown[];
+}
+interface CompteRenduBase {
+  lignesRetenues: number;
+  lignesRejetees: number;
+}
+
+/**
+ * Recharge les données de démonstration d'un geste : le corpus de connaissances puis la base clients.
+ * Visible seulement quand l'entreprise est en démonstration (le serveur refuse de toute façon en réel).
+ */
+function RechargerDemonstration() {
+  const { companyId } = useHostContext();
+  const [enCours, setEnCours] = useState(false);
+  const [erreur, setErreur] = useState<unknown>(null);
+  const [resultat, setResultat] = useState<string | null>(null);
+  const recharger = async () => {
+    if (!companyId) return;
+    setEnCours(true);
+    setErreur(null);
+    setResultat(null);
+    try {
+      const corpus = await appelRoute<CompteRenduCorpus>("POST", "/connaissances/demonstration", { companyId });
+      const base = await appelRoute<CompteRenduBase>("POST", "/base-clients/demonstration", { companyId });
+      setResultat(
+        `Documents : ${corpus.importes.length} importé(s), ${corpus.dejaImportes.length} déjà présent(s), ${corpus.refuses.length} refusé(s). Base clients : ${base.lignesRetenues} clients chargés, ${base.lignesRejetees} ligne(s) rejetée(s).`,
+      );
+    } catch (err) {
+      setErreur(err);
+    } finally {
+      setEnCours(false);
+    }
+  };
+  return (
+    <Section
+      titre="Recharger la démonstration"
+      aide="Importe à nouveau les documents de démonstration et remplace la base clients par celle de démonstration. Les prospects se rechargent par le script peupler-prospects.py."
+    >
+      <div>
+        <Bouton variante="principal" enCours={enCours} onClick={() => void recharger()}>
+          Recharger la démonstration
+        </Bouton>
+      </div>
+      {erreur ? <EtatErreur erreur={erreur} contexte="rechargement de la démonstration" /> : null}
+      {resultat ? (
+        <p className="atl-succes" role="status">
+          {resultat}
+        </p>
+      ) : null}
+    </Section>
   );
 }
 

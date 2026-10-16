@@ -37,10 +37,10 @@ sur une page qui la confirme, dans un budget borné, sans aucune action sur une 
 
 1. Structurer : une campagne par objectif, un groupe d'annonces par thème et page
    (structure type dans `references/structure-campagne.md`).
-2. Mots-clés : thèmes du brief, variantes locales (Liège, Ans, Outremeuse), types de
-   correspondance justifiés.
-3. Exclusions : emplois, gratuit (si l'offre n'est pas gratuite), bricolage, zones hors
-   périmètre.
+2. Mots-clés : thèmes du brief, variantes locales (communes des établissements de la marque),
+   types de correspondance justifiés.
+3. Exclusions : emplois, gratuit (si l'offre n'est pas gratuite), termes hors métier du client,
+   zones hors périmètre.
 4. Annonces : au moins deux variantes par groupe ; chaque titre et description renvoie à
    l'offre et à la page qui la confirme ; pas de superlatif invérifiable.
 5. Budget : répartition journalière et totale, inférieure au plafond, avec la marge laissée
@@ -60,14 +60,16 @@ offre/page, budget borné, approbations requises, limites.
 
 ## Limites
 
-- Aucune régie n'est connectée : pas de volumes de recherche ni de coûts par clic mesurés ;
-  toute estimation est étiquetée avec sa source et sa date.
-- Les publicités sur les aides publiques exigent une source officielle vérifiée.
+- La connexion Google Ads (lecture seule) donne les campagnes existantes et leurs résultats, pas les
+  volumes de recherche ni les coûts par clic prévisionnels : toute estimation est étiquetée avec sa
+  source et sa date, jamais présentée comme une mesure.
+- Les secteurs réglementés exigent une source officielle vérifiée (assurance : règles FSMA/IDD,
+  aucune promesse de rendement ; aides publiques : texte officiel).
 
 ## Exemple
 
-Groupe « Isolation toiture Liège » → page `/isolation-toiture`.
-Annonce A : titre « Isolation de toiture à Liège » · « Diagnostic avec visite » ·
-description « Devis détaillé après visite. Trois agences : Liège-Centre, Outremeuse, Ans. »
-Offre : « Toiture 2027 » (`demo/offres.md`). Budget : 25 € par jour pendant 45 jours,
-total 1 125 € sur un plafond de 1 500 €. État : brouillon, non activé.
+(Courtier fictif.) Groupe « Assurance habitation Namur » → page `/assurance-habitation`.
+Annonce A : titre « Assurance habitation à Namur » · « Conseil d'un courtier local » ·
+description « Comparez les garanties avec un courtier. Fiche produit à lire avant de souscrire. »
+Offre : « Assurance habitation » (marque de l'atelier). Budget : 15 € par jour pendant 30 jours,
+total 450 € sur un plafond de 500 €. État : brouillon, non activé.

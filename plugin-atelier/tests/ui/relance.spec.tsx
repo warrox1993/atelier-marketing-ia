@@ -157,7 +157,11 @@ describe("dossier : relance, rejet et diffusion", () => {
     await saisir(champParLibelle(c, "Commentaire"), "Hors sujet.");
     await cliquer(parTexte(c, "button", "Enregistrer : rejeter"));
     expect(pont.appelsActions.find((a) => a.cle === "atelier.decision")?.params).toMatchObject({ action: "rejeter" });
-    expect(fetchMock).not.toHaveBeenCalled();
+    // Seule lecture native tolérée : le nom de l'entreprise pour le bandeau (GET, aucune transition).
+    const appelsNatifs = (fetchMock.mock.calls as unknown as Array<[string, RequestInit | undefined]>).filter(
+      ([url, init]) => !(init?.method === "GET" && /^\/api\/companies\/[^/]+$/u.test(url)),
+    );
+    expect(appelsNatifs).toEqual([]);
     expect(c.textContent).toContain("annulée dans la même opération");
   });
 

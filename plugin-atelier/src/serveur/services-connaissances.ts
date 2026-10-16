@@ -80,6 +80,10 @@ export interface EntreesConnaissancesPorte {
 export interface ServicesConnaissances {
   routes: Partial<Record<CleRouteApi, GestionnaireRoute>>;
   entreesPorte(companyId: string, issueId: string, livrable: { corps: string } | null): Promise<EntreesConnaissancesPorte | undefined>;
+  /** Garde-fous de vérité : titres (sans doublon) des documents dont un passage répond à la question, sans aucune trace. */
+  rechercherTitres(companyId: string, mode: "demonstration" | "reel", question: string): Promise<string[]>;
+  /** Garde-fous de vérité : documents en vigueur, sans contenu. */
+  titresEnVigueur(companyId: string): Promise<Array<{ documentId: string; titre: string; type: string; produit: string | null; statut: string; valideAu: string | null }>>;
 }
 
 /** Métadonnées d'un fichier à importer (après validation de l'entrée). */
@@ -141,6 +145,8 @@ export function creerConnaissances(d: DependancesConnaissances): ServicesConnais
   const aujourdhui = () => dateDuJourBruxelles(maintenant());
   const files = new Map<string, Promise<unknown>>();
   let vectoriseurLocal: { dossier: string; v: Vectoriseur } | null = null;
+  /** Entreprises pour lesquelles « local » a été lu au moins une fois (avertir d'un repli ultérieur). */
+  const localDemande = new Set<string>();
 
   /** Indexations d'une entreprise l'une après l'autre (tâche de fond). */
   function enFile(companyId: string, travail: () => Promise<void>): Promise<void> {
@@ -156,6 +162,7 @@ export function creerConnaissances(d: DependancesConnaissances): ServicesConnais
     const config = await d.configEntreprise(companyId);
     const choix = config.connaissancesVectorisation;
     if (choix === "local") {
+      localDemande.add(companyId);
       // Modèle épinglé dans `plugin-atelier/.modeles` (le worker est `plugin-atelier/dist/worker.js`).
       const dossier = fileURLToPath(new URL("../.modeles", import.meta.url));
       if (vectoriseurLocal?.dossier !== dossier) {
@@ -178,14 +185,32 @@ export function creerConnaissances(d: DependancesConnaissances): ServicesConnais
       }
       const ref = config.connaissancesVoyageCle;
       const modele = "voyage-4";
+      // La clé est résolue ICI, pendant la requête : l'indexation de fond tourne après la réponse 202, quand
+      // `secrets.resolve` est refusé par l'hôte (portée d'invocation expirée). Un échec est gardé et relancé
+      // au moment de vectoriser (même message qu'avant quand la clé manque), jamais remplacé par un repli.
+      const resolue: { valeur: string } | { erreur: unknown } = await (async () => {
+        try {
+          if (!ref || typeof ref !== "object") throw new Error("Clé Voyage AI absente de la configuration (secret natif « connaissancesVoyageCle »).");
+          return { valeur: await ctx.secrets.resolve(ref as never, { companyId, configPath: "connaissancesVoyageCle" } as never) };
+        } catch (erreur) {
+          return { erreur };
+        }
+      })();
       return creerVectoriseurVoyage({
         autorise: true,
         modele,
         cle: async () => {
-          if (!ref || typeof ref !== "object") throw new Error("Clé Voyage AI absente de la configuration (secret natif « connaissancesVoyageCle »).");
-          return ctx.secrets.resolve(ref as never, { companyId, configPath: "connaissancesVoyageCle" } as never);
+          if ("erreur" in resolue) throw resolue.erreur;
+          return resolue.valeur;
         },
       });
+    }
+    // Jamais de repli silencieux : une valeur inconnue, ou « local » déjà vu puis une configuration
+    // illisible (lecture refusée par l'hôte, rendue vide par `configEntreprise`), est signalée.
+    if (choix !== undefined && choix !== null && choix !== "aucun") {
+      ctx.logger.warn("Valeur de connaissancesVectorisation inconnue : vectorisation désactivée (recherche plein texte seulement)", { companyId, valeur: String(choix).slice(0, 40) });
+    } else if (choix === undefined && localDemande.has(companyId)) {
+      ctx.logger.warn("Vectorisation « local » demandée, mais la configuration de l'entreprise est illisible ou vide : repli sur « aucun » (recherche plein texte seulement)", { companyId });
     }
     return creerVectoriseurAucun();
   }
@@ -247,8 +272,18 @@ export function creerConnaissances(d: DependancesConnaissances): ServicesConnais
 
   /* ---------------- import ---------------- */
 
+  /**
+   * Ce qui demande l'hôte (configuration, secrets), résolu PENDANT la requête : l'indexation de fond
+   * tourne après la réponse 202, quand la portée d'invocation de l'hôte a expiré (`config.get` et
+   * `secrets.resolve` y sont refusés : « missing, expired, or unknown invocation scope »).
+   */
+  interface Preparation {
+    v: Vectoriseur;
+    cle: { valeur: string } | { erreur: unknown } | null;
+  }
+
   /** Extraction, pseudonymisation, passages, vecteurs, activation ; la version passe à `indexe` ou `refuse`. */
-  async function indexer(companyId: string, doc: LigneDocument, version: LigneVersion, octets: Uint8Array, meta: Meta, ancienne: LigneVersion | null): Promise<LigneVersion> {
+  async function indexer(companyId: string, doc: LigneDocument, version: LigneVersion, octets: Uint8Array, meta: Meta, ancienne: LigneVersion | null, prep: Preparation): Promise<LigneVersion> {
     try {
       await stock.majVersion(companyId, version.id, { etatIndexation: "en_cours" });
       const extrait = await extraireDocument({ nom: NOM_EXTRACTION[meta.format], contenu: octets }, { limites: { octetsMax: LIMITES_CONNAISSANCES.importTailleMaxOctets } });
@@ -256,7 +291,9 @@ export function creerConnaissances(d: DependancesConnaissances): ServicesConnais
       if (passages.length === 0) throw new Error("Aucun passage exploitable dans le document.");
       let rapport: RapportPseudonymisation | null = null;
       if (meta.pseudonymiser) {
-        const cle = await clePseudonymes(companyId, version.mode === "reel");
+        if (!prep.cle) throw new Error("Clé de pseudonymisation non préparée.");
+        if ("erreur" in prep.cle) throw prep.cle.erreur;
+        const cle = prep.cle.valeur;
         rapport = { ...RAPPORT_VIDE };
         passages = passages.map((p) => {
           const r = pseudonymiser(p.texte, { cle });
@@ -264,7 +301,7 @@ export function creerConnaissances(d: DependancesConnaissances): ServicesConnais
           return { ...p, texte: r.texte, texte_normalise: texteNormalise(r.texte) };
         });
       }
-      const v = await vectoriseurPour(companyId);
+      const v = prep.v;
       const index = await indexPour(companyId, v);
       let vecteurs: Array<string | null> = passages.map(() => null);
       if (index) {
@@ -346,16 +383,22 @@ export function creerConnaissances(d: DependancesConnaissances): ServicesConnais
     });
 
     const v = await vectoriseurPour(doc.companyId);
+    const prep: Preparation = {
+      v,
+      cle: meta.pseudonymiser
+        ? await clePseudonymes(companyId, mode === "reel").then((valeur) => ({ valeur }), (erreur: unknown) => ({ erreur }))
+        : null,
+    };
     if (v.type !== "aucun") {
       // Avec un modèle : indexation en tâche de fond, état visible (« en file », puis « indexé » ou « refusé »).
       void enFile(companyId, async () => {
-        await indexer(companyId, doc, version, octets, meta, ancienne);
+        await indexer(companyId, doc, version, octets, meta, ancienne, prep);
       });
       return { statut: 202, corps: { document: vueDocument(doc, precedentes), version: vueVersion(version), pseudonymisation: null } };
     }
     let finale: LigneVersion = version;
     await enFile(companyId, async () => {
-      finale = await indexer(companyId, doc, version, octets, meta, ancienne);
+      finale = await indexer(companyId, doc, version, octets, meta, ancienne, prep);
     });
     const pseudo = finale.pseudonymise ? (finale.pseudonymisation as RapportPseudonymisation | null) : null;
     const versions = await stock.listerVersions(companyId, [doc.id]);
@@ -368,9 +411,27 @@ export function creerConnaissances(d: DependancesConnaissances): ServicesConnais
 
   /* ---------------- porte ---------------- */
 
+  /**
+   * Tâches dont les recherches valent pour le livrable : la tâche elle-même, sa tâche mère (cadrage, brief) et ses
+   * sous-tâches directes (revues). Un passage repris d'un verdict de relecture a donc bien été rendu par une
+   * recherche de la mission ; un passage jamais rendu reste refusé. Lecture en échec : la tâche seule.
+   */
+  async function tachesDeLaMission(companyId: string, issueId: string): Promise<string[]> {
+    const ids = new Set<string>([issueId]);
+    try {
+      const tache = await d.ctx.issues.get(issueId, companyId);
+      if (tache?.parentId) ids.add(tache.parentId);
+      const toutes = await d.ctx.issues.list({ companyId, includePluginOperations: true, limit: 500 } as never);
+      for (const i of toutes) if (i.parentId === issueId) ids.add(i.id);
+    } catch {
+      /* la tâche seule */
+    }
+    return [...ids];
+  }
+
   async function entreesPorte(companyId: string, issueId: string, livrable: { corps: string } | null): Promise<EntreesConnaissancesPorte | undefined> {
     if (!livrable) return undefined;
-    const adresses = await stock.adressesRendues(companyId, issueId);
+    const adresses = [...new Set((await Promise.all((await tachesDeLaMission(companyId, issueId)).map((id) => stock.adressesRendues(companyId, id)))).flat())];
     // La règle s'applique dès que la tâche a reçu des passages, que le livrable cite une adresse
     // `connaissance://`, ou que l'entreprise a des connaissances indexées (chiffres d'offre à sourcer).
     const actif = adresses.length > 0 || /connaissance:\/\//iu.test(livrable.corps) || (await stock.compterPassages(companyId)) > 0;
@@ -546,7 +607,8 @@ export function creerConnaissances(d: DependancesConnaissances): ServicesConnais
     if (!p.success) erreurValidation("Suppression de connaissances", p.error.issues);
     const e = p.data;
     if (e.portee.type === "document") {
-      const doc = await stock.lireDocument(r.companyId, e.portee.documentId);
+      // Suppression réelle : atteint aussi un document à la corbeille (purge, ou suppression directe).
+      const doc = await stock.lireDocument(r.companyId, e.portee.documentId, { corbeille: true });
       if (!doc) erreur("introuvable", "Document introuvable dans cette entreprise.");
       const [versions, sources, taches] = await Promise.all([
         stock.listerVersions(r.companyId, [doc.id]), stock.compterSourcesDocument(r.companyId, doc.id), stock.tachesCitant(r.companyId, doc.id),
@@ -614,5 +676,22 @@ export function creerConnaissances(d: DependancesConnaissances): ServicesConnais
     };
   };
 
-  return { routes, entreesPorte };
+  async function rechercherTitres(companyId: string, mode: "demonstration" | "reel", question: string): Promise<string[]> {
+    const resultat = await rechercherConnaissances({ executer: stock.executer, vectoriseur: await vectoriseurPour(companyId), cache, maintenant }, { companyId, mode }, { question });
+    return [...new Set(resultat.passages.map((p) => p.citation.titre))];
+  }
+
+  async function titresEnVigueur(companyId: string) {
+    const [docs, versions] = await Promise.all([stock.listerDocuments(companyId), stock.listerVersions(companyId)]);
+    const date = aujourdhui();
+    return docs.flatMap((doc) => {
+      const active = versions.find((v) => v.documentId === doc.id && v.active);
+      if (!active) return [];
+      const statut = statutEffectif(active, date);
+      if (statut !== "en_vigueur") return [];
+      return [{ documentId: doc.id, titre: doc.titre, type: doc.type, produit: doc.produit, statut, valideAu: active.valideAu }];
+    });
+  }
+
+  return { routes, entreesPorte, rechercherTitres, titresEnVigueur };
 }

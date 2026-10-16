@@ -547,7 +547,7 @@ export function routesBaseClients(d: DependancesProspection, o: OutilsProspectio
       for (let page = 1; prospects.length < 5000; page++) {
         const f = analyser(ListerProspectsEntree, { ...entree.filtres, companyId: r.companyId, page, parPage: LIMITES_PROSPECTION.pageMax }, "Filtres de l'export");
         const { lignes } = await base.listerProspects(r.companyId, f);
-        prospects.push(...(await o.assemblerLignes(r.companyId, lignes)));
+        prospects.push(...(await o.assemblerLignes(r.companyId, lignes)).filter((p) => !f.qualifiesSeulement || p.confiance?.qualifie === true));
         if (lignes.length < f.parPage) break;
       }
     }

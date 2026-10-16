@@ -16,7 +16,7 @@
  */
 import { z } from "zod";
 import { Horodatage } from "./communs.js";
-import { Marque } from "./marque.js";
+import { Marque, PositionEtablissement } from "./marque.js";
 
 /** Code stable d'un élément du référentiel (minuscules, chiffres, tirets), garde son sens d'une version à l'autre. */
 export const CodeReferentiel = z.string().regex(/^[a-z0-9][a-z0-9-]{1,39}$/u, "Code attendu : minuscules, chiffres et tirets (ex. offre-toiture)");
@@ -125,6 +125,8 @@ export const EtablissementReferentiel = z
     nom: z.string(),
     adresse: z.string().nullable(),
     confirme: z.boolean(),
+    /** Position saisie par un humain ; absente = inconnue (jamais déduite des prospects). */
+    position: PositionEtablissement.nullable().optional(),
     code: CodeReferentiel.optional(),
     communes: z.array(z.string().min(1).max(120)).max(200).optional(),
     codesPostaux: z.array(z.string().regex(/^\d{4}$/u)).max(500).optional(),

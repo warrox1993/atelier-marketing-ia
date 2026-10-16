@@ -6,6 +6,13 @@
 import { z } from "zod";
 import { Horodatage, IdNatif } from "./communs.js";
 
+/**
+ * Position géographique d'un bureau, saisie par un humain (aucune valeur n'est déduite : un bureau sans
+ * position reste sans position, jamais de centroïde de prospects, ce serait une fausse précision).
+ */
+export const PositionEtablissement = z.object({ lat: z.number().min(-90).max(90), lon: z.number().min(-180).max(180) }).strict();
+export type PositionEtablissement = z.infer<typeof PositionEtablissement>;
+
 export const Marque = z.object({
   id: IdNatif,
   companyId: IdNatif,
@@ -14,7 +21,7 @@ export const Marque = z.object({
   ton: z.string(),
   offres: z.array(z.object({ nom: z.string(), description: z.string(), confirmee: z.boolean() })),
   zones: z.array(z.string()),
-  etablissements: z.array(z.object({ nom: z.string(), adresse: z.string().nullable(), confirme: z.boolean() })),
+  etablissements: z.array(z.object({ nom: z.string(), adresse: z.string().nullable(), confirme: z.boolean(), position: PositionEtablissement.nullable().optional() })),
   affirmationsAutorisees: z.array(z.object({ texte: z.string(), sourceId: IdNatif.nullable() })),
   informationsManquantes: z.array(z.string()),
   creeLe: Horodatage,

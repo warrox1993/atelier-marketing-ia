@@ -45,6 +45,18 @@ BUREAUX = [("liege", "4000", "Liège", "10"), ("ans", "4430", "Ans", "20"), ("he
            ("waremme", "4300", "Waremme", "7"), ("spa", "4900", "Spa", "2"), ("eupen", "4700", "Eupen", "9"),
            ("vise", "4600", "Visé", "4"), ("chaudfontaine", "4050", "Chaudfontaine", "6"), ("aywaille", "4920", "Aywaille", "1")]
 
+# Centre de la commune, OpenStreetMap, 16/10/2026 : bureau fictif, position approximative
+# (moyenne des lieux de l'index OSM local pour le code postal, arrondie à 4 décimales).
+# Écrite en dur : aucun appel réseau dans ce script.
+POSITIONS = {
+    "liege": {"lat": 50.6391, "lon": 5.5696}, "ans": {"lat": 50.6594, "lon": 5.5246},
+    "herstal": {"lat": 50.6806, "lon": 5.6343}, "seraing": {"lat": 50.5875, "lon": 5.5177},
+    "verviers": {"lat": 50.5912, "lon": 5.8546}, "huy": {"lat": 50.5230, "lon": 5.2411},
+    "waremme": {"lat": 50.6927, "lon": 5.2618}, "spa": {"lat": 50.4895, "lon": 5.8596},
+    "eupen": {"lat": 50.6306, "lon": 6.0309}, "vise": {"lat": 50.7411, "lon": 5.6937},
+    "chaudfontaine": {"lat": 50.5872, "lon": 5.6427}, "aywaille": {"lat": 50.4715, "lon": 5.6965},
+}
+
 ENTITES = [
     ("courtier-non-vie", "Courtier Démo, branche non-vie (démonstration)"),
     ("courtier-vie", "Courtier Démo, branche vie (démonstration)"),
@@ -77,6 +89,7 @@ OFFRES = [
     offre("flotte-auto", "Flotte automobile", "Assurance de flotte avec remises dès 10 véhicules.", "b2b", "courtier-non-vie", ["pme", "transport"], ["assurer plusieurs véhicules"]),
     offre("accidents-travail", "Accidents du travail", "Assurance légale accidents du travail.", "b2b", "courtier-non-vie", ["pme", "independants"], ["respecter l'obligation légale"]),
 ]
+# Chaque segment : (code, libellé, type) et, en option, un 4e élément : liste des codes NACE du segment.
 SEGMENTS = [
     ("conducteurs", "Conducteurs", "type_particulier"), ("proprietaires", "Propriétaires", "type_particulier"),
     ("locataires", "Locataires", "type_particulier"), ("familles", "Familles", "type_particulier"),
@@ -89,7 +102,7 @@ SEGMENTS = [
 
 def referentiel():
     etablissements = [{"code": f"bureau-{i}", "nom": f"Bureau de {nom} (démonstration)", "adresse": f"Rue des Exemples {num}, {cp} {nom}",
-                       "confirme": True, "communes": [nom], "codesPostaux": [cp], "entites": [c for c, _ in ENTITES]} for i, cp, nom, num in BUREAUX]
+                       "confirme": True, "position": dict(POSITIONS[i]), "communes": [nom], "codesPostaux": [cp], "entites": [c for c, _ in ENTITES]} for i, cp, nom, num in BUREAUX]
     zones_bureaux = [f"bureau-{i}" for i, *_ in BUREAUX]
     return {
         "identite": ("Courtier Démo (démonstration) : courtier en assurances multi-entités en province de Liège "
@@ -101,7 +114,7 @@ def referentiel():
         "affirmationsAutorisees": [],
         "informationsManquantes": ["Numéro FSMA et mentions légales réelles du client (aucune donnée réelle dans cette démonstration)."],
         "entites": [{"code": c, "nom": n, "type": "entite_juridique", "porteePar": None, "identifiants": [], "mentionsLegales": MENTION} for c, n in ENTITES],
-        "segments": [{"code": c, "libelle": l, "type": t, "nace": []} for c, l, t in SEGMENTS],
+        "segments": [{"code": c, "libelle": l, "type": t, "nace": (seg[3] if len(seg) > 3 else [])} for seg in SEGMENTS for c, l, t in [seg[:3]]],
         "ciblesProspection": [
             {"code": "particuliers-liege", "libelle": "Particuliers de la province de Liège", "cible": "b2c",
              "segments": ["conducteurs", "proprietaires", "locataires", "familles", "seniors", "actifs"],
@@ -137,8 +150,9 @@ def regler_marque():
     # ne servent pas à décider (l'enregistrement installé peut les ignorer, voir l'affichage final).
     if actuelle and all(actuelle.get(k) == ref[k] for k in ("identite", "ton", "zones")) \
             and [o.get("nom") for o in actuelle.get("offres", [])] == [o["nom"] for o in ref["offres"]] \
-            and [e.get("nom") for e in actuelle.get("etablissements", [])] == [e["nom"] for e in ref["etablissements"]] \
-            and len(actuelle.get("entites") or []) == len(ref.get("entites") or []):
+            and [(e.get("nom"), e.get("position")) for e in actuelle.get("etablissements", [])] == [(e["nom"], e.get("position")) for e in ref["etablissements"]] \
+            and len(actuelle.get("entites") or []) == len(ref.get("entites") or []) \
+            and [(g.get("code"), g.get("nace") or []) for g in actuelle.get("segments") or []] == [(g["code"], g.get("nace") or []) for g in ref.get("segments") or []]:
         print(f"[marque] déjà réglée (version {actuelle['version']}), rien à réenregistrer.")
         return actuelle, "inchangée"
     code, rep = action("atelier.marque.enregistrer", ref)
@@ -229,4 +243,5 @@ def main():
     sys.exit(0 if ok else 1)
 
 
-main()
+if __name__ == "__main__":
+    main()

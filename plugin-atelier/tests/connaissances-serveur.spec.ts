@@ -6,12 +6,13 @@
  * Un dernier bloc fait passer le SQL réel de `base-connaissances.ts` par les règles de l'hôte.
  */
 import type { PluginContext } from "@paperclipai/plugin-sdk";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { ESPACE_BASE } from "../src/contrats/index.js";
 import { creerAiguillage } from "../src/serveur/atelier.js";
 import type { BaseAtelier } from "../src/serveur/base.js";
 import { creerStockConnaissances, type LigneDocument, type LigneIndex, type LigneVersion, type NouveauPassage, type SourceConnaissance, type StockConnaissances } from "../src/serveur/base-connaissances.js";
 import { requeteDetails, requeteIdsFiltres, requeteMotsCles } from "../src/serveur/connaissances/recherche.js";
+import type { Vectoriseur } from "../src/serveur/connaissances/vectorisation.js";
 import { creerServices } from "../src/serveur/services.js";
 import { ISSUE, PORTE_AGENT, SOC, creerBanc } from "./outils-base.js";
 
@@ -58,11 +59,12 @@ function stockMemoire() {
   const executer = async (sql: string, params: unknown[]): Promise<Record<string, unknown>[]> => {
     if (sql.includes("connaissances_index i")) return t.index.filter((i) => i.companyId === params[0] && i.actif).map((i) => ({ id: i.id, fournisseur: i.fournisseur, modele: i.modele, empreinte_modele: i.empreinteModele, dimension: i.dimension, version_index: i.versionIndex }));
     if (sql.includes("ts_rank_cd")) {
-      const question = String(params[params.length - 2]);
-      const mots = [...new Set(question.split(/[^\p{L}\p{N}]+/u).filter((m) => m.length >= 4))];
+      // Termes en JSON, seuil, limite = trois derniers paramètres (requête tolérante).
+      const mots = JSON.parse(String(params[params.length - 3])) as string[];
+      const seuil = Number(params[params.length - 2]);
       return lignesFiltrees(sql, params)
         .map(({ p }) => ({ id: p.id, score: mots.filter((m) => p.texteNormalise.includes(m)).length }))
-        .filter((x) => x.score > 0)
+        .filter((x) => x.score > 0 && x.score >= seuil)
         .sort((a, b) => b.score - a.score || a.id.localeCompare(b.id))
         .slice(0, Number(params[params.length - 1]));
     }
@@ -121,7 +123,7 @@ function stockMemoire() {
   return { stock, t };
 }
 
-function banc(o: { sourcesWeb?: string[] } = {}) {
+function banc(o: { sourcesWeb?: string[]; vectoriseur?: (companyId: string) => Promise<Vectoriseur> } = {}) {
   const b = creerBanc({ modeEntreprise: "demonstration" });
   const k = stockMemoire();
   const base = new Proxy(b.base as unknown as Ligne, {
@@ -132,13 +134,20 @@ function banc(o: { sourcesWeb?: string[] } = {}) {
           ? async () => o.sourcesWeb!.map((url, i) => ({ id: `s${i}`, mode: "reel", provenance: "web", url, service: null, outil: null, chiffres: [] }))
           : cible[cle as string],
   }) as unknown as BaseAtelier;
-  const aiguillage = creerAiguillage(b.ctx, creerServices(b.ctx, { base, connaissances: { stock: k.stock, dossierDemo: DOSSIER_DEMO, maintenant: () => MAINTENANT } }));
+  const aiguillage = creerAiguillage(b.ctx, creerServices(b.ctx, { base, connaissances: { stock: k.stock, dossierDemo: DOSSIER_DEMO, maintenant: () => MAINTENANT, ...(o.vectoriseur ? { vectoriseur: o.vectoriseur } : {}) } }));
+  /** Portée d'invocation de l'hôte : ouverte seulement pendant le traitement d'une requête. */
+  const portee = { active: false };
   async function appeler(routeKey: string, o: { params?: Record<string, string>; query?: Record<string, string | string[]>; body?: unknown; companyId?: string; agent?: boolean }) {
-    return aiguillage.traiterRequeteApi({
-      routeKey, method: "POST", path: "/x", params: o.params ?? {}, query: o.query ?? {}, body: o.body,
-      actor: o.agent ? { actorType: "agent", actorId: AGENT, agentId: AGENT, runId: "run-1" } : { actorType: "user", actorId: HUMAIN, userId: HUMAIN, runId: null },
-      companyId: o.companyId ?? SOC, headers: {},
-    } as never) as Promise<{ status: number; body: any }>; // eslint-disable-line @typescript-eslint/no-explicit-any
+    portee.active = true;
+    try {
+      return (await aiguillage.traiterRequeteApi({
+        routeKey, method: "POST", path: "/x", params: o.params ?? {}, query: o.query ?? {}, body: o.body,
+        actor: o.agent ? { actorType: "agent", actorId: AGENT, agentId: AGENT, runId: "run-1" } : { actorType: "user", actorId: HUMAIN, userId: HUMAIN, runId: null },
+        companyId: o.companyId ?? SOC, headers: {},
+      } as never)) as { status: number; body: any }; // eslint-disable-line @typescript-eslint/no-explicit-any
+    } finally {
+      portee.active = false;
+    }
   }
   const importer = (o: { texte: string; titre?: string; type?: string; companyId?: string; documentId?: string; valideDu?: string; nom?: string; agent?: boolean; pseudonymiser?: boolean }) =>
     appeler("connaissances.importer", {
@@ -153,7 +162,7 @@ function banc(o: { sourcesWeb?: string[] } = {}) {
     appeler("tache.connaissances.rechercher", { params: { issueId: o.issueId ?? ISSUE }, body: { question }, companyId: o.companyId ?? SOC, agent: o.agent ?? true });
   const livrable = (corps: string) => b.documents.set(`${ISSUE}:livrable`, { latestRevisionId: "88888888-8888-4888-8888-888888888881", latestRevisionNumber: 1, title: "Page", body: corps, updatedByAgentId: "p", createdByAgentId: "p" });
   const evaluer = async () => (await appeler("tache.porte.evaluer", { params: { issueId: ISSUE } })).body as { decision: string; motifs: Array<{ code: string; emplacement: string | null; message: string }> };
-  return { ...b, k, appeler, importer, rechercher, livrable, evaluer };
+  return { ...b, k, portee, appeler, importer, rechercher, livrable, evaluer };
 }
 
 const TARIF = "# Tarif assurance auto 2026\n\nLa prime annuelle de la responsabilité civile seule est de 648 € pour le profil de référence.\n\nLa franchise omnium est de 275 €.";
@@ -275,6 +284,23 @@ describe("porte : controlerCitationsConnaissances branché sur l'évaluation", (
     const ev = await f.evaluer();
     expect(ev.decision).toBe("REFUS");
     expect(ev.motifs.map((m) => m.code)).toContain("citation_connaissance_inconnue");
+  });
+
+  it("passage rendu à une revue du livrable (sous-tâche) : accepté ; rendu à une tâche sans lien : REFUS", async () => {
+    const f = banc();
+    f.tacheSousPorte();
+    await f.importer({ texte: TARIF });
+    const REVUE = "77777777-7777-4777-8777-777777777771";
+    const AUTRE = "77777777-7777-4777-8777-777777777772";
+    f.issues.set(REVUE, { ...f.issues.get(ISSUE)!, id: REVUE, identifier: "DEM-2", parentId: ISSUE, title: "Revue" });
+    f.issues.set(AUTRE, { ...f.issues.get(ISSUE)!, id: AUTRE, identifier: "DEM-3", parentId: null, title: "Autre mission" });
+    const autre = await f.rechercher("prime responsabilité civile", { issueId: AUTRE });
+    f.livrable(`# Offre auto\n\nPrime RC seule : 648 € par an (${autre.body.passages[0].citation.adresse}).`);
+    expect((await f.evaluer()).motifs.map((m) => m.code)).toContain("citation_connaissance_inconnue");
+    const revue = await f.rechercher("prime responsabilité civile", { issueId: REVUE });
+    f.livrable(`# Offre auto\n\nPrime RC seule : 648 € par an (${revue.body.passages[0].citation.adresse}).`);
+    const ev = await f.evaluer();
+    expect(ev.motifs.map((m) => m.code)).not.toContain("citation_connaissance_inconnue");
   });
 
   it("citation d'une version remplacée depuis : REFUS citation_connaissance_perimee", async () => {
@@ -465,7 +491,7 @@ describe("SQL de recherche : listes passées en JSON", () => {
     const id = "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
     const filtres = { dateReference: "2026-10-15", inclurePerimes: false, types: ["tarif", "faq"], produits: ["auto"], langues: ["fr", "nl"], documentIds: [id, id] };
     const requetes = [
-      requeteMotsCles(contexte, filtres, "franchise", 10),
+      requeteMotsCles(contexte, filtres, ["franchise"], 10),
       requeteIdsFiltres(contexte, filtres, id),
       requeteDetails(contexte, filtres, [id, id]),
     ];
@@ -518,5 +544,109 @@ describe("SQL des connaissances (base-connaissances.ts réelle, règles de l'hô
     await s.adressesRendues(SOC, id);
     await s.tachesCitant(SOC, id);
     await s.compterSourcesDocument(SOC, id);
+  });
+});
+
+/* ------------------------------------------------------------------ */
+/* Vectorisation : configuration lue pendant la requête, pas après     */
+/* ------------------------------------------------------------------ */
+
+describe("vectorisation : portée d'invocation de l'hôte", () => {
+  /** Faux vectoriseur « local » (dimension 1024, empreinte de 64 hexadécimaux comme l'index l'exige). */
+  const fauxLocal: Vectoriseur = {
+    type: "local", empreinte: "e".repeat(64), dimension: 1024,
+    vectoriser: async (textes) => textes.map((_, i) => Float32Array.from({ length: 1024 }, (__, j) => (j === i % 1024 ? 1 : 0.01))),
+    arreter: async () => undefined,
+  };
+
+  it("l'indexation de fond (réponse 202) garde le vectoriseur choisi pendant la requête", async () => {
+    // Comme l'hôte Paperclip : `config.get` refusé hors de la portée de la requête (« expired invocation scope »).
+    let f!: ReturnType<typeof banc>;
+    const lectures: boolean[] = [];
+    const vectoriseur = async (companyId: string): Promise<Vectoriseur> => {
+      lectures.push(f.portee.active);
+      let config: Record<string, unknown> = {};
+      try {
+        config = (await f.ctx.config.get(companyId)) ?? {};
+      } catch {
+        config = {}; // comme `configEntreprise` de services.ts
+      }
+      return config.connaissancesVectorisation === "local" ? fauxLocal : { type: "aucun", empreinte: null, dimension: 0, vectoriser: async () => { throw new Error("aucun"); }, arreter: async () => undefined };
+    };
+    f = banc({ vectoriseur });
+    (f.ctx as unknown as { config: { get: () => Promise<Record<string, unknown>> } }).config.get = async () => {
+      if (!f.portee.active) throw new Error("the worker referenced a missing, expired, or unknown invocation scope");
+      return { connaissancesVectorisation: "local" };
+    };
+    const imp = await f.importer({ texte: TARIF });
+    expect(imp.status).toBe(202);
+    await vi.waitFor(() => expect(f.k.t.versions.find((v) => v.id === imp.body.version.id)?.etatIndexation).not.toBe("en_file"), { timeout: 10_000 });
+    await vi.waitFor(() => expect(f.k.t.versions.find((v) => v.id === imp.body.version.id)?.etatIndexation).not.toBe("en_cours"), { timeout: 10_000 });
+    expect(f.k.t.versions.find((v) => v.id === imp.body.version.id)).toMatchObject({ etatIndexation: "indexe", motifRefus: null });
+    const passages = f.k.t.passages.filter((p) => p.versionId === imp.body.version.id);
+    expect(passages.length).toBeGreaterThan(0);
+    expect(passages.every((p) => typeof p.vecteurBase64 === "string" && p.indexId !== null)).toBe(true);
+    expect(f.k.t.index).toHaveLength(1);
+    expect(f.k.t.index[0]).toMatchObject({ companyId: SOC, fournisseur: "local", passagesIndexes: passages.length });
+    // Le vectoriseur n'est résolu qu'une fois, et dans la portée de la requête.
+    expect(lectures).toEqual([true]);
+  }, 20_000);
+
+  it("Voyage : la clé API est résolue pendant la requête, l'indexation de fond (202) vectorise avec elle", async () => {
+    const f = banc();
+    const ctx = f.ctx as unknown as { config: { get: () => Promise<Record<string, unknown>> }; secrets: { resolve: (...a: unknown[]) => Promise<string> } };
+    ctx.config.get = async () => {
+      if (!f.portee.active) throw new Error("the worker referenced a missing, expired, or unknown invocation scope");
+      return { connaissancesVectorisation: "voyage", connaissancesVoyageAccord: true, connaissancesVoyageCle: { type: "secret_ref", secretId: "s1" } };
+    };
+    const resolutions: boolean[] = [];
+    ctx.secrets.resolve = async () => {
+      resolutions.push(f.portee.active);
+      if (!f.portee.active) throw new Error("the worker referenced a missing, expired, or unknown invocation scope");
+      return "cle-voyage-factice";
+    };
+    const autorisations: string[] = [];
+    vi.stubGlobal("fetch", async (_url: string, init: { headers: Record<string, string>; body: string }) => {
+      autorisations.push(init.headers.authorization ?? "");
+      const { input } = JSON.parse(init.body) as { input: string[] };
+      return new Response(JSON.stringify({ data: input.map((_t, i) => ({ index: i, embedding: Array.from({ length: 1024 }, (__, j) => (j === i % 1024 ? 1 : 0.01)) })) }), { status: 200 });
+    });
+    try {
+      const imp = await f.importer({ texte: TARIF });
+      expect(imp.status).toBe(202);
+      await vi.waitFor(() => expect(f.k.t.versions.find((v) => v.id === imp.body.version.id)?.etatIndexation).toBe("indexe"), { timeout: 10_000 });
+      const passages = f.k.t.passages.filter((p) => p.versionId === imp.body.version.id);
+      expect(passages.length).toBeGreaterThan(0);
+      expect(passages.every((p) => typeof p.vecteurBase64 === "string" && p.indexId !== null)).toBe(true);
+      expect(f.k.t.index[0]).toMatchObject({ fournisseur: "voyage", passagesIndexes: passages.length });
+      // Le secret n'est résolu que dans la portée de la requête ; la clé part bien vers Voyage.
+      expect(resolutions.length).toBeGreaterThan(0);
+      expect(resolutions.every((x) => x)).toBe(true);
+      expect(autorisations.every((a) => a === "Bearer cle-voyage-factice")).toBe(true);
+      expect(f.journauxLogger.some((l) => l.includes("cle-voyage-factice"))).toBe(false);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  }, 20_000);
+
+  it("avertit quand « local » était demandé et que la configuration devient illisible (plus de repli silencieux)", async () => {
+    const f = banc();
+    f.tacheSousPorte();
+    let config: Record<string, unknown> = { connaissancesVectorisation: "local" };
+    (f.ctx as unknown as { config: { get: () => Promise<Record<string, unknown>> } }).config.get = async () => config;
+    // Modèle absent à côté des sources : la recherche échoue, mais « local » est noté comme demandé.
+    await f.rechercher("prime responsabilité civile");
+    config = {};
+    f.journauxLogger.length = 0;
+    await f.rechercher("prime responsabilité civile");
+    expect(f.journauxLogger.some((l) => l.includes("Vectorisation « local » demandée") && l.includes("repli sur « aucun »"))).toBe(true);
+  });
+
+  it("avertit d'une valeur de vectorisation inconnue", async () => {
+    const f = banc();
+    f.tacheSousPorte();
+    (f.ctx as unknown as { config: { get: () => Promise<Record<string, unknown>> } }).config.get = async () => ({ connaissancesVectorisation: "Local" });
+    await f.rechercher("prime responsabilité civile");
+    expect(f.journauxLogger.some((l) => l.includes("connaissancesVectorisation inconnue"))).toBe(true);
   });
 });

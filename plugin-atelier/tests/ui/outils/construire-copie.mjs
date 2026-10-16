@@ -10,7 +10,7 @@
 import esbuild from "esbuild";
 import { cpSync, mkdirSync, rmSync } from "node:fs";
 import path from "node:path";
-import { createPluginBundlerPresets } from "@paperclipai/plugin-sdk/bundlers";
+import { creerConfigurations } from "../../../esbuild.config.mjs";
 
 const cible = process.argv[2];
 if (!cible || !path.isAbsolute(cible)) {
@@ -18,15 +18,18 @@ if (!cible || !path.isAbsolute(cible)) {
   process.exit(2);
 }
 
-const presets = createPluginBundlerPresets({ uiEntry: "src/ui/index.tsx" });
+// Même configuration que `esbuild.config.mjs` (bannière `createRequire`, externes), sans la dupliquer.
+const configs = creerConfigurations();
 const dist = path.join(cible, "dist");
 mkdirSync(dist, { recursive: true });
 rmSync(path.join(dist, "ui"), { recursive: true, force: true });
 
 await Promise.all([
-  esbuild.build({ ...presets.esbuild.worker, outdir: dist }),
-  esbuild.build({ ...presets.esbuild.manifest, outdir: dist }),
-  esbuild.build({ ...presets.esbuild.ui, outdir: path.join(dist, "ui") }),
+  esbuild.build({ ...configs.worker, outdir: dist }),
+  esbuild.build({ ...configs.vectoriseur, outfile: path.join(dist, "processus-vectoriseur.js") }),
+  esbuild.build({ ...configs.extraction, outfile: path.join(dist, "extraction-worker.js") }),
+  esbuild.build({ ...configs.manifest, outdir: dist }),
+  esbuild.build({ ...configs.ui, outdir: path.join(dist, "ui") }),
 ]);
 cpSync("package.json", path.join(cible, "package.json"));
 cpSync("migrations", path.join(cible, "migrations"), { recursive: true });

@@ -81,6 +81,10 @@ describe("liste des documents", () => {
     lignes = [];
     const c = await ouvrir();
     expect(c.textContent).toContain("Aucun document pour le moment.");
+    expect(c.textContent).toContain("Importez les conditions générales, les fiches produit et les tarifs");
+    // Le bouton d'invitation amène au formulaire d'ajout déjà présent plus bas.
+    await cliquer(parTexte(c, "button", "Ajouter un document"));
+    expect(document.activeElement?.id).toBe("atl-ajout-document");
   });
 });
 
@@ -121,6 +125,52 @@ describe("import", () => {
     expect(c.querySelector('[role="alert"]')!.textContent).toContain("7 Mo");
     expect(parTexte(c, "button", "Choisir un fichier")).toBeTruthy();
     expect(posts()).toHaveLength(0);
+  });
+});
+
+describe("import d'une page web", () => {
+  it("le bouton ouvre un petit formulaire et envoie l'adresse, le titre, le type et la langue", async () => {
+    const c = await ouvrir();
+    expect(c.querySelector('input[type="url"]')).toBeNull();
+    await cliquer(parTexte(c, "button", "Importer une page web"));
+    await saisir(champParLibelle(c, "Adresse de la page web"), " https://www.exemple.be/assurance-auto ");
+    await saisir(champParLibelle(c, "Titre dans les connaissances"), "Page assurance auto");
+    await saisir(champParLibelle(c, "Type de la page"), "faq");
+    await saisir(champParLibelle(c, "Langue de la page"), "nl");
+    await saisir(champParLibelle(c, "Produit concerné (facultatif)"), "Auto");
+    await cliquer(parTexte(c, "button", "Importer la page"));
+    const post = posts()[0]!;
+    expect(post.url).toMatch(/\/connaissances\/page-web$/u);
+    expect(post.corps).toEqual({ companyId: ENTREPRISE, url: "https://www.exemple.be/assurance-auto", titre: "Page assurance auto", type: "faq", langue: "nl", produit: "Auto" });
+    expect(c.querySelector('[role="status"]')!.textContent).toContain("Page assurance auto");
+    expect(c.querySelector('input[type="url"]')).toBeNull();
+    // La liste est rechargée après l'import.
+    expect(appels.filter((a) => a.methode === "GET" && a.url.includes("/connaissances?")).length).toBeGreaterThanOrEqual(2);
+  });
+
+  it("n'envoie rien sans adresse valide ni titre, et explique pourquoi", async () => {
+    const c = await ouvrir();
+    await cliquer(parTexte(c, "button", "Importer une page web"));
+    await cliquer(parTexte(c, "button", "Importer la page"));
+    expect(c.textContent).toContain("Saisissez l'adresse de la page.");
+    await saisir(champParLibelle(c, "Adresse de la page web"), "ftp://exemple.be/x");
+    expect(c.textContent).toContain("doit commencer par http");
+    await saisir(champParLibelle(c, "Adresse de la page web"), "https://exemple.be/x");
+    expect(c.textContent).toContain("Donnez un titre");
+    await cliquer(parTexte(c, "button", "Importer la page"));
+    expect(posts()).toHaveLength(0);
+  });
+
+  it("affiche le refus du serveur (adresse privée) et garde le formulaire ouvert", async () => {
+    const base = serveur;
+    serveur = (m, u, b) => (u.endsWith("/connaissances/page-web") ? { statut: 422, corps: { erreur: "Adresse refusée : seules les pages publiques sont lisibles." } } : base(m, u, b));
+    const c = await ouvrir();
+    await cliquer(parTexte(c, "button", "Importer une page web"));
+    await saisir(champParLibelle(c, "Adresse de la page web"), "http://192.168.1.10/");
+    await saisir(champParLibelle(c, "Titre dans les connaissances"), "Interne");
+    await cliquer(parTexte(c, "button", "Importer la page"));
+    expect(c.querySelector('[role="alert"]')!.textContent).toContain("pages publiques");
+    expect(c.querySelector('input[type="url"]')).not.toBeNull();
   });
 });
 
@@ -179,6 +229,39 @@ describe("essai de recherche", () => {
     await chercher(c);
     expect(c.textContent).toContain("Aucune source trouvée");
     expect(c.textContent).toContain("Aucun passage au-dessus du seuil.");
+  });
+});
+
+describe("mise à la corbeille", () => {
+  it("exige un second clic « Confirmer », envoie le bon corps puis rafraîchit la liste", async () => {
+    const c = await ouvrir();
+    expect(c.textContent).toContain("Récupérable 30 jours dans la Corbeille");
+    const avant = appels.filter((a) => a.methode === "GET").length;
+    await cliquer(parTexte(c, "button", "Mettre à la corbeille"));
+    expect(posts()).toHaveLength(0);
+    await cliquer(parTexte(c, "button", "Confirmer"));
+    expect(posts()).toHaveLength(1);
+    expect(posts()[0]!.url).toMatch(/\/corbeille\/suppression$/u);
+    expect(posts()[0]!.corps).toEqual({ companyId: ENTREPRISE, type: "document", id: DOC_A });
+    expect(appels.filter((a) => a.methode === "GET").length).toBeGreaterThan(avant);
+    expect(c.textContent).not.toContain("Confirmer");
+  });
+
+  it("« Annuler » abandonne sans rien envoyer", async () => {
+    const c = await ouvrir();
+    await cliquer(parTexte(c, "button", "Mettre à la corbeille"));
+    await cliquer(parTexte(c, "button", "Annuler"));
+    expect(posts()).toHaveLength(0);
+    expect(c.textContent).not.toContain("Confirmer");
+  });
+
+  it("affiche l'erreur du serveur et garde la confirmation ouverte", async () => {
+    serveur = (m, u) => (m === "POST" ? { statut: 403, corps: { error: "Réservé à un humain." } } : { statut: 200, corps: lignes });
+    const c = await ouvrir();
+    await cliquer(parTexte(c, "button", "Mettre à la corbeille"));
+    await cliquer(parTexte(c, "button", "Confirmer"));
+    expect(c.querySelector('[role="alert"]')).not.toBeNull();
+    expect(c.textContent).toContain("Confirmer");
   });
 });
 

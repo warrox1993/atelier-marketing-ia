@@ -1,0 +1,149 @@
+From e953c164d5b5b575b589227cf99f93f9525c2540 Mon Sep 17 00:00:00 2001
+From: Jean-Baptiste Dhondt <114347858+warrox1993@users.noreply.github.com>
+Date: Thu, 15 Oct 2026 23:56:40 +0200
+Subject: [PATCH] =?UTF-8?q?feat(atelier,=20local):=20discussion=20li=C3=A9?=
+ =?UTF-8?q?e=20=C3=A0=20son=20agent,=20effort=20par=20d=C3=A9faut=20nomm?=
+ =?UTF-8?q?=C3=A9?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01DP85vPq2MHkZg8VNtRvCzB
+---
+ .../ComposerRunSettingsPicker.test.tsx        | 33 ++++++++++++++++---
+ .../task-chat/ComposerRunSettingsPicker.tsx   | 22 +++++++++----
+ 2 files changed, 44 insertions(+), 11 deletions(-)
+
+diff --git a/ui/src/components/task-chat/ComposerRunSettingsPicker.test.tsx b/ui/src/components/task-chat/ComposerRunSettingsPicker.test.tsx
+index 23efce4e8..850b796a8 100644
+--- a/ui/src/components/task-chat/ComposerRunSettingsPicker.test.tsx
++++ b/ui/src/components/task-chat/ComposerRunSettingsPicker.test.tsx
+@@ -69,6 +69,29 @@ describe("composer assignee picker", () => {
+     expect(container!.querySelector('[data-testid="task-chat-composer-model-label"]')?.textContent).toBe(label);
+   });
+ 
++  // Atelier (patch local 0016) : une discussion avec un agent reste avec cet agent.
++  it("keeps the conversation with its agent: no assignee list once an agent is assigned", async () => {
++    const onAssigneeChange = vi.fn();
++    render(onAssigneeChange, vi.fn());
++    await click("Select assignee");
++    expect(document.querySelector('[aria-label="Search assignees"]')).toBeNull();
++    const choose = document.querySelector<HTMLButtonElement>('button[aria-label="Choose assignee"]');
++    expect(choose?.disabled).toBe(true);
++    expect(onAssigneeChange).not.toHaveBeenCalled();
++  });
++
++  // Atelier (patch local 0016) : « Default » nomme l'effort réellement appliqué.
++  it.each([
++    { config: { model: "claude-opus-5", effort: "high" }, label: "Default · High" },
++    { config: { model: "claude-opus-5" }, label: "Default · Medium" },
++  ])("names the default effort ($label)", async ({ config, label }) => {
++    const defaultAgent = { ...agent, adapterType: "claude_local", adapterConfig: config } as Agent;
++    render(vi.fn(), vi.fn(), false, { settings: null, agents: new Map([[agent.id, defaultAgent]]),
++      modelOptionsOverride: [{ id: "claude-opus-5", label: "Claude Opus 5" }] });
++    await click("Select model and effort");
++    expect(document.querySelector('[data-testid="selected-effort"]')?.textContent).toBe(label);
++  });
++
+   it("does not offer effort levels for an unknown Claude default", async () => {
+     const defaultAgent = { ...agent, adapterType: "claude_local", adapterConfig: {} } as Agent;
+     render(vi.fn(), vi.fn(), false, { settings: null, agents: new Map([[agent.id, defaultAgent]]),
+@@ -123,7 +146,7 @@ describe("composer assignee picker", () => {
+   });
+ 
+   it("finds assignees by their displayed role and harness", async () => {
+-    render(vi.fn(), vi.fn());
++    render(vi.fn(), vi.fn(), false, { assigneeValue: "", currentAssigneeValue: "", options: [...options, { id: "user:me", label: "Me" }] });
+     await click("Select assignee");
+     const input = document.querySelector<HTMLInputElement>('input[aria-label="Search assignees"]');
+     expect(input).not.toBeNull();
+@@ -177,9 +200,9 @@ describe("composer assignee picker", () => {
+   it("preserves settings when the selected assignee is chosen again", async () => {
+     const onAssigneeChange = vi.fn();
+     const onSettingsChange = vi.fn();
+-    render(onAssigneeChange, onSettingsChange);
++    render(onAssigneeChange, onSettingsChange, false, { assigneeValue: "user:me", currentAssigneeValue: "user:me", options: [...options, { id: "user:me", label: "Me" }] });
+     await click("Select assignee");
+-    await click("Clippy");
++    await click("Me");
+     expect(onAssigneeChange).not.toHaveBeenCalled();
+     expect(onSettingsChange).not.toHaveBeenCalled();
+     expect(document.querySelector('[role="listbox"]')).toBeNull();
+@@ -188,7 +211,7 @@ describe("composer assignee picker", () => {
+   it("offers No assignee and clears settings when selected", async () => {
+     const onAssigneeChange = vi.fn();
+     const onSettingsChange = vi.fn();
+-    render(onAssigneeChange, onSettingsChange);
++    render(onAssigneeChange, onSettingsChange, false, { assigneeValue: "user:me", currentAssigneeValue: "user:me", options: [...options, { id: "user:me", label: "Me" }] });
+     await click("Select assignee");
+     await click("No assignee");
+     expect(onAssigneeChange).toHaveBeenCalledWith("");
+@@ -216,7 +239,7 @@ describe("composer assignee picker", () => {
+   });
+ 
+   it("opens the assignee list directly on mobile", async () => {
+-    render(vi.fn(), vi.fn(), false, { mobile: true });
++    render(vi.fn(), vi.fn(), false, { mobile: true, ...{ assigneeValue: "", currentAssigneeValue: "", options: [...options, { id: "user:me", label: "Me" }] } });
+     await click("Select assignee");
+     expect(document.querySelector('[data-testid="composer-mobile-dialog"]')).not.toBeNull();
+     expect(document.querySelector('[aria-label="Search assignees"]')).not.toBeNull();
+diff --git a/ui/src/components/task-chat/ComposerRunSettingsPicker.tsx b/ui/src/components/task-chat/ComposerRunSettingsPicker.tsx
+index e8f613676..5ff523ead 100644
+--- a/ui/src/components/task-chat/ComposerRunSettingsPicker.tsx
++++ b/ui/src/components/task-chat/ComposerRunSettingsPicker.tsx
+@@ -128,7 +128,15 @@ export function ComposerRunSettingsPicker({
+   const choices = composerEfforts(agent, model, models.map((item) => item.id));
+   const effort = selected.effort && choices.includes(selected.effort) ? selected.effort : null;
+   const effortIndex = effort ? choices.indexOf(effort) + 1 : 0;
+-  const effortLabel = effort ? EFFORT_LABELS[effort] ?? effort : "Default";
++  // Atelier (patch local 0016) : « Default » dit quel effort s'applique réellement (celui de l'agent,
++  // sinon le défaut du modèle), pour que le réglage par défaut soit lisible.
++  const configuredEffortRaw = typeof agent?.adapterConfig?.effort === "string" ? agent.adapterConfig.effort.trim() : "";
++  const configuredEffort = configuredEffortRaw || (choices.includes("medium") ? "medium" : "");
++  const defaultEffortLabel = configuredEffort ? `Default · ${EFFORT_LABELS[configuredEffort] ?? configuredEffort}` : "Default";
++  const effortLabel = effort ? EFFORT_LABELS[effort] ?? effort : defaultEffortLabel;
++  // Atelier (patch local 0016) : une discussion avec un agent reste avec cet agent ; une tâche sans
++  // agent (non assignée ou tenue par un humain) peut encore être confiée.
++  const assigneeLocked = Boolean(agent);
+   const fastAvailable = composerFastAvailable(agent, model);
+   const effortChoicesKey = choices.join(",");
+   useEffect(() => {
+@@ -188,7 +196,7 @@ export function ComposerRunSettingsPicker({
+   const Trigger = mobile ? DialogTrigger : PopoverTrigger;
+   const triggers = <div data-testid="task-chat-composer-selection" className="flex min-w-0 max-w-full items-center rounded-full bg-muted text-xs font-medium">
+     <Trigger asChild><button ref={triggerRef} type="button" disabled={disabled} aria-label="Select assignee" data-testid="task-chat-composer-assignee"
+-      onClick={() => { setView("agents"); setHighlightedAssignee(0); }}
++      onClick={() => { if (assigneeLocked) setView("settings"); else { setView("agents"); setHighlightedAssignee(0); } }}
+       className="flex h-8 min-w-0 max-w-full items-center gap-1.5 rounded-full px-2.5 hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50">
+       {renderAssigneeIdentity?.(assigneeValue, agent?.name ?? "Unassigned", "trigger")}
+       <span data-testid="task-chat-composer-assignee-label" className="min-w-0 truncate">{assigneeOptions.find((item) => item.id === assigneeValue)?.label ?? "Unassigned"}</span>
+@@ -199,7 +207,7 @@ export function ComposerRunSettingsPicker({
+       <button type="button" disabled={disabled} aria-label="Select model and effort" aria-haspopup="dialog" aria-expanded={open && view !== "agents"} onClick={() => { setView("settings"); setOpen(true); }}
+         className="flex h-8 min-w-0 max-w-full items-center gap-1.5 rounded-full px-2.5 text-muted-foreground hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50">
+         <span data-testid="task-chat-composer-model-label" className="min-w-0 truncate">{modelName || "Default"}</span>
+-        {effort ? <span className="hidden shrink-0 sm:inline">{effortLabel}</span> : null}
++        {effort || configuredEffort ? <span className="hidden shrink-0 sm:inline">{effortLabel}</span> : null}
+         <ChevronDown className="size-3 shrink-0" aria-hidden />
+       </button>
+     </> : null}
+@@ -207,11 +215,13 @@ export function ComposerRunSettingsPicker({
+ 
+   const body = view === "settings" ? <div className="p-3">
+     <div className="flex items-center gap-2">
+-      <button type="button" aria-label="Choose assignee" onClick={() => setView("agents")}
+-        className="flex min-w-0 flex-1 items-center gap-2 rounded-md px-1 py-1 text-left hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
++      {/* Atelier (patch local 0016) : on parle à l'agent assigné ; les nouvelles demandes passent par
++          le Coordinateur (accueil de l'atelier), donc pas de changement d'agent depuis la discussion. */}
++      <button type="button" aria-label="Choose assignee" disabled={assigneeLocked} title={assigneeLocked ? "Les nouvelles demandes passent par le Coordinateur (accueil de l'atelier)." : undefined} onClick={() => setView("agents")}
++        className="flex min-w-0 flex-1 items-center gap-2 rounded-md px-1 py-1 text-left enabled:hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+         {renderAssigneeIdentity?.(assigneeValue, agent?.name ?? "Unassigned", "option") ?? <span className="grid size-6 shrink-0 place-items-center rounded-md bg-secondary text-xs font-semibold text-secondary-foreground">{agent?.name.slice(0, 1) ?? "?"}</span>}
+         <span className="min-w-0 flex-1"><span className="block truncate text-sm font-medium">{agent?.name ?? options.find((item) => item.id === assigneeValue)?.label ?? "Unassigned"}</span><span className="block truncate text-xs text-muted-foreground">{harnessLabel(agent)}</span></span>
+-        <ChevronDown className="size-4 shrink-0 text-muted-foreground" aria-hidden />
++        {assigneeLocked ? null : <ChevronDown className="size-4 shrink-0 text-muted-foreground" aria-hidden />}
+       </button>
+       {!choices.length && modelSupported ? <button type="button" aria-label="Reset to agent default" title="Reset to agent default" disabled={!changed} onClick={reset} className="grid size-8 place-items-center rounded-md text-muted-foreground hover:bg-accent disabled:opacity-40"><RotateCcw className="size-4" /></button> : null}
+       {closeButton}
+-- 
+2.53.0
+

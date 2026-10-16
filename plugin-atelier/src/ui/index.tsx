@@ -8,7 +8,7 @@
  *   indisponible.
  * - Tout en français, dates à l'heure de Bruxelles, mention « démonstration ».
  */
-import type { ReactNode } from "react";
+import { useState, type FormEvent, type ReactNode } from "react";
 import {
   useHostContext,
   useHostLocation,
@@ -19,18 +19,23 @@ import {
   type PluginWidgetProps,
 } from "@paperclipai/plugin-sdk/ui";
 import type { VueContenusAValider, VueEquipe } from "../contrats/ui.js";
-import { Chargement, EtatErreur, LienHote } from "./composants.js";
+import { BandeauEntreprise, Bouton, Champ, Chargement, EtatErreur, LienHote } from "./composants.js";
+import { useEnvoiDemande } from "./demande.js";
 import { FournisseurDonnees, useDonnees } from "./donnees.js";
 import { chemin, lireRoute, VUES, type CleVue } from "./route.js";
 import { STYLES_ATELIER } from "./styles.js";
+import { VueAccueil } from "./vues/accueil.js";
 import { VueCalendrier } from "./vues/calendrier.js";
 import { VueCampagnes } from "./vues/campagnes.js";
+import { VueCarte } from "./vues/carte.js";
 import { Dossier, VueContenus } from "./vues/contenus.js";
 import { VueEquipeAtelier } from "./vues/equipe.js";
 import { VueMarqueAtelier } from "./vues/marque.js";
+import { VueMiseEnPlace } from "./vues/mise-en-place.js";
 import { VueParametres } from "./vues/parametres.js";
 import { VueProspects } from "./vues/prospects.js";
 import { VueConnaissances } from "./vues/connaissances.js";
+import { VueCorbeille } from "./vues/corbeille.js";
 import { VueResultatsAtelier } from "./vues/resultats.js";
 
 /** Racine commune : styles (dédupliqués par React), langue, portée `.atl`. */
@@ -51,6 +56,8 @@ function SansEntreprise() {
 
 function Vue({ vue, id }: { vue: CleVue; id: string | null }) {
   switch (vue) {
+    case "accueil":
+      return <VueAccueil />;
     case "equipe":
       return <VueEquipeAtelier agentId={id} />;
     case "campagnes":
@@ -65,10 +72,16 @@ function Vue({ vue, id }: { vue: CleVue; id: string | null }) {
       return <VueMarqueAtelier />;
     case "prospects":
       return <VueProspects />;
+    case "carte":
+      return <VueCarte />;
     case "connaissances":
       return <VueConnaissances />;
+    case "mise-en-place":
+      return <VueMiseEnPlace />;
     case "parametres":
       return <VueParametres />;
+    case "corbeille":
+      return <VueCorbeille />;
   }
 }
 
@@ -93,6 +106,7 @@ export function PageAtelier({ context }: PluginPageProps) {
       <FournisseurDonnees>
         <main className="atl-page">
           <Onglets courante={route.vue} />
+          {context.companyId && route.vue !== "mise-en-place" ? <BandeauEntreprise /> : null}
           {context.companyId ? <Vue key={`${route.vue}:${route.id ?? ""}`} vue={route.vue} id={route.id} /> : <SansEntreprise />}
         </main>
       </FournisseurDonnees>
@@ -141,7 +155,7 @@ export function EntreeAtelier(_props: PluginSidebarProps) {
   const actif = /\/atelier(\/|$)/u.test(pathname);
   return (
     <Racine>
-      <LienHote vers={chemin("equipe")} className="atl-entree" courant={actif}>
+      <LienHote vers={chemin("accueil")} className="atl-entree" courant={actif}>
         <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
           <path d="M2.5 13.5V6l5.5-3.5L13.5 6v7.5" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" />
           <path d="M6 13.5v-4h4v4" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" />
@@ -198,6 +212,33 @@ function ContenuWidget() {
           Ouvrir les contenus à valider
         </LienHote>
       ) : null}
+      <DemandeRapide companyId={contexte.companyId ?? null} />
     </section>
+  );
+}
+
+/** Petit formulaire « Demander à l'équipe » de l'encart : même route et même redirection que l'accueil. */
+function DemandeRapide({ companyId }: { companyId: string | null }) {
+  const [texte, setTexte] = useState("");
+  const { envoyer, enCours, erreur } = useEnvoiDemande(companyId);
+  const soumettre = async (e: FormEvent) => {
+    e.preventDefault();
+    if (await envoyer(texte)) setTexte("");
+  };
+  if (!companyId) return null;
+  return (
+    <form className="atl-widget-demande" onSubmit={soumettre}>
+      <Champ libelle="Demander à l'équipe">
+        <textarea value={texte} onChange={(e) => setTexte(e.target.value)} rows={2} placeholder="Écrivez votre demande au Coordinateur" />
+      </Champ>
+      <Bouton type="submit" variante="principal" enCours={enCours} raisonDesactive={texte.trim() === "" ? "Écrivez d'abord votre demande." : null}>
+        Envoyer
+      </Bouton>
+      {erreur ? (
+        <p className="atl-widget-erreur" role="alert">
+          {erreur}
+        </p>
+      ) : null}
+    </form>
   );
 }

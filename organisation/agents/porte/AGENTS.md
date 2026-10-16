@@ -3,7 +3,7 @@ kind: "agent"
 slug: "porte"
 name: "Porte"
 title: "Porte de contrôle"
-reportsTo: null
+reportsTo: "relecteur"
 skills: []
 ---
 

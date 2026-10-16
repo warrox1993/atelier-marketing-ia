@@ -14,7 +14,7 @@ import {
   type AjouterOppositionEntree,
   type ImportBaseClients,
 } from "../contrats/prospection.js";
-import { Bouton, Champ, EtatErreur, Horodatage, MentionDemo, Section } from "./composants.js";
+import { Bouton, BoutonAller, Champ, EtatErreur, Horodatage, MentionDemo, Section, Vide } from "./composants.js";
 import { nombre } from "./format.js";
 import { appelRoute } from "./routes-prospection.js";
 
@@ -284,7 +284,7 @@ function ImportGuide({ etatBase, onChange }: { etatBase: EtatBase | null; onChan
   }
 
   return (
-    <Section titre="Importer la base de clients" aide="Le fichier n'est pas conservé : seuls ses comptes et une empreinte le sont. Les identifiants directs sont chiffrés, rien n'est envoyé à personne.">
+    <Section titre="Importer la base de clients" id="atl-import-base-clients" aide="Le fichier n'est pas conservé : seuls ses comptes et une empreinte le sont. Les identifiants directs sont chiffrés, rien n'est envoyé à personne.">
       <Etapes courante={etape} />
       {etape === 0 ? (
         <div className="atl-formulaire">
@@ -580,7 +580,11 @@ function EtatBaseClients({ etat, erreur, chargement, onReessayer }: { etat: Etat
     <Section titre="Base clients actuelle" aide="Ce que l'atelier détient en ce moment. Un nouvel import remplace entièrement cette base.">
       {erreur ? <EtatErreur erreur={erreur} onReessayer={onReessayer} contexte="état de la base clients" /> : null}
       {chargement && !etat && !erreur ? <p className="atl-attenue">Chargement de l'état de la base.</p> : null}
-      {etat && !etat.existe ? <p>Aucune base clients n'est chargée pour l'instant.</p> : null}
+      {etat && !etat.existe ? (
+        <Vide titre="Aucune base clients" action={<BoutonAller cible="atl-import-base-clients">Importer un fichier</BoutonAller>}>
+          Importez un fichier CSV ou Excel pour exclure vos clients actuels et repérer les ventes croisées.
+        </Vide>
+      ) : null}
       {etat?.existe ? (
         <div className="atl-formulaire" role="status">
           {etat.mode === "demonstration" ? <MentionDemo compacte /> : null}

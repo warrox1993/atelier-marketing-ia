@@ -107,7 +107,8 @@ export type ChampsVersion = Partial<Pick<LigneVersion, "valideAu" | "statut" | "
 export interface StockConnaissances {
   /** Lecture pour la recherche (`rechercherConnaissances`). */
   executer: ExecuteurRequetes;
-  lireDocument(companyId: string, documentId: string): Promise<LigneDocument | null>;
+  /** Exclut les documents à la corbeille, sauf `{ corbeille: true }` (corbeille et suppression réelle). */
+  lireDocument(companyId: string, documentId: string, options?: { corbeille?: boolean }): Promise<LigneDocument | null>;
   listerDocuments(companyId: string): Promise<LigneDocument[]>;
   /** Versions de l'entreprise, d'un document ou de plusieurs. */
   listerVersions(companyId: string, documentIds?: readonly string[]): Promise<LigneVersion[]>;
@@ -208,12 +209,13 @@ export function creerStockConnaissances(db: Db): StockConnaissances {
   return {
     executer: (sql, params) => q(sql, params),
 
-    async lireDocument(companyId, documentId) {
-      const [r] = await q(`select id, company_id, titre, type, produit, langue, mode, cree_par, cree_le from ${ns}.connaissances_documents where company_id = $1 and id = $2`, [companyId, documentId]);
+    async lireDocument(companyId, documentId, options = {}) {
+      const filtre = options.corbeille === true ? "" : " and corbeille_le is null";
+      const [r] = await q(`select id, company_id, titre, type, produit, langue, mode, cree_par, cree_le from ${ns}.connaissances_documents where company_id = $1 and id = $2${filtre}`, [companyId, documentId]);
       return r ? document(r) : null;
     },
     async listerDocuments(companyId) {
-      return (await q(`select id, company_id, titre, type, produit, langue, mode, cree_par, cree_le from ${ns}.connaissances_documents where company_id = $1 order by type asc, titre asc, id asc`, [companyId])).map(document);
+      return (await q(`select id, company_id, titre, type, produit, langue, mode, cree_par, cree_le from ${ns}.connaissances_documents where company_id = $1 and corbeille_le is null order by type asc, titre asc, id asc`, [companyId])).map(document);
     },
     async listerVersions(companyId, documentIds) {
       if (documentIds && documentIds.length === 0) return [];
@@ -264,7 +266,10 @@ export function creerStockConnaissances(db: Db): StockConnaissances {
       );
     },
     async supprimerDocument(companyId, documentId) {
-      return x(`delete from ${ns}.connaissances_documents where company_id = $1 and id = $2`, [companyId, documentId]);
+      const n = await x(`delete from ${ns}.connaissances_documents where company_id = $1 and id = $2`, [companyId, documentId]);
+      // Le document n'existe plus : sa ligne de corbeille ne doit pas rester (la purge échouerait pour toujours).
+      await x(`delete from ${ns}.corbeille where company_id = $1 and type = 'document' and element_id = $2`, [companyId, documentId]);
+      return n;
     },
     async passagesContenant(companyId, texteMinuscule) {
       const lignes = await q(

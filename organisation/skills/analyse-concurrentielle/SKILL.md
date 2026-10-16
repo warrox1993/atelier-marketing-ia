@@ -61,8 +61,8 @@ Tableau comparatif sourcé, liste des changements depuis la dernière analyse, s
 
 | concurrent | offre affichée | zone | preuve affichée | relevé |
 | --- | --- | --- | --- | --- |
-| Toits Mosans (fictif) | diagnostic gratuit, isolation par l'extérieur | Liège, Herstal | « 20 ans d'expérience » (non vérifiable) | 02/10/2026 |
-| Isolpro Liège (fictif) | non observé (page tarifs réservée) | Liège | non observé | 02/10/2026 |
+| Assur Mosane (fictif) | bilan d'assurance gratuit, assurance habitation | Liège, Herstal | « 20 ans d'expérience » (non vérifiable) | 02/10/2026 |
+| Protecto Liège (fictif) | non observé (page tarifs réservée) | Liège | non observé | 02/10/2026 |
 
-Recommandation : mettre en avant le diagnostic thermique avec visite, que nos offres
+Recommandation : mettre en avant l'entretien pour faire le point avant tout devis, que nos offres
 validées prévoient, sans reprendre « gratuit » tant que l'offre n'est pas confirmée.

@@ -2,6 +2,8 @@
  * Lot L9 : garde des données simulées. Règles pures (déduction du mode, chiffres, livrable,
  * porte, diffusion) et branchement dans `evaluerPorte`.
  */
+import { spawnSync } from "node:child_process";
+import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import { DeposerDonneesConnexionEntree, MENTION_DONNEES_DEMONSTRATION, MotifPorte } from "../src/contrats/index.js";
 import { evaluerPorte, type EntreesPorte } from "../src/serveur/porte.js";
@@ -273,5 +275,26 @@ describe("mode effectif (règle prudente du lot L9, affichée dans la campagne)"
     expect(calculerModeEffectif({ mode: "demonstration" }, reglages("demonstration")).mode).toBe("demonstration");
     expect(calculerModeEffectif(null, reglages("reel", false)).mode).toBe("demonstration");
     expect(calculerModeEffectif(null, reglages("reel")).mode).toBe("reel");
+  });
+});
+
+describe("référentiel de l'entreprise de démonstration « Courtier » (scripts/demo/regler-courtier.py)", () => {
+  // Le script n'agit sur aucune instance à l'import : on lit seulement le référentiel qu'il produit.
+  const script = resolve(import.meta.dirname, "../../scripts/demo/regler-courtier.py");
+  const lu = spawnSync("python3", ["-I", "-c", `import importlib.util as u, json, sys; s = u.spec_from_file_location("rc", ${JSON.stringify(script)}); m = u.module_from_spec(s); s.loader.exec_module(m); json.dump(m.referentiel(), sys.stdout)`], { encoding: "utf-8" });
+
+  it("produit un référentiel valide où chaque bureau a une position dans la province de Liège", async () => {
+    expect(lu.status, lu.stderr).toBe(0);
+    const { ReferentielSaisie } = await import("../src/contrats/index.js");
+    const ref = JSON.parse(lu.stdout);
+    const saisie = ReferentielSaisie.parse(ref);
+    expect(saisie.etablissements).toHaveLength(12);
+    for (const e of saisie.etablissements) {
+      expect(e.position, e.nom).toBeTruthy();
+      expect(e.position!.lat).toBeGreaterThan(50.4);
+      expect(e.position!.lat).toBeLessThan(50.8);
+      expect(e.position!.lon).toBeGreaterThan(5.2);
+      expect(e.position!.lon).toBeLessThan(6.1);
+    }
   });
 });

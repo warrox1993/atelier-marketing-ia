@@ -17,6 +17,17 @@ import { libelleForme, libelleNace, nomAssureurDemo } from "./referentiel.js";
 export const SOURCE_BCE = "BCE Open Data (simulateur de démonstration : entreprises entièrement fictives)";
 const NOTE_NUMEROS = "Numéros à chiffre de contrôle volontairement faux (modulo 97) : aucune entreprise réelle ne peut y correspondre.";
 
+/** Phrase ajoutée aux descriptions des outils qui renvoient `position_approx` (identique en démonstration et en réel). */
+export const PHRASE_POSITION_APPROX =
+  "Chaque entité et chaque unité d'établissement porte `position_approx` (lat, lon, précision code_postal ou commune, source osm, ou null) : position approximative déduite du code postal ou de la commune, jamais l'adresse exacte.";
+
+/** Position fictive déterministe d'une adresse de démonstration (même code postal, même point), située en Belgique. */
+function positionApproxDemo(a: AdresseDemo): Record<string, unknown> | null {
+  const n = Number.parseInt(a.codePostal, 10);
+  if (!Number.isFinite(n)) return null;
+  return { lat: 49.6 + ((n * 37) % 1000) / 1000 * 1.4, lon: 2.6 + ((n * 91) % 1000) / 1000 * 3.2, precision: "code_postal", source: "osm" };
+}
+
 const adresseBce = (type: "REGO" | "BAET", a: AdresseDemo): Record<string, string> => ({
   TypeOfAddress: type,
   CountryFR: "Belgique",
@@ -31,7 +42,7 @@ const activitesBce = (codes: readonly string[]): Record<string, string>[] =>
   codes.flatMap((code, i) => ["2008", "2025"].map((version) => ({ ActivityGroup: "003", NaceVersion: version, NaceCode: code, Classification: i === 0 ? "MAIN" : "SECO", Libelle: libelleNace(code) })));
 
 function etablissementBce(e: EtablissementDemo, entreprise: EntrepriseDemo): Record<string, unknown> {
-  return { EstablishmentNumber: e.numero, StartDate: dateBce(e.debut), EnterpriseNumber: entreprise.numero, adresses: [adresseBce("BAET", e.adresse)], activites: activitesBce(entreprise.nace) };
+  return { EstablishmentNumber: e.numero, StartDate: dateBce(e.debut), EnterpriseNumber: entreprise.numero, adresses: [adresseBce("BAET", e.adresse)], position_approx: positionApproxDemo(e.adresse), activites: activitesBce(entreprise.nace) };
 }
 
 /** Une entité complète, à la forme des fichiers de la BCE. */
@@ -50,6 +61,7 @@ export function entiteBce(e: EntrepriseDemo): Record<string, unknown> {
     StartDate: dateBce(e.debut),
     denominations: [{ Language: "1", TypeOfDenomination: "001", Denomination: e.denomination }],
     adresses: [adresseBce("REGO", e.siege)],
+    position_approx: positionApproxDemo(e.siege),
     activites: activitesBce(e.nace),
     contacts,
     etablissements: e.etablissements.map((x) => etablissementBce(x, e)),
@@ -67,7 +79,7 @@ export const outilRechercher: OutilPasserelle = outilLecture(
     description:
       "Recherche d'entreprises actives de la BCE par secteur (NACE), zone (commune, code postal, province, région, pays) et forme juridique, " +
       "avec filtres d'atelier facultatifs : creees_depuis (date de début) et taille (jointure avec les comptes annuels : micro < 10, petite < 50, moyenne < 250, grande ≥ 250 équivalents temps plein ; " +
-      "« inconnue » = aucun compte déposé). Une entreprise correspond si son siège OU l'une de ses unités d'établissement est dans la zone. Personnes physiques jamais incluses.",
+      "« inconnue » = aucun compte déposé). Une entreprise correspond si son siège OU l'une de ses unités d'établissement est dans la zone. Personnes physiques jamais incluses. " + PHRASE_POSITION_APPROX,
     schemaEntree: {
       ...formeNace,
       ...formeZone,
@@ -99,7 +111,7 @@ export const outilEntreprise: OutilPasserelle = outilLecture(
     description:
       "Fiche complète d'une entité du fichier BCE actif, par numéro (0123.456.789) ou numéro d'unité d'établissement (2.123.456.789). " +
       "Absent du fichier actif : entreprise radiée, cessée ou numéro inconnu (le fichier ne garde aucun historique). " +
-      "Un numéro au contrôle modulo 97 valide est refusé : il pourrait être réel.",
+      "Un numéro au contrôle modulo 97 valide est refusé : il pourrait être réel. " + PHRASE_POSITION_APPROX,
     schemaEntree: { numero: z.string().min(1).max(30).describe("Numéro BCE, avec ou sans points ni préfixe BE.") },
   },
   (args) => {

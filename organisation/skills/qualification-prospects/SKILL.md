@@ -73,7 +73,7 @@ non exportée ».
 
 | prospect | critère | constat | source | points |
 | --- | --- | --- | --- | --- |
-| Toitures Exemple SRL (démonstration) | secteur | NACE 43.910, couverture | dépôt `bce_rechercher` du 15/10/2026 | 3 |
-| Toitures Exemple SRL (démonstration) | taille | non mesurable (comptes absents) | `bnb` sans réponse | 0 |
-| Toitures Exemple SRL (démonstration) | activité visible | chantiers en hauteur décrits sur le site | source enregistrée SRC-021 | 2 |
+| Cabinet Médical Exemple SRL (démonstration) | secteur | NACE 86.210, médecine générale, couverture | dépôt `bce_rechercher` du 15/10/2026 | 3 |
+| Cabinet Médical Exemple SRL (démonstration) | taille | non mesurable (comptes absents) | `bnb` sans réponse | 0 |
+| Cabinet Médical Exemple SRL (démonstration) | activité visible | exercice en indépendant décrit sur le site | source enregistrée SRC-021 | 2 |
 | Total | | estimation, étalonnage non mesuré | | 5 |

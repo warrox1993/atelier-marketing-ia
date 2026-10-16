@@ -11,6 +11,7 @@ export const ROUTES_UI_CONNAISSANCES = {
   lister: "/connaissances",
   statut: "/connaissances/statut",
   supprimer: "/connaissances/suppression",
+  importerUrl: "/connaissances/page-web",
   rechercher: (issueId: string) => `/taches/${encodeURIComponent(issueId)}/connaissances/recherche`,
 } as const;
 

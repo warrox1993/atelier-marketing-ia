@@ -4,13 +4,15 @@
  * et l'usine ne contacte personne : aucune action d'envoi.
  */
 import { useCallback, useEffect, useState, type FormEvent } from "react";
-import { useHostContext } from "@paperclipai/plugin-sdk/ui";
+import { useHostContext, useHostNavigation } from "@paperclipai/plugin-sdk/ui";
 import {
   CanalContact,
   CodeNace,
+  CompteRenduProspect,
   MATRICE_BASES_LEGALES,
   MotifExclusion,
   SEUILS_ETALONNAGE,
+  SEUIL_QUALIFICATION,
   StatutProspect,
   type BaseLegale,
   type CibleProspect,
@@ -18,8 +20,9 @@ import {
   type Prospect,
 } from "../../contrats/prospection.js";
 import { BaseClients, lireBase64 } from "../base-clients.js";
-import { Bouton, Champ, Chargement, EnTete, EtatErreur, Horodatage, MentionDemo, Pastille, Section, Vide } from "../composants.js";
+import { Bouton, Champ, Chargement, EnTete, EtatErreur, Horodatage, LienHote, MentionDemo, Pastille, Section, Vide } from "../composants.js";
 import { idCourt, nombre, type Ton } from "../format.js";
+import { chemin } from "../route.js";
 import { appelRoute, telechargerBase64 } from "../routes-prospection.js";
 
 const LIBELLES_CIBLES: Readonly<Record<CibleProspect, string>> = { entreprise: "Entreprises", particulier: "Particuliers", partenaire: "Partenaires" };
@@ -68,22 +71,56 @@ export function libelleZone(z: Prospect["zone"]): string {
   return parties || z.province || z.region || "Zone inconnue";
 }
 
-const pourcent = (x: number) => `${Math.round(x * 100)} %`;
 
-/** « 72/100 » et la nature exacte du chiffre : une estimation n'est jamais présentée comme une probabilité. */
+const entier = (n: number) => String(n).replace(/\B(?=(\d{3})+(?!\d))/gu, "\u00a0");
+
+const EXPLICATION_MESUREE =
+  "Part de prospects semblables qui sont devenus clients, mesurée sur vos propres résultats. La fourchette est la marge d'incertitude à 95 %.";
+const EXPLICATION_ESTIMATION =
+  "Note de 0 à 100 calculée avec des règles simples. Elle classe les prospects entre eux mais ne dit pas leur chance réelle de signer : il manque encore assez de dossiers conclus pour la mesurer.";
+
+/** Texte lisible d'un score : une chance mesurée, ou une estimation clairement annoncée comme telle. */
+export function libelleScore(score: NonNullable<Prospect["score"]>): string {
+  if (score.nature === "probabilite_mesuree") {
+    const marge = score.etalonnage?.marge;
+    if (marge) {
+      const dossiers = score.etalonnage ? `, mesuré sur ${entier(score.etalonnage.effectif)} dossiers` : "";
+      return `${Math.round(marge.probabilite * 100)} % de chances (entre ${Math.round(marge.borneBasse * 100)} et ${Math.round(marge.borneHaute * 100)} %)${dossiers}`;
+    }
+    return `Score ${score.valeur}/100, mesuré sur vos résultats avec marge d'incertitude`;
+  }
+  return `Score ${score.valeur}/100, estimation (pas assez d'historique)`;
+}
+
+/** Le chiffre et sa nature exacte : une estimation n'est jamais présentée comme une probabilité. */
 export function ScoreAffiche({ p }: { p: Prospect }) {
   if (!p.score) return <span className="atl-attenue">pas de score</span>;
-  const marge = p.score.nature === "probabilite_mesuree" ? p.score.etalonnage?.marge : null;
-  const nature =
-    p.score.nature === "estimation"
-      ? "estimation, non étalonnée"
-      : marge
-        ? `probabilité mesurée : ${pourcent(marge.probabilite)} (entre ${pourcent(marge.borneBasse)} et ${pourcent(marge.borneHaute)})`
-        : "mesurée sur vos résultats, avec marge d'incertitude";
+  const mesuree = p.score.nature === "probabilite_mesuree";
   return (
-    <span className="atl-score">
-      <strong>{p.score.valeur}/100</strong>
-      <span className="atl-sous">{nature}</span>
+    <span className="atl-score" title={mesuree ? EXPLICATION_MESUREE : EXPLICATION_ESTIMATION}>
+      <strong>{libelleScore(p.score)}</strong>
+      {mesuree ? <span className="atl-sous">Score {p.score.valeur}/100</span> : null}
+    </span>
+  );
+}
+
+/** Bulle d'aide : la confiance n'est pas la chance de signer, qui est le score voisin. */
+const EXPLICATION_CONFIANCE =
+  "Confiance : à quel point on a vérifié, avec des sources déposées, que ce prospect correspond à votre cible. Ce n'est pas sa chance de signer, que mesure le score à côté.";
+
+/** Texte lisible de la confiance : « 92 % qualifié » ou « 64 % à enrichir ». */
+export function libelleConfiance(c: NonNullable<Prospect["confiance"]>): string {
+  if (c.qualifie) return `${c.valeur} % qualifié`;
+  return c.plafonnee ? `${c.valeur} % non qualifié (critère contraire)` : `${c.valeur} % à enrichir`;
+}
+
+export function ConfianceAffichee({ p }: { p: Prospect }) {
+  if (!p.confiance) return <span className="atl-attenue">non calculée</span>;
+  const manquants = p.confiance.criteres.filter((c) => c.statut === "non_verifie").length;
+  return (
+    <span className="atl-score" title={EXPLICATION_CONFIANCE}>
+      <strong>{libelleConfiance(p.confiance)}</strong>
+      {!p.confiance.qualifie && manquants > 0 ? <span className="atl-sous">{manquants} critère{manquants > 1 ? "s" : ""} à vérifier</span> : null}
     </span>
   );
 }
@@ -98,8 +135,43 @@ interface Filtres {
   zone: string;
   statut: StatutProspect | "";
   scoreMin: string;
+  qualifies: boolean;
+  /** Bureau choisi (établissement de la fiche) et zones qu'il couvre (codes postaux ou communes). */
+  bureau: { nom: string; zones: string[] } | null;
+  /** Code de segment du référentiel. */
+  segment: string;
+  source: "" | "reelle" | "demonstration";
+  /** Réaffiche les prospects déjà clients, masqués par défaut. */
+  avecClients: boolean;
 }
-const FILTRES_VIDES: Filtres = { cibles: [], secteur: "", zone: "", statut: "", scoreMin: "" };
+const FILTRES_VIDES: Filtres = { cibles: [], secteur: "", zone: "", statut: "", scoreMin: "", qualifies: false, bureau: null, segment: "", source: "", avecClients: false };
+
+/** Bureaux et segments de la fiche du client (lecture de `GET /marque`), tolérante à une fiche incomplète. */
+interface OptionsFiltres {
+  bureaux: Array<{ nom: string; zones: string[] }>;
+  segments: Array<{ code: string; libelle: string }>;
+}
+const OPTIONS_VIDES: OptionsFiltres = { bureaux: [], segments: [] };
+
+/** Zones d'un bureau : communes et codes postaux du référentiel, sinon code postal et commune de l'adresse. */
+export function zonesDuBureau(e: { adresse?: string | null; communes?: string[]; codesPostaux?: string[] }): string[] {
+  const zones = [...(e.codesPostaux ?? []), ...(e.communes ?? [])];
+  if (zones.length) return zones;
+  const m = /(\d{4})\s+([^,\d]+?)\s*$/u.exec(e.adresse ?? "");
+  return m ? [m[1]!, m[2]!.trim()] : [];
+}
+
+export function optionsDepuisMarque(donnees: unknown): OptionsFiltres {
+  const marque = (donnees as { marque?: { etablissements?: unknown; segments?: unknown } | null } | null)?.marque;
+  if (!marque) return OPTIONS_VIDES;
+  const bureaux = (Array.isArray(marque.etablissements) ? marque.etablissements : [])
+    .map((e: { nom?: string; adresse?: string | null; communes?: string[]; codesPostaux?: string[] }) => ({ nom: String(e.nom ?? ""), zones: zonesDuBureau(e) }))
+    .filter((b) => b.nom && b.zones.length > 0);
+  const segments = (Array.isArray(marque.segments) ? marque.segments : [])
+    .map((s: { code?: string; libelle?: string }) => ({ code: String(s.code ?? ""), libelle: String(s.libelle ?? s.code ?? "") }))
+    .filter((s) => s.code);
+  return { bureaux, segments };
+}
 
 function jetons(texte: string): string[] {
   return texte.split(",").map((x) => x.trim()).filter(Boolean);
@@ -129,6 +201,11 @@ export function requeteProspects(companyId: string, f: Filtres, page: number): s
   if (communes.length) q.set("communes", communes.join(","));
   if (f.statut) q.set("statuts", f.statut);
   if (f.scoreMin !== "") q.set("scoreMin", f.scoreMin);
+  if (f.qualifies) q.set("qualifiesSeulement", "true");
+  if (f.bureau) q.set("zonesBureau", f.bureau.zones.join(","));
+  if (f.segment) q.set("segments", f.segment);
+  if (f.source) q.set("source", f.source);
+  if (f.avecClients) q.set("avecClientsActuels", "true");
   if (page > 1) q.set("page", String(page));
   return `/prospects?${q.toString()}`;
 }
@@ -140,7 +217,7 @@ export function filtresExport(f: Filtres): Record<string, string> {
   return Object.fromEntries(q.entries());
 }
 
-function BarreFiltres({ valeur, onAppliquer }: { valeur: Filtres; onAppliquer(f: Filtres): void }) {
+function BarreFiltres({ valeur, options, onAppliquer }: { valeur: Filtres; options: OptionsFiltres; onAppliquer(f: Filtres): void }) {
   const [saisie, setSaisie] = useState<Filtres>(valeur);
   const raison = raisonFiltres(saisie);
   const basculer = (c: CibleProspect) => setSaisie({ ...saisie, cibles: saisie.cibles.includes(c) ? saisie.cibles.filter((x) => x !== c) : [...saisie.cibles, c] });
@@ -174,10 +251,45 @@ function BarreFiltres({ valeur, onAppliquer }: { valeur: Filtres; onAppliquer(f:
             ))}
           </select>
         </Champ>
+        <Champ libelle="Bureau" aide="Prospects de la même commune ou du même code postal que le bureau.">
+          <select value={saisie.bureau?.nom ?? ""} onChange={(e) => setSaisie({ ...saisie, bureau: options.bureaux.find((b) => b.nom === e.target.value) ?? null })}>
+            <option value="">Tous les bureaux</option>
+            {options.bureaux.map((b) => (
+              <option key={b.nom} value={b.nom}>
+                {b.nom}
+              </option>
+            ))}
+          </select>
+        </Champ>
+        <Champ libelle="Segment">
+          <select value={saisie.segment} onChange={(e) => setSaisie({ ...saisie, segment: e.target.value })}>
+            <option value="">Tous les segments</option>
+            {options.segments.map((s) => (
+              <option key={s.code} value={s.code}>
+                {s.libelle}
+              </option>
+            ))}
+          </select>
+        </Champ>
+        <Champ libelle="Source">
+          <select value={saisie.source} onChange={(e) => setSaisie({ ...saisie, source: e.target.value as Filtres["source"] })}>
+            <option value="">Réelle et démonstration</option>
+            <option value="reelle">Réelle</option>
+            <option value="demonstration">Démonstration</option>
+          </select>
+        </Champ>
         <Champ libelle="Score minimal (0 à 100)" className="atl-champ-etroit">
           <input value={saisie.scoreMin} onChange={(e) => setSaisie({ ...saisie, scoreMin: e.target.value })} inputMode="numeric" autoComplete="off" aria-invalid={raison?.startsWith("Score") ? true : undefined} />
         </Champ>
       </div>
+      <label className="atl-sous" title={EXPLICATION_CONFIANCE}>
+        <input type="checkbox" checked={saisie.qualifies} onChange={(e) => setSaisie({ ...saisie, qualifies: e.target.checked })} />
+        Qualifiés (≥ {SEUIL_QUALIFICATION} %)
+      </label>
+      <label className="atl-sous">
+        <input type="checkbox" checked={saisie.avecClients} onChange={(e) => setSaisie({ ...saisie, avecClients: e.target.checked })} />
+        Afficher aussi les clients actuels
+      </label>
       {raison ? (
         <p className="atl-texte-danger" role="alert">
           {raison}
@@ -213,12 +325,175 @@ export function motifRefusCanal(p: Prospect, canal: CanalContact): string {
   return `Aucune base légale vérifiée. Bases possibles : ${permises.map((b) => LIBELLES_BASES[b]).join(" ; ")}.`;
 }
 
-function Fiche({ p, companyId, onFermer, onExclu }: { p: Prospect; companyId: string; onFermer(): void; onExclu(): void }) {
+/* ------------------------------------------------------------------ */
+/* Compte rendu du lead et question au Coordinateur                    */
+/* ------------------------------------------------------------------ */
+
+const jourCourt = (iso: string | null) => (iso === null ? "date inconnue" : iso.slice(0, 10).split("-").reverse().join("/"));
+
+/**
+ * Compte rendu déterministe (chargé à l'ouverture de la fiche, aucune IA) puis question à poser au
+ * Coordinateur : la route crée une tâche qui lui est assignée, et on ouvre sa discussion.
+ */
+function CompteRenduLead({ p, companyId }: { p: Prospect; companyId: string }) {
+  const nav = useHostNavigation();
+  const [cr, setCr] = useState<CompteRenduProspect | null>(null);
+  const [erreurLecture, setErreurLecture] = useState<unknown>(null);
+  const [question, setQuestion] = useState("");
+  const [enCours, setEnCours] = useState(false);
+  const [erreur, setErreur] = useState<unknown>(null);
+
+  const charger = useCallback(async () => {
+    setCr(null);
+    setErreurLecture(null);
+    try {
+      const brut = await appelRoute<unknown>("GET", `/prospects/${encodeURIComponent(p.id)}/compte-rendu?companyId=${encodeURIComponent(companyId)}`);
+      const lu = CompteRenduProspect.safeParse(brut);
+      if (!lu.success) throw new Error("Le compte rendu reçu n'a pas la forme attendue.");
+      setCr(lu.data);
+    } catch (e) {
+      setErreurLecture(e);
+    }
+  }, [p.id, companyId]);
+  useEffect(() => {
+    void charger();
+  }, [charger]);
+
+  const raison = question.trim().length < 3 ? "Écrivez votre question (3 caractères au moins)." : null;
+  async function poser() {
+    setEnCours(true);
+    setErreur(null);
+    try {
+      const r = await appelRoute<{ issueId: string; identifiant: string | null; lien: string }>("POST", `/prospects/${encodeURIComponent(p.id)}/question`, { companyId, question: question.trim() });
+      setQuestion("");
+      // La réponse du Coordinateur arrive dans la discussion de la tâche créée.
+      if (r.lien) nav.navigate(r.lien);
+    } catch (e) {
+      setErreur(e);
+    } finally {
+      setEnCours(false);
+    }
+  }
+
+  return (
+    <section className="atl-compte-rendu" aria-label="Compte rendu du lead">
+      <h3 className="atl-h3">Compte rendu du lead</h3>
+      {erreurLecture ? <EtatErreur erreur={erreurLecture} contexte="compte rendu du lead" onReessayer={() => void charger()} /> : null}
+      {!cr && !erreurLecture ? <Chargement libelle="Lecture du compte rendu" lignes={4} /> : null}
+      {cr ? (
+        <>
+          <p className="atl-sous">Établi à partir des données enregistrées, sans intelligence artificielle : rien n'est supposé.</p>
+          <h4 className="atl-h3">Pourquoi ce lead</h4>
+          <ul className="atl-liste-compacte">
+            {cr.pourquoi.verifies.map((v) => (
+              <li key={v.code}>
+                <strong>Vérifié :</strong> {v.libelle}. {v.detail}.{" "}
+                <span className="atl-attenue">
+                  Source : {v.source}, {jourCourt(v.date)}.
+                </span>
+              </li>
+            ))}
+            {cr.pourquoi.verifies.length === 0 ? <li className="atl-attenue">Aucun critère n'est encore vérifié.</li> : null}
+            {cr.pourquoi.nonVerifies.map((n) => (
+              <li key={n.code}>
+                <strong>Pas encore vérifié :</strong> {n.libelle}. <span className="atl-attenue">{n.detail}.</span>
+              </li>
+            ))}
+            {cr.pourquoi.contraires.map((x) => (
+              <li key={x.code}>
+                <strong>Contraire :</strong> {x.libelle}. {x.detail}.
+              </li>
+            ))}
+          </ul>
+          <h4 className="atl-h3">Confiance et score</h4>
+          <ul className="atl-liste-compacte">
+            <li>
+              <strong>Confiance :</strong> {cr.confiance.valeur} % ({cr.confiance.qualifie ? "qualifié" : cr.confiance.plafonnee ? "non qualifié, critère contraire" : `à enrichir, seuil ${cr.confiance.seuil} %`})
+            </li>
+            <li>
+              <strong>Score :</strong> {cr.score ? cr.score.libelle : "pas encore calculé"}
+            </li>
+          </ul>
+          <p className="atl-sous">{cr.differenceConfianceScore}</p>
+          <h4 className="atl-h3">Signaux de moment</h4>
+          {cr.signaux.length > 0 ? (
+            <ul className="atl-liste-compacte">
+              {cr.signaux.map((s) => (
+                <li key={s.code}>
+                  {s.libelle}. <span className="atl-attenue">{s.source}, {jourCourt(s.date)}.</span>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="atl-attenue">Aucun signal de moment établi par les sources.</p>
+          )}
+          <h4 className="atl-h3">Offre recommandée</h4>
+          {cr.offreRecommandee ? (
+            <p>
+              <strong>{cr.offreRecommandee.nom}.</strong> {cr.offreRecommandee.raison}
+            </p>
+          ) : (
+            <p className="atl-attenue">Aucune offre recommandée : {cr.raisonSansOffre}</p>
+          )}
+          <h4 className="atl-h3">Établissement proche</h4>
+          {cr.etablissementProche ? (
+            <p>
+              <strong>{cr.etablissementProche.nom}</strong>
+              {cr.etablissementProche.adresse ? `, ${cr.etablissementProche.adresse}` : ""}{" "}
+              <span className="atl-attenue">
+                ({cr.etablissementProche.raison === "distance" ? `à ${cr.etablissementProche.distanceKm} km` : cr.etablissementProche.raison === "meme_code_postal" ? "même code postal" : "même commune"})
+              </span>
+            </p>
+          ) : (
+            <p className="atl-attenue">Aucun établissement de la fiche ne correspond à la zone connue du lead.</p>
+          )}
+          <h4 className="atl-h3">Prochaine action</h4>
+          <p>{cr.prochaineAction.libelle}</p>
+          <h4 className="atl-h3">Limites</h4>
+          <ul className="atl-liste-compacte">
+            {cr.limites.map((x) => (
+              <li key={x}>{x}</li>
+            ))}
+          </ul>
+        </>
+      ) : null}
+      <div className="atl-formulaire">
+        <Champ libelle="Votre question sur ce lead" aide="Le Coordinateur répond dans la discussion de la tâche créée, avec ce compte rendu en contexte.">
+          <textarea value={question} onChange={(e) => setQuestion(e.target.value)} rows={3} maxLength={4000} />
+        </Champ>
+        {erreur ? <EtatErreur erreur={erreur} contexte="question au Coordinateur" /> : null}
+        <div className="atl-actions">
+          <Bouton variante="principal" raisonDesactive={raison} enCours={enCours} onClick={() => void poser()}>
+            Poser une question au Coordinateur
+          </Bouton>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function Fiche({ p, companyId, onFermer, onExclu, onCorbeille }: { p: Prospect; companyId: string; onFermer(): void; onExclu(): void; onCorbeille(): void }) {
   const [motif, setMotif] = useState<MotifExclusion>("doublon");
   const [detail, setDetail] = useState("");
   const [enCours, setEnCours] = useState(false);
   const [erreur, setErreur] = useState<unknown>(null);
   const raison = detail.trim().length < 3 ? "Expliquez le motif (3 caractères au moins)." : null;
+  const [confirmationCorbeille, setConfirmationCorbeille] = useState(false);
+  const [corbeilleEnCours, setCorbeilleEnCours] = useState(false);
+  const [erreurCorbeille, setErreurCorbeille] = useState<unknown>(null);
+
+  async function mettreALaCorbeille() {
+    setCorbeilleEnCours(true);
+    setErreurCorbeille(null);
+    try {
+      await appelRoute("POST", "/corbeille/suppression", { companyId, type: "prospect", id: p.id });
+      onCorbeille();
+    } catch (e) {
+      setErreurCorbeille(e);
+    } finally {
+      setCorbeilleEnCours(false);
+    }
+  }
 
   async function exclure() {
     setEnCours(true);
@@ -281,6 +556,8 @@ function Fiche({ p, companyId, onFermer, onExclu }: { p: Prospect; companyId: st
           </ul>
         </div>
       ) : null}
+
+      <CompteRenduLead p={p} companyId={companyId} />
 
       <h3 className="atl-h3">Critères du score</h3>
       {p.score ? (
@@ -375,6 +652,34 @@ function Fiche({ p, companyId, onFermer, onExclu }: { p: Prospect; companyId: st
           </div>
         </div>
       ) : null}
+
+      <div className="atl-formulaire">
+        <h3 className="atl-h3">Corbeille</h3>
+        <div className="atl-actions">
+          {confirmationCorbeille ? (
+            <span className="atl-actions" role="group" aria-label={`Confirmation de la mise à la corbeille de ${nomProspect(p)}`}>
+              <Bouton variante="danger" enCours={corbeilleEnCours} onClick={() => void mettreALaCorbeille()}>
+                Confirmer
+              </Bouton>
+              <Bouton variante="discret" onClick={() => setConfirmationCorbeille(false)}>
+                Annuler
+              </Bouton>
+            </span>
+          ) : (
+            <Bouton
+              variante="discret"
+              onClick={() => {
+                setErreurCorbeille(null);
+                setConfirmationCorbeille(true);
+              }}
+            >
+              Mettre à la corbeille
+            </Bouton>
+          )}
+          <span className="atl-sous">Récupérable 30 jours dans la Corbeille</span>
+        </div>
+        {erreurCorbeille ? <EtatErreur erreur={erreurCorbeille} contexte="mise à la corbeille du prospect" /> : null}
+      </div>
     </section>
   );
 }
@@ -584,6 +889,19 @@ function ListeProspects() {
   const [etat, setEtat] = useState<{ data: PageProspects | null; erreur: unknown; chargement: boolean }>({ data: null, erreur: null, chargement: true });
   const [choisi, setChoisi] = useState<string | null>(null);
   const [ordreAsc, setOrdreAsc] = useState(false);
+  const [tri, setTri] = useState<"score" | "confiance">("score");
+  const [options, setOptions] = useState<OptionsFiltres>(OPTIONS_VIDES);
+
+  useEffect(() => {
+    if (!companyId) return;
+    let annule = false;
+    appelRoute<unknown>("GET", `/marque?companyId=${encodeURIComponent(companyId)}`)
+      .then((d) => !annule && setOptions(optionsDepuisMarque(d)))
+      .catch(() => undefined); // sans fiche lisible, les filtres bureau et segment restent vides
+    return () => {
+      annule = true;
+    };
+  }, [companyId]);
 
   useEffect(() => {
     if (!companyId) return;
@@ -603,19 +921,30 @@ function ListeProspects() {
     setChoisi(null);
   }, []);
 
-  const lignes = [...(etat.data?.prospects ?? [])].sort((a, b) => (ordreAsc ? 1 : -1) * ((a.score?.valeur ?? -1) - (b.score?.valeur ?? -1)));
+  const cleTri = (p: Prospect) => (tri === "confiance" ? p.confiance?.valeur : p.score?.valeur) ?? -1;
+  const lignes = [...(etat.data?.prospects ?? [])].sort((a, b) => (ordreAsc ? 1 : -1) * (cleTri(a) - cleTri(b)));
+  const trier = (cle: "score" | "confiance") => {
+    if (cle === tri) setOrdreAsc(!ordreAsc);
+    else {
+      setTri(cle);
+      setOrdreAsc(false);
+    }
+  };
   const fiche = lignes.find((p) => p.id === choisi) ?? null;
   const filtre = JSON.stringify(filtres) !== JSON.stringify(FILTRES_VIDES);
 
   return (
     <>
-      <BarreFiltres valeur={filtres} onAppliquer={appliquer} />
+      <BarreFiltres valeur={filtres} options={options} onAppliquer={appliquer} />
       {companyId ? <ExportProspects companyId={companyId} filtres={filtres} /> : null}
       {etat.erreur ? <EtatErreur erreur={etat.erreur} onReessayer={() => setVersionCharge((v) => v + 1)} contexte="prospects" /> : null}
       {etat.chargement && !etat.data ? <Chargement libelle="Chargement des prospects" /> : null}
       {etat.data && lignes.length === 0 ? (
-        <Vide titre={filtre ? "Aucun prospect ne correspond à ces filtres." : "Aucun prospect pour le moment."}>
-          {filtre ? "Élargissez la zone ou baissez le score minimal, ou effacez les filtres." : "Les prospects arrivent quand une campagne de prospection a collecté des données publiques ou qu'un particulier est enregistré."}
+        <Vide
+          titre={filtre ? "Aucun prospect ne correspond à ces filtres." : "Aucun prospect pour le moment."}
+          action={filtre ? undefined : <LienHote vers={chemin("equipe")} className="atl-bouton">Demander une recherche au Coordinateur</LienHote>}
+        >
+          {filtre ? "Élargissez la zone ou baissez le score minimal, ou effacez les filtres." : "Demandez une recherche au Coordinateur : les prospects arrivent quand une campagne de prospection a collecté des données publiques ou qu'un particulier est enregistré."}
         </Vide>
       ) : null}
       {etat.data && lignes.length > 0 ? (
@@ -635,9 +964,14 @@ function ListeProspects() {
                   <th scope="col">Prospect</th>
                   <th scope="col">Cible</th>
                   <th scope="col">Zone</th>
-                  <th scope="col" aria-sort={ordreAsc ? "ascending" : "descending"}>
-                    <button type="button" className="atl-lien" onClick={() => setOrdreAsc(!ordreAsc)} aria-label={`Score, trié ${ordreAsc ? "du plus bas au plus haut" : "du plus haut au plus bas"} ; inverser`}>
-                      Score ({ordreAsc ? "croissant" : "décroissant"})
+                  <th scope="col" aria-sort={tri === "score" ? (ordreAsc ? "ascending" : "descending") : undefined}>
+                    <button type="button" className="atl-lien" onClick={() => trier("score")} aria-label={tri === "score" ? `Score, trié ${ordreAsc ? "du plus bas au plus haut" : "du plus haut au plus bas"} ; inverser` : "Trier par score"}>
+                      {tri === "score" ? `Score (${ordreAsc ? "croissant" : "décroissant"})` : "Score"}
+                    </button>
+                  </th>
+                  <th scope="col" aria-sort={tri === "confiance" ? (ordreAsc ? "ascending" : "descending") : undefined}>
+                    <button type="button" className="atl-lien" title={EXPLICATION_CONFIANCE} onClick={() => trier("confiance")} aria-label={tri === "confiance" ? `Confiance, triée ${ordreAsc ? "du plus bas au plus haut" : "du plus haut au plus bas"} ; inverser` : "Trier par confiance"}>
+                      {tri === "confiance" ? `Confiance (${ordreAsc ? "croissante" : "décroissante"})` : "Confiance"}
                     </button>
                   </th>
                   <th scope="col">Statut</th>
@@ -657,6 +991,9 @@ function ListeProspects() {
                     <td data-libelle="Score">
                       <ScoreAffiche p={p} />
                     </td>
+                    <td data-libelle="Confiance">
+                      <ConfianceAffichee p={p} />
+                    </td>
                     <td data-libelle="Statut">
                       <Pastille ton={TONS_STATUTS[p.statut]}>{LIBELLES_STATUTS[p.statut]}</Pastille>
                       {p.motifsExclusion.length > 0 ? <span className="atl-sous">{p.motifsExclusion.map((m) => LIBELLES_MOTIFS[m.motif]).join(" ; ")}</span> : null}
@@ -666,7 +1003,7 @@ function ListeProspects() {
               </tbody>
             </table>
           </div>
-          <p className="atl-sous">Tri par score sur la page affichée.</p>
+          <p className="atl-sous">Tri sur la page affichée. Le score estime la chance de signer ; la confiance dit si le prospect correspond à votre cible.</p>
           {etat.data.pages > 1 ? (
             <div className="atl-actions">
               <Bouton raisonDesactive={page <= 1 ? "Première page." : null} onClick={() => setPage(page - 1)}>
@@ -687,6 +1024,10 @@ function ListeProspects() {
           companyId={companyId}
           onFermer={() => setChoisi(null)}
           onExclu={() => {
+            setChoisi(null);
+            setVersionCharge((v) => v + 1);
+          }}
+          onCorbeille={() => {
             setChoisi(null);
             setVersionCharge((v) => v + 1);
           }}

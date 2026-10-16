@@ -34,7 +34,8 @@ const JETON = "jeton-de-prospection-de-test-0123456789abcdef";
 /** Forme d'une valeur JSON : clés triées à chaque niveau, un élément représentatif par tableau, feuilles sans type (une valeur peut être nulle d'un côté). */
 function forme(v: unknown): unknown {
   if (Array.isArray(v)) return v.length === 0 ? [] : [forme(v[0])];
-  if (v !== null && typeof v === "object") return Object.fromEntries(Object.keys(v).sort().map((k) => [k, forme((v as Record<string, unknown>)[k])]));
+  // position_approx est nullable (objet ou null selon l'index OSM disponible) : seule sa présence compte pour la parité.
+  if (v !== null && typeof v === "object") return Object.fromEntries(Object.keys(v).sort().map((k) => [k, k === "position_approx" ? "*" : forme((v as Record<string, unknown>)[k])]));
   return "*";
 }
 const cles = (o: Record<string, any>): string[] => Object.keys(o).sort();

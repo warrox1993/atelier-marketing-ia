@@ -6,12 +6,13 @@
  */
 import type { PluginContext } from "@paperclipai/plugin-sdk";
 import { describe, expect, it } from "vitest";
-import { ESPACE_BASE, Opposition, PageProspects, Prospect } from "../src/contrats/index.js";
+import { ESPACE_BASE, CompteRenduProspect, CriteresManquants, Opposition, PageProspects, Prospect } from "../src/contrats/index.js";
+import { REFERENTIEL_COURTIER } from "../src/contrats/exemples/prospection.js";
 import { creerAiguillage } from "../src/serveur/atelier.js";
 import { creerBase, type BaseAtelier } from "../src/serveur/base.js";
 import { dechiffrer, empreinte } from "../src/serveur/chiffrement-donnees.js";
 import { creerServices } from "../src/serveur/services.js";
-import { clesDemonstration, extraireProspects, regionDuCodePostal } from "../src/serveur/services-prospection.js";
+import { clesDemonstration, extraireChangementsBce, extraireComptesBnb, extraireProspects, regionDuCodePostal } from "../src/serveur/services-prospection.js";
 import { BRIEF, CAMP, SOC, creerBanc } from "./outils-base.js";
 import { emballer, paireEd25519, passerelle } from "./outils-passerelle.js";
 
@@ -62,17 +63,22 @@ function reponse(o: { mode?: "demonstration" | "reel"; signataire?: typeof SIGNA
 /* Banc : base en mémoire complétée des tables de prospection          */
 /* ------------------------------------------------------------------ */
 
-function banc(o: { modeEntreprise?: "demonstration" | "reel"; config?: Record<string, unknown>; poids?: Record<string, number>; clients?: Record<string, string> } = {}) {
+function banc(o: { modeEntreprise?: "demonstration" | "reel"; config?: Record<string, unknown>; poids?: Record<string, number>; clients?: Record<string, string>; marque?: Ligne; baseClients?: number } = {}) {
   const b = creerBanc({ modeEntreprise: o.modeEntreprise ?? "demonstration", config: { passerelleClesPubliques: [CLES.publiqueBase64], ...o.config } });
-  const t = { prospects: [] as Ligne[], empreintes: [] as Ligne[], oppositions: [] as Ligne[], scores: [] as Ligne[] };
+  const t = { prospects: [] as Ligne[], empreintes: [] as Ligne[], oppositions: [] as Ligne[], scores: [] as Ligne[], bases: new Map<string, Ligne[]>() };
+  const appelsListe: number[] = [];
   const copie = <T>(v: T): T => structuredClone(v);
   const ext: Record<string, unknown> = {
     prospectsParIdentifiants: async (c: string, ids: Array<{ type: string; valeur: string }>) =>
       copie(t.prospects.filter((p) => p.companyId === c && ids.some((i) => i.type === p.identifiant.type && i.valeur === p.identifiant.valeur))),
-    lireProspect: async (c: string, id: string) => copie(t.prospects.find((p) => p.companyId === c && p.id === id) ?? null),
+    // Comme la vraie base : un prospect à la corbeille (`corbeille_le`) n'est servi que sur demande explicite.
+    lireProspect: async (c: string, id: string, opt: { corbeille?: boolean } = {}) =>
+      copie(t.prospects.find((p) => p.companyId === c && p.id === id && (opt.corbeille === true || p.corbeille_le == null)) ?? null),
     empreintesProspectsEnBase: async (c: string, v: string[]) => t.empreintes.filter((e) => e.companyId === c && v.includes(e.valeur)).map((e) => ({ prospectId: e.prospectId, type: e.type, valeur: e.valeur })),
     oppositionsPour: async (c: string, v: string[]) => t.oppositions.filter((x) => x.companyId === c && v.includes(x.empreinte)).map((x) => ({ type: x.type, valeur: x.empreinte, canal: x.canal })),
     clientsActuelsPour: async () => [],
+    marques: async () => (o.marque ? [copie(o.marque)] : []),
+    etatBaseClients: async () => ({ dernierImport: null, clients: o.baseClients ?? 0, actifs: o.baseClients ?? 0 }),
     dncmPour: async () => null,
     clientExiste: async () => false,
     clientParEmpreinte: async (_c: string, type: string, v: string) => (type === "identifiant_client" ? (o.clients?.[v] ?? null) : null),
@@ -101,9 +107,10 @@ function banc(o: { modeEntreprise?: "demonstration" | "reel"; config?: Record<st
     detailsProspects: async (c: string, ids: string[]) => ({
       empreintes: new Map(ids.map((id) => [id, t.empreintes.filter((e) => e.companyId === c && e.prospectId === id).map((e) => ({ type: e.type, valeur: e.valeur }))])),
       scores: new Map(t.scores.filter((s) => s.companyId === c && ids.includes(s.prospectId)).map((s) => [s.prospectId, { valeur: s.valeur, criteres: s.criteres, versionPoids: s.versionPoids, calculeLe: s.calculeLe }])),
-      bases: new Map(),
+      bases: new Map(ids.filter((id) => t.bases.has(id)).map((id) => [id, copie(t.bases.get(id)!)])),
     }),
     listerProspects: async (c: string, f: Ligne) => {
+      appelsListe.push(f.parPage);
       const toutes = t.prospects.filter((p) => p.companyId === c && (!f.statuts || f.statuts.includes(p.statut)) && (!f.cibles || f.cibles.includes(p.cible)));
       return { total: toutes.length, lignes: copie(toutes.slice((f.page - 1) * f.parPage, f.page * f.parPage)) };
     },
@@ -128,16 +135,37 @@ function banc(o: { modeEntreprise?: "demonstration" | "reel"; config?: Record<st
   }
   const deposer = (corps: unknown, companyId = SOC) => appeler("tache.prospects.deposer", { params: { issueId: BRIEF }, body: corps, companyId });
   const opposer = (corps: Ligne, companyId = SOC) => appeler("oppositions.ajouter", { body: { companyId, ...corps }, companyId, agent: false });
-  return { ...b, tp: t, appeler, deposer, opposer };
+  return { ...b, tp: t, appelsListe, appeler, deposer, opposer };
 }
 
 const depotBce = (r = reponse()) => ({ service: "bce", outil: "bce_rechercher", reponse: r, arguments: ARGS });
+
+const depotOsm = (commerce: Ligne) => ({
+  service: "osm", outil: "osm_commerces", arguments: ARGS,
+  reponse: emballer(SIGNATAIRE, "demonstration", { source: "OpenStreetMap", commerces: [commerce] }, { service: "osm", outil: "osm_commerces", compte: "registre/demo-osm", args: ARGS }) as { texte: string; structuredContent: Record<string, unknown> },
+});
+const CABINET = { id: "n43", nom: "Centre de Santé Intégrée", adresse: { code_postal: "4000", commune: "Liège" } };
 
 /* ------------------------------------------------------------------ */
 /* Dépôt signé                                                         */
 /* ------------------------------------------------------------------ */
 
 describe("tache.prospects.deposer", () => {
+  it("lieu OSM : la catégorie (clé, valeur) est stockée sur la source ; un re-dépôt complète un lieu déjà connu sans catégorie", async () => {
+    const f = banc();
+    const premier = await f.deposer(depotOsm(CABINET));
+    expect(premier.status).toBe(201);
+    const ancien = Prospect.parse((premier.body.prospects as unknown[])[0]);
+    expect(ancien.sources[0]!.categorieOsm).toBeUndefined();
+    const second = await f.deposer(depotOsm({ ...CABINET, cle: "amenity", valeur: "clinic" }));
+    expect(second.body).toMatchObject({ crees: 0, misAJour: 1 });
+    const maj = Prospect.parse((second.body.prospects as unknown[])[0]);
+    expect(maj.id).toBe(ancien.id);
+    expect(maj.sources.some((s) => s.service === "osm" && s.categorieOsm?.cle === "amenity" && s.categorieOsm.valeur === "clinic")).toBe(true);
+    const neuf = await banc().deposer(depotOsm({ ...CABINET, cle: "amenity", valeur: "dentist" }));
+    expect(Prospect.parse((neuf.body.prospects as unknown[])[0]).sources[0]!.categorieOsm).toEqual({ cle: "amenity", valeur: "dentist" });
+  });
+
   it("dépôt signé accepté : prospects créés, exclusions appliquées, personne physique BCE écartée, doublon de la réponse fusionné", async () => {
     const f = banc();
     const r = await f.deposer(depotBce());
@@ -522,7 +550,148 @@ describe("service b2c", () => {
 /* Fonctions pures                                                     */
 /* ------------------------------------------------------------------ */
 
+describe("signaux de moment BCE", () => {
+  const changements = (liste: Ligne[]) =>
+    emballer(SIGNATAIRE, "demonstration", { source: "BCE", depuis: "2025-10-01", changements: liste }, { service: "bce", outil: "bce_changements", compte: "registre/demo-bce", args: ARGS });
+  const depotChangements = (liste: Ligne[]) => ({ service: "bce", outil: "bce_changements", reponse: changements(liste), arguments: ARGS });
+
+  it("la date de début d'une entreprise (StartDate, JJ-MM-AAAA) est conservée dans la source du prospect", async () => {
+    const f = banc();
+    const e = { ...entite("0123.456.749", "Toitures de Meuse"), StartDate: "10-02-2026" };
+    const r = await f.deposer(depotBce(reponse({ entreprises: [e] })));
+    expect(r.status).toBe(201);
+    expect(f.tp.prospects[0]!.sources[0]).toMatchObject({ service: "bce", outil: "bce_rechercher", faits: [{ code: "debut_entreprise", date: "2026-02-10" }] });
+  });
+
+  it("sans StartDate, la source ne porte aucun fait", async () => {
+    const f = banc();
+    await f.deposer(depotBce(reponse({ entreprises: [entite("0123.456.749", "Toitures de Meuse")] })));
+    expect(f.tp.prospects[0]!.sources[0]).not.toHaveProperty("faits");
+  });
+
+  it("un dépôt bce_changements enrichit le prospect EXISTANT de même numéro BCE, sans créer de prospect, et ignore les autres numéros et les radiations", async () => {
+    const f = banc();
+    await f.deposer(depotBce(reponse({ entreprises: [entite("0123.456.749", "Toitures de Meuse")] })));
+    const r = await f.deposer(depotChangements([
+      { date: "2026-08-20", type: "changement_adresse", EnterpriseNumber: "0123.456.749", de: "4000 Liège", vers: "4020 Liège" },
+      { date: "2026-09-02", type: "nouvel_etablissement", EnterpriseNumber: "0123.456.749", etablissement: "2.000.000.001" },
+      { date: "2026-09-03", type: "radiation", EnterpriseNumber: "0123.456.749" },
+      { date: "2026-09-05", type: "creation", EnterpriseNumber: "0999.000.001" },
+    ]));
+    expect(r.status).toBe(201);
+    expect(r.body).toMatchObject({ crees: 0, misAJour: 0, enrichisParChangements: 1 });
+    expect(f.tp.prospects).toHaveLength(1);
+    const sources = f.tp.prospects[0]!.sources as Ligne[];
+    expect(sources).toHaveLength(2);
+    expect(sources[1]).toMatchObject({ type: "depot_signe", service: "bce", outil: "bce_changements", sourceId: r.body.sourceId, faits: [{ code: "changement_adresse", date: "2026-08-20" }, { code: "nouvel_etablissement", date: "2026-09-02" }] });
+    // Même dépôt répété : aucun fait nouveau, rien n'est ajouté.
+    const encore = await f.deposer(depotChangements([{ date: "2026-08-20", type: "changement_adresse", EnterpriseNumber: "0123.456.749" }]));
+    expect(encore.body.enrichisParChangements).toBe(0);
+    expect((f.tp.prospects[0]!.sources as Ligne[])).toHaveLength(2);
+  });
+  it("un dépôt de démonstration n'enrichit pas un prospect RÉEL de même numéro BCE (changements), ni l'inverse", async () => {
+    const f = banc();
+    await f.deposer(depotBce(reponse({ entreprises: [entite("0123.456.749", "Toitures de Meuse")] })));
+    const depot = depotChangements([{ date: "2026-08-20", type: "changement_adresse", EnterpriseNumber: "0123.456.749" }]);
+    f.tp.prospects[0]!.mode = "reel";
+    const r = await f.deposer(depot);
+    expect(r.body.enrichisParChangements).toBe(0);
+    expect(f.tp.prospects[0]!.sources as Ligne[]).toHaveLength(1);
+    f.tp.prospects[0]!.mode = "demonstration";
+    expect((await f.deposer(depot)).body.enrichisParChangements).toBe(1);
+  });
+
+  it("un prospect à la corbeille n'est pas enrichi par un dépôt de changements BCE", async () => {
+    const f = banc();
+    await f.deposer(depotBce(reponse({ entreprises: [entite("0123.456.749", "Toitures de Meuse")] })));
+    f.tp.prospects[0]!.corbeille_le = "2026-10-15T10:00:00.000Z";
+    const r = await f.deposer(depotChangements([{ date: "2026-08-20", type: "changement_adresse", EnterpriseNumber: "0123.456.749" }]));
+    expect(r.body.enrichisParChangements).toBe(0);
+    expect(f.tp.prospects[0]!.sources as Ligne[]).toHaveLength(1);
+  });
+});
+
+describe("comptes annuels BNB", () => {
+  const comptes = (numero: string, o: Ligne = {}) => emballer(SIGNATAIRE, "demonstration", {
+    source: "BNB", EnterpriseNumber: numero, trouve: true, taille_deduite: "petite",
+    references: [
+      { ReferenceNumber: "2026-0001", ExerciseDates: { startDate: "2025-01-01", endDate: "2025-12-31" }, AccountingData: { Rubrics: [{ Code: "9087", Period: "N", Value: 6 }, { Code: "20/58", Period: "N", Value: 900000 }] } },
+      { ReferenceNumber: "2025-0001", ExerciseDates: { startDate: "2024-01-01", endDate: "2024-12-31" }, AccountingData: { Rubrics: [{ Code: "9087", Period: "N", Value: 5 }] } },
+    ],
+    ...o,
+  }, { service: "bnb", outil: "bnb_comptes", compte: "centrale/demo-bnb", args: ARGS });
+  const depotComptes = (numero: string, o: Ligne = {}) => ({ service: "bnb", outil: "bnb_comptes", reponse: comptes(numero, o), arguments: ARGS });
+
+  it("un dépôt bnb_comptes enrichit le prospect EXISTANT de même numéro BCE (taille), sans créer de prospect, sans doublon ; un numéro inconnu n'enrichit rien", async () => {
+    const f = banc();
+    await f.deposer(depotBce(reponse({ entreprises: [entite("0123.456.749", "Toitures de Meuse")] })));
+    const r = await f.deposer(depotComptes("0123.456.749"));
+    expect(r.status).toBe(201);
+    expect(r.body).toMatchObject({ crees: 0, misAJour: 0, enrichisParComptes: 1, enrichisParChangements: 0 });
+    expect(f.tp.prospects).toHaveLength(1);
+    const sources = f.tp.prospects[0]!.sources as Ligne[];
+    expect(sources).toHaveLength(2);
+    expect(sources[1]).toMatchObject({ type: "depot_signe", service: "bnb", outil: "bnb_comptes", sourceId: r.body.sourceId, taille: { exercice: 2025, effectifEtp: 6, categorie: "petite" } });
+    // Même dépôt répété : rien de nouveau.
+    const encore = await f.deposer(depotComptes("0123.456.749"));
+    expect(encore.body.enrichisParComptes).toBe(0);
+    expect(f.tp.prospects[0]!.sources as Ligne[]).toHaveLength(2);
+    // Numéro inconnu : aucun enrichissement, aucune création.
+    const inconnu = await f.deposer(depotComptes("0999.000.001"));
+    expect(inconnu.body).toMatchObject({ crees: 0, enrichisParComptes: 0 });
+    expect(f.tp.prospects).toHaveLength(1);
+    // Réponse « non trouvée » : rien.
+    const nonTrouve = await f.deposer(depotComptes("0123.456.749", { trouve: false, references: [] }));
+    expect(nonTrouve.body.enrichisParComptes).toBe(0);
+  });
+
+  it("un dépôt bnb_comptes n'enrichit ni un prospect d'un autre mode ni un prospect à la corbeille", async () => {
+    const f = banc();
+    await f.deposer(depotBce(reponse({ entreprises: [entite("0123.456.749", "Toitures de Meuse")] })));
+    f.tp.prospects[0]!.mode = "reel";
+    expect((await f.deposer(depotComptes("0123.456.749"))).body.enrichisParComptes).toBe(0);
+    f.tp.prospects[0]!.mode = "demonstration";
+    f.tp.prospects[0]!.corbeille_le = "2026-10-15T10:00:00.000Z";
+    expect((await f.deposer(depotComptes("0123.456.749"))).body.enrichisParComptes).toBe(0);
+    expect(f.tp.prospects[0]!.sources as Ligne[]).toHaveLength(1);
+  });
+
+  it("le prospect d'une AUTRE entreprise de même numéro BCE n'est jamais touché", async () => {
+    const f = banc();
+    await f.deposer(depotBce(reponse({ entreprises: [entite("0123.456.749", "Toitures de Meuse")] })));
+    const autre = { ...structuredClone(f.tp.prospects[0]!), id: "dddddddd-dddd-4ddd-8ddd-dddddddddddd", companyId: SOC2 };
+    f.tp.prospects.push(autre);
+    const r = await f.deposer(depotComptes("0123.456.749"));
+    expect(r.body.enrichisParComptes).toBe(1);
+    expect(f.tp.prospects.find((p) => p.companyId === SOC2)!.sources as Ligne[]).toHaveLength(1);
+    expect(f.tp.prospects.find((p) => p.companyId === SOC)!.sources as Ligne[]).toHaveLength(2);
+  });
+
+  it("extraireComptesBnb : dépôt le plus récent avec effectif, catégorie seulement si l'effectif est connu, rien si non trouvé", () => {
+    const m = extraireComptesBnb([{ EnterpriseNumber: "0123.456.749", trouve: true, taille_deduite: "petite", references: [
+      { ExerciseDates: { endDate: "2025-12-31" }, AccountingData: { Rubrics: [{ Code: "9087", Period: "N", Value: null }] } },
+      { ExerciseDates: { endDate: "2024-12-31" }, AccountingData: { Rubrics: [{ Code: "9087", Period: "N", Value: 12.5 }] } },
+    ] }]);
+    expect(m.get("0123.456.749")).toEqual({ exercice: 2024, effectifEtp: 12.5, categorie: "petite" });
+    const sansEffectif = extraireComptesBnb([{ EnterpriseNumber: "0123.456.749", trouve: true, taille_deduite: "inconnue", references: [{ ExerciseDates: { endDate: "2025-12-31" } }] }]);
+    expect(sansEffectif.get("0123.456.749")).toEqual({ exercice: 2025, effectifEtp: null, categorie: null });
+    expect(extraireComptesBnb([{ EnterpriseNumber: "0123.456.749", trouve: false, references: [] }]).size).toBe(0);
+    expect(extraireComptesBnb([{ EnterpriseNumber: "pas un numéro", trouve: true, references: [{ ExerciseDates: { endDate: "2025-12-31" } }] }]).size).toBe(0);
+  });
+});
+
 describe("extraction et zone", () => {
+  it("extraireChangementsBce : types connus et dates valides seulement", () => {
+    const m = extraireChangementsBce([{ changements: [
+      { date: "2026-08-20", type: "changement_forme", EnterpriseNumber: "0123.456.749" },
+      { date: "20-08-2026", type: "creation", EnterpriseNumber: "0123.456.749" },
+      { date: "pas une date", type: "creation", EnterpriseNumber: "0123.456.749" },
+      { date: "2026-08-20", type: "inconnu", EnterpriseNumber: "0123.456.749" },
+      { date: "2026-08-20", type: "creation", EnterpriseNumber: "pas un numéro" },
+    ] }]);
+    expect(m.get("0123.456.749")).toEqual([{ code: "changement_forme", date: "2026-08-20" }, { code: "creation", date: "2026-08-20" }]);
+    expect(m.size).toBe(1);
+  });
   it("les outils sans prospect (comptes, changements, répartition) n'en donnent aucun", () => {
     expect(extraireProspects("bnb", "bnb_comptes", [{ EnterpriseNumber: "0123.456.749", references: [] }]).prospects).toEqual([]);
     expect(extraireProspects("bce", "bce_changements", [{ changements: [{ EnterpriseNumber: "0123.456.749" }] }]).prospects).toEqual([]);
@@ -532,7 +701,9 @@ describe("extraction et zone", () => {
     expect(fsma).toMatchObject({ cible: "partenaire", forme: "inconnue", identifiantReglementaire: "fsma:123456", numeroBce: "0123.456.749" });
     expect(fsma.zone.region).toBe("Bruxelles-Capitale");
     const osm = extraireProspects("osm", "osm_commerces", [{ commerces: [{ id: "n42", nom: "Boulangerie", adresse: { code_postal: "9000", commune: "Gand" }, telephone: "+32 9 000 00 00" }] }]).prospects[0]!;
-    expect(osm).toMatchObject({ cleOsm: "n42", telephones: ["+32 9 000 00 00"] });
+    expect(osm).toMatchObject({ cleOsm: "n42", telephones: ["+32 9 000 00 00"], categorieOsm: null });
+    const dentiste = extraireProspects("osm", "osm_commerces", [{ commerces: [{ id: "n43", nom: "Cabinet", cle: "amenity", valeur: "dentist", adresse: { code_postal: "4000", commune: "Liège" } }] }]).prospects[0]!;
+    expect(dentiste.categorieOsm).toEqual({ cle: "amenity", valeur: "dentist" });
     expect(regionDuCodePostal("1348")).toBe("Wallonie");
     expect(regionDuCodePostal("8000")).toBe("Flandre");
   });
@@ -599,7 +770,9 @@ describe("SQL de prospection (base.ts réelle, règles de l'hôte)", () => {
     await base.listerProspects(SOC, {
       campagneId: CAMP, cibles: ["entreprise"], nace: ["43.9"], codesPostaux: ["4000"], communes: ["Liège"], provinces: ["Liège"], regions: ["Wallonie"], statuts: ["nouveau"],
       entites: ["non-vie"], etablissements: ["liege"], segments: ["pme"], offres: ["rc"], origines: ["formulaire_entrant"], scoreMin: 20, page: 2, parPage: 10,
+      zonesBureau: ["4000", "Liège"], source: "reelle", avecClientsActuels: false,
     });
+    await base.listerProspects(SOC, { avecClientsActuels: true, source: "demonstration", page: 1, parPage: 10 });
     await base.prospectsAvecEmpreinte(SOC, "courriel", "a".repeat(64));
     await base.lireOpposition(SOC, "courriel", "a".repeat(64), "tous");
     await base.exclureProspect(SOC, id, []);
@@ -627,5 +800,186 @@ describe("SQL de prospection (base.ts réelle, règles de l'hôte)", () => {
     const ecrit = JSON.stringify(ecrits);
     expect(ecrits.length).toBeGreaterThan(3);
     for (const clair of ["info@toitures-meuse.example", "contact@charpentes.example", "+32 4 000 11 22"]) expect(ecrit).not.toContain(clair);
+  });
+});
+
+/* ------------------------------------------------------------------ */
+/* Confiance de qualification : lecture, liste, filtre, critères manquants */
+/* ------------------------------------------------------------------ */
+
+describe("confiance de qualification (courtier fictif)", () => {
+  // Cibles du courtier fictif : médecins (NACE 86.21x) à Liège ; les entreprises de test (NACE 43.910, toitures) sont donc hors segment.
+  const marque = REFERENTIEL_COURTIER;
+  const ciblesToitures = {
+    ...marque,
+    segments: [...marque.segments, { code: "couvreurs", libelle: "Couvreurs", type: "profession", nace: ["43.910"] }],
+    ciblesProspection: [{ code: "couvreurs-liege", libelle: "Couvreurs de Liège", cible: "b2b", segments: ["couvreurs"], zones: { etablissements: ["bureau-liege"], communes: [], codesPostaux: [], provinces: [], regions: [] }, tailles: [], offres: [], entite: "non-vie" }],
+  };
+
+  it("lecture et liste : la confiance et ses critères sont servis, distincts du score de conversion", async () => {
+    const f = banc({ marque: ciblesToitures, baseClients: 12, poids: { source_registre_officiel: 40, courriel_impersonnel: 30, telephone_present: 10 } });
+    await f.deposer(depotBce());
+    const r = await f.appeler("prospects.lister", { query: { companyId: SOC, statuts: "nouveau", parPage: "10" }, agent: false });
+    const page = PageProspects.parse(r.body);
+    const toitures = page.prospects.find((p) => p.numeroBce === "0123.456.749")!;
+    // Actif (BCE), segment, zone, pas client (base importée) vérifiés ; joignable (aucune base légale dans le banc), taille, concordance non vérifiés.
+    expect(toitures.confiance).toMatchObject({ valeur: 20 + 20 + 15 + 10, qualifie: false, plafonnee: false, seuil: 90 });
+    expect(toitures.confiance!.criteres.map((c) => [c.code, c.statut])).toEqual([
+      ["entreprise_active", "verifie"], ["segment_cible", "verifie"], ["zone_cible", "verifie"], ["joignable_legalement", "non_verifie"],
+      ["pas_deja_client", "verifie"], ["taille_connue", "non_verifie"], ["sources_concordantes", "non_verifie"],
+    ]);
+    expect(toitures.confiance!.criteres[0]!.sourceId).toBe(toitures.sources[0]!.sourceId);
+    // Le score de conversion garde sa nature et ses points : la confiance ne le modifie pas.
+    expect(toitures.score).toMatchObject({ nature: "estimation", versionPoids: 1 });
+    expect(toitures.score!.criteres.map((c) => c.code)).toEqual(["source_registre_officiel", "courriel_impersonnel", "telephone_present"]);
+  });
+
+  it("à chaque nouveau dépôt la confiance est recalculée, mais une 2e source du même service ne vaut pas concordance", async () => {
+    const f = banc({ marque: ciblesToitures, baseClients: 3 });
+    const premier = await f.deposer(depotBce());
+    const avant = (premier.body.prospects as Prospect[]).find((p) => p.numeroBce === "0123.456.749")!.confiance!.valeur;
+    // Même prospect, redéposé : une 2e source du MÊME service ne compte pas comme concordance (indépendance exigée).
+    const second = await f.deposer(depotBce());
+    const apres = (second.body.prospects as Prospect[]).find((p) => p.numeroBce === "0123.456.749")!;
+    expect(apres.sources).toHaveLength(2);
+    expect(apres.confiance!.valeur).toBe(avant);
+    expect(apres.confiance!.criteres.find((c) => c.code === "sources_concordantes")!.statut).toBe("non_verifie");
+  });
+
+  it("filtre qualifiesSeulement : seuls les prospects à 90 % ou plus ; pagination sur les qualifiés", async () => {
+    const f = banc({ marque: ciblesToitures, baseClients: 3 });
+    await f.deposer(depotBce());
+    const tous = PageProspects.parse((await f.appeler("prospects.lister", { query: { companyId: SOC, parPage: "10" }, agent: false })).body);
+    expect(tous.total).toBeGreaterThan(0);
+    expect(tous.prospects.every((p) => !p.confiance!.qualifie)).toBe(true);
+    const q = PageProspects.parse((await f.appeler("prospects.lister", { query: { companyId: SOC, qualifiesSeulement: "true" }, agent: false })).body);
+    expect(q).toMatchObject({ total: 0, pages: 0, prospects: [] });
+    // Un prospect porté à 90 % (base légale + 2e source concordante) apparaît, l'autre non.
+    const ligne = f.tp.prospects.find((p) => p.numeroBce === "0123.456.749")!;
+    ligne.sources = [...ligne.sources, { type: "depot_signe", sourceId: "c2222222-2222-4222-8222-222222222222", service: "osm", outil: "osm_commerces", url: null, collecteLe: ligne.creeLe }];
+    f.tp.bases.set(ligne.id, [{
+      cible: "entreprise", forme: "personne_morale", canal: "courriel", base: "personne_morale_adresse_impersonnelle", nature_adresse: "impersonnelle",
+      preuve: { type: "source", reference: "BCE (démonstration)", date: ligne.creeLe }, information: { texteArt14: "Adresse trouvée à la BCE (démonstration).", moyenOpposition: "Lien de désinscription" },
+      dncm_verifie_le: null, verifie_le: ligne.creeLe, verifie_par: "systeme",
+    }]);
+    const apres = PageProspects.parse((await f.appeler("prospects.lister", { query: { companyId: SOC, qualifiesSeulement: "true" }, agent: false })).body);
+    expect(apres.total).toBe(1);
+    expect(apres.prospects[0]).toMatchObject({ numeroBce: "0123.456.749", confiance: { valeur: 90, qualifie: true } });
+    const hors = PageProspects.parse((await f.appeler("prospects.lister", { query: { companyId: SOC, qualifiesSeulement: "true", page: "2" }, agent: false })).body);
+    expect(hors).toMatchObject({ total: 1, page: 2, prospects: [] });
+  });
+
+  it("carte avec qualifiesSeulement : un seul parcours par pages de 200, jamais la liste paginée de la carte", async () => {
+    const f = banc({ marque: ciblesToitures, baseClients: 3 });
+    await f.deposer(depotBce());
+    const ligne = f.tp.prospects.find((p) => p.numeroBce === "0123.456.749")!;
+    ligne.sources = [...ligne.sources, { type: "depot_signe", sourceId: "c2222222-2222-4222-8222-222222222222", service: "osm", outil: "osm_commerces", url: null, collecteLe: ligne.creeLe }];
+    f.tp.bases.set(ligne.id, [{
+      cible: "entreprise", forme: "personne_morale", canal: "courriel", base: "personne_morale_adresse_impersonnelle", nature_adresse: "impersonnelle",
+      preuve: { type: "source", reference: "BCE (démonstration)", date: ligne.creeLe }, information: { texteArt14: "Adresse trouvée à la BCE (démonstration).", moyenOpposition: "Lien de désinscription" },
+      dncm_verifie_le: null, verifie_le: ligne.creeLe, verifie_par: "systeme",
+    }]);
+    f.appelsListe.length = 0;
+    const r = await f.appeler("prospects.carte", { query: { companyId: SOC, qualifiesSeulement: "true" }, agent: false });
+    expect(r.status).toBe(200);
+    expect(r.body).toMatchObject({ total: 1, tronque: false });
+    // Un seul passage de 200 (moins de 200 lignes : un seul appel) ; la liste paginée de la carte (pages de 100) n'est pas utilisée.
+    expect(f.appelsListe).toEqual([200]);
+  });
+
+  it("prospects.criteres-manquants : un agent lit les critères à enrichir et l'outil de la passerelle pour chacun", async () => {
+    const f = banc({ marque: ciblesToitures });
+    await f.deposer(depotBce());
+    const id = f.tp.prospects.find((p) => p.numeroBce === "0123.456.749")!.id;
+    const r = await f.appeler("prospects.criteres-manquants", { params: { prospectId: id }, query: { companyId: SOC } });
+    expect(r.status).toBe(200);
+    const m = CriteresManquants.parse(r.body);
+    expect(m).toMatchObject({ prospectId: id, qualifie: false, seuil: 90, confiance: 20 + 20 + 15, contraires: [] });
+    const outils = Object.fromEntries(m.manquants.map((x) => [x.code, x.verifiePar.map((v) => v.outil)]));
+    expect(outils).toEqual({ taille_connue: ["bnb_comptes"], joignable_legalement: [], pas_deja_client: [], sources_concordantes: ["osm_commerces"] });
+    // Autre entreprise : introuvable ; prospect inconnu : introuvable.
+    const autre = await f.appeler("prospects.criteres-manquants", { params: { prospectId: id }, query: { companyId: SOC2 }, companyId: SOC2 });
+    expect(autre.status).toBe(404);
+    const inconnu = await f.appeler("prospects.criteres-manquants", { params: { prospectId: "dddddddd-dddd-4ddd-8ddd-dddddddddddd" }, query: { companyId: SOC } });
+    expect(inconnu.status).toBe(404);
+  });
+  it("un prospect à la corbeille n'est servi par aucune route de lecture (404 compte-rendu, critères manquants, question)", async () => {
+    const f = banc({ marque: ciblesToitures, baseClients: 12 });
+    (f.ctx as unknown as { agents: { list: unknown } }).agents.list = async () => [{ id: "44444444-4444-4444-8444-444444444444", companyId: SOC, name: "Coordinateur", role: "ceo", status: "idle" }];
+    await f.deposer(depotBce());
+    const prospect = f.tp.prospects.find((p) => p.numeroBce === "0123.456.749")!;
+    const id = prospect.id;
+    expect((await f.appeler("prospects.compte-rendu", { params: { prospectId: id }, query: { companyId: SOC } })).status).toBe(200);
+    prospect.corbeille_le = "2026-10-15T10:00:00.000Z";
+    expect((await f.appeler("prospects.compte-rendu", { params: { prospectId: id }, query: { companyId: SOC } })).status).toBe(404);
+    expect((await f.appeler("prospects.criteres-manquants", { params: { prospectId: id }, query: { companyId: SOC } })).status).toBe(404);
+    expect((await f.appeler("prospects.question", { params: { prospectId: id }, body: { companyId: SOC, question: "Une question ?" }, agent: false })).status).toBe(404);
+    // Restauré : de nouveau servi.
+    delete prospect.corbeille_le;
+    expect((await f.appeler("prospects.compte-rendu", { params: { prospectId: id }, query: { companyId: SOC } })).status).toBe(200);
+  });
+  it("prospects.compte-rendu : lecture déterministe d'un agent ; autre entreprise et prospect inconnu : 404", async () => {
+    const f = banc({ marque: ciblesToitures, baseClients: 12 });
+    await f.deposer(depotBce());
+    const id = f.tp.prospects.find((p) => p.numeroBce === "0123.456.749")!.id;
+    const r = await f.appeler("prospects.compte-rendu", { params: { prospectId: id }, query: { companyId: SOC } });
+    expect(r.status).toBe(200);
+    const cr = CompteRenduProspect.parse(r.body);
+    expect(cr).toMatchObject({ prospectId: id, nom: "Autre nom", confiance: { valeur: 20 + 20 + 15 + 10, qualifie: false } });
+    expect(cr.pourquoi.verifies.map((v) => v.code)).toEqual(["entreprise_active", "segment_cible", "zone_cible", "pas_deja_client"]);
+    expect(cr.pourquoi.verifies[0]).toMatchObject({ service: "bce" });
+    expect(cr.pourquoi.nonVerifies.map((v) => v.code)).toEqual(["joignable_legalement", "taille_connue", "sources_concordantes"]);
+    expect(cr.prochaineAction.libelle).toContain("Enrichir : bnb_comptes");
+    expect(cr.etablissementProche).toMatchObject({ code: "bureau-liege", raison: "meme_code_postal" });
+    expect(cr.markdown).toContain("## Compte rendu du lead : Autre nom");
+    expect(cr.limites.join(" ")).toContain("Données de démonstration");
+    // Les coordonnées ne sortent jamais.
+    expect(JSON.stringify(cr)).not.toMatch(/@|\+32/u);
+    expect((await f.appeler("prospects.compte-rendu", { params: { prospectId: id }, query: { companyId: SOC2 }, companyId: SOC2 })).status).toBe(404);
+    expect((await f.appeler("prospects.compte-rendu", { params: { prospectId: "dddddddd-dddd-4ddd-8ddd-dddddddddddd" }, query: { companyId: SOC } })).status).toBe(404);
+  });
+
+  describe("prospects.question", () => {
+    const COORD_ID = "44444444-4444-4444-8444-444444444444";
+    async function prepare() {
+      const f = banc({ marque: ciblesToitures, baseClients: 12 });
+      (f.ctx as unknown as { agents: { list: unknown } }).agents.list = async () => [{ id: COORD_ID, companyId: SOC, name: "Coordinateur", role: "ceo", status: "idle" }];
+      await f.deposer(depotBce());
+      const id = f.tp.prospects.find((p) => p.numeroBce === "0123.456.749")!.id;
+      return { f, id };
+    }
+
+    it("un humain crée une tâche assignée au Coordinateur avec la question puis le compte rendu ; journalisé", async () => {
+      const { f, id } = await prepare();
+      const r = await f.appeler("prospects.question", { params: { prospectId: id }, body: { companyId: SOC, question: "Pourquoi ce lead est-il à 55 % ?" }, agent: false });
+      expect(r.status).toBe(201);
+      expect(r.body).toMatchObject({ identifiant: expect.stringMatching(/^REV-/u), lien: expect.stringMatching(/^\/issues\/REV-/u) });
+      const tache = f.issues.get(r.body.issueId)!;
+      expect(tache).toMatchObject({ companyId: SOC, assigneeAgentId: COORD_ID, status: "todo" });
+      expect(tache.title).toBe("Lead : Autre nom : Pourquoi ce lead est-il à 55 % ?");
+      expect(tache.description.startsWith("Pourquoi ce lead est-il à 55 % ?\n")).toBe(true);
+      expect(tache.description).toContain("Réponds dans la discussion");
+      expect(tache.description).toContain("## Compte rendu du lead : Autre nom");
+      expect(tache.description).toContain("Source : BCE");
+      expect(tache.description).not.toMatch(/@|\+32/u);
+      const j = f.t.journal.find((e) => e.type === "prospect.question")!;
+      expect(j).toMatchObject({ entite: "prospect", entiteId: id, issueId: r.body.issueId, acteur: HUMAIN });
+      expect(j.donnees).toEqual({ coordinateurId: COORD_ID, titre: tache.title, tailleQuestion: 32 });
+    });
+
+    it("refus 403 pour un agent, 404 pour un prospect d'une autre entreprise, 400 pour une question vide, 404 sans Coordinateur", async () => {
+      const { f, id } = await prepare();
+      const agent = await f.appeler("prospects.question", { params: { prospectId: id }, body: { companyId: SOC, question: "Une question ?" } });
+      expect(agent.status).toBe(403);
+      expect(f.issues.size).toBeLessThan(100);
+      const autre = await f.appeler("prospects.question", { params: { prospectId: id }, body: { companyId: SOC2, question: "Une question ?" }, companyId: SOC2, agent: false });
+      expect(autre.status).toBe(404);
+      const vide = await f.appeler("prospects.question", { params: { prospectId: id }, body: { companyId: SOC, question: "  " }, agent: false });
+      expect(vide.status).toBe(400);
+      (f.ctx as unknown as { agents: { list: unknown } }).agents.list = async () => [];
+      const sans = await f.appeler("prospects.question", { params: { prospectId: id }, body: { companyId: SOC, question: "Une question ?" }, agent: false });
+      expect(sans.status).toBe(404);
+      expect(f.t.journal.filter((e) => e.type === "prospect.question")).toHaveLength(0);
+    });
   });
 });

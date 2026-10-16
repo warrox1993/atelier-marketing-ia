@@ -128,8 +128,15 @@ def main():
               f"conversions={e.get('conversions')} méthode={e.get('methode')} brier={e.get('brier')} "
               f"application={json.dumps(rep.get('application'), ensure_ascii=False)[:200]}")
 
-    # 5) ventes croisées : aucune route exposée par le plugin (routes.ts)
-    print("Opportunités de vente croisée : aucune route ne les expose (absentes de contrats/routes.ts).")
+    # 5) ventes croisées : route `ventes-croisees.lister` (humain seulement, sous pseudonyme)
+    st, rep = api("GET", PLUGIN + "/ventes-croisees?companyId=" + COMPANY)
+    if st >= 400:
+        print(f"Ventes croisées : HTTP {st} {json.dumps(rep, ensure_ascii=False)[:300]}")
+        code = 1
+    else:
+        liste = rep.get("opportunites", rep.get("elements", rep)) if isinstance(rep, dict) else rep
+        nb = len(liste) if isinstance(liste, list) else "?"
+        print(f"Ventes croisées : {nb} opportunité(s) (aperçu : {json.dumps(rep, ensure_ascii=False)[:300]})")
     sys.exit(code)
 
 

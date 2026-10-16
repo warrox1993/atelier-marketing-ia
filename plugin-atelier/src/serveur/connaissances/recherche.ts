@@ -4,7 +4,9 @@
  * Ordre des opérations :
  * 1. filtres structurés dans le `WHERE` des deux recherches (`company_id` imposé par l'appelant, version
  *    active, statut `en_vigueur` par défaut, validité à la date de référence, type, produit, langue, mode) ;
- * 2. mots-clés : `websearch_to_tsquery` en `french` ET en `dutch` sur le texte normalisé, `ts_rank_cd` ;
+ * 2. mots-clés : un `websearch_to_tsquery` par terme significatif (mots vides ignorés), en `french` ET en `dutch`,
+ *    passage retenu s'il contient au moins la moitié des termes (arrondie au supérieur, minimum 1), classé par
+ *    nombre de termes puis `ts_rank_cd` ;
  * 3. sens : vecteur de la question contre le cache des vecteurs de l'entreprise, restreint aux identifiants
  *    retenus par les filtres (produit scalaire exact) ;
  * 4. fusion RRF (k = 60) ; 5. seuil « aucune source » ; 6. passages rendus avec citation et consigne.
@@ -284,7 +286,7 @@ export function construireFiltres(contexte: ContexteRecherche, filtres: FiltresR
   const from =
     `${T_PASSAGES} p ` +
     `JOIN ${T_VERSIONS} v ON v.id = p.version_id AND v.company_id = p.company_id ` +
-    `JOIN ${T_DOCUMENTS} d ON d.id = p.document_id AND d.company_id = p.company_id AND v.document_id = d.id`;
+    `JOIN ${T_DOCUMENTS} d ON d.id = p.document_id AND d.company_id = p.company_id AND v.document_id = d.id AND d.corbeille_le IS NULL`;
   return { from, where: conditions.join(" AND "), params };
 }
 
@@ -298,23 +300,55 @@ export function requeteIndexActif(companyId: string): { sql: string; params: unk
   };
 }
 
-/** Mots-clés : requête en français ET en néerlandais (réunion des deux), classement `ts_rank_cd`. */
+/** Mots vides français ignorés dans la question (comparés sans accents, en minuscules). */
+export const MOTS_VIDES_FRANCAIS: ReadonlySet<string> = new Set(
+  ("a au aux avec ce ces cet cette ceux celle celles dans de des du elle elles en es est et eux il ils je la le les leur leurs lui ma mais me meme mes moi mon ne nos notre nous on ou par pas pour qu que qui sa se ses son sur ta te tes toi ton tu un une vos votre vous " +
+    "y quel quelle quels quelles quoi dont comment combien quand pourquoi si sont suis sera etre ete avoir ai as avons avez ont fait faire peut peuvent doit doivent plus moins tres aussi entre chez sans sous vers d l s n c j m t")
+    .split(/\s+/u),
+);
+
+/**
+ * Termes significatifs d'une question : minuscules sans accents, découpée sur tout ce qui n'est ni lettre ni
+ * chiffre, sans doublon, mots vides français et lettres isolées retirés. Si tout est retiré, on garde les mots
+ * d'au moins deux caractères (la question n'est alors faite que de mots courants).
+ */
+export function termesSignificatifs(questionNormalisee: string): string[] {
+  const mots = [...new Set(questionNormalisee.split(/[^\p{L}\p{N}]+/u).filter((m) => m.length > 0))];
+  const utiles = mots.filter((m) => m.length >= 2 && !MOTS_VIDES_FRANCAIS.has(m));
+  return utiles.length > 0 ? utiles : mots.filter((m) => m.length >= 2);
+}
+
+/** Seuil de correspondance : au moins la moitié des termes significatifs, arrondie au supérieur, et au moins 1. */
+export function seuilTermes(nombreTermes: number): number {
+  return Math.max(1, Math.ceil(nombreTermes / 2));
+}
+
+/**
+ * Mots-clés, tolérants : chaque terme significatif devient une requête en français ET en néerlandais (réunion
+ * des deux) ; un passage est retenu s'il en contient au moins `seuil`, classé par nombre de termes trouvés puis
+ * par somme des `ts_rank_cd`, puis par identifiant. Les termes passent en JSON (l'hôte étale les tableaux).
+ */
 export function requeteMotsCles(
   contexte: ContexteRecherche,
   filtres: FiltresResolus,
-  questionNormalisee: string,
+  termes: readonly string[],
   limite: number,
 ): { sql: string; params: unknown[] } {
   const { from, where, params } = construireFiltres(contexte, filtres);
-  params.push(questionNormalisee);
+  params.push(JSON.stringify([...termes]));
   const q = params.length;
+  params.push(seuilTermes(termes.length));
+  const s = params.length;
   params.push(limite);
   const l = params.length;
   return {
     sql:
-      `WITH q AS (SELECT websearch_to_tsquery('french', $${q}::text) || websearch_to_tsquery('dutch', $${q}::text) AS tsq) ` +
-      `SELECT p.id, ts_rank_cd(p.tsv, q.tsq) AS score FROM ${from} CROSS JOIN q ` +
-      `WHERE ${where} AND p.tsv @@ q.tsq ORDER BY score DESC, p.id ASC LIMIT $${l}`,
+      `WITH t AS (SELECT websearch_to_tsquery('french', m.mot) || websearch_to_tsquery('dutch', m.mot) AS tsq ` +
+      `FROM jsonb_array_elements_text($${q}::jsonb) AS m(mot)) ` +
+      `SELECT p.id, c.rang AS score FROM ${from} ` +
+      `CROSS JOIN LATERAL (SELECT count(*) FILTER (WHERE p.tsv @@ t.tsq) AS nb, ` +
+      `COALESCE(sum(ts_rank_cd(p.tsv, t.tsq)) FILTER (WHERE p.tsv @@ t.tsq), 0) AS rang FROM t) c ` +
+      `WHERE ${where} AND c.nb >= $${s}::int ORDER BY c.nb DESC, score DESC, p.id ASC LIMIT $${l}`,
     params,
   };
 }
@@ -489,8 +523,12 @@ export async function rechercherConnaissances(
   const index = lireIndex((await executer(ri.sql, ri.params))[0]);
 
   // Mots-clés.
-  const rm = requeteMotsCles(ctx, filtres, sansAccents(entree.question), CANDIDATS_PAR_LISTE);
-  const listeTexte = (await executer(rm.sql, rm.params)).map((l) => String(l.id));
+  const termes = termesSignificatifs(sansAccents(entree.question));
+  let listeTexte: string[] = [];
+  if (termes.length > 0) {
+    const rm = requeteMotsCles(ctx, filtres, termes, CANDIDATS_PAR_LISTE);
+    listeTexte = (await executer(rm.sql, rm.params)).map((l) => String(l.id));
+  }
 
   // Sens : seulement si l'entreprise a un index vectorisé et que le vectoriseur en a un aussi.
   let listeSens: string[] = [];

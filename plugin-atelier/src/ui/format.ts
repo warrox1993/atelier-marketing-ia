@@ -127,7 +127,7 @@ export function idCourt(id: string | null | undefined): string {
 export const ETATS_CONNEXION: Record<EtatConnexion, { libelle: string; aide: string; ton: Ton }> = {
   demonstration: { libelle: "Démonstration", aide: "Fixtures déterministes : aucune IA réelle, aucun appel externe.", ton: "demo" },
   reel_teste: { libelle: "Réel testé", aide: "Fonctionnement réel vérifié par un appel effectif.", ton: "succes" },
-  configure_non_verifie: { libelle: "Configuré, non vérifié", aide: "Une configuration existe, mais aucun appel réel ne l'a encore prouvée.", ton: "attention" },
+  configure_non_verifie: { libelle: "Prêt, pas encore utilisé", aide: "La connexion est configurée et prête, mais aucun appel réel ne l'a encore utilisée : son fonctionnement n'est pas encore prouvé.", ton: "neutre" },
   non_connecte: { libelle: "Non connecté", aide: "Aucune connexion configurée.", ton: "neutre" },
   indisponible: { libelle: "Indisponible", aide: "Le service ne répond pas ou n'est pas disponible dans cette version.", ton: "attention" },
   erreur: { libelle: "Erreur", aide: "Le dernier essai a échoué.", ton: "danger" },

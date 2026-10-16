@@ -71,6 +71,6 @@ scénarios, approbations requises.
 ## Exemple
 
 Scénario « Relance devis non signé » : entrée = devis envoyé depuis 10 jours ; déclencheur
-= aucune réponse ; exclusions = devis signé, demande de ne plus être contacté, chantier en
+= aucune réponse ; exclusions = devis signé, demande de ne plus être contacté, dossier de sinistre en
 cours ; consentement = suivi de la demande de devis (relation précontractuelle, à faire
 vérifier) ; envoi = un courriel, puis rien ; contact fictif : `client.demo1@exemple.invalid`.

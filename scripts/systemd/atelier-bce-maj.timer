@@ -1,0 +1,10 @@
+[Unit]
+Description=Mise à jour de l'index BCE le 5 de chaque mois à 04 h
+
+[Timer]
+OnCalendar=*-*-05 04:00:00
+Persistent=true
+Unit=atelier-bce-maj.service
+
+[Install]
+WantedBy=timers.target

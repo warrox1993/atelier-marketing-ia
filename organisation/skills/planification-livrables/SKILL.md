@@ -71,10 +71,10 @@ fermées avec justification.
 
 | tâche | agent | exigences | dépend de | relectures |
 | --- | --- | --- | --- | --- |
-| T1 Note de marché isolation toitures | Veille | REQ-002 | (aucune) | exigences, relecteur |
-| T2 Audit local des 3 établissements | SEO local GEO | REQ-003 à REQ-005 | (aucune) | exigences, tests techniques |
-| T3 Article de blog | Contenus | REQ-002, REQ-006 | T1, T2 | exigences, relecteur, tests techniques |
-| T4 Campagne SEA en brouillon | SEA | REQ-007, REQ-008 | T1, T3 | exigences, relecteur, tests techniques |
+| T1 Note de marché assurance habitation | Veille | REQ-002 | (aucune) | exigences, relecteur |
+| T2 Audit local des 2 bureaux | SEO local GEO | REQ-003 et REQ-004 | (aucune) | exigences, tests techniques |
+| T3 Article de blog | Contenus | REQ-002, REQ-005 | T1, T2 | exigences, relecteur, tests techniques |
+| T4 Campagne SEA en brouillon | SEA | REQ-006, REQ-007 | T1, T3 | exigences, relecteur, tests techniques |
 | T5 Dossier humain | Coordinateur | toutes | T3, T4 | (porte déterministe puis humain) |
 
 Fermée avec justification : « CRM non demandé dans ce brief ».

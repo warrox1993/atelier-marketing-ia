@@ -62,7 +62,10 @@ OUTIL_SERVEUR_CONNEXIONS = "mcp__paperclip-assigned"
 OUTILS_NATIFS_CONNEXIONS = {"mcp__Paperclip_connections__connections_search", "mcp__Paperclip_connections__connection_request"}
 OUTILS_RECHERCHE = {"Read", "Grep", "Glob", "WebSearch", "WebFetch", OUTIL_SERVEUR_CONNEXIONS} | OUTILS_NATIFS_CONNEXIONS
 OUTILS_MUTATION = {"Write", "Edit", "Bash(curl *)", OUTIL_SERVEUR_CONNEXIONS}
-OUTILS_CONNUS = OUTILS_RECHERCHE | OUTILS_MUTATION | {"NotebookEdit", "Bash"}
+# Outils de sous-agents de Claude Code (« Agent », ancien nom « Task ») : interdits à tous les
+# agents de l'atelier. La délégation passe par les tâches Paperclip, visibles et soumises à la porte.
+OUTILS_SOUS_AGENTS = {"Agent", "Task"}
+OUTILS_CONNUS = OUTILS_RECHERCHE | OUTILS_MUTATION | {"NotebookEdit", "Bash"} | OUTILS_SOUS_AGENTS
 CHAMPS_AGENT = [
     "slug", "nom", "titre", "role", "rapporteA", "mission", "entrees", "sorties", "competences",
     "competencesObligatoires", "outils", "modele", "budgetMensuelCentimes", "maxToursParExecution",
@@ -340,6 +343,8 @@ def controler_registre(bootstrap):
             erreur(f"agent {s} : outil à la fois autorisé et interdit")
         if not (autorises | set(o["interdits"])) <= OUTILS_CONNUS:
             erreur(f"agent {s} : outil inconnu")
+        if not OUTILS_SOUS_AGENTS <= set(o["interdits"]):
+            erreur(f"agent {s} : les outils de sous-agents (Agent, Task) doivent être interdits explicitement")
         if a["budgetMensuelCentimes"] <= 0 or a["maxToursParExecution"] <= 0:
             erreur(f"agent {s} : budget et plafond de tours doivent être positifs")
         if a["rapporteA"] is not None and a["rapporteA"] not in par_slug:
@@ -357,6 +362,23 @@ def controler_registre(bootstrap):
             chaine = vus - {a["slug"]}
             if chaine & set(a["relit"]):
                 erreur(f"contrôleur {a['slug']} subordonné à un producteur qu'il relit : {chaine & set(a['relit'])}")
+    # Indépendance : aucun contrôleur ne rapporte au Coordinateur ni à un producteur (directement
+    # ou par la chaîne) ; la branche qualité a pour tête le Responsable qualité (le relecteur).
+    prods = {a["slug"] for a in agents if not a["relit"] and a["slug"] not in ("coordinateur", "porte")}
+    for a in agents:
+        if not a["relit"] and a["slug"] != "porte":
+            continue
+        cur, chaine = a["rapporteA"], set()
+        while cur is not None and cur not in chaine:
+            chaine.add(cur)
+            cur = par_slug[cur]["rapporteA"]
+        if chaine & (prods | {"coordinateur"}):
+            erreur(f"contrôleur {a['slug']} dépend du coordinateur ou d'un producteur : {sorted(chaine & (prods | {'coordinateur'}))}")
+    for s in ("exigences", "tests-techniques", "porte"):
+        if par_slug[s]["rapporteA"] != "relecteur":
+            erreur(f"{s} : doit rendre compte au Responsable qualité (relecteur)")
+    if par_slug["relecteur"]["rapporteA"] is not None:
+        erreur("relecteur : le Responsable qualité ne rend compte à personne")
     roles = [a["roleRevue"] for a in agents if a["relit"]]
     if sorted(roles) != sorted(ROLES_REVUE) or any(a["roleRevue"] for a in agents if not a["relit"]):
         erreur(f"rôles de revue : un contrôleur par rôle {sorted(ROLES_REVUE)} attendu, trouvé {roles}")
@@ -496,6 +518,7 @@ SERVICES_PASSERELLE = {
     "linkedin": "atelier-linkedin", "crm": "atelier-hubspot", "pipedrive": "atelier-pipedrive",
     "odoo": "atelier-odoo", "teamleader": "atelier-teamleader",
     "bce": "atelier-bce", "bnb": "atelier-bnb", "fsma": "atelier-fsma", "osm": "atelier-osm", "b2c": "atelier-b2c",
+    "liens": "atelier-liens",  # vérification de liens (verifier_url), service réel sans compte
 }
 # Services de prospection (lot P10) : leurs réponses se déposent par tache.prospects.deposer (/prospects),
 # pas par tache.donnees.deposer (/donnees-connexion).

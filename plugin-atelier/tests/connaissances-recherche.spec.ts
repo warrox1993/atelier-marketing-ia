@@ -15,6 +15,9 @@ import {
   construireCitation,
   fusionRrf,
   rechercherConnaissances,
+  requeteMotsCles,
+  seuilTermes,
+  termesSignificatifs,
   type ContexteRecherche,
   type DependancesRecherche,
   type LignePassage,
@@ -167,15 +170,22 @@ function fauxExecuteur(monde: { passages: PassageFaux[]; index: IndexFaux[] }) {
     });
 
     if (n.includes("websearch_to_tsquery")) {
-      const q = /websearch_to_tsquery\('french', \$(\d+)::text\)/.exec(n)!;
-      const mots = String(p(Number(q[1]))).split(/\s+/).filter((m) => m.length > 2);
+      // Reproduit la requête tolérante : termes en JSON, seuil, limite = trois derniers paramètres.
+      const termes = JSON.parse(String(params[params.length - 3])) as string[];
+      const seuil = Number(params[params.length - 2]);
       const lim = Number(params[params.length - 1]);
       return lignes
         .map((x) => ({ x, mots: x.texte_normalise.split(/[^\p{L}\p{N}]+/u) }))
-        .filter(({ mots: ms }) => mots.length > 0 && mots.every((m) => ms.includes(m)))
-        .map(({ x, mots: ms }) => ({ id: x.id, score: mots.reduce((s, m) => s + ms.filter((y) => y === m).length, 0) }))
-        .sort((a, b) => b.score - a.score || (a.id < b.id ? -1 : 1))
-        .slice(0, lim);
+        .map(({ x, mots: ms }) => ({
+          x,
+          nb: termes.filter((m) => ms.includes(m)).length,
+          score: termes.reduce((s, m) => s + ms.filter((y) => y === m).length, 0),
+        }))
+        .filter(({ nb }) => nb > 0 && nb >= seuil)
+        .map(({ x, nb, score }) => ({ id: x.id, nb, score }))
+        .sort((a, b) => b.nb - a.nb || b.score - a.score || (a.id < b.id ? -1 : 1))
+        .slice(0, lim)
+        .map(({ id, score }) => ({ id, score }));
     }
     if (n.startsWith("SELECT p.id FROM")) return lignes.map((x) => ({ id: x.id }));
     if (n.includes("to_char(v.date_document")) {
@@ -311,6 +321,65 @@ describe("fusion RRF (calculs à la main, k = 60)", () => {
 /* Recherche contre le faux exécuteur                                  */
 /* ------------------------------------------------------------------ */
 
+describe("recherche plein texte tolérante : termes significatifs et seuil", () => {
+  it("retire les mots vides français, les lettres isolées et les doublons ; garde l'ordre", () => {
+    expect(termesSignificatifs(sansAccents("garanties de l'assurance habitation Courtier Direct pour un propriétaire"))).toEqual([
+      "garanties", "assurance", "habitation", "courtier", "direct", "proprietaire",
+    ]);
+    expect(termesSignificatifs("assurance assurance habitation")).toEqual(["assurance", "habitation"]);
+    // Question faite seulement de mots courants : on garde les mots d'au moins deux caractères.
+    expect(termesSignificatifs("pour les")).toEqual(["pour", "les"]);
+    expect(termesSignificatifs("a !")).toEqual([]);
+  });
+
+  it("seuil : la moitié arrondie au supérieur, au moins 1", () => {
+    expect([0, 1, 2, 3, 4, 5, 6, 7].map(seuilTermes)).toEqual([1, 1, 1, 2, 2, 3, 3, 4]);
+  });
+
+  it("la question longue naturelle trouve les passages de « assurance habitation propriétaire » ; la question sans rapport ne trouve rien", async () => {
+    const idx = index(ENT_A);
+    const cible = passage(ENT_A, idx.id, "Garanties de l'assurance habitation du propriétaire : incendie, dégâts des eaux", null);
+    const cible2 = passage(ENT_A, idx.id, "Assurance habitation propriétaire non occupant : conditions", null);
+    const partiel = passage(ENT_A, idx.id, "Assurance auto : franchise et bonus", null); // 1 terme sur 6 : sous le seuil (3)
+    const { executer } = fauxExecuteur({ passages: [cible, cible2, partiel], index: [index(ENT_A, { fournisseur: "aucun", modele: null, empreinte_modele: null, dimension: null })] });
+    const { v } = fauxVectoriseur(() => [1, 0, 0, 0], "aucun");
+
+    const longue = await rechercherConnaissances(deps(executer, v), CTX_A, {
+      question: "garanties de l'assurance habitation Courtier Direct pour un propriétaire",
+    });
+    expect(longue.aucuneSource).toBe(false);
+    expect(longue.passages.map((p) => p.texte).sort()).toEqual([cible.texte, cible2.texte].sort());
+    // Classement : le passage qui contient le plus de termes passe devant.
+    expect(longue.passages[0]!.texte).toBe(cible.texte);
+    valider(longue);
+
+    // La formulation courte d'origine donne toujours les mêmes passages.
+    const courte = await rechercherConnaissances(deps(executer, v), CTX_A, { question: "assurance habitation propriétaire" });
+    expect(courte.passages.map((p) => p.texte).sort()).toEqual([cible.texte, cible2.texte].sort());
+
+    const horsSujet = await rechercherConnaissances(deps(executer, v), CTX_A, { question: "recette de tarte aux pommes" });
+    expect(horsSujet.passages).toEqual([]);
+    expect(horsSujet.aucuneSource).toBe(true);
+    expect(horsSujet.motifAucuneSource).toBe(MOTIF_AUCUNE_SOURCE);
+
+    // Une question faite uniquement de mots vides ne plante pas et ne rend rien de farfelu.
+    const vide = await rechercherConnaissances(deps(executer, v), CTX_A, { question: "de la pour" });
+    expect(vide.aucuneSource).toBe(true);
+  });
+
+  it("la requête SQL porte les termes en JSON, le seuil et la limite, sans tableau JS", () => {
+    const { sql, params } = requeteMotsCles(
+      { companyId: ENT_A, mode: "demonstration" },
+      { dateReference: "2026-10-15", inclurePerimes: false },
+      ["garanties", "assurance", "habitation", "proprietaire"],
+      50,
+    );
+    expect(params.slice(-3)).toEqual([JSON.stringify(["garanties", "assurance", "habitation", "proprietaire"]), 2, 50]);
+    expect(sql).toContain("c.nb >= $5::int");
+    expect(sql).toContain("ORDER BY c.nb DESC");
+  });
+});
+
 describe("recherche hybride", () => {
   it("rend des passages cités, non fiables, avec la consigne ; 8 par défaut, 20 au plus", async () => {
     const idx = index(ENT_A);
@@ -402,7 +471,7 @@ describe("recherche hybride", () => {
     expect(r.index).toMatchObject({ fournisseur: "aucun", modele: null });
     expect(journal.some((j) => j.sql.includes("encode("))).toBe(false);
     // La question est normalisée par le code (accents retirés) avant l'envoi.
-    expect(journal.find((j) => j.sql.includes("websearch_to_tsquery"))!.params).toContain("reclamation mediation");
+    expect(journal.find((j) => j.sql.includes("websearch_to_tsquery"))!.params).toContain(JSON.stringify(["reclamation", "mediation"]));
     valider(r);
 
     // Index vectorisé mais vectoriseur « aucun » : plein texte seul aussi.

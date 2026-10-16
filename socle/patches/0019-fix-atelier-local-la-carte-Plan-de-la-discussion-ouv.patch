@@ -1,0 +1,125 @@
+From e8d147a2f7c153e34508e795fa19af129d3f6a7f Mon Sep 17 00:00:00 2001
+From: Jean-Baptiste Dhondt <114347858+warrox1993@users.noreply.github.com>
+Date: Fri, 16 Oct 2026 00:38:10 +0200
+Subject: [PATCH] fix(atelier, local): la carte Plan de la discussion ouvre le
+ document
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Un clic sur la carte Plan ouvre l'onglet Plan et agrandit le panneau, à chaque clic.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01DP85vPq2MHkZg8VNtRvCzB
+---
+ .../TaskChatPlanPreviewCard.test.tsx          |  1 +
+ .../task-chat/TaskChatPlanPreviewCard.tsx     |  2 ++
+ ui/src/pages/IssueDetail.test.tsx             | 28 +++++++++++++++++++
+ ui/src/pages/IssueDetail.tsx                  | 10 ++++++-
+ 4 files changed, 40 insertions(+), 1 deletion(-)
+
+diff --git a/ui/src/components/task-chat/TaskChatPlanPreviewCard.test.tsx b/ui/src/components/task-chat/TaskChatPlanPreviewCard.test.tsx
+index 05b97c5ab..91dcb4f22 100644
+--- a/ui/src/components/task-chat/TaskChatPlanPreviewCard.test.tsx
++++ b/ui/src/components/task-chat/TaskChatPlanPreviewCard.test.tsx
+@@ -81,6 +81,7 @@ describe("TaskChatPlanPreviewCard", () => {
+ 
+     const preview = container.querySelector('[data-testid="task-chat-plan-preview"]');
+     expect(preview?.getAttribute("href")).toBe("#document-plan");
++    expect(preview?.hasAttribute("data-plan-card-maximize")).toBe(true);
+     expect(preview?.getAttribute("aria-label")).toBe("Open Plan revision 4");
+     expect(preview?.textContent).toContain("Plan· rev 4");
+     expect(preview?.textContent).toContain("Streaming task UX");
+diff --git a/ui/src/components/task-chat/TaskChatPlanPreviewCard.tsx b/ui/src/components/task-chat/TaskChatPlanPreviewCard.tsx
+index 99ddea242..ff351b6d4 100644
+--- a/ui/src/components/task-chat/TaskChatPlanPreviewCard.tsx
++++ b/ui/src/components/task-chat/TaskChatPlanPreviewCard.tsx
+@@ -146,6 +146,8 @@ export function TaskChatPlanPreviewCard({
+     return (
+       <a
+         href={href}
++        // Marque la carte : un clic ouvre le document ET agrandit le panneau.
++        data-plan-card-maximize=""
+         data-testid={testId}
+         aria-label={ariaLabel ?? `Open Plan${revision == null ? "" : ` revision ${revision}`}`}
+         className={sharedClassName}
+diff --git a/ui/src/pages/IssueDetail.test.tsx b/ui/src/pages/IssueDetail.test.tsx
+index 1055e4be7..51eaabb11 100644
+--- a/ui/src/pages/IssueDetail.test.tsx
++++ b/ui/src/pages/IssueDetail.test.tsx
+@@ -2209,6 +2209,34 @@ describe("IssueDetail", () => {
+     });
+   });
+ 
++  it("la carte Plan ouvre le document et agrandit le panneau à chaque clic", async () => {
++    mockLocation.hash = "#document-plan";
++    mockIssuesApi.get.mockResolvedValue(createIssue());
++    await act(async () => {
++      root.render(<QueryClientProvider client={queryClient}><IssueDetail /></QueryClientProvider>);
++    });
++    await waitForAssertion(() => {
++      const panel = mockOpenPanel.mock.calls.at(-1)?.[0]?.props.children as
++        { props?: Record<string, unknown> } | undefined;
++      expect((panel?.props?.documentDeepLink as { requestId?: number } | null)?.requestId).toBe(1);
++    });
++    mockRequestPanelMaximize.mockClear();
++
++    const link = document.createElement("a");
++    link.href = "#document-plan";
++    link.setAttribute("data-plan-card-maximize", "");
++    container.appendChild(link);
++    await act(async () => link.click());
++    await waitForAssertion(() => expect(mockRequestPanelMaximize).toHaveBeenCalledTimes(1));
++    await act(async () => link.click());
++    await waitForAssertion(() => {
++      expect(mockRequestPanelMaximize).toHaveBeenCalledTimes(2);
++      const panel = mockOpenPanel.mock.calls.at(-1)?.[0]?.props.children as
++        { props?: Record<string, unknown> } | undefined;
++      expect((panel?.props?.documentDeepLink as { requestId?: number } | null)?.requestId).toBe(3);
++    });
++  });
++
+   it("maximizes the desktop pane once per viewer=full deep link", async () => {
+     mockPanelState.panelVisible = false;
+     mockLocation.hash = "#document-qa-evidence&viewer=full";
+diff --git a/ui/src/pages/IssueDetail.tsx b/ui/src/pages/IssueDetail.tsx
+index 07b3c0721..f0bdee3ab 100644
+--- a/ui/src/pages/IssueDetail.tsx
++++ b/ui/src/pages/IssueDetail.tsx
+@@ -5997,9 +5997,14 @@ export function TaskDetailSurface({ conversation, tasksTab }: { tasksTab?: TaskS
+   // the issue param so navigating to another issue with an identical hash
+   // still maximizes the destination pane.
+   const lastMaximizeRequestKeyRef = useRef<string | null>(null);
++  // Posé par un clic sur la carte Plan de la discussion : le prochain routage
++  // agrandit le panneau à chaque clic, sans la garde « une fois par lien ».
++  const cardMaximizeRef = useRef(false);
+   const routeIssueDocumentDeepLink = useCallback(
+     (hash: string) => {
+       const route = resolveIssueDocumentDeepLink(hash);
++      const cardMaximize = cardMaximizeRef.current;
++      cardMaximizeRef.current = false;
+       if (!route) return false;
+ 
+       if (route.kind === "continuation-summary") {
+@@ -6023,7 +6028,9 @@ export function TaskDetailSurface({ conversation, tasksTab }: { tasksTab?: TaskS
+         // `viewer=full` (LOOA-2181): external links (Slack approval cards)
+         // land with the pane maximized. Mobile uses the sheet, which is
+         // already full-screen, so the request is desktop-only.
+-        if (route.maximize) {
++        if (cardMaximize) {
++          requestPanelMaximize();
++        } else if (route.maximize) {
+           const requestKey = `${issueId ?? ""}::${hash}`;
+           if (lastMaximizeRequestKeyRef.current !== requestKey) {
+             lastMaximizeRequestKeyRef.current = requestKey;
+@@ -6103,6 +6110,7 @@ export function TaskDetailSurface({ conversation, tasksTab }: { tasksTab?: TaskS
+       const route = resolveIssueDocumentDeepLink(hash);
+       if (route?.kind === "properties-pane" && (!taskInterfaceSettingsLoaded || !taskChatShellEnabled)) return;
+       event.preventDefault();
++      if (anchor.hasAttribute("data-plan-card-maximize")) cardMaximizeRef.current = true;
+       // Let link handlers close any hovered task preview. Router links and
+       // popover triggers honor defaultPrevented and skip their navigation.
+       if (hash === location.hash) {
+-- 
+2.53.0
+

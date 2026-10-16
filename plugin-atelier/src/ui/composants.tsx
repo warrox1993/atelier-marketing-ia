@@ -4,11 +4,13 @@
  * boutons dont la désactivation porte toujours une raison visible.
  */
 import { cloneElement, useEffect, useId, useState, type ReactElement, type ReactNode } from "react";
-import { useHostNavigation, type PluginBridgeError } from "@paperclipai/plugin-sdk/ui";
+import { useHostContext, useHostNavigation, type PluginBridgeError } from "@paperclipai/plugin-sdk/ui";
 import { MENTION_DEMONSTRATION } from "../contrats/identifiants.js";
 import type { EtatConnexion } from "../contrats/communs.js";
 import type { StatutFonctionnel } from "../contrats/statuts.js";
-import { DELAI_PERIME_MS, useContexteDonnees } from "./donnees.js";
+import type { ReglagesEntreprise } from "../contrats/campagnes.js";
+import { DELAI_PERIME_MS, useContexteDonnees, useDonnees } from "./donnees.js";
+import { appelHote } from "./hote.js";
 import { classerErreur, dateHeure, dateSeule, decalageBruxelles, ETATS_CONNEXION, heureSeule, ilYA, libelleStatut, TON_STATUT, type Ton } from "./format.js";
 
 export function Pastille({ ton = "neutre", children, titre }: { ton?: Ton; children: ReactNode; titre?: string }) {
@@ -270,5 +272,62 @@ export function Champ({ libelle, aide, className, children }: { libelle: ReactNo
         </span>
       ) : null}
     </div>
+  );
+}
+
+/**
+ * Bandeau « entreprise courante » en tête de chaque vue : le nom complet de l'entreprise et son mode
+ * (« Démonstration » ou « Client réel »), pour qu'on ne confonde jamais l'une avec l'autre.
+ * Le mode est celui des réglages de l'entreprise (même règle que le serveur : réel dès que
+ * l'entreprise est réglée en réel) ; tant qu'il n'est pas lu, aucune pastille n'est affichée.
+ */
+export function BandeauEntreprise() {
+  const { companyId } = useHostContext();
+  const reglages = useDonnees<ReglagesEntreprise>("atelier.reglages");
+  const [nom, setNom] = useState<string | null>(null);
+  useEffect(() => {
+    if (!companyId) return;
+    let annule = false;
+    appelHote<{ name?: unknown }>("GET", `/companies/${encodeURIComponent(companyId)}`)
+      .then((c) => {
+        if (!annule) setNom(typeof c?.name === "string" && c.name.trim() ? c.name.trim() : null);
+      })
+      .catch(() => undefined);
+    return () => {
+      annule = true;
+    };
+  }, [companyId]);
+  const mode = reglages.data?.modeParDefaut ?? null;
+  return (
+    <p className="atl-bandeau-entreprise" aria-label="Entreprise courante">
+      <span className="atl-bandeau-etiquette">Entreprise</span>
+      <strong className="atl-bandeau-nom">{nom ?? "Entreprise courante"}</strong>
+      {mode === "reel" ? (
+        <Pastille ton="info" titre="Données réelles : chaque action externe exige une approbation humaine.">
+          Client réel
+        </Pastille>
+      ) : mode === "demonstration" ? (
+        <Pastille ton="demo" titre={MENTION_DEMONSTRATION}>
+          Démonstration
+        </Pastille>
+      ) : null}
+    </p>
+  );
+}
+
+/** Bouton qui amène à un titre de la page (écran vide : « Importer » mène au formulaire déjà présent plus bas). */
+export function BoutonAller({ cible, children }: { cible: string; children: ReactNode }) {
+  return (
+    <Bouton
+      variante="principal"
+      onClick={() => {
+        const element = document.getElementById(cible);
+        element?.scrollIntoView?.({ behavior: "smooth", block: "start" });
+        element?.setAttribute("tabindex", "-1");
+        element?.focus?.({ preventScroll: true });
+      }}
+    >
+      {children}
+    </Bouton>
   );
 }

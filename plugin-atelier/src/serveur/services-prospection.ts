@@ -26,10 +26,14 @@ import {
   LIMITES,
   ListerProspectsEntree,
   NumeroBce,
+  FaitBce,
+  TailleBnb,
   ORIGINES_AVEC_CONSENTEMENT,
   Opposition,
+  PositionProspect,
   PreuveConsentement,
   Prospect,
+  QuestionProspectEntree,
   RenvoiReferentiel,
   coordonneesManifestementFictives,
   type CanalContact,
@@ -40,7 +44,7 @@ import {
   type ModeExecution,
   type OrigineParticulier,
   type ScoreProspect,
-  type SourceProspect,
+  SourceProspect,
   type TypeEmpreinte,
   type ZoneProspect,
 } from "../contrats/index.js";
@@ -51,6 +55,9 @@ import { chiffrer, empreinte, memeCle, TAILLE_CLE_CHIFFREMENT, TAILLE_CLE_HMAC_M
 import { erreur, erreurValidation } from "./erreurs.js";
 import { estOutilEcriture } from "./preuve-approbation.js";
 import { AGE_MAX_REPONSE_S, deduireModeReponse, reponseEcriture, type ModeEffectif } from "./regles-donnees-demo.js";
+import { construireCompteRendu, nomDuProspect, type FicheClientCompteRendu } from "./compte-rendu-prospect.js";
+import { ORIGINE_DEMANDE, titreDepuisTexte } from "./services-accueil.js";
+import { calculerConfiance, criteresManquants, type ContexteQualification } from "./qualification-prospects.js";
 import { dedoublonner, empreintesDuProspect, exclusionsProspect, natureAdresse, type ContexteProspection, type ZoneChoisie } from "./regles-prospection.js";
 import { calculerScore, type CritereEvalue } from "./score-prospects.js";
 import { routesBaseClients } from "./services-base-clients.js";
@@ -59,7 +66,15 @@ import { DERIVE_HORLOGE_S, chargeEcriture, empreinteArgumentsAppel, verifierEnve
 type Issue = NonNullable<Awaited<ReturnType<PluginContext["issues"]["get"]>>>;
 type Campagne = { id: string; mode: "demonstration" | "reel"; canaux: string[]; perimetre: { zones: string[] } };
 
+/** Services de la prospection exposés aux autres routes (renseignés par `routesProspection`). */
+export interface ServicesProspection {
+  /** Prospects qualifiés du filtre en un seul parcours, pour l'entreprise donnée, jusqu'à `plafond` (à une page près). */
+  listerQualifies?: (companyId: string, query: Record<string, string | string[]>, plafond: number) => Promise<Prospect[]>;
+}
+
 export interface DependancesProspection {
+  /** Objet que `routesProspection` remplit avec ses services réutilisables. */
+  services?: ServicesProspection;
   ctx: PluginContext;
   base: BaseAtelier;
   tache(companyId: string, issueId: string): Promise<Issue>;
@@ -130,10 +145,24 @@ export function regionDuCodePostal(cp: string | null): ZoneProspect["region"] {
 const REGIONS = new Set(["Wallonie", "Bruxelles-Capitale", "Flandre"]);
 const texte = (v: unknown, max: number): string | null => (typeof v === "string" && v.trim() !== "" ? v.trim().slice(0, max) : null);
 
-function zoneDe(cp: unknown, commune: unknown, province?: unknown, region?: unknown): ZoneProspect {
+/** Position lue dans une réponse (`{ lat, lon }`), avec la précision que la source annonce ; null si absente ou invalide. */
+function positionDe(v: unknown, precision: "exacte" | "code_postal" | "commune"): PositionProspect | null {
+  const o = objetOuNull(v);
+  if (o === null || typeof o.lat !== "number" || typeof o.lon !== "number") return null;
+  const r = PositionProspect.safeParse({ lat: o.lat, lon: o.lon, precision });
+  return r.success ? r.data : null;
+}
+
+/** Précision annoncée par la passerelle pour `position_approx` (BCE) : `code_postal` ou `commune`, sinon rejet. */
+function positionApprox(v: unknown): PositionProspect | null {
+  const o = objetOuNull(v);
+  return o !== null && (o.precision === "code_postal" || o.precision === "commune") ? positionDe(o, o.precision) : null;
+}
+
+function zoneDe(cp: unknown, commune: unknown, province?: unknown, region?: unknown, position: PositionProspect | null = null): ZoneProspect {
   const codePostal = typeof cp === "string" && /^\d{4}$/u.test(cp.trim()) ? cp.trim() : null;
   const r = typeof region === "string" && REGIONS.has(region) ? (region as ZoneProspect["region"]) : regionDuCodePostal(codePostal);
-  return { codePostal, commune: texte(commune, 120), province: texte(province, 80), region: r, pays: "BE" };
+  return { codePostal, commune: texte(commune, 120), province: texte(province, 80), region: r, pays: "BE", ...(position ? { position } : {}) };
 }
 
 /** Prospect tel que lu dans une réponse d'outil, avant chiffrement. Les coordonnées sont EN CLAIR : jamais stockées ainsi. */
@@ -149,6 +178,68 @@ export interface ProspectBrut {
   courriels: string[];
   telephones: string[];
   site: string | null;
+  /** Faits datés de la BCE (date de début de l'entreprise) ; vide pour les autres services. */
+  faits: FaitBce[];
+  /** Étiquette OpenStreetMap (clé, valeur) du lieu ; null hors OSM. */
+  categorieOsm?: { cle: string; valeur: string } | null;
+}
+
+/** Date d'un fait BCE (`JJ-MM-AAAA` du fichier BCE ou `AAAA-MM-JJ`) ramenée à `AAAA-MM-JJ` ; null si absente ou invalide. */
+function dateFaitBce(v: unknown): string | null {
+  if (typeof v !== "string") return null;
+  const t = v.trim();
+  const m = /^(\d{2})-(\d{2})-(\d{4})$/u.exec(t);
+  const iso = m ? `${m[3]}-${m[2]}-${m[1]}` : /^\d{4}-\d{2}-\d{2}/u.test(t) ? t.slice(0, 10) : null;
+  return iso !== null && !Number.isNaN(new Date(`${iso}T00:00:00Z`).getTime()) ? iso : null;
+}
+
+const CODES_CHANGEMENT: Readonly<Record<string, FaitBce["code"]>> = {
+  creation: "creation", nouvel_etablissement: "nouvel_etablissement", changement_adresse: "changement_adresse", changement_forme: "changement_forme",
+};
+
+/**
+ * Changements d'une réponse `bce_changements`, par numéro d'entreprise : créations, nouvelles unités
+ * d'établissement, changements d'adresse et de forme (les radiations ne donnent aucun fait). Ne crée aucun prospect.
+ */
+export function extraireChangementsBce(structures: readonly Record<string, unknown>[]): Map<string, FaitBce[]> {
+  const parNumero = new Map<string, FaitBce[]>();
+  for (const s of structures) {
+    for (const c of objets(s.changements)) {
+      const numero = typeof c.EnterpriseNumber === "string" ? c.EnterpriseNumber.trim() : "";
+      const code = typeof c.type === "string" ? CODES_CHANGEMENT[c.type] : undefined;
+      const date = dateFaitBce(c.date);
+      if (code === undefined || date === null || !NumeroBce.safeParse(numero).success) continue;
+      const faits = parNumero.get(numero) ?? [];
+      if (!faits.some((f) => f.code === code && f.date === date)) faits.push({ code, date });
+      parNumero.set(numero, faits.slice(0, 20));
+    }
+  }
+  return parNumero;
+}
+
+/**
+ * Taille d'une réponse `bnb_comptes`, par numéro d'entreprise : exercice et effectif (rubrique 9087, ETP) du dépôt le plus
+ * récent qui a des données, catégorie déduite par la passerelle. Réponse « non trouvée » ou sans exercice daté : rien.
+ * Ne crée aucun prospect.
+ */
+export function extraireComptesBnb(structures: readonly Record<string, unknown>[]): Map<string, TailleBnb> {
+  const parNumero = new Map<string, TailleBnb>();
+  for (const s of structures) {
+    const numero = typeof s.EnterpriseNumber === "string" ? s.EnterpriseNumber.trim() : "";
+    if (s.trouve !== true || !NumeroBce.safeParse(numero).success) continue;
+    const lignes = objets(s.references).map((r) => {
+      const fin = dateFaitBce(objetOuNull(r.ExerciseDates)?.endDate);
+      const rubrique = objets(objetOuNull(r.AccountingData)?.Rubrics).find((x) => x.Code === "9087" && x.Period === "N");
+      const etp = typeof rubrique?.Value === "number" && Number.isFinite(rubrique.Value) && rubrique.Value >= 0 ? rubrique.Value : null;
+      return { exercice: fin === null ? null : Number(fin.slice(0, 4)), etp };
+    }).filter((l) => l.exercice !== null);
+    const retenue = lignes.find((l) => l.etp !== null) ?? lignes[0];
+    if (retenue === undefined) continue;
+    const categorie = ["micro", "petite", "moyenne", "grande"].find((c) => c === s.taille_deduite);
+    const taille = TailleBnb.safeParse({ exercice: retenue.exercice, effectifEtp: retenue.etp, categorie: retenue.etp === null ? null : (categorie ?? null) });
+    if (taille.success) parNumero.set(numero, taille.data);
+  }
+  return parNumero;
 }
 
 const objets = (v: unknown): Record<string, unknown>[] => (Array.isArray(v) ? v.filter((x): x is Record<string, unknown> => typeof x === "object" && x !== null && !Array.isArray(x)) : []);
@@ -169,10 +260,11 @@ function depuisBce(e: Record<string, unknown>): ProspectBrut | null {
     cleOsm: null,
     denomination: texte(objets(e.denominations)[0]?.Denomination, 300),
     nace: [...new Set(objets(e.activites).map((a) => String(a.NaceCode ?? "")).filter((c) => CodeNace.safeParse(c).success))].slice(0, 20),
-    zone: zoneDe(siege.Zipcode, siege.MunicipalityFR),
+    zone: zoneDe(siege.Zipcode, siege.MunicipalityFR, undefined, undefined, positionApprox(e.position_approx)),
     courriels: valeurs("EMAIL"),
     telephones: valeurs("TEL"),
     site: valeurs("WEB")[0] ?? null,
+    faits: ((d) => (d === null ? [] : [{ code: "debut_entreprise" as const, date: d }]))(dateFaitBce(e.StartDate)),
   };
 }
 
@@ -194,6 +286,7 @@ function depuisFsma(f: Record<string, unknown>): ProspectBrut | null {
     courriels: [],
     telephones: [],
     site: null,
+    faits: [],
   };
 }
 
@@ -210,10 +303,12 @@ function depuisOsm(c: Record<string, unknown>): ProspectBrut | null {
     cleOsm: cle,
     denomination: nom,
     nace: [],
-    zone: zoneDe(a.code_postal, a.commune),
+    zone: zoneDe(a.code_postal, a.commune, undefined, undefined, positionDe(c.position, "exacte")),
     courriels: [],
     telephones: typeof c.telephone === "string" ? [c.telephone] : [],
     site: texte(c.site, 300),
+    faits: [],
+    categorieOsm: ((cle, valeur) => (cle !== null && valeur !== null ? { cle, valeur } : null))(texte(c.cle, 40), texte(c.valeur, 80)),
   };
 }
 
@@ -548,7 +643,7 @@ export function routesProspection(d: DependancesProspection): Partial<Record<Cle
     }
     const p = {
       id: randomUUID(), companyId: o.companyId, campagneId: o.campagneId, cible: b.cible, identifiant, numeroBce: b.numeroBce, referentiel: o.referentiel,
-      forme: b.forme, denomination: b.denomination, nomChiffre: null, nace: b.nace, zone: b.zone, coordonnees, empreintes: [] as Empreinte[], sources: [o.source],
+      forme: b.forme, denomination: b.denomination, nomChiffre: null, nace: b.nace, zone: b.zone, coordonnees, empreintes: [] as Empreinte[], sources: [{ ...o.source, ...(b.faits.length > 0 ? { faits: b.faits } : {}), ...(b.categorieOsm ? { categorieOsm: b.categorieOsm } : {}) }],
       mode: o.mode, statut: "nouveau" as const, motifsExclusion: [] as ExclusionConstatee[], score: null, basesLegales: [], particulier: null, creeLe: o.date, modifieLe: o.date,
     } satisfies Prospect;
     p.empreintes = empreintesDuProspect({ empreintes, coordonnees }).slice(0, 20);
@@ -595,7 +690,8 @@ export function routesProspection(d: DependancesProspection): Partial<Record<Cle
     const date = maintenant().toISOString();
     let exclus = 0;
     for (const id of await base.prospectsAvecEmpreinte(companyId, o.type, h)) {
-      const l = await base.lireProspect(companyId, id);
+      // Une opposition s'applique aussi aux prospects à la corbeille : une restauration ne doit pas les remettre contactables.
+      const l = await base.lireProspect(companyId, id, { corbeille: true });
       if (!l || (l.motifsExclusion as ExclusionConstatee[]).some((m) => m.motif === "opposition_client")) continue;
       await base.exclureProspect(companyId, id, fusionnerMotifs(l.motifsExclusion as ExclusionConstatee[], [{ motif: "opposition_client", detail: "Inscrit à la liste d'opposition du client", constateLe: date }]));
       exclus++;
@@ -661,7 +757,12 @@ export function routesProspection(d: DependancesProspection): Partial<Record<Cle
     const anciennesCoord = existant.coordonnees as Prospect["coordonnees"];
     const coordonnees = [...anciennesCoord, ...p.coordonnees.filter((c) => !anciennesCoord.some((a) => a.canal === c.canal && a.empreinte === c.empreinte))].slice(0, 20);
     const anciennesSources = existant.sources as SourceProspect[];
-    const sources = [...anciennesSources, ...p.sources.filter((s) => !anciennesSources.some((a) => a.sourceId !== null && a.sourceId === s.sourceId))].slice(-50);
+    // Un lieu OSM déjà connu dont la source n'a pas de catégorie la reçoit du nouveau dépôt (même dépôt rejoué), sans doublon.
+    const completees = anciennesSources.map((a) => {
+      const n = a.categorieOsm === undefined && a.sourceId !== null ? p.sources.find((s) => s.sourceId === a.sourceId && s.categorieOsm !== undefined) : undefined;
+      return n ? { ...a, categorieOsm: n.categorieOsm } : a;
+    });
+    const sources = [...completees, ...p.sources.filter((s) => !anciennesSources.some((a) => a.sourceId !== null && a.sourceId === s.sourceId))].slice(-50);
     const fusion = fusionnerMotifs(existant.motifsExclusion as ExclusionConstatee[], motifs);
     const statut = fusion.length > 0 ? "exclu" : existant.statut;
     let particulier = existant.particulier as Prospect["particulier"];
@@ -718,10 +819,30 @@ export function routesProspection(d: DependancesProspection): Partial<Record<Cle
     return r.data;
   }
 
+  /** Cibles du client (dernière version de la marque) et état de sa base de clients, pour la confiance de qualification. */
+  async function contexteQualification(companyId: string): Promise<ContexteQualification> {
+    const [marque] = await base.marques(companyId);
+    const etat = await base.etatBaseClients(companyId);
+    return {
+      cibles: (marque?.ciblesProspection ?? []) as ContexteQualification["cibles"],
+      segments: (marque?.segments ?? []) as ContexteQualification["segments"],
+      etablissements: (marque?.etablissements ?? []) as ContexteQualification["etablissements"],
+      baseClientsImportee: etat.clients > 0,
+      maintenant: maintenant().toISOString(),
+    };
+  }
+
+  /** Ajoute la confiance de qualification (recalculée à chaque lecture, donc à jour après chaque dépôt). */
+  async function avecConfiance(companyId: string, prospects: Prospect[]): Promise<Prospect[]> {
+    if (prospects.length === 0) return prospects;
+    const ctx = await contexteQualification(companyId);
+    return prospects.map((p) => ({ ...p, confiance: calculerConfiance(p, ctx) }));
+  }
+
   async function relire(companyId: string, id: string): Promise<Prospect> {
     const l = await base.lireProspect(companyId, id);
     if (!l) erreur("introuvable", "Prospect introuvable dans cette entreprise.");
-    return assembler(l, await base.detailsProspects(companyId, [id]));
+    return (await avecConfiance(companyId, [assembler(l, await base.detailsProspects(companyId, [id]))]))[0]!;
   }
 
   /** Enregistre un lot : dédoublonnage interne, exclusions §5.4, fusion avec l'existant, score. */
@@ -754,7 +875,9 @@ export function routesProspection(d: DependancesProspection): Partial<Record<Cle
       const score = await scorer(r.prospect, criteresDuProspect(r.prospect, x.site, x.libelleSource, date, etablissements), poids, date);
       resultats.push({ prospect: score ? { ...r.prospect, score } : r.prospect, cree: r.cree });
     }
-    return { resultats, fusionnes };
+    // La confiance se recalcule à chaque dépôt : les sources fusionnées comptent tout de suite.
+    const avecC = await avecConfiance(companyId, resultats.map((x) => x.prospect));
+    return { resultats: resultats.map((x, i) => ({ ...x, prospect: avecC[i]! })), fusionnes };
   }
 
   const routes: Partial<Record<CleRouteApi, GestionnaireRoute>> = {};
@@ -814,6 +937,8 @@ export function routesProspection(d: DependancesProspection): Partial<Record<Cle
       const b2c = entree.service === "b2c" ? extraireB2c(entree.outil, deduction.structures) : { particuliers: [], oppositions: [], ignores: 0 };
       let ignores = ignoresEntreprises + b2c.ignores;
       // Conditions de la BCE : les données d'une personne physique ne servent jamais au marketing direct (non enregistrées).
+      const changementsBce = entree.service === "bce" && entree.outil === "bce_changements" ? extraireChangementsBce(deduction.structures) : new Map<string, FaitBce[]>();
+      const comptesBnb = entree.service === "bnb" && entree.outil === "bnb_comptes" ? extraireComptesBnb(deduction.structures) : new Map<string, TailleBnb>();
       const retenus = bruts.filter((b) => !(b.forme === "personne_physique" && b.numeroBce !== null));
       const personnesPhysiques = bruts.length - retenus.length;
 
@@ -823,11 +948,50 @@ export function routesProspection(d: DependancesProspection): Partial<Record<Cle
       await base.insererSource({
         id: sourceId, companyId: r.companyId, campagneId: campagne?.id ?? null, issueId: issue.id, revisionId: null,
         url: `connexion://${entree.service}/${entree.outil}`, urlFinale: null, titre: `${entree.service} · ${entree.outil}`, statutAcces: "accessible", codeHttp: null,
-        typeContenu: "application/json", extrait: `${retenus.length + b2c.particuliers.length} prospect(s) et ${b2c.oppositions.length} opposition(s) extrait(s) ; coordonnées chiffrées à la réception, réponse brute non conservée.`,
+        typeContenu: "application/json", extrait: `${retenus.length + b2c.particuliers.length} prospect(s), ${b2c.oppositions.length} opposition(s) ${changementsBce.size} numéro(s) BCE avec changements et ${comptesBnb.size} numéro(s) avec comptes annuels extrait(s) ; coordonnées chiffrées à la réception, réponse brute non conservée.`,
         empreinte: createHash("sha256").update(JSON.stringify(entree.reponse)).digest("hex"), indicesErreur: [], injections: [], provenance: "connexion", mode: deduction.mode,
         connexion: { service: entree.service, outil: entree.outil, indicesMode: deduction.indices, chiffres: [], modeCampagne: effectif.mode, compte: deduction.compte },
       });
       const source: SourceProspect = { type: "depot_signe", sourceId, service: entree.service, outil: entree.outil, url: null, collecteLe: date };
+      // Un dépôt n'enrichit que les prospects de SON mode (démonstration ou réel) et hors corbeille.
+      const aEnrichir = async <T extends { id: string; mode: string }>(lignes: T[]): Promise<T[]> => {
+        const gardees: T[] = [];
+        for (const l of lignes) {
+          if (l.mode !== deduction.mode) continue;
+          if ((await base.lireProspect(r.companyId, l.id)) === null) continue;
+          gardees.push(l);
+        }
+        return gardees;
+      };
+      // Changements BCE : ils enrichissent les prospects EXISTANTS de même numéro BCE (jamais de nouveau prospect).
+      let enrichisParChangements = 0;
+      if (changementsBce.size > 0) {
+        const existants = await base.prospectsParIdentifiants(r.companyId, [...changementsBce.keys()].map((valeur) => ({ type: "numero_bce", valeur })));
+        for (const l of await aEnrichir(existants)) {
+          const faits = changementsBce.get(String(l.numeroBce ?? l.identifiant.valeur)) ?? [];
+          const anciennes = l.sources as SourceProspect[];
+          const connus = anciennes.flatMap((x) => x.faits ?? []);
+          const nouveaux = faits.filter((f) => !connus.some((k) => k.code === f.code && k.date === f.date));
+          if (nouveaux.length === 0) continue;
+          const sources = [...anciennes, SourceProspect.parse({ ...source, faits: nouveaux })].slice(-50);
+          await base.majProspect(r.companyId, l.id, { nace: l.nace, zone: l.zone, coordonnees: l.coordonnees, sources, statut: l.statut, motifsExclusion: l.motifsExclusion, particulier: l.particulier });
+          enrichisParChangements++;
+        }
+      }
+      // Comptes annuels BNB : ils enrichissent les prospects EXISTANTS de même numéro BCE (jamais de nouveau prospect).
+      let enrichisParComptes = 0;
+      if (comptesBnb.size > 0) {
+        const existants = await base.prospectsParIdentifiants(r.companyId, [...comptesBnb.keys()].map((valeur) => ({ type: "numero_bce", valeur })));
+        for (const l of await aEnrichir(existants)) {
+          const taille = comptesBnb.get(String(l.numeroBce ?? l.identifiant.valeur));
+          if (taille === undefined) continue;
+          const anciennes = l.sources as SourceProspect[];
+          if (anciennes.some((x) => x.service === "bnb" && x.outil === "bnb_comptes" && x.taille?.exercice === taille.exercice && x.taille.effectifEtp === taille.effectifEtp && x.taille.categorie === taille.categorie)) continue;
+          const sources = [...anciennes, SourceProspect.parse({ ...source, taille })].slice(-50);
+          await base.majProspect(r.companyId, l.id, { nace: l.nace, zone: l.zone, coordonnees: l.coordonnees, sources, statut: l.statut, motifsExclusion: l.motifsExclusion, particulier: l.particulier });
+          enrichisParComptes++;
+        }
+      }
       const referentiel = await referentielPour(r.companyId, campagne?.id ?? null);
       const lot: Array<{ prospect: Prospect; enClair: CoordonneesEnClair | null; site: string | null; libelleSource: string }> = retenus.flatMap((b) => {
         const p = construireDepuisBrut(b, { cles: clesDonneesLot, companyId: r.companyId, campagneId: campagne?.id ?? null, referentiel, mode: deduction.mode, source, date });
@@ -875,7 +1039,7 @@ export function routesProspection(d: DependancesProspection): Partial<Record<Cle
         companyId: r.companyId, type: "prospects.deposes", entite: "source", entiteId: sourceId, issueId: issue.id, runId: r.acteur.runId, acteur: r.acteur.id,
         donnees: {
           service: entree.service, outil: entree.outil, mode: deduction.mode, modeCampagne: effectif.mode, cles: clesDonneesLot.origine,
-          crees: resultats.filter((x) => x.cree).length, misAJour: resultats.filter((x) => !x.cree).length, exclus, ignores: ignores + bruts.length - retenus.length, fusionnes, clientsHorsBase, oppositionsAjoutees, exclusParOpposition,
+          crees: resultats.filter((x) => x.cree).length, misAJour: resultats.filter((x) => !x.cree).length, exclus, ignores: ignores + bruts.length - retenus.length, fusionnes, enrichisParChangements, enrichisParComptes, clientsHorsBase, oppositionsAjoutees, exclusParOpposition,
         },
       });
       return {
@@ -890,6 +1054,8 @@ export function routesProspection(d: DependancesProspection): Partial<Record<Cle
           exclus,
           ignores,
           personnesPhysiquesEcartees: personnesPhysiques,
+          enrichisParChangements,
+          enrichisParComptes,
           clientsHorsBase,
           oppositionsAjoutees,
           exclusParOpposition,
@@ -904,21 +1070,116 @@ export function routesProspection(d: DependancesProspection): Partial<Record<Cle
 
   /* ---------------- liste ---------------- */
 
-  const CHAMPS_LISTES = ["cibles", "nace", "codesPostaux", "communes", "provinces", "regions", "statuts", "entites", "etablissements", "segments", "offres", "origines"] as const;
+  const CHAMPS_LISTES = ["cibles", "nace", "codesPostaux", "communes", "provinces", "regions", "statuts", "entites", "etablissements", "segments", "offres", "origines", "zonesBureau"] as const;
   const CHAMPS_NOMBRES = ["scoreMin", "page", "parPage"] as const;
+  const CHAMPS_BOOLEENS = ["qualifiesSeulement", "avecClientsActuels"] as const;
 
-  routes["prospects.lister"] = async (r) => {
-    const brute: Record<string, unknown> = { companyId: r.companyId };
-    for (const [cle, v] of Object.entries(r.query)) {
+  /** Filtres de liste lus dans la requête (listes séparées par des virgules, nombres, booléens), validés par le contrat. */
+  function filtresDeRequete(companyId: string, query: Record<string, string | string[]>) {
+    const brute: Record<string, unknown> = { companyId };
+    for (const [cle, v] of Object.entries(query)) {
       if (cle === "companyId") continue;
       if ((CHAMPS_LISTES as readonly string[]).includes(cle)) brute[cle] = (Array.isArray(v) ? v : [v]).flatMap((x) => x.split(",")).map((x) => x.trim()).filter(Boolean);
       else if ((CHAMPS_NOMBRES as readonly string[]).includes(cle)) brute[cle] = Number(Array.isArray(v) ? v[0] : v);
+      else if ((CHAMPS_BOOLEENS as readonly string[]).includes(cle)) brute[cle] = (Array.isArray(v) ? v[0] : v) === "true";
       else brute[cle] = Array.isArray(v) ? v[0] : v;
     }
-    const f = analyser(ListerProspectsEntree, brute, "Liste des prospects");
+    return analyser(ListerProspectsEntree, brute, "Liste des prospects");
+  }
+
+  /**
+   * Parcourt les prospects du filtre par pages de 200 et ne garde que les qualifiés (la confiance se calcule à la
+   * lecture). Le contexte de qualification n'est lu qu'une fois par parcours. S'arrête dès que `plafond` est atteint
+   * (le résultat peut alors dépasser `plafond` de moins d'une page : l'appelant tranche).
+   */
+  async function parcourirQualifies(companyId: string, f: ReturnType<typeof filtresDeRequete>, plafond: number): Promise<Prospect[]> {
+    const qualifies: Prospect[] = [];
+    let ctx: ContexteQualification | null = null;
+    for (let page = 1; qualifies.length < plafond; page++) {
+      const { lignes } = await base.listerProspects(companyId, { ...f, page, parPage: 200 });
+      if (lignes.length > 0) {
+        const det = await base.detailsProspects(companyId, lignes.map((l) => l.id));
+        ctx ??= await contexteQualification(companyId);
+        const c = ctx;
+        for (const l of lignes) {
+          const p = assembler(l, det);
+          const confiance = calculerConfiance(p, c);
+          if (confiance.qualifie) qualifies.push({ ...p, confiance });
+        }
+      }
+      if (lignes.length < 200) break;
+    }
+    return qualifies;
+  }
+
+  if (d.services) {
+    d.services.listerQualifies = (companyId, query, plafond) => parcourirQualifies(companyId, filtresDeRequete(companyId, query), plafond);
+  }
+
+  routes["prospects.lister"] = async (r) => {
+    const f = filtresDeRequete(r.companyId, r.query);
+    if (f.qualifiesSeulement) {
+      // La confiance se calcule à la lecture : on parcourt les prospects du filtre, puis on pagine les qualifiés.
+      const qualifies = await parcourirQualifies(r.companyId, f, 5000);
+      const debut = (f.page - 1) * f.parPage;
+      return { corps: { total: qualifies.length, page: f.page, pages: Math.ceil(qualifies.length / f.parPage), prospects: qualifies.slice(debut, debut + f.parPage) } };
+    }
     const { total, lignes } = await base.listerProspects(r.companyId, f);
     const det = await base.detailsProspects(r.companyId, lignes.map((l) => l.id));
-    return { corps: { total, page: f.page, pages: Math.ceil(total / f.parPage), prospects: lignes.map((l) => assembler(l, det)) } };
+    return { corps: { total, page: f.page, pages: Math.ceil(total / f.parPage), prospects: await avecConfiance(r.companyId, lignes.map((l) => assembler(l, det))) } };
+  };
+
+  /** Critères de confiance encore non vérifiés d'un prospect, avec l'outil de la passerelle qui pourrait les établir. */
+  routes["prospects.criteres-manquants"] = async (r) => {
+    const p = await relire(r.companyId, r.params.prospectId ?? "");
+    return { corps: criteresManquants(p, p.confiance!) };
+  };
+
+  /** Fiche du client (dernière version de la marque) telle que le compte rendu la lit. */
+  async function ficheClient(companyId: string): Promise<FicheClientCompteRendu> {
+    const [marque] = await base.marques(companyId);
+    return {
+      offres: (marque?.offres ?? []) as FicheClientCompteRendu["offres"],
+      segments: (marque?.segments ?? []) as FicheClientCompteRendu["segments"],
+      etablissements: (marque?.etablissements ?? []) as FicheClientCompteRendu["etablissements"],
+    };
+  }
+
+  async function compteRendu(companyId: string, prospectId: string) {
+    const p = await relire(companyId, prospectId);
+    return { p, cr: construireCompteRendu(p, await ficheClient(companyId), maintenant()) };
+  }
+
+  /** Compte rendu déterministe d'un lead : lecture des données stockées, aucune IA. */
+  routes["prospects.compte-rendu"] = async (r) => ({ corps: (await compteRendu(r.companyId, r.params.prospectId ?? "")).cr });
+
+  /** Question d'un humain au Coordinateur sur un lead : tâche native assignée, avec le compte rendu en contexte. */
+  routes["prospects.question"] = async (r) => {
+    exigerHumain(r.acteur, "Une question au Coordinateur sur un lead");
+    const entree = analyser(QuestionProspectEntree, r.corps, "Question sur un lead");
+    if (entree.companyId.toLowerCase() !== r.companyId.toLowerCase()) erreur("hors_entreprise", "Entreprise incohérente : seule l'entreprise résolue par l'hôte est servie.");
+    const { p, cr } = await compteRendu(r.companyId, r.params.prospectId ?? "");
+    const agents = (await d.ctx.agents.list({ companyId: r.companyId, limit: 200 })).filter((a) => a.status !== "terminated");
+    const coord = agents.find((a) => a.role === "ceo") ?? agents.find((a) => a.name.startsWith("Coordinateur")) ?? null;
+    if (!coord) erreur("introuvable", "Aucun Coordinateur dans cette entreprise : la question ne peut pas être transmise.");
+    const titre = `Lead : ${nomDuProspect(p)} : ${titreDepuisTexte(entree.question)}`;
+    const description = [
+      entree.question,
+      "",
+      "Réponds dans la discussion de cette tâche, en t'appuyant sur les sources citées dans le compte rendu ci-dessous et sur la fiche du client. Ne contacte personne et n'invente aucune donnée : ce qui manque, dis-le.",
+      "",
+      cr.markdown,
+    ].join("\n");
+    const tache = await d.ctx.issues.create({
+      companyId: r.companyId, title: titre, description, status: "todo", priority: "medium", assigneeAgentId: coord.id,
+      originKind: ORIGINE_DEMANDE as never, originId: `question-lead:${randomUUID()}`,
+      ...(r.acteur.userId ? { actor: { actorUserId: r.acteur.userId } } : {}),
+    });
+    await base.journaliser({
+      companyId: r.companyId, type: "prospect.question", entite: "prospect", entiteId: p.id, issueId: tache.id, acteur: r.acteur.id,
+      donnees: { coordinateurId: coord.id, titre, tailleQuestion: entree.question.length },
+    });
+    return { statut: 201, corps: { issueId: tache.id, identifiant: tache.identifier ?? null, lien: `/issues/${tache.identifier ?? tache.id}` } };
   };
 
   /* ---------------- particuliers ---------------- */
@@ -1008,7 +1269,7 @@ export function routesProspection(d: DependancesProspection): Partial<Record<Cle
     clesDonnees, relire, referentielPour, contexteExclusions,
     assemblerLignes: async (companyId, lignes) => {
       const det = await base.detailsProspects(companyId, lignes.map((l) => l.id));
-      return lignes.map((l) => assembler(l, det));
+      return avecConfiance(companyId, lignes.map((l) => assembler(l, det)));
     },
   }));
 

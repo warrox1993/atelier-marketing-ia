@@ -60,7 +60,7 @@ liée à la révision.
 
 ## Exemple
 
-État : prêt pour validation humaine. Approbation demandée : « Article Isolation de toiture,
+État : prêt pour validation humaine. Approbation demandée : « Article Assurance habitation,
 révision rev-3, publication sur le blog du site, aucune dépense, durée illimitée. » Non
 inclus : la campagne SEA (dossier séparé, montant 1 125 €, 45 jours). Limite : affichage
 mobile non contrôlé (aucun outil de rendu).

@@ -4,7 +4,7 @@
   "competences": {
     "analyse-concurrentielle": {
       "version": "1.0.0",
-      "sha256": "db472d77005ca480b25efa2515f1ef9100513c70aa83ff449f7f753c1b07db8c",
+      "sha256": "e1364b7828d7cf05f1323d2b70630cc626f9c5d90213f7a55217a7290d2fd9d9",
       "fichiers": [
         "SKILL.md"
       ]
@@ -18,7 +18,7 @@
     },
     "audit-seo": {
       "version": "1.2.0",
-      "sha256": "4ad7eaca67cfb44eae24c2f8556e6ad614cd63dcbfef8b9e72c5a1b02314e76a",
+      "sha256": "a573f4e7d65531ccbf5f7012e5f5fd9cf79a0312362c0b986063b7c58344aef6",
       "fichiers": [
         "SKILL.md",
         "references/liste-controles-seo.md"
@@ -26,7 +26,7 @@
     },
     "cadrage-exigences": {
       "version": "1.0.0",
-      "sha256": "f6b3ae3bcae4113e1dfefebdff5ea32fd175e7e161352079f0cc7fa73fab6ff7",
+      "sha256": "38c60510f9730a29816f3a98c2a39fe1c957564159aa0d6e417de9a889547d8e",
       "fichiers": [
         "SKILL.md",
         "references/gabarit-brief.md"
@@ -34,7 +34,7 @@
     },
     "charte-marque": {
       "version": "1.0.0",
-      "sha256": "5c06def6240e30d99d38a49732a47114ce1e3c0dc69af04510be078e76d2d449",
+      "sha256": "887b6dfcea944df4ea234f978b77fb143675681e556d9006bc80dbe23fdc56c2",
       "fichiers": [
         "SKILL.md",
         "references/grille-charte.md"
@@ -42,14 +42,14 @@
     },
     "contenu-recherche-ia": {
       "version": "1.0.0",
-      "sha256": "09715452b19c2041f784f26a08aa11fbbdbf2edb9dd72a45baa662468d8b713b",
+      "sha256": "9b27d6b9749965b444477ff0309af5e88d6ff8c26fb2662100cdfc24278d2d37",
       "fichiers": [
         "SKILL.md"
       ]
     },
     "controle-couverture": {
       "version": "1.0.0",
-      "sha256": "8d60e253de6c6931d24f78d6e71341bd4cb81ad6545ba11a2027f58ab3455dd2",
+      "sha256": "d500a158a28911d7ace62bccc100fff12a8aa898369d46517192bc7344808713",
       "fichiers": [
         "SKILL.md",
         "references/schema-verdict.md"
@@ -64,14 +64,14 @@
     },
     "conversion-crm": {
       "version": "1.3.0",
-      "sha256": "3777124c27c95c1088f0e77eee64838983cab57ad0580bebf479cec6b81635b6",
+      "sha256": "9b0726ea61740fb5debe78a3f0c20c380cbc5ccd8d02aa0105c6eb618af3c17e",
       "fichiers": [
         "SKILL.md"
       ]
     },
     "dossier-validation-humaine": {
       "version": "1.0.0",
-      "sha256": "c157019bcfb9c4755e5ea37c7e46e57c01192b8cc282ce10e5a32fdbb656b8d6",
+      "sha256": "b87d22ea611ffc5b261dcd77ce1c7fa99e2765a5ab0d2eb59eeaa4937d5244b1",
       "fichiers": [
         "SKILL.md",
         "references/gabarit-dossier.md"
@@ -86,14 +86,14 @@
     },
     "planification-livrables": {
       "version": "1.0.0",
-      "sha256": "94ac4795ccf64490da13275bc7e1f1c472919f8dee49ae53984a0960bf95334b",
+      "sha256": "e76894b8bf977f847da8189a5ade2f05f9a465ae1fa1900e82470f1e405d3dff",
       "fichiers": [
         "SKILL.md"
       ]
     },
     "preparation-campagnes-sea": {
       "version": "1.2.0",
-      "sha256": "78f991283b3823fdbcbb688618423101b4b85dffdf05ba495d6f5a3c6eeb3de8",
+      "sha256": "0a7b7c4e48b73975cf2e2feed569942a1f1ea008a7c50b0ebf26cf1df90b5449",
       "fichiers": [
         "SKILL.md",
         "references/structure-campagne.md"
@@ -101,7 +101,7 @@
     },
     "qualification-prospects": {
       "version": "1.0.0",
-      "sha256": "c65f45f5b3212083a5ca51923680356d41b12e1b96de0eb07c58b81d32b44b95",
+      "sha256": "42801c8c8fff6ebd1c9a07e4d86c2773c8a111f7f3b617eaa3ac3cbea575ee88",
       "fichiers": [
         "SKILL.md",
         "references/fiche-qualification.md"
@@ -125,7 +125,7 @@
     },
     "recherche-sourcee": {
       "version": "1.0.0",
-      "sha256": "a3426a1dddb223e2ad90cfd85546ae1c3aee552c0097bf3ea9f36ae43980945c",
+      "sha256": "f1d0c45f05616b24fff998ca91cd09fba6a6cb3f4c35cb483948fa4e09e678a9",
       "fichiers": [
         "SKILL.md",
         "references/fiche-source.md"
@@ -133,7 +133,7 @@
     },
     "redaction-declinaison-canal": {
       "version": "1.4.0",
-      "sha256": "01cd4143bdcecd330170ba81002dc0651fe1a2ce90956ef90829a4ac43e310c7",
+      "sha256": "11100ff1ea2061c710b078ef305d526b6c90ab4f73a93dfc0f09474cd048ebff",
       "fichiers": [
         "SKILL.md"
       ]

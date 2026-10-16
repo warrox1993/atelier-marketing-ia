@@ -7,6 +7,7 @@ import { describe, expect, it } from "vitest";
 import { ACTIONS_UI, ReferentielClient } from "../src/contrats/index.js";
 import { REFERENTIEL_COURTIER } from "../src/contrats/exemples/prospection.js";
 import type { BaseAtelier } from "../src/serveur/base.js";
+import { creerAiguillage } from "../src/serveur/atelier.js";
 import { creerServices } from "../src/serveur/services.js";
 import { SOC, creerBanc } from "./outils-base.js";
 
@@ -54,7 +55,15 @@ function banc() {
     if (!analyse.success) return { refus: analyse.error.issues.map((i) => `${i.path.join(".")} : ${i.message}`) };
     return { marque: await services.actions["atelier.marque.enregistrer"]!(analyse.data as Record<string, unknown>, SOC, HUMAIN) };
   }
-  return { enregistrer, lire: () => services.donnees["atelier.marque"]!({}, SOC) as Promise<Ligne> };
+  /** Lecture par la route REST, comme un agent de l'entreprise donnée. */
+  async function lireParRoute(companyId: string = SOC) {
+    const sortie = await creerAiguillage(b.ctx, services).traiterRequeteApi({
+      routeKey: "marque.lire", method: "GET", path: "/marque", params: {}, query: { companyId },
+      actor: { actorType: "agent", actorId: "agent-1", agentId: "agent-1", runId: "run-1" }, companyId, headers: {},
+    } as never);
+    return sortie as unknown as { status: number; body: Ligne };
+  }
+  return { enregistrer, lireParRoute, lire: () => services.donnees["atelier.marque"]!({}, SOC) as Promise<Ligne> };
 }
 
 describe("atelier.marque.enregistrer : référentiel étendu", () => {
@@ -92,6 +101,21 @@ describe("atelier.marque.enregistrer : référentiel étendu", () => {
     expect(m.modulesConformite).toEqual([]);
   });
 
+  it("conserve la position d'un établissement (ou null) et refuse une position hors bornes", async () => {
+    const b = banc();
+    const saisie = saisieCourtier();
+    saisie.etablissements[0].position = { lat: 50.6123, lon: 5.5612 };
+    saisie.etablissements[1].position = null;
+    const m = (await b.enregistrer(saisie)).marque as Ligne;
+    expect(m.etablissements[0].position).toEqual({ lat: 50.6123, lon: 5.5612 });
+    expect(m.etablissements[1].position).toBeNull();
+    expect(((await b.lire()).marque as Ligne).etablissements[0].position).toEqual({ lat: 50.6123, lon: 5.5612 });
+    saisie.etablissements[0].position = { lat: 91, lon: 5.5612 };
+    const r = await b.enregistrer(saisie);
+    expect(r.marque).toBeUndefined();
+    expect(r.refus?.join(" ")).toContain("position");
+  });
+
   it("refuse un code croisé invalide (offre qui renvoie à une entité inconnue)", async () => {
     const b = banc();
     const saisie = saisieCourtier();
@@ -100,5 +124,34 @@ describe("atelier.marque.enregistrer : référentiel étendu", () => {
     expect(r.marque).toBeUndefined();
     expect(r.refus?.join(" ")).toContain("Entité inconnue : entite-fantome");
     expect((await b.lire()).marque).toBeNull();
+  });
+});
+
+describe("route marque.lire : lecture de la marque par un agent", () => {
+  it("un agent lit le référentiel complet (200), sans sources ni imports", async () => {
+    const b = banc();
+    await b.enregistrer(saisieCourtier());
+    const r = await b.lireParRoute();
+    expect(r.status).toBe(200);
+    expect(ReferentielClient.safeParse(r.body.marque).success).toBe(true);
+    expect(r.body.marque.entites.map((e: Ligne) => e.code)).toEqual(["non-vie", "vie", "devis-en-ligne"]);
+    expect(r.body.marque.modulesConformite).toHaveLength(1);
+    expect(r.body.versions).toHaveLength(1);
+    expect(Object.keys(r.body).sort()).toEqual(["marque", "versions"]);
+  });
+
+  it("une autre entreprise ne voit jamais la marque de la première", async () => {
+    const b = banc();
+    await b.enregistrer(saisieCourtier());
+    const autre = await b.lireParRoute("22222222-2222-4222-8222-222222222222");
+    expect(autre.status).toBe(200);
+    expect(autre.body.marque).toBeNull();
+    expect(JSON.stringify(autre.body)).not.toContain("bureau-liege");
+  });
+
+  it("marque absente : réponse vide claire", async () => {
+    const r = await banc().lireParRoute();
+    expect(r.status).toBe(200);
+    expect(r.body).toEqual({ marque: null, versions: [] });
   });
 });

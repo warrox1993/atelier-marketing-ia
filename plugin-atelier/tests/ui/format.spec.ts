@@ -24,6 +24,12 @@ describe("libellés et tons", () => {
     expect(libelles).toHaveLength(6);
     expect(new Set(libelles).size).toBe(6);
   });
+  it("« Prêt, pas encore utilisé » est neutre (ni orange ni alarmant) et dit pourquoi", () => {
+    const e = ETATS_CONNEXION.configure_non_verifie;
+    expect(e.libelle).toBe("Prêt, pas encore utilisé");
+    expect(e.ton).toBe("neutre");
+    expect(e.aide).toContain("aucun appel réel ne l'a encore utilisée");
+  });
 });
 
 describe("dates à l'heure de Bruxelles", () => {
@@ -106,13 +112,13 @@ describe("chronologie", () => {
 });
 
 describe("routes de la page", () => {
-  it("couvre les six rubriques et les paramètres", () => {
-    expect(VUES.map((v) => v.cle)).toEqual([...RUBRIQUES.map((r) => r.cle), "prospects", "connaissances", "parametres"]);
+  it("couvre l'accueil, les six rubriques, la carte, la mise en place et les paramètres", () => {
+    expect(VUES.map((v) => v.cle)).toEqual(["accueil", ...RUBRIQUES.map((r) => r.cle), "prospects", "carte", "connaissances", "mise-en-place", "parametres", "corbeille"]);
   });
   it("lit la rubrique et l'identifiant depuis le chemin de l'hôte", () => {
-    expect(lireRoute("/RNO/atelier")).toEqual({ vue: "equipe", id: null });
+    expect(lireRoute("/RNO/atelier")).toEqual({ vue: "accueil", id: null });
     expect(lireRoute("/RNO/atelier/contenus/abc")).toEqual({ vue: "contenus", id: "abc" });
-    expect(lireRoute("/RNO/atelier/inconnue")).toEqual({ vue: "equipe", id: null });
+    expect(lireRoute("/RNO/atelier/inconnue")).toEqual({ vue: "accueil", id: null });
     expect(chemin("campagnes", "nouvelle")).toBe("/atelier/campagnes/nouvelle");
   });
 });

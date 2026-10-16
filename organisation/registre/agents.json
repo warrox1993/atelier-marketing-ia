@@ -53,7 +53,8 @@
       "bnb": "atelier-bnb",
       "fsma": "atelier-fsma",
       "osm": "atelier-osm",
-      "b2c": "atelier-b2c"
+      "b2c": "atelier-b2c",
+      "liens": "atelier-liens"
     },
     "acces": {
       "lecture": "lecture seule : toute écriture du service est bloquée pour ce rôle",
@@ -124,17 +125,19 @@
         "recherche": [
           "Read",
           "Grep",
-          "Glob"
+          "Glob",
+          "WebFetch"
         ],
         "mutation": [
           "Bash(curl *)"
         ],
         "interdits": [
           "WebSearch",
-          "WebFetch",
           "Write",
           "Edit",
-          "NotebookEdit"
+          "NotebookEdit",
+          "Agent",
+          "Task"
         ]
       },
       "connexions": {},
@@ -156,7 +159,7 @@
     {
       "slug": "veille",
       "nom": "Veille",
-      "titre": "Marché et veille concurrentielle",
+      "titre": "Pôle Intelligence · Marché et veille concurrentielle",
       "role": "researcher",
       "rapporteA": "coordinateur",
       "mission": "Recherche besoins, segments, concurrence et opportunités ; produit des observations sourcées, datées et bornées.",
@@ -191,7 +194,9 @@
         ],
         "interdits": [
           "Edit",
-          "NotebookEdit"
+          "NotebookEdit",
+          "Agent",
+          "Task"
         ]
       },
       "connexions": {},
@@ -212,7 +217,7 @@
     {
       "slug": "prospection",
       "nom": "Prospection",
-      "titre": "Recherche et qualification de prospects",
+      "titre": "Pôle Intelligence · Recherche et qualification de prospects",
       "role": "researcher",
       "rapporteA": "coordinateur",
       "mission": "Cherche et qualifie des prospects B2B (entreprises par secteur NACE et zone), B2C (origines légales seulement) et partenaires, à partir des réponses signées des connexions de prospection ; ne contacte jamais personne et n'écrit pas au CRM.",
@@ -252,7 +257,9 @@
         ],
         "interdits": [
           "Edit",
-          "NotebookEdit"
+          "NotebookEdit",
+          "Agent",
+          "Task"
         ]
       },
       "connexions": {
@@ -279,7 +286,7 @@
     {
       "slug": "seo-local-geo",
       "nom": "SEO local GEO",
-      "titre": "Référencement naturel, local et GEO",
+      "titre": "Pôle Production · Référencement naturel, local et GEO",
       "role": "general",
       "rapporteA": "coordinateur",
       "mission": "Audite contenu, structure technique accessible, intentions de recherche et cohérence locale ; propose des améliorations vérifiables pour la recherche classique et les réponses des moteurs d'IA, sans garantie de classement.",
@@ -321,7 +328,9 @@
         ],
         "interdits": [
           "Edit",
-          "NotebookEdit"
+          "NotebookEdit",
+          "Agent",
+          "Task"
         ]
       },
       "connexions": {
@@ -346,7 +355,7 @@
     {
       "slug": "sea",
       "nom": "SEA",
-      "titre": "Publicité et SEA",
+      "titre": "Pôle Production · Publicité et SEA",
       "role": "general",
       "rapporteA": "coordinateur",
       "mission": "Prépare campagnes, groupes, mots-clés, exclusions, variantes et propositions budgétaires reliés à une offre validée et à une page cohérente ; n'active rien.",
@@ -387,7 +396,9 @@
         "interdits": [
           "WebSearch",
           "Edit",
-          "NotebookEdit"
+          "NotebookEdit",
+          "Agent",
+          "Task"
         ]
       },
       "connexions": {
@@ -410,7 +421,7 @@
     {
       "slug": "contenus",
       "nom": "Contenus",
-      "titre": "Contenus et création",
+      "titre": "Pôle Production · Contenus et création",
       "role": "designer",
       "rapporteA": "coordinateur",
       "mission": "Produit articles, publications, pages et briefs de visuels selon la marque et le canal ; signale sources et droits ; n'invente ni avis, ni prix, ni certification. Peut publier sur Facebook, Instagram et LinkedIn, seulement sur approbation humaine de l'appel exact.",
@@ -451,7 +462,9 @@
         ],
         "interdits": [
           "WebSearch",
-          "NotebookEdit"
+          "NotebookEdit",
+          "Agent",
+          "Task"
         ]
       },
       "connexions": {
@@ -482,7 +495,7 @@
     {
       "slug": "crm-conversion",
       "nom": "CRM conversion",
-      "titre": "CRM et conversion",
+      "titre": "Pôle Production · CRM et conversion",
       "role": "general",
       "rapporteA": "coordinateur",
       "mission": "Conçoit pages de conversion, formulaires, segmentation et scénarios de suivi avec déclencheurs, exclusions et consentements ; aucune prospection réelle automatique.",
@@ -521,7 +534,9 @@
         "interdits": [
           "WebSearch",
           "WebFetch",
-          "NotebookEdit"
+          "NotebookEdit",
+          "Agent",
+          "Task"
         ]
       },
       "connexions": {
@@ -547,7 +562,7 @@
     {
       "slug": "mesure",
       "nom": "Mesure",
-      "titre": "Mesure et optimisation",
+      "titre": "Pôle Intelligence · Mesure et optimisation",
       "role": "researcher",
       "rapporteA": "coordinateur",
       "mission": "Vérifie données, conversions et doublons ; présente coûts, périodes, attribution et incertitudes ; propose des expériences avec hypothèse, métrique et condition d'arrêt ; répond « non mesurable » si les données manquent.",
@@ -583,7 +598,9 @@
           "WebSearch",
           "WebFetch",
           "Edit",
-          "NotebookEdit"
+          "NotebookEdit",
+          "Agent",
+          "Task"
         ]
       },
       "connexions": {
@@ -610,7 +627,7 @@
       "nom": "Exigences",
       "titre": "Contrôleur des exigences",
       "role": "qa",
-      "rapporteA": null,
+      "rapporteA": "relecteur",
       "mission": "Compare chaque livrable au brief original et à chaque exigence ; exige une preuve localisable pour tout point annoncé couvert ; signale établissements, canaux ou sections oubliés.",
       "entrees": [
         "brief original",
@@ -643,7 +660,9 @@
           "WebFetch",
           "Write",
           "Edit",
-          "NotebookEdit"
+          "NotebookEdit",
+          "Agent",
+          "Task"
         ]
       },
       "connexions": {},
@@ -673,7 +692,7 @@
     {
       "slug": "relecteur",
       "nom": "Relecteur",
-      "titre": "Relecteur métier et factuel",
+      "titre": "Responsable qualité",
       "role": "qa",
       "rapporteA": null,
       "mission": "Vérifie raisonnement, informations, sources, cohérence entre canaux et respect de la marque ; chaque anomalie indique emplacement, preuve, gravité et correction attendue.",
@@ -710,7 +729,9 @@
         "interdits": [
           "Write",
           "Edit",
-          "NotebookEdit"
+          "NotebookEdit",
+          "Agent",
+          "Task"
         ]
       },
       "connexions": {},
@@ -742,7 +763,7 @@
       "nom": "Tests techniques",
       "titre": "Vérificateur technique",
       "role": "qa",
-      "rapporteA": null,
+      "rapporteA": "relecteur",
       "mission": "Exécute les contrôles techniques adaptés : URLs, redirections, accessibilité, formulaires, suivi, formats, schémas et affichage ; un HTTP 200 sur une page d'erreur reste un échec.",
       "entrees": [
         "version précise du livrable",
@@ -765,7 +786,10 @@
           "Read",
           "Grep",
           "Glob",
-          "WebFetch"
+          "WebFetch",
+          "mcp__paperclip-assigned",
+          "mcp__Paperclip_connections__connections_search",
+          "mcp__Paperclip_connections__connection_request"
         ],
         "mutation": [
           "Bash(curl *)"
@@ -774,10 +798,14 @@
           "WebSearch",
           "Write",
           "Edit",
-          "NotebookEdit"
+          "NotebookEdit",
+          "Agent",
+          "Task"
         ]
       },
-      "connexions": {},
+      "connexions": {
+        "liens": "lecture"
+      },
       "modele": {
         "id": "claude-sonnet-5-5",
         "effort": "medium"
@@ -802,7 +830,7 @@
       "nom": "Porte",
       "titre": "Porte de contrôle",
       "role": "qa",
-      "rapporteA": null,
+      "rapporteA": "relecteur",
       "deterministe": true,
       "mission": "Agent déterministe, sans modèle : tient l'unique étape native de revue (circuit 1.1). Il évalue la porte du plugin dans son run et décide : PASS → étape d'approbation humaine ; sinon retour au producteur. La garde P2 du serveur revérifie.",
       "entrees": [

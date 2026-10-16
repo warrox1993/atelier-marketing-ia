@@ -39,6 +39,8 @@ export const CodeMotifPorte = z.enum([
   "citation_connaissance_inconnue",
   "citation_connaissance_perimee",
   "chiffre_offre_sans_source",
+  /** Garde-fous de vérité : numéro FSMA ou BCE cité qui n'est pas, dans la fiche du client, un identifiant de ce type (`services-faits.ts`). */
+  "identifiant_legal_incoherent",
 ]);
 export type CodeMotifPorte = z.infer<typeof CodeMotifPorte>;
 

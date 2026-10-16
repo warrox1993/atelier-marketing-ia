@@ -71,9 +71,9 @@ pages non explorées).
 
 | page | contrôle | observation | méthode | priorité |
 | --- | --- | --- | --- | --- |
-| /isolation-toiture | title | « Accueil » identique à la page d'accueil | lecture du HTML, 02/10/2026 | forte, REQ-006 |
-| /agences/ans | h1 | absent | lecture du HTML, 02/10/2026 | moyenne, REQ-005 |
-| /blog | indexation | balise `noindex` présente | lecture du HTML, 02/10/2026 | forte, REQ-006 |
+| /assurance-habitation | title | « Accueil » identique à la page d'accueil | lecture du HTML, 02/10/2026 | forte, REQ-005 |
+| /bureaux/namur | h1 | absent | lecture du HTML, 02/10/2026 | moyenne, REQ-004 |
+| /blog | indexation | balise `noindex` présente | lecture du HTML, 02/10/2026 | forte, REQ-005 |
 
-Recommandation : titre « Isolation de toiture à Liège et Ans : diagnostic avec visite »
+Recommandation : titre « Assurance habitation à Liège et Namur : faire le point avec un courtier »
 (à valider par la charte), puis contrôle de la balise après mise en ligne.

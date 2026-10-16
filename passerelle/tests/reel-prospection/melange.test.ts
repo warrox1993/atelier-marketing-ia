@@ -11,7 +11,7 @@ import { RegistreFournisseurs } from "../../src/fournisseurs.js";
 import { enregistrerProspectionDemo } from "../../src/demo/prospection/enregistrer.js";
 import { enregistrerOsmDemo, SOURCE_OSM_DEMO } from "../../src/demo/prospection/osm.js";
 import { ATTRIBUTION_OSM, LICENCE_OSM } from "../../src/demo/prospection/osm-commun.js";
-import { enregistrerOsmReelSeul } from "../../src/reel/prospection/enregistrer.js";
+import { enregistrerBceReelSeul, enregistrerBnbReelSeul, enregistrerOsmReelSeul } from "../../src/reel/prospection/enregistrer.js";
 import { importerOsm } from "../../src/reel/prospection/osm/importer.js";
 import { MENTION_DONNEES_TIERCES } from "../../src/outils.js";
 import { MENTION_DEMONSTRATION } from "../../src/services.js";
@@ -31,7 +31,7 @@ describe("PASSERELLE_SERVICES_REELS : lecture du réglage", () => {
   });
   it("refuse un service qui n'est pas mélangeable (comptes de tiers, jetons réels)", () => {
     expect(() => lireServicesReels({ PASSERELLE_SERVICES_REELS: "osm,gsc" })).toThrow(/gsc.*non permis/);
-    expect(() => lireServicesReels({ PASSERELLE_SERVICES_REELS: "bce" })).toThrow(/non permis/);
+    expect(() => lireServicesReels({ PASSERELLE_SERVICES_REELS: "fsma" })).toThrow(/non permis/);
   });
 });
 
@@ -150,5 +150,77 @@ describe("mélange : service listé sans fournisseur réel", () => {
     } finally {
       await p.arreter();
     }
+  });
+});
+
+describe("mélange : bce et bnb réels (osm,liens,bce,bnb), fsma et b2c en démonstration", () => {
+  const dossier = dossierTemporaire("passerelle-melange-bce-bnb-");
+  const clients: Client[] = [];
+  const journal: string[] = [];
+  let p: PasserelleDeTest;
+  let fermerIndex: () => void;
+
+  const PROPRIETES: Record<string, string> = { bce: "registre/demo-bce", bnb: "centrale/demo-bnb", fsma: "registre/demo-fsma", b2c: "particuliers/demo-b2c" };
+
+  async function connecter(service: string): Promise<Client> {
+    const jeton = (await obtenirJetons(p.url, service, PROPRIETES[service])).access_token;
+    const c = new Client({ name: "essai-melange-bce-bnb", version: "0.0.0" });
+    await c.connect(new StreamableHTTPClientTransport(new URL(`${p.url}/mcp/${service}`), { requestInit: { headers: { authorization: `Bearer ${jeton}` } } }));
+    clients.push(c);
+    return c;
+  }
+
+  beforeAll(async () => {
+    const services = lireServicesReels({ PASSERELLE_SERVICES_REELS: "osm,liens,bce,bnb" });
+    const registre = enregistrerOsmDemo(enregistrerProspectionDemo(new RegistreFournisseurs()));
+    // Index BCE ABSENT et aucune clé BNB : le démarrage ne doit pas en souffrir.
+    const env = { PASSERELLE_BCE_INDEX: join(dossier, "absent-bce.sqlite") };
+    const indexBce = enregistrerBceReelSeul(registre, env, { journal: (m) => journal.push(m) });
+    enregistrerBnbReelSeul(registre, env, { journal: (m) => journal.push(m) });
+    fermerIndex = () => indexBce.fermer();
+    p = await demarrer({ registre, servicesReels: services });
+  });
+
+  afterAll(async () => {
+    for (const c of clients) await c.close().catch(() => undefined);
+    await p.arreter();
+    fermerIndex();
+  });
+
+  it("/sante liste bce et bnb dans services_reels ; fsma et b2c n'y sont pas", async () => {
+    const corps = (await (await fetch(`${p.url}/sante`)).json()) as Record<string, any>;
+    expect(corps["mode"]).toBe("demonstration");
+    expect(corps["services_reels"]).toEqual(expect.arrayContaining(["bce", "bnb"]));
+    expect(corps["services_reels"]).not.toContain("fsma");
+    expect(corps["services_reels"]).not.toContain("b2c");
+    expect(corps["services"]).toEqual(expect.arrayContaining(["bce", "bnb", "fsma", "b2c"]));
+  });
+
+  it("fsma et b2c restent en démonstration", async () => {
+    for (const service of ["fsma", "b2c"]) {
+      const c = await connecter(service);
+      const r = await c.callTool({ name: "atelier_identite", arguments: {} });
+      expect((r["structuredContent"] as Record<string, any>)["mode"]).toBe("demonstration");
+    }
+  });
+
+  it("bce réel avec index absent : erreur claire en français, pas de données fictives", async () => {
+    const c = await connecter("bce");
+    expect(((await c.callTool({ name: "atelier_identite", arguments: {} }))["structuredContent"] as Record<string, any>)["mode"]).toBe("reel");
+    const r = await c.callTool({ name: "bce_rechercher", arguments: {} });
+    expect(r["isError"]).toBe(true);
+    expect(JSON.stringify(r["content"])).toMatch(/index BCE absent.*bce-telecharger --importer/);
+  });
+
+  it("bnb réel sans clé : erreur claire, mode réel", async () => {
+    const c = await connecter("bnb");
+    expect(((await c.callTool({ name: "atelier_identite", arguments: {} }))["structuredContent"] as Record<string, any>)["mode"]).toBe("reel");
+    const r = await c.callTool({ name: "bnb_comptes", arguments: { numero: "0403170701" } });
+    expect(JSON.stringify(r["content"])).toMatch(/Clé BNB invalide ou absente/);
+  });
+
+  it("le journal dit que la clé BNB manque et que l'index BCE est absent", () => {
+    expect(journal.some((m) => m.includes("index BCE absent"))).toBe(true);
+    expect(journal.some((m) => m.includes("clé BNB absente"))).toBe(true);
   });
 });

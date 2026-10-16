@@ -10,6 +10,7 @@ import { createHash } from "node:crypto";
 import type { CodeMotifPorte, DecisionPorte, MotifPorte, RoleRevue } from "../contrats/index.js";
 import { GRAVITES_BLOQUANTES } from "../contrats/index.js";
 import { verifierDonneesDemo, type EntreesDonneesDemo } from "./regles-donnees-demo.js";
+import { controlerIdentifiantsLegaux, type FaitsFiche } from "./services-faits.js";
 import { controlerCitationsConnaissances, type VersionPourValidite } from "./regles-connaissances.js";
 
 export interface PreuveEntree {
@@ -83,6 +84,8 @@ export interface EntreesPorte {
    * Connaissances du client (lot R7) : corps du livrable, adresses `connaissance://` rendues à la tâche,
    * versions des documents cités, date de la porte. Absente : la règle ne s'applique pas.
    */
+  /** Garde-fous de vérité : identifiants de la fiche du client et texte du livrable (`services-faits.ts`). Absent : pas de contrôle. */
+  faits?: { livrable: string; fiche: FaitsFiche };
   connaissances?: { livrable: string; passagesRendus: string[]; versions: VersionPourValidite[]; date: string; urlsSourcesTache?: string[] };
 }
 
@@ -265,6 +268,12 @@ export function evaluerPorte(e: EntreesPorte): ResultatPorte {
     const k = e.connaissances;
     for (const c of controlerCitationsConnaissances(k.livrable, k.passagesRendus, k.versions, k.date, { urlsSourcesTache: k.urlsSourcesTache ?? [] })) {
       motifs.push(motif(c.code, c.message, { emplacement: c.emplacement, element: c.adresse ?? c.extrait }));
+    }
+  }
+
+  if (e.faits) {
+    for (const f of controlerIdentifiantsLegaux(e.faits.livrable, e.faits.fiche)) {
+      motifs.push(motif("identifiant_legal_incoherent", `${f.explication} (« ${f.extrait} »)`, { element: f.extrait }));
     }
   }
 

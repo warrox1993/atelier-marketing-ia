@@ -1,0 +1,92 @@
+From 7b4f5b28b390a9de5a20093dcce3e4e44defc26e Mon Sep 17 00:00:00 2001
+From: Jean-Baptiste Dhondt <114347858+warrox1993@users.noreply.github.com>
+Date: Fri, 16 Oct 2026 00:08:50 +0200
+Subject: [PATCH] =?UTF-8?q?feat(atelier,=20local):=20bouton=20Cancel=20au?=
+ =?UTF-8?q?=20premier=20=C3=A9cran=20de=20l'assistant=20de=20cr=C3=A9ation?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01DP85vPq2MHkZg8VNtRvCzB
+---
+ ui/src/components/OnboardingWizard.test.tsx | 12 ++++++++++++
+ ui/src/components/OnboardingWizard.tsx      |  7 ++++++-
+ ui/src/components/onboarding/FooterNav.tsx  |  5 ++++-
+ 3 files changed, 22 insertions(+), 2 deletions(-)
+
+diff --git a/ui/src/components/OnboardingWizard.test.tsx b/ui/src/components/OnboardingWizard.test.tsx
+index c82482c5f..09310bf37 100644
+--- a/ui/src/components/OnboardingWizard.test.tsx
++++ b/ui/src/components/OnboardingWizard.test.tsx
+@@ -438,6 +438,18 @@ describe("OnboardingWizard restore-gate (stale localStorage across accounts)", (
+       await flushReact();
+     }
+ 
++    // Atelier (patch local 0016) : le premier écran a une sortie (« Cancel ») qui ferme l'assistant sans rien créer.
++    it("offers Cancel on the naming step, which closes the wizard without creating a company", async () => {
++      mockDialog.closeOnboarding.mockClear();
++      const { root } = await openStepOne();
++      await clickByText((t) => t.trim() === "Cancel");
++
++      expect(mockDialog.closeOnboarding).toHaveBeenCalled();
++      expect(mockCompaniesApi.create).not.toHaveBeenCalled();
++
++      await act(async () => root.unmount());
++    });
++
+     it("creates the organization on Continue and lands on the agent step, no mission", async () => {
+       mockCompaniesApi.create.mockResolvedValue({ id: "company-new", issuePrefix: "INI" });
+       const { root } = await openStepOne();
+diff --git a/ui/src/components/OnboardingWizard.tsx b/ui/src/components/OnboardingWizard.tsx
+index aeeb67b19..6af4bcee9 100644
+--- a/ui/src/components/OnboardingWizard.tsx
++++ b/ui/src/components/OnboardingWizard.tsx
+@@ -3082,8 +3082,13 @@ function OnboardingWizardInner({
+                       ? unwindConnectStep
+                       : canGoBackFromOnboardingStep({ currentStep: step, entryStep })
+                         ? () => setStep(backStepFrom(step))
+-                        : undefined
++                        // Atelier (patch local 0016) : le premier écran a une sortie. Ouvert par
++                        // erreur, il bloquait la page sans retour possible.
++                        : step === 1
++                          ? handleClose
++                          : undefined
+                   }
++                  backLabel={step === 1 ? "Cancel" : undefined}
+                   // The prototype's cloud flow hires on this step and calls the
+                   // action "Create". Here the model step sits between, so this
+                   // one advances — which is exactly the distinction the
+diff --git a/ui/src/components/onboarding/FooterNav.tsx b/ui/src/components/onboarding/FooterNav.tsx
+index 13ce21d49..801d90b47 100644
+--- a/ui/src/components/onboarding/FooterNav.tsx
++++ b/ui/src/components/onboarding/FooterNav.tsx
+@@ -23,6 +23,7 @@ export type FooterPrimaryIcon = "arrow" | "spinner" | "none";
+  */
+ export function FooterNav({
+   onBack,
++  backLabel,
+   primaryLabel,
+   primaryDisabled,
+   loading,
+@@ -31,6 +32,8 @@ export function FooterNav({
+   onPrimary,
+ }: {
+   onBack?: () => void;
++  /** Atelier (patch local 0016) : libellé du bouton de gauche, « Back » par défaut (« Cancel » au premier écran). */
++  backLabel?: string;
+   primaryLabel: string;
+   primaryDisabled?: boolean;
+   loading?: boolean;
+@@ -66,7 +69,7 @@ export function FooterNav({
+           disabled={loading}
+         >
+           <ArrowLeft className="mr-1 size-3.5" />
+-          Back
++          {backLabel ?? "Back"}
+         </Button>
+       ) : (
+         <span />
+-- 
+2.53.0
+

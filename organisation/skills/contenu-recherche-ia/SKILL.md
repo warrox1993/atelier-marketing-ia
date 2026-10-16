@@ -60,9 +60,9 @@ données structurées, note mesure/hypothèse/recommandation.
 
 ## Exemple
 
-Question : « Combien de temps faut-il pour isoler une toiture à Liège ? »
-Réponse d'ouverture proposée : « Pour une maison mitoyenne, Rénovation Liège
-(démonstration) prévoit en général de deux à quatre jours de chantier après le diagnostic
-avec visite (source : `demo/offres.md`, offre Toiture 2027). Le délai exact est confirmé
-au devis. » Mention ajoutée : délai issu d'une offre interne, pas d'une statistique de
-marché.
+Question : « Que couvre une assurance habitation à Liège ? »
+Réponse d'ouverture proposée : « Une assurance habitation couvre en général les murs ou
+le contenu selon le contrat choisi, avec des exclusions et des franchises propres à chaque
+assureur. Courtier Exemple (démonstration) vous aide à faire le point ; seules les
+conditions générales du contrat font foi. » Mention ajoutée : réponse d'ordre général, sans
+conseil personnalisé, pas une statistique de marché.

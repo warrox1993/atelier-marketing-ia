@@ -1,0 +1,483 @@
+From 017e0d7f7e251d991377fcf606671097e611acbd Mon Sep 17 00:00:00 2001
+From: Jean-Baptiste Dhondt <114347858+warrox1993@users.noreply.github.com>
+Date: Thu, 15 Oct 2026 23:43:15 +0200
+Subject: [PATCH] =?UTF-8?q?feat(atelier,=20local):=20garde=20de=20d=C3=A9l?=
+ =?UTF-8?q?=C3=A9gation=20(sp=C3=A9cialistes,=202=20niveaux,=204=20sous-t?=
+ =?UTF-8?q?=C3=A2ches=20ouvertes)?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01DP85vPq2MHkZg8VNtRvCzB
+---
+ .../atelier-garde-delegation.test.ts          |  89 ++++++++++
+ ...ue-agent-mutation-ownership-routes.test.ts |   6 +
+ ...issue-assignee-invokability-routes.test.ts |   6 +
+ .../__tests__/issue-watchdogs-routes.test.ts  |   6 +
+ .../issue-workspace-command-authz.test.ts     |  82 ++++++++++
+ server/src/atelier/garde-delegation.ts        | 154 ++++++++++++++++++
+ server/src/routes/issues.ts                   |  20 +++
+ 7 files changed, 363 insertions(+)
+ create mode 100644 server/src/__tests__/atelier-garde-delegation.test.ts
+ create mode 100644 server/src/atelier/garde-delegation.ts
+
+diff --git a/server/src/__tests__/atelier-garde-delegation.test.ts b/server/src/__tests__/atelier-garde-delegation.test.ts
+new file mode 100644
+index 000000000..eb0608fa8
+--- /dev/null
++++ b/server/src/__tests__/atelier-garde-delegation.test.ts
+@@ -0,0 +1,89 @@
++import { describe, expect, it } from "vitest";
++import {
++  MAX_SOUS_TACHES_OUVERTES,
++  MESSAGE_DEUX_NIVEAUX_AU_PLUS,
++  MESSAGE_MISSION_TROP_LARGE,
++  MESSAGE_SPECIALISTE_NE_DELEGUE_PAS,
++  appliquerDecision,
++  compterOuvertes,
++  compterSubordonnesActifs,
++  decider,
++  refuserDelegationParAgent,
++  type DonneesDelegation,
++} from "../atelier/garde-delegation.js";
++
++const base: DonneesDelegation = {
++  acteurAgent: true,
++  nbSubordonnes: 3,
++  aParent: true,
++  parentDuParent: null,
++  nbOuvertes: 0,
++  nbAjoutees: 1,
++};
++
++describe("atelier (patch local 0015) : garde de délégation, fonctions pures", () => {
++  it("la limite est une constante nommée valant 4", () => {
++    expect(MAX_SOUS_TACHES_OUVERTES).toBe(4);
++  });
++
++  it("refuse (403) un spécialiste, sans subordonné, même pour une création à la racine", () => {
++    const d = decider({ ...base, nbSubordonnes: 0, aParent: false });
++    expect(d).toMatchObject({ autorise: false, statut: 403, message: MESSAGE_SPECIALISTE_NE_DELEGUE_PAS });
++  });
++
++  it("accepte le coordinateur (des subordonnés), à la racine comme sous un parent racine", () => {
++    expect(decider({ ...base, aParent: false })).toEqual({ autorise: true });
++    expect(decider(base)).toEqual({ autorise: true });
++  });
++
++  it("refuse (403) un parent qui n'est pas une tâche racine", () => {
++    const d = decider({ ...base, parentDuParent: "tache-mere" });
++    expect(d).toMatchObject({ autorise: false, statut: 403, message: MESSAGE_DEUX_NIVEAUX_AU_PLUS });
++  });
++
++  it("refuse (403) le rattachement d'une tâche qui a déjà des sous-tâches (3e niveau)", () => {
++    const d = decider({ ...base, deplaceeADesEnfants: true });
++    expect(d).toMatchObject({ autorise: false, statut: 403, message: MESSAGE_DEUX_NIVEAUX_AU_PLUS });
++    expect(decider({ ...base, deplaceeADesEnfants: false })).toEqual({ autorise: true });
++  });
++
++  it("refuse (409) un 5e enfant ouvert, accepte le 4e", () => {
++    expect(decider({ ...base, nbOuvertes: 4 })).toMatchObject({ autorise: false, statut: 409, message: MESSAGE_MISSION_TROP_LARGE });
++    expect(decider({ ...base, nbOuvertes: 3 })).toEqual({ autorise: true });
++  });
++
++  it("une décomposition de plusieurs enfants compte tous les enfants ajoutés", () => {
++    expect(decider({ ...base, nbOuvertes: 2, nbAjoutees: 2 })).toEqual({ autorise: true });
++    expect(decider({ ...base, nbOuvertes: 2, nbAjoutees: 3 })).toMatchObject({ autorise: false, statut: 409 });
++  });
++
++  it("les enfants done ou cancelled ne sont pas comptés", () => {
++    expect(compterOuvertes(["done", "cancelled", "todo", "blocked", "in_progress", "in_review", "backlog"])).toBe(5);
++    expect(compterOuvertes(["done", "cancelled", "done", "cancelled", "todo"])).toBe(1);
++    expect(decider({ ...base, nbOuvertes: compterOuvertes(["done", "done", "cancelled", "cancelled", "todo", "todo", "todo"]) })).toEqual({ autorise: true });
++  });
++
++  it("les agents terminés ou en attente d'approbation ne sont pas des subordonnés", () => {
++    expect(compterSubordonnesActifs(["terminated", "pending_approval"])).toBe(0);
++    expect(compterSubordonnesActifs(["terminated", "idle", "paused"])).toBe(2);
++  });
++
++  it("un humain n'est jamais limité", () => {
++    expect(decider({ ...base, acteurAgent: false, nbSubordonnes: 0, parentDuParent: "x", nbOuvertes: 9 })).toEqual({ autorise: true });
++  });
++
++  it("appliquerDecision lève 403 ou 409 avec un code, et ne lève rien si autorisé", () => {
++    expect(() => appliquerDecision({ autorise: true })).not.toThrow();
++    const e403 = (() => { try { appliquerDecision(decider({ ...base, nbSubordonnes: 0 })); } catch (e) { return e as any; } })();
++    expect(e403.status).toBe(403);
++    expect(e403.details.code).toBe("atelier_specialiste_ne_delegue_pas");
++    const e409 = (() => { try { appliquerDecision(decider({ ...base, nbOuvertes: 4 })); } catch (e) { return e as any; } })();
++    expect(e409.status).toBe(409);
++    expect(e409.details.code).toBe("atelier_mission_trop_large");
++  });
++
++  it("refuserDelegationParAgent ne lit rien en base pour un humain", async () => {
++    const db = { select: () => { throw new Error("lecture inattendue"); } };
++    await expect(refuserDelegationParAgent(db as any, { actor: { type: "board" } }, { companyId: "c", parentId: "p" })).resolves.toBeUndefined();
++  });
++});
+diff --git a/server/src/__tests__/issue-agent-mutation-ownership-routes.test.ts b/server/src/__tests__/issue-agent-mutation-ownership-routes.test.ts
+index 71beb1c14..40a49b657 100644
+--- a/server/src/__tests__/issue-agent-mutation-ownership-routes.test.ts
++++ b/server/src/__tests__/issue-agent-mutation-ownership-routes.test.ts
+@@ -4,6 +4,12 @@ import request from "supertest";
+ import { getTableName, type SQL } from "drizzle-orm";
+ import { PgDialect } from "drizzle-orm/pg-core";
+ import { beforeEach, describe, expect, it, vi } from "vitest";
++
++// Atelier (patch local 0015) : la garde de délégation (un spécialiste ne délègue pas, 2 niveaux,
++// 4 sous-tâches ouvertes) est neutralisée ici pour que ces tests amont continuent de vérifier
++// leur propre règle ; elle est testée dans atelier-garde-delegation.test.ts et
++// issue-workspace-command-authz.test.ts.
++vi.mock("../atelier/garde-delegation.js", () => ({ refuserDelegationParAgent: async () => undefined }));
+ import { HttpError } from "../errors.js";
+ import { hoistModuleGraph } from "./helpers/hoist-module-graph.js";
+ 
+diff --git a/server/src/__tests__/issue-assignee-invokability-routes.test.ts b/server/src/__tests__/issue-assignee-invokability-routes.test.ts
+index 749314714..fe71e6f96 100644
+--- a/server/src/__tests__/issue-assignee-invokability-routes.test.ts
++++ b/server/src/__tests__/issue-assignee-invokability-routes.test.ts
+@@ -2,6 +2,12 @@ import express from "express";
+ import request from "supertest";
+ import { beforeEach, describe, expect, it, vi } from "vitest";
+ 
++// Atelier (patch local 0015) : la garde de délégation (un spécialiste ne délègue pas, 2 niveaux,
++// 4 sous-tâches ouvertes) est neutralisée ici pour que ces tests amont continuent de vérifier
++// leur propre règle ; elle est testée dans atelier-garde-delegation.test.ts et
++// issue-workspace-command-authz.test.ts.
++vi.mock("../atelier/garde-delegation.js", () => ({ refuserDelegationParAgent: async () => undefined }));
++
+ const AGENT_ACTOR_ID = "11111111-1111-4111-8111-111111111111";
+ const AGENT_RUN_ID = "44444444-4444-4444-8444-444444444444";
+ const PAUSED_AGENT_ID = "22222222-2222-4222-8222-222222222222";
+diff --git a/server/src/__tests__/issue-watchdogs-routes.test.ts b/server/src/__tests__/issue-watchdogs-routes.test.ts
+index dd5636d17..047ac45e9 100644
+--- a/server/src/__tests__/issue-watchdogs-routes.test.ts
++++ b/server/src/__tests__/issue-watchdogs-routes.test.ts
+@@ -3,6 +3,12 @@ import express from "express";
+ import request from "supertest";
+ import { and, eq } from "drizzle-orm";
+ import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
++
++// Atelier (patch local 0015) : la garde de délégation (un spécialiste ne délègue pas, 2 niveaux,
++// 4 sous-tâches ouvertes) est neutralisée ici pour que ces tests amont continuent de vérifier
++// leur propre règle ; elle est testée dans atelier-garde-delegation.test.ts et
++// issue-workspace-command-authz.test.ts.
++vi.mock("../atelier/garde-delegation.js", () => ({ refuserDelegationParAgent: async () => undefined }));
+ import {
+   activityLog,
+   agentRuntimeState,
+diff --git a/server/src/__tests__/issue-workspace-command-authz.test.ts b/server/src/__tests__/issue-workspace-command-authz.test.ts
+index 4d7bc94bb..388832c53 100644
+--- a/server/src/__tests__/issue-workspace-command-authz.test.ts
++++ b/server/src/__tests__/issue-workspace-command-authz.test.ts
+@@ -363,4 +363,86 @@ describe("issue workspace command authorization", () => {
+       expect(res.status, JSON.stringify(res.body)).not.toBe(403);
+     });
+   });
++
++  describe("atelier (patch local 0015) : garde de délégation des agents", () => {
++    const agentActor = { type: "agent", agentId: "agent-1", companyId: "company-1", source: "agent_key", runId: "run-1" };
++    const board = { type: "board", userId: "board-user", source: "local_implicit", isInstanceAdmin: true, companyIds: ["company-1"] };
++
++    /** Données lues par la garde, selon la table interrogée (agents ou issues, 1re puis 2e lecture). */
++    function donneesGarde(opts: { subordonnes: string[]; parentDuParent?: string | null; enfants?: string[] }) {
++      const lectures = { issues: 0 };
++      mockDbSelectFrom.mockImplementation(((table: any) => ({
++        where: () => {
++          const nom = table?.[Symbol.for("drizzle:Name")];
++          let rows: unknown[] = [{ companyId: "company-1", agentId: "agent-1", contextSnapshot: null }];
++          if (nom === "agents") rows = opts.subordonnes.map((status) => ({ status }));
++          if (nom === "issues") {
++            lectures.issues += 1;
++            rows = lectures.issues === 1
++              ? [{ parentId: opts.parentDuParent ?? null }]
++              : (opts.enfants ?? []).map((status) => ({ status }));
++          }
++          return {
++            then: (ok: (r: unknown[]) => unknown, ko?: (e: unknown) => unknown) => Promise.resolve(rows).then(ok, ko),
++          };
++        },
++      })) as any);
++    }
++
++    it("refuse (403) la création d'une sous-tâche par un spécialiste", async () => {
++      donneesGarde({ subordonnes: [] });
++      const res = await request(await createApp(agentActor)).post("/api/issues/issue-1/children").send({ title: "Enfant" });
++      expect(res.status, JSON.stringify(res.body)).toBe(403);
++      expect(res.body.error).toBe("Un spécialiste ne délègue pas : demandez au Coordinateur de répartir le travail.");
++      expect(res.body.code).toBe("atelier_specialiste_ne_delegue_pas");
++      expect(mockIssueService.create).not.toHaveBeenCalled();
++    });
++
++    it("refuse (403) la création d'une tâche à la racine par un spécialiste", async () => {
++      donneesGarde({ subordonnes: [] });
++      const res = await request(await createApp(agentActor)).post("/api/companies/company-1/issues").send({ title: "Racine" });
++      expect(res.status, JSON.stringify(res.body)).toBe(403);
++      expect(res.body.code).toBe("atelier_specialiste_ne_delegue_pas");
++      expect(mockIssueService.create).not.toHaveBeenCalled();
++    });
++
++    it("refuse (403) le rattachement d'une tâche à un parent par PATCH pour un spécialiste", async () => {
++      donneesGarde({ subordonnes: [] });
++      const res = await request(await createApp(agentActor)).patch("/api/issues/issue-1").send({ parentId: "11111111-1111-4111-8111-111111111111" });
++      expect(res.status, JSON.stringify(res.body)).toBe(403);
++      expect(res.body.code).toBe("atelier_specialiste_ne_delegue_pas");
++      expect(mockIssueService.update).not.toHaveBeenCalled();
++    });
++
++    it("refuse (403) une sous-tâche sous une sous-tâche, même pour le coordinateur", async () => {
++      donneesGarde({ subordonnes: ["idle", "idle"], parentDuParent: "mission-0" });
++      const res = await request(await createApp(agentActor)).post("/api/issues/issue-1/children").send({ title: "Petit-enfant" });
++      expect(res.status, JSON.stringify(res.body)).toBe(403);
++      expect(res.body.error).toBe("Deux niveaux au plus : une sous-tâche ne peut pas avoir de sous-tâche.");
++      expect(mockIssueService.create).not.toHaveBeenCalled();
++    });
++
++    it("refuse (409) un 5e enfant ouvert pour le coordinateur", async () => {
++      donneesGarde({ subordonnes: ["idle"], enfants: ["todo", "in_progress", "blocked", "backlog", "done", "cancelled"] });
++      const res = await request(await createApp(agentActor)).post("/api/issues/issue-1/children").send({ title: "5e" });
++      expect(res.status, JSON.stringify(res.body)).toBe(409);
++      expect(res.body.error).toBe("Mission trop large : 4 sous-tâches ouvertes au plus. Découpez-la en plusieurs demandes.");
++      expect(res.body.code).toBe("atelier_mission_trop_large");
++      expect(mockIssueService.create).not.toHaveBeenCalled();
++    });
++
++    it("accepte l'agent qui a des subordonnés avec 3 enfants ouverts (la garde ne refuse pas)", async () => {
++      donneesGarde({ subordonnes: ["idle"], enfants: ["todo", "in_progress", "blocked", "done"] });
++      const res = await request(await createApp(agentActor)).post("/api/issues/issue-1/children").send({ title: "4e" });
++      expect(res.body?.code ?? "").not.toMatch(/^atelier_/);
++      expect([403, 409]).not.toContain(res.status);
++    });
++
++    it("laisse passer un humain (board), sans lecture des subordonnés", async () => {
++      donneesGarde({ subordonnes: [], parentDuParent: "mission-0", enfants: ["todo", "todo", "todo", "todo", "todo"] });
++      const res = await request(await createApp(board)).post("/api/issues/issue-1/children").send({ title: "Enfant" });
++      expect(res.body?.code ?? "").not.toMatch(/^atelier_/);
++      expect([403, 409]).not.toContain(res.status);
++    });
++  });
+ });
+diff --git a/server/src/atelier/garde-delegation.ts b/server/src/atelier/garde-delegation.ts
+new file mode 100644
+index 000000000..bc33ee236
+--- /dev/null
++++ b/server/src/atelier/garde-delegation.ts
+@@ -0,0 +1,154 @@
++/**
++ * Atelier Marketing IA (patch local 0015, non amont) : garde de délégation des agents.
++ *
++ * Règles voulues par l'opérateur, valables en démonstration comme chez un client réel (aucune
++ * condition de mode) et limitées aux acteurs `agent` ; le board (humains) n'est pas limité :
++ *  1. un spécialiste ne délègue jamais : un agent sans subordonné ne crée aucune tâche
++ *     (création, création d'enfant, décomposition de plan accepté) ni ne rattache une tâche
++ *     à un parent par PATCH (403) ;
++ *  2. deux niveaux au plus : le parent d'une sous-tâche créée ou rattachée par un agent doit
++ *     être une tâche racine (403) ;
++ *  3. au plus {@link MAX_SOUS_TACHES_OUVERTES} sous-tâches ouvertes (ni `done` ni `cancelled`)
++ *     par mission (409).
++ *
++ * Est subordonné d'un agent tout agent de la même entreprise, ni `terminated` ni
++ * `pending_approval`, dont `reportsTo` vaut l'id de cet agent.
++ *
++ * Exception « Gardien des connexions » : examinée, aucune exception nécessaire. C'est un agent
++ * déterministe (adaptateur `process`, battement natif) qui lance `assurer-connexions` ; ce
++ * script ne crée aucune tâche (aucun appel aux routes de tâches), il n'est donc jamais touché.
++ */
++import { and, eq } from "drizzle-orm";
++import type { Db } from "@paperclipai/db";
++import { agents, issues } from "@paperclipai/db";
++import { conflict, forbidden } from "../errors.js";
++
++/** Nombre maximal de sous-tâches ouvertes sous une même mission. */
++export const MAX_SOUS_TACHES_OUVERTES = 4;
++
++export const CODE_SPECIALISTE_NE_DELEGUE_PAS = "atelier_specialiste_ne_delegue_pas";
++export const CODE_DEUX_NIVEAUX_AU_PLUS = "atelier_deux_niveaux_au_plus";
++export const CODE_MISSION_TROP_LARGE = "atelier_mission_trop_large";
++
++export const MESSAGE_SPECIALISTE_NE_DELEGUE_PAS =
++  "Un spécialiste ne délègue pas : demandez au Coordinateur de répartir le travail.";
++export const MESSAGE_DEUX_NIVEAUX_AU_PLUS =
++  "Deux niveaux au plus : une sous-tâche ne peut pas avoir de sous-tâche.";
++export const MESSAGE_MISSION_TROP_LARGE =
++  `Mission trop large : ${MAX_SOUS_TACHES_OUVERTES} sous-tâches ouvertes au plus. Découpez-la en plusieurs demandes.`;
++
++/** Statuts d'agent qui ne comptent pas comme subordonné. */
++const STATUTS_AGENT_NON_SUBORDONNES = ["terminated", "pending_approval"];
++/** Statuts de tâche qui ne comptent pas comme « ouverte ». */
++const STATUTS_TACHE_CLOS = ["done", "cancelled"];
++
++export type DonneesDelegation = {
++  /** L'acteur est-il un agent ? Sinon aucune règle ne s'applique. */
++  acteurAgent: boolean;
++  /** Nombre de subordonnés actifs de l'acteur. */
++  nbSubordonnes: number;
++  /** Création ou rattachement sous un parent ? */
++  aParent: boolean;
++  /** `parentId` du parent visé (nul si le parent est une tâche racine). */
++  parentDuParent: string | null;
++  /** Sous-tâches ouvertes du parent avant l'opération. */
++  nbOuvertes: number;
++  /** Nombre de sous-tâches que l'opération ajoute (1 sauf décomposition). */
++  nbAjoutees: number;
++  /** Rattachement (PATCH) d'une tâche qui a déjà des sous-tâches : créerait un 3e niveau. */
++  deplaceeADesEnfants?: boolean;
++};
++
++export type DecisionDelegation =
++  | { autorise: true }
++  | { autorise: false; statut: 403 | 409; code: string; message: string };
++
++/** Nombre de tâches ouvertes (statut ni `done` ni `cancelled`). Fonction pure. */
++export function compterOuvertes(statuts: readonly string[]): number {
++  return statuts.filter((s) => !STATUTS_TACHE_CLOS.includes(s)).length;
++}
++
++/** Nombre de subordonnés actifs parmi des agents `{ status }` déjà filtrés sur `reportsTo`. Fonction pure. */
++export function compterSubordonnesActifs(statuts: readonly string[]): number {
++  return statuts.filter((s) => !STATUTS_AGENT_NON_SUBORDONNES.includes(s)).length;
++}
++
++/** Décision à partir des données lues. Fonction pure. */
++export function decider(d: DonneesDelegation): DecisionDelegation {
++  if (!d.acteurAgent) return { autorise: true };
++  if (d.nbSubordonnes <= 0) {
++    return { autorise: false, statut: 403, code: CODE_SPECIALISTE_NE_DELEGUE_PAS, message: MESSAGE_SPECIALISTE_NE_DELEGUE_PAS };
++  }
++  if (!d.aParent) return { autorise: true };
++  if (d.parentDuParent !== null || d.deplaceeADesEnfants) {
++    return { autorise: false, statut: 403, code: CODE_DEUX_NIVEAUX_AU_PLUS, message: MESSAGE_DEUX_NIVEAUX_AU_PLUS };
++  }
++  if (d.nbOuvertes + d.nbAjoutees > MAX_SOUS_TACHES_OUVERTES) {
++    return { autorise: false, statut: 409, code: CODE_MISSION_TROP_LARGE, message: MESSAGE_MISSION_TROP_LARGE };
++  }
++  return { autorise: true };
++}
++
++/** Lève l'erreur HTTP correspondant à une décision de refus ; sans effet si autorisé. */
++export function appliquerDecision(decision: DecisionDelegation): void {
++  if (decision.autorise) return;
++  const details = { code: decision.code };
++  throw decision.statut === 409 ? conflict(decision.message, details) : forbidden(decision.message, details);
++}
++
++type ActeurRequete = { actor: { type: string; agentId?: string | null; companyId?: string | null } };
++
++/**
++ * Lit en base ce qu'il faut puis applique les règles. Sans effet pour un humain (aucune lecture).
++ * `parentId` : parent visé (création d'enfant, rattachement) ; absent pour une création à la racine.
++ * `nbAjoutees` : nombre de sous-tâches créées d'un coup (décomposition de plan accepté).
++ */
++export async function refuserDelegationParAgent(
++  db: Db,
++  req: ActeurRequete,
++  options: { companyId: string; parentId?: string | null; nbAjoutees?: number; issueDeplaceeId?: string },
++): Promise<void> {
++  if (req.actor.type !== "agent") return;
++  const agentId = req.actor.agentId ?? "";
++  const lignesSubordonnes = agentId
++    ? await db
++        .select({ status: agents.status })
++        .from(agents)
++        .where(and(eq(agents.companyId, options.companyId), eq(agents.reportsTo, agentId)))
++    : [];
++  const aParent = Boolean(options.parentId);
++  let parentDuParent: string | null = null;
++  let nbOuvertes = 0;
++  if (aParent && options.parentId) {
++    const parents = await db
++      .select({ parentId: issues.parentId })
++      .from(issues)
++      .where(and(eq(issues.companyId, options.companyId), eq(issues.id, options.parentId)));
++    parentDuParent = parents[0]?.parentId ?? null;
++    const enfants = await db
++      .select({ status: issues.status })
++      .from(issues)
++      .where(and(eq(issues.companyId, options.companyId), eq(issues.parentId, options.parentId)));
++    nbOuvertes = compterOuvertes(enfants.map((e) => e.status));
++  }
++  // Rattachement d'une tâche existante : si elle a déjà des sous-tâches, on créerait un 3e niveau.
++  let deplaceeADesEnfants = false;
++  if (aParent && options.issueDeplaceeId) {
++    const enfantsDeplacee = await db
++      .select({ id: issues.id })
++      .from(issues)
++      .where(and(eq(issues.companyId, options.companyId), eq(issues.parentId, options.issueDeplaceeId)));
++    deplaceeADesEnfants = enfantsDeplacee.length > 0;
++  }
++  appliquerDecision(
++    decider({
++      acteurAgent: true,
++      nbSubordonnes: compterSubordonnesActifs(lignesSubordonnes.map((l) => l.status)),
++      aParent,
++      parentDuParent,
++      nbOuvertes,
++      nbAjoutees: options.nbAjoutees ?? 1,
++      deplaceeADesEnfants,
++    }),
++  );
++}
+diff --git a/server/src/routes/issues.ts b/server/src/routes/issues.ts
+index 25b47e322..f7abfd609 100644
+--- a/server/src/routes/issues.ts
++++ b/server/src/routes/issues.ts
+@@ -243,6 +243,7 @@ import {
+   collectIssueWorkspaceCommandPaths,
+ } from "./workspace-command-authz.js";
+ import { cheminsSurchargeModeleEffort, refuserModeleEffortParAgent } from "../atelier/garde-modele-agent.js";
++import { refuserDelegationParAgent } from "../atelier/garde-delegation.js";
+ import { shouldWakeAssigneeOnCheckout } from "./issues-checkout-wakeup.js";
+ import {
+   formatAttachmentSize,
+@@ -11625,6 +11626,8 @@ export function issueRoutes(
+       );
+       // Atelier (patch local 0014) : un agent ne choisit ni modèle ni effort par la tâche.
+       refuserModeleEffortParAgent(req, cheminsSurchargeModeleEffort(req.body));
++      // Atelier (patch local 0015) : garde de délégation (spécialiste, deux niveaux, quatre sous-tâches ouvertes).
++      await refuserDelegationParAgent(db, req, { companyId, parentId: req.body.parentId });
+       const sanitizedBody = await sanitizeIssueCreateAttribution(
+         db,
+         req,
+@@ -12106,6 +12109,8 @@ export function issueRoutes(
+       );
+       // Atelier (patch local 0014) : un agent ne choisit ni modèle ni effort par la tâche.
+       refuserModeleEffortParAgent(req, cheminsSurchargeModeleEffort(req.body));
++      // Atelier (patch local 0015) : garde de délégation.
++      await refuserDelegationParAgent(db, req, { companyId: parent.companyId, parentId: parent.id });
+       const sanitizedBody = await sanitizeIssueCreateAttribution(
+         db,
+         req,
+@@ -12347,6 +12352,13 @@ export function issueRoutes(
+       if (!(await assertAgentIssueMutationAllowed(req, res, sourceIssue)))
+         return;
+ 
++      // Atelier (patch local 0015) : garde de délégation, un seul contrôle pour tous les enfants.
++      await refuserDelegationParAgent(db, req, {
++        companyId: sourceIssue.companyId,
++        parentId: sourceIssue.id,
++        nbAjoutees: (req.body.children as unknown[]).length,
++      });
++
+       const requestedChildren = [];
+       for (const child of req.body.children as Array<
+         (typeof req.body.children)[number]
+@@ -12825,6 +12837,14 @@ export function issueRoutes(
+       );
+       // Atelier (patch local 0014) : un agent ne change ni modèle ni effort par la tâche.
+       refuserModeleEffortParAgent(req, cheminsSurchargeModeleEffort(req.body, existing.assigneeAdapterOverrides));
++      // Atelier (patch local 0015) : garde de délégation, seulement si le parent change vers une valeur non nulle.
++      if (req.body.parentId && req.body.parentId !== existing.parentId) {
++        await refuserDelegationParAgent(db, req, {
++          companyId: existing.companyId,
++          parentId: req.body.parentId,
++          issueDeplaceeId: existing.id,
++        });
++      }
+       if (req.actor.type === "agent" && req.body.onBehalfOfUserId != null) {
+         await auditAgentIssueCommentAttributionSpoof({
+           db,
+-- 
+2.53.0
+

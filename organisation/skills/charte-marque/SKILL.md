@@ -54,7 +54,7 @@ correction proposée ; version de la charte utilisée.
 
 ## Exemple
 
-Texte : « Leader de l'isolation à Liège, satisfaction garantie à 100 %. »
+Texte : « Leader de l'assurance habitation à Liège, satisfaction garantie à 100 %. »
 Écarts : « leader » non autorisé (aucune source) ; « satisfaction garantie à 100 % »
-interdit par la charte (promesse absolue). Proposition : « Une équipe locale, trois
-agences, un diagnostic avec visite avant chaque devis. » Charte appliquée : version 1.0.
+interdit par la charte (promesse absolue). Proposition : « Une équipe locale, deux
+bureaux, à Liège et à Namur, un entretien pour faire le point avant chaque devis. » Charte appliquée : version 1.0.

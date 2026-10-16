@@ -1,0 +1,353 @@
+From 9c2ced0471c0c26cd2a2efa4200c48b3f9bc8ca6 Mon Sep 17 00:00:00 2001
+From: Jean-Baptiste Dhondt <114347858+warrox1993@users.noreply.github.com>
+Date: Fri, 16 Oct 2026 01:19:34 +0200
+Subject: [PATCH] =?UTF-8?q?fix(atelier,=20local):=20stop=20qui=20rend=20la?=
+ =?UTF-8?q?=20main,=20confirmation=20dans=20la=20langue=20de=20l'agent,=20?=
+ =?UTF-8?q?passages=20r=C3=A9cents?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+- Arrêt humain d'un passage : la tâche in_progress sans autre passage actif reprend
+  son statut précédent (todo à défaut) avec un commentaire système en français.
+- Carte request_confirmation d'un plan : le prompt de l'agent s'affiche, le texte
+  par défaut ne sert que s'il est absent.
+- Tableau de bord : la section « Agents » devient « Recent agent runs ».
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01DP85vPq2MHkZg8VNtRvCzB
+---
+ .../src/__tests__/operator-run-stop.test.ts   | 114 ++++++++++++++++++
+ server/src/routes/agents.ts                   |   5 +
+ server/src/services/operator-run-stop.ts      |  87 +++++++++++++
+ .../TaskChatCompactInteractionCard.tsx        |   3 +-
+ .../TaskChatInteractionCard.test.tsx          |  46 +++++++
+ ui/src/pages/Dashboard.tsx                    |   2 +-
+ 6 files changed, 255 insertions(+), 2 deletions(-)
+ create mode 100644 server/src/__tests__/operator-run-stop.test.ts
+ create mode 100644 server/src/services/operator-run-stop.ts
+
+diff --git a/server/src/__tests__/operator-run-stop.test.ts b/server/src/__tests__/operator-run-stop.test.ts
+new file mode 100644
+index 000000000..6815408e2
+--- /dev/null
++++ b/server/src/__tests__/operator-run-stop.test.ts
+@@ -0,0 +1,114 @@
++import { randomUUID } from "node:crypto";
++import { eq } from "drizzle-orm";
++import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
++import {
++  activityLog,
++  agents,
++  companies,
++  createDb,
++  heartbeatRuns,
++  issueComments,
++  issues,
++} from "@paperclipai/db";
++import {
++  getEmbeddedPostgresTestSupport,
++  startEmbeddedPostgresTestDatabase,
++} from "./helpers/embedded-postgres.js";
++import { restoreIssueAfterOperatorRunStop } from "../services/operator-run-stop.js";
++
++const embeddedPostgresSupport = await getEmbeddedPostgresTestSupport();
++const describeEmbeddedPostgres = embeddedPostgresSupport.supported ? describe : describe.skip;
++
++describeEmbeddedPostgres("stop humain d'un passage : reprise du statut de la tâche", () => {
++  let db!: ReturnType<typeof createDb>;
++  let tempDb: Awaited<ReturnType<typeof startEmbeddedPostgresTestDatabase>> | null = null;
++
++  beforeAll(async () => {
++    tempDb = await startEmbeddedPostgresTestDatabase("paperclip-operator-run-stop-");
++    db = createDb(tempDb.connectionString);
++  }, 30_000);
++
++  afterEach(async () => {
++    await db.delete(issueComments);
++    await db.delete(activityLog);
++    await db.delete(heartbeatRuns);
++    await db.delete(issues);
++    await db.delete(agents);
++    await db.delete(companies);
++  });
++
++  afterAll(async () => {
++    await tempDb?.cleanup();
++  });
++
++  async function seed(options: { issueStatus?: string; previous?: string | null; otherActiveRun?: boolean }) {
++    const companyId = randomUUID();
++    const agentId = randomUUID();
++    const issueId = randomUUID();
++    const runId = randomUUID();
++    await db.insert(companies).values({
++      id: companyId,
++      name: "Stop Co",
++      issuePrefix: `S${companyId.replace(/-/g, "").slice(0, 6).toUpperCase()}`,
++      requireBoardApprovalForNewAgents: false,
++    });
++    await db.insert(agents).values({
++      id: agentId, companyId, name: "Agent", role: "engineer", status: "idle",
++      adapterType: "codex_local", adapterConfig: {}, runtimeConfig: {}, permissions: {},
++    });
++    await db.insert(issues).values({
++      id: issueId, companyId, identifier: "STP-1", title: "Tâche", status: options.issueStatus ?? "in_progress", priority: "medium",
++    });
++    await db.insert(heartbeatRuns).values({
++      id: runId, companyId, agentId, invocationSource: "assignment", triggerDetail: "system",
++      status: "cancelled", contextSnapshot: { issueId },
++    });
++    if (options.otherActiveRun) {
++      await db.insert(heartbeatRuns).values({
++        id: randomUUID(), companyId, agentId, invocationSource: "assignment", triggerDetail: "system",
++        status: "running", contextSnapshot: { issueId },
++      });
++    }
++    if (options.previous) {
++      await db.insert(activityLog).values({
++        companyId, actorType: "agent", actorId: agentId, agentId, runId,
++        action: "issue.checked_out", entityType: "issue", entityId: issueId,
++        details: { status: "in_progress", _previous: { status: options.previous } },
++      });
++    }
++    return { companyId, issueId, runId };
++  }
++
++  const statusOf = async (issueId: string) =>
++    (await db.select({ status: issues.status }).from(issues).where(eq(issues.id, issueId)))[0]?.status;
++
++  it("rend à la tâche son statut précédent et laisse un commentaire système en français", async () => {
++    const { companyId, issueId, runId } = await seed({ previous: "in_review" });
++    const result = await restoreIssueAfterOperatorRunStop(db, { id: runId, companyId, contextSnapshot: { issueId } });
++    expect(result).toEqual({ restoredStatus: "in_review" });
++    expect(await statusOf(issueId)).toBe("in_review");
++    const comments = await db.select().from(issueComments).where(eq(issueComments.issueId, issueId));
++    expect(comments).toHaveLength(1);
++    expect(comments[0]?.body).toBe("Passage arrêté par un humain : la tâche reprend son statut précédent (in_review).");
++    expect(comments[0]?.authorType).toBe("system");
++  });
++
++  it("passe en todo quand le statut précédent est inconnu", async () => {
++    const { companyId, issueId, runId } = await seed({ previous: null });
++    const result = await restoreIssueAfterOperatorRunStop(db, { id: runId, companyId, contextSnapshot: { issueId } });
++    expect(result).toEqual({ restoredStatus: "todo" });
++    expect(await statusOf(issueId)).toBe("todo");
++  });
++
++  it("ne touche pas la tâche si un autre passage est actif", async () => {
++    const { companyId, issueId, runId } = await seed({ previous: "todo", otherActiveRun: true });
++    expect(await restoreIssueAfterOperatorRunStop(db, { id: runId, companyId, contextSnapshot: { issueId } })).toBeNull();
++    expect(await statusOf(issueId)).toBe("in_progress");
++  });
++
++  it("ne touche pas une tâche qui n'est pas en cours", async () => {
++    const { companyId, issueId, runId } = await seed({ issueStatus: "done", previous: "todo" });
++    expect(await restoreIssueAfterOperatorRunStop(db, { id: runId, companyId, contextSnapshot: { issueId } })).toBeNull();
++    expect(await statusOf(issueId)).toBe("done");
++  });
++});
+diff --git a/server/src/routes/agents.ts b/server/src/routes/agents.ts
+index eb40bc225..2cd9b5a77 100644
+--- a/server/src/routes/agents.ts
++++ b/server/src/routes/agents.ts
+@@ -24,6 +24,7 @@ import { generateKeyPairSync, randomUUID } from "node:crypto";
+ import { readFile, rm } from "node:fs/promises";
+ import path from "node:path";
+ import type { Db } from "@paperclipai/db";
++import { restoreIssueAfterOperatorRunStop } from "../services/operator-run-stop.js";
+ import type { ChatChannelService } from "../services/chat-channels.js";
+ import { activityLog, agents as agentsTable, chatConversations, companies, heartbeatRuns, issues as issuesTable, projects as projectsTable } from "@paperclipai/db";
+ import { and, desc, eq, inArray, not, sql } from "drizzle-orm";
+@@ -7197,6 +7198,10 @@ export function agentRoutes(
+     });
+ 
+     if (run) {
++      // Un humain a arrêté le passage : la tâche ne doit pas rester « en cours » sans passage actif.
++      if (run.status === "cancelled") {
++        await restoreIssueAfterOperatorRunStop(db, run);
++      }
+       await logActivity(db, {
+         companyId: run.companyId,
+         actorType: "user",
+diff --git a/server/src/services/operator-run-stop.ts b/server/src/services/operator-run-stop.ts
+new file mode 100644
+index 000000000..e5564a2c4
+--- /dev/null
++++ b/server/src/services/operator-run-stop.ts
+@@ -0,0 +1,87 @@
++import { and, desc, eq, inArray, ne, sql } from "drizzle-orm";
++import type { Db } from "@paperclipai/db";
++import { activityLog, heartbeatRuns, issues } from "@paperclipai/db";
++import { issueService } from "./issues.js";
++
++const ACTIVE_RUN_STATUSES = ["queued", "running", "scheduled_retry"] as const;
++// Statuts qu'une tâche peut retrouver : jamais un statut terminal ni « en cours ».
++const RESTORABLE_STATUSES = new Set(["backlog", "todo", "in_review", "blocked"]);
++
++function readIssueId(context: unknown): string | null {
++  if (!context || typeof context !== "object") return null;
++  const direct = (context as Record<string, unknown>).issueId;
++  return typeof direct === "string" && direct ? direct : null;
++}
++
++// Statut qu'avait la tâche juste avant de passer « en cours », lu dans le
++// journal d'activité (champ `_previous.status` posé au checkout ou à la mise à jour).
++// On préfère l'entrée écrite par le passage arrêté, sinon la plus récente de la tâche.
++async function findStatusBeforeInProgress(db: Db, input: { companyId: string; issueId: string; runId: string }) {
++  const rows = await db
++    .select({ runId: activityLog.runId, previous: sql<string | null>`${activityLog.details} -> '_previous' ->> 'status'` })
++    .from(activityLog)
++    .where(and(
++      eq(activityLog.companyId, input.companyId),
++      eq(activityLog.entityType, "issue"),
++      eq(activityLog.entityId, input.issueId),
++      sql`${activityLog.details} ->> 'status' = 'in_progress'`,
++      sql`${activityLog.details} -> '_previous' ->> 'status' is not null`,
++      sql`${activityLog.details} -> '_previous' ->> 'status' <> 'in_progress'`,
++    ))
++    .orderBy(desc(activityLog.createdAt))
++    .limit(20);
++  const own = rows.find((row) => row.runId === input.runId && row.previous && RESTORABLE_STATUSES.has(row.previous));
++  const any = rows.find((row) => row.previous && RESTORABLE_STATUSES.has(row.previous));
++  return (own ?? any)?.previous ?? null;
++}
++
++/**
++ * Quand un humain arrête un passage, la tâche liée ne doit pas rester « en cours »
++ * sans passage actif : elle reprend son statut précédent (à défaut, `todo`).
++ * Ne fait rien si la tâche n'est pas `in_progress` ou si un autre passage est actif.
++ */
++export async function restoreIssueAfterOperatorRunStop(
++  db: Db,
++  run: { id: string; companyId: string; contextSnapshot?: unknown },
++): Promise<{ restoredStatus: string } | null> {
++  const issueId = readIssueId(run.contextSnapshot);
++  if (!issueId) return null;
++  const issue = await db
++    .select({ id: issues.id, status: issues.status })
++    .from(issues)
++    .where(and(eq(issues.id, issueId), eq(issues.companyId, run.companyId)))
++    .then((rows) => rows[0] ?? null);
++  if (!issue || issue.status !== "in_progress") return null;
++
++  const otherActive = await db
++    .select({ id: heartbeatRuns.id })
++    .from(heartbeatRuns)
++    .where(and(
++      eq(heartbeatRuns.companyId, run.companyId),
++      ne(heartbeatRuns.id, run.id),
++      inArray(heartbeatRuns.status, [...ACTIVE_RUN_STATUSES]),
++      sql`${heartbeatRuns.contextSnapshot} ->> 'issueId' = ${issueId}`,
++    ))
++    .limit(1);
++  if (otherActive.length > 0) return null;
++
++  const restoredStatus =
++    (await findStatusBeforeInProgress(db, { companyId: run.companyId, issueId, runId: run.id })) ?? "todo";
++  const updated = await db
++    .update(issues)
++    .set({ status: restoredStatus, updatedAt: new Date() })
++    .where(and(eq(issues.id, issueId), eq(issues.status, "in_progress")))
++    .returning({ id: issues.id });
++  if (updated.length === 0) return null;
++
++  await issueService(db).addComment(
++    issueId,
++    `Passage arrêté par un humain : la tâche reprend son statut précédent (${restoredStatus}).`,
++    {},
++    {
++      authorType: "system",
++      presentation: { kind: "system_notice", tone: "info", title: "Passage arrêté", density: "compact", detailsDefaultOpen: false },
++    },
++  );
++  return { restoredStatus };
++}
+diff --git a/ui/src/components/task-chat/TaskChatCompactInteractionCard.tsx b/ui/src/components/task-chat/TaskChatCompactInteractionCard.tsx
+index ef5331bb9..c6965a51c 100644
+--- a/ui/src/components/task-chat/TaskChatCompactInteractionCard.tsx
++++ b/ui/src/components/task-chat/TaskChatCompactInteractionCard.tsx
+@@ -864,8 +864,9 @@ function ConfirmationCard({
+       ) : isPlanConfirmation && rejecting ? null : (
+         <div className="flex flex-wrap items-start justify-between gap-2">
+           <p className="min-w-0 flex-1 text-sm leading-5 text-foreground">
++            {/* Le prompt fourni par l'agent prime ; le texte par défaut ne sert que s'il est absent. */}
+             {isPlanConfirmation
+-              ? "Do you accept this plan?"
++              ? interaction.payload.prompt?.trim() || "Do you accept this plan?"
+               : interaction.payload.prompt}
+           </p>
+           {!isPlanConfirmation ? (
+diff --git a/ui/src/components/task-chat/TaskChatInteractionCard.test.tsx b/ui/src/components/task-chat/TaskChatInteractionCard.test.tsx
+index 8f2348fed..9b224fd6d 100644
+--- a/ui/src/components/task-chat/TaskChatInteractionCard.test.tsx
++++ b/ui/src/components/task-chat/TaskChatInteractionCard.test.tsx
+@@ -370,6 +370,52 @@ describe("TaskChatInteractionCard", () => {
+     ).toBeNull();
+   });
+ 
++  it("affiche le prompt fourni par l'agent sur la carte de confirmation d'un plan, et le texte par défaut seulement s'il est absent", () => {
++    const rendre = (prompt: string | undefined) => {
++      const interaction = createRequestConfirmation({
++        sourceRunId: "run-plan",
++        title: "Valider le plan",
++        payload: {
++          version: 1,
++          // Le type exige un prompt ; on force son absence pour tester le repli.
++          prompt: prompt as string,
++          acceptLabel: "Approuver",
++          rejectLabel: "Demander des changements",
++          target: {
++            type: "issue_document",
++            issueId: "issue-1",
++            documentId: "document-plan",
++            key: "plan",
++            revisionId: "revision-4",
++            revisionNumber: 4,
++          },
++        },
++      });
++      flushSync(() => {
++        root.render(
++          <TooltipProvider>
++            <ThemeProvider>
++              <TaskChatInteractionCard
++                item={interactionItem(interaction)}
++                presentation="takeover"
++                onAcceptInteraction={vi.fn()}
++                onRejectInteraction={vi.fn()}
++                onUploadImage={vi.fn().mockResolvedValue("/uploads/boat.png")}
++              />
++            </ThemeProvider>
++          </TooltipProvider>,
++        );
++      });
++    };
++
++    rendre("Acceptez-vous ce plan ?");
++    expect(container.textContent).toContain("Acceptez-vous ce plan ?");
++    expect(container.textContent).not.toContain("Do you accept this plan?");
++
++    rendre(undefined);
++    expect(container.textContent).toContain("Do you accept this plan?");
++  });
++
+   it("keeps the plan revision in the header and hides the prompt while requesting changes", async () => {
+     const interaction = createRequestConfirmation({
+       sourceRunId: "run-plan",
+diff --git a/ui/src/pages/Dashboard.tsx b/ui/src/pages/Dashboard.tsx
+index 38bf9e51e..773e8a5b8 100644
+--- a/ui/src/pages/Dashboard.tsx
++++ b/ui/src/pages/Dashboard.tsx
+@@ -374,7 +374,7 @@ export function Dashboard() {
+         </div>
+       )}
+ 
+-      <ActiveAgentsPanel companyId={selectedCompanyId!} dedupeLinkedTasks />
++      <ActiveAgentsPanel companyId={selectedCompanyId!} title="Recent agent runs" dedupeLinkedTasks />
+ 
+       {data && (
+         <>
+-- 
+2.53.0
+

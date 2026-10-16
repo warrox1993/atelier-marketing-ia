@@ -66,6 +66,11 @@ export const CreerCampagneEntree = z.object({
   mode: ModeExecution.default("demonstration"),
   /** Agent coordinateur à qui confier la tâche de brief (sinon non affectée). */
   coordinateurAgentId: IdNatif.nullable().default(null),
+  /**
+   * Création par un agent (rôle `ceo`) seulement : tâche de l'entreprise, assignée à l'agent, dont une
+   * demande de confirmation (`request_confirmation`) a été acceptée par un humain. Ignoré pour un humain.
+   */
+  issueId: IdNatif.optional(),
 });
 export type CreerCampagneEntree = z.infer<typeof CreerCampagneEntree>;
 
@@ -146,6 +151,23 @@ export const PageJournal = z.object({
 });
 export type PageJournal = z.infer<typeof PageJournal>;
 
+/** Une source de données dont le mode (réel ou démonstration) est lu sur la passerelle, jamais supposé. */
+export const SourceReelle = z.object({
+  cle: z.enum(["bce", "bnb", "osm", "liens"]),
+  nom: z.string(),
+  reelle: z.boolean(),
+  detail: z.string(),
+  verifieLe: Horodatage,
+});
+export type SourceReelle = z.infer<typeof SourceReelle>;
+
+export const SourcesReelles = z.object({
+  /** « injoignable » : le worker n'a pas pu lire `/sante` ; « non_configuree » : aucune adresse enregistrée. */
+  passerelle: z.enum(["joignable", "injoignable", "non_configuree"]),
+  sources: z.array(SourceReelle),
+});
+export type SourcesReelles = z.infer<typeof SourcesReelles>;
+
 export const Diagnostic = z.object({
   plugin: z.object({ id: z.string(), version: z.string() }),
   espaceBase: z.string(),
@@ -157,6 +179,8 @@ export const Diagnostic = z.object({
     regulateurRuns: EtatConnexion,
   }),
   connecteurs: z.array(Connecteur),
+  /** Sources de données lues sur `/sante` de la passerelle (optionnel : absent d'un ancien worker). */
+  sourcesReelles: SourcesReelles.optional(),
   verifieLe: Horodatage,
 });
 export type Diagnostic = z.infer<typeof Diagnostic>;

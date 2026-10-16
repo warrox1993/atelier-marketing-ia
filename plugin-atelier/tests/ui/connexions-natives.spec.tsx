@@ -248,7 +248,7 @@ describe("page Paramètres : tableau des connexions natives", () => {
     expect(ligne(c, "Google Analytics 4").textContent).toContain("Indisponible");
   });
 
-  it("passerelle réelle (variante : portée Google) sans appel d'outil : Configuré, non vérifié, mode Réel", async () => {
+  it("passerelle réelle (variante : portée Google) sans appel d'outil : Prêt, pas encore utilisé, mode Réel", async () => {
     const variante = {
       connections: CONNEXIONS.connections.map((x) => {
         if (!String(x.name).startsWith("Search Console")) return x;
@@ -260,7 +260,7 @@ describe("page Paramètres : tableau des connexions natives", () => {
     stubReseau({ connexions: { corps: variante }, agents: { corps: AGENTS } });
     const c = await pageParametres();
     const gsc = ligne(c, "Google Search Console");
-    expect(gsc.textContent).toContain("Configuré, non vérifié");
+    expect(gsc.textContent).toContain("Prêt, pas encore utilisé");
     expect(gsc.textContent).toContain("Passerelle : Réel");
   });
 
@@ -278,7 +278,7 @@ describe("page Paramètres : tableau des connexions natives", () => {
     stubReseau({ connexions: { corps: CONNEXIONS }, agents: { corps: AGENTS } });
     const c = await pageParametres();
     const claude = ligne(c, "Adaptateur Claude Code");
-    expect(claude.textContent).toContain("Configuré, non vérifié");
+    expect(claude.textContent).toContain("Prêt, pas encore utilisé");
     expect(claude.textContent).toContain("absent pour : Coordinateur");
     const secretId = (AGENTS.find((a) => a.name === "Veille")!.adapterConfig as { env: { CLAUDE_CODE_OAUTH_TOKEN: { secretId: string } } }).env.CLAUDE_CODE_OAUTH_TOKEN.secretId;
     expect(c.textContent).not.toContain(secretId);

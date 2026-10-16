@@ -14,7 +14,8 @@ import { enregistrerProspectionDemo } from "./demo/prospection/enregistrer.js";
 import { enregistrerOsmDemo } from "./demo/prospection/osm.js";
 import { enregistrerGoogleReel } from "./reel/google/enregistrer.js";
 import { enregistrerSocialCrmReel } from "./reel/social-crm/enregistrer.js";
-import { enregistrerOsmReelSeul, enregistrerProspectionReel } from "./reel/prospection/enregistrer.js";
+import { fournisseurLiensReel } from "./reel/liens/verifier-url.js";
+import { enregistrerBceReelSeul, enregistrerBnbReelSeul, enregistrerOsmReelSeul, enregistrerProspectionReel } from "./reel/prospection/enregistrer.js";
 
 // Par défaut : passerelle/etat/oauth-demo.json, quel que soit le répertoire de lancement
 // (ce fichier compilé vit dans passerelle/dist/src/).
@@ -40,8 +41,16 @@ function principal(): void {
   enregistrerOsmDemo(registre); // P3b : osm (démonstration)
   if (reglages.mode === "reel") enregistrerGoogleReel(registre, process.env, { hote: reglages.hote, urlPasserelle: () => `http://${reglages.hote === "::1" ? "[::1]" : reglages.hote}:${reglages.port}`, journal: (m) => console.log(m) }); // L4 : gsc, ga4, ads, gbp (réel)
   if (reglages.mode === "reel") enregistrerProspectionReel(registre, process.env, { journal: (m) => console.log(m) }); // P3 et P3b : bce, osm (réel, index locaux)
-  // Mélange : en démonstration, PASSERELLE_SERVICES_REELS=osm sert `osm` en réel (index local) et le reste en démonstration.
+  // Mélange : en démonstration, PASSERELLE_SERVICES_REELS=osm,bce,bnb sert `osm`, `bce` et `bnb` en réel (index local) et le reste en démonstration.
   if (reglages.mode === "demonstration" && servicesReels.includes("osm")) enregistrerOsmReelSeul(registre, process.env, { journal: (m) => console.log(m) });
+  // Mélange : `bce` (index SQLite local) et `bnb` (API CBSO, clé PASSERELLE_BNB_CLE) de la même façon ; `fsma` et `b2c` restent en démonstration.
+  if (reglages.mode === "demonstration" && servicesReels.includes("bce")) enregistrerBceReelSeul(registre, process.env, { journal: (m) => console.log(m) });
+  if (reglages.mode === "demonstration" && servicesReels.includes("bnb")) enregistrerBnbReelSeul(registre, process.env, { journal: (m) => console.log(m) });
+  // Mélange : `liens` (verifier_url, lecture d'URL protégée, aucun compte) est servi en réel dès qu'il est demandé.
+  if (reglages.mode === "demonstration" && servicesReels.includes("liens")) {
+    registre.enregistrer(fournisseurLiensReel());
+    console.log("liens RÉEL (mélange, passerelle en démonstration) : verifier_url, adresses publiques seulement");
+  }
   try {
     if (reglages.mode === "reel") enregistrerSocialCrmReel(registre, process.env, { hote: reglages.hote, urlPasserelle: () => `http://${reglages.hote === "::1" ? "[::1]" : reglages.hote}:${reglages.port}`, journal: (m) => console.log(m), signataire }); // réseaux sociaux et CRM (réel)
   } catch (erreur) {

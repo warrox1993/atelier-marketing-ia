@@ -18,7 +18,7 @@ import {
   type ResultatRechercheConnaissances,
   type StatutVersionConnaissance,
 } from "../../contrats/connaissances.js";
-import { Bouton, Champ, Chargement, EnTete, EtatErreur, Horodatage, Pastille, Section, Vide } from "../composants.js";
+import { Bouton, BoutonAller, Champ, Chargement, EnTete, EtatErreur, Horodatage, Pastille, Section, Vide } from "../composants.js";
 import { nombre, type Ton } from "../format.js";
 import { appelRoute } from "../routes-prospection.js";
 import { cheminAvecEntreprise, ROUTES_UI_CONNAISSANCES } from "../routes-connaissances.js";
@@ -221,7 +221,7 @@ function Import({ companyId, onImporte }: { companyId: string; onImporte(): void
   }
 
   return (
-    <Section titre="Ajouter un document" aide="Les agents ne citent que les documents importés ici, et seulement ceux qui sont en vigueur. Un humain importe ; le fichier lui-même n'est pas modifié.">
+    <Section titre="Ajouter un document" id="atl-ajout-document" aide="Les agents ne citent que les documents importés ici, et seulement ceux qui sont en vigueur. Un humain importe ; le fichier lui-même n'est pas modifié.">
       <div
         className="atl-depot"
         data-survol={survol || undefined}
@@ -302,6 +302,117 @@ function Import({ companyId, onImporte }: { companyId: string; onImporte(): void
 }
 
 /* ------------------------------------------------------------------ */
+/* Import d'une page web publique                                      */
+/* ------------------------------------------------------------------ */
+
+function ImportPageWeb({ companyId, onImporte }: { companyId: string; onImporte(): void }) {
+  const [ouvert, setOuvert] = useState(false);
+  const [adresse, setAdresse] = useState("");
+  const [titre, setTitre] = useState("");
+  const [type, setType] = useState<TypeDocumentConnaissance>("fiche_produit");
+  const [langue, setLangue] = useState<"fr" | "nl">("fr");
+  const [produit, setProduit] = useState("");
+  const [enCours, setEnCours] = useState(false);
+  const [erreur, setErreur] = useState<unknown>(null);
+  const [reussi, setReussi] = useState<string | null>(null);
+
+  const adresseNette = adresse.trim();
+  const raison =
+    adresseNette === "" ? "Saisissez l'adresse de la page."
+    : !/^https?:\/\/\S+$/iu.test(adresseNette) ? "L'adresse doit commencer par http:// ou https://."
+    : titre.trim() === "" ? "Donnez un titre à ce document."
+    : null;
+
+  async function importer() {
+    if (raison) return;
+    setEnCours(true);
+    setErreur(null);
+    setReussi(null);
+    try {
+      await appelRoute("POST", ROUTES_UI_CONNAISSANCES.importerUrl, {
+        companyId, url: adresseNette, titre: titre.trim(), type, langue, ...(produit.trim() === "" ? {} : { produit: produit.trim() }),
+      });
+      setReussi(`La page « ${titre.trim()} » est importée. L'indexation se fait en arrière-plan : l'état apparaît dans la liste.`);
+      setAdresse("");
+      setTitre("");
+      setProduit("");
+      setOuvert(false);
+      onImporte();
+    } catch (e) {
+      setErreur(e);
+    } finally {
+      setEnCours(false);
+    }
+  }
+
+  return (
+    <Section titre="Ajouter une page web" id="atl-ajout-page-web" aide="Pour une page publique du site du client : tarifs, formules, questions fréquentes. Le texte est lu une seule fois, sans les menus ni le pied de page, et la source est notée en tête du document.">
+      {reussi ? (
+        <p className="atl-succes" role="status">
+          {reussi}
+        </p>
+      ) : null}
+      {ouvert ? (
+        <form
+          className="atl-formulaire"
+          onSubmit={(e) => {
+            e.preventDefault();
+            void importer();
+          }}
+        >
+          <div className="atl-grille-champs">
+            <Champ libelle="Adresse de la page web" aide="Une page publique, par exemple https://www.exemple.be/assurance-auto.">
+              <input type="url" value={adresse} onChange={(e) => setAdresse(e.target.value)} maxLength={2048} autoComplete="off" />
+            </Champ>
+            <Champ libelle="Titre dans les connaissances">
+              <input value={titre} onChange={(e) => setTitre(e.target.value)} maxLength={LIMITES_CONNAISSANCES.titreMax} autoComplete="off" />
+            </Champ>
+            <Champ libelle="Type de la page">
+              <select value={type} onChange={(e) => setType(e.target.value as TypeDocumentConnaissance)}>
+                {TypeDocumentConnaissance.options.map((t) => (
+                  <option key={t} value={t}>
+                    {LIBELLES_TYPES[t]}
+                  </option>
+                ))}
+              </select>
+            </Champ>
+            <Champ libelle="Langue de la page">
+              <select value={langue} onChange={(e) => setLangue(e.target.value as "fr" | "nl")}>
+                <option value="fr">{LANGUES.fr}</option>
+                <option value="nl">{LANGUES.nl}</option>
+              </select>
+            </Champ>
+            <Champ libelle="Produit concerné (facultatif)">
+              <input value={produit} onChange={(e) => setProduit(e.target.value)} maxLength={120} autoComplete="off" />
+            </Champ>
+          </div>
+          {erreur ? <EtatErreur erreur={erreur} contexte="import de la page web" /> : null}
+          <div className="atl-actions">
+            <Bouton type="submit" variante="principal" raisonDesactive={raison} enCours={enCours}>
+              Importer la page
+            </Bouton>
+            <Bouton variante="discret" onClick={() => setOuvert(false)}>
+              Annuler
+            </Bouton>
+          </div>
+        </form>
+      ) : (
+        <div className="atl-actions">
+          <Bouton
+            onClick={() => {
+              setReussi(null);
+              setOuvert(true);
+            }}
+          >
+            Importer une page web
+          </Bouton>
+        </div>
+      )}
+    </Section>
+  );
+}
+
+/* ------------------------------------------------------------------ */
 /* Liste                                                               */
 /* ------------------------------------------------------------------ */
 
@@ -348,6 +459,23 @@ function Liste({ companyId, version, onChange }: { companyId: string; version: n
   const [etat, setEtat] = useState<{ lignes: LigneDocument[] | null; erreur: unknown; chargement: boolean }>({ lignes: null, erreur: null, chargement: true });
   const [rechargement, setRechargement] = useState(0);
   const [aSupprimer, setASupprimer] = useState<string | null>(null);
+  const [aMettreAuRebut, setAMettreAuRebut] = useState<string | null>(null);
+  const [corbeilleEnCours, setCorbeilleEnCours] = useState(false);
+  const [erreurCorbeille, setErreurCorbeille] = useState<unknown>(null);
+
+  async function mettreALaCorbeille(id: string) {
+    setCorbeilleEnCours(true);
+    setErreurCorbeille(null);
+    try {
+      await appelRoute("POST", "/corbeille/suppression", { companyId, type: "document", id });
+      setAMettreAuRebut(null);
+      onChange();
+    } catch (e) {
+      setErreurCorbeille(e);
+    } finally {
+      setCorbeilleEnCours(false);
+    }
+  }
 
   useEffect(() => {
     let annule = false;
@@ -368,7 +496,9 @@ function Liste({ companyId, version, onChange }: { companyId: string; version: n
       {etat.erreur ? <EtatErreur erreur={etat.erreur} onReessayer={() => setRechargement((v) => v + 1)} contexte="documents" /> : null}
       {etat.chargement && !etat.lignes ? <Chargement libelle="Chargement des documents" /> : null}
       {etat.lignes && etat.lignes.length === 0 ? (
-        <Vide titre="Aucun document pour le moment.">Importez les conditions générales, les fiches produit et les tarifs : les agents pourront alors les citer au lieu d'inventer.</Vide>
+        <Vide titre="Aucun document pour le moment." action={<BoutonAller cible="atl-ajout-document">Ajouter un document</BoutonAller>}>
+          Importez les conditions générales, les fiches produit et les tarifs : les agents pourront alors les citer au lieu d'inventer.
+        </Vide>
       ) : null}
       {nbRevoir > 0 ? (
         <div className="atl-encart" data-ton="attention" role="status">
@@ -425,6 +555,28 @@ function Liste({ companyId, version, onChange }: { companyId: string; version: n
                       <Bouton variante="discret" onClick={() => setASupprimer(l.id)}>
                         Supprimer
                       </Bouton>
+                      {aMettreAuRebut === l.id ? (
+                        <span className="atl-actions" role="group" aria-label={`Confirmation de la mise à la corbeille de ${l.titre}`}>
+                          <Bouton variante="danger" enCours={corbeilleEnCours} onClick={() => void mettreALaCorbeille(l.id)}>
+                            Confirmer
+                          </Bouton>
+                          <Bouton variante="discret" onClick={() => setAMettreAuRebut(null)}>
+                            Annuler
+                          </Bouton>
+                        </span>
+                      ) : (
+                        <Bouton
+                          variante="discret"
+                          onClick={() => {
+                            setErreurCorbeille(null);
+                            setAMettreAuRebut(l.id);
+                          }}
+                        >
+                          Mettre à la corbeille
+                        </Bouton>
+                      )}
+                      <span className="atl-sous">Récupérable 30 jours dans la Corbeille</span>
+                      {aMettreAuRebut === l.id && erreurCorbeille ? <EtatErreur erreur={erreurCorbeille} contexte="mise à la corbeille du document" /> : null}
                     </td>
                   </tr>
                 ))}
@@ -552,6 +704,7 @@ export function VueConnaissances() {
       {companyId ? (
         <>
           <Import companyId={companyId} onImporte={rafraichir} />
+          <ImportPageWeb companyId={companyId} onImporte={rafraichir} />
           <Liste companyId={companyId} version={version} onChange={rafraichir} />
           <Essai />
         </>

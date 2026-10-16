@@ -1,0 +1,10 @@
+[Unit]
+Description=Mise à jour mensuelle de l'index BCE (Atelier marketing IA)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+# Adapter le chemin si le dépôt est ailleurs. La journalisation détaillée est dans instance/donnees/bce/maj.log
+ExecStart=%h/Projets/atelier-marketing-ia/scripts/bce-mise-a-jour.sh
+Nice=10

@@ -94,6 +94,13 @@ const manifest: PaperclipPluginManifestV1 = {
         maxItems: 5,
         items: { type: "string", minLength: 40, maxLength: 4000 },
       },
+      passerelleUrl: {
+        type: "string",
+        title: "Adresse de la passerelle",
+        description:
+          "Adresse locale de la passerelle marketing (par exemple http://127.0.0.1:3190), lue seulement par le diagnostic pour afficher quelles sources sont réelles. Sans adresse : mode non vérifié.",
+        maxLength: 200,
+      },
       // Lot R7 (connaissances du client, docs/rag-conception.md §3.4) : vectorisation des passages.
       connaissancesVectorisation: {
         type: "string",

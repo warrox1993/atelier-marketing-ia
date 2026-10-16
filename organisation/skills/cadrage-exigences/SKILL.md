@@ -74,21 +74,20 @@ exigences suit le gabarit.
 
 ## Exemple
 
-Demande : « Pour le printemps, on veut plus de demandes de devis pour l'isolation des
-toitures dans nos trois agences, avec un article de blog et une campagne Google, budget
+Demande : « Pour le printemps, on veut plus de demandes de devis pour l'assurance
+habitation dans nos deux bureaux, avec un article de blog et une campagne Google, budget
 pub 1 500 € maximum. »
 
 | id | texte d'origine | interprétation | obligatoire | critères |
 | --- | --- | --- | --- | --- |
 | REQ-001 | « plus de demandes de devis » | objectif de conversion mesuré par formulaire | oui | indicateur défini, source de mesure nommée ou « non mesurable » déclaré |
-| REQ-002 | « isolation des toitures » | thème unique de la campagne | oui | toutes les pièces traitent ce thème |
-| REQ-003 | « nos trois agences » : Liège-Centre | couverture de l'établissement | oui | mentionné avec adresse et zone vérifiées |
-| REQ-004 | « nos trois agences » : Liège-Outremeuse | idem | oui | idem |
-| REQ-005 | « nos trois agences » : Ans | idem | oui | idem |
-| REQ-006 | « un article de blog » | un article publié sur le site | oui | article relu, sources citées |
-| REQ-007 | « une campagne Google » | campagne de liens sponsorisés en brouillon | oui | aucune activation sans approbation |
-| REQ-008 | « budget pub 1 500 € maximum » | plafond total de dépense publicitaire | oui | total proposé ≤ 1 500 € |
+| REQ-002 | « assurance habitation » | thème unique de la campagne | oui | toutes les pièces traitent ce thème |
+| REQ-003 | « nos deux bureaux » : Liège | couverture de l'établissement | oui | mentionné avec adresse et zone vérifiées |
+| REQ-004 | « nos deux bureaux » : Namur | idem | oui | idem |
+| REQ-005 | « un article de blog » | un article publié sur le site | oui | article relu, sources citées |
+| REQ-006 | « une campagne Google » | campagne de liens sponsorisés en brouillon | oui | aucune activation sans approbation |
+| REQ-007 | « budget pub 1 500 € maximum » | plafond total de dépense publicitaire | oui | total proposé ≤ 1 500 € |
 
 Information manquante : « Le printemps commence-t-il en mars ou en avril pour vous ? La
-date conditionne le calendrier (REQ-006, REQ-007). » Partie indépendante poursuivie :
+date conditionne le calendrier (REQ-005, REQ-006). » Partie indépendante poursuivie :
 recherche concurrentielle.

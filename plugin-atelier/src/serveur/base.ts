@@ -1090,8 +1090,13 @@ export function creerBase(db: Db) {
     return (await q(`select * from ${ns}.prospects where company_id = $1 and (identifiant_type || ':' || identifiant_valeur) in (select jsonb_array_elements_text($2::jsonb))`, [companyId, json(cles)])).map(ligneProspect);
   }
 
-  async function lireProspect(companyId: string, id: string): Promise<LigneProspect | null> {
-    const [r] = await q(`select * from ${ns}.prospects where company_id = $1 and id = $2`, [companyId, id]);
+  /**
+   * Un prospect à la corbeille n'est pas servi (`corbeille_le` renseignée) : seules la corbeille elle-même et
+   * les règles qui doivent encore l'atteindre (opposition d'un client) passent `{ corbeille: true }`.
+   */
+  async function lireProspect(companyId: string, id: string, options: { corbeille?: boolean } = {}): Promise<LigneProspect | null> {
+    const filtre = options.corbeille === true ? "" : " and corbeille_le is null";
+    const [r] = await q(`select * from ${ns}.prospects where company_id = $1 and id = $2${filtre}`, [companyId, id]);
     return r ? ligneProspect(r) : null;
   }
 
@@ -1246,7 +1251,8 @@ export function creerBase(db: Db) {
   async function listerProspects(companyId: string, f: {
     campagneId?: string | undefined; cibles?: string[] | undefined; nace?: string[] | undefined; codesPostaux?: string[] | undefined; communes?: string[] | undefined;
     provinces?: string[] | undefined; regions?: string[] | undefined; statuts?: string[] | undefined; entites?: string[] | undefined; etablissements?: string[] | undefined;
-    segments?: string[] | undefined; offres?: string[] | undefined; origines?: string[] | undefined; scoreMin?: number | undefined; page: number; parPage: number;
+    segments?: string[] | undefined; offres?: string[] | undefined; origines?: string[] | undefined;
+    zonesBureau?: string[] | undefined; source?: "reelle" | "demonstration" | undefined; avecClientsActuels?: boolean | undefined; scoreMin?: number | undefined; page: number; parPage: number;
   }) {
     const params: unknown[] = [companyId];
     const p = (v: unknown) => `$${params.push(v)}`;
@@ -1254,10 +1260,18 @@ export function creerBase(db: Db) {
     const score = `(select s.valeur from ${ns}.prospects_scores s where s.company_id = p.company_id and s.prospect_id = p.id order by s.calcule_le desc limit 1)`;
     const conditions = [
       "p.company_id = $1",
+      "p.corbeille_le is null",
       ...(f.campagneId ? [`p.campagne_id = ${p(f.campagneId)}`] : []),
       ...dans("p.cible", f.cibles),
       ...dans("p.statut", f.statuts),
       ...dans("p.origine_particulier", f.origines),
+      ...(f.source ? [`p.mode = ${p(f.source === "reelle" ? "reel" : "demonstration")}`] : []),
+      // Zone d'un bureau : même code postal OU même commune.
+      ...(f.zonesBureau?.length
+        ? [`((p.zone->>'codePostal') in (select jsonb_array_elements_text(${p(json(f.zonesBureau.filter((z) => /^\d{4}$/u.test(z))))}::jsonb)) or lower(p.zone->>'commune') in (select jsonb_array_elements_text(${p(json(f.zonesBureau.filter((z) => !/^\d{4}$/u.test(z)).map((z) => z.toLowerCase())))}::jsonb)))`]
+        : []),
+      // Déjà clients exclus par défaut : motif « client_actuel » ou origine « client_existant » (critère de qualification contraire).
+      ...(f.avecClientsActuels ? [] : [`not (p.motifs_exclusion @> ${p(json([{ motif: "client_actuel" }]))}::jsonb or coalesce(p.origine_particulier, '') = 'client_existant')`]),
       ...dans("(p.zone->>'codePostal')", f.codesPostaux),
       ...dans("lower(p.zone->>'commune')", f.communes?.map((c) => c.toLowerCase())),
       ...dans("lower(p.zone->>'province')", f.provinces?.map((c) => c.toLowerCase())),
@@ -1397,7 +1411,7 @@ export function creerBase(db: Db) {
       `select ic.issue, ic.date_issue, ic.origine, p.nace,
               (select s.valeur from ${ns}.prospects_scores s where s.company_id = ic.company_id and s.prospect_id = ic.prospect_id and s.calcule_le < ic.date_issue + 1 order by s.calcule_le desc limit 1) as score
        from ${ns}.issues_commerciales ic join ${ns}.prospects p on p.id = ic.prospect_id and p.company_id = ic.company_id
-       where ic.company_id = $1 and p.cible = $2 and ic.mode = $3 order by ic.date_issue`,
+       where ic.company_id = $1 and p.cible = $2 and ic.mode = $3 and p.corbeille_le is null order by ic.date_issue`,
       [companyId, cible, mode],
     )).map((r) => ({ issue: String(r.issue), date: iso(r.date_issue).slice(0, 10), origine: String(r.origine), nace: tableau<string>(r.nace), score: r.score == null ? null : Number(r.score) }));
   }
@@ -1407,7 +1421,7 @@ export function creerBase(db: Db) {
     return (await q(
       `select p.id, p.nace, s.valeur, s.criteres, s.version_poids from ${ns}.prospects p
        join lateral (select valeur, criteres, version_poids from ${ns}.prospects_scores where company_id = p.company_id and prospect_id = p.id order by calcule_le desc limit 1) s on true
-       where p.company_id = $1 and p.cible = $2 and p.statut <> 'exclu'`,
+       where p.company_id = $1 and p.cible = $2 and p.statut <> 'exclu' and p.corbeille_le is null`,
       [companyId, cible],
     )).map((r) => ({ prospectId: String(r.id), nace: tableau<string>(r.nace), valeur: Number(r.valeur), criteres: tableau(r.criteres), versionPoids: Number(r.version_poids) }));
   }

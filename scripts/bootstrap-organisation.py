@@ -1253,7 +1253,7 @@ def assurer_connexions(api: Api, company_id: str, reg_agents: dict, agents: dict
     return ecritures, resume
 
 
-def corps_gardien(api: Api) -> dict:
+def corps_gardien(api: Api, rapporte_a: str | None = None) -> dict:
     """Définition voulue du « Gardien des connexions » : agent natif process, AUCUN modèle.
     Le battement natif (runtimeConfig.heartbeat, intervalle en secondes) lance, sans tâche ni
     issue créée, `bootstrap-organisation.py assurer-connexions`. L'API visée et le dossier de
@@ -1274,6 +1274,7 @@ def corps_gardien(api: Api) -> dict:
         "name": GARDIEN_NOM,
         "role": "devops",
         "title": "Gardien des connexions (déterministe, sans modèle)",
+        "reportsTo": rapporte_a,
         "capabilities": (
             "Agent déterministe, sans modèle : réserve aux rôles déclarés dans le registre chaque connexion de "
             "la passerelle créée après le bootstrap (accès natif, installations, politiques de lecture seule)."
@@ -1290,6 +1291,8 @@ def corps_gardien(api: Api) -> dict:
 def gardien_conforme(d: dict, voulu: dict) -> list[str]:
     """Écarts entre l'agent existant et la définition voulue (liste vide = conforme)."""
     ecarts = []
+    if d.get("reportsTo") != voulu.get("reportsTo"):
+        ecarts.append("reportsTo")
     cfg = d.get("adapterConfig") or {}
     for cle, valeur in voulu["adapterConfig"].items():
         if cle != "env" and cfg.get(cle) != valeur:
@@ -1316,8 +1319,9 @@ def assurer_gardien(api: Api, company_id: str) -> tuple[int, str]:
     une approbation pour tout nouvel agent, et cet agent n'a aucun modèle ni aucun droit.
     Un agent mis en pause par un humain n'est jamais réactivé (choix humain respecté) : il est
     seulement signalé, car les connexions restent alors ouvertes tant qu'il est en pause."""
-    voulu = corps_gardien(api)
     agents = agents_par_slug(api, company_id)
+    # Le Gardien rend compte au Responsable qualité (branche des contrôleurs), pas au Coordinateur.
+    voulu = corps_gardien(api, (agents.get("relecteur") or {}).get("id"))
     existant = agents.get(GARDIEN_SLUG)
     ecritures = 0
     if existant is None:
@@ -1343,6 +1347,7 @@ def assurer_gardien(api: Api, company_id: str) -> tuple[int, str]:
         api.appel("PATCH", f"/agents/{existant['id']}", {
             "adapterConfig": voulu["adapterConfig"], "replaceAdapterConfig": True,
             "runtimeConfig": voulu["runtimeConfig"], "metadata": voulu["metadata"],
+            "reportsTo": voulu["reportsTo"],
         })
         ecritures += 1
         if any(e.startswith("permissions") for e in ecarts):

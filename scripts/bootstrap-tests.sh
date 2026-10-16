@@ -82,6 +82,19 @@ PY
 "${PY[@]}" "${d}/scripts/bootstrap-organisation.py" generer > /dev/null
 attendre_refus "relecteur subordonné à un producteur" "${d}" "subordonné à un producteur"
 
+d="$(copie controleur-coordinateur)"
+"${PY[@]}" - "${d}/organisation/registre/agents.json" <<'PY'
+import json, sys
+p = sys.argv[1]
+r = json.load(open(p, encoding="utf-8"))
+for a in r["agents"]:
+    if a["slug"] == "exigences":
+        a["rapporteA"] = "coordinateur"
+json.dump(r, open(p, "w", encoding="utf-8"), ensure_ascii=False, indent=2)
+PY
+"${PY[@]}" "${d}/scripts/bootstrap-organisation.py" generer > /dev/null
+attendre_refus "contrôleur rattaché au coordinateur" "${d}" "dépend du coordinateur ou d'un producteur"
+
 d="$(copie modele)"
 modifier_registre() {
   "${PY[@]}" - "$1" "$2" <<'PY'
@@ -129,7 +142,9 @@ PY2
 attendre_refus "outils de connexion sans connexion déclarée" "${d}" "outils de connexion autorisés sans connexion"
 
 d="$(copie connexion-consigne)"
-sed -i 's|/donnees-connexion|/donnees|' "${d}/organisation/agents/mesure/AGENTS.md"
+# La route est citée dans le texte du rôle ET dans les consignes communes (recopiées par « generer » sous le marqueur,
+# donc seule leur source survit à la régénération) : on retire la mention aux deux endroits.
+sed -i 's|/donnees-connexion|/donnees|g' "${d}/organisation/agents/mesure/AGENTS.md" "${d}/organisation/registre/consignes-communes.md"
 "${PY[@]}" "${d}/scripts/bootstrap-organisation.py" generer > /dev/null
 attendre_refus "consigne de dépôt des réponses absente" "${d}" "consigne manquante dans AGENTS.md : dépôt"
 
@@ -198,7 +213,8 @@ sed -i 's|preuve_approbation|preuve|g' "${d}/organisation/agents/contenus/AGENTS
 attendre_refus "Contenus : publication sans la preuve jointe à l'appel" "${d}" "agent contenus : consigne de diffusion réelle manquante dans AGENTS.md : preuve jointe"
 
 d="$(copie diffusion-lecture)"
-printf '\n## Diffusion réelle : parcours complet\n' >> "${d}/organisation/agents/mesure/AGENTS.md"
+# Le titre est inséré AVANT le marqueur des consignes communes : tout ce qui le suit est régénéré par « generer ».
+sed -i '0,/^<!-- Consignes communes : /s||## Diffusion réelle : parcours complet\n\n&|' "${d}/organisation/agents/mesure/AGENTS.md"
 "${PY[@]}" "${d}/scripts/bootstrap-organisation.py" generer > /dev/null
 attendre_refus "parcours de diffusion réelle dans un rôle en lecture seule" "${d}" "rôle en lecture seule"
 
@@ -935,14 +951,19 @@ try:
     routines = routines if isinstance(routines, list) else routines.get("items", [])
     print(f"agents={len(agents)} competences={len(skills)} projets={len(projets)} routines={len(routines)}")
     coord = next(a["id"] for a in agents if a["name"] == "Coordinateur")
+    qualite = next(a["id"] for a in agents if a["name"] == "Relecteur")
     hierarchie = {a["name"]: a.get("reportsTo") for a in agents}
-    if any(v not in (None, coord) for v in hierarchie.values()):
-        raise SystemExit("hiérarchie : un agent rend compte à un autre que le coordinateur")
+    # Deux branches : 7 producteurs -> Coordinateur ; Exigences, Tests techniques, Porte -> Responsable qualité (Relecteur).
+    attendu = {n: coord for n in ("Veille", "Prospection", "Mesure", "Contenus", "SEA", "SEO local GEO", "CRM conversion")}
+    attendu.update({n: qualite for n in ("Exigences", "Tests techniques", "Porte")})
+    attendu.update({"Coordinateur": None, "Relecteur": None})
+    if hierarchie != attendu:
+        raise SystemExit(f"hiérarchie : écart avec les deux branches attendues : {hierarchie}")
     # 19 compétences du dépôt + 8 intégrées vendorisées par l'export + 8 réinstallées = 35 (lot P10 : +3).
     ok = len(agents) == 12 and len(projets) == 2 and len(routines) == 3 and len(skills) == 35 \
         and all(a.get("status") == "paused" for a in agents)
-    print("hiérarchie conservée :", sum(1 for v in hierarchie.values() if v) == 7)
-    if not ok or sum(1 for v in hierarchie.values() if v) != 7:
+    print("hiérarchie conservée :", sum(1 for v in hierarchie.values() if v) == 10)
+    if not ok or sum(1 for v in hierarchie.values() if v) != 10:
         raise SystemExit("aller-retour incomplet")
 finally:
     api.appel("DELETE", f"/companies/{cid}")

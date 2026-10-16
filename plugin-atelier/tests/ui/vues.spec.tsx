@@ -52,13 +52,13 @@ describe("navigation", () => {
   it("la page porte aussi des onglets (téléphone) et chaque lien passe par la navigation de l'hôte", async () => {
     const c = await page("/RNO/atelier/equipe");
     const onglets = c.querySelector("nav.atl-onglets");
-    expect(onglets?.querySelectorAll("a")).toHaveLength(9);
+    expect(onglets?.querySelectorAll("a")).toHaveLength(13);
     await cliquer(parTexte(onglets!, "a", "Marque et sources"));
     expect(pont.navigations).toContain("/atelier/marque");
   });
   it("l'entrée de la barre latérale mène à l'atelier", async () => {
     rendu = await rendre(createElement(EntreeAtelier, { context: contexte }));
-    expect(rendu.conteneur.querySelector("a")?.getAttribute("href")).toBe("/RNO/atelier/equipe");
+    expect(rendu.conteneur.querySelector("a")?.getAttribute("href")).toBe("/RNO/atelier/accueil");
   });
 });
 
@@ -241,7 +241,11 @@ describe("rubriques", () => {
     expect(alerte).toContain("porte déterministe n'est pas franchie");
     expect(alerte).not.toContain("[conflit]");
     expect(alerte).toContain("Code : conflit");
-    expect(fetchMock).not.toHaveBeenCalled();
+    // Seule lecture native tolérée : le nom de l'entreprise pour le bandeau (GET, aucune transition).
+    const appelsNatifs = (fetchMock.mock.calls as unknown as Array<[string, RequestInit | undefined]>).filter(
+      ([url, init]) => !(init?.method === "GET" && /^\/api\/companies\/[^/]+$/u.test(url)),
+    );
+    expect(appelsNatifs).toEqual([]);
   });
 
   it("calendrier : date proposée distincte d'une programmation réelle", async () => {
@@ -272,9 +276,33 @@ describe("rubriques", () => {
     const c = await page("/RNO/atelier/parametres");
     await vi.waitFor(() => expect(c.querySelector('[aria-busy="true"]')).toBeNull());
     expect(c.textContent).toContain("Réel testé");
-    expect(c.textContent).toContain("Configuré, non vérifié");
+    expect(c.textContent).toContain("Prêt, pas encore utilisé");
     expect(c.textContent).toContain("Non connecté");
     expect(parTexte(c, "button", "Remettre à zéro").getAttribute("aria-disabled")).toBe("true");
+  });
+
+  it("paramètres : tableau « Sources de données réelles » (mode lu sur la passerelle)", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ id: ENTREPRISE, name: "Entreprise" }), { status: 200 })));
+    const iso = "2026-10-16T08:00:00.000Z";
+    pont.donnees["atelier.sante"] = {
+      data: {
+        plugin: { id: "atelier", version: "0.1.0" }, espaceBase: "x", migrationsAppliquees: true, connecteurs: [], verifieLe: iso,
+        gardeServeur: { p1PolitiqueVerrouillee: "configure_non_verifie", p2PorteDeterministe: "configure_non_verifie", regulateurRuns: "configure_non_verifie" },
+        sourcesReelles: { passerelle: "joignable", sources: [
+          { cle: "bce", nom: "Banque-Carrefour des Entreprises (BCE)", reelle: false, detail: "Index BCE réel non branché : inscription au portail de la BCE à terminer.", verifieLe: iso },
+          { cle: "osm", nom: "OpenStreetMap", reelle: true, detail: "Extrait OpenStreetMap réel servi par la passerelle.", verifieLe: iso },
+        ] },
+      },
+      loading: false, error: null,
+    };
+    const c = await page("/RNO/atelier/parametres");
+    await vi.waitFor(() => expect(c.textContent).toContain("Sources de données réelles"));
+    const lignes = [...c.querySelectorAll("table")].find((t) => t.textContent?.includes("OpenStreetMap"))!.querySelectorAll("tbody tr");
+    expect(lignes).toHaveLength(2);
+    expect(lignes[0]!.textContent).toContain("Démonstration");
+    expect(lignes[0]!.textContent).toContain("inscription au portail de la BCE à terminer");
+    expect(lignes[1]!.textContent).toContain("Réel");
+    expect(c.textContent).toContain("Passerelle joignable.");
   });
 });
 
@@ -334,6 +362,36 @@ describe("onglet de tâche et widget", () => {
     rendu = await rendre(createElement(WidgetAtelier, { context: contexte }));
     expect(rendu.conteneur.textContent).toContain("1 à valider");
     expect(rendu.conteneur.textContent).toContain("0 run actif sur 3");
+  });
+  it("le widget envoie une demande au Coordinateur puis ouvre la tâche créée", async () => {
+    const appels: Array<{ methode: string; url: string; corps: unknown }> = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string, init?: { method?: string; body?: string }) => {
+        appels.push({ methode: init?.method ?? "GET", url, corps: init?.body ? JSON.parse(init.body) : null });
+        return new Response(JSON.stringify({ issueId: "n1", identifiant: "DEM-9", lien: "/issues/DEM-9" }), { status: 201 });
+      }),
+    );
+    rendu = await rendre(createElement(WidgetAtelier, { context: contexte }));
+    const c = rendu.conteneur;
+    await cliquer(parTexte(c, "button", "Envoyer"));
+    expect(appels).toHaveLength(0);
+    const champ = champParLibelle(c, "Demander à l'équipe") as HTMLTextAreaElement;
+    await saisir(champ, " Un post sur l'offre ");
+    await cliquer(parTexte(c, "button", "Envoyer"));
+    const post = appels.find((a) => a.methode === "POST");
+    expect(post?.url).toContain("/equipe/demande");
+    expect(post?.corps).toMatchObject({ companyId: ENTREPRISE, texte: "Un post sur l'offre" });
+    expect(pont.navigations).toContain("/issues/DEM-9");
+    expect(champ.value).toBe("");
+  });
+  it("le widget affiche l'erreur d'envoi en role alert", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ error: "refusé" }), { status: 500 })));
+    rendu = await rendre(createElement(WidgetAtelier, { context: contexte }));
+    await saisir(champParLibelle(rendu.conteneur, "Demander à l'équipe") as HTMLTextAreaElement, "Bonjour");
+    await cliquer(parTexte(rendu.conteneur, "button", "Envoyer"));
+    expect(rendu.conteneur.querySelector('[role="alert"]')?.textContent).toBeTruthy();
+    expect(pont.navigations).toHaveLength(0);
   });
 });
 

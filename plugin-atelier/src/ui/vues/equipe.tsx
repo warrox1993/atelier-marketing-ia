@@ -178,7 +178,7 @@ function Competences({ agent }: { agent: AgentVue }) {
     <span className="atl-pile">
       <span>{agent.competences.length} compétence{agent.competences.length > 1 ? "s" : ""}</span>
       <span className="atl-sous">
-        {transmises.length ? `${transmises.length} transmise(s) au dernier run` : "configurées, pas encore vues dans un run"}
+        {transmises.length ? `${transmises.length} transmise(s) au dernier run` : "prêtes, pas encore utilisées"}
       </span>
     </span>
   );

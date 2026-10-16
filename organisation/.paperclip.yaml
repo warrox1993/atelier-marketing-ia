@@ -23,13 +23,15 @@ agents:
           - "Read"
           - "Grep"
           - "Glob"
+          - "WebFetch"
           - "Bash(curl *)"
           - "--disallowedTools"
           - "WebSearch"
-          - "WebFetch"
           - "Write"
           - "Edit"
           - "NotebookEdit"
+          - "Agent"
+          - "Task"
         env:
           DISABLE_TELEMETRY:
             type: "plain"
@@ -64,14 +66,16 @@ agents:
           - "Read"
           - "Grep"
           - "Glob"
+          - "WebFetch"
         outilsMutation:
           - "Bash(curl *)"
         outilsInterdits:
           - "WebSearch"
-          - "WebFetch"
           - "Write"
           - "Edit"
           - "NotebookEdit"
+          - "Agent"
+          - "Task"
         relit: []
         roleRevue: null
         connexions: {}
@@ -118,6 +122,8 @@ agents:
           - "--disallowedTools"
           - "Edit"
           - "NotebookEdit"
+          - "Agent"
+          - "Task"
         env:
           DISABLE_TELEMETRY:
             type: "plain"
@@ -133,7 +139,7 @@ agents:
       atelier:
         registre: "atelier/registre-agents/v1"
         versionRegistre: "1.6.0"
-        titre: "Marché et veille concurrentielle"
+        titre: "Pôle Intelligence · Marché et veille concurrentielle"
         entrees:
           - "brief et exigences"
           - "zone géographique et offres"
@@ -156,6 +162,8 @@ agents:
         outilsInterdits:
           - "Edit"
           - "NotebookEdit"
+          - "Agent"
+          - "Task"
         relit: []
         roleRevue: null
         connexions: {}
@@ -204,6 +212,8 @@ agents:
           - "--disallowedTools"
           - "Edit"
           - "NotebookEdit"
+          - "Agent"
+          - "Task"
         env:
           DISABLE_TELEMETRY:
             type: "plain"
@@ -219,7 +229,7 @@ agents:
       atelier:
         registre: "atelier/registre-agents/v1"
         versionRegistre: "1.6.0"
-        titre: "Recherche et qualification de prospects"
+        titre: "Pôle Intelligence · Recherche et qualification de prospects"
         entrees:
           - "brief et exigences"
           - "secteurs NACE, zone et type de prospects visés"
@@ -246,6 +256,8 @@ agents:
         outilsInterdits:
           - "Edit"
           - "NotebookEdit"
+          - "Agent"
+          - "Task"
         relit: []
         roleRevue: null
         connexions:
@@ -299,6 +311,8 @@ agents:
           - "--disallowedTools"
           - "Edit"
           - "NotebookEdit"
+          - "Agent"
+          - "Task"
         env:
           DISABLE_TELEMETRY:
             type: "plain"
@@ -314,7 +328,7 @@ agents:
       atelier:
         registre: "atelier/registre-agents/v1"
         versionRegistre: "1.6.0"
-        titre: "Référencement naturel, local et GEO"
+        titre: "Pôle Production · Référencement naturel, local et GEO"
         entrees:
           - "brief et exigences"
           - "URLs du site"
@@ -341,6 +355,8 @@ agents:
         outilsInterdits:
           - "Edit"
           - "NotebookEdit"
+          - "Agent"
+          - "Task"
         relit: []
         roleRevue: null
         connexions:
@@ -392,6 +408,8 @@ agents:
           - "WebSearch"
           - "Edit"
           - "NotebookEdit"
+          - "Agent"
+          - "Task"
         env:
           DISABLE_TELEMETRY:
             type: "plain"
@@ -407,7 +425,7 @@ agents:
       atelier:
         registre: "atelier/registre-agents/v1"
         versionRegistre: "1.6.0"
-        titre: "Publicité et SEA"
+        titre: "Pôle Production · Publicité et SEA"
         entrees:
           - "brief et exigences"
           - "offres validées"
@@ -435,6 +453,8 @@ agents:
           - "WebSearch"
           - "Edit"
           - "NotebookEdit"
+          - "Agent"
+          - "Task"
         relit: []
         roleRevue: null
         connexions:
@@ -484,6 +504,8 @@ agents:
           - "--disallowedTools"
           - "WebSearch"
           - "NotebookEdit"
+          - "Agent"
+          - "Task"
         env:
           DISABLE_TELEMETRY:
             type: "plain"
@@ -499,7 +521,7 @@ agents:
       atelier:
         registre: "atelier/registre-agents/v1"
         versionRegistre: "1.6.0"
-        titre: "Contenus et création"
+        titre: "Pôle Production · Contenus et création"
         entrees:
           - "brief et exigences"
           - "charte de marque"
@@ -526,6 +548,8 @@ agents:
         outilsInterdits:
           - "WebSearch"
           - "NotebookEdit"
+          - "Agent"
+          - "Task"
         relit: []
         roleRevue: null
         connexions:
@@ -581,6 +605,8 @@ agents:
           - "WebSearch"
           - "WebFetch"
           - "NotebookEdit"
+          - "Agent"
+          - "Task"
         env:
           DISABLE_TELEMETRY:
             type: "plain"
@@ -596,7 +622,7 @@ agents:
       atelier:
         registre: "atelier/registre-agents/v1"
         versionRegistre: "1.6.0"
-        titre: "CRM et conversion"
+        titre: "Pôle Production · CRM et conversion"
         entrees:
           - "brief et exigences"
           - "offres validées"
@@ -622,6 +648,8 @@ agents:
           - "WebSearch"
           - "WebFetch"
           - "NotebookEdit"
+          - "Agent"
+          - "Task"
         relit: []
         roleRevue: null
         connexions:
@@ -674,6 +702,8 @@ agents:
           - "WebFetch"
           - "Edit"
           - "NotebookEdit"
+          - "Agent"
+          - "Task"
         env:
           DISABLE_TELEMETRY:
             type: "plain"
@@ -689,7 +719,7 @@ agents:
       atelier:
         registre: "atelier/registre-agents/v1"
         versionRegistre: "1.6.0"
-        titre: "Mesure et optimisation"
+        titre: "Pôle Intelligence · Mesure et optimisation"
         entrees:
           - "exports de données importés avec période et provenance"
           - "objectifs de la campagne"
@@ -714,6 +744,8 @@ agents:
           - "WebFetch"
           - "Edit"
           - "NotebookEdit"
+          - "Agent"
+          - "Task"
         relit: []
         roleRevue: null
         connexions:
@@ -762,6 +794,8 @@ agents:
           - "Write"
           - "Edit"
           - "NotebookEdit"
+          - "Agent"
+          - "Task"
         env:
           DISABLE_TELEMETRY:
             type: "plain"
@@ -801,6 +835,8 @@ agents:
           - "Write"
           - "Edit"
           - "NotebookEdit"
+          - "Agent"
+          - "Task"
         relit:
           - "coordinateur"
           - "veille"
@@ -854,6 +890,8 @@ agents:
           - "Write"
           - "Edit"
           - "NotebookEdit"
+          - "Agent"
+          - "Task"
         env:
           DISABLE_TELEMETRY:
             type: "plain"
@@ -869,7 +907,7 @@ agents:
       atelier:
         registre: "atelier/registre-agents/v1"
         versionRegistre: "1.6.0"
-        titre: "Relecteur métier et factuel"
+        titre: "Responsable qualité"
         entrees:
           - "brief original"
           - "exigences"
@@ -893,6 +931,8 @@ agents:
           - "Write"
           - "Edit"
           - "NotebookEdit"
+          - "Agent"
+          - "Task"
         relit:
           - "coordinateur"
           - "veille"
@@ -940,12 +980,17 @@ agents:
           - "Grep"
           - "Glob"
           - "WebFetch"
+          - "mcp__paperclip-assigned"
+          - "mcp__Paperclip_connections__connections_search"
+          - "mcp__Paperclip_connections__connection_request"
           - "Bash(curl *)"
           - "--disallowedTools"
           - "WebSearch"
           - "Write"
           - "Edit"
           - "NotebookEdit"
+          - "Agent"
+          - "Task"
         env:
           DISABLE_TELEMETRY:
             type: "plain"
@@ -977,6 +1022,9 @@ agents:
           - "Grep"
           - "Glob"
           - "WebFetch"
+          - "mcp__paperclip-assigned"
+          - "mcp__Paperclip_connections__connections_search"
+          - "mcp__Paperclip_connections__connection_request"
         outilsMutation:
           - "Bash(curl *)"
         outilsInterdits:
@@ -984,13 +1032,16 @@ agents:
           - "Write"
           - "Edit"
           - "NotebookEdit"
+          - "Agent"
+          - "Task"
         relit:
           - "seo-local-geo"
           - "sea"
           - "contenus"
           - "crm-conversion"
         roleRevue: "technique"
-        connexions: {}
+        connexions:
+          liens: "lecture"
         criteresReussite:
           - "chaque URL a un statut, une destination finale et un contrôle de contenu"
           - "un code 200 sur une page d'erreur est classé en échec"

@@ -141,6 +141,19 @@ export type NumeroBce = z.infer<typeof NumeroBce>;
 export const CodeNace = z.string().regex(/^\d{2}(?:\.?\d{1,3})?$/u, "Code NACE attendu (ex. 43.910 ou 66220)");
 export type CodeNace = z.infer<typeof CodeNace>;
 
+/**
+ * Position d'un prospect sur la carte. `exacte` : point d'un établissement connu (OpenStreetMap) ;
+ * `code_postal` ou `commune` : centre de la zone, donc approximatif (la source est dans les sources du prospect).
+ */
+export const PositionProspect = z
+  .object({
+    lat: z.number().min(-90).max(90),
+    lon: z.number().min(-180).max(180),
+    precision: z.enum(["exacte", "code_postal", "commune"]),
+  })
+  .strict();
+export type PositionProspect = z.infer<typeof PositionProspect>;
+
 /** Zone d'un prospect ou d'un client (pas d'adresse précise : elle est chiffrée). */
 export const ZoneProspect = z
   .object({
@@ -149,6 +162,8 @@ export const ZoneProspect = z
     province: z.string().max(80).nullable(),
     region: z.enum(["Wallonie", "Bruxelles-Capitale", "Flandre"]).nullable(),
     pays: z.string().regex(/^[A-Z]{2}$/u).default("BE"),
+    /** Position facultative (stockée dans le JSON de la zone, sans migration) ; absente ou null = inconnue. */
+    position: PositionProspect.nullable().optional(),
   })
   .strict();
 export type ZoneProspect = z.infer<typeof ZoneProspect>;
@@ -350,6 +365,31 @@ export function coordonneesManifestementFictives(c: CoordonneesEnClair): boolean
 }
 
 /** D'où vient un fait sur le prospect : un dépôt signé (source de la tâche), une URL lue, un import, un formulaire, un humain. */
+/**
+ * Fait daté lu dans une réponse BCE (`StartDate` d'une entreprise, ou changement de `bce_changements`) :
+ * il porte la date du fait lui-même (AAAA-MM-JJ), distincte de la date de collecte de la source.
+ */
+export const FaitBce = z
+  .object({
+    code: z.enum(["debut_entreprise", "creation", "nouvel_etablissement", "changement_adresse", "changement_forme"]),
+    date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/u),
+  })
+  .strict();
+export type FaitBce = z.infer<typeof FaitBce>;
+
+/**
+ * Taille d'une entreprise lue dans une réponse `bnb_comptes` (Centrale des bilans) : exercice (année de clôture),
+ * effectif en équivalents temps plein et catégorie déduite par la passerelle. Chaque champ est null s'il n'est pas fourni.
+ */
+export const TailleBnb = z
+  .object({
+    exercice: z.number().int().min(1900).max(2200).nullable(),
+    effectifEtp: z.number().min(0).max(10_000_000).nullable(),
+    categorie: z.enum(["micro", "petite", "moyenne", "grande"]).nullable(),
+  })
+  .strict();
+export type TailleBnb = z.infer<typeof TailleBnb>;
+
 export const SourceProspect = z
   .object({
     type: z.enum(["depot_signe", "lecture_url", "import", "formulaire", "partenaire", "saisie_humaine"]),
@@ -359,6 +399,12 @@ export const SourceProspect = z
     outil: z.string().max(80).nullable(),
     url: z.string().max(2048).nullable(),
     collecteLe: Horodatage,
+    /** Faits datés de la BCE portés par ce dépôt (signaux de moment) ; absent hors dépôt BCE. */
+    faits: z.array(FaitBce).max(20).optional(),
+    /** Taille tirée des comptes annuels BNB portés par ce dépôt (`bnb_comptes`) ; absente hors dépôt BNB. */
+    taille: TailleBnb.optional(),
+    /** Étiquette OpenStreetMap du lieu (clé et valeur, ex. `amenity` / `dentist`) portée par ce dépôt ; absente hors dépôt OSM. */
+    categorieOsm: z.object({ cle: z.string().min(1).max(40), valeur: z.string().min(1).max(80) }).strict().optional(),
   })
   .strict()
   .refine((s) => s.type !== "depot_signe" || (s.sourceId !== null && s.service !== null && s.outil !== null), {
@@ -539,6 +585,97 @@ export const ScoreProspect = z
   );
 export type ScoreProspect = z.infer<typeof ScoreProspect>;
 
+/* ------------------------------------------------------------------ */
+/* Confiance de qualification (distincte du score de conversion)        */
+/* ------------------------------------------------------------------ */
+
+/** Seuil de la confiance (en %) à partir duquel un prospect est « qualifié ». */
+export const SEUIL_QUALIFICATION = 90;
+
+/** Critères vérifiables : chacun ne monte que sur une source déposée, jamais sur une hypothèse. */
+export const CodeCritereQualification = z.enum([
+  "entreprise_active",
+  "segment_cible",
+  "zone_cible",
+  "taille_connue",
+  "joignable_legalement",
+  "pas_deja_client",
+  "sources_concordantes",
+]);
+export type CodeCritereQualification = z.infer<typeof CodeCritereQualification>;
+
+export const StatutCritereQualification = z.enum(["verifie", "non_verifie", "contraire"]);
+export type StatutCritereQualification = z.infer<typeof StatutCritereQualification>;
+
+export const CritereQualification = z
+  .object({
+    code: CodeCritereQualification,
+    libelle: z.string().min(1).max(200),
+    statut: StatutCritereQualification,
+    poids: z.number().int().min(0).max(100),
+    /** `Source.id` du dépôt qui établit le fait ; null quand la preuve n'est pas un dépôt (base légale, base de clients). */
+    sourceId: IdNatif.nullable(),
+    /** Origine lisible du fait (service et outil, ou nature de la preuve). */
+    source: z.string().max(300),
+    detail: z.string().max(300),
+  })
+  .strict();
+export type CritereQualification = z.infer<typeof CritereQualification>;
+
+/**
+ * Confiance de qualification (0 à 100) : à quel point il est établi que le prospect correspond à la cible
+ * du client. Moyenne pondérée des critères vérifiés ; un critère contraire la plafonne à 50 et la rend non
+ * qualifiée. À ne jamais confondre avec le score (`ScoreProspect`), qui estime la chance de conversion.
+ */
+export const ConfianceQualification = z
+  .object({
+    valeur: z.number().int().min(0).max(100),
+    qualifie: z.boolean(),
+    /** Vrai si au moins un critère est contraire (plafond de 50 %). */
+    plafonnee: z.boolean(),
+    seuil: z.literal(SEUIL_QUALIFICATION),
+    criteres: z.array(CritereQualification).min(1).max(7),
+    calculeLe: Horodatage,
+  })
+  .strict()
+  .refine((c) => c.qualifie === (c.valeur >= SEUIL_QUALIFICATION), { message: "« qualifié » vaut : confiance au moins égale au seuil", path: ["qualifie"] })
+  .refine((c) => !c.plafonnee || (c.valeur <= 50 && !c.qualifie), { message: "Un critère contraire plafonne la confiance à 50 % et rend non qualifié", path: ["plafonnee"] })
+  .refine((c) => c.plafonnee === c.criteres.some((x) => x.statut === "contraire"), { message: "« plafonnée » vaut : au moins un critère contraire", path: ["plafonnee"] });
+export type ConfianceQualification = z.infer<typeof ConfianceQualification>;
+
+/** Outil de la passerelle qui pourrait vérifier un critère manquant. */
+export const SourceVerification = z
+  .object({ service: ServiceProspection, outil: z.string().min(1).max(80), pourquoi: z.string().min(1).max(300) })
+  .strict();
+export type SourceVerification = z.infer<typeof SourceVerification>;
+
+/** Réponse de `prospects.criteres-manquants` : ce qu'il faut encore établir pour atteindre le seuil. */
+export const CriteresManquants = z
+  .object({
+    prospectId: IdNatif,
+    confiance: z.number().int().min(0).max(100),
+    qualifie: z.boolean(),
+    seuil: z.literal(SEUIL_QUALIFICATION),
+    manquants: z
+      .array(
+        z
+          .object({
+            code: CodeCritereQualification,
+            libelle: z.string().min(1).max(200),
+            poids: z.number().int().min(0).max(100),
+            /** Outils de la passerelle qui peuvent le vérifier (vide si la preuve vient d'un humain ou d'un import). */
+            verifiePar: z.array(SourceVerification).max(6),
+            /** Geste à faire quand aucun outil ne suffit. */
+            action: z.string().max(300).nullable(),
+          })
+          .strict(),
+      )
+      .max(7),
+    contraires: z.array(CodeCritereQualification).max(7),
+  })
+  .strict();
+export type CriteresManquants = z.infer<typeof CriteresManquants>;
+
 /** Poids du score choisis par le client dans les réglages, versionnés et journalisés. */
 export const PoidsScore = z
   .object({
@@ -708,6 +845,8 @@ export const Prospect = z
     statut: StatutProspect,
     motifsExclusion: z.array(ExclusionConstatee).max(20),
     score: ScoreProspect.nullable(),
+    /** Confiance de qualification, calculée à la lecture sur les sources déposées (distincte du score). */
+    confiance: ConfianceQualification.optional(),
     basesLegales: z.array(BaseLegaleContact).max(4),
     /** Volet B2C : obligatoire pour un particulier, absent (null) pour une entreprise ou un partenaire. */
     particulier: VoletParticulier.nullable(),
@@ -1142,7 +1281,15 @@ export const ListerProspectsEntree = z
     offres: z.array(CodeReferentiel).max(50).optional(),
     /** Origine légale (particuliers). */
     origines: z.array(OrigineParticulier).max(12).optional(),
+    /** Zone d'un bureau : codes postaux (4 chiffres) ou communes ; un prospect de l'une OU l'autre convient. */
+    zonesBureau: z.array(z.string().min(1).max(120)).max(100).optional(),
+    /** Source des données : réelle ou de démonstration. */
+    source: z.enum(["reelle", "demonstration"]).optional(),
+    /** Par défaut, les prospects déjà clients (critère « pas déjà client » contraire) sont masqués ; `true` les réaffiche. */
+    avecClientsActuels: z.boolean().optional(),
     scoreMin: z.number().int().min(0).max(100).optional(),
+    /** Seulement les prospects dont la confiance de qualification atteint le seuil (90 %). */
+    qualifiesSeulement: z.boolean().optional(),
     page: z.number().int().min(1).default(1),
     parPage: z.number().int().min(1).max(LIMITES_PROSPECTION.pageMax).default(50),
   })
@@ -1294,6 +1441,56 @@ export const ExportCrm = z
     path: ["etat"],
   });
 export type ExportCrm = z.infer<typeof ExportCrm>;
+
+/* ------------------------------------------------------------------ */
+/* Compte rendu d'un lead et question au Coordinateur                   */
+/* ------------------------------------------------------------------ */
+
+/** Réponse de `prospects.compte-rendu` : lecture déterministe des données stockées, sans IA ni invention. */
+export const CompteRenduProspect = z
+  .object({
+    prospectId: IdNatif,
+    /** Dénomination, pseudonyme ou identifiant court : jamais le nom d'une personne. */
+    nom: z.string().min(1).max(300),
+    genereLe: Horodatage,
+    pourquoi: z
+      .object({
+        verifies: z.array(z.object({ code: CodeCritereQualification, libelle: z.string(), detail: z.string(), source: z.string(), service: ServiceProspection.nullable(), date: Horodatage.nullable() }).strict()).max(7),
+        nonVerifies: z.array(z.object({ code: CodeCritereQualification, libelle: z.string(), detail: z.string() }).strict()).max(7),
+        contraires: z.array(z.object({ code: CodeCritereQualification, libelle: z.string(), detail: z.string() }).strict()).max(7),
+      })
+      .strict(),
+    /** Confiance de qualification (sources vérifiées), distincte du score. */
+    confiance: z.object({ valeur: z.number().int().min(0).max(100), qualifie: z.boolean(), plafonnee: z.boolean(), seuil: z.number().int() }).strict(),
+    /** Score de conversion tel qu'il est stocké (estimation ou probabilité mesurée) ; null tant qu'il n'est pas calculé. */
+    score: z.object({ valeur: z.number().int().min(0).max(100), nature: NatureScore, libelle: z.string() }).strict().nullable(),
+    /** Une phrase qui explique la différence entre la confiance et le score. */
+    differenceConfianceScore: z.string(),
+    /** Signaux de moment établis par les données ; vide quand les sources n'en portent aucun. */
+    signaux: z.array(z.object({ code: z.string(), libelle: z.string(), date: Horodatage.nullable(), source: z.string() }).strict()).max(10),
+    offreRecommandee: z.object({ code: z.string().nullable(), nom: z.string(), description: z.string(), raison: z.string() }).strict().nullable(),
+    /** Pourquoi aucune offre n'est recommandée (null quand une offre l'est). */
+    raisonSansOffre: z.string().nullable(),
+    etablissementProche: z
+      .object({ code: z.string().nullable(), nom: z.string(), adresse: z.string().nullable(), distanceKm: z.number().min(0).nullable(), raison: z.enum(["distance", "meme_code_postal", "meme_commune"]), precisionPosition: PositionProspect.shape.precision.nullable().optional() })
+      .strict()
+      .nullable(),
+    prochaineAction: z.object({ libelle: z.string(), canal: CanalContact.nullable(), outils: z.array(z.string()).max(10) }).strict(),
+    limites: z.array(z.string()).max(10),
+    /** Même contenu en Markdown, pour le coller dans une tâche. */
+    markdown: z.string(),
+  })
+  .strict();
+export type CompteRenduProspect = z.infer<typeof CompteRenduProspect>;
+
+/** Entrée de `prospects.question` (humain seulement) : une question posée au Coordinateur sur ce lead. */
+export const QuestionProspectEntree = z
+  .object({
+    companyId: IdNatif,
+    question: z.string().trim().min(3, "La question est trop courte.").max(4000),
+  })
+  .strict();
+export type QuestionProspectEntree = z.infer<typeof QuestionProspectEntree>;
 
 /* ------------------------------------------------------------------ */
 /* Routes prévues                                                      */

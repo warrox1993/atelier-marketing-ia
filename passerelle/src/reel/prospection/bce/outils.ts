@@ -11,7 +11,9 @@
 import * as z from "zod";
 import type { FournisseurService, OutilPasserelle } from "../../../fournisseurs.js";
 import { formeNace, formePage, formeZone, outilLecture, verifierDateIso } from "../../../demo/prospection/commun.js";
+import { PHRASE_POSITION_APPROX } from "../../../demo/prospection/bce.js";
 import { analyserNumero } from "../../../demo/prospection/numeros.js";
+import type { CentroidesOsm, PositionApprox } from "../osm/centroides.js";
 import { IndexBce, TAILLE_PAGE } from "./index.js";
 
 export const FICHE_BCE = {
@@ -30,6 +32,27 @@ export const NOTE_TAILLE =
   "La taille d'une entreprise vient des comptes annuels de la BNB (lot P4, pas encore branché) : sans ces données, toute taille vaut « inconnue ».";
 
 export type AccesIndex = () => IndexBce;
+/** Centroïdes OSM (facultatifs) : sans eux, `position_approx` vaut `null` partout. */
+export type AccesCentroides = () => CentroidesOsm | null;
+
+type Fiche = Record<string, unknown>;
+
+function positionDe(adresses: unknown, centroides: CentroidesOsm | null): PositionApprox | null {
+  if (!centroides || !Array.isArray(adresses) || adresses.length === 0) return null;
+  const liste = adresses as Record<string, string | null>[];
+  const a = liste.find((x) => x["TypeOfAddress"] === "REGO") ?? liste[0]!;
+  return centroides.position(a["Zipcode"], a["MunicipalityFR"]);
+}
+
+/** Ajoute `position_approx` à une entité (adresse du siège) et à chacune de ses unités d'établissement, ou à une unité seule. */
+function avecPositions(fiche: Fiche, centroides: CentroidesOsm | null): Fiche {
+  const etabs = fiche["etablissements"];
+  return {
+    ...fiche,
+    position_approx: positionDe(fiche["adresses"], centroides),
+    ...(Array.isArray(etabs) ? { etablissements: (etabs as Fiche[]).map((s) => avecPositions(s, centroides)) } : {}),
+  };
+}
 
 function contexte(index: IndexBce): Record<string, string> {
   return { source: `BCE Open Data (index local, extraction du ${index.dateExtractionBce()})`, date_extraction: index.meta()["SnapshotDate"] ?? "", conditions: CONDITIONS };
@@ -38,18 +61,18 @@ function contexte(index: IndexBce): Record<string, string> {
 /** Index présent et rempli, sinon erreur d'outil claire (jamais de réponse vide trompeuse). */
 function indexPret(acces: AccesIndex): IndexBce {
   const index = acces();
-  if (!index.disponible()) throw new Error("Index BCE indisponible : aucun fichier complet n'a été importé (voir docs/passerelle.md, « Fournisseur BCE réel »).");
+  if (!index.disponible()) throw new Error("Index BCE indisponible : index BCE absent ou vide, aucun fichier complet importé : lancer cli.js bce-telecharger --importer (voir docs/passerelle.md, « Fournisseur BCE réel »).");
   return index;
 }
 
-export function outilsBce(acces: AccesIndex): OutilPasserelle[] {
+export function outilsBce(acces: AccesIndex, centroides: AccesCentroides = () => null): OutilPasserelle[] {
   const rechercher = outilLecture(
     {
       nom: "bce_rechercher",
       description:
         "Recherche d'entreprises actives de la BCE par secteur (NACE), zone (commune, code postal, province, région, pays) et forme juridique, " +
         "avec filtres d'atelier facultatifs : creees_depuis (date de début) et taille (jointure avec les comptes annuels : micro < 10, petite < 50, moyenne < 250, grande ≥ 250 équivalents temps plein ; " +
-        "« inconnue » = aucun compte déposé). Une entreprise correspond si son siège OU l'une de ses unités d'établissement est dans la zone. Personnes physiques jamais incluses.",
+        "« inconnue » = aucun compte déposé). Une entreprise correspond si son siège OU l'une de ses unités d'établissement est dans la zone. Personnes physiques jamais incluses. " + PHRASE_POSITION_APPROX,
       schemaEntree: {
         ...formeNace,
         ...formeZone,
@@ -69,7 +92,7 @@ export function outilsBce(acces: AccesIndex): OutilPasserelle[] {
         return { ...base, total: 0, page: args.page ?? 1, taille_page: TAILLE_PAGE, pages: 1, taille_note: NOTE_TAILLE, entreprises: [] };
       }
       const { elements, filtres_zone: _fz, ...pagination } = index.rechercher({ ...args, creees_depuis: depuis });
-      return { ...base, ...pagination, taille_note: NOTE_TAILLE, entreprises: elements };
+      return { ...base, ...pagination, taille_note: NOTE_TAILLE, entreprises: elements.map((e) => avecPositions(e, centroides())) };
     },
   );
 
@@ -79,7 +102,7 @@ export function outilsBce(acces: AccesIndex): OutilPasserelle[] {
       description:
         "Fiche complète d'une entité du fichier BCE actif, par numéro (0123.456.789) ou numéro d'unité d'établissement (2.123.456.789). " +
         "Absent du fichier actif : entreprise radiée, cessée ou numéro inconnu (le fichier ne garde aucun historique). " +
-        "Un numéro absent dont le chiffre de contrôle (modulo 97) est faux est signalé (motif numero_invalide).",
+        "Un numéro absent dont le chiffre de contrôle (modulo 97) est faux est signalé (motif numero_invalide). " + PHRASE_POSITION_APPROX,
       schemaEntree: { numero: z.string().min(1).max(30).describe("Numéro BCE, avec ou sans points ni préfixe BE.") },
     },
     (args) => {
@@ -88,10 +111,10 @@ export function outilsBce(acces: AccesIndex): OutilPasserelle[] {
       const base = contexte(index);
       if (n.type === "entreprise") {
         const e = index.entite(n.formate);
-        if (e) return { ...base, trouve: true, entreprise: e };
+        if (e) return { ...base, trouve: true, entreprise: avecPositions(e, centroides()) };
       } else {
         const s = index.etablissement(n.formate);
-        if (s) return { ...base, trouve: true, etablissement: s };
+        if (s) return { ...base, trouve: true, etablissement: avecPositions(s, centroides()) };
       }
       // Absent : un chiffre de contrôle faux (modulo 97) fait penser à une faute de frappe, sinon l'entité n'est pas dans le fichier actif.
       if (!n.controleValide) {
@@ -133,6 +156,6 @@ export function outilsBce(acces: AccesIndex): OutilPasserelle[] {
 }
 
 /** Fournisseur du service `bce` en mode réel, servi derrière le jeton porteur statique de la passerelle. */
-export function fournisseurBceReel(acces: AccesIndex, verifier: (jeton: string) => ReturnType<NonNullable<FournisseurService["verifierJeton"]>>): FournisseurService {
-  return { service: "bce", mode: "reel", fiche: FICHE_BCE, outils: outilsBce(acces), verifierJeton: (jeton) => verifier(jeton) };
+export function fournisseurBceReel(acces: AccesIndex, verifier: (jeton: string) => ReturnType<NonNullable<FournisseurService["verifierJeton"]>>, centroides: AccesCentroides = () => null): FournisseurService {
+  return { service: "bce", mode: "reel", fiche: FICHE_BCE, outils: outilsBce(acces, centroides), verifierJeton: (jeton) => verifier(jeton) };
 }

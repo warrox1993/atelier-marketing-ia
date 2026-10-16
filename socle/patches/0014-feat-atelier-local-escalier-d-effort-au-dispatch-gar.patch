@@ -1,0 +1,921 @@
+From 78fbb4efab8559a6e221f3fb2cdbdd4bbd29c434 Mon Sep 17 00:00:00 2001
+From: Jean-Baptiste Dhondt <114347858+warrox1993@users.noreply.github.com>
+Date: Thu, 15 Oct 2026 23:34:00 +0200
+Subject: [PATCH] =?UTF-8?q?feat(atelier,=20local):=20escalier=20d'effort?=
+ =?UTF-8?q?=20au=20dispatch,=20garde=20mod=C3=A8le/effort,=20cartes=20honn?=
+ =?UTF-8?q?=C3=AAtes?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Escalier d'effort (server/src/atelier/effort-run.ts, branché dans heartbeat.ts) :
+pour le producteur d'une tâche sous porte (claude_local seulement), l'effort du run
+monte d'un cran par révision refusée (CHANGES_REQUESTED ou refus de porte sur le
+fond, mêmes refus que les cycles de correction du plugin) depuis la dernière
+évaluation PASS, plafonné au dernier niveau du modèle ; base absente = medium ;
+retour à la base après un PASS. Le modèle n'est jamais touché ; Haiku et process
+sont ignorés. L'effort relevé vit dans la configuration du run seulement, appliqué
+après le calcul de l'empreinte de session (la session est reprise). Traces :
+événement atelier.effort, contextSnapshot.atelierEffort, commentaire système
+dédupliqué « Effort relevé à <x> après refus de la porte ou de la revue ».
+
+Garde (server/src/atelier/garde-modele-agent.ts) : 403 quand un acteur agent change
+le modèle ou l'effort par PATCH /agents/:id (configuration finale), par restauration
+de révision, ou par assigneeAdapterOverrides.adapterConfig des routes de tâches
+(création, enfant, décomposition de plan accepté, PATCH). Les humains gardent le
+droit. Le test amont qui laissait un agent changer le modèle d'un pair est inversé
+(cas d'origine conservé avec une autre clé).
+
+Cartes : en passerelle mixte, un service listé dans services_reels de /sante est
+libellé « (données publiques réelles) », description « Données publiques réelles,
+lecture seule », au lieu de « (démonstration) ».
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01DP85vPq2MHkZg8VNtRvCzB
+---
+ .../agent-permissions-routes.test.ts          |  86 ++++++++-
+ .../src/__tests__/atelier-effort-run.test.ts  | 171 ++++++++++++++++++
+ .../__tests__/atelier-garde-modele.test.ts    |  40 ++++
+ .../__tests__/atelier-marketing-apps.test.ts  |  25 ++-
+ .../issue-workspace-command-authz.test.ts     |  47 +++++
+ server/src/atelier/effort-run.ts              | 144 +++++++++++++++
+ server/src/atelier/garde-modele-agent.ts      |  62 +++++++
+ server/src/routes/agents.ts                   |  11 ++
+ server/src/routes/issues.ts                   |   9 +
+ server/src/services/atelier-gateway.ts        |  17 +-
+ server/src/services/heartbeat.ts              |  52 ++++++
+ 11 files changed, 659 insertions(+), 5 deletions(-)
+ create mode 100644 server/src/__tests__/atelier-effort-run.test.ts
+ create mode 100644 server/src/__tests__/atelier-garde-modele.test.ts
+ create mode 100644 server/src/atelier/effort-run.ts
+ create mode 100644 server/src/atelier/garde-modele-agent.ts
+
+diff --git a/server/src/__tests__/agent-permissions-routes.test.ts b/server/src/__tests__/agent-permissions-routes.test.ts
+index 8428ab4e6..12c607d01 100644
+--- a/server/src/__tests__/agent-permissions-routes.test.ts
++++ b/server/src/__tests__/agent-permissions-routes.test.ts
+@@ -982,17 +982,99 @@ describe("agent permission routes", () => {
+     expect(mockAgentService.update).not.toHaveBeenCalled();
+   });
+ 
+-  it("allows an agent to update a peer's local model without host settings", async () => {
++  // Atelier (patch local 0014) : l'amont autorisait ici un agent à changer le MODÈLE d'un pair ;
++  // le modèle et l'effort sont désormais réservés aux humains (voir le bloc « atelier » plus bas).
++  // Le cas d'origine (réglage local sans paramètre d'hôte) reste couvert avec une autre clé.
++  it("allows an agent to update a peer's local settings without host settings", async () => {
+     mockAgentService.getById.mockResolvedValue({ ...baseAgent, adapterType: "claude_local" });
+     const app = await createApp({ type: "agent", agentId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", companyId, source: "agent_key", runId: "run-1" });
+     const res = await requestApp(app, (baseUrl) => request(baseUrl)
+       .patch(`/api/agents/${agentId}`)
+-      .send({ adapterConfig: { model: "claude-sonnet-4-5" } }));
++      .send({ adapterConfig: { maxTurnsPerRun: 40 } }));
+ 
+     expect(res.status, JSON.stringify(res.body)).toBe(200);
+     expect(mockAgentService.update).toHaveBeenCalledOnce();
+   });
+ 
++  describe("atelier (patch local 0014) : modèle et effort réservés aux humains", () => {
++    const agentActor = { type: "agent", agentId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", companyId, source: "agent_key", runId: "run-1" };
++    const selfActor = { type: "agent", agentId, companyId, source: "agent_key", runId: "run-1" };
++    const boardActor = { type: "board", userId: "board-user", source: "local_implicit", isInstanceAdmin: true, companyIds: [companyId] };
++    const claudeAgent = { ...baseAgent, adapterType: "claude_local", adapterConfig: { model: "claude-sonnet-5-5", effort: "medium" } };
++
++    it.each([
++      ["l'effort d'un pair", agentActor, { adapterConfig: { effort: "high" } }, "adapterConfig.effort"],
++      ["le modèle d'un pair", agentActor, { adapterConfig: { model: "claude-opus-5-5" } }, "adapterConfig.model"],
++      ["son propre effort", selfActor, { adapterConfig: { effort: "max" } }, "adapterConfig.effort"],
++      ["le modèle en remplaçant la config", selfActor, { adapterConfig: { effort: "medium" }, replaceAdapterConfig: true }, "adapterConfig.model"],
++    ])("refuse (403) qu'un agent change %s", async (_libelle, actor, body, chemin) => {
++      mockAgentService.getById.mockResolvedValue(claudeAgent);
++      const app = await createApp(actor);
++      const res = await requestApp(app, (baseUrl) => request(baseUrl).patch(`/api/agents/${agentId}`).send(body));
++
++      expect(res.status, JSON.stringify(res.body)).toBe(403);
++      expect(res.body.error).toContain("modèle ni d'effort");
++      expect(res.body.error).toContain(chemin);
++      expect(mockAgentService.update).not.toHaveBeenCalled();
++    });
++
++    it("laisse un agent renvoyer le même modèle et le même effort", async () => {
++      mockAgentService.getById.mockResolvedValue(claudeAgent);
++      mockAgentService.update.mockResolvedValue(claudeAgent);
++      const app = await createApp(agentActor);
++      const res = await requestApp(app, (baseUrl) => request(baseUrl)
++        .patch(`/api/agents/${agentId}`)
++        .send({ adapterConfig: { model: "claude-sonnet-5-5", effort: "medium", maxTurnsPerRun: 40 } }));
++
++      expect(res.status, JSON.stringify(res.body)).toBe(200);
++      expect(mockAgentService.update).toHaveBeenCalledOnce();
++    });
++
++    it("laisse un humain (board) changer modèle et effort (200)", async () => {
++      mockAgentService.getById.mockResolvedValue(claudeAgent);
++      mockAgentService.update.mockResolvedValue({ ...claudeAgent, adapterConfig: { model: "claude-opus-5-5", effort: "high" } });
++      const app = await createApp(boardActor);
++      const res = await requestApp(app, (baseUrl) => request(baseUrl)
++        .patch(`/api/agents/${agentId}`)
++        .send({ adapterConfig: { model: "claude-opus-5-5", effort: "high" } }));
++
++      expect(res.status, JSON.stringify(res.body)).toBe(200);
++      expect(mockAgentService.update).toHaveBeenCalledOnce();
++    });
++
++    it("refuse (403) qu'un agent restaure une révision qui change l'effort", async () => {
++      const revisionId = "33333333-3333-4333-8333-333333333333";
++      mockAgentService.getById.mockResolvedValue(claudeAgent);
++      mockAgentService.getConfigRevision.mockResolvedValue({
++        id: revisionId,
++        afterConfig: { adapterType: "claude_local", adapterConfig: { model: "claude-sonnet-5-5", effort: "max" }, runtimeConfig: {} },
++      });
++      const app = await createApp(agentActor);
++      const res = await requestApp(app, (baseUrl) => request(baseUrl)
++        .post(`/api/agents/${agentId}/config-revisions/${revisionId}/rollback`));
++
++      expect(res.status, JSON.stringify(res.body)).toBe(403);
++      expect(res.body.error).toContain("adapterConfig.effort");
++      expect(mockAgentService.rollbackConfigRevision).not.toHaveBeenCalled();
++    });
++
++    it("laisse un humain restaurer cette révision (200)", async () => {
++      const revisionId = "33333333-3333-4333-8333-333333333333";
++      mockAgentService.getById.mockResolvedValue(claudeAgent);
++      mockAgentService.getConfigRevision.mockResolvedValue({
++        id: revisionId,
++        afterConfig: { adapterType: "claude_local", adapterConfig: { model: "claude-sonnet-5-5", effort: "max" }, runtimeConfig: {} },
++      });
++      mockAgentService.rollbackConfigRevision.mockResolvedValue({ ...claudeAgent, adapterConfig: { model: "claude-sonnet-5-5", effort: "max" } });
++      const app = await createApp(boardActor);
++      const res = await requestApp(app, (baseUrl) => request(baseUrl)
++        .post(`/api/agents/${agentId}/config-revisions/${revisionId}/rollback`));
++
++      expect(res.status, JSON.stringify(res.body)).toBe(200);
++      expect(mockAgentService.rollbackConfigRevision).toHaveBeenCalledOnce();
++    });
++  });
++
+   it("allows a provider credential reference without allowing arbitrary environment variables", async () => {
+     mockAgentService.getById.mockResolvedValue({ ...baseAgent, adapterType: "claude_local" });
+     const app = await createApp({ type: "agent", agentId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", companyId, source: "agent_key", runId: "run-1" });
+diff --git a/server/src/__tests__/atelier-effort-run.test.ts b/server/src/__tests__/atelier-effort-run.test.ts
+new file mode 100644
+index 000000000..087be40b0
+--- /dev/null
++++ b/server/src/__tests__/atelier-effort-run.test.ts
+@@ -0,0 +1,171 @@
++/**
++ * Atelier Marketing IA (patch local 0014) : escalier d'effort au dispatch.
++ * Décision pure (crans, plafond, modèle jamais touché) et lecture des refus
++ * contre une vraie base PostgreSQL embarquée.
++ */
++import { randomUUID } from "node:crypto";
++import { sql } from "drizzle-orm";
++import { afterAll, beforeAll, describe, expect, it } from "vitest";
++import { createDb, pluginDatabaseNamespaces, plugins } from "@paperclipai/db";
++import { getEmbeddedPostgresTestSupport, startEmbeddedPostgresTestDatabase } from "./helpers/embedded-postgres.js";
++import {
++  appliquerEffortRun,
++  compterRefusDepuisAcceptation,
++  compterRevisionsRefusees,
++  decideEffortRun,
++  messageEffortReleve,
++  type EntreeDecisionEffort,
++} from "../atelier/effort-run.js";
++
++function entree(champs: Partial<EntreeDecisionEffort> & { config?: Record<string, unknown> } = {}): EntreeDecisionEffort {
++  const { config, ...reste } = champs;
++  return {
++    adapterType: "claude_local",
++    adapterConfig: config ?? { model: "claude-sonnet-5-5", effort: "medium" },
++    refus: 1,
++    estProducteur: true,
++    ...reste,
++  };
++}
++
++function effortApres(e: EntreeDecisionEffort): unknown {
++  return appliquerEffortRun(e.adapterConfig, decideEffortRun(e)).effort;
++}
++
++describe("escalier d'effort : décision", () => {
++  it("monte d'un cran par refus et plafonne à max", () => {
++    const attendu = ["medium", "high", "xhigh", "max", "max", "max"];
++    for (let refus = 0; refus < attendu.length; refus++) {
++      expect(effortApres(entree({ refus })), `refus=${refus}`).toBe(attendu[refus]);
++    }
++  });
++
++  it("part d'une base high : high → xhigh → max", () => {
++    const config = { model: "claude-opus-5-5", effort: "high" };
++    expect(effortApres(entree({ config, refus: 0 }))).toBe("high");
++    expect(effortApres(entree({ config, refus: 1 }))).toBe("xhigh");
++    expect(effortApres(entree({ config, refus: 2 }))).toBe("max");
++    expect(effortApres(entree({ config, refus: 7 }))).toBe("max");
++    const auPlafond = decideEffortRun(entree({ config: { model: "claude-opus-5-5", effort: "max" }, refus: 3 }));
++    expect(auPlafond).toMatchObject({ applique: true, effort: "max", releve: false });
++  });
++
++  it("base absente = medium", () => {
++    const d = decideEffortRun(entree({ config: { model: "claude-sonnet-5-5" }, refus: 1 }));
++    expect(d).toMatchObject({ applique: true, base: "medium", baseExplicite: false, effort: "high", releve: true });
++  });
++
++  it("revient à la base quand aucun refus ne suit la dernière acceptation", () => {
++    const config = { model: "claude-sonnet-5-5", effort: "medium" };
++    const d = decideEffortRun(entree({ config, refus: 0 }));
++    expect(d.applique).toBe(false);
++    expect(appliquerEffortRun(config, d)).toBe(config);
++  });
++
++  it("ne change jamais le modèle et ne produit jamais fable", () => {
++    for (const modele of ["claude-sonnet-5-5", "claude-opus-5-5", "claude-opus-4-6", "claude-sonnet-4-5", ""]) {
++      for (let refus = 0; refus <= 6; refus++) {
++        const config: Record<string, unknown> = modele ? { model: modele, effort: "medium", maxTurnsPerRun: 30 } : { effort: "medium" };
++        const decision = decideEffortRun(entree({ config, refus }));
++        expect(Object.keys(decision)).not.toContain("model");
++        const resultat = appliquerEffortRun(config, decision);
++        expect(resultat.model).toBe(config.model);
++        expect({ ...resultat, effort: undefined }).toEqual({ ...config, effort: undefined });
++        expect(JSON.stringify(resultat)).not.toMatch(/fable/i);
++      }
++    }
++  });
++
++  it("respecte l'échelle propre au modèle (pas de xhigh sur un modèle qui ne l'a pas)", () => {
++    const config = { model: "claude-opus-4-6", effort: "high" };
++    expect(effortApres(entree({ config, refus: 1 }))).toBe("max");
++    expect(effortApres(entree({ config: { model: "claude-sonnet-4-5", effort: "medium" }, refus: 5 }))).toBe("high");
++  });
++
++  it("ignore Haiku, l'adaptateur process, les autres adaptateurs, les tâches hors porte et les non-producteurs", () => {
++    expect(decideEffortRun(entree({ config: { model: "claude-haiku-4-5", effort: "low" }, refus: 3 })).applique).toBe(false);
++    expect(decideEffortRun(entree({ adapterType: "process", config: { effort: "medium" }, refus: 3 })).applique).toBe(false);
++    expect(decideEffortRun(entree({ adapterType: "codex_local", refus: 3 })).applique).toBe(false);
++    expect(decideEffortRun(entree({ refus: null })).applique).toBe(false);
++    expect(decideEffortRun(entree({ estProducteur: false, refus: 3 })).applique).toBe(false);
++    expect(decideEffortRun(entree({ config: { model: "claude-sonnet-5-5", effort: "turbo" }, refus: 3 })).applique).toBe(false);
++  });
++
++  it("compte les révisions distinctes refusées, comme les cycles du plugin", () => {
++    const r1 = randomUUID();
++    const r2 = randomUUID();
++    const r3 = randomUUID();
++    expect(compterRevisionsRefusees([
++      { origine: "verdict", revisionId: r1, motifs: null },
++      { origine: "porte", revisionId: r1, motifs: [{ code: "exigence_non_couverte" }] },
++      { origine: "porte", revisionId: r2, motifs: [{ code: "revue_requise_absente" }] },
++      { origine: "porte", revisionId: r3, motifs: [{ code: "revue_sur_ancienne_version" }, { code: "preuve_absente" }] },
++      { origine: "porte", revisionId: null, motifs: [{ code: "preuve_absente" }] },
++    ])).toBe(2);
++  });
++
++  it("annonce le relèvement sans parler de modèle choisi", () => {
++    expect(messageEffortReleve("high")).toBe("Effort relevé à high après refus de la porte ou de la revue (modèle inchangé).");
++  });
++});
++
++const support = await getEmbeddedPostgresTestSupport();
++const NS = "plugin_atelier_effort_test";
++
++(support.supported ? describe : describe.skip)("escalier d'effort : lecture des refus en base", () => {
++  let base: Awaited<ReturnType<typeof startEmbeddedPostgresTestDatabase>>;
++  let db: ReturnType<typeof createDb>;
++
++  beforeAll(async () => {
++    base = await startEmbeddedPostgresTestDatabase("paperclip-atelier-effort-");
++    db = createDb(base.connectionString);
++  }, 30_000);
++
++  afterAll(async () => {
++    await base?.cleanup();
++  });
++
++  it("renvoie null sans plugin, puis compte les refus depuis le dernier PASS", async () => {
++    const issueId = randomUUID();
++    expect(await compterRefusDepuisAcceptation(db, issueId)).toBeNull();
++
++    const pluginId = randomUUID();
++    await db.insert(plugins).values({ id: pluginId, pluginKey: "atelier.marketing-ia", packageName: "@atelier/plugin-atelier", version: "0.1.0", manifestJson: {} as never, status: "ready" });
++    await db.insert(pluginDatabaseNamespaces).values({ pluginId, pluginKey: "atelier.marketing-ia", namespaceName: NS, status: "active" });
++    for (const ddl of [
++      `create schema ${NS}`,
++      `create table ${NS}.portes (issue_id uuid primary key, actif boolean not null default true)`,
++      `create table ${NS}.evaluations_porte (id uuid primary key, issue_id uuid not null, revision_id uuid, decision text not null, motifs jsonb not null default '[]'::jsonb, cree_le timestamptz not null default clock_timestamp())`,
++      `create table ${NS}.verdicts (id uuid primary key, issue_id uuid not null, revision_id uuid not null, verdict text not null, cree_le timestamptz not null default clock_timestamp())`,
++    ]) await db.execute(sql.raw(ddl));
++
++    // Tâche hors porte : aucun escalier.
++    expect(await compterRefusDepuisAcceptation(db, issueId)).toBeNull();
++    await db.execute(sql.raw(`insert into ${NS}.portes (issue_id) values ('${issueId}')`));
++    expect(await compterRefusDepuisAcceptation(db, issueId)).toBe(0);
++
++    const [v1, v2, v3, v4] = [randomUUID(), randomUUID(), randomUUID(), randomUUID()];
++    const refusPorte = (rev: string, code: string) =>
++      db.execute(sql.raw(`insert into ${NS}.evaluations_porte (id, issue_id, revision_id, decision, motifs) values ('${randomUUID()}', '${issueId}', '${rev}', 'REFUS', '[{"code":"${code}"}]')`));
++    const verdict = (rev: string, v: string) =>
++      db.execute(sql.raw(`insert into ${NS}.verdicts (id, issue_id, revision_id, verdict) values ('${randomUUID()}', '${issueId}', '${rev}', '${v}')`));
++
++    await verdict(v1, "CHANGES_REQUESTED");
++    await refusPorte(v1, "exigence_non_couverte"); // même révision : un seul cran
++    await refusPorte(v2, "revue_requise_absente"); // motif sans cycle : ne compte pas
++    await verdict(v2, "PASS");
++    expect(await compterRefusDepuisAcceptation(db, issueId)).toBe(1);
++    await refusPorte(v2, "preuve_absente");
++    expect(await compterRefusDepuisAcceptation(db, issueId)).toBe(2);
++
++    // Acceptation : retour à la base.
++    await db.execute(sql.raw(`insert into ${NS}.evaluations_porte (id, issue_id, revision_id, decision) values ('${randomUUID()}', '${issueId}', '${v3}', 'PASS')`));
++    expect(await compterRefusDepuisAcceptation(db, issueId)).toBe(0);
++    await verdict(v4, "CHANGES_REQUESTED");
++    expect(await compterRefusDepuisAcceptation(db, issueId)).toBe(1);
++
++    // Porte désactivée : plus d'escalier.
++    await db.execute(sql.raw(`update ${NS}.portes set actif = false where issue_id = '${issueId}'`));
++    expect(await compterRefusDepuisAcceptation(db, issueId)).toBeNull();
++  }, 30_000);
++});
+diff --git a/server/src/__tests__/atelier-garde-modele.test.ts b/server/src/__tests__/atelier-garde-modele.test.ts
+new file mode 100644
+index 000000000..fbf12c3cf
+--- /dev/null
++++ b/server/src/__tests__/atelier-garde-modele.test.ts
+@@ -0,0 +1,40 @@
++/**
++ * Atelier Marketing IA (patch local 0014) : fonctions pures de la garde
++ * « un agent ne change ni modèle ni effort ». Les routes sont testées dans
++ * agent-permissions-routes.test.ts et issue-workspace-command-authz.test.ts.
++ */
++import { describe, expect, it } from "vitest";
++import { cheminsSurchargeModeleEffort, clesModeleEffortModifiees, refuserModeleEffortParAgent } from "../atelier/garde-modele-agent.js";
++
++describe("garde modèle et effort", () => {
++  it("repère les clés de modèle et d'effort modifiées, ajoutées ou retirées", () => {
++    expect(clesModeleEffortModifiees({ model: "a", effort: "medium" }, { model: "a", effort: "medium", maxTurnsPerRun: 3 })).toEqual([]);
++    expect(clesModeleEffortModifiees({ model: "a", effort: "medium" }, { model: "b", effort: "high" })).toEqual(["model", "effort"]);
++    expect(clesModeleEffortModifiees({ model: "a" }, {})).toEqual(["model"]);
++    expect(clesModeleEffortModifiees({}, { modelReasoningEffort: "high", variant: "x" })).toEqual(["modelReasoningEffort", "variant"]);
++    expect(clesModeleEffortModifiees({ effort: "" }, {})).toEqual([]);
++    expect(clesModeleEffortModifiees(null, undefined)).toEqual([]);
++  });
++
++  it("lit les surcharges de tâche (création, enfant de décomposition, PATCH)", () => {
++    expect(cheminsSurchargeModeleEffort({ title: "x" })).toEqual([]);
++    expect(cheminsSurchargeModeleEffort({ assigneeAdapterOverrides: { useProjectWorkspace: true } })).toEqual([]);
++    expect(cheminsSurchargeModeleEffort({ assigneeAdapterOverrides: { adapterConfig: { effort: "max" } } }))
++      .toEqual(["assigneeAdapterOverrides.adapterConfig.effort"]);
++    const existant = { adapterConfig: { model: "claude-opus-5-5" } };
++    expect(cheminsSurchargeModeleEffort({ assigneeAdapterOverrides: { adapterConfig: { model: "claude-opus-5-5" } } }, existant)).toEqual([]);
++    expect(cheminsSurchargeModeleEffort({ assigneeAdapterOverrides: null }, existant)).toEqual(["assigneeAdapterOverrides.adapterConfig.model"]);
++    expect(cheminsSurchargeModeleEffort({}, existant)).toEqual([]);
++  });
++
++  it("refuse un agent (403) et laisse passer un humain", () => {
++    expect(() => refuserModeleEffortParAgent({ actor: { type: "agent" } }, ["adapterConfig.effort"])).toThrow(/modèle ni d'effort/);
++    try {
++      refuserModeleEffortParAgent({ actor: { type: "agent" } }, ["adapterConfig.effort"]);
++    } catch (err) {
++      expect((err as { status?: number }).status).toBe(403);
++    }
++    expect(() => refuserModeleEffortParAgent({ actor: { type: "board" } }, ["adapterConfig.effort"])).not.toThrow();
++    expect(() => refuserModeleEffortParAgent({ actor: { type: "agent" } }, [])).not.toThrow();
++  });
++});
+diff --git a/server/src/__tests__/atelier-marketing-apps.test.ts b/server/src/__tests__/atelier-marketing-apps.test.ts
+index 673dc1fa2..571e8f642 100644
+--- a/server/src/__tests__/atelier-marketing-apps.test.ts
++++ b/server/src/__tests__/atelier-marketing-apps.test.ts
+@@ -26,11 +26,11 @@ const actor = { actorType: "user" as const, actorId: "atelier-reviewer" };
+ const redirectUri = "http://localhost:3100/api/tools/oauth/callback";
+ const ACCESS_TOKEN = "atelier-fixture-access-token";
+ 
+-function fixtureGateway(mode: "demonstration" | "reel", services = ["gsc", "ga4", "ads", "gbp", "facebook", "instagram", "linkedin", "crm", "pipedrive", "odoo", "teamleader", "bce", "bnb", "fsma", "osm", "b2c"]) {
++function fixtureGateway(mode: "demonstration" | "reel", services = ["gsc", "ga4", "ads", "gbp", "facebook", "instagram", "linkedin", "crm", "pipedrive", "odoo", "teamleader", "bce", "bnb", "fsma", "osm", "b2c"], servicesReels?: string[]) {
+   return vi.fn(async (url: string, init: RequestInit = {}) => {
+     const u = new URL(url);
+     if (u.origin !== BASE) return new Response("", { status: 404 });
+-    if (u.pathname === "/sante") return Response.json({ ok: true, mode, services });
++    if (u.pathname === "/sante") return Response.json({ ok: true, mode, services, ...(servicesReels ? { services_reels: servicesReels } : {}) });
+     const resource = /^\/\.well-known\/oauth-protected-resource\/mcp\/([a-z0-9]+)$/.exec(u.pathname);
+     if (resource) {
+       return Response.json({
+@@ -215,6 +215,27 @@ describe("atelier gateway address", () => {
+     expect(bySlug.get("atelier-hubspot")?.availability?.reason).toContain("ne sert pas ce service");
+   });
+ 
++  it("labels the real public services of a mixed gateway honestly (local patch 0014)", async () => {
++    const c = await company();
++    const response = await request(routeApp(fixtureGateway("demonstration", undefined, ["bce", "osm"]))).get(`/api/companies/${c.id}/tools/gallery`).expect(200);
++    const bySlug = new Map((response.body.apps as Array<{ slug: string; name: string; description: string }>).map((app) => [app.slug, app]));
++    const bce = bySlug.get("atelier-bce")!;
++    expect(bce.name).toBe("Registre des entreprises (BCE) (données publiques réelles)");
++    expect(bce.description).toMatch(/^Données publiques réelles, lecture seule\. /);
++    expect(bce.name).not.toContain("démonstration");
++    expect(bce.description).not.toContain("Démonstration");
++    expect(bySlug.get("atelier-osm")?.name).toMatch(/ \(données publiques réelles\)$/);
++    expect(bySlug.get("atelier-hubspot")?.name).toMatch(/ \(démonstration\)$/);
++    expect(bySlug.get("atelier-hubspot")?.description).toMatch(/^Démonstration : données fictives/);
++  });
++
++  it("ignores services_reels outside demonstration mode (local patch 0014)", async () => {
++    const c = await company();
++    const response = await request(routeApp(fixtureGateway("reel", ["gsc", "bce"], ["bce"]))).get(`/api/companies/${c.id}/tools/gallery`).expect(200);
++    const bce = (response.body.apps as Array<{ slug: string; name: string }>).find((app) => app.slug === "atelier-bce");
++    expect(bce?.name).toBe("Registre des entreprises (BCE)");
++  });
++
+   it("marks the cards unavailable when the gateway does not answer, and refuses setup", async () => {
+     const c = await company();
+     const silent = vi.fn(async () => { throw new TypeError("fetch failed"); }) as unknown as ReturnType<typeof fixtureGateway>;
+diff --git a/server/src/__tests__/issue-workspace-command-authz.test.ts b/server/src/__tests__/issue-workspace-command-authz.test.ts
+index 8b5e09d7a..4d7bc94bb 100644
+--- a/server/src/__tests__/issue-workspace-command-authz.test.ts
++++ b/server/src/__tests__/issue-workspace-command-authz.test.ts
+@@ -316,4 +316,51 @@ describe("issue workspace command authorization", () => {
+     expect(res.body.error).toContain("host-executed workspace commands");
+     expect(mockIssueService.update).not.toHaveBeenCalled();
+   });
++
++  describe("atelier (patch local 0014) : un agent ne choisit ni modèle ni effort par la tâche", () => {
++    const agentActor = { type: "agent", agentId: "agent-1", companyId: "company-1", source: "agent_key", runId: "run-1" };
++    const surcharge = { assigneeAdapterOverrides: { adapterConfig: { model: "claude-opus-5-5", effort: "max" } } };
++
++    it("refuse (403) à la création d'une tâche", async () => {
++      const res = await request(await createApp(agentActor))
++        .post("/api/companies/company-1/issues")
++        .send({ title: "Surcharge", ...surcharge });
++      expect(res.status, JSON.stringify(res.body)).toBe(403);
++      expect(res.body.error).toContain("assigneeAdapterOverrides.adapterConfig.model");
++      expect(mockIssueService.create).not.toHaveBeenCalled();
++    });
++
++    it("refuse (403) à la création d'une sous-tâche", async () => {
++      const res = await request(await createApp(agentActor))
++        .post("/api/issues/issue-1/children")
++        .send({ title: "Enfant", ...surcharge });
++      expect(res.status, JSON.stringify(res.body)).toBe(403);
++      expect(res.body.error).toContain("assigneeAdapterOverrides.adapterConfig.effort");
++      expect(mockIssueService.create).not.toHaveBeenCalled();
++    });
++
++    it("refuse (403) au PATCH d'une tâche, y compris l'effacement d'une surcharge posée par un humain", async () => {
++      const res = await request(await createApp(agentActor))
++        .patch("/api/issues/issue-1")
++        .send({ assigneeAdapterOverrides: { adapterConfig: { effort: "xhigh" } } });
++      expect(res.status, JSON.stringify(res.body)).toBe(403);
++      expect(res.body.error).toContain("assigneeAdapterOverrides.adapterConfig.effort");
++
++      mockIssueService.getById.mockResolvedValue(makeIssue({ assigneeAdapterOverrides: { adapterConfig: { model: "claude-opus-5-5" } } }));
++      const efface = await request(await createApp(agentActor))
++        .patch("/api/issues/issue-1")
++        .send({ assigneeAdapterOverrides: null });
++      expect(efface.status, JSON.stringify(efface.body)).toBe(403);
++      expect(efface.body.error).toContain("assigneeAdapterOverrides.adapterConfig.model");
++      expect(mockIssueService.update).not.toHaveBeenCalled();
++    });
++
++    it("laisse passer un humain (board) : pas de 403 de la garde", async () => {
++      const res = await request(await createApp({ type: "board", userId: "board-user", source: "local_implicit", isInstanceAdmin: true, companyIds: ["company-1"] }))
++        .patch("/api/issues/issue-1")
++        .send({ assigneeAdapterOverrides: { adapterConfig: { effort: "xhigh" } } });
++      expect(res.body?.error ?? "").not.toContain("modèle ni d'effort");
++      expect(res.status, JSON.stringify(res.body)).not.toBe(403);
++    });
++  });
+ });
+diff --git a/server/src/atelier/effort-run.ts b/server/src/atelier/effort-run.ts
+new file mode 100644
+index 000000000..6d0a001d2
+--- /dev/null
++++ b/server/src/atelier/effort-run.ts
+@@ -0,0 +1,144 @@
++/**
++ * Atelier Marketing IA (patch local 0014, non amont) : escalier d'effort au dispatch.
++ *
++ * Quand le livrable d'une tâche sous porte est refusé (revue CHANGES_REQUESTED ou refus
++ * de porte sur le fond), le run suivant du producteur travaille un cran plus fort :
++ *   effort effectif = effort de base de l'agent + 1 cran par révision refusée
++ *   depuis la dernière évaluation PASS de la tâche, plafonné au dernier niveau du modèle.
++ * Base absente = `medium`. Après un PASS, le compteur repart de zéro : retour à la base.
++ *
++ * Règles fixes :
++ *  - seul l'effort change, JAMAIS le modèle (aucune clé `model` n'est produite) ;
++ *  - seulement l'adaptateur `claude_local`, seulement l'agent assigné à la tâche ;
++ *  - Haiku (pas de niveau d'effort) et l'adaptateur `process` sont ignorés ;
++ *  - l'effort relevé vit dans la configuration du run, jamais dans `agents.adapter_config`.
++ *
++ * Les refus comptés sont ceux qui consomment un cycle de correction dans le plugin
++ * (plugin-atelier/src/serveur/services.ts `revisionsRefusees`, porte.ts `refusDeFond`) :
++ * révisions DISTINCTES ayant reçu un verdict CHANGES_REQUESTED ou un REFUS de porte
++ * portant au moins un motif de fond.
++ */
++import { sql } from "drizzle-orm";
++import { claudeLocalReasoningEffortsForModel } from "@paperclipai/adapter-claude-local";
++import { lignes, schemaAtelier, tableAtelier, type ExecuteurSql } from "./espace-atelier.js";
++
++export const ECHELLE_EFFORT = ["low", "medium", "high", "xhigh", "max"] as const;
++export type NiveauEffort = (typeof ECHELLE_EFFORT)[number];
++export const EFFORT_BASE_PAR_DEFAUT: NiveauEffort = "medium";
++
++/** Copie de `MOTIFS_SANS_CYCLE` du plugin (porte.ts) : motifs qui ne disent rien du fond. */
++export const MOTIFS_SANS_CYCLE: ReadonlySet<string> = new Set(["revue_requise_absente", "revue_sur_ancienne_version", "cycles_epuises"]);
++
++export interface RefusLu {
++  origine: "verdict" | "porte";
++  revisionId: string | null;
++  /** Motifs de l'évaluation de porte (null pour un verdict de revue). */
++  motifs: unknown;
++}
++
++/** Un refus de porte consomme-t-il un cycle ? Même règle que `refusDeFond` du plugin. */
++export function refusDeFond(motifs: unknown): boolean {
++  if (!Array.isArray(motifs)) return false;
++  return motifs.some((m) => {
++    const code = m && typeof m === "object" ? (m as { code?: unknown }).code : undefined;
++    return !MOTIFS_SANS_CYCLE.has(typeof code === "string" ? code : "");
++  });
++}
++
++/** Nombre de révisions distinctes refusées parmi les refus lus. Fonction pure. */
++export function compterRevisionsRefusees(refus: readonly RefusLu[]): number {
++  const revisions = new Set<string>();
++  for (const r of refus) {
++    if (!r.revisionId) continue;
++    if (r.origine === "verdict" || refusDeFond(r.motifs)) revisions.add(r.revisionId);
++  }
++  return revisions.size;
++}
++
++/**
++ * Révisions refusées depuis la dernière évaluation PASS de la tâche.
++ * null : plugin absent, tâche hors porte ou porte inactive (aucun escalier).
++ * La comparaison des dates est faite par PostgreSQL (précision microseconde).
++ */
++export async function compterRefusDepuisAcceptation(executeur: ExecuteurSql, issueId: string): Promise<number | null> {
++  const schema = await schemaAtelier(executeur);
++  if (!schema) return null;
++  const portes = tableAtelier(schema, "portes");
++  const porte = lignes<{ actif: boolean }>(
++    await executeur.execute(sql`select actif from ${portes} where issue_id = ${issueId} limit 1`),
++  )[0];
++  if (!porte?.actif) return null;
++  const evaluations = tableAtelier(schema, "evaluations_porte");
++  const verdicts = tableAtelier(schema, "verdicts");
++  const rangs = lignes<{ origine: "verdict" | "porte"; revision_id: string | null; motifs: unknown }>(
++    await executeur.execute(sql`with dernier_pass as (
++        select max(cree_le) as le from ${evaluations} where issue_id = ${issueId} and decision = 'PASS'
++      )
++      select 'verdict' as origine, v.revision_id::text as revision_id, null::jsonb as motifs
++        from ${verdicts} v, dernier_pass p
++        where v.issue_id = ${issueId} and v.verdict = 'CHANGES_REQUESTED' and (p.le is null or v.cree_le > p.le)
++      union all
++      select 'porte' as origine, e.revision_id::text as revision_id, e.motifs
++        from ${evaluations} e, dernier_pass p
++        where e.issue_id = ${issueId} and e.decision = 'REFUS' and e.revision_id is not null and (p.le is null or e.cree_le > p.le)`),
++  );
++  return compterRevisionsRefusees(rangs.map((r) => ({ origine: r.origine, revisionId: r.revision_id, motifs: r.motifs })));
++}
++
++export interface EntreeDecisionEffort {
++  adapterType: string;
++  /** Configuration effective du run (après surcharges de la tâche). */
++  adapterConfig: Record<string, unknown>;
++  /** Révisions refusées depuis la dernière acceptation ; null = tâche hors porte. */
++  refus: number | null;
++  /** L'agent du run est-il l'assigné (le producteur) de la tâche ? */
++  estProducteur: boolean;
++}
++
++export type DecisionEffort =
++  | { applique: false; raison: string }
++  | {
++      applique: true;
++      effort: NiveauEffort;
++      base: NiveauEffort;
++      baseExplicite: boolean;
++      refus: number;
++      plafond: NiveauEffort;
++      /** L'effort transmis diffère de l'effort configuré. */
++      releve: boolean;
++    };
++
++function niveauxDuModele(modele: string): NiveauEffort[] | null {
++  if (!modele) return [...ECHELLE_EFFORT];
++  const niveaux = claudeLocalReasoningEffortsForModel(modele);
++  return ECHELLE_EFFORT.filter((n) => niveaux.includes(n));
++}
++
++/** Décide l'effort du run. Ne produit jamais de modèle. Fonction pure. */
++export function decideEffortRun(entree: EntreeDecisionEffort): DecisionEffort {
++  if (entree.adapterType !== "claude_local") return { applique: false, raison: `adaptateur ${entree.adapterType} non concerné` };
++  if (!entree.estProducteur) return { applique: false, raison: "l'agent n'est pas le producteur de la tâche" };
++  if (entree.refus === null) return { applique: false, raison: "tâche hors porte" };
++  if (!Number.isInteger(entree.refus) || entree.refus <= 0) return { applique: false, raison: "aucun refus depuis la dernière acceptation" };
++  const modele = typeof entree.adapterConfig.model === "string" ? entree.adapterConfig.model.trim() : "";
++  if (/haiku/i.test(modele)) return { applique: false, raison: "modèle Haiku : pas de niveau d'effort" };
++  const niveaux = niveauxDuModele(modele);
++  if (!niveaux || niveaux.length === 0) return { applique: false, raison: `modèle ${modele} : pas de niveau d'effort` };
++  const brut = typeof entree.adapterConfig.effort === "string" ? entree.adapterConfig.effort.trim() : "";
++  const base = (brut || EFFORT_BASE_PAR_DEFAUT) as NiveauEffort;
++  const indexBase = niveaux.indexOf(base);
++  if (indexBase < 0) return { applique: false, raison: `effort de base « ${brut} » hors de l'échelle du modèle` };
++  const plafond = niveaux[niveaux.length - 1]!;
++  const effort = niveaux[Math.min(indexBase + entree.refus, niveaux.length - 1)]!;
++  return { applique: true, effort, base, baseExplicite: brut !== "", refus: entree.refus, plafond, releve: effort !== brut };
++}
++
++/** Configuration du run avec l'effort décidé : seule la clé `effort` change. */
++export function appliquerEffortRun(config: Record<string, unknown>, decision: DecisionEffort): Record<string, unknown> {
++  if (!decision.applique) return config;
++  return { ...config, effort: decision.effort };
++}
++
++export function messageEffortReleve(effort: NiveauEffort): string {
++  return `Effort relevé à ${effort} après refus de la porte ou de la revue (modèle inchangé).`;
++}
+diff --git a/server/src/atelier/garde-modele-agent.ts b/server/src/atelier/garde-modele-agent.ts
+new file mode 100644
+index 000000000..a4fa349f3
+--- /dev/null
++++ b/server/src/atelier/garde-modele-agent.ts
+@@ -0,0 +1,62 @@
++/**
++ * Atelier Marketing IA (patch local 0014, non amont) : un agent ne choisit ni son modèle
++ * ni son effort, ni ceux d'un autre agent.
++ *
++ * Paperclip laisse un agent modifier SA propre configuration sans autorisation
++ * (authorization.ts « allow_self ») et celle des autres avec `agents:configure` ;
++ * essai réel du 15/10 : un agent a changé l'effort d'un autre agent et le sien (HTTP 200).
++ * Le modèle et l'effort sont des décisions humaines (le board) ; l'escalier d'effort
++ * automatique du socle (effort-run.ts) ne passe pas par ces routes.
++ *
++ * Surfaces gardées (acteur `agent` seulement, les humains gardent le droit) :
++ *  - PATCH /agents/:id, comparé sur la configuration FINALE (fusion, remplacement,
++ *    changement d'adaptateur compris) ;
++ *  - POST /agents/:id/config-revisions/:revisionId/rollback ;
++ *  - `assigneeAdapterOverrides.adapterConfig` des routes de tâches (création, enfant,
++ *    décomposition de plan accepté, PATCH).
++ */
++import { forbidden } from "../errors.js";
++
++/**
++ * Clés qui choisissent le modèle ou son niveau de raisonnement, tous adaptateurs :
++ * `model`, `effort` (claude_local), `modelReasoningEffort` (codex_local),
++ * `reasoningEffort`, `thinking`, `variant` (grok, pi, kimi, opencode).
++ */
++export const CLES_MODELE_EFFORT = ["model", "effort", "modelReasoningEffort", "reasoningEffort", "thinking", "variant"] as const;
++
++function enregistrement(valeur: unknown): Record<string, unknown> {
++  return valeur && typeof valeur === "object" && !Array.isArray(valeur) ? (valeur as Record<string, unknown>) : {};
++}
++
++function normaliser(valeur: unknown): string {
++  if (valeur === undefined || valeur === null || valeur === "") return "";
++  return JSON.stringify(valeur);
++}
++
++/** Clés de modèle ou d'effort dont la valeur diffère entre deux configurations. Fonction pure. */
++export function clesModeleEffortModifiees(avant: unknown, apres: unknown): string[] {
++  const a = enregistrement(avant);
++  const b = enregistrement(apres);
++  return CLES_MODELE_EFFORT.filter((cle) => normaliser(a[cle]) !== normaliser(b[cle]));
++}
++
++/**
++ * Chemins de modèle ou d'effort que modifie un corps de tâche portant
++ * `assigneeAdapterOverrides`. `existant` : surcharges actuelles de la tâche (PATCH),
++ * absent pour une création. Corps sans le champ : aucune modification. Fonction pure.
++ */
++export function cheminsSurchargeModeleEffort(corps: unknown, existant?: unknown): string[] {
++  const c = enregistrement(corps);
++  if (!Object.prototype.hasOwnProperty.call(c, "assigneeAdapterOverrides") || c.assigneeAdapterOverrides === undefined) return [];
++  const apres = enregistrement(enregistrement(c.assigneeAdapterOverrides).adapterConfig);
++  const avant = enregistrement(enregistrement(existant).adapterConfig);
++  return clesModeleEffortModifiees(avant, apres).map((cle) => `assigneeAdapterOverrides.adapterConfig.${cle}`);
++}
++
++/** 403 si un acteur agent modifie un modèle ou un effort ; sans effet pour un humain. */
++export function refuserModeleEffortParAgent(req: { actor: { type: string } }, chemins: readonly string[]): void {
++  if (req.actor.type !== "agent" || chemins.length === 0) return;
++  throw forbidden(
++    `Un agent ne peut pas changer de modèle ni d'effort (${chemins.join(", ")}) : décision humaine (atelier).`,
++  );
++}
+diff --git a/server/src/routes/agents.ts b/server/src/routes/agents.ts
+index 0f7e74bbe..eb40bc225 100644
+--- a/server/src/routes/agents.ts
++++ b/server/src/routes/agents.ts
+@@ -96,6 +96,7 @@ import {
+   workspaceOperationService,
+ } from "../services/index.js";
+ import { badRequest, conflict, forbidden, HttpError, notFound, unprocessable } from "../errors.js";
++import { clesModeleEffortModifiees, refuserModeleEffortParAgent } from "../atelier/garde-modele-agent.js";
+ import { ONBOARDING_FIRST_TASK_SKILL_KEY, PAPERCLIP_CORE_SKILL_KEYS } from "../services/company-skills.js";
+ import { createRunSecretRedactionRegistry } from "../services/run-secret-redaction.js";
+ import { assertAuthenticated, assertBoard, assertCompanyAccess, assertInstanceAdmin, buildActorSecretContext, getAccessibleResource, getActorInfo, hasCompanyAccess } from "./authz.js";
+@@ -4483,6 +4484,11 @@ export function agentRoutes(
+     }
+     const rollbackAdapterConfig = asRecord(rollbackConfig.adapterConfig) ?? {};
+     assertNoAgentAdapterConfigMutation(req, rollbackAdapterConfig);
++    // Atelier (patch local 0014) : une restauration ne sert pas de détour pour changer modèle ou effort.
++    refuserModeleEffortParAgent(
++      req,
++      clesModeleEffortModifiees(existing.adapterConfig, rollbackAdapterConfig).map((cle) => `adapterConfig.${cle}`),
++    );
+     assertNoAgentLocalAdapterHostCommandMutation(req, rollbackAdapterType, rollbackAdapterConfig);
+     assertNoAgentProcessAdapterMutation(
+       req,
+@@ -5692,6 +5698,11 @@ export function agentRoutes(
+         ...existing,
+         adapterConfig: patchData.adapterConfig,
+       });
++      // Atelier (patch local 0014) : un agent ne change ni modèle ni effort, comparé sur la config finale.
++      refuserModeleEffortParAgent(
++        req,
++        clesModeleEffortModifiees(existing.adapterConfig, patchData.adapterConfig).map((cle) => `adapterConfig.${cle}`),
++      );
+     }
+     if (existing.runtimeConfig.aiConnection && requestedRuntimeConfig && !requestedRuntimeConfig.aiConnection) requestedRuntimeConfig.aiConnection = existing.runtimeConfig.aiConnection;
+     const nextAiBinding = aiRuntimeConnectionBindingSchema.safeParse(requestedRuntimeConfig?.aiConnection ?? existing.runtimeConfig.aiConnection).data;
+diff --git a/server/src/routes/issues.ts b/server/src/routes/issues.ts
+index 42754cf2b..25b47e322 100644
+--- a/server/src/routes/issues.ts
++++ b/server/src/routes/issues.ts
+@@ -242,6 +242,7 @@ import {
+   assertNoAgentHostWorkspaceCommandMutation,
+   collectIssueWorkspaceCommandPaths,
+ } from "./workspace-command-authz.js";
++import { cheminsSurchargeModeleEffort, refuserModeleEffortParAgent } from "../atelier/garde-modele-agent.js";
+ import { shouldWakeAssigneeOnCheckout } from "./issues-checkout-wakeup.js";
+ import {
+   formatAttachmentSize,
+@@ -11622,6 +11623,8 @@ export function issueRoutes(
+         req,
+         collectIssueWorkspaceCommandPaths(req.body),
+       );
++      // Atelier (patch local 0014) : un agent ne choisit ni modèle ni effort par la tâche.
++      refuserModeleEffortParAgent(req, cheminsSurchargeModeleEffort(req.body));
+       const sanitizedBody = await sanitizeIssueCreateAttribution(
+         db,
+         req,
+@@ -12101,6 +12104,8 @@ export function issueRoutes(
+         req,
+         collectIssueWorkspaceCommandPaths(req.body),
+       );
++      // Atelier (patch local 0014) : un agent ne choisit ni modèle ni effort par la tâche.
++      refuserModeleEffortParAgent(req, cheminsSurchargeModeleEffort(req.body));
+       const sanitizedBody = await sanitizeIssueCreateAttribution(
+         db,
+         req,
+@@ -12375,6 +12380,8 @@ export function issueRoutes(
+           req,
+           collectIssueWorkspaceCommandPaths(childBody),
+         );
++        // Atelier (patch local 0014) : un agent ne choisit ni modèle ni effort par la tâche.
++        refuserModeleEffortParAgent(req, cheminsSurchargeModeleEffort(childBody));
+         if (childBody.assigneeAgentId || childBody.assigneeUserId) {
+           await assertCanAssignTasks(req, sourceIssue.companyId, {
+             projectId: childBody.projectId ?? sourceIssue.projectId ?? null,
+@@ -12816,6 +12823,8 @@ export function issueRoutes(
+         req,
+         collectIssueWorkspaceCommandPaths(req.body),
+       );
++      // Atelier (patch local 0014) : un agent ne change ni modèle ni effort par la tâche.
++      refuserModeleEffortParAgent(req, cheminsSurchargeModeleEffort(req.body, existing.assigneeAdapterOverrides));
+       if (req.actor.type === "agent" && req.body.onBehalfOfUserId != null) {
+         await auditAgentIssueCommentAttributionSpoof({
+           db,
+diff --git a/server/src/services/atelier-gateway.ts b/server/src/services/atelier-gateway.ts
+index 7eba198a1..95f32ae0b 100644
+--- a/server/src/services/atelier-gateway.ts
++++ b/server/src/services/atelier-gateway.ts
+@@ -15,6 +15,8 @@
+  * demonstration scope, so the provider scopes declared by the definitions are
+  * withheld (no `scope` parameter) and restored in real mode. Cards and new
+  * connections are labelled "(démonstration)" while that mode is reported.
++ * Local patch 0014: in a mixed gateway, the services listed in `services_reels`
++ * serve real public data; their cards say so instead of "(démonstration)".
+  */
+ import type { AppDefinition } from "@paperclipai/shared";
+ import { APP_DEFINITIONS } from "@paperclipai/shared";
+@@ -27,7 +29,7 @@ const PROBE_TIMEOUT_MS = 2_000;
+ 
+ export type AtelierGatewayMode = "demonstration" | "reel";
+ export type AtelierGatewayStatus =
+-  | { reachable: true; baseUrl: string; mode: AtelierGatewayMode; services: string[] }
++  | { reachable: true; baseUrl: string; mode: AtelierGatewayMode; services: string[]; servicesReels?: string[] }
+   | { reachable: false; baseUrl: string; reason: string };
+ 
+ type Fetcher = (url: string, init: RequestInit) => Promise<Response>;
+@@ -157,6 +159,7 @@ export async function syncAtelierGateway(
+     const body = (response.ok ? await response.json() : null) as {
+       mode?: unknown;
+       services?: unknown;
++      services_reels?: unknown;
+     } | null;
+     if (body && (body.mode === "demonstration" || body.mode === "reel")) {
+       status = {
+@@ -166,6 +169,9 @@ export async function syncAtelierGateway(
+         services: Array.isArray(body.services)
+           ? body.services.filter((entry): entry is string => typeof entry === "string")
+           : [],
++        servicesReels: Array.isArray(body.services_reels)
++          ? body.services_reels.filter((entry): entry is string => typeof entry === "string")
++          : [],
+       };
+     } else {
+       status = { reachable: false, baseUrl, reason: `réponse inattendue de ${baseUrl}/sante` };
+@@ -179,6 +185,7 @@ export async function syncAtelierGateway(
+ }
+ 
+ export const ATELIER_DEMONSTRATION_SUFFIX = " (démonstration)";
++export const ATELIER_REAL_PUBLIC_SUFFIX = " (données publiques réelles)";
+ 
+ /**
+  * Gallery and setup view of an atelier definition for the current gateway
+@@ -205,6 +212,14 @@ export function atelierAppForStatus(app: AppDefinition, status: AtelierGatewaySt
+       },
+     };
+   }
++  if (status.mode === "demonstration" && status.servicesReels?.includes(atelierServiceId(app))) {
++    // Mixed gateway: this service answers with real public data, read only.
++    return {
++      ...app,
++      name: `${app.name}${ATELIER_REAL_PUBLIC_SUFFIX}`,
++      description: `Données publiques réelles, lecture seule. ${app.description}`,
++    };
++  }
+   if (status.mode === "demonstration") {
+     return {
+       ...app,
+diff --git a/server/src/services/heartbeat.ts b/server/src/services/heartbeat.ts
+index 4aa5a58a2..24c96046b 100644
+--- a/server/src/services/heartbeat.ts
++++ b/server/src/services/heartbeat.ts
+@@ -201,6 +201,7 @@ import { incrementToolRuntimeMetricCounter } from "./tool-runtime-metrics.js";
+ import { logger } from "../middleware/logger.js";
+ import { creerRegulateurRuns } from "../atelier/regulateur-runs.js";
+ import { inventaireCompetencesRun } from "../atelier/competences-run.js";
++import { appliquerEffortRun, compterRefusDepuisAcceptation, decideEffortRun, messageEffortReleve } from "../atelier/effort-run.js";
+ import {
+   createGitRemoteAuthProvider,
+   resolveManagedGitHubIdentitySelection,
+@@ -22036,6 +22037,57 @@ export function heartbeatService(
+       const sessionResetReason =
+         sessionConfigFreshness.reasons.join("; ") || null;
+       const taskSessionForRun = resetTaskSession ? null : taskSession;
++      // Atelier Marketing IA (patch local 0014) : escalier d'effort au dispatch. Placé APRÈS
++      // le calcul de l'empreinte de session (calculée sur la configuration de base) : la
++      // session Claude est reprise, seul l'effort du run change. Jamais le modèle, jamais
++      // persisté dans la configuration de l'agent. Un échec de lecture laisse l'effort de base.
++      if (issueRef && agent.adapterType === "claude_local") {
++        try {
++          const decisionEffort = decideEffortRun({
++            adapterType: agent.adapterType,
++            adapterConfig: runtimeConfig,
++            refus: await compterRefusDepuisAcceptation(db, issueRef.id),
++            estProducteur: issueContext?.assigneeAgentId === agent.id,
++          });
++          if (decisionEffort.applique) {
++            runtimeConfig = appliquerEffortRun(runtimeConfig, decisionEffort);
++            const traceEffort = {
++              effort: decisionEffort.effort,
++              base: decisionEffort.base,
++              baseExplicite: decisionEffort.baseExplicite,
++              refus: decisionEffort.refus,
++              plafond: decisionEffort.plafond,
++              releve: decisionEffort.releve,
++              modele: configuredModel ?? null,
++            };
++            context.atelierEffort = traceEffort;
++            await appendRunEvent(run, {
++              eventType: "atelier.effort",
++              stream: "system",
++              level: "info",
++              message: `atelier : effort ${decisionEffort.effort} (base ${decisionEffort.base}, ${decisionEffort.refus} révision(s) refusée(s) depuis la dernière acceptation, modèle inchangé)`,
++              payload: traceEffort,
++            });
++            await db.update(heartbeatRuns).set({
++              contextSnapshot: sql`coalesce(${heartbeatRuns.contextSnapshot}, '{}'::jsonb) || ${JSON.stringify({ atelierEffort: traceEffort })}::jsonb`,
++            }).where(eq(heartbeatRuns.id, run.id));
++            if (decisionEffort.releve) {
++              await addPlanApprovalResumeFailureCommentOnce({
++                issueId: issueRef.id,
++                run,
++                body: messageEffortReleve(decisionEffort.effort),
++              });
++            }
++          }
++        } catch (err) {
++          await appendRunEvent(run, {
++            eventType: "atelier.effort",
++            stream: "system",
++            level: "warn",
++            message: `atelier : escalier d'effort non appliqué, effort de base conservé (${err instanceof Error ? err.message : String(err)})`,
++          });
++        }
++      }
+       const getFreshSessionHandoff = issueRef ? createNativeSessionHandoffLoader({
+         db, companyId: agent.companyId, issueId: issueRef.id, agentId: agent.id, before: run.createdAt,
+         throughCommentId: readNonEmptyString(context.conversationReplayThroughCommentId) ?? (context.interactionKind ? null : wakeCommentId),
+-- 
+2.53.0
+

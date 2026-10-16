@@ -93,6 +93,22 @@ export const STYLES_ATELIER = `
 .atl-pastille[data-ton="demo"] { --ton: var(--atl-demo); background: transparent; box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--ton) 55%, transparent); }
 .atl-pastille[data-ton="demo"]::before { border-radius: 1px; transform: rotate(45deg); }
 
+/* Bandeau de l'entreprise courante */
+.atl-bandeau-entreprise { display: flex; flex-wrap: wrap; align-items: center; gap: 0.25rem 0.625rem; padding-bottom: 0.625rem; border-bottom: 1px solid var(--atl-trait); font-size: 0.875rem; }
+.atl-bandeau-etiquette { color: var(--atl-attenue); font-size: 0.75rem; }
+.atl-bandeau-nom { font-weight: 600; }
+
+/* Écrans vides avec invitation */
+.atl-vide-action { display: flex; flex-wrap: wrap; justify-content: center; gap: 0.5rem; margin-top: 0.25rem; }
+
+/* Mise en place du client */
+.atl-etapes { display: flex; flex-direction: column; border: 1px solid var(--atl-trait); border-radius: var(--atl-rayon); }
+.atl-etape { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 0.25rem 1rem; padding: 0.75rem 1rem; }
+.atl-etape + .atl-etape { border-top: 1px solid var(--atl-trait); }
+.atl-etape-titre { font-weight: 600; }
+.atl-etape-detail { grid-column: 1; color: var(--atl-attenue); font-size: 0.8125rem; max-width: 62ch; }
+.atl-etape-etat { grid-column: 2; grid-row: 1 / span 2; display: flex; align-items: center; gap: 0.75rem; }
+
 /* Mention de démonstration, bandeau */
 .atl-demo { padding: 0.5rem 0.75rem; border-radius: var(--atl-rayon); color: var(--atl-texte); background: color-mix(in oklab, var(--atl-demo) 6%, var(--atl-fond)); box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--atl-demo) 40%, transparent); }
 .atl-demo strong { color: var(--atl-demo); font-weight: 600; }
@@ -274,6 +290,10 @@ export const STYLES_ATELIER = `
 /* Widget du tableau de bord */
 .atl-widget { display: flex; flex-direction: column; gap: 0.75rem; }
 .atl-widget-ligne { display: flex; flex-wrap: wrap; gap: 0.5rem 1.25rem; }
+.atl-widget-demande { display: flex; flex-direction: column; align-items: flex-start; gap: 0.5rem; }
+.atl-widget-demande textarea { width: 100%; min-height: 3.5rem; resize: vertical; padding: 0.5rem 0.625rem; border: 1px solid var(--atl-trait); border-radius: calc(var(--atl-rayon) * 0.8); background: var(--atl-fond); color: inherit; font: inherit; line-height: 1.5; }
+.atl-widget-demande textarea:focus-visible { outline-offset: 0; border-color: var(--atl-anneau); }
+.atl-widget-erreur { color: var(--atl-danger); margin: 0; }
 .atl-widget-ligne strong { font-size: 1.125rem; font-weight: 600; }
 
 /* Appels proposés (contrat v1.6) : tout ce qui partira, sans troncature */

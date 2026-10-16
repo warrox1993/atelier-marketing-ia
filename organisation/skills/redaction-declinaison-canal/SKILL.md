@@ -73,8 +73,9 @@ briefs de visuels ; liste des points à confirmer.
 
 ## Exemple
 
-Message clé : « Une toiture isolée, c'est un diagnostic avec visite puis un devis
-détaillé. » Publication réseau social (≈ 300 caractères) : « Votre toiture laisse filer la
-chaleur ? Nos équipes de Liège-Centre, Outremeuse et Ans passent faire un diagnostic avant
-tout devis. Prenez rendez-vous sur notre site. » Point à confirmer : aucune promesse
-« gratuit » tant que l'offre n'est pas validée.
+Message clé : « Bien assurer son logement, c'est d'abord faire le point sur sa situation, puis
+comparer les conditions générales. » Publication réseau social (≈ 300 caractères) : « Votre assurance habitation
+correspond-elle encore à votre logement ? Nos bureaux de Liège et de Namur font le point
+avec vous avant tout devis. Prenez rendez-vous sur notre site. » Point à confirmer : aucune promesse
+« meilleur prix » ni « gratuit » tant que l'offre n'est pas validée ; renvoi aux conditions
+générales, aucun conseil personnalisé.

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { lireMode, lirePort, lireReglages, verifierHoteEcoute } from "../src/config.js";
+import { lireMode, lirePort, lireReglages, lireServicesReels, verifierHoteEcoute } from "../src/config.js";
 import { creerServeur } from "../src/serveur.js";
 
 describe("garde « boucle locale seulement »", () => {
@@ -40,5 +40,23 @@ describe("réglages par l'environnement", () => {
     expect(() => lirePort("abc")).toThrow();
     expect(() => lirePort("70000")).toThrow();
     expect(() => lirePort("-1")).toThrow();
+  });
+});
+
+describe("services réels en mélange : liens", () => {
+  it("liens est permis, sans compte de tiers, seul ou avec osm", () => {
+    expect(lireServicesReels({ PASSERELLE_SERVICES_REELS: "liens" })).toEqual(["liens"]);
+    expect(lireServicesReels({ PASSERELLE_SERVICES_REELS: "osm liens" })).toEqual(["osm", "liens"]);
+    expect(() => lireServicesReels({ PASSERELLE_SERVICES_REELS: "liens,gsc" })).toThrow(/gsc.*non permis/);
+  });
+});
+
+describe("services réels en mélange : bce et bnb", () => {
+  it("bce et bnb sont permis en mélange avec osm et liens", () => {
+    expect(lireServicesReels({ PASSERELLE_SERVICES_REELS: "osm,liens,bce,bnb" })).toEqual(["osm", "liens", "bce", "bnb"]);
+  });
+  it("un service inconnu ou non mélangeable reste refusé", () => {
+    expect(() => lireServicesReels({ PASSERELLE_SERVICES_REELS: "bce,inconnu" })).toThrow(/inconnu.*non permis/);
+    expect(() => lireServicesReels({ PASSERELLE_SERVICES_REELS: "fsma" })).toThrow(/fsma.*non permis/);
   });
 });

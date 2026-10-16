@@ -48,10 +48,10 @@ export function lireReglages(env: NodeJS.ProcessEnv): ReglagesEnvironnement {
 
 /**
  * Lit PASSERELLE_SERVICES_REELS : liste de services (séparés par des virgules ou des espaces) servis par leur fournisseur
- * RÉEL alors que la passerelle est en démonstration (mélange). Seuls les services de prospection à données locales
- * (`osm`) sont permis : les autres fournisseurs réels exigent le mode réel complet (comptes et jetons de tiers).
+ * RÉEL alors que la passerelle est en démonstration (mélange). Seuls les services sans compte de tiers
+ * (`osm` et `bce` : index locaux ; `bnb` : API de la BNB par simple clé ; `liens` : lecture d'URL protégée) sont permis : les autres fournisseurs réels exigent le mode réel complet (comptes et jetons de tiers).
  */
-export const SERVICES_REELS_MELANGEABLES: readonly string[] = ["osm"];
+export const SERVICES_REELS_MELANGEABLES: readonly string[] = ["osm", "liens", "bce", "bnb"];
 
 export function lireServicesReels(env: NodeJS.ProcessEnv): string[] {
   const brut = env["PASSERELLE_SERVICES_REELS"]?.trim() ?? "";
