@@ -19,6 +19,7 @@ import {
 const ici = path.dirname(fileURLToPath(import.meta.url));
 const ENFANT_FACTICE = path.join(ici, "fixtures", "enfant-vectoriseur-factice.mjs");
 const ENFANT_PLANTE = path.join(ici, "fixtures", "enfant-vectoriseur-charge-plante.mjs");
+const ENFANT_ENVIRONNEMENT = path.join(ici, "fixtures", "enfant-vectoriseur-environnement.mjs");
 const sansVerification = async () => undefined;
 
 function vivant(pid: number): boolean {
@@ -50,6 +51,20 @@ function local(options: Partial<Parameters<typeof creerVectoriseurLocal>[0]> = {
 }
 afterEach(async () => {
   await Promise.all(aArreter.splice(0).map((v) => v.arreter()));
+});
+
+describe("sous-processus local : environnement minimal (revue du 16/10, m7)", () => {
+  it("les secrets du processus parent ne sont pas transmis au sous-processus", async () => {
+    process.env.ATELIER_SECRET_DE_TEST = "secret-fictif";
+    try {
+      const [v] = await local({ scriptEnfant: ENFANT_ENVIRONNEMENT }).vectoriser(["a"]);
+      expect(v![0]).toBe(0); // la variable secrète n'est pas visible
+      expect(v![1]).toBeGreaterThan(0);
+      expect(v![2]).toBeGreaterThan(0); // PATH reste transmis
+    } finally {
+      delete process.env.ATELIER_SECRET_DE_TEST;
+    }
+  });
 });
 
 describe("empreinte d'index : jamais deux modèles", () => {
@@ -251,6 +266,55 @@ describe("mode voyage : client HTTP contre un faux serveur local", () => {
     const erreur = await v.vectoriser(["a"]).catch((e: Error) => e);
     expect((erreur as Error).message).toMatch(/Voyage AI : HTTP 401/u);
     expect((erreur as Error).message).not.toContain("cle-secrete");
+  });
+
+  it("refuse une URL de base en clair hors de la machine locale (la clé partirait en clair)", () => {
+    const options = { autorise: true, cle: () => "k", modele: "voyage-4" };
+    expect(() => creerVectoriseurVoyage({ ...options, urlBase: "http://voyage.example/v1" })).toThrow(/https/u);
+    expect(() => creerVectoriseurVoyage({ ...options, urlBase: "ftp://voyage.example/v1" })).toThrow(/https/u);
+    expect(() => creerVectoriseurVoyage({ ...options, urlBase: "pas une url" })).toThrow(/https/u);
+    expect(() => creerVectoriseurVoyage({ ...options, urlBase: "https://voyage.example/v1" })).not.toThrow();
+    expect(() => creerVectoriseurVoyage({ ...options, urlBase: "http://127.0.0.1:9/v1" })).not.toThrow();
+    expect(() => creerVectoriseurVoyage({ ...options, urlBase: "http://localhost:9/v1" })).not.toThrow();
+  });
+
+  it("le corps d'une réponse d'erreur (qui peut citer le texte du client) n'est pas repris", async () => {
+    const v = creerVectoriseurVoyage({
+      autorise: true, cle: () => "k", modele: "voyage-4", dimension: 2,
+      fetch: (async () => new Response("Texte refusé : Monsieur Fictif, contrat 123", { status: 400 })) as unknown as typeof fetch,
+    });
+    const erreur = (await v.vectoriser(["a"]).catch((e: Error) => e)) as Error;
+    expect(erreur.message).toMatch(/Voyage AI : HTTP 400/u);
+    expect(erreur.message).not.toContain("Fictif");
+  });
+
+  it("refuse une réponse trop volumineuse sans la lire en entier", async () => {
+    let lus = 0;
+    const flux = new ReadableStream<Uint8Array>({
+      pull(c) {
+        lus += 1;
+        if (lus > 10_000) return c.close();
+        c.enqueue(new Uint8Array(64 * 1024).fill(0x20));
+      },
+    });
+    const v = creerVectoriseurVoyage({
+      autorise: true, cle: () => "k", modele: "voyage-4", dimension: 2,
+      fetch: (async () => new Response(flux, { status: 200 })) as unknown as typeof fetch,
+    });
+    await expect(v.vectoriser(["a"])).rejects.toThrow(/trop volumineuse/u);
+    expect(lus).toBeLessThan(10_000);
+  });
+
+  it("refuse des index en double, manquants ou des composantes non numériques", async () => {
+    const repondre = (data: unknown) =>
+      creerVectoriseurVoyage({
+        autorise: true, cle: () => "k", modele: "voyage-4", dimension: 2,
+        fetch: (async () => new Response(JSON.stringify({ data }), { status: 200 })) as unknown as typeof fetch,
+      });
+    await expect(repondre([{ index: 0, embedding: [1, 0] }, { index: 0, embedding: [0, 1] }]).vectoriser(["a", "b"])).rejects.toThrow(/index/u);
+    await expect(repondre([{ index: 1, embedding: [1, 0] }, { index: 2, embedding: [0, 1] }]).vectoriser(["a", "b"])).rejects.toThrow(/index/u);
+    await expect(repondre([{ index: 0, embedding: [1, "x"] }]).vectoriser(["a"])).rejects.toThrow(/composante/u);
+    await expect(repondre({ pas: "un tableau" }).vectoriser(["a"])).rejects.toThrow(/nombre de vecteurs|réponse/u);
   });
 
   it("refuse une dimension ou un nombre de vecteurs inattendus", async () => {

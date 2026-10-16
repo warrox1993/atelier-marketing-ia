@@ -12,8 +12,12 @@ import { creerAiguillage } from "../src/serveur/atelier.js";
 import { creerBase, type BaseAtelier } from "../src/serveur/base.js";
 import { dechiffrer, empreinte } from "../src/serveur/chiffrement-donnees.js";
 import { creerServices } from "../src/serveur/services.js";
-import { clesDemonstration, extraireChangementsBce, extraireComptesBnb, extraireProspects, regionDuCodePostal } from "../src/serveur/services-prospection.js";
+import { CODES_POSTAUX_BE } from "../src/serveur/codes-postaux-be.js";
+import { depotDepuisJournal } from "../src/serveur/base.js";
+import { appelPourCouverture, clesDemonstration, extraireChangementsBce, extraireComptesBnb, extraireProspects, regionDuCodePostal } from "../src/serveur/services-prospection.js";
+import type { StockReglagesLeads } from "../src/serveur/services-reglages-leads.js";
 import { BRIEF, CAMP, SOC, creerBanc } from "./outils-base.js";
+import { stockMemoire } from "./outils-reglages-leads.js";
 import { emballer, paireEd25519, passerelle } from "./outils-passerelle.js";
 
 const P = await passerelle();
@@ -63,7 +67,7 @@ function reponse(o: { mode?: "demonstration" | "reel"; signataire?: typeof SIGNA
 /* Banc : base en mémoire complétée des tables de prospection          */
 /* ------------------------------------------------------------------ */
 
-function banc(o: { modeEntreprise?: "demonstration" | "reel"; config?: Record<string, unknown>; poids?: Record<string, number>; clients?: Record<string, string>; marque?: Ligne; baseClients?: number } = {}) {
+function banc(o: { modeEntreprise?: "demonstration" | "reel"; config?: Record<string, unknown>; poids?: Record<string, number>; clients?: Record<string, string>; marque?: Ligne; baseClients?: number; stockLeads?: StockReglagesLeads } = {}) {
   const b = creerBanc({ modeEntreprise: o.modeEntreprise ?? "demonstration", config: { passerelleClesPubliques: [CLES.publiqueBase64], ...o.config } });
   const t = { prospects: [] as Ligne[], empreintes: [] as Ligne[], oppositions: [] as Ligne[], scores: [] as Ligne[], bases: new Map<string, Ligne[]>() };
   const appelsListe: number[] = [];
@@ -111,7 +115,7 @@ function banc(o: { modeEntreprise?: "demonstration" | "reel"; config?: Record<st
     }),
     listerProspects: async (c: string, f: Ligne) => {
       appelsListe.push(f.parPage);
-      const toutes = t.prospects.filter((p) => p.companyId === c && (!f.statuts || f.statuts.includes(p.statut)) && (!f.cibles || f.cibles.includes(p.cible)));
+      const toutes = t.prospects.filter((p) => p.companyId === c && (!f.statuts || f.statuts.includes(p.statut)) && (!f.cibles || f.cibles.includes(p.cible)) && (!f.campagneId || p.campagneId === f.campagneId));
       return { total: toutes.length, lignes: copie(toutes.slice((f.page - 1) * f.parPage, f.page * f.parPage)) };
     },
     insererOpposition: async (x: Ligne) => {
@@ -125,7 +129,7 @@ function banc(o: { modeEntreprise?: "demonstration" | "reel"; config?: Record<st
     },
   };
   const base = new Proxy(b.base as unknown as Ligne, { get: (cible, cle) => (cle in ext ? ext[cle as string] : cible[cle as string]) }) as unknown as BaseAtelier;
-  const aiguillage = creerAiguillage(b.ctx, creerServices(b.ctx, { base }));
+  const aiguillage = creerAiguillage(b.ctx, creerServices(b.ctx, { base, ...(o.stockLeads ? { stockReglagesLeads: o.stockLeads } : {}) }));
   async function appeler(routeKey: string, o2: { params?: Record<string, string>; query?: Record<string, string | string[]>; body?: unknown; companyId?: string; agent?: boolean }) {
     return aiguillage.traiterRequeteApi({
       routeKey, method: "POST", path: "/x", params: o2.params ?? {}, query: o2.query ?? {}, body: o2.body,
@@ -227,6 +231,27 @@ describe("tache.prospects.deposer", () => {
     const r = await sansCle.deposer(depotBce());
     expect(r.status).toBe(400);
     expect(String(r.body.erreur)).toMatch(/Aucune clé publique de la passerelle/u);
+  });
+
+  it("couverture : taille de page et nombre renvoyé sont journalisés puis relus (preuve de dernière page sans `pages`)", () => {
+    const appel = appelPourCouverture("osm_commerces", { communes: ["Liège"], page: 2, nom: "Dupont" }, [{ total: 230, page: 2, taille_page: 200, commerces: new Array(30).fill({}) }]);
+    expect(appel).toEqual({ arguments: { communes: ["Liège"], page: 2 }, total: 230, page: 2, pages: null, taillePage: 200, renvoyes: 30 });
+    expect(depotDepuisJournal(null, { outil: "osm_commerces", appel }, "2026-10-16T00:00:00.000Z")).toMatchObject({ taillePage: 200, renvoyes: 30, page: 2, total: 230 });
+    expect(appelPourCouverture("b2c_oppositions", { telephone: "0470000000" }, [{}])).toBeUndefined();
+  });
+
+  it("couverture : le dépôt signé journalise la campagne, les arguments vérifiés et la pagination ; la route marque la zone interrogée", async () => {
+    const [, lat, lon] = CODES_POSTAUX_BE.find((l) => l[0] === "4000")!;
+    const f = banc({ marque: { entites: [], etablissements: [{ nom: "Bureau", adresse: null, confirme: true, position: { lat, lon } }] } });
+    expect((await f.deposer(depotBce())).status).toBe(201);
+    expect(f.t.journal[0]!.donnees).toMatchObject({ campagneId: CAMP, outil: "bce_rechercher", appel: { arguments: { communes: ["Liège"] }, total: 4, page: null, pages: null } });
+    // Zone, page et filtres de secteur (nace) sont journalisés : deux requêtes de secteurs différents restent distinctes.
+    expect((f.t.journal[0]!.donnees as { appel: { arguments: Record<string, unknown> } }).appel.arguments).toHaveProperty("nace");
+    const r = await f.appeler("prospection.couverture", { query: { companyId: SOC, campagneId: CAMP } });
+    expect(r.status).toBe(200);
+    expect(r.body.outilsRequis).toEqual(["bce_rechercher"]);
+    expect(r.body.zones.find((z: Ligne) => z.codePostal === "4000").interrogee.bce_rechercher).toBe(true); // commune « Liège »
+    expect(r.body.totaux.bce_rechercher).toMatchObject({ requetes: 1, total: 4 });
   });
 
   it("mode déduit de la réponse signée, jamais du corps : un champ « mode » est refusé", async () => {
@@ -358,16 +383,30 @@ describe("prospects.lister et prospects.exclure", () => {
   it("liste filtrée de l'entreprise résolue, au format PageProspects ; une autre entreprise ne voit rien", async () => {
     const f = banc();
     await f.deposer(depotBce());
-    const r = await f.appeler("prospects.lister", { query: { companyId: SOC, statuts: "nouveau", parPage: "10" } });
+    const r = await f.appeler("prospects.lister", { query: { vue: "complete", companyId: SOC, statuts: "nouveau", parPage: "10" } });
     expect(r.status).toBe(200);
     const page = PageProspects.parse(r.body);
     expect(page).toMatchObject({ total: 2, page: 1, pages: 1 });
     expect(page.prospects.map((p) => p.numeroBce).sort()).toEqual(["0123.456.749", "0999.000.001"]);
     expect(page.prospects.every((p) => p.empreintes.length > 0)).toBe(true);
-    const exclus = await f.appeler("prospects.lister", { query: { companyId: SOC, statuts: "exclu", parPage: "10" } });
+    const exclus = await f.appeler("prospects.lister", { query: { vue: "complete", companyId: SOC, statuts: "exclu", parPage: "10" } });
     expect(PageProspects.parse(exclus.body).total).toBe(0);
-    const autre = await f.appeler("prospects.lister", { query: { companyId: SOC2 }, companyId: SOC2 });
+    const autre = await f.appeler("prospects.lister", { query: { vue: "complete", companyId: SOC2 }, companyId: SOC2 });
     expect(PageProspects.parse(autre.body).total).toBe(0);
+  });
+
+  it("filtre « mission » : le paramètre campagneId est accepté, une autre mission ne renvoie rien, une autre entreprise n'est jamais servie", async () => {
+    const f = banc();
+    await f.deposer(depotBce());
+    const dans = PageProspects.parse((await f.appeler("prospects.lister", { query: { vue: "complete", companyId: SOC, campagneId: CAMP, parPage: "10" } })).body);
+    expect(dans.total).toBe(2);
+    expect(dans.prospects.every((p) => p.campagneId === CAMP)).toBe(true);
+    const AUTRE_MISSION = "99999999-9999-4999-8999-999999999999";
+    expect(PageProspects.parse((await f.appeler("prospects.lister", { query: { vue: "complete", companyId: SOC, campagneId: AUTRE_MISSION } })).body).total).toBe(0);
+    // Même identifiant de mission demandé par une autre entreprise : rien, et jamais les prospects de SOC.
+    expect(PageProspects.parse((await f.appeler("prospects.lister", { query: { vue: "complete", companyId: SOC2, campagneId: CAMP }, companyId: SOC2 })).body).total).toBe(0);
+    // Un identifiant qui n'en est pas un est refusé par le contrat.
+    expect((await f.appeler("prospects.lister", { query: { vue: "complete", companyId: SOC, campagneId: "x'; drop table prospects;--" } })).status).toBe(400);
   });
 
   it("exclusion avec un motif connu, journalisée ; prospect d'une autre entreprise introuvable", async () => {
@@ -536,6 +575,18 @@ describe("service b2c", () => {
     expect(JSON.stringify(f.tp.oppositions)).not.toContain("exemple.invalid");
   });
 
+  it("RGPD : un dépôt b2c_oppositions ne journalise aucun argument d'appel (ni téléphone ni courriel)", async () => {
+    const f = banc();
+    const args = { page: 1, telephone: "+32 470 99 88 77", courriel: "secret.personne@exemple.invalid" };
+    const corps = { service: "b2c", outil: "b2c_oppositions", arguments: args,
+      reponse: emballer(SIGNATAIRE, "demonstration", { source: "B2C", client_demonstration: "Assureur de démonstration", oppositions: [{ id: "op9", personne: personneB2c("1"), adresse: adresseB2c, inscrit_le: "2026-09-01", canaux_opposes: ["telephone"] }] }, { service: "b2c", outil: "b2c_oppositions", compte: "registre/demo-b2c", args }) as { texte: string; structuredContent: Record<string, unknown> } };
+    expect((await f.deposer(corps)).status).toBe(201);
+    const journal = JSON.stringify(f.t.journal);
+    expect(journal).not.toContain("470 99 88 77");
+    expect(journal).not.toContain("secret.personne");
+    expect(f.t.journal.find((j) => j.type === "prospects.deposes")!.donnees).not.toHaveProperty("appel");
+  });
+
   it("b2c non signé : refusé", async () => {
     const f = banc();
     const corps = depotB2c("b2c_demandes_devis", { demandes });
@@ -622,6 +673,18 @@ describe("comptes annuels BNB", () => {
   }, { service: "bnb", outil: "bnb_comptes", compte: "centrale/demo-bnb", args: ARGS });
   const depotComptes = (numero: string, o: Ligne = {}) => ({ service: "bnb", outil: "bnb_comptes", reponse: comptes(numero, o), arguments: ARGS });
 
+  it("sources BNB : une taille relue de la base avec ses clés dans un autre ordre ne crée pas de doublon", async () => {
+    const f = banc();
+    await f.deposer(depotBce(reponse({ entreprises: [entite("0123.456.749", "Toitures de Meuse")] })));
+    await f.deposer(depotComptes("0123.456.749"));
+    // jsonb ne conserve pas l'ordre des clés : on renverse celui de la taille stockée.
+    const src = (f.tp.prospects[0]!.sources as Ligne[])[1]!;
+    src.taille = Object.fromEntries(Object.entries(src.taille as Ligne).reverse());
+    const encore = await f.deposer(depotComptes("0123.456.749"));
+    expect(encore.body.enrichisParComptes).toBe(0);
+    expect(f.tp.prospects[0]!.sources as Ligne[]).toHaveLength(2);
+  });
+
   it("un dépôt bnb_comptes enrichit le prospect EXISTANT de même numéro BCE (taille), sans créer de prospect, sans doublon ; un numéro inconnu n'enrichit rien", async () => {
     const f = banc();
     await f.deposer(depotBce(reponse({ entreprises: [entite("0123.456.749", "Toitures de Meuse")] })));
@@ -665,6 +728,38 @@ describe("comptes annuels BNB", () => {
     expect(r.body.enrichisParComptes).toBe(1);
     expect(f.tp.prospects.find((p) => p.companyId === SOC2)!.sources as Ligne[]).toHaveLength(1);
     expect(f.tp.prospects.find((p) => p.companyId === SOC)!.sources as Ligne[]).toHaveLength(2);
+  });
+
+  it("extraireComptesBnb : l'exercice affiché et les fonds propres viennent du MÊME exercice (le plus récent avec données structurées)", () => {
+    const rub = (...r: [string, number | null][]) => ({ Rubrics: r.map(([Code, Value]) => ({ Code, Period: "N", Value })) });
+    const m = extraireComptesBnb([{ EnterpriseNumber: "0123.456.749", trouve: true, taille_deduite: "petite", references: [
+      { ExerciseDates: { endDate: "2025-12-31" }, AccountingData: rub(["10/15", 500000]) },
+      { ExerciseDates: { endDate: "2024-12-31" }, AccountingData: rub(["9087", 5], ["10/15", 300000]) },
+    ] }]);
+    expect(m.get("0123.456.749")).toMatchObject({ exercice: 2025, fondsPropres: 500000 });
+    expect(m.get("0123.456.749")!.effectifEtp).toBeNull();
+  });
+
+  it("extraireComptesBnb (lot 2) : fonds propres (10/15) et terrains (22) du dernier exercice, résultats (9904) des deux derniers, rien de deviné", () => {
+    const rub = (...r: [string, number | null][]) => ({ Rubrics: r.map(([Code, Value]) => ({ Code, Period: "N", Value })) });
+    const m = extraireComptesBnb([{ EnterpriseNumber: "0123.456.749", trouve: true, taille_deduite: "petite", references: [
+      { ExerciseDates: { endDate: "2025-12-31" }, AccountingData: rub(["9087", 12.5], ["10/15", 500000], ["22", 350000], ["9904", 42000]) },
+      { ExerciseDates: { endDate: "2024-12-31" }, AccountingData: rub(["9087", 11], ["9904", -3000], ["10/15", 100]) },
+      { ExerciseDates: { endDate: "2023-12-31" }, AccountingData: rub(["9904", 7]) },
+    ] }]);
+    expect(m.get("0123.456.749")).toEqual({
+      exercice: 2025, effectifEtp: 12.5, categorie: "petite", fondsPropres: 500000, terrainsConstructions: 350000,
+      resultats: [{ exercice: 2025, resultat: 42000 }, { exercice: 2024, resultat: -3000 }],
+    });
+    // Rubriques absentes du dernier exercice : omises (jamais reprises d'un exercice plus ancien), résultat manquant : nul.
+    const partiel = extraireComptesBnb([{ EnterpriseNumber: "0123.456.749", trouve: true, taille_deduite: "inconnue", references: [
+      { ExerciseDates: { endDate: "2025-12-31" }, AccountingData: rub(["9087", 3]) },
+      { ExerciseDates: { endDate: "2024-12-31" }, AccountingData: rub(["10/15", 900], ["22", 1], ["9904", 5]) },
+    ] }]);
+    expect(partiel.get("0123.456.749")).toEqual({ exercice: 2025, effectifEtp: 3, categorie: null, resultats: [{ exercice: 2025, resultat: null }, { exercice: 2024, resultat: 5 }] });
+    // Fonds propres négatifs et perte : conservés tels quels.
+    const perte = extraireComptesBnb([{ EnterpriseNumber: "0123.456.749", trouve: true, references: [{ ExerciseDates: { endDate: "2025-12-31" }, AccountingData: rub(["10/15", -2000], ["9904", -500]) }] }]);
+    expect(perte.get("0123.456.749")).toMatchObject({ fondsPropres: -2000, resultats: [{ exercice: 2025, resultat: -500 }] });
   });
 
   it("extraireComptesBnb : dépôt le plus récent avec effectif, catégorie seulement si l'effectif est connu, rien si non trouvé", () => {
@@ -750,6 +845,22 @@ describe("SQL de prospection (base.ts réelle, règles de l'hôte)", () => {
     return { db, ecrits };
   }
 
+  it("depotsProspectionCampagne lit TOUS les dépôts, par pages, au-delà du plafond de page (les récents ne sont pas ignorés)", async () => {
+    const lignes = Array.from({ length: 7 }, (_, i) => ({ seq: i + 1, issue_id: null, donnees: { outil: "bce_rechercher", campagneId: CAMP, appel: { arguments: { page: i + 1 } } }, cree_le: new Date(2026, 0, i + 1).toISOString() }));
+    const db = {
+      namespace: ESPACE_BASE,
+      async query(sql: string, params: unknown[] = []) {
+        const limite = Number(/limit (\d+)/u.exec(sql)![1]);
+        return lignes.filter((l) => l.seq > Number(params[2])).slice(0, limite);
+      },
+      async execute() { return { rowCount: 0 }; },
+    };
+    const base = creerBase(db as unknown as PluginContext["db"]);
+    const depots = await base.depotsProspectionCampagne(SOC, CAMP, 3);
+    expect(depots).toHaveLength(7);
+    expect(depots.map((d) => d.arguments)).toEqual(lignes.map((l) => l.donnees.appel.arguments));
+  });
+
   it("toutes les fonctions ajoutées passent les règles (une instruction, aucun mot de mutation en lecture, $n tous liés)", async () => {
     const { db } = dbControlee();
     const base = creerBase(db as unknown as PluginContext["db"]);
@@ -807,6 +918,26 @@ describe("SQL de prospection (base.ts réelle, règles de l'hôte)", () => {
 /* Confiance de qualification : lecture, liste, filtre, critères manquants */
 /* ------------------------------------------------------------------ */
 
+/** Une date AAAA-MM-JJ située `mois` mois avant aujourd'hui (le banc calcule avec l'horloge réelle). */
+const ilYaMois = (mois: number) => {
+  const d = new Date();
+  d.setUTCMonth(d.getUTCMonth() - mois);
+  return d.toISOString().slice(0, 10);
+};
+/** Ajoute à la source BCE d'un prospect un début d'activité et un nouvel établissement récents : critères « installation » et « événement » vérifiés. */
+const avecFaitsRecents = (ligne: Record<string, any>) => {
+  const bce = (ligne.sources as { service?: string; faits?: unknown[] }[]).find((x) => x.service === "bce")!;
+  bce.faits = [{ code: "debut_entreprise", date: ilYaMois(6) }, { code: "nouvel_etablissement", date: ilYaMois(2) }];
+};
+
+/** Ajoute une source BNB complète (effectif, fonds propres, terrains, résultats) : les quatre critères du lot 2 deviennent vérifiables. */
+const avecComptesBnb = (ligne: Record<string, any>) => {
+  ligne.sources = [...ligne.sources, {
+    type: "depot_signe", sourceId: "c3333333-3333-4333-8333-333333333333", service: "bnb", outil: "bnb_comptes", url: null, collecteLe: ligne.creeLe,
+    taille: { exercice: 2025, effectifEtp: 12, categorie: "petite", fondsPropres: 500000, terrainsConstructions: 350000, resultats: [{ exercice: 2025, resultat: 42000 }, { exercice: 2024, resultat: 8000 }] },
+  }];
+};
+
 describe("confiance de qualification (courtier fictif)", () => {
   // Cibles du courtier fictif : médecins (NACE 86.21x) à Liège ; les entreprises de test (NACE 43.910, toitures) sont donc hors segment.
   const marque = REFERENTIEL_COURTIER;
@@ -819,14 +950,23 @@ describe("confiance de qualification (courtier fictif)", () => {
   it("lecture et liste : la confiance et ses critères sont servis, distincts du score de conversion", async () => {
     const f = banc({ marque: ciblesToitures, baseClients: 12, poids: { source_registre_officiel: 40, courriel_impersonnel: 30, telephone_present: 10 } });
     await f.deposer(depotBce());
-    const r = await f.appeler("prospects.lister", { query: { companyId: SOC, statuts: "nouveau", parPage: "10" }, agent: false });
+    const r = await f.appeler("prospects.lister", { query: { vue: "complete", companyId: SOC, statuts: "nouveau", parPage: "10" }, agent: false });
     const page = PageProspects.parse(r.body);
     const toitures = page.prospects.find((p) => p.numeroBce === "0123.456.749")!;
     // Actif (BCE), segment, zone, pas client (base importée) vérifiés ; joignable (aucune base légale dans le banc), taille, concordance non vérifiés.
-    expect(toitures.confiance).toMatchObject({ valeur: 20 + 20 + 15 + 10, qualifie: false, plafonnee: false, seuil: 90 });
+    // Critères courtier : NACE 43.910 (construction) = RC pro obligatoire, offre RC pro active dans la fiche, pas un concurrent ;
+    // installation et événement : aucun fait BCE daté dans ce dépôt, donc non vérifiés.
+    // Lot 2 (comptes BNB) : aucun compte BNB dans ce dépôt, donc effectif, flotte (NACE de construction, effectif inconnu), locaux et santé financière non vérifiés.
+    // Lot 3 : aucune fiche de bureau ne dit quel segment il suit (bureau spécialisé non vérifié) ; l'adresse impersonnelle du banc est un contact publié (vérifié, +6).
+    // Confiance : (85 + 6) / (100 + 36 + 20 + 12) = 91 / 168 = 54,2 % arrondi à 54 (avant le lot 3 : 85 / 156 = 54 ; avant le lot 2 : 85 / 136 = 63 ; avant les critères courtier : 65 / 100).
+    expect(toitures.confiance).toMatchObject({ valeur: 54, qualifie: false, plafonnee: false, seuil: 90 });
     expect(toitures.confiance!.criteres.map((c) => [c.code, c.statut])).toEqual([
       ["entreprise_active", "verifie"], ["segment_cible", "verifie"], ["zone_cible", "verifie"], ["joignable_legalement", "non_verifie"],
       ["pas_deja_client", "verifie"], ["taille_connue", "non_verifie"], ["sources_concordantes", "non_verifie"],
+      ["assurance_obligatoire_metier", "verifie"], ["installation_recente", "non_verifie"], ["evenement_recent", "non_verifie"],
+      ["besoin_offre_active", "verifie"], ["pas_concurrent", "verifie"],
+      ["emploie_personnel", "non_verifie"], ["flotte_probable", "non_verifie"], ["proprietaire_locaux", "non_verifie"], ["sante_financiere", "non_verifie"],
+      ["bureau_specialise_proche", "non_verifie"], ["contact_public_permis", "verifie"],
     ]);
     expect(toitures.confiance!.criteres[0]!.sourceId).toBe(toitures.sources[0]!.sourceId);
     // Le score de conversion garde sa nature et ses points : la confiance ne le modifie pas.
@@ -849,23 +989,27 @@ describe("confiance de qualification (courtier fictif)", () => {
   it("filtre qualifiesSeulement : seuls les prospects à 90 % ou plus ; pagination sur les qualifiés", async () => {
     const f = banc({ marque: ciblesToitures, baseClients: 3 });
     await f.deposer(depotBce());
-    const tous = PageProspects.parse((await f.appeler("prospects.lister", { query: { companyId: SOC, parPage: "10" }, agent: false })).body);
+    const tous = PageProspects.parse((await f.appeler("prospects.lister", { query: { vue: "complete", companyId: SOC, parPage: "10" }, agent: false })).body);
     expect(tous.total).toBeGreaterThan(0);
     expect(tous.prospects.every((p) => !p.confiance!.qualifie)).toBe(true);
-    const q = PageProspects.parse((await f.appeler("prospects.lister", { query: { companyId: SOC, qualifiesSeulement: "true" }, agent: false })).body);
+    const q = PageProspects.parse((await f.appeler("prospects.lister", { query: { vue: "complete", companyId: SOC, qualifiesSeulement: "true" }, agent: false })).body);
     expect(q).toMatchObject({ total: 0, pages: 0, prospects: [] });
-    // Un prospect porté à 90 % (base légale + 2e source concordante) apparaît, l'autre non.
+    // Un prospect porté à 90 % ou plus (base légale + 2e source concordante + faits BCE récents) apparaît, l'autre non.
     const ligne = f.tp.prospects.find((p) => p.numeroBce === "0123.456.749")!;
     ligne.sources = [...ligne.sources, { type: "depot_signe", sourceId: "c2222222-2222-4222-8222-222222222222", service: "osm", outil: "osm_commerces", url: null, collecteLe: ligne.creeLe }];
+    avecFaitsRecents(ligne);
+    avecComptesBnb(ligne);
     f.tp.bases.set(ligne.id, [{
       cible: "entreprise", forme: "personne_morale", canal: "courriel", base: "personne_morale_adresse_impersonnelle", nature_adresse: "impersonnelle",
       preuve: { type: "source", reference: "BCE (démonstration)", date: ligne.creeLe }, information: { texteArt14: "Adresse trouvée à la BCE (démonstration).", moyenOpposition: "Lien de désinscription" },
       dncm_verifie_le: null, verifie_le: ligne.creeLe, verifie_par: "systeme",
     }]);
-    const apres = PageProspects.parse((await f.appeler("prospects.lister", { query: { companyId: SOC, qualifiesSeulement: "true" }, agent: false })).body);
+    const apres = PageProspects.parse((await f.appeler("prospects.lister", { query: { vue: "complete", companyId: SOC, qualifiesSeulement: "true" }, agent: false })).body);
     expect(apres.total).toBe(1);
-    expect(apres.prospects[0]).toMatchObject({ numeroBce: "0123.456.749", confiance: { valeur: 90, qualifie: true } });
-    const hors = PageProspects.parse((await f.appeler("prospects.lister", { query: { companyId: SOC, qualifiesSeulement: "true", page: "2" }, agent: false })).body);
+    // Tout vérifié sauf le bureau spécialisé (la fiche du courtier fictif ne dit pas quel bureau suit quel segment : non vérifié, jamais deviné), comptes BNB complets compris :
+    // (156 + 6 du contact publié) / (156 + 12 du lot 3) = 162 / 168 = 96,4 % arrondi à 96 (avant le lot 3 : 156 / 156 = 100 % ; avant le lot 2 : sans la taille, 126 / 136 = 93).
+    expect(apres.prospects[0]).toMatchObject({ numeroBce: "0123.456.749", confiance: { valeur: 96, qualifie: true } });
+    const hors = PageProspects.parse((await f.appeler("prospects.lister", { query: { vue: "complete", companyId: SOC, qualifiesSeulement: "true", page: "2" }, agent: false })).body);
     expect(hors).toMatchObject({ total: 1, page: 2, prospects: [] });
   });
 
@@ -874,6 +1018,8 @@ describe("confiance de qualification (courtier fictif)", () => {
     await f.deposer(depotBce());
     const ligne = f.tp.prospects.find((p) => p.numeroBce === "0123.456.749")!;
     ligne.sources = [...ligne.sources, { type: "depot_signe", sourceId: "c2222222-2222-4222-8222-222222222222", service: "osm", outil: "osm_commerces", url: null, collecteLe: ligne.creeLe }];
+    avecFaitsRecents(ligne);
+    avecComptesBnb(ligne);
     f.tp.bases.set(ligne.id, [{
       cible: "entreprise", forme: "personne_morale", canal: "courriel", base: "personne_morale_adresse_impersonnelle", nature_adresse: "impersonnelle",
       preuve: { type: "source", reference: "BCE (démonstration)", date: ligne.creeLe }, information: { texteArt14: "Adresse trouvée à la BCE (démonstration).", moyenOpposition: "Lien de désinscription" },
@@ -894,15 +1040,95 @@ describe("confiance de qualification (courtier fictif)", () => {
     const r = await f.appeler("prospects.criteres-manquants", { params: { prospectId: id }, query: { companyId: SOC } });
     expect(r.status).toBe(200);
     const m = CriteresManquants.parse(r.body);
-    expect(m).toMatchObject({ prospectId: id, qualifie: false, seuil: 90, confiance: 20 + 20 + 15, contraires: [] });
+    // (75 + 6 du contact publié) / 168 = 81 / 168 = 48,2 % : actif, segment, zone, RC pro obligatoire, offre RC pro, contact impersonnel (avant le lot 3 : 75 / 156 = 48 ; avant le lot 2 : 75 / 136 = 55).
+    expect(m).toMatchObject({ prospectId: id, qualifie: false, seuil: 90, confiance: 48, contraires: [] });
     const outils = Object.fromEntries(m.manquants.map((x) => [x.code, x.verifiePar.map((v) => v.outil)]));
-    expect(outils).toEqual({ taille_connue: ["bnb_comptes"], joignable_legalement: [], pas_deja_client: [], sources_concordantes: ["osm_commerces"] });
+    expect(outils).toEqual({
+      taille_connue: ["bnb_comptes"], joignable_legalement: [], pas_deja_client: [], sources_concordantes: ["osm_commerces"],
+      installation_recente: ["bce_entreprise"], evenement_recent: ["bce_changements"],
+      emploie_personnel: ["bnb_comptes"], flotte_probable: ["bce_entreprise", "bnb_comptes"], proprietaire_locaux: ["bnb_comptes"], sante_financiere: ["bnb_comptes"],
+      bureau_specialise_proche: [],
+    });
     // Autre entreprise : introuvable ; prospect inconnu : introuvable.
     const autre = await f.appeler("prospects.criteres-manquants", { params: { prospectId: id }, query: { companyId: SOC2 }, companyId: SOC2 });
     expect(autre.status).toBe(404);
     const inconnu = await f.appeler("prospects.criteres-manquants", { params: { prospectId: "dddddddd-dddd-4ddd-8ddd-dddddddddddd" }, query: { companyId: SOC } });
     expect(inconnu.status).toBe(404);
   });
+  it("réglages des leads et décision humaine : appliqués à la lecture (une seule lecture par parcours) ; agent refusé", async () => {
+    const m = stockMemoire();
+    const f = banc({ marque: ciblesToitures, stockLeads: m.stock });
+    await f.deposer(depotBce());
+    const id = f.tp.prospects.find((p) => p.numeroBce === "0123.456.749")!.id;
+    const corps = { companyId: SOC, statut: "verifie", justification: "Comptes vus au greffe" };
+    // Agent : 403, rien d'écrit.
+    expect((await f.appeler("prospects.critere.corriger", { params: { prospectId: id, code: "taille_connue" }, body: corps })).status).toBe(403);
+    expect(m.corrections()).toHaveLength(0);
+    // Humain : décision enregistrée, le critère passe à vérifié avec la source « humain ».
+    const ok = await f.appeler("prospects.critere.corriger", { params: { prospectId: id, code: "taille_connue" }, body: corps, agent: false });
+    expect(ok.status).toBe(200);
+    const mq = CriteresManquants.parse((await f.appeler("prospects.criteres-manquants", { params: { prospectId: id }, query: { companyId: SOC } })).body);
+    // (20 + 20 + 15 + 10 de la décision humaine sur la taille + 10 + 10 courtier) / 156 = 85 / 156 = 54,5 % arrondi à 54 (avant le lot 2 : 85 / 136 = 63).
+    expect(mq.confiance).toBe(54);
+    expect(mq.manquants.map((x) => x.code)).not.toContain("taille_connue");
+    const page = PageProspects.parse((await f.appeler("prospects.lister", { query: { vue: "complete", companyId: SOC }, agent: false })).body);
+    const taille = page.prospects.find((p) => p.id === id)!.confiance!.criteres.find((c) => c.code === "taille_connue")!;
+    expect(taille).toMatchObject({ statut: "verifie", source: "humain", sourceId: null });
+    expect(taille.detail).toMatch(/^Décision humaine de local-board le \d{2}\/\d{2}\/\d{4} : Comptes vus au greffe$/u);
+    // Seuil abaissé à 50 (minimum autorisé ; la confiance est à 54 %) par l'humain : le lead devient qualifié ; un parcours des qualifiés lit réglages et corrections UNE fois.
+    const criteres = (await f.appeler("reglages-leads.lire", { query: { companyId: SOC }, agent: false })).body.criteres.map((c: Ligne) => ({ code: c.code, actif: c.actif, poids: c.poids }));
+    expect((await f.appeler("reglages-leads.enregistrer", { body: { companyId: SOC, criteres, seuil: 50, personnalises: [] }, agent: false })).status).toBe(200);
+    const avant = { ...m.lectures };
+    const q = PageProspects.parse((await f.appeler("prospects.lister", { query: { vue: "complete", companyId: SOC, qualifiesSeulement: "true" }, agent: false })).body);
+    expect(q.prospects.map((p) => p.id)).toContain(id);
+    expect(q.prospects.every((p) => p.confiance!.seuil === 50)).toBe(true);
+    expect(m.lectures.corrections - avant.corrections).toBe(1);
+    expect(m.lectures.reglages - avant.reglages).toBe(1);
+    // Retrait : retour au calcul.
+    expect((await f.appeler("prospects.critere.retirer", { params: { prospectId: id, code: "taille_connue" }, query: { companyId: SOC }, agent: false })).status).toBe(200);
+    const apres = CriteresManquants.parse((await f.appeler("prospects.criteres-manquants", { params: { prospectId: id }, query: { companyId: SOC } })).body);
+    expect(apres.manquants.map((x) => x.code)).toContain("taille_connue");
+  });
+
+  it("l'agent évalue un critère personnalisé : la confiance change, la décision humaine prime, refus codé, sans source, désactivé, hors entreprise", async () => {
+    const m = stockMemoire();
+    const f = banc({ marque: ciblesToitures, stockLeads: m.stock });
+    await f.deposer(depotBce());
+    const id = f.tp.prospects.find((p) => p.numeroBce === "0123.456.749")!.id;
+    // L'agent appelant est l'agent Prospection de l'entreprise : seul lui peut évaluer (revue de sécurité).
+    (f.ctx as unknown as { agents: { get: unknown } }).agents.get = async (agentId: string, companyId: string) => ({ id: agentId, companyId, name: "Prospection", role: "researcher", status: "idle" });
+    const salon = { code: "rencontre_salon", libelle: "Rencontré au salon", poids: 25, description: "Carte de visite reçue" };
+    const reglage = async (personnalises: unknown[]) => {
+      const criteres = (await f.appeler("reglages-leads.lire", { query: { companyId: SOC }, agent: false })).body.criteres.map((c: Ligne) => ({ code: c.code, actif: c.actif, poids: c.poids }));
+      return f.appeler("reglages-leads.enregistrer", { body: { companyId: SOC, criteres, seuil: 90, personnalises }, agent: false });
+    };
+    expect((await reglage([salon])).status).toBe(200);
+    const evaluer = (corps: Ligne, o: { code?: string; companyId?: string; agent?: boolean } = {}) =>
+      f.appeler("prospects.critere.evaluer", { params: { prospectId: id, code: o.code ?? "rencontre_salon" }, body: { companyId: o.companyId ?? SOC, statut: "verifie", justification: "Exposant du salon 2026", sources: ["https://salon.example/dupont"], ...corps }, companyId: o.companyId, agent: o.agent });
+    const critere = async () => PageProspects.parse((await f.appeler("prospects.lister", { query: { vue: "complete", companyId: SOC }, agent: false })).body).prospects.find((p) => p.id === id)!.confiance!;
+    // Avant : non vérifié, l'agent le voit dans les critères manquants avec la description.
+    const avant = CriteresManquants.parse((await f.appeler("prospects.criteres-manquants", { params: { prospectId: id }, query: { companyId: SOC } })).body);
+    expect(avant.manquants.find((x) => x.code === "rencontre_salon")!.action).toContain("Carte de visite reçue");
+    const c0 = await critere();
+    // L'agent évalue : la confiance monte du poids du critère, source « agent ».
+    expect((await evaluer({})).status).toBe(200);
+    const c1 = await critere();
+    expect(c1.valeur).toBeGreaterThan(c0.valeur);
+    expect(c1.criteres.find((c) => c.code === "rencontre_salon")).toMatchObject({ statut: "verifie", source: "agent" });
+    // Décision humaine : prime sur l'agent.
+    await f.appeler("prospects.critere.corriger", { params: { prospectId: id, code: "rencontre_salon" }, body: { companyId: SOC, statut: "contraire", justification: "Jamais venu" }, agent: false });
+    expect((await critere()).criteres.find((c) => c.code === "rencontre_salon")).toMatchObject({ statut: "contraire", source: "humain" });
+    // Refus : critère codé, sans source, humain, hors entreprise.
+    expect((await evaluer({}, { code: "taille_connue" })).status).toBe(400);
+    expect((await evaluer({ sources: [] })).status).toBe(400);
+    expect((await evaluer({}, { agent: false })).status).toBe(403);
+    expect((await evaluer({ companyId: SOC2 })).status).toBe(404);
+    expect((await evaluer({}, { companyId: SOC2 })).status).toBe(404);
+    // Critère retiré des réglages : refusé.
+    expect((await reglage([])).status).toBe(200);
+    expect((await evaluer({})).status).toBe(400);
+  });
+
   it("un prospect à la corbeille n'est servi par aucune route de lecture (404 compte-rendu, critères manquants, question)", async () => {
     const f = banc({ marque: ciblesToitures, baseClients: 12 });
     (f.ctx as unknown as { agents: { list: unknown } }).agents.list = async () => [{ id: "44444444-4444-4444-8444-444444444444", companyId: SOC, name: "Coordinateur", role: "ceo", status: "idle" }];
@@ -925,10 +1151,11 @@ describe("confiance de qualification (courtier fictif)", () => {
     const r = await f.appeler("prospects.compte-rendu", { params: { prospectId: id }, query: { companyId: SOC } });
     expect(r.status).toBe(200);
     const cr = CompteRenduProspect.parse(r.body);
-    expect(cr).toMatchObject({ prospectId: id, nom: "Autre nom", confiance: { valeur: 20 + 20 + 15 + 10, qualifie: false } });
-    expect(cr.pourquoi.verifies.map((v) => v.code)).toEqual(["entreprise_active", "segment_cible", "zone_cible", "pas_deja_client"]);
+    // (85 + 6 du contact publié) / 168 = 91 / 168 = 54,2 % arrondi à 54 (avant le lot 3 : 85 / 156 = 54 ; avant le lot 2 : 85 / 136 = 63).
+    expect(cr).toMatchObject({ prospectId: id, nom: "Autre nom", confiance: { valeur: 54, qualifie: false } });
+    expect(cr.pourquoi.verifies.map((v) => v.code)).toEqual(["entreprise_active", "segment_cible", "zone_cible", "pas_deja_client", "assurance_obligatoire_metier", "besoin_offre_active", "pas_concurrent", "contact_public_permis"]);
     expect(cr.pourquoi.verifies[0]).toMatchObject({ service: "bce" });
-    expect(cr.pourquoi.nonVerifies.map((v) => v.code)).toEqual(["joignable_legalement", "taille_connue", "sources_concordantes"]);
+    expect(cr.pourquoi.nonVerifies.map((v) => v.code)).toEqual(["joignable_legalement", "taille_connue", "sources_concordantes", "installation_recente", "evenement_recent", "emploie_personnel", "flotte_probable", "proprietaire_locaux", "sante_financiere", "bureau_specialise_proche"]);
     expect(cr.prochaineAction.libelle).toContain("Enrichir : bnb_comptes");
     expect(cr.etablissementProche).toMatchObject({ code: "bureau-liege", raison: "meme_code_postal" });
     expect(cr.markdown).toContain("## Compte rendu du lead : Autre nom");
@@ -981,5 +1208,67 @@ describe("confiance de qualification (courtier fictif)", () => {
       expect(sans.status).toBe(404);
       expect(f.t.journal.filter((e) => e.type === "prospect.question")).toHaveLength(0);
     });
+  });
+});
+
+/* ------------------------------------------------------------------ */
+/* Résumé de la liste (agents) : < 40 000 caractères, détail, vue complète */
+/* ------------------------------------------------------------------ */
+
+describe("prospects.lister : résumé par défaut", () => {
+  /** Dépôt réel puis 100 prospects au total (les lignes déposées sont clonées avec un identifiant et un numéro propres). */
+  async function peupler() {
+    const f = banc();
+    await f.deposer(depotBce());
+    const modele = f.tp.prospects[0]!;
+    for (let i = 0; i < 98; i++) {
+      f.tp.prospects.push({ ...structuredClone(modele), id: crypto.randomUUID(), identifiant: { type: "empreinte", valeur: `empreinte-test-${i}` }, numeroBce: null });
+    }
+    return f;
+  }
+  const q = (extra: Record<string, string> = {}) => ({ companyId: SOC, ...extra });
+
+  it("100 prospects par page : résumé de moins de 40 000 caractères, sans coordonnées ni détail de score ; la vue complète dépasse largement", async () => {
+    const f = await peupler();
+    const complet = await f.appeler("prospects.lister", { query: q({ parPage: "100", vue: "complete" }) });
+    const resume = await f.appeler("prospects.lister", { query: q({ parPage: "100" }) });
+    const tComplet = JSON.stringify(complet.body).length;
+    const tResume = JSON.stringify(resume.body).length;
+    process.stderr.write(`prospects : page complète = ${tComplet} ; résumé = ${tResume}\n`);
+    expect(complet.body.prospects).toHaveLength(100);
+    expect(tComplet).toBeGreaterThan(40_000);
+    expect(tResume).toBeLessThan(40_000);
+    expect(resume.body).toMatchObject({ vue: "resume", total: 100, page: 1, pages: 1 });
+    expect(resume.body.prospects).toHaveLength(100);
+    expect(Object.keys(resume.body.prospects[0]).sort()).toEqual(["cible", "confiance", "denomination", "id", "identifiant", "lieu", "mode", "nace", "score", "statut"].sort());
+    expect(JSON.stringify(resume.body)).not.toContain("coordonnees");
+  });
+
+  it("pages recollées : mêmes prospects, dans le même ordre, que la vue complète ; le détail d'un prospect est identique", async () => {
+    const f = await peupler();
+    const ids = async (extra: Record<string, string>, page: number) => (await f.appeler("prospects.lister", { query: q({ parPage: "30", page: String(page), ...extra }) })).body.prospects.map((p: { id: string }) => p.id);
+    for (const page of [1, 2, 3, 4]) expect(await ids({}, page)).toEqual(await ids({ vue: "complete" }, page));
+    const complet = (await f.appeler("prospects.lister", { query: q({ parPage: "5", vue: "complete" }) })).body.prospects[2];
+    const detail = await f.appeler("prospects.lister", { query: q({ partie: "detail", prospectId: complet.id }) });
+    expect(detail.status).toBe(200);
+    // La confiance se recalcule à chaque lecture : seul son horodatage peut différer entre les deux appels.
+    const sansHorloge = (p: Ligne) => ({ ...p, confiance: p.confiance ? { ...p.confiance, calculeLe: undefined } : p.confiance });
+    expect(sansHorloge(detail.body)).toEqual(sansHorloge(complet));
+  });
+
+  it("filtres conservés avec le résumé ; paramètres de vue invalides refusés ; détail inconnu ou d'une autre entreprise introuvable", async () => {
+    const f = await peupler();
+    const exclus = await f.appeler("prospects.lister", { query: q({ statuts: "exclu" }) });
+    expect(exclus.body).toMatchObject({ vue: "resume", total: 0, prospects: [] });
+    expect((await f.appeler("prospects.lister", { query: q({ vue: "autre" }) })).status).toBe(400);
+    expect((await f.appeler("prospects.lister", { query: q({ partie: "secrets" }) })).status).toBe(400);
+    expect((await f.appeler("prospects.lister", { query: q({ partie: "detail" }) })).status).toBe(400);
+    const id = f.tp.prospects[0]!.id as string;
+    expect((await f.appeler("prospects.lister", { query: q({ partie: "detail", prospectId: "99999999-9999-4999-8999-999999999999" }) })).status).toBe(404);
+    // Isolement : une autre entreprise ne voit ni le résumé, ni le détail, ni la vue complète.
+    const autre = await f.appeler("prospects.lister", { query: { companyId: SOC2 }, companyId: SOC2 });
+    expect(autre.body).toMatchObject({ total: 0, prospects: [] });
+    expect((await f.appeler("prospects.lister", { query: { companyId: SOC2, partie: "detail", prospectId: id }, companyId: SOC2 })).status).toBe(404);
+    expect((await f.appeler("prospects.lister", { query: { companyId: SOC2, vue: "complete" }, companyId: SOC2 })).body).toMatchObject({ total: 0, prospects: [] });
   });
 });

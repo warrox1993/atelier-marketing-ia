@@ -1,0 +1,1026 @@
+From ffe3a613a47386730890ebce2ceec21e0f6e598a Mon Sep 17 00:00:00 2001
+From: Jean-Baptiste Dhondt <114347858+warrox1993@users.noreply.github.com>
+Date: Fri, 16 Oct 2026 13:12:20 +0200
+Subject: [PATCH] =?UTF-8?q?feat(ui):=20fil=20d'activit=C3=A9=20traduit=20e?=
+ =?UTF-8?q?n=20fran=C3=A7ais=20(libell=C3=A9s,=20plugins,=20comp=C3=A9tenc?=
+ =?UTF-8?q?es,=20=C2=AB=20Humain=20=C2=BB)?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01DP85vPq2MHkZg8VNtRvCzB
+---
+ ui/src/components/ActivityRow.tsx  |   2 +-
+ ui/src/lib/activity-format.test.ts | 145 +++++---
+ ui/src/lib/activity-format.ts      | 534 ++++++++++++++++++-----------
+ ui/src/lib/assignees.test.ts       |   4 +-
+ ui/src/lib/assignees.ts            |   2 +-
+ ui/src/lib/company-members.test.ts |   4 +-
+ ui/src/lib/company-members.ts      |   2 +-
+ 7 files changed, 424 insertions(+), 269 deletions(-)
+
+diff --git a/ui/src/components/ActivityRow.tsx b/ui/src/components/ActivityRow.tsx
+index 4cc0526c9..8a85dc444 100644
+--- a/ui/src/components/ActivityRow.tsx
++++ b/ui/src/components/ActivityRow.tsx
+@@ -50,7 +50,7 @@ export function ActivityRow({ event, agentMap, userProfileMap, entityNameMap, en
+ 
+   const actor = event.actorType === "agent" ? agentMap.get(event.actorId) : null;
+   const userProfile = event.actorType === "user" ? userProfileMap?.get(event.actorId) : null;
+-  const actorName = actor?.name ?? (event.actorType === "system" ? "System" : userProfile?.label ?? (event.actorType === "user" ? "Board" : event.actorId || "Unknown"));
++  const actorName = actor?.name ?? (event.actorType === "system" ? "Système" : userProfile?.label ?? (event.actorType === "user" ? "Humain" : event.actorId || "Inconnu"));
+   const actorAvatarUrl = userProfile?.image ?? null;
+ 
+   const inner = (
+diff --git a/ui/src/lib/activity-format.test.ts b/ui/src/lib/activity-format.test.ts
+index a4af09774..deb3965ed 100644
+--- a/ui/src/lib/activity-format.test.ts
++++ b/ui/src/lib/activity-format.test.ts
+@@ -10,14 +10,14 @@ describe("activity formatting", () => {
+ 
+   it("labels a Slack settlement as idle while retaining actual review wording", () => {
+     const details = { status: "in_review", externalConversationState: "waiting" };
+-    expect(formatActivityVerb("issue.updated", details)).toBe("changed status to idle on");
+-    expect(formatIssueActivityAction("issue.updated", details)).toBe("changed the status to idle");
+-    expect(formatActivityVerb("issue.updated", { status: "in_review" })).toBe("changed status to in review on");
++    expect(formatActivityVerb("issue.updated", details)).toBe("a changé le statut en idle sur");
++    expect(formatIssueActivityAction("issue.updated", details)).toBe("a changé le statut en idle");
++    expect(formatActivityVerb("issue.updated", { status: "in_review" })).toBe("a changé le statut en in review sur");
+   });
+ 
+   it("uses readable verbs for task read-state changes", () => {
+-    expect(formatActivityVerb("issue.read_marked")).toBe("read");
+-    expect(formatActivityVerb("issue.read_unmarked")).toBe("marked unread");
++    expect(formatActivityVerb("issue.read_marked")).toBe("a marqué comme lu");
++    expect(formatActivityVerb("issue.read_unmarked")).toBe("a marqué comme non lu");
+   });
+ 
+   it("formats blocker activity using linked issue identifiers", () => {
+@@ -28,8 +28,8 @@ describe("activity formatting", () => {
+       removedBlockedByIssues: [],
+     };
+ 
+-    expect(formatActivityVerb("issue.blockers_updated", details)).toBe("added blocker PAP-22 to");
+-    expect(formatIssueActivityAction("issue.blockers_updated", details)).toBe("added blocker PAP-22");
++    expect(formatActivityVerb("issue.blockers_updated", details)).toBe("a ajouté bloqueur PAP-22 à");
++    expect(formatIssueActivityAction("issue.blockers_updated", details)).toBe("a ajouté bloqueur PAP-22");
+   });
+ 
+   it("formats reviewer activity using agent names", () => {
+@@ -40,8 +40,8 @@ describe("activity formatting", () => {
+       removedParticipants: [],
+     };
+ 
+-    expect(formatActivityVerb("issue.reviewers_updated", details, { agentMap })).toBe("added reviewer Reviewer Bot to");
+-    expect(formatIssueActivityAction("issue.reviewers_updated", details, { agentMap })).toBe("added reviewer Reviewer Bot");
++    expect(formatActivityVerb("issue.reviewers_updated", details, { agentMap })).toBe("a ajouté relecteur Reviewer Bot à");
++    expect(formatIssueActivityAction("issue.reviewers_updated", details, { agentMap })).toBe("a ajouté relecteur Reviewer Bot");
+   });
+ 
+   it("formats approver removals using user-aware labels", () => {
+@@ -52,8 +52,8 @@ describe("activity formatting", () => {
+       ],
+     };
+ 
+-    expect(formatActivityVerb("issue.approvers_updated", details)).toBe("removed approver Board from");
+-    expect(formatIssueActivityAction("issue.approvers_updated", details)).toBe("removed approver Board");
++    expect(formatActivityVerb("issue.approvers_updated", details)).toBe("a retiré approbateur Humain de");
++    expect(formatIssueActivityAction("issue.approvers_updated", details)).toBe("a retiré approbateur Humain");
+   });
+ 
+   it("falls back to updated wording when reviewers are both added and removed", () => {
+@@ -66,99 +66,138 @@ describe("activity formatting", () => {
+       ],
+     };
+ 
+-    expect(formatActivityVerb("issue.reviewers_updated", details, { agentMap })).toBe("updated reviewers on");
+-    expect(formatIssueActivityAction("issue.reviewers_updated", details, { agentMap })).toBe("updated reviewers");
++    expect(formatActivityVerb("issue.reviewers_updated", details, { agentMap })).toBe("a mis à jour les relecteurs sur");
++    expect(formatIssueActivityAction("issue.reviewers_updated", details, { agentMap })).toBe("a mis à jour les relecteurs");
+   });
+ 
+   it("formats monitor activity with direct verbs", () => {
+-    expect(formatActivityVerb("issue.monitor_scheduled")).toBe("scheduled monitor on");
+-    expect(formatActivityVerb("issue.monitor_exhausted")).toBe("exhausted monitor on");
+-    expect(formatIssueActivityAction("issue.monitor_triggered")).toBe("triggered a monitor");
+-    expect(formatIssueActivityAction("issue.monitor_cleared")).toBe("cleared a monitor");
+-    expect(formatIssueActivityAction("issue.monitor_recovery_issue_created")).toBe("created a monitor recovery issue");
++    expect(formatActivityVerb("issue.monitor_scheduled")).toBe("a planifié une surveillance sur");
++    expect(formatActivityVerb("issue.monitor_exhausted")).toBe("a épuisé la surveillance sur");
++    expect(formatIssueActivityAction("issue.monitor_triggered")).toBe("a déclenché une surveillance");
++    expect(formatIssueActivityAction("issue.monitor_cleared")).toBe("a levé une surveillance");
++    expect(formatIssueActivityAction("issue.monitor_recovery_issue_created")).toBe("a créé une tâche de reprise de surveillance");
+   });
+ 
+   it("labels each queued-comment queue mutation", () => {
+-    expect(formatActivityVerb("issue.queued_comment_edited")).toBe("edited a queued comment on");
+-    expect(formatActivityVerb("issue.queued_comments_reordered")).toBe("reordered queued comments on");
+-    expect(formatActivityVerb("issue.queued_comment_discarded")).toBe("discarded a queued comment on");
+-    expect(formatIssueActivityAction("issue.queued_comment_edited")).toBe("edited a queued comment");
+-    expect(formatIssueActivityAction("issue.queued_comments_reordered")).toBe("reordered queued comments");
+-    expect(formatIssueActivityAction("issue.queued_comment_discarded")).toBe("discarded a queued comment");
++    expect(formatActivityVerb("issue.queued_comment_edited")).toBe("a modifié un commentaire en attente sur");
++    expect(formatActivityVerb("issue.queued_comments_reordered")).toBe("a réordonné les commentaires en attente sur");
++    expect(formatActivityVerb("issue.queued_comment_discarded")).toBe("a écarté un commentaire en attente sur");
++    expect(formatIssueActivityAction("issue.queued_comment_edited")).toBe("a modifié un commentaire en attente");
++    expect(formatIssueActivityAction("issue.queued_comments_reordered")).toBe("a réordonné les commentaires en attente");
++    expect(formatIssueActivityAction("issue.queued_comment_discarded")).toBe("a écarté un commentaire en attente");
+   });
+ 
+   // PAP-16506 P4: agents can now resolve an interaction, including a review of
+   // their own work, so an outcome has to read as an outcome in the timeline
+   // instead of leaking the raw action id.
+   it("reads an interaction outcome as an outcome, whoever gave it", () => {
+-    expect(formatIssueActivityAction("issue.thread_interaction_accepted")).toBe("accepted the request");
+-    expect(formatIssueActivityAction("issue.thread_interaction_rejected")).toBe("rejected the request");
+-    expect(formatIssueActivityAction("issue.thread_interaction_withdrawn")).toBe("withdrew the request");
+-    expect(formatIssueActivityAction("issue.thread_interaction_expired")).toBe("expired the request");
+-    expect(formatActivityVerb("issue.thread_interaction_accepted")).toBe("accepted the request on");
+-    expect(formatActivityVerb("issue.thread_interaction_rejected")).toBe("rejected the request on");
++    expect(formatIssueActivityAction("issue.thread_interaction_accepted")).toBe("a accepté la demande");
++    expect(formatIssueActivityAction("issue.thread_interaction_rejected")).toBe("a rejeté la demande");
++    expect(formatIssueActivityAction("issue.thread_interaction_withdrawn")).toBe("a retiré la demande");
++    expect(formatIssueActivityAction("issue.thread_interaction_expired")).toBe("a laissé expirer la demande");
++    expect(formatActivityVerb("issue.thread_interaction_accepted")).toBe("a accepté la demande sur");
++    expect(formatActivityVerb("issue.thread_interaction_rejected")).toBe("a rejeté la demande sur");
+   });
+ 
+   // The accepted/rejected actions fire for every interaction kind, so only a
+   // confirmation may read as an approval.
+   it("says 'approved' only for a confirmation, never for a suggestion or a question", () => {
+     expect(formatIssueActivityAction("issue.thread_interaction_accepted", { interactionKind: "request_confirmation" }))
+-      .toBe("approved the request");
++      .toBe("a approuvé la demande");
+     expect(formatIssueActivityAction("issue.thread_interaction_accepted", { interactionKind: "request_checkbox_confirmation" }))
+-      .toBe("approved the request");
++      .toBe("a approuvé la demande");
+     expect(formatIssueActivityAction("issue.thread_interaction_accepted", { interactionKind: "suggest_tasks" }))
+-      .toBe("accepted the task suggestions");
++      .toBe("a accepté les tâches suggérées");
+     expect(formatIssueActivityAction("issue.thread_interaction_accepted", { interactionKind: "ask_user_questions" }))
+-      .toBe("accepted the answers");
++      .toBe("a accepté les réponses");
+     expect(formatIssueActivityAction("issue.thread_interaction_rejected", { interactionKind: "request_confirmation" }))
+-      .toBe("rejected the request");
++      .toBe("a rejeté la demande");
+     expect(formatIssueActivityAction("issue.thread_interaction_rejected", { interactionKind: "suggest_tasks" }))
+-      .toBe("declined the task suggestions");
++      .toBe("a refusé les tâches suggérées");
+     expect(formatActivityVerb("issue.thread_interaction_accepted", { interactionKind: "suggest_tasks" }))
+-      .toBe("accepted the task suggestions on");
++      .toBe("a accepté les tâches suggérées sur");
+   });
+ 
+   it("keeps the neutral wording for a kind it does not know", () => {
+     expect(formatIssueActivityAction("issue.thread_interaction_accepted", { interactionKind: "request_item_verdicts" }))
+-      .toBe("accepted the request");
++      .toBe("a accepté la demande");
+     expect(formatIssueActivityAction("issue.thread_interaction_accepted", { interactionKind: "future_kind" }))
+-      .toBe("accepted the request");
++      .toBe("a accepté la demande");
+     expect(formatIssueActivityAction("issue.thread_interaction_accepted", { interactionKind: 7 }))
+-      .toBe("accepted the request");
++      .toBe("a accepté la demande");
+   });
+ 
+   it("names the verb an actor chose on a stalled review", () => {
+     expect(formatIssueActivityAction("issue.stalled_review_decided", { action: "approve" }))
+-      .toBe("approved the review");
++      .toBe("a approuvé la revue");
+     expect(formatIssueActivityAction("issue.stalled_review_decided", { action: "request_changes" }))
+-      .toBe("requested changes on the review");
++      .toBe("a demandé des modifications sur la revue");
+     expect(formatIssueActivityAction("issue.stalled_review_decided", { action: "send_back" }))
+-      .toBe("sent the review back to work");
++      .toBe("a renvoyé la revue au travail");
+     expect(formatActivityVerb("issue.stalled_review_decided", { action: "approve" }))
+-      .toBe("approved the review on");
++      .toBe("a approuvé la revue sur");
+   });
+ 
+   it("falls back to a generic verdict line when the decision verb is missing", () => {
+-    expect(formatIssueActivityAction("issue.stalled_review_decided")).toBe("recorded a review verdict");
++    expect(formatIssueActivityAction("issue.stalled_review_decided")).toBe("a enregistré un verdict de revue");
+     expect(formatIssueActivityAction("issue.stalled_review_decided", { action: "shrug" }))
+-      .toBe("recorded a review verdict");
++      .toBe("a enregistré un verdict de revue");
+   });
+ 
+   it("describes a review-policy change without calling the default 'none'", () => {
+     expect(formatIssueActivityAction("issue.updated", { reviewPolicy: null }))
+-      .toBe("changed who can approve to anyone");
++      .toBe("a changé qui peut approuver en anyone");
+     expect(formatIssueActivityAction("issue.updated", { reviewPolicy: "human_only" }))
+-      .toBe("changed who can approve to human only");
++      .toBe("a changé qui peut approuver en human only");
+     expect(formatIssueActivityAction("issue.updated", { reviewPolicy: "not_creator" }))
+-      .toBe("changed who can approve to anyone else");
++      .toBe("a changé qui peut approuver en anyone else");
+   });
+ 
+   it("uses plain next-step copy for successful-run handoff activity", () => {
+-    expect(formatActivityVerb("issue.successful_run_handoff_required")).toBe("flagged missing next step on");
+-    expect(formatIssueActivityAction("issue.successful_run_handoff_required")).toBe("Run finished without a clear next step");
+-    expect(formatIssueActivityAction("issue.successful_run_handoff_resolved")).toBe("Next step chosen");
++    expect(formatActivityVerb("issue.successful_run_handoff_required")).toBe("a signalé l'absence de prochaine étape sur");
++    expect(formatIssueActivityAction("issue.successful_run_handoff_required")).toBe("Exécution terminée sans prochaine étape claire");
++    expect(formatIssueActivityAction("issue.successful_run_handoff_resolved")).toBe("Prochaine étape choisie");
+     expect(formatIssueActivityAction("issue.successful_run_handoff_escalated")).toBe(
+-      "Run finished without a next step - recovery escalated",
++      "Exécution terminée sans prochaine étape - reprise escaladée",
+     );
+   });
++
++  it("traduit les actions de plugin vues sur le tableau de bord", () => {
++    expect(formatActivityVerb("plugin.enabled")).toBe("a activé le plugin");
++    expect(formatActivityVerb("plugin.disabled")).toBe("a désactivé le plugin");
++    expect(formatActivityVerb("plugin.installed")).toBe("a installé le plugin");
++    expect(formatActivityVerb("plugin.uninstalled")).toBe("a désinstallé le plugin");
++    expect(formatActivityVerb("plugin.upgraded")).toBe("a mis à niveau le plugin");
++    expect(formatActivityVerb("plugin.config.updated")).toBe("a mis à jour la configuration du plugin");
++    expect(formatActivityVerb("plugin.managed_routine.run_triggered")).toBe("a déclenché la routine gérée du plugin");
++    expect(formatIssueActivityAction("plugin.enabled")).toBe("a activé le plugin");
++  });
++
++  it("traduit les actions de compétence d'organisation", () => {
++    expect(formatActivityVerb("company.skill_version_created")).toBe("a créé une version de la compétence");
++    expect(formatActivityVerb("company.skill_created")).toBe("a créé la compétence");
++    expect(formatActivityVerb("company.skill_updated")).toBe("a mis à jour la compétence");
++    expect(formatActivityVerb("company.skills_imported")).toBe("a importé des compétences");
++    expect(formatActivityVerb("skills.install")).toBe("a installé une compétence");
++    expect(formatActivityVerb("agent.skills_synced")).toBe("a synchronisé les compétences de");
++  });
++
++  it("nomme l'utilisateur local « Humain » et l'utilisateur courant « Vous »", () => {
++    const details = {
++      addedParticipants: [{ type: "user", agentId: null, userId: "u-courant" }],
++      removedParticipants: [],
++    };
++    expect(formatActivityVerb("issue.approvers_updated", details, { currentUserId: "u-courant" }))
++      .toBe("a ajouté approbateur Vous à");
++    expect(formatIssueActivityAction("issue.updated", { assigneeUserId: "local-board" }))
++      .toBe("a désigné Humain responsable de la tâche");
++  });
++
++  it("n'affiche plus d'anglais pour les actions du plan accepté", () => {
++    expect(formatIssueActivityAction("issue.accepted_plan_decomposition_updated", {
++      status: "completed",
++      childIssueIds: ["a", "b", "c"],
++      newlyCreatedChildIssueIds: ["a", "b"],
++    })).toBe("décomposition terminée (2 créées, 1 réutilisée)");
++  });
+ });
+diff --git a/ui/src/lib/activity-format.ts b/ui/src/lib/activity-format.ts
+index a898b1dc3..765ed8af6 100644
+--- a/ui/src/lib/activity-format.ts
++++ b/ui/src/lib/activity-format.ts
+@@ -23,166 +23,282 @@ interface ActivityFormatOptions {
+ }
+ 
+ const ACTIVITY_ROW_VERBS: Record<string, string> = {
+-  "issue.created": "created",
+-  "issue.updated": "updated",
+-  "issue.read_marked": "read",
+-  "issue.read_unmarked": "marked unread",
+-  "issue.checked_out": "checked out",
+-  "issue.released": "released",
+-  "issue.comment_added": "commented on",
+-  "issue.comment_cancelled": "cancelled a queued comment on",
+-  "issue.queued_comment_edited": "edited a queued comment on",
+-  "issue.queued_comments_reordered": "reordered queued comments on",
+-  "issue.queued_comment_discarded": "discarded a queued comment on",
+-  "issue.comment_deleted": "deleted a comment on",
+-  "issue.attachment_added": "attached file to",
+-  "issue.attachment_removed": "removed attachment from",
+-  "issue.document_created": "created document for",
+-  "issue.document_updated": "updated document on",
+-  "issue.document_locked": "locked document on",
+-  "issue.document_unlocked": "unlocked document on",
+-  "issue.document_deleted": "deleted document from",
+-  "issue.monitor_scheduled": "scheduled monitor on",
+-  "issue.monitor_triggered": "triggered monitor for",
+-  "issue.monitor_cleared": "cleared monitor on",
+-  "issue.monitor_skipped": "skipped monitor for",
+-  "issue.monitor_exhausted": "exhausted monitor on",
+-  "issue.monitor_recovery_wake_queued": "queued monitor recovery for",
+-  "issue.monitor_recovery_issue_created": "created monitor recovery for",
+-  "issue.monitor_escalated_to_board": "escalated monitor for",
+-  "issue.commented": "commented on",
+-  "issue.deleted": "deleted",
+-  "issue.successful_run_handoff_required": "flagged missing next step on",
+-  "issue.successful_run_handoff_resolved": "recorded next step chosen on",
+-  "issue.successful_run_handoff_escalated": "escalated missing next step on",
+-  "issue.accepted_plan_decomposition_updated": "updated accepted-plan decomposition on",
+-  "issue.recovery_action_opened": "opened a recovery action on",
+-  "issue.recovery_action_resolved": "resolved the recovery action on",
+-  "issue.recovery_action_escalated": "escalated the recovery action on",
+-  "agent.created": "created",
+-  "agent.updated": "updated",
+-  "agent.paused": "paused",
+-  "agent.resumed": "resumed",
+-  "agent.error_cleared": "cleared error on",
+-  "agent.terminated": "terminated",
+-  "agent.key_created": "created API key for",
+-  "agent.budget_updated": "updated budget for",
+-  "agent.runtime_session_reset": "reset session for",
+-  "heartbeat.invoked": "invoked heartbeat for",
+-  "heartbeat.cancelled": "cancelled heartbeat for",
+-  "heartbeat.output_stale_source_resolved": "system-folded stale run on",
+-  "heartbeat.output_stale_recovery_recursion_refused": "refused recovery-on-recovery for",
+-  "approval.created": "requested approval",
+-  "approval.approved": "approved",
+-  "approval.rejected": "rejected",
++  "issue.created": "a créé",
++  "issue.updated": "a mis à jour",
++  "issue.read_marked": "a marqué comme lu",
++  "issue.read_unmarked": "a marqué comme non lu",
++  "issue.checked_out": "a pris en charge",
++  "issue.released": "a libéré",
++  "issue.comment_added": "a commenté",
++  "issue.comment_cancelled": "a annulé un commentaire en attente sur",
++  "issue.queued_comment_edited": "a modifié un commentaire en attente sur",
++  "issue.queued_comments_reordered": "a réordonné les commentaires en attente sur",
++  "issue.queued_comment_discarded": "a écarté un commentaire en attente sur",
++  "issue.comment_deleted": "a supprimé un commentaire sur",
++  "issue.attachment_added": "a joint un fichier à",
++  "issue.attachment_removed": "a retiré une pièce jointe de",
++  "issue.document_created": "a créé un document pour",
++  "issue.document_updated": "a mis à jour un document sur",
++  "issue.document_locked": "a verrouillé un document sur",
++  "issue.document_unlocked": "a déverrouillé un document sur",
++  "issue.document_deleted": "a supprimé un document de",
++  "issue.monitor_scheduled": "a planifié une surveillance sur",
++  "issue.monitor_triggered": "a déclenché une surveillance pour",
++  "issue.monitor_cleared": "a levé une surveillance sur",
++  "issue.monitor_skipped": "a ignoré une surveillance pour",
++  "issue.monitor_exhausted": "a épuisé la surveillance sur",
++  "issue.monitor_recovery_wake_queued": "a mis en file une reprise de surveillance pour",
++  "issue.monitor_recovery_issue_created": "a créé une tâche de reprise de surveillance pour",
++  "issue.monitor_escalated_to_board": "a signalé à l'humain une surveillance pour",
++  "issue.commented": "a commenté",
++  "issue.deleted": "a supprimé",
++  "issue.successful_run_handoff_required": "a signalé l'absence de prochaine étape sur",
++  "issue.successful_run_handoff_resolved": "a enregistré la prochaine étape choisie sur",
++  "issue.successful_run_handoff_escalated": "a escaladé l'absence de prochaine étape sur",
++  "issue.accepted_plan_decomposition_updated": "a mis à jour la décomposition du plan accepté sur",
++  "issue.recovery_action_opened": "a ouvert une action de reprise sur",
++  "issue.recovery_action_resolved": "a résolu l'action de reprise sur",
++  "issue.recovery_action_escalated": "a escaladé l'action de reprise sur",
++  "agent.created": "a créé",
++  "agent.updated": "a mis à jour",
++  "agent.paused": "a mis en pause",
++  "agent.resumed": "a relancé",
++  "agent.error_cleared": "a effacé l'erreur de",
++  "agent.terminated": "a arrêté définitivement",
++  "agent.key_created": "a créé une clé d'API pour",
++  "agent.budget_updated": "a mis à jour le budget de",
++  "agent.runtime_session_reset": "a réinitialisé la session de",
++  "heartbeat.invoked": "a lancé un battement pour",
++  "heartbeat.cancelled": "a annulé un battement pour",
++  "heartbeat.output_stale_source_resolved": "a replié automatiquement une exécution périmée sur",
++  "heartbeat.output_stale_recovery_recursion_refused": "a refusé une reprise de reprise pour",
++  "approval.created": "a demandé une approbation",
++  "approval.approved": "a approuvé",
++  "approval.rejected": "a rejeté",
+   // Interaction outcomes (PAP-16506). An agent may now resolve one — including a
+   // review of its own work — so these must read as outcomes in the feed instead
+   // of falling through to the raw "issue thread interaction accepted" action id.
+   // `details.interactionKind` sharpens the wording; see INTERACTION_OUTCOME_LABELS.
+-  "issue.thread_interaction_created": "asked for a decision on",
+-  "issue.thread_interaction_accepted": "accepted the request on",
+-  "issue.thread_interaction_rejected": "rejected the request on",
+-  "issue.thread_interaction_answered": "answered the request on",
+-  "issue.thread_interaction_withdrawn": "withdrew the request on",
+-  "issue.thread_interaction_cancelled": "cancelled the request on",
+-  "issue.thread_interaction_skipped": "skipped the request on",
+-  "issue.thread_interaction_expired": "expired the request on",
+-  "issue.thread_interaction_item_verdicts_submitted": "submitted verdicts on",
+-  "issue.stalled_review_decided": "recorded a review verdict on",
+-  "project.created": "created",
+-  "project.updated": "updated",
+-  "project.deleted": "deleted",
+-  "goal.created": "created",
+-  "goal.updated": "updated",
+-  "goal.deleted": "deleted",
+-  "cost.reported": "reported cost for",
+-  "cost.recorded": "recorded cost for",
+-  "company.created": "created organization",
+-  "company.updated": "updated organization",
+-  "company.archived": "archived",
+-  "company.reactivated": "reactivated",
+-  "company.budget_updated": "updated budget for",
+-  "audit.exported": "exported the agent audit log for",
+-  "tool_app.connected": "connected",
+-  "tool_app.oauth_connected": "connected credentials for",
+-  "tool_app.oauth_failed": "failed to connect credentials for",
+-  "tool_app.oauth_access_finalized": "finished credential access for",
+-  "tool_app.finished": "finished setup for",
+-  "tool_app.reconnected": "reconnected",
+-  "tool_connection.created": "created",
+-  "tool_connection.updated": "updated",
+-  "tool_connection.archived": "removed",
+-  "tool_connection.catalog_refresh": "refreshed actions for",
+-  "tool_connection.installs_synced": "changed agent installs for",
+-  "tool_connection.install_access_extended": "extended agent access for",
+-  "tool_connection.grant_audience_replaced": "changed human access for",
+-  "tool_connection.grant_added": "added credentials to",
+-  "tool_connection.grant_revoked": "revoked credentials from",
+-  "tool_connection.grant_delegated": "delegated credentials for",
+-  "tool_connection.grant_delegation_revoked": "revoked credential delegation for",
++  "issue.thread_interaction_created": "a demandé une décision sur",
++  "issue.thread_interaction_accepted": "a accepté la demande sur",
++  "issue.thread_interaction_rejected": "a rejeté la demande sur",
++  "issue.thread_interaction_answered": "a répondu à la demande sur",
++  "issue.thread_interaction_withdrawn": "a retiré la demande sur",
++  "issue.thread_interaction_cancelled": "a annulé la demande sur",
++  "issue.thread_interaction_skipped": "a ignoré la demande sur",
++  "issue.thread_interaction_expired": "a laissé expirer la demande sur",
++  "issue.thread_interaction_item_verdicts_submitted": "a soumis des avis sur",
++  "issue.stalled_review_decided": "a enregistré un verdict de revue sur",
++  "project.created": "a créé",
++  "project.updated": "a mis à jour",
++  "project.deleted": "a supprimé",
++  "goal.created": "a créé",
++  "goal.updated": "a mis à jour",
++  "goal.deleted": "a supprimé",
++  "cost.reported": "a déclaré un coût pour",
++  "cost.recorded": "a enregistré un coût pour",
++  "company.created": "a créé l'organisation",
++  "company.updated": "a mis à jour l'organisation",
++  "company.archived": "a archivé",
++  "company.reactivated": "a réactivé",
++  "company.budget_updated": "a mis à jour le budget de",
++  "audit.exported": "a exporté le journal d'audit des agents de",
++  "tool_app.connected": "a connecté",
++  "tool_app.oauth_connected": "a connecté les identifiants de",
++  "tool_app.oauth_failed": "n'a pas pu connecter les identifiants de",
++  "tool_app.oauth_access_finalized": "a terminé l'accès aux identifiants de",
++  "tool_app.finished": "a terminé la configuration de",
++  "tool_app.reconnected": "a reconnecté",
++  "tool_connection.created": "a créé",
++  "tool_connection.updated": "a mis à jour",
++  "tool_connection.archived": "a retiré",
++  "tool_connection.catalog_refresh": "a actualisé les actions de",
++  "tool_connection.installs_synced": "a modifié les installations d'agents de",
++  "tool_connection.install_access_extended": "a étendu l'accès des agents à",
++  "tool_connection.grant_audience_replaced": "a modifié l'accès humain à",
++  "tool_connection.grant_added": "a ajouté des identifiants à",
++  "tool_connection.grant_revoked": "a révoqué des identifiants de",
++  "tool_connection.grant_delegated": "a délégué des identifiants pour",
++  "tool_connection.grant_delegation_revoked": "a révoqué la délégation d'identifiants pour",
++  // Plugins et compétences (libellés ajoutés pour le tableau de bord).
++  "plugin.installed": "a installé le plugin",
++  "plugin.uninstalled": "a désinstallé le plugin",
++  "plugin.enabled": "a activé le plugin",
++  "plugin.disabled": "a désactivé le plugin",
++  "plugin.upgraded": "a mis à niveau le plugin",
++  "plugin.upgrade_pending": "a mis en attente la mise à niveau du plugin",
++  "plugin.config.updated": "a mis à jour la configuration du plugin",
++  "plugin.local_folder.configured": "a configuré un dossier local pour le plugin",
++  "plugin.loaded": "a chargé le plugin",
++  "plugin.unloaded": "a déchargé le plugin",
++  "plugin.error": "a signalé une erreur du plugin",
++  "plugin.status_changed": "a changé l'état du plugin",
++  "plugin.synced": "a synchronisé le plugin",
++  "plugin.ui.updated": "a mis à jour l'interface du plugin",
++  "plugin.worker_started": "a démarré le processus du plugin",
++  "plugin.worker_stopped": "a arrêté le processus du plugin",
++  "plugin.worker.crashed": "a constaté l'arrêt brutal du processus du plugin",
++  "plugin.worker.restarted": "a redémarré le processus du plugin",
++  "plugin.managed_agent.created": "a créé l'agent géré du plugin",
++  "plugin.managed_agent.relinked": "a relié l'agent géré du plugin",
++  "plugin.managed_agent.reset": "a réinitialisé l'agent géré du plugin",
++  "plugin.managed_agent.pause_reason_backfilled": "a complété le motif de pause de l'agent géré du plugin",
++  "plugin.managed_routine.created": "a créé la routine gérée du plugin",
++  "plugin.managed_routine.updated": "a mis à jour la routine gérée du plugin",
++  "plugin.managed_routine.reset": "a réinitialisé la routine gérée du plugin",
++  "plugin.managed_routine.run_triggered": "a déclenché la routine gérée du plugin",
++  "plugin.managed_skill.reconciled": "a rapproché la compétence gérée du plugin",
++  "plugin.managed_skill.reset": "a réinitialisé la compétence gérée du plugin",
++  "company.skill_created": "a créé la compétence",
++  "company.skill_updated": "a mis à jour la compétence",
++  "company.skill_deleted": "a supprimé la compétence",
++  "company.skill_renamed": "a renommé la compétence",
++  "company.skill_forked": "a dupliqué la compétence",
++  "company.skill_reset": "a réinitialisé la compétence",
++  "company.skill_version_created": "a créé une version de la compétence",
++  "company.skill_file_updated": "a modifié un fichier de la compétence",
++  "company.skill_file_deleted": "a supprimé un fichier de la compétence",
++  "company.skill_audited": "a audité la compétence",
++  "company.skill_catalog_installed": "a installé une compétence du catalogue",
++  "company.skill_update_installed": "a installé la mise à jour de la compétence",
++  "company.skills_imported": "a importé des compétences",
++  "company.skills_scanned": "a analysé les compétences",
++  "company.skill_starred": "a ajouté aux favoris la compétence",
++  "company.skill_unstarred": "a retiré des favoris la compétence",
++  "company.skill_comment_created": "a commenté la compétence",
++  "company.skill_comment_updated": "a modifié un commentaire sur la compétence",
++  "company.skill_comment_deleted": "a supprimé un commentaire sur la compétence",
++  "company.skill_policy_replaced": "a remplacé la politique de la compétence",
++  "company.skill_policy_reset": "a réinitialisé la politique de la compétence",
++  "skills.create": "a créé une compétence",
++  "skills.edit": "a modifié une compétence",
++  "skills.import": "a importé une compétence",
++  "skills.install": "a installé une compétence",
++  "skills.publish": "a publié une compétence",
++  "skills.remove": "a retiré une compétence",
++  "skills.test": "a testé une compétence",
++  "agent.skills_synced": "a synchronisé les compétences de",
+ };
+ 
+ const ISSUE_ACTIVITY_LABELS: Record<string, string> = {
+-  "issue.created": "created the issue",
+-  "issue.updated": "updated the issue",
+-  "issue.checked_out": "checked out the issue",
+-  "issue.released": "released the issue",
+-  "issue.comment_added": "added a comment",
+-  "issue.comment_cancelled": "cancelled a queued comment",
+-  "issue.queued_comment_edited": "edited a queued comment",
+-  "issue.queued_comments_reordered": "reordered queued comments",
+-  "issue.queued_comment_discarded": "discarded a queued comment",
+-  "issue.comment_deleted": "deleted a comment",
+-  "issue.feedback_vote_saved": "saved feedback on an AI output",
+-  "issue.attachment_added": "added an attachment",
+-  "issue.attachment_removed": "removed an attachment",
+-  "issue.document_created": "created a document",
+-  "issue.document_updated": "updated a document",
+-  "issue.document_locked": "locked a document",
+-  "issue.document_unlocked": "unlocked a document",
+-  "issue.document_deleted": "deleted a document",
+-  "issue.monitor_scheduled": "scheduled a monitor",
+-  "issue.monitor_triggered": "triggered a monitor",
+-  "issue.monitor_cleared": "cleared a monitor",
+-  "issue.monitor_skipped": "skipped a monitor",
+-  "issue.monitor_exhausted": "exhausted a monitor",
+-  "issue.monitor_recovery_wake_queued": "queued a monitor recovery wake",
+-  "issue.monitor_recovery_issue_created": "created a monitor recovery issue",
+-  "issue.monitor_escalated_to_board": "escalated a monitor to the board",
+-  "issue.deleted": "deleted the issue",
+-  "issue.successful_run_handoff_required": "Run finished without a clear next step",
+-  "issue.successful_run_handoff_resolved": "Next step chosen",
+-  "issue.successful_run_handoff_escalated": "Run finished without a next step - recovery escalated",
+-  "issue.cross_issue_influence_cap_rejected": "hit the per-run cross-task write cap",
+-  "issue.cross_issue_influence_observed": "made a cross-task write",
+-  "issue.attribution_spoof_rejected": "tried to choose its own responsible user",
+-  "issue.recovery_action_opened": "Opened a source-scoped recovery action",
+-  "issue.recovery_action_resolved": "Resolved the recovery action",
+-  "issue.recovery_action_escalated": "Escalated the recovery action",
+-  "issue.accepted_plan_decomposition_updated": "updated the accepted-plan decomposition",
+-  "agent.created": "created an agent",
+-  "agent.updated": "updated the agent",
+-  "agent.paused": "paused the agent",
+-  "agent.resumed": "resumed the agent",
+-  "agent.error_cleared": "cleared the agent error",
+-  "agent.terminated": "terminated the agent",
+-  "heartbeat.invoked": "invoked a heartbeat",
+-  "heartbeat.cancelled": "cancelled a heartbeat",
+-  "heartbeat.output_stale_source_resolved": "System folded a stale run",
+-  "heartbeat.output_stale_recovery_recursion_refused": "Refused recovery-on-recovery escalation",
+-  "approval.created": "requested approval",
+-  "approval.approved": "approved",
+-  "approval.rejected": "rejected",
+-  "issue.thread_interaction_created": "asked for a decision",
+-  "issue.thread_interaction_accepted": "accepted the request",
+-  "issue.thread_interaction_rejected": "rejected the request",
+-  "issue.thread_interaction_answered": "answered the request",
+-  "issue.thread_interaction_withdrawn": "withdrew the request",
+-  "issue.thread_interaction_cancelled": "cancelled the request",
+-  "issue.thread_interaction_skipped": "skipped the request",
+-  "issue.thread_interaction_expired": "expired the request",
+-  "issue.thread_interaction_item_verdicts_submitted": "submitted verdicts on the request",
+-  "issue.stalled_review_decided": "recorded a review verdict",
++  "issue.created": "a créé la tâche",
++  "issue.updated": "a mis à jour la tâche",
++  "issue.checked_out": "a pris en charge la tâche",
++  "issue.released": "a libéré la tâche",
++  "issue.comment_added": "a ajouté un commentaire",
++  "issue.comment_cancelled": "a annulé un commentaire en attente",
++  "issue.queued_comment_edited": "a modifié un commentaire en attente",
++  "issue.queued_comments_reordered": "a réordonné les commentaires en attente",
++  "issue.queued_comment_discarded": "a écarté un commentaire en attente",
++  "issue.comment_deleted": "a supprimé un commentaire",
++  "issue.feedback_vote_saved": "a enregistré un avis sur une production de l'IA",
++  "issue.attachment_added": "a ajouté une pièce jointe",
++  "issue.attachment_removed": "a retiré une pièce jointe",
++  "issue.document_created": "a créé un document",
++  "issue.document_updated": "a mis à jour un document",
++  "issue.document_locked": "a verrouillé un document",
++  "issue.document_unlocked": "a déverrouillé un document",
++  "issue.document_deleted": "a supprimé un document",
++  "issue.monitor_scheduled": "a planifié une surveillance",
++  "issue.monitor_triggered": "a déclenché une surveillance",
++  "issue.monitor_cleared": "a levé une surveillance",
++  "issue.monitor_skipped": "a ignoré une surveillance",
++  "issue.monitor_exhausted": "a épuisé une surveillance",
++  "issue.monitor_recovery_wake_queued": "a mis en file un réveil de reprise de surveillance",
++  "issue.monitor_recovery_issue_created": "a créé une tâche de reprise de surveillance",
++  "issue.monitor_escalated_to_board": "a signalé une surveillance à l'humain",
++  "issue.deleted": "a supprimé la tâche",
++  "issue.successful_run_handoff_required": "Exécution terminée sans prochaine étape claire",
++  "issue.successful_run_handoff_resolved": "Prochaine étape choisie",
++  "issue.successful_run_handoff_escalated": "Exécution terminée sans prochaine étape - reprise escaladée",
++  "issue.cross_issue_influence_cap_rejected": "a atteint la limite d'écritures sur d'autres tâches par exécution",
++  "issue.cross_issue_influence_observed": "a écrit sur une autre tâche",
++  "issue.attribution_spoof_rejected": "a tenté de choisir lui-même l'utilisateur responsable",
++  "issue.recovery_action_opened": "A ouvert une action de reprise propre à la source",
++  "issue.recovery_action_resolved": "A résolu l'action de reprise",
++  "issue.recovery_action_escalated": "A escaladé l'action de reprise",
++  "issue.accepted_plan_decomposition_updated": "a mis à jour la décomposition du plan accepté",
++  "agent.created": "a créé un agent",
++  "agent.updated": "a mis à jour l'agent",
++  "agent.paused": "a mis l'agent en pause",
++  "agent.resumed": "a relancé l'agent",
++  "agent.error_cleared": "a effacé l'erreur de l'agent",
++  "agent.terminated": "a arrêté définitivement l'agent",
++  "heartbeat.invoked": "a lancé un battement",
++  "heartbeat.cancelled": "a annulé un battement",
++  "heartbeat.output_stale_source_resolved": "Le système a replié une exécution périmée",
++  "heartbeat.output_stale_recovery_recursion_refused": "Escalade de reprise de reprise refusée",
++  "approval.created": "a demandé une approbation",
++  "approval.approved": "a approuvé",
++  "approval.rejected": "a rejeté",
++  "issue.thread_interaction_created": "a demandé une décision",
++  "issue.thread_interaction_accepted": "a accepté la demande",
++  "issue.thread_interaction_rejected": "a rejeté la demande",
++  "issue.thread_interaction_answered": "a répondu à la demande",
++  "issue.thread_interaction_withdrawn": "a retiré la demande",
++  "issue.thread_interaction_cancelled": "a annulé la demande",
++  "issue.thread_interaction_skipped": "a ignoré la demande",
++  "issue.thread_interaction_expired": "a laissé expirer la demande",
++  "issue.thread_interaction_item_verdicts_submitted": "a soumis des avis sur la demande",
++  "issue.stalled_review_decided": "a enregistré un verdict de revue",
++  // Plugins et compétences (libellés ajoutés pour le tableau de bord).
++  "plugin.installed": "a installé le plugin",
++  "plugin.uninstalled": "a désinstallé le plugin",
++  "plugin.enabled": "a activé le plugin",
++  "plugin.disabled": "a désactivé le plugin",
++  "plugin.upgraded": "a mis à niveau le plugin",
++  "plugin.upgrade_pending": "a mis en attente la mise à niveau du plugin",
++  "plugin.config.updated": "a mis à jour la configuration du plugin",
++  "plugin.local_folder.configured": "a configuré un dossier local pour le plugin",
++  "plugin.loaded": "a chargé le plugin",
++  "plugin.unloaded": "a déchargé le plugin",
++  "plugin.error": "a signalé une erreur du plugin",
++  "plugin.status_changed": "a changé l'état du plugin",
++  "plugin.synced": "a synchronisé le plugin",
++  "plugin.ui.updated": "a mis à jour l'interface du plugin",
++  "plugin.worker_started": "a démarré le processus du plugin",
++  "plugin.worker_stopped": "a arrêté le processus du plugin",
++  "plugin.worker.crashed": "a constaté l'arrêt brutal du processus du plugin",
++  "plugin.worker.restarted": "a redémarré le processus du plugin",
++  "plugin.managed_agent.created": "a créé l'agent géré du plugin",
++  "plugin.managed_agent.relinked": "a relié l'agent géré du plugin",
++  "plugin.managed_agent.reset": "a réinitialisé l'agent géré du plugin",
++  "plugin.managed_agent.pause_reason_backfilled": "a complété le motif de pause de l'agent géré du plugin",
++  "plugin.managed_routine.created": "a créé la routine gérée du plugin",
++  "plugin.managed_routine.updated": "a mis à jour la routine gérée du plugin",
++  "plugin.managed_routine.reset": "a réinitialisé la routine gérée du plugin",
++  "plugin.managed_routine.run_triggered": "a déclenché la routine gérée du plugin",
++  "plugin.managed_skill.reconciled": "a rapproché la compétence gérée du plugin",
++  "plugin.managed_skill.reset": "a réinitialisé la compétence gérée du plugin",
++  "company.skill_created": "a créé la compétence",
++  "company.skill_updated": "a mis à jour la compétence",
++  "company.skill_deleted": "a supprimé la compétence",
++  "company.skill_renamed": "a renommé la compétence",
++  "company.skill_forked": "a dupliqué la compétence",
++  "company.skill_reset": "a réinitialisé la compétence",
++  "company.skill_version_created": "a créé une version de la compétence",
++  "company.skill_file_updated": "a modifié un fichier de la compétence",
++  "company.skill_file_deleted": "a supprimé un fichier de la compétence",
++  "company.skill_audited": "a audité la compétence",
++  "company.skill_catalog_installed": "a installé une compétence du catalogue",
++  "company.skill_update_installed": "a installé la mise à jour de la compétence",
++  "company.skills_imported": "a importé des compétences",
++  "company.skills_scanned": "a analysé les compétences",
++  "company.skill_starred": "a ajouté aux favoris la compétence",
++  "company.skill_unstarred": "a retiré des favoris la compétence",
++  "company.skill_comment_created": "a commenté la compétence",
++  "company.skill_comment_updated": "a modifié un commentaire sur la compétence",
++  "company.skill_comment_deleted": "a supprimé un commentaire sur la compétence",
++  "company.skill_policy_replaced": "a remplacé la politique de la compétence",
++  "company.skill_policy_reset": "a réinitialisé la politique de la compétence",
++  "skills.create": "a créé une compétence",
++  "skills.edit": "a modifié une compétence",
++  "skills.import": "a importé une compétence",
++  "skills.install": "a installé une compétence",
++  "skills.publish": "a publié une compétence",
++  "skills.remove": "a retiré une compétence",
++  "skills.test": "a testé une compétence",
++  "agent.skills_synced": "a synchronisé les compétences de",
+ };
+ 
+ /**
+@@ -191,30 +307,30 @@ const ISSUE_ACTIVITY_LABELS: Record<string, string> = {
+  * Mirrors `StalledReviewDecisionAction` in shared.
+  */
+ const STALLED_REVIEW_DECISION_LABELS: Record<string, string> = {
+-  approve: "approved the review",
+-  request_changes: "requested changes on the review",
+-  send_back: "sent the review back to work",
++  approve: "a approuvé la revue",
++  request_changes: "a demandé des modifications sur la revue",
++  send_back: "a renvoyé la revue au travail",
+ };
+ 
+ /**
+  * `issue.thread_interaction_accepted` / `_rejected` fire for *every* interaction
+  * kind, not only for a review. A task suggestion or a question is accepted, not
+  * approved, so the kind on the event picks the verb. Kinds absent from a map
+- * keep the neutral "accepted the request" wording from the tables above, which
++ * keep the neutral "a accepté la demande" wording from the tables above, which
+  * is also the fallback for an event that carries no kind.
+  */
+ const INTERACTION_ACCEPTED_LABELS: Record<string, string> = {
+-  request_confirmation: "approved the request",
+-  request_checkbox_confirmation: "approved the request",
+-  suggest_tasks: "accepted the task suggestions",
+-  ask_user_questions: "accepted the answers",
++  request_confirmation: "a approuvé la demande",
++  request_checkbox_confirmation: "a approuvé la demande",
++  suggest_tasks: "a accepté les tâches suggérées",
++  ask_user_questions: "a accepté les réponses",
+ };
+ 
+ const INTERACTION_REJECTED_LABELS: Record<string, string> = {
+-  request_confirmation: "rejected the request",
+-  request_checkbox_confirmation: "rejected the request",
+-  suggest_tasks: "declined the task suggestions",
+-  ask_user_questions: "declined the questions",
++  request_confirmation: "a rejeté la demande",
++  request_checkbox_confirmation: "a rejeté la demande",
++  suggest_tasks: "a refusé les tâches suggérées",
++  ask_user_questions: "a refusé les questions",
+ };
+ 
+ /**
+@@ -238,7 +354,7 @@ function asRecord(value: unknown): Record<string, unknown> | null {
+ }
+ 
+ function humanizeValue(value: unknown): string {
+-  if (typeof value !== "string") return String(value ?? "none");
++  if (typeof value !== "string") return String(value ?? "aucun");
+   return value.replace(/_/g, " ");
+ }
+ 
+@@ -265,11 +381,11 @@ function readIssueReferences(details: ActivityDetails, key: string): ActivityIss
+ }
+ 
+ function formatUserLabel(userId: string | null | undefined, options: ActivityFormatOptions = {}): string {
+-  if (!userId || userId === "local-board") return "Board";
+-  if (options.currentUserId && userId === options.currentUserId) return "You";
++  if (!userId || userId === "local-board") return "Humain";
++  if (options.currentUserId && userId === options.currentUserId) return "Vous";
+   const profile = options.userProfileMap?.get(userId);
+   if (profile) return profile.label;
+-  return `user ${userId.slice(0, 5)}`;
++  return `utilisateur ${userId.slice(0, 5)}`;
+ }
+ 
+ function formatParticipantLabel(participant: ActivityParticipant, options: ActivityFormatOptions): string {
+@@ -284,7 +400,7 @@ function formatIssueReferenceLabel(reference: ActivityIssueReference): string {
+   if (reference.identifier) return reference.identifier;
+   if (reference.title) return reference.title;
+   if (reference.id) return reference.id.slice(0, 8);
+-  return "task";
++  return "tâche";
+ }
+ 
+ function formatChangedEntityLabel(
+@@ -315,13 +431,13 @@ function formatAcceptedPlanDecompositionDetail(details: ActivityDetails): string
+   const newlyCreated = readStringArrayLength(details.newlyCreatedChildIssueIds);
+   const reused = Math.max(0, totalChildren - newlyCreated);
+   const parts: string[] = [];
+-  if (newlyCreated > 0) parts.push(`created ${newlyCreated} new`);
+-  if (reused > 0) parts.push(`reused ${reused} existing`);
+-  if (parts.length === 0 && requested !== null) parts.push(`${requested} requested`);
++  if (newlyCreated > 0) parts.push(`${newlyCreated} ${newlyCreated > 1 ? "créées" : "créée"}`);
++  if (reused > 0) parts.push(`${reused} ${reused > 1 ? "réutilisées" : "réutilisée"}`);
++  if (parts.length === 0 && requested !== null) parts.push(`${requested} ${requested > 1 ? "demandées" : "demandée"}`);
+   const summary = parts.length > 0 ? parts.join(", ") : null;
+-  if (status === "completed" && summary) return `decomposition completed (${summary})`;
+-  if (status === "completed") return "decomposition completed";
+-  if (status === "in_flight" && summary) return `decomposition in flight (${summary})`;
++  if (status === "completed" && summary) return `décomposition terminée (${summary})`;
++  if (status === "completed") return "décomposition terminée";
++  if (status === "in_flight" && summary) return `décomposition en cours (${summary})`;
+   return summary;
+ }
+ 
+@@ -332,14 +448,14 @@ function formatIssueUpdatedVerb(details: ActivityDetails): string | null {
+     const from = previous.status;
+     const to = humanizeValue(details.status === "in_review" && details.externalConversationState === "waiting" ? "idle" : details.status);
+     return from
+-      ? `changed status from ${humanizeValue(from)} to ${to} on`
+-      : `changed status to ${to} on`;
++      ? `a changé le statut de ${humanizeValue(from)} à ${to} sur`
++      : `a changé le statut en ${to} sur`;
+   }
+   if (details.priority !== undefined) {
+     const from = previous.priority;
+     return from
+-      ? `changed priority from ${humanizeValue(from)} to ${humanizeValue(details.priority)} on`
+-      : `changed priority to ${humanizeValue(details.priority)} on`;
++      ? `a changé la priorité de ${humanizeValue(from)} à ${humanizeValue(details.priority)} sur`
++      : `a changé la priorité en ${humanizeValue(details.priority)} sur`;
+   }
+   return null;
+ }
+@@ -367,29 +483,29 @@ function formatIssueUpdatedAction(details: ActivityDetails, options: ActivityFor
+     const to = humanizeValue(details.status === "in_review" && details.externalConversationState === "waiting" ? "idle" : details.status);
+     parts.push(
+       from
+-        ? `changed the status from ${humanizeValue(from)} to ${to}`
+-        : `changed the status to ${to}`,
++        ? `a changé le statut de ${humanizeValue(from)} à ${to}`
++        : `a changé le statut en ${to}`,
+     );
+   }
+   if (details.priority !== undefined) {
+     const from = previous.priority;
+     parts.push(
+       from
+-        ? `changed the priority from ${humanizeValue(from)} to ${humanizeValue(details.priority)}`
+-        : `changed the priority to ${humanizeValue(details.priority)}`,
++        ? `a changé la priorité de ${humanizeValue(from)} à ${humanizeValue(details.priority)}`
++        : `a changé la priorité en ${humanizeValue(details.priority)}`,
+     );
+   }
+   if (details.assigneeAgentId !== undefined || details.assigneeUserId !== undefined) {
+     const assigneeName = formatAssigneeName(details, options);
+-    parts.push(assigneeName ? `made ${assigneeName} responsible for the task` : "cleared the responsible");
++    parts.push(assigneeName ? `a désigné ${assigneeName} responsable de la tâche` : "a retiré le responsable");
+   }
+   if (details.reviewPolicy !== undefined) {
+     // `null` is the default ("anyone can approve"), so it must not read as
+     // "changed the review policy to none" (PAP-16506).
+-    parts.push(`changed who can approve to ${formatReviewPolicyValue(details.reviewPolicy)}`);
++    parts.push(`a changé qui peut approuver en ${formatReviewPolicyValue(details.reviewPolicy)}`);
+   }
+-  if (details.title !== undefined) parts.push("updated the title");
+-  if (details.description !== undefined) parts.push("updated the description");
++  if (details.title !== undefined) parts.push("a modifié le titre");
++  if (details.description !== undefined) parts.push("a modifié la description");
+ 
+   return parts.length > 0 ? parts.join(", ") : null;
+ }
+@@ -407,30 +523,30 @@ function formatStructuredIssueChange(input: {
+     const added = readIssueReferences(details, "addedBlockedByIssues").map(formatIssueReferenceLabel);
+     const removed = readIssueReferences(details, "removedBlockedByIssues").map(formatIssueReferenceLabel);
+     if (added.length > 0 && removed.length === 0) {
+-      const changed = formatChangedEntityLabel("blocker", "blockers", added);
+-      return input.forIssueDetail ? `added ${changed}` : `added ${changed} to`;
++      const changed = formatChangedEntityLabel("bloqueur", "bloqueurs", added);
++      return input.forIssueDetail ? `a ajouté ${changed}` : `a ajouté ${changed} à`;
+     }
+     if (removed.length > 0 && added.length === 0) {
+-      const changed = formatChangedEntityLabel("blocker", "blockers", removed);
+-      return input.forIssueDetail ? `removed ${changed}` : `removed ${changed} from`;
++      const changed = formatChangedEntityLabel("bloqueur", "bloqueurs", removed);
++      return input.forIssueDetail ? `a retiré ${changed}` : `a retiré ${changed} de`;
+     }
+-    return input.forIssueDetail ? "updated blockers" : "updated blockers on";
++    return input.forIssueDetail ? "a mis à jour les bloqueurs" : "a mis à jour les bloqueurs sur";
+   }
+ 
+   if (input.action === "issue.reviewers_updated" || input.action === "issue.approvers_updated") {
+     const added = readParticipants(details, "addedParticipants").map((participant) => formatParticipantLabel(participant, input.options));
+     const removed = readParticipants(details, "removedParticipants").map((participant) => formatParticipantLabel(participant, input.options));
+-    const singular = input.action === "issue.reviewers_updated" ? "reviewer" : "approver";
+-    const plural = input.action === "issue.reviewers_updated" ? "reviewers" : "approvers";
++    const singular = input.action === "issue.reviewers_updated" ? "relecteur" : "approbateur";
++    const plural = input.action === "issue.reviewers_updated" ? "relecteurs" : "approbateurs";
+     if (added.length > 0 && removed.length === 0) {
+       const changed = formatChangedEntityLabel(singular, plural, added);
+-      return input.forIssueDetail ? `added ${changed}` : `added ${changed} to`;
++      return input.forIssueDetail ? `a ajouté ${changed}` : `a ajouté ${changed} à`;
+     }
+     if (removed.length > 0 && added.length === 0) {
+       const changed = formatChangedEntityLabel(singular, plural, removed);
+-      return input.forIssueDetail ? `removed ${changed}` : `removed ${changed} from`;
++      return input.forIssueDetail ? `a retiré ${changed}` : `a retiré ${changed} de`;
+     }
+-    return input.forIssueDetail ? `updated ${plural}` : `updated ${plural} on`;
++    return input.forIssueDetail ? `a mis à jour les ${plural}` : `a mis à jour les ${plural} sur`;
+   }
+ 
+   return null;
+@@ -446,16 +562,16 @@ export function formatActivityVerb(
+       ? details.tool
+       : typeof details?.upstreamToolName === "string"
+         ? details.upstreamToolName
+-        : "an app action";
++        : "une action d'application";
+     const tool = rawTool.replace(/[._-]+/g, " ");
+     const isTest = details?.source === "test";
+-    if (action === "tool_gateway.call_completed") return `${isTest ? "tested" : "used"} ${tool} on`;
+-    if (action === "tool_gateway.call_allowed") return `${isTest ? "started a test of" : "was allowed to use"} ${tool} on`;
+-    if (action === "tool_gateway.call_denied") return `was blocked from using ${tool} on`;
+-    if (action === "tool_gateway.approval_requested") return `asked to use ${tool} on`;
+-    if (action === "tool_gateway.session_created") return "opened an app session for";
+-    if (action === "tool_gateway.session_rejected") return "was blocked from opening an app session for";
+-    if (action === "tool_gateway.discovery") return "discovered app actions for";
++    if (action === "tool_gateway.call_completed") return `${isTest ? "a testé" : "a utilisé"} ${tool} sur`;
++    if (action === "tool_gateway.call_allowed") return `${isTest ? "a lancé un test de" : "a été autorisé à utiliser"} ${tool} sur`;
++    if (action === "tool_gateway.call_denied") return `a été empêché d'utiliser ${tool} sur`;
++    if (action === "tool_gateway.approval_requested") return `a demandé à utiliser ${tool} sur`;
++    if (action === "tool_gateway.session_created") return "a ouvert une session d'application pour";
++    if (action === "tool_gateway.session_rejected") return "a été empêché d'ouvrir une session d'application pour";
++    if (action === "tool_gateway.discovery") return "a découvert les actions d'application de";
+   }
+ 
+   if (action === "issue.updated") {
+@@ -466,11 +582,11 @@ export function formatActivityVerb(
+   if (action === "issue.stalled_review_decided") {
+     const decision = typeof details?.action === "string" ? details.action : null;
+     const label = decision ? STALLED_REVIEW_DECISION_LABELS[decision] : null;
+-    if (label) return `${label} on`;
++    if (label) return `${label} sur`;
+   }
+ 
+   const outcomeLabel = formatInteractionOutcomeLabel(action, details);
+-  if (outcomeLabel) return `${outcomeLabel} on`;
++  if (outcomeLabel) return `${outcomeLabel} sur`;
+ 
+   const structuredChange = formatStructuredIssueChange({
+     action,
+@@ -520,7 +636,7 @@ export function formatIssueActivityAction(
+       ? details.serviceName.trim()
+       : null;
+     const base = ISSUE_ACTIVITY_LABELS[action] ?? action.replace(/[._]/g, " ");
+-    return serviceName ? `${base} for ${serviceName}` : base;
++    return serviceName ? `${base} pour ${serviceName}` : base;
+   }
+ 
+   if (
+diff --git a/ui/src/lib/assignees.test.ts b/ui/src/lib/assignees.test.ts
+index 66b4f3f1b..e3e800c47 100644
+--- a/ui/src/lib/assignees.test.ts
++++ b/ui/src/lib/assignees.test.ts
+@@ -49,14 +49,14 @@ describe("assignee selection helpers", () => {
+ 
+   it("formats current and board user labels consistently", () => {
+     expect(formatAssigneeUserLabel("user-1", "user-1")).toBe("You");
+-    expect(formatAssigneeUserLabel("local-board", "someone-else")).toBe("Board");
++    expect(formatAssigneeUserLabel("local-board", "someone-else")).toBe("Humain");
+     expect(formatAssigneeUserLabel("user-abcdef", "someone-else")).toBe("user-");
+   });
+ 
+   it("formats actual user labels without current-user substitution", () => {
+     expect(formatUserLabel("user-1", new Map([["user-1", "Dotta"]]))).toBe("Dotta");
+     expect(formatUserLabel("user-1", new Map([["user-2", "Someone Else"]]))).toBe("user-");
+-    expect(formatUserLabel("local-board")).toBe("Board");
++    expect(formatUserLabel("local-board")).toBe("Humain");
+   });
+ 
+   it("suggests the last non-me commenter without changing the actual assignee encoding", () => {
+diff --git a/ui/src/lib/assignees.ts b/ui/src/lib/assignees.ts
+index 2e45490cd..d8a442ed7 100644
+--- a/ui/src/lib/assignees.ts
++++ b/ui/src/lib/assignees.ts
+@@ -92,6 +92,6 @@ export function formatUserLabel(
+       : (userLabels as Record<string, string>)[userId];
+     if (typeof label === "string" && label.trim()) return label;
+   }
+-  if (userId === "local-board") return "Board";
++  if (userId === "local-board") return "Humain";
+   return userId.slice(0, 5);
+ }
+diff --git a/ui/src/lib/company-members.test.ts b/ui/src/lib/company-members.test.ts
+index c8b1e630b..eb646ce24 100644
+--- a/ui/src/lib/company-members.test.ts
++++ b/ui/src/lib/company-members.test.ts
+@@ -31,7 +31,7 @@ describe("company-members helpers", () => {
+     ]);
+ 
+     expect(labels.get("user-1")).toBe("Taylor");
+-    expect(labels.get("local-board")).toBe("Board");
++    expect(labels.get("local-board")).toBe("Humain");
+   });
+ 
+   it("builds user profiles with labels and avatars", () => {
+@@ -48,7 +48,7 @@ describe("company-members helpers", () => {
+       image: "https://example.com/taylor.png",
+     });
+     expect(profiles.get("local-board")).toEqual({
+-      label: "Board",
++      label: "Humain",
+       image: null,
+     });
+   });
+diff --git a/ui/src/lib/company-members.ts b/ui/src/lib/company-members.ts
+index 484b0a4b3..c66381cc6 100644
+--- a/ui/src/lib/company-members.ts
++++ b/ui/src/lib/company-members.ts
+@@ -12,7 +12,7 @@ type CompanyUserRecord = Pick<CompanyMember, "principalId" | "status" | "user">
+   | CompanyUserDirectoryEntry;
+ 
+ function fallbackUserLabel(userId: string): string {
+-  if (userId === "local-board") return "Board";
++  if (userId === "local-board") return "Humain";
+   return userId.slice(0, 5);
+ }
+ 
+-- 
+2.53.0
+

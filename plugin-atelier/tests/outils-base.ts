@@ -5,7 +5,7 @@
  * implémentée lève une erreur explicite : un test ne peut pas passer par un chemin non simulé.
  */
 import type { PluginContext } from "@paperclipai/plugin-sdk";
-import type { BaseAtelier } from "../src/serveur/base.js";
+import { depotDepuisJournal, type BaseAtelier } from "../src/serveur/base.js";
 
 type Ligne = Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
 
@@ -26,7 +26,7 @@ export function creerBanc(o: { mode?: "demonstration" | "reel"; modeEntreprise?:
   const horloge = () => new Date(Date.UTC(2026, 9, 15, 10, 0, 0, 0) + ++tic).toISOString();
   const t = {
     reglages: [] as Ligne[], campagnes: [] as Ligne[], exigences: [] as Ligne[], portes: [] as Ligne[], evaluations: [] as Ligne[], decisions: [] as Ligne[],
-    diffusions: [] as Ligne[], appels: [] as Ligne[], sources: [] as Ligne[], journal: [] as Ligne[], couvertures: [] as Ligne[], verdicts: [] as Ligne[], constats: [] as Ligne[], relances: [] as Ligne[],
+    diffusions: [] as Ligne[], appels: [] as Ligne[], sources: [] as Ligne[], journal: [] as Ligne[], couvertures: [] as Ligne[], verdicts: [] as Ligne[], constats: [] as Ligne[], relances: [] as Ligne[], messages: [] as Ligne[],
   };
   if (o.modeEntreprise) t.reglages.push({ companyId: SOC, modeParDefaut: o.modeEntreprise, maxRunsActifs: 3, maxCyclesCorrection: 3, retentionJours: 365, plafondPub: null, modifieLe: horloge() });
   t.campagnes.push({ id: CAMP, companyId: SOC, projectId: PROJET, briefIssueId: BRIEF, nom: "Printemps", objectifs: [], cible: null, offre: null, canaux: [], perimetre: { etablissements: [], zones: [] }, budgetMaxCents: null, plafondPub: null, mode: o.mode ?? "demonstration", etatProjet: { statut: "in_progress", enPause: false, archive: false }, creeLe: horloge() });
@@ -50,6 +50,9 @@ export function creerBanc(o: { mode?: "demonstration" | "reel"; modeEntreprise?:
     // Base de clients vide par défaut (la confiance de qualification la lit pour « pas déjà client »).
     etatBaseClients: async () => ({ dernierImport: null, clients: 0, actifs: 0 }),
     journaliser: async (e) => void t.journal.push({ ...e, seq: t.journal.length + 1, creeLe: horloge() }),
+    datesJournal: async (_c, issueId, type) => t.journal.filter((j) => j.issueId === issueId && j.type === type).map((j) => j.creeLe as string).sort().reverse(),
+    depotsProspectionCampagne: async (companyId, campagneId) =>
+      t.journal.filter((j) => j.companyId === companyId && j.type === "prospects.deposes" && j.donnees?.campagneId === campagneId).map((j) => depotDepuisJournal(j.issueId ?? null, j.donnees ?? {}, j.creeLe)),
     lireJournal: async (_c, after, _l, issueId) => ({ evenements: t.journal.filter((j) => j.seq > after && (!issueId || j.issueId === issueId)) as never, dernierSeq: t.journal.length, complet: true }),
     lireReglages: async (companyId) => {
       const r = t.reglages.find((x) => x.companyId === companyId);
@@ -192,6 +195,8 @@ export function creerBanc(o: { mode?: "demonstration" | "reel"; modeEntreprise?:
     listerRelances: async () => [],
     dernierBrief: async () => null,
     listerMessages: async () => [],
+    insererMessage: async (m) => void t.messages.push({ ...m }),
+    lierCommentaire: async () => undefined,
     coutsEntreprise: async () => ({ totalCents: 0, evenements: 0 }),
     runsDeTaches: async () => [],
     bloqueursNonResolus: async () => [],

@@ -1,5 +1,78 @@
 # Reprise : Atelier Marketing IA
 
+## État au 16/10/2026, 15 h
+
+Cette section prime sur les suivantes en cas de doute. Elle suffit pour reprendre sans rien redemander.
+
+### 1. En ligne depuis 13 h 24 (instances 3100 et 3580)
+
+Plugin au commit `bf61dba` (16/10, 13 h 22), socle avec les patches `0021` à `0033`. Fonctions :
+
+- chat Discussion, dictée et voix en direct (la voix attend la clé OpenAI, voir plus bas) ;
+- critères des leads (poids étroits, formulaire de décision d'un critère) ;
+- veilleur des tâches orphelines ;
+- cycles remis à zéro par décision humaine ;
+- traduction française de l'interface, patches `0027` à `0031` (barre latérale, tableau de bord, fil d'activité,
+  statuts, priorités) ;
+- Prospection et SEA à 90 tours ;
+- sécurité déjà déployée : patch `0032` (`90498d2`, corps des requêtes de plugin masqué dans le journal HTTP) et
+  patch `0033` (`473ea76`, expiration des cartes IA filtrée par fournisseur et phase).
+
+### 2. Commité mais PAS déployé (27 commits, `git log --oneline bf61dba..HEAD`, tête `d4fe5be`)
+
+- **Mobile** : `7632ac3` (saisie de la Discussion au-dessus de la barre de l'hôte), `6220ff8` (sommaire et sections
+  repliables des Paramètres, volet Filtres des Prospects, onglets), patch `0040` `6dc03b1` (propriétés, actions et
+  statut accessibles sous md), patch `0041` `3eca7c0` (barre du bas mobile), `0f7530e` (e2e Discussion, Paramètres et
+  Prospects sur téléphone). Audit : `socle/patches/audit-mobile.md`.
+- **Contexte, dossier et prospects résumés** : `70ceb65` (contexte de tâche, résumé par défaut sous 40 000
+  caractères, pages du livrable, `vue=complete`), `a3a8154` (même principe pour le dossier de tâche et la liste des
+  prospects).
+- **Fiche des routes** : `730ec76` (corps de requête des routes d'agents, générée depuis les contrats zod),
+  `efef5a4` (verifier-organisation lit la consigne de dépôt dans le texte du rôle).
+- **Traduction 0034 et suivants** : `654ce4f` (0034, reçu, priorités, fil de la tâche), `80425c9` (0035, routines,
+  projets, filtres), `d4c5ba2` (0036, détail de projet et de routine, dossiers, navigation), `0e39738` (0037,
+  attendus de tests français), `8c4a997` (0042, libellés français des écrans principaux).
+- **Format fr-BE** : `0258629` (0038, nombres et test du choix d'un humain), `3662d40` (0039, nombres, montants et
+  dates explicites en fr-BE).
+- **Sécurité** : `26daf1b` (C1, sommaire du livrable : motif linéaire, lignes bornées, gel du worker), `99a393b` (C2,
+  surcharge distante en liste blanche, sans source, filtre de secrets), `333cceb` (F1, clé du tableau en en-tête non
+  redirigeable, limitée à l'adresse locale, localhost et `*.ts.net`), `19eda5f` (F2, destinataire humain des
+  blocages de revue selon le mode de déploiement), `7c3aa72` (F3, refus de démarrer si le tailnet publie l'instance
+  sans surcharge distante). Les patches `0032` et `0033` ne sont pas dans cette liste : ils sont déjà en ligne.
+- **Préparation de l'accès distant** : `516c175` (surcharge facultative `config/atelier-distant.env`, modèle
+  `config/atelier-distant.env.exemple`, validation), `f544519` (réglage `humainDestinataire`, repli `local-board`),
+  `a1369e1` (clé d'API du tableau facultative `PAPERCLIP_BOARD_KEY` pour le mode authentifié).
+- **Déploiement** : `d4fe5be` (`scripts/deployer.sh` et sa section dans `docs/exploitation.md`).
+- **Documentation** : `244393f` (`docs/guide-utilisateur.md`), `c59d4cf` (limite de dictée en taille).
+
+Dernier patch du socle : `0042`. Un fichier de test (`plugin-atelier/tests/securite-extraction.spec.ts`) était
+modifié et non commité au moment de cette mise à jour : à relire avant tout déploiement (le déploiement exige un
+arbre propre).
+
+### 3. Prochaines étapes, dans l'ordre
+
+1. **Second déploiement**, seulement quand la suite complète du socle et celle du plugin sont vertes :
+   `scripts/deployer.sh --cible toutes --apercu <dossier d'aperçu> --journaux <dossier>`. Le script exige un arbre
+   propre dans le dépôt et dans `paperclip/`. Juste après, renseigner une fois le réglage `humainDestinataire` en mode
+   authentifié.
+2. **Accès mobile par Tailscale** (9 étapes ; aucun document de `docs/` ne les détaille, `docs/evolution-deploiement.md`
+   décrit seulement les modes de déploiement) :
+   1. JB installe Tailscale 1.104 depuis le dépôt apt officiel, puis lance
+      `tailscale up --netfilter-mode=off --accept-dns=false` (son Mullvad utilise le DNS 100.64.0.29).
+   2. JB active MagicDNS et HTTPS.
+   3. JB règle les ACL sur tcp:443.
+   4. Claude copie `config/atelier-distant.env.exemple` vers `config/atelier-distant.env`, le remplit, puis valide avec
+      `scripts/verifier-config.sh --distant`.
+   5. Relance de l'instance 3100.
+   6. `tailscale serve --bg --https=443 http://127.0.0.1:3100`, jamais Funnel.
+   7. JB crée son compte et ouvre l'URL de réclamation du tableau affichée dans le terminal.
+   8. Fermeture des inscriptions avec `PAPERCLIP_AUTH_DISABLE_SIGN_UP=true`.
+   9. Essais sur téléphone.
+3. **Clé OpenAI** pour la voix : la ranger comme secret natif et la lier au réglage `openaiSecretRef`
+   (`docs/voix-en-direct.md`).
+4. **Réindexation bge-m3 sur l'instance 3580** (`scripts/reindexer-connaissances.py`).
+5. **Push GitHub par l'opérateur**, après un nouveau `scripts/publier.sh`. Rien n'est poussé à ce jour.
+
 Dernière mise à jour : 15/10/2026 au soir (modules de prospection et de connaissances du client, passerelle OpenStreetMap
 réelle, rôle de tête du Coordinateur ; voir la dernière section).
 Seul responsable du code à cette date : l'intégrateur final. Historique : `git log`.

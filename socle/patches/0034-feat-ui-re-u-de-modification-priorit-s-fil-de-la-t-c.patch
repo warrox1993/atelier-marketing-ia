@@ -1,0 +1,1769 @@
+From 48b4b0079aea2074c43bed350e590c194f934d10 Mon Sep 17 00:00:00 2001
+From: Jean-Baptiste Dhondt <114347858+warrox1993@users.noreply.github.com>
+Date: Fri, 16 Oct 2026 13:31:08 +0200
+Subject: [PATCH] =?UTF-8?q?feat(ui):=20re=C3=A7u=20de=20modification,=20pr?=
+ =?UTF-8?q?iorit=C3=A9s,=20fil=20de=20la=20t=C3=A2che=20et=20propri=C3=A9t?=
+ =?UTF-8?q?=C3=A9s=20de=20la=20t=C3=A2che=20traduits=20en=20fran=C3=A7ais?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01DP85vPq2MHkZg8VNtRvCzB
+---
+ ui/src/components/ArtifactsPanel.tsx          |   2 +-
+ .../components/ExecutionParticipantPicker.tsx |   2 +-
+ ui/src/components/IssueChatThread.test.tsx    |  10 +-
+ ui/src/components/IssueChatThread.tsx         |  18 +--
+ .../IssueFieldChangeReceipt.test.tsx          |  12 +-
+ ui/src/components/IssueProperties.test.tsx    | 146 +++++++++---------
+ .../PriorityIcon.interaction.test.tsx         |   4 +-
+ ui/src/components/PriorityIcon.test.tsx       |   2 +-
+ ui/src/components/PriorityIcon.tsx            |  12 +-
+ ui/src/components/PropertiesPanel.tsx         |   2 +-
+ ui/src/components/TaskChatThread.test.tsx     |  24 +--
+ .../issue-properties/IssueProperties.tsx      |  56 +++----
+ .../task-chat/TaskChatBlockerLinks.tsx        |   2 +-
+ .../TaskChatCompactInteractionCard.tsx        |   2 +-
+ .../components/task-chat/TaskChatComposer.tsx |   2 +-
+ .../task-chat/TaskChatLiveRunPill.test.tsx    |  34 ++--
+ .../task-chat/TaskChatLiveRunPill.tsx         |   8 +-
+ .../task-chat/TaskChatRunnerTurn.test.tsx     |  20 +--
+ .../task-chat/TaskChatRunnerTurn.tsx          |   6 +-
+ .../task-chat/TaskChatTurn.test.tsx           |  30 ++--
+ ui/src/components/task-chat/TaskChatTurn.tsx  |  18 +--
+ ui/src/components/task-chat/tool-taxonomy.ts  |   2 +-
+ ui/src/lib/activity-format.ts                 |   4 +-
+ ui/src/lib/attention.test.ts                  |   2 +-
+ ui/src/lib/attention.ts                       |  16 +-
+ ui/src/lib/issue-change-receipt.test.ts       |  10 +-
+ ui/src/lib/issue-change-receipt.ts            |  14 +-
+ ui/src/lib/issue-chat-messages.test.ts        |   2 +-
+ ui/src/lib/issue-chat-messages.ts             |   8 +-
+ 29 files changed, 238 insertions(+), 232 deletions(-)
+
+diff --git a/ui/src/components/ArtifactsPanel.tsx b/ui/src/components/ArtifactsPanel.tsx
+index f5a058b4b..71b65fdd0 100644
+--- a/ui/src/components/ArtifactsPanel.tsx
++++ b/ui/src/components/ArtifactsPanel.tsx
+@@ -131,7 +131,7 @@ export function ArtifactsPanel({ taskId, isAgentWorking, openDocKey, openDocTitl
+     <div className="flex flex-col h-full" data-artifacts-panel>
+       <div className="px-4 py-3 border-b border-border flex items-center gap-2">
+         <Package className="h-4 w-4 text-muted-foreground shrink-0" />
+-        <h3 className="text-sm font-semibold">Artifacts</h3>
++        <h3 className="text-sm font-semibold">Livrables</h3>
+       </div>
+ 
+       {/* Filter chips */}
+diff --git a/ui/src/components/ExecutionParticipantPicker.tsx b/ui/src/components/ExecutionParticipantPicker.tsx
+index b13d60748..e5362fae7 100644
+--- a/ui/src/components/ExecutionParticipantPicker.tsx
++++ b/ui/src/components/ExecutionParticipantPicker.tsx
+@@ -89,7 +89,7 @@ export function ExecutionParticipantPicker({
+     updatePolicy(next);
+   };
+ 
+-  const label = stageType === "review" ? "Reviewers" : "Approvers";
++  const label = stageType === "review" ? "Relecteurs" : "Approbateurs";
+   const Icon = stageType === "review" ? Eye : ShieldCheck;
+ 
+   return (
+diff --git a/ui/src/components/IssueChatThread.test.tsx b/ui/src/components/IssueChatThread.test.tsx
+index 00b3609d1..c68e0216f 100644
+--- a/ui/src/components/IssueChatThread.test.tsx
++++ b/ui/src/components/IssueChatThread.test.tsx
+@@ -4760,8 +4760,8 @@ describe("IssueChatThread", () => {
+       );
+     });
+ 
+-    expect(container.textContent).toContain("Working");
+-    expect(container.textContent).not.toContain("Worked");
++    expect(container.textContent).toContain("Au travail");
++    expect(container.textContent).not.toContain("A travaillé");
+ 
+     act(() => {
+       root.unmount();
+@@ -4806,7 +4806,7 @@ describe("IssueChatThread", () => {
+     expect(container.textContent).toContain("Working...");
+     expect(container.textContent).toContain("Using bash");
+     expect(container.textContent).not.toContain("last activity");
+-    expect(container.textContent).toMatch(/\d+ seconds? ago/);
++    expect(container.textContent).toMatch(/il y a \d+ secondes?/);
+ 
+     act(() => {
+       root.unmount();
+@@ -4836,11 +4836,11 @@ describe("IssueChatThread", () => {
+     });
+ 
+     const header = Array.from(container.querySelectorAll("button")).find((button) =>
+-      button.textContent?.includes("worked for 4 minutes"),
++      button.textContent?.includes("a travaillé pendant 4 minutes"),
+     );
+     expect(header).toBeDefined();
+     const label = Array.from(header!.children).find((child) =>
+-      child.textContent?.includes("worked for 4 minutes"),
++      child.textContent?.includes("a travaillé pendant 4 minutes"),
+     );
+     const caret = label?.nextElementSibling;
+     expect(caret?.tagName.toLowerCase()).toBe("svg");
+diff --git a/ui/src/components/IssueChatThread.tsx b/ui/src/components/IssueChatThread.tsx
+index 4a9aef03b..74f351027 100644
+--- a/ui/src/components/IssueChatThread.tsx
++++ b/ui/src/components/IssueChatThread.tsx
+@@ -454,8 +454,8 @@ function IssueChatLiveRunStatusLine({
+       : currentStatusMessage;
+   const activityText = lastActivityElapsed
+     ? lastActivityAgeMs !== null && lastActivityAgeMs >= 15_000
+-      ? `no output for ${lastActivityElapsed} - still running`
+-      : `${lastActivityElapsed} ago`
++      ? `aucune sortie depuis ${lastActivityElapsed} : toujours en cours`
++      : `il y a ${lastActivityElapsed}`
+     : "";
+   const text = [primary, activityText].filter(Boolean).join(" · ");
+   if (!text) return null;
+@@ -1198,8 +1198,8 @@ function toolCountSummary(toolParts: ToolCallMessagePart[]): string | null {
+   }
+   const parts: string[] = [];
+   if (commands > 0)
+-    parts.push(`ran ${commands} command${commands === 1 ? "" : "s"}`);
+-  if (other > 0) parts.push(`called ${other} tool${other === 1 ? "" : "s"}`);
++    parts.push(`a exécuté ${commands} commande${commands === 1 ? "" : "s"}`);
++  if (other > 0) parts.push(`appelé ${other} outil${other === 1 ? "" : "s"}`);
+   return parts.join(", ");
+ }
+ 
+@@ -1279,15 +1279,15 @@ function IssueChatChainOfThought({
+   let headerVerb: string;
+   let headerSuffix: string | null = null;
+   if (isActive) {
+-    headerVerb = "Working";
+-    if (liveElapsed) headerSuffix = `for ${liveElapsed}`;
++    headerVerb = "Au travail";
++    if (liveElapsed) headerSuffix = `depuis ${liveElapsed}`;
+   } else if (segmentTiming) {
+     const durationMs = segmentTiming.endMs - segmentTiming.startMs;
+     const durationText = formatDurationWords(durationMs);
+-    headerVerb = "Worked";
+-    if (durationText) headerSuffix = `for ${durationText}`;
++    headerVerb = "A travaillé";
++    if (durationText) headerSuffix = `pendant ${durationText}`;
+   } else {
+-    headerVerb = "Worked";
++    headerVerb = "A travaillé";
+   }
+ 
+   const toolSummary = toolCountSummary(toolParts);
+diff --git a/ui/src/components/IssueFieldChangeReceipt.test.tsx b/ui/src/components/IssueFieldChangeReceipt.test.tsx
+index 0468b59b3..c150c3063 100644
+--- a/ui/src/components/IssueFieldChangeReceipt.test.tsx
++++ b/ui/src/components/IssueFieldChangeReceipt.test.tsx
+@@ -29,11 +29,11 @@ describe("IssueFieldChangeReceipt", () => {
+       />,
+     );
+ 
+-    expect(html).toContain("Status");
+-    expect(html).toContain("todo");
+-    expect(html).toContain("in progress");
+-    expect(html).toContain("Priority");
+-    expect(html).toContain("high");
++    expect(html).toContain("Statut");
++    expect(html).toContain("à faire");
++    expect(html).toContain("en cours");
++    expect(html).toContain("Priorité");
++    expect(html).toContain("haute");
+     expect(html).toContain('data-testid="issue-change-row-status"');
+   });
+ 
+@@ -73,7 +73,7 @@ describe("IssueFieldChangeReceipt", () => {
+       />,
+     );
+ 
+-    expect(html).toContain("Assignee");
++    expect(html).toContain("Assigné à");
+     expect(html).toContain("ClaudeCoder");
+     expect(html).toContain("UXDesigner");
+   });
+diff --git a/ui/src/components/IssueProperties.test.tsx b/ui/src/components/IssueProperties.test.tsx
+index 27151f3c7..f06cca8e1 100644
+--- a/ui/src/components/IssueProperties.test.tsx
++++ b/ui/src/components/IssueProperties.test.tsx
+@@ -384,7 +384,7 @@ function createProject(overrides: Partial<Project> = {}): Project {
+     goalId: null,
+     goalIds: [],
+     goals: [],
+-    name: "Project",
++    name: "Projet",
+     description: null,
+     status: "in_progress",
+     leadAgentId: null,
+@@ -530,15 +530,15 @@ describe("IssueProperties", () => {
+     expect(surface?.querySelectorAll('[data-property-section="true"]').length).toBeGreaterThan(1);
+     expect(surface?.querySelector('[data-property-value="true"]')).not.toBeNull();
+     const statusVisual = surface?.querySelector(
+-      '[data-property-label="Status"] + [data-property-value="true"] [data-testid="status-icon"]',
++      '[data-property-label="Statut"] + [data-property-value="true"] [data-testid="status-icon"]',
+     );
+     expect(statusVisual).not.toBeNull();
+     expect(statusVisual?.getAttribute("data-size")).toBeNull();
+     expect(statusVisual?.getAttribute("data-glyph-container-class")).toContain("size-6");
+     expect(surface?.querySelector('[data-property-section="true"] > div')?.classList)
+       .toContain("text-muted-foreground/70");
+-    const projectLabel = surface?.querySelector('[data-property-label="Project"]');
+-    const labelsLabel = surface?.querySelector('[data-property-label="Labels"]');
++    const projectLabel = surface?.querySelector('[data-property-label="Projet"]');
++    const labelsLabel = surface?.querySelector('[data-property-label="Étiquettes"]');
+     if (!projectLabel || !labelsLabel) throw new Error("Expected Project and Labels rows");
+     expect(projectLabel.compareDocumentPosition(labelsLabel) & Node.DOCUMENT_POSITION_FOLLOWING)
+       .toBeTruthy();
+@@ -587,7 +587,7 @@ describe("IssueProperties", () => {
+     });
+     await flush();
+ 
+-    for (const label of ["Labels", "Blocked by", "Blocking", "Subtasks"]) {
++    for (const label of ["Étiquettes", "Bloquée par", "Bloque", "Sous-tâches"]) {
+       const labelNode = container.querySelector(`[data-property-label="${label}"]`);
+       const row = labelNode?.closest('[data-property-row="true"]');
+       const value = row?.querySelector('[data-property-value="true"]');
+@@ -597,9 +597,9 @@ describe("IssueProperties", () => {
+       expect(value?.classList).toContain("items-start");
+     }
+ 
+-    for (const label of ["Labels", "Blocked by", "Subtasks"]) {
++    for (const label of ["Étiquettes", "Bloquée par", "Sous-tâches"]) {
+       const trigger = findRowTrigger(container, label);
+-      const chipStack = label === "Labels"
++      const chipStack = label === "Étiquettes"
+         ? trigger?.querySelector("div")
+         : trigger?.closest('[data-property-value="true"]')?.querySelector(".flex-col");
+       expect(chipStack?.classList).toContain("flex-col");
+@@ -607,7 +607,7 @@ describe("IssueProperties", () => {
+     }
+ 
+     const blockingValue = container
+-      .querySelector('[data-property-label="Blocking"]')
++      .querySelector('[data-property-label="Bloque"]')
+       ?.closest('[data-property-row="true"]')
+       ?.querySelector('[data-property-value="true"] > div');
+     expect(blockingValue?.classList).toContain("flex-col");
+@@ -628,7 +628,7 @@ describe("IssueProperties", () => {
+     await flush();
+ 
+     const tab = headerSlot.querySelector<HTMLButtonElement>('[role="tab"]');
+-    expect(tab?.textContent).toBe("Properties");
++    expect(tab?.textContent).toBe("Propriétés");
+     expect(tab?.getAttribute("aria-selected")).toBe("true");
+     expect(tab?.classList).toContain("bg-muted");
+     expect(tab?.classList).toContain("px-3");
+@@ -650,14 +650,14 @@ describe("IssueProperties", () => {
+     await flush();
+ 
+     const tabs = Array.from(headerSlot.querySelectorAll<HTMLButtonElement>('[role="tab"]'));
+-    const propertiesTab = tabs.find((tab) => tab.textContent === "Properties");
+-    const subtasksTab = tabs.find((tab) => tab.textContent?.includes("Subtasks"));
++    const propertiesTab = tabs.find((tab) => tab.textContent === "Propriétés");
++    const subtasksTab = tabs.find((tab) => tab.textContent?.includes("Sous-tâches"));
+     const tabItems = Array.from(headerSlot.querySelectorAll<HTMLElement>('[data-slot="task-detail-pane-tab"]'));
+     const tabDividers = Array.from(headerSlot.querySelectorAll<HTMLElement>('[data-slot="task-detail-pane-tab-divider"]'));
+-    const subtasksLabel = subtasksTab?.querySelector<HTMLElement>('[title="Subtasks"]');
++    const subtasksLabel = subtasksTab?.querySelector<HTMLElement>('[title="Sous-tâches"]');
+     const subtasksCount = Array.from(subtasksTab?.querySelectorAll<HTMLElement>("span") ?? [])
+       .find((span) => span.textContent === "1");
+-    const closeSubtasks = headerSlot.querySelector<HTMLButtonElement>('[aria-label="Close Subtasks tab"]');
++    const closeSubtasks = headerSlot.querySelector<HTMLButtonElement>('[aria-label="Close Sous-tâches tab"]');
+     const openClosedTab = headerSlot.querySelector<HTMLButtonElement>('[aria-label="Open closed sidebar tab"]');
+ 
+     expect(propertiesTab?.getAttribute("data-state")).toBe("active");
+@@ -694,8 +694,8 @@ describe("IssueProperties", () => {
+     expect(subtasksTab?.getAttribute("data-state")).toBe("active");
+ 
+     await act(async () => closeSubtasks?.click());
+-    expect(headerSlot.querySelector('[role="tab"][data-state="active"]')?.textContent).toBe("Properties");
+-    expect(headerSlot.textContent).not.toContain("Subtasks");
++    expect(headerSlot.querySelector('[role="tab"][data-state="active"]')?.textContent).toBe("Propriétés");
++    expect(headerSlot.textContent).not.toContain("Sous-tâches");
+     expect(openClosedTab?.disabled).toBe(false);
+ 
+     await act(async () => {
+@@ -706,7 +706,7 @@ describe("IssueProperties", () => {
+     let reopenSubtasks: HTMLElement | undefined;
+     await waitForAssertion(() => {
+       reopenSubtasks = Array.from(document.body.querySelectorAll<HTMLElement>('[role="menuitem"]'))
+-        .find((item) => item.textContent === "Subtasks");
++        .find((item) => item.textContent === "Sous-tâches");
+       expect(reopenSubtasks).not.toBeUndefined();
+     });
+ 
+@@ -715,7 +715,7 @@ describe("IssueProperties", () => {
+       reopenSubtasks?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+     });
+     await flush();
+-    expect(headerSlot.querySelector('[role="tab"][data-state="active"]')?.textContent).toContain("Subtasks");
++    expect(headerSlot.querySelector('[role="tab"][data-state="active"]')?.textContent).toContain("Sous-tâches");
+ 
+     act(() => root.unmount());
+   });
+@@ -737,7 +737,7 @@ describe("IssueProperties", () => {
+       expect(container.querySelector(".task-detail-properties")).toBeNull();
+       expect(container.querySelector('[role="tab"]')).toBeNull();
+     });
+-    expect(container.textContent).toContain("Status");
++    expect(container.textContent).toContain("Statut");
+     expect(container.textContent).toContain("Triage");
+ 
+     act(() => root.unmount());
+@@ -759,7 +759,7 @@ describe("IssueProperties", () => {
+       onUpdate: vi.fn(),
+     });
+     await waitForAssertion(() => {
+-      expect(headerSlot.textContent).toBe("Properties");
++      expect(headerSlot.textContent).toBe("Propriétés");
+       expect(headerSlot.querySelector('[role="tab"]')).toBeNull();
+       expect(container.querySelector(".task-detail-properties")).toBeNull();
+     });
+@@ -866,9 +866,9 @@ describe("IssueProperties", () => {
+ 
+     await waitForAssertion(() => {
+       // The Triage section still renders the Status row...
+-      expect(container.querySelector('[data-property-label="Status"]')).not.toBeNull();
++      expect(container.querySelector('[data-property-label="Statut"]')).not.toBeNull();
+       // ...but the Priority row is gated behind SHOW_TASK_PRIORITY_UI (off).
+-      expect(container.querySelector('[data-property-label="Priority"]')).toBeNull();
++      expect(container.querySelector('[data-property-label="Priorité"]')).toBeNull();
+     });
+ 
+     act(() => root.unmount());
+@@ -889,9 +889,9 @@ describe("IssueProperties", () => {
+     await flush();
+ 
+     await waitForAssertion(() => {
+-      expect(container.textContent).toContain("Assignee");
++      expect(container.textContent).toContain("Assigné à");
+       expect(container.textContent).toContain("CodexCoder");
+-      expect(container.textContent).toContain("Originating");
++      expect(container.textContent).toContain("Origine");
+       expect(container.textContent).toContain("Riley Board");
+       expect(container.textContent).not.toContain("Morgan Product");
+       expect(container.textContent).not.toContain("Responsible");
+@@ -916,7 +916,7 @@ describe("IssueProperties", () => {
+     await flush();
+ 
+     await waitForAssertion(() => {
+-      expect(container.textContent).toContain("Originating");
++      expect(container.textContent).toContain("Origine");
+       expect(container.textContent).toContain("Riley Board");
+       expect(container.textContent).not.toContain("Kicked off by");
+       expect(container.textContent).not.toContain("Kicked off by · responsible");
+@@ -942,9 +942,9 @@ describe("IssueProperties", () => {
+     await flush();
+ 
+     await waitForAssertion(() => {
+-      expect(container.textContent).toContain("Originating");
++      expect(container.textContent).toContain("Origine");
+       expect(container.textContent).toContain("CodexCoder");
+-      expect(container.textContent).toContain("Assignee");
++      expect(container.textContent).toContain("Assigné à");
+       expect(container.textContent).toContain("Unassigned");
+       expect(container.textContent).not.toContain("Responsible");
+       expect(container.textContent).not.toContain("Kicked off by");
+@@ -969,7 +969,7 @@ describe("IssueProperties", () => {
+     await flush();
+ 
+     await waitForAssertion(() => {
+-      expect(container.textContent).toContain("Originating");
++      expect(container.textContent).toContain("Origine");
+       expect(container.textContent).toContain("Morgan Product");
+       expect(container.textContent).toContain("via CodexCoder");
+       expect(container.textContent).not.toContain("Responsible");
+@@ -993,7 +993,7 @@ describe("IssueProperties", () => {
+     await flush();
+ 
+     await waitForAssertion(() => {
+-      expect(container.textContent).toContain("Originating");
++      expect(container.textContent).toContain("Origine");
+       expect(container.textContent).toContain("Morgan Product");
+       expect(container.textContent).not.toContain("via ");
+     });
+@@ -1130,7 +1130,7 @@ describe("IssueProperties", () => {
+       expect(container.textContent).toContain("Add subtask");
+     });
+ 
+-    expect(container.textContent).toContain("Subtasks");
++    expect(container.textContent).toContain("Sous-tâches");
+ 
+     const addButton = Array.from(container.querySelectorAll("button"))
+       .find((button) => button.textContent?.includes("Add subtask"));
+@@ -1157,7 +1157,7 @@ describe("IssueProperties", () => {
+     await flush();
+ 
+     const subtasksTab = Array.from(container.querySelectorAll<HTMLButtonElement>('button[role="tab"]'))
+-      .find((button) => button.textContent?.includes("Subtasks"));
++      .find((button) => button.textContent?.includes("Sous-tâches"));
+     expect(subtasksTab).not.toBeUndefined();
+     await act(async () => {
+       subtasksTab!.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, button: 0 }));
+@@ -1184,9 +1184,9 @@ describe("IssueProperties", () => {
+     await flush();
+ 
+     await waitForAssertion(() => {
+-      expect(container.textContent).toContain("Watchdog");
++      expect(container.textContent).toContain("Surveillant");
+       // Empty watchdog uses the uniform muted "None" empty state (ux-spec §6).
+-      expect(findRowTrigger(container, "Watchdog")?.textContent).toContain("None");
++      expect(findRowTrigger(container, "Surveillant")?.textContent).toContain("None");
+     });
+ 
+     act(() => root.unmount());
+@@ -1260,7 +1260,7 @@ describe("IssueProperties", () => {
+       inline: true,
+     });
+     await flush();
+-    const row = container.querySelector('[data-property-label="Blocked by"]')!.closest('[data-property-row]')!;
++    const row = container.querySelector('[data-property-label="Bloquée par"]')!.closest('[data-property-row]')!;
+     const link = row.querySelector<HTMLAnchorElement>('a[href="/issues/PAP-2"]')!;
+     expect(link).not.toBeNull();
+     expect(link.textContent).toContain("in_progress");
+@@ -1303,7 +1303,7 @@ describe("IssueProperties", () => {
+     });
+     await flush();
+ 
+-    const blockerTrigger = findRowTrigger(container, "Blocked by");
++    const blockerTrigger = findRowTrigger(container, "Bloquée par");
+     expect(blockerTrigger?.closest('[data-property-row="true"]')?.textContent).toContain("PAP-2");
+     expect(container.textContent).not.toContain("Add blocker");
+     expect(container.querySelector('input[placeholder="Search tasks..."]')).toBeNull();
+@@ -1345,7 +1345,7 @@ describe("IssueProperties", () => {
+     });
+     await flush();
+ 
+-    const blockerTrigger = findRowTrigger(container, "Blocked by");
++    const blockerTrigger = findRowTrigger(container, "Bloquée par");
+     expect(blockerTrigger).not.toBeUndefined();
+ 
+     await act(async () => {
+@@ -1412,7 +1412,7 @@ describe("IssueProperties", () => {
+     });
+     await flush();
+ 
+-    const blockerTrigger = findRowTrigger(container, "Blocked by");
++    const blockerTrigger = findRowTrigger(container, "Bloquée par");
+     expect(blockerTrigger).not.toBeUndefined();
+ 
+     await act(async () => {
+@@ -1465,7 +1465,7 @@ describe("IssueProperties", () => {
+     });
+     await flush();
+ 
+-    const blockerTrigger = findRowTrigger(container, "Blocked by");
++    const blockerTrigger = findRowTrigger(container, "Bloquée par");
+     expect(blockerTrigger?.closest('[data-property-row="true"]')?.textContent).toContain("PAP-2");
+ 
+     await act(async () => {
+@@ -1509,13 +1509,13 @@ describe("IssueProperties", () => {
+     });
+     await flush();
+ 
+-    const blockedByTrigger = findRowTrigger(container, "Blocked by");
++    const blockedByTrigger = findRowTrigger(container, "Bloquée par");
+     expect(blockedByTrigger?.closest('[data-property-row="true"]')?.textContent).toContain("BLOCK-1");
+     expect(blockedByTrigger?.closest('[data-property-row="true"]')?.textContent).toContain("BLOCK-2");
+     expect(blockedByTrigger?.closest('[data-property-row="true"]')?.textContent).toContain("+5 more");
+     expect(blockedByTrigger?.closest('[data-property-row="true"]')?.textContent).not.toContain("BLOCK-7");
+ 
+-    const subtasksTrigger = findRowTrigger(container, "Subtasks");
++    const subtasksTrigger = findRowTrigger(container, "Sous-tâches");
+     expect(subtasksTrigger?.closest('[data-property-row="true"]')?.textContent).toContain("SUB-1");
+     expect(subtasksTrigger?.closest('[data-property-row="true"]')?.textContent).toContain("SUB-2");
+     expect(subtasksTrigger?.closest('[data-property-row="true"]')?.textContent).toContain("+5 more");
+@@ -1703,8 +1703,8 @@ describe("IssueProperties", () => {
+     });
+     await flush();
+ 
+-    expect(findRowTrigger(container, "Blocked by")?.closest('[data-property-row="true"]')?.textContent).toContain("BLOCK-1");
+-    expect(findRowTrigger(container, "Blocked by")?.closest('[data-property-row="true"]')?.textContent).toContain("+5 more");
++    expect(findRowTrigger(container, "Bloquée par")?.closest('[data-property-row="true"]')?.textContent).toContain("BLOCK-1");
++    expect(findRowTrigger(container, "Bloquée par")?.closest('[data-property-row="true"]')?.textContent).toContain("+5 more");
+ 
+     const nextBlockedBy = [{
+       id: "next-blocker",
+@@ -1730,9 +1730,9 @@ describe("IssueProperties", () => {
+     });
+     await flush();
+ 
+-    expect(findRowTrigger(container, "Blocked by")?.closest('[data-property-row="true"]')?.textContent).toContain("NEXT-1");
+-    expect(findRowTrigger(container, "Blocked by")?.closest('[data-property-row="true"]')?.textContent).not.toContain("BLOCK-1");
+-    expect(findRowTrigger(container, "Blocked by")?.closest('[data-property-row="true"]')?.textContent).not.toContain("more");
++    expect(findRowTrigger(container, "Bloquée par")?.closest('[data-property-row="true"]')?.textContent).toContain("NEXT-1");
++    expect(findRowTrigger(container, "Bloquée par")?.closest('[data-property-row="true"]')?.textContent).not.toContain("BLOCK-1");
++    expect(findRowTrigger(container, "Bloquée par")?.closest('[data-property-row="true"]')?.textContent).not.toContain("more");
+ 
+     act(() => root.unmount());
+   });
+@@ -1756,7 +1756,7 @@ describe("IssueProperties", () => {
+ 
+     expect(mockProjectsApi.list).toHaveBeenCalledWith("company-1", { includeArchived: true });
+     await waitForAssertion(() => {
+-      expect(findRowTrigger(container, "Project")?.textContent).toContain("Archived Project");
++      expect(findRowTrigger(container, "Projet")?.textContent).toContain("Archived Project");
+     });
+ 
+     act(() => root.unmount());
+@@ -1778,10 +1778,10 @@ describe("IssueProperties", () => {
+       sidePanelContentOnly: true,
+     });
+     await waitForAssertion(() => {
+-      expect(findRowTrigger(container, "Project")?.textContent).toContain("Configured Project");
++      expect(findRowTrigger(container, "Projet")?.textContent).toContain("Configured Project");
+     });
+ 
+-    const projectTrigger = findRowTrigger(container, "Project");
++    const projectTrigger = findRowTrigger(container, "Projet");
+     const projectTile = projectTrigger?.querySelector<HTMLElement>('span.inline-flex[aria-hidden="true"]');
+     expect(projectTile?.style.backgroundColor).toBe("rgb(14, 165, 233)");
+     expect(projectTile?.querySelector("svg")?.classList).toContain("lucide-rocket");
+@@ -1796,12 +1796,12 @@ describe("IssueProperties", () => {
+       issue: createIssue(), childIssues: [], onUpdate: vi.fn(), inline: true,
+     });
+     await flush();
+-    await act(() => findRowTrigger(container, "Project")!.click());
++    await act(() => findRowTrigger(container, "Projet")!.click());
+     const option = [...document.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.trim() === "Remembered Project")!;
+     expect(option).toBeDefined();
+     act(() => option.click());
+     expect(getLastProjectId("company-1")).toBeUndefined();
+-    await act(() => findRowTrigger(container, "Project")!.click());
++    await act(() => findRowTrigger(container, "Projet")!.click());
+     const none = [...document.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent?.trim() === "No project")!;
+     act(() => none.click());
+     expect(getLastProjectId("company-1")).toBeUndefined();
+@@ -1885,11 +1885,11 @@ describe("IssueProperties", () => {
+     });
+     await flush();
+ 
+-    expect(container.textContent).toMatch(/CreatedApr 6, 2026, \d{1,2}:34 (AM|PM)/);
+-    expect(container.textContent).toMatch(/StartedApr 6, 2026, \d{1,2}:35 (AM|PM)/);
++    expect(container.textContent).toMatch(/CrééeApr 6, 2026, \d{1,2}:34 (AM|PM)/);
++    expect(container.textContent).toMatch(/DémarréeApr 6, 2026, \d{1,2}:35 (AM|PM)/);
+     expect(container.textContent).toMatch(/CompletedApr 6, 2026, \d{1,2}:36 (AM|PM)/);
+ 
+-    for (const label of ["Started", "Completed", "Created"]) {
++    for (const label of ["Démarrée", "Completed", "Créée"]) {
+       const labelNode = container.querySelector(`[data-property-label="${label}"]`);
+       const value = labelNode?.parentElement?.querySelector<HTMLElement>('[data-property-value="true"] > span');
+       expect(value?.classList).toContain("min-w-0");
+@@ -2161,7 +2161,7 @@ describe("IssueProperties", () => {
+ 
+     expect(container.querySelector('button[aria-label="Add label"]')).toBeNull();
+     expect(container.querySelector('input[placeholder="Search labels..."]')).toBeNull();
+-    const labelsTrigger = findRowTrigger(container, "Labels");
++    const labelsTrigger = findRowTrigger(container, "Étiquettes");
+     expect(labelsTrigger?.textContent).toContain("Bug");
+     const labelChip = labelsTrigger?.querySelector<HTMLElement>('[title="Bug"]');
+     expect(labelChip?.classList).toContain("border-0");
+@@ -2418,7 +2418,7 @@ describe("IssueProperties", () => {
+     });
+     await flush();
+ 
+-    const labelsTrigger = findRowTrigger(container, "Labels");
++    const labelsTrigger = findRowTrigger(container, "Étiquettes");
+     expect(labelsTrigger?.textContent).toContain("Bug");
+     await act(async () => {
+       labelsTrigger!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+@@ -2619,7 +2619,7 @@ describe("IssueProperties", () => {
+     await flush();
+ 
+     const runReviewButton = Array.from(container.querySelectorAll("button"))
+-      .find((button) => button.textContent?.includes("Run review now"));
++      .find((button) => button.textContent?.includes("Lancer la revue maintenant"));
+     expect(runReviewButton).not.toBeUndefined();
+ 
+     await act(async () => {
+@@ -2650,8 +2650,8 @@ describe("IssueProperties", () => {
+     });
+     await flush();
+ 
+-    expect(container.textContent).toContain("Run approval now");
+-    expect(container.textContent).not.toContain("Run review now");
++    expect(container.textContent).toContain("Lancer l’approbation maintenant");
++    expect(container.textContent).not.toContain("Lancer la revue maintenant");
+ 
+     act(() => root.unmount());
+   });
+@@ -2677,7 +2677,7 @@ describe("IssueProperties", () => {
+     });
+     await flush();
+ 
+-    expect(container.textContent).toContain("Run review now");
++    expect(container.textContent).toContain("Lancer la revue maintenant");
+ 
+     act(() => root.unmount());
+   });
+@@ -2707,8 +2707,8 @@ describe("IssueProperties", () => {
+     });
+     await flush();
+ 
+-    expect(container.textContent).not.toContain("Run review now");
+-    expect(container.textContent).not.toContain("Run approval now");
++    expect(container.textContent).not.toContain("Lancer la revue maintenant");
++    expect(container.textContent).not.toContain("Lancer l’approbation maintenant");
+ 
+     act(() => root.unmount());
+   });
+@@ -2753,7 +2753,7 @@ describe("IssueProperties", () => {
+     });
+     await flush();
+ 
+-    expect(container.textContent).toContain("Monitor");
++    expect(container.textContent).toContain("Surveillance");
+     expect(container.textContent).toContain("In 2h 30m");
+     expect(container.querySelector('input[type="datetime-local"]')).toBeNull();
+     expect(container.querySelector('input[placeholder="What should the agent re-check?"]')).toBeNull();
+@@ -2955,8 +2955,8 @@ describe("IssueProperties", () => {
+ 
+     let trigger: HTMLButtonElement | undefined;
+     await waitForAssertion(() => {
+-      expect(container.textContent).toContain("Watchdog");
+-      trigger = findRowTrigger(container, "Watchdog");
++      expect(container.textContent).toContain("Surveillant");
++      trigger = findRowTrigger(container, "Surveillant");
+       expect(trigger).toBeTruthy();
+     });
+ 
+@@ -3026,7 +3026,7 @@ describe("IssueProperties", () => {
+ 
+     let trigger: HTMLButtonElement | undefined;
+     await waitForAssertion(() => {
+-      trigger = findRowTrigger(container, "Watchdog");
++      trigger = findRowTrigger(container, "Surveillant");
+       expect(trigger).toBeTruthy();
+     });
+ 
+@@ -3133,7 +3133,7 @@ describe("IssueProperties", () => {
+     expect(instructionNode!.className).not.toContain("whitespace-normal");
+     expect(instructionNode!.className).not.toContain("break-words");
+ 
+-    const watchdogTrigger = findRowTrigger(container, "Watchdog");
++    const watchdogTrigger = findRowTrigger(container, "Surveillant");
+     expect(watchdogTrigger?.querySelector("[title]")?.getAttribute("title")).toBe(instructions);
+ 
+     act(() => root.unmount());
+@@ -3394,7 +3394,7 @@ describe("IssueProperties", () => {
+     await flush();
+ 
+     await waitForAssertion(() => {
+-      expect(container.textContent).toContain("Updated");
++      expect(container.textContent).toContain("Mise à jour");
+     });
+     expect(container.textContent).not.toContain("Archived by");
+     expect(
+@@ -3484,7 +3484,7 @@ describe("IssueProperties", () => {
+ 
+     await flush();
+ 
+-    expect(container.querySelector('[data-property-label="Execution"]')).toBeNull();
++    expect(container.querySelector('[data-property-label="Exécution"]')).toBeNull();
+     expect(mockExecutionWorkspacesApi.list).not.toHaveBeenCalled();
+     act(() => root.unmount());
+   });
+@@ -3498,7 +3498,7 @@ describe("IssueProperties", () => {
+       childIssues: [], onUpdate, inline: true,
+     }, ["workspaces.isolation"]);
+     await flush();
+-    expect(container.querySelector('[data-property-label="Execution"]')).toBeNull();
++    expect(container.querySelector('[data-property-label="Exécution"]')).toBeNull();
+     expect(container.querySelector('a[href="/execution-workspaces/workspace-1"]')).not.toBeNull();
+     expect(onUpdate).not.toHaveBeenCalled();
+     act(() => root.unmount());
+@@ -3517,7 +3517,7 @@ describe("IssueProperties", () => {
+     });
+ 
+     await waitForAssertion(() => {
+-      expect(findRowTrigger(container, "Execution")?.textContent).toBe("Default");
++      expect(findRowTrigger(container, "Exécution")?.textContent).toBe("Default");
+     });
+ 
+     act(() => root.unmount());
+@@ -3536,8 +3536,8 @@ describe("IssueProperties", () => {
+       inline: true,
+     });
+ 
+-    await waitForAssertion(() => expect(findRowTrigger(container, "Execution")).toBeDefined());
+-    act(() => findRowTrigger(container, "Execution")!.click());
++    await waitForAssertion(() => expect(findRowTrigger(container, "Exécution")).toBeDefined());
++    act(() => findRowTrigger(container, "Exécution")!.click());
+     const isolatedOption = Array.from(container.querySelectorAll("button"))
+       .find((button) => button.textContent?.includes("New isolated workspace"));
+     act(() => isolatedOption!.click());
+@@ -3581,8 +3581,8 @@ describe("IssueProperties", () => {
+       inline: true,
+     });
+ 
+-    await waitForAssertion(() => expect(findRowTrigger(container, "Execution")).toBeDefined());
+-    act(() => findRowTrigger(container, "Execution")!.click());
++    await waitForAssertion(() => expect(findRowTrigger(container, "Exécution")).toBeDefined());
++    act(() => findRowTrigger(container, "Exécution")!.click());
+     const reuseOption = Array.from(container.querySelectorAll("button"))
+       .find((button) => button.textContent?.includes("Reuse existing workspace"));
+     act(() => reuseOption!.click());
+diff --git a/ui/src/components/PriorityIcon.interaction.test.tsx b/ui/src/components/PriorityIcon.interaction.test.tsx
+index bb2b6f102..921e9bf12 100644
+--- a/ui/src/components/PriorityIcon.interaction.test.tsx
++++ b/ui/src/components/PriorityIcon.interaction.test.tsx
+@@ -37,7 +37,7 @@ describe("PriorityIcon picker", () => {
+     await act(async () => root?.render(<PriorityIcon priority="medium" onChange={onChange} />));
+ 
+     const trigger = container.querySelector<HTMLButtonElement>(
+-      'button[aria-label="Change priority (current: Medium)"]',
++      'button[aria-label="Changer la priorité (actuelle : Moyenne)"]',
+     );
+     expect(trigger).not.toBeNull();
+ 
+@@ -46,7 +46,7 @@ describe("PriorityIcon picker", () => {
+     });
+ 
+     const highOption = [...document.body.querySelectorAll<HTMLButtonElement>("button")]
+-      .find((button) => button.textContent?.trim() === "High");
++      .find((button) => button.textContent?.trim() === "Haute");
+     expect(highOption).not.toBeUndefined();
+ 
+     await act(async () => {
+diff --git a/ui/src/components/PriorityIcon.test.tsx b/ui/src/components/PriorityIcon.test.tsx
+index dd31dfb7b..2b5a642f8 100644
+--- a/ui/src/components/PriorityIcon.test.tsx
++++ b/ui/src/components/PriorityIcon.test.tsx
+@@ -9,6 +9,6 @@ describe("PriorityIcon", () => {
+     const html = renderToStaticMarkup(<PriorityIcon priority="medium" onChange={() => {}} />);
+ 
+     expect(html).toContain('<button type="button"');
+-    expect(html).toContain('aria-label="Change priority (current: Medium)"');
++    expect(html).toContain('aria-label="Changer la priorité (actuelle : Moyenne)"');
+   });
+ });
+diff --git a/ui/src/components/PriorityIcon.tsx b/ui/src/components/PriorityIcon.tsx
+index 4202636c7..896bc3dc3 100644
+--- a/ui/src/components/PriorityIcon.tsx
++++ b/ui/src/components/PriorityIcon.tsx
+@@ -6,10 +6,10 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
+ import { Button } from "@/components/ui/button";
+ 
+ const priorityConfig: Record<string, { icon: typeof ArrowUp; color: string; label: string }> = {
+-  critical: { icon: AlertTriangle, color: priorityColor.critical ?? priorityColorDefault, label: "Critical" },
+-  high: { icon: ArrowUp, color: priorityColor.high ?? priorityColorDefault, label: "High" },
+-  medium: { icon: Minus, color: priorityColor.medium ?? priorityColorDefault, label: "Medium" },
+-  low: { icon: ArrowDown, color: priorityColor.low ?? priorityColorDefault, label: "Low" },
++  critical: { icon: AlertTriangle, color: priorityColor.critical ?? priorityColorDefault, label: "Urgente" },
++  high: { icon: ArrowUp, color: priorityColor.high ?? priorityColorDefault, label: "Haute" },
++  medium: { icon: Minus, color: priorityColor.medium ?? priorityColorDefault, label: "Moyenne" },
++  low: { icon: ArrowDown, color: priorityColor.low ?? priorityColorDefault, label: "Basse" },
+ };
+ 
+ const allPriorities = ["critical", "high", "medium", "low"];
+@@ -44,7 +44,7 @@ export function PriorityIcon({ priority, onChange, className, showLabel }: Prior
+   const trigger = showLabel ? (
+     <button
+       type="button"
+-      aria-label={`Change priority (current: ${config.label})`}
++      aria-label={`Changer la priorité (actuelle : ${config.label})`}
+       className="inline-flex min-h-5 items-center gap-1.5 cursor-pointer hover:bg-accent/50 rounded px-1 -mx-1 py-0.5 transition-colors"
+     >
+       {icon}
+@@ -54,7 +54,7 @@ export function PriorityIcon({ priority, onChange, className, showLabel }: Prior
+     <button
+       type="button"
+       data-slot="icon-button"
+-      aria-label={`Change priority (current: ${config.label})`}
++      aria-label={`Changer la priorité (actuelle : ${config.label})`}
+       className="inline-flex cursor-pointer items-center justify-center rounded-sm focus-visible:outline-none focus-visible:ring-(length:--rad-3) focus-visible:ring-ring"
+     >
+       {icon}
+diff --git a/ui/src/components/PropertiesPanel.tsx b/ui/src/components/PropertiesPanel.tsx
+index 783ec1dd3..bd344dd63 100644
+--- a/ui/src/components/PropertiesPanel.tsx
++++ b/ui/src/components/PropertiesPanel.tsx
+@@ -31,7 +31,7 @@ export function PropertiesPanel({ taskDetailLayout = false }: { taskDetailLayout
+       >
+         <div className="w-80 flex-1 flex flex-col min-w-(--sz-320px) min-h-0">
+           <div className="flex items-center justify-between px-4 py-2 border-b border-border">
+-            <span className="text-sm font-medium">Properties</span>
++            <span className="text-sm font-medium">Propriétés</span>
+             <Button variant="ghost" size="icon-xs" onClick={() => setPanelVisible(false)}>
+               <X className="h-4 w-4" />
+             </Button>
+diff --git a/ui/src/components/TaskChatThread.test.tsx b/ui/src/components/TaskChatThread.test.tsx
+index 1a111c116..d22594fbc 100644
+--- a/ui/src/components/TaskChatThread.test.tsx
++++ b/ui/src/components/TaskChatThread.test.tsx
+@@ -195,11 +195,11 @@ describe.each(["legacy", "native"] as const)("historical %s system status", (run
+     expect(container.textContent).toContain("Saved the useful response.");
+     expect(container.textContent).toContain("Please keep this message.");
+     expect(container.textContent).toContain("New session");
+-    for (const status of ["Run failed", "Stopped", "Worked", "Run cancelled", "Waiting to resume", "Recovery pending", "Run completed", "previous execution needs"]) {
++    for (const status of ["Run failed", "Stopped", "A travaillé", "Run cancelled", "Waiting to resume", "Recovery pending", "Run completed", "previous execution needs"]) {
+       expect(container.textContent).not.toContain(status);
+     }
+     if (runtimeMode === "legacy") {
+-      const activity = Array.from(container.querySelectorAll<HTMLButtonElement>('button')).find(button => button.textContent?.startsWith("Activity"));
++      const activity = Array.from(container.querySelectorAll<HTMLButtonElement>('button')).find(button => button.textContent?.startsWith("Activité"));
+       expect(activity).toBeDefined();
+       flushSync(() => activity!.click());
+       expect(container.textContent).toContain("Inspected the source.");
+@@ -268,7 +268,7 @@ describe.each(["legacy", "native"] as const)("historical %s system status", (run
+     render(<TaskChatThread comments={[comment("old-response", "Saved the useful response.", "old"), response]}
+       onAdd={async () => {}} issueStatus="in_progress" linkedRuns={[run("old", "failed", 0), run("new", "succeeded", 1)]} />);
+     expect(container.textContent).toContain("The follow-up succeeded.");
+-    expect(container.textContent).toContain("Worked");
++    expect(container.textContent).toContain("A travaillé");
+     expect(container.textContent).not.toContain("Stopped");
+     expect(container.textContent).not.toContain("Run failed");
+   });
+@@ -2165,7 +2165,7 @@ describe("TaskChatThread runtime transcript selection", () => {
+       "Continued after steering",
+     );
+     expect(turnHeaders[1]?.textContent).toContain(
+-      "Continued after steering · Worked for",
++      "Continued after steering · A travaillé pendant",
+     );
+   });
+ 
+@@ -2231,7 +2231,7 @@ describe("TaskChatThread runtime transcript selection", () => {
+     expect(
+       container.querySelector('[data-testid="task-chat-turn-status-header"]')
+         ?.textContent,
+-    ).toContain("Continued after steering · Working for");
++    ).toContain("Continued after steering · Au travail depuis");
+     expect(container.textContent).toContain(
+       new Date("2026-08-25T17:59:32.000Z").toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }),
+     );
+@@ -2892,7 +2892,7 @@ describe("TaskChatThread runtime transcript selection", () => {
+       expect(
+         container.querySelector('[data-testid="task-chat-turn-summary"]')
+           ?.textContent,
+-      ).toContain("Worked");
++      ).toContain("A travaillé");
+       expect(
+         container.querySelector('[data-testid="task-chat-runner-turn"]'),
+       ).toBeNull();
+@@ -3299,11 +3299,11 @@ describe("TaskChatThread blocker links", () => {
+     expect(notices[0]?.getAttribute("data-placement")).toBe("top");
+     expect(notices[1]?.getAttribute("data-placement")).toBe("bottom");
+     expect(notices[0]?.textContent).toContain(
+-      "Blocked byPAP-600Waiting in review",
++      "Bloquée parPAP-600Waiting in review",
+     );
+     expect(notices[0]?.textContent).toContain("Root blockerPAP-777Actual work");
+     expect(notices[1]?.textContent).toContain(
+-      "Still blocked byPAP-600Waiting in review",
++      "Toujours bloquée parPAP-600Waiting in review",
+     );
+     expect(notices[1]?.textContent).toContain(
+       "Root blocker remainsPAP-777Actual work",
+@@ -3483,7 +3483,7 @@ describe("TaskChatThread blocker links", () => {
+       container.querySelectorAll('[data-testid="task-chat-blocker-links"]'),
+     ).toHaveLength(2);
+     expect(container.textContent).toContain(
+-      "Blocked byPAP-500Direct dependency",
++      "Bloquée parPAP-500Direct dependency",
+     );
+     expect(container.textContent).not.toContain("Ultimately blocked by");
+     expect(container.textContent).not.toContain("Root blocker");
+@@ -3553,13 +3553,13 @@ describe("TaskChatThread blocker links", () => {
+       '[data-testid="task-chat-blocker-links"]',
+     );
+     expect(notices[0]?.textContent).toContain(
+-      "Blocked byPAP-600Selected dependency",
++      "Bloquée parPAP-600Selected dependency",
+     );
+     expect(notices[0]?.textContent).toContain(
+       "Root blockerPAP-650Stalled intermediate review",
+     );
+     expect(notices[1]?.textContent).toContain(
+-      "Still blocked byPAP-600Selected dependency",
++      "Toujours bloquée parPAP-600Selected dependency",
+     );
+     expect(notices[1]?.textContent).toContain(
+       "Root blocker remainsPAP-650Stalled intermediate review",
+@@ -4555,7 +4555,7 @@ describe("TaskChatThread live transcript", () => {
+     expect(container.textContent).toContain("Last words before the run stops");
+     // The pill has settled to its "Worked" state rather than flipping back to a
+     // spinner while it waits for the reply comment.
+-    expect(container.textContent).toContain("Worked");
++    expect(container.textContent).toContain("A travaillé");
+   });
+ });
+ 
+diff --git a/ui/src/components/issue-properties/IssueProperties.tsx b/ui/src/components/issue-properties/IssueProperties.tsx
+index 640ae943b..09ea06f27 100644
+--- a/ui/src/components/issue-properties/IssueProperties.tsx
++++ b/ui/src/components/issue-properties/IssueProperties.tsx
+@@ -1049,7 +1049,7 @@ export function IssueProperties({
+         className="inline-flex items-center rounded-full border border-border px-2 py-0.5 text-xs text-muted-foreground transition-colors hover:bg-accent/50 hover:text-foreground"
+         onClick={() => onUpdate({ status: "in_review" })}
+       >
+-        {stageType === "review" ? "Run review now" : "Run approval now"}
++        {stageType === "review" ? "Lancer la revue maintenant" : "Lancer l’approbation maintenant"}
+       </button>
+     </PropertyRow>
+   );
+@@ -1345,7 +1345,7 @@ export function IssueProperties({
+           onPointerDown={(event) => event.stopPropagation()}
+         >
+           <div className="flex items-center justify-between border-b border-border px-4 py-3">
+-            <span className="text-sm font-semibold">Monitor</span>
++            <span className="text-sm font-semibold">Surveillance</span>
+             {monitorAttemptCount > 0 ? <span className="text-xs text-muted-foreground">Attempt {monitorAttemptCount}</span> : null}
+           </div>
+           <div className="space-y-3 px-4 py-3 text-left">
+@@ -2331,7 +2331,7 @@ export function IssueProperties({
+         first
+         streamlined={streamlinedPropertiesEnabled}
+       >
+-        <PropertyRow label="Status">
++        <PropertyRow label="Statut">
+           <StatusIcon
+             status={issue.status}
+             externalConversationState={issue.externalConversationState}
+@@ -2344,7 +2344,7 @@ export function IssueProperties({
+ 
+         {/* PAP-411: priority UI is hidden behind SHOW_TASK_PRIORITY_UI. Revive by flipping the flag. */}
+         {SHOW_TASK_PRIORITY_UI && (
+-          <PropertyRow label="Priority">
++          <PropertyRow label="Priorité">
+             <PriorityIcon
+               priority={issue.priority}
+               onChange={(priority) => onUpdate({ priority })}
+@@ -2355,7 +2355,7 @@ export function IssueProperties({
+ 
+         <PropertyPicker
+           inline={inline}
+-          label="Assignee"
++          label="Assigné à"
+           open={assigneeOpen}
+           onOpenChange={(open) => { setAssigneeOpen(open); if (!open) { setAssigneeSearch(""); setPendingAssignee(null); } }}
+           triggerContent={assigneeTrigger}
+@@ -2389,7 +2389,7 @@ export function IssueProperties({
+ 
+         <PropertyPicker
+           inline={inline}
+-          label="Project"
++          label="Projet"
+           open={projectOpen}
+           onOpenChange={(open) => { setProjectOpen(open); if (!open) setProjectSearch(""); }}
+           triggerContent={projectTrigger}
+@@ -2410,7 +2410,7 @@ export function IssueProperties({
+ 
+         <PropertyPicker
+           inline={inline}
+-          label="Labels"
++          label="Étiquettes"
+           open={labelsOpen}
+           onOpenChange={(open) => { setLabelsOpen(open); if (!open) setLabelSearch(""); }}
+           triggerContent={labelsTrigger}
+@@ -2443,7 +2443,7 @@ export function IssueProperties({
+         {streamlinedPropertiesEnabled ? (
+           <PropertyPicker
+             inline={inline}
+-            label="Blocked by"
++            label="Bloquée par"
+             open={blockedByOpen}
+             onOpenChange={(open) => {
+               setBlockedByOpen(open);
+@@ -2459,7 +2459,7 @@ export function IssueProperties({
+           </PropertyPicker>
+         ) : inline ? (
+           <div>
+-            <PropertyRow label="Blocked by" wrap>
++            <PropertyRow label="Bloquée par" wrap>
+               {visibleBlockedByRelations.map((relation) => (
+                 <RemovableIssueReferencePill
+                   key={relation.id}
+@@ -2482,7 +2482,7 @@ export function IssueProperties({
+             ) : null}
+           </div>
+         ) : (
+-          <PropertyRow label="Blocked by" wrap>
++          <PropertyRow label="Bloquée par" wrap>
+             {visibleBlockedByRelations.map((relation) => (
+               <RemovableIssueReferencePill
+                 key={relation.id}
+@@ -2511,7 +2511,7 @@ export function IssueProperties({
+           </PropertyRow>
+         )}
+ 
+-        <PropertyRow label="Blocking" wrap>
++        <PropertyRow label="Bloque" wrap>
+           {blockingIssues.length > 0 ? (
+             <div className="flex flex-col items-start gap-1.5">
+               {visibleBlockingIssues.map((relation) => (
+@@ -2531,7 +2531,7 @@ export function IssueProperties({
+         {streamlinedPropertiesEnabled ? (
+           <PropertyPicker
+             inline={inline}
+-            label="Subtasks"
++            label="Sous-tâches"
+             open={subtasksOpen}
+             onOpenChange={setSubtasksOpen}
+             separateTrigger={childIssues.length > 0}
+@@ -2543,7 +2543,7 @@ export function IssueProperties({
+             {subtasksContent}
+           </PropertyPicker>
+         ) : !taskChatShellEnabled ? (
+-          <PropertyRow label="Sub-tasks" wrap>
++          <PropertyRow label="Sous-tâches" wrap>
+             <div className="flex flex-col items-start gap-1.5">
+               {visibleChildIssues.map((child) => (
+                 <IssueReferencePill key={child.id} issue={child} />
+@@ -2590,7 +2590,7 @@ export function IssueProperties({
+         />
+       </PropertySection>
+ 
+-      <PropertySection title="Execution" streamlined={streamlinedPropertiesEnabled}>
++      <PropertySection title="Exécution" streamlined={streamlinedPropertiesEnabled}>
+         {/* Read-only: agents set the policy, the board does not. */}
+         {reviewPolicyBadge ? (
+           <PropertyRow label="Approvals">
+@@ -2603,7 +2603,7 @@ export function IssueProperties({
+ 
+         <PropertyPicker
+           inline={inline}
+-          label="Reviewers"
++          label="Relecteurs"
+           open={reviewersOpen}
+           onOpenChange={(open) => { setReviewersOpen(open); if (!open) setReviewerSearch(""); }}
+           triggerContent={reviewerTrigger}
+@@ -2622,7 +2622,7 @@ export function IssueProperties({
+ 
+         <PropertyPicker
+           inline={inline}
+-          label="Approvers"
++          label="Approbateurs"
+           open={approversOpen}
+           onOpenChange={(open) => { setApproversOpen(open); if (!open) setApproverSearch(""); }}
+           triggerContent={approverTrigger}
+@@ -2640,7 +2640,7 @@ export function IssueProperties({
+         {nextRunnableExecutionStage === "approval" && approverValues.length > 0 ? runExecutionButton("approval") : null}
+ 
+         {currentExecutionLabel && (
+-          <PropertyRow label="Execution">
++          <PropertyRow label="Exécution">
+             <span className="text-sm truncate min-w-0" title={currentExecutionLabel}>{currentExecutionLabel}</span>
+           </PropertyRow>
+         )}
+@@ -2666,7 +2666,7 @@ export function IssueProperties({
+ 
+         <PropertyPicker
+           inline={inline}
+-          label="Monitor"
++          label="Surveillance"
+           open={monitorOpen}
+           onOpenChange={setMonitorOpen}
+           triggerContent={monitorTrigger}
+@@ -2678,7 +2678,7 @@ export function IssueProperties({
+ 
+         <PropertyPicker
+           inline={inline}
+-          label="Watchdog"
++          label="Surveillant"
+           open={watchdogOpen}
+           onOpenChange={setWatchdogOpen}
+           triggerContent={watchdogTrigger}
+@@ -2707,7 +2707,7 @@ export function IssueProperties({
+           {workspacePickerEligible ? (
+             <PropertyPicker
+               inline={inline}
+-              label="Execution"
++              label="Exécution"
+               open={workspacePickerOpen}
+               onOpenChange={(open) => {
+                 setWorkspacePickerOpen(open);
+@@ -2874,7 +2874,7 @@ export function IssueProperties({
+ 
+       <PropertySection title="About" streamlined={streamlinedPropertiesEnabled}>
+         {originatingActor ? (
+-          <PropertyRow label="Originating">
++          <PropertyRow label="Origine">
+             {originatingActor.kind === "agent" ? (
+               <Link
+                 to={`/agents/${originatingActor.id}`}
+@@ -2899,7 +2899,7 @@ export function IssueProperties({
+           </PropertyRow>
+         ) : null}
+         {issue.startedAt && (
+-          <PropertyRow label="Started">
++          <PropertyRow label="Démarrée">
+             <span
+               className={streamlinedPropertiesEnabled ? "min-w-0 truncate whitespace-nowrap text-sm" : "text-sm"}
+               title={streamlinedPropertiesEnabled ? formatDateTime(issue.startedAt) : undefined}
+@@ -2914,13 +2914,13 @@ export function IssueProperties({
+             >{formatDateTime(issue.completedAt)}</span>
+           </PropertyRow>
+         )}
+-        <PropertyRow label="Created">
++        <PropertyRow label="Créée">
+           <span
+             className={streamlinedPropertiesEnabled ? "min-w-0 truncate whitespace-nowrap text-sm" : "text-sm"}
+             title={streamlinedPropertiesEnabled ? formatDateTime(issue.createdAt) : undefined}
+           >{formatDateTime(issue.createdAt)}</span>
+         </PropertyRow>
+-        <PropertyRow label="Updated">
++        <PropertyRow label="Mise à jour">
+           <span
+             className={streamlinedPropertiesEnabled ? "min-w-0 truncate whitespace-nowrap text-sm" : "text-sm"}
+             title={streamlinedPropertiesEnabled ? timeAgo(issue.updatedAt) : undefined}
+@@ -2994,9 +2994,9 @@ export function IssueProperties({
+   const hasReferencesTab = streamlinedPropertiesEnabled
+     && (panelReferencedTasks.length > 0 || panelMentionedInTasks.length > 0);
+   const availablePaneTabs: IssuePaneTabDescriptor[] = [
+-    { value: "properties", label: "Properties", closable: false },
++    { value: "properties", label: "Propriétés", closable: false },
+     ...(hasSubtasksTab
+-      ? [{ value: "subtasks" as const, label: "Subtasks", count: childIssues.length, closable: true }]
++      ? [{ value: "subtasks" as const, label: "Sous-tâches", count: childIssues.length, closable: true }]
+       : []),
+     ...(hasReferencesTab
+       ? [{ value: "references" as const, label: "References", closable: true }]
+@@ -3030,11 +3030,11 @@ export function IssueProperties({
+                     "inline-flex flex-none items-center bg-muted px-3",
+                   )}
+                 >
+-                  Properties
++                  Propriétés
+                 </button>
+               </div>,
+               paneHeaderSlot,
+-            ) : createPortal(<span className="text-sm font-medium">Properties</span>, paneHeaderSlot)
++            ) : createPortal(<span className="text-sm font-medium">Propriétés</span>, paneHeaderSlot)
+           : null}
+         {propertiesBody}
+       </>
+diff --git a/ui/src/components/task-chat/TaskChatBlockerLinks.tsx b/ui/src/components/task-chat/TaskChatBlockerLinks.tsx
+index e4d2576a3..252f6c22d 100644
+--- a/ui/src/components/task-chat/TaskChatBlockerLinks.tsx
++++ b/ui/src/components/task-chat/TaskChatBlockerLinks.tsx
+@@ -193,7 +193,7 @@ export function TaskChatBlockerLinks({
+   placement: "top" | "bottom";
+ }) {
+   const streamlined = useStreamlinedTaskChatPresentation();
+-  const directLabel = streamlined && placement === "bottom" ? "Still blocked by" : "Blocked by";
++  const directLabel = streamlined && placement === "bottom" ? "Toujours bloquée par" : "Bloquée par";
+   const rootLabel = streamlined
+     ? placement === "bottom" ? "Root blocker remains" : "Root blocker"
+     : "Ultimately blocked by";
+diff --git a/ui/src/components/task-chat/TaskChatCompactInteractionCard.tsx b/ui/src/components/task-chat/TaskChatCompactInteractionCard.tsx
+index c6965a51c..e06246d7b 100644
+--- a/ui/src/components/task-chat/TaskChatCompactInteractionCard.tsx
++++ b/ui/src/components/task-chat/TaskChatCompactInteractionCard.tsx
+@@ -88,7 +88,7 @@ export interface TaskChatCompactInteractionCardProps extends SharedInteractionPr
+ const KIND_COPY = {
+   suggest_tasks: {
+     fallbackTitle: "Suggested tasks",
+-    label: "Tasks",
++    label: "Tâches",
+     icon: GitBranch,
+   },
+   ask_user_questions: {
+diff --git a/ui/src/components/task-chat/TaskChatComposer.tsx b/ui/src/components/task-chat/TaskChatComposer.tsx
+index 19ed3daf8..a315bcf1a 100644
+--- a/ui/src/components/task-chat/TaskChatComposer.tsx
++++ b/ui/src/components/task-chat/TaskChatComposer.tsx
+@@ -309,7 +309,7 @@ function modePlaceholder(mode: IssueWorkMode, agentName: string, mobile: boolean
+     case "ask":
+       return `Ask ${agentName} a question — read-only, nothing runs…`;
+     default:
+-      return `Message ${agentName} — describe what you want done…`;
++      return `Écrire à ${agentName} : décrivez ce que vous voulez faire…`;
+   }
+ }
+ 
+diff --git a/ui/src/components/task-chat/TaskChatLiveRunPill.test.tsx b/ui/src/components/task-chat/TaskChatLiveRunPill.test.tsx
+index 363636431..f5d1fa709 100644
+--- a/ui/src/components/task-chat/TaskChatLiveRunPill.test.tsx
++++ b/ui/src/components/task-chat/TaskChatLiveRunPill.test.tsx
+@@ -25,7 +25,7 @@ describe("toolCountSummaryFromEntries", () => {
+       toolCall({ name: "command_execution", input: { command: "pwd" }, toolUseId: "c2" }),
+       toolCall({ name: "read_file", input: { path: "a.ts" }, toolUseId: "t1" }),
+     ];
+-    expect(toolCountSummaryFromEntries(entries)).toBe("ran 2 commands, called 1 tool");
++    expect(toolCountSummaryFromEntries(entries)).toBe("a exécuté 2 commandes, appelé 1 outil");
+   });
+ 
+   it("dedupes re-emitted tool_calls that share a toolUseId", () => {
+@@ -34,7 +34,7 @@ describe("toolCountSummaryFromEntries", () => {
+       toolCall({ name: "read_file", input: { path: "a.ts" }, toolUseId: "t1" }),
+       toolCall({ name: "read_file", input: { path: "a.ts" }, toolUseId: "t1" }),
+     ];
+-    expect(toolCountSummaryFromEntries(entries)).toBe("called 1 tool");
++    expect(toolCountSummaryFromEntries(entries)).toBe("appelé 1 outil");
+   });
+ });
+ 
+@@ -61,16 +61,16 @@ describe("TaskChatLiveRunPill", () => {
+         <TaskChatLiveRunPill
+           status="running"
+           startedAtMs={startedAtMs}
+-          toolSummary="called 3 tools"
++          toolSummary="appelé 3 outils"
+         />,
+       );
+     });
+     const pill = container.querySelector('[data-testid="task-chat-live-run-pill"]');
+     expect(pill).not.toBeNull();
+     const shimmer = container.querySelector(".shimmer-text");
+-    expect(shimmer?.textContent).toBe("Working");
+-    expect(pill?.textContent).toContain("for 1 minute");
+-    expect(pill?.textContent).toContain("called 3 tools");
++    expect(shimmer?.textContent).toBe("Au travail");
++    expect(pill?.textContent).toContain("depuis 1 minute");
++    expect(pill?.textContent).toContain("appelé 3 outils");
+   });
+ 
+   it.each(["reconnecting", "retry_scheduled"] as const)(
+@@ -83,20 +83,20 @@ describe("TaskChatLiveRunPill", () => {
+       const render = (status: string) => act(() => root.render(
+         <TaskChatLiveRunPill status={status} execution={execution}
+           startedAtMs={startedAtMs} finishedAtMs={startedAtMs + 8_000}
+-          toolSummary="called 2 tools" />,
++          toolSummary="appelé 2 outils" />,
+       ));
+       render("running");
+-      expect(container.querySelector(".shimmer-text")?.textContent).toBe("Working");
++      expect(container.querySelector(".shimmer-text")?.textContent).toBe("Au travail");
+       expect(container.querySelector(".animate-spin")).not.toBeNull();
+-      expect(container.textContent).toContain("for 6 seconds");
+-      expect(container.textContent).toContain("called 2 tools");
++      expect(container.textContent).toContain("depuis 6 secondes");
++      expect(container.textContent).toContain("appelé 2 outils");
+       act(() => vi.advanceTimersByTime(2_000));
+-      expect(container.textContent).toContain("for 8 seconds");
++      expect(container.textContent).toContain("depuis 8 secondes");
+       render("succeeded");
+-      expect(container.textContent).toContain("Worked");
++      expect(container.textContent).toContain("A travaillé");
+       expect(container.querySelector(".animate-spin")).toBeNull();
+       render("failed");
+-      expect(container.textContent).toContain("Stopped");
++      expect(container.textContent).toContain("Arrêté");
+       expect(container.textContent).not.toContain("Reconnecting");
+     },
+   );
+@@ -109,15 +109,15 @@ describe("TaskChatLiveRunPill", () => {
+           status="succeeded"
+           startedAtMs={startedAtMs}
+           finishedAtMs={startedAtMs + 42_000}
+-          toolSummary="ran 1 command"
++          toolSummary="a exécuté 1 commande"
+         />,
+       );
+     });
+     const pill = container.querySelector('[data-testid="task-chat-live-run-pill"]');
+     expect(container.querySelector(".shimmer-text")).toBeNull();
+-    expect(pill?.textContent).toContain("Worked");
+-    expect(pill?.textContent).toContain("for 42 seconds");
+-    expect(pill?.textContent).toContain("ran 1 command");
++    expect(pill?.textContent).toContain("A travaillé");
++    expect(pill?.textContent).toContain("pendant 42 secondes");
++    expect(pill?.textContent).toContain("a exécuté 1 commande");
+   });
+ 
+ });
+diff --git a/ui/src/components/task-chat/TaskChatLiveRunPill.tsx b/ui/src/components/task-chat/TaskChatLiveRunPill.tsx
+index 310f47e8a..9dac4eb1e 100644
+--- a/ui/src/components/task-chat/TaskChatLiveRunPill.tsx
++++ b/ui/src/components/task-chat/TaskChatLiveRunPill.tsx
+@@ -29,8 +29,8 @@ export function toolCountSummaryFromEntries(entries: readonly TranscriptEntry[])
+     else other += 1;
+   }
+   const parts: string[] = [];
+-  if (commands > 0) parts.push(`ran ${commands} command${commands === 1 ? "" : "s"}`);
+-  if (other > 0) parts.push(`called ${other} tool${other === 1 ? "" : "s"}`);
++  if (commands > 0) parts.push(`a exécuté ${commands} commande${commands === 1 ? "" : "s"}`);
++  if (other > 0) parts.push(`appelé ${other} outil${other === 1 ? "" : "s"}`);
+   return parts.length > 0 ? parts.join(", ") : null;
+ }
+ 
+@@ -68,8 +68,8 @@ export function TaskChatLiveRunPill({
+     ? formatDurationWords(elapsedMs)
+     : null;
+   const failed = ["failed", "timed_out", "cancelled", "interrupted"].includes(status);
+-  const verb = active ? "Working" : failed ? "Stopped" : "Worked";
+-  const suffix = elapsed ? `for ${elapsed}` : null;
++  const verb = active ? "Au travail" : failed ? "Arrêté" : "A travaillé";
++  const suffix = elapsed ? `${active ? "depuis" : failed ? "après" : "pendant"} ${elapsed}` : null;
+ 
+   return (
+     <div
+diff --git a/ui/src/components/task-chat/TaskChatRunnerTurn.test.tsx b/ui/src/components/task-chat/TaskChatRunnerTurn.test.tsx
+index 6206e6975..b06864c7a 100644
+--- a/ui/src/components/task-chat/TaskChatRunnerTurn.test.tsx
++++ b/ui/src/components/task-chat/TaskChatRunnerTurn.test.tsx
+@@ -117,7 +117,7 @@ describe("TaskChatRunnerTurn", () => {
+     expect(
+       container.querySelector('[data-testid="task-chat-turn-status-header"]')
+         ?.textContent,
+-    ).toContain("Working for");
++    ).toContain("Au travail depuis");
+     expect(container.textContent).not.toContain("Waiting for transcript");
+     const identity = container.querySelector(
+       '[data-testid="task-chat-agent-identity"]',
+@@ -150,16 +150,16 @@ describe("TaskChatRunnerTurn", () => {
+       const execution = { phase } as ExecutionProjection;
+       render([], "running", "run-1", undefined, false, false, execution);
+       expect(container.querySelector('[data-testid="task-chat-turn-status-header"]')?.textContent)
+-        .toContain("Working for");
++        .toContain("Au travail depuis");
+       expect(container.querySelector('[data-testid="task-chat-current-activity-label"]')?.textContent)
+         .toBe("Thinking");
+       render([], "succeeded", "run-1", undefined, false, false, execution);
+       expect(container.querySelector('[data-testid="task-chat-turn-status-header"]')?.textContent)
+-        .toContain("Worked");
++        .toContain("A travaillé");
+       expect(container.querySelector('[data-testid="task-chat-current-activity"]')).toBeNull();
+       render([], "failed", "run-1", undefined, false, false, execution);
+       expect(container.querySelector('[data-testid="task-chat-turn-status-header"]')?.textContent)
+-        .toContain("Stopped");
++        .toContain("Arrêté");
+       expect(container.textContent).not.toContain("Reconnecting");
+     },
+   );
+@@ -170,7 +170,7 @@ describe("TaskChatRunnerTurn", () => {
+     expect(
+       container.querySelector('[data-testid="task-chat-turn-status-header"]')
+         ?.textContent,
+-    ).toContain("Continued after steering · Working for");
++    ).toContain("Continued after steering · Au travail depuis");
+   });
+ 
+   it("renders completed progress exactly once when the live run returns to Thinking", () => {
+@@ -280,7 +280,7 @@ describe("TaskChatRunnerTurn", () => {
+ 
+     const header = container.querySelector('[data-testid="task-chat-turn-status-header"]');
+     const activity = container.querySelector('[data-testid="task-chat-activity-viewport"]');
+-    expect(header?.textContent).toContain("Working for");
++    expect(header?.textContent).toContain("Au travail depuis");
+     expect(activity?.textContent).toBe("Thinking");
+     expect(header?.compareDocumentPosition(activity!)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+     expect(container.querySelector('[data-testid="task-chat-current-activity"]')).toBeNull();
+@@ -912,7 +912,7 @@ describe("TaskChatRunnerTurn", () => {
+     expect(
+       container.querySelector('[data-testid="task-chat-turn-status-header"]')
+         ?.textContent,
+-    ).toContain("Worked for");
++    ).toContain("A travaillé pendant");
+     expect(
+       container.querySelector('[data-testid="task-chat-phase-interstitial"]')
+         ?.textContent,
+@@ -1103,7 +1103,7 @@ describe("TaskChatRunnerTurn", () => {
+     expect(
+       container.querySelector('[data-testid="task-chat-turn-status-header"]')
+         ?.textContent,
+-    ).toContain("Worked for");
++    ).toContain("A travaillé pendant");
+     expect(
+       container.querySelector('[data-testid="task-chat-activity-phase-toggle"]')
+         ?.textContent,
+@@ -1514,7 +1514,7 @@ describe("TaskChatRunnerTurn", () => {
+     expect(
+       container.querySelector('[data-testid="task-chat-turn-status-header"]')
+         ?.textContent,
+-    ).toContain("Worked for");
++    ).toContain("A travaillé pendant");
+   });
+ 
+   it("resets phase disclosure state when a different run takes over", () => {
+@@ -1576,7 +1576,7 @@ describe("TaskChatRunnerTurn", () => {
+     expect(
+       container.querySelector('[data-testid="task-chat-turn-status-header"]')
+         ?.textContent,
+-    ).toContain("Stopped after");
++    ).toContain("Arrêté après");
+     expect(
+       container.querySelector('[data-testid="task-chat-final-response"]')
+         ?.textContent,
+diff --git a/ui/src/components/task-chat/TaskChatRunnerTurn.tsx b/ui/src/components/task-chat/TaskChatRunnerTurn.tsx
+index 00df5ee5f..f164ed218 100644
+--- a/ui/src/components/task-chat/TaskChatRunnerTurn.tsx
++++ b/ui/src/components/task-chat/TaskChatRunnerTurn.tsx
+@@ -84,12 +84,12 @@ function RunnerTurnStatus({
+   const elapsed = formatCompactDuration(elapsedMs);
+ 
+   const failed = terminalStatusFailed(status);
+-  const label = terminal ? (failed ? "Stopped" : "Worked") : "Working";
++  const label = terminal ? (failed ? "Arrêté" : "A travaillé") : "Au travail";
+   const semanticLabel = terminal
+     ? elapsed
+-      ? `${label} ${failed ? "after" : "for"} ${elapsed}`
++      ? `${label} ${failed ? "après" : "pendant"} ${elapsed}`
+       : label
+-    : `${label} for ${elapsed ?? "0s"}`;
++    : `${label} depuis ${elapsed ?? "0s"}`;
+   const visibleLabel = continuedAfterSteering
+     ? `Continued after steering · ${semanticLabel}`
+     : semanticLabel;
+diff --git a/ui/src/components/task-chat/TaskChatTurn.test.tsx b/ui/src/components/task-chat/TaskChatTurn.test.tsx
+index bfdc95d4d..a74d880d0 100644
+--- a/ui/src/components/task-chat/TaskChatTurn.test.tsx
++++ b/ui/src/components/task-chat/TaskChatTurn.test.tsx
+@@ -65,20 +65,20 @@ const parentRowTurn = (
+ describe("turnSummaryText", () => {
+   it("joins the known parts with dots", () => {
+     expect(turnSummaryText(SETTLED.summary)).toBe(
+-      "Worked · 38s · 3 tools · +34 −3 · 12.3k tokens",
++      "A travaillé · 38s · 3 outils · +34 −3 · 12.3k tokens",
+     );
+   });
+ 
+   it("omits unknown parts and singularizes one tool", () => {
+     expect(turnSummaryText({ toolCount: 1, added: 0, removed: 0 })).toBe(
+-      "Worked · 1 tool",
++      "A travaillé · 1 outil",
+     );
+   });
+ 
+   it("labels failed turns Stopped", () => {
+     expect(
+       turnSummaryText({ toolCount: 0, added: 0, removed: 0, failed: true }),
+-    ).toBe("Stopped");
++    ).toBe("Arrêté");
+   });
+ });
+ 
+@@ -173,9 +173,9 @@ describe("TaskChatTurn", () => {
+ 
+   it("keeps historical activity expandable without a failure or completion status", () => {
+     renderTurn({ ...SETTLED, historical: true, summary: { ...SETTLED.summary, failed: true } });
+-    expect(summaryBtn()?.textContent).toContain("Activity");
+-    expect(container.textContent).not.toContain("Stopped");
+-    expect(container.textContent).not.toContain("Worked");
++    expect(summaryBtn()?.textContent).toContain("Activité");
++    expect(container.textContent).not.toContain("Arrêté");
++    expect(container.textContent).not.toContain("A travaillé");
+     flushSync(() => summaryBtn()!.click());
+     expect(container.textContent).toContain("c1");
+     expect(fold()?.getAttribute("data-folded")).toBe("false");
+@@ -188,16 +188,16 @@ describe("TaskChatTurn", () => {
+     expect(container.textContent).toContain("Assistant");
+     expect(container.textContent).toContain("Saved response");
+     expect(container.textContent).toContain("c1");
+-    expect(container.textContent).not.toContain("Stopped");
+-    expect(container.textContent).not.toContain("Worked");
++    expect(container.textContent).not.toContain("Arrêté");
++    expect(container.textContent).not.toContain("A travaillé");
+   });
+ 
+   it("renders a settled turn folded with its summary line", () => {
+     renderTurn(SETTLED);
+     // Label and mono metrics are adjacent spans (v7 runsum grammar).
+-    expect(summaryBtn()?.textContent).toContain("Worked");
++    expect(summaryBtn()?.textContent).toContain("A travaillé");
+     expect(summaryBtn()?.textContent).toContain(
+-      "38s · 3 tools · +34 −3 · 12.3k tokens",
++      "38s · 3 outils · +34 −3 · 12.3k tokens",
+     );
+     expect(fold()?.getAttribute("data-folded")).toBe("true");
+     expect(summaryBtn()?.lastElementChild?.tagName).toBe("svg");
+@@ -215,9 +215,9 @@ describe("TaskChatTurn", () => {
+       agentName: "Codex",
+       agentIcon: "code",
+     });
+-    expect(summaryBtn()?.textContent).toContain("Worked for 38s");
++    expect(summaryBtn()?.textContent).toContain("A travaillé pendant 38s");
+     expect(summaryBtn()?.textContent).toContain("Codex");
+-    expect(summaryBtn()?.textContent).not.toContain("3 tools");
++    expect(summaryBtn()?.textContent).not.toContain("3 outils");
+     expect(
+       summaryBtn()?.querySelector('[data-testid="task-chat-agent-avatar"]'),
+     ).not.toBeNull();
+@@ -244,7 +244,7 @@ describe("TaskChatTurn", () => {
+     });
+ 
+     expect(summaryBtn()?.textContent).toContain(
+-      "Continued after steering · Worked for 38s",
++      "Continued after steering · A travaillé pendant 38s",
+     );
+   });
+ 
+@@ -487,7 +487,7 @@ describe("TaskChatTurn", () => {
+     renderTurn(parentRowTurn([tool("a")]));
+     renderTurn({ ...SETTLED, animateFold: true, items: [tool("a")] });
+     expect(liveHeaderBtn()).toBeNull();
+-    expect(summaryBtn()?.textContent).toContain("Worked");
++    expect(summaryBtn()?.textContent).toContain("A travaillé");
+     expect(fold()?.getAttribute("data-folded")).toBe("true");
+   });
+ 
+@@ -535,7 +535,7 @@ describe("TaskChatTurn", () => {
+     });
+     // "2:34 PM · ✓ Worked · …" — timestamp first, always visible, and the
+     // expand affordance still works from the same line.
+-    expect(summaryBtn()?.textContent).toMatch(/^2:34 PM·Worked/);
++    expect(summaryBtn()?.textContent).toMatch(/^2:34 PM·A travaillé/);
+     // The branch task view intentionally keeps the expand affordance at the
+     // end of the timestamp-led summary row.
+     expect(summaryBtn()?.lastElementChild?.tagName).toBe("svg");
+diff --git a/ui/src/components/task-chat/TaskChatTurn.tsx b/ui/src/components/task-chat/TaskChatTurn.tsx
+index 71c081cf2..7b6e8e46e 100644
+--- a/ui/src/components/task-chat/TaskChatTurn.tsx
++++ b/ui/src/components/task-chat/TaskChatTurn.tsx
+@@ -35,7 +35,7 @@ export function turnSummaryMetrics(
+   if (summary.durationLabel) parts.push(summary.durationLabel);
+   if (summary.toolCount > 0)
+     parts.push(
+-      `${summary.toolCount} tool${summary.toolCount === 1 ? "" : "s"}`,
++      `${summary.toolCount} outil${summary.toolCount === 1 ? "" : "s"}`,
+     );
+   if (summary.added > 0 || summary.removed > 0)
+     parts.push(`+${summary.added} −${summary.removed}`);
+@@ -46,7 +46,7 @@ export function turnSummaryMetrics(
+ /** "✓ Worked · 38s · 3 tools · +34 −3 · 12.3k tokens" (parts omitted when unknown). */
+ export function turnSummaryText(summary: TaskChatTurnItem["summary"]): string {
+   const metrics = turnSummaryMetrics(summary);
+-  const label = summary.failed ? "Stopped" : "Worked";
++  const label = summary.failed ? "Arrêté" : "A travaillé";
+   return metrics ? `${label} · ${metrics}` : label;
+ }
+ 
+@@ -102,10 +102,10 @@ export function TaskChatTurn({
+           {!item.historical ? <span className="min-w-0 truncate">
+             {item.continuedAfterSteering ? "Continued after steering · " : ""}
+             {item.summary.durationLabel
+-              ? `${item.summary.failed ? "Stopped" : "Worked"} for ${item.summary.durationLabel}`
++              ? (item.summary.failed ? `Arrêté après ${item.summary.durationLabel}` : `A travaillé pendant ${item.summary.durationLabel}`)
+               : item.summary.failed
+-                ? "Stopped"
+-                : "Worked"}
++                ? "Arrêté"
++                : "A travaillé"}
+           </span> : null}
+         </div> : null}
+         {item.items.length > 0 ? (
+@@ -206,11 +206,11 @@ export function TaskChatTurn({
+         <SummaryIcon className="h-3.5 w-3.5 shrink-0" />
+       ) : null}
+       <span>
+-        {item.historical ? "Activity" : item.standaloneHeader && item.summary.durationLabel
+-          ? `${item.summary.failed ? "Stopped" : "Worked"} for ${item.summary.durationLabel}`
++        {item.historical ? "Activité" : item.standaloneHeader && item.summary.durationLabel
++          ? (item.summary.failed ? `Arrêté après ${item.summary.durationLabel}` : `A travaillé pendant ${item.summary.durationLabel}`)
+           : item.summary.failed
+-            ? "Stopped"
+-            : "Worked"}
++            ? "Arrêté"
++            : "A travaillé"}
+       </span>
+       {!item.standaloneHeader && turnSummaryMetrics(item.summary) ? (
+         // Time/tools/tokens is demoted, not deleted (PAP-502): it stays in the
+diff --git a/ui/src/components/task-chat/tool-taxonomy.ts b/ui/src/components/task-chat/tool-taxonomy.ts
+index e27b1271d..4d35e2f1d 100644
+--- a/ui/src/components/task-chat/tool-taxonomy.ts
++++ b/ui/src/components/task-chat/tool-taxonomy.ts
+@@ -162,7 +162,7 @@ const EXACT_ACTIONS: Record<string, ExactAction> = {
+   exec_command: { action: "run" },
+   apply_patch: { action: "update", running: "Applying a patch", completed: "Applied a patch" },
+   read: { action: "read", running: "Reading a file", completed: "Read a file" },
+-  write: { action: "update", running: "Writing a file", completed: "Wrote a file" },
++  write: { action: "update", running: "Écriture d’un fichier", completed: "Fichier écrit" },
+   edit: { action: "update", running: "Editing a file", completed: "Edited a file" },
+   notebook_read: { action: "read", running: "Reading a notebook", completed: "Read a notebook" },
+   notebook_edit: { action: "update", running: "Editing a notebook", completed: "Edited a notebook" },
+diff --git a/ui/src/lib/activity-format.ts b/ui/src/lib/activity-format.ts
+index 9aec9452a..8377955b8 100644
+--- a/ui/src/lib/activity-format.ts
++++ b/ui/src/lib/activity-format.ts
+@@ -354,7 +354,7 @@ function asRecord(value: unknown): Record<string, unknown> | null {
+ }
+ 
+ /** Libellés français (en milieu de phrase) des statuts et priorités de tâche. */
+-const LIBELLES_VALEURS: Record<string, string> = {
++export const LIBELLES_VALEURS: Record<string, string> = {
+   backlog: "en attente",
+   todo: "à faire",
+   in_progress: "en cours",
+@@ -368,7 +368,7 @@ const LIBELLES_VALEURS: Record<string, string> = {
+   low: "basse",
+ };
+ 
+-function humanizeValue(value: unknown): string {
++export function humanizeValue(value: unknown): string {
+   if (typeof value !== "string") return String(value ?? "aucun");
+   return LIBELLES_VALEURS[value] ?? value.replace(/_/g, " ");
+ }
+diff --git a/ui/src/lib/attention.test.ts b/ui/src/lib/attention.test.ts
+index 3b7469466..7229a7a99 100644
+--- a/ui/src/lib/attention.test.ts
++++ b/ui/src/lib/attention.test.ts
+@@ -491,7 +491,7 @@ describe("groupAttentionItems", () => {
+       buildItem({ id: "med", severity: "medium" }),
+     ];
+     const groups = groupAttentionItems(items, "severity");
+-    expect(groups.map((g) => g.label)).toEqual(["Critical", "Medium", "Low"]);
++    expect(groups.map((g) => g.label)).toEqual(["Urgente", "Moyenne", "Basse"]);
+   });
+ 
+   it("groups by project, keeping a 'No project' bucket for unassigned rows", () => {
+diff --git a/ui/src/lib/attention.ts b/ui/src/lib/attention.ts
+index 331fd7c75..8be1a5654 100644
+--- a/ui/src/lib/attention.ts
++++ b/ui/src/lib/attention.ts
+@@ -74,10 +74,10 @@ interface SeverityStyle {
+ }
+ 
+ const SEVERITY_STYLE: Record<AttentionSeverity, SeverityStyle> = {
+-  critical: { accent: "bg-red-500", dot: "bg-red-500", label: "Critical" },
+-  high: { accent: "bg-orange-500", dot: "bg-orange-500", label: "High" },
+-  medium: { accent: "bg-yellow-500", dot: "bg-yellow-500", label: "Medium" },
+-  low: { accent: "bg-blue-500", dot: "bg-blue-500", label: "Low" },
++  critical: { accent: "bg-red-500", dot: "bg-red-500", label: "Urgente" },
++  high: { accent: "bg-orange-500", dot: "bg-orange-500", label: "Haute" },
++  medium: { accent: "bg-yellow-500", dot: "bg-yellow-500", label: "Moyenne" },
++  low: { accent: "bg-blue-500", dot: "bg-blue-500", label: "Basse" },
+ };
+ 
+ export function severityStyle(severity: AttentionSeverity): SeverityStyle {
+@@ -834,10 +834,10 @@ export function attentionDateBucket(activityAt: string, now: number): DateBucket
+ }
+ 
+ const SEVERITY_LABEL: Record<AttentionSeverity, string> = {
+-  critical: "Critical",
+-  high: "High",
+-  medium: "Medium",
+-  low: "Low",
++  critical: "Urgente",
++  high: "Haute",
++  medium: "Moyenne",
++  low: "Basse",
+ };
+ 
+ /**
+diff --git a/ui/src/lib/issue-change-receipt.test.ts b/ui/src/lib/issue-change-receipt.test.ts
+index 31ba9dc9d..fa320dd4e 100644
+--- a/ui/src/lib/issue-change-receipt.test.ts
++++ b/ui/src/lib/issue-change-receipt.test.ts
+@@ -9,14 +9,14 @@ import {
+ 
+ describe("issueChangeFieldLabel", () => {
+   it("uses curated labels for id-bearing fields", () => {
+-    expect(issueChangeFieldLabel("assigneeAgentId")).toBe("Assignee");
++    expect(issueChangeFieldLabel("assigneeAgentId")).toBe("Assigné à");
+     expect(issueChangeFieldLabel("blockedByIssueIds")).toBe("Blockers");
+     expect(issueChangeFieldLabel("workMode")).toBe("Work mode");
+     expect(issueChangeFieldLabel("reviewPolicy")).toBe("Who can approve");
+   });
+ 
+   it("humanizes unknown camelCase and snake_case fields", () => {
+-    expect(issueChangeFieldLabel("status")).toBe("Status");
++    expect(issueChangeFieldLabel("status")).toBe("Statut");
+     expect(issueChangeFieldLabel("someNewField")).toBe("Some new field");
+     expect(issueChangeFieldLabel("some_new_field")).toBe("Some new field");
+   });
+@@ -96,11 +96,11 @@ describe("readIssueChangeReceipt", () => {
+       },
+     });
+ 
+-    expect(rows.map((row) => row.label)).toEqual(["Priority", "Status"]);
++    expect(rows.map((row) => row.label)).toEqual(["Priorité", "Statut"]);
+     expect(rows[1]).toMatchObject({
+       field: "status",
+-      from: "todo",
+-      to: "in progress",
++      from: "à faire",
++      to: "en cours",
+       truncated: false,
+     });
+   });
+diff --git a/ui/src/lib/issue-change-receipt.ts b/ui/src/lib/issue-change-receipt.ts
+index f5f5a0862..ef4bac0cd 100644
+--- a/ui/src/lib/issue-change-receipt.ts
++++ b/ui/src/lib/issue-change-receipt.ts
+@@ -1,5 +1,6 @@
+ import type { IssueChangeReceiptEntry } from "@paperclipai/shared";
+ import { formatReviewPolicyValue } from "./review-policy";
++import { LIBELLES_VALEURS } from "./activity-format";
+ 
+ /**
+  * Read + format the field-level change receipts carried on an `issue.updated`
+@@ -17,13 +18,15 @@ import { formatReviewPolicyValue } from "./review-policy";
+ 
+ /** Field names whose raw ids carry no meaning in a scannable summary. */
+ const FIELD_LABELS: Record<string, string> = {
+-  assigneeAgentId: "Assignee",
++  status: "Statut",
++  priority: "Priorité",
++  assigneeAgentId: "Assigné à",
+   assigneeUserId: "Assignee (user)",
+   responsibleUserId: "Responsible user",
+   blockedByIssueIds: "Blockers",
+-  labelIds: "Labels",
++  labelIds: "Étiquettes",
+   parentId: "Parent",
+-  projectId: "Project",
++  projectId: "Projet",
+   goalId: "Goal",
+   workMode: "Work mode",
+   reviewPolicy: "Who can approve",
+@@ -31,7 +34,7 @@ const FIELD_LABELS: Record<string, string> = {
+   checkoutRunId: "Checkout run",
+   executionRunId: "Execution run",
+   hiddenAt: "Hidden",
+-  startedAt: "Started",
++  startedAt: "Démarrée",
+   completedAt: "Completed",
+   cancelledAt: "Cancelled",
+   requestDepth: "Request depth",
+@@ -94,6 +97,9 @@ export function formatIssueChangeValue(
+         ? options.resolveUserLabel?.(trimmed)
+         : null;
+     if (resolved) return resolved;
++    if ((options.field === "status" || options.field === "priority") && LIBELLES_VALEURS[trimmed]) {
++      return LIBELLES_VALEURS[trimmed]!;
++    }
+     if (isIsoTimestamp(trimmed)) return new Date(trimmed).toLocaleString();
+     if (looksLikeId(trimmed)) return shortenId(trimmed);
+     const humanized = trimmed.includes(" ") ? trimmed : trimmed.replace(/_/g, " ");
+diff --git a/ui/src/lib/issue-chat-messages.test.ts b/ui/src/lib/issue-chat-messages.test.ts
+index 20f904167..dc28b769f 100644
+--- a/ui/src/lib/issue-chat-messages.test.ts
++++ b/ui/src/lib/issue-chat-messages.test.ts
+@@ -1244,7 +1244,7 @@ describe("buildIssueChatMessages", () => {
+         custom: {
+           kind: "historical-run",
+           runId: "run-history-1",
+-          chainOfThoughtLabel: "Worked for 2 minutes",
++          chainOfThoughtLabel: "A travaillé pendant 2 minutes",
+         },
+       },
+     });
+diff --git a/ui/src/lib/issue-chat-messages.ts b/ui/src/lib/issue-chat-messages.ts
+index cd184c004..195bf7a5e 100644
+--- a/ui/src/lib/issue-chat-messages.ts
++++ b/ui/src/lib/issue-chat-messages.ts
+@@ -778,7 +778,7 @@ export function formatDurationWords(ms: number | null) {
+   if (ms === null || !Number.isFinite(ms) || ms <= 0) return null;
+   const totalSeconds = Math.max(1, Math.round(ms / 1000));
+   if (totalSeconds < 60) {
+-    return `${totalSeconds} second${totalSeconds === 1 ? "" : "s"}`;
++    return `${totalSeconds} seconde${totalSeconds === 1 ? "" : "s"}`;
+   }
+   const totalMinutes = Math.round(totalSeconds / 60);
+   if (totalMinutes < 60) {
+@@ -787,9 +787,9 @@ export function formatDurationWords(ms: number | null) {
+   const hours = Math.floor(totalMinutes / 60);
+   const minutes = totalMinutes % 60;
+   if (minutes === 0) {
+-    return `${hours} hour${hours === 1 ? "" : "s"}`;
++    return `${hours} heure${hours === 1 ? "" : "s"}`;
+   }
+-  return `${hours} hour${hours === 1 ? "" : "s"} ${minutes} minute${minutes === 1 ? "" : "s"}`;
++  return `${hours} heure${hours === 1 ? "" : "s"} ${minutes} minute${minutes === 1 ? "" : "s"}`;
+ }
+ 
+ function runDurationLabel(run: {
+@@ -807,7 +807,7 @@ function runDurationLabel(run: {
+   const stopReason = typeof run.resultJson?.stopReason === "string" ? run.resultJson.stopReason : null;
+   switch (run.status) {
+     case "succeeded":
+-      return durationText ? `Worked for ${durationText}` : "Finished work";
++      return durationText ? `A travaillé pendant ${durationText}` : "Travail terminé";
+     case "failed":
+     case "error":
+       return durationText ? `Failed after ${durationText}` : "Run failed";
+-- 
+2.53.0
+

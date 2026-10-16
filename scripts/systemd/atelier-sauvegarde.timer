@@ -1,0 +1,11 @@
+[Unit]
+Description=Sauvegarde hors machine quotidienne de l'Atelier marketing IA
+
+[Timer]
+OnCalendar=*-*-* 03:30:00
+Persistent=true
+RandomizedDelaySec=10min
+Unit=atelier-sauvegarde.service
+
+[Install]
+WantedBy=timers.target

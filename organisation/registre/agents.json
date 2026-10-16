@@ -27,7 +27,26 @@
         "**/CLAUDE.local.md",
         "**/.claude/rules/**",
         "**/AGENTS.md"
-      ]
+      ],
+      "autoMemoryEnabled": false,
+      "permissions": {
+        "deny": [
+          "Read(~/.ssh/**)",
+          "Read(~/.config/**)",
+          "Read(~/.claude/**)",
+          "Read(~/.claude.json)",
+          "Read(**/.env)",
+          "Read(**/*.env)",
+          "Read(**/*.key)",
+          "Edit(~/.ssh/**)",
+          "Edit(~/.config/**)",
+          "Edit(~/.claude/**)",
+          "Edit(~/.claude.json)",
+          "Edit(**/.env)",
+          "Edit(**/*.env)",
+          "Edit(**/*.key)"
+        ]
+      }
     }
   },
   "connexionsPasserelle": {
@@ -274,7 +293,7 @@
         "effort": "medium"
       },
       "budgetMensuelCentimes": 1500,
-      "maxToursParExecution": 60,
+      "maxToursParExecution": 90,
       "relit": [],
       "roleRevue": null,
       "criteresReussite": [
@@ -409,7 +428,7 @@
         "effort": "medium"
       },
       "budgetMensuelCentimes": 1500,
-      "maxToursParExecution": 60,
+      "maxToursParExecution": 90,
       "relit": [],
       "roleRevue": null,
       "criteresReussite": [

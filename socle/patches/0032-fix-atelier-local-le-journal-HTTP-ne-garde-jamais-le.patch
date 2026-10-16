@@ -1,0 +1,67 @@
+From 0b19059771226fcd5b8c17ab398e07ba64d9759e Mon Sep 17 00:00:00 2001
+From: Jean-Baptiste Dhondt <114347858+warrox1993@users.noreply.github.com>
+Date: Fri, 16 Oct 2026 13:19:37 +0200
+Subject: [PATCH] =?UTF-8?q?fix(atelier,=20local):=20le=20journal=20HTTP=20?=
+ =?UTF-8?q?ne=20garde=20jamais=20le=20corps=20d'une=20requ=C3=AAte=20d'API?=
+ =?UTF-8?q?=20de=20plugin=20en=20erreur?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Audio de dictée et texte de discussion ne doivent pas finir dans la sortie du serveur.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01DP85vPq2MHkZg8VNtRvCzB
+---
+ server/src/__tests__/http-log-redaction.test.ts | 15 +++++++++++++++
+ server/src/middleware/logger.ts                 |  8 ++++++++
+ 2 files changed, 23 insertions(+)
+
+diff --git a/server/src/__tests__/http-log-redaction.test.ts b/server/src/__tests__/http-log-redaction.test.ts
+index e98c45260..2a43de19d 100644
+--- a/server/src/__tests__/http-log-redaction.test.ts
++++ b/server/src/__tests__/http-log-redaction.test.ts
+@@ -12,6 +12,21 @@ import { testAdapterEnvironmentSchema } from "@paperclipai/shared";
+ import { createHttpLogger } from "../middleware/logger.js";
+ 
+ describe("HTTP logger redaction", () => {
++  it("ne journalise jamais le corps d'une requête d'API de plugin en erreur (audio de dictée, texte de discussion)", async () => {
++    const chunks: string[] = [];
++    const stream = new Writable({ write(chunk, _encoding, callback) { chunks.push(chunk.toString()); callback(); } });
++    const app = express();
++    app.use(express.json());
++    app.use(createHttpLogger(pino({ redact: [...HTTP_LOG_REDACT_PATHS] }, stream)));
++    app.post("/api/plugins/:pluginId/api/*splat", (_req, res) => res.status(503).json({ error: "dictee_indisponible" }));
++    await request(app).post("/api/plugins/atelier.marketing-ia/api/dictee/transcrire").send({ companyId: "c", audioBase64: "audio-canary", type: "audio/webm" });
++    await request(app).post("/api/plugins/atelier.marketing-ia/api/discussion/message").send({ companyId: "c", texte: "texte-canary" });
++    const sortie = chunks.join("");
++    expect(sortie).not.toMatch(/audio-canary|texte-canary/);
++    expect(sortie).toContain("/api/plugins/atelier.marketing-ia/api/dictee/transcrire");
++    expect(sortie).toContain("[REDACTED]");
++  });
++
+   it("redacts inbound MCP OAuth codes, PKCE verifiers, refresh tokens and redirect credentials", async () => {
+     const chunks: string[] = [];
+     const stream = new Writable({ write(chunk, _encoding, callback) { chunks.push(chunk.toString()); callback(); } });
+diff --git a/server/src/middleware/logger.ts b/server/src/middleware/logger.ts
+index 0d76d5810..5aec17155 100644
+--- a/server/src/middleware/logger.ts
++++ b/server/src/middleware/logger.ts
+@@ -165,6 +165,14 @@ export function createHttpLogger(baseLogger: Logger) {
+         if (/^\/mcp\/(?:oauth|paperclip)(?:\/|$)/.test(requestClassificationUrl(req) ?? "")) {
+           return { reqBody: "[REDACTED]", ...(ctx ? { errorContext: { name: "Error" } } : {}) };
+         }
++        if (/^\/api\/plugins\/[^/]+\/api\//.test(requestClassificationUrl(req) ?? "")) {
++          // Routes d'API des plugins : le corps peut contenir de l'audio de dictée ou le texte d'une
++          // discussion. On ne le journalise jamais, même en erreur ; le statut et la route restent.
++          return {
++            reqBody: "[REDACTED]",
++            ...(ctx ? { errorContext: redactSensitive(ctx.error) } : {}),
++          };
++        }
+         if (isPrivateWebhook(req)) {
+           // Omit, rather than recursively redact, the entire provider payload.
+           // This applies equally before/after parsing and with/without context.
+-- 
+2.53.0
+

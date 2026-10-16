@@ -1,0 +1,198 @@
+From 8bcf9becda3381d1ac79d6d4dc840462f454d3a8 Mon Sep 17 00:00:00 2001
+From: Jean-Baptiste Dhondt <114347858+warrox1993@users.noreply.github.com>
+Date: Fri, 16 Oct 2026 13:10:27 +0200
+Subject: [PATCH] =?UTF-8?q?fix(atelier,=20local):=20plus=20de=20carte=20d'?=
+ =?UTF-8?q?authentification=20IA=20pour=20un=20passage=20arr=C3=AAt=C3=A9?=
+ =?UTF-8?q?=20par=20sa=20limite=20de=20tours?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Le passage 574f916d (Prospection, ATL-35) s'est arrêté sur error_max_turns
+mais a reçu le code claude_auth_required : le motif large de connexion
+requise lisait « unauthorized » dans le texte d'un skill chargé, présent
+dans le stdout brut. requestForRunAuthFailure a alors ouvert une carte
+« Anthropic authentication required » que personne ne pouvait retirer.
+
+- detectClaudeLoginRequired ne classe jamais en connexion requise un
+  passage arrêté par sa limite de tours (il a fait des appels authentifiés).
+- Un passage réussi, ou arrêté par sa limite de tours, expire les cartes
+  connection_intent « ai » en attente du même agent créées avant son début
+  (résultat « expired », raison « Connexion rétablie »).
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01DP85vPq2MHkZg8VNtRvCzB
+---
+ .../claude-local/src/server/parse.test.ts     | 19 +++++++++++
+ .../adapters/claude-local/src/server/parse.ts |  8 ++++-
+ server/src/__tests__/ai-connections.test.ts   | 34 +++++++++++++++++++
+ server/src/services/heartbeat.ts              | 10 ++++++
+ .../src/services/issue-thread-interactions.ts | 23 +++++++++++++
+ 5 files changed, 93 insertions(+), 1 deletion(-)
+
+diff --git a/packages/adapters/claude-local/src/server/parse.test.ts b/packages/adapters/claude-local/src/server/parse.test.ts
+index 5b291d405..088bf8be5 100644
+--- a/packages/adapters/claude-local/src/server/parse.test.ts
++++ b/packages/adapters/claude-local/src/server/parse.test.ts
+@@ -24,6 +24,25 @@ describe("detectClaudeLoginRequired", () => {
+     ).toEqual({ requiresLogin: true, loginUrl: null });
+   });
+ 
++  it("never classifies a run that reached its turn limit as login required", () => {
++    // Real case (16/10/2026, run 574f916d): a loaded Paperclip skill printed
++    // "unauthorized recipients" into the stream-json stdout of a run that then
++    // stopped on error_max_turns. The run made 60 authenticated turns.
++    const parsed = {
++      type: "result",
++      is_error: true,
++      subtype: "error_max_turns",
++      errors: ["Reached maximum number of turns (60)"],
++    };
++    const stdout =
++      '{"type":"user","message":{"content":[{"type":"text","text":"The server rejects unknown or unauthorized recipients."}]}}';
++    expect(detectClaudeLoginRequired({ parsed, stdout, stderr: "" }).requiresLogin).toBe(false);
++    // The same stdout without the turn-limit result still reads as a login prompt.
++    expect(
++      detectClaudeLoginRequired({ parsed: { is_error: true, subtype: "error_during_execution" }, stdout, stderr: "" }).requiresLogin,
++    ).toBe(true);
++  });
++
+   it("does not classify a bare invalid API key as the Claude login flow", () => {
+     expect(
+       detectClaudeLoginRequired({
+diff --git a/packages/adapters/claude-local/src/server/parse.ts b/packages/adapters/claude-local/src/server/parse.ts
+index 3e636ac2c..e3432dfe0 100644
+--- a/packages/adapters/claude-local/src/server/parse.ts
++++ b/packages/adapters/claude-local/src/server/parse.ts
+@@ -229,8 +229,14 @@ export function detectClaudeLoginRequired(input: {
+     claudeResultIndicatesAuthFailure(parsed) &&
+     CLAUDE_AUTH_TOKEN_FAILURE_RE.test(collectClaudeTerminalText(parsed));
+ 
++  // A run that reached its turn limit made authenticated provider calls on
++  // every turn. Login-prompt words seen in that run's stdout come from loaded
++  // skills or tool output (for example "unauthorized recipients"), never from
++  // the CLI asking for a login, so the run is never an authentication failure.
++  const reachedMaxTurns = isClaudeMaxTurnsResult(parsed);
++
+   return {
+-    requiresLogin: loginPrompt || tokenFailure,
++    requiresLogin: !reachedMaxTurns && (loginPrompt || tokenFailure),
+     loginUrl: extractClaudeLoginUrl([input.stdout, input.stderr].join("\n")),
+   };
+ }
+diff --git a/server/src/__tests__/ai-connections.test.ts b/server/src/__tests__/ai-connections.test.ts
+index 2195fafb7..7e7c9ce4a 100644
+--- a/server/src/__tests__/ai-connections.test.ts
++++ b/server/src/__tests__/ai-connections.test.ts
+@@ -1,5 +1,6 @@
+ import { connectionIntentService } from "../services/connection-intents.js";
+ import { connectionIntentDeliveryService } from "../services/connection-intent-delivery.js";
++import { issueThreadInteractionService } from "../services/issue-thread-interactions.js";
+ import { issueRecoveryActionService } from "../services/issue-recovery-actions.js";
+ import * as localCredentials from "../services/local-ai-credentials.js";
+ import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+@@ -188,6 +189,39 @@ describe("managed AI connections", () => {
+     await db.insert(heartbeatRuns).values({ companyId, agentId: id, status: "succeeded", responsibleUserId: "alice", contextSnapshot: { issueId }, createdAt: new Date(Date.now() + 1000) });
+     expect(await intents.requestForRunAuthFailure(runId)).toBeNull();
+   });
++
++  it("expires an agent's stale AI reconnection card once a later run of that agent is healthy", async () => {
++    const id = randomUUID();
++    const otherId = randomUUID();
++    const issueId = randomUUID();
++    const runId = randomUUID();
++    const otherRunId = randomUUID();
++    await db.insert(agents).values([
++      { id, companyId, name: "Stale card", adapterType: "claude_local" },
++      { id: otherId, companyId, name: "Still broken", adapterType: "claude_local" },
++    ]);
++    await db.insert(issues).values({ id: issueId, companyId, title: "Stale card", status: "in_progress", assigneeAgentId: id });
++    await db.insert(heartbeatRuns).values([
++      { id: runId, companyId, agentId: id, nativeIssueId: issueId, status: "failed", errorCode: "claude_auth_required", responsibleUserId: "alice", contextSnapshot: {} },
++      { id: otherRunId, companyId, agentId: otherId, nativeIssueId: issueId, status: "failed", errorCode: "claude_auth_required", responsibleUserId: "alice", contextSnapshot: {} },
++    ]);
++    const intents = connectionIntentService(db);
++    const card = await intents.requestForRunAuthFailure(runId);
++    expect(card).toMatchObject({ service: "anthropic", state: "needs_user_action" });
++    const [otherCard] = await db.insert(issueThreadInteractions).values({ companyId, issueId, kind: "connection_intent", status: "pending",
++      sourceRunId: otherRunId, createdByAgentId: otherId, addresseeUserId: "alice", payload: { version: 1, purpose: "ai", phase: "requested", serviceSlug: "anthropic", serviceName: "Anthropic" } }).returning();
++    const interactions = issueThreadInteractionService(db);
++    // A run that started before the card was raised proves nothing about it.
++    expect(await interactions.expireAiConnectionIntentsAfterHealthyRun({ companyId, agentId: id, healthySince: new Date(Date.now() - 60_000) })).toEqual([]);
++    const expired = await interactions.expireAiConnectionIntentsAfterHealthyRun({ companyId, agentId: id, healthySince: new Date(Date.now() + 1000) });
++    expect(expired.map((row) => row.id)).toEqual([card!.interactionId]);
++    const [row] = await db.select().from(issueThreadInteractions).where(eq(issueThreadInteractions.id, card!.interactionId!));
++    expect(row).toMatchObject({ status: "expired", result: { version: 1, outcome: "expired", reason: expect.stringContaining("Connexion rétablie") } });
++    expect(row.resolvedAt).not.toBeNull();
++    // Another agent's card stays pending.
++    const [other] = await db.select().from(issueThreadInteractions).where(eq(issueThreadInteractions.id, otherCard.id));
++    expect(other.status).toBe("pending");
++  });
+   it.each([
+     ["anthropic", "claude_local", "CLAUDE_CODE_OAUTH_TOKEN", "ANTHROPIC_API_KEY"],
+     ["openai", "codex_local", "CODEX_HOME", "OPENAI_API_KEY"],
+diff --git a/server/src/services/heartbeat.ts b/server/src/services/heartbeat.ts
+index 24c96046b..f879cdcad 100644
+--- a/server/src/services/heartbeat.ts
++++ b/server/src/services/heartbeat.ts
+@@ -38,6 +38,7 @@ import { applyConnectorSkills, prepareConnectorSkillDelivery, resolveConnectorAs
+ import { admitExplicitNativeContinuation, admitExplicitContinuationRetry, undeliveredLegacyUserCommentIds } from "./explicit-native-continuation.js";
+ import { canRetryStoppedRun, isCancelledNativeStartup } from "./cancelled-native-startup.js";
+ import { connectionIntentService } from "./connection-intents.js";
++import { issueThreadInteractionService } from "./issue-thread-interactions.js";
+ import { managedAiSessionFingerprintConfig, prepareManagedAiRuntime, assertManagedAiProjectAuth, stripAiAuthBindings, isAiConnectionBusy, AI_AUTH_ENV_KEYS } from "./ai-connection-runtime.js";
+ import { aiConnectionBindingSchema, aiRuntimeConnectionBindingSchema, type AiConnectionRouterSelection } from "@paperclipai/shared";
+ import { aiConnectionRouterService, AiConnectionPoolExhausted, applyAiConnectionRouterTaskSettings } from "./ai-connection-router.js";
+@@ -18503,6 +18504,15 @@ export function heartbeatService(
+           return null;
+         })
+       : null;
++    // A succeeded run, or one stopped by its turn limit, made authenticated
++    // provider calls: earlier AI reconnection cards of this agent are stale.
++    if (run.status === "succeeded" || run.errorCode === "max_turns_exhausted") {
++      await issueThreadInteractionService(db).expireAiConnectionIntentsAfterHealthyRun({
++        companyId: run.companyId, agentId: run.agentId, healthySince: run.startedAt ?? run.createdAt,
++      }).catch(() => {
++        logger.warn({ runId: run.id }, "Could not expire stale AI connection requests after a healthy run");
++      });
++    }
+     const classification = classifyRunLiveness({
+       ...await buildRunLivenessInput(run, resultJson),
+       authenticationRepairRequested: Boolean(authRepair?.interactionId),
+diff --git a/server/src/services/issue-thread-interactions.ts b/server/src/services/issue-thread-interactions.ts
+index 9db918363..b6db913ef 100644
+--- a/server/src/services/issue-thread-interactions.ts
++++ b/server/src/services/issue-thread-interactions.ts
+@@ -4723,6 +4723,29 @@ export function issueThreadInteractionService(
+       if (expired.length) await db.delete(toolOauthStates).where(inArray(toolOauthStates.interactionId, expired.map((row) => row.id)));
+       return expired;
+     },
++    // A later run of the same agent completed with a working AI connection, so
++    // its pending AI reconnection cards are stale. Only cards created before
++    // that run started are expired: a card raised during or after it stays.
++    expireAiConnectionIntentsAfterHealthyRun: async (input: { companyId: string; agentId: string; healthySince: Date }) => {
++      const resolvedAt = now();
++      const expired = await db.update(issueThreadInteractions).set({
++        status: "expired",
++        result: { version: 1, outcome: "expired", reason: "Connexion rétablie : un passage ultérieur de l'agent a abouti" },
++        resolvedAt, updatedAt: resolvedAt,
++      }).where(and(
++        eq(issueThreadInteractions.companyId, input.companyId),
++        eq(issueThreadInteractions.createdByAgentId, input.agentId),
++        eq(issueThreadInteractions.kind, "connection_intent"),
++        eq(issueThreadInteractions.status, "pending"),
++        sql`${issueThreadInteractions.payload}->>'purpose' = 'ai'`,
++        sql`${issueThreadInteractions.createdAt} < ${input.healthySince.toISOString()}::timestamptz`,
++      )).returning();
++      if (expired.length) {
++        await db.delete(toolOauthStates).where(inArray(toolOauthStates.interactionId, expired.map((row) => row.id)));
++        for (const issueId of new Set(expired.map((row) => row.issueId))) await touchIssue(db, issueId);
++      }
++      return expired;
++    },
+     expirePendingInteractionsForTerminalIssue: async (
+       issue: { id: string; companyId: string; status: string },
+       actor: InteractionActor = {},
+-- 
+2.53.0
+

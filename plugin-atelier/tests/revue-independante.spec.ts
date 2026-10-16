@@ -304,6 +304,71 @@ describe("M5 : une évaluation prématurée ne consomme pas de cycle ; l'évalua
 });
 
 /* ------------------------------------------------------------------ */
+/* Cycles réservés à la qualité (tâche SEA du 16/10/2026)               */
+/* ------------------------------------------------------------------ */
+describe("Cycles : une panne d'outil ou une révision périmée ne consomme aucun cycle", () => {
+  const TECH = [{ role: "technique", agentId: RELECTEUR }];
+  const verdict = (revisionId: string, v: Record<string, unknown>) => ({ revisionId, role: "technique", exigencesExaminees: [], preuvesVerifiees: [], constats: [], constatsResolus: [], ...v });
+  const constat = { categorie: "autre", gravite: "majeure", emplacement: "Annonce 1", description: "Lien mort", preuve: "404", correctionAttendue: "Corriger le lien" };
+  function nouvelleRevision(banc: ReturnType<typeof creerBanc>, revisionId: string) {
+    const doc = banc.documents.get(`${ISSUE}:livrable`)!;
+    banc.documents.set(`${ISSUE}:livrable`, { ...doc, latestRevisionId: revisionId, latestRevisionNumber: 2 });
+  }
+
+  it("BLOCKED_INFORMATION exige la cause ; avec elle : message `blocage` au coordinateur, et la révision suivante garde ses cycles", async () => {
+    const banc = creerBanc();
+    banc.tacheSousPorte({ status: "in_progress", etape: null, revuesRequises: TECH, maxCycles: 1 });
+    const sansCause = await route(banc, "tache.verdict", agent(RELECTEUR), verdict(REV1, { verdict: "BLOCKED_INFORMATION" }), { issueId: ISSUE });
+    expect(sansCause.corps).toMatchObject({ code: "entree_invalide" });
+    expect(banc.t.verdicts).toEqual([]);
+
+    const bloque = await route(banc, "tache.verdict", agent(RELECTEUR), verdict(REV1, { verdict: "BLOCKED_INFORMATION", controlesNonExecutes: ["verifier_url : ECONNREFUSED, aucune réponse"] }), { issueId: ISSUE });
+    expect(bloque.statut).toBe(201);
+    expect(banc.t.messages).toHaveLength(1);
+    expect(banc.t.messages[0]).toMatchObject({ type: "blocage", destinataireType: "agent", destinataireId: COORD, expediteurId: RELECTEUR, issueId: ISSUE });
+    expect(banc.t.messages[0]!.contenu.informationManquante).toContain("ECONNREFUSED");
+
+    // Un seul cycle autorisé : la révision suivante est encore relue (rien n'a été consommé).
+    nouvelleRevision(banc, REV2);
+    expect((await route(banc, "tache.verdict", agent(RELECTEUR), verdict(REV2, { verdict: "PASS" }), { issueId: ISSUE })).statut).toBe(201);
+  });
+
+  it("sans coordinateur : le blocage va à l'humain du réglage `humainDestinataire`, à défaut « local-board »", async () => {
+    const blocage = verdict(REV1, { verdict: "BLOCKED_INFORMATION", controlesNonExecutes: ["verifier_url : ECONNREFUSED"] });
+    const sans = creerBanc();
+    sans.issues.set(BRIEF, { ...sans.issues.get(BRIEF)!, assigneeAgentId: null });
+    sans.tacheSousPorte({ status: "in_progress", etape: null, revuesRequises: TECH, maxCycles: 1 });
+    expect((await route(sans, "tache.verdict", agent(RELECTEUR), blocage, { issueId: ISSUE })).statut).toBe(201);
+    expect(sans.t.messages[0]).toMatchObject({ destinataireType: "humain", destinataireId: "local-board" });
+
+    const regle = creerBanc({ config: { humainDestinataire: " utilisateur-reel-42 " } });
+    regle.issues.set(BRIEF, { ...regle.issues.get(BRIEF)!, assigneeAgentId: null });
+    regle.tacheSousPorte({ status: "in_progress", etape: null, revuesRequises: TECH, maxCycles: 1 });
+    expect((await route(regle, "tache.verdict", agent(RELECTEUR), blocage, { issueId: ISSUE })).statut).toBe(201);
+    expect(regle.t.messages[0]).toMatchObject({ destinataireType: "humain", destinataireId: "utilisateur-reel-42" });
+  });
+
+  it("témoin : un CHANGES_REQUESTED consomme le cycle, la révision suivante n'est plus reçue", async () => {
+    const banc = creerBanc();
+    banc.tacheSousPorte({ status: "in_progress", etape: null, revuesRequises: TECH, maxCycles: 1 });
+    expect((await route(banc, "tache.verdict", agent(RELECTEUR), verdict(REV1, { verdict: "CHANGES_REQUESTED", constats: [constat] }), { issueId: ISSUE })).statut).toBe(201);
+    expect(banc.t.messages).toEqual([]);
+    nouvelleRevision(banc, REV2);
+    expect((await route(banc, "tache.verdict", agent(RELECTEUR), verdict(REV2, { verdict: "PASS" }), { issueId: ISSUE })).corps).toMatchObject({ code: "conflit" });
+  });
+
+  it("verdict sur une révision dépassée pendant la relecture : refusé, rien d'enregistré, aucun cycle consommé", async () => {
+    const banc = creerBanc();
+    banc.tacheSousPorte({ status: "in_progress", etape: null, revuesRequises: TECH, maxCycles: 1, revision: REV2 });
+    const perime = await route(banc, "tache.verdict", agent(RELECTEUR), verdict(REV1, { verdict: "CHANGES_REQUESTED", constats: [constat] }), { issueId: ISSUE });
+    expect(perime.corps).toMatchObject({ code: "revision_perimee" });
+    expect(banc.t.verdicts).toEqual([]);
+    expect(banc.t.constats).toEqual([]);
+    expect((await route(banc, "tache.verdict", agent(RELECTEUR), verdict(REV2, { verdict: "PASS" }), { issueId: ISSUE })).statut).toBe(201);
+  });
+});
+
+/* ------------------------------------------------------------------ */
 /* M6, B1, B4, B5                                                      */
 /* ------------------------------------------------------------------ */
 describe("M6 : la remise à zéro de démonstration n'efface jamais une trace réelle", () => {
@@ -368,3 +433,81 @@ describe("B5 : les revues d'une révision sont cherchées par leur origine exact
 });
 
 void BRIEF;
+
+/* ------------------------------------------------------------------ */
+/* F2 : destinataire humain des blocages selon le mode de déploiement     */
+/* ------------------------------------------------------------------ */
+describe("F2 : humainDestinataire absent en mode authenticated", () => {
+  const TECH = [{ role: "technique", agentId: RELECTEUR }];
+  const blocage = { revisionId: REV1, role: "technique", exigencesExaminees: [], preuvesVerifiees: [], constats: [], constatsResolus: [], verdict: "BLOCKED_INFORMATION", controlesNonExecutes: ["verifier_url : ECONNREFUSED"] };
+
+  /** Banc sans coordinateur (le blocage vise un humain), services créés avec le mode voulu. */
+  function bancSansCoordinateur(mode: string, config: Record<string, unknown> = {}) {
+    const banc = creerBanc({ config });
+    banc.issues.set(BRIEF, { ...banc.issues.get(BRIEF)!, assigneeAgentId: null });
+    banc.tacheSousPorte({ status: "in_progress", etape: null, revuesRequises: TECH, maxCycles: 1 });
+    const services = creerServices(banc.ctx, { base: banc.base, modeDeploiement: () => mode });
+    const verdictBloque = () => services.routes["tache.verdict"]!({ cle: "tache.verdict" as never, params: { issueId: ISSUE }, query: {}, companyId: SOC, acteur: agent(RELECTEUR), corps: blocage });
+    return { banc, services, verdictBloque };
+  }
+
+  it("local_trusted sans réglage : le blocage va à « local-board », comme avant", async () => {
+    const { banc, verdictBloque } = bancSansCoordinateur("local_trusted");
+    expect((await verdictBloque()).statut).toBe(201);
+    expect(banc.t.messages[0]).toMatchObject({ destinataireType: "humain", destinataireId: "local-board" });
+    expect(banc.t.journal.some((j) => j.type === "destinataire.absent")).toBe(false);
+  });
+
+  it("authenticated sans réglage ni décision : aucun message vers « local-board », avertissement journalisé, commentaire miroir présent", async () => {
+    const { banc, verdictBloque } = bancSansCoordinateur("authenticated");
+    expect((await verdictBloque()).statut).toBe(201);
+    expect(banc.t.messages).toEqual([]);
+    expect(banc.t.journal.find((j) => j.type === "destinataire.absent")).toMatchObject({ entiteId: ISSUE, donnees: { role: "technique", modeDeploiement: "authenticated" } });
+    expect(banc.journauxLogger.join("\n")).toMatch(/humainDestinataire/u);
+    expect(banc.commentaires).toHaveLength(1);
+    expect(banc.commentaires[0]).toMatch(/blocage/u);
+    expect(banc.commentaires[0]).not.toMatch(/local-board/u);
+  });
+
+  it("authenticated sans réglage : le blocage va à l'auteur de la dernière décision humaine de la tâche", async () => {
+    const { banc, verdictBloque } = bancSansCoordinateur("authenticated");
+    banc.t.decisions.push({ id: "d1", companyId: SOC, issueId: ISSUE, revisionId: REV1, action: "demander_correction", commentaire: "x", userId: "ancien-utilisateur-1", portee: null, invalidee: false, mode: "demonstration", creeLe: "2026-10-15T09:00:00.000Z" });
+    banc.t.decisions.push({ id: "d2", companyId: SOC, issueId: ISSUE, revisionId: REV1, action: "demander_correction", commentaire: "x", userId: "dernier-utilisateur-2", portee: null, invalidee: false, mode: "demonstration", creeLe: "2026-10-15T09:30:00.000Z" });
+    expect((await verdictBloque()).statut).toBe(201);
+    expect(banc.t.messages[0]).toMatchObject({ destinataireType: "humain", destinataireId: "dernier-utilisateur-2" });
+    expect(banc.t.journal.some((j) => j.type === "destinataire.absent")).toBe(false);
+  });
+
+  it("authenticated avec réglage : le blocage va à l'utilisateur réglé", async () => {
+    const { banc, verdictBloque } = bancSansCoordinateur("authenticated", { humainDestinataire: " utilisateur-reel-42 " });
+    expect((await verdictBloque()).statut).toBe(201);
+    expect(banc.t.messages[0]).toMatchObject({ destinataireType: "humain", destinataireId: "utilisateur-reel-42" });
+  });
+
+  describe("ligne du Diagnostic", () => {
+    async function diag(mode: string, config: Record<string, unknown> = {}) {
+      const banc = creerBanc({ config });
+      const services = creerServices(banc.ctx, { base: banc.base, modeDeploiement: () => mode });
+      const r = await services.routes["sante"]!({ cle: "sante" as never, params: {}, query: {}, companyId: SOC, acteur: humain, corps: undefined });
+      return r.corps as { destinataireHumain: { modeDeploiement: string; regle: string | null; alerte: string | null } };
+    }
+
+    it("authenticated sans réglage : ligne demandant de renseigner humainDestinataire", async () => {
+      expect((await diag("authenticated")).destinataireHumain.alerte).toBe("Destinataire humain des blocages : non réglé ; renseignez humainDestinataire");
+    });
+    it("local_trusted sans réglage : aucune ligne", async () => {
+      expect((await diag("local_trusted")).destinataireHumain.alerte).toBeNull();
+    });
+    it("réglage valide : aucune ligne", async () => {
+      expect((await diag("authenticated", { humainDestinataire: "utilisateur-reel-42" })).destinataireHumain).toMatchObject({ regle: "utilisateur-reel-42", alerte: null });
+    });
+    it("réglage qui ne ressemble pas à un identifiant (e-mail, espaces) : affiché dans le Diagnostic, dans tous les modes", async () => {
+      for (const mode of ["authenticated", "local_trusted"]) {
+        const a = (await diag(mode, { humainDestinataire: "jb@example.org" })).destinataireHumain.alerte;
+        expect(a).toMatch(/jb@example\.org/u);
+        expect(a).toMatch(/identifiant d'utilisateur/u);
+      }
+      expect((await diag("authenticated", { humainDestinataire: "deux mots" })).destinataireHumain.alerte).not.toBeNull();
+    });
+  });
+});

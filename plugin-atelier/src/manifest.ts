@@ -101,6 +101,13 @@ const manifest: PaperclipPluginManifestV1 = {
           "Adresse locale de la passerelle marketing (par exemple http://127.0.0.1:3190), lue seulement par le diagnostic pour afficher quelles sources sont réelles. Sans adresse : mode non vérifié.",
         maxLength: 200,
       },
+      dicteeUrl: {
+        type: "string",
+        title: "Adresse du serveur de dictée vocale",
+        description:
+          "Adresse locale de whisper-server (défaut http://127.0.0.1:8178), boucle locale seulement : l'audio ne sort jamais de cette machine et n'est jamais conservé.",
+        maxLength: 200,
+      },
       // Lot R7 (connaissances du client, docs/rag-conception.md §3.4) : vectorisation des passages.
       connaissancesVectorisation: {
         type: "string",
@@ -115,6 +122,29 @@ const manifest: PaperclipPluginManifestV1 = {
         default: false,
         title: "Accord écrit du client pour Voyage AI",
         description: "À cocher seulement si le client a accepté PAR ÉCRIT l'envoi du texte de ses documents à Voyage AI. Sans cela, « voyage » retombe sur le plein texte.",
+      },
+      // Veilleur des tâches orphelines (16/10/2026).
+      veilleurSeuilMinutes: {
+        type: "integer",
+        minimum: 5,
+        maximum: 1440,
+        default: 15,
+        title: "Veilleur : délai avant réveil d'une tâche orpheline (minutes)",
+        description:
+          "Une tâche assignée à un agent, non terminée et sans passage actif ni programmé depuis ce délai est réveillée une fois par période (au plus 3 fois en 24 heures, puis l'atelier le signale).",
+      },
+      humainDestinataire: {
+        type: "string",
+        title: "Humain destinataire (identifiant d'utilisateur)",
+        description:
+          "Identifiant de l'utilisateur Paperclip (propriétaire ou administrateur) qui reçoit les blocages de revue et les messages adressés à l'humain quand aucun humain n'est assigné à la tâche. Obligatoire en mode authentifié (accès à distance) ; sans valeur, repli « local-board » (mode local_trusted).",
+        maxLength: 200,
+      },
+      openaiSecretRef: {
+        type: "object",
+        format: "secret-ref",
+        title: "Clé d'API OpenAI (voix en direct)",
+        description: "Secret natif de Paperclip contenant la clé d'API OpenAI de la voix en direct ; lue à chaque ouverture de session, jamais copiée en configuration ni envoyée au navigateur (il ne reçoit qu'un secret éphémère de 60 secondes).",
       },
       connaissancesVoyageCle: {
         type: "object",

@@ -13,6 +13,39 @@ const NOM_ENTREPRISE = process.env.ATELIER_E2E_ENTREPRISE ?? "Rénovation Liège
 
 let prefixe = "";
 let idEntreprise = "";
+/** Vrai si le prospect fictif avec position a été enregistré (alors la carte doit afficher au moins un point). */
+let prospectPositionne = false;
+
+const NOM_LEAD = "Marie Exemple (démonstration)";
+const NOM_LEAD_POSITIONNE = "Jean Placé (démonstration)";
+// Les noms sont pseudonymisés à l'affichage (« [client-xxxxxxxx] ») : on ne s'appuie pas sur eux pour retrouver une ligne.
+
+const consentementFictif = (reference: string) => ({
+  date: "2026-10-14T10:00:00+02:00",
+  texteAccepte: "J'accepte d'être recontacté par courriel au sujet de ma demande de devis.",
+  source: "https://exemple.invalid/devis",
+  canauxAutorises: ["courriel"],
+  responsableNomme: "Bureau de démonstration",
+  reference,
+});
+
+/**
+ * Le socle (page d'une tâche) interroge toujours le document « plan », absent d'une tâche neuve : 404
+ * normal, côté socle et non côté atelier. On l'écarte (avec son écho en console), rien d'autre.
+ */
+function sansPlanAbsent(erreurs: string[]): string[] {
+  const plan = (e: string) => /^réponse 404 : GET \S+\/api\/issues\/[^/]+\/documents\/plan$/u.test(e);
+  const nb = erreurs.filter(plan).length;
+  let echos = nb;
+  return erreurs.filter((e) => {
+    if (plan(e)) return false;
+    if (echos > 0 && e === "console : Failed to load resource: the server responded with a status of 404 (Not Found)") {
+      echos--;
+      return false;
+    }
+    return true;
+  });
+}
 
 /** Erreurs de console et exceptions de page, relevées pendant tout un test. */
 function surveillerConsole(page: Page): string[] {
@@ -21,6 +54,10 @@ function surveillerConsole(page: Page): string[] {
     if (m.type() === "error") erreurs.push(`console : ${m.text()}`);
   });
   page.on("pageerror", (e) => erreurs.push(`exception : ${e.message}`));
+  // L'adresse d'une ressource refusée n'apparaît pas dans le message de console : on la note.
+  page.on("response", (r) => {
+    if (r.status() >= 400) erreurs.push(`réponse ${r.status()} : ${r.request().method()} ${r.url()}`);
+  });
   return erreurs;
 }
 
@@ -40,27 +77,31 @@ test.beforeAll(async ({ request }) => {
   prefixe = e.issuePrefix;
   idEntreprise = e.id;
 
-  // Un prospect fictif, pour que le tableau des prospects (colonne « Confiance ») ait une ligne à afficher.
+  // Un prospect fictif, pour que le tableau des prospects (colonne « Statut du lead ») ait une ligne à afficher.
   // Idempotent : un deuxième passage retombe sur le même prospect (ou le refuse), sans effet sur le test.
   await request.post("/api/plugins/atelier.marketing-ia/api/prospects/particuliers", {
     data: {
       companyId: idEntreprise,
       referentiel: { version: 1 },
       zone: { codePostal: "4020", commune: "Liège", province: "Liège", region: "Wallonie" },
-      coordonnees: { nom: "Marie Exemple (démonstration)", courriel: "marie.exemple@exemple.invalid", telephone: "+32 4 000 99 88", adresse: null },
+      coordonnees: { nom: NOM_LEAD, courriel: "marie.exemple@exemple.invalid", telephone: "+32 4 000 99 88", adresse: null },
       origine: "formulaire_entrant",
-      consentements: [
-        {
-          date: "2026-10-14T10:00:00+02:00",
-          texteAccepte: "J'accepte d'être recontacté par courriel au sujet de ma demande de devis.",
-          source: "https://exemple.invalid/devis",
-          canauxAutorises: ["courriel"],
-          responsableNomme: "Bureau de démonstration",
-          reference: "soumission-e2e",
-        },
-      ],
+      consentements: [consentementFictif("soumission-e2e")],
     },
   });
+
+  // Un second prospect fictif, avec une position connue (centre du code postal), pour la carte.
+  const placé = await request.post("/api/plugins/atelier.marketing-ia/api/prospects/particuliers", {
+    data: {
+      companyId: idEntreprise,
+      referentiel: { version: 1 },
+      zone: { codePostal: "4000", commune: "Liège", province: "Liège", region: "Wallonie", position: { lat: 50.6326, lon: 5.5797, precision: "code_postal" } },
+      coordonnees: { nom: NOM_LEAD_POSITIONNE, courriel: "jean.place@exemple.invalid", telephone: "+32 4 000 99 77", adresse: null },
+      origine: "formulaire_entrant",
+      consentements: [consentementFictif("soumission-e2e-carte")],
+    },
+  });
+  prospectPositionne = placé.ok();
 });
 
 test("accueil : un modèle remplit le champ sans rien envoyer, Entrée envoie et ouvre la tâche créée", async ({ page }) => {
@@ -113,6 +154,99 @@ test("nouvelles vues : Corbeille, Carte des prospects, Prospects, Paramètres et
   await expect(page.locator(".atl-entete h1")).toHaveText("Paramètres et diagnostic");
   await expect(page.getByRole("heading", { name: "Sources de données réelles" })).toBeVisible();
   await expect(page.locator(".atl-page [role='alert']")).toHaveCount(0);
+
+  expect(erreurs, erreurs.join("\n")).toEqual([]);
+});
+
+test("fiche d'un lead : compte rendu, question au Coordinateur, arrivée sur la tâche créée", async ({ page }) => {
+  const erreurs = surveillerConsole(page);
+  const question = "Quel premier message envoyer à ce lead, et pourquoi ? (essai automatique)";
+  const envois: string[] = [];
+  page.on("request", (r) => {
+    if (r.method() === "POST" && r.url().includes("/question")) envois.push(r.url());
+  });
+
+  await ouvrir(page, "/prospects");
+  await page.getByRole("button", { name: /Ouvrir la fiche de/u }).first().click();
+
+  const compteRendu = page.getByRole("region", { name: "Compte rendu du lead" });
+  await expect(compteRendu).toBeVisible();
+  await expect(compteRendu.getByRole("heading", { name: "Pourquoi ce lead" })).toBeVisible({ timeout: 30_000 });
+  await expect(compteRendu.getByRole("heading", { name: "Confiance et score" })).toBeVisible();
+  await expect(compteRendu.getByText(/Confiance :/u)).toBeVisible();
+  await expect(compteRendu.locator("[role='alert']")).toHaveCount(0);
+
+  // Tant que la question est vide, le bouton est inactif ; une fois saisie, il envoie.
+  const bouton = compteRendu.getByRole("button", { name: "Poser une question au Coordinateur" });
+  await expect(bouton).toBeDisabled();
+  await compteRendu.getByLabel("Votre question sur ce lead").fill(question);
+  await expect(bouton).toBeEnabled();
+  await bouton.click();
+
+  await expect(page).toHaveURL(new RegExp(`/${prefixe}/issues/${prefixe}-\\d+`, "u"), { timeout: 30_000 });
+  expect(envois, "une seule question envoyée").toHaveLength(1);
+  await expect(page.getByText(question).first()).toBeVisible({ timeout: 30_000 });
+  const restantes = sansPlanAbsent(erreurs);
+  expect(restantes, restantes.join("\n")).toEqual([]);
+});
+
+test("carte des prospects : au moins un point et la légende (sinon état vide honnête)", async ({ page }) => {
+  const erreurs = surveillerConsole(page);
+
+  await ouvrir(page, "/carte");
+  await expect(page.locator(".atl-entete h1")).toHaveText("Carte des prospects");
+  await expect(page.locator(".atl-page [role='alert']")).toHaveCount(0);
+
+  if (prospectPositionne) {
+    await expect(page.locator("svg.atl-carte circle.atl-carte-point").first()).toBeVisible({ timeout: 30_000 });
+    expect(await page.locator("svg.atl-carte circle.atl-carte-point").count()).toBeGreaterThanOrEqual(1);
+    await expect(page.getByRole("list", { name: "Légende de la carte" })).toBeVisible();
+    await expect(page.getByRole("link", { name: /\[client-/u }).first()).toBeVisible();
+  } else {
+    await expect(page.getByText("Aucun prospect n'a de position connue.")).toBeVisible();
+  }
+
+  expect(erreurs, erreurs.join("\n")).toEqual([]);
+});
+
+test("écrans de l'après-midi : ouverture, menus, encart d'accueil, statut du lead et fiche au clic", async ({ page }) => {
+  const erreurs = surveillerConsole(page);
+
+  // 1. Ouvrir l'entreprise mène à l'atelier ; dans le menu du socle, « Atelier marketing » est le premier lien.
+  await page.goto(`/${prefixe}`);
+  await expect(page).toHaveURL(new RegExp(`/${prefixe}/atelier(/|$)`, "u"), { timeout: 30_000 });
+  await page.goto(`/${prefixe}/dashboard`);
+  const menuSocle = page.locator("aside nav").first();
+  await expect(menuSocle.getByRole("link").first()).toHaveText("Atelier marketing");
+
+  // 2. Menu de l'atelier : « À faire », puis le groupe « Prospection » (Prospects, Carte des prospects).
+  await ouvrir(page, "");
+  const menu = page.locator("nav.atl-nav").first();
+  const liens = await menu.getByRole("link").allInnerTexts();
+  expect(liens.slice(0, 3).map((t) => t.trim())).toEqual(["À faire", "Prospects", "Carte des prospects"]);
+  const groupe = menu.getByRole("group", { name: "Prospection" });
+  await expect(groupe).toBeVisible();
+  await expect(groupe.getByRole("link", { name: "Prospects", exact: true })).toBeVisible();
+  await expect(groupe.getByRole("link", { name: "Carte des prospects", exact: true })).toBeVisible();
+
+  // 3. Accueil : l'encart « Prospection » (total, qualifiés, deux liens) vient avant « Demander à l'équipe ».
+  const titreProspection = page.getByRole("heading", { name: "Prospection", exact: true });
+  await expect(titreProspection).toBeVisible();
+  await expect(page.getByText(/leads? au total/u)).toBeVisible();
+  await expect(page.getByText(/leads? qualifiés?/u)).toBeVisible();
+  await expect(page.getByRole("link", { name: "Voir les prospects", exact: true })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Voir la carte", exact: true })).toBeVisible();
+  const yProspection = (await titreProspection.boundingBox())?.y ?? Infinity;
+  const yDemande = (await page.getByRole("heading", { name: "Demander à l'équipe" }).boundingBox())?.y ?? -1;
+  expect(yProspection, "l'encart Prospection doit être au-dessus de « Demander à l'équipe »").toBeLessThan(yDemande);
+
+  // 4. Prospects : colonne « Statut du lead » avec badge, colonne « Étape », clic sur une cellule = fiche.
+  await ouvrir(page, "/prospects");
+  await expect(page.getByRole("columnheader", { name: /Statut du lead/u })).toBeVisible();
+  await expect(page.getByRole("columnheader", { name: "Étape", exact: true })).toBeVisible();
+  await expect(page.locator("td[data-libelle='Statut du lead']").first()).toContainText(/Qualifié|À vérifier|Écarté/u);
+  await page.locator("td[data-libelle='Zone']").first().click();
+  await expect(page.getByRole("region", { name: "Compte rendu du lead" })).toBeVisible({ timeout: 30_000 });
 
   expect(erreurs, erreurs.join("\n")).toEqual([]);
 });

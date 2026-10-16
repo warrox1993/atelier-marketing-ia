@@ -48,7 +48,9 @@ import {
   type TypeEmpreinte,
   type ZoneProspect,
 } from "../contrats/index.js";
+import { VueProspectsRequete } from "../contrats/api.js";
 import type { ActeurHote, GestionnaireRoute } from "./atelier.js";
+import { resumerProspects, type PageProspectsComplete } from "./prospects-resume.js";
 import type { BaseAtelier } from "./base.js";
 import { normaliserPourEmpreinte } from "./base-clients.js";
 import { chiffrer, empreinte, memeCle, TAILLE_CLE_CHIFFREMENT, TAILLE_CLE_HMAC_MIN } from "./chiffrement-donnees.js";
@@ -90,9 +92,14 @@ export interface DependancesProspection {
   /** Lot P9b : demande de diffusion ordinaire de `services.ts` (sans verrou : l'appelant le tient déjà). */
   demanderDiffusionSansVerrou(companyId: string, issueId: string, corps: unknown, acteur: ActeurHote): Promise<{ statut: number; corps: unknown }>;
   maintenant?: () => Date;
+  /** Réglages des leads et décisions humaines de l'entreprise (migration 010), lus une fois par parcours. */
+  lectureQualification?(companyId: string): Promise<Pick<ContexteQualification, "reglages" | "corrections" | "evaluations">>;
 }
 
 type Schema<T> = { safeParse(v: unknown): { success: true; data: T } | { success: false; error: { issues: ReadonlyArray<{ path: PropertyKey[]; message: string }> } } };
+/** Valeur d'un paramètre de requête (le premier s'il est répété), `undefined` s'il est absent. */
+const pur = (v: string | string[] | undefined): string | undefined => (Array.isArray(v) ? v[0] : v);
+
 function analyser<T>(schema: Schema<T>, valeur: unknown, quoi: string): T {
   const r = schema.safeParse(valeur);
   if (!r.success) erreurValidation(quoi, r.error.issues);
@@ -219,7 +226,7 @@ export function extraireChangementsBce(structures: readonly Record<string, unkno
 
 /**
  * Taille d'une réponse `bnb_comptes`, par numéro d'entreprise : exercice et effectif (rubrique 9087, ETP) du dépôt le plus
- * récent qui a des données, catégorie déduite par la passerelle. Réponse « non trouvée » ou sans exercice daté : rien.
+ * récent qui a des données, catégorie déduite par la passerelle ; fonds propres, terrains et résultats (lot 2) lus dans les dépôts les plus récents, jamais devinés. Réponse « non trouvée » ou sans exercice daté : rien.
  * Ne crée aucun prospect.
  */
 export function extraireComptesBnb(structures: readonly Record<string, unknown>[]): Map<string, TailleBnb> {
@@ -229,14 +236,29 @@ export function extraireComptesBnb(structures: readonly Record<string, unknown>[
     if (s.trouve !== true || !NumeroBce.safeParse(numero).success) continue;
     const lignes = objets(s.references).map((r) => {
       const fin = dateFaitBce(objetOuNull(r.ExerciseDates)?.endDate);
-      const rubrique = objets(objetOuNull(r.AccountingData)?.Rubrics).find((x) => x.Code === "9087" && x.Period === "N");
-      const etp = typeof rubrique?.Value === "number" && Number.isFinite(rubrique.Value) && rubrique.Value >= 0 ? rubrique.Value : null;
-      return { exercice: fin === null ? null : Number(fin.slice(0, 4)), etp };
+      const rubriques = objets(objetOuNull(r.AccountingData)?.Rubrics);
+      const nombre = (code: string): number | null => {
+        const v = rubriques.find((x) => x.Code === code && x.Period === "N")?.Value;
+        return typeof v === "number" && Number.isFinite(v) ? v : null;
+      };
+      const etp = nombre("9087");
+      // Rubriques du lot 2 (codes à confirmer sur la documentation BNB) : 10/15 fonds propres, 22 terrains et constructions, 9904 résultat de l'exercice.
+      return { exercice: fin === null ? null : Number(fin.slice(0, 4)), etp: etp !== null && etp >= 0 ? etp : null, fondsPropres: nombre("10/15"), terrains: nombre("22"), resultat: nombre("9904") };
     }).filter((l) => l.exercice !== null);
-    const retenue = lignes.find((l) => l.etp !== null) ?? lignes[0];
+    // Un seul exercice pour tout : le plus récent ayant au moins une donnée structurée (exercice affiché, effectif, fonds propres, terrains).
+    const recentes = [...lignes].sort((a, b) => (b.exercice as number) - (a.exercice as number));
+    const retenue = recentes.find((l) => l.etp !== null || l.fondsPropres !== null || l.terrains !== null || l.resultat !== null) ?? recentes[0];
     if (retenue === undefined) continue;
     const categorie = ["micro", "petite", "moyenne", "grande"].find((c) => c === s.taille_deduite);
-    const taille = TailleBnb.safeParse({ exercice: retenue.exercice, effectifEtp: retenue.etp, categorie: retenue.etp === null ? null : (categorie ?? null) });
+    // Bilan : dernier exercice déposé seulement ; résultats : les deux derniers exercices (nul si la rubrique manque, pour ne rien deviner).
+    const dernier = retenue;
+    const resultats = recentes.slice(0, 2).map((l) => ({ exercice: l.exercice as number, resultat: l.resultat }));
+    const taille = TailleBnb.safeParse({
+      exercice: retenue.exercice, effectifEtp: retenue.etp, categorie: retenue.etp === null ? null : (categorie ?? null),
+      ...(dernier.fondsPropres !== null ? { fondsPropres: dernier.fondsPropres } : {}),
+      ...(dernier.terrains !== null ? { terrainsConstructions: dernier.terrains } : {}),
+      ...(resultats.some((x) => x.resultat !== null) ? { resultats } : {}),
+    });
     if (taille.success) parNumero.set(numero, taille.data);
   }
   return parNumero;
@@ -558,6 +580,37 @@ const estRefSecret = (r: unknown) => typeof r === "object" && r !== null && (r a
 /* Routes                                                              */
 /* ------------------------------------------------------------------ */
 
+/**
+ * Appel tel que la couverture le relit : arguments de l'appel (déjà comparés à l'empreinte signée par la
+ * passerelle ; absents = aucune zone prouvée), total, page et nombre de pages de la réponse signée.
+ */
+export function appelPourCouverture(outil: string, args: Record<string, unknown> | undefined, structures: readonly Record<string, unknown>[]) {
+  // RGPD : seuls osm_commerces et bce_rechercher alimentent la couverture ; les arguments des autres outils
+  // (téléphone, courriel…) ne sont jamais journalisés.
+  if (outil !== "osm_commerces" && outil !== "bce_rechercher") return undefined;
+  const nombre = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : null);
+  const s = structures[0] ?? {};
+  const argumentsGardes = args === undefined ? null : Object.fromEntries(Object.entries(args).filter(([k]) => CLES_APPEL_JOURNALISEES.includes(k)));
+  // Taille de page et nombre d'éléments renvoyés : prouvent la dernière page quand `pages` manque.
+  const liste = ["entreprises", "commerces", "elements"].map((k) => s[k]).find(Array.isArray) as unknown[] | undefined;
+  return {
+    arguments: argumentsGardes, total: nombre(s["total"]), page: nombre(s["page"]), pages: nombre(s["pages"]),
+    taillePage: nombre(s["taille_page"]), renvoyes: liste === undefined ? null : liste.length,
+  };
+}
+
+// Zone, page et filtres de secteur (non personnels) : deux requêtes qui ne diffèrent que par le secteur
+// (dentistes puis médecins) restent distinctes pour la couverture et le recomptage des totaux. Jamais
+// `nom` (recherche par nom, qui peut viser un indépendant) ni un autre argument.
+const CLES_APPEL_JOURNALISEES = ["codes_postaux", "communes", "provinces", "regions", "pays", "page", "nace", "categories", "formes", "creees_depuis", "taille"];
+
+/** Égalité profonde indépendante de l'ordre des clés (valeurs relues d'une colonne jsonb). */
+export function egalProfond(a: unknown, b: unknown): boolean {
+  const trier = (v: unknown): unknown =>
+    Array.isArray(v) ? v.map(trier) : v && typeof v === "object" ? Object.fromEntries(Object.entries(v as Record<string, unknown>).sort(([x], [y]) => (x < y ? -1 : x > y ? 1 : 0)).map(([k, x]) => [k, trier(x)])) : v;
+  return JSON.stringify(trier(a)) === JSON.stringify(trier(b));
+}
+
 export function routesProspection(d: DependancesProspection): Partial<Record<CleRouteApi, GestionnaireRoute>> {
   const { ctx, base } = d;
   const maintenant = () => (d.maintenant ? d.maintenant() : new Date());
@@ -823,10 +876,13 @@ export function routesProspection(d: DependancesProspection): Partial<Record<Cle
   async function contexteQualification(companyId: string): Promise<ContexteQualification> {
     const [marque] = await base.marques(companyId);
     const etat = await base.etatBaseClients(companyId);
+    const reglages = d.lectureQualification ? await d.lectureQualification(companyId) : {};
     return {
+      ...reglages,
       cibles: (marque?.ciblesProspection ?? []) as ContexteQualification["cibles"],
       segments: (marque?.segments ?? []) as ContexteQualification["segments"],
       etablissements: (marque?.etablissements ?? []) as ContexteQualification["etablissements"],
+      offres: (marque?.offres ?? []) as NonNullable<ContexteQualification["offres"]>,
       baseClientsImportee: etat.clients > 0,
       maintenant: maintenant().toISOString(),
     };
@@ -986,7 +1042,7 @@ export function routesProspection(d: DependancesProspection): Partial<Record<Cle
           const taille = comptesBnb.get(String(l.numeroBce ?? l.identifiant.valeur));
           if (taille === undefined) continue;
           const anciennes = l.sources as SourceProspect[];
-          if (anciennes.some((x) => x.service === "bnb" && x.outil === "bnb_comptes" && x.taille?.exercice === taille.exercice && x.taille.effectifEtp === taille.effectifEtp && x.taille.categorie === taille.categorie)) continue;
+          if (anciennes.some((x) => x.service === "bnb" && x.outil === "bnb_comptes" && egalProfond(x.taille, taille))) continue;
           const sources = [...anciennes, SourceProspect.parse({ ...source, taille })].slice(-50);
           await base.majProspect(r.companyId, l.id, { nace: l.nace, zone: l.zone, coordonnees: l.coordonnees, sources, statut: l.statut, motifsExclusion: l.motifsExclusion, particulier: l.particulier });
           enrichisParComptes++;
@@ -1039,6 +1095,8 @@ export function routesProspection(d: DependancesProspection): Partial<Record<Cle
         companyId: r.companyId, type: "prospects.deposes", entite: "source", entiteId: sourceId, issueId: issue.id, runId: r.acteur.runId, acteur: r.acteur.id,
         donnees: {
           service: entree.service, outil: entree.outil, mode: deduction.mode, modeCampagne: effectif.mode, cles: clesDonneesLot.origine,
+          // Couverture calculée (couverture-prospection.ts) : campagne, arguments vérifiés contre la signature, pagination.
+          campagneId: campagne?.id ?? null, ...(appelPourCouverture(entree.outil, entree.arguments, deduction.structures) !== undefined ? { appel: appelPourCouverture(entree.outil, entree.arguments, deduction.structures) } : {}),
           crees: resultats.filter((x) => x.cree).length, misAJour: resultats.filter((x) => !x.cree).length, exclus, ignores: ignores + bruts.length - retenus.length, fusionnes, enrichisParChangements, enrichisParComptes, clientsHorsBase, oppositionsAjoutees, exclusParOpposition,
         },
       });
@@ -1116,23 +1174,41 @@ export function routesProspection(d: DependancesProspection): Partial<Record<Cle
     d.services.listerQualifies = (companyId, query, plafond) => parcourirQualifies(companyId, filtresDeRequete(companyId, query), plafond);
   }
 
-  routes["prospects.lister"] = async (r) => {
-    const f = filtresDeRequete(r.companyId, r.query);
+  /** Page entière (forme historique) : les filtres de la requête, sans les paramètres de vue. */
+  async function pageComplete(companyId: string, query: Record<string, string | string[]>): Promise<PageProspectsComplete> {
+    const f = filtresDeRequete(companyId, query);
     if (f.qualifiesSeulement) {
       // La confiance se calcule à la lecture : on parcourt les prospects du filtre, puis on pagine les qualifiés.
-      const qualifies = await parcourirQualifies(r.companyId, f, 5000);
+      const qualifies = await parcourirQualifies(companyId, f, 5000);
       const debut = (f.page - 1) * f.parPage;
-      return { corps: { total: qualifies.length, page: f.page, pages: Math.ceil(qualifies.length / f.parPage), prospects: qualifies.slice(debut, debut + f.parPage) } };
+      return { total: qualifies.length, page: f.page, pages: Math.ceil(qualifies.length / f.parPage), prospects: qualifies.slice(debut, debut + f.parPage) };
     }
-    const { total, lignes } = await base.listerProspects(r.companyId, f);
-    const det = await base.detailsProspects(r.companyId, lignes.map((l) => l.id));
-    return { corps: { total, page: f.page, pages: Math.ceil(total / f.parPage), prospects: await avecConfiance(r.companyId, lignes.map((l) => assembler(l, det))) } };
+    const { total, lignes } = await base.listerProspects(companyId, f);
+    const det = await base.detailsProspects(companyId, lignes.map((l) => l.id));
+    return { total, page: f.page, pages: Math.ceil(total / f.parPage), prospects: await avecConfiance(companyId, lignes.map((l) => assembler(l, det))) };
+  }
+
+  /**
+   * Résumé par défaut (fiches courtes) ; `?partie=detail&prospectId=` rend un prospect entier ; `?vue=complete`
+   * rend la page entière comme avant. Les paramètres de vue sont retirés avant la validation stricte des filtres.
+   */
+  routes["prospects.lister"] = async (r) => {
+    const { vue: _vue, partie: _partie, prospectId: _id, ...filtres } = r.query;
+    void _vue, _partie, _id;
+    const v = analyser(VueProspectsRequete, { vue: pur(r.query["vue"]), partie: pur(r.query["partie"]), prospectId: pur(r.query["prospectId"]) }, "Vue des prospects");
+    if (v.partie === "detail") {
+      if (!v.prospectId) erreur("entree_invalide", "partie=detail demande prospectId.");
+      return { corps: await relire(r.companyId, v.prospectId) };
+    }
+    const page = await pageComplete(r.companyId, filtres);
+    return { corps: v.vue === "complete" ? page : resumerProspects(page) };
   };
 
   /** Critères de confiance encore non vérifiés d'un prospect, avec l'outil de la passerelle qui pourrait les établir. */
   routes["prospects.criteres-manquants"] = async (r) => {
     const p = await relire(r.companyId, r.params.prospectId ?? "");
-    return { corps: criteresManquants(p, p.confiance!) };
+    const reglages = d.lectureQualification ? (await d.lectureQualification(r.companyId)).reglages : undefined;
+    return { corps: criteresManquants(p, p.confiance!, reglages?.personnalises ?? []) };
   };
 
   /** Fiche du client (dernière version de la marque) telle que le compte rendu la lit. */

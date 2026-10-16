@@ -140,7 +140,7 @@
     },
     "relecture-independante": {
       "version": "1.0.0",
-      "sha256": "bf41786e7ff45da50f2e044f4e28fbde8a06e2c2112c12a23205ac266d98091f",
+      "sha256": "e68493e84481259dfeb3486fa37a60544c4d66912186b8a4c1a5ab9128b3eb85",
       "fichiers": [
         "SKILL.md",
         "references/grille-gravite.md"

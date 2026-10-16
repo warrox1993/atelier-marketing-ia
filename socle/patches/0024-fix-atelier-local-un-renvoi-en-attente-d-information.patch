@@ -1,0 +1,144 @@
+From fd8200a5ab6c1c8da15573071ca47d386ba6c806 Mon Sep 17 00:00:00 2001
+From: Jean-Baptiste Dhondt <114347858+warrox1993@users.noreply.github.com>
+Date: Fri, 16 Oct 2026 12:38:16 +0200
+Subject: [PATCH] fix(atelier, local): un renvoi en attente d'information ne
+ compte pas comme un tour de revue
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Le corps du PATCH accepte un champ optionnel `awaitingInformation`. Sur une
+décision « changements demandés » d'un agent, il laisse `changesRequestedCount`
+inchangé et n'escalade pas à l'humain : un contrôle impossible (panne d'outil)
+n'est pas un défaut de qualité. Sans le champ, rien ne change ; une décision
+humaine remet toujours le compteur à zéro. Tests : renvoi en attente
+d'information au plafond moins un (pas d'escalade, compteur figé), vrai renvoi
+toujours compté.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01DP85vPq2MHkZg8VNtRvCzB
+---
+ packages/shared/src/validators/issue.ts       |  6 +++
+ .../__tests__/issue-execution-policy.test.ts  | 38 +++++++++++++++++++
+ server/src/routes/issues.ts                   |  2 +
+ server/src/services/issue-execution-policy.ts | 11 +++++-
+ 4 files changed, 55 insertions(+), 2 deletions(-)
+
+diff --git a/packages/shared/src/validators/issue.ts b/packages/shared/src/validators/issue.ts
+index d39f18450..c07d6e422 100644
+--- a/packages/shared/src/validators/issue.ts
++++ b/packages/shared/src/validators/issue.ts
+@@ -889,6 +889,12 @@ export const updateIssueSchema = objectWithoutDefaults(
+     onBehalfOfUserId: z.string().trim().min(1).optional().nullable(),
+     reviewInteractionId: z.string().guid().optional(),
+     reviewRequest: issueReviewRequestSchema.optional().nullable(),
++    /**
++     * Atelier (local) : la décision « changements demandés » de l'étape est un renvoi en attente
++     * d'information (contrôle impossible, aucun défaut de qualité) ; elle ne compte pas comme un
++     * tour de revue. Sans effet hors d'une telle décision.
++     */
++    awaitingInformation: z.boolean().optional(),
+     reopen: z.boolean().optional(),
+     resume: z.boolean().optional(),
+     interrupt: z.boolean().optional(),
+diff --git a/server/src/__tests__/issue-execution-policy.test.ts b/server/src/__tests__/issue-execution-policy.test.ts
+index 8b9d56019..064f7120b 100644
+--- a/server/src/__tests__/issue-execution-policy.test.ts
++++ b/server/src/__tests__/issue-execution-policy.test.ts
+@@ -1840,6 +1840,44 @@ describe("review round circuit breaker", () => {
+     });
+   });
+ 
++  it("ne compte pas un renvoi en attente d'information comme un tour (atelier)", () => {
++    const result = applyIssueExecutionPolicyTransition({
++      issue: reviewPendingIssue({}, { changesRequestedCount: 2 }),
++      policy,
++      requestedStatus: "in_progress",
++      requestedAssigneePatch: {},
++      actor: { agentId: qaAgentId },
++      commentBody: "Contrôle impossible : outil indisponible",
++      awaitingInformation: true,
++    });
++
++    // Au plafond moins un : un vrai renvoi escaladerait ; celui-ci retourne au producteur.
++    expect(result.decision).toMatchObject({ outcome: "changes_requested" });
++    expect(result.patch.status).toBe("in_progress");
++    expect(result.patch.assigneeAgentId).toBe(coderAgentId);
++    expect(result.patch.executionState).toMatchObject({
++      status: "changes_requested",
++      changesRequestedCount: 2,
++    });
++  });
++
++  it("compte toujours un vrai renvoi quand le drapeau est absent ou faux (atelier)", () => {
++    const result = applyIssueExecutionPolicyTransition({
++      issue: reviewPendingIssue({}, { changesRequestedCount: 1 }),
++      policy,
++      requestedStatus: "in_progress",
++      requestedAssigneePatch: {},
++      actor: { agentId: qaAgentId },
++      commentBody: "Défaut de qualité",
++      awaitingInformation: false,
++    });
++
++    expect(result.patch.executionState).toMatchObject({
++      status: "changes_requested",
++      changesRequestedCount: 2,
++    });
++  });
++
+   it("carries the round count through the executor's resubmission", () => {
+     const result = applyIssueExecutionPolicyTransition({
+       issue: {
+diff --git a/server/src/routes/issues.ts b/server/src/routes/issues.ts
+index b5ce649fe..f4b71480e 100644
+--- a/server/src/routes/issues.ts
++++ b/server/src/routes/issues.ts
+@@ -12904,6 +12904,7 @@ export function issueRoutes(
+         attachmentIds: commentAttachmentIds,
+         reviewInteractionId: requestedReviewInteractionId,
+         reviewRequest,
++        awaitingInformation,
+         reopen: reopenRequested,
+         resume: resumeRequested,
+         interrupt: interruptRequested,
+@@ -13261,6 +13262,7 @@ export function issueRoutes(
+         allowBoardOverride: req.actor.type === "board",
+         commentBody,
+         reviewRequest: reviewRequest === undefined ? undefined : reviewRequest,
++        awaitingInformation: awaitingInformation === true,
+         monitorExplicitlyUpdated:
+           req.body.executionPolicy !== undefined && monitorChanged,
+       });
+diff --git a/server/src/services/issue-execution-policy.ts b/server/src/services/issue-execution-policy.ts
+index 859dc5fe1..21f7a55aa 100644
+--- a/server/src/services/issue-execution-policy.ts
++++ b/server/src/services/issue-execution-policy.ts
+@@ -52,6 +52,8 @@ type TransitionInput = {
+   allowBoardOverride?: boolean;
+   commentBody?: string | null;
+   reviewRequest?: IssueExecutionState["reviewRequest"] | null;
++  /** Atelier (local) : renvoi en attente d'information, hors compteur de tours. */
++  awaitingInformation?: boolean;
+   monitorExplicitlyUpdated?: boolean;
+ };
+ 
+@@ -864,8 +866,13 @@ function applyIssueExecutionStageTransition(input: TransitionInput): TransitionR
+         // Human decisions reset the round counter: the cap exists to stop
+         // unattended agent↔agent ping-pong, not to limit human review.
+         const actorIsHuman = actor?.type === "user";
+-        const nextRounds = actorIsHuman ? 0 : (existingState.changesRequestedCount ?? 0) + 1;
+-        if (!actorIsHuman && nextRounds >= resolveMaxReviewRounds(input.policy)) {
++        // Atelier (local) : un renvoi en attente d'information (contrôle impossible, aucun
++        // défaut de qualité constaté) n'est pas un tour de correction : le compteur reste tel quel.
++        const awaitingInformation = !actorIsHuman && input.awaitingInformation === true;
++        const nextRounds = actorIsHuman
++          ? 0
++          : (existingState.changesRequestedCount ?? 0) + (awaitingInformation ? 0 : 1);
++        if (!actorIsHuman && !awaitingInformation && nextRounds >= resolveMaxReviewRounds(input.policy)) {
+           const escalationUserId = reviewEscalationUserId(input.issue);
+           if (escalationUserId) {
+             // Rounds exhausted: keep the stage pending but hand it to the
+-- 
+2.53.0
+

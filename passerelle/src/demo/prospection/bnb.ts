@@ -2,7 +2,7 @@
 // Query » (comptes annuels en JSON). Forme inspirée des deux appels du service (liste des dépôts d'une entité,
 // puis données comptables d'un dépôt), fusionnés en une réponse : niveau de preuve « probable », noms exacts des
 // champs à confirmer sur la documentation BNB au lot P4. Rubriques : 9087 = effectif moyen en équivalents temps
-// plein, 20/58 = total de l'actif (total du bilan).
+// plein, 20/58 = total de l'actif (total du bilan) ; lot 2 : 10/15 = fonds propres, 22 = terrains et constructions, 9904 = résultat de l'exercice (codes à confirmer).
 //
 // Comme la vraie centrale : les petites entités non tenues au dépôt et les créations récentes n'ont aucun compte,
 // et les données ont un an ou plus de retard. Une entreprise radiée garde ses anciens comptes.
@@ -27,6 +27,10 @@ const reference = (c: CompteDemo): Record<string, unknown> => ({
     Rubrics: [
       { Code: "9087", Libelle: "Effectif moyen du personnel en équivalents temps plein", Period: "N", Value: c.effectifEtp },
       { Code: "20/58", Libelle: "Total de l'actif (total du bilan)", Period: "N", Value: c.totalBilan },
+      // Lot 2 (critères « courtier ») : codes de rubriques à confirmer sur la documentation BNB.
+      { Code: "10/15", Libelle: "Capitaux propres (fonds propres)", Period: "N", Value: c.fondsPropres },
+      { Code: "22", Libelle: "Terrains et constructions", Period: "N", Value: c.terrainsConstructions },
+      { Code: "9904", Libelle: "Bénéfice (perte) de l'exercice", Period: "N", Value: c.resultat },
     ],
   },
 });

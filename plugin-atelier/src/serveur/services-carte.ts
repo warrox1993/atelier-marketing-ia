@@ -80,7 +80,7 @@ export function routesCarte(d: DependancesCarte): Partial<Record<CleRouteApi, Ge
           tronque = true;
           break;
         }
-        const res = (await lister({ ...r, cle: "prospects.lister", query: { ...query, page: String(page), parPage: String(PAR_PAGE) } })).corps as { total: number; pages: number; prospects: Prospect[] };
+        const res = (await lister({ ...r, cle: "prospects.lister", query: { ...query, vue: "complete", page: String(page), parPage: String(PAR_PAGE) } })).corps as { total: number; pages: number; prospects: Prospect[] };
         total = res.total;
         ajouter(res.prospects);
         if (page >= res.pages) break;

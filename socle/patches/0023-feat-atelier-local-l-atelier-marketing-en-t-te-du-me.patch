@@ -1,0 +1,286 @@
+From 78ce54a07a114f5648861d2f81a0129ac2e6646f Mon Sep 17 00:00:00 2001
+From: Jean-Baptiste Dhondt <114347858+warrox1993@users.noreply.github.com>
+Date: Fri, 16 Oct 2026 12:36:13 +0200
+Subject: [PATCH] =?UTF-8?q?feat(atelier,=20local):=20l'atelier=20marketing?=
+ =?UTF-8?q?=20en=20t=C3=AAte=20du=20menu=20et=20page=20d'accueil=20de=20l'?=
+ =?UTF-8?q?entreprise?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Les entrées latérales de plugins passent en tête de la barre latérale, au-dessus de « New Task ». L'ouverture de l'entreprise sans chemin précis mène à /atelier quand un plugin prêt déclare cette page, sinon au tableau de bord ; /dashboard reste direct.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01DP85vPq2MHkZg8VNtRvCzB
+---
+ ui/src/App.tsx                                |  6 +-
+ .../components/CompanyHomeRedirect.test.tsx   | 74 +++++++++++++++++++
+ ui/src/components/CompanyHomeRedirect.tsx     | 33 +++++++++
+ ui/src/components/Sidebar.production.tsx      | 16 ++--
+ ui/src/components/Sidebar.test.tsx            | 21 ++++--
+ ui/src/components/Sidebar.tsx                 | 16 ++--
+ 6 files changed, 142 insertions(+), 24 deletions(-)
+ create mode 100644 ui/src/components/CompanyHomeRedirect.test.tsx
+ create mode 100644 ui/src/components/CompanyHomeRedirect.tsx
+
+diff --git a/ui/src/App.tsx b/ui/src/App.tsx
+index b3894d497..0abab79eb 100644
+--- a/ui/src/App.tsx
++++ b/ui/src/App.tsx
+@@ -23,6 +23,7 @@ import { CaseDetail } from "./pages/CaseDetail";
+ import { OnboardingWizardVariant } from "./components/OnboardingWizardVariant";
+ import { CloudAccessGate } from "./components/CloudAccessGate";
+ import { PaperclipLoading } from "./components/AnimatedPaperclipIcon";
++import { CompanyHomeRedirect } from "./components/CompanyHomeRedirect";
+ import { Dashboard } from "./pages/Dashboard";
+ import { DashboardLive } from "./pages/DashboardLive";
+ import { Timeline } from "./pages/Timeline";
+@@ -154,7 +155,7 @@ function boardRoutes(streamlinedUiEnabled: boolean, combinedInboxTasksEnabled: b
+   const mergedTasks = streamlinedUiEnabled && combinedInboxTasksEnabled;
+   return (
+     <>
+-      <Route index element={<Navigate to="dashboard" replace />} />
++      <Route index element={<CompanyHomeRedirect />} />
+       <Route path="dashboard" element={<Dashboard />} />
+       <Route path="dashboard/live" element={<DashboardLive />} />
+       <Route
+@@ -696,7 +697,8 @@ function CompanyRootRedirect() {
+     return <NoCompaniesStartPage />;
+   }
+ 
+-  return <Navigate to={`/${targetCompany.issuePrefix}/dashboard`} replace />;
++  // Accueil de l'entreprise : l'index décide (atelier si son plugin est prêt, sinon tableau de bord).
++  return <Navigate to={`/${targetCompany.issuePrefix}`} replace />;
+ }
+ 
+ function StatusCardsLegacyRedirect() {
+diff --git a/ui/src/components/CompanyHomeRedirect.test.tsx b/ui/src/components/CompanyHomeRedirect.test.tsx
+new file mode 100644
+index 000000000..294f5d4bf
+--- /dev/null
++++ b/ui/src/components/CompanyHomeRedirect.test.tsx
+@@ -0,0 +1,74 @@
++// @vitest-environment jsdom
++
++import type { ReactNode } from "react";
++import { flushSync } from "react-dom";
++import { createRoot } from "react-dom/client";
++import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
++import { afterEach, describe, expect, it, vi } from "vitest";
++import type { PluginUiContribution } from "@/api/plugins";
++import { atelierDisponible, CompanyHomeRedirect } from "./CompanyHomeRedirect";
++
++const mockPluginsApi = vi.hoisted(() => ({ listUiContributions: vi.fn() }));
++
++vi.mock("@/api/plugins", () => ({ pluginsApi: mockPluginsApi }));
++vi.mock("@/lib/router", () => ({
++  Navigate: ({ to }: { to: string }) => <div>Navigate:{to}</div>,
++}));
++vi.mock("./AnimatedPaperclipIcon", () => ({ PaperclipLoading: () => <div>Chargement</div> }));
++
++function contribution(slots: PluginUiContribution["slots"]): PluginUiContribution {
++  return {
++    pluginId: "p1",
++    pluginKey: "atelier.marketing-ia",
++    displayName: "Atelier marketing",
++    version: "1.0.0",
++    uiEntryFile: "index.js",
++    slots,
++    launchers: [],
++  };
++}
++
++const pageAtelier = { type: "page", id: "atelier-page", displayName: "Atelier marketing", exportName: "Page", routePath: "atelier" };
++const autrePage = { type: "page", id: "autre", displayName: "Autre", exportName: "Autre", routePath: "autre" };
++
++async function rendre(node: ReactNode) {
++  const container = document.createElement("div");
++  document.body.appendChild(container);
++  const root = createRoot(container);
++  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
++  flushSync(() => {
++    root.render(<QueryClientProvider client={client}>{node}</QueryClientProvider>);
++  });
++  return { container, root };
++}
++
++afterEach(() => {
++  document.body.innerHTML = "";
++  vi.clearAllMocks();
++});
++
++describe("CompanyHomeRedirect", () => {
++  it("détecte la page de l'atelier seulement si un plugin la déclare", () => {
++    expect(atelierDisponible(undefined)).toBe(false);
++    expect(atelierDisponible([contribution([autrePage] as never)])).toBe(false);
++    expect(atelierDisponible([contribution([pageAtelier] as never)])).toBe(true);
++  });
++
++  it("redirige vers l'atelier quand le plugin est prêt", async () => {
++    mockPluginsApi.listUiContributions.mockResolvedValue([contribution([pageAtelier] as never)]);
++    const { container } = await rendre(<CompanyHomeRedirect />);
++    await vi.waitFor(() => expect(container.textContent).toBe("Navigate:atelier"));
++  });
++
++  it("redirige vers le tableau de bord sans plugin d'atelier", async () => {
++    mockPluginsApi.listUiContributions.mockResolvedValue([contribution([autrePage] as never)]);
++    const { container } = await rendre(<CompanyHomeRedirect />);
++    await vi.waitFor(() => expect(container.textContent).toBe("Navigate:dashboard"));
++  });
++
++  it("retombe sur le tableau de bord si la liste des plugins est en erreur", async () => {
++    mockPluginsApi.listUiContributions.mockRejectedValue(new Error("hors service"));
++    const { container } = await rendre(<CompanyHomeRedirect />);
++    await vi.waitFor(() => expect(container.textContent).toBe("Navigate:dashboard"));
++  });
++});
+diff --git a/ui/src/components/CompanyHomeRedirect.tsx b/ui/src/components/CompanyHomeRedirect.tsx
+new file mode 100644
+index 000000000..2650904c4
+--- /dev/null
++++ b/ui/src/components/CompanyHomeRedirect.tsx
+@@ -0,0 +1,33 @@
++import { useQuery } from "@tanstack/react-query";
++import { Navigate } from "@/lib/router";
++import { pluginsApi, type PluginUiContribution } from "@/api/plugins";
++import { queryKeys } from "@/lib/queryKeys";
++import { PaperclipLoading } from "./AnimatedPaperclipIcon";
++
++/**
++ * Chemin (relatif à l'entreprise) de la page principale de l'atelier marketing,
++ * déclarée par le plugin `atelier.marketing-ia` (créneau « page », routePath « atelier »).
++ */
++export const CHEMIN_PAGE_ATELIER = "atelier";
++
++/** Vrai si un plugin prêt déclare la page principale de l'atelier. */
++export function atelierDisponible(contributions: PluginUiContribution[] | undefined): boolean {
++  return (contributions ?? []).some((contribution) =>
++    contribution.slots.some((slot) => slot.type === "page" && slot.routePath === CHEMIN_PAGE_ATELIER),
++  );
++}
++
++/**
++ * Page d'accueil d'une entreprise (ouverture sans chemin précis) : l'atelier
++ * quand son plugin est prêt, sinon le tableau de bord. Le lien direct
++ * `/dashboard` n'est pas concerné et affiche toujours le tableau de bord.
++ */
++export function CompanyHomeRedirect() {
++  const { data, isLoading } = useQuery({
++    queryKey: queryKeys.plugins.uiContributions,
++    queryFn: () => pluginsApi.listUiContributions(),
++  });
++
++  if (isLoading) return <PaperclipLoading />;
++  return <Navigate to={atelierDisponible(data) ? CHEMIN_PAGE_ATELIER : "dashboard"} replace />;
++}
+diff --git a/ui/src/components/Sidebar.production.tsx b/ui/src/components/Sidebar.production.tsx
+index 3bcc09b1e..18bb501e9 100644
+--- a/ui/src/components/Sidebar.production.tsx
++++ b/ui/src/components/Sidebar.production.tsx
+@@ -125,6 +125,15 @@ export function Sidebar() {
+ 
+       <nav className="flex-1 min-h-0 overflow-y-auto scrollbar-auto-hide flex flex-col gap-4 pointer-coarse:gap-3 px-3 py-2">
+         <div className="flex flex-col gap-0.5">
++          {/* Entrées latérales des plugins (ex. « Atelier marketing ») : en tête de
++              barre, au-dessus de « New Task », pour être visibles dès l'ouverture. */}
++          <PluginSlotOutlet
++            slotTypes={["sidebar"]}
++            context={pluginContext}
++            className="flex flex-col gap-0.5"
++            itemClassName="text-(length:--text-compact) font-medium"
++            missingBehavior="placeholder"
++          />
+           {/* New Task button aligned with nav items */}
+           {(() => {
+             const newTaskButton = (
+@@ -208,13 +217,6 @@ export function Sidebar() {
+               <SidebarStarredProjects />
+             </>
+           ) : null}
+-          <PluginSlotOutlet
+-            slotTypes={["sidebar"]}
+-            context={pluginContext}
+-            className="flex flex-col gap-0.5"
+-            itemClassName="text-(length:--text-compact) font-medium"
+-            missingBehavior="placeholder"
+-          />
+           <PluginLauncherOutlet
+             placementZones={["sidebar"]}
+             context={pluginContext}
+diff --git a/ui/src/components/Sidebar.test.tsx b/ui/src/components/Sidebar.test.tsx
+index a4e72bb16..51a83ca11 100644
+--- a/ui/src/components/Sidebar.test.tsx
++++ b/ui/src/components/Sidebar.test.tsx
+@@ -330,22 +330,27 @@ describe("Sidebar", () => {
+     });
+   });
+ 
+-  it("renders plugin sidebar slots in Work below Workspaces", async () => {
++  it("renders plugin sidebar slots first, above New Task and outside Work", async () => {
+     mockInstanceSettingsApi.getExperimental.mockResolvedValue({ enableIsolatedWorkspaces: true });
+     const root = await renderSidebar();
+ 
+     const sidebarSlot = [...container.querySelectorAll("nav [data-plugin-slot-types]")]
+       .find((node) => node.getAttribute("data-plugin-slot-types") === "sidebar");
+     expect(sidebarSlot?.textContent).toContain("Plugin slot outlet");
+-    const workSectionContainer = sidebarSlot?.parentElement?.parentElement;
+-    const workText = workSectionContainer?.textContent ?? "";
++
++    // L'entrée de plugin est le PREMIER enfant du premier groupe de la navigation,
++    // donc avant le bouton « New Task ».
++    const primaryGroup = container.querySelector("nav > div:first-child");
++    expect(primaryGroup?.firstElementChild).toBe(sidebarSlot);
++    const primaryNavText = primaryGroup?.textContent ?? "";
++    expect(primaryNavText.indexOf("Plugin slot outlet")).toBeLessThan(primaryNavText.indexOf("New Task"));
++    expect(primaryNavText).toContain("Inbox");
++
++    // Elle n'est plus dans la section Work (les lanceurs, eux, y restent).
++    const workText = container.querySelector("nav [data-plugin-launcher-zone]")?.parentElement?.parentElement?.textContent ?? "";
+     expect(workText).toContain("Work");
+     expect(workText).toContain("Workspaces");
+-    expect(workText.indexOf("Workspaces")).toBeLessThan(workText.indexOf("Plugin slot outlet"));
+-
+-    const primaryNavText = container.querySelector("nav > div:first-child")?.textContent ?? "";
+-    expect(primaryNavText).toContain("Inbox");
+-    expect(primaryNavText).not.toContain("Plugin slot outlet");
++    expect(workText).not.toContain("Plugin slot outlet");
+ 
+     flushSync(() => {
+       root.unmount();
+diff --git a/ui/src/components/Sidebar.tsx b/ui/src/components/Sidebar.tsx
+index e745e2b01..b0162659c 100644
+--- a/ui/src/components/Sidebar.tsx
++++ b/ui/src/components/Sidebar.tsx
+@@ -145,6 +145,15 @@ export function Sidebar({ children }: { children?: ReactNode }) {
+ 
+       <nav className={primarySidebarStyles.nav}>
+         <div className={primarySidebarStyles.group}>
++          {/* Entrées latérales des plugins (ex. « Atelier marketing ») : en tête de
++              barre, au-dessus de « New Task », pour être visibles dès l'ouverture. */}
++          <PluginSlotOutlet
++            slotTypes={["sidebar"]}
++            context={pluginContext}
++            className="flex flex-col gap-0.5"
++            itemClassName="text-(length:--text-compact) font-medium"
++            missingBehavior="placeholder"
++          />
+           {/* New Task button aligned with nav items */}
+           {(() => {
+             const newTaskButton = (
+@@ -252,13 +261,6 @@ export function Sidebar({ children }: { children?: ReactNode }) {
+           {showWorkspacesLink ? (
+             <SidebarNavItem to="/workspaces" label="Workspaces" icon={GitBranch} />
+           ) : null}
+-          <PluginSlotOutlet
+-            slotTypes={["sidebar"]}
+-            context={pluginContext}
+-            className="flex flex-col gap-0.5"
+-            itemClassName="text-(length:--text-compact) font-medium"
+-            missingBehavior="placeholder"
+-          />
+           <PluginLauncherOutlet
+             placementZones={["sidebar"]}
+             context={pluginContext}
+-- 
+2.53.0
+

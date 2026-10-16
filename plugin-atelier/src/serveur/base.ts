@@ -58,6 +58,24 @@ function objet(valeur: unknown): Record<string, unknown> {
   return typeof v === "object" && v !== null && !Array.isArray(v) ? (v as Record<string, unknown>) : {};
 }
 
+/** Dépôt de prospection lu dans une entrée de journal `prospects.deposes` (forme de `DepotCouverture`). */
+export function depotDepuisJournal(issueId: string | null, donnees: Record<string, unknown>, creeLe: string) {
+  const appel = (donnees["appel"] && typeof donnees["appel"] === "object" ? donnees["appel"] : {}) as Record<string, unknown>;
+  const nombre = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : null);
+  const args = appel["arguments"];
+  return {
+    issueId,
+    outil: String(donnees["outil"] ?? ""),
+    arguments: args && typeof args === "object" && !Array.isArray(args) ? (args as Record<string, unknown>) : null,
+    total: nombre(appel["total"]),
+    page: nombre(appel["page"]),
+    pages: nombre(appel["pages"]),
+    taillePage: nombre(appel["taillePage"]),
+    renvoyes: nombre(appel["renvoyes"]),
+    creeLe,
+  };
+}
+
 export function creerBase(db: Db) {
   const ns = db.namespace;
   if (!IDENT.test(ns)) erreur("erreur_interne", "Espace de base du plugin invalide");
@@ -83,6 +101,84 @@ export function creerBase(db: Db) {
       `insert into ${ns}.journal (company_id, type, entite, entite_id, issue_id, run_id, acteur, donnees) values ($1, $2, $3, $4, $5, $6, $7, $8::jsonb)`,
       [e.companyId, e.type, e.entite, e.entiteId, e.issueId ?? null, e.runId ?? null, e.acteur ?? null, json(e.donnees ?? {})],
     );
+  }
+
+  /** Dates (ISO, de la plus récente à la plus ancienne) des entrées de journal d'un type donné sur une tâche. */
+  async function datesJournal(companyId: string, issueId: string, type: string) {
+    return (await q(`select cree_le from ${ns}.journal where company_id = $1 and issue_id = $2 and type = $3 order by cree_le desc limit 200`, [companyId, issueId, type])).map((r) => iso(r.cree_le));
+  }
+
+  /**
+   * Dépôts signés de prospection d'une campagne (journal `prospects.deposes`), avec les arguments vérifiés
+   * de l'appel et la pagination de la réponse : base de la couverture calculée (`couverture-prospection.ts`).
+   */
+  async function depotsProspectionCampagne(companyId: string, campagneId: string, pas = 5000) {
+    // Lecture paginée par seq croissant : tous les dépôts, jamais les 5 000 plus anciens seulement.
+    const depots: ReturnType<typeof depotDepuisJournal>[] = [];
+    let apres = 0;
+    for (;;) {
+      const rangs = await q(
+        `select seq, issue_id, donnees, cree_le from ${ns}.journal where company_id = $1 and type = 'prospects.deposes' and donnees->>'campagneId' = $2 and seq > $3 order by seq asc limit ${Math.max(1, Math.floor(pas))}`,
+        [companyId, campagneId, apres],
+      );
+      for (const r of rangs) depots.push(depotDepuisJournal((r.issue_id as string | null) ?? null, (typeof r.donnees === "object" && r.donnees ? r.donnees : {}) as Record<string, unknown>, iso(r.cree_le)));
+      if (rangs.length < pas) break;
+      apres = Number(rangs[rangs.length - 1]!.seq);
+    }
+    return depots;
+  }
+
+  /** Entreprises suivies par l'atelier (au moins une porte de tâche). */
+  async function entreprisesSuivies() {
+    return (await q(`select distinct company_id from ${ns}.portes`)).map((r) => String(r.company_id));
+  }
+
+  /**
+   * Veilleur (tâches orphelines) : tâches assignées à un agent invocable, `todo` ou `in_progress`,
+   * sans bloqueur ouvert ni sous-tâche ouverte, sans passage en file ou en cours, dont le dernier
+   * passage s'est arrêté sans aboutir (interrompu, échoué, expiré) sans code d'arrêt « définitif »
+   * (tours épuisés, budget, quota, authentification), hors issue de discussion, est une relance programmée
+   * jamais partie, ou n'existe pas ; et rien n'a bougé (tâche, passage) depuis `seuilMinutes`.
+   */
+  async function tachesOrphelines(companyId: string, seuilMinutes: number) {
+    const rangs = await q(
+      `with dernier as (
+         select distinct on (r.context_snapshot->>'issueId') r.context_snapshot->>'issueId' as issue_id, r.id, r.status, r.error_code, coalesce(r.finished_at, r.scheduled_retry_at, r.created_at) as le
+         from public.heartbeat_runs r
+         where r.company_id = $1 and r.created_at > now() - interval '30 days'
+         order by r.context_snapshot->>'issueId', r.created_at desc
+       )
+       select i.id, i.identifier, i.status, i.assignee_agent_id, d.id as run_id, d.status as run_statut, d.le as run_le
+       from public.issues i
+       join public.agents a on a.id = i.assignee_agent_id and a.company_id = i.company_id
+       left join dernier d on d.issue_id = i.id::text
+       where i.company_id = $1
+         and i.status in ('todo', 'in_progress')
+         and i.assignee_user_id is null
+         and i.hidden_at is null
+         and not (i.origin_kind like 'plugin:%:discussion' and coalesce(i.origin_id, '') like 'discussion:%')
+         and coalesce(d.error_code, '') not in ('max_turns_exhausted', 'provider_quota', 'claude_auth_required', 'acpx_auth_required', 'continuation_user_authorization_missing')
+         and coalesce(d.error_code, '') not like '%budget%'
+         and coalesce(d.error_code, '') not like '%quota%'
+         and coalesce(d.error_code, '') not like '%auth%'
+         and a.status not in ('paused', 'terminated', 'pending_approval')
+         and i.updated_at < now() - make_interval(mins => $2::int)
+         and (d.id is null or d.status in ('interrupted', 'failed', 'timed_out', 'scheduled_retry'))
+         and coalesce(d.le, i.updated_at) < now() - make_interval(mins => $2::int)
+         and not exists (select 1 from public.heartbeat_runs x where x.company_id = $1 and x.context_snapshot->>'issueId' = i.id::text and x.status in ('queued', 'running'))
+         and not exists (select 1 from public.issue_relations rel join public.issues b on b.id = rel.issue_id where rel.related_issue_id = i.id and rel.type = 'blocks' and b.status <> 'done')
+         and not exists (select 1 from public.issues c where c.parent_id = i.id and c.status not in ('done', 'cancelled'))
+       order by i.updated_at asc
+       limit 50`,
+      [companyId, Math.max(1, Math.floor(seuilMinutes))],
+    );
+    return rangs.map((r) => ({
+      issueId: String(r.id),
+      identifier: r.identifier == null ? null : String(r.identifier),
+      statut: String(r.status),
+      agentId: String(r.assignee_agent_id),
+      dernierRun: r.run_id == null ? null : { id: String(r.run_id), statut: String(r.run_statut), le: iso(r.run_le) },
+    }));
   }
 
   async function lireJournal(companyId: string, afterSeq: number, limite: number, issueId?: string) {
@@ -1463,7 +1559,7 @@ export function creerBase(db: Db) {
   async function supprimerDonneesEntreprise(companyId: string) {
     const supprimes: Record<string, number> = {};
     // P9b : tables de prospection et de base clients d'abord (exports avant diffusions ; enfants avant parents).
-    for (const table of ["exports_crm", "issues_commerciales", "bases_legales", "prospects_scores", "prospects_empreintes", "prospects", "etalonnages", "poids_score",
+    for (const table of ["corrections_criteres", "evaluations_criteres", "reglages_leads", "exports_crm", "issues_commerciales", "bases_legales", "prospects_scores", "prospects_empreintes", "prospects", "etalonnages", "poids_score",
       "clients_empreintes", "clients", "bases_clients_imports", "regles_ventes_croisees", "dncm_empreintes", "listes_dncm", "oppositions",
       "relances_correction", "appels_proposes", "diffusions", "decisions_humaines", "constats", "verdicts", "couvertures", "evaluations_porte", "messages", "sources", "mesures", "imports", "planifications", "portes", "exigences", "briefs", "campagnes", "marques", "journal", "reglages_entreprise"]) {
       const { rowCount } = await x(`delete from ${ns}.${table} where company_id = $1`, [companyId]);
@@ -1474,7 +1570,7 @@ export function creerBase(db: Db) {
 
   return {
     ns,
-    journaliser, lireJournal,
+    journaliser, lireJournal, datesJournal, entreprisesSuivies, tachesOrphelines,
     lireReglages, enregistrerReglages, enregistrerPlafondEntreprise, enregistrerPlafondCampagne, donneesEngagement,
     creerCampagne, listerCampagnes, lireCampagne, creerBrief, dernierBrief,
     enregistrerExigence, creerExigenceSiAbsente, listerExigences, lireExigence, changerExclusion,
@@ -1482,7 +1578,7 @@ export function creerBase(db: Db) {
     insererCouverture, listerCouvertures, insererVerdict, listerVerdicts, insererConstat, resoudreConstats, listerConstats,
     derniereEntree, etatDerniereEvaluation, insererEvaluation, perimerEvaluations, listerEvaluations,
     insererMessage, lierCommentaire, listerMessages, messagesRecents, compterEnvoisRecents, changerEtatMessage,
-    insererSource, listerSources, sourcesPourGarde, toucherPorte, insererImport, listerImports,
+    insererSource, listerSources, sourcesPourGarde, depotsProspectionCampagne, toucherPorte, insererImport, listerImports,
     insererDecision, invaliderDecisions, listerDecisions, insererRelance, listerRelances, insererDiffusion, lireDiffusionParCle, listerDiffusions,
     rapporterIssueDiffusion, lireDiffusionInterne, figerPreuve, revoquerPreuves, listerRevocations,
     insererAppel, listerAppels, lireAppel, lireAppelParEmpreinte, comptesConnexion,

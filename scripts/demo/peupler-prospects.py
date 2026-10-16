@@ -56,9 +56,34 @@ APPELS = [
 ]
 
 
+def ajouter_cle_tableau(req):
+    """Mode authentifié (accès à distance) : ajoute la clé d'API du tableau (PAPERCLIP_BOARD_KEY), facultative.
+
+    La clé n'est envoyée que vers http://127.0.0.1:<port>, http://localhost:<port> ou https://<nom>.ts.net ;
+    ailleurs, rien n'est envoyé (avertissement sans la clé). L'en-tête est « non redirigeable » : il n'est
+    jamais recopié lors d'une redirection. (Recopié dans chaque script : ils tournent en `python3 -I`.)
+    """
+    cle = os.environ.get("PAPERCLIP_BOARD_KEY")
+    if not cle:
+        return
+    u = urllib.parse.urlsplit(req.full_url)
+    h = (u.hostname or "").lower()
+    if u.scheme == "http" and h in ("127.0.0.1", "localhost") and u.port is not None:
+        autorise = True
+    else:
+        autorise = u.scheme == "https" and h.endswith(".ts.net") and len(h) > len(".ts.net")
+    if autorise:
+        req.add_unredirected_header("Authorization", "Bearer " + cle)
+    else:
+        print("AVERTISSEMENT : PAPERCLIP_BOARD_KEY non envoyée (destination hors 127.0.0.1, localhost et *.ts.net : "
+              + (u.hostname or "?") + ").", file=sys.stderr)
+
+
 def api(base, methode, chemin, corps=None, attendu=None, delai=60):
     donnees = None if corps is None else json.dumps(corps).encode("utf-8")
     req = urllib.request.Request(base + chemin, data=donnees, method=methode)
+    # Mode authentifié (accès à distance) : clé d'API du tableau, facultative et limitée aux destinations sûres.
+    ajouter_cle_tableau(req)
     if donnees is not None:
         req.add_header("Content-Type", "application/json")
     try:
@@ -270,7 +295,7 @@ def main():
     comptes = {}
     page = 1
     while True:
-        _, liste = api(base, "GET", f"{PLUGIN}/prospects?companyId={cid}&parPage=100&page={page}", attendu=(200,))
+        _, liste = api(base, "GET", f"{PLUGIN}/prospects?companyId={cid}&parPage=100&vue=complete&page={page}", attendu=(200,))
         lignes = liste.get("lignes") or liste.get("prospects") or liste.get("items") or []
         for p in lignes:
             cle_c = (p.get("cible"), p.get("statut"))

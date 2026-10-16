@@ -45,8 +45,51 @@ export const JournalRequete = z.object({
 });
 export type JournalRequete = z.infer<typeof JournalRequete>;
 
-/** Contexte d'une tâche renvoyé aux agents (producteur et relecteurs). */
+/**
+ * Requête de `tache.contexte` : résumé par défaut ; `partie` pour le détail (`livrable` paginé par
+ * `debut`, `lignes` et `decalage`, ou une partie entière) ; `vue=complete` pour le corps historique.
+ */
+const PaginationLivrableChamps = {
+  debut: z.coerce.number().int().min(1).default(1),
+  lignes: z.coerce.number().int().min(1).max(20000).optional(),
+  decalage: z.coerce.number().int().min(0).default(0),
+};
+export const ContexteRequete = z.object({
+  partie: z.enum(["livrable", "verdicts", "couvertures", "donneesConnexion"]).optional(),
+  vue: z.enum(["resume", "complete"]).optional(),
+  ...PaginationLivrableChamps,
+});
+export type ContexteRequete = z.infer<typeof ContexteRequete>;
+
+/** Parties du dossier de la tâche demandables une à une (`?partie=`). */
+export const PARTIES_DOSSIER = ["livrable", "matrice", "sources", "revues", "decisions", "diffusions", "appelsProposes"] as const;
+
+/**
+ * Requête de `tache.dossier` : résumé par défaut (moins de 40 000 caractères) ; `partie` pour le détail
+ * (`livrable` paginé par `debut`, `lignes` et `decalage`, ou une partie entière) ; `vue=complete` pour le corps complet.
+ */
+export const DossierRequete = z.object({
+  partie: z.enum(PARTIES_DOSSIER).optional(),
+  vue: z.enum(["resume", "complete"]).optional(),
+  ...PaginationLivrableChamps,
+});
+export type DossierRequete = z.infer<typeof DossierRequete>;
+
+/**
+ * Paramètres de vue de `prospects.lister`, retirés des filtres avant leur validation stricte : résumé par
+ * défaut, `vue=complete` pour les prospects entiers, `partie=detail` avec `prospectId` pour un seul prospect entier.
+ */
+export const VueProspectsRequete = z.object({
+  vue: z.enum(["resume", "complete"]).optional(),
+  partie: z.enum(["detail"]).optional(),
+  prospectId: IdNatif.optional(),
+});
+export type VueProspectsRequete = z.infer<typeof VueProspectsRequete>;
+
+/** Contexte d'une tâche renvoyé aux agents (producteur et relecteurs). Clés du résumé par défaut. */
 export const ContexteTacheSchemaCles = [
+  "vue",
+  "pourAllerPlus",
   "tache",
   "campagne",
   "brief",
@@ -79,6 +122,9 @@ export const CODES_ERREUR = [
   "diffusion_refusee",
   "url_refusee",
   "import_refuse",
+  "dictee_indisponible",
+  "voix_non_configuree",
+  "voix_indisponible",
   "conflit",
   "non_implemente",
   "erreur_interne",

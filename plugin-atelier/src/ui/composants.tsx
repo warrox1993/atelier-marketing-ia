@@ -189,17 +189,65 @@ export function LienHote({ vers, children, className, courant }: { vers: string;
   );
 }
 
-export function Section({ titre, id, children, actions, aide }: { titre: string; id?: string; children: ReactNode; actions?: ReactNode; aide?: ReactNode }) {
+/** Vrai sur un écran étroit (téléphone) ; faux sans `matchMedia` (tests, rendu serveur). */
+export function ecranEtroit(): boolean {
+  try {
+    return typeof window !== "undefined" && typeof window.matchMedia === "function" && window.matchMedia("(max-width: 640px)").matches;
+  } catch {
+    return false;
+  }
+}
+
+/** Vrai si l'adresse courante vise cette ancre (`#ancre`). */
+function ancreVisee(ancre: string | undefined): boolean {
+  if (!ancre || typeof window === "undefined") return false;
+  return window.location.hash === `#${ancre}`;
+}
+
+/**
+ * Section de page. Avec `repliable`, le titre devient le résumé d'un `details` : ouvert sur grand écran,
+ * replié sur téléphone sauf si l'adresse vise l'ancre de la section (`ancre`, posée sur l'élément).
+ */
+export function Section({ titre, id, children, actions, aide, ancre, repliable }: { titre: string; id?: string; children: ReactNode; actions?: ReactNode; aide?: ReactNode; ancre?: string; repliable?: boolean }) {
   const auto = useId();
   const idTitre = id ?? auto;
+  const [ouvert, setOuvert] = useState(() => !ecranEtroit() || ancreVisee(ancre));
+  useEffect(() => {
+    if (!repliable) return;
+    const surAncre = () => {
+      if (ancreVisee(ancre)) setOuvert(true);
+    };
+    window.addEventListener("hashchange", surAncre);
+    return () => window.removeEventListener("hashchange", surAncre);
+  }, [repliable, ancre]);
+  const corps = (
+    <>
+      {aide ? <p className="atl-section-aide">{aide}</p> : null}
+      {children}
+    </>
+  );
+  if (repliable) {
+    return (
+      <section className="atl-section atl-section-repliable" aria-labelledby={idTitre} id={ancre}>
+        <details open={ouvert} onToggle={(e) => setOuvert(e.currentTarget.open)}>
+          <summary className="atl-section-resume">
+            <h2 id={idTitre}>{titre}</h2>
+          </summary>
+          <div className="atl-section-corps">
+            {actions ? <div className="atl-section-actions">{actions}</div> : null}
+            {corps}
+          </div>
+        </details>
+      </section>
+    );
+  }
   return (
-    <section className="atl-section" aria-labelledby={idTitre}>
+    <section className="atl-section" aria-labelledby={idTitre} id={ancre}>
       <div className="atl-section-tete">
         <h2 id={idTitre}>{titre}</h2>
         {actions ? <div className="atl-section-actions">{actions}</div> : null}
       </div>
-      {aide ? <p className="atl-section-aide">{aide}</p> : null}
-      {children}
+      {corps}
     </section>
   );
 }

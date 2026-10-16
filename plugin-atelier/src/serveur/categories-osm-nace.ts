@@ -13,6 +13,8 @@ export interface CorrespondanceOsmNace {
   readonly libelle: string;
   /** Codes NACE déduits, au format avec points. */
   readonly nace: readonly string[];
+  /** Vrai : catégorie de santé connue mais hors des professions assurées visées (le critère segment est alors contraire). */
+  readonly horsCible?: boolean;
 }
 
 export const CATEGORIES_OSM_NACE: Readonly<Record<string, CorrespondanceOsmNace>> = {
@@ -32,11 +34,32 @@ export const CATEGORIES_OSM_NACE: Readonly<Record<string, CorrespondanceOsmNace>
   "amenity=veterinary": { libelle: "vétérinaire", nace: ["75.000"] },
 };
 
+/**
+ * Catégories de santé ou d'action sociale connues mais HORS des professions assurées visées (médecins, dentistes,
+ * pharmacies, kinésithérapeutes, hôpitaux, vétérinaires). Elles ne doivent pas rester « non vérifiées » : un humain
+ * perdrait du temps sur des lieux hors cible (don de sang, laboratoire, planning familial...).
+ * Liste volontairement explicite : une étiquette absente reste sans correspondance.
+ */
+const HORS_CIBLE: Readonly<Record<string, CorrespondanceOsmNace>> = {
+  "healthcare=blood_donation": { libelle: "don de sang", nace: ["86.900"], horsCible: true },
+  "healthcare=laboratory": { libelle: "laboratoire", nace: ["86.900"], horsCible: true },
+  "healthcare=speech_therapist": { libelle: "logopède", nace: ["86.900"], horsCible: true },
+  "healthcare=podiatrist": { libelle: "podologue", nace: ["86.900"], horsCible: true },
+  "healthcare=optometrist": { libelle: "optométriste", nace: ["86.900"], horsCible: true },
+  "healthcare=audiologist": { libelle: "audioprothésiste", nace: ["86.900"], horsCible: true },
+  "healthcare=psychotherapist": { libelle: "psychothérapeute", nace: ["86.900"], horsCible: true },
+  "healthcare=alternative": { libelle: "médecine alternative", nace: ["86.900"], horsCible: true },
+  "healthcare=midwife": { libelle: "sage-femme", nace: ["86.900"], horsCible: true },
+  "healthcare=counselling": { libelle: "centre d'écoute et de planning familial", nace: ["88.999"], horsCible: true },
+  "amenity=social_facility": { libelle: "structure d'action sociale", nace: ["88.999"], horsCible: true },
+};
+
 /** NACE déduits de l'étiquette OpenStreetMap portée par les sources du prospect ; null si aucune correspondance. */
-export function naceDeduitOsm(p: Pick<Prospect, "sources">): { libelle: string; nace: readonly string[] } | null {
+export function naceDeduitOsm(p: Pick<Prospect, "sources">): CorrespondanceOsmNace | null {
   for (const s of p.sources) {
     if (s.categorieOsm === undefined) continue;
-    const c = CATEGORIES_OSM_NACE[`${s.categorieOsm.cle}=${s.categorieOsm.valeur}`];
+    const cle = `${s.categorieOsm.cle}=${s.categorieOsm.valeur}`;
+    const c = CATEGORIES_OSM_NACE[cle] ?? HORS_CIBLE[cle];
     if (c !== undefined) return c;
   }
   return null;

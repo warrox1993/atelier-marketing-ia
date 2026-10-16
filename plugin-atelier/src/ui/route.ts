@@ -6,7 +6,7 @@
 import { ROUTE_ATELIER, RUBRIQUES } from "../contrats/ui-constantes.js";
 
 export type CleRubrique = (typeof RUBRIQUES)[number]["cle"];
-export type CleVue = "accueil" | CleRubrique | "prospects" | "carte" | "connaissances" | "mise-en-place" | "parametres" | "corbeille";
+export type CleVue = "discussion" | "accueil" | CleRubrique | "prospects" | "carte" | "connaissances" | "mise-en-place" | "parametres" | "corbeille";
 
 export interface RouteAtelier {
   vue: CleVue;
@@ -14,11 +14,15 @@ export interface RouteAtelier {
   id: string | null;
 }
 
-export const VUES: ReadonlyArray<{ cle: CleVue; libelle: string }> = [
+/** Intertitre du groupe de la prospection dans le menu latéral (zone la plus importante pour le client). */
+export const GROUPE_PROSPECTION = "Prospection";
+
+export const VUES: ReadonlyArray<{ cle: CleVue; libelle: string; groupe?: typeof GROUPE_PROSPECTION }> = [
+  { cle: "discussion", libelle: "Discussion" },
   { cle: "accueil", libelle: "À faire" },
+  { cle: "prospects", libelle: "Prospects", groupe: GROUPE_PROSPECTION },
+  { cle: "carte", libelle: "Carte des prospects", groupe: GROUPE_PROSPECTION },
   ...RUBRIQUES.map((r) => ({ cle: r.cle as CleVue, libelle: r.libelle })),
-  { cle: "prospects", libelle: "Prospects" },
-  { cle: "carte", libelle: "Carte des prospects" },
   { cle: "connaissances", libelle: "Connaissances" },
   { cle: "mise-en-place", libelle: "Mise en place du client" },
   { cle: "parametres", libelle: "Paramètres et diagnostic" },

@@ -171,6 +171,8 @@ export type SourcesReelles = z.infer<typeof SourcesReelles>;
 export const Diagnostic = z.object({
   plugin: z.object({ id: z.string(), version: z.string() }),
   espaceBase: z.string(),
+  /** Réglage `humainDestinataire` des blocages (optionnel : absent d'un ancien worker). `alerte` : texte à afficher, ou null. */
+  destinataireHumain: z.object({ modeDeploiement: z.string(), regle: z.string().nullable(), alerte: z.string().nullable() }).optional(),
   migrationsAppliquees: z.boolean(),
   gardeServeur: z.object({
     /** Patch P1/P2 présent dans le serveur (vérifié par une sonde, pas supposé). */

@@ -131,6 +131,8 @@ export const EtablissementReferentiel = z
     communes: z.array(z.string().min(1).max(120)).max(200).optional(),
     codesPostaux: z.array(z.string().regex(/^\d{4}$/u)).max(500).optional(),
     entites: z.array(CodeReferentiel).max(20).optional(),
+    /** Codes des segments que ce bureau suit (lot 3, critère « bureau spécialisé proche ») ; absent ou vide = non renseigné, jamais déduit. */
+    segmentsSuivis: z.array(CodeReferentiel).max(50).optional(),
   })
   .strict();
 export type EtablissementReferentiel = z.infer<typeof EtablissementReferentiel>;
@@ -243,6 +245,7 @@ function verifierReferences(r: Brut, ctx: z.RefinementCtx): void {
     (o.segments ?? []).forEach((s) => segments.has(s) || manque(["offres", i, "segments"], `Segment inconnu : ${s}`));
   });
   r.etablissements.forEach((e, i) => (e.entites ?? []).forEach((c) => entites.has(c) || manque(["etablissements", i, "entites"], `Entité inconnue : ${c}`)));
+  r.etablissements.forEach((e, i) => (e.segmentsSuivis ?? []).forEach((c) => segments.has(c) || manque(["etablissements", i, "segmentsSuivis"], `Segment inconnu : ${c}`)));
   r.ciblesProspection.forEach((c, i) => {
     c.segments.forEach((s) => segments.has(s) || manque(["ciblesProspection", i, "segments"], `Segment inconnu : ${s}`));
     c.offres.forEach((o) => offres.has(o) || manque(["ciblesProspection", i, "offres"], `Offre inconnue : ${o}`));

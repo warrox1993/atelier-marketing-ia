@@ -5,6 +5,7 @@
  */
 import { describe, expect, it } from "vitest";
 import { adresseConnaissance } from "../src/contrats/connaissances.js";
+import { RAPPORT_CROISSANCE_MAX, rapportCroissance } from "./outils-temps.js";
 import { nettoyerTexte } from "../src/connaissances/extraction/normalisation.js";
 import {
   controlerCitationsConnaissances,
@@ -15,34 +16,36 @@ import {
 
 const CLE = "cle-de-test-fictive-32-octets!!!";
 const pseudo = (t: string) => pseudonymiser(t, { cle: CLE });
-
-/** Durée d'exécution d'une fonction synchrone, en millisecondes. */
-function duree(f: () => unknown): number {
-  const t0 = performance.now();
-  f();
-  return performance.now() - t0;
-}
+/** Rapport de croissance du temps de `f` quand l'entrée `motif(n)` grandit (voir outils-temps.ts). */
+const croissance = (motif: (n: number) => string, f: (t: string) => unknown, petit: number) => rapportCroissance(motif, f, petit);
 
 /* ------------------------------------------------------------------ */
 describe("G1 : motifs de pseudonymisation à temps linéaire", () => {
-  it("« police » suivi de milliers d'espaces : moins de 500 ms (près de 5 s avant)", () => {
-    expect(duree(() => pseudo(`police${" ".repeat(20_000)}x`))).toBeLessThan(500);
-    expect(duree(() => pseudo(`police${"\t ".repeat(10_000)}: x`))).toBeLessThan(500);
+  it("« police » suivi de milliers d'espaces : croissance linéaire (près de 5 s pour 2 000 avant, cubique)", () => {
+    expect(croissance((n) => `police${" ".repeat(n)}x`, pseudo, 5_000)).toBeLessThan(RAPPORT_CROISSANCE_MAX);
+    expect(croissance((n) => `police${"\t ".repeat(n)}: x`, pseudo, 2_500)).toBeLessThan(RAPPORT_CROISSANCE_MAX);
   });
 
   it("espaces exotiques répétés (U+1680, U+2028, U+2029) ramenés à une espace par le nettoyage", () => {
     for (const c of [" ", " ", " ", "  "]) {
       const t = nettoyerTexte(`police${c.repeat(5_000)}x`);
       expect(t).toBe("police x");
-      expect(duree(() => pseudo(t))).toBeLessThan(500);
+      expect(croissance((n) => nettoyerTexte(`police${c.repeat(n)}x`), pseudo, 1_250)).toBeLessThan(RAPPORT_CROISSANCE_MAX);
     }
     // Même sans nettoyage préalable : la pseudonymisation réduit elle-même les espaces.
-    expect(duree(() => pseudo(`police${" ".repeat(20_000)}x`))).toBeLessThan(500);
+    expect(croissance((n) => `police${"\u2028".repeat(n)}x`, pseudo, 5_000)).toBeLessThan(RAPPORT_CROISSANCE_MAX);
   });
 
-  it("longue suite de caractères de courriel sans arobase : moins de 500 ms", () => {
-    expect(duree(() => pseudo("a".repeat(200_000)))).toBeLessThan(500);
-    expect(duree(() => pseudo("a.".repeat(100_000)))).toBeLessThan(500);
+  // Les sauts de ligne ne sont pas réduits par la pseudonymisation : seul le motif borné (espaces et
+  // tabulations, jamais « \s ») protège ici. 2 000 sauts de ligne coûtaient plusieurs secondes.
+  it("« police » suivi de milliers de sauts de ligne : croissance linéaire (9 s pour 2 000 avant, cubique)", () => {
+    expect(croissance((n) => `police${"\n".repeat(n)}x`, pseudo, 500)).toBeLessThan(RAPPORT_CROISSANCE_MAX);
+    expect(croissance((n) => `police d'assurance${" \n".repeat(n)}: x`, pseudo, 250)).toBeLessThan(RAPPORT_CROISSANCE_MAX);
+  });
+
+  it("longue suite de caractères de courriel sans arobase : croissance linéaire (quadratique avant)", () => {
+    expect(croissance((n) => "a".repeat(n), pseudo, 20_000)).toBeLessThan(RAPPORT_CROISSANCE_MAX);
+    expect(croissance((n) => "a.".repeat(n), pseudo, 10_000)).toBeLessThan(RAPPORT_CROISSANCE_MAX);
   });
 
   it("le numéro de police reste masqué avec le motif borné", () => {
@@ -135,10 +138,22 @@ describe("M2 : porte des chiffres d'offre", () => {
     });
   }
 
-  it("motifs bornés : chiffres et espaces répétés contrôlés en moins de 500 ms", () => {
-    expect(duree(() => porte("1".repeat(50_000)))).toBeLessThan(500);
-    expect(duree(() => porte("1 ".repeat(50_000)))).toBeLessThan(500);
-    expect(duree(() => porte(`franchise ${"1 ".repeat(50_000)}`))).toBeLessThan(500);
+  // Revue du 16/10 : notations belges « 150,- € », multiplicateurs « 150 k€ », « 1,5 M€ » et « 150EUR » collé.
+  for (const phrase of ["Prime de 150,- € par an.", "Prime de 150.- EUR par an.", "Budget de 150 k€.", "Budget de 1,5 M€.", "Budget de 150K EUR.", "Prime de 150EUR par an.", "Prime de 150,- euros."]) {
+    it(`repère « ${phrase} »`, () => {
+      expect(porte(phrase)).toEqual(["chiffre_offre_sans_source"]);
+    });
+  }
+
+  it("pas de faux positif sur des mots proches de « euro »", () => {
+    expect(porte("Couverture en Europe pour 3 véhicules.")).toEqual([]);
+    expect(porte("Le contrat 2026 couvre 4 membres de la famille.")).toEqual([]);
+  });
+
+  it("motifs bornés : chiffres et espaces répétés contrôlés en temps linéaire (7,8 s pour 40 000 chiffres avant)", () => {
+    expect(croissance((n) => "1".repeat(n), porte, 12_500)).toBeLessThan(RAPPORT_CROISSANCE_MAX);
+    expect(croissance((n) => "1 ".repeat(n), porte, 12_500)).toBeLessThan(RAPPORT_CROISSANCE_MAX);
+    expect(croissance((n) => `franchise ${"1 ".repeat(n)}`, porte, 12_500)).toBeLessThan(RAPPORT_CROISSANCE_MAX);
   });
 
   it("au-delà de la taille contrôlée : constat explicite, sans analyse", () => {

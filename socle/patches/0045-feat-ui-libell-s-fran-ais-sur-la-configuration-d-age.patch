@@ -1,0 +1,2870 @@
+From 4c27beeafd0eb6ce690734e38ecc0588b7bec0ea Mon Sep 17 00:00:00 2001
+From: Jean-Baptiste Dhondt <114347858+warrox1993@users.noreply.github.com>
+Date: Fri, 16 Oct 2026 17:08:46 +0200
+Subject: [PATCH] =?UTF-8?q?feat(ui):=20libell=C3=A9s=20fran=C3=A7ais=20sur?=
+ =?UTF-8?q?=20la=20configuration=20d'agent=20et=20les=20nouveaux=20essais?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>
+---
+ .../AgentConfigForm.render.test.tsx           | 280 ++++++++--------
+ ui/src/components/AgentConfigForm.tsx         | 300 +++++++++---------
+ ui/src/components/IssueBlockedNotice.test.tsx |  48 +--
+ ui/src/components/IssueBlockedNotice.tsx      |  94 +++---
+ ui/src/components/IssueChatThread.test.tsx    |  20 +-
+ .../IssueScheduledRetryCard.test.tsx          |  18 +-
+ ui/src/components/IssueScheduledRetryCard.tsx |  24 +-
+ ui/src/components/TaskChatThread.test.tsx     |   3 +
+ ui/src/lib/pipeline-liveness.ts               |  32 +-
+ ui/src/lib/successful-run-handoff.ts          |   2 +-
+ 10 files changed, 413 insertions(+), 408 deletions(-)
+
+diff --git a/ui/src/components/AgentConfigForm.render.test.tsx b/ui/src/components/AgentConfigForm.render.test.tsx
+index cd2600106..f69246ebf 100644
+--- a/ui/src/components/AgentConfigForm.render.test.tsx
++++ b/ui/src/components/AgentConfigForm.render.test.tsx
+@@ -625,11 +625,11 @@ async function clickElement(element: Element | null | undefined) {
+ }
+ 
+ async function runTest(container: HTMLElement) {
+-  await clickByText(container, "Test");
++  await clickByText(container, "Tester");
+ }
+ 
+ async function startLogin(container: HTMLElement) {
+-  await clickByText(container, "Sign in");
++  await clickByText(container, "Se connecter");
+   await flushReact();
+ }
+ 
+@@ -758,7 +758,7 @@ describe("AgentConfigForm environment selector", () => {
+     });
+     await flushReact();
+     expect(dirty).toHaveBeenLastCalledWith(true);
+-    expect([...result.container.querySelectorAll("button")].some(button => button.textContent?.trim() === "Save")).toBe(false);
++    expect([...result.container.querySelectorAll("button")].some(button => button.textContent?.trim() === "Enregistrer")).toBe(false);
+     await act(async () => { await save?.(); });
+     expect(result.onSave).toHaveBeenCalledWith(expect.objectContaining({ adapterConfig: expect.objectContaining({ env: { ONBOARDING_SMOKE: { type: "plain", value: "true" } } }) }));
+     await act(async () => discard?.());
+@@ -778,7 +778,7 @@ describe("AgentConfigForm environment selector", () => {
+     expect(low).toBeTruthy();
+     await act(async () => low.click());
+     await flushReact();
+-    const save = [...result.container.querySelectorAll("button")].find(button => button.textContent?.trim() === "Save")!;
++    const save = [...result.container.querySelectorAll("button")].find(button => button.textContent?.trim() === "Enregistrer")!;
+     await act(async () => save.click());
+     expect(result.onSave).toHaveBeenCalledWith(expect.objectContaining({ adapterConfig: expect.objectContaining({ thinking: "low" }) }));
+     expect(result.onSave.mock.calls[0][0].adapterConfig.effort).toBeUndefined();
+@@ -795,7 +795,7 @@ describe("AgentConfigForm environment selector", () => {
+     expect(xhigh).toBeTruthy();
+     await act(async () => xhigh.click());
+     await flushReact();
+-    const save = [...result.container.querySelectorAll("button")].find(button => button.textContent?.trim() === "Save")!;
++    const save = [...result.container.querySelectorAll("button")].find(button => button.textContent?.trim() === "Enregistrer")!;
+     await act(async () => save.click());
+     expect(result.onSave).toHaveBeenCalledWith(expect.objectContaining({ adapterConfig: expect.objectContaining({ reasoningEffort: "xhigh" }) }));
+     expect(result.onSave.mock.calls[0][0].adapterConfig.effort).toBeUndefined();
+@@ -807,7 +807,7 @@ describe("AgentConfigForm environment selector", () => {
+     ]);
+     roots.push(result.root);
+ 
+-    expect(result.container.textContent).not.toContain("Environment override");
++    expect(result.container.textContent).not.toContain("Environnement spécifique");
+     expect(result.container.querySelector("select")).toBeNull();
+   });
+ 
+@@ -877,7 +877,7 @@ describe("AgentConfigForm environment selector", () => {
+     await flushReact();
+ 
+     const saveButton = Array.from(result.container.querySelectorAll("button"))
+-      .find((button) => button.textContent?.trim() === "Save");
++      .find((button) => button.textContent?.trim() === "Enregistrer");
+     expect(saveButton).not.toBeUndefined();
+     await act(async () => {
+       saveButton!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+@@ -895,8 +895,8 @@ describe("AgentConfigForm environment selector", () => {
+     roots.push(existing.root);
+     const created = await renderCreateForm(environments, { adapterType: "claude_local", model: "" });
+     roots.push(created.root);
+-    expect(existing.container.textContent).toContain("Default (claude-opus-5)");
+-    expect(created.container.textContent).toContain("Default (claude-opus-5)");
++    expect(existing.container.textContent).toContain("Par défaut (claude-opus-5)");
++    expect(created.container.textContent).toContain("Par défaut (claude-opus-5)");
+     expect(existing.onSave).not.toHaveBeenCalled();
+   });
+ 
+@@ -906,7 +906,7 @@ describe("AgentConfigForm environment selector", () => {
+     ]);
+     roots.push(result.root);
+ 
+-    expect(result.container.textContent).not.toContain("Secret access");
++    expect(result.container.textContent).not.toContain("Accès aux secrets");
+   });
+ 
+   it("renders secret access as dedicated form content", async () => {
+@@ -917,9 +917,9 @@ describe("AgentConfigForm environment selector", () => {
+     );
+     roots.push(result.root);
+ 
+-    expect(result.container.textContent).toContain("Secret access");
++    expect(result.container.textContent).toContain("Accès aux secrets");
+     expect(result.container.textContent).toContain("No secrets are bound to this agent yet.");
+-    expect(result.container.textContent).not.toContain("Environment variables");
++    expect(result.container.textContent).not.toContain("Variables d'environnement");
+   });
+ 
+   it("shows concise Environment copy when one runnable non-local environment exists", async () => {
+@@ -938,8 +938,8 @@ describe("AgentConfigForm environment selector", () => {
+     const selector = result.container.querySelector("select");
+ 
+     expect(text).toContain("Environment");
+-    expect(text).toContain("Environment override");
+-    expect(selector?.textContent).toContain("Default: Local");
++    expect(text).toContain("Environnement spécifique");
++    expect(selector?.textContent).toContain("Par défaut : Local");
+     expect(selector?.textContent).toContain("E2B · sandbox");
+     expect(text).not.toContain("Execution");
+     expect(text).not.toContain("Leave this unset to inherit the instance default");
+@@ -964,7 +964,7 @@ describe("AgentConfigForm environment selector", () => {
+     const text = result.container.textContent ?? "";
+     const selector = result.container.querySelector("select");
+ 
+-    expect(text).toContain("Environment override");
++    expect(text).toContain("Environnement spécifique");
+     expect(selector?.textContent).toContain("E2B · sandbox");
+   });
+ 
+@@ -986,7 +986,7 @@ describe("AgentConfigForm environment selector", () => {
+     const text = result.container.textContent ?? "";
+     const selector = result.container.querySelector("select");
+ 
+-    expect(text).toContain("Environment override");
++    expect(text).toContain("Environnement spécifique");
+     expect(selector?.textContent).toContain("E2B · sandbox");
+   });
+ 
+@@ -1008,8 +1008,8 @@ describe("AgentConfigForm environment selector", () => {
+     const text = result.container.textContent ?? "";
+     const selector = result.container.querySelector("select");
+ 
+-    expect(text).toContain("Environment override");
+-    expect(selector?.textContent).toContain("Default: Local");
++    expect(text).toContain("Environnement spécifique");
++    expect(selector?.textContent).toContain("Par défaut : Local");
+     expect(selector?.textContent).toContain("Fake Sandbox · sandbox");
+   });
+ 
+@@ -1028,7 +1028,7 @@ describe("AgentConfigForm environment selector", () => {
+ 
+     const selector = result.container.querySelector("select");
+ 
+-    expect(selector?.textContent).toContain("Default: Paperclip Computer");
++    expect(selector?.textContent).toContain("Par défaut : Paperclip Computer");
+     expect(selector?.textContent).toContain("Paperclip Computer");
+     expect(selector?.textContent).not.toContain("(sandbox)");
+     expect(selector?.textContent).not.toContain("· sandbox");
+@@ -1072,7 +1072,7 @@ describe("AgentConfigForm environment selector", () => {
+     await flushReact();
+ 
+     const defaultButton = Array.from(document.body.querySelectorAll("button")).find(
+-      (button) => button.textContent?.trim() === "Default",
++      (button) => button.textContent?.trim() === "Par défaut",
+     );
+     expect(defaultButton).toBeTruthy();
+ 
+@@ -1082,7 +1082,7 @@ describe("AgentConfigForm environment selector", () => {
+     await flushReact();
+ 
+     const testButton = Array.from(result.container.querySelectorAll("button")).find(
+-      (button) => button.textContent?.trim() === "Test",
++      (button) => button.textContent?.trim() === "Tester",
+     );
+     expect(testButton).toBeTruthy();
+ 
+@@ -1113,7 +1113,7 @@ describe("AgentConfigForm environment selector", () => {
+     roots.push(result.root);
+ 
+     const testButton = Array.from(result.container.querySelectorAll("button")).find(
+-      (button) => button.textContent?.trim() === "Test",
++      (button) => button.textContent?.trim() === "Tester",
+     );
+     expect(testButton).toBeTruthy();
+ 
+@@ -1154,7 +1154,7 @@ describe("AgentConfigForm environment selector", () => {
+     await flushReact();
+ 
+     const testButton = Array.from(result.container.querySelectorAll("button")).find(
+-      (button) => button.textContent?.trim() === "Test",
++      (button) => button.textContent?.trim() === "Tester",
+     );
+     expect(testButton).toBeTruthy();
+ 
+@@ -1190,7 +1190,7 @@ describe("AgentConfigForm environment selector", () => {
+     roots.push(result.root);
+ 
+     const testButton = Array.from(result.container.querySelectorAll("button")).find(
+-      (button) => button.textContent?.trim() === "Test",
++      (button) => button.textContent?.trim() === "Tester",
+     );
+     expect(testButton).toBeTruthy();
+ 
+@@ -1208,11 +1208,11 @@ describe("AgentConfigForm environment selector", () => {
+     const result = await renderCodexSandbox();
+     roots.push(result.root);
+ 
+-    expect(findButton(result.container, "Sign in")).toBeFalsy();
++    expect(findButton(result.container, "Se connecter")).toBeFalsy();
+ 
+     await runTest(result.container);
+ 
+-    expect(findButton(result.container, "Sign in")).toBeTruthy();
++    expect(findButton(result.container, "Se connecter")).toBeTruthy();
+   });
+ 
+   it("hides the Codex login for a provider without the login pseudo-terminal capability", async () => {
+@@ -1237,7 +1237,7 @@ describe("AgentConfigForm environment selector", () => {
+ 
+     await runTest(result.container);
+ 
+-    expect(findButton(result.container, "Sign in")).toBeFalsy();
++    expect(findButton(result.container, "Se connecter")).toBeFalsy();
+   });
+ 
+   it("shows the login affordance and the displayed-code panel for a third adapter with a projected login capability", async () => {
+@@ -1248,13 +1248,13 @@ describe("AgentConfigForm environment selector", () => {
+     const result = await renderVendorSandbox();
+     roots.push(result.root);
+ 
+-    expect(findButton(result.container, "Sign in")).toBeFalsy();
++    expect(findButton(result.container, "Se connecter")).toBeFalsy();
+ 
+     await runTest(result.container);
+ 
+     // The projected capability gates the login affordance on for the third
+     // adapter.
+-    expect(findButton(result.container, "Sign in")).toBeTruthy();
++    expect(findButton(result.container, "Se connecter")).toBeTruthy();
+ 
+     await startLogin(result.container);
+ 
+@@ -1262,7 +1262,7 @@ describe("AgentConfigForm environment selector", () => {
+     // URL. It shows no browser-code input, so the dispatcher picked the panel
+     // from the projected `displayed_code` mode.
+     expect(result.container.textContent).toContain("WXYZ-1234");
+-    expect(result.container.querySelector('input[aria-label="Browser code"]')).toBeFalsy();
++    expect(result.container.querySelector('input[aria-label="Code du navigateur"]')).toBeFalsy();
+   });
+ 
+   it("shows the login affordance and the displayed-code panel for a Grok sandbox with a projected login capability", async () => {
+@@ -1273,16 +1273,16 @@ describe("AgentConfigForm environment selector", () => {
+     const result = await renderGrokSandbox();
+     roots.push(result.root);
+ 
+-    expect(findButton(result.container, "Sign in")).toBeFalsy();
++    expect(findButton(result.container, "Se connecter")).toBeFalsy();
+ 
+     await runTest(result.container);
+ 
+-    expect(findButton(result.container, "Sign in")).toBeTruthy();
++    expect(findButton(result.container, "Se connecter")).toBeTruthy();
+ 
+     await startLogin(result.container);
+ 
+     expect(result.container.textContent).toContain("WXYZ-1234");
+-    expect(result.container.querySelector('input[aria-label="Browser code"]')).toBeFalsy();
++    expect(result.container.querySelector('input[aria-label="Code du navigateur"]')).toBeFalsy();
+   });
+ 
+   it("hides the Login button before Test and shows it after the adapter_auth_missing check for a Claude sandbox", async () => {
+@@ -1290,11 +1290,11 @@ describe("AgentConfigForm environment selector", () => {
+     const result = await renderClaudeSandbox();
+     roots.push(result.root);
+ 
+-    expect(findButton(result.container, "Sign in")).toBeFalsy();
++    expect(findButton(result.container, "Se connecter")).toBeFalsy();
+ 
+     await runTest(result.container);
+ 
+-    expect(findButton(result.container, "Sign in")).toBeTruthy();
++    expect(findButton(result.container, "Se connecter")).toBeTruthy();
+   });
+ 
+   it("hides the Login button for a Claude sandbox whose provider lacks the setup-token login capability", async () => {
+@@ -1318,7 +1318,7 @@ describe("AgentConfigForm environment selector", () => {
+ 
+     // E2B does not advertise the setup-token login capability, so the panel
+     // stays hidden even after the auth-missing check.
+-    expect(findButton(result.container, "Sign in")).toBeFalsy();
++    expect(findButton(result.container, "Se connecter")).toBeFalsy();
+   });
+ 
+   it("hides the Login button for a Daytona sandbox while the capabilities report no setup-token support", async () => {
+@@ -1353,7 +1353,7 @@ describe("AgentConfigForm environment selector", () => {
+ 
+     await runTest(result.container);
+ 
+-    expect(findButton(result.container, "Sign in")).toBeFalsy();
++    expect(findButton(result.container, "Se connecter")).toBeFalsy();
+   });
+ 
+   it("gates a pseudo-terminal login on the provider pty capability for a non-Claude adapter", async () => {
+@@ -1379,7 +1379,7 @@ describe("AgentConfigForm environment selector", () => {
+ 
+     await runTest(result.container);
+ 
+-    expect(findButton(result.container, "Sign in")).toBeFalsy();
++    expect(findButton(result.container, "Se connecter")).toBeFalsy();
+   });
+ 
+   it("shows a pseudo-terminal login for a non-Claude adapter when the provider advertises pty support", async () => {
+@@ -1404,7 +1404,7 @@ describe("AgentConfigForm environment selector", () => {
+ 
+     await runTest(result.container);
+ 
+-    expect(findButton(result.container, "Sign in")).toBeTruthy();
++    expect(findButton(result.container, "Se connecter")).toBeTruthy();
+   });
+ 
+   it("shows the Login button when a parent lifts the test feedback and renders the panel from the descriptor", async () => {
+@@ -1472,11 +1472,11 @@ describe("AgentConfigForm environment selector", () => {
+     });
+     await flushReact();
+ 
+-    expect(findButton(container, "Sign in")).toBeFalsy();
++    expect(findButton(container, "Se connecter")).toBeFalsy();
+ 
+     await runTest(container);
+ 
+-    expect(findButton(container, "Sign in")).toBeTruthy();
++    expect(findButton(container, "Se connecter")).toBeTruthy();
+   });
+ 
+   it("does not show the Login button when the Test result has no adapter_auth_missing check", async () => {
+@@ -1485,7 +1485,7 @@ describe("AgentConfigForm environment selector", () => {
+ 
+     await runTest(result.container);
+ 
+-    expect(findButton(result.container, "Sign in")).toBeFalsy();
++    expect(findButton(result.container, "Se connecter")).toBeFalsy();
+   });
+ 
+   it("does not show the Login button when the effective environment is Local", async () => {
+@@ -1499,7 +1499,7 @@ describe("AgentConfigForm environment selector", () => {
+ 
+     await runTest(result.container);
+ 
+-    expect(findButton(result.container, "Sign in")).toBeFalsy();
++    expect(findButton(result.container, "Se connecter")).toBeFalsy();
+   });
+ 
+   it("shows the Login button for an agent with no own environment under the managed-sandbox-only policy", async () => {
+@@ -1535,11 +1535,11 @@ describe("AgentConfigForm environment selector", () => {
+     );
+     roots.push(result.root);
+ 
+-    expect(findButton(result.container, "Sign in")).toBeFalsy();
++    expect(findButton(result.container, "Se connecter")).toBeFalsy();
+ 
+     await runTest(result.container);
+ 
+-    expect(findButton(result.container, "Sign in")).toBeTruthy();
++    expect(findButton(result.container, "Se connecter")).toBeTruthy();
+   });
+ 
+   it("keeps the Login button hidden under the managed-sandbox-only policy when no managed sandbox is available", async () => {
+@@ -1566,7 +1566,7 @@ describe("AgentConfigForm environment selector", () => {
+     );
+     roots.push(result.root);
+ 
+-    expect(findButton(result.container, "Sign in")).toBeFalsy();
++    expect(findButton(result.container, "Se connecter")).toBeFalsy();
+   });
+ 
+   it("starts a login session for the effective sandbox and shows the code and the authentication URL", async () => {
+@@ -1600,7 +1600,7 @@ describe("AgentConfigForm environment selector", () => {
+     await runTest(result.container);
+     await startLogin(result.container);
+ 
+-    expect(result.container.textContent).toContain("Preparing...");
++    expect(result.container.textContent).toContain("Préparation…");
+     expect(result.container.textContent).not.toContain("https://");
+   });
+ 
+@@ -1612,8 +1612,8 @@ describe("AgentConfigForm environment selector", () => {
+     await runTest(result.container);
+     await startLogin(result.container);
+ 
+-    await clickElement(findByAriaLabel(result.container, "Copy code"));
+-    await clickElement(findByAriaLabel(result.container, "Copy URL"));
++    await clickElement(findByAriaLabel(result.container, "Copier le code"));
++    await clickElement(findByAriaLabel(result.container, "Copier l'URL"));
+ 
+     expect(mockClipboard.copyTextToClipboard).toHaveBeenCalledWith("WXYZ-1234");
+     expect(mockClipboard.copyTextToClipboard).toHaveBeenCalledWith("https://auth.example.test/device");
+@@ -1623,8 +1623,8 @@ describe("AgentConfigForm environment selector", () => {
+     // while it is still in front of you. The panel used to run the other way.
+     const labels = [...result.container.querySelectorAll("div")]
+       .map((el) => el.textContent?.trim())
+-      .filter((t) => t === "1. Code" || t === "2. Authentication URL");
+-    expect(labels).toEqual(["1. Code", "2. Authentication URL"]);
++      .filter((t) => t === "1. Code" || t === "2. URL d'authentification");
++    expect(labels).toEqual(["1. Code", "2. URL d'authentification"]);
+ 
+     const codeIndex = result.container.textContent!.indexOf("WXYZ-1234");
+     const urlIndex = result.container.textContent!.indexOf("https://auth.example.test/device");
+@@ -1694,7 +1694,7 @@ describe("AgentConfigForm environment selector", () => {
+       "session-1",
+     );
+     // The panel resets: the Sign in button is available again and the code is gone.
+-    const login = findButton(result.container, "Sign in");
++    const login = findButton(result.container, "Se connecter");
+     expect(login?.disabled).toBe(false);
+     expect(findButton(result.container, "Annuler")).toBeFalsy();
+     expect(result.container.textContent).not.toContain("WXYZ-1234");
+@@ -1740,17 +1740,17 @@ describe("AgentConfigForm environment selector", () => {
+           aiConnection={{ ...intent, agentIds: [] }} chrome="onboarding" autoStart />
+       </TooltipProvider></ToastProvider></QueryClientProvider>);
+     });
+-    await flushUntil(() => Boolean(findButton(container, "Cancel previous sign-in and retry")));
++    await flushUntil(() => Boolean(findButton(container, "Annuler la connexion précédente et réessayer")));
+     expect(mockAgentsApi.startAdapterAuthLogin).not.toHaveBeenCalled();
+     expect(mockAgentsApi.cancelAdapterAuthLogin).not.toHaveBeenCalled();
+-    await act(async () => findButton(container, "Cancel previous sign-in and retry")!.click());
+-    await flushUntil(() => container.textContent?.includes("Could not cancel") ?? false);
++    await act(async () => findButton(container, "Annuler la connexion précédente et réessayer")!.click());
++    await flushUntil(() => container.textContent?.includes("Impossible d'annuler") ?? false);
+     expect(mockAgentsApi.startAdapterAuthLogin).not.toHaveBeenCalled();
+     let release!: () => void;
+     mockAgentsApi.cancelAdapterAuthLogin.mockImplementationOnce(() => new Promise<void>((resolve) => { release = resolve; }));
+-    await act(async () => findButton(container, "Cancel previous sign-in and retry")!.click());
++    await act(async () => findButton(container, "Annuler la connexion précédente et réessayer")!.click());
+     await flushReact();
+-    expect(findButton(container, "Cancel previous sign-in and retry")!.disabled).toBe(true);
++    expect(findButton(container, "Annuler la connexion précédente et réessayer")!.disabled).toBe(true);
+     expect(mockAgentsApi.startAdapterAuthLogin).not.toHaveBeenCalled();
+     await act(async () => release());
+     await flushUntil(() => mockAgentsApi.startAdapterAuthLogin.mock.calls.length === 1);
+@@ -1855,7 +1855,7 @@ describe("AgentConfigForm environment selector", () => {
+     });
+     // The panel narrates the bind as its own state, separate from the login's
+     // success line — the bind is a second save that can still fail.
+-    await flushUntil(() => container.textContent?.includes("Agent bound to the signed-in account") ?? false);
++    await flushUntil(() => container.textContent?.includes("Agent lié au compte connecté") ?? false);
+   });
+ 
+   it("a failed bind save renders an explicit Retry instead of silently latching the claim", async () => {
+@@ -1908,14 +1908,14 @@ describe("AgentConfigForm environment selector", () => {
+         </QueryClientProvider>,
+       );
+     });
+-    await flushUntil(() => container.textContent?.includes("Could not bind this agent") ?? false);
++    await flushUntil(() => container.textContent?.includes("Impossible de lier cet agent") ?? false);
+     const retry = findButton(container, "Réessayer");
+     expect(retry).toBeTruthy();
+ 
+     await act(async () => {
+       retry!.click();
+     });
+-    await flushUntil(() => container.textContent?.includes("Agent bound to the signed-in account") ?? false);
++    await flushUntil(() => container.textContent?.includes("Agent lié au compte connecté") ?? false);
+     expect(onAccountBinding).toHaveBeenCalledTimes(2);
+     expect(onAccountBinding).toHaveBeenLastCalledWith({
+       secretId: "secret-bind-2",
+@@ -1990,7 +1990,7 @@ describe("AgentConfigForm environment selector", () => {
+       companyIdentityDiffers: true,
+     });
+ 
+-    const signIn = findButton(container, "Sign in");
++    const signIn = findButton(container, "Se connecter");
+     expect(signIn).toBeTruthy();
+     await act(async () => {
+       signIn!.click();
+@@ -2056,16 +2056,16 @@ describe("AgentConfigForm environment selector", () => {
+         </QueryClientProvider>,
+       );
+     });
+-    await flushUntil(() => container.textContent?.includes("Binding this agent") ?? false);
+-    const signInWhileSaving = findButton(container, "Sign in");
++    await flushUntil(() => container.textContent?.includes("Liaison de cet agent") ?? false);
++    const signInWhileSaving = findButton(container, "Se connecter");
+     expect(signInWhileSaving).toBeTruthy();
+     expect(signInWhileSaving!.disabled).toBe(true);
+ 
+     await act(async () => {
+       releaseSave?.();
+     });
+-    await flushUntil(() => container.textContent?.includes("Agent bound to the signed-in account") ?? false);
+-    const signInAfterSave = findButton(container, "Sign in");
++    await flushUntil(() => container.textContent?.includes("Agent lié au compte connecté") ?? false);
++    const signInAfterSave = findButton(container, "Se connecter");
+     expect(signInAfterSave!.disabled).toBe(false);
+   });
+ 
+@@ -2144,7 +2144,7 @@ describe("AgentConfigForm environment selector", () => {
+     await flushUntil(() => onSave.mock.calls.length > 0);
+ 
+     // Rename the agent while the bind save is still in flight.
+-    const nameInput = container.querySelector<HTMLInputElement>('input[placeholder="Agent name"]');
++    const nameInput = container.querySelector<HTMLInputElement>('input[placeholder="Nom de l\'agent"]');
+     expect(nameInput).toBeTruthy();
+     setInputValue(nameInput!, "Renamed during bind");
+     await flushReact();
+@@ -2161,12 +2161,12 @@ describe("AgentConfigForm environment selector", () => {
+     });
+     await flushReact();
+     expect(
+-      container.querySelector<HTMLInputElement>('input[placeholder="Agent name"]')!.value,
++      container.querySelector<HTMLInputElement>('input[placeholder="Nom de l\'agent"]')!.value,
+     ).toBe("Renamed during bind");
+ 
+     // An ordinary Save in that window still carries the binding.
+     const persistedPatch = onSave.mock.calls[0]![0] as Record<string, unknown>;
+-    const saveButton = findButton(container, "Save");
++    const saveButton = findButton(container, "Enregistrer");
+     expect(saveButton).toBeTruthy();
+     await act(async () => {
+       saveButton!.click();
+@@ -2203,7 +2203,7 @@ describe("AgentConfigForm environment selector", () => {
+     // The rename survives the refresh instead of reverting to the refreshed
+     // agent's name.
+     expect(
+-      container.querySelector<HTMLInputElement>('input[placeholder="Agent name"]')!.value,
++      container.querySelector<HTMLInputElement>('input[placeholder="Nom de l\'agent"]')!.value,
+     ).toBe("Renamed during bind");
+   });
+ 
+@@ -2260,7 +2260,7 @@ describe("AgentConfigForm environment selector", () => {
+     await flushReact();
+ 
+     expect(mockAgentsApi.startAdapterAuthLogin).not.toHaveBeenCalled();
+-    expect(findButton(result.container, "Sign in")?.disabled).toBe(false);
++    expect(findButton(result.container, "Se connecter")?.disabled).toBe(false);
+ 
+     await startLogin(result.container);
+ 
+@@ -2315,10 +2315,10 @@ describe("AgentConfigForm environment selector", () => {
+     expect(findButton(result.container, "Annuler")).toBeTruthy();
+ 
+     resolveCancel();
+-    await flushUntil(() => findButton(result.container, "Sign in")?.disabled === false);
++    await flushUntil(() => findButton(result.container, "Se connecter")?.disabled === false);
+ 
+     expect(findButton(result.container, "Annuler")).toBeFalsy();
+-    expect(findButton(result.container, "Sign in")?.disabled).toBe(false);
++    expect(findButton(result.container, "Se connecter")?.disabled).toBe(false);
+   });
+ 
+   it("announces the login state through a polite live region", async () => {
+@@ -2356,7 +2356,7 @@ describe("AgentConfigForm environment selector", () => {
+     await runTest(result.container);
+     await startLogin(result.container);
+ 
+-    const startButton = findButton(result.container, "Sign in");
++    const startButton = findButton(result.container, "Se connecter");
+     expect(startButton).toBeTruthy();
+     expect(startButton?.disabled).toBe(true);
+     expect(mockAgentsApi.startAdapterAuthLogin).toHaveBeenCalledTimes(1);
+@@ -2378,7 +2378,7 @@ describe("AgentConfigForm environment selector", () => {
+     await runTest(result.container);
+     await startLogin(result.container);
+ 
+-    expect(result.container.textContent).toContain("Authenticated");
++    expect(result.container.textContent).toContain("Connecté");
+   });
+ 
+   it("renders the failed terminal state with the non-secret message", async () => {
+@@ -2397,7 +2397,7 @@ describe("AgentConfigForm environment selector", () => {
+     await runTest(result.container);
+     await startLogin(result.container);
+ 
+-    expect(result.container.textContent).toContain("Login failed");
++    expect(result.container.textContent).toContain("Échec de la connexion");
+     expect(result.container.textContent).toContain("The device rejected the code.");
+   });
+ 
+@@ -2417,7 +2417,7 @@ describe("AgentConfigForm environment selector", () => {
+     await runTest(result.container);
+     await startLogin(result.container);
+ 
+-    expect(result.container.textContent).toContain("Login timed out");
++    expect(result.container.textContent).toContain("Délai de connexion dépassé");
+   });
+ 
+   it("hides the Login button when the effective environment changes after a Test", async () => {
+@@ -2426,7 +2426,7 @@ describe("AgentConfigForm environment selector", () => {
+     roots.push(result.root);
+ 
+     await runTest(result.container);
+-    expect(findButton(result.container, "Sign in")).toBeTruthy();
++    expect(findButton(result.container, "Se connecter")).toBeTruthy();
+ 
+     const select = result.container.querySelector("select");
+     await act(async () => {
+@@ -2438,7 +2438,7 @@ describe("AgentConfigForm environment selector", () => {
+     });
+     await flushReact();
+ 
+-    expect(findButton(result.container, "Sign in")).toBeFalsy();
++    expect(findButton(result.container, "Se connecter")).toBeFalsy();
+   });
+ 
+   it("shows the authorization URL and a browser-code input for a Claude sandbox", async () => {
+@@ -2459,11 +2459,11 @@ describe("AgentConfigForm environment selector", () => {
+     // shows a server-displayed code.
+     expect(result.container.textContent).toContain("https://claude.example.test/authorize");
+     expect(
+-      result.container.querySelector('input[aria-label="Browser code"]'),
++      result.container.querySelector('input[aria-label="Code du navigateur"]'),
+     ).toBeTruthy();
+     // The default prompt carries no advisory: a confidential transport. So the
+     // panel shows no disclaimer.
+-    expect(result.container.textContent).not.toContain("not encrypted");
++    expect(result.container.textContent).not.toContain("n'est pas chiffrée");
+   });
+ 
+   it("shows a non-blocking disclaimer when the transport advisory is present", async () => {
+@@ -2480,16 +2480,16 @@ describe("AgentConfigForm environment selector", () => {
+ 
+     await runTest(result.container);
+     await startLogin(result.container);
+-    await flushUntil(() => (result.container.textContent ?? "").includes("not encrypted"));
++    await flushUntil(() => (result.container.textContent ?? "").includes("n'est pas chiffrée"));
+ 
+     // The disclaimer states the transport risk in plain language.
+-    expect(result.container.textContent).toContain("not encrypted");
+-    expect(result.container.textContent).toContain("clear text");
++    expect(result.container.textContent).toContain("n'est pas chiffrée");
++    expect(result.container.textContent).toContain("en clair");
+     // The login still proceeds: the panel shows the URL and the browser-code
+     // input, so the disclaimer never blocks the flow.
+     expect(result.container.textContent).toContain("https://claude.example.test/authorize");
+     expect(
+-      result.container.querySelector('input[aria-label="Browser code"]'),
++      result.container.querySelector('input[aria-label="Code du navigateur"]'),
+     ).toBeTruthy();
+   });
+ 
+@@ -2501,15 +2501,15 @@ describe("AgentConfigForm environment selector", () => {
+     await runTest(result.container);
+     await startLogin(result.container);
+     await flushUntil(() =>
+-      Boolean(result.container.querySelector('input[aria-label="Browser code"]')),
++      Boolean(result.container.querySelector('input[aria-label="Code du navigateur"]')),
+     );
+ 
+     const input = result.container.querySelector<HTMLInputElement>(
+-      'input[aria-label="Browser code"]',
++      'input[aria-label="Code du navigateur"]',
+     );
+     setInputValue(input!, "BROWSERCODE-9");
+     await flushReact();
+-    await clickByText(result.container, "Submit");
++    await clickByText(result.container, "Envoyer");
+     await flushReact();
+ 
+     expect(mockAgentsApi.submitClaudeSetupTokenBrowserCode).toHaveBeenCalledWith(
+@@ -2520,7 +2520,7 @@ describe("AgentConfigForm environment selector", () => {
+     // The panel clears the browser code after submit, so the secret does not
+     // linger in the input.
+     const clearedInput = result.container.querySelector<HTMLInputElement>(
+-      'input[aria-label="Browser code"]',
++      'input[aria-label="Code du navigateur"]',
+     );
+     expect(clearedInput?.value).toBe("");
+   });
+@@ -2539,13 +2539,13 @@ describe("AgentConfigForm environment selector", () => {
+ 
+     await runTest(result.container);
+     await startLogin(result.container);
+-    await flushUntil(() => (result.container.textContent ?? "").includes("Authenticated"));
++    await flushUntil(() => (result.container.textContent ?? "").includes("Connecté"));
+ 
+     expect(mockAgentsApi.completeClaudeSetupTokenLogin).toHaveBeenCalledWith(
+       "company-1",
+       "claude-session-1",
+     );
+-    expect(result.container.textContent).toContain("Authenticated");
++    expect(result.container.textContent).toContain("Connecté");
+   });
+ 
+   it("clears the stored-session claim and the fixed binding when the effective environment changes", async () => {
+@@ -2787,16 +2787,16 @@ describe("AgentConfigForm environment selector", () => {
+         </QueryClientProvider>,
+       );
+     });
+-    await flushUntil(() => Boolean(findButton(container, "Use saved login")));
++    await flushUntil(() => Boolean(findButton(container, "Utiliser la connexion enregistrée")));
+ 
+-    await clickByText(container, "Use saved login");
++    await clickByText(container, "Utiliser la connexion enregistrée");
+ 
+     expect(onApplyStored).toHaveBeenCalledTimes(1);
+     // The panel shows the applied confirmation and hides the apply affordance.
+     await flushUntil(() =>
+       (container.textContent ?? "").includes("The saved Claude login is bound to this agent now."),
+     );
+-    expect(findButton(container, "Use saved login")).toBeUndefined();
++    expect(findButton(container, "Utiliser la connexion enregistrée")).toBeUndefined();
+     // The apply-existing path never starts a login round trip.
+     expect(mockAgentsApi.startClaudeSetupTokenLogin).not.toHaveBeenCalled();
+   });
+@@ -2829,9 +2829,9 @@ describe("AgentConfigForm environment selector", () => {
+         </QueryClientProvider>,
+       );
+     });
+-    await flushUntil(() => Boolean(findButton(container, "Sign in")));
++    await flushUntil(() => Boolean(findButton(container, "Se connecter")));
+ 
+-    expect(findButton(container, "Use saved login")).toBeUndefined();
++    expect(findButton(container, "Utiliser la connexion enregistrée")).toBeUndefined();
+     expect(onApplyStored).not.toHaveBeenCalled();
+   });
+ 
+@@ -2850,13 +2850,13 @@ describe("AgentConfigForm environment selector", () => {
+     await runTest(result.container);
+     await startLogin(result.container);
+     await flushUntil(() =>
+-      (result.container.textContent ?? "").includes("The login did not finish"),
++      (result.container.textContent ?? "").includes("La connexion n'a pas abouti"),
+     );
+ 
+     // The panel shows a fixed message and returns to its start state. The Log in
+     // button is available again.
+-    expect(result.container.textContent).toContain("The login did not finish");
+-    expect(findButton(result.container, "Sign in")?.disabled).toBe(false);
++    expect(result.container.textContent).toContain("La connexion n'a pas abouti");
++    expect(findButton(result.container, "Se connecter")?.disabled).toBe(false);
+     // The panel never shows the provider failure message, which could carry a
+     // secret.
+     expect(result.container.textContent).not.toContain("the provider rejected the browser code");
+@@ -2877,11 +2877,11 @@ describe("AgentConfigForm environment selector", () => {
+     await runTest(result.container);
+     await startLogin(result.container);
+     await flushUntil(() =>
+-      (result.container.textContent ?? "").includes("The login did not finish"),
++      (result.container.textContent ?? "").includes("La connexion n'a pas abouti"),
+     );
+ 
+-    expect(result.container.textContent).toContain("The login did not finish");
+-    expect(findButton(result.container, "Sign in")?.disabled).toBe(false);
++    expect(result.container.textContent).toContain("La connexion n'a pas abouti");
++    expect(findButton(result.container, "Se connecter")?.disabled).toBe(false);
+   });
+ 
+   it("shows a terminal failure and stops polling on a status 404 from server cleanup", async () => {
+@@ -2907,17 +2907,17 @@ describe("AgentConfigForm environment selector", () => {
+     await runTest(result.container);
+     await startLogin(result.container);
+     await flushUntil(() =>
+-      (result.container.textContent ?? "").includes("The login did not finish"),
++      (result.container.textContent ?? "").includes("La connexion n'a pas abouti"),
+     );
+ 
+     // The panel shows the fixed failure message and returns to its start state.
+-    expect(result.container.textContent).toContain("The login did not finish");
+-    expect(findButton(result.container, "Sign in")?.disabled).toBe(false);
++    expect(result.container.textContent).toContain("La connexion n'a pas abouti");
++    expect(findButton(result.container, "Se connecter")?.disabled).toBe(false);
+ 
+     // The panel shows no credential material: no authorization URL and no
+     // browser-code input.
+     expect(result.container.textContent).not.toContain("https://claude.example.test/authorize");
+-    expect(result.container.querySelector('input[aria-label="Browser code"]')).toBeFalsy();
++    expect(result.container.querySelector('input[aria-label="Code du navigateur"]')).toBeFalsy();
+ 
+     // The stale polling stopped. The status call count stays fixed after the
+     // failure, so the panel does not poll a session the server removed.
+@@ -2951,10 +2951,10 @@ describe("AgentConfigForm environment selector", () => {
+     );
+     // The panel resets: the Sign in button is available again, and the URL and the
+     // browser-code input are gone.
+-    expect(findButton(result.container, "Sign in")?.disabled).toBe(false);
++    expect(findButton(result.container, "Se connecter")?.disabled).toBe(false);
+     expect(findButton(result.container, "Annuler")).toBeFalsy();
+     expect(result.container.textContent).not.toContain("https://claude.example.test/authorize");
+-    expect(result.container.querySelector('input[aria-label="Browser code"]')).toBeFalsy();
++    expect(result.container.querySelector('input[aria-label="Code du navigateur"]')).toBeFalsy();
+   });
+ 
+   it("treats a 404 cancel the same as success and returns to its start state", async () => {
+@@ -2986,11 +2986,11 @@ describe("AgentConfigForm environment selector", () => {
+     // The panel reset even though the cancel returned a 404: the Sign in button is
+     // available again, and the URL and the browser-code input are gone. No error
+     // message remains.
+-    expect(findButton(result.container, "Sign in")?.disabled).toBe(false);
++    expect(findButton(result.container, "Se connecter")?.disabled).toBe(false);
+     expect(findButton(result.container, "Annuler")).toBeFalsy();
+     expect(result.container.textContent).not.toContain("https://claude.example.test/authorize");
+-    expect(result.container.querySelector('input[aria-label="Browser code"]')).toBeFalsy();
+-    expect(result.container.textContent).not.toContain("Could not cancel the login.");
++    expect(result.container.querySelector('input[aria-label="Code du navigateur"]')).toBeFalsy();
++    expect(result.container.textContent).not.toContain("Impossible d'annuler la connexion.");
+   });
+ 
+   it("does not cancel an active login session when the panel unmounts", async () => {
+@@ -3023,7 +3023,7 @@ describe("AgentConfigForm environment selector", () => {
+     await runTest(result.container);
+     // The panel shows the Sign in button but no session started, so no active
+     // session exists to cancel.
+-    expect(findButton(result.container, "Sign in")).toBeTruthy();
++    expect(findButton(result.container, "Se connecter")).toBeTruthy();
+ 
+     await act(async () => {
+       result.root.unmount();
+@@ -3071,7 +3071,7 @@ describe("AgentConfigForm environment selector", () => {
+     await flushReact();
+ 
+     expect(mockAgentsApi.startClaudeSetupTokenLogin).not.toHaveBeenCalled();
+-    expect(findButton(result.container, "Sign in")?.disabled).toBe(false);
++    expect(findButton(result.container, "Se connecter")?.disabled).toBe(false);
+ 
+     await startLogin(result.container);
+ 
+@@ -3104,7 +3104,7 @@ describe("AgentConfigForm environment selector", () => {
+       "company-1",
+       "resumed-claude-session-1",
+     );
+-    expect(findButton(result.container, "Sign in")?.disabled).toBe(false);
++    expect(findButton(result.container, "Se connecter")?.disabled).toBe(false);
+     expect(findButton(result.container, "Annuler")).toBeFalsy();
+   });
+ 
+@@ -3151,13 +3151,13 @@ describe("AgentConfigForm environment selector", () => {
+ 
+     // The cancel call fired, but the panel still shows the resumed login as
+     // active because it is waiting for the cancel response.
+-    expect(findButton(result.container, "Sign in")?.disabled).toBe(true);
++    expect(findButton(result.container, "Se connecter")?.disabled).toBe(true);
+ 
+     resolveCancel();
+-    await flushUntil(() => findButton(result.container, "Sign in")?.disabled === false);
++    await flushUntil(() => findButton(result.container, "Se connecter")?.disabled === false);
+ 
+     expect(findButton(result.container, "Annuler")).toBeFalsy();
+-    expect(findButton(result.container, "Sign in")?.disabled).toBe(false);
++    expect(findButton(result.container, "Se connecter")?.disabled).toBe(false);
+   });
+ 
+   it("stops both polls and shows the timed-out state at the server deadline", async () => {
+@@ -3254,8 +3254,8 @@ describe("AgentConfigForm environment selector", () => {
+       });
+       await flushFake();
+ 
+-      await clickFake(container, "Test");
+-      await clickFake(container, "Sign in");
++      await clickFake(container, "Tester");
++      await clickFake(container, "Se connecter");
+ 
+       // The login is active: both polls have run at least once.
+       const statusCallsAtStart = mockAgentsApi.getClaudeSetupTokenLoginStatus.mock.calls.length;
+@@ -3272,19 +3272,19 @@ describe("AgentConfigForm environment selector", () => {
+       expect(mockAgentsApi.getClaudeSetupTokenLoginPrompt.mock.calls.length).toBeGreaterThan(
+         promptCallsAtStart,
+       );
+-      expect(container.textContent).not.toContain("The login timed out");
++      expect(container.textContent).not.toContain("La connexion a expiré");
+ 
+       // Advance past the old fixed sixty-second cutoff. The panel does NOT time
+       // out now, because the cutoff comes from the server `expiresAt`, which is
+       // far longer than sixty seconds. This proves the fixed 60-second cap is
+       // gone.
+       await advanceFake(60_000);
+-      expect(container.textContent).not.toContain("The login timed out");
++      expect(container.textContent).not.toContain("La connexion a expiré");
+ 
+       // Advance past the server deadline. The panel enters the timed-out state.
+       // Total elapsed after this step is 1 second past `serverDeadlineMs`.
+       await advanceFake(serverDeadlineMs - 66_000 + 1_000);
+-      expect(container.textContent).toContain("The login timed out");
++      expect(container.textContent).toContain("La connexion a expiré");
+       // The panel released the server session when the cutoff fired. The cancel
+       // frees the per-owner reservation now, so an immediate retry by the same
+       // owner starts a new session and does not hit the "too many active
+@@ -3294,7 +3294,7 @@ describe("AgentConfigForm environment selector", () => {
+         "claude-session-1",
+       );
+       // The Log in button is available again, and the Cancel button is gone.
+-      expect(findButton(container, "Sign in")?.disabled).toBe(false);
++      expect(findButton(container, "Se connecter")?.disabled).toBe(false);
+       expect(findButton(container, "Annuler")).toBeFalsy();
+ 
+       // Both polls stopped. A further ten seconds adds no new poll call.
+@@ -3354,9 +3354,9 @@ describe("AgentConfigForm environment selector", () => {
+ 
+     await runTest(result.container);
+     await startLogin(result.container);
+-    await flushUntil(() => (result.container.textContent ?? "").includes("Authenticated"));
++    await flushUntil(() => (result.container.textContent ?? "").includes("Connecté"));
+ 
+-    expect(result.container.textContent).toContain("Authenticated");
++    expect(result.container.textContent).toContain("Connecté");
+     expect(result.container.textContent).not.toContain("sk-ant-SECRET-TOKEN");
+   });
+ });
+@@ -3513,12 +3513,12 @@ describe("AgentConfigForm create-mode Claude OAuth binding", () => {
+     await runTest(result.container);
+     await startLogin(result.container);
+     await flushUntil(() =>
+-      (result.container.textContent ?? "").includes("The login did not finish"),
++      (result.container.textContent ?? "").includes("La connexion n'a pas abouti"),
+     );
+ 
+     // The panel shows a fixed, non-secret message and returns to its start state.
+-    expect(result.container.textContent).toContain("The login did not finish");
+-    expect(findButton(result.container, "Sign in")?.disabled).toBe(false);
++    expect(result.container.textContent).toContain("La connexion n'a pas abouti");
++    expect(findButton(result.container, "Se connecter")?.disabled).toBe(false);
+     expect(result.container.textContent).not.toContain(
+       "the provider rejected the stored-session claim",
+     );
+@@ -3743,13 +3743,13 @@ describe("AgentConfigForm managed-sandbox-only host surfaces", () => {
+ 
+     await act(async () => {
+       for (const button of result.container.querySelectorAll("button")) {
+-        if (["Advanced", "Advanced Run Policy"].includes(button.textContent?.trim() ?? "")) button.click();
++        if (["Avancé", "Politique d'exécution avancée"].includes(button.textContent?.trim() ?? "")) button.click();
+       }
+     });
+     await flushReact();
+     const labels = fieldLabels(result.container);
+-    expect(labels).toContain("Working directory (deprecated)");
+-    expect(labels).toContain("Command");
++    expect(labels).toContain("Répertoire de travail (obsolète)");
++    expect(labels).toContain("Commande");
+     expect(labels).toContain("Execution engine");
+     expect(labels).toContain("ACP server command");
+     expect(labels).toContain("ACP state directory");
+@@ -3770,13 +3770,13 @@ describe("AgentConfigForm managed-sandbox-only host surfaces", () => {
+ 
+     await act(async () => {
+       for (const button of result.container.querySelectorAll("button")) {
+-        if (["Advanced", "Advanced Run Policy"].includes(button.textContent?.trim() ?? "")) button.click();
++        if (["Avancé", "Politique d'exécution avancée"].includes(button.textContent?.trim() ?? "")) button.click();
+       }
+     });
+     await flushReact();
+     const labels = fieldLabels(result.container);
+-    expect(labels).not.toContain("Working directory (deprecated)");
+-    expect(labels).not.toContain("Command");
++    expect(labels).not.toContain("Répertoire de travail (obsolète)");
++    expect(labels).not.toContain("Commande");
+     expect(labels).not.toContain("Execution engine");
+     expect(labels).not.toContain("ACP server command");
+     expect(labels).not.toContain("ACP state directory");
+@@ -3796,7 +3796,7 @@ describe("AgentConfigForm managed-sandbox-only host surfaces", () => {
+ 
+     await act(async () => {
+       for (const button of result.container.querySelectorAll("button")) {
+-        if (["Advanced", "Advanced Run Policy"].includes(button.textContent?.trim() ?? "")) button.click();
++        if (["Avancé", "Politique d'exécution avancée"].includes(button.textContent?.trim() ?? "")) button.click();
+       }
+     });
+     await flushReact();
+@@ -3817,13 +3817,13 @@ describe("AgentConfigForm managed-sandbox-only host surfaces", () => {
+ 
+     await act(async () => {
+       for (const button of result.container.querySelectorAll("button")) {
+-        if (["Advanced", "Advanced Run Policy"].includes(button.textContent?.trim() ?? "")) button.click();
++        if (["Avancé", "Politique d'exécution avancée"].includes(button.textContent?.trim() ?? "")) button.click();
+       }
+     });
+     await flushReact();
+     const labels = fieldLabels(result.container);
+-    expect(labels).not.toContain("Working directory (deprecated)");
+-    expect(labels).not.toContain("Command");
++    expect(labels).not.toContain("Répertoire de travail (obsolète)");
++    expect(labels).not.toContain("Commande");
+     expect(labels).not.toContain("Execution engine");
+     expect(choosePathButtons(result.container)).toHaveLength(0);
+     expect(result.container.textContent).not.toContain("/srv/agents/cody");
+@@ -3839,13 +3839,13 @@ describe("AgentConfigForm managed-sandbox-only host surfaces", () => {
+ 
+     await act(async () => {
+       for (const button of result.container.querySelectorAll("button")) {
+-        if (["Advanced", "Advanced Run Policy"].includes(button.textContent?.trim() ?? "")) button.click();
++        if (["Avancé", "Politique d'exécution avancée"].includes(button.textContent?.trim() ?? "")) button.click();
+       }
+     });
+     await flushReact();
+     const labels = fieldLabels(result.container);
+-    expect(labels).not.toContain("Working directory (deprecated)");
+-    expect(labels).not.toContain("Command");
++    expect(labels).not.toContain("Répertoire de travail (obsolète)");
++    expect(labels).not.toContain("Commande");
+     expect(choosePathButtons(result.container)).toHaveLength(0);
+ 
+     const adapterFields = result.container.querySelector('[data-testid="adapter-config-fields"]');
+diff --git a/ui/src/components/AgentConfigForm.tsx b/ui/src/components/AgentConfigForm.tsx
+index d09117af6..6508be83b 100644
+--- a/ui/src/components/AgentConfigForm.tsx
++++ b/ui/src/components/AgentConfigForm.tsx
+@@ -450,7 +450,7 @@ export function AgentConfigForm(props: AgentConfigFormProps) {
+   );
+   const createSecret = useMutation({
+     mutationFn: (input: { name: string; value: string }) => {
+-      if (!selectedCompanyId) throw new Error("Select an organization to create secrets");
++      if (!selectedCompanyId) throw new Error("Sélectionnez une organisation pour créer des secrets");
+       return secretsApi.create(selectedCompanyId, input);
+     },
+     onSuccess: () => {
+@@ -461,7 +461,7 @@ export function AgentConfigForm(props: AgentConfigFormProps) {
+ 
+   const uploadMarkdownImage = useMutation({
+     mutationFn: async ({ file, namespace }: { file: File; namespace: string }) => {
+-      if (!selectedCompanyId) throw new Error("Select an organization to upload images");
++      if (!selectedCompanyId) throw new Error("Sélectionnez une organisation pour téléverser des images");
+       return assetsApi.uploadImage(selectedCompanyId, file, namespace);
+     },
+   });
+@@ -922,7 +922,7 @@ export function AgentConfigForm(props: AgentConfigFormProps) {
+       : ["agents", "none", "detect-model", adapterType],
+     queryFn: () => {
+       if (!selectedCompanyId) {
+-        throw new Error("Select an organization to detect the model");
++        throw new Error("Sélectionnez une organisation pour détecter le modèle");
+       }
+       return agentsApi.detectModel(selectedCompanyId, adapterType);
+     },
+@@ -988,7 +988,7 @@ export function AgentConfigForm(props: AgentConfigFormProps) {
+   const testEnvironment = useMutation({
+     mutationFn: async () => {
+       if (!selectedCompanyId) {
+-        throw new Error("Select an organization to test adapter environment");
++        throw new Error("Sélectionnez une organisation pour tester l'environnement de l'adaptateur");
+       }
+       const flushedEnv = flushEnvironmentDraft();
+       const adapterConfigPatch = flushedEnv ? { env: flushedEnv } : undefined;
+@@ -1038,7 +1038,7 @@ export function AgentConfigForm(props: AgentConfigFormProps) {
+           managedSandboxOnly = resolvedExperimental?.enableManagedSandboxOnly === true;
+         } catch {
+           throw new Error(
+-            "Could not load environment settings to determine which environment to test in. Retry the test.",
++            "Impossible de charger les réglages d'environnement pour déterminer l'environnement à tester. Relancez le test.",
+           );
+         }
+       }
+@@ -1078,7 +1078,7 @@ export function AgentConfigForm(props: AgentConfigFormProps) {
+   });
+   const [testActionPending, setTestActionPending] = useState(false);
+   const [testActionError, setTestActionError] = useState<string | null>(null);
+-  const testActionLabel = "Test";
++  const testActionLabel = "Tester";
+   const isSavePending = !isCreate && Boolean(props.isSaving);
+   const testEnvironmentDisabled = testActionPending || isSavePending || !selectedCompanyId;
+ 
+@@ -1158,7 +1158,7 @@ export function AgentConfigForm(props: AgentConfigFormProps) {
+     (!loginNeedsPty || providerSupportsLoginPty);
+   const runEnvironmentTest = useCallback(async () => {
+     if (!selectedCompanyId) {
+-      throw new Error("Select an organization to test adapter environment");
++      throw new Error("Sélectionnez une organisation pour tester l'environnement de l'adaptateur");
+     }
+     setTestActionPending(true);
+     setTestActionError(null);
+@@ -1166,7 +1166,7 @@ export function AgentConfigForm(props: AgentConfigFormProps) {
+     try {
+       return await testEnvironment.mutateAsync();
+     } catch (error) {
+-      setTestActionError(error instanceof Error ? error.message : "Environment test failed");
++      setTestActionError(error instanceof Error ? error.message : "Échec du test de l'environnement");
+       throw error;
+     } finally {
+       setTestActionPending(false);
+@@ -1219,7 +1219,7 @@ export function AgentConfigForm(props: AgentConfigFormProps) {
+         ?? (testEnvironment.error instanceof Error
+           ? testEnvironment.error.message
+           : testEnvironment.error
+-            ? "Environment test failed"
++            ? "Échec du test de l'environnement"
+             : null),
+       result: testEnvironment.data ?? null,
+       // `showAdapterLogin` already requires a selected company and a non-empty
+@@ -1257,7 +1257,7 @@ export function AgentConfigForm(props: AgentConfigFormProps) {
+       const refreshed = await agentsApi.adapterModels(selectedCompanyId, adapterType, { refresh: true, environmentId: currentDefaultEnvironmentId || null, provider: modelProvider });
+       queryClient.setQueryData(modelQueryKey, refreshed);
+     } catch (error) {
+-      setRefreshModelsError(error instanceof Error ? error.message : "Failed to refresh adapter models.");
++      setRefreshModelsError(error instanceof Error ? error.message : "Impossible d'actualiser les modèles de l'adaptateur.");
+     } finally {
+       setRefreshingModels(false);
+     }
+@@ -1384,9 +1384,9 @@ export function AgentConfigForm(props: AgentConfigFormProps) {
+         {isDirty && !props.hideInlineSave && (
+           <div className="sticky top-0 z-10 flex items-center justify-end border-b border-primary/20 bg-background/90 px-4 py-2 backdrop-blur-sm">
+             <div className="flex items-center gap-3">
+-              <span className="text-xs text-muted-foreground">Unsaved changes</span>
++              <span className="text-xs text-muted-foreground">Modifications non enregistrées</span>
+               <Button size="sm" onClick={handleSave} disabled={props.isSaving}>
+-                {props.isSaving ? "Saving..." : "Save"}
++                {props.isSaving ? "Enregistrement…" : "Enregistrer"}
+               </Button>
+             </div>
+           </div>
+@@ -1395,8 +1395,8 @@ export function AgentConfigForm(props: AgentConfigFormProps) {
+         {props.environmentVariablesPlacement === "secrets" && (
+           <div data-config-section="environment-variables" className={cn(!cards && "border-b border-border")}>
+             {cards
+-              ? <h3 className="mb-3 text-sm font-medium">Environment variables</h3>
+-              : <div className="px-4 py-2 text-xs font-medium text-muted-foreground">Environment variables</div>
++              ? <h3 className="mb-3 text-sm font-medium">Variables d'environnement</h3>
++              : <div className="px-4 py-2 text-xs font-medium text-muted-foreground">Variables d'environnement</div>
+             }
+             <div className={cn(cards ? "rounded-lg border border-border p-4" : "px-4 pb-3")}>
+               {environmentVariablesEditor}
+@@ -1406,8 +1406,8 @@ export function AgentConfigForm(props: AgentConfigFormProps) {
+ 
+         <div data-config-section="secrets" className={cn(!cards && "border-b border-border")}>
+           {cards
+-            ? <h3 className="mb-3 text-sm font-medium">Secret access</h3>
+-            : <div className="px-4 py-2 text-xs font-medium text-muted-foreground">Secret access</div>
++            ? <h3 className="mb-3 text-sm font-medium">Accès aux secrets</h3>
++            : <div className="px-4 py-2 text-xs font-medium text-muted-foreground">Accès aux secrets</div>
+           }
+           <div className={cn(cards ? "space-y-3 rounded-lg border border-border p-4" : "space-y-3 px-4 pb-3")}>
+             <p className="text-xs text-muted-foreground">{help.secretAccess}</p>
+@@ -1433,13 +1433,13 @@ export function AgentConfigForm(props: AgentConfigFormProps) {
+       {isDirty && !props.hideInlineSave && (
+         <div className="sticky top-0 z-10 flex items-center justify-end px-4 py-2 bg-background/90 backdrop-blur-sm border-b border-primary/20">
+           <div className="flex items-center gap-3">
+-            <span className="text-xs text-muted-foreground">Unsaved changes</span>
++            <span className="text-xs text-muted-foreground">Modifications non enregistrées</span>
+             <Button
+               size="sm"
+               onClick={handleSave}
+               disabled={!isCreate && props.isSaving}
+             >
+-              {!isCreate && props.isSaving ? "Saving..." : "Save"}
++              {!isCreate && props.isSaving ? "Enregistrement…" : "Enregistrer"}
+             </Button>
+           </div>
+         </div>
+@@ -1449,40 +1449,40 @@ export function AgentConfigForm(props: AgentConfigFormProps) {
+       {!isCreate && (
+         <div data-config-section="identity" className={cn(!cards && "border-b border-border")}>
+           {cards
+-            ? <h3 className="text-sm font-medium mb-3">{props.sectionTitles?.["identity"] ?? "Identity"}</h3>
+-            : <div className="px-4 py-2 text-xs font-medium text-muted-foreground">Identity</div>
++            ? <h3 className="text-sm font-medium mb-3">{props.sectionTitles?.["identity"] ?? "Identité"}</h3>
++            : <div className="px-4 py-2 text-xs font-medium text-muted-foreground">Identité</div>
+           }
+           <div className={cn(cards ? "border border-border rounded-lg p-4 space-y-3" : "px-4 pb-3 space-y-3")}>
+-            <Field label="Name" hint={help.name}>
++            <Field label="Nom" hint={help.name}>
+               <DraftInput
+                 value={eff("identity", "name", props.agent.name)}
+                 onCommit={(v) => mark("identity", "name", v)}
+                 immediate
+                 className={inputClass}
+-                placeholder="Agent name"
++                placeholder="Nom de l'agent"
+               />
+             </Field>
+-            <Field label="Title" hint={help.title}>
++            <Field label="Intitulé" hint={help.title}>
+               <DraftInput
+                 value={eff("identity", "title", props.agent.title ?? "")}
+                 onCommit={(v) => mark("identity", "title", v || null)}
+                 immediate
+                 className={inputClass}
+-                placeholder="e.g. VP of Engineering"
++                placeholder="p. ex. directeur technique"
+               />
+             </Field>
+-            <Field label="Reports to" hint={help.reportsTo}>
++            <Field label="Rend compte à" hint={help.reportsTo}>
+               <ReportsToPicker
+                 agents={companyAgents}
+                 value={eff("identity", "reportsTo", props.agent.reportsTo ?? null)}
+                 onChange={(id) => mark("identity", "reportsTo", id)}
+                 excludeAgentIds={[props.agent.id]}
+-                chooseLabel="Choose manager…"
++                chooseLabel="Choisir un responsable…"
+               />
+             </Field>
+             {isLocal && !props.hidePromptTemplate && (
+               <>
+-                <Field label="Prompt Template" hint={help.promptTemplate}>
++                <Field label="Modèle de prompt" hint={help.promptTemplate}>
+                   <MarkdownEditor
+                     value={eff(
+                       "adapterConfig",
+@@ -1490,7 +1490,7 @@ export function AgentConfigForm(props: AgentConfigFormProps) {
+                       String(config.promptTemplate ?? ""),
+                     )}
+                     onChange={(v) => mark("adapterConfig", "promptTemplate", v ?? "")}
+-                    placeholder="You are agent {{ agent.name }}. Your role is {{ agent.role }}..."
++                    placeholder="Vous êtes l'agent {{ agent.name }}. Votre rôle est {{ agent.role }}…"
+                     contentClassName="min-h-(--sz-88px) text-sm font-mono"
+                     imageUploadHandler={async (file) => {
+                       const namespace = `agents/${props.agent.id}/prompt-template`;
+@@ -1500,7 +1500,7 @@ export function AgentConfigForm(props: AgentConfigFormProps) {
+                   />
+                 </Field>
+                 <div className="rounded-md border border-amber-500/25 bg-amber-500/10 px-3 py-2 text-xs text-amber-900 dark:text-amber-100">
+-                  Prompt template is replayed on every heartbeat. Keep it compact and dynamic to avoid recurring token cost and cache churn.
++                  Le modèle de prompt est rejoué à chaque heartbeat. Gardez-le court et dynamique pour éviter un coût récurrent en jetons et un renouvellement inutile du cache.
+                 </div>
+               </>
+             )}
+@@ -1520,18 +1520,18 @@ export function AgentConfigForm(props: AgentConfigFormProps) {
+           }
+           <div className={cn(cards ? "border border-border rounded-lg p-4 space-y-3" : "px-4 pb-3 space-y-3")}>
+             <Field
+-              label="Default environment"
+-              hint="This instance runs all agents in the Kubernetes sandbox. Local execution is disabled."
++              label="Environnement par défaut"
++              hint="Cette instance exécute tous les agents dans le bac à sable Kubernetes. L'exécution locale est désactivée."
+             >
+               {kubernetesEnvironment ? (
+                 <div className={cn(inputClass, "flex items-center text-muted-foreground")}>
+-                  {kubernetesEnvironment.name} · Kubernetes sandbox
++                  {kubernetesEnvironment.name} · bac à sable Kubernetes
+                 </div>
+               ) : (
+                 <div className="rounded-md border border-amber-500/25 bg-amber-500/10 px-3 py-2 text-xs text-amber-800 dark:text-amber-200">
+-                  This instance requires the Kubernetes sandbox, but no managed Kubernetes
+-                  environment is available for this organization yet. Configure one before creating
+-                  agents; execution will not fall back to local.
++                  Cette instance exige le bac à sable Kubernetes, mais aucun environnement
++                  Kubernetes géré n'est encore disponible pour cette organisation. Configurez-en un avant de créer
++                  des agents : l'exécution ne basculera pas en local.
+                 </div>
+               )}
+             </Field>
+@@ -1544,7 +1544,7 @@ export function AgentConfigForm(props: AgentConfigFormProps) {
+             : <div className="px-4 py-2 text-xs font-medium text-muted-foreground">Environment</div>
+           }
+           <div className={cn(cards ? "border border-border rounded-lg p-4 space-y-3" : "px-4 pb-3 space-y-3")}>
+-            <Field label="Environment override">
++            <Field label="Environnement spécifique">
+               <div className="space-y-2">
+                 <select
+                   className={inputClass}
+@@ -1558,7 +1558,7 @@ export function AgentConfigForm(props: AgentConfigFormProps) {
+                     mark("identity", "defaultEnvironmentId", nextValue || null);
+                   }}
+                 >
+-                  <option value="">Default: {inheritedEnvironmentLabel}</option>
++                  <option value="">Par défaut : {inheritedEnvironmentLabel}</option>
+                   {environmentOptions.map((environment) => (
+                     <option key={environment.id} value={environment.id}>
+                       {environmentDisplayLabel(environment)}
+@@ -1575,8 +1575,8 @@ export function AgentConfigForm(props: AgentConfigFormProps) {
+       <div data-config-section="adapter" className={cn(!cards && (isCreate ? "border-t border-border" : "border-b border-border"))}>
+         <div className={cn(cards ? "flex items-center justify-between mb-3" : "px-4 py-2 flex items-center justify-between gap-2")}>
+           {cards
+-            ? <h3 className="text-sm font-medium">{props.sectionTitles?.["adapter"] ?? "Adapter"}</h3>
+-            : <span className="text-xs font-medium text-muted-foreground">Adapter</span>
++            ? <h3 className="text-sm font-medium">{props.sectionTitles?.["adapter"] ?? "Adaptateur"}</h3>
++            : <span className="text-xs font-medium text-muted-foreground">Adaptateur</span>
+           }
+           {showInlineAdapterTestEnvironmentButton && (
+             <Button
+@@ -1587,13 +1587,13 @@ export function AgentConfigForm(props: AgentConfigFormProps) {
+               onClick={triggerTestEnvironment}
+               disabled={testEnvironmentDisabled}
+             >
+-              {testActionPending ? `${testActionLabel}...` : testActionLabel}
++              {testActionPending ? `${testActionLabel}…` : testActionLabel}
+             </Button>
+           )}
+         </div>
+         <div className={cn(cards ? "border border-border rounded-lg p-4 space-y-3" : "px-4 pb-3 space-y-3")}>
+           {showAdapterTypeField && (
+-            <Field label="Adapter type" hint={help.adapterType}>
++            <Field label="Type d'adaptateur" hint={help.adapterType}>
+               <AdapterTypeDropdown
+                 value={adapterType}
+                 disabledTypes={adapterPickerDisabledTypes}
+@@ -1668,7 +1668,7 @@ export function AgentConfigForm(props: AgentConfigFormProps) {
+               {testActionError
+                 ?? (testEnvironment.error instanceof Error
+                   ? testEnvironment.error.message
+-                  : "Environment test failed")}
++                  : "Échec du test de l'environnement")}
+             </div>
+           )}
+ 
+@@ -1692,7 +1692,7 @@ export function AgentConfigForm(props: AgentConfigFormProps) {
+ 
+           {/* Working directory */}
+           {showLegacyWorkingDirectoryField && (
+-            <Field label="Working directory (deprecated)" hint={help.cwd}>
++            <Field label="Répertoire de travail (obsolète)" hint={help.cwd}>
+               <div className="flex items-center gap-2 rounded-md border border-border px-2.5 py-1.5">
+                 <FolderOpen className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                 <DraftInput
+@@ -1740,7 +1740,7 @@ export function AgentConfigForm(props: AgentConfigFormProps) {
+                 }}
+                 open={modelOpen}
+                 onOpenChange={setModelOpen}
+-                defaultLabel={adapterType === "claude_local" ? `Default (${DEFAULT_CLAUDE_LOCAL_MODEL})` : undefined}
++                defaultLabel={adapterType === "claude_local" ? `Par défaut (${DEFAULT_CLAUDE_LOCAL_MODEL})` : undefined}
+                 allowDefault={adapterType !== "opencode_local" && adapterType !== "pi_local" && adapterType !== "paperclip_runner"}
+                 required={adapterType === "opencode_local" || adapterType === "pi_local"}
+                 groupByProvider={adapterType === "opencode_local" || adapterType === "pi_local"}
+@@ -1760,22 +1760,22 @@ export function AgentConfigForm(props: AgentConfigFormProps) {
+                     : undefined
+                 }
+                 refreshingModels={refreshingModels}
+-                detectModelLabel="Detect model"
+-                emptyDetectHint="No model detected. Select or enter one manually."
++                detectModelLabel="Détecter le modèle"
++                emptyDetectHint="Aucun modèle détecté. Choisissez-en un ou saisissez-le à la main."
+               />
+               {(refreshModelsError || fetchedModelsError) && (
+                 <p className="text-xs text-destructive">
+                   {refreshModelsError
+                     ?? (fetchedModelsError instanceof Error
+                       ? fetchedModelsError.message
+-                      : "Failed to load adapter models.")}
++                      : "Impossible de charger les modèles de l'adaptateur.")}
+                 </p>
+               )}
+               {adapterType === "opencode_local"
+                 && currentDefaultEnvironment
+                 && currentDefaultEnvironment.driver !== "local" && (
+                 <p className="text-xs text-muted-foreground">
+-                  Live OpenCode model discovery only runs for Local environments. Using the curated list and manual entry for {currentDefaultEnvironment.name}.
++                  La détection en direct des modèles OpenCode ne fonctionne que pour les environnements locaux. La liste sélectionnée et la saisie manuelle sont utilisées pour {currentDefaultEnvironment.name}.
+                 </p>
+               )}
+ 
+@@ -1796,7 +1796,7 @@ export function AgentConfigForm(props: AgentConfigFormProps) {
+                     codexSearchEnabled &&
+                     currentThinkingEffort === "minimal" && (
+                       <p className="text-xs text-amber-400">
+-                        Codex may reject `minimal` thinking when search is enabled.
++                        Codex peut refuser le niveau de réflexion `minimal` quand la recherche est activée.
+                       </p>
+                     )}
+                 </>
+@@ -1816,7 +1816,7 @@ export function AgentConfigForm(props: AgentConfigFormProps) {
+           <div className={cn(cards ? "border border-border rounded-lg p-4 space-y-3" : "px-4 pb-3 space-y-3")}>
+               {!isCreate && typeof config.bootstrapPromptTemplate === "string" && config.bootstrapPromptTemplate && (
+                 <>
+-                  <Field label="Bootstrap prompt (legacy)" hint={help.bootstrapPrompt}>
++                  <Field label="Prompt d'amorçage (obsolète)" hint={help.bootstrapPrompt}>
+                     <MarkdownEditor
+                       value={eff(
+                         "adapterConfig",
+@@ -1826,7 +1826,7 @@ export function AgentConfigForm(props: AgentConfigFormProps) {
+                       onChange={(v) =>
+                         mark("adapterConfig", "bootstrapPromptTemplate", v || undefined)
+                       }
+-                      placeholder="Optional initial setup prompt for the first run"
++                      placeholder="Prompt de mise en place initial, facultatif, pour la première exécution"
+                       contentClassName="min-h-(--sz-44px) text-sm font-mono"
+                       imageUploadHandler={async (file) => {
+                         const namespace = `agents/${props.agent.id}/bootstrap-prompt`;
+@@ -1836,14 +1836,14 @@ export function AgentConfigForm(props: AgentConfigFormProps) {
+                     />
+                   </Field>
+                   <div className="rounded-md border border-amber-500/25 bg-amber-500/10 px-3 py-2 text-xs text-amber-800 dark:text-amber-200">
+-                    Bootstrap prompt is legacy and will be removed in a future release. Consider moving this content into the agent&apos;s prompt template or instructions file instead.
++                    Le prompt d'amorçage est obsolète et sera retiré dans une prochaine version. Pensez à déplacer ce contenu dans le modèle de prompt ou le fichier d'instructions de l'agent.
+                   </div>
+                 </>
+               )}
+               {renderAdapterFields("configuration")}
+               {(isLocal || adapterType === "process" || configSchema?.fields.some((field) => schemaFieldSection(field.key) === "advanced")) && (
+               <CollapsibleSection
+-                title="Advanced"
++                title="Avancé"
+                 open={configurationAdvancedOpen}
+                 onToggle={() => setConfigurationAdvancedOpen(!configurationAdvancedOpen)}
+               >
+@@ -1860,7 +1860,7 @@ export function AgentConfigForm(props: AgentConfigFormProps) {
+                 flashes on a managed instance.
+               */}
+               {!hideHostPaths && (
+-                <Field label="Command" hint={help.localCommand}>
++                <Field label="Commande" hint={help.localCommand}>
+                   <DraftInput
+                     value={
+                       isCreate
+@@ -1895,7 +1895,7 @@ export function AgentConfigForm(props: AgentConfigFormProps) {
+                 </Field>
+               )}
+ 
+-              <Field label="Extra args (comma-separated)" hint={help.extraArgs}>
++              <Field label="Arguments supplémentaires (séparés par des virgules)" hint={help.extraArgs}>
+                 <DraftInput
+                   value={
+                     isCreate
+@@ -1908,7 +1908,7 @@ export function AgentConfigForm(props: AgentConfigFormProps) {
+                       : mark("adapterConfig", "extraArgs", v?.trim() ? parseCommaArgs(v) : null)
+                   }
+                   className={inputClass}
+-                  placeholder="e.g. --verbose, --foo=bar"
++                  placeholder="p. ex. --verbose, --foo=bar"
+                 />
+               </Field>
+ 
+@@ -1925,8 +1925,8 @@ export function AgentConfigForm(props: AgentConfigFormProps) {
+       {props.environmentVariablesPlacement !== "secrets" && (isLocal || configSchema?.fields.some((field) => schemaFieldSection(field.key) === "environment")) && (
+         <div data-config-section="environment-variables" className={cn(!cards && "border-b border-border")}>
+           {cards
+-            ? <h3 className="text-sm font-medium mb-3">Environment variables</h3>
+-            : <div className="px-4 py-2 text-xs font-medium text-muted-foreground">Environment variables</div>
++            ? <h3 className="text-sm font-medium mb-3">Variables d'environnement</h3>
++            : <div className="px-4 py-2 text-xs font-medium text-muted-foreground">Variables d'environnement</div>
+           }
+           <div className={cn(cards ? "border border-border rounded-lg p-4 space-y-3" : "px-4 pb-3 space-y-3")}>
+             {isLocal ? environmentVariablesEditor : renderAdapterFields("environment")}
+@@ -1938,23 +1938,23 @@ export function AgentConfigForm(props: AgentConfigFormProps) {
+       {isCreate && showCreateRunPolicySection ? (
+         <div data-config-section="run-policy" className={cn(!cards && "border-b border-border")}>
+           {cards
+-            ? <h3 className="text-sm font-medium flex items-center gap-2 mb-3"><Heart className="h-3 w-3" /> Run Policy</h3>
+-            : <div className="px-4 py-2 text-xs font-medium text-muted-foreground flex items-center gap-2"><Heart className="h-3 w-3" /> Run Policy</div>
++            ? <h3 className="text-sm font-medium flex items-center gap-2 mb-3"><Heart className="h-3 w-3" /> Politique d'exécution</h3>
++            : <div className="px-4 py-2 text-xs font-medium text-muted-foreground flex items-center gap-2"><Heart className="h-3 w-3" /> Politique d'exécution</div>
+           }
+           <div className={cn(cards ? "border border-border rounded-lg p-4 space-y-3" : "px-4 pb-3 space-y-3")}>
+             <ToggleWithNumber
+-              label="Heartbeat on interval"
++              label="Heartbeat à intervalle régulier"
+               hint={help.heartbeatInterval}
+               checked={val!.heartbeatEnabled}
+               onCheckedChange={(v) => set!({ heartbeatEnabled: v })}
+               number={val!.intervalSec}
+               onNumberChange={(v) => set!({ intervalSec: v })}
+-              numberLabel="sec"
+-              numberPrefix="Run heartbeat every"
++              numberLabel="s"
++              numberPrefix="Lancer un heartbeat toutes les"
+               numberHint={help.intervalSec}
+               showNumber={val!.heartbeatEnabled}
+             />
+-            <CollapsibleSection title="Advanced Run Policy" open={runPolicyAdvancedOpen} onToggle={() => setRunPolicyAdvancedOpen(!runPolicyAdvancedOpen)}>
++            <CollapsibleSection title="Politique d'exécution avancée" open={runPolicyAdvancedOpen} onToggle={() => setRunPolicyAdvancedOpen(!runPolicyAdvancedOpen)}>
+               <div className="space-y-3">{renderAdapterFields("runPolicy")}</div>
+             </CollapsibleSection>
+           </div>
+@@ -1962,26 +1962,26 @@ export function AgentConfigForm(props: AgentConfigFormProps) {
+       ) : !isCreate ? (
+         <div data-config-section="run-policy" className={cn(!cards && "border-b border-border")}>
+           {cards
+-            ? <h3 className="text-sm font-medium flex items-center gap-2 mb-3"><Heart className="h-3 w-3" /> Run Policy</h3>
+-            : <div className="px-4 py-2 text-xs font-medium text-muted-foreground flex items-center gap-2"><Heart className="h-3 w-3" /> Run Policy</div>
++            ? <h3 className="text-sm font-medium flex items-center gap-2 mb-3"><Heart className="h-3 w-3" /> Politique d'exécution</h3>
++            : <div className="px-4 py-2 text-xs font-medium text-muted-foreground flex items-center gap-2"><Heart className="h-3 w-3" /> Politique d'exécution</div>
+           }
+           <div className={cn(cards ? "border border-border rounded-lg overflow-hidden" : "")}>
+             <div className={cn(cards ? "p-4 space-y-3" : "px-4 pb-3 space-y-3")}>
+               <ToggleWithNumber
+-                label="Heartbeat on interval"
++                label="Heartbeat à intervalle régulier"
+                 hint={help.heartbeatInterval}
+                 checked={eff("heartbeat", "enabled", heartbeat.enabled === true)}
+                 onCheckedChange={(v) => mark("heartbeat", "enabled", v)}
+                 number={eff("heartbeat", "intervalSec", Number(heartbeat.intervalSec ?? 300))}
+                 onNumberChange={(v) => mark("heartbeat", "intervalSec", v)}
+-                numberLabel="sec"
+-                numberPrefix="Run heartbeat every"
++                numberLabel="s"
++                numberPrefix="Lancer un heartbeat toutes les"
+                 numberHint={help.intervalSec}
+                 showNumber={eff("heartbeat", "enabled", heartbeat.enabled === true)}
+               />
+             </div>
+             <CollapsibleSection
+-              title="Advanced Run Policy"
++              title="Politique d'exécution avancée"
+               bordered={cards}
+               open={runPolicyAdvancedOpen}
+               onToggle={() => setRunPolicyAdvancedOpen(!runPolicyAdvancedOpen)}
+@@ -1993,7 +1993,7 @@ export function AgentConfigForm(props: AgentConfigFormProps) {
+               {!isCreate && (
+                 <>
+                   {!configSchema?.fields.some((field) => field.key === "timeoutSec") && (
+-                  <Field label="Timeout (sec)" hint={help.timeoutSec}>
++                  <Field label="Délai maximal (s)" hint={help.timeoutSec}>
+                     <DraftNumberInput
+                       value={eff(
+                         "adapterConfig",
+@@ -2007,7 +2007,7 @@ export function AgentConfigForm(props: AgentConfigFormProps) {
+                   </Field>
+                   )}
+                   {!configSchema?.fields.some((field) => field.key === "graceSec") && (
+-                  <Field label="Interrupt grace period (sec)" hint={help.graceSec}>
++                  <Field label="Délai de grâce à l'interruption (s)" hint={help.graceSec}>
+                     <DraftNumberInput
+                       value={eff(
+                         "adapterConfig",
+@@ -2024,7 +2024,7 @@ export function AgentConfigForm(props: AgentConfigFormProps) {
+               )}
+               </>)}
+               <ToggleField
+-                label="Wake on demand"
++                label="Réveil à la demande"
+                 hint={help.wakeOnDemand}
+                 checked={eff(
+                   "heartbeat",
+@@ -2033,7 +2033,7 @@ export function AgentConfigForm(props: AgentConfigFormProps) {
+                 )}
+                 onChange={(v) => mark("heartbeat", "wakeOnDemand", v)}
+               />
+-              <Field label="Cooldown (sec)" hint={help.cooldownSec}>
++              <Field label="Temps de repos (s)" hint={help.cooldownSec}>
+                 <DraftNumberInput
+                   value={eff(
+                     "heartbeat",
+@@ -2045,7 +2045,7 @@ export function AgentConfigForm(props: AgentConfigFormProps) {
+                   className={inputClass}
+                 />
+               </Field>
+-              <Field label="Max concurrent runs" hint={help.maxConcurrentRuns}>
++              <Field label="Exécutions simultanées maximales" hint={help.maxConcurrentRuns}>
+                 <DraftNumberInput
+                   value={eff(
+                     "heartbeat",
+@@ -2059,14 +2059,14 @@ export function AgentConfigForm(props: AgentConfigFormProps) {
+               </Field>
+               <div className="rounded-md border border-border/70 px-3 py-2">
+                 <ToggleField
+-                  label="Continue after max-turn stop"
++                  label="Poursuivre après un arrêt par limite de tours"
+                   hint={help.maxTurnContinuationEnabled}
+                   checked={maxTurnContinuationEnabled}
+                   onChange={(v) => updateMaxTurnContinuation({ enabled: v })}
+                 />
+                 {maxTurnContinuationEnabled ? (
+                   <div className="mt-3 grid gap-3 sm:grid-cols-2">
+-                    <Field label="Continuation attempts" hint={help.maxTurnContinuationMaxAttempts}>
++                    <Field label="Tentatives de poursuite" hint={help.maxTurnContinuationMaxAttempts}>
+                       <DraftNumberInput
+                         value={maxTurnContinuationMaxAttempts}
+                         onCommit={(v) =>
+@@ -2077,7 +2077,7 @@ export function AgentConfigForm(props: AgentConfigFormProps) {
+                         className={inputClass}
+                       />
+                     </Field>
+-                    <Field label="Continuation delay (sec)" hint={help.maxTurnContinuationDelaySec}>
++                    <Field label="Délai avant poursuite (s)" hint={help.maxTurnContinuationDelaySec}>
+                       <DraftNumberInput
+                         value={maxTurnContinuationDelaySec}
+                         onCommit={(v) =>
+@@ -2102,11 +2102,11 @@ export function AgentConfigForm(props: AgentConfigFormProps) {
+         <div className={cn(!cards && "border-b border-border")}>
+           {cards ? (
+             <h3 className="mb-3 flex items-center gap-2 text-sm font-medium">
+-              <Bug className="h-3 w-3" /> Debugging
++              <Bug className="h-3 w-3" /> Débogage
+             </h3>
+           ) : (
+             <div className="flex items-center gap-2 px-4 py-2 text-xs font-medium text-muted-foreground">
+-              <Bug className="h-3 w-3" /> Debugging
++              <Bug className="h-3 w-3" /> Débogage
+             </div>
+           )}
+           <div
+@@ -2118,8 +2118,8 @@ export function AgentConfigForm(props: AgentConfigFormProps) {
+             )}
+           >
+             <ToggleField
+-              label="Capture raw provider traces"
+-              hint="Stores exact provider traffic for every future run until disabled. Traces may contain sensitive prompts and tool arguments, are administrator-only, and expire after 24 hours."
++              label="Capturer les traces brutes du fournisseur"
++              hint="Conserve les échanges exacts avec le fournisseur pour chaque exécution à venir, jusqu'à désactivation. Les traces peuvent contenir des prompts et des arguments d'outils sensibles, sont réservées aux administrateurs et expirent au bout de 24 heures."
+               checked={eff<unknown>("debug", "providerTrace", debug.providerTrace) === "raw"}
+               onChange={(enabled) =>
+                 mark("debug", "providerTrace", enabled ? "raw" : undefined)
+@@ -2129,7 +2129,7 @@ export function AgentConfigForm(props: AgentConfigFormProps) {
+               <div className="mt-3 flex items-start gap-2 rounded-md border border-border bg-background/60 px-3 py-2 text-xs text-foreground">
+                 <Bug className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                 <span>
+-                  Raw tracing is on for future runs. Paperclip keeps at most 64 MiB per run and automatically deletes it after 24 hours.
++                  La trace brute est activée pour les prochaines exécutions. Paperclip conserve au plus 64 Mio par exécution et la supprime automatiquement au bout de 24 heures.
+                 </span>
+               </div>
+             ) : null}
+@@ -2211,16 +2211,16 @@ function AdapterLoginTerminalState({
+     return (
+       <div className="flex items-center gap-2 text-(length:--text-micro) text-foreground">
+         <Check className="size-3 shrink-0" />
+-        <span>Authenticated. The environment has credentials now.</span>
++        <span>Connecté. L'environnement dispose maintenant d'identifiants.</span>
+       </div>
+     );
+   }
+   const label =
+     status === "timed_out"
+-      ? "Login timed out"
++      ? "Délai de connexion dépassé"
+       : status === "cancelled"
+-        ? "Login cancelled"
+-        : "Login failed";
++        ? "Connexion annulée"
++        : "Échec de la connexion";
+   return (
+     <div className="flex items-start gap-2 text-(length:--text-micro) text-destructive">
+       <TriangleAlert className="size-3 shrink-0" />
+@@ -2330,7 +2330,7 @@ const ADAPTER_LOGIN_PROVIDER: Record<string, string> = {
+ 
+ function adapterLoginTitle(adapterType: string): string {
+   const provider = ADAPTER_LOGIN_PROVIDER[adapterType];
+-  return provider ? `Sign in to ${provider}` : "Sign in to the environment";
++  return provider ? `Se connecter à ${provider}` : "Se connecter à l'environnement";
+ }
+ 
+ export function AdapterLoginPanel(props: AdapterLoginPanelProps) {
+@@ -2344,7 +2344,7 @@ export function AdapterLoginPanel(props: AdapterLoginPanelProps) {
+ 
+ class AdapterLoginConflictError extends Error {
+   constructor(readonly sessionId: string) {
+-    super("Another sign-in attempt is active. Finish or cancel that attempt before starting a new sign-in.");
++    super("Une autre tentative de connexion est en cours. Terminez-la ou annulez-la avant d'en démarrer une nouvelle.");
+   }
+ }
+ 
+@@ -2392,7 +2392,7 @@ function DisplayedCodeLoginPanel({
+       setSessionId(session.sessionId);
+     },
+     onError: (error) => {
+-      setStartError(error instanceof Error ? error.message : "Could not start the login.");
++      setStartError(error instanceof Error ? error.message : "Impossible de démarrer la connexion.");
+     },
+   });
+ 
+@@ -2409,7 +2409,7 @@ function DisplayedCodeLoginPanel({
+     mutationFn: () => agentsApi.cancelAdapterAuthLogin(companyId, adapterType, sessionId!),
+     onSuccess: clearActiveSession,
+     onError: (error) => {
+-      setStartError(error instanceof Error ? error.message : "Could not cancel the login.");
++      setStartError(error instanceof Error ? error.message : "Impossible d'annuler la connexion.");
+     },
+   });
+ 
+@@ -2540,7 +2540,7 @@ function DisplayedCodeLoginPanel({
+       setStartError(null);
+       await activeSessionQuery.refetch();
+     },
+-    onError: () => setStartError("Could not cancel the previous sign-in. Retry before starting a new one."),
++    onError: () => setStartError("Impossible d'annuler la connexion précédente. Réessayez avant d'en démarrer une nouvelle."),
+   });
+   const startLoginRef = useRef(startLogin.mutate);
+   startLoginRef.current = startLogin.mutate;
+@@ -2554,7 +2554,7 @@ function DisplayedCodeLoginPanel({
+       setStartError(
+         activeSessionQuery.error instanceof Error
+           ? activeSessionQuery.error.message
+-          : "Could not check for an active login.",
++          : "Impossible de vérifier s'il existe une connexion en cours.",
+       );
+       return;
+     }
+@@ -2643,17 +2643,17 @@ function DisplayedCodeLoginPanel({
+             {activeSessionQuery.error instanceof AdapterLoginConflictError && (
+               <Button type="button" variant="outline" disabled={cancelConflictingLogin.isPending}
+                 onClick={() => cancelConflictingLogin.mutate()}>
+-                Cancel previous sign-in and retry
++                Annuler la connexion précédente et réessayer
+               </Button>
+             )}
+           </div>
+         ) : failed ? (
+           <p role="alert" className="pl-2 text-xs text-destructive">
+             {status === "timed_out"
+-              ? "The login timed out. Start it again."
++              ? "La connexion a expiré. Relancez-la."
+               : status === "cancelled"
+-                ? "The login was cancelled."
+-                : "The login did not finish. Start it again."}
++                ? "La connexion a été annulée."
++                : "La connexion n'a pas abouti. Relancez-la."}
+           </p>
+         ) : (
+           <OnboardingLoginCodeRow code={prompt?.code ?? ""} autoCopy />
+@@ -2692,7 +2692,7 @@ function DisplayedCodeLoginPanel({
+             disabled={startDisabled}
+             onClick={() => startLogin.mutate()}
+           >
+-            Sign in
++            Se connecter
+           </Button>
+         </div>
+       </div>
+@@ -2709,14 +2709,14 @@ function DisplayedCodeLoginPanel({
+         {isActive && !prompt && (
+           <div className="flex items-center gap-2 text-(length:--text-micro) text-muted-foreground">
+             <Loader2 className="size-3 animate-spin shrink-0" />
+-            <span>Preparing...</span>
++            <span>Préparation…</span>
+           </div>
+         )}
+ 
+         {isActive && prompt && (
+           <div className="space-y-2">
+             <div className="text-(length:--text-micro) text-muted-foreground">
+-              Copy the code, then open the authentication page.
++              Copiez le code, puis ouvrez la page d'authentification.
+             </div>
+           {/* Code first, then the URL, and the sentence and the numbering both
+               say so.
+@@ -2740,24 +2740,24 @@ function DisplayedCodeLoginPanel({
+               </div>
+               <span className="font-mono text-xs text-foreground break-all">{prompt.code}</span>
+             </div>
+-            <AdapterLoginCopyButton value={prompt.code} label="Copy code" />
++            <AdapterLoginCopyButton value={prompt.code} label="Copier le code" />
+           </div>
+           <div className="flex items-center justify-between gap-2">
+             <div className="min-w-0">
+               <div className="text-(length:--text-micro) uppercase tracking-wide text-muted-foreground">
+-                2. Authentication URL
++                2. URL d'authentification
+               </div>
+               <span className="font-mono text-xs text-foreground break-all">{prompt.url}</span>
+             </div>
+             <div className="flex items-center">
+-              <AdapterLoginCopyButton value={prompt.url} label="Copy URL" />
++              <AdapterLoginCopyButton value={prompt.url} label="Copier l'URL" />
+               <Button
+                 asChild
+                 type="button"
+                 variant="ghost"
+                 size="icon-xs"
+-                aria-label="Open the authentication page"
+-                title="Open the authentication page"
++                aria-label="Ouvrir la page d'authentification"
++                title="Ouvrir la page d'authentification"
+                 className="text-muted-foreground hover:text-foreground"
+               >
+                 <a href={prompt.url} target="_blank" rel="noreferrer noopener">
+@@ -2779,20 +2779,20 @@ function DisplayedCodeLoginPanel({
+         {status === "authenticated" && accountBindState === "saving" && (
+           <div className="flex items-center gap-2 text-(length:--text-micro) text-muted-foreground">
+             <Loader2 className="size-3 animate-spin shrink-0" />
+-            <span>Binding this agent to the signed-in account...</span>
++            <span>Liaison de cet agent au compte connecté…</span>
+           </div>
+         )}
+         {status === "authenticated" && accountBindState === "bound" && (
+           <div className="flex items-center gap-2 text-(length:--text-micro) text-foreground">
+             <Check className="size-3 shrink-0" />
+-            <span>Agent bound to the signed-in account.</span>
++            <span>Agent lié au compte connecté.</span>
+           </div>
+         )}
+         {status === "authenticated" && accountBindState === "failed" && (
+           <div className="flex items-center gap-2 text-(length:--text-micro)">
+             <TriangleAlert className="size-3 shrink-0 text-destructive" />
+             <span className="text-destructive">
+-              Could not bind this agent to the signed-in account.
++              Impossible de lier cet agent au compte connecté.
+             </span>
+             <Button
+               type="button"
+@@ -2823,7 +2823,7 @@ const CLAUDE_LOGIN_FAILURE_STATUSES = new Set<AdapterAuthSessionStatus>([
+ // The fixed, non-secret message for a failed Claude login. The panel shows this
+ // text and returns to its start state. It never shows a provider message that
+ // could carry a secret.
+-const CLAUDE_LOGIN_FAILED_MESSAGE = "The login did not finish. Start the login again.";
++const CLAUDE_LOGIN_FAILED_MESSAGE = "La connexion n'a pas abouti. Relancez la connexion.";
+ 
+ // The client wall-clock cap for one active login. The panel polls the status
+ // route and the prompt route every two seconds. The server can leave a session
+@@ -2840,7 +2840,7 @@ const CLAUDE_LOGIN_FAILSAFE_TIMEOUT_MS = 15 * 60_000;
+ 
+ // The fixed, non-secret message for a timed-out Claude login. The panel shows
+ // this text, stops both polls, and returns to its start state.
+-const CLAUDE_LOGIN_TIMED_OUT_MESSAGE = "The login timed out. Start the login again.";
++const CLAUDE_LOGIN_TIMED_OUT_MESSAGE = "La connexion a expiré. Relancez la connexion.";
+ 
+ // The submitted-browser-code login panel for the Claude adapter. It starts a
+ // setup-token login, polls the status route, and reads the authorization URL
+@@ -2965,7 +2965,7 @@ function SubmittedBrowserCodeLoginPanel({
+       setSessionId(session.sessionId);
+     },
+     onError: (error) => {
+-      setStartError(error instanceof Error ? error.message : "Could not start the login.");
++      setStartError(error instanceof Error ? error.message : "Impossible de démarrer la connexion.");
+     },
+   });
+ 
+@@ -2992,7 +2992,7 @@ function SubmittedBrowserCodeLoginPanel({
+         clearActiveSession();
+         return;
+       }
+-      setStartError(error instanceof Error ? error.message : "Could not cancel the login.");
++      setStartError(error instanceof Error ? error.message : "Impossible d'annuler la connexion.");
+     },
+   });
+ 
+@@ -3026,7 +3026,7 @@ function SubmittedBrowserCodeLoginPanel({
+       try {
+         const active = await agentsApi.getActiveClaudeSetupTokenLoginSession(companyId);
+         if (!active) return null;
+-        if ((aiConnection && active.environmentId !== environmentId) || Boolean(active.aiConnection) !== Boolean(aiConnection) || (aiConnection && (active.aiConnection?.provider !== aiConnection.provider || active.aiConnection?.method !== aiConnection.method || active.aiConnection?.connectionId !== aiConnection.connectionId || active.aiConnection?.ownership !== aiConnection.ownership || active.aiConnection?.allAgents !== aiConnection.allAgents || JSON.stringify(active.aiConnection?.agentIds) !== JSON.stringify(aiConnection.agentIds)))) throw new Error("Another sign-in attempt is active. Finish or cancel it in its original account setup before starting this one.");
++        if ((aiConnection && active.environmentId !== environmentId) || Boolean(active.aiConnection) !== Boolean(aiConnection) || (aiConnection && (active.aiConnection?.provider !== aiConnection.provider || active.aiConnection?.method !== aiConnection.method || active.aiConnection?.connectionId !== aiConnection.connectionId || active.aiConnection?.ownership !== aiConnection.ownership || active.aiConnection?.allAgents !== aiConnection.allAgents || JSON.stringify(active.aiConnection?.agentIds) !== JSON.stringify(aiConnection.agentIds)))) throw new Error("Une autre tentative de connexion est en cours. Terminez-la ou annulez-la dans sa configuration de compte d'origine avant de lancer celle-ci.");
+         return active;
+       } catch (error) {
+         if (error instanceof ApiError && error.status === 404) return null;
+@@ -3156,7 +3156,7 @@ function SubmittedBrowserCodeLoginPanel({
+     mutationFn: (code: string) =>
+       agentsApi.submitClaudeSetupTokenBrowserCode(companyId, sessionId!, code),
+     onError: (error) => {
+-      setStartError(error instanceof Error ? error.message : "Could not submit the browser code.");
++      setStartError(error instanceof Error ? error.message : "Impossible d'envoyer le code du navigateur.");
+     },
+   });
+ 
+@@ -3289,7 +3289,7 @@ function SubmittedBrowserCodeLoginPanel({
+       setStartError(
+         activeSessionQuery.error instanceof Error
+           ? activeSessionQuery.error.message
+-          : "Could not check for an active login.",
++          : "Impossible de vérifier s'il existe une connexion en cours.",
+       );
+       return;
+     }
+@@ -3384,8 +3384,8 @@ function SubmittedBrowserCodeLoginPanel({
+         {transportInsecure && (
+           <p className="flex items-start gap-2 pl-2 text-xs text-amber-700 dark:text-amber-200">
+             <TriangleAlert className="mt-0.5 size-3 shrink-0" />
+-            This connection is not encrypted. The login code travels in clear text on this
+-            network. Continue only on a network you trust.
++            Cette connexion n'est pas chiffrée. Le code de connexion circule en clair sur ce
++            réseau. Ne continuez que sur un réseau de confiance.
+           </p>
+         )}
+         {startError ? (
+@@ -3451,7 +3451,7 @@ function SubmittedBrowserCodeLoginPanel({
+                 setAppliedStored(true);
+               }}
+             >
+-              Use saved login
++              Utiliser la connexion enregistrée
+             </Button>
+           )}
+           <Button
+@@ -3462,7 +3462,7 @@ function SubmittedBrowserCodeLoginPanel({
+             disabled={startDisabled}
+             onClick={() => startLogin.mutate()}
+           >
+-            {storedToken && !isActive && !isStored ? "Sign in to replace" : "Sign in"}
++            {storedToken && !isActive && !isStored ? "Se reconnecter pour remplacer" : "Se connecter"}
+           </Button>
+         </div>
+       </div>
+@@ -3472,15 +3472,15 @@ function SubmittedBrowserCodeLoginPanel({
+           token; a replacement login rotates it under the captured version. */}
+       {storedToken && !isActive && !isStored && !appliedStored && (
+         <div className="text-(length:--text-micro) text-muted-foreground">
+-          You have a saved Claude login. Use it to bind this agent, or log in again to replace the
+-          stored token.
++          Vous avez une connexion Claude enregistrée. Utilisez-la pour lier cet agent, ou reconnectez-vous pour remplacer le
++          jeton enregistré.
+         </div>
+       )}
+ 
+       {appliedStored && (
+         <div className="flex items-center gap-2 text-(length:--text-micro) text-foreground">
+           <Check className="size-3 shrink-0" />
+-          <span>The saved Claude login is bound to this agent now.</span>
++          <span>La connexion Claude enregistrée est maintenant liée à cet agent.</span>
+         </div>
+       )}
+ 
+@@ -3496,7 +3496,7 @@ function SubmittedBrowserCodeLoginPanel({
+         {isActive && !authorizationUrl && !isCompleting && (
+           <div className="flex items-center gap-2 text-(length:--text-micro) text-muted-foreground">
+             <Loader2 className="size-3 animate-spin shrink-0" />
+-            <span>Preparing...</span>
++            <span>Préparation…</span>
+           </div>
+         )}
+ 
+@@ -3508,13 +3508,13 @@ function SubmittedBrowserCodeLoginPanel({
+               >
+                 <TriangleAlert className="size-3 shrink-0 mt-0.5" />
+                 <span>
+-                  This connection is not encrypted. The login code travels in clear text on this
+-                  network. Continue only on a network you trust.
++                  Cette connexion n'est pas chiffrée. Le code de connexion circule en clair sur ce
++                  réseau. Ne continuez que sur un réseau de confiance.
+                 </span>
+               </div>
+             )}
+             <div className="text-(length:--text-micro) text-muted-foreground">
+-              Open the authorization page, then enter the browser code it shows.
++              Ouvrez la page d'autorisation, puis saisissez le code du navigateur qu'elle affiche.
+             </div>
+             <div className="flex items-center justify-between gap-2">
+               <div className="min-w-0">
+@@ -3524,14 +3524,14 @@ function SubmittedBrowserCodeLoginPanel({
+                 <span className="font-mono text-xs text-foreground break-all">{authorizationUrl}</span>
+               </div>
+               <div className="flex items-center">
+-                <AdapterLoginCopyButton value={authorizationUrl} label="Copy URL" />
++                <AdapterLoginCopyButton value={authorizationUrl} label="Copier l'URL" />
+                 <Button
+                   asChild
+                   type="button"
+                   variant="ghost"
+                   size="icon-xs"
+-                  aria-label="Open the authorization page"
+-                  title="Open the authorization page"
++                  aria-label="Ouvrir la page d'autorisation"
++                  title="Ouvrir la page d'autorisation"
+                   className="text-muted-foreground hover:text-foreground"
+                 >
+                   <a href={authorizationUrl} target="_blank" rel="noreferrer noopener">
+@@ -3542,11 +3542,11 @@ function SubmittedBrowserCodeLoginPanel({
+             </div>
+             <div className="space-y-1">
+               <div className="text-(length:--text-micro) uppercase tracking-wide text-muted-foreground">
+-                2. Browser code
++                2. Code du navigateur
+               </div>
+               <div className="flex items-center gap-2">
+                 <input
+-                  aria-label="Browser code"
++                  aria-label="Code du navigateur"
+                   type="text"
+                   autoComplete="off"
+                   spellCheck={false}
+@@ -3568,7 +3568,7 @@ function SubmittedBrowserCodeLoginPanel({
+                   disabled={!canSubmit}
+                   onClick={handleSubmit}
+                 >
+-                  Submit
++                  Envoyer
+                 </Button>
+               </div>
+             </div>
+@@ -3578,14 +3578,14 @@ function SubmittedBrowserCodeLoginPanel({
+         {isCompleting && (
+           <div className="flex items-center gap-2 text-(length:--text-micro) text-muted-foreground">
+             <Loader2 className="size-3 animate-spin shrink-0" />
+-            <span>Completing the login…</span>
++            <span>Finalisation de la connexion…</span>
+           </div>
+         )}
+ 
+         {isStored && (
+           <div className="flex items-center gap-2 text-(length:--text-micro) text-foreground">
+             <Check className="size-3 shrink-0" />
+-            <span>Authenticated. The environment has credentials now.</span>
++            <span>Connecté. L'environnement dispose maintenant d'identifiants.</span>
+           </div>
+         )}
+ 
+@@ -3609,7 +3609,7 @@ function SubmittedBrowserCodeLoginPanel({
+ 
+ export function AdapterEnvironmentResult({ result }: { result: AdapterEnvironmentTestResult }) {
+   const statusLabel =
+-    result.status === "pass" ? "Passed" : result.status === "warn" ? "Warnings" : "Failed";
++    result.status === "pass" ? "Réussi" : result.status === "warn" ? "Avertissements" : "Échec";
+   const statusClass =
+     result.status === "pass"
+       ? "text-green-700 dark:text-green-300 border-green-300 dark:border-green-500/40 bg-green-50 dark:bg-green-500/10"
+@@ -3634,7 +3634,7 @@ export function AdapterEnvironmentResult({ result }: { result: AdapterEnvironmen
+             <span className="mx-1 opacity-60">·</span>
+             <span>{check.message}</span>
+             {check.detail && <span className="block opacity-75 break-all">({check.detail})</span>}
+-            {check.hint && <span className="block opacity-90 break-words">Hint: {check.hint}</span>}
++            {check.hint && <span className="block opacity-90 break-words">Conseil : {check.hint}</span>}
+           </div>
+         ))}
+       </div>
+@@ -3700,7 +3700,7 @@ export function AdapterTypeDropdown({
+               {item.experimental && <ExperimentalBadge />}
+             </span>
+             {item.comingSoon && (
+-              <span className="text-(length:--text-nano) text-muted-foreground">Coming soon</span>
++              <span className="text-(length:--text-nano) text-muted-foreground">Bientôt disponible</span>
+             )}
+           </button>
+         ))}
+@@ -3712,7 +3712,7 @@ export function AdapterTypeDropdown({
+ function ExperimentalBadge() {
+   return (
+     <span className="shrink-0 rounded border border-amber-500/30 bg-amber-500/10 px-1.5 py-0.5 text-(length:--text-nano) font-medium leading-none text-amber-700 dark:text-amber-200">
+-      Experimental
++      Expérimental
+     </span>
+   );
+ }
+@@ -3827,7 +3827,7 @@ export function ModelDropdown({
+   }
+ 
+   return (
+-    <Field label="Model" hint={help.model}>
++    <Field label="Modèle" hint={help.model}>
+       <Popover
+         open={open}
+         onOpenChange={(nextOpen) => {
+@@ -3841,7 +3841,7 @@ export function ModelDropdown({
+               {selected
+                 ? selected.label
+                 : value
+-                  || (allowDefault ? (defaultLabel ?? "Default") : required ? "Select model (required)" : "Select model")}
++                  || (allowDefault ? (defaultLabel ?? "Par défaut") : required ? "Choisir un modèle (obligatoire)" : "Choisir un modèle")}
+             </span>
+             <ChevronDown className="h-3 w-3 text-muted-foreground" />
+           </button>
+@@ -3850,7 +3850,7 @@ export function ModelDropdown({
+           <div className="relative mb-1">
+             <input
+               className="w-full px-2 py-1.5 pr-6 text-xs bg-transparent outline-none border-b border-border placeholder:text-muted-foreground/50"
+-              placeholder={creatable ? "Search models... (type to create)" : "Search models..."}
++              placeholder={creatable ? "Rechercher un modèle… (saisir pour créer)" : "Rechercher un modèle…"}
+               value={modelSearch}
+               onChange={(e) => setModelSearch(e.target.value)}
+               autoFocus
+@@ -3881,7 +3881,7 @@ export function ModelDropdown({
+                 <path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
+                 <path d="M3 3v5h5" />
+               </svg>
+-              {detectingModel ? "Detecting..." : detectedModel ? (detectModelLabel?.replace(/^Detect\b/, "Re-detect") ?? "Re-detect from config") : (detectModelLabel ?? "Detect from config")}
++              {detectingModel ? "Détection…" : detectedModel ? (detectModelLabel?.replace(/^Détecter\b/, "Redétecter") ?? "Redétecter depuis la configuration") : (detectModelLabel ?? "Détecter depuis la configuration")}
+             </button>
+           )}
+           {onRefreshModels && !modelSearch.trim() && (
+@@ -3899,7 +3899,7 @@ export function ModelDropdown({
+                 <path d="M21 12a9 9 0 0 1-15.28 6.36L3 16" />
+                 <path d="M8 16H3v5" />
+               </svg>
+-              {refreshingModels ? "Refreshing..." : "Refresh models"}
++              {refreshingModels ? "Actualisation…" : "Actualiser les modèles"}
+             </button>
+           )}
+           {value && (!models.some((m) => m.id === value) || promotedModelIds.has(value)) && (
+@@ -3916,7 +3916,7 @@ export function ModelDropdown({
+                 {models.find((m) => m.id === value)?.label ?? value}
+               </span>
+               <Badge variant="outline" className="ml-auto text-(length:--text-nano) px-1.5 bg-green-500/15 text-green-400 border-green-500/20">
+-                current
++                actuel
+               </Badge>
+             </button>
+           )}
+@@ -3935,7 +3935,7 @@ export function ModelDropdown({
+                 {models.find((m) => m.id === detectedModel)?.label ?? detectedModel}
+               </span>
+               <Badge variant="outline" className="ml-auto text-(length:--text-nano) px-1.5 bg-blue-500/15 text-blue-400 border-blue-500/20">
+-                detected
++                détecté
+               </Badge>
+             </button>
+           )}
+@@ -3977,7 +3977,7 @@ export function ModelDropdown({
+                   onOpenChange(false);
+                 }}
+               >
+-                Default
++                Par défaut
+               </button>
+             )}
+             {canCreateManualModel && (
+@@ -3990,7 +3990,7 @@ export function ModelDropdown({
+                   setModelSearch("");
+                 }}
+               >
+-                <span>Use manual model</span>
++                <span>Utiliser le modèle saisi</span>
+                 <span className="text-xs font-mono text-muted-foreground">{manualModel}</span>
+               </button>
+             )}
+@@ -4025,8 +4025,8 @@ export function ModelDropdown({
+               <div className="px-2 py-2 space-y-2">
+                 <p className="text-xs text-muted-foreground">
+                   {onDetectModel
+-                    ? (emptyDetectHint ?? "No model detected yet. Enter a provider/model manually.")
+-                    : "No models found."}
++                    ? (emptyDetectHint ?? "Aucun modèle détecté pour l'instant. Saisissez un fournisseur/modèle à la main.")
++                    : "Aucun modèle trouvé."}
+                 </p>
+               </div>
+             )}
+@@ -4053,7 +4053,7 @@ function ThinkingEffortDropdown({
+   const selected = options.find((option) => option.id === value) ?? options[0];
+ 
+   return (
+-    <Field label="Thinking effort" hint={help.thinkingEffort}>
++    <Field label="Effort de réflexion" hint={help.thinkingEffort}>
+       <Popover open={open} onOpenChange={onOpenChange}>
+         <PopoverTrigger asChild>
+           <button className="inline-flex items-center gap-1.5 rounded-md border border-border px-2.5 py-1.5 text-sm hover:bg-accent/50 transition-colors w-full justify-between">
+diff --git a/ui/src/components/IssueBlockedNotice.test.tsx b/ui/src/components/IssueBlockedNotice.test.tsx
+index 9f5532721..d45de3760 100644
+--- a/ui/src/components/IssueBlockedNotice.test.tsx
++++ b/ui/src/components/IssueBlockedNotice.test.tsx
+@@ -143,16 +143,16 @@ describe("IssueBlockedNotice", () => {
+     );
+ 
+     expect(node.querySelector('[data-successful-run-handoff="required"]')).not.toBeNull();
+-    expect(node.textContent).toContain("This task still needs a next step.");
++    expect(node.textContent).toContain("Cette tâche a encore besoin d'une prochaine étape.");
+     expect(node.textContent).toContain(
+-      "A run finished successfully, but the task is still open. Paperclip needs someone to choose what happens next.",
++      "Une exécution s'est terminée avec succès, mais la tâche est toujours ouverte. Paperclip a besoin que quelqu'un choisisse la suite.",
+     );
+-    expect(node.textContent).toContain("Mark it done or cancelled.");
+-    expect(node.textContent).toContain("Send it for review or ask for input.");
+-    expect(node.textContent).toContain("Record what is blocking it and who owns that blocker.");
+-    expect(node.textContent).toContain("Delegate follow-up work or queue a continuation.");
+-    expect(node.textContent).toContain("Asked CodexCoder to choose the next step");
+-    expect(node.textContent).toContain("Detected progress: Updated the plan and left follow-up work.");
++    expect(node.textContent).toContain("La marquer comme terminée ou annulée.");
++    expect(node.textContent).toContain("L'envoyer en revue ou demander des précisions.");
++    expect(node.textContent).toContain("Indiquer ce qui la bloque et qui s'en occupe.");
++    expect(node.textContent).toContain("Déléguer le travail de suite ou planifier une poursuite.");
++    expect(node.textContent).toContain("CodexCoder a été invitée à choisir la prochaine étape");
++    expect(node.textContent).toContain("Avancement détecté : Updated the plan and left follow-up work.");
+     expect(node.querySelector('[data-testid="issue-next-step-retry-now"]')).toBeNull();
+     // No live continuation ⇒ the alarm stays exactly as it was; the calm
+     // in-flight line must not appear alongside it.
+@@ -217,8 +217,8 @@ describe("IssueBlockedNotice", () => {
+ 
+     // The amber alarm and every remediation bullet are gone...
+     expect(node.querySelector('[data-successful-run-handoff="required"]')).toBeNull();
+-    expect(node.textContent).not.toContain("This task still needs a next step.");
+-    expect(node.textContent).not.toContain("Mark it done or cancelled.");
++    expect(node.textContent).not.toContain("Cette tâche a encore besoin d'une prochaine étape.");
++    expect(node.textContent).not.toContain("La marquer comme terminée ou annulée.");
+     expect(node.querySelector(".bg-amber-50\\/90")).toBeNull();
+ 
+     // ...replaced by one quiet line that links the live run.
+@@ -226,7 +226,7 @@ describe("IssueBlockedNotice", () => {
+     expect(calm).not.toBeNull();
+     expect(calm!.getAttribute("data-successful-run-handoff")).toBe("in_flight");
+     expect(node.textContent).toContain(
+-      "A correction run is in progress — the agent is working. This alert returns if the run stops without choosing a next step.",
++      "Une exécution de correction est en cours : l'agent travaille. Cette alerte reviendra si l'exécution s'arrête sans avoir choisi la prochaine étape.",
+     );
+     const runLink = calm!.querySelector("a");
+     expect(runLink?.getAttribute("href")).toBe(
+@@ -261,7 +261,7 @@ describe("IssueBlockedNotice", () => {
+     expect(calm).not.toBeNull();
+     // No `liveRunId` on the payload — the copy stands alone, with no run link.
+     expect(calm!.querySelector("a")).toBeNull();
+-    expect(node.textContent).toContain("A correction run is in progress");
++    expect(node.textContent).toContain("Une exécution de correction est en cours");
+   });
+ 
+   it("omits the run link but keeps the calm copy when the live run has no known agent", () => {
+@@ -336,9 +336,9 @@ describe("IssueBlockedNotice", () => {
+     expect(node.querySelector('[data-successful-run-handoff="required"]')).not.toBeNull();
+     expect(node.querySelector('[data-testid="issue-next-step-retry-now"]')).not.toBeNull();
+     // The carve-out wins over the calm line: the alarm is the only thing that
+-    // keeps "Retry now" reachable, so it must not be quieted or duplicated.
++    // keeps « Relancer maintenant » reachable, so it must not be quieted or duplicated.
+     expect(node.querySelector('[data-testid="issue-next-step-in-flight"]')).toBeNull();
+-    expect(node.textContent).toContain("This task still needs a next step.");
++    expect(node.textContent).toContain("Cette tâche a encore besoin d'une prochaine étape.");
+   });
+ 
+   it("does not render when the issue is done even if a stale handoff state is required", () => {
+@@ -428,7 +428,7 @@ describe("IssueBlockedNotice", () => {
+     // Rule C: a `blocked` issue with an unresolved blocker suppresses
+     // comment-driven reopening.
+     expect(node.querySelector('[data-blocker-attention-state="covered"]')).not.toBeNull();
+-    expect(node.textContent).toContain("A message won’t restart this task yet");
++    expect(node.textContent).toContain("Un message ne relancera pas encore cette tâche");
+   });
+ 
+   it("sorts same-status live-work steps with numeric identifier ordering", () => {
+@@ -489,9 +489,9 @@ describe("IssueBlockedNotice", () => {
+       />,
+     );
+ 
+-    expect(node.textContent).toContain("Waiting on live work");
++    expect(node.textContent).toContain("En attente d'un travail en cours");
+     expect(node.textContent).toContain(
+-      "This task resumes automatically when the chain is done.",
++      "Cette tâche reprend automatiquement quand la chaîne est terminée.",
+     );
+ 
+     const stepLinks = Array.from(
+@@ -504,7 +504,7 @@ describe("IssueBlockedNotice", () => {
+ 
+     const runningStep = node.querySelectorAll('[data-testid="issue-blocked-notice-steps"] a')[2];
+     if (!runningStep) throw new Error("Expected a running live-work step.");
+-    expect(runningStep.querySelector('svg[aria-label="In Progress status"]')).not.toBeNull();
++    expect(runningStep.querySelector('svg[aria-label="Statut : En cours"]')).not.toBeNull();
+     expect(node.querySelector('[data-testid="issue-blocked-notice-now-running"]')).toBeNull();
+   });
+ 
+@@ -527,13 +527,13 @@ describe("IssueBlockedNotice", () => {
+       />,
+     );
+ 
+-    expect(node.textContent).toContain("A message won’t restart this task yet");
+-    expect(node.textContent).toContain("Comments still notify CodexCoder for questions or triage");
++    expect(node.textContent).toContain("Un message ne relancera pas encore cette tâche");
++    expect(node.textContent).toContain("les commentaires préviennent toujours CodexCoder pour les questions ou le tri");
+     const suppressed = node.querySelector('[data-testid="issue-blocked-notice-reopen-suppressed"]');
+     expect(suppressed).not.toBeNull();
+-    expect(suppressed!.textContent).toContain("Still blocked by");
++    expect(suppressed!.textContent).toContain("Toujours bloquée par");
+     expect(suppressed!.textContent).toContain("PAP-500");
+-    expect(suppressed!.textContent).toContain("(in progress)");
++    expect(suppressed!.textContent).toContain("(en cours)");
+   });
+ 
+   it("names the deepest unresolved terminal leaf, not the direct blocker (Rule C)", () => {
+@@ -601,7 +601,7 @@ describe("IssueBlockedNotice", () => {
+     const suppressed = node.querySelector('[data-testid="issue-blocked-notice-reopen-suppressed"]');
+     expect(suppressed).not.toBeNull();
+     expect(suppressed!.textContent).toContain("PAP-501");
+-    expect(suppressed!.textContent).toContain("and 1 other task");
++    expect(suppressed!.textContent).toContain("et 1 autre tâche");
+     expect(suppressed!.textContent).not.toContain("PAP-502");
+   });
+ 
+@@ -665,7 +665,7 @@ describe("IssueBlockedNotice", () => {
+ 
+     const nowRunning = node.querySelector('[data-testid="issue-blocked-notice-now-running"]');
+     expect(nowRunning).not.toBeNull();
+-    expect(nowRunning!.children[0]?.textContent?.trim()).toBe("Now running");
++    expect(nowRunning!.children[0]?.textContent?.trim()).toBe("En cours maintenant");
+     expect(nowRunning!.children[1]?.querySelector("a")?.textContent).toContain("TASK-99");
+     const stepText = node.querySelector('[data-testid="issue-blocked-notice-steps"]')?.textContent;
+     expect(stepText).not.toContain("TASK-99");
+diff --git a/ui/src/components/IssueBlockedNotice.tsx b/ui/src/components/IssueBlockedNotice.tsx
+index c69f2ad40..101ec005a 100644
+--- a/ui/src/components/IssueBlockedNotice.tsx
++++ b/ui/src/components/IssueBlockedNotice.tsx
+@@ -31,6 +31,7 @@ import {
+   formatRecoveryLineageSummary,
+   readRecoveryRetryLineage,
+ } from "../lib/recovery-lineage";
++import { LIBELLES_VALEURS } from "../lib/activity-format";
+ import { StatusGlyph } from "./StatusGlyph";
+ 
+ function BlockerRecoveryIndicator({
+@@ -60,8 +61,8 @@ function BlockerRecoveryIndicator({
+       role="status"
+       aria-label={detail ? `${label} — ${detail}` : label}
+       title={detail
+-        ? `${label} — ${detail}. Open the source task to act.`
+-        : `${label} — open the source task to act.`}
++        ? `${label} — ${detail}. Ouvrez la tâche source pour agir.`
++        : `${label} — ouvrez la tâche source pour agir.`}
+       className={`[&>svg]:size-2.5 gap-0.5 px-1.5 text-(length:--text-nano) ${tone.className}`}
+     >
+       <Icon className="h-2.5 w-2.5" aria-hidden />
+@@ -108,17 +109,17 @@ function SuccessfulRunRetryNowControl({
+           {retryNow.isPending ? (
+             <span className="inline-flex items-center gap-1.5">
+               <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
+-              Retrying...
++              Nouvelle tentative…
+             </span>
+           ) : success ? (
+             <span className="inline-flex items-center gap-1.5">
+               <CheckCircle2 className="h-3.5 w-3.5" aria-hidden="true" />
+-              {retryNow.data?.outcome === "already_promoted" ? "Already promoted" : "Promoted"}
++              {retryNow.data?.outcome === "already_promoted" ? "Déjà relancé" : "Relancé"}
+             </span>
+           ) : (
+             <span className="inline-flex items-center gap-1.5">
+               <RotateCcw className="h-3.5 w-3.5" aria-hidden="true" />
+-              Retry now
++              Relancer maintenant
+             </span>
+           )}
+         </Button>
+@@ -138,7 +139,8 @@ function SuccessfulRunRetryNowControl({
+ const EMPTY_LIVE_IDS: ReadonlySet<string> = new Set<string>();
+ 
+ function waitingTaskStatusLabel(status: string): string {
+-  return status.replace(/_/g, " ").replace(/\b\w/g, (character) => character.toUpperCase());
++  const libelle = LIBELLES_VALEURS[status] ?? status.replace(/_/g, " ");
++  return libelle.charAt(0).toUpperCase() + libelle.slice(1);
+ }
+ 
+ function WaitingChipLink({
+@@ -158,7 +160,7 @@ function WaitingChipLink({
+       <StatusGlyph
+         status={blocker.status}
+         size="sm"
+-        title={`${waitingTaskStatusLabel(blocker.status)} status`}
++        title={`Statut : ${waitingTaskStatusLabel(blocker.status)}`}
+       />
+       <span>{blocker.identifier ?? blocker.id.slice(0, 8)}</span>
+       <span className="max-w-(--sz-18rem) truncate font-sans text-(length:--text-micro) text-blue-800 dark:text-blue-200">
+@@ -166,7 +168,7 @@ function WaitingChipLink({
+       </span>
+       {running ? (
+         <span className="ml-0.5 rounded-full bg-blue-500/15 px-1.5 py-0.5 text-(length:--text-nano) font-medium uppercase tracking-wide text-blue-700 dark:bg-blue-400/20 dark:text-blue-200">
+-          running
++          en cours
+         </span>
+       ) : null}
+     </IssueLinkQuicklook>
+@@ -214,8 +216,8 @@ function SuccessfulRunHandoffInFlightNotice({
+           <span className="h-2 w-2 animate-pulse rounded-full bg-blue-400" />
+         </span>
+         <p className="min-w-0 leading-5">
+-          A correction run is in progress — the agent is working. This alert returns if the run
+-          stops without choosing a next step.
++          Une exécution de correction est en cours : l'agent travaille. Cette alerte reviendra si l'exécution
++          s'arrête sans avoir choisi la prochaine étape.
+           {shortRunId ? (
+             <>
+               {" "}
+@@ -275,7 +277,7 @@ function WaitingOnLiveWorkNotice({
+     nowRunning.push(blocker);
+   }
+ 
+-  const queuedNoun = total === 1 ? "task" : "tasks";
++  const queuedNoun = total === 1 ? "tâche traitée" : "tâches traitées";
+ 
+   return (
+     <div
+@@ -289,22 +291,22 @@ function WaitingOnLiveWorkNotice({
+         </span>
+         <div className="min-w-0 flex-1 space-y-2">
+           <div className="space-y-1">
+-            <p className="font-medium leading-5">Waiting on live work</p>
++            <p className="font-medium leading-5">En attente d'un travail en cours</p>
+             <p className="leading-5">
+-              Queued behind {total} {queuedNoun} being worked in order. This task
+-              resumes automatically when the chain is done. Comments still notify the
+-              assignee.
++              En file derrière {total} {queuedNoun} dans l'ordre. Cette tâche
++              reprend automatiquement quand la chaîne est terminée. Les commentaires
++              préviennent toujours la personne responsable.
+             </p>
+           </div>
+ 
+           <div className="space-y-1" data-testid="issue-blocked-notice-progress">
+             <div className="text-xs font-medium text-blue-800 dark:text-blue-200">
+-              {doneCount} of {total} done
+-              {runningCount > 0 ? ` · ${runningCount} running` : null}
++              {doneCount} sur {total} terminée{doneCount > 1 ? "s" : ""}
++              {runningCount > 0 ? ` · ${runningCount} en cours` : null}
+             </div>
+             <div
+               role="progressbar"
+-              aria-label="Blocker chain progress"
++              aria-label="Progression de la chaîne de blocages"
+               aria-valuemin={0}
+               aria-valuenow={doneCount}
+               aria-valuemax={total}
+@@ -355,7 +357,7 @@ function WaitingOnLiveWorkNotice({
+               </div>
+               <div className="min-w-0 pb-0.5">
+                 <span className="inline-block rounded-md border border-dashed border-blue-300/70 px-2 py-1 text-xs text-blue-800 dark:border-blue-500/40 dark:text-blue-200">
+-                  This task — resumes automatically when the chain is done
++                  Cette tâche : reprend automatiquement quand la chaîne est terminée
+                 </span>
+               </div>
+             </div>
+@@ -367,7 +369,7 @@ function WaitingOnLiveWorkNotice({
+               className="space-y-1 pt-0.5"
+             >
+               <div className="text-xs font-medium text-blue-800 dark:text-blue-200">
+-                Now running
++                En cours maintenant
+               </div>
+               <div className="flex flex-wrap items-center gap-1.5">
+                 {nowRunning.map((blocker) => (
+@@ -436,7 +438,7 @@ export function IssueBlockedNotice({
+   // Outstanding handoff + a live run on the issue: the alarm is suppressed, so
+   // render the quiet in-flight line in its place rather than nothing at all.
+   // The unpromoted-scheduled-retry carve-out keeps `showSuccessfulRunHandoff`
+-  // true, so the amber notice (and its "Retry now" control) still wins there.
++  // true, so the amber notice (and its « Relancer maintenant » control) still wins there.
+   // This stands in for the handoff alarm only. When the issue also has
+   // blockers, the blocker notice below is the stronger signal and owns the
+   // slot, exactly as it did before this line existed.
+@@ -461,7 +463,7 @@ export function IssueBlockedNotice({
+       ? { issueId, scheduledRetry }
+       : null;
+ 
+-  const blockerLabel = blockers.length === 1 ? "the linked task" : "the linked tasks";
++  const blockerLabel = blockers.length === 1 ? "la tâche liée" : "les tâches liées";
+   const terminalBlockers = blockers
+     .flatMap((blocker) => blocker.terminalBlockers ?? [])
+     .filter((blocker, index, all) => all.findIndex((candidate) => candidate.id === blocker.id) === index);
+@@ -515,7 +517,7 @@ export function IssueBlockedNotice({
+   // Rule B reopen path — we must not claim "a message won't reopen" for those.
+   // Name the deepest unresolved leaf (prefer terminal leaves) with its status
+   // so "I sent a message and nothing happened" can't recur silently.
+-  const responsibleName = agentName ?? "the assignee";
++  const responsibleName = agentName ?? "la personne responsable";
+   const reopenSuppressed = issueStatus === "blocked" && !isStalled && blockers.length > 0;
+   const unresolvedLeafBlockers = (() => {
+     if (!reopenSuppressed) return [] as IssueRelationIssueSummary[];
+@@ -539,7 +541,7 @@ export function IssueBlockedNotice({
+     ? reopenSuppressedLeaf.identifier ?? reopenSuppressedLeaf.id.slice(0, 8)
+     : null;
+   const reopenSuppressedLeafStatus = reopenSuppressedLeaf
+-    ? reopenSuppressedLeaf.status.replace(/_/g, " ")
++    ? LIBELLES_VALEURS[reopenSuppressedLeaf.status] ?? reopenSuppressedLeaf.status.replace(/_/g, " ")
+     : null;
+   const reopenSuppressedOtherCount = Math.max(unresolvedLeafBlockers.length - 1, 0);
+ 
+@@ -607,16 +609,16 @@ export function IssueBlockedNotice({
+         <div className="min-w-0 space-y-1.5">
+           {showSuccessfulRunHandoff ? (
+             <>
+-              <p className="font-medium leading-5">This task still needs a next step.</p>
++              <p className="font-medium leading-5">Cette tâche a encore besoin d'une prochaine étape.</p>
+               <p className="leading-5">
+-                A run finished successfully, but the task is still open. Paperclip needs someone to choose
+-                what happens next.
++                Une exécution s'est terminée avec succès, mais la tâche est toujours ouverte. Paperclip a besoin que quelqu'un choisisse
++                la suite.
+               </p>
+               <ul className="list-disc space-y-1 pl-5 text-xs leading-5 text-amber-900 dark:text-amber-100">
+-                <li>Mark it done or cancelled.</li>
+-                <li>Send it for review or ask for input.</li>
+-                <li>Record what is blocking it and who owns that blocker.</li>
+-                <li>Delegate follow-up work or queue a continuation.</li>
++                <li>La marquer comme terminée ou annulée.</li>
++                <li>L'envoyer en revue ou demander des précisions.</li>
++                <li>Indiquer ce qui la bloque et qui s'en occupe.</li>
++                <li>Déléguer le travail de suite ou planifier une poursuite.</li>
+               </ul>
+               <div className="flex flex-wrap gap-1.5 text-xs">
+                 {successfulRunHandoff.sourceRunId && successfulRunHandoff.assigneeAgentId ? (
+@@ -624,20 +626,20 @@ export function IssueBlockedNotice({
+                     to={`/agents/${successfulRunHandoff.assigneeAgentId}/runs/${successfulRunHandoff.sourceRunId}`}
+                     className="rounded-md border border-amber-300/70 bg-background/80 px-2 py-1 font-mono text-amber-950 hover:border-amber-500 hover:bg-amber-100 hover:underline dark:border-amber-500/40 dark:bg-background/40 dark:text-amber-100 dark:hover:bg-amber-500/15"
+                   >
+-                    run {successfulRunHandoff.sourceRunId.slice(0, 8)}
++                    exécution {successfulRunHandoff.sourceRunId.slice(0, 8)}
+                   </Link>
+                 ) : successfulRunHandoff.sourceRunId ? (
+                   <span className="rounded-md border border-amber-300/70 bg-background/80 px-2 py-1 font-mono text-amber-950 dark:border-amber-500/40 dark:bg-background/40 dark:text-amber-100">
+-                    run {successfulRunHandoff.sourceRunId.slice(0, 8)}
++                    exécution {successfulRunHandoff.sourceRunId.slice(0, 8)}
+                   </span>
+                 ) : null}
+                 <span className="rounded-md border border-amber-300/70 bg-background/80 px-2 py-1 text-amber-900 dark:border-amber-500/40 dark:bg-background/40 dark:text-amber-100">
+-                  Asked {agentName ?? "the assignee"} to choose the next step
++                  {agentName ?? "La personne responsable"} a été invitée à choisir la prochaine étape
+                 </span>
+               </div>
+               {successfulRunHandoff.detectedProgressSummary ? (
+                 <p className="text-xs leading-5 text-amber-800 dark:text-amber-200">
+-                  Detected progress: {successfulRunHandoff.detectedProgressSummary}
++                  Avancement détecté : {successfulRunHandoff.detectedProgressSummary}
+                 </p>
+               ) : null}
+               {successfulRunRetryNow ? (
+@@ -657,25 +659,25 @@ export function IssueBlockedNotice({
+                 {blockers.length > 0
+                   ? isStalled
+                     ? stalledLeafBlockers.length > 1
+-                      ? <>Work on this task is blocked by {blockerLabel}, but the chain is stalled in review without a clear next step. Resolve the stalled reviews below or remove them as blockers.</>
+-                      : <>Work on this task is blocked by {blockerLabel}, but the chain is stalled in review without a clear next step. Resolve the stalled review below or remove it as a blocker.</>
++                      ? <>Le travail sur cette tâche est bloqué par {blockerLabel}, mais la chaîne est immobilisée en revue sans prochaine étape claire. Réglez les revues immobilisées ci-dessous ou retirez-les des blocages.</>
++                      : <>Le travail sur cette tâche est bloqué par {blockerLabel}, mais la chaîne est immobilisée en revue sans prochaine étape claire. Réglez la revue immobilisée ci-dessous ou retirez-la des blocages.</>
+                     : reopenSuppressed
+-                      ? <>A message won&rsquo;t restart this task yet — it stays blocked by {blockerLabel} until {blockers.length === 1 ? "it is" : "they are"} done, then it reopens automatically. Comments still notify {responsibleName} for questions or triage in the meantime.</>
+-                      : <>Work on this task is blocked by {blockerLabel} until {blockers.length === 1 ? "it is" : "they are"} complete. Comments still notify the assignee for questions or triage.</>
+-                  : <>Work on this task is blocked until someone moves it back to To do. Comments still notify the assignee for questions or triage.</>}
++                      ? <>Un message ne relancera pas encore cette tâche : elle reste bloquée par {blockerLabel} jusqu'à ce que {blockers.length === 1 ? "celle-ci soit terminée" : "celles-ci soient terminées"}, puis elle rouvrira automatiquement. D'ici là, les commentaires préviennent toujours {responsibleName} pour les questions ou le tri.</>
++                      : <>Le travail sur cette tâche est bloqué par {blockerLabel} jusqu'à ce que {blockers.length === 1 ? "celle-ci soit terminée" : "celles-ci soient terminées"}. Les commentaires préviennent toujours la personne responsable pour les questions ou le tri.</>
++                  : <>Le travail sur cette tâche est bloqué tant que personne ne la remet à faire. Les commentaires préviennent toujours la personne responsable pour les questions ou le tri.</>}
+               </p>
+               {reopenSuppressed && reopenSuppressedLeafId ? (
+                 <p
+                   data-testid="issue-blocked-notice-reopen-suppressed"
+                   className="text-xs font-medium leading-5 text-amber-900 dark:text-amber-100"
+                 >
+-                  Still blocked by{" "}
++                  Toujours bloquée par{" "}
+                   <span className="font-mono">{reopenSuppressedLeafId}</span>
+                   {reopenSuppressedLeafStatus ? <> ({reopenSuppressedLeafStatus})</> : null}
+                   {reopenSuppressedOtherCount > 0
+-                    ? ` and ${reopenSuppressedOtherCount} other ${
+-                        reopenSuppressedOtherCount === 1 ? "task" : "tasks"
+-                      }`
++                    ? ` et ${reopenSuppressedOtherCount} autre${
++                        reopenSuppressedOtherCount === 1 ? "" : "s"
++                      } tâche${reopenSuppressedOtherCount === 1 ? "" : "s"}`
+                     : null}
+                   .
+                 </p>
+@@ -688,14 +690,14 @@ export function IssueBlockedNotice({
+               {showStalledRow ? (
+                 <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
+                   <span className="text-xs font-medium text-amber-800 dark:text-amber-200">
+-                    Stalled in review
++                    Immobilisées en revue
+                   </span>
+                   {stalledLeafBlockers.map(renderBlockerChip)}
+                 </div>
+               ) : terminalBlockers.length > 0 ? (
+                 <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
+                   <span className="text-xs font-medium text-amber-800 dark:text-amber-200">
+-                    Ultimately waiting on
++                    En définitive en attente de
+                   </span>
+                   {terminalBlockers.map(renderBlockerChip)}
+                 </div>
+diff --git a/ui/src/components/IssueChatThread.test.tsx b/ui/src/components/IssueChatThread.test.tsx
+index 61dee702d..3bf48b3c2 100644
+--- a/ui/src/components/IssueChatThread.test.tsx
++++ b/ui/src/components/IssueChatThread.test.tsx
+@@ -2360,7 +2360,7 @@ describe("IssueChatThread", () => {
+ 
+     expect(container.textContent).toContain("PAP-2167");
+     expect(container.textContent).toContain("Phase 7 review");
+-    expect(container.textContent).toContain("Ultimately waiting on");
++    expect(container.textContent).toContain("En définitive en attente de");
+     expect(container.textContent).toContain("PAP-2201");
+     expect(container.textContent).toContain("Security sign-off");
+     expect(
+@@ -2438,16 +2438,16 @@ describe("IssueChatThread", () => {
+     expect(notice?.getAttribute("data-blocker-attention-state")).toBe(
+       "covered",
+     );
+-    expect(container.textContent).toContain("Waiting on live work");
++    expect(container.textContent).toContain("En attente d'un travail en cours");
+     expect(container.textContent).toContain(
+-      "resumes automatically when the chain is done",
++      "reprend automatiquement quand la chaîne est terminée",
+     );
+     // Progress counts: 1 done, 1 running out of 3.
+-    expect(container.textContent).toContain("1 of 3 done · 1 running");
+-    // Amber "Ultimately waiting on" / "blocked by the linked task" copy is gone.
+-    expect(container.textContent).not.toContain("Ultimately waiting on");
++    expect(container.textContent).toContain("1 sur 3 terminée · 1 en cours");
++    // Amber "En définitive en attente de" / "blocked by the linked task" copy is gone.
++    expect(container.textContent).not.toContain("En définitive en attente de");
+     expect(container.textContent).not.toContain(
+-      "Work on this task is blocked by",
++      "Le travail sur cette tâche est bloqué par",
+     );
+     // All three blockers render as chips.
+     expect(
+@@ -2521,9 +2521,9 @@ describe("IssueChatThread", () => {
+       '[data-testid="issue-blocked-notice-now-running"]',
+     );
+     expect(nowRunning).not.toBeNull();
+-    expect(nowRunning?.textContent).toContain("Now running");
++    expect(nowRunning?.textContent).toContain("En cours maintenant");
+     expect(nowRunning?.textContent).toContain("PAP-3002");
+-    expect(container.textContent).not.toContain("Ultimately waiting on");
++    expect(container.textContent).not.toContain("En définitive en attente de");
+ 
+     flushAct(() => {
+       root.unmount();
+@@ -2650,7 +2650,7 @@ describe("IssueChatThread", () => {
+       expect(amber).not.toBeNull();
+       expect(amber?.className).toContain("border-amber-300/70");
+       if (state === "stalled") {
+-        expect(container.textContent).toContain("Stalled in review");
++        expect(container.textContent).toContain("Immobilisées en revue");
+       }
+ 
+       flushAct(() => {
+diff --git a/ui/src/components/IssueScheduledRetryCard.test.tsx b/ui/src/components/IssueScheduledRetryCard.test.tsx
+index 5ab5e10fa..cb9b1745f 100644
+--- a/ui/src/components/IssueScheduledRetryCard.test.tsx
++++ b/ui/src/components/IssueScheduledRetryCard.test.tsx
+@@ -123,9 +123,9 @@ function getRetryNowButton() {
+ describe("IssueScheduledRetryCard", () => {
+   it("shows workspace contention as an automatic wait without failure or retry controls", () => {
+     renderWithProviders(<IssueScheduledRetryCard issueId="issue-1" scheduledRetry={{ ...baseRetry, scheduledRetryReason: "workspace_busy" }} />);
+-    expect(container.textContent).toContain("Waiting for workspace");
+-    expect(container.textContent).toContain("Work starts automatically");
+-    expect(container.textContent).not.toMatch(/failed|Retry|Attempt|Essai|Replaces run/);
++    expect(container.textContent).toContain("En attente de l'espace de travail");
++    expect(container.textContent).toContain("Le travail démarre automatiquement");
++    expect(container.textContent).not.toMatch(/failed|Retry|Attempt|Essai|Replaces run|échou|Réessay|Tentative|Remplace|Relancer/);
+     expect(getRetryNowButton()).toBeNull();
+   });
+   it("surfaces model capacity and the automatic retry without a generic failure", () => {
+@@ -133,7 +133,7 @@ describe("IssueScheduledRetryCard", () => {
+       error: "Selected model is at capacity. Please try a different model.", errorCode: "native_provider_overloaded" }} />);
+     expect(container.textContent).toContain("Modèle saturé");
+     expect(container.textContent).toContain("Selected model is at capacity");
+-    expect(container.textContent).toContain("Paperclip will retry automatically");
++    expect(container.textContent).toContain("Paperclip réessaiera automatiquement");
+     expect(container.textContent).not.toContain("Native session failed");
+   });
+ 
+@@ -176,7 +176,7 @@ describe("IssueScheduledRetryCard", () => {
+     const text = getCard()?.textContent ?? "";
+     expect(text).toContain("Poursuite planifiée");
+     expect(text).toContain("Continuation automatique");
+-    expect(text).toContain("Pulls continuation forward immediately");
++    expect(text).toContain("Avance immédiatement la poursuite");
+   });
+ 
+   it("uses 'due now' label when scheduledRetryAt is at the current time", () => {
+@@ -201,10 +201,10 @@ describe("IssueScheduledRetryCard", () => {
+     act(() => {
+       button!.click();
+     });
+-    await waitForRetryButtonText("Promoted");
++    await waitForRetryButtonText("Relancé");
+     expect(retryNowMock).toHaveBeenCalledWith("issue-1");
+     const finalButton = getRetryNowButton();
+-    expect(finalButton!.textContent ?? "").toContain("Promoted");
++    expect(finalButton!.textContent ?? "").toContain("Relancé");
+     expect(finalButton!.disabled).toBe(true);
+   });
+ 
+@@ -216,8 +216,8 @@ describe("IssueScheduledRetryCard", () => {
+     act(() => {
+       getRetryNowButton()!.click();
+     });
+-    await waitForRetryButtonText("Already promoted");
+-    expect(getRetryNowButton()!.textContent ?? "").toContain("Already promoted");
++    await waitForRetryButtonText("Déjà relancé");
++    expect(getRetryNowButton()!.textContent ?? "").toContain("Déjà relancé");
+     expect(container.querySelector('[data-testid="issue-scheduled-retry-error-band"]')).toBeNull();
+   });
+ 
+diff --git a/ui/src/components/IssueScheduledRetryCard.tsx b/ui/src/components/IssueScheduledRetryCard.tsx
+index 91ce5daa7..ba30cf851 100644
+--- a/ui/src/components/IssueScheduledRetryCard.tsx
++++ b/ui/src/components/IssueScheduledRetryCard.tsx
+@@ -35,8 +35,8 @@ export function IssueScheduledRetryCard({
+ 
+   if (scheduledRetry.scheduledRetryReason === "workspace_busy") {
+     return (
+-      <InlineBanner tone="info" icon={Clock} title="Waiting for workspace" className="mb-3">
+-        Another task is using this workspace. Work starts automatically when it is available.
++      <InlineBanner tone="info" icon={Clock} title="En attente de l'espace de travail" className="mb-3">
++        Une autre tâche utilise cet espace de travail. Le travail démarre automatiquement dès qu'il est disponible.
+       </InlineBanner>
+     );
+   }
+@@ -70,8 +70,8 @@ export function IssueScheduledRetryCard({
+   const title = `${titleAction} ${titleSuffix}`;
+ 
+   const helperIdle = continuation
+-    ? "Pulls continuation forward immediately"
+-    : "Pulls retry forward immediately";
++    ? "Avance immédiatement la poursuite"
++    : "Avance immédiatement le nouvel essai";
+   const isError = retryNow.isError || retryNow.lastError !== null;
+   const isSuccessTransient = retryNow.isSuccess
+     && (retryNow.data?.outcome === "promoted" || retryNow.data?.outcome === "already_promoted");
+@@ -102,7 +102,7 @@ export function IssueScheduledRetryCard({
+               {absolute && scheduledRetry.retryOfRunId ? <span>{" · "}</span> : null}
+               {scheduledRetry.retryOfRunId ? (
+                 <span>
+-                  Replaces run{" "}
++                  Remplace l'exécution{" "}
+                   <Link
+                     to={`/agents/${scheduledRetry.agentId}/runs/${scheduledRetry.retryOfRunId}`}
+                     className="font-mono text-foreground hover:underline"
+@@ -115,7 +115,7 @@ export function IssueScheduledRetryCard({
+           ) : null}
+           {scheduledRetry.error ? (
+             <div className="mt-1 text-xs text-muted-foreground">
+-              Last attempt failed: {scheduledRetry.error}{/[.!?]$/.test(scheduledRetry.error.trim()) ? "" : "."} Paperclip will retry automatically.
++              Dernière tentative échouée : {scheduledRetry.error}{/[.!?]$/.test(scheduledRetry.error.trim()) ? "" : "."} Paperclip réessaiera automatiquement.
+             </div>
+           ) : null}
+           {isError ? (
+@@ -146,22 +146,22 @@ export function IssueScheduledRetryCard({
+             ) : isSuccessTransient ? (
+               <span className="inline-flex items-center gap-1.5">
+                 <CheckCircle2 className="h-3.5 w-3.5" aria-hidden="true" />
+-                {retryNow.data?.outcome === "already_promoted" ? "Already promoted" : "Promoted"}
++                {retryNow.data?.outcome === "already_promoted" ? "Déjà relancé" : "Relancé"}
+               </span>
+             ) : (
+               <span className="inline-flex items-center gap-1.5">
+                 <RotateCcw className="h-3.5 w-3.5" aria-hidden="true" />
+-                Retry now
++                Relancer maintenant
+               </span>
+             )}
+           </Button>
+           <span className="text-right text-xs text-muted-foreground sm:max-w-(--sz-12rem)">
+             {retryNow.isPending
+-              ? "Promoting scheduled retry"
++              ? "Lancement du nouvel essai planifié"
+               : isSuccessTransient
+                 ? retryNow.data?.outcome === "already_promoted"
+-                  ? "Already promoted — run starting"
+-                  : "Promoted — run starting"
++                  ? "Déjà relancé : l'exécution démarre"
++                  : "Relancé : l'exécution démarre"
+                 : helperIdle}
+           </span>
+         </div>
+@@ -189,7 +189,7 @@ export function RetryErrorBand({ error, onRetry, className }: RetryErrorBandProp
+     >
+       <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+       <div className="min-w-0 flex-1">
+-        <div className="font-medium">Couldn't retry now</div>
++        <div className="font-medium">Impossible de réessayer maintenant</div>
+         <div className="mt-0.5 text-muted-foreground">{error.message}</div>
+       </div>
+       <button
+diff --git a/ui/src/components/TaskChatThread.test.tsx b/ui/src/components/TaskChatThread.test.tsx
+index 259426475..34659618d 100644
+--- a/ui/src/components/TaskChatThread.test.tsx
++++ b/ui/src/components/TaskChatThread.test.tsx
+@@ -3316,6 +3316,9 @@ describe("TaskChatThread blocker links", () => {
+     expect(container.textContent).not.toContain(
+       "This task resumes automatically",
+     );
++    expect(container.textContent).not.toContain(
++      "Cette tâche reprend automatiquement",
++    );
+   });
+ 
+   it("shows the ordered live-work queue at the top and bottom", () => {
+diff --git a/ui/src/lib/pipeline-liveness.ts b/ui/src/lib/pipeline-liveness.ts
+index 7038c9276..742a70a16 100644
+--- a/ui/src/lib/pipeline-liveness.ts
++++ b/ui/src/lib/pipeline-liveness.ts
+@@ -40,7 +40,7 @@ export interface LivenessBannerView {
+ }
+ 
+ const AUTO_RETRY_NOTE =
+-  "Paperclip retries automatically once the blocker clears — you don't need to move the item by hand.";
++  "Paperclip réessaie automatiquement dès que le blocage est levé : inutile de déplacer l'élément à la main.";
+ 
+ /**
+  * Prosumer-voice body for the `no_action_path` "stuck" banner. The server's
+@@ -49,8 +49,8 @@ const AUTO_RETRY_NOTE =
+  * the PAP-11245 voice rule forbids, so we translate it here. See PAP-11259.
+  */
+ const NO_ACTION_PATH_BODY =
+-  "Paperclip can't see anything to work on next here — no automation, retry, blocker, or review. " +
+-  "Re-run the stage to nudge it, or use the ⋯ menu to move it by hand.";
++  "Paperclip ne voit rien à traiter ensuite ici : ni automatisation, ni nouvel essai, ni blocage, ni revue. " +
++  "Relancez l'étape pour le débloquer, ou utilisez le menu ⋯ pour le déplacer à la main.";
+ 
+ /**
+  * The `pipelines:write` permission key is the only permission the Phase 2
+@@ -106,7 +106,7 @@ export function derivePipelineLivenessBanner(
+       return {
+         reason: liveness.reason,
+         tone: "blocked",
+-        title: "Automation paused — waiting on a blocker",
++        title: "Automatisation en pause : en attente d'un blocage levé",
+         body: liveness.message,
+         blockerLink: blockerLinkFromLiveness(liveness),
+         automationLink: automationLinkFromLiveness(liveness),
+@@ -121,7 +121,7 @@ export function derivePipelineLivenessBanner(
+       return {
+         reason: liveness.reason,
+         tone: "blocked",
+-        title: "Automation paused — waiting on a blocker",
++        title: "Automatisation en pause : en attente d'un blocage levé",
+         body: liveness.message,
+         blockerLink: blockerLinkFromLiveness(liveness),
+         automationLink: automationLinkFromLiveness(liveness),
+@@ -136,7 +136,7 @@ export function derivePipelineLivenessBanner(
+       return {
+         reason: liveness.reason,
+         tone: "permission",
+-        title: "Permission needed before this can run",
++        title: "Autorisation requise avant l'exécution",
+         body: liveness.message,
+         blockerLink: null,
+         automationLink: automationLinkFromLiveness(liveness),
+@@ -145,7 +145,7 @@ export function derivePipelineLivenessBanner(
+         retryKind: null,
+         retryLabel: "",
+         helperNote:
+-          "Grant the access above to the configured responsible, then Paperclip retries automatically.",
++          "Accordez l'accès ci-dessus à la personne responsable configurée, puis Paperclip réessaiera automatiquement.",
+       };
+ 
+     case "automation_failed": {
+@@ -157,14 +157,14 @@ export function derivePipelineLivenessBanner(
+       return {
+         reason: liveness.reason,
+         tone: recovered ? "retry" : "attention",
+-        title: recovered ? "Blocker resolved — ready to retry" : "Automation failed",
++        title: recovered ? "Blocage levé : prêt à être relancé" : "Échec de l'automatisation",
+         body: liveness.message,
+         blockerLink: null,
+         automationLink: automationLinkFromLiveness(liveness),
+         permissionKey: null,
+         showRetry: true,
+         retryKind: automationId ? "automation" : "stage",
+-        retryLabel: "Retry now",
++        retryLabel: "Relancer maintenant",
+         helperNote: recovered ? AUTO_RETRY_NOTE : null,
+       };
+     }
+@@ -173,14 +173,14 @@ export function derivePipelineLivenessBanner(
+       return {
+         reason: liveness.reason,
+         tone: "attention",
+-        title: "Waiting on breakdown evidence",
++        title: "En attente des éléments du découpage",
+         body: liveness.message,
+         blockerLink: null,
+         automationLink: null,
+         permissionKey: null,
+         showRetry: true,
+         retryKind: "stage",
+-        retryLabel: "Re-run stage automation",
++        retryLabel: "Relancer l'automatisation de l'étape",
+         helperNote: null,
+       };
+ 
+@@ -188,14 +188,14 @@ export function derivePipelineLivenessBanner(
+       return {
+         reason: liveness.reason,
+         tone: "blocked",
+-        title: "Breakdown is incomplete",
++        title: "Le découpage est incomplet",
+         body: missingPiecesBody(liveness),
+         blockerLink: null,
+         automationLink: null,
+         permissionKey: null,
+         showRetry: true,
+         retryKind: "stage",
+-        retryLabel: "Re-run stage automation",
++        retryLabel: "Relancer l'automatisation de l'étape",
+         helperNote: null,
+       };
+ 
+@@ -203,14 +203,14 @@ export function derivePipelineLivenessBanner(
+       return {
+         reason: liveness.reason,
+         tone: "attention",
+-        title: "This item is stuck",
++        title: "Cet élément est bloqué",
+         body: NO_ACTION_PATH_BODY,
+         blockerLink: null,
+         automationLink: null,
+         permissionKey: null,
+         showRetry: true,
+         retryKind: "stage",
+-        retryLabel: "Re-run stage automation",
++        retryLabel: "Relancer l'automatisation de l'étape",
+         helperNote: null,
+       };
+ 
+@@ -222,7 +222,7 @@ export function derivePipelineLivenessBanner(
+ function missingPiecesBody(liveness: PipelineCaseLiveness): string {
+   const missing = liveness.breakdown?.missingRequestKeys?.length ?? 0;
+   if (missing > 0) {
+-    return `${liveness.message} ${missing} expected ${missing === 1 ? "piece is" : "pieces are"} still missing.`;
++    return `${liveness.message} ${missing} ${missing === 1 ? "élément attendu manque encore" : "éléments attendus manquent encore"}.`;
+   }
+   return liveness.message;
+ }
+diff --git a/ui/src/lib/successful-run-handoff.ts b/ui/src/lib/successful-run-handoff.ts
+index 2ffac2d77..011a06865 100644
+--- a/ui/src/lib/successful-run-handoff.ts
++++ b/ui/src/lib/successful-run-handoff.ts
+@@ -22,7 +22,7 @@ export function isSuccessfulRunHandoffRequired(
+   // A live continuation (running/queued run or queued wake) means an agent is
+   // already on the issue — only complain when nothing is moving. The one
+   // carve-out is a not-yet-promoted scheduled retry: the notice stays visible
+-  // there so the "Retry now" control remains reachable.
++  // there so the « Relancer maintenant » control remains reachable.
+   if (!handoff.hasLiveContinuation) return true;
+   return issue.scheduledRetry?.status === "scheduled_retry";
+ }
+-- 
+2.53.0
+

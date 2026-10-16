@@ -1,0 +1,64 @@
+From 351bc6953a55e6712170ce7af2448ba64ad544b0 Mon Sep 17 00:00:00 2001
+From: Jean-Baptiste Dhondt <114347858+warrox1993@users.noreply.github.com>
+Date: Fri, 16 Oct 2026 12:48:00 +0200
+Subject: [PATCH] =?UTF-8?q?test(atelier,=20local):=20l'heure=20du=20monite?=
+ =?UTF-8?q?ur=20est=20rendue=20en=20en-US=20pour=20que=20le=20test=20soit?=
+ =?UTF-8?q?=20d=C3=A9terministe?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Le composant formate l'heure sans locale explicite ; sur un poste en fr-FR le test
+recevait « Today, 16:08 » au lieu de « Today, 4:08 PM ». La locale est imposée en
+en-US dans ce seul test (restaurée à la fin), l'attendu exact est conservé.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01DP85vPq2MHkZg8VNtRvCzB
+---
+ ui/src/components/IssueProperties.test.tsx | 16 ++++++++++++----
+ 1 file changed, 12 insertions(+), 4 deletions(-)
+
+diff --git a/ui/src/components/IssueProperties.test.tsx b/ui/src/components/IssueProperties.test.tsx
+index cd0c00db4..18b664077 100644
+--- a/ui/src/components/IssueProperties.test.tsx
++++ b/ui/src/components/IssueProperties.test.tsx
+@@ -2807,6 +2807,15 @@ describe("IssueProperties", () => {
+     const at = (minutesFromNow: number) =>
+       new Date(NOW.getTime() + minutesFromNow * 60_000).toISOString();
+     const dateNowSpy = vi.spyOn(Date, "now").mockReturnValue(NOW.getTime());
++    // Le composant formate l'heure sans locale explicite : elle viendrait de la
++    // machine (« 16:08 » en fr-FR, « 4:08 PM » en en-US). On impose en-US pour que
++    // l'attendu exact soit identique partout, sans l'assouplir.
++    const RealDateTimeFormat = Intl.DateTimeFormat;
++    const dateTimeFormatSpy = vi.spyOn(Intl, "DateTimeFormat").mockImplementation(
++      function (locales?: Intl.LocalesArgument, options?: Intl.DateTimeFormatOptions) {
++        return new RealDateTimeFormat(locales ?? "en-US", options);
++      } as unknown as typeof Intl.DateTimeFormat,
++    );
+     const baseMonitorState = {
+       status: "scheduled" as const,
+       nextCheckAt: at(132),
+@@ -2837,10 +2846,8 @@ describe("IssueProperties", () => {
+     }));
+     await flush();
+     expect(monitorRowText()).toContain("In 2h 12m");
+-    // The hour is rendered in the machine's timezone, so it is not pinned here:
+-    // this instant is 4:08 PM at UTC and 9:08 AM at UTC-7. What the row states
+-    // are actually about — the countdown and the attempt suffix — is asserted
+-    // exactly, and the countdown above is timezone-independent already.
++    // L'heure est celle du fuseau local, ancrée plus haut sur 13:56 locale + 132 min,
++    // donc 4:08 PM partout ; la locale est imposée en en-US ci-dessus.
+     expect(monitorRowText()).toContain("Today, 4:08 PM · Attempt 1");
+ 
+     renderMonitor(createIssue({
+@@ -2900,6 +2907,7 @@ describe("IssueProperties", () => {
+ 
+     act(() => root.unmount());
+     dateNowSpy.mockRestore();
++    dateTimeFormatSpy.mockRestore();
+   });
+ 
+   const watchdogAgent = {
+-- 
+2.53.0
+

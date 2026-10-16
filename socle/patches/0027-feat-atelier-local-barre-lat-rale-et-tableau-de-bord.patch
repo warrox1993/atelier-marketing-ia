@@ -1,0 +1,510 @@
+From 7198a925691eec5540381ef38e74929c8f41e9ac Mon Sep 17 00:00:00 2001
+From: Jean-Baptiste Dhondt <114347858+warrox1993@users.noreply.github.com>
+Date: Fri, 16 Oct 2026 12:59:32 +0200
+Subject: [PATCH] =?UTF-8?q?feat(atelier,=20local):=20barre=20lat=C3=A9rale?=
+ =?UTF-8?q?=20et=20tableau=20de=20bord=20traduits=20en=20fran=C3=A7ais?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Barre latérale (Nouvelle tâche, Rechercher, Tableau de bord, Boîte de réception,
+Travail, Tâches, Projets, Productions, Organisation, Compétences, Connecteurs,
+Journal d'audit), heures relatives (à l'instant, il y a N min), dates des
+graphiques en fr-BE, panneau des exécutions actives. Libellés seulement.
+Tests mis à jour vers les attendus français exacts.
+
+Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01DP85vPq2MHkZg8VNtRvCzB
+---
+ ui/src/components/ActiveAgentsPanel.test.tsx  |  7 ++-
+ ui/src/components/ActiveAgentsPanel.tsx       | 10 +--
+ ui/src/components/ActivityCharts.tsx          |  2 +-
+ ui/src/components/CommentThread.test.tsx      |  4 +-
+ ui/src/components/IssueProperties.test.tsx    |  2 +-
+ ui/src/components/Sidebar.test.tsx            | 62 +++++++++----------
+ ui/src/components/Sidebar.tsx                 | 32 +++++-----
+ .../task-chat/TaskChatMarker.test.tsx         |  2 +-
+ .../task-chat/TaskChatSystemNotice.test.tsx   |  2 +-
+ ui/src/lib/timeAgo.ts                         | 12 ++--
+ ui/src/lib/utils.ts                           |  8 +--
+ 11 files changed, 72 insertions(+), 71 deletions(-)
+
+diff --git a/ui/src/components/ActiveAgentsPanel.test.tsx b/ui/src/components/ActiveAgentsPanel.test.tsx
+index 532785a22..3b7656694 100644
+--- a/ui/src/components/ActiveAgentsPanel.test.tsx
++++ b/ui/src/components/ActiveAgentsPanel.test.tsx
+@@ -150,7 +150,7 @@ describe("ActiveAgentsPanel", () => {
+     });
+ 
+     const moreLink = [...container.querySelectorAll("a")].find((anchor) =>
+-      anchor.textContent?.includes("more active/recent"),
++      anchor.textContent?.includes("active ou récente"),
+     );
+     expect(moreLink?.getAttribute("href")).toBe("/dashboard/live");
+     expect(container.textContent).not.toContain("Run output");
+@@ -198,7 +198,7 @@ describe("ActiveAgentsPanel", () => {
+       "/agents/agent-4/runs/run-4",
+       "/agents/agent-5/runs/run-5",
+     ]);
+-    expect(container.textContent).toContain("1 more active/recent run");
++    expect(container.textContent).toContain("1 autre exécution active ou récente");
+ 
+     await act(async () => root.unmount());
+   });
+@@ -234,7 +234,8 @@ describe("ActiveAgentsPanel", () => {
+       limit: 50,
+       distinctTasks: false,
+     });
+-    expect(container.textContent).not.toContain("more active/recent");
++    expect(container.textContent).not.toContain("active ou récente");
++    expect(container.textContent).not.toContain("actives ou récentes");
+     expect(container.textContent).not.toContain("Run output");
+     expect(container.querySelectorAll(".dashboard-agent-card")).toHaveLength(2);
+ 
+diff --git a/ui/src/components/ActiveAgentsPanel.tsx b/ui/src/components/ActiveAgentsPanel.tsx
+index b3aaf50a2..5c3d46e59 100644
+--- a/ui/src/components/ActiveAgentsPanel.tsx
++++ b/ui/src/components/ActiveAgentsPanel.tsx
+@@ -159,8 +159,8 @@ export function ActiveAgentsPanel({
+         <div className="mt-3 flex justify-end text-xs text-muted-foreground">
+           <Link to="/dashboard/live" className="hover:text-foreground hover:underline">
+             {hiddenRunCount > 0
+-              ? `${hiddenRunCount} more active/recent run${hiddenRunCount === 1 ? "" : "s"}`
+-              : "View all runs"}
++              ? `${hiddenRunCount} ${hiddenRunCount === 1 ? "autre exécution active ou récente" : "autres exécutions actives ou récentes"}`
++              : "Voir toutes les exécutions"}
+           </Link>
+         </div>
+       )}
+@@ -190,8 +190,8 @@ export const AgentRunCard = memo(function AgentRunCard({
+   const statusLabel = runStatusLabels[run.status] ?? run.status.replace(/[_-]/g, " ");
+   const runUrl = `/agents/${run.agentId}/runs/${run.id}`;
+   const timestamp = run.finishedAt
+-    ? `Finished ${relativeTime(run.finishedAt)}`
+-    : run.startedAt ? `Started ${relativeTime(run.startedAt)}` : `Queued ${relativeTime(run.createdAt)}`;
++    ? `Terminé ${relativeTime(run.finishedAt)}`
++    : run.startedAt ? `Démarré ${relativeTime(run.startedAt)}` : `En file ${relativeTime(run.createdAt)}`;
+   const taskStatus = issue?.status === "in_review" && issue.externalConversationState === "waiting" ? "idle" : issue?.status ?? "backlog";
+   const taskTitle = issue?.title ?? (issueLoadFailed ? "Task unavailable" : "Loading task…");
+ 
+@@ -236,7 +236,7 @@ export const AgentRunCard = memo(function AgentRunCard({
+         ) : (
+           <Link to={runUrl} className="flex items-center gap-1.5 rounded-lg border border-border/60 bg-background/60 px-2.5 py-2 text-sm text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+             <Clock3 className="size-4 shrink-0" aria-hidden />
+-            <span className="truncate">{run.invocationSource === "timer" ? "Scheduled heartbeat" : "No linked task"}</span>
++            <span className="truncate">{run.invocationSource === "timer" ? "Battement planifié" : "Aucune tâche liée"}</span>
+           </Link>
+         )}
+         <time
+diff --git a/ui/src/components/ActivityCharts.tsx b/ui/src/components/ActivityCharts.tsx
+index 58b65c6f3..6efacd85e 100644
+--- a/ui/src/components/ActivityCharts.tsx
++++ b/ui/src/components/ActivityCharts.tsx
+@@ -12,7 +12,7 @@ export function getLast14Days(): string[] {
+ 
+ function formatDayLabel(dateStr: string): string {
+   const d = new Date(dateStr + "T12:00:00");
+-  return `${d.getMonth() + 1}/${d.getDate()}`;
++  return d.toLocaleDateString("fr-BE", { day: "2-digit", month: "2-digit" });
+ }
+ 
+ function emptyRunDay(date: string): DashboardRunActivityDay {
+diff --git a/ui/src/components/CommentThread.test.tsx b/ui/src/components/CommentThread.test.tsx
+index 427d5f62e..2bed42c04 100644
+--- a/ui/src/components/CommentThread.test.tsx
++++ b/ui/src/components/CommentThread.test.tsx
+@@ -156,8 +156,8 @@ describe("CommentThread", () => {
+     expect(runRow?.className).not.toContain("border");
+     expect(container.textContent).toContain("CodexCoder");
+     expect(container.textContent).toContain("succeeded");
+-    expect(container.textContent).toContain("2h ago");
+-    expect(container.textContent).not.toContain("4h ago");
++    expect(container.textContent).toContain("il y a 2 h");
++    expect(container.textContent).not.toContain("il y a 4 h");
+     const runLink = container.querySelector('a[href="/agents/agent-1/runs/run-12345678abcd"]') as HTMLAnchorElement | null;
+     expect(runLink?.textContent).toContain("run-1234");
+     expect(runLink?.className).toContain("rounded-md");
+diff --git a/ui/src/components/IssueProperties.test.tsx b/ui/src/components/IssueProperties.test.tsx
+index 18b664077..27151f3c7 100644
+--- a/ui/src/components/IssueProperties.test.tsx
++++ b/ui/src/components/IssueProperties.test.tsx
+@@ -2899,7 +2899,7 @@ describe("IssueProperties", () => {
+     }));
+     await flush();
+     expect(monitorRowText()).toContain("Cleared");
+-    expect(monitorRowText()).toContain("last checked 2h ago · after attempt 2");
++    expect(monitorRowText()).toContain("last checked il y a 2 h · after attempt 2");
+ 
+     renderMonitor(createIssue());
+     await flush();
+diff --git a/ui/src/components/Sidebar.test.tsx b/ui/src/components/Sidebar.test.tsx
+index 51a83ca11..8f9b33c11 100644
+--- a/ui/src/components/Sidebar.test.tsx
++++ b/ui/src/components/Sidebar.test.tsx
+@@ -196,7 +196,7 @@ describe("Sidebar", () => {
+ 
+     expect(container.querySelector('a[aria-label="Open search"]')).toBeNull();
+     const navSearchLink = [...container.querySelectorAll("nav a")]
+-      .find((anchor) => anchor.textContent?.trim() === "Search");
++      .find((anchor) => anchor.textContent?.trim() === "Rechercher");
+     expect(navSearchLink?.getAttribute("href")).toBe("/search");
+ 
+     flushSync(() => {
+@@ -217,11 +217,11 @@ describe("Sidebar", () => {
+     // The Work section is a Collapsible now (one extra wrapper level), so
+     // resolve the section root by walking up until the header label appears.
+     let workSectionContainer = workSection?.parentElement ?? null;
+-    while (workSectionContainer && !workSectionContainer.textContent?.includes("Work")) {
++    while (workSectionContainer && !workSectionContainer.textContent?.includes("Travail")) {
+       workSectionContainer = workSectionContainer.parentElement;
+     }
+-    expect(workSectionContainer?.textContent).toContain("Work");
+-    expect(workSectionContainer?.textContent).toContain("Tasks");
++    expect(workSectionContainer?.textContent).toContain("Travail");
++    expect(workSectionContainer?.textContent).toContain("Tâches");
+     expect(workSectionContainer?.textContent).not.toContain("Goals");
+ 
+     flushSync(() => {
+@@ -236,19 +236,19 @@ describe("Sidebar", () => {
+     });
+     const root = await renderSidebar();
+ 
+-    expect(container.textContent).toContain("New Task");
++    expect(container.textContent).toContain("Nouvelle tâche");
+     expect(container.textContent).not.toContain("New Issue");
+ 
+     const navLabels = [...container.querySelectorAll("nav a")].map((a) => a.textContent?.trim());
+-    expect(navLabels).toContain("Tasks");
++    expect(navLabels).toContain("Tâches");
+     expect(navLabels).not.toContain("Issues");
+ 
+-    const projectsLink = [...container.querySelectorAll("nav a")].find((a) => a.textContent?.trim() === "Projects");
++    const projectsLink = [...container.querySelectorAll("nav a")].find((a) => a.textContent?.trim() === "Projets");
+     expect(projectsLink?.getAttribute("href")).toBe("/projects");
+     const agentLinks = [...container.querySelectorAll('a[href="/agents"]')];
+     expect(agentLinks).toHaveLength(1);
+     expect([...container.querySelectorAll('a[href="/activity"]')]).toHaveLength(1);
+-    expect(navLabels).toContain("Audit");
++    expect(navLabels).toContain("Journal d'audit");
+     expect(navLabels).not.toContain("Settings");
+     expect(navLabels).not.toContain("Activity");
+     expect(navLabels).not.toContain("Costs");
+@@ -264,7 +264,7 @@ describe("Sidebar", () => {
+     const root = await renderSidebar();
+ 
+     const navLabels = [...container.querySelectorAll("nav a")].map((a) => a.textContent?.trim());
+-    expect(navLabels).toContain("Projects");
++    expect(navLabels).toContain("Projets");
+     expect(navLabels).toContain("Agents");
+     expect(container.textContent).not.toContain("Organization");
+ 
+@@ -283,9 +283,9 @@ describe("Sidebar", () => {
+     const root = await renderSidebar();
+ 
+     const navLabels = [...container.querySelectorAll("nav a")].map((a) => a.textContent?.trim());
+-    expect(navLabels).toContain("Tasks");
++    expect(navLabels).toContain("Tâches");
+     // Top-level Projects link + starred children stay, per-project collapsible gone.
+-    expect(navLabels).toContain("Projects");
++    expect(navLabels).toContain("Projets");
+     expect(container.querySelector('[data-testid="sidebar-starred-projects"]')).not.toBeNull();
+     expect(navLabels).toContain("Agents");
+ 
+@@ -306,9 +306,9 @@ describe("Sidebar", () => {
+     expect(container.querySelector('[data-testid="sidebar-projects"]')).not.toBeNull();
+     expect(container.querySelector('[data-testid="sidebar-agents"]')?.getAttribute("data-streamlined")).toBe("undefined");
+     expect(container.textContent).toContain("Organization");
+-    expect(labels).toEqual(expect.arrayContaining(["Org", "Connectors", "Timeline", "Costs", "Activity", "Settings"]));
+-    expect(labels).not.toContain("Audit");
+-    expect(labels).not.toContain("Projects");
++    expect(labels).toEqual(expect.arrayContaining(["Org", "Connecteurs", "Timeline", "Costs", "Activity", "Settings"]));
++    expect(labels).not.toContain("Journal d'audit");
++    expect(labels).not.toContain("Projets");
+     expect(container.querySelector('a[href="/agents"]')).toBeNull();
+     expect(container.querySelector("aside")?.classList).toContain("border-r");
+ 
+@@ -343,12 +343,12 @@ describe("Sidebar", () => {
+     const primaryGroup = container.querySelector("nav > div:first-child");
+     expect(primaryGroup?.firstElementChild).toBe(sidebarSlot);
+     const primaryNavText = primaryGroup?.textContent ?? "";
+-    expect(primaryNavText.indexOf("Plugin slot outlet")).toBeLessThan(primaryNavText.indexOf("New Task"));
+-    expect(primaryNavText).toContain("Inbox");
++    expect(primaryNavText.indexOf("Plugin slot outlet")).toBeLessThan(primaryNavText.indexOf("Nouvelle tâche"));
++    expect(primaryNavText).toContain("Boîte de réception");
+ 
+     // Elle n'est plus dans la section Work (les lanceurs, eux, y restent).
+     const workText = container.querySelector("nav [data-plugin-launcher-zone]")?.parentElement?.parentElement?.textContent ?? "";
+-    expect(workText).toContain("Work");
++    expect(container.querySelector("nav")?.textContent).toContain("Travail");
+     expect(workText).toContain("Workspaces");
+     expect(workText).not.toContain("Plugin slot outlet");
+ 
+@@ -380,7 +380,7 @@ describe("Sidebar", () => {
+ 
+       const workSection = chatLink?.closest("div")?.parentElement?.parentElement;
+       const workText = workSection?.textContent ?? "";
+-      expect(workText.indexOf("Chat")).toBeLessThan(workText.indexOf("Tasks"));
++      expect(workText.indexOf("Chat")).toBeLessThan(workText.indexOf("Tâches"));
+ 
+       flushSync(() => {
+         root.unmount();
+@@ -449,7 +449,7 @@ describe("Sidebar", () => {
+       expect([...container.querySelectorAll("a")].some((anchor) => anchor.getAttribute("href") === "/inbox")).toBe(false);
+ 
+       const tasksLink = [...container.querySelectorAll("a")].find((anchor) => anchor.getAttribute("href") === "/issues");
+-      expect(tasksLink?.textContent).toContain("Tasks");
++      expect(tasksLink?.textContent).toContain("Tâches");
+       expect(tasksLink?.textContent).toContain("7");
+ 
+       flushSync(() => {
+@@ -523,13 +523,13 @@ describe("Sidebar", () => {
+     const root = await renderSidebar();
+ 
+     const sections = [...container.querySelectorAll("nav > div")];
+-    const workSection = sections.find((section) => section.textContent?.startsWith("Work"));
+-    const orgSection = sections.find((section) => section.textContent?.startsWith("Org"));
++    const workSection = sections.find((section) => section.textContent?.startsWith("Travail"));
++    const orgSection = sections.find((section) => section.textContent?.startsWith("Organisation"));
+     const labels = (section: Element | undefined) => [...(section?.querySelectorAll("a") ?? [])]
+       .map((anchor) => anchor.textContent?.trim());
+ 
+-    expect(labels(workSection)).toEqual(["Tasks", "Projects", "Routines", "Artifacts"]);
+-    expect(labels(orgSection)).toEqual(["Agents", "Skills", "Connectors", "Audit"]);
++    expect(labels(workSection)).toEqual(["Tâches", "Projets", "Routines", "Productions"]);
++    expect(labels(orgSection)).toEqual(["Agents", "Compétences", "Connecteurs", "Journal d'audit"]);
+     expect(sections.indexOf(workSection!)).toBeLessThan(sections.indexOf(orgSection!));
+     expect(
+       workSection?.querySelector('a[href="/issues"] svg')?.classList.contains("lucide-circle-check"),
+@@ -577,7 +577,7 @@ describe("Sidebar", () => {
+     expect(link?.getAttribute("href")).toBe("/goals");
+ 
+     const navText = container.querySelector("nav")?.textContent ?? "";
+-    expect(navText.indexOf("Artifacts")).toBeLessThan(navText.indexOf("Goals"));
++    expect(navText.indexOf("Productions")).toBeLessThan(navText.indexOf("Goals"));
+ 
+     flushSync(() => {
+       root.unmount();
+@@ -589,8 +589,8 @@ describe("Sidebar", () => {
+     const root = await renderSidebar();
+ 
+     const sections = [...container.querySelectorAll("nav > div")];
+-    const workSection = sections.find((section) => section.textContent?.startsWith("Work"));
+-    expect(workSection?.textContent).toContain("Projects");
++    const workSection = sections.find((section) => section.textContent?.startsWith("Travail"));
++    expect(workSection?.textContent).toContain("Projets");
+     expect(workSection?.textContent).not.toContain("Timeline");
+     expect(container.querySelector('a[href="/timeline"]')).toBeNull();
+ 
+@@ -660,14 +660,14 @@ describe("Sidebar", () => {
+     const root = await renderSidebar();
+ 
+     const links = [...container.querySelectorAll("a")];
+-    const link = links.find((anchor) => anchor.textContent === "Connectors");
++    const link = links.find((anchor) => anchor.textContent === "Connecteurs");
+     expect(link?.getAttribute("href")).toBe("/apps");
+     expect(link?.querySelector("svg")?.classList).toContain("lucide-unplug");
+-    expect(links.findIndex((anchor) => anchor.textContent === "Connectors")).toBeGreaterThan(
+-      links.findIndex((anchor) => anchor.textContent === "Skills"),
++    expect(links.findIndex((anchor) => anchor.textContent === "Connecteurs")).toBeGreaterThan(
++      links.findIndex((anchor) => anchor.textContent === "Compétences"),
+     );
+-    expect(links.findIndex((anchor) => anchor.textContent === "Connectors")).toBeLessThan(
+-      links.findIndex((anchor) => anchor.textContent === "Audit"),
++    expect(links.findIndex((anchor) => anchor.textContent === "Connecteurs")).toBeLessThan(
++      links.findIndex((anchor) => anchor.textContent === "Journal d'audit"),
+     );
+ 
+     flushSync(() => {
+diff --git a/ui/src/components/Sidebar.tsx b/ui/src/components/Sidebar.tsx
+index b0162659c..2e7efba83 100644
+--- a/ui/src/components/Sidebar.tsx
++++ b/ui/src/components/Sidebar.tsx
+@@ -160,19 +160,19 @@ export function Sidebar({ children }: { children?: ReactNode }) {
+               <button
+                 onClick={() => openNewIssue()}
+                 data-slot="icon-button"
+-                aria-label={rail ? "New Task" : undefined}
++                aria-label={rail ? "Nouvelle tâche" : undefined}
+                 className={cn(
+                   "flex items-center gap-2.5 mx-2 rounded-lg px-2 py-1.5 pointer-coarse:py-1 text-(length:--text-compact) font-medium text-foreground/80 transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
+                 )}
+               >
+                 <SquarePen className="h-4 w-4 shrink-0" />
+-                <span className={rail ? SIDEBAR_RAIL_HIDDEN_LABEL : "truncate"}>New Task</span>
++                <span className={rail ? SIDEBAR_RAIL_HIDDEN_LABEL : "truncate"}>Nouvelle tâche</span>
+               </button>
+             );
+             return rail ? (
+               <Tooltip>
+                 <TooltipTrigger asChild>{newTaskButton}</TooltipTrigger>
+-                <TooltipContent side="right">New Task</TooltipContent>
++                <TooltipContent side="right">Nouvelle tâche</TooltipContent>
+               </Tooltip>
+             ) : (
+               newTaskButton
+@@ -182,12 +182,12 @@ export function Sidebar({ children }: { children?: ReactNode }) {
+               width; a nav row also keeps search reachable from the
+               collapsed rail, where the old header icon was dropped entirely.
+               Cmd/Ctrl+K remains the keyboard path (command palette). */}
+-          <SidebarNavItem to="/search" label="Search" icon={Search} />
+-          <SidebarNavItem to="/dashboard" label="Dashboard" icon={LayoutDashboard} liveCount={liveRunCount} />
++          <SidebarNavItem to="/search" label="Rechercher" icon={Search} />
++          <SidebarNavItem to="/dashboard" label="Tableau de bord" icon={LayoutDashboard} liveCount={liveRunCount} />
+           {!combinedInboxTasks ? (
+             <SidebarNavItem
+               to="/inbox"
+-              label="Inbox"
++              label="Boîte de réception"
+               icon={Inbox}
+               badge={inboxBadge.inbox}
+               badgeLabel="unread"
+@@ -213,7 +213,7 @@ export function Sidebar({ children }: { children?: ReactNode }) {
+           ) : null}
+         </div>
+ 
+-        <SidebarSection label="Work" collapsible={{ open: workOpen, onOpenChange: setWorkOpen }}>
++        <SidebarSection label="Travail" collapsible={{ open: workOpen, onOpenChange: setWorkOpen }}>
+           {/* Agent Chat: Chat leads the Work group as a single row — the
+               agents you talk to live in the Chat surface's own secondary rail
+               (ChatContextualSidebar), not in the primary nav. */}
+@@ -225,7 +225,7 @@ export function Sidebar({ children }: { children?: ReactNode }) {
+           {combinedInboxTasks ? (
+             <SidebarNavItem
+               to="/issues"
+-              label="Tasks"
++              label="Tâches"
+               icon={CircleCheck}
+               badge={inboxBadge.inbox}
+               badgeLabel="unread"
+@@ -233,16 +233,16 @@ export function Sidebar({ children }: { children?: ReactNode }) {
+               alert={inboxBadge.failedRuns > 0}
+             />
+           ) : (
+-            <SidebarNavItem to="/issues" label="Tasks" icon={CircleCheck} />
++            <SidebarNavItem to="/issues" label="Tâches" icon={CircleCheck} />
+           )}
+           {streamlinedUiEnabled ? (
+             <>
+-              <SidebarNavItem to="/projects" label="Projects" icon={FolderOpen} />
++              <SidebarNavItem to="/projects" label="Projets" icon={FolderOpen} />
+               <SidebarStarredProjects />
+             </>
+           ) : null}
+           <SidebarNavItem to="/routines" label="Routines" icon={Repeat} />
+-          <SidebarNavItem to="/artifacts" label="Artifacts" icon={Package} />
++          <SidebarNavItem to="/artifacts" label="Productions" icon={Package} />
+           {showCases ? (
+             <SidebarNavItem to="/cases" label="Cases" icon={Layers} textBadge="beta" />
+           ) : null}
+@@ -271,13 +271,13 @@ export function Sidebar({ children }: { children?: ReactNode }) {
+ 
+         {streamlinedUiEnabled ? (
+           <SidebarSection
+-            label="Org"
++            label="Organisation"
+             collapsible={{ open: organizationOpen, onOpenChange: setOrganizationOpen }}
+           >
+             <SidebarNavItem to="/agents" label="Agents" icon={Users} />
+-            <SidebarNavItem to="/skills" label="Skills" icon={Boxes} />
+-            <SidebarNavItem to="/apps" label="Connectors" icon={Unplug} />
+-            <SidebarNavItem to="/activity" label="Audit" icon={History} />
++            <SidebarNavItem to="/skills" label="Compétences" icon={Boxes} />
++            <SidebarNavItem to="/apps" label="Connecteurs" icon={Unplug} />
++            <SidebarNavItem to="/activity" label="Journal d'audit" icon={History} />
+           </SidebarSection>
+         ) : null}
+ 
+@@ -294,7 +294,7 @@ export function Sidebar({ children }: { children?: ReactNode }) {
+               collapsible={{ open: organizationOpen, onOpenChange: setOrganizationOpen }}
+             >
+               <SidebarNavItem to="/org" label="Org" icon={Network} />
+-              <SidebarNavItem to="/apps" label="Connectors" icon={Unplug} />
++              <SidebarNavItem to="/apps" label="Connecteurs" icon={Unplug} />
+               <SidebarNavItem to="/timeline" label="Timeline" icon={GanttChartSquare} />
+               <SidebarNavItem to="/costs" label="Costs" icon={DollarSign} />
+               <SidebarNavItem to="/activity" label="Activity" icon={History} />
+diff --git a/ui/src/components/task-chat/TaskChatMarker.test.tsx b/ui/src/components/task-chat/TaskChatMarker.test.tsx
+index bc6402841..d97eb1bf0 100644
+--- a/ui/src/components/task-chat/TaskChatMarker.test.tsx
++++ b/ui/src/components/task-chat/TaskChatMarker.test.tsx
+@@ -57,7 +57,7 @@ describe("TaskChatMarker", () => {
+       '[data-testid="task-chat-collapsible-marker"] button[aria-expanded]',
+     )!;
+     expect(toggle.textContent).toContain("Run failed");
+-    expect(toggle.textContent).toContain("5m ago");
++    expect(toggle.textContent).toContain("il y a 5 min");
+     expect(
+       container
+         .querySelector('[data-testid="task-chat-collapsible-marker"]')
+diff --git a/ui/src/components/task-chat/TaskChatSystemNotice.test.tsx b/ui/src/components/task-chat/TaskChatSystemNotice.test.tsx
+index 2b6f34f50..658d50797 100644
+--- a/ui/src/components/task-chat/TaskChatSystemNotice.test.tsx
++++ b/ui/src/components/task-chat/TaskChatSystemNotice.test.tsx
+@@ -62,7 +62,7 @@ describe("TaskChatSystemNotice (PAP-443)", () => {
+     const button = toggleButton();
+     expect(button.getAttribute("aria-expanded")).toBe("false");
+     expect(button.textContent).toContain("Task paused — a secret/config binding is missing");
+-    expect(button.textContent).toContain("5m ago");
++    expect(button.textContent).toContain("il y a 5 min");
+     expect(container.textContent).not.toContain("source-scoped recovery action");
+     expect(
+       container.querySelector('[data-testid="task-chat-system-notice-details"]'),
+diff --git a/ui/src/lib/timeAgo.ts b/ui/src/lib/timeAgo.ts
+index 88888bd93..1c5421f45 100644
+--- a/ui/src/lib/timeAgo.ts
++++ b/ui/src/lib/timeAgo.ts
+@@ -9,23 +9,23 @@ export function timeAgo(date: Date | string): string {
+   const then = new Date(date).getTime();
+   const seconds = Math.round((now - then) / 1000);
+ 
+-  if (seconds < MINUTE) return "just now";
++  if (seconds < MINUTE) return "à l'instant";
+   if (seconds < HOUR) {
+     const m = Math.floor(seconds / MINUTE);
+-    return `${m}m ago`;
++    return `il y a ${m} min`;
+   }
+   if (seconds < DAY) {
+     const h = Math.floor(seconds / HOUR);
+-    return `${h}h ago`;
++    return `il y a ${h} h`;
+   }
+   if (seconds < WEEK) {
+     const d = Math.floor(seconds / DAY);
+-    return `${d}d ago`;
++    return `il y a ${d} j`;
+   }
+   if (seconds < MONTH) {
+     const w = Math.floor(seconds / WEEK);
+-    return `${w}w ago`;
++    return `il y a ${w} sem.`;
+   }
+   const mo = Math.floor(seconds / MONTH);
+-  return `${mo}mo ago`;
++  return `il y a ${mo} mois`;
+ }
+diff --git a/ui/src/lib/utils.ts b/ui/src/lib/utils.ts
+index 41fb267aa..26d732da3 100644
+--- a/ui/src/lib/utils.ts
++++ b/ui/src/lib/utils.ts
+@@ -83,13 +83,13 @@ export function relativeTime(date: Date | string): string {
+   const now = Date.now();
+   const then = new Date(date).getTime();
+   const diffSec = Math.round((now - then) / 1000);
+-  if (diffSec < 60) return "just now";
++  if (diffSec < 60) return "à l'instant";
+   const diffMin = Math.round(diffSec / 60);
+-  if (diffMin < 60) return `${diffMin}m ago`;
++  if (diffMin < 60) return `il y a ${diffMin} min`;
+   const diffHr = Math.round(diffMin / 60);
+-  if (diffHr < 24) return `${diffHr}h ago`;
++  if (diffHr < 24) return `il y a ${diffHr} h`;
+   const diffDay = Math.round(diffHr / 24);
+-  if (diffDay < 30) return `${diffDay}d ago`;
++  if (diffDay < 30) return `il y a ${diffDay} j`;
+   return formatDate(date);
+ }
+ 
+-- 
+2.53.0
+

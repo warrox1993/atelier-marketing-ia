@@ -21,6 +21,16 @@ et la liste des documents disponibles : `…/api/plugins/atelier.marketing-ia/ap
   la fiche : « La page affiche 0123.456.789 comme numéro FSMA, alors que le FSMA de la fiche est
   012345. » Sans le bon numéro, la porte refuse la phrase.
 
+## Livrable en relecture : attendre tous les verdicts
+
+- Tant qu'une tâche de revue de la révision courante est ouverte (résumé du contexte de ta tâche :
+  `revuesRevisionCourante`, statut autre que `done` ou `cancelled`), n'écris aucune nouvelle révision
+  du livrable : relecture en cours, attends les verdicts, puis corrige tout en une seule révision.
+  Une révision écrite pendant une relecture rend les verdicts en cours caducs (`revision_perimee`).
+- Un verdict `BLOCKED_INFORMATION` (outil ou réseau en panne) n'appelle aucune correction : n'écris
+  pas de nouvelle révision et ne demande pas la clôture ; le Coordinateur relance la revue quand la
+  cause est levée.
+
 ## Appeler l'API de Paperclip
 
 Ton seul accès au shell est l'autorisation `Bash(curl *)`, sans question possible : une commande qui
@@ -35,8 +45,18 @@ avec `$PAPERCLIP_…` ailleurs (consignes, compétences, message de réveil) : t
   (écris l'apostrophe typographique ’). Corps long, si tu as l'outil Write : écris le JSON dans un
   fichier de ton espace de travail, puis `--data-binary @<chemin absolu du fichier>`.
 - `-w '\nHTTP %{http_code}\n'` affiche le code de retour ; `-o <fichier>` remplace toute redirection.
+- Corps des requêtes : voir la fiche routes-agents (section « Corps des requêtes de tes routes » en bas de tes
+  consignes) ; ne lis jamais le code source du plugin.
 
-Lire une tâche (même forme pour tout `GET`, par exemple `…/taches/<issueId>/contexte` du plugin) :
+Lire une tâche (même forme pour tout `GET`, par exemple `…/taches/<issueId>/contexte` du plugin ; ce contexte est un
+résumé par défaut : le livrable se lit par pages avec `?partie=livrable&debut=<ligne>&lignes=<n>` d'après
+`livrable.sommaire`, le détail avec `?partie=verdicts|couvertures|donneesConnexion`, le schéma des clés par `pourAllerPlus`
+et `?vue=complete` seulement si le résumé ne suffit pas). Le dossier de la tâche (`…/taches/<issueId>/dossier`) et la
+liste des prospects (`…/prospects`) suivent la même règle : résumé par défaut, `?partie=` pour le détail (dossier :
+`livrable` paginé, `matrice`, `revues`, `sources`, `decisions`, `diffusions`, `appelsProposes` ; prospects :
+`?partie=detail&prospectId=<id>` et `page`), `?vue=complete` en dernier recours. Pour lire le livrable, utilise la partie
+`livrable` paginée du contexte de l'atelier (`…/contexte?partie=livrable&debut=<ligne>`) plutôt que de télécharger le
+document natif de la tâche : il tient en une seule ligne trop longue pour `Read` et pousse à des dizaines de `grep` :
 
 ```
 curl -sS --variable %PAPERCLIP_API_URL --variable %PAPERCLIP_API_KEY --expand-header 'Authorization: Bearer {{PAPERCLIP_API_KEY}}' --expand-url '{{PAPERCLIP_API_URL}}/api/issues/<issueId>'
@@ -72,3 +92,7 @@ curl -sS -w '\nHTTP %{http_code}\n' -X POST --variable %PAPERCLIP_API_URL --vari
 
 Une commande refusée ne se contourne pas par un autre outil : corrige-la selon ces règles. Un code
 HTTP 4xx vient du serveur (lis son message), pas de la syntaxe.
+
+## Fichiers temporaires et limites de lecture
+
+Écris tes fichiers temporaires dans ton répertoire de travail, jamais dans /tmp. N'essaie jamais de lire des fichiers hors de ton répertoire de travail.

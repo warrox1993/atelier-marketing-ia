@@ -1,0 +1,287 @@
+From eebd7dd66e3e047461b6111c15fc24bcb882a361 Mon Sep 17 00:00:00 2001
+From: Jean-Baptiste Dhondt <114347858+warrox1993@users.noreply.github.com>
+Date: Fri, 16 Oct 2026 12:36:45 +0200
+Subject: [PATCH] =?UTF-8?q?fix(atelier,=20local):=20ouvrir=20une=20t=C3=A2?=
+ =?UTF-8?q?che=20sans=20plan=20ne=20produit=20plus=20d'erreur=20404?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+La lecture du document plan passe par ?optional=true : le serveur répond
+200 avec null quand il n'existe pas (le contrat des autres lectures reste
+inchangé). La requête ne se relance plus en boucle.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01DP85vPq2MHkZg8VNtRvCzB
+---
+ .../document-annotation-routes.test.ts        | 11 +++
+ server/src/routes/issues.ts                   |  7 ++
+ ui/src/api/issues.ts                          |  5 ++
+ ui/src/components/IssueProperties.test.tsx    |  5 +-
+ ui/src/hooks/useIssuePlanDocument.test.tsx    | 80 +++++++++++++++++++
+ ui/src/hooks/useIssuePlanDocument.ts          |  5 +-
+ ui/src/pages/IssueDetail.test.tsx             | 13 +--
+ 7 files changed, 117 insertions(+), 9 deletions(-)
+ create mode 100644 ui/src/hooks/useIssuePlanDocument.test.tsx
+
+diff --git a/server/src/__tests__/document-annotation-routes.test.ts b/server/src/__tests__/document-annotation-routes.test.ts
+index b490c0c45..9d55baa92 100644
+--- a/server/src/__tests__/document-annotation-routes.test.ts
++++ b/server/src/__tests__/document-annotation-routes.test.ts
+@@ -241,6 +241,17 @@ describe("document annotation routes", () => {
+     });
+   });
+ 
++  it("répond 404 pour un document absent, et 200 null avec ?optional=true", async () => {
++    mockDocumentService.getIssueDocumentByKey.mockResolvedValue(null);
++    await request(await createApp("agent"))
++      .get(`/api/issues/${issueId}/documents/plan`)
++      .expect(404);
++    const res = await request(await createApp("agent"))
++      .get(`/api/issues/${issueId}/documents/plan?optional=true`)
++      .expect(200);
++    expect(res.body).toBeNull();
++  });
++
+   it("includes annotation comment bodies on document reads only when explicitly requested", async () => {
+     const res = await request(await createApp("agent"))
+       .get(`/api/issues/${issueId}/documents/plan?includeAnnotationComments=true`)
+diff --git a/server/src/routes/issues.ts b/server/src/routes/issues.ts
+index f7abfd609..b5ce649fe 100644
+--- a/server/src/routes/issues.ts
++++ b/server/src/routes/issues.ts
+@@ -9823,6 +9823,13 @@ export function issueRoutes(
+       keyParsed.data,
+     );
+     if (!doc) {
++      // Lecture optionnelle (?optional=true) : « pas de document » est une
++      // réponse normale (200 null), pour ne pas polluer la console du navigateur
++      // d'une erreur 404 à chaque ouverture d'une tâche sans plan.
++      if (parseBooleanQuery(req.query.optional)) {
++        res.json(null);
++        return;
++      }
+       res.status(404).json({ error: "Document not found" });
+       return;
+     }
+diff --git a/ui/src/api/issues.ts b/ui/src/api/issues.ts
+index 129961dbb..36ce8c492 100644
+--- a/ui/src/api/issues.ts
++++ b/ui/src/api/issues.ts
+@@ -543,6 +543,11 @@ export const issuesApi = {
+     api.get<IssueDocument>(
+       `/issues/${id}/documents/${encodeURIComponent(key)}`,
+     ),
++  // Lecture d'un document qui peut ne pas exister : 200 avec null au lieu d'un 404.
++  getOptionalDocument: (id: string, key: string) =>
++    api.get<IssueDocument | null>(
++      `/issues/${id}/documents/${encodeURIComponent(key)}?optional=true`,
++    ),
+   upsertDocument: (id: string, key: string, data: UpsertIssueDocument) =>
+     api.put<IssueDocument>(
+       `/issues/${id}/documents/${encodeURIComponent(key)}`,
+diff --git a/ui/src/components/IssueProperties.test.tsx b/ui/src/components/IssueProperties.test.tsx
+index 4a6b329a0..d1f2638e3 100644
+--- a/ui/src/components/IssueProperties.test.tsx
++++ b/ui/src/components/IssueProperties.test.tsx
+@@ -35,6 +35,7 @@ const mockExecutionWorkspacesApi = vi.hoisted(() => ({
+ const mockIssuesApi = vi.hoisted(() => ({
+   list: vi.fn(),
+   getDocument: vi.fn(),
++  getOptionalDocument: vi.fn(),
+   listAcceptedPlanDecompositions: vi.fn(),
+   listAttachments: vi.fn(),
+   listDocuments: vi.fn(),
+@@ -475,7 +476,7 @@ describe("IssueProperties", () => {
+     mockExecutionWorkspacesApi.list.mockResolvedValue([]);
+     mockExecutionWorkspacesApi.controlRuntimeCommands.mockReset();
+     mockIssuesApi.list.mockResolvedValue([]);
+-    mockIssuesApi.getDocument.mockResolvedValue(null);
++    mockIssuesApi.getOptionalDocument.mockResolvedValue(null);
+     mockIssuesApi.listAcceptedPlanDecompositions.mockResolvedValue([]);
+     mockIssuesApi.listAttachments.mockResolvedValue([]);
+     mockIssuesApi.listDocuments.mockResolvedValue([]);
+@@ -817,7 +818,7 @@ describe("IssueProperties", () => {
+     mockInstanceSettingsApi.getExperimental.mockResolvedValue({
+       enableClassicTaskInterface: false,
+     });
+-    mockIssuesApi.getDocument.mockResolvedValue(planDocument);
++    mockIssuesApi.getOptionalDocument.mockResolvedValue(planDocument);
+     mockIssuesApi.listDocuments.mockResolvedValue([planDocument, artifactDocument]);
+     Element.prototype.scrollIntoView = vi.fn();
+ 
+diff --git a/ui/src/hooks/useIssuePlanDocument.test.tsx b/ui/src/hooks/useIssuePlanDocument.test.tsx
+new file mode 100644
+index 000000000..cf32e5f89
+--- /dev/null
++++ b/ui/src/hooks/useIssuePlanDocument.test.tsx
+@@ -0,0 +1,80 @@
++// @vitest-environment jsdom
++import { act } from "react";
++import { createRoot, type Root } from "react-dom/client";
++import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
++import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
++import { ApiError } from "@/api/client";
++import { useIssuePlanDocument } from "./useIssuePlanDocument";
++
++const mockIssuesApi = vi.hoisted(() => ({
++  getDocument: vi.fn(),
++  getOptionalDocument: vi.fn(),
++}));
++vi.mock("@/api/issues", () => ({ issuesApi: mockIssuesApi }));
++
++(globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
++
++let result: ReturnType<typeof useIssuePlanDocument>;
++let root: Root;
++let host: HTMLDivElement;
++
++function Harness() {
++  result = useIssuePlanDocument("issue-1");
++  return null;
++}
++
++async function monter() {
++  // Les relances par défaut sont conservées : seule la correction doit les couper.
++  const queryClient = new QueryClient({
++    defaultOptions: { queries: { retryDelay: 1 } },
++  });
++  await act(async () => {
++    root.render(
++      <QueryClientProvider client={queryClient}>
++        <Harness />
++      </QueryClientProvider>,
++    );
++  });
++  for (let i = 0; i < 30; i++) {
++    await act(async () => {
++      await new Promise((r) => setTimeout(r, 5));
++    });
++  }
++}
++
++beforeEach(() => {
++  vi.clearAllMocks();
++  host = document.createElement("div");
++  root = createRoot(host);
++});
++afterEach(() => {
++  act(() => root.unmount());
++});
++
++describe("useIssuePlanDocument", () => {
++  it("un plan absent donne null, sans erreur et sans appel qui échoue", async () => {
++    mockIssuesApi.getOptionalDocument.mockResolvedValue(null);
++    mockIssuesApi.getDocument.mockRejectedValue(new ApiError("Document not found", 404, null));
++    await monter();
++    expect(result.isError).toBe(false);
++    expect(result.data).toBeNull();
++    // La lecture « optionnelle » ne produit pas de 404 côté réseau.
++    expect(mockIssuesApi.getDocument).not.toHaveBeenCalled();
++    expect(mockIssuesApi.getOptionalDocument).toHaveBeenCalledTimes(1);
++  });
++
++  it("un 404 résiduel reste traité comme « pas de plan »", async () => {
++    mockIssuesApi.getOptionalDocument.mockRejectedValue(new ApiError("Document not found", 404, null));
++    await monter();
++    expect(result.isError).toBe(false);
++    expect(result.data).toBeNull();
++    expect(mockIssuesApi.getOptionalDocument).toHaveBeenCalledTimes(1);
++  });
++
++  it("une vraie erreur (500) reste une erreur, sans relance en boucle", async () => {
++    mockIssuesApi.getOptionalDocument.mockRejectedValue(new ApiError("boom", 500, null));
++    await monter();
++    expect(result.isError).toBe(true);
++    expect(mockIssuesApi.getOptionalDocument).toHaveBeenCalledTimes(1);
++  });
++});
+diff --git a/ui/src/hooks/useIssuePlanDocument.ts b/ui/src/hooks/useIssuePlanDocument.ts
+index 9b0f0ed50..30011b69d 100644
+--- a/ui/src/hooks/useIssuePlanDocument.ts
++++ b/ui/src/hooks/useIssuePlanDocument.ts
+@@ -17,11 +17,14 @@ export function useIssuePlanDocument(issueId: string | null | undefined) {
+     enabled: Boolean(issueId) && !issueId?.startsWith("chat:"),
+     queryFn: async () => {
+       try {
+-        return await issuesApi.getDocument(issueId!, "plan");
++        // 200 null si le plan n'existe pas (aucune erreur 404 dans la console).
++        return await issuesApi.getOptionalDocument(issueId!, "plan");
+       } catch (error) {
+         if (error instanceof ApiError && error.status === 404) return null;
+         throw error;
+       }
+     },
++    // Un plan absent n'est pas une panne : pas de relances automatiques.
++    retry: false,
+   });
+ }
+diff --git a/ui/src/pages/IssueDetail.test.tsx b/ui/src/pages/IssueDetail.test.tsx
+index 2c5f4f1c3..5a88e2a0a 100644
+--- a/ui/src/pages/IssueDetail.test.tsx
++++ b/ui/src/pages/IssueDetail.test.tsx
+@@ -79,6 +79,7 @@ const mockIssuesApi = vi.hoisted(() => ({
+   deleteAttachment: vi.fn(),
+   upsertDocument: vi.fn(),
+   getDocument: vi.fn(),
++  getOptionalDocument: vi.fn(),
+   rejectInteraction: vi.fn(),
+ }));
+ 
+@@ -1393,7 +1394,7 @@ describe("IssueDetail", () => {
+       enableStreamlinedUi: true,
+     });
+     mockIssuesApi.listAcceptedPlanDecompositions.mockResolvedValue([]);
+-    mockIssuesApi.getDocument.mockResolvedValue(null);
++    mockIssuesApi.getOptionalDocument.mockResolvedValue(null);
+     mockOpenPanel.mockClear();
+     mockClosePanel.mockClear();
+     mockSetPanelVisible.mockClear();
+@@ -4396,7 +4397,7 @@ describe("IssueDetail", () => {
+       createIssue({ originKind: ONBOARDING_FIRST_TASK_ORIGIN_KIND }),
+     );
+     // No plan yet: the hook's 404 resolves to null.
+-    mockIssuesApi.getDocument.mockResolvedValue(null);
++    mockIssuesApi.getOptionalDocument.mockResolvedValue(null);
+ 
+     await act(async () => {
+       root.render(
+@@ -4429,7 +4430,7 @@ describe("IssueDetail", () => {
+         workMode: "planning",
+       }),
+     );
+-    mockIssuesApi.getDocument.mockResolvedValue(null);
++    mockIssuesApi.getOptionalDocument.mockResolvedValue(null);
+ 
+     await act(async () => {
+       root.render(
+@@ -4471,7 +4472,7 @@ describe("IssueDetail", () => {
+         workMode: "planning",
+       }),
+     );
+-    mockIssuesApi.getDocument.mockResolvedValue({ id: "doc-1", key: "plan" });
++    mockIssuesApi.getOptionalDocument.mockResolvedValue({ id: "doc-1", key: "plan" });
+ 
+     await act(async () => {
+       root.render(
+@@ -4498,7 +4499,7 @@ describe("IssueDetail", () => {
+       createIssue({ originKind: ONBOARDING_FIRST_TASK_ORIGIN_KIND }),
+     );
+     // No plan yet: the panel mount is suppressed by default.
+-    mockIssuesApi.getDocument.mockResolvedValue(null);
++    mockIssuesApi.getOptionalDocument.mockResolvedValue(null);
+ 
+     await act(async () => {
+       root.render(
+@@ -4546,7 +4547,7 @@ describe("IssueDetail", () => {
+     mockIssuesApi.get.mockResolvedValue(
+       createIssue({ originKind: ONBOARDING_FIRST_TASK_ORIGIN_KIND }),
+     );
+-    mockIssuesApi.getDocument.mockResolvedValue({ id: "doc-1", key: "plan" });
++    mockIssuesApi.getOptionalDocument.mockResolvedValue({ id: "doc-1", key: "plan" });
+ 
+     await act(async () => {
+       root.render(
+-- 
+2.53.0
+

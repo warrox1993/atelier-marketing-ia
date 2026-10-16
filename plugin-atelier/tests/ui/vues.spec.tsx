@@ -49,10 +49,31 @@ describe("navigation", () => {
     expect(rendu.conteneur.querySelector('a[aria-current="page"]')?.textContent).toContain("Calendrier éditorial");
     expect(rendu.conteneur.querySelector('a[aria-current="page"]')?.getAttribute("href")).toBe("/RNO/atelier/calendrier");
   });
+  it("la barre latérale place Prospects et la carte juste après « À faire », sous l'intertitre « Prospection »", async () => {
+    pont.chemin = "/RNO/atelier/prospects";
+    rendu = await rendre(createElement(NavigationAtelier, { context: contexte }));
+    const nav = rendu.conteneur.querySelector("nav.atl-nav")!;
+    // Premier <span> de chaque lien : le libellé, sans le compteur « à valider » de « Contenus ».
+    const textes = Array.from(nav.querySelectorAll("a")).map((a) => a.querySelector("span")?.textContent);
+    expect(textes.slice(0, 4)).toEqual(["Discussion", "À faire", "Prospects", "Carte des prospects"]);
+    expect(textes.slice(4, 4 + RUBRIQUES.length)).toEqual(RUBRIQUES.map((r) => r.libelle));
+    const groupe = nav.querySelector('[role="group"]')!;
+    expect(groupe.textContent).toContain("Prospection");
+    expect(Array.from(groupe.querySelectorAll("a")).map((a) => a.textContent)).toEqual(["Prospects", "Carte des prospects"]);
+    expect(groupe.getAttribute("aria-labelledby")).toBeTruthy();
+    expect(document.getElementById(groupe.getAttribute("aria-labelledby")!)?.textContent).toBe("Prospection");
+    expect(groupe.querySelector('a[aria-current="page"]')?.textContent).toBe("Prospects");
+  });
+  it("les onglets (téléphone) suivent le même ordre", async () => {
+    const c = await page("/RNO/atelier/equipe");
+    const textes = Array.from(c.querySelectorAll("nav.atl-onglets a")).map((a) => a.textContent?.trim());
+    expect(textes.slice(0, 4)).toEqual(["Discussion", "À faire", "Prospects", "Carte des prospects"]);
+    expect(textes.slice(4, 4 + RUBRIQUES.length)).toEqual(RUBRIQUES.map((r) => r.libelle));
+  });
   it("la page porte aussi des onglets (téléphone) et chaque lien passe par la navigation de l'hôte", async () => {
     const c = await page("/RNO/atelier/equipe");
     const onglets = c.querySelector("nav.atl-onglets");
-    expect(onglets?.querySelectorAll("a")).toHaveLength(13);
+    expect(onglets?.querySelectorAll("a")).toHaveLength(14);
     await cliquer(parTexte(onglets!, "a", "Marque et sources"));
     expect(pont.navigations).toContain("/atelier/marque");
   });
@@ -191,6 +212,37 @@ describe("rubriques", () => {
     expect(fetchMock).toHaveBeenCalledWith(`/api/issues/${T}`, expect.objectContaining({ method: "PATCH" }));
     expect(c.textContent).toContain("Décision enregistrée.");
     expect(c.textContent).toContain("aucune diffusion n'a été déclenchée");
+  });
+
+  it("dossier : « demander une correction » est transmise au Coordinateur, sans PATCH natif en in_progress", async () => {
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify({ status: "blocked" }), { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+    pont.actions["atelier.decision"] = async (p) => ({ id: "d", ...p, transmission: { transmission: "coordinateur", parentId: "parent" } });
+    const c = await page(`/RNO/atelier/contenus/${T}`);
+    expect(c.textContent).not.toContain("La correction sera transmise au Coordinateur s'il y en a un pour cette tâche, sinon au producteur.");
+    await cliquer(c.querySelector('input[type="radio"][value="demander_correction"]') as HTMLElement);
+    expect(c.textContent).toContain("La correction sera transmise au Coordinateur s'il y en a un pour cette tâche, sinon au producteur.");
+    await saisir(champParLibelle(c, "Commentaire"), "Reprendre les codes postaux manquants.");
+    await cliquer(parTexte(c, "button", "Enregistrer : demander une correction"));
+    const appel = pont.appelsActions.find((a) => a.cle === "atelier.decision");
+    expect(appel?.params).toMatchObject({ issueId: T, action: "demander_correction", commentaire: "Reprendre les codes postaux manquants." });
+    const patchs = fetchMock.mock.calls.filter((args) => (args as unknown[])[1] && ((args as unknown[])[1] as { method?: string }).method === "PATCH");
+    expect(patchs).toHaveLength(0);
+    expect(c.textContent).toContain("La correction est transmise au Coordinateur, qui la répartira.");
+  });
+
+  it("dossier : correction renvoyée au producteur par le serveur : transition native, pas de message « transmise au Coordinateur »", async () => {
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify({ status: "in_progress" }), { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+    pont.actions["atelier.decision"] = async (p) => ({ id: "d", ...p, transmission: { transmission: "producteur", raison: "réveil du Coordinateur refusé" } });
+    const c = await page(`/RNO/atelier/contenus/${T}`);
+    await cliquer(c.querySelector('input[type="radio"][value="demander_correction"]') as HTMLElement);
+    await saisir(champParLibelle(c, "Commentaire"), "Reprendre les codes postaux manquants.");
+    await cliquer(parTexte(c, "button", "Enregistrer : demander une correction"));
+    const patchs = fetchMock.mock.calls.filter((args) => (args as unknown[])[1] && ((args as unknown[])[1] as { method?: string }).method === "PATCH");
+    expect(patchs).toHaveLength(1);
+    expect(c.textContent).not.toContain("La correction est transmise au Coordinateur");
+    expect(c.textContent).toContain("La tâche Paperclip repart en production.");
   });
 
   it("dossier : sans action externe, aucun champ masqué n'est envoyé dans la portée", async () => {

@@ -1,0 +1,2612 @@
+From 6fd7bee42e3dd43badc9bb1efd5b3d7f05def86b Mon Sep 17 00:00:00 2001
+From: Jean-Baptiste Dhondt <114347858+warrox1993@users.noreply.github.com>
+Date: Fri, 16 Oct 2026 13:37:55 +0200
+Subject: [PATCH] =?UTF-8?q?feat(ui):=20routines,=20projets,=20filtres=20de?=
+ =?UTF-8?q?=20t=C3=A2ches,=20activit=C3=A9=20et=20marqueurs=20du=20fil=20t?=
+ =?UTF-8?q?raduits=20en=20fran=C3=A7ais?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01DP85vPq2MHkZg8VNtRvCzB
+---
+ .../components/IssueFiltersPopover.test.tsx   |  10 +-
+ ui/src/components/IssueFiltersPopover.tsx     |  46 ++---
+ ui/src/components/IssuesList.test.tsx         |  18 +-
+ ui/src/components/IssuesList.tsx              |  32 +--
+ ui/src/components/LegacyIssuesList.tsx        |  32 +--
+ .../components/RoutineContextualSidebar.tsx   |   2 +-
+ ui/src/components/RoutineList.tsx             |  27 +--
+ ui/src/components/RoutineSubSidebar.test.tsx  |   2 +-
+ ui/src/components/RoutineSubSidebar.tsx       |   2 +-
+ ui/src/components/Sidebar.production.tsx      |   2 +-
+ ui/src/components/Sidebar.test.tsx            |   4 +-
+ ui/src/components/Sidebar.tsx                 |   2 +-
+ ui/src/components/TaskChatThread.test.tsx     |  40 ++--
+ ui/src/components/TaskChatThread.tsx          |   6 +-
+ .../task-chat/RichWorkProductCard.tsx         |   2 +-
+ .../task-chat/TaskChatMarker.test.tsx         |   8 +-
+ .../task-chat/TaskChatProtocolCard.test.tsx   |   2 +-
+ .../task-chat/TaskChatRunnerTurn.test.tsx     |   2 +-
+ .../task-chat/TaskChatRunnerTurn.tsx          |   2 +-
+ .../task-chat/TaskChatThreadView.tsx          |   2 +-
+ .../task-chat/TaskChatTurn.test.tsx           |   2 +-
+ ui/src/components/task-chat/TaskChatTurn.tsx  |   2 +-
+ .../task-chat/status-relevance.test.ts        |   2 +-
+ ui/src/lib/activity-format.ts                 |  29 +++
+ ui/src/lib/issue-filters.ts                   |  11 +-
+ ui/src/lib/task-views.ts                      |  22 +-
+ ui/src/pages/Inbox.test.tsx                   |   2 +-
+ ui/src/pages/Projects.test.tsx                |  18 +-
+ ui/src/pages/Projects.tsx                     |  37 ++--
+ ui/src/pages/Routines.production.tsx          | 184 ++++++++---------
+ ui/src/pages/Routines.test.tsx                |  42 ++--
+ ui/src/pages/Routines.tsx                     | 192 +++++++++---------
+ 32 files changed, 410 insertions(+), 376 deletions(-)
+
+diff --git a/ui/src/components/IssueFiltersPopover.test.tsx b/ui/src/components/IssueFiltersPopover.test.tsx
+index 69eb612fe..29f78c07c 100644
+--- a/ui/src/components/IssueFiltersPopover.test.tsx
++++ b/ui/src/components/IssueFiltersPopover.test.tsx
+@@ -81,7 +81,7 @@ describe("IssueFiltersPopover", () => {
+       element.className.includes("md:grid-cols-3"),
+     );
+     expect(layoutGrid?.className).toContain("grid-cols-1");
+-    expect(popoverContent?.textContent).toContain("Live runs only");
++    expect(popoverContent?.textContent).toContain("Exécutions en direct seulement");
+   });
+ 
+   it("hides the Priority filter section while priority UI is off (PAP-411)", () => {
+@@ -106,8 +106,8 @@ describe("IssueFiltersPopover", () => {
+     const popoverContent = container.querySelector("[data-testid='popover-content']");
+     expect(popoverContent).not.toBeNull();
+     // Status section still renders, Priority section is gated off (PAP-411).
+-    expect(popoverContent?.textContent).toContain("Status");
+-    expect(popoverContent?.textContent).not.toContain("Priority");
++    expect(popoverContent?.textContent).toContain("Statut");
++    expect(popoverContent?.textContent).not.toContain("Priorité");
+   });
+ 
+   it("searches long option lists while the popover remains the only scroll owner", () => {
+@@ -130,7 +130,7 @@ describe("IssueFiltersPopover", () => {
+       );
+     });
+ 
+-    const input = container.querySelector<HTMLInputElement>('input[aria-label="Search responsible"]');
++    const input = container.querySelector<HTMLInputElement>('input[aria-label="Rechercher responsable"]');
+     expect(input).not.toBeNull();
+     act(() => {
+       const valueSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+@@ -172,7 +172,7 @@ describe("IssueFiltersPopover", () => {
+ 
+     const popoverContent = container.querySelector("[data-testid='popover-content']");
+     expect(popoverContent?.className).not.toContain("overflow-y-auto");
+-    expect(container.querySelector('input[aria-label="Search responsible"]')).toBeNull();
++    expect(container.querySelector('input[aria-label="Rechercher responsable"]')).toBeNull();
+     expect(container.querySelector('[data-filter-options="responsible"]')?.className).toContain("overflow-y-auto");
+     expect(container.querySelector('[data-filter-options="projects"]')?.className).toContain("overflow-y-auto");
+ 
+diff --git a/ui/src/components/IssueFiltersPopover.tsx b/ui/src/components/IssueFiltersPopover.tsx
+index 05f717493..92d4fbccb 100644
+--- a/ui/src/components/IssueFiltersPopover.tsx
++++ b/ui/src/components/IssueFiltersPopover.tsx
+@@ -96,8 +96,8 @@ function FilterOptionSearch({
+       <Input
+         value={value}
+         onChange={(event) => onChange(event.target.value)}
+-        placeholder={`Search ${label.toLowerCase()}...`}
+-        aria-label={`Search ${label.toLowerCase()}`}
++        placeholder={`Rechercher ${label.toLowerCase()}...`}
++        aria-label={`Rechercher ${label.toLowerCase()}`}
+         className="h-8 pl-7 text-xs"
+       />
+     </div>
+@@ -196,9 +196,9 @@ export function IssueFiltersPopover({
+   return (
+     <Popover>
+       <PopoverTrigger asChild>
+-        <Button variant={buttonVariant} size={iconOnly ? "icon" : "sm"} className={`text-xs ${iconOnly ? "relative h-8 w-8 shrink-0" : ""} ${activeFilterCount > 0 ? "text-blue-600 dark:text-blue-400" : ""}`} title={iconOnly ? (activeFilterCount > 0 ? `Filters: ${activeFilterCount}` : "Filter") : undefined}>
++        <Button variant={buttonVariant} size={iconOnly ? "icon" : "sm"} className={`text-xs ${iconOnly ? "relative h-8 w-8 shrink-0" : ""} ${activeFilterCount > 0 ? "text-blue-600 dark:text-blue-400" : ""}`} title={iconOnly ? (activeFilterCount > 0 ? `Filtres : ${activeFilterCount}` : "Filtrer") : undefined}>
+           <Filter className={iconOnly ? "h-3.5 w-3.5" : "h-3.5 w-3.5 sm:h-3 sm:w-3 sm:mr-1"} />
+-          {!iconOnly && <span className="hidden sm:inline">{activeFilterCount > 0 ? `Filters: ${activeFilterCount}` : "Filter"}</span>}
++          {!iconOnly && <span className="hidden sm:inline">{activeFilterCount > 0 ? `Filtres : ${activeFilterCount}` : "Filtrer"}</span>}
+           {!iconOnly && activeFilterCount > 0 ? <span className="ml-0.5 text-(length:--text-nano) font-medium sm:hidden">{activeFilterCount}</span> : null}
+           {iconOnly && activeFilterCount > 0 ? <span className="absolute -right-1 -top-1 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-blue-600 text-(length:--text-nano) font-bold text-white">{activeFilterCount}</span> : null}
+           {!iconOnly && activeFilterCount > 0 ? (
+@@ -220,7 +220,7 @@ export function IssueFiltersPopover({
+       >
+         <div className="space-y-3 p-3">
+           <div className="flex items-center justify-between">
+-            <span className="text-sm font-medium">Filters</span>
++            <span className="text-sm font-medium">Filtres</span>
+             {activeFilterCount > 0 ? (
+               <button
+                 type="button"
+@@ -295,7 +295,7 @@ export function IssueFiltersPopover({
+           ) : null}
+ 
+           <div className="space-y-1.5">
+-            <span className="text-xs text-muted-foreground">Quick filters</span>
++            <span className="text-xs text-muted-foreground">Filtres rapides</span>
+             <div className="flex flex-wrap gap-1.5">
+               {issueQuickFilterPresets.map((preset) => {
+                 const isActive = issueFilterArraysEqual(state.statuses, preset.statuses);
+@@ -322,7 +322,7 @@ export function IssueFiltersPopover({
+           <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+             <div className="min-w-0 space-y-3">
+               <div className="space-y-1">
+-                <span className="text-xs text-muted-foreground">Status</span>
++                <span className="text-xs text-muted-foreground">Statut</span>
+                 <div className="space-y-0.5">
+                   {issueStatusOrder.map((status) => (
+                     <label key={status} className="flex cursor-pointer items-center gap-2 rounded-sm px-2 py-1 hover:bg-accent/50">
+@@ -340,7 +340,7 @@ export function IssueFiltersPopover({
+               {/* PAP-411: Priority filter section hidden behind SHOW_TASK_PRIORITY_UI (filter state stays intact). */}
+               {SHOW_TASK_PRIORITY_UI && (
+               <div className="space-y-1">
+-                <span className="text-xs text-muted-foreground">Priority</span>
++                <span className="text-xs text-muted-foreground">Priorité</span>
+                 <div className="space-y-0.5">
+                   {issuePriorityOrder.map((priority) => (
+                     <label key={priority} className="flex cursor-pointer items-center gap-2 rounded-sm px-2 py-1 hover:bg-accent/50">
+@@ -359,9 +359,9 @@ export function IssueFiltersPopover({
+ 
+             <div className="min-w-0 space-y-3">
+               <div className="space-y-1">
+-                <span className="text-xs text-muted-foreground">Responsible</span>
++                <span className="text-xs text-muted-foreground">Responsable</span>
+                 {streamlined && (agents?.length ?? 0) + (currentUserId ? 2 : 1) > SEARCHABLE_FILTER_THRESHOLD ? (
+-                  <FilterOptionSearch value={assigneeSearch} onChange={setAssigneeSearch} label="Responsible" />
++                  <FilterOptionSearch value={assigneeSearch} onChange={setAssigneeSearch} label="Responsable" />
+                 ) : null}
+                 <div data-filter-options="responsible" className={streamlined ? "space-y-0.5" : "max-h-32 space-y-0.5 overflow-y-auto"}>
+                   <label className="flex cursor-pointer items-center gap-2 rounded-sm px-2 py-1 hover:bg-accent/50">
+@@ -369,7 +369,7 @@ export function IssueFiltersPopover({
+                       checked={state.assignees.includes("__unassigned")}
+                       onCheckedChange={() => onChange({ assignees: toggleIssueFilterValue(state.assignees, "__unassigned") })}
+                     />
+-                    <span className="text-sm">No responsible</span>
++                    <span className="text-sm">Aucun responsable</span>
+                   </label>
+                   {currentUserId ? (
+                     <label className="flex cursor-pointer items-center gap-2 rounded-sm px-2 py-1 hover:bg-accent/50">
+@@ -378,7 +378,7 @@ export function IssueFiltersPopover({
+                         onCheckedChange={() => onChange({ assignees: toggleIssueFilterValue(state.assignees, "__me") })}
+                       />
+                       <User className="h-3.5 w-3.5 text-muted-foreground" />
+-                      <span className="text-sm">Me</span>
++                      <span className="text-sm">Moi</span>
+                     </label>
+                   ) : null}
+                   {(streamlined ? visibleAgents : agents ?? []).map((agent) => (
+@@ -395,7 +395,7 @@ export function IssueFiltersPopover({
+ 
+               {creatorOptions.length > 0 ? (
+                 <div className="space-y-1">
+-                  <span className="text-xs text-muted-foreground">Creator</span>
++                  <span className="text-xs text-muted-foreground">Créateur</span>
+                   {selectedCreatorOptions.length > 0 ? (
+                     <div className="flex flex-wrap gap-1">
+                       {selectedCreatorOptions.map((creator) => (
+@@ -441,7 +441,7 @@ export function IssueFiltersPopover({
+                         </button>
+                       );
+                     }) : (
+-                      <div className="px-2 py-1 text-xs text-muted-foreground">No creators match.</div>
++                      <div className="px-2 py-1 text-xs text-muted-foreground">Aucun créateur ne correspond.</div>
+                     )}
+                   </div>
+                 </div>
+@@ -449,9 +449,9 @@ export function IssueFiltersPopover({
+ 
+               {projects && projects.length > 0 ? (
+                 <div className="space-y-1">
+-                  <span className="text-xs text-muted-foreground">Project</span>
++                  <span className="text-xs text-muted-foreground">Projet</span>
+                   {streamlined && projects.length > SEARCHABLE_FILTER_THRESHOLD ? (
+-                    <FilterOptionSearch value={projectSearch} onChange={setProjectSearch} label="Projects" />
++                    <FilterOptionSearch value={projectSearch} onChange={setProjectSearch} label="Projets" />
+                   ) : null}
+                   <div data-filter-options="projects" className={streamlined ? "space-y-0.5" : "max-h-32 space-y-0.5 overflow-y-auto"}>
+                     {(streamlined ? visibleProjects : projects).map((project) => (
+@@ -471,9 +471,9 @@ export function IssueFiltersPopover({
+             <div className="min-w-0 space-y-3">
+               {labels && labels.length > 0 ? (
+                 <div className="space-y-1">
+-                  <span className="text-xs text-muted-foreground">Labels</span>
++                  <span className="text-xs text-muted-foreground">Étiquettes</span>
+                   {streamlined && labels.length > SEARCHABLE_FILTER_THRESHOLD ? (
+-                    <FilterOptionSearch value={labelSearch} onChange={setLabelSearch} label="Labels" />
++                    <FilterOptionSearch value={labelSearch} onChange={setLabelSearch} label="Étiquettes" />
+                   ) : null}
+                   <div data-filter-options="labels" className={streamlined ? "space-y-0.5" : "max-h-32 space-y-0.5 overflow-y-auto"}>
+                     {(streamlined ? visibleLabels : labels).map((label) => (
+@@ -492,9 +492,9 @@ export function IssueFiltersPopover({
+ 
+               {workspaces && workspaces.length > 0 ? (
+                 <div className="space-y-1">
+-                  <span className="text-xs text-muted-foreground">Workspace</span>
++                  <span className="text-xs text-muted-foreground">Espace de travail</span>
+                   {streamlined && workspaces.length > SEARCHABLE_FILTER_THRESHOLD ? (
+-                    <FilterOptionSearch value={workspaceSearch} onChange={setWorkspaceSearch} label="Workspaces" />
++                    <FilterOptionSearch value={workspaceSearch} onChange={setWorkspaceSearch} label="Espaces de travail" />
+                   ) : null}
+                   <div data-filter-options="workspaces" className={streamlined ? "space-y-0.5" : "max-h-32 space-y-0.5 overflow-y-auto"}>
+                     {(streamlined ? visibleWorkspaces : workspaces).map((workspace) => (
+@@ -545,13 +545,13 @@ export function IssueFiltersPopover({
+               ) : null}
+ 
+               <div className="space-y-1">
+-                <span className="text-xs text-muted-foreground">Visibility</span>
++                <span className="text-xs text-muted-foreground">Visibilité</span>
+                 <label className="flex cursor-pointer items-center gap-2 rounded-sm px-2 py-1 hover:bg-accent/50">
+                   <Checkbox
+                     checked={state.liveOnly}
+                     onCheckedChange={(checked) => onChange({ liveOnly: checked === true })}
+                   />
+-                  <span className="text-sm">Live runs only</span>
++                  <span className="text-sm">Exécutions en direct seulement</span>
+                 </label>
+                 {enableRoutineVisibilityFilter ? (
+                   <label className="flex cursor-pointer items-center gap-2 rounded-sm px-2 py-1 hover:bg-accent/50">
+@@ -559,7 +559,7 @@ export function IssueFiltersPopover({
+                       checked={state.hideRoutineExecutions}
+                       onCheckedChange={(checked) => onChange({ hideRoutineExecutions: checked === true })}
+                     />
+-                    <span className="text-sm">Hide routine runs</span>
++                    <span className="text-sm">Masquer les exécutions de routines</span>
+                   </label>
+                 ) : null}
+               </div>
+diff --git a/ui/src/components/IssuesList.test.tsx b/ui/src/components/IssuesList.test.tsx
+index 72cdcf23e..eb9b83b12 100644
+--- a/ui/src/components/IssuesList.test.tsx
++++ b/ui/src/components/IssuesList.test.tsx
+@@ -933,7 +933,7 @@ describe("IssuesList", () => {
+     });
+ 
+     const sortButton = Array.from(container.querySelectorAll("button")).find(
+-      (button) => button.getAttribute("title") === "Sort",
++      (button) => button.getAttribute("title") === "Trier",
+     );
+     expect(sortButton).toBeTruthy();
+     act(() => {
+@@ -942,12 +942,12 @@ describe("IssuesList", () => {
+     await waitForAssertion(() => {
+       const labels = Array.from(document.body.querySelectorAll("button")).map((b) => b.textContent ?? "");
+       // Status sort option renders, but the Priority option is gated off (PAP-411).
+-      expect(labels.some((text) => text.includes("Status"))).toBe(true);
+-      expect(labels.some((text) => text.includes("Priority"))).toBe(false);
++      expect(labels.some((text) => text.includes("Statut"))).toBe(true);
++      expect(labels.some((text) => text.includes("Priorité"))).toBe(false);
+     });
+ 
+     const groupButton = Array.from(container.querySelectorAll("button")).find(
+-      (button) => button.getAttribute("title") === "Group",
++      (button) => button.getAttribute("title") === "Grouper",
+     );
+     expect(groupButton).toBeTruthy();
+     act(() => {
+@@ -955,8 +955,8 @@ describe("IssuesList", () => {
+     });
+     await waitForAssertion(() => {
+       const labels = Array.from(document.body.querySelectorAll("button")).map((b) => b.textContent ?? "");
+-      expect(labels.some((text) => text.includes("Status"))).toBe(true);
+-      expect(labels.some((text) => text.includes("Priority"))).toBe(false);
++      expect(labels.some((text) => text.includes("Statut"))).toBe(true);
++      expect(labels.some((text) => text.includes("Priorité"))).toBe(false);
+     });
+ 
+     act(() => {
+@@ -1997,7 +1997,7 @@ describe("IssuesList", () => {
+ 
+     await act(async () => {
+       const filterButton = Array.from(document.body.querySelectorAll("button")).find(
+-        (button) => button.getAttribute("title") === "Filter",
++        (button) => button.getAttribute("title") === "Filtrer",
+       );
+       filterButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+       await Promise.resolve();
+@@ -2005,14 +2005,14 @@ describe("IssuesList", () => {
+ 
+     await waitForAssertion(() => {
+       const toggle = Array.from(document.body.querySelectorAll("label")).find(
+-        (label) => label.textContent?.includes("Hide routine runs"),
++        (label) => label.textContent?.includes("Masquer les exécutions de routines"),
+       );
+       expect(toggle).not.toBeUndefined();
+     });
+ 
+     await act(async () => {
+       const toggle = Array.from(document.body.querySelectorAll("label")).find(
+-        (label) => label.textContent?.includes("Hide routine runs"),
++        (label) => label.textContent?.includes("Masquer les exécutions de routines"),
+       );
+       toggle?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+       await Promise.resolve();
+diff --git a/ui/src/components/IssuesList.tsx b/ui/src/components/IssuesList.tsx
+index da467d40f..b83c628e0 100644
+--- a/ui/src/components/IssuesList.tsx
++++ b/ui/src/components/IssuesList.tsx
+@@ -1368,7 +1368,7 @@ function StreamlinedIssuesList({
+       key,
+       label:
+         key === "__unassigned"
+-          ? "Unassigned"
++          ? "Non assigné"
+           : key.startsWith("__user:")
+             ? (formatAssigneeUserLabel(key.slice("__user:".length), currentUserId, companyUserLabelMap) ?? "User")
+             : (agentName(key) ?? key.slice(0, 8)),
+@@ -1928,7 +1928,7 @@ function StreamlinedIssuesList({
+           {viewState.viewMode === "list" && (
+             <Popover>
+               <PopoverTrigger asChild>
+-                <Button variant="outline" size="icon" className="h-8 w-8 shrink-0" title="Sort">
++                <Button variant="outline" size="icon" className="h-8 w-8 shrink-0" title="Trier">
+                   <ArrowUpDown className="h-3.5 w-3.5" />
+                 </Button>
+               </PopoverTrigger>
+@@ -1936,12 +1936,12 @@ function StreamlinedIssuesList({
+                 <div className="p-2 space-y-0.5">
+                   {/* PAP-411: "priority" sort option hidden behind SHOW_TASK_PRIORITY_UI (comparator stays dormant). */}
+                   {([
+-                    ["workflow", "Workflow"],
+-                    ["status", "Status"],
+-                    ["priority", "Priority"],
+-                    ["title", "Title"],
+-                    ["created", "Created"],
+-                    ["updated", "Updated"],
++                    ["workflow", "Flux"],
++                    ["status", "Statut"],
++                    ["priority", "Priorité"],
++                    ["title", "Titre"],
++                    ["created", "Créée"],
++                    ["updated", "Modifiée"],
+                   ] as const)
+                     .filter(([field]) => SHOW_TASK_PRIORITY_UI || field !== "priority")
+                     .map(([field, label]) => (
+@@ -1975,7 +1975,7 @@ function StreamlinedIssuesList({
+           {viewState.viewMode === "list" && (
+             <Popover>
+               <PopoverTrigger asChild>
+-                <Button variant="outline" size="icon" className="h-8 w-8 shrink-0" title="Group">
++                <Button variant="outline" size="icon" className="h-8 w-8 shrink-0" title="Grouper">
+                   <Layers className="h-3.5 w-3.5" />
+                 </Button>
+               </PopoverTrigger>
+@@ -1983,13 +1983,13 @@ function StreamlinedIssuesList({
+                 <div className="p-2 space-y-0.5">
+                   {/* PAP-411: "priority" group-by option hidden behind SHOW_TASK_PRIORITY_UI (group logic stays dormant). */}
+                   {([
+-                    ["status", "Status"],
+-                    ["priority", "Priority"],
+-                    ["assignee", "Responsible"],
+-                    ["project", "Project"],
+-                    ["workspace", "Workspace"],
+-                    ["parent", "Parent Task"],
+-                    ["none", "None"],
++                    ["status", "Statut"],
++                    ["priority", "Priorité"],
++                    ["assignee", "Responsable"],
++                    ["project", "Projet"],
++                    ["workspace", "Espace de travail"],
++                    ["parent", "Tâche parente"],
++                    ["none", "Aucun"],
+                   ] as const)
+                     .filter(([value]) => SHOW_TASK_PRIORITY_UI || value !== "priority")
+                     .map(([value, label]) => (
+diff --git a/ui/src/components/LegacyIssuesList.tsx b/ui/src/components/LegacyIssuesList.tsx
+index 55cfbb48f..169373893 100644
+--- a/ui/src/components/LegacyIssuesList.tsx
++++ b/ui/src/components/LegacyIssuesList.tsx
+@@ -1286,7 +1286,7 @@ export function IssuesList({
+       key,
+       label:
+         key === "__unassigned"
+-          ? "Unassigned"
++          ? "Non assigné"
+           : key.startsWith("__user:")
+             ? (formatAssigneeUserLabel(key.slice("__user:".length), currentUserId, companyUserLabelMap) ?? "User")
+             : (agentName(key) ?? key.slice(0, 8)),
+@@ -1821,7 +1821,7 @@ export function IssuesList({
+           {viewState.viewMode === "list" && (
+             <Popover>
+               <PopoverTrigger asChild>
+-                <Button variant="outline" size="icon" className="h-8 w-8 shrink-0" title="Sort">
++                <Button variant="outline" size="icon" className="h-8 w-8 shrink-0" title="Trier">
+                   <ArrowUpDown className="h-3.5 w-3.5" />
+                 </Button>
+               </PopoverTrigger>
+@@ -1829,12 +1829,12 @@ export function IssuesList({
+                 <div className="p-2 space-y-0.5">
+                   {/* PAP-411: "priority" sort option hidden behind SHOW_TASK_PRIORITY_UI (comparator stays dormant). */}
+                   {([
+-                    ["workflow", "Workflow"],
+-                    ["status", "Status"],
+-                    ["priority", "Priority"],
+-                    ["title", "Title"],
+-                    ["created", "Created"],
+-                    ["updated", "Updated"],
++                    ["workflow", "Flux"],
++                    ["status", "Statut"],
++                    ["priority", "Priorité"],
++                    ["title", "Titre"],
++                    ["created", "Créée"],
++                    ["updated", "Modifiée"],
+                   ] as const)
+                     .filter(([field]) => SHOW_TASK_PRIORITY_UI || field !== "priority")
+                     .map(([field, label]) => (
+@@ -1868,7 +1868,7 @@ export function IssuesList({
+           {viewState.viewMode === "list" && (
+             <Popover>
+               <PopoverTrigger asChild>
+-                <Button variant="outline" size="icon" className="h-8 w-8 shrink-0" title="Group">
++                <Button variant="outline" size="icon" className="h-8 w-8 shrink-0" title="Grouper">
+                   <Layers className="h-3.5 w-3.5" />
+                 </Button>
+               </PopoverTrigger>
+@@ -1876,13 +1876,13 @@ export function IssuesList({
+                 <div className="p-2 space-y-0.5">
+                   {/* PAP-411: "priority" group-by option hidden behind SHOW_TASK_PRIORITY_UI (group logic stays dormant). */}
+                   {([
+-                    ["status", "Status"],
+-                    ["priority", "Priority"],
+-                    ["assignee", "Responsible"],
+-                    ["project", "Project"],
+-                    ["workspace", "Workspace"],
+-                    ["parent", "Parent Task"],
+-                    ["none", "None"],
++                    ["status", "Statut"],
++                    ["priority", "Priorité"],
++                    ["assignee", "Responsable"],
++                    ["project", "Projet"],
++                    ["workspace", "Espace de travail"],
++                    ["parent", "Tâche parente"],
++                    ["none", "Aucun"],
+                   ] as const)
+                     .filter(([value]) => SHOW_TASK_PRIORITY_UI || value !== "priority")
+                     .map(([value, label]) => (
+diff --git a/ui/src/components/RoutineContextualSidebar.tsx b/ui/src/components/RoutineContextualSidebar.tsx
+index 4e562e102..557dd7192 100644
+--- a/ui/src/components/RoutineContextualSidebar.tsx
++++ b/ui/src/components/RoutineContextualSidebar.tsx
+@@ -111,7 +111,7 @@ export function RoutineContextualSidebar({
+           />
+           <SidebarNavItem
+             to={routineDetailHref(routineId, "activity")}
+-            label="Activity"
++            label="Activité"
+             icon={Activity}
+           />
+         </div>
+diff --git a/ui/src/components/RoutineList.tsx b/ui/src/components/RoutineList.tsx
+index 332422307..72f221026 100644
+--- a/ui/src/components/RoutineList.tsx
++++ b/ui/src/components/RoutineList.tsx
+@@ -11,6 +11,7 @@ import {
+   DropdownMenuSeparator,
+   DropdownMenuTrigger,
+ } from "@/components/ui/dropdown-menu";
++import { libelleStatutProjetRoutine } from "../lib/activity-format";
+ import { ToggleSwitch } from "@/components/ui/toggle-switch";
+ 
+ export type RoutineListProjectSummary = {
+@@ -38,13 +39,13 @@ export type RoutineListRowItem = {
+ };
+ 
+ export function formatLastRunTimestamp(value: Date | string | null | undefined) {
+-  if (!value) return "Never";
++  if (!value) return "Jamais";
+   return new Date(value).toLocaleString();
+ }
+ 
+ export function formatRoutineRunStatus(value: string | null | undefined) {
+   if (!value) return null;
+-  return value.replaceAll("_", " ");
++  return libelleStatutProjetRoutine(value);
+ }
+ 
+ export function nextRoutineStatus(currentStatus: string, enabled: boolean) {
+@@ -59,7 +60,7 @@ export function RoutineListRow<TRoutine extends RoutineListRowItem>({
+   runningRoutineId,
+   statusMutationRoutineId,
+   href,
+-  configureLabel = "Edit",
++  configureLabel = "Modifier",
+   managedByLabel,
+   secondaryDetails,
+   runNowButton = false,
+@@ -125,7 +126,7 @@ export function RoutineListRow<TRoutine extends RoutineListRowItem>({
+             type="checkbox"
+             className="h-4 w-4 rounded border-border"
+             checked={selected}
+-            aria-label={`Select ${routine.title}`}
++            aria-label={`Sélectionner ${routine.title}`}
+             onChange={(event) => onSelectChange?.(routine, event.target.checked)}
+           />
+         </div>
+@@ -148,11 +149,11 @@ export function RoutineListRow<TRoutine extends RoutineListRowItem>({
+               className="h-2.5 w-2.5 shrink-0 rounded-sm"
+               style={{ backgroundColor: project?.color ?? "var(--project-none)" }}
+             />
+-            <span>{routine.projectId ? (project?.name ?? "Unknown project") : "No project"}</span>
++            <span>{routine.projectId ? (project?.name ?? "Projet inconnu") : "Aucun projet"}</span>
+           </span>
+           <span className="flex items-center gap-2">
+             {routine.assigneeAgentId ? <AgentAvatar agent={{ ...agent, id: routine.assigneeAgentId }} size={16} className="h-3.5 w-3.5 shrink-0"/> : null}
+-            <span>{routine.assigneeAgentId ? (agent?.name ?? "Unknown agent") : "No default agent"}</span>
++            <span>{routine.assigneeAgentId ? (agent?.name ?? "Agent inconnu") : "Aucun agent par défaut"}</span>
+           </span>
+           <span>
+             {formatLastRunTimestamp(routine.lastRun?.triggeredAt)}
+@@ -173,7 +174,7 @@ export function RoutineListRow<TRoutine extends RoutineListRowItem>({
+             onClick={() => onRunNow(routine)}
+           >
+             <Play className="h-3.5 w-3.5" />
+-            {runningRoutineId === routine.id ? "Running..." : "Run now"}
++            {runningRoutineId === routine.id ? "Exécution..." : "Lancer maintenant"}
+           </Button>
+         ) : null}
+ 
+@@ -183,16 +184,16 @@ export function RoutineListRow<TRoutine extends RoutineListRowItem>({
+             checked={enabled}
+             onCheckedChange={() => onToggleEnabled(routine, enabled)}
+             disabled={isStatusPending || isArchived || disableToggle}
+-            aria-label={enabled ? `Disable ${routine.title}` : `Enable ${routine.title}`}
++            aria-label={enabled ? `Désactiver ${routine.title}` : `Activer ${routine.title}`}
+           />
+           <span className="w-12 text-xs text-muted-foreground">
+-            {isArchived ? "Archived" : isDraft ? "Draft" : enabled ? "On" : "Off"}
++            {isArchived ? "Archivée" : isDraft ? "Brouillon" : enabled ? "Activée" : "Désactivée"}
+           </span>
+         </div>
+ 
+         <DropdownMenu>
+           <DropdownMenuTrigger asChild>
+-            <Button variant="ghost" size="icon-sm" aria-label={`More actions for ${routine.title}`}>
++            <Button variant="ghost" size="icon-sm" aria-label={`Plus d'actions pour ${routine.title}`}>
+               <MoreHorizontal className="h-4 w-4" />
+             </Button>
+           </DropdownMenuTrigger>
+@@ -204,7 +205,7 @@ export function RoutineListRow<TRoutine extends RoutineListRowItem>({
+               disabled={runDisabled}
+               onClick={() => onRunNow(routine)}
+             >
+-              {runningRoutineId === routine.id ? "Running..." : "Run now"}
++              {runningRoutineId === routine.id ? "Exécution..." : "Lancer maintenant"}
+             </DropdownMenuItem>
+             {extraMenuItems ? (
+               <>
+@@ -217,14 +218,14 @@ export function RoutineListRow<TRoutine extends RoutineListRowItem>({
+               onClick={() => onToggleEnabled(routine, enabled)}
+               disabled={isStatusPending || isArchived || disableToggle}
+             >
+-              {enabled ? "Pause" : "Enable"}
++              {enabled ? "Mettre en pause" : "Activer"}
+             </DropdownMenuItem>
+             {!hideArchiveAction && onToggleArchived ? (
+               <DropdownMenuItem
+                 onClick={() => onToggleArchived(routine)}
+                 disabled={isStatusPending}
+               >
+-                {routine.status === "archived" ? "Restore" : "Archive"}
++                {routine.status === "archived" ? "Restaurer" : "Archiver"}
+               </DropdownMenuItem>
+             ) : null}
+           </DropdownMenuContent>
+diff --git a/ui/src/components/RoutineSubSidebar.test.tsx b/ui/src/components/RoutineSubSidebar.test.tsx
+index 2a028c88a..26e9607d5 100644
+--- a/ui/src/components/RoutineSubSidebar.test.tsx
++++ b/ui/src/components/RoutineSubSidebar.test.tsx
+@@ -76,7 +76,7 @@ describe("RoutineSubSidebar", () => {
+       "Secrets",
+       "Delivery",
+       "Runs",
+-      "Activity",
++      "Activité",
+       "History",
+     ]);
+     const groupLabels = Array.from(container.querySelectorAll("p")).map((p) => p.textContent);
+diff --git a/ui/src/components/RoutineSubSidebar.tsx b/ui/src/components/RoutineSubSidebar.tsx
+index 9964bc1d2..75a72e8f2 100644
+--- a/ui/src/components/RoutineSubSidebar.tsx
++++ b/ui/src/components/RoutineSubSidebar.tsx
+@@ -53,7 +53,7 @@ const NAV_GROUPS: NavGroup[] = [
+     label: "Operate",
+     items: [
+       { key: "runs", label: "Runs", icon: Play },
+-      { key: "activity", label: "Activity", icon: ActivityIcon },
++      { key: "activity", label: "Activité", icon: ActivityIcon },
+       { key: "history", label: "History", icon: HistoryIcon },
+     ],
+   },
+diff --git a/ui/src/components/Sidebar.production.tsx b/ui/src/components/Sidebar.production.tsx
+index 18bb501e9..99a665b3e 100644
+--- a/ui/src/components/Sidebar.production.tsx
++++ b/ui/src/components/Sidebar.production.tsx
+@@ -236,7 +236,7 @@ export function Sidebar() {
+           <SidebarNavItem to="/timeline" label="Timeline" icon={GanttChartSquare} />
+           <SidebarNavItem to="/costs" label="Costs" icon={DollarSign} />
+           {/* One entry — /audit merged into the rich Activity feed (PAP-16302). */}
+-          <SidebarNavItem to="/activity" label="Activity" icon={History} />
++          <SidebarNavItem to="/activity" label="Activité" icon={History} />
+           <SidebarNavItem to="/company/settings" label="Settings" icon={Settings} />
+         </SidebarSection>
+ 
+diff --git a/ui/src/components/Sidebar.test.tsx b/ui/src/components/Sidebar.test.tsx
+index 34f0527fe..eac61dfdc 100644
+--- a/ui/src/components/Sidebar.test.tsx
++++ b/ui/src/components/Sidebar.test.tsx
+@@ -304,7 +304,7 @@ describe("Sidebar", () => {
+     expect([...container.querySelectorAll('a[href="/activity"]')]).toHaveLength(1);
+     expect(navLabels).toContain("Journal d'audit");
+     expect(navLabels).not.toContain("Settings");
+-    expect(navLabels).not.toContain("Activity");
++    expect(navLabels).not.toContain("Activité");
+     expect(navLabels).not.toContain("Costs");
+     expect(container.querySelector('[data-testid="sidebar-recent-tasks"]')).not.toBeNull();
+ 
+@@ -360,7 +360,7 @@ describe("Sidebar", () => {
+     expect(container.querySelector('[data-testid="sidebar-projects"]')).not.toBeNull();
+     expect(container.querySelector('[data-testid="sidebar-agents"]')?.getAttribute("data-streamlined")).toBe("undefined");
+     expect(container.textContent).toContain("Organization");
+-    expect(labels).toEqual(expect.arrayContaining(["Org", "Connecteurs", "Timeline", "Costs", "Activity", "Settings"]));
++    expect(labels).toEqual(expect.arrayContaining(["Org", "Connecteurs", "Timeline", "Costs", "Activité", "Settings"]));
+     expect(labels).not.toContain("Journal d'audit");
+     expect(labels).not.toContain("Projets");
+     expect(container.querySelector('a[href="/agents"]')).toBeNull();
+diff --git a/ui/src/components/Sidebar.tsx b/ui/src/components/Sidebar.tsx
+index 7d6bebea4..682677934 100644
+--- a/ui/src/components/Sidebar.tsx
++++ b/ui/src/components/Sidebar.tsx
+@@ -319,7 +319,7 @@ export function Sidebar({ children }: { children?: ReactNode }) {
+               <SidebarNavItem to="/apps" label="Connecteurs" icon={Unplug} />
+               <SidebarNavItem to="/timeline" label="Timeline" icon={GanttChartSquare} />
+               <SidebarNavItem to="/costs" label="Costs" icon={DollarSign} />
+-              <SidebarNavItem to="/activity" label="Activity" icon={History} />
++              <SidebarNavItem to="/activity" label="Activité" icon={History} />
+               <SidebarNavItem to="/company/settings" label="Settings" icon={Settings} />
+             </SidebarSection>
+           </>
+diff --git a/ui/src/components/TaskChatThread.test.tsx b/ui/src/components/TaskChatThread.test.tsx
+index d22594fbc..96ede944e 100644
+--- a/ui/src/components/TaskChatThread.test.tsx
++++ b/ui/src/components/TaskChatThread.test.tsx
+@@ -195,7 +195,7 @@ describe.each(["legacy", "native"] as const)("historical %s system status", (run
+     expect(container.textContent).toContain("Saved the useful response.");
+     expect(container.textContent).toContain("Please keep this message.");
+     expect(container.textContent).toContain("New session");
+-    for (const status of ["Run failed", "Stopped", "A travaillé", "Run cancelled", "Waiting to resume", "Recovery pending", "Run completed", "previous execution needs"]) {
++    for (const status of ["Exécution échouée", "Arrêtée", "A travaillé", "Run cancelled", "Waiting to resume", "Recovery pending", "Run completed", "previous execution needs"]) {
+       expect(container.textContent).not.toContain(status);
+     }
+     if (runtimeMode === "legacy") {
+@@ -217,13 +217,13 @@ describe.each(["legacy", "native"] as const)("historical %s system status", (run
+     const wait = { ...run("wait", "cancelled", 1), startedAt: null, errorCode: "execution_reconciliation_required" };
+     const props = { comments: [notice, comment("response", "Saved the useful response.", "old")], onAdd: async () => {}, issueStatus: "in_progress" };
+     render(<TaskChatThread {...props} linkedRuns={[run("old", "failed", 0), wait]} />);
+-    expect(container.textContent).toContain("Run failed");
++    expect(container.textContent).toContain("Exécution échouée");
+     expect(container.textContent).toContain("Waiting to resume");
+     for (const linkedRuns of [[run("new", "succeeded", 2), wait, run("old", "failed", 0)], [run("old", "failed", 0), wait, run("new", "succeeded", 2)]]) {
+       render(<TaskChatThread {...props} linkedRuns={linkedRuns} />);
+-      expect(container.textContent).not.toContain("Run failed");
++      expect(container.textContent).not.toContain("Exécution échouée");
+       expect(container.textContent).not.toContain("Waiting to resume");
+-      expect(container.textContent).not.toContain("Stopped");
++      expect(container.textContent).not.toContain("Arrêtée");
+       expect(container.querySelector('[data-testid="task-chat-system-notice"]')).toBeNull();
+       expect(container.textContent).toContain("Saved the useful response.");
+     }
+@@ -233,7 +233,7 @@ describe.each(["legacy", "native"] as const)("historical %s system status", (run
+     const retry = vi.fn();
+     const linkedRuns = [run("new-failure", "failed", 2), run("old-failure", "failed", 0)];
+     render(<TaskChatThread comments={[]} onAdd={async () => {}} issueStatus="blocked" linkedRuns={linkedRuns} onRetryFailedRun={retry} />);
+-    expect(container.textContent?.match(/Run failed/g)).toHaveLength(1);
++    expect(container.textContent?.match(/Exécution échouée/g)).toHaveLength(1);
+     const button = container.querySelector<HTMLButtonElement>('[data-testid="task-chat-run-failed-try-again"]');
+     expect(button).not.toBeNull();
+     flushSync(() => button!.click());
+@@ -256,7 +256,7 @@ describe.each(["legacy", "native"] as const)("historical %s system status", (run
+       invocationSource: "on_demand", triggerDetail: null };
+     render(<TaskChatThread comments={[]} onAdd={async () => {}} issueStatus="in_progress"
+       linkedRuns={[old]} activeRun={live} liveRuns={[live]} />);
+-    expect(container.textContent).not.toContain("Run failed");
++    expect(container.textContent).not.toContain("Exécution échouée");
+     expect(container.querySelector('[data-testid="task-chat-run-failed-try-again"]')).toBeNull();
+   });
+ 
+@@ -269,8 +269,8 @@ describe.each(["legacy", "native"] as const)("historical %s system status", (run
+       onAdd={async () => {}} issueStatus="in_progress" linkedRuns={[run("old", "failed", 0), run("new", "succeeded", 1)]} />);
+     expect(container.textContent).toContain("The follow-up succeeded.");
+     expect(container.textContent).toContain("A travaillé");
+-    expect(container.textContent).not.toContain("Stopped");
+-    expect(container.textContent).not.toContain("Run failed");
++    expect(container.textContent).not.toContain("Arrêtée");
++    expect(container.textContent).not.toContain("Exécution échouée");
+   });
+ });
+ 
+@@ -1539,7 +1539,7 @@ describe("TaskChatThread runtime transcript selection", () => {
+     const marker = container.querySelector(
+       '[data-testid="task-chat-collapsible-marker"]',
+     );
+-    expect(marker?.textContent).toContain("Run failed");
++    expect(marker?.textContent).toContain("Exécution échouée");
+     const retry = container.querySelector<HTMLButtonElement>(
+       '[data-testid="task-chat-run-failed-try-again"]',
+     );
+@@ -1593,7 +1593,7 @@ describe("TaskChatThread runtime transcript selection", () => {
+           lastConfirmedActivityAt: null, retryAt: null, attempt: 2, maxAttempts: 3, recoveryOwner: null, nextAction: null,
+           permittedActions: ["inspect_run" as const], predecessorRunId: null, successorRunId: "fresh-run" } } : {}),
+       }]} />);
+-    expect(container.textContent?.includes("Run failed")).toBe(!continued);
++    expect(container.textContent?.includes("Exécution échouée")).toBe(!continued);
+     expect(container.querySelector('[data-testid="task-chat-run-failed-try-again"]')).toBeNull();
+   });
+ 
+@@ -1626,7 +1626,7 @@ describe("TaskChatThread runtime transcript selection", () => {
+       '[data-testid="task-chat-collapsible-marker"]',
+     );
+     expect(marker?.textContent).toContain("Usage limit reached");
+-    expect(marker?.textContent).not.toContain("Run failed");
++    expect(marker?.textContent).not.toContain("Exécution échouée");
+     const disclosure = marker?.querySelector<HTMLButtonElement>(
+       'button[aria-expanded="false"]',
+     );
+@@ -1676,7 +1676,7 @@ describe("TaskChatThread runtime transcript selection", () => {
+     ]} />);
+     expect(container.textContent?.match(/Waiting to resume/g)).toHaveLength(2);
+     expect(container.textContent).not.toContain("Couldn't start");
+-    expect(container.textContent).toContain(runtimeMode === "native" ? "Run cancelled" : "Stopped");
++    expect(container.textContent).toContain(runtimeMode === "native" ? "Run cancelled" : "Arrêtée");
+   });
+ 
+   it("shows cancellation after native progress without offering a retry", () => {
+@@ -1722,7 +1722,7 @@ describe("TaskChatThread runtime transcript selection", () => {
+   });
+ 
+   it.each([
+-    ["failed", "Run failed"],
++    ["failed", "Exécution échouée"],
+     ["timed_out", "Run timed out"],
+     ["cancelled", "Run cancelled"],
+     ["interrupted", "Run interrupted"],
+@@ -1836,7 +1836,7 @@ describe("TaskChatThread runtime transcript selection", () => {
+       createdAt: "2026-09-12T18:00:00.000Z", finishedAt: "2026-09-12T18:00:01.000Z",
+     }]} />);
+     expect(container.textContent).not.toContain("Run cancelled");
+-    expect(container.textContent).not.toContain("Run failed");
++    expect(container.textContent).not.toContain("Exécution échouée");
+     expect(container.textContent).not.toContain("before returning an answer");
+   });
+ 
+@@ -1912,7 +1912,7 @@ describe("TaskChatThread runtime transcript selection", () => {
+         />,
+       );
+       expect(container.textContent).toContain(
+-        runtimeMode === "native" ? "Run cancelled" : "Stopped",
++        runtimeMode === "native" ? "Run cancelled" : "Arrêtée",
+       );
+     },
+   );
+@@ -2162,10 +2162,10 @@ describe("TaskChatThread runtime transcript selection", () => {
+     );
+     expect(turnHeaders).toHaveLength(2);
+     expect(turnHeaders[0]?.textContent).not.toContain(
+-      "Continued after steering",
++      "Poursuivie après réorientation",
+     );
+     expect(turnHeaders[1]?.textContent).toContain(
+-      "Continued after steering · A travaillé pendant",
++      "Poursuivie après réorientation · A travaillé pendant",
+     );
+   });
+ 
+@@ -2227,11 +2227,11 @@ describe("TaskChatThread runtime transcript selection", () => {
+     expect(
+       container.querySelector('[data-testid="task-chat-turn-summary"]')
+         ?.textContent,
+-    ).not.toContain("Continued after steering");
++    ).not.toContain("Poursuivie après réorientation");
+     expect(
+       container.querySelector('[data-testid="task-chat-turn-status-header"]')
+         ?.textContent,
+-    ).toContain("Continued after steering · Au travail depuis");
++    ).toContain("Poursuivie après réorientation · Au travail depuis");
+     expect(container.textContent).toContain(
+       new Date("2026-08-25T17:59:32.000Z").toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }),
+     );
+@@ -2606,7 +2606,7 @@ describe("TaskChatThread runtime transcript selection", () => {
+         />,
+       );
+ 
+-      expect(container.textContent).toContain(status === "cancelled" ? "Stopped" : "Run failed");
++      expect(container.textContent).toContain(status === "cancelled" ? "Arrêtée" : "Exécution échouée");
+       if (status !== "cancelled") {
+         expect(container.textContent).toContain("You can retry this message now.");
+       }
+diff --git a/ui/src/components/TaskChatThread.tsx b/ui/src/components/TaskChatThread.tsx
+index 45690233d..9a8484c17 100644
+--- a/ui/src/components/TaskChatThread.tsx
++++ b/ui/src/components/TaskChatThread.tsx
+@@ -1649,7 +1649,7 @@ export function TaskChatThread(props: TaskChatThreadProps) {
+                 ? "Run interrupted"
+                 : source.status === "timed_out"
+                   ? "Run timed out"
+-                  : "Run failed";
++                  : "Exécution échouée";
+         const responseBoundary = sourceHasNativeResponse
+           ? " after returning a final response"
+           : "";
+@@ -1742,7 +1742,7 @@ export function TaskChatThread(props: TaskChatThreadProps) {
+             id,
+             kind: "marker",
+             variant: "interrupted",
+-            label: restoreFailed ? "Workspace restore failed" : source.status === "cancelled" ? (meta?.startedAt ? "Stopped" : "Couldn't start") : "Run failed",
++            label: restoreFailed ? "Workspace restore failed" : source.status === "cancelled" ? (meta?.startedAt ? "Arrêtée" : "Couldn't start") : "Exécution échouée",
+             runId: source.status === "cancelled" ? undefined : source.id,
+             ...(restoreFailed ? {
+               retryable: meta?.resultJson?.workspaceRestoreFailure !== "restore_unsafe_archive",
+@@ -1817,7 +1817,7 @@ export function TaskChatThread(props: TaskChatThreadProps) {
+               id,
+               kind: "marker",
+               variant: "turn_boundary",
+-              label: source.status === "cancelled" ? "Stopped" : "Run completed",
++              label: source.status === "cancelled" ? "Arrêtée" : "Run completed",
+               detail: source.status === "cancelled" ? "This turn was cancelled before it returned a response." : "The runner returned no user-facing response.",
+             },
+           });
+diff --git a/ui/src/components/task-chat/RichWorkProductCard.tsx b/ui/src/components/task-chat/RichWorkProductCard.tsx
+index 4b5dedf72..5863dc6db 100644
+--- a/ui/src/components/task-chat/RichWorkProductCard.tsx
++++ b/ui/src/components/task-chat/RichWorkProductCard.tsx
+@@ -66,7 +66,7 @@ export function stateChipFor(
+     return { label: "Running", tone: "progress" };
+   }
+   if (kind === "runtime_service" && status === "closed") {
+-    return { label: "Stopped", tone: "failure" };
++    return { label: "Arrêté", tone: "failure" };
+   }
+   return null;
+ }
+diff --git a/ui/src/components/task-chat/TaskChatMarker.test.tsx b/ui/src/components/task-chat/TaskChatMarker.test.tsx
+index d97eb1bf0..3c1362d92 100644
+--- a/ui/src/components/task-chat/TaskChatMarker.test.tsx
++++ b/ui/src/components/task-chat/TaskChatMarker.test.tsx
+@@ -41,7 +41,7 @@ describe("TaskChatMarker", () => {
+               id: "run-1:failure",
+               kind: "marker",
+               variant: "interrupted",
+-              label: "Run failed",
++              label: "Exécution échouée",
+               detail:
+                 "The runner stopped before returning an answer (runner_exited).",
+               collapsible: true,
+@@ -56,7 +56,7 @@ describe("TaskChatMarker", () => {
+     const toggle = container.querySelector<HTMLButtonElement>(
+       '[data-testid="task-chat-collapsible-marker"] button[aria-expanded]',
+     )!;
+-    expect(toggle.textContent).toContain("Run failed");
++    expect(toggle.textContent).toContain("Exécution échouée");
+     expect(toggle.textContent).toContain("il y a 5 min");
+     expect(
+       container
+@@ -114,7 +114,7 @@ describe("TaskChatMarker", () => {
+               id: "run-1:failure",
+               kind: "marker",
+               variant: "interrupted",
+-              label: "Run failed",
++              label: "Exécution échouée",
+               detail: "The runner stopped before returning an answer.",
+               collapsible: true,
+             }}
+@@ -147,7 +147,7 @@ describe("TaskChatMarker", () => {
+                 id: "run-1:failure",
+                 kind: "marker",
+                 variant: "interrupted",
+-                label: "Run failed",
++                label: "Exécution échouée",
+                 detail: "The runner stopped before returning an answer.",
+                 collapsible: true,
+                 runId: "run-1",
+diff --git a/ui/src/components/task-chat/TaskChatProtocolCard.test.tsx b/ui/src/components/task-chat/TaskChatProtocolCard.test.tsx
+index c06903a59..161d8b55f 100644
+--- a/ui/src/components/task-chat/TaskChatProtocolCard.test.tsx
++++ b/ui/src/components/task-chat/TaskChatProtocolCard.test.tsx
+@@ -420,7 +420,7 @@ describe("TaskChatProtocolCard", () => {
+       workProduct: product,
+     });
+ 
+-    expect(container.textContent).toContain("Stopped");
++    expect(container.textContent).toContain("Arrêté");
+     expect(container.textContent).not.toContain("Unhealthy");
+   });
+ 
+diff --git a/ui/src/components/task-chat/TaskChatRunnerTurn.test.tsx b/ui/src/components/task-chat/TaskChatRunnerTurn.test.tsx
+index b06864c7a..058c12beb 100644
+--- a/ui/src/components/task-chat/TaskChatRunnerTurn.test.tsx
++++ b/ui/src/components/task-chat/TaskChatRunnerTurn.test.tsx
+@@ -170,7 +170,7 @@ describe("TaskChatRunnerTurn", () => {
+     expect(
+       container.querySelector('[data-testid="task-chat-turn-status-header"]')
+         ?.textContent,
+-    ).toContain("Continued after steering · Au travail depuis");
++    ).toContain("Poursuivie après réorientation · Au travail depuis");
+   });
+ 
+   it("renders completed progress exactly once when the live run returns to Thinking", () => {
+diff --git a/ui/src/components/task-chat/TaskChatRunnerTurn.tsx b/ui/src/components/task-chat/TaskChatRunnerTurn.tsx
+index f164ed218..ebd8aab98 100644
+--- a/ui/src/components/task-chat/TaskChatRunnerTurn.tsx
++++ b/ui/src/components/task-chat/TaskChatRunnerTurn.tsx
+@@ -91,7 +91,7 @@ function RunnerTurnStatus({
+       : label
+     : `${label} depuis ${elapsed ?? "0s"}`;
+   const visibleLabel = continuedAfterSteering
+-    ? `Continued after steering · ${semanticLabel}`
++    ? `Poursuivie après réorientation · ${semanticLabel}`
+     : semanticLabel;
+ 
+   return (
+diff --git a/ui/src/components/task-chat/TaskChatThreadView.tsx b/ui/src/components/task-chat/TaskChatThreadView.tsx
+index fd2f66d48..fd68e9db3 100644
+--- a/ui/src/components/task-chat/TaskChatThreadView.tsx
++++ b/ui/src/components/task-chat/TaskChatThreadView.tsx
+@@ -325,7 +325,7 @@ export function TaskChatThreadView({
+             (item) =>
+               item.kind === "marker" &&
+               item.variant === "interrupted" &&
+-              (item.label === "Run failed" ||
++              (item.label === "Exécution échouée" ||
+                 item.label === "Usage limit reached"),
+           )?.id
+       : undefined;
+diff --git a/ui/src/components/task-chat/TaskChatTurn.test.tsx b/ui/src/components/task-chat/TaskChatTurn.test.tsx
+index a74d880d0..e0a8fd797 100644
+--- a/ui/src/components/task-chat/TaskChatTurn.test.tsx
++++ b/ui/src/components/task-chat/TaskChatTurn.test.tsx
+@@ -244,7 +244,7 @@ describe("TaskChatTurn", () => {
+     });
+ 
+     expect(summaryBtn()?.textContent).toContain(
+-      "Continued after steering · A travaillé pendant 38s",
++      "Poursuivie après réorientation · A travaillé pendant 38s",
+     );
+   });
+ 
+diff --git a/ui/src/components/task-chat/TaskChatTurn.tsx b/ui/src/components/task-chat/TaskChatTurn.tsx
+index 7b6e8e46e..d91d88805 100644
+--- a/ui/src/components/task-chat/TaskChatTurn.tsx
++++ b/ui/src/components/task-chat/TaskChatTurn.tsx
+@@ -100,7 +100,7 @@ export function TaskChatTurn({
+             />
+           ) : null}
+           {!item.historical ? <span className="min-w-0 truncate">
+-            {item.continuedAfterSteering ? "Continued after steering · " : ""}
++            {item.continuedAfterSteering ? "Poursuivie après réorientation · " : ""}
+             {item.summary.durationLabel
+               ? (item.summary.failed ? `Arrêté après ${item.summary.durationLabel}` : `A travaillé pendant ${item.summary.durationLabel}`)
+               : item.summary.failed
+diff --git a/ui/src/components/task-chat/status-relevance.test.ts b/ui/src/components/task-chat/status-relevance.test.ts
+index a80f31ccf..8c118da72 100644
+--- a/ui/src/components/task-chat/status-relevance.test.ts
++++ b/ui/src/components/task-chat/status-relevance.test.ts
+@@ -121,7 +121,7 @@ it("removes run lifecycle diagnostics while retaining tool failures and pending
+   ];
+   const items: TaskChatItem[] = [
+     ...retained,
+-    { id: "failed", kind: "marker", variant: "interrupted", label: "Run failed" },
++    { id: "failed", kind: "marker", variant: "interrupted", label: "Exécution échouée" },
+     { id: "system", kind: "message", author: "system", text: "Waiting to resume" },
+     { id: "wait", kind: "protocol", surface: "provider_activity", family: "wait", title: "Waiting", status: "completed",
+       eventType: "wait", details: [], steps: [], links: [], children: [] },
+diff --git a/ui/src/lib/activity-format.ts b/ui/src/lib/activity-format.ts
+index 8377955b8..0d330fabc 100644
+--- a/ui/src/lib/activity-format.ts
++++ b/ui/src/lib/activity-format.ts
+@@ -368,6 +368,35 @@ export const LIBELLES_VALEURS: Record<string, string> = {
+   low: "basse",
+ };
+ 
++/**
++ * Libellés français (au masculin, pour un badge) des statuts de projet, de
++ * routine et d'exécution de routine. Les clés sont les valeurs stockées : on
++ * ne traduit que l'affichage.
++ */
++export const LIBELLES_STATUTS_PROJET_ROUTINE: Record<string, string> = {
++  backlog: "en attente",
++  planned: "planifié",
++  in_progress: "en cours",
++  completed: "terminé",
++  cancelled: "annulé",
++  active: "actif",
++  paused: "en pause",
++  archived: "archivé",
++  draft: "brouillon",
++  received: "reçue",
++  queued: "en file",
++  running: "en cours",
++  succeeded: "réussie",
++  failed: "échouée",
++  skipped: "ignorée",
++  coalesced: "regroupée",
++  issue_created: "tâche créée",
++};
++
++export function libelleStatutProjetRoutine(value: string): string {
++  return LIBELLES_STATUTS_PROJET_ROUTINE[value] ?? value.replace(/_/g, " ");
++}
++
+ export function humanizeValue(value: unknown): string {
+   if (typeof value !== "string") return String(value ?? "aucun");
+   return LIBELLES_VALEURS[value] ?? value.replace(/_/g, " ");
+diff --git a/ui/src/lib/issue-filters.ts b/ui/src/lib/issue-filters.ts
+index ce6178102..48fafb8ee 100644
+--- a/ui/src/lib/issue-filters.ts
++++ b/ui/src/lib/issue-filters.ts
+@@ -1,4 +1,5 @@
+ import type { ExternalObjectSummary, Issue } from "@paperclipai/shared";
++import { LIBELLES_VALEURS } from "./activity-format";
+ 
+ export type IssueFilterWorkspaceLookup = {
+   mode?: string | null;
+@@ -80,13 +81,15 @@ export const issueStatusOrder = ["in_progress", "todo", "backlog", "in_review",
+ export const issuePriorityOrder = ["critical", "high", "medium", "low"];
+ 
+ export const issueQuickFilterPresets = [
+-  { label: "All", statuses: [] as string[] },
+-  { label: "Active", statuses: ["todo", "in_progress", "in_review", "blocked"] },
+-  { label: "Backlog", statuses: ["backlog"] },
+-  { label: "Done", statuses: ["done", "cancelled"] },
++  { label: "Toutes", statuses: [] as string[] },
++  { label: "Actives", statuses: ["todo", "in_progress", "in_review", "blocked"] },
++  { label: "En attente", statuses: ["backlog"] },
++  { label: "Terminées", statuses: ["done", "cancelled"] },
+ ];
+ 
+ export function issueFilterLabel(value: string): string {
++  const francais = LIBELLES_VALEURS[value];
++  if (francais) return francais.charAt(0).toUpperCase() + francais.slice(1);
+   return value.replace(/_/g, " ").replace(/\b\w/g, (char) => char.toUpperCase());
+ }
+ 
+diff --git a/ui/src/lib/task-views.ts b/ui/src/lib/task-views.ts
+index 3fecf2494..58c675a8e 100644
+--- a/ui/src/lib/task-views.ts
++++ b/ui/src/lib/task-views.ts
+@@ -49,22 +49,22 @@ export interface TaskViewGroup {
+ 
+ export const TASK_VIEW_GROUPS: TaskViewGroup[] = [
+   {
+-    label: "My work",
++    label: "Mon travail",
+     views: [
+-      { key: "mine", label: "Mine", surface: "inbox", inboxTab: "mine", hint: "Assigned to you or waiting on you" },
+-      { key: "unread", label: "Unread", surface: "inbox", inboxTab: "unread", hint: "Tasks you touched with new activity" },
+-      { key: "blocked", label: "Blocked", surface: "inbox", inboxTab: "blocked", hint: "Blocked tasks, grouped by blocker" },
+-      { key: "recent", label: "Recent", surface: "inbox", inboxTab: "recent", hint: "Everything you touched lately" },
+-      { key: "everything", label: "Everything", surface: "inbox", inboxTab: "all", hint: "Tasks, approvals, failed runs and join requests" },
++      { key: "mine", label: "Les miennes", surface: "inbox", inboxTab: "mine", hint: "Qui vous sont assignées ou qui attendent votre réponse" },
++      { key: "unread", label: "Non lues", surface: "inbox", inboxTab: "unread", hint: "Tâches que vous avez touchées, avec de l'activité nouvelle" },
++      { key: "blocked", label: "Bloquées", surface: "inbox", inboxTab: "blocked", hint: "Tâches bloquées, regroupées par bloqueur" },
++      { key: "recent", label: "Récentes", surface: "inbox", inboxTab: "recent", hint: "Tout ce que vous avez touché récemment" },
++      { key: "everything", label: "Tout", surface: "inbox", inboxTab: "all", hint: "Tâches, approbations, exécutions échouées et demandes d'adhésion" },
+     ],
+   },
+   {
+-    label: "Organization",
++    label: "Organisation",
+     views: [
+-      { key: "all", label: "All tasks", surface: "issues", statuses: [], hint: "Every task in the organization" },
+-      { key: "active", label: "Active", surface: "issues", statuses: ["todo", "in_progress", "in_review", "blocked"], hint: "Open tasks, running or not" },
+-      { key: "backlog", label: "Backlog", surface: "issues", statuses: ["backlog"], hint: "Not started yet" },
+-      { key: "done", label: "Done", surface: "issues", statuses: ["done", "cancelled"], hint: "Completed and cancelled" },
++      { key: "all", label: "Toutes les tâches", surface: "issues", statuses: [], hint: "Toutes les tâches de l'organisation" },
++      { key: "active", label: "Actives", surface: "issues", statuses: ["todo", "in_progress", "in_review", "blocked"], hint: "Tâches ouvertes, en cours ou non" },
++      { key: "backlog", label: "En attente", surface: "issues", statuses: ["backlog"], hint: "Pas encore commencées" },
++      { key: "done", label: "Terminées", surface: "issues", statuses: ["done", "cancelled"], hint: "Terminées et annulées" },
+     ],
+   },
+ ];
+diff --git a/ui/src/pages/Inbox.test.tsx b/ui/src/pages/Inbox.test.tsx
+index caf85d5ba..3513fc916 100644
+--- a/ui/src/pages/Inbox.test.tsx
++++ b/ui/src/pages/Inbox.test.tsx
+@@ -663,7 +663,7 @@ describe("Inbox toolbar", () => {
+ 
+     expect(container.querySelector('input[placeholder="Search inbox…"]')).not.toBeNull();
+     expect(container.querySelector('[data-testid="inbox-blocked-tab-badge"]')).toBeNull();
+-    expect(container.querySelector('button[title="Filter"]')).not.toBeNull();
++    expect(container.querySelector('button[title="Filtrer"]')).not.toBeNull();
+     expect(container.querySelector('button[title="Group"]')).not.toBeNull();
+     expect(container.querySelector('button[title="Columns"]')).not.toBeNull();
+     expect(container.querySelector('button[title="Sort"]')).not.toBeNull();
+diff --git a/ui/src/pages/Projects.test.tsx b/ui/src/pages/Projects.test.tsx
+index 53a417f19..567bfbcdf 100644
+--- a/ui/src/pages/Projects.test.tsx
++++ b/ui/src/pages/Projects.test.tsx
+@@ -186,7 +186,7 @@ describe("Projects", () => {
+   }
+ 
+   async function openSortMenu() {
+-    const trigger = container.querySelector<HTMLButtonElement>('button[title="Sort"]');
++    const trigger = container.querySelector<HTMLButtonElement>('button[title="Trier"]');
+     expect(trigger).not.toBeNull();
+ 
+     await act(async () => {
+@@ -211,23 +211,23 @@ describe("Projects", () => {
+     await renderProjects();
+ 
+     const content = container.textContent ?? "";
+-    expect(container.querySelector('button[title="Sort"]')?.textContent).toContain("Sort: Name");
+-    expect(content.indexOf("My Projects")).toBeLessThan(content.indexOf("Alpha"));
++    expect(container.querySelector('button[title="Trier"]')?.textContent).toContain("Tri : Nom");
++    expect(content.indexOf("Mes projets")).toBeLessThan(content.indexOf("Alpha"));
+     expect(content.indexOf("Alpha")).toBeLessThan(content.indexOf("Charlie"));
+-    expect(content.indexOf("Charlie")).toBeLessThan(content.indexOf("Other Projects"));
+-    expect(content.indexOf("Other Projects")).toBeLessThan(content.indexOf("Bravo"));
+-    expect(content).toContain("in progress");
++    expect(content.indexOf("Charlie")).toBeLessThan(content.indexOf("Autres projets"));
++    expect(content.indexOf("Autres projets")).toBeLessThan(content.indexOf("Bravo"));
++    expect(content).toContain("en cours");
+   });
+ 
+   it("sorts grouped projects by the selected field", async () => {
+     await renderProjects();
+     await openSortMenu();
+-    await chooseSortField("Updated");
++    await chooseSortField("Modifié");
+ 
+     const content = container.textContent ?? "";
+-    expect(content.indexOf("My Projects")).toBeLessThan(content.indexOf("Charlie"));
++    expect(content.indexOf("Mes projets")).toBeLessThan(content.indexOf("Charlie"));
+     expect(content.indexOf("Charlie")).toBeLessThan(content.indexOf("Alpha"));
+-    expect(content.indexOf("Alpha")).toBeLessThan(content.indexOf("Other Projects"));
++    expect(content.indexOf("Alpha")).toBeLessThan(content.indexOf("Autres projets"));
+   });
+ 
+   it("reserves description line height for projects without descriptions", async () => {
+diff --git a/ui/src/pages/Projects.tsx b/ui/src/pages/Projects.tsx
+index 02006e0f2..5940c9d17 100644
+--- a/ui/src/pages/Projects.tsx
++++ b/ui/src/pages/Projects.tsx
+@@ -22,6 +22,7 @@ import {
+ } from "../hooks/useResourceMemberships";
+ import { Button } from "@/components/ui/button";
+ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
++import { libelleStatutProjetRoutine } from "../lib/activity-format";
+ import { ArrowUpDown, Check, Hexagon, Plus } from "lucide-react";
+ import { Card } from "@/components/ui/card";
+ 
+@@ -29,10 +30,10 @@ type ProjectSortField = "name" | "updated" | "created" | "targetDate";
+ type ProjectSortDir = "asc" | "desc";
+ 
+ const PROJECT_SORT_OPTIONS: Array<{ field: ProjectSortField; label: string }> = [
+-  { field: "name", label: "Name" },
+-  { field: "updated", label: "Updated" },
+-  { field: "created", label: "Created" },
+-  { field: "targetDate", label: "Target date" },
++  { field: "name", label: "Nom" },
++  { field: "updated", label: "Modifié" },
++  { field: "created", label: "Créé" },
++  { field: "targetDate", label: "Date cible" },
+ ];
+ 
+ function compareProjectNames(left: Project, right: Project) {
+@@ -84,7 +85,7 @@ export function Projects() {
+   const [sortDir, setSortDir] = useState<ProjectSortDir>("asc");
+ 
+   useEffect(() => {
+-    setBreadcrumbs([{ label: "Projects" }]);
++    setBreadcrumbs([{ label: "Projets" }]);
+   }, [setBreadcrumbs]);
+ 
+   const { data: allProjects, isLoading, error } = useQuery({
+@@ -116,10 +117,10 @@ export function Projects() {
+ 
+     return groups;
+   }, [membershipsQuery.data, sortedProjects]);
+-  const sortLabel = PROJECT_SORT_OPTIONS.find((option) => option.field === sortField)?.label ?? "Name";
++  const sortLabel = PROJECT_SORT_OPTIONS.find((option) => option.field === sortField)?.label ?? "Nom";
+ 
+   if (!selectedCompanyId) {
+-    return <EmptyState icon={Hexagon} message="Select an organization to view projects." />;
++    return <EmptyState icon={Hexagon} message="Sélectionnez une organisation pour voir les projets." />;
+   }
+ 
+   if (isLoading) {
+@@ -131,9 +132,9 @@ export function Projects() {
+       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+         <Popover>
+           <PopoverTrigger asChild>
+-            <Button variant="ghost" size="sm" className="w-fit text-xs" title="Sort">
++            <Button variant="ghost" size="sm" className="w-fit text-xs" title="Trier">
+               <ArrowUpDown className="h-3.5 w-3.5 sm:h-3 sm:w-3 sm:mr-1" />
+-              <span>Sort: {sortLabel}</span>
++              <span>Tri : {sortLabel}</span>
+             </Button>
+           </PopoverTrigger>
+           <PopoverContent align="start" className="w-44 p-0">
+@@ -160,7 +161,7 @@ export function Projects() {
+                   {sortField === option.field ? (
+                     <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                       <Check className="h-3 w-3" />
+-                      {sortDir === "asc" ? "Asc" : "Desc"}
++                      {sortDir === "asc" ? "Croissant" : "Décroissant"}
+                     </span>
+                   ) : null}
+                 </button>
+@@ -170,7 +171,7 @@ export function Projects() {
+         </Popover>
+         <Button size="sm" variant="outline" onClick={openNewProject}>
+           <Plus className="h-4 w-4 mr-1" />
+-          Add Project
++          Ajouter un projet
+         </Button>
+       </div>
+ 
+@@ -179,8 +180,8 @@ export function Projects() {
+       {!isLoading && projects.length === 0 && (
+         <EmptyState
+           icon={Hexagon}
+-          message="No projects yet."
+-          action="Add Project"
++          message="Aucun projet pour le moment."
++          action="Ajouter un projet"
+           onAction={openNewProject}
+         />
+       )}
+@@ -188,8 +189,8 @@ export function Projects() {
+       {projects.length > 0 && (
+         <div className="space-y-6">
+           {([
+-            ["My Projects", groupedProjects.mine],
+-            ["Other Projects", groupedProjects.other],
++            ["Mes projets", groupedProjects.mine],
++            ["Autres projets", groupedProjects.other],
+           ] as const).map(([label, sectionProjects]) => {
+             if (sectionProjects.length === 0) return null;
+ 
+@@ -223,9 +224,9 @@ export function Projects() {
+                           <div className="flex items-center gap-3">
+                             <span
+                               className="hidden text-xs text-muted-foreground tabular-nums sm:inline"
+-                              title={`${formatNumber(project.taskCount ?? 0)} task${(project.taskCount ?? 0) === 1 ? "" : "s"}`}
++                              title={`${formatNumber(project.taskCount ?? 0)} tâche${(project.taskCount ?? 0) > 1 ? "s" : ""}`}
+                             >
+-                              {formatNumber(project.taskCount ?? 0)} task{(project.taskCount ?? 0) === 1 ? "" : "s"}
++                              {formatNumber(project.taskCount ?? 0)} tâche{(project.taskCount ?? 0) > 1 ? "s" : ""}
+                             </span>
+                             {project.budget && (
+                               <span className="hidden text-xs text-muted-foreground tabular-nums sm:inline">
+@@ -237,7 +238,7 @@ export function Projects() {
+                                 {formatDate(project.targetDate)}
+                               </span>
+                             )}
+-                            <StatusBadge status={project.status} />
++                            <StatusBadge status={project.status} label={libelleStatutProjetRoutine(project.status)} />
+                             <MembershipAction
+                               state={state}
+                               pending={joinLeavePending}
+diff --git a/ui/src/pages/Routines.production.tsx b/ui/src/pages/Routines.production.tsx
+index 691ec369d..86594233c 100644
+--- a/ui/src/pages/Routines.production.tsx
++++ b/ui/src/pages/Routines.production.tsx
+@@ -68,13 +68,13 @@ import {
+ const concurrencyPolicies = ["coalesce_if_active", "always_enqueue", "skip_if_active"];
+ const catchUpPolicies = ["skip_missed", "enqueue_missed_with_cap"];
+ const concurrencyPolicyDescriptions: Record<string, string> = {
+-  coalesce_if_active: "If a run is already active, keep just one follow-up run queued.",
+-  always_enqueue: "Queue every trigger occurrence, even if the routine is already running.",
+-  skip_if_active: "Drop new trigger occurrences while a run is still active.",
++  coalesce_if_active: "Si une exécution est déjà active, ne garder qu'une seule exécution de suite en file.",
++  always_enqueue: "Mettre en file chaque déclenchement, même si la routine tourne déjà.",
++  skip_if_active: "Ignorer les nouveaux déclenchements tant qu'une exécution est active.",
+ };
+ const catchUpPolicyDescriptions: Record<string, string> = {
+-  skip_missed: "Ignore windows that were missed while the scheduler or routine was paused.",
+-  enqueue_missed_with_cap: "Catch up missed schedule windows after recovery; sub-hourly schedules are combined into one catch-up run, slower schedules replay each missed window up to a cap.",
++  skip_missed: "Ignorer les créneaux manqués pendant la pause du planificateur ou de la routine.",
++  enqueue_missed_with_cap: "Rattraper les créneaux manqués après la reprise ; les planifications infra-horaires sont regroupées en une seule exécution de rattrapage, les plus lentes rejouent chaque créneau manqué jusqu'à un plafond.",
+ };
+ 
+ function autoResizeTextarea(element: HTMLTextAreaElement | null) {
+@@ -183,8 +183,8 @@ export function buildRoutineGroups(
+         const positionCompare = leftPosition - rightPosition;
+         if (positionCompare !== 0) return positionCompare;
+ 
+-        const labelCompare = (leftFolder?.name ?? "Unknown folder").localeCompare(
+-          rightFolder?.name ?? "Unknown folder",
++        const labelCompare = (leftFolder?.name ?? "Dossier inconnu").localeCompare(
++          rightFolder?.name ?? "Dossier inconnu",
+           undefined,
+           { sensitivity: "base" },
+         );
+@@ -192,7 +192,7 @@ export function buildRoutineGroups(
+       })
+       .map((key) => ({
+         key,
+-        label: key === "__unfiled" ? "Unfiled" : (folderById.get(key)?.name ?? "Unknown folder"),
++        label: key === "__unfiled" ? "Sans dossier" : (folderById.get(key)?.name ?? "Dossier inconnu"),
+         items: groups[key]!,
+       }));
+   }
+@@ -201,13 +201,13 @@ export function buildRoutineGroups(
+     const groups = groupBy(routines, (routine) => routine.projectId ?? "__no_project");
+     return Object.keys(groups)
+       .sort((left, right) => {
+-        const leftLabel = left === "__no_project" ? "No project" : (projectById.get(left)?.name ?? "Unknown project");
+-        const rightLabel = right === "__no_project" ? "No project" : (projectById.get(right)?.name ?? "Unknown project");
++        const leftLabel = left === "__no_project" ? "Aucun projet" : (projectById.get(left)?.name ?? "Projet inconnu");
++        const rightLabel = right === "__no_project" ? "Aucun projet" : (projectById.get(right)?.name ?? "Projet inconnu");
+         return leftLabel.localeCompare(rightLabel);
+       })
+       .map((key) => ({
+         key,
+-        label: key === "__no_project" ? "No project" : (projectById.get(key)?.name ?? "Unknown project"),
++        label: key === "__no_project" ? "Aucun projet" : (projectById.get(key)?.name ?? "Projet inconnu"),
+         items: groups[key]!,
+       }));
+   }
+@@ -215,13 +215,13 @@ export function buildRoutineGroups(
+   const groups = groupBy(routines, (routine) => routine.assigneeAgentId ?? "__unassigned");
+   return Object.keys(groups)
+     .sort((left, right) => {
+-      const leftLabel = left === "__unassigned" ? "Unassigned" : (agentById.get(left)?.name ?? "Unknown agent");
+-      const rightLabel = right === "__unassigned" ? "Unassigned" : (agentById.get(right)?.name ?? "Unknown agent");
++      const leftLabel = left === "__unassigned" ? "Non assigné" : (agentById.get(left)?.name ?? "Agent inconnu");
++      const rightLabel = right === "__unassigned" ? "Non assigné" : (agentById.get(right)?.name ?? "Agent inconnu");
+       return leftLabel.localeCompare(rightLabel);
+     })
+     .map((key) => ({
+       key,
+-      label: key === "__unassigned" ? "Unassigned" : (agentById.get(key)?.name ?? "Unknown agent"),
++      label: key === "__unassigned" ? "Non assigné" : (agentById.get(key)?.name ?? "Agent inconnu"),
+       items: groups[key]!,
+     }));
+ }
+@@ -243,7 +243,7 @@ export function buildRoutineSections(
+     .filter((group) => group.items.length > 0)
+     .map((group) => (
+       builtInRoutines.length > 0 && groupByValue === "none" && group.key === "__all"
+-        ? { ...group, label: "Custom routines" }
++        ? { ...group, label: "Routines personnalisées" }
+         : group
+     ));
+ 
+@@ -253,7 +253,7 @@ export function buildRoutineSections(
+     ...customGroups,
+     {
+       key: builtInRoutineGroupKey,
+-      label: "Built-in routines",
++      label: "Routines intégrées",
+       items: builtInRoutines,
+     },
+   ];
+@@ -454,10 +454,10 @@ export function Routines() {
+       setAdvancedOpen(false);
+       await queryClient.invalidateQueries({ queryKey: queryKeys.routines.list(selectedCompanyId!) });
+       pushToast({
+-        title: "Routine created",
++        title: "Routine créée",
+         body: routine.assigneeAgentId
+-          ? "Add the first trigger to turn it into a live workflow."
+-          : "Draft saved. Add a default agent before enabling automation.",
++          ? "Ajoutez le premier déclencheur pour en faire un flux de travail actif."
++          : "Brouillon enregistré. Ajoutez un agent par défaut avant d'activer l'automatisation.",
+         tone: "success",
+       });
+       navigate(`/routines/${routine.id}?tab=triggers`);
+@@ -483,8 +483,8 @@ export function Routines() {
+           ]);
+         } catch (moveError) {
+           pushToast({
+-            title: "Folder created, move failed",
+-            body: moveError instanceof Error ? moveError.message : "Paperclip could not move the selected routines.",
++            title: "Dossier créé, déplacement échoué",
++            body: moveError instanceof Error ? moveError.message : "Impossible de déplacer les routines sélectionnées.",
+             tone: "error",
+           });
+           return;
+@@ -492,12 +492,12 @@ export function Routines() {
+       } else {
+         setFolderSelection(folder.id);
+       }
+-      pushToast({ title: "Folder created", body: folder.name, tone: "success" });
++      pushToast({ title: "Dossier créé", body: folder.name, tone: "success" });
+     },
+     onError: (mutationError) => {
+       pushToast({
+-        title: "Failed to save folder",
+-        body: mutationError instanceof Error ? mutationError.message : "Paperclip could not save the folder.",
++        title: "Échec de l'enregistrement du dossier",
++        body: mutationError instanceof Error ? mutationError.message : "Impossible d'enregistrer le dossier.",
+         tone: "error",
+       });
+     },
+@@ -512,8 +512,8 @@ export function Routines() {
+     },
+     onError: (mutationError) => {
+       pushToast({
+-        title: "Folder save failed",
+-        body: mutationError instanceof Error ? mutationError.message : "Paperclip could not update the folder.",
++        title: "Échec de l'enregistrement du dossier",
++        body: mutationError instanceof Error ? mutationError.message : "Impossible de mettre à jour le dossier.",
+         tone: "error",
+       });
+     },
+@@ -527,12 +527,12 @@ export function Routines() {
+         queryClient.invalidateQueries({ queryKey: queryKeys.routines.list(selectedCompanyId!) }),
+         queryClient.invalidateQueries({ queryKey: queryKeys.folders.list(selectedCompanyId!, "routine") }),
+       ]);
+-      pushToast({ title: "Folder deleted", body: "Items moved to Unfiled.", tone: "success" });
++      pushToast({ title: "Dossier supprimé", body: "Éléments déplacés vers Sans dossier.", tone: "success" });
+     },
+     onError: (mutationError) => {
+       pushToast({
+-        title: "Folder delete failed",
+-        body: mutationError instanceof Error ? mutationError.message : "Paperclip could not delete the folder.",
++        title: "Échec de la suppression du dossier",
++        body: mutationError instanceof Error ? mutationError.message : "Impossible de supprimer le dossier.",
+         tone: "error",
+       });
+     },
+@@ -548,8 +548,8 @@ export function Routines() {
+     },
+     onError: (mutationError) => {
+       pushToast({
+-        title: "Move failed",
+-        body: mutationError instanceof Error ? mutationError.message : "Paperclip could not move the routine.",
++        title: "Échec du déplacement",
++        body: mutationError instanceof Error ? mutationError.message : "Impossible de déplacer la routine.",
+         tone: "error",
+       });
+     },
+@@ -578,8 +578,8 @@ export function Routines() {
+     },
+     onError: (mutationError) => {
+       pushToast({
+-        title: "Failed to update routine",
+-        body: mutationError instanceof Error ? mutationError.message : "Paperclip could not update the routine.",
++        title: "Échec de la mise à jour de la routine",
++        body: mutationError instanceof Error ? mutationError.message : "Impossible de mettre à jour la routine.",
+         tone: "error",
+       });
+     },
+@@ -613,8 +613,8 @@ export function Routines() {
+     },
+     onError: (mutationError) => {
+       pushToast({
+-        title: "Routine run failed",
+-        body: mutationError instanceof Error ? mutationError.message : "Paperclip could not start the routine run.",
++        title: "Échec de l'exécution de la routine",
++        body: mutationError instanceof Error ? mutationError.message : "Impossible de lancer l'exécution de la routine.",
+         tone: "error",
+       });
+     },
+@@ -759,11 +759,11 @@ export function Routines() {
+         queryClient.invalidateQueries({ queryKey: queryKeys.routines.list(selectedCompanyId!) }),
+         queryClient.invalidateQueries({ queryKey: queryKeys.folders.list(selectedCompanyId!, "routine") }),
+       ]);
+-      pushToast({ title: "Routines moved", body: `${ids.length} routine${ids.length === 1 ? "" : "s"} filed.`, tone: "success" });
++      pushToast({ title: "Routines déplacées", body: `${ids.length} routine${ids.length === 1 ? "" : "s"} filed.`, tone: "success" });
+     } catch (moveError) {
+       pushToast({
+-        title: "Failed to move routines",
+-        body: moveError instanceof Error ? moveError.message : "Paperclip could not move the selected routines.",
++        title: "Échec du déplacement des routines",
++        body: moveError instanceof Error ? moveError.message : "Impossible de déplacer les routines sélectionnées.",
+         tone: "error",
+       });
+     }
+@@ -776,8 +776,8 @@ export function Routines() {
+   function handleToggleEnabled(routine: RoutineListItem, enabled: boolean) {
+     if (!enabled && !routine.assigneeAgentId) {
+       pushToast({
+-        title: "Default agent required",
+-        body: "Set a default agent before enabling routine automation.",
++        title: "Agent par défaut requis",
++        body: "Définissez un agent par défaut avant d'activer l'automatisation de la routine.",
+         tone: "warn",
+       });
+       return;
+@@ -796,7 +796,7 @@ export function Routines() {
+   }
+ 
+   if (!selectedCompanyId) {
+-    return <EmptyState icon={Repeat} message="Select a company to view routines." />;
++    return <EmptyState icon={Repeat} message="Sélectionnez une organisation pour voir les routines." />;
+   }
+ 
+   if (isLoading) {
+@@ -811,12 +811,12 @@ export function Routines() {
+             Routines
+           </h1>
+           <p className="text-sm text-muted-foreground">
+-            Recurring work definitions that materialize into auditable execution tasks.
++            Définitions de travail récurrent qui se matérialisent en tâches d'exécution traçables.
+           </p>
+         </div>
+         <Button onClick={openCreateRoutine}>
+           <Plus className="mr-2 h-4 w-4" />
+-          Create routine
++          Créer la routine
+         </Button>
+       </div>
+ 
+@@ -827,7 +827,7 @@ export function Routines() {
+           onValueChange={handleTabChange}
+           items={[
+             { value: "routines", label: "Routines" },
+-            { value: "runs", label: "Recent Runs" },
++            { value: "runs", label: "Exécutions récentes" },
+           ]}
+         />
+         <TabsContent value="routines" className="space-y-4">
+@@ -838,18 +838,18 @@ export function Routines() {
+             <div className="flex items-center gap-1">
+               <Popover>
+                 <PopoverTrigger asChild>
+-                  <Button variant="ghost" size="sm" className="text-xs" title="Sort">
++                  <Button variant="ghost" size="sm" className="text-xs" title="Trier">
+                     <ArrowUpDown className="h-3.5 w-3.5 sm:h-3 sm:w-3 sm:mr-1" />
+-                    <span className="hidden sm:inline">Sort</span>
++                    <span className="hidden sm:inline">Trier</span>
+                   </Button>
+                 </PopoverTrigger>
+                 <PopoverContent align="end" className="w-44 p-0">
+                   <div className="p-2 space-y-0.5">
+                     {([
+-                      ["updated", "Updated"],
+-                      ["created", "Created"],
+-                      ["lastRun", "Last run"],
+-                      ["title", "Title"],
++                      ["updated", "Modifiée"],
++                      ["created", "Créée"],
++                      ["lastRun", "Dernière exécution"],
++                      ["title", "Titre"],
+                     ] as const).map(([field, label]) => (
+                       <button
+                         key={field}
+@@ -879,18 +879,18 @@ export function Routines() {
+               </Popover>
+               <Popover>
+                 <PopoverTrigger asChild>
+-                  <Button variant="ghost" size="sm" className="text-xs" title="Group">
++                  <Button variant="ghost" size="sm" className="text-xs" title="Grouper">
+                     <Layers className="h-3.5 w-3.5 sm:h-3 sm:w-3 sm:mr-1" />
+-                    <span className="hidden sm:inline">Group</span>
++                    <span className="hidden sm:inline">Grouper</span>
+                   </Button>
+                 </PopoverTrigger>
+                 <PopoverContent align="end" className="w-44 p-0">
+                   <div className="p-2 space-y-0.5">
+                     {([
+-                      ["folder", "Folder"],
+-                      ["project", "Project"],
++                      ["folder", "Dossier"],
++                      ["project", "Projet"],
+                       ["assignee", "Agent"],
+-                      ["none", "None"],
++                      ["none", "Aucun"],
+                     ] as const).map(([value, label]) => (
+                       <button
+                         key={value}
+@@ -911,7 +911,7 @@ export function Routines() {
+               {routineViewState.groupBy === "folder" && !hasRoutineFolders ? (
+                 <Button variant="outline" size="sm" onClick={() => openCreateFolder()}>
+                   <Plus className="mr-2 h-3.5 w-3.5" />
+-                  New folder
++                  Nouveau dossier
+                 </Button>
+               ) : null}
+               {showFolderRail ? (
+@@ -926,7 +926,7 @@ export function Routines() {
+               <FolderChip
+                 result={railFolderResult}
+                 selection={folderSelection}
+-                allLabel="All routines"
++                allLabel="Toutes les routines"
+                 onClick={() => setMobileFoldersOpen(true)}
+               />
+             </div>
+@@ -961,9 +961,9 @@ export function Routines() {
+         >
+           <div className="shrink-0 flex flex-wrap items-center justify-between gap-3 border-b border-border/60 px-5 py-3">
+             <div>
+-              <p className="text-xs font-medium uppercase tracking-(--tracking-caps) text-muted-foreground">New routine</p>
++              <p className="text-xs font-medium uppercase tracking-(--tracking-caps) text-muted-foreground">Nouvelle routine</p>
+               <p className="text-sm text-muted-foreground">
+-                Define the recurring work first. Default project and agent are optional for draft routines.
++                Définissez d'abord le travail récurrent. Le projet et l'agent par défaut sont facultatifs pour un brouillon.
+               </p>
+             </div>
+             <Button
+@@ -975,7 +975,7 @@ export function Routines() {
+               }}
+               disabled={createRoutine.isPending}
+             >
+-              Cancel
++              Annuler
+             </Button>
+           </div>
+ 
+@@ -984,7 +984,7 @@ export function Routines() {
+               <textarea
+                 ref={titleInputRef}
+                 className="w-full resize-none overflow-hidden bg-transparent text-xl font-semibold outline-none placeholder:text-muted-foreground/50"
+-                placeholder="Routine title"
++                placeholder="Titre de la routine"
+                 rows={1}
+                 value={draft.title}
+                 onChange={(event) => {
+@@ -1017,16 +1017,16 @@ export function Routines() {
+             <div className="px-5 pb-3">
+               <div className="overflow-x-auto overscroll-x-contain">
+                 <div className="inline-flex min-w-full flex-wrap items-center gap-2 text-sm text-muted-foreground sm:min-w-max sm:flex-nowrap">
+-                  <span>For</span>
++                  <span>Pour</span>
+                   <InlineEntitySelector
+                     ref={assigneeSelectorRef}
+                     value={draft.assigneeAgentId}
+                     options={assigneeOptions}
+                     recentOptionIds={recentAssigneeIds}
+-                    placeholder="Responsible"
+-                    noneLabel="No responsible"
+-                    searchPlaceholder="Search responsible..."
+-                    emptyMessage="No responsible found."
++                    placeholder="Responsable"
++                    noneLabel="Aucun responsable"
++                    searchPlaceholder="Rechercher un responsable..."
++                    emptyMessage="Aucun responsable trouvé."
+                     onChange={(assigneeAgentId) => {
+                       if (assigneeAgentId) trackRecentAssignee(assigneeAgentId);
+                       setDraft((current) => ({ ...current, assigneeAgentId }));
+@@ -1049,7 +1049,7 @@ export function Routines() {
+                           <span className="truncate">{option.label}</span>
+                         )
+                       ) : (
+-                        <span className="text-muted-foreground">Responsible</span>
++                        <span className="text-muted-foreground">Responsable</span>
+                       )
+                     }
+                     renderOption={(option) => {
+@@ -1069,10 +1069,10 @@ export function Routines() {
+                     value={draft.projectId}
+                     options={projectOptions}
+                     recentOptionIds={recentProjectIds}
+-                    placeholder="Project"
+-                    noneLabel="No project"
+-                    searchPlaceholder="Search projects..."
+-                    emptyMessage="No projects found."
++                    placeholder="Projet"
++                    noneLabel="Aucun projet"
++                    searchPlaceholder="Rechercher un projet..."
++                    emptyMessage="Aucun projet trouvé."
+                     onChange={(projectId) => {
+                       if (projectId) trackRecentProject(projectId);
+                       setDraft((current) => ({ ...current, projectId }));
+@@ -1088,7 +1088,7 @@ export function Routines() {
+                           <span className="truncate">{option.label}</span>
+                         </>
+                       ) : (
+-                        <span className="text-muted-foreground">Project</span>
++                        <span className="text-muted-foreground">Projet</span>
+                       )
+                     }
+                     renderOption={(option) => {
+@@ -1105,7 +1105,7 @@ export function Routines() {
+                       );
+                     }}
+                   />
+-                  <span>filed in</span>
++                  <span>classée dans</span>
+                   <Select
+                     value={draft.folderId ?? "__unfiled"}
+                     onValueChange={(value) => setDraft((current) => ({
+@@ -1117,7 +1117,7 @@ export function Routines() {
+                       <SelectValue />
+                     </SelectTrigger>
+                     <SelectContent>
+-                      <SelectItem value="__unfiled">Unfiled</SelectItem>
++                      <SelectItem value="__unfiled">Sans dossier</SelectItem>
+                       {(routineFolders?.folders ?? []).map((folder) => (
+                         <SelectItem key={folder.id} value={folder.id}>
+                           {folder.name}
+@@ -1134,7 +1134,7 @@ export function Routines() {
+                 ref={descriptionEditorRef}
+                 value={draft.description}
+                 onChange={(description) => setDraft((current) => ({ ...current, description }))}
+-                placeholder="Add instructions..."
++                placeholder="Ajouter des instructions..."
+                 bordered={false}
+                 contentClassName="min-h-(--sz-160px) text-sm text-muted-foreground"
+                 mentions={mentionOptions}
+@@ -1150,15 +1150,15 @@ export function Routines() {
+               <Collapsible open={advancedOpen} onOpenChange={setAdvancedOpen}>
+                 <CollapsibleTrigger className="flex w-full items-center justify-between text-left">
+                   <div>
+-                    <p className="text-sm font-medium">Advanced delivery settings</p>
+-                    <p className="text-sm text-muted-foreground">Keep policy controls secondary to the work definition.</p>
++                    <p className="text-sm font-medium">Réglages avancés de livraison</p>
++                    <p className="text-sm text-muted-foreground">Les règles de livraison restent secondaires par rapport à la définition du travail.</p>
+                   </div>
+                   {advancedOpen ? <ChevronDown className="h-4 w-4 text-muted-foreground" /> : <ChevronRight className="h-4 w-4 text-muted-foreground" />}
+                 </CollapsibleTrigger>
+                 <CollapsibleContent className="pt-3">
+                   <div className="grid gap-4 md:grid-cols-2">
+                     <div className="space-y-2">
+-                      <p className="text-xs font-medium uppercase tracking-(--tracking-caps) text-muted-foreground">Concurrency</p>
++                      <p className="text-xs font-medium uppercase tracking-(--tracking-caps) text-muted-foreground">Concurrence</p>
+                       <Select
+                         value={draft.concurrencyPolicy}
+                         onValueChange={(concurrencyPolicy) => setDraft((current) => ({ ...current, concurrencyPolicy }))}
+@@ -1175,7 +1175,7 @@ export function Routines() {
+                       <p className="text-xs text-muted-foreground">{concurrencyPolicyDescriptions[draft.concurrencyPolicy]}</p>
+                     </div>
+                     <div className="space-y-2">
+-                      <p className="text-xs font-medium uppercase tracking-(--tracking-caps) text-muted-foreground">Catch-up</p>
++                      <p className="text-xs font-medium uppercase tracking-(--tracking-caps) text-muted-foreground">Rattrapage</p>
+                       <Select
+                         value={draft.catchUpPolicy}
+                         onValueChange={(catchUpPolicy) => setDraft((current) => ({ ...current, catchUpPolicy }))}
+@@ -1199,7 +1199,7 @@ export function Routines() {
+ 
+           <div className="shrink-0 flex flex-col gap-3 border-t border-border/60 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+             <div className="text-sm text-muted-foreground">
+-              After creation, Paperclip takes you straight to trigger setup. Draft routines stay paused until you add a default agent.
++              Après la création, vous passez directement au réglage des déclencheurs. Un brouillon reste en pause tant que vous n'ajoutez pas d'agent par défaut.
+             </div>
+             <div className="flex flex-col gap-2 sm:items-end">
+               <Button
+@@ -1210,11 +1210,11 @@ export function Routines() {
+                 }
+               >
+                 <Plus className="mr-2 h-4 w-4" />
+-                {createRoutine.isPending ? "Creating..." : "Create routine"}
++                {createRoutine.isPending ? "Création..." : "Créer la routine"}
+               </Button>
+               {createRoutine.isError ? (
+                 <p className="text-sm text-destructive">
+-                  {createRoutine.error instanceof Error ? createRoutine.error.message : "Failed to create routine"}
++                  {createRoutine.error instanceof Error ? createRoutine.error.message : "Échec de la création de la routine"}
+                 </p>
+               ) : null}
+             </div>
+@@ -1225,7 +1225,7 @@ export function Routines() {
+       {error ? (
+         <Card>
+           <CardContent className="pt-6 text-sm text-destructive">
+-            {error instanceof Error ? error.message : "Failed to load routines"}
++            {error instanceof Error ? error.message : "Échec du chargement des routines"}
+           </CardContent>
+         </Card>
+       ) : null}
+@@ -1236,7 +1236,7 @@ export function Routines() {
+             <FolderRail
+               result={railFolderResult}
+               selection={folderSelection}
+-              allLabel="All routines"
++              allLabel="Toutes les routines"
+               itemLabelPlural="routines"
+               loading={foldersLoading}
+               onSelect={setFolderSelection}
+@@ -1252,10 +1252,10 @@ export function Routines() {
+           <div className="min-w-0 flex-1">
+           {routineViewState.groupBy === "folder" && hasRoutineFolders ? (
+             <div className="mb-3 flex flex-wrap items-center gap-2">
+-              {folderSelection === "all" ? <FolderIconHeader label="All routines" count={sortedRoutines.length} /> : (
++              {folderSelection === "all" ? <FolderIconHeader label="Toutes les routines" count={sortedRoutines.length} /> : (
+                 <div className="flex min-w-0 items-center gap-2 text-sm">
+                   <FolderSwatch color={activeFolder?.color} />
+-                  <span className="truncate font-medium">{folderSelection === "unfiled" ? "Unfiled" : activeFolder?.name ?? "Folder"}</span>
++                  <span className="truncate font-medium">{folderSelection === "unfiled" ? "Sans dossier" : activeFolder?.name ?? "Folder"}</span>
+                   <span className="text-muted-foreground">{sortedRoutines.length} routine{sortedRoutines.length === 1 ? "" : "s"}</span>
+                 </div>
+               )}
+@@ -1285,20 +1285,20 @@ export function Routines() {
+             <div className="py-12">
+               <EmptyState
+                 icon={Repeat}
+-                message="No active routines. Use Create routine to define the first recurring workflow."
++                message="Aucune routine active. Utilisez « Créer la routine » pour définir le premier flux récurrent."
+               />
+             </div>
+           ) : sortedRoutines.length === 0 ? (
+             <div className="py-12">
+               <EmptyState
+                 icon={Repeat}
+-                message={folderSelection === "all" ? "No routines match this view." : "This folder is empty."}
++                message={folderSelection === "all" ? "Aucune routine ne correspond à cette vue." : "Ce dossier est vide."}
+               />
+               {folderSelection !== "all" ? (
+                 <div className="mt-3 flex justify-center">
+                   <Button size="sm" onClick={openCreateRoutine}>
+                     <Plus className="mr-2 h-3.5 w-3.5" />
+-                    New routine in this folder
++                    Nouvelle routine dans ce dossier
+                   </Button>
+                 </div>
+               ) : null}
+@@ -1358,13 +1358,13 @@ export function Routines() {
+                                 const previousFolderId = routine.folderId ?? null;
+                                 moveRoutineToFolder.mutate({ itemId: routine.id, folderId });
+                                 pushToast({
+-                                  title: "Routine moved",
++                                  title: "Routine déplacée",
+                                   body: folderId
+                                     ? `Moved "${routine.title}" to ${routineFolders?.folders.find((folder) => folder.id === folderId)?.name ?? "folder"}.`
+                                     : `Moved "${routine.title}" to Unfiled.`,
+                                   tone: "success",
+                                   action: {
+-                                    label: "Undo",
++                                    label: "Annuler",
+                                     onClick: () => moveRoutineToFolder.mutate({ itemId: routine.id, folderId: previousFolderId }),
+                                   },
+                                 });
+@@ -1412,7 +1412,7 @@ export function Routines() {
+         onOpenChange={setMobileFoldersOpen}
+         result={railFolderResult}
+         selection={folderSelection}
+-        allLabel="All routines"
++        allLabel="Toutes les routines"
+         itemLabelPlural="Routines"
+         onSelect={setFolderSelection}
+         onCreate={() => openCreateFolder()}
+diff --git a/ui/src/pages/Routines.test.tsx b/ui/src/pages/Routines.test.tsx
+index 199839b13..7f10d9256 100644
+--- a/ui/src/pages/Routines.test.tsx
++++ b/ui/src/pages/Routines.test.tsx
+@@ -446,7 +446,7 @@ describe("Routines page", () => {
+       new Map(),
+     );
+ 
+-    expect(groups.map((group) => group.label)).toEqual(["Project Alpha", "Built-in routines"]);
++    expect(groups.map((group) => group.label)).toEqual(["Project Alpha", "Routines intégrées"]);
+     expect(groups[0]?.items.map((item) => item.title)).toEqual(["Morning sync"]);
+     expect(groups[1]?.items.map((item) => item.title)).toEqual(["Reflection review"]);
+   });
+@@ -467,7 +467,7 @@ describe("Routines page", () => {
+       ]),
+     );
+ 
+-    expect(groups.map((group) => group.label)).toEqual(["RPI", "Test", "Unfiled"]);
++    expect(groups.map((group) => group.label)).toEqual(["RPI", "Test", "Sans dossier"]);
+     expect(groups[0]?.items.map((item) => item.title)).toEqual(["RPI review"]);
+     expect(groups[1]?.items.map((item) => item.title)).toEqual(["Test summary"]);
+     expect(groups[2]?.items.map((item) => item.title)).toEqual(["Unfiled sweep"]);
+@@ -489,7 +489,7 @@ describe("Routines page", () => {
+       ]),
+     );
+ 
+-    expect(groups.map((group) => group.label)).toEqual(["Beta", "Alpha", "Unfiled"]);
++    expect(groups.map((group) => group.label)).toEqual(["Beta", "Alpha", "Sans dossier"]);
+     expect(groups.map((group) => group.key)).toEqual(["folder-beta", "folder-alpha", "__unfiled"]);
+   });
+ 
+@@ -512,7 +512,7 @@ describe("Routines page", () => {
+       new Map([["folder-rpi", { name: "RPI" }]]),
+     );
+ 
+-    expect(groups.map((group) => group.label)).toEqual(["RPI", "Unfiled", "Built-in routines"]);
++    expect(groups.map((group) => group.label)).toEqual(["RPI", "Sans dossier", "Routines intégrées"]);
+     expect(groups[0]?.items.map((item) => item.title)).toEqual(["RPI review"]);
+     expect(groups[1]?.items.map((item) => item.title)).toEqual(["Unfiled sweep"]);
+     expect(groups[2]?.items.map((item) => item.title)).toEqual(["Reflection review"]);
+@@ -590,14 +590,14 @@ describe("Routines page", () => {
+       await flush();
+     });
+ 
+-    let sortButton = container.querySelector<HTMLButtonElement>('button[title="Sort"]');
+-    let groupButton = container.querySelector<HTMLButtonElement>('button[title="Group"]');
++    let sortButton = container.querySelector<HTMLButtonElement>('button[title="Trier"]');
++    let groupButton = container.querySelector<HTMLButtonElement>('button[title="Grouper"]');
+     for (let attempts = 0; attempts < 5 && (!sortButton || !groupButton); attempts += 1) {
+       await act(async () => {
+         await flush();
+       });
+-      sortButton = container.querySelector<HTMLButtonElement>('button[title="Sort"]');
+-      groupButton = container.querySelector<HTMLButtonElement>('button[title="Group"]');
++      sortButton = container.querySelector<HTMLButtonElement>('button[title="Trier"]');
++      groupButton = container.querySelector<HTMLButtonElement>('button[title="Grouper"]');
+     }
+ 
+     expect(sortButton).not.toBeNull();
+@@ -680,7 +680,7 @@ describe("Routines page", () => {
+ 
+     const sectionLabels = Array.from(container.querySelectorAll("[data-routine-section-label]"))
+       .map((element) => element.textContent);
+-    expect(sectionLabels).toEqual(["RPI", "Test", "Unfiled"]);
++    expect(sectionLabels).toEqual(["RPI", "Test", "Sans dossier"]);
+ 
+     const text = container.textContent ?? "";
+     expect(text.indexOf("RPI review")).toBeLessThan(text.indexOf("Test summary"));
+@@ -723,15 +723,15 @@ describe("Routines page", () => {
+       await flush();
+     });
+ 
+-    for (let attempts = 0; attempts < 5 && !container.textContent?.includes("Built-in routines"); attempts += 1) {
++    for (let attempts = 0; attempts < 5 && !container.textContent?.includes("Routines intégrées"); attempts += 1) {
+       await act(async () => {
+         await flush();
+       });
+     }
+ 
+     const text = container.textContent ?? "";
+-    expect(text.indexOf("Morning sync")).toBeLessThan(text.indexOf("Built-in routines"));
+-    expect(text.indexOf("Built-in routines")).toBeLessThan(text.indexOf("Reflection review"));
++    expect(text.indexOf("Morning sync")).toBeLessThan(text.indexOf("Routines intégrées"));
++    expect(text.indexOf("Routines intégrées")).toBeLessThan(text.indexOf("Reflection review"));
+ 
+     await act(async () => {
+       root.unmount();
+@@ -827,14 +827,14 @@ describe("Routines page", () => {
+       );
+       await flush();
+     });
+-    for (let attempts = 0; attempts < 5 && !container.textContent?.includes("This folder is empty"); attempts += 1) {
++    for (let attempts = 0; attempts < 5 && !container.textContent?.includes("Ce dossier est vide"); attempts += 1) {
+       await act(async () => {
+         await flush();
+       });
+     }
+ 
+-    expect(container.textContent).toContain("This folder is empty");
+-    expect(container.textContent).toContain("New routine in this folder");
++    expect(container.textContent).toContain("Ce dossier est vide");
++    expect(container.textContent).toContain("Nouvelle routine dans ce dossier");
+ 
+     await act(async () => {
+       secondRoot.unmount();
+@@ -901,14 +901,14 @@ describe("Routines page", () => {
+     });
+ 
+     let runNowButton = Array.from(container.querySelectorAll("button")).find((button) =>
+-      button.textContent?.includes("Run now"),
++      button.textContent?.includes("Lancer maintenant"),
+     );
+     for (let attempts = 0; attempts < 5 && !runNowButton; attempts += 1) {
+       await act(async () => {
+         await flush();
+       });
+       runNowButton = Array.from(container.querySelectorAll("button")).find((button) =>
+-        button.textContent?.includes("Run now"),
++        button.textContent?.includes("Lancer maintenant"),
+       );
+     }
+ 
+@@ -941,14 +941,14 @@ describe("Routines page", () => {
+     });
+ 
+     let createButton = Array.from(container.querySelectorAll("button")).find((button) =>
+-      button.textContent?.includes("Create routine"),
++      button.textContent?.includes("Créer la routine"),
+     );
+     for (let attempts = 0; attempts < 5 && !createButton; attempts += 1) {
+       await act(async () => {
+         await flush();
+       });
+       createButton = Array.from(container.querySelectorAll("button")).find((button) =>
+-        button.textContent?.includes("Create routine"),
++        button.textContent?.includes("Créer la routine"),
+       );
+     }
+ 
+@@ -991,14 +991,14 @@ describe("Routines page", () => {
+     });
+ 
+     let createButton = Array.from(container.querySelectorAll("button")).find((button) =>
+-      button.textContent?.includes("Create routine"),
++      button.textContent?.includes("Créer la routine"),
+     );
+     for (let attempts = 0; attempts < 5 && !createButton; attempts += 1) {
+       await act(async () => {
+         await flush();
+       });
+       createButton = Array.from(container.querySelectorAll("button")).find((button) =>
+-        button.textContent?.includes("Create routine"),
++        button.textContent?.includes("Créer la routine"),
+       );
+     }
+ 
+diff --git a/ui/src/pages/Routines.tsx b/ui/src/pages/Routines.tsx
+index 978a7e78e..7ef569fc8 100644
+--- a/ui/src/pages/Routines.tsx
++++ b/ui/src/pages/Routines.tsx
+@@ -71,13 +71,13 @@ import {
+ const concurrencyPolicies = ["coalesce_if_active", "always_enqueue", "skip_if_active"];
+ const catchUpPolicies = ["skip_missed", "enqueue_missed_with_cap"];
+ const concurrencyPolicyDescriptions: Record<string, string> = {
+-  coalesce_if_active: "If a run is already active, keep just one follow-up run queued.",
+-  always_enqueue: "Queue every trigger occurrence, even if the routine is already running.",
+-  skip_if_active: "Drop new trigger occurrences while a run is still active.",
++  coalesce_if_active: "Si une exécution est déjà active, ne garder qu'une seule exécution de suite en file.",
++  always_enqueue: "Mettre en file chaque déclenchement, même si la routine tourne déjà.",
++  skip_if_active: "Ignorer les nouveaux déclenchements tant qu'une exécution est active.",
+ };
+ const catchUpPolicyDescriptions: Record<string, string> = {
+-  skip_missed: "Ignore windows that were missed while the scheduler or routine was paused.",
+-  enqueue_missed_with_cap: "Catch up missed schedule windows after recovery; sub-hourly schedules are combined into one catch-up run, slower schedules replay each missed window up to a cap.",
++  skip_missed: "Ignorer les créneaux manqués pendant la pause du planificateur ou de la routine.",
++  enqueue_missed_with_cap: "Rattraper les créneaux manqués après la reprise ; les planifications infra-horaires sont regroupées en une seule exécution de rattrapage, les plus lentes rejouent chaque créneau manqué jusqu'à un plafond.",
+ };
+ 
+ function autoResizeTextarea(element: HTMLTextAreaElement | null) {
+@@ -186,8 +186,8 @@ export function buildRoutineGroups(
+         const positionCompare = leftPosition - rightPosition;
+         if (positionCompare !== 0) return positionCompare;
+ 
+-        const labelCompare = (leftFolder?.name ?? "Unknown folder").localeCompare(
+-          rightFolder?.name ?? "Unknown folder",
++        const labelCompare = (leftFolder?.name ?? "Dossier inconnu").localeCompare(
++          rightFolder?.name ?? "Dossier inconnu",
+           undefined,
+           { sensitivity: "base" },
+         );
+@@ -195,7 +195,7 @@ export function buildRoutineGroups(
+       })
+       .map((key) => ({
+         key,
+-        label: key === "__unfiled" ? "Unfiled" : (folderById.get(key)?.name ?? "Unknown folder"),
++        label: key === "__unfiled" ? "Sans dossier" : (folderById.get(key)?.name ?? "Dossier inconnu"),
+         items: groups[key]!,
+       }));
+   }
+@@ -204,13 +204,13 @@ export function buildRoutineGroups(
+     const groups = groupBy(routines, (routine) => routine.projectId ?? "__no_project");
+     return Object.keys(groups)
+       .sort((left, right) => {
+-        const leftLabel = left === "__no_project" ? "No project" : (projectById.get(left)?.name ?? "Unknown project");
+-        const rightLabel = right === "__no_project" ? "No project" : (projectById.get(right)?.name ?? "Unknown project");
++        const leftLabel = left === "__no_project" ? "Aucun projet" : (projectById.get(left)?.name ?? "Projet inconnu");
++        const rightLabel = right === "__no_project" ? "Aucun projet" : (projectById.get(right)?.name ?? "Projet inconnu");
+         return leftLabel.localeCompare(rightLabel);
+       })
+       .map((key) => ({
+         key,
+-        label: key === "__no_project" ? "No project" : (projectById.get(key)?.name ?? "Unknown project"),
++        label: key === "__no_project" ? "Aucun projet" : (projectById.get(key)?.name ?? "Projet inconnu"),
+         items: groups[key]!,
+       }));
+   }
+@@ -218,13 +218,13 @@ export function buildRoutineGroups(
+   const groups = groupBy(routines, (routine) => routine.assigneeAgentId ?? "__unassigned");
+   return Object.keys(groups)
+     .sort((left, right) => {
+-      const leftLabel = left === "__unassigned" ? "Unassigned" : (agentById.get(left)?.name ?? "Unknown agent");
+-      const rightLabel = right === "__unassigned" ? "Unassigned" : (agentById.get(right)?.name ?? "Unknown agent");
++      const leftLabel = left === "__unassigned" ? "Non assigné" : (agentById.get(left)?.name ?? "Agent inconnu");
++      const rightLabel = right === "__unassigned" ? "Non assigné" : (agentById.get(right)?.name ?? "Agent inconnu");
+       return leftLabel.localeCompare(rightLabel);
+     })
+     .map((key) => ({
+       key,
+-      label: key === "__unassigned" ? "Unassigned" : (agentById.get(key)?.name ?? "Unknown agent"),
++      label: key === "__unassigned" ? "Non assigné" : (agentById.get(key)?.name ?? "Agent inconnu"),
+       items: groups[key]!,
+     }));
+ }
+@@ -246,7 +246,7 @@ export function buildRoutineSections(
+     .filter((group) => group.items.length > 0)
+     .map((group) => (
+       builtInRoutines.length > 0 && groupByValue === "none" && group.key === "__all"
+-        ? { ...group, label: "Custom routines" }
++        ? { ...group, label: "Routines personnalisées" }
+         : group
+     ));
+ 
+@@ -256,7 +256,7 @@ export function buildRoutineSections(
+     ...customGroups,
+     {
+       key: builtInRoutineGroupKey,
+-      label: "Built-in routines",
++      label: "Routines intégrées",
+       items: builtInRoutines,
+     },
+   ];
+@@ -449,10 +449,10 @@ export function Routines() {
+       setAdvancedOpen(false);
+       await queryClient.invalidateQueries({ queryKey: queryKeys.routines.list(selectedCompanyId!) });
+       pushToast({
+-        title: "Routine created",
++        title: "Routine créée",
+         body: routine.assigneeAgentId
+-          ? "Add the first trigger to turn it into a live workflow."
+-          : "Draft saved. Add a default agent before enabling automation.",
++          ? "Ajoutez le premier déclencheur pour en faire un flux de travail actif."
++          : "Brouillon enregistré. Ajoutez un agent par défaut avant d'activer l'automatisation.",
+         tone: "success",
+       });
+       navigate(routineDetailHref(routine.id, "triggers"));
+@@ -478,8 +478,8 @@ export function Routines() {
+           ]);
+         } catch (moveError) {
+           pushToast({
+-            title: "Folder created, move failed",
+-            body: moveError instanceof Error ? moveError.message : "Paperclip could not move the selected routines.",
++            title: "Dossier créé, déplacement échoué",
++            body: moveError instanceof Error ? moveError.message : "Impossible de déplacer les routines sélectionnées.",
+             tone: "error",
+           });
+           return;
+@@ -487,12 +487,12 @@ export function Routines() {
+       } else {
+         setFolderSelection(folder.id);
+       }
+-      pushToast({ title: "Folder created", body: folder.name, tone: "success" });
++      pushToast({ title: "Dossier créé", body: folder.name, tone: "success" });
+     },
+     onError: (mutationError) => {
+       pushToast({
+-        title: "Failed to save folder",
+-        body: mutationError instanceof Error ? mutationError.message : "Paperclip could not save the folder.",
++        title: "Échec de l'enregistrement du dossier",
++        body: mutationError instanceof Error ? mutationError.message : "Impossible d'enregistrer le dossier.",
+         tone: "error",
+       });
+     },
+@@ -507,8 +507,8 @@ export function Routines() {
+     },
+     onError: (mutationError) => {
+       pushToast({
+-        title: "Folder save failed",
+-        body: mutationError instanceof Error ? mutationError.message : "Paperclip could not update the folder.",
++        title: "Échec de l'enregistrement du dossier",
++        body: mutationError instanceof Error ? mutationError.message : "Impossible de mettre à jour le dossier.",
+         tone: "error",
+       });
+     },
+@@ -522,12 +522,12 @@ export function Routines() {
+         queryClient.invalidateQueries({ queryKey: queryKeys.routines.list(selectedCompanyId!) }),
+         queryClient.invalidateQueries({ queryKey: queryKeys.folders.list(selectedCompanyId!, "routine") }),
+       ]);
+-      pushToast({ title: "Folder deleted", body: "Items moved to Unfiled.", tone: "success" });
++      pushToast({ title: "Dossier supprimé", body: "Éléments déplacés vers Sans dossier.", tone: "success" });
+     },
+     onError: (mutationError) => {
+       pushToast({
+-        title: "Folder delete failed",
+-        body: mutationError instanceof Error ? mutationError.message : "Paperclip could not delete the folder.",
++        title: "Échec de la suppression du dossier",
++        body: mutationError instanceof Error ? mutationError.message : "Impossible de supprimer le dossier.",
+         tone: "error",
+       });
+     },
+@@ -543,8 +543,8 @@ export function Routines() {
+     },
+     onError: (mutationError) => {
+       pushToast({
+-        title: "Move failed",
+-        body: mutationError instanceof Error ? mutationError.message : "Paperclip could not move the routine.",
++        title: "Échec du déplacement",
++        body: mutationError instanceof Error ? mutationError.message : "Impossible de déplacer la routine.",
+         tone: "error",
+       });
+     },
+@@ -565,8 +565,8 @@ export function Routines() {
+     },
+     onError: (mutationError) => {
+       pushToast({
+-        title: "Failed to update routine",
+-        body: mutationError instanceof Error ? mutationError.message : "Paperclip could not update the routine.",
++        title: "Échec de la mise à jour de la routine",
++        body: mutationError instanceof Error ? mutationError.message : "Impossible de mettre à jour la routine.",
+         tone: "error",
+       });
+     },
+@@ -600,8 +600,8 @@ export function Routines() {
+     },
+     onError: (mutationError) => {
+       pushToast({
+-        title: "Routine run failed",
+-        body: mutationError instanceof Error ? mutationError.message : "Paperclip could not start the routine run.",
++        title: "Échec de l'exécution de la routine",
++        body: mutationError instanceof Error ? mutationError.message : "Impossible de lancer l'exécution de la routine.",
+         tone: "error",
+       });
+     },
+@@ -752,11 +752,11 @@ export function Routines() {
+         queryClient.invalidateQueries({ queryKey: queryKeys.routines.list(selectedCompanyId!) }),
+         queryClient.invalidateQueries({ queryKey: queryKeys.folders.list(selectedCompanyId!, "routine") }),
+       ]);
+-      pushToast({ title: "Routines moved", body: `${ids.length} routine${ids.length === 1 ? "" : "s"} filed.`, tone: "success" });
++      pushToast({ title: "Routines déplacées", body: `${ids.length} routine${ids.length === 1 ? "" : "s"} filed.`, tone: "success" });
+     } catch (moveError) {
+       pushToast({
+-        title: "Failed to move routines",
+-        body: moveError instanceof Error ? moveError.message : "Paperclip could not move the selected routines.",
++        title: "Échec du déplacement des routines",
++        body: moveError instanceof Error ? moveError.message : "Impossible de déplacer les routines sélectionnées.",
+         tone: "error",
+       });
+     }
+@@ -769,8 +769,8 @@ export function Routines() {
+   function handleToggleEnabled(routine: RoutineListItem, enabled: boolean) {
+     if (!enabled && !routine.assigneeAgentId) {
+       pushToast({
+-        title: "Default agent required",
+-        body: "Set a default agent before enabling routine automation.",
++        title: "Agent par défaut requis",
++        body: "Définissez un agent par défaut avant d'activer l'automatisation de la routine.",
+         tone: "warn",
+       });
+       return;
+@@ -789,7 +789,7 @@ export function Routines() {
+   }
+ 
+   if (!selectedCompanyId) {
+-    return <EmptyState icon={Repeat} message="Select an organization to view routines." />;
++    return <EmptyState icon={Repeat} message="Sélectionnez une organisation pour voir les routines." />;
+   }
+ 
+   if (streamlinedUiEnabled && legacyRunsRequested) {
+@@ -807,12 +807,12 @@ export function Routines() {
+           <div className="space-y-1">
+             <h1 className="text-2xl font-semibold tracking-tight">Routines</h1>
+             <p className="text-sm text-muted-foreground">
+-              Recurring work definitions that materialize into auditable execution tasks.
++              Définitions de travail récurrent qui se matérialisent en tâches d'exécution traçables.
+             </p>
+           </div>
+           <Button onClick={openCreateRoutine}>
+             <Plus className="mr-2 h-4 w-4" />
+-            Create routine
++            Créer la routine
+           </Button>
+         </div>
+         <Tabs value={activeTab} onValueChange={handleLegacyTabChange}>
+@@ -822,7 +822,7 @@ export function Routines() {
+             onValueChange={handleLegacyTabChange}
+             items={[
+               { value: "routines", label: "Routines" },
+-              { value: "runs", label: "Recent Runs" },
++              { value: "runs", label: "Exécutions récentes" },
+             ]}
+           />
+         </Tabs>
+@@ -847,18 +847,18 @@ export function Routines() {
+         <div className="space-y-1">
+           <h1 className="text-xl font-bold">Routines</h1>
+           <p className="text-sm text-muted-foreground">
+-            Recurring work definitions that materialize into auditable execution tasks.
++            Définitions de travail récurrent qui se matérialisent en tâches d'exécution traçables.
+           </p>
+         </div>
+         <div className="flex items-center gap-2">
+           {streamlinedUiEnabled ? (
+             <Button variant="outline" asChild>
+-              <Link to={auditSectionHref("runs", {})}>View all runs</Link>
++              <Link to={auditSectionHref("runs", {})}>Voir toutes les exécutions</Link>
+             </Button>
+           ) : null}
+           <Button onClick={openCreateRoutine}>
+             <Plus className="mr-2 h-4 w-4" />
+-            Create routine
++            Créer la routine
+           </Button>
+         </div>
+       </div>
+@@ -871,7 +871,7 @@ export function Routines() {
+             onValueChange={handleLegacyTabChange}
+             items={[
+               { value: "routines", label: "Routines" },
+-              { value: "runs", label: "Recent Runs" },
++              { value: "runs", label: "Exécutions récentes" },
+             ]}
+           />
+         </Tabs>
+@@ -885,18 +885,18 @@ export function Routines() {
+           <div className="flex items-center gap-1">
+               <Popover>
+                 <PopoverTrigger asChild>
+-                  <Button variant="ghost" size="sm" className="text-xs" title="Sort">
++                  <Button variant="ghost" size="sm" className="text-xs" title="Trier">
+                     <ArrowUpDown className="h-3.5 w-3.5 sm:h-3 sm:w-3 sm:mr-1" />
+-                    <span className="hidden sm:inline">Sort</span>
++                    <span className="hidden sm:inline">Trier</span>
+                   </Button>
+                 </PopoverTrigger>
+                 <PopoverContent align="end" className="w-44 p-0">
+                   <div className="p-2 space-y-0.5">
+                     {([
+-                      ["updated", "Updated"],
+-                      ["created", "Created"],
+-                      ["lastRun", "Last run"],
+-                      ["title", "Title"],
++                      ["updated", "Modifiée"],
++                      ["created", "Créée"],
++                      ["lastRun", "Dernière exécution"],
++                      ["title", "Titre"],
+                     ] as const).map(([field, label]) => (
+                       <button
+                         key={field}
+@@ -926,18 +926,18 @@ export function Routines() {
+               </Popover>
+               <Popover>
+                 <PopoverTrigger asChild>
+-                  <Button variant="ghost" size="sm" className="text-xs" title="Group">
++                  <Button variant="ghost" size="sm" className="text-xs" title="Grouper">
+                     <Layers className="h-3.5 w-3.5 sm:h-3 sm:w-3 sm:mr-1" />
+-                    <span className="hidden sm:inline">Group</span>
++                    <span className="hidden sm:inline">Grouper</span>
+                   </Button>
+                 </PopoverTrigger>
+                 <PopoverContent align="end" className="w-44 p-0">
+                   <div className="p-2 space-y-0.5">
+                     {([
+-                      ["folder", "Folder"],
+-                      ["project", "Project"],
++                      ["folder", "Dossier"],
++                      ["project", "Projet"],
+                       ["assignee", "Agent"],
+-                      ["none", "None"],
++                      ["none", "Aucun"],
+                     ] as const).map(([value, label]) => (
+                       <button
+                         key={value}
+@@ -958,7 +958,7 @@ export function Routines() {
+               {routineViewState.groupBy === "folder" && !hasRoutineFolders ? (
+                 <Button variant="outline" size="sm" onClick={() => openCreateFolder()}>
+                   <Plus className="mr-2 h-3.5 w-3.5" />
+-                  New folder
++                  Nouveau dossier
+                 </Button>
+               ) : null}
+               {showFolderRail ? (
+@@ -973,7 +973,7 @@ export function Routines() {
+             <FolderChip
+               result={railFolderResult}
+               selection={folderSelection}
+-              allLabel="All routines"
++              allLabel="Toutes les routines"
+               onClick={() => setMobileFoldersOpen(true)}
+             />
+           </div>
+@@ -994,9 +994,9 @@ export function Routines() {
+         >
+           <div className="shrink-0 flex flex-wrap items-center justify-between gap-3 border-b border-border/60 px-5 py-3">
+             <div>
+-              <p className="text-xs font-medium uppercase tracking-(--tracking-caps) text-muted-foreground">New routine</p>
++              <p className="text-xs font-medium uppercase tracking-(--tracking-caps) text-muted-foreground">Nouvelle routine</p>
+               <p className="text-sm text-muted-foreground">
+-                Define the recurring work first. Default project and agent are optional for draft routines.
++                Définissez d'abord le travail récurrent. Le projet et l'agent par défaut sont facultatifs pour un brouillon.
+               </p>
+             </div>
+             <Button
+@@ -1008,7 +1008,7 @@ export function Routines() {
+               }}
+               disabled={createRoutine.isPending}
+             >
+-              Cancel
++              Annuler
+             </Button>
+           </div>
+ 
+@@ -1017,7 +1017,7 @@ export function Routines() {
+               <textarea
+                 ref={titleInputRef}
+                 className="w-full resize-none overflow-hidden bg-transparent text-xl font-semibold outline-none placeholder:text-muted-foreground/50"
+-                placeholder="Routine title"
++                placeholder="Titre de la routine"
+                 rows={1}
+                 value={draft.title}
+                 onChange={(event) => {
+@@ -1050,16 +1050,16 @@ export function Routines() {
+             <div className="px-5 pb-3">
+               <div className="overflow-x-auto overscroll-x-contain">
+                 <div className="inline-flex min-w-full flex-wrap items-center gap-2 text-sm text-muted-foreground sm:min-w-max sm:flex-nowrap">
+-                  <span>For</span>
++                  <span>Pour</span>
+                   <InlineEntitySelector
+                     ref={assigneeSelectorRef}
+                     value={draft.assigneeAgentId}
+                     options={assigneeOptions}
+                     recentOptionIds={recentAssigneeIds}
+-                    placeholder="Responsible"
+-                    noneLabel="No responsible"
+-                    searchPlaceholder="Search responsible..."
+-                    emptyMessage="No responsible found."
++                    placeholder="Responsable"
++                    noneLabel="Aucun responsable"
++                    searchPlaceholder="Rechercher un responsable..."
++                    emptyMessage="Aucun responsable trouvé."
+                     onChange={(assigneeAgentId) => {
+                       if (assigneeAgentId) trackRecentAssignee(assigneeAgentId);
+                       setDraft((current) => ({ ...current, assigneeAgentId }));
+@@ -1082,7 +1082,7 @@ export function Routines() {
+                           <span className="truncate">{option.label}</span>
+                         )
+                       ) : (
+-                        <span className="text-muted-foreground">Responsible</span>
++                        <span className="text-muted-foreground">Responsable</span>
+                       )
+                     }
+                     renderOption={(option) => {
+@@ -1102,10 +1102,10 @@ export function Routines() {
+                     value={draft.projectId}
+                     options={projectOptions}
+                     recentOptionIds={recentProjectIds}
+-                    placeholder="Project"
+-                    noneLabel="No project"
+-                    searchPlaceholder="Search projects..."
+-                    emptyMessage="No projects found."
++                    placeholder="Projet"
++                    noneLabel="Aucun projet"
++                    searchPlaceholder="Rechercher un projet..."
++                    emptyMessage="Aucun projet trouvé."
+                     onChange={(projectId) => {
+                       if (projectId) trackRecentProject(projectId);
+                       setDraft((current) => ({ ...current, projectId }));
+@@ -1121,7 +1121,7 @@ export function Routines() {
+                           <span className="truncate">{option.label}</span>
+                         </>
+                       ) : (
+-                        <span className="text-muted-foreground">Project</span>
++                        <span className="text-muted-foreground">Projet</span>
+                       )
+                     }
+                     renderOption={(option) => {
+@@ -1138,7 +1138,7 @@ export function Routines() {
+                       );
+                     }}
+                   />
+-                  <span>filed in</span>
++                  <span>classée dans</span>
+                   <Select
+                     value={draft.folderId ?? "__unfiled"}
+                     onValueChange={(value) => setDraft((current) => ({
+@@ -1150,7 +1150,7 @@ export function Routines() {
+                       <SelectValue />
+                     </SelectTrigger>
+                     <SelectContent>
+-                      <SelectItem value="__unfiled">Unfiled</SelectItem>
++                      <SelectItem value="__unfiled">Sans dossier</SelectItem>
+                       {(routineFolders?.folders ?? []).map((folder) => (
+                         <SelectItem key={folder.id} value={folder.id}>
+                           {folder.name}
+@@ -1167,7 +1167,7 @@ export function Routines() {
+                 ref={descriptionEditorRef}
+                 value={draft.description}
+                 onChange={(description) => setDraft((current) => ({ ...current, description }))}
+-                placeholder="Add instructions..."
++                placeholder="Ajouter des instructions..."
+                 bordered={false}
+                 contentClassName="min-h-(--sz-160px) text-sm text-muted-foreground"
+                 mentions={mentionOptions}
+@@ -1183,15 +1183,15 @@ export function Routines() {
+               <Collapsible open={advancedOpen} onOpenChange={setAdvancedOpen}>
+                 <CollapsibleTrigger className="flex w-full items-center justify-between text-left">
+                   <div>
+-                    <p className="text-sm font-medium">Advanced delivery settings</p>
+-                    <p className="text-sm text-muted-foreground">Keep policy controls secondary to the work definition.</p>
++                    <p className="text-sm font-medium">Réglages avancés de livraison</p>
++                    <p className="text-sm text-muted-foreground">Les règles de livraison restent secondaires par rapport à la définition du travail.</p>
+                   </div>
+                   {advancedOpen ? <ChevronDown className="h-4 w-4 text-muted-foreground" /> : <ChevronRight className="h-4 w-4 text-muted-foreground" />}
+                 </CollapsibleTrigger>
+                 <CollapsibleContent className="pt-3">
+                   <div className="grid gap-4 md:grid-cols-2">
+                     <div className="space-y-2">
+-                      <p className="text-xs font-medium uppercase tracking-(--tracking-caps) text-muted-foreground">Concurrency</p>
++                      <p className="text-xs font-medium uppercase tracking-(--tracking-caps) text-muted-foreground">Concurrence</p>
+                       <Select
+                         value={draft.concurrencyPolicy}
+                         onValueChange={(concurrencyPolicy) => setDraft((current) => ({ ...current, concurrencyPolicy }))}
+@@ -1208,7 +1208,7 @@ export function Routines() {
+                       <p className="text-xs text-muted-foreground">{concurrencyPolicyDescriptions[draft.concurrencyPolicy]}</p>
+                     </div>
+                     <div className="space-y-2">
+-                      <p className="text-xs font-medium uppercase tracking-(--tracking-caps) text-muted-foreground">Catch-up</p>
++                      <p className="text-xs font-medium uppercase tracking-(--tracking-caps) text-muted-foreground">Rattrapage</p>
+                       <Select
+                         value={draft.catchUpPolicy}
+                         onValueChange={(catchUpPolicy) => setDraft((current) => ({ ...current, catchUpPolicy }))}
+@@ -1232,7 +1232,7 @@ export function Routines() {
+ 
+           <div className="shrink-0 flex flex-col gap-3 border-t border-border/60 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+             <div className="text-sm text-muted-foreground">
+-              After creation, Paperclip takes you straight to trigger setup. Draft routines stay paused until you add a default agent.
++              Après la création, vous passez directement au réglage des déclencheurs. Un brouillon reste en pause tant que vous n'ajoutez pas d'agent par défaut.
+             </div>
+             <div className="flex flex-col gap-2 sm:items-end">
+               <Button
+@@ -1243,11 +1243,11 @@ export function Routines() {
+                 }
+               >
+                 <Plus className="mr-2 h-4 w-4" />
+-                {createRoutine.isPending ? "Creating..." : "Create routine"}
++                {createRoutine.isPending ? "Création..." : "Créer la routine"}
+               </Button>
+               {createRoutine.isError ? (
+                 <p className="text-sm text-destructive">
+-                  {createRoutine.error instanceof Error ? createRoutine.error.message : "Failed to create routine"}
++                  {createRoutine.error instanceof Error ? createRoutine.error.message : "Échec de la création de la routine"}
+                 </p>
+               ) : null}
+             </div>
+@@ -1258,7 +1258,7 @@ export function Routines() {
+       {error ? (
+         <Card>
+           <CardContent className="pt-6 text-sm text-destructive">
+-            {error instanceof Error ? error.message : "Failed to load routines"}
++            {error instanceof Error ? error.message : "Échec du chargement des routines"}
+           </CardContent>
+         </Card>
+       ) : null}
+@@ -1268,7 +1268,7 @@ export function Routines() {
+             <FolderRail
+               result={railFolderResult}
+               selection={folderSelection}
+-              allLabel="All routines"
++              allLabel="Toutes les routines"
+               itemLabelPlural="routines"
+               loading={foldersLoading}
+               onSelect={setFolderSelection}
+@@ -1284,10 +1284,10 @@ export function Routines() {
+           <div className="min-w-0 flex-1">
+           {routineViewState.groupBy === "folder" && hasRoutineFolders ? (
+             <div className="mb-3 flex flex-wrap items-center gap-2">
+-              {folderSelection === "all" ? <FolderIconHeader label="All routines" count={sortedRoutines.length} /> : (
++              {folderSelection === "all" ? <FolderIconHeader label="Toutes les routines" count={sortedRoutines.length} /> : (
+                 <div className="flex min-w-0 items-center gap-2 text-sm">
+                   <FolderSwatch color={activeFolder?.color} />
+-                  <span className="truncate font-medium">{folderSelection === "unfiled" ? "Unfiled" : activeFolder?.name ?? "Folder"}</span>
++                  <span className="truncate font-medium">{folderSelection === "unfiled" ? "Sans dossier" : activeFolder?.name ?? "Folder"}</span>
+                   <span className="text-muted-foreground">{sortedRoutines.length} routine{sortedRoutines.length === 1 ? "" : "s"}</span>
+                 </div>
+               )}
+@@ -1317,20 +1317,20 @@ export function Routines() {
+             <div className="py-12">
+               <EmptyState
+                 icon={Repeat}
+-                message="No active routines. Use Create routine to define the first recurring workflow."
++                message="Aucune routine active. Utilisez « Créer la routine » pour définir le premier flux récurrent."
+               />
+             </div>
+           ) : sortedRoutines.length === 0 ? (
+             <div className="py-12">
+               <EmptyState
+                 icon={Repeat}
+-                message={folderSelection === "all" ? "No routines match this view." : "This folder is empty."}
++                message={folderSelection === "all" ? "Aucune routine ne correspond à cette vue." : "Ce dossier est vide."}
+               />
+               {folderSelection !== "all" ? (
+                 <div className="mt-3 flex justify-center">
+                   <Button size="sm" onClick={openCreateRoutine}>
+                     <Plus className="mr-2 h-3.5 w-3.5" />
+-                    New routine in this folder
++                    Nouvelle routine dans ce dossier
+                   </Button>
+                 </div>
+               ) : null}
+@@ -1390,13 +1390,13 @@ export function Routines() {
+                                 const previousFolderId = routine.folderId ?? null;
+                                 moveRoutineToFolder.mutate({ itemId: routine.id, folderId });
+                                 pushToast({
+-                                  title: "Routine moved",
++                                  title: "Routine déplacée",
+                                   body: folderId
+                                     ? `Moved "${routine.title}" to ${routineFolders?.folders.find((folder) => folder.id === folderId)?.name ?? "folder"}.`
+                                     : `Moved "${routine.title}" to Unfiled.`,
+                                   tone: "success",
+                                   action: {
+-                                    label: "Undo",
++                                    label: "Annuler",
+                                     onClick: () => moveRoutineToFolder.mutate({ itemId: routine.id, folderId: previousFolderId }),
+                                   },
+                                 });
+@@ -1443,7 +1443,7 @@ export function Routines() {
+         onOpenChange={setMobileFoldersOpen}
+         result={railFolderResult}
+         selection={folderSelection}
+-        allLabel="All routines"
++        allLabel="Toutes les routines"
+         itemLabelPlural="Routines"
+         onSelect={setFolderSelection}
+         onCreate={() => openCreateFolder()}
+-- 
+2.53.0
+

@@ -3,7 +3,7 @@
  * canal, exclusion humaine, puis base de clients. Les coordonnées n'arrivent jamais en clair ici,
  * et l'usine ne contacte personne : aucune action d'envoi.
  */
-import { useCallback, useEffect, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import { useHostContext, useHostNavigation } from "@paperclipai/plugin-sdk/ui";
 import {
   CanalContact,
@@ -13,14 +13,19 @@ import {
   MotifExclusion,
   SEUILS_ETALONNAGE,
   SEUIL_QUALIFICATION,
+  StatutCritereQualification,
   StatutProspect,
   type BaseLegale,
   type CibleProspect,
+  type CritereQualification,
   type PageProspects,
   type Prospect,
 } from "../../contrats/prospection.js";
+import type { Campagne } from "../../contrats/campagnes.js";
+import { naceDeduitOsm } from "../../serveur/categories-osm-nace.js";
+import { useDonnees } from "../donnees.js";
 import { BaseClients, lireBase64 } from "../base-clients.js";
-import { Bouton, Champ, Chargement, EnTete, EtatErreur, Horodatage, LienHote, MentionDemo, Pastille, Section, Vide } from "../composants.js";
+import { Bouton, Champ, Chargement, ecranEtroit, EnTete, EtatErreur, Horodatage, LienHote, MentionDemo, Pastille, Section, Vide } from "../composants.js";
 import { idCourt, nombre, type Ton } from "../format.js";
 import { chemin } from "../route.js";
 import { appelRoute, telechargerBase64 } from "../routes-prospection.js";
@@ -31,9 +36,9 @@ const LIBELLE_CIBLE_UNIQUE: Readonly<Record<CibleProspect, string>> = { entrepri
 const LIBELLES_STATUTS: Readonly<Record<StatutProspect, string>> = {
   nouveau: "Nouveau",
   exclu: "Exclu par une règle",
-  qualifie: "Qualifié",
+  qualifie: "Retenu",
   exporte: "Exporté",
-  refuse: "Écarté par un humain",
+  refuse: "Refusé par un humain",
 };
 const TONS_STATUTS: Readonly<Record<StatutProspect, Ton>> = { nouveau: "info", exclu: "attention", qualifie: "succes", exporte: "neutre", refuse: "neutre" };
 
@@ -126,10 +131,62 @@ export function ConfianceAffichee({ p }: { p: Prospect }) {
 }
 
 /* ------------------------------------------------------------------ */
+/* Statut du lead : un seul badge à la place de deux chiffres          */
+/* ------------------------------------------------------------------ */
+
+export type StatutLead = { cle: "qualifie" | "ecarte" | "a_verifier"; libelle: string; detail: string | null };
+
+/**
+ * Le badge unique d'un lead. « Qualifié » : cible prouvée et lead non exclu. « Écarté » : exclu ou refusé,
+ * ou critère contraire. « À vérifier » : tout le reste (le détail dit combien de critères manquent).
+ * On ne contacte jamais un lead qui n'est pas qualifié.
+ */
+export function statutLead(p: Prospect): StatutLead {
+  const exclu = p.statut === "exclu" || p.statut === "refuse" || p.motifsExclusion.length > 0;
+  if (exclu || p.confiance?.plafonnee) {
+    const motif = p.motifsExclusion[0];
+    const contraire = p.confiance?.criteres.find((c) => c.statut === "contraire");
+    const detail = motif ? LIBELLES_MOTIFS[motif.motif] : p.statut === "refuse" ? "écarté par un humain" : contraire ? contraire.libelle : "critère contraire";
+    return { cle: "ecarte", libelle: "Écarté", detail };
+  }
+  if (p.confiance?.qualifie) return { cle: "qualifie", libelle: "Qualifié", detail: null };
+  const manquants = p.confiance ? p.confiance.criteres.filter((c) => c.statut === "non_verifie").length : 0;
+  return { cle: "a_verifier", libelle: "À vérifier", detail: manquants > 0 ? `il manque ${manquants} critère${manquants > 1 ? "s" : ""}` : null };
+}
+
+const TONS_STATUT_LEAD: Readonly<Record<StatutLead["cle"], Ton>> = { qualifie: "succes", ecarte: "neutre", a_verifier: "attention" };
+
+/** La phrase fixe qui explique les deux chiffres, affichée dans la fiche. */
+export const EXPLICATION_STATUT_LEAD =
+  "La cible prouvée dit si ce lead correspond à votre cible, sources à l'appui (qualifié à 90 % et plus). La priorité dit par qui commencer. On ne contacte jamais un lead qui n'est pas qualifié.";
+
+/** Les deux chiffres, en petit : priorité de contact (estimation ou mesure) et cible prouvée. */
+function ChiffresLead({ p }: { p: Prospect }) {
+  const mesuree = p.score?.nature === "probabilite_mesuree";
+  const priorite = p.score
+    ? `Priorité ${p.score.valeur}/100 ${mesuree ? "(mesurée)" : "(estimation)"}${mesuree && p.score.etalonnage?.marge ? ` : ${libelleScore(p.score)}` : ""}`
+    : "Priorité non calculée";
+  const cible = p.confiance ? `Cible prouvée à ${p.confiance.valeur} %` : "Cible non calculée";
+  return <span className="atl-sous atl-statut-chiffres">{priorite} · {cible}</span>;
+}
+
+export function BadgeStatutLead({ p, grand }: { p: Prospect; grand?: boolean }) {
+  const s = statutLead(p);
+  return (
+    <span className={grand ? "atl-statut-lead atl-statut-lead-grand" : "atl-statut-lead"} data-statut-lead={s.cle}>
+      <Pastille ton={TONS_STATUT_LEAD[s.cle]}>{s.libelle}</Pastille>
+      {s.detail ? <span className="atl-sous">{s.detail}</span> : null}
+    </span>
+  );
+}
+
+/* ------------------------------------------------------------------ */
 /* Filtres                                                             */
 /* ------------------------------------------------------------------ */
 
 interface Filtres {
+  /** Mission (campagne) choisie : identifiant, ou « » pour toutes les missions. */
+  campagneId: string;
   cibles: CibleProspect[];
   secteur: string;
   zone: string;
@@ -144,14 +201,16 @@ interface Filtres {
   /** Réaffiche les prospects déjà clients, masqués par défaut. */
   avecClients: boolean;
 }
-const FILTRES_VIDES: Filtres = { cibles: [], secteur: "", zone: "", statut: "", scoreMin: "", qualifies: false, bureau: null, segment: "", source: "", avecClients: false };
+export const FILTRES_VIDES: Filtres = { campagneId: "", cibles: [], secteur: "", zone: "", statut: "", scoreMin: "", qualifies: false, bureau: null, segment: "", source: "", avecClients: false };
 
 /** Bureaux et segments de la fiche du client (lecture de `GET /marque`), tolérante à une fiche incomplète. */
 interface OptionsFiltres {
+  /** Missions (campagnes) de l'entreprise. */
+  missions: Array<{ id: string; nom: string }>;
   bureaux: Array<{ nom: string; zones: string[] }>;
   segments: Array<{ code: string; libelle: string }>;
 }
-const OPTIONS_VIDES: OptionsFiltres = { bureaux: [], segments: [] };
+const OPTIONS_VIDES: OptionsFiltres = { missions: [], bureaux: [], segments: [] };
 
 /** Zones d'un bureau : communes et codes postaux du référentiel, sinon code postal et commune de l'adresse. */
 export function zonesDuBureau(e: { adresse?: string | null; communes?: string[]; codesPostaux?: string[] }): string[] {
@@ -170,7 +229,7 @@ export function optionsDepuisMarque(donnees: unknown): OptionsFiltres {
   const segments = (Array.isArray(marque.segments) ? marque.segments : [])
     .map((s: { code?: string; libelle?: string }) => ({ code: String(s.code ?? ""), libelle: String(s.libelle ?? s.code ?? "") }))
     .filter((s) => s.code);
-  return { bureaux, segments };
+  return { missions: [], bureaux, segments };
 }
 
 function jetons(texte: string): string[] {
@@ -191,6 +250,7 @@ export function raisonFiltres(f: Filtres): string | null {
 /** Chemin de la requête `GET /prospects` : codes postaux et communes sont séparés selon la forme saisie. */
 export function requeteProspects(companyId: string, f: Filtres, page: number): string {
   const q = new URLSearchParams({ companyId });
+  if (f.campagneId) q.set("campagneId", f.campagneId);
   if (f.cibles.length) q.set("cibles", f.cibles.join(","));
   const nace = jetons(f.secteur);
   if (nace.length) q.set("nace", nace.join(","));
@@ -217,9 +277,38 @@ export function filtresExport(f: Filtres): Record<string, string> {
   return Object.fromEntries(q.entries());
 }
 
+/** Familles de métier de la santé, dans l'ordre d'affichage du tri « Par famille de métier ». */
+const FAMILLES_METIER = ["medecins", "dentistes", "kines", "pharmacies", "autres"] as const;
+type FamilleMetier = (typeof FAMILLES_METIER)[number];
+const LIBELLES_FAMILLES: Readonly<Record<FamilleMetier, string>> = { medecins: "Médecins", dentistes: "Dentistes", kines: "Kinésithérapeutes", pharmacies: "Pharmacies", autres: "Autres" };
+
+function familleDeNace(codes: readonly string[]): FamilleMetier | null {
+  for (const brut of codes) {
+    const c = brut.replace(/\./gu, "");
+    if (c.startsWith("8621") || c.startsWith("8622")) return "medecins";
+    if (c.startsWith("8623")) return "dentistes";
+    if (c.startsWith("8690")) return "kines";
+    if (c.startsWith("4773")) return "pharmacies";
+  }
+  return null;
+}
+
+/** Famille de métier d'un prospect : son NACE, sinon le NACE déduit de la catégorie OpenStreetMap de sa source ; « autres » à défaut. */
+export function familleMetier(p: Pick<Prospect, "nace" | "sources">): FamilleMetier {
+  return familleDeNace(p.nace) ?? familleDeNace(naceDeduitOsm(p)?.nace ?? []) ?? "autres";
+}
+
+/** Nombre de filtres appliqués (la cible compte pour un, quel que soit le nombre de cibles cochées). */
+export function nombreFiltresActifs(f: Filtres): number {
+  const actifs = [f.campagneId !== "", f.cibles.length > 0, f.secteur.trim() !== "", f.zone.trim() !== "", f.statut !== "", f.scoreMin.trim() !== "", f.qualifies, f.bureau !== null, f.segment !== "", f.source !== "", f.avecClients];
+  return actifs.filter(Boolean).length;
+}
+
 function BarreFiltres({ valeur, options, onAppliquer }: { valeur: Filtres; options: OptionsFiltres; onAppliquer(f: Filtres): void }) {
   const [saisie, setSaisie] = useState<Filtres>(valeur);
   const raison = raisonFiltres(saisie);
+  const [ouvert, setOuvert] = useState(() => !ecranEtroit());
+  const actifs = nombreFiltresActifs(valeur);
   const basculer = (c: CibleProspect) => setSaisie({ ...saisie, cibles: saisie.cibles.includes(c) ? saisie.cibles.filter((x) => x !== c) : [...saisie.cibles, c] });
   function envoyer(e: FormEvent) {
     e.preventDefault();
@@ -227,87 +316,102 @@ function BarreFiltres({ valeur, options, onAppliquer }: { valeur: Filtres; optio
   }
   return (
     <form className="atl-formulaire atl-filtres-prospects" onSubmit={envoyer} aria-label="Filtres des prospects">
-      <div className="atl-segments" role="group" aria-label="Cible">
-        {(Object.keys(LIBELLES_CIBLES) as CibleProspect[]).map((c) => (
-          <button key={c} type="button" className="atl-segment" aria-pressed={saisie.cibles.includes(c)} onClick={() => basculer(c)}>
-            {LIBELLES_CIBLES[c]}
-          </button>
-        ))}
-      </div>
-      <div className="atl-grille-champs">
-        <Champ libelle="Secteur (code NACE)" aide="Plusieurs codes séparés par des virgules.">
-          <input value={saisie.secteur} onChange={(e) => setSaisie({ ...saisie, secteur: e.target.value })} placeholder="43.910, 66220" autoComplete="off" />
-        </Champ>
-        <Champ libelle="Zone (commune ou code postal)" aide="Plusieurs valeurs séparées par des virgules.">
-          <input value={saisie.zone} onChange={(e) => setSaisie({ ...saisie, zone: e.target.value })} placeholder="Liège, 4000" autoComplete="off" />
-        </Champ>
-        <Champ libelle="Statut">
-          <select value={saisie.statut} onChange={(e) => setSaisie({ ...saisie, statut: e.target.value as Filtres["statut"] })}>
-            <option value="">Tous les statuts</option>
-            {StatutProspect.options.map((s) => (
-              <option key={s} value={s}>
-                {LIBELLES_STATUTS[s]}
-              </option>
-            ))}
-          </select>
-        </Champ>
-        <Champ libelle="Bureau" aide="Prospects de la même commune ou du même code postal que le bureau.">
-          <select value={saisie.bureau?.nom ?? ""} onChange={(e) => setSaisie({ ...saisie, bureau: options.bureaux.find((b) => b.nom === e.target.value) ?? null })}>
-            <option value="">Tous les bureaux</option>
-            {options.bureaux.map((b) => (
-              <option key={b.nom} value={b.nom}>
-                {b.nom}
-              </option>
-            ))}
-          </select>
-        </Champ>
-        <Champ libelle="Segment">
-          <select value={saisie.segment} onChange={(e) => setSaisie({ ...saisie, segment: e.target.value })}>
-            <option value="">Tous les segments</option>
-            {options.segments.map((s) => (
-              <option key={s.code} value={s.code}>
-                {s.libelle}
-              </option>
-            ))}
-          </select>
-        </Champ>
-        <Champ libelle="Source">
-          <select value={saisie.source} onChange={(e) => setSaisie({ ...saisie, source: e.target.value as Filtres["source"] })}>
-            <option value="">Réelle et démonstration</option>
-            <option value="reelle">Réelle</option>
-            <option value="demonstration">Démonstration</option>
-          </select>
-        </Champ>
-        <Champ libelle="Score minimal (0 à 100)" className="atl-champ-etroit">
-          <input value={saisie.scoreMin} onChange={(e) => setSaisie({ ...saisie, scoreMin: e.target.value })} inputMode="numeric" autoComplete="off" aria-invalid={raison?.startsWith("Score") ? true : undefined} />
-        </Champ>
-      </div>
-      <label className="atl-sous" title={EXPLICATION_CONFIANCE}>
-        <input type="checkbox" checked={saisie.qualifies} onChange={(e) => setSaisie({ ...saisie, qualifies: e.target.checked })} />
-        Qualifiés (≥ {SEUIL_QUALIFICATION} %)
-      </label>
-      <label className="atl-sous">
-        <input type="checkbox" checked={saisie.avecClients} onChange={(e) => setSaisie({ ...saisie, avecClients: e.target.checked })} />
-        Afficher aussi les clients actuels
-      </label>
-      {raison ? (
-        <p className="atl-texte-danger" role="alert">
-          {raison}
-        </p>
-      ) : null}
-      <div className="atl-actions">
-        <Bouton type="submit" variante="principal" raisonDesactive={raison ? "Corrigez les filtres." : null}>
-          Filtrer
-        </Bouton>
-        <Bouton
-          onClick={() => {
-            setSaisie(FILTRES_VIDES);
-            onAppliquer(FILTRES_VIDES);
-          }}
-        >
-          Effacer les filtres
-        </Bouton>
-      </div>
+      <details className="atl-filtres-volet" open={ouvert} onToggle={(e) => setOuvert(e.currentTarget.open)}>
+        <summary className="atl-filtres-resume">{`Filtres (${actifs} ${actifs > 1 ? "actifs" : "actif"})`}</summary>
+        <div className="atl-formulaire atl-filtres-corps">
+        <div className="atl-segments" role="group" aria-label="Cible">
+          {(Object.keys(LIBELLES_CIBLES) as CibleProspect[]).map((c) => (
+            <button key={c} type="button" className="atl-segment" aria-pressed={saisie.cibles.includes(c)} onClick={() => basculer(c)}>
+              {LIBELLES_CIBLES[c]}
+            </button>
+          ))}
+        </div>
+        <div className="atl-grille-champs">
+          <Champ libelle="Mission" aide="Ne montre que les prospects trouvés par cette mission.">
+            <select value={saisie.campagneId} onChange={(e) => setSaisie({ ...saisie, campagneId: e.target.value })}>
+              <option value="">Toutes les missions</option>
+              {options.missions.map((m) => (
+                <option key={m.id} value={m.id}>
+                  {m.nom}
+                </option>
+              ))}
+            </select>
+          </Champ>
+          <Champ libelle="Secteur (code NACE)" aide="Plusieurs codes séparés par des virgules.">
+            <input value={saisie.secteur} onChange={(e) => setSaisie({ ...saisie, secteur: e.target.value })} placeholder="43.910, 66220" autoComplete="off" />
+          </Champ>
+          <Champ libelle="Zone (commune ou code postal)" aide="Plusieurs valeurs séparées par des virgules.">
+            <input value={saisie.zone} onChange={(e) => setSaisie({ ...saisie, zone: e.target.value })} placeholder="Liège, 4000" autoComplete="off" />
+          </Champ>
+          <Champ libelle="Étape">
+            <select value={saisie.statut} onChange={(e) => setSaisie({ ...saisie, statut: e.target.value as Filtres["statut"] })}>
+              <option value="">Toutes les étapes</option>
+              {StatutProspect.options.map((s) => (
+                <option key={s} value={s}>
+                  {LIBELLES_STATUTS[s]}
+                </option>
+              ))}
+            </select>
+          </Champ>
+          <Champ libelle="Bureau" aide="Prospects de la même commune ou du même code postal que le bureau.">
+            <select value={saisie.bureau?.nom ?? ""} onChange={(e) => setSaisie({ ...saisie, bureau: options.bureaux.find((b) => b.nom === e.target.value) ?? null })}>
+              <option value="">Tous les bureaux</option>
+              {options.bureaux.map((b) => (
+                <option key={b.nom} value={b.nom}>
+                  {b.nom}
+                </option>
+              ))}
+            </select>
+          </Champ>
+          <Champ libelle="Segment">
+            <select value={saisie.segment} onChange={(e) => setSaisie({ ...saisie, segment: e.target.value })}>
+              <option value="">Tous les segments</option>
+              {options.segments.map((s) => (
+                <option key={s.code} value={s.code}>
+                  {s.libelle}
+                </option>
+              ))}
+            </select>
+          </Champ>
+          <Champ libelle="Source">
+            <select value={saisie.source} onChange={(e) => setSaisie({ ...saisie, source: e.target.value as Filtres["source"] })}>
+              <option value="">Réelle et démonstration</option>
+              <option value="reelle">Réelle</option>
+              <option value="demonstration">Démonstration</option>
+            </select>
+          </Champ>
+          <Champ libelle="Score minimal (0 à 100)" className="atl-champ-etroit">
+            <input value={saisie.scoreMin} onChange={(e) => setSaisie({ ...saisie, scoreMin: e.target.value })} inputMode="numeric" autoComplete="off" aria-invalid={raison?.startsWith("Score") ? true : undefined} />
+          </Champ>
+        </div>
+        <label className="atl-sous" title={EXPLICATION_CONFIANCE}>
+          <input type="checkbox" checked={saisie.qualifies} onChange={(e) => setSaisie({ ...saisie, qualifies: e.target.checked })} />
+          Qualifiés (≥ {SEUIL_QUALIFICATION} %)
+        </label>
+        <label className="atl-sous">
+          <input type="checkbox" checked={saisie.avecClients} onChange={(e) => setSaisie({ ...saisie, avecClients: e.target.checked })} />
+          Afficher aussi les clients actuels
+        </label>
+        {raison ? (
+          <p className="atl-texte-danger" role="alert">
+            {raison}
+          </p>
+        ) : null}
+        <div className="atl-actions">
+          <Bouton type="submit" variante="principal" raisonDesactive={raison ? "Corrigez les filtres." : null}>
+            Filtrer
+          </Bouton>
+          <Bouton
+            onClick={() => {
+              setSaisie(FILTRES_VIDES);
+              onAppliquer(FILTRES_VIDES);
+            }}
+          >
+            Effacer les filtres
+          </Bouton>
+        </div>
+        </div>
+      </details>
     </form>
   );
 }
@@ -335,7 +439,7 @@ const jourCourt = (iso: string | null) => (iso === null ? "date inconnue" : iso.
  * Compte rendu déterministe (chargé à l'ouverture de la fiche, aucune IA) puis question à poser au
  * Coordinateur : la route crée une tâche qui lui est assignée, et on ouvre sa discussion.
  */
-function CompteRenduLead({ p, companyId }: { p: Prospect; companyId: string }) {
+function CompteRenduLead({ p, companyId, version = 0 }: { p: Prospect; companyId: string; version?: number }) {
   const nav = useHostNavigation();
   const [cr, setCr] = useState<CompteRenduProspect | null>(null);
   const [erreurLecture, setErreurLecture] = useState<unknown>(null);
@@ -354,7 +458,7 @@ function CompteRenduLead({ p, companyId }: { p: Prospect; companyId: string }) {
     } catch (e) {
       setErreurLecture(e);
     }
-  }, [p.id, companyId]);
+  }, [p.id, companyId, version]);
   useEffect(() => {
     void charger();
   }, [charger]);
@@ -472,15 +576,164 @@ function CompteRenduLead({ p, companyId }: { p: Prospect; companyId: string }) {
   );
 }
 
-function Fiche({ p, companyId, onFermer, onExclu, onCorbeille }: { p: Prospect; companyId: string; onFermer(): void; onExclu(): void; onCorbeille(): void }) {
+/* ------------------------------------------------------------------ */
+/* Critères de qualification : décision humaine par critère            */
+/* ------------------------------------------------------------------ */
+
+const LIBELLES_STATUTS_CRITERE: Readonly<Record<StatutCritereQualification, string>> = { verifie: "Vérifié", contraire: "Contraire", non_verifie: "Non vérifié" };
+const TONS_STATUTS_CRITERE: Readonly<Record<StatutCritereQualification, Ton>> = { verifie: "succes", contraire: "danger", non_verifie: "neutre" };
+/** Ordre de présentation des statuts dans le formulaire. */
+const ORDRE_STATUTS_CRITERE: readonly StatutCritereQualification[] = ["verifie", "contraire", "non_verifie"];
+
+/** Formulaire en ligne sous un critère : statut, justification obligatoire (3 à 500 caractères). Échap le ferme. */
+function FormulaireCritere({ c, p, companyId, onFerme, onEnregistre }: { c: CritereQualification; p: Prospect; companyId: string; onFerme(): void; onEnregistre(): void }) {
+  const [statut, setStatut] = useState<StatutCritereQualification>(c.statut);
+  const [justification, setJustification] = useState("");
+  const [enCours, setEnCours] = useState(false);
+  const [erreur, setErreur] = useState<unknown>(null);
+  const premier = useRef<HTMLSelectElement>(null);
+  useEffect(() => {
+    premier.current?.focus();
+  }, []);
+  const raison = justification.trim().length < 3 ? "Justifiez votre décision (3 caractères au moins)." : null;
+
+  async function enregistrer() {
+    if (raison) return;
+    setEnCours(true);
+    setErreur(null);
+    try {
+      await appelRoute("PATCH", `/prospects/${encodeURIComponent(p.id)}/criteres/${encodeURIComponent(c.code)}`, { companyId, statut, justification: justification.trim() });
+      onEnregistre();
+    } catch (e) {
+      setErreur(e);
+    } finally {
+      setEnCours(false);
+    }
+  }
+
+  return (
+    <form
+      className="atl-formulaire atl-critere-formulaire"
+      aria-label={`Décision humaine sur le critère « ${c.libelle} »`}
+      onSubmit={(e) => {
+        e.preventDefault();
+        void enregistrer();
+      }}
+      onKeyDown={(e) => {
+        if (e.key === "Escape") {
+          e.stopPropagation();
+          onFerme();
+        }
+      }}
+    >
+      <Champ libelle="Statut du critère">
+        <select ref={premier} value={statut} onChange={(e) => setStatut(e.target.value as StatutCritereQualification)}>
+          {ORDRE_STATUTS_CRITERE.map((s) => (
+            <option key={s} value={s}>
+              {LIBELLES_STATUTS_CRITERE[s]}
+            </option>
+          ))}
+        </select>
+      </Champ>
+      <Champ libelle="Justification" aide="Obligatoire, 3 à 500 caractères. Elle est journalisée avec votre nom.">
+        <textarea value={justification} onChange={(e) => setJustification(e.target.value)} rows={2} maxLength={500} />
+      </Champ>
+      {erreur ? <EtatErreur erreur={erreur} contexte="décision sur le critère" /> : null}
+      <div className="atl-actions">
+        <Bouton type="submit" variante="principal" raisonDesactive={raison} enCours={enCours}>
+          Enregistrer la décision
+        </Bouton>
+        <Bouton variante="discret" onClick={onFerme}>
+          Annuler
+        </Bouton>
+      </div>
+    </form>
+  );
+}
+
+/**
+ * Critères de qualification d'un lead (codés et personnalisés actifs), avec leur statut et leur source.
+ * Un humain peut décider à la main d'un critère (« Modifier ») ou revenir au calcul automatique.
+ * Après chaque changement, `onChange` recharge le lead : confiance et badge sont recalculés par le serveur.
+ */
+function CriteresQualification({ p, companyId, onChange }: { p: Prospect; companyId: string; onChange(): void }) {
+  const [ouvert, setOuvert] = useState<string | null>(null);
+  const [retraitEnCours, setRetraitEnCours] = useState<string | null>(null);
+  const [erreurRetrait, setErreurRetrait] = useState<{ code: string; erreur: unknown } | null>(null);
+  const criteres = p.confiance?.criteres ?? [];
+  if (criteres.length === 0) return null;
+
+  async function revenirAuCalcul(code: string) {
+    setRetraitEnCours(code);
+    setErreurRetrait(null);
+    try {
+      await appelRoute("DELETE", `/prospects/${encodeURIComponent(p.id)}/criteres/${encodeURIComponent(code)}?companyId=${encodeURIComponent(companyId)}`);
+      setOuvert(null);
+      onChange();
+    } catch (e) {
+      setErreurRetrait({ code, erreur: e });
+    } finally {
+      setRetraitEnCours(null);
+    }
+  }
+
+  return (
+    <section aria-label="Critères de qualification">
+      <h3 className="atl-h3">Critères de qualification</h3>
+      <p className="atl-sous">Vous pouvez décider à la main d'un critère : votre décision, prioritaire sur le calcul et sur l'agent, remplace le calcul automatique et reste journalisée.</p>
+      <ul className="atl-liste-compacte">
+        {criteres.map((c) => {
+          const humain = c.source === "humain";
+          return (
+            <li key={c.code} className="atl-critere" data-code={c.code}>
+              <div>
+                <strong>{c.libelle}</strong> <Pastille ton={TONS_STATUTS_CRITERE[c.statut]}>{LIBELLES_STATUTS_CRITERE[c.statut]}</Pastille>{" "}
+                <span className="atl-attenue">
+                  Source : {c.source}
+                  {c.detail ? `. ${c.detail}` : ""}
+                </span>
+              </div>
+              {ouvert === c.code ? (
+                <FormulaireCritere c={c} p={p} companyId={companyId} onFerme={() => setOuvert(null)} onEnregistre={() => { setOuvert(null); onChange(); }} />
+              ) : (
+                <div className="atl-actions">
+                  <Bouton variante="discret" onClick={() => setOuvert(c.code)}>
+                    Modifier
+                  </Bouton>
+                  {humain ? (
+                    <Bouton variante="discret" enCours={retraitEnCours === c.code} onClick={() => void revenirAuCalcul(c.code)}>
+                      Revenir au calcul automatique
+                    </Bouton>
+                  ) : null}
+                </div>
+              )}
+              {erreurRetrait?.code === c.code ? <EtatErreur erreur={erreurRetrait.erreur} contexte="retour au calcul automatique" /> : null}
+            </li>
+          );
+        })}
+      </ul>
+    </section>
+  );
+}
+
+function Fiche({ p, companyId, onFermer, onExclu, onCorbeille, onRecharger }: { p: Prospect; companyId: string; onFermer(): void; onExclu(): void; onCorbeille(): void; onRecharger(): void }) {
   const [motif, setMotif] = useState<MotifExclusion>("doublon");
   const [detail, setDetail] = useState("");
   const [enCours, setEnCours] = useState(false);
   const [erreur, setErreur] = useState<unknown>(null);
   const raison = detail.trim().length < 3 ? "Expliquez le motif (3 caractères au moins)." : null;
+  const [versionCompteRendu, setVersionCompteRendu] = useState(0);
   const [confirmationCorbeille, setConfirmationCorbeille] = useState(false);
   const [corbeilleEnCours, setCorbeilleEnCours] = useState(false);
   const [erreurCorbeille, setErreurCorbeille] = useState<unknown>(null);
+  // La fiche s'affiche sous la liste : on l'amène à l'écran et on y place le focus à l'ouverture.
+  const racine = useRef<HTMLElement>(null);
+  useEffect(() => {
+    racine.current?.scrollIntoView?.({ behavior: "smooth", block: "start" });
+    racine.current?.focus({ preventScroll: true });
+    // Dépend de l'id : choisir un autre lead alors qu'une fiche est ouverte ramène aussi la fiche à l'écran.
+    // scrollIntoView fait défiler tous les ancêtres qui défilent, y compris le conteneur interne du socle.
+  }, [p.id]);
 
   async function mettreALaCorbeille() {
     setCorbeilleEnCours(true);
@@ -509,7 +762,7 @@ function Fiche({ p, companyId, onFermer, onExclu, onCorbeille }: { p: Prospect; 
   }
 
   return (
-    <section className="atl-section atl-fiche" aria-label={`Fiche de ${nomProspect(p)}`}>
+    <section ref={racine} tabIndex={-1} className="atl-section atl-fiche" aria-label={`Fiche de ${nomProspect(p)}`}>
       <div className="atl-section-tete">
         <h2>{nomProspect(p)}</h2>
         <div className="atl-section-actions">
@@ -517,6 +770,11 @@ function Fiche({ p, companyId, onFermer, onExclu, onCorbeille }: { p: Prospect; 
             Fermer la fiche
           </Bouton>
         </div>
+      </div>
+      <div className="atl-statut-lead-bloc" aria-label="Statut du lead">
+        <BadgeStatutLead p={p} grand />
+        <ChiffresLead p={p} />
+        <p className="atl-sous">{EXPLICATION_STATUT_LEAD}</p>
       </div>
       <dl className="atl-champs atl-champs-grille">
         <div>
@@ -528,7 +786,7 @@ function Fiche({ p, companyId, onFermer, onExclu, onCorbeille }: { p: Prospect; 
           <dd>{libelleZone(p.zone)}</dd>
         </div>
         <div>
-          <dt>Statut</dt>
+          <dt>Étape</dt>
           <dd>{LIBELLES_STATUTS[p.statut]}</dd>
         </div>
         {p.nace.length ? (
@@ -557,7 +815,16 @@ function Fiche({ p, companyId, onFermer, onExclu, onCorbeille }: { p: Prospect; 
         </div>
       ) : null}
 
-      <CompteRenduLead p={p} companyId={companyId} />
+      <CompteRenduLead p={p} companyId={companyId} version={versionCompteRendu} />
+
+      <CriteresQualification
+        p={p}
+        companyId={companyId}
+        onChange={() => {
+          setVersionCompteRendu((v) => v + 1);
+          onRecharger();
+        }}
+      />
 
       <h3 className="atl-h3">Critères du score</h3>
       {p.score ? (
@@ -889,8 +1156,10 @@ function ListeProspects() {
   const [etat, setEtat] = useState<{ data: PageProspects | null; erreur: unknown; chargement: boolean }>({ data: null, erreur: null, chargement: true });
   const [choisi, setChoisi] = useState<string | null>(null);
   const [ordreAsc, setOrdreAsc] = useState(false);
-  const [tri, setTri] = useState<"score" | "confiance">("score");
-  const [options, setOptions] = useState<OptionsFiltres>(OPTIONS_VIDES);
+  const [tri, setTri] = useState<"score" | "confiance" | "famille">("score");
+  const [optionsMarque, setOptions] = useState<OptionsFiltres>(OPTIONS_VIDES);
+  const campagnes = useDonnees<Campagne[]>("atelier.campagnes");
+  const options = { ...optionsMarque, missions: (campagnes.data ?? []).map((c) => ({ id: c.id, nom: c.nom })) };
 
   useEffect(() => {
     if (!companyId) return;
@@ -907,7 +1176,7 @@ function ListeProspects() {
     if (!companyId) return;
     let annule = false;
     setEtat((e) => ({ ...e, chargement: true, erreur: null }));
-    appelRoute<PageProspects>("GET", requeteProspects(companyId, filtres, page))
+    appelRoute<PageProspects>("GET", `${requeteProspects(companyId, filtres, page)}&vue=complete`) // prospects entiers : le résumé est pour les agents
       .then((data) => !annule && setEtat({ data, erreur: null, chargement: false }))
       .catch((erreur: unknown) => !annule && setEtat({ data: null, erreur, chargement: false }));
     return () => {
@@ -921,13 +1190,14 @@ function ListeProspects() {
     setChoisi(null);
   }, []);
 
-  const cleTri = (p: Prospect) => (tri === "confiance" ? p.confiance?.valeur : p.score?.valeur) ?? -1;
-  const lignes = [...(etat.data?.prospects ?? [])].sort((a, b) => (ordreAsc ? 1 : -1) * (cleTri(a) - cleTri(b)));
-  const trier = (cle: "score" | "confiance") => {
+  const cleTri = (p: Prospect) => (tri === "famille" ? FAMILLES_METIER.indexOf(familleMetier(p)) : tri === "confiance" ? p.confiance?.valeur : p.score?.valeur) ?? -1;
+  // Par famille, à égalité : le meilleur score d'abord.
+  const lignes = [...(etat.data?.prospects ?? [])].sort((a, b) => (ordreAsc ? 1 : -1) * (cleTri(a) - cleTri(b)) || (b.score?.valeur ?? -1) - (a.score?.valeur ?? -1));
+  const trier = (cle: "score" | "confiance" | "famille") => {
     if (cle === tri) setOrdreAsc(!ordreAsc);
     else {
       setTri(cle);
-      setOrdreAsc(false);
+      setOrdreAsc(cle === "famille"); // médecins d'abord
     }
   };
   const fiche = lignes.find((p) => p.id === choisi) ?? null;
@@ -963,23 +1233,29 @@ function ListeProspects() {
                 <tr>
                   <th scope="col">Prospect</th>
                   <th scope="col">Cible</th>
+                  <th scope="col" aria-sort={tri === "famille" ? (ordreAsc ? "ascending" : "descending") : undefined}>
+                    <button type="button" className="atl-lien" onClick={() => trier("famille")} aria-label={tri === "famille" ? `Famille de métier, ${ordreAsc ? "médecins en premier" : "autres en premier"} ; inverser` : "Trier par famille de métier"}>
+                      Par famille de métier
+                    </button>
+                  </th>
                   <th scope="col">Zone</th>
-                  <th scope="col" aria-sort={tri === "score" ? (ordreAsc ? "ascending" : "descending") : undefined}>
-                    <button type="button" className="atl-lien" onClick={() => trier("score")} aria-label={tri === "score" ? `Score, trié ${ordreAsc ? "du plus bas au plus haut" : "du plus haut au plus bas"} ; inverser` : "Trier par score"}>
-                      {tri === "score" ? `Score (${ordreAsc ? "croissant" : "décroissant"})` : "Score"}
-                    </button>
+                  <th scope="col" aria-sort={tri === "score" ? (ordreAsc ? "ascending" : "descending") : tri === "confiance" ? (ordreAsc ? "ascending" : "descending") : undefined}>
+                    Statut du lead
+                    <span className="atl-statut-tris">
+                      <button type="button" className="atl-lien" onClick={() => trier("score")} aria-label={tri === "score" ? `Score, trié ${ordreAsc ? "du plus bas au plus haut" : "du plus haut au plus bas"} ; inverser` : "Trier par score"}>
+                        {tri === "score" ? `Score (${ordreAsc ? "croissant" : "décroissant"})` : "Score"}
+                      </button>
+                      <button type="button" className="atl-lien" title={EXPLICATION_CONFIANCE} onClick={() => trier("confiance")} aria-label={tri === "confiance" ? `Confiance, triée ${ordreAsc ? "du plus bas au plus haut" : "du plus haut au plus bas"} ; inverser` : "Trier par confiance"}>
+                        {tri === "confiance" ? `Confiance (${ordreAsc ? "croissante" : "décroissante"})` : "Confiance"}
+                      </button>
+                    </span>
                   </th>
-                  <th scope="col" aria-sort={tri === "confiance" ? (ordreAsc ? "ascending" : "descending") : undefined}>
-                    <button type="button" className="atl-lien" title={EXPLICATION_CONFIANCE} onClick={() => trier("confiance")} aria-label={tri === "confiance" ? `Confiance, triée ${ordreAsc ? "du plus bas au plus haut" : "du plus haut au plus bas"} ; inverser` : "Trier par confiance"}>
-                      {tri === "confiance" ? `Confiance (${ordreAsc ? "croissante" : "décroissante"})` : "Confiance"}
-                    </button>
-                  </th>
-                  <th scope="col">Statut</th>
+                  <th scope="col">Étape</th>
                 </tr>
               </thead>
               <tbody>
                 {lignes.map((p) => (
-                  <tr key={p.id} data-choisi={p.id === choisi || undefined}>
+                  <tr key={p.id} data-choisi={p.id === choisi || undefined} className="atl-ligne-cliquable" onClick={() => setChoisi(p.id)}>
                     <th scope="row">
                       <button type="button" className="atl-lien" onClick={() => setChoisi(p.id)} aria-label={`Ouvrir la fiche de ${nomProspect(p)}`}>
                         {nomProspect(p)}
@@ -987,14 +1263,13 @@ function ListeProspects() {
                       {p.mode === "demonstration" ? <span className="atl-sous">donnée de démonstration</span> : null}
                     </th>
                     <td data-libelle="Cible">{LIBELLE_CIBLE_UNIQUE[p.cible]}</td>
+                    <td data-libelle="Famille de métier">{LIBELLES_FAMILLES[familleMetier(p)]}</td>
                     <td data-libelle="Zone">{libelleZone(p.zone)}</td>
-                    <td data-libelle="Score">
-                      <ScoreAffiche p={p} />
+                    <td data-libelle="Statut du lead">
+                      <BadgeStatutLead p={p} />
+                      <ChiffresLead p={p} />
                     </td>
-                    <td data-libelle="Confiance">
-                      <ConfianceAffichee p={p} />
-                    </td>
-                    <td data-libelle="Statut">
+                    <td data-libelle="Étape">
                       <Pastille ton={TONS_STATUTS[p.statut]}>{LIBELLES_STATUTS[p.statut]}</Pastille>
                       {p.motifsExclusion.length > 0 ? <span className="atl-sous">{p.motifsExclusion.map((m) => LIBELLES_MOTIFS[m.motif]).join(" ; ")}</span> : null}
                     </td>
@@ -1003,7 +1278,7 @@ function ListeProspects() {
               </tbody>
             </table>
           </div>
-          <p className="atl-sous">Tri sur la page affichée. Le score estime la chance de signer ; la confiance dit si le prospect correspond à votre cible.</p>
+          <p className="atl-sous">Tri sur la page affichée. La priorité dit par qui commencer ; la cible prouvée dit si le lead correspond à votre cible.</p>
           {etat.data.pages > 1 ? (
             <div className="atl-actions">
               <Bouton raisonDesactive={page <= 1 ? "Première page." : null} onClick={() => setPage(page - 1)}>
@@ -1023,6 +1298,7 @@ function ListeProspects() {
           p={fiche}
           companyId={companyId}
           onFermer={() => setChoisi(null)}
+          onRecharger={() => setVersionCharge((v) => v + 1)}
           onExclu={() => {
             setChoisi(null);
             setVersionCharge((v) => v + 1);

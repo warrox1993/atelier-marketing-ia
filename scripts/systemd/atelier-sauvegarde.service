@@ -1,0 +1,15 @@
+[Unit]
+Description=Sauvegarde hors machine de l'Atelier marketing IA (copie vers le disque de données)
+
+[Service]
+# pnpm est dans ~/.local/bin, absent du PATH par défaut des services utilisateur (constaté le 16/10).
+Environment=PATH=%h/.local/bin:/usr/local/bin:/usr/bin:/bin
+Type=oneshot
+# Adapter le chemin du dépôt et la destination (autre disque que le système) si besoin.
+# Code de sortie non nul = échec : « journalctl --user -u atelier-sauvegarde ».
+ExecStart=%h/Projets/atelier-marketing-ia/scripts/sauvegarde-hors-machine.sh /mnt/donnees/Systeme/Sauvegardes/atelier
+Nice=15
+IOSchedulingClass=idle
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=atelier-sauvegarde

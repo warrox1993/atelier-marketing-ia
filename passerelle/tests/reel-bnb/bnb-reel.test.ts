@@ -58,11 +58,15 @@ describe("bnb réel : réponses nominales", () => {
     expect(a.AccountingData.Rubrics).toEqual([
       { Code: "9087", Libelle: "Effectif moyen du personnel en équivalents temps plein", Period: "N", Value: 12.5 },
       { Code: "20/58", Libelle: "Total de l'actif (total du bilan)", Period: "N", Value: 1850000 },
+      { Code: "10/15", Libelle: "Capitaux propres (fonds propres)", Period: "N", Value: 500 },
+      { Code: "22", Libelle: "Terrains et constructions", Period: "N", Value: 350000 },
+      { Code: "9904", Libelle: "Bénéfice (perte) de l'exercice", Period: "N", Value: 42000 },
     ]);
     expect(a).toMatchObject({ DepositDate: "2026-07-02", ExerciseDates: { startDate: "2025-01-01", endDate: "2025-12-31" }, ModelType: "m02-f", Language: "FR", Currency: "EUR", json_disponible: true });
-    expect(b.AccountingData.Rubrics.map((x: any) => x.Value)).toEqual([11, 1700000]);
+    // Rubriques absentes du dépôt (10/15, 22) : valeur nulle, jamais devinée ; perte de 2024 lue en négatif (9904)
+    expect(b.AccountingData.Rubrics.map((x: any) => x.Value)).toEqual([11, 1700000, null, null, -8000]);
     // Modèle micro sans effectif : valeur nulle, rien de deviné
-    expect(c.AccountingData.Rubrics.map((x: any) => x.Value)).toEqual([null, 1500000]);
+    expect(c.AccountingData.Rubrics.map((x: any) => x.Value)).toEqual([null, 1500000, null, null, null]);
     expect(c.note).toMatch(/absente/);
     expect(r.taille_deduite).toBe("petite");
     // 1 liste + 3 dépôts (l'initial remplacé par la rectification n'est pas téléchargé)

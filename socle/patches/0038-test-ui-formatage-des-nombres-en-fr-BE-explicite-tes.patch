@@ -1,0 +1,124 @@
+From b89b9295347e2eedc33299e6f3495c70848db905 Mon Sep 17 00:00:00 2001
+From: Jean-Baptiste Dhondt <114347858+warrox1993@users.noreply.github.com>
+Date: Fri, 16 Oct 2026 14:00:56 +0200
+Subject: [PATCH] =?UTF-8?q?test(ui):=20formatage=20des=20nombres=20en=20fr?=
+ =?UTF-8?q?-BE=20explicite,=20test=20du=20choix=20d'un=20humain=20adapt?=
+ =?UTF-8?q?=C3=A9=20au=20verrou=20d'agent?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+CaseFieldsPanel et TaskChatStatusPill formataient avec la locale du poste : « 1,850 » en en-US,
+« 1 850 » en fr. Le formatage est désormais explicite en fr-BE (espace fine insécable U+202F) et les
+tests attendent ce format exact, identique sur tout poste. Le test « remembers a chosen human »
+cliquait un sélecteur verrouillé par le patch 0016 dès qu'un agent est assigné : il part maintenant
+d'un état sans agent.
+
+Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01DP85vPq2MHkZg8VNtRvCzB
+---
+ ui/src/components/CaseFieldsPanel.test.tsx              | 4 ++--
+ ui/src/components/CaseFieldsPanel.tsx                   | 4 ++--
+ ui/src/components/NewIssueDialog.test.tsx               | 6 ++++--
+ ui/src/components/task-chat/TaskChatStatusPill.test.tsx | 4 ++--
+ ui/src/components/task-chat/TaskChatStatusPill.tsx      | 4 ++--
+ 5 files changed, 12 insertions(+), 10 deletions(-)
+
+diff --git a/ui/src/components/CaseFieldsPanel.test.tsx b/ui/src/components/CaseFieldsPanel.test.tsx
+index 1c85a9f81..9d39cdc68 100644
+--- a/ui/src/components/CaseFieldsPanel.test.tsx
++++ b/ui/src/components/CaseFieldsPanel.test.tsx
+@@ -59,8 +59,8 @@ describe("CaseFieldsPanel", () => {
+ 
+     // string
+     expect(container.textContent).toContain("hermes-agent-post");
+-    // number — locale grouped, tabular
+-    expect(container.textContent).toContain("1,850");
++    // nombre : groupé en fr-BE (espace fine insécable U+202F), chiffres tabulaires
++    expect(container.textContent).toContain("1\u202f850");
+     // string[] — chips
+     expect(container.textContent).toContain("ai");
+     expect(container.textContent).toContain("launch");
+diff --git a/ui/src/components/CaseFieldsPanel.tsx b/ui/src/components/CaseFieldsPanel.tsx
+index cd14c73a8..b2bc42b30 100644
+--- a/ui/src/components/CaseFieldsPanel.tsx
++++ b/ui/src/components/CaseFieldsPanel.tsx
+@@ -176,11 +176,11 @@ export function CaseFieldValue({
+     if (variant === "compact") {
+       return (
+         <CopyableCompactValue value={value} className="text-sm tabular-nums">
+-          {value.toLocaleString()}
++          {value.toLocaleString("fr-BE")}
+         </CopyableCompactValue>
+       );
+     }
+-    return <span className="text-sm tabular-nums">{value.toLocaleString()}</span>;
++    return <span className="text-sm tabular-nums">{value.toLocaleString("fr-BE")}</span>;
+   }
+ 
+   if (typeof value === "boolean") {
+diff --git a/ui/src/components/NewIssueDialog.test.tsx b/ui/src/components/NewIssueDialog.test.tsx
+index b92e834bf..468d952cd 100644
+--- a/ui/src/components/NewIssueDialog.test.tsx
++++ b/ui/src/components/NewIssueDialog.test.tsx
+@@ -506,9 +506,11 @@ describe("NewIssueDialog", () => {
+   });
+ 
+   it("remembers a chosen human and leaves the request empty", async () => {
+-    mockAgentsApi.list.mockResolvedValue(defaultAgents);
++    // Atelier (patch 0016) : dès qu'un agent est assigné, le sélecteur est verrouillé (les demandes passent par
++    // le Coordinateur). On choisit donc l'humain depuis un état sans agent, comme le test voisin.
++    mockAgentsApi.list.mockResolvedValue([]);
+     const { root } = renderDialog(container);
+-    await waitForAssertion(() => expect(container.querySelector('[data-testid="task-chat-composer-assignee-label"]')?.textContent).toBe("CEO"));
++    await flush();
+     act(() => container.querySelector<HTMLButtonElement>('[aria-label="Select assignee"]')!.click());
+     const me = [...container.querySelectorAll<HTMLButtonElement>('[role="option"]')].find((button) => button.textContent?.includes("Me"))!;
+     act(() => me.click());
+diff --git a/ui/src/components/task-chat/TaskChatStatusPill.test.tsx b/ui/src/components/task-chat/TaskChatStatusPill.test.tsx
+index 1a09919ca..97415fef8 100644
+--- a/ui/src/components/task-chat/TaskChatStatusPill.test.tsx
++++ b/ui/src/components/task-chat/TaskChatStatusPill.test.tsx
+@@ -113,7 +113,7 @@ describe("TaskChatStatusPill whimsy", () => {
+       vi.advanceTimersByTime(1200);
+     });
+     expect(container.textContent).toContain("1.2s");
+-    expect(container.textContent).toContain("18,240/200,000 ctx");
++    expect(container.textContent).toContain("18\u202f240/200\u202f000 ctx");
+   });
+ 
+   it("permanently reserves the interstitial row while live so layout never jumps (round 9)", () => {
+@@ -150,7 +150,7 @@ describe("TaskChatStatusPill whimsy", () => {
+     expect(row?.contains(line)).toBe(true);
+     expect(container.textContent).not.toContain("Responding…");
+     expect(container.textContent).toContain("1.2s");
+-    expect(container.textContent).toContain("18,240/200,000 ctx");
++    expect(container.textContent).toContain("18\u202f240/200\u202f000 ctx");
+     expect(container.querySelector(".animate-pulse")).not.toBeNull();
+     // Viewport + transition classes: 1lh clip outside, transform-only inner.
+     expect(line?.className).toContain("tc-line-scroll");
+diff --git a/ui/src/components/task-chat/TaskChatStatusPill.tsx b/ui/src/components/task-chat/TaskChatStatusPill.tsx
+index 6d2b4204f..78e11fc9f 100644
+--- a/ui/src/components/task-chat/TaskChatStatusPill.tsx
++++ b/ui/src/components/task-chat/TaskChatStatusPill.tsx
+@@ -356,7 +356,7 @@ export function TaskChatStatusPill({
+           ) : null}
+           {item.tokens ? (
+             <span className="ml-auto shrink-0 font-mono text-(length:--text-micro)">
+-              {item.tokens.used.toLocaleString()}/{item.tokens.size.toLocaleString()} ctx
++              {item.tokens.used.toLocaleString("fr-BE")}/{item.tokens.size.toLocaleString("fr-BE")} ctx
+             </span>
+           ) : null}
+         </span>
+@@ -422,7 +422,7 @@ export function TaskChatStatusPill({
+           {elapsed ? <span>{elapsed}</span> : null}
+           {item.tokens ? (
+             <span>
+-              {item.tokens.used.toLocaleString()}/{item.tokens.size.toLocaleString()} ctx
++              {item.tokens.used.toLocaleString("fr-BE")}/{item.tokens.size.toLocaleString("fr-BE")} ctx
+             </span>
+           ) : null}
+         </span>
+-- 
+2.53.0
+

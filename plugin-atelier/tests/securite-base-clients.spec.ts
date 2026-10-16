@@ -9,20 +9,16 @@ import { describe, expect, it } from "vitest";
 import type { CorrespondanceColonnes } from "../src/contrats/index.js";
 import { colonnesSensibles, lireFichierBaseClients, neutraliserFormule, preparerImportBaseClients } from "../src/serveur/base-clients.js";
 import { injectionsSignalees } from "../src/serveur/contenu-externe.js";
+import { RAPPORT_CROISSANCE_MAX, rapportCroissance } from "./outils-temps.js";
 
-function duree(f: () => unknown): number {
-  const t0 = performance.now();
-  f();
-  return performance.now() - t0;
-}
 
 const octets = (t: string) => new TextEncoder().encode(t);
 const fauxTour = (signalements: string[]) => signalements.some((s) => s.startsWith("faux tour de dialogue"));
 
 describe("G4 : faux tour de dialogue à temps linéaire", () => {
-  it("une suite de lignes vides : moins de 500 ms (283 ms pour 20 000 avant, quadratique)", () => {
-    expect(duree(() => injectionsSignalees(`nom\n${"\n".repeat(200_000)}`))).toBeLessThan(500);
-    expect(duree(() => injectionsSignalees(`nom\n${" \t\n".repeat(100_000)}x`))).toBeLessThan(500);
+  it("une suite de lignes vides : croissance linéaire (283 ms pour 20 000 avant, quadratique)", () => {
+    expect(rapportCroissance((n) => `nom\n${"\n".repeat(n)}`, injectionsSignalees, 20_000)).toBeLessThan(RAPPORT_CROISSANCE_MAX);
+    expect(rapportCroissance((n) => `nom\n${" \t\n".repeat(n)}x`, injectionsSignalees, 10_000)).toBeLessThan(RAPPORT_CROISSANCE_MAX);
   });
 
   it("le faux tour de dialogue en début de ligne reste repéré", () => {
@@ -31,8 +27,9 @@ describe("G4 : faux tour de dialogue à temps linéaire", () => {
     expect(fauxTour(injectionsSignalees("Le system : rien"))).toBe(false);
   });
 
-  it("base clients CSV de 100 000 lignes vides : lue en moins de 500 ms (7 s avant)", () => {
-    expect(duree(() => lireFichierBaseClients({ nomFichier: "b.csv", format: "csv", contenu: octets(`nom\n${"\n".repeat(100_000)}`) }))).toBeLessThan(500);
+  it("base clients CSV de lignes vides : croissance linéaire (7 s pour 100 000 avant, quadratique)", () => {
+    const lire = (t: string) => lireFichierBaseClients({ nomFichier: "b.csv", format: "csv", contenu: octets(t) });
+    expect(rapportCroissance((n) => `nom\n${"\n".repeat(n)}`, lire, 20_000)).toBeLessThan(RAPPORT_CROISSANCE_MAX);
   });
 
   it("les injections sont cherchées dans les cellules, pas dans le fichier brut", () => {

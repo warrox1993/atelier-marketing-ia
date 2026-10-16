@@ -673,7 +673,7 @@ function DecisionPanneau({ dossier: d, onFait }: { dossier: DossierHumain; onFai
     setResultat(null);
     try {
       const revisionId = d.livrable.revisionId;
-      await decider({
+      const enregistree = (await decider({
         issueId: d.issueId,
         revisionId,
         action: choix,
@@ -693,10 +693,13 @@ function DecisionPanneau({ dossier: d, onFait }: { dossier: DossierHumain; onFai
                 dureeJours: externe ? duree : null,
               }
             : null,
-      });
+      })) as (DecisionHumaine & { transmission?: { transmission?: string } }) | undefined;
       let suite = "Décision enregistrée.";
       if (choix === "rejeter") {
         suite += " La tâche Paperclip a été annulée dans la même opération, avec votre commentaire.";
+      } else if (choix === "demander_correction" && enregistree?.transmission?.transmission === "coordinateur") {
+        // Le serveur a mis le livrable en attente et prévenu le Coordinateur : aucune transition native ici.
+        suite += " La correction est transmise au Coordinateur, qui la répartira.";
       } else {
         try {
           const t = await transitionTache(
@@ -819,6 +822,7 @@ function DecisionPanneau({ dossier: d, onFait }: { dossier: DossierHumain; onFai
         <Bouton type="submit" variante={choix === "rejeter" ? "danger" : "principal"} raisonDesactive={raison} enCours={enCours}>
           Enregistrer : {(ACTIONS_HUMAINES[choix] ?? choix).toLowerCase()}
         </Bouton>
+        {choix === "demander_correction" ? <p className="atl-aide">La correction sera transmise au Coordinateur s'il y en a un pour cette tâche, sinon au producteur.</p> : null}
         {resultat ? (
           <p className="atl-succes" role="status">
             {resultat}

@@ -1,0 +1,16 @@
+[Unit]
+Description=Contrôle de santé de l'Atelier marketing IA (%i)
+After=network-online.target
+
+[Service]
+# pnpm est dans ~/.local/bin, absent du PATH par défaut des services utilisateur (constaté le 16/10).
+Environment=PATH=%h/.local/bin:/usr/local/bin:/usr/bin:/bin
+Type=oneshot
+# ATELIER_PORT et ATELIER_PASSERELLE_URL viennent du même fichier que l'instance.
+EnvironmentFile=%h/.config/atelier/%i.env
+# Code de sortie non nul = alerte : visible avec « journalctl --user -u atelier-sante@%i ».
+ExecStart=%h/Projets/atelier-marketing-ia/scripts/sante-atelier.sh --notifier
+Nice=10
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=atelier-sante-%i

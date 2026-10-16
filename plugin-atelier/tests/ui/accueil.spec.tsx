@@ -28,6 +28,7 @@ beforeEach(() => {
   appels = [];
   serveur = (methode, url) => {
     if (url.includes("/accueil?")) return { statut: 200, corps: { companyId: "c", elements: [ELEMENT, BAS], missions: [MISSION] } };
+    if (url.includes("/prospects?")) return { statut: 200, corps: { total: url.includes("qualifiesSeulement=true") ? 7 : 42, page: 1, pages: 42, prospects: [] } };
     if (url.includes("/missions/")) return { statut: 200, corps: SUIVI };
     if (methode === "POST") return { statut: 201, corps: { issueId: "n1", identifiant: "DEM-2", lien: "/issues/DEM-2" } };
     return { statut: 404, corps: {} };
@@ -73,6 +74,52 @@ describe("accueil", () => {
     expect(c.textContent).not.toContain("—");
     expect(appels.some((a) => a.url.includes("/accueil?companyId="))).toBe(true);
     expect(appels.some((a) => a.url.includes("/missions/m1?companyId="))).toBe(true);
+  });
+
+  it("l'encart Prospection vient en premier, avant « Demander à l'équipe », avec total, qualifiés et deux liens", async () => {
+    const c = await ouvrir();
+    const titres = Array.from(c.querySelectorAll("h2, h3")).map((h) => h.textContent);
+    expect(titres.indexOf("Prospection")).toBeGreaterThanOrEqual(0);
+    expect(titres.indexOf("Prospection")).toBeLessThan(titres.indexOf("Demander à l'équipe"));
+    const encart = c.querySelector(".atl-prospection")!;
+    expect(encart.textContent).toContain("42");
+    expect(encart.textContent).toContain("leads au total");
+    expect(encart.textContent).toContain("7");
+    expect(encart.textContent).toContain("leads qualifiés");
+    expect(appels.some((a) => a.url.includes("/prospects?") && a.url.includes("parPage=1") && !a.url.includes("qualifiesSeulement"))).toBe(true);
+    expect(appels.some((a) => a.url.includes("/prospects?") && a.url.includes("parPage=1") && a.url.includes("qualifiesSeulement=true"))).toBe(true);
+    await cliquer(parTexte(encart, "a", "Voir les prospects"));
+    await cliquer(parTexte(encart, "a", "Voir la carte"));
+    expect(pont.navigations).toEqual(expect.arrayContaining(["/atelier/prospects", "/atelier/carte"]));
+  });
+
+  it("sans lead : message honnête et modèle « Prospection d'une zone » appliqué à la demande", async () => {
+    const base = serveur;
+    serveur = (m, u, b) => (u.includes("/prospects?") ? { statut: 200, corps: { total: 0, page: 1, pages: 0, prospects: [] } } : base(m, u, b));
+    const c = await ouvrir();
+    const encart = c.querySelector(".atl-prospection")!;
+    expect(encart.textContent).toContain("Aucun lead pour l'instant : demandez une prospection à l'équipe");
+    expect(encart.querySelector("a")).toBeNull();
+    await cliquer(parTexte(encart, "button", "Utiliser le modèle « Prospection d'une zone »"));
+    const champ = champParLibelle(c, "Votre demande") as HTMLTextAreaElement;
+    expect(champ.value).toContain("Trouve les prospects les plus pertinents pour <segment>");
+  });
+
+  it("erreur de la route prospects : alerte dans l'encart, le reste de l'accueil reste affiché", async () => {
+    const base = serveur;
+    serveur = (m, u, b) => (u.includes("/prospects?") ? { statut: 500, corps: { error: "boum" } } : base(m, u, b));
+    const c = await ouvrir();
+    expect(c.querySelector(".atl-prospection [role='alert']")).toBeTruthy();
+    expect(c.textContent).toContain("Page toiture");
+    expect(c.textContent).toContain("Post de printemps");
+  });
+
+  it("une réponse sans total est traitée comme une erreur, pas comme zéro lead", async () => {
+    const base = serveur;
+    serveur = (m, u, b) => (u.includes("/prospects?") ? { statut: 200, corps: { prospects: [] } } : base(m, u, b));
+    const c = await ouvrir();
+    expect(c.querySelector(".atl-prospection [role='alert']")).toBeTruthy();
+    expect(c.textContent).not.toContain("Aucun lead pour l'instant");
   });
 
   it("montre le projet, le statut lisible et le lien « Voir le plan » de chaque mission", async () => {

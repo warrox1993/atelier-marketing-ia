@@ -46,6 +46,26 @@ function coordonnees(x: unknown): { latitude: number; longitude: number } | null
   return o && ok(o.latitude, o.longitude) ? { latitude: o.latitude, longitude: o.longitude as number } : null;
 }
 
+const TERMES_ETABLISSEMENT = new Set([
+  "pharmacie", "cabinet", "centre", "clinique", "maison", "sprl", "srl", "sa", "sc", "asbl", "scrl", "scomm", "hopital", "laboratoire",
+  "groupe", "societe", "association", "institut", "residence", "polyclinique", "service", "pole", "ecole", "mutualite", "croix", "rouge",
+]);
+const MOT_CAPITALISE = /^\p{Lu}[\p{Ll}'’]+(?:-\p{Lu}[\p{Ll}'’]+)*$/u;
+const sansAccent = (m: string): string => m.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase();
+
+/**
+ * Vrai si la dénomination ressemble à un nom de personne (cabinet exercé en nom propre) : « Dr » ou « Docteur » suivi
+ * d'un ou plusieurs noms, ou deux à trois mots capitalisés sans terme d'établissement. Heuristique prudente, jamais une preuve.
+ */
+export function estNomDePersonneProbable(denomination: string | null | undefined): boolean {
+  const mots = (denomination ?? "").trim().split(/\s+/u).filter((m) => m !== "");
+  if (mots.length === 0) return false;
+  if (mots.some((m) => TERMES_ETABLISSEMENT.has(sansAccent(m).replace(/[.,;]/gu, "")))) return false;
+  const titre = /^(?:dr|docteur)\.?$/iu.test(mots[0]!);
+  if (titre) return mots.length >= 2 && mots.length <= 5 && mots.slice(1).every((m) => MOT_CAPITALISE.test(m));
+  return mots.length >= 2 && mots.length <= 3 && mots.every((m) => MOT_CAPITALISE.test(m));
+}
+
 /** Nom affiché : dénomination, pseudonyme d'un particulier, sinon identifiant court (le nom d'une personne reste chiffré). */
 export function nomDuProspect(p: Prospect): string {
   return p.denomination ?? p.particulier?.pseudonyme ?? `[prospect-${p.id.slice(0, 8)}]`;
@@ -237,7 +257,12 @@ export function construireCompteRendu(p: Prospect, fiche: FicheClientCompteRendu
     prochaineAction = { libelle: `Enrichir : ${parties.length ? parties.join(" ; ") : "aucun outil ne peut établir les critères restants, un humain doit les confirmer"}.`, canal: null, outils };
   }
 
+  const nomPropre = p.denomination !== null && p.denomination !== undefined && estNomDePersonneProbable(p.denomination);
+  if (nomPropre && p.statut !== "exclu" && p.statut !== "refuse") {
+    prochaineAction = { ...prochaineAction, libelle: `${prochaineAction.libelle} Praticien en nom propre probable : contact seulement à l'adresse professionnelle.` };
+  }
   const limites = [
+    ...(nomPropre ? ["Praticien en nom propre probable : données d'une personne physique ; contact seulement à l'adresse professionnelle, après validation humaine (RGPD)"] : []),
     p.basesLegales.length > 0
       ? `RGPD : le contact repose sur une base légale vérifiée par canal (${p.basesLegales.map((b) => `${LIBELLES_CANAUX[b.canal]} : ${b.base.replace(/_/gu, " ")}`).join(" ; ")}). La personne peut s'opposer à tout moment (art. 21) et doit être informée dès le premier message (art. 14). Aucun contact sans validation humaine.`
       : "RGPD : aucune base légale vérifiée pour un canal, donc aucun contact possible pour l'instant. La personne peut s'opposer à tout moment (art. 21). Aucun contact sans validation humaine.",

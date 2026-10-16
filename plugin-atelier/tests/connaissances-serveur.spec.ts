@@ -6,7 +6,8 @@
  * Un dernier bloc fait passer le SQL réel de `base-connaissances.ts` par les règles de l'hôte.
  */
 import type { PluginContext } from "@paperclipai/plugin-sdk";
-import { describe, expect, it, vi } from "vitest";
+import { beforeAll, describe, expect, it, vi } from "vitest";
+import { extraireDocument } from "../src/connaissances/extraction/index.js";
 import { ESPACE_BASE } from "../src/contrats/index.js";
 import { creerAiguillage } from "../src/serveur/atelier.js";
 import type { BaseAtelier } from "../src/serveur/base.js";
@@ -434,6 +435,12 @@ describe("connaissances.supprimer, lister, statut", () => {
 /* ------------------------------------------------------------------ */
 
 describe("connaissances.importer-demo", () => {
+  // Chauffe : le premier appel du processus empaquette le fil isolé d'extraction (esbuild, environ
+  // 1 s, bien plus sous la charge d'une suite complète) ; ce coût unique sort du délai du test.
+  beforeAll(async () => {
+    await extraireDocument({ nom: "chauffe.md", contenu: new TextEncoder().encode("Chauffe du fil isolé.") });
+  }, 60_000);
+
   it("importe le corpus d'un geste, refuse le questionnaire de santé, ne réimporte rien au second appel", async () => {
     const f = banc();
     f.tacheSousPorte();

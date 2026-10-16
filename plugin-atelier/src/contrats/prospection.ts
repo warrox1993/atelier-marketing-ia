@@ -386,6 +386,14 @@ export const TailleBnb = z
     exercice: z.number().int().min(1900).max(2200).nullable(),
     effectifEtp: z.number().min(0).max(10_000_000).nullable(),
     categorie: z.enum(["micro", "petite", "moyenne", "grande"]).nullable(),
+    // Lot 2 (critères courtier) : rubriques du bilan, absentes quand la BNB ne les fournit pas (jamais devinées).
+    // Les codes de rubriques (10/15, 22, 9904) sont à confirmer sur la documentation BNB.
+    /** Fonds propres (rubrique 10/15) du dernier exercice déposé ; peut être négatif. */
+    fondsPropres: z.number().min(-1e13).max(1e13).nullable().optional(),
+    /** Terrains et constructions (rubrique 22) du dernier exercice déposé. */
+    terrainsConstructions: z.number().min(-1e13).max(1e13).nullable().optional(),
+    /** Résultat de l'exercice (rubrique 9904, négatif = perte) des deux derniers exercices déposés, du plus récent au plus ancien. */
+    resultats: z.array(z.object({ exercice: z.number().int().min(1900).max(2200), resultat: z.number().min(-1e13).max(1e13).nullable() }).strict()).max(3).optional(),
   })
   .strict();
 export type TailleBnb = z.infer<typeof TailleBnb>;
@@ -601,15 +609,46 @@ export const CodeCritereQualification = z.enum([
   "joignable_legalement",
   "pas_deja_client",
   "sources_concordantes",
+  // Critères spécialisés « courtier » (lot 1) : besoin d'assurance prouvé et concurrence, entreprises seulement.
+  "assurance_obligatoire_metier",
+  "installation_recente",
+  "evenement_recent",
+  "besoin_offre_active",
+  "pas_concurrent",
+  // Critères « courtier » (lot 2) : fondés sur les comptes annuels BNB (effectif, fonds propres, terrains, résultat), entreprises seulement.
+  "emploie_personnel",
+  "flotte_probable",
+  "proprietaire_locaux",
+  "sante_financiere",
+  // Critères « courtier » (lot 3) : bureau spécialisé à proximité (fiche du client) et contact professionnel publié permis (sources du prospect).
+  "bureau_specialise_proche",
+  "contact_public_permis",
 ]);
 export type CodeCritereQualification = z.infer<typeof CodeCritereQualification>;
+
+/** Bornes du seuil de qualification choisi par le client (réglages des leads). */
+export const SEUIL_QUALIFICATION_MIN = 50;
+export const SEUIL_QUALIFICATION_MAX = 100;
+/** Au plus dix critères personnalisés par entreprise. */
+export const CRITERES_PERSONNALISES_MAX = 10;
+/** Critères codés (18) et personnalisés (10 au plus) : nombre maximal de critères d'une confiance. */
+export const CRITERES_CONFIANCE_MAX = 18 + CRITERES_PERSONNALISES_MAX;
+
+/** Code d'un critère : critère codé ou critère personnalisé du client. */
+export const CodeCritere = z.string().regex(/^[a-z][a-z0-9_]{1,39}$/u, "Code : minuscules, chiffres et _ (2 à 40 caractères), commençant par une lettre");
+export type CodeCritere = z.infer<typeof CodeCritere>;
+
+/** Code d'un critère personnalisé : jamais celui d'un critère codé. */
+export const CodeCriterePersonnalise = CodeCritere.refine((c) => !(CodeCritereQualification.options as readonly string[]).includes(c), {
+  message: "Ce code est celui d'un critère existant",
+});
 
 export const StatutCritereQualification = z.enum(["verifie", "non_verifie", "contraire"]);
 export type StatutCritereQualification = z.infer<typeof StatutCritereQualification>;
 
 export const CritereQualification = z
   .object({
-    code: CodeCritereQualification,
+    code: CodeCritere,
     libelle: z.string().min(1).max(200),
     statut: StatutCritereQualification,
     poids: z.number().int().min(0).max(100),
@@ -617,7 +656,8 @@ export const CritereQualification = z
     sourceId: IdNatif.nullable(),
     /** Origine lisible du fait (service et outil, ou nature de la preuve). */
     source: z.string().max(300),
-    detail: z.string().max(300),
+    /** Une décision humaine porte sa justification (500 caractères au plus) dans le détail. */
+    detail: z.string().max(800),
   })
   .strict();
 export type CritereQualification = z.infer<typeof CritereQualification>;
@@ -633,12 +673,13 @@ export const ConfianceQualification = z
     qualifie: z.boolean(),
     /** Vrai si au moins un critère est contraire (plafond de 50 %). */
     plafonnee: z.boolean(),
-    seuil: z.literal(SEUIL_QUALIFICATION),
-    criteres: z.array(CritereQualification).min(1).max(7),
+    /** Seuil choisi par le client (90 par défaut). */
+    seuil: z.number().int().min(SEUIL_QUALIFICATION_MIN).max(SEUIL_QUALIFICATION_MAX),
+    criteres: z.array(CritereQualification).min(1).max(CRITERES_CONFIANCE_MAX),
     calculeLe: Horodatage,
   })
   .strict()
-  .refine((c) => c.qualifie === (c.valeur >= SEUIL_QUALIFICATION), { message: "« qualifié » vaut : confiance au moins égale au seuil", path: ["qualifie"] })
+  .refine((c) => c.qualifie === (!c.plafonnee && c.valeur >= c.seuil), { message: "« qualifié » vaut : confiance au moins égale au seuil", path: ["qualifie"] })
   .refine((c) => !c.plafonnee || (c.valeur <= 50 && !c.qualifie), { message: "Un critère contraire plafonne la confiance à 50 % et rend non qualifié", path: ["plafonnee"] })
   .refine((c) => c.plafonnee === c.criteres.some((x) => x.statut === "contraire"), { message: "« plafonnée » vaut : au moins un critère contraire", path: ["plafonnee"] });
 export type ConfianceQualification = z.infer<typeof ConfianceQualification>;
@@ -655,12 +696,12 @@ export const CriteresManquants = z
     prospectId: IdNatif,
     confiance: z.number().int().min(0).max(100),
     qualifie: z.boolean(),
-    seuil: z.literal(SEUIL_QUALIFICATION),
+    seuil: z.number().int().min(SEUIL_QUALIFICATION_MIN).max(SEUIL_QUALIFICATION_MAX),
     manquants: z
       .array(
         z
           .object({
-            code: CodeCritereQualification,
+            code: CodeCritere,
             libelle: z.string().min(1).max(200),
             poids: z.number().int().min(0).max(100),
             /** Outils de la passerelle qui peuvent le vérifier (vide si la preuve vient d'un humain ou d'un import). */
@@ -670,8 +711,8 @@ export const CriteresManquants = z
           })
           .strict(),
       )
-      .max(7),
-    contraires: z.array(CodeCritereQualification).max(7),
+      .max(CRITERES_CONFIANCE_MAX),
+    contraires: z.array(CodeCritere).max(CRITERES_CONFIANCE_MAX),
   })
   .strict();
 export type CriteresManquants = z.infer<typeof CriteresManquants>;
@@ -687,6 +728,140 @@ export const PoidsScore = z
   })
   .strict();
 export type PoidsScore = z.infer<typeof PoidsScore>;
+
+/* ------------------------------------------------------------------ */
+/* Réglages des leads : critères de confiance, seuil, poids du score   */
+/* ------------------------------------------------------------------ */
+
+const Poids0a100 = z.number().int().min(0).max(100);
+const sansDoublon = <T extends { code: string }>(l: readonly T[]) => new Set(l.map((x) => x.code)).size === l.length;
+
+/** Critère codé tel que le client le règle : actif ou non, et son poids. */
+export const ReglageCritere = z.object({ code: CodeCritereQualification, actif: z.boolean(), poids: Poids0a100 }).strict();
+export type ReglageCritere = z.infer<typeof ReglageCritere>;
+
+/** Critère ajouté par le client : il ne se vérifie qu'à la main, dans la fiche d'un lead. */
+export const CriterePersonnalise = z
+  .object({ code: CodeCriterePersonnalise, libelle: z.string().trim().min(1).max(120), poids: Poids0a100, description: z.string().trim().max(300) })
+  .strict();
+export type CriterePersonnalise = z.infer<typeof CriterePersonnalise>;
+
+/** Corps de `reglages-leads.enregistrer` : les douze critères codés, le seuil et les critères personnalisés. */
+export const EnregistrerReglagesLeads = z
+  .object({
+    companyId: IdNatif,
+    criteres: z.array(ReglageCritere).length(CodeCritereQualification.options.length),
+    seuil: z.number().int().min(SEUIL_QUALIFICATION_MIN).max(SEUIL_QUALIFICATION_MAX),
+    personnalises: z.array(CriterePersonnalise).max(CRITERES_PERSONNALISES_MAX),
+  })
+  .strict()
+  .refine((r) => sansDoublon(r.criteres), { message: "Chaque critère n'apparaît qu'une fois", path: ["criteres"] })
+  .refine((r) => sansDoublon(r.personnalises), { message: "Deux critères personnalisés ont le même code", path: ["personnalises"] })
+  .refine((r) => r.criteres.some((c) => c.actif && c.poids > 0 && c.code !== "taille_connue") || r.personnalises.some((c) => c.poids > 0), {
+    message: "Au moins un critère qui vaut pour tous les leads (autre que « Taille connue ») doit rester actif avec un poids non nul",
+    path: ["criteres"],
+  });
+export type EnregistrerReglagesLeads = z.infer<typeof EnregistrerReglagesLeads>;
+
+/** Réponse de `reglages-leads.lire` : réglages en vigueur (version 0 : réglages par défaut, jamais enregistrés). */
+export const ReglagesLeads = z
+  .object({
+    companyId: IdNatif,
+    version: z.number().int().min(0),
+    criteres: z.array(ReglageCritere.extend({ libelle: z.string().min(1).max(200) })).length(CodeCritereQualification.options.length),
+    seuil: z.number().int().min(SEUIL_QUALIFICATION_MIN).max(SEUIL_QUALIFICATION_MAX),
+    personnalises: z.array(CriterePersonnalise).max(CRITERES_PERSONNALISES_MAX),
+    decidePar: z.string().nullable(),
+    decideLe: Horodatage.nullable(),
+  })
+  .strict();
+export type ReglagesLeads = z.infer<typeof ReglagesLeads>;
+
+/** Critères du score expliqué (codes calculés par `services-prospection.ts`), dans l'ordre d'affichage. */
+export const CRITERES_SCORE = [
+  { code: "source_registre_officiel", libelle: "Source : registre officiel (BCE, FSMA)" },
+  { code: "activite_nace_connue", libelle: "Activité NACE connue" },
+  { code: "courriel_impersonnel", libelle: "Adresse électronique impersonnelle" },
+  { code: "telephone_present", libelle: "Téléphone publié" },
+  { code: "site_present", libelle: "Site web publié" },
+  { code: "origine_demande_personne", libelle: "Origine consentie : demande de devis ou de rendez-vous, ou client existant" },
+  { code: "contact_direct", libelle: "Contact direct : rendez-vous, visite au bureau ou client existant" },
+  { code: "consentement_actif", libelle: "Consentement actif pour au moins un canal" },
+  { code: "produit_demande", libelle: "Produit demandé connu" },
+  { code: "zone_desservie", libelle: "Zone desservie par un bureau" },
+] as const;
+export const CodeCritereScore = z.enum(CRITERES_SCORE.map((c) => c.code) as [(typeof CRITERES_SCORE)[number]["code"], ...(typeof CRITERES_SCORE)[number]["code"][]]);
+export type CodeCritereScore = z.infer<typeof CodeCritereScore>;
+
+/** Corps de `reglages-score.enregistrer` : poids de 0 à 100 par critère du score (un critère absent ne compte pas). */
+export const EnregistrerPoidsScore = z
+  .object({ companyId: IdNatif, poids: z.partialRecord(CodeCritereScore, Poids0a100) })
+  .strict()
+  .refine((r) => Object.keys(r.poids).length > 0, { message: "Au moins un poids", path: ["poids"] });
+export type EnregistrerPoidsScore = z.infer<typeof EnregistrerPoidsScore>;
+
+/** Réponse de `reglages-score.lire` : version courante (null tant qu'aucun poids n'est enregistré). */
+export const ReglagesScore = z
+  .object({
+    companyId: IdNatif,
+    version: z.number().int().positive().nullable(),
+    poids: z.record(z.string(), z.number().int().min(-100).max(100)),
+    criteres: z.array(z.object({ code: CodeCritereScore, libelle: z.string() }).strict()),
+    decidePar: z.string().nullable(),
+    decideLe: Horodatage.nullable(),
+  })
+  .strict();
+export type ReglagesScore = z.infer<typeof ReglagesScore>;
+
+/** Corps de `prospects.critere.corriger` : décision humaine sur UN critère d'UN lead. */
+export const CorrigerCritereEntree = z
+  .object({ companyId: IdNatif, statut: StatutCritereQualification, justification: z.string().trim().min(3).max(500) })
+  .strict();
+export type CorrigerCritereEntree = z.infer<typeof CorrigerCritereEntree>;
+
+/** Correction humaine enregistrée : elle remplace le statut calculé de ce critère pour ce lead. */
+export const CorrectionCritere = z
+  .object({
+    prospectId: IdNatif,
+    code: CodeCritere,
+    statut: StatutCritereQualification,
+    justification: z.string().min(3).max(500),
+    auteur: z.string().min(1).max(200),
+    date: Horodatage,
+  })
+  .strict();
+export type CorrectionCritere = z.infer<typeof CorrectionCritere>;
+
+/** Source d'une évaluation par l'agent : adresse web ou connaissance interne (`connaissance://…`). */
+const SourceEvaluation = z.string().trim().min(8).max(300).regex(/^(https?|connaissance):\/\/\S+$/u, "Source : URL http(s) ou adresse connaissance://");
+
+/** Corps de `prospects.critere.evaluer` : évaluation par l'agent d'UN critère personnalisé d'UN lead. */
+export const EvaluerCritereEntree = z
+  .object({
+    companyId: IdNatif,
+    statut: StatutCritereQualification,
+    justification: z.string().trim().min(3).max(500),
+    sources: z.array(SourceEvaluation).max(10),
+  })
+  .strict()
+  .superRefine((e, ctx) => {
+    if (e.statut !== "non_verifie" && e.sources.length === 0) ctx.addIssue({ code: "custom", path: ["sources"], message: "Un critère vérifié ou contraire exige au moins une source." });
+  });
+export type EvaluerCritereEntree = z.infer<typeof EvaluerCritereEntree>;
+
+/** Évaluation enregistrée de l'agent : elle passe après la décision humaine, avant « non vérifié ». */
+export const EvaluationCritere = z
+  .object({
+    prospectId: IdNatif,
+    code: CodeCritere,
+    statut: StatutCritereQualification,
+    justification: z.string().min(3).max(500),
+    sources: z.array(z.string().max(300)).max(10),
+    agent: z.string().min(1).max(200),
+    date: Horodatage,
+  })
+  .strict();
+export type EvaluationCritere = z.infer<typeof EvaluationCritere>;
 
 /* ------------------------------------------------------------------ */
 /* Base légale par prospect et par canal                               */
@@ -1455,9 +1630,9 @@ export const CompteRenduProspect = z
     genereLe: Horodatage,
     pourquoi: z
       .object({
-        verifies: z.array(z.object({ code: CodeCritereQualification, libelle: z.string(), detail: z.string(), source: z.string(), service: ServiceProspection.nullable(), date: Horodatage.nullable() }).strict()).max(7),
-        nonVerifies: z.array(z.object({ code: CodeCritereQualification, libelle: z.string(), detail: z.string() }).strict()).max(7),
-        contraires: z.array(z.object({ code: CodeCritereQualification, libelle: z.string(), detail: z.string() }).strict()).max(7),
+        verifies: z.array(z.object({ code: CodeCritere, libelle: z.string(), detail: z.string(), source: z.string(), service: ServiceProspection.nullable(), date: Horodatage.nullable() }).strict()).max(CRITERES_CONFIANCE_MAX),
+        nonVerifies: z.array(z.object({ code: CodeCritere, libelle: z.string(), detail: z.string() }).strict()).max(CRITERES_CONFIANCE_MAX),
+        contraires: z.array(z.object({ code: CodeCritere, libelle: z.string(), detail: z.string() }).strict()).max(CRITERES_CONFIANCE_MAX),
       })
       .strict(),
     /** Confiance de qualification (sources vérifiées), distincte du score. */

@@ -1,6 +1,6 @@
 // Outil `bnb_comptes` du service `bnb` en mode réel (lot P4) : MÊME nom, MÊME schéma d'entrée et MÊME forme de réponse que le
 // simulateur (src/demo/prospection/bnb.ts) : `references` = jusqu'à trois exercices, du plus récent au plus ancien, avec ReferenceNumber,
-// ExerciseDates, DepositDate, ModelType, Language, Currency et AccountingData.Rubrics (9087 = effectif moyen en ETP, 20/58 = total du bilan).
+// ExerciseDates, DepositDate, ModelType, Language, Currency et AccountingData.Rubrics (9087 = effectif moyen en ETP, 20/58 = total du bilan, et pour les critères « courtier » 10/15 = fonds propres, 22 = terrains et constructions, 9904 = résultat de l'exercice ; ces trois codes sont à confirmer sur la documentation BNB).
 //
 // Différences voulues :
 //   - pas de refus de numéro « non fictif » : les vrais numéros sont l'objet du service ; un chiffre de contrôle (modulo 97) faux est refusé
@@ -30,6 +30,10 @@ export const DATE_DEBUT_JSON = "2022-04-04";
 export const NB_EXERCICES = 3;
 const RUBRIQUE_EFFECTIF = "9087";
 const RUBRIQUE_TOTAL_BILAN = "20/58";
+// Lot 2 (critères de qualification « courtier ») : codes de rubriques du schéma comptable belge, À CONFIRMER sur la documentation BNB.
+const RUBRIQUE_FONDS_PROPRES = "10/15"; // capitaux propres
+const RUBRIQUE_TERRAINS = "22"; // terrains et constructions (immobilisations corporelles)
+const RUBRIQUE_RESULTAT = "9904"; // bénéfice (perte) de l'exercice, négatif = perte
 
 /** Un dépôt par exercice (le plus récemment déposé : une rectification remplace l'initial), trois exercices au plus, du plus récent au plus ancien. */
 export function exercicesRetenus(refs: readonly ReferenceBnb[]): ReferenceBnb[] {
@@ -101,6 +105,9 @@ export function outilComptesReel(client: ClientBnb, maintenant: () => Date = () 
         }
         const etp = valeur(rubriques, RUBRIQUE_EFFECTIF);
         const total = valeur(rubriques, RUBRIQUE_TOTAL_BILAN);
+        const fondsPropres = valeur(rubriques, RUBRIQUE_FONDS_PROPRES);
+        const terrains = valeur(rubriques, RUBRIQUE_TERRAINS);
+        const resultat = valeur(rubriques, RUBRIQUE_RESULTAT);
         if (!dernierVu) { dernierEtp = etp; dernierVu = true; }
         references.push({
           ...entete,
@@ -109,6 +116,9 @@ export function outilComptesReel(client: ClientBnb, maintenant: () => Date = () 
             Rubrics: [
               { Code: RUBRIQUE_EFFECTIF, Libelle: "Effectif moyen du personnel en équivalents temps plein", Period: "N", Value: etp },
               { Code: RUBRIQUE_TOTAL_BILAN, Libelle: "Total de l'actif (total du bilan)", Period: "N", Value: total },
+              { Code: RUBRIQUE_FONDS_PROPRES, Libelle: "Capitaux propres (fonds propres)", Period: "N", Value: fondsPropres },
+              { Code: RUBRIQUE_TERRAINS, Libelle: "Terrains et constructions", Period: "N", Value: terrains },
+              { Code: RUBRIQUE_RESULTAT, Libelle: "Bénéfice (perte) de l'exercice", Period: "N", Value: resultat },
             ],
           },
           ...(etp === null || total === null ? { note: "Rubrique absente de ce dépôt (selon le modèle de schéma, l'effectif ou le total peuvent ne pas figurer) : valeur nulle, rien de deviné." } : {}),

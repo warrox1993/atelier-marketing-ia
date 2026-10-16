@@ -126,6 +126,16 @@ tout appel qui demanderait une permission est refusé
 explicite parce qu'un run `-p` sans récupération des drapeaux de fonctionnalités (télémétrie
 coupée) démarre sinon en mode `auto` depuis Claude Code 2.1.285 (même page).
 
+Permissions bornées (revue de sécurité du 16/10/2026) : en `dontAsk`, une règle sans chemin
+autorise tous les chemins. Le registre garde donc `Read`, `Grep` et `Glob` pour décrire les
+outils d'un rôle, mais le générateur les retire de `--allowedTools` (la lecture dans le dossier de
+travail reste permise sans règle) et remplace `Write` et `Edit` par `Edit(./**)` (seule forme qui autorise l'écriture : `Write(./**)` n'autorise rien, mesuré le 16/10/2026).
+Le `settings.json` dédié de chaque agent (créé par `appliquer`) refuse en plus la lecture et
+l'écriture de `~/.ssh`, `~/.config`, `~/.claude`, des `.env` et `*.key`, des secrets, bases et
+clés de l'instance et de `config/` (chemins absolus calculés à la génération, jamais suivis par
+git), coupe la mémoire automatique (`autoMemoryEnabled: false`) et n'autorise la lecture que des
+`tool-results` de l'agent sous sa propre configuration.
+
 `Bash(curl *)` sert aux échanges avec Paperclip (API native et routes du moteur de
 l'atelier). Les mutations dans Paperclip sont autorisées ou refusées par le serveur
 (un agent ne peut ni approuver, ni modifier une politique de revue grâce à la garde P1 du

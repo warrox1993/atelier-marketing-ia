@@ -6,7 +6,7 @@
 import { PLUGIN_ID } from "../contrats/identifiants.js";
 import { appelHote } from "./hote.js";
 
-export function appelRoute<T>(methode: "GET" | "POST", chemin: string, corps?: unknown): Promise<T> {
+export function appelRoute<T>(methode: "GET" | "POST" | "PATCH" | "DELETE", chemin: string, corps?: unknown): Promise<T> {
   return appelHote<T>(methode, `/plugins/${PLUGIN_ID}/api${chemin}`, corps);
 }
 

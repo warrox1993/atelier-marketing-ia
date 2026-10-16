@@ -86,6 +86,19 @@ interface Attente {
 }
 
 /** Script du sous-processus par défaut, à côté du module courant (`dist/` une fois empaqueté). */
+/**
+ * Variables d'environnement transmises au sous-processus de vectorisation : le strict nécessaire au
+ * démarrage de Node et d'ONNX Runtime. Les secrets du processus parent (clés d'API, jetons, mots de
+ * passe de base) ne lui sont jamais transmis.
+ */
+const VARIABLES_ENFANT = ["PATH", "HOME", "LANG", "LC_ALL", "LC_CTYPE", "TMPDIR", "TZ"] as const;
+
+export function environnementEnfant(source: NodeJS.ProcessEnv = process.env): NodeJS.ProcessEnv {
+  const env: NodeJS.ProcessEnv = {};
+  for (const nom of VARIABLES_ENFANT) if (source[nom] !== undefined) env[nom] = source[nom];
+  return env;
+}
+
 function scriptEnfantParDefaut(): string {
   const courant = import.meta.url;
   const dansSource = courant.includes("/src/serveur/connaissances/");
@@ -145,6 +158,7 @@ class VectoriseurLocal implements Vectoriseur {
       await (this.options.verifier ?? verifierModele)(this.options.dossierModeles);
       const enfant = fork(this.options.scriptEnfant ?? scriptEnfantParDefaut(), [], {
         execArgv: [],
+        env: environnementEnfant(),
         serialization: "json",
         stdio: ["ignore", "inherit", "inherit", "ipc"],
       });
@@ -283,12 +297,49 @@ export interface OptionsVoyage {
 /** Point d'accès Europe de Voyage AI (MongoDB Atlas, `docs/rag-conception.md` §3.1) ; chemin à confirmer en R11. */
 export const URL_VOYAGE_EUROPE = "https://eu.ai.mongodb.com/v1";
 
+/**
+ * URL de base admise : `https:` seulement, la clé d'API partant dans l'en-tête `Authorization` ;
+ * `http:` toléré pour la seule machine locale (faux serveur de test).
+ */
+function verifierUrlBase(brute: string): string {
+  let url: URL;
+  try {
+    url = new URL(brute);
+  } catch {
+    throw new Error("Voyage AI : URL de base invalide (https:// exigé).");
+  }
+  const locale = url.hostname === "localhost" || url.hostname === "127.0.0.1" || url.hostname === "[::1]";
+  if (url.protocol !== "https:" && !(url.protocol === "http:" && locale)) {
+    throw new Error("Voyage AI : URL de base refusée, https:// exigé (la clé d'API ne part jamais en clair).");
+  }
+  return brute.replace(/\/+$/u, "");
+}
+
+/** Lit le corps d'une réponse sans dépasser `max` octets (une réponse démesurée est refusée en cours de lecture). */
+async function lireCorpsBorne(reponse: Response, max: number): Promise<string> {
+  if (!reponse.body) return "";
+  const lecteur = reponse.body.getReader();
+  const morceaux: Uint8Array[] = [];
+  let total = 0;
+  for (;;) {
+    const { done, value } = await lecteur.read();
+    if (done) break;
+    total += value.byteLength;
+    if (total > max) {
+      await lecteur.cancel().catch(() => undefined);
+      throw new Error(`Voyage AI : réponse trop volumineuse (plus de ${max} octets).`);
+    }
+    morceaux.push(value);
+  }
+  return Buffer.concat(morceaux).toString("utf8");
+}
+
 export function creerVectoriseurVoyage(options: OptionsVoyage): Vectoriseur {
   if (!options.autorise) {
     throw new Error("Voyage AI non autorisé : le client doit l'avoir accepté par écrit (drapeau de configuration).");
   }
   const dimension = options.dimension ?? 1024;
-  const urlBase = (options.urlBase ?? URL_VOYAGE_EUROPE).replace(/\/+$/u, "");
+  const urlBase = verifierUrlBase(options.urlBase ?? URL_VOYAGE_EUROPE);
   const appeler = options.fetch ?? fetch;
   return {
     type: "voyage",
@@ -307,16 +358,36 @@ export function creerVectoriseurVoyage(options: OptionsVoyage): Vectoriseur {
           signal: AbortSignal.timeout(options.delaiMs ?? 60_000),
         });
         if (!reponse.ok) {
-          // Le corps d'erreur est tronqué et la clé n'y figure jamais : l'en-tête n'est pas relu.
-          const detail = (await reponse.text().catch(() => "")).slice(0, 200);
-          throw new Error(`Voyage AI : HTTP ${reponse.status} ${detail}`.trim());
+          // Le corps d'erreur n'est pas repris : il peut citer le texte du client (qui finirait dans les
+          // journaux). La clé n'y figure jamais : l'en-tête n'est pas relu.
+          await reponse.body?.cancel().catch(() => undefined);
+          throw new Error(`Voyage AI : HTTP ${reponse.status}`);
         }
-        const corps = (await reponse.json()) as { data?: { embedding: number[]; index: number }[] };
-        const donnees = [...(corps.data ?? [])].sort((a, b) => a.index - b.index);
-        if (donnees.length !== lot.length) throw new Error("Voyage AI : nombre de vecteurs différent du nombre de textes.");
-        for (const d of donnees) {
-          if (d.embedding.length !== dimension) throw new Error(`Voyage AI : dimension ${d.embedding.length}, ${dimension} attendue.`);
-          sortie.push(Float32Array.from(d.embedding));
+        // Environ 20 caractères par composante en JSON : marge large, mais une réponse démesurée est coupée.
+        const max = lot.length * dimension * 32 + 65_536;
+        let corps: { data?: unknown };
+        try {
+          corps = JSON.parse(await lireCorpsBorne(reponse, max)) as { data?: unknown };
+        } catch (e) {
+          if (e instanceof Error && e.message.startsWith("Voyage AI")) throw e;
+          throw new Error("Voyage AI : réponse illisible (JSON attendu).");
+        }
+        const brutes = Array.isArray(corps?.data) ? (corps.data as Array<{ embedding?: unknown; index?: unknown }>) : [];
+        if (brutes.length !== lot.length) throw new Error("Voyage AI : nombre de vecteurs différent du nombre de textes.");
+        // Chaque index de 0 à n−1 exactement une fois : un doublon remettrait un vecteur au mauvais passage.
+        const parIndex: Array<unknown[] | undefined> = new Array(lot.length);
+        for (const d of brutes) {
+          const index = d?.index;
+          if (typeof index !== "number" || !Number.isInteger(index) || index < 0 || index >= lot.length || parIndex[index]) {
+            throw new Error("Voyage AI : index de vecteur manquant, en double ou hors limites.");
+          }
+          if (!Array.isArray(d.embedding)) throw new Error("Voyage AI : vecteur absent.");
+          parIndex[index] = d.embedding;
+        }
+        for (const embedding of parIndex as unknown[][]) {
+          if (embedding.length !== dimension) throw new Error(`Voyage AI : dimension ${embedding.length}, ${dimension} attendue.`);
+          if (!embedding.every((x) => typeof x === "number" && Number.isFinite(x))) throw new Error("Voyage AI : composante non numérique.");
+          sortie.push(Float32Array.from(embedding as number[]));
         }
       }
       return sortie;

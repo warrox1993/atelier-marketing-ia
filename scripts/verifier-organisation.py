@@ -603,10 +603,13 @@ def controler_connexions():
             if OUTIL_SERVEUR_CONNEXIONS not in attendu or OUTIL_SERVEUR_CONNEXIONS in autre:
                 erreur(f"agent {s} : {OUTIL_SERVEUR_CONNEXIONS} doit être en {'mutation' if ecrit else 'recherche'} seulement")
             corps = (ORGA / "agents" / s / "AGENTS.md").read_text(encoding="utf-8")
+            # La fiche des routes (bloc généré, recopié des contrats) cite toujours /donnees-connexion : la consigne de dépôt
+            # doit figurer dans le texte du rôle, hors de ce bloc, sinon le contrôle ne verrait jamais son absence.
+            corps_role = re.sub(r"(?ms)^## Corps des requêtes de tes routes \(fiche routes-agents\)\n.*?(?=^## (?!#)|\Z)", "", corps)
             for motif, libelle in CONSIGNES_CONNEXION:
                 if motif == "/donnees-connexion" and set(c) <= SERVICES_PROSPECTION:
                     motif, libelle = "/prospects`", "dépôt de chaque réponse de prospection (tache.prospects.deposer)"
-                if motif not in corps:
+                if motif not in (corps_role if motif.startswith("/") else corps):
                     erreur(f"agent {s} : consigne manquante dans AGENTS.md : {libelle}")
             bloques = a.get("outilsBloques") or {}
             for service, outils in bloques.items():

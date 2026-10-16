@@ -166,9 +166,11 @@ const NOMBRE_EN_LETTRES =
 /**
  * Motifs des chiffres d'offre : montant en euros, pourcentage, franchise ou plafond chiffrés.
  * Quantificateurs tous bornés : le temps reste linéaire quelle que soit l'entrée (ReDoS corrigé).
+ * Notations admises après le nombre : « 150,- € » (usage belge), multiplicateur « k », « M », « mio »,
+ * « mln » (« 150 k€ », « 1,5 M€ ») et devise collée au nombre (« 150EUR »).
  */
 const MOTIFS_CHIFFRE_OFFRE: ReadonlyArray<[RegExp, string]> = [
-  [/€[ \t]?\d[\d \u00a0\u202f.,]{0,30}|\bEUR[ \t]?\d[\d \u00a0\u202f.,]{0,30}|\d(?:[\d \u00a0\u202f.,]{0,30}\d)?[ \t]?(?:€|\bEUR\b|\beuros?\b)/iu, "montant en euros"],
+  [/€[ \t]?\d[\d \u00a0\u202f.,]{0,30}|\bEUR[ \t]?\d[\d \u00a0\u202f.,]{0,30}|\d(?:[\d \u00a0\u202f.,]{0,30}\d)?(?:[.,]-{1,2})?[ \t]?(?:(?:k|m|mio|mln)[ \t]?)?(?:€|EUR\b|euros?\b)/iu, "montant en euros"],
   [new RegExp(`\\b${NOMBRE_EN_LETTRES}(?:[ -](?:et[ -])?${NOMBRE_EN_LETTRES}){0,6}[ \\t]{1,2}(?:euros?|EUR)\\b`, "iu"), "montant en euros"],
   [/\d{1,30}(?:[.,]\d{1,10})?[ \t]?(?:%|pour[ \t]?cent\b|procent\b)/iu, "pourcentage"],
   [new RegExp(`\\b${NOMBRE_EN_LETTRES}(?:[ -]${NOMBRE_EN_LETTRES}){0,4}[ \\t]{1,2}(?:pour[ \\t]?cent|procent)\\b`, "iu"), "pourcentage"],

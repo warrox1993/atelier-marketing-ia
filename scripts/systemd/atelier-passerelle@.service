@@ -1,0 +1,27 @@
+[Unit]
+Description=Passerelle de l'Atelier marketing IA (port %i)
+After=network-online.target
+Wants=network-online.target
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+# %i = port de la passerelle. Réglages existants (chemins de fichiers seulement, pas de secret en clair) :
+EnvironmentFile=%h/Projets/atelier-marketing-ia/instance/passerelles/%i.env
+# Surcharges facultatives propres à ce poste (mode, services réels…), lues si le fichier existe.
+EnvironmentFile=-%h/.config/atelier/passerelle-%i.env
+Environment=PASSERELLE_MODE=demonstration
+Environment=PASSERELLE_PORT=%i
+WorkingDirectory=%h/Projets/atelier-marketing-ia/passerelle
+# Même commande que scripts/passerelles.sh (« exec node dist/src/demarrer.js »), mais au premier plan
+# pour que systemd surveille le processus. Si node vient d'un gestionnaire de versions,
+# ajouter Environment=PATH=… dans passerelle-%i.env.
+ExecStart=/usr/bin/env node dist/src/demarrer.js
+Restart=on-failure
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=atelier-passerelle-%i
+
+[Install]
+WantedBy=default.target

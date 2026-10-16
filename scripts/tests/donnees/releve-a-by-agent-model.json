@@ -1,0 +1,5 @@
+[
+  {"agentId": "aaaaaaaa-0000-4000-8000-000000000001", "agentName": "Agent Alpha", "provider": "anthropic", "biller": "anthropic", "billingType": "subscription_included", "model": "claude-opus-5-5", "costCents": 0, "inputTokens": 1000, "cachedInputTokens": 5000, "outputTokens": 200},
+  {"agentId": "aaaaaaaa-0000-4000-8000-000000000001", "agentName": "Agent Alpha", "provider": "anthropic", "biller": "anthropic", "billingType": "subscription_included", "model": "claude-sonnet-5-5", "costCents": 0, "inputTokens": 300, "cachedInputTokens": 700, "outputTokens": 50},
+  {"agentId": "aaaaaaaa-0000-4000-8000-000000000002", "agentName": "Agent Beta", "provider": "anthropic", "biller": "anthropic", "billingType": "subscription_included", "model": "claude-opus-5-5", "costCents": 0, "inputTokens": 2000, "cachedInputTokens": 10000, "outputTokens": 400}
+]

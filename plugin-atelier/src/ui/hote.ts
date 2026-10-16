@@ -14,7 +14,7 @@ export interface ErreurHote {
   message: string;
 }
 
-export async function appelHote<T>(methode: "GET" | "POST" | "PATCH" | "PUT", chemin: string, corps?: unknown): Promise<T> {
+export async function appelHote<T>(methode: "GET" | "POST" | "PATCH" | "PUT" | "DELETE", chemin: string, corps?: unknown): Promise<T> {
   let reponse: Response;
   try {
     reponse = await fetch(`/api${chemin}`, {

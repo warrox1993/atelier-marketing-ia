@@ -71,7 +71,8 @@ describe("déterminisme", () => {
 
   it("empreinte de référence du jeu (même résultat d'un processus à l'autre)", () => {
     // Valeur figée au premier calcul : ne change que par une modification voulue du jeu, à justifier.
-    expect(empreinte(JSON.stringify(construireJeu()))).toBe("fbacc729e10343455d66ef2e2627866e34abc70b345bafa7be6637a8ce5c66ff");
+    // Modifiée le 16/10/2026 : comptes fictifs enrichis (fonds propres, terrains et constructions, résultat) pour les critères courtier du lot 2.
+    expect(empreinte(JSON.stringify(construireJeu()))).toBe("4401ee3b94410c13f1b305911b758f9b73e3ab40fa4653d948ccbf40b9ebb240");
   });
 
   it("le nom de l'assureur vient de l'environnement et ne change pas les graines", () => {

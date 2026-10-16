@@ -5,41 +5,62 @@
  */
 import { deflateSync } from "node:zlib";
 import JSZip from "jszip";
-import { describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it } from "vitest";
 import { extraireDocument, LIMITES_PAR_DEFAUT, RefusExtraction } from "../src/connaissances/extraction/index.js";
 import { extraireHtml, extraireMarkdown } from "../src/connaissances/extraction/texte.js";
 
 /**
- * Meilleur de 3 mesures : la suite complète tourne en parallèle et une mesure isolée peut être
- * retardée par les autres fichiers ; le minimum reste un plafond fiable du coût réel (un algorithme
- * quadratique dépasse le seuil à chacune des 3 mesures).
+ * Mesure la CROISSANCE du temps, pas le temps lui-même : un seuil en millisecondes dépend de la charge
+ * du poste (il a échoué à 563 ms puis 2 055 ms quand d'autres suites tournaient). On chronomètre
+ * l'analyse d'une entrée de taille `petit`, puis d'une entrée 4 fois plus grande, et on rend le
+ * rapport des deux (minimum de plusieurs mesures, après un passage de chauffe). La charge ralentit
+ * les deux mesures dans la même proportion et le rapport reste stable : environ 4 pour un temps
+ * linéaire, environ 16 pour un temps quadratique (l'ancien motif ReDoS).
  */
-function duree(f: () => unknown): number {
+const FACTEUR = 4;
+const RAPPORT_MAX = 8;
+
+function chronometrer(f: (entree: string) => unknown, entree: string): number {
   let meilleure = Number.POSITIVE_INFINITY;
-  for (let i = 0; i < 3; i++) {
+  for (let i = 0; i < 7; i++) {
     const t0 = performance.now();
-    f();
+    f(entree);
     meilleure = Math.min(meilleure, performance.now() - t0);
   }
   return meilleure;
 }
 
+function rapportCroissance(motif: (n: number) => string, f: (entree: string) => unknown, petit = 100_000): number {
+  f(motif(petit)); // chauffe : compilation JIT avant les mesures
+  const petite = motif(petit);
+  const grande = motif(petit * FACTEUR);
+  // Plus petit rapport de 3 essais indépendants : une pause du ramasse-miettes ou de l'ordonnanceur
+  // peut gonfler un essai, jamais le faire passer sous le vrai rapport (~16 si le temps est quadratique,
+  // dont chaque essai dépasse le seuil).
+  let meilleur = Number.POSITIVE_INFINITY;
+  for (let essai = 0; essai < 3 && meilleur >= RAPPORT_MAX; essai++) {
+    const tPetit = chronometrer(f, petite);
+    const tGrand = chronometrer(f, grande);
+    meilleur = Math.min(meilleur, tGrand / Math.max(tPetit, 0.05));
+  }
+  return meilleur;
+}
+
 describe("G3 : HTML et Markdown à temps linéaire", () => {
-  const n = 200_000;
-  it("balises jamais fermées « <a<a<a… » : moins de 500 ms", () => {
-    expect(duree(() => extraireHtml("<a".repeat(n)))).toBeLessThan(500);
+  it("balises jamais fermées « <a<a<a… » : croissance linéaire", () => {
+    expect(rapportCroissance((n) => "<a".repeat(n), extraireHtml)).toBeLessThan(RAPPORT_MAX);
   });
 
-  it("commentaires jamais fermés « <!--<!--… » : moins de 500 ms", () => {
-    expect(duree(() => extraireHtml("<!--".repeat(n)))).toBeLessThan(500);
-    expect(duree(() => extraireMarkdown("<!--".repeat(n)))).toBeLessThan(500);
+  it("commentaires jamais fermés « <!--<!--… » : croissance linéaire", () => {
+    expect(rapportCroissance((n) => "<!--".repeat(n), extraireHtml)).toBeLessThan(RAPPORT_MAX);
+    expect(rapportCroissance((n) => "<!--".repeat(n), extraireMarkdown)).toBeLessThan(RAPPORT_MAX);
   });
 
-  it("liens Markdown ouverts « [[[[… » et titres « # a####…b » : moins de 500 ms", () => {
-    expect(duree(() => extraireMarkdown("[".repeat(n)))).toBeLessThan(500);
-    expect(duree(() => extraireMarkdown(`[a](${"(".repeat(n)}`))).toBeLessThan(500);
-    expect(duree(() => extraireMarkdown(`# a${"#".repeat(n)}b`))).toBeLessThan(500);
-    expect(duree(() => extraireHtml(`&${"a".repeat(n)}`))).toBeLessThan(500);
+  it("liens Markdown ouverts « [[[[… » et titres « # a####…b » : croissance linéaire", () => {
+    expect(rapportCroissance((n) => "[".repeat(n), extraireMarkdown, 20_000)).toBeLessThan(RAPPORT_MAX);
+    expect(rapportCroissance((n) => `[a](${"(".repeat(n)}`, extraireMarkdown)).toBeLessThan(RAPPORT_MAX);
+    expect(rapportCroissance((n) => `# a${"#".repeat(n)}b`, extraireMarkdown)).toBeLessThan(RAPPORT_MAX);
+    expect(rapportCroissance((n) => `&${"a".repeat(n)}`, extraireHtml)).toBeLessThan(RAPPORT_MAX);
   });
 
   it("le comportement utile est conservé", () => {
@@ -96,6 +117,12 @@ function pdfCompresse(contenu: Buffer): Uint8Array {
 }
 
 describe("G2 : extraction isolée, délai effectif, mémoire et décompression bornées", () => {
+  // Chauffe : le premier appel du processus empaquette le fil isolé (esbuild) ; ce coût unique,
+  // sensible à la charge du poste, ne doit pas entrer dans les durées mesurées ci-dessous.
+  beforeAll(async () => {
+    await extraireDocument({ nom: "chauffe.md", contenu: new TextEncoder().encode("Chauffe du fil isolé.") });
+  }, 60_000);
+
   const markdownLourd = new TextEncoder().encode(`${"Une phrase de test assez ordinaire pour remplir. ".repeat(20)}\n\n`.repeat(4000));
 
   it("le délai interrompt vraiment l'extraction, sans bloquer le fil principal", async () => {
@@ -106,7 +133,8 @@ describe("G2 : extraction isolée, délai effectif, mémoire et décompression b
     const ecoule = performance.now() - t0;
     clearInterval(h);
     expect(e.code).toBe("delai_depasse");
-    expect(ecoule).toBeLessThan(1_000);
+    // Délai de 100 ms : borne large (démarrage du fil sous charge), le refus doit venir du minuteur.
+    expect(ecoule).toBeLessThan(3_000);
     expect(ticks).toBeGreaterThan(0);
   });
 
@@ -126,15 +154,16 @@ describe("G2 : extraction isolée, délai effectif, mémoire et décompression b
     expect((await refus(extraireDocument({ nom: "gros.docx", contenu: docx }))).code).toBe("archive_trop_volumineuse");
   });
 
-  it("PDF piégé (100 Mo de texte compressés) : refusé avant pdfjs, en moins de 2 s", async () => {
+  it("PDF piégé (100 Mo de texte compressés) : refusé avant pdfjs, en quelques secondes au plus", async () => {
     const contenu = Buffer.concat([Buffer.from("BT /F1 12 Tf 72 720 Td ("), Buffer.alloc(100 * 1024 * 1024, 0x61), Buffer.from(") Tj ET")]);
     const pdf = pdfCompresse(contenu);
     expect(pdf.byteLength).toBeLessThan(500_000);
     const t0 = performance.now();
     const e = await refus(extraireDocument({ nom: "bombe.pdf", contenu: pdf }));
     expect(e.code).toBe("archive_trop_volumineuse");
-    expect(performance.now() - t0).toBeLessThan(2_000);
-  });
+    // 18,5 s (ou plantage du processus) avant le pré-contrôle ; marge large pour la charge du poste.
+    expect(performance.now() - t0).toBeLessThan(5_000);
+  }, 30_000);
 
   it("PDF : plafond de texte par page", async () => {
     const pdf = pdfCompresse(Buffer.from("BT /F1 12 Tf 72 720 Td (Une ligne de texte ordinaire et lisible.) Tj ET"));

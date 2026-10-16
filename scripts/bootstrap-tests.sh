@@ -976,5 +976,40 @@ PY
   fi
 fi
 
+# Permissions des agents claude_local (revue de sécurité du 16/10/2026) : jamais de règle sans
+# chemin en mode dontAsk, refus des secrets, mémoire automatique coupée.
+if "${PY[@]}" - "${RACINE}" > "${TRAVAIL}/permissions.txt" 2>&1 <<'PY'
+import importlib.util, json, re, sys
+from pathlib import Path
+racine = Path(sys.argv[1])
+spec = importlib.util.spec_from_file_location("bootstrap", racine / "scripts" / "bootstrap-organisation.py")
+mod = importlib.util.module_from_spec(spec); spec.loader.exec_module(mod)
+reg = json.loads((racine / "organisation/registre/agents.json").read_text(encoding="utf-8"))
+nus = {"Read", "Grep", "Glob", "Write", "Edit", "Write(./**)"}
+for agent in reg["agents"]:
+    if agent.get("deterministe"):
+        continue
+    args = mod.arguments_outils(agent, reg["adaptateur"])
+    autorises = args[args.index("--allowedTools") + 1:args.index("--disallowedTools")]
+    nus_presents = [a for a in autorises if a in nus]
+    if nus_presents:
+        raise SystemExit(f"{agent['slug']} : règle sans chemin dans allowedTools : {nus_presents}")
+reglages = mod.reglages_agent(reg, racine / "instance" / "claude-config" / "essai")
+if reglages.get("autoMemoryEnabled") is not False:
+    raise SystemExit("autoMemoryEnabled doit valoir false")
+refus = reglages["permissions"]["deny"]
+for motif in ("Read(~/.ssh/**)", "Read(~/.claude/**)", "Read(~/.config/**)", "Edit(~/.claude.json)", "Read(**/*.env)"):
+    if motif not in refus:
+        raise SystemExit(f"refus manquant : {motif}")
+if not any(r.startswith("Read(//") and r.endswith("/instances/*/secrets/**)") for r in refus):
+    raise SystemExit("refus des secrets d'instance manquant")
+print("aucune règle nue ; refus et mémoire automatique coupée présents")
+PY
+then
+  ok "permissions des agents : $(tail -1 "${TRAVAIL}/permissions.txt")"
+else
+  ko "permissions des agents"; cat "${TRAVAIL}/permissions.txt"
+fi
+
 echo "Bilan : ${reussis} réussi(s), ${echecs} échec(s)."
 [[ "${echecs}" -eq 0 ]]

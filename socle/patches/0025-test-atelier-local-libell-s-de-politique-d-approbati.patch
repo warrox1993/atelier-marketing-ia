@@ -1,0 +1,41 @@
+From fefdcb841073ead4cbcd812971fdcda144972ebb Mon Sep 17 00:00:00 2001
+From: Jean-Baptiste Dhondt <114347858+warrox1993@users.noreply.github.com>
+Date: Fri, 16 Oct 2026 12:40:22 +0200
+Subject: [PATCH] =?UTF-8?q?test(atelier,=20local):=20libell=C3=A9s=20de=20?=
+ =?UTF-8?q?politique=20d'approbation=20attendus=20en=20fran=C3=A7ais=20apr?=
+ =?UTF-8?q?=C3=A8s=20la=20traduction?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01DP85vPq2MHkZg8VNtRvCzB
+---
+ ui/src/components/IssueProperties.test.tsx | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/ui/src/components/IssueProperties.test.tsx b/ui/src/components/IssueProperties.test.tsx
+index d1f2638e3..cd0c00db4 100644
+--- a/ui/src/components/IssueProperties.test.tsx
++++ b/ui/src/components/IssueProperties.test.tsx
+@@ -3442,7 +3442,7 @@ describe("IssueProperties", () => {
+     await flush();
+ 
+     const row = findApprovalsRow();
+-    expect(row?.textContent).toContain("Human only");
++    expect(row?.textContent).toContain("Humain uniquement");
+     // Read-only: the row is a chip, not a picker — nothing here can PATCH.
+     expect(row?.querySelector("button")).toBeNull();
+     expect(onUpdate).not.toHaveBeenCalled();
+@@ -3459,7 +3459,7 @@ describe("IssueProperties", () => {
+     });
+     await flush();
+ 
+-    expect(findApprovalsRow()?.textContent).toContain("Anyone else");
++    expect(findApprovalsRow()?.textContent).toContain("Toute autre personne");
+ 
+     act(() => root.unmount());
+   });
+-- 
+2.53.0
+

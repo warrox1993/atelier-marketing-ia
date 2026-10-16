@@ -88,6 +88,11 @@ MARQUEUR_CONSIGNES_COMMUNES = (
     "<!-- Consignes communes : générées depuis organisation/registre/consignes-communes.md "
     "par scripts/bootstrap-organisation.py generer ; ne pas modifier sous cette ligne. -->"
 )
+# Fiche des corps de requête des routes ouvertes aux agents, GÉNÉRÉE par
+# plugin-atelier/scripts/fiche-routes-agents.ts. « generer » en recopie, à la fin de l'AGENTS.md de
+# chaque agent, seulement les sections des routes que son texte ou ses compétences citent.
+FICHE_ROUTES_AGENTS = ORGA / "registre" / "routes-agents.md"
+TITRE_FICHE_ROUTES = "## Corps des requêtes de tes routes (fiche routes-agents)"
 DOSSIER_POLITIQUES = ORGA / "politiques"
 # Dossier des données locales du bootstrap (espaces d'agents, configurations Claude dédiées,
 # état, verrou). ATELIER_DONNEES_LOCALES permet d'isoler une instance d'essai : sans elle,
@@ -209,9 +214,26 @@ def avec_frontmatter(entete: dict, corps: str) -> str:
 # Génération (registre -> paquet natif)
 # ---------------------------------------------------------------------------
 
+# Outils de lecture sans chemin : inutiles dans --allowedTools (lecture du cwd déjà permise) et
+# dangereux (tous les chemins autorisés).
+OUTILS_LECTURE_NUS = ("Read", "Grep", "Glob")
+
+
 def arguments_outils(agent: dict, adaptateur: dict) -> list[str]:
     outils = agent["outils"]
-    autorises = outils["recherche"] + outils["mutation"]
+    # Sécurité (revue du 16/10/2026) : en mode dontAsk, une règle SANS chemin autorise tous les
+    # chemins (lire ~/.ssh, écrire ~/.zshrc). Read, Grep et Glob nus sont donc retirés (la lecture
+    # dans le cwd reste permise sans règle) ; Write et Edit sont bornés au répertoire de travail.
+    autorises = []
+    for outil in outils["recherche"] + outils["mutation"]:
+        if outil in OUTILS_LECTURE_NUS:
+            continue
+        # Mesuré le 16/10/2026 (claude -p, Claude Code 2.1.292) : « Write(./**) » n'autorise rien ;
+        # c'est « Edit(./**) » qui couvre Write et Edit (les règles Edit visent tous les outils qui
+        # modifient des fichiers), y compris quand « Edit » seul reste dans --disallowedTools.
+        regle = "Edit(./**)" if outil in ("Write", "Edit") else outil
+        if regle not in autorises:
+            autorises.append(regle)
     # Une valeur par argument (forme de la documentation Claude Code :
     # --allowedTools "Bash(git log *)" "Read"). Le prompt arrive par l'entrée
     # standard (execute.ts : stdin), donc les options variadiques ne l'absorbent pas.
@@ -385,7 +407,11 @@ def fichiers_generes(reg_agents: dict, reg_orga: dict) -> dict[Path, str]:
         _, corps = separer_frontmatter(chemin.read_text(encoding="utf-8"))
         corps = corps.split(MARQUEUR_CONSIGNES_COMMUNES)[0].rstrip("\n") + "\n"
         if not agent.get("deterministe"):
+            corps_role = corps
             corps += "\n" + MARQUEUR_CONSIGNES_COMMUNES + "\n\n" + consignes_communes
+            fiche = fiche_routes_agent(agent, corps_role)
+            if fiche:
+                corps += "\n" + fiche
         sortie[chemin] = avec_frontmatter(
             {
                 "kind": "agent",
@@ -401,6 +427,63 @@ def fichiers_generes(reg_agents: dict, reg_orga: dict) -> dict[Path, str]:
     verrou = construire_verrou()
     sortie[ORGA / FICHIER_VERROU] = json.dumps(verrou, ensure_ascii=False, indent=2) + "\n"
     return sortie
+
+
+def sections_fiche_routes() -> list[tuple[str, str]]:
+    """Sections (chemin de la route, texte) de la fiche routes-agents, dans l'ordre du fichier."""
+    if not FICHE_ROUTES_AGENTS.exists():
+        raise ErreurAtelier(
+            "fiche des routes d'agents absente : lancer « npx tsx scripts/fiche-routes-agents.ts » dans plugin-atelier"
+        )
+    sections: list[tuple[str, str]] = []
+    courant: list[str] = []
+    chemin = ""
+    for ligne in FICHE_ROUTES_AGENTS.read_text(encoding="utf-8").splitlines():
+        m = re.match(r"^## (?:GET|POST|PATCH|DELETE) (\S+)$", ligne)
+        if m:
+            if courant:
+                sections.append((chemin, "\n".join(courant).rstrip("\n") + "\n"))
+            chemin, courant = m.group(1), [ligne]
+        elif courant:
+            courant.append(ligne)
+    if courant:
+        sections.append((chemin, "\n".join(courant).rstrip("\n") + "\n"))
+    return sections
+
+
+def route_citee(chemin: str, texte: str) -> bool:
+    """Vrai si `texte` cite la route (`:param` du chemin écrit `<param>`, `<id>`… dans les consignes)."""
+    morceaux = re.split(r":[A-Za-z]+", chemin)
+    motif = "<[^>/\\s]+>".join(re.escape(m) for m in morceaux)
+    return re.search(motif + r"(?![\w/<-])", texte) is not None
+
+
+def fiche_routes_agent(agent: dict, corps_role: str) -> str:
+    """Bloc généré (vide si l'agent n'appelle aucune route à corps) : ses routes seulement."""
+    textes = [corps_role]
+    for nom in agent.get("competences", []):
+        fichier = ORGA / "skills" / nom / "SKILL.md"
+        if fichier.exists():
+            textes.append(fichier.read_text(encoding="utf-8"))
+    texte = "\n".join(textes)
+    # Les consignes communes décrivent le dépôt des réponses d'outils pour tout agent qui a des connexions.
+    retenues = [
+        s
+        for chemin, s in sections_fiche_routes()
+        if route_citee(chemin, texte) or (chemin == "/taches/:issueId/donnees-connexion" and agent.get("connexions"))
+    ]
+    if not retenues:
+        return ""
+    bloc = [
+        TITRE_FICHE_ROUTES,
+        "",
+        "Corps JSON à envoyer, tirés des contrats du plugin : ne lis jamais le code source du plugin pour les deviner.",
+        "",
+    ]
+    for s in retenues:
+        bloc.append(s.replace("## ", "### ", 1).rstrip("\n"))
+        bloc.append("")
+    return "\n".join(bloc).rstrip("\n") + "\n"
 
 
 def cmd_generer(args) -> int:
@@ -552,6 +635,29 @@ def url_api() -> str:
     return f"http://127.0.0.1:{port}/api"
 
 
+def ajouter_cle_tableau(req):
+    """Mode authentifié (accès à distance) : ajoute la clé d'API du tableau (PAPERCLIP_BOARD_KEY), facultative.
+
+    La clé n'est envoyée que vers http://127.0.0.1:<port>, http://localhost:<port> ou https://<nom>.ts.net ;
+    ailleurs, rien n'est envoyé (avertissement sans la clé). L'en-tête est « non redirigeable » : il n'est
+    jamais recopié lors d'une redirection. (Recopié dans chaque script : ils tournent en `python3 -I`.)
+    """
+    cle = os.environ.get("PAPERCLIP_BOARD_KEY")
+    if not cle:
+        return
+    u = urllib.parse.urlsplit(req.full_url)
+    h = (u.hostname or "").lower()
+    if u.scheme == "http" and h in ("127.0.0.1", "localhost") and u.port is not None:
+        autorise = True
+    else:
+        autorise = u.scheme == "https" and h.endswith(".ts.net") and len(h) > len(".ts.net")
+    if autorise:
+        req.add_unredirected_header("Authorization", "Bearer " + cle)
+    else:
+        print("AVERTISSEMENT : PAPERCLIP_BOARD_KEY non envoyée (destination hors 127.0.0.1, localhost et *.ts.net : "
+              + (u.hostname or "?") + ").", file=sys.stderr)
+
+
 class Api:
     def __init__(self, base: str):
         self.base = base
@@ -560,6 +666,8 @@ class Api:
     def appel(self, methode: str, chemin: str, corps=None, attendu=(200, 201)):
         donnees = None if corps is None else json.dumps(corps).encode("utf-8")
         req = urllib.request.Request(self.base + chemin, data=donnees, method=methode)
+        # Mode authentifié (accès à distance) : clé d'API du tableau, facultative et limitée aux destinations sûres.
+        ajouter_cle_tableau(req)
         req.add_header("Accept", "application/json")
         if donnees is not None:
             req.add_header("Content-Type", "application/json")
@@ -632,6 +740,33 @@ def dossiers_agent(slug: str) -> tuple[Path, Path]:
     return ESPACES / slug, CONFIGS_CLAUDE / slug
 
 
+def reglages_agent(reg_agents: dict, config: Path) -> dict:
+    """settings.json dédié d'un agent : réglages du registre + chemins propres à la machine.
+
+    Les refus portant sur les secrets de l'instance et de la racine du dépôt ont besoin de
+    chemins absolus (forme « //chemin » des règles Claude Code) : ils sont calculés ici, au
+    moment de generer/appliquer, et jamais écrits dans un fichier suivi par git. L'autorisation
+    de lecture ne vise que les fichiers « tool-results » de l'agent lui-même, dans sa propre
+    configuration, hors de son cwd.
+    """
+    reglages = json.loads(json.dumps(reg_agents["adaptateur"]["reglagesConfigClaude"]))
+    permissions = reglages.setdefault("permissions", {})
+    secrets = [
+        f"/{INSTANCE}/instances/*/secrets/**",
+        f"/{INSTANCE}/instances/*/db/**",
+        f"/{INSTANCE}/cles/**",
+        f"/{RACINE}/config/**",
+    ]
+    refus = list(permissions.get("deny", []))
+    for chemin in secrets:
+        refus.append(f"Read({chemin})")
+    for chemin in secrets:
+        refus.append(f"Edit({chemin})")
+    permissions["deny"] = refus
+    permissions["allow"] = [f"Read(/{config}/projects/**)"]
+    return reglages
+
+
 def preparer_dossiers_locaux(reg_agents: dict) -> int:
     """Crée l'espace et la configuration Claude dédiée de chaque agent.
 
@@ -640,7 +775,6 @@ def preparer_dossiers_locaux(reg_agents: dict) -> int:
     (constaté le 15/10/2026 par capture locale de la requête, sans appel de modèle :
     scripts/bootstrap-tests.sh, test d'isolement). Renvoie le nombre de fichiers écrits.
     """
-    reglages = json.dumps(reg_agents["adaptateur"]["reglagesConfigClaude"], ensure_ascii=False, indent=2) + "\n"
     ecrits = 0
     for agent in reg_agents["agents"]:
         if agent.get("deterministe"):
@@ -649,6 +783,7 @@ def preparer_dossiers_locaux(reg_agents: dict) -> int:
         for d in (espace, config):
             d.mkdir(parents=True, exist_ok=True)
             os.chmod(d, 0o700)
+        reglages = json.dumps(reglages_agent(reg_agents, config), ensure_ascii=False, indent=2) + "\n"
         if ecrire_si_change(config / "settings.json", reglages):
             os.chmod(config / "settings.json", 0o600)
             ecrits += 1

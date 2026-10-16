@@ -8,7 +8,7 @@
  *   indisponible.
  * - Tout en français, dates à l'heure de Bruxelles, mention « démonstration ».
  */
-import { useState, type FormEvent, type ReactNode } from "react";
+import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 import {
   useHostContext,
   useHostLocation,
@@ -22,7 +22,7 @@ import type { VueContenusAValider, VueEquipe } from "../contrats/ui.js";
 import { BandeauEntreprise, Bouton, Champ, Chargement, EtatErreur, LienHote } from "./composants.js";
 import { useEnvoiDemande } from "./demande.js";
 import { FournisseurDonnees, useDonnees } from "./donnees.js";
-import { chemin, lireRoute, VUES, type CleVue } from "./route.js";
+import { chemin, GROUPE_PROSPECTION, lireRoute, VUES, type CleVue } from "./route.js";
 import { STYLES_ATELIER } from "./styles.js";
 import { VueAccueil } from "./vues/accueil.js";
 import { VueCalendrier } from "./vues/calendrier.js";
@@ -36,6 +36,7 @@ import { VueParametres } from "./vues/parametres.js";
 import { VueProspects } from "./vues/prospects.js";
 import { VueConnaissances } from "./vues/connaissances.js";
 import { VueCorbeille } from "./vues/corbeille.js";
+import { VueDiscussion } from "./vues/discussion.js";
 import { VueResultatsAtelier } from "./vues/resultats.js";
 
 /** Racine commune : styles (dédupliqués par React), langue, portée `.atl`. */
@@ -56,6 +57,8 @@ function SansEntreprise() {
 
 function Vue({ vue, id }: { vue: CleVue; id: string | null }) {
   switch (vue) {
+    case "discussion":
+      return <VueDiscussion />;
     case "accueil":
       return <VueAccueil />;
     case "equipe":
@@ -87,14 +90,36 @@ function Vue({ vue, id }: { vue: CleVue; id: string | null }) {
 
 /** Onglets de rubriques affichés dans la page sur téléphone (la barre latérale y est repliée). */
 function Onglets({ courante }: { courante: CleVue }) {
+  const barre = useRef<HTMLElement>(null);
+  const [suite, setSuite] = useState(false);
+  // L'onglet actif est amené dans la vue au chargement et à chaque changement de rubrique.
+  useEffect(() => {
+    const actif = barre.current?.querySelector<HTMLElement>('a[aria-current="page"]');
+    if (actif && typeof actif.scrollIntoView === "function") actif.scrollIntoView({ inline: "nearest", block: "nearest" });
+  }, [courante]);
+  // L'ombre du bord droit reste tant qu'il y a des onglets à faire défiler.
+  useEffect(() => {
+    const el = barre.current;
+    if (!el) return;
+    const mesurer = () => setSuite(el.scrollLeft + el.clientWidth < el.scrollWidth - 2);
+    mesurer();
+    el.addEventListener("scroll", mesurer, { passive: true });
+    window.addEventListener("resize", mesurer);
+    return () => {
+      el.removeEventListener("scroll", mesurer);
+      window.removeEventListener("resize", mesurer);
+    };
+  }, []);
   return (
-    <nav className="atl-onglets" aria-label="Rubriques de l'atelier">
-      {VUES.map((v) => (
-        <LienHote key={v.cle} vers={chemin(v.cle)} courant={v.cle === courante} className="">
-          {v.libelle}
-        </LienHote>
-      ))}
-    </nav>
+    <div className="atl-onglets-cadre" data-suite={suite ? "oui" : undefined}>
+      <nav className="atl-onglets" aria-label="Rubriques de l'atelier" ref={barre}>
+        {VUES.map((v) => (
+          <LienHote key={v.cle} vers={chemin(v.cle)} courant={v.cle === courante} className="">
+            {v.libelle}
+          </LienHote>
+        ))}
+      </nav>
+    </div>
   );
 }
 
@@ -133,12 +158,29 @@ export function NavigationAtelier({ context }: PluginRouteSidebarProps) {
     <Racine>
       <FournisseurDonnees veille={false}>
         <nav className="atl-nav" aria-label="Rubriques de l'atelier">
-          {VUES.filter((v) => v.cle !== "parametres").map((v) => (
-            <LienHote key={v.cle} vers={chemin(v.cle)} courant={route.vue === v.cle} className="">
-              <span>{v.libelle}</span>
-              {v.cle === "contenus" && context.companyId ? <CompteurContenus /> : null}
-            </LienHote>
-          ))}
+          {VUES.filter((v) => v.cle !== "parametres").map((v) => {
+            const lien = (
+              <LienHote key={v.cle} vers={chemin(v.cle)} courant={route.vue === v.cle} className="">
+                <span>{v.libelle}</span>
+                {v.cle === "contenus" && context.companyId ? <CompteurContenus /> : null}
+              </LienHote>
+            );
+            // Le groupe « Prospection » (deux entrées contiguës) est rendu d'un bloc, sous son intertitre.
+            if (v.groupe && VUES.find((x) => x.groupe)?.cle !== v.cle) return null;
+            if (!v.groupe) return lien;
+            return (
+              <div key="groupe-prospection" className="atl-nav-groupe" role="group" aria-labelledby="atl-nav-groupe-prospection">
+                <span id="atl-nav-groupe-prospection" className="atl-nav-intertitre">
+                  {GROUPE_PROSPECTION}
+                </span>
+                {VUES.filter((x) => x.groupe === v.groupe).map((x) => (
+                  <LienHote key={x.cle} vers={chemin(x.cle)} courant={route.vue === x.cle} className="">
+                    <span>{x.libelle}</span>
+                  </LienHote>
+                ))}
+              </div>
+            );
+          })}
           <div className="atl-nav-pied">
             <LienHote vers={chemin("parametres")} courant={route.vue === "parametres"} className="">
               Paramètres et diagnostic

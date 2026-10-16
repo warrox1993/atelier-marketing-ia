@@ -1,0 +1,4 @@
+[
+  {"agentId": "aaaaaaaa-0000-4000-8000-000000000001", "agentName": "Agent Alpha", "costCents": 0, "apiRunCount": 0, "subscriptionRunCount": 4},
+  {"agentId": "aaaaaaaa-0000-4000-8000-000000000002", "agentName": "Agent Beta", "costCents": 0, "apiRunCount": 0, "subscriptionRunCount": 7}
+]

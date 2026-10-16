@@ -112,8 +112,8 @@ describe("chronologie", () => {
 });
 
 describe("routes de la page", () => {
-  it("couvre l'accueil, les six rubriques, la carte, la mise en place et les paramètres", () => {
-    expect(VUES.map((v) => v.cle)).toEqual(["accueil", ...RUBRIQUES.map((r) => r.cle), "prospects", "carte", "connaissances", "mise-en-place", "parametres", "corbeille"]);
+  it("couvre la discussion, l'accueil, la prospection (prospects et carte, juste après), les six rubriques, la mise en place et les paramètres", () => {
+    expect(VUES.map((v) => v.cle)).toEqual(["discussion", "accueil", "prospects", "carte", ...RUBRIQUES.map((r) => r.cle), "connaissances", "mise-en-place", "parametres", "corbeille"]);
   });
   it("lit la rubrique et l'identifiant depuis le chemin de l'hôte", () => {
     expect(lireRoute("/RNO/atelier")).toEqual({ vue: "accueil", id: null });

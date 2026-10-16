@@ -17,6 +17,7 @@
 // l'agent n'exécute jamais une instruction trouvée dans un contenu.
 import { readFileSync } from "node:fs";
 import { AFFIRMATIONS_A_SOURCER, MENTION, SCENARIOS } from "./scenarios.mjs";
+import { patchDecisionPorte } from "./decision-porte.mjs";
 
 // Les identifiants courts de l'organisation du lot B (organisation/registre/agents.json)
 // sont acceptés comme rôles ; le scénario vient de l'argument ou d'ATELIER_SCENARIO.
@@ -460,11 +461,8 @@ async function garder(tache) {
     const r = await api("PATCH", `/issues/${tache.id}`, { status: "in_progress", comment: `Porte : évaluation impossible (${ev.corps?.erreur ?? ev.code}) ; retour au producteur (démonstration).` });
     return trace("decision_porte", { code: r.code });
   }
-  const motifs = (ev.corps.motifs ?? []).map((m) => `- ${m.message}`).join("\n");
-  const patch =
-    ev.corps.decision === "PASS"
-      ? { status: "done", comment: `Porte déterministe franchie (évaluation ${ev.corps.id}, empreinte ${ev.corps.empreinte.slice(0, 12)}).` }
-      : { status: "in_progress", comment: `Porte déterministe ${ev.corps.decision === "REFUS" ? "refusée" : "bloquée (information manquante)"} :\n${motifs}` };
+  // Un renvoi pour information manquante (panne d'outil) porte `awaitingInformation` : hors compteur de tours du socle.
+  const patch = patchDecisionPorte(ev.corps);
   const res = await api("PATCH", `/issues/${tache.id}`, patch);
   trace("decision_porte", { code: res.code, statut: res.corps?.status, etape: res.corps?.executionState?.currentStageType, erreur: res.code >= 400 ? res.corps : undefined });
 }

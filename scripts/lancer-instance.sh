@@ -8,6 +8,8 @@ set -uo pipefail
 
 RACINE="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 FICHIER_ENV="${RACINE}/config/atelier.env"
+# Surcharge facultative pour l'accès à distance (tailscale serve) : chargée APRÈS atelier.env.
+FICHIER_DISTANT="${RACINE}/config/atelier-distant.env"
 SOCLE="${RACINE}/paperclip"
 
 if [[ ! -f "${FICHIER_ENV}" ]]; then
@@ -16,6 +18,9 @@ if [[ ! -f "${FICHIER_ENV}" ]]; then
 fi
 # Validation de la configuration (variables, plages, boucle locale, aucun secret).
 "${RACINE}/scripts/verifier-config.sh" "${FICHIER_ENV}" || exit 1
+if [[ -f "${FICHIER_DISTANT}" ]]; then
+  "${RACINE}/scripts/verifier-config.sh" --distant "${FICHIER_DISTANT}" || exit 1
+fi
 if [[ ! -d "${SOCLE}/node_modules" ]]; then
   echo "Dépendances absentes : lancez scripts/preparer-socle.sh d'abord." >&2
   exit 1
@@ -25,7 +30,30 @@ fi
 set -a
 # shellcheck disable=SC1090
 source "${FICHIER_ENV}"
+if [[ -f "${FICHIER_DISTANT}" ]]; then
+  echo "Surcharge d'accès à distance chargée : ${FICHIER_DISTANT}"
+  # Jamais de « source » : le fichier a été validé ligne à ligne (liste blanche de clés) par
+  # verifier-config.sh --distant ; on n'exporte ici que les paires CLE=valeur, une à une.
+  while IFS= read -r ligne_distante || [[ -n "${ligne_distante}" ]]; do
+    [[ "${ligne_distante}" =~ ^[[:space:]]*$ || "${ligne_distante}" =~ ^[[:space:]]*# ]] && continue
+    if [[ ! "${ligne_distante}" =~ ^[A-Z_]+=[^\$\`\;\|\&]*$ ]]; then
+      echo "Ligne inattendue dans ${FICHIER_DISTANT} : démarrage refusé." >&2
+      exit 1
+    fi
+    export "${ligne_distante%%=*}=${ligne_distante#*=}"
+  done < "${FICHIER_DISTANT}"
+fi
 set +a
+
+# Refuse de démarrer si l'instance est déjà publiée sur le tailnet (tailscale serve) alors que la
+# surcharge distante (mode authentifié) est absente : ce serait un accès sans authentification.
+if command -v tailscale >/dev/null 2>&1 && [[ ! -f "${FICHIER_DISTANT}" ]]; then
+  if tailscale serve status 2>/dev/null | grep -Eq "(127\.0\.0\.1|localhost):${PORT}([^0-9]|$)"; then
+    echo "Instance publiée sur le tailnet sans authentification : \`tailscale serve\` redirige déjà vers le port ${PORT} alors que ${FICHIER_DISTANT} est absent." >&2
+    echo "Lancer \`sudo tailscale serve reset\` ou rétablir la surcharge distante (config/atelier-distant.env). Démarrage refusé." >&2
+    exit 1
+  fi
+fi
 
 mkdir -p "${PAPERCLIP_HOME}"
 

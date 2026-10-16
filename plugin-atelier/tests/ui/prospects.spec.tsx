@@ -9,7 +9,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { PROSPECT_B2B, PROSPECT_B2C } from "../../src/contrats/exemples/prospection.js";
 import { PageAtelier } from "../../src/ui/index.js";
 import { CompteRenduProspect, ConfianceQualification } from "../../src/contrats/prospection.js";
-import { libelleScore } from "../../src/ui/vues/prospects.js";
+import { EXPLICATION_STATUT_LEAD, familleMetier, FILTRES_VIDES, filtresExport, libelleScore, statutLead } from "../../src/ui/vues/prospects.js";
+import { act } from "react";
 import { champParLibelle, cliquer, ENTREPRISE, installerPont, parTexte, rendre, saisir, type Pont, type Rendu } from "./pont.js";
 
 const contexte = { companyId: ENTREPRISE, companyPrefix: "RNO", projectId: null, entityId: null, entityType: null, userId: "local-board" };
@@ -80,7 +81,7 @@ describe("liste des prospects", () => {
     expect(lignes[0]!.textContent).toContain("[client-7f3a]");
     expect(lignes[0]!.textContent).toContain("Particulier");
     expect(lignes[1]!.textContent).toContain("55/100");
-    expect(lignes[1]!.textContent).toContain("Score 55/100, estimation (pas assez d'historique)");
+    expect(lignes[1]!.textContent).toContain("Priorité 55/100 (estimation)");
     expect(lignes[0]!.textContent).toContain("70/100");
     expect(lignes[0]!.textContent).not.toContain("non étalonnée");
     expect(c.textContent).not.toMatch(/certain|taux exact/iu);
@@ -128,6 +129,48 @@ describe("liste des prospects", () => {
     expect(derniere.searchParams.get("avecClientsActuels")).toBeNull();
   });
 
+  it("filtre « Mission » : menu des campagnes, « Toutes les missions » par défaut, campagneId envoyé à la liste et à l'export", async () => {
+    const M1 = "11111111-1111-4111-8111-111111111111";
+    pont.donnees["atelier.campagnes"] = { data: [{ id: M1, nom: "Professions médicales" }, { id: "22222222-2222-4222-8222-222222222222", nom: "Restauration" }], loading: false, error: null };
+    const c = await ouvrir();
+    const menu = champParLibelle(c, "Mission") as HTMLSelectElement;
+    expect(menu.value).toBe("");
+    expect([...menu.options].map((o) => o.textContent)).toEqual(["Toutes les missions", "Professions médicales", "Restauration"]);
+    expect(new URL(requetesListe()[0]!.url, "http://x").searchParams.get("campagneId")).toBeNull();
+    await saisir(menu, M1);
+    await cliquer(parTexte(c, "button", "Filtrer"));
+    expect(new URL(requetesListe().at(-1)!.url, "http://x").searchParams.get("campagneId")).toBe(M1);
+    expect(filtresExport({ ...FILTRES_VIDES, campagneId: M1 })).toEqual({ campagneId: M1 });
+  });
+
+  it("tri « Par famille de métier » : médecins, dentistes, kinés, pharmacies, autres, d'après le NACE ou la catégorie OpenStreetMap", async () => {
+    const avec = (nom: string, nace: string[], osm?: { cle: string; valeur: string }) => {
+      const p = structuredClone(B2B);
+      p.id = `${nom}-id`;
+      p.denomination = nom;
+      p.nace = nace;
+      p.score = { ...p.score!, valeur: 50 };
+      p.sources = (osm ? [{ ...p.sources[0]!, service: "osm", categorieOsm: osm }] : p.sources) as typeof p.sources;
+      return p;
+    };
+    serveur = () => ({
+      statut: 200,
+      corps: page(
+        avec("Ninja ramen", ["56.101"]),
+        avec("Pharmacie du Pont", [], { cle: "amenity", valeur: "pharmacy" }),
+        avec("Cabinet kiné", ["86.906"]),
+        avec("Dr Martin", ["86.210"]),
+        avec("Cabinet dentaire", [], { cle: "amenity", valeur: "dentist" }),
+      ),
+    });
+    const c = await ouvrir();
+    await cliquer(parTexte(c, "button", "Par famille de métier"));
+    const noms = [...c.querySelectorAll("tbody tr th button")].map((b) => b.textContent);
+    expect(noms).toEqual(["Dr Martin", "Cabinet dentaire", "Cabinet kiné", "Pharmacie du Pont", "Ninja ramen"]);
+    expect(familleMetier({ nace: ["86.210"], sources: [] })).toBe("medecins");
+    expect(familleMetier({ nace: [], sources: [] })).toBe("autres");
+  });
+
   it("clients actuels masqués par défaut ; la case les réaffiche et l'effacement la retire", async () => {
     const c = await ouvrir();
     expect(new URL(requetesListe()[0]!.url, "http://x").searchParams.get("avecClientsActuels")).toBeNull();
@@ -161,6 +204,15 @@ describe("liste des prospects", () => {
 });
 
 describe("fiche d'un prospect", () => {
+  it("un clic n'importe où sur la ligne ouvre la fiche (pas seulement sur le nom)", async () => {
+    const c = await ouvrir();
+    expect(c.querySelector(".atl-fiche")).toBeNull();
+    const ligne = parTexte(c, "button", B2B.denomination!).closest("tr")!;
+    await cliquer(ligne.querySelector("td")!);
+    const fiche = c.querySelector(".atl-fiche");
+    expect(fiche?.getAttribute("aria-label")).toBe(`Fiche de ${B2B.denomination}`);
+  });
+
   it("montre les critères (valeur, source, date) et la base légale par canal", async () => {
     const c = await ouvrir();
     await cliquer(parTexte(c, "button", B2B.denomination!));
@@ -614,38 +666,88 @@ describe("confiance de qualification", () => {
   const qualifie = { ...structuredClone(B2B), confiance: confiance(92, 0) };
   const aEnrichir = { ...structuredClone(B2C), confiance: confiance(64, 2) };
 
-  it("colonne « Confiance » : « 92 % qualifié » et « 64 % à enrichir », à côté du score inchangé", async () => {
+  it("colonne « Statut du lead » : badge « Qualifié » et « À vérifier », avec les deux chiffres dessous", async () => {
     serveur = () => ({ statut: 200, corps: page(qualifie, aEnrichir) });
     const c = await ouvrir();
     const entetes = [...c.querySelectorAll("thead th")].map((th) => th.textContent);
-    expect(entetes.some((t) => t?.startsWith("Confiance"))).toBe(true);
+    expect(entetes.some((t) => t?.startsWith("Statut du lead"))).toBe(true);
     const lignes = c.querySelectorAll("tbody tr");
     const ligneB2B = [...lignes].find((l) => l.textContent?.includes("55/100"))!;
     const ligneB2C = [...lignes].find((l) => l.textContent?.includes("70/100"))!;
-    expect(ligneB2B.querySelector('td[data-libelle="Confiance"]')!.textContent).toContain("92 % qualifié");
-    expect(ligneB2C.querySelector('td[data-libelle="Confiance"]')!.textContent).toContain("64 % à enrichir");
-    expect(ligneB2C.querySelector('td[data-libelle="Confiance"]')!.textContent).toContain("2 critères à vérifier");
-    // La probabilité de conversion existante reste telle quelle.
-    expect(ligneB2B.querySelector('td[data-libelle="Score"]')!.textContent).toContain("Score 55/100, estimation (pas assez d'historique)");
-    // Bulle d'aide : la différence entre confiance et chance de signer.
+    const celluleB2B = ligneB2B.querySelector('td[data-libelle="Statut du lead"]')!.textContent!;
+    const celluleB2C = ligneB2C.querySelector('td[data-libelle="Statut du lead"]')!.textContent!;
+    expect(celluleB2B).toContain("Qualifié");
+    expect(celluleB2B).toContain("Cible prouvée à 92 %");
+    expect(celluleB2C).toContain("À vérifier");
+    expect(celluleB2C).toContain("il manque 2 critères");
+    expect(celluleB2C).toContain("Cible prouvée à 64 %");
+    // La priorité (ex-score) reste affichée, inchangée.
+    expect(celluleB2B).toContain("Priorité 55/100 (estimation)");
+    expect(celluleB2C).toContain("Priorité 70/100 (mesurée)");
+    // Bulle d'aide : la différence entre cible prouvée et chance de signer.
     expect(c.querySelector('[title*="Ce n\'est pas sa chance de signer"]')).toBeTruthy();
+  });
+
+  it("colonne « Étape » : un lead à l'étape « qualifie » mais à vérifier affiche « Retenu » et « À vérifier », jamais deux « Qualifié »", async () => {
+    const retenuAVerifier = { ...structuredClone(B2C), statut: "qualifie", confiance: confiance(64, 2) };
+    serveur = () => ({ statut: 200, corps: page(retenuAVerifier) });
+    const c = await ouvrir();
+    const entetes = [...c.querySelectorAll("thead th")].map((th) => th.textContent);
+    expect(entetes).toContain("Étape");
+    expect(entetes).not.toContain("Statut");
+    const ligne = c.querySelector("tbody tr")!;
+    expect(ligne.querySelector('td[data-libelle="Étape"]')!.textContent).toBe("Retenu");
+    expect(ligne.querySelector('td[data-libelle="Statut du lead"]')!.textContent).toContain("À vérifier");
+    expect(ligne.textContent).not.toContain("Qualifié");
   });
 
   it("un critère contraire est annoncé : non qualifié, pas « à enrichir »", async () => {
     const contraire = { ...structuredClone(B2B), confiance: confiance(50, 0, { plafonnee: true, criteres: [critere("entreprise_active", "verifie", 20), critere("zone_cible", "contraire", 15)] }) };
     serveur = () => ({ statut: 200, corps: page(contraire) });
     const c = await ouvrir();
-    expect(c.querySelector('td[data-libelle="Confiance"]')!.textContent).toContain("50 % non qualifié (critère contraire)");
+    const cellule = c.querySelector('td[data-libelle="Statut du lead"]')!.textContent!;
+    expect(cellule).toContain("Écarté");
+    expect(cellule).toContain("zone_cible");
+    expect(cellule).toContain("Cible prouvée à 50 %");
+    expect(cellule).not.toContain("À vérifier");
   });
 
   it("tri par confiance : le plus haut d'abord, puis inversé", async () => {
     serveur = () => ({ statut: 200, corps: page(aEnrichir, qualifie) });
     const c = await ouvrir();
     await cliquer(parTexte(c, "th button", "Confiance"));
-    const ordre = () => [...c.querySelectorAll('tbody td[data-libelle="Confiance"]')].map((td) => td.textContent);
-    expect(ordre()[0]).toContain("92 % qualifié");
+    const ordre = () => [...c.querySelectorAll('tbody td[data-libelle="Statut du lead"]')].map((td) => td.textContent);
+    expect(ordre()[0]).toContain("Cible prouvée à 92 %");
     await cliquer(parTexte(c, "th button", "Confiance"));
-    expect(ordre()[0]).toContain("64 % à enrichir");
+    expect(ordre()[0]).toContain("Cible prouvée à 64 %");
+  });
+
+  it("statutLead : Qualifié, Écarté (exclu, refusé ou critère contraire) et À vérifier", () => {
+    expect(statutLead(qualifie as never)).toEqual({ cle: "qualifie", libelle: "Qualifié", detail: null });
+    expect(statutLead(aEnrichir as never)).toEqual({ cle: "a_verifier", libelle: "À vérifier", detail: "il manque 2 critères" });
+    const unSeul = { ...structuredClone(B2C), confiance: confiance(70, 1) };
+    expect(statutLead(unSeul as never).detail).toBe("il manque 1 critère");
+    const sansConfiance = { ...structuredClone(B2C), confiance: undefined };
+    expect(statutLead(sansConfiance as never)).toEqual({ cle: "a_verifier", libelle: "À vérifier", detail: null });
+    const contraire = { ...structuredClone(B2B), confiance: confiance(50, 0, { plafonnee: true, criteres: [critere("zone_cible", "contraire", 15)] }) };
+    expect(statutLead(contraire as never)).toEqual({ cle: "ecarte", libelle: "Écarté", detail: "zone_cible" });
+    const exclu = { ...structuredClone(qualifie), statut: "exclu", motifsExclusion: [{ motif: "doublon", detail: "déjà en base" }] };
+    expect(statutLead(exclu as never)).toMatchObject({ cle: "ecarte", libelle: "Écarté" });
+    expect(statutLead(exclu as never).detail).toBeTruthy();
+    const refuse = { ...structuredClone(qualifie), statut: "refuse" };
+    expect(statutLead(refuse as never)).toEqual({ cle: "ecarte", libelle: "Écarté", detail: "écarté par un humain" });
+  });
+
+  it("la fiche montre le badge en grand, les deux chiffres et la phrase d'explication", async () => {
+    serveur = (methode, url) => (methode === "GET" && url.includes("/compte-rendu") ? { statut: 200, corps: COMPTE_RENDU } : { statut: 200, corps: page(qualifie) });
+    const c = await ouvrir();
+    await cliquer(parTexte(c, "button", B2B.denomination!));
+    const bloc = c.querySelector("[aria-label='Statut du lead']")!;
+    expect(bloc.querySelector(".atl-statut-lead-grand")!.textContent).toContain("Qualifié");
+    expect(bloc.textContent).toContain("Priorité 55/100 (estimation)");
+    expect(bloc.textContent).toContain("Cible prouvée à 92 %");
+    expect(bloc.textContent).toContain(EXPLICATION_STATUT_LEAD);
+    expect(EXPLICATION_STATUT_LEAD).toBe("La cible prouvée dit si ce lead correspond à votre cible, sources à l'appui (qualifié à 90 % et plus). La priorité dit par qui commencer. On ne contacte jamais un lead qui n'est pas qualifié.");
   });
 
   it("filtre « Qualifiés (≥ 90 %) » : la requête porte qualifiesSeulement, l'effacement le retire", async () => {
@@ -657,5 +759,118 @@ describe("confiance de qualification", () => {
     expect(new URL(requetesListe().at(-1)!.url, "http://x").searchParams.get("qualifiesSeulement")).toBe("true");
     await cliquer(parTexte(c, "button", "Effacer les filtres"));
     expect(new URL(requetesListe().at(-1)!.url, "http://x").searchParams.get("qualifiesSeulement")).toBeNull();
+  });
+});
+
+describe("fiche : décision humaine sur un critère de qualification", () => {
+  const H = "2026-10-15T10:00:00.000Z";
+  const critere = (code: string, libelle: string, statut: string, source = "BCE · bce_rechercher", detail = "Registre") => ({ code, libelle, statut, poids: 20, sourceId: null, source, detail });
+  const avecConfiance = (criteres: Array<{ statut: string }>) => ({
+    ...structuredClone(B2B),
+    confiance: ConfianceQualification.parse({ valeur: 40, qualifie: false, plafonnee: criteres.some((x) => x.statut === "contraire"), seuil: 90, calculeLe: H, criteres }),
+  });
+  const calcule = avecConfiance([critere("entreprise_active", "Entreprise active", "verifie"), critere("certifie_qualite", "Certifié qualité (personnalisé)", "non_verifie", "agent", "Évalué par l'agent le 16/10/2026 : à confirmer")]);
+  const humain = avecConfiance([critere("entreprise_active", "Entreprise active", "contraire", "humain", "Décision humaine de Jean-Baptiste le 16/10/2026 : fermée selon le client")]);
+
+  async function ouvrirFiche(prospect: unknown) {
+    serveur = (methode, url) => (methode === "GET" && url.includes("/compte-rendu") ? { statut: 200, corps: COMPTE_RENDU } : { statut: 200, corps: page(prospect) });
+    const c = await ouvrir();
+    await cliquer(parTexte(c, "button", B2B.denomination!));
+    return c.querySelector(".atl-fiche")!;
+  }
+  const ligneCritere = (fiche: Element, code: string) => fiche.querySelector(`.atl-critere[data-code="${code}"]`)!;
+
+  it("« Modifier » ouvre le formulaire, focus sur le premier champ, Échap le ferme ; les critères personnalisés y figurent", async () => {
+    const fiche = await ouvrirFiche(calcule);
+    const ligne = ligneCritere(fiche, "certifie_qualite");
+    expect(ligne.textContent).toContain("Certifié qualité (personnalisé)");
+    expect(ligne.textContent).toContain("Source : agent");
+    expect(fiche.querySelector("form")).toBeNull();
+    await cliquer(parTexte(ligne, "button", "Modifier"));
+    const form = ligne.querySelector("form")!;
+    expect(form).not.toBeNull();
+    expect(document.activeElement).toBe(champParLibelle(form, "Statut du critère"));
+    await act(async () => {
+      form.querySelector("textarea")!.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    });
+    expect(fiche.querySelector("form")).toBeNull();
+  });
+
+  it("enregistrer envoie le PATCH attendu puis recharge le lead", async () => {
+    const fiche = await ouvrirFiche(calcule);
+    const listesAvant = requetesListe().length;
+    await cliquer(parTexte(ligneCritere(fiche, "certifie_qualite"), "button", "Modifier"));
+    const form = fiche.querySelector("form")!;
+    await saisir(champParLibelle(form, "Statut du critère"), "verifie");
+    await saisir(champParLibelle(form, "Justification"), "  Certificat vu au cabinet  ");
+    await cliquer(parTexte(form, "button", "Enregistrer la décision"));
+    const patch = appels.find((a) => a.methode === "PATCH")!;
+    expect(patch.url).toContain(`/prospects/${B2B.id}/criteres/certifie_qualite`);
+    expect(patch.corps).toEqual({ companyId: ENTREPRISE, statut: "verifie", justification: "Certificat vu au cabinet" });
+    expect(requetesListe().length).toBe(listesAvant + 1);
+    expect(fiche.querySelector("form")).toBeNull();
+  });
+
+  it("une justification vide ou trop courte est refusée côté interface : aucun appel", async () => {
+    const fiche = await ouvrirFiche(calcule);
+    await cliquer(parTexte(ligneCritere(fiche, "certifie_qualite"), "button", "Modifier"));
+    const form = fiche.querySelector("form")!;
+    const bouton = parTexte(form, "button", "Enregistrer la décision") as HTMLButtonElement;
+    expect(bouton.getAttribute("aria-disabled")).toBe("true");
+    await saisir(champParLibelle(form, "Justification"), " a ");
+    expect(bouton.getAttribute("aria-disabled")).toBe("true");
+    await cliquer(bouton);
+    expect(appels.some((a) => a.methode === "PATCH")).toBe(false);
+  });
+
+  it("« Revenir au calcul automatique » n'existe que sur une décision humaine et envoie le DELETE", async () => {
+    const fiche = await ouvrirFiche(humain);
+    expect(ligneCritere(fiche, "entreprise_active").textContent).toContain("Source : humain");
+    const listesAvant = requetesListe().length;
+    await cliquer(parTexte(ligneCritere(fiche, "entreprise_active"), "button", "Revenir au calcul automatique"));
+    const suppression = appels.find((a) => a.methode === "DELETE")!;
+    expect(suppression.url).toContain(`/prospects/${B2B.id}/criteres/entreprise_active?companyId=${ENTREPRISE}`);
+    expect(requetesListe().length).toBe(listesAvant + 1);
+  });
+
+  it("pas de retour au calcul sur un critère calculé", async () => {
+    const fiche = await ouvrirFiche(calcule);
+    expect(fiche.textContent).not.toContain("Revenir au calcul automatique");
+  });
+
+  it("une erreur du serveur est affichée sans planter, le formulaire reste ouvert", async () => {
+    const fiche = await ouvrirFiche(calcule);
+    const base = serveur;
+    serveur = (methode, url, corps) => (methode === "PATCH" ? { statut: 422, corps: { erreur: "Ce critère est désactivé dans les réglages." } } : base(methode, url, corps));
+    await cliquer(parTexte(ligneCritere(fiche, "entreprise_active"), "button", "Modifier"));
+    const form = fiche.querySelector("form")!;
+    await saisir(champParLibelle(form, "Justification"), "Essai refusé");
+    await cliquer(parTexte(form, "button", "Enregistrer la décision"));
+    expect(fiche.querySelector("form [role='alert']")!.textContent).toContain("Ce critère est désactivé dans les réglages.");
+  });
+
+  it("l'erreur d'un retour au calcul est affichée", async () => {
+    const fiche = await ouvrirFiche(humain);
+    const base = serveur;
+    serveur = (methode, url, corps) => (methode === "DELETE" ? { statut: 403, corps: { erreur: "Réservé aux humains." } } : base(methode, url, corps));
+    await cliquer(parTexte(ligneCritere(fiche, "entreprise_active"), "button", "Revenir au calcul automatique"));
+    expect(ligneCritere(fiche, "entreprise_active").querySelector("[role='alert']")!.textContent).toContain("Réservé aux humains.");
+  });
+
+  it("un changement de lead alors qu'une fiche est ouverte ramène la nouvelle fiche à l'écran (scrollIntoView rappelé)", async () => {
+    const defilement = vi.fn();
+    Element.prototype.scrollIntoView = defilement;
+    try {
+      const c = await ouvrir();
+      await cliquer(parTexte(c, "button", B2B.denomination!));
+      const apresPremiere = defilement.mock.calls.length;
+      expect(apresPremiere).toBeGreaterThan(0);
+      expect(defilement.mock.contexts.at(-1)).toBe(c.querySelector(".atl-fiche"));
+      await cliquer(parTexte(c, "button", /\[client-7f3a\]/u));
+      expect(c.querySelector(".atl-fiche")!.getAttribute("aria-label")).toContain("[client-7f3a]");
+      expect(defilement.mock.calls.length).toBeGreaterThan(apresPremiere);
+    } finally {
+      delete (Element.prototype as { scrollIntoView?: unknown }).scrollIntoView;
+    }
   });
 });

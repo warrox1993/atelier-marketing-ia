@@ -1,0 +1,33 @@
+[Unit]
+Description=Instance Paperclip de l'Atelier marketing IA (%i)
+After=network-online.target
+Wants=network-online.target
+# Pas de limite de redémarrages rapides : on laisse RestartSec espacer les essais.
+StartLimitIntervalSec=0
+
+[Service]
+# pnpm est dans ~/.local/bin, absent du PATH par défaut des services utilisateur (constaté le 16/10).
+Environment=PATH=%h/.local/bin:/usr/local/bin:/usr/bin:/bin
+Type=simple
+# Variables de l'instance (ports, URL de la passerelle), sans aucun secret :
+#   ATELIER_PORT=3580
+#   ATELIER_PORT_DB=54339
+#   ATELIER_PASSERELLE_URL=http://127.0.0.1:3581
+# Les secrets restent dans config/atelier.env et les fichiers de l'instance, jamais ici.
+EnvironmentFile=%h/.config/atelier/%i.env
+WorkingDirectory=%h/Projets/atelier-marketing-ia
+# « atelier » = instance principale (lancer-instance.sh, port fixé par config/atelier.env) ;
+# « atelier-<suffixe> » = instance d'essai (instance-essai.sh <id> <port> <port base>).
+# Les « $$ » sont des « $ » littéraux pour systemd ; %i est l'identifiant de l'instance.
+ExecStart=/bin/bash -c 'if [ "$$1" = atelier ]; then exec scripts/lancer-instance.sh; else exec scripts/instance-essai.sh demarrer "$$1" "$$ATELIER_PORT" "$$ATELIER_PORT_DB"; fi' atelier-instance %i
+Restart=on-failure
+RestartSec=15
+# Laisse à Paperclip le temps d'arrêter son PostgreSQL embarqué proprement.
+TimeoutStopSec=90
+KillMode=mixed
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=atelier-instance-%i
+
+[Install]
+WantedBy=default.target

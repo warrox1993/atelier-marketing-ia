@@ -1,0 +1,10 @@
+[Unit]
+Description=Contrôle de santé de l'Atelier marketing IA (%i), toutes les 5 minutes
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=5min
+AccuracySec=30s
+
+[Install]
+WantedBy=timers.target

@@ -41,6 +41,10 @@ export const CodeMotifPorte = z.enum([
   "chiffre_offre_sans_source",
   /** Garde-fous de vérité : numéro FSMA ou BCE cité qui n'est pas, dans la fiche du client, un identifiant de ce type (`services-faits.ts`). */
   "identifiant_legal_incoherent",
+  /** Couverture de prospection (`serveur/couverture-prospection.ts`) : code postal à moins du rayon d'un bureau jamais interrogé. */
+  "couverture_zone_manquante",
+  /** Couverture de prospection : somme fausse, total différent du total recompté sur les dépôts, nombre de codes postaux annoncé faux. */
+  "total_incoherent",
 ]);
 export type CodeMotifPorte = z.infer<typeof CodeMotifPorte>;
 

@@ -1,0 +1,308 @@
+From 9bec9f5e412c0f22db2f968b5f78f4c47cce7bfc Mon Sep 17 00:00:00 2001
+From: Jean-Baptiste Dhondt <114347858+warrox1993@users.noreply.github.com>
+Date: Fri, 16 Oct 2026 14:14:13 +0200
+Subject: [PATCH] =?UTF-8?q?feat(ui):=20propri=C3=A9t=C3=A9s,=20actions=20e?=
+ =?UTF-8?q?t=20statut=20accessibles=20au=20doigt=20sous=20md?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+- tête de tâche : bouton « Propriétés » (44 px) qui ouvre le panneau existant en feuille, y compris en interface simplifiée
+- menu « Autres actions sur la tâche » visible sous md, cible de 44 px
+- bouton de statut : zone tactile de 44 px sous md sans changer l'icône
+- zone de saisie du fil : une ligne au repos sous md, jusqu'à 28 % de la hauteur à la saisie
+- rendu au-delà de md inchangé
+
+Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01DP85vPq2MHkZg8VNtRvCzB
+---
+ ui/src/components/StatusIcon.test.tsx         |  15 +++
+ ui/src/components/StatusIcon.tsx              |   4 +-
+ .../task-chat/TaskChatComposer.test.tsx       |  14 ++-
+ .../components/task-chat/TaskChatComposer.tsx |   2 +-
+ ui/src/pages/IssueDetail.test.tsx             | 100 ++++++++++++++++++
+ ui/src/pages/IssueDetail.tsx                  |  26 ++++-
+ 6 files changed, 152 insertions(+), 9 deletions(-)
+
+diff --git a/ui/src/components/StatusIcon.test.tsx b/ui/src/components/StatusIcon.test.tsx
+index 3c9dfc321..14a3a64d8 100644
+--- a/ui/src/components/StatusIcon.test.tsx
++++ b/ui/src/components/StatusIcon.test.tsx
+@@ -137,4 +137,19 @@ describe("Slack idle status presentation", () => {
+   it("preserves an explicit terminal outcome even with stale waiting data", () => {
+     expect(renderToStaticMarkup(<IssueStatusBadge status="done" externalConversationState="waiting" />)).toContain(">Done<");
+   });
++
++  it("donne une zone tactile de 44 px sous md au bouton de statut, sans changer l'icône", () => {
++    const html = renderToStaticMarkup(<StatusIcon status="todo" onChange={() => {}} />);
++    expect(html).toContain("max-md:after:size-(--sz-44px)");
++    expect(html).toContain("max-md:after:absolute");
++    // La taille de l'icône reste celle de la prop size.
++    const sans = renderToStaticMarkup(<StatusIcon status="todo" />);
++    const svg = (h: string) => /<svg[^>]*class="([^"]*)"/.exec(h)?.[1]?.replace(" cursor-pointer", "");
++    expect(svg(html)).toBe(svg(sans));
++  });
++
++  it("garde 44 px de haut sous md pour le bouton de statut avec libellé", () => {
++    const html = renderToStaticMarkup(<StatusIcon status="todo" showLabel onChange={() => {}} />);
++    expect(html).toContain("max-md:min-h-(--sz-44px)");
++  });
+ });
+diff --git a/ui/src/components/StatusIcon.tsx b/ui/src/components/StatusIcon.tsx
+index 30f90f040..579b8c3cb 100644
+--- a/ui/src/components/StatusIcon.tsx
++++ b/ui/src/components/StatusIcon.tsx
+@@ -114,7 +114,7 @@ export function StatusIcon({ status, externalConversationState, blockerAttention
+     <button
+       type="button"
+       aria-label={`Change status (current: ${ariaLabel})`}
+-      className="inline-flex min-h-5 items-center gap-1.5 cursor-pointer hover:bg-accent/50 rounded px-1 -mx-1 py-0.5 transition-colors"
++      className="inline-flex min-h-5 items-center gap-1.5 cursor-pointer hover:bg-accent/50 rounded px-1 -mx-1 py-0.5 transition-colors max-md:min-h-(--sz-44px)"
+     >
+       {glyph}
+       <span className="text-sm">{statusLabel(displayStatus)}</span>
+@@ -124,7 +124,7 @@ export function StatusIcon({ status, externalConversationState, blockerAttention
+       type="button"
+       data-slot="icon-button"
+       aria-label={`Change status (current: ${ariaLabel})`}
+-      className="inline-flex cursor-pointer items-center justify-center rounded-sm focus-visible:outline-none focus-visible:ring-(length:--rad-3) focus-visible:ring-ring"
++      className="relative inline-flex cursor-pointer items-center justify-center rounded-sm focus-visible:outline-none focus-visible:ring-(length:--rad-3) focus-visible:ring-ring max-md:after:absolute max-md:after:left-1/2 max-md:after:top-1/2 max-md:after:size-(--sz-44px) max-md:after:-translate-x-1/2 max-md:after:-translate-y-1/2 max-md:after:content-['']"
+     >
+       {glyph}
+     </button>
+diff --git a/ui/src/components/task-chat/TaskChatComposer.test.tsx b/ui/src/components/task-chat/TaskChatComposer.test.tsx
+index 769a4d4c5..e874ef7e6 100644
+--- a/ui/src/components/task-chat/TaskChatComposer.test.tsx
++++ b/ui/src/components/task-chat/TaskChatComposer.test.tsx
+@@ -865,8 +865,18 @@ describe("TaskChatComposer", () => {
+   it("uses a compact mobile editor that can grow with the message", () => {
+     render(<TaskChatComposer onAdd={vi.fn()} workMode="standard" mobile />);
+ 
+-    expect(editable().dataset.contentClassName).toContain("min-h-(--sz-48px)");
+-    expect(editable().dataset.contentClassName).toContain("max-h-(--sz-28dvh)");
++    const classes = editable().dataset.contentClassName!.split(/\s+/);
++    expect(classes).toContain("min-h-(--sz-48px)");
++    // Au repos : une ligne (48 px) ; à la saisie (focus) : jusqu'à 28 % de la hauteur.
++    expect(classes).toContain("max-h-(--sz-48px)");
++    expect(classes).toContain("focus:max-h-(--sz-28dvh)");
++    expect(classes).not.toContain("max-h-(--sz-28dvh)");
++  });
++
++  it("garde la hauteur maximale de 28 % en permanence sur ordinateur", () => {
++    render(<TaskChatComposer onAdd={vi.fn()} workMode="standard" />);
++    const classes = editable().dataset.contentClassName!.split(/\s+/);
++    expect(classes).toContain("max-h-(--sz-28dvh)");
+   });
+ 
+   it("submits the trimmed body on Cmd+Enter and clears the draft", async () => {
+diff --git a/ui/src/components/task-chat/TaskChatComposer.tsx b/ui/src/components/task-chat/TaskChatComposer.tsx
+index a315bcf1a..7bdcefb7d 100644
+--- a/ui/src/components/task-chat/TaskChatComposer.tsx
++++ b/ui/src/components/task-chat/TaskChatComposer.tsx
+@@ -1372,7 +1372,7 @@ export function TaskChatComposer({
+               className={cn(disabled && "opacity-60")}
+               contentClassName={
+                 mobile
+-                  ? "max-h-(--sz-28dvh) min-h-(--sz-48px) overflow-y-auto px-1 py-1 text-base scrollbar-auto-hide"
++                  ? "max-h-(--sz-48px) min-h-(--sz-48px) overflow-y-auto px-1 py-1 text-base scrollbar-auto-hide focus:max-h-(--sz-28dvh)"
+                   : "max-h-(--sz-28dvh) min-h-(--sz-48px) overflow-y-auto px-1 py-1 text-sm scrollbar-auto-hide"
+               }
+             />
+diff --git a/ui/src/pages/IssueDetail.test.tsx b/ui/src/pages/IssueDetail.test.tsx
+index 5a88e2a0a..3e942a2bd 100644
+--- a/ui/src/pages/IssueDetail.test.tsx
++++ b/ui/src/pages/IssueDetail.test.tsx
+@@ -2444,6 +2444,106 @@ describe("IssueDetail", () => {
+     expect(panel?.querySelector('[data-slot="sheet-close"]')).not.toBeNull();
+   });
+ 
++  describe("accès mobile aux propriétés et aux actions (sous md)", () => {
++    // Ces tests appellent l'API de mise à jour : on isole les appels pour ne pas
++    // fausser les tests voisins qui lisent invocationCallOrder[0].
++    beforeEach(() => { mockIssuesApi.update.mockClear(); });
++    afterEach(() => { mockIssuesApi.update.mockClear(); });
++    const renderPage = async () => {
++      mockIssuesApi.get.mockResolvedValue(createIssue());
++      await act(async () => {
++        root.render(
++          <QueryClientProvider client={queryClient}>
++            <IssueDetail />
++          </QueryClientProvider>,
++        );
++      });
++      await flushReact();
++      await flushReact();
++    };
++    const propsButton = () =>
++      container.querySelector<HTMLButtonElement>(
++        '[data-testid="issue-detail-header"] button[aria-label="Propriétés"]',
++      );
++
++    it("le bouton Propriétés de la tête ouvre le panneau en feuille et se ferme avec un bouton de 44 px", async () => {
++      mockSidebarState.isMobile = true;
++      await renderPage();
++
++      expect(propsButton()).not.toBeNull();
++      // Visible seulement sous md, avec une cible tactile de 44 px (h-11).
++      expect(propsButton()!.className).toContain("md:hidden");
++      expect(propsButton()!.className).toContain("h-11");
++      expect(document.querySelector('[data-testid="mobile-task-side-panel"]')).toBeNull();
++
++      await act(async () => propsButton()!.click());
++      await waitForAssertion(() => {
++        const panel = document.querySelector('[data-testid="mobile-task-side-panel"]');
++        expect(panel).not.toBeNull();
++        expect(panel?.textContent).toContain("Task side panel");
++      });
++
++      // Le bouton « Fermer » du panneau (onRequestClose) referme la feuille.
++      const props = mockTaskSidePanelRender.mock.calls.at(-1)?.[0];
++      expect(props.mobile).toBe(true);
++      await act(async () => { props.onRequestClose(); });
++      await waitForAssertion(() => {
++        expect(document.querySelector('[data-testid="mobile-task-side-panel"]')).toBeNull();
++      });
++    });
++
++    it("le statut se modifie depuis le panneau ouvert sur mobile", async () => {
++      mockSidebarState.isMobile = true;
++      mockIssuesApi.update.mockResolvedValueOnce(createIssue({ status: "done" }));
++      await renderPage();
++
++      await act(async () => propsButton()!.click());
++      await waitForAssertion(() => {
++        expect(document.querySelector('[data-testid="mobile-task-side-panel"]')).not.toBeNull();
++      });
++      const props = mockTaskSidePanelRender.mock.calls.at(-1)?.[0];
++      await act(async () => { props.onUpdate({ status: "done" }); });
++      await waitForAssertion(() => {
++        expect(mockIssuesApi.update).toHaveBeenCalledWith(
++          "PAP-1",
++          expect.objectContaining({ status: "done" }),
++        );
++      });
++    });
++
++    it("le menu « Autres actions » est présent, de 44 px, et son contenu est atteignable", async () => {
++      mockSidebarState.isMobile = true;
++      await renderPage();
++
++      const titleActions = container.querySelector('[data-slot="task-title-actions"]');
++      // Plus de h-7 seul : 44 px sous md, 28 px au-delà.
++      expect(titleActions?.className).toContain("h-11");
++      expect(titleActions?.className).toContain("md:h-7");
++      // Le conteneur des actions n'est plus masqué sous md.
++      const wrapper = titleActions?.parentElement;
++      expect(wrapper?.className).not.toContain("hidden");
++
++      const moreButton = titleActions?.querySelector<HTMLButtonElement>(
++        'button[aria-label="Autres actions sur la tâche"]',
++      );
++      expect(moreButton).not.toBeNull();
++      expect(moreButton!.className).toContain("max-md:size-11");
++
++      await act(async () => moreButton!.click());
++      const hide = Array.from(document.body.querySelectorAll<HTMLButtonElement>("button"))
++        .find((button) => button.textContent?.trim() === "Masquer cette tâche");
++      expect(hide).toBeDefined();
++    });
++
++    it("les boutons réservés au bureau restent masqués sous md", async () => {
++      mockSidebarState.isMobile = true;
++      await renderPage();
++      const desktopOnly = container.querySelector('[data-slot="task-title-actions"]')
++        ?.parentElement?.querySelector(":scope > .hidden.md\\:contents");
++      expect(desktopOnly).not.toBeNull();
++    });
++  });
++
+   it("loads ancestors, subtask membership and created work independently and refreshes on issue activity", async () => {
+     const ancestors = [{ id: "parent-task", identifier: "PAP-0", title: "Parent task", status: "in_progress" }] as Issue["ancestors"];
+     const source = createIssue({ ancestors });
+diff --git a/ui/src/pages/IssueDetail.tsx b/ui/src/pages/IssueDetail.tsx
+index 959f852fb..150e36cf9 100644
+--- a/ui/src/pages/IssueDetail.tsx
++++ b/ui/src/pages/IssueDetail.tsx
+@@ -7062,7 +7062,7 @@ export function TaskDetailSurface({ conversation, tasksTab }: { tasksTab?: TaskS
+       )}
+     >
+       {streamlinedTaskDetailEnabled ? (
+-        <div className="flex min-w-0 items-start gap-2 md:items-center md:pr-8">
++        <div className="flex min-w-0 items-start gap-2 pr-12 md:items-center md:pr-8">
+           <div className="hidden md:block">{issueStatusControl}</div>
+           <div
+             data-slot="task-detail-title"
+@@ -7098,6 +7098,19 @@ export function TaskDetailSurface({ conversation, tasksTab }: { tasksTab?: TaskS
+             {issue.identifier ?? issue.id.slice(0, 8)}
+           </span>
+         ) : null}
++        {streamlinedTaskDetailEnabled && !(isMobile && isFromInbox) ? (
++          <Button
++            variant="ghost"
++            size="sm"
++            className="ml-auto h-11 shrink-0 gap-1.5 px-3 md:hidden"
++            onClick={() => setMobilePropsOpen(true)}
++            aria-label="Propriétés"
++            title="Propriétés"
++          >
++            <SlidersHorizontal className="h-4 w-4" />
++            Propriétés
++          </Button>
++        ) : null}
+         {!streamlinedTaskDetailEnabled ? issueStatusControl : null}
+         {/* PAP-411: priority UI hidden behind SHOW_TASK_PRIORITY_UI. */}
+         {SHOW_TASK_PRIORITY_UI && (
+@@ -7248,6 +7261,7 @@ export function TaskDetailSurface({ conversation, tasksTab }: { tasksTab?: TaskS
+             <Button
+               variant="ghost"
+               size="icon-xs"
++              className="max-md:size-11"
+               onClick={copyIssueToClipboard}
+               title="Copier la tâche en markdown"
+             >
+@@ -7260,7 +7274,9 @@ export function TaskDetailSurface({ conversation, tasksTab }: { tasksTab?: TaskS
+             <Button
+               variant="ghost"
+               size="icon-xs"
++              className="max-md:size-11"
+               onClick={() => setMobilePropsOpen(true)}
++              aria-label="Propriétés"
+               title="Propriétés"
+             >
+               <SlidersHorizontal className="h-4 w-4" />
+@@ -7268,7 +7284,8 @@ export function TaskDetailSurface({ conversation, tasksTab }: { tasksTab?: TaskS
+           </div>
+         )}
+ 
+-        <div className="hidden md:flex items-center md:ml-auto shrink-0">
++        <div className="flex items-center md:ml-auto shrink-0">
++          <div className="hidden md:contents">
+           {!streamlinedTaskDetailEnabled && canArchiveFromInbox && (
+             <Button
+               variant="ghost"
+@@ -7321,11 +7338,12 @@ export function TaskDetailSurface({ conversation, tasksTab }: { tasksTab?: TaskS
+               />
+             </TooltipProvider>
+           ) : null}
++          </div>
+           <div
+             data-slot="task-title-actions"
+             className={cn(
+               streamlinedTaskDetailEnabled &&
+-                "absolute right-0 top-0 flex h-7 items-center",
++                "absolute right-0 top-0 flex h-11 items-center md:h-7",
+             )}
+           >
+             <Popover open={moreOpen} onOpenChange={setMoreOpen}>
+@@ -7333,7 +7351,7 @@ export function TaskDetailSurface({ conversation, tasksTab }: { tasksTab?: TaskS
+                 <Button
+                   variant="ghost"
+                   size="icon-xs"
+-                  className="shrink-0"
++                  className="shrink-0 max-md:size-11"
+                   aria-label="Autres actions sur la tâche"
+                   title="Autres actions sur la tâche"
+                   onKeyDown={(event) => {
+-- 
+2.53.0
+

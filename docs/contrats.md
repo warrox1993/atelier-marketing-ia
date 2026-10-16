@@ -131,13 +131,13 @@ un agent), résout l'entreprise, vérifie l'accès (403 hors entreprise) avant l
 
 | Clé | Méthode et chemin | Auth | Entreprise résolue par | Corps / réponse |
 | --- | --- | --- | --- | --- |
-| `tache.contexte` | GET `/taches/:issueId/contexte` | board ou agent | tâche | contexte complet de la tâche (brief, exigences, livrable, revues, constats, boîte) |
+| `tache.contexte` | GET `/taches/:issueId/contexte` | board ou agent | tâche | RÉSUMÉ du contexte de la tâche (< 40 000 caractères, voir la note ci-dessous) |
 | `tache.couverture` | POST `/taches/:issueId/couverture` | board ou agent (producteur assigné, checkout exigé en `in_progress`) | tâche | `DeclarerCouvertureEntree` → `{ couvertures, revues: [{ role, issueId, identifier, statut }], cyclesConsommes, cyclesEpuises }` (crée les tâches de revue liées de la révision, §6 bis) |
 | `tache.planification` | POST `/taches/:issueId/planification` | board ou agent | tâche | `PlanifierEntree { canal, dateProposee }` → date PROPOSÉE (jamais une programmation réelle) |
 | `tache.verdict` | POST `/taches/:issueId/verdicts` | board ou agent désigné pour le rôle, jamais le producteur | tâche | `DeposerVerdictEntree` → `VerdictRevue` |
 | `tache.porte.evaluer` | POST `/taches/:issueId/porte/evaluer` | board ou agent **participant d'une étape de revue native de la tâche** (v1.5, M5 : `role_non_autorise` sinon) | tâche | → `EvaluationPorte` |
 | `tache.porte.lire` | GET `/taches/:issueId/porte` | board ou agent | tâche | → `EvaluationPorte \| null` |
-| `tache.dossier` | GET `/taches/:issueId/dossier` | board ou agent | tâche | → `DossierHumain` |
+| `tache.dossier` | GET `/taches/:issueId/dossier` | board ou agent | tâche | RÉSUMÉ du dossier (< 40 000 caractères) ; `?vue=complete` → `DossierHumain` (voir la note « `tache.dossier` ») |
 | `tache.messages.envoyer` | POST `/taches/:issueId/messages` | board ou agent | tâche | `EnvoyerMessageEntree` → `MessageAgent` |
 | `tache.messages.boite` | GET `/taches/:issueId/messages` | board ou agent | tâche | → `MessageAgent[]` adressés à l'appelant |
 | `tache.messages.etat` | POST `/taches/:issueId/messages/:messageId/etat` | destinataire | tâche | `{ etat }` → `MessageAgent` |
@@ -160,6 +160,35 @@ un agent), résout l'entreprise, vérifie l'accès (403 hors entreprise) avant l
 | `journal.lire` | GET `/journal?companyId=&afterSeq=` | board ou agent | requête | → `PageJournal` |
 | `sante` | GET `/sante?companyId=` | board ou agent | requête | → `Diagnostic` |
 | `reglages.enregistrer` | POST `/reglages` | board | corps | `EnregistrerReglagesEntree` → `ReglagesEntreprise` |
+
+> **Note `tache.contexte` (résumé par défaut).** Le corps complet fait 48 à 112 Ko sur une seule ligne, ce qu'un
+> agent qui n'a que `curl` ne peut ni lire ni découper. La route renvoie donc par défaut un résumé (`vue: "resume"`) :
+> `tache`, `campagne`, `brief`, `porte` et `exigences` sans identifiants répétés (`companyId`, `campagneId`, `issueId`) ;
+> `livrable` réduit à `{revisionId, revisionNumber, titre, longueur, lignes, sommaire:[{ligne, titre}]}` ;
+> `couvertures` réduites à `{code, etat, nbPreuves, hypotheses, question}` ; `verdicts` de la révision courante sans
+> `preuvesVerifiees`, ceux des révisions antérieures réduits à `{role, verdict, revisionId}` ; `constatsOuverts` complets
+> sans `companyId`, `issueId` ni `reviewer` ; `donneesConnexion` en comptes `{service, outil, mode, nombre}` ; toutes les
+> autres clés inchangées. Paramètres de requête : `?partie=livrable&debut=<ligne>&lignes=<n>` (pages d'au plus
+> 15 000 caractères ; réponse avec `suivant: {debut, decalage}` ou `null`, `decalage` n'étant utile que pour une ligne
+> plus longue qu'une page) ; `?partie=verdicts|couvertures|donneesConnexion` (la partie en entier) ; `?vue=complete`
+> (exactement l'ancien corps). Une partie inconnue est refusée (`entree_invalide`).
+
+> **Note `tache.dossier` et `prospects.lister` (résumé par défaut, même traitement que `tache.contexte`).**
+> *Dossier* : le corps complet dépasse 100 Ko (livrable entier, `preuvesVerifiees` de chaque verdict, `extrait` de chaque
+> source, aperçus d'appels). Par défaut la route renvoie `vue: "resume"` : `livrable` réduit à `{revisionId, revisionNumber,
+> titre, longueur, lignes, sommaire}` ; `matrice` avec couverture réduite (`nbPreuves`) ; `revues`, `sources`, `decisions`,
+> `diffusions` et `appelsProposes` sous la forme `{ total, tronque, elements }` (au plus 40 éléments, sans preuves, extraits,
+> portées, preuves d'approbation signées ni arguments) ; `constatsResolus` et `constatsRestants` sans `companyId`, `issueId` ni
+> `reviewer` ; les autres clés inchangées. Paramètres : `?partie=livrable&debut=&lignes=&decalage=` (pages comme le
+> contexte, mêmes `suivant`), `?partie=matrice|revues|sources|decisions|diffusions|appelsProposes` (la partie entière,
+> identique au corps complet), `?vue=complete` (exactement l'ancien corps : l'interface humaine passe par
+> `atelier.dossier`, les scripts de scénarios par `?vue=complete`). Partie inconnue : `entree_invalide`.
+> *Prospects* : une page de 50 prospects entiers pèse environ 170 Ko (100 : 335 Ko). Par défaut la route renvoie
+> `{ vue: "resume", total, page, pages, prospects: [fiche] }`, la fiche étant `{ id, cible, identifiant, denomination,
+> nace, lieu, statut, mode, score, confiance:{valeur, qualifie}, motifsExclusion? }` (sans coordonnées ; moins de 40 000
+> caractères même à 100 par page). Filtres, `page` et `parPage` inchangés ; `?partie=detail&prospectId=<id>` rend un
+> prospect entier ; `?vue=complete` rend la page entière comme avant (liste de l'interface, carte, scripts).
+
 
 Erreurs : `{ erreur, code, details? }`, codes stables dans `CODES_ERREUR` (`api.ts`).
 

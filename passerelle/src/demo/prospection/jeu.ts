@@ -56,6 +56,12 @@ export interface CompteDemo {
   modele: "m01" | "m02" | "m81";
   effectifEtp: number;
   totalBilan: number;
+  /** Fonds propres (rubrique 10/15, à confirmer sur la documentation BNB) : fictifs, parfois négatifs. */
+  fondsPropres: number;
+  /** Terrains et constructions (rubrique 22) : zéro pour les locataires. */
+  terrainsConstructions: number;
+  /** Résultat de l'exercice (rubrique 9904) : négatif = perte. */
+  resultat: number;
 }
 
 export type TailleDemo = "micro" | "petite" | "moyenne" | "grande" | "inconnue";
@@ -153,6 +159,15 @@ function comptesDe(id: string, debut: string, forcerAucun = false): CompteDemo[]
     // Retard des données : certains exercices récents ne sont pas encore déposés.
     if (depot > DATE_FIN_JEU || (exercice === 2025 && alea(...k(id, "exercice-2025")) < 0.3)) continue;
     const effectifEtp = Math.max(0.5, arrondi1(base * bruit(0.08, ...k(id, "etp-an", exercice))));
+    const totalBilan = Math.round((effectifEtp * rapport * bruit(0.1, ...k(id, "bilan-an", exercice)) + 40_000) / 100) * 100;
+    // Rubriques du lot 2, tirées avec leurs propres clés (les tirages d'avant ne bougent pas) : environ 12 % d'entreprises à fonds propres
+    // négatifs, un tiers propriétaire de ses locaux, une année sur cinq en perte.
+    const fondsNegatifs = alea(...k(id, "fonds-negatifs")) < 0.12;
+    const fondsPropres = Math.round((totalBilan * (fondsNegatifs ? -entre(0.02, 0.15, ...k(id, "fonds-an", exercice)) : entre(0.15, 0.55, ...k(id, "fonds-an", exercice)))) / 100) * 100;
+    const proprietaire = alea(...k(id, "proprietaire")) < 0.35;
+    const terrainsConstructions = proprietaire ? Math.round((totalBilan * entre(0.1, 0.4, ...k(id, "terrains-an", exercice))) / 100) * 100 : 0;
+    const enPerte = alea(...k(id, "perte-an", exercice)) < 0.2;
+    const resultat = Math.round((totalBilan * (enPerte ? -entre(0.01, 0.08, ...k(id, "resultat-an", exercice)) : entre(0.005, 0.1, ...k(id, "resultat-an", exercice)))) / 100) * 100;
     comptes.push({
       exercice,
       debut: `${exercice}-01-01`,
@@ -161,7 +176,10 @@ function comptesDe(id: string, debut: string, forcerAucun = false): CompteDemo[]
       referenceDepot: `${exercice + 1}-${String(Math.floor(alea(...k(id, "ref", exercice)) * 1e7)).padStart(7, "0")}`,
       modele: profil === "micro" ? "m81" : profil === "petite" ? "m02" : "m01",
       effectifEtp,
-      totalBilan: Math.round((effectifEtp * rapport * bruit(0.1, ...k(id, "bilan-an", exercice)) + 40_000) / 100) * 100,
+      totalBilan,
+      fondsPropres,
+      terrainsConstructions,
+      resultat,
     });
   }
   return comptes;

@@ -52,7 +52,7 @@ documents de tâche par l'API Paperclip. Publication : `facebook_publier`, `inst
 
 Requêtes authentifiées, toujours sous la forme exacte de la section « Appeler l'API de Paperclip » plus bas (contrats : `docs/contrats.md`).
 
-- Contexte complet de ta tâche (brief, exigences, livrable, revues, boîte) : `GET /api/plugins/atelier.marketing-ia/api/taches/<issueId>/contexte`.
+- Contexte de ta tâche, en résumé (brief, exigences, sommaire du livrable, revues, constats, boîte) : `GET /api/plugins/atelier.marketing-ia/api/taches/<issueId>/contexte`. Le livrable se lit par pages (`?partie=livrable&debut=<ligne>&lignes=<n>`, lignes données par `livrable.sommaire`) ; `?partie=verdicts|couvertures|donneesConnexion` pour le détail.
 - Messages typés : `GET` et `POST /api/plugins/atelier.marketing-ia/api/taches/<issueId>/messages` ; une mention dans un commentaire ne réveille personne.
 - Déclaration de couverture de ton livrable, exigence par exigence avec preuves : `POST /api/plugins/atelier.marketing-ia/api/taches/<issueId>/couverture`.
 - Lecture protégée d'une URL (source enregistrée et datée) : `POST /api/plugins/atelier.marketing-ia/api/taches/<issueId>/sources`.
@@ -207,6 +207,16 @@ et la liste des documents disponibles : `…/api/plugins/atelier.marketing-ia/ap
   la fiche : « La page affiche 0123.456.789 comme numéro FSMA, alors que le FSMA de la fiche est
   012345. » Sans le bon numéro, la porte refuse la phrase.
 
+## Livrable en relecture : attendre tous les verdicts
+
+- Tant qu'une tâche de revue de la révision courante est ouverte (résumé du contexte de ta tâche :
+  `revuesRevisionCourante`, statut autre que `done` ou `cancelled`), n'écris aucune nouvelle révision
+  du livrable : relecture en cours, attends les verdicts, puis corrige tout en une seule révision.
+  Une révision écrite pendant une relecture rend les verdicts en cours caducs (`revision_perimee`).
+- Un verdict `BLOCKED_INFORMATION` (outil ou réseau en panne) n'appelle aucune correction : n'écris
+  pas de nouvelle révision et ne demande pas la clôture ; le Coordinateur relance la revue quand la
+  cause est levée.
+
 ## Appeler l'API de Paperclip
 
 Ton seul accès au shell est l'autorisation `Bash(curl *)`, sans question possible : une commande qui
@@ -221,8 +231,18 @@ avec `$PAPERCLIP_…` ailleurs (consignes, compétences, message de réveil) : t
   (écris l'apostrophe typographique ’). Corps long, si tu as l'outil Write : écris le JSON dans un
   fichier de ton espace de travail, puis `--data-binary @<chemin absolu du fichier>`.
 - `-w '\nHTTP %{http_code}\n'` affiche le code de retour ; `-o <fichier>` remplace toute redirection.
+- Corps des requêtes : voir la fiche routes-agents (section « Corps des requêtes de tes routes » en bas de tes
+  consignes) ; ne lis jamais le code source du plugin.
 
-Lire une tâche (même forme pour tout `GET`, par exemple `…/taches/<issueId>/contexte` du plugin) :
+Lire une tâche (même forme pour tout `GET`, par exemple `…/taches/<issueId>/contexte` du plugin ; ce contexte est un
+résumé par défaut : le livrable se lit par pages avec `?partie=livrable&debut=<ligne>&lignes=<n>` d'après
+`livrable.sommaire`, le détail avec `?partie=verdicts|couvertures|donneesConnexion`, le schéma des clés par `pourAllerPlus`
+et `?vue=complete` seulement si le résumé ne suffit pas). Le dossier de la tâche (`…/taches/<issueId>/dossier`) et la
+liste des prospects (`…/prospects`) suivent la même règle : résumé par défaut, `?partie=` pour le détail (dossier :
+`livrable` paginé, `matrice`, `revues`, `sources`, `decisions`, `diffusions`, `appelsProposes` ; prospects :
+`?partie=detail&prospectId=<id>` et `page`), `?vue=complete` en dernier recours. Pour lire le livrable, utilise la partie
+`livrable` paginée du contexte de l'atelier (`…/contexte?partie=livrable&debut=<ligne>`) plutôt que de télécharger le
+document natif de la tâche : il tient en une seule ligne trop longue pour `Read` et pousse à des dizaines de `grep` :
 
 ```
 curl -sS --variable %PAPERCLIP_API_URL --variable %PAPERCLIP_API_KEY --expand-header 'Authorization: Bearer {{PAPERCLIP_API_KEY}}' --expand-url '{{PAPERCLIP_API_URL}}/api/issues/<issueId>'
@@ -258,3 +278,220 @@ curl -sS -w '\nHTTP %{http_code}\n' -X POST --variable %PAPERCLIP_API_URL --vari
 
 Une commande refusée ne se contourne pas par un autre outil : corrige-la selon ces règles. Un code
 HTTP 4xx vient du serveur (lis son message), pas de la syntaxe.
+
+## Fichiers temporaires et limites de lecture
+
+Écris tes fichiers temporaires dans ton répertoire de travail, jamais dans /tmp. N'essaie jamais de lire des fichiers hors de ton répertoire de travail.
+
+## Corps des requêtes de tes routes (fiche routes-agents)
+
+Corps JSON à envoyer, tirés des contrats du plugin : ne lis jamais le code source du plugin pour les deviner.
+
+### POST /taches/:issueId/couverture
+
+Clé : `tache.couverture`. Le producteur déclare la couverture de chaque exigence pour une révision, avec preuves localisables.
+
+| Champ | Type | Obligatoire | Bornes |
+| --- | --- | --- | --- |
+| `revisionId` | uuid | oui |  |
+| `lignes` | tableau d'objets | oui | 1 à 200 éléments |
+| `lignes[].code` | texte | oui | motif `^REQ-\d{3,}$` |
+| `lignes[].etat` | énumération | oui | "non_traite" \| "partiel" \| "couvert" \| "bloque" \| "na_justifie" |
+| `lignes[].preuves` | tableau d'objets | non | 0 à 100 éléments |
+| `lignes[].preuves[].revisionId` | uuid | oui |  |
+| `lignes[].preuves[].emplacement` | texte | oui | 1 à 300 caractères |
+| `lignes[].preuves[].element` | texte | non | 1 à 200 caractères ; peut valoir null |
+| `lignes[].preuves[].extrait` | texte | oui | 1 à 1000 caractères |
+| `lignes[].preuves[].sourceIds` | tableau de uuid | non | 0 à 20 éléments |
+| `lignes[].hypotheses` | tableau d'objets | non | 0 à 20 éléments |
+| `lignes[].hypotheses[].texte` | texte | oui | 1 à 1000 caractères |
+| `lignes[].hypotheses[].autoriseePar` | texte | oui | peut valoir null |
+| `lignes[].question` | texte | non | 1 à 2000 caractères ; peut valoir null |
+
+Exemple minimal valide :
+
+```json
+{"revisionId":"123e4567-e89b-42d3-a456-426614174000","lignes":[{"code":"REQ-001","etat":"non_traite"}]}
+```
+
+### POST /taches/:issueId/messages
+
+Clé : `tache.messages.envoyer`. Envoi d'un message typé rattaché à la tâche.
+
+Aucun champ en plus de ceux listés (les champs inconnus sont refusés).
+
+| Champ | Type | Obligatoire | Bornes |
+| --- | --- | --- | --- |
+| `recipient` | objet | oui |  |
+| `recipient.type` | énumération | oui | "agent" \| "humain" |
+| `recipient.id` | texte | oui | 1 à 200 caractères |
+| `contenu` | une des variantes ci-dessous | oui |  |
+| `contenu{type=demande_information}` | variante | oui |  |
+| `contenu{type=demande_information}.question` | texte | oui | 1 à 8000 caractères |
+| `contenu{type=demande_information}.justification` | texte | oui | 1 à 8000 caractères |
+| `contenu{type=demande_information}.consequence` | texte | oui | 1 à 8000 caractères |
+| `contenu{type=reponse}` | variante | oui |  |
+| `contenu{type=reponse}.enReponseA` | uuid | oui |  |
+| `contenu{type=reponse}.texte` | texte | oui | 1 à 8000 caractères |
+| `contenu{type=contrat_propose}` | variante | oui |  |
+| `contenu{type=contrat_propose}.entrees` | tableau de texte | oui | 1 à 30 éléments |
+| `contenu{type=contrat_propose}.sorties` | tableau de texte | oui | 1 à 30 éléments |
+| `contenu{type=contrat_propose}.exigences` | tableau de texte | non | 0 à 50 éléments |
+| `contenu{type=contrat_propose}.echeance` | date ISO | non | peut valoir null |
+| `contenu{type=contrat_accepte}` | variante | oui |  |
+| `contenu{type=contrat_accepte}.contratMessageId` | uuid | oui |  |
+| `contenu{type=contrat_accepte}.remarques` | texte | non | 0 à 2000 caractères ; peut valoir null |
+| `contenu{type=dependance_modifiee}` | variante | oui |  |
+| `contenu{type=dependance_modifiee}.tacheId` | uuid | oui |  |
+| `contenu{type=dependance_modifiee}.changement` | texte | oui | 1 à 8000 caractères |
+| `contenu{type=constat_revue}` | variante | oui |  |
+| `contenu{type=constat_revue}.findingId` | texte | oui | 1 à 64 caractères |
+| `contenu{type=constat_revue}.resume` | texte | oui | 1 à 8000 caractères |
+| `contenu{type=correction_demandee}` | variante | oui |  |
+| `contenu{type=correction_demandee}.findingIds` | tableau de texte | oui | 1 à 50 éléments |
+| `contenu{type=correction_demandee}.texte` | texte | oui | 1 à 8000 caractères |
+| `contenu{type=blocage}` | variante | oui |  |
+| `contenu{type=blocage}.raison` | texte | oui | 1 à 8000 caractères |
+| `contenu{type=blocage}.informationManquante` | texte | oui | 1 à 8000 caractères |
+| `contenu{type=decision}` | variante | oui |  |
+| `contenu{type=decision}.sujet` | texte | oui | 1 à 8000 caractères |
+| `contenu{type=decision}.decision` | texte | oui | 1 à 8000 caractères |
+| `contenu{type=decision}.justification` | texte | oui | 1 à 8000 caractères |
+| `contenu{type=resultat}` | variante | oui |  |
+| `contenu{type=resultat}.resume` | texte | oui | 1 à 8000 caractères |
+| `contenu{type=resultat}.revisionId` | uuid | non | peut valoir null |
+| `references` | tableau d'objets | non | 0 à 30 éléments |
+| `references[].type` | énumération | oui | "revision_document" \| "source" \| "tache" \| "constat" \| "exigence" \| "message" |
+| `references[].id` | texte | oui | 1 à 200 caractères |
+
+Exemple minimal valide :
+
+```json
+{"recipient":{"type":"agent","id":"exemple"},"contenu":{"type":"demande_information","question":"exemple","justification":"exemple","consequence":"exemple"}}
+```
+
+### POST /taches/:issueId/sources
+
+Clé : `tache.sources.lire`. Lecture d'une URL publique protégée contre la SSRF ;
+
+| Champ | Type | Obligatoire | Bornes |
+| --- | --- | --- | --- |
+| `url` | texte | oui | 1 à 2048 caractères |
+| `campagneId` | uuid | non | peut valoir null |
+
+Exemple minimal valide :
+
+```json
+{"url":"exemple"}
+```
+
+### POST /taches/:issueId/donnees-connexion
+
+Clé : `tache.donnees.deposer`. Dépôt de la réponse brute d'un outil de connexion (passerelle marketing) : le serveur en déduit le mode (démonstration ou réel) et retient ses chiffres pour ...
+
+Aucun champ en plus de ceux listés (les champs inconnus sont refusés).
+
+Règle croisée : `reponse` doit contenir `texte` ou `structuredContent` (au moins l'un des deux). `arguments` devient obligatoire en mode réel.
+
+| Champ | Type | Obligatoire | Bornes |
+| --- | --- | --- | --- |
+| `service` | texte | oui | motif `^[a-z0-9][a-z0-9_-]{0,39}$` |
+| `outil` | texte | oui | motif `^[a-z0-9][a-z0-9_]{0,79}$` |
+| `reponse` | objet | oui |  |
+| `reponse.texte` | texte | non | 1 à ∞ caractères |
+| `reponse.structuredContent` | objet libre | non |  |
+| `arguments` | objet libre | non |  |
+| `compte` | texte | non | 1 à 200 caractères |
+
+Exemple minimal valide :
+
+```json
+{"service":"gsc","outil":"gsc_requete_performances","reponse":{"texte":"texte brut de la réponse de l'outil"}}
+```
+
+### POST /taches/:issueId/diffusions
+
+Clé : `tache.diffusions`. Demande d'action externe : refusée côté serveur sans décision humaine valide sur la révision et la portée.
+
+| Champ | Type | Obligatoire | Bornes |
+| --- | --- | --- | --- |
+| `revisionId` | uuid | oui |  |
+| `action` | énumération | oui | "publier" \| "envoyer" \| "programmer" \| "activer_campagne_payante" \| "modifier_crm" |
+| `canal` | texte | oui | 1 à 100 caractères |
+| `compte` | texte | non | 1 à 200 caractères ; peut valoir null |
+| `audience` | texte | non | 1 à 500 caractères ; peut valoir null |
+| `montantCents` | entier | non | 0 à ∞ ; peut valoir null |
+| `cleIdempotence` | texte | oui | 8 à 200 caractères |
+| `service` | énumération | non | "facebook" \| "instagram" \| "linkedin" \| "crm" \| "pipedrive" \| "odoo" \| "teamleader" |
+| `outil` | texte | non | motif `^[a-z][a-z0-9_]{0,63}$` |
+| `arguments` | objet libre | non |  |
+
+Exemple minimal valide :
+
+```json
+{"revisionId":"123e4567-e89b-42d3-a456-426614174000","action":"publier","canal":"exemple","cleIdempotence":"exemplex"}
+```
+
+### POST /taches/:issueId/diffusions/:diffusionId/issue
+
+Clé : `tache.diffusions.issue`. Issue d'une diffusion réelle : réponse brute de l'outil de la passerelle, signature vérifiée, état confirmé ou à réconcilier (v1.5).
+
+Aucun champ en plus de ceux listés (les champs inconnus sont refusés).
+
+Règle croisée : `reponse` doit contenir `texte` ou `structuredContent` (au moins l'un des deux).
+
+| Champ | Type | Obligatoire | Bornes |
+| --- | --- | --- | --- |
+| `reponse` | objet | oui |  |
+| `reponse.texte` | texte | non | 1 à ∞ caractères |
+| `reponse.structuredContent` | objet libre | non |  |
+
+Exemple minimal valide :
+
+```json
+{"reponse":{"texte":"texte brut de la réponse de l'outil"}}
+```
+
+### POST /taches/:issueId/appels
+
+Clé : `tache.appels.proposer`. L'agent propose l'appel d'outil EXACT (service, outil, compte, arguments) d'une diffusion réelle ;
+
+Aucun champ en plus de ceux listés (les champs inconnus sont refusés).
+
+| Champ | Type | Obligatoire | Bornes |
+| --- | --- | --- | --- |
+| `revisionId` | uuid | oui |  |
+| `service` | énumération | oui | "facebook" \| "instagram" \| "linkedin" \| "crm" \| "pipedrive" \| "odoo" \| "teamleader" |
+| `outil` | texte | oui | motif `^[a-z][a-z0-9_]{0,63}$` |
+| `compte` | texte | oui | 1 à 200 caractères |
+| `arguments` | objet libre | oui |  |
+
+Exemple minimal valide :
+
+```json
+{"revisionId":"123e4567-e89b-42d3-a456-426614174000","service":"facebook","outil":"exemple","compte":"exemple","arguments":{}}
+```
+
+### POST /taches/:issueId/connaissances/recherche
+
+Clé : `tache.connaissances.rechercher`. Recherche hybride (plein texte et sens) dans les documents de l'entreprise de la tâche ;
+
+Aucun champ en plus de ceux listés (les champs inconnus sont refusés).
+
+| Champ | Type | Obligatoire | Bornes |
+| --- | --- | --- | --- |
+| `question` | texte | oui | 3 à 1000 caractères |
+| `filtres` | objet | non |  |
+| `filtres.types` | tableau de énumération | non | 0 à 11 éléments |
+| `filtres.produits` | tableau de texte | non | 0 à 20 éléments |
+| `filtres.langues` | tableau de énumération | non | 0 à 2 éléments |
+| `filtres.documentIds` | tableau de uuid | non | 0 à 50 éléments |
+| `filtres.dateReference` | texte | non |  |
+| `filtres.inclurePerimes` | booléen | non | défaut false |
+| `nombre` | entier | non | 1 à 20 ; défaut 8 |
+
+Exemple minimal valide :
+
+```json
+{"question":"exemple"}
+```

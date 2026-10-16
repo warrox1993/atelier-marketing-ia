@@ -8,8 +8,10 @@ import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { useHostContext } from "@paperclipai/plugin-sdk/ui";
 import { LIMITES } from "../../contrats/identifiants.js";
 import type { Diagnostic, ReglagesEntreprise, SourcesReelles } from "../../contrats/campagnes.js";
+import { CRITERES_PERSONNALISES_MAX, SEUIL_QUALIFICATION_MAX, SEUIL_QUALIFICATION_MIN, type CriterePersonnalise, type ReglagesLeads, type ReglagesScore } from "../../contrats/prospection.js";
 import { Champ, Bouton, EnTete, EtatErreur, Fraicheur, Horodatage, LienHote, Lecture, Pastille, PastilleConnexion, Section } from "../composants.js";
 import { TableauConnecteurs } from "../connecteurs.js";
+import { ANCRE_PASSAGE_AU_REEL, SectionPassageAuReel } from "../realite.js";
 import { useAction, useDonnees } from "../donnees.js";
 import { euros } from "../format.js";
 import { ecrireBudgetNatif, lireBudgetEntreprise, lireBudgetsAgents, type BudgetNatif } from "../hote.js";
@@ -23,7 +25,9 @@ export function VueParametres() {
     <>
       <EnTete titre="Paramètres et diagnostic" description="État vérifié des gardes et des connecteurs ; une configuration enregistrée ne vaut pas preuve de fonctionnement." />
       <Fraicheur chargeLe={diag.chargeLe} actualisation={diag.loading && diag.data !== null} />
-      <Section titre="Diagnostic">
+      <SommaireParametres avecRechargement={reg.data?.modeParDefaut === "demonstration"} />
+      <SectionPassageAuReel />
+      <Section titre="Diagnostic" ancre="param-diagnostic" repliable>
         <Lecture r={diag} libelle="diagnostic">
           {(d) => (
             <>
@@ -58,6 +62,12 @@ export function VueParametres() {
                     <PastilleConnexion etat={d.gardeServeur.regulateurRuns} />
                   </dd>
                 </div>
+                {d.destinataireHumain?.alerte ? (
+                  <div>
+                    <dt>Blocages de revue</dt>
+                    <dd role="alert">{d.destinataireHumain.alerte}</dd>
+                  </div>
+                ) : null}
                 <div>
                   <dt>Vérifié</dt>
                   <dd>
@@ -70,25 +80,28 @@ export function VueParametres() {
           )}
         </Lecture>
       </Section>
-      <Section titre="Sources de données réelles" aide="Mode lu sur la passerelle au moment du diagnostic ; rien n'est supposé.">
+      <Section titre="Sources de données réelles" ancre="param-sources" repliable aide="Mode lu sur la passerelle au moment du diagnostic ; rien n'est supposé.">
         <Lecture r={diag} libelle="sources de données">
           {(d) => <TableauSourcesReelles sources={d.sourcesReelles} />}
         </Lecture>
       </Section>
-      <Section titre="Réglages de l'entreprise">
+      <Section titre="Réglages de l'entreprise" ancre="param-reglages" repliable>
         <Lecture r={reg} libelle="réglages">
           {(d) => <FormulaireReglages reglages={d} onFait={reg.refresh} />}
         </Lecture>
       </Section>
-      <Section titre="Dépenses publicitaires" aide="Plafond choisi par le client pour toute l'entreprise. Chaque campagne peut avoir le sien. Même sans limite, chaque dépense exige une approbation humaine.">
+      <Section titre="Critères des leads" ancre="param-criteres" repliable aide="Ces réglages décident sur quoi reposent la confiance et la priorité de vos leads. Un critère personnalisé se coche à la main dans la fiche d'un lead.">
+        <CriteresLeads />
+      </Section>
+      <Section titre="Dépenses publicitaires" ancre="param-depenses" repliable aide="Plafond choisi par le client pour toute l'entreprise. Chaque campagne peut avoir le sien. Même sans limite, chaque dépense exige une approbation humaine.">
         <Lecture r={reg} libelle="plafond publicitaire">
           {(d) => <PlafondEntreprise reglages={d} onFait={reg.refresh} />}
         </Lecture>
       </Section>
-      <Section titre="Coûts IA" aide="Budget mensuel natif de Paperclip, pour l'entreprise et pour chaque agent. L'atelier ne crée pas de budget parallèle. À la limite, Paperclip met l'agent en pause.">
+      <Section titre="Coûts IA" ancre="param-couts" repliable aide="Budget mensuel natif de Paperclip, pour l'entreprise et pour chaque agent. L'atelier ne crée pas de budget parallèle. À la limite, Paperclip met l'agent en pause.">
         <BudgetsIa />
       </Section>
-      <Section titre="Modèles, budgets et compétences" aide="Ces réglages appartiennent à Paperclip : l'atelier ne les duplique pas.">
+      <Section titre="Modèles, budgets et compétences" ancre="param-modeles" repliable aide="Ces réglages appartiennent à Paperclip : l'atelier ne les duplique pas.">
         <ul className="atl-liste">
           <li>
             <LienHote vers="/agents/all">Agents</LienHote> : modèle et adaptateur par rôle, compétences assignées, pause et reprise.
@@ -104,6 +117,40 @@ export function VueParametres() {
       {reg.data?.modeParDefaut === "demonstration" ? <RechargerDemonstration /> : null}
       <RemiseAZero />
     </>
+  );
+}
+
+const SECTIONS_PARAMETRES: ReadonlyArray<{ ancre: string; libelle: string; demoSeulement?: true }> = [
+  { ancre: ANCRE_PASSAGE_AU_REEL, libelle: "Passage au réel" },
+  { ancre: "param-diagnostic", libelle: "Diagnostic" },
+  { ancre: "param-sources", libelle: "Sources réelles" },
+  { ancre: "param-reglages", libelle: "Réglages" },
+  { ancre: "param-criteres", libelle: "Critères des leads" },
+  { ancre: "param-depenses", libelle: "Dépenses publicitaires" },
+  { ancre: "param-couts", libelle: "Coûts IA" },
+  { ancre: "param-modeles", libelle: "Modèles et compétences" },
+  { ancre: "param-recharger", libelle: "Recharger la démonstration", demoSeulement: true },
+  { ancre: "param-remise", libelle: "Remise à zéro" },
+];
+
+/** Sommaire des sections : un clic ouvre la section visée (repliée sur téléphone) avant le saut d'ancre. */
+export function SommaireParametres({ avecRechargement }: { avecRechargement: boolean }) {
+  const ouvrir = (ancre: string) => {
+    const detail = document.getElementById(ancre)?.querySelector("details");
+    if (detail) detail.open = true;
+  };
+  return (
+    <nav className="atl-sommaire" aria-label="Sections des paramètres">
+      <ul>
+        {SECTIONS_PARAMETRES.filter((x) => !x.demoSeulement || avecRechargement).map((x) => (
+          <li key={x.ancre}>
+            <a href={`#${x.ancre}`} onClick={() => ouvrir(x.ancre)}>
+              {x.libelle}
+            </a>
+          </li>
+        ))}
+      </ul>
+    </nav>
   );
 }
 
@@ -261,6 +308,8 @@ function RechargerDemonstration() {
   return (
     <Section
       titre="Recharger la démonstration"
+      ancre="param-recharger"
+      repliable
       aide="Importe à nouveau les documents de démonstration et remplace la base clients par celle de démonstration. Les prospects se rechargent par le script peupler-prospects.py."
     >
       <div>
@@ -297,7 +346,7 @@ function RemiseAZero() {
     }
   };
   return (
-    <Section titre="Remise à zéro de la démonstration" aide="Supprime les données de l'atelier de cette entreprise (campagnes, revues, journal…). Refusée par le serveur si une campagne réelle existe. Les tâches et agents Paperclip ne sont pas supprimés.">
+    <Section titre="Remise à zéro de la démonstration" ancre="param-remise" repliable aide="Supprime les données de l'atelier de cette entreprise (campagnes, revues, journal…). Refusée par le serveur si une campagne réelle existe. Les tâches et agents Paperclip ne sont pas supprimés.">
       <Champ libelle="Tapez REINITIALISER pour confirmer" className="atl-champ-etroit">
         <input value={saisie} onChange={(e) => setSaisie(e.target.value)} autoComplete="off" />
       </Champ>
@@ -464,5 +513,223 @@ function BudgetsIa() {
       <h3 className="atl-h3">Agents</h3>
       {agents.length === 0 ? <p className="atl-attenue">Aucun agent.</p> : agents.map((a) => <LigneBudgetIa key={a.id} cible={a} portee="agent" onFait={() => void charger()} />)}
     </>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Critères des leads : confiance (critères, seuil, critères            */
+/* personnalisés) et poids du score                                     */
+/* ------------------------------------------------------------------ */
+
+interface SaisieLeads {
+  criteres: Array<{ code: string; libelle: string; actif: boolean; poids: string }>;
+  seuil: string;
+  personnalises: CriterePersonnalise[];
+  score: Array<{ code: string; libelle: string; poids: string }>;
+}
+
+const sansAccents = (s: string) => s.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase();
+
+/** Code d'un critère personnalisé tiré de son libellé (préfixe « perso_ » : jamais celui d'un critère existant). */
+function codePersonnalise(libelle: string, pris: readonly string[]): string {
+  const racine = `perso_${sansAccents(libelle).replace(/[^a-z0-9]+/gu, "_").replace(/^_+|_+$/gu, "")}`.slice(0, 36).replace(/_+$/u, "") || "perso_critere";
+  let code = racine;
+  for (let i = 2; pris.includes(code); i++) code = `${racine}_${i}`;
+  return code;
+}
+
+function saisieDepuis(l: ReglagesLeads, sc: ReglagesScore): SaisieLeads {
+  return {
+    criteres: l.criteres.map((c) => ({ code: c.code, libelle: c.libelle, actif: c.actif, poids: String(c.poids) })),
+    seuil: String(l.seuil),
+    personnalises: l.personnalises,
+    score: sc.criteres.map((c) => ({ code: c.code, libelle: c.libelle, poids: String(sc.poids[c.code] ?? 0) })),
+  };
+}
+
+const entierEntre = (v: string, min: number, max: number) => /^\d+$/u.test(v) && Number(v) >= min && Number(v) <= max;
+
+export function CriteresLeads() {
+  const { companyId } = useHostContext();
+  const [charge, setCharge] = useState<{ leads: ReglagesLeads; score: ReglagesScore } | null>(null);
+  const [f, setF] = useState<SaisieLeads | null>(null);
+  const [nouveau, setNouveau] = useState({ libelle: "", poids: "10", description: "" });
+  const [erreur, setErreur] = useState<unknown>(null);
+  const [enCours, setEnCours] = useState(false);
+  const [fait, setFait] = useState(false);
+
+  const charger = useCallback(async () => {
+    if (!companyId) return;
+    setErreur(null);
+    try {
+      const q = `?companyId=${encodeURIComponent(companyId)}`;
+      const [leads, score] = await Promise.all([appelRoute<ReglagesLeads>("GET", `/reglages/leads${q}`), appelRoute<ReglagesScore>("GET", `/reglages/score${q}`)]);
+      setCharge({ leads, score });
+      setF(saisieDepuis(leads, score));
+    } catch (err) {
+      setErreur(err);
+    }
+  }, [companyId]);
+  useEffect(() => {
+    void charger();
+  }, [charger]);
+
+  if (!f || !charge) return erreur ? <EtatErreur erreur={erreur} onReessayer={() => void charger()} contexte="critères des leads" /> : <p className="atl-sous">Chargement des critères…</p>;
+
+  const initial = saisieDepuis(charge.leads, charge.score);
+  const leadsModifies = JSON.stringify([f.criteres, f.seuil, f.personnalises]) !== JSON.stringify([initial.criteres, initial.seuil, initial.personnalises]);
+  const scoreModifie = JSON.stringify(f.score) !== JSON.stringify(initial.score);
+  const raison =
+    f.criteres.some((c) => !entierEntre(c.poids, 0, 100)) || f.score.some((c) => !entierEntre(c.poids, 0, 100))
+      ? "Chaque poids est un entier de 0 à 100."
+      : !entierEntre(f.seuil, SEUIL_QUALIFICATION_MIN, SEUIL_QUALIFICATION_MAX)
+        ? `Seuil : entre ${SEUIL_QUALIFICATION_MIN} et ${SEUIL_QUALIFICATION_MAX} %.`
+        : !f.criteres.some((c) => c.actif && Number(c.poids) > 0 && c.code !== "taille_connue") && !f.personnalises.some((c) => c.poids > 0)
+          ? "Gardez au moins un critère actif avec un poids (autre que « Taille connue »)."
+          : !leadsModifies && !scoreModifie
+            ? "Aucune modification à enregistrer."
+            : null;
+  const raisonAjout = !nouveau.libelle.trim()
+    ? "Donnez un libellé au critère."
+    : !entierEntre(nouveau.poids, 0, 100)
+      ? "Poids : entier de 0 à 100."
+      : f.personnalises.length >= CRITERES_PERSONNALISES_MAX
+        ? `Au plus ${CRITERES_PERSONNALISES_MAX} critères personnalisés.`
+        : null;
+
+  const majCritere = (code: string, champ: { actif?: boolean; poids?: string }) => setF((x) => x && { ...x, criteres: x.criteres.map((c) => (c.code === code ? { ...c, ...champ } : c)) });
+  const majScore = (code: string, poids: string) => setF((x) => x && { ...x, score: x.score.map((c) => (c.code === code ? { ...c, poids } : c)) });
+  const ajouter = () => {
+    if (raisonAjout) return;
+    setF((x) => x && {
+      ...x,
+      personnalises: [...x.personnalises, { code: codePersonnalise(nouveau.libelle, x.personnalises.map((c) => c.code)), libelle: nouveau.libelle.trim(), poids: Number(nouveau.poids), description: nouveau.description.trim() }],
+    });
+    setNouveau({ libelle: "", poids: "10", description: "" });
+    setFait(false);
+  };
+  const retirer = (code: string) => setF((x) => x && { ...x, personnalises: x.personnalises.filter((c) => c.code !== code) });
+
+  const enregistrer = async (e: FormEvent) => {
+    e.preventDefault();
+    if (raison || !companyId) return;
+    setEnCours(true);
+    setErreur(null);
+    setFait(false);
+    try {
+      let { leads, score } = charge;
+      if (leadsModifies) {
+        leads = await appelRoute<ReglagesLeads>("PATCH", "/reglages/leads", {
+          companyId, seuil: Number(f.seuil), personnalises: f.personnalises,
+          criteres: f.criteres.map((c) => ({ code: c.code, actif: c.actif, poids: Number(c.poids) })),
+        });
+      }
+      if (scoreModifie) {
+        score = await appelRoute<ReglagesScore>("PATCH", "/reglages/score", { companyId, poids: Object.fromEntries(f.score.map((c) => [c.code, Number(c.poids)])) });
+      }
+      setCharge({ leads, score });
+      setF(saisieDepuis(leads, score));
+      setFait(true);
+    } catch (err) {
+      setErreur(err);
+    } finally {
+      setEnCours(false);
+    }
+  };
+
+  return (
+    <form className="atl-formulaire atl-criteres-leads" onSubmit={(e) => void enregistrer(e)} noValidate>
+      <h3>Confiance de qualification</h3>
+      <div className="atl-table-cadre">
+        <table className="atl-table">
+          <caption className="atl-sr">Critères de la confiance de qualification</caption>
+          <thead>
+            <tr>
+              <th scope="col">Critère</th>
+              <th scope="col">Compte</th>
+              <th scope="col">Poids (0 à 100)</th>
+            </tr>
+          </thead>
+          <tbody>
+            {f.criteres.map((c) => (
+              <tr key={c.code}>
+                <th scope="row">{c.libelle}</th>
+                <td data-libelle="Compte">
+                  <input type="checkbox" checked={c.actif} aria-label={`Compter « ${c.libelle} »`} onChange={(e) => majCritere(c.code, { actif: e.target.checked })} />
+                </td>
+                <td data-libelle="Poids">
+                  <input value={c.poids} inputMode="numeric" aria-label={`Poids de « ${c.libelle} »`} disabled={!c.actif} onChange={(e) => majCritere(c.code, { poids: e.target.value })} />
+                </td>
+              </tr>
+            ))}
+            {f.personnalises.map((c) => (
+              <tr key={c.code}>
+                <th scope="row">
+                  {c.libelle} <Pastille ton="neutre">à la main</Pastille>
+                  {c.description ? <span className="atl-aide"> {c.description}</span> : null}
+                </th>
+                <td data-libelle="Compte">
+                  <Bouton onClick={() => retirer(c.code)}>Retirer « {c.libelle} »</Bouton>
+                </td>
+                <td data-libelle="Poids">{c.poids}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <div className="atl-grille-champs">
+        <Champ libelle="Seuil de qualification (%)" aide={`Un lead est qualifié à partir de ce seuil (${SEUIL_QUALIFICATION_MIN} à ${SEUIL_QUALIFICATION_MAX}).`}>
+          <input value={f.seuil} inputMode="numeric" onChange={(e) => setF((x) => x && { ...x, seuil: e.target.value })} />
+        </Champ>
+      </div>
+      <fieldset className="atl-champ">
+        <legend>Ajouter un critère personnalisé</legend>
+        <div className="atl-grille-champs">
+          <Champ libelle="Libellé du critère">
+            <input value={nouveau.libelle} maxLength={120} onChange={(e) => setNouveau((x) => ({ ...x, libelle: e.target.value }))} />
+          </Champ>
+          <Champ libelle="Poids du critère">
+            <input value={nouveau.poids} inputMode="numeric" onChange={(e) => setNouveau((x) => ({ ...x, poids: e.target.value }))} />
+          </Champ>
+          <Champ libelle="Description (facultative)">
+            <input value={nouveau.description} maxLength={300} onChange={(e) => setNouveau((x) => ({ ...x, description: e.target.value }))} />
+          </Champ>
+        </div>
+        <Bouton onClick={ajouter} raisonDesactive={raisonAjout}>
+          Ajouter le critère
+        </Bouton>
+      </fieldset>
+      <h3>Poids du score</h3>
+      <div className="atl-table-cadre">
+        <table className="atl-table">
+          <caption className="atl-sr">Poids des critères du score</caption>
+          <thead>
+            <tr>
+              <th scope="col">Critère du score</th>
+              <th scope="col">Poids (0 à 100)</th>
+            </tr>
+          </thead>
+          <tbody>
+            {f.score.map((c) => (
+              <tr key={c.code}>
+                <th scope="row">{c.libelle}</th>
+                <td data-libelle="Poids">
+                  <input value={c.poids} inputMode="numeric" aria-label={`Poids du score : « ${c.libelle} »`} onChange={(e) => majScore(c.code, e.target.value)} />
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      {erreur ? <EtatErreur erreur={erreur} contexte="critères des leads non enregistrés" /> : null}
+      {fait ? (
+        <p className="atl-succes" role="status">
+          Critères des leads enregistrés.
+        </p>
+      ) : null}
+      <Bouton type="submit" variante="principal" raisonDesactive={raison} enCours={enCours}>
+        Enregistrer
+      </Bouton>
+    </form>
   );
 }

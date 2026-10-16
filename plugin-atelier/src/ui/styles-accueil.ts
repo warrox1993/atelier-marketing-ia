@@ -32,4 +32,10 @@ export const STYLES_ACCUEIL = `
 @media (max-width: 40rem) {
   .atl-afaire > li { grid-template-columns: minmax(0, 1fr); }
 }
+.atl-prospection { display: flex; flex-direction: column; gap: 0.75rem; padding: 0.75rem 1rem; border-left: 3px solid var(--atl-accent); }
+.atl-prospection-chiffres { display: flex; flex-wrap: wrap; gap: 0.5rem 2rem; }
+.atl-prospection-chiffre { display: flex; flex-direction: column; }
+.atl-prospection-valeur { font-size: 1.75rem; font-weight: 600; line-height: 1.2; font-variant-numeric: tabular-nums; }
+.atl-prospection-actions { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+.atl-prospection-actions .atl-bouton { text-decoration: none; }
 `;

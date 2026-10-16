@@ -10,6 +10,8 @@ import { Bouton, Champ, Chargement, EnTete, EtatErreur, Horodatage, LienHote, Pa
 import { MODELES_DEMANDE, useEnvoiDemande } from "../demande.js";
 import type { Ton } from "../format.js";
 import { appelRoute } from "../routes-prospection.js";
+import { EncartPassageAuReel } from "../realite.js";
+import { chemin } from "../route.js";
 import { STYLES_ACCUEIL } from "../styles-accueil.js";
 
 const URGENCES: Readonly<Record<UrgenceAccueil, { libelle: string; ton: Ton }>> = {
@@ -52,12 +54,16 @@ export function VueAccueil() {
   }, [companyId, version]);
 
   const recharger = useCallback(() => setVersion((v) => v + 1), []);
+  // Modèle posé depuis l'encart Prospection : `n` change à chaque clic pour rejouer l'effet.
+  const [modeleExterne, setModeleExterne] = useState<{ texte: string; n: number }>({ texte: "", n: 0 });
 
   return (
     <>
       <style>{STYLES_ACCUEIL}</style>
       <EnTete titre="Accueil" description="Ce qui attend votre décision, une zone pour demander quelque chose à l'équipe, et l'avancement de ses missions." />
-      <DemanderAEquipe companyId={companyId ?? null} onEnvoyee={recharger} />
+      <EncartProspection companyId={companyId ?? null} onModele={() => setModeleExterne((m) => ({ texte: MODELE_PROSPECTION, n: m.n + 1 }))} />
+      <EncartPassageAuReel />
+      <DemanderAEquipe companyId={companyId ?? null} onEnvoyee={recharger} modeleExterne={modeleExterne} />
       <Section titre="À faire" id="accueil-afaire">
         {etat.erreur ? <EtatErreur erreur={etat.erreur} onReessayer={recharger} contexte="l'accueil" /> : null}
         {etat.chargement && !etat.data ? <Chargement libelle="Chargement de l'accueil" /> : null}
@@ -80,7 +86,77 @@ export function VueAccueil() {
   );
 }
 
-function DemanderAEquipe({ companyId, onEnvoyee }: { companyId: string | null; onEnvoyee: () => void }) {
+const MODELE_PROSPECTION = MODELES_DEMANDE.find((m) => m.libelle === "Prospection d'une zone")?.texte ?? "";
+
+interface TotauxProspection {
+  total: number;
+  qualifies: number;
+}
+
+/** Encart d'accueil : la prospection d'abord (total de leads, leads qualifiés, accès aux prospects et à la carte). */
+function EncartProspection({ companyId, onModele }: { companyId: string | null; onModele: () => void }) {
+  const [etat, setEtat] = useState<{ data: TotauxProspection | null; erreur: unknown; chargement: boolean }>({ data: null, erreur: null, chargement: true });
+  const [version, setVersion] = useState(0);
+  useEffect(() => {
+    if (!companyId) return;
+    let annule = false;
+    const base = `companyId=${encodeURIComponent(companyId)}&parPage=1&vue=complete`;
+    const total = (r: { total?: unknown }): number => {
+      if (typeof r.total !== "number") throw new Error("Réponse de prospection sans total.");
+      return r.total;
+    };
+    setEtat((e) => ({ ...e, chargement: true, erreur: null }));
+    Promise.all([appelRoute<{ total?: unknown }>("GET", `/prospects?${base}`), appelRoute<{ total?: unknown }>("GET", `/prospects?${base}&qualifiesSeulement=true`)])
+      .then(([tous, qualifies]) => !annule && setEtat({ data: { total: total(tous), qualifies: total(qualifies) }, erreur: null, chargement: false }))
+      .catch((erreur: unknown) => !annule && setEtat({ data: null, erreur, chargement: false }));
+    return () => {
+      annule = true;
+    };
+  }, [companyId, version]);
+
+  return (
+    <Section titre="Prospection" id="accueil-prospection">
+      <div className="atl-prospection">
+        {etat.erreur ? <EtatErreur erreur={etat.erreur} onReessayer={() => setVersion((v) => v + 1)} contexte="la prospection" /> : null}
+        {etat.chargement && !etat.data && !etat.erreur ? <Chargement libelle="Chargement de la prospection" lignes={1} /> : null}
+        {etat.data && etat.data.total === 0 ? (
+          <>
+            <p>Aucun lead pour l'instant : demandez une prospection à l'équipe.</p>
+            <div className="atl-prospection-actions">
+              <Bouton variante="principal" onClick={onModele}>
+                Utiliser le modèle « Prospection d'une zone »
+              </Bouton>
+            </div>
+          </>
+        ) : null}
+        {etat.data && etat.data.total > 0 ? (
+          <>
+            <div className="atl-prospection-chiffres">
+              <p className="atl-prospection-chiffre">
+                <span className="atl-prospection-valeur">{etat.data.total}</span>
+                <span>{etat.data.total > 1 ? "leads au total" : "lead au total"}</span>
+              </p>
+              <p className="atl-prospection-chiffre">
+                <span className="atl-prospection-valeur">{etat.data.qualifies}</span>
+                <span>{etat.data.qualifies > 1 ? "leads qualifiés" : "lead qualifié"}</span>
+              </p>
+            </div>
+            <div className="atl-prospection-actions">
+              <LienHote vers={chemin("prospects")} className="atl-bouton">
+                Voir les prospects
+              </LienHote>
+              <LienHote vers={chemin("carte")} className="atl-bouton">
+                Voir la carte
+              </LienHote>
+            </div>
+          </>
+        ) : null}
+      </div>
+    </Section>
+  );
+}
+
+function DemanderAEquipe({ companyId, onEnvoyee, modeleExterne }: { companyId: string | null; onEnvoyee: () => void; modeleExterne: { texte: string; n: number } }) {
   const [texte, setTexte] = useState("");
   const zone = useRef<HTMLTextAreaElement>(null);
   const { envoyer: envoyerDemande, enCours, erreur, envoyee } = useEnvoiDemande(companyId);
@@ -99,6 +175,10 @@ function DemanderAEquipe({ companyId, onEnvoyee }: { companyId: string | null; o
     setTexte(modele);
     setModeleAppose((n) => n + 1);
   };
+  // Modèle demandé depuis l'encart Prospection.
+  useEffect(() => {
+    if (modeleExterne.n > 0) appliquerModele(modeleExterne.texte);
+  }, [modeleExterne]);
   // Après le rendu du modèle : focus dans la zone, curseur en fin de texte.
   useEffect(() => {
     const z = zone.current;

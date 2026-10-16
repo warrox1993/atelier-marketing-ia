@@ -9,6 +9,7 @@
 # Configuration locale : seul l'exemple sans secret est suivi.
 /config/*.env
 !/config/*.env.example
+/config/atelier-distant.env
 
 # Divers
 node_modules/

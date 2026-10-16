@@ -12,6 +12,7 @@ import { GRAVITES_BLOQUANTES } from "../contrats/index.js";
 import { verifierDonneesDemo, type EntreesDonneesDemo } from "./regles-donnees-demo.js";
 import { controlerIdentifiantsLegaux, type FaitsFiche } from "./services-faits.js";
 import { controlerCitationsConnaissances, type VersionPourValidite } from "./regles-connaissances.js";
+import { controlerLivrableProspection, type ResultatCouverture } from "./couverture-prospection.js";
 
 export interface PreuveEntree {
   revisionId: string;
@@ -87,6 +88,11 @@ export interface EntreesPorte {
   /** Garde-fous de vérité : identifiants de la fiche du client et texte du livrable (`services-faits.ts`). Absent : pas de contrôle. */
   faits?: { livrable: string; fiche: FaitsFiche };
   connaissances?: { livrable: string; passagesRendus: string[]; versions: VersionPourValidite[]; date: string; urlsSourcesTache?: string[] };
+  /**
+   * Couverture de prospection (tâche de prospection seulement) : zones calculées par la machine et dépôts de la
+   * campagne. `couverture` null : aucun bureau positionné, couverture incalculable. Absente : pas de contrôle.
+   */
+  prospection?: { livrable: string; couverture: ResultatCouverture | null };
 }
 
 export interface ResultatPorte {
@@ -277,6 +283,14 @@ export function evaluerPorte(e: EntreesPorte): ResultatPorte {
     }
   }
 
+  if (e.prospection && revision) {
+    if (e.prospection.couverture === null) {
+      motifs.push(motif("information_manquante", "Couverture de prospection incalculable : aucun bureau de la fiche du client n'a de position ; un humain doit la saisir."));
+    } else {
+      for (const x of controlerLivrableProspection(e.prospection.livrable, e.prospection.couverture)) motifs.push(motif(x.code, x.message, { element: x.element }));
+    }
+  }
+
   // M4 : cycles déjà épuisés AVANT cette révision (aucune relance humaine ne les a relevés) :
   // la révision courante n'a pas droit à une évaluation, l'escalade humaine est obligatoire.
   const dejaEpuises = revision !== null && new Set(e.revisionsDejaRefusees).size >= e.porte.maxCycles;
@@ -323,6 +337,12 @@ export function evaluerPorte(e: EntreesPorte): ResultatPorte {
               passagesRendus: [...e.connaissances.passagesRendus].map((a) => a.toLowerCase()).sort(),
               versions: e.connaissances.versions.map((v) => ({ d: v.documentId, v: v.version, s: v.statut, du: v.valideDu, au: v.valideAu })).sort((a, b) => `${a.d}/${a.v}`.localeCompare(`${b.d}/${b.v}`)),
             }
+          : undefined,
+        // Couverture de prospection : clé ajoutée seulement quand la règle s'applique.
+        prospection: e.prospection
+          ? e.prospection.couverture === null
+            ? { incalculable: true }
+            : { manquantes: e.prospection.couverture.manquantes.map((z) => z.codePostal), totaux: e.prospection.couverture.totaux }
           : undefined,
       }),
     )

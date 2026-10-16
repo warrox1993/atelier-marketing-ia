@@ -1,0 +1,102 @@
+From 0063d2844318d32d3de3cab9142432689bb26a3b Mon Sep 17 00:00:00 2001
+From: Jean-Baptiste Dhondt <114347858+warrox1993@users.noreply.github.com>
+Date: Fri, 16 Oct 2026 13:56:45 +0200
+Subject: [PATCH] =?UTF-8?q?test(ui):=20attendus=20fran=C3=A7ais=20pour=20l?=
+ =?UTF-8?q?e=20fil=20d'audit=20et=20la=20relance=20de=20t=C3=A2che,=20r?=
+ =?UTF-8?q?=C3=A9gressions=20de=20la=20traduction=20du=20jour?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+AuditFeed attend « a commenté » et « a testé … sur » (activity-format traduit), chat-ui-contract attend le titre « Nouvelle tentative en file d'attente » d'IssueDetail.
+
+Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01DP85vPq2MHkZg8VNtRvCzB
+---
+ ui/src/pages/apps/chat/chat-ui-contract.test.ts |  2 +-
+ ui/src/pages/audit/AuditFeed.test.tsx           | 14 +++++++-------
+ 2 files changed, 8 insertions(+), 8 deletions(-)
+
+diff --git a/ui/src/pages/apps/chat/chat-ui-contract.test.ts b/ui/src/pages/apps/chat/chat-ui-contract.test.ts
+index 07f701f51..fa9d0ab93 100644
+--- a/ui/src/pages/apps/chat/chat-ui-contract.test.ts
++++ b/ui/src/pages/apps/chat/chat-ui-contract.test.ts
+@@ -31,7 +31,7 @@ describe("chat connector UI contract", () => {
+     expect(issue).toMatch(
+       /agentsApi\.retryFailedRun\(\s*failedRun\.agentId,\s*failedRun\.runId,\s*companyId/,
+     );
+-    expect(issue).toContain("Retry queued");
++    expect(issue).toContain("Nouvelle tentative en file d'attente");
+     for (const file of ["Inbox.tsx", "LegacyInbox.tsx"]) {
+       const page = source(`../../${file}`);
+       expect(page).toMatch(
+diff --git a/ui/src/pages/audit/AuditFeed.test.tsx b/ui/src/pages/audit/AuditFeed.test.tsx
+index 670c89a97..a69ce99af 100644
+--- a/ui/src/pages/audit/AuditFeed.test.tsx
++++ b/ui/src/pages/audit/AuditFeed.test.tsx
+@@ -197,7 +197,7 @@ describe("AuditFeed", () => {
+       expect.objectContaining({ actorScope: "all" }),
+     );
+     expect(container.textContent).toContain("Fable");
+-    expect(container.textContent).toContain("commented on");
++    expect(container.textContent).toContain("a commenté");
+     const taskLink = container.querySelector('a[href="/issues/PAP-1"]');
+     expect(taskLink?.textContent).toContain("PAP-1");
+     expect(container.textContent).toContain("Looks good to me");
+@@ -230,7 +230,7 @@ describe("AuditFeed", () => {
+       "company-1",
+       expect.objectContaining({ action: "tool_" }),
+     );
+-    expect(container.textContent).toContain("tested get repository on");
++    expect(container.textContent).toContain("a testé get repository sur");
+     expect(container.querySelector('a[href="/apps/conn-1/permissions"]')).toBeTruthy();
+     expect(container.textContent).toContain("tool_gateway.call_completed");
+   });
+@@ -251,7 +251,7 @@ describe("AuditFeed", () => {
+     listAgentActionsMock.mockResolvedValue({ items: [record()], nextCursor: null, accessTier: "basic" });
+     await render();
+ 
+-    expect(container.textContent).toContain("commented on");
++    expect(container.textContent).toContain("a commenté");
+     expect(container.textContent).not.toContain("All agents");
+     expect(container.textContent).not.toContain("All responsible users");
+     expect(container.textContent).not.toContain("Export CSV");
+@@ -299,7 +299,7 @@ describe("AuditFeed", () => {
+       expect(listAgentActionsMock.mock.calls.at(-1)?.[1]).toEqual(
+         expect.objectContaining({ actorScope: "all", agentId: undefined }),
+       );
+-      expect(container.textContent).toContain("commented on");
++      expect(container.textContent).toContain("a commenté");
+       expect(container.textContent).not.toContain("Paperclip Enterprise view");
+       expect(container.textContent).not.toContain("All agents");
+       expect(container.textContent).not.toContain("Export CSV");
+@@ -351,7 +351,7 @@ describe("AuditFeed", () => {
+     expect(listAgentActionsMock.mock.calls.at(-1)?.[1]).toEqual(
+       expect.objectContaining({ actorScope: "all", cursor: undefined }),
+     );
+-    expect(container.textContent).toContain("commented on");
++    expect(container.textContent).toContain("a commenté");
+     expect(container.textContent).not.toContain("on behalf of Dotta");
+     expect(container.querySelector('a[href="/agents/agent-1/runs/run-1"]')).toBeFalsy();
+     expect(container.textContent).not.toContain("All agents");
+@@ -414,7 +414,7 @@ describe("AuditFeed", () => {
+     await flushReact();
+ 
+     expect(container.textContent).not.toContain("Refreshing audit access…");
+-    expect(container.textContent).toContain("commented on");
++    expect(container.textContent).toContain("a commenté");
+     // Least-privileged page wins, so the privileged chrome stays hidden.
+     expect(container.textContent).not.toContain("Export CSV");
+     // And the cached full-tier page must not render revoked attribution beside
+@@ -516,7 +516,7 @@ describe("AuditFeed", () => {
+     expect(tabs.map((tab) => tab.textContent?.trim())).toEqual(["Activité", "Agent Actions"]);
+     expect(tabs.find((tab) => tab.textContent?.trim() === "Agent Actions")?.disabled).toBe(true);
+     // The basic feed itself still renders.
+-    expect(container.textContent).toContain("commented on");
++    expect(container.textContent).toContain("a commenté");
+   });
+ 
+   it("falls back to all-activity instead of the upsell when a basic reader opens the agent-actions mode", async () => {
+-- 
+2.53.0
+

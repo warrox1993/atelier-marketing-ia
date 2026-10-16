@@ -665,3 +665,38 @@ describe("accès croisé : deux entreprises, documents quasi identiques, un mot 
     }
   });
 });
+
+describe("cache des vecteurs borné (revue du 16/10, m6)", () => {
+  const entree = (companyId: string, lignes: number) => ({
+    companyId,
+    cle: "index|1|modele",
+    ids: Array.from({ length: lignes }, (_, i) => `p${i}`),
+    positions: new Map<string, number>(),
+    matrice: { dimension: 4, lignes, donnees: new Float32Array(lignes * 4) },
+  });
+
+  it("au-delà du nombre d'entreprises admis, la moins récemment lue est retirée", () => {
+    const cache = new CacheVecteurs({ entreprisesMax: 2 });
+    cache.ranger(entree("a", 1));
+    cache.ranger(entree("b", 1));
+    expect(cache.obtenir("a", "index|1|modele")).toBeDefined(); // « a » relue : « b » devient la plus ancienne
+    cache.ranger(entree("c", 1));
+    expect(cache.entreprises().sort()).toEqual(["a", "c"]);
+  });
+
+  it("au-delà de la taille totale admise, les entrées les plus anciennes sont retirées", () => {
+    const cache = new CacheVecteurs({ octetsMax: 100 * 16 });
+    cache.ranger(entree("a", 60)); // 60 lignes × 4 composantes × 4 octets = 960 octets
+    cache.ranger(entree("b", 60));
+    expect(cache.entreprises()).toEqual(["b"]);
+    cache.ranger(entree("c", 500)); // plus grosse que le plafond à elle seule : jamais gardée
+    expect(cache.obtenir("c", "index|1|modele")).toBeUndefined();
+    expect(cache.entreprises()).toEqual(["b"]);
+  });
+
+  it("par défaut, le cache est borné", () => {
+    const cache = new CacheVecteurs();
+    for (let i = 0; i < 100; i++) cache.ranger(entree(`e${i}`, 1));
+    expect(cache.entreprises().length).toBeLessThan(100);
+  });
+});

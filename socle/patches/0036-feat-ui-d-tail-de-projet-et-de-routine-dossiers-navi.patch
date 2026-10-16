@@ -1,0 +1,2675 @@
+From 45f12f73e5570de6a37ec515ee1d67ba2063c3d7 Mon Sep 17 00:00:00 2001
+From: Jean-Baptiste Dhondt <114347858+warrox1993@users.noreply.github.com>
+Date: Fri, 16 Oct 2026 13:48:38 +0200
+Subject: [PATCH] =?UTF-8?q?feat(ui):=20d=C3=A9tail=20de=20projet=20et=20de?=
+ =?UTF-8?q?=20routine,=20dossiers,=20navigation,=20libell=C3=A9s=20d'inbox?=
+ =?UTF-8?q?=20et=20marqueurs=20de=20passage=20traduits=20en=20fran=C3=A7ai?=
+ =?UTF-8?q?s?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01DP85vPq2MHkZg8VNtRvCzB
+---
+ ui/src/components/AgentContextualSidebar.tsx  |   2 +-
+ ui/src/components/IssueChatThread.test.tsx    |   4 +-
+ ui/src/components/ManagedRoutinesList.tsx     |  16 +-
+ .../RoutineContextualSidebar.test.tsx         |   6 +-
+ .../components/RoutineContextualSidebar.tsx   |  12 +-
+ ui/src/components/RoutineOverview.test.tsx    |  12 +-
+ ui/src/components/RoutineOverview.tsx         |  51 +++----
+ ui/src/components/RoutineSubSidebar.test.tsx  |  16 +-
+ ui/src/components/RoutineSubSidebar.tsx       |  18 +--
+ ui/src/components/Sidebar.production.tsx      |   8 +-
+ ui/src/components/Sidebar.test.tsx            |  12 +-
+ ui/src/components/Sidebar.tsx                 |  10 +-
+ ui/src/components/TaskChatThread.test.tsx     |  24 +--
+ ui/src/components/TaskChatThread.tsx          |  10 +-
+ .../folders/FolderControls.test.tsx           |  28 ++--
+ ui/src/components/folders/FolderControls.tsx  |  74 ++++-----
+ ui/src/lib/attention.test.ts                  |   2 +-
+ ui/src/lib/attention.ts                       |   2 +-
+ ui/src/lib/blockedInbox.ts                    |   4 +-
+ ui/src/lib/inbox.test.ts                      |   2 +-
+ ui/src/lib/inbox.ts                           |   2 +-
+ ui/src/lib/issue-chat-messages.ts             |  10 +-
+ ui/src/lib/routine-run-display.test.ts        |   2 +-
+ ui/src/lib/routine-run-display.ts             |   2 +-
+ ui/src/pages/PipelineSettings.tsx             |   4 +-
+ ui/src/pages/ProjectDetail.test.tsx           |   6 +-
+ ui/src/pages/ProjectDetail.tsx                |  52 +++----
+ ui/src/pages/ProjectWorkspaceDetail.test.tsx  |  28 ++--
+ ui/src/pages/ProjectWorkspaceDetail.tsx       | 141 +++++++++---------
+ ui/src/pages/RoutineDetail.production.tsx     |  94 ++++++------
+ ui/src/pages/RoutineDetail.tsx                | 102 ++++++-------
+ ui/src/pages/apps/gateways/gateway-tabs.ts    |   2 +-
+ ui/src/pages/audit/AuditFeed.production.tsx   |   4 +-
+ ui/src/pages/audit/AuditFeed.test.tsx         |   4 +-
+ ui/src/pages/audit/AuditFeed.tsx              |   6 +-
+ ui/src/pages/audit/AuditHub.test.tsx          |   4 +-
+ .../audit/CompanyActivity.production.tsx      |   2 +-
+ ui/src/pages/audit/CompanyActivity.tsx        |   2 +-
+ ui/src/pages/audit/audit-navigation.ts        |   2 +-
+ 39 files changed, 392 insertions(+), 390 deletions(-)
+
+diff --git a/ui/src/components/AgentContextualSidebar.tsx b/ui/src/components/AgentContextualSidebar.tsx
+index 14ab6a27a..9e6158579 100644
+--- a/ui/src/components/AgentContextualSidebar.tsx
++++ b/ui/src/components/AgentContextualSidebar.tsx
+@@ -41,7 +41,7 @@ const localIcons = {
+ } satisfies Record<AgentLocalDetailView, typeof Sparkles>;
+ 
+ const auditItems = [
+-  { section: "activity", label: "Activity", icon: Activity },
++  { section: "activity", label: "Activité", icon: Activity },
+   { section: "runs", label: "Runs", icon: PlayCircle },
+   { section: "costs", label: "Costs", icon: ReceiptText },
+   { section: "budgets", label: "Budgets", icon: BadgeDollarSign },
+diff --git a/ui/src/components/IssueChatThread.test.tsx b/ui/src/components/IssueChatThread.test.tsx
+index c68e0216f..622ae34bf 100644
+--- a/ui/src/components/IssueChatThread.test.tsx
++++ b/ui/src/components/IssueChatThread.test.tsx
+@@ -561,8 +561,8 @@ describe("IssueChatThread", () => {
+     expect(container.textContent).toContain(
+       "interrupted by board after 1 minute",
+     );
+-    expect(container.textContent).toContain("cancelled after 1 minute");
+-    expect(container.textContent).not.toContain("run interrupted");
++    expect(container.textContent).toContain("annulée après 1 minute");
++    expect(container.textContent).not.toContain("exécution interrompue");
+ 
+     act(() => {
+       root.unmount();
+diff --git a/ui/src/components/ManagedRoutinesList.tsx b/ui/src/components/ManagedRoutinesList.tsx
+index 5b85b6910..dda8a2138 100644
+--- a/ui/src/components/ManagedRoutinesList.tsx
++++ b/ui/src/components/ManagedRoutinesList.tsx
+@@ -79,7 +79,7 @@ export function ManagedRoutinesList({
+   agents = [],
+   projects = [],
+   pluginDisplayName = null,
+-  emptyMessage = "No managed routines.",
++  emptyMessage = "Aucune routine gérée.",
+   runningRoutineKey = null,
+   statusMutationRoutineKey = null,
+   reconcilingRoutineKey = null,
+@@ -123,8 +123,8 @@ export function ManagedRoutinesList({
+               runningRoutineId={runningRoutineKey}
+               statusMutationRoutineId={statusMutationRoutineKey}
+               href={href}
+-              configureLabel="Configure"
+-              managedByLabel={managedBy ? `Managed by ${managedBy}` : null}
++              configureLabel="Modifier"
++              managedByLabel={managedBy ? `Géré par ${managedBy}` : null}
+               runNowButton
+               hideArchiveAction
+               disableRunNow={!canUseRoutine}
+@@ -132,7 +132,7 @@ export function ManagedRoutinesList({
+               secondaryDetails={
+                 <span className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                   {routine.resourceKey ? <span>{routine.resourceKey}</span> : null}
+-                  {routine.cronExpression ? <span>Schedule {routine.cronExpression}</span> : null}
++                  {routine.cronExpression ? <span>Calendrier {routine.cronExpression}</span> : null}
+                 </span>
+               }
+               onRunNow={() => onRunNow?.(routine)}
+@@ -148,8 +148,8 @@ export function ManagedRoutinesList({
+               >
+                 <span>
+                   {missingRefs.length
+-                    ? `Missing ${missingRefs.map((ref) => `${ref.resourceKind}:${ref.resourceKey}`).join(", ")}`
+-                    : "Routine defaults can be repaired."}
++                    ? `Manquant : ${missingRefs.map((ref) => `${ref.resourceKind}:${ref.resourceKey}`).join(", ")}`
++                    : "Les valeurs par défaut de la routine peuvent être réparées."}
+                 </span>
+                 <span className="flex items-center gap-2">
+                   {onReconcile ? (
+@@ -159,7 +159,7 @@ export function ManagedRoutinesList({
+                       disabled={reconcilingRoutineKey === routine.key}
+                       onClick={() => onReconcile(routine)}
+                     >
+-                      {reconcilingRoutineKey === routine.key ? "Reconciling..." : "Reconcile"}
++                      {reconcilingRoutineKey === routine.key ? "Réconciliation..." : "Réconcilier"}
+                     </Button>
+                   ) : null}
+                   {onReset ? (
+@@ -169,7 +169,7 @@ export function ManagedRoutinesList({
+                       disabled={resettingRoutineKey === routine.key}
+                       onClick={() => onReset(routine)}
+                     >
+-                      {resettingRoutineKey === routine.key ? "Resetting..." : "Reset"}
++                      {resettingRoutineKey === routine.key ? "Réinitialisation..." : "Réinitialiser"}
+                     </Button>
+                   ) : null}
+                 </span>
+diff --git a/ui/src/components/RoutineContextualSidebar.test.tsx b/ui/src/components/RoutineContextualSidebar.test.tsx
+index 888591c53..29272341f 100644
+--- a/ui/src/components/RoutineContextualSidebar.test.tsx
++++ b/ui/src/components/RoutineContextualSidebar.test.tsx
+@@ -103,12 +103,12 @@ describe("routine contextual navigation", () => {
+     expect(frame?.getAttribute("data-show-header")).toBe("false");
+     expect(frame?.classList).toContain("bg-background");
+     expect(frame?.classList).toContain("border-r");
+-    expect(container.querySelector('a[href="/routines/routine-1/overview"]')?.textContent).toBe("Overview");
+-    expect(container.querySelector('a[href="/routines/routine-1/triggers"]')?.textContent).toBe("Triggers");
++    expect(container.querySelector('a[href="/routines/routine-1/overview"]')?.textContent).toBe("Vue d'ensemble");
++    expect(container.querySelector('a[href="/routines/routine-1/triggers"]')?.textContent).toBe("Déclencheurs");
+     expect(container.querySelector('a[href="/routines/routine-1/runs"]'))
+       .not.toBeNull();
+     expect(container.querySelector('a[href="/routines/routine-1/activity"]'))
+       .not.toBeNull();
+-    expect(container.textContent).not.toContain("History");
++    expect(container.textContent).not.toContain("Historique");
+   });
+ });
+diff --git a/ui/src/components/RoutineContextualSidebar.tsx b/ui/src/components/RoutineContextualSidebar.tsx
+index 557dd7192..b7e006ca3 100644
+--- a/ui/src/components/RoutineContextualSidebar.tsx
++++ b/ui/src/components/RoutineContextualSidebar.tsx
+@@ -36,10 +36,10 @@ export type RoutineContextualNavItem = {
+ };
+ 
+ export const ROUTINE_CONTEXTUAL_NAV_ITEMS: readonly RoutineContextualNavItem[] = [
+-  { view: "overview", label: "Overview", icon: LayoutDashboard },
+-  { view: "triggers", label: "Triggers", icon: CalendarClock },
++  { view: "overview", label: "Vue d'ensemble", icon: LayoutDashboard },
++  { view: "triggers", label: "Déclencheurs", icon: CalendarClock },
+   { view: "variables", label: "Variables", icon: Braces },
+-  { view: "delivery", label: "Delivery", icon: Send },
++  { view: "delivery", label: "Livraison", icon: Send },
+   { view: "secrets", label: "Secrets", icon: KeyRound },
+ ];
+ 
+@@ -87,7 +87,7 @@ export function RoutineContextualSidebar({
+       showHeader={false}
+       className="border-r border-border bg-background"
+     >
+-      <nav className="min-h-0 flex-1 overflow-y-auto px-3 py-2" aria-label="Routine navigation">
++      <nav className="min-h-0 flex-1 overflow-y-auto px-3 py-2" aria-label="Navigation de la routine">
+         <div className="flex flex-col gap-0.5">
+           {ROUTINE_CONTEXTUAL_NAV_ITEMS.map((item) => (
+             <SidebarNavItem
+@@ -101,12 +101,12 @@ export function RoutineContextualSidebar({
+         </div>
+ 
+         <p className="px-4 pb-1 pt-5 text-(length:--text-nano) font-mono font-medium uppercase tracking-widest text-muted-foreground/60">
+-          Operate
++          Exploitation
+         </p>
+         <div className="flex flex-col gap-0.5">
+           <SidebarNavItem
+             to={routineDetailHref(routineId, "runs")}
+-            label="Runs"
++            label="Exécutions"
+             icon={Play}
+           />
+           <SidebarNavItem
+diff --git a/ui/src/components/RoutineOverview.test.tsx b/ui/src/components/RoutineOverview.test.tsx
+index 240b9eb0b..77f92d68e 100644
+--- a/ui/src/components/RoutineOverview.test.tsx
++++ b/ui/src/components/RoutineOverview.test.tsx
+@@ -155,20 +155,20 @@ describe("RoutineOverview", () => {
+ 
+   it("summarizes enabled schedules and their next run", () => {
+     expect(summarizeRoutineSchedule(routine.triggers)).toMatchObject({
+-      label: "1 active schedule",
++      label: "1 calendrier actif",
+       detail: "0 9 * * 1-5 · America/Los_Angeles",
+       nextRunAt: new Date("2026-09-01T16:00:00.000Z"),
+     });
+     expect(summarizeRoutineSchedule([{ ...routine.triggers[0]!, enabled: false }])).toEqual({
+-      label: "No active schedule",
+-      detail: "Manual runs only",
++      label: "Aucun calendrier actif",
++      detail: "Exécutions manuelles uniquement",
+       nextRunAt: null,
+     });
+   });
+ 
+   it("describes webhook-only routines as externally triggered", () => {
+     expect(summarizeRoutineSchedule([{ ...routine.triggers[0]!, kind: "webhook", enabled: true }])).toEqual({
+-      label: "1 active webhook", detail: "Runs on incoming requests", nextRunAt: null,
++      label: "1 webhook actif", detail: "S'exécute à chaque requête entrante", nextRunAt: null,
+     });
+   });
+ 
+@@ -193,8 +193,8 @@ describe("RoutineOverview", () => {
+       </RoutineDetailContext.Provider>,
+     ));
+ 
+-    expect(container.textContent).toContain("1 active schedule");
+-    expect(container.textContent).toContain("Next run");
++    expect(container.textContent).toContain("1 calendrier actif");
++    expect(container.textContent).toContain("Prochaine exécution");
+     expect(container.textContent).toContain("Release Manager");
+     expect(container.textContent).toContain("Summarize **release readiness** for the operator.");
+     expect(container.textContent).toContain("Prepare the release digest");
+diff --git a/ui/src/components/RoutineOverview.tsx b/ui/src/components/RoutineOverview.tsx
+index 5baf0930b..1f5d4e1de 100644
+--- a/ui/src/components/RoutineOverview.tsx
++++ b/ui/src/components/RoutineOverview.tsx
+@@ -10,6 +10,7 @@ import { CalendarClock, Clock3, Play, Repeat, UserRound } from "lucide-react";
+ import { IssueRow } from "@/components/IssueRow";
+ import { MarkdownBody } from "@/components/MarkdownBody";
+ import { StatusBadge } from "@/components/StatusBadge";
++import { libelleStatutProjetRoutine } from "../lib/activity-format";
+ import { Button } from "@/components/ui/button";
+ import { createIssueDetailLocationState } from "@/lib/issueDetailBreadcrumb";
+ import { Link } from "@/lib/router";
+@@ -42,20 +43,20 @@ export function summarizeRoutineSchedule(triggers: RoutineTrigger[]): RoutineSch
+     const webhooks = triggers.filter((trigger) => trigger.kind === "webhook" && trigger.enabled);
+     if (webhooks.length > 0) {
+       return {
+-        label: `${webhooks.length} active webhook${webhooks.length === 1 ? "" : "s"}`,
+-        detail: "Runs on incoming requests",
++        label: `${webhooks.length} webhook${webhooks.length === 1 ? " actif" : "s actifs"}`,
++        detail: "S'exécute à chaque requête entrante",
+         nextRunAt: null,
+       };
+     }
+-    return { label: "No active schedule", detail: "Manual runs only", nextRunAt: null };
++    return { label: "Aucun calendrier actif", detail: "Exécutions manuelles uniquement", nextRunAt: null };
+   }
+ 
+   const first = schedules[0]!;
+   return {
+-    label: schedules.length === 1 ? "1 active schedule" : `${schedules.length} active schedules`,
++    label: schedules.length === 1 ? "1 calendrier actif" : `${schedules.length} calendriers actifs`,
+     detail: first.cronExpression
+       ? `${first.cronExpression}${first.timezone ? ` · ${first.timezone}` : ""}`
+-      : first.label ?? "Scheduled trigger",
++      : first.label ?? "Déclencheur planifié",
+     nextRunAt,
+   };
+ }
+@@ -162,32 +163,32 @@ export function RoutineOverview() {
+       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+         <OverviewFact
+           icon={Repeat}
+-          label="State"
+-          value={<StatusBadge status={automationState} />}
+-          detail={hasLiveRun ? "A run is active now" : "No active run"}
++          label="État"
++          value={<StatusBadge status={automationState} label={libelleStatutProjetRoutine(automationState)} />}
++          detail={hasLiveRun ? "Une exécution est en cours" : "Aucune exécution en cours"}
+         />
+         <OverviewFact
+           icon={CalendarClock}
+-          label="Triggers"
++          label="Déclencheurs"
+           value={schedule.label}
+           detail={<span className="font-mono">{schedule.detail}</span>}
+         />
+         <OverviewFact
+           icon={Clock3}
+-          label="Next run"
+-          value={schedule.nextRunAt ? formatRoutineTimestamp(schedule.nextRunAt) : hasWebhook ? "On webhook delivery" : "Not scheduled"}
+-          detail={schedule.nextRunAt ? "Scheduled" : hasWebhook ? "Waiting for an incoming request" : "Add or enable a schedule"}
++          label="Prochaine exécution"
++          value={schedule.nextRunAt ? formatRoutineTimestamp(schedule.nextRunAt) : hasWebhook ? "À la réception d'un webhook" : "Non planifiée"}
++          detail={schedule.nextRunAt ? "Planifiée" : hasWebhook ? "En attente d'une requête entrante" : "Ajoutez ou activez un calendrier"}
+         />
+         <OverviewFact
+           icon={Play}
+-          label="Last run"
+-          value={lastRun ? <StatusBadge status={lastRun.status} /> : "No runs yet"}
+-          detail={lastRun ? formatRoutineTimestamp(lastRun.triggeredAt) : "Run manually or wait for a trigger"}
++          label="Dernière exécution"
++          value={lastRun ? <StatusBadge status={lastRun.status} label={libelleStatutProjetRoutine(lastRun.status)} /> : "Aucune exécution pour le moment"}
++          detail={lastRun ? formatRoutineTimestamp(lastRun.triggeredAt) : "Lancez-la manuellement ou attendez un déclencheur"}
+         />
+       </div>
+ 
+       <section className="flex flex-col gap-2" aria-labelledby="routine-agent-heading">
+-        <h2 id="routine-agent-heading" className="text-sm font-semibold">Default agent</h2>
++        <h2 id="routine-agent-heading" className="text-sm font-semibold">Agent par défaut</h2>
+         {currentAssignee ? (
+           <Link
+             to={`/agents/${currentAssignee.urlKey ?? currentAssignee.id}`}
+@@ -197,7 +198,7 @@ export function RoutineOverview() {
+             {currentAssignee.name}
+           </Link>
+         ) : (
+-          <p className="text-sm text-muted-foreground">No default agent. Automatic triggers remain paused.</p>
++          <p className="text-sm text-muted-foreground">Aucun agent par défaut. Les déclencheurs automatiques restent en pause.</p>
+         )}
+       </section>
+ 
+@@ -208,20 +209,20 @@ export function RoutineOverview() {
+             {routine.description}
+           </MarkdownBody>
+         ) : (
+-          <p className="text-sm text-muted-foreground">No description yet.</p>
++          <p className="text-sm text-muted-foreground">Aucune description pour le moment.</p>
+         )}
+       </section>
+ 
+       <section className="flex flex-col gap-2" aria-labelledby="routine-recent-runs-heading">
+         <div className="flex items-center justify-between gap-3">
+-          <h2 id="routine-recent-runs-heading" className="text-sm font-semibold">Recent runs</h2>
++          <h2 id="routine-recent-runs-heading" className="text-sm font-semibold">Exécutions récentes</h2>
+           <Button variant="ghost" size="sm" asChild>
+-            <Link to={routineDetailHref(routine.id, "runs")}>View all runs</Link>
++            <Link to={routineDetailHref(routine.id, "runs")}>Voir toutes les exécutions</Link>
+           </Button>
+         </div>
+         {recentRuns.length === 0 ? (
+           <p className="py-6 text-center text-sm text-muted-foreground">
+-            No runs yet. Run the routine now or wait for its schedule.
++            Aucune exécution pour le moment. Lancez la routine maintenant ou attendez son calendrier.
+           </p>
+         ) : (
+           <div className="flex flex-col gap-0.5">
+@@ -233,22 +234,22 @@ export function RoutineOverview() {
+                 presentation="task"
+                 metadata={(
+                   <span className="flex items-center gap-2">
+-                    <StatusBadge status={run.status} />
++                    <StatusBadge status={run.status} label={libelleStatutProjetRoutine(run.status)} />
+                     <span className="font-mono text-xs text-muted-foreground">{formatRoutineTimestamp(run.triggeredAt)}</span>
+                   </span>
+                 )}
+               />
+             ) : (
+               <div key={run.id} className="flex min-w-0 items-center gap-2 rounded-lg px-2 py-2 text-sm">
+-                <StatusBadge status={run.status} />
+-                <span className="min-w-0 flex-1 truncate">{run.trigger?.label ?? "Routine run"}</span>
++                <StatusBadge status={run.status} label={libelleStatutProjetRoutine(run.status)} />
++                <span className="min-w-0 flex-1 truncate">{run.trigger?.label ?? "Exécution de la routine"}</span>
+                 <span className="shrink-0 font-mono text-xs text-muted-foreground">{formatRoutineTimestamp(run.triggeredAt)}</span>
+               </div>
+             ))}
+           </div>
+         )}
+         <Button variant="link" size="sm" className="w-fit px-0" asChild>
+-          <Link to={routineDetailHref(routine.id, "activity")}>View routine activity</Link>
++          <Link to={routineDetailHref(routine.id, "activity")}>Voir l'activité de la routine</Link>
+         </Button>
+       </section>
+     </div>
+diff --git a/ui/src/components/RoutineSubSidebar.test.tsx b/ui/src/components/RoutineSubSidebar.test.tsx
+index 26e9607d5..e41e2bc59 100644
+--- a/ui/src/components/RoutineSubSidebar.test.tsx
++++ b/ui/src/components/RoutineSubSidebar.test.tsx
+@@ -70,18 +70,18 @@ describe("RoutineSubSidebar", () => {
+     const links = Array.from(container.querySelectorAll("a"));
+     const labels = links.map((link) => link.textContent?.trim());
+     expect(labels).toEqual([
+-      "Overview",
+-      "Triggers",
++      "Vue d'ensemble",
++      "Déclencheurs",
+       "Variables",
+       "Secrets",
+-      "Delivery",
+-      "Runs",
++      "Livraison",
++      "Exécutions",
+       "Activité",
+-      "History",
++      "Historique",
+     ]);
+     const groupLabels = Array.from(container.querySelectorAll("p")).map((p) => p.textContent);
+     expect(groupLabels).toContain("Routine");
+-    expect(groupLabels).toContain("Operate");
++    expect(groupLabels).toContain("Exploitation");
+   });
+ 
+   it("marks the active section with aria-current=page", () => {
+@@ -100,14 +100,14 @@ describe("RoutineSubSidebar", () => {
+ 
+   it("shows a dirty marker only on dirty editable sections", () => {
+     renderSidebar({ dirty: ["overview", "delivery"] });
+-    const dirtyMarkers = container.querySelectorAll('[aria-label="Unsaved changes"]');
++    const dirtyMarkers = container.querySelectorAll('[aria-label="Modifications non enregistrées"]');
+     expect(dirtyMarkers.length).toBe(2);
+   });
+ 
+   it("fires onNavigate when a section is clicked", () => {
+     const { onNavigate } = renderSidebar();
+     const triggers = Array.from(container.querySelectorAll("a")).find(
+-      (link) => link.textContent?.trim() === "Triggers",
++      (link) => link.textContent?.trim() === "Déclencheurs",
+     ) as HTMLAnchorElement;
+     act(() => {
+       triggers.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+diff --git a/ui/src/components/RoutineSubSidebar.tsx b/ui/src/components/RoutineSubSidebar.tsx
+index 75a72e8f2..ed7b3dbea 100644
+--- a/ui/src/components/RoutineSubSidebar.tsx
++++ b/ui/src/components/RoutineSubSidebar.tsx
+@@ -42,19 +42,19 @@ const NAV_GROUPS: NavGroup[] = [
+   {
+     label: "Routine",
+     items: [
+-      { key: "overview", label: "Overview", icon: Circle },
+-      { key: "triggers", label: "Triggers", icon: Clock3 },
++      { key: "overview", label: "Vue d'ensemble", icon: Circle },
++      { key: "triggers", label: "Déclencheurs", icon: Clock3 },
+       { key: "variables", label: "Variables", icon: LayoutGrid },
+       { key: "secrets", label: "Secrets", icon: KeyRound },
+-      { key: "delivery", label: "Delivery", icon: Send },
++      { key: "delivery", label: "Livraison", icon: Send },
+     ],
+   },
+   {
+-    label: "Operate",
++    label: "Exploitation",
+     items: [
+-      { key: "runs", label: "Runs", icon: Play },
++      { key: "runs", label: "Exécutions", icon: Play },
+       { key: "activity", label: "Activité", icon: ActivityIcon },
+-      { key: "history", label: "History", icon: HistoryIcon },
++      { key: "history", label: "Historique", icon: HistoryIcon },
+     ],
+   },
+ ];
+@@ -109,7 +109,7 @@ export function RoutineSubSidebar({
+ 
+   return (
+     <nav
+-      aria-label="Routine sections"
++      aria-label="Sections de la routine"
+       className="hidden h-full w-52 shrink-0 flex-col gap-4 overflow-y-auto border-r border-border bg-background px-3 py-4 md:flex"
+     >
+       {NAV_GROUPS.map((group) => (
+@@ -152,7 +152,7 @@ export function RoutineSubSidebar({
+                   <span className="ml-auto h-1.5 w-1.5 shrink-0 rounded-full bg-blue-500 motion-safe:animate-pulse" />
+                 ) : dirty ? (
+                   <span
+-                    aria-label="Unsaved changes"
++                    aria-label="Modifications non enregistrées"
+                     className="ml-auto h-1.5 w-1.5 shrink-0 rounded-full bg-amber-500 ring-2 ring-background"
+                   />
+                 ) : null}
+@@ -185,7 +185,7 @@ export function RoutineSectionPicker({
+           }
+         }}
+       >
+-        <SelectTrigger className="h-11 w-full" aria-label="Routine section">
++        <SelectTrigger className="h-11 w-full" aria-label="Section de la routine">
+           <SelectValue />
+         </SelectTrigger>
+         <SelectContent>
+diff --git a/ui/src/components/Sidebar.production.tsx b/ui/src/components/Sidebar.production.tsx
+index 99a665b3e..83bc82c56 100644
+--- a/ui/src/components/Sidebar.production.tsx
++++ b/ui/src/components/Sidebar.production.tsx
+@@ -231,13 +231,13 @@ export function Sidebar() {
+         <SidebarAgents streamlined={streamlined} />
+ 
+         <SidebarSection label="Company" collapsible={{ open: companyOpen, onOpenChange: setCompanyOpen }}>
+-          <SidebarNavItem to="/org" label="Org" icon={Network} />
++          <SidebarNavItem to="/org" label="Organigramme" icon={Network} />
+           {showApps ? <SidebarNavItem to="/apps" label="Connectors" icon={Unplug} /> : null}
+-          <SidebarNavItem to="/timeline" label="Timeline" icon={GanttChartSquare} />
+-          <SidebarNavItem to="/costs" label="Costs" icon={DollarSign} />
++          <SidebarNavItem to="/timeline" label="Chronologie" icon={GanttChartSquare} />
++          <SidebarNavItem to="/costs" label="Coûts" icon={DollarSign} />
+           {/* One entry — /audit merged into the rich Activity feed (PAP-16302). */}
+           <SidebarNavItem to="/activity" label="Activité" icon={History} />
+-          <SidebarNavItem to="/company/settings" label="Settings" icon={Settings} />
++          <SidebarNavItem to="/company/settings" label="Paramètres" icon={Settings} />
+         </SidebarSection>
+ 
+         <PluginSlotOutlet
+diff --git a/ui/src/components/Sidebar.test.tsx b/ui/src/components/Sidebar.test.tsx
+index eac61dfdc..d6e1aec34 100644
+--- a/ui/src/components/Sidebar.test.tsx
++++ b/ui/src/components/Sidebar.test.tsx
+@@ -303,9 +303,9 @@ describe("Sidebar", () => {
+     expect(agentLinks).toHaveLength(1);
+     expect([...container.querySelectorAll('a[href="/activity"]')]).toHaveLength(1);
+     expect(navLabels).toContain("Journal d'audit");
+-    expect(navLabels).not.toContain("Settings");
++    expect(navLabels).not.toContain("Paramètres");
+     expect(navLabels).not.toContain("Activité");
+-    expect(navLabels).not.toContain("Costs");
++    expect(navLabels).not.toContain("Coûts");
+     expect(container.querySelector('[data-testid="sidebar-recent-tasks"]')).not.toBeNull();
+ 
+     flushSync(() => {
+@@ -320,7 +320,7 @@ describe("Sidebar", () => {
+     const navLabels = [...container.querySelectorAll("nav a")].map((a) => a.textContent?.trim());
+     expect(navLabels).toContain("Projets");
+     expect(navLabels).toContain("Agents");
+-    expect(container.textContent).not.toContain("Organization");
++    expect(navLabels).not.toContain("Organigramme");
+ 
+     flushSync(() => {
+       root.unmount();
+@@ -359,8 +359,8 @@ describe("Sidebar", () => {
+     expect(container.querySelector('[data-testid="sidebar-recent-tasks"]')).toBeNull();
+     expect(container.querySelector('[data-testid="sidebar-projects"]')).not.toBeNull();
+     expect(container.querySelector('[data-testid="sidebar-agents"]')?.getAttribute("data-streamlined")).toBe("undefined");
+-    expect(container.textContent).toContain("Organization");
+-    expect(labels).toEqual(expect.arrayContaining(["Org", "Connecteurs", "Timeline", "Costs", "Activité", "Settings"]));
++    expect(container.textContent).toContain("Organisation");
++    expect(labels).toEqual(expect.arrayContaining(["Organigramme", "Connecteurs", "Chronologie", "Coûts", "Activité", "Paramètres"]));
+     expect(labels).not.toContain("Journal d'audit");
+     expect(labels).not.toContain("Projets");
+     expect(container.querySelector('a[href="/agents"]')).toBeNull();
+@@ -645,7 +645,7 @@ describe("Sidebar", () => {
+     const sections = [...container.querySelectorAll("nav > div")];
+     const workSection = sections.find((section) => section.textContent?.startsWith("Travail"));
+     expect(workSection?.textContent).toContain("Projets");
+-    expect(workSection?.textContent).not.toContain("Timeline");
++    expect(workSection?.textContent).not.toContain("Chronologie");
+     expect(container.querySelector('a[href="/timeline"]')).toBeNull();
+ 
+     flushSync(() => {
+diff --git a/ui/src/components/Sidebar.tsx b/ui/src/components/Sidebar.tsx
+index 682677934..1aa531b80 100644
+--- a/ui/src/components/Sidebar.tsx
++++ b/ui/src/components/Sidebar.tsx
+@@ -312,15 +312,15 @@ export function Sidebar({ children }: { children?: ReactNode }) {
+             <SidebarProjects />
+             <SidebarAgents />
+             <SidebarSection
+-              label="Organization"
++              label="Organisation"
+               collapsible={{ open: organizationOpen, onOpenChange: setOrganizationOpen }}
+             >
+-              <SidebarNavItem to="/org" label="Org" icon={Network} />
++              <SidebarNavItem to="/org" label="Organigramme" icon={Network} />
+               <SidebarNavItem to="/apps" label="Connecteurs" icon={Unplug} />
+-              <SidebarNavItem to="/timeline" label="Timeline" icon={GanttChartSquare} />
+-              <SidebarNavItem to="/costs" label="Costs" icon={DollarSign} />
++              <SidebarNavItem to="/timeline" label="Chronologie" icon={GanttChartSquare} />
++              <SidebarNavItem to="/costs" label="Coûts" icon={DollarSign} />
+               <SidebarNavItem to="/activity" label="Activité" icon={History} />
+-              <SidebarNavItem to="/company/settings" label="Settings" icon={Settings} />
++              <SidebarNavItem to="/company/settings" label="Paramètres" icon={Settings} />
+             </SidebarSection>
+           </>
+         )}
+diff --git a/ui/src/components/TaskChatThread.test.tsx b/ui/src/components/TaskChatThread.test.tsx
+index 96ede944e..140e184a1 100644
+--- a/ui/src/components/TaskChatThread.test.tsx
++++ b/ui/src/components/TaskChatThread.test.tsx
+@@ -195,7 +195,7 @@ describe.each(["legacy", "native"] as const)("historical %s system status", (run
+     expect(container.textContent).toContain("Saved the useful response.");
+     expect(container.textContent).toContain("Please keep this message.");
+     expect(container.textContent).toContain("New session");
+-    for (const status of ["Exécution échouée", "Arrêtée", "A travaillé", "Run cancelled", "Waiting to resume", "Recovery pending", "Run completed", "previous execution needs"]) {
++    for (const status of ["Exécution échouée", "Arrêtée", "A travaillé", "Exécution annulée", "Waiting to resume", "Recovery pending", "Exécution terminée", "previous execution needs"]) {
+       expect(container.textContent).not.toContain(status);
+     }
+     if (runtimeMode === "legacy") {
+@@ -1657,7 +1657,7 @@ describe("TaskChatThread runtime transcript selection", () => {
+     }]} />);
+     expect(container.textContent).toContain("Waiting to resume");
+     expect(container.textContent).not.toContain("No user-facing response");
+-    expect(container.textContent).not.toContain("Run completed");
++    expect(container.textContent).not.toContain("Exécution terminée");
+     expect(container.querySelector(".text-destructive")).toBeNull();
+   });
+ 
+@@ -1676,7 +1676,7 @@ describe("TaskChatThread runtime transcript selection", () => {
+     ]} />);
+     expect(container.textContent?.match(/Waiting to resume/g)).toHaveLength(2);
+     expect(container.textContent).not.toContain("Couldn't start");
+-    expect(container.textContent).toContain(runtimeMode === "native" ? "Run cancelled" : "Arrêtée");
++    expect(container.textContent).toContain(runtimeMode === "native" ? "Exécution annulée" : "Arrêtée");
+   });
+ 
+   it("shows cancellation after native progress without offering a retry", () => {
+@@ -1715,7 +1715,7 @@ describe("TaskChatThread runtime transcript selection", () => {
+     expect(
+       container.querySelector('[data-testid="task-chat-collapsible-marker"]')
+         ?.textContent,
+-    ).toContain("Run cancelled");
++    ).toContain("Exécution annulée");
+     expect(
+       container.querySelector('[data-testid="task-chat-run-failed-try-again"]'),
+     ).toBeNull();
+@@ -1723,9 +1723,9 @@ describe("TaskChatThread runtime transcript selection", () => {
+ 
+   it.each([
+     ["failed", "Exécution échouée"],
+-    ["timed_out", "Run timed out"],
+-    ["cancelled", "Run cancelled"],
+-    ["interrupted", "Run interrupted"],
++    ["timed_out", "Exécution expirée"],
++    ["cancelled", "Exécution annulée"],
++    ["interrupted", "Exécution interrompue"],
+   ] as const)(
+     "does not claim a native %s run returned no answer when its final response is visible",
+     (status, expectedLabel) => {
+@@ -1835,7 +1835,7 @@ describe("TaskChatThread runtime transcript selection", () => {
+       agentId: "agent-1", agentName: "Runner", adapterType: "paperclip_runner", startedAt: null,
+       createdAt: "2026-09-12T18:00:00.000Z", finishedAt: "2026-09-12T18:00:01.000Z",
+     }]} />);
+-    expect(container.textContent).not.toContain("Run cancelled");
++    expect(container.textContent).not.toContain("Exécution annulée");
+     expect(container.textContent).not.toContain("Exécution échouée");
+     expect(container.textContent).not.toContain("before returning an answer");
+   });
+@@ -1847,7 +1847,7 @@ describe("TaskChatThread runtime transcript selection", () => {
+       createdAt: "2026-09-11T18:00:00.000Z", finishedAt: "2026-09-11T18:00:01.000Z",
+     }]} />);
+     expect(container.textContent).not.toContain("The runner returned no user-facing response.");
+-    expect(container.textContent).not.toContain("Run completed");
++    expect(container.textContent).not.toContain("Exécution terminée");
+   });
+ 
+   it.each([
+@@ -1881,9 +1881,9 @@ describe("TaskChatThread runtime transcript selection", () => {
+       expect(container.textContent).not.toContain(
+         "The runner returned no user-facing response.",
+       );
+-      expect(container.textContent).not.toContain("Run completed");
++      expect(container.textContent).not.toContain("Exécution terminée");
+       expect(container.textContent).not.toContain("Couldn't start");
+-      expect(container.textContent).not.toContain("Run cancelled");
++      expect(container.textContent).not.toContain("Exécution annulée");
+       expect(container.textContent).not.toContain("before returning an answer");
+     },
+   );
+@@ -1912,7 +1912,7 @@ describe("TaskChatThread runtime transcript selection", () => {
+         />,
+       );
+       expect(container.textContent).toContain(
+-        runtimeMode === "native" ? "Run cancelled" : "Arrêtée",
++        runtimeMode === "native" ? "Exécution annulée" : "Arrêtée",
+       );
+     },
+   );
+diff --git a/ui/src/components/TaskChatThread.tsx b/ui/src/components/TaskChatThread.tsx
+index 9a8484c17..e0c42a468 100644
+--- a/ui/src/components/TaskChatThread.tsx
++++ b/ui/src/components/TaskChatThread.tsx
+@@ -1644,11 +1644,11 @@ export function TaskChatThread(props: TaskChatThreadProps) {
+             : code === "native_provider_usage_limit" && source.status === "failed"
+             ? "Usage limit reached"
+             : source.status === "cancelled"
+-              ? "Run cancelled"
++              ? "Exécution annulée"
+               : source.status === "interrupted"
+-                ? "Run interrupted"
++                ? "Exécution interrompue"
+                 : source.status === "timed_out"
+-                  ? "Run timed out"
++                  ? "Exécution expirée"
+                   : "Exécution échouée";
+         const responseBoundary = sourceHasNativeResponse
+           ? " after returning a final response"
+@@ -1817,7 +1817,7 @@ export function TaskChatThread(props: TaskChatThreadProps) {
+               id,
+               kind: "marker",
+               variant: "turn_boundary",
+-              label: source.status === "cancelled" ? "Arrêtée" : "Run completed",
++              label: source.status === "cancelled" ? "Arrêtée" : "Exécution terminée",
+               detail: source.status === "cancelled" ? "This turn was cancelled before it returned a response." : "The runner returned no user-facing response.",
+             },
+           });
+@@ -1849,7 +1849,7 @@ export function TaskChatThread(props: TaskChatThreadProps) {
+             id,
+             kind: "marker",
+             variant: "turn_boundary",
+-            label: "Run completed",
++            label: "Exécution terminée",
+             detail: "The runner returned no user-facing response.",
+           },
+         });
+diff --git a/ui/src/components/folders/FolderControls.test.tsx b/ui/src/components/folders/FolderControls.test.tsx
+index 6940e0840..d72073da1 100644
+--- a/ui/src/components/folders/FolderControls.test.tsx
++++ b/ui/src/components/folders/FolderControls.test.tsx
+@@ -176,7 +176,7 @@ describe("FolderControls", () => {
+ 
+     expect(container.textContent).toContain("All routines");
+     expect(container.textContent).toContain("Reporting");
+-    expect(container.textContent).toContain("Unfiled");
++    expect(container.textContent).toContain("Sans dossier");
+     expect(container.textContent).toContain("4");
+     expect(container.textContent).toContain("3");
+     expect(container.textContent).toContain("1");
+@@ -212,7 +212,7 @@ describe("FolderControls", () => {
+     });
+ 
+     const current = container.querySelector('[aria-current="page"]');
+-    expect(current?.textContent).toContain("Unfiled");
++    expect(current?.textContent).toContain("Sans dossier");
+   });
+ 
+   it("renames a folder inline via double-click and Enter", () => {
+@@ -281,7 +281,7 @@ describe("FolderControls", () => {
+     });
+ 
+     const subTrigger = Array.from(document.querySelectorAll("[data-radix-collection-item]")).find(
+-      (element) => element.textContent?.includes("Move to"),
++      (element) => element.textContent?.includes("Déplacer vers"),
+     );
+     expect(subTrigger).toBeTruthy();
+     act(() => {
+@@ -289,9 +289,9 @@ describe("FolderControls", () => {
+     });
+ 
+     const menuItems = Array.from(document.querySelectorAll('[role="menuitem"]'));
+-    const unfiledItem = menuItems.find((element) => element.textContent?.includes("Unfiled"));
++    const unfiledItem = menuItems.find((element) => element.textContent?.includes("Sans dossier"));
+     const folderItem = menuItems.find((element) => element.textContent?.includes("Reporting"));
+-    const newFolderItem = menuItems.find((element) => element.textContent?.includes("New folder"));
++    const newFolderItem = menuItems.find((element) => element.textContent?.includes("Nouveau dossier"));
+     expect(unfiledItem).toBeTruthy();
+     expect(folderItem).toBeTruthy();
+     expect(newFolderItem).toBeTruthy();
+@@ -328,7 +328,7 @@ describe("FolderControls", () => {
+     });
+ 
+     const submit = Array.from(document.querySelectorAll("button")).find(
+-      (button) => button.textContent === "Create folder",
++      (button) => button.textContent === "Créer le dossier",
+     ) as HTMLButtonElement | undefined;
+     expect(submit).toBeTruthy();
+     expect(submit?.disabled).toBe(true);
+@@ -363,11 +363,11 @@ describe("FolderControls", () => {
+       );
+     });
+ 
+-    expect(document.body.textContent).toContain("3 routines in this folder won't be deleted");
+-    expect(document.body.textContent).toContain("They'll move to Unfiled");
++    expect(document.body.textContent).toContain("les 3 routines de ce dossier passeront dans");
++    expect(document.body.textContent).toContain("Rien ne sera supprimé");
+ 
+     const confirmButton = Array.from(document.querySelectorAll("button")).find(
+-      (button) => button.textContent === "Delete folder",
++      (button) => button.textContent === "Supprimer le dossier",
+     );
+     act(() => {
+       confirmButton?.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+@@ -395,7 +395,7 @@ describe("FolderControls", () => {
+     });
+ 
+     expect(document.body.textContent).toContain("All routines");
+-    expect(document.body.textContent).toContain("Unfiled");
++    expect(document.body.textContent).toContain("Sans dossier");
+ 
+     const reportingRow = Array.from(document.querySelectorAll("button")).find(
+       (button) => button.textContent?.includes("Reporting"),
+@@ -449,16 +449,16 @@ describe("FolderControls", () => {
+       );
+     });
+ 
+-    expect(container.textContent).toContain("Create your first folder");
++    expect(container.textContent).toContain("Créer votre premier dossier");
+ 
+     const dismissButton = container.querySelector<HTMLButtonElement>(
+-      'button[aria-label="Dismiss folder suggestion"]',
++      'button[aria-label="Ignorer la suggestion de dossier"]',
+     );
+     act(() => {
+       dismissButton?.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+     });
+ 
+-    expect(container.textContent).not.toContain("Create your first folder");
++    expect(container.textContent).not.toContain("Créer votre premier dossier");
+     expect(window.localStorage.getItem(storageKey)).toBe("1");
+ 
+     act(() => {
+@@ -474,7 +474,7 @@ describe("FolderControls", () => {
+         />,
+       );
+     });
+-    expect(container.textContent).not.toContain("Create your first folder");
++    expect(container.textContent).not.toContain("Créer votre premier dossier");
+     window.localStorage.removeItem(storageKey);
+   });
+ });
+diff --git a/ui/src/components/folders/FolderControls.tsx b/ui/src/components/folders/FolderControls.tsx
+index 47a773ad8..10e135180 100644
+--- a/ui/src/components/folders/FolderControls.tsx
++++ b/ui/src/components/folders/FolderControls.tsx
+@@ -120,7 +120,7 @@ function selectionLabel({
+   allLabel: string;
+ }) {
+   if (selection === "all") return allLabel;
+-  if (selection === "unfiled") return "Unfiled";
++  if (selection === "unfiled") return "Sans dossier";
+   return folders.find((folder) => folder.id === selection)?.name ?? allLabel;
+ }
+ 
+@@ -222,10 +222,10 @@ export function FolderRail({
+   }
+ 
+   return (
+-    <nav aria-label={`${itemLabelPlural} folders`} className="hidden w-(--sz-folder-rail) shrink-0 border-r border-border pr-3 md:block">
++    <nav aria-label={`Dossiers : ${itemLabelPlural}`} className="hidden w-(--sz-folder-rail) shrink-0 border-r border-border pr-3 md:block">
+       <div className="mb-2 flex items-center justify-between gap-2">
+-        <div className="text-(length:--text-micro) font-medium uppercase tracking-wide text-muted-foreground">Folders</div>
+-        <Button variant="ghost" size="icon-sm" title="New folder" onClick={onCreate}>
++        <div className="text-(length:--text-micro) font-medium uppercase tracking-wide text-muted-foreground">Dossiers</div>
++        <Button variant="ghost" size="icon-sm" title="Nouveau dossier" onClick={onCreate}>
+           <Plus className="h-3.5 w-3.5" />
+         </Button>
+       </div>
+@@ -255,9 +255,9 @@ export function FolderRail({
+             />
+           ))}
+           <div className="px-2 pb-1 pt-3 text-(length:--text-micro) font-medium uppercase tracking-wide text-muted-foreground">
+-            System
++            Système
+           </div>
+-          {renderVirtualRow("unfiled", "Unfiled", result?.unfiledCount ?? 0, <FolderSwatch color={null} className="mt-0.5" />)}
++          {renderVirtualRow("unfiled", "Sans dossier", result?.unfiledCount ?? 0, <FolderSwatch color={null} className="mt-0.5" />)}
+         </div>
+       )}
+     </nav>
+@@ -334,18 +334,18 @@ export function FolderRailItem({
+             variant="ghost"
+             size="icon-sm"
+             className="h-6 w-6 opacity-0 group-hover:opacity-100 data-[state=open]:opacity-100"
+-            aria-label={`Folder actions for ${folder.name}`}
++            aria-label={`Actions du dossier ${folder.name}`}
+           >
+             <MoreHorizontal className="h-3.5 w-3.5" />
+           </Button>
+         </DropdownMenuTrigger>
+         <DropdownMenuContent align="end">
+-          <DropdownMenuItem onSelect={onStartRename}>Rename</DropdownMenuItem>
+-          <DropdownMenuItem onSelect={onEdit}>Edit color</DropdownMenuItem>
++          <DropdownMenuItem onSelect={onStartRename}>Renommer</DropdownMenuItem>
++          <DropdownMenuItem onSelect={onEdit}>Modifier la couleur</DropdownMenuItem>
+           <DropdownMenuSeparator />
+           <DropdownMenuItem variant="destructive" onSelect={onDelete}>
+             <Trash2 className="h-3.5 w-3.5" />
+-            Delete
++            Supprimer
+           </DropdownMenuItem>
+         </DropdownMenuContent>
+       </DropdownMenu>
+@@ -389,12 +389,12 @@ export function AllUnfiledBanner({
+     <div className="mb-3 flex flex-wrap items-center gap-2 rounded-md border border-border bg-muted/40 px-3 py-2 text-sm">
+       <FolderIcon className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+       <span className="min-w-0 flex-1 text-muted-foreground">
+-        Group these {itemLabelPlural} into folders to keep things tidy.
++        Regroupez ces {itemLabelPlural} dans des dossiers pour garder de l'ordre.
+       </span>
+       <Button size="sm" variant="outline" onClick={onCreateFolder}>
+-        Create your first folder
++        Créer votre premier dossier
+       </Button>
+-      <Button size="icon-sm" variant="ghost" aria-label="Dismiss folder suggestion" onClick={dismiss}>
++      <Button size="icon-sm" variant="ghost" aria-label="Ignorer la suggestion de dossier" onClick={dismiss}>
+         <X className="h-3.5 w-3.5" />
+       </Button>
+     </div>
+@@ -451,7 +451,7 @@ export function MobileFolderSheet({
+     <Sheet open={open} onOpenChange={onOpenChange}>
+       <SheetContent side="bottom" className="max-h-(--sz-folder-sheet-max) rounded-t-lg pb-4">
+         <SheetHeader className="border-b border-border px-4 py-3">
+-          <SheetTitle>{itemLabelPlural} folders</SheetTitle>
++          <SheetTitle>Dossiers : {itemLabelPlural}</SheetTitle>
+         </SheetHeader>
+         <div className="overflow-y-auto px-3">
+           <MobileFolderRow
+@@ -477,7 +477,7 @@ export function MobileFolderSheet({
+           )}
+           <MobileFolderRow
+             id="unfiled"
+-            label="Unfiled"
++            label="Sans dossier"
+             count={result?.unfiledCount ?? 0}
+             selected={selection === "unfiled"}
+             onSelect={select}
+@@ -486,7 +486,7 @@ export function MobileFolderSheet({
+         <div className="border-t border-border px-4 pt-3">
+           <Button size="sm" variant="outline" className="w-full" onClick={onCreate}>
+             <Plus className="mr-2 h-3.5 w-3.5" />
+-            New folder
++            Nouveau dossier
+           </Button>
+         </div>
+       </SheetContent>
+@@ -538,7 +538,7 @@ export function MoveToMenu({
+ }) {
+   return (
+     <DropdownMenuSub>
+-      <DropdownMenuSubTrigger>Move to...</DropdownMenuSubTrigger>
++      <DropdownMenuSubTrigger>Déplacer vers...</DropdownMenuSubTrigger>
+       <DropdownMenuSubContent className="w-56">
+         <MoveToMenuItems
+           folders={folders}
+@@ -577,14 +577,14 @@ function MoveToMenuItems({
+             value={query}
+             onChange={(event) => setQuery(event.target.value)}
+             onKeyDown={(event) => event.stopPropagation()}
+-            placeholder="Search folders"
++            placeholder="Rechercher des dossiers"
+             className="h-7 min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
+           />
+         </div>
+         <DropdownMenuSeparator />
+         <DropdownMenuItem onSelect={() => onMove(null)}>
+           <FolderSwatch color={null} />
+-          Unfiled
++          Sans dossier
+           {currentFolderId == null ? <Check className="ml-auto h-3.5 w-3.5" /> : null}
+         </DropdownMenuItem>
+         {visibleFolders.map((folder) => (
+@@ -595,12 +595,12 @@ function MoveToMenuItems({
+           </DropdownMenuItem>
+         ))}
+         {visibleFolders.length === 0 ? (
+-          <div className="px-2 py-2 text-xs text-muted-foreground">No folders match.</div>
++          <div className="px-2 py-2 text-xs text-muted-foreground">Aucun dossier ne correspond.</div>
+         ) : null}
+         <DropdownMenuSeparator />
+         <DropdownMenuItem onSelect={onCreateAndMove}>
+           <Plus className="h-3.5 w-3.5" />
+-          New folder...
++          Nouveau dossier...
+         </DropdownMenuItem>
+     </>
+   );
+@@ -635,14 +635,14 @@ export function FolderFormDialog({
+     <Dialog open={open} onOpenChange={onOpenChange}>
+       <DialogContent className="sm:max-w-md">
+         <DialogHeader>
+-          <DialogTitle>{isEdit ? "Edit folder" : "Create folder"}</DialogTitle>
++          <DialogTitle>{isEdit ? "Modifier le dossier" : "Créer un dossier"}</DialogTitle>
+           <DialogDescription>
+-            {kind === "routine" ? "Organize routines in this organization." : "Organize installed organization skills."}
++            {kind === "routine" ? "Organisez les routines de cette organisation." : "Organisez les skills installés de l'organisation."}
+           </DialogDescription>
+         </DialogHeader>
+         <div className="space-y-4">
+           <div className="space-y-2">
+-            <label className="text-sm font-medium" htmlFor="folder-name">Name</label>
++            <label className="text-sm font-medium" htmlFor="folder-name">Nom</label>
+             <Input
+               id="folder-name"
+               value={name}
+@@ -654,13 +654,13 @@ export function FolderFormDialog({
+             />
+           </div>
+           <div className="space-y-2">
+-            <div className="text-sm font-medium">Color</div>
++            <div className="text-sm font-medium">Couleur</div>
+             <div className="flex flex-wrap gap-2">
+               {FOLDER_COLORS.map((swatch) => (
+                 <button
+                   key={swatch}
+                   type="button"
+-                  aria-label={`Use folder color ${swatch}`}
++                  aria-label={`Utiliser la couleur de dossier ${swatch}`}
+                   className={cn(
+                     "h-7 w-7 rounded-md border border-border",
+                     color === swatch && "ring-2 ring-ring ring-offset-2 ring-offset-background",
+@@ -677,17 +677,17 @@ export function FolderFormDialog({
+                 )}
+                 onClick={() => setColor(null)}
+               >
+-                None
++                Aucune
+               </button>
+             </div>
+           </div>
+         </div>
+         <DialogFooter>
+           <Button variant="ghost" onClick={() => onOpenChange(false)} disabled={pending}>
+-            Cancel
++            Annuler
+           </Button>
+           <Button onClick={() => onSubmit({ name: name.trim(), color })} disabled={pending || !name.trim()}>
+-            {pending ? "Saving..." : isEdit ? "Save" : "Create folder"}
++            {pending ? "Enregistrement..." : isEdit ? "Enregistrer" : "Créer le dossier"}
+           </Button>
+         </DialogFooter>
+       </DialogContent>
+@@ -714,13 +714,13 @@ export function DeleteFolderDialog({
+     <AlertDialog open={open} onOpenChange={onOpenChange}>
+       <AlertDialogContent>
+         <AlertDialogHeader>
+-          <AlertDialogTitle>Delete folder</AlertDialogTitle>
++          <AlertDialogTitle>Supprimer le dossier</AlertDialogTitle>
+           <AlertDialogDescription>
+-            The {folder?.itemCount ?? 0} {itemLabelPlural} in this folder won't be deleted. They'll move to Unfiled.
++            Rien ne sera supprimé : les {folder?.itemCount ?? 0} {itemLabelPlural} de ce dossier passeront dans « Sans dossier ».
+           </AlertDialogDescription>
+         </AlertDialogHeader>
+         <AlertDialogFooter>
+-          <AlertDialogCancel disabled={pending}>Cancel</AlertDialogCancel>
++          <AlertDialogCancel disabled={pending}>Annuler</AlertDialogCancel>
+           <AlertDialogAction
+             className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+             disabled={pending || !folder}
+@@ -729,7 +729,7 @@ export function DeleteFolderDialog({
+               onConfirm();
+             }}
+           >
+-            {pending ? "Deleting..." : "Delete folder"}
++            {pending ? "Suppression..." : "Supprimer le dossier"}
+           </AlertDialogAction>
+         </AlertDialogFooter>
+       </AlertDialogContent>
+@@ -755,10 +755,10 @@ export function BulkBar({
+   if (selectedCount === 0) return null;
+   return (
+     <div className="sticky top-2 z-10 flex flex-wrap items-center gap-2 rounded-md border border-border bg-background/95 px-3 py-2 shadow-sm backdrop-blur">
+-      <span className="mr-auto text-sm text-muted-foreground">{selectedCount} selected</span>
++      <span className="mr-auto text-sm text-muted-foreground">{selectedCount} sélectionné(s)</span>
+       <DropdownMenu>
+         <DropdownMenuTrigger asChild>
+-          <Button size="sm" variant="outline">Move to...</Button>
++          <Button size="sm" variant="outline">Déplacer vers...</Button>
+         </DropdownMenuTrigger>
+         <DropdownMenuContent align="end" className="w-56">
+           <MoveToMenuItems
+@@ -769,8 +769,8 @@ export function BulkBar({
+           />
+         </DropdownMenuContent>
+       </DropdownMenu>
+-      <Button size="sm" variant="ghost" onClick={onClear}>Deselect all</Button>
+-      <Button size="sm" onClick={onDone}>Done</Button>
++      <Button size="sm" variant="ghost" onClick={onClear}>Tout désélectionner</Button>
++      <Button size="sm" onClick={onDone}>Terminé</Button>
+     </div>
+   );
+ }
+diff --git a/ui/src/lib/attention.test.ts b/ui/src/lib/attention.test.ts
+index 7229a7a99..35a65f63f 100644
+--- a/ui/src/lib/attention.test.ts
++++ b/ui/src/lib/attention.test.ts
+@@ -73,7 +73,7 @@ describe("attention group preference persistence", () => {
+ 
+   it("defaults to None and lists it as the first group option", () => {
+     expect(loadAttentionGroupBy()).toBe("none");
+-    expect(ATTENTION_GROUP_BY_OPTIONS[0]).toEqual(["none", "None"]);
++    expect(ATTENTION_GROUP_BY_OPTIONS[0]).toEqual(["none", "Aucun"]);
+   });
+ 
+   it("round-trips explicit grouped choices and treats stale values as None", () => {
+diff --git a/ui/src/lib/attention.ts b/ui/src/lib/attention.ts
+index 8be1a5654..b08387907 100644
+--- a/ui/src/lib/attention.ts
++++ b/ui/src/lib/attention.ts
+@@ -522,7 +522,7 @@ export type AttentionSortOrder = "newest" | "oldest";
+ 
+ /** Ordered list used to render the group-by picker (label + value). */
+ export const ATTENTION_GROUP_BY_OPTIONS: ReadonlyArray<[AttentionGroupBy, string]> = [
+-  ["none", "None"],
++  ["none", "Aucun"],
+   ["date", "Date"],
+   ["type", "Type"],
+   ["project", "Project"],
+diff --git a/ui/src/lib/blockedInbox.ts b/ui/src/lib/blockedInbox.ts
+index d14db461e..0a6575c27 100644
+--- a/ui/src/lib/blockedInbox.ts
++++ b/ui/src/lib/blockedInbox.ts
+@@ -51,7 +51,7 @@ const REASON_LABELS: Record<IssueBlockedInboxReason, string> = {
+   pending_user_decision: "Pending user decision",
+   missing_successful_run_disposition: "Pick disposition",
+   blocked_chain_stalled: "Blocked chain stalled",
+-  blocked_by_unassigned_issue: "Unassigned blocker",
++  blocked_by_unassigned_issue: "Bloqueur non assigné",
+   blocked_by_assigned_backlog_issue: "Parked blocker",
+   blocked_by_cancelled_issue: "Cancelled blocker",
+   in_review_without_action_path: "Review without action path",
+@@ -111,7 +111,7 @@ export type BlockedInboxSort = "urgency" | "most_recent" | "longest_stopped";
+ 
+ export const BLOCKED_GROUP_OPTIONS: readonly [BlockedInboxGroupBy, string][] = [
+   ["blocker_type", "Blocker type"],
+-  ["none", "None"],
++  ["none", "Aucun"],
+ ];
+ 
+ export const BLOCKED_SORT_OPTIONS: readonly [BlockedInboxSort, string][] = [
+diff --git a/ui/src/lib/inbox.test.ts b/ui/src/lib/inbox.test.ts
+index 421cb4dc9..780898e4b 100644
+--- a/ui/src/lib/inbox.test.ts
++++ b/ui/src/lib/inbox.test.ts
+@@ -1473,7 +1473,7 @@ describe("inbox helpers", () => {
+       { key: "kind:approval", label: "Approvals", items: [items[1]] },
+       { key: "assignee:user:user-1", label: "Riley", items: [items[2]] },
+       { key: "assignee:agent:agent-1", label: "Coder", items: [items[0]] },
+-      { key: "assignee:none", label: "Unassigned", items: [items[3]] },
++      { key: "assignee:none", label: "Non assigné", items: [items[3]] },
+     ]);
+   });
+ 
+diff --git a/ui/src/lib/inbox.ts b/ui/src/lib/inbox.ts
+index c95b01535..a2d24c788 100644
+--- a/ui/src/lib/inbox.ts
++++ b/ui/src/lib/inbox.ts
+@@ -898,7 +898,7 @@ function resolveIssueAssigneeGroup(
+     };
+   }
+ 
+-  return { key: "assignee:none", label: "Unassigned" };
++  return { key: "assignee:none", label: "Non assigné" };
+ }
+ 
+ function resolveIssueProjectGroup(
+diff --git a/ui/src/lib/issue-chat-messages.ts b/ui/src/lib/issue-chat-messages.ts
+index 195bf7a5e..d2fa1a28a 100644
+--- a/ui/src/lib/issue-chat-messages.ts
++++ b/ui/src/lib/issue-chat-messages.ts
+@@ -665,10 +665,10 @@ function createTimelineEventMessage(args: {
+   if (event.assigneeChange) {
+     const from = event.assigneeChange.from.agentId
+       ? (agentMap?.get(event.assigneeChange.from.agentId)?.name ?? event.assigneeChange.from.agentId.slice(0, 8))
+-      : (formatAssigneeUserLabel(event.assigneeChange.from.userId, currentUserId, userLabelMap) ?? "Unassigned");
++      : (formatAssigneeUserLabel(event.assigneeChange.from.userId, currentUserId, userLabelMap) ?? "Non assigné");
+     const to = event.assigneeChange.to.agentId
+       ? (agentMap?.get(event.assigneeChange.to.agentId)?.name ?? event.assigneeChange.to.agentId.slice(0, 8))
+-      : (formatAssigneeUserLabel(event.assigneeChange.to.userId, currentUserId, userLabelMap) ?? "Unassigned");
++      : (formatAssigneeUserLabel(event.assigneeChange.to.userId, currentUserId, userLabelMap) ?? "Non assigné");
+     lines.push(`Assignee: ${from} -> ${to}`);
+   }
+   if (event.workspaceChange) {
+@@ -810,9 +810,9 @@ function runDurationLabel(run: {
+       return durationText ? `A travaillé pendant ${durationText}` : "Travail terminé";
+     case "failed":
+     case "error":
+-      return durationText ? `Failed after ${durationText}` : "Run failed";
++      return durationText ? `Échec après ${durationText}` : "Exécution échouée";
+     case "timed_out":
+-      return durationText ? `Timed out after ${durationText}` : "Run timed out";
++      return durationText ? `Expirée après ${durationText}` : "Exécution expirée";
+     case "cancelled":
+       if (isOperatorInterruptedRun(run.resultJson, run.errorCode)) {
+         return durationText ? `Interrupted by board after ${durationText}` : "Interrupted by board";
+@@ -820,7 +820,7 @@ function runDurationLabel(run: {
+       if (stopReason === "paused") {
+         return durationText ? `Paused by board after ${durationText}` : "Paused by board";
+       }
+-      return durationText ? `Cancelled after ${durationText}` : "Run cancelled";
++      return durationText ? `Annulée après ${durationText}` : "Exécution annulée";
+     case "queued":
+       return "Queued";
+     case "running":
+diff --git a/ui/src/lib/routine-run-display.test.ts b/ui/src/lib/routine-run-display.test.ts
+index ada448196..999e3d47d 100644
+--- a/ui/src/lib/routine-run-display.test.ts
++++ b/ui/src/lib/routine-run-display.test.ts
+@@ -41,7 +41,7 @@ describe("runRowSubtitle", () => {
+       { status: "failed", failureReason: null, triggerPayload: null },
+       variables,
+     );
+-    expect(subtitle).toBe("Run failed");
++    expect(subtitle).toBe("Exécution échouée");
+   });
+ 
+   it("returns empty when there is no payload", () => {
+diff --git a/ui/src/lib/routine-run-display.ts b/ui/src/lib/routine-run-display.ts
+index e05b0da00..3372e0edf 100644
+--- a/ui/src/lib/routine-run-display.ts
++++ b/ui/src/lib/routine-run-display.ts
+@@ -54,7 +54,7 @@ export function runRowSubtitle(
+   variables: readonly RoutineVariable[] | null | undefined,
+ ): string {
+   if (run.status === "failed") {
+-    return run.failureReason?.trim() || "Run failed";
++    return run.failureReason?.trim() || "Exécution échouée";
+   }
+   if (run.status === "skipped") {
+     const reason = run.failureReason?.trim();
+diff --git a/ui/src/pages/PipelineSettings.tsx b/ui/src/pages/PipelineSettings.tsx
+index 57e084d4c..ddff5f309 100644
+--- a/ui/src/pages/PipelineSettings.tsx
++++ b/ui/src/pages/PipelineSettings.tsx
+@@ -177,7 +177,7 @@ const STAGE_NAV_GROUPS: Array<{
+   {
+     label: "Operate",
+     items: [
+-      { id: "activity", label: "Activity", icon: ActivityIcon },
++      { id: "activity", label: "Activité", icon: ActivityIcon },
+       { id: "history", label: "History", icon: HistoryIcon },
+     ],
+   },
+@@ -186,7 +186,7 @@ const STAGE_NAV_GROUPS: Array<{
+ const STAGE_SECTION_TITLES: Record<StageSectionKey, string> = {
+   instructions: "Automation",
+   secrets: "Secrets",
+-  activity: "Activity",
++  activity: "Activité",
+   history: "History",
+   advanced: "Advanced",
+ };
+diff --git a/ui/src/pages/ProjectDetail.test.tsx b/ui/src/pages/ProjectDetail.test.tsx
+index 59cd9c74d..b6bf08720 100644
+--- a/ui/src/pages/ProjectDetail.test.tsx
++++ b/ui/src/pages/ProjectDetail.test.tsx
+@@ -257,18 +257,18 @@ describe("ProjectDetail", () => {
+       await new Promise((resolve) => setTimeout(resolve, 0));
+     });
+ 
+-    expect(container.textContent).toContain("Managed by Missions");
++    expect(container.textContent).toContain("Géré par Missions");
+     expect(container.textContent).toContain("Project summary card");
+     expect(mockSummarySlotCard).toHaveBeenCalledWith(expect.objectContaining({
+       companyId: "company-1",
+       scopeKind: "project",
+       scopeId: "project-1",
+-      title: "Project summary",
++      title: "Résumé du projet",
+     }));
+     const titleEditor = Array.from(container.querySelectorAll("span")).find((node) => node.textContent === "Managed Project");
+     const summaryCard = container.querySelector('[data-testid="summary-slot-card"]');
+     expect(titleEditor && summaryCard ? Boolean(titleEditor.compareDocumentPosition(summaryCard) & Node.DOCUMENT_POSITION_FOLLOWING) : false).toBe(true);
+-    expect(container.textContent).toContain("Plugin operations");
++    expect(container.textContent).toContain("Opérations du plugin");
+     expect(mockIssuesApi.list).toHaveBeenCalledWith("company-1", {
+       projectId: "project-1",
+       originKindPrefix: "plugin:paperclip.missions",
+diff --git a/ui/src/pages/ProjectDetail.tsx b/ui/src/pages/ProjectDetail.tsx
+index 8588bdec6..e426b4a0d 100644
+--- a/ui/src/pages/ProjectDetail.tsx
++++ b/ui/src/pages/ProjectDetail.tsx
+@@ -109,16 +109,16 @@ function ProjectTilePicker({
+         <button
+           type="button"
+           className="shrink-0 rounded-lg cursor-pointer hover:ring-2 hover:ring-foreground/20 transition-(--tp-box-shadow)"
+-          aria-label="Change project icon and color"
++          aria-label="Changer l'icône et la couleur du projet"
+         >
+           <ProjectTile color={color} icon={icon} size="md" />
+         </button>
+       </PopoverTrigger>
+       <PopoverContent className="w-72 p-3" align="start">
+         {/* Icon search + grid */}
+-        <p className="text-xs font-medium text-muted-foreground mb-2">Icon</p>
++        <p className="text-xs font-medium text-muted-foreground mb-2">Icône</p>
+         <Input
+-          placeholder="Search icons..."
++          placeholder="Rechercher une icône..."
+           value={search}
+           onChange={(e) => setSearch(e.target.value)}
+           className="mb-2 h-8 text-sm"
+@@ -140,13 +140,13 @@ function ProjectTilePicker({
+             </button>
+           ))}
+           {filteredIcons.length === 0 && (
+-            <p className="col-span-7 text-xs text-muted-foreground text-center py-2">No icons match</p>
++            <p className="col-span-7 text-xs text-muted-foreground text-center py-2">Aucune icône ne correspond</p>
+           )}
+         </div>
+ 
+         {/* Color swatches */}
+         <div className="mt-3 border-t border-border pt-3">
+-          <p className="text-xs font-medium text-muted-foreground mb-2">Color</p>
++          <p className="text-xs font-medium text-muted-foreground mb-2">Couleur</p>
+           <div className="grid grid-cols-5 gap-1.5">
+             {/* Neutral / reset-to-gray option */}
+             <button
+@@ -157,8 +157,8 @@ function ProjectTilePicker({
+                   ? "ring-2 ring-foreground ring-offset-1 ring-offset-background rounded-md"
+                   : ""
+               }`}
+-              aria-label="Reset to neutral gray"
+-              title="Neutral (default)"
++              aria-label="Revenir au gris neutre"
++              title="Neutre (par défaut)"
+             >
+               <ProjectTile color={null} size="sm" />
+             </button>
+@@ -173,7 +173,7 @@ function ProjectTilePicker({
+                     : "hover:ring-2 hover:ring-foreground/30"
+                 }`}
+                 style={{ backgroundColor: swatch }}
+-                aria-label={`Select color ${swatch}`}
++                aria-label={`Sélectionner la couleur ${swatch}`}
+               />
+             ))}
+           </div>
+@@ -461,17 +461,17 @@ export function ProjectDetail() {
+       ),
+     onSuccess: (updatedProject, archived) => {
+       invalidateProject();
+-      const name = updatedProject?.name ?? project?.name ?? "Project";
++      const name = updatedProject?.name ?? project?.name ?? "Projet";
+       if (archived) {
+-        pushToast({ title: `"${name}" has been archived`, tone: "success" });
++        pushToast({ title: `« ${name} » a été archivé`, tone: "success" });
+         navigate("/dashboard");
+       } else {
+-        pushToast({ title: `"${name}" has been unarchived`, tone: "success" });
++        pushToast({ title: `« ${name} » a été désarchivé`, tone: "success" });
+       }
+     },
+     onError: (_, archived) => {
+       pushToast({
+-        title: archived ? "Failed to archive project" : "Failed to unarchive project",
++        title: archived ? "Échec de l'archivage du projet" : "Échec du désarchivage du projet",
+         tone: "error",
+       });
+     },
+@@ -479,7 +479,7 @@ export function ProjectDetail() {
+ 
+   const uploadImage = useMutation({
+     mutationFn: async (file: File) => {
+-      if (!resolvedCompanyId) throw new Error("No organization selected");
++      if (!resolvedCompanyId) throw new Error("Aucune organisation sélectionnée");
+       return assetsApi.uploadImage(resolvedCompanyId, file, `projects/${projectLookupRef || "draft"}`);
+     },
+   });
+@@ -494,8 +494,8 @@ export function ProjectDetail() {
+ 
+   useEffect(() => {
+     setBreadcrumbs([
+-      { label: "Projects", href: "/projects" },
+-      { label: project?.name ?? routeProjectRef ?? "Project" },
++      { label: "Projets", href: "/projects" },
++      { label: project?.name ?? routeProjectRef ?? "Projet" },
+     ]);
+   }, [setBreadcrumbs, project, routeProjectRef]);
+ 
+@@ -601,7 +601,7 @@ export function ProjectDetail() {
+       companyId: resolvedCompanyId ?? "",
+       scopeType: "project",
+       scopeId: project?.id ?? routeProjectRef,
+-      scopeName: project?.name ?? "Project",
++      scopeName: project?.name ?? "Projet",
+       metric: "billed_cents",
+       windowKind: "lifetime",
+       amount: 0,
+@@ -719,7 +719,7 @@ export function ProjectDetail() {
+       {showLeftProjectNotice ? (
+         <div className="flex items-center gap-3 border border-yellow-300/35 bg-yellow-300/10 px-3 py-2 text-sm text-yellow-900 dark:text-yellow-100">
+           <p className="min-w-0 flex-1">
+-            You left this project. It no longer appears in your sidebar.
++            Vous avez quitté ce projet. Il n'apparaît plus dans votre barre latérale.
+           </p>
+           <MembershipAction
+             compact
+@@ -743,7 +743,7 @@ export function ProjectDetail() {
+           <button
+             type="button"
+             className="h-6 w-6 shrink-0 text-yellow-900/70 hover:text-yellow-900 dark:text-yellow-100/70 dark:hover:text-yellow-100"
+-            aria-label="Dismiss project membership notice"
++            aria-label="Fermer l'avis d'appartenance au projet"
+             onClick={() => setDismissedLeftProjectIds((current) => new Set(current).add(project.id))}
+           >
+             ×
+@@ -769,13 +769,13 @@ export function ProjectDetail() {
+           {project.pauseReason === "budget" ? (
+             <div className="inline-flex items-center gap-2 rounded-full border border-red-500/30 bg-red-500/10 px-3 py-1 text-(length:--text-micro) font-medium uppercase tracking-(--tracking-caps) text-red-800 dark:text-red-200">
+               <span className="h-2 w-2 rounded-full bg-red-400" />
+-              Paused by budget hard stop
++              Mis en pause par l'arrêt strict du budget
+             </div>
+           ) : null}
+           {project.managedByPlugin ? (
+             <div className="inline-flex items-center gap-2 rounded-full border border-border bg-muted px-3 py-1 text-(length:--text-micro) font-medium text-muted-foreground">
+               <span className="h-2 w-2 rounded-full" style={{ backgroundColor: project.color ?? "var(--project-seed)" }} />
+-              Managed by {project.managedByPlugin.pluginDisplayName}
++              Géré par {project.managedByPlugin.pluginDisplayName}
+             </div>
+           ) : null}
+         </div>
+@@ -799,8 +799,8 @@ export function ProjectDetail() {
+         companyId={resolvedCompanyId}
+         scopeKind="project"
+         scopeId={project.id}
+-        title="Project summary"
+-        description="Summarizer keeps the latest project status, next step, and operator-needed items here."
++        title="Résumé du projet"
++        description="Le résumeur conserve ici le dernier état du projet, la prochaine étape et les points qui demandent un opérateur."
+       />
+ 
+       <PluginSlotOutlet
+@@ -837,10 +837,10 @@ export function ProjectDetail() {
+       <Tabs value={activeTab ?? "list"} onValueChange={(value) => handleTabChange(value as ProjectTab)}>
+         <PageTabBar
+           items={[
+-            { value: "list", label: "Tasks" },
++            { value: "list", label: "Tâches" },
+ 
+-            ...(project.managedByPlugin ? [{ value: "plugin-operations", label: "Plugin operations" }] : []),
+-            ...(showWorkspacesTab ? [{ value: "workspaces", label: "Workspaces" }] : []),
++            ...(project.managedByPlugin ? [{ value: "plugin-operations", label: "Opérations du plugin" }] : []),
++            ...(showWorkspacesTab ? [{ value: "workspaces", label: "Espaces de travail" }] : []),
+             { value: "configuration", label: "Configuration" },
+             { value: "budget", label: "Budget" },
+             ...pluginTabItems.map((item) => ({
+@@ -881,7 +881,7 @@ export function ProjectDetail() {
+             />
+           )
+         ) : (
+-          <p className="text-sm text-muted-foreground">Loading workspaces...</p>
++          <p className="text-sm text-muted-foreground">Chargement des espaces de travail...</p>
+         )
+       ) : null}
+ 
+diff --git a/ui/src/pages/ProjectWorkspaceDetail.test.tsx b/ui/src/pages/ProjectWorkspaceDetail.test.tsx
+index c3e90e0a5..9a2127ac6 100644
+--- a/ui/src/pages/ProjectWorkspaceDetail.test.tsx
++++ b/ui/src/pages/ProjectWorkspaceDetail.test.tsx
+@@ -259,11 +259,11 @@ describe("ProjectWorkspaceDetail plugin tabs", () => {
+     await render();
+ 
+     expect(container.querySelector("h1")?.textContent).toBe("Primary checkout");
+-    expect(container.textContent).toContain("Project workspace");
+-    expect(container.textContent).toContain("This is the project’s primary codebase workspace.");
++    expect(container.textContent).toContain("Espace de travail du projet");
++    expect(container.textContent).toContain("Ceci est l’espace de travail principal du code du projet.");
+     expect(container.querySelector('[data-testid="plugin-slot-mount"]')).not.toBeNull();
+-    expect(container.textContent).not.toContain("Configure the concrete workspace");
+-    expect(container.textContent).not.toContain("Workspace name");
++    expect(container.textContent).not.toContain("Configurez l'espace de travail concret");
++    expect(container.textContent).not.toContain("Nom de l'espace de travail");
+   });
+ 
+   it("orders project workspace plugin tabs against built-in tabs by slot order", async () => {
+@@ -303,7 +303,7 @@ describe("ProjectWorkspaceDetail plugin tabs", () => {
+ 
+     expect(container.querySelector('[data-tab-value="changes"]')).toBeNull();
+     expect(container.querySelector('[data-testid="plugin-slot-mount"]')).toBeNull();
+-    expect(container.textContent).toContain("Project workspace");
++    expect(container.textContent).toContain("Espace de travail du projet");
+   });
+ 
+   it("shows a missing plugin placeholder instead of configuration for stale plugin tab URLs", async () => {
+@@ -313,11 +313,11 @@ describe("ProjectWorkspaceDetail plugin tabs", () => {
+ 
+     expect(container.textContent).toContain("Workspace plugin tab is not available.");
+     expect(container.querySelector('a[href="/projects/paperclip-app/workspaces/workspace-1?tab=configuration"]')?.textContent).toBe(
+-      "Back to configuration",
++      "Retour à la configuration",
+     );
+     expect(container.querySelector('[data-testid="plugin-slot-mount"]')).toBeNull();
+-    expect(container.textContent).not.toContain("Configure the concrete workspace");
+-    expect(container.textContent).not.toContain("Workspace name");
++    expect(container.textContent).not.toContain("Configurez l'espace de travail concret");
++    expect(container.textContent).not.toContain("Nom de l'espace de travail");
+   });
+ 
+   it("shows loading and error states for plugin tab manifests", async () => {
+@@ -326,7 +326,7 @@ describe("ProjectWorkspaceDetail plugin tabs", () => {
+ 
+     await render();
+ 
+-    expect(container.textContent).toContain("Loading workspace plugin...");
++    expect(container.textContent).toContain("Chargement du plugin de l'espace de travail...");
+ 
+     act(() => root?.unmount());
+     root = null;
+@@ -382,18 +382,18 @@ describe("ProjectWorkspaceDetail local path under the managed-sandbox-only polic
+   it("shows the local path field and fact row when the policy is off", async () => {
+     await render({});
+ 
+-    expect(container.textContent).toContain("Local path");
+-    expect(container.querySelector('input[placeholder="/absolute/path/to/workspace"]')).not.toBeNull();
++    expect(container.textContent).toContain("Chemin local");
++    expect(container.querySelector('input[placeholder="/chemin/absolu/vers/espace-de-travail"]')).not.toBeNull();
+     expect(container.textContent).toContain("/tmp/paperclip");
+   });
+ 
+   it("hides the local path field and fact row when the policy is on", async () => {
+     await render({ enableManagedSandboxOnly: true });
+ 
+-    expect(container.textContent).not.toContain("Local path");
+-    expect(container.querySelector('input[placeholder="/absolute/path/to/workspace"]')).toBeNull();
++    expect(container.textContent).not.toContain("Chemin local");
++    expect(container.querySelector('input[placeholder="/chemin/absolu/vers/espace-de-travail"]')).toBeNull();
+     expect(container.textContent).not.toContain("/tmp/paperclip");
+     // The repo fact row does not name the host filesystem, so it stays.
+-    expect(container.textContent).toContain("Repo URL");
++    expect(container.textContent).toContain("URL du dépôt");
+   });
+ });
+diff --git a/ui/src/pages/ProjectWorkspaceDetail.tsx b/ui/src/pages/ProjectWorkspaceDetail.tsx
+index 9cdc20f8f..57abd4557 100644
+--- a/ui/src/pages/ProjectWorkspaceDetail.tsx
++++ b/ui/src/pages/ProjectWorkspaceDetail.tsx
+@@ -73,15 +73,15 @@ function orderProjectWorkspaceTabItems(items: OrderedProjectWorkspaceTabItem[])
+ }
+ 
+ const SOURCE_TYPE_OPTIONS: Array<{ value: ProjectWorkspaceSourceType; label: string; description: string }> = [
+-  { value: "local_path", label: "Local git checkout", description: "A local path Paperclip can use directly." },
+-  { value: "non_git_path", label: "Local non-git path", description: "A local folder without git semantics." },
+-  { value: "git_repo", label: "Remote git repo", description: "A repo URL with optional refs and local checkout." },
+-  { value: "remote_managed", label: "Remote-managed workspace", description: "A hosted workspace tracked by external reference." },
++  { value: "local_path", label: "Copie git locale", description: "Un chemin local que Paperclip peut utiliser directement." },
++  { value: "non_git_path", label: "Dossier local hors git", description: "Un dossier local sans notion de git." },
++  { value: "git_repo", label: "Dépôt git distant", description: "Une URL de dépôt avec références facultatives et copie locale." },
++  { value: "remote_managed", label: "Espace de travail géré à distance", description: "Un espace de travail hébergé, suivi par référence externe." },
+ ];
+ 
+ const VISIBILITY_OPTIONS: Array<{ value: ProjectWorkspaceVisibility; label: string }> = [
+-  { value: "default", label: "Default" },
+-  { value: "advanced", label: "Advanced" },
++  { value: "default", label: "Par défaut" },
++  { value: "advanced", label: "Avancée" },
+ ];
+ 
+ function isSafeExternalUrl(value: string | null | undefined) {
+@@ -139,14 +139,14 @@ function parseRuntimeConfigJson(value: string) {
+     if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+       return {
+         ok: false as const,
+-        error: "Workspace commands JSON must be a JSON object.",
++        error: "Le JSON des commandes de l'espace de travail doit être un objet JSON.",
+       };
+     }
+     return { ok: true as const, value: parsed as Record<string, unknown> };
+   } catch (error) {
+     return {
+       ok: false as const,
+-      error: error instanceof Error ? error.message : "Invalid JSON.",
++      error: error instanceof Error ? error.message : "JSON invalide.",
+     };
+   }
+ }
+@@ -190,21 +190,21 @@ function validateWorkspaceForm(form: WorkspaceFormState) {
+ 
+   if (form.sourceType === "remote_managed") {
+     if (!remoteWorkspaceRef && !repoUrl) {
+-      return "Remote-managed workspaces require a remote workspace ref or repo URL.";
++      return "Les espaces de travail gérés à distance exigent une référence d'espace distant ou une URL de dépôt.";
+     }
+   } else if (!cwd && !repoUrl) {
+-    return "Workspace requires at least one local path or repo URL.";
++    return "L'espace de travail exige au moins un chemin local ou une URL de dépôt.";
+   }
+ 
+   if (cwd && (form.sourceType === "local_path" || form.sourceType === "non_git_path") && !isAbsolutePath(cwd)) {
+-    return "Local workspace path must be absolute.";
++    return "Le chemin local de l'espace de travail doit être absolu.";
+   }
+ 
+   if (repoUrl) {
+     try {
+       new URL(repoUrl);
+     } catch {
+-      return "Repo URL must be a valid URL.";
++      return "L'URL du dépôt doit être une URL valide.";
+     }
+   }
+ 
+@@ -324,9 +324,9 @@ export function ProjectWorkspaceDetail() {
+   useEffect(() => {
+     if (!project) return;
+     setBreadcrumbs([
+-      { label: "Projects", href: "/projects" },
++      { label: "Projets", href: "/projects" },
+       { label: project.name, href: `/projects/${canonicalProjectRef}` },
+-      { label: "Workspaces", href: `/projects/${canonicalProjectRef}/workspaces` },
++      { label: "Espaces de travail", href: `/projects/${canonicalProjectRef}/workspaces` },
+       { label: workspace?.name ?? routeWorkspaceId },
+     ]);
+   }, [setBreadcrumbs, project, canonicalProjectRef, workspace?.name, routeWorkspaceId]);
+@@ -354,7 +354,7 @@ export function ProjectWorkspaceDetail() {
+       setErrorMessage(null);
+     },
+     onError: (error) => {
+-      setErrorMessage(error instanceof Error ? error.message : "Failed to save workspace.");
++      setErrorMessage(error instanceof Error ? error.message : "Échec de l'enregistrement de l'espace de travail.");
+     },
+   });
+ 
+@@ -365,7 +365,7 @@ export function ProjectWorkspaceDetail() {
+       setErrorMessage(null);
+     },
+     onError: (error) => {
+-      setErrorMessage(error instanceof Error ? error.message : "Failed to update workspace.");
++      setErrorMessage(error instanceof Error ? error.message : "Échec de la mise à jour de l'espace de travail.");
+     },
+   });
+ 
+@@ -377,30 +377,30 @@ export function ProjectWorkspaceDetail() {
+       setErrorMessage(null);
+       setRuntimeActionMessage(
+         request.action === "run"
+-          ? "Workspace job completed."
++          ? "Tâche de l'espace de travail terminée."
+           : request.action === "stop"
+-            ? "Workspace service stopped. Task execution is not paused."
++            ? "Service de l'espace de travail arrêté. L'exécution des tâches n'est pas mise en pause."
+             : request.action === "restart"
+-              ? "Workspace service restarted. Task execution is not paused."
+-              : "Workspace service started.",
++              ? "Service de l'espace de travail redémarré. L'exécution des tâches n'est pas mise en pause."
++              : "Service de l'espace de travail démarré.",
+       );
+     },
+     onError: (error) => {
+       setRuntimeActionMessage(null);
+-      setErrorMessage(error instanceof Error ? error.message : "Failed to control workspace commands.");
++      setErrorMessage(error instanceof Error ? error.message : "Échec du pilotage des commandes de l'espace de travail.");
+     },
+   });
+ 
+-  if (projectQuery.isLoading) return <p className="text-sm text-muted-foreground">Loading workspace…</p>;
++  if (projectQuery.isLoading) return <p className="text-sm text-muted-foreground">Chargement de l'espace de travail…</p>;
+   if (projectQuery.error) {
+     return (
+       <p className="text-sm text-destructive">
+-        {projectQuery.error instanceof Error ? projectQuery.error.message : "Failed to load workspace"}
++        {projectQuery.error instanceof Error ? projectQuery.error.message : "Échec du chargement de l'espace de travail"}
+       </p>
+     );
+   }
+   if (!project || !workspace || !form || !initialState) {
+-    return <p className="text-sm text-muted-foreground">Workspace not found for this project.</p>;
++    return <p className="text-sm text-muted-foreground">Espace de travail introuvable pour ce projet.</p>;
+   }
+ 
+   const canRunWorkspaceCommands = Boolean(workspace.cwd);
+@@ -441,7 +441,7 @@ export function ProjectWorkspaceDetail() {
+         <Button variant="ghost" size="sm" asChild>
+           <Link to={`/projects/${canonicalProjectRef}/workspaces`}>
+             <ArrowLeft className="mr-1 h-4 w-4" />
+-            Back to workspaces
++            Retour aux espaces de travail
+           </Link>
+         </Button>
+       </div>
+@@ -449,7 +449,7 @@ export function ProjectWorkspaceDetail() {
+       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+         <div className="min-w-0 space-y-2">
+           <div className="text-xs font-medium uppercase tracking-(--tracking-eyebrow) text-muted-foreground">
+-            Project workspace
++            Espace de travail du projet
+           </div>
+           <h1 className="truncate text-xl font-semibold sm:text-2xl">{workspace.name}</h1>
+         </div>
+@@ -463,12 +463,12 @@ export function ProjectWorkspaceDetail() {
+             {setPrimaryWorkspace.isPending
+               ? <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+               : <Check className="mr-2 h-4 w-4" />}
+-            Make primary
++            Définir comme principal
+           </Button>
+         ) : (
+           <div className="inline-flex items-center gap-2 rounded-xl border border-emerald-500/25 bg-emerald-500/10 px-3 py-2 text-sm text-emerald-700 dark:text-emerald-300 sm:max-w-sm">
+             <Sparkles className="h-4 w-4" />
+-            This is the project’s primary codebase workspace.
++            Ceci est l’espace de travail principal du code du projet.
+           </div>
+         )}
+       </div>
+@@ -487,24 +487,25 @@ export function ProjectWorkspaceDetail() {
+         <div className="space-y-6">
+           <Card className="block p-5">
+             <p className="max-w-2xl text-sm text-muted-foreground">
+-              Configure the concrete workspace Paperclip attaches to this project. These values drive per-workspace
+-              checkout behavior, default runtime services for child execution workspaces, and let you override setup
+-              or cleanup commands when one workspace needs special handling.
++              Configurez l'espace de travail concret que Paperclip rattache à ce projet. Ces valeurs pilotent le
++              comportement de copie propre à chaque espace de travail, les services d'exécution par défaut des espaces
++              de travail d'exécution enfants, et permettent de remplacer les commandes d'installation ou de nettoyage
++              lorsqu'un espace de travail demande un traitement particulier.
+             </p>
+ 
+             <Separator className="my-5" />
+ 
+             <div className="grid gap-4 md:grid-cols-2">
+-              <Field label="Workspace name">
++              <Field label="Nom de l'espace de travail">
+                 <input
+                   className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none"
+                   value={form.name}
+                   onChange={(event) => setForm((current) => current ? { ...current, name: event.target.value } : current)}
+-                  placeholder="Workspace name"
++                  placeholder="Nom de l'espace de travail"
+                 />
+               </Field>
+ 
+-              <Field label="Visibility">
++              <Field label="Visibilité">
+                 <select
+                   className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none"
+                   value={form.visibility}
+@@ -520,7 +521,7 @@ export function ProjectWorkspaceDetail() {
+             </div>
+ 
+             <div className="mt-4 grid gap-4">
+-              <Field label="Source type" hint={sourceTypeDescription ?? undefined}>
++              <Field label="Type de source" hint={sourceTypeDescription ?? undefined}>
+                 <select
+                   className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none"
+                   value={form.sourceType}
+@@ -542,12 +543,12 @@ export function ProjectWorkspaceDetail() {
+               */}
+               {!hideHostPaths && (
+                 <div className="grid gap-4 md:grid-cols-(--gtc-13)">
+-                  <Field label="Local path">
++                  <Field label="Chemin local">
+                     <input
+                       className="w-full rounded-lg border border-border bg-background px-3 py-2 font-mono text-sm outline-none"
+                       value={form.cwd}
+                       onChange={(event) => setForm((current) => current ? { ...current, cwd: event.target.value } : current)}
+-                      placeholder="/absolute/path/to/workspace"
++                      placeholder="/chemin/absolu/vers/espace-de-travail"
+                     />
+                   </Field>
+                   <div className="flex items-end">
+@@ -557,7 +558,7 @@ export function ProjectWorkspaceDetail() {
+               )}
+ 
+               <div className="grid gap-4 md:grid-cols-2">
+-                <Field label="Repo URL">
++                <Field label="URL du dépôt">
+                   <input
+                     className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none"
+                     value={form.repoUrl}
+@@ -565,7 +566,7 @@ export function ProjectWorkspaceDetail() {
+                     placeholder="https://github.com/org/repo"
+                   />
+                 </Field>
+-                <Field label="Repo ref">
++                <Field label="Référence du dépôt">
+                   <input
+                     className="w-full rounded-lg border border-border bg-background px-3 py-2 font-mono text-sm outline-none"
+                     value={form.repoRef}
+@@ -576,7 +577,7 @@ export function ProjectWorkspaceDetail() {
+               </div>
+ 
+               <div className="grid gap-4 md:grid-cols-2">
+-                <Field label="Default ref">
++                <Field label="Référence par défaut">
+                   <input
+                     className="w-full rounded-lg border border-border bg-background px-3 py-2 font-mono text-sm outline-none"
+                     value={form.defaultRef}
+@@ -584,7 +585,7 @@ export function ProjectWorkspaceDetail() {
+                     placeholder="origin/main"
+                   />
+                 </Field>
+-                <Field label="Shared workspace key">
++                <Field label="Clé d'espace de travail partagé">
+                   <input
+                     className="w-full rounded-lg border border-border bg-background px-3 py-2 font-mono text-sm outline-none"
+                     value={form.sharedWorkspaceKey}
+@@ -595,7 +596,7 @@ export function ProjectWorkspaceDetail() {
+               </div>
+ 
+               <div className="grid gap-4 md:grid-cols-2">
+-                <Field label="Remote provider">
++                <Field label="Fournisseur distant">
+                   <input
+                     className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none"
+                     value={form.remoteProvider}
+@@ -603,7 +604,7 @@ export function ProjectWorkspaceDetail() {
+                     placeholder="codespaces"
+                   />
+                 </Field>
+-                <Field label="Remote workspace ref">
++                <Field label="Référence de l'espace de travail distant">
+                   <input
+                     className="w-full rounded-lg border border-border bg-background px-3 py-2 font-mono text-sm outline-none"
+                     value={form.remoteWorkspaceRef}
+@@ -614,7 +615,7 @@ export function ProjectWorkspaceDetail() {
+               </div>
+ 
+               <div className="grid gap-4 md:grid-cols-2">
+-                <Field label="Setup command" hint="Runs when this workspace needs custom bootstrap">
++                <Field label="Commande d'installation" hint="S'exécute lorsque cet espace de travail a besoin d'une initialisation personnalisée">
+                   <textarea
+                     className="min-h-28 w-full rounded-lg border border-border bg-background px-3 py-2 font-mono text-sm outline-none"
+                     value={form.setupCommand}
+@@ -622,7 +623,7 @@ export function ProjectWorkspaceDetail() {
+                     placeholder="pnpm install && pnpm dev"
+                   />
+                 </Field>
+-                <Field label="Cleanup command" hint="Runs before project-level execution workspace teardown">
++                <Field label="Commande de nettoyage" hint="S'exécute avant le démontage des espaces de travail d'exécution au niveau du projet">
+                   <textarea
+                     className="min-h-28 w-full rounded-lg border border-border bg-background px-3 py-2 font-mono text-sm outline-none"
+                     value={form.cleanupCommand}
+@@ -633,12 +634,12 @@ export function ProjectWorkspaceDetail() {
+               </div>
+ 
+               <details className="rounded-xl border border-dashed border-border/70 bg-background px-3 py-3">
+-                <summary className="cursor-pointer text-sm font-medium">Advanced runtime JSON</summary>
++                <summary className="cursor-pointer text-sm font-medium">JSON d'exécution avancé</summary>
+                 <p className="mt-2 text-sm text-muted-foreground">
+-                  Paperclip derives Services and Jobs from this JSON. Prefer editing named commands first; use raw JSON for advanced lifecycle, port, readiness, or environment settings.
++                  Paperclip déduit les services et les tâches de ce JSON. Modifiez d'abord les commandes nommées ; réservez le JSON brut aux réglages avancés de cycle de vie, de port, de disponibilité ou d'environnement.
+                 </p>
+                 <div className="mt-3">
+-                  <Field label="Workspace commands JSON" hint="Execution workspaces inherit this config unless they override it. Legacy `services` arrays still work, but `commands` supports both services and jobs.">
++                  <Field label="JSON des commandes de l'espace de travail" hint="Les espaces de travail d'exécution héritent de cette configuration sauf s'ils la remplacent. Les anciens tableaux `services` fonctionnent toujours, mais `commands` prend en charge à la fois les services et les tâches.">
+                     <textarea
+                       className="min-h-96 w-full rounded-lg border border-border bg-background px-3 py-2 font-mono text-sm outline-none"
+                       value={form.runtimeConfig}
+@@ -653,7 +654,7 @@ export function ProjectWorkspaceDetail() {
+             <div className="mt-5 flex flex-col items-stretch gap-3 sm:flex-row sm:flex-wrap sm:items-center">
+               <Button className="w-full sm:w-auto" disabled={!isDirty || updateWorkspace.isPending} onClick={saveChanges}>
+                 {updateWorkspace.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+-                Save changes
++                Enregistrer les modifications
+               </Button>
+               <Button
+                 variant="outline"
+@@ -664,11 +665,11 @@ export function ProjectWorkspaceDetail() {
+                   setErrorMessage(null);
+                 }}
+               >
+-                Reset
++                Réinitialiser
+               </Button>
+               {errorMessage ? <p className="text-sm text-destructive">{errorMessage}</p> : null}
+               {!errorMessage && runtimeActionMessage ? <p className="text-sm text-muted-foreground">{runtimeActionMessage}</p> : null}
+-              {!errorMessage && !isDirty ? <p className="text-sm text-muted-foreground">No unsaved changes.</p> : null}
++              {!errorMessage && !isDirty ? <p className="text-sm text-muted-foreground">Aucune modification non enregistrée.</p> : null}
+             </div>
+           </Card>
+         </div>
+@@ -676,22 +677,22 @@ export function ProjectWorkspaceDetail() {
+         <div className="space-y-6">
+           <Card className="block p-5">
+             <div className="space-y-1">
+-              <div className="text-xs font-medium uppercase tracking-(--tracking-eyebrow) text-muted-foreground">Workspace facts</div>
+-              <h2 className="text-lg font-semibold">Current state</h2>
++              <div className="text-xs font-medium uppercase tracking-(--tracking-eyebrow) text-muted-foreground">Informations sur l'espace de travail</div>
++              <h2 className="text-lg font-semibold">État actuel</h2>
+             </div>
+             <Separator className="my-4" />
+-            <DetailRow label="Project">
++            <DetailRow label="Projet">
+               <Link to={`/projects/${canonicalProjectRef}`} className="hover:underline">{project.name}</Link>
+             </DetailRow>
+-            <DetailRow label="Workspace ID">
++            <DetailRow label="ID de l'espace de travail">
+               <span className="break-all font-mono text-xs">{workspace.id}</span>
+             </DetailRow>
+             {hideHostPaths ? null : (
+-              <DetailRow label="Local path">
+-                <span className="break-all font-mono text-xs">{workspace.cwd ?? "None"}</span>
++              <DetailRow label="Chemin local">
++                <span className="break-all font-mono text-xs">{workspace.cwd ?? "Aucun"}</span>
+               </DetailRow>
+             )}
+-            <DetailRow label="Repo">
++            <DetailRow label="Dépôt">
+               {workspace.repoUrl && isSafeExternalUrl(workspace.repoUrl) ? (
+                 <a href={workspace.repoUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 hover:underline">
+                   {workspace.repoUrl}
+@@ -699,19 +700,19 @@ export function ProjectWorkspaceDetail() {
+                 </a>
+               ) : workspace.repoUrl ? (
+                 <span className="break-all font-mono text-xs">{workspace.repoUrl}</span>
+-              ) : "None"}
++              ) : "Aucun"}
+             </DetailRow>
+-            <DetailRow label="Default ref">{workspace.defaultRef ?? "None"}</DetailRow>
+-            <DetailRow label="Updated">{new Date(workspace.updatedAt).toLocaleString()}</DetailRow>
++            <DetailRow label="Référence par défaut">{workspace.defaultRef ?? "Aucune"}</DetailRow>
++            <DetailRow label="Mis à jour">{new Date(workspace.updatedAt).toLocaleString()}</DetailRow>
+           </Card>
+ 
+           <Card className="block p-5">
+             <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+               <div className="space-y-1">
+-                <div className="text-xs font-medium uppercase tracking-(--tracking-eyebrow) text-muted-foreground">Workspace commands</div>
+-                <h2 className="text-lg font-semibold">Services and jobs</h2>
++                <div className="text-xs font-medium uppercase tracking-(--tracking-eyebrow) text-muted-foreground">Commandes de l'espace de travail</div>
++                <h2 className="text-lg font-semibold">Services et tâches</h2>
+                 <p className="text-sm text-muted-foreground">
+-                  Long-running services stay supervised here, while one-shot jobs run on demand against this workspace. Execution workspaces inherit this config unless they override it.
++                  Les services de longue durée restent supervisés ici, tandis que les tâches ponctuelles s'exécutent à la demande sur cet espace de travail. Les espaces de travail d'exécution héritent de cette configuration sauf s'ils la remplacent.
+                 </p>
+               </div>
+             </div>
+@@ -722,11 +723,11 @@ export function ProjectWorkspaceDetail() {
+               pendingRequest={pendingRuntimeAction}
+               serviceEmptyMessage={
+                 workspace.runtimeConfig?.workspaceRuntime
+-                  ? "No services have been started for this workspace yet."
+-                  : "No workspace command config is defined for this workspace yet."
++                  ? "Aucun service n'a encore été démarré pour cet espace de travail."
++                  : "Aucune configuration de commandes n'est encore définie pour cet espace de travail."
+               }
+-              jobEmptyMessage="No one-shot jobs are configured for this workspace yet."
+-              disabledHint="Project workspaces need a working directory before local commands can run, and services also need runtime config."
++              jobEmptyMessage="Aucune tâche ponctuelle n'est encore configurée pour cet espace de travail."
++              disabledHint="Les espaces de travail de projet ont besoin d'un répertoire de travail avant l'exécution de commandes locales, et les services ont aussi besoin d'une configuration d'exécution."
+               onAction={(request) => controlRuntimeServices.mutate(request)}
+             />
+           </Card>
+@@ -749,12 +750,12 @@ export function ProjectWorkspaceDetail() {
+           />
+         ) : pluginDetailSlotsLoading || pluginDetailSlotsError ? (
+           <div className="rounded-lg border border-dashed border-border bg-background px-4 py-8 text-sm text-muted-foreground">
+-            {pluginDetailSlotsError ? pluginDetailSlotsError : "Loading workspace plugin..."}
++            {pluginDetailSlotsError ? pluginDetailSlotsError : "Chargement du plugin de l'espace de travail..."}
+           </div>
+         ) : (
+           <MissingPluginTabPlaceholder
+             defaultTabHref={`${projectWorkspaceUrl(project, routeWorkspaceId)}?tab=configuration`}
+-            defaultTabLabel="Back to configuration"
++            defaultTabLabel="Retour à la configuration"
+           />
+         )
+       ) : null}
+diff --git a/ui/src/pages/RoutineDetail.production.tsx b/ui/src/pages/RoutineDetail.production.tsx
+index 992f226d2..95479e8bd 100644
+--- a/ui/src/pages/RoutineDetail.production.tsx
++++ b/ui/src/pages/RoutineDetail.production.tsx
+@@ -83,14 +83,14 @@ export function buildRoutineProjectOptions(
+ }
+ 
+ const SECTION_TITLES: Record<RoutineSectionKey, string> = {
+-  overview: "Overview",
+-  triggers: "Triggers",
++  overview: "Vue d'ensemble",
++  triggers: "Déclencheurs",
+   variables: "Variables",
+   secrets: "Secrets",
+-  delivery: "Delivery",
+-  runs: "Runs",
+-  activity: "Activity",
+-  history: "History",
++  delivery: "Livraison",
++  runs: "Exécutions",
++  activity: "Activité",
++  history: "Historique",
+ };
+ 
+ function isRoutineSection(value: string | undefined | null): value is RoutineSectionKey {
+@@ -251,7 +251,7 @@ export function RoutineDetail() {
+   });
+   const createSecret = useMutation({
+     mutationFn: (input: { name: string; value: string }) => {
+-      if (!selectedCompanyId) throw new Error("Select a company to create secrets");
++      if (!selectedCompanyId) throw new Error("Sélectionnez une organisation pour créer des secrets");
+       return secretsApi.create(selectedCompanyId, input);
+     },
+     onSuccess: () => {
+@@ -371,11 +371,11 @@ export function RoutineDetail() {
+     async (label: string, value: string) => {
+       try {
+         await copyTextToClipboard(value);
+-        pushToast({ title: `${label} copied`, tone: "success" });
++        pushToast({ title: `${label} copié`, tone: "success" });
+       } catch (copyError) {
+         pushToast({
+-          title: `Failed to copy ${label.toLowerCase()}`,
+-          body: copyError instanceof Error ? copyError.message : "Clipboard access was denied.",
++          title: `Échec de la copie : ${label.toLowerCase()}`,
++          body: copyError instanceof Error ? copyError.message : "L'accès au presse-papiers a été refusé.",
+           tone: "error",
+         });
+       }
+@@ -405,15 +405,15 @@ export function RoutineDetail() {
+       if (mutationError instanceof ApiError && mutationError.status === 409) {
+         setSaveConflict(true);
+         pushToast({
+-          title: "Routine changed",
+-          body: "Someone else updated this routine. Reload to see the latest revision.",
++          title: "Routine modifiée",
++          body: "Quelqu'un d'autre a modifié cette routine. Rechargez pour voir la dernière révision.",
+           tone: "warn",
+         });
+         return;
+       }
+       pushToast({
+-        title: "Failed to save routine",
+-        body: mutationError instanceof Error ? mutationError.message : "Paperclip could not save the routine.",
++        title: "Échec de l'enregistrement de la routine",
++        body: mutationError instanceof Error ? mutationError.message : "Paperclip n'a pas pu enregistrer la routine.",
+         tone: "error",
+       });
+     },
+@@ -434,7 +434,7 @@ export function RoutineDetail() {
+           : {}),
+       }),
+     onSuccess: async () => {
+-      pushToast({ title: "Routine run started", tone: "success" });
++      pushToast({ title: "Exécution de la routine lancée", tone: "success" });
+       setRunVariablesOpen(false);
+       navigateToSection("runs");
+       await Promise.all([
+@@ -446,8 +446,8 @@ export function RoutineDetail() {
+     },
+     onError: (runError) => {
+       pushToast({
+-        title: "Routine run failed",
+-        body: runError instanceof Error ? runError.message : "Paperclip could not start the routine run.",
++        title: "Exécution de la routine échouée",
++        body: runError instanceof Error ? runError.message : "Paperclip n'a pas pu lancer l'exécution de la routine.",
+         tone: "error",
+       });
+     },
+@@ -457,8 +457,8 @@ export function RoutineDetail() {
+     mutationFn: (status: string) => routinesApi.update(routineId!, { status }),
+     onSuccess: async (_data, status) => {
+       pushToast({
+-        title: "Routine saved",
+-        body: status === "paused" ? "Automation paused." : "Automation enabled.",
++        title: "Routine enregistrée",
++        body: status === "paused" ? "Automatisation mise en pause." : "Automatisation activée.",
+         tone: "success",
+       });
+       await Promise.all([
+@@ -468,8 +468,8 @@ export function RoutineDetail() {
+     },
+     onError: (statusError) => {
+       pushToast({
+-        title: "Failed to update routine",
+-        body: statusError instanceof Error ? statusError.message : "Paperclip could not update the routine.",
++        title: "Échec de la mise à jour de la routine",
++        body: statusError instanceof Error ? statusError.message : "Paperclip n'a pas pu mettre à jour la routine.",
+         tone: "error",
+       });
+     },
+@@ -493,11 +493,11 @@ export function RoutineDetail() {
+     onSuccess: async (result) => {
+       if (result.secretMaterial) {
+         setSecretMessage({
+-          title: "Webhook trigger created",
++          title: "Déclencheur webhook créé",
+           entries: [{ webhookUrl: result.secretMaterial.webhookUrl, webhookSecret: result.secretMaterial.webhookSecret }],
+         });
+       } else {
+-        pushToast({ title: "Trigger added", body: "The routine schedule was saved.", tone: "success" });
++        pushToast({ title: "Déclencheur ajouté", body: "Le calendrier de la routine a été enregistré.", tone: "success" });
+       }
+       await Promise.all([
+         queryClient.invalidateQueries({ queryKey: queryKeys.routines.detail(routineId!) }),
+@@ -507,8 +507,8 @@ export function RoutineDetail() {
+     },
+     onError: (triggerError) => {
+       pushToast({
+-        title: "Failed to add trigger",
+-        body: triggerError instanceof Error ? triggerError.message : "Paperclip could not create the trigger.",
++        title: "Échec de l'ajout du déclencheur",
++        body: triggerError instanceof Error ? triggerError.message : "Paperclip n'a pas pu créer le déclencheur.",
+         tone: "error",
+       });
+     },
+@@ -517,7 +517,7 @@ export function RoutineDetail() {
+   const updateTrigger = useMutation({
+     mutationFn: ({ id, patch }: { id: string; patch: Record<string, unknown> }) => routinesApi.updateTrigger(id, patch),
+     onSuccess: async () => {
+-      pushToast({ title: "Trigger saved", body: "The routine cadence update was saved.", tone: "success" });
++      pushToast({ title: "Déclencheur enregistré", body: "La mise à jour de la cadence de la routine a été enregistrée.", tone: "success" });
+       await Promise.all([
+         queryClient.invalidateQueries({ queryKey: queryKeys.routines.detail(routineId!) }),
+         queryClient.invalidateQueries({ queryKey: queryKeys.routines.list(selectedCompanyId!) }),
+@@ -526,8 +526,8 @@ export function RoutineDetail() {
+     },
+     onError: (triggerError) => {
+       pushToast({
+-        title: "Failed to update trigger",
+-        body: triggerError instanceof Error ? triggerError.message : "Paperclip could not update the trigger.",
++        title: "Échec de la mise à jour du déclencheur",
++        body: triggerError instanceof Error ? triggerError.message : "Paperclip n'a pas pu mettre à jour le déclencheur.",
+         tone: "error",
+       });
+     },
+@@ -536,7 +536,7 @@ export function RoutineDetail() {
+   const deleteTrigger = useMutation({
+     mutationFn: (id: string) => routinesApi.deleteTrigger(id),
+     onSuccess: async () => {
+-      pushToast({ title: "Trigger deleted", tone: "success" });
++      pushToast({ title: "Déclencheur supprimé", tone: "success" });
+       await Promise.all([
+         queryClient.invalidateQueries({ queryKey: queryKeys.routines.detail(routineId!) }),
+         queryClient.invalidateQueries({ queryKey: queryKeys.routines.list(selectedCompanyId!) }),
+@@ -545,8 +545,8 @@ export function RoutineDetail() {
+     },
+     onError: (triggerError) => {
+       pushToast({
+-        title: "Failed to delete trigger",
+-        body: triggerError instanceof Error ? triggerError.message : "Paperclip could not delete the trigger.",
++        title: "Échec de la suppression du déclencheur",
++        body: triggerError instanceof Error ? triggerError.message : "Paperclip n'a pas pu supprimer le déclencheur.",
+         tone: "error",
+       });
+     },
+@@ -556,7 +556,7 @@ export function RoutineDetail() {
+     mutationFn: (id: string): Promise<RotateRoutineTriggerResponse> => routinesApi.rotateTriggerSecret(id),
+     onSuccess: async (result) => {
+       setSecretMessage({
+-        title: "Webhook secret rotated",
++        title: "Secret du webhook renouvelé",
+         entries: [{ webhookUrl: result.secretMaterial.webhookUrl, webhookSecret: result.secretMaterial.webhookSecret }],
+       });
+       await Promise.all([
+@@ -566,8 +566,8 @@ export function RoutineDetail() {
+     },
+     onError: (triggerError) => {
+       pushToast({
+-        title: "Failed to rotate webhook secret",
+-        body: triggerError instanceof Error ? triggerError.message : "Paperclip could not rotate the webhook secret.",
++        title: "Échec du renouvellement du secret du webhook",
++        body: triggerError instanceof Error ? triggerError.message : "Paperclip n'a pas pu renouveler le secret du webhook.",
+         tone: "error",
+       });
+     },
+@@ -631,8 +631,8 @@ export function RoutineDetail() {
+       setSecretMessage({
+         title:
+           response.secretMaterials.length === 1
+-            ? "Webhook trigger restored"
+-            : `${response.secretMaterials.length} webhook triggers restored`,
++            ? "Déclencheur webhook restauré"
++            : `${response.secretMaterials.length} déclencheurs webhook restaurés`,
+         entries: response.secretMaterials.map((recreated) => ({
+           webhookUrl: recreated.webhookUrl,
+           webhookSecret: recreated.webhookSecret,
+@@ -675,7 +675,7 @@ export function RoutineDetail() {
+   );
+ 
+   if (!selectedCompanyId) {
+-    return <EmptyState icon={Repeat} message="Select a company to view routines." />;
++    return <EmptyState icon={Repeat} message="Sélectionnez une organisation pour voir les routines." />;
+   }
+ 
+   // Back-compat redirect: `?tab=x` → `/routines/:id/x`.
+@@ -702,7 +702,7 @@ export function RoutineDetail() {
+     return (
+       <EmptyState
+         icon={AlertCircle}
+-        message={error instanceof Error ? error.message : "We couldn't load this routine."}
++        message={error instanceof Error ? error.message : "Impossible de charger cette routine."}
+       />
+     );
+   }
+@@ -711,12 +711,12 @@ export function RoutineDetail() {
+   const automationToggleDisabled = updateRoutineStatus.isPending || routine.status === "archived";
+   const automationLabel =
+     routine.status === "archived"
+-      ? "Archived"
++      ? "Archivée"
+       : !routine.assigneeAgentId
+-        ? "Draft"
++        ? "Brouillon"
+         : automationEnabled
+-          ? "Active"
+-          : "Paused";
++          ? "Activée"
++          : "En pause";
+   const automationLabelClassName =
+     routine.status === "archived"
+       ? "text-muted-foreground"
+@@ -746,8 +746,8 @@ export function RoutineDetail() {
+     onToggleAutomation: () => {
+       if (!automationEnabled && !routine.assigneeAgentId) {
+         pushToast({
+-          title: "Default agent required",
+-          body: "Set a default agent before enabling routine automation.",
++          title: "Agent par défaut requis",
++          body: "Définissez un agent par défaut avant d'activer l'automatisation de la routine.",
+           tone: "warn",
+         });
+         return;
+@@ -799,7 +799,7 @@ export function RoutineDetail() {
+         href="#routine-section"
+         className="sr-only focus:not-sr-only focus:absolute focus:left-2 focus:top-2 focus:z-20 focus:rounded focus:bg-background focus:px-3 focus:py-1.5 focus:text-sm"
+       >
+-        Skip to section
++        Aller à la section
+       </a>
+ 
+       {/* Bounded to the main scroll area's height so the header + sub-nav stay
+@@ -813,7 +813,7 @@ export function RoutineDetail() {
+               ref={titleInputRef}
+               data-autosize-title
+               className="min-w-0 flex-1 resize-none overflow-hidden bg-transparent text-base font-semibold leading-7 outline-none placeholder:text-muted-foreground/50"
+-              placeholder="Routine title"
++              placeholder="Titre de la routine"
+               rows={1}
+               value={editDraft.title}
+               onChange={(event) => {
+@@ -847,7 +847,7 @@ export function RoutineDetail() {
+                 checked={automationEnabled}
+                 onCheckedChange={contextValue.onToggleAutomation}
+                 disabled={automationToggleDisabled}
+-                aria-label={automationEnabled ? "Pause automatic triggers" : "Enable automatic triggers"}
++                aria-label={automationEnabled ? "Suspendre les déclencheurs automatiques" : "Activer les déclencheurs automatiques"}
+               />
+               <span className={`text-sm font-medium ${automationLabelClassName}`}>{automationLabel}</span>
+             </div>
+diff --git a/ui/src/pages/RoutineDetail.tsx b/ui/src/pages/RoutineDetail.tsx
+index 4bc357332..93c92a2f1 100644
+--- a/ui/src/pages/RoutineDetail.tsx
++++ b/ui/src/pages/RoutineDetail.tsx
+@@ -85,14 +85,14 @@ export function buildRoutineProjectOptions(
+ }
+ 
+ const SECTION_TITLES: Record<RoutineSectionKey, string> = {
+-  overview: "Overview",
+-  triggers: "Triggers",
++  overview: "Vue d'ensemble",
++  triggers: "Déclencheurs",
+   variables: "Variables",
+   secrets: "Secrets",
+-  delivery: "Delivery",
+-  runs: "Runs",
+-  activity: "Activity",
+-  history: "Version history",
++  delivery: "Livraison",
++  runs: "Exécutions",
++  activity: "Activité",
++  history: "Historique des versions",
+ };
+ 
+ function autoResizeTextarea(element: HTMLTextAreaElement | null) {
+@@ -231,7 +231,7 @@ export function RoutineDetail() {
+   });
+   const createSecret = useMutation({
+     mutationFn: (input: { name: string; value: string }) => {
+-      if (!selectedCompanyId) throw new Error("Select an organization to create secrets");
++      if (!selectedCompanyId) throw new Error("Sélectionnez une organisation pour créer des secrets");
+       return secretsApi.create(selectedCompanyId, input);
+     },
+     onSuccess: () => {
+@@ -348,11 +348,11 @@ export function RoutineDetail() {
+     async (label: string, value: string) => {
+       try {
+         await copyTextToClipboard(value);
+-        pushToast({ title: `${label} copied`, tone: "success" });
++        pushToast({ title: `${label} copié`, tone: "success" });
+       } catch (copyError) {
+         pushToast({
+-          title: `Failed to copy ${label.toLowerCase()}`,
+-          body: copyError instanceof Error ? copyError.message : "Clipboard access was denied.",
++          title: `Échec de la copie : ${label.toLowerCase()}`,
++          body: copyError instanceof Error ? copyError.message : "L'accès au presse-papiers a été refusé.",
+           tone: "error",
+         });
+       }
+@@ -382,15 +382,15 @@ export function RoutineDetail() {
+       if (mutationError instanceof ApiError && mutationError.status === 409) {
+         setSaveConflict(true);
+         pushToast({
+-          title: "Routine changed",
+-          body: "Someone else updated this routine. Reload to see the latest revision.",
++          title: "Routine modifiée",
++          body: "Quelqu'un d'autre a modifié cette routine. Rechargez pour voir la dernière révision.",
+           tone: "warn",
+         });
+         return;
+       }
+       pushToast({
+-        title: "Failed to save routine",
+-        body: mutationError instanceof Error ? mutationError.message : "Paperclip could not save the routine.",
++        title: "Échec de l'enregistrement de la routine",
++        body: mutationError instanceof Error ? mutationError.message : "Paperclip n'a pas pu enregistrer la routine.",
+         tone: "error",
+       });
+     },
+@@ -411,7 +411,7 @@ export function RoutineDetail() {
+           : {}),
+       }),
+     onSuccess: async () => {
+-      pushToast({ title: "Routine run started", tone: "success" });
++      pushToast({ title: "Exécution de la routine lancée", tone: "success" });
+       setRunVariablesOpen(false);
+       navigateToSection("runs");
+       await Promise.all([
+@@ -424,8 +424,8 @@ export function RoutineDetail() {
+     },
+     onError: (runError) => {
+       pushToast({
+-        title: "Routine run failed",
+-        body: runError instanceof Error ? runError.message : "Paperclip could not start the routine run.",
++        title: "Exécution de la routine échouée",
++        body: runError instanceof Error ? runError.message : "Paperclip n'a pas pu lancer l'exécution de la routine.",
+         tone: "error",
+       });
+     },
+@@ -435,8 +435,8 @@ export function RoutineDetail() {
+     mutationFn: (status: string) => routinesApi.update(routineId!, { status }),
+     onSuccess: async (_data, status) => {
+       pushToast({
+-        title: "Routine saved",
+-        body: status === "paused" ? "Automation paused." : "Automation enabled.",
++        title: "Routine enregistrée",
++        body: status === "paused" ? "Automatisation mise en pause." : "Automatisation activée.",
+         tone: "success",
+       });
+       await Promise.all([
+@@ -446,8 +446,8 @@ export function RoutineDetail() {
+     },
+     onError: (statusError) => {
+       pushToast({
+-        title: "Failed to update routine",
+-        body: statusError instanceof Error ? statusError.message : "Paperclip could not update the routine.",
++        title: "Échec de la mise à jour de la routine",
++        body: statusError instanceof Error ? statusError.message : "Paperclip n'a pas pu mettre à jour la routine.",
+         tone: "error",
+       });
+     },
+@@ -471,11 +471,11 @@ export function RoutineDetail() {
+     onSuccess: async (result) => {
+       if (result.secretMaterial) {
+         setSecretMessage({
+-          title: "Webhook trigger created",
++          title: "Déclencheur webhook créé",
+           entries: [{ webhookUrl: result.secretMaterial.webhookUrl, webhookSecret: result.secretMaterial.webhookSecret }],
+         });
+       } else {
+-        pushToast({ title: "Trigger added", body: "The routine schedule was saved.", tone: "success" });
++        pushToast({ title: "Déclencheur ajouté", body: "Le calendrier de la routine a été enregistré.", tone: "success" });
+       }
+       await Promise.all([
+         queryClient.invalidateQueries({ queryKey: queryKeys.routines.detail(routineId!) }),
+@@ -485,8 +485,8 @@ export function RoutineDetail() {
+     },
+     onError: (triggerError) => {
+       pushToast({
+-        title: "Failed to add trigger",
+-        body: triggerError instanceof Error ? triggerError.message : "Paperclip could not create the trigger.",
++        title: "Échec de l'ajout du déclencheur",
++        body: triggerError instanceof Error ? triggerError.message : "Paperclip n'a pas pu créer le déclencheur.",
+         tone: "error",
+       });
+     },
+@@ -495,7 +495,7 @@ export function RoutineDetail() {
+   const updateTrigger = useMutation({
+     mutationFn: ({ id, patch }: { id: string; patch: Record<string, unknown> }) => routinesApi.updateTrigger(id, patch),
+     onSuccess: async () => {
+-      pushToast({ title: "Trigger saved", body: "The routine cadence update was saved.", tone: "success" });
++      pushToast({ title: "Déclencheur enregistré", body: "La mise à jour de la cadence de la routine a été enregistrée.", tone: "success" });
+       await Promise.all([
+         queryClient.invalidateQueries({ queryKey: queryKeys.routines.detail(routineId!) }),
+         queryClient.invalidateQueries({ queryKey: queryKeys.routines.list(selectedCompanyId!) }),
+@@ -504,8 +504,8 @@ export function RoutineDetail() {
+     },
+     onError: (triggerError) => {
+       pushToast({
+-        title: "Failed to update trigger",
+-        body: triggerError instanceof Error ? triggerError.message : "Paperclip could not update the trigger.",
++        title: "Échec de la mise à jour du déclencheur",
++        body: triggerError instanceof Error ? triggerError.message : "Paperclip n'a pas pu mettre à jour le déclencheur.",
+         tone: "error",
+       });
+     },
+@@ -514,7 +514,7 @@ export function RoutineDetail() {
+   const deleteTrigger = useMutation({
+     mutationFn: (id: string) => routinesApi.deleteTrigger(id),
+     onSuccess: async () => {
+-      pushToast({ title: "Trigger deleted", tone: "success" });
++      pushToast({ title: "Déclencheur supprimé", tone: "success" });
+       await Promise.all([
+         queryClient.invalidateQueries({ queryKey: queryKeys.routines.detail(routineId!) }),
+         queryClient.invalidateQueries({ queryKey: queryKeys.routines.list(selectedCompanyId!) }),
+@@ -523,8 +523,8 @@ export function RoutineDetail() {
+     },
+     onError: (triggerError) => {
+       pushToast({
+-        title: "Failed to delete trigger",
+-        body: triggerError instanceof Error ? triggerError.message : "Paperclip could not delete the trigger.",
++        title: "Échec de la suppression du déclencheur",
++        body: triggerError instanceof Error ? triggerError.message : "Paperclip n'a pas pu supprimer le déclencheur.",
+         tone: "error",
+       });
+     },
+@@ -534,7 +534,7 @@ export function RoutineDetail() {
+     mutationFn: (id: string): Promise<RotateRoutineTriggerResponse> => routinesApi.rotateTriggerSecret(id),
+     onSuccess: async (result) => {
+       setSecretMessage({
+-        title: "Webhook secret rotated",
++        title: "Secret du webhook renouvelé",
+         entries: [{ webhookUrl: result.secretMaterial.webhookUrl, webhookSecret: result.secretMaterial.webhookSecret }],
+       });
+       await Promise.all([
+@@ -544,8 +544,8 @@ export function RoutineDetail() {
+     },
+     onError: (triggerError) => {
+       pushToast({
+-        title: "Failed to rotate webhook secret",
+-        body: triggerError instanceof Error ? triggerError.message : "Paperclip could not rotate the webhook secret.",
++        title: "Échec du renouvellement du secret du webhook",
++        body: triggerError instanceof Error ? triggerError.message : "Paperclip n'a pas pu renouveler le secret du webhook.",
+         tone: "error",
+       });
+     },
+@@ -609,8 +609,8 @@ export function RoutineDetail() {
+       setSecretMessage({
+         title:
+           response.secretMaterials.length === 1
+-            ? "Webhook trigger restored"
+-            : `${response.secretMaterials.length} webhook triggers restored`,
++            ? "Déclencheur webhook restauré"
++            : `${response.secretMaterials.length} déclencheurs webhook restaurés`,
+         entries: response.secretMaterials.map((recreated) => ({
+           webhookUrl: recreated.webhookUrl,
+           webhookSecret: recreated.webhookSecret,
+@@ -653,7 +653,7 @@ export function RoutineDetail() {
+   );
+ 
+   if (!selectedCompanyId) {
+-    return <EmptyState icon={Repeat} message="Select an organization to view routines." />;
++    return <EmptyState icon={Repeat} message="Sélectionnez une organisation pour voir les routines." />;
+   }
+ 
+   const legacyTab = new URLSearchParams(window.location.search).get("tab");
+@@ -675,7 +675,7 @@ export function RoutineDetail() {
+     return (
+       <EmptyState
+         icon={AlertCircle}
+-        message={error instanceof Error ? error.message : "We couldn't load this routine."}
++        message={error instanceof Error ? error.message : "Impossible de charger cette routine."}
+       />
+     );
+   }
+@@ -684,12 +684,12 @@ export function RoutineDetail() {
+   const automationToggleDisabled = updateRoutineStatus.isPending || routine.status === "archived";
+   const automationLabel =
+     routine.status === "archived"
+-      ? "Archived"
++      ? "Archivée"
+       : !routine.assigneeAgentId
+-        ? "Draft"
++        ? "Brouillon"
+         : automationEnabled
+-          ? "Active"
+-          : "Paused";
++          ? "Activée"
++          : "En pause";
+   const automationLabelClassName =
+     routine.status === "archived"
+       ? "text-muted-foreground"
+@@ -719,8 +719,8 @@ export function RoutineDetail() {
+     onToggleAutomation: () => {
+       if (!automationEnabled && !routine.assigneeAgentId) {
+         pushToast({
+-          title: "Default agent required",
+-          body: "Set a default agent before enabling routine automation.",
++          title: "Agent par défaut requis",
++          body: "Définissez un agent par défaut avant d'activer l'automatisation de la routine.",
+           tone: "warn",
+         });
+         return;
+@@ -774,7 +774,7 @@ export function RoutineDetail() {
+         href="#routine-section"
+         className="sr-only focus:not-sr-only focus:absolute focus:left-2 focus:top-2 focus:z-20 focus:rounded focus:bg-background focus:px-3 focus:py-1.5 focus:text-sm"
+       >
+-        Skip to section
++        Aller à la section
+       </a>
+ 
+       {/* The global shell owns routine navigation. This surface keeps one
+@@ -806,7 +806,7 @@ export function RoutineDetail() {
+                 ref={titleInputRef}
+                 data-autosize-title
+                 className="min-w-0 flex-1 resize-none overflow-hidden bg-transparent text-base font-semibold leading-7 outline-none placeholder:text-muted-foreground/50"
+-                placeholder="Routine title"
++                placeholder="Titre de la routine"
+                 rows={1}
+                 value={editDraft.title}
+                 onChange={(event) => {
+@@ -838,7 +838,7 @@ export function RoutineDetail() {
+                 size="sm"
+                 onClick={() => navigate(routineDetailHref(routine.id))}
+               >
+-                Back to overview
++                Retour à la vue d'ensemble
+               </Button>
+             ) : (
+               <Button
+@@ -847,7 +847,7 @@ export function RoutineDetail() {
+                 onClick={() => navigate(routineDetailHref(routine.id, "history"))}
+               >
+                 <History className="h-3.5 w-3.5" />
+-                History
++                Historique
+               </Button>
+             )}
+             {section === "overview" ? (
+@@ -861,12 +861,12 @@ export function RoutineDetail() {
+                   }}
+                 >
+                   <X className="h-3.5 w-3.5" />
+-                  Cancel editing
++                  Annuler la modification
+                 </Button>
+               ) : (
+                 <Button variant="outline" size="sm" onClick={() => setOverviewEditing(true)}>
+                   <Pencil className="h-3.5 w-3.5" />
+-                  Edit routine
++                  Modifier la routine
+                 </Button>
+               )
+             ) : null}
+@@ -877,7 +877,7 @@ export function RoutineDetail() {
+                 checked={automationEnabled}
+                 onCheckedChange={contextValue.onToggleAutomation}
+                 disabled={automationToggleDisabled}
+-                aria-label={automationEnabled ? "Pause automatic triggers" : "Enable automatic triggers"}
++                aria-label={automationEnabled ? "Suspendre les déclencheurs automatiques" : "Activer les déclencheurs automatiques"}
+               />
+               <span className={`text-sm font-medium ${automationLabelClassName}`}>{automationLabel}</span>
+             </div>
+diff --git a/ui/src/pages/apps/gateways/gateway-tabs.ts b/ui/src/pages/apps/gateways/gateway-tabs.ts
+index 7fd5607f5..bbba3f8cb 100644
+--- a/ui/src/pages/apps/gateways/gateway-tabs.ts
++++ b/ui/src/pages/apps/gateways/gateway-tabs.ts
+@@ -9,7 +9,7 @@ export const GATEWAY_TABS = [
+   { key: "overview", label: "Overview", icon: LayoutGrid },
+   { key: "apps", label: "Apps & tools", icon: Boxes },
+   { key: "tokens", label: "Tokens", icon: KeyRound },
+-  { key: "activity", label: "Activity", icon: Activity },
++  { key: "activity", label: "Activité", icon: Activity },
+   { key: "advanced", label: "Advanced", icon: Wrench },
+ ] as const;
+ 
+diff --git a/ui/src/pages/audit/AuditFeed.production.tsx b/ui/src/pages/audit/AuditFeed.production.tsx
+index 375f11282..12a78ceb9 100644
+--- a/ui/src/pages/audit/AuditFeed.production.tsx
++++ b/ui/src/pages/audit/AuditFeed.production.tsx
+@@ -465,7 +465,7 @@ export function AuditFeed({
+       {!hideHeader ? (
+         <div className="flex flex-wrap items-start justify-between gap-3">
+           <div>
+-            <h1 className="text-lg font-semibold text-foreground">Activity</h1>
++            <h1 className="text-lg font-semibold text-foreground">Activité</h1>
+             <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
+               {resolvedMode === "agents"
+                 ? "Every recorded agent action, newest first — with the responsible person and run behind each one."
+@@ -477,7 +477,7 @@ export function AuditFeed({
+ 
+       {showModeToggle ? (
+         <Tabs value={resolvedMode} onValueChange={(value) => onModeChange?.(value as AuditFeedMode)}>
+-          <TabsList aria-label="Activity scope">
++          <TabsList aria-label="Portée de l'activité">
+             <TabsTrigger value="all">All activity</TabsTrigger>
+             <TabsTrigger value="agents">Agent actions</TabsTrigger>
+           </TabsList>
+diff --git a/ui/src/pages/audit/AuditFeed.test.tsx b/ui/src/pages/audit/AuditFeed.test.tsx
+index 52ca3ef1f..670c89a97 100644
+--- a/ui/src/pages/audit/AuditFeed.test.tsx
++++ b/ui/src/pages/audit/AuditFeed.test.tsx
+@@ -464,7 +464,7 @@ describe("AuditFeed", () => {
+     });
+     await flushReact();
+ 
+-    expect(container.textContent).toContain("Activity");
++    expect(container.textContent).toContain("Activité");
+     expect(container.textContent).toContain("Agent Actions");
+     expect(listAgentActionsMock.mock.calls[0]?.[1]).toEqual(
+       expect.objectContaining({ actorScope: "all" }),
+@@ -513,7 +513,7 @@ describe("AuditFeed", () => {
+     await render({ mode: "all", onModeChange: vi.fn() });
+ 
+     const tabs = Array.from(container.querySelectorAll<HTMLButtonElement>('[role="tab"]'));
+-    expect(tabs.map((tab) => tab.textContent?.trim())).toEqual(["Activity", "Agent Actions"]);
++    expect(tabs.map((tab) => tab.textContent?.trim())).toEqual(["Activité", "Agent Actions"]);
+     expect(tabs.find((tab) => tab.textContent?.trim() === "Agent Actions")?.disabled).toBe(true);
+     // The basic feed itself still renders.
+     expect(container.textContent).toContain("commented on");
+diff --git a/ui/src/pages/audit/AuditFeed.tsx b/ui/src/pages/audit/AuditFeed.tsx
+index 525ddc90a..7d375b9c2 100644
+--- a/ui/src/pages/audit/AuditFeed.tsx
++++ b/ui/src/pages/audit/AuditFeed.tsx
+@@ -501,7 +501,7 @@ export function AuditFeed({
+       {!hideHeader ? (
+         <div className="flex flex-wrap items-start justify-between gap-3">
+           <div>
+-            <h2 className="text-lg font-semibold text-foreground">Activity</h2>
++            <h2 className="text-lg font-semibold text-foreground">Activité</h2>
+             <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
+               {resolvedMode === "agents"
+                 ? "Every recorded agent action, newest first — with the responsible person and run behind each one."
+@@ -513,8 +513,8 @@ export function AuditFeed({
+ 
+       {showModeToggle ? (
+         <Tabs value={resolvedMode} onValueChange={(value) => onModeChange?.(value as AuditFeedMode)}>
+-          <TabsList aria-label="Activity scope">
+-            <TabsTrigger value="all">Activity</TabsTrigger>
++          <TabsList aria-label="Portée de l'activité">
++            <TabsTrigger value="all">Activité</TabsTrigger>
+             <TabsTrigger
+               value="agents"
+               disabled={accessTier === "basic"}
+diff --git a/ui/src/pages/audit/AuditHub.test.tsx b/ui/src/pages/audit/AuditHub.test.tsx
+index 74634a87c..a06e52dc4 100644
+--- a/ui/src/pages/audit/AuditHub.test.tsx
++++ b/ui/src/pages/audit/AuditHub.test.tsx
+@@ -98,7 +98,7 @@ describe("AuditHub", () => {
+     render("activity");
+ 
+     expect(container.querySelectorAll('[role="tab"]')).toHaveLength(5);
+-    expect(container.textContent).toContain("Activity");
++    expect(container.textContent).toContain("Activité");
+     expect(container.textContent).toContain("Runs");
+     expect(container.textContent).toContain("Costs");
+     expect(container.textContent).toContain("Budgets");
+@@ -136,7 +136,7 @@ describe("AuditHub", () => {
+ 
+     const labels = Array.from(container.querySelectorAll<HTMLElement>('[role="tab"]'))
+       .map((tab) => tab.textContent?.trim());
+-    expect(labels).toEqual(["Activity", "Runs", "Costs", "Budgets", "Timeline"]);
++    expect(labels).toEqual(["Activité", "Runs", "Costs", "Budgets", "Timeline"]);
+     expect(container.querySelector<HTMLElement>('[data-testid="audit-timeline"]')?.dataset.embedded)
+       .toBe("true");
+   });
+diff --git a/ui/src/pages/audit/CompanyActivity.production.tsx b/ui/src/pages/audit/CompanyActivity.production.tsx
+index cd92a013f..7846ef97a 100644
+--- a/ui/src/pages/audit/CompanyActivity.production.tsx
++++ b/ui/src/pages/audit/CompanyActivity.production.tsx
+@@ -21,7 +21,7 @@ export function CompanyActivity() {
+   const mode: AuditFeedMode = searchParams.get("mode") === "agents" ? "agents" : "all";
+ 
+   useEffect(() => {
+-    setBreadcrumbs([{ label: "Activity" }]);
++    setBreadcrumbs([{ label: "Activité" }]);
+   }, [setBreadcrumbs]);
+ 
+   const handleModeChange = useCallback(
+diff --git a/ui/src/pages/audit/CompanyActivity.tsx b/ui/src/pages/audit/CompanyActivity.tsx
+index d67d64ea2..77f39e956 100644
+--- a/ui/src/pages/audit/CompanyActivity.tsx
++++ b/ui/src/pages/audit/CompanyActivity.tsx
+@@ -34,7 +34,7 @@ export function CompanyActivity() {
+   ].includes(actionParam ?? "") ? actionParam! : "__all";
+ 
+   useEffect(() => {
+-    if (!streamlinedUiEnabled) setBreadcrumbs([{ label: "Activity" }]);
++    if (!streamlinedUiEnabled) setBreadcrumbs([{ label: "Activité" }]);
+   }, [setBreadcrumbs, streamlinedUiEnabled]);
+ 
+   const handleModeChange = useCallback(
+diff --git a/ui/src/pages/audit/audit-navigation.ts b/ui/src/pages/audit/audit-navigation.ts
+index 8562295ea..a928af6b1 100644
+--- a/ui/src/pages/audit/audit-navigation.ts
++++ b/ui/src/pages/audit/audit-navigation.ts
+@@ -5,7 +5,7 @@ export const AUDIT_SECTIONS: ReadonlyArray<{
+   label: string;
+   href: string;
+ }> = [
+-  { value: "activity", label: "Activity", href: "/activity" },
++  { value: "activity", label: "Activité", href: "/activity" },
+   { value: "runs", label: "Runs", href: "/activity/runs" },
+   { value: "costs", label: "Costs", href: "/activity/costs" },
+   { value: "budgets", label: "Budgets", href: "/activity/budgets" },
+-- 
+2.53.0
+

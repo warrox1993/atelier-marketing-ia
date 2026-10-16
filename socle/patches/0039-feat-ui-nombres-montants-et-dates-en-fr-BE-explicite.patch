@@ -1,0 +1,1594 @@
+From a03ba40e4a00be9610634582074e6e01ea07cc78 Mon Sep 17 00:00:00 2001
+From: Jean-Baptiste Dhondt <114347858+warrox1993@users.noreply.github.com>
+Date: Fri, 16 Oct 2026 14:07:35 +0200
+Subject: [PATCH] feat(ui): nombres, montants et dates en fr-BE explicite dans
+ toute l'interface
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+formatNumber, formatCents (symbole $ étroit), formatDate (JJ/MM/AAAA), formatDateTime et formatShortDate passent en fr-BE, 24 h ; les autres toLocale*String et Intl sans locale ou en en-US aussi. Attendus des tests mis à jour.
+---
+ ui/src/components/AgentConfigForm.tsx         |  2 +-
+ ui/src/components/AttentionQueueRow.test.tsx  |  3 +-
+ ui/src/components/AttentionQueueRow.tsx       |  2 +-
+ ui/src/components/ClaudeSubscriptionPanel.tsx |  2 +-
+ ui/src/components/CodexSubscriptionPanel.tsx  |  2 +-
+ ui/src/components/DecisionTriageStrip.tsx     |  2 +-
+ ui/src/components/EmailMessageCard.tsx        |  2 +-
+ ui/src/components/InstructionHistory.tsx      |  2 +-
+ ui/src/components/IssueProperties.test.tsx    | 21 ++++++-------
+ ui/src/components/IssueRecoveryActionCard.tsx |  4 +--
+ .../IssueThreadInteractionCard.test.tsx       |  2 +-
+ ui/src/components/IssuesList.tsx              |  2 +-
+ ui/src/components/LegacyIssuesList.tsx        |  2 +-
+ ui/src/components/OnboardingWizard.tsx        |  2 +-
+ ui/src/components/ProviderQuotaCard.tsx       |  2 +-
+ .../components/ProviderTraceStatusBadge.tsx   |  2 +-
+ ui/src/components/RoutineActivityRow.tsx      |  2 +-
+ ui/src/components/RoutineList.tsx             |  2 +-
+ ui/src/components/RoutineOverview.tsx         |  2 +-
+ ui/src/components/RoutineTriggerCard.tsx      |  2 +-
+ ui/src/components/RunnerInspector.tsx         |  2 +-
+ ui/src/components/ScheduleEditor.tsx          |  2 +-
+ ui/src/components/SidebarServerInfo.tsx       |  2 +-
+ ui/src/components/SmokeLabDashboardCard.tsx   |  2 +-
+ .../components/SourceResolvedFoldCallout.tsx  |  2 +-
+ ui/src/components/SourceTrustBadge.tsx        |  2 +-
+ ui/src/components/SummarySlotCard.test.tsx    |  8 ++---
+ ui/src/components/SummarySlotCard.tsx         |  6 ++--
+ ui/src/components/SystemNotice.tsx            |  2 +-
+ ui/src/components/access/InvitesSection.tsx   |  2 +-
+ .../AiConnectionUsagePanel.test.tsx           |  8 ++---
+ .../ai-connections/AiConnectionUsagePanel.tsx |  2 +-
+ .../artifacts/ArtifactCard.test.tsx           |  6 ++--
+ .../artifacts/RichArtifactCards.tsx           |  4 +--
+ ui/src/components/chat/AgentWorkPanels.tsx    |  2 +-
+ .../IssuePropertiesPlansTab.tsx               |  2 +-
+ .../editable-sections.production.tsx          |  4 +--
+ .../routine-sections/editable-sections.tsx    |  4 +--
+ .../routine-sections/operate-sections.tsx     |  2 +-
+ .../TaskChatCompactInteractionCard.tsx        |  8 ++---
+ .../task-chat/TaskChatRunnerActivityGroup.tsx |  4 +--
+ .../task-chat/TaskChatUsageReadout.tsx        |  4 +--
+ .../components/task-chat/task-chat-adapter.ts |  2 +-
+ .../task-side-panel/TaskDocumentPanel.tsx     |  2 +-
+ .../timeline/WorkTimelineChart.test.tsx       |  9 +++---
+ .../components/timeline/WorkTimelineChart.tsx | 11 +++----
+ ui/src/lib/attention.ts                       |  2 +-
+ ui/src/lib/issue-change-receipt.ts            |  4 +--
+ ui/src/lib/issue-monitor.ts                   | 14 ++++-----
+ ui/src/lib/project-budget-format.test.ts      |  6 ++--
+ ui/src/lib/utils.date-time.test.ts            |  6 ++--
+ ui/src/lib/utils.ts                           | 31 ++++++++++++-------
+ ui/src/pages/AgentDetail.production.tsx       | 12 +++----
+ ui/src/pages/AgentDetail.tsx                  | 12 +++----
+ ui/src/pages/ApprovalDetail.tsx               |  2 +-
+ ui/src/pages/CompanyAccess.tsx                |  2 +-
+ ui/src/pages/CompanyEnvironments.tsx          |  2 +-
+ ui/src/pages/CompanyExport.tsx                |  6 ++--
+ ui/src/pages/InstanceAccess.tsx               |  2 +-
+ ui/src/pages/InstanceExperimentalSettings.tsx |  2 +-
+ ui/src/pages/IssueDetail.tsx                  |  4 +--
+ ui/src/pages/JoinRequestQueue.tsx             |  2 +-
+ ui/src/pages/PipelineSettings.tsx             |  2 +-
+ ui/src/pages/Pipelines.tsx                    |  6 ++--
+ ui/src/pages/PluginSettings.tsx               |  6 ++--
+ ui/src/pages/ProjectWorkspaceDetail.tsx       |  2 +-
+ ui/src/pages/Secrets.tsx                      |  4 +--
+ .../StatusCards/ArchivedStatusCardRow.tsx     |  2 +-
+ ui/src/pages/Timeline.test.tsx                |  6 ++--
+ ui/src/pages/Timeline.tsx                     |  6 ++--
+ ui/src/pages/apps/Browse.tsx                  |  2 +-
+ .../apps/app-detail/ActionTestDialog.tsx      |  2 +-
+ ui/src/pages/apps/chat/GitHubChatSetup.tsx    |  2 +-
+ ui/src/pages/audit/AuditFeed.production.tsx   |  2 +-
+ ui/src/pages/audit/AuditFeed.tsx              |  2 +-
+ .../pages/secrets/ImportFromVaultDialog.tsx   |  4 +--
+ ui/src/pages/skills/SkillPackagePreview.tsx   |  2 +-
+ ui/src/pages/tools/SmokeLabTab.tsx            |  2 +-
+ ui/src/pages/tools/shared.tsx                 |  2 +-
+ 79 files changed, 167 insertions(+), 162 deletions(-)
+
+diff --git a/ui/src/components/AgentConfigForm.tsx b/ui/src/components/AgentConfigForm.tsx
+index 6f6550577..c2c494b08 100644
+--- a/ui/src/components/AgentConfigForm.tsx
++++ b/ui/src/components/AgentConfigForm.tsx
+@@ -3622,7 +3622,7 @@ export function AdapterEnvironmentResult({ result }: { result: AdapterEnvironmen
+       <div className="flex items-center justify-between gap-2">
+         <span className="font-medium">{statusLabel}</span>
+         <span className="text-(length:--text-micro) opacity-80">
+-          {new Date(result.testedAt).toLocaleTimeString()}
++          {new Date(result.testedAt).toLocaleTimeString("fr-BE")}
+         </span>
+       </div>
+       <div className="mt-2 space-y-1.5">
+diff --git a/ui/src/components/AttentionQueueRow.test.tsx b/ui/src/components/AttentionQueueRow.test.tsx
+index ba33872bc..f3b31807e 100644
+--- a/ui/src/components/AttentionQueueRow.test.tsx
++++ b/ui/src/components/AttentionQueueRow.test.tsx
+@@ -411,7 +411,8 @@ describe("AttentionQueueRow", () => {
+ 
+     const eyebrow = container?.querySelector('[data-attention-row] > div');
+     expect(eyebrow?.textContent).toContain("·");
+-    expect(eyebrow?.textContent).not.toContain("/");
++    // Les dates fr-BE (JJ/MM/AAAA) contiennent des « / » : on les retire avant de vérifier le séparateur.
++    expect(eyebrow?.textContent?.replace(/\d{2}\/\d{2}\/\d{4}/g, "")).not.toContain("/");
+   });
+ 
+   // Regression: the meta breadcrumb used to read only `relatedIssue`, so rows
+diff --git a/ui/src/components/AttentionQueueRow.tsx b/ui/src/components/AttentionQueueRow.tsx
+index 9387d5b58..0a3c1e1f8 100644
+--- a/ui/src/components/AttentionQueueRow.tsx
++++ b/ui/src/components/AttentionQueueRow.tsx
+@@ -293,7 +293,7 @@ export const AttentionQueueRow = memo(function AttentionQueueRow({
+           {isHidden && snoozedUntil ? (
+             <span
+               className="text-(length:--text-nano) text-muted-foreground"
+-              title={`Reappears ${new Date(snoozedUntil).toLocaleString()}`}
++              title={`Reappears ${new Date(snoozedUntil).toLocaleString("fr-BE")}`}
+             >
+               Reappears {reappearLabel(snoozedUntil)}
+             </span>
+diff --git a/ui/src/components/ClaudeSubscriptionPanel.tsx b/ui/src/components/ClaudeSubscriptionPanel.tsx
+index 3a950a457..33d0aca8a 100644
+--- a/ui/src/components/ClaudeSubscriptionPanel.tsx
++++ b/ui/src/components/ClaudeSubscriptionPanel.tsx
+@@ -24,7 +24,7 @@ function normalizeLabel(text: string): string {
+ function detailText(window: QuotaWindow): string | null {
+   if (typeof window.detail === "string" && window.detail.trim().length > 0) return window.detail.trim();
+   if (window.resetsAt) {
+-    const formatted = new Date(window.resetsAt).toLocaleString(undefined, {
++    const formatted = new Date(window.resetsAt).toLocaleString("fr-BE", {
+       month: "short",
+       day: "numeric",
+       hour: "numeric",
+diff --git a/ui/src/components/CodexSubscriptionPanel.tsx b/ui/src/components/CodexSubscriptionPanel.tsx
+index 5f2631402..31ee8e8da 100644
+--- a/ui/src/components/CodexSubscriptionPanel.tsx
++++ b/ui/src/components/CodexSubscriptionPanel.tsx
+@@ -30,7 +30,7 @@ function orderedWindows(windows: QuotaWindow[]): QuotaWindow[] {
+ function detailText(window: QuotaWindow): string | null {
+   if (typeof window.detail === "string" && window.detail.trim().length > 0) return window.detail.trim();
+   if (!window.resetsAt) return null;
+-  const formatted = new Date(window.resetsAt).toLocaleString(undefined, {
++  const formatted = new Date(window.resetsAt).toLocaleString("fr-BE", {
+     month: "short",
+     day: "numeric",
+     hour: "numeric",
+diff --git a/ui/src/components/DecisionTriageStrip.tsx b/ui/src/components/DecisionTriageStrip.tsx
+index 1fb7d9d7e..4d009c871 100644
+--- a/ui/src/components/DecisionTriageStrip.tsx
++++ b/ui/src/components/DecisionTriageStrip.tsx
+@@ -232,7 +232,7 @@ export function DecisionTriageStrip({ item, companyId, agents }: DecisionTriageS
+         {item.snoozedUntil ? (
+           <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
+             <AlarmClock className="h-3.5 w-3.5" />
+-            Snoozed until {new Date(item.snoozedUntil).toLocaleString()}
++            Snoozed until {new Date(item.snoozedUntil).toLocaleString("fr-BE")}
+             <button
+               type="button"
+               className="text-muted-foreground hover:text-foreground"
+diff --git a/ui/src/components/EmailMessageCard.tsx b/ui/src/components/EmailMessageCard.tsx
+index be4a083e1..aa5966285 100644
+--- a/ui/src/components/EmailMessageCard.tsx
++++ b/ui/src/components/EmailMessageCard.tsx
+@@ -65,7 +65,7 @@ export function EmailMessageCard({
+           {message.direction === "inbound" ? "Email received" : "Email sent"}
+         </span>
+         <span className="text-xs text-muted-foreground">
+-          {new Date(message.timestamp).toLocaleString()}
++          {new Date(message.timestamp).toLocaleString("fr-BE")}
+         </span>
+       </div>
+       <div className="space-y-1">
+diff --git a/ui/src/components/InstructionHistory.tsx b/ui/src/components/InstructionHistory.tsx
+index 2d8dbecfd..789ddd680 100644
+--- a/ui/src/components/InstructionHistory.tsx
++++ b/ui/src/components/InstructionHistory.tsx
+@@ -89,7 +89,7 @@ export function InstructionHistory({
+                 </Button>
+                 <span className="text-sm text-muted-foreground">
+                   {revision.source} ·{" "}
+-                  {new Date(revision.createdAt).toLocaleString()}
++                  {new Date(revision.createdAt).toLocaleString("fr-BE")}
+                   {revision.id === currentRevisionId ? " · Current" : ""}
+                 </span>
+               </div>
+diff --git a/ui/src/components/IssueProperties.test.tsx b/ui/src/components/IssueProperties.test.tsx
+index f06cca8e1..a4ed84efc 100644
+--- a/ui/src/components/IssueProperties.test.tsx
++++ b/ui/src/components/IssueProperties.test.tsx
+@@ -1885,9 +1885,9 @@ describe("IssueProperties", () => {
+     });
+     await flush();
+ 
+-    expect(container.textContent).toMatch(/CrééeApr 6, 2026, \d{1,2}:34 (AM|PM)/);
+-    expect(container.textContent).toMatch(/DémarréeApr 6, 2026, \d{1,2}:35 (AM|PM)/);
+-    expect(container.textContent).toMatch(/CompletedApr 6, 2026, \d{1,2}:36 (AM|PM)/);
++    expect(container.textContent).toMatch(/Créée06\/04\/2026 12:34/);
++    expect(container.textContent).toMatch(/Démarrée06\/04\/2026 12:35/);
++    expect(container.textContent).toMatch(/Completed06\/04\/2026 12:36/);
+ 
+     for (const label of ["Démarrée", "Completed", "Créée"]) {
+       const labelNode = container.querySelector(`[data-property-label="${label}"]`);
+@@ -2807,13 +2807,12 @@ describe("IssueProperties", () => {
+     const at = (minutesFromNow: number) =>
+       new Date(NOW.getTime() + minutesFromNow * 60_000).toISOString();
+     const dateNowSpy = vi.spyOn(Date, "now").mockReturnValue(NOW.getTime());
+-    // Le composant formate l'heure sans locale explicite : elle viendrait de la
+-    // machine (« 16:08 » en fr-FR, « 4:08 PM » en en-US). On impose en-US pour que
+-    // l'attendu exact soit identique partout, sans l'assouplir.
++    // Le composant formate l'heure en fr-BE par défaut (24 h : « 16:08 »). On
++    // impose aussi fr-BE ici pour que l'attendu exact soit identique partout.
+     const RealDateTimeFormat = Intl.DateTimeFormat;
+     const dateTimeFormatSpy = vi.spyOn(Intl, "DateTimeFormat").mockImplementation(
+       function (locales?: Intl.LocalesArgument, options?: Intl.DateTimeFormatOptions) {
+-        return new RealDateTimeFormat(locales ?? "en-US", options);
++        return new RealDateTimeFormat(locales ?? "fr-BE", options);
+       } as unknown as typeof Intl.DateTimeFormat,
+     );
+     const baseMonitorState = {
+@@ -2847,8 +2846,8 @@ describe("IssueProperties", () => {
+     await flush();
+     expect(monitorRowText()).toContain("In 2h 12m");
+     // L'heure est celle du fuseau local, ancrée plus haut sur 13:56 locale + 132 min,
+-    // donc 4:08 PM partout ; la locale est imposée en en-US ci-dessus.
+-    expect(monitorRowText()).toContain("Today, 4:08 PM · Attempt 1");
++    // donc 16:08 partout ; la locale est imposée en fr-BE ci-dessus.
++    expect(monitorRowText()).toContain("Today, 16:08 · Attempt 1");
+ 
+     renderMonitor(createIssue({
+       executionPolicy: createExecutionPolicy({ monitor: { ...baseMonitorState, nextCheckAt: at(252) } }),
+@@ -2857,7 +2856,7 @@ describe("IssueProperties", () => {
+     }));
+     await flush();
+     expect(monitorRowText()).toContain("In 2h 12m");
+-    expect(monitorRowText()).toContain("Today, 4:08 PM");
++    expect(monitorRowText()).toContain("Today, 16:08");
+ 
+     renderMonitor(createIssue({
+       executionPolicy: createExecutionPolicy({ monitor: { ...baseMonitorState, serviceName: "vercel-deploy" } }),
+@@ -2881,7 +2880,7 @@ describe("IssueProperties", () => {
+     }));
+     await flush();
+     expect(monitorRowText()).toContain("Overdue by 18m");
+-    expect(monitorRowText()).toContain("Today, 1:38 PM · fires on next tick");
++    expect(monitorRowText()).toContain("Today, 13:38 · fires on next tick");
+ 
+     renderMonitor(createIssue({
+       executionPolicy: createExecutionPolicy(),
+diff --git a/ui/src/components/IssueRecoveryActionCard.tsx b/ui/src/components/IssueRecoveryActionCard.tsx
+index beb84076e..c6ff4e719 100644
+--- a/ui/src/components/IssueRecoveryActionCard.tsx
++++ b/ui/src/components/IssueRecoveryActionCard.tsx
+@@ -787,7 +787,7 @@ function formatTimeShort(value: string | Date | null | undefined): string | null
+     if (absMin < 60) {
+       return diffMs >= 0 ? `in ${absMin}m` : `${absMin}m ago`;
+     }
+-    return date.toLocaleString(undefined, {
++    return date.toLocaleString("fr-BE", {
+       month: "short",
+       day: "numeric",
+       hour: "numeric",
+@@ -890,7 +890,7 @@ function formatTimeAbsolute(value: string | Date | null | undefined): string | n
+   if (!value) return null;
+   const date = value instanceof Date ? value : new Date(value);
+   if (Number.isNaN(date.getTime())) return null;
+-  return date.toLocaleString(undefined, {
++  return date.toLocaleString("fr-BE", {
+     month: "short",
+     day: "numeric",
+     hour: "numeric",
+diff --git a/ui/src/components/IssueThreadInteractionCard.test.tsx b/ui/src/components/IssueThreadInteractionCard.test.tsx
+index 5d14a2565..397f2ff0a 100644
+--- a/ui/src/components/IssueThreadInteractionCard.test.tsx
++++ b/ui/src/components/IssueThreadInteractionCard.test.tsx
+@@ -1203,7 +1203,7 @@ describe("IssueThreadInteractionCard tool-action card", () => {
+     // already carries the "Expirée · tâche clôturée" label, so the footer must
+     // not restate it.
+     const footer = host.querySelector('[data-testid="interaction-issue-closed-footer"]');
+-    expect(footer?.textContent).toContain("Apr 20");
++    expect(footer?.textContent).toContain("20/04");
+     expect(footer?.textContent).not.toContain("Expired when the issue closed");
+     // The "Expirée · tâche clôturée" label survives exactly once (the header
+     // status badge); the duplicate body eyebrow was dropped.
+diff --git a/ui/src/components/IssuesList.tsx b/ui/src/components/IssuesList.tsx
+index b83c628e0..3041768cd 100644
+--- a/ui/src/components/IssuesList.tsx
++++ b/ui/src/components/IssuesList.tsx
+@@ -638,7 +638,7 @@ function SubIssueProgressSummaryStrip({
+               <>
+                 <span
+                   className="text-muted-foreground tabular-nums"
+-                  title={`${costSummary.runCount.toLocaleString()} run${
++                  title={`${costSummary.runCount.toLocaleString("fr-BE")} run${
+                     costSummary.runCount === 1 ? "" : "s"
+                   } across ${costSummary.issueCount} sub-task${
+                     costSummary.issueCount === 1 ? "" : "s"
+diff --git a/ui/src/components/LegacyIssuesList.tsx b/ui/src/components/LegacyIssuesList.tsx
+index 169373893..2296483b4 100644
+--- a/ui/src/components/LegacyIssuesList.tsx
++++ b/ui/src/components/LegacyIssuesList.tsx
+@@ -611,7 +611,7 @@ function SubIssueProgressSummaryStrip({
+               <>
+                 <span
+                   className="text-muted-foreground tabular-nums"
+-                  title={`${costSummary.runCount.toLocaleString()} run${
++                  title={`${costSummary.runCount.toLocaleString("fr-BE")} run${
+                     costSummary.runCount === 1 ? "" : "s"
+                   } across ${costSummary.issueCount} sub-task${
+                     costSummary.issueCount === 1 ? "" : "s"
+diff --git a/ui/src/components/OnboardingWizard.tsx b/ui/src/components/OnboardingWizard.tsx
+index 6af4bcee9..6557ee1ef 100644
+--- a/ui/src/components/OnboardingWizard.tsx
++++ b/ui/src/components/OnboardingWizard.tsx
+@@ -3169,7 +3169,7 @@ function AdapterEnvironmentResult({
+       <div className="flex items-center justify-between gap-2">
+         <span className="font-medium">{statusLabel}</span>
+         <span className="opacity-80">
+-          {new Date(result.testedAt).toLocaleTimeString()}
++          {new Date(result.testedAt).toLocaleTimeString("fr-BE")}
+         </span>
+       </div>
+       <div className="mt-1.5 space-y-1">
+diff --git a/ui/src/components/ProviderQuotaCard.tsx b/ui/src/components/ProviderQuotaCard.tsx
+index bd20aedbe..5852b0120 100644
+--- a/ui/src/components/ProviderQuotaCard.tsx
++++ b/ui/src/components/ProviderQuotaCard.tsx
+@@ -367,7 +367,7 @@ export function ProviderQuotaCard({
+                             </p>
+                           ) : qw.resetsAt ? (
+                             <p className="text-xs text-muted-foreground">
+-                              resets {new Date(qw.resetsAt).toLocaleDateString(undefined, { month: "short", day: "numeric" })}
++                              resets {new Date(qw.resetsAt).toLocaleDateString("fr-BE", { month: "short", day: "numeric" })}
+                             </p>
+                           ) : null}
+                         </div>
+diff --git a/ui/src/components/ProviderTraceStatusBadge.tsx b/ui/src/components/ProviderTraceStatusBadge.tsx
+index 5f70abcab..bbe4d9fc2 100644
+--- a/ui/src/components/ProviderTraceStatusBadge.tsx
++++ b/ui/src/components/ProviderTraceStatusBadge.tsx
+@@ -70,7 +70,7 @@ export function ProviderTraceStatusBadge({
+       )}
+       title={
+         trace
+-          ? `${trace.frameCount} frames · ${trace.byteCount} bytes · expires ${new Date(trace.expiresAt).toLocaleString()}`
++          ? `${trace.frameCount} frames · ${trace.byteCount} bytes · expires ${new Date(trace.expiresAt).toLocaleString("fr-BE")}`
+           : requested
+             ? "This run requested sensitive provider-frame capture."
+             : "Raw provider-frame capture was disabled for this run."
+diff --git a/ui/src/components/RoutineActivityRow.tsx b/ui/src/components/RoutineActivityRow.tsx
+index 783383d0c..b59f375fa 100644
+--- a/ui/src/components/RoutineActivityRow.tsx
++++ b/ui/src/components/RoutineActivityRow.tsx
+@@ -7,7 +7,7 @@ export type RoutineActivityEvent = Pick<ActivityEvent, "id" | "action" | "detail
+ 
+ function formatTime(value: string | Date): string {
+   try {
+-    return new Date(value).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
++    return new Date(value).toLocaleTimeString("fr-BE", { hour: "2-digit", minute: "2-digit" });
+   } catch {
+     return String(value);
+   }
+diff --git a/ui/src/components/RoutineList.tsx b/ui/src/components/RoutineList.tsx
+index 72f221026..047019331 100644
+--- a/ui/src/components/RoutineList.tsx
++++ b/ui/src/components/RoutineList.tsx
+@@ -40,7 +40,7 @@ export type RoutineListRowItem = {
+ 
+ export function formatLastRunTimestamp(value: Date | string | null | undefined) {
+   if (!value) return "Jamais";
+-  return new Date(value).toLocaleString();
++  return new Date(value).toLocaleString("fr-BE");
+ }
+ 
+ export function formatRoutineRunStatus(value: string | null | undefined) {
+diff --git a/ui/src/components/RoutineOverview.tsx b/ui/src/components/RoutineOverview.tsx
+index 1f5d4e1de..d9c261915 100644
+--- a/ui/src/components/RoutineOverview.tsx
++++ b/ui/src/components/RoutineOverview.tsx
+@@ -26,7 +26,7 @@ export type RoutineScheduleSummary = {
+ };
+ 
+ export function formatRoutineTimestamp(value: Date | string) {
+-  return new Date(value).toLocaleString(undefined, {
++  return new Date(value).toLocaleString("fr-BE", {
+     dateStyle: "medium",
+     timeStyle: "short",
+   });
+diff --git a/ui/src/components/RoutineTriggerCard.tsx b/ui/src/components/RoutineTriggerCard.tsx
+index 598c0e9a9..0384bcb30 100644
+--- a/ui/src/components/RoutineTriggerCard.tsx
++++ b/ui/src/components/RoutineTriggerCard.tsx
+@@ -94,7 +94,7 @@ export function RoutineTriggerCard({
+           ) : null}
+           <span className="text-xs text-muted-foreground">
+             {trigger.kind === "schedule" && trigger.nextRunAt
+-              ? `Next: ${new Date(trigger.nextRunAt).toLocaleString()}`
++              ? `Next: ${new Date(trigger.nextRunAt).toLocaleString("fr-BE")}`
+               : trigger.kind === "webhook"
+                 ? "Webhook"
+                 : "API"}
+diff --git a/ui/src/components/RunnerInspector.tsx b/ui/src/components/RunnerInspector.tsx
+index 23ed03d82..c6396045a 100644
+--- a/ui/src/components/RunnerInspector.tsx
++++ b/ui/src/components/RunnerInspector.tsx
+@@ -1226,7 +1226,7 @@ export function RunnerInspector({
+ 
+           {canInspectRaw === true && inspection?.trace?.runId === runId ? (
+             <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border p-3">
+-              <p className="text-xs text-muted-foreground">{inspection.trace.frameCount} frames · {formatBytes(inspection.trace.byteCount)} · expires {new Date(inspection.trace.expiresAt).toLocaleString()}</p>
++              <p className="text-xs text-muted-foreground">{inspection.trace.frameCount} frames · {formatBytes(inspection.trace.byteCount)} · expires {new Date(inspection.trace.expiresAt).toLocaleString("fr-BE")}</p>
+               <div className="flex gap-2"><Button size="sm" variant="outline" onClick={() => void downloadTrace()}><Download className="mr-1.5 h-4 w-4" />Download exact trace</Button><Button size="sm" variant="destructive" onClick={() => void deleteTrace()}><Trash2 className="mr-1.5 h-4 w-4" />Delete trace</Button></div>
+             </div>
+           ) : null}
+diff --git a/ui/src/components/ScheduleEditor.tsx b/ui/src/components/ScheduleEditor.tsx
+index 0fac47371..1f5352845 100644
+--- a/ui/src/components/ScheduleEditor.tsx
++++ b/ui/src/components/ScheduleEditor.tsx
+@@ -290,7 +290,7 @@ export function ScheduleEditor({
+           >
+             {customValidation.message}
+             {customValidation.valid && customValidation.nextFires.length > 0
+-              ? ` Next: ${customValidation.nextFires.map((fire) => fire.toLocaleString()).join(", ")}.`
++              ? ` Next: ${customValidation.nextFires.map((fire) => fire.toLocaleString("fr-BE")).join(", ")}.`
+               : null}
+           </p>
+         </div>
+diff --git a/ui/src/components/SidebarServerInfo.tsx b/ui/src/components/SidebarServerInfo.tsx
+index 1eade29fc..d1dc3ae05 100644
+--- a/ui/src/components/SidebarServerInfo.tsx
++++ b/ui/src/components/SidebarServerInfo.tsx
+@@ -8,7 +8,7 @@ function formatTimestamp(value: string | null | undefined): string {
+   if (!value) return "Unavailable";
+   const date = new Date(value);
+   if (Number.isNaN(date.getTime())) return "Unavailable";
+-  return new Intl.DateTimeFormat(undefined, {
++  return new Intl.DateTimeFormat("fr-BE", {
+     dateStyle: "medium",
+     timeStyle: "short",
+   }).format(date);
+diff --git a/ui/src/components/SmokeLabDashboardCard.tsx b/ui/src/components/SmokeLabDashboardCard.tsx
+index c6c46b0ad..8beb215bd 100644
+--- a/ui/src/components/SmokeLabDashboardCard.tsx
++++ b/ui/src/components/SmokeLabDashboardCard.tsx
+@@ -26,7 +26,7 @@ function formatTime(value: string | Date | null | undefined): string {
+   if (!value) return "—";
+   const date = new Date(value as string | Date);
+   if (Number.isNaN(date.getTime())) return "—";
+-  return new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(date);
++  return new Intl.DateTimeFormat("fr-BE", { dateStyle: "medium", timeStyle: "short" }).format(date);
+ }
+ 
+ /**
+diff --git a/ui/src/components/SourceResolvedFoldCallout.tsx b/ui/src/components/SourceResolvedFoldCallout.tsx
+index 94186dcf2..d6ae17fb9 100644
+--- a/ui/src/components/SourceResolvedFoldCallout.tsx
++++ b/ui/src/components/SourceResolvedFoldCallout.tsx
+@@ -19,7 +19,7 @@ function isoOrLocaleString(value: string | null | undefined): string | null {
+   if (!value) return null;
+   const date = new Date(value);
+   if (Number.isNaN(date.getTime())) return value;
+-  return date.toLocaleString();
++  return date.toLocaleString("fr-BE");
+ }
+ 
+ function issueLink(id: string, identifier: string | null) {
+diff --git a/ui/src/components/SourceTrustBadge.tsx b/ui/src/components/SourceTrustBadge.tsx
+index 18da1b766..4306ed845 100644
+--- a/ui/src/components/SourceTrustBadge.tsx
++++ b/ui/src/components/SourceTrustBadge.tsx
+@@ -19,7 +19,7 @@ export function SourceTrustBadge({
+ 
+   const promoted = sourceTrust?.disposition === "promoted";
+   const tooltip = promoted
+-    ? `Promoted from low-trust${sourceTrust.promotedAt ? ` on ${new Date(sourceTrust.promotedAt).toLocaleString()}` : ""}.`
++    ? `Promoted from low-trust${sourceTrust.promotedAt ? ` on ${new Date(sourceTrust.promotedAt).toLocaleString("fr-BE")}` : ""}.`
+     : `Authored by a low-trust review agent. Raw ${artifactLabel} is not auto-shared with higher-trust agents.`;
+ 
+   return (
+diff --git a/ui/src/components/SummarySlotCard.test.tsx b/ui/src/components/SummarySlotCard.test.tsx
+index 3a0fd086b..a951c877f 100644
+--- a/ui/src/components/SummarySlotCard.test.tsx
++++ b/ui/src/components/SummarySlotCard.test.tsx
+@@ -446,11 +446,11 @@ describe("SummarySlotCard", () => {
+ 
+     await openRevisionSelect(container);
+ 
+-    expect(document.body.textContent).toContain("Latest (Rev 3) - Jul 14");
+-    expect(document.body.textContent).toContain("Rev 1 - Jul 13");
+-    expect(document.body.textContent).toContain("Rev 2 - Jul 14");
++    expect(document.body.textContent).toContain("Latest (Rev 3) - 14/07");
++    expect(document.body.textContent).toContain("Rev 1 - 13/07");
++    expect(document.body.textContent).toContain("Rev 2 - 14/07");
+ 
+-    await chooseRevisionOption("Rev 1 - Jul 13");
++    await chooseRevisionOption("Rev 1 - 13/07");
+ 
+     expect(container.textContent).toContain("Historical revision");
+     expect(container.textContent).toContain("Old body");
+diff --git a/ui/src/components/SummarySlotCard.tsx b/ui/src/components/SummarySlotCard.tsx
+index 9b94b0dfb..83d8a892c 100644
+--- a/ui/src/components/SummarySlotCard.tsx
++++ b/ui/src/components/SummarySlotCard.tsx
+@@ -49,9 +49,9 @@ function revisionLabel(revision: SummarySlotRevision) {
+ }
+ 
+ function formatRevisionTimestamp(date: Date | string) {
+-  return new Intl.DateTimeFormat("en-US", {
+-    month: "short",
+-    day: "numeric",
++  return new Intl.DateTimeFormat("fr-BE", {
++    day: "2-digit",
++    month: "2-digit",
+     hour: "2-digit",
+     minute: "2-digit",
+     hourCycle: "h23",
+diff --git a/ui/src/components/SystemNotice.tsx b/ui/src/components/SystemNotice.tsx
+index 291e380d2..4d7cb782c 100644
+--- a/ui/src/components/SystemNotice.tsx
++++ b/ui/src/components/SystemNotice.tsx
+@@ -100,7 +100,7 @@ const TONE_TOKENS: Record<SystemNoticeTone, ToneTokens> = {
+ 
+ function formatTimestamp(ts: string) {
+   try {
+-    return new Date(ts).toLocaleString(undefined, {
++    return new Date(ts).toLocaleString("fr-BE", {
+       month: "short",
+       day: "numeric",
+       hour: "numeric",
+diff --git a/ui/src/components/access/InvitesSection.tsx b/ui/src/components/access/InvitesSection.tsx
+index db6f22c76..17c97789c 100644
+--- a/ui/src/components/access/InvitesSection.tsx
++++ b/ui/src/components/access/InvitesSection.tsx
+@@ -323,7 +323,7 @@ export function InvitesSection() {
+                         ) : null}
+                       </td>
+                       <td className="px-5 py-3 align-top text-muted-foreground">
+-                        {new Date(invite.createdAt).toLocaleString()}
++                        {new Date(invite.createdAt).toLocaleString("fr-BE")}
+                       </td>
+                       <td className="px-5 py-3 align-top">
+                         {invite.relatedJoinRequestId ? (
+diff --git a/ui/src/components/ai-connections/AiConnectionUsagePanel.test.tsx b/ui/src/components/ai-connections/AiConnectionUsagePanel.test.tsx
+index 2693f17d3..ca3a6d92c 100644
+--- a/ui/src/components/ai-connections/AiConnectionUsagePanel.test.tsx
++++ b/ui/src/components/ai-connections/AiConnectionUsagePanel.test.tsx
+@@ -58,10 +58,10 @@ it("does not round almost-exhausted usage up to an exhausted allowance", async (
+       limitReached: false, allowed: null, windowDurationSeconds: 18000, resetsAt: null, limit: 1, remaining: 0.0000001, unit: "USD" }],
+   });
+   render(); click();
+-  await vi.waitFor(() => expect(host.textContent).toContain("99.99999% used"));
+-  expect(host.textContent).not.toContain("0.00001% remaining");
+-  expect(host.textContent).toContain("$0.0000001 left");
+-  expect(host.textContent).toContain("$0.00001");
++  await vi.waitFor(() => expect(host.textContent).toContain("99,99999% used"));
++  expect(host.textContent).not.toContain("0,00001% remaining");
++  expect(host.textContent).toContain("0,0000001\u00a0$ left");
++  expect(host.textContent).toContain("0,00001\u00a0$");
+   expect(host.textContent).not.toContain("Limit reached");
+ });
+ it("explains unsupported methods and disables checks for a revoked grant", () => {
+diff --git a/ui/src/components/ai-connections/AiConnectionUsagePanel.tsx b/ui/src/components/ai-connections/AiConnectionUsagePanel.tsx
+index d0e7d9a5b..2d09d60e7 100644
+--- a/ui/src/components/ai-connections/AiConnectionUsagePanel.tsx
++++ b/ui/src/components/ai-connections/AiConnectionUsagePanel.tsx
+@@ -8,7 +8,7 @@ import { formatDateTime, formatNumber } from "@/lib/utils";
+ 
+ const usageNumber = (value: number) => formatNumber(value, { maximumFractionDigits: 20 });
+ const amount = (value: number, unit: string | null) => unit === "USD"
+-  ? formatNumber(value, { style: "currency", currency: "USD", minimumFractionDigits: 0, maximumFractionDigits: 20 })
++  ? formatNumber(value, { style: "currency", currency: "USD", currencyDisplay: "narrowSymbol", minimumFractionDigits: 0, maximumFractionDigits: 20 })
+   : `${usageNumber(value)}${unit ? ` ${unit}` : ""}`;
+ 
+ function limitLabel(window: AiConnectionUsageLimit) {
+diff --git a/ui/src/components/artifacts/ArtifactCard.test.tsx b/ui/src/components/artifacts/ArtifactCard.test.tsx
+index f8dc36a59..8aa4cfdff 100644
+--- a/ui/src/components/artifacts/ArtifactCard.test.tsx
++++ b/ui/src/components/artifacts/ArtifactCard.test.tsx
+@@ -60,7 +60,7 @@ describe("ArtifactCard", () => {
+     expect(markup).toContain("Hero shot");
+     expect(markup).toContain("flex h-7 items-start justify-between gap-2");
+     expect(markup).toContain("leading-7");
+-    expect(markup).toContain("Last edited Jun 1, 2026");
++    expect(markup).toContain("Last edited 01/06/2026");
+     expect(markup).not.toContain("Landing visuals");
+     expect(markup).not.toContain("Edited ");
+   });
+@@ -78,7 +78,7 @@ describe("ArtifactCard", () => {
+     );
+ 
+     expect(markup).toContain("Social launch clip");
+-    expect(markup).toContain("Last edited Oct 8, 2025");
++    expect(markup).toContain("Last edited 08/10/2025");
+     expect(markup).not.toContain("Make artifact page look like this");
+     expect(markup).not.toContain(">PAP-10370<");
+   });
+@@ -268,7 +268,7 @@ describe("ArtifactCard", () => {
+ 
+     expect(markup).toContain("flex h-7 items-start justify-between gap-2");
+     expect(markup).toContain("leading-7");
+-    expect(markup).toContain("Last edited Jun 1, 2026");
++    expect(markup).toContain("Last edited 01/06/2026");
+     expect(markup).not.toContain('aria-label="Download file"');
+     expect(markup).not.toContain('aria-label="Open file in new tab"');
+   });
+diff --git a/ui/src/components/artifacts/RichArtifactCards.tsx b/ui/src/components/artifacts/RichArtifactCards.tsx
+index f26a761c6..d16ccd363 100644
+--- a/ui/src/components/artifacts/RichArtifactCards.tsx
++++ b/ui/src/components/artifacts/RichArtifactCards.tsx
+@@ -139,12 +139,12 @@ function Diff({ additions, deletions, filesChanged }: DiffProps) {
+     <div className="flex flex-wrap gap-2 font-mono text-xs">
+       {additions != null && (
+         <span className="text-(--status-task-icon-done)">
+-          +{additions.toLocaleString("en-US")}
++          +{additions.toLocaleString("fr-BE")}
+         </span>
+       )}
+       {deletions != null && (
+         <span className="text-(--status-task-icon-blocked)">
+-          −{deletions.toLocaleString("en-US")}
++          −{deletions.toLocaleString("fr-BE")}
+         </span>
+       )}
+       {filesChanged != null && (
+diff --git a/ui/src/components/chat/AgentWorkPanels.tsx b/ui/src/components/chat/AgentWorkPanels.tsx
+index 2e7c63610..51e95cc20 100644
+--- a/ui/src/components/chat/AgentWorkPanels.tsx
++++ b/ui/src/components/chat/AgentWorkPanels.tsx
+@@ -96,7 +96,7 @@ export function AgentTaskCard({ task }: { task: Issue }) {
+       <div className="flex items-center gap-1.5 pl-6 text-xs text-muted-foreground">
+         <span className="font-mono">{task.identifier ?? task.id.slice(0, 8)}</span>
+         <span aria-hidden>·</span>
+-        <time dateTime={new Date(task.updatedAt).toISOString()} title={new Date(task.updatedAt).toLocaleString()}>
++        <time dateTime={new Date(task.updatedAt).toISOString()} title={new Date(task.updatedAt).toLocaleString("fr-BE")}>
+           {relativeTime(task.updatedAt)}
+         </time>
+       </div>
+diff --git a/ui/src/components/issue-properties/IssuePropertiesPlansTab.tsx b/ui/src/components/issue-properties/IssuePropertiesPlansTab.tsx
+index b35a422d0..0a69e8c6e 100644
+--- a/ui/src/components/issue-properties/IssuePropertiesPlansTab.tsx
++++ b/ui/src/components/issue-properties/IssuePropertiesPlansTab.tsx
+@@ -80,7 +80,7 @@ export function IssuePropertiesPlansTab({ issue }: IssuePropertiesPlansTabProps)
+       {planDocument ? (
+         <section data-testid="issue-plan-document" className="space-y-2">
+           <div className="flex items-center gap-1 text-xs text-muted-foreground">
+-            {`Revision ${planDocument.latestRevisionNumber ?? 1} · updated ${new Date(planDocument.updatedAt).toLocaleString([], {
++            {`Revision ${planDocument.latestRevisionNumber ?? 1} · updated ${new Date(planDocument.updatedAt).toLocaleString("fr-BE", {
+               month: "short",
+               day: "numeric",
+               hour: "numeric",
+diff --git a/ui/src/components/routine-sections/editable-sections.production.tsx b/ui/src/components/routine-sections/editable-sections.production.tsx
+index ac3651d9f..dd78f0179 100644
+--- a/ui/src/components/routine-sections/editable-sections.production.tsx
++++ b/ui/src/components/routine-sections/editable-sections.production.tsx
+@@ -144,7 +144,7 @@ export function OverviewSection({
+       .filter((trigger) => trigger.kind === "schedule" && trigger.nextRunAt)
+       .map((trigger) => new Date(trigger.nextRunAt as Date))
+       .sort((a, b) => a.getTime() - b.getTime())[0];
+-    return upcoming ? upcoming.toLocaleString() : null;
++    return upcoming ? upcoming.toLocaleString("fr-BE") : null;
+   }, [routine.triggers]);
+   const boundSecrets = editDraft.env ? Object.keys(editDraft.env).length : 0;
+   const lastRun = (routineRuns ?? [])[0] ?? null;
+@@ -845,7 +845,7 @@ function NextFiresPreview({
+ 
+ function formatFireTime(date: Date, timeZone: string): string {
+   try {
+-    return new Intl.DateTimeFormat(undefined, {
++    return new Intl.DateTimeFormat("fr-BE", {
+       timeZone,
+       year: "numeric",
+       month: "2-digit",
+diff --git a/ui/src/components/routine-sections/editable-sections.tsx b/ui/src/components/routine-sections/editable-sections.tsx
+index f1c29e54c..8fde3ce4a 100644
+--- a/ui/src/components/routine-sections/editable-sections.tsx
++++ b/ui/src/components/routine-sections/editable-sections.tsx
+@@ -128,7 +128,7 @@ export function OverviewSection({
+       .filter((trigger) => trigger.kind === "schedule" && trigger.nextRunAt)
+       .map((trigger) => new Date(trigger.nextRunAt as Date))
+       .sort((a, b) => a.getTime() - b.getTime())[0];
+-    return upcoming ? upcoming.toLocaleString() : null;
++    return upcoming ? upcoming.toLocaleString("fr-BE") : null;
+   }, [routine.triggers]);
+   const lastRun = (routineRuns ?? [])[0] ?? null;
+   const recentActivity = (activity ?? []).slice(0, 5);
+@@ -625,7 +625,7 @@ function NextFiresPreview({
+ 
+ function formatFireTime(date: Date, timeZone: string): string {
+   try {
+-    return new Intl.DateTimeFormat(undefined, {
++    return new Intl.DateTimeFormat("fr-BE", {
+       timeZone,
+       year: "numeric",
+       month: "2-digit",
+diff --git a/ui/src/components/routine-sections/operate-sections.tsx b/ui/src/components/routine-sections/operate-sections.tsx
+index a1b442a30..152ca3b28 100644
+--- a/ui/src/components/routine-sections/operate-sections.tsx
++++ b/ui/src/components/routine-sections/operate-sections.tsx
+@@ -60,7 +60,7 @@ export function ActivitySection({ isLoading = false, error }: { isLoading?: bool
+     for (const event of events) {
+       let label = "Earlier";
+       try {
+-        label = new Date(event.createdAt).toLocaleDateString(undefined, {
++        label = new Date(event.createdAt).toLocaleDateString("fr-BE", {
+           weekday: "short",
+           month: "short",
+           day: "numeric",
+diff --git a/ui/src/components/task-chat/TaskChatCompactInteractionCard.tsx b/ui/src/components/task-chat/TaskChatCompactInteractionCard.tsx
+index e06246d7b..e0a5376ed 100644
+--- a/ui/src/components/task-chat/TaskChatCompactInteractionCard.tsx
++++ b/ui/src/components/task-chat/TaskChatCompactInteractionCard.tsx
+@@ -536,7 +536,7 @@ function ReceiptDisclosure({
+               Expires{" "}
+               {new Date(
+                 interaction.payload.toolAction.expiresAt,
+-              ).toLocaleString()}
++              ).toLocaleString("fr-BE")}
+             </p>
+             <div className="mt-2">
+               <MarkdownBody externalReferences={externalReferences}>
+@@ -573,7 +573,7 @@ function ReceiptDisclosure({
+               <dd>
+                 {new Date(
+                   interaction.payload.secretProposal.expiresAt,
+-                ).toLocaleString()}
++                ).toLocaleString("fr-BE")}
+               </dd>
+             </div>
+           </dl>
+@@ -899,7 +899,7 @@ function ConfirmationCard({
+               Expires{" "}
+               {new Date(
+                 interaction.payload.toolAction.expiresAt,
+-              ).toLocaleString()}
++              ).toLocaleString("fr-BE")}
+             </span>
+           </div>
+           <MarkdownBody externalReferences={externalReferences}>
+@@ -940,7 +940,7 @@ function ConfirmationCard({
+             <dd>
+               {new Date(
+                 interaction.payload.secretProposal.expiresAt,
+-              ).toLocaleString()}
++              ).toLocaleString("fr-BE")}
+             </dd>
+           </div>
+         </dl>
+diff --git a/ui/src/components/task-chat/TaskChatRunnerActivityGroup.tsx b/ui/src/components/task-chat/TaskChatRunnerActivityGroup.tsx
+index 3e07ace36..95afca6fe 100644
+--- a/ui/src/components/task-chat/TaskChatRunnerActivityGroup.tsx
++++ b/ui/src/components/task-chat/TaskChatRunnerActivityGroup.tsx
+@@ -84,10 +84,10 @@ function presentation(item: Activity, active: boolean) {
+   const { used, size, inputTokens, outputTokens, costUsd } = item.usage;
+   const usage = [
+     size > 0
+-      ? `${used.toLocaleString()}/${size.toLocaleString()} ctx`
++      ? `${used.toLocaleString("fr-BE")}/${size.toLocaleString("fr-BE")} ctx`
+       : undefined,
+     inputTokens != null || outputTokens != null
+-      ? `↑${(inputTokens ?? 0).toLocaleString()} ↓${(outputTokens ?? 0).toLocaleString()}`
++      ? `↑${(inputTokens ?? 0).toLocaleString("fr-BE")} ↓${(outputTokens ?? 0).toLocaleString("fr-BE")}`
+       : undefined,
+     costUsd != null ? `$${costUsd.toFixed(4)}` : undefined,
+   ]
+diff --git a/ui/src/components/task-chat/TaskChatUsageReadout.tsx b/ui/src/components/task-chat/TaskChatUsageReadout.tsx
+index 4fdc17210..d03573faa 100644
+--- a/ui/src/components/task-chat/TaskChatUsageReadout.tsx
++++ b/ui/src/components/task-chat/TaskChatUsageReadout.tsx
+@@ -18,12 +18,12 @@ export function TaskChatUsageReadout({ item }: { item: TaskChatUsageItem }) {
+         {item.label ? <span className="font-medium">{item.label}</span> : null}
+         {contextWindowSize ? (
+           <span>
+-            {used.toLocaleString()}/{contextWindowSize.toLocaleString()} ctx ({pct}%)
++            {used.toLocaleString("fr-BE")}/{contextWindowSize.toLocaleString("fr-BE")} ctx ({pct}%)
+           </span>
+         ) : null}
+         {inputTokens != null || outputTokens != null ? (
+           <span>
+-            · ↑{(inputTokens ?? 0).toLocaleString()} ↓{(outputTokens ?? 0).toLocaleString()}
++            · ↑{(inputTokens ?? 0).toLocaleString("fr-BE")} ↓{(outputTokens ?? 0).toLocaleString("fr-BE")}
+           </span>
+         ) : null}
+         {costUsd != null ? <span>· ${costUsd.toFixed(4)}</span> : null}
+diff --git a/ui/src/components/task-chat/task-chat-adapter.ts b/ui/src/components/task-chat/task-chat-adapter.ts
+index d8434c4ad..405178f1f 100644
+--- a/ui/src/components/task-chat/task-chat-adapter.ts
++++ b/ui/src/components/task-chat/task-chat-adapter.ts
+@@ -51,7 +51,7 @@ export function formatTaskChatTimestamp(value: unknown): string | undefined {
+   if (!value) return undefined;
+   const d = value instanceof Date ? value : new Date(value as string);
+   if (Number.isNaN(d.getTime())) return undefined;
+-  return d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
++  return d.toLocaleTimeString("fr-BE", { hour: "numeric", minute: "2-digit" });
+ }
+ 
+ /** Keep every comment footer on the same compact, user-visible timestamp. */
+diff --git a/ui/src/components/task-side-panel/TaskDocumentPanel.tsx b/ui/src/components/task-side-panel/TaskDocumentPanel.tsx
+index 3b38da9b8..7f1a91e6a 100644
+--- a/ui/src/components/task-side-panel/TaskDocumentPanel.tsx
++++ b/ui/src/components/task-side-panel/TaskDocumentPanel.tsx
+@@ -71,7 +71,7 @@ export function TaskDocumentPanel({
+         <div className="flex flex-wrap items-center gap-1 text-xs text-muted-foreground">
+           <span>{`Revision ${document.latestRevisionNumber ?? 1}`}</span>
+           <span aria-hidden>·</span>
+-          <span>{`Updated ${new Date(document.updatedAt).toLocaleString()}`}</span>
++          <span>{`Updated ${new Date(document.updatedAt).toLocaleString("fr-BE")}`}</span>
+           <DocumentAnnotationsCountChip
+             issueId={issueId}
+             docKey={document.key}
+diff --git a/ui/src/components/timeline/WorkTimelineChart.test.tsx b/ui/src/components/timeline/WorkTimelineChart.test.tsx
+index 31470558b..6877e6a30 100644
+--- a/ui/src/components/timeline/WorkTimelineChart.test.tsx
++++ b/ui/src/components/timeline/WorkTimelineChart.test.tsx
+@@ -96,14 +96,13 @@ function timelineSample(): WorkTimelineResult {
+ }
+ 
+ describe("WorkTimelineChart", () => {
+-  it("renders date-aware AM/PM labels on the header axis", () => {
++  it("renders date-aware 24-hour labels on the header axis", () => {
+     renderChart(timelineSample());
+ 
+     const timeAxis = container.querySelector<HTMLElement>("[data-testid='work-timeline-time-axis']");
+ 
+-    expect(timeAxis?.textContent).toContain("Jul 2");
+-    expect(timeAxis?.textContent).toContain("AM");
+-    expect(timeAxis?.textContent).not.toContain("09:00");
++    expect(timeAxis?.textContent).toContain("02/07");
++    expect(timeAxis?.textContent).not.toMatch(/AM|PM/);
+   });
+ 
+   it("freezes the time axis over vertical scrolling while preserving horizontal alignment", async () => {
+@@ -125,7 +124,7 @@ describe("WorkTimelineChart", () => {
+     });
+     await new Promise((resolve) => setTimeout(resolve, 0));
+ 
+-    expect(timeAxis.textContent).toContain("Jul 2");
++    expect(timeAxis.textContent).toContain("02/07");
+     expect(axisSvg.style.transform).toBe("translateX(-240px)");
+   });
+ 
+diff --git a/ui/src/components/timeline/WorkTimelineChart.tsx b/ui/src/components/timeline/WorkTimelineChart.tsx
+index b982a51da..870152562 100644
+--- a/ui/src/components/timeline/WorkTimelineChart.tsx
++++ b/ui/src/components/timeline/WorkTimelineChart.tsx
+@@ -120,17 +120,16 @@ interface DragSelectionState {
+ 
+ function fmtClock(ms: number): string {
+   const d = new Date(ms);
+-  const hasMinutes = d.getMinutes() !== 0;
+-  return d.toLocaleTimeString("en-US", {
+-    hour: "numeric",
+-    minute: hasMinutes ? "2-digit" : undefined,
+-    hour12: true,
++  return d.toLocaleTimeString("fr-BE", {
++    hour: "2-digit",
++    minute: "2-digit",
++    hourCycle: "h23",
+   });
+ }
+ 
+ function fmtTick(ms: number, stepMs: number): string {
+   const d = new Date(ms);
+-  const date = d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
++  const date = d.toLocaleDateString("fr-BE", { day: "2-digit", month: "2-digit" });
+   if (stepMs >= 24 * 60 * 60 * 1000) {
+     return date;
+   }
+diff --git a/ui/src/lib/attention.ts b/ui/src/lib/attention.ts
+index b08387907..4bb4f6e6a 100644
+--- a/ui/src/lib/attention.ts
++++ b/ui/src/lib/attention.ts
+@@ -427,7 +427,7 @@ export function decideByLabel(decideBy: string | null): string {
+   if (/^\d{4}-\d{2}-\d{2}$/.test(decideBy)) {
+     const parsed = new Date(`${decideBy}T00:00:00.000Z`);
+     return Number.isFinite(parsed.getTime())
+-      ? parsed.toLocaleDateString(undefined, { month: "short", day: "numeric", timeZone: "UTC" })
++      ? parsed.toLocaleDateString("fr-BE", { month: "short", day: "numeric", timeZone: "UTC" })
+       : decideBy;
+   }
+   return decideBy;
+diff --git a/ui/src/lib/issue-change-receipt.ts b/ui/src/lib/issue-change-receipt.ts
+index ef4bac0cd..fed4af188 100644
+--- a/ui/src/lib/issue-change-receipt.ts
++++ b/ui/src/lib/issue-change-receipt.ts
+@@ -85,7 +85,7 @@ export function formatIssueChangeValue(
+       : `${strings.length} items`;
+   }
+ 
+-  if (value instanceof Date) return value.toLocaleString();
++  if (value instanceof Date) return value.toLocaleString("fr-BE");
+ 
+   if (typeof value === "string") {
+     const trimmed = value.trim();
+@@ -100,7 +100,7 @@ export function formatIssueChangeValue(
+     if ((options.field === "status" || options.field === "priority") && LIBELLES_VALEURS[trimmed]) {
+       return LIBELLES_VALEURS[trimmed]!;
+     }
+-    if (isIsoTimestamp(trimmed)) return new Date(trimmed).toLocaleString();
++    if (isIsoTimestamp(trimmed)) return new Date(trimmed).toLocaleString("fr-BE");
+     if (looksLikeId(trimmed)) return shortenId(trimmed);
+     const humanized = trimmed.includes(" ") ? trimmed : trimmed.replace(/_/g, " ");
+     return truncate(humanized);
+diff --git a/ui/src/lib/issue-monitor.ts b/ui/src/lib/issue-monitor.ts
+index 3a313b1ba..338218d49 100644
+--- a/ui/src/lib/issue-monitor.ts
++++ b/ui/src/lib/issue-monitor.ts
+@@ -122,10 +122,10 @@ export function formatMonitorAbsolute(
+ ): string {
+   const target = new Date(toTimestamp(nextCheckAt));
+   const reference = new Date(toTimestamp(now));
+-  const targetYmd = zonedYmd(target, options.locale, options.timeZone);
+-  const referenceYmd = zonedYmd(reference, options.locale, options.timeZone);
++  const targetYmd = zonedYmd(target, options.locale ?? "fr-BE", options.timeZone);
++  const referenceYmd = zonedYmd(reference, options.locale ?? "fr-BE", options.timeZone);
+ 
+-  const time = new Intl.DateTimeFormat(options.locale, {
++  const time = new Intl.DateTimeFormat(options.locale ?? "fr-BE", {
+     hour: "numeric",
+     minute: "2-digit",
+     timeZone: options.timeZone,
+@@ -137,11 +137,11 @@ export function formatMonitorAbsolute(
+     targetYmd.day === referenceYmd.day;
+   if (isToday) return `Today, ${time}`;
+ 
+-  const weekday = new Intl.DateTimeFormat(options.locale, {
++  const weekday = new Intl.DateTimeFormat(options.locale ?? "fr-BE", {
+     weekday: "short",
+     timeZone: options.timeZone,
+   }).format(target);
+-  const date = new Intl.DateTimeFormat(options.locale, {
++  const date = new Intl.DateTimeFormat(options.locale ?? "fr-BE", {
+     month: "short",
+     day: "numeric",
+     year: targetYmd.year === referenceYmd.year ? undefined : "numeric",
+@@ -156,14 +156,14 @@ export function formatMonitorAbsoluteFull(
+   options: MonitorDateTimeFormatOptions = {},
+ ): string {
+   const date = new Date(toTimestamp(nextCheckAt));
+-  const datePart = new Intl.DateTimeFormat(options.locale, {
++  const datePart = new Intl.DateTimeFormat(options.locale ?? "fr-BE", {
+     weekday: "long",
+     year: "numeric",
+     month: "long",
+     day: "numeric",
+     timeZone: options.timeZone,
+   }).format(date);
+-  const timePart = new Intl.DateTimeFormat(options.locale, {
++  const timePart = new Intl.DateTimeFormat(options.locale ?? "fr-BE", {
+     hour: "numeric",
+     minute: "2-digit",
+     second: "2-digit",
+diff --git a/ui/src/lib/project-budget-format.test.ts b/ui/src/lib/project-budget-format.test.ts
+index 92e797498..136962ff3 100644
+--- a/ui/src/lib/project-budget-format.test.ts
++++ b/ui/src/lib/project-budget-format.test.ts
+@@ -3,14 +3,14 @@ import { formatProjectBudget } from "./utils";
+ 
+ describe("formatProjectBudget", () => {
+   it("renders a /mo suffix for monthly budgets", () => {
+-    expect(formatProjectBudget({ amountCents: 120_000, windowKind: "calendar_month_utc" })).toBe("$1,200.00/mo");
++    expect(formatProjectBudget({ amountCents: 120_000, windowKind: "calendar_month_utc" })).toBe("1\u202f200,00\u00a0$/mo");
+   });
+ 
+   it("renders the bare amount for lifetime budgets", () => {
+-    expect(formatProjectBudget({ amountCents: 50_000, windowKind: "lifetime" })).toBe("$500.00");
++    expect(formatProjectBudget({ amountCents: 50_000, windowKind: "lifetime" })).toBe("500,00\u00a0$");
+   });
+ 
+   it("formats sub-dollar amounts with cents", () => {
+-    expect(formatProjectBudget({ amountCents: 150, windowKind: "lifetime" })).toBe("$1.50");
++    expect(formatProjectBudget({ amountCents: 150, windowKind: "lifetime" })).toBe("1,50\u00a0$");
+   });
+ });
+diff --git a/ui/src/lib/utils.date-time.test.ts b/ui/src/lib/utils.date-time.test.ts
+index 18e23b180..cfa0de871 100644
+--- a/ui/src/lib/utils.date-time.test.ts
++++ b/ui/src/lib/utils.date-time.test.ts
+@@ -6,16 +6,16 @@ describe("formatDateTime", () => {
+   const timestamp = new Date(2026, 8, 7, 13, 2, 54);
+ 
+   it("preserves minute precision for existing callers", () => {
+-    expect(formatDateTime(timestamp)).toBe("Sep 7, 2026, 1:02 PM");
++    expect(formatDateTime(timestamp)).toBe("07/09/2026 13:02");
+   });
+ 
+   it("distinguishes activity in the same minute when seconds are requested", () => {
+     expect(formatDateTime(timestamp, { includeSeconds: true })).toBe(
+-      "Sep 7, 2026, 1:02:54 PM",
++      "07/09/2026 13:02:54",
+     );
+     expect(
+       formatDateTime(new Date(2026, 8, 7, 13, 2, 55), { includeSeconds: true }),
+-    ).toBe("Sep 7, 2026, 1:02:55 PM");
++    ).toBe("07/09/2026 13:02:55");
+   });
+ 
+   it("formats serialized server timestamps identically to Date values", () => {
+diff --git a/ui/src/lib/utils.ts b/ui/src/lib/utils.ts
+index 26d732da3..025bf64cf 100644
+--- a/ui/src/lib/utils.ts
++++ b/ui/src/lib/utils.ts
+@@ -34,11 +34,17 @@ export function asFiniteNumber(value: unknown, fallback: number) {
+ }
+ 
+ export function formatCents(cents: number): string {
+-  return `$${(cents / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
++  return (cents / 100).toLocaleString("fr-BE", {
++    style: "currency",
++    currency: "USD",
++    currencyDisplay: "narrowSymbol",
++    minimumFractionDigits: 2,
++    maximumFractionDigits: 2,
++  });
+ }
+ 
+ export function formatNumber(n: number, options?: Intl.NumberFormatOptions): string {
+-  return n.toLocaleString("en-US", options);
++  return n.toLocaleString("fr-BE", options);
+ }
+ 
+ /**
+@@ -51,9 +57,9 @@ export function formatProjectBudget(budget: { amountCents: number; windowKind: s
+ }
+ 
+ export function formatDate(date: Date | string): string {
+-  return new Date(date).toLocaleDateString("en-US", {
+-    month: "short",
+-    day: "numeric",
++  return new Date(date).toLocaleDateString("fr-BE", {
++    day: "2-digit",
++    month: "2-digit",
+     year: "numeric",
+   });
+ }
+@@ -62,20 +68,21 @@ export function formatDateTime(
+   date: Date | string,
+   options: { includeSeconds?: boolean; includeYear?: boolean } = {},
+ ): string {
+-  return new Date(date).toLocaleString("en-US", {
+-    month: "short",
+-    day: "numeric",
++  return new Date(date).toLocaleString("fr-BE", {
++    day: "2-digit",
++    month: "2-digit",
+     ...(options.includeYear === false ? {} : { year: "numeric" as const }),
+-    hour: "numeric",
++    hour: "2-digit",
+     minute: "2-digit",
++    hourCycle: "h23",
+     ...(options.includeSeconds ? { second: "2-digit" as const } : {}),
+   });
+ }
+ 
+ export function formatShortDate(date: Date | string): string {
+-  return new Date(date).toLocaleString("en-US", {
+-    month: "short",
+-    day: "numeric",
++  return new Date(date).toLocaleString("fr-BE", {
++    day: "2-digit",
++    month: "2-digit",
+   });
+ }
+ 
+diff --git a/ui/src/pages/AgentDetail.production.tsx b/ui/src/pages/AgentDetail.production.tsx
+index 91efc7643..44da0f691 100644
+--- a/ui/src/pages/AgentDetail.production.tsx
++++ b/ui/src/pages/AgentDetail.production.tsx
+@@ -633,7 +633,7 @@ function WorkspaceOperationLogViewer({
+               {chunks.map((chunk, index) => (
+                 <div key={`${chunk.ts}-${index}`} className="flex gap-2">
+                   <span className="shrink-0 text-neutral-500">
+-                    {new Date(chunk.ts).toLocaleTimeString("en-US", { hour12: false })}
++                    {new Date(chunk.ts).toLocaleTimeString("fr-BE", { hour12: false })}
+                   </span>
+                   <span
+                     className={cn(
+@@ -3369,8 +3369,8 @@ function RunDetail({ run: initialRun, agentRouteId, adapterType, adapterConfig }
+   }, [isRunning, run.startedAt]);
+ 
+   const timeFormat: Intl.DateTimeFormatOptions = { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false };
+-  const startTime = run.startedAt ? new Date(run.startedAt).toLocaleTimeString("en-US", timeFormat) : null;
+-  const endTime = run.finishedAt ? new Date(run.finishedAt).toLocaleTimeString("en-US", timeFormat) : null;
++  const startTime = run.startedAt ? new Date(run.startedAt).toLocaleTimeString("fr-BE", timeFormat) : null;
++  const endTime = run.finishedAt ? new Date(run.finishedAt).toLocaleTimeString("fr-BE", timeFormat) : null;
+   const durationSec = run.startedAt && run.finishedAt
+     ? Math.round((new Date(run.finishedAt).getTime() - new Date(run.startedAt).getTime()) / 1000)
+     : null;
+@@ -4283,9 +4283,9 @@ export function LogViewer({ run, adapterType }: { run: HeartbeatRun; adapterType
+               {loadingMoreLog ? "Loading..." : "Load more log"}
+             </Button>
+             <span className="text-xs text-muted-foreground">
+-              Showing the first {Math.round(logOffset / 1024).toLocaleString("en-US")} KB
++              Showing the first {Math.round(logOffset / 1024).toLocaleString("fr-BE")} KB
+               {typeof run.logBytes === "number" && run.logBytes > 0
+-                ? ` of ${Math.round(run.logBytes / 1024).toLocaleString("en-US")} KB`
++                ? ` of ${Math.round(run.logBytes / 1024).toLocaleString("fr-BE")} KB`
+                 : ""}
+             </span>
+           </div>
+@@ -4347,7 +4347,7 @@ export function LogViewer({ run, adapterType }: { run: HeartbeatRun; adapterType
+               return (
+                 <div key={evt.id} className="flex gap-2">
+                   <span className="text-neutral-400 dark:text-neutral-600 shrink-0 select-none w-16">
+-                    {new Date(evt.createdAt).toLocaleTimeString("en-US", { hour12: false })}
++                    {new Date(evt.createdAt).toLocaleTimeString("fr-BE", { hour12: false })}
+                   </span>
+                   <span className={cn("shrink-0 w-14", evt.stream ? (streamColors[evt.stream] ?? "text-neutral-500") : "text-neutral-500")}>
+                     {evt.stream ? `[${evt.stream}]` : ""}
+diff --git a/ui/src/pages/AgentDetail.tsx b/ui/src/pages/AgentDetail.tsx
+index 84a616a77..4462e9059 100644
+--- a/ui/src/pages/AgentDetail.tsx
++++ b/ui/src/pages/AgentDetail.tsx
+@@ -636,7 +636,7 @@ function WorkspaceOperationLogViewer({
+               {chunks.map((chunk, index) => (
+                 <div key={`${chunk.ts}-${index}`} className="flex gap-2">
+                   <span className="shrink-0 text-neutral-500">
+-                    {new Date(chunk.ts).toLocaleTimeString("en-US", { hour12: false })}
++                    {new Date(chunk.ts).toLocaleTimeString("fr-BE", { hour12: false })}
+                   </span>
+                   <span
+                     className={cn(
+@@ -3561,8 +3561,8 @@ function RunDetail({ run: initialRun, agentRouteId, adapterType, adapterConfig }
+   }, [isRunning, run.startedAt]);
+ 
+   const timeFormat: Intl.DateTimeFormatOptions = { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false };
+-  const startTime = run.startedAt ? new Date(run.startedAt).toLocaleTimeString("en-US", timeFormat) : null;
+-  const endTime = run.finishedAt ? new Date(run.finishedAt).toLocaleTimeString("en-US", timeFormat) : null;
++  const startTime = run.startedAt ? new Date(run.startedAt).toLocaleTimeString("fr-BE", timeFormat) : null;
++  const endTime = run.finishedAt ? new Date(run.finishedAt).toLocaleTimeString("fr-BE", timeFormat) : null;
+   const durationSec = run.startedAt && run.finishedAt
+     ? Math.round((new Date(run.finishedAt).getTime() - new Date(run.startedAt).getTime()) / 1000)
+     : null;
+@@ -4517,9 +4517,9 @@ export function LogViewer({ run, adapterType }: { run: HeartbeatRun; adapterType
+               {loadingMoreLog ? "Loading..." : "Load more log"}
+             </Button>
+             <span className="text-xs text-muted-foreground">
+-              Showing the first {Math.round(logOffset / 1024).toLocaleString("en-US")} KB
++              Showing the first {Math.round(logOffset / 1024).toLocaleString("fr-BE")} KB
+               {typeof run.logBytes === "number" && run.logBytes > 0
+-                ? ` of ${Math.round(run.logBytes / 1024).toLocaleString("en-US")} KB`
++                ? ` of ${Math.round(run.logBytes / 1024).toLocaleString("fr-BE")} KB`
+                 : ""}
+             </span>
+           </div>
+@@ -4581,7 +4581,7 @@ export function LogViewer({ run, adapterType }: { run: HeartbeatRun; adapterType
+               return (
+                 <div key={evt.id} className="flex gap-2">
+                   <span className="text-neutral-400 dark:text-neutral-600 shrink-0 select-none w-16">
+-                    {new Date(evt.createdAt).toLocaleTimeString("en-US", { hour12: false })}
++                    {new Date(evt.createdAt).toLocaleTimeString("fr-BE", { hour12: false })}
+                   </span>
+                   <span className={cn("shrink-0 w-14", evt.stream ? (streamColors[evt.stream] ?? "text-neutral-500") : "text-neutral-500")}>
+                     {evt.stream ? `[${evt.stream}]` : ""}
+diff --git a/ui/src/pages/ApprovalDetail.tsx b/ui/src/pages/ApprovalDetail.tsx
+index 9491f5b4d..9263110e9 100644
+--- a/ui/src/pages/ApprovalDetail.tsx
++++ b/ui/src/pages/ApprovalDetail.tsx
+@@ -341,7 +341,7 @@ export function ApprovalDetail() {
+                   <Identity name="Board" size="sm" />
+                 )}
+                 <span className="text-xs text-muted-foreground">
+-                  {new Date(comment.createdAt).toLocaleString()}
++                  {new Date(comment.createdAt).toLocaleString("fr-BE")}
+                 </span>
+               </div>
+               <MarkdownBody className="text-sm">{comment.body}</MarkdownBody>
+diff --git a/ui/src/pages/CompanyAccess.tsx b/ui/src/pages/CompanyAccess.tsx
+index 1befd061b..964364ba3 100644
+--- a/ui/src/pages/CompanyAccess.tsx
++++ b/ui/src/pages/CompanyAccess.tsx
+@@ -345,7 +345,7 @@ export function CompanyAccess() {
+                       ? `${request.invite.allowedJoinTypes} join invite${request.invite.humanRole ? ` • default role ${request.invite.humanRole}` : ""}`
+                       : "Invite metadata unavailable"
+                   }
+-                  detail={`Submitted ${new Date(request.createdAt).toLocaleString()}`}
++                  detail={`Submitted ${new Date(request.createdAt).toLocaleString("fr-BE")}`}
+                   approveLabel="Approve human"
+                   rejectLabel="Reject human"
+                   disabled={joinRequestActionPending}
+diff --git a/ui/src/pages/CompanyEnvironments.tsx b/ui/src/pages/CompanyEnvironments.tsx
+index 5df5c92a8..29e997506 100644
+--- a/ui/src/pages/CompanyEnvironments.tsx
++++ b/ui/src/pages/CompanyEnvironments.tsx
+@@ -313,7 +313,7 @@ function readEnvironmentSandboxProvider(environment: Environment): string | null
+ function formatDateTime(value: string | Date | null | undefined): string | null {
+   if (!value) return null;
+   const date = value instanceof Date ? value : new Date(value);
+-  return Number.isNaN(date.getTime()) ? null : date.toLocaleString();
++  return Number.isNaN(date.getTime()) ? null : date.toLocaleString("fr-BE");
+ }
+ 
+ function formatShortId(value: string): string {
+diff --git a/ui/src/pages/CompanyExport.tsx b/ui/src/pages/CompanyExport.tsx
+index c0409607a..0782f298f 100644
+--- a/ui/src/pages/CompanyExport.tsx
++++ b/ui/src/pages/CompanyExport.tsx
+@@ -1087,7 +1087,7 @@ export function CompanyExport() {
+               {selectedCompany?.name ?? "Organization"} export
+             </span>
+             <span className="text-muted-foreground">
+-              Exporting {selectedCount.toLocaleString()} of {totalFiles.toLocaleString()} file{totalFiles === 1 ? "" : "s"}
++              Exporting {selectedCount.toLocaleString("fr-BE")} of {totalFiles.toLocaleString("fr-BE")} file{totalFiles === 1 ? "" : "s"}
+               {selectedCount > 0 && ` (~${formatBytes(estimatedZipBytes)})`}
+             </span>
+             {warnings.length > 0 && (
+@@ -1110,7 +1110,7 @@ export function CompanyExport() {
+             <Download className="mr-1.5 h-3.5 w-3.5" />
+             {downloadMutation.isPending
+               ? "Building export..."
+-              : `Export ${selectedCount.toLocaleString()} file${selectedCount === 1 ? "" : "s"}`}
++              : `Export ${selectedCount.toLocaleString("fr-BE")} file${selectedCount === 1 ? "" : "s"}`}
+           </Button>
+         </div>
+       </div>
+@@ -1181,7 +1181,7 @@ export function CompanyExport() {
+                     />
+                     <span className="min-w-0 truncate">{EXPORT_CATEGORY_LABELS[key]}</span>
+                     <span className="text-xs text-muted-foreground">
+-                      {countLoaded ? count.toLocaleString() : "—"}
++                      {countLoaded ? count.toLocaleString("fr-BE") : "—"}
+                     </span>
+                   </label>
+                 );
+diff --git a/ui/src/pages/InstanceAccess.tsx b/ui/src/pages/InstanceAccess.tsx
+index 459191fe6..e31f908fd 100644
+--- a/ui/src/pages/InstanceAccess.tsx
++++ b/ui/src/pages/InstanceAccess.tsx
+@@ -252,7 +252,7 @@ export function InstanceAccess() {
+                         </div>
+                       </div>
+                       <div className="text-xs text-muted-foreground">
+-                        {new Date(membership.updatedAt).toLocaleDateString()}
++                        {new Date(membership.updatedAt).toLocaleDateString("fr-BE")}
+                       </div>
+                     </div>
+                   ))}
+diff --git a/ui/src/pages/InstanceExperimentalSettings.tsx b/ui/src/pages/InstanceExperimentalSettings.tsx
+index f6b77ded4..357c46187 100644
+--- a/ui/src/pages/InstanceExperimentalSettings.tsx
++++ b/ui/src/pages/InstanceExperimentalSettings.tsx
+@@ -54,7 +54,7 @@ function resolveWorktreeRunExecutionDisplayState(
+ function formatActivationTimestamp(iso: string): string {
+   const parsed = new Date(iso);
+   if (Number.isNaN(parsed.getTime())) return iso;
+-  return parsed.toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
++  return parsed.toLocaleString("fr-BE", { dateStyle: "medium", timeStyle: "short" });
+ }
+ 
+ // PAP-11233: keep Conference Room code intact, but hide the user-facing opt-in for now.
+diff --git a/ui/src/pages/IssueDetail.tsx b/ui/src/pages/IssueDetail.tsx
+index db14abd95..959f852fb 100644
+--- a/ui/src/pages/IssueDetail.tsx
++++ b/ui/src/pages/IssueDetail.tsx
+@@ -2810,11 +2810,11 @@ function IssueDetailActivityTab({
+                 <div className="flex flex-wrap gap-3">
+                   <span className="font-medium text-foreground">
+                     Including sub-tasks{" "}
+-                    {(issueTreeCostSummary.costCents / 100).toLocaleString(
+-                      undefined,
++                    {(issueTreeCostSummary.costCents / 100).toLocaleString("fr-BE",
+                       {
+                         style: "currency",
+                         currency: "USD",
++                        currencyDisplay: "narrowSymbol",
+                         minimumFractionDigits: 4,
+                         maximumFractionDigits: 4,
+                       },
+diff --git a/ui/src/pages/JoinRequestQueue.tsx b/ui/src/pages/JoinRequestQueue.tsx
+index 794132431..73e2b7cf7 100644
+--- a/ui/src/pages/JoinRequestQueue.tsx
++++ b/ui/src/pages/JoinRequestQueue.tsx
+@@ -181,7 +181,7 @@ export function JoinRequestQueue() {
+                 </div>
+                 <div className="rounded-lg border border-border bg-background px-3 py-2">
+                   <div className="text-xs font-medium uppercase tracking-wide">Request details</div>
+-                  <div className="mt-2">Submitted {new Date(request.createdAt).toLocaleString()}</div>
++                  <div className="mt-2">Submitted {new Date(request.createdAt).toLocaleString("fr-BE")}</div>
+                   <div>Source IP {request.requestIp}</div>
+                   {request.requestType === "agent" && request.capabilities ? <div>{request.capabilities}</div> : null}
+                 </div>
+diff --git a/ui/src/pages/PipelineSettings.tsx b/ui/src/pages/PipelineSettings.tsx
+index ddff5f309..b2e235a88 100644
+--- a/ui/src/pages/PipelineSettings.tsx
++++ b/ui/src/pages/PipelineSettings.tsx
+@@ -1252,7 +1252,7 @@ function StageEventsList({
+           key={event.id}
+           className="grid min-h-11 grid-cols-(--gtc-15) items-center gap-3 border-b border-border/70 px-3 py-2 text-sm last:border-b-0"
+         >
+-          <span className="text-xs text-muted-foreground" title={new Date(event.createdAt).toLocaleString()}>
++          <span className="text-xs text-muted-foreground" title={new Date(event.createdAt).toLocaleString("fr-BE")}>
+             {relativeTime(event.createdAt)}
+           </span>
+           <div className="min-w-0">
+diff --git a/ui/src/pages/Pipelines.tsx b/ui/src/pages/Pipelines.tsx
+index 55b4b1627..aa0dbaac6 100644
+--- a/ui/src/pages/Pipelines.tsx
++++ b/ui/src/pages/Pipelines.tsx
+@@ -582,7 +582,7 @@ function formatPipelineActivity(value: string | Date | null) {
+   if (diffDays < 7) return `${diffDays} days ago`;
+   if (diffDays < 14) return "last week";
+   if (diffDays < 30) return `${Math.round(diffDays / 7)} weeks ago`;
+-  return new Date(value).toLocaleDateString("en-US", { month: "short", day: "numeric" });
++  return new Date(value).toLocaleDateString("fr-BE", { month: "short", day: "numeric" });
+ }
+ 
+ function PipelineStatusChip({ archivedAt }: { archivedAt: Date | string | null }) {
+@@ -4166,7 +4166,7 @@ function BuiltFromTree({
+ }
+ 
+ function formatShortDate(value: Date | string) {
+-  return new Intl.DateTimeFormat(undefined, {
++  return new Intl.DateTimeFormat("fr-BE", {
+     month: "short",
+     day: "numeric",
+     hour: "numeric",
+@@ -5237,7 +5237,7 @@ export function Learnings() {
+                         forcedMove && "border-l-2 border-l-amber-400 bg-amber-50/50 dark:bg-amber-400/10",
+                       )}
+                     >
+-                      <span className="text-xs text-muted-foreground" title={new Date(event.createdAt).toLocaleString()}>
++                      <span className="text-xs text-muted-foreground" title={new Date(event.createdAt).toLocaleString("fr-BE")}>
+                         {relativeTime(event.createdAt)}
+                       </span>
+                       <div className="min-w-0">
+diff --git a/ui/src/pages/PluginSettings.tsx b/ui/src/pages/PluginSettings.tsx
+index 1616394a7..dadd60267 100644
+--- a/ui/src/pages/PluginSettings.tsx
++++ b/ui/src/pages/PluginSettings.tsx
+@@ -420,7 +420,7 @@ export function PluginSettings() {
+ 
+                       <div className="flex items-center gap-1.5 border-t border-border/50 pt-2 text-xs text-muted-foreground">
+                         <Clock className="h-3 w-3" />
+-                        Last checked: {new Date(dashboardData.checkedAt).toLocaleTimeString()}
++                        Last checked: {new Date(dashboardData.checkedAt).toLocaleTimeString("fr-BE")}
+                       </div>
+                     </>
+                   ) : (
+@@ -455,7 +455,7 @@ export function PluginSettings() {
+                                   : "text-muted-foreground"
+                           }`}
+                         >
+-                          <span className="shrink-0 text-muted-foreground/50">{new Date(entry.createdAt).toLocaleTimeString()}</span>
++                          <span className="shrink-0 text-muted-foreground/50">{new Date(entry.createdAt).toLocaleTimeString("fr-BE")}</span>
+                           <Badge variant="outline" className="h-4 shrink-0 px-1 text-(length:--text-nano)">{entry.level}</Badge>
+                           <span className="truncate" title={entry.message}>{entry.message}</span>
+                         </div>
+@@ -1187,7 +1187,7 @@ function formatRelativeTime(isoString: string): string {
+  * Format a unix timestamp (ms since epoch) to a locale string.
+  */
+ function formatTimestamp(epochMs: number): string {
+-  return new Date(epochMs).toLocaleString();
++  return new Date(epochMs).toLocaleString("fr-BE");
+ }
+ 
+ /**
+diff --git a/ui/src/pages/ProjectWorkspaceDetail.tsx b/ui/src/pages/ProjectWorkspaceDetail.tsx
+index 57abd4557..8176898e0 100644
+--- a/ui/src/pages/ProjectWorkspaceDetail.tsx
++++ b/ui/src/pages/ProjectWorkspaceDetail.tsx
+@@ -703,7 +703,7 @@ export function ProjectWorkspaceDetail() {
+               ) : "Aucun"}
+             </DetailRow>
+             <DetailRow label="Référence par défaut">{workspace.defaultRef ?? "Aucune"}</DetailRow>
+-            <DetailRow label="Mis à jour">{new Date(workspace.updatedAt).toLocaleString()}</DetailRow>
++            <DetailRow label="Mis à jour">{new Date(workspace.updatedAt).toLocaleString("fr-BE")}</DetailRow>
+           </Card>
+ 
+           <Card className="block p-5">
+diff --git a/ui/src/pages/Secrets.tsx b/ui/src/pages/Secrets.tsx
+index 732bed60e..1d2eac330 100644
+--- a/ui/src/pages/Secrets.tsx
++++ b/ui/src/pages/Secrets.tsx
+@@ -294,7 +294,7 @@ function formatRelative(value: Date | string | null | undefined): string {
+   const date = typeof value === "string" ? new Date(value) : value;
+   if (Number.isNaN(date.getTime())) return "—";
+   const diff = Date.now() - date.getTime();
+-  if (diff < 0) return date.toLocaleString();
++  if (diff < 0) return date.toLocaleString("fr-BE");
+   const seconds = Math.floor(diff / 1000);
+   if (seconds < 60) return `${seconds}s ago`;
+   const minutes = Math.floor(seconds / 60);
+@@ -303,7 +303,7 @@ function formatRelative(value: Date | string | null | undefined): string {
+   if (hours < 48) return `${hours}h ago`;
+   const days = Math.floor(hours / 24);
+   if (days < 30) return `${days}d ago`;
+-  return date.toLocaleDateString();
++  return date.toLocaleDateString("fr-BE");
+ }
+ 
+ function statusTextTone(status: SecretStatus) {
+diff --git a/ui/src/pages/StatusCards/ArchivedStatusCardRow.tsx b/ui/src/pages/StatusCards/ArchivedStatusCardRow.tsx
+index ccbadc08d..85b0b7967 100644
+--- a/ui/src/pages/StatusCards/ArchivedStatusCardRow.tsx
++++ b/ui/src/pages/StatusCards/ArchivedStatusCardRow.tsx
+@@ -10,7 +10,7 @@ import type { StatusCardView } from "./types";
+ 
+ function shortDate(iso: string | null): string {
+   if (!iso) return "—";
+-  return new Date(iso).toLocaleDateString(undefined, { month: "short", day: "numeric" });
++  return new Date(iso).toLocaleDateString("fr-BE", { month: "short", day: "numeric" });
+ }
+ 
+ export function ArchivedStatusCardRow({
+diff --git a/ui/src/pages/Timeline.test.tsx b/ui/src/pages/Timeline.test.tsx
+index 7236793b8..992584c74 100644
+--- a/ui/src/pages/Timeline.test.tsx
++++ b/ui/src/pages/Timeline.test.tsx
+@@ -218,7 +218,7 @@ describe("Timeline", () => {
+     expect(container.textContent).toContain("Run time");
+     expect(container.textContent).toContain("Tokens used");
+     expect(container.textContent).toContain("45m");
+-    expect(container.textContent).toContain("3K");
++    expect(container.textContent).toContain("3\u00a0k");
+ 
+     const footer = Array.from(container.querySelectorAll("div")).find((element) =>
+       element.textContent?.includes("2 runs") && element.textContent.includes("Range"),
+@@ -340,8 +340,8 @@ describe("Timeline", () => {
+     await flushReact();
+ 
+     expect(container.textContent).toContain("Tokens used");
+-    expect(container.textContent).toContain("2K");
+-    expect(container.textContent).not.toContain("4K");
++    expect(container.textContent).toContain("2\u00a0k");
++    expect(container.textContent).not.toContain("4\u00a0k");
+   });
+ 
+   it("summarizes only runs that overlap the visible timeline window", () => {
+diff --git a/ui/src/pages/Timeline.tsx b/ui/src/pages/Timeline.tsx
+index 125a347ca..7dc2eaa56 100644
+--- a/ui/src/pages/Timeline.tsx
++++ b/ui/src/pages/Timeline.tsx
+@@ -136,11 +136,11 @@ function rangeError(range: DateRangeState): string | null {
+ }
+ 
+ function formatInteger(value: number): string {
+-  return new Intl.NumberFormat("en-US").format(value);
++  return new Intl.NumberFormat("fr-BE").format(value);
+ }
+ 
+ function formatCompactInteger(value: number): string {
+-  return new Intl.NumberFormat("en-US", {
++  return new Intl.NumberFormat("fr-BE", {
+     notation: "compact",
+     maximumFractionDigits: 1,
+   }).format(value);
+@@ -530,7 +530,7 @@ export function Timeline({ embedded = false }: { embedded?: boolean } = {}) {
+             <div className="flex flex-wrap items-center justify-between gap-3">
+               <p className="text-xs text-muted-foreground">
+                 {data.spans.length} run{data.spans.length === 1 ? "" : "s"} ·{" "}
+-                {new Date(data.window.from).toLocaleString()} to {new Date(data.window.to).toLocaleString()}
++                {new Date(data.window.from).toLocaleString("fr-BE")} to {new Date(data.window.to).toLocaleString("fr-BE")}
+                 {data.window.capped ? " · window capped" : ""}
+               </p>
+               {rangeControls}
+diff --git a/ui/src/pages/apps/Browse.tsx b/ui/src/pages/apps/Browse.tsx
+index f79226594..783937a89 100644
+--- a/ui/src/pages/apps/Browse.tsx
++++ b/ui/src/pages/apps/Browse.tsx
+@@ -934,7 +934,7 @@ export function Browse({ renderAccountDetails = (connection) => connection.conne
+       {accountLoadErrors.length ? <p role="alert" className="text-sm text-destructive">Couldn’t load {Array.from(new Set(accountLoadErrors)).join(" or ")} accounts. Use Refresh in the connection’s menu to try again.</p> : null}
+ 
+       {!loading && catalogRows.length > 0 ? <nav aria-label="Connector catalog pages" className="flex flex-wrap items-center justify-between gap-3 text-sm">
+-        <p className="text-muted-foreground" role="status">{pageStart + 1}–{Math.min(pageStart + CATALOG_PAGE_SIZE, catalogRows.length)} of {catalogRows.length.toLocaleString()} connectors</p>
++        <p className="text-muted-foreground" role="status">{pageStart + 1}–{Math.min(pageStart + CATALOG_PAGE_SIZE, catalogRows.length)} of {catalogRows.length.toLocaleString("fr-BE")} connectors</p>
+         <div className="flex items-center gap-2">
+           <Button variant="outline" size="sm" disabled={currentPage === 1} onClick={() => { setPage(currentPage - 1); catalogTop.current?.scrollIntoView?.({ block: "start" }); }}>Previous</Button>
+           <span className="text-xs text-muted-foreground">Page {currentPage} of {pageCount}</span>
+diff --git a/ui/src/pages/apps/app-detail/ActionTestDialog.tsx b/ui/src/pages/apps/app-detail/ActionTestDialog.tsx
+index 698b834e0..50a7608b8 100644
+--- a/ui/src/pages/apps/app-detail/ActionTestDialog.tsx
++++ b/ui/src/pages/apps/app-detail/ActionTestDialog.tsx
+@@ -682,7 +682,7 @@ function ProviderPendingResult({ pending, appName, connectionId, agent }: { pend
+       {pending.links.length === 0 && !pending.resumeTool && <p>Open the provider dashboard to complete this request.</p>}
+       {pending.executionId && <p>Execution: <code className="break-all">{pending.executionId}</code></p>}
+       {pending.elicitationId && <p>Request: <code className="break-all">{pending.elicitationId}</code></p>}
+-      {pending.expiresAt && <p>Approval expires {new Date(pending.expiresAt).toLocaleTimeString()}.</p>}
++      {pending.expiresAt && <p>Approval expires {new Date(pending.expiresAt).toLocaleTimeString("fr-BE")}.</p>}
+       {pending.resumeTool && agent ? <ProviderResumeControls pending={pending} connectionId={connectionId} agent={agent} onResult={setResumed} /> :
+       <p className="text-muted-foreground">{pending.resumeTool
+         ? `After approval, test the ${pending.resumeTool} action with this execution ID. Do not start the original action again.`
+diff --git a/ui/src/pages/apps/chat/GitHubChatSetup.tsx b/ui/src/pages/apps/chat/GitHubChatSetup.tsx
+index ba8bbbf7d..b2b7d6fdf 100644
+--- a/ui/src/pages/apps/chat/GitHubChatSetup.tsx
++++ b/ui/src/pages/apps/chat/GitHubChatSetup.tsx
+@@ -437,7 +437,7 @@ export function GitHubChatSetup() {
+                   </Button>
+                   <p className="mt-2 text-xs text-muted-foreground">
+                     Registration expires at{" "}
+-                    {new Date(registration.expiresAt).toLocaleTimeString()}.
++                    {new Date(registration.expiresAt).toLocaleTimeString("fr-BE")}.
+                   </p>
+                 </form>
+               )}
+diff --git a/ui/src/pages/audit/AuditFeed.production.tsx b/ui/src/pages/audit/AuditFeed.production.tsx
+index 12a78ceb9..91bb00787 100644
+--- a/ui/src/pages/audit/AuditFeed.production.tsx
++++ b/ui/src/pages/audit/AuditFeed.production.tsx
+@@ -227,7 +227,7 @@ function AuditRow({
+         <time
+           className="shrink-0 whitespace-nowrap text-xs text-muted-foreground"
+           dateTime={record.createdAt}
+-          title={new Date(record.createdAt).toLocaleString()}
++          title={new Date(record.createdAt).toLocaleString("fr-BE")}
+         >
+           {relativeTime(record.createdAt)}
+         </time>
+diff --git a/ui/src/pages/audit/AuditFeed.tsx b/ui/src/pages/audit/AuditFeed.tsx
+index 7d375b9c2..c2f7f4d84 100644
+--- a/ui/src/pages/audit/AuditFeed.tsx
++++ b/ui/src/pages/audit/AuditFeed.tsx
+@@ -249,7 +249,7 @@ function AuditRow({
+         <time
+           className="shrink-0 whitespace-nowrap text-xs text-muted-foreground"
+           dateTime={record.createdAt}
+-          title={new Date(record.createdAt).toLocaleString()}
++          title={new Date(record.createdAt).toLocaleString("fr-BE")}
+         >
+           {relativeTime(record.createdAt)}
+         </time>
+diff --git a/ui/src/pages/secrets/ImportFromVaultDialog.tsx b/ui/src/pages/secrets/ImportFromVaultDialog.tsx
+index 473148855..83a44576e 100644
+--- a/ui/src/pages/secrets/ImportFromVaultDialog.tsx
++++ b/ui/src/pages/secrets/ImportFromVaultDialog.tsx
+@@ -188,7 +188,7 @@ function formatRelativeShort(value: string | null | undefined): string {
+   const date = new Date(value);
+   if (Number.isNaN(date.getTime())) return "—";
+   const diff = Date.now() - date.getTime();
+-  if (diff < 0) return date.toLocaleDateString();
++  if (diff < 0) return date.toLocaleDateString("fr-BE");
+   const seconds = Math.floor(diff / 1000);
+   if (seconds < 60) return `${seconds}s ago`;
+   const minutes = Math.floor(seconds / 60);
+@@ -197,7 +197,7 @@ function formatRelativeShort(value: string | null | undefined): string {
+   if (hours < 48) return `${hours}h ago`;
+   const days = Math.floor(hours / 24);
+   if (days < 30) return `${days}d ago`;
+-  return date.toLocaleDateString();
++  return date.toLocaleDateString("fr-BE");
+ }
+ 
+ function readableErrorMessage(error: unknown): string {
+diff --git a/ui/src/pages/skills/SkillPackagePreview.tsx b/ui/src/pages/skills/SkillPackagePreview.tsx
+index e7a654dda..616176b39 100644
+--- a/ui/src/pages/skills/SkillPackagePreview.tsx
++++ b/ui/src/pages/skills/SkillPackagePreview.tsx
+@@ -64,7 +64,7 @@ export function SkillPackagePreview({ companyId, repository, commitSha, skill, i
+         <div className="flex min-w-0 flex-1 flex-col">
+           <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border bg-muted/30 px-3 py-2 text-xs">
+             <span className="break-all font-mono">{filePath}</span>
+-            {file && <span className="text-muted-foreground">{file.sizeBytes.toLocaleString()} bytes{file.executable ? ' · executable' : ''}</span>}
++            {file && <span className="text-muted-foreground">{file.sizeBytes.toLocaleString("fr-BE")} bytes{file.executable ? ' · executable' : ''}</span>}
+           </div>
+           <div className="max-h-(--sz-480px) min-h-40 overflow-auto p-3">
+             {preview.isFetching && <p role="status" className="text-sm text-muted-foreground">Loading preview…</p>}
+diff --git a/ui/src/pages/tools/SmokeLabTab.tsx b/ui/src/pages/tools/SmokeLabTab.tsx
+index df3c6f33b..4bcb2144b 100644
+--- a/ui/src/pages/tools/SmokeLabTab.tsx
++++ b/ui/src/pages/tools/SmokeLabTab.tsx
+@@ -43,7 +43,7 @@ function formatTime(value: string | Date | null | undefined): string {
+   if (!value) return "—";
+   const date = new Date(value as string | Date);
+   if (Number.isNaN(date.getTime())) return "—";
+-  return new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(date);
++  return new Intl.DateTimeFormat("fr-BE", { dateStyle: "medium", timeStyle: "short" }).format(date);
+ }
+ 
+ function serviceTone(status: string): "success" | "warn" | "error" | "muted" {
+diff --git a/ui/src/pages/tools/shared.tsx b/ui/src/pages/tools/shared.tsx
+index 537e169e5..a9519191b 100644
+--- a/ui/src/pages/tools/shared.tsx
++++ b/ui/src/pages/tools/shared.tsx
+@@ -131,7 +131,7 @@ export function RelativeTime({ value }: { value: Date | string | null | undefine
+     text = isFuture ? `in ${value}` : `${value} ago`;
+   }
+   return (
+-    <span title={date.toLocaleString()} className="text-muted-foreground">
++    <span title={date.toLocaleString("fr-BE")} className="text-muted-foreground">
+       {text}
+     </span>
+   );
+-- 
+2.53.0
+

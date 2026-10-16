@@ -30,6 +30,21 @@
       "Code": "10/15",
       "Period": "N",
       "Value": "500"
+    },
+    {
+      "Code": "22",
+      "Period": "N",
+      "Value": "350000"
+    },
+    {
+      "Code": "9904",
+      "Period": "N",
+      "Value": "42000"
+    },
+    {
+      "Code": "9904",
+      "Period": "NM1",
+      "Value": "-8000"
     }
   ]
 }

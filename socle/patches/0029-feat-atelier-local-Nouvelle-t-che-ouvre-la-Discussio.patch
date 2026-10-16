@@ -1,0 +1,170 @@
+From f27c15ccba7d642249df03e488ae5221d3004c6c Mon Sep 17 00:00:00 2001
+From: Jean-Baptiste Dhondt <114347858+warrox1993@users.noreply.github.com>
+Date: Fri, 16 Oct 2026 13:11:45 +0200
+Subject: [PATCH] =?UTF-8?q?feat(atelier-local):=20=C2=AB=20Nouvelle=20t?=
+ =?UTF-8?q?=C3=A2che=20=C2=BB=20ouvre=20la=20Discussion=20de=20l'atelier?=
+ =?UTF-8?q?=20quand=20le=20plugin=20est=20pr=C3=AAt?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Sans l'atelier, le dialogue de création d'issue reste inchangé.
+
+Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01DP85vPq2MHkZg8VNtRvCzB
+---
+ ui/src/components/Sidebar.test.tsx | 56 +++++++++++++++++++++++++++++-
+ ui/src/components/Sidebar.tsx      | 28 +++++++++++++--
+ 2 files changed, 80 insertions(+), 4 deletions(-)
+
+diff --git a/ui/src/components/Sidebar.test.tsx b/ui/src/components/Sidebar.test.tsx
+index 8f9b33c11..34f0527fe 100644
+--- a/ui/src/components/Sidebar.test.tsx
++++ b/ui/src/components/Sidebar.test.tsx
+@@ -20,7 +20,14 @@ const mockInstanceSettingsApi = vi.hoisted(() => ({
+   getExperimental: vi.fn(),
+ }));
+ 
++const mockNavigate = vi.hoisted(() => vi.fn());
++const mockOpenNewIssue = vi.hoisted(() => vi.fn());
++const mockPluginsApi = vi.hoisted(() => ({ listUiContributions: vi.fn() }));
++
++vi.mock("../api/plugins", () => ({ pluginsApi: mockPluginsApi }));
++
+ vi.mock("@/lib/router", () => ({
++  useNavigate: () => mockNavigate,
+   NavLink: ({ to, children, className, ...props }: {
+     to: string;
+     children: ReactNode;
+@@ -41,7 +48,7 @@ vi.mock("../context/DialogContext", () => ({
+     openNewIssue: vi.fn(),
+   }),
+   useDialogActions: () => ({
+-    openNewIssue: vi.fn(),
++    openNewIssue: mockOpenNewIssue,
+   }),
+ }));
+ 
+@@ -158,6 +165,7 @@ describe("Sidebar", () => {
+     container = document.createElement("div");
+     document.body.appendChild(container);
+     mockHeartbeatsApi.liveRunsForCompany.mockResolvedValue([]);
++    mockPluginsApi.listUiContributions.mockResolvedValue([]);
+     mockAttentionApi.list.mockResolvedValue({ items: [] });
+     mockSidebar.isMobile = false;
+     mockSidebar.collapsed = false;
+@@ -173,6 +181,52 @@ describe("Sidebar", () => {
+     vi.clearAllMocks();
+   });
+ 
++  const pageAtelier = { type: "page", id: "atelier-page", displayName: "Atelier marketing", exportName: "Page", routePath: "atelier" };
++  const contributionAtelier = {
++    pluginId: "p1",
++    pluginKey: "atelier.marketing-ia",
++    displayName: "Atelier marketing",
++    version: "1.0.0",
++    uiEntryFile: "index.js",
++    slots: [pageAtelier],
++    launchers: [],
++  };
++
++  function boutonNouvelleTache() {
++    return [...container.querySelectorAll("button")].find((b) => b.textContent?.trim() === "Nouvelle tâche") as HTMLButtonElement;
++  }
++
++  it("ouvre la Discussion de l'atelier quand le plugin est prêt", async () => {
++    mockPluginsApi.listUiContributions.mockResolvedValue([contributionAtelier]);
++    const root = await renderSidebar();
++
++    const bouton = boutonNouvelleTache();
++    expect(bouton.getAttribute("aria-label")).toBe("Discuter avec le Coordinateur (nouvelle demande, question, action)");
++    flushSync(() => {
++      bouton.click();
++    });
++
++    expect(mockNavigate).toHaveBeenCalledWith("/atelier/discussion");
++    expect(mockOpenNewIssue).not.toHaveBeenCalled();
++    flushSync(() => {
++      root.unmount();
++    });
++  });
++
++  it("ouvre le dialogue de création sans l'atelier", async () => {
++    const root = await renderSidebar();
++
++    flushSync(() => {
++      boutonNouvelleTache().click();
++    });
++
++    expect(mockOpenNewIssue).toHaveBeenCalledTimes(1);
++    expect(mockNavigate).not.toHaveBeenCalled();
++    flushSync(() => {
++      root.unmount();
++    });
++  });
++
+   it("keeps the default sidebar edge borderless", async () => {
+     mockInstanceSettingsApi.getExperimental.mockResolvedValue({ enableIsolatedWorkspaces: false });
+     const root = await renderSidebar();
+diff --git a/ui/src/components/Sidebar.tsx b/ui/src/components/Sidebar.tsx
+index 2e7efba83..7d6bebea4 100644
+--- a/ui/src/components/Sidebar.tsx
++++ b/ui/src/components/Sidebar.tsx
+@@ -47,11 +47,22 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
+ import { cn, SIDEBAR_RAIL_HIDDEN_LABEL } from "../lib/utils";
+ import { PluginSlotOutlet } from "@/plugins/slots";
+ import { PluginLauncherOutlet } from "@/plugins/launchers";
++import { pluginsApi } from "../api/plugins";
++import { useNavigate } from "@/lib/router";
++import { atelierDisponible, CHEMIN_PAGE_ATELIER } from "./CompanyHomeRedirect";
+ import { SidebarCompanyMenu } from "./SidebarCompanyMenu";
+ import { primarySidebarStyles } from "./primary-sidebar-styles";
+ 
+ export function Sidebar({ children }: { children?: ReactNode }) {
+   const { openNewIssue } = useDialogActions();
++  const navigate = useNavigate();
++  // Atelier marketing prêt : « Nouvelle tâche » ouvre la Discussion avec le Coordinateur
++  // au lieu du dialogue de création d'issue (même détection que l'accueil d'entreprise).
++  const { data: contributionsPlugins } = useQuery({
++    queryKey: queryKeys.plugins.uiContributions,
++    queryFn: () => pluginsApi.listUiContributions(),
++  });
++  const atelierPret = atelierDisponible(contributionsPlugins);
+   const { enabled: agentChatEnabled } = useAgentChatEnabled();
+   // Every labeled section is collapsible (session-scoped, default open) —
+   // one policy across static nav groups and the data-driven sections.
+@@ -158,9 +169,18 @@ export function Sidebar({ children }: { children?: ReactNode }) {
+           {(() => {
+             const newTaskButton = (
+               <button
+-                onClick={() => openNewIssue()}
++                onClick={() =>
++                  atelierPret ? navigate(`/${CHEMIN_PAGE_ATELIER}/discussion`) : openNewIssue()
++                }
+                 data-slot="icon-button"
+-                aria-label={rail ? "Nouvelle tâche" : undefined}
++                aria-label={
++                  atelierPret
++                    ? "Discuter avec le Coordinateur (nouvelle demande, question, action)"
++                    : rail
++                      ? "Nouvelle tâche"
++                      : undefined
++                }
++                title={atelierPret ? "Discuter avec le Coordinateur (nouvelle demande, question, action)" : undefined}
+                 className={cn(
+                   "flex items-center gap-2.5 mx-2 rounded-lg px-2 py-1.5 pointer-coarse:py-1 text-(length:--text-compact) font-medium text-foreground/80 transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
+                 )}
+@@ -172,7 +192,9 @@ export function Sidebar({ children }: { children?: ReactNode }) {
+             return rail ? (
+               <Tooltip>
+                 <TooltipTrigger asChild>{newTaskButton}</TooltipTrigger>
+-                <TooltipContent side="right">Nouvelle tâche</TooltipContent>
++                <TooltipContent side="right">
++                  {atelierPret ? "Discuter avec le Coordinateur (nouvelle demande, question, action)" : "Nouvelle tâche"}
++                </TooltipContent>
+               </Tooltip>
+             ) : (
+               newTaskButton
+-- 
+2.53.0
+

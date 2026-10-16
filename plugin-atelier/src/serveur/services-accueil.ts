@@ -45,6 +45,8 @@ export interface ElementAccueil {
   lien: string;
   /** Libellé du bouton d'action de la ligne. */
   action: string;
+  /** Question posée par l'équipe (carte native en attente) : toujours en tête de « À faire ». */
+  enTete?: boolean;
 }
 
 export interface MissionResumee {
@@ -102,10 +104,10 @@ const RANG_TYPE: Readonly<Record<TypeElementAccueil, number>> = {
   information_manquante: 5,
 };
 
-/** Tri par urgence, puis par type, puis par titre (ordre stable et prévisible). */
+/** Tri : questions de l'équipe d'abord, puis par urgence, par type et par titre (ordre stable et prévisible). */
 export function trierElements(elements: readonly ElementAccueil[]): ElementAccueil[] {
   return [...elements].sort(
-    (a, b) => RANG_URGENCE[a.urgence] - RANG_URGENCE[b.urgence] || RANG_TYPE[a.type] - RANG_TYPE[b.type] || a.titre.localeCompare(b.titre, "fr"),
+    (a, b) => Number(Boolean(b.enTete)) - Number(Boolean(a.enTete)) || RANG_URGENCE[a.urgence] - RANG_URGENCE[b.urgence] || RANG_TYPE[a.type] - RANG_TYPE[b.type] || a.titre.localeCompare(b.titre, "fr"),
   );
 }
 
@@ -178,6 +180,25 @@ const DemanderEntree = z
 /* Routes                                                              */
 /* ------------------------------------------------------------------ */
 
+/** Appels à l'hôte simultanés au plus, pour l'accueil. */
+const CONCURRENCE_HOTE = 8;
+const MAX_PORTES_QUESTIONS = 60;
+const MAX_TACHES_QUESTIONS = 40;
+
+/** Applique `f` à chaque élément avec au plus `n` appels en cours ; l'ordre des résultats suit celui des éléments. */
+async function enParallele<T, R>(elements: readonly T[], n: number, f: (e: T) => Promise<R>): Promise<R[]> {
+  const resultats = new Array<R>(elements.length);
+  let suivant = 0;
+  const ouvrier = async () => {
+    while (suivant < elements.length) {
+      const i = suivant++;
+      resultats[i] = await f(elements[i]!);
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(n, elements.length) }, ouvrier));
+  return resultats;
+}
+
 export function routesAccueil(d: DependancesAccueil): Partial<Record<CleRouteApi, GestionnaireRoute>> {
   const { ctx, base } = d;
   const routes: Partial<Record<CleRouteApi, GestionnaireRoute>> = {};
@@ -228,6 +249,43 @@ export function routesAccueil(d: DependancesAccueil): Partial<Record<CleRouteApi
         });
       }
     }
+    return elements;
+  }
+
+  /**
+   * Questions de l'équipe (16/10/2026) : cartes natives `ask_user_questions` ou `request_confirmation`
+   * en attente sur les tâches de coordination (brief des campagnes, tâches parentes des livrables sous
+   * porte). Le Coordinateur y demande une information introuvable ou une décision : en tête de « À faire ».
+   */
+  async function elementsQuestions(companyId: string): Promise<ElementAccueil[]> {
+    const [campagnes, portes] = await Promise.all([
+      sansEchec("campagnes", () => base.listerCampagnes(companyId), [] as Awaited<ReturnType<BaseAtelier["listerCampagnes"]>>),
+      sansEchec("portes", () => base.listerPortes(companyId), [] as Awaited<ReturnType<BaseAtelier["listerPortes"]>>),
+    ]);
+    const candidates = new Set<string>(campagnes.map((c) => c.briefIssueId).filter((x): x is string => typeof x === "string" && x !== ""));
+    const actives = portes.filter((x) => x.actif);
+    if (actives.length > MAX_PORTES_QUESTIONS) ctx.logger.warn("Accueil : questions de l'équipe, livrables sous porte tronqués", { total: actives.length, lus: MAX_PORTES_QUESTIONS });
+    const parents = await enParallele(actives.slice(0, MAX_PORTES_QUESTIONS), CONCURRENCE_HOTE, async (p) => (await sansEchec("tâche", () => ctx.issues.get(p.issueId, companyId), null))?.parentId ?? null);
+    for (const parentId of parents) if (parentId) candidates.add(parentId);
+    if (candidates.size > MAX_TACHES_QUESTIONS) ctx.logger.warn("Accueil : questions de l'équipe, tâches de coordination tronquées", { total: candidates.size, lues: MAX_TACHES_QUESTIONS });
+    const lots = await enParallele([...candidates].slice(0, MAX_TACHES_QUESTIONS), CONCURRENCE_HOTE, async (issueId) => {
+      const issue = await sansEchec("tâche", () => ctx.issues.get(issueId, companyId), null);
+      if (!issue || issue.companyId !== companyId || issue.status === "done" || issue.status === "cancelled") return [];
+      const cartes = await sansEchec("cartes", () => ctx.issues.listInteractions(issue.id, companyId), [] as Awaited<ReturnType<PluginContext["issues"]["listInteractions"]>>);
+      const trouves: ElementAccueil[] = [];
+      for (const carte of cartes) {
+        if (carte.status !== "pending" || (carte.kind !== "ask_user_questions" && carte.kind !== "request_confirmation")) continue;
+        const question = carte.kind === "ask_user_questions";
+        trouves.push({
+          id: `question:${carte.id}`, type: "information_manquante", urgence: "haute", enTete: true,
+          titre: carte.title?.trim() || (question ? "L'équipe vous pose une question" : "L'équipe attend votre confirmation"),
+          raison: `${question ? "Il manque une information que l'équipe ne peut pas obtenir seule" : "Une décision vous revient"} (${issue.identifier ?? "tâche"} · ${issue.title}). Le travail attend votre réponse.`,
+          lien: lienTache(issue), action: question ? "Répondre" : "Confirmer",
+        });
+      }
+      return trouves;
+    });
+    const elements: ElementAccueil[] = lots.flat();
     return elements;
   }
 
@@ -306,12 +364,13 @@ export function routesAccueil(d: DependancesAccueil): Partial<Record<CleRouteApi
   routes["accueil.lister"] = async (r) => {
     exigerHumain(r.acteur, "L'accueil");
     const c = r.companyId;
-    const [taches, approbations, connaissances, manquants, demandes] = await Promise.all([
+    const [taches, approbations, connaissances, manquants, demandes, questions] = await Promise.all([
       sansEchec("tâches", () => elementsTaches(c), [] as ElementAccueil[]),
       sansEchec("approbations", () => elementsApprobations(c), [] as ElementAccueil[]),
       sansEchec("connaissances", () => elementsConnaissances(c), [] as ElementAccueil[]),
       elementsManquants(c),
       sansEchec("missions", () => ctx.issues.list({ companyId: c, originKind: ORIGINE_DEMANDE as never, includePluginOperations: true, limit: 50 }), [] as Issue[]),
+      sansEchec("questions", () => elementsQuestions(c), [] as ElementAccueil[]),
     ]);
     const projets = new Map<string, { id: string; nom: string } | null>();
     const projetDe = async (issue: Issue) => {
@@ -337,7 +396,7 @@ export function routesAccueil(d: DependancesAccueil): Partial<Record<CleRouteApi
           };
         }),
     );
-    return { corps: { companyId: c, elements: trierElements([...taches, ...approbations, ...connaissances, ...manquants]), missions } };
+    return { corps: { companyId: c, elements: trierElements([...questions, ...taches, ...approbations, ...connaissances, ...manquants]), missions } };
   };
 
   routes["equipe.demander"] = async (r) => {

@@ -397,28 +397,64 @@ export function requeteDetails(contexte: ContexteRecherche, filtres: FiltresReso
 /* Cache des vecteurs, par entreprise                                  */
 /* ------------------------------------------------------------------ */
 
+/** Limites du cache des vecteurs (nombre d'entreprises et octets de vecteurs gardés en mémoire). */
+export interface LimitesCacheVecteurs {
+  entreprisesMax: number;
+  octetsMax: number;
+}
+
+export const LIMITES_CACHE_VECTEURS: Readonly<LimitesCacheVecteurs> = Object.freeze({
+  entreprisesMax: 32,
+  octetsMax: 512 * 1024 * 1024,
+});
+
 /**
  * Cache en mémoire des vecteurs, indexé par entreprise ; la clé interne (index, version de l'index,
  * empreinte du modèle) le recharge dès qu'elle change. Une recherche ne lit que l'entrée de son entreprise.
+ *
+ * Borné : au-delà de `entreprisesMax` entrées ou de `octetsMax` octets de vecteurs, les entrées les
+ * moins récemment lues sont retirées (elles seront rechargées depuis la base à la recherche suivante).
+ * Une entrée plus grosse que `octetsMax` à elle seule n'est pas gardée.
  */
 export class CacheVecteurs {
+  /** Ordre d'insertion de la `Map` = ordre d'usage : la première entrée est la moins récemment lue. */
   private readonly entrees = new Map<string, EntreeCache>();
+  private octets = 0;
+  private readonly limites: LimitesCacheVecteurs;
+
+  constructor(limites: Partial<LimitesCacheVecteurs> = {}) {
+    this.limites = { ...LIMITES_CACHE_VECTEURS, ...limites };
+  }
 
   obtenir(companyId: string, cle: string): EntreeCache | undefined {
     const e = this.entrees.get(companyId);
-    return e && e.cle === cle && e.companyId === companyId ? e : undefined;
+    if (!e || e.cle !== cle || e.companyId !== companyId) return undefined;
+    this.entrees.delete(companyId);
+    this.entrees.set(companyId, e);
+    return e;
   }
 
   ranger(entree: EntreeCache): void {
+    this.invalider(entree.companyId);
+    const taille = entree.matrice.donnees.byteLength;
+    if (taille > this.limites.octetsMax) return;
+    while (this.entrees.size > 0 && (this.entrees.size >= this.limites.entreprisesMax || this.octets + taille > this.limites.octetsMax)) {
+      this.invalider(this.entrees.keys().next().value as string);
+    }
     this.entrees.set(entree.companyId, entree);
+    this.octets += taille;
   }
 
   invalider(companyId: string): void {
+    const e = this.entrees.get(companyId);
+    if (!e) return;
+    this.octets -= e.matrice.donnees.byteLength;
     this.entrees.delete(companyId);
   }
 
   vider(): void {
     this.entrees.clear();
+    this.octets = 0;
   }
 
   entreprises(): string[] {

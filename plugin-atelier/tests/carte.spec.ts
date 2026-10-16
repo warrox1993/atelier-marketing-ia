@@ -81,7 +81,7 @@ describe("route prospects.carte", () => {
     expect(typeof c.points[0]!.confiance).toBe("number");
     expect(c.etablissements).toEqual([{ nom: "Bureau Liège", code: "bureau-liege", adresse: "Rue X 1", lat: 50.6412, lon: 5.5718, confirme: true }]);
     // Mêmes filtres que la liste ; la pagination de l'appelant est ignorée, la carte parcourt les pages.
-    expect(requeteLister).toEqual([{ companyId: SOC, statuts: "nouveau", page: "1", parPage: "100" }, { companyId: SOC, statuts: "nouveau", page: "2", parPage: "100" }]);
+    expect(requeteLister).toEqual([{ companyId: SOC, statuts: "nouveau", vue: "complete", page: "1", parPage: "100" }, { companyId: SOC, statuts: "nouveau", vue: "complete", page: "2", parPage: "100" }]);
   });
 
   it("avec qualifiesSeulement : un seul parcours, la liste paginée n'est jamais rappelée", async () => {

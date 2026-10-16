@@ -1,0 +1,515 @@
+From fe5beef2e5b9c457731847e14f0016b5ee806bd7 Mon Sep 17 00:00:00 2001
+From: Jean-Baptiste Dhondt <114347858+warrox1993@users.noreply.github.com>
+Date: Fri, 16 Oct 2026 14:17:07 +0200
+Subject: [PATCH] =?UTF-8?q?feat(ui):=20barre=20du=20bas=20mobile=20:=20Ate?=
+ =?UTF-8?q?lier,=20cibles=20tactiles=20de=2044=20px,=20=C3=A9tiquettes=20d?=
+ =?UTF-8?q?e=2012=20px?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+- l'Atelier remplace Accueil quand le plugin est prêt, et Nouvelle tâche ouvre la Discussion
+- la barre du bas est masquée quand le tiroir du menu est ouvert (plus de superposition)
+- burger, liens du tiroir et bouton Nouvelle tâche : 44 px minimum en tactile
+- étiquettes et pastilles de la barre du bas à 12 px, libellés en français
+
+Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01DP85vPq2MHkZg8VNtRvCzB
+---
+ .../components/BreadcrumbBar.production.tsx   |   2 +-
+ ui/src/components/BreadcrumbBar.test.tsx      |   4 +
+ ui/src/components/BreadcrumbBar.tsx           |   2 +-
+ ui/src/components/Layout.test.tsx             |  30 +++-
+ ui/src/components/Layout.tsx                  |   2 +-
+ ui/src/components/MobileBottomNav.test.tsx    | 144 ++++++++++++++++++
+ ui/src/components/MobileBottomNav.tsx         |  69 ++++++---
+ ui/src/components/Sidebar.tsx                 |   6 +-
+ ui/src/components/SidebarNavItem.tsx          |   2 +-
+ 9 files changed, 236 insertions(+), 25 deletions(-)
+ create mode 100644 ui/src/components/MobileBottomNav.test.tsx
+
+diff --git a/ui/src/components/BreadcrumbBar.production.tsx b/ui/src/components/BreadcrumbBar.production.tsx
+index 4563df0c6..19f8c4698 100644
+--- a/ui/src/components/BreadcrumbBar.production.tsx
++++ b/ui/src/components/BreadcrumbBar.production.tsx
+@@ -74,7 +74,7 @@ export function BreadcrumbBar() {
+     <Button
+       variant="ghost"
+       size="icon-sm"
+-      className="mr-2 shrink-0"
++      className="mr-2 size-11 shrink-0"
+       onClick={toggleSidebar}
+       aria-label="Open sidebar"
+     >
+diff --git a/ui/src/components/BreadcrumbBar.test.tsx b/ui/src/components/BreadcrumbBar.test.tsx
+index 8ba15e379..dccbd437a 100644
+--- a/ui/src/components/BreadcrumbBar.test.tsx
++++ b/ui/src/components/BreadcrumbBar.test.tsx
+@@ -157,6 +157,10 @@ describe("BreadcrumbBar", () => {
+     expect(identifier?.previousElementSibling?.textContent).toBe("Hire your first engineer and create a hiring plan");
+     expect(identifier?.previousElementSibling?.className).toContain("truncate");
+     expect(container.querySelector('button[aria-label="Open sidebar"]')).not.toBeNull();
++    // Cible tactile : 44 px (size-11) au lieu des 36 px de size-9.
++    const burger = container.querySelector('button[aria-label="Open sidebar"]') as HTMLElement;
++    expect(burger.className).toContain("size-11");
++    expect(burger.className).not.toContain("size-9");
+   });
+ 
+   it("renders a page toolbar in the same persistent row as the task breadcrumb", async () => {
+diff --git a/ui/src/components/BreadcrumbBar.tsx b/ui/src/components/BreadcrumbBar.tsx
+index 9684c360b..6b4625e7a 100644
+--- a/ui/src/components/BreadcrumbBar.tsx
++++ b/ui/src/components/BreadcrumbBar.tsx
+@@ -100,7 +100,7 @@ export function BreadcrumbBar({ taskDetailLayout = false }: { taskDetailLayout?:
+     <Button
+       variant="ghost"
+       size="icon-sm"
+-      className="mr-2 shrink-0"
++      className="mr-2 size-11 shrink-0"
+       onClick={toggleSidebar}
+       aria-label="Open sidebar"
+     >
+diff --git a/ui/src/components/Layout.test.tsx b/ui/src/components/Layout.test.tsx
+index ff30b5524..a1c135a64 100644
+--- a/ui/src/components/Layout.test.tsx
++++ b/ui/src/components/Layout.test.tsx
+@@ -156,7 +156,9 @@ vi.mock("./AnnouncementWell", () => ({
+ }));
+ 
+ vi.mock("./MobileBottomNav", () => ({
+-  MobileBottomNav: () => null,
++  MobileBottomNav: ({ visible }: { visible: boolean }) => (
++    <nav data-testid="barre-basse" data-visible={String(visible)} />
++  ),
+ }));
+ 
+ vi.mock("./WorktreeBanner", () => ({
+@@ -607,6 +609,32 @@ describe("Layout", () => {
+     });
+   });
+ 
++  it("masque la barre du bas quand le tiroir mobile est ouvert, sans superposition", async () => {
++    mockSidebarState.isMobile = true;
++    const rendre = async () => {
++      const root = createRoot(container);
++      const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
++      await act(async () => {
++        root.render(
++          <QueryClientProvider client={queryClient}>
++            <Layout />
++          </QueryClientProvider>,
++        );
++      });
++      await flushReact();
++      const valeur = container.querySelector('[data-testid="barre-basse"]')?.getAttribute("data-visible");
++      await act(async () => {
++        root.unmount();
++      });
++      return valeur;
++    };
++
++    mockSidebarState.sidebarOpen = true;
++    expect(await rendre()).toBe("false");
++    mockSidebarState.sidebarOpen = false;
++    expect(await rendre()).toBe("true");
++  });
++
+   it("renders a mobile company settings selector on company settings routes", async () => {
+     currentPathname = "/PAP/company/settings/secrets";
+     mockSidebarState.isMobile = true;
+diff --git a/ui/src/components/Layout.tsx b/ui/src/components/Layout.tsx
+index 385941d6c..85461ec6a 100644
+--- a/ui/src/components/Layout.tsx
++++ b/ui/src/components/Layout.tsx
+@@ -743,7 +743,7 @@ export function Layout({ sidebarSections }: { sidebarSections?: ReactNode }) {
+           </div>
+         </div>
+       </div>
+-      {isMobile && <MobileBottomNav visible={mobileNavVisible} />}
++      {isMobile && <MobileBottomNav visible={mobileNavVisible && !sidebarOpen} />}
+       <CommandPalette />
+       <NewIssueDialog />
+       <NewProjectDialog />
+diff --git a/ui/src/components/MobileBottomNav.test.tsx b/ui/src/components/MobileBottomNav.test.tsx
+new file mode 100644
+index 000000000..5e2d79125
+--- /dev/null
++++ b/ui/src/components/MobileBottomNav.test.tsx
+@@ -0,0 +1,144 @@
++// @vitest-environment jsdom
++
++import { type ReactNode } from "react";
++import { flushSync } from "react-dom";
++import { createRoot } from "react-dom/client";
++import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
++import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
++import { MobileBottomNav } from "./MobileBottomNav";
++
++const mockNavigate = vi.hoisted(() => vi.fn());
++const mockOpenNewIssue = vi.hoisted(() => vi.fn());
++const mockPluginsApi = vi.hoisted(() => ({ listUiContributions: vi.fn() }));
++const mockInboxBadge = vi.hoisted(() => ({ inbox: 0, failedRuns: 0 }));
++
++vi.mock("../api/plugins", () => ({ pluginsApi: mockPluginsApi }));
++
++vi.mock("@/lib/router", () => ({
++  useNavigate: () => mockNavigate,
++  useLocation: () => ({ pathname: "/" }),
++  NavLink: ({ to, children, className, ...props }: {
++    to: string;
++    children: ReactNode | ((state: { isActive: boolean }) => ReactNode);
++    className?: string | ((state: { isActive: boolean }) => string);
++  }) => (
++    <a
++      href={to}
++      className={typeof className === "function" ? className({ isActive: false }) : className}
++      {...props}
++    >
++      {typeof children === "function" ? children({ isActive: false }) : children}
++    </a>
++  ),
++}));
++
++vi.mock("../context/DialogContext", () => ({
++  useDialogActions: () => ({ openNewIssue: mockOpenNewIssue }),
++}));
++
++vi.mock("../context/CompanyContext", () => ({
++  useCompany: () => ({ selectedCompanyId: "company-1" }),
++}));
++
++vi.mock("../hooks/useInboxBadge", () => ({ useInboxBadge: () => mockInboxBadge }));
++vi.mock("@/hooks/useAgentChatEnabled", () => ({ useAgentChatEnabled: () => ({ enabled: false }) }));
++vi.mock("@/hooks/useCombinedInboxTasksEnabled", () => ({
++  useCombinedInboxTasksEnabled: () => ({ enabled: false }),
++}));
++
++const contributionAtelier = {
++  pluginId: "p1",
++  pluginKey: "atelier.marketing-ia",
++  displayName: "Atelier marketing",
++  version: "1.0.0",
++  uiEntryFile: "index.js",
++  slots: [{ type: "page", id: "atelier-page", displayName: "Atelier marketing", exportName: "Page", routePath: "atelier" }],
++  launchers: [],
++};
++
++async function flushReact() {
++  for (let index = 0; index < 5; index += 1) {
++    await Promise.resolve();
++    await new Promise((resolve) => window.setTimeout(resolve, 0));
++  }
++  flushSync(() => {});
++}
++
++describe("MobileBottomNav", () => {
++  let container: HTMLDivElement;
++
++  async function rendre(visible = true) {
++    const root = createRoot(container);
++    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
++    flushSync(() => {
++      root.render(
++        <QueryClientProvider client={queryClient}>
++          <MobileBottomNav visible={visible} />
++        </QueryClientProvider>,
++      );
++    });
++    await flushReact();
++    return root;
++  }
++
++  const libelles = () =>
++    [...container.querySelectorAll("nav span.leading-tight")].map((el) => el.textContent?.trim());
++  const boutonNouvelleTache = () =>
++    [...container.querySelectorAll("button")].find((b) => b.textContent?.trim() === "Nouvelle tâche") as HTMLButtonElement;
++
++  beforeEach(() => {
++    container = document.createElement("div");
++    document.body.appendChild(container);
++    mockPluginsApi.listUiContributions.mockResolvedValue([]);
++  });
++
++  afterEach(() => {
++    document.body.innerHTML = "";
++    vi.clearAllMocks();
++  });
++
++  it("sans l'atelier : Accueil mène au tableau de bord et Nouvelle tâche ouvre le dialogue", async () => {
++    const root = await rendre();
++    expect(libelles()).toEqual(["Accueil", "Tâches", "Nouvelle tâche", "Agents", "Boîte"]);
++    expect(container.querySelector('a[href="/dashboard"]')).not.toBeNull();
++    expect(container.querySelector('a[href="/atelier"]')).toBeNull();
++    boutonNouvelleTache().click();
++    expect(mockOpenNewIssue).toHaveBeenCalledTimes(1);
++    expect(mockNavigate).not.toHaveBeenCalled();
++    flushSync(() => root.unmount());
++  });
++
++  it("avec l'atelier : Atelier remplace Accueil et Nouvelle tâche ouvre la Discussion", async () => {
++    mockPluginsApi.listUiContributions.mockResolvedValue([contributionAtelier]);
++    const root = await rendre();
++    expect(libelles()).toEqual(["Atelier", "Tâches", "Nouvelle tâche", "Agents", "Boîte"]);
++    expect(container.querySelector('a[href="/atelier"]')).not.toBeNull();
++    expect(container.querySelector('a[href="/dashboard"]')).toBeNull();
++    boutonNouvelleTache().click();
++    expect(mockNavigate).toHaveBeenCalledWith("/atelier/discussion");
++    expect(mockOpenNewIssue).not.toHaveBeenCalled();
++    flushSync(() => root.unmount());
++  });
++
++  it("garde le libellé complet de la boîte de réception pour les lecteurs d'écran", async () => {
++    const root = await rendre();
++    expect(container.querySelector('a[aria-label="Boîte de réception"]')).not.toBeNull();
++    flushSync(() => root.unmount());
++  });
++
++  it("étiquettes à 12 px minimum (text-xs, plus de text-nano)", async () => {
++    const root = await rendre();
++    const nav = container.querySelector("nav") as HTMLElement;
++    expect(nav.innerHTML).not.toContain("text-nano");
++    expect(nav.querySelectorAll("a.text-xs, button.text-xs").length).toBe(5);
++    flushSync(() => root.unmount());
++  });
++
++  it("barre masquée (data-visible=false) et inerte quand visible est faux", async () => {
++    const root = await rendre(false);
++    const nav = container.querySelector("nav") as HTMLElement;
++    expect(nav.getAttribute("data-visible")).toBe("false");
++    expect(nav.hasAttribute("inert")).toBe(true);
++    flushSync(() => root.unmount());
++  });
++});
+diff --git a/ui/src/components/MobileBottomNav.tsx b/ui/src/components/MobileBottomNav.tsx
+index 2cda50955..52771b2a1 100644
+--- a/ui/src/components/MobileBottomNav.tsx
++++ b/ui/src/components/MobileBottomNav.tsx
+@@ -1,5 +1,6 @@
+ import { useMemo } from "react";
+-import { NavLink, useLocation } from "@/lib/router";
++import { useQuery } from "@tanstack/react-query";
++import { NavLink, useLocation, useNavigate } from "@/lib/router";
+ import {
+   House,
+   CircleCheck,
+@@ -7,6 +8,7 @@ import {
+   Users,
+   MessageCircle,
+   Inbox,
++  Sparkles,
+ } from "lucide-react";
+ import { useCompany } from "../context/CompanyContext";
+ import { useDialogActions } from "../context/DialogContext";
+@@ -16,6 +18,9 @@ import { useInboxBadge } from "../hooks/useInboxBadge";
+ import { useAgentChatEnabled } from "@/hooks/useAgentChatEnabled";
+ import { useCombinedInboxTasksEnabled } from "@/hooks/useCombinedInboxTasksEnabled";
+ import { Badge } from "@/components/ui/badge";
++import { pluginsApi } from "../api/plugins";
++import { queryKeys } from "../lib/queryKeys";
++import { atelierDisponible, CHEMIN_PAGE_ATELIER } from "./CompanyHomeRedirect";
+ 
+ interface MobileBottomNavProps {
+   visible: boolean;
+@@ -25,6 +30,8 @@ interface MobileNavLinkItem {
+   type: "link";
+   to: string;
+   label: string;
++  /** Libellé complet pour les lecteurs d'écran quand l'étiquette est abrégée. */
++  ariaLabel?: string;
+   icon: typeof House;
+   badge?: number;
+ }
+@@ -32,6 +39,7 @@ interface MobileNavLinkItem {
+ interface MobileNavActionItem {
+   type: "action";
+   label: string;
++  ariaLabel?: string;
+   icon: typeof SquarePen;
+   onClick: () => void;
+ }
+@@ -41,7 +49,14 @@ type MobileNavItem = MobileNavLinkItem | MobileNavActionItem;
+ export function MobileBottomNav({ visible }: MobileBottomNavProps) {
+   const location = useLocation();
+   const { selectedCompanyId } = useCompany();
++  const navigate = useNavigate();
+   const { openNewIssue } = useDialogActions();
++  // Atelier marketing prêt : même détection que l'accueil d'entreprise et la barre latérale.
++  const { data: contributionsPlugins } = useQuery({
++    queryKey: queryKeys.plugins.uiContributions,
++    queryFn: () => pluginsApi.listUiContributions(),
++  });
++  const atelierPret = atelierDisponible(contributionsPlugins);
+   const inboxBadge = useInboxBadge(selectedCompanyId);
+   const { enabled: agentChatEnabled } = useAgentChatEnabled();
+   const { enabled: combinedInboxTasksEnabled } = useCombinedInboxTasksEnabled();
+@@ -51,38 +66,56 @@ export function MobileBottomNav({ visible }: MobileBottomNavProps) {
+   // Tasks · Agents). Combined Inbox + Task List drops Inbox as a destination —
+   // it is a view inside Tasks, so its unread badge rides on Tasks. The grid
+   // tracks the live count, so the bar stays evenly divided in every mix.
++  const accueil = useMemo<MobileNavLinkItem>(
++    () => atelierPret
++      ? { type: "link", to: `/${CHEMIN_PAGE_ATELIER}`, label: "Atelier", icon: Sparkles }
++      : { type: "link", to: "/dashboard", label: "Accueil", icon: House },
++    [atelierPret],
++  );
++  // « Nouvelle tâche » ouvre la Discussion de l'atelier quand il est prêt (comme la barre latérale).
++  const nouvelleTache = useMemo<MobileNavActionItem>(
++    () => ({
++      type: "action",
++      label: "Nouvelle tâche",
++      icon: SquarePen,
++      onClick: () => (atelierPret ? navigate(`/${CHEMIN_PAGE_ATELIER}/discussion`) : openNewIssue()),
++    }),
++    [atelierPret, navigate, openNewIssue],
++  );
+   const items = useMemo<MobileNavItem[]>(
+     () => !agentChatEnabled && !combinedInboxTasksEnabled ? [
+-      { type: "link", to: "/dashboard", label: "Home", icon: House },
+-      { type: "link", to: "/issues", label: "Tasks", icon: CircleCheck },
+-      { type: "action", label: "New Task", icon: SquarePen, onClick: () => openNewIssue() },
++      accueil,
++      { type: "link", to: "/issues", label: "Tâches", icon: CircleCheck },
++      nouvelleTache,
+       { type: "link", to: "/agents/all", label: "Agents", icon: Users },
+       {
+         type: "link",
+         to: "/inbox",
+-        label: "Inbox",
++        label: "Boîte",
++        ariaLabel: "Boîte de réception",
+         icon: Inbox,
+         badge: inboxBadge.inbox,
+       },
+     ] : [
+-      { type: "link", to: "/dashboard", label: "Home", icon: House },
++      accueil,
+       ...(agentChatEnabled
+-        ? [{ type: "link", to: "/chats", label: "Chat", icon: MessageCircle } as MobileNavItem]
++        ? [{ type: "link", to: "/chats", label: "Discussions", icon: MessageCircle } as MobileNavItem]
+         : []),
+-      { type: "action", label: "New Task", icon: SquarePen, onClick: () => openNewIssue() },
++      nouvelleTache,
+       {
+         type: "link",
+         to: "/issues",
+-        label: "Tasks",
++        label: "Tâches",
+         icon: CircleCheck,
+         badge: combinedInboxTasksEnabled ? inboxBadge.inbox : undefined,
+       },
+       { type: "link", to: "/agents/all", label: "Agents", icon: Users },
+       ...(!combinedInboxTasksEnabled
+-        ? [{ type: "link", to: "/inbox", label: "Inbox", icon: Inbox, badge: inboxBadge.inbox } as MobileNavItem]
++        ? [{ type: "link", to: "/inbox", label: "Boîte",
++        ariaLabel: "Boîte de réception", icon: Inbox, badge: inboxBadge.inbox } as MobileNavItem]
+         : []),
+     ],
+-    [openNewIssue, inboxBadge.inbox, agentChatEnabled, combinedInboxTasksEnabled],
++    [accueil, nouvelleTache, inboxBadge.inbox, agentChatEnabled, combinedInboxTasksEnabled],
+   );
+ 
+   return (
+@@ -92,7 +125,7 @@ export function MobileBottomNav({ visible }: MobileBottomNavProps) {
+       )}
+       data-visible={visible}
+       inert={!visible}
+-      aria-label="Mobile navigation"
++      aria-label="Navigation mobile"
+     >
+       <div
+         className="grid h-16 px-1"
+@@ -106,16 +139,17 @@ export function MobileBottomNav({ visible }: MobileBottomNavProps) {
+               <button
+                 key={item.label}
+                 type="button"
++                aria-label={item.ariaLabel}
+                 onClick={item.onClick}
+                 className={cn(
+-                  "relative flex min-w-0 flex-col items-center justify-center gap-1 rounded-md text-(length:--text-nano) font-medium transition-colors",
++                  "relative flex min-w-0 flex-col items-center justify-center gap-1 rounded-md text-xs font-medium transition-colors",
+                   active
+                     ? "text-foreground"
+                     : "text-muted-foreground hover:text-foreground",
+                 )}
+               >
+                 <Icon className="h-(--sz-18px) w-(--sz-18px)" />
+-                <span className="truncate">{item.label}</span>
++                <span className="max-w-full text-center leading-tight break-words">{item.label}</span>
+               </button>
+             );
+           }
+@@ -125,10 +159,11 @@ export function MobileBottomNav({ visible }: MobileBottomNavProps) {
+             <NavLink
+               key={item.label}
+               to={item.to}
++              aria-label={item.ariaLabel}
+               state={SIDEBAR_SCROLL_RESET_STATE}
+               className={({ isActive }) =>
+                 cn(
+-                  "relative flex min-w-0 flex-col items-center justify-center gap-1 rounded-md text-(length:--text-nano) font-medium transition-colors",
++                  "relative flex min-w-0 flex-col items-center justify-center gap-1 rounded-md text-xs font-medium transition-colors",
+                   isActive
+                     ? "text-foreground"
+                     : "text-muted-foreground hover:text-foreground",
+@@ -140,12 +175,12 @@ export function MobileBottomNav({ visible }: MobileBottomNavProps) {
+                   <span className="relative">
+                     <Icon className={cn("h-(--sz-18px) w-(--sz-18px)", isActive && "stroke-(length:--sw-2_3)")} />
+                     {item.badge != null && item.badge > 0 && (
+-                      <Badge variant="ghost" className="absolute -right-2 -top-2 bg-primary px-1.5 text-(length:--text-nano) leading-none text-primary-foreground">
++                      <Badge variant="ghost" className="absolute -right-2 -top-2 bg-primary px-1.5 text-xs leading-none text-primary-foreground">
+                         {item.badge > 99 ? "99+" : item.badge}
+                       </Badge>
+                     )}
+                   </span>
+-                  <span className="truncate">{item.label}</span>
++                  <span className="max-w-full text-center leading-tight break-words">{item.label}</span>
+                 </>
+               )}
+             </NavLink>
+diff --git a/ui/src/components/Sidebar.tsx b/ui/src/components/Sidebar.tsx
+index 1aa531b80..2126c0d06 100644
+--- a/ui/src/components/Sidebar.tsx
++++ b/ui/src/components/Sidebar.tsx
+@@ -162,7 +162,7 @@ export function Sidebar({ children }: { children?: ReactNode }) {
+             slotTypes={["sidebar"]}
+             context={pluginContext}
+             className="flex flex-col gap-0.5"
+-            itemClassName="text-(length:--text-compact) font-medium"
++            itemClassName="text-(length:--text-compact) font-medium pointer-coarse:[&_a]:min-h-11 pointer-coarse:[&_a]:items-center"
+             missingBehavior="placeholder"
+           />
+           {/* New Task button aligned with nav items */}
+@@ -182,7 +182,7 @@ export function Sidebar({ children }: { children?: ReactNode }) {
+                 }
+                 title={atelierPret ? "Discuter avec le Coordinateur (nouvelle demande, question, action)" : undefined}
+                 className={cn(
+-                  "flex items-center gap-2.5 mx-2 rounded-lg px-2 py-1.5 pointer-coarse:py-1 text-(length:--text-compact) font-medium text-foreground/80 transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
++                  "flex items-center gap-2.5 mx-2 rounded-lg px-2 py-1.5 pointer-coarse:min-h-11 pointer-coarse:py-1 text-(length:--text-compact) font-medium text-foreground/80 transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
+                 )}
+               >
+                 <SquarePen className="h-4 w-4 shrink-0" />
+@@ -287,7 +287,7 @@ export function Sidebar({ children }: { children?: ReactNode }) {
+             placementZones={["sidebar"]}
+             context={pluginContext}
+             className="flex flex-col gap-0.5"
+-            itemClassName="text-(length:--text-compact) font-medium"
++            itemClassName="text-(length:--text-compact) font-medium pointer-coarse:[&_a]:min-h-11 pointer-coarse:[&_a]:items-center"
+           />
+         </SidebarSection>
+ 
+diff --git a/ui/src/components/SidebarNavItem.tsx b/ui/src/components/SidebarNavItem.tsx
+index efbcfa4e5..78f5c021d 100644
+--- a/ui/src/components/SidebarNavItem.tsx
++++ b/ui/src/components/SidebarNavItem.tsx
+@@ -126,7 +126,7 @@ export function SidebarNavItem({
+           // the sidebar edges, rounded-lg matches the card anchor, px-2 gives
+           // the icon breathing room inside the pill. Rows with hover menus
+           // (agents/projects) reserve extra right padding via className.
+-          "flex items-center gap-2.5 mx-2 rounded-lg px-2 py-1.5 pointer-coarse:py-1 text-(length:--text-compact) font-medium transition-colors",
++          "flex items-center gap-2.5 mx-2 rounded-lg px-2 py-1.5 pointer-coarse:min-h-11 pointer-coarse:py-1 text-(length:--text-compact) font-medium transition-colors",
+           (active ?? isActive)
+             ? "bg-sidebar-accent text-sidebar-accent-foreground"
+             : "text-foreground/80 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
+-- 
+2.53.0
+

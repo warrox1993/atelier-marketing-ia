@@ -125,6 +125,22 @@ describe("atelier.marque.enregistrer : référentiel étendu", () => {
     expect(r.refus?.join(" ")).toContain("Entité inconnue : entite-fantome");
     expect((await b.lire()).marque).toBeNull();
   });
+
+  it("segmentsSuivis (lot 3) : champ facultatif d'un établissement, accepté, conservé puis relu ; un segment inconnu est refusé", async () => {
+    const b = banc();
+    const saisie = saisieCourtier();
+    saisie.etablissements[0].segmentsSuivis = ["medecins", "avocats"];
+    const m = (await b.enregistrer(saisie)).marque as Ligne;
+    expect(ReferentielClient.safeParse(m).success).toBe(true);
+    expect(m.etablissements[0].segmentsSuivis).toEqual(["medecins", "avocats"]);
+    expect(m.etablissements[1].segmentsSuivis).toBeUndefined();
+    expect(((await b.lire()).marque as Ligne).etablissements[0].segmentsSuivis).toEqual(["medecins", "avocats"]);
+    const mauvais = saisieCourtier();
+    mauvais.etablissements[0].segmentsSuivis = ["segment-fantome"];
+    const r = await banc().enregistrer(mauvais);
+    expect(r.marque).toBeUndefined();
+    expect(r.refus?.join(" ")).toContain("Segment inconnu : segment-fantome");
+  });
 });
 
 describe("route marque.lire : lecture de la marque par un agent", () => {

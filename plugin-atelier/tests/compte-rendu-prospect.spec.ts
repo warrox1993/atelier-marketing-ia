@@ -5,7 +5,7 @@
 import { describe, expect, it } from "vitest";
 import { CompteRenduProspect, Prospect } from "../src/contrats/index.js";
 import { PROSPECT_B2B, PROSPECT_B2C, REFERENTIEL_COURTIER } from "../src/contrats/exemples/prospection.js";
-import { construireCompteRendu, distanceKm, nomDuProspect, type FicheClientCompteRendu } from "../src/serveur/compte-rendu-prospect.js";
+import { construireCompteRendu, distanceKm, estNomDePersonneProbable, nomDuProspect, type FicheClientCompteRendu } from "../src/serveur/compte-rendu-prospect.js";
 import { calculerConfiance, type ContexteQualification } from "../src/serveur/qualification-prospects.js";
 
 const MAINTENANT = new Date("2026-10-16T10:00:00.000Z");
@@ -243,5 +243,26 @@ describe("établissement proche par distance (positions)", () => {
       const osm = { ...PROSPECT_B2B.sources[0]!, service: "osm", faits: [{ code: "creation", date: "2026-10-05" }] } as never;
       expect(construireCompteRendu(b2b({ sources: [osm] as never }), fiche, MAINTENANT).signaux).toEqual([]);
     });
+  });
+});
+
+describe("praticien en nom propre", () => {
+  const LIMITE = "Praticien en nom propre probable : données d'une personne physique ; contact seulement à l'adresse professionnelle, après validation humaine (RGPD)";
+  it("estNomDePersonneProbable : cas positifs", () => {
+    for (const n of ["Gaspar Caroline", "Dr Andre-Marie Masson", "Spanu Antoine", "Docteur Jean Dupont"]) expect(estNomDePersonneProbable(n), n).toBe(true);
+  });
+  it("estNomDePersonneProbable : cas négatifs", () => {
+    for (const n of ["Pharmacie Hustinx", "Centre Médical Mosan", "Synlab", "Ninja ramen", "Cabinet Dupont Martin", "Clinique Saint Joseph", "", null, undefined]) expect(estNomDePersonneProbable(n), String(n)).toBe(false);
+  });
+  it("nom de personne : limite ajoutée et rappelée dans la prochaine action", () => {
+    const cr = construireCompteRendu(b2b({ denomination: "Spanu Antoine" }), fiche, MAINTENANT);
+    expect(cr.limites).toContain(LIMITE);
+    expect(cr.prochaineAction.libelle).toContain("Praticien en nom propre probable");
+    expect(cr.markdown).toContain(LIMITE);
+  });
+  it("pharmacie : aucune limite de ce type", () => {
+    const cr = construireCompteRendu(b2b({ denomination: "Pharmacie Hustinx" }), fiche, MAINTENANT);
+    expect(cr.limites.some((l) => l.includes("nom propre"))).toBe(false);
+    expect(cr.prochaineAction.libelle).not.toContain("nom propre");
   });
 });

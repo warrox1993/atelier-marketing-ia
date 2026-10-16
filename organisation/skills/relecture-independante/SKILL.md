@@ -53,6 +53,9 @@ Catégories usuelles : `affirmation_non_sourcee`, `offre_non_confirmee`,
 
 - Aucun constat sans emplacement ni preuve.
 - Aucun `PASS` avec un constat critique ou majeur ouvert.
+- Aucun `CHANGES_REQUESTED` pour une panne d'outil ou de réseau (outil injoignable, ECONNREFUSED,
+  délai dépassé) : verdict `BLOCKED_INFORMATION` avec la cause dans `controlesNonExecutes` ; aucun
+  cycle de correction n'est consommé et le Coordinateur relance la revue quand la cause est levée.
 
 ## Limites
 

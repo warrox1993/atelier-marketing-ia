@@ -157,10 +157,27 @@ describe("bnb_comptes", () => {
     const ex = r["references"].map((x: any) => x.ExerciseDates.endDate);
     expect(ex).toEqual([...ex].sort().reverse());
     const rub = r["references"][0].AccountingData.Rubrics;
-    expect(rub.map((x: any) => x.Code)).toEqual(["9087", "20/58"]);
+    expect(rub.map((x: any) => x.Code)).toEqual(["9087", "20/58", "10/15", "22", "9904"]);
     expect(rub[0].Value).toBe(e.comptes.at(-1)!.effectifEtp);
     expect(rub[1].Value).toBe(e.comptes.at(-1)!.totalBilan);
+    // Lot 2 : fonds propres, terrains et constructions, résultat de l'exercice (codes à confirmer sur la documentation BNB)
+    expect(rub[2].Value).toBe(e.comptes.at(-1)!.fondsPropres);
+    expect(rub[3].Value).toBe(e.comptes.at(-1)!.terrainsConstructions);
+    expect(rub[4].Value).toBe(e.comptes.at(-1)!.resultat);
     expect(r["taille_deduite"]).toBe(tailleDe(e.comptes));
+  });
+
+  it("rubriques du lot 2 : jeu fictif cohérent (fonds propres négatifs, locataires et propriétaires, pertes et bénéfices présents ; terrains jamais négatifs)", () => {
+    const comptes = jeu.entreprises.flatMap((x) => x.comptes);
+    expect(comptes.some((c) => c.fondsPropres < 0)).toBe(true);
+    expect(comptes.some((c) => c.fondsPropres > 0)).toBe(true);
+    expect(comptes.some((c) => c.terrainsConstructions === 0)).toBe(true);
+    expect(comptes.some((c) => c.terrainsConstructions > 0)).toBe(true);
+    expect(comptes.some((c) => c.resultat < 0)).toBe(true);
+    expect(comptes.some((c) => c.resultat > 0)).toBe(true);
+    expect(comptes.every((c) => c.terrainsConstructions >= 0 && c.terrainsConstructions <= c.totalBilan)).toBe(true);
+    // Les fonds propres négatifs sont un trait de l'entreprise (même tirage sur ses exercices), pas du hasard par année.
+    for (const x of jeu.entreprises) expect(new Set(x.comptes.map((c) => c.fondsPropres < 0)).size).toBeLessThanOrEqual(1);
   });
 
   it("création récente : aucun compte ; radiée : anciens comptes conservés ; mal formé et réel présumé refusés", async () => {

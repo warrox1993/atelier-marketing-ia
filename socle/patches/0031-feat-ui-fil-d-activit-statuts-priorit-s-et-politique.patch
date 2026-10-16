@@ -1,0 +1,145 @@
+From 6fc1ac33e13d1ecee8e578aea6487d8c66146b61 Mon Sep 17 00:00:00 2001
+From: Jean-Baptiste Dhondt <114347858+warrox1993@users.noreply.github.com>
+Date: Fri, 16 Oct 2026 13:14:00 +0200
+Subject: [PATCH] =?UTF-8?q?feat(ui):=20fil=20d'activit=C3=A9,=20statuts,?=
+ =?UTF-8?q?=20priorit=C3=A9s=20et=20politique=20de=20revue=20affich=C3=A9s?=
+ =?UTF-8?q?=20en=20fran=C3=A7ais?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01DP85vPq2MHkZg8VNtRvCzB
+---
+ ui/src/lib/activity-format.test.ts      | 14 ++++++++++----
+ ui/src/lib/activity-format.ts           | 17 ++++++++++++++++-
+ ui/src/lib/issue-change-receipt.test.ts |  6 +++---
+ ui/src/lib/review-policy.test.ts        | 10 +++++-----
+ ui/src/lib/review-policy.ts             |  6 +++---
+ 5 files changed, 37 insertions(+), 16 deletions(-)
+
+diff --git a/ui/src/lib/activity-format.test.ts b/ui/src/lib/activity-format.test.ts
+index deb3965ed..8b05d178a 100644
+--- a/ui/src/lib/activity-format.test.ts
++++ b/ui/src/lib/activity-format.test.ts
+@@ -12,7 +12,13 @@ describe("activity formatting", () => {
+     const details = { status: "in_review", externalConversationState: "waiting" };
+     expect(formatActivityVerb("issue.updated", details)).toBe("a changé le statut en idle sur");
+     expect(formatIssueActivityAction("issue.updated", details)).toBe("a changé le statut en idle");
+-    expect(formatActivityVerb("issue.updated", { status: "in_review" })).toBe("a changé le statut en in review sur");
++    expect(formatActivityVerb("issue.updated", { status: "in_review" })).toBe("a changé le statut en en revue sur");
++    expect(formatActivityVerb("issue.updated", { status: "done", _previous: { status: "blocked" } }))
++      .toBe("a changé le statut de bloquée à terminée sur");
++    expect(formatActivityVerb("issue.updated", { priority: "critical", _previous: { priority: "low" } }))
++      .toBe("a changé la priorité de basse à urgente sur");
++    expect(formatActivityVerb("issue.updated", { priority: "medium" }))
++      .toBe("a changé la priorité en moyenne sur");
+   });
+ 
+   it("uses readable verbs for task read-state changes", () => {
+@@ -146,11 +152,11 @@ describe("activity formatting", () => {
+ 
+   it("describes a review-policy change without calling the default 'none'", () => {
+     expect(formatIssueActivityAction("issue.updated", { reviewPolicy: null }))
+-      .toBe("a changé qui peut approuver en anyone");
++      .toBe("a changé qui peut approuver en n'importe qui");
+     expect(formatIssueActivityAction("issue.updated", { reviewPolicy: "human_only" }))
+-      .toBe("a changé qui peut approuver en human only");
++      .toBe("a changé qui peut approuver en humain uniquement");
+     expect(formatIssueActivityAction("issue.updated", { reviewPolicy: "not_creator" }))
+-      .toBe("a changé qui peut approuver en anyone else");
++      .toBe("a changé qui peut approuver en toute autre personne");
+   });
+ 
+   it("uses plain next-step copy for successful-run handoff activity", () => {
+diff --git a/ui/src/lib/activity-format.ts b/ui/src/lib/activity-format.ts
+index 765ed8af6..9aec9452a 100644
+--- a/ui/src/lib/activity-format.ts
++++ b/ui/src/lib/activity-format.ts
+@@ -353,9 +353,24 @@ function asRecord(value: unknown): Record<string, unknown> | null {
+   return value as Record<string, unknown>;
+ }
+ 
++/** Libellés français (en milieu de phrase) des statuts et priorités de tâche. */
++const LIBELLES_VALEURS: Record<string, string> = {
++  backlog: "en attente",
++  todo: "à faire",
++  in_progress: "en cours",
++  in_review: "en revue",
++  blocked: "bloquée",
++  done: "terminée",
++  cancelled: "annulée",
++  critical: "urgente",
++  high: "haute",
++  medium: "moyenne",
++  low: "basse",
++};
++
+ function humanizeValue(value: unknown): string {
+   if (typeof value !== "string") return String(value ?? "aucun");
+-  return value.replace(/_/g, " ");
++  return LIBELLES_VALEURS[value] ?? value.replace(/_/g, " ");
+ }
+ 
+ function isActivityParticipant(value: unknown): value is ActivityParticipant {
+diff --git a/ui/src/lib/issue-change-receipt.test.ts b/ui/src/lib/issue-change-receipt.test.ts
+index af4b4c956..31ba9dc9d 100644
+--- a/ui/src/lib/issue-change-receipt.test.ts
++++ b/ui/src/lib/issue-change-receipt.test.ts
+@@ -39,9 +39,9 @@ describe("formatIssueChangeValue", () => {
+   // A cleared `reviewPolicy` means "anyone can approve" (PAP-16506), so the
+   // receipt must not report the default as an absent value.
+   it("reads a cleared review policy as 'anyone', not 'none'", () => {
+-    expect(formatIssueChangeValue(null, { field: "reviewPolicy" })).toBe("anyone");
+-    expect(formatIssueChangeValue("human_only", { field: "reviewPolicy" })).toBe("human only");
+-    expect(formatIssueChangeValue("not_creator", { field: "reviewPolicy" })).toBe("anyone else");
++    expect(formatIssueChangeValue(null, { field: "reviewPolicy" })).toBe("n'importe qui");
++    expect(formatIssueChangeValue("human_only", { field: "reviewPolicy" })).toBe("humain uniquement");
++    expect(formatIssueChangeValue("not_creator", { field: "reviewPolicy" })).toBe("toute autre personne");
+   });
+ 
+   it("renders booleans and numbers plainly", () => {
+diff --git a/ui/src/lib/review-policy.test.ts b/ui/src/lib/review-policy.test.ts
+index 2cbed3d79..088272086 100644
+--- a/ui/src/lib/review-policy.test.ts
++++ b/ui/src/lib/review-policy.test.ts
+@@ -31,14 +31,14 @@ describe("issueReviewPolicyBadge", () => {
+ 
+ describe("formatReviewPolicyValue", () => {
+   it("reads a cleared policy as 'anyone', never as 'none'", () => {
+-    expect(formatReviewPolicyValue(null)).toBe("anyone");
+-    expect(formatReviewPolicyValue(undefined)).toBe("anyone");
+-    expect(formatReviewPolicyValue("anyone")).toBe("anyone");
++    expect(formatReviewPolicyValue(null)).toBe("n'importe qui");
++    expect(formatReviewPolicyValue(undefined)).toBe("n'importe qui");
++    expect(formatReviewPolicyValue("anyone")).toBe("n'importe qui");
+   });
+ 
+   it("uses the badge wording mid-sentence so a receipt matches the badge", () => {
+-    expect(formatReviewPolicyValue("not_creator")).toBe("anyone else");
+-    expect(formatReviewPolicyValue("human_only")).toBe("human only");
++    expect(formatReviewPolicyValue("not_creator")).toBe("toute autre personne");
++    expect(formatReviewPolicyValue("human_only")).toBe("humain uniquement");
+   });
+ 
+   it("humanizes an unknown policy rather than hiding it", () => {
+diff --git a/ui/src/lib/review-policy.ts b/ui/src/lib/review-policy.ts
+index 6c822d15e..9ed632dbb 100644
+--- a/ui/src/lib/review-policy.ts
++++ b/ui/src/lib/review-policy.ts
+@@ -46,9 +46,9 @@ const BADGES: Partial<Record<IssueReviewPolicy, IssueReviewPolicyBadge>> = {
+ 
+ /** Mid-sentence wording for activity lines and field-change receipts. */
+ const VALUE_LABELS: Record<IssueReviewPolicy, string> = {
+-  anyone: "anyone",
+-  not_creator: "anyone else",
+-  human_only: "human only",
++  anyone: "n'importe qui",
++  not_creator: "toute autre personne",
++  human_only: "humain uniquement",
+ };
+ 
+ /**
+-- 
+2.53.0
+
