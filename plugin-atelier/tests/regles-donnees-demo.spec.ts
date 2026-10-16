@@ -297,4 +297,14 @@ describe("référentiel de l'entreprise de démonstration « Courtier » (script
       expect(e.position!.lon).toBeLessThan(6.1);
     }
   });
+
+  it("prend la position de chaque bureau dans le référentiel des codes postaux (aucune coordonnée inventée)", async () => {
+    const { CODES_POSTAUX_BE } = await import("../src/serveur/codes-postaux-be.js");
+    const ref = JSON.parse(lu.stdout) as { etablissements: Array<{ nom: string; codesPostaux: string[]; position: { lat: number; lon: number } }> };
+    for (const e of ref.etablissements) {
+      const ligne = CODES_POSTAUX_BE.find((l) => l[0] === e.codesPostaux[0]);
+      expect(ligne, e.nom).toBeTruthy();
+      expect(e.position, e.nom).toEqual({ lat: ligne![1], lon: ligne![2] });
+    }
+  });
 });

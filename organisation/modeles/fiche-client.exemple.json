@@ -1,0 +1,44 @@
+{
+  "_commentaire": "Modèle de fiche pour « scripts/bootstrap-organisation.py nouveau-client --fiche <fichier> ». Toutes les valeurs de ce modèle sont FICTIVES : copier le fichier hors du dépôt, remplacer les valeurs, ne jamais committer une fiche réelle.",
+  "nomCommercial": "Courtage Exemple (fiche fictive)",
+  "numeroBce": "0123.456.749",
+  "courtier": true,
+  "numeroFsma": "DEMO-0100",
+  "langues": ["FR", "NL"],
+  "mode": "demonstration",
+  "budgetIaMensuelCentimes": 5000,
+  "ton": "Clair, posé, sans promesse de résultat",
+  "zones": ["Province exemple"],
+  "bureaux": [
+    {
+      "nom": "Bureau Exemple Centre",
+      "adresse": "1 rue de l'Exemple, 4000 Ville-Exemple",
+      "position": { "lat": 50.0, "lon": 5.5 },
+      "segmentsSuivis": ["professions-liberales"]
+    },
+    {
+      "nom": "Bureau Exemple Nord",
+      "adresse": "2 avenue d'Essai, 4100 Ville-Essai"
+    }
+  ],
+  "segmentsCibles": [
+    { "code": "professions-liberales", "libelle": "Professions libérales", "type": "profession" },
+    { "code": "proprietaires", "libelle": "Propriétaires occupants", "type": "type_particulier" }
+  ],
+  "offres": [
+    {
+      "code": "assurance-pro",
+      "nom": "Assurance professionnelle (exemple)",
+      "description": "Offre fictive à remplacer par celle du client.",
+      "cible": "b2b",
+      "segments": ["professions-liberales"]
+    },
+    {
+      "code": "assurance-habitation",
+      "nom": "Assurance habitation (exemple)",
+      "description": "Offre fictive à remplacer par celle du client.",
+      "cible": "b2c",
+      "segments": ["proprietaires"]
+    }
+  ]
+}

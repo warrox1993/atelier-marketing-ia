@@ -65,6 +65,11 @@ export interface DefinitionMutation<A extends Record<string, unknown>> {
   resume: (args: A) => string;
   /** Contrôles locaux avant tout appel (mêmes refus qu'en démonstration quand ils ont un sens en réel). */
   verifier?: (args: A) => void;
+  /**
+   * Complète les arguments AVANT l'empreinte, la préparation et la vérification de la preuve (idempotent) : ce que
+   * l'humain approuve est donc exactement ce qui part (mention d'information IA des messages directs).
+   */
+  preparer?: (args: A) => A;
   /** Effectue l'action ; renvoie les identifiants produits. Lève ErreurFournisseur. */
   executer: (acces: AccesPlateforme, args: A) => Promise<Record<string, unknown>>;
   /** Relit la plateforme pour savoir si une tentative ambiguë a produit son effet (depuis `debutMs`). */
@@ -92,7 +97,8 @@ export function mutationReelle<A extends Record<string, unknown>>(dep: Dependanc
     async executer(brut, contexte) {
       // Arguments de transport (preuve et liste de révocation) retirés AVANT tout usage : ils n'entrent ni dans l'empreinte,
       // ni dans les paramètres rapportés, ni dans l'exécution.
-      const { preuve_approbation: preuve, revocations_approbation: revocations, ...reste } = brut as A & { preuve_approbation?: string; revocations_approbation?: string };
+      const { preuve_approbation: preuve, revocations_approbation: revocations, ...resteBrut } = brut as A & { preuve_approbation?: string; revocations_approbation?: string };
+      const reste = (def.preparer ? def.preparer(resteBrut as unknown as A) : resteBrut) as Record<string, unknown>;
       const args = reste as unknown as A;
       def.verifier?.(args);
       const action = { service: contexte.service, outil: def.outil.nom, requete_reelle_visee: def.requeteReelle, parametres: { ...reste } };

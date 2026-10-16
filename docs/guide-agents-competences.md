@@ -240,8 +240,8 @@ compétences obligatoires.
 (commande `claude` du PATH, 2.1.292 sur le poste de développement), `maxConcurrentRuns: 1`,
 `timeoutSec 1800`, `graceSec 30`, télémétrie coupée (`DISABLE_TELEMETRY=1`,
 `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1`). Liaison propre à la machine, posée par le
-bootstrap et jamais écrite dans le paquet : `cwd` = `instance/agents-atelier/<slug>`,
-`CLAUDE_CONFIG_DIR` = `instance/claude-config/<slug>` (droits 700) contenant seulement un
+bootstrap et jamais écrite dans le paquet : `cwd` = `instance/agents-atelier/<id entreprise>/<slug>`,
+`CLAUDE_CONFIG_DIR` = `instance/claude-config/<id entreprise>/<slug>` (droits 700) contenant seulement un
 `settings.json` (droits 600) avec `claudeMdExcludes` (registre, `adaptateur.reglagesConfigClaude`).
 Tous les agents sont importés **en pause**.
 
@@ -301,7 +301,7 @@ scripts/bootstrap-tests.sh [--instance [--remise-a-zero]]
 description porte le marqueur `atelier-demo:renovation-liege` est touchée. Une entreprise du
 même nom sans marqueur, ou deux entreprises marquées, arrêtent le script sans rien modifier.
 Les dossiers locaux supprimés par la remise à zéro sont seulement
-`instance/agents-atelier/<slug>`, `instance/claude-config/<slug>` et `instance/atelier-demo/`.
+`instance/agents-atelier/<id entreprise>/`, `instance/claude-config/<id entreprise>/` et `instance/atelier-demo/` (les anciens dossiers partagés par rôle ne sont jamais touchés).
 
 **Idempotence.** Première passe : import natif (`new_company`, agents et routines en pause),
 liaison locale, objectifs, liens projets-objectifs, versions de compétences. Passes

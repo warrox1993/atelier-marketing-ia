@@ -752,6 +752,544 @@ else
 fi
 
 
+# 2g. Sous-commande « nouveau-client » contre une fausse API Paperclip (entreprises, plugin et budgets en
+#     mémoire ; l'application de l'organisation des agents, déjà couverte par ailleurs, est remplacée par une
+#     doublure qui crée l'entreprise comme l'import natif). On vérifie : fiche valide à blanc (écritures listées,
+#     aucune écriture réelle), BCE invalide et courtier sans FSMA refusés (code non nul, aucun appel d'API),
+#     mode réel sans --reel refusé, création, deuxième passage sans aucune création ni réécriture (budget,
+#     référentiel), et refus d'une entreprise du client qui appartient à la démonstration.
+if "${PY[@]}" - "${RACINE}" "${TRAVAIL}" > "${TRAVAIL}/nouveau-client.txt" 2>&1 <<'PY'
+import contextlib, copy, importlib.util, io, json, os, re, sys, threading, urllib.parse
+from http.server import BaseHTTPRequestHandler, HTTPServer
+from pathlib import Path
+racine, travail = Path(sys.argv[1]), Path(sys.argv[2])
+sys.dont_write_bytecode = True
+reg_orga = json.load(open(racine / "organisation/registre/organisation.json", encoding="utf-8"))
+ent = reg_orga["entreprise"]
+etat = {"societes": [], "requetes": [], "ecritures": [], "creations": 0, "marques": {}, "appels_coeur": 0}
+class H(BaseHTTPRequestHandler):
+    def log_message(self, *a): pass
+    def rep(self, code, corps):
+        brut = json.dumps(corps).encode(); self.send_response(code); self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(brut))); self.end_headers(); self.wfile.write(brut)
+    def corps(self):
+        n = int(self.headers.get("Content-Length") or 0); return json.loads(self.rfile.read(n) or b"null")
+    def do_GET(self):
+        q = urllib.parse.urlparse(self.path)[2][len("/api"):]; etat["requetes"].append(("GET", q))
+        if q == "/companies": return self.rep(200, etat["societes"])
+        if q == "/plugins/atelier.marketing-ia": return self.rep(200, {"pluginKey": "atelier.marketing-ia", "status": "ready"})
+        self.rep(404, {"error": q})
+    def do_POST(self):
+        q = urllib.parse.urlparse(self.path)[2][len("/api"):]; c = self.corps(); etat["requetes"].append(("POST", q))
+        m = re.fullmatch(r"/plugins/atelier.marketing-ia/data/atelier.marque", q)
+        if m:  # lecture seule : pas une écriture
+            return self.rep(200, {"data": {"marque": etat["marques"].get(c["companyId"])}})
+        etat["ecritures"].append(("POST", q))
+        if q == "/plugins/atelier.marketing-ia/actions/atelier.marque.enregistrer":
+            cid = c["companyId"]; ancienne = etat["marques"].get(cid)
+            # Comme le serveur : version, identifiant et valeurs par défaut ajoutés à la saisie.
+            marque = {**copy.deepcopy(c["params"]), "id": "x", "companyId": cid, "version": (ancienne["version"] + 1) if ancienne else 1, "creeLe": "2026-10-16T08:00:00.000Z"}
+            marque["offres"] = [{**o, "argumentsValides": []} for o in marque["offres"]]
+            etat["marques"][cid] = marque
+            return self.rep(200, {"data": marque})
+        self.rep(404, {"error": q})
+    def do_PATCH(self):
+        q = urllib.parse.urlparse(self.path)[2][len("/api"):]; c = self.corps(); etat["ecritures"].append(("PATCH", q))
+        m = re.fullmatch(r"/companies/([^/]+)/budgets", q)
+        if m:
+            for s_ in etat["societes"]:
+                if s_["id"] == m.group(1): s_["budgetMonthlyCents"] = c["budgetMonthlyCents"]; return self.rep(200, s_)
+        self.rep(404, {"error": q})
+serveur = HTTPServer(("127.0.0.1", 0), H); port = serveur.server_address[1]
+threading.Thread(target=serveur.serve_forever, daemon=True).start()
+donnees = travail / "donnees-client"; donnees.mkdir()
+os.environ["ATELIER_API"] = f"http://127.0.0.1:{port}/api"; os.environ["ATELIER_DONNEES_LOCALES"] = str(donnees)
+spec = importlib.util.spec_from_file_location("b", racine / "scripts/bootstrap-organisation.py")
+b = importlib.util.module_from_spec(spec); spec.loader.exec_module(b)
+
+def coeur_double(api, reg_agents, reg_client, fichiers, mode, dossier_etat):
+    """Doublure de appliquer_organisation : crée l'entreprise du client comme l'import natif, ou la retrouve."""
+    etat["appels_coeur"] += 1
+    e = reg_client["entreprise"]
+    assert e["marqueur"].startswith("atelier-client:") and e["nom"] != ent["nom"], e
+    assert "COMPANY.md" in fichiers and ent["nom"] not in fichiers["COMPANY.md"] and e["marqueur"] in fichiers["COMPANY.md"], "COMPANY.md du client"
+    assert all(ent["nom"] not in o["titre"] for o in reg_client["objectifs"])
+    slug = e["slug"]
+    assert dossier_etat.name == slug and dossier_etat.parent.name == "atelier-client", dossier_etat
+    trouvee = b.trouver_entreprise(api, reg_client)
+    if trouvee is None:
+        etat["creations"] += 1
+        trouvee = {"id": f"{etat['creations']:08x}-0000-4000-8000-000000000000", "name": e["nom"], "description": e["description"], "budgetMonthlyCents": 0}
+        etat["societes"].append(trouvee)
+    assert trouvee["id"] in str(b.dossiers_agent(trouvee["id"], "coordinateur")[0]), "dossiers locaux propres à l'entreprise du client"
+    return trouvee["id"]
+b.appliquer_organisation = coeur_double
+
+avant_lancement = [0]
+def lancer(*args):
+    avant_lancement[0] = len(etat["requetes"])
+    sortie = io.StringIO()
+    with contextlib.redirect_stdout(sortie), contextlib.redirect_stderr(sortie):
+        code = b.main(list(args))
+    return code, sortie.getvalue()
+def ecrire_fiche(nom, modif=None):
+    f = json.load(open(racine / "organisation/modeles/fiche-client.exemple.json", encoding="utf-8"))
+    if modif: modif(f)
+    chemin = travail / nom; chemin.write_text(json.dumps(f, ensure_ascii=False), encoding="utf-8"); return str(chemin)
+def sans_appel():
+    """Le dernier lancement n'a pas touché l'API (refus avant tout appel) et rien n'a jamais été écrit."""
+    assert len(etat["requetes"]) == avant_lancement[0] and not etat["ecritures"] and etat["appels_coeur"] == 0, etat
+
+valide = ecrire_fiche("fiche-valide.json")
+# 1. Fiche valide à blanc : écritures listées, rien d'écrit (le modèle du dépôt est lui-même une fiche valide).
+code, s = lancer("nouveau-client", "--fiche", str(racine / "organisation/modeles/fiche-client.exemple.json"), "--a-blanc")
+assert code == 0 and "À blanc" in s and "créer l'entreprise" in s and "budget IA mensuel" in s and "référentiel de marque" in s and "intermediaire_assurance" in s, (code, s)
+assert not etat["ecritures"] and etat["creations"] == 0 and etat["appels_coeur"] == 0, etat
+print("1. fiche valide à blanc : écritures prévues listées (entreprise, organisation, budget, référentiel), aucune écriture")
+# 2. BCE invalide : refus, aucun appel d'API.
+code, s = lancer("nouveau-client", "--fiche", ecrire_fiche("bce.json", lambda f: f.update(numeroBce="0123.456.748")))
+assert code != 0 and "BCE" in s and "rien n'est écrit" in s, (code, s); sans_appel()
+print("2. BCE invalide (modulo 97) : refus, code", code, ", aucun appel d'API")
+# 3. Courtier sans FSMA : refus.
+code, s = lancer("nouveau-client", "--fiche", ecrire_fiche("fsma.json", lambda f: f.pop("numeroFsma")))
+assert code != 0 and "numeroFsma" in s, (code, s); sans_appel()
+code, s = lancer("nouveau-client", "--fiche", ecrire_fiche("fsma2.json", lambda f: f.update(numeroFsma="12")))
+assert code != 0 and "numeroFsma" in s, (code, s); sans_appel()
+print("3. courtier sans numéro FSMA (ou numéro mal formé) : refus, aucun appel d'API")
+# 3 bis. Mode réel sans --reel, et code FSMA de démonstration en mode réel : refus ; autres défauts de fiche.
+code, s = lancer("nouveau-client", "--fiche", ecrire_fiche("reel.json", lambda f: f.update(mode="reel")))
+assert code != 0 and "--reel" in s, (code, s); sans_appel()
+code, s = lancer("nouveau-client", "--fiche", ecrire_fiche("reel2.json", lambda f: f.update(mode="reel")), "--reel", "--a-blanc")
+assert code != 0 and "numeroFsma" in s, (code, s); sans_appel()
+code, s = lancer("nouveau-client", "--fiche", ecrire_fiche("langue.json", lambda f: f.update(langues=["DE"])))
+assert code != 0 and "langues" in s, (code, s); sans_appel()
+code, s = lancer("nouveau-client", "--fiche", str(travail / "absente.json"))
+assert code != 0 and "introuvable" in s, (code, s); sans_appel()
+print("3 bis. mode réel sans --reel, FSMA de démonstration en réel, langue inconnue, fiche absente : refus sans appel d'API")
+# 3 ter. m3 / m4 : nom et listes de la fiche contrôlés (textes recopiés tels quels dans COMPANY.md et le référentiel).
+def refus_fiche(nom, modif, motif):
+    code, s = lancer("nouveau-client", "--fiche", ecrire_fiche(nom, modif))
+    assert code != 0 and motif in s and "rien n'est écrit" in s, (nom, code, s); sans_appel()
+refus_fiche("n1.json", lambda f: f.update(nomCommercial="Client\nAutre ligne"), "nomCommercial")
+refus_fiche("n2.json", lambda f: f.update(nomCommercial="Client\x07Bip"), "nomCommercial")
+refus_fiche("n3.json", lambda f: f.update(nomCommercial="C" * 121), "nomCommercial")
+refus_fiche("n4.json", lambda f: f.update(nomCommercial="Client Autre"), "nomCommercial")
+refus_fiche("z1.json", lambda f: f.update(zones="Liège"), "zones")
+refus_fiche("z2.json", lambda f: f.update(zones=["a"] * 51), "zones")
+refus_fiche("z3.json", lambda f: f.update(zones=[1]), "zones")
+refus_fiche("z4.json", lambda f: f.update(zones=["x" * 121]), "zones")
+refus_fiche("z5.json", lambda f: f.update(zones=["a\nb"]), "zones")
+refus_fiche("c1.json", lambda f: f["segmentsCibles"][0].update(nace="6920"), "nace")
+refus_fiche("c2.json", lambda f: f["segmentsCibles"][0].update(nace=[69]), "nace")
+refus_fiche("c3.json", lambda f: f["segmentsCibles"][0].update(nace=["1"] * 51), "nace")
+refus_fiche("c4.json", lambda f: f["segmentsCibles"][0].update(nace=["x" * 21]), "nace")
+refus_fiche("t1.json", lambda f: f.update(ton=["a"]), "ton")
+refus_fiche("t2.json", lambda f: f.update(ton="t" * 501), "ton")
+refus_fiche("d1.json", lambda f: f["offres"][0].update(description=12), "description")
+refus_fiche("d2.json", lambda f: f["offres"][0].update(description="d" * 1001), "description")
+code, s = lancer("nouveau-client", "--fiche", ecrire_fiche("ok-limites.json", lambda f: f.update(nomCommercial="N" * 120, zones=["z" * 120] * 50)), "--a-blanc")
+assert code == 0, (code, s)
+texte_agents = (racine / "organisation/registre/agents.json").read_text(encoding="utf-8")
+assert "claude-config/<slug>" not in texte_agents and "claude-config/<id entreprise>/<slug>" in texte_agents, "m6 : disposition par entreprise"
+print("3 ter. nom, zones, nace, ton et description bornés et typés : refus sans appel d'API ; agents.json décrit la disposition par entreprise")
+# 4. Création réelle : entreprise, budget, référentiel, une seule fois chacun.
+code, s = lancer("nouveau-client", "--fiche", valide)
+assert code == 0, s
+assert etat["creations"] == 1 and len(etat["societes"]) == 1, etat
+cid = etat["societes"][0]["id"]
+assert "atelier-client:courtage-exemple-fiche-fictive" in etat["societes"][0]["description"] and "atelier-demo" not in etat["societes"][0]["description"]
+assert [e for e in etat["ecritures"] if e[1].endswith("/budgets")] == [("PATCH", f"/companies/{cid}/budgets")] and etat["societes"][0]["budgetMonthlyCents"] == 5000
+marque = etat["marques"][cid]
+assert [e for e in etat["ecritures"] if "atelier.marque.enregistrer" in e[1]] and marque["version"] == 1
+assert marque["modulesConformite"][0]["code"] == "intermediaire_assurance" and marque["entites"][0]["identifiants"][1] == {"type": "fsma", "libelle": None, "valeur": "DEMO-0100"}
+assert marque["entites"][0]["identifiants"][0]["valeur"] == "0123.456.749" and all(o["confirmee"] is False for o in marque["offres"]) and all(x["confirme"] is False for x in marque["etablissements"])
+assert marque["etablissements"][0]["position"] == {"lat": 50.0, "lon": 5.5} and marque["etablissements"][0]["segmentsSuivis"] == ["professions-liberales"]
+assert "rénovation" not in json.dumps(marque).lower() and "liège" not in json.dumps(marque).lower()
+print("4. création : entreprise marquée atelier-client:<slug>, budget 5000 centimes, référentiel v1 (module de conformité, offres non confirmées)")
+# 5. Deuxième passage : aucune création, aucune réécriture.
+avant = list(etat["ecritures"]); creations = etat["creations"]
+code, s = lancer("nouveau-client", "--fiche", valide)
+assert code == 0 and etat["creations"] == creations == 1 and len(etat["societes"]) == 1, (code, s)
+assert etat["ecritures"] == avant, "le deuxième passage a écrit : " + str(etat["ecritures"][len(avant):])
+assert "déjà à 5000" in s and "déjà à jour" in s, s
+code, s = lancer("nouveau-client", "--fiche", valide, "--a-blanc")
+assert code == 0 and "aucune création" in s and "aucune écriture" in s and "créer l'entreprise" not in s, s
+assert etat["ecritures"] == avant
+print("5. deuxième passage : aucune création, budget et référentiel inchangés (aucune écriture) ; à blanc : « aucune création »")
+# 5 bis. Fiche modifiée : seul ce qui change est réécrit (nouvelle version du référentiel, pas de seconde entreprise).
+code, s = lancer("nouveau-client", "--fiche", ecrire_fiche("fiche-v2.json", lambda f: f["offres"][0].update(nom="Assurance professionnelle (v2)")))
+assert code == 0 and etat["creations"] == 1 and etat["marques"][cid]["version"] == 2, (code, s)
+print("5 bis. fiche modifiée : nouvelle version du référentiel, toujours une seule entreprise")
+# 6. Une entreprise portant le marqueur du client mais appartenant à la démonstration : refus, rien d'écrit.
+etat["societes"].append({"id": "dddddddd-0000-4000-8000-000000000000", "name": "Autre client", "description": f"atelier-client:autre-client {ent['marqueur']}", "budgetMonthlyCents": 0})
+avant = list(etat["ecritures"]); creations = etat["creations"]; coeur = etat["appels_coeur"]
+code, s = lancer("nouveau-client", "--fiche", ecrire_fiche("autre.json", lambda f: f.update(nomCommercial="Autre client")))
+assert code != 0 and "démonstration" in s and etat["ecritures"] == avant and etat["creations"] == creations and etat["appels_coeur"] == coeur, (code, s)
+code, s = lancer("nouveau-client", "--fiche", ecrire_fiche("demo.json", lambda f: f.update(nomCommercial=ent["nom"])))
+assert code != 0 and "démonstration" in s and etat["ecritures"] == avant and etat["appels_coeur"] == coeur, (code, s)
+code, s = lancer("nouveau-client", "--fiche", ecrire_fiche("demo2.json", lambda f: f.update(nomCommercial=ent["nom"])), "--a-blanc")
+assert code != 0 and "démonstration" in s and etat["ecritures"] == avant, (code, s)
+print("6. entreprise du client appartenant à la démonstration (marqueur ou nom) : refus, rien d'écrit")
+# 7. M2 : registre local écrit à la création (hors de portée des agents : dossier 0700, fichier 0600).
+import shutil
+reg_dir = donnees / "atelier-client" / "courtage-exemple-fiche-fictive"; fichier_reg = reg_dir / "entreprise.json"
+assert fichier_reg.is_file(), "registre local absent après la création"
+rg = json.load(open(fichier_reg, encoding="utf-8"))
+assert rg["entrepriseId"] == cid and rg["numeroBce"] == "0123456749" and rg["creeLe"], rg
+assert (fichier_reg.stat().st_mode & 0o777) == 0o600 and (reg_dir.stat().st_mode & 0o777) == 0o700, "droits du registre"
+print("7. registre local instance/atelier-client/<slug>/entreprise.json : id, BCE, date ; dossier 0700, fichier 0600")
+# 8. m1 : même nom, BCE différent : refus ; même BCE écrit autrement : accepté.
+autre_bce = next(f"{n:010d}" for n in range(1000000000, 1000001000) if b.bce_valide(f"{n:010d}") and f"{n:010d}" != "0123456749")
+avant = list(etat["ecritures"]); coeur = etat["appels_coeur"]
+for extra in ((), ("--a-blanc",)):
+    code, s = lancer("nouveau-client", "--fiche", ecrire_fiche("bce2.json", lambda f: f.update(numeroBce=autre_bce)), *extra)
+    assert code != 0 and "BCE" in s and "registre" in s and etat["ecritures"] == avant and etat["appels_coeur"] == coeur, (extra, code, s)
+code, s = lancer("nouveau-client", "--fiche", ecrire_fiche("bce3.json", lambda f: f.update(numeroBce="BE0123.456.749")))
+assert code == 0, s
+print("8. même nom, BCE différent du registre : refus (à blanc aussi), rien d'écrit ; même BCE autrement écrit : accepté")
+# 9. M2 : entreprise portant le marqueur sans registre, ou désignée par un autre identifiant : refus.
+etat["societes"].append({"id": "eeeeeeee-0000-4000-8000-000000000000", "name": "Client Usurpé",
+                         "description": "Entreprise cliente. Marqueur de périmètre : atelier-client:client-usurpe.", "budgetMonthlyCents": 0})
+avant = list(etat["ecritures"]); coeur = etat["appels_coeur"]; fiche_usurpe = ecrire_fiche("usurpe.json", lambda f: f.update(nomCommercial="Client Usurpé"))
+code, s = lancer("nouveau-client", "--fiche", fiche_usurpe)
+assert code != 0 and "registre" in s and etat["ecritures"] == avant and etat["appels_coeur"] == coeur, (code, s)
+d_us = donnees / "atelier-client" / "client-usurpe"; d_us.mkdir()
+(d_us / "entreprise.json").write_text(json.dumps({"entrepriseId": "ffffffff-0000-4000-8000-000000000000", "numeroBce": "0123456749", "slug": "client-usurpe", "creeLe": "2026-10-16T08:00:00Z"}), encoding="utf-8")
+code, s = lancer("nouveau-client", "--fiche", fiche_usurpe)
+assert code != 0 and "registre" in s and etat["ecritures"] == avant and etat["appels_coeur"] == coeur, (code, s)
+shutil.rmtree(d_us); etat["societes"].pop()
+print("9. marqueur d'un client posé sur une entreprise sans registre ou avec un autre identifiant : refus, rien d'écrit")
+# 10. Marqueur en mot entier : « zeta-plus » n'est pas « zeta ».
+etat["societes"].append({"id": "11111111-0000-4000-8000-0000000000aa", "name": "Zeta Plus",
+                         "description": "Entreprise cliente. Marqueur de périmètre : atelier-client:zeta-plus.", "budgetMonthlyCents": 0})
+creations = etat["creations"]
+code, s = lancer("nouveau-client", "--fiche", ecrire_fiche("zeta.json", lambda f: f.update(nomCommercial="Zeta")))
+assert code == 0 and etat["creations"] == creations + 1 and (donnees / "atelier-client/zeta/entreprise.json").is_file(), (code, s)
+print("10. marqueur atelier-client:zeta distinct de atelier-client:zeta-plus : création acceptée, registre écrit")
+# 11. Migration : --enregistrer-existante crée le registre d'une entreprise d'avant le correctif, après contrôle du BCE.
+ANC = "22222222-0000-4000-8000-0000000000bb"
+etat["societes"].append({"id": ANC, "name": "Client Ancien", "description": "Entreprise cliente. Marqueur de périmètre : atelier-client:client-ancien.", "budgetMonthlyCents": 0})
+etat["marques"][ANC] = {"version": 1, "entites": [{"identifiants": [{"type": "bce", "libelle": None, "valeur": "0123.456.749"}]}]}
+def fiche_anc(**kw): return ecrire_fiche("ancien.json", lambda f: f.update(nomCommercial="Client Ancien", **kw))
+reg_anc = donnees / "atelier-client" / "client-ancien" / "entreprise.json"
+avant = list(etat["ecritures"]); coeur = etat["appels_coeur"]
+def refus_enreg(args_, motif):
+    code, s = lancer("nouveau-client", *args_)
+    assert code != 0 and motif in s and not reg_anc.exists() and etat["ecritures"] == avant and etat["appels_coeur"] == coeur, (args_, code, s)
+refus_enreg(["--enregistrer-existante", "--fiche", fiche_anc()], "--entreprise")
+refus_enreg(["--entreprise", ANC, "--fiche", fiche_anc()], "--enregistrer-existante")
+refus_enreg(["--enregistrer-existante", "--entreprise", "pas-un-uuid", "--fiche", fiche_anc()], "UUID")
+refus_enreg(["--enregistrer-existante", "--entreprise", "99999999-0000-4000-8000-000000000009", "--fiche", fiche_anc()], "introuvable")
+refus_enreg(["--enregistrer-existante", "--entreprise", ANC, "--fiche", fiche_anc(numeroBce=autre_bce)], "BCE")
+marque_ancien = etat["marques"].pop(ANC)
+refus_enreg(["--enregistrer-existante", "--entreprise", ANC, "--fiche", fiche_anc()], "BCE")
+etat["marques"][ANC] = marque_ancien
+etat["societes"].append({"id": "33333333-0000-4000-8000-0000000000cc", "name": "Client Ancien", "description": "créée à la main", "budgetMonthlyCents": 0})
+refus_enreg(["--enregistrer-existante", "--entreprise", "33333333-0000-4000-8000-0000000000cc", "--fiche", fiche_anc()], "marqueur")
+etat["societes"].pop()
+etat["societes"].append({"id": "44444444-0000-4000-8000-0000000000dd", "name": ent["nom"], "description": ent["marqueur"], "budgetMonthlyCents": 0})
+refus_enreg(["--enregistrer-existante", "--entreprise", "44444444-0000-4000-8000-0000000000dd", "--fiche", fiche_anc()], "démonstration")
+etat["societes"].pop()
+code, s = lancer("nouveau-client", "--enregistrer-existante", "--entreprise", ANC, "--fiche", fiche_anc(), "--a-blanc")
+assert code == 0 and not reg_anc.exists() and etat["ecritures"] == avant, (code, s)
+code, s = lancer("nouveau-client", "--enregistrer-existante", "--entreprise", ANC, "--fiche", fiche_anc())
+assert code == 0 and etat["ecritures"] == avant and etat["appels_coeur"] == coeur, (code, s)
+rg = json.load(open(reg_anc, encoding="utf-8")); assert rg["entrepriseId"] == ANC and rg["numeroBce"] == "0123456749", rg
+assert (reg_anc.stat().st_mode & 0o777) == 0o600 and (reg_anc.parent.stat().st_mode & 0o777) == 0o700
+code, s = lancer("nouveau-client", "--enregistrer-existante", "--entreprise", ANC, "--fiche", fiche_anc()); assert code == 0, s
+code, s = lancer("nouveau-client", "--fiche", fiche_anc()); assert code == 0 and etat["creations"] == creations + 1, (code, s)
+print("11. --enregistrer-existante : refus sans --entreprise, UUID invalide, entreprise inconnue, BCE différent ou non vérifiable, sans marqueur, démonstration ; succès sans écriture API")
+print("nouveau-client : 8 groupes de vérifications contre une fausse API, tous réussis")
+PY
+then
+  ok "nouveau-client : $(tail -1 "${TRAVAIL}/nouveau-client.txt")"
+else
+  ko "nouveau-client"; tail -30 "${TRAVAIL}/nouveau-client.txt"
+fi
+
+# 2h. Sous-commandes « exporter --entreprise » et « purger » contre une fausse API Paperclip (entreprises, projets,
+#     export natif et route de purge du plugin en mémoire). On vérifie : refus sans --confirmer, sur la démonstration
+#     (marqueur ou nom), sans export, avec un export trop ancien, modifié ou d'une autre entreprise (aucun appel
+#     d'écriture) ; à blanc (étapes et comptes par table, rien supprimé) ; purge complète (plugin, socle, fichiers,
+#     dossiers locaux, ordre des étapes, rapport sans nom ni chemin, avertissement sur les sauvegardes) ; une autre
+#     entreprise n'est jamais touchée. L'export contient aussi les données du plugin (route donnees.exporter,
+#     paginée) : la purge est refusée si ces fichiers manquent ou si leurs comptes ne correspondent plus.
+if "${PY[@]}" - "${RACINE}" "${TRAVAIL}" > "${TRAVAIL}/purge.txt" 2>&1 <<'PY'
+import contextlib, datetime as dt, importlib.util, io, json, os, re, sys, threading, urllib.parse
+from http.server import BaseHTTPRequestHandler, HTTPServer
+from pathlib import Path
+racine, travail = Path(sys.argv[1]), Path(sys.argv[2])
+sys.dont_write_bytecode = True
+reg_orga = json.load(open(racine / "organisation/registre/organisation.json", encoding="utf-8"))
+ent = reg_orga["entreprise"]
+DEMO, CLIENT, AUTRE = "d0000000-0000-4000-8000-000000000001", "c0000000-0000-4000-8000-000000000002", "c0000000-0000-4000-8000-000000000003"
+societes = [
+    {"id": DEMO, "name": ent["nom"], "description": ent["marqueur"]},
+    {"id": CLIENT, "name": "Client Fictif SRL", "description": "atelier-client:fictif"},
+    {"id": AUTRE, "name": "Autre Client SA", "description": "atelier-client:autre"},
+]
+# Tables du plugin : comptes par entreprise ; la fausse route ne touche jamais qu'une entreprise.
+plugin = {CLIENT: {"prospects": 4, "clients": 2, "connaissances_index": 1, "connaissances_documents": 3, "journal": 9},
+          AUTRE: {"prospects": 7, "connaissances_documents": 5}}
+TABLES = ("prospects", "clients", "connaissances_index", "connaissances_documents", "journal", "corbeille")
+etat = {"ordre": [], "ecritures": 0, "echec_plugin": False, "pages_export": 0}
+class H(BaseHTTPRequestHandler):
+    def log_message(self, *a): pass
+    def rep(self, code, corps):
+        brut = json.dumps(corps).encode(); self.send_response(code); self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(brut))); self.end_headers(); self.wfile.write(brut)
+    def corps(self):
+        n = int(self.headers.get("Content-Length") or 0); return json.loads(self.rfile.read(n) or b"null")
+    def do_GET(self):
+        q = urllib.parse.urlparse(self.path)[2][len("/api"):]
+        if q == "/companies": return self.rep(200, societes)
+        if re.fullmatch(r"/companies/[^/]+/projects", q): return self.rep(200, [{"id": "p1", "goalIds": ["g1"]}])
+        self.rep(404, {"error": q})
+    def do_POST(self):
+        q = urllib.parse.urlparse(self.path)[2][len("/api"):]; c = self.corps()
+        if q.endswith("/exports") or q == "/companies/import/preview":
+            if q.endswith("/exports"): return self.rep(200, {"files": {"COMPANY.md": "# Client\n", "agents/a/AGENTS.md": "agent\n"}, "warnings": []})
+            return self.rep(200, {"plan": {}, "manifest": {}, "errors": []})
+        if q == "/plugins/atelier.marketing-ia/api/donnees/export":
+            comptes = {t: plugin.get(c["companyId"], {}).get(t, 0) for t in TABLES}
+            if c.get("table") is None: return self.rep(200, {"companyId": c["companyId"], "total": sum(comptes.values()), "tables": comptes})
+            t, d = c["table"], c.get("decalage", 0); etat["pages_export"] += 1
+            # Pages de 3 lignes pour exercer la pagination ; valeur chiffrée laissée telle quelle.
+            toutes = [{"company_id": c["companyId"], "rang": i, "donnees_chiffrees": {"email": f"chv1.{t}{i}"}} for i in range(comptes[t])]
+            lignes = toutes[d:d + 3]; suivant = d + len(lignes) if d + len(lignes) < len(toutes) else None
+            return self.rep(200, {"companyId": c["companyId"], "table": t, "total": len(toutes), "decalage": d, "limite": 3, "lignes": lignes, "suivant": suivant})
+        if q == "/plugins/atelier.marketing-ia/api/donnees/purge":
+            comptes = {t: plugin.get(c["companyId"], {}).get(t, 0) for t in TABLES}
+            if c.get("aBlanc"): return self.rep(200, {"aBlanc": True, "supprime": False, "total": sum(comptes.values()), "tables": comptes})
+            etat["ecritures"] += 1; etat["ordre"].append("plugin")
+            if etat["echec_plugin"]: return self.rep(500, {"error": "base indisponible"})
+            plugin[c["companyId"]] = {}
+            return self.rep(200, {"aBlanc": False, "supprime": True, "total": sum(comptes.values()), "tables": comptes})
+        self.rep(404, {"error": q})
+    def do_PATCH(self):
+        q = urllib.parse.urlparse(self.path)[2][len("/api"):]; self.corps(); etat["ecritures"] += 1; self.rep(200, {})
+    def do_DELETE(self):
+        q = urllib.parse.urlparse(self.path)[2][len("/api"):]; etat["ecritures"] += 1; etat["ordre"].append("socle")
+        m = re.fullmatch(r"/companies/([^/]+)", q)
+        societes[:] = [s_ for s_ in societes if s_["id"] != m.group(1)]; self.rep(200, {"ok": True})
+serveur = HTTPServer(("127.0.0.1", 0), H); port = serveur.server_address[1]
+threading.Thread(target=serveur.serve_forever, daemon=True).start()
+donnees = travail / "donnees-purge"; donnees.mkdir()
+home = travail / "paperclip-home"
+os.environ.update({"ATELIER_API": f"http://127.0.0.1:{port}/api", "ATELIER_DONNEES_LOCALES": str(donnees),
+                   "PAPERCLIP_HOME": str(home), "PAPERCLIP_INSTANCE_ID": "essai"})
+spec = importlib.util.spec_from_file_location("b", racine / "scripts/bootstrap-organisation.py")
+b = importlib.util.module_from_spec(spec); spec.loader.exec_module(b)
+def lancer(*args):
+    sortie = io.StringIO()
+    with contextlib.redirect_stdout(sortie), contextlib.redirect_stderr(sortie):
+        code = b.main(list(args))
+    return code, sortie.getvalue()
+def rien_ecrit(avant): assert etat["ecritures"] == avant and len(societes) == 3, (etat, societes)
+# Fichiers disque de chaque entreprise et dossiers locaux du client.
+for cid in (CLIENT, AUTRE):
+    d = home / "instances" / "essai" / "companies" / cid; d.mkdir(parents=True); (d / "instructions.md").write_text("x")
+for d in (donnees / "agents-atelier" / CLIENT / "coordinateur", donnees / "claude-config" / CLIENT / "coordinateur",
+          donnees / "agents-atelier" / "client-fictif" / "coordinateur", donnees / "atelier-client" / "fictif",
+          donnees / "agents-atelier" / AUTRE / "coordinateur", donnees / "agents-atelier" / "client-autre" / "coordinateur"):
+    d.mkdir(parents=True)
+(donnees / "agents-atelier" / CLIENT / "coordinateur" / "notes.md").write_text("donnée du client")
+def registre(slug, cid_):
+    d_ = donnees / "atelier-client" / slug; d_.mkdir(parents=True, exist_ok=True)
+    (d_ / "entreprise.json").write_text(json.dumps({"entrepriseId": cid_, "numeroBce": "0123456749", "slug": slug, "creeLe": "2026-10-16T08:00:00Z"}), encoding="utf-8")
+registre("fictif", CLIENT); registre("autre", AUTRE)
+
+# 1. Sans --confirmer : refus (code non nul), aucune écriture, même sans export.
+code, s = lancer("purger", "--entreprise", CLIENT)
+assert code != 0 and "--confirmer" in s, (code, s); rien_ecrit(0)
+# 2. UUID invalide, entreprise inconnue.
+code, s = lancer("purger", "--entreprise", "pas-un-uuid", "--confirmer"); assert code != 0 and "UUID" in s, s
+code, s = lancer("purger", "--entreprise", "e0000000-0000-4000-8000-000000000009", "--confirmer"); assert code != 0 and "introuvable" in s, s
+rien_ecrit(0)
+# 2 bis. Entreprise sans marqueur atelier-client:<slug> : refus (même à blanc) ; seule dérogation --hors-marqueur avec
+#     le nom exact retapé (--nom-confirme), jamais l'un sans l'autre ; un marqueur collé à un autre mot ne compte pas.
+SANS = "f0000000-0000-4000-8000-000000000005"
+societes.append({"id": SANS, "name": "Société Étrangère SA", "description": "créée à la main"})
+for extra in ((), ("--a-blanc",), ("--hors-marqueur",), ("--nom-confirme", "Société Étrangère SA"), ("--hors-marqueur", "--nom-confirme", "Société Etrangère SA"),
+              ("--hors-marqueur", "--nom-confirme", "société étrangère sa"), ("--hors-marqueur", "--nom-confirme", "Société Étrangère SA ")):
+    code, s = lancer("purger", "--entreprise", SANS, "--confirmer", *extra)
+    assert code != 0 and ("marqueur atelier-client" in s or "--nom-confirme" in s) and "Rien n'a été supprimé" in s, (extra, code, s)
+    assert etat["ecritures"] == 0 and len(societes) == 4, (extra, etat)
+assert etat["ecritures"] == 0 and len(societes) == 4, (etat, societes)
+societes[-1]["description"] = "préfixeatelier-client:fictif-faux et sans-atelier-client:x"
+code, s = lancer("purger", "--entreprise", SANS, "--confirmer"); assert code != 0 and "marqueur atelier-client" in s, s
+societes[-1]["description"] = "créée à la main"
+# Avec le nom exact : le garde-fou passe (le refus suivant vient alors de l'absence d'export, pas du marqueur).
+code, s = lancer("purger", "--entreprise", SANS, "--confirmer", "--hors-marqueur", "--nom-confirme", "Société Étrangère SA")
+assert code != 0 and "marqueur" not in s and "aucun export de moins de 24 h" in s and etat["ecritures"] == 0, (code, s)
+code, s = lancer("purger", "--entreprise", SANS, "--a-blanc", "--hors-marqueur", "--nom-confirme", "Société Étrangère SA")
+assert code == 0 and "Entreprise à purger" in s and etat["ecritures"] == 0, (code, s)
+societes.pop()
+print("1 bis. entreprise sans marqueur atelier-client:<slug> : refus ; --hors-marqueur exige le nom exact ; rien d'écrit")
+
+# 3. Démonstration (marqueur) refusée, même avec --confirmer et --a-blanc ; une entreprise portant le nom de la démonstration aussi.
+for extra in ((), ("--a-blanc",)):
+    code, s = lancer("purger", "--entreprise", DEMO, "--confirmer", *extra)
+    assert code != 0 and "démonstration" in s, (code, s); rien_ecrit(0)
+societes.append({"id": "d0000000-0000-4000-8000-000000000004", "name": ent["nom"], "description": ""})
+code, s = lancer("purger", "--entreprise", "d0000000-0000-4000-8000-000000000004", "--confirmer")
+assert code != 0 and "démonstration" in s, s
+societes.pop(); rien_ecrit(0)
+print("1. refus sans --confirmer, UUID invalide, entreprise inconnue, démonstration (marqueur et nom) : rien d'écrit")
+
+# 3 bis. M2 : l'identité d'un client vient du registre local, jamais de la description (modifiable par un agent).
+# a. Marqueur d'un autre client posé sur AUTRE : les dossiers locaux supprimés restent ceux d'AUTRE.
+autre_soc = next(s_ for s_ in societes if s_["id"] == AUTRE); desc_autre = autre_soc["description"]
+autre_soc["description"] = "atelier-client:fictif"
+code, s = lancer("purger", "--entreprise", AUTRE, "--a-blanc")
+ligne4 = [l for l in s.splitlines() if "4. dossiers locaux" in l][0]
+assert code == 0 and "client-fictif" not in ligne4 and "atelier-client/fictif" not in ligne4 and "atelier-client/autre" in ligne4 and "client-autre" in ligne4, (code, s)
+autre_soc["description"] = desc_autre
+# b. Un marqueur de démonstration ajouté par un agent ne bloque plus la purge d'un client enregistré.
+societes[1]["description"] = "atelier-client:fictif atelier-demo:x"
+code, s = lancer("purger", "--entreprise", CLIENT, "--a-blanc"); assert code == 0 and "Entreprise à purger" in s, (code, s)
+code, s = lancer("purger", "--entreprise", CLIENT, "--confirmer"); assert "démonstration" not in s and "aucun export" in s, s
+societes[1]["description"] = "atelier-client:fictif"; rien_ecrit(0)
+# c. Une entreprise qui porte le marqueur mais n'a aucun registre : refus ; seule la dérogation humaine passe le garde-fou.
+SANSREG = "f0000000-0000-4000-8000-000000000006"
+societes.append({"id": SANSREG, "name": "Sans Registre SA", "description": "atelier-client:sans-registre"})
+for extra in ((), ("--a-blanc",)):
+    code, s = lancer("purger", "--entreprise", SANSREG, "--confirmer", *extra)
+    assert code != 0 and "registre local" in s and "Rien n'a été supprimé" in s and etat["ecritures"] == 0, (extra, code, s)
+code, s = lancer("purger", "--entreprise", SANSREG, "--confirmer", "--hors-marqueur", "--nom-confirme", "Sans Registre SA")
+assert code != 0 and "registre local" not in s and "aucun export" in s and etat["ecritures"] == 0, (code, s)
+societes.pop(); rien_ecrit(0)
+print("1 ter. identité par le registre local : marqueur usurpé sans effet sur les dossiers, atelier-demo: sans effet, entreprise sans registre refusée")
+
+# 4. Aucun export : refus avec la commande à lancer ; à blanc rend 0 mais annonce que la purge serait refusée.
+code, s = lancer("purger", "--entreprise", CLIENT, "--confirmer")
+assert code != 0 and "aucun export de moins de 24 h" in s and f"exporter --entreprise {CLIENT}" in s, (code, s); rien_ecrit(0)
+code, s = lancer("purger", "--entreprise", CLIENT, "--a-blanc")
+assert code == 0 and "ABSENT" in s and "serait refusée" in s, (code, s); rien_ecrit(0)
+print("2. refus sans export (message avec la commande d'export) ; à blanc signale l'absence")
+
+# 5. Export réel contre la fausse API : manifeste, empreintes, emplacement par défaut.
+code, s = lancer("exporter", "--entreprise", CLIENT); assert code == 0, s
+dossiers = sorted((donnees / "exports" / CLIENT).iterdir()); assert len(dossiers) == 1, dossiers
+export = dossiers[0]; m = json.loads((export / "manifeste-export.json").read_text())
+fichiers_plugin = {f"donnees-plugin/{t}.json" for t in TABLES}
+assert m["entrepriseId"] == CLIENT and set(m["fichiers"]) == {"COMPANY.md", "agents/a/AGENTS.md"} | fichiers_plugin and len(m["empreinte"]) == 64, m
+lues = {t: json.loads((export / "donnees-plugin" / f"{t}.json").read_text()) for t in TABLES}
+assert {t: len(v) for t, v in lues.items()} == plugin[CLIENT] | {"corbeille": 0}, lues
+assert [l["rang"] for l in lues["prospects"]] == [0, 1, 2, 3] and etat["pages_export"] >= 2 + len(TABLES) - 1, (lues["prospects"], etat["pages_export"])
+assert all(l["company_id"] == CLIENT and l["donnees_chiffrees"]["email"].startswith("chv1.") for v in lues.values() for l in v), "colonnes chiffrées et entreprise"
+assert AUTRE not in json.dumps(lues), "aucune ligne d'une autre entreprise"
+assert "Données du plugin : 19 ligne(s) dans 6 table(s)" in s, s
+assert b.verifier_export_recent(CLIENT, export, dt.datetime.now(dt.timezone.utc))[0] is not None
+code, s = lancer("exporter", "--entreprise", "pas-un-uuid"); assert code != 0, s
+code, s = lancer("exporter"); assert code != 0 and "--sortie" in s, s
+print("3. exporter --entreprise : manifeste (entreprise, date, empreintes), données du plugin paginées et chiffrées, emplacement par défaut")
+
+# 6. Export trop ancien, modifié, ou d'une autre entreprise : refus sans écriture.
+def reecrire(**champs):
+    m2 = json.loads((export / "manifeste-export.json").read_text()); m2.update(champs)
+    (export / "manifeste-export.json").write_text(json.dumps(m2))
+original = (export / "manifeste-export.json").read_text()
+vieux = (dt.datetime.now(dt.timezone.utc) - dt.timedelta(hours=25)).strftime("%Y-%m-%dT%H:%M:%SZ")
+reecrire(exporteLe=vieux)
+code, s = lancer("purger", "--entreprise", CLIENT, "--confirmer"); assert code != 0 and "trop ancien" in s, s; rien_ecrit(0)
+(export / "manifeste-export.json").write_text(original)
+(export / "COMPANY.md").write_text("# modifié après l'export\n")
+code, s = lancer("purger", "--entreprise", CLIENT, "--confirmer"); assert code != 0 and "modifié" in s, s; rien_ecrit(0)
+(export / "COMPANY.md").write_text("# Client\n")
+reecrire(entrepriseId=AUTRE)
+code, s = lancer("purger", "--entreprise", CLIENT, "--confirmer"); assert code != 0 and "autre entreprise" in s, s; rien_ecrit(0)
+(export / "manifeste-export.json").write_text(original)
+print("4. export de plus de 24 h, fichier modifié, manifeste d'une autre entreprise : refus, rien d'écrit")
+
+# 6 bis. Export incomplet (fichier du plugin absent, comptes différents, ancien format sans données du plugin) : refus, rien d'écrit.
+import shutil
+def export_modifie(nom, modifier):
+    d = travail / f"export-{nom}"; shutil.copytree(export, d)
+    modifier(d)
+    m3 = json.loads((d / "manifeste-export.json").read_text())
+    m3["fichiers"] = {c: __import__("hashlib").sha256((d / c).read_bytes()).hexdigest() for c in m3["fichiers"] if (d / c).is_file()}
+    m3["empreinte"] = b.empreinte_manifeste(m3["fichiers"]); (d / "manifeste-export.json").write_text(json.dumps(m3))
+    return d
+def sans_fichier(d): (d / "donnees-plugin/prospects.json").unlink()
+def moins_de_lignes(d): (d / "donnees-plugin/prospects.json").write_text(json.dumps(json.loads((d / "donnees-plugin/prospects.json").read_text())[:3]))
+def ancien_format(d): shutil.rmtree(d / "donnees-plugin")
+for nom, modif, attendu in (("sans-fichier", sans_fichier, "donnees-plugin/prospects.json absent"),
+                            ("moins-de-lignes", moins_de_lignes, "prospects : 3 ligne(s) exportée(s) pour 4"),
+                            ("ancien-format", ancien_format, "absent de l'export")):
+    d = export_modifie(nom, modif)
+    code, s = lancer("purger", "--entreprise", CLIENT, "--confirmer", "--export", str(d))
+    assert code != 0 and "l'export ne contient pas toutes les données du plugin" in s and attendu in s and "rien n'a été supprimé" in s, (nom, code, s)
+    rien_ecrit(0); assert not list(d.glob("rapport-purge-*")) and plugin[CLIENT]["prospects"] == 4
+    code, s = lancer("purger", "--entreprise", CLIENT, "--a-blanc", "--export", str(d))
+    assert code == 0 and "INCOMPLET" in s and "serait refusée" in s, (nom, s)
+# Les données ont changé depuis l'export (4 prospects exportés, 5 aujourd'hui) : refus aussi pour l'export par défaut.
+plugin[CLIENT]["prospects"] = 5
+code, s = lancer("purger", "--entreprise", CLIENT, "--confirmer")
+assert code != 0 and "prospects : 4 ligne(s) exportée(s) pour 5 actuellement" in s, s; rien_ecrit(0)
+plugin[CLIENT]["prospects"] = 4
+# Purge reprise après un échec du socle : les tables du plugin sont déjà vidées (ou réduites), l'export en contient plus : autorisé.
+for restant in (3, 0):
+    plugin[CLIENT]["prospects"] = restant
+    code, s = lancer("purger", "--entreprise", CLIENT, "--a-blanc")
+    assert code == 0 and "la purge réelle est autorisée" in s, (restant, s); rien_ecrit(0)
+plugin[CLIENT]["prospects"] = 4
+print("4 bis. export sans les données du plugin, avec comptes différents ou périmé : refus, rien d'écrit (l'à blanc le signale)")
+
+# 7. À blanc avec export valide : étapes, comptes par table, avertissement sur les sauvegardes, rien supprimé.
+code, s = lancer("purger", "--entreprise", CLIENT, "--a-blanc")
+assert code == 0 and "la purge réelle est autorisée" in s and "À blanc" in s, s
+for attendu in ("1. données du plugin : 19 ligne(s) dans 5 table(s)", "prospects : 4", "connaissances_index : 1", "journal : 9", "corbeille : 0",
+                "2. entreprise côté socle", "3. fichiers Paperclip", "4. dossiers locaux du client", "14 jours", "ne sont PAS modifiées"):
+    assert attendu in s, (attendu, s)
+rien_ecrit(0); assert plugin[CLIENT]["prospects"] == 4
+assert not list(export.glob("rapport-purge-*")), "l'à blanc n'écrit aucun rapport"
+print("5. à blanc : quatre étapes, comptes par table, avertissement sauvegardes ; rien supprimé, aucun rapport")
+
+# 8. Échec du plugin : rien d'autre supprimé (entreprise, fichiers), rapport « échec », code non nul.
+etat["echec_plugin"] = True
+code, s = lancer("purger", "--entreprise", CLIENT, "--confirmer")
+assert code != 0 and len(societes) == 3 and (home / "instances/essai/companies" / CLIENT).is_dir(), (code, s, societes)
+rapport_echec = json.loads(sorted(export.glob("rapport-purge-*.json"))[0].read_text()); assert rapport_echec["statut"] == "échec", rapport_echec
+for f in export.glob("rapport-purge-*.json"): f.unlink()
+etat["echec_plugin"] = False; etat["ordre"].clear()
+print("6. échec de la purge du plugin : entreprise et fichiers intacts, rapport « échec »")
+
+# 9. Purge complète : ordre plugin puis socle, fichiers et dossiers locaux supprimés, autre entreprise intacte.
+code, s = lancer("purger", "--entreprise", CLIENT, "--confirmer")
+assert code == 0, s
+assert etat["ordre"] == ["plugin", "socle"], etat["ordre"]
+assert [i for i in range(1, 5) if f"[purge] étape {i}/4" in s] == [1, 2, 3, 4] and s.index("étape 1/4") < s.index("étape 2/4") < s.index("étape 3/4") < s.index("étape 4/4"), s
+assert [c["id"] for c in societes if c["id"] in (CLIENT, AUTRE)] == [AUTRE], societes
+assert not (home / "instances/essai/companies" / CLIENT).exists() and (home / "instances/essai/companies" / AUTRE).is_dir()
+assert not (donnees / "agents-atelier" / CLIENT).exists() and not (donnees / "claude-config" / CLIENT).exists() and not (donnees / "agents-atelier/client-fictif").exists() and not (donnees / "claude-config/client-fictif").exists() and not (donnees / "atelier-client/fictif").exists()
+assert (donnees / "agents-atelier" / AUTRE / "coordinateur").is_dir() and (donnees / "agents-atelier/client-autre/coordinateur").is_dir(), "dossiers locaux d'un autre client intacts"
+assert plugin[CLIENT] == {} and plugin[AUTRE] == {"prospects": 7, "connaissances_documents": 5}, plugin
+assert "ne sont PAS modifiées" in s and "14 jours" in s and "Rapport de purge" in s
+rapports = sorted(export.glob("rapport-purge-*.json")); assert len(rapports) == 1, rapports
+brut = rapports[0].read_text(encoding="utf-8"); r = json.loads(brut)
+assert r["statut"] == "réussie" and r["entrepriseId"] == CLIENT and r["total"] == 19 and r["tables"]["prospects"] == 4, r
+assert [e["etape"] for e in r["etapes"]] == [1, 2, 3, 4] and all(e["statut"] == "fait" for e in r["etapes"]), r["etapes"]
+assert any("14 jours" in a and "PAS modifiées" in a for a in r["avertissements"]), r["avertissements"]
+assert re.fullmatch(r"rapport-purge-\d{8}-\d{6}\.json", rapports[0].name) and r["debut"] <= r["fin"]
+for interdit in ("Client Fictif", "client-fictif", "/home/", "/tmp/", str(travail), "donnée du client"):
+    assert interdit not in brut, f"le rapport contient « {interdit} »"
+print("7. purge complète : plugin puis socle, fichiers et dossiers locaux supprimés, rapport horodaté sans nom ni chemin")
+
+# 10. Deuxième purge de la même entreprise : introuvable, rien d'écrit ; l'autre entreprise reste intacte.
+avant = etat["ecritures"]
+code, s = lancer("purger", "--entreprise", CLIENT, "--confirmer"); assert code != 0 and "introuvable" in s and etat["ecritures"] == avant, s
+assert any(c["id"] == AUTRE for c in societes)
+print("8. seconde purge de la même entreprise : introuvable, rien d'écrit ; l'autre entreprise intacte")
+print("purger : 10 groupes de vérifications contre une fausse API, tous réussis")
+PY
+then
+  ok "purger : $(tail -1 "${TRAVAIL}/purge.txt")"
+else
+  ko "purger"; tail -30 "${TRAVAIL}/purge.txt"
+fi
+
+
 # 3. Isolement des consignes personnelles, sans aucun appel de modèle : le vrai « claude » est lancé
 #    dans un dossier situé sous ~, avec une configuration dédiée, une clé
 #    factice et ANTHROPIC_BASE_URL vers un serveur local qui enregistre la requête et répond
@@ -1009,6 +1547,72 @@ then
   ok "permissions des agents : $(tail -1 "${TRAVAIL}/permissions.txt")"
 else
   ko "permissions des agents"; cat "${TRAVAIL}/permissions.txt"
+fi
+
+# Cloisonnement entre entreprises (16/10/2026) : le même rôle a un cwd et un CLAUDE_CONFIG_DIR distincts dans
+# deux entreprises, avec le même settings.json (mêmes règles deny) ; l'ancien dossier partagé par rôle n'est
+# jamais déplacé ni supprimé (avertissement) ; l'identifiant d'entreprise est validé.
+DONNEES_CLOISON="${TRAVAIL}/donnees-cloisonnement"
+rm -rf "${DONNEES_CLOISON}"; mkdir -p "${DONNEES_CLOISON}"
+if ATELIER_DONNEES_LOCALES="${DONNEES_CLOISON}" "${PY[@]}" - "${RACINE}" "${DONNEES_CLOISON}" > "${TRAVAIL}/cloisonnement.txt" 2>&1 <<'PY'
+import contextlib, importlib.util, io, json, sys
+from pathlib import Path
+racine, donnees = Path(sys.argv[1]), Path(sys.argv[2]).resolve()
+spec = importlib.util.spec_from_file_location("bootstrap", racine / "scripts" / "bootstrap-organisation.py")
+b = importlib.util.module_from_spec(spec); spec.loader.exec_module(b)
+reg = json.loads((racine / "organisation/registre/agents.json").read_text(encoding="utf-8"))
+A, B = "aaaaaaaa-0000-4000-8000-000000000001", "bbbbbbbb-0000-4000-8000-000000000002"
+# Ancien dossier partagé (disposition d'avant) : fichiers de deux entreprises mêlés, plus un fichier d'authentification.
+for rac in ("agents-atelier", "claude-config"):
+    (donnees / rac / "coordinateur").mkdir(parents=True)
+(donnees / "agents-atelier/coordinateur/reste-entreprise-a.json").write_text("{}", encoding="utf-8")
+(donnees / "agents-atelier/coordinateur/reste-entreprise-b.json").write_text("{}", encoding="utf-8")
+(donnees / "claude-config/coordinateur/.credentials.json").write_text('{"jeton":"x"}', encoding="utf-8")
+(donnees / "claude-config/coordinateur/.claude.json").write_text("{}", encoding="utf-8")
+sortie = io.StringIO()
+with contextlib.redirect_stdout(sortie):
+    b.preparer_dossiers_locaux(A, reg)
+    b.preparer_dossiers_locaux(B, reg)
+    ecrits_a2 = b.preparer_dossiers_locaux(A, reg)
+assert ecrits_a2 == 0, "deuxième passage : rien à réécrire"
+roles = [a["slug"] for a in reg["agents"] if not a.get("deterministe")]
+assert "coordinateur" in roles and "prospection" in roles
+for role in roles:
+    ea, ca = b.dossiers_agent(A, role); eb, cb = b.dossiers_agent(B, role)
+    assert ea != eb and ca != cb, f"{role} : cwd ou configuration partagés entre deux entreprises"
+    assert A in str(ea) and A in str(ca) and B in str(eb) and B in str(cb)
+    for d in (ea, ca, eb, cb):
+        assert d.is_dir() and (d.stat().st_mode & 0o777) == 0o700, f"{d} : droits"
+    ja, jb = json.loads((ca / "settings.json").read_text(encoding="utf-8")), json.loads((cb / "settings.json").read_text(encoding="utf-8"))
+    assert ja["permissions"]["deny"] and ja["autoMemoryEnabled"] is False, role
+    assert ja["permissions"]["deny"] == jb["permissions"]["deny"], f"{role} : règles deny différentes"
+    assert ja["permissions"]["allow"] == [f"Read(/{ca}/projects/**)"] and jb["permissions"]["allow"] == [f"Read(/{cb}/projects/**)"]
+    # La liaison locale pointe vers les dossiers de SON entreprise.
+    la = b.liaison_voulue(A, reg, role, None, "reel"); lb = b.liaison_voulue(B, reg, role, None, "reel")
+    assert la["cwd"] == str(ea) and lb["cwd"] == str(eb) and la["cwd"] != lb["cwd"]
+    assert la["config"]["env"]["CLAUDE_CONFIG_DIR"]["value"] == str(ca) and lb["config"]["env"]["CLAUDE_CONFIG_DIR"]["value"] == str(cb)
+# Ancien dossier : intact, rien déplacé ; seule l'authentification est recopiée ; avertissement affiché.
+for f in ("agents-atelier/coordinateur/reste-entreprise-a.json", "agents-atelier/coordinateur/reste-entreprise-b.json",
+          "claude-config/coordinateur/.credentials.json", "claude-config/coordinateur/.claude.json"):
+    assert (donnees / f).is_file(), f"ancien fichier supprimé ou déplacé : {f}"
+ea, ca = b.dossiers_agent(A, "coordinateur")
+assert not any(ea.iterdir()), "le nouvel espace doit rester vide"
+assert (ca / ".credentials.json").is_file() and not (ca / ".claude.json").exists(), "seule l'authentification est recopiée"
+assert "ancien dossier partagé laissé en place" in sortie.getvalue() and "reste-entreprise-a.json" in sortie.getvalue()
+# Identifiant invalide : refus (aucun chemin construit).
+for mauvais in ("", "..", "../x", "a/b", "court", "abcdefgh", "abcdefgh-1234", "AAAAAAAA-0000-4000-8000-000000000001"):
+    try:
+        b.dossiers_agent(mauvais, "coordinateur")
+    except b.ErreurAtelier:
+        pass
+    else:
+        raise SystemExit(f"identifiant accepté à tort : {mauvais!r}")
+print(f"{len(roles)} rôles : cwd et configuration distincts par entreprise, mêmes règles deny, ancien dossier intact")
+PY
+then
+  ok "cloisonnement des dossiers par entreprise : $(tail -1 "${TRAVAIL}/cloisonnement.txt")"
+else
+  ko "cloisonnement des dossiers par entreprise"; cat "${TRAVAIL}/cloisonnement.txt"
 fi
 
 echo "Bilan : ${reussis} réussi(s), ${echecs} échec(s)."

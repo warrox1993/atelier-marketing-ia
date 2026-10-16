@@ -1,81 +1,91 @@
 # Reprise : Atelier Marketing IA
 
-## État au 16/10/2026, 15 h
+## État au 16/10/2026, au soir
 
-Cette section prime sur les suivantes en cas de doute. Elle suffit pour reprendre sans rien redemander.
+Cette section prime sur les suivantes en cas de doute. Elle suffit pour reprendre sans rien redemander. Historique des lots
+de l'après-midi et du soir : `git log --oneline 51be4b1..HEAD` (tête `7bc4dd2`, copie de travail propre).
 
-### 1. En ligne depuis 13 h 24 (instances 3100 et 3580)
+### 1. Ce qui tourne
 
-Plugin au commit `bf61dba` (16/10, 13 h 22), socle avec les patches `0021` à `0033`. Fonctions :
+- Deux instances et trois passerelles, sous **systemd utilisateur** (`atelier-instance@<id>`, `atelier-passerelle@<port>`),
+  linger activé, redémarrage automatique en cas d'échec :
+  - instance `atelier` (3100) avec la passerelle 3190 ;
+  - instance `atelier-apercu` (3580) avec les passerelles 3581 et 3582.
+- Fichiers d'environnement : `~/.config/atelier/<id>.env` (ports et URL, aucun secret).
+- Santé : `atelier-sante@<id>.timer` toutes les 5 minutes (`scripts/sante-atelier.sh --notifier`, notification bureau).
+- Sauvegarde hors machine : `atelier-sauvegarde.timer`, chaque jour à 03 h 30, vers `/mnt/donnees/Systeme/Sauvegardes/atelier`
+  (14 copies, empreintes vérifiées). Détail : `docs/exploitation.md` §3 (« Sauvegarde hors machine ») et §16.
+- Le plugin de l'instance 3580 vit dans `instance/plugin-apercu` (avec `courtier.sh`), plus dans un dossier temporaire :
+  le redémarrage du poste du 16/10 à 16 h 31 avait fait perdre l'ancien emplacement.
+- Dernier patch du socle : `0047` (traductions). Si un patch `0048` est apparu depuis (`ls socle/patches | tail -3`), il vient
+  de l'agent sécurité : le lire avant de déployer.
 
-- chat Discussion, dictée et voix en direct (la voix attend la clé OpenAI, voir plus bas) ;
-- critères des leads (poids étroits, formulaire de décision d'un critère) ;
-- veilleur des tâches orphelines ;
-- cycles remis à zéro par décision humaine ;
-- traduction française de l'interface, patches `0027` à `0031` (barre latérale, tableau de bord, fil d'activité,
-  statuts, priorités) ;
-- Prospection et SEA à 90 tours ;
-- sécurité déjà déployée : patch `0032` (`90498d2`, corps des requêtes de plugin masqué dans le journal HTTP) et
-  patch `0033` (`473ea76`, expiration des cartes IA filtrée par fournisseur et phase).
+### 2. Déployer et publier
 
-### 2. Commité mais PAS déployé (27 commits, `git log --oneline bf61dba..HEAD`, tête `d4fe5be`)
+- Plugin et socle : `scripts/deployer.sh --apercu instance/plugin-apercu --journaux ~/.cache/atelier-journaux`
+  (`docs/exploitation.md` §15). Le script exige un arbre propre dans le dépôt et dans `paperclip/`.
+- Passerelles : `cd passerelle && npm run build`, puis `systemctl --user restart atelier-passerelle@<port>`. Ne plus utiliser
+  `passerelles.sh demarrer` pour celles que gère systemd.
+- Publication : `scripts/publier.sh`, puis push par l'opérateur. Dernier état publié : `fc8c074` sur `main` de GitHub (16/10).
+  Les commits postérieurs (sous-commande purger, dossiers par identifiant d'entreprise) ne sont pas encore poussés.
 
-- **Mobile** : `7632ac3` (saisie de la Discussion au-dessus de la barre de l'hôte), `6220ff8` (sommaire et sections
-  repliables des Paramètres, volet Filtres des Prospects, onglets), patch `0040` `6dc03b1` (propriétés, actions et
-  statut accessibles sous md), patch `0041` `3eca7c0` (barre du bas mobile), `0f7530e` (e2e Discussion, Paramètres et
-  Prospects sur téléphone). Audit : `socle/patches/audit-mobile.md`.
-- **Contexte, dossier et prospects résumés** : `70ceb65` (contexte de tâche, résumé par défaut sous 40 000
-  caractères, pages du livrable, `vue=complete`), `a3a8154` (même principe pour le dossier de tâche et la liste des
-  prospects).
-- **Fiche des routes** : `730ec76` (corps de requête des routes d'agents, générée depuis les contrats zod),
-  `efef5a4` (verifier-organisation lit la consigne de dépôt dans le texte du rôle).
-- **Traduction 0034 et suivants** : `654ce4f` (0034, reçu, priorités, fil de la tâche), `80425c9` (0035, routines,
-  projets, filtres), `d4c5ba2` (0036, détail de projet et de routine, dossiers, navigation), `0e39738` (0037,
-  attendus de tests français), `8c4a997` (0042, libellés français des écrans principaux).
-- **Format fr-BE** : `0258629` (0038, nombres et test du choix d'un humain), `3662d40` (0039, nombres, montants et
-  dates explicites en fr-BE).
-- **Sécurité** : `26daf1b` (C1, sommaire du livrable : motif linéaire, lignes bornées, gel du worker), `99a393b` (C2,
-  surcharge distante en liste blanche, sans source, filtre de secrets), `333cceb` (F1, clé du tableau en en-tête non
-  redirigeable, limitée à l'adresse locale, localhost et `*.ts.net`), `19eda5f` (F2, destinataire humain des
-  blocages de revue selon le mode de déploiement), `7c3aa72` (F3, refus de démarrer si le tailnet publie l'instance
-  sans surcharge distante). Les patches `0032` et `0033` ne sont pas dans cette liste : ils sont déjà en ligne.
-- **Préparation de l'accès distant** : `516c175` (surcharge facultative `config/atelier-distant.env`, modèle
-  `config/atelier-distant.env.exemple`, validation), `f544519` (réglage `humainDestinataire`, repli `local-board`),
-  `a1369e1` (clé d'API du tableau facultative `PAPERCLIP_BOARD_KEY` pour le mode authentifié).
-- **Déploiement** : `d4fe5be` (`scripts/deployer.sh` et sa section dans `docs/exploitation.md`).
-- **Documentation** : `244393f` (`docs/guide-utilisateur.md`), `c59d4cf` (limite de dictée en taille).
+### 3. Lots livrés le 16/10 (commits sur `main`)
 
-Dernier patch du socle : `0042`. Un fichier de test (`plugin-atelier/tests/securite-extraction.spec.ts`) était
-modifié et non commité au moment de cette mise à jour : à relire avant tout déploiement (le déploiement exige un
-arbre propre).
+- **Renvoi au Coordinateur** d'un livrable bloqué, concurrence, retour arrière, consigne en cas de cycles épuisés : `ac3d451`, `dd9b998`.
+- **Couverture de prospection** calculée par la machine (zones à interroger, porte contre les zones oubliées et les totaux faux) :
+  `0d1ed16`, `5650cff`, `bc363ba`, `62ad323`, `5307641`.
+- **Critères de qualification du courtier de démonstration**, lots 1 à 3 (18 critères codés) : `c3bd5fb`, `fcb2613`, `0a0f778`, `3c818d7`.
+- **Passage au réel** (état des branchements, ce qu'ils débloquent, qui agit, leads concernés) : `72dc32b`, `11c2699`.
+- **Revue indépendante corrigée** (C1, M1 à M9, mineurs) ; suites de sécurité : M2 résiduel `4bc4fad`, m5 et m7 `f9f2ae4`, m6 `e4520db`,
+  tests de croissance contre les ReDoS et les bombes `8b50c51`. Statut par constat : `docs/revue-independante.md`.
+- **Traductions du socle** : patches `0045` (`4e90ba4`), `0046` (`8f1c572`), `0047` (`79d5229`).
+- **Supervision** (unités systemd, contrôle de santé) : `10f0513`, `fa74265`. **Sauvegarde hors machine** : `e8b8cdb`.
+  **Relevé mensuel des coûts IA** par entreprise et par agent (`scripts/releve-couts.py`) : `e88c73e`.
+- **Mention d'information IA** sur les messages directs de la passerelle (article 50 du règlement européen sur l'IA) : `b1f7289`.
+- **Nouveau client** (`bootstrap-organisation.py nouveau-client`, §17 de `docs/exploitation.md`) : `4ae0de7`.
+  **Purge** de fin de contrat et droit à l'effacement (§18) : `8d14c59`.
+- **Cloisonnement** : dossiers locaux des agents rangés par identifiant d'entreprise (anciennes dispositions par slug reconnues
+  à la purge) : `f5f7e15`, `7bc4dd2`.
+- **Réveil immédiat** du Coordinateur après une demande à l'équipe : `eb8ae2d`.
+- **Démonstration du courtier** : positions des bureaux reprises du référentiel des codes postaux : `6861b49`.
+- **Dépendances** : `@paperclipai/shared` forcé à 2026.1012.0 (GHSA-3pw3-v88x-xj24, alerte sprintf-js fermée) : `f5f3f8b`.
+- **Hygiène** : plus aucun nom du client de démonstration dans les fichiers suivis : `272f050`.
 
-### 3. Prochaines étapes, dans l'ordre
+### 4. Décisions de l'opérateur
 
-1. **Second déploiement**, seulement quand la suite complète du socle et celle du plugin sont vertes :
-   `scripts/deployer.sh --cible toutes --apercu <dossier d'aperçu> --journaux <dossier>`. Le script exige un arbre
-   propre dans le dépôt et dans `paperclip/`. Juste après, renseigner une fois le réglage `humainDestinataire` en mode
-   authentifié.
-2. **Accès mobile par Tailscale** (9 étapes ; aucun document de `docs/` ne les détaille, `docs/evolution-deploiement.md`
-   décrit seulement les modes de déploiement) :
-   1. JB installe Tailscale 1.104 depuis le dépôt apt officiel, puis lance
-      `tailscale up --netfilter-mode=off --accept-dns=false` (son Mullvad utilise le DNS 100.64.0.29).
-   2. JB active MagicDNS et HTTPS.
-   3. JB règle les ACL sur tcp:443.
-   4. Claude copie `config/atelier-distant.env.exemple` vers `config/atelier-distant.env`, le remplit, puis valide avec
-      `scripts/verifier-config.sh --distant`.
-   5. Relance de l'instance 3100.
-   6. `tailscale serve --bg --https=443 http://127.0.0.1:3100`, jamais Funnel.
-   7. JB crée son compte et ouvre l'URL de réclamation du tableau affichée dans le terminal.
-   8. Fermeture des inscriptions avec `PAPERCLIP_AUTH_DISABLE_SIGN_UP=true`.
-   9. Essais sur téléphone.
-3. **Clé OpenAI** pour la voix : la ranger comme secret natif et la lier au réglage `openaiSecretRef`
-   (`docs/voix-en-direct.md`).
-4. **Réindexation bge-m3 sur l'instance 3580** (`scripts/reindexer-connaissances.py`).
-5. **Push GitHub par l'opérateur**, après un nouveau `scripts/publier.sh`. Rien n'est poussé à ce jour.
+- Les agents tournent sur l'abonnement Max « pour le moment » : pas de clé d'API.
+- Priorité à un fonctionnement parfait en local avant toute vente.
+- Service géré pour les clients : pas encore tranché.
 
-Dernière mise à jour : 15/10/2026 au soir (modules de prospection et de connaissances du client, passerelle OpenStreetMap
-réelle, rôle de tête du Coordinateur ; voir la dernière section).
-Seul responsable du code à cette date : l'intégrateur final. Historique : `git log`.
+### 5. Restes, dans l'ordre
+
+1. Trier les anciens dossiers `instance/agents-atelier/<rôle>` et `instance/claude-config/<rôle>` (disposition d'avant le rangement
+   par identifiant d'entreprise).
+2. Passer l'instance 3100 en réel (non fait) ; décider des cartes en attente COUA-3, COUA-4 et COUA-5 sur 3580.
+3. Fixer la durée de validité de la liste « Ne m'appelez plus » (30 jours proposés).
+4. Relire la mention d'information IA en NL et en EN.
+5. Sécurité ouverte : m1 (données additionnelles authentifiées du chiffrement) et m8 (HTML caché). CodeQL non activé sur GitHub :
+   accord de l'opérateur attendu.
+6. Essai réel de `nouveau-client` sur une instance d'essai (il n'a été prouvé qu'avec une fausse API).
+7. Confirmer la licence ODbL des données OpenStreetMap.
+8. Accès mobile par Tailscale (9 étapes ci-dessous), clé OpenAI pour la voix (`docs/voix-en-direct.md`), réindexation bge-m3 sur
+   3580 (`scripts/reindexer-connaissances.py`) : encore à faire d'après ce document, à confirmer avant de les lancer.
+
+Étapes de l'accès mobile (aucun document de `docs/` ne les détaille ; `docs/evolution-deploiement.md` décrit les modes de déploiement) :
+
+1. JB installe Tailscale 1.104 depuis le dépôt apt officiel, puis lance `tailscale up --netfilter-mode=off --accept-dns=false`
+   (son Mullvad utilise le DNS 100.64.0.29).
+2. JB active MagicDNS et HTTPS.
+3. JB règle les ACL sur tcp:443.
+4. Copier `config/atelier-distant.env.exemple` vers `config/atelier-distant.env`, le remplir, valider avec
+   `scripts/verifier-config.sh --distant`.
+5. Relancer l'instance 3100 (`systemctl --user restart atelier-instance@atelier`).
+6. `tailscale serve --bg --https=443 http://127.0.0.1:3100`, jamais Funnel.
+7. JB crée son compte et ouvre l'URL de réclamation du tableau affichée dans le terminal.
+8. Fermer les inscriptions avec `PAPERCLIP_AUTH_DISABLE_SIGN_UP=true`, puis renseigner une fois le réglage `humainDestinataire`.
+9. Essais sur téléphone.
+
+Mise à jour du 16/10/2026 au soir. Seul responsable du code à cette date : l'intégrateur final. Historique : `git log`.
 
 ## État réel
 
@@ -83,7 +93,7 @@ Seul responsable du code à cette date : l'intégrateur final. Historique : `git
   choix explicite de l'opérateur limité au système de plugins) + patch serveur isolé (P1, P2, régulateur,
   journal des compétences, suppression d'entreprise). Vue d'ensemble : `docs/architecture.md` ;
   contrats v1.4 : `docs/contrats.md` (§11 décisions du 15/10/2026, §12 plafonds, §13 données simulées).
-- **Socle** : `paperclip/` = tag `v2026.1012.0` + 7 commits locaux (`socle/patches/0001` à `0007`). Rien n'est poussé.
+- **Socle** : `paperclip/` = tag `v2026.1012.0` + les patches locaux `socle/patches/0001` à `0047`.
   Le patch `0007` (revue indépendante) : P2 exige pour `done` un humain, l'étape d'approbation et une décision
   « approuver » valide sur la révision courante ; livrable verrouillé (verrou natif) pendant l'approbation ; révision
   relue `for update` ; sources dans la fraîcheur ; `commentRequired` dans P1. Rejeu 0001 à 0007 sur le tag : arbre
@@ -134,8 +144,9 @@ Seul responsable du code à cette date : l'intégrateur final. Historique : `git
   passerelle) ; signature `_atelier` vérifiée au dépôt avec `passerelleClesPubliques`. B6 (verrou des plafonds en mémoire) :
   documenté, non corrigé.
 - **Instances** :
-  - principale `atelier` (3100) : utilisée par l'opérateur, mise à jour par la session principale ;
-    ne pas l'arrêter ni y réinstaller le plugin depuis une autre session.
+  - principale `atelier` (3100) : utilisée par l'opérateur, sous systemd (`atelier-instance@atelier`) ; ne pas y réinstaller le plugin
+    depuis une autre session ; déployer avec `scripts/deployer.sh`.
+  - aperçu `atelier-apercu` (3580, PG 54780, passerelles 3581 et 3582) : sous systemd, plugin dans `instance/plugin-apercu`.
   - essai `atelier-corr` (3340, PG 54540, corrections de la revue, passerelle de démonstration sur 3393) : arrêtée ;
     données dans `instance/instances/atelier-corr/` (entreprises des scénarios A à S, secret d'essai et configuration du
     plugin sur l'entreprise du scénario A).
@@ -156,15 +167,14 @@ Voir `docs/resultats-tests.md` (commandes, sorties, dates) et `docs/tracabilite.
 
 ## Limites et points ouverts
 
-- Mode réel jamais exécuté : `claude setup-token` par l'opérateur, puis `bootstrap-organisation.py jeton
+- Mode réel : l'instance 3100 n'est pas passée en réel (agents sur l'abonnement Max pour le moment). Procédure : `claude setup-token` par l'opérateur, puis `bootstrap-organisation.py jeton
   --confirmer` et `test-reel --confirmer` (`README.md` §3, `docs/checklist-usage-reel.md`).
 - `curl` des agents réels non borné : `networkScope: "allowlist"` (stable dans l'adaptateur,
   Bubblewrap présent) non activé faute de pouvoir valider la liste d'hôtes sans run réel.
 - Lecture d'URL du plugin non exposée comme outil Claude : les agents passent par les routes.
 - Aucun connecteur de diffusion ni de mesure ; recherche Web absente ; pause de campagne
   indisponible (limite du socle).
-- Suite serveur complète non lancée. Scénario A joué avec les agents de démonstration seulement.
-- Une connexion ajoutée par une carte reste ouverte à tous les agents jusqu'au prochain `appliquer`.
+- Une connexion ajoutée par une carte reste ouverte à tous les agents jusqu'au passage du Gardien des connexions (environ 90 s).
 - Tâches parallèles d'un même agent : le socle peut annuler un run qui a déjà écrit puis bloquer la tâche sans
   rejeu (vu une fois au scénario A) ; reprise humaine (« Reprendre ») nécessaire.
 - Diffusion réelle des réseaux sociaux et CRM : preuve d'approbation signée par le plugin (v1.5), jamais exercée contre un
@@ -186,11 +196,8 @@ Voir `docs/resultats-tests.md` (commandes, sorties, dates) et `docs/tracabilite.
 
 ## Prochaine étape
 
-1. L'opérateur fournit le jeton ; premier run réel minimal (`test-reel --confirmer`), puis une campagne
-   de test sur l'entreprise fictive avec budgets bas ; trancher `networkScope`.
-2. Connecteurs (étude : commit `1fcf74a`).
-3. Instance 3100 de l'opérateur : la redémarrer pour charger le patch `0005` (serveur lancé sur les sources), avec la passerelle
-   sur 3190 ; puis `bootstrap-organisation.py appliquer` après chaque nouvelle connexion.
+Voir la section « État au 16/10/2026, au soir », paragraphe 5 (restes). Pour le passage au réel : jeton par l'opérateur, premier run
+réel minimal (`test-reel --confirmer`), campagne de test avec budgets bas, décision sur `networkScope`.
 
 ## Commandes utiles
 
@@ -219,7 +226,7 @@ Recharger le worker après `pnpm build` : `POST /api/plugins/atelier.marketing-i
 
 - Une connexion ajoutée par une carte est désormais réservée aux rôles prévus **toute seule** (environ 90 s) : « Gardien des connexions »,
   agent natif `process` sans modèle posé par `appliquer`, battement de 60 s, sous-commande `assurer-connexions` (`docs/integrations.md`,
-  `docs/exploitation.md` §10). Cela remplace les lignes ci-dessus qui demandent de relancer `appliquer` après chaque connexion.
+  `docs/exploitation.md` §10). Il n'est donc plus nécessaire de relancer `appliquer` après chaque connexion.
 - Arrêt d'instance : cause de l'orphelin PostgreSQL trouvée et corrigée (`scripts/lib-arret-instance.sh`, `docs/exploitation.md` §9) ;
   tests `scripts/arret-instance-tests.sh`. Essais `atelier-conn` (3360) et `atelier-arret` (3361) : arrêtés, données dans `instance/instances/`.
 
@@ -252,7 +259,7 @@ Historique : `git log --oneline 3ae1c79..HEAD` (44 commits).
 - Le masqueur de secrets restitue la vraie valeur dans les commandes : ne rien coller de ces sorties.
 
 **Reste à faire**
-- Correctifs de la revue de sécurité (G1 à G4, M1 à M3 et mineurs), reportés après la présentation.
+- Revue de sécurité : correctifs appliqués le 16/10 (m1 et m8 restent ouverts, voir les restes en tête).
 - Évaluation R10 du RAG ; FSMA réel.
 - Comptes réels : fichier BCE, clé BNB, Google, Meta, LinkedIn, HubSpot.
 - Décision sur les données personnelles d'indépendants présentes dans OpenStreetMap.

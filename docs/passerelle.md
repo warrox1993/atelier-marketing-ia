@@ -1153,3 +1153,11 @@ Aucune inscription (Geofabrik et OSM sont ouverts). Installer `osmium-tool`, pr�
 le jeton d'accès (voir BCE), importer, puis déclarer dans Paperclip la connexion `mcp_remote` vers `<passerelle>/mcp/osm`.
 
 Vérification : `npx tsc --noEmit` et `npx vitest run` dans `passerelle/`.
+
+## Mention d'information IA (article 50 du règlement européen sur l'IA)
+
+- Les messages envoyés directement à une personne (`facebook_envoyer_message`) se terminent par « Message rédigé avec l'aide d'un assistant IA. » sur une ligne séparée ; les publications de page et les CRM internes ne sont pas concernés.
+- La mention est ajoutée à la préparation du message, avant l'empreinte : l'humain approuve donc le texte avec la mention, et une preuve signée sur le texte sans mention est refusée.
+- Réglages : `PASSERELLE_MENTION_IA` (texte personnalisé) et `PASSERELLE_MENTION_IA_LANGUE` (`fr` par défaut, `nl` ou `en`).
+- Désactivation : `PASSERELLE_MENTION_IA_DESACTIVEE=oui` exige `PASSERELLE_MENTION_IA_MOTIF` (motif écrit) ; sans motif, la passerelle refuse de démarrer (code 2).
+- Code : `src/mention-ia.ts` ; tests : `tests/reel-social-crm/mention-ia.test.ts` (le mode démonstration ne change pas).

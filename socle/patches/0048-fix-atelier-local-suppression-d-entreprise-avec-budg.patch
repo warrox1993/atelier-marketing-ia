@@ -1,0 +1,78 @@
+From b7cffaa9ebd73328f0fdb45196e69d964a25669b Mon Sep 17 00:00:00 2001
+From: Jean-Baptiste Dhondt <114347858+warrox1993@users.noreply.github.com>
+Date: Fri, 16 Oct 2026 18:17:39 +0200
+Subject: [PATCH 48/49] =?UTF-8?q?fix(atelier,=20local):=20suppression=20d'?=
+ =?UTF-8?q?entreprise=20avec=20budget=20mensuel=20pos=C3=A9?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Patch local de l'Atelier Marketing IA, non destiné à l'amont.
+- companies.remove : incidents puis politiques de budget supprimés avant
+  les approbations et l'entreprise (budget_policies sans cascade : 500,
+  contrainte budget_policies_company_id_companies_id_fk, constaté lors de
+  la validation réelle de « purger » le 16/10/2026).
+- Test : atelier-suppression-entreprise.test.ts (échoue sans le correctif).
+
+Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01DP85vPq2MHkZg8VNtRvCzB
+---
+ .../__tests__/atelier-suppression-entreprise.test.ts   | 10 +++++++++-
+ server/src/services/companies.ts                       |  8 ++++++++
+ 2 files changed, 17 insertions(+), 1 deletion(-)
+
+diff --git a/server/src/__tests__/atelier-suppression-entreprise.test.ts b/server/src/__tests__/atelier-suppression-entreprise.test.ts
+index 1d9ecd87d..76725ae10 100644
+--- a/server/src/__tests__/atelier-suppression-entreprise.test.ts
++++ b/server/src/__tests__/atelier-suppression-entreprise.test.ts
+@@ -5,7 +5,7 @@
+ import { randomUUID } from "node:crypto";
+ import { eq } from "drizzle-orm";
+ import { afterAll, beforeAll, describe, expect, it } from "vitest";
+-import { companies, createDb, goals, projects } from "@paperclipai/db";
++import { budgetPolicies, companies, createDb, goals, projects } from "@paperclipai/db";
+ import { getEmbeddedPostgresTestSupport, startEmbeddedPostgresTestDatabase } from "./helpers/embedded-postgres.js";
+ import { companyService } from "../services/companies.js";
+ 
+@@ -36,4 +36,12 @@ decrire("atelier : suppression d'entreprise avec projet lié à un objectif", ()
+     expect(await db.select().from(goals).where(eq(goals.companyId, companyId))).toEqual([]);
+     expect(await db.select().from(projects).where(eq(projects.companyId, companyId))).toEqual([]);
+   });
++  it("supprime une entreprise dont le budget mensuel est posé (politique de budget sans cascade)", async () => {
++    const companyId = randomUUID();
++    await db.insert(companies).values({ id: companyId, name: "Suppression budget", issuePrefix: `B${companyId.slice(0, 6).toUpperCase().replace(/-/g, "")}`, requireBoardApprovalForNewAgents: false });
++    await db.insert(budgetPolicies).values({ companyId, scopeType: "company", scopeId: companyId, metric: "billed_cents", windowKind: "calendar_month_utc", amount: 5000 });
++    const supprimee = await companyService(db).remove(companyId);
++    expect(supprimee?.id).toBe(companyId);
++    expect(await db.select().from(budgetPolicies).where(eq(budgetPolicies.companyId, companyId))).toEqual([]);
++  });
+ });
+diff --git a/server/src/services/companies.ts b/server/src/services/companies.ts
+index 2c6b02950..e3037033d 100644
+--- a/server/src/services/companies.ts
++++ b/server/src/services/companies.ts
+@@ -21,6 +21,8 @@ import {
+   issueReadStates,
+   approvalComments,
+   approvals,
++  budgetIncidents,
++  budgetPolicies,
+   activityLog,
+   companySecrets,
+   joinRequests,
+@@ -559,6 +561,12 @@ export function companyService(db: Db) {
+         await tx.delete(issueComments).where(eq(issueComments.companyId, id));
+         await tx.delete(costEvents).where(eq(costEvents.companyId, id));
+         await tx.delete(financeEvents).where(eq(financeEvents.companyId, id));
++        // Atelier Marketing IA (patch local) : incidents puis politiques de budget AVANT les approbations
++        // et l'entreprise. budget_incidents référence approvals et budget_policies sans cascade : une
++        // entreprise dont le budget mensuel avait été posé (PATCH /budgets) ne pouvait plus être
++        // supprimée (500, contrainte budget_policies_company_id_companies_id_fk ; constat du 16/10/2026).
++        await tx.delete(budgetIncidents).where(eq(budgetIncidents.companyId, id));
++        await tx.delete(budgetPolicies).where(eq(budgetPolicies.companyId, id));
+         await tx.delete(approvalComments).where(eq(approvalComments.companyId, id));
+         await tx.delete(approvals).where(eq(approvals.companyId, id));
+         await tx.delete(companySecrets).where(eq(companySecrets.companyId, id));
+-- 
+2.53.0
+

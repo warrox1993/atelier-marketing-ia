@@ -19,7 +19,7 @@
       "CLAUDE_CODE_OAUTH_TOKEN": "Jeton longue durée produit par « claude setup-token » (abonnement Claude de l'opérateur, usage personnel). Stocké comme secret Paperclip, jamais dans un fichier."
     },
     "envLocal": {
-      "CLAUDE_CONFIG_DIR": "Dossier de configuration Claude dédié à l'agent, créé par le bootstrap sous instance/claude-config/<slug>. Jamais le ~/.claude de l'opérateur."
+      "CLAUDE_CONFIG_DIR": "Dossier de configuration Claude dédié à l'agent, créé par le bootstrap sous instance/claude-config/<id entreprise>/<slug> (un dossier par entreprise et par rôle). Jamais le ~/.claude de l'opérateur."
     },
     "reglagesConfigClaude": {
       "claudeMdExcludes": [

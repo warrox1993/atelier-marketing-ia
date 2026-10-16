@@ -33,6 +33,30 @@ export type TypeElementAccueil =
 
 export type UrgenceAccueil = "haute" | "moyenne" | "basse";
 
+/** Question d'une carte native `ask_user_questions`, réduite à ce que l'Accueil affiche. */
+export interface QuestionAccueil {
+  id: string;
+  invite: string;
+  aide: string | null;
+  choix: "single" | "multi";
+  obligatoire: boolean;
+  /** Réponse libre autorisée en plus des choix. */
+  autre: boolean;
+  options: Array<{ id: string; libelle: string; description: string | null; texteLibre: boolean }>;
+}
+
+/** Carte native en attente, avec de quoi y répondre sur place (route native de réponse aux interactions). */
+export interface InteractionAccueil {
+  id: string;
+  kind: "ask_user_questions" | "request_confirmation";
+  /** Texte de la confirmation demandée (`request_confirmation`). */
+  invite: string | null;
+  details: string | null;
+  libelleAccepter: string | null;
+  libelleRefuser: string | null;
+  questions: QuestionAccueil[];
+}
+
 export interface ElementAccueil {
   /** Identifiant stable (type et objet), utile comme clé de liste. */
   id: string;
@@ -47,6 +71,12 @@ export interface ElementAccueil {
   action: string;
   /** Question posée par l'équipe (carte native en attente) : toujours en tête de « À faire ». */
   enTete?: boolean;
+  /** Tâche native concernée (contenu à valider, tâche bloquée, carte en attente). */
+  issueId?: string;
+  /** Approbation native en attente (approbation, demande d'accès). */
+  approbationId?: string;
+  /** Carte native en attente (question ou confirmation). */
+  interaction?: InteractionAccueil;
 }
 
 export interface MissionResumee {
@@ -160,6 +190,33 @@ export function raisonTacheBloquee(statut: StatutFonctionnel, issue: { status: s
   }
 }
 
+const texteOuNul = (v: unknown): string | null => (typeof v === "string" && v.trim() !== "" ? v.trim() : null);
+
+/** Réduit une carte native en attente à ce que l'Accueil affiche (lecture défensive : la charge vient de l'hôte). */
+export function interactionAccueil(carte: { id: string; kind: string; payload?: unknown }): InteractionAccueil {
+  const p = (carte.payload ?? {}) as Record<string, unknown>;
+  const questions = Array.isArray(p.questions) ? (p.questions as Array<Record<string, unknown>>) : [];
+  return {
+    id: carte.id,
+    kind: carte.kind === "ask_user_questions" ? "ask_user_questions" : "request_confirmation",
+    invite: texteOuNul(p.prompt),
+    details: texteOuNul(p.detailsMarkdown),
+    libelleAccepter: texteOuNul(p.acceptLabel),
+    libelleRefuser: texteOuNul(p.rejectLabel),
+    questions: carte.kind !== "ask_user_questions" ? [] : questions.map((q) => ({
+      id: String(q.id ?? ""),
+      invite: texteOuNul(q.prompt) ?? "",
+      aide: texteOuNul(q.helpText),
+      choix: q.selectionMode === "multi" ? "multi" : "single",
+      obligatoire: q.required === true,
+      autre: q.allowOther === true,
+      options: (Array.isArray(q.options) ? (q.options as Array<Record<string, unknown>>) : []).map((o) => ({
+        id: String(o.id ?? ""), libelle: texteOuNul(o.label) ?? "", description: texteOuNul(o.description), texteLibre: o.freeText === true,
+      })),
+    })),
+  };
+}
+
 const exigerHumain = (acteur: ActeurHote, quoi: string) => {
   if (acteur.type !== "humain") erreur("elevation_refusee", `${quoi} est réservé à un humain.`);
 };
@@ -237,7 +294,7 @@ export function routesAccueil(d: DependancesAccueil): Partial<Record<CleRouteApi
         elements.push({
           id: `contenu:${issue.id}`, type: "contenu_a_valider", urgence: "haute", titre: issue.title,
           raison: "Le contenu a passé les contrôles de l'équipe. Il attend votre décision avant toute suite.",
-          lien: lienRubrique("contenus", issue.id), action: "Relire et décider",
+          lien: lienRubrique("contenus", issue.id), action: "Relire et décider", issueId: issue.id,
         });
         continue;
       }
@@ -245,7 +302,7 @@ export function routesAccueil(d: DependancesAccueil): Partial<Record<CleRouteApi
       if (bloque) {
         elements.push({
           id: `tache:${issue.id}`, type: "tache_bloquee", urgence: statut === "failed" ? "moyenne" : "haute", titre: `${identifiant} · ${issue.title}`,
-          raison: bloque.raison, lien: sousPorte.has(issue.id) ? lienRubrique("contenus", issue.id) : lienTache(issue), action: bloque.action,
+          raison: bloque.raison, lien: sousPorte.has(issue.id) ? lienRubrique("contenus", issue.id) : lienTache(issue), action: bloque.action, issueId: issue.id,
         });
       }
     }
@@ -280,7 +337,7 @@ export function routesAccueil(d: DependancesAccueil): Partial<Record<CleRouteApi
           id: `question:${carte.id}`, type: "information_manquante", urgence: "haute", enTete: true,
           titre: carte.title?.trim() || (question ? "L'équipe vous pose une question" : "L'équipe attend votre confirmation"),
           raison: `${question ? "Il manque une information que l'équipe ne peut pas obtenir seule" : "Une décision vous revient"} (${issue.identifier ?? "tâche"} · ${issue.title}). Le travail attend votre réponse.`,
-          lien: lienTache(issue), action: question ? "Répondre" : "Confirmer",
+          lien: lienTache(issue), action: question ? "Répondre" : "Confirmer", issueId: issue.id, interaction: interactionAccueil(carte),
         });
       }
       return trouves;
@@ -307,6 +364,7 @@ export function routesAccueil(d: DependancesAccueil): Partial<Record<CleRouteApi
             : "L'équipe attend votre accord pour poursuivre.",
         lien: `/approvals/${a.id}`,
         action: acces ? "Examiner la demande" : "Décider",
+        approbationId: a.id,
       } satisfies ElementAccueil;
     });
   }
@@ -412,9 +470,22 @@ export function routesAccueil(d: DependancesAccueil): Partial<Record<CleRouteApi
       originKind: ORIGINE_DEMANDE as never, originId: `demande:${globalThis.crypto.randomUUID()}`,
       ...(r.acteur.userId ? { actor: { actorUserId: r.acteur.userId } } : {}),
     });
+    // L'hôte ne réveille pas l'agent à la création : on le réveille ici pour ne pas attendre le balayage
+    // périodique. Un échec n'annule pas la demande (le balayage reste le filet) mais est journalisé.
+    let erreurReveil: string | null = null;
+    try {
+      await ctx.issues.requestWakeup(tache.id, r.companyId, {
+        reason: "atelier_demande_equipe",
+        contextSource: "atelier.demande",
+        idempotencyKey: `atelier-demande-${tache.id}`,
+      });
+    } catch (err) {
+      erreurReveil = err instanceof Error ? err.message : String(err);
+      ctx.logger.warn("Demande à l'équipe : réveil du Coordinateur impossible, le balayage périodique prendra le relais", { issueId: tache.id, erreur: erreurReveil });
+    }
     await base.journaliser({
       companyId: r.companyId, type: "equipe.demande", entite: "tache", entiteId: tache.id, issueId: tache.id, acteur: r.acteur.id,
-      donnees: { coordinateurId: coord.id, titre },
+      donnees: { coordinateurId: coord.id, titre, ...(erreurReveil ? { erreurReveil } : {}) },
     });
     return { statut: 201, corps: { issueId: tache.id, identifiant: tache.identifier ?? null, lien: lienTache(tache) } };
   };

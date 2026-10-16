@@ -80,6 +80,7 @@ import { creerRedispatch } from "./redispatch.js";
 import { routesCarte, PLAFOND_QUALIFIES } from "./services-carte.js";
 import { entreesCouverturePorte, routesCouverture } from "./services-couverture.js";
 import { routesCorbeille } from "./services-corbeille.js";
+import { routesPurge } from "./services-purge.js";
 import { routesDiscussion } from "./services-discussion.js";
 import { routesRealite } from "./services-realite.js";
 import { routesDictee } from "./services-dictee.js";
@@ -2646,6 +2647,8 @@ export function creerServices(ctx: PluginContext, options: { transportReel?: Tra
 
   // Corbeille : suppression réversible (tâches, documents, prospects).
   Object.assign(routes, routesCorbeille({ ctx, base, routesConnaissances: connaissances.routes }));
+  // Purge de toutes les données d'une entreprise (fin de contrat, droit à l'effacement ; humain seulement).
+  Object.assign(routes, routesPurge({ ctx }));
   Object.assign(routes, routesDiscussion({ ctx, base }));
   Object.assign(routes, routesDictee({ ctx, base, fetchLocal: options.fetchBoucleLocale }));
   Object.assign(routes, routesVoix({ ctx, base }));

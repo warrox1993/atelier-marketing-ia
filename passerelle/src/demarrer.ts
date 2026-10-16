@@ -5,6 +5,7 @@
 
 import { fileURLToPath } from "node:url";
 import { lireReglages, lireServicesReels } from "./config.js";
+import { lireMentionIa } from "./mention-ia.js";
 import { RegistreFournisseurs } from "./fournisseurs.js";
 import { creerServeur } from "./serveur.js";
 import { signataireDepuisEnv, type SignataireEnveloppe } from "./signature-enveloppe.js";
@@ -29,6 +30,7 @@ function principal(): void {
     reglages = lireReglages(process.env);
     servicesReels = lireServicesReels(process.env);
     signataire = signataireDepuisEnv(process.env);
+    lireMentionIa(process.env); // article 50 : désactivation sans motif écrit = refus de démarrer
   } catch (erreur) {
     console.error(erreur instanceof Error ? erreur.message : String(erreur));
     process.exit(2);

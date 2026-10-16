@@ -3,9 +3,11 @@
  * l'équipe et suivre ce qu'elle fait. Lecture seule hors l'envoi d'une demande, qui devient une
  * tâche native confiée au Coordinateur.
  */
-import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useId, useRef, useState, type FormEvent } from "react";
 import { useHostContext } from "@paperclipai/plugin-sdk/ui";
 import type { ElementAccueil, EtapeMission, MissionResumee, UrgenceAccueil } from "../../serveur/services-accueil.js";
+import { SurPlace, traitableSurPlace } from "../accueil-sur-place.js";
+import { compterAFaire, publierNombreAFaire } from "../compteur-afaire.js";
 import { Bouton, Champ, Chargement, EnTete, EtatErreur, Horodatage, LienHote, Pastille, Section, Vide } from "../composants.js";
 import { MODELES_DEMANDE, useEnvoiDemande } from "../demande.js";
 import type { Ton } from "../format.js";
@@ -40,13 +42,22 @@ export function VueAccueil() {
   const { companyId } = useHostContext();
   const [etat, setEtat] = useState<{ data: DonneesAccueil | null; erreur: unknown; chargement: boolean }>({ data: null, erreur: null, chargement: true });
   const [version, setVersion] = useState(0);
+  // Éléments traités sur place : masqués tout de suite, puis absents de la liste rechargée.
+  const [traites, setTraites] = useState<ReadonlySet<string>>(new Set());
+  const [confirmation, setConfirmation] = useState<string | null>(null);
 
   useEffect(() => {
     if (!companyId) return;
     let annule = false;
     setEtat((e) => ({ ...e, chargement: true, erreur: null }));
     appelRoute<DonneesAccueil>("GET", `/accueil?companyId=${encodeURIComponent(companyId)}`)
-      .then((data) => !annule && setEtat({ data, erreur: null, chargement: false }))
+      .then((data) => {
+        if (annule) return;
+        setEtat({ data, erreur: null, chargement: false });
+        // Ce que le serveur renvoie fait foi : un élément encore présent redevient visible.
+        setTraites(new Set());
+        publierNombreAFaire(companyId, compterAFaire(data.elements));
+      })
       .catch((erreur: unknown) => !annule && setEtat({ data: null, erreur, chargement: false }));
     return () => {
       annule = true;
@@ -54,6 +65,14 @@ export function VueAccueil() {
   }, [companyId, version]);
 
   const recharger = useCallback(() => setVersion((v) => v + 1), []);
+  const surTraite = useCallback(
+    (element: ElementAccueil, message: string) => {
+      setTraites((t) => new Set(t).add(element.id));
+      setConfirmation(`${element.titre} : ${message}`);
+      recharger();
+    },
+    [recharger],
+  );
   // Modèle posé depuis l'encart Prospection : `n` change à chaque clic pour rejouer l'effet.
   const [modeleExterne, setModeleExterne] = useState<{ texte: string; n: number }>({ texte: "", n: 0 });
 
@@ -67,7 +86,12 @@ export function VueAccueil() {
       <Section titre="À faire" id="accueil-afaire">
         {etat.erreur ? <EtatErreur erreur={etat.erreur} onReessayer={recharger} contexte="l'accueil" /> : null}
         {etat.chargement && !etat.data ? <Chargement libelle="Chargement de l'accueil" /> : null}
-        {etat.data ? <AFaire elements={etat.data.elements} /> : null}
+        {confirmation ? (
+          <p className="atl-succes atl-afaire-confirmation" role="status">
+            {confirmation}
+          </p>
+        ) : null}
+        {etat.data ? <AFaire elements={etat.data.elements.filter((e) => !traites.has(e.id))} onFait={surTraite} /> : null}
       </Section>
       <Section titre="Missions en cours" id="accueil-missions">
         {etat.data ? (
@@ -234,25 +258,46 @@ function DemanderAEquipe({ companyId, onEnvoyee, modeleExterne }: { companyId: s
   );
 }
 
-function AFaire({ elements }: { elements: ElementAccueil[] }) {
+function AFaire({ elements, onFait }: { elements: ElementAccueil[]; onFait(element: ElementAccueil, message: string): void }) {
   if (elements.length === 0) return <Vide titre="Rien n'attend votre décision.">Quand l'équipe aura besoin de vous, la demande apparaîtra ici.</Vide>;
   return (
     <ul className="atl-afaire">
       {elements.map((e) => (
-        <li key={e.id}>
-          <span>
-            <Pastille ton={URGENCES[e.urgence].ton}>{URGENCES[e.urgence].libelle}</Pastille>
-          </span>
-          <div className="atl-afaire-texte">
-            <span className="atl-afaire-titre">{e.titre}</span>
-            <span className="atl-afaire-raison">{e.raison}</span>
-          </div>
-          <LienHote vers={e.lien} className="atl-bouton">
-            {e.action}
-          </LienHote>
-        </li>
+        <LigneAFaire key={e.id} element={e} onFait={(m) => onFait(e, m)} />
       ))}
     </ul>
+  );
+}
+
+function LigneAFaire({ element: e, onFait }: { element: ElementAccueil; onFait(message: string): void }) {
+  const [ouvert, setOuvert] = useState(false);
+  const idPanneau = useId();
+  const surPlace = traitableSurPlace(e);
+  return (
+    <li data-ouvert={ouvert ? "oui" : undefined}>
+      <span>
+        <Pastille ton={URGENCES[e.urgence].ton}>{URGENCES[e.urgence].libelle}</Pastille>
+      </span>
+      <div className="atl-afaire-texte">
+        <span className="atl-afaire-titre">{e.titre}</span>
+        <span className="atl-afaire-raison">{e.raison}</span>
+      </div>
+      <div className="atl-afaire-actions">
+        {surPlace ? (
+          <button type="button" className="atl-bouton" data-variante="principal" aria-expanded={ouvert} aria-controls={idPanneau} onClick={() => setOuvert((o) => !o)}>
+            {ouvert ? "Replier" : "Traiter ici"}
+          </button>
+        ) : null}
+        <LienHote vers={e.lien} className="atl-bouton">
+          {e.action}
+        </LienHote>
+      </div>
+      {surPlace && ouvert ? (
+        <div className="atl-afaire-detail" id={idPanneau}>
+          <SurPlace element={e} onFait={onFait} />
+        </div>
+      ) : null}
+    </li>
   );
 }
 

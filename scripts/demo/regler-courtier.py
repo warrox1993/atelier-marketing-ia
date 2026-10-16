@@ -71,16 +71,16 @@ BUREAUX = [("liege", "4000", "Liège", "10"), ("ans", "4430", "Ans", "20"), ("he
            ("waremme", "4300", "Waremme", "7"), ("spa", "4900", "Spa", "2"), ("eupen", "4700", "Eupen", "9"),
            ("vise", "4600", "Visé", "4"), ("chaudfontaine", "4050", "Chaudfontaine", "6"), ("aywaille", "4920", "Aywaille", "1")]
 
-# Centre de la commune, OpenStreetMap, 16/10/2026 : bureau fictif, position approximative
-# (moyenne des lieux de l'index OSM local pour le code postal, arrondie à 4 décimales).
-# Écrite en dur : aucun appel réseau dans ce script.
+# Position approximative (centre du code postal de la commune) : bureau fictif, jamais une adresse réelle.
+# Valeurs recopiées de plugin-atelier/src/serveur/codes-postaux-be.ts (OpenStreetMap, extraction du 14/10/2026,
+# © les contributeurs d'OpenStreetMap, ODbL) ; un test vérifie la concordance. Aucun appel réseau dans ce script.
 POSITIONS = {
-    "liege": {"lat": 50.6391, "lon": 5.5696}, "ans": {"lat": 50.6594, "lon": 5.5246},
-    "herstal": {"lat": 50.6806, "lon": 5.6343}, "seraing": {"lat": 50.5875, "lon": 5.5177},
-    "verviers": {"lat": 50.5912, "lon": 5.8546}, "huy": {"lat": 50.5230, "lon": 5.2411},
-    "waremme": {"lat": 50.6927, "lon": 5.2618}, "spa": {"lat": 50.4895, "lon": 5.8596},
-    "eupen": {"lat": 50.6306, "lon": 6.0309}, "vise": {"lat": 50.7411, "lon": 5.6937},
-    "chaudfontaine": {"lat": 50.5872, "lon": 5.6427}, "aywaille": {"lat": 50.4715, "lon": 5.6965},
+    "liege": {"lat": 50.6413, "lon": 5.5708}, "ans": {"lat": 50.6607, "lon": 5.5283},
+    "herstal": {"lat": 50.6817, "lon": 5.6359}, "seraing": {"lat": 50.5926, "lon": 5.5116},
+    "verviers": {"lat": 50.5907, "lon": 5.8552}, "huy": {"lat": 50.5219, "lon": 5.2391},
+    "waremme": {"lat": 50.6953, "lon": 5.256}, "spa": {"lat": 50.4906, "lon": 5.8627},
+    "eupen": {"lat": 50.6312, "lon": 6.0328}, "vise": {"lat": 50.7374, "lon": 5.6947},
+    "chaudfontaine": {"lat": 50.5867, "lon": 5.6425}, "aywaille": {"lat": 50.4774, "lon": 5.696},
 }
 
 ENTITES = [

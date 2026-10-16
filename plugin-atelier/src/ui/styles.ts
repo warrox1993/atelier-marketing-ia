@@ -320,6 +320,7 @@ details[open] > .atl-section-resume::after, details[open] > .atl-filtres-resume:
 .atl-entree { display: flex; align-items: center; gap: 0.625rem; padding: 0.5rem 0.75rem; font-size: 0.8125rem; font-weight: 500; color: inherit; text-decoration: none; border-radius: calc(var(--atl-rayon) * 0.8); }
 .atl-entree:hover { background: var(--atl-surface-2); }
 .atl-entree svg { flex: none; }
+.atl-entree .atl-nav-compte { margin-left: auto; }
 
 /* Widget du tableau de bord */
 .atl-widget { display: flex; flex-direction: column; gap: 0.75rem; }

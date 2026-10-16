@@ -91,7 +91,7 @@ agents:
           kind: "plain"
           requirement: "optional"
           portability: "system_dependent"
-          description: "Dossier de configuration Claude dédié à l'agent, créé par le bootstrap sous instance/claude-config/<slug>. Jamais le ~/.claude de l'opérateur."
+          description: "Dossier de configuration Claude dédié à l'agent, créé par le bootstrap sous instance/claude-config/<id entreprise>/<slug> (un dossier par entreprise et par rôle). Jamais le ~/.claude de l'opérateur."
   veille:
     role: "researcher"
     capabilities: "Recherche besoins, segments, concurrence et opportunités ; produit des observations sourcées, datées et bornées."
@@ -175,7 +175,7 @@ agents:
           kind: "plain"
           requirement: "optional"
           portability: "system_dependent"
-          description: "Dossier de configuration Claude dédié à l'agent, créé par le bootstrap sous instance/claude-config/<slug>. Jamais le ~/.claude de l'opérateur."
+          description: "Dossier de configuration Claude dédié à l'agent, créé par le bootstrap sous instance/claude-config/<id entreprise>/<slug> (un dossier par entreprise et par rôle). Jamais le ~/.claude de l'opérateur."
   prospection:
     role: "researcher"
     capabilities: "Cherche et qualifie des prospects B2B (entreprises par secteur NACE et zone), B2C (origines légales seulement) et partenaires, à partir des réponses signées des connexions de prospection ; ne contacte jamais personne et n'écrit pas au CRM."
@@ -271,7 +271,7 @@ agents:
           kind: "plain"
           requirement: "optional"
           portability: "system_dependent"
-          description: "Dossier de configuration Claude dédié à l'agent, créé par le bootstrap sous instance/claude-config/<slug>. Jamais le ~/.claude de l'opérateur."
+          description: "Dossier de configuration Claude dédié à l'agent, créé par le bootstrap sous instance/claude-config/<id entreprise>/<slug> (un dossier par entreprise et par rôle). Jamais le ~/.claude de l'opérateur."
   seo-local-geo:
     role: "general"
     capabilities: "Audite contenu, structure technique accessible, intentions de recherche et cohérence locale ; propose des améliorations vérifiables pour la recherche classique et les réponses des moteurs d'IA, sans garantie de classement."
@@ -365,7 +365,7 @@ agents:
           kind: "plain"
           requirement: "optional"
           portability: "system_dependent"
-          description: "Dossier de configuration Claude dédié à l'agent, créé par le bootstrap sous instance/claude-config/<slug>. Jamais le ~/.claude de l'opérateur."
+          description: "Dossier de configuration Claude dédié à l'agent, créé par le bootstrap sous instance/claude-config/<id entreprise>/<slug> (un dossier par entreprise et par rôle). Jamais le ~/.claude de l'opérateur."
   sea:
     role: "general"
     capabilities: "Prépare campagnes, groupes, mots-clés, exclusions, variantes et propositions budgétaires reliés à une offre validée et à une page cohérente ; n'active rien."
@@ -458,7 +458,7 @@ agents:
           kind: "plain"
           requirement: "optional"
           portability: "system_dependent"
-          description: "Dossier de configuration Claude dédié à l'agent, créé par le bootstrap sous instance/claude-config/<slug>. Jamais le ~/.claude de l'opérateur."
+          description: "Dossier de configuration Claude dédié à l'agent, créé par le bootstrap sous instance/claude-config/<id entreprise>/<slug> (un dossier par entreprise et par rôle). Jamais le ~/.claude de l'opérateur."
   contenus:
     role: "designer"
     capabilities: "Produit articles, publications, pages et briefs de visuels selon la marque et le canal ; signale sources et droits ; n'invente ni avis, ni prix, ni certification. Peut publier sur Facebook, Instagram et LinkedIn, seulement sur approbation humaine de l'appel exact."
@@ -555,7 +555,7 @@ agents:
           kind: "plain"
           requirement: "optional"
           portability: "system_dependent"
-          description: "Dossier de configuration Claude dédié à l'agent, créé par le bootstrap sous instance/claude-config/<slug>. Jamais le ~/.claude de l'opérateur."
+          description: "Dossier de configuration Claude dédié à l'agent, créé par le bootstrap sous instance/claude-config/<id entreprise>/<slug> (un dossier par entreprise et par rôle). Jamais le ~/.claude de l'opérateur."
   crm-conversion:
     role: "general"
     capabilities: "Conçoit pages de conversion, formulaires, segmentation et scénarios de suivi avec déclencheurs, exclusions et consentements ; aucune prospection réelle automatique."
@@ -648,7 +648,7 @@ agents:
           kind: "plain"
           requirement: "optional"
           portability: "system_dependent"
-          description: "Dossier de configuration Claude dédié à l'agent, créé par le bootstrap sous instance/claude-config/<slug>. Jamais le ~/.claude de l'opérateur."
+          description: "Dossier de configuration Claude dédié à l'agent, créé par le bootstrap sous instance/claude-config/<id entreprise>/<slug> (un dossier par entreprise et par rôle). Jamais le ~/.claude de l'opérateur."
   mesure:
     role: "researcher"
     capabilities: "Vérifie données, conversions et doublons ; présente coûts, périodes, attribution et incertitudes ; propose des expériences avec hypothèse, métrique et condition d'arrêt ; répond « non mesurable » si les données manquent."
@@ -740,7 +740,7 @@ agents:
           kind: "plain"
           requirement: "optional"
           portability: "system_dependent"
-          description: "Dossier de configuration Claude dédié à l'agent, créé par le bootstrap sous instance/claude-config/<slug>. Jamais le ~/.claude de l'opérateur."
+          description: "Dossier de configuration Claude dédié à l'agent, créé par le bootstrap sous instance/claude-config/<id entreprise>/<slug> (un dossier par entreprise et par rôle). Jamais le ~/.claude de l'opérateur."
   exigences:
     role: "qa"
     capabilities: "Compare chaque livrable au brief original et à chaque exigence ; exige une preuve localisable pour tout point annoncé couvert ; signale établissements, canaux ou sections oubliés."
@@ -833,7 +833,7 @@ agents:
           kind: "plain"
           requirement: "optional"
           portability: "system_dependent"
-          description: "Dossier de configuration Claude dédié à l'agent, créé par le bootstrap sous instance/claude-config/<slug>. Jamais le ~/.claude de l'opérateur."
+          description: "Dossier de configuration Claude dédié à l'agent, créé par le bootstrap sous instance/claude-config/<id entreprise>/<slug> (un dossier par entreprise et par rôle). Jamais le ~/.claude de l'opérateur."
   relecteur:
     role: "qa"
     capabilities: "Vérifie raisonnement, informations, sources, cohérence entre canaux et respect de la marque ; chaque anomalie indique emplacement, preuve, gravité et correction attendue."
@@ -926,7 +926,7 @@ agents:
           kind: "plain"
           requirement: "optional"
           portability: "system_dependent"
-          description: "Dossier de configuration Claude dédié à l'agent, créé par le bootstrap sous instance/claude-config/<slug>. Jamais le ~/.claude de l'opérateur."
+          description: "Dossier de configuration Claude dédié à l'agent, créé par le bootstrap sous instance/claude-config/<id entreprise>/<slug> (un dossier par entreprise et par rôle). Jamais le ~/.claude de l'opérateur."
   tests-techniques:
     role: "qa"
     capabilities: "Exécute les contrôles techniques adaptés : URLs, redirections, accessibilité, formulaires, suivi, formats, schémas et affichage ; un HTTP 200 sur une page d'erreur reste un échec."
@@ -1021,7 +1021,7 @@ agents:
           kind: "plain"
           requirement: "optional"
           portability: "system_dependent"
-          description: "Dossier de configuration Claude dédié à l'agent, créé par le bootstrap sous instance/claude-config/<slug>. Jamais le ~/.claude de l'opérateur."
+          description: "Dossier de configuration Claude dédié à l'agent, créé par le bootstrap sous instance/claude-config/<id entreprise>/<slug> (un dossier par entreprise et par rôle). Jamais le ~/.claude de l'opérateur."
   porte:
     role: "qa"
     capabilities: "Agent déterministe, sans modèle : tient l'unique étape native de revue (circuit 1.1). Il évalue la porte du plugin dans son run et décide : PASS → étape d'approbation humaine ; sinon retour au producteur. La garde P2 du serveur revérifie."

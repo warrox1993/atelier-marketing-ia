@@ -20,6 +20,7 @@ import {
 } from "@paperclipai/plugin-sdk/ui";
 import type { VueContenusAValider, VueEquipe } from "../contrats/ui.js";
 import { BandeauEntreprise, Bouton, Champ, Chargement, EtatErreur, LienHote } from "./composants.js";
+import { useNombreAFaire, useTitreOnglet } from "./compteur-afaire.js";
 import { useEnvoiDemande } from "./demande.js";
 import { FournisseurDonnees, useDonnees } from "./donnees.js";
 import { chemin, GROUPE_PROSPECTION, lireRoute, VUES, type CleVue } from "./route.js";
@@ -123,12 +124,19 @@ function Onglets({ courante }: { courante: CleVue }) {
   );
 }
 
+/** Titre de l'onglet du navigateur : « (3) Atelier » selon le nombre d'éléments en attente. */
+function TitreOnglet({ companyId }: { companyId: string | null | undefined }) {
+  useTitreOnglet(useNombreAFaire(companyId));
+  return null;
+}
+
 export function PageAtelier({ context }: PluginPageProps) {
   const { pathname } = useHostLocation();
   const route = lireRoute(pathname);
   return (
     <Racine>
       <FournisseurDonnees>
+        <TitreOnglet companyId={context.companyId} />
         <main className="atl-page">
           <Onglets courante={route.vue} />
           {context.companyId && route.vue !== "mise-en-place" ? <BandeauEntreprise /> : null}
@@ -136,6 +144,18 @@ export function PageAtelier({ context }: PluginPageProps) {
         </main>
       </FournisseurDonnees>
     </Racine>
+  );
+}
+
+/** Pastille du nombre d'éléments en attente (entrée du menu et rubrique « À faire »). */
+function PastilleAFaire({ companyId }: { companyId: string | null | undefined }) {
+  const n = useNombreAFaire(companyId);
+  if (!n) return null;
+  return (
+    <span className="atl-nav-compte" data-testid="pastille-afaire">
+      {n}
+      <span className="atl-sr"> à faire</span>
+    </span>
   );
 }
 
@@ -163,6 +183,7 @@ export function NavigationAtelier({ context }: PluginRouteSidebarProps) {
               <LienHote key={v.cle} vers={chemin(v.cle)} courant={route.vue === v.cle} className="">
                 <span>{v.libelle}</span>
                 {v.cle === "contenus" && context.companyId ? <CompteurContenus /> : null}
+                {v.cle === "accueil" && context.companyId ? <PastilleAFaire companyId={context.companyId} /> : null}
               </LienHote>
             );
             // Le groupe « Prospection » (deux entrées contiguës) est rendu d'un bloc, sous son intertitre.
@@ -192,7 +213,7 @@ export function NavigationAtelier({ context }: PluginRouteSidebarProps) {
   );
 }
 
-export function EntreeAtelier(_props: PluginSidebarProps) {
+export function EntreeAtelier({ context }: PluginSidebarProps) {
   const { pathname } = useHostLocation();
   const actif = /\/atelier(\/|$)/u.test(pathname);
   return (
@@ -203,6 +224,7 @@ export function EntreeAtelier(_props: PluginSidebarProps) {
           <path d="M6 13.5v-4h4v4" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" />
         </svg>
         Atelier marketing
+        {context.companyId ? <PastilleAFaire companyId={context.companyId} /> : null}
       </LienHote>
     </Racine>
   );

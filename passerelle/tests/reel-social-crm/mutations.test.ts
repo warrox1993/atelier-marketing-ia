@@ -4,6 +4,7 @@
 import type { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { appeler, clientMcp, connecter, monter, preuve, type Montage, listeRevocations } from "./aide.js";
+import { ajouterMention, MENTION_IA_PAR_DEFAUT } from "../../src/mention-ia.js";
 import { CLE_API_ODOO } from "./faux-plateformes.js";
 
 let m: Montage;
@@ -142,7 +143,8 @@ describe("résultat ambigu : réconciliation avant tout nouvel essai", () => {
 
   it("message privé ambigu : jamais renvoyé automatiquement (non relisible)", async () => {
     const args = { destinataire: "6942000000000001", texte: "Bonjour, voici votre devis." };
-    const p = preuve(m, "facebook", "facebook_envoyer_message", args);
+    // L'humain approuve le texte AVEC la mention d'information IA (article 50), ajoutée à la préparation.
+    const p = preuve(m, "facebook", "facebook_envoyer_message", { ...args, texte: ajouterMention(args.texte, MENTION_IA_PAR_DEFAUT) });
     m.faux.injecter("POST /meta-graph/v26.0/100000000000001/messages", "coupure_apres_effet");
     expect((await appeler(fb(), "facebook_envoyer_message", { ...args, preuve_approbation: p, revocations_approbation: listeRevocations(m) })).donnees.etat).toBe("ambigue_a_reconcilier");
     const r2 = await appeler(fb(), "facebook_envoyer_message", { ...args, preuve_approbation: p, revocations_approbation: listeRevocations(m) });

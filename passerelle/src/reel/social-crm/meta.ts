@@ -19,6 +19,7 @@
 //                            POST /{ig-user-id}/media_publish (creation_id) → { id }
 //                            https://developers.facebook.com/docs/instagram-platform/content-publishing
 
+import { ajouterMention, MENTION_IA_PAR_DEFAUT } from "../../mention-ia.js";
 import type { FournisseurService, OutilPasserelle } from "../../fournisseurs.js";
 import { fournisseurFacebook, fournisseurInstagram } from "../../demo/social-crm/meta.js";
 import type { AccesPlateforme } from "./autorisation.js";
@@ -160,11 +161,18 @@ export function fournisseurFacebookReel(dep: DependancesOutils): FournisseurServ
     },
   });
 
+  const LONGUEUR_MAX_MESSAGE = 2000;
   type ArgsMessage = { destinataire: string; texte: string };
   const message = mutationReelle<ArgsMessage>(dep, {
     outil: { ...gabarit(demo, "facebook_envoyer_message", "Envoie un message privé depuis la Page (POST /{page-id}/messages, type RESPONSE : réponse dans la fenêtre de messagerie standard)."), executer: () => undefined },
     requeteReelle: "POST /{page-id}/messages",
     resume: (a) => `message privé de ${a.texte.length} caractères.`,
+    // Article 50 du règlement européen sur l'IA : la mention est ajoutée à la préparation, donc visible dans ce que l'humain approuve
+    // et incluse dans l'empreinte signée.
+    preparer: (a) => ({ ...a, texte: ajouterMention(a.texte, dep.config.mentionIa ?? MENTION_IA_PAR_DEFAUT) }),
+    verifier: (a) => {
+      if (a.texte.length > LONGUEUR_MAX_MESSAGE) throw new ErreurFournisseur("requete_invalide", `Le message, mention d'information IA comprise, dépasse ${LONGUEUR_MAX_MESSAGE} caractères : le raccourcir.`);
+    },
     executer: async (acces, a) => {
       const r = await graph(dep, "meta", acces, "POST", `${acces.compte.id}/messages`, {}, "la conversation", { recipient: { id: a.destinataire }, messaging_type: "RESPONSE", message: { text: a.texte } });
       return { recipient_id: texte(r["recipient_id"]), message_id: texte(r["message_id"]) };

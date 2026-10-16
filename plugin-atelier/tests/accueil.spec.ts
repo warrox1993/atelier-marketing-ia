@@ -45,14 +45,18 @@ interface Options {
   projets?: Record<string, { id: string; name: string }>;
   /** Tâches qui portent un document `plan`. */
   avecPlan?: string[];
+  /** Fait échouer `requestWakeup` avec ce message. */
+  echecReveil?: string;
 }
 
 function faux(o: Options = {}) {
   const issues = new Map<string, Ligne>((o.issues ?? []).map((i) => [i.id as string, i]));
   const crees: Ligne[] = [];
   const journal: Ligne[] = [];
+  const reveils: Array<{ issueId: string; companyId: string; options: Ligne }> = [];
+  const avertissements: Array<{ message: string; meta: Ligne }> = [];
   const ctx = {
-    logger: { info() {}, warn() {}, error() {}, debug() {} },
+    logger: { info() {}, warn: (message: string, meta: Ligne) => void avertissements.push({ message, meta }), error() {}, debug() {} },
     agents: {
       list: async () => o.agents ?? [{ id: COORD, companyId: SOC, name: "Coordinateur", role: "ceo", status: "idle" }],
       get: async (agentId: string) => (o.agents ?? [{ id: COORD, companyId: SOC, name: "Coordinateur", role: "ceo", status: "idle" }]).find((a) => a.id === agentId) ?? null,
@@ -65,6 +69,11 @@ function faux(o: Options = {}) {
       list: async (q: Ligne) =>
         [...issues.values()].filter((i) => (!q.status || i.status === q.status) && (!q.originKind || i.originKind === q.originKind)),
       listComments: async (issueId: string) => o.commentaires?.[issueId] ?? [],
+      requestWakeup: async (issueId: string, companyId: string, options: Ligne) => {
+        reveils.push({ issueId, companyId, options });
+        if (o.echecReveil) throw new Error(o.echecReveil);
+        return { queued: true, runId: "run-1" };
+      },
       create: async (c: Ligne) => {
         const cree = { ...c, id: id(100 + crees.length), identifier: `DEM-${crees.length + 1}`, parentId: null, createdAt: T0, updatedAt: T0 };
         crees.push(cree);
@@ -89,7 +98,7 @@ function faux(o: Options = {}) {
   const routes = routesAccueil(deps);
   const appeler = (cle: "accueil.lister" | "equipe.demander" | "mission.suivre", r: Partial<RequeteRoute> = {}) =>
     routes[cle]!({ cle, params: {}, query: {}, corps: null, acteur: HUMAIN, companyId: SOC, ...r });
-  return { appeler, crees, journal, issues };
+  return { appeler, crees, journal, issues, reveils, avertissements };
 }
 
 const tache = (n: number, o: Ligne = {}) => ({
@@ -233,6 +242,24 @@ describe("equipe.demander", () => {
       description: "Prépare un post LinkedIn sur notre nouvelle offre de toiture pour la rentrée",
     });
     expect(f.journal[0]).toMatchObject({ type: "equipe.demande", issueId: id(100), acteur: "local-board" });
+  });
+
+  it("réveille le Coordinateur une seule fois, avec la clé d'idempotence de la demande", async () => {
+    const f = faux();
+    const res = await f.appeler("equipe.demander", { corps: corps("Prépare un post") });
+    expect(f.reveils).toHaveLength(1);
+    expect(f.reveils[0]).toMatchObject({ issueId: id(100), companyId: SOC, options: { idempotencyKey: `atelier-demande-${id(100)}` } });
+    expect((res.corps as Ligne).issueId).toBe(id(100));
+  });
+
+  it("un réveil en échec ne fait pas échouer la demande : tâche créée, échec journalisé", async () => {
+    const f = faux({ echecReveil: "hôte indisponible" });
+    const res = await f.appeler("equipe.demander", { corps: corps("Prépare un post") });
+    expect(res.statut).toBe(201);
+    expect(f.crees).toHaveLength(1);
+    expect(f.reveils).toHaveLength(1);
+    expect(f.avertissements[0]?.meta).toMatchObject({ issueId: id(100), erreur: "hôte indisponible" });
+    expect(f.journal[0]?.donnees).toMatchObject({ erreurReveil: "hôte indisponible" });
   });
 
   it("à défaut de rôle ceo, prend le premier agent dont le nom commence par « Coordinateur » ; titre fourni respecté", async () => {

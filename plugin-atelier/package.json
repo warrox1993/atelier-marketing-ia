@@ -33,7 +33,7 @@
   "//": "Installation : utiliser `pnpm run installer` (ONNXRUNTIME_NODE_INSTALL=skip), sinon le postinstall d'onnxruntime-node télécharge 272 Mo de fournisseurs CUDA inutiles (vectorisation sur processeur seul). Le modèle bge-m3 (560 Mo) se télécharge par `pnpm run modele` vers .modeles/ (ignoré par git).",
   "pnpm": {
     "overrides": {
-      "@paperclipai/shared": "file:.paperclip-sdk/paperclipai-shared-0.3.1.tgz"
+      "@paperclipai/shared": "2026.1012.0"
     }
   },
   "dependencies": {
@@ -46,7 +46,7 @@
   },
   "devDependencies": {
     "@paperclipai/plugin-sdk": "file:.paperclip-sdk/paperclipai-plugin-sdk-1.0.0.tgz",
-    "@paperclipai/shared": "file:.paperclip-sdk/paperclipai-shared-0.3.1.tgz",
+    "@paperclipai/shared": "2026.1012.0",
     "@types/node": "^24.0.0",
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.3",

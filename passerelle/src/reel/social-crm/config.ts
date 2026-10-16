@@ -15,6 +15,7 @@
 //   odoo       : toujours (adresse de l'instance + clé d'API du client)
 // Et, pour tous : PASSERELLE_SOCIAL_CLE (32 octets en base64, ou _FICHIER).
 
+import { lireMentionIa, type MentionIa } from "../../mention-ia.js";
 import { createPublicKey, type KeyObject } from "node:crypto";
 import { readFileSync, statSync } from "node:fs";
 import { lireRedirectionsPermises } from "../../garde-oauth.js";
@@ -133,6 +134,8 @@ export interface ConfigSocialCrmReel {
    * de la boucle locale. Vide ou absent : boucle locale seulement (Paperclip local).
    */
   redirectionsPermises?: readonly string[];
+  /** Mention d'information IA des messages directs (article 50) ; absente : mention française par défaut. */
+  mentionIa?: MentionIa;
 }
 
 export type LectureConfigSocial = { ok: true; config: ConfigSocialCrmReel } | { ok: false; raison: string };
@@ -254,6 +257,7 @@ export function lireConfigSocialCrm(env: NodeJS.ProcessEnv, fichierEtatParDefaut
         attenteQuotaMaxMs: 10_000,
         delaiAppelMs: 20_000,
         redirectionsPermises: lireRedirectionsPermises(env),
+        mentionIa: lireMentionIa(env),
       },
     };
   } catch (erreur) {
