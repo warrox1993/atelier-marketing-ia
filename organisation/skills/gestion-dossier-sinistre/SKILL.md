@@ -2,7 +2,7 @@
 name: "gestion-dossier-sinistre"
 description: "Organise le suivi administratif d'un dossier de sinistre par un intermédiaire d'assurance en Belgique : ouverture, pièces à réunir, délais de déclaration à l'assureur, suivi avec l'assureur, communication régulière avec l'assuré, clôture et conservation. À utiliser quand un client signale un sinistre ou qu'un dossier ouvert doit être relancé ; jamais pour décider si le sinistre est couvert, évaluer ou promettre une indemnisation, refuser une prise en charge, ni pour envoyer quoi que ce soit à l'assureur sans validation humaine."
 metadata:
-  version: "1.0.0"
+  version: "1.1.0"
   langue: "fr"
   domaine: "sav"
 ---
@@ -37,10 +37,10 @@ Un dossier tenu : faits déclarés, pièces reçues et manquantes, délais, dern
 ## Étapes
 
 1. **Ouvrir le dossier** le jour de la réception : référence interne, date et heure de l'avis reçu, identité du déclarant et lien avec la police, date et lieu du sinistre, circonstances telles que déclarées, tiers éventuels (nom, assureur, plaque), blessés éventuels. Noter ce qui est déclaré comme « déclaré par le client », sans le qualifier.
-2. **Vérifier la police rattachée** : en vigueur à la date du sinistre ? numéro, assureur, branche. Un doute (police échue, prime impayée, risque non assuré) est écrit « à confirmer par l'assureur » : l'intermédiaire ne tranche pas.
+2. **Vérifier la police rattachée** : en vigueur à la date du sinistre ? numéro, assureur, branche. Si plusieurs polices ou plusieurs dossiers correspondent (même nom, même adresse, déclaration sans numéro), ne jamais en choisir un seul : les lister tous et demander à l'humain lequel s'applique avant d'aller plus loin. Un doute (police échue, prime impayée, risque non assuré) est écrit « à confirmer par l'assureur » : l'intermédiaire ne tranche pas.
 3. **Calculer le délai d'avis à l'assureur.** La loi du 4 avril 2014 impose à l'assuré de donner avis du sinistre dès que possible et en tout cas dans le délai fixé par le contrat ; l'assureur ne peut pas se prévaloir du dépassement du délai contractuel si l'avis a été donné aussi rapidement que cela pouvait raisonnablement se faire. En cas de manquement, l'assureur peut réduire sa prestation à concurrence du préjudice qu'il subit, et décliner sa garantie seulement en cas d'intention frauduleuse (voir sources). Conséquence pratique : déclarer sans attendre la collecte de toutes les pièces. Relever dans la police le délai exact et écrire la date limite ; ne jamais en citer un de mémoire.
 4. **Transmettre la déclaration à l'assureur** (brouillon préparé, envoi par l'humain) avec les informations disponibles, dans le canal prévu, et conserver la preuve d'envoi. Ne pas retenir l'avis pour compléter le dossier.
-5. **Dresser la liste des pièces** selon la branche et les exigences de l'assureur : constat ou déclaration écrite, photos, factures ou devis, rapport de police en cas de vol ou d'infraction, coordonnées bancaires, certificats médicaux pour les dommages corporels. Chaque pièce a un statut : demandée, reçue, incomplète, transmise. Une pièce illisible est redemandée, pas supposée.
+5. **Dresser la liste des pièces** à partir de la liste par type de sinistre établie avec l'entreprise cliente et des exigences de l'assureur (la liste ci-après n'est qu'un point de départ, jamais une liste d'un autre cabinet) : constat ou déclaration écrite, photos, factures ou devis, rapport de police en cas de vol ou d'infraction, coordonnées bancaires, certificats médicaux pour les dommages corporels. Chaque pièce a un statut : demandée, reçue, incomplète, transmise. Une pièce illisible est redemandée, pas supposée.
 6. **Informer l'assuré** par écrit dans un langage clair : ce qui est fait, ce qu'il doit fournir, avant quelle date, ce qu'il ne doit pas faire (reconnaître sa responsabilité, engager des réparations importantes sans accord de l'assureur, jeter les objets endommagés, selon les conditions de la police à lire). Aucune promesse d'indemnisation, aucun pronostic de couverture.
 7. **Suivre avec l'assureur.** Noter la date de transmission, le numéro de sinistre attribué, le gestionnaire, l'expert éventuel, la date de la dernière réponse. Relancer à intervalle fixe (par défaut toutes les 2 semaines ouvrables sans nouvelle, à confirmer avec le responsable) ; chaque relance est datée. Transmettre sans délai à l'assuré les demandes de l'assureur et à l'assureur les pièces reçues.
 8. **Communiquer avec l'assuré** à des dates convenues (dernier contact au maximum 15 jours auparavant, sinon un point de situation même sans nouveau) : où en est le dossier, ce qui attend qui, prochaine étape. Dire « information manquante » plutôt que deviner une date de paiement.
@@ -65,13 +65,15 @@ Rien n'est envoyé, signé, payé ni déposé : l'humain valide et agit.
 - L'assuré n'est jamais plus de 15 jours sans nouvelle écrite pendant que le dossier est ouvert.
 - Aucune phrase du dossier ne tranche la couverture, ne chiffre une indemnité ni promet un résultat.
 - Les données sensibles se limitent à ce qui est nécessaire.
+- Quand plusieurs polices ou dossiers correspondent, aucun n'est choisi sans décision humaine.
 
 ## Sources officielles
 
 Consultées le 16/10/2026 :
 
 - Loi du 4 avril 2014 relative aux assurances, Justel (texte mis à jour au 04/08/2026), https://www.ejustice.just.fgov.be/cgi_loi/article.pl?language=fr&lg_txt=f&type=&sort=&numac_search=2014011239&cn_search=2014040446&caller=article&&view_numac=2014011239n : article 74 (avis du sinistre dès que possible et dans le délai du contrat ; assureur privé du moyen tiré du délai si l'avis a été donné aussi vite que raisonnablement possible ; renseignements sans retard), article 75 (mesures raisonnables pour limiter le dommage), article 76 (réduction à concurrence du préjudice ; déchéance seulement en cas d'intention frauduleuse), article 88 (prescription de trois ans des actions dérivant du contrat, avec les règles de départ), articles 265 et 322 (plaintes visant les intermédiaires, Ombudsman des assurances).
-- Source secondaire : article de Test-Achats « Plaintes après votre indemnisation par votre assureur ? », https://www.test-achats.be/argent/assurance/dossier/indemnisation-decevante : l'Ombudsman des assurances est gratuit, ses décisions ne lient pas l'assureur ; à confirmer sur le site de l'Ombudsman, qui n'a pas pu être ouvert le 16/10/2026 (certificat non reconnu).
+- Même loi, art. 322 § 1er (le service ombudsman contribue à résoudre les différends entre assureurs ou intermédiaires et leurs clients « en rendant un avis ou en intervenant en qualité de médiateur ») et § 2/2 (suspension de la prescription de l'art. 88 dès réception d'une demande complète), relus sur Justel le 17/10/2026, https://www.ejustice.just.fgov.be/eli/loi/2014/04/04/2014011239/justel.
+- Ombudsman des Assurances, « Introduire une plainte », https://www.ombudsman-insurance.be/introduire-une-plainte/ (17/10/2026) : le client interroge d'abord l'assureur ou l'intermédiaire ; plainte écrite avec la référence du dossier. L'article de Test-Achats cité auparavant a été retiré.
 
 Aucun texte officiel n'a été consulté sur les délais d'intervention de l'assureur ou de l'expert, ni sur les pièces exigées par branche : ils figurent dans la police et chez l'assureur.
 
@@ -98,3 +100,10 @@ Le 12/10/2026, une cliente signale par courriel un dégât des eaux dans sa cuis
 - Relance de l'assureur le 27/10 si aucune réponse ; point de situation à la cliente le 27/10 au plus tard.
 
 Cas d'échec : le client signale un vol de vélo le 10/10 mais ne retrouve la police qu'une semaine plus tard et ne veut déclarer à l'assureur que lorsque le rapport de police sera obtenu. La compétence ne retient pas l'avis : elle recommande de déclarer immédiatement, rappelle le délai relevé dans la police et la règle de l'article 74, et note que le rapport de police sera transmis dès réception. Si la police n'est pas retrouvée, elle écrit « délai d'avis : information manquante, police à obtenir auprès de l'assureur » et ne cite aucun délai générique.
+
+## Origine de la méthode
+
+Règle « ne jamais choisir seul un dossier quand plusieurs correspondent » adaptée et traduite de
+github.com/anthropics/knowledge-work-plugins, `small-business/skills/ticket-deflector/SKILL.md`, étape 2, commit
+33eeda1e8fd856455b05479d13a0f85b5f803744, licence Apache 2.0. Le reste de la méthode est propre à l'atelier et fondé sur
+la loi du 4 avril 2014. Texte de la licence et liste des reprises : `organisation/skills/LICENCES-TIERS.md`.

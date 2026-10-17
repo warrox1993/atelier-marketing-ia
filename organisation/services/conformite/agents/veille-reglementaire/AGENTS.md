@@ -6,7 +6,6 @@ title: "Conformité · Veille réglementaire"
 reportsTo: "coordinateur-conformite"
 skills:
   - "veille-reglementaire"
-  - "controle-communications-reglementees"
 ---
 
 # Veille réglementaire

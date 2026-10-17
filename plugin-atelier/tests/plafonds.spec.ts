@@ -66,6 +66,13 @@ describe("contrats des plafonds", () => {
     expect(EnregistrerReglagesEntree.parse({ companyId: id, plafondPub: null }).plafondPub).toBeNull();
     expect(EnregistrerPlafondCampagneEntree.safeParse({ companyId: id, plafondPub: { type: "montant", montantCents: 0 } }).success).toBe(false);
   });
+  it("E1 : réglages, seul le mode « reel » est accepté (contrat serveur et action de l'interface)", () => {
+    const id = "11111111-1111-4111-8111-111111111111";
+    expect(EnregistrerReglagesEntree.parse({ companyId: id, modeParDefaut: "reel" }).modeParDefaut).toBe("reel");
+    expect(EnregistrerReglagesEntree.safeParse({ companyId: id, modeParDefaut: "demonstration" }).success).toBe(false);
+    expect(ACTIONS_UI["atelier.reglages.enregistrer"].params.safeParse({ modeParDefaut: "demonstration" }).success).toBe(false);
+    expect(ACTIONS_UI["atelier.reglages.enregistrer"].params.safeParse({ modeParDefaut: "reel" }).success).toBe(true);
+  });
   it("les actions de plafond sont réservées à l'humain", () => {
     expect(ACTIONS_UI["atelier.campagne.plafond"].humainSeulement).toBe(true);
     expect(ACTIONS_UI["atelier.reglages.enregistrer"].humainSeulement).toBe(true);

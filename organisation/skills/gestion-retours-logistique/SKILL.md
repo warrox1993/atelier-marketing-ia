@@ -2,7 +2,7 @@
 name: "gestion-retours-logistique"
 description: "Organise le traitement logistique des retours de marchandises d'une PME belge : réception, contrôle et tri (remise en stock, reconditionnement, déclassement, destruction, renvoi au fournisseur), traçabilité, calcul du coût réel d'un retour et des motifs récurrents, en tenant compte du droit de rétractation de 14 jours et de la garantie légale pour les ventes aux consommateurs. À utiliser pour établir la procédure ou instruire un lot de retours ; jamais pour décider d'un remboursement, accepter une garantie, trancher le droit à retour d'un client ni détruire un stock sans décision humaine."
 metadata:
-  version: "1.0.0"
+  version: "1.1.0"
   langue: "fr"
   domaine: "logistique"
 ---
@@ -37,9 +37,16 @@ Un circuit de retour écrit : chaque colis reçu est identifié, contrôlé selo
 ## Étapes
 
 1. **Recevoir et identifier** : rapprocher le colis de l'autorisation de retour, noter la date, l'état de l'emballage, les écarts de quantité. Un colis sans autorisation est mis de côté et signalé au service après-vente, pas traité.
-2. **Qualifier le client et le motif** : consommateur ou professionnel. Pour un consommateur ayant acheté à distance, un délai de rétractation de 14 jours calendrier court depuis la réception des biens, sans motif ni pénalité ; le vendeur rembourse le prix et les frais de livraison standard par le moyen de paiement initial, sans imposer un bon d'achat ; les frais de renvoi peuvent être mis à la charge du consommateur s'il en a été informé correctement avant le contrat (source secondaire). Certaines catégories sont exclues (biens personnalisés, produits périssables, produits d'hygiène descellés, contenu numérique entamé). Ces points relèvent du service après-vente et du juridique : la logistique les rappelle, ne les tranche pas.
+2. **Qualifier le client et le motif** : consommateur ou professionnel. Pour un consommateur ayant acheté à distance, un délai de rétractation de 14 jours calendrier court depuis la réception des biens, sans motif ni pénalité ; le vendeur rembourse le prix et les frais de livraison standard par le moyen de paiement initial, sans imposer un bon d'achat ; le consommateur renvoie les biens au plus tard 14 jours après avoir communiqué sa décision et ne supporte que les coûts directs du renvoi, sauf prise en charge par l'entreprise ou information manquante (Code de droit économique, art. VI.47, VI.50 et VI.51). Certaines catégories sont exclues (biens personnalisés, produits périssables, produits d'hygiène descellés, contenu numérique entamé). Ces points relèvent du service après-vente et du juridique : la logistique les rappelle, ne les tranche pas.
 3. **Contrôler** selon la grille : conforme à la commande, complet, état, usage, numéro de série, péremption. Photographier. Distinguer l'article intact, l'article ouvert mais complet, l'article abîmé par l'usage, l'article défectueux, l'article sans rapport avec la commande.
-4. **Orienter vers une destination** selon des règles écrites : remise en stock (neuf, complet, emballage intact), reconditionnement (emballage à refaire, accessoire manquant remplaçable), déclassement (vente à prix réduit, validée par la direction), retour au fournisseur (défaut d'origine, dans le cadre de la garantie fournisseur), don ou destruction (jamais sans décision humaine écrite, avec respect des règles sur les déchets et sur les données des appareils).
+4. **Orienter vers une destination** par un arbre écrit, selon l'état noté (A : intact et complet ; B : emballage abîmé ou ouvert, complet ; C : usé ou incomplet ; D : défectueux ou inutilisable) et l'économie du cas :
+   - **remise en stock vendable** : état A seulement, emballage complet, après les tests de fonctionnement ou de sécurité requis ; un réemballage ne fait jamais passer un produit utilisé pour neuf ;
+   - **reconditionnement ou vente en « emballage ouvert »** : état A à emballage abîmé ou B, si le coût du reconditionnement reste justifié par l'écart de prix (repère de départ : coût inférieur à 40 % du prix de revente reconditionné, à fixer par la direction) ;
+   - **retour au fournisseur** : défaut d'origine couvert par la garantie ou le contrat fournisseur ; comparer le montant récupérable au coût du renvoi ;
+   - **déclassement ou vente à un soldeur** : états B ou C quand le reconditionnement ne se justifie pas, sans mélanger les familles dans un même lot (le lot se vend au prix de la famille la moins chère) ; validée par la direction ;
+   - **don** : jamais sans décision humaine écrite, en protégeant la marque ;
+   - **destruction obligatoire** : produit rappelé, contrefaçon découverte, produit soumis à une filière réglementée (piles, équipements électriques et électroniques, produits dangereux) ; preuve de destruction conservée ; données des appareils effacées.
+   La destination est proposée ligne par ligne avec sa raison ; remboursement et mise au rebut restent des décisions humaines.
 5. **Remettre en stock avec traçabilité** : mouvement de stock daté, lien avec le retour, lot et numéro de série conservés. Un article revient en stock vendable seulement après le contrôle ; sinon en stock séparé « à traiter ». Informer le responsable de prévision pour que la demande nette soit calculée sans double comptage.
 6. **Transmettre le constat** au service après-vente, qui décide du remboursement, de l'avoir ou du remplacement. Le constat dit ce qui est constaté, pas ce qui est dû. En cas de dommage de transport, ouvrir un dossier avec photos et réserves (voir `organisation-transport`) et prévenir le service sinistres via la liaison.
 7. **Calculer le coût réel d'un retour** : transport aller et retour, temps de réception et de contrôle, reconditionnement, perte de valeur (déclassement ou destruction), remboursement des frais de livraison, divisé par le nombre de retours de la période. Donner le détail, pas seulement le total.
@@ -53,16 +60,16 @@ Une procédure de retour d'une page (étapes, grille de contrôle, règles d'ori
 ## Critères de réussite
 
 - Chaque retour reçu a une autorisation, un constat daté avec photos et une destination écrite.
-- Aucun article n'est remis en stock vendable sans contrôle.
+- Aucun article n'est remis en stock vendable sans contrôle ; chaque destination suit l'arbre écrit et porte sa raison.
 - Le coût est donné avec son détail et la période.
 - Aucune décision de remboursement, de garantie, de destruction ni de dérogation n'a été prise par la logistique.
 - Les données personnelles du client se limitent à la référence de commande.
 
 ## Sources officielles
 
-Aucun texte officiel n'a pu être ouvert le 16/10/2026 : le site de l'économie fédérale (economie.fgov.be) et EUR-Lex ont renvoyé une vérification anti-robot ou une page vide. Le droit de rétractation cité vient d'une source secondaire ouverte le même jour :
+Consulté le 17/10/2026 :
 
-- « Guide pratique du droit de rétractation en 10 questions-réponses », blog.oeccbb.be (éditeur institutionnel non vérifié), https://blog.oeccbb.be/fr/article/guide-pratique-du-droit-de-retractation-en-10-questions-reponses/31246 : source secondaire, 14 jours calendrier, remboursement du prix et des frais de livraison standard, frais de retour possibles à charge du consommateur, exceptions. À confronter au texte officiel : Code de droit économique, livre VI, et directive 2011/83/UE (articles 9, 13, 14 et 16), non ouverts.
+- Code de droit économique, art. VI.47 (délai de rétractation de 14 jours d'un contrat à distance, sans motif, sans autres coûts que ceux des art. VI.50 § 2 et VI.51), art. VI.50 § 1er (remboursement de tous les paiements, y compris les frais de livraison, dans les 14 jours, par le même moyen de paiement sauf accord exprès) et art. VI.51 § 1er (renvoi des biens dans les 14 jours, coûts directs du renvoi à charge du consommateur sauf prise en charge par l'entreprise), texte consolidé sur Justel, https://www.ejustice.just.fgov.be/eli/loi/2013/02/28/2013A11134/justel. Remplace la source secondaire citée dans la version 1.0.0.
 
 ## À vérifier par un professionnel
 
@@ -80,3 +87,7 @@ Le droit applicable à un retour précis (rétractation, garantie légale de con
 Mois de septembre 2026 : 42 retours sur 610 commandes (6,9 %). Détail : 18 pour erreur de choix du client (rétractation), 14 pour défaut, 7 pour erreur de préparation, 3 sans autorisation. Coût par retour (extrait du 03/10, provisoire) : transport retour 6,40 euros, contrôle 4,80 euros (12 minutes), reconditionnement moyen 2,10 euros, soit 13,30 euros avant perte de valeur ; perte de valeur sur 5 articles déclassés : 124 euros au total. Les 14 défauts concernent le même fournisseur sur 3 références : hypothèse de défaut de série, à confirmer avec la qualité avant toute réclamation.
 
 Cas d'échec : un client demande un retour 25 jours après la livraison d'un article personnalisé et le colis arrive sans autorisation. La logistique n'accepte ni ne refuse : elle met le colis de côté, photographie l'état, écrit « retour sans autorisation, article personnalisé » et transmet le constat au service après-vente pour décision, sans le remettre en stock.
+
+## Origine de la méthode
+
+Version 1.1.0 : arbre de destination par état (étape 4) adapté et traduit de github.com/affaan-m/ECC, `skills/returns-reverse-logistics/SKILL.md`, « Disposition Decision Trees » et « Disposition Routing by Category and Condition », commit ef648e01899ba3e8dc6371642deaaf64b4477775, compétence sous licence Apache 2.0 (en-tête `license: Apache-2.0`, auteur « evos »). Les références américaines (FTC, plateformes de liquidation, déduction fiscale du don) ne sont pas reprises. Modifications : réécriture en français, droit belge de la consommation, décision humaine. Texte des licences et liste des reprises : `organisation/skills/LICENCES-TIERS.md`.

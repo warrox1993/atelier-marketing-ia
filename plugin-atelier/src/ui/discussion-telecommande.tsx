@@ -12,10 +12,13 @@ import { useEffect, useState, type ReactElement } from "react";
 import { parametresDepuisFiltre } from "../contrats/filtre-prospects.js";
 import type { ActionDiscussion } from "../serveur/discussion-actions.js";
 import type { ElementAccueil } from "../serveur/services-accueil.js";
+import type { DepartementDeclare } from "../contrats/departements.js";
 import { SurPlace, natifSeulement, traitableSurPlace } from "./accueil-sur-place.js";
 import { LienHote, MessageFait } from "./composants.js";
+import { MINIMUM_DEPARTEMENTS } from "./departements-sonde.js";
 import { appelRoute } from "./routes-prospection.js";
 import { chemin, type CleVue } from "./route.js";
+import { enParallele, lireEntreprises } from "./vues/departements.js";
 
 export const LIBELLES_CIBLES: Readonly<Record<string, string>> = {
   accueil: "Voir ce qui est à faire",
@@ -103,6 +106,105 @@ export function useElementsAFaire(
   return { elements, erreur, reessayer: () => setEssai((n) => n + 1) };
 }
 
+/** Service d'où vient un élément de « À faire » : la décision se prend dans cette entreprise. */
+export interface OrigineElement {
+  companyId: string;
+  nom: string;
+  estDirection: boolean;
+}
+
+/** Intervalle de relecture du « À faire » des départements (onglet visible seulement). */
+export const INTERVALLE_DEPARTEMENTS_MS = 30_000;
+
+/** Lectures du « À faire » simultanées au plus (un client compte au plus 14 services). */
+const LECTURES_AFAIRE_SIMULTANEES = 4;
+
+/** Types d'éléments proposés dans le fil : ceux qui attendent une décision de la personne. */
+export const estDecisionAttendue = (e: ElementAccueil): boolean => Boolean(e.interaction || e.approbationId || e.liaison || e.type === "contenu_a_valider");
+
+export interface AFaireClient {
+  elements: Map<string, ElementAccueil>;
+  /** Service d'origine de chaque élément (vide hors client à plusieurs services). */
+  origines: Map<string, OrigineElement>;
+  /** Éléments des départements autres que la Direction, à proposer dans le fil. */
+  autres: Array<{ element: ElementAccueil; origine: OrigineElement }>;
+  erreur: boolean;
+  reessayer(): void;
+}
+
+/**
+ * « À faire » de TOUT le client. Client à plusieurs services : une lecture `/accueil` par service avec le companyId de
+ * SON service (l'hôte refuse tout autre appel), chaque lien est préfixé par celui de son entreprise, et chaque élément
+ * garde son service d'origine (la décision se prend là). Un service illisible, ou dont le préfixe est inconnu, est
+ * signalé (`erreur`) sans masquer les autres. Sinon (lecture des services en échec, un seul service) : comportement
+ * historique, `useElementsAFaire` sur l'entreprise du fil.
+ */
+export function useAFaireClient(
+  companyId: string | null | undefined,
+  services: readonly DepartementDeclare[] | null | undefined,
+  vises: readonly string[],
+  version: number,
+): AFaireClient {
+  const multi = (services?.length ?? 0) >= MINIMUM_DEPARTEMENTS;
+  const simple = useElementsAFaire(multi ? null : companyId, vises, version);
+  const [etat, setEtat] = useState<Omit<AFaireClient, "reessayer">>({ elements: new Map(), origines: new Map(), autres: [], erreur: false });
+  const [essai, setEssai] = useState(0);
+  const [tic, setTic] = useState(0);
+  useEffect(() => {
+    if (!multi) return;
+    const minuteur = setInterval(() => {
+      if (typeof document === "undefined" || document.visibilityState === "visible") setTic((n) => n + 1);
+    }, INTERVALLE_DEPARTEMENTS_MS);
+    return () => clearInterval(minuteur);
+  }, [multi]);
+  useEffect(() => {
+    if (!multi || !services) return;
+    let annule = false;
+    void (async () => {
+      const entreprises = await lireEntreprises().catch(() => []);
+      const prefixes = new Map(entreprises.map((e) => [e.id, e.issuePrefix]));
+      const resultats = new Map<string, ElementAccueil[] | null>();
+      await enParallele(services, LECTURES_AFAIRE_SIMULTANEES, async (s) => {
+        try {
+          const r = await appelRoute<{ elements?: ElementAccueil[] }>("GET", `/accueil?companyId=${encodeURIComponent(s.companyId)}`);
+          resultats.set(s.companyId, Array.isArray(r?.elements) ? r.elements : null);
+        } catch {
+          resultats.set(s.companyId, null);
+        }
+      });
+      if (annule) return;
+      const elements = new Map<string, ElementAccueil>();
+      const origines = new Map<string, OrigineElement>();
+      const autres: AFaireClient["autres"] = [];
+      let erreur = false;
+      // Direction d'abord : en cas d'identifiant commun, son élément l'emporte.
+      for (const s of [...services].sort((a, b) => Number(b.estDirection) - Number(a.estDirection))) {
+        const liste = resultats.get(s.companyId);
+        const prefixe = prefixes.get(s.companyId);
+        if (!liste || (!s.estDirection && !prefixe)) {
+          erreur = true;
+          continue;
+        }
+        const origine: OrigineElement = { companyId: s.companyId, nom: s.nom, estDirection: s.estDirection };
+        for (const brut of liste) {
+          // Lien relatif à l'entreprise d'origine : préfixé pour rester valable depuis la Direction.
+          const element = prefixe && brut.lien.startsWith("/") ? { ...brut, lien: `/${prefixe}${brut.lien}` } : brut;
+          if (elements.has(element.id)) continue;
+          elements.set(element.id, element);
+          origines.set(element.id, origine);
+          if (!s.estDirection && estDecisionAttendue(element)) autres.push({ element, origine });
+        }
+      }
+      setEtat({ elements, origines, autres, erreur });
+    })();
+    return () => {
+      annule = true;
+    };
+  }, [multi, services, version, essai, tic]);
+  if (!multi) return { elements: simple.elements, origines: new Map(), autres: [], erreur: simple.erreur, reessayer: simple.reessayer };
+  return { ...etat, reessayer: () => setEssai((n) => n + 1) };
+}
+
 /** Message et bouton affichés quand les actions ou les cartes de la Discussion n'ont pas pu être lues. */
 export function ActionsIndisponibles({ onReessayer }: { onReessayer(): void }) {
   return (
@@ -123,11 +225,22 @@ export interface PropsActions {
   /** Actions déjà traitées, avec le message de confirmation à afficher à la place du bouton. */
   faits: Readonly<Record<string, string>>;
   onFait(cle: string, message: string): void;
+  /** Service d'origine des éléments (client à plusieurs services) : affiché devant le bouton, décision prise là. */
+  origines?: ReadonlyMap<string, OrigineElement>;
 }
 
-export function ActionsMessage({ idMessage, actions, elements, faits, onFait }: PropsActions) {
+/** Étiquette du service d'origine d'un élément. */
+export function EtiquetteService({ nom }: { nom: string }) {
+  return (
+    <span className="atl-disc-dep" title="Service concerné">
+      {nom}
+    </span>
+  );
+}
+
+export function ActionsMessage({ idMessage, actions, elements, faits, onFait, origines }: PropsActions) {
   const [ouverts, setOuverts] = useState<ReadonlySet<string>>(new Set());
-  const boutons: Array<{ cle: string; bouton: ReactElement; panneau: ReactElement | null }> = [];
+  const boutons: Array<{ cle: string; bouton: ReactElement; panneau: ReactElement | null; service?: string }> = [];
   for (const a of actions) {
     const cle = `${idMessage}:${cleAction(a)}`;
     if (a.type === "ouvrir") {
@@ -147,6 +260,7 @@ export function ActionsMessage({ idMessage, actions, elements, faits, onFait }: 
       });
     } else if (a.type === "traiter") {
       const e = elements.get(a.element);
+      const origine = origines?.get(a.element);
       if (faits[cle]) {
         boutons.push({ cle, bouton: <MessageFait element="span" className="atl-disc-fait" texte={faits[cle]!} />, panneau: null });
         continue;
@@ -161,6 +275,7 @@ export function ActionsMessage({ idMessage, actions, elements, faits, onFait }: 
             </LienHote>
           ),
           panneau: null,
+          service: origine?.nom,
         });
         continue;
       }
@@ -179,7 +294,8 @@ export function ActionsMessage({ idMessage, actions, elements, faits, onFait }: 
             {ouvert ? "Replier" : libelleTraiter(e)}
           </button>
         ),
-        panneau: ouvert ? <SurPlace element={e} onFait={(m) => onFait(cle, m)} /> : null,
+        panneau: ouvert ? <SurPlace element={e} companyId={origine?.companyId} onFait={(m) => onFait(cle, m)} /> : null,
+        service: origine?.nom,
       });
     } else {
       console.warn("Discussion : type d'action inconnu, bouton ignoré", (a as { type?: unknown }).type);
@@ -190,7 +306,10 @@ export function ActionsMessage({ idMessage, actions, elements, faits, onFait }: 
     <div className="atl-disc-actions">
       <div className="atl-disc-actions-boutons">
         {boutons.map((b) => (
-          <span key={b.cle}>{b.bouton}</span>
+          <span key={b.cle}>
+            {b.service ? <EtiquetteService nom={b.service} /> : null}
+            {b.bouton}
+          </span>
         ))}
       </div>
       {boutons.map((b) => (b.panneau ? <div key={b.cle} className="atl-disc-panneau">{b.panneau}</div> : null))}
@@ -199,14 +318,17 @@ export function ActionsMessage({ idMessage, actions, elements, faits, onFait }: 
 }
 
 /** Carte native en attente, affichée dans le fil comme un message du Coordinateur, répondable en place. */
-export function CarteFil({ element, onFait }: { element: ElementAccueil; onFait(message: string): void }) {
+export function CarteFil({ element, onFait, origine }: { element: ElementAccueil; onFait(message: string): void; origine?: OrigineElement }) {
   return (
-    <div className="atl-disc-bulle" data-auteur="agent" data-carte="oui">
-      <span className="atl-disc-meta">Coordinateur · en attente de votre réponse</span>
+    <div className="atl-disc-bulle" data-auteur="agent" data-carte="oui" data-service={origine ? origine.nom : undefined}>
+      <span className="atl-disc-meta">
+        {origine ? <EtiquetteService nom={origine.nom} /> : null}
+        {origine ? "En attente de votre décision" : "Coordinateur · en attente de votre réponse"}
+      </span>
       <div className="atl-disc-texte atl-disc-carte">
         <p className="atl-disc-carte-titre">{element.titre}</p>
         <div className="atl-disc-panneau">
-          <SurPlace element={element} onFait={onFait} />
+          <SurPlace element={element} companyId={origine?.companyId} onFait={onFait} />
         </div>
       </div>
     </div>

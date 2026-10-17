@@ -216,7 +216,7 @@ async function produire(tache) {
   if (tache.status === "blocked" && CODE_SCENARIO !== "D") {
     // Escalade déjà faite (cycles épuisés) : le moteur réveille la tâche bloquée sans bloqueur ;
     // la reprendre relancerait l'escalade en boucle. Seule une relance humaine la débloque.
-    const { corps: c0 } = await api("GET", `${PLUGIN}/taches/${tache.id}/contexte`);
+    const { corps: c0 } = await api("GET", `${PLUGIN}/taches/${tache.id}/contexte?vue=complete`);
     const revues0 = c0?.revuesRevisionCourante ?? [];
     const enCours0 = revues0.filter((r) => r.statutNatif !== "done" && r.statutNatif !== "cancelled");
     const aCorriger0 = (c0?.constatsOuverts?.length ?? 0) > 0 || revues0.some((r) => r.verdict === "CHANGES_REQUESTED");
@@ -228,7 +228,7 @@ async function produire(tache) {
     }
   }
   if (!(await checkout(tache))) return;
-  const { code, corps: ctx } = await api("GET", `${PLUGIN}/taches/${tache.id}/contexte`);
+  const { code, corps: ctx } = await api("GET", `${PLUGIN}/taches/${tache.id}/contexte?vue=complete`);
   if (code !== 200) return trace("contexte_echec", { code, corps: ctx });
 
   if (CODE_SCENARIO === "D") return produireAvecInformationManquante(tache, ctx);
@@ -316,7 +316,7 @@ async function produire(tache) {
 
 /** Déclare la couverture de la révision courante (si absente) puis attend les revues liées. */
 async function declarerEtAttendre(tache, corpsLivrable, version) {
-  const { corps: ctx } = await api("GET", `${PLUGIN}/taches/${tache.id}/contexte`);
+  const { corps: ctx } = await api("GET", `${PLUGIN}/taches/${tache.id}/contexte?vue=complete`);
   const revisionId = ctx.livrable.revisionId;
   let revues = ctx.revuesRevisionCourante ?? [];
   if (ctx.couvertures.length === 0) {
@@ -402,7 +402,7 @@ async function produireAvecInformationManquante(tache, ctx) {
     const ecrit = await api("PUT", `/issues/${tache.id}/documents/livrable`, { title: SCENARIO.titre, format: "markdown", body: SCENARIO.livrable(1), changeSummary: "Version 1 (démonstration)", baseRevisionId: null });
     trace("livrable_ecrit", { code: ecrit.code });
   }
-  const { corps: ctx2 } = await api("GET", `${PLUGIN}/taches/${tache.id}/contexte`);
+  const { corps: ctx2 } = await api("GET", `${PLUGIN}/taches/${tache.id}/contexte?vue=complete`);
   if (ctx2.couvertures.length === 0) {
     const dec = await api("POST", `${PLUGIN}/taches/${tache.id}/couverture`, {
       revisionId: ctx2.livrable.revisionId,
@@ -476,7 +476,7 @@ async function relire(tache, role) {
   if (!m || m[1] !== role) return trace("tache_hors_role", { tache: tache.identifier });
   if (!(await checkout(tache))) return;
   const parent = tache.parentId;
-  const { corps: ctx } = await api("GET", `${PLUGIN}/taches/${parent}/contexte`);
+  const { corps: ctx } = await api("GET", `${PLUGIN}/taches/${parent}/contexte?vue=complete`);
   const rev = ctx?.livrable?.revisionId;
   if (rev !== m[2]) {
     await api("PATCH", `/issues/${tache.id}`, { status: "cancelled", comment: "Révision dépassée : revue sans objet (démonstration)." });

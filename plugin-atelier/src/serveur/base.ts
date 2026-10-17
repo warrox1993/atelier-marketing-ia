@@ -76,6 +76,16 @@ export function depotDepuisJournal(issueId: string | null, donnees: Record<strin
   };
 }
 
+/** Tables légales que la remise à zéro conserve toujours (faille M1). */
+export const TABLES_CONSERVEES = ["oppositions", "listes_dncm", "dncm_empreintes", "bases_legales", "journal"] as const;
+
+/** Tables vidées par la remise à zéro, dans l'ordre (enfants avant parents). `prospects` ne perd que ceux sans base légale. */
+export const TABLES_REMISE_A_ZERO = [
+  "corrections_criteres", "evaluations_criteres", "reglages_leads", "exports_crm", "issues_commerciales", "prospects_scores", "prospects_empreintes", "prospects", "etalonnages", "poids_score",
+  "clients_empreintes", "clients", "bases_clients_imports", "regles_ventes_croisees",
+  "relances_correction", "appels_proposes", "diffusions", "decisions_humaines", "constats", "verdicts", "couvertures", "evaluations_porte", "messages", "sources", "mesures", "imports", "planifications", "portes", "exigences", "briefs", "campagnes", "marques", "reglages_entreprise",
+] as const;
+
 export function creerBase(db: Db) {
   const ns = db.namespace;
   if (!IDENT.test(ns)) erreur("erreur_interne", "Espace de base du plugin invalide");
@@ -1176,6 +1186,8 @@ export function creerBase(db: Db) {
       particulier: r.particulier == null ? null : objet(r.particulier),
       creeLe: iso(r.cree_le),
       modifieLe: iso(r.modifie_le),
+      /** Chiffrée avec l'ancienne clé devinable (migration 016) : illisible, jamais servie comme donnée valide. */
+      cleAReimporter: r.cle_a_reimporter === true,
     };
   }
   type LigneProspect = ReturnType<typeof ligneProspect>;
@@ -1191,7 +1203,8 @@ export function creerBase(db: Db) {
    * les règles qui doivent encore l'atteindre (opposition d'un client) passent `{ corbeille: true }`.
    */
   async function lireProspect(companyId: string, id: string, options: { corbeille?: boolean } = {}): Promise<LigneProspect | null> {
-    const filtre = options.corbeille === true ? "" : " and corbeille_le is null";
+    // Une fiche à réimporter n'est jamais servie (clé devinable) ; elle reste atteignable par `prospectsParIdentifiants` pour être remplacée.
+    const filtre = `${options.corbeille === true ? "" : " and corbeille_le is null"} and cle_a_reimporter = false`;
     const [r] = await q(`select * from ${ns}.prospects where company_id = $1 and id = $2${filtre}`, [companyId, id]);
     return r ? ligneProspect(r) : null;
   }
@@ -1199,16 +1212,35 @@ export function creerBase(db: Db) {
   /** Empreintes déjà portées par des prospects de l'entreprise, parmi les valeurs données. */
   async function empreintesProspectsEnBase(companyId: string, valeurs: readonly string[]) {
     if (valeurs.length === 0) return [];
-    return (await q(`select prospect_id, type, empreinte from ${ns}.prospects_empreintes where company_id = $1 and empreinte in (select jsonb_array_elements_text($2::jsonb))`, [companyId, json(valeurs)])).map((r) => ({
+    // Les fiches à réimporter portent des empreintes calculées avec l'ancienne clé : exclues du rapprochement de doublons.
+    return (await q(
+      `select e.prospect_id, e.type, e.empreinte from ${ns}.prospects_empreintes e join ${ns}.prospects p on p.id = e.prospect_id and p.company_id = e.company_id
+       where e.company_id = $1 and not p.cle_a_reimporter and e.empreinte in (select jsonb_array_elements_text($2::jsonb))`,
+      [companyId, json(valeurs)],
+    )).map((r) => ({
       prospectId: String(r.prospect_id), type: String(r.type), valeur: String(r.empreinte),
     }));
   }
 
   async function oppositionsPour(companyId: string, valeurs: readonly string[]) {
     if (valeurs.length === 0) return [];
-    return (await q(`select type, empreinte, canal from ${ns}.oppositions where company_id = $1 and empreinte in (select jsonb_array_elements_text($2::jsonb))`, [companyId, json(valeurs)])).map((r) => ({
+    // Une opposition à réimporter n'est pas lisible avec la clé du coffre : exclue ici, et tout export de contact est refusé
+    // tant qu'il en reste (`compterAReimporter`), pour ne jamais rendre contactable une personne qui s'est opposée.
+    return (await q(`select type, empreinte, canal from ${ns}.oppositions where company_id = $1 and not cle_a_reimporter and empreinte in (select jsonb_array_elements_text($2::jsonb))`, [companyId, json(valeurs)])).map((r) => ({
       type: String(r.type), valeur: String(r.empreinte), canal: String(r.canal),
     }));
+  }
+
+  /** Lignes marquées « à réimporter » (migration 016) de l'entreprise, par table : jamais déchiffrées ni servies. */
+  async function compterAReimporter(companyId: string) {
+    const [r] = await q(
+      `select (select count(*) from ${ns}.prospects where company_id = $1 and cle_a_reimporter) as prospects,
+              (select count(*) from ${ns}.clients where company_id = $1 and cle_a_reimporter) as clients,
+              (select count(*) from ${ns}.bases_clients_imports where company_id = $1 and cle_a_reimporter) as imports,
+              (select count(*) from ${ns}.oppositions where company_id = $1 and cle_a_reimporter) as oppositions`,
+      [companyId],
+    );
+    return { prospects: Number(r?.prospects ?? 0), clients: Number(r?.clients ?? 0), imports: Number(r?.imports ?? 0), oppositions: Number(r?.oppositions ?? 0) };
   }
 
   /** Empreintes des clients ACTIFS de la base de clients, parmi les valeurs données. */
@@ -1216,7 +1248,7 @@ export function creerBase(db: Db) {
     if (valeurs.length === 0) return [];
     return (await q(
       `select e.type, e.empreinte from ${ns}.clients_empreintes e join ${ns}.clients c on c.id = e.client_id and c.company_id = e.company_id
-       where e.company_id = $1 and c.statut = 'actif' and e.empreinte in (select jsonb_array_elements_text($2::jsonb))`,
+       where e.company_id = $1 and c.statut = 'actif' and not c.cle_a_reimporter and e.empreinte in (select jsonb_array_elements_text($2::jsonb))`,
       [companyId, json(valeurs)],
     )).map((r) => ({ type: String(r.type), valeur: String(r.empreinte) }));
   }
@@ -1234,12 +1266,16 @@ export function creerBase(db: Db) {
   }
 
   async function clientExiste(companyId: string, clientId: string) {
-    return (await q(`select id from ${ns}.clients where company_id = $1 and id = $2`, [companyId, clientId])).length > 0;
+    return (await q(`select id from ${ns}.clients where company_id = $1 and id = $2 and not cle_a_reimporter`, [companyId, clientId])).length > 0;
   }
 
   /** Client de la base de clients désigné par une empreinte (ex. `identifiant_client`) ; null si absent. */
   async function clientParEmpreinte(companyId: string, type: string, valeur: string): Promise<string | null> {
-    const [r] = await q(`select client_id from ${ns}.clients_empreintes where company_id = $1 and type = $2 and empreinte = $3 limit 1`, [companyId, type, valeur]);
+    const [r] = await q(
+      `select e.client_id from ${ns}.clients_empreintes e join ${ns}.clients c on c.id = e.client_id and c.company_id = e.company_id
+       where e.company_id = $1 and not c.cle_a_reimporter and e.type = $2 and e.empreinte = $3 limit 1`,
+      [companyId, type, valeur],
+    );
     return r ? String(r.client_id) : null;
   }
 
@@ -1264,7 +1300,7 @@ export function creerBase(db: Db) {
   }
 
   /** Prospect validé par le contrat `Prospect` (l'appelant le vérifie avant). Score et bases légales vont dans leurs tables. */
-  async function insererProspect(p: Omit<LigneProspect, "creeLe" | "modifieLe">) {
+  async function insererProspect(p: Omit<LigneProspect, "creeLe" | "modifieLe" | "cleAReimporter">) {
     await x(
       `insert into ${ns}.prospects (id, company_id, campagne_id, cible, identifiant_type, forme, referentiel, identifiant_valeur, numero_bce, denomination, nom_chiffre, nace, zone, coordonnees, sources, mode, statut, motifs_exclusion, particulier, origine_particulier)
        values ($1, $2, $3, $4, $5, $6, $7::jsonb, $8, $9, $10, $11, $12::jsonb, $13::jsonb, $14::jsonb, $15::jsonb, $16, $17, $18::jsonb, $19::jsonb, $20)`,
@@ -1281,6 +1317,20 @@ export function creerBase(db: Db) {
        where company_id = $1 and id = $2`,
       [companyId, id, json(p.nace), json(p.zone), json(p.coordonnees), json(p.sources), p.statut, json(p.motifsExclusion), p.particulier === null ? null : json(p.particulier)],
     );
+    return rowCount;
+  }
+
+  /**
+   * Nouveau dépôt d'un prospect marqué « à réimporter » : la fiche reçoit le contenu neuf (chiffré avec la clé du coffre),
+   * ses anciennes empreintes (ancienne clé) sont retirées et la marque tombe. Bases légales, scores et identifiant restent.
+   */
+  async function remplacerProspectAReimporter(companyId: string, id: string, p: Pick<LigneProspect, "nomChiffre" | "nace" | "zone" | "coordonnees" | "sources" | "statut" | "motifsExclusion" | "particulier">) {
+    const { rowCount } = await x(
+      `update ${ns}.prospects set nom_chiffre = $3, nace = $4::jsonb, zone = $5::jsonb, coordonnees = $6::jsonb, sources = $7::jsonb, statut = $8, motifs_exclusion = $9::jsonb, particulier = $10::jsonb,
+         cle_a_reimporter = false, modifie_le = now() where company_id = $1 and id = $2 and cle_a_reimporter`,
+      [companyId, id, p.nomChiffre, json(p.nace), json(p.zone), json(p.coordonnees), json(p.sources), p.statut, json(p.motifsExclusion), p.particulier === null ? null : json(p.particulier)],
+    );
+    if (rowCount) await x(`delete from ${ns}.prospects_empreintes where company_id = $1 and prospect_id = $2`, [companyId, id]);
     return rowCount;
   }
 
@@ -1357,6 +1407,7 @@ export function creerBase(db: Db) {
     const conditions = [
       "p.company_id = $1",
       "p.corbeille_le is null",
+      "p.cle_a_reimporter = false",
       ...(f.campagneId ? [`p.campagne_id = ${p(f.campagneId)}`] : []),
       ...dans("p.cible", f.cibles),
       ...dans("p.statut", f.statuts),
@@ -1388,7 +1439,9 @@ export function creerBase(db: Db) {
     const limite = p(f.parPage);
     const decalage = p((f.page - 1) * f.parPage);
     const lignes = (await q(`select p.* from ${ns}.prospects p where ${ou} order by ${score} desc nulls last, p.cree_le desc, p.id limit ${limite} offset ${decalage}`, params)).map(ligneProspect);
-    return { total, lignes };
+    // Fiches à réimporter de l'entreprise : exclues de la liste, comptées à part pour que l'interface le dise.
+    const [m] = await q(`select count(*) as total from ${ns}.prospects where company_id = $1 and cle_a_reimporter`, [companyId]);
+    return { total, lignes, aReimporter: Number(m?.total ?? 0) };
   }
 
   async function insererOpposition(o: { id: string; companyId: string; type: string; empreinte: string; canal: string; origine: string; par: string; recueillieLe: string | null }) {
@@ -1443,14 +1496,16 @@ export function creerBase(db: Db) {
 
   /** Dernier import de la base de clients (ou null) et nombre de clients enregistrés. */
   async function etatBaseClients(companyId: string) {
-    const [i] = await q(`select * from ${ns}.bases_clients_imports where company_id = $1 order by importe_le desc limit 1`, [companyId]);
-    const [c] = await q(`select count(*) as total, count(*) filter (where statut = 'actif') as actifs from ${ns}.clients where company_id = $1`, [companyId]);
+    const [i] = await q(`select * from ${ns}.bases_clients_imports where company_id = $1 and not cle_a_reimporter order by importe_le desc limit 1`, [companyId]);
+    const [c] = await q(`select count(*) filter (where not cle_a_reimporter) as total, count(*) filter (where statut = 'actif' and not cle_a_reimporter) as actifs, count(*) filter (where cle_a_reimporter) as a_reimporter from ${ns}.clients where company_id = $1`, [companyId]);
     return {
       dernierImport: i
         ? { id: String(i.id), nomFichier: String(i.nom_fichier), format: String(i.format), importeLe: iso(i.importe_le), importePar: String(i.importe_par), purgeLe: iso(i.purge_le), finalite: String(i.finalite), dureeConservationMois: Number(i.duree_conservation_mois), lignesRetenues: Number(i.lignes_retenues), lignesRejetees: Number(i.lignes_rejetees), mode: String(i.mode) }
         : null,
       clients: Number(c?.total ?? 0),
       actifs: Number(c?.actifs ?? 0),
+      /** Clients chiffrés avec l'ancienne clé : exclus des totaux ci-dessus ; un nouvel import les remplace. */
+      aReimporter: Number(c?.a_reimporter ?? 0),
     };
   }
 
@@ -1468,7 +1523,7 @@ export function creerBase(db: Db) {
   async function clientsPourVentesCroisees(companyId: string, limite = 5000) {
     const lignes = await q(
       `select c.*, c.debut_contrat::text as debut_contrat_texte, coalesce((select jsonb_agg(jsonb_build_object('type', e.type, 'valeur', e.empreinte)) from ${ns}.clients_empreintes e where e.client_id = c.id and e.company_id = c.company_id), '[]'::jsonb) as empreintes_client
-       from ${ns}.clients c where c.company_id = $1 order by c.cree_le, c.id limit $2`,
+       from ${ns}.clients c where c.company_id = $1 and not c.cle_a_reimporter order by c.cree_le, c.id limit $2`,
       [companyId, limite],
     );
     return lignes.map((r) => ({
@@ -1555,17 +1610,30 @@ export function creerBase(db: Db) {
     );
   }
 
-  /* ---------------- remise à zéro de la démonstration ---------------- */
+  /* ---------------- remise à zéro des données de l'atelier ---------------- */
+  // Faille M1 : oppositions RGPD, listes « Ne m'appelez plus » (DNCM), bases légales et journal d'audit
+  // sont des obligations légales. La remise à zéro ne les efface JAMAIS, quel que soit l'appelant :
+  // ces tables ne figurent pas dans la liste des suppressions, et les prospects qui portent une base
+  // légale sont gardés (la clé étrangère `bases_legales.prospect_id` est en ON DELETE CASCADE).
   async function supprimerDonneesEntreprise(companyId: string) {
     const supprimes: Record<string, number> = {};
     // P9b : tables de prospection et de base clients d'abord (exports avant diffusions ; enfants avant parents).
-    for (const table of ["corrections_criteres", "evaluations_criteres", "reglages_leads", "exports_crm", "issues_commerciales", "bases_legales", "prospects_scores", "prospects_empreintes", "prospects", "etalonnages", "poids_score",
-      "clients_empreintes", "clients", "bases_clients_imports", "regles_ventes_croisees", "dncm_empreintes", "listes_dncm", "oppositions",
-      "relances_correction", "appels_proposes", "diffusions", "decisions_humaines", "constats", "verdicts", "couvertures", "evaluations_porte", "messages", "sources", "mesures", "imports", "planifications", "portes", "exigences", "briefs", "campagnes", "marques", "journal", "reglages_entreprise"]) {
-      const { rowCount } = await x(`delete from ${ns}.${table} where company_id = $1`, [companyId]);
+    for (const table of TABLES_REMISE_A_ZERO) {
+      const { rowCount } = table === "prospects"
+        ? await x(
+          `delete from ${ns}.prospects p where p.company_id = $1 and not exists (select 1 from ${ns}.bases_legales b where b.prospect_id = p.id)`,
+          [companyId],
+        )
+        : await x(`delete from ${ns}.${table} where company_id = $1`, [companyId]);
       supprimes[table] = rowCount;
     }
-    return supprimes;
+    const [r] = await q<Record<string, number | string>>(
+      `select ${TABLES_CONSERVEES.map((t) => `(select count(*) from ${ns}.${t} where company_id = $1) as ${t}`).join(", ")}, (select count(*) from ${ns}.prospects where company_id = $1) as prospects_avec_base_legale`,
+      [companyId],
+    );
+    const conserves: Record<string, number> = {};
+    for (const t of [...TABLES_CONSERVEES, "prospects_avec_base_legale"]) conserves[t] = Number(r?.[t] ?? 0);
+    return { supprimes, conserves };
   }
 
   return {
@@ -1585,8 +1653,8 @@ export function creerBase(db: Db) {
     insererMarque, marques, planifier, listerPlanifications, listerMesures,
     tachesDeProjet, bloqueursNonResolus, runsDeTaches, coutsEntreprise, coutsEntrepriseMois, competencesDernierRun,
     supprimerDonneesEntreprise,
-    prospectsParIdentifiants, lireProspect, empreintesProspectsEnBase, oppositionsPour, clientsActuelsPour, dncmPour, clientExiste, clientParEmpreinte, poidsScoreCourant,
-    referentielProspection, insererProspect, majProspect, exclureProspect, ajouterEmpreintesProspect, prospectsAvecEmpreinte, insererScoreProspect,
+    prospectsParIdentifiants, lireProspect, empreintesProspectsEnBase, oppositionsPour, compterAReimporter, clientsActuelsPour, dncmPour, clientExiste, clientParEmpreinte, poidsScoreCourant,
+    referentielProspection, insererProspect, majProspect, remplacerProspectAReimporter, exclureProspect, ajouterEmpreintesProspect, prospectsAvecEmpreinte, insererScoreProspect,
     detailsProspects, listerProspects, insererOpposition, lireOpposition,
     insererImportBaseClients, insererClients, etatBaseClients, supprimerBaseClients, reglesVentesCroisees, clientsPourVentesCroisees, insererEtalonnage, issuesPourEtalonnage, scoresCourantsCible, insererScoreMesure,
     lireExportCrmParCle, insererExportCrm,

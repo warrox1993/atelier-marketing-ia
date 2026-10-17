@@ -47,7 +47,7 @@ agents:
     metadata:
       atelier:
         registre: "atelier/registre-agents/v1"
-        versionRegistre: "1.6.0"
+        versionRegistre: "1.7.0"
         titre: "Coordinateur marketing"
         entrees:
           - "demande du client ou de l'opérateur"
@@ -140,7 +140,7 @@ agents:
     metadata:
       atelier:
         registre: "atelier/registre-agents/v1"
-        versionRegistre: "1.6.0"
+        versionRegistre: "1.7.0"
         titre: "Pôle Intelligence · Marché et veille concurrentielle"
         entrees:
           - "brief et exigences"
@@ -231,7 +231,7 @@ agents:
     metadata:
       atelier:
         registre: "atelier/registre-agents/v1"
-        versionRegistre: "1.6.0"
+        versionRegistre: "1.7.0"
         titre: "Pôle Intelligence · Recherche et qualification de prospects"
         entrees:
           - "brief et exigences"
@@ -331,7 +331,7 @@ agents:
     metadata:
       atelier:
         registre: "atelier/registre-agents/v1"
-        versionRegistre: "1.6.0"
+        versionRegistre: "1.7.0"
         titre: "Pôle Production · Référencement naturel, local et GEO"
         entrees:
           - "brief et exigences"
@@ -429,7 +429,7 @@ agents:
     metadata:
       atelier:
         registre: "atelier/registre-agents/v1"
-        versionRegistre: "1.6.0"
+        versionRegistre: "1.7.0"
         titre: "Pôle Production · Publicité et SEA"
         entrees:
           - "brief et exigences"
@@ -525,7 +525,7 @@ agents:
     metadata:
       atelier:
         registre: "atelier/registre-agents/v1"
-        versionRegistre: "1.6.0"
+        versionRegistre: "1.7.0"
         titre: "Pôle Production · Contenus et création"
         entrees:
           - "brief et exigences"
@@ -626,7 +626,7 @@ agents:
     metadata:
       atelier:
         registre: "atelier/registre-agents/v1"
-        versionRegistre: "1.6.0"
+        versionRegistre: "1.7.0"
         titre: "Pôle Production · CRM et conversion"
         entrees:
           - "brief et exigences"
@@ -724,7 +724,7 @@ agents:
     metadata:
       atelier:
         registre: "atelier/registre-agents/v1"
-        versionRegistre: "1.6.0"
+        versionRegistre: "1.7.0"
         titre: "Pôle Intelligence · Mesure et optimisation"
         entrees:
           - "exports de données importés avec période et provenance"
@@ -762,6 +762,182 @@ agents:
           - "aucun chiffre sans période ni provenance"
           - "« non mesurable » plutôt qu'une performance inventée"
           - "chaque expérience a une hypothèse, une métrique et une condition d'arrêt"
+    inputs:
+      env:
+        CLAUDE_CODE_OAUTH_TOKEN:
+          kind: "secret"
+          requirement: "optional"
+          description: "Jeton longue durée produit par « claude setup-token » (abonnement Claude de l'opérateur, usage personnel). Stocké comme secret Paperclip, jamais dans un fichier."
+        CLAUDE_CONFIG_DIR:
+          kind: "plain"
+          requirement: "optional"
+          portability: "system_dependent"
+          description: "Dossier de configuration Claude dédié à l'agent, créé par le bootstrap sous instance/claude-config/<id entreprise>/<slug> (un dossier par entreprise et par rôle). Jamais le ~/.claude de l'opérateur."
+  reseaux-sociaux:
+    role: "designer"
+    capabilities: "Prépare le social organique : piliers éditoriaux, calendrier par réseau, brouillons de posts courts et de réponses aux commentaires publics non litigieux ; ne publie rien et ne répond à personne lui-même."
+    adapter:
+      type: "claude_local"
+      config:
+        engine: "cli"
+        model: "claude-sonnet-5-5"
+        effort: "medium"
+        dangerouslySkipPermissions: false
+        maxTurnsPerRun: 60
+        timeoutSec: 1800
+        graceSec: 30
+        extraArgs:
+          - "--permission-mode"
+          - "dontAsk"
+          - "--allowedTools"
+          - "WebSearch"
+          - "Bash(curl *)"
+          - "Edit(./**)"
+          - "--disallowedTools"
+          - "WebFetch"
+          - "Edit"
+          - "NotebookEdit"
+          - "Agent"
+          - "Task"
+        env:
+          DISABLE_TELEMETRY:
+            type: "plain"
+            value: "1"
+          CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC:
+            type: "plain"
+            value: "1"
+        filesystemScope: "workspace"
+        networkScope: "allowlist"
+        networkAllowlist:
+          - "api.anthropic.com"
+    runtime:
+      heartbeat:
+        maxConcurrentRuns: 1
+    budgetMonthlyCents: 1500
+    metadata:
+      atelier:
+        registre: "atelier/registre-agents/v1"
+        versionRegistre: "1.7.0"
+        titre: "Pôle Contenus · Calendrier social, posts et réponses publiques"
+        entrees:
+          - "brief et exigences"
+          - "charte de marque et publications passées"
+          - "commentaires publics à traiter, avec lien et date"
+        sorties:
+          - "piliers de contenu et calendrier par semaine et par réseau"
+          - "brouillons de posts conformes à la charte"
+          - "brouillons de réponses aux commentaires non litigieux et liste des commentaires litigieux signalés"
+        competencesObligatoires:
+          - "calendrier-reseaux-sociaux"
+          - "charte-marque"
+        outilsRecherche:
+          - "Read"
+          - "Grep"
+          - "Glob"
+          - "WebSearch"
+        outilsMutation:
+          - "Bash(curl *)"
+          - "Write"
+        outilsInterdits:
+          - "WebFetch"
+          - "Edit"
+          - "NotebookEdit"
+          - "Agent"
+          - "Task"
+        relit: []
+        roleRevue: null
+        connexions: {}
+        criteresReussite:
+          - "chaque post du calendrier est rattaché à un pilier et à une exigence"
+          - "aucune publication, aucune programmation, aucun message privé"
+          - "aucune réponse proposée à un commentaire litigieux ; aucun post sur un produit d'assurance sans contrôle de la conformité publicitaire"
+    inputs:
+      env:
+        CLAUDE_CODE_OAUTH_TOKEN:
+          kind: "secret"
+          requirement: "optional"
+          description: "Jeton longue durée produit par « claude setup-token » (abonnement Claude de l'opérateur, usage personnel). Stocké comme secret Paperclip, jamais dans un fichier."
+        CLAUDE_CONFIG_DIR:
+          kind: "plain"
+          requirement: "optional"
+          portability: "system_dependent"
+          description: "Dossier de configuration Claude dédié à l'agent, créé par le bootstrap sous instance/claude-config/<id entreprise>/<slug> (un dossier par entreprise et par rôle). Jamais le ~/.claude de l'opérateur."
+  conformite-publicitaire:
+    role: "general"
+    capabilities: "Contrôle, avant la relecture indépendante, les communications commerciales en secteur réglementé (FSMA, Code de droit économique) : affirmations à prouver, mentions obligatoires, formulations interdites, verdict ; ne réécrit pas et ne publie rien."
+    adapter:
+      type: "claude_local"
+      config:
+        engine: "cli"
+        model: "claude-sonnet-5-5"
+        effort: "medium"
+        dangerouslySkipPermissions: false
+        maxTurnsPerRun: 40
+        timeoutSec: 1800
+        graceSec: 30
+        extraArgs:
+          - "--permission-mode"
+          - "dontAsk"
+          - "--allowedTools"
+          - "WebSearch"
+          - "Bash(curl *)"
+          - "Edit(./**)"
+          - "--disallowedTools"
+          - "WebFetch"
+          - "Edit"
+          - "NotebookEdit"
+          - "Agent"
+          - "Task"
+        env:
+          DISABLE_TELEMETRY:
+            type: "plain"
+            value: "1"
+          CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC:
+            type: "plain"
+            value: "1"
+        filesystemScope: "workspace"
+        networkScope: "allowlist"
+        networkAllowlist:
+          - "api.anthropic.com"
+    runtime:
+      heartbeat:
+        maxConcurrentRuns: 1
+    budgetMonthlyCents: 1000
+    metadata:
+      atelier:
+        registre: "atelier/registre-agents/v1"
+        versionRegistre: "1.7.0"
+        titre: "Pôle Contrôle préalable · Communications commerciales réglementées"
+        entrees:
+          - "contenu à contrôler, canal et public"
+          - "fiche de l'entreprise (statut, inscriptions, mentions)"
+        sorties:
+          - "tableau des points relevés avec règle citée ou « à vérifier »"
+          - "mentions obligatoires présentes, absentes ou à reprendre de la fiche"
+          - "verdict : publiable, publiable après corrections, non publiable en l'état"
+        competencesObligatoires:
+          - "controle-communications-reglementees"
+        outilsRecherche:
+          - "Read"
+          - "Grep"
+          - "Glob"
+          - "WebSearch"
+        outilsMutation:
+          - "Bash(curl *)"
+          - "Write"
+        outilsInterdits:
+          - "WebFetch"
+          - "Edit"
+          - "NotebookEdit"
+          - "Agent"
+          - "Task"
+        relit: []
+        roleRevue: null
+        connexions: {}
+        criteresReussite:
+          - "chaque affirmation chiffrée ou superlative est relevée avec sa preuve ou l'absence de preuve"
+          - "aucune mention légale inventée"
+          - "le verdict est l'un des trois prévus et il est justifié"
     inputs:
       env:
         CLAUDE_CODE_OAUTH_TOKEN:
@@ -817,7 +993,7 @@ agents:
     metadata:
       atelier:
         registre: "atelier/registre-agents/v1"
-        versionRegistre: "1.6.0"
+        versionRegistre: "1.7.0"
         titre: "Contrôleur des exigences"
         entrees:
           - "brief original"
@@ -853,6 +1029,8 @@ agents:
           - "contenus"
           - "crm-conversion"
           - "mesure"
+          - "reseaux-sociaux"
+          - "conformite-publicitaire"
         roleRevue: "exigences"
         connexions: {}
         criteresReussite:
@@ -914,7 +1092,7 @@ agents:
     metadata:
       atelier:
         registre: "atelier/registre-agents/v1"
-        versionRegistre: "1.6.0"
+        versionRegistre: "1.7.0"
         titre: "Responsable qualité"
         entrees:
           - "brief original"
@@ -950,6 +1128,8 @@ agents:
           - "contenus"
           - "crm-conversion"
           - "mesure"
+          - "reseaux-sociaux"
+          - "conformite-publicitaire"
         roleRevue: "metier"
         connexions: {}
         criteresReussite:
@@ -1014,7 +1194,7 @@ agents:
     metadata:
       atelier:
         registre: "atelier/registre-agents/v1"
-        versionRegistre: "1.6.0"
+        versionRegistre: "1.7.0"
         titre: "Vérificateur technique"
         entrees:
           - "version précise du livrable"
@@ -1083,7 +1263,7 @@ agents:
     metadata:
       atelier:
         registre: "atelier/registre-agents/v1"
-        versionRegistre: "1.6.0"
+        versionRegistre: "1.7.0"
         titre: "Porte de contrôle"
         entrees:
           - "tâche sous porte en étape de revue"

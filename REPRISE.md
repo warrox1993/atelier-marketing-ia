@@ -7,22 +7,22 @@ de l'après-midi et du soir : `git log --oneline 51be4b1..HEAD` (tête `7bc4dd2`
 
 ### 1. Ce qui tourne
 
-- Deux instances et trois passerelles, sous **systemd utilisateur** (`atelier-instance@<id>`, `atelier-passerelle@<port>`),
+- Une instance et une passerelle, sous **systemd utilisateur** (`atelier-instance@<id>`, `atelier-passerelle@<port>`),
   linger activé, redémarrage automatique en cas d'échec :
   - instance `atelier` (3100) avec la passerelle 3190 ;
-  - instance `atelier-apercu` (3580) avec les passerelles 3581 et 3582.
+  - l'instance d'aperçu `atelier-apercu` (3580, base 54780) et ses passerelles 3581 et 3582 sont arrêtées définitivement
+    (unités désactivées le 17/10/2026) : ne plus les attendre ni les viser.
 - Fichiers d'environnement : `~/.config/atelier/<id>.env` (ports et URL, aucun secret).
 - Santé : `atelier-sante@<id>.timer` toutes les 5 minutes (`scripts/sante-atelier.sh --notifier`, notification bureau).
 - Sauvegarde hors machine : `atelier-sauvegarde.timer`, chaque jour à 03 h 30, vers `/mnt/donnees/Systeme/Sauvegardes/atelier`
   (14 copies, empreintes vérifiées). Détail : `docs/exploitation.md` §3 (« Sauvegarde hors machine ») et §16.
-- Le plugin de l'instance 3580 vit dans `instance/plugin-apercu` (avec `courtier.sh`), plus dans un dossier temporaire :
-  le redémarrage du poste du 16/10 à 16 h 31 avait fait perdre l'ancien emplacement.
+- `instance/plugin-apercu` (données locales, ancien plugin de l'instance 3580) n'est plus déployé ni sauvegardé.
 - Dernier patch du socle : `0047` (traductions). Si un patch `0048` est apparu depuis (`ls socle/patches | tail -3`), il vient
   de l'agent sécurité : le lire avant de déployer.
 
 ### 2. Déployer et publier
 
-- Plugin et socle : `scripts/deployer.sh --apercu instance/plugin-apercu --journaux ~/.cache/atelier-journaux`
+- Plugin et socle : `scripts/deployer.sh --journaux ~/.cache/atelier-journaux`
   (`docs/exploitation.md` §15). Le script exige un arbre propre dans le dépôt et dans `paperclip/`.
 - Passerelles : `cd passerelle && npm run build`, puis `systemctl --user restart atelier-passerelle@<port>`. Ne plus utiliser
   `passerelles.sh demarrer` pour celles que gère systemd.
@@ -61,15 +61,15 @@ de l'après-midi et du soir : `git log --oneline 51be4b1..HEAD` (tête `7bc4dd2`
 
 1. Trier les anciens dossiers `instance/agents-atelier/<rôle>` et `instance/claude-config/<rôle>` (disposition d'avant le rangement
    par identifiant d'entreprise).
-2. Passer l'instance 3100 en réel (non fait) ; décider des cartes en attente COUA-3, COUA-4 et COUA-5 sur 3580.
+2. Passer l'instance 3100 en réel (non fait) .
+   (Les cartes COUA-3, COUA-4 et COUA-5 de l'ancienne instance 3580 disparaissent avec elle.)
 3. Fixer la durée de validité de la liste « Ne m'appelez plus » (30 jours proposés).
 4. Relire la mention d'information IA en NL et en EN.
 5. Sécurité ouverte : m1 (données additionnelles authentifiées du chiffrement) et m8 (HTML caché). CodeQL non activé sur GitHub :
    accord de l'opérateur attendu.
 6. Essai réel de `nouveau-client` sur une instance d'essai (il n'a été prouvé qu'avec une fausse API).
 7. Confirmer la licence ODbL des données OpenStreetMap.
-8. Accès mobile par Tailscale (9 étapes ci-dessous), clé OpenAI pour la voix (`docs/voix-en-direct.md`), réindexation bge-m3 sur
-   3580 (`scripts/reindexer-connaissances.py`) : encore à faire d'après ce document, à confirmer avant de les lancer.
+8. Accès mobile par Tailscale (9 étapes ci-dessous), clé OpenAI pour la voix (`docs/voix-en-direct.md`), réindexation bge-m3 (script `scripts/reindexer-connaissances.py` retiré le 16/10/2026) : encore à faire d'après ce document, à confirmer avant de les lancer.
 
 Étapes de l'accès mobile (aucun document de `docs/` ne les détaille ; `docs/evolution-deploiement.md` décrit les modes de déploiement) :
 
@@ -110,8 +110,8 @@ Mise à jour du 16/10/2026 au soir. Seul responsable du code à cette date : l'i
 - **Interface** : démarche Impeccable du lot C (captures `docs/captures/`, tests `tests/ui/`, e2e
   `tests/e2e/atelier/`, README du dossier) ; nouveaux panneaux de l'intégration sans nouvelle
   passe Impeccable (mêmes composants et jetons).
-- **Organisation** : 10 agents marketing `claude_local` + agent déterministe `porte`
-  (process) ; politiques alignées sur le circuit 1.1 ; bootstrap idempotent vérifié en mode réel.
+- **Organisation** : 13 agents marketing `claude_local` + agent déterministe `porte`
+  (process) ; usine étendue le 17/10/2026 (`docs/usine-services.md`) ; politiques alignées sur le circuit 1.1 ; bootstrap idempotent vérifié en mode réel.
 - **Décisions de l'opérateur du 15/10/2026 appliquées** : aucun livrable non conforme accepté ni
   diffusé (relance humaine à leviers, levée de porte retirée) ; rejet = annulation native ;
   bouton Diffuser ; **priorité au mode réel** (les agents déterministes restent un banc de test).
@@ -146,7 +146,7 @@ Mise à jour du 16/10/2026 au soir. Seul responsable du code à cette date : l'i
 - **Instances** :
   - principale `atelier` (3100) : utilisée par l'opérateur, sous systemd (`atelier-instance@atelier`) ; ne pas y réinstaller le plugin
     depuis une autre session ; déployer avec `scripts/deployer.sh`.
-  - aperçu `atelier-apercu` (3580, PG 54780, passerelles 3581 et 3582) : sous systemd, plugin dans `instance/plugin-apercu`.
+  - aperçu `atelier-apercu` (3580, PG 54780, passerelles 3581 et 3582) : ARRÊTÉ définitivement le 17/10/2026, unités désactivées.
   - essai `atelier-corr` (3340, PG 54540, corrections de la revue, passerelle de démonstration sur 3393) : arrêtée ;
     données dans `instance/instances/atelier-corr/` (entreprises des scénarios A à S, secret d'essai et configuration du
     plugin sur l'entreprise du scénario A).
@@ -204,7 +204,6 @@ réel minimal (`test-reel --confirmer`), campagne de test avec budgets bas, déc
 ```bash
 cd ~/Projets/atelier-marketing-ia
 scripts/verifier-config.sh
-scripts/demonstration.sh                                     # démonstration en une commande
 scripts/instance-essai.sh demarrer atelier-lote 3180 54380   # instance d'essai isolée (premier plan)
 python3 -I scripts/scenarios/atelier_scenarios.py G http://127.0.0.1:3180/api   # B C D E F G H K S J
 python3 -I scripts/scenarios/atelier_scenarios.py A http://127.0.0.1:3320/api   # A : passerelle de démonstration requise (README §2)

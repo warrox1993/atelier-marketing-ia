@@ -42,6 +42,12 @@ export function routeDeclarer(d: Pick<DependancesLiaisons, "base" | "stock">): P
       if (paires.has(`${f.source}>${f.cible}`)) erreur("entree_invalide", `Flux ${f.source} vers ${f.cible} déclaré deux fois.`);
       paires.add(`${f.source}>${f.cible}`);
     }
+    // Un marqueur de client déjà connu ne peut être redéclaré que depuis une entreprise qui en fait déjà partie :
+    // sinon une entreprise étrangère s'y glisserait et lirait le registre des autres (revue de sécurité F5).
+    const propre = await stock.serviceDeEntreprise(r.companyId);
+    if (!propre && (await stock.clientExiste(e.clientMarqueur))) {
+      erreur("acces_refuse", "Ce client existe déjà : seule une de ses entreprises peut le redéclarer.");
+    }
     for (const x of e.entreprises) {
       const deja = await stock.serviceDeEntreprise(x.companyId);
       if (deja && deja.clientMarqueur !== e.clientMarqueur) erreur("conflit", `L'entreprise ${x.companyId} est déjà déclarée pour un autre client.`);

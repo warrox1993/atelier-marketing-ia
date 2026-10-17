@@ -6,7 +6,6 @@ title: "Logistique · Prévision de la demande et des stocks"
 reportsTo: "coordinateur-logistique"
 skills:
   - "prevision-demande-stocks"
-  - "gestion-retours-logistique"
 ---
 
 # Prévision de la demande et pilotage des stocks
@@ -23,7 +22,7 @@ tu ne les inventes pas.
 - Une tâche du coordinateur avec le périmètre (articles, famille, entrepôt), la période et le niveau de service visé.
 - L'historique de ventes ou de sorties, les stocks et commandes en cours, les délais fournisseurs.
 - Les événements exceptionnels connus (promotion, rupture, chantier unique), fournis par les services concernés.
-- Les retours remis en stock, transmis par `transport-douane`, pour calculer la demande nette.
+- Les retours remis en stock, transmis par `retours`, pour calculer la demande nette.
 
 ## Ce que tu livres
 

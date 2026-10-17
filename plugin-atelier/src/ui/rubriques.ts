@@ -6,7 +6,7 @@
 import { ANCRE_PASSAGE_AU_REEL } from "./realite.js";
 import { chemin, type CleVue } from "./route.js";
 
-export type CleRubriqueNav = "accueil" | "discussion" | "prospects" | "marketing" | "reglages" | "direction";
+export type CleRubriqueNav = "departements" | "accueil" | "discussion" | "prospects" | "marketing" | "reglages" | "direction";
 
 export interface OngletRubrique {
   cle: string;
@@ -67,9 +67,20 @@ export const RUBRIQUE_DIRECTION: RubriqueNav = {
   onglets: [{ cle: "echanges", libelle: "Registre des échanges", vue: "echanges" }],
 };
 
-/** Rubriques affichées : les cinq habituelles, plus « Direction » seulement quand le serveur l'autorise. */
-export function rubriquesVisibles(estDirection: boolean): ReadonlyArray<RubriqueNav> {
-  return estDirection ? [...RUBRIQUES_NAV.slice(0, -1), RUBRIQUE_DIRECTION, RUBRIQUES_NAV[RUBRIQUES_NAV.length - 1]!] : RUBRIQUES_NAV;
+/** Tableau des départements, en tête, pour un client à au moins deux services (sonde `departements.lister`). */
+export const RUBRIQUE_DEPARTEMENTS: RubriqueNav = {
+  cle: "departements",
+  libelle: "Départements",
+  onglets: [{ cle: "departements", libelle: "Départements", vue: "departements" }],
+};
+
+/**
+ * Rubriques affichées : les cinq habituelles, plus « Direction » seulement quand le serveur l'autorise, et
+ * « Départements » en tête quand le client a plusieurs services.
+ */
+export function rubriquesVisibles(estDirection: boolean, plusieursDepartements = false): ReadonlyArray<RubriqueNav> {
+  const base = estDirection ? [...RUBRIQUES_NAV.slice(0, -1), RUBRIQUE_DIRECTION, RUBRIQUES_NAV[RUBRIQUES_NAV.length - 1]!] : RUBRIQUES_NAV;
+  return plusieursDepartements ? [RUBRIQUE_DEPARTEMENTS, ...base] : base;
 }
 
 /** Adresse relative d'un onglet : l'ancienne adresse de sa vue, avec son ancre éventuelle. */
@@ -80,7 +91,7 @@ export function cheminOnglet(o: OngletRubrique): string {
 /** Rubrique et onglet d'une vue ; `hash` (sans « # ») départage Connexions et Paramètres. */
 export function rubriqueDe(vue: CleVue, hash = ""): { rubrique: RubriqueNav; onglet: OngletRubrique } {
   const ancre = hash.replace(/^#/u, "");
-  const candidats = [...RUBRIQUES_NAV, RUBRIQUE_DIRECTION].flatMap((r) => r.onglets.filter((o) => o.vue === vue).map((onglet) => ({ rubrique: r, onglet })));
+  const candidats = [...RUBRIQUES_NAV, RUBRIQUE_DIRECTION, RUBRIQUE_DEPARTEMENTS].flatMap((r) => r.onglets.filter((o) => o.vue === vue).map((onglet) => ({ rubrique: r, onglet })));
   const exact = candidats.find((c) => c.onglet.ancre !== undefined && c.onglet.ancre === ancre);
   const resultat = exact ?? candidats.find((c) => c.onglet.ancre === undefined) ?? candidats[0];
   return resultat ?? { rubrique: RUBRIQUES_NAV[0]!, onglet: RUBRIQUES_NAV[0]!.onglets[0]! };

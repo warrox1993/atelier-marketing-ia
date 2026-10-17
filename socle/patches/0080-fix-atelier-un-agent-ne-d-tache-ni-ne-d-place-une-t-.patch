@@ -1,0 +1,262 @@
+From 3aab5b55145f2580ef41fa464c4bb60f2a32ac8b Mon Sep 17 00:00:00 2001
+From: Jean-Baptiste Dhondt <114347858+warrox1993@users.noreply.github.com>
+Date: Sat, 17 Oct 2026 23:23:58 +0200
+Subject: [PATCH] =?UTF-8?q?fix(atelier):=20un=20agent=20ne=20d=C3=A9tache?=
+ =?UTF-8?q?=20ni=20ne=20d=C3=A9place=20une=20t=C3=A2che=20re=C3=A7ue=20par?=
+ =?UTF-8?q?=20liaison?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Garde locale (non amont) sur PATCH /issues/:id : un acteur agent qui change parentId
+(vers null ou une autre tâche) d'une tâche d'origine plugin:atelier.marketing-ia:liaison,
+ou d'une de ses descendantes, reçoit 403 atelier_lignee_liaison_figee. Lignée lue
+bornée à 20 ancêtres, refus au-delà. Le board n'est pas limité.
+
+Revue de f525e9b : la lignée porte la chaîne et la teinte des liaisons du plugin.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01DP85vPq2MHkZg8VNtRvCzB
+---
+ .../atelier-garde-parent-liaison.test.ts      | 102 ++++++++++++++++++
+ server/src/atelier/garde-parent-liaison.ts    |  93 ++++++++++++++++
+ server/src/routes/issues.ts                   |   7 ++
+ 3 files changed, 202 insertions(+)
+ create mode 100644 server/src/__tests__/atelier-garde-parent-liaison.test.ts
+ create mode 100644 server/src/atelier/garde-parent-liaison.ts
+
+diff --git a/server/src/__tests__/atelier-garde-parent-liaison.test.ts b/server/src/__tests__/atelier-garde-parent-liaison.test.ts
+new file mode 100644
+index 000000000..ec179395c
+--- /dev/null
++++ b/server/src/__tests__/atelier-garde-parent-liaison.test.ts
+@@ -0,0 +1,102 @@
++import { describe, expect, it } from "vitest";
++import {
++  ANCETRES_MAX,
++  CODE_LIGNEE_LIAISON_FIGEE,
++  ORIGINE_LIAISON,
++  changeLeParent,
++  deciderParentLiaison,
++  refuserChangementParentLiaisonParAgent,
++} from "../atelier/garde-parent-liaison.js";
++
++/** Faux `db` : chaque `select().from().where()` rend la ligne de la tâche suivante dans `lignee` (par id demandé). */
++function fauxDb(taches: Record<string, { parentId: string | null; originKind: string }>) {
++  const lectures: number[] = [];
++  let n = 0;
++  const db = {
++    select: () => ({
++      from: () => ({
++        where: (condition: unknown) => {
++          n += 1;
++          lectures.push(n);
++          // L'id demandé est le dernier paramètre de la condition drizzle ; on le retrouve en parcourant l'objet.
++          const id = trouverId(condition, Object.keys(taches));
++          return Promise.resolve(id ? [taches[id]] : []);
++        },
++      }),
++    }),
++  };
++  return { db: db as any, lectures };
++}
++
++function trouverId(v: unknown, ids: string[], vus = new Set<unknown>()): string | null {
++  if (typeof v === "string") return ids.includes(v) ? v : null;
++  if (!v || typeof v !== "object" || vus.has(v)) return null;
++  vus.add(v);
++  for (const cle of Object.keys(v as object)) {
++    if (cle === "table") continue;
++    const r = trouverId((v as Record<string, unknown>)[cle], ids, vus);
++    if (r) return r;
++  }
++  return null;
++}
++
++const agent = { actor: { type: "agent" } };
++const erreur = async (p: Promise<unknown>) => (await p.then(() => null, (e: unknown) => e)) as any;
++
++describe("atelier : un agent ne détache ni ne déplace une tâche issue du bureau de liaison", () => {
++  it("changeLeParent : null ou autre parent compte, absence ou même parent non", () => {
++    expect(changeLeParent({ parentId: null }, "p")).toBe(true);
++    expect(changeLeParent({ parentId: "q" }, "p")).toBe(true);
++    expect(changeLeParent({ parentId: "q" }, null)).toBe(true);
++    expect(changeLeParent({}, "p")).toBe(false);
++    expect(changeLeParent({ parentId: undefined }, "p")).toBe(false);
++    expect(changeLeParent({ parentId: "P" }, "p")).toBe(false);
++    expect(changeLeParent({ parentId: null }, null)).toBe(false);
++  });
++
++  it("deciderParentLiaison : refuse un agent sur une lignée liaison ou tronquée, jamais un humain", () => {
++    const base = { acteurAgent: true, parentChange: true, origines: ["manual", ORIGINE_LIAISON], ligneeTronquee: false };
++    expect(deciderParentLiaison(base)).toMatchObject({ autorise: false, statut: 403, code: CODE_LIGNEE_LIAISON_FIGEE });
++    expect(deciderParentLiaison({ ...base, origines: ["manual", "manual"] })).toEqual({ autorise: true });
++    expect(deciderParentLiaison({ ...base, origines: ["manual"], ligneeTronquee: true })).toMatchObject({ autorise: false });
++    expect(deciderParentLiaison({ ...base, acteurAgent: false })).toEqual({ autorise: true });
++    expect(deciderParentLiaison({ ...base, parentChange: false })).toEqual({ autorise: true });
++  });
++
++  it("scénario de la revue : un agent met parentId à null sur une sous-tâche d'une tâche reçue par liaison : 403", async () => {
++    const { db } = fauxDb({ recue: { parentId: null, originKind: ORIGINE_LIAISON } });
++    const e = await erreur(refuserChangementParentLiaisonParAgent(db, agent, { companyId: "c", issue: { id: "st", parentId: "recue", originKind: "manual" }, corps: { parentId: null } }));
++    expect(e?.status).toBe(403);
++    expect(e?.details?.code).toBe(CODE_LIGNEE_LIAISON_FIGEE);
++  });
++
++  it("une sous-sous-tâche aussi (ancêtre lointain), et le déplacement vers un autre parent", async () => {
++    const { db } = fauxDb({ st: { parentId: "recue", originKind: "manual" }, recue: { parentId: null, originKind: ORIGINE_LIAISON } });
++    expect((await erreur(refuserChangementParentLiaisonParAgent(db, agent, { companyId: "c", issue: { id: "sst", parentId: "st", originKind: "manual" }, corps: { parentId: null } })))?.status).toBe(403);
++    expect((await erreur(refuserChangementParentLiaisonParAgent(db, agent, { companyId: "c", issue: { id: "sst", parentId: "st", originKind: "manual" }, corps: { parentId: "autre" } })))?.status).toBe(403);
++  });
++
++  it("la tâche reçue elle-même ne peut pas être rattachée sous une autre tâche", async () => {
++    const { db, lectures } = fauxDb({});
++    const e = await erreur(refuserChangementParentLiaisonParAgent(db, agent, { companyId: "c", issue: { id: "recue", parentId: null, originKind: ORIGINE_LIAISON }, corps: { parentId: "x" } }));
++    expect(e?.status).toBe(403);
++    expect(lectures).toHaveLength(0);
++  });
++
++  it("une tâche ordinaire se détache librement ; un humain n'est jamais limité ; un parent inchangé ne lit rien", async () => {
++    const { db } = fauxDb({ mission: { parentId: null, originKind: "manual" }, recue: { parentId: null, originKind: ORIGINE_LIAISON } });
++    await expect(refuserChangementParentLiaisonParAgent(db, agent, { companyId: "c", issue: { id: "st", parentId: "mission", originKind: "manual" }, corps: { parentId: null } })).resolves.toBeUndefined();
++    const interdit = { select: () => { throw new Error("lecture inattendue"); } } as any;
++    await expect(refuserChangementParentLiaisonParAgent(interdit, { actor: { type: "board" } }, { companyId: "c", issue: { id: "st", parentId: "recue", originKind: "manual" }, corps: { parentId: null } })).resolves.toBeUndefined();
++    await expect(refuserChangementParentLiaisonParAgent(interdit, agent, { companyId: "c", issue: { id: "st", parentId: "recue", originKind: "manual" }, corps: { parentId: "recue" } })).resolves.toBeUndefined();
++    await expect(refuserChangementParentLiaisonParAgent(interdit, agent, { companyId: "c", issue: { id: "st", parentId: "recue", originKind: "manual" }, corps: { title: "x" } as any })).resolves.toBeUndefined();
++  });
++
++  it("lignée plus longue que la borne : refus par prudence", async () => {
++    const taches: Record<string, { parentId: string | null; originKind: string }> = {};
++    for (let i = 0; i <= ANCETRES_MAX + 2; i++) taches[`t${i}`] = { parentId: `t${i + 1}`, originKind: "manual" };
++    const { db } = fauxDb(taches);
++    const e = await erreur(refuserChangementParentLiaisonParAgent(db, agent, { companyId: "c", issue: { id: "depart", parentId: "t0", originKind: "manual" }, corps: { parentId: null } }));
++    expect(e?.status).toBe(403);
++  });
++});
+diff --git a/server/src/atelier/garde-parent-liaison.ts b/server/src/atelier/garde-parent-liaison.ts
+new file mode 100644
+index 000000000..b8cd917c2
+--- /dev/null
++++ b/server/src/atelier/garde-parent-liaison.ts
+@@ -0,0 +1,93 @@
++/**
++ * Atelier Marketing IA (patch local, non amont) : un agent ne détache ni ne déplace une tâche issue du bureau de liaison.
++ *
++ * Le plugin Atelier dérive la chaîne d'une liaison (relais, cycle) et sa teinte (approbation humaine) de la tâche
++ * d'origine ET de ses ancêtres (`parentId`). Un agent qui met `parentId: null` sur une sous-tâche d'une tâche reçue
++ * par liaison, ou la rattache ailleurs, effacerait cette lignée (revue de f525e9b). Règle, limitée aux acteurs `agent`
++ * (le board, humain, n'est pas limité) : un PATCH qui CHANGE le parent (vers `null` ou une autre tâche) est refusé
++ * (403) si la tâche est d'origine liaison du plugin (`origin_kind` = {@link ORIGINE_LIAISON}) ou descend d'une telle
++ * tâche. La lignée lue est bornée à {@link ANCETRES_MAX} ancêtres ; au-delà, refus par prudence.
++ *
++ * Ce que le socle ne voit pas : la teinte d'une tâche SOURCE (réponse teintée reçue, en base du plugin). Le plugin la
++ * couvre lui-même par prudence (toute liaison sortante de l'entreprise est teintée tant que la réponse est récente ou
++ * sa tâche ouverte), sans dépendre de cette garde.
++ */
++import { and, eq } from "drizzle-orm";
++import type { Db } from "@paperclipai/db";
++import { issues } from "@paperclipai/db";
++import { forbidden } from "../errors.js";
++
++/** `origin_kind` des tâches créées par le bureau de liaison du plugin Atelier (`plugin:<id>:liaison`). */
++export const ORIGINE_LIAISON = "plugin:atelier.marketing-ia:liaison";
++/** Ancêtres lus au plus pour retrouver une origine liaison. */
++export const ANCETRES_MAX = 20;
++
++export const CODE_LIGNEE_LIAISON_FIGEE = "atelier_lignee_liaison_figee";
++export const MESSAGE_LIGNEE_LIAISON_FIGEE =
++  "Une tâche reçue par le bureau de liaison, ou une de ses sous-tâches, garde son parent : un agent ne peut ni la détacher ni la déplacer.";
++
++export type DonneesParentLiaison = {
++  /** L'acteur est-il un agent ? Sinon aucune règle ne s'applique. */
++  acteurAgent: boolean;
++  /** Le PATCH change-t-il le parent (vers `null` ou une autre tâche) ? */
++  parentChange: boolean;
++  /** `origin_kind` de la tâche puis de ses ancêtres, du plus proche au plus lointain. */
++  origines: readonly string[];
++  /** La lignée n'a pas pu être lue en entier (borne atteinte). */
++  ligneeTronquee: boolean;
++};
++
++export type DecisionParentLiaison = { autorise: true } | { autorise: false; statut: 403; code: string; message: string };
++
++/** Vrai si un PATCH change le parent : `parentId` présent et différent de l'actuel (`null` compris). Fonction pure. */
++export function changeLeParent(corps: { parentId?: string | null }, parentActuel: string | null | undefined): boolean {
++  if (!Object.prototype.hasOwnProperty.call(corps, "parentId") || corps.parentId === undefined) return false;
++  return (corps.parentId ?? null)?.toLowerCase() !== (parentActuel ?? null)?.toLowerCase();
++}
++
++/** Décision à partir des données lues. Fonction pure. */
++export function deciderParentLiaison(d: DonneesParentLiaison): DecisionParentLiaison {
++  if (!d.acteurAgent || !d.parentChange) return { autorise: true };
++  if (d.ligneeTronquee || d.origines.includes(ORIGINE_LIAISON)) {
++    return { autorise: false, statut: 403, code: CODE_LIGNEE_LIAISON_FIGEE, message: MESSAGE_LIGNEE_LIAISON_FIGEE };
++  }
++  return { autorise: true };
++}
++
++type ActeurRequete = { actor: { type: string } };
++
++/**
++ * Lit la lignée de la tâche (même entreprise) puis applique la règle. Sans effet, et sans lecture, pour un humain ou
++ * quand le parent ne change pas.
++ */
++export async function refuserChangementParentLiaisonParAgent(
++  db: Db,
++  req: ActeurRequete,
++  options: { companyId: string; issue: { id: string; parentId: string | null; originKind: string | null }; corps: { parentId?: string | null } },
++): Promise<void> {
++  if (req.actor.type !== "agent") return;
++  const parentChange = changeLeParent(options.corps, options.issue.parentId);
++  if (!parentChange) return;
++  const origines: string[] = [options.issue.originKind ?? ""];
++  const vus = new Set([options.issue.id.toLowerCase()]);
++  let ligneeTronquee = false;
++  let parentId = options.issue.parentId;
++  while (parentId && !origines.includes(ORIGINE_LIAISON)) {
++    if (vus.has(parentId.toLowerCase())) break;
++    if (vus.size > ANCETRES_MAX) {
++      ligneeTronquee = true;
++      break;
++    }
++    vus.add(parentId.toLowerCase());
++    const lignes = await db
++      .select({ parentId: issues.parentId, originKind: issues.originKind })
++      .from(issues)
++      .where(and(eq(issues.companyId, options.companyId), eq(issues.id, parentId)));
++    const parent = lignes[0];
++    if (!parent) break;
++    origines.push(parent.originKind ?? "");
++    parentId = parent.parentId ?? null;
++  }
++  const decision = deciderParentLiaison({ acteurAgent: true, parentChange, origines, ligneeTronquee });
++  if (!decision.autorise) throw forbidden(decision.message, { code: decision.code });
++}
+diff --git a/server/src/routes/issues.ts b/server/src/routes/issues.ts
+index f4b71480e..14cfe7b38 100644
+--- a/server/src/routes/issues.ts
++++ b/server/src/routes/issues.ts
+@@ -244,6 +244,7 @@ import {
+ } from "./workspace-command-authz.js";
+ import { cheminsSurchargeModeleEffort, refuserModeleEffortParAgent } from "../atelier/garde-modele-agent.js";
+ import { refuserDelegationParAgent } from "../atelier/garde-delegation.js";
++import { refuserChangementParentLiaisonParAgent } from "../atelier/garde-parent-liaison.js";
+ import { shouldWakeAssigneeOnCheckout } from "./issues-checkout-wakeup.js";
+ import {
+   formatAttachmentSize,
+@@ -12844,6 +12845,12 @@ export function issueRoutes(
+       );
+       // Atelier (patch local 0014) : un agent ne change ni modèle ni effort par la tâche.
+       refuserModeleEffortParAgent(req, cheminsSurchargeModeleEffort(req.body, existing.assigneeAdapterOverrides));
++      // Atelier (patch local) : un agent ne détache ni ne déplace une tâche reçue par liaison ou une descendante.
++      await refuserChangementParentLiaisonParAgent(db, req, {
++        companyId: existing.companyId,
++        issue: { id: existing.id, parentId: existing.parentId ?? null, originKind: existing.originKind ?? null },
++        corps: req.body,
++      });
+       // Atelier (patch local 0015) : garde de délégation, seulement si le parent change vers une valeur non nulle.
+       if (req.body.parentId && req.body.parentId !== existing.parentId) {
+         await refuserDelegationParAgent(db, req, {
+-- 
+2.53.0
+

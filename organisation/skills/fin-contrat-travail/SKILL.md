@@ -2,7 +2,7 @@
 name: "fin-contrat-travail"
 description: "Prépare l'analyse d'une fin de contrat de travail pour une PME belge : calcul indicatif du préavis selon l'ancienneté, exigences de motivation (CCT n° 109), calendrier de la procédure, motif grave et ses délais stricts, documents de sortie (C4). À utiliser pour une note préparatoire destinée à un avocat en droit social ou au secrétariat social ; jamais pour décider, notifier ou recommander une rupture, ce qui reste une décision humaine."
 metadata:
-  version: "1.0.0"
+  version: "1.1.0"
   langue: "fr"
   domaine: "juridique-social"
 ---
@@ -36,6 +36,7 @@ Une note qui expose les options, les délais, les documents à prévoir et les r
 
 1. **Vérifier la nature de la fin de contrat** : licenciement avec préavis, avec indemnité de rupture, motif grave, démission, fin d'un contrat à durée déterminée. Si la qualification est incertaine, poser la question, ne pas trancher.
 2. **Repérer les protections et exclusions** possibles (travailleur protégé, suspension du contrat) à faire confirmer par le RH ; si l'une apparaît, arrêter l'analyse de la procédure et escalader.
+   Déclencheurs d'escalade d'office vers l'avocat, quel que soit le cas : litige déjà en cours ou annoncé ; intervention d'une autorité (inspection, tribunal) ; représentant du personnel, candidat ou délégué ; travailleur en congé protégé (maternité, parental, crédit-temps, à vérifier) ou en incapacité ; présence de données de santé ou d'autres données sensibles dans le dossier ; travail dans un autre pays.
 3. **Choisir le barème de préavis** selon la date de début du contrat (voir tableau) et mesurer l'ancienneté de date à date. La durée du préavis est un résultat indicatif à faire valider.
 4. **Fixer le calendrier** : le préavis est notifié par écrit selon les formes de la loi (l'employeur par lettre recommandée ou exploit d'huissier, à vérifier) et prend cours le lundi qui suit la semaine de la notification (loi du 3 juillet 1978, art. 37/1). Calculer la date de fin indicative.
 5. **Motivation (CCT n° 109)** : indiquer si le travailleur est dans le champ (secteur privé, ancienneté de six mois au moins, exclusions listées dans la source), les délais de demande des motifs et de réponse, et l'enjeu (indemnité en cas de non-respect, licenciement manifestement déraisonnable).
@@ -106,3 +107,7 @@ Tout calcul de préavis ou d'indemnité, la qualification d'un fait en motif gra
 Entrée : contrat à durée indéterminée débuté le 15/03/2019, licenciement envisagé par l'employeur, notification prévue le mercredi 04/11/2026. Ancienneté à la notification : 7 ans et près de 8 mois, donc tranche « 7 à moins de 8 ans », soit 24 semaines (contrat débuté avant le 01/06/2026). Le préavis prend cours le lundi 09/11/2026. La note affiche « durée indicative 24 semaines, à faire valider », liste les documents de sortie, rappelle que le travailleur a six mois d'ancienneté ou plus et peut donc demander les motifs, et pose la question « le travailleur est-il protégé ? ».
 
 Cas d'échec : le service RH signale qu'un fait grave est connu depuis quatre jours ouvrables. La note n'écrit pas « motif grave possible » : elle signale que le délai de trois jours ouvrables semble dépassé, que la qualification est à apprécier par l'avocat, et escalade immédiatement par une carte de décision. De même, si la date de début du contrat manque, aucun barème n'est appliqué : « information manquante, barème non déterminé ».
+
+## Origine de la méthode
+
+Déclencheurs d'escalade d'office adaptés de github.com/anthropics/knowledge-work-plugins, `legal/skills/legal-response/SKILL.md` (étape 3, « Universal Escalation Triggers »), commit 33eeda1e8fd856455b05479d13a0f85b5f803744, licence Apache 2.0, et de la liste des actes à haut risque de github.com/wshobson/agents, `plugins/hr-legal-compliance/agents/hr-pro.md` (« Guardrails »), commit 044b4b21f083948e69ec878a7b07c8d0951a6ffa, licence MIT, Copyright (c) 2024 Seth Hobson. La couche belge (CCT n° 109, motif grave) est propre à l'atelier. Liste des reprises : `organisation/skills/LICENCES-TIERS.md`.

@@ -255,7 +255,7 @@ ils renvoient `etat: "simulee"`, comme la diffusion actuelle de l'atelier. Ils s
 
 - **Une seule source de vérité** : un « modèle de demande » quotidien par service (toiture,
   murs, châssis, ventilation) et par établissement (Liège-Centre, Liège-Outremeuse, Ans ;
-  `organisation/demo/etablissements.md`), avec une saisonnalité (pic au printemps et au début de
+  `organisation/demo/etablissements.md`, retiré le 16/10/2026), avec une saisonnalité (pic au printemps et au début de
   l'automne pour toiture et châssis, creux en août et à Noël), la semaine (moins le week-end ; Ans
   ouvert le samedi) et un tirage pseudo-aléatoire graine = SHA-256(`atelier-demo:renovation-liege`
   | service | date). Les mêmes paramètres donnent toujours les mêmes chiffres.

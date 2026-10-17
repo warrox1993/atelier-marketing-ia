@@ -164,6 +164,13 @@ describe("rapport.mensuel : totaux sur données simulées", () => {
     for (const c of demo) expect(c.libelle).toContain("(démonstration)");
   });
 
+  it("aucune ligne de démonstration quand elle est à zéro, les lignes réelles restent", async () => {
+    const r = await faux({ contenus: { [SOC]: { produits: { reel: 5, demonstration: 0 }, valides: zero, publies: zero } } }).lire();
+    expect(r.contenus.filter((c) => c.mode === "demonstration")).toEqual([]);
+    expect(valeur(r.contenus, "contenus_produits_reel")).toBe(5);
+    expect(r.prospects.chiffres.filter((c) => c.mode === "demonstration")).toEqual([]);
+  });
+
   it("prospects : seuls les leads du mois comptent, par mode ; badge et exportés cohérents", async () => {
     const prospects = [
       lead(1, SOC),
@@ -204,7 +211,7 @@ describe("rapport.mensuel : totaux sur données simulées", () => {
     const r = await faux({ couts: { [SOC]: couts } }).lire();
     expect(r.coutsIa.lignes).toEqual(couts);
     expect(r.coutsIa.total).toEqual({ jetonsEntree: 1500, jetonsEntreeCache: 400, jetonsSortie: 300, coutCentimes: 42 });
-    expect(r.coutsIa.source).toContain("cost_events");
+    expect(r.coutsIa.source).toContain("coûts déclarés par agent et par modèle");
     expect(r.coutsIa.periode.debut).toBe("2026-10-01T00:00:00.000Z");
   });
 

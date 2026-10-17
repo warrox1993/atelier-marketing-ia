@@ -298,12 +298,12 @@ archives ne doivent pas être présentées comme l'état actuel » (§11).
   courtes, deux fiches produit, une grille tarifaire, une FAQ, des notes de rendez-vous et retours de courtiers
   pseudonymisés, trois réclamations, deux bilans de campagne ; pièges inclus (version périmée, document piégé par une
   injection, doublon, chiffre contradictoire entre deux versions). Il suppose une **entreprise fictive de type assureur à
-  Liège** : la seule entreprise de démonstration actuelle est « Rénovation Liège (démonstration) » (`organisation/demo/`).
+  Liège** : la seule entreprise de démonstration actuelle est « Rénovation Liège (démonstration) » (`organisation/demo/`, retiré le 16/10/2026).
   Garder les deux donne aussi le test d'isolement entre entreprises.
 
 ## 7. Évaluation de la qualité
 
-- **Jeu de référence** versionné (`organisation/demo/connaissances/evaluation.json`) : 60 questions au départ, 40 en
+- **Jeu de référence** versionné (`organisation/demo/connaissances/evaluation.json`, retiré le 16/10/2026) : 60 questions au départ, 40 en
   français et 20 en néerlandais, dont 10 sans réponse dans le corpus, 10 reformulations familières, 10 portant sur une
   version périmée ; pour chaque question, les passages attendus notés 0 à 3 (grille de `paperclip/doc/SEARCH.md`).
   Pour un vrai client : 30 questions écrites avec ses experts, mêmes règles.
@@ -353,11 +353,11 @@ parallèle.
 | **R3** Vectorisation | interface `Vectoriseur` : `aucun`, `local` (`bge-m3`, empreinte du modèle), `voyage` (point d'accès Europe, secret natif) | `plugin-atelier/src/serveur/connaissances/vectorisation.ts`, `plugin-atelier/tests/connaissances-vectorisation.spec.ts` | Sonnet, `medium` | faux vectoriseur déterministe ; faux serveur Voyage ; essai local réel facultatif lancé à part ; jamais deux modèles dans un index |
 | **R4** Recherche hybride | filtres, plein texte, sens, RRF, seuil | `plugin-atelier/src/serveur/connaissances/recherche.ts`, `plugin-atelier/tests/connaissances-recherche.spec.ts` | Opus, `medium` | cas RRF calculés à la main ; filtres appliqués avant ; périmé exclu par défaut ; test d'accès croisé à deux entreprises |
 | **R5** Règles | injections, péremption, pseudonymisation, contrôle des citations pour la porte (fonctions pures) | `plugin-atelier/src/serveur/regles-connaissances.ts`, `plugin-atelier/tests/regles-connaissances.spec.ts` | Opus, `medium` | un cas par motif ; mutation d'une règle = échec attendu |
-| **R6** Corpus de démonstration | documents fictifs FR et NL, pièges §6.2 | `organisation/demo/connaissances/*.md`, `*.csv` | Sonnet, `medium` | aucune marque ni personne réelle ; mention « (démonstration) » partout ; pièges présents |
+| **R6** Corpus de démonstration | documents fictifs FR et NL, pièges §6.2 | `organisation/demo/connaissances/*.md`, `*.csv` (retirés le 16/10/2026) | Sonnet, `medium` | aucune marque ni personne réelle ; mention « (démonstration) » partout ; pièges présents |
 | **R7** Intégration plugin | routes, services, SQL, sources `connaissance`, motifs de porte, configuration (fournisseur, secret Voyage) | `services.ts`, `routes.ts`, `base.ts`, `contrats/index.ts`, `porte.ts`, `manifest.ts`, tests associés | Opus, `medium` | citation inconnue ou périmée = REFUS ; agent d'une autre entreprise refusé ; injection sans effet ; suite serveur verte |
 | **R8** Interface « Connaissances » | rubrique, glisser-déposer, liste, essai de recherche, suppression | `plugin-atelier/src/ui/connaissances.tsx`, `plugin-atelier/tests/ui/connaissances.test.tsx` | Sonnet, `medium` + Impeccable | Playwright : import du corpus de démonstration en un geste, citation visible, document périmé signalé |
 | **R9** Compétence et consignes | `recherche-connaissances`, consignes des rôles qui écrivent | `organisation/skills/recherche-connaissances/`, `organisation/agents/*/AGENTS.md` (après P10 de la prospection) | Opus, `medium` | `bootstrap-organisation.py generer` sans écart ; `verifier-config.sh` vert |
-| **R10** Évaluation | jeu de référence, script, rapport JSON, seuils §7 | `scripts/rag/evaluer.mjs`, `organisation/demo/connaissances/evaluation.json` | Opus, `medium` | rejoué deux fois = mêmes chiffres ; seuils atteints ou écart expliqué |
+| **R10** Évaluation | jeu de référence, script, rapport JSON, seuils §7 | `scripts/rag/evaluer.mjs`, `organisation/demo/connaissances/evaluation.json` (retiré le 16/10/2026) | Opus, `medium` | rejoué deux fois = mêmes chiffres ; seuils atteints ou écart expliqué |
 
 Dépendances : R0 → R3, R4 ; R1 → R2 à R5 → R7 → R8, R9, R10 ; R6 → R10.
 

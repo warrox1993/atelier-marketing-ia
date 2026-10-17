@@ -1,0 +1,6 @@
+ticket;heure;client;canal;message
+T-9101;08:12;client A;formulaire;l'espace client affiche une erreur
+T-9102;08:40;client B;courriel;Erreur 500 en me connectant à l'espace client
+T-9103;09:05;client C;téléphone;Impossible d'ouvrir mon espace client, une erreur s'affiche
+T-9104;09:31;client D;formulaire;l'espace client affiche une erreur
+T-9105;10:02;client E;courriel;même erreur que ce matin sur l'espace client, urgent

@@ -1,0 +1,305 @@
+From d397c44e39e56bc11e2e785ced791dac22a5fbfe Mon Sep 17 00:00:00 2001
+From: Jean-Baptiste Dhondt <114347858+warrox1993@users.noreply.github.com>
+Date: Sat, 17 Oct 2026 22:46:07 +0200
+Subject: [PATCH 71/78] =?UTF-8?q?feat(ui):=20r=C3=B4les=20d'agent=20et=20n?=
+ =?UTF-8?q?avigation=20de=20la=20fiche=20d'agent=20en=20fran=C3=A7ais?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Table d'affichage des rôles (Direction générale, Contrôle qualité,
+Exploitation, Recherche, Généraliste…) propre à l'interface : la valeur
+stockée et AGENT_ROLE_LABELS du paquet partagé restent inchangés. Fiche
+d'agent : rubriques (Vue d'ensemble, Compétences, Moteur d'exécution,
+Outils, Canaux, Gouvernance, Permissions et confiance, Clés d'API,
+Révisions) et liens d'audit (Activité, Exécutions, Coûts, Budgets).
+Audit visuel D08.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01DP85vPq2MHkZg8VNtRvCzB
+---
+ .../AgentContextualSidebar.test.tsx           |  4 ++--
+ ui/src/components/AgentContextualSidebar.tsx  |  2 +-
+ ui/src/components/AgentProperties.tsx         |  5 +++--
+ ui/src/components/agent-config-primitives.tsx |  4 ++--
+ ui/src/lib/agent-role-labels.ts               | 21 +++++++++++++++++++
+ ui/src/pages/AgentDetail.tsx                  |  6 +++---
+ ui/src/pages/Agents.production.tsx            |  5 +++--
+ ui/src/pages/Agents.tsx                       |  5 +++--
+ ui/src/pages/OrgChart.production.tsx          |  5 +++--
+ ui/src/pages/OrgChart.tsx                     |  5 +++--
+ ui/src/pages/agent-detail-navigation.ts       | 20 +++++++++---------
+ 11 files changed, 54 insertions(+), 28 deletions(-)
+ create mode 100644 ui/src/lib/agent-role-labels.ts
+
+diff --git a/ui/src/components/AgentContextualSidebar.test.tsx b/ui/src/components/AgentContextualSidebar.test.tsx
+index 7b4eaa549..f516b5117 100644
+--- a/ui/src/components/AgentContextualSidebar.test.tsx
++++ b/ui/src/components/AgentContextualSidebar.test.tsx
+@@ -63,7 +63,7 @@ describe("AgentContextualSidebar", () => {
+     expect(markup).toContain('href="/agents/codexcoder/api-keys"');
+     expect(markup).toContain('href="/activity?mode=agents&amp;agentId=agent-1"');
+     expect(markup).toContain('href="/activity/runs?agentId=agent-1"');
+-    expect(markup).toContain("Harness / Runtime");
+-    expect(markup).toContain("Permissions / Trust");
++    expect(markup).toContain("Moteur d&#x27;exécution");
++    expect(markup).toContain("Permissions et confiance");
+   });
+ });
+diff --git a/ui/src/components/AgentContextualSidebar.tsx b/ui/src/components/AgentContextualSidebar.tsx
+index cd7d0b71f..0d4e011e9 100644
+--- a/ui/src/components/AgentContextualSidebar.tsx
++++ b/ui/src/components/AgentContextualSidebar.tsx
+@@ -51,7 +51,7 @@ export function AgentContextualSidebar({
+   agentRef,
+   agentId,
+   agentName,
+-  labels = { secrets: "Secrets & variables" },
++  labels = { secrets: "Secrets et variables" },
+ }: {
+   agentRef: string;
+   agentId?: string;
+diff --git a/ui/src/components/AgentProperties.tsx b/ui/src/components/AgentProperties.tsx
+index fcdee23b1..87772d04b 100644
+--- a/ui/src/components/AgentProperties.tsx
++++ b/ui/src/components/AgentProperties.tsx
+@@ -1,7 +1,7 @@
+ import { AgentIdentity } from "@/components/AgentIdentity";
+ import { useQuery } from "@tanstack/react-query";
+ import { Link } from "@/lib/router";
+-import { AGENT_ROLE_LABELS, type Agent, type AgentRuntimeState } from "@paperclipai/shared";
++import { type Agent, type AgentRuntimeState } from "@paperclipai/shared";
+ import { agentsApi } from "../api/agents";
+ import { useCompany } from "../context/CompanyContext";
+ import { getAdapterLabel } from "../adapters/adapter-display-registry";
+@@ -10,13 +10,14 @@ import { AgentStatusBadge } from "./StatusBadge";
+ import { Identity } from "./Identity";
+ import { formatDate, agentUrl } from "../lib/utils";
+ import { Separator } from "@/components/ui/separator";
++import { LIBELLES_ROLES_AGENT } from "../lib/agent-role-labels";
+ 
+ interface AgentPropertiesProps {
+   agent: Agent;
+   runtimeState?: AgentRuntimeState;
+ }
+ 
+-const roleLabels = AGENT_ROLE_LABELS as Record<string, string>;
++const roleLabels = LIBELLES_ROLES_AGENT as Record<string, string>;
+ 
+ function PropertyRow({ label, children }: { label: string; children: React.ReactNode }) {
+   return (
+diff --git a/ui/src/components/agent-config-primitives.tsx b/ui/src/components/agent-config-primitives.tsx
+index 169e38838..5299b0a0b 100644
+--- a/ui/src/components/agent-config-primitives.tsx
++++ b/ui/src/components/agent-config-primitives.tsx
+@@ -16,7 +16,6 @@ import {
+ import { Button } from "@/components/ui/button";
+ import { HelpCircle, ChevronDown, ChevronRight } from "lucide-react";
+ import { cn } from "../lib/utils";
+-import { AGENT_ROLE_LABELS } from "@paperclipai/shared";
+ 
+ /* ---- Help text for (?) tooltips ---- */
+ export const help: Record<string, string> = {
+@@ -65,10 +64,11 @@ export const help: Record<string, string> = {
+ };
+ 
+ import { getAdapterLabels } from "../adapters/adapter-display-registry";
++import { LIBELLES_ROLES_AGENT } from "../lib/agent-role-labels";
+ 
+ export const adapterLabels = getAdapterLabels();
+ 
+-export const roleLabels = AGENT_ROLE_LABELS as Record<string, string>;
++export const roleLabels = LIBELLES_ROLES_AGENT as Record<string, string>;
+ 
+ /* ---- Primitive components ---- */
+ 
+diff --git a/ui/src/lib/agent-role-labels.ts b/ui/src/lib/agent-role-labels.ts
+new file mode 100644
+index 000000000..a46eaeb27
+--- /dev/null
++++ b/ui/src/lib/agent-role-labels.ts
+@@ -0,0 +1,21 @@
++import type { AgentRole } from "@paperclipai/shared";
++
++/**
++ * Libellés français des rôles d'agent, affichage seulement : la valeur stockée
++ * (`ceo`, `qa`…) et `AGENT_ROLE_LABELS` du paquet partagé (lu par le serveur) ne changent pas.
++ * Formulés par fonction pour rester neutres.
++ */
++export const LIBELLES_ROLES_AGENT: Record<AgentRole, string> = {
++  ceo: "Direction générale",
++  cto: "Direction technique",
++  cmo: "Direction marketing",
++  cfo: "Direction financière",
++  security: "Sécurité",
++  engineer: "Développement",
++  designer: "Design",
++  pm: "Gestion de projet",
++  qa: "Contrôle qualité",
++  devops: "Exploitation",
++  researcher: "Recherche",
++  general: "Généraliste",
++};
+diff --git a/ui/src/pages/AgentDetail.tsx b/ui/src/pages/AgentDetail.tsx
+index 3ea5f3564..b249f177d 100644
+--- a/ui/src/pages/AgentDetail.tsx
++++ b/ui/src/pages/AgentDetail.tsx
+@@ -1829,13 +1829,13 @@ export function AgentOverview({
+       <section className="space-y-3" aria-labelledby="agent-audit-links-heading">
+         <h3 id="agent-audit-links-heading" className="text-sm font-medium">Audit</h3>
+         <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+-          {(["activity", "runs", "costs", "budgets"] as const).map((section) => (
++          {([["activity", "Activité"], ["runs", "Exécutions"], ["costs", "Coûts"], ["budgets", "Budgets"]] as const).map(([section, libelle]) => (
+             <Link
+               key={section}
+               to={agentScopedAuditHref(agent.id, section)}
+-              className="rounded-lg border border-border px-3 py-2 text-sm font-medium capitalize hover:bg-accent"
++              className="rounded-lg border border-border px-3 py-2 text-sm font-medium hover:bg-accent"
+             >
+-              {section}
++              {libelle}
+             </Link>
+           ))}
+         </div>
+diff --git a/ui/src/pages/Agents.production.tsx b/ui/src/pages/Agents.production.tsx
+index c30600290..3a978029e 100644
+--- a/ui/src/pages/Agents.production.tsx
++++ b/ui/src/pages/Agents.production.tsx
+@@ -25,7 +25,7 @@ import { PageTabBar } from "../components/PageTabBar";
+ import { Tabs } from "@/components/ui/tabs";
+ import { Button } from "@/components/ui/button";
+ import { AlertTriangle, Bot, Plus, List, GitBranch } from "lucide-react";
+-import { AGENT_ROLE_LABELS, type Agent, type Environment, type EnvironmentCapabilities } from "@paperclipai/shared";
++import { type Agent, type Environment, type EnvironmentCapabilities } from "@paperclipai/shared";
+ import {
+   isStarred,
+   resourceMembershipState,
+@@ -35,8 +35,9 @@ import {
+ import { usePublishSharedQueryData, useSharedPollingQuery } from "../hooks/useSharedPolling";
+ 
+ import { getAdapterLabel } from "../adapters/adapter-display-registry";
++import { LIBELLES_ROLES_AGENT } from "../lib/agent-role-labels";
+ 
+-const roleLabels = AGENT_ROLE_LABELS as Record<string, string>;
++const roleLabels = LIBELLES_ROLES_AGENT as Record<string, string>;
+ 
+ // Lazy-loaded so the roster page doesn't statically pull in the full
+ // AgentConfigForm module graph (the modal reuses its adapter/model pickers).
+diff --git a/ui/src/pages/Agents.tsx b/ui/src/pages/Agents.tsx
+index b78715c5f..e8edddd3e 100644
+--- a/ui/src/pages/Agents.tsx
++++ b/ui/src/pages/Agents.tsx
+@@ -28,7 +28,7 @@ import { PageTabBar } from "../components/PageTabBar";
+ import { Tabs } from "@/components/ui/tabs";
+ import { Button } from "@/components/ui/button";
+ import { AlertTriangle, Bot, Plus, List, Network } from "lucide-react";
+-import { AGENT_ROLE_LABELS, type Agent, type Environment, type EnvironmentCapabilities } from "@paperclipai/shared";
++import { type Agent, type Environment, type EnvironmentCapabilities } from "@paperclipai/shared";
+ import {
+   isStarred,
+   resourceMembershipState,
+@@ -38,8 +38,9 @@ import {
+ import { usePublishSharedQueryData, useSharedPollingQuery } from "../hooks/useSharedPolling";
+ 
+ import { getAdapterLabel } from "../adapters/adapter-display-registry";
++import { LIBELLES_ROLES_AGENT } from "../lib/agent-role-labels";
+ 
+-const roleLabels = AGENT_ROLE_LABELS as Record<string, string>;
++const roleLabels = LIBELLES_ROLES_AGENT as Record<string, string>;
+ 
+ // Lazy-loaded so the roster page doesn't statically pull in the full
+ // AgentConfigForm module graph (the modal reuses its adapter/model pickers).
+diff --git a/ui/src/pages/OrgChart.production.tsx b/ui/src/pages/OrgChart.production.tsx
+index 87df93b4e..2537a8fc8 100644
+--- a/ui/src/pages/OrgChart.production.tsx
++++ b/ui/src/pages/OrgChart.production.tsx
+@@ -12,9 +12,10 @@ import { Button } from "@/components/ui/button";
+ import { EmptyState } from "../components/EmptyState";
+ import { PageSkeleton } from "../components/PageSkeleton";
+ import { Download, Maximize2, Minus, Network, Plus, Upload } from "lucide-react";
+-import { AGENT_ROLE_LABELS, type Agent } from "@paperclipai/shared";
++import { type Agent } from "@paperclipai/shared";
+ import { useCloudInstance } from "@/hooks/useCloudInstance";
+ import { useHiddenSettings } from "@/hooks/useHiddenSettings";
++import { LIBELLES_ROLES_AGENT } from "../lib/agent-role-labels";
+ 
+ // Layout constants
+ const CARD_W = 200;
+@@ -634,7 +635,7 @@ export function OrgChart() {
+   );
+ }
+ 
+-const roleLabels: Record<string, string> = AGENT_ROLE_LABELS;
++const roleLabels: Record<string, string> = LIBELLES_ROLES_AGENT;
+ 
+ function roleLabel(role: string): string {
+   return roleLabels[role] ?? role;
+diff --git a/ui/src/pages/OrgChart.tsx b/ui/src/pages/OrgChart.tsx
+index a9fe1193e..101b07861 100644
+--- a/ui/src/pages/OrgChart.tsx
++++ b/ui/src/pages/OrgChart.tsx
+@@ -12,9 +12,10 @@ import { Button } from "@/components/ui/button";
+ import { EmptyState } from "../components/EmptyState";
+ import { PageSkeleton } from "../components/PageSkeleton";
+ import { Download, Maximize2, Minus, Network, Plus, Upload } from "lucide-react";
+-import { AGENT_ROLE_LABELS, type Agent } from "@paperclipai/shared";
++import { type Agent } from "@paperclipai/shared";
+ import { useCloudInstance } from "@/hooks/useCloudInstance";
+ import { useHiddenSettings } from "@/hooks/useHiddenSettings";
++import { LIBELLES_ROLES_AGENT } from "../lib/agent-role-labels";
+ 
+ // Layout constants
+ const CARD_W = 200;
+@@ -666,7 +667,7 @@ export function OrgChart({ orgTree: providedOrgTree, agents: providedAgents, emb
+   );
+ }
+ 
+-const roleLabels: Record<string, string> = AGENT_ROLE_LABELS;
++const roleLabels: Record<string, string> = LIBELLES_ROLES_AGENT;
+ 
+ function roleLabel(role: string): string {
+   return roleLabels[role] ?? role;
+diff --git a/ui/src/pages/agent-detail-navigation.ts b/ui/src/pages/agent-detail-navigation.ts
+index 39308751b..ed31b575d 100644
+--- a/ui/src/pages/agent-detail-navigation.ts
++++ b/ui/src/pages/agent-detail-navigation.ts
+@@ -22,26 +22,26 @@ export const AGENT_DETAIL_NAVIGATION: ReadonlyArray<{
+   {
+     label: "Agent",
+     items: [
+-      { value: "overview", label: "Overview" },
++      { value: "overview", label: "Vue d'ensemble" },
+       { value: "instructions", label: "Instructions" },
+-      { value: "skills", label: "Skills" },
++      { value: "skills", label: "Compétences" },
+     ],
+   },
+   {
+-    label: "Runtime",
++    label: "Exécution",
+     items: [
+-      { value: "runtime", label: "Harness / Runtime" },
++      { value: "runtime", label: "Moteur d'exécution" },
+       { value: "secrets", label: "Secrets" },
+-      { value: "tools", label: "Tools" },
+-      { value: "channels", label: "Channels" },
++      { value: "tools", label: "Outils" },
++      { value: "channels", label: "Canaux" },
+     ],
+   },
+   {
+-    label: "Governance",
++    label: "Gouvernance",
+     items: [
+-      { value: "permissions", label: "Permissions / Trust" },
+-      { value: "api-keys", label: "API Keys" },
+-      { value: "revisions", label: "Revisions" },
++      { value: "permissions", label: "Permissions et confiance" },
++      { value: "api-keys", label: "Clés d'API" },
++      { value: "revisions", label: "Révisions" },
+     ],
+   },
+ ] as const;
+-- 
+2.53.0
+

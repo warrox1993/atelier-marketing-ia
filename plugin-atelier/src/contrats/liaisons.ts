@@ -20,6 +20,23 @@ export const LIMITES_LIAISON = {
   raisonMax: 1000,
   /** Liaisons ouvertes (ou en attente d'approbation) tolérées par entreprise source. */
   ouvertesParEntrepriseMax: 5,
+  /**
+   * Plafond propre de l'entreprise Direction, dont le seul agent autorisé à ouvrir une liaison est le coordinateur
+   * général (rôle ceo) : il doit pouvoir interroger tous les coordinateurs d'un client (27 pour 28 services). Ce plafond
+   * n'exempte d'aucune approbation humaine.
+   */
+  ouvertesCoordinateurGeneralMax: 30,
+  /** Relais au plus par chaîne de liaisons (protocole inter-coordinateurs : « au plus deux relais »). */
+  relaisMax: 2,
+  /** Ancêtres d'une tâche d'origine parcourus au plus pour retrouver sa chaîne ; au-delà, la demande est refusée. */
+  ancetresMax: 50,
+  /**
+   * Teinte par prudence (tâche racine) : une réponse teintée reçue par l'entreprise teinte TOUTES ses liaisons sortantes
+   * tant que sa tâche d'origine est ouverte, et au moins pendant ce nombre de jours après la réponse.
+   */
+  teinteFenetreJours: 7,
+  /** Réponses teintées examinées au plus pour la teinte par prudence ; au-delà, l'entreprise est tenue pour teintée. */
+  teintesExamineesMax: 200,
 } as const;
 
 /** Identifiant stable d'un service (clé du registre des services). */
@@ -84,6 +101,9 @@ export const LiaisonEnregistree = z
   .strict();
 export type LiaisonEnregistree = z.infer<typeof LiaisonEnregistree>;
 
+/** Entreprises (services) d'un même client dans une déclaration. */
+export const MAX_ENTREPRISES_DECLAREES = 40;
+
 /** Un flux autorisé de la matrice (registre des services : `flux`). */
 export const FluxService = z
   .object({
@@ -106,8 +126,10 @@ export const DeclarerServicesEntree = z
     entreprises: z
       .array(z.object({ companyId: IdNatif, serviceSlug: SlugService, estDirection: z.boolean().default(false) }).strict())
       .min(1)
-      .max(40),
-    flux: z.array(FluxService).max(400).default([]),
+      .max(MAX_ENTREPRISES_DECLAREES),
+    // Matrice complète : flux métier + réseau des coordinateurs généré (toute paire ordonnée de services du client,
+    // scripts/atelier_services.py), soit au plus 40 x 39 paires pour 40 entreprises.
+    flux: z.array(FluxService).max(MAX_ENTREPRISES_DECLAREES * (MAX_ENTREPRISES_DECLAREES - 1)).default([]),
   })
   .strict();
 export type DeclarerServicesEntree = z.infer<typeof DeclarerServicesEntree>;

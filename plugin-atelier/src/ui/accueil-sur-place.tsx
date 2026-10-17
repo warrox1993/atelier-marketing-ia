@@ -47,12 +47,21 @@ export function natifSeulement(e: ElementAccueil): boolean {
 
 export interface PropsSurPlace {
   element: ElementAccueil;
+  /**
+   * Entreprise d'origine de l'élément quand elle n'est pas celle de la page (Discussion d'un client à plusieurs
+   * services). Les décisions par routes natives de l'hôte n'en dépendent pas ; la décision du bureau de liaison part avec
+   * ce companyId ; celles qui passent par le pont du plugin (contenu à valider) sont liées à l'entreprise de la page :
+   * pour un autre service, seul le lien vers sa page est proposé.
+   */
+  companyId?: string;
   /** Appelé après une action réussie : l'élément disparaît de la liste avec ce message. */
   onFait(message: string): void;
 }
 
-export function SurPlace({ element, onFait }: PropsSurPlace) {
-  if (element.liaison) return <Liaison liaison={element.liaison} onFait={onFait} />;
+export function SurPlace({ element, companyId, onFait }: PropsSurPlace) {
+  const { companyId: courante } = useHostContext();
+  if (element.liaison) return <Liaison liaison={element.liaison} companyId={companyId} onFait={onFait} />;
+  if (companyId && courante && companyId !== courante && element.type === "contenu_a_valider") return <AutreService element={element} />;
   if (natifSeulement(element)) return <PageNative element={element} />;
   if (element.interaction?.kind === "ask_user_questions" && element.issueId) return <Questions element={element} interaction={element.interaction} issueId={element.issueId} onFait={onFait} />;
   if (element.interaction && element.issueId) return <Confirmation interaction={element.interaction} issueId={element.issueId} onFait={onFait} />;
@@ -69,6 +78,18 @@ function PageNative({ element }: { element: ElementAccueil }) {
       <p>{element.interaction ? "Cette demande déclenche une action (envoi, accès ou secret) : son détail complet est dans la tâche." : "Cette décision se prend dans la page native, où tout son contenu est visible."}</p>
       <LienHote vers={element.lien} className="atl-lien">
         {element.interaction ? "Ouvrir la tâche" : "Ouvrir la page native"}
+      </LienHote>
+    </Encadre>
+  );
+}
+
+/** Contenu d'un autre service : la décision se prend dans sa page, jamais ici (le pont du plugin vise l'entreprise de la page). */
+function AutreService({ element }: { element: ElementAccueil }) {
+  return (
+    <Encadre etiquette="Décision dans la page du service">
+      <p>Ce contenu appartient à un autre service : sa décision se prend dans la page de ce service, où tout son détail est visible.</p>
+      <LienHote vers={element.lien} className="atl-lien">
+        Ouvrir la page du service
       </LienHote>
     </Encadre>
   );
@@ -325,8 +346,9 @@ function TexteComplet({ texte, etiquette }: { texte: string; etiquette: string }
   );
 }
 
-function Liaison({ liaison, onFait }: { liaison: LiaisonAApprouver; onFait(message: string): void }) {
-  const { companyId } = useHostContext();
+function Liaison({ liaison, companyId: origine, onFait }: { liaison: LiaisonAApprouver; companyId?: string; onFait(message: string): void }) {
+  const { companyId: courante } = useHostContext();
+  const companyId = origine ?? courante;
   const [raison, setRaison] = useState("");
   const { enCours, erreur, lancer } = useActionNative();
   const decider = (decision: "approuver" | "refuser") =>

@@ -1,0 +1,21 @@
+id;nom;courriel;type;base_legale_connue;origine_de_la_base_legale
+C-001;Contact 001;contact001@exemple.invalid;prospect;oui;consentement newsletter 2025
+C-002;Contact 002;contact002@exemple.invalid;prospect;oui;consentement newsletter 2025
+C-003;Contact 003;contact003@exemple.invalid;client;oui;consentement newsletter 2025
+C-004;Contact 004;contact004@exemple.invalid;prospect;;
+C-005;Contact 005;contact005@exemple.invalid;prospect;oui;consentement newsletter 2025
+C-006;Contact 006;contact006@exemple.invalid;client;oui;consentement newsletter 2025
+C-007;Contact 007;contact007@exemple.invalid;prospect;oui;consentement newsletter 2025
+C-008;Contact 008;contact008@exemple.invalid;prospect;oui;consentement newsletter 2025
+C-009;Contact 009;contact009@exemple.invalid;client;;
+C-010;Contact 010;contact010@exemple.invalid;prospect;oui;consentement newsletter 2025
+C-011;Contact 011;contact011@exemple.invalid;prospect;oui;consentement newsletter 2025
+C-012;Contact 012;contact012@exemple.invalid;client;oui;consentement newsletter 2025
+C-013;Contact 013;contact013@exemple.invalid;prospect;;
+C-014;Contact 014;contact014@exemple.invalid;prospect;oui;consentement newsletter 2025
+C-015;Contact 015;contact015@exemple.invalid;client;oui;consentement newsletter 2025
+C-016;Contact 016;contact016@exemple.invalid;prospect;oui;consentement newsletter 2025
+C-017;Contact 017;contact017@exemple.invalid;prospect;;
+C-018;Contact 018;contact018@exemple.invalid;client;oui;consentement newsletter 2025
+C-019;Contact 019;contact019@exemple.invalid;prospect;oui;consentement newsletter 2025
+C-020;Contact 020;contact020@exemple.invalid;prospect;oui;consentement newsletter 2025

@@ -2,7 +2,7 @@
 name: "redaction-contrat-travail"
 description: "Prépare le projet d'un contrat de travail pour une PME belge : choix du type de contrat, mentions à prévoir, clauses sensibles (non-concurrence, écolage), commission paritaire, lien avec le règlement de travail, et points d'attention pour validation. À utiliser pour un projet d'embauche ou d'avenant ; jamais pour signer, fixer une rémunération non fournie ni affirmer qu'une clause est valable sans validation d'un avocat en droit social ou du secrétariat social."
 metadata:
-  version: "1.0.0"
+  version: "1.1.0"
   langue: "fr"
   domaine: "juridique-social"
 ---
@@ -33,6 +33,8 @@ Un projet de contrat dont chaque mention est soit renseignée par une source (fa
 - `modele_existant` : modèle de contrat de l'entreprise, s'il y en a un.
 
 ## Étapes
+
+Avant de rédiger : si le droit applicable n'est pas certain (travailleur à l'étranger, détachement, télétravail depuis un autre pays), le demander ; si plusieurs pays sont en jeu, appliquer la règle la plus protectrice pour le travailleur jusqu'à confirmation par l'avocat de chaque pays. Au plus trois questions ciblées, posées en une seule fois (pays, commission paritaire, régime de travail), avant de produire un projet.
 
 1. **Choisir le type de contrat** selon les faits : le contrat à durée indéterminée est le cas général ; une durée déterminée, un temps partiel ou un remplacement exigent des mentions et un écrit propres. En cas de doute sur le type, écrire la question à poser plutôt que de choisir.
 2. **Vérifier l'écrit et son moment** : le contrat à durée déterminée, le temps partiel et plusieurs autres régimes exigent un écrit, en principe établi au plus tard au début de l'exécution (loi du 3 juillet 1978, notamment art. 9 et 11bis, à vérifier). Noter la date de signature visée par l'humain.
@@ -89,3 +91,7 @@ Le projet complet, et en particulier toute clause de non-concurrence ou d'écola
 Le service RH fournit : employé administratif, temps plein, début le 01/12/2026, durée indéterminée, rémunération brute mensuelle 3 000 euros (fournie par la direction), commission paritaire non précisée. Le projet renseigne ces faits, écrit « commission paritaire : information manquante, à demander au secrétariat social », renvoie au règlement de travail pour l'horaire et laisse le préavis à la loi. La direction demande une non-concurrence de 24 mois : la note signale que le repère lu au texte est de 12 mois au maximum, avec indemnité compensatoire, et pose la question à l'avocat au lieu d'inscrire la clause.
 
 Cas d'échec : l'employeur demande de « mettre la même clause que pour le précédent collaborateur » sans la fournir. Le projet n'invente pas de clause : il écrit « clause non fournie » et demande le texte. De même, si la rémunération n'est pas donnée, le contrat reste « à compléter » et n'est pas transmis comme prêt à signer.
+
+## Origine de la méthode
+
+Règle « droit inconnu : demander ; plusieurs pays : norme la plus protectrice jusqu'à confirmation de l'avocat ; au plus trois questions ciblées » adaptée de github.com/wshobson/agents, `plugins/hr-legal-compliance/agents/hr-pro.md` (« Operating Principles », « Information to Collect »), commit 044b4b21f083948e69ec878a7b07c8d0951a6ffa, licence MIT, Copyright (c) 2024 Seth Hobson. Liste des reprises : `organisation/skills/LICENCES-TIERS.md`.

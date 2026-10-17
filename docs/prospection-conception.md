@@ -181,7 +181,7 @@ le client couvre le même besoin avec moins de risques : à proposer d'abord.
 | Base légale | intérêt légitime pour les clients existants (attentes raisonnables, produits analogues), limitée par l'ePrivacy pour courriel et SMS (§3.2) ; mise en balance documentée par le client |
 | Minimisation | champs de la correspondance seulement ; aucune donnée de santé, de sinistre ni bancaire (refus à l'import si une colonne y ressemble, sur liste de noms) ; les agents ne reçoivent que des agrégats et des identifiants pseudonymes, jamais la base entière |
 | Conservation | durée choisie par le client à l'import (défaut proposé : 12 mois sans nouvel import), purge automatique, suppression sur demande |
-| Opposition | liste d'opposition par entreprise (désinscriptions, art. 21.3) vérifiée **côté serveur** avant toute préparation de contact ; une opposition survit à la purge (empreinte seule) |
+| Opposition | liste d'opposition par entreprise (désinscriptions, art. 21.3) vérifiée **côté serveur** avant toute préparation de contact ; une opposition est supprimée avec l'entreprise et ne survit que dans l'export fait avant la suppression (empreinte seule) |
 | Isolement | tout est rattaché à `company_id` (comme toutes les tables du plugin) ; aucune requête sans entreprise |
 | Chiffrement | identifiants directs (nom, courriel, téléphone, adresse) chiffrés au niveau applicatif (AES-256-GCM) avec une clé référencée par un secret natif de Paperclip, comme `approbationClePrivee` ; empreintes HMAC pour dédoublonner sans déchiffrer |
 | Stockage | schéma du plugin dans le PostgreSQL de Paperclip ; **aucun fichier suivi par git** ; le fichier importé n'est pas conservé (empreinte et nombre de lignes seulement) |
@@ -301,7 +301,7 @@ CRM » qui crée une demande de diffusion `exporter_crm`. Passage Impeccable obl
 ## 7. Démonstration réaliste
 
 Entreprises fictives déjà présentes : « Rénovation Liège (démonstration) » (le client de démonstration), « Toits
-Mosans » et « Isolpro Liège » (concurrents fictifs, `organisation/demo/sources/`). Le simulateur `bce` les complète par une
+Mosans » et « Isolpro Liège » (concurrents fictifs, `organisation/demo/sources/`, retiré le 16/10/2026). Le simulateur `bce` les complète par une
 cinquantaine d'entreprises fictives générées par le modèle déterministe (graine SHA-256 existante), sur les communes
 déjà utilisées (Liège, Outremeuse, Ans, Herstal hors zone), avec de vrais codes NACE et formes juridiques mais :
 - numéros BCE **à chiffre de contrôle volontairement faux**, donc impossibles pour une entreprise réelle, reconnus comme
@@ -357,7 +357,7 @@ le rendu est insuffisant ; toute suite longue en arrière-plan, journal lu une f
 | **P5** Règles de prospection | validation (modulo 97, E.164, courriel, impersonnel), dédoublonnage, exclusions §5.4, matrice §3.2 | `plugin-atelier/src/serveur/regles-prospection.ts`, `plugin-atelier/tests/regles-prospection.spec.ts` | Opus, `medium` (règle légale) | un cas par case de la matrice ; mutation d'une règle = échec attendu |
 | **P6** Score et étalonnage | points expliqués ; Platt, Brier, Wilson, seuils §5.3 | `plugin-atelier/src/serveur/score-prospects.ts`, `plugin-atelier/src/serveur/etalonnage.ts`, `plugin-atelier/tests/score-etalonnage.spec.ts` | Opus, `medium` | valeurs identiques (à 1e-6) à scikit-learn sur un jeu de référence figé ; sous le seuil = « estimation » ; aucune sortie « certitude » |
 | **P7** Base clients CSV | correspondance des colonnes, validation, refus des colonnes sensibles, chiffrement et empreintes HMAC, purge | `plugin-atelier/src/serveur/base-clients.ts`, `plugin-atelier/tests/base-clients.spec.ts` | Sonnet, `medium` | réutilise `analyserImport` sans le modifier ; aucune valeur en clair en base (test SQL) ; isolement entre deux entreprises ; suppression totale |
-| **P8** Base clients de démonstration | générateur CSV et XLSX à partir du modèle (gagnés et perdus) | `passerelle/src/demo/prospection/base-clients.ts`, `scripts/demo/generer-base-clients.mjs`, `passerelle/tests/prospection-demo/base-clients.test.ts` | Sonnet, `medium` | cohérence avec `crm_transactions` ; coordonnées fictives seulement ; même graine = même fichier |
+| **P8** Base clients de démonstration | générateur CSV et XLSX à partir du modèle (gagnés et perdus) | `passerelle/src/demo/prospection/base-clients.ts`, `scripts/demo/generer-base-clients.mjs` (retiré le 16/10/2026 ; jeu figé dans `plugin-atelier/tests/fixtures/base-clients/`), `passerelle/tests/prospection-demo/base-clients.test.ts` | Sonnet, `medium` | cohérence avec `crm_transactions` ; coordonnées fictives seulement ; même graine = même fichier |
 | **P9** Intégration plugin | routes, services, SQL, gardes de diffusion `exporter_crm`, santé (`bce`, `bnb`, `fsma`) | `plugin-atelier/src/serveur/services.ts`, `routes.ts`, `base.ts`, `contrats/index.ts`, `regles-diffusion.ts`, tests associés | Opus, `medium` | dépôt non signé refusé ; export sans base légale ou avec opposition refusé (403) ; scénario sans approbation = rien ne part |
 | **P10** Rôle et compétences | rôle `prospection`, deux compétences, connexions réservées, régénération | `organisation/registre/agents.json`, `organisation/agents/prospection/`, `organisation/skills/recherche-prospects/`, `organisation/skills/qualification-prospects/` | Opus, `medium` | `bootstrap-organisation.py generer` sans écart ; `verifier-config.sh` vert ; consignes : aucun conseil d'assurance, dépôt de chaque réponse |
 | **P11** Interface « Prospects » | rubrique, filtres, fiche, étalonnage, import guidé | `plugin-atelier/src/ui/prospects.tsx`, `plugin-atelier/src/ui/base-clients.tsx`, `plugin-atelier/tests/ui/prospects.test.tsx` | Sonnet, `medium` + Impeccable | Playwright : filtre secteur × zone, libellé « estimation » visible, import CSV de démonstration en un geste |
@@ -394,7 +394,7 @@ P18 vérification ponctuelle Google Places (clé payante), P19 enrichissement pa
 ## 12. Sources consultées le 15/10/2026
 
 Projet (local) : `REPRISE.md`, `docs/architecture.md`, `docs/connecteurs-conception.md`, `docs/passerelle.md`,
-`docs/contrats.md` (§9, §12 à §14), `organisation/registre/agents.json`, `organisation/demo/`,
+`docs/contrats.md` (§9, §12 à §14), `organisation/registre/agents.json`, `organisation/demo/` (retiré le 16/10/2026),
 `passerelle/src/demo/modele/referentiel.ts`, `plugin-atelier/src/serveur/imports.ts`.
 
 En ligne :

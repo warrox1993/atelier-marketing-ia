@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Déploie le plugin de l'Atelier Marketing IA sur les instances locales (recette appliquée à la main jusqu'ici).
-# Étapes : vérifications préalables, construction du plugin, copie vers instance/plugin-jb et l'aperçu,
+# Étapes : vérifications préalables, construction du plugin, copie vers instance/plugin-jb (et vers un dossier supplémentaire si --apercu est donné),
 # construction de l'interface du socle, redémarrage, attente de « ready », puis liste des clients réels
 # (aucun « appliquer » : plus de mode démonstration, les objectifs sur mesure ne sont jamais écrasés).
 # Voir docs/exploitation.md, section « Déployer ». Jamais de pkill : on passe par les scripts d'arrêt existants.
@@ -15,8 +15,9 @@ ESSAI=0; SANS_TESTS=0; CIBLE="toutes"; APERCU=""; JOURNAUX=""
 aide() {
   cat <<'AIDE'
 Usage : scripts/deployer.sh [options]
-  --cible 3100|3580|toutes   instances à redémarrer (défaut : toutes)
-  --apercu <dossier>         dossier d'aperçu (copie du plugin) ; absent : aperçu ignoré
+  --cible 3100|toutes        instance à redémarrer (défaut : toutes ; seule l'instance 3100 existe)
+  --apercu <dossier>         facultatif : copie aussi le plugin dans ce dossier (l'instance d'aperçu 3580 est
+                             arrêtée définitivement, ne plus s'en servir pour elle) ; absent : copie ignorée
   --journaux <dossier>       dossier des journaux de démarrage (obligatoire sauf avec --essai)
   --sans-tests               saute tsc et vitest (avertissement affiché)
   --essai                    affiche chaque commande sans l'exécuter (aucun effet)
@@ -41,7 +42,7 @@ while [[ $# -gt 0 ]]; do
   shift
 done
 
-case "${CIBLE}" in 3100|3580|toutes) ;; *) echec "--cible attend 3100, 3580 ou toutes (reçu : « ${CIBLE} »)" ;; esac
+case "${CIBLE}" in 3100|toutes) ;; *) echec "--cible attend 3100 ou toutes (reçu : « ${CIBLE} » ; l'instance 3580 n'existe plus)" ;; esac
 [[ -n "${JOURNAUX}" || "${ESSAI}" -eq 1 ]] || echec "--journaux <dossier> est obligatoire (hors --essai)"
 JOURNAUX="${JOURNAUX:-/tmp/deployer-journaux}"
 veut() { [[ "${CIBLE}" == "toutes" || "${CIBLE}" == "$1" ]]; }
@@ -93,7 +94,7 @@ if [[ "${ESSAI}" -eq 1 ]]; then echo "+ (cd plugin-atelier && node esbuild.confi
 else (cd "${RACINE}/plugin-atelier" && node esbuild.config.mjs) || echec "construction du plugin en échec"; fi
 
 # ---------- 3. Copie ----------
-etape "3. Copie vers instance/plugin-jb et l'aperçu"
+etape "3. Copie vers instance/plugin-jb (et le dossier --apercu s'il est donné)"
 copier_vers() {
   local dest="$1"
   executer mkdir -p "${dest}" || return 1
@@ -105,7 +106,7 @@ copier_vers "${RACINE}/instance/plugin-jb" || echec "copie vers instance/plugin-
 if [[ -n "${APERCU}" ]]; then
   copier_vers "${APERCU}" || echec "copie vers ${APERCU} en échec"
 else
-  echo "Aperçu : --apercu absent, copie ignorée."
+  echo "Dossier supplémentaire : --apercu absent, copie ignorée."
 fi
 
 # ---------- 4. Interface du socle ----------
@@ -118,15 +119,6 @@ etape "5. Redémarrage (cible : ${CIBLE})"
 if veut 3100; then
   executer scripts/arreter-instance.sh || echec "arrêt de l'instance 3100 en échec"
   lancer_fond "${JOURNAUX}/instance-3100.log" scripts/lancer-instance.sh
-fi
-if veut 3580; then
-  executer scripts/instance-essai.sh arreter atelier-apercu 3580 54780 || echec "arrêt de l'instance 3580 en échec"
-  if [[ "${ESSAI}" -eq 1 ]]; then
-    echo "+ PAPERCLIP_ATELIER_GATEWAY_URL=http://127.0.0.1:3581 setsid nohup scripts/instance-essai.sh demarrer atelier-apercu 3580 54780 > ${JOURNAUX}/instance-3580.log 2>&1 < /dev/null &"
-  else
-    PAPERCLIP_ATELIER_GATEWAY_URL=http://127.0.0.1:3581 setsid nohup scripts/instance-essai.sh demarrer atelier-apercu 3580 54780 \
-      > "${JOURNAUX}/instance-3580.log" 2>&1 < /dev/null &
-  fi
 fi
 
 # ---------- 6. Attente ----------
@@ -147,7 +139,7 @@ attendre() {
   erreur "instance ${port} pas prête après ${DELAI_ATTENTE} s (journal : ${JOURNAUX}/instance-${port}.log)"
   return 1
 }
-for p in 3100 3580; do veut "${p}" && { attendre "${p}" || exit 1; }; done
+veut 3100 && { attendre 3100 || exit 1; }
 
 # ---------- 7. Clients réels ----------
 # Plus de mode démonstration : rien n'est réappliqué automatiquement (les objectifs sur mesure

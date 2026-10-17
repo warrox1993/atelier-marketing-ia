@@ -33,7 +33,7 @@ verifie() {   # verifie <nom> <commande…> : réussit si la commande réussit
 # Arborescence factice : deux instances, éléments uniques.
 fabriquer() {
   local s="$1" id
-  for id in atelier atelier-apercu; do
+  for id in atelier atelier-essai; do
     local b="${s}/instance/instances/${id}"
     mkdir -p "${b}/data/backups" "${b}/secrets" "${b}/companies/c1" "${b}/data/storage" "${b}/db"
     echo "ancienne" | gzip > "${b}/data/backups/paperclip-20260101-000000.sql.gz"
@@ -44,15 +44,16 @@ fabriquer() {
     echo "VIVANTE" > "${b}/db/base-vivante"
   done
   mkdir -p "${s}/instance/cles" "${s}/instance/secrets" "${s}/instance/passerelles" \
-           "${s}/instance/plugin-jb" "${s}/instance/plugin-apercu" "${s}/instance/demo-reel" "${s}/passerelle/etat"
+           "${s}/instance/plugin-jb" "${s}/instance/demo-reel" "${s}/passerelle/etat"
   echo k > "${s}/instance/cles/a.pem"; echo s > "${s}/instance/secrets/b.txt"; echo p > "${s}/instance/passerelles/p.env"
-  echo j > "${s}/instance/plugin-jb/m.js"; echo a > "${s}/instance/plugin-apercu/m.js"
+  echo j > "${s}/instance/plugin-jb/m.js"
   echo d > "${s}/instance/demo-reel/d.json"; ln -s demo-reel "${s}/instance/demo-client"
   echo i > "${s}/passerelle/etat/index.db"
 }
 
 SRC="${TMP}/source"; DST="${TMP}/dest"; mkdir -p "${SRC}" "${DST}"; fabriquer "${SRC}"
-COMMUN=(--source "${SRC}" --meme-disque)
+PHX_ABSENT="${TMP}/phoenix-absent"   # les tests existants ne doivent jamais toucher le vrai Phoenix
+COMMUN=(--source "${SRC}" --meme-disque --instances atelier,atelier-essai --phoenix "${PHX_ABSENT}")
 
 # 1. Copie complète et empreintes identiques.
 attendre "copie complète" 0 "empreintes vérifiées" "${DST}" "${COMMUN[@]}"
@@ -63,11 +64,11 @@ verifie "contrôle sha256sum -c sur la copie"     bash -c "cd '${COPIE}' && sha2
 verifie "--verifier accepte la copie"            "${SCRIPT}" --verifier "${COPIE}"
 verifie "dernière sauvegarde copiée"             test -f "${COPIE}/instance/instances/atelier/data/backups/paperclip-20260102-000000.sql.gz"
 verifie "ancienne sauvegarde non copiée"         test ! -e "${COPIE}/instance/instances/atelier/data/backups/paperclip-20260101-000000.sql.gz"
-verifie "master.key copiée"                      cmp "${SRC}/instance/instances/atelier-apercu/secrets/master.key" "${COPIE}/instance/instances/atelier-apercu/secrets/master.key"
+verifie "master.key copiée"                      cmp "${SRC}/instance/instances/atelier-essai/secrets/master.key" "${COPIE}/instance/instances/atelier-essai/secrets/master.key"
 verifie "base vivante db/ non copiée"            test ! -e "${COPIE}/instance/instances/atelier/db"
 verifie "data/storage et companies copiés"       test -f "${COPIE}/instance/instances/atelier/data/storage/p.bin" -a -f "${COPIE}/instance/instances/atelier/companies/c1/doc.md"
 verifie "demo-client suivi (contenu copié)"      test -f "${COPIE}/instance/demo-client/d.json"
-verifie "passerelle/etat et plugins copiés"      test -f "${COPIE}/passerelle/etat/index.db" -a -f "${COPIE}/instance/plugin-jb/m.js" -a -f "${COPIE}/instance/plugin-apercu/m.js"
+verifie "passerelle/etat et plugins copiés"      test -f "${COPIE}/passerelle/etat/index.db" -a -f "${COPIE}/instance/plugin-jb/m.js"
 
 # 2. Empreinte altérée → non nul.
 echo "altéré" >> "${COPIE}/instance/cles/a.pem"
@@ -81,9 +82,9 @@ mv "${TMP}/master.key.sauve" "${SRC}/instance/instances/atelier/secrets/master.k
 mv "${SRC}/passerelle/etat" "${TMP}/etat.sauve"
 attendre "passerelle/etat manquant"         non0 "passerelle/etat" "${DST}" "${COMMUN[@]}"
 mv "${TMP}/etat.sauve" "${SRC}/passerelle/etat"
-mv "${SRC}/instance/instances/atelier-apercu/data/backups" "${TMP}/backups.sauve"
+mv "${SRC}/instance/instances/atelier-essai/data/backups" "${TMP}/backups.sauve"
 attendre "aucune sauvegarde de base"        non0 "aucune sauvegarde de base" "${DST}" "${COMMUN[@]}"
-mv "${TMP}/backups.sauve" "${SRC}/instance/instances/atelier-apercu/data/backups"
+mv "${TMP}/backups.sauve" "${SRC}/instance/instances/atelier-essai/data/backups"
 verifie "aucune copie créée en cas d'échec"  test "$(find "${DST}" -mindepth 1 -maxdepth 1 | wc -l)" = "${AVANT}"
 
 # 4. Destination absente ; argument inconnu ; --garder invalide.
@@ -109,6 +110,47 @@ verifie "rotation : 2 copies restantes"      test "$(find "${D3}" -maxdepth 1 -t
 verifie "rotation : la plus récente gardée"  test -f "${D3}/atelier-20250103-0100/EMPREINTES.sha256"
 verifie "rotation : les plus anciennes supprimées" test ! -e "${D3}/atelier-20250101-0100" -a ! -e "${D3}/atelier-20250102-0100"
 verifie "rotation : dossier étranger intact" test -d "${D3}/autre-dossier"
+
+# 8. Phoenix : base SQLite factice en mode WAL, avec une écriture en cours pendant la sauvegarde.
+PHX="${TMP}/phoenix-donnees"; D4="${TMP}/dest-phoenix"; mkdir -p "${PHX}" "${D4}"
+python3 -I -c '
+import os, sqlite3, subprocess, sys
+base, script, source, dest = sys.argv[1:5]
+c = sqlite3.connect(os.path.join(base, "phoenix.db"), isolation_level=None)
+c.execute("PRAGMA journal_mode=WAL"); c.execute("PRAGMA wal_autocheckpoint=0")
+c.execute("CREATE TABLE traces (id INTEGER PRIMARY KEY, v TEXT)")
+for i in range(200):
+    c.execute("INSERT INTO traces (v) VALUES (?)", ("validee-%d" % i,))
+# Écriture en cours : transaction ouverte et non validée pendant toute la sauvegarde.
+c.execute("BEGIN"); c.execute("INSERT INTO traces (v) VALUES (?)", ("EN-COURS",))
+assert os.path.getsize(os.path.join(base, "phoenix.db-wal")) > 0, "les écritures validées doivent être dans le WAL"
+r = subprocess.run([script, dest, "--source", source, "--meme-disque", "--instances", "atelier,atelier-essai", "--phoenix", base],
+                   capture_output=True, text=True)
+sys.stdout.write(r.stdout + r.stderr)
+c.execute("ROLLBACK")
+sys.exit(r.returncode)
+' "${PHX}" "${SCRIPT}" "${SRC}" "${D4}" > "${TMP}/phx.sortie" 2>&1
+CODE_PHX=$?
+TOTAL=$((TOTAL + 1))
+if [[ "${CODE_PHX}" -eq 0 ]]; then
+  echo "OK     sauvegarde avec base Phoenix WAL en écriture (code 0)"
+else
+  echo "ECHEC  sauvegarde Phoenix (code ${CODE_PHX})"; sed 's/^/         /' "${TMP}/phx.sortie"; ECHECS=$((ECHECS + 1))
+fi
+COPIE_PHX="$(find "${D4}" -mindepth 1 -maxdepth 1 -type d -name 'atelier-*' | head -n 1)"
+requete() { python3 -I -c 'import sqlite3,sys; print(sqlite3.connect(sys.argv[1]).execute(sys.argv[2]).fetchone()[0])' "${COPIE_PHX}/phoenix/phoenix.db" "$1"; }
+verifie "Phoenix : base copiée dans la sauvegarde"    test -s "${COPIE_PHX}/phoenix/phoenix.db"
+verifie "Phoenix : aucun fichier temporaire ni -wal"  test -z "$(find "${COPIE_PHX}/phoenix" -name '.*' -o -name '*-wal' -o -name '*-shm')"
+verifie "Phoenix : copie cohérente (integrity_check)" test "$(requete 'PRAGMA integrity_check')" = "ok"
+verifie "Phoenix : écritures validées présentes (200)" test "$(requete "SELECT count(*) FROM traces WHERE v LIKE 'validee-%'")" = "200"
+verifie "Phoenix : écriture non validée absente"      test "$(requete "SELECT count(*) FROM traces WHERE v='EN-COURS'")" = "0"
+verifie "Phoenix : empreinte de la base contrôlée"    grep -q ' \./phoenix/phoenix.db$' "${COPIE_PHX}/EMPREINTES.sha256"
+verifie "Phoenix : --verifier accepte la copie"       "${SCRIPT}" --verifier "${COPIE_PHX}"
+
+# 9. Dossier Phoenix absent : message clair, la sauvegarde réussit quand même, sans dossier phoenix/.
+D5="${TMP}/dest-sans-phoenix"; mkdir -p "${D5}"
+attendre "Phoenix absent : la sauvegarde continue" 0 "données Phoenix non sauvegardées" "${D5}" "${COMMUN[@]}"
+verifie "Phoenix absent : pas de dossier phoenix/"    test ! -e "$(find "${D5}" -mindepth 1 -maxdepth 1 -type d -name 'atelier-*' | head -n 1)/phoenix"
 
 echo "---"; echo "${TOTAL} tests, ${ECHECS} échec(s)"
 [[ "${ECHECS}" -eq 0 ]]

@@ -2,7 +2,7 @@
 name: "classement-douanier-origine"
 description: "Prépare, pour une PME belge qui exporte ou importe, la proposition de classement douanier (code SH, NC, TARIC), l'analyse de l'origine préférentielle au titre des accords de l'UE, le statut d'exportateur enregistré (REX) et le premier examen des sanctions et des biens à double usage (règlement (UE) 2021/821), avec signal d'arrêt et escalade. À utiliser pour proposer un code ou une origine à faire confirmer, ou repérer un risque de conformité ; jamais pour certifier un code, une origine ou un statut, déposer une déclaration, ni conclure qu'une opération est autorisée : toute alerte suspend le dossier et passe à un humain."
 metadata:
-  version: "1.0.0"
+  version: "1.1.0"
   langue: "fr"
   domaine: "commerce-exterieur"
 ---
@@ -36,8 +36,13 @@ Une proposition motivée, jamais une certification : un code avec les raisonneme
 ## Étapes
 
 1. **Rassembler la description** et signaler tout manque (« composition inconnue », « fonction non précisée »). Sans description technique, ne pas proposer de code : écrire « information manquante » et la question précise.
-2. **Proposer le classement** en suivant l'ordre de la nomenclature : la base internationale de six chiffres (Système harmonisé, SH), le code de huit chiffres de la Nomenclature combinée (NC) et, pour les mesures, le code de dix chiffres du TARIC, base de données de l'UE qui regroupe droits, préférences, suspensions, contingents, mesures de défense commerciale, interdictions et restrictions. Écrire pour chaque proposition : le code, les chapitres et positions écartés avec la raison, la description que l'on a utilisée, le degré de certitude (« forte », « moyenne », « faible »).
-3. **Signaler les cas à sécuriser** : produit à usage multiple, ensemble, article composite, pièce détachée, produit nouveau. Pour un risque de redressement ou une valeur élevée, recommander une demande de décision écrite aux autorités douanières plutôt qu'un classement de bonne foi ; la voie exacte est à confirmer par le déclarant.
+2. **Proposer le classement** en suivant l'ordre de la nomenclature : la base internationale de six chiffres (Système harmonisé, SH), le code de huit chiffres de la Nomenclature combinée (NC) et, pour les mesures, le code de dix chiffres du TARIC, base de données de l'UE qui regroupe droits, préférences, suspensions, contingents, mesures de défense commerciale, interdictions et restrictions. Appliquer les règles générales interprétatives dans l'ordre, sans raccourci, et **écrire laquelle tranche** :
+   - lire les notes de section et de chapitre, qui priment sur le libellé des positions ;
+   - règle 1 : lire les libellés des positions à la lettre ; si une seule position couvre le produit, le classement est décidé ;
+   - si plusieurs positions restent possibles, appliquer la règle 2 puis la règle 3 dans l'ordre ; pour un produit composite, chercher le caractère essentiel (fonction, valeur, volume ou facteur le plus pertinent pour ce produit) et dire lequel ;
+   - valider la sous-position (règle 6, notes de sous-positions), puis vérifier que le code à huit ou dix chiffres prolonge bien la position à six chiffres retenue.
+   Chercher des renseignements tarifaires contraignants déjà délivrés pour des produits identiques ou proches dans la base publique EBTI : ils éclairent sans lier un autre titulaire. Quand deux positions restent défendables, présenter **les deux**, argumentées, sans en affirmer une comme certaine. Écrire pour chaque proposition : le code, la règle qui tranche, les chapitres et positions écartés avec la raison, la description que l'on a utilisée, le degré de certitude (« forte », « moyenne », « faible »).
+3. **Signaler les cas à sécuriser** : produit à usage multiple, ensemble, article composite, pièce détachée, produit nouveau. Pour un classement incertain, un risque de redressement ou une valeur élevée, suggérer une demande de renseignement tarifaire contraignant (décision de classement délivrée par l'administration des douanes, valable en principe trois ans dans toute l'UE et opposable à toutes les administrations douanières de l'UE et au titulaire) plutôt qu'un classement de bonne foi ; la décision de la demander est humaine et la démarche est à confirmer par le déclarant.
 4. **Analyser l'origine** : distinguer l'origine non préférentielle (nationalité économique de la marchandise, pour la politique commerciale) et l'origine préférentielle (droit à un tarif réduit ou nul au titre d'un accord). Pour la préférentielle : le produit est soit entièrement obtenu dans la zone, soit a subi une ouvraison ou transformation suffisante selon la règle propre à son code dans l'accord ; examiner le cumul éventuel, les tolérances et la règle de non-modification pendant le transport. Lister l'accord applicable à la destination, la règle du produit et les pièces à fournir.
 5. **Examiner la preuve d'origine** : selon l'accord, certificat ou déclaration d'origine ; pour les accords récents, la déclaration est établie par un exportateur enregistré au système REX. Si la PME n'a pas de statut REX et que l'accord l'exige au-delà d'un seuil, noter « enregistrement à envisager » et renvoyer à l'autorité douanière ; les seuils de valeur ne sont pas fixés ici, ils sont lus dans l'accord et à confirmer.
 6. **Faire l'examen de conformité**, dans cet ordre, et s'arrêter au premier signal :
@@ -59,7 +64,7 @@ Conduite à tenir : ne pas poursuivre le dossier ; ne proposer aucune solution a
 
 ## Livrable
 
-1. Une fiche de classement : description utilisée, code proposé (SH, NC, TARIC), raisonnement, codes écartés, degré de certitude, mention « à confirmer par l'humain ou un transitaire ».
+1. Une fiche de classement : description utilisée, code proposé (SH, NC, TARIC), règle interprétative qui tranche, raisonnement, codes écartés, degré de certitude, mention « à confirmer par l'humain ou un transitaire ».
 2. Une fiche d'origine : type (préférentielle ou non), accord, règle du produit, composants non originaires, état de la preuve, statut REX.
 3. Un état de conformité : sanctions, double usage, signaux d'alerte, avec le résultat « rien relevé à ce stade, non vérifié dans les registres officiels » ou « ARRÊT ».
 4. La liste des informations manquantes et des questions à poser.
@@ -67,7 +72,8 @@ Conduite à tenir : ne pas poursuivre le dossier ; ne proposer aucune solution a
 ## Critères de réussite
 
 - Aucun code ni origine n'est affirmé sans description technique et sans mention de certitude.
-- Le raisonnement montre les positions écartées, pas seulement le code retenu.
+- Le raisonnement montre les positions écartées et la règle interprétative qui tranche, pas seulement le code retenu.
+- Un classement ambigu présente au moins deux positions argumentées et suggère un renseignement tarifaire contraignant.
 - La distinction entre origine préférentielle et non préférentielle est respectée.
 - Tout signal d'arrêt a stoppé le dossier, sans solution de contournement, avec escalade.
 - Le résultat « rien relevé » n'est jamais présenté comme une autorisation.
@@ -79,6 +85,7 @@ Consultées en ligne le 16/10/2026 :
 - « TARIC », Commission européenne, https://taxation-customs.ec.europa.eu/customs-4/calculation-customs-duties/customs-tariff/eu-customs-tariff-taric_en : base de données multilingue qui regroupe les mesures du tarif douanier commun et de la législation commerciale et agricole (droits, préférences, suspensions, contingents, défense commerciale, interdictions et restrictions). La page ne détaille pas la structure hiérarchique des codes et ne parle pas des décisions écrites : ces points restent à confirmer.
 - « Rules of origin for goods », Commission européenne, https://taxation-customs.ec.europa.eu/customs/rules-origin-goods_en : origine non préférentielle et préférentielle, arrangements unilatéraux (par exemple le système de préférences généralisées) et réciproques (accords de libre-échange) ; l'origine, avec le classement et la valeur, détermine le traitement tarifaire.
 - « Preferential rules of origin », Commission européenne, https://taxation-customs.ec.europa.eu/customs/rules-origin-goods/preferential-rules-origin_en : produits entièrement obtenus ou ayant subi une ouvraison suffisante, cumul, tolérance générale, règle de non-modification, outils d'auto-évaluation.
+- « EU Binding Tariff Information (BTI) », Commission européenne, https://taxation-customs.ec.europa.eu/customs/common-customs-tariff-cct/tariff-classification-goods/eu-binding-tariff-information-bti_en, consultée le 17/10/2026 : décision juridique de classement délivrée par l'administration douanière d'un pays de l'UE, valable en général trois ans dans toute l'UE, liant toutes les administrations douanières de l'UE et le titulaire, sans effet rétroactif ; décisions publiées dans la base EBTI, informations confidentielles protégées.
 - « Access2Markets », Commission européenne, https://trade.ec.europa.eu/access-to-markets/fr/home : portail pour exportateurs de l'UE (droits de douane, règles d'origine, procédures, exigences produit).
 
 Non lu ce jour : le texte du règlement (UE) 2021/821 sur EUR-Lex (https://eur-lex.europa.eu) n'a pas pu être ouvert, le site ayant renvoyé une page vide à la lecture automatique. Les mentions du règlement dans cette compétence (liste de contrôle, rôle de l'usage final) restent donc sans citation d'article et sont à vérifier sur le texte officiel avant toute décision. Les pages de la Commission sur le système REX n'ont pas pu être ouvertes à l'adresse essayée (erreur 404) : le fonctionnement et les seuils du REX sont à confirmer auprès de l'administration des douanes et accises ou du transitaire. Les listes de sanctions n'ont pas été consultées.
@@ -105,3 +112,9 @@ Origine : aluminium acheté hors UE (45 % de la valeur), usinage et assemblage e
 Conformité : rien relevé à ce stade, non vérifié dans les registres officiels.
 
 Cas d'échec : l'acheteur commande des pièces usinées de précision et refuse de dire à quoi elles serviront, en demandant une livraison par un pays voisin de la destination annoncée. Statut : « ARRÊT : usage final inconnu, itinéraire illogique, risque de double usage ou de sanctions ». La compétence ne cherche pas de code « plus neutre » ni de découpage de la commande, n'informe pas le client, et transmet au coordinateur pour décision humaine et avis juridique.
+
+Cas ambigu (version 1.1.0) : support métallique intégrant une carte électronique de commande. Deux positions candidates présentées : ouvrages en métal et appareils électriques ; la règle 1 ne tranche pas, la règle 3 b) est appliquée avec le caractère essentiel cherché dans la fonction (la commande électronique détermine l'usage), certitude « faible ». Aucune des deux n'est affirmée ; question au déclarant et suggestion d'un renseignement tarifaire contraignant posée en carte.
+
+## Origine de la méthode
+
+Version 1.1.0 : ordre d'application des règles générales interprétatives, règle qui tranche écrite, recherche de décisions de classement existantes, adapté et traduit de github.com/affaan-m/ECC, `skills/customs-trade-compliance/SKILL.md`, « Classification Decision Logic », commit ef648e01899ba3e8dc6371642deaaf64b4477775, compétence sous licence Apache 2.0 (en-tête `license: Apache-2.0`, auteur « evos »). Modifications : réécriture en français, sources de l'UE (EBTI) à la place des bases américaines, décision humaine. Texte des licences et liste des reprises : `organisation/skills/LICENCES-TIERS.md`.

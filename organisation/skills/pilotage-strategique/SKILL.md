@@ -2,7 +2,7 @@
 name: "pilotage-strategique"
 description: "Aide la direction d'une PME à arbitrer entre les demandes concurrentes des services, à fixer des objectifs trimestriels (méthode OKR), à classer les initiatives par impact, effort et risque, et à tracer chaque décision dans un registre. À utiliser quand plusieurs services demandent des moyens limités, quand un trimestre doit être cadré ou quand une décision doit être préparée et documentée ; jamais pour trancher à la place du dirigeant, ni pour une décision d'investissement, d'embauche ou de tarification présentée comme prise."
 metadata:
-  version: "1.0.0"
+  version: "1.1.0"
   langue: "fr"
   domaine: "direction"
 ---
@@ -61,6 +61,10 @@ Donner au dirigeant un arbitrage préparé : les demandes classées sur des crit
 | Risques et plan B | deux ou trois, avec le signal d'alerte |
 | Décision | vide tant que l'humain n'a pas tranché ; ensuite : option choisie, décideur, date |
 | Revue prévue | date et indicateur regardé |
+
+Chaque décision proposée est transmise au registre des décisions de la direction (compétence `registre-decisions`) avec
+l'état « proposée » ; elle n'y passe à « prise » que sur la preuve d'une approbation humaine. Avant de proposer, vérifier
+dans ce registre qu'une option identique n'a pas été rejetée avec la mention « ne pas reproposer ».
 
 ## Livrable
 

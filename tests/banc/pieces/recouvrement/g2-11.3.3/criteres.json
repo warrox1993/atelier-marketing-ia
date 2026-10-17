@@ -1,0 +1,14 @@
+[
+ {
+  "critere": "montant du paiement cité",
+  "nombres": [
+   3280.0
+  ]
+ },
+ {
+  "critere": "l'IBAN connu et le nouvel IBAN comparés",
+  "mots": [
+   "IBAN"
+  ]
+ }
+]

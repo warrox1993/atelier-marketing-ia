@@ -2,7 +2,7 @@
 name: "agenda-echeances-legales"
 description: "Construit et tient le calendrier des échéances légales récurrentes d'une PME belge : TVA (mensuelle ou trimestrielle), précompte professionnel, acomptes, approbation des comptes par l'assemblée générale (6 mois après la clôture), dépôt des comptes annuels à la Banque nationale de Belgique (30 jours après approbation, 7 mois au plus tard), déclaration à l'impôt des sociétés, confirmation annuelle du registre UBO, listing clients, avec rappels, responsable proposé et marge de sécurité. À utiliser pour créer le calendrier d'un exercice, le mettre à jour à une date de clôture ou de régime donnée, ou préparer les rappels de la semaine ; jamais pour déposer, payer ou signer une déclaration, ni pour déterminer seul le régime ou la date limite exacte d'une entreprise."
 metadata:
-  version: "1.0.0"
+  version: "1.2.0"
   langue: "fr"
   domaine: "administratif"
 ---
@@ -40,12 +40,16 @@ Un calendrier où chaque échéance a une date calculée et sourcée, un respons
 1. **Lister les obligations applicables** parmi le catalogue ci-dessous, en excluant celles qui ne concernent pas l'entreprise (par exemple pas de précompte sans personnel).
 2. **Calculer chaque date limite** à partir de la règle et du régime. Appliquer la règle de report (week-end, jour férié) de la source de la ligne ; si les sources divergent, indiquer les deux dates et retenir la plus précoce.
 3. **Poser un rappel anticipé** : pour chaque échéance, rappel de préparation (J moins 10 jours ouvrables) et rappel de dépôt (J moins 5), plus un rappel final la veille.
+   Un rappel n'existe que s'il est porté par un outil réel (agenda partagé, tâche planifiée de l'atelier, logiciel du comptable) : le livrable dit qui ou quoi le portera, et n'écrit jamais « c'est programmé » tant que l'humain n'a pas confirmé la création du rappel dans cet outil.
 4. **Désigner le responsable proposé** : préparation (comptabilité ou comptable externe), validation (dirigeant ou administrateur), dépôt ou paiement (personne habilitée). L'humain valide les noms.
 5. **Lister la pièce à préparer** : relevés, états de paie, liste de clients, projet de comptes, procès-verbal.
 6. **Contrôler la cohérence** : l'approbation des comptes précède le dépôt ; l'assemblée précède la convocation de quinze jours ; le dépôt ne dépasse pas sept mois après la clôture.
 7. **Marquer les points à confirmer** : toute date qui dépend d'une décision du comptable, d'une circulaire annuelle ou d'une particularité de l'entreprise.
 8. **Publier** le calendrier (tableau et liste chronologique) et la liste des rappels de la semaine.
-9. **Mettre à jour** à chaque modification de régime ou de clôture ; archiver l'ancienne version (voir `classement-archivage`).
+9. **Relier chaque échéance à sa preuve** : une échéance passe à « déposé » ou « payé » seulement quand l'humain fournit la
+   preuve (accusé de réception de la plateforme, référence de paiement) ; sans preuve, elle reste « à confirmer » et
+   apparaît dans les rappels.
+10. **Mettre à jour** à chaque modification de régime ou de clôture ; archiver l'ancienne version (voir `classement-archivage`).
 
 ### Catalogue des échéances
 
@@ -63,6 +67,7 @@ Les dates indiquées sont les règles de principe consultées le 16/10/2026. Les
 | Dépôt des comptes annuels à la Banque nationale de Belgique | dans les trente jours de l'approbation et au plus tard sept mois après la clôture (CSA art. 3:10) ; le dépôt est considéré comme accepté sauf avis contraire dans les huit jours ouvrables ; en cas d'erreurs substantielles, dépôt rectificatif dans les deux mois (art. 3:14) | annuelle | comptes approuvés, document de composition de l'organe, éventuel rapport | administrateur ou comptable, validation dirigeant |
 | Contribution pour dépôt tardif | si le dépôt a lieu plus d'un mois après l'échéance de sept mois : 400 euros (neuvième mois), 600 euros (dixième à douzième), 1 200 euros (à partir du treizième) ; réduit à 120, 180, 360 euros pour les petites sociétés ou micro (CSA art. 3:13, texte tronqué dans la lecture : à vérifier) | si retard | n/a | n/a |
 | Déclaration à l'impôt des sociétés | date limite fixée annuellement ; en 2026 le repère consulté est le 30 septembre pour une clôture au 31 décembre 2025, avec échelonnement selon la date de clôture | annuelle | comptes approuvés, annexes fiscales | comptable, validation dirigeant |
+| Fiches fiscales 281 (281.10, 281.20, 281.50 et autres applicables) | introduction annuelle par Belcotax-on-web pour les sommes de l'année précédente ; date limite fixée par l'administration, à confirmer chaque année (page officielle bloquée par une vérification anti-robot le 17/10/2026) | annuelle | relevés de paie annuels, liste des commissions et honoraires versés | secrétariat social ou comptabilité, validation dirigeant |
 | Registre des bénéficiaires effectifs (UBO) | enregistrement dans les trente jours de la création, modification dans le mois (source de 2021), confirmation annuelle même sans changement, via MyMinfin ; rappel envoyé un mois avant l'échéance dans la boîte MyMinfin ; amendes administratives de 250 à 50 000 euros (source de 2021) | annuelle et à chaque changement | registre des actions, pièces justificatives | administrateur, avec le comptable |
 
 ### Règles de calcul
@@ -74,7 +79,7 @@ Les dates indiquées sont les règles de principe consultées le 16/10/2026. Les
 
 ## Livrable
 
-1. **Tableau annuel** : échéance, date limite, règle (source), pièce, responsable proposé, rappels (J-10, J-5, veille), état (à faire, en cours, déposé, payé).
+1. **Tableau annuel** : échéance, date limite, règle (source), pièce, responsable proposé, rappels (J-10, J-5, veille), état (à faire, en cours, déposé, payé), preuve de dépôt ou de paiement (accusé de réception, référence, date ; vide tant qu'elle n'est pas fournie par l'humain).
 2. **Liste chronologique** des 90 prochains jours.
 3. **Rappels de la semaine** : trois colonnes (cette semaine, la suivante, en retard), avec pour chaque ligne le responsable et la pièce attendue.
 4. **Points à confirmer** avec le comptable, avec la question exacte.
@@ -82,6 +87,7 @@ Les dates indiquées sont les règles de principe consultées le 16/10/2026. Les
 
 ## Critères de réussite
 
+- Aucune échéance n'est marquée déposée ou payée sans preuve fournie par l'humain.
 - Chaque date limite est recalculable à partir de la règle écrite dans la ligne.
 - Chaque ligne a un responsable proposé, un rappel et un état.
 - Aucune échéance de l'exercice n'est omise parmi celles applicables au régime déclaré.
@@ -125,3 +131,10 @@ Les pages du SPF Finances (finances.belgium.be, finanzen.belgium.be) étaient pr
 Société anonyme, clôture au 31 décembre 2025, TVA trimestrielle, pas de commissaire. Calcul : approbation à tenir avant le 30 juin 2026 ; dépôt dans les 30 jours de l'approbation et au plus tard le 31 juillet 2026 (sept mois après la clôture) ; convocation à envoyer au plus tard quinze jours avant l'assemblée (si l'assemblée est prévue le 22 juin 2026, convocation au plus tard le vendredi 5 juin, le 7 juin étant un dimanche) ; déclaration à l'impôt des sociétés autour du 30 septembre 2026 (à confirmer par le comptable) ; confirmation UBO dans MyMinfin à la date indiquée. Rappels automatiques à J-10, J-5 et la veille. Responsables proposés : administrateur délégué (validation), comptable externe (préparation et dépôt).
 
 Cas d'échec : la TVA du troisième trimestre doit être déposée en octobre 2026. Une source indique le 25 octobre, une autre le 26. Le 25 octobre 2026 est un dimanche. La compétence ne choisit pas : elle écrit « 25 octobre (dimanche) selon la règle sans report ; 26 octobre selon un calendrier de cabinet ; retenue : vendredi 23 octobre, à confirmer par le comptable ». Elle ne dépose rien.
+
+## Origine de la méthode
+
+Lien entre chaque échéance et sa preuve de dépôt adapté de github.com/anthropics/knowledge-work-plugins,
+`operations/skills/compliance-tracking/SKILL.md` (calendrier d'audit et gestion des preuves), commit
+33eeda1e8fd856455b05479d13a0f85b5f803744, licence Apache 2.0. Modifications : traduction, échéances belges. Règle « une cadence enregistrée ne déclenche rien sans planificateur réel » (étape 3) adaptée de `small-business/shared/chain-seams.md` (section 2), même dépôt et même commit. Licence et
+reprises : `organisation/skills/LICENCES-TIERS.md`.

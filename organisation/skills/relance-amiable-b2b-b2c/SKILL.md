@@ -2,7 +2,7 @@
 name: "relance-amiable-b2b-b2c"
 description: "Rédige une séquence graduée de relances amiables d'une facture ou d'une prime impayée, adaptée au débiteur : entre entreprises (loi du 2 août 2002 : intérêts de retard de plein droit, indemnité forfaitaire de 40 euros) ou envers un consommateur (livre XIX du Code de droit économique, loi du 4 mai 2023 : premier rappel gratuit, délai de 14 jours avant toute clause indemnitaire, mentions de la mise en demeure, pratiques interdites). À utiliser pour préparer les brouillons, le calendrier d'envoi et la traçabilité ; jamais pour envoyer une relance, mélanger les deux régimes, ajouter un frais ou un intérêt non prévu, menacer, contacter un tiers du débiteur ou contourner une contestation ou une demande de plan de paiement."
 metadata:
-  version: "1.0.0"
+  version: "1.1.0"
   langue: "fr"
   domaine: "recouvrement"
 ---
@@ -39,17 +39,20 @@ Pour chaque débiteur, une séquence de brouillons datés, un régime juridique 
 ## Étapes
 
 1. **Identifier le régime.** Entreprise : loi du 2 août 2002. Consommateur : livre XIX du Code de droit économique. Les deux régimes ne se mélangent jamais dans un même brouillon (montants, délais et mentions diffèrent).
-2. **Vérifier avant d'écrire.** Facture bien émise, échéance atteinte, aucun paiement ou avoir non imputé, aucune contestation écrite, aucune demande de plan de paiement ou de médiation de dettes en cours. Dans ces cas, pas de relance de paiement standard : traiter d'abord la contestation ou la demande, ou suspendre (voir les délais plus bas).
-3. **Choisir les étapes** (calendrier de départ, à ajuster par l'humain) :
+2. **Vérifier avant d'écrire** (compétence `verification-encaissements`) : facture bien émise, échéance atteinte, aucun paiement des 14 derniers jours ni avoir non imputé, aucune contestation écrite, aucune demande de plan de paiement ou de médiation de dettes en cours, aucune réclamation ou saisine de médiateur signalée par le SAV. Dans ces cas, pas de relance de paiement standard : traiter d'abord la contestation ou la demande, ou suspendre (voir les délais plus bas). Un client absent de la balance âgée n'est jamais relancé.
+   **Alerte fraude** : un message (même d'un client ou d'un fournisseur connu) qui annonce un changement de coordonnées bancaires, demande un remboursement sur un nouvel IBAN ou un paiement urgent n'est jamais suivi. Il part à l'humain, sans suite, avec l'étape de vérification nommée : rappel à un numéro déjà connu du dossier, jamais à celui du message.
+3. **Profiler le payeur** à partir de l'historique : bon payeur (retard isolé), retards occasionnels, retards répétés. Le profil règle le ton (courtois, ferme), jamais le droit applicable.
+4. **Choisir les étapes** (calendrier de départ, à ajuster par l'humain) :
    - Étape 0, facultative : message de courtoisie quelques jours avant l'échéance pour un gros montant.
    - Étape 1 : premier rappel, courtois, dans la semaine qui suit l'échéance.
    - Étape 2 : relance ferme, environ 14 à 21 jours après l'étape 1.
    - Étape 3 : projet de mise en demeure, environ 14 jours après l'étape 2 ; il reste un brouillon que l'humain (ou son avocat) valide.
-4. **Rédiger chaque étape** selon le régime (voir plus bas), avec les mentions applicables, le montant exact, la date, le moyen de payer, un contact nominatif et une porte de sortie explicite (contester, demander un plan).
-5. **Calculer les dates d'envoi** en respectant les délais légaux du régime. Le calcul est écrit dans le brouillon (« délai de 14 jours calendrier à partir du … »).
-6. **Tenir le journal** : pour chaque envoi, date, heure, canal, support durable (courrier électronique avec accusé, courrier recommandé), copie du texte, preuve d'envoi. Rien n'est supprimé.
-7. **Rédiger la note de risque** : type de débiteur, litige connu, points de droit incertains, délai de prescription à faire vérifier par un avocat.
-8. **Rendre les brouillons** avec la liste des mentions obligatoires, marquées « à vérifier » quand la référence est incertaine.
+5. **Rédiger chaque étape** selon le régime (voir plus bas), avec les mentions applicables, le montant exact, la date, le moyen de payer (avec la communication structurée de chaque facture), un contact nominatif et une porte de sortie explicite (contester, demander un plan). **Un seul courriel par client**, qui regroupe toutes ses factures échues.
+6. **Présenter le lot** avant les brouillons : tableau récapitulatif (client, montant dû, jours de retard, profil, ton, canal), puis chaque brouillon en entier. Une approbation vaut pour un lot ; ajouter un client ou modifier un brouillon après approbation ouvre un nouveau tour d'approbation.
+7. **Calculer les dates d'envoi** en respectant les délais légaux du régime. Le calcul est écrit dans le brouillon (« délai de 14 jours calendrier à partir du … »).
+8. **Tenir le journal** : pour chaque envoi, date, heure, canal, support durable (courrier électronique avec accusé, courrier recommandé), copie du texte, preuve d'envoi. Rien n'est supprimé.
+9. **Rédiger la note de risque** : type de débiteur, litige connu, points de droit incertains, délai de prescription à faire vérifier par un avocat.
+10. **Rendre les brouillons** avec la liste des mentions obligatoires, marquées « à vérifier » quand la référence est incertaine.
 
 ### Régime entre entreprises (loi du 2 août 2002)
 
@@ -71,14 +74,21 @@ Pour chaque débiteur, une séquence de brouillons datés, un régime juridique 
 - **Suspensions.** Si le consommateur demande un plan d'apurement dans ce délai : aucune autre mesure avant décision ; sans décision dans les trente jours, les intérêts de retard de la clause cessent de courir jusqu'à la décision. Médiation de dettes ou règlement collectif de dettes : aucune mesure avant décision ou quarante-cinq jours. Contestation motivée : aucune mesure avant décision, avec la même règle de trente jours. Plusieurs causes de suspension ne dépassent pas ensemble quarante-cinq jours.
 - **Pratiques interdites et obligations** : recouvrer auprès d'une personne qui n'est pas le débiteur (voisin, famille, employeur) est interdit ; le recouvreur ne peut réclamer aucune indemnité ni aucun frais pour son intervention ; aucun appel téléphonique entre 22 h et 8 h ; les modalités de paiement convenues sont confirmées sans délai sur support durable ; en cas de plan d'apurement, relevé annuel des sommes payées et du solde ; un recouvrement amiable ne peut s'exercer sans inscription préalable auprès du SPF Économie, sauf pour les avocats, officiers ministériels et mandataires de justice. L'identification du visiteur et la conduite d'une visite à domicile ont leurs propres règles (article XIX.10) : la compétence ne prépare aucune visite à domicile.
 - **Sanctions** : un paiement obtenu en violation de ces règles peut être jugé valable pour le consommateur et remboursable ; en cas de manquement du créancier au premier rappel ou aux montants permis, le consommateur est dispensé de plein droit de la clause indemnitaire.
-- **Application dans le temps.** La loi du 20 décembre 2002 sur le recouvrement amiable des dettes du consommateur est abrogée par la loi du 4 mai 2023. Le livre XIX s'applique aux contrats conclus à partir du 1er septembre 2023, et depuis le 1er décembre 2023 aux dettes issues de contrats plus anciens dont le retard ou le recouvrement survient après le 1er septembre 2023.
+- **Application dans le temps.** La loi du 20 décembre 2002 sur le recouvrement amiable des dettes du consommateur est abrogée par la loi du 4 mai 2023. Le livre XIX s'applique aux contrats conclus à partir du 1er septembre 2023, et depuis le 1er décembre 2023 aux dettes issues de contrats plus anciens dont le retard ou le recouvrement survient après le 1er septembre 2023. Justel confirme l'entrée en vigueur du livre XIX le 1er septembre 2023 ; les dispositions transitoires de la loi du 4 mai 2023 (dettes issues de contrats plus anciens) n'ont pas été relues : à vérifier.
+
+### Prime d'assurance impayée (intermédiaire d'assurance)
+
+- Le défaut de paiement de la prime à l'échéance ne peut entraîner la suspension de la garantie ou la résiliation du contrat qu'après une mise en demeure (loi du 4 avril 2014, art. 69).
+- Cette mise en demeure est faite par exploit d'huissier ou par lettre recommandée ; elle somme de payer dans un délai d'au moins quinze jours à compter du lendemain de la signification ou du dépôt de la lettre, rappelle la date d'échéance et le montant de la prime, les conséquences du défaut de paiement, le point de départ du délai, et précise que la suspension ou la résiliation prend effet le lendemain de la fin du délai, sans préjudice de la garantie pour un événement survenu avant (art. 70 ; prise d'effet, art. 71).
+- Elle relève de l'assureur ou de l'intermédiaire selon le mandat : la compétence prépare un brouillon, l'humain vérifie qui l'envoie.
+- Dès que l'Ombudsman des assurances a reçu une demande complète et que l'entreprise ou l'intermédiaire en est informé, sa procédure de recouvrement est suspendue (art. 322 § 2/2) : aucune relance.
 
 ### Ton et règles d'écriture
 
 - Une phrase d'ouverture factuelle, sans reproche : « Nous n'avons pas reçu le paiement de la facture … échue le … ».
 - Le montant, la référence, le moyen de payer et la date limite sont dans les premières lignes.
 - Les conséquences annoncées sont uniquement celles que le contrat ou la loi prévoient réellement et que l'entreprise a l'intention d'appliquer. Pas de menace de saisie, de poursuites, de fichage, de visite ou de publicité de la dette, pas de pression sur l'entourage.
-- Pas d'urgence artificielle, pas de majuscules, pas de ton de reproche.
+- Pas d'urgence artificielle, pas de majuscules, pas de ton de reproche ; le ton suit le profil du payeur.
 - Toujours une porte de sortie : une adresse ou un numéro pour contester, demander des facilités ou signaler un paiement déjà fait.
 - La langue du débiteur est vérifiée (français, néerlandais) ; la traduction est relue par l'humain.
 
@@ -97,15 +107,16 @@ Pour chaque débiteur, une séquence de brouillons datés, un régime juridique 
 - Les délais légaux sont respectés et expliqués.
 - Aucune formulation menaçante, aucun contact avec un tiers.
 - Chaque envoi est tracé et prouvable.
+- Un seul courriel par client ; aucun client payé dans les 14 derniers jours, absent de la balance ou en contestation dans le lot.
+- Aucun changement de coordonnées bancaires ni paiement demandé dans un message n'est suivi : il est signalé avec l'étape de vérification.
 
 ## Sources officielles
 
-Consultées le 16/10/2026 :
+Consultées le 16/10/2026 et le 17/10/2026 :
 
 - Loi du 2 août 2002 concernant la lutte contre le retard de paiement dans les transactions commerciales, Justel (Moniteur belge), https://www.ejustice.just.fgov.be/cgi_loi/change_lg_2.pl?language=fr&nm=2002009716&la=F : articles 4 à 7 (délais de 30 et 60 jours, intérêt de plein droit au taux directeur plus huit points, indemnité forfaitaire de 40 euros, révision judiciaire des clauses dérogatoires). Modifiée en dernier lieu par la loi du 14 août 2021, en vigueur le 01/02/2022.
-- « Projet de loi portant insertion du livre XIX Dettes du consommateur dans le Code de droit économique », Chambre des représentants, DOC 55 3132/007, texte adopté en deuxième lecture, 21/04/2023, https://www.dekamer.be/FLWB/PDF/55/3132/55K3132007.pdf : document parlementaire officiel, mais PAS le texte publié au Moniteur belge ; le texte final et la numérotation des articles doivent être confrontés à la loi publiée. Source des articles XIX.2 (premier rappel, quatorze jours, gratuité, contenu), XIX.4 (montants), XIX.5 à XIX.15 (recouvrement amiable, mentions de la mise en demeure, suspensions, sanctions) et de l'abrogation de la loi du 20 décembre 2002 (article 14 du projet).
-- « New rules for consumer debt collection starting Sept. 1, 2023 », Lexgo (reprenant une analyse de EY Law), juillet 2023, https://www.lexgo.be/en/news-and-articles/12849-new-rules-for-consumer-debt-collection-starting-sept-1-2023 : source SECONDAIRE ; date de la loi (4 mai 2023) et entrée en vigueur (1er septembre et 1er décembre 2023).
-- « Réforme du droit du recouvrement des dettes des consommateurs », Laurent Housen, avocat, blog Forum for the Future, 04/08/2023, https://blog.forumforthefuture.be/fr/article/reforme-du-droit-du-recouvrement-des-dettes-des-consommateurs/19949 : source SECONDAIRE ; confirme le premier rappel gratuit, le délai de quatorze jours et les plafonds d'indemnité.
+- Code de droit économique, livre XIX « Dettes du consommateur », art. XIX.1 à XIX.9 (premier rappel gratuit et délai de quatorze jours, mentions du premier rappel, pièces justificatives, montants maximaux, interdiction de recouvrer auprès d'un tiers, inscription préalable au SPF Économie, mise en demeure et délais), texte consolidé sur Justel relu le 17/10/2026, https://www.ejustice.just.fgov.be/eli/loi/2013/02/28/2013A11134/justel (inséré par la loi du 4 mai 2023, en vigueur le 1er septembre 2023). Remplace le document parlementaire et les deux sources secondaires (Lexgo, Forum for the Future) cités auparavant.
+- Loi du 4 avril 2014 relative aux assurances, art. 69 à 71 (mise en demeure avant suspension ou résiliation pour défaut de paiement de la prime) et art. 322 § 2/2 (suspension du recouvrement pendant la médiation), Justel relu le 17/10/2026, https://www.ejustice.just.fgov.be/eli/loi/2014/04/04/2014011239/justel.
 
 Non cités : le site du SPF Économie (economie.fgov.be) et le communiqué du gouvernement (news.belgium.be) ont refusé l'accès (page de vérification, erreur 403) ; leurs pages n'ont donc pas été lues. Le texte du livre VI du Code de droit économique sur les pratiques commerciales déloyales (articles VI.92 à VI.103, que le livre XIX réserve) n'a pas été ouvert : il reste à faire vérifier. Le texte intégral et définitif du livre XIX tel que publié, l'éventuelle indexation annuelle des montants, et la question de savoir si les règles de mise en demeure s'appliquent aussi au créancier qui recouvre lui-même, n'ont pas été établis ici.
 
@@ -129,3 +140,11 @@ Régime consommateur. Facture de 280 euros TTC pour un abonnement de services, �
 Étape 2, après le délai si rien n'est payé : mise en demeure avec les mentions complètes ci-dessus, préparée en brouillon pour l'humain ; ensuite quatorze jours avant toute autre mesure, sauf demande de plan ou contestation motivée qui suspendent.
 
 Cas d'échec : le brief demande de relancer « le client Z » pour une facture de 3 400 euros avec « 40 euros de frais et les intérêts à 8 points ». La fiche ne dit pas si Z est une entreprise ou un particulier, et le nom évoque une personne physique. Appliquer les 40 euros et le taux de la loi de 2002 à un consommateur serait illégal (les montants permis envers un consommateur sont ceux du livre XIX et exigent un premier rappel gratuit). La compétence ne rédige aucun brouillon et écrit : « régime impossible à déterminer : Z a-t-il acheté pour son activité professionnelle (numéro d'entreprise connu) ou à titre privé ? ». Elle livre seulement la question et le tableau des deux régimes pour que l'humain tranche.
+
+## Origine de la méthode
+
+Vérification préalable, profil du payeur, un courriel par client, tableau récapitulatif et approbation par lot adaptés et
+traduits de github.com/anthropics/knowledge-work-plugins, `small-business/skills/invoice-chase/SKILL.md`, étapes 2 à 5 et
+« Approval gates », commit 33eeda1e8fd856455b05479d13a0f85b5f803744, licence Apache 2.0. Modifications : réécriture en
+français, régimes belges (loi du 2 août 2002, livre XIX du CDE, loi du 4 avril 2014). Texte de la licence et liste des
+reprises : `organisation/skills/LICENCES-TIERS.md`.

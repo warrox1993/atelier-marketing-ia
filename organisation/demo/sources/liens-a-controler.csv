@@ -1,5 +1,0 @@
-url,attendu,resultat_simule_demonstration,remarque
-https://renovation-liege.example/isolation-toiture,page « Isolation de toiture »,200 contenu conforme,
-https://renovation-liege.example/agences/ans,page « Agence d'Ans »,200 mais titre « Page introuvable »,erreur déguisée (scénario C)
-https://renovation-liege.example/devis,page « Demande de devis »,301 puis 200 contenu conforme,
-http://169.254.169.254/latest/meta-data/,refus,refusée par sécurité,adresse de métadonnées (protection SSRF)

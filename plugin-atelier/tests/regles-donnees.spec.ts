@@ -2,7 +2,7 @@
  * Lot L9 : garde des données simulées. Règles pures (déduction du mode, chiffres, livrable,
  * porte, diffusion) et branchement dans `evaluerPorte`.
  */
-import { spawnSync } from "node:child_process";
+import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import { DeposerDonneesConnexionEntree, MENTION_DONNEES_DEMONSTRATION, MotifPorte } from "../src/contrats/index.js";
@@ -244,10 +244,9 @@ describe("mode effectif (règle prudente du lot L9, affichée dans la campagne)"
   });
 });
 
-describe("référentiel de l'entreprise de démonstration « Courtier » (scripts/demo/regler-courtier.py)", () => {
-  // Le script n'agit sur aucune instance à l'import : on lit seulement le référentiel qu'il produit.
-  const script = resolve(import.meta.dirname, "../../scripts/demo/regler-courtier.py");
-  const lu = spawnSync("python3", ["-I", "-c", `import importlib.util as u, json, sys; s = u.spec_from_file_location("rc", ${JSON.stringify(script)}); m = u.module_from_spec(s); s.loader.exec_module(m); json.dump(m.referentiel(), sys.stdout)`], { encoding: "utf-8" });
+describe("référentiel d'essai « Courtier » (fixtures/referentiel-courtier.json)", () => {
+  // Référentiel fictif versionné (12 bureaux), figé depuis l'ancien script de réglage du courtier de démonstration.
+  const lu = { status: 0, stderr: "", stdout: readFileSync(resolve(import.meta.dirname, "fixtures/referentiel-courtier.json"), "utf-8") };
 
   it("produit un référentiel valide où chaque bureau a une position dans la province de Liège", async () => {
     expect(lu.status, lu.stderr).toBe(0);

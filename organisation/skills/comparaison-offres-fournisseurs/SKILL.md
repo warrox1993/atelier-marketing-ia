@@ -2,7 +2,7 @@
 name: "comparaison-offres-fournisseurs"
 description: "Compare les offres reçues de plusieurs fournisseurs pour un achat de PME belge sur une grille explicite : coût total de possession, délais, niveau de service (SLA), solvabilité à partir des données publiques (BCE, comptes annuels déposés à la Banque nationale), références ; détecte les offres anormalement basses ou incomplètes et rédige une recommandation motivée, la décision restant humaine. À utiliser dès que deux offres ou plus répondent à une même demande ; jamais pour extrapoler un prix absent, divulguer les prix d'un fournisseur à un autre, contacter un fournisseur ou choisir à la place de l'humain."
 metadata:
-  version: "1.0.0"
+  version: "1.1.0"
   langue: "fr"
   domaine: "achats"
 ---
@@ -44,18 +44,26 @@ Un tableau où chaque ligne renvoie à la page ou à la clause de l'offre, des t
    - comptes annuels déposés à la Banque nationale (Centrale des bilans) : chiffre d'affaires ou marge brute selon le schéma, fonds propres, résultat, évolution sur 3 exercices, date du dernier dépôt ;
    - signaux d'alerte : comptes non déposés dans les délais, fonds propres négatifs, perte répétée, changement récent de dénomination ou de dirigeants, société très récente pour un contrat long.
    Ne tirer aucune conclusion sur une personne physique ; ne jamais écrire « en difficulté » sur la base d'un seul signal.
-6. **Vérifier les références** : au moins deux clients comparables, contactables, par l'humain ; la compétence prépare les questions (délai tenu, incidents, qualité du support, coûts imprévus), n'appelle personne.
-7. **Détecter les offres anormalement basses ou incomplètes** : une offre est suspecte quand elle est nettement inférieure aux autres (repère de départ : plus de 25 % sous la médiane des autres offres, ou sous 70 % de l'estimation du demandeur), quand un poste obligatoire manque (maintenance, formation, migration), quand le périmètre est plus étroit, ou quand le prix de la première année est cassé avec forte hausse ensuite. Réponse : ne pas écarter automatiquement, faire poser par l'humain une question écrite demandant d'expliquer la composition du prix (méthode de production ou de service, conditions exceptionnelles, respect des obligations sociales et fiscales), puis juger l'explication. Une offre sans explication satisfaisante n'est pas recommandée.
-8. **Noter** chaque critère selon la méthode annoncée, calculer le total sur 100, puis faire un test de sensibilité : le classement change-t-il si le poids du prix passe de 40 à 30 ou à 50 ? Si oui, l'écrire.
-9. **Rédiger la recommandation** : offre proposée, pourquoi en trois phrases, ce qu'elle coûte réellement sur la durée, risques résiduels (dépendance, reconduction tacite, indexation, sortie), conditions à négocier avant signature, offre de repli, et questions encore ouvertes pour chaque fournisseur. La décision, la négociation et la signature restent humaines.
+6. **Évaluer les risques de chaque offre** sur une grille fixe, chaque ligne notée faible, moyen ou élevé avec sa
+   pièce : solidité financière (étape 5) ; sécurité et conformité (certifications annoncées, sous-traitant au sens de
+   l'article 28 du RGPD si des données personnelles sont traitées, lieu d'hébergement) ; dépendance à un seul
+   fournisseur (part des dépenses ou des fonctions critiques qui reposerait sur lui) ; verrouillage contractuel
+   (durée ferme, reconduction tacite, préavis, format et coût de récupération des données, réversibilité) ; continuité
+   (plan de reprise annoncé, engagement en cas de défaillance). Un coût de sortie absent de l'offre est une question
+   au fournisseur, jamais un zéro.
+7. **Vérifier les références** : au moins deux clients comparables, contactables, par l'humain ; la compétence prépare les questions (délai tenu, incidents, qualité du support, coûts imprévus), n'appelle personne.
+8. **Détecter les offres anormalement basses ou incomplètes** : une offre est suspecte quand elle est nettement inférieure aux autres (repère de départ : plus de 25 % sous la médiane des autres offres, ou sous 70 % de l'estimation du demandeur), quand un poste obligatoire manque (maintenance, formation, migration), quand le périmètre est plus étroit, ou quand le prix de la première année est cassé avec forte hausse ensuite. Réponse : ne pas écarter automatiquement, faire poser par l'humain une question écrite demandant d'expliquer la composition du prix (méthode de production ou de service, conditions exceptionnelles, respect des obligations sociales et fiscales), puis juger l'explication. Une offre sans explication satisfaisante n'est pas recommandée.
+9. **Noter** chaque critère selon la méthode et les pondérations écrites avant d'ouvrir les offres (celles du demandeur), calculer le total sur 100, puis faire un test de sensibilité : le classement change-t-il si le poids du prix passe de 40 à 30 ou à 50 ? Si oui, l'écrire.
+10. **Rédiger la recommandation** : offre proposée, pourquoi en trois phrases, ce qu'elle coûte réellement sur la durée, risques résiduels (dépendance, reconduction tacite, indexation, sortie), rubrique « points de négociation » (chaque point avec l'écart constaté et ce qu'on demande : plafond d'indexation, coût de sortie, pénalités de service, durée ferme), offre de repli, et questions encore ouvertes pour chaque fournisseur. La décision, la négociation et la signature restent humaines.
 
 ## Livrable
 
 1. Le tableau de conformité aux exigences obligatoires.
 2. La grille comparative (CTP, délais, SLA, solidité, références) avec renvoi à la page ou à la clause.
 3. Le classement noté et son test de sensibilité.
-4. La note de recommandation d'une page : choix proposé, risques, négociation, questions au fournisseur.
-5. La liste des informations absentes et des vérifications confiées à l'humain.
+4. La grille de risques par offre.
+5. La note de recommandation d'une page : choix proposé, risques, points de négociation, questions au fournisseur.
+6. La liste des informations absentes et des vérifications confiées à l'humain.
 
 ## Critères de réussite
 
@@ -65,6 +73,8 @@ Un tableau où chaque ligne renvoie à la page ou à la clause de l'offre, des t
 - Toute offre anormalement basse a déclenché une question écrite, pas un rejet d'office ni une acceptation.
 - Aucun prix d'un fournisseur n'apparaît dans une question adressée à un autre.
 - La recommandation dit ce qui pourrait la faire changer.
+- Les pondérations sont écrites avant la notation ; le coût de sortie de chaque offre est chiffré ou demandé.
+- Chaque offre a sa grille de risques complète (cinq lignes).
 
 ## Sources officielles
 
@@ -109,3 +119,11 @@ CTP sur 3 ans pour A : 1 200 + 5 400 x 3 + indexation (3 % sur années 2 et 3, s
 Offre C : 2 700 par an, c'est environ 53 % sous la médiane des deux autres (5 700). Offre anormalement basse présumée. Action : question écrite à C (« le prix inclut-il la mise en service, la formation, le support, l'export des données ? Quelles hypothèses de volume ? »). Le prix de A et de B n'est pas mentionné dans la question.
 
 Cas d'échec : l'humain demande de ne retenir que l'offre C « parce que c'est la moins chère » et que la compétence « fasse le total ». Elle refuse de publier un classement : trois postes sont manquants, un total ne serait pas comparable. Elle livre le tableau avec les « informations manquantes », la question à C, et précise qu'aucune recommandation n'est possible tant que C n'a pas répondu.
+
+## Origine de la méthode
+
+Grille de risques (solidité, sécurité et conformité, dépendance, verrouillage, continuité), coût de sortie dans le coût
+total et rubrique de points de négociation adaptés et traduits de github.com/anthropics/knowledge-work-plugins,
+`operations/skills/vendor-review/SKILL.md` (« Evaluation Framework »), commit 33eeda1e8fd856455b05479d13a0f85b5f803744,
+licence Apache 2.0. Modifications : traduction, sources publiques belges, validation humaine. Licence et reprises :
+`organisation/skills/LICENCES-TIERS.md`.

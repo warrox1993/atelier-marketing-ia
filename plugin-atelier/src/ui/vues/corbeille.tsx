@@ -35,7 +35,7 @@ export function VueCorbeille() {
   const [confirmation, setConfirmation] = useState(false);
   const [enCours, setEnCours] = useState<string | null>(null);
   const [selection, setSelection] = useState<ReadonlySet<string>>(new Set());
-  const [bilanGroupe, setBilanGroupe] = useState<{ reussis: number; echecs: Array<{ titre: string; message: string }> } | null>(null);
+  const [bilanGroupe, setBilanGroupe] = useState<{ reussis: number; echecs: Array<{ id: string; titre: string; message: string }> } | null>(null);
   const [retour, setRetour] = useState<{ ton: "ok" | "erreur"; texte: string } | null>(null);
 
   useEffect(() => {
@@ -134,6 +134,31 @@ export function VueCorbeille() {
           </p>
         ) : null}
         {etat.data && elements.length === 0 ? <Vide titre="La corbeille est vide.">Les tâches, documents et prospects que vous supprimez apparaissent ici.</Vide> : null}
+        {bilanGroupe ? (
+          <>
+            {bilanGroupe.echecs.length === 0 ? (
+              <p role="status" className="atl-succes">
+                {bilanGroupe.reussis} élément{bilanGroupe.reussis > 1 ? "s restaurés" : " restauré"}.
+              </p>
+            ) : (
+              <div role="alert" className="atl-erreur">
+                <p>
+                  {bilanGroupe.reussis} élément{bilanGroupe.reussis > 1 ? "s restaurés" : " restauré"}, {bilanGroupe.echecs.length} en échec (ils restent cochés pour un nouvel essai) :
+                </p>
+                <ul>
+                  {bilanGroupe.echecs.map((e) => (
+                    <li key={e.id}>
+                      « {e.titre} » : {e.message}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            <Bouton variante="discret" onClick={() => setBilanGroupe(null)}>
+              Fermer
+            </Bouton>
+          </>
+        ) : null}
         {elements.length > 0 ? (
           <>
             <div className="atl-actions">
@@ -147,26 +172,6 @@ export function VueCorbeille() {
                 </Bouton>
               ) : null}
             </div>
-            {bilanGroupe ? (
-              bilanGroupe.echecs.length === 0 ? (
-                <p role="status" className="atl-succes">
-                  {bilanGroupe.reussis} élément{bilanGroupe.reussis > 1 ? "s restaurés" : " restauré"}.
-                </p>
-              ) : (
-                <div role="alert" className="atl-erreur">
-                  <p>
-                    {bilanGroupe.reussis} élément{bilanGroupe.reussis > 1 ? "s restaurés" : " restauré"}, {bilanGroupe.echecs.length} en échec (ils restent cochés pour un nouvel essai) :
-                  </p>
-                  <ul>
-                    {bilanGroupe.echecs.map((e) => (
-                      <li key={e.titre}>
-                        « {e.titre} » : {e.message}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )
-            ) : null}
             <div className="atl-table-cadre">
               <table className="atl-table">
                 <thead>

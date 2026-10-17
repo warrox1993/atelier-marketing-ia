@@ -3,7 +3,7 @@ schema: "agentcompanies/v1"
 kind: "company"
 slug: "renovation-liege-demonstration"
 name: "Rénovation Liège (démonstration)"
-description: "Entreprise fictive de rénovation à Liège, créée pour la démonstration de l'Atelier Marketing IA. Aucune coordonnée réelle. Marqueur de périmètre : atelier-demo:renovation-liege."
+description: "Entreprise fictive de rénovation à Liège, créée pour l'Atelier Marketing IA. Aucune coordonnée réelle. Marqueur de périmètre : atelier-demo:renovation-liege."
 version: "1.0.0"
 goals:
   - "OBJ-1 · Obtenir des demandes de devis qualifiées en rénovation énergétique à Liège"
@@ -15,8 +15,7 @@ goals:
 
 Entreprise **fictive** de rénovation intérieure et énergétique, utilisée pour démontrer
 l'Atelier Marketing IA. Ses noms, adresses, numéros et sources sont inventés ; toute
-ressemblance avec une entreprise réelle est fortuite. Le corpus de démonstration (marque,
-offres, établissements, sources datées) se trouve dans `organisation/demo/` du dépôt.
+ressemblance avec une entreprise réelle est fortuite.
 
 ## Organisation
 

@@ -1,6 +1,7 @@
 // Tests unitaires et de parcours du serveur d'autorisation local :
 // PKCE, enregistrement dynamique (DCR), page de consentement, code, jeton, rotation.
 
+import { createHash } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { RegistreFournisseurs } from "../src/fournisseurs.js";
 import {
@@ -311,6 +312,108 @@ describe("parcours OAuth local", () => {
 
 });
 
+/** Attend (borné à 5 s) que le port soit réellement libéré avant de le réutiliser. */
+async function attendrePortLibre(port: number): Promise<void> {
+  const { createServer } = await import("node:net");
+  for (let essai = 0; essai < 50; essai++) {
+    const libre = await new Promise<boolean>((resolve) => {
+      const sonde = createServer();
+      sonde.once("error", () => resolve(false));
+      sonde.listen(port, "127.0.0.1", () => sonde.close(() => resolve(true)));
+    });
+    if (libre) return;
+    await new Promise((r) => setTimeout(r, 100));
+  }
+  throw new Error(`le port ${port} n'a pas été libéré dans les 5 s`);
+}
+
+/** Rejoue une requête si la connexion est réinitialisée (au plus 5 essais), sinon propage l'erreur. */
+async function avecNouveauxEssais<T>(requete: () => Promise<T>): Promise<T> {
+  let derniere: unknown;
+  for (let essai = 0; essai < 5; essai++) {
+    try {
+      return await requete();
+    } catch (erreur) {
+      derniere = erreur;
+      const texte = `${erreur instanceof Error ? erreur.message : ""} ${(erreur as { cause?: { code?: string } })?.cause?.code ?? ""}`;
+      if (!/ECONNRESET|ECONNREFUSED|fetch failed|socket hang up/i.test(texte)) throw erreur;
+      await new Promise((r) => setTimeout(r, 100));
+    }
+  }
+  throw derniere;
+}
+
+describe("portée « demonstration » retirée (audit F1)", () => {
+  const empreinte = (jeton: string): string => createHash("sha256").update(jeton).digest("hex");
+
+  it("l'autorisation n'accorde plus la portée « demonstration » : invalid_scope avec message clair", async () => {
+    const p = await demarrer();
+    try {
+      const client = await enregistrerClient(p.url);
+      const pkce = nouveauPkce();
+      const rep = await fetch(urlAutorisation(p.url, client, pkce, "gsc", { scope: "demonstration" }), { redirect: "manual" });
+      expect(rep.status).toBe(302);
+      const cible = new URL(rep.headers.get("location") ?? "");
+      expect(cible.searchParams.get("error")).toBe("invalid_scope");
+      expect(cible.searchParams.get("error_description")).toContain("retrait du mode démonstration");
+    } finally {
+      await p.arreter();
+    }
+  });
+
+  it("jeton hérité de la portée « demonstration » refusé (401 clair, refresh refusé) ; jeton « local » accepté", async () => {
+    const { mkdtempSync, writeFileSync, rmSync } = await import("node:fs");
+    const { tmpdir } = await import("node:os");
+    const { join } = await import("node:path");
+    const dossier = mkdtempSync(join(tmpdir(), "passerelle-portee-"));
+    const fichier = join(dossier, "oauth-local.json");
+    try {
+      const sonde = await demarrer();
+      const port = Number(new URL(sonde.url).port);
+      await sonde.arreter();
+      await attendrePortLibre(port);
+      const ressource = `http://127.0.0.1:${port}/mcp/gsc`;
+      const identite = { service: "gsc", compte: "Rénovation Liège (démonstration)", propriete: { id: "sc-domain:essai.example", libelle: "essai" } };
+      const identiteLocale = { service: "gsc", compte: "Compte local", propriete: { id: "sc-domain:essai.example", libelle: "essai" } };
+      const expire = Date.now() + 3_600_000;
+      const clientDemo = { clientId: "demo-ancien", redirectUris: [REDIRECTION_TEST], clientName: "ancien", grantTypes: ["authorization_code", "refresh_token"], applicationType: "web", emisLe: 1 };
+      // Format d'avant le champ `portee` : le jeton démo est reconnu à son client « demo- » / son compte.
+      const etat = {
+        version: 1,
+        clients: [["demo-ancien", clientDemo]],
+        jetons: [
+          [empreinte("jeton-demo-ancien"), { clientId: "demo-ancien", resource: ressource, identite, expire, octroi: "o1" }],
+          [empreinte("jeton-local-recent"), { clientId: "local-nouveau", resource: ressource, identite: identiteLocale, expire, octroi: "o2", portee: "local" }],
+        ],
+        rafraichissements: [[empreinte("rafraichissement-demo-ancien"), { clientId: "demo-ancien", resource: ressource, identite, expire, octroi: "o1" }]],
+      };
+      writeFileSync(fichier, JSON.stringify(etat), { mode: 0o600 });
+
+      const p = await demarrer({ fichierEtat: fichier, port });
+      try {
+        const refuse = await avecNouveauxEssais(() => rpc(p.url, "gsc", "tools/list", {}, "jeton-demo-ancien"));
+        expect(refuse.statut).toBe(401);
+        expect(refuse.corps.message).toContain("retrait du mode démonstration");
+        expect(refuse.entetes.get("www-authenticate")).toContain('error="invalid_token"');
+
+        expect((await rpc(p.url, "gsc", "tools/list", {}, "jeton-local-recent")).statut).toBe(200);
+
+        const rafraichi = await fetch(`${p.url}/oauth/token`, {
+          method: "POST",
+          headers: { "content-type": "application/x-www-form-urlencoded" },
+          body: new URLSearchParams({ grant_type: "refresh_token", refresh_token: "rafraichissement-demo-ancien", client_id: "demo-ancien" }),
+        });
+        expect(rafraichi.status).toBe(400);
+        expect(((await rafraichi.json()) as { error: string }).error).toBe("invalid_grant");
+      } finally {
+        await p.arreter();
+      }
+    } finally {
+      rmSync(dossier, { recursive: true, force: true });
+    }
+  });
+});
+
 describe("état OAuth persistant (redémarrage de la passerelle)", () => {
   it("clients et jetons survivent à un redémarrage ; le fichier est en 0600 et ne contient aucun jeton en clair", async () => {
     const { mkdtempSync, readFileSync, statSync, rmSync } = await import("node:fs");
@@ -323,8 +426,7 @@ describe("état OAuth persistant (redémarrage de la passerelle)", () => {
       const j = await obtenirJetons(premiere.url, "gsc", "sc-domain:essai.example");
       const port = Number(new URL(premiere.url).port);
       await premiere.arreter();
-      // Laisse le client HTTP du test écarter ses connexions persistantes vers l'ancien serveur.
-      await new Promise((r) => setTimeout(r, 100));
+      await attendrePortLibre(port);
 
       expect((statSync(fichier).mode & 0o777).toString(8)).toBe("600");
       const contenu = readFileSync(fichier, "utf8");
@@ -334,12 +436,16 @@ describe("état OAuth persistant (redémarrage de la passerelle)", () => {
       // Même port (l'URL de ressource est liée au port), même fichier.
       const seconde = await demarrer({ fichierEtat: fichier, port });
       try {
-        expect((await rpc(seconde.url, "gsc", "tools/list", {}, j.access_token)).statut).toBe(200);
-        const suite = await fetch(`${seconde.url}/oauth/token`, {
-          method: "POST",
-          headers: { "content-type": "application/x-www-form-urlencoded" },
-          body: new URLSearchParams({ grant_type: "refresh_token", refresh_token: j.refresh_token, client_id: j.client.clientId }),
-        });
+        // Réutilisation du port : une connexion gardée vers l'ancien serveur peut être réinitialisée (ECONNRESET).
+        // Nouvel essai borné de la connexion ; les assertions restent celles d'origine.
+        expect((await avecNouveauxEssais(() => rpc(seconde.url, "gsc", "tools/list", {}, j.access_token))).statut).toBe(200);
+        const suite = await avecNouveauxEssais(() =>
+          fetch(`${seconde.url}/oauth/token`, {
+            method: "POST",
+            headers: { "content-type": "application/x-www-form-urlencoded" },
+            body: new URLSearchParams({ grant_type: "refresh_token", refresh_token: j.refresh_token, client_id: j.client.clientId }),
+          }),
+        );
         expect(suite.status).toBe(200);
       } finally {
         await seconde.arreter();

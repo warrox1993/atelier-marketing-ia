@@ -1,0 +1,3 @@
+# Description du dispositif (une page, fictive)
+
+Dispositif de signalement des documents manquants dans un dossier de sinistre : à l'ouverture du dossier, un moteur de règles compare la liste des pièces reçues à la liste exigée pour le type de sinistre, puis envoie automatiquement au client un courriel listant les pièces manquantes, avec un lien de dépôt sécurisé. Le moteur apprend, à partir des dossiers passés, le délai moyen de réponse du client et programme un rappel adapté. Aucune publication ni dépôt de brevet n'a été fait. Le dispositif a été présenté lors d'un séminaire interne le 03/06/2026 (30 participants) et dans un billet de blog le 18/06/2026.

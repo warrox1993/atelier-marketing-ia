@@ -5,7 +5,7 @@
  * Accueil). Vérifie la sélection, la confirmation unique avec récapitulatif, le filtre « contrôle
  * réussi » et l'échec partiel (les autres continuent, bilan des échecs).
  */
-import { createElement } from "react";
+import { act, createElement, useState } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { EXEMPLES_DONNEES } from "../../src/contrats/exemples/index.js";
 import { PageAtelier } from "../../src/ui/index.js";
@@ -165,6 +165,38 @@ describe("Accueil : approuver tout ce qui a passé le contrôle automatique", ()
   });
 });
 
+describe("Accueil : le bilan de l'approbation groupée survit à la liste vide", () => {
+  it("le rechargement de la liste échoue : le bilan reste jusqu'à « Fermer »", async () => {
+    const elem = { id: "contenu:a", type: "contenu_a_valider", urgence: "haute", titre: "Page Liège", raison: "Attend votre décision.", lien: `/atelier/contenus/${A}`, action: "Relire et décider", issueId: A };
+    let accueils = 0;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string) => {
+        if (url.includes("/accueil?")) {
+          accueils += 1;
+          // Premier relevé : un contenu ; rechargement après le lot : le serveur répond en erreur.
+          if (accueils > 1) return new Response(JSON.stringify({ error: "indisponible" }), { status: 500 });
+          return new Response(JSON.stringify({ companyId: "c", elements: [elem], missions: [] }), { status: 200 });
+        }
+        if (url.includes("/prospects?")) return new Response(JSON.stringify({ total: 0, page: 1, pages: 1, prospects: [] }), { status: 200 });
+        return new Response(JSON.stringify({ status: "done" }), { status: 200 });
+      }),
+    );
+    pont.actions["atelier.decision"] = async (p) => ({ id: "d", ...p });
+    rendu = await rendre(createElement(VueAccueil));
+    const c = rendu.conteneur;
+    await cliquer(parTexte(c, "button", "Approuver tout ce qui a passé le contrôle automatique (1)"));
+    const recap = c.querySelector('[aria-label="Confirmation de la décision groupée"]') as HTMLElement;
+    await saisir(champParLibelle(recap, "Commentaire commun (enregistré avec chaque approbation)"), "Ok.");
+    await cliquer(parTexte(recap, "button", "Confirmer l'approbation (1)"));
+    await vi.waitFor(() => expect(accueils).toBeGreaterThanOrEqual(2));
+    const bilan = c.querySelector('[aria-label="Bilan de la décision groupée"]') as HTMLElement;
+    expect(bilan.textContent).toContain("1 décision enregistrée.");
+    await cliquer(parTexte(bilan, "button", "Fermer"));
+    expect(c.querySelector('[aria-label="Bilan de la décision groupée"]')).toBeNull();
+  });
+});
+
 describe("Campagnes : décision groupée sur les demandes d'exclusion", () => {
   const exigence = (n: string, etat: string) => ({
     ...(EXEMPLES_DONNEES["atelier.campagne"] as { exigences: Record<string, unknown>[] }).exigences[0],
@@ -205,6 +237,53 @@ describe("Campagnes : décision groupée sur les demandes d'exclusion", () => {
       { exigenceId: ID("4"), decision: "autoriser", justification: "Hors périmètre de la campagne." },
     ]);
     expect(c.textContent).toContain("2 décisions enregistrées.");
+  });
+
+  it("après un lot réussi, le bilan reste jusqu'à « Fermer » et une nouvelle demande se traite normalement", async () => {
+    // Recharge réelle simulée : « refresh » relit pont.donnees et refait le rendu de la page.
+    const sdk = (globalThis as unknown as { __paperclipPluginBridge__: { sdkUi: { usePluginData: (cle: string, params?: Record<string, unknown>) => Record<string, unknown> } } }).__paperclipPluginBridge__.sdkUi;
+    const original = sdk.usePluginData;
+    let relire = () => {};
+    sdk.usePluginData = (cle, params) => {
+      const [, setN] = useState(0);
+      relire = () => setN((n) => n + 1);
+      return { ...original(cle, params), refresh: () => setN((n) => n + 1) };
+    };
+    const d = EXEMPLES_DONNEES["atelier.campagne"] as Record<string, unknown>;
+    const donnees = (exigences: unknown[]) => ({ data: { ...d, exigences }, loading: false, error: null });
+    pont.actions["atelier.exigence.exclusion"] = async (p) => {
+      // Les trois demandes sont traitées : plus aucune n'est en attente.
+      pont.donnees["atelier.campagne"] = donnees([exigence("1", "aucune"), exigence("2", "aucune"), exigence("3", "aucune"), exigence("4", "aucune")]);
+      return { ...p };
+    };
+    const c = await page(`/RNO/atelier/campagnes/${campagneId}`);
+    await cliquer(parTexte(c, "label", "Toutes les demandes d'exclusion (3)").querySelector("input") as HTMLElement);
+    await cliquer(parTexte(c, "button", "Autoriser la sélection (3)"));
+    const recap = c.querySelector('[aria-label="Confirmation de la décision groupée"]') as HTMLElement;
+    await saisir(champParLibelle(recap, "Votre justification commune"), "Hors périmètre de la campagne.");
+    await cliquer(parTexte(recap, "button", "Confirmer l'autorisation (3)"));
+    const bilan = c.querySelector('[aria-label="Bilan de la décision groupée"]') as HTMLElement;
+    expect(bilan.textContent).toContain("3 décisions enregistrées.");
+    // Le bilan survit au rechargement : plus aucune demande en attente, le bloc de sélection a disparu.
+    expect(c.querySelector('[aria-label="Décision groupée sur les demandes d\'exclusion"]')).toBeNull();
+    expect(c.querySelector('[aria-label="Bilan de la décision groupée"]')).not.toBeNull();
+    await cliquer(parTexte(bilan, "button", "Fermer"));
+    expect(c.querySelector('[aria-label="Bilan de la décision groupée"]')).toBeNull();
+    // Une nouvelle demande arrive : aucune confirmation fantôme, boutons utilisables.
+    pont.donnees["atelier.campagne"] = donnees([exigence("1", "aucune"), exigence("2", "aucune"), exigence("3", "aucune"), exigence("4", "aucune"), exigence("5", "demandee")]);
+    await act(async () => relire());
+    expect(c.querySelector('[aria-label="Confirmation de la décision groupée"]')).toBeNull();
+    await cliquer(c.querySelector('input[aria-label="Sélectionner l\'exigence : Exigence 5"]') as HTMLElement);
+    const refuser = parTexte(c, "button", "Refuser la sélection (1)");
+    expect(refuser.getAttribute("aria-disabled")).not.toBe("true");
+    await cliquer(refuser);
+    const recap2 = c.querySelector('[aria-label="Confirmation de la décision groupée"]') as HTMLElement;
+    expect(recap2.textContent).toContain("Exigence 5");
+    expect(recap2.textContent).not.toContain("Exigence 1");
+    await saisir(champParLibelle(recap2, "Votre justification commune"), "Exigence maintenue pour la qualité.");
+    await cliquer(parTexte(recap2, "button", "Confirmer le refus (1)"));
+    expect(pont.appelsActions.at(-1)?.params).toEqual({ exigenceId: ID("5"), decision: "refuser", justification: "Exigence maintenue pour la qualité." });
+    sdk.usePluginData = original;
   });
 
   it("refus groupé avec échec partiel : la suite continue et l'échec est listé", async () => {

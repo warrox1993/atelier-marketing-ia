@@ -219,7 +219,7 @@ sed -i '0,/^<!-- Consignes communes : /s||## Diffusion réelle : parcours comple
 attendre_refus "parcours de diffusion réelle dans un rôle en lecture seule" "${d}" "rôle en lecture seule"
 
 d="$(copie hygiene)"
-printf '\nContact : %s\n' "jean@exemple.be" >> "${d}/organisation/demo/marque.md"
+printf '\nContact : %s\n' "jean@exemple.be" >> "${d}/organisation/COMPANY.md"
 attendre_refus "adresse électronique réelle" "${d}" "adresse électronique non fictive"
 
 
@@ -752,6 +752,31 @@ else
 fi
 
 
+# Faux psql pour « exporter --entreprise » (tables du socle : activity_log, approvals, cost_events). Il lit le script SQL sur
+# l'entrée standard, exige « BEGIN READ ONLY » et l'identifiant d'entreprise, rend une ligne JSON par table, et journalise
+# ses appels (FAUX_PSQL_JOURNAL). FAUX_PSQL_MODE : « compte_faux » (compte différent des lignes) ou « echec » (code 1).
+cat > "${TRAVAIL}/faux-psql.py" <<'FAUXPSQL'
+import json, os, re, sys
+script = sys.stdin.read()
+j = os.environ.get("FAUX_PSQL_JOURNAL")
+if j:
+    open(j, "a").write(json.dumps({"argv": sys.argv[1:], "script": script, "pgpassword": os.environ.get("PGPASSWORD")}) + "\n")
+mode = os.environ.get("FAUX_PSQL_MODE", "")
+if mode == "echec":
+    sys.stderr.write("faux psql : connexion refusée\n"); sys.exit(1)
+if not script.startswith("BEGIN READ ONLY") or not script.rstrip().endswith("COMMIT;"):
+    sys.stderr.write("faux psql : transaction en lecture seule exigée\n"); sys.exit(3)
+if re.search(r"\b(INSERT|UPDATE|DELETE|DROP|ALTER|TRUNCATE|CREATE)\b", script):
+    sys.stderr.write("faux psql : écriture interdite\n"); sys.exit(4)
+cid = re.search(r"company_id = '([0-9a-f-]{36})'", script).group(1)
+tailles = {"activity_log": 5, "approvals": 2, "cost_events": 3}
+for t in re.findall(r"'table', '(\w+)'", script):
+    n = tailles[t]
+    lignes = [{"id": f"{t}-{i}", "company_id": cid, "detail": "x"} for i in range(n)]
+    print(json.dumps({"table": t, "compte": n + (1 if mode == "compte_faux" else 0), "lignes": lignes}))
+FAUXPSQL
+export ATELIER_PSQL="python3 -I ${TRAVAIL}/faux-psql.py"
+
 # 2g. Sous-commande « nouveau-client » contre une fausse API Paperclip (entreprises, plugin et budgets en
 #     mémoire ; l'application de l'organisation des agents, déjà couverte par ailleurs, est remplacée par une
 #     doublure qui crée l'entreprise comme l'import natif). On vérifie : fiche valide à blanc (écritures listées,
@@ -1202,7 +1227,7 @@ for a_ in reg_j:  # chaque agent juridique livre exactement les compétences de 
     assert a_["competences"] == skills_depot("juridique", a_["slug"]), a_["slug"]
 assert not any(c_.startswith("skills/") and c_.split("/")[1] not in {x for a in reg_j for x in a["competences"]} for c_ in paquet_j)
 assert b.competences_entete('---\nskills: ["cadrage-exigences", "audit-seo"]\n---\n', "direction", "x") == ["cadrage-exigences", "audit-seo"]  # liste en ligne
-assert skills_depot("commercial", "preparation-rdv") == ["preparation-rendez-vous-b2b"]
+assert skills_depot("commercial", "preparation-rdv") == ["preparation-rendez-vous-b2b", "reponse-objection", "compte-rendu-rendez-vous"]
 # Sans clé « skills » : aucune compétence. Compétence inconnue ou nom suspect : refus qui nomme l'agent et la compétence.
 assert b.competences_entete('---\nkind: "agent"\nslug: "x"\n---\n\nCorps\n', "juridique", "x") == []
 assert b.competences_entete('Sans en-tête\n', "juridique", "x") == []
@@ -1327,11 +1352,11 @@ print(f"7. service inconnu, liste vide ou en double, budget d'un service non cho
 avant_ecr = len(etat["ecritures"]); n_soc = len(etat["societes"])
 ids_trio = {svc: e["entrepriseId"] for svc, e in registre("client-trio")["entreprises"].items()}
 for svc in ("marketing", "direction", "juridique"):
-    code, s = lancer("exporter", "--entreprise", ids_trio[svc]); assert code == 0, s
+    code, s = lancer("exporter", "--entreprise", ids_trio[svc], "--pg-port", "54329"); assert code == 0, s
 code, s = lancer("purger", "--entreprise", ids_trio["juridique"], "--confirmer")
 assert code != 0 and ids_trio["commercial"] in s and "aucun export de moins de 24 h" in s, (code, s)
 assert len(etat["ecritures"]) == avant_ecr and len(etat["societes"]) == n_soc and not etat["supprimees"], etat["supprimees"]
-code, s = lancer("exporter", "--entreprise", ids_trio["commercial"]); assert code == 0, s
+code, s = lancer("exporter", "--entreprise", ids_trio["commercial"], "--pg-port", "54329"); assert code == 0, s
 code, s = lancer("purger", "--entreprise", ids_trio["juridique"], "--a-blanc")
 assert code == 0 and "4 entreprise(s) à purger" in s and s.count("Entreprise à purger") == 4 and all(i in s for i in ids_trio.values()) and not etat["supprimees"], s
 code, s = lancer("purger", "--entreprise", ids_trio["juridique"], "--confirmer")
@@ -1588,17 +1613,37 @@ assert code == 0 and "ABSENT" in s and "serait refusée" in s, (code, s); rien_e
 print("2. refus sans export (message avec la commande d'export) ; à blanc signale l'absence")
 
 # 5. Export réel contre la fausse API : manifeste, empreintes, emplacement par défaut.
-code, s = lancer("exporter", "--entreprise", CLIENT); assert code == 0, s
+# 5 bis. Tables du socle : --pg-port obligatoire ; psql en lecture seule ; échec de psql ou compte différent des lignes lues :
+#     export refusé et rien n'est écrit (aucun dossier d'export créé).
+journal_psql = travail / "journal-psql.jsonl"; os.environ["FAUX_PSQL_JOURNAL"] = str(journal_psql); os.environ["PGPASSWORD"] = "mot-de-passe-d-essai"
+code, s = lancer("exporter", "--entreprise", CLIENT); assert code != 0 and "--pg-port" in s, s
+for mode, attendu in (("echec", "psql a échoué"), ("compte_faux", "ligne(s) lues pour un compte de")):
+    os.environ["FAUX_PSQL_MODE"] = mode
+    code, s = lancer("exporter", "--entreprise", CLIENT, "--pg-port", "54329")
+    assert code != 0 and attendu in s and "rien n'a été écrit" in s, (mode, code, s)
+    assert not (donnees / "exports" / CLIENT).exists(), "aucun dossier d'export après un refus"
+os.environ.pop("FAUX_PSQL_MODE")
+code, s = lancer("exporter", "--entreprise", CLIENT, "--pg-port", "54329"); assert code == 0, s
+appels = [json.loads(l) for l in journal_psql.read_text().splitlines()]
+assert appels and all(a["script"].startswith("BEGIN READ ONLY") and "54329" in a["argv"] and "mot-de-passe-d-essai" not in " ".join(a["argv"])
+                      and a["pgpassword"] == "mot-de-passe-d-essai" for a in appels), appels
+assert "Données du socle : 10 ligne(s)" in s, s
 dossiers = sorted((donnees / "exports" / CLIENT).iterdir()); assert len(dossiers) == 1, dossiers
 export = dossiers[0]; m = json.loads((export / "manifeste-export.json").read_text())
 fichiers_plugin = {f"donnees-plugin/{t}.json" for t in TABLES}
-assert m["entrepriseId"] == CLIENT and set(m["fichiers"]) == {"COMPANY.md", "agents/a/AGENTS.md"} | fichiers_plugin and len(m["empreinte"]) == 64, m
+fichiers_socle = {f"donnees-socle/{t}.json" for t in ("activity_log", "approvals", "cost_events")}
+assert m["entrepriseId"] == CLIENT and set(m["fichiers"]) == {"COMPANY.md", "agents/a/AGENTS.md"} | fichiers_plugin | fichiers_socle and len(m["empreinte"]) == 64, m
 lues = {t: json.loads((export / "donnees-plugin" / f"{t}.json").read_text()) for t in TABLES}
 assert {t: len(v) for t, v in lues.items()} == plugin[CLIENT] | {"corbeille": 0}, lues
 assert [l["rang"] for l in lues["prospects"]] == [0, 1, 2, 3] and etat["pages_export"] >= 2 + len(TABLES) - 1, (lues["prospects"], etat["pages_export"])
 assert all(l["company_id"] == CLIENT and l["donnees_chiffrees"]["email"].startswith("chv1.") for v in lues.values() for l in v), "colonnes chiffrées et entreprise"
 assert AUTRE not in json.dumps(lues), "aucune ligne d'une autre entreprise"
 assert "Données du plugin : 19 ligne(s) dans 6 table(s)" in s, s
+assert m["comptesSocle"] == {"activity_log": 5, "approvals": 2, "cost_events": 3}, m
+socle = {t: json.loads((export / "donnees-socle" / f"{t}.json").read_text()) for t in ("activity_log", "approvals", "cost_events")}
+assert {t: len(v) for t, v in socle.items()} == m["comptesSocle"] and all(l["company_id"] == CLIENT for v in socle.values() for l in v), socle
+assert all(m["fichiers"][c] == __import__("hashlib").sha256((export / c).read_bytes()).hexdigest() for c in fichiers_socle), "empreintes SHA-256 du socle"
+assert "PGPASSWORD" not in json.dumps(m) and "mot-de-passe-d-essai" not in json.dumps(m), "aucun secret au manifeste"
 assert b.verifier_export_recent(CLIENT, export, dt.datetime.now(dt.timezone.utc))[0] is not None
 code, s = lancer("exporter", "--entreprise", "pas-un-uuid"); assert code != 0, s
 code, s = lancer("exporter"); assert code != 0 and "--sortie" in s, s
@@ -1653,6 +1698,25 @@ for restant in (3, 0):
     code, s = lancer("purger", "--entreprise", CLIENT, "--a-blanc")
     assert code == 0 and "la purge réelle est autorisée" in s, (restant, s); rien_ecrit(0)
 plugin[CLIENT]["prospects"] = 4
+# 6 ter. Données du socle absentes, incomplètes ou sans compte au manifeste : refus, rien d'écrit.
+def socle_sans_fichier(d): (d / "donnees-socle/activity_log.json").unlink()
+def socle_moins_de_lignes(d): (d / "donnees-socle/activity_log.json").write_text(json.dumps(json.loads((d / "donnees-socle/activity_log.json").read_text())[:4]))
+def socle_sans_compte(d):
+    m4 = json.loads((d / "manifeste-export.json").read_text()); m4.pop("comptesSocle"); (d / "manifeste-export.json").write_text(json.dumps(m4))
+def socle_ancien_format(d): shutil.rmtree(d / "donnees-socle")
+for nom, modif, attendu in (("socle-sans-fichier", socle_sans_fichier, "donnees-socle/activity_log.json absent de l'export"),
+                            ("socle-moins-de-lignes", socle_moins_de_lignes, "activity_log : 4 ligne(s) dans le fichier pour 5 comptée(s)"),
+                            ("socle-ancien-format", socle_ancien_format, "donnees-socle/approvals.json absent de l'export")):
+    d = export_modifie(nom, modif)
+    code, s = lancer("purger", "--entreprise", CLIENT, "--confirmer", "--export", str(d))
+    assert code != 0 and "l'export ne contient pas le journal, les approbations et les coûts du socle" in s and attendu in s and "rien n'a été supprimé" in s, (nom, code, s)
+    rien_ecrit(0); assert not list(d.glob("rapport-purge-*"))
+    code, s = lancer("purger", "--entreprise", CLIENT, "--a-blanc", "--export", str(d))
+    assert code == 0 and "INCOMPLET" in s and "serait refusée" in s, (nom, s)
+d = travail / "export-socle-sans-compte"; shutil.copytree(export, d); socle_sans_compte(d)
+code, s = lancer("purger", "--entreprise", CLIENT, "--confirmer", "--export", str(d))
+assert code != 0 and "compte absent du manifeste" in s, s; rien_ecrit(0)
+print("4 ter. export sans les données du socle (fichier absent, lignes en moins, compte absent) : refus, rien d'écrit")
 print("4 bis. export sans les données du plugin, avec comptes différents ou périmé : refus, rien d'écrit (l'à blanc le signale)")
 
 # 7. À blanc avec export valide : étapes, comptes par table, avertissement sur les sauvegardes, rien supprimé.
@@ -1807,11 +1871,11 @@ PY
     ko "idempotence : la deuxième passe a écrit"
   fi
   if "${PY[@]}" "${RACINE}/scripts/bootstrap-organisation.py" etat > "${TRAVAIL}/etat.txt" 2>&1 \
-     && [[ "$(grep -c '^  agent ' "${TRAVAIL}/etat.txt")" -eq 11 ]] \
+     && [[ "$(grep -c '^  agent ' "${TRAVAIL}/etat.txt")" -eq 14 ]] \
      && grep -q '  objectifs : 3$' "${TRAVAIL}/etat.txt" \
      && grep -q '  projets : 2$' "${TRAVAIL}/etat.txt" \
      && grep -q '  routines : 3$' "${TRAVAIL}/etat.txt"; then
-    ok "état : 11 agents (10 + porte), 3 objectifs, 2 projets, 3 routines (aucun doublon)"
+    ok "état : 14 agents (13 + porte), 3 objectifs, 2 projets, 3 routines (aucun doublon)"
   else
     ko "état inattendu"; cat "${TRAVAIL}/etat.txt"
   fi
@@ -1910,17 +1974,20 @@ try:
     coord = next(a["id"] for a in agents if a["name"] == "Coordinateur")
     qualite = next(a["id"] for a in agents if a["name"] == "Relecteur")
     hierarchie = {a["name"]: a.get("reportsTo") for a in agents}
-    # Deux branches : 7 producteurs -> Coordinateur ; Exigences, Tests techniques, Porte -> Responsable qualité (Relecteur).
-    attendu = {n: coord for n in ("Veille", "Prospection", "Mesure", "Contenus", "SEA", "SEO local GEO", "CRM conversion")}
+    # Deux branches : 9 producteurs -> Coordinateur ; Exigences, Tests techniques, Porte -> Responsable qualité (Relecteur).
+    attendu = {n: coord for n in ("Veille", "Prospection", "Mesure", "Contenus", "SEA", "SEO local GEO", "CRM conversion",
+                                  "Reseaux sociaux", "Conformite publicitaire")}
     attendu.update({n: qualite for n in ("Exigences", "Tests techniques", "Porte")})
     attendu.update({"Coordinateur": None, "Relecteur": None})
     if hierarchie != attendu:
         raise SystemExit(f"hiérarchie : écart avec les deux branches attendues : {hierarchie}")
-    # 19 compétences du dépôt + 8 intégrées vendorisées par l'export + 8 réinstallées = 35 (lot P10 : +3).
-    ok = len(agents) == 12 and len(projets) == 2 and len(routines) == 3 and len(skills) == 35 \
+    # Compétences du paquet (toutes celles d'organisation/skills/, recensées par le verrou
+    # company-package.lock.json) + 8 intégrées vendorisées par l'export + 8 réinstallées.
+    competences_paquet = len(json.loads((racine / "organisation" / "company-package.lock.json").read_text(encoding="utf-8"))["competences"])
+    ok = len(agents) == 14 and len(projets) == 2 and len(routines) == 3 and len(skills) == competences_paquet + 16 \
         and all(a.get("status") == "paused" for a in agents)
-    print("hiérarchie conservée :", sum(1 for v in hierarchie.values() if v) == 10)
-    if not ok or sum(1 for v in hierarchie.values() if v) != 10:
+    print("hiérarchie conservée :", sum(1 for v in hierarchie.values() if v) == 12)
+    if not ok or sum(1 for v in hierarchie.values() if v) != 12:
         raise SystemExit("aller-retour incomplet")
 finally:
     api.appel("DELETE", f"/companies/{cid}")

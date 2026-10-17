@@ -72,8 +72,10 @@ function monde(liaisons: LiaisonLue[]) {
     routes["liaison.lire"]!({ cle: "liaison.lire", params: { issueId }, query: {}, corps: null, acteur, companyId } satisfies RequeteRoute);
   const registre = (companyId: string, query: Record<string, string | string[]> = {}, acteur: ActeurHote = HUMAIN) =>
     routes["liaison.registre"]!({ cle: "liaison.registre", params: {}, query, corps: null, acteur, companyId } satisfies RequeteRoute);
+  const acces = (companyId: string, acteur: ActeurHote = HUMAIN) =>
+    routes["liaison.acces"]!({ cle: "liaison.acces", params: {}, query: {}, corps: null, acteur, companyId } satisfies RequeteRoute);
   const refus = async (p: Promise<unknown>) => (await p.then(() => null, (e: unknown) => e)) as ErreurAtelier | null;
-  return { lire, registre, refus, appelsRegistre };
+  return { lire, registre, acces, refus, appelsRegistre };
 }
 
 describe("contrats de lecture", () => {
@@ -175,6 +177,46 @@ describe("liaison.lire : isolation", () => {
     expect(a).toMatchObject({ code: "elevation_refusee" });
     expect(a!.statut).toBe(403);
     expect((await m.refus(m.lire("pas-un-id", MKT)))!.statut).toBe(400);
+  });
+});
+
+describe("liaison.acces : sonde de l'écran Échanges", () => {
+  const lots = [liaison()];
+  it("répond 200 {acces: true} pour la Direction, sans aucune donnée du registre", async () => {
+    const m = monde(lots);
+    const r = await m.acces(DIR);
+    expect(r.statut).toBe(200);
+    expect(r.corps).toEqual({ acces: true });
+    expect(m.appelsRegistre).toEqual([]);
+  });
+
+  it("répond 200 {acces: false} hors Direction et pour une entreprise non déclarée (jamais 403)", async () => {
+    const m = monde(lots);
+    for (const c of [MKT, JUR, id(77)]) {
+      const r = await m.acces(c);
+      expect(r.statut).toBe(200);
+      expect(r.corps).toEqual({ acces: false });
+    }
+    expect(m.appelsRegistre).toEqual([]);
+  });
+
+  it("applique la règle du registre : un agent est refusé (403) comme sur le registre", async () => {
+    const m = monde(lots);
+    const e = await m.refus(m.acces(DIR, AGENT));
+    expect(e).toMatchObject({ code: "elevation_refusee" });
+    expect(e!.statut).toBe(403);
+  });
+
+  it("garde le 403 du registre hors Direction", async () => {
+    const m = monde(lots);
+    const e = await m.refus(m.registre(MKT));
+    expect(e).toMatchObject({ code: "acces_refuse" });
+    expect(e!.statut).toBe(403);
+  });
+
+  it("est déclarée en lecture humaine, sans toucher au manifeste", () => {
+    expect(ROUTES_API.find((r) => r.cle === "liaison.acces")).toMatchObject({ methode: "GET", chemin: "/liaisons/acces", auth: "board", resolution: { from: "query", key: "companyId" } });
+    expect((manifest.apiRoutes ?? []).map((r) => r.routeKey)).toContain("liaison.acces");
   });
 });
 

@@ -2,7 +2,7 @@
 name: "entretien-evaluation"
 description: "Prépare un entretien d'évaluation ou de fonctionnement dans une PME belge : préparation du manager, grille de critères observables, objectifs SMART, trame d'entretien, compte rendu équitable et traçable, suites possibles (formation, plan d'accompagnement ou d'amélioration) et garde-fous de confidentialité. À utiliser pour structurer un entretien annuel ou de fin de période ; jamais pour noter, classer ou juger une personne à la place de l'humain, décider d'une sanction ou d'un licenciement, ni traiter une donnée de santé, syndicale ou familiale."
 metadata:
-  version: "1.0.0"
+  version: "1.1.0"
   langue: "fr"
   domaine: "ressources-humaines"
 ---
@@ -43,6 +43,7 @@ Un entretien préparé sur des faits datés, une grille de critères observables
 4. **Écrire la trame d'entretien** : accueil et objectif ; auto-évaluation de la personne d'abord ; retour du manager sur les faits ; points de désaccord ; objectifs de la période suivante ; besoins en formation et en conditions de travail ; mot de la fin laissé à la personne.
 5. **Formuler les objectifs** : au plus cinq, spécifiques, mesurables, atteignables, pertinents pour le poste, datés ; chaque objectif a l'indicateur qui permettra de le constater et le soutien prévu.
 6. **Rédiger le compte rendu** : faits, avis du manager, avis de la personne dans ses mots, désaccords laissés tels quels, objectifs convenus, formations demandées, prochaine date. Aucun mot flou ou étiquette (« mauvais esprit »), aucun jugement de personnalité.
+   Quatre règles de rédaction : un fait précis plutôt qu'un compliment ou un reproche général (« a réduit de 40 % le délai de traitement des dossiers » plutôt que « bon travail ») ; points forts et points de progrès tous deux présents, aucun ne découvrant la personne le jour même ; comportements décrits, jamais la personnalité (« les comptes rendus de visite étaient incomplets » plutôt que « négligent ») ; développement formulé en action datée (« présenter le dossier X à l'équipe en mars ») plutôt qu'en vœu (« mieux communiquer »).
 7. **Proposer des suites possibles** à faire décider par l'humain : formation, accompagnement, changement de tâches, plan d'amélioration avec objectifs, délai, soutien et dates de point. Un plan d'amélioration n'est pas une sanction et ne remplace pas l'avis d'un professionnel si une rupture est envisagée.
 8. **Faire relire et signer par la personne** : elle peut ajouter ses commentaires ; la compétence propose la mention « lu et commenté le », sans valeur de preuve juridique.
 9. **Conserver et protéger** : accès limité au manager, à la direction et aux ressources humaines ; durée de conservation décidée par l'entreprise avec le délégué à la protection des données ; pas de copie dans une messagerie ouverte.
@@ -92,3 +93,10 @@ Aucun texte belge ne prescrit une forme unique d'entretien d'évaluation dans le
 Une assistante administrative, période janvier à octobre 2026. Le manager fournit : traitement des factures sans retard sauf en mars (2 semaines, remplacement d'une collègue absente) ; deux erreurs de saisie relevées en juin ; aide appréciée à la nouvelle collègue en septembre. La compétence prépare : trois faits positifs et deux points de progrès datés ; critère « qualité du travail » avec comportements observables ; objectifs : réduire à zéro les erreurs de saisie répétées d'ici fin janvier (vérification mensuelle), suivre une formation sur le logiciel de facturation d'ici décembre ; compte rendu avec ses propres mots sur la charge de mars.
 
 Cas d'échec : le manager écrit « manque d'implication, souvent absente, on dirait qu'elle est fragile ». La compétence ne reprend pas ce texte : elle signale qu'une absence pour maladie et une appréciation de santé ne sont pas des critères, demande des faits de travail datés et renvoie le sujet à l'humain et au secrétariat social. Sans faits, le compte rendu reste vide sur ce point.
+
+## Origine de la méthode
+
+Règles de rédaction de l'étape 6 adaptées de github.com/anthropics/knowledge-work-plugins,
+`human-resources/skills/performance-review/SKILL.md` (« Tips »), commit 33eeda1e8fd856455b05479d13a0f85b5f803744, licence
+Apache 2.0. Non repris : note globale, recommandation de rémunération et préparation de calibrage (évaluation de
+personnes). Liste des reprises : `organisation/skills/LICENCES-TIERS.md`.

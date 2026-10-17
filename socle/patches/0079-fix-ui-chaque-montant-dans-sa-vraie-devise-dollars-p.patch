@@ -1,0 +1,214 @@
+From e1d1f0b599321e6a1c95165cdc6dd855573f8c8c Mon Sep 17 00:00:00 2001
+From: Jean-Baptiste Dhondt <114347858+warrox1993@users.noreply.github.com>
+Date: Sat, 17 Oct 2026 23:08:38 +0200
+Subject: [PATCH] fix(ui): chaque montant dans sa vraie devise (dollars, pas
+ euros)
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Les coûts des fournisseurs, les cost_events et les budgets (budget_policies.amount,
+métrique billed_cents, comparé à sum(cost_events.cost_cents), sans colonne de devise)
+sont en dollars : le lot E les affichait en euros sans conversion. formatCents
+repasse en USD (fr-BE, symbole $), libellés de budget et icônes dollar rétablis.
+Le suffixe « /mois » et les séparateurs fr-BE sont conservés.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01DP85vPq2MHkZg8VNtRvCzB
+---
+ ui/src/components/AgentContextualSidebar.tsx     | 4 ++--
+ ui/src/components/BudgetIncidentCard.tsx         | 2 +-
+ ui/src/components/BudgetPolicyCard.tsx           | 2 +-
+ ui/src/components/BudgetSidebarMarker.tsx        | 4 ++--
+ ui/src/components/ConfigureBuiltInAgentModal.tsx | 2 +-
+ ui/src/components/Sidebar.tsx                    | 4 ++--
+ ui/src/lib/project-budget-format.test.ts         | 6 +++---
+ ui/src/lib/utils.ts                              | 2 +-
+ ui/src/pages/Companies.tsx                       | 4 ++--
+ ui/src/pages/Dashboard.tsx                       | 4 ++--
+ 10 files changed, 17 insertions(+), 17 deletions(-)
+
+diff --git a/ui/src/components/AgentContextualSidebar.tsx b/ui/src/components/AgentContextualSidebar.tsx
+index 740dd43c9..0d4e011e9 100644
+--- a/ui/src/components/AgentContextualSidebar.tsx
++++ b/ui/src/components/AgentContextualSidebar.tsx
+@@ -1,7 +1,7 @@
+ import { useQuery } from "@tanstack/react-query";
+ import {
+   Activity,
+-  BadgeEuro,
++  BadgeDollarSign,
+   BookOpenText,
+   History,
+   KeyRound,
+@@ -44,7 +44,7 @@ const auditItems = [
+   { section: "activity", label: "Activité", icon: Activity },
+   { section: "runs", label: "Exécutions", icon: PlayCircle },
+   { section: "costs", label: "Coûts", icon: ReceiptText },
+-  { section: "budgets", label: "Budgets", icon: BadgeEuro },
++  { section: "budgets", label: "Budgets", icon: BadgeDollarSign },
+ ] as const;
+ 
+ export function AgentContextualSidebar({
+diff --git a/ui/src/components/BudgetIncidentCard.tsx b/ui/src/components/BudgetIncidentCard.tsx
+index c5b4dee53..2e4c673ad 100644
+--- a/ui/src/components/BudgetIncidentCard.tsx
++++ b/ui/src/components/BudgetIncidentCard.tsx
+@@ -77,7 +77,7 @@ export function BudgetIncidentCard({
+ 
+         <div className="rounded-xl border border-border/60 bg-background/60 p-3">
+           <label className="text-(length:--text-micro) uppercase tracking-(--tracking-caps) text-muted-foreground">
+-            Nouveau budget (EUR)
++            Nouveau budget (USD)
+           </label>
+           <div className="mt-2 flex flex-col gap-3 sm:flex-row">
+             <Input
+diff --git a/ui/src/components/BudgetPolicyCard.tsx b/ui/src/components/BudgetPolicyCard.tsx
+index f8e4dc590..f4a887e89 100644
+--- a/ui/src/components/BudgetPolicyCard.tsx
++++ b/ui/src/components/BudgetPolicyCard.tsx
+@@ -145,7 +145,7 @@ export function BudgetPolicyCard({
+     <div className={cn("flex flex-col gap-3 sm:flex-row sm:items-end", isPlain ? "" : "rounded-xl border border-border/70 bg-background/50 p-3")}>
+       <div className="min-w-0 flex-1">
+         <label className="text-(length:--text-micro) uppercase tracking-(--tracking-caps) text-muted-foreground">
+-          Budget (EUR)
++          Budget (USD)
+         </label>
+         <Input
+           value={draftBudget}
+diff --git a/ui/src/components/BudgetSidebarMarker.tsx b/ui/src/components/BudgetSidebarMarker.tsx
+index 71e39006c..2e5b9ae8e 100644
+--- a/ui/src/components/BudgetSidebarMarker.tsx
++++ b/ui/src/components/BudgetSidebarMarker.tsx
+@@ -1,4 +1,4 @@
+-import { Euro } from "lucide-react";
++import { DollarSign } from "lucide-react";
+ 
+ export type BudgetSidebarMarkerLevel = "healthy" | "warning" | "critical";
+ 
+@@ -29,7 +29,7 @@ export function BudgetSidebarMarker({
+       aria-label={accessibleTitle}
+       className={`ml-auto inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full shadow-(--shadow-extract-3) ${levelClasses[level]}`}
+     >
+-      <Euro className="h-3 w-3" />
++      <DollarSign className="h-3 w-3" />
+     </span>
+   );
+ }
+diff --git a/ui/src/components/ConfigureBuiltInAgentModal.tsx b/ui/src/components/ConfigureBuiltInAgentModal.tsx
+index 39987f133..0a8c01479 100644
+--- a/ui/src/components/ConfigureBuiltInAgentModal.tsx
++++ b/ui/src/components/ConfigureBuiltInAgentModal.tsx
+@@ -205,7 +205,7 @@ export function ConfigureBuiltInAgentModal({
+ 
+           <Field label="Monthly budget (optional)" hint="Leave blank for no cap.">
+             <div className="flex items-center gap-2">
+-              <span className="text-sm text-muted-foreground">€</span>
++              <span className="text-sm text-muted-foreground">$</span>
+               <Input
+                 type="number"
+                 min="0"
+diff --git a/ui/src/components/Sidebar.tsx b/ui/src/components/Sidebar.tsx
+index b12960a34..7b3be7f0a 100644
+--- a/ui/src/components/Sidebar.tsx
++++ b/ui/src/components/Sidebar.tsx
+@@ -4,7 +4,7 @@ import {
+   CircleCheck,
+   Target,
+   LayoutDashboard,
+-  Euro,
++  DollarSign,
+   History,
+   Search,
+   SquarePen,
+@@ -318,7 +318,7 @@ export function Sidebar({ children }: { children?: ReactNode }) {
+                   <SidebarNavItem to="/org" label="Organigramme" icon={Network} />
+                   <SidebarNavItem to="/apps" label="Connecteurs" icon={Unplug} />
+                   <SidebarNavItem to="/timeline" label="Chronologie" icon={GanttChartSquare} />
+-                  <SidebarNavItem to="/costs" label="Coûts" icon={Euro} />
++                  <SidebarNavItem to="/costs" label="Coûts" icon={DollarSign} />
+                   <SidebarNavItem to="/activity" label="Activité" icon={History} />
+                   <SidebarNavItem to="/company/settings" label="Paramètres" icon={Settings} />
+                 </SidebarSection>
+diff --git a/ui/src/lib/project-budget-format.test.ts b/ui/src/lib/project-budget-format.test.ts
+index 8a5c93539..aca3c0367 100644
+--- a/ui/src/lib/project-budget-format.test.ts
++++ b/ui/src/lib/project-budget-format.test.ts
+@@ -3,14 +3,14 @@ import { formatProjectBudget } from "./utils";
+ 
+ describe("formatProjectBudget", () => {
+   it("renders a /mois suffix for monthly budgets", () => {
+-    expect(formatProjectBudget({ amountCents: 120_000, windowKind: "calendar_month_utc" })).toBe("1\u202f200,00\u00a0€/mois");
++    expect(formatProjectBudget({ amountCents: 120_000, windowKind: "calendar_month_utc" })).toBe("1\u202f200,00\u00a0$/mois");
+   });
+ 
+   it("renders the bare amount for lifetime budgets", () => {
+-    expect(formatProjectBudget({ amountCents: 50_000, windowKind: "lifetime" })).toBe("500,00\u00a0€");
++    expect(formatProjectBudget({ amountCents: 50_000, windowKind: "lifetime" })).toBe("500,00\u00a0$");
+   });
+ 
+   it("formats sub-dollar amounts with cents", () => {
+-    expect(formatProjectBudget({ amountCents: 150, windowKind: "lifetime" })).toBe("1,50\u00a0€");
++    expect(formatProjectBudget({ amountCents: 150, windowKind: "lifetime" })).toBe("1,50\u00a0$");
+   });
+ });
+diff --git a/ui/src/lib/utils.ts b/ui/src/lib/utils.ts
+index e03aff718..11bdfd8df 100644
+--- a/ui/src/lib/utils.ts
++++ b/ui/src/lib/utils.ts
+@@ -36,7 +36,7 @@ export function asFiniteNumber(value: unknown, fallback: number) {
+ export function formatCents(cents: number): string {
+   return (cents / 100).toLocaleString("fr-BE", {
+     style: "currency",
+-    currency: "EUR",
++    currency: "USD",
+     currencyDisplay: "narrowSymbol",
+     minimumFractionDigits: 2,
+     maximumFractionDigits: 2,
+diff --git a/ui/src/pages/Companies.tsx b/ui/src/pages/Companies.tsx
+index cfeb57e83..359a5291a 100644
+--- a/ui/src/pages/Companies.tsx
++++ b/ui/src/pages/Companies.tsx
+@@ -27,7 +27,7 @@ import {
+   Trash2,
+   Users,
+   CircleDot,
+-  Euro,
++  DollarSign,
+   Calendar,
+   ArchiveRestore,
+ } from "lucide-react";
+@@ -282,7 +282,7 @@ export function Companies() {
+                   </span>
+                 </div>
+                 <div className="flex items-center gap-1.5 tabular-nums">
+-                  <Euro className="h-3.5 w-3.5" />
++                  <DollarSign className="h-3.5 w-3.5" />
+                   <span>
+                     {formatCents(company.spentMonthlyCents)}
+                     {company.budgetMonthlyCents > 0
+diff --git a/ui/src/pages/Dashboard.tsx b/ui/src/pages/Dashboard.tsx
+index 1c6472740..a40f1045e 100644
+--- a/ui/src/pages/Dashboard.tsx
++++ b/ui/src/pages/Dashboard.tsx
+@@ -29,7 +29,7 @@ import { regrouperActivite } from "../lib/activity-grouping";
+ import { timeAgo } from "../lib/timeAgo";
+ import { cn, formatCents } from "../lib/utils";
+ import { SHOW_TASK_PRIORITY_UI } from "../lib/ui-flags";
+-import { Bot, CircleDot, Euro, ShieldCheck, LayoutDashboard, PauseCircle } from "lucide-react";
++import { Bot, CircleDot, DollarSign, ShieldCheck, LayoutDashboard, PauseCircle } from "lucide-react";
+ import { ActiveAgentsPanel } from "../components/ActiveAgentsPanel";
+ import { ChartCard, RunActivityChart, PriorityChart, IssueStatusChart, SuccessRateChart } from "../components/ActivityCharts";
+ import { PageSkeleton } from "../components/PageSkeleton";
+@@ -428,7 +428,7 @@ export function Dashboard() {
+               }
+             />
+             <MetricCard
+-              icon={Euro}
++              icon={DollarSign}
+               value={formatCents(data.costs.monthSpendCents)}
+               label="Dépenses du mois"
+               to="/costs"
+-- 
+2.53.0
+

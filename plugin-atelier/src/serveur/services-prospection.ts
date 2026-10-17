@@ -521,7 +521,7 @@ export function zoneDesservie(zone: ZoneProspect, etablissements: readonly ZoneE
  * - `consentement_actif` : consentement prouvé, non retiré, pour au moins un canal ;
  * - `produit_demande` : au moins une offre demandée connue ;
  * - `zone_desservie` : code postal ou commune couverts par un établissement du référentiel.
- * Avec les poids de démonstration (`scripts/demo/peupler-prospects.py`), ces critères reproduisent le
+ * Avec les poids d'étalonnage du barème (`SCORE_DEMO_CANAL`), ces critères reproduisent le
  * barème `SCORE_DEMO_CANAL` qui score l'historique d'opportunités (même échelle, donc étalonnage applicable) :
  * un devis en ligne dans la zone vaut 50 (= `devis_en_ligne`), un rendez-vous 60 (= `bureau`).
  */
@@ -554,19 +554,15 @@ export function criteresDuProspect(p: Prospect, site: string | null, source: str
 /* Clés de chiffrement et d'empreinte                                  */
 /* ------------------------------------------------------------------ */
 
+/**
+ * Clés des données personnelles : TOUJOURS lues dans le coffre de secrets de l'hôte. Il n'existe aucune
+ * clé dérivée ni de repli (faille E1 : l'ancienne clé de démonstration était calculable par quiconque
+ * connaissait l'identifiant de l'entreprise).
+ */
 export interface ClesDonnees {
   chiffrement: Buffer;
   hmac: Buffer;
-  origine: "coffre" | "demonstration";
-}
-
-/**
- * Clés dérivées de DÉMONSTRATION SEULEMENT : déterministes, calculables par quiconque connaît
- * l'identifiant de l'entreprise ; elles ne protègent rien. Jamais utilisées en mode réel.
- */
-export function clesDemonstration(companyId: string): ClesDonnees {
-  const deriver = (usage: string) => createHash("sha256").update(`atelier-marketing-ia:demonstration-seulement:${usage}:${companyId}`, "utf8").digest();
-  return { chiffrement: deriver("chiffrement"), hmac: deriver("hmac"), origine: "demonstration" };
+  origine: "coffre";
 }
 
 /** Clé lue dans un secret : hexadécimal (au moins 64 caractères) ou base64 / base64url. */
@@ -619,14 +615,14 @@ export function routesProspection(d: DependancesProspection): Partial<Record<Cle
 
   /**
    * Clés des données personnelles, résolues depuis le coffre natif (comme `approbationClePrivee`),
-   * gardées 60 s en mémoire au plus ; jamais journalisées ni renvoyées. `reel` : la donnée ou
-   * l'entreprise est réelle, et aucune clé de démonstration n'est admise.
+   * gardées 60 s en mémoire au plus ; jamais journalisées ni renvoyées. Quel que soit le mode, aucune
+   * donnée personnelle n'est chiffrée ni empreinte sans les deux secrets : pas de clé de repli.
    */
   // L'hôte limite le débit des résolutions de secrets (« Rate limit exceeded for secret resolution ») :
   // un agent qui dépose plusieurs pages d'affilée les épuise. Les clés résolues restent donc en mémoire
   // 60 s au plus, par entreprise et par couple de secrets (jamais écrites, journalisées ni renvoyées).
   const cacheCles = new Map<string, { cles: ClesDonnees; expire: number }>();
-  async function clesDonnees(companyId: string, reel: boolean): Promise<ClesDonnees> {
+  async function clesDonnees(companyId: string): Promise<ClesDonnees> {
     const config = await d.configEntreprise(companyId);
     const refC = config.donneesCleChiffrement;
     const refH = config.donneesCleHmac;
@@ -654,10 +650,7 @@ export function routesProspection(d: DependancesProspection): Partial<Record<Cle
     if (estRefSecret(refC) || estRefSecret(refH)) {
       erreur("acces_refuse", "Configuration incomplète : « donneesCleChiffrement » et « donneesCleHmac » vont ensemble (deux secrets natifs distincts).");
     }
-    if (reel) {
-      erreur("acces_refuse", "Mode réel : aucune clé de chiffrement des données configurée (secrets natifs « donneesCleChiffrement » et « donneesCleHmac » du plugin). Aucune donnée personnelle n'est enregistrée sans elles.");
-    }
-    return clesDemonstration(companyId);
+    return erreur("acces_refuse", "Aucune clé de chiffrement des données configurée (secrets natifs « donneesCleChiffrement » et « donneesCleHmac » du plugin). Aucune donnée personnelle n'est enregistrée ni recherchée sans elles.");
   }
 
   const hacher = (cles: ClesDonnees, type: TypeEmpreinte, brut: string): string | null => {
@@ -809,6 +802,15 @@ export function routesProspection(d: DependancesProspection): Partial<Record<Cle
       await base.ajouterEmpreintesProspect(final.companyId, final.id, final.empreintes);
       return { prospect: final, cree: true };
     }
+    if (existant.cleAReimporter) {
+      // Fiche chiffrée avec l'ancienne clé devinable : illisible, jamais fusionnée. Le nouveau dépôt la remplace (clé du coffre).
+      const final = Prospect.parse({ ...p, id: existant.id, motifsExclusion: motifs.slice(0, 20), statut: motifs.length > 0 ? "exclu" : "nouveau" });
+      await base.remplacerProspectAReimporter(final.companyId, final.id, {
+        nomChiffre: final.nomChiffre, nace: final.nace, zone: final.zone, coordonnees: final.coordonnees, sources: final.sources, statut: final.statut, motifsExclusion: final.motifsExclusion, particulier: final.particulier,
+      });
+      await base.ajouterEmpreintesProspect(final.companyId, final.id, final.empreintes);
+      return { prospect: final, cree: false };
+    }
     const anciennesCoord = existant.coordonnees as Prospect["coordonnees"];
     const coordonnees = [...anciennesCoord, ...p.coordonnees.filter((c) => !anciennesCoord.some((a) => a.canal === c.canal && a.empreinte === c.empreinte))].slice(0, 20);
     const anciennesSources = existant.sources as SourceProspect[];
@@ -830,8 +832,10 @@ export function routesProspection(d: DependancesProspection): Partial<Record<Cle
         offresDemandees: [...new Set([...particulier.offresDemandees, ...p.particulier.offresDemandees])].slice(0, 50),
       };
     }
+    // La marque `cleAReimporter` est une donnée de stockage, hors du contrat strict `Prospect` (ici toujours false).
+    const { cleAReimporter: _marque, ...ligneExistante } = existant;
     const final = Prospect.parse({
-      ...existant, coordonnees, sources, statut, motifsExclusion: fusion, particulier,
+      ...ligneExistante, coordonnees, sources, statut, motifsExclusion: fusion, particulier,
       nace: existant.nace.length > 0 ? existant.nace : p.nace,
       zone: existant.zone,
       empreintes: empreintesDuProspect({ empreintes: p.empreintes, coordonnees }).slice(0, 20),
@@ -866,7 +870,9 @@ export function routesProspection(d: DependancesProspection): Partial<Record<Cle
       preuve: typeof b.preuve === "string" ? JSON.parse(b.preuve) : b.preuve, information: typeof b.information === "string" ? JSON.parse(b.information) : b.information,
       dncmVerifieLe: b.dncm_verifie_le == null ? null : new Date(String(b.dncm_verifie_le)).toISOString(), verifieLe: new Date(String(b.verifie_le)).toISOString(), verifiePar: b.verifie_par,
     }));
-    const r = Prospect.safeParse({ ...l, empreintes: (det.empreintes.get(l.id) ?? []).slice(0, 20), score, basesLegales: basesLegales.map((b) => BaseLegaleContact.parse(b)) });
+    // `cleAReimporter` (marque de stockage) n'appartient pas au contrat strict `Prospect` : retirée avant validation.
+    const { cleAReimporter: _marque, ...ligne } = l;
+    const r = Prospect.safeParse({ ...ligne, empreintes: (det.empreintes.get(l.id) ?? []).slice(0, 20), score, basesLegales: basesLegales.map((b) => BaseLegaleContact.parse(b)) });
     if (!r.success) {
       ctx.logger.error("Prospect en base non conforme au contrat", { companyId: l.companyId, prospectId: l.id, chemins: r.error.issues.slice(0, 5).map((i) => i.path.join(".")) });
       erreur("erreur_interne", `Prospect ${l.id} non conforme au contrat (voir le journal du plugin).`);
@@ -990,7 +996,7 @@ export function routesProspection(d: DependancesProspection): Partial<Record<Cle
 
       const campagne = await d.campagneDeTache(r.companyId, issue);
       const effectif = await d.modeEffectif(r.companyId, campagne);
-      const clesDonneesLot = await clesDonnees(r.companyId, deduction.mode === "reel" || effectif.mode === "reel");
+      const clesDonneesLot = await clesDonnees(r.companyId);
       const { prospects: bruts, ignores: ignoresEntreprises } = extraireProspects(entree.service, entree.outil, deduction.structures);
       const b2c = entree.service === "b2c" ? extraireB2c(entree.outil, deduction.structures) : { particuliers: [], oppositions: [], ignores: 0 };
       let ignores = ignoresEntreprises + b2c.ignores;
@@ -1183,11 +1189,12 @@ export function routesProspection(d: DependancesProspection): Partial<Record<Cle
       // La confiance se calcule à la lecture : on parcourt les prospects du filtre, puis on pagine les qualifiés.
       const qualifies = await parcourirQualifies(companyId, f, 5000);
       const debut = (f.page - 1) * f.parPage;
-      return { total: qualifies.length, page: f.page, pages: Math.ceil(qualifies.length / f.parPage), prospects: qualifies.slice(debut, debut + f.parPage) };
+      const { aReimporter } = await base.listerProspects(companyId, { ...f, page: 1, parPage: 1 });
+      return { total: qualifies.length, page: f.page, pages: Math.ceil(qualifies.length / f.parPage), prospects: qualifies.slice(debut, debut + f.parPage), ...((aReimporter ?? 0) > 0 ? { aReimporter } : {}) };
     }
-    const { total, lignes } = await base.listerProspects(companyId, f);
+    const { total, lignes, aReimporter } = await base.listerProspects(companyId, f);
     const det = await base.detailsProspects(companyId, lignes.map((l) => l.id));
-    return { total, page: f.page, pages: Math.ceil(total / f.parPage), prospects: await avecConfiance(companyId, lignes.map((l) => assembler(l, det))) };
+    return { total, page: f.page, pages: Math.ceil(total / f.parPage), prospects: await avecConfiance(companyId, lignes.map((l) => assembler(l, det))), ...((aReimporter ?? 0) > 0 ? { aReimporter } : {}) };
   }
 
   /**
@@ -1282,7 +1289,7 @@ export function routesProspection(d: DependancesProspection): Partial<Record<Cle
       }
       // Mode déduit de l'entreprise (et de la campagne) et des coordonnées, jamais déclaré.
       const mode: ModeExecution = effectif.mode === "reel" && !fictif ? "reel" : "demonstration";
-      const cles = await clesDonnees(r.companyId, mode === "reel" || effectif.mode === "reel");
+      const cles = await clesDonnees(r.companyId);
       const c = entree.coordonnees;
       const date = maintenant().toISOString();
       const p = construireParticulier({
@@ -1379,7 +1386,7 @@ export function routesProspection(d: DependancesProspection): Partial<Record<Cle
       const entree = analyser(AjouterOppositionEntree, r.corps, "Opposition");
       if (entree.companyId !== r.companyId) erreur("hors_entreprise", "Entreprise incohérente : seule l'entreprise résolue par l'hôte est servie.");
       const effectif = await d.modeEffectif(r.companyId, null);
-      const cles = await clesDonnees(r.companyId, effectif.mode === "reel");
+      const cles = await clesDonnees(r.companyId);
       // La valeur en clair ne sort pas de cette fonction : ni stockée, ni journalisée, ni renvoyée.
       const res = await enregistrerOpposition(r.companyId, cles, { type: entree.type, valeur: entree.valeur, canal: entree.canal, origine: entree.origine, par: `${r.acteur.type}:${r.acteur.id}`, recueillieLe: entree.recueillieLe ?? null });
       if (res === null) erreur("entree_invalide", "Valeur d'opposition inexploitable.");

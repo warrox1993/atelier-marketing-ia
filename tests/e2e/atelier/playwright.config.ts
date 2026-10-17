@@ -3,13 +3,13 @@
  * instance Paperclip RÉELLE déjà lancée (aucune substitution du backend).
  *
  * Préparation : voir tests/e2e/atelier/README.md (instance d'essai sur le
- * port 3140, organisation de démonstration, plugin installé).
+ * port 3590, organisation de démonstration, plugin installé).
  * Lancement : paperclip/node_modules/.bin/playwright test --config tests/e2e/atelier/playwright.config.ts
  * Navigateur : chromium SANS INTERFACE uniquement.
  */
 import { defineConfig } from "@playwright/test";
 
-const BASE = process.env.ATELIER_E2E_URL ?? "http://127.0.0.1:3140";
+const BASE = process.env.ATELIER_E2E_URL ?? "http://127.0.0.1:3590";
 
 export default defineConfig({
   testDir: ".",

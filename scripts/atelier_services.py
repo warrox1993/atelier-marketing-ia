@@ -5,6 +5,13 @@
 Chaque service est une entreprise Paperclip distincte ; la matrice « flux » liste les seuls
 échanges autorisés entre services (pas de flux déclaré, pas d'échange).
 
+Réseau des coordinateurs (lot 2 de l'usine v2) : chaque coordinateur peut adresser une demande à tout autre
+coordinateur du même client, et le coordinateur général (Direction, champ « coordinateurGeneral ») à chacun d'eux.
+Ces flux ne sont JAMAIS écrits à la main dans le registre : `flux_coordinateurs` les génère pour toutes les paires
+ordonnées de services que la matrice métier ne couvre pas encore, et `flux_complets` rend la matrice déclarée au
+plugin (métier puis générés). Règle sensible inchangée : un flux qui touche un service « sensible » exige
+l'approbation humaine. Le cloisonnement par client est tenu par la déclaration (un client à la fois) et par le plugin.
+
 Usage : python3 -I scripts/atelier_services.py verifier [--fichier CHEMIN]
 Code de sortie : 0 si le registre est valide, 1 sinon. Bibliothèque standard seule, aucune écriture.
 """
@@ -29,6 +36,14 @@ RE_PREFIXE = re.compile(r"^[A-Z]{3,4}$")
 CHAMPS_TEXTE = ("slug", "nom", "prefixe", "description", "coordinateur")
 CHAMPS_LISTES = ("agents", "humainSeul", "obligations", "donnees")
 CHAMPS_FLUX = ("source", "cible", "objet")
+
+# Service qui porte le coordinateur général (entreprise Direction du client).
+SERVICE_DIRECTION = "direction"
+COMPETENCE_PROTOCOLE = "protocole-inter-coordinateurs"
+OBJET_ENTRE_COORDINATEURS = ("Liaison entre coordinateurs (compétence protocole-inter-coordinateurs) : "
+                             "question bornée, réponse tracée, au plus deux relais")
+OBJET_COORDINATEUR_GENERAL = ("Coordinateur général et coordinateurs de département (compétence "
+                              "protocole-inter-coordinateurs) : délégation, réponse et consolidation tracées")
 
 
 def charger_services(chemin=FICHIER_PAR_DEFAUT) -> dict:
@@ -92,6 +107,16 @@ def valider(registre) -> list[str]:
                 erreurs.append(f"{pre}« {champ} » ne doit contenir que des textes non vides")
         if "sensible" in s and not isinstance(s["sensible"], bool):
             erreurs.append(f"{pre}« sensible » doit être un booléen")
+        if "coordinateurGeneral" in s:
+            general = s["coordinateurGeneral"]
+            if s.get("slug") != SERVICE_DIRECTION:
+                erreurs.append(f"{pre}seul le service {SERVICE_DIRECTION} porte le coordinateur général")
+            if not _texte_ok(general):
+                erreurs.append(f"{pre}« coordinateurGeneral » doit être un texte non vide")
+            elif general == s.get("coordinateur"):
+                erreurs.append(f"{pre}le coordinateur général doit être distinct du coordinateur du service")
+            elif isinstance(s.get("agents"), list) and general not in s["agents"]:
+                erreurs.append(f"{pre}coordinateur général « {general} » absent de la liste des agents")
 
         slug = s.get("slug")
         if _texte_ok(slug):
@@ -118,11 +143,14 @@ def valider(registre) -> list[str]:
                 erreurs.append(f"{pre}registre d'agents référencé illisible : {s['agentsRefErreur']}")
             if len(set(agents)) != len(agents):
                 erreurs.append(f"{pre}agents en double")
-            if not s.get("agentsRef") and not 2 <= len(agents) <= 4:
-                erreurs.append(f"{pre}2 à 4 agents attendus, {len(agents)} trouvé(s)")
+            if not s.get("agentsRef") and not 2 <= len(agents) <= 12:
+                erreurs.append(f"{pre}2 à 12 agents attendus, {len(agents)} trouvé(s)")
             coord = s.get("coordinateur")
             if _texte_ok(coord) and coord not in agents:
                 erreurs.append(f"{pre}coordinateur « {coord} » absent de la liste des agents")
+
+    if not any(isinstance(s, dict) and _texte_ok(s.get("coordinateurGeneral")) for s in services):
+        erreurs.append(f"aucun coordinateur général : le service {SERVICE_DIRECTION} doit porter « coordinateurGeneral »")
 
     vus = set()
     for i, x in enumerate(flux):
@@ -154,6 +182,35 @@ def valider(registre) -> list[str]:
     return erreurs
 
 
+def flux_coordinateurs(registre: dict) -> list[dict]:
+    """Flux du réseau des coordinateurs, générés (jamais listés à la main) : une entrée par paire ordonnée de services
+    distincts que la matrice métier ne couvre pas. Les paires qui touchent la Direction portent l'objet du coordinateur
+    général (seul interlocuteur de l'humain, rôle ceo de l'entreprise Direction : c'est lui qui reçoit les demandes
+    adressées à la Direction). Approbation humaine dès qu'un des deux services est sensible. Ordre stable."""
+    services = [s for s in registre["services"]]
+    sensibles = {s["slug"] for s in services if s.get("sensible") is True}
+    metier = {(f["source"], f["cible"]) for f in registre["flux"]}
+    generes = []
+    for a in services:
+        for b in services:
+            source, cible = a["slug"], b["slug"]
+            if source == cible or (source, cible) in metier:
+                continue
+            general = SERVICE_DIRECTION in (source, cible)
+            generes.append({
+                "source": source, "cible": cible,
+                "objet": OBJET_COORDINATEUR_GENERAL if general else OBJET_ENTRE_COORDINATEURS,
+                "approbationHumaine": source in sensibles or cible in sensibles,
+                "origine": "coordinateur-general" if general else "coordinateurs",
+            })
+    return generes
+
+
+def flux_complets(registre: dict) -> list[dict]:
+    """Matrice déclarée au plugin : flux métier du registre (origine « metier »), puis réseau des coordinateurs."""
+    return [{**f, "origine": "metier"} for f in registre["flux"]] + flux_coordinateurs(registre)
+
+
 def main(argv=None) -> int:
     p = argparse.ArgumentParser(description="Registre des services de l'Atelier")
     sous = p.add_subparsers(dest="commande", required=True)
@@ -171,7 +228,8 @@ def main(argv=None) -> int:
     if erreurs:
         print(f"Registre des services invalide : {len(erreurs)} erreur(s).")
         return 1
-    print(f"OK   registre des services valide : {len(registre['services'])} service(s), {len(registre['flux'])} flux.")
+    print(f"OK   registre des services valide : {len(registre['services'])} service(s), {len(registre['flux'])} flux métier, "
+          f"{len(flux_coordinateurs(registre))} flux générés entre coordinateurs.")
     return 0
 
 

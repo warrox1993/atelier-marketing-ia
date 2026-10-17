@@ -18,13 +18,16 @@ import subprocess
 import sys
 
 RACINE = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
-URL = sys.argv[1] if len(sys.argv) > 1 else "http://127.0.0.1:3520/api"
+URL = sys.argv[1] if len(sys.argv) > 1 else "http://127.0.0.1:3590/api"
 MODE = sys.argv[2] if len(sys.argv) > 2 else "propose"
 NOM = sys.argv[3] if len(sys.argv) > 3 else f"Dossier e2e appel {MODE} (démonstration)"
 # Le module du lot A lit l'URL dans sys.argv[2] au chargement.
 sys.argv = [sys.argv[0], "B", URL]
 sys.path.insert(0, os.path.join(RACINE, "scripts", "scenarios"))
 import atelier_scenarios as s  # noqa: E402
+
+# Environnement propre à chaque rôle des agents déterministes (vide par défaut).
+ENV_AGENTS = {r: {} for r in ("coordinateur", "producteur", "porte", "exigences", "metier", "technique", "contourneur")}
 
 BRIEF = (
     "Campagne « Toitures avant l'hiver » pour Rénovations Meuse et Ourthe (entreprise fictive). "
@@ -59,7 +62,7 @@ def phrase_du_livrable(corps):
 
 def principal():
     s.installer_plugin()
-    entreprise, ids, projet = s.preparer("B", nom=NOM)
+    entreprise, ids, projet = s.preparer("B", env_agents=ENV_AGENTS, nom=NOM)
     if not cles(entreprise):
         print(json.dumps({"etat": "clés de signature non créées"}))
         return 1
@@ -74,7 +77,7 @@ def principal():
         print(json.dumps({"etat": s.etat(s.lire(T))}, ensure_ascii=False))
         return 1
     plugin = s.PLUGIN
-    _, dossier = s.api("GET", f"{plugin}/taches/{T}/dossier", attendu=(200,))
+    _, dossier = s.api("GET", f"{plugin}/taches/{T}/dossier?vue=complete", attendu=(200,))
     liv = dossier["livrable"]
     phrase = phrase_du_livrable(liv["corps"])
     if not phrase:

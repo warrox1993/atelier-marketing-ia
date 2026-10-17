@@ -2,7 +2,7 @@
 name: "accueil-nouveau-collaborateur"
 description: "Prépare le plan d'accueil d'un nouveau collaborateur d'une PME belge : formalités à vérifier avant le premier jour (Dimona, règlement de travail, accueil sécurité), documents à remettre, accès informatiques à ouvrir, parrainage, plan d'intégration à 30, 60 et 90 jours et points de suivi. À utiliser dès qu'une arrivée est confirmée ; jamais pour évaluer ou noter la personne, fixer une rémunération ou des conditions de contrat, demander une donnée de santé ou syndicale, ni déposer quoi que ce soit auprès d'une autorité."
 metadata:
-  version: "1.0.0"
+  version: "1.1.0"
   langue: "fr"
   domaine: "ressources-humaines"
 ---
@@ -44,7 +44,8 @@ Un plan daté, de J-10 à J+90, où chaque formalité a un responsable humain et
    - l'accueil en matière de sécurité et de bien-être : à organiser avec le conseiller en prévention.
 3. **Préparer les documents à remettre** : règlement de travail, charte informatique, plan d'urgence et consignes de sécurité, organigramme du service, liste des personnes ressources. Ne rien demander que la tâche exige : pas de donnée de santé, de conviction syndicale ou de situation familiale ; pièces administratives demandées uniquement par le secrétariat social.
 4. **Planifier les accès informatiques** : un tableau accès par accès (messagerie, dossiers partagés, logiciels métier, badge), avec le responsable informatique, la date demandée et la règle du moindre accès : uniquement ce que le poste exige, mot de passe initial communiqué par un canal séparé.
-5. **Écrire le premier jour et la première semaine** heure par heure : accueil, visite, matériel, rencontre du parrain, déjeuner, point de fin de journée, point de fin de semaine.
+5. **Écrire le premier jour et la première semaine** : le jour 1 en tableau heure, activité, avec qui (accueil, visite, matériel, rencontre du parrain, déjeuner, point de fin de journée) ; la première semaine en liste à cocher (documents clés du poste, rencontre de chaque collègue proche, premières réunions suivies, première petite tâche, point de fin de semaine).
+   Ajouter un **tableau des contacts clés** : personne, rôle, pour quoi s'adresser à elle (manager, parrain, informatique, ressources humaines, conseiller en prévention).
 6. **Fixer les objectifs 30, 60, 90 jours** avec le manager : trois à cinq objectifs observables par palier (apprendre, prendre en charge, contribuer), chacun avec sa façon de vérifier. Les objectifs décrivent ce que la personne apprend et fait, pas un jugement sur elle.
 7. **Prévoir les points de suivi** (fin de première semaine, 30, 60, 90 jours) avec trois questions fixes à la personne : ce qui va bien, ce qui manque, ce qu'elle aimerait clarifier.
 8. **Rédiger le brouillon du message de bienvenue**, sobre, avec les informations pratiques (heure, lieu, interlocuteur, tenue seulement si la fonction l'exige).
@@ -55,6 +56,7 @@ Un plan daté, de J-10 à J+90, où chaque formalité a un responsable humain et
 - Un plan d'accueil daté (avant l'arrivée, jour 1, première semaine, 30/60/90 jours).
 - Une liste de contrôle des formalités avec statut « à vérifier » et responsable.
 - Le tableau des documents à remettre et des accès à ouvrir.
+- Le tableau des contacts clés.
 - Les objectifs 30/60/90 jours et les points de suivi.
 - Un message de bienvenue en brouillon.
 
@@ -92,3 +94,10 @@ La remise d'une copie du règlement de travail à chaque engagement (loi du 8 av
 Arrivée d'un technicien le lundi 2 novembre 2026, manager Marie (prénom fictif). Plan : J-10 demander au secrétariat social la confirmation de la Dimona ; J-5 demander la messagerie et le badge au responsable informatique (accès limités aux dossiers de son équipe) ; J-1 message de bienvenue ; J accueil à 9 h, visite, remise du règlement de travail et de la charte informatique, accueil sécurité avec le conseiller en prévention ; 30 jours : connaître les trois procédures de base ; 60 jours : prendre en charge deux dossiers avec relecture ; 90 jours : tenir seul un dossier courant.
 
 Cas d'échec : le secrétariat social ne répond pas à J-3 et la Dimona n'est pas confirmée. La compétence ne déclare rien elle-même : elle remonte l'alerte au manager et à la direction avec la date limite (avant le début des prestations) et propose de décaler l'arrivée si la confirmation n'arrive pas.
+
+## Origine de la méthode
+
+Présentation du jour 1 en tableau, liste de la première semaine et tableau des contacts clés adaptés de
+github.com/anthropics/knowledge-work-plugins, `human-resources/skills/onboarding/SKILL.md` (« Output »), commit
+33eeda1e8fd856455b05479d13a0f85b5f803744, licence Apache 2.0. Les formalités belges sont propres à l'atelier. Liste des
+reprises : `organisation/skills/LICENCES-TIERS.md`.

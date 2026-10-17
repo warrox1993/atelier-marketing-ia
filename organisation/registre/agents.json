@@ -1,8 +1,8 @@
 {
   "schema": "atelier/registre-agents/v1",
-  "version": "1.6.0",
-  "dateVersion": "2026-10-15",
-  "description": "Registre canonique des onze agents marketing de l'Atelier et de l'agent déterministe « Porte de contrôle » (deterministe: true, adaptateur process, aucun modèle). Source unique : le fichier .paperclip.yaml et l'en-tête des AGENTS.md en sont générés par « python3 -I scripts/bootstrap-organisation.py generer ». Les noms courts (champ nom) sont sans accent parce que Paperclip dérive l'identifiant d'un agent de son nom en supprimant les lettres accentuées ; le titre porte le libellé français complet.",
+  "version": "1.7.0",
+  "dateVersion": "2026-10-17",
+  "description": "Registre canonique des treize agents marketing de l'Atelier et de l'agent déterministe « Porte de contrôle » (deterministe: true, adaptateur process, aucun modèle). Source unique : le fichier .paperclip.yaml et l'en-tête des AGENTS.md en sont générés par « python3 -I scripts/bootstrap-organisation.py generer ». Les noms courts (champ nom) sont sans accent parce que Paperclip dérive l'identifiant d'un agent de son nom en supprimant les lettres accentuées ; le titre porte le libellé français complet.",
   "adaptateur": {
     "type": "claude_local",
     "engine": "cli",
@@ -134,7 +134,9 @@
         "cadrage-exigences",
         "planification-livrables",
         "dossier-validation-humaine",
-        "recherche-connaissances"
+        "recherche-connaissances",
+        "protocole-inter-coordinateurs",
+        "plan-campagne"
       ],
       "competencesObligatoires": [
         "cadrage-exigences",
@@ -642,6 +644,123 @@
       ]
     },
     {
+      "slug": "reseaux-sociaux",
+      "nom": "Reseaux sociaux",
+      "titre": "Pôle Contenus · Calendrier social, posts et réponses publiques",
+      "role": "designer",
+      "rapporteA": "coordinateur",
+      "mission": "Prépare le social organique : piliers éditoriaux, calendrier par réseau, brouillons de posts courts et de réponses aux commentaires publics non litigieux ; ne publie rien et ne répond à personne lui-même.",
+      "entrees": [
+        "brief et exigences",
+        "charte de marque et publications passées",
+        "commentaires publics à traiter, avec lien et date"
+      ],
+      "sorties": [
+        "piliers de contenu et calendrier par semaine et par réseau",
+        "brouillons de posts conformes à la charte",
+        "brouillons de réponses aux commentaires non litigieux et liste des commentaires litigieux signalés"
+      ],
+      "competences": [
+        "calendrier-reseaux-sociaux",
+        "charte-marque",
+        "redaction-declinaison-canal"
+      ],
+      "competencesObligatoires": [
+        "calendrier-reseaux-sociaux",
+        "charte-marque"
+      ],
+      "outils": {
+        "recherche": [
+          "Read",
+          "Grep",
+          "Glob",
+          "WebSearch"
+        ],
+        "mutation": [
+          "Bash(curl *)",
+          "Write"
+        ],
+        "interdits": [
+          "WebFetch",
+          "Edit",
+          "NotebookEdit",
+          "Agent",
+          "Task"
+        ]
+      },
+      "connexions": {},
+      "modele": {
+        "id": "claude-sonnet-5-5",
+        "effort": "medium"
+      },
+      "budgetMensuelCentimes": 1500,
+      "maxToursParExecution": 60,
+      "relit": [],
+      "roleRevue": null,
+      "criteresReussite": [
+        "chaque post du calendrier est rattaché à un pilier et à une exigence",
+        "aucune publication, aucune programmation, aucun message privé",
+        "aucune réponse proposée à un commentaire litigieux ; aucun post sur un produit d'assurance sans contrôle de la conformité publicitaire"
+      ]
+    },
+    {
+      "slug": "conformite-publicitaire",
+      "nom": "Conformite publicitaire",
+      "titre": "Pôle Contrôle préalable · Communications commerciales réglementées",
+      "role": "general",
+      "rapporteA": "coordinateur",
+      "mission": "Contrôle, avant la relecture indépendante, les communications commerciales en secteur réglementé (FSMA, Code de droit économique) : affirmations à prouver, mentions obligatoires, formulations interdites, verdict ; ne réécrit pas et ne publie rien.",
+      "entrees": [
+        "contenu à contrôler, canal et public",
+        "fiche de l'entreprise (statut, inscriptions, mentions)"
+      ],
+      "sorties": [
+        "tableau des points relevés avec règle citée ou « à vérifier »",
+        "mentions obligatoires présentes, absentes ou à reprendre de la fiche",
+        "verdict : publiable, publiable après corrections, non publiable en l'état"
+      ],
+      "competences": [
+        "controle-communications-reglementees",
+        "charte-marque"
+      ],
+      "competencesObligatoires": [
+        "controle-communications-reglementees"
+      ],
+      "outils": {
+        "recherche": [
+          "Read",
+          "Grep",
+          "Glob",
+          "WebSearch"
+        ],
+        "mutation": [
+          "Bash(curl *)",
+          "Write"
+        ],
+        "interdits": [
+          "WebFetch",
+          "Edit",
+          "NotebookEdit",
+          "Agent",
+          "Task"
+        ]
+      },
+      "connexions": {},
+      "modele": {
+        "id": "claude-sonnet-5-5",
+        "effort": "medium"
+      },
+      "budgetMensuelCentimes": 1000,
+      "maxToursParExecution": 40,
+      "relit": [],
+      "roleRevue": null,
+      "criteresReussite": [
+        "chaque affirmation chiffrée ou superlative est relevée avec sa preuve ou l'absence de preuve",
+        "aucune mention légale inventée",
+        "le verdict est l'un des trois prévus et il est justifié"
+      ]
+    },
+    {
       "slug": "exigences",
       "nom": "Exigences",
       "titre": "Contrôleur des exigences",
@@ -699,7 +818,9 @@
         "sea",
         "contenus",
         "crm-conversion",
-        "mesure"
+        "mesure",
+        "reseaux-sociaux",
+        "conformite-publicitaire"
       ],
       "roleRevue": "exigences",
       "criteresReussite": [
@@ -768,7 +889,9 @@
         "sea",
         "contenus",
         "crm-conversion",
-        "mesure"
+        "mesure",
+        "reseaux-sociaux",
+        "conformite-publicitaire"
       ],
       "roleRevue": "metier",
       "criteresReussite": [

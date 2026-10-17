@@ -2,7 +2,7 @@
 name: "revue-contrat-commercial"
 description: "Prépare la revue d'un contrat commercial pour une PME belge : grille de lecture en dix points (parties, objet, prix, durée, résiliation, responsabilité et plafond, force majeure, confidentialité, propriété intellectuelle, droit applicable et for), détection des clauses à risque, rapprochement avec les clauses abusives entre entreprises (articles VI.91/3 à VI.91/6 du Code de droit économique, loi du 4 avril 2019) et synthèse en feux rouges, orange et verts avec questions pour l'avocat. À utiliser avant la signature, le renouvellement ou la renégociation d'un contrat de vente, de prestation, de distribution ou de licence ; jamais pour dire qu'un contrat est valable ou sans risque, rédiger un contrat opposable, contacter la contrepartie ni signer."
 metadata:
-  version: "1.0.0"
+  version: "1.1.0"
   langue: "fr"
   domaine: "juridique"
 ---
@@ -34,12 +34,14 @@ Une fiche qui, pour dix rubriques, dit ce que prévoit le contrat (avec l'articl
 ## Étapes
 
 1. **Identifier le type de contrat et la nature des parties.** Si une partie est un consommateur, arrêter la grille B2B et le signaler : le régime des clauses abusives est différent (articles VI.82 et suivants du Code de droit économique) et la revue passe à l'avocat. Si le contrat est un marché public ou un service financier, l'indiquer : le titre sur les clauses abusives entre entreprises ne s'y applique pas (article VI.91/1).
-2. **Remplir la grille de lecture**, une ligne par rubrique : citation exacte, article, lecture en une phrase, feu (voir plus bas). Une rubrique absente du contrat reçoit « silence du contrat » et un feu, jamais un blanc.
+2. **Charger le référentiel de positions** de l'entreprise (positions acceptables, de repli et inacceptables par type de clause), fourni ou trouvé dans les connaissances. S'il manque, l'écrire en tête de la synthèse et appliquer les positions de marché courantes, marquées comme telles. Puis **lire le contrat en entier** avant de signaler quoi que ce soit, en lisant ensemble les clauses qui s'équilibrent (plafond de responsabilité et indemnisation, durée et résiliation, garanties et exclusions).
+   **Remplir la grille de lecture**, une ligne par rubrique : citation exacte, article, lecture en une phrase, feu (voir plus bas). Une rubrique absente du contrat reçoit « silence du contrat » et un feu, jamais un blanc.
 3. **Chercher les clauses à risque** de la liste ci-dessous, même placées hors de leur rubrique habituelle (dans les conditions générales ou une annexe).
 4. **Rapprocher des clauses abusives entre entreprises** : pour chaque clause jugée déséquilibrée, dire laquelle des trois catégories elle évoque (clause interdite par principe, clause présumée abusive, ou déséquilibre manifeste à apprécier) et le raisonnement, en écrivant « à confirmer par l'avocat ». Ne jamais écrire « cette clause est nulle ».
 5. **Vérifier la cohérence interne** : définitions utilisées mais non définies, renvois à un article inexistant, contradiction entre contrat et conditions générales, ordre de priorité des documents, versions linguistiques.
-6. **Attribuer les feux** et rédiger la synthèse : d'abord les rouges, puis les oranges, puis ce qui est vert.
-7. **Préparer les questions pour l'avocat** : une question par point rouge ou orange, avec la clause citée, l'enjeu en euros ou en jours si connu, et la modification souhaitée en une phrase.
+6. **Attribuer les feux** et rédiger la synthèse : d'abord les rouges, puis les oranges, puis ce qui est vert. Ne pas détailler une clause équitable et courante ; signaler en revanche ce qui manque (un contrat muet sur le plafond de responsabilité ou sur les modifications de commande est souvent plus risqué qu'une clause défavorable).
+7. **Pour chaque point orange ou rouge**, écrire : citation exacte, modification proposée, raison, priorité de négociation (indispensable : sans elle on ne signe pas ; importante : risque réel mais marge de discussion ; souhaitable : à céder si nécessaire) et position de repli acceptable.
+8. **Préparer les questions pour l'avocat** : une question par point rouge ou orange, avec la clause citée, l'enjeu en euros ou en jours si connu, et la modification souhaitée en une phrase.
 
 ### Grille de lecture
 
@@ -133,3 +135,12 @@ Contrat de maintenance informatique proposé à une PME de 25 personnes. Extrait
 Question pour l'avocat : « Les articles 4.2, 9.1 et 11.3 relèvent-ils de VI.91/5 ? Peut-on exiger un préavis de 90 jours avant toute révision de prix et un droit de sortie sans frais ? Enjeu : 3 ans de redevances. » Rappel en bas de fiche : analyse préparatoire à faire valider par un avocat.
 
 Cas d'échec : l'une des parties est une association de copropriétaires de plus de vingt-cinq pour cent de lots professionnels, ou un consommateur. La fiche ne conclut pas : elle écrit « nature de la partie à confirmer, le régime applicable diffère; revue B2B suspendue » et pose la question à l'avocat. Autre échec évité : les conditions générales annexées manquent ; le feu des rubriques concernées reste orange avec « document manquant », jamais vert.
+
+## Origine de la méthode
+
+Référentiel de positions avec repli explicite, lecture complète et lecture d'ensemble des clauses qui s'équilibrent,
+format de modification avec position de repli et trois priorités de négociation adaptés de
+github.com/anthropics/knowledge-work-plugins, `legal/skills/review-contract/SKILL.md` (étapes 3, 4, 6 et 7) ; « ne pas
+signaler le standard équitable, signaler ce qui manque » de `small-business/skills/contract-review/SKILL.md`
+(« Approval gates ») ; commit 33eeda1e8fd856455b05479d13a0f85b5f803744, licence Apache 2.0. Les feux et la couche
+VI.91/1 et suivants sont propres à l'atelier. Liste des reprises : `organisation/skills/LICENCES-TIERS.md`.

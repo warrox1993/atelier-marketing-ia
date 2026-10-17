@@ -65,7 +65,11 @@ export function VueParametres() {
   const actif = (cle: string) => !surReel && panneau === cle;
   return (
     <>
-      <EnTete titre="Paramètres et diagnostic" description="État vérifié des gardes et des connecteurs ; une configuration enregistrée ne vaut pas preuve de fonctionnement." />
+      {surReel ? (
+        <EnTete titre="Connexions" description="Ce qui est branché, ce qui ne l'est pas encore, et qui doit agir." />
+      ) : (
+        <EnTete titre="Paramètres et diagnostic" description="État vérifié des gardes et des connecteurs ; une configuration enregistrée ne vaut pas preuve de fonctionnement." />
+      )}
       <Fraicheur chargeLe={diag.chargeLe} actualisation={diag.loading && diag.data !== null} />
       <div hidden={!surReel}>
         <SectionPassageAuReel />
@@ -247,7 +251,7 @@ function FormulaireReglages({ reglages, onFait }: { reglages: ReglagesEntreprise
     setErreur(null);
     setFait(false);
     try {
-      await enregistrer({ maxRunsActifs: Number(f.maxRunsActifs), maxCyclesCorrection: Number(f.maxCyclesCorrection), modeParDefaut: f.modeParDefaut, retentionJours: Number(f.retentionJours) });
+      await enregistrer({ maxRunsActifs: Number(f.maxRunsActifs), maxCyclesCorrection: Number(f.maxCyclesCorrection), retentionJours: Number(f.retentionJours) });
       setFait(true);
       onFait();
     } catch (err) {
@@ -297,16 +301,16 @@ interface CompteRenduBase {
 }
 
 function RemiseAZero() {
-  const reinitialiser = useAction<{ supprimes: Record<string, number> }>("atelier.donnees.reinitialiser");
+  const reinitialiser = useAction<{ supprimes: Record<string, number>; conserves: Record<string, number> }>("atelier.donnees.reinitialiser");
   const [saisie, setSaisie] = useState("");
   const [enCours, setEnCours] = useState(false);
   const [erreur, setErreur] = useState<unknown>(null);
-  const [resultat, setResultat] = useState<Record<string, number> | null>(null);
+  const [resultat, setResultat] = useState<{ supprimes: Record<string, number>; conserves: Record<string, number> } | null>(null);
   const confirmer = async () => {
     setEnCours(true);
     setErreur(null);
     try {
-      setResultat((await reinitialiser({ confirmation: "REINITIALISER" })).supprimes);
+      setResultat(await reinitialiser({ confirmation: "REINITIALISER" }));
       setSaisie("");
     } catch (err) {
       setErreur(err);
@@ -315,7 +319,7 @@ function RemiseAZero() {
     }
   };
   return (
-    <Section titre="Remise à zéro des données de l'atelier" ancre="param-remise" repliable aide="Supprime les données de l'atelier de cette entreprise (campagnes, revues, journal…). Refusée par le serveur si une campagne existe ou si l'entreprise garde une décision ou une diffusion. Les tâches et agents Paperclip ne sont pas supprimés.">
+    <Section titre="Remise à zéro des données de l'atelier" ancre="param-remise" repliable aide="Supprime les données de l'atelier de cette entreprise (campagnes, revues, prospects…). Les oppositions, les listes « Ne m'appelez plus », les bases légales et le journal sont toujours conservés (obligations légales). Refusée par le serveur si une campagne existe ou si l'entreprise garde une décision ou une diffusion. Les tâches et agents Paperclip ne sont pas supprimés.">
       <Champ libelle="Tapez REINITIALISER pour confirmer" className="atl-champ-etroit">
         <input value={saisie} onChange={(e) => setSaisie(e.target.value)} autoComplete="off" />
       </Champ>
@@ -325,7 +329,8 @@ function RemiseAZero() {
       {erreur ? <EtatErreur erreur={erreur} contexte="remise à zéro refusée" /> : null}
       {resultat ? (
         <p className="atl-succes" role="status">
-          Remise à zéro effectuée : {Object.entries(resultat).map(([k, v]) => `${k} ${v}`).join(", ") || "rien à supprimer"}.
+          Remise à zéro effectuée : {Object.entries(resultat.supprimes).map(([k, v]) => `${k} ${v}`).join(", ") || "rien à supprimer"}.
+          {" "}Conservé (obligations légales) : {Object.entries(resultat.conserves ?? {}).map(([k, v]) => `${k} ${v}`).join(", ") || "rien"}.
         </p>
       ) : null}
     </Section>
@@ -419,6 +424,9 @@ export function BudgetsIa() {
   const [enCours, setEnCours] = useState(false);
   const [echecs, setEchecs] = useState<Record<string, unknown>>({});
   const [bilan, setBilan] = useState<string | null>(null);
+  // Budgets bien écrits dans Paperclip dont la trace n'a pas pu être écrite : seule la trace est à reprendre.
+  const [tracesManquantes, setTracesManquantes] = useState<Record<string, { portee: "entreprise" | "agent"; avantCents: number; erreur: unknown }>>({});
+  const [traceEnCours, setTraceEnCours] = useState<string | null>(null);
   // Lignes dont l'enregistrement a échoué : leur saisie est conservée au rechargement.
   const aGarder = useRef<Set<string>>(new Set());
   const charger = useCallback(async () => {
@@ -466,23 +474,58 @@ export function BudgetsIa() {
     setEnCours(true);
     setBilan(null);
     const nouveauxEchecs: Record<string, unknown> = {};
+    const nouvellesTraces: Record<string, { portee: "entreprise" | "agent"; avantCents: number; erreur: unknown }> = {};
     let reussies = 0;
     for (const l of modifiees) {
       const cents = l.lu.cents ?? 0;
       try {
         await ecrireBudgetNatif(l.portee, l.cible.id, cents);
-        await tracer({ portee: l.portee, ...(l.portee === "agent" ? { agentId: l.cible.id } : {}), avantCents: l.cible.budgetMonthlyCents });
-        reussies++;
       } catch (err) {
         nouveauxEchecs[l.cible.id] = err;
         aGarder.current.add(l.cible.id);
+        continue;
+      }
+      // Le budget est écrit : un échec de la trace ne doit pas faire croire qu'il ne l'est pas.
+      try {
+        await tracer({ portee: l.portee, ...(l.portee === "agent" ? { agentId: l.cible.id } : {}), avantCents: l.cible.budgetMonthlyCents });
+        reussies++;
+      } catch (err) {
+        nouvellesTraces[l.cible.id] = { portee: l.portee, avantCents: l.cible.budgetMonthlyCents, erreur: err };
       }
     }
     setEchecs(nouveauxEchecs);
+    setTracesManquantes((prec) => ({ ...prec, ...nouvellesTraces }));
     const nbEchecs = Object.keys(nouveauxEchecs).length;
-    setBilan(nbEchecs === 0 ? `${reussies} budget${reussies > 1 ? "s enregistrés" : " enregistré"} dans Paperclip et tracé${reussies > 1 ? "s" : ""}.` : `${reussies} enregistré${reussies > 1 ? "s" : ""}, ${nbEchecs} en échec (voir les lignes concernées).`);
+    const nbTraces = Object.keys(nouvellesTraces).length;
+    const s = (n: number) => (n > 1 ? "s" : "");
+    setBilan(
+      nbTraces === 0
+        ? nbEchecs === 0
+          ? `${reussies} budget${reussies > 1 ? "s enregistrés" : " enregistré"} dans Paperclip et tracé${s(reussies)}.`
+          : `${reussies} enregistré${s(reussies)}, ${nbEchecs} en échec (voir les lignes concernées).`
+        : `${reussies} enregistré${s(reussies)} et tracé${s(reussies)} ; ${nbTraces} enregistré${s(nbTraces)}, trace non écrite : réessayer la trace${nbEchecs ? ` ; ${nbEchecs} en échec (voir les lignes concernées)` : ""}.`,
+    );
     setEnCours(false);
     await charger();
+  };
+
+  /** Reprend la seule trace d'un budget déjà enregistré (jamais l'écriture du budget). */
+  const reessayerTrace = async (id: string) => {
+    const t = tracesManquantes[id];
+    if (!t || traceEnCours) return;
+    setTraceEnCours(id);
+    try {
+      await tracer({ portee: t.portee, ...(t.portee === "agent" ? { agentId: id } : {}), avantCents: t.avantCents });
+      setTracesManquantes((prec) => {
+        const { [id]: _fait, ...reste } = prec;
+        return reste;
+      });
+      setBilan("Trace écrite : le budget est enregistré et tracé.");
+    } catch (err) {
+      setTracesManquantes((prec) => ({ ...prec, [id]: { ...t, erreur: err } }));
+    } finally {
+      setTraceEnCours(null);
+    }
   };
 
   return (
@@ -526,6 +569,14 @@ export function BudgetsIa() {
                   />
                   {l.lu.raison !== null && l.modifie ? <p className="atl-aide" role="alert">{l.lu.raison}</p> : null}
                   {l.cible.id in echecs ? <EtatErreur erreur={echecs[l.cible.id]} contexte={`budget de ${l.cible.nom} non enregistré`} /> : null}
+                  {l.cible.id in tracesManquantes ? (
+                    <div role="alert" className="atl-erreur">
+                      <p>Budget de {l.cible.nom} enregistré, trace non écrite : réessayer la trace.</p>
+                      <Bouton variante="secondaire" enCours={traceEnCours === l.cible.id} onClick={() => void reessayerTrace(l.cible.id)}>
+                        Réessayer la trace
+                      </Bouton>
+                    </div>
+                  ) : null}
                 </td>
               </tr>
             ))}

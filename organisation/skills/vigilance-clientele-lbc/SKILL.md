@@ -113,6 +113,7 @@ Toute la compétence est une analyse préparatoire. Elle doit être validée par
 - La compétence ne consulte aucune base externe (listes de sanctions, de PPE, médias) hors des sources autorisées dans la tâche ; elle indique qu'une recherche est à faire par l'humain.
 - Elle ne note aucune personne par un score automatique et ne conclut jamais au soupçon.
 - Elle ne déclare rien, ne contacte aucun client et n'avertit personne : l'interdiction de divulgation de l'article 55 s'applique aux entités, à leurs dirigeants, membres du personnel et agents.
+- Règle de non-divulgation : ni le client concerné ni un tiers ne doit apprendre qu'une information ou une déclaration est, sera ou a été transmise à la CTIF, ni qu'une analyse de blanchiment est en cours ou envisagée (article 55 de la loi du 18 septembre 2017, confirmé par la page de la Banque nationale de Belgique sur l'interdiction de divulgation, qui cite les articles 55 et 56 ; portée des exceptions et article 56 : article à vérifier par un professionnel). Aucun livrable destiné au client ou hors du cercle du responsable de la conformité n'y fait allusion.
 - Les procédures internes de l'entreprise priment pour les seuils et la grille de risque, dans le respect de la loi.
 
 ## Exemple

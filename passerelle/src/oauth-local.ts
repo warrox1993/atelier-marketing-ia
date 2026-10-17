@@ -29,8 +29,10 @@ const MAX_TRANSACTIONS = 200;
 const MAX_CORPS_OCTETS = 16 * 1024;
 
 export const PORTEE_LOCALE = "local";
-/** Ancienne portée (avant le retrait du mode démonstration) : toujours acceptée pour que les connexions existantes continuent. */
-const PORTEE_ANCIENNE = "demonstration";
+/** Portée retirée avec le mode démonstration : plus délivrée, et les jetons qui la portent sont refusés (reconnexion obligatoire). */
+const PORTEE_RETIREE = "demonstration";
+export const MESSAGE_PORTEE_RETIREE =
+  "Jeton émis avant le retrait du mode démonstration : reconnecter le service (nouvelle autorisation avec la portée « local »).";
 
 // ---------------------------------------------------------------------------
 // PKCE (RFC 7636)
@@ -93,6 +95,8 @@ interface JetonEmis {
   identite: IdentiteJeton;
   expire: number;
   octroi: string;
+  /** Portée accordée ; absente dans les états écrits avant ce champ (déduite au chargement). */
+  portee?: string;
 }
 
 export interface OptionsServeurAutorisation {
@@ -114,6 +118,16 @@ interface EtatPersiste {
 
 const aleatoire = (octets = 32): string => randomBytes(octets).toString("base64url");
 const empreinte = (jeton: string): string => createHash("sha256").update(jeton).digest("hex");
+
+/**
+ * États écrits avant le champ `portee` : un jeton issu du mode démonstration (client « demo-… » ou compte
+ * « (démonstration) ») est marqué à la portée retirée ; les autres sont des jetons « local ».
+ */
+function marquerPortee(jeton: JetonEmis): JetonEmis {
+  if (jeton.portee !== undefined) return jeton;
+  const demo = jeton.clientId.startsWith("demo-") || /d[ée]monstration/i.test(jeton.identite?.compte ?? "");
+  return { ...jeton, portee: demo ? PORTEE_RETIREE : PORTEE_LOCALE };
+}
 
 function sansBarreFinale(valeur: string): string {
   return valeur.replace(/\/+$/, "");
@@ -165,8 +179,8 @@ export class ServeurAutorisationLocal {
     const etat = brut as Partial<EtatPersiste> | null;
     if (!etat || etat.version !== 1 || !Array.isArray(etat.clients) || !Array.isArray(etat.jetons) || !Array.isArray(etat.rafraichissements)) return;
     for (const [cle, client] of etat.clients) this.clients.set(cle, client);
-    for (const [cle, jeton] of etat.jetons) this.jetons.set(cle, jeton);
-    for (const [cle, jeton] of etat.rafraichissements) this.rafraichissements.set(cle, jeton);
+    for (const [cle, jeton] of etat.jetons) this.jetons.set(cle, marquerPortee(jeton));
+    for (const [cle, jeton] of etat.rafraichissements) this.rafraichissements.set(cle, marquerPortee(jeton));
     this.nettoyer();
   }
 
@@ -252,12 +266,18 @@ export class ServeurAutorisationLocal {
   verifierJeton(jeton: string, service: Service): IdentiteJeton | null {
     const trouve = this.jetons.get(empreinte(jeton));
     if (!trouve) return null;
+    if (trouve.portee === PORTEE_RETIREE) return null;
     if (trouve.expire <= this.maintenant()) {
       this.jetons.delete(empreinte(jeton));
       return null;
     }
     if (sansBarreFinale(trouve.resource) !== this.urlRessource(service)) return null;
     return trouve.identite;
+  }
+
+  /** Vrai si le jeton existe mais porte la portée « demonstration » retirée (le client doit se reconnecter). */
+  porteeRetiree(jeton: string): boolean {
+    return this.jetons.get(empreinte(jeton))?.portee === PORTEE_RETIREE;
   }
 
   // --- Routage /oauth/* ----------------------------------------------------
@@ -413,7 +433,8 @@ export class ServeurAutorisationLocal {
     const service = ressource ? this.serviceDeRessource(ressource) : null;
     if (!service) return erreurRedirigee("invalid_target", "Indicateur de ressource inconnu ou absent (RFC 8707)");
     const portee = (q.get("scope") ?? "").split(/\s+/).filter(Boolean);
-    const inconnues = portee.filter((p) => p !== PORTEE_LOCALE && p !== PORTEE_ANCIENNE && p !== "offline_access");
+    const inconnues = portee.filter((p) => p !== PORTEE_LOCALE && p !== "offline_access");
+    if (portee.includes(PORTEE_RETIREE)) return erreurRedirigee("invalid_scope", MESSAGE_PORTEE_RETIREE);
     if (inconnues.length > 0) return erreurRedirigee("invalid_scope", `Portée inconnue : ${inconnues.join(" ")}`);
 
     if (this.transactions.size >= MAX_TRANSACTIONS) {
@@ -567,6 +588,11 @@ ${options}
       if (!ancien || ancien.clientId !== client.clientId) {
         throw new ErreurHttp(400, "invalid_grant", "Jeton de rafraîchissement invalide ou expiré");
       }
+      if (ancien.portee === PORTEE_RETIREE) {
+        this.rafraichissements.delete(cle);
+        this.sauvegarder();
+        throw new ErreurHttp(400, "invalid_grant", MESSAGE_PORTEE_RETIREE);
+      }
       if (ressourceDemandee && sansBarreFinale(ressourceDemandee) !== sansBarreFinale(ancien.resource)) {
         throw new ErreurHttp(400, "invalid_target", "La ressource demandée diffère de celle autorisée");
       }
@@ -588,12 +614,13 @@ ${options}
     const acces = aleatoire(32);
     const rafraichissement = aleatoire(32);
     const t = this.maintenant();
-    this.jetons.set(empreinte(acces), { clientId, resource, identite, octroi, expire: t + DUREE_JETON_S * 1000 });
+    this.jetons.set(empreinte(acces), { clientId, resource, identite, octroi, portee: PORTEE_LOCALE, expire: t + DUREE_JETON_S * 1000 });
     this.rafraichissements.set(empreinte(rafraichissement), {
       clientId,
       resource,
       identite,
       octroi,
+      portee: PORTEE_LOCALE,
       expire: t + DUREE_RAFRAICHISSEMENT_MS,
     });
     this.sauvegarder();

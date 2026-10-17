@@ -2,7 +2,7 @@
 name: "reponse-client-multicanal"
 description: "Rédige des brouillons de réponse à des clients d'une PME belge sur plusieurs canaux (courriel, formulaire, chat, réseaux sociaux, courrier, script téléphonique) en français, néerlandais ou anglais : ton, gabarits, délais annoncés, accessibilité et protection des données personnelles. À utiliser pour répondre à une question, une demande ou un incident courant ; jamais pour promettre un remboursement, un avoir, une remise ou un délai non confirmé, ni pour répondre à une réclamation engageante sans validation humaine."
 metadata:
-  version: "1.0.0"
+  version: "1.1.0"
   langue: "fr"
   domaine: "service-client"
 ---
@@ -39,12 +39,17 @@ Un brouillon qui répond à la question posée dès la première phrase, que le 
 1. **Identifier la question réelle**, en une phrase, et ce que le client doit pouvoir faire après la réponse.
 2. **Vérifier la nature** : une réclamation, une menace de procédure ou un dommage n'est pas une réponse courante. Arrêter, signaler au tri pour transfert au SAV, ne rien rédiger d'engageant.
 3. **Rassembler les faits** et leur source. Un point sans source reçoit « à confirmer » dans une note interne, jamais dans le texte client.
+   **Partir de la politique écrite de l'entreprise** (conditions générales, politique de remboursement, article d'aide) avant d'écrire un mot :
+   - ne jamais promettre ce que la politique écrite n'offre pas (remboursement, délai, remplacement, avoir, exception) ;
+   - si la demande sort de la politique, le brouillon dit non, poliment, avec la raison, et propose ce que la politique permet ;
+   - si la politique est muette ou se contredit, aucun brouillon : une question à l'humain, qui cite la ligne en cause ;
+   - sans politique écrite, le dire et demander à l'humain ce qu'il veut offrir avant de rédiger.
 4. **Choisir le gabarit** du canal (section suivante) et la langue du client.
 5. **Rédiger** : réponse dans la première phrase, une seule action demandée au client à la fois, étapes numérotées s'il y en a, dates écrites en toutes lettres.
 6. **Annoncer le délai** seulement s'il est confirmé ; sinon dire quand le client aura des nouvelles et par quel canal.
 7. **Protéger les données** : ne citer que ce que le client a lui-même écrit dans ce fil ; aucun numéro complet, aucune donnée d'un tiers ; un message public ne contient aucune donnée personnelle et renvoie vers un canal privé.
 8. **Contrôler l'accessibilité** : phrases courtes, un sujet par paragraphe, pas d'information portée par la couleur seule, texte de remplacement pour les images, liens explicites (« guide de connexion » plutôt que « cliquez ici »).
-9. **Relire** : ton, faits, langue, absence de promesse, absence de donnée en trop. Remplir la note interne.
+9. **Relire avec la liste de contrôle** : le ton convient à la situation et à la relation ; aucun engagement au-delà de ce qui est autorisé ; aucune information interne (projet, organisation, nom d'un collègue sans raison) ; les renvois aux échanges précédents sont exacts ; la prochaine étape et son responsable sont clairs ; le niveau de détail convient au lecteur ; la longueur convient au canal. Remplir la note interne.
 10. **Soumettre** : brouillon prêt à envoyer, jamais envoyé. Si un geste commercial est utile, rédiger une carte de décision pour un humain.
 
 ### Ton
@@ -89,14 +94,15 @@ Pour chaque ticket : le brouillon de réponse dans la langue du client et le can
 - Aucune promesse de remboursement, d'avoir, de remise, d'exception ou de délai non confirmé.
 - Aucune donnée personnelle en trop, aucune donnée d'un tiers, aucun détail de dossier dans un message public.
 - Le texte est compréhensible à la première lecture, y compris avec un lecteur d'écran.
+- Une demande hors politique reçoit un non motivé et ce que la politique permet ; une politique muette donne une question à l'humain, pas un brouillon.
 
 ## Sources officielles
 
 Consultées le 16/10/2026 :
 
 - « Web Content Accessibility Guidelines (WCAG) 2.2 », W3C, https://www.w3.org/TR/WCAG22/ : Recommandation du W3C du 12 décembre 2024 ; quatre principes (perceptible, utilisable, compréhensible, robuste) et trois niveaux A, AA, AAA ; le niveau AA est la cible usuelle. Fonde les contrôles de l'étape 8 (lecture seule de l'en-tête et du résumé ; les 170 000 derniers caractères n'ont pas été lus).
-- Règlement général sur la protection des données, article 12, paragraphe 3, texte reproduit par gdpr-info.eu (source secondaire), https://gdpr-info.eu/art-12-gdpr/ : réponse à une personne qui exerce ses droits dans un délai d'un mois, prorogeable de deux mois avec information motivée. La version EUR-Lex n'a pas pu être lue (page vide).
-- « European Accessibility Act in Belgium », Craftzing, https://www.craftzing.com/our-insights/articles/european-accessibility-act-in-belgium-compliance-complaints-penalties (source secondaire, cabinet privé) : applicable depuis le 28 juin 2025 ; commerce électronique visé ; norme EN 301 549 ; les microentreprises belges de commerce électronique bénéficieraient d'une période transitoire jusqu'en 2030. Le texte officiel de la loi belge n'a pas été consulté : à confirmer avant de s'y appuyer.
+- Autorité de protection des données, « Droits des citoyens », https://www.autoriteprotectiondonnees.be/professionnel/rgpd-/droits-des-citoyens (consultée le 17/10/2026) : réponse à la personne qui exerce un droit dans un délai d'un mois, prolongeable de deux mois pour une demande complexe si la personne en est informée dans le premier mois ; en cas de refus, information des motifs dans le mois. Remplace la source secondaire gdpr-info.eu ; le texte du RGPD sur EUR-Lex reste illisible (page de vérification antirobot).
+- Obligations d'accessibilité des services numériques aux consommateurs (directive (UE) 2019/882, dite acte européen sur l'accessibilité, et sa transposition belge) : la source privée citée auparavant a été retirée ; le texte officiel n'a pas pu être lu le 17/10/2026 (EUR-Lex et les pages du SPF Économie renvoient une page de vérification antirobot, non contournée). Champ d'application, dates et exemptions : à vérifier.
 
 Les gabarits, longueurs et règles de ton sont des conventions de gestion courantes : aucune source officielle n'est citée pour eux.
 
@@ -119,3 +125,11 @@ Ticket en néerlandais, canal courriel, catégorie SUP : un client demande comme
 Brouillon (extrait) : « Beste mevrouw, beste heer, u kunt uw wachtwoord zelf opnieuw instellen via de knop « Wachtwoord vergeten » op de inlogpagina. U ontvangt binnen enkele minuten een e-mail met een link. Lukt het niet, antwoord dan op dit bericht en wij helpen u verder. » Note interne : source = article du 02/10/2026 ; « binnen enkele minuten » repris de l'article ; texte à faire relire par un néerlandophone.
 
 Cas d'échec : le client ajoute « et remboursez-moi le mois perdu ». Le brouillon accepte « bien sûr, nous vous créditerons ». C'est une promesse non autorisée. Correctif : la partie remboursement est retirée, la demande est signalée au tri comme REC, une carte de décision est posée, et le brouillon dit seulement « nous revenons vers vous sur ce point d'ici le jeudi 15 octobre 2026 », date confirmée par le coordinateur.
+
+## Origine de la méthode
+
+Liste de contrôle de relecture adaptée et traduite de github.com/anthropics/knowledge-work-plugins,
+`customer-support/skills/draft-response/SKILL.md`, étape 4, et règles « politique écrite d'abord » de
+`small-business/skills/ticket-deflector/SKILL.md`, étape 4, commit 33eeda1e8fd856455b05479d13a0f85b5f803744, licence
+Apache 2.0. Modifications : réécriture en français, gabarits et langues belges conservés. Texte de la licence et liste des
+reprises : `organisation/skills/LICENCES-TIERS.md`.

@@ -19,7 +19,7 @@ import { useHostContext } from "@paperclipai/plugin-sdk/ui";
 import type { Diagnostic, ReglagesEntreprise } from "../../contrats/campagnes.js";
 import type { StatutConnaissances } from "../../contrats/connaissances.js";
 import type { VueMarque } from "../../contrats/ui.js";
-import { BandeauEntreprise, Bouton, EnTete, LienHote, Pastille, Section } from "../composants.js";
+import { Bouton, EnTete, LienHote, Pastille, Section } from "../composants.js";
 import { lireConnexionsNatives, lignesServices } from "../connexions-natives.js";
 import { BaseClients } from "../base-clients.js";
 import { useDonnees } from "../donnees.js";
@@ -213,7 +213,6 @@ export function VueMiseEnPlace() {
 
   return (
     <>
-      <BandeauEntreprise />
       <EnTete titre="Mise en place du client" description="Six étapes pour qu'un nouveau client puisse travailler avec l'équipe. L'état de chaque étape est lu sur l'atelier ; l'étape à faire en premier est signalée." />
       <div className="atl-progression" role="progressbar" aria-label="Progression de la mise en place" aria-valuemin={0} aria-valuemax={etapes.length} aria-valuenow={faites} aria-valuetext={`${faites} étape${faites > 1 ? "s" : ""} sur ${etapes.length} faite${faites > 1 ? "s" : ""}`}>
         <span className="atl-progression-barre" style={{ width: `${Math.round((faites / etapes.length) * 100)}%` }} />
@@ -377,7 +376,6 @@ function EtapeSources({ sante, nbServices }: { sante: Diagnostic | null; nbServi
   const src = sante?.sourcesReelles;
   return (
     <>
-      <p className="atl-attenue">{detailSources(nbServices, src ?? null)}</p>
       {src && src.passerelle === "joignable" ? (
         <ul className="atl-liste-compacte" aria-label="Sources réelles">
           {src.sources.map((s) => (

@@ -152,6 +152,7 @@ test("nouvelles vues : Corbeille, Carte des prospects, Prospects, Paramètres et
 
   await ouvrir(page, "/parametres");
   await expect(page.locator(".atl-entete h1")).toHaveText("Paramètres et diagnostic");
+  await page.getByRole("tab", { name: "Sources", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Sources de données réelles" })).toBeVisible();
   await expect(page.locator(".atl-page [role='alert']")).toHaveCount(0);
 
@@ -217,17 +218,18 @@ test("écrans de l'après-midi : ouverture, menus, encart d'accueil, statut du l
   await expect(page).toHaveURL(new RegExp(`/${prefixe}/atelier(/|$)`, "u"), { timeout: 30_000 });
   await page.goto(`/${prefixe}/dashboard`);
   const menuSocle = page.locator("aside nav").first();
-  await expect(menuSocle.getByRole("link").first()).toHaveText("Atelier marketing");
+  // Le menu du socle reçoit l'entrée du plugin après son chargement ; elle porte la pastille « N à faire ».
+  await expect(menuSocle.getByRole("link").first()).toHaveText(/^Atelier marketing/u);
 
-  // 2. Menu de l'atelier : « À faire », puis le groupe « Prospection » (Prospects, Carte des prospects).
+  // 2. Menu de l'atelier : les cinq rubriques, puis « Prospects » avec ses deux onglets (Liste, Carte).
   await ouvrir(page, "");
   const menu = page.locator("nav.atl-nav").first();
   const liens = await menu.getByRole("link").allInnerTexts();
-  expect(liens.slice(0, 3).map((t) => t.trim())).toEqual(["À faire", "Prospects", "Carte des prospects"]);
-  const groupe = menu.getByRole("group", { name: "Prospection" });
-  await expect(groupe).toBeVisible();
-  await expect(groupe.getByRole("link", { name: "Prospects", exact: true })).toBeVisible();
-  await expect(groupe.getByRole("link", { name: "Carte des prospects", exact: true })).toBeVisible();
+  expect(liens.slice(0, 5).map((t) => t.trim().split("\n")[0])).toEqual(["Accueil", "Discussion", "Prospects", "Marketing", "Réglages"]);
+  await menu.getByRole("link", { name: /^Prospects/u }).click();
+  const onglets = page.getByRole("tablist", { name: "Prospects : sections" });
+  await expect(onglets.getByRole("tab")).toHaveText(["Liste", "Carte"]);
+  await ouvrir(page, "");
 
   // 3. Accueil : l'encart « Prospection » (total, qualifiés, deux liens) vient avant « Demander à l'équipe ».
   const titreProspection = page.getByRole("heading", { name: "Prospection", exact: true });

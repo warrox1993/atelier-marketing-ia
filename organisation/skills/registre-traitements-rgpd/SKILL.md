@@ -2,7 +2,7 @@
 name: "registre-traitements-rgpd"
 description: "Établit ou met à jour le registre des activités de traitement (article 30 du RGPD) d'une PME belge : une fiche par traitement avec les rubriques de l'article 30, paragraphe 1, une base légale proposée parmi celles de l'article 6, des durées de conservation à justifier, la liste des sous-traitants et la vérification du contrat de l'article 28, puis un test d'analyse d'impact (article 35) qui dit si elle est probablement nécessaire. À utiliser pour créer le registre, ajouter un traitement (nouvel outil, nouveau fournisseur, nouvelle campagne) ou préparer un contrôle ; jamais pour trancher la base légale à la place du responsable du traitement, déclarer un traitement licite, notifier l'autorité ou conclure qu'une analyse d'impact n'est pas requise."
 metadata:
-  version: "1.0.0"
+  version: "1.1.0"
   langue: "fr"
   domaine: "juridique"
 ---
@@ -43,7 +43,8 @@ Un registre où chaque traitement a sa fiche complète, avec une base légale pr
 6. **Décrire les mesures de sécurité** en termes généraux (contrôle d'accès, chiffrement, sauvegarde, journalisation), dans la mesure du possible, comme le demande l'article 30, paragraphe 1, point g.
 7. **Passer le test d'analyse d'impact** (article 35) pour chaque fiche : voir la grille plus bas. Le résultat est « probablement requise », « à examiner » ou « aucun critère relevé », toujours à valider.
 8. **Établir la liste des questions ouvertes** : base légale incertaine, durée absente, sous-traitant sans contrat, transfert non encadré, catégorie particulière de données, information des personnes (articles 12 à 14) non vérifiée.
-9. **Dater et versionner** : date de la fiche, auteur, sources des informations, prochaine révision (au moins une fois par an et à chaque changement d'outil).
+9. **Préparer un contrôle** avec six questions qu'un auditeur ou l'Autorité de protection des données poserait : le registre est-il complet et daté de sa dernière mise à jour ? Quelle est la base légale de chaque finalité (une seule par finalité) ? Où sont les analyses d'impact des traitements à risque élevé ? Quelle est la dernière demande d'exercice de droits et en combien de temps a-t-elle reçu réponse ? Quels transferts hors Espace économique européen et sur quelle garantie ? Où est le registre des violations, y compris celles qui n'ont pas été notifiées ? Chaque question sans réponse documentée devient une question ouverte.
+10. **Dater et versionner** : date de la fiche, auteur, sources des informations, prochaine révision (au moins une fois par an et à chaque changement d'outil).
 
 ### Rubriques de l'article 30, paragraphe 1
 
@@ -133,3 +134,11 @@ Activité décrite par le service commercial d'une PME de 40 personnes : « Nous
 | Analyse d'impact | aucun critère relevé à ce stade ; liste de l'autorité à consulter |
 
 Cas d'échec : le service écrit seulement « on garde les données tant qu'on est en relation avec le client » et ne sait pas dans quel pays l'outil héberge ses données. La fiche reste « incomplète » : durée marquée à justifier, transfert marqué à confirmer, deux questions ouvertes (qui est le contact chez le fournisseur ? quelles sont les clauses du contrat ?). La compétence ne remplit ni un pays ni une durée plausibles.
+
+## Origine de la méthode
+
+Les six questions de l'étape 9 sont adaptées de github.com/alirezarezvani/claude-skills,
+`compliance-os/skills/gdpr-audit-prep/SKILL.md` (« The Six DPO Questions »), commit
+19392f7a08264ed00486a251f5b2098321771f94, licence MIT, Copyright (c) 2025 Alireza Rezvani. Scripts non repris.
+Modifications : français, cadre de l'Autorité de protection des données. Liste des reprises :
+`organisation/skills/LICENCES-TIERS.md`.

@@ -1477,6 +1477,8 @@ export const PageProspects = z
     page: z.number().int().min(1),
     pages: z.number().int().nonnegative(),
     prospects: z.array(Prospect).max(LIMITES_PROSPECTION.pageMax),
+    /** Fiches chiffrées avec l'ancienne clé (migration 016) : exclues de la page, à réimporter. Absent quand il n'y en a aucune. */
+    aReimporter: z.number().int().positive().optional(),
   })
   .strict();
 export type PageProspects = z.infer<typeof PageProspects>;
@@ -1512,7 +1514,7 @@ export const CalculerEtalonnageEntree = z
     horizonJours: z.number().int().min(7).max(730).default(SEUILS_ETALONNAGE.horizonJoursParDefaut),
     separation: z.enum(["validation_croisee", "decoupage_temporel"]).default("decoupage_temporel"),
     /**
-     * Lot P9b : historique d'opportunités importé (format de `scripts/demo/generer-base-clients.mjs` :
+     * Lot P9b : historique d'opportunités importé (format de l'historique d'opportunités des clients :
      * `type_cible`, `canal_origine`, `date_cloture`, `issue` gagnee|perdue, colonne `score` facultative).
      * Absent : les issues commerciales enregistrées (table `issues_commerciales`).
      */

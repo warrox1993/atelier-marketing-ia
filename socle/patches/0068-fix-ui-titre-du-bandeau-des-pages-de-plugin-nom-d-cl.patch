@@ -1,0 +1,169 @@
+From d9cdc0fa9dc0982709c78200745794c3ab94a2d8 Mon Sep 17 00:00:00 2001
+From: Jean-Baptiste Dhondt <114347858+warrox1993@users.noreply.github.com>
+Date: Sat, 17 Oct 2026 22:38:40 +0200
+Subject: [PATCH 68/78] =?UTF-8?q?fix(ui):=20titre=20du=20bandeau=20des=20p?=
+ =?UTF-8?q?ages=20de=20plugin=20=3D=20nom=20d=C3=A9clar=C3=A9=20par=20la?=
+ =?UTF-8?q?=20page,=20plus=20le=20segment=20d'adresse?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Le titre était déduit de l'adresse (sans accents, « PARAMETRES » sur l'onglet
+Connexions). Il vient désormais du displayName de la page (à défaut celui du
+plugin). Bouton « Back » traduit en « Retour ». Audit visuel D02.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01DP85vPq2MHkZg8VNtRvCzB
+---
+ ui/src/pages/PluginPage.test.tsx | 13 +++++----
+ ui/src/pages/PluginPage.tsx      | 50 ++++++--------------------------
+ 2 files changed, 16 insertions(+), 47 deletions(-)
+
+diff --git a/ui/src/pages/PluginPage.test.tsx b/ui/src/pages/PluginPage.test.tsx
+index 89775e237..0759f2a9b 100644
+--- a/ui/src/pages/PluginPage.test.tsx
++++ b/ui/src/pages/PluginPage.test.tsx
+@@ -123,7 +123,7 @@ describe("PluginPage", () => {
+     vi.clearAllMocks();
+   });
+ 
+-  it("renders the breadcrumb and Back button on a legacy plugin route (no routeSidebar)", async () => {
++  it("renders the breadcrumb and Retour button on a legacy plugin route (no routeSidebar)", async () => {
+     mockParams.pluginRoutePath = "wiki";
+     mockPluginsApi.listUiContributions.mockResolvedValue([pageContribution()]);
+ 
+@@ -133,7 +133,7 @@ describe("PluginPage", () => {
+       { label: "Plugins", href: "/company/settings/instance/plugins" },
+       { label: "LLM Wiki" },
+     ]);
+-    expect(container.textContent).toContain("Back");
++    expect(container.textContent).toContain("Retour");
+     expect(container.querySelector('a[href="/PAP/dashboard"]')).not.toBeNull();
+ 
+     await act(async () => {
+@@ -141,7 +141,7 @@ describe("PluginPage", () => {
+     });
+   });
+ 
+-  it("uses a route title and hides the Back button when a routeSidebar matches the active route", async () => {
++  it("uses a route title and hides the Retour button when a routeSidebar matches the active route", async () => {
+     mockParams.pluginRoutePath = "wiki";
+     mockPluginsApi.listUiContributions.mockResolvedValue([
+       pageContribution({
+@@ -167,7 +167,7 @@ describe("PluginPage", () => {
+     const root = await renderPage(container);
+ 
+     expect(mockSetBreadcrumbs).toHaveBeenCalledWith([{ label: "Wiki" }]);
+-    expect(container.textContent).not.toContain("Back");
++    expect(container.textContent).not.toContain("Retour");
+     expect(container.querySelector('a[href="/PAP/dashboard"]')).toBeNull();
+     // Page slot itself still renders.
+     expect(container.querySelector('[data-testid="plugin-slot-mount"]')?.textContent).toBe("Wiki");
+@@ -177,7 +177,7 @@ describe("PluginPage", () => {
+     });
+   });
+ 
+-  it("uses the selected plugin page path as the route-sidebar title", async () => {
++  it("keeps the declared page title (not the URL path) as the route-sidebar title", async () => {
+     mockParams.pluginRoutePath = "wiki";
+     mockParams["*"] = "page/templates%3A%3Aindex.md";
+     mockPluginsApi.listUiContributions.mockResolvedValue([
+@@ -203,7 +203,8 @@ describe("PluginPage", () => {
+ 
+     const root = await renderPage(container);
+ 
+-    expect(mockSetBreadcrumbs).toHaveBeenCalledWith([{ label: "index" }]);
++    expect(mockSetBreadcrumbs).toHaveBeenCalledWith([{ label: "Wiki" }]);
++    expect(mockSetBreadcrumbs).not.toHaveBeenCalledWith([{ label: "index" }]);
+ 
+     await act(async () => {
+       root.unmount();
+diff --git a/ui/src/pages/PluginPage.tsx b/ui/src/pages/PluginPage.tsx
+index 1a8b9a226..a6eedb296 100644
+--- a/ui/src/pages/PluginPage.tsx
++++ b/ui/src/pages/PluginPage.tsx
+@@ -30,7 +30,6 @@ export function PluginPage() {
+     "*": string | undefined;
+   }>();
+   const { companyPrefix: routeCompanyPrefix, pluginId, pluginRoutePath } = params;
+-  const pluginRouteSplat = params["*"];
+   const { companies, selectedCompanyId } = useCompany();
+   const { setBreadcrumbs } = useBreadcrumbs();
+   const routeCompany = useMemo(() => {
+@@ -115,14 +114,14 @@ export function PluginPage() {
+   useEffect(() => {
+     if (!pageSlot) return;
+     if (routeSidebarActive) {
+-      setBreadcrumbs([{ label: resolveRouteSidebarPageTitle(pageSlot, pluginRouteSplat) }]);
++      setBreadcrumbs([{ label: resolveRouteSidebarPageTitle(pageSlot) }]);
+       return;
+     }
+     setBreadcrumbs([
+       { label: "Plugins", href: "/company/settings/instance/plugins" },
+       { label: pageSlot.pluginDisplayName },
+     ]);
+-  }, [pageSlot, pluginRouteSplat, setBreadcrumbs, routeSidebarActive]);
++  }, [pageSlot, setBreadcrumbs, routeSidebarActive]);
+ 
+   if (!resolvedCompanyId) {
+     if (hasInvalidCompanyPrefix) {
+@@ -170,7 +169,7 @@ export function PluginPage() {
+           <Button variant="ghost" size="sm" asChild>
+             <Link to={companyPrefix ? `/${companyPrefix}/dashboard` : "/dashboard"}>
+               <ArrowLeft className="h-4 w-4 mr-1" />
+-              Back
++              Retour
+             </Link>
+           </Button>
+         </div>
+@@ -185,41 +184,10 @@ export function PluginPage() {
+   );
+ }
+ 
+-function resolveRouteSidebarPageTitle(pageSlot: ResolvedPluginSlot, routeSplat: string | undefined): string {
+-  const title = titleFromRouteSplat(routeSplat);
+-  return title ?? pageSlot.displayName ?? pageSlot.pluginDisplayName;
+-}
+-
+-function titleFromRouteSplat(routeSplat: string | undefined): string | null {
+-  const segments = (routeSplat ?? "")
+-    .split("/")
+-    .filter(Boolean)
+-    .map(decodeRouteSegment);
+-  if (segments.length === 0) return null;
+-
+-  if (segments[0] === "page" && segments.length > 1) {
+-    return titleFromPath(segments.slice(1).join("/"), { preserveCase: true });
+-  }
+-
+-  return titleFromPath(segments[0] ?? null);
+-}
+-
+-function titleFromPath(path: string | null | undefined, options: { preserveCase?: boolean } = {}): string | null {
+-  const trimmed = path?.trim();
+-  if (!trimmed) return null;
+-  const basename = trimmed.split("/").filter(Boolean).at(-1) ?? trimmed;
+-  const withoutNamespace = basename.split("::").at(-1) ?? basename;
+-  const withoutExtension = withoutNamespace.replace(/\.[^.]+$/, "");
+-  const normalized = withoutExtension.replace(/[-_]+/g, " ").trim();
+-  if (!normalized) return null;
+-  if (options.preserveCase) return normalized;
+-  return normalized.replace(/\b\w/g, (char) => char.toUpperCase());
+-}
+-
+-function decodeRouteSegment(segment: string): string {
+-  try {
+-    return decodeURIComponent(segment);
+-  } catch {
+-    return segment;
+-  }
++/**
++ * Titre du bandeau d'une page de plugin : le nom déclaré par la page (ou, à défaut, par le plugin),
++ * jamais un segment d'adresse (il perdait les accents et nommait mal les sous-vues).
++ */
++function resolveRouteSidebarPageTitle(pageSlot: ResolvedPluginSlot): string {
++  return pageSlot.displayName ?? pageSlot.pluginDisplayName;
+ }
+-- 
+2.53.0
+

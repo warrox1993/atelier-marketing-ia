@@ -9,7 +9,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { PROSPECT_B2B, PROSPECT_B2C } from "../../src/contrats/exemples/prospection.js";
 import { PageAtelier } from "../../src/ui/index.js";
 import { CompteRenduProspect, ConfianceQualification } from "../../src/contrats/prospection.js";
-import { adresseDepuisFiltres, EXPLICATION_STATUT_LEAD, familleMetier, filtresDepuisAdresse, FILTRES_VIDES, filtresExport, libelleScore, statutLead } from "../../src/ui/vues/prospects.js";
+import { adresseDepuisFiltres, EXPLICATION_STATUT_LEAD, familleMetier, filtresDepuisAdresse, FILTRES_VIDES, filtresExport, filtresMemorises, libelleScore, statutLead } from "../../src/ui/vues/prospects.js";
 import { act } from "react";
 import { champParLibelle, cliquer, ENTREPRISE, installerPont, parTexte, rendre, saisir, type Pont, type Rendu } from "./pont.js";
 
@@ -214,12 +214,14 @@ describe("filtres portés par l'adresse", () => {
     expect(q.get("statuts")).toBe("qualifie");
     expect(q.get("segments")).toBe("medecins");
     expect(q.get("communes")).toBe("Liège");
-    expect(q.get("source")).toBe("reelle");
+    // Le sélecteur Source n'existe plus : `?source=` est ignoré, il ne filtre pas et ne compte pas.
+    expect(q.get("source")).toBeNull();
     expect(q.get("scoreMin")).toBe("60");
-    expect(c.textContent).toContain("Filtres (5 actifs)");
+    expect(c.textContent).toContain("Filtres (4 actifs)");
   });
 
   it("valeurs invalides ignorées : statut inconnu, score hors bornes, balise, champ inconnu, valeur trop longue", () => {
+    expect(filtresDepuisAdresse("?source=reelle")).toEqual(FILTRES_VIDES);
     expect(filtresDepuisAdresse("?statut=pirate&score=101&segment=%3Cscript%3E&zone=" + "a".repeat(81) + "&secteur=abc&source=autre&qualifies=1&x=1")).toEqual(FILTRES_VIDES);
     expect(filtresDepuisAdresse("?statut=qualifie&score=abc&campagne=c-1")).toEqual({ ...FILTRES_VIDES, statut: "qualifie", campagneId: "c-1" });
     expect(filtresDepuisAdresse("")).toEqual(FILTRES_VIDES);
@@ -289,6 +291,18 @@ describe("moins de clics : cibles, filtres mémorisés, taille de page", () => {
     window.history.replaceState(null, "", "/RNO/atelier/prospects?zone=Mons");
     await ouvrir();
     expect(new URL(requetesListe()[0]!.url, "http://x").searchParams.get("communes")).toBe("Mons");
+  });
+
+  it("une source mémorisée avant le retrait du sélecteur est ignorée : pas de filtre invisible, ni dans la requête ni dans l'adresse", async () => {
+    window.localStorage.setItem(cle, JSON.stringify({ ...FILTRES_VIDES, zone: "Namur", source: "demonstration" }));
+    const c = await ouvrir();
+    const q = new URL(requetesListe()[0]!.url, "http://x").searchParams;
+    expect(q.get("source")).toBeNull();
+    expect(q.get("communes")).toBe("Namur");
+    expect(window.location.search).not.toContain("source");
+    expect(c.textContent).toContain("Filtres (1 actif");
+    expect(filtresMemorises(ENTREPRISE).source).toBe("");
+    expect(adresseDepuisFiltres({ ...FILTRES_VIDES, source: "reelle" })).toBe("");
   });
 
   it("sans stockage ou avec une mémoire corrompue, la page marche et ignore les valeurs inattendues", async () => {

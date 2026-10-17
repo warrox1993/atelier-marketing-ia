@@ -2,7 +2,7 @@
 name: "conception-module-formation"
 description: "Conçoit un module de formation en entreprise : objectifs pédagogiques mesurables, séquences, méthodes actives, supports, évaluation à quatre niveaux (modèle de Kirkpatrick) et plan de transfert sur le poste. À utiliser pour créer ou refondre une formation interne ou cahier des charges d'une formation externe ; jamais pour promettre un résultat, délivrer une attestation ou un diplôme, ni évaluer une personne nommément sans accord humain."
 metadata:
-  version: "1.0.0"
+  version: "1.1.0"
   langue: "fr"
   domaine: "formation"
 ---
@@ -42,6 +42,8 @@ Un module où chaque objectif décrit un comportement observable, chaque séquen
    - niveau 3, comportement : applique-t-il ce qui a été appris sur son poste, vérifié 4 à 12 semaines après avec son responsable ;
    - niveau 4, résultats : l'indicateur de travail du point 1 a-t-il bougé (erreurs, délais, réclamations), en sachant que d'autres causes jouent.
    Le niveau 1 se fait toujours, le 2 pour tout objectif, le 3 pour les formations à enjeu, le 4 seulement s'il existe un indicateur mesuré avant la formation.
+   Le module ne contient que le niveau retenu par objectif ; le dispositif détaillé (délai d'attente, comparaison avant et
+   après, verdict d'efficacité) relève de la compétence `evaluation-formation`.
 4. **Construire les séquences** : pour chaque objectif, une mise en situation, un apport court, une pratique par les participants, un retour. Prévoir le temps de pratique avant le temps d'exposé. Durées chiffrées, total égal à la durée disponible.
 5. **Choisir des méthodes actives** adaptées au public : cas réels de l'entreprise anonymisés, jeux de rôle, démonstration puis essai, exercices sur le poste, binômes, étude de cas. Écarter la méthode qui ne sert aucun objectif.
 6. **Préparer les supports** : support du formateur, support du participant, exercices, grille d'évaluation, fiche de transfert. Un support utilise les documents de l'entreprise ; une source externe est citée avec sa date.

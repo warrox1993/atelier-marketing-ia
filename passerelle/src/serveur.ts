@@ -22,7 +22,7 @@ import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/
 import { CallToolRequestSchema, ListToolsRequestSchema } from "@modelcontextprotocol/sdk/types.js";
 import { HOTE_PAR_DEFAUT, PORT_PAR_DEFAUT, verifierHoteEcoute } from "./config.js";
 import { RegistreFournisseurs, type ContexteAppel, type IdentiteAppel, type ModePasserelle } from "./fournisseurs.js";
-import { ServeurAutorisationLocal } from "./oauth-local.js";
+import { MESSAGE_PORTEE_RETIREE, ServeurAutorisationLocal } from "./oauth-local.js";
 import { appelerOutil, construireCatalogue, enveloppeAtelier, VERSION_PASSERELLE } from "./outils.js";
 import { COMPTE_LOCAL, MOTIF_SERVICE, type Service } from "./services.js";
 import type { SignataireEnveloppe } from "./signature-enveloppe.js";
@@ -38,7 +38,7 @@ export interface OptionsServeur {
   /** Port d'écoute ; 0 = port libre choisi par le système (tests). */
   port?: number;
   registre?: RegistreFournisseurs;
-  /** Désactive l'exigence de jeton (tests unitaires seulement). Jamais en production. */
+  /** Désactive l'exigence de jeton : acceptée seulement si NODE_ENV=test ou VITEST, sinon erreur au démarrage. */
   sansAuthentification?: boolean;
   journal?: (message: string) => void;
   /** Fichier d'état de l'autorisation locale (clients, empreintes de jetons) qui survit au redémarrage. */
@@ -106,6 +106,9 @@ export function creerServeur(options: OptionsServeur): ServeurPasserelle {
   const portDemande = options.port ?? PORT_PAR_DEFAUT;
   const registre = options.registre ?? new RegistreFournisseurs();
   const journal = options.journal ?? ((): void => undefined);
+  if (options.sansAuthentification === true && process.env.NODE_ENV !== "test" && process.env.VITEST === undefined) {
+    throw new Error("L'option sansAuthentification est réservée aux tests (NODE_ENV=test ou VITEST) : démarrage refusé.");
+  }
   const exigerJeton = options.sansAuthentification !== true;
 
   let portReel = portDemande;
@@ -171,7 +174,8 @@ export function creerServeur(options: OptionsServeur): ServeurPasserelle {
       if (estLocal(service)) {
         const trouve = autorisation.verifierJeton(jetonPorteur, service);
         if (!trouve) {
-          envoyerJson(res, 401, { error: "invalid_token", message: "Jeton invalide, expiré ou destiné à un autre service." }, { "www-authenticate": enteteChallenge(service, true) });
+          const message = autorisation.porteeRetiree(jetonPorteur) ? MESSAGE_PORTEE_RETIREE : "Jeton invalide, expiré ou destiné à un autre service.";
+          envoyerJson(res, 401, { error: "invalid_token", message }, { "www-authenticate": enteteChallenge(service, true) });
           return;
         }
         identite = { compte: trouve.compte, propriete: trouve.propriete };

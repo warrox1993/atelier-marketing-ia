@@ -113,17 +113,19 @@ describe("rubrique « Direction » et registre", () => {
   };
   const liens = (c: HTMLElement) => Array.from(c.querySelectorAll("nav a")).map((a) => a.textContent?.trim());
 
-  it("n'apparaît pas hors Direction (403) ni quand la réponse n'est pas celle du registre", async () => {
-    serveur = () => ({ statut: 403, corps: { error: "réservé" } });
+  it("n'apparaît pas hors Direction (acces: false) ni quand la réponse n'est pas celle de la sonde, et ne sonde jamais le registre", async () => {
+    serveur = () => ({ statut: 200, corps: { acces: false } });
     expect(liens(await navigation())).not.toContain("Direction");
     rendu?.demonter();
     oublierAccesDirection();
     serveur = () => ({ statut: 200, corps: { points: [], total: 0 } });
     expect(liens(await navigation())).not.toContain("Direction");
+    expect(appels.some((a) => a.url.includes("/liaisons/registre"))).toBe(false);
+    expect(appels.some((a) => a.url.includes("/liaisons/acces?companyId="))).toBe(true);
   });
 
-  it("apparaît avant Réglages quand le serveur autorise le registre", async () => {
-    serveur = () => ({ statut: 200, corps: { autorise: true, lignes: [], total: 0, page: 1, taille: 1, pages: 1 } });
+  it("apparaît avant Réglages quand la sonde répond acces: true", async () => {
+    serveur = (url) => (url.includes("/liaisons/acces") ? { statut: 200, corps: { acces: true } } : { statut: 404, corps: {} });
     const l = liens(await navigation());
     expect(l).toContain("Direction");
     expect(l.indexOf("Direction")).toBe(l.indexOf("Réglages") - 1);

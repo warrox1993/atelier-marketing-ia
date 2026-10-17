@@ -1,0 +1,6 @@
+agent;date_debut;date_fin;jours_ouvrables;motif
+Agent 1;05/01/2026;09/01/2026;5;maladie
+Agent 1;14/04/2026;15/04/2026;2;maladie
+Agent 2;02/03/2026;20/03/2026;15;maladie
+Agent 3;01/06/2026;03/06/2026;3;raison familiale
+Agent 3;21/09/2026;21/09/2026;1;maladie

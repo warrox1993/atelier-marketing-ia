@@ -2,7 +2,7 @@
 name: "courrier-officiel"
 description: "Prépare les courriers et courriels formels d'une PME belge (réponse à une administration, mise en demeure simple, envoi recommandé, relance formelle) avec les mentions obligatoires d'une personne morale sur ses documents (dénomination, forme, siège, numéro d'entreprise, RPM et tribunal) et les durées de conservation à appliquer à l'original et à la preuve d'envoi. À utiliser pour rédiger un brouillon destiné à être relu, signé et envoyé par un humain ; jamais pour envoyer, signer, qualifier juridiquement un litige, chiffrer des intérêts de retard ou répondre seul à un courrier sensible (recours, plainte, demande RGPD, courrier d'autorité)."
 metadata:
-  version: "1.0.0"
+  version: "1.1.0"
   langue: "fr"
   domaine: "administratif"
 ---
@@ -45,7 +45,8 @@ Un brouillon sobre, complet et vérifiable : en-tête conforme, références du 
 6. **Choisir le mode d'envoi** selon l'enjeu : courriel pour le courant ; recommandé (avec accusé de réception) quand la date de réception comptera (mise en demeure, résiliation, contestation, réponse à une autorité dont le délai court). Garder la preuve d'envoi avec le dossier.
 7. **Lister les pièces jointes** et vérifier qu'elles ne contiennent que le nécessaire (minimisation : retirer ou masquer les données personnelles sans rapport).
 8. **Établir la fiche de classement** : nom de fichier, durée de conservation proposée, lien vers la compétence `classement-archivage`.
-9. **Relire contre la liste de contrôle** : orthographe des noms, montants et dates recoupés avec les pièces, aucun engagement non validé, aucun tiret cadratin, signature laissée vierge.
+9. **Réutiliser un modèle seulement s'il convient** : un modèle de courrier de l'entreprise porte un intitulé, une version, la date de sa dernière relecture, une rubrique « à utiliser quand », une rubrique « ne pas utiliser quand » (procédure judiciaire ou enquête possible, courrier d'une autorité, engagement ou renonciation, situation sans précédent, dirigeant visé), les variables à remplir et les actions de suivi. Si l'un des cas « ne pas utiliser » est présent, ne pas produire de courrier modèle : signaler le cas et préparer un brouillon marqué « pour relecture juridique uniquement ».
+10. **Relire contre la liste de contrôle** : orthographe des noms, montants et dates recoupés avec les pièces, aucun engagement non validé, aucun tiret cadratin, signature laissée vierge.
 
 ### Mentions obligatoires sur les documents d'une personne morale
 
@@ -132,3 +133,9 @@ Les sites des services publics fédéraux (SPF Finances, SPF Economie) étaient 
 Une société reçoit le 12/10/2026 une lettre d'une commune réclamant un document dans un délai de 15 jours. Le brouillon reprend en tête : « Réponse attendue avant le 27/10/2026 (15 jours calendrier à compter de la réception du 12/10) ; sensibilité : normale ; envoi proposé : recommandé car la date de réception comptera ». Le corps cite la référence de la commune, liste les pièces jointes et laisse la signature vide. Le bas de page porte les sept mentions de l'article 2:20 ; le capital n'est pas mentionné (inutile et à risque).
 
 Cas d'échec : le courrier reçu est une mise en demeure d'un fournisseur qui annonce une action en justice, et l'humain demande « une réponse ferme qui conteste tout ». La compétence ne rédige pas de réponse de fond : elle prépare la fiche « courrier sensible » (dates, pièces, demande de l'humain) et écrit « qualification juridique et stratégie de réponse : à demander à un avocat ». Elle peut, si l'humain le demande, préparer un simple accusé de réception neutre sans reconnaissance de dette.
+
+## Origine de la méthode
+
+Gabarit de modèle avec « à utiliser quand » et « ne pas utiliser quand » (étape 9) adapté de github.com/anthropics/knowledge-work-plugins,
+`legal/skills/legal-response/SKILL.md` (« Template Format », étape 3), commit 33eeda1e8fd856455b05479d13a0f85b5f803744, licence Apache 2.0. Liste des reprises :
+`organisation/skills/LICENCES-TIERS.md`.

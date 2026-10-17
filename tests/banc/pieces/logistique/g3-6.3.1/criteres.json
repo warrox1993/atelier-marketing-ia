@@ -1,0 +1,12 @@
+[
+ {
+  "critere": "moyenne de 42 sans les semaines de rupture",
+  "nombres": [
+   42.0
+  ],
+  "nombres_interdits": [
+   35.54,
+   35.5
+  ]
+ }
+]

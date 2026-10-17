@@ -1,6 +1,0 @@
-produit,garantie,franchise_eur,plafond_eur,statut,source
-auto,omnium,275,valeur_catalogue,en_vigueur,tarif-auto-2026.md
-habitation,degats_des_eaux,275,valeur_a_neuf,en_vigueur,cg-habitation-2026.md
-habitation,vol_contenu,0,6400,en_vigueur,cg-habitation-2026.md
-habitation,vol_bijoux,0,1280,en_vigueur,cg-habitation-2026.md
-animaux,soins_veterinaires,50,1500,en_vigueur,grille de demonstration

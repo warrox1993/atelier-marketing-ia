@@ -1,0 +1,144 @@
+From 52cd3d54fe75645b4732212a40d211892a79705f Mon Sep 17 00:00:00 2001
+From: Jean-Baptiste Dhondt <114347858+warrox1993@users.noreply.github.com>
+Date: Sat, 17 Oct 2026 22:54:21 +0200
+Subject: [PATCH 77/78] =?UTF-8?q?fix(ui):=20bo=C3=AEte=20de=20r=C3=A9cepti?=
+ =?UTF-8?q?on,=20une=20seule=20marque=20et=20recherche=20lisible?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Déplié, l'entrée de la boîte affichait un point rouge sur l'icône et la
+pastille chiffrée (déjà rouge en cas d'échec) : le point n'apparaît plus
+qu'en barre repliée ou sans pastille. Le champ de recherche affiche
+« Rechercher » (le libellé complet passe en étiquette d'accessibilité) au
+lieu d'un texte coupé. Compteur « N en cours » et « attention requise »
+en français. Audit visuel D24.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01DP85vPq2MHkZg8VNtRvCzB
+---
+ ui/src/components/SidebarAgents.test.tsx      | 2 +-
+ ui/src/components/SidebarNavItem.test.tsx     | 2 +-
+ ui/src/components/SidebarNavItem.tsx          | 9 +++++----
+ ui/src/components/SidebarRecentTasks.test.tsx | 2 +-
+ ui/src/pages/Inbox.test.tsx                   | 6 +++---
+ ui/src/pages/Inbox.tsx                        | 3 ++-
+ 6 files changed, 13 insertions(+), 11 deletions(-)
+
+diff --git a/ui/src/components/SidebarAgents.test.tsx b/ui/src/components/SidebarAgents.test.tsx
+index 74313c995..db8bef254 100644
+--- a/ui/src/components/SidebarAgents.test.tsx
++++ b/ui/src/components/SidebarAgents.test.tsx
+@@ -748,7 +748,7 @@ describe("SidebarAgents", () => {
+     let labels = agentLinkLabels(container);
+     expect(labels).toHaveLength(1);
+     expect(labels[0]).toContain("Alpha");
+-    expect(labels[0]).toContain("1 live");
++    expect(labels[0]).toContain("1 en cours");
+ 
+     mockHeartbeatsApi.liveRunsForCompany.mockResolvedValue([]);
+     await act(async () => {
+diff --git a/ui/src/components/SidebarNavItem.test.tsx b/ui/src/components/SidebarNavItem.test.tsx
+index 3f882ab26..d3d475ca1 100644
+--- a/ui/src/components/SidebarNavItem.test.tsx
++++ b/ui/src/components/SidebarNavItem.test.tsx
+@@ -190,6 +190,6 @@ describe("SidebarNavItem", () => {
+     sidebarState.collapsed = true;
+     render(<SidebarNavItem to="/dashboard" label="Dashboard" icon={Inbox} liveCount={3} />);
+ 
+-    expect(link().getAttribute("aria-label")).toBe("Dashboard, 3 live");
++    expect(link().getAttribute("aria-label")).toBe("Dashboard, 3 en cours");
+   });
+ });
+diff --git a/ui/src/components/SidebarNavItem.tsx b/ui/src/components/SidebarNavItem.tsx
+index 78f5c021d..27b256ca8 100644
+--- a/ui/src/components/SidebarNavItem.tsx
++++ b/ui/src/components/SidebarNavItem.tsx
+@@ -103,11 +103,11 @@ export function SidebarNavItem({
+   // Accessible text equivalent for the collapsed dot indicator. The visible
+   // label is `sr-only` in the rail, so the count must be surfaced here.
+   const railStatusText = hasLive
+-    ? `${liveCount} live`
++    ? `${liveCount} en cours`
+     : hasBadge
+       ? `${badge}${badgeLabel ? ` ${badgeLabel}` : ""}`
+       : alert
+-        ? "attention needed"
++        ? "attention requise"
+         : undefined;
+   const railAriaLabel = !rail || (!railStatusText && !trailingLabel)
+     ? undefined
+@@ -137,7 +137,8 @@ export function SidebarNavItem({
+       {showIconSlot ? (
+         <span data-slot="sidebar-nav-icon" className="relative shrink-0">
+           {iconNode ?? (Icon ? <Icon className="h-4 w-4" /> : null)}
+-          {alert && (
++          {/* Déplié avec une pastille chiffrée, celle-ci passe déjà au rouge : pas de second point sur l'icône. */}
++          {alert && (rail || !hasBadge) && (
+             <span
+               data-slot="sidebar-icon-alert-badge"
+               className="absolute -right-0.5 -top-0.5 h-2 w-2 rounded-full bg-red-500 shadow-(--shadow-sidebar-icon-badge)"
+@@ -190,7 +191,7 @@ export function SidebarNavItem({
+                 <span className="animate-pulse absolute inline-flex h-full w-full rounded-full bg-blue-600 dark:bg-blue-400 opacity-75" />
+                 <span className="relative inline-flex rounded-full h-2 w-2 bg-blue-600 dark:bg-blue-400" />
+               </span>
+-              <span className="text-(length:--text-micro) font-medium text-blue-600 dark:text-blue-400">{liveCount} live</span>
++              <span className="text-(length:--text-micro) font-medium text-blue-600 dark:text-blue-400">{liveCount} en cours</span>
+             </>
+           )}
+         </span>
+diff --git a/ui/src/components/SidebarRecentTasks.test.tsx b/ui/src/components/SidebarRecentTasks.test.tsx
+index 075a7c548..61547e918 100644
+--- a/ui/src/components/SidebarRecentTasks.test.tsx
++++ b/ui/src/components/SidebarRecentTasks.test.tsx
+@@ -159,7 +159,7 @@ describe("SidebarRecentTasks", () => {
+       title: "Refreshed title",
+     });
+     expect(link?.textContent).toContain("Refreshed title");
+-    expect(link?.textContent).toContain("1 live");
++    expect(link?.textContent).toContain("1 en cours");
+     expect(link?.querySelector('[aria-label="In Progress"]')).toBeNull();
+     expect(link?.querySelector('[data-slot="recent-task-icon-spacer"]')).toBeNull();
+     expect(link?.querySelector('[data-slot="sidebar-nav-icon"]')).toBeNull();
+diff --git a/ui/src/pages/Inbox.test.tsx b/ui/src/pages/Inbox.test.tsx
+index c122f74fc..e5cc59fc5 100644
+--- a/ui/src/pages/Inbox.test.tsx
++++ b/ui/src/pages/Inbox.test.tsx
+@@ -661,7 +661,7 @@ describe("Inbox toolbar", () => {
+       );
+     });
+ 
+-    expect(container.querySelector('input[placeholder="Rechercher : boîte de réception…"]')).not.toBeNull();
++    expect(container.querySelector('input[placeholder="Rechercher"][aria-label="Rechercher : boîte de réception"]')).not.toBeNull();
+     expect(container.querySelector('[data-testid="inbox-blocked-tab-badge"]')).toBeNull();
+     expect(container.querySelector('button[title="Filtrer"]')).not.toBeNull();
+     expect(container.querySelector('button[title="Grouper"]')).not.toBeNull();
+@@ -694,9 +694,9 @@ describe("Inbox toolbar", () => {
+       const toolbar = container.querySelector('[data-slot="collection-toolbar"]');
+       expect(toolbar?.getAttribute("aria-label")).toBe("Commandes : Boîte de réception");
+       expect(toolbar?.querySelector('[data-slot="collection-toolbar-context"]')).not.toBeNull();
+-      expect(toolbar?.querySelector('[data-slot="collection-toolbar-search"] input[placeholder="Rechercher : boîte de réception…"]')).not.toBeNull();
++      expect(toolbar?.querySelector('[data-slot="collection-toolbar-search"] input[placeholder="Rechercher"][aria-label="Rechercher : boîte de réception"]')).not.toBeNull();
+       expect(toolbar?.querySelector('[data-slot="collection-toolbar-controls"]')).not.toBeNull();
+-      expect(container.querySelectorAll('input[placeholder="Rechercher : boîte de réception…"]')).toHaveLength(1);
++      expect(container.querySelectorAll('input[placeholder="Rechercher"][aria-label="Rechercher : boîte de réception"]')).toHaveLength(1);
+ 
+       act(() => root.unmount());
+       container.replaceChildren();
+diff --git a/ui/src/pages/Inbox.tsx b/ui/src/pages/Inbox.tsx
+index 7c6906673..bd7364e0e 100644
+--- a/ui/src/pages/Inbox.tsx
++++ b/ui/src/pages/Inbox.tsx
+@@ -2449,7 +2449,8 @@ function StreamlinedInbox({
+             <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+             <Input
+               type="search"
+-              placeholder={`Rechercher : ${surfaceLabel.toLowerCase()}…`}
++              placeholder="Rechercher"
++              aria-label={`Rechercher : ${surfaceLabel.toLowerCase()}`}
+               value={searchQuery}
+               onChange={(e) => setSearchQuery(e.target.value)}
+               onKeyDown={(e) => {
+-- 
+2.53.0
+

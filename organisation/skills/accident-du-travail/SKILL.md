@@ -2,7 +2,7 @@
 name: "accident-du-travail"
 description: "Prépare le dossier administratif et l'analyse d'un accident du travail dans une PME belge : premiers gestes administratifs, projet de déclaration à l'assureur, fiche d'accident, analyse des causes, mesures correctives, avec les délais à vérifier. À utiliser après un accident, quand les secours sont déjà passés, pour préparer les documents que l'employeur et le conseiller en prévention valideront ; jamais pour déclarer soi-même, décider d'une responsabilité, ni traiter un blessé ou une situation encore dangereuse."
 metadata:
-  version: "1.0.0"
+  version: "1.1.0"
   langue: "fr"
   domaine: "hse"
 ---
@@ -37,7 +37,8 @@ Un dossier prêt à relire : chronologie des faits sans nom ni donnée de santé
 2. **Qualifier le cas avec un humain** : accident sur le lieu ou sur le chemin du travail, gravité annoncée. Un accident grave (incapacité permanente ou décès) déclenche un signalement immédiat à l'inspection régionale du contrôle du bien-être au travail, qui est un acte humain à vérifier avec le conseiller en prévention.
 3. **Calculer les délais à vérifier** : déclaration électronique à l'assureur dans les huit jours de l'accident (DRS scénario 1, à vérifier) ; fiche d'accident si l'incapacité est d'au moins quatre jours (à vérifier) ; la déclaration à l'assureur peut tenir lieu de fiche si elle contient toutes les données. Écrire chaque date limite en toutes lettres, avec la mention « à vérifier ».
 4. **Reconstituer les faits** : chronologie en phrases courtes, sourcée, sans nom, sans diagnostic, sans jugement sur la personne.
-5. **Analyser les causes** : de l'événement vers ses causes (technique, organisationnelle, humaine, environnement) en demandant « pourquoi » à chaque niveau, jusqu'à des causes sur lesquelles l'entreprise peut agir. Distinguer fait, inférence et hypothèse.
+5. **Analyser les causes** : de l'événement vers ses causes en demandant « pourquoi » à chaque niveau, jusqu'à des causes sur lesquelles l'entreprise peut agir. Passer en revue six familles : personnes (formation, charge, communication), équipements (entretien, état), méthodes (procédure, consigne absente ou floue), matériaux et produits, mesures et contrôles, milieu (sol, éclairage, météo, encombrement). Distinguer fait, inférence et hypothèse.
+   **Valider la cause retenue** avant de proposer une mesure, en cochant ou en expliquant chacun des cinq points : elle est prouvée par un élément objectif ; la supprimer empêcherait la récurrence ; elle est maîtrisable par l'entreprise ; elle explique tous les faits constatés ; aucune autre cause importante ne reste sans traitement. Un point non validé est écrit, jamais passé sous silence.
 6. **Proposer des mesures** dans l'ordre de prévention (voir `analyse-risques-poste`), avec responsable et échéance proposés, et lier l'accident à une mise à jour de l'analyse du poste.
 7. **Préparer le projet de déclaration et de fiche** à partir des faits ; les champs inconnus restent vides avec « information manquante ».
 8. **Remettre le dossier** à l'employeur et au conseiller en prévention avec les décisions attendues : déclarer, signaler, appliquer les mesures.
@@ -82,3 +83,11 @@ Un opérateur de la ligne de conditionnement a subi une coupure à la main lors 
 Délais : déclaration à l'assureur au plus tard le mercredi 14 octobre 2026 (huit jours à compter du lendemain, à vérifier) ; fiche d'accident à décider selon la durée d'incapacité. Chronologie : « Mardi 6 octobre, vers 10 h, un opérateur change la lame de la ligne 2, machine arrêtée mais protecteur démonté (source : rapport du chef d'équipe). » Causes : procédure de changement non écrite (fait), absence de consignation de la machine (hypothèse à vérifier). Mesures proposées : procédure de changement de lame et protecteur fixe, responsable et échéance proposés.
 
 Cas d'échec : la tâche arrive avec le certificat médical du blessé et la demande « indique qui est responsable ». La compétence ne recopie pas le certificat, n'écrit aucune responsabilité individuelle, signale que la question relève d'un juriste ou de l'assureur, et poursuit avec l'analyse des causes du système de travail. Si la machine n'est pas encore consignée et que d'autres personnes y travaillent, elle s'arrête et fait alerter un humain.
+
+## Origine de la méthode
+
+Six familles de causes et liste de validation de la cause adaptées et traduites de github.com/alirezarezvani/claude-skills,
+`ra-qm-team/skills/capa-officer/SKILL.md`, sections « Fishbone Diagram Categories (6M) » et « Root Cause Validation »,
+commit 19392f7a08264ed00486a251f5b2098321771f94, licence MIT, Copyright (c) 2025 Alireza Rezvani. Modifications :
+traduction, transposition à l'accident du travail. Texte des licences et liste des reprises :
+`organisation/skills/LICENCES-TIERS.md`.

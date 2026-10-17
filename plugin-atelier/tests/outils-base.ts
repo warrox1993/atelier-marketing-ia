@@ -48,7 +48,7 @@ export function creerBanc(o: { mode?: "demonstration" | "reel"; modeEntreprise?:
     // Fiche du client : aucune marque par défaut (les garde-fous de vérité de la porte lisent `marques`).
     marques: async () => [],
     // Base de clients vide par défaut (la confiance de qualification la lit pour « pas déjà client »).
-    etatBaseClients: async () => ({ dernierImport: null, clients: 0, actifs: 0 }),
+    etatBaseClients: async () => ({ dernierImport: null, clients: 0, actifs: 0, aReimporter: 0 }),
     journaliser: async (e) => void t.journal.push({ ...e, seq: t.journal.length + 1, creeLe: horloge() }),
     datesJournal: async (_c, issueId, type) => t.journal.filter((j) => j.issueId === issueId && j.type === type).map((j) => j.creeLe as string).sort().reverse(),
     depotsProspectionCampagne: async (companyId, campagneId) =>
@@ -56,7 +56,7 @@ export function creerBanc(o: { mode?: "demonstration" | "reel"; modeEntreprise?:
     lireJournal: async (_c, after, _l, issueId) => ({ evenements: t.journal.filter((j) => j.seq > after && (!issueId || j.issueId === issueId)) as never, dernierSeq: t.journal.length, complet: true }),
     lireReglages: async (companyId) => {
       const r = t.reglages.find((x) => x.companyId === companyId);
-      return { companyId, maxRunsActifs: r?.maxRunsActifs ?? 3, maxCyclesCorrection: r?.maxCyclesCorrection ?? 3, modeParDefaut: r?.modeParDefaut ?? "demonstration", retentionJours: r?.retentionJours ?? 365, plafondPub: r?.plafondPub ?? null, modifieLe: r?.modifieLe ?? new Date(0).toISOString(), existe: Boolean(r) };
+      return { companyId, maxRunsActifs: r?.maxRunsActifs ?? 3, maxCyclesCorrection: r?.maxCyclesCorrection ?? 3, modeParDefaut: r?.modeParDefaut ?? "reel", retentionJours: r?.retentionJours ?? 365, plafondPub: r?.plafondPub ?? null, modifieLe: r?.modifieLe ?? new Date(0).toISOString(), existe: Boolean(r) };
     },
     enregistrerReglages: async (r) => {
       const ex = t.reglages.find((x) => x.companyId === r.companyId);
@@ -200,7 +200,7 @@ export function creerBanc(o: { mode?: "demonstration" | "reel"; modeEntreprise?:
     coutsEntreprise: async () => ({ totalCents: 0, evenements: 0 }),
     runsDeTaches: async () => [],
     bloqueursNonResolus: async () => [],
-    supprimerDonneesEntreprise: async () => ({ journal: t.journal.splice(0).length }),
+    supprimerDonneesEntreprise: async () => ({ supprimes: {}, conserves: { journal: t.journal.length } }),
   };
   function vueDiffusion(d: Ligne) {
     return {

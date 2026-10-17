@@ -5,6 +5,13 @@
  * interrogation toutes les 4 s quand l'onglet est visible, jamais en arrière-plan. Le texte est rendu
  * sans HTML (aucun `dangerouslySetInnerHTML`) ; seuls les identifiants de tâche (`ABC-12`) deviennent
  * des liens vers la tâche.
+ *
+ * Destinataire : pour un client à plusieurs services (une entreprise par service), le fil est celui de l'entreprise
+ * Direction, dont le coordinateur est le coordinateur général, seul interlocuteur de l'humain ; il délègue aux
+ * coordinateurs de département par le bureau de liaison. L'entreprise Direction est lue par `departements.lister`
+ * (déclaration des services du même client, jamais d'un autre). Entreprise non déclarée ou sans Direction : le fil
+ * reste celui de l'entreprise courante. Une lecture en échec n'aiguille jamais en silence vers un autre destinataire :
+ * elle s'affiche en erreur avec « Réessayer ».
  */
 import { Fragment, useCallback, useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import { useHostContext } from "@paperclipai/plugin-sdk/ui";
@@ -14,9 +21,10 @@ import { BoutonDicter } from "../composants/dictee.js";
 import { VoixEnDirect } from "../composants/voix-en-direct.js";
 import { Bouton, Chargement, EtatErreur, LienHote, MessageFait } from "../composants.js";
 import { dateHeure, classerErreur } from "../format.js";
-import { ActionsIndisponibles, ActionsMessage, CarteFil, elementsVises, useElementsAFaire } from "../discussion-telecommande.js";
+import { ActionsIndisponibles, ActionsMessage, CarteFil, elementsVises, useAFaireClient } from "../discussion-telecommande.js";
 import { appelRoute } from "../routes-prospection.js";
 import { STYLES_DISCUSSION } from "../styles-discussion.js";
+import type { DepartementDeclare, ReponseDepartements } from "../../contrats/departements.js";
 
 export interface MessageFil {
   id: string;
@@ -78,8 +86,45 @@ function fusionner(actuels: MessageFil[], nouveaux: MessageFil[]): MessageFil[] 
   return [...actuels, ...ajouts].sort((a, b) => a.date.localeCompare(b.date) || a.id.localeCompare(b.id));
 }
 
+/**
+ * Entreprise dont la discussion est ouverte : la Direction du client si l'entreprise courante est un service déclaré
+ * d'un client qui en a une (coordinateur général), sinon l'entreprise courante. `companyId` reste indéfini pendant la
+ * lecture ; `general` est vrai quand le fil est celui du coordinateur général du client (y compris quand l'entreprise
+ * courante est la Direction elle-même) ; `services` liste les services du client (null sans client à plusieurs services).
+ */
+export function useEntrepriseDiscussion(courante: string | null | undefined): { companyId: string | null; general: boolean; services: DepartementDeclare[] | null; erreur: unknown; reessayer: () => void } {
+  const [etat, setEtat] = useState<{ pour: string | null; cible: string | null; general: boolean; services: DepartementDeclare[] | null; erreur: unknown }>({ pour: null, cible: null, general: false, services: null, erreur: null });
+  const [essai, setEssai] = useState(0);
+  useEffect(() => {
+    if (!courante) return;
+    let annule = false;
+    setEtat({ pour: null, cible: null, general: false, services: null, erreur: null });
+    appelRoute<Partial<ReponseDepartements>>("GET", `/departements?companyId=${encodeURIComponent(courante)}`)
+      .then((r) => {
+        if (annule) return;
+        const services = Array.isArray(r?.departements) ? r.departements : [];
+        const direction = services.find((d) => d.estDirection);
+        const plusieurs = direction !== undefined && services.length >= 2;
+        setEtat({ pour: courante, cible: direction?.companyId ?? courante, general: plusieurs, services: plusieurs ? services : null, erreur: null });
+      })
+      .catch((erreur: unknown) => !annule && setEtat({ pour: courante, cible: null, general: false, services: null, erreur }));
+    return () => {
+      annule = true;
+    };
+  }, [courante, essai]);
+  const pret = etat.pour === courante ? etat.cible : null;
+  return {
+    companyId: pret,
+    general: pret !== null && etat.general,
+    services: pret !== null ? etat.services : null,
+    erreur: etat.pour === courante ? etat.erreur : null,
+    reessayer: () => setEssai((e) => e + 1),
+  };
+}
+
 export function VueDiscussion() {
-  const { companyId } = useHostContext();
+  const { companyId: courante } = useHostContext();
+  const { companyId, general, services, erreur: erreurDestinataire, reessayer: reessayerDestinataire } = useEntrepriseDiscussion(courante);
   const [etat, setEtat] = useState<{ ouverture: Ouverture | null; erreur: unknown; chargement: boolean }>({ ouverture: null, erreur: null, chargement: true });
   const [messages, setMessages] = useState<MessageFil[]>([]);
   const [texte, setTexte] = useState("");
@@ -93,7 +138,7 @@ export function VueDiscussion() {
   /** Actions et cartes déjà traitées (clé → message de confirmation), pour les retirer sans attendre l'interrogation. */
   const [faits, setFaits] = useState<Record<string, string>>({});
   const [versionElements, setVersionElements] = useState(0);
-  const { elements, erreur: erreurElements, reessayer: reessayerElements } = useElementsAFaire(companyId, elementsVises(messages), versionElements);
+  const { elements, origines, autres, erreur: erreurElements, reessayer: reessayerElements } = useAFaireClient(companyId, services, elementsVises(messages), versionElements);
   const traite = (cle: string, message: string) => {
     setFaits((f) => ({ ...f, [cle]: message }));
     setVersionElements((v) => v + 1);
@@ -171,7 +216,7 @@ export function VueDiscussion() {
   useEffect(() => {
     const el = fil.current;
     if (el) el.scrollTop = el.scrollHeight;
-  }, [messages.length, cartes.length, attenteDepuis]);
+  }, [messages.length, cartes.length, autres.length, attenteDepuis]);
 
   const envoyer = useCallback(
     async (brut: string) => {
@@ -200,6 +245,7 @@ export function VueDiscussion() {
     }
   };
 
+  if (erreurDestinataire) return <EtatErreur erreur={erreurDestinataire} onReessayer={reessayerDestinataire} contexte="la discussion" />;
   if (etat.erreur) return <EtatErreur erreur={etat.erreur} onReessayer={() => setVersion((v) => v + 1)} contexte="la discussion" />;
   if (etat.chargement && !etat.ouverture) return <Chargement libelle="Ouverture de la discussion" lignes={3} />;
 
@@ -208,10 +254,11 @@ export function VueDiscussion() {
       <style>{STYLES_DISCUSSION}</style>
       <div className="atl-disc-entete">
         <h1>Discussion avec le Coordinateur</h1>
+        {general ? <span className="atl-attenue">Coordinateur général (Direction) : il transmet aux départements</span> : null}
         {etat.ouverture?.identifiant ? <span className="atl-attenue">{etat.ouverture.identifiant}</span> : null}
       </div>
       <div ref={fil} className="atl-disc-fil" role="log" aria-live="polite" aria-label="Messages de la discussion">
-        {messages.length === 0 && cartes.length === 0 ? (
+        {messages.length === 0 && cartes.length === 0 && autres.length === 0 ? (
           <div className="atl-disc-vide">
             <p>Demandez ce que vous voulez à l'équipe : état des missions, blocages, nouveaux leads, nouvelle prospection.</p>
             <div className="atl-disc-suggestions">
@@ -234,7 +281,7 @@ export function VueDiscussion() {
                 </p>
               ) : null}
               {m.auteur === "agent" && m.actions && m.actions.length > 0 ? (
-                <ActionsMessage idMessage={m.id} actions={m.actions} elements={elements} faits={faits} onFait={traite} />
+                <ActionsMessage idMessage={m.id} actions={m.actions} elements={elements} origines={origines} faits={faits} onFait={traite} />
               ) : null}
             </div>
           ))
@@ -248,6 +295,16 @@ export function VueDiscussion() {
           .filter((c) => !faits[`carte:${c.id}`])
           .map((c) => (
             <CarteFil key={c.id} element={c} onFait={(message) => traite(`carte:${c.id}`, message)} />
+          ))}
+        {autres
+          .filter(({ element }) => faits[`carte:${element.id}`])
+          .map(({ element }) => (
+            <MessageFait key={element.id} className="atl-disc-attente" texte={faits[`carte:${element.id}`]!} />
+          ))}
+        {autres
+          .filter(({ element }) => !faits[`carte:${element.id}`])
+          .map(({ element, origine }) => (
+            <CarteFil key={element.id} element={element} origine={origine} onFait={(message) => traite(`carte:${element.id}`, message)} />
           ))}
         {erreurElements || cartesIndisponibles ? (
           <ActionsIndisponibles

@@ -21,12 +21,14 @@ export function stockLiaisonsParesseux(ctx: PluginContext): StockLiaisons {
   let reel: StockLiaisons | null = null;
   const p = (): StockLiaisons => (reel ??= creerStockLiaisons(ctx.db));
   return {
-    serviceDeEntreprise: (c) => p().serviceDeEntreprise(c), servicesParSlug: (s) => p().servicesParSlug(s),
+    serviceDeEntreprise: (c) => p().serviceDeEntreprise(c), clientExiste: (m) => p().clientExiste(m), servicesParSlug: (s) => p().servicesParSlug(s), servicesDuClient: (m) => p().servicesDuClient(m),
     lireFlux: (c, s, t) => p().lireFlux(c, s, t), declarer: (x) => p().declarer(x), lireParCle: (c, k) => p().lireParCle(c, k),
     compterOuvertes: (c) => p().compterOuvertes(c), estTacheDeLiaison: (c, i) => p().estTacheDeLiaison(c, i),
+    liaisonsEntrantes: (c, i) => p().liaisonsEntrantes(c, i), retourTeinte: (c, i) => p().retourTeinte(c, i),
+    liaisonsEntrantesOuvertes: (c) => p().liaisonsEntrantesOuvertes(c), retoursTeintesDe: (c, j, n) => p().retoursTeintesDe(c, j, n),
     inserer: (l) => p().inserer(l), lireParId: (c, i) => p().lireParId(c, i), lireParTacheCible: (c, t) => p().lireParTacheCible(c, t),
     listerEnAttente: (c, n) => p().listerEnAttente(c, n), transiter: (c, i, d, v) => p().transiter(c, i, d, v), attacher: (c, i, x) => p().attacher(c, i, x),
-    listerATransmettre: (n, m) => p().listerATransmettre(n, m), listerANotifier: (n, m) => p().listerANotifier(n, m),
+    listerATransmettre: (n, m) => p().listerATransmettre(n, m), listerCibleSupprimee: (n, m) => p().listerCibleSupprimee(n, m), listerANotifier: (n, m) => p().listerANotifier(n, m),
     reserverEssai: (c, i, a, m) => p().reserverEssai(c, i, a, m), noterErreurFacteur: (c, i, e) => p().noterErreurFacteur(c, i, e),
     marquerNotifiee: (c, i) => p().marquerNotifiee(c, i), relancerFacteur: (c, i) => p().relancerFacteur(c, i),
   };

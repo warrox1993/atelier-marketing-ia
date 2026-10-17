@@ -9,6 +9,7 @@ import { egalProfond } from "../src/serveur/services-prospection.js";
 import { creerAiguillage } from "../src/serveur/atelier.js";
 import { creerServices } from "../src/serveur/services.js";
 import { BRIEF, SOC, creerBanc } from "./outils-base.js";
+import { avecClesDonnees, REFS_CLES } from "./outils-cles-donnees.js";
 import { emballer, paireEd25519, passerelle } from "./outils-passerelle.js";
 
 type Ligne = Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
@@ -116,7 +117,8 @@ describe("prospects.fusionner-doublons", () => {
     const P = await passerelle();
     const CLES = paireEd25519();
     const signataire = new P.SignataireEnveloppe(CLES.privee);
-    const b = creerBanc({ modeEntreprise: "demonstration", config: { passerelleClesPubliques: [CLES.publiqueBase64] } });
+    const b = creerBanc({ modeEntreprise: "demonstration", config: { passerelleClesPubliques: [CLES.publiqueBase64], ...REFS_CLES } });
+    avecClesDonnees(b.ctx);
     const t = { prospects: [] as Ligne[], empreintes: [] as Ligne[] };
     const copie = <T>(v: T): T => structuredClone(v);
     const ext: Ligne = {

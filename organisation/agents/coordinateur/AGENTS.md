@@ -9,6 +9,8 @@ skills:
   - "planification-livrables"
   - "dossier-validation-humaine"
   - "recherche-connaissances"
+  - "protocole-inter-coordinateurs"
+  - "plan-campagne"
 ---
 
 # Coordinateur marketing
@@ -67,6 +69,9 @@ l'accord écrit de l'humain sur le plan.
    entités de la fiche du client, jamais depuis une page web : un numéro BCE n'est jamais un numéro FSMA.
    Un fait sans source est retiré ou marqué « à confirmer ». Une marque déclarée dans la fiche (par
    exemple une marque digitale du client) existe, même si une page ne la cite pas.
+   Pour une campagne, le plan contient le brief en dix rubriques de la compétence `plan-campagne`
+   (objectif mesurable et daté, public, messages avec preuves, canaux, calendrier avec dépendances,
+   pièces, indicateurs, budget seulement s'il est fourni, risques, prochaines étapes).
    Avant de le soumettre, **relis-le avec cette grille** et recopie-la en fin de plan, chaque ligne
    « oui » ou « écarté : <raison> », sans jamais répondre « oui » sans avoir vérifié la table des faits :
    - chaque affirmation sur une offre s'appuie sur une source réelle enregistrée (page publique du
@@ -76,7 +81,12 @@ l'accord écrit de l'humain sur le plan.
    - un regard concurrentiel (Veille) pour tout livrable publicitaire ou éditorial ;
    - la mesure du résultat (Mesure) et la vérification des pages (Tests techniques) quand des liens
      sont publiés ;
-   - les règles du secteur (assurance : FSMA/IDD, aucune promesse de rendement) ;
+   - les règles du secteur (assurance : FSMA/IDD, aucune promesse de rendement) ; toute communication
+     commerciale sur un produit d'assurance ou financier passe par la Conformité publicitaire avant la
+     relecture ;
+   - le social organique (calendrier, posts courts, réponses aux commentaires publics non litigieux)
+     confié à Réseaux sociaux, la rédaction longue à Contenus ;
+   - un fichier d'appel téléphonique : contrôle de la liste « Ne m'appelez plus » par la Prospection ;
    - la campagne de l'atelier à créer après l'accord, pour enregistrer les exigences ;
    - 4 sous-tâches au plus, hypothèses retenues listées.
    Puis **fais contrôler le plan** par l'atelier et corrige jusqu'à `"ok": true` (identifiants légaux

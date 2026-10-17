@@ -7,7 +7,7 @@ import { act, createElement } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { STYLES_DISCUSSION } from "../../src/ui/styles-discussion.js";
 import { INTERVALLE_MS, VueDiscussion } from "../../src/ui/vues/discussion.js";
-import { cliquer, installerPont, parTexte, rendre, saisir, type Rendu } from "./pont.js";
+import { cliquer, ENTREPRISE, installerPont, parTexte, rendre, saisir, type Rendu } from "./pont.js";
 
 let rendu: Rendu | null = null;
 let appels: Array<{ methode: string; url: string; corps: unknown }> = [];
@@ -16,6 +16,9 @@ let compteur = 0;
 let dicteeDisponible = true;
 let cartes: Array<Record<string, unknown>> = [];
 let elementsAccueil: Array<Record<string, unknown>> = [];
+/** Réponse de `departements.lister` ; `null` : la route rend le même corps générique que les autres GET (aucune Direction). */
+let departements: { statut: number; corps: unknown } | null = null;
+const DIRECTION = "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
 
 const msg = (o: Record<string, unknown>) => ({ id: `m${++compteur}`, auteur: "agent", nom: "Coordinateur", texte: "Bonjour", date: new Date(Date.UTC(2026, 9, 16, 10, 0, compteur)).toISOString(), ...o });
 
@@ -32,6 +35,7 @@ beforeEach(() => {
   dicteeDisponible = true;
   cartes = [];
   elementsAccueil = [];
+  departements = null;
   Object.defineProperty(document, "visibilityState", { configurable: true, get: () => "visible" });
   vi.stubGlobal(
     "fetch",
@@ -45,6 +49,7 @@ beforeEach(() => {
         cartes = [];
         return new Response("{}", { status: 200 });
       }
+      if (departements && methode === "GET" && url.includes("/departements?")) return new Response(JSON.stringify(departements.corps), { status: departements.statut });
       if (methode === "GET" && url.includes("/accueil?")) return new Response(JSON.stringify({ companyId: "c", elements: elementsAccueil, missions: [] }), { status: 200 });
       if (methode === "GET" && url.includes("/discussion/messages")) {
         const depuis = new URL(url, "http://x").searchParams.get("depuis");
@@ -105,6 +110,43 @@ describe("discussion : affichage", () => {
     expect(lien.textContent).toBe("ATL-12");
     expect(lien.getAttribute("href")).toBe("/RNO/issues/ATL-12");
     expect(c.querySelector(".atl-disc-vide")).toBeNull();
+  });
+});
+
+describe("discussion : destinataire", () => {
+  const avecDirection = () => {
+    departements = { statut: 200, corps: { client: "fictive-sa", departements: [
+      { companyId: DIRECTION, slug: "direction", nom: "Direction", estDirection: true, courant: false },
+      { companyId: ENTREPRISE, slug: "marketing", nom: "Marketing", estDirection: false, courant: true },
+    ] } };
+  };
+  const entreprisesVisees = () => appels.filter((a) => a.url.includes("/discussion")).map((a) => (a.methode === "GET" ? new URL(a.url, "http://x").searchParams.get("companyId") : (a.corps as { companyId: string }).companyId));
+
+  it("client à plusieurs services : le fil est celui du coordinateur général (entreprise Direction), envoi compris", async () => {
+    avecDirection();
+    const c = await ouvrir();
+    expect(appels.some((a) => a.url.includes(`/departements?companyId=${encodeURIComponent(ENTREPRISE)}`))).toBe(true);
+    expect(parTexte(c, "span", "Coordinateur général (Direction) : il transmet aux départements")).toBeTruthy();
+    await saisir(champParLibelle(c, "Votre message au Coordinateur"), "Où en est le recrutement ?");
+    await touche(champParLibelle(c, "Votre message au Coordinateur"), { key: "Enter" });
+    expect(entreprisesVisees().length).toBeGreaterThanOrEqual(2);
+    expect(new Set(entreprisesVisees())).toEqual(new Set([DIRECTION]));
+  });
+
+  it("entreprise non déclarée (aucune Direction) : le fil reste celui de l'entreprise courante, sans mention", async () => {
+    departements = { statut: 200, corps: { client: null, departements: [] } };
+    const c = await ouvrir();
+    expect(new Set(entreprisesVisees())).toEqual(new Set([ENTREPRISE]));
+    expect(c.textContent).not.toContain("Coordinateur général");
+  });
+
+  it("lecture du destinataire en échec : erreur affichée, aucun message envoyé ailleurs, puis réessai", async () => {
+    departements = { statut: 500, corps: { erreur: { code: "interne", message: "panne" } } };
+    const c = await ouvrir();
+    expect(entreprisesVisees()).toEqual([]);
+    avecDirection();
+    await cliquer(parTexte(c, "button", "Réessayer"));
+    expect(new Set(entreprisesVisees())).toEqual(new Set([DIRECTION]));
   });
 });
 

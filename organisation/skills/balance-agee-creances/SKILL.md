@@ -2,7 +2,7 @@
 name: "balance-agee-creances"
 description: "Construit et analyse la balance âgée des créances clients d'une PME belge : classement par tranche de retard, contrôle des totaux contre la comptabilité, concentration par débiteur, priorisation des relances (montant, ancienneté, risque), DSO, base d'une proposition de réductions de valeur et signaux d'alerte. À utiliser pour préparer le suivi d'encaissement ou le point mensuel avec la direction ; jamais pour corriger les chiffres de la comptabilité, passer une créance en perte, décider d'une procédure ou enrichir la balance avec des informations extérieures aux documents fournis."
 metadata:
-  version: "1.0.0"
+  version: "1.0.1"
   langue: "fr"
   domaine: "recouvrement"
 ---
@@ -91,7 +91,7 @@ Un débiteur en litige déclaré (contestation écrite) n'entre pas dans la rela
 Consultées le 16/10/2026 :
 
 - Loi du 2 août 2002 concernant la lutte contre le retard de paiement dans les transactions commerciales, Justel (Moniteur belge), https://www.ejustice.just.fgov.be/cgi_loi/change_lg_2.pl?language=fr&nm=2002009716&la=F : article 4, délai de paiement de 30 jours civils à défaut de délai convenu, 60 jours civils au maximum par convention (une clause plus longue est réputée non écrite, sauf dérogation royale sectorielle) ; article 5, intérêt de retard de plein droit au taux directeur majoré de huit points, arrondi au demi-point supérieur ; article 6, indemnité forfaitaire de 40 euros et indemnisation raisonnable des autres frais de recouvrement. Dernière modification relevée : loi du 14 août 2021, en vigueur le 01/02/2022. Fonde les délais de référence du DSO et les montants que la balance peut chiffrer.
-- « Réductions de valeur et moins-values sur créances commerciales », Baker Tilly Belgium (cabinet comptable), 27/02/2023, https://bakertilly.be/fr/news/reductions-de-valeur-et-moins-values-sur-creances-commerciales/ : source SECONDAIRE (pas un texte officiel). Distinction entre perte définitive (article 49 du CIR 1992) et perte probable (articles 48 et 22), évaluation créance par créance, provision générale fondée sur l'expérience non déductible, perte définitive notamment à la clôture de faillite sans répartition ou sur attestation écrite du curateur.
+- Source professionnelle, non officielle : « Réductions de valeur et moins-values sur créances commerciales », Baker Tilly Belgium (cabinet comptable), 27/02/2023, https://bakertilly.be/fr/news/reductions-de-valeur-et-moins-values-sur-creances-commerciales/. Elle ne fonde aucune règle de la compétence : elle signale seulement la distinction entre perte définitive (article 49 du CIR 1992) et perte probable (articles 48 et 22). Ces articles n'ont pas pu être relus sur un texte officiel le 17/10/2026 (recherche Justel du CIR 1992 infructueuse) : à vérifier par l'expert-comptable avant tout usage.
 
 Les tranches (1-30, 31-60, 61-90, plus de 90), la formule du DSO, la grille de priorité et les repères de concentration sont des conventions de gestion courantes, pas des textes officiels ; aucune source officielle n'est citée pour elles. Le texte intégral du Code des impôts sur les revenus et la circulaire de l'administration fiscale sur les réductions de valeur n'ont pas été ouverts ici : les règles fiscales ne sont donc pas à appliquer sans le comptable.
 

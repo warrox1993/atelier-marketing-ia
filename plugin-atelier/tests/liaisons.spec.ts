@@ -31,6 +31,8 @@ const MKT = id(1);
 const DIR = id(2);
 const JUR = id(3);
 const ETRANGER = id(4); // service « direction » d'un AUTRE client
+const COMPTA = id(5); // quatrième service du client « courtier » (chaînes de relais)
+const COMPTA_COORD = id(51);
 const MKT_COORD = id(11);
 const MKT_AGENT = id(12);
 const DIR_COORD = id(21);
@@ -60,7 +62,9 @@ function stockMemoire(): StockLiaisons & { liaisons: LiaisonMemoire[]; services:
   return {
     liaisons, services, flux, echecInsertion, horloge,
     serviceDeEntreprise: async (c) => services.find((s) => s.companyId === c) ?? null,
+    clientExiste: async (m) => services.some((x) => x.clientMarqueur === m),
     servicesParSlug: async (slug) => services.filter((s) => s.serviceSlug === slug),
+    servicesDuClient: async (m) => services.filter((s) => s.clientMarqueur === m),
     lireFlux: async (m, s, c) => {
       const f = flux.find((x) => x.client === m && x.source === s && x.cible === c);
       return f ? { objet: f.objet, approbationHumaine: f.approbationHumaine } : null;
@@ -74,9 +78,20 @@ function stockMemoire(): StockLiaisons & { liaisons: LiaisonMemoire[]; services:
     lireParCle: async (c, k) => liaisons.find((l) => l.entrepriseSource === c && l.cleIdempotence === k) ?? null,
     compterOuvertes: async (c) => liaisons.filter((l) => l.entrepriseSource === c && (l.statut === "ouverte" || l.statut === "en_attente_approbation")).length,
     estTacheDeLiaison: async (c, i) => liaisons.some((l) => l.entrepriseCible === c && l.tacheCible === i),
+    liaisonsEntrantes: async (c, ids) =>
+      liaisons.filter((l) => l.entrepriseCible === c && l.tacheCible !== null && ids.includes(l.tacheCible)).map((l) => ({ chaine: [...l.chaine], profondeur: l.profondeur, approbationRequise: l.approbationRequise })),
+    retourTeinte: async (c, ids) => liaisons.some((l) => l.entrepriseSource === c && l.teinteRetour === true && ids.includes(l.tacheOrigine)),
+    liaisonsEntrantesOuvertes: async (c) =>
+      liaisons.filter((l) => l.entrepriseCible === c && l.statut === "ouverte" && l.tacheCible !== null).map((l) => ({ chaine: [...l.chaine], profondeur: l.profondeur, approbationRequise: l.approbationRequise })),
+    retoursTeintesDe: async (c, jours, n) =>
+      liaisons
+        .filter((l) => l.entrepriseSource === c && l.teinteRetour === true)
+        .sort((a, b) => (b.reponduLe ?? "9999").localeCompare(a.reponduLe ?? "9999"))
+        .slice(0, n)
+        .map((l) => ({ tacheOrigine: l.tacheOrigine, recente: l.reponduLe == null || Date.parse(l.reponduLe) > horloge.t - jours * 86_400_000 })),
     inserer: async (l) => {
       if (echecInsertion.actif || liaisons.some((x) => x.entrepriseSource === l.entrepriseSource && x.cleIdempotence === l.cleIdempotence)) throw new Error("clé unique");
-      liaisons.push({ ...l, facteurEssais: 0, sourceNotifieeLe: null });
+      liaisons.push({ ...l, chaine: [...l.chaine], facteurEssais: 0, sourceNotifieeLe: null, teinteRetour: false });
     },
     lireParId: async (c, i) => liaisons.find((l) => l.entrepriseSource === c && l.id === i) ?? null,
     lireParTacheCible: async (c, t) => liaisons.find((l) => l.entrepriseCible === c && l.tacheCible === t) ?? null,
@@ -86,7 +101,8 @@ function stockMemoire(): StockLiaisons & { liaisons: LiaisonMemoire[]; services:
       if (!l || !depuis.includes(l.statut)) return false;
       l.statut = vers.statut;
       if (vers.reponse != null) l.reponse = vers.reponse;
-      if (vers.repondu) l.reponduLe = "2026-10-16T12:00:00.000Z";
+      if (vers.repondu) l.reponduLe = new Date(horloge.t).toISOString();
+      if (vers.teinte) l.teinteRetour = true;
       return true;
     },
     attacher: async (c, i, ch) => {
@@ -96,6 +112,7 @@ function stockMemoire(): StockLiaisons & { liaisons: LiaisonMemoire[]; services:
       if (ch.statut) l.statut = ch.statut;
     },
     listerATransmettre: async (n, max) => liaisons.filter((l) => l.statut === "ouverte" && !l.tacheCible && due(l, max)).slice(0, n).map((l) => ({ ...l })),
+    listerCibleSupprimee: async (n, max) => liaisons.filter((l) => (l.statut === "ouverte" || l.statut === "en_attente_approbation") && l.entrepriseCible === null && due(l, max)).slice(0, n).map((l) => ({ ...l })),
     listerANotifier: async (n, max) => liaisons.filter((l) => (l.statut === "repondue" || l.statut === "annulee") && !l.sourceNotifieeLe && due(l, max)).slice(0, n).map((l) => ({ ...l })),
     reserverEssai: async (c, i, attente, max) => {
       const l = trouver(c, i);
@@ -120,7 +137,7 @@ const PLUGIN = "atelier.marketing-ia";
 function monde(o: { reveilEchoue?: boolean; commentaireEchoue?: boolean; creationEchoue?: { actif: boolean }; /** Entreprises SANS configuration du plugin (hors `proactiveCompanyScopes`). */ sansConfiguration?: string[] } = {}) {
   /** Invocation en cours (route ou événement), comme l'AsyncLocalStorage du worker réel ; aucune pour le facteur. */
   const portee = new AsyncLocalStorage<{ companyId: string }>();
-  const configurees = new Set([MKT, DIR, JUR, ETRANGER].filter((c) => !(o.sansConfiguration ?? []).includes(c)));
+  const configurees = new Set([MKT, DIR, JUR, ETRANGER, COMPTA].filter((c) => !(o.sansConfiguration ?? []).includes(c)));
   const appels: Array<{ methode: string; companyId: string; portee: string | null }> = [];
   /** Règle de l'hôte réel (host-client-factory.ts, requireInvocationCompanyScope ; plugin-worker-manager.ts, contextForWorkerMessage). */
   const exigerPortee = (methode: string, companyId: string) => {
@@ -148,6 +165,7 @@ function monde(o: { reveilEchoue?: boolean; commentaireEchoue?: boolean; creatio
     [DIR]: [{ id: DIR_COORD, name: "Coordinateur Direction", role: "ceo", status: "idle", reportsTo: null }, { id: id(22), name: "Tableau de bord", role: "general", status: "idle", reportsTo: DIR_COORD }],
     [JUR]: [{ id: JUR_COORD, name: "Coordinateur Juridique", role: "ceo", status: "idle", reportsTo: null }],
     [ETRANGER]: [{ id: ETR_COORD, name: "Coordinateur Direction", role: "ceo", status: "idle", reportsTo: null }],
+    [COMPTA]: [{ id: COMPTA_COORD, name: "Coordinateur Comptabilité", role: "ceo", status: "idle", reportsTo: null }],
   };
   const ctx = {
     logger: { info() {}, warn() {}, error() {}, debug() {} },
@@ -208,7 +226,7 @@ function monde(o: { reveilEchoue?: boolean; commentaireEchoue?: boolean; creatio
       acteur: o2.acteur ?? agent(MKT_COORD), companyId: o2.companyId ?? MKT,
     } satisfies RequeteRoute);
   const refus = async (p: Promise<unknown>) => (await p.then(() => null, (e: unknown) => e)) as ErreurAtelier | null;
-  return { ctx, issues, reveils, commentaires, journal, stock, routes, retour, declarer, demander, refus, poster, avancer, portee, appels, configurees };
+  return { ctx, issues, reveils, commentaires, journal, stock, routes, retour, declarer, demander, refus, poster, avancer, portee, appels, configurees, agentsParEntreprise };
 }
 
 const demande = (o: Ligne = {}) => ({ tacheOrigineId: TACHE_MKT, serviceCible: "direction", objet: "Rapport mensuel", question: "Pouvez-vous valider le budget ?", extraits: [{ titre: "Budget", texte: "12 000 euros" }], ...o });
@@ -495,6 +513,33 @@ describe("services.declarer : registre complet", () => {
     });
     expect(r.success, JSON.stringify(r.success ? "" : r.error.issues.slice(0, 3))).toBe(true);
   });
+
+  it("accepte la matrice complète avec le réseau des coordinateurs : 28 x 27 = 756 paires (118 métier + 638 générées)", () => {
+    const reg = JSON.parse(readFileSync(new URL("../../organisation/registre/services.json", import.meta.url), "utf8")) as {
+      services: Array<{ slug: string; sensible?: boolean }>;
+      flux: Array<{ source: string; cible: string; objet: string; approbationHumaine: boolean }>;
+    };
+    // Même règle que scripts/atelier_services.py (flux_coordinateurs) : toute paire ordonnée que le métier ne couvre pas.
+    const metier = new Set(reg.flux.map((f) => `${f.source}>${f.cible}`));
+    const sensibles = new Set(reg.services.filter((x) => x.sensible).map((x) => x.slug));
+    const generes = reg.services.flatMap((a) => reg.services
+      .filter((b) => b.slug !== a.slug && !metier.has(`${a.slug}>${b.slug}`))
+      .map((b) => ({ source: a.slug, cible: b.slug, objet: "Liaison entre coordinateurs", approbationHumaine: sensibles.has(a.slug) || sensibles.has(b.slug) })));
+    expect(generes.length).toBe(638);
+    const entreprises = reg.services.map((x, i) => ({ companyId: `22222222-2222-4222-8222-${String(i).padStart(12, "0")}`, serviceSlug: x.slug, estDirection: x.slug === "direction" }));
+    const r = DeclarerServicesEntree.safeParse({ companyId: entreprises[0]!.companyId, clientMarqueur: "client-test", entreprises, flux: [...reg.flux, ...generes] });
+    expect(r.success, JSON.stringify(r.success ? "" : r.error.issues.slice(0, 3))).toBe(true);
+  });
+
+  it("borne : 40 entreprises et leurs 40 x 39 paires acceptées, une de plus refusée", () => {
+    const slugs = Array.from({ length: 40 }, (_, i) => `service-${i}`);
+    const entreprises = slugs.map((s, i) => ({ companyId: `22222222-2222-4222-8222-${String(i).padStart(12, "0")}`, serviceSlug: s, estDirection: i === 0 }));
+    const flux = slugs.flatMap((a) => slugs.filter((b) => b !== a).map((b) => ({ source: a, cible: b, objet: "x", approbationHumaine: false })));
+    expect(flux.length).toBe(1560);
+    const corps = { companyId: entreprises[0]!.companyId, clientMarqueur: "client-test", entreprises, flux };
+    expect(DeclarerServicesEntree.safeParse(corps).success).toBe(true);
+    expect(DeclarerServicesEntree.safeParse({ ...corps, flux: [...flux, flux[0]!] }).success).toBe(false);
+  });
 });
 
 describe("services.declarer", () => {
@@ -514,6 +559,40 @@ describe("services.declarer", () => {
     expect(m.stock.services.map((s) => s.serviceSlug).sort()).toEqual(["direction", "marketing"]);
     expect(m.journal[0]).toMatchObject({ type: "services.declares", companyId: MKT });
     expect((await m.demander(demande())).statut).toBe(201);
+  });
+
+  it("F5 : redéclarer son propre client est accepté et idempotent", async () => {
+    const m = monde();
+    await declarer(m, corps());
+    const avant = JSON.stringify(m.stock.services);
+    expect((await declarer(m, corps())).corps).toMatchObject({ clientMarqueur: "courtier", entreprises: 2 });
+    expect(JSON.stringify(m.stock.services)).toBe(avant);
+  });
+
+  it("F5 : le marqueur d'un client existant est refusé depuis une entreprise étrangère, rien n'est écrit", async () => {
+    const m = monde();
+    await m.declarer();
+    const avant = JSON.stringify([m.stock.services, m.stock.flux]);
+    const intrus = id(77);
+    const r = await m.refus(m.routes["services.declarer"]!({
+      cle: "services.declarer", params: {}, query: {}, acteur: HUMAIN, companyId: intrus,
+      corps: corps({ companyId: intrus, entreprises: [{ companyId: intrus, serviceSlug: "marketing" }, { companyId: DIR, serviceSlug: "direction", estDirection: true }] }),
+    }));
+    expect(r).toMatchObject({ code: "acces_refuse" });
+    expect(r!.statut).toBe(403);
+    expect(JSON.stringify([m.stock.services, m.stock.flux])).toBe(avant);
+    expect(m.journal).toHaveLength(0);
+  });
+
+  it("F5 : le registre d'un client n'est pas lisible depuis une entreprise étrangère", async () => {
+    const m = monde();
+    await m.declarer();
+    // ETRANGER est Conformité d'un autre client (non Direction) : refus ; et l'intrus ne peut pas se glisser dans « courtier ».
+    const intrus = id(77);
+    await m.refus(m.routes["services.declarer"]!({ cle: "services.declarer", params: {}, query: {}, acteur: HUMAIN, companyId: intrus,
+      corps: corps({ companyId: intrus, entreprises: [{ companyId: intrus, serviceSlug: "direction", estDirection: true }] }) }));
+    expect(await m.stock.serviceDeEntreprise(intrus)).toBeNull();
+    expect((await m.stock.serviceDeEntreprise(DIR))?.clientMarqueur).toBe("courtier");
   });
 
   it("est réservée à un humain", async () => {
@@ -972,6 +1051,59 @@ describe("facteur : gardes revérifiées et bornes", () => {
     expect(m.commentaires.filter((c) => c.issueId === TACHE_MKT)).toHaveLength(1);
   });
 
+  it("liaison déjà transmise puis cible supprimée : clôturée au passage suivant, la source est informée une seule fois", async () => {
+    const m = monde();
+    await m.declarer();
+    await m.demander(demande());
+    await m.poster();
+    expect(m.stock.liaisons[0]!.tacheCible).not.toBeNull();
+    Object.assign(m.stock.liaisons[0]!, { entrepriseCible: null });
+    const p = await m.poster();
+    expect(p.echecs).toHaveLength(0);
+    expect(m.stock.liaisons[0]).toMatchObject({ statut: "cible_supprimee", entrepriseCible: null });
+    expect(m.stock.liaisons[0]!.sourceNotifieeLe).not.toBeNull();
+    const aSource = () => m.commentaires.filter((c) => c.issueId === TACHE_MKT && c.body.includes("n'existe plus"));
+    expect(aSource()).toEqual([expect.objectContaining({ companyId: MKT })]);
+    expect(m.journal.filter((j) => j.type === "liaison.non_transmise")).toHaveLength(1);
+    expect(m.journal.find((j) => j.type === "liaison.non_transmise")?.donnees).toMatchObject({ raison: "cible_supprimee" });
+    // Deux passages de plus : toujours une seule information.
+    m.avancer();
+    await m.poster();
+    m.avancer();
+    await m.poster();
+    expect(aSource()).toHaveLength(1);
+    expect(m.journal.filter((j) => j.type === "liaison.non_transmise")).toHaveLength(1);
+  });
+
+  it("liaison en attente d'approbation puis cible supprimée : clôturée par le facteur, source informée une fois", async () => {
+    const m = monde();
+    const { id: liaisonId } = await enAttente(m);
+    Object.assign(m.stock.liaisons[0]!, { entrepriseCible: null });
+    const p = await m.poster();
+    expect(p.echecs).toHaveLength(0);
+    expect(m.stock.liaisons[0]).toMatchObject({ id: liaisonId, statut: "cible_supprimee", tacheCible: null });
+    expect(m.commentaires.filter((c) => c.issueId === TACHE_MKT && c.body.includes("n'existe plus"))).toHaveLength(1);
+    expect(m.journal.filter((j) => j.type === "liaison.non_transmise")).toHaveLength(1);
+    m.avancer();
+    await m.poster();
+    expect(m.commentaires.filter((c) => c.issueId === TACHE_MKT && c.body.includes("n'existe plus"))).toHaveLength(1);
+    expect(m.stock.liaisons[0]!.statut).toBe("cible_supprimee");
+  });
+
+  it("decider (approuver) sur une liaison sans cible : clôture en cible_supprimee au lieu de seulement refuser, rejeu sans doublon", async () => {
+    const m = monde();
+    const { id: liaisonId } = await enAttente(m);
+    Object.assign(m.stock.liaisons[0]!, { entrepriseCible: null });
+    expect(await m.refus(decider(m, { companyId: MKT, liaisonId, decision: "approuver" }))).toMatchObject({ code: "liaison_refusee" });
+    expect(m.stock.liaisons[0]).toMatchObject({ statut: "cible_supprimee" });
+    expect(m.commentaires.filter((c) => c.issueId === TACHE_MKT && c.body.includes("n'existe plus"))).toHaveLength(1);
+    expect(m.journal.filter((j) => j.type === "liaison.non_transmise")).toHaveLength(1);
+    // Rejeu : plus clôturable, conflit, aucun commentaire de plus ; le facteur n'a plus rien à faire.
+    expect(await m.refus(decider(m, { companyId: MKT, liaisonId, decision: "approuver" }))).toMatchObject({ code: "conflit" });
+    await m.poster();
+    expect(m.commentaires.filter((c) => c.issueId === TACHE_MKT && c.body.includes("n'existe plus"))).toHaveLength(1);
+  });
+
   it("réponse déjà donnée puis cible supprimée : la source est notifiée sans plantage ni journal chez la cible", async () => {
     const m = monde();
     await m.declarer();
@@ -1019,5 +1151,492 @@ describe("facteur : gardes revérifiées et bornes", () => {
     expect(a.transmises.length + b.transmises.length).toBe(1);
     expect(m.issues.filter((i) => i.originKind === ORIGINE_LIAISON)).toHaveLength(1);
     expect(m.reveils).toHaveLength(1);
+  });
+});
+
+/* ------------------------------------------------------------------ */
+/* Revue indépendante du 17/10/2026 : H2 (chaîne), M1 (teinte), M3 (plafond du coordinateur général), B6 (coordinateur déclaré) */
+/* ------------------------------------------------------------------ */
+
+const SERVICES_RESEAU = [
+  { companyId: MKT, serviceSlug: "marketing", estDirection: false },
+  { companyId: DIR, serviceSlug: "direction", estDirection: true },
+  { companyId: JUR, serviceSlug: "juridique", estDirection: false },
+  { companyId: COMPTA, serviceSlug: "compta", estDirection: false },
+];
+const COORD_DE: Record<string, string> = { [MKT]: MKT_COORD, [DIR]: DIR_COORD, [JUR]: JUR_COORD, [COMPTA]: COMPTA_COORD };
+
+/** Réseau complet des coordinateurs (toute paire ordonnée) ; `sensibles` exigent l'approbation humaine dans les deux sens. */
+async function declarerReseau(m: ReturnType<typeof monde>, sensibles: string[] = ["juridique"]) {
+  const flux = SERVICES_RESEAU.flatMap((a) =>
+    SERVICES_RESEAU.filter((b) => b !== a).map((b) => ({ source: a.serviceSlug, cible: b.serviceSlug, objet: "Réseau des coordinateurs", approbationHumaine: sensibles.includes(a.serviceSlug) || sensibles.includes(b.serviceSlug) })),
+  );
+  await m.stock.declarer({ clientMarqueur: "courtier", entreprises: SERVICES_RESEAU, flux, par: "test" });
+}
+
+let numeroSousTache = 0;
+/** Sous-tâche créée par un agent sous `parentId` (aucune origine liaison : c'est le contournement de la revue H2). */
+function sousTache(m: ReturnType<typeof monde>, companyId: string, parentId: string): string {
+  const t = { id: id(7000 + numeroSousTache++), companyId, title: "Sous-tâche", status: "todo", originKind: "manual", originId: null, parentId };
+  m.issues.push(t);
+  return t.id;
+}
+
+/** Demande depuis la tâche `tache` de l'entreprise `companyId`, par son coordinateur. */
+const depuis = (m: ReturnType<typeof monde>, companyId: string, tache: string, serviceCible: string, objet = `Demande vers ${serviceCible}`) =>
+  m.demander(demande({ tacheOrigineId: tache, serviceCible, objet, extraits: [] }), { acteur: agent(COORD_DE[companyId]!), companyId });
+
+/** Tâche reçue par la cible de cette liaison, après passage du facteur. */
+const tacheRecue = (m: ReturnType<typeof monde>, liaisonId: string) => m.stock.liaisons.find((l) => l.id === liaisonId)!.tacheCible!;
+
+/** Le coordinateur cible répond et termine la tâche reçue ; l'événement de retour passe. */
+async function repondre(m: ReturnType<typeof monde>, liaisonId: string, texte = "Réponse du service.") {
+  const l = m.stock.liaisons.find((x) => x.id === liaisonId)!;
+  const cibleId = l.tacheCible!;
+  m.commentaires.push({ id: id(8000 + m.commentaires.length), issueId: cibleId, companyId: l.entrepriseCible, body: texte, authorType: "agent", authorAgentId: COORD_DE[l.entrepriseCible!], createdAt: new Date(2026, 9, 16, 14, 0, m.commentaires.length), deletedAt: null });
+  m.issues.find((i) => i.id === cibleId)!.status = "done";
+  await m.retour({ eventId: `evt-${liaisonId}`, companyId: l.entrepriseCible!, entityId: cibleId, entityType: "issue", payload: { changes: { status: { from: "in_progress", to: "done" } } } });
+}
+
+const idLiaison = (r: { corps: unknown }) => (r.corps as Ligne).liaison.id as string;
+
+describe("revue H2 : chaîne des liaisons dérivée de la tâche d'origine et de ses ancêtres", () => {
+  it("contournement par sous-tâche refusé : A vers B, puis B relance A depuis une sous-tâche (et une sous-sous-tâche) de la tâche reçue", async () => {
+    const m = monde();
+    await declarerReseau(m);
+    const l1 = idLiaison(await depuis(m, MKT, TACHE_MKT, "direction"));
+    await m.poster();
+    const recue = tacheRecue(m, l1);
+    const st = sousTache(m, DIR, recue);
+    const e = await m.refus(depuis(m, DIR, st, "marketing"));
+    expect(e).toMatchObject({ code: "liaison_refusee", details: { garde: "c", motif: "cycle" } });
+    const sst = sousTache(m, DIR, st);
+    const e2 = await m.refus(depuis(m, DIR, sst, "marketing"));
+    expect(e2).toMatchObject({ code: "liaison_refusee", details: { garde: "c", motif: "cycle" } });
+    // La tâche reçue elle-même reste refusée par le « un seul saut ».
+    expect(await m.refus(depuis(m, DIR, recue, "compta"))).toMatchObject({ details: { garde: "c", motif: "saut" } });
+    expect(m.stock.liaisons).toHaveLength(1);
+  });
+
+  it("deux relais acceptés (chaîne et profondeur enregistrées), le troisième refusé, même par une sous-tâche plus profonde", async () => {
+    const m = monde();
+    await declarerReseau(m);
+    const l1 = idLiaison(await depuis(m, MKT, TACHE_MKT, "direction"));
+    await m.poster();
+    expect(m.stock.liaisons[0]).toMatchObject({ chaine: ["marketing", "direction"], profondeur: 1, approbationRequise: false });
+
+    const stDir = sousTache(m, DIR, tacheRecue(m, l1));
+    const r2 = await depuis(m, DIR, stDir, "compta");
+    expect(r2.statut).toBe(201);
+    const l2 = idLiaison(r2);
+    expect(m.stock.liaisons.find((l) => l.id === l2)).toMatchObject({ chaine: ["marketing", "direction", "compta"], profondeur: 2, statut: "ouverte" });
+    await m.poster();
+
+    const stCompta = sousTache(m, COMPTA, sousTache(m, COMPTA, tacheRecue(m, l2)));
+    const e = await m.refus(depuis(m, COMPTA, stCompta, "juridique"));
+    expect(e).toMatchObject({ code: "liaison_refusee", details: { garde: "c", motif: "relais" } });
+    // Revenir vers un service déjà présent est refusé aussi (au troisième relais, la profondeur tombe d'abord).
+    expect(await m.refus(depuis(m, COMPTA, stCompta, "marketing"))).toMatchObject({ details: { garde: "c" } });
+    expect(m.stock.liaisons).toHaveLength(2);
+  });
+
+  it("cycle refusé au deuxième relais : A vers B, B vers A refusé, B vers C accepté", async () => {
+    const m = monde();
+    await declarerReseau(m);
+    m.issues.push({ id: id(9101), companyId: COMPTA, title: "Clôture", status: "in_progress", originKind: "manual", originId: null });
+    const l1 = idLiaison(await depuis(m, COMPTA, id(9101), "direction"));
+    await m.poster();
+    const st = sousTache(m, DIR, tacheRecue(m, l1));
+    expect(await m.refus(depuis(m, DIR, st, "compta"))).toMatchObject({ details: { garde: "c", motif: "cycle" } });
+    expect((await depuis(m, DIR, st, "marketing")).statut).toBe(201);
+  });
+
+  it("une tâche sans liaison reçue dans sa lignée garde une chaîne d'un relais, même sous-tâche d'une tâche ordinaire", async () => {
+    const m = monde();
+    await declarerReseau(m);
+    const st = sousTache(m, MKT, TACHE_MKT);
+    const r = await depuis(m, MKT, st, "compta");
+    expect(r.statut).toBe(201);
+    expect(m.stock.liaisons[0]).toMatchObject({ chaine: ["marketing", "compta"], profondeur: 1 });
+  });
+
+  it("un ancêtre reçu par liaison dont la trace a disparu compte encore pour un relais", async () => {
+    const m = monde();
+    await declarerReseau(m);
+    m.issues.push({ id: id(9201), companyId: DIR, title: "Reçue jadis", status: "in_progress", originKind: ORIGINE_LIAISON, originId: "liaison:x" });
+    const st = sousTache(m, DIR, id(9201));
+    const r = await depuis(m, DIR, st, "compta");
+    expect(r.statut).toBe(201);
+    expect(m.stock.liaisons[0]).toMatchObject({ profondeur: 2 });
+    await m.poster();
+    const st2 = sousTache(m, COMPTA, tacheRecue(m, idLiaison(r)));
+    expect(await m.refus(depuis(m, COMPTA, st2, "marketing"))).toMatchObject({ details: { garde: "c", motif: "relais" } });
+  });
+});
+
+describe("revue M1 : la sensibilité suit la réponse (teinte)", () => {
+  /** Marketing demande au juridique (sensible), un humain approuve, le juridique répond. */
+  async function reponseSensible(m: ReturnType<typeof monde>) {
+    await declarerReseau(m);
+    const r = await depuis(m, MKT, TACHE_MKT, "juridique", "Lecture du contrat");
+    expect(r.corps).toMatchObject({ approbationRequise: true });
+    const lid = idLiaison(r);
+    await decider(m, { companyId: MKT, liaisonId: lid, decision: "approuver" });
+    await m.poster();
+    await repondre(m, lid, "Clause 4 à revoir : données personnelles du client X.");
+    return lid;
+  }
+
+  it("la réponse d'une liaison approuvée teinte la tâche qui la reçoit : une liaison vers un service non sensible attend l'approbation", async () => {
+    const m = monde();
+    const lid = await reponseSensible(m);
+    expect(m.stock.liaisons.find((l) => l.id === lid)).toMatchObject({ statut: "repondue", teinteRetour: true, approbationRequise: true });
+    // Le comportement de recopie est inchangé : la réponse arrive sur la tâche d'origine.
+    await m.poster();
+    expect(m.commentaires.some((c) => c.issueId === TACHE_MKT && c.body.includes("Clause 4 à revoir"))).toBe(true);
+
+    const r = await depuis(m, MKT, TACHE_MKT, "direction", "Synthèse pour la direction");
+    expect(r.statut).toBe(201);
+    expect(r.corps).toMatchObject({ approbationRequise: true, teinte: true, liaison: { statut: "en_attente_approbation", tacheCible: null } });
+    await m.poster();
+    expect(m.issues.some((i) => i.companyId === DIR && i.originKind === ORIGINE_LIAISON)).toBe(false);
+    expect(m.journal.find((j) => j.type === "liaison.approbation_demandee" && j.donnees.serviceCible === "direction")!.donnees.teinte).toBe(true);
+  });
+
+  it("la teinte se propage aux descendantes de la tâche teintée ; une tâche sans lien n'est teintée que par prudence (réponse récente ou tâche ouverte)", async () => {
+    const m = monde();
+    await reponseSensible(m);
+    const st = sousTache(m, MKT, sousTache(m, MKT, TACHE_MKT));
+    expect((await depuis(m, MKT, st, "compta")).corps).toMatchObject({ approbationRequise: true, liaison: { statut: "en_attente_approbation" } });
+    m.issues.push({ id: id(9301), companyId: MKT, title: "Autre sujet", status: "in_progress", originKind: "manual", originId: null });
+    // Revue de f525e9b : par prudence, la réponse teintée récente teinte aussi les tâches sans lien de l'entreprise.
+    expect((await depuis(m, MKT, id(9301), "compta", "Sans lien, réponse récente")).corps).toMatchObject({ approbationRequise: true, liaison: { statut: "en_attente_approbation" } });
+    // Réponse de plus de 7 jours ET tâche d'origine close : la tâche sans lien n'est plus teintée ; la descendante l'est toujours.
+    m.avancer((LIMITES_LIAISON.teinteFenetreJours + 1) * 86_400_000);
+    m.issues.find((i) => i.id === TACHE_MKT)!.status = "done";
+    expect((await depuis(m, MKT, id(9301), "compta", "Sans lien, plus tard")).corps).toMatchObject({ approbationRequise: false, liaison: { statut: "ouverte" } });
+    expect((await depuis(m, MKT, st, "compta", "Descendante, plus tard")).corps).toMatchObject({ approbationRequise: true });
+  });
+
+  it("une réponse d'une liaison non approuvée ne teinte rien", async () => {
+    const m = monde();
+    await declarerReseau(m);
+    const lid = idLiaison(await depuis(m, MKT, TACHE_MKT, "direction"));
+    await m.poster();
+    await repondre(m, lid);
+    expect(m.stock.liaisons[0]).toMatchObject({ statut: "repondue", teinteRetour: false });
+    expect((await depuis(m, MKT, TACHE_MKT, "compta")).corps).toMatchObject({ approbationRequise: false, liaison: { statut: "ouverte" } });
+  });
+
+  it("une liaison approuvée annulée par la cible ne teinte pas la tâche d'origine", async () => {
+    const m = monde();
+    await declarerReseau(m);
+    const lid = idLiaison(await depuis(m, MKT, TACHE_MKT, "juridique"));
+    await decider(m, { companyId: MKT, liaisonId: lid, decision: "approuver" });
+    await m.poster();
+    const cibleId = tacheRecue(m, lid);
+    m.issues.find((i) => i.id === cibleId)!.status = "cancelled";
+    await m.retour({ eventId: "evt-annule", companyId: JUR, entityId: cibleId, entityType: "issue", payload: { changes: { status: { from: "todo", to: "cancelled" } } } });
+    expect(m.stock.liaisons[0]).toMatchObject({ statut: "annulee", teinteRetour: false });
+    expect((await depuis(m, MKT, TACHE_MKT, "direction")).corps).toMatchObject({ approbationRequise: false, liaison: { statut: "ouverte" } });
+  });
+
+  it("une demande teintée approuvée teinte à son tour sa réponse et la tâche reçue", async () => {
+    const m = monde();
+    await reponseSensible(m);
+    const r = await depuis(m, MKT, TACHE_MKT, "direction", "Synthèse teintée");
+    const lid = idLiaison(r);
+    await decider(m, { companyId: MKT, liaisonId: lid, decision: "approuver" });
+    await m.poster();
+    // La direction reçoit une demande approuvée : ses relais depuis la tâche reçue (sous-tâche) sont teintés aussi.
+    const st = sousTache(m, DIR, tacheRecue(m, lid));
+    expect((await depuis(m, DIR, st, "compta")).corps).toMatchObject({ approbationRequise: true, teinte: true });
+    await repondre(m, lid);
+    expect(m.stock.liaisons.find((l) => l.id === lid)).toMatchObject({ teinteRetour: true });
+  });
+
+  it("la demande reçue par une liaison approuvée teinte la tâche reçue, même vers un flux non sensible", async () => {
+    const m = monde();
+    await declarerReseau(m, []); // aucun service sensible dans la matrice
+    const r = await depuis(m, MKT, TACHE_MKT, "direction");
+    const lid = idLiaison(r);
+    m.stock.liaisons[0]!.approbationRequise = true; // liaison approuvée (par exemple teintée à l'origine)
+    await m.poster();
+    const st = sousTache(m, DIR, tacheRecue(m, lid));
+    expect((await depuis(m, DIR, st, "compta")).corps).toMatchObject({ approbationRequise: true, liaison: { statut: "en_attente_approbation" } });
+  });
+});
+
+describe("revue M3 : plafond propre au coordinateur général", () => {
+  it("l'entreprise Direction peut tenir 30 liaisons ouvertes, la 31e est refusée ; les autres services restent à 5", async () => {
+    const m = monde();
+    await declarerReseau(m, []);
+    for (let i = 1; i <= LIMITES_LIAISON.ouvertesCoordinateurGeneralMax; i++) {
+      expect((await depuis(m, DIR, TACHE_DIR, i % 2 ? "marketing" : "compta", `Diffusion ${i}`)).statut).toBe(201);
+    }
+    expect(LIMITES_LIAISON.ouvertesCoordinateurGeneralMax).toBeGreaterThanOrEqual(27);
+    expect(await m.refus(depuis(m, DIR, TACHE_DIR, "marketing", "Diffusion de trop"))).toMatchObject({ details: { garde: "d" } });
+    for (let i = 1; i <= LIMITES_LIAISON.ouvertesParEntrepriseMax; i++) expect((await depuis(m, MKT, TACHE_MKT, "compta", `Marketing ${i}`)).statut).toBe(201);
+    expect(await m.refus(depuis(m, MKT, TACHE_MKT, "compta", "Marketing de trop"))).toMatchObject({ details: { garde: "d" } });
+  });
+
+  it("le plafond propre n'exempte d'aucune approbation : vers un service sensible, la demande du coordinateur général attend l'humain", async () => {
+    const m = monde();
+    await declarerReseau(m);
+    expect((await depuis(m, DIR, TACHE_DIR, "juridique")).corps).toMatchObject({ approbationRequise: true, liaison: { statut: "en_attente_approbation" } });
+  });
+});
+
+describe("revue B6 : seuls les coordinateurs déclarés ouvrent une liaison", () => {
+  it("un agent qui a des subordonnés sans être coordinateur (le relecteur) est refusé ; le coordinateur et le coordinateur général passent", async () => {
+    const m = monde();
+    await declarerReseau(m);
+    const RELECTEUR = id(13);
+    m.agentsParEntreprise[MKT]!.push({ id: RELECTEUR, name: "Relecteur", role: "qa", status: "idle", reportsTo: null }, { id: id(14), name: "Gardien", role: "qa", status: "idle", reportsTo: RELECTEUR });
+    expect(await m.refus(m.demander(demande({ extraits: [] }), { acteur: agent(RELECTEUR) }))).toMatchObject({ code: "liaison_refusee", details: { garde: "a" } });
+    expect(await m.refus(m.demander(demande({ serviceCible: "marketing", tacheOrigineId: TACHE_DIR }), { acteur: agent(id(22)), companyId: DIR }))).toMatchObject({ details: { garde: "a" } });
+    expect((await m.demander(demande({ extraits: [] }), { acteur: agent(MKT_COORD) })).statut).toBe(201);
+    expect((await m.demander(demande({ serviceCible: "marketing", tacheOrigineId: TACHE_DIR }), { acteur: agent(DIR_COORD), companyId: DIR })).statut).toBe(201);
+  });
+
+  it("deux agents de rôle ceo dans une même entreprise : aucun n'est tenu pour le coordinateur déclaré", async () => {
+    const m = monde();
+    await declarerReseau(m);
+    m.agentsParEntreprise[MKT]!.push({ id: id(15), name: "Second ceo", role: "ceo", status: "idle", reportsTo: null });
+    expect(await m.refus(m.demander(demande()))).toMatchObject({ details: { garde: "a" } });
+  });
+});
+
+/* ------------------------------------------------------------------ */
+/* Revue de f525e9b : contournement des gardes par une TÂCHE RACINE (relais, cycle, teinte) */
+/* ------------------------------------------------------------------ */
+
+let numeroRacine = 0;
+/** Tâche RACINE créée par le coordinateur (aucun parent, aucune origine liaison) : le vecteur du contournement. */
+function racine(m: ReturnType<typeof monde>, companyId: string): string {
+  const t = { id: id(9600 + numeroRacine++), companyId, title: "Recopie de la demande reçue", status: "todo", originKind: "manual", originId: null, parentId: null };
+  m.issues.push(t);
+  return t.id;
+}
+
+describe("revue de f525e9b : relais par prudence (tâche racine)", () => {
+  it("cycle : B reçoit T de A, crée une racine R qui recopie T et relance A depuis R : refusé tant que T est ouverte", async () => {
+    const m = monde();
+    await declarerReseau(m);
+    const l1 = idLiaison(await depuis(m, MKT, TACHE_MKT, "direction"));
+    await m.poster();
+    const r = racine(m, DIR);
+    expect(await m.refus(depuis(m, DIR, r, "marketing"))).toMatchObject({ code: "liaison_refusee", details: { garde: "c", motif: "cycle", prudence: true } });
+    expect(m.stock.liaisons).toHaveLength(1);
+    // T terminée (réponse rendue) : plus de relais supposé, la racine ouvre librement.
+    await repondre(m, l1);
+    expect((await depuis(m, DIR, r, "marketing")).statut).toBe(201);
+    expect(m.stock.liaisons[1]).toMatchObject({ chaine: ["direction", "marketing"], profondeur: 1 });
+  });
+
+  it("relais : depuis une racine, la liaison hérite de la chaîne et de la profondeur maximales des liaisons reçues ouvertes ; le 3e relais est refusé", async () => {
+    const m = monde();
+    await declarerReseau(m);
+    const l1 = idLiaison(await depuis(m, MKT, TACHE_MKT, "direction"));
+    await m.poster();
+    // B (direction) relaie vers C (compta) depuis une racine : accepté, mais compté comme 2e relais de la chaîne reçue.
+    const r2 = await depuis(m, DIR, racine(m, DIR), "compta");
+    expect(r2.statut).toBe(201);
+    const l2 = idLiaison(r2);
+    expect(m.stock.liaisons.find((l) => l.id === l2)).toMatchObject({ chaine: ["marketing", "direction", "compta"], profondeur: 2 });
+    await m.poster();
+    // C relaie à son tour depuis une racine : 3e relais refusé.
+    expect(await m.refus(depuis(m, COMPTA, racine(m, COMPTA), "juridique"))).toMatchObject({ code: "liaison_refusee", details: { garde: "c", motif: "relais", prudence: true } });
+    expect(m.stock.liaisons).toHaveLength(2);
+    expect(tacheRecue(m, l1)).toBeTruthy();
+  });
+
+  it("une liaison reçue pas encore transmise (aucune tâche reçue) ne compte pas", async () => {
+    const m = monde();
+    await declarerReseau(m);
+    await depuis(m, MKT, TACHE_MKT, "direction"); // pas de passage du facteur : rien n'est arrivé chez la direction
+    const r = await depuis(m, DIR, racine(m, DIR), "marketing");
+    expect(r.statut).toBe(201);
+    expect(m.stock.liaisons[1]).toMatchObject({ chaine: ["direction", "marketing"], profondeur: 1 });
+  });
+
+  it("une liaison reçue approuvée et encore ouverte teinte les liaisons ouvertes depuis une racine", async () => {
+    const m = monde();
+    await declarerReseau(m, []);
+    const lid = idLiaison(await depuis(m, MKT, TACHE_MKT, "direction"));
+    m.stock.liaisons[0]!.approbationRequise = true;
+    await m.poster();
+    expect(tacheRecue(m, lid)).toBeTruthy();
+    expect((await depuis(m, DIR, racine(m, DIR), "compta")).corps).toMatchObject({ approbationRequise: true, teinte: true, liaison: { statut: "en_attente_approbation" } });
+  });
+});
+
+describe("revue de f525e9b : teinte par prudence (tâche racine)", () => {
+  /** Marketing demande au juridique (sensible), un humain approuve, le juridique répond : TACHE_MKT reçoit une réponse teintée. */
+  async function reponseSensible(m: ReturnType<typeof monde>) {
+    await declarerReseau(m);
+    const lid = idLiaison(await depuis(m, MKT, TACHE_MKT, "juridique", "Lecture du contrat"));
+    await decider(m, { companyId: MKT, liaisonId: lid, decision: "approuver" });
+    await m.poster();
+    await repondre(m, lid, "Clause 4 à revoir : données personnelles du client X.");
+    await m.poster();
+  }
+
+  it("A recopie la réponse teintée dans une racine R et l'envoie à un service non sensible : approbation humaine exigée", async () => {
+    const m = monde();
+    await reponseSensible(m);
+    const r = racine(m, MKT);
+    const res = await m.demander(
+      demande({ tacheOrigineId: r, serviceCible: "direction", objet: "Synthèse", extraits: [{ titre: "Avis", texte: "Clause 4 à revoir : données personnelles du client X." }] }),
+      { acteur: agent(MKT_COORD), companyId: MKT },
+    );
+    expect(res.corps).toMatchObject({ approbationRequise: true, teinte: true, liaison: { statut: "en_attente_approbation", tacheCible: null } });
+    await m.poster();
+    expect(m.issues.some((i) => i.companyId === DIR && i.originKind === ORIGINE_LIAISON)).toBe(false);
+  });
+
+  it("la prudence dure tant que la tâche teintée est ouverte, même après 7 jours ; puis cesse quand elle est close", async () => {
+    const m = monde();
+    await reponseSensible(m);
+    m.avancer((LIMITES_LIAISON.teinteFenetreJours + 1) * 86_400_000);
+    expect((await depuis(m, MKT, racine(m, MKT), "direction", "Après 8 jours, tâche ouverte")).corps).toMatchObject({ approbationRequise: true });
+    m.issues.find((i) => i.id === TACHE_MKT)!.status = "cancelled";
+    expect((await depuis(m, MKT, racine(m, MKT), "direction", "Après 8 jours, tâche close")).corps).toMatchObject({ approbationRequise: false, liaison: { statut: "ouverte" } });
+  });
+
+  it("dans les 7 jours, la prudence vaut même si la tâche teintée est close", async () => {
+    const m = monde();
+    await reponseSensible(m);
+    m.issues.find((i) => i.id === TACHE_MKT)!.status = "done";
+    m.avancer((LIMITES_LIAISON.teinteFenetreJours - 1) * 86_400_000);
+    expect((await depuis(m, MKT, racine(m, MKT), "direction")).corps).toMatchObject({ approbationRequise: true });
+  });
+
+  it("trop de réponses teintées pour les examiner : l'entreprise est tenue pour teintée", async () => {
+    const m = monde();
+    await declarerReseau(m, []);
+    const modele = m.stock.liaisons;
+    for (let i = 0; i < LIMITES_LIAISON.teintesExamineesMax; i++) {
+      modele.push({
+        id: `vieille-${i}`, entrepriseSource: MKT, entrepriseCible: JUR, tacheOrigine: id(20000 + i), tacheCible: id(30000 + i), statut: "repondue", objet: "o", extraits: [],
+        creeLe: "2026-01-01T00:00:00.000Z", reponduLe: "2026-01-02T00:00:00.000Z", serviceSource: "marketing", serviceCible: "juridique", question: "q",
+        cleIdempotence: `k-${i}`, interactionId: null, demandePar: "x", chaine: ["marketing", "juridique"], profondeur: 1, approbationRequise: true, teinteRetour: true,
+      });
+    }
+    expect((await depuis(m, MKT, racine(m, MKT), "direction")).corps).toMatchObject({ approbationRequise: true });
+    modele.splice(0, 1);
+    // Une de moins : toutes anciennes et leurs tâches d'origine introuvables (closes) : pas de teinte.
+    expect((await depuis(m, MKT, racine(m, MKT), "direction", "Une de moins")).corps).toMatchObject({ approbationRequise: false });
+  });
+});
+
+describe("exemption de la prudence : vraie racine humaine (demande de l'opérateur au coordinateur général)", () => {
+  let numeroHumaine = 0;
+  /** Tâche racine créée dans la Discussion : `createdByUserId` renseigné par l'hôte. `o` surcharge les champs de créateur. */
+  function racineCreee(m: ReturnType<typeof monde>, companyId: string, o: Ligne = {}, parentId: string | null = null): string {
+    const t = { id: id(9800 + numeroHumaine++), companyId, title: "Demande de l'opérateur", status: "todo", originKind: "manual", originId: null, parentId, ...o };
+    m.issues.push(t);
+    return t.id;
+  }
+  const humaine = (m: ReturnType<typeof monde>, c: string, parentId: string | null = null) => racineCreee(m, c, { createdByUserId: "user-jb", createdByAgentId: null }, parentId);
+
+  it("escalade reçue ouverte : la demande humaine part avec la seule lignée (profondeur 1) et peut interroger le service qui escalade", async () => {
+    const m = monde();
+    await declarerReseau(m);
+    await depuis(m, MKT, TACHE_MKT, "direction");
+    await m.poster();
+    const res = await depuis(m, DIR, humaine(m, DIR), "marketing");
+    expect(res.statut).toBe(201);
+    expect(m.stock.liaisons[1]).toMatchObject({ chaine: ["direction", "marketing"], profondeur: 1 });
+  });
+
+  it("les services interrogés peuvent relayer : la profondeur ne hérite pas des escalades reçues", async () => {
+    const m = monde();
+    await declarerReseau(m);
+    await depuis(m, MKT, TACHE_MKT, "direction");
+    await depuis(m, COMPTA, racine(m, COMPTA), "direction");
+    await m.poster();
+    await m.poster();
+    // Deux demandes reçues ouvertes, dont une de profondeur 2 serait héritée sans l'exemption.
+    m.stock.liaisons[0]!.profondeur = 2;
+    const res = await depuis(m, DIR, humaine(m, DIR), "compta");
+    expect(res.statut).toBe(201);
+    expect(m.stock.liaisons.at(-1)).toMatchObject({ profondeur: 1 });
+  });
+
+  it("réponse teintée récente : pas d'approbation forcée par prudence, mais le flux sensible l'exige toujours", async () => {
+    const m = monde();
+    await declarerReseau(m);
+    const lid = idLiaison(await depuis(m, DIR, TACHE_DIR, "juridique", "Lecture du contrat"));
+    await decider(m, { companyId: DIR, liaisonId: lid, decision: "approuver" }, { companyId: DIR });
+    await m.poster();
+    await repondre(m, lid, "Clause 4 à revoir : données personnelles du client X.");
+    await m.poster();
+    // Contrôle : une racine d'agent est teintée par prudence.
+    expect((await depuis(m, DIR, racine(m, DIR), "marketing", "Racine agent")).corps).toMatchObject({ approbationRequise: true, teinte: true });
+    // Racine humaine : pas de teinte par prudence.
+    expect((await depuis(m, DIR, humaine(m, DIR), "marketing", "Racine humaine")).corps).toMatchObject({ approbationRequise: false, liaison: { statut: "ouverte" } });
+    // Flux sensible : l'approbation reste exigée par le flux lui-même.
+    expect((await depuis(m, DIR, humaine(m, DIR), "juridique", "Flux sensible")).corps).toMatchObject({ approbationRequise: true });
+  });
+
+  it("racine créée par un agent : prudence maintenue, même si un utilisateur est aussi renseigné", async () => {
+    const m = monde();
+    await declarerReseau(m);
+    await depuis(m, MKT, TACHE_MKT, "direction");
+    await m.poster();
+    for (const o of [{ createdByAgentId: DIR_COORD, createdByUserId: null }, { createdByAgentId: DIR_COORD, createdByUserId: "user-jb" }]) {
+      expect(await m.refus(depuis(m, DIR, racineCreee(m, DIR, o), "marketing"))).toMatchObject({ details: { garde: "c", motif: "cycle", prudence: true } });
+    }
+  });
+
+  it("créateur absent, vide ou illisible : prudence", async () => {
+    const m = monde();
+    await declarerReseau(m);
+    await depuis(m, MKT, TACHE_MKT, "direction");
+    await m.poster();
+    for (const o of [{}, { createdByUserId: null, createdByAgentId: null }, { createdByUserId: "", createdByAgentId: null }]) {
+      expect(await m.refus(depuis(m, DIR, racineCreee(m, DIR, o), "marketing"))).toMatchObject({ details: { prudence: true } });
+    }
+  });
+
+  it("sous-tâche d'une racine d'agent, même créée par un humain : prudence (le sommet compte)", async () => {
+    const m = monde();
+    await declarerReseau(m);
+    await depuis(m, MKT, TACHE_MKT, "direction");
+    await m.poster();
+    const sommet = racineCreee(m, DIR, { createdByAgentId: DIR_COORD, createdByUserId: null });
+    expect(await m.refus(depuis(m, DIR, humaine(m, DIR, sommet), "marketing"))).toMatchObject({ details: { prudence: true } });
+  });
+
+  it("lignée illisible (parent introuvable) : pas d'exemption, prudence", async () => {
+    const m = monde();
+    await declarerReseau(m);
+    await depuis(m, MKT, TACHE_MKT, "direction");
+    await m.poster();
+    expect(await m.refus(depuis(m, DIR, humaine(m, DIR, id(99999)), "marketing"))).toMatchObject({ details: { prudence: true } });
+  });
+
+  it("descendante d'une tâche reçue : la lignée compte et la prudence reste (aucune exemption)", async () => {
+    const m = monde();
+    await declarerReseau(m);
+    await depuis(m, MKT, TACHE_MKT, "direction");
+    await depuis(m, COMPTA, racine(m, COMPTA), "direction");
+    await m.poster();
+    await m.poster();
+    const recue = tacheRecue(m, m.stock.liaisons[1]!.id);
+    // Même si l'hôte attribue la tâche reçue à un humain, un ancêtre reçu par liaison exclut l'exemption.
+    Object.assign(m.issues.find((i) => i.id === recue)!, { createdByUserId: "user-jb", createdByAgentId: null });
+    // Sous-tâche créée par un humain sous une tâche reçue de la compta : lignée = chaîne compta ; le marketing figure dans l'autre reçue ouverte.
+    expect(await m.refus(depuis(m, DIR, humaine(m, DIR, recue), "marketing"))).toMatchObject({ details: { garde: "c", prudence: true } });
+  });
+
+  it("racine humaine : la lignée réelle compte toujours (sous-tâche humaine d'une tâche reçue : relais hérité de la lignée)", async () => {
+    const m = monde();
+    await declarerReseau(m, []);
+    const l1 = idLiaison(await depuis(m, MKT, TACHE_MKT, "direction"));
+    await m.poster();
+    const recue = tacheRecue(m, l1);
+    expect(await m.refus(depuis(m, DIR, humaine(m, DIR, recue), "marketing"))).toMatchObject({ details: { garde: "c", motif: "cycle" } });
   });
 });

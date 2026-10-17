@@ -1,0 +1,867 @@
+From 9f76c9f8ddaee188d3d31cded08661900567159c Mon Sep 17 00:00:00 2001
+From: Jean-Baptiste Dhondt <114347858+warrox1993@users.noreply.github.com>
+Date: Sat, 17 Oct 2026 22:49:06 +0200
+Subject: [PATCH 72/78] =?UTF-8?q?feat(ui):=20r=C3=A9glages=20de=20l'organi?=
+ =?UTF-8?q?sation=20et=20de=20l'instance=20en=20fran=C3=A7ais,=20sans=20ti?=
+ =?UTF-8?q?ret=20cadratin?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Gouvernance des interactions (types, audiences, plafonds, texte d'aide),
+apparence et sélecteur de logo (bouton « Choisir un fichier » au lieu du
+texte natif du navigateur), archivage, déploiement et authentification,
+masquage du nom d'utilisateur, conservation des sauvegardes, partage des
+avis sur l'IA, déconnexion. Les sections réservées à l'administrateur sont
+traduites, pas masquées. Les cartes de tâche gardent leurs libellés
+d'audience. Audit visuel D08.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01DP85vPq2MHkZg8VNtRvCzB
+---
+ .../InteractionGovernancePanel.test.tsx       |  38 +++---
+ .../components/InteractionGovernancePanel.tsx |  77 +++++++-----
+ ui/src/components/Layout.test.tsx             |   2 +-
+ ui/src/components/access/ModeBadge.tsx        |   6 +-
+ ui/src/pages/CompanySettings.tsx              |  49 ++++----
+ ui/src/pages/CompanySettingsArchive.test.tsx  |   4 +-
+ ui/src/pages/InstanceGeneralSettings.test.tsx |  30 ++---
+ ui/src/pages/InstanceGeneralSettings.tsx      | 114 +++++++++---------
+ 8 files changed, 170 insertions(+), 150 deletions(-)
+
+diff --git a/ui/src/components/InteractionGovernancePanel.test.tsx b/ui/src/components/InteractionGovernancePanel.test.tsx
+index 05f4f9291..0fe3ac3eb 100644
+--- a/ui/src/components/InteractionGovernancePanel.test.tsx
++++ b/ui/src/components/InteractionGovernancePanel.test.tsx
+@@ -68,22 +68,22 @@ describe("InteractionGovernancePanel", () => {
+     const { host } = renderPanel();
+ 
+     const defaultSelect = host.querySelector('[data-testid="governance-request_confirmation-default"]');
+-    expect(defaultSelect?.textContent).toContain("Anyone (default)");
++    expect(defaultSelect?.textContent).toContain("Tout le monde (par défaut)");
+     const cap = host.querySelector('[data-testid="governance-request_confirmation-cap"]');
+-    expect(cap?.textContent).toContain("No cap");
++    expect(cap?.textContent).toContain("Sans plafond");
+   });
+ 
+   it("describes the open default without presenting it as board-required", () => {
+     const { host } = renderPanel();
+     const copy = host.textContent ?? "";
+ 
+-    expect(copy).toContain("Thread interactions are open by default");
+-    expect(copy).toContain("the board or any agent, including the one that asked");
++    expect(copy).toContain("Les interactions des discussions sont ouvertes par défaut");
++    expect(copy).toContain("une personne comme n'importe quel agent, y compris celui qui a posé la question");
+     expect(copy).not.toContain("Board only");
+     expect(copy).not.toContain("always require the board");
+     // Governed tool approvals keep their human-only guarantee.
+-    expect(copy).toContain("Tool-approval confirmations always stay");
+-    expect(copy).toContain("Human only");
++    expect(copy).toContain("Les confirmations d'approbation d'outil restent toujours en");
++    expect(copy).toContain("Humain seulement");
+   });
+ 
+   it("shows a stored narrowing override on the matching row", () => {
+@@ -93,14 +93,14 @@ describe("InteractionGovernancePanel", () => {
+ 
+     expect(
+       host.querySelector('[data-testid="governance-request_confirmation-default"]')?.textContent,
+-    ).toContain("Human only");
++    ).toContain("Humain seulement");
+     expect(
+       host.querySelector('[data-testid="governance-request_confirmation-cap"]')?.textContent,
+-    ).toContain("Anyone except creator");
++    ).toContain("Tous sauf l'auteur");
+     // Untouched kinds still read as open.
+     expect(
+       host.querySelector('[data-testid="governance-suggest_tasks-default"]')?.textContent,
+-    ).toContain("Anyone (default)");
++    ).toContain("Tout le monde (par défaut)");
+   });
+ 
+   /**
+@@ -113,8 +113,8 @@ describe("InteractionGovernancePanel", () => {
+     const { host } = renderPanel();
+ 
+     for (const kind of INTERACTION_KINDS) {
+-      expect(triggerText(host, `governance-${kind}-default`)).toBe("Anyone (default)");
+-      expect(triggerText(host, `governance-${kind}-cap`)).toBe("No cap");
++      expect(triggerText(host, `governance-${kind}-default`)).toBe("Tout le monde (par défaut)");
++      expect(triggerText(host, `governance-${kind}-cap`)).toBe("Sans plafond");
+     }
+   });
+ 
+@@ -123,12 +123,12 @@ describe("InteractionGovernancePanel", () => {
+       request_confirmation: { defaultPolicy: "human_only", cap: "not_creator" },
+     });
+ 
+-    expect(triggerText(host, "governance-request_confirmation-default")).toBe("Human only");
+-    expect(triggerText(host, "governance-request_confirmation-cap")).toBe("Anyone except creator");
++    expect(triggerText(host, "governance-request_confirmation-default")).toBe("Humain seulement");
++    expect(triggerText(host, "governance-request_confirmation-cap")).toBe("Tous sauf l'auteur");
+     // The effect prose belongs to the option list, never the trigger.
+-    expect(host.textContent).not.toContain("New cards wait for a person on the board");
+-    expect(host.textContent).not.toContain("narrowed to exclude its creator");
+-    expect(host.textContent).not.toContain("New cards are open");
++    expect(host.textContent).not.toContain("Les nouvelles cartes attendent une personne");
++    expect(host.textContent).not.toContain("exclut son auteur");
++    expect(host.textContent).not.toContain("Les nouvelles cartes sont ouvertes");
+   });
+ 
+   it("still offers the effect sentence inside the open option list", async () => {
+@@ -144,11 +144,11 @@ describe("InteractionGovernancePanel", () => {
+ 
+     const listbox = document.querySelector('[data-slot="select-content"]');
+     const listText = listbox?.textContent ?? "";
+-    expect(listText).toContain("Anyone (default)");
++    expect(listText).toContain("Tout le monde (par défaut)");
+     expect(listText).toContain(
+-      "New cards are open — the board or any agent can respond, including the one that asked.",
++      "Les nouvelles cartes sont ouvertes : une personne ou n'importe quel agent peut répondre, y compris celui qui a posé la question.",
+     );
+-    expect(listText).toContain("New cards wait for a person on the board. Agents are turned away.");
++    expect(listText).toContain("Les nouvelles cartes attendent une personne. Les agents sont écartés.");
+     // Each option keeps a label-only typeahead value so keyboard search does not
+     // match the effect prose.
+     expect(
+diff --git a/ui/src/components/InteractionGovernancePanel.tsx b/ui/src/components/InteractionGovernancePanel.tsx
+index 6bbf6b4f0..2cc0fb585 100644
+--- a/ui/src/components/InteractionGovernancePanel.tsx
++++ b/ui/src/components/InteractionGovernancePanel.tsx
+@@ -14,17 +14,27 @@ import {
+   SelectTrigger,
+   SelectValue,
+ } from "@/components/ui/select";
+-import { resolverPolicyLabel } from "../lib/interaction-audience";
+ 
+ const INTERACTION_KIND_LABELS: Record<IssueThreadInteractionKind, string> = {
+-  suggest_tasks: "Suggested tasks",
+-  ask_user_questions: "Ask user questions",
++  suggest_tasks: "Tâches suggérées",
++  ask_user_questions: "Questions à l'utilisateur",
+   request_confirmation: "Confirmations",
+-  request_checkbox_confirmation: "Checkbox confirmations",
+-  request_item_verdicts: "Item verdicts",
+-  connection_intent: "Connection requests",
++  request_checkbox_confirmation: "Confirmations à cocher",
++  request_item_verdicts: "Verdicts par élément",
++  connection_intent: "Demandes de connexion",
+ };
+ 
++/** Libellés français des audiences dans ce panneau (les cartes de tâche gardent `resolverPolicyLabel`). */
++const LIBELLES_POLITIQUE: Record<IssueThreadInteractionCanonicalResolverPolicy, string> = {
++  anyone: "Tout le monde",
++  not_creator: "Tous sauf l'auteur",
++  human_only: "Humain seulement",
++};
++
++function libellePolitique(policy: IssueThreadInteractionResolverPolicy): string {
++  return LIBELLES_POLITIQUE[normalizeIssueThreadInteractionResolverPolicy(policy)];
++}
++
+ /**
+  * Sentinel for "no override" — Radix Select disallows empty-string item values.
+  * Under the open-default contract (PAP-17280) an absent override *is* the open
+@@ -48,25 +58,25 @@ const NARROWING_POLICIES: readonly IssueThreadInteractionCanonicalResolverPolicy
+ ];
+ 
+ const UNSET_LABELS: Record<GovernanceField, string> = {
+-  defaultPolicy: "Anyone (default)",
+-  cap: "No cap",
++  defaultPolicy: "Tout le monde (par défaut)",
++  cap: "Sans plafond",
+ };
+ 
+ const UNSET_EFFECTS: Record<GovernanceField, string> = {
+-  defaultPolicy: "New cards are open — the board or any agent can respond, including the one that asked.",
+-  cap: "A request keeps whatever audience it asks for.",
++  defaultPolicy: "Les nouvelles cartes sont ouvertes : une personne ou n'importe quel agent peut répondre, y compris celui qui a posé la question.",
++  cap: "Une demande garde l'audience qu'elle réclame.",
+ };
+ 
+ const DEFAULT_POLICY_EFFECTS: Record<IssueThreadInteractionCanonicalResolverPolicy, string> = {
+   anyone: UNSET_EFFECTS.defaultPolicy,
+-  not_creator: "New cards exclude the agent that created them, so the answer comes from someone else.",
+-  human_only: "New cards wait for a person on the board. Agents are turned away.",
++  not_creator: "Les nouvelles cartes excluent l'agent qui les a créées : la réponse vient de quelqu'un d'autre.",
++  human_only: "Les nouvelles cartes attendent une personne. Les agents sont écartés.",
+ };
+ 
+ const CAP_EFFECTS: Record<IssueThreadInteractionCanonicalResolverPolicy, string> = {
+   anyone: UNSET_EFFECTS.cap,
+-  not_creator: "Even a card that asks for Anyone is narrowed to exclude its creator.",
+-  human_only: "Every card of this kind waits for a person, whatever it asked for.",
++  not_creator: "Même une carte qui demande « Tout le monde » exclut son auteur.",
++  human_only: "Chaque carte de ce type attend une personne, quoi qu'elle demande.",
+ };
+ 
+ function governanceOptions(field: GovernanceField): {
+@@ -79,7 +89,7 @@ function governanceOptions(field: GovernanceField): {
+     { value: GOVERNANCE_UNSET, label: UNSET_LABELS[field], effect: UNSET_EFFECTS[field] },
+     ...NARROWING_POLICIES.map((policy) => ({
+       value: policy as GovernanceSelectValue,
+-      label: resolverPolicyLabel(policy),
++      label: libellePolitique(policy),
+       effect: effects[policy],
+     })),
+   ];
+@@ -91,7 +101,7 @@ function governanceOptions(field: GovernanceField): {
+  * still renders a complete, truthful label instead of falling back to a lie.
+  */
+ export function governanceValueLabel(field: GovernanceField, value: GovernanceSelectValue): string {
+-  return value === GOVERNANCE_UNSET ? UNSET_LABELS[field] : resolverPolicyLabel(value);
++  return value === GOVERNANCE_UNSET ? UNSET_LABELS[field] : libellePolitique(value);
+ }
+ 
+ /**
+@@ -239,19 +249,20 @@ export function InteractionGovernancePanel({
+   return (
+     <div className="space-y-4" data-testid="company-settings-interaction-governance-section">
+       <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+-        Interaction governance
++        Gouvernance des interactions
+       </div>
+       <div className="space-y-4">
+         <p className="text-sm text-muted-foreground">
+-          Thread interactions are open by default:{" "}
+-          <span className="font-medium text-foreground">Anyone</span> in the organization — the
+-          board or any agent, including the one that asked — can respond. Narrow a kind
+-          only when you need to.{" "}
+-          <span className="font-medium text-foreground">Default policy</span> is the
+-          audience new cards get when the requester does not ask for one;{" "}
+-          <span className="font-medium text-foreground">Cap</span> narrows every request of
+-          that kind and can never widen one. Tool-approval confirmations always stay{" "}
+-          <span className="font-medium text-foreground">Human only</span>.
++          Les interactions des discussions sont ouvertes par défaut :{" "}
++          <span className="font-medium text-foreground">tout le monde</span> dans l'organisation
++          peut répondre, une personne comme n'importe quel agent, y compris celui qui a posé la
++          question. Ne restreignez un type qu'en cas de besoin. La{" "}
++          <span className="font-medium text-foreground">politique par défaut</span> est
++          l'audience donnée aux nouvelles cartes quand la demande n'en précise pas ; le{" "}
++          <span className="font-medium text-foreground">plafond</span> restreint toutes les
++          demandes de ce type et ne les élargit jamais. Les confirmations d'approbation d'outil
++          restent toujours en{" "}
++          <span className="font-medium text-foreground">Humain seulement</span>.
+         </p>
+         {/*
+          * Responsive: below `sm` the row collapses to a single column so the
+@@ -262,13 +273,13 @@ export function InteractionGovernancePanel({
+          */}
+         <div className="grid grid-cols-1 gap-y-4 sm:grid-cols-[1fr_auto_auto] sm:items-center sm:gap-x-4 sm:gap-y-2.5">
+           <div className="hidden text-xs font-medium text-muted-foreground uppercase tracking-wide sm:block">
+-            Kind
++            Type
+           </div>
+           <div className="hidden text-xs font-medium text-muted-foreground uppercase tracking-wide sm:block">
+-            Default policy
++            Politique par défaut
+           </div>
+           <div className="hidden text-xs font-medium text-muted-foreground uppercase tracking-wide sm:block">
+-            Cap
++            Plafond
+           </div>
+           {ISSUE_THREAD_INTERACTION_KINDS.map((kind) => {
+             const entry = governance[kind] ?? {};
+@@ -279,8 +290,8 @@ export function InteractionGovernancePanel({
+                 <GovernanceSelect
+                   field="defaultPolicy"
+                   testId={`governance-${kind}-default`}
+-                  ariaLabel={`Default resolver audience for ${kindLabel}`}
+-                  mobileLabel="Default policy"
++                  ariaLabel={`Audience par défaut pour ${kindLabel}`}
++                  mobileLabel="Politique par défaut"
+                   value={toGovernanceSelectValue(entry.defaultPolicy)}
+                   disabled={isPending}
+                   onChange={(v) => onChange(kind, "defaultPolicy", v)}
+@@ -288,8 +299,8 @@ export function InteractionGovernancePanel({
+                 <GovernanceSelect
+                   field="cap"
+                   testId={`governance-${kind}-cap`}
+-                  ariaLabel={`Resolver cap for ${kindLabel}`}
+-                  mobileLabel="Cap"
++                  ariaLabel={`Plafond d'audience pour ${kindLabel}`}
++                  mobileLabel="Plafond"
+                   value={toGovernanceSelectValue(entry.cap)}
+                   disabled={isPending}
+                   onChange={(v) => onChange(kind, "cap", v)}
+diff --git a/ui/src/components/Layout.test.tsx b/ui/src/components/Layout.test.tsx
+index cf3e0545a..777a59163 100644
+--- a/ui/src/components/Layout.test.tsx
++++ b/ui/src/components/Layout.test.tsx
+@@ -362,7 +362,7 @@ describe("Layout", () => {
+     expect(container.textContent).toContain("Outlet content");
+     expect(container.querySelectorAll("[data-announcement-well]")).toHaveLength(1);
+     expect(container.textContent).not.toContain("Company rail");
+-    expect(container.textContent).not.toContain("Authenticated private");
++    expect(container.textContent).not.toContain("Authentifié privé");
+     expect(container.textContent).not.toContain(
+       "Sign-in is required and this instance is intended for private-network access.",
+     );
+diff --git a/ui/src/components/access/ModeBadge.tsx b/ui/src/components/access/ModeBadge.tsx
+index 8a65f38cc..3c1668154 100644
+--- a/ui/src/components/access/ModeBadge.tsx
++++ b/ui/src/components/access/ModeBadge.tsx
+@@ -12,8 +12,10 @@ export function ModeBadge({
+ 
+   const label =
+     deploymentMode === "local_trusted"
+-      ? "Local trusted"
+-      : `Authenticated ${deploymentExposure ?? "private"}`;
++      ? "Local de confiance"
++      : (deploymentExposure ?? "private") === "public"
++        ? "Authentifié public"
++        : "Authentifié privé";
+ 
+   return <Badge variant="outline">{label}</Badge>;
+ }
+diff --git a/ui/src/pages/CompanySettings.tsx b/ui/src/pages/CompanySettings.tsx
+index c71dbdc9d..754b9d32f 100644
+--- a/ui/src/pages/CompanySettings.tsx
++++ b/ui/src/pages/CompanySettings.tsx
+@@ -150,7 +150,7 @@ export function CompanySettings() {
+       // still makes sense (another active company, the Cloud portfolio, or
+       // the companies list), with a toast naming what happened.
+       const archived = companies.find((company) => company.id === companyId);
+-      const archivedName = archived?.name ?? "Organization";
++      const archivedName = archived?.name ?? "L'organisation";
+       const departure = resolveCompanyArchiveDeparture({
+         archivedCompanyId: companyId,
+         companies,
+@@ -166,7 +166,7 @@ export function CompanySettings() {
+       if (departure.kind === "company") {
+         toastActions?.pushToast({
+           title: `${archivedName} est archivée`,
+-          body: `Switched to ${departure.company.name}.`,
++          body: `Vous êtes passé à ${departure.company.name}.`,
+           tone: "info",
+           dedupeKey: `company-archive-departure:${companyId}`,
+         });
+@@ -192,7 +192,7 @@ export function CompanySettings() {
+ 
+   useEffect(() => {
+     setBreadcrumbs([
+-      { label: selectedCompany?.name ?? "Company", href: "/dashboard" },
++      { label: selectedCompany?.name ?? "Organisation", href: "/dashboard" },
+       { label: "Paramètres" }
+     ]);
+   }, [setBreadcrumbs, selectedCompany?.name]);
+@@ -225,7 +225,7 @@ export function CompanySettings() {
+           Général
+         </div>
+         <div className="space-y-3">
+-          <Field label="Nom de l'organisation" hint="The display name for your organization.">
++          <Field label="Nom de l'organisation" hint="Nom affiché de votre organisation.">
+             <input
+               className="w-full rounded-md border border-border bg-transparent px-2.5 py-1.5 text-sm outline-none"
+               type="text"
+@@ -241,7 +241,7 @@ export function CompanySettings() {
+           </Field>
+           <Field
+             label="Description"
+-            hint="Optional description shown in the organization profile."
++            hint="Description facultative affichée dans le profil de l'organisation."
+           >
+             <input
+               className="w-full rounded-md border border-border bg-transparent px-2.5 py-1.5 text-sm outline-none"
+@@ -257,7 +257,7 @@ export function CompanySettings() {
+       {/* Appearance */}
+       <div className="max-w-2xl space-y-4">
+         <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+-          Appearance
++          Apparence
+         </div>
+         <div className="space-y-3">
+           <div className="flex items-start gap-4">
+@@ -271,15 +271,22 @@ export function CompanySettings() {
+             <div className="flex-1 space-y-3">
+               <Field
+                 label="Logo"
+-                hint="Upload a PNG, JPEG, WEBP, GIF, or SVG logo image."
++                hint="Image du logo au format PNG, JPEG, WEBP, GIF ou SVG."
+               >
+                 <div className="space-y-2">
+-                  <input
+-                    type="file"
+-                    accept="image/png,image/jpeg,image/webp,image/gif,image/svg+xml"
+-                    onChange={handleLogoFileChange}
+-                    className="w-full rounded-md border border-border bg-transparent px-2.5 py-1.5 text-sm outline-none file:mr-4 file:rounded-md file:border-0 file:bg-muted file:px-2.5 file:py-1 file:text-xs"
+-                  />
++                  {/* Sélecteur natif masqué : son texte (« Choose File ») suit la langue du navigateur. */}
++                  <label className="flex w-full cursor-pointer items-center gap-3 rounded-md border border-border px-2.5 py-1.5 text-sm focus-within:ring-2 focus-within:ring-ring">
++                    <input
++                      type="file"
++                      accept="image/png,image/jpeg,image/webp,image/gif,image/svg+xml"
++                      onChange={handleLogoFileChange}
++                      className="sr-only"
++                    />
++                    <span className="rounded-md bg-muted px-2.5 py-1 text-xs font-medium">Choisir un fichier</span>
++                    <span className="truncate text-muted-foreground">
++                      {logoUploadMutation.isPending ? "Envoi du logo…" : logoUrl ? "Logo enregistré" : "Aucun fichier choisi"}
++                    </span>
++                  </label>
+                   {logoUrl && (
+                     <div className="flex items-center gap-2">
+                       <Button
+@@ -297,7 +304,7 @@ export function CompanySettings() {
+                       {logoUploadError ??
+                         (logoUploadMutation.error instanceof Error
+                           ? logoUploadMutation.error.message
+-                          : "Logo upload failed")}
++                          : "L'envoi du logo a échoué")}
+                     </span>
+                   )}
+                   {clearLogoMutation.isError && (
+@@ -332,7 +339,7 @@ export function CompanySettings() {
+             <span className="text-xs text-destructive">
+               {generalMutation.error instanceof Error
+                   ? generalMutation.error.message
+-                  : "Failed to save"}
++                  : "L'enregistrement a échoué"}
+             </span>
+           )}
+         </div>
+@@ -363,7 +370,7 @@ export function CompanySettings() {
+           governanceMutation.isError
+             ? governanceMutation.error instanceof Error
+               ? governanceMutation.error.message
+-              : "Failed to save interaction governance"
++              : "L'enregistrement de la gouvernance des interactions a échoué"
+             : null
+         }
+       />
+@@ -391,23 +398,23 @@ export function CompanySettings() {
+               onClick={() => {
+                 if (!selectedCompanyId) return;
+                 const confirmed = window.confirm(
+-                  `Archive organization "${selectedCompany.name}"? It will be hidden from the sidebar.`
++                  `Archiver l'organisation « ${selectedCompany.name} » ? Elle sera masquée de la barre latérale.`
+                 );
+                 if (!confirmed) return;
+                 archiveMutation.mutate({ companyId: selectedCompanyId });
+               }}
+             >
+               {archiveMutation.isPending
+-                ? "Archiving..."
++                ? "Archivage…"
+                 : selectedCompany.status === "archived"
+-                ? "Already archived"
+-                : "Archive organization"}
++                ? "Déjà archivée"
++                : "Archiver l'organisation"}
+             </Button>
+             {archiveMutation.isError && (
+               <span className="text-xs text-destructive">
+                 {archiveMutation.error instanceof Error
+                   ? archiveMutation.error.message
+-                  : "Failed to archive organization"}
++                  : "L'archivage de l'organisation a échoué"}
+               </span>
+             )}
+           </div>
+diff --git a/ui/src/pages/CompanySettingsArchive.test.tsx b/ui/src/pages/CompanySettingsArchive.test.tsx
+index 6d53e604f..1ff3cb1b0 100644
+--- a/ui/src/pages/CompanySettingsArchive.test.tsx
++++ b/ui/src/pages/CompanySettingsArchive.test.tsx
+@@ -168,7 +168,7 @@ describe("CompanySettings archive departure", () => {
+ 
+   function clickArchive() {
+     const button = Array.from(container.querySelectorAll("button")).find(
+-      (element) => element.textContent?.trim() === "Archive organization",
++      (element) => element.textContent?.trim() === "Archiver l'organisation",
+     );
+     expect(button).toBeDefined();
+     flushSync(() => {
+@@ -188,7 +188,7 @@ describe("CompanySettings archive departure", () => {
+       expect(mockPushToast).toHaveBeenCalledWith(
+         expect.objectContaining({
+           title: "Old Co est archivée",
+-          body: "Switched to Paperclip.",
++          body: "Vous êtes passé à Paperclip.",
+         }),
+       );
+       expect(mockNavigateTopLevel).not.toHaveBeenCalled();
+diff --git a/ui/src/pages/InstanceGeneralSettings.test.tsx b/ui/src/pages/InstanceGeneralSettings.test.tsx
+index 0efa275d8..3fc5dce0e 100644
+--- a/ui/src/pages/InstanceGeneralSettings.test.tsx
++++ b/ui/src/pages/InstanceGeneralSettings.test.tsx
+@@ -82,13 +82,13 @@ describe("InstanceGeneralSettings sign-out", () => {
+         </QueryClientProvider>,
+       );
+     });
+-    await vi.waitFor(() => expect(container.textContent).toContain("Deployment and auth"));
++    await vi.waitFor(() => expect(container.textContent).toContain("Déploiement et authentification"));
+     expect(container.querySelector('[data-slot="card"]')).toBeNull();
+   }
+ 
+   function signOutButton() {
+     return Array.from(container.querySelectorAll("button"))
+-      .find((button) => button.textContent?.trim() === "Sign out");
++      .find((button) => button.textContent?.trim() === "Se déconnecter");
+   }
+ 
+   it("uses the Cloud-managed top-level logout without calling local auth", async () => {
+@@ -131,7 +131,7 @@ describe("InstanceGeneralSettings sign-out", () => {
+     await renderPage(SELF_HOSTED_HEALTH);
+ 
+     const censorToggle = container.querySelector<HTMLButtonElement>(
+-      '[aria-label="Toggle username log censoring"]',
++      '[aria-label="Masquer le nom d\'utilisateur dans les journaux"]',
+     );
+     flushSync(() => censorToggle?.click());
+     await vi.waitFor(() => expect(container.textContent).toContain("Settings update failed"));
+@@ -150,7 +150,7 @@ describe("InstanceGeneralSettings sign-out", () => {
+     await vi.waitFor(() => expect(container.textContent).toContain("Sign-out request failed"));
+ 
+     const censorToggle = container.querySelector<HTMLButtonElement>(
+-      '[aria-label="Toggle username log censoring"]',
++      '[aria-label="Masquer le nom d\'utilisateur dans les journaux"]',
+     );
+     flushSync(() => censorToggle?.click());
+ 
+@@ -168,7 +168,7 @@ describe("InstanceGeneralSettings sign-out", () => {
+     await renderPage(SELF_HOSTED_HEALTH);
+ 
+     const censorToggle = container.querySelector<HTMLButtonElement>(
+-      '[aria-label="Toggle username log censoring"]',
++      '[aria-label="Masquer le nom d\'utilisateur dans les journaux"]',
+     );
+     flushSync(() => signOutButton()?.click());
+     await vi.waitFor(() => expect(mockAuthApi.signOut).toHaveBeenCalledOnce());
+@@ -191,7 +191,7 @@ describe("InstanceGeneralSettings sign-out", () => {
+     await renderPage(SELF_HOSTED_HEALTH);
+ 
+     const censorToggle = container.querySelector<HTMLButtonElement>(
+-      '[aria-label="Toggle username log censoring"]',
++      '[aria-label="Masquer le nom d\'utilisateur dans les journaux"]',
+     );
+     flushSync(() => censorToggle?.click());
+     await vi.waitFor(() => expect(mockInstanceSettingsApi.updateGeneral).toHaveBeenCalledOnce());
+@@ -240,7 +240,7 @@ describe("InstanceGeneralSettings operator-hidden sections", () => {
+         </QueryClientProvider>,
+       );
+     });
+-    await vi.waitFor(() => expect(container.textContent).toContain("Backup retention"));
++    await vi.waitFor(() => expect(container.textContent).toContain("Conservation des sauvegardes"));
+   }
+ 
+   it("hides an operator-hidden field-backed section and a UI-only section", async () => {
+@@ -252,18 +252,18 @@ describe("InstanceGeneralSettings operator-hidden sections", () => {
+       ],
+     });
+ 
+-    expect(container.textContent).not.toContain("Censor username in logs");
+-    expect(container.textContent).not.toContain("Deployment and auth");
+-    expect(container.textContent).toContain("Backup retention");
+-    expect(container.textContent).toContain("AI feedback sharing");
+-    expect(container.textContent).toContain("Sign out");
++    expect(container.textContent).not.toContain("Masquer le nom d'utilisateur dans les journaux");
++    expect(container.textContent).not.toContain("Déploiement et authentification");
++    expect(container.textContent).toContain("Conservation des sauvegardes");
++    expect(container.textContent).toContain("Partage des avis sur l'IA");
++    expect(container.textContent).toContain("Se déconnecter");
+   });
+ 
+   it("shows every section when nothing is hidden", async () => {
+     await renderPage(SELF_HOSTED_HEALTH);
+ 
+-    expect(container.textContent).toContain("Deployment and auth");
+-    expect(container.textContent).toContain("Censor username in logs");
+-    expect(container.textContent).toContain("Backup retention");
++    expect(container.textContent).toContain("Déploiement et authentification");
++    expect(container.textContent).toContain("Masquer le nom d'utilisateur dans les journaux");
++    expect(container.textContent).toContain("Conservation des sauvegardes");
+   });
+ });
+diff --git a/ui/src/pages/InstanceGeneralSettings.tsx b/ui/src/pages/InstanceGeneralSettings.tsx
+index d76b2dbb8..d6a41edef 100644
+--- a/ui/src/pages/InstanceGeneralSettings.tsx
++++ b/ui/src/pages/InstanceGeneralSettings.tsx
+@@ -30,8 +30,8 @@ export function InstanceGeneralSettings({ embedded = false }: { embedded?: boole
+   useEffect(() => {
+     if (embedded) return;
+     setBreadcrumbs([
+-      { label: "Settings", href: "/company/settings" },
+-      { label: "General" },
++      { label: "Paramètres", href: "/company/settings" },
++      { label: "Général" },
+     ]);
+   }, [embedded, setBreadcrumbs]);
+ 
+@@ -57,12 +57,12 @@ export function InstanceGeneralSettings({ embedded = false }: { embedded?: boole
+       await queryClient.invalidateQueries({ queryKey: queryKeys.instance.generalSettings });
+     },
+     onError: (error) => {
+-      setActionError(error instanceof Error ? error.message : "Failed to update general settings.");
++      setActionError(error instanceof Error ? error.message : "La mise à jour des réglages généraux a échoué.");
+     },
+   });
+ 
+   if (generalQuery.isLoading || healthQuery.isLoading) {
+-    return <div className="text-sm text-muted-foreground">Loading general settings...</div>;
++    return <div className="text-sm text-muted-foreground">Chargement des réglages généraux…</div>;
+   }
+ 
+   if (generalQuery.error) {
+@@ -70,7 +70,7 @@ export function InstanceGeneralSettings({ embedded = false }: { embedded?: boole
+       <div className="text-sm text-destructive">
+         {generalQuery.error instanceof Error
+           ? generalQuery.error.message
+-          : "Failed to load general settings."}
++          : "Le chargement des réglages généraux a échoué."}
+       </div>
+     );
+   }
+@@ -85,17 +85,17 @@ export function InstanceGeneralSettings({ embedded = false }: { embedded?: boole
+   const showFeedbackDataSharing = !hiddenSettings.has("instance.general.feedbackDataSharingPreference");
+   const showSignOut = !hiddenSettings.has("instance.general.signOut");
+   const visibleTopics = [
+-    ...(showCensorUsernameInLogs ? ["log display"] : []),
+-    ...(showBackupRetention ? ["backup retention"] : []),
+-    ...(showFeedbackDataSharing ? ["data sharing"] : []),
++    ...(showCensorUsernameInLogs ? ["affichage des journaux"] : []),
++    ...(showBackupRetention ? ["conservation des sauvegardes"] : []),
++    ...(showFeedbackDataSharing ? ["partage de données"] : []),
+   ];
+   const topicSummary = visibleTopics.length > 2
+-    ? `${visibleTopics.slice(0, -1).join(", ")}, and ${visibleTopics[visibleTopics.length - 1]}`
+-    : visibleTopics.join(" and ");
++    ? `${visibleTopics.slice(0, -1).join(", ")} et ${visibleTopics[visibleTopics.length - 1]}`
++    : visibleTopics.join(" et ");
+   const visibleActionError = signOutMutation.error instanceof Error
+     ? signOutMutation.error.message
+     : signOutMutation.error
+-      ? "Failed to sign out."
++      ? "La déconnexion a échoué."
+       : actionError;
+ 
+   return (
+@@ -104,11 +104,11 @@ export function InstanceGeneralSettings({ embedded = false }: { embedded?: boole
+         <div className="space-y-2">
+           <div className="flex items-center gap-2">
+             <SlidersHorizontal className="h-5 w-5 text-muted-foreground" />
+-            <h1 className="text-lg font-semibold">General</h1>
++            <h1 className="text-lg font-semibold">Général</h1>
+           </div>
+           <p className="text-sm text-muted-foreground">
+-            Configure instance-wide preferences
+-            {visibleTopics.length > 0 ? <> including {topicSummary}</> : null}.
++            Préférences valables pour toute l'instance
++            {visibleTopics.length > 0 ? <>, dont {topicSummary}</> : null}.
+           </p>
+         </div>
+       ) : null}
+@@ -123,7 +123,7 @@ export function InstanceGeneralSettings({ embedded = false }: { embedded?: boole
+       <section>
+         <div className="space-y-3">
+           <div className="flex items-center gap-2">
+-            <h2 className="text-sm font-semibold">Deployment and auth</h2>
++            <h2 className="text-sm font-semibold">Déploiement et authentification</h2>
+             <ModeBadge
+               deploymentMode={healthQuery.data?.deploymentMode}
+               deploymentExposure={healthQuery.data?.deploymentExposure}
+@@ -131,23 +131,23 @@ export function InstanceGeneralSettings({ embedded = false }: { embedded?: boole
+           </div>
+           <div className="text-sm text-muted-foreground">
+             {healthQuery.data?.deploymentMode === "local_trusted"
+-              ? "Local trusted mode is optimized for a local operator. Browser requests run as local board context and no sign-in is required."
++              ? "Le mode local de confiance est prévu pour un opérateur sur ce poste. Les requêtes du navigateur s'exécutent avec les droits de l'opérateur local, sans connexion."
+               : healthQuery.data?.deploymentExposure === "public"
+-                ? "Authenticated public mode requires sign-in for board access and is intended for public URLs."
+-                : "Authenticated private mode requires sign-in and is intended for LAN, VPN, or other private-network deployments."}
++                ? "Le mode authentifié public exige une connexion et convient à une adresse publique."
++                : "Le mode authentifié privé exige une connexion et convient à un réseau local, un VPN ou un autre réseau privé."}
+           </div>
+           <div className="grid gap-3 md:grid-cols-3">
+             <StatusBox
+-              label="Auth readiness"
+-              value={healthQuery.data?.authReady ? "Ready" : "Not ready"}
++              label="Authentification"
++              value={healthQuery.data?.authReady ? "Prête" : "Pas prête"}
+             />
+             <StatusBox
+-              label="Bootstrap status"
+-              value={healthQuery.data?.bootstrapStatus === "bootstrap_pending" ? "Setup required" : "Ready"}
++              label="Initialisation"
++              value={healthQuery.data?.bootstrapStatus === "bootstrap_pending" ? "Configuration requise" : "Terminée"}
+             />
+             <StatusBox
+-              label="Bootstrap invite"
+-              value={healthQuery.data?.bootstrapInviteActive ? "Active" : "None"}
++              label="Invitation initiale"
++              value={healthQuery.data?.bootstrapInviteActive ? "Active" : "Aucune"}
+             />
+           </div>
+         </div>
+@@ -158,18 +158,18 @@ export function InstanceGeneralSettings({ embedded = false }: { embedded?: boole
+       <section>
+         <div className="flex items-start justify-between gap-4">
+           <div className="space-y-1.5">
+-            <h2 className="text-sm font-semibold">Censor username in logs</h2>
++            <h2 className="text-sm font-semibold">Masquer le nom d'utilisateur dans les journaux</h2>
+             <p className="max-w-2xl text-sm text-muted-foreground">
+-              Hide the username segment in home-directory paths and similar operator-visible log output. Standalone
+-              username mentions outside of paths are not yet masked in the live transcript view. This is off by
+-              default.
++              Masque le nom d'utilisateur dans les chemins du dossier personnel et dans les journaux visibles par
++              l'opérateur. Les mentions isolées du nom, hors chemins, ne sont pas encore masquées dans la transcription
++              en direct. Désactivé par défaut.
+             </p>
+           </div>
+           <ToggleSwitch
+             checked={censorUsernameInLogs}
+             onCheckedChange={() => updateGeneralMutation.mutate({ censorUsernameInLogs: !censorUsernameInLogs })}
+             disabled={updateGeneralMutation.isPending || signOutMutation.isPending}
+-            aria-label="Toggle username log censoring"
++            aria-label="Masquer le nom d'utilisateur dans les journaux"
+           />
+         </div>
+       </section>
+@@ -179,16 +179,16 @@ export function InstanceGeneralSettings({ embedded = false }: { embedded?: boole
+       <section>
+         <div className="space-y-5">
+           <div className="space-y-1.5">
+-            <h2 className="text-sm font-semibold">Backup retention</h2>
++            <h2 className="text-sm font-semibold">Conservation des sauvegardes</h2>
+             <p className="max-w-2xl text-sm text-muted-foreground">
+-              Configure how long automatic database backups are retained. Backups run roughly
+-              every hour and are compressed with gzip. Within the daily window all backups are
+-              kept; beyond that, one backup per week and one per month are preserved.
++              Durée de conservation des sauvegardes automatiques de la base de données. Une sauvegarde
++              est faite environ toutes les heures et compressée avec gzip. Pendant la période quotidienne,
++              toutes sont gardées ; au-delà, on garde une sauvegarde par semaine et une par mois.
+             </p>
+           </div>
+ 
+           <div className="space-y-1.5">
+-            <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Daily</h3>
++            <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Quotidienne</h3>
+             <div className="flex flex-wrap gap-2">
+               {DAILY_RETENTION_PRESETS.map((days) => {
+                 const active = backupRetention.dailyDays === days;
+@@ -209,7 +209,7 @@ export function InstanceGeneralSettings({ embedded = false }: { embedded?: boole
+                       })
+                     }
+                   >
+-                    <div className="text-sm font-medium">{days} days</div>
++                    <div className="text-sm font-medium">{days} jours</div>
+                   </button>
+                 );
+               })}
+@@ -217,11 +217,11 @@ export function InstanceGeneralSettings({ embedded = false }: { embedded?: boole
+           </div>
+ 
+           <div className="space-y-1.5">
+-            <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Weekly</h3>
++            <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Hebdomadaire</h3>
+             <div className="flex flex-wrap gap-2">
+               {WEEKLY_RETENTION_PRESETS.map((weeks) => {
+                 const active = backupRetention.weeklyWeeks === weeks;
+-                const label = weeks === 1 ? "1 week" : `${weeks} weeks`;
++                const label = weeks === 1 ? "1 semaine" : `${weeks} semaines`;
+                 return (
+                   <button
+                     key={weeks}
+@@ -247,11 +247,11 @@ export function InstanceGeneralSettings({ embedded = false }: { embedded?: boole
+           </div>
+ 
+           <div className="space-y-1.5">
+-            <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Monthly</h3>
++            <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Mensuelle</h3>
+             <div className="flex flex-wrap gap-2">
+               {MONTHLY_RETENTION_PRESETS.map((months) => {
+                 const active = backupRetention.monthlyMonths === months;
+-                const label = months === 1 ? "1 month" : `${months} months`;
++                const label = `${months} mois`;
+                 return (
+                   <button
+                     key={months}
+@@ -283,10 +283,10 @@ export function InstanceGeneralSettings({ embedded = false }: { embedded?: boole
+       <section>
+         <div className="space-y-4">
+           <div className="space-y-1.5">
+-            <h2 className="text-sm font-semibold">AI feedback sharing</h2>
++            <h2 className="text-sm font-semibold">Partage des avis sur l'IA</h2>
+             <p className="max-w-2xl text-sm text-muted-foreground">
+-              Control whether thumbs up and thumbs down votes can send the voted AI output to
+-              Paperclip Labs. Votes are always saved locally.
++              Indique si un pouce levé ou baissé peut envoyer la réponse de l'IA concernée à
++              Paperclip Labs. Les votes sont toujours enregistrés sur ce poste.
+             </p>
+             {FEEDBACK_TERMS_URL ? (
+               <a
+@@ -295,27 +295,27 @@ export function InstanceGeneralSettings({ embedded = false }: { embedded?: boole
+                 rel="noreferrer"
+                 className="inline-flex text-sm text-muted-foreground underline underline-offset-4 hover:text-foreground"
+               >
+-                Read our terms of service
++                Lire les conditions d'utilisation
+               </a>
+             ) : null}
+           </div>
+           {feedbackDataSharingPreference === "prompt" ? (
+             <div className="rounded-lg bg-accent/20 px-3 py-2 text-sm text-muted-foreground">
+-              No default is saved yet. The next thumbs up or thumbs down choice will ask once and
+-              then save the answer here.
++              Aucun choix par défaut n'est encore enregistré. Le prochain vote posera la question une
++              fois, puis la réponse sera enregistrée ici.
+             </div>
+           ) : null}
+           <div className="flex flex-wrap gap-2">
+             {[
+               {
+                 value: "allowed",
+-                label: "Always allow",
+-                description: "Share voted AI outputs automatically.",
++                label: "Toujours autoriser",
++                description: "Partager automatiquement les réponses notées.",
+               },
+               {
+                 value: "not_allowed",
+-                label: "Don't allow",
+-                description: "Keep voted AI outputs local only.",
++                label: "Ne pas autoriser",
++                description: "Garder les réponses notées sur ce poste.",
+               },
+             ].map((option) => {
+               const active = feedbackDataSharingPreference === option.value;
+@@ -347,11 +347,11 @@ export function InstanceGeneralSettings({ embedded = false }: { embedded?: boole
+             })}
+           </div>
+           <p className="text-xs text-muted-foreground">
+-            To retest the first-use prompt in local dev, remove the{" "}
+-            <code>feedbackDataSharingPreference</code> key from the{" "}
+-            <code>instance_settings.general</code> JSON row for this instance, or set it back to{" "}
+-            <code>"prompt"</code>. Unset and <code>"prompt"</code> both mean no default has been
+-            chosen yet.
++            Pour revoir la question du premier vote en développement local, retirez la clé{" "}
++            <code>feedbackDataSharingPreference</code> de la ligne JSON{" "}
++            <code>instance_settings.general</code> de cette instance, ou remettez-la à{" "}
++            <code>"prompt"</code>. Absente ou à <code>"prompt"</code>, elle signifie qu'aucun choix
++            n'est encore fait.
+           </p>
+         </div>
+       </section>
+@@ -362,9 +362,9 @@ export function InstanceGeneralSettings({ embedded = false }: { embedded?: boole
+       <section>
+         <div className="flex items-start justify-between gap-4">
+           <div className="space-y-1.5">
+-            <h2 className="text-sm font-semibold">Sign out</h2>
++            <h2 className="text-sm font-semibold">Déconnexion</h2>
+             <p className="max-w-2xl text-sm text-muted-foreground">
+-              Sign out of this Paperclip instance. You will be redirected to the login page.
++              Se déconnecter de cette instance Paperclip. Vous serez renvoyé vers la page de connexion.
+             </p>
+           </div>
+           <Button
+@@ -377,7 +377,7 @@ export function InstanceGeneralSettings({ embedded = false }: { embedded?: boole
+             }}
+           >
+             <LogOut className="size-4" />
+-            {signOutMutation.isPending ? "Signing out..." : "Sign out"}
++            {signOutMutation.isPending ? "Déconnexion…" : "Se déconnecter"}
+           </Button>
+         </div>
+       </section>
+-- 
+2.53.0
+

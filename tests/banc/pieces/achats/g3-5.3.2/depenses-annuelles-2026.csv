@@ -1,0 +1,41 @@
+ligne;fournisseur;categorie;montant_annuel_eur;prochain_renouvellement
+D-01;Fournisseur 01;licence logicielle;960,00;07/2027
+D-02;Fournisseur 02;abonnement cloud;6 760,00;10/2027
+D-03;Fournisseur 03;téléphonie;5 820,00;11/2027
+D-04;VisioPlus;visioconférence;1 080,00;11/2027
+D-05;Fournisseur 05;fournitures;3 880,00;08/2027
+D-06;Fournisseur 06;assurance flotte;4 320,00;02/2027
+D-07;Fournisseur 07;formation;880,00;07/2027
+D-08;Fournisseur 08;location;1 820,00;01/2027
+D-09;Fournisseur 09;licence logicielle;6 900,00;04/2027
+D-10;Fournisseur 10;abonnement cloud;3 820,00;10/2027
+D-11;Fournisseur 11;téléphonie;7 780,00;03/2027
+D-12;Fournisseur 12;maintenance;8 460,00;07/2027
+D-13;Fournisseur 13;fournitures;2 800,00;02/2027
+D-14;Fournisseur 14;assurance flotte;4 860,00;06/2027
+D-15;Fournisseur 15;formation;1 920,00;11/2027
+D-16;Fournisseur 16;location;720,00;01/2027
+D-17;Fournisseur 17;licence logicielle;5 620,00;07/2027
+D-18;ReunionFacile;visioconférence;1 440,00;11/2027
+D-19;Fournisseur 19;téléphonie;920,00;10/2027
+D-20;Fournisseur 20;maintenance;7 100,00;09/2027
+D-21;Fournisseur 21;fournitures;7 280,00;02/2027
+D-22;Fournisseur 22;assurance flotte;5 440,00;06/2027
+D-23;Fournisseur 23;formation;4 500,00;01/2027
+D-24;Fournisseur 24;location;8 120,00;05/2027
+D-25;Fournisseur 25;licence logicielle;1 580,00;06/2027
+D-26;Fournisseur 26;abonnement cloud;4 760,00;11/2027
+D-27;Fournisseur 27;téléphonie;1 960,00;03/2027
+D-28;Fournisseur 28;maintenance;3 580,00;03/2027
+D-29;Fournisseur 29;fournitures;3 040,00;06/2027
+D-30;CallBox;visioconférence;960,00;08/2027
+D-31;Fournisseur 31;formation;6 240,00;10/2027
+D-32;Fournisseur 32;location;3 400,00;01/2027
+D-33;Fournisseur 33;licence logicielle;2 600,00;05/2027
+D-34;Fournisseur 34;abonnement cloud;6 280,00;04/2027
+D-35;Fournisseur 35;téléphonie;2 000,00;11/2027
+D-36;Fournisseur 36;maintenance;7 320,00;07/2027
+D-37;Fournisseur 37;fournitures;7 260,00;11/2027
+D-38;Fournisseur 38;assurance flotte;2 280,00;04/2027
+D-39;Fournisseur 39;formation;1 920,00;11/2027
+D-40;Fournisseur 40;location;1 480,00;10/2027

@@ -2,7 +2,7 @@
 name: "communication-interne"
 description: "Organise la communication interne d'une PME belge : plan éditorial interne, intranet ou lettre, annonces de direction, messages aux managers, information des représentants du personnel quand elle est requise (conseil d'entreprise, CPPT, délégation syndicale), FAQ interne. À utiliser pour planifier ou rédiger ce que l'entreprise dit à son personnel ; jamais pour annoncer une décision non prise, diffuser sans approbation humaine, remplacer une procédure d'information ou de consultation légale, ni diffuser des données personnelles de collègues."
 metadata:
-  version: "1.0.0"
+  version: "1.1.0"
   langue: "fr"
   domaine: "communication"
 ---
@@ -42,13 +42,14 @@ Un personnel informé à temps, par un canal adapté, avec un message vrai, simp
 2. **Contrôler la procédure avant d'écrire.** Se demander si le sujet touche l'organisation du travail, le règlement de travail, l'emploi, la sécurité ou les conditions de travail. Si oui, signaler à l'humain qu'une information ou une consultation d'un organe (conseil d'entreprise à partir de 100 travailleurs, CPPT à partir de 50, délégation syndicale selon le secteur) peut être requise avant l'annonce, et demander un avis à un avocat en droit social ou au secrétariat social. La compétence n'interprète pas la loi : elle pose la question et attend la réponse.
 3. **Construire le plan éditorial** (3 à 6 mois) : rubriques stables (mot de la direction, nouveaux arrivants, clients et projets, sécurité, vie de l'entreprise, questions du personnel), fréquence réaliste, responsable de chaque rubrique, canal, temps de rédaction en heures, indicateur simple (taux d'ouverture, participation, questions reçues).
 4. **Ordonner la séquence d'annonce** : représentants du personnel si requis, puis encadrement avec le message pour les managers, puis ensemble du personnel, puis externes. Heure et canal écrits. Une annonce sensible ne part jamais un vendredi soir sans équipe pour répondre.
-5. **Rédiger le message.** Ce qui change, pour qui, à partir de quand, pourquoi, ce qui ne change pas, ce qu'on ne sait pas encore et quand on le saura, à qui poser ses questions. Phrases courtes, pas de jargon, pas d'euphémisme pour une mauvaise nouvelle. Les deux langues si le personnel l'est, rédigées chacune pour son public.
-6. **Préparer l'encadrement.** Note de 1 page : message clé, réponses aux 8 questions attendues, ce qu'on ne dit pas, à qui renvoyer. Les managers l'ont avant le personnel.
-7. **Préparer la FAQ interne.** Questions réelles recueillies auprès d'un échantillon d'encadrants, réponses datées, mise à jour tracée.
-8. **Protéger les données.** Aucun nom de salarié concerné par une maladie, une sanction, une évaluation ou un départ conflictuel. Les photos et vidéos de collègues supposent leur accord. Un message interne est écrit comme s'il pouvait être lu à l'extérieur.
-9. **Coordonner avec l'externe.** Même table de faits que la presse (voir `communique-de-presse`) ; en crise, voir `communication-de-crise`. Le personnel n'apprend pas par les médias ce qui le concerne.
-10. **Poser la carte d'approbation** : texte, ordre d'envoi, canal, heure, destinataires, questions pour l'avocat. Rien n'est envoyé avant la réponse.
-11. **Mesurer et ajuster.** Après l'envoi : questions reçues, incompréhensions, rumeurs. Corriger par un second message court, daté, plutôt que par un démenti.
+5. **Choisir le format selon le type de message** : point d'équipe hebdomadaire au format « 3P » (progrès : ce qui a été fait ; projets : ce qui vient ; problèmes : ce qui freine), une à trois phrases factuelles et chiffrées par rubrique, lisible en moins d'une minute, en nommant l'équipe et la période ; lettre d'information interne ; réponse aux questions fréquentes ; annonce de changement ; note de direction. Un type de message non couvert : demander le format plutôt que l'inventer.
+6. **Rédiger le message.** Ce qui change, pour qui, à partir de quand, pourquoi, ce qui ne change pas, ce qu'on ne sait pas encore et quand on le saura, à qui poser ses questions. Phrases courtes, pas de jargon, pas d'euphémisme pour une mauvaise nouvelle. Les deux langues si le personnel l'est, rédigées chacune pour son public.
+7. **Préparer l'encadrement.** Note de 1 page : message clé, réponses aux 8 questions attendues, ce qu'on ne dit pas, à qui renvoyer. Les managers l'ont avant le personnel.
+8. **Préparer la FAQ interne.** Questions réelles recueillies auprès d'un échantillon d'encadrants, réponses datées, mise à jour tracée.
+9. **Protéger les données.** Aucun nom de salarié concerné par une maladie, une sanction, une évaluation ou un départ conflictuel. Les photos et vidéos de collègues supposent leur accord. Un message interne est écrit comme s'il pouvait être lu à l'extérieur.
+10. **Coordonner avec l'externe.** Même table de faits que la presse (voir `communique-de-presse`) ; en crise, voir `communication-de-crise`. Le personnel n'apprend pas par les médias ce qui le concerne.
+11. **Poser la carte d'approbation** : texte, ordre d'envoi, canal, heure, destinataires, questions pour l'avocat. Rien n'est envoyé avant la réponse.
+12. **Mesurer et ajuster.** Après l'envoi : questions reçues, incompréhensions, rumeurs. Corriger par un second message court, daté, plutôt que par un démenti.
 
 ## Livrable
 
@@ -58,6 +59,7 @@ Un dossier avec : le plan éditorial interne ; le calendrier de diffusion ; les 
 
 - Chaque message dit en tête ce qui change, pour qui et à partir de quand.
 - L'ordre d'information est écrit et justifié ; le message aux managers précède celui du personnel.
+- Le format suit le type de message (3P pour un point d'équipe, lisible en moins d'une minute).
 - Aucun fait non validé, aucune donnée personnelle superflue.
 - La question de l'information ou de la consultation des représentants du personnel est posée par écrit avant toute annonce sensible.
 - Le plan éditorial est tenable en heures par l'équipe réelle.
@@ -90,3 +92,11 @@ Toute annonce touchant l'organisation du travail, le règlement de travail, l'em
 Une PME de 70 personnes déménage son entrepôt le 15 novembre 2026 (décision de direction du 09/10/2026, source : note signée). Pas de conseil d'entreprise ; un CPPT existe. La compétence propose : question à l'avocat en droit social sur l'information du CPPT avant l'annonce ; réunion d'encadrement le lundi à 8 h avec note aux managers ; message au personnel le lundi à 11 h par courriel et affichage à l'entrepôt, en FR et NL ; FAQ (trajet, parking, horaires) ; point de suivi le jeudi. Carte d'approbation posée avec l'ordre et les heures.
 
 Cas d'échec : la direction demande d'annoncer au personnel « la suppression de l'équipe de nuit » dès demain alors que rien n'est décidé ni validé par l'avocat. La compétence refuse de rédiger l'annonce comme décision, écrit « décision non confirmée, procédure d'information ou de consultation à vérifier », propose à la place une note au dirigeant listant les étapes à clarifier, et ne prépare aucun message au personnel avant la réponse.
+
+## Origine de la méthode
+
+Format « 3P » et choix du format selon le type de message adaptés et traduits de github.com/anthropics/skills,
+`skills/internal-comms/SKILL.md` et `skills/internal-comms/examples/3p-updates.md`, commit
+b9e19e6f44773509fbdd7001d77ff41a49a486c1, licence Apache 2.0. Modifications : réécriture en français, sans émoji,
+obligations belges d'information du personnel conservées. Texte de la licence et liste des reprises :
+`organisation/skills/LICENCES-TIERS.md`.

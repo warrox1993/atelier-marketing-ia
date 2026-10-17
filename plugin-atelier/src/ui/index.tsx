@@ -43,6 +43,8 @@ import { VueDiscussion } from "./vues/discussion.js";
 import { VueResultatsAtelier } from "./vues/resultats.js";
 import { VueRapport } from "./vues/rapport.js";
 import { OngletEchanges, useAccesDirection, useLiaisonsTache, VueRegistre } from "./vues/echanges.js";
+import { VueDepartements } from "./vues/departements.js";
+import { aPlusieursDepartements, useDepartements } from "./departements-sonde.js";
 
 /** Racine commune : styles (dédupliqués par React), langue, portée `.atl`. */
 function Racine({ children, className }: { children: ReactNode; className?: string }) {
@@ -94,6 +96,8 @@ function Vue({ vue, id }: { vue: CleVue; id: string | null }) {
       return <VueRapport />;
     case "echanges":
       return <VueRegistre />;
+    case "departements":
+      return <VueDepartements />;
   }
 }
 
@@ -143,14 +147,14 @@ export function PageAtelier({ context }: PluginPageProps) {
   const route = lireRoute(pathname);
   const { rubrique, onglet } = rubriqueDe(route.vue, useAncre());
   const base = `atl-rub-${rubrique.cle}`;
-  const rubriques = rubriquesVisibles(useAccesDirection(context.companyId));
+  const rubriques = rubriquesVisibles(useAccesDirection(context.companyId), aPlusieursDepartements(useDepartements(context.companyId)));
   const vue = context.companyId ? <Vue key={`${route.vue}:${route.id ?? ""}`} vue={route.vue} id={route.id} /> : <SansEntreprise />;
   return (
     <Racine>
       <FournisseurDonnees>
         <TitreOnglet companyId={context.companyId} />
         <main className="atl-page">
-          {context.companyId && route.vue !== "mise-en-place" ? <BandeauEntreprise /> : null}
+          {context.companyId ? <BandeauEntreprise /> : null}
           <Rubriques courante={rubrique.cle} rubriques={rubriques} />
           {rubrique.onglets.length > 1 ? (
             <ListeOnglets
@@ -201,7 +205,7 @@ export function NavigationAtelier({ context }: PluginRouteSidebarProps) {
   const { pathname } = useHostLocation();
   const route = lireRoute(pathname);
   const { rubrique } = rubriqueDe(route.vue, useAncre());
-  const rubriques = rubriquesVisibles(useAccesDirection(context.companyId));
+  const rubriques = rubriquesVisibles(useAccesDirection(context.companyId), aPlusieursDepartements(useDepartements(context.companyId)));
   return (
     <Racine>
       <FournisseurDonnees veille={false}>

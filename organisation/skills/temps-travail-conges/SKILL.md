@@ -2,7 +2,7 @@
 name: "temps-travail-conges"
 description: "Explique à une PME belge les principes du temps de travail et des congés : durée du travail, heures supplémentaires, jours fériés légaux et jours de remplacement, congés annuels, mentions du règlement de travail, avec renvoi au secrétariat social pour tout calcul. À utiliser pour répondre à une question d'organisation du temps ou préparer une clause d'horaire ; jamais pour calculer une rémunération, un sursalaire ou un pécule, ni trancher un cas individuel."
 metadata:
-  version: "1.0.0"
+  version: "1.1.0"
   langue: "fr"
   domaine: "juridique-social"
 ---
@@ -49,6 +49,8 @@ Une note courte qui énonce les principes sourcés, signale ce qui dépend de la
 
 ## Livrable
 
+Quand la question vient d'un membre du personnel et porte sur une règle de l'entreprise, la note suit le format : réponse en une ou deux phrases, détails, exceptions, à qui s'adresser, source citée ; si aucune règle n'est trouvée dans les documents fournis, l'écrire clairement au lieu de supposer.
+
 Une note d'une page : question, principe sourcé avec date de lecture, éléments variables selon la commission paritaire, points d'attention sur le cas, questions et renvoi au secrétariat social. Aucun montant, aucun nombre de jours de congé individuel.
 
 ## Critères de réussite
@@ -85,3 +87,7 @@ Le calcul des heures supplémentaires et des repos compensatoires, le sursalaire
 Question : « Le 11 novembre 2026 tombe un mercredi, devons-nous fermer ? ». Réponse : le 11 novembre est l'un des dix jours fériés légaux ; l'entreprise doit en principe accorder le congé, la rémunération étant celle d'une journée normale. La note précise que si l'entreprise a un régime particulier (jour d'inactivité habituel), un jour de remplacement est fixé selon la hiérarchie des sources, et renvoie le calcul au secrétariat social.
 
 Cas d'échec : le service RH demande « combien doit-on payer ce week-end de garde à Jean ? » avec un nom et un horaire sans commission paritaire. La note ne calcule rien : elle écrit « sursalaire dépend de la commission paritaire et du régime, information manquante », retire le nom du texte (minimisation) et pose la question au secrétariat social.
+
+## Origine de la méthode
+
+Format de réponse à une question de politique interne (réponse courte, détails, exceptions, contact, source, « rien trouvé » dit clairement) adapté de github.com/anthropics/knowledge-work-plugins, `human-resources/skills/policy-lookup/SKILL.md` (« How to Answer », « Output »), commit 33eeda1e8fd856455b05479d13a0f85b5f803744, licence Apache 2.0. Liste des reprises : `organisation/skills/LICENCES-TIERS.md`.

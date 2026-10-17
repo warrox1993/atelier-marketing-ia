@@ -6,7 +6,7 @@
 import { ROUTE_ATELIER, RUBRIQUES } from "../contrats/ui-constantes.js";
 
 export type CleRubrique = (typeof RUBRIQUES)[number]["cle"];
-export type CleVue = "discussion" | "accueil" | CleRubrique | "prospects" | "carte" | "connaissances" | "mise-en-place" | "parametres" | "corbeille" | "rapport" | "echanges";
+export type CleVue = "discussion" | "accueil" | CleRubrique | "prospects" | "carte" | "connaissances" | "mise-en-place" | "parametres" | "corbeille" | "rapport" | "echanges" | "departements";
 
 export interface RouteAtelier {
   vue: CleVue;
@@ -33,7 +33,10 @@ export const VUES: ReadonlyArray<{ cle: CleVue; libelle: string; groupe?: typeof
 /** Vue réservée à l'entreprise Direction (registre des échanges) : hors `VUES`, absente du menu des autres entreprises. */
 export const VUE_DIRECTION = { cle: "echanges", libelle: "Registre des échanges" } as const satisfies { cle: CleVue; libelle: string };
 
-const CLES = new Set<string>([...VUES.map((v) => v.cle), VUE_DIRECTION.cle]);
+/** Tableau des départements du client : hors `VUES`, présent au menu seulement pour un client à plusieurs services. */
+export const VUE_DEPARTEMENTS = { cle: "departements", libelle: "Départements" } as const satisfies { cle: CleVue; libelle: string };
+
+const CLES = new Set<string>([...VUES.map((v) => v.cle), VUE_DIRECTION.cle, VUE_DEPARTEMENTS.cle]);
 
 /** Lit la vue depuis le chemin de l'hôte ; vue par défaut : accueil (« À faire »). */
 export function lireRoute(pathname: string): RouteAtelier {

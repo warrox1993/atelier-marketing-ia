@@ -16,9 +16,11 @@ describe("migration 015 : liaisons et suppression d'une entreprise cible", () =>
   const sql = readFileSync(join(DOSSIER, "015_liaisons_cible_supprimee.sql"), "utf8");
   const instructions = sql.split("\n").filter((l) => !l.trimStart().startsWith("--")).join("\n");
 
-  it("est la dernière migration, numérotée à la suite de 014", () => {
-    expect(fichiers.at(-1)).toBe("015_liaisons_cible_supprimee.sql");
-    expect(fichiers.at(-2)).toMatch(/^014_/u);
+  it("reste numérotée à la suite de 014 et immédiatement avant 016", () => {
+    const i = fichiers.indexOf("015_liaisons_cible_supprimee.sql");
+    expect(i).toBeGreaterThan(0);
+    expect(fichiers[i - 1]).toMatch(/^014_/u);
+    expect(fichiers[i + 1]).toMatch(/^016_/u);
   });
 
   it("rend la cible nullable, retire la clé CASCADE par son nom réel et la recrée en SET NULL", () => {

@@ -5,6 +5,7 @@
  * Un dernier bloc fait passer les requêtes SQL de `base.ts` par une copie des règles de l'hôte.
  */
 import type { PluginContext } from "@paperclipai/plugin-sdk";
+import { createHash } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import { ESPACE_BASE, CompteRenduProspect, CriteresManquants, Opposition, PageProspects, Prospect } from "../src/contrats/index.js";
 import { REFERENTIEL_COURTIER } from "../src/contrats/exemples/prospection.js";
@@ -14,10 +15,12 @@ import { dechiffrer, empreinte } from "../src/serveur/chiffrement-donnees.js";
 import { creerServices } from "../src/serveur/services.js";
 import { CODES_POSTAUX_BE } from "../src/serveur/codes-postaux-be.js";
 import { depotDepuisJournal } from "../src/serveur/base.js";
-import { appelPourCouverture, clesDemonstration, extraireChangementsBce, extraireComptesBnb, extraireProspects, regionDuCodePostal } from "../src/serveur/services-prospection.js";
+import * as moduleProspection from "../src/serveur/services-prospection.js";
+import { appelPourCouverture, extraireChangementsBce, extraireComptesBnb, extraireProspects, regionDuCodePostal } from "../src/serveur/services-prospection.js";
 import type { StockReglagesLeads } from "../src/serveur/services-reglages-leads.js";
 import { BRIEF, CAMP, SOC, creerBanc } from "./outils-base.js";
 import { stockMemoire } from "./outils-reglages-leads.js";
+import { avecClesDonnees, CLES_TEST, REFS_CLES } from "./outils-cles-donnees.js";
 import { emballer, paireEd25519, passerelle } from "./outils-passerelle.js";
 
 const P = await passerelle();
@@ -30,6 +33,9 @@ const HUMAIN = "local-board";
 const ARGS = { nace: ["43"], communes: ["Liège"] };
 
 type Ligne = Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
+
+/** Ancienne clé « de démonstration » (déterministe, calculable par quiconque connaît l'entreprise). */
+const ancienneCleDevinable = (companyId: string, usage: string) => createHash("sha256").update(`atelier-marketing-ia:demonstration-seulement:${usage}:${companyId}`, "utf8").digest();
 
 /* ------------------------------------------------------------------ */
 /* Données de réponse (forme du simulateur `bce` de la passerelle)     */
@@ -67,8 +73,9 @@ function reponse(o: { mode?: "demonstration" | "reel"; signataire?: typeof SIGNA
 /* Banc : base en mémoire complétée des tables de prospection          */
 /* ------------------------------------------------------------------ */
 
-function banc(o: { modeEntreprise?: "demonstration" | "reel"; config?: Record<string, unknown>; poids?: Record<string, number>; clients?: Record<string, string>; marque?: Ligne; baseClients?: number; stockLeads?: StockReglagesLeads } = {}) {
-  const b = creerBanc({ modeEntreprise: o.modeEntreprise ?? "demonstration", config: { passerelleClesPubliques: [CLES.publiqueBase64], ...o.config } });
+function banc(o: { modeEntreprise?: "demonstration" | "reel"; sansCles?: boolean; config?: Record<string, unknown>; poids?: Record<string, number>; clients?: Record<string, string>; marque?: Ligne; baseClients?: number; stockLeads?: StockReglagesLeads } = {}) {
+  const b = creerBanc({ modeEntreprise: o.modeEntreprise ?? "demonstration", config: { passerelleClesPubliques: [CLES.publiqueBase64], ...(o.sansCles ? {} : REFS_CLES), ...o.config } });
+  avecClesDonnees(b.ctx);
   const t = { prospects: [] as Ligne[], empreintes: [] as Ligne[], oppositions: [] as Ligne[], scores: [] as Ligne[], bases: new Map<string, Ligne[]>() };
   const appelsListe: number[] = [];
   const copie = <T>(v: T): T => structuredClone(v);
@@ -91,7 +98,8 @@ function banc(o: { modeEntreprise?: "demonstration" | "reel"; config?: Record<st
     insererProspect: async (p: Ligne) => {
       if (t.prospects.some((x) => x.companyId === p.companyId && x.identifiant.type === p.identifiant.type && x.identifiant.valeur === p.identifiant.valeur)) throw new Error("violation de prospects_identifiant_uidx");
       const { empreintes: _e, score: _s, basesLegales: _b, ...ligne } = copie(p);
-      t.prospects.push({ ...ligne, creeLe: p.creeLe ?? b.horloge(), modifieLe: p.modifieLe ?? b.horloge() });
+      // Comme la vraie base : colonne cle_a_reimporter à false par défaut, toujours rendue par ligneProspect (base.ts).
+      t.prospects.push({ ...ligne, cleAReimporter: false, creeLe: p.creeLe ?? b.horloge(), modifieLe: p.modifieLe ?? b.horloge() });
     },
     majProspect: async (c: string, id: string, champs: Ligne) => {
       const p = t.prospects.find((x) => x.companyId === c && x.id === id);
@@ -202,7 +210,7 @@ describe("tache.prospects.deposer", () => {
     const courriel = valide.coordonnees.find((c: Ligne) => c.canal === "courriel");
     expect(courriel.valeur).toMatch(/^chv1\./u);
     expect(courriel.nature).toBe("impersonnelle");
-    expect(dechiffrer(courriel.valeur, clesDemonstration(SOC).chiffrement)).toBe("info@toitures-meuse.example");
+    expect(dechiffrer(courriel.valeur, CLES_TEST.chiffrement)).toBe("info@toitures-meuse.example");
     expect(valide.nomChiffre).toBeNull();
   });
 
@@ -262,10 +270,10 @@ describe("tache.prospects.deposer", () => {
   });
 
   it("entreprise réelle sans clés de données configurées : refus explicite ; clés identiques refusées ; clés distinctes acceptées", async () => {
-    const reel = banc({ modeEntreprise: "reel" });
+    const reel = banc({ modeEntreprise: "reel", sansCles: true });
     const r = await reel.deposer(depotBce(reponse({ mode: "reel" })));
     expect(r.status).toBe(403);
-    expect(String(r.body.erreur)).toMatch(/Mode réel : aucune clé de chiffrement/u);
+    expect(String(r.body.erreur)).toMatch(/aucune clé de chiffrement des données configurée/iu);
     expect(reel.tp.prospects).toEqual([]);
 
     const refs = { donneesCleChiffrement: { type: "secret_ref", secretId: "a" }, donneesCleHmac: { type: "secret_ref", secretId: "b" } };
@@ -281,6 +289,33 @@ describe("tache.prospects.deposer", () => {
     expect(ok.body.mode).toBe("reel");
     const courriel = distinctes.tp.prospects.find((p) => p.numeroBce === "0123.456.749")!.coordonnees[0];
     expect(dechiffrer(courriel.valeur, cleC)).toBe("info@toitures-meuse.example");
+  });
+
+  it("E1 : sans secret, refus explicite dans TOUS les modes (dépôt, particulier, opposition), jamais de clé de repli", async () => {
+    const demo = banc({ sansCles: true });
+    const depot = await demo.deposer(depotBce());
+    expect(depot.status).toBe(403);
+    expect(String(depot.body.erreur)).toMatch(/aucune clé de chiffrement des données configurée/iu);
+    const opp = await demo.opposer({ type: "courriel", valeur: "INFO@toitures-meuse.example", origine: "demande_ecrite" });
+    expect(opp.status).toBe(403);
+    expect(demo.tp.prospects).toEqual([]);
+    expect(demo.tp.empreintes).toEqual([]);
+    expect(demo.tp.oppositions).toEqual([]);
+    // Un seul des deux secrets : refus également.
+    const moitie = banc({ sansCles: true, config: { donneesCleChiffrement: REFS_CLES.donneesCleChiffrement } });
+    expect((await moitie.deposer(depotBce())).status).toBe(403);
+    expect(moitie.tp.prospects).toEqual([]);
+  });
+
+  it("E1 : plus aucune clé déterministe ; ce qui est stocké ne se déchiffre ni ne se recalcule avec l'ancienne clé devinable", async () => {
+    expect("clesDemonstration" in moduleProspection).toBe(false);
+    const f = banc();
+    expect((await f.deposer(depotBce())).status).toBe(201);
+    const courriel = f.tp.prospects.find((p) => p.numeroBce === "0123.456.749")!.coordonnees.find((c: Ligne) => c.canal === "courriel");
+    expect(dechiffrer(courriel.valeur, CLES_TEST.chiffrement)).toBe("info@toitures-meuse.example");
+    expect(() => dechiffrer(courriel.valeur, ancienneCleDevinable(SOC, "chiffrement"))).toThrow();
+    expect(courriel.empreinte).not.toBe(empreinte("courriel", "info@toitures-meuse.example", ancienneCleDevinable(SOC, "hmac")));
+    expect(f.t.journal.filter((j) => j.type === "prospects.deposes").map((j) => j.donnees.cles)).toEqual(["coffre"]);
   });
 
   it("donnée de démonstration dans une entreprise réelle : enregistrée exclue (donnee_demonstration_campagne_reelle) avec les clés du coffre", async () => {
@@ -442,8 +477,16 @@ describe("prospects.particuliers.enregistrer", () => {
     const p = Prospect.parse(r.body);
     expect(p).toMatchObject({ cible: "particulier", forme: "personne_physique", mode: "demonstration", denomination: null, numeroBce: null, statut: "nouveau" });
     expect(p.particulier).toMatchObject({ origine: "formulaire_entrant", consentements: [expect.objectContaining({ reference: "soumission-0001" })] });
-    expect(dechiffrer(p.nomChiffre!, clesDemonstration(SOC).chiffrement)).toBe("Marie Exemple (démonstration)");
+    expect(dechiffrer(p.nomChiffre!, CLES_TEST.chiffrement)).toBe("Marie Exemple (démonstration)");
     expect(JSON.stringify(f.tp.prospects)).not.toMatch(/marie@exemple|Marie Exemple|000 99 88/u);
+  });
+
+  it("E1 : sans secret de données, un particulier (même fictif, en démonstration) est refusé et rien n'est stocké", async () => {
+    const f = banc({ sansCles: true });
+    const r = await f.appeler("prospects.particuliers.enregistrer", { body: particulier(), agent: false });
+    expect(r.status).toBe(403);
+    expect(String(r.body.erreur)).toMatch(/aucune clé de chiffrement des données configurée/iu);
+    expect(f.tp.prospects).toEqual([]);
   });
 
   it("origine légale exigée, preuve de consentement exigée pour un formulaire, personne réelle refusée en démonstration, humain seulement", async () => {
@@ -472,7 +515,7 @@ describe("M3 : nature, empreintes, auteur et dates calculés par le serveur", ()
     const r = await f.deposer(depotBce(reponse({ entreprises: [piegee] })));
     expect(r.status).toBe(201);
     const stocke = f.tp.prospects[0]!;
-    const cles = clesDemonstration(SOC);
+    const cles = CLES_TEST;
     const attendue = empreinte("courriel", "jean.dupont@toitures-meuse.example", cles.hmac);
     expect(stocke.coordonnees[0]).toMatchObject({ canal: "courriel", nature: "nominative", empreinte: attendue });
     const valeurs = f.tp.empreintes.map((e) => e.valeur);
@@ -552,7 +595,7 @@ describe("service b2c", () => {
 
   it("b2c_clients : client existant rapproché de la base de clients par empreinte ; hors base : non retenu", async () => {
     const CLIENT = "ffffffff-ffff-4fff-8fff-ffffffffffff";
-    const h = empreinte("identifiant_client", "cl1", clesDemonstration(SOC).hmac);
+    const h = empreinte("identifiant_client", "cl1", CLES_TEST.hmac);
     const f = banc({ clients: { [h]: CLIENT } });
     const clients = [
       { id: "cl1", personne: personneB2c("4"), adresse: adresseB2c, consentement_marketing: consentementB2c() },
@@ -904,9 +947,10 @@ describe("SQL de prospection (base.ts réelle, règles de l'hôte)", () => {
       logger: { info() {}, warn() {}, error() {}, debug() {} },
       issues: { get: async (id: string, c: string) => (id === ISSUE && c === SOC ? { id: ISSUE, companyId: SOC, projectId: null, status: "in_progress", title: "Prospection" } : null) },
       activity: { log: async () => undefined },
-      config: { get: async () => ({ passerelleClesPubliques: [CLES.publiqueBase64] }) },
+      config: { get: async () => ({ passerelleClesPubliques: [CLES.publiqueBase64], ...REFS_CLES }) },
       events: { on() {} }, data: { register() {} }, actions: { register() {} },
     } as unknown as PluginContext;
+    avecClesDonnees(ctx);
     const r = (await creerAiguillage(ctx, creerServices(ctx)).traiterRequeteApi({
       routeKey: "tache.prospects.deposer", method: "POST", path: "/x", params: { issueId: ISSUE }, query: {}, body: depotBce(),
       actor: { actorType: "agent", actorId: AGENT, agentId: AGENT, runId: null }, companyId: SOC, headers: {},

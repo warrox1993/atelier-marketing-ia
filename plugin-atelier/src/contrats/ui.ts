@@ -232,6 +232,6 @@ export const ACTIONS_UI = {
     resultat: z.object({ issueId: IdNatif, canal: z.string(), dateProposee: Horodatage.nullable(), fuseau: z.literal("Europe/Brussels"), publicationProgrammee: z.null() }),
     humainSeulement: true,
   },
-  "atelier.donnees.reinitialiser": { params: z.object({ confirmation: z.literal("REINITIALISER") }), resultat: z.object({ supprimes: z.record(z.string(), z.number()) }), humainSeulement: true },
+  "atelier.donnees.reinitialiser": { params: z.object({ confirmation: z.literal("REINITIALISER") }), resultat: z.object({ supprimes: z.record(z.string(), z.number()), conserves: z.record(z.string(), z.number()) }), humainSeulement: true },
 } as const;
 export type CleActionUi = keyof typeof ACTIONS_UI;

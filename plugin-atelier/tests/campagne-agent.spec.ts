@@ -1,7 +1,7 @@
 /**
  * Création de campagne par un agent (`campagnes.creer`) : seul le Coordinateur (rôle ceo) le peut, depuis une
  * tâche qui lui est assignée et dont le plan (`request_confirmation`) a été accepté par un humain ; toujours en
- * démonstration et sans plafond publicitaire. L'humain garde le comportement d'origine.
+ * mode réel (plus de démonstration) et sans plafond publicitaire ; la diffusion reste soumise à l'approbation humaine. L'humain garde le comportement d'origine.
  */
 import { describe, expect, it } from "vitest";
 import type { ActeurHote } from "../src/serveur/atelier.js";
@@ -37,13 +37,13 @@ describe("campagnes.creer : création par un agent", () => {
     expect(r.statut).toBe(201);
   });
 
-  it("agent ceo avec plan accepté : 201, mode démonstration, sans plafond, trace dans le journal", async () => {
+  it("agent ceo avec plan accepté : 201, mode réel, sans plafond, trace dans le journal", async () => {
     const b = banc();
     const r = await creer(b, agent(COORD), corps({ issueId: ISSUE }));
     expect(r.statut).toBe(201);
-    expect(r.corps).toMatchObject({ mode: "demonstration", plafondPub: null });
+    expect(r.corps).toMatchObject({ mode: "reel", plafondPub: null });
     const nouvelle = b.t.campagnes.at(-1)!;
-    expect(nouvelle.mode).toBe("demonstration");
+    expect(nouvelle.mode).toBe("reel");
     const trace = b.t.journal.find((j) => j.type === "campagne.creee");
     expect(trace).toMatchObject({ acteur: COORD, donnees: { creeParAgent: true, agentId: COORD, issueOrigineId: ISSUE } });
     expect(b.activite.join("\n")).toMatch(/créée par l'agent .* depuis la tâche/u);
@@ -99,11 +99,42 @@ describe("campagnes.creer : création par un agent", () => {
     }
   });
 
-  it("mode réel demandé par un agent : 403", async () => {
+  it("mode demonstration demandé explicitement par un agent : 403, rien n'est créé", async () => {
     const b = banc();
-    const r = await creer(b, agent(COORD), corps({ issueId: ISSUE, mode: "reel" }));
+    const r = await creer(b, agent(COORD), corps({ issueId: ISSUE, mode: "demonstration" }));
     expect(r.corps).toMatchObject({ code: "elevation_refusee", statut: 403 });
     expect(r.corps.message).toMatch(/demonstration/u);
     expect(b.t.campagnes).toHaveLength(1);
+  });
+
+  it("entreprise sans réglages : l'agent crée une campagne sans mode, les réglages créés sont en « reel »", async () => {
+    const b = banc();
+    expect(b.t.reglages.find((x) => x.companyId === SOC)).toBeUndefined();
+    const r = await creer(b, agent(COORD), corps({ issueId: ISSUE }));
+    expect(r.statut).toBe(201);
+    expect(b.t.reglages.find((x) => x.companyId === SOC)).toMatchObject({ modeParDefaut: "reel" });
+  });
+
+  it("campagne créée par un agent : aucune diffusion ni décision sans humain, aucune ligne de diffusion créée", async () => {
+    const b = banc();
+    const c = await creer(b, agent(COORD), corps({ issueId: ISSUE }));
+    expect(c.statut).toBe(201);
+    expect(c.corps.mode).toBe("reel");
+    const services = creerServices(b.ctx, { base: b.base });
+    const appeler = async (cle: "tache.diffusions" | "tache.decision", corpsRequete: unknown) => {
+      try {
+        return (await services.routes[cle]!({ cle, params: { issueId: ISSUE }, query: {}, companyId: SOC, acteur: agent(COORD), corps: corpsRequete })) as { statut: number; corps: Record<string, any> }; // eslint-disable-line @typescript-eslint/no-explicit-any
+      } catch (err) {
+        return { statut: 0, corps: err as Record<string, any> }; // eslint-disable-line @typescript-eslint/no-explicit-any
+      }
+    };
+    // Un agent ne s'approuve pas lui-même : l'enregistrement d'une décision est réservé à un humain authentifié.
+    const decision = await appeler("tache.decision", { revisionId: "dddddddd-dddd-4ddd-8ddd-dddddddddddd", action: "approuver", commentaire: "ok" });
+    expect(decision.corps).toMatchObject({ code: "elevation_refusee", statut: 403 });
+    expect(b.t.decisions).toHaveLength(0);
+    // Sans décision humaine d'approbation, une demande de diffusion (publication) est refusée : ni « simulee » ni « preparee ».
+    const diffusion = await appeler("tache.diffusions", { revisionId: "dddddddd-dddd-4ddd-8ddd-dddddddddddd", action: "publier", canal: "linkedin", cleIdempotence: "linkedin-publication-1" });
+    expect(diffusion.statut === 403 || diffusion.corps.statut === 403 || diffusion.corps.etat === "refusee").toBe(true);
+    expect(b.t.diffusions.filter((d) => d.etat !== "refusee")).toHaveLength(0);
   });
 });

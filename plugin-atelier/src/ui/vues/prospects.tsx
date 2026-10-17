@@ -26,7 +26,7 @@ import { CLES_FILTRE_PROSPECTS, filtreDepuisAdresse, parametresDepuisFiltre, typ
 import { naceDeduitOsm } from "../../serveur/categories-osm-nace.js";
 import { expliquerConfiance } from "./explication-confiance.js";
 import { useDonnees } from "../donnees.js";
-import { BaseClients, lireBase64 } from "../base-clients.js";
+import { BaseClients, ChoixFichier, lireBase64 } from "../base-clients.js";
 import { Bouton, Champ, Chargement, ecranEtroit, EnTete, EtatErreur, Horodatage, LienHote, Pastille, Section, Vide } from "../composants.js";
 import { idCourt, nombre, type Ton } from "../format.js";
 import { chemin } from "../route.js";
@@ -293,7 +293,6 @@ export function filtresDepuisAdresse(recherche: string): Filtres {
     ...(a.campagne ? { campagneId: a.campagne } : {}),
     ...(a.zone ? { zone: a.zone } : {}),
     ...(a.secteur ? { secteur: a.secteur } : {}),
-    ...(a.source ? { source: a.source } : {}),
     ...(a.score ? { scoreMin: a.score } : {}),
     ...(a.qualifies ? { qualifies: true } : {}),
   };
@@ -321,7 +320,6 @@ export function filtresMemorises(companyId: string | null): Filtres {
     const m = brut as Record<string, unknown>;
     const texte = (v: unknown, max = 80) => (typeof v === "string" && v.length <= max ? v : "");
     const statut = texte(m["statut"]);
-    const source = texte(m["source"]);
     const bureau = m["bureau"] as { nom?: unknown; zones?: unknown } | null | undefined;
     const cibles = Array.isArray(m["cibles"]) ? (m["cibles"] as unknown[]).filter((c): c is CibleProspect => typeof c === "string" && c in LIBELLES_CIBLES) : [];
     const score = texte(m["scoreMin"], 3);
@@ -335,7 +333,8 @@ export function filtresMemorises(companyId: string | null): Filtres {
       qualifies: m["qualifies"] === true,
       bureau: bureau && typeof bureau.nom === "string" && Array.isArray(bureau.zones) && bureau.zones.every((z) => typeof z === "string") ? { nom: bureau.nom, zones: bureau.zones as string[] } : null,
       segment: texte(m["segment"]),
-      source: source === "reelle" || source === "demonstration" ? source : "",
+      // Le sélecteur Source n'existe plus : une ancienne valeur mémorisée ne doit pas filtrer sans contrôle visible.
+      source: "",
       avecClients: m["avecClients"] === true,
     };
   } catch {
@@ -351,7 +350,6 @@ export function adresseDepuisFiltres(f: Filtres, base = ""): string {
     ...(f.campagneId ? { campagne: f.campagneId } : {}),
     ...(f.zone.trim() ? { zone: f.zone.trim() } : {}),
     ...(f.secteur.trim() ? { secteur: f.secteur.trim() } : {}),
-    ...(f.source ? { source: f.source } : {}),
     ...(f.scoreMin.trim() ? { score: f.scoreMin.trim() } : {}),
     ...(f.qualifies ? { qualifies: "oui" as const } : {}),
   };
@@ -1195,7 +1193,7 @@ function EtalonnerScore({ companyId, onTermine }: { companyId: string; onTermine
             </select>
           </Champ>
           <Champ libelle="Historique des résultats (.csv ou .xlsx)" aide="Facultatif : sans fichier, les résultats déjà enregistrés sont utilisés.">
-            <input type="file" accept=".csv,.xlsx" onChange={(ev) => void choisir(ev.target.files?.[0])} />
+            <ChoixFichier accept=".csv,.xlsx" nom={historique?.nomFichier ?? null} onChoisir={(f) => void choisir(f)} />
           </Champ>
           <Bouton variante="principal" enCours={enCours} raisonDesactive={erreurFichier ? "Corrigez le fichier." : null} onClick={() => void calculer()}>
             Calculer l'étalonnage

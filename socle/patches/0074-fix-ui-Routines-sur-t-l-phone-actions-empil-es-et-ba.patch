@@ -1,0 +1,54 @@
+From 79aa9ca8d5de671fcbcb7c2d1e26b04866e857ab Mon Sep 17 00:00:00 2001
+From: Jean-Baptiste Dhondt <114347858+warrox1993@users.noreply.github.com>
+Date: Sat, 17 Oct 2026 22:50:39 +0200
+Subject: [PATCH 74/78] =?UTF-8?q?fix(ui):=20Routines=20sur=20t=C3=A9l?=
+ =?UTF-8?q?=C3=A9phone,=20actions=20empil=C3=A9es=20et=20bandeau=20des=20d?=
+ =?UTF-8?q?ossiers=20lisible?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Sous 640 px, « Créer la routine » sortait de l'écran : les actions de
+l'en-tête s'empilent sur toute la largeur, l'action principale en tête.
+Le bandeau « Regroupez ces routines… » écrasait la phrase à un mot par
+ligne : base de 12rem pour le texte, les boutons passent à la ligne.
+Audit visuel D12.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01DP85vPq2MHkZg8VNtRvCzB
+---
+ ui/src/components/folders/FolderControls.tsx | 3 ++-
+ ui/src/pages/Routines.tsx                    | 3 ++-
+ 2 files changed, 4 insertions(+), 2 deletions(-)
+
+diff --git a/ui/src/components/folders/FolderControls.tsx b/ui/src/components/folders/FolderControls.tsx
+index 10e135180..cfee18f44 100644
+--- a/ui/src/components/folders/FolderControls.tsx
++++ b/ui/src/components/folders/FolderControls.tsx
+@@ -388,7 +388,8 @@ export function AllUnfiledBanner({
+   return (
+     <div className="mb-3 flex flex-wrap items-center gap-2 rounded-md border border-border bg-muted/40 px-3 py-2 text-sm">
+       <FolderIcon className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+-      <span className="min-w-0 flex-1 text-muted-foreground">
++      {/* Base de 12rem : sur téléphone les boutons passent à la ligne au lieu d'écraser la phrase. */}
++      <span className="min-w-0 flex-1 basis-48 text-muted-foreground">
+         Regroupez ces {itemLabelPlural} dans des dossiers pour garder de l'ordre.
+       </span>
+       <Button size="sm" variant="outline" onClick={onCreateFolder}>
+diff --git a/ui/src/pages/Routines.tsx b/ui/src/pages/Routines.tsx
+index 82d4e4bcd..92c102314 100644
+--- a/ui/src/pages/Routines.tsx
++++ b/ui/src/pages/Routines.tsx
+@@ -850,7 +850,8 @@ export function Routines() {
+             Définitions de travail récurrent qui se matérialisent en tâches d'exécution traçables.
+           </p>
+         </div>
+-        <div className="flex items-center gap-2">
++        {/* Sous 640 px, les actions s'empilent sur toute la largeur, l'action principale en tête. */}
++        <div className="flex flex-col-reverse gap-2 sm:flex-row sm:items-center">
+           {streamlinedUiEnabled ? (
+             <Button variant="outline" asChild>
+               <Link to={auditSectionHref("runs", {})}>Voir toutes les exécutions</Link>
+-- 
+2.53.0
+

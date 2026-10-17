@@ -1,0 +1,10 @@
+[Unit]
+Description=Export du journal de l'atelier vers Phoenix toutes les 15 minutes
+
+[Timer]
+OnBootSec=5min
+OnUnitActiveSec=15min
+Unit=atelier-phoenix-export.service
+
+[Install]
+WantedBy=timers.target

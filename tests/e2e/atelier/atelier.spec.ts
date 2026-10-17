@@ -26,7 +26,7 @@ async function trouverEntreprise(request: APIRequestContext): Promise<Entreprise
   const brut = (await rep.json()) as unknown;
   const liste = (Array.isArray(brut) ? brut : ((brut as { items?: unknown[] }).items ?? [])) as Array<{ id: string; name: string; issuePrefix: string }>;
   const e = liste.find((x) => x.name === NOM_ENTREPRISE);
-  if (!e) throw new Error(`Entreprise « ${NOM_ENTREPRISE} » absente : appliquer scripts/bootstrap-organisation.py appliquer --mode demonstration`);
+  if (!e) throw new Error(`Entreprise « ${NOM_ENTREPRISE} » absente : lancer tests/e2e/atelier/preparer.sh atelier-e2e 3590 54790`);
   return { id: e.id, prefixe: e.issuePrefix };
 }
 
@@ -46,28 +46,43 @@ test.beforeAll(async ({ request }) => {
   entreprise = await trouverEntreprise(request);
 });
 
-const RUBRIQUES = [
-  ["Équipe et coordination", "/equipe"],
+const RUBRIQUES_MENU = ["Accueil", "Discussion", "Prospects", "Marketing", "Réglages"] as const;
+const ONGLETS_MARKETING = [
   ["Campagnes", "/campagnes"],
-  ["Contenus à valider", "/contenus"],
-  ["Calendrier éditorial", "/calendrier"],
+  ["Contenus", "/contenus"],
+  ["Calendrier", "/calendrier"],
   ["Résultats", "/resultats"],
-  ["Marque et sources", "/marque"],
+  ["Équipe", "/equipe"],
+  ["Rapport du mois", "/rapport"],
 ] as const;
 
-test("navigation réelle dans les six rubriques par la barre latérale du plugin", async ({ page }) => {
+test("navigation réelle dans les cinq rubriques du menu de l'atelier, puis les onglets de Marketing et de Réglages", async ({ page }) => {
   await ouvrir(page, "/equipe");
-  const nav = page.getByRole("navigation", { name: "Rubriques de l'atelier" }).filter({ has: page.locator(".atl-nav-pied") });
-  for (const [libelle, chemin] of RUBRIQUES) {
-    await nav.getByRole("link", { name: libelle }).click();
-    await expect(page).toHaveURL(new RegExp(`/atelier${chemin}$`, "u"));
-    await expect(page.locator(".atl-entete h1")).toHaveText(libelle);
-    await expect(nav.getByRole("link", { name: libelle })).toHaveAttribute("aria-current", "page");
+  const nav = page.locator("nav.atl-nav");
+  for (const nom of RUBRIQUES_MENU) {
+    const lien = nav.getByRole("link", { name: new RegExp(`^${nom}`, "u") });
+    await lien.click();
+    await expect(lien).toHaveAttribute("aria-current", "page");
+    await expect(page.locator(".atl-page")).toBeVisible();
     await expect(page.locator(".atl-page [role='alert']")).toHaveCount(0);
   }
-  await nav.getByRole("link", { name: "Paramètres et diagnostic" }).click();
+  await nav.getByRole("link", { name: /^Marketing/u }).click();
+  const marketing = page.getByRole("tablist", { name: "Marketing : sections" });
+  await expect(marketing).toBeVisible();
+  for (const [libelle, chemin] of ONGLETS_MARKETING) {
+    await marketing.getByRole("tab", { name: libelle, exact: true }).click();
+    await expect(page).toHaveURL(new RegExp(`/atelier${chemin}$`, "u"));
+    await expect(marketing.getByRole("tab", { name: libelle, exact: true })).toHaveAttribute("aria-selected", "true");
+    await expect(page.locator(".atl-page [role='alert']")).toHaveCount(0);
+  }
+  await nav.getByRole("link", { name: /^Réglages/u }).click();
+  const reglages = page.getByRole("tablist", { name: "Réglages : sections" });
+  await reglages.getByRole("tab", { name: "Paramètres", exact: true }).click();
   await expect(page.locator(".atl-entete h1")).toHaveText("Paramètres et diagnostic");
-  await expect(page.locator(".atl-page")).toContainText("Démonstration");
+  // « Connexions » (ancien « Passage au réel ») : ce qui est branché et ce qui ne l'est pas.
+  await reglages.getByRole("tab", { name: "Connexions", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Connexions" }).first()).toBeVisible();
+  await expect(page.locator(".atl-page [role='alert']")).toHaveCount(0);
 });
 
 test("sélection d'un agent : ses tâches natives s'ouvrent", async ({ page, request }) => {
@@ -80,7 +95,7 @@ test("sélection d'un agent : ses tâches natives s'ouvrent", async ({ page, req
   const detail = page.locator("section", { has: page.getByRole("heading", { level: 2, name: agent.nom }) });
   await expect(detail).toBeVisible();
   await expect(detail.getByRole("heading", { name: "Tâches et résultats de l'agent" })).toBeVisible();
-  await expect(detail.getByRole("link", { name: "Fiche Paperclip" })).toHaveAttribute("href", `/${entreprise.prefixe}/agents/${agent.id}`);
+  await expect(detail.getByRole("link", { name: "Fiche dans le tableau de bord" })).toHaveAttribute("href", `/${entreprise.prefixe}/agents/${agent.id}`);
   await expect(page.locator(".atl-table tr[data-choisi='true']")).toHaveCount(1);
   await expect(page.locator(".atl-table").getByRole("link", { name: agent.nom, exact: true })).toHaveAttribute("aria-current", "page");
 });
@@ -109,7 +124,7 @@ test("création d'une campagne depuis un brief, puis annulation, vérifiées dan
   const detail = await donnees<{ campagne: { projectId: string; briefIssueId: string; budgetMaxCents: number; perimetre: { etablissements: string[] }; mode: string } }>(request, "atelier.campagne", entreprise.id, { campagneId });
   expect(detail.campagne.budgetMaxCents).toBe(80000);
   expect(detail.campagne.perimetre.etablissements).toEqual(["Herstal", "Seraing"]);
-  expect(detail.campagne.mode).toBe("demonstration");
+  expect(detail.campagne.mode).toBe("reel");
   const projet = await request.get(`/api/projects/${detail.campagne.projectId}`);
   expect(projet.ok()).toBeTruthy();
   const brief = await request.get(`/api/issues/${detail.campagne.briefIssueId}`);
@@ -213,10 +228,12 @@ test.describe("smartphone (390 × 844)", () => {
     await ouvrir(page, "/equipe");
     const onglets = page.locator("nav.atl-onglets");
     await expect(onglets).toBeVisible();
-    await onglets.getByRole("link", { name: "Campagnes" }).click();
-    await expect(page.locator(".atl-entete h1")).toHaveText("Campagnes");
-    await onglets.getByRole("link", { name: "Équipe et coordination" }).click();
-    await expect(page.locator(".atl-entete h1")).toHaveText("Équipe et coordination");
+    await onglets.getByRole("link", { name: /^Marketing/u }).click();
+    const marketing = page.getByRole("tablist", { name: "Marketing : sections" });
+    await marketing.getByRole("tab", { name: "Campagnes", exact: true }).click();
+    await expect(page).toHaveURL(/\/atelier\/campagnes$/u);
+    await marketing.getByRole("tab", { name: "Équipe", exact: true }).click();
+    await expect(page).toHaveURL(/\/atelier\/equipe$/u);
     await expect(page.locator(".atl-table thead").first()).toBeHidden();
     const deborde = await page.locator(".atl-page").evaluate((el) => el.scrollWidth - el.clientWidth);
     expect(deborde).toBeLessThanOrEqual(1);
@@ -225,13 +242,13 @@ test.describe("smartphone (390 × 844)", () => {
 
 test("clavier : atteindre une rubrique et une action désactivée avec sa raison", async ({ page }) => {
   await ouvrir(page, "/equipe");
-  const lien = page.locator("nav.atl-nav").getByRole("link", { name: "Campagnes" });
+  const lien = page.locator("nav.atl-nav").getByRole("link", { name: /^Marketing/u });
   await lien.focus();
   await expect(lien).toBeFocused();
   const contour = await lien.evaluate((el) => getComputedStyle(el).outlineStyle);
   expect(contour).not.toBe("none");
   await page.keyboard.press("Enter");
-  await expect(page.locator(".atl-entete h1")).toHaveText("Campagnes");
+  await expect(page.getByRole("tablist", { name: "Marketing : sections" })).toBeVisible();
   await page.goto(`/${entreprise.prefixe}/atelier/campagnes/nouvelle`);
   const champ = page.getByLabel("Nom de la campagne");
   await champ.focus();
@@ -319,20 +336,6 @@ test("relancer la correction après des cycles épuisés : consigne envoyée, de
   await expect(section.locator(".atl-succes")).toContainText("Correction relancée", { timeout: 20_000 });
   const apres = await donnees<{ cycles: { epuises: boolean; maximum: number } | null }>(request, "atelier.dossier", cible!.companyId, { issueId: cible!.dossier.issueId });
   expect(apres.cycles?.epuises).toBe(false);
-});
-
-test("diffuser un contenu approuvé en démonstration : diffusion simulée, rien n'est envoyé", async ({ page, request }) => {
-  const cible = await chercherDossier(request, (d) => d.mode === "demonstration" && approbationDiffusable(d) && d.diffusions.length === 0);
-  test.skip(!cible, "Aucun contenu approuvé non diffusé en démonstration : jouer d'abord la décision (preparer_dossier.py puis le test de décision).");
-  await page.goto(`/${cible!.prefixe}/atelier/contenus/${cible!.dossier.issueId}`);
-  const section = page.locator("section", { has: page.getByRole("heading", { level: 2, name: "Diffusion", exact: true }) });
-  await expect(section).toContainText("la diffusion est simulée");
-  const bouton = section.getByRole("button", { name: "Diffuser" });
-  await expect(bouton).not.toHaveAttribute("aria-disabled", "true");
-  await bouton.click();
-  await expect(section.locator(".atl-succes")).toContainText("Diffusion simulée (démonstration) : rien n'a été envoyé.", { timeout: 20_000 });
-  const apres = await donnees<DossierMin>(request, "atelier.dossier", cible!.companyId, { issueId: cible!.dossier.issueId });
-  expect(apres.diffusions.map((x) => x.etat)).toEqual(["simulee"]);
 });
 
 test("Diffuser est grisé en mode réel, avec la raison (aucun connecteur de publication)", async ({ page, request }) => {

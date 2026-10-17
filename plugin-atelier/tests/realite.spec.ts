@@ -67,7 +67,8 @@ function faux(o: Options = {}) {
     listerProspects: async (companyId: string, f: { page: number; parPage: number }) => {
       compteurs.liste++;
       const tous = prospects.filter((p) => p.companyId === companyId);
-      return { total: tous.length, lignes: tous.slice((f.page - 1) * f.parPage, f.page * f.parPage) };
+      // Comme ligneProspect (base.ts) : chaque ligne porte la marque cle_a_reimporter (false pour une fiche servie).
+      return { total: tous.length, lignes: tous.slice((f.page - 1) * f.parPage, f.page * f.parPage).map((p) => ({ ...p, cleAReimporter: false })) };
     },
     detailsProspects: async (_c: string, ids: readonly string[]) => {
       compteurs.details++;

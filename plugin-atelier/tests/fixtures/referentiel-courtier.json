@@ -1,0 +1,674 @@
+{
+  "identite": "Courtier Démo (démonstration) : courtier en assurances multi-entités en province de Liège (non-vie, vie, crédits), au service des particuliers et des entreprises. Entreprise fictive.",
+  "ton": "Sobre, clair et rassurant ; vouvoiement ; jamais de promesse de gain ni de conseil personnalisé dans un contenu marketing.",
+  "offres": [
+    {
+      "code": "auto",
+      "nom": "Assurance auto",
+      "description": "RC, omnium et assistance pour les conducteurs de la province de Liège.",
+      "confirmee": true,
+      "cible": "b2c",
+      "segments": [
+        "conducteurs"
+      ],
+      "besoinsCouverts": [
+        "rouler couvert",
+        "limiter la franchise"
+      ],
+      "argumentsValides": [],
+      "conditions": null,
+      "entite": "courtier-non-vie",
+      "fournisseur": null
+    },
+    {
+      "code": "habitation",
+      "nom": "Assurance habitation",
+      "description": "Incendie, dégâts des eaux, tempête, vol et bris de vitres, bâtiment et contenu.",
+      "confirmee": true,
+      "cible": "b2c",
+      "segments": [
+        "proprietaires",
+        "locataires"
+      ],
+      "besoinsCouverts": [
+        "protéger son logement"
+      ],
+      "argumentsValides": [],
+      "conditions": null,
+      "entite": "courtier-non-vie",
+      "fournisseur": null
+    },
+    {
+      "code": "hospitalisation",
+      "nom": "Assurance hospitalisation",
+      "description": "Frais d'hospitalisation complémentaires.",
+      "confirmee": true,
+      "cible": "b2c",
+      "segments": [
+        "familles"
+      ],
+      "besoinsCouverts": [
+        "couvrir les frais d'hôpital"
+      ],
+      "argumentsValides": [],
+      "conditions": null,
+      "entite": "courtier-non-vie",
+      "fournisseur": null
+    },
+    {
+      "code": "familiale",
+      "nom": "Assurance responsabilité familiale",
+      "description": "Responsabilité civile de la famille.",
+      "confirmee": true,
+      "cible": "b2c",
+      "segments": [
+        "familles"
+      ],
+      "besoinsCouverts": [
+        "couvrir les dégâts causés à autrui"
+      ],
+      "argumentsValides": [],
+      "conditions": null,
+      "entite": "courtier-non-vie",
+      "fournisseur": null
+    },
+    {
+      "code": "animaux",
+      "nom": "Assurance animaux",
+      "description": "Frais vétérinaires et responsabilité pour chiens et chats.",
+      "confirmee": true,
+      "cible": "b2c",
+      "segments": [
+        "proprietaires-animaux"
+      ],
+      "besoinsCouverts": [
+        "frais vétérinaires"
+      ],
+      "argumentsValides": [],
+      "conditions": null,
+      "entite": "courtier-non-vie",
+      "fournisseur": null
+    },
+    {
+      "code": "obseques",
+      "nom": "Assurance obsèques",
+      "description": "Capital pour les frais d'obsèques (offre Sérénité retirée du catalogue).",
+      "confirmee": true,
+      "cible": "b2c",
+      "segments": [
+        "seniors"
+      ],
+      "besoinsCouverts": [
+        "préparer ses obsèques"
+      ],
+      "argumentsValides": [],
+      "conditions": null,
+      "entite": "courtier-vie",
+      "fournisseur": null
+    },
+    {
+      "code": "epargne-pension",
+      "nom": "Épargne-pension",
+      "description": "Épargne à long terme pour la pension.",
+      "confirmee": true,
+      "cible": "b2c",
+      "segments": [
+        "actifs"
+      ],
+      "besoinsCouverts": [
+        "préparer sa pension"
+      ],
+      "argumentsValides": [],
+      "conditions": null,
+      "entite": "courtier-vie",
+      "fournisseur": null
+    },
+    {
+      "code": "credit",
+      "nom": "Crédit",
+      "description": "Crédit à la consommation et crédit habitation.",
+      "confirmee": true,
+      "cible": "b2c",
+      "segments": [
+        "proprietaires",
+        "actifs"
+      ],
+      "besoinsCouverts": [
+        "financer un projet"
+      ],
+      "argumentsValides": [],
+      "conditions": null,
+      "entite": "courtier-credits",
+      "fournisseur": null
+    },
+    {
+      "code": "rc-pro",
+      "nom": "RC professionnelle",
+      "description": "Responsabilité civile professionnelle pour indépendants et PME.",
+      "confirmee": true,
+      "cible": "b2b",
+      "segments": [
+        "pme",
+        "independants"
+      ],
+      "besoinsCouverts": [
+        "couvrir les dommages causés aux clients"
+      ],
+      "argumentsValides": [],
+      "conditions": null,
+      "entite": "courtier-non-vie",
+      "fournisseur": null
+    },
+    {
+      "code": "multirisque",
+      "nom": "Multirisque entreprise",
+      "description": "Locaux, contenu, pertes d'exploitation.",
+      "confirmee": true,
+      "cible": "b2b",
+      "segments": [
+        "pme",
+        "commerces"
+      ],
+      "besoinsCouverts": [
+        "protéger les locaux et l'activité"
+      ],
+      "argumentsValides": [],
+      "conditions": null,
+      "entite": "courtier-non-vie",
+      "fournisseur": null
+    },
+    {
+      "code": "flotte-auto",
+      "nom": "Flotte automobile",
+      "description": "Assurance de flotte avec remises dès 10 véhicules.",
+      "confirmee": true,
+      "cible": "b2b",
+      "segments": [
+        "pme",
+        "transport"
+      ],
+      "besoinsCouverts": [
+        "assurer plusieurs véhicules"
+      ],
+      "argumentsValides": [],
+      "conditions": null,
+      "entite": "courtier-non-vie",
+      "fournisseur": null
+    },
+    {
+      "code": "accidents-travail",
+      "nom": "Accidents du travail",
+      "description": "Assurance légale accidents du travail.",
+      "confirmee": true,
+      "cible": "b2b",
+      "segments": [
+        "pme",
+        "independants"
+      ],
+      "besoinsCouverts": [
+        "respecter l'obligation légale"
+      ],
+      "argumentsValides": [],
+      "conditions": null,
+      "entite": "courtier-non-vie",
+      "fournisseur": null
+    }
+  ],
+  "zones": [
+    "Province de Liège"
+  ],
+  "etablissements": [
+    {
+      "code": "bureau-liege",
+      "nom": "Bureau de Liège (démonstration)",
+      "adresse": "Rue des Exemples 10, 4000 Liège",
+      "confirme": true,
+      "position": {
+        "lat": 50.6413,
+        "lon": 5.5708
+      },
+      "communes": [
+        "Liège"
+      ],
+      "codesPostaux": [
+        "4000"
+      ],
+      "entites": [
+        "courtier-non-vie",
+        "courtier-vie",
+        "courtier-credits"
+      ]
+    },
+    {
+      "code": "bureau-ans",
+      "nom": "Bureau de Ans (démonstration)",
+      "adresse": "Rue des Exemples 20, 4430 Ans",
+      "confirme": true,
+      "position": {
+        "lat": 50.6607,
+        "lon": 5.5283
+      },
+      "communes": [
+        "Ans"
+      ],
+      "codesPostaux": [
+        "4430"
+      ],
+      "entites": [
+        "courtier-non-vie",
+        "courtier-vie",
+        "courtier-credits"
+      ]
+    },
+    {
+      "code": "bureau-herstal",
+      "nom": "Bureau de Herstal (démonstration)",
+      "adresse": "Rue des Exemples 5, 4040 Herstal",
+      "confirme": true,
+      "position": {
+        "lat": 50.6817,
+        "lon": 5.6359
+      },
+      "communes": [
+        "Herstal"
+      ],
+      "codesPostaux": [
+        "4040"
+      ],
+      "entites": [
+        "courtier-non-vie",
+        "courtier-vie",
+        "courtier-credits"
+      ]
+    },
+    {
+      "code": "bureau-seraing",
+      "nom": "Bureau de Seraing (démonstration)",
+      "adresse": "Rue des Exemples 8, 4100 Seraing",
+      "confirme": true,
+      "position": {
+        "lat": 50.5926,
+        "lon": 5.5116
+      },
+      "communes": [
+        "Seraing"
+      ],
+      "codesPostaux": [
+        "4100"
+      ],
+      "entites": [
+        "courtier-non-vie",
+        "courtier-vie",
+        "courtier-credits"
+      ]
+    },
+    {
+      "code": "bureau-verviers",
+      "nom": "Bureau de Verviers (démonstration)",
+      "adresse": "Rue des Exemples 12, 4800 Verviers",
+      "confirme": true,
+      "position": {
+        "lat": 50.5907,
+        "lon": 5.8552
+      },
+      "communes": [
+        "Verviers"
+      ],
+      "codesPostaux": [
+        "4800"
+      ],
+      "entites": [
+        "courtier-non-vie",
+        "courtier-vie",
+        "courtier-credits"
+      ]
+    },
+    {
+      "code": "bureau-huy",
+      "nom": "Bureau de Huy (démonstration)",
+      "adresse": "Rue des Exemples 3, 4500 Huy",
+      "confirme": true,
+      "position": {
+        "lat": 50.5219,
+        "lon": 5.2391
+      },
+      "communes": [
+        "Huy"
+      ],
+      "codesPostaux": [
+        "4500"
+      ],
+      "entites": [
+        "courtier-non-vie",
+        "courtier-vie",
+        "courtier-credits"
+      ]
+    },
+    {
+      "code": "bureau-waremme",
+      "nom": "Bureau de Waremme (démonstration)",
+      "adresse": "Rue des Exemples 7, 4300 Waremme",
+      "confirme": true,
+      "position": {
+        "lat": 50.6953,
+        "lon": 5.256
+      },
+      "communes": [
+        "Waremme"
+      ],
+      "codesPostaux": [
+        "4300"
+      ],
+      "entites": [
+        "courtier-non-vie",
+        "courtier-vie",
+        "courtier-credits"
+      ]
+    },
+    {
+      "code": "bureau-spa",
+      "nom": "Bureau de Spa (démonstration)",
+      "adresse": "Rue des Exemples 2, 4900 Spa",
+      "confirme": true,
+      "position": {
+        "lat": 50.4906,
+        "lon": 5.8627
+      },
+      "communes": [
+        "Spa"
+      ],
+      "codesPostaux": [
+        "4900"
+      ],
+      "entites": [
+        "courtier-non-vie",
+        "courtier-vie",
+        "courtier-credits"
+      ]
+    },
+    {
+      "code": "bureau-eupen",
+      "nom": "Bureau de Eupen (démonstration)",
+      "adresse": "Rue des Exemples 9, 4700 Eupen",
+      "confirme": true,
+      "position": {
+        "lat": 50.6312,
+        "lon": 6.0328
+      },
+      "communes": [
+        "Eupen"
+      ],
+      "codesPostaux": [
+        "4700"
+      ],
+      "entites": [
+        "courtier-non-vie",
+        "courtier-vie",
+        "courtier-credits"
+      ]
+    },
+    {
+      "code": "bureau-vise",
+      "nom": "Bureau de Visé (démonstration)",
+      "adresse": "Rue des Exemples 4, 4600 Visé",
+      "confirme": true,
+      "position": {
+        "lat": 50.7374,
+        "lon": 5.6947
+      },
+      "communes": [
+        "Visé"
+      ],
+      "codesPostaux": [
+        "4600"
+      ],
+      "entites": [
+        "courtier-non-vie",
+        "courtier-vie",
+        "courtier-credits"
+      ]
+    },
+    {
+      "code": "bureau-chaudfontaine",
+      "nom": "Bureau de Chaudfontaine (démonstration)",
+      "adresse": "Rue des Exemples 6, 4050 Chaudfontaine",
+      "confirme": true,
+      "position": {
+        "lat": 50.5867,
+        "lon": 5.6425
+      },
+      "communes": [
+        "Chaudfontaine"
+      ],
+      "codesPostaux": [
+        "4050"
+      ],
+      "entites": [
+        "courtier-non-vie",
+        "courtier-vie",
+        "courtier-credits"
+      ]
+    },
+    {
+      "code": "bureau-aywaille",
+      "nom": "Bureau de Aywaille (démonstration)",
+      "adresse": "Rue des Exemples 1, 4920 Aywaille",
+      "confirme": true,
+      "position": {
+        "lat": 50.4774,
+        "lon": 5.696
+      },
+      "communes": [
+        "Aywaille"
+      ],
+      "codesPostaux": [
+        "4920"
+      ],
+      "entites": [
+        "courtier-non-vie",
+        "courtier-vie",
+        "courtier-credits"
+      ]
+    }
+  ],
+  "affirmationsAutorisees": [],
+  "informationsManquantes": [
+    "Numéro FSMA et mentions légales réelles du client (aucune donnée réelle dans cette démonstration)."
+  ],
+  "entites": [
+    {
+      "code": "courtier-non-vie",
+      "nom": "Courtier Démo, branche non-vie (démonstration)",
+      "type": "entite_juridique",
+      "porteePar": null,
+      "identifiants": [],
+      "mentionsLegales": "Courtier Démo est une société fictive de démonstration, intermédiaire d'assurance. Aucun numéro d'agrément réel : à remplacer par la dénomination et le numéro FSMA du client réel. Les avantages présentés sont toujours accompagnés des risques et conditions."
+    },
+    {
+      "code": "courtier-vie",
+      "nom": "Courtier Démo, branche vie (démonstration)",
+      "type": "entite_juridique",
+      "porteePar": null,
+      "identifiants": [],
+      "mentionsLegales": "Courtier Démo est une société fictive de démonstration, intermédiaire d'assurance. Aucun numéro d'agrément réel : à remplacer par la dénomination et le numéro FSMA du client réel. Les avantages présentés sont toujours accompagnés des risques et conditions."
+    },
+    {
+      "code": "courtier-credits",
+      "nom": "Courtier Démo, crédits (démonstration)",
+      "type": "entite_juridique",
+      "porteePar": null,
+      "identifiants": [],
+      "mentionsLegales": "Courtier Démo est une société fictive de démonstration, intermédiaire d'assurance. Aucun numéro d'agrément réel : à remplacer par la dénomination et le numéro FSMA du client réel. Les avantages présentés sont toujours accompagnés des risques et conditions."
+    }
+  ],
+  "segments": [
+    {
+      "code": "conducteurs",
+      "libelle": "Conducteurs",
+      "type": "type_particulier",
+      "nace": []
+    },
+    {
+      "code": "proprietaires",
+      "libelle": "Propriétaires",
+      "type": "type_particulier",
+      "nace": []
+    },
+    {
+      "code": "locataires",
+      "libelle": "Locataires",
+      "type": "type_particulier",
+      "nace": []
+    },
+    {
+      "code": "familles",
+      "libelle": "Familles",
+      "type": "type_particulier",
+      "nace": []
+    },
+    {
+      "code": "proprietaires-animaux",
+      "libelle": "Propriétaires d'animaux",
+      "type": "type_particulier",
+      "nace": []
+    },
+    {
+      "code": "seniors",
+      "libelle": "Seniors",
+      "type": "type_particulier",
+      "nace": []
+    },
+    {
+      "code": "actifs",
+      "libelle": "Actifs de 30 à 55 ans",
+      "type": "type_particulier",
+      "nace": []
+    },
+    {
+      "code": "pme",
+      "libelle": "PME de la province de Liège",
+      "type": "secteur",
+      "nace": []
+    },
+    {
+      "code": "independants",
+      "libelle": "Indépendants et professions libérales",
+      "type": "profession",
+      "nace": []
+    },
+    {
+      "code": "commerces",
+      "libelle": "Commerces et horeca",
+      "type": "secteur",
+      "nace": []
+    },
+    {
+      "code": "transport",
+      "libelle": "Transport et logistique",
+      "type": "secteur",
+      "nace": []
+    }
+  ],
+  "ciblesProspection": [
+    {
+      "code": "particuliers-liege",
+      "libelle": "Particuliers de la province de Liège",
+      "cible": "b2c",
+      "segments": [
+        "conducteurs",
+        "proprietaires",
+        "locataires",
+        "familles",
+        "seniors",
+        "actifs"
+      ],
+      "zones": {
+        "etablissements": [
+          "bureau-liege",
+          "bureau-ans",
+          "bureau-herstal",
+          "bureau-seraing",
+          "bureau-verviers",
+          "bureau-huy",
+          "bureau-waremme",
+          "bureau-spa",
+          "bureau-eupen",
+          "bureau-vise",
+          "bureau-chaudfontaine",
+          "bureau-aywaille"
+        ],
+        "communes": [],
+        "codesPostaux": [],
+        "provinces": [
+          "Liège"
+        ],
+        "regions": []
+      },
+      "tailles": [],
+      "offres": [
+        "auto",
+        "habitation",
+        "hospitalisation",
+        "familiale",
+        "obseques",
+        "epargne-pension",
+        "credit"
+      ],
+      "entite": null
+    },
+    {
+      "code": "entreprises-liege",
+      "libelle": "Entreprises de la province de Liège",
+      "cible": "b2b",
+      "segments": [
+        "pme",
+        "independants",
+        "commerces",
+        "transport"
+      ],
+      "zones": {
+        "etablissements": [
+          "bureau-liege",
+          "bureau-ans",
+          "bureau-herstal",
+          "bureau-seraing",
+          "bureau-verviers",
+          "bureau-huy",
+          "bureau-waremme",
+          "bureau-spa",
+          "bureau-eupen",
+          "bureau-vise",
+          "bureau-chaudfontaine",
+          "bureau-aywaille"
+        ],
+        "communes": [],
+        "codesPostaux": [],
+        "provinces": [
+          "Liège"
+        ],
+        "regions": []
+      },
+      "tailles": [
+        "micro",
+        "petite",
+        "moyenne"
+      ],
+      "offres": [
+        "rc-pro",
+        "multirisque",
+        "flotte-auto",
+        "accidents-travail"
+      ],
+      "entite": null
+    }
+  ],
+  "modulesConformite": [
+    {
+      "code": "intermediaire_assurance",
+      "entites": [],
+      "motsInterdits": [],
+      "activeLe": "2026-10-15T00:00:00.000Z",
+      "activePar": "demonstration"
+    }
+  ]
+}

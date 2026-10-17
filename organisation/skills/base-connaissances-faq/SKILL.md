@@ -2,7 +2,7 @@
 name: "base-connaissances-faq"
 description: "Construit et tient à jour la FAQ et la base de connaissances du service après-vente d'une PME belge à partir des tickets réellement reçus : regroupement des questions récurrentes, rédaction d'une réponse courte en langage clair, validation par un humain, date de revue, anonymisation et mesure de l'utilité (questions évitées, avis des lecteurs, tickets restants). À utiliser pour créer, réorganiser ou auditer une FAQ ; jamais pour publier sans validation, généraliser une réponse qui dépend d'un contrat précis, inventer une question que personne n'a posée ni reprendre des données personnelles d'un ticket."
 metadata:
-  version: "1.0.0"
+  version: "1.1.0"
   langue: "fr"
   domaine: "sav"
 ---
@@ -40,13 +40,12 @@ Une FAQ construite sur les questions réelles des clients : chaque article a une
    - *Réponse générale* : la même réponse vaut pour tous les clients ; article de FAQ.
    - *Réponse dépendante d'un contrat, d'une police ou d'un cas* : pas d'article général ; on rédige une consigne interne ou on renvoie au service, et on l'écrit dans la liste « non généralisable ».
    - *Défaut de l'entreprise* (information manquante, étape confuse) : à corriger à la source, pas à contourner par une FAQ.
-4. **Rédiger chaque article** avec ce modèle court :
-   - *Titre* : la question comme le client la pose, sans jargon interne.
-   - *Réponse en deux phrases maximum*, qui donne l'essentiel d'abord.
-   - *Pas à pas* numérotés si une action est attendue.
-   - *Cas particuliers* : deux ou trois au plus.
-   - *Quand nous contacter* : situation précise, canal, ce qu'il faut préparer.
-   Langage clair : phrases de 20 mots environ, termes du client, sigle expliqué à la première apparition, aucun reproche, aucun terme juridique non expliqué.
+4. **Choisir le modèle** selon le groupe, puis rédiger :
+   - *Mode d'emploi* (« Comment faire… ») : titre « Comment [faire la chose] » ; prérequis ; étapes numérotées, une action par étape ; « Vérifier que cela a fonctionné » ; problèmes fréquents ; articles liés.
+   - *Dépannage* : titre qui décrit ce que le client voit (« Le site affiche "accès refusé" à la connexion ») ; symptômes ; cause en une ou deux phrases ; solution principale, puis solution de rechange ; comment éviter que cela revienne ; « Toujours un problème ? ».
+   - *Question fréquente* : titre = la question dans les mots du client ; réponse directe en deux phrases maximum ; détails ; questions liées.
+   Dans les trois cas : la première phrase dit au lecteur ce que l'article résout ; les mots du titre sont ceux que le client tape (relevés dans les tickets), pas le vocabulaire interne ; l'article se termine par « Toujours un problème ? » avec la situation précise, le canal et ce qu'il faut préparer.
+      Langage clair : phrases de 20 mots environ, termes du client, sigle expliqué à la première apparition, aucun reproche, aucun terme juridique non expliqué.
 5. **Faire valider** par la personne désignée. L'article porte alors : relecteur, date de validation, date de prochaine revue (3 mois pour les prix, délais et procédures qui changent, 12 mois pour le reste), référence interne de la source (numéro de groupe, pas de ticket nominatif).
 6. **Classer** : catégories peu nombreuses (7 au plus), un article n'apparaît qu'à un endroit, chaque article renvoie à deux articles liés au plus. Pour un public bilingue, la version néerlandaise est rédigée avec les usages belges et relue par un locuteur ; elle n'est pas une traduction mot à mot.
 7. **Mesurer l'utilité** (voir le tableau). Les chiffres sont comparés à la période d'avant, avec le nombre de tickets sur lequel ils reposent.
@@ -79,7 +78,20 @@ Aucune mesure ne remplace la lecture de 5 à 10 tickets réels : elle dit où re
 - Aucune donnée personnelle dans les articles, le tableau ou les exemples.
 - Aucune réponse n'affirme un fait absent des sources internes ; une information manquante est écrite comme telle.
 - Les réponses dépendant d'un contrat sont écartées de la FAQ générale.
+- Chaque article suit l'un des trois modèles, son titre reprend les mots des clients et il se termine par « Toujours un problème ? ».
 - Les chiffres de mesure sont toujours accompagnés du nombre de tickets ou de votes sur lesquels ils reposent.
+
+## Sources officielles
+
+Consultées le 17/10/2026 :
+
+- Autorité de protection des données, « Recherche », https://www.autoriteprotectiondonnees.be/professionnel/themes/recherche :
+  des données anonymes (qui ne peuvent raisonnablement plus être reliées à une personne) sortent du champ du RGPD, mais
+  supprimer le nom et l'adresse ne suffit pas toujours ; certaines combinaisons de données permettent encore
+  d'identifier. Fonde l'étape 1 : un ticket qui reste identifiable par recoupement est écarté.
+- Autorité de protection des données, « Droits des citoyens », https://www.autoriteprotectiondonnees.be/professionnel/rgpd-/droits-des-citoyens :
+  un article qui explique comment exercer ses droits (accès, effacement, opposition) ne promet pas d'autre délai que le
+  mois prévu, prolongeable de deux mois pour une demande complexe.
 
 ## À vérifier par un professionnel
 
@@ -102,3 +114,11 @@ Article rédigé : « Où en est ma commande ? ». Réponse : « Votre commande 
 Mesure à 4 semaines : tickets de ce groupe, 31 en 13 semaines avant et 19 en 4 semaines après, soit environ 6 par mois contre 10 ; vote utile 14 sur 18. Lecture : « baisse observée, à confirmer sur 3 mois ; 18 votes, avis indicatif ».
 
 Cas d'échec : le groupe « remboursement » mélange des clients qui ont acheté avec des conditions de reprise différentes selon un contrat cadre. La compétence n'écrit pas de délai unique : elle classe le groupe « non généralisable », demande au responsable les conditions par type de contrat, et propose un article qui renvoie au service pour les cas sous contrat cadre. Elle ne comble pas l'écart par la durée la plus fréquente.
+
+## Origine de la méthode
+
+Trois modèles d'articles, titre dans les mots du client, phrase d'ouverture et « Toujours un problème ? » adaptés et
+traduits de github.com/anthropics/knowledge-work-plugins, `customer-support/skills/kb-article/SKILL.md` (« Article Type
+Templates », « Writing for Searchability »), commit 33eeda1e8fd856455b05479d13a0f85b5f803744, licence Apache 2.0.
+Modifications : réécriture en français, anonymisation selon l'APD, usages belges. Texte de la licence et liste des
+reprises : `organisation/skills/LICENCES-TIERS.md`.

@@ -7,11 +7,10 @@
  * observées, `appliquerEtalonnage` refusait : aucun particulier n'obtenait de probabilité mesurée.
  * Ces tests fixent les critères B2C, leur correspondance avec le barème et l'application de l'étalonnage.
  */
-import { spawnSync } from "node:child_process";
-import { existsSync, readFileSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { beforeAll, describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 import type { Prospect } from "../src/contrats/index.js";
 import { lireFichierBaseClients } from "../src/serveur/base-clients.js";
 import { appliquerEtalonnage, etalonner } from "../src/serveur/etalonnage.js";
@@ -19,25 +18,19 @@ import { calculerScore } from "../src/serveur/score-prospects.js";
 import { coupureParDefaut, observationsHistorique, SCORE_DEMO_CANAL } from "../src/serveur/services-base-clients.js";
 import { criteresDuProspect, extraireB2c, zoneDesservie } from "../src/serveur/services-prospection.js";
 
-const RACINE = fileURLToPath(new URL("../../", import.meta.url));
-const DOSSIER_DEMO = join(RACINE, "instance", "demo", "base-clients");
+/** Jeu d'essai fictif versionné (adresses @exemple.invalid), sortie figée de l'ancien générateur de démonstration. */
+const DOSSIER_DEMO = fileURLToPath(new URL("./fixtures/base-clients/", import.meta.url));
 const SOC = "11111111-1111-4111-8111-111111111111";
 const DATE = "2026-10-15T10:00:00.000Z";
 
-beforeAll(() => {
-  if (!existsSync(join(DOSSIER_DEMO, "historique-opportunites.csv"))) {
-    const r = spawnSync(process.execPath, [join(RACINE, "scripts", "demo", "generer-base-clients.mjs")], { encoding: "utf8" });
-    if (r.status !== 0) throw new Error(`Générateur de démonstration en échec : ${r.stderr}`);
-  }
-}, 120_000);
-
-/** Poids de démonstration lus dans le script qui les écrit (une seule source de vérité). */
-function poidsDuScript(): Record<string, number> {
-  const script = readFileSync(join(RACINE, "scripts", "demo", "peupler-prospects.py"), "utf8");
-  const bloc = script.match(/^POIDS = \{([\s\S]*?)^\}/mu)?.[1] ?? "";
-  return Object.fromEntries([...bloc.matchAll(/"([a-z_]+)":\s*(\d+)/gu)].map((m) => [m[1]!, Number(m[2])]));
-}
-const POIDS = { version: 2, poids: poidsDuScript() };
+/** Poids du score expliqué (version 2) : mêmes valeurs que celles de l'ancien script de peuplement. */
+const POIDS = {
+  version: 2,
+  poids: {
+    source_registre_officiel: 30, activite_nace_connue: 15, courriel_impersonnel: 25, telephone_present: 15, site_present: 15,
+    origine_demande_personne: 25, contact_direct: 10, consentement_actif: 10, produit_demande: 5, zone_desservie: 10,
+  } as Record<string, number>,
+};
 
 const BUREAUX = [{ codesPostaux: ["4000"], communes: ["Liège"] }, { codesPostaux: ["4430"], communes: ["Ans"] }];
 
@@ -59,10 +52,10 @@ function particulier(o: { origine: string; codePostal?: string | null; commune?:
 const scorer = (p: Prospect) => calculerScore({ criteres: criteresDuProspect(p, null, "test", DATE, BUREAUX).filter((c) => POIDS.poids[c.code] !== undefined), poids: POIDS, calculeLe: DATE }).valeur;
 
 describe("critères B2C du score des particuliers", () => {
-  it("un particulier n'est plus scoré sur les critères B2B : critères B2C seulement, tous pondérés par le script de démonstration", () => {
+  it("un particulier n'est plus scoré sur les critères B2B : critères B2C seulement, tous pondérés", () => {
     const codes = criteresDuProspect(particulier({ origine: "simulateur_devis" }), null, "test", DATE, BUREAUX).map((c) => c.code);
     expect(codes).toEqual(["origine_demande_personne", "contact_direct", "consentement_actif", "produit_demande", "zone_desservie"]);
-    for (const c of codes) expect(POIDS.poids[c], `poids de ${c} dans peupler-prospects.py`).toBeTypeOf("number");
+    for (const c of codes) expect(POIDS.poids[c], `poids de ${c}`).toBeTypeOf("number");
     expect(codes).not.toContain("telephone_present");
   });
 

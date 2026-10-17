@@ -9,7 +9,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useHostContext } from "@paperclipai/plugin-sdk/ui";
 import type { StatutLiaison } from "../../contrats/liaisons.js";
-import { NOMS_SERVICES, type LigneRegistre, type ReponseExportRegistre, type ReponseLireLiaisons, type ReponseRegistre, type VueLiaison } from "../../contrats/liaisons-lecture.js";
+import { NOMS_SERVICES, type LigneRegistre, type ReponseAccesRegistre, type ReponseExportRegistre, type ReponseLireLiaisons, type ReponseRegistre, type VueLiaison } from "../../contrats/liaisons-lecture.js";
 import { Bouton, Champ, Chargement, EnTete, EtatErreur, Horodatage, Pastille, Section, Vide } from "../composants.js";
 import { classerErreur, type Ton } from "../format.js";
 import { appelRoute, telechargerBase64 } from "../routes-prospection.js";
@@ -124,13 +124,14 @@ export function oublierAccesDirection(): void {
   accesParEntreprise.clear();
 }
 
-/** Vrai si le serveur autorise le registre pour cette entreprise (il répond `autorise: true`) ; un refus est mémorisé, une panne non. */
+/** Vrai si le serveur autorise le registre pour cette entreprise (`GET /liaisons/acces` répond `acces: true`, toujours en 200) ; la réponse est mémorisée, une panne non. */
 export function accesDirection(companyId: string): Promise<boolean> {
   const connu = accesParEntreprise.get(companyId);
   if (connu) return connu;
-  const p = appelRoute<Partial<ReponseRegistre> | null>("GET", `/liaisons/registre?companyId=${encodeURIComponent(companyId)}&taille=1`).then(
-    (r) => r?.autorise === true,
+  const p = appelRoute<Partial<ReponseAccesRegistre> | null>("GET", `/liaisons/acces?companyId=${encodeURIComponent(companyId)}`).then(
+    (r) => r?.acces === true,
     (e: unknown) => {
+      // Un 403 (acteur non humain) reste un refus définitif ; toute autre panne n'est pas mémorisée.
       if ((e as { code?: unknown } | null)?.code !== "HTTP_403") accesParEntreprise.delete(companyId);
       return false;
     },

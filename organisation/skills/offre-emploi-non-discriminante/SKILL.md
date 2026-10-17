@@ -2,7 +2,7 @@
 name: "offre-emploi-non-discriminante"
 description: "Rédige ou relit une offre d'emploi d'une PME belge conforme à la législation antidiscrimination (loi du 10 mai 2007, critères protégés, exigences justifiées par la fonction, langue, formulation neutre H/F/X), choisit les canaux de diffusion (Forem, VDAB, Actiris) et prépare l'information RGPD des candidats avec une durée de conservation à décider par l'humain. À utiliser avant toute publication d'une offre ; jamais pour trier, classer ou noter des candidats, publier l'offre, inventer un salaire ou fixer seule une durée de conservation."
 metadata:
-  version: "1.0.0"
+  version: "1.1.0"
   langue: "fr"
   domaine: "ressources-humaines"
 ---
@@ -37,10 +37,11 @@ Une offre claire dont chaque exigence est reliée à une tâche réelle de la fo
 ## Étapes
 
 1. **Reformuler la fonction** en missions concrètes (verbes d'action, résultats attendus) à partir de la fiche. Une mission non fournie est une question, pas une invention.
-2. **Classer les exigences** en indispensables et souhaitables. Pour chacune, écrire la tâche qui la justifie ; une exigence sans tâche est retirée ou signalée.
+2. **Classer les exigences** en indispensables et souhaitables. Pour chacune, écrire la tâche qui la justifie ; une exigence sans tâche est retirée ou signalée. Viser 4 à 6 indispensables au plus : une liste trop longue écarte surtout les personnes qui ne cochent pas toutes les cases.
 3. **Passer la grille des critères protégés** (liste ci-dessous) sur chaque phrase de l'offre : titre, exigences, description de l'équipe, avantages, photos et illustrations.
 4. **Traiter la langue** : une exigence de langue est écrite comme un niveau de maîtrise lié à une tâche (« rédiger des courriers en néerlandais »), jamais comme une origine ou une « langue maternelle ». Un niveau exigé sans tâche est signalé.
-5. **Neutraliser la formulation** : intitulé avec la mention H/F/X ou une forme épicène, accords neutres, pas d'image de candidat idéal.
+5. **Neutraliser la formulation** : intitulé avec la mention H/F/X ou une forme épicène, accords neutres, pas d'image de candidat idéal. Ajouter une courte mention d'ouverture sincère et indiquer à qui s'adresser pour demander un aménagement raisonnable pendant la sélection.
+   Relire ensuite l'offre avec les yeux d'un candidat : les contraintes réelles (horaires, déplacements, charge) sont-elles dites ? Une offre trop belle produit des départs rapides.
 6. **Ne rien inventer** : salaire, avantages, date de début, nombre de postes. Absent des sources, écrire « information manquante » et poser la question.
 7. **Proposer les canaux** : le Forem permet de diffuser gratuitement une offre en ligne depuis un espace entreprise et la relie aux plateformes régionales (VDAB pour la Flandre, Actiris pour Bruxelles) ; dire à l'humain de vérifier les conditions du jour avant de créer le compte. Aucune création de compte, aucun dépôt par la compétence.
 8. **Préparer l'information RGPD** : finalité (gérer le recrutement), données demandées limitées à ce qui est nécessaire (pas de photo, âge, état civil ni numéro de registre national à ce stade sauf justification), destinataires, droits, durée de conservation. La durée n'est pas inventée : la compétence propose deux options chiffrées à faire trancher par l'humain et valider par le conseiller (voir « À vérifier par un professionnel »).
@@ -105,3 +106,10 @@ Aucune durée belge officielle de conservation des candidatures n'a été trouv�
 Demande : « comptable junior, jeune et dynamique, français langue maternelle, 3 jours par semaine ». La compétence répond : intitulé « Assistant(e) comptable (H/F/X) » ; « jeune et dynamique » remplacé par « tenue de la facturation et des rapprochements bancaires, pic d'activité en fin de mois » ; « langue maternelle » remplacé par « rédaction de courriers en français (niveau à préciser par l'entreprise) » ; salaire : information manquante, question posée ; durée de conservation : option A (fin du processus plus un délai court) ou option B (réserve avec consentement), à trancher.
 
 Cas d'échec : la fiche de poste est absente et l'entreprise demande « mets ce qui se fait d'habitude ». La compétence ne remplit pas des missions types : elle livre une trame vide avec les questions (missions, lieu, régime, langues réellement nécessaires) et refuse de produire une offre complète.
+
+## Origine de la méthode
+
+Plafond des exigences indispensables, mention d'ouverture avec contact pour un aménagement raisonnable et relecture des
+contraintes réelles repris de github.com/warrox1993/skills-claude-entreprise,
+`plugins/entreprise-rh/skills/offre-emploi-inclusive/SKILL.md`, commit 474785fbcba8429cb034ef35fca20bbfcfd68554, licence
+MIT (même auteur que l'atelier). Liste des reprises : `organisation/skills/LICENCES-TIERS.md`.

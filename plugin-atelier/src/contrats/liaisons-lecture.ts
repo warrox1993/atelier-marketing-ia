@@ -126,6 +126,11 @@ export interface LigneRegistre {
   reponduLe: string | null;
 }
 
+/** Réponse de `liaison.acces` : seulement le droit d'accès au registre, jamais une donnée du registre. */
+export interface ReponseAccesRegistre {
+  acces: boolean;
+}
+
 export interface ReponseRegistre {
   autorise: true;
   lignes: LigneRegistre[];

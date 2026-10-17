@@ -5,7 +5,7 @@ Rejoue le DÉBUT d'un scénario du lot A (scripts/scenarios/atelier_scenarios.py
 vrai moteur Paperclip et les agents de démonstration, puis S'ARRÊTE avant le geste humain :
 c'est l'interface qui le fera pendant le test Playwright.
 
-Usage : python3 -I tests/e2e/atelier/preparer_dossier.py [URL_API=http://127.0.0.1:3140/api] [mode]
+Usage : python3 -I tests/e2e/atelier/preparer_dossier.py [URL_API=http://127.0.0.1:3590/api] [mode]
 Modes :
   pret          (défaut) scénario B jusqu'à l'approbation humaine (décision, Diffuser) ;
   epuise        scénario G jusqu'à l'épuisement des cycles (Relancer la correction) ;
@@ -20,12 +20,15 @@ import os
 import sys
 
 RACINE = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
-URL = sys.argv[1] if len(sys.argv) > 1 else "http://127.0.0.1:3140/api"
+URL = sys.argv[1] if len(sys.argv) > 1 else "http://127.0.0.1:3590/api"
 MODE = sys.argv[2] if len(sys.argv) > 2 else "pret"
 # Le module du lot A lit l'URL dans sys.argv[2] au chargement.
 sys.argv = [sys.argv[0], "B", URL]
 sys.path.insert(0, os.path.join(RACINE, "scripts", "scenarios"))
 import atelier_scenarios as s  # noqa: E402
+
+# Environnement propre à chaque rôle des agents déterministes (vide par défaut).
+ENV_AGENTS = {r: {} for r in ("coordinateur", "producteur", "porte", "exigences", "metier", "technique", "contourneur")}
 
 BRIEF = (
     "Campagne « Toitures avant l'hiver » pour Rénovations Meuse et Ourthe (entreprise fictive). "
@@ -35,7 +38,7 @@ BRIEF = (
 
 
 def epuise():
-    entreprise, ids, projet = s.preparer("G", nom="Dossier e2e relance (démonstration)")
+    entreprise, ids, projet = s.preparer("G", env_agents=ENV_AGENTS, nom="Dossier e2e relance (démonstration)")
     campagne = s.lancer_campagne(entreprise, ids, projet, BRIEF, ["Liège-Guillemins", "Herstal", "Seraing"])
     production = s.attendre(lambda: s.production(entreprise, campagne["briefIssueId"]), delai=180)
     if not production:
@@ -52,7 +55,7 @@ def interruption():
     if not essai:
         print(json.dumps({"etat": "ATELIER_INSTANCE_ESSAI absent : interruption refusée (jamais l'instance principale)"}))
         return 2
-    entreprise, ids, projet = s.preparer("E", env_agents={"producteur": {"DEMO_PAUSE_MS": "30000"}}, nom="Dossier e2e reprise (démonstration)")
+    entreprise, ids, projet = s.preparer("E", env_agents={**ENV_AGENTS, "producteur": {**ENV_AGENTS["producteur"], "DEMO_PAUSE_MS": "30000"}}, nom="Dossier e2e reprise (démonstration)")
     s.COMPAGNIE_SONDE[:] = [entreprise]
     campagne = s.lancer_campagne(entreprise, ids, projet, BRIEF, ["Liège-Guillemins", "Herstal", "Seraing"])
     production = s.attendre(lambda: s.production(entreprise, campagne["briefIssueId"]), delai=180)
@@ -84,7 +87,7 @@ def principal():
         return epuise()
     if MODE == "interruption":
         return interruption()
-    entreprise, ids, projet = s.preparer("B", nom=os.environ.get("ATELIER_DOSSIER_NOM") or "Dossier e2e lot C (démonstration)")
+    entreprise, ids, projet = s.preparer("B", env_agents=ENV_AGENTS, nom=os.environ.get("ATELIER_DOSSIER_NOM") or "Dossier e2e lot C (démonstration)")
     campagne = s.lancer_campagne(entreprise, ids, projet, BRIEF, ["Liège-Guillemins", "Herstal", "Seraing"])
     production = s.attendre(lambda: s.production(entreprise, campagne["briefIssueId"]), delai=180)
     if not production:

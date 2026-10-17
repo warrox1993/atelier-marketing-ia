@@ -7,8 +7,7 @@ marketing (`organisation/agents/`), **sans** le marqueur des consignes communes 
 Règles communes à tous les agents : jamais inventer (sans source, l'information manque), l'humain
 approuve tout acte qui engage, aucun dossier complet d'un autre service, toute référence légale incertaine
 est marquée « à vérifier ». Un coordinateur ne délègue jamais hors de son service ; pour une information
-d'un autre service, il passe par le bureau de liaison (route `liaison.demander`, en cours de
-construction) : demande au service X avec objet, question et seuls les extraits nécessaires.
+d'un autre service, il passe par le bureau de liaison (route `liaison.demander`) : demande au service X avec objet, question et seuls les extraits nécessaires.
 
 | Service (dossier) | Coordinateur | Spécialistes | Ce qui reste humain |
 | --- | --- | --- | --- |

@@ -293,13 +293,13 @@ function rang(c: ConnexionNative): number {
 export function etatDepuisConnexion(c: ConnexionNative): { etat: EtatConnexion; detail: string } {
   if (c.statut === "draft") return { etat: "non_connecte", detail: "Connexion commencée, autorisation non terminée : reprenez-la avec « Connecter »." };
   if (c.statut === "disabled" || c.statut === "archived" || !c.activee) {
-    return { etat: "indisponible", detail: c.statut === "archived" ? "Connexion archivée dans Paperclip." : "Connexion désactivée dans Paperclip." };
+    return { etat: "indisponible", detail: c.statut === "archived" ? "Connexion archivée dans l'application." : "Connexion désactivée dans l'application." };
   }
   if (c.sante === "failed" || c.sante === "error" || c.sante === "missing_secret") {
     return { etat: "erreur", detail: c.messageSante ? `Dernière vérification en échec : ${c.messageSante}` : "Dernière vérification en échec." };
   }
   if (c.mode === "demonstration") return { etat: "non_connecte", detail: "Aucun accès réel au service : terminez l'autorisation avec « Connecter » pour le brancher." };
-  if (c.sante === "ok" && c.dernierUsage) return { etat: "reel_teste", detail: "Passerelle réelle : au moins un appel d'outil enregistré par Paperclip (l'issue de cet appel n'est pas relue ici)." };
+  if (c.sante === "ok" && c.dernierUsage) return { etat: "reel_teste", detail: "Passerelle réelle : au moins un appel d'outil enregistré par l'application (l'issue de cet appel n'est pas relue ici)." };
   return { etat: "configure_non_verifie", detail: "Passerelle réelle connectée ; aucun appel d'outil enregistré à ce jour." };
 }
 
@@ -318,6 +318,8 @@ export function lignesServices(connexions: ConnexionNative[]): LigneService[] {
   });
 }
 
+const agentsClaude = (n: number): string => `${n} ${n > 1 ? "agents Claude" : "agent Claude"}`;
+
 export interface LigneAgentNatif {
   etat: EtatConnexion;
   detail: string;
@@ -325,17 +327,17 @@ export interface LigneAgentNatif {
 
 /** Adaptateur Claude Code : configuré ou non, jeton présent ou non. Jamais « testé » sans run réel (vue Équipe). */
 export function etatClaude(agents: AgentClaude[]): LigneAgentNatif {
-  if (agents.length === 0) return { etat: "non_connecte", detail: "Aucun agent claude_local configuré." };
+  if (agents.length === 0) return { etat: "non_connecte", detail: "Aucun agent Claude configuré sur votre poste." };
   const sans = agents.filter((a) => !a.jetonPresent);
-  if (sans.length === agents.length) return { etat: "non_connecte", detail: `${agents.length} agent(s) claude_local, aucun jeton déclaré : aucun passage réel possible.` };
-  if (sans.length > 0) return { etat: "configure_non_verifie", detail: `Jeton présent pour ${agents.length - sans.length} agent(s) sur ${agents.length} ; absent pour : ${sans.map((a) => a.nom).join(", ")}. Aucun passage réel vérifié ici.` };
-  return { etat: "configure_non_verifie", detail: `${agents.length} agent(s) claude_local avec jeton présent (valeur jamais affichée). Aucun passage réel vérifié ici.` };
+  if (sans.length === agents.length) return { etat: "non_connecte", detail: `${agentsClaude(agents.length)} sur votre poste, aucun jeton déclaré : aucun passage réel possible.` };
+  if (sans.length > 0) return { etat: "configure_non_verifie", detail: `Jeton présent pour ${agents.length - sans.length} agent${agents.length - sans.length > 1 ? "s" : ""} sur ${agents.length} ; absent pour : ${sans.map((a) => a.nom).join(", ")}. Aucun passage réel vérifié ici.` };
+  return { etat: "configure_non_verifie", detail: `${agentsClaude(agents.length)} sur votre poste avec jeton présent (valeur jamais affichée). Aucun passage réel vérifié ici.` };
 }
 
 /** Recherche Web : outil natif des agents claude_local en mode réel, jamais prouvé sans run réel. */
 export function etatRechercheWeb(agents: AgentClaude[]): LigneAgentNatif {
   const autorises = agents.filter((a) => a.rechercheWeb);
-  if (autorises.length === 0) return { etat: "non_connecte", detail: "Aucun agent claude_local n'est autorisé à utiliser WebSearch." };
+  if (autorises.length === 0) return { etat: "non_connecte", detail: "Aucun agent Claude de votre poste n'est autorisé à faire des recherches sur le Web." };
   return {
     etat: "configure_non_verifie",
     detail: `Disponible en mode réel (outil natif de l'agent), non vérifié : ${autorises.map((a) => a.nom).join(", ")}.`,

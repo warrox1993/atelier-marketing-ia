@@ -14,10 +14,11 @@ import {
   NOM_SERVICE_SUPPRIME,
   nomService,
   type LigneRegistre,
+  type ReponseAccesRegistre,
   type ReponseExportRegistre,
   type ReponseRegistre,
 } from "../../contrats/liaisons-lecture.js";
-import type { GestionnaireRoute } from "../atelier.js";
+import type { GestionnaireRoute, RequeteRoute } from "../atelier.js";
 import { erreur, erreurValidation } from "../erreurs.js";
 import type { StockLiaisons } from "./base-liaisons.js";
 import type { LectureLiaisons, LiaisonLue } from "./lecture-liaisons.js";
@@ -64,14 +65,31 @@ export function csvRegistre(lignes: readonly LigneRegistre[]): string {
   return "﻿" + [entete.map(celluleCsv).join(";"), ...corps].join("\r\n") + "\r\n";
 }
 
+/**
+ * Règle d'accès UNIQUE au registre (humain seulement, entreprise Direction seulement), partagée par `liaison.registre`
+ * et `liaison.acces` : l'acteur doit être humain (sinon erreur) ; rend le service de l'entreprise si c'est la Direction,
+ * `null` sinon.
+ */
+async function serviceDirection(stock: Pick<StockLiaisons, "serviceDeEntreprise">, r: Pick<RequeteRoute, "acteur" | "companyId">) {
+  exigerHumainLecture(r.acteur, "Le registre des échanges");
+  const service = await stock.serviceDeEntreprise(r.companyId);
+  return service?.estDirection ? service : null;
+}
+
 export function routeRegistre(d: { stock: Pick<StockLiaisons, "serviceDeEntreprise">; lecture: LectureLiaisons }): Partial<Record<CleRouteApi, GestionnaireRoute>> {
   const { stock, lecture } = d;
   const routes: Partial<Record<CleRouteApi, GestionnaireRoute>> = {};
 
+  // Sonde de l'écran : même règle que le registre, mais un refus d'entreprise est une réponse 200 `acces: false`
+  // (pas d'erreur 403 dans la console du navigateur) ; aucune donnée du registre n'est lue ni renvoyée.
+  routes["liaison.acces"] = async (r) => {
+    const corps: ReponseAccesRegistre = { acces: (await serviceDirection(stock, r)) !== null };
+    return { statut: 200, corps };
+  };
+
   routes["liaison.registre"] = async (r) => {
-    exigerHumainLecture(r.acteur, "Le registre des échanges");
-    const service = await stock.serviceDeEntreprise(r.companyId);
-    if (!service?.estDirection) erreur("acces_refuse", "Le registre des échanges est réservé à l'entreprise Direction du client.");
+    const service = await serviceDirection(stock, r);
+    if (!service) erreur("acces_refuse", "Le registre des échanges est réservé à l'entreprise Direction du client.");
 
     // Les paramètres de requête arrivent en texte (ou en liste) ; `companyId` est celui de l'hôte, jamais un filtre.
     const brut: Record<string, string> = {};
@@ -91,7 +109,7 @@ export function routeRegistre(d: { stock: Pick<StockLiaisons, "serviceDeEntrepri
       let total = 0;
       const lot = 500;
       for (let decalage = 0; decalage < LIMITES_REGISTRE.exportMax; decalage += lot) {
-        const page = await lecture.registre(service!.clientMarqueur, critere, Math.min(lot, LIMITES_REGISTRE.exportMax - decalage), decalage);
+        const page = await lecture.registre(service.clientMarqueur, critere, Math.min(lot, LIMITES_REGISTRE.exportMax - decalage), decalage);
         total = page.total;
         toutes.push(...page.lignes.map(enLigne));
         if (page.lignes.length === 0 || toutes.length >= total) break;
@@ -106,7 +124,7 @@ export function routeRegistre(d: { stock: Pick<StockLiaisons, "serviceDeEntrepri
       return { statut: 200, corps };
     }
 
-    const { lignes, total } = await lecture.registre(service!.clientMarqueur, critere, f.taille, (f.page - 1) * f.taille);
+    const { lignes, total } = await lecture.registre(service.clientMarqueur, critere, f.taille, (f.page - 1) * f.taille);
     const corps: ReponseRegistre = { autorise: true, lignes: lignes.map(enLigne), total, page: f.page, taille: f.taille, pages: Math.max(1, Math.ceil(total / f.taille)) };
     return { statut: 200, corps };
   };

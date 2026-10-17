@@ -171,32 +171,34 @@ export function routesRapport(d: DependancesRapport): Partial<Record<CleRouteApi
     const noteEtat = "État du projet au jour de la consultation : la date de fin d'une campagne n'est pas conservée.";
     const lignesCampagnes = [
       chiffre("campagnes_creees", "Campagnes créées dans le mois", campagnes.filter((c) => c.creeLe >= debut && c.creeLe < finExclue).length, "campagnes"),
-      chiffre("campagnes_actives", "Campagnes actives", avantFin.filter((c) => !terminee(c)).length, "campagnes, projets (état)", null, noteEtat),
-      chiffre("campagnes_terminees", "Campagnes terminées", avantFin.filter(terminee).length, "campagnes, projets (état)", null, noteEtat),
+      chiffre("campagnes_actives", "Campagnes actives", avantFin.filter((c) => !terminee(c)).length, "campagnes (état actuel)", null, noteEtat),
+      chiffre("campagnes_terminees", "Campagnes terminées", avantFin.filter(terminee).length, "campagnes (état actuel)", null, noteEtat),
     ];
 
+    // La ligne de démonstration n'apparaît que si elle compte quelque chose : à zéro, elle n'apprend rien au client.
     const parModes = (cle: string, libelle: string, c: ComptesParMode, source: string, noteDemo: string): ChiffreRapport[] => [
       chiffre(`${cle}_reel`, libelle, c.reel, source, "reel"),
-      chiffre(`${cle}_demonstration`, `${libelle} (démonstration)`, c.demonstration, source, "demonstration", noteDemo),
+      ...(c.demonstration > 0 ? [chiffre(`${cle}_demonstration`, `${libelle} (démonstration)`, c.demonstration, source, "demonstration", noteDemo)] : []),
     ];
     const lignesContenus = [
-      ...parModes("contenus_produits", "Contenus produits", contenus.produits, "portes, campagnes (mode)", "Campagnes en démonstration : aucun effet réel."),
-      ...parModes("contenus_valides", "Contenus validés par vous", contenus.valides, "decisions_humaines (approuver, non invalidée)", "Décisions prises en démonstration."),
-      ...parModes("contenus_publies", "Contenus publiés", contenus.publies, "diffusions (confirmee en mode réel)", "Diffusions simulées ou préparées en démonstration : rien n'a été publié pour de bon."),
+      ...parModes("contenus_produits", "Contenus produits", contenus.produits, "contenus produits, mode des campagnes", "Campagnes en démonstration : aucun effet réel."),
+      ...parModes("contenus_valides", "Contenus validés par vous", contenus.valides, "vos validations (approbations non annulées)", "Décisions prises en démonstration."),
+      ...parModes("contenus_publies", "Contenus publiés", contenus.publies, "publications confirmées en mode réel", "Diffusions simulées ou préparées en démonstration : rien n'a été publié pour de bon."),
     ];
 
     const trouvesNote = parcours.tronque ? `Parcours arrêté à ${PAGES_MAX_RAPPORT * PAR_PAGE} leads : nombres minimums.` : null;
     const chiffresProspects = [
       chiffre("prospects_trouves_reel", "Prospects trouvés", parcours.trouves.reel, "prospects", "reel", trouvesNote),
-      chiffre("prospects_trouves_demonstration", "Prospects trouvés (démonstration)", parcours.trouves.demonstration, "prospects", "demonstration", "Leads de démonstration : pas de vrais prospects."),
-      ...parModes("prospects_exportes", "Prospects exportés vers le CRM", exports.exportes, "exports_crm (confirmee en mode réel)", "Exports simulés en démonstration."),
+      ...(parcours.trouves.demonstration > 0 ? [chiffre("prospects_trouves_demonstration", "Prospects trouvés (démonstration)", parcours.trouves.demonstration, "prospects", "demonstration", "Leads de démonstration : pas de vrais prospects.")] : []),
+      ...parModes("prospects_exportes", "Prospects exportés vers le CRM", exports.exportes, "exports vers votre CRM, confirmés en mode réel", "Exports simulés en démonstration."),
     ];
     const noteBadge = "Badge recalculé au jour de la consultation, pour les leads trouvés dans le mois." + (trouvesNote ? ` ${trouvesNote}` : "");
     const badges = [
-      chiffre("prospects_qualifies", "Qualifiés", parcours.badges.qualifie, "prospects, qualification (calculerConfiance)", null, noteBadge),
-      chiffre("prospects_a_verifier", "À vérifier", parcours.badges.a_verifier, "prospects, qualification (calculerConfiance)", null, noteBadge),
-      chiffre("prospects_ecartes", "Écartés", parcours.badges.ecarte, "prospects, qualification (calculerConfiance)", null, noteBadge),
+      chiffre("prospects_qualifies", "Qualifiés", parcours.badges.qualifie, "prospects, qualification automatique", null, noteBadge),
+      chiffre("prospects_a_verifier", "À vérifier", parcours.badges.a_verifier, "prospects, qualification automatique", null, noteBadge),
+      chiffre("prospects_ecartes", "Écartés", parcours.badges.ecarte, "prospects, qualification automatique", null, noteBadge),
     ];
+    if (parcours.aReimporter > 0) badges.push(chiffre("prospects_a_reimporter", "Fiches à réimporter", parcours.aReimporter, "prospects", null, "Chiffrées avec l'ancienne clé : exclues du classement, à réimporter."));
     if (parcours.illisibles > 0) badges.push(chiffre("prospects_illisibles", "Leads illisibles, non classés", parcours.illisibles, "prospects", null, "Fiches non conformes au contrat : ignorées du classement."));
 
     const chiffresResultats =
@@ -220,9 +222,9 @@ export function routesRapport(d: DependancesRapport): Partial<Record<CleRouteApi
       coutsIa: {
         lignes: couts,
         total,
-        source: "cost_events par agent et modèle (équivalent de /costs/by-agent-model)",
+        source: "coûts déclarés par agent et par modèle",
         periode,
-        note: couts.length === 0 ? "Aucun coût déclaré par Paperclip sur ce mois." : "Coût en centimes du socle, sans conversion. Les agents sous abonnement affichent un coût nul : seuls les jetons comptent.",
+        note: couts.length === 0 ? "Aucun coût déclaré sur ce mois." : "Coût en centimes, sans conversion. Les agents sous abonnement affichent un coût nul : seuls les jetons comptent.",
       },
       enAttenteClient: { points, source: "accueil (liste « À faire », hors tâches bloquées)", note: "État au jour de la consultation, pas au dernier jour du mois." },
     };
@@ -235,13 +237,15 @@ export function routesRapport(d: DependancesRapport): Partial<Record<CleRouteApi
     const trouves: ComptesParMode = { reel: 0, demonstration: 0 };
     const badges = { qualifie: 0, a_verifier: 0, ecarte: 0 };
     let illisibles = 0;
+    let aReimporter = 0;
     let tronque = false;
     for (let page = 1; ; page++) {
       if (page > PAGES_MAX_RAPPORT) {
         tronque = true;
         break;
       }
-      const { lignes } = await base.listerProspects(companyId, { page, parPage: PAR_PAGE, avecClientsActuels: true });
+      const { lignes, aReimporter: marquees } = await base.listerProspects(companyId, { page, parPage: PAR_PAGE, avecClientsActuels: true });
+      aReimporter = marquees ?? 0;
       const duMois = lignes.filter((l) => l.creeLe >= debut && l.creeLe < finExclue);
       if (duMois.length > 0) {
         const det = await base.detailsProspects(companyId, duMois.map((l) => l.id));
@@ -258,7 +262,7 @@ export function routesRapport(d: DependancesRapport): Partial<Record<CleRouteApi
       }
       if (lignes.length < PAR_PAGE) break;
     }
-    return { trouves, badges, illisibles, tronque };
+    return { trouves, badges, illisibles, aReimporter, tronque };
   }
 
   return routes;

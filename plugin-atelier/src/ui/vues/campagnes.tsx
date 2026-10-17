@@ -19,7 +19,7 @@ import { chemin } from "../route.js";
 
 /** Raison renvoyée par le worker pour la pause (services.ts, « pauseNonDisponible »). */
 export const RAISON_PAUSE =
-  "Indisponible : Paperclip ne met un projet en pause que par budget et le SDK des plugins n'expose pas cette action. Mettez en pause les agents concernés depuis leur fiche.";
+  "Indisponible : l'application ne met un projet en pause que par budget et n'offre pas cette action aux extensions. Mettez en pause les agents concernés depuis leur fiche.";
 
 export function VueCampagnes({ id }: { id: string | null }) {
   if (id === "nouvelle") return <NouvelleCampagne />;
@@ -40,7 +40,7 @@ function ListeCampagnes() {
     <>
       <EnTete
         titre="Campagnes"
-        description="Chaque campagne est un projet Paperclip ; ses tâches et leur état viennent de Paperclip."
+        description="Chaque campagne est un projet du tableau de bord ; ses tâches et leur état viennent de là."
         actions={
           <LienHote vers={chemin("campagnes", "nouvelle")} className="atl-bouton">
             Nouvelle campagne
@@ -115,7 +115,7 @@ function DetailCampagneVue({ campagneId }: { campagneId: string }) {
             description={
               <span className="atl-pile-ligne">
                 <Pastille ton={etatProjet(d.campagne).ton}>{etatProjet(d.campagne).libelle}</Pastille>
-                <LienHote vers={`/projects/${d.campagne.projectId}`}>Projet Paperclip</LienHote>
+                <LienHote vers={`/projects/${d.campagne.projectId}`}>Projet dans le tableau de bord</LienHote>
               </span>
             }
           />
@@ -199,7 +199,7 @@ function DetailCampagneVue({ campagneId }: { campagneId: string }) {
                             <span className="atl-attenue">hors contrôle automatique</span>
                           )}
                         </td>
-                        <td data-libelle="Dépendances">{t.bloqueePar.length ? `${t.bloqueePar.length} non résolue(s)` : <span className="atl-attenue">aucune</span>}</td>
+                        <td data-libelle="Dépendances">{t.bloqueePar.length ? `${t.bloqueePar.length} non ${t.bloqueePar.length > 1 ? "résolues" : "résolue"}` : <span className="atl-attenue">aucune</span>}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -290,37 +290,38 @@ function ExigencesListe({ exigences, onFait }: { exigences: Exigence[]; onFait()
           <Bouton raisonDesactive={raisonSelection} onClick={() => ouvrir("refuser")}>
             {`Refuser la sélection (${n})`}
           </Bouton>
-          {lot ? (
-            <ConfirmationLot
-              titre={`${lot.decision === "autoriser" ? "Autoriser" : "Refuser"} l'exclusion de ${lot.elements.length > 1 ? `ces ${lot.elements.length} exigences` : "cette exigence"} ?`}
-              elements={lot.elements}
-              effet={
-                lot.decision === "autoriser"
-                  ? "L'exclusion demandée par l'agent est acceptée pour chacune de ces exigences."
-                  : "Ces exigences restent à prouver : l'exclusion demandée par l'agent est refusée."
-              }
-              libelleConfirmer={`${lot.decision === "autoriser" ? "Confirmer l'autorisation" : "Confirmer le refus"} (${lot.elements.length})`}
-              variante={lot.decision === "autoriser" ? "principal" : "danger"}
-              raisonDesactive={raisonJustification}
-              traiter={async (element) => {
-                await exclure({ exigenceId: element.id, decision: lot.decision, justification });
-              }}
-              onBilan={(b) => {
-                const faits = new Set(b.reussis.map((r) => r.element.id));
-                setCochees((c) => new Set([...c].filter((id) => !faits.has(id))));
-                onFait();
-              }}
-              onFermer={() => {
-                setLot(null);
-                setJustification("");
-              }}
-            >
-              <Champ libelle="Votre justification commune">
-                <textarea value={justification} onChange={(ev) => setJustification(ev.target.value)} rows={2} maxLength={2000} />
-              </Champ>
-            </ConfirmationLot>
-          ) : null}
         </div>
+      ) : null}
+      {/* Hors du bloc des demandes : le bilan reste affiché jusqu'à « Fermer », même quand plus aucune demande n'est en attente. */}
+      {lot ? (
+        <ConfirmationLot
+          titre={`${lot.decision === "autoriser" ? "Autoriser" : "Refuser"} l'exclusion de ${lot.elements.length > 1 ? `ces ${lot.elements.length} exigences` : "cette exigence"} ?`}
+          elements={lot.elements}
+          effet={
+            lot.decision === "autoriser"
+              ? "L'exclusion demandée par l'agent est acceptée pour chacune de ces exigences."
+              : "Ces exigences restent à prouver : l'exclusion demandée par l'agent est refusée."
+          }
+          libelleConfirmer={`${lot.decision === "autoriser" ? "Confirmer l'autorisation" : "Confirmer le refus"} (${lot.elements.length})`}
+          variante={lot.decision === "autoriser" ? "principal" : "danger"}
+          raisonDesactive={raisonJustification}
+          traiter={async (element) => {
+            await exclure({ exigenceId: element.id, decision: lot.decision, justification });
+          }}
+          onBilan={(b) => {
+            const faits = new Set(b.reussis.map((r) => r.element.id));
+            setCochees((c) => new Set([...c].filter((id) => !faits.has(id))));
+            onFait();
+          }}
+          onFermer={() => {
+            setLot(null);
+            setJustification("");
+          }}
+        >
+          <Champ libelle="Votre justification commune">
+            <textarea value={justification} onChange={(ev) => setJustification(ev.target.value)} rows={2} maxLength={2000} />
+          </Champ>
+        </ConfirmationLot>
       ) : null}
       <ul className="atl-exigences">
         {exigences.map((e) => (
@@ -432,7 +433,7 @@ function ActionsCampagne({ campagne, onFait }: { campagne: Campagne; onFait(): v
           Annuler la campagne
         </Bouton>
       </span>
-      {fait ? <p className="atl-succes" role="status">Annulation enregistrée : les tâches ouvertes du projet sont passées à « annulée » dans Paperclip.</p> : null}
+      {fait ? <p className="atl-succes" role="status">Annulation enregistrée : les tâches ouvertes du projet sont passées à « annulée » dans le tableau de bord.</p> : null}
       {ouvert ? (
         <div
           className="atl-encart"
@@ -591,7 +592,7 @@ function NouvelleCampagne() {
       <EnTete
         titre="Nouvelle campagne"
         retour={<LienHote vers={chemin("campagnes")}>Toutes les campagnes</LienHote>}
-        description="La campagne crée un projet Paperclip et une tâche de brief. Si un coordinateur est choisi, il reçoit le brief et en extrait les exigences."
+        description="La campagne crée un projet dans le tableau de bord et une tâche de brief. Si un coordinateur est choisi, il reçoit le brief et en extrait les exigences."
       />
       <form className="atl-formulaire" onSubmit={(e) => void soumettre(e)} noValidate>
         <Champ libelle="Nom de la campagne">
@@ -639,10 +640,10 @@ function NouvelleCampagne() {
         />
         {projetId ? (
           <p className="atl-attenue">
-            Projet Paperclip déjà créé ({idCourt(projetId)}) : un nouvel essai le réutilise au lieu d'en créer un second.
+            Projet déjà créé dans le tableau de bord ({idCourt(projetId)}) : un nouvel essai le réutilise au lieu d'en créer un second.
           </p>
         ) : null}
-        {erreur ? <EtatErreur erreur={erreur} contexte={etapeEchec === "projet" ? "création du projet Paperclip" : "création de la campagne"} /> : null}
+        {erreur ? <EtatErreur erreur={erreur} contexte={etapeEchec === "projet" ? "création du projet" : "création de la campagne"} /> : null}
         <div className="atl-actions">
           <Bouton type="submit" variante="principal" raisonDesactive={raison} enCours={etape !== "saisie"}>
             Créer la campagne

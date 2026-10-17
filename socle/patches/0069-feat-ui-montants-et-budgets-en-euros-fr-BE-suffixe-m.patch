@@ -1,0 +1,117 @@
+From f66aa7db257a97e81c845bcc2ca3723754ca8a26 Mon Sep 17 00:00:00 2001
+From: Jean-Baptiste Dhondt <114347858+warrox1993@users.noreply.github.com>
+Date: Sat, 17 Oct 2026 22:39:28 +0200
+Subject: [PATCH 69/78] =?UTF-8?q?feat(ui):=20montants=20et=20budgets=20en?=
+ =?UTF-8?q?=20euros=20(fr-BE),=20suffixe=20=C2=AB=20/mois=20=C2=BB?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+formatCents affichait des dollars codés en dur alors que l'atelier parle en
+euros. Devise EUR, libellés des champs de budget en EUR, symbole € dans la
+fenêtre d'agent intégré. Les coûts bruts rapportés par les fournisseurs
+(costUsd des exécutions, cartes d'état) restent en dollars. Audit visuel D09.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01DP85vPq2MHkZg8VNtRvCzB
+---
+ ui/src/components/BudgetIncidentCard.tsx         | 2 +-
+ ui/src/components/BudgetPolicyCard.tsx           | 2 +-
+ ui/src/components/ConfigureBuiltInAgentModal.tsx | 2 +-
+ ui/src/lib/project-budget-format.test.ts         | 8 ++++----
+ ui/src/lib/utils.ts                              | 6 +++---
+ 5 files changed, 10 insertions(+), 10 deletions(-)
+
+diff --git a/ui/src/components/BudgetIncidentCard.tsx b/ui/src/components/BudgetIncidentCard.tsx
+index 2e4c673ad..c5b4dee53 100644
+--- a/ui/src/components/BudgetIncidentCard.tsx
++++ b/ui/src/components/BudgetIncidentCard.tsx
+@@ -77,7 +77,7 @@ export function BudgetIncidentCard({
+ 
+         <div className="rounded-xl border border-border/60 bg-background/60 p-3">
+           <label className="text-(length:--text-micro) uppercase tracking-(--tracking-caps) text-muted-foreground">
+-            Nouveau budget (USD)
++            Nouveau budget (EUR)
+           </label>
+           <div className="mt-2 flex flex-col gap-3 sm:flex-row">
+             <Input
+diff --git a/ui/src/components/BudgetPolicyCard.tsx b/ui/src/components/BudgetPolicyCard.tsx
+index f4a887e89..f8e4dc590 100644
+--- a/ui/src/components/BudgetPolicyCard.tsx
++++ b/ui/src/components/BudgetPolicyCard.tsx
+@@ -145,7 +145,7 @@ export function BudgetPolicyCard({
+     <div className={cn("flex flex-col gap-3 sm:flex-row sm:items-end", isPlain ? "" : "rounded-xl border border-border/70 bg-background/50 p-3")}>
+       <div className="min-w-0 flex-1">
+         <label className="text-(length:--text-micro) uppercase tracking-(--tracking-caps) text-muted-foreground">
+-          Budget (USD)
++          Budget (EUR)
+         </label>
+         <Input
+           value={draftBudget}
+diff --git a/ui/src/components/ConfigureBuiltInAgentModal.tsx b/ui/src/components/ConfigureBuiltInAgentModal.tsx
+index 0a8c01479..39987f133 100644
+--- a/ui/src/components/ConfigureBuiltInAgentModal.tsx
++++ b/ui/src/components/ConfigureBuiltInAgentModal.tsx
+@@ -205,7 +205,7 @@ export function ConfigureBuiltInAgentModal({
+ 
+           <Field label="Monthly budget (optional)" hint="Leave blank for no cap.">
+             <div className="flex items-center gap-2">
+-              <span className="text-sm text-muted-foreground">$</span>
++              <span className="text-sm text-muted-foreground">€</span>
+               <Input
+                 type="number"
+                 min="0"
+diff --git a/ui/src/lib/project-budget-format.test.ts b/ui/src/lib/project-budget-format.test.ts
+index 136962ff3..8a5c93539 100644
+--- a/ui/src/lib/project-budget-format.test.ts
++++ b/ui/src/lib/project-budget-format.test.ts
+@@ -2,15 +2,15 @@ import { describe, expect, it } from "vitest";
+ import { formatProjectBudget } from "./utils";
+ 
+ describe("formatProjectBudget", () => {
+-  it("renders a /mo suffix for monthly budgets", () => {
+-    expect(formatProjectBudget({ amountCents: 120_000, windowKind: "calendar_month_utc" })).toBe("1\u202f200,00\u00a0$/mo");
++  it("renders a /mois suffix for monthly budgets", () => {
++    expect(formatProjectBudget({ amountCents: 120_000, windowKind: "calendar_month_utc" })).toBe("1\u202f200,00\u00a0€/mois");
+   });
+ 
+   it("renders the bare amount for lifetime budgets", () => {
+-    expect(formatProjectBudget({ amountCents: 50_000, windowKind: "lifetime" })).toBe("500,00\u00a0$");
++    expect(formatProjectBudget({ amountCents: 50_000, windowKind: "lifetime" })).toBe("500,00\u00a0€");
+   });
+ 
+   it("formats sub-dollar amounts with cents", () => {
+-    expect(formatProjectBudget({ amountCents: 150, windowKind: "lifetime" })).toBe("1,50\u00a0$");
++    expect(formatProjectBudget({ amountCents: 150, windowKind: "lifetime" })).toBe("1,50\u00a0€");
+   });
+ });
+diff --git a/ui/src/lib/utils.ts b/ui/src/lib/utils.ts
+index 025bf64cf..e03aff718 100644
+--- a/ui/src/lib/utils.ts
++++ b/ui/src/lib/utils.ts
+@@ -36,7 +36,7 @@ export function asFiniteNumber(value: unknown, fallback: number) {
+ export function formatCents(cents: number): string {
+   return (cents / 100).toLocaleString("fr-BE", {
+     style: "currency",
+-    currency: "USD",
++    currency: "EUR",
+     currencyDisplay: "narrowSymbol",
+     minimumFractionDigits: 2,
+     maximumFractionDigits: 2,
+@@ -49,11 +49,11 @@ export function formatNumber(n: number, options?: Intl.NumberFormatOptions): str
+ 
+ /**
+  * Format a project's budget for the projects list view (IA Phase 4 — PAP-60).
+- * Monthly budgets render a `/mo` suffix; lifetime budgets show the bare amount.
++ * Monthly budgets render a `/mois` suffix; lifetime budgets show the bare amount.
+  */
+ export function formatProjectBudget(budget: { amountCents: number; windowKind: string }): string {
+   const amount = formatCents(budget.amountCents);
+-  return budget.windowKind === "calendar_month_utc" ? `${amount}/mo` : amount;
++  return budget.windowKind === "calendar_month_utc" ? `${amount}/mois` : amount;
+ }
+ 
+ export function formatDate(date: Date | string): string {
+-- 
+2.53.0
+

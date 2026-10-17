@@ -2,7 +2,7 @@
 name: "communication-de-crise"
 description: "Prépare et conduit la communication de crise d'une PME belge : cellule de crise, rôles, message d'attente, porte-parole, questions-réponses, journal de crise, coordination interne et externe, retour d'expérience. À utiliser dès qu'un événement (accident, fuite de données, rappel de produit, mise en cause publique, panne majeure) menace la réputation ou la sécurité de personnes ; jamais pour nier ou spéculer, ni pour diffuser sans approbation humaine, ni pour remplacer les obligations légales de notification ou l'avis d'un avocat."
 metadata:
-  version: "1.0.0"
+  version: "1.1.0"
   langue: "fr"
   domaine: "communication"
 ---
@@ -38,6 +38,7 @@ Protéger d'abord les personnes, puis la confiance : une cellule qui décide vit
 ## Étapes
 
 1. **Évaluer le niveau et alerter.** Classer 1, 2 ou 3 d'après des critères écrits (personnes en danger, visibilité, obligation légale). Au niveau 3, poser immédiatement une carte à l'humain responsable avant toute rédaction.
+   **Liste des 60 premières minutes** : confirmer les faits (ce qui est établi, par qui, à quelle heure) ; désigner un seul porte-parole ; préparer le message d'attente ; fixer l'heure de la prochaine mise à jour. En cas de fuite de données, de blessure, de procès ou d'intervention d'une autorité, demander l'avis juridique avant tout aveu de faute ou toute publication.
 2. **Constituer la cellule de crise** : décideur, porte-parole, responsable des faits, responsable juridique, responsable interne, responsable des réseaux sociaux et de la veille, secrétaire du journal. Une personne peut cumuler dans une PME, jamais décideur et secrétaire.
 3. **Ouvrir le journal de crise** (voir livrable) : chaque ligne porte heure, fait ou décision, source, auteur. Les faits confirmés sont séparés des rumeurs.
 4. **Fixer la table des faits unique** : ce qui est établi, ce qui est en cours de vérification, ce qui est inconnu. Tous les textes en sortent. Mise à jour à chaque confirmation, avec l'heure.
@@ -57,6 +58,7 @@ Pour une crise : la fiche de cellule (rôles, suppléants, joignabilité) ; la t
 ## Critères de réussite
 
 - Le message d'attente est prêt en moins d'une page et ne contient aucun fait non confirmé.
+- La liste des 60 premières minutes est faite : faits confirmés, porte-parole, message d'attente, heure de la prochaine mise à jour.
 - Chaque fait diffusé est dans la table des faits avec sa source et son heure.
 - Le journal de crise permet de reconstituer chaque décision, son auteur et son heure.
 - Un seul porte-parole s'exprime ; les textes interne et externe sont cohérents.
@@ -73,10 +75,32 @@ Pour une crise : la fiche de cellule (rôles, suppléants, joignabilité) ; la t
 
 ## Sources officielles
 
-Aucune source consultée pour cette compétence ; les règles de consentement, de prospection et les obligations légales citées (RGPD articles 6 et 7, Code de droit économique livre XII) sont à vérifier par le juriste ou le DPO avant tout usage.
+Consultée le 17/10/2026 :
+
+- Autorité de protection des données, « Violation de données personnelles », https://www.autoriteprotectiondonnees.be/professionnel/actions/violation-de-donnees-personnelles :
+  le responsable du traitement notifie une violation de données à caractère personnel à l'autorité dans les meilleurs
+  délais et, si possible, 72 heures au plus tard après en avoir pris connaissance, sauf si elle n'est pas susceptible
+  d'engendrer un risque (RGPD art. 33 ; l'information des personnes concernées relève de l'art. 34, à vérifier). La
+  communication de crise ne retarde jamais cette notification, qui est confiée au délégué à la protection des données.
+- Centre pour la Cybersécurité Belgique (CCB), https://ccb.belgium.be/fr : point de signalement d'un incident cyber ; le
+  site a refusé l'accès le 17/10/2026 (réponse 403, non contournée). Obligations de notification (notamment NIS2) à
+  vérifier avec le responsable informatique et la conformité.
+
+## À vérifier par un professionnel
+
+- Toute obligation de notification (APD, CCB, autorité de contrôle sectorielle, assureur) et son délai, par le juriste ou
+  le délégué à la protection des données.
+- Tout aveu de faute, toute mention d'une personne et toute déclaration chiffrée, par le juriste avant publication.
 
 ## Exemple
 
 Une PME de 40 personnes subit une panne de serveur après une attaque informatique probable (constat du prestataire à 10 h 20, source : courriel du prestataire). Niveau 2. Cellule de 4 personnes. Message d'attente à 10 h 55, soumis à la gérante : « Nous rencontrons un incident informatique qui perturbe nos services. Nos équipes et nos prestataires travaillent à le résoudre. Nous informerons nos clients à 14 h. Contact : standard. » Aucun mot « attaque » ni nombre de données concernées, car non confirmés. Journal ouvert, juridique alerté pour évaluer une notification de violation de données (délai à vérifier). Message interne distinct et consigne aux collaborateurs de ne pas commenter.
 
 Cas d'échec : à 11 h, un salarié annonce sur un réseau social que « des données clients ont fuité » et la direction demande de le démentir. Le démenti serait faux ou non prouvé : la compétence refuse de nier, ajoute à la table des faits « fuite de données : non confirmée, en cours de vérification », prépare un message qui dit ce qui est vérifié et l'heure de la prochaine information, et pose la carte d'approbation.
+
+## Origine de la méthode
+
+Liste des 60 premières minutes et avis juridique préalable adaptés et traduits de github.com/coreyhaines31/marketingskills,
+`skills/public-relations/SKILL.md`, section « When Something Goes Wrong », commit dda3841f0b294e01e93b1541486beefbfab0915e,
+licence MIT, Copyright (c) 2025 Corey Haines. Modifications : réécriture en français, obligations belges. Texte de la
+licence et liste des reprises : `organisation/skills/LICENCES-TIERS.md`.

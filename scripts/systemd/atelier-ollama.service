@@ -1,0 +1,35 @@
+[Unit]
+Description=Ollama local du banc d'essais de l'Atelier marketing IA (écoute sur 127.0.0.1 seulement)
+Documentation=https://docs.ollama.com/linux
+
+# Installation (une fois), méthode « Manual install » de la documentation officielle, dans l'espace utilisateur :
+#   version figée v0.40.6 (release GitHub finale, prerelease=false, vérifiée le 17/10/2026)
+#   curl -fsSL -o ollama-linux-amd64.tar.zst \
+#     https://github.com/ollama/ollama/releases/download/v0.40.6/ollama-linux-amd64.tar.zst
+#   echo "c164ab8b1b28e2a247c29719b8e404c423c5b83ae64c3ab4e59d50c7ff7fc5e0  ollama-linux-amd64.tar.zst" | sha256sum -c -
+#   mkdir -p ~/.local/share/atelier-banc/ollama && tar --zstd -xf ollama-linux-amd64.tar.zst -C ~/.local/share/atelier-banc/ollama
+#   install -m 644 scripts/systemd/atelier-ollama.service ~/.config/systemd/user/
+#   systemctl --user daemon-reload && systemctl --user start atelier-ollama
+# Pas d'activation au démarrage : la carte graphique (10 Go) est partagée avec les jeux. Démarrer avant un banc,
+# arrêter après (« systemctl --user stop atelier-ollama »). Contrôle : « ss -ltnp | grep 11434 ».
+
+[Service]
+Type=simple
+Environment=OLLAMA_HOST=127.0.0.1:11434
+Environment=OLLAMA_MODELS=%h/.local/share/atelier-banc/modeles
+# Tout reste sur le PC : ni inférence distante ni recherche web d'Ollama.
+Environment=OLLAMA_NO_CLOUD=1
+Environment=OLLAMA_CONTEXT_LENGTH=16384
+Environment=OLLAMA_NUM_PARALLEL=1
+Environment=OLLAMA_MAX_LOADED_MODELS=1
+ExecStartPre=/usr/bin/mkdir -p %h/.local/share/atelier-banc/modeles
+ExecStart=%h/.local/share/atelier-banc/ollama/bin/ollama serve
+Restart=on-failure
+RestartSec=10
+NoNewPrivileges=yes
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=atelier-ollama
+
+[Install]
+WantedBy=default.target

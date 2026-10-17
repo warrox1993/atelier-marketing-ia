@@ -2,7 +2,7 @@
 name: "incitants-fiscaux-rd"
 description: "Explique en principe et prépare les pièces des incitants fiscaux belges de recherche et développement : déduction pour investissement, déduction pour revenus d'innovation et dispense partielle de versement du précompte professionnel pour chercheurs, avec questions à poser au conseiller fiscal. À utiliser pour évaluer si un projet de R&D peut ouvrir droit à ces incitants et pour tenir la documentation utile ; jamais pour chiffrer un avantage comme acquis, remplir une déclaration fiscale ou affirmer qu'une condition est remplie sans validation d'un conseiller fiscal."
 metadata:
-  version: "1.0.0"
+  version: "1.1.0"
   langue: "fr"
   domaine: "recherche-innovation"
 ---
@@ -64,12 +64,13 @@ Une note de principe qui présente, pour chaque incitant, à quoi il sert, les t
 
 ## Sources officielles
 
-Consultées le 16/10/2026 par l'agent rédacteur :
+Consultées le 17/10/2026 (version 1.1.0) :
 
-- SPF Finances, page sur la déduction pour revenus d'innovation, https://finances.belgium.be/fr/entreprises/impot_des_societes/revenus-innovation : bloquée par un test anti-robot le 16/10/2026, non lue.
-- Aucune autre page officielle des SPF Finances ou des administrations régionales n'a pu être ouverte pour la déduction pour investissement ni pour la dispense de précompte pour chercheurs lors de cette rédaction.
+- Article 275/3 du Code des impôts sur les revenus 1992, texte publié par la Politique scientifique fédérale (BELSPO), « Article 275³, CIR 92 (édition 2022) », https://belspo.be/Belspo/fiscal/doc/Article275.3MinFin2022.pdf : dispense de versement de 80 % du précompte professionnel accordée notamment aux entreprises qui rémunèrent des chercheurs engagés dans des projets ou programmes de recherche ou de développement et titulaires des diplômes visés au § 2, à condition de retenir 100 % du précompte. Édition 2022 : les modifications ultérieures (dont l'enregistrement préalable du projet auprès de BELSPO) sont à vérifier.
+- Politique scientifique fédérale, page « fiscalité », https://www.belspo.be/belspo/fiscal/index_fr.stm : formulaires d'enregistrement des projets de recherche et de développement expérimental, et de la déduction pour revenus d'innovation des logiciels.
+- SPF Finances, page sur la déduction pour revenus d'innovation, https://finances.belgium.be/fr/entreprises/impot_des_societes/revenus-innovation : bloquée par une vérification antirobot le 16/10/2026, non contournée ; non lue. Le texte consolidé du Code des impôts sur les revenus sur Justel n'a pas pu être affiché par lecture automatique le 17/10/2026.
 
-Les principes décrits ci-dessus sont donc une connaissance générale, source secondaire, sans taux ni plafond repris : l'agent doit lire le texte officiel en vigueur (SPF Finances, Code des impôts sur les revenus) à chaque tâche avant de citer un chiffre.
+Les principes de la déduction pour investissement et de la déduction pour revenus d'innovation restent donc sans source officielle lue, sans taux ni plafond repris : l'agent lit le texte officiel en vigueur à chaque tâche avant de citer un chiffre.
 
 ## À vérifier par un professionnel
 

@@ -1,0 +1,22 @@
+{
+  "name": "passerelle-whatsapp",
+  "version": "0.1.0",
+  "private": true,
+  "license": "UNLICENSED",
+  "description": "Passerelle WhatsApp de l'Atelier : reçoit le webhook de la WhatsApp Cloud API (Meta), relaie les messages de l'opérateur au coordinateur général et lui envoie alertes et réponses. Seul service exposé par Tailscale Funnel.",
+  "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "build": "tsc -p tsconfig.build.json",
+    "test": "vitest run",
+    "start": "node dist/src/demarrer.js"
+  },
+  "devDependencies": {
+    "@types/node": "24.19.2",
+    "typescript": "7.0.2",
+    "vitest": "4.1.11"
+  }
+}

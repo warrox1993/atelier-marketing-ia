@@ -306,6 +306,24 @@ describe("mise à la corbeille groupée", () => {
     expect(posts()).toHaveLength(0);
   });
 
+  it("mise à la corbeille qui vide la liste : le bilan reste affiché jusqu'à « Fermer »", async () => {
+    serveur = (m, u) => {
+      if (m === "POST") {
+        lignes = [];
+        return { statut: 200, corps: {} };
+      }
+      return m === "GET" && u.includes("/connaissances?") ? { statut: 200, corps: lignes } : { statut: 200, corps: {} };
+    };
+    const c = await ouvrir();
+    await cliquer(caseTout(c));
+    await cliquer(parTexte(c, "button", "Mettre à la corbeille (2)"));
+    await cliquer(parTexte(c, "button", "Confirmer pour 2 documents"));
+    expect(c.textContent).toContain("Aucun document pour le moment.");
+    expect(c.querySelector('[role="status"].atl-succes')?.textContent).toContain("2 documents mis à la corbeille");
+    await cliquer(parTexte(c, "button", "Fermer"));
+    expect(c.textContent).not.toContain("2 documents mis à la corbeille");
+  });
+
   it("échec partiel : les autres continuent et le récapitulatif nomme le document en échec", async () => {
     serveur = (m, u, corps) =>
       m === "POST" && corps?.id === DOC_A ? { statut: 403, corps: { error: "Réservé à un humain." } } : m === "GET" && u.includes("/connaissances?") ? { statut: 200, corps: lignes } : { statut: 200, corps: {} };

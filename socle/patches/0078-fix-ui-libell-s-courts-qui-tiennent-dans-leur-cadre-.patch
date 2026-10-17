@@ -1,0 +1,171 @@
+From 516b79abd169286393fadef7d935686e6827550d Mon Sep 17 00:00:00 2001
+From: Jean-Baptiste Dhondt <114347858+warrox1993@users.noreply.github.com>
+Date: Sat, 17 Oct 2026 22:55:56 +0200
+Subject: [PATCH 78/78] =?UTF-8?q?fix(ui):=20libell=C3=A9s=20courts=20qui?=
+ =?UTF-8?q?=20tiennent=20dans=20leur=20cadre,=20=C2=AB=20Ex=C3=A9cution=20?=
+ =?UTF-8?q?=C3=A9chou=C3=A9e=20=C2=BB?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Le contrôle visuel à 1440 px montrait « Tout le monde (par défa… » dans
+les listes de gouvernance et « Permissions et confia… » dans la
+navigation de l'agent : « Tous (par défaut) » et « Permissions ». La
+ligne d'échec de la boîte de réception était encore « Failed run — … » :
+« Exécution échouée : … ». Audit visuel D08 et D24.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01DP85vPq2MHkZg8VNtRvCzB
+---
+ ui/src/components/AgentContextualSidebar.test.tsx     | 2 +-
+ ui/src/components/InteractionGovernancePanel.test.tsx | 8 ++++----
+ ui/src/components/InteractionGovernancePanel.tsx      | 2 +-
+ ui/src/lib/attention.ts                               | 2 +-
+ ui/src/pages/Inbox.test.tsx                           | 4 ++--
+ ui/src/pages/Inbox.tsx                                | 2 +-
+ ui/src/pages/LegacyInbox.tsx                          | 2 +-
+ ui/src/pages/agent-detail-navigation.ts               | 2 +-
+ 8 files changed, 12 insertions(+), 12 deletions(-)
+
+diff --git a/ui/src/components/AgentContextualSidebar.test.tsx b/ui/src/components/AgentContextualSidebar.test.tsx
+index f516b5117..5ef354938 100644
+--- a/ui/src/components/AgentContextualSidebar.test.tsx
++++ b/ui/src/components/AgentContextualSidebar.test.tsx
+@@ -64,6 +64,6 @@ describe("AgentContextualSidebar", () => {
+     expect(markup).toContain('href="/activity?mode=agents&amp;agentId=agent-1"');
+     expect(markup).toContain('href="/activity/runs?agentId=agent-1"');
+     expect(markup).toContain("Moteur d&#x27;exécution");
+-    expect(markup).toContain("Permissions et confiance");
++    expect(markup).toContain(">Permissions<");
+   });
+ });
+diff --git a/ui/src/components/InteractionGovernancePanel.test.tsx b/ui/src/components/InteractionGovernancePanel.test.tsx
+index 0fe3ac3eb..ded169aa6 100644
+--- a/ui/src/components/InteractionGovernancePanel.test.tsx
++++ b/ui/src/components/InteractionGovernancePanel.test.tsx
+@@ -68,7 +68,7 @@ describe("InteractionGovernancePanel", () => {
+     const { host } = renderPanel();
+ 
+     const defaultSelect = host.querySelector('[data-testid="governance-request_confirmation-default"]');
+-    expect(defaultSelect?.textContent).toContain("Tout le monde (par défaut)");
++    expect(defaultSelect?.textContent).toContain("Tous (par défaut)");
+     const cap = host.querySelector('[data-testid="governance-request_confirmation-cap"]');
+     expect(cap?.textContent).toContain("Sans plafond");
+   });
+@@ -100,7 +100,7 @@ describe("InteractionGovernancePanel", () => {
+     // Untouched kinds still read as open.
+     expect(
+       host.querySelector('[data-testid="governance-suggest_tasks-default"]')?.textContent,
+-    ).toContain("Tout le monde (par défaut)");
++    ).toContain("Tous (par défaut)");
+   });
+ 
+   /**
+@@ -113,7 +113,7 @@ describe("InteractionGovernancePanel", () => {
+     const { host } = renderPanel();
+ 
+     for (const kind of INTERACTION_KINDS) {
+-      expect(triggerText(host, `governance-${kind}-default`)).toBe("Tout le monde (par défaut)");
++      expect(triggerText(host, `governance-${kind}-default`)).toBe("Tous (par défaut)");
+       expect(triggerText(host, `governance-${kind}-cap`)).toBe("Sans plafond");
+     }
+   });
+@@ -144,7 +144,7 @@ describe("InteractionGovernancePanel", () => {
+ 
+     const listbox = document.querySelector('[data-slot="select-content"]');
+     const listText = listbox?.textContent ?? "";
+-    expect(listText).toContain("Tout le monde (par défaut)");
++    expect(listText).toContain("Tous (par défaut)");
+     expect(listText).toContain(
+       "Les nouvelles cartes sont ouvertes : une personne ou n'importe quel agent peut répondre, y compris celui qui a posé la question.",
+     );
+diff --git a/ui/src/components/InteractionGovernancePanel.tsx b/ui/src/components/InteractionGovernancePanel.tsx
+index 2cc0fb585..6e17f870f 100644
+--- a/ui/src/components/InteractionGovernancePanel.tsx
++++ b/ui/src/components/InteractionGovernancePanel.tsx
+@@ -58,7 +58,7 @@ const NARROWING_POLICIES: readonly IssueThreadInteractionCanonicalResolverPolicy
+ ];
+ 
+ const UNSET_LABELS: Record<GovernanceField, string> = {
+-  defaultPolicy: "Tout le monde (par défaut)",
++  defaultPolicy: "Tous (par défaut)",
+   cap: "Sans plafond",
+ };
+ 
+diff --git a/ui/src/lib/attention.ts b/ui/src/lib/attention.ts
+index a0cd035d0..2affa2fc2 100644
+--- a/ui/src/lib/attention.ts
++++ b/ui/src/lib/attention.ts
+@@ -57,7 +57,7 @@ const SOURCE_META: Record<AttentionSourceKind, SourceMeta> = {
+   productivity_review: { label: "Task" },
+   blocker_attention: { label: "Blocked dependency" },
+   review: { label: "Review" },
+-  failed_run: { label: "Failed run" },
++  failed_run: { label: "Exécution échouée" },
+   budget_alert: { label: "Budget" },
+   agent_error_alert: { label: "Agent error" },
+ };
+diff --git a/ui/src/pages/Inbox.test.tsx b/ui/src/pages/Inbox.test.tsx
+index e5cc59fc5..eb42a4f3f 100644
+--- a/ui/src/pages/Inbox.test.tsx
++++ b/ui/src/pages/Inbox.test.tsx
+@@ -521,7 +521,7 @@ describe("Inbox toolbar", () => {
+     });
+     await vi.waitFor(() => {
+       expect(container.textContent).toContain("Recrutement d'agent : New teammate");
+-      expect(container.textContent).toContain("Failed run");
++      expect(container.textContent).toContain("Exécution échouée");
+       expect(container.textContent).toContain("Jordan Example");
+     });
+ 
+@@ -529,7 +529,7 @@ describe("Inbox toolbar", () => {
+       [...container.querySelectorAll("[data-inbox-item]")]
+         .find((row) => row.textContent?.includes(text));
+ 
+-    for (const text of ["Recrutement d'agent : New teammate", "Failed run", "Jordan Example"]) {
++    for (const text of ["Recrutement d'agent : New teammate", "Exécution échouée", "Jordan Example"]) {
+       const row = rowFor(text);
+       expect(row, `missing inbox row for ${text}`).toBeDefined();
+       expect(row?.querySelector('button[aria-label="Marquer comme lu"]')).not.toBeNull();
+diff --git a/ui/src/pages/Inbox.tsx b/ui/src/pages/Inbox.tsx
+index bd7364e0e..498cfadd1 100644
+--- a/ui/src/pages/Inbox.tsx
++++ b/ui/src/pages/Inbox.tsx
+@@ -441,7 +441,7 @@ export function FailedRunInboxRow({
+                   {issue.title}
+                 </>
+               ) : (
+-                <>Failed run{linkedAgentName ? ` — ${linkedAgentName}` : ""}</>
++                <>Exécution échouée{linkedAgentName ? ` : ${linkedAgentName}` : ""}</>
+               )}
+             </span>
+             <span className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
+diff --git a/ui/src/pages/LegacyInbox.tsx b/ui/src/pages/LegacyInbox.tsx
+index f374e0c5e..9de274f32 100644
+--- a/ui/src/pages/LegacyInbox.tsx
++++ b/ui/src/pages/LegacyInbox.tsx
+@@ -376,7 +376,7 @@ export function FailedRunInboxRow({
+                   {issue.title}
+                 </>
+               ) : (
+-                <>Failed run{linkedAgentName ? ` — ${linkedAgentName}` : ""}</>
++                <>Exécution échouée{linkedAgentName ? ` : ${linkedAgentName}` : ""}</>
+               )}
+             </span>
+             <span className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
+diff --git a/ui/src/pages/agent-detail-navigation.ts b/ui/src/pages/agent-detail-navigation.ts
+index ed31b575d..2267b9ed2 100644
+--- a/ui/src/pages/agent-detail-navigation.ts
++++ b/ui/src/pages/agent-detail-navigation.ts
+@@ -39,7 +39,7 @@ export const AGENT_DETAIL_NAVIGATION: ReadonlyArray<{
+   {
+     label: "Gouvernance",
+     items: [
+-      { value: "permissions", label: "Permissions et confiance" },
++      { value: "permissions", label: "Permissions" },
+       { value: "api-keys", label: "Clés d'API" },
+       { value: "revisions", label: "Révisions" },
+     ],
+-- 
+2.53.0
+

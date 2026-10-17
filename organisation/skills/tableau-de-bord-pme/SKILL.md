@@ -2,7 +2,7 @@
 name: "tableau-de-bord-pme"
 description: "Construit le tableau de bord de pilotage d'une PME belge : indicateurs clés (trésorerie, DSO, carnet de commandes, marge brute, absentéisme, productivité, qualité de service) avec définition exacte, formule, fréquence, seuil d'alerte et source de données dans l'application. À utiliser pour créer ou mettre à jour un tableau de bord de direction ; jamais pour interpoler une donnée absente, descendre au niveau d'une personne identifiable ni présenter comme définitif un chiffre comptable non validé."
 metadata:
-  version: "1.0.0"
+  version: "1.1.0"
   langue: "fr"
   domaine: "direction"
 ---
@@ -33,13 +33,21 @@ Un tableau où chaque ligne a une définition écrite, une formule reproductible
 
 ## Étapes
 
-1. **Choisir les indicateurs** dans la liste ci-dessous : au plus dix, chacun relié à une décision possible. Un indicateur qui ne déclenche jamais de décision est retiré.
-2. **Vérifier les données reçues** : période, unité (euros hors TVA ou TVA comprise), date d'extraction. Une unité ambiguë est signalée, pas supposée.
-3. **Calculer** avec la formule donnée, en gardant les valeurs de départ et d'arrivée visibles. Aucun arrondi caché ; aucune moyenne sur une série trouée.
-4. **Comparer** à la période précédente et à la même période de l'année précédente quand elle existe. Une rupture de série (changement de méthode, de périmètre) est notée en toutes lettres.
-5. **Attribuer le feu** selon le seuil. En l'absence de seuil convenu, écrire « seuil à définir par la direction » plutôt que de colorer.
-6. **Commenter** chaque écart important : cause probable, marquée « hypothèse », et question à poser au service.
-7. **Lister les indicateurs impossibles** faute de donnée, avec la donnée manquante et le service à solliciter.
+1. **Situer le tableau** dans l'un des trois niveaux, qui ne se mélangent pas : direction (objectifs de l'entreprise,
+   une page, mensuel ou trimestriel), gestion (objectifs d'un service, hebdomadaire ou mensuel), opérationnel (suivi
+   quotidien d'une équipe). Un tableau de direction ne descend pas au détail opérationnel.
+2. **Choisir les indicateurs** dans la liste ci-dessous : au plus dix, chacun relié à une décision possible. Un indicateur qui ne déclenche jamais de décision est retiré.
+3. **Vérifier les données reçues** : période, unité (euros hors TVA ou TVA comprise), date d'extraction. Une unité ambiguë est signalée, pas supposée.
+4. **Calculer** avec la formule donnée, en gardant les valeurs de départ et d'arrivée visibles. Aucun arrondi caché ; aucune moyenne sur une série trouée.
+5. **Comparer** à la période précédente et à la même période de l'année précédente quand elle existe. Une rupture de série (changement de méthode, de périmètre) est notée en toutes lettres.
+6. **Attribuer le feu** selon le seuil. En l'absence de seuil convenu, écrire « seuil à définir par la direction » plutôt que de colorer.
+7. **Commenter** chaque écart important : cause probable, marquée « hypothèse », et question à poser au service.
+8. **Résoudre les contradictions** : quand un indicateur du tableau ne correspond pas au même chiffre dans la
+   comptabilité ou un autre rapport (chiffre d'affaires, créances), ne pas choisir l'un des deux : écrire les deux
+   valeurs, leurs définitions et leurs sources, et proposer une définition unique et une source unique, à valider par
+   le propriétaire de l'indicateur. Chaque indicateur a une fiche : définition, formule, source, fréquence, seuil,
+   propriétaire.
+9. **Lister les indicateurs impossibles** faute de donnée, avec la donnée manquante et le service à solliciter.
 
 ### Les indicateurs
 
@@ -69,6 +77,8 @@ Un tableau Markdown (ou exportable) : indicateur, valeur, période, comparaison,
 - Aucune ligne sans source ni date ; aucun feu sans seuil écrit.
 - Aucun nom de personne, de client ou de débiteur dans le tableau.
 - Les ruptures de série sont signalées.
+- Le tableau est situé dans un seul niveau (direction, gestion, opérationnel).
+- Toute contradiction avec un autre rapport est montrée avec les deux définitions, jamais tranchée en silence.
 
 ## Sources officielles
 
@@ -105,3 +115,10 @@ DSO = 96 800 / 66 550 x 30 = 43,6 jours. Feu vert (sous 45). Commentaire : en ha
 | Taux d'absentéisme | information manquante | 2026-09 | sans feu | RH : jours d'absence agrégés non transmis |
 
 Cas d'échec : la comptabilité transmet le chiffre d'affaires hors TVA mais les créances en TTC. Le DSO calculé serait faux d'environ 21 % (TVA de 21 %). Le tableau ne publie pas de valeur : il écrit « DSO impossible : unités différentes » et pose la question « fournir les deux montants dans la même unité ».
+
+## Origine de la méthode
+
+Niveaux de tableaux (direction, gestion, opérationnel) et traitement des indicateurs contradictoires par une définition
+unique adaptés et traduits de github.com/wshobson/agents, `plugins/business-analytics/skills/kpi-dashboard-design/SKILL.md`,
+commit 044b4b21f083948e69ec878a7b07c8d0951a6ffa, licence MIT, Copyright (c) 2024 Seth Hobson. Modifications :
+traduction, indicateurs de PME belge. Licence et reprises : `organisation/skills/LICENCES-TIERS.md`.

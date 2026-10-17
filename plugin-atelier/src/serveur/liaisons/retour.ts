@@ -12,6 +12,8 @@
  * L'événement est une invocation portée par l'entreprise CIBLE : l'hôte y refuse toute écriture dans l'entreprise source
  * (constaté en réel, essai L9). Le commentaire sur la tâche d'origine, présenté comme DONNÉES (jamais comme
  * instructions), et le réveil du coordinateur source sont donc posés par le facteur (`facteur.ts`), hors invocation.
+ * Teinte : si la liaison a exigé l'approbation humaine, la réponse est marquée teintée dans la même écriture
+ * (`teinte_retour`, migration 017) ; la tâche d'origine et ses descendantes sont alors teintées (voir `demander.ts`).
  * Idempotence : le changement de statut est conditionnel (`ouverte` seulement) ; un rejeu de l'événement ne fait rien.
  * Isolation : la liaison est cherchée avec l'entreprise de l'événement comme entreprise CIBLE.
  */
@@ -103,7 +105,9 @@ export function creerRetour(d: { ctx: PluginContext; base: BaseAtelier; stock: S
       const texte = annulee ? null : await reponseDuCoordinateur(l, l.entrepriseCible, tache.assigneeAgentId ?? null);
       const reponse = texte === null ? null : borner(texte);
       // Seule écriture de l'événement : la liaison (base du plugin). Le facteur notifie la source et journalise.
-      await stock.transiter(l.entrepriseSource, l.id, ["ouverte"], { statut: annulee ? "annulee" : "repondue", reponse, repondu: true });
+      // Teinte (revue M1) : la réponse d'une liaison approuvée (service sensible, ou demande déjà teintée) teinte la tâche
+      // d'origine qui la reçoit ; toute liaison ouverte ensuite depuis elle ou ses descendantes attendra l'approbation humaine.
+      await stock.transiter(l.entrepriseSource, l.id, ["ouverte"], { statut: annulee ? "annulee" : "repondue", reponse, repondu: true, teinte: !annulee && l.approbationRequise });
     } catch (e) {
       ctx.logger.warn("Liaison : retour de la réponse impossible", { evenement: event.eventId ?? null, erreur: e instanceof Error ? e.message : String(e) });
     }

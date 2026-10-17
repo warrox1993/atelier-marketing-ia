@@ -33,8 +33,7 @@ simulé. Les agents sont les vrais agents Claude (section 3), importés en pause
 décision humaine. Le bootstrap n'accepte plus que le mode `reel` (l'option `--reel` est tolérée
 sans effet, avec un avertissement).
 
-Les anciens scripts de démonstration (`scripts/demonstration.sh`, `scripts/demo/`,
-`organisation/demo/`) sont conservés en attente de retrait : ne plus les utiliser.
+Les anciens scripts et le corpus de démonstration ont été retirés du dépôt.
 
 Scénarios rejouables contre une instance (résultats bruts dans `instance/scenarios/`) :
 
@@ -66,7 +65,7 @@ en lecture ; `bootstrap-organisation.py etat` signale une connexion encore ouver
 
 ```bash
 claude setup-token                                                 # dans un terminal de l'opérateur
-python3 -I scripts/bootstrap-organisation.py appliquer             # liaison réelle (claude_local) des 10 agents
+python3 -I scripts/bootstrap-organisation.py appliquer             # liaison réelle (claude_local) des 13 agents marketing
 python3 -I scripts/bootstrap-organisation.py jeton --confirmer     # coller le jeton : secret natif chiffré
 python3 -I scripts/bootstrap-organisation.py test-reel             # à blanc : agent, modèle, jeton
 python3 -I scripts/bootstrap-organisation.py test-reel --confirmer # un appel réel minimal (non exécuté à ce jour)
@@ -117,7 +116,9 @@ producteur reprend alors à l'étape suivante sans double effet (scénario E).
 | Matrice de traçabilité du cahier (§0 à §19) | `docs/tracabilite.md` |
 | Checklist avant utilisation réelle | `docs/checklist-usage-reel.md` |
 | Mise à jour du socle, évolution du déploiement | `docs/mise-a-jour-socle.md`, `docs/evolution-deploiement.md` |
-| Usine d'agents : 28 services, matrice des échanges, compétences, mise en place chez un client | `docs/usine-services.md` |
+| Usine d'agents : services, coordination, matrice des échanges, compétences, mise en place chez un client | `docs/usine-services.md` |
+| Études qui ont fondé l'usine (trois groupes de départements) | `docs/etude-usine-v2/` |
+| Traces Phoenix et banc d'essais des compétences | `docs/phoenix.md`, `docs/banc-essais.md` |
 
 `paperclip/` (clone amont) et `instance/` (données) ne sont pas versionnés ici. Droits :
 tous droits réservés (`LICENSE`) ; les correctifs et extraits issus de Paperclip restent sous

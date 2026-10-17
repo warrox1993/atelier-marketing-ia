@@ -1,0 +1,10 @@
+[
+ {
+  "critere": "charge de 130 % (325 jours demandés pour 250)",
+  "nombres": [
+   130.0,
+   325.0,
+   250.0
+  ]
+ }
+]

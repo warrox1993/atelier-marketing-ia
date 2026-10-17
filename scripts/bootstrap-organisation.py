@@ -31,6 +31,14 @@ Sous-commandes :
                          retiré du nom, registre local écrit) ; son organisation et son référentiel de marque ne sont pas
                          réécrits ; les autres services et la Direction sont créés par le chemin habituel (agents en pause).
                          Idempotent ; --a-blanc n'écrit rien. Le nom de la fiche doit être celui de l'entreprise sans « (démonstration) ».
+  mettre-a-jour-client --client SLUG [--a-blanc] [--pause-hors-registre] [--sans-nouveaux-services]
+                         met à jour un client DÉJÀ créé (registre local instance/atelier-client/<slug>/) sur le registre actuel :
+                         crée, dans chaque entreprise de service et le marketing, les agents du registre manquants (en pause, mêmes
+                         réglages que nouveau-client), ajoute les services absents, remet à jour consignes, compétences et liaisons
+                         des agents existants (import natif « replace »), rallume les agents déjà actifs que l'import aurait mis en
+                         pause. Les agents hors registre (renommés, scindés) sont listés ; --pause-hors-registre les met en pause
+                         (jamais de suppression). Objectifs, description et budget des entreprises existantes ne sont pas réécrits.
+                         Idempotent ; --a-blanc n'écrit rien.
   assurer-connexions     étape légère et idempotente : réserve aux rôles déclarés chaque connexion de la
                          passerelle créée depuis le dernier « appliquer » (accès natif, installations,
                          politiques « block » des rôles en lecture). Lancée toutes les minutes par le
@@ -43,6 +51,10 @@ Sous-commandes :
                          --sortie, l'export va dans instance/exports/<UUID>/<horodatage>/ ; les données du
                          plugin (route donnees.exporter, colonnes chiffrées laissées chiffrées) y sont écrites
                          table par table dans donnees-plugin/<table>.json, avec leurs empreintes au manifeste.
+                         --pg-port PORT (obligatoire avec --entreprise) : activity_log, approvals et cost_events du
+                         socle sont lus en LECTURE SEULE par psql (PGPASSWORD dans l'environnement ; ATELIER_PSQL
+                         remplace la commande) et écrits dans donnees-socle/<table>.json, comptes vérifiés ;
+                         « purger » refuse si ces fichiers manquent ou sont incomplets.
   purger --entreprise UUID [--confirmer] [--a-blanc] [--export DIR] [--hors-marqueur --nom-confirme NOM]
                          fin de contrat / droit à l'effacement : supprime TOUTES les données d'un client, après
                          un export de moins de 24 h (manifeste vérifié, données du plugin présentes et de même
@@ -1857,7 +1869,7 @@ def cmd_etat(args) -> int:
 
 
 MOTIFS_INTERDITS_EXPORT = [
-    (re.compile(r"/home/|/tmp/|/root/|/Users/|/mnt/|/media/|/var/|/opt/|/srv/|(?<![A-Za-z])[A-Za-z]:\\[A-Za-z]"), "chemin local absolu"),
+    (re.compile(r"(?<![A-Za-z0-9.-])/(?:home|tmp|root|Users|mnt|media|var|opt|srv)/|(?<![A-Za-z])[A-Za-z]:\\[A-Za-z]"), "chemin local absolu"),
     (re.compile(r"sk-ant-[A-Za-z0-9_\-]{8,}"), "clé Anthropic"),
     (re.compile(r"(?i)oauth[_-]?token\"?\s*[:=]\s*\"[A-Za-z0-9_\-]{12,}"), "jeton OAuth"),
     (re.compile(r"-----BEGIN [A-Z ]*PRIVATE KEY-----"), "clé privée"),
@@ -1991,7 +2003,7 @@ def empreinte_manifeste(fichiers: dict[str, str]) -> str:
     return hashlib.sha256("\n".join(f"{c}:{h}" for c, h in sorted(fichiers.items())).encode("utf-8")).hexdigest()
 
 
-def ecrire_manifeste_export(sortie: Path, company_id: str, contenus: dict[str, bytes]) -> dict:
+def ecrire_manifeste_export(sortie: Path, company_id: str, contenus: dict[str, bytes], comptes_socle: dict[str, int] | None = None) -> dict:
     """Manifeste de l'export (entreprise, date, empreinte de chaque fichier) : aucune donnée personnelle.
     « purger » ne s'appuie que sur lui pour reconnaître un export récent et intact."""
     fichiers = {c: hashlib.sha256(v).hexdigest() for c, v in contenus.items()}
@@ -2000,6 +2012,8 @@ def ecrire_manifeste_export(sortie: Path, company_id: str, contenus: dict[str, b
         "exporteLe": dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "fichiers": fichiers, "empreinte": empreinte_manifeste(fichiers),
     }
+    if comptes_socle:
+        manifeste["comptesSocle"] = dict(sorted(comptes_socle.items()))
     (sortie / FICHIER_MANIFESTE_EXPORT).write_text(json.dumps(manifeste, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     return manifeste
 
@@ -2040,6 +2054,65 @@ def exporter_donnees_plugin(api: Api, company_id: str) -> dict[str, bytes]:
     return contenus
 
 
+DOSSIER_DONNEES_SOCLE = "donnees-socle"
+# Tables que le socle efface à la suppression d'une entreprise (paperclip/server/src/services/companies.ts) et que
+# l'export natif ne contient pas : journal d'activité, approbations, évènements de coût.
+TABLES_SOCLE = ("activity_log", "approvals", "cost_events")
+PG_HOTE, PG_UTILISATEUR, PG_BASE = "127.0.0.1", "paperclip", "paperclip"
+
+
+def commande_psql(port: int) -> list[str]:
+    """Commande psql (modèle : scripts/positions-prospects.py). Le mot de passe vient du seul environnement
+    (PGPASSWORD), jamais d'un argument ni d'un fichier. ATELIER_PSQL remplace « psql » (tests : faux psql)."""
+    import shlex
+    base = shlex.split(os.environ.get("ATELIER_PSQL") or "psql")
+    return [*base, "-h", PG_HOTE, "-p", str(port), "-U", PG_UTILISATEUR, "-d", PG_BASE, "-X", "-q", "-A", "-t", "-w",
+            "-v", "ON_ERROR_STOP=1"]
+
+
+def exporter_donnees_socle(port: int, company_id: str) -> tuple[dict[str, bytes], dict[str, int]]:
+    """Lit en LECTURE SEULE (transaction BEGIN READ ONLY) activity_log, approvals et cost_events de l'entreprise, avec
+    le compte count(*) pris dans la même transaction ; refuse si le nombre de lignes lues diffère du compte.
+    Rend ({« donnees-socle/<table>.json » : octets}, comptes)."""
+    if not RE_UUID.fullmatch(company_id):
+        raise ErreurAtelier("identifiant d'entreprise invalide pour la lecture du socle")
+    requetes = "".join(
+        f"SELECT json_build_object('table', '{t}', "
+        f"'compte', (SELECT count(*) FROM public.{t} WHERE company_id = '{company_id}'), "
+        f"'lignes', (SELECT coalesce(json_agg(to_jsonb(x) ORDER BY x.id), '[]'::json) FROM public.{t} x WHERE x.company_id = '{company_id}'));\n"
+        for t in TABLES_SOCLE)
+    script = "BEGIN READ ONLY ISOLATION LEVEL REPEATABLE READ;\n" + requetes + "COMMIT;\n"
+    try:
+        r = subprocess.run(commande_psql(port), input=script, capture_output=True, text=True, check=False, timeout=600)
+    except (OSError, subprocess.SubprocessError) as e:
+        raise ErreurAtelier(f"lecture du socle impossible (psql) : {e}. Export refusé, rien n'a été écrit") from None
+    if r.returncode != 0:
+        raise ErreurAtelier(f"psql a échoué (code {r.returncode}) : {r.stderr.strip()[:300]}. Mot de passe dans PGPASSWORD, bon --pg-port ? "
+                            "Export refusé, rien n'a été écrit")
+    lus: dict[str, dict] = {}
+    for ligne in r.stdout.splitlines():
+        if not ligne.startswith("{"):
+            continue
+        try:
+            o = json.loads(ligne)
+        except ValueError:
+            raise ErreurAtelier("réponse de psql illisible : export refusé, rien n'a été écrit") from None
+        if isinstance(o, dict) and o.get("table") in TABLES_SOCLE:
+            lus[o["table"]] = o
+    contenus: dict[str, bytes] = {}
+    comptes: dict[str, int] = {}
+    for t in TABLES_SOCLE:
+        o = lus.get(t)
+        if o is None or not isinstance(o.get("lignes"), list) or not isinstance(o.get("compte"), int):
+            raise ErreurAtelier(f"table {t} absente de la réponse de psql : export refusé, rien n'a été écrit")
+        if len(o["lignes"]) != o["compte"]:
+            raise ErreurAtelier(f"table {t} : {len(o['lignes'])} ligne(s) lues pour un compte de {o['compte']} : export refusé, rien n'a été écrit")
+        comptes[t] = o["compte"]
+        contenus[f"{DOSSIER_DONNEES_SOCLE}/{t}.json"] = (
+            json.dumps(o["lignes"], indent=2, ensure_ascii=False, sort_keys=True) + "\n").encode("utf-8")
+    return contenus, comptes
+
+
 def cmd_exporter(args) -> int:
     reg_agents, reg_orga = registres()
     api = Api(url_api())
@@ -2050,6 +2123,9 @@ def cmd_exporter(args) -> int:
         e = next((c for c in api.get("/companies") if c.get("id") == cible), None)
         if not e:
             raise ErreurAtelier(f"entreprise {cible} introuvable : rien n'est exporté")
+        if args.pg_port is None:
+            raise ErreurAtelier("--pg-port est obligatoire avec --entreprise (54329 pour l'instance 3100) : "
+                                "le journal, les approbations et les coûts du socle sont archivés avec l'export")
         sortie = (Path(args.sortie) if args.sortie
                   else INSTANCE / "exports" / cible / dt.datetime.now(dt.timezone.utc).strftime("%Y%m%d-%H%M%S")).resolve()
     else:
@@ -2088,6 +2164,7 @@ def cmd_exporter(args) -> int:
         return 1
     # Données du plugin (seulement avec --entreprise : l'export de l'organisation modèle n'en a pas besoin).
     donnees_plugin = exporter_donnees_plugin(api, e["id"]) if args.entreprise else {}
+    donnees_socle, comptes_socle = exporter_donnees_socle(args.pg_port, e["id"]) if args.entreprise else ({}, {})
     sortie.mkdir(parents=True, exist_ok=True)
     ecrits: dict[str, bytes] = {}
     for chemin, contenu in fichiers.items():
@@ -2098,7 +2175,7 @@ def cmd_exporter(args) -> int:
         octets = contenu.encode("utf-8") if isinstance(contenu, str) else base64.b64decode(contenu["data"])
         cible.write_bytes(octets)
         ecrits[chemin] = octets
-    for chemin, octets in donnees_plugin.items():
+    for chemin, octets in {**donnees_plugin, **donnees_socle}.items():
         cible = sortie / chemin
         cible.parent.mkdir(parents=True, exist_ok=True)
         cible.write_bytes(octets)
@@ -2107,7 +2184,10 @@ def cmd_exporter(args) -> int:
     if donnees_plugin:
         lignes_plugin = sum(len(json.loads(o)) for o in donnees_plugin.values())
         print(f"Données du plugin : {lignes_plugin} ligne(s) dans {len(donnees_plugin)} table(s), écrites dans {DOSSIER_DONNEES_PLUGIN}/ (colonnes chiffrées non déchiffrées)")
-    manifeste = ecrire_manifeste_export(sortie, e["id"], ecrits)
+    if donnees_socle:
+        print(f"Données du socle : {sum(comptes_socle.values())} ligne(s) ({', '.join(f'{t} {n}' for t, n in comptes_socle.items())}), "
+              f"écrites dans {DOSSIER_DONNEES_SOCLE}/ (lecture seule, comptes vérifiés)")
+    manifeste = ecrire_manifeste_export(sortie, e["id"], ecrits, comptes_socle)
     print(f"Manifeste de l'export : {FICHIER_MANIFESTE_EXPORT} (empreinte {manifeste['empreinte'][:16]}…)")
     # Aperçu d'import du paquet exporté (aucune écriture).
     textes = {k: v for k, v in fichiers.items() if isinstance(v, str)}
@@ -3294,11 +3374,16 @@ def consigne_minimale(svc: dict, agent: dict) -> str:
 
 def agents_service(reg_agents: dict, svc: dict) -> tuple[list[dict], dict[str, str], list[str]]:
     """Agents d'un service (hors marketing) au format du registre d'agents, leur corps de consigne (sans consignes communes) et les
-    avertissements. Le coordinateur (rôle ceo) ne rapporte à personne ; les autres lui rapportent."""
+    avertissements. Le coordinateur (rôle ceo) ne rapporte à personne ; les autres lui rapportent.
+    Direction (champ « coordinateurGeneral ») : le coordinateur général est le rôle ceo, seul interlocuteur de l'humain
+    (discussion de l'atelier, demandes du bureau de liaison adressées à la Direction) ; le coordinateur du service lui
+    rapporte et reste un coordinateur de département comme les autres (ses spécialistes lui rapportent)."""
     gabarits = {a["slug"]: a for a in reg_agents["agents"]}
     agents, corps_par_slug, avertissements = [], {}, []
+    general = svc.get("coordinateurGeneral")
     for slug in svc["agents"]:
-        coordinateur = slug == svc["coordinateur"]
+        est_general = slug == general
+        coordinateur = slug == svc["coordinateur"] or est_general
         a = json.loads(json.dumps(gabarits[GABARIT_COORDINATEUR if coordinateur else GABARIT_SPECIALISTE]))
         nom, titre = libelle_agent(slug), f"{svc['nom']} · {libelle_agent(slug)}"
         fichier = ORGA / "services" / svc["slug"] / "agents" / slug / "AGENTS.md"
@@ -3314,9 +3399,12 @@ def agents_service(reg_agents: dict, svc: dict) -> tuple[list[dict], dict[str, s
             corps = corps_brut.split(MARQUEUR_CONSIGNES_COMMUNES)[0].strip()
         a.update({
             "slug": slug, "nom": nom, "titre": titre,
-            "role": "ceo" if coordinateur else "general",
-            "rapporteA": None if coordinateur else svc["coordinateur"],
-            "mission": (f"Coordonne le service {svc['nom']} : répartit les demandes entre les spécialistes, contrôle les livrables "
+            "role": "ceo" if est_general or (coordinateur and not general) else "general",
+            "rapporteA": None if est_general or (coordinateur and not general) else (general if coordinateur else svc["coordinateur"]),
+            "mission": ("Coordinateur général : seul interlocuteur de l'humain, délègue aux coordinateurs de département par le "
+                        "bureau de liaison, consolide leurs réponses sans fusionner les validations et ne décide, ne publie, "
+                        "n'envoie ni ne dépense rien." if est_general
+                        else f"Coordonne le service {svc['nom']} : répartit les demandes entre les spécialistes, contrôle les livrables "
                         "et prépare le dossier de validation humaine." if coordinateur
                         else f"{titre} : traite les tâches que le coordinateur du service {svc['nom']} lui affecte."),
             "entrees": list(ENTREES_SERVICE), "sorties": list(SORTIES_SERVICE), "criteresReussite": list(CRITERES_SERVICE),
@@ -3803,6 +3891,205 @@ def cmd_nouveau_client(args) -> int:
 
 
 # ---------------------------------------------------------------------------
+# Mise à jour d'un client déjà créé : agents du registre manquants, services absents, agents hors registre
+# ---------------------------------------------------------------------------
+
+SUFFIXE_MARKETING_NOM = " · Marketing"
+STATUTS_AGENT_INACTIFS = ("paused", "terminated", "pending_approval")
+
+
+def fiche_depuis_registre_client(slug: str, registre: dict) -> dict:
+    """Fiche minimale d'un client DÉJÀ créé, tirée de son registre local (la fiche d'origine n'est pas conservée) : de quoi
+    réutiliser plan_service. Les offres et les bureaux ne servent pas ici : les objectifs, la description et le budget des
+    entreprises existantes sont repris de l'instance, jamais réécrits depuis cette fiche."""
+    nom_commercial = None
+    for service, e in registre["entreprises"].items():
+        nom = unicodedata.normalize("NFC", e.get("nom") or "")
+        if nom and (service == "marketing" or nom_commercial is None):
+            nom_commercial = nom[: -len(SUFFIXE_MARKETING_NOM)] if nom.endswith(SUFFIXE_MARKETING_NOM) else nom.split(" · ")[0]
+    if not nom_commercial:
+        raise ErreurAtelier(f"registre local du client {slug} : aucun nom d'entreprise, impossible de nommer les services à ajouter.")
+    return {"slug": slug, "nomCommercial": nom_commercial, "numeroBce": registre["numeroBce"], "mode": "reel",
+            "services": list(registre["entreprises"]), "budgets": {}, "budgetIaMensuelCentimes": 0, "offres": [], "bureaux": []}
+
+
+def reprendre_etat_existant(api: Api, plan: dict) -> None:
+    """Pour une entreprise existante : description, et pour le marketing objectifs (titre, description, niveau, statut), repris
+    tels que l'instance les porte, pour que la mise à jour n'en écrase rien."""
+    existante = plan["existante"]
+    if existante is None:
+        return
+    reg_s = plan["reg_s"]
+    if existante.get("description"):
+        reg_s["entreprise"]["description"] = existante["description"]
+    if plan["svc"]["slug"] != "marketing":
+        return
+    buts = api.get(f"/companies/{existante['id']}/goals")
+    for o in reg_s["objectifs"]:
+        g = next((g for g in buts if (g.get("title") or "").startswith(o["cle"] + " ")), None)
+        if g is None:
+            continue
+        prefixe = f"{o['cle']} · "
+        titre = g.get("title") or ""
+        o["titre"] = titre[len(prefixe):] if titre.startswith(prefixe) else titre
+        o["description"] = g.get("description") or o["description"]
+        o["niveau"], o["statut"] = g.get("level") or o["niveau"], g.get("status") or o["statut"]
+
+
+def fichiers_mise_a_jour(plan: dict) -> dict[str, str]:
+    """Paquet natif de l'entreprise d'un service (même construction que nouveau-client)."""
+    if plan["svc"]["slug"] == "marketing":
+        fichiers = fichiers_paquet()
+        fichiers["COMPANY.md"] = company_md_client(plan["reg_s"])
+        return fichiers
+    return fichiers_service(plan["reg_agents"], plan["reg_s"], plan["svc"], plan["corps"])
+
+
+def diagnostic_mise_a_jour(api: Api, plan: dict, mode: str) -> dict:
+    """Lecture seule : agents du registre à créer, agents hors registre, raisons de mise à jour des agents existants."""
+    slugs = [a["slug"] for a in plan["reg_agents"]["agents"]]
+    diag = {"creer": list(slugs), "hors_registre": [], "raisons": []}
+    if plan["existante"] is None:
+        return diag
+    cid = plan["existante"]["id"]
+    presents = agents_par_slug(api, cid)
+    diag["creer"] = [s for s in slugs if s not in presents]
+    diag["hors_registre"] = sorted((s, a["id"], a.get("status")) for s, a in presents.items() if s not in slugs and s != GARDIEN_SLUG)
+    secret = secret_jeton(api, cid)
+    jeton_id = secret["id"] if secret else None
+    fichiers = plan["fichiers"]
+    empreinte = hashlib.sha256((empreinte_paquet(fichiers) + ":" + mode).encode()).hexdigest()
+    if plan["svc"]["slug"] == "marketing":
+        raisons = etat_a_jour(api, cid, plan["reg_agents"], empreinte, jeton_id, mode)
+    else:
+        raisons = etat_service_a_jour(api, cid, plan["reg_agents"], fichiers, empreinte, jeton_id, mode)
+    diag["raisons"] = [r for r in raisons if not r.startswith("agent absent")]
+    return diag
+
+
+def agents_actifs(api: Api, company_id: str, slugs) -> dict[str, str]:
+    """Slug -> identifiant des agents du registre qui ne sont ni en pause, ni terminés, ni en attente d'approbation."""
+    voulus = set(slugs)
+    return {s: a["id"] for s, a in agents_par_slug(api, company_id).items()
+            if s in voulus and a.get("status") not in STATUTS_AGENT_INACTIFS}
+
+
+def remettre_agents_actifs(api: Api, company_id: str, avant: dict[str, str]) -> list[str]:
+    """L'import natif qui crée des agents remet en pause ceux qu'il met à jour : un agent que l'opérateur avait activé est rallumé
+    (POST /agents/<id>/resume), il retrouve l'état d'avant. Rend les slugs rallumés."""
+    apres = agents_par_slug(api, company_id)
+    rallumes = []
+    for slug, aid in sorted(avant.items()):
+        if (apres.get(slug) or {}).get("status") == "paused":
+            api.appel("POST", f"/agents/{aid}/resume")
+            rallumes.append(slug)
+    return rallumes
+
+
+def cmd_mettre_a_jour_client(args) -> int:
+    """Met à jour un client enregistré (registre local) sur le registre actuel : crée dans chaque entreprise de service (et
+    le marketing) les agents du registre manquants, en pause, avec les réglages de nouveau-client ; ajoute les services du
+    registre absents ; remet à jour consignes, compétences et liaisons des agents existants (import natif « replace » de
+    appliquer_service / appliquer_organisation) ; signale les agents hors registre et, avec --pause-hors-registre, les met en
+    pause. Rien n'est jamais supprimé. Idempotent."""
+    slug = args.client
+    registre = lire_registre_client(slug)
+    if registre is None:
+        raise ErreurAtelier(f"aucun registre local pour le client {slug} ({dossier_client(slug) / FICHIER_REGISTRE_CLIENT}) : "
+                            "créez-le avec nouveau-client (--enregistrer-existante ou --ajouter-services).")
+    if "marketing" not in registre["entreprises"]:
+        raise ErreurAtelier(f"le client {slug} n'a pas d'entreprise marketing dans son registre : utilisez nouveau-client.")
+    if registre.get("_ancienFormat"):
+        raise ErreurAtelier(f"le registre du client {slug} est à l'ancien format : migrez-le d'abord (nouveau-client --ajouter-services).")
+    reg_agents, reg_orga = registres()
+    fiche = fiche_depuis_registre_client(slug, registre)
+    actifs = [s for s in registre_services()["services"] if s.get("actif")]
+    absents = [] if args.sans_nouveaux_services else [s["slug"] for s in actifs if s["slug"] not in registre["entreprises"]]
+    services = [s for s in actifs if s["slug"] in registre["entreprises"] or s["slug"] in absents]
+    inconnus = sorted(set(registre["entreprises"]) - {s["slug"] for s in actifs})
+    api = Api(url_api())
+    plans = []
+    for svc in services:  # tous les contrôles d'identité passent avant la moindre écriture
+        plan = plan_service(api, reg_agents, reg_orga, fiche, svc, registre)
+        reprendre_etat_existant(api, plan)
+        plan["fichiers"] = fichiers_mise_a_jour(plan)
+        plan["diag"] = diagnostic_mise_a_jour(api, plan, fiche["mode"])
+        plans.append(plan)
+    total_creer = sum(len(p["diag"]["creer"]) for p in plans)
+    total_hors = sum(len(p["diag"]["hors_registre"]) for p in plans)
+    prefixe = "À blanc : rien n'est écrit. " if args.a_blanc else ""
+    print(f"{prefixe}Client « {fiche['nomCommercial']} » ({slug}) : {len(plans)} service(s), "
+          f"{total_creer} agent(s) à créer en pause, {total_hors} agent(s) hors registre.")
+    for s in inconnus:
+        print(f"  service du registre local absent du registre des services (ou inactif), laissé tel quel : {s}")
+    for plan in plans:
+        d, etiquette = plan["diag"], plan["svc"]["slug"]
+        if plan["existante"] is None:
+            print(f"  [{etiquette}] service à AJOUTER : entreprise « {plan['nom']} » créée avec {len(d['creer'])} agent(s) en pause")
+            continue
+        detail = f"{len(d['creer'])} à créer" + (f" ({', '.join(d['creer'])})" if d["creer"] else "")
+        print(f"  [{etiquette}] {plan['existante']['id']} : {detail} ; {len(d['raisons'])} écart(s) à réconcilier sur les agents existants ; "
+              f"{len(d['hors_registre'])} hors registre" + (f" ({', '.join(s for s, _, _ in d['hors_registre'])})" if d["hors_registre"] else ""))
+    if args.a_blanc:
+        encore_actifs = sum(1 for p in plans for _, _, st in p["diag"]["hors_registre"] if st != "paused")
+        if args.pause_hors_registre:
+            print(f"  --pause-hors-registre : {encore_actifs} agent(s) hors registre encore actif(s) seraient mis en pause (aucune suppression).")
+        elif total_hors:
+            print(f"  sans --pause-hors-registre, aucun agent hors registre n'est touché ({encore_actifs} encore actif(s) : décision humaine).")
+        return 0
+
+    if cmd_generer(argparse.Namespace(verifier=True)) != 0:
+        return 1
+    with verrou_ecriture("mettre-a-jour-client"):
+        for plan in plans:
+            svc, reg_s = plan["svc"], plan["reg_s"]
+            print(f"=== Service {svc['nom']} : « {plan['nom']} » ===")
+            if svc["slug"] == "marketing":
+                appliquer, dossier_etat = appliquer_organisation, INSTANCE / "atelier-client" / slug
+            else:
+                appliquer, dossier_etat = appliquer_service, INSTANCE / "atelier-client" / slug / "services" / svc["slug"]
+            avant = agents_actifs(api, plan["existante"]["id"], [a["slug"] for a in plan["reg_agents"]["agents"]]) if plan["existante"] else {}
+            try:
+                cid = appliquer(api, plan["reg_agents"], reg_s, plan["fichiers"], fiche["mode"], dossier_etat)
+            except (ErreurAtelier, OSError):
+                if plan["existante"] is None:
+                    try:
+                        creee = trouver_entreprise(api, reg_s)
+                        if creee:
+                            noter_entreprise_registre(slug, fiche["numeroBce"], lire_registre_client(slug), svc["slug"],
+                                                      {"entrepriseId": creee["id"], "nom": plan["nom"], "marqueur": plan["marqueur"]})
+                    except (ErreurAtelier, OSError):
+                        pass
+                raise
+            registre = noter_entreprise_registre(slug, fiche["numeroBce"], registre, svc["slug"],
+                                                 {"entrepriseId": cid, "nom": plan["nom"], "marqueur": plan["marqueur"]})
+            plan["cid"] = cid
+            for rallume in remettre_agents_actifs(api, cid, avant):
+                print(f"  agent déjà actif avant la mise à jour, rallumé : {rallume}")
+            if plan["existante"] is None:  # budget posé à la création seulement : celui d'une entreprise existante n'est pas touché
+                api.appel("PATCH", f"/companies/{cid}/budgets", {"budgetMonthlyCents": plan["budget"]})
+                print(f"Budget IA mensuel posé : {plan['budget']} centimes")
+        mis_en_pause, restes = 0, []
+        for plan in plans:
+            slugs = {a["slug"] for a in plan["reg_agents"]["agents"]}
+            for s, a in sorted(agents_par_slug(api, plan["cid"]).items()):
+                if s in slugs or s == GARDIEN_SLUG or a.get("status") == "paused":
+                    continue
+                if args.pause_hors_registre:
+                    api.appel("POST", f"/agents/{a['id']}/pause")
+                    mis_en_pause += 1
+                    print(f"  agent hors registre mis en pause (rien n'est supprimé) : [{plan['svc']['slug']}] {s}")
+                else:
+                    restes.append(f"[{plan['svc']['slug']}] {s} (statut {a.get('status')})")
+        for r in restes:
+            print(f"  agent hors registre, encore actif (décision humaine, --pause-hors-registre pour le mettre en pause) : {r}")
+        configurer_plugin_client(api, slug)
+    print(f"Client « {fiche['nomCommercial']} » à jour : {len(plans)} entreprise(s), {mis_en_pause} agent(s) hors registre mis en pause, "
+          f"{len(restes)} laissé(s) actif(s).")
+    return 0
+
+
+# ---------------------------------------------------------------------------
 # Purge : fin de contrat et droit à l'effacement (RGPD)
 # ---------------------------------------------------------------------------
 
@@ -3814,8 +4101,9 @@ AVERTISSEMENT_SAUVEGARDES = (
     "les ferait revenir : la purge doit alors être rejouée."
 )
 LIMITE_EXPORT = (
-    "L'export contient le paquet de l'organisation (agents, projets, tâches, compétences) et, dans donnees-plugin/, "
-    "les données du plugin (prospects, clients, connaissances, journal) ; leurs colonnes chiffrées y restent chiffrées "
+    "L'export contient le paquet de l'organisation (agents, projets, tâches, compétences), dans donnees-socle/ le journal "
+    "d'activité, les approbations et les coûts du socle, et, dans donnees-plugin/, "
+    "les données du plugin (prospects, clients, connaissances, journal, oppositions, bases légales) ; leurs colonnes chiffrées y restent chiffrées "
     "(la clé de chiffrement n'est pas dans l'export : à conserver à part si le client doit pouvoir les relire)."
 )
 
@@ -3918,6 +4206,36 @@ def verifier_donnees_plugin_export(export: Path, manifeste: dict, comptes: dict)
             + f"). Relancez : python3 -I scripts/bootstrap-organisation.py exporter --entreprise {manifeste.get('entrepriseId')} ; rien n'a été supprimé.")
 
 
+def verifier_donnees_socle_export(export: Path, manifeste: dict) -> None:
+    """L'export doit contenir donnees-socle/<table>.json (déjà contrôlé par empreinte au manifeste) pour activity_log,
+    approvals et cost_events, avec exactement le nombre de lignes compté à l'export (manifeste.comptesSocle) ; sinon
+    ErreurAtelier (rien supprimé)."""
+    refus = []
+    fichiers = manifeste.get("fichiers") or {}
+    comptes = manifeste.get("comptesSocle")
+    comptes = comptes if isinstance(comptes, dict) else {}
+    for table in TABLES_SOCLE:
+        chemin = f"{DOSSIER_DONNEES_SOCLE}/{table}.json"
+        if chemin not in fichiers:
+            refus.append(f"{chemin} absent de l'export")
+            continue
+        if not isinstance(comptes.get(table), int):
+            refus.append(f"{table} : compte absent du manifeste")
+            continue
+        try:
+            lues = len(json.loads((export / chemin).read_text(encoding="utf-8")))
+        except (ValueError, OSError, TypeError):
+            refus.append(f"{chemin} illisible")
+            continue
+        if lues != comptes[table]:
+            refus.append(f"{table} : {lues} ligne(s) dans le fichier pour {comptes[table]} comptée(s) à l'export")
+    if refus:
+        raise ErreurAtelier(
+            "purge refusée : l'export ne contient pas le journal, les approbations et les coûts du socle, complets (" + "; ".join(refus)
+            + f"). Relancez : python3 -I scripts/bootstrap-organisation.py exporter --entreprise {manifeste.get('entrepriseId')} --pg-port <port> ; "
+            "rien n'a été supprimé.")
+
+
 def appel_purge_plugin(api: Api, company_id: str, a_blanc: bool) -> dict:
     corps = {"companyId": company_id, "aBlanc": True} if a_blanc else {"companyId": company_id, "confirmer": True}
     return api.appel("POST", f"/plugins/{PLUGIN_CLE}/api/donnees/purge", corps) or {}
@@ -3984,6 +4302,7 @@ def cmd_purger(args) -> int:
         export, manifeste = trouver_export_recent(c_id, args.export if c_id == cid else None)
         comptes_avant = (appel_purge_plugin(api, c_id, True)).get("tables") or {}
         verifier_donnees_plugin_export(export, manifeste, comptes_avant)
+        verifier_donnees_socle_export(export, manifeste)
         print(f"Export récent trouvé : {export.name} (empreinte {manifeste['empreinte'][:16]}…), données du plugin complètes")
         pretes.append((c_id, soc, export, manifeste, dossiers_locaux_client(c_id, avec_etat=rang == len(cibles) - 1)))
     code = 0
@@ -4007,6 +4326,7 @@ def apercu_purge(api: Api, cid: str, societe: dict, export_explicite: str | None
     try:
         export, manifeste_ab = trouver_export_recent(cid, export_explicite)
         verifier_donnees_plugin_export(export, manifeste_ab, comptes)
+        verifier_donnees_socle_export(export, manifeste_ab)
         print(f"Export récent : {export.name} (complet, données du plugin comprises : la purge réelle est autorisée)")
     except ErreurAtelier as e:
         print(f"Export récent : ABSENT ou INCOMPLET, la purge réelle serait refusée ({e})")
@@ -4096,11 +4416,20 @@ def main(argv=None) -> int:
     nc.add_argument("--ajouter-services", action="store_true", dest="ajouter_services",
                     help="dote une entreprise EXISTANTE (avec --entreprise) de tous les services de la fiche : elle devient le service marketing du client")
     nc.add_argument("--slug", default=None, help="identifiant du client à la place de celui tiré du nom (avec --ajouter-services)")
+    mc = sp.add_parser("mettre-a-jour-client")
+    mc.add_argument("--client", required=True, help="identifiant (slug) du client enregistré sous instance/atelier-client/<slug>/")
+    mc.add_argument("--a-blanc", "--a_blanc", action="store_true", dest="a_blanc", help="liste les écritures prévues sans rien écrire")
+    mc.add_argument("--pause-hors-registre", action="store_true", dest="pause_hors_registre",
+                    help="met en pause (jamais de suppression) les agents hors registre ; décision humaine")
+    mc.add_argument("--sans-nouveaux-services", action="store_true", dest="sans_nouveaux_services",
+                    help="n'ajoute pas les services du registre absents chez ce client")
     ac = sp.add_parser("assurer-connexions")
     ac.add_argument("--detail", action="store_true", help="affiche aussi le détail quand rien n'a été écrit")
     x = sp.add_parser("exporter")
     x.add_argument("--sortie", default=None, help="dossier de sortie (vide ou absent) ; obligatoire sans --entreprise")
     x.add_argument("--entreprise", default=None, help="UUID de l'entreprise à exporter (défaut : l'organisation modèle)")
+    x.add_argument("--pg-port", type=int, default=None, dest="pg_port",
+                   help="avec --entreprise : port PostgreSQL de l'instance (54329 pour 3100) ; mot de passe dans PGPASSWORD")
     pg = sp.add_parser("purger")
     pg.add_argument("--entreprise", required=True, help="UUID de l'entreprise dont toutes les données seront supprimées")
     pg.add_argument("--confirmer", action="store_true", help="obligatoire : la suppression est irréversible")
@@ -4130,6 +4459,7 @@ def main(argv=None) -> int:
         "appliquer": cmd_appliquer,
         "etat": cmd_etat,
         "nouveau-client": cmd_nouveau_client,
+        "mettre-a-jour-client": cmd_mettre_a_jour_client,
         "assurer-connexions": cmd_assurer_connexions,
         "exporter": cmd_exporter,
         "purger": cmd_purger,

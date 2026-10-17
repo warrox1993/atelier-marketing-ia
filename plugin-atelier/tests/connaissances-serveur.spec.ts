@@ -15,6 +15,9 @@ import { requeteDetails, requeteIdsFiltres, requeteMotsCles } from "../src/serve
 import type { Vectoriseur } from "../src/serveur/connaissances/vectorisation.js";
 import { creerServices } from "../src/serveur/services.js";
 import { ISSUE, PORTE_AGENT, SOC, creerBanc } from "./outils-base.js";
+import { createHash } from "node:crypto";
+import { pseudonymiser } from "../src/serveur/regles-connaissances.js";
+import { avecClesDonnees, CLES_TEST, REFS_CLES } from "./outils-cles-donnees.js";
 
 const SOC2 = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
 const AGENT = PORTE_AGENT;
@@ -122,13 +125,19 @@ function stockMemoire() {
   return { stock, t };
 }
 
-function banc(o: { sourcesWeb?: string[]; vectoriseur?: (companyId: string) => Promise<Vectoriseur> } = {}) {
-  const b = creerBanc({ modeEntreprise: "demonstration" });
+/**
+ * `sansCles` : aucune référence de secret des données dans la configuration ; `config` remplace les
+ * références (clés absentes ou illisibles). Par défaut, la clé des pseudonymes est servie par le coffre de
+ * test (`outils-cles-donnees.ts`) : le serveur n'a plus aucune clé de repli.
+ */
+function banc(o: { sourcesWeb?: string[]; vectoriseur?: (companyId: string) => Promise<Vectoriseur>; sansCles?: boolean; config?: Record<string, unknown>; modeEntreprise?: "demonstration" | "reel" } = {}) {
+  const b = creerBanc({ modeEntreprise: o.modeEntreprise ?? "demonstration", config: { ...(o.sansCles ? {} : REFS_CLES), ...o.config } });
+  if (!o.sansCles) avecClesDonnees(b.ctx);
   const k = stockMemoire();
   const base = new Proxy(b.base as unknown as Ligne, {
     get: (cible, cle) =>
       cle === "lireReglages"
-        ? async () => ({ modeParDefaut: "demonstration", maxRunsActifs: 3, maxCyclesCorrection: 3, retentionJours: 365, plafondPub: null })
+        ? async () => ({ modeParDefaut: o.modeEntreprise ?? "demonstration", maxRunsActifs: 3, maxCyclesCorrection: 3, retentionJours: 365, plafondPub: null })
         : cle === "sourcesPourGarde" && o.sourcesWeb
           ? async () => o.sourcesWeb!.map((url, i) => ({ id: `s${i}`, mode: "reel", provenance: "web", url, service: null, outil: null, chiffres: [] }))
           : cible[cle as string],
@@ -219,6 +228,53 @@ describe("connaissances.importer puis tache.connaissances.rechercher", () => {
     const textes = f.k.t.passages.map((p) => p.texte).join("\n");
     expect(textes).not.toContain("jean.dupont@exemple.invalid");
     expect(textes).toMatch(/\[client-[0-9a-f]+\]/u);
+  });
+
+  /* Clé des pseudonymes : coffre seulement, jamais dérivée (même défaut que la faille E1). */
+  const RECLAMATION = "# Réclamation\n\nLe client (marie.dupont@example.be) conteste le remboursement.";
+
+  it("pseudonymes calculés avec la clé du coffre, jamais avec l'ancienne clé dérivée de l'entreprise", async () => {
+    const f = banc();
+    const r = await f.importer({ texte: RECLAMATION, titre: "Réclamation septembre", type: "reclamation" });
+    expect(r.status).toBe(201);
+    const textes = f.k.t.passages.map((p) => p.texte).join("\n");
+    const avecCoffre = pseudonymiser("marie.dupont@example.be", { cle: CLES_TEST.hmac.toString("hex") }).texte;
+    const ancienneCle = createHash("sha256").update(`atelier-demonstration-pseudonymes:${SOC.toLowerCase()}`).digest("hex");
+    const avecAncienne = pseudonymiser("marie.dupont@example.be", { cle: ancienneCle }).texte;
+    expect(avecCoffre).not.toBe(avecAncienne);
+    expect(textes).toContain(avecCoffre);
+    expect(textes).not.toContain(avecAncienne);
+    expect(textes).not.toContain("marie.dupont@example.be");
+  });
+
+  for (const modeEntreprise of ["demonstration", "reel"] as const) {
+    it(`sans secret « donneesCleHmac » (mode ${modeEntreprise}) : 403 acces_refuse, rien n'est enregistré`, async () => {
+      const f = banc({ sansCles: true, modeEntreprise });
+      const r = await f.importer({ texte: RECLAMATION, titre: "Réclamation septembre", type: "reclamation" });
+      expect(r.status).toBe(403);
+      expect(r.body.code).toBe("acces_refuse");
+      expect(String(r.body.erreur)).toMatch(/donneesCleHmac/u);
+      expect(f.k.t.docs).toHaveLength(0);
+      expect(f.k.t.versions).toHaveLength(0);
+      expect(f.k.t.passages).toHaveLength(0);
+    });
+  }
+
+  it("secret illisible, trop court ou référence invalide : refus, aucune clé de repli", async () => {
+    const illisible = banc({ sansCles: true, config: { donneesCleHmac: { type: "secret_ref", secretId: "x" } } });
+    expect((await illisible.importer({ texte: RECLAMATION, type: "reclamation" })).status).toBe(403);
+    const court = banc({ sansCles: true, config: { donneesCleHmac: { type: "secret_ref", secretId: "x" } } });
+    (court.ctx as unknown as Ligne).secrets = { resolve: async () => "trop-court" };
+    expect((await court.importer({ texte: RECLAMATION, type: "reclamation" })).status).toBe(403);
+    const brut = banc({ sansCles: true, config: { donneesCleHmac: "une-valeur-en-clair-non-acceptee" } });
+    expect((await brut.importer({ texte: RECLAMATION, type: "reclamation" })).status).toBe(403);
+    for (const f of [illisible, court, brut]) expect(f.k.t.passages).toHaveLength(0);
+  });
+
+  it("sans secret, un document non pseudonymisé s'importe toujours", async () => {
+    const f = banc({ sansCles: true });
+    expect((await f.importer({ texte: TARIF })).status).toBe(201);
+    expect((await f.importer({ texte: RECLAMATION, type: "reclamation", pseudonymiser: false })).status).toBe(201);
   });
 
   it("question sans réponse : « aucune source », aucune source de tâche créée", async () => {

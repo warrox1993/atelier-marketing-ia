@@ -1,0 +1,31 @@
+type;date;piece;tiers;pays;nature;base_ht;taux_applique_pct;tva
+V;01/07/2026;FV-700;Client 01;BE;Manuel de formation (papier);1 200,00;6;72,00
+V;06/07/2026;FV-701;Client 02;BE;Prestation de conseil;860,00;21;180,60
+V;11/07/2026;FV-702;Client 03;BE;Prestation de conseil;2 420,00;21;508,20
+V;16/07/2026;FV-703;Client 04;BE;Prestation de conseil;670,00;21;140,70
+V;21/07/2026;FV-704;Client 05;BE;Prestation de conseil;2 020,00;21;424,20
+V;18/08/2026;FV-705;Client 06;BE;Manuel de formation (papier);2 500,00;21;525,00
+V;03/08/2026;FV-706;Client 07;BE;Prestation de conseil;780,00;21;163,80
+V;08/08/2026;FV-707;Client 08;BE;Prestation de conseil;1 570,00;21;329,70
+V;13/08/2026;FV-708;Client 09;BE;Prestation de conseil;1 280,00;21;268,80
+V;18/08/2026;FV-709;Client 10;BE;Prestation de conseil;940,00;21;197,40
+V;23/08/2026;FV-710;Client 11;BE;Manuel de formation (papier);2 500,00;6;150,00
+V;28/08/2026;FV-711;Client 12;BE;Prestation de conseil;750,00;21;157,50
+V;05/09/2026;FV-712;Client 13;BE;Prestation de conseil;2 100,00;21;441,00
+V;10/09/2026;FV-713;Client 14;BE;Prestation de conseil;3 230,00;21;678,30
+V;15/09/2026;FV-714;Client 15;BE;Prestation de conseil;860,00;21;180,60
+V;20/09/2026;FV-715;Client 16;BE;Manuel de formation (papier);1 650,00;6;99,00
+A;01/07/2026;FA-900;Fournisseur 01;BE;achat courant;320,00;21;67,20
+A;08/07/2026;FA-901;Fournisseur 02;BE;achat courant;1 450,00;21;304,50
+A;15/07/2026;FA-902;Fournisseur 03;BE;achat courant;780,00;21;163,80
+A;22/07/2026;FA-903;Fournisseur 04;BE;achat courant;2 100,00;21;441,00
+A;01/07/2026;FA-904;Fournisseur 05;BE;achat courant;560,00;21;117,60
+A;08/08/2026;FA-905;Fournisseur 06;BE;achat courant;940,00;21;197,40
+A;15/08/2026;FA-906;Fournisseur 07;BE;achat courant;1 180,00;21;247,80
+A;22/08/2026;FA-907;Fournisseur 08;BE;achat courant;410,00;21;86,10
+A;01/08/2026;FA-908;Fournisseur 09;BE;achat courant;1 690,00;21;354,90
+A;08/08/2026;FA-909;Fournisseur 10;BE;achat courant;270,00;21;56,70
+A;15/09/2026;FA-910;Fournisseur 11;BE;achat courant;880,00;21;184,80
+A;22/09/2026;FA-911;Fournisseur 12;BE;achat courant;1 320,00;21;277,20
+A;01/09/2026;FA-912;Fournisseur 13;BE;achat courant;640,00;21;134,40
+A;20/09/2026;FA-913;Beratung Weiss GmbH;DE;service de conseil reçu;4 800,00;0;0,00

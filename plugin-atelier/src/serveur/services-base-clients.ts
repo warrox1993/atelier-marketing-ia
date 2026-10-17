@@ -50,7 +50,7 @@ type Campagne = { id: string; mode: "demonstration" | "reel"; canaux: string[]; 
 
 /** Fonctions internes de `routesProspection` partagées avec ces routes. */
 export interface OutilsProspection {
-  clesDonnees(companyId: string, reel: boolean): Promise<ClesDonnees>;
+  clesDonnees(companyId: string): Promise<ClesDonnees>;
   relire(companyId: string, id: string): Promise<Prospect>;
   assemblerLignes(companyId: string, lignes: Awaited<ReturnType<BaseAtelier["listerProspects"]>>["lignes"]): Promise<Prospect[]>;
   contexteExclusions(companyId: string, campagne: Campagne | null, modeCampagne: ModeExecution, prospects: readonly Prospect[], date: string): Promise<{ contexte: ContexteProspection }>;
@@ -66,6 +66,17 @@ function analyser<T>(schema: Schema<T>, valeur: unknown, quoi: string): T {
 
 function exigerHumain(acteur: ActeurHote, quoi: string) {
   if (acteur.type !== "humain") erreur("elevation_refusee", `${quoi} est réservé à un humain.`);
+}
+
+/**
+ * RGPD : des oppositions chiffrées avec l'ancienne clé devinable (marquées `cle_a_reimporter`) ne sont plus lisibles.
+ * Tant qu'il en reste, aucune personne ne peut être déclarée contactable : tout export pour un canal de contact est refusé.
+ */
+export async function exigerOppositionsLisibles(base: BaseAtelier, companyId: string): Promise<void> {
+  const { oppositions } = await base.compterAReimporter(companyId);
+  if (oppositions > 0) {
+    erreur("conflit", `Export refusé : ${oppositions} opposition${oppositions > 1 ? "s" : ""} à réimporter. Des oppositions doivent être recueillies à nouveau avant tout export.`, { oppositionsAReimporter: oppositions });
+  }
 }
 
 function memeEntreprise(corps: { companyId: string }, companyId: string) {
@@ -93,8 +104,8 @@ function ligneCsv(valeurs: readonly string[]): string {
  * Score de DÉMONSTRATION d'une opportunité de l'historique quand il n'a pas de colonne `score` : le
  * générateur de démonstration ne fournit que le canal d'origine. Barème fixe, jamais ajusté sur les issues.
  *
- * Il est sur la MÊME échelle que le score des particuliers (critères B2C de `criteresDuProspect`, poids de
- * démonstration de `scripts/demo/peupler-prospects.py`) : origine consentie 25 + consentement actif 10 +
+ * Il est sur la MÊME échelle que le score des particuliers (critères B2C de `criteresDuProspect`, poids
+ * d'étalonnage du barème `SCORE_DEMO_CANAL`) : origine consentie 25 + consentement actif 10 +
  * produit demandé 5 + zone desservie 10 = 50 pour un devis en ligne (`devis_en_ligne`), + contact direct 10
  * = 60 pour un rendez-vous ou une visite (`bureau`) ; hors zone, 40 (`appel_sortant`). Sans cette
  * correspondance, l'étalonnage tiré de l'historique ne s'appliquerait à aucun prospect (tranches non observées).
@@ -275,7 +286,7 @@ export function routesBaseClients(d: DependancesProspection, o: OutilsProspectio
       const entree = analyser(ImporterBaseClientsEntree, r.corps, "Import de base de clients");
       memeEntreprise(entree, r.companyId);
       const effectif = await d.modeEffectif(r.companyId, null);
-      const cles = await o.clesDonnees(r.companyId, effectif.mode === "reel");
+      const cles = await o.clesDonnees(r.companyId);
       const res = preparerImportBaseClients(
         {
           nomFichier: entree.nomFichier, format: entree.format, contenu: Buffer.from(entree.contenuBase64, "base64"), correspondance: entree.correspondance,
@@ -304,7 +315,7 @@ export function routesBaseClients(d: DependancesProspection, o: OutilsProspectio
     const i = e.dernierImport;
     return {
       corps: {
-        existe: i !== null, clients: e.clients, actifs: e.actifs, importId: i?.id ?? null, nomFichier: i?.nomFichier ?? null, format: i?.format ?? null, importeLe: i?.importeLe ?? null,
+        existe: i !== null, clients: e.clients, actifs: e.actifs, aReimporter: e.aReimporter ?? 0, importId: i?.id ?? null, nomFichier: i?.nomFichier ?? null, format: i?.format ?? null, importeLe: i?.importeLe ?? null,
         importePar: i?.importePar ?? null, purgeLe: i?.purgeLe ?? null, finalite: i?.finalite ?? null, dureeConservationMois: i?.dureeConservationMois ?? null, mode: i?.mode ?? null,
         aPurger: i ? aPurger({ importeLe: i.importeLe, dureeConservationMois: i.dureeConservationMois }, maintenant().toISOString()) : false,
       },
@@ -325,6 +336,7 @@ export function routesBaseClients(d: DependancesProspection, o: OutilsProspectio
 
   routes["ventes-croisees.lister"] = async (r) => {
     exigerHumain(r.acteur, "La lecture des ventes croisées");
+    await exigerOppositionsLisibles(base, r.companyId);
     const mode = (await d.modeEffectif(r.companyId, null)).mode;
     const enregistrees = await base.reglesVentesCroisees(r.companyId);
     const origineRegles: "client" | "demonstration" | "aucune" = enregistrees.length > 0 ? "client" : mode === "demonstration" ? "demonstration" : "aucune";
@@ -427,6 +439,7 @@ export function routesBaseClients(d: DependancesProspection, o: OutilsProspectio
         if (deja.issueId !== issue.id) erreur("conflit", "Clé d'idempotence déjà utilisée pour une autre tâche.");
         return { statut: deja.etat === "refusee" ? 403 : 200, corps: { etat: deja.etat, export: ExportCrm.parse(deja), verifications: deja.verifications, appel: null, diffusion: null, rejoue: true } };
       }
+      await exigerOppositionsLisibles(base, r.companyId);
       const campagne = await d.campagneDeTache(r.companyId, issue);
       const effectif = await d.modeEffectif(r.companyId, campagne);
       const date = maintenant().toISOString();
@@ -531,6 +544,7 @@ export function routesBaseClients(d: DependancesProspection, o: OutilsProspectio
     exigerHumain(r.acteur, "L'export d'un fichier de prospects");
     const entree = analyser(ExporterFichierProspectsEntree, r.corps, "Export fichier de prospects");
     memeEntreprise(entree, r.companyId);
+    await exigerOppositionsLisibles(base, r.companyId);
     const effectif = await d.modeEffectif(r.companyId, null);
     const date = maintenant().toISOString();
     const prospects: Prospect[] = [];
@@ -559,7 +573,7 @@ export function routesBaseClients(d: DependancesProspection, o: OutilsProspectio
       if (motif === null) retenus.push(p);
       else refuses.push({ prospectId: p.id, denomination: p.denomination, motif });
     }
-    const cles = await o.clesDonnees(r.companyId, effectif.mode === "reel" || retenus.some((p) => p.mode === "reel"));
+    const cles = await o.clesDonnees(r.companyId);
     const clair = (v: string | null | undefined) => {
       if (!v) return "";
       try {

@@ -1,0 +1,41 @@
+id;nom;commune;telephone;source_du_contact;date_de_collecte;drapeau_liste_robinson
+P-001;Hugo Delvaux;Verviers;04XX 01 45 (fictif);ancien client;07/01/2025;
+P-002;Océane Gilson;Seraing;04XX 02 56 (fictif);salon de l'habitat 2025;23/10/2025;
+P-003;Bruno Jacquemin;Huy;04XX 03 43 (fictif);formulaire de devis;20/02/2024;
+P-004;Inès Colin;Herstal;04XX 04 52 (fictif);parrainage;12/05/2024;
+P-005;Paul Fontaine;Huy;04XX 05 72 (fictif);concours en ligne 2025;05/04/2025;
+P-006;Chloé Istace;Huy;04XX 06 57 (fictif);ancien client;05/04/2025;
+P-007;Jules Bertrand;Seraing;04XX 07 33 (fictif);salon de l'habitat 2025;12/10/2025;inscrit Ne m'appelez plus
+P-008;Quentin Evrard;Liège;04XX 08 15 (fictif);formulaire de devis;24/01/2024;
+P-009;David Henrard;Verviers;04XX 09 93 (fictif);parrainage;17/12/2024;
+P-010;Karine Aubry;Seraing;04XX 10 88 (fictif);concours en ligne 2025;19/09/2024;
+P-011;Rita Delvaux;Herstal;04XX 11 33 (fictif);ancien client;02/09/2025;
+P-012;Emma Gilson;Herstal;04XX 12 71 (fictif);;;
+P-013;Louis Jacquemin;Liège;04XX 13 46 (fictif);formulaire de devis;09/03/2024;
+P-014;Samuel Colin;Liège;04XX 14 10 (fictif);parrainage;09/07/2025;
+P-015;Félix Fontaine;Verviers;04XX 15 31 (fictif);concours en ligne 2025;01/05/2024;
+P-016;Manon Istace;Verviers;04XX 16 15 (fictif);ancien client;17/10/2024;
+P-017;Tania Bertrand;Liège;04XX 17 86 (fictif);salon de l'habitat 2025;15/01/2024;
+P-018;Gaëlle Evrard;Seraing;04XX 18 72 (fictif);formulaire de devis;16/07/2024;
+P-019;Nicolas Henrard;Liège;04XX 19 74 (fictif);parrainage;27/05/2024;inscrit Ne m'appelez plus
+P-020;Alice Aubry;Liège;04XX 20 10 (fictif);concours en ligne 2025;21/10/2024;
+P-021;Hugo Delvaux;Liège;04XX 21 57 (fictif);ancien client;26/09/2025;
+P-022;Océane Gilson;Verviers;04XX 22 45 (fictif);salon de l'habitat 2025;02/12/2025;
+P-023;Bruno Jacquemin;Huy;04XX 23 71 (fictif);formulaire de devis;21/11/2024;
+P-024;Inès Colin;Liège;04XX 24 66 (fictif);parrainage;14/08/2024;
+P-025;Paul Fontaine;Huy;04XX 25 41 (fictif);concours en ligne 2025;08/05/2024;
+P-026;Chloé Istace;Huy;04XX 26 27 (fictif);;;
+P-027;Jules Bertrand;Verviers;04XX 27 49 (fictif);salon de l'habitat 2025;27/01/2025;
+P-028;Quentin Evrard;Herstal;04XX 28 86 (fictif);formulaire de devis;22/09/2025;
+P-029;David Henrard;Liège;04XX 29 62 (fictif);parrainage;23/07/2025;
+P-030;Karine Aubry;Verviers;04XX 30 54 (fictif);concours en ligne 2025;06/07/2024;
+P-031;Rita Delvaux;Seraing;04XX 31 57 (fictif);ancien client;24/07/2024;
+P-032;Emma Gilson;Herstal;04XX 32 19 (fictif);salon de l'habitat 2025;12/04/2024;
+P-033;Louis Jacquemin;Liège;04XX 33 26 (fictif);formulaire de devis;22/02/2025;inscrit Ne m'appelez plus
+P-034;Samuel Colin;Herstal;04XX 34 76 (fictif);parrainage;15/11/2024;
+P-035;Félix Fontaine;Huy;04XX 35 60 (fictif);concours en ligne 2025;20/07/2024;
+P-036;Manon Istace;Verviers;04XX 36 61 (fictif);ancien client;05/07/2024;
+P-037;Tania Bertrand;Huy;04XX 37 55 (fictif);salon de l'habitat 2025;04/04/2024;
+P-038;Gaëlle Evrard;Seraing;04XX 38 11 (fictif);formulaire de devis;04/02/2024;
+P-039;Nicolas Henrard;Liège;04XX 39 12 (fictif);parrainage;04/08/2025;
+P-040;Alice Aubry;Liège;04XX 40 84 (fictif);concours en ligne 2025;02/02/2025;

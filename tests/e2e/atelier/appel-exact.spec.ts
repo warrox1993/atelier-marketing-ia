@@ -21,9 +21,14 @@ interface Cible {
 
 async function entreprisesNommees(request: APIRequestContext, nom: string): Promise<Cible[]> {
   const brut = (await (await request.get("/api/companies")).json()) as unknown;
-  const liste = (Array.isArray(brut) ? brut : ((brut as { items?: unknown[] }).items ?? [])) as Array<{ id: string; name: string; issuePrefix: string }>;
-  // Un nouveau passage du script ajoute une entreprise du même nom : on les essaie toutes (celles déjà consommées sont ignorées).
-  return liste.filter((x) => x.name === nom).map((x) => ({ id: x.id, prefixe: x.issuePrefix }));
+  const liste = (Array.isArray(brut) ? brut : ((brut as { items?: unknown[] }).items ?? [])) as Array<{ id: string; name: string; issuePrefix: string; createdAt: string }>;
+  // Un nouveau passage du script ajoute une entreprise du même nom : on les essaie toutes (celles déjà consommées sont ignorées),
+  // la PLUS RÉCENTE d'abord : une préparation antérieure ratée (tâche prête sans appel proposé) ne doit pas passer avant
+  // celle que preparer.sh vient de faire (constaté le 17/10/2026).
+  return liste
+    .filter((x) => x.name === nom)
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+    .map((x) => ({ id: x.id, prefixe: x.issuePrefix }));
 }
 
 async function donnees<T>(request: APIRequestContext, cle: string, companyId: string, params: Record<string, unknown> = {}): Promise<T> {

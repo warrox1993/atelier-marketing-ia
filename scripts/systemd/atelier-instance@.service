@@ -10,9 +10,9 @@ StartLimitIntervalSec=0
 Environment=PATH=%h/.local/bin:/usr/local/bin:/usr/bin:/bin
 Type=simple
 # Variables de l'instance (ports, URL de la passerelle), sans aucun secret :
-#   ATELIER_PORT=3580
-#   ATELIER_PORT_DB=54339
-#   ATELIER_PASSERELLE_URL=http://127.0.0.1:3581
+#   ATELIER_PORT=3590          (exemple d'une instance d'essai ; l'instance « atelier » prend ses ports dans config/atelier.env)
+#   ATELIER_PORT_DB=54790
+#   ATELIER_PASSERELLE_URL=http://127.0.0.1:<port de la passerelle>
 # Les secrets restent dans config/atelier.env et les fichiers de l'instance, jamais ici.
 EnvironmentFile=%h/.config/atelier/%i.env
 WorkingDirectory=%h/Projets/atelier-marketing-ia

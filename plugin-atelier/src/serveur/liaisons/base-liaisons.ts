@@ -30,13 +30,35 @@ export interface LiaisonStockee extends LiaisonEnregistree {
   facteurEssais?: number;
   /** Date du commentaire de réponse posé sur la tâche d'origine (null tant que la source n'est pas notifiée). */
   sourceNotifieeLe?: string | null;
+  /**
+   * Migration 017 : services traversés par la chaîne de liaisons, du premier demandeur au service visé inclus,
+   * dérivée de la tâche d'origine ET de ses ancêtres.
+   */
+  chaine: string[];
+  /** Nombre de relais de la chaîne (1 pour une demande directe), au plus `LIMITES_LIAISON.relaisMax`. */
+  profondeur: number;
+  /** La liaison a exigé l'approbation humaine (flux sensible ou tâche d'origine teintée). */
+  approbationRequise: boolean;
+  /** La réponse recopiée sur la tâche d'origine vient d'une liaison approuvée : cette tâche est teintée. */
+  teinteRetour?: boolean;
+}
+
+/** Liaison reçue par une tâche (ou un de ses ancêtres) : ce qu'il faut pour prolonger sa chaîne. */
+export interface LiaisonEntrante {
+  chaine: string[];
+  profondeur: number;
+  approbationRequise: boolean;
 }
 
 export interface StockLiaisons {
   /** Service déclaré pour cette entreprise, ou null. */
   serviceDeEntreprise(companyId: string): Promise<ServiceEntreprise | null>;
+  /** Vrai si au moins une entreprise est déjà déclarée sous ce marqueur de client. */
+  clientExiste(clientMarqueur: string): Promise<boolean>;
   /** Toutes les entreprises déclarées sous ce slug (tous clients confondus). */
   servicesParSlug(slug: string): Promise<ServiceEntreprise[]>;
+  /** Services déclarés de CE client seulement (tableau des départements), au plus 200. */
+  servicesDuClient(clientMarqueur: string): Promise<ServiceEntreprise[]>;
   lireFlux(clientMarqueur: string, source: string, cible: string): Promise<FluxLu | null>;
   /** Remplace la déclaration d'un client (entreprises et flux). */
   declarer(d: { clientMarqueur: string; entreprises: Array<{ companyId: string; serviceSlug: string; estDirection: boolean }>; flux: FluxService[]; par: string }): Promise<void>;
@@ -45,6 +67,20 @@ export interface StockLiaisons {
   compterOuvertes(companyId: string): Promise<number>;
   /** Vrai si cette tâche a été créée par une liaison dans cette entreprise (tâche de liaison côté cible). */
   estTacheDeLiaison(companyId: string, issueId: string): Promise<boolean>;
+  /** Liaisons dont l'une de ces tâches (la tâche d'origine et ses ancêtres) est la tâche cible, côté entreprise CIBLE. */
+  liaisonsEntrantes(companyId: string, issueIds: readonly string[]): Promise<LiaisonEntrante[]>;
+  /** Vrai si l'une de ces tâches a reçu la réponse d'une liaison approuvée (teinte), côté entreprise SOURCE. */
+  retourTeinte(companyId: string, issueIds: readonly string[]): Promise<boolean>;
+  /**
+   * Relais par prudence (tâche racine) : liaisons dont cette entreprise est la CIBLE, déjà transmises (tâche reçue
+   * créée) et encore `ouverte` (tâche reçue ni terminée ni annulée), quelle que soit la tâche d'où part la demande.
+   */
+  liaisonsEntrantesOuvertes(companyId: string): Promise<LiaisonEntrante[]>;
+  /**
+   * Teinte par prudence (tâche racine) : réponses teintées reçues par cette entreprise SOURCE, les plus récentes
+   * d'abord, au plus `limite`. `recente` : reçue depuis moins de `fenetreJours` jours (ou date inconnue).
+   */
+  retoursTeintesDe(companyId: string, fenetreJours: number, limite: number): Promise<Array<{ tacheOrigine: string; recente: boolean }>>;
   inserer(l: LiaisonStockee): Promise<void>;
   /** Liaison de cette entreprise SOURCE, par identifiant. */
   lireParId(companyId: string, id: string): Promise<LiaisonStockee | null>;
@@ -56,7 +92,7 @@ export interface StockLiaisons {
    * Changement de statut conditionnel (comparer et échanger) : n'agit que si le statut actuel figure dans `depuis`.
    * Rend vrai pour l'unique appelant qui a effectué la transition (idempotence face aux rejeux et aux courses).
    */
-  transiter(companyId: string, id: string, depuis: readonly StatutLiaison[], vers: { statut: StatutLiaison; reponse?: string | null; repondu?: boolean }): Promise<boolean>;
+  transiter(companyId: string, id: string, depuis: readonly StatutLiaison[], vers: { statut: StatutLiaison; reponse?: string | null; repondu?: boolean; /** Marque la teinte de la réponse (jamais retirée). */ teinte?: boolean }): Promise<boolean>;
   /** Fixe la tâche cible et l'identifiant de carte d'une liaison existante (une tâche cible remet les essais du facteur à zéro). */
   attacher(companyId: string, id: string, champs: { tacheCible?: string; interactionId?: string; statut?: StatutLiaison }): Promise<void>;
   /**
@@ -64,6 +100,11 @@ export interface StockLiaisons {
    * cible dont l'essai suivant est dû et sous le plafond d'essais, les plus anciennes d'abord.
    */
   listerATransmettre(limite: number, essaisMax: number): Promise<LiaisonStockee[]>;
+  /**
+   * File de sortie : liaisons `ouverte` ou `en_attente_approbation` dont l'entreprise cible a été supprimée
+   * (`entreprise_cible_id` NULL), transmises ou non, à clôturer en `cible_supprimee`.
+   */
+  listerCibleSupprimee(limite: number, essaisMax: number): Promise<LiaisonStockee[]>;
   /** File de sortie : liaisons `repondue` ou `annulee` dont la tâche d'origine n'a pas encore reçu la réponse. */
   listerANotifier(limite: number, essaisMax: number): Promise<LiaisonStockee[]>;
   /**
@@ -100,6 +141,18 @@ function extraitsDe(v: unknown): ExtraitLiaison[] {
   return Array.isArray(x) ? (x as ExtraitLiaison[]) : [];
 }
 
+function chaineDe(v: unknown): string[] {
+  let x = v;
+  if (typeof x === "string") {
+    try {
+      x = JSON.parse(x);
+    } catch {
+      return [];
+    }
+  }
+  return Array.isArray(x) ? x.filter((e): e is string => typeof e === "string") : [];
+}
+
 const enLiaison = (r: Ligne): LiaisonStockee => ({
   id: String(r["id"]),
   entrepriseSource: String(r["company_id"]),
@@ -120,7 +173,19 @@ const enLiaison = (r: Ligne): LiaisonStockee => ({
   demandePar: String(r["demande_par"]),
   facteurEssais: Number(r["facteur_essais"] ?? 0),
   sourceNotifieeLe: r["source_notifiee_le"] == null ? null : iso(r["source_notifiee_le"]),
+  ...enEntrante(r),
+  teinteRetour: r["teinte_retour"] === true,
 });
+
+/** Une ligne sans chaîne (antérieure à la migration 017, en principe reprise par elle) garde ses deux services. */
+function enEntrante(r: Ligne): LiaisonEntrante {
+  const chaine = chaineDe(r["chaine"]);
+  return {
+    chaine: chaine.length > 0 ? chaine : [String(r["service_source"]), String(r["service_cible"])],
+    profondeur: Math.max(1, Number(r["profondeur"] ?? 1) || 1),
+    approbationRequise: r["approbation_requise"] === true,
+  };
+}
 
 export function creerStockLiaisons(db: PluginContext["db"]): StockLiaisons {
   const ns = db.namespace;
@@ -131,8 +196,15 @@ export function creerStockLiaisons(db: PluginContext["db"]): StockLiaisons {
       const [r] = await q(`select company_id, client_marqueur, service_slug, est_direction from ${ns}.services_entreprises where company_id = $1`, [companyId]);
       return r ? enService(r) : null;
     },
+    async clientExiste(clientMarqueur) {
+      const [r] = await q<{ n: number | string }>(`select count(*)::int as n from ${ns}.services_entreprises where client_marqueur = $1`, [clientMarqueur]);
+      return Number(r?.n ?? 0) > 0;
+    },
     async servicesParSlug(slug) {
       return (await q(`select company_id, client_marqueur, service_slug, est_direction from ${ns}.services_entreprises where service_slug = $1 limit 50`, [slug])).map(enService);
+    },
+    async servicesDuClient(clientMarqueur) {
+      return (await q(`select company_id, client_marqueur, service_slug, est_direction from ${ns}.services_entreprises where client_marqueur = $1 order by service_slug limit 200`, [clientMarqueur])).map(enService);
     },
     async lireFlux(clientMarqueur, source, cible) {
       const [r] = await q(`select objet, approbation_humaine from ${ns}.flux_services where client_marqueur = $1 and source_slug = $2 and cible_slug = $3`, [clientMarqueur, source, cible]);
@@ -144,7 +216,8 @@ export function creerStockLiaisons(db: PluginContext["db"]): StockLiaisons {
           `insert into ${ns}.services_entreprises (company_id, client_marqueur, service_slug, est_direction, declare_par)
            values ($1, $2, $3, $4, $5)
            on conflict (company_id) do update set client_marqueur = excluded.client_marqueur, service_slug = excluded.service_slug,
-             est_direction = excluded.est_direction, declare_par = excluded.declare_par, declare_le = now()`,
+             est_direction = excluded.est_direction, declare_par = excluded.declare_par, declare_le = now()
+           where ${ns}.services_entreprises.client_marqueur = excluded.client_marqueur`,
           [e.companyId, d.clientMarqueur, e.serviceSlug, e.estDirection, d.par],
         );
       }
@@ -179,13 +252,46 @@ export function creerStockLiaisons(db: PluginContext["db"]): StockLiaisons {
       const [r] = await q<{ n: number | string }>(`select count(*)::int as n from ${ns}.liaisons where entreprise_cible_id = $1 and tache_cible_id = $2`, [companyId, issueId]);
       return Number(r?.n ?? 0) > 0;
     },
+    async liaisonsEntrantes(companyId, issueIds) {
+      if (issueIds.length === 0) return [];
+      // Liste en JSON : l'hôte aplatit un paramètre tableau.
+      return (await q(
+        `select service_source, service_cible, chaine, profondeur, approbation_requise from ${ns}.liaisons
+          where entreprise_cible_id = $1 and tache_cible_id::text in (select jsonb_array_elements_text($2::jsonb))`,
+        [companyId, JSON.stringify(issueIds.map((i) => i.toLowerCase()))],
+      )).map(enEntrante);
+    },
+    async retourTeinte(companyId, issueIds) {
+      if (issueIds.length === 0) return false;
+      const [r] = await q<{ n: number | string }>(
+        `select count(*)::int as n from ${ns}.liaisons
+          where company_id = $1 and teinte_retour = true and tache_origine_id::text in (select jsonb_array_elements_text($2::jsonb))`,
+        [companyId, JSON.stringify(issueIds.map((i) => i.toLowerCase()))],
+      );
+      return Number(r?.n ?? 0) > 0;
+    },
+    async liaisonsEntrantesOuvertes(companyId) {
+      // Bornée par les plafonds des entreprises sources (5, ou 30 pour la Direction) : pas de limite propre.
+      return (await q(
+        `select service_source, service_cible, chaine, profondeur, approbation_requise from ${ns}.liaisons
+          where entreprise_cible_id = $1 and statut = 'ouverte' and tache_cible_id is not null`,
+        [companyId],
+      )).map(enEntrante);
+    },
+    async retoursTeintesDe(companyId, fenetreJours, limite) {
+      return (await q<{ tache_origine_id: string; recente: boolean | null }>(
+        `select tache_origine_id, coalesce(repondu_le > now() - make_interval(days => $2::int), true) as recente from ${ns}.liaisons
+          where company_id = $1 and teinte_retour = true order by repondu_le desc nulls first limit $3`,
+        [companyId, fenetreJours, limite],
+      )).map((r) => ({ tacheOrigine: String(r.tache_origine_id), recente: r.recente !== false }));
+    },
     async inserer(l) {
       await db.execute(
         `insert into ${ns}.liaisons (id, company_id, entreprise_cible_id, service_source, service_cible, tache_origine_id, tache_cible_id, interaction_id,
-           statut, objet, question, extraits, cle_idempotence, demande_par)
-         values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12::jsonb, $13, $14)`,
+           statut, objet, question, extraits, cle_idempotence, demande_par, chaine, profondeur, approbation_requise)
+         values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12::jsonb, $13, $14, $15::jsonb, $16, $17)`,
         [l.id, l.entrepriseSource, l.entrepriseCible, l.serviceSource, l.serviceCible, l.tacheOrigine, l.tacheCible, l.interactionId, l.statut, l.objet, l.question,
-          JSON.stringify(l.extraits), l.cleIdempotence, l.demandePar],
+          JSON.stringify(l.extraits), l.cleIdempotence, l.demandePar, JSON.stringify(l.chaine), l.profondeur, l.approbationRequise],
       );
     },
     async lireParId(companyId, id) {
@@ -204,9 +310,10 @@ export function creerStockLiaisons(db: PluginContext["db"]): StockLiaisons {
       // `execute` et on compte les lignes touchées. Zéro ligne : la liaison n'était plus dans l'un des états de départ.
       // La liste des états passe en JSON : l'hôte aplatit un paramètre tableau (un seul état donnait « malformed array literal »).
       const { rowCount } = await db.execute(
-        `update ${ns}.liaisons set statut = $4, reponse = coalesce($5, reponse), repondu_le = case when $6::boolean then now() else repondu_le end
+        `update ${ns}.liaisons set statut = $4, reponse = coalesce($5, reponse), repondu_le = case when $6::boolean then now() else repondu_le end,
+           teinte_retour = teinte_retour or $7::boolean
          where company_id = $1 and id = $2 and statut in (select jsonb_array_elements_text($3::jsonb))`,
-        [companyId, id, JSON.stringify([...depuis]), vers.statut, vers.reponse ?? null, vers.repondu === true],
+        [companyId, id, JSON.stringify([...depuis]), vers.statut, vers.reponse ?? null, vers.repondu === true, vers.teinte === true],
       );
       return rowCount > 0;
     },
@@ -223,6 +330,13 @@ export function creerStockLiaisons(db: PluginContext["db"]): StockLiaisons {
     async listerATransmettre(limite, essaisMax) {
       return (await q(
         `select * from ${ns}.liaisons where statut = 'ouverte' and tache_cible_id is null and facteur_essais < $2
+           and (facteur_prochain_le is null or facteur_prochain_le <= now()) order by cree_le limit $1`,
+        [limite, essaisMax],
+      )).map(enLiaison);
+    },
+    async listerCibleSupprimee(limite, essaisMax) {
+      return (await q(
+        `select * from ${ns}.liaisons where statut in ('ouverte', 'en_attente_approbation') and entreprise_cible_id is null and facteur_essais < $2
            and (facteur_prochain_le is null or facteur_prochain_le <= now()) order by cree_le limit $1`,
         [limite, essaisMax],
       )).map(enLiaison);

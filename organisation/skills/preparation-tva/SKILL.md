@@ -2,7 +2,7 @@
 name: "preparation-tva"
 description: "Prépare le contrôle de la TVA d'une PME belge avant la déclaration périodique : vérification des opérations, des taux, de l'autoliquidation et des opérations intracommunautaires, préparation du listing annuel des clients et du relevé intracommunautaire, contrôle des factures électroniques structurées obligatoires entre assujettis depuis 2026. À utiliser pour préparer une déclaration ou repérer ce qui manque ; jamais pour déposer une déclaration, trancher le taux ou le lieu d'une opération douteuse, ni deviner un numéro de TVA absent."
 metadata:
-  version: "1.0.0"
+  version: "1.1.0"
   langue: "fr"
   domaine: "fiscalite"
 ---
@@ -35,6 +35,20 @@ Un dossier de préparation où chaque ligne de TVA est rattachée à une pièce,
 
 ## Étapes
 
+### Barrière avant tout calcul
+
+Aucun contrôle fiscal ne commence tant que la comptabilité de la période n'est pas clôturée. Le coordinateur demande au
+coordinateur comptabilité, par le bureau de liaison, si chaque mois de la période est clôturé (rapprochements soldés,
+aucun point ouvert, dossier de clôture produit) :
+
+- clôturé : vérifier seulement que rien n'a été passé après la clôture, le dire en une ligne et continuer ;
+- non clôturé ou partiellement : s'arrêter, lister ce qui reste ouvert et ce que cela peut changer au montant
+  (« 11 pièces non imputées pour 6 800 euros : le montant de la déclaration peut varier en conséquence ») ;
+- si l'humain décide de continuer malgré tout, cette décision devient une hypothèse écrite en tête du livrable, pas
+  une note de bas de page.
+
+### Contrôles
+
 1. **Vérifier le périmètre** : période, régime, périodicité, statut des chiffres (provisoire ou validé). Un chiffre provisoire est signalé comme tel sur toutes les lignes.
 2. **Contrôler chaque vente** : taux appliqué rapproché de la nature de l'opération, mention de TVA ou d'exemption sur la facture, date d'exigibilité. Un taux inhabituel pour la nature de l'opération est une question pour l'expert-comptable, jamais une correction silencieuse.
 3. **Contrôler chaque achat** : TVA déductible justifiée par une facture conforme, au nom de l'entreprise, avec la période de déduction cohérente. Les achats à usage mixte ou à déduction limitée sont signalés sans calcul de proportion inventé.
@@ -52,6 +66,7 @@ Un dossier en Markdown : tableau des opérations contrôlées (pièce, taux, cas
 
 ## Critères de réussite
 
+- Si la clôture de la période n'est pas validée, le livrable s'arrête à la barrière et le dit.
 - Chaque ligne renvoie à une pièce ; aucun taux ni numéro de TVA inventé.
 - Les chiffres provisoires sont marqués comme tels.
 - Les cas douteux sont des questions, pas des décisions.
@@ -87,3 +102,10 @@ Période T3 2026, entreprise de services informatiques trimestrielle. Extraits (
 Le dossier écrit : vente transfrontalière avec numéro de TVA présent, à valider dans VIES par l'humain (pièce V-014) ; qualification du lieu de la prestation et traitement de la TVA : question à l'expert-comptable (« à vérifier »). Achat sans TVA belge : cas d'autoliquidation possible, mention attendue sur la facture à contrôler, case proposée sans décision. Aucun montant de TVA n'est calculé tant que la qualification n'est pas confirmée.
 
 Cas d'échec : le numéro de TVA du client étranger est absent de la facture. Le dossier n'écrit pas « exemptée » : il écrit « numéro de TVA de la contrepartie manquant, exemption non retenue » et pose la question « fournir le numéro et sa validation, ou confirmer le traitement avec l'expert-comptable ». La ligne reste hors du projet de relevé intracommunautaire.
+
+## Origine de la méthode
+
+Barrière « livres d'abord » adaptée et traduite de github.com/anthropics/knowledge-work-plugins,
+`small-business/skills/tax-prep/SKILL.md` (« Step 1 » et « The gate before Step 2 »), commit
+33eeda1e8fd856455b05479d13a0f85b5f803744, licence Apache 2.0. Modifications : traduction, question posée au
+coordinateur comptabilité par le bureau de liaison, droit belge. Licence et reprises : `organisation/skills/LICENCES-TIERS.md`.

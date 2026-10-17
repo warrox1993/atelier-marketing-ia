@@ -2,7 +2,7 @@
 name: "documentation-technique"
 description: "Établit la documentation technique d'une PME belge : inventaire des actifs informatiques, procédures d'exploitation, plan de sauvegarde 3-2-1 avec test de restauration, registre des comptes et des accès (moindre privilège, authentification multifacteur). À utiliser pour créer, compléter ou auditer ces documents à partir de ce que l'humain fournit ; jamais pour inventer un équipement, un accès ou un résultat de test, recopier un mot de passe ou une clé, ni modifier un système."
 metadata:
-  version: "1.0.0"
+  version: "1.1.0"
   langue: "fr"
   domaine: "informatique"
 ---
@@ -35,7 +35,12 @@ Quatre documents courts, tenus à jour, lisibles par un remplaçant : inventaire
 
 1. **Inventorier les actifs.** Un tableau, une ligne par actif : identifiant, type (poste, serveur, imprimante, équipement réseau, téléphone, service en ligne, licence), usage, propriétaire (une personne ou un service), emplacement, système et version, date de fin de support, données hébergées (aucune, internes, personnelles), criticité (1 à 3), sauvegardé oui ou non. Ajouter les services en ligne : messagerie, stockage, comptabilité, site web, nom de domaine.
 2. **Classer par criticité.** Critique : l'entreprise s'arrête en moins d'une journée sans lui. Écrire le temps de remise en route toléré (repère à fixer par la direction).
-3. **Rédiger les procédures d'exploitation** pour les tâches répétées et à risque : arrivée et départ d'un salarié, installation d'un poste, mise à jour, renouvellement du nom de domaine et des certificats, ajout d'un accès, mise au rebut d'un matériel avec effacement des données. Chaque procédure tient sur une page : but, prérequis, étapes numérotées, vérification, retour arrière, responsable.
+3. **Rédiger les procédures d'exploitation** pour les tâches répétées et à risque : arrivée et départ d'un salarié, installation d'un poste, mise à jour, renouvellement du nom de domaine et des certificats, ajout d'un accès, mise au rebut d'un matériel avec effacement des données. Chaque procédure d'exploitation suit une structure fixe : en-tête (propriétaire, fréquence, date de mise à jour,
+   dernière exécution) ; but et moment de l'utiliser ; prérequis (accès, outils, données) ; procédure en étapes
+   numérotées, chacune avec l'action exacte, le résultat attendu et quoi faire si elle échoue ; vérification finale ;
+   tableau de dépannage (symptôme, cause probable, correction) ; retour arrière ; escalade (situation, qui, comment) ;
+   historique des exécutions (date, par qui, remarques). « Lancer le script » n'est pas une étape : l'étape dit quelle
+   commande, depuis quel poste, avec quels paramètres (sans aucun secret).
 4. **Établir le plan de sauvegarde** (voir ci-dessous) et en planifier le test.
 5. **Tenir le registre des comptes et accès** (voir ci-dessous), revu au moins deux fois par an et à chaque départ.
 6. **Dater et attribuer.** Chaque document porte une version, une date, un propriétaire et une date de prochaine revue.
@@ -73,6 +78,7 @@ Un dossier Markdown : `inventaire`, `procedures`, `plan-sauvegarde`, `registre-a
 - Le plan de sauvegarde montre trois copies, deux supports, une copie hors site et une copie protégée, ou signale laquelle manque.
 - Au moins un test de restauration daté est consigné, sinon la mention « jamais testé » apparaît en tête.
 - Un remplaçant peut refaire une procédure sans poser de question.
+- Chaque procédure d'exploitation contient les rubriques de la structure fixe, dont le retour arrière et l'escalade.
 
 ## Sources officielles
 
@@ -103,3 +109,10 @@ Entreprise de 12 personnes, un serveur de fichiers, une messagerie en ligne. Ext
 Constat : serveur de fichiers, propriétaire « responsable administratif », criticité 3, Windows Server dont la fin de support est à vérifier (information manquante), sauvegarde quotidienne sur un disque USB resté branché au serveur. Analyse 3-2-1 : une seule copie en plus de l'original, un seul support, aucune copie hors site, copie non déconnectée donc exposée à un rançongiciel. Test de restauration : jamais testé. Trous listés avec actions : ajouter une copie hors site, déconnecter ou protéger une copie, planifier un test de fichier ce mois-ci.
 
 Cas d'échec : le tableur contient une colonne « mot de passe administrateur ». La compétence ne la recopie pas, la signale comme risque majeur, écrit « secret à retirer du tableur et à placer dans un gestionnaire de mots de passe », et recommande de considérer ces mots de passe comme compromis donc à changer.
+
+## Origine de la méthode
+
+Structure fixe d'une procédure d'exploitation adaptée et traduite de github.com/anthropics/knowledge-work-plugins,
+`operations/skills/runbook/SKILL.md`, commit 33eeda1e8fd856455b05479d13a0f85b5f803744, licence Apache 2.0.
+Modifications : traduction, règles de secrets et de sauvegarde de l'atelier. Licence et reprises :
+`organisation/skills/LICENCES-TIERS.md`.

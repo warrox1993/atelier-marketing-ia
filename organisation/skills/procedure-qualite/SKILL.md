@@ -2,7 +2,7 @@
 name: "procedure-qualite"
 description: "Rédige ou révise une procédure écrite d'une PME belge (objet, champ d'application, responsabilités par fonction, étapes, contrôles, enregistrements, indicateurs, versionnage) selon la logique de l'approche processus et de l'amélioration continue de l'ISO 9001. À utiliser pour décrire un processus réel (accueil d'une commande, traitement d'une réclamation, validation d'un document), mettre à jour une procédure périmée ou uniformiser plusieurs procédures ; jamais pour décrire un idéal que l'entreprise ne pratique pas, reproduire le texte de la norme (payant), approuver soi-même la procédure ni imposer un changement d'organisation."
 metadata:
-  version: "1.0.0"
+  version: "1.1.0"
   langue: "fr"
   domaine: "qualite"
 ---
@@ -37,8 +37,8 @@ Une procédure courte (une à trois pages) qu'un nouvel arrivant peut suivre san
 
 1. **Cadrer** : écrire en une phrase l'objet (« cette procédure décrit comment... »), le déclencheur et le résultat attendu. Si le processus n'a pas de début ou de fin nets, le dire et proposer une coupe.
 2. **Fixer le champ d'application** : ce qui est couvert, ce qui est exclu, les sites ou équipes concernés. Une exclusion non écrite est une source de désaccord plus tard.
-3. **Définir les responsabilités par fonction** : chaque étape a une seule fonction qui rend des comptes (« gestionnaire des commandes », jamais un prénom). Les fonctions qui contribuent sont listées à part. Une étape sans responsable est signalée comme manque.
-4. **Décrire les étapes dans l'ordre réel** : un verbe d'action par étape, qui fait quoi, avec quel outil ou document, dans quel délai. Les cas d'exception (client absent, produit refusé, panne) ont leur propre étape plutôt qu'une parenthèse.
+3. **Définir les responsabilités par fonction** : chaque étape a une seule fonction qui rend des comptes (« gestionnaire des commandes », jamais un prénom). Les fonctions qui contribuent sont listées à part. Une étape sans responsable est signalée comme manque. Présenter le tout en matrice RACI (réalise, rend des comptes, consulté, informé) : exactement un « A » par étape.
+4. **Décrire les étapes dans l'ordre réel** : un verbe d'action par étape, qui fait quoi, avec quel outil ou document, dans quel délai. Les cas d'exception (client absent, produit refusé, panne) ont leur propre étape plutôt qu'une parenthèse, et sont repris dans un tableau « exceptions et cas particuliers » (situation, quoi faire, qui décide) : c'est souvent la partie la plus utile de la procédure. Une exception citée en passant pendant l'entretien y figure toujours.
 5. **Placer les contrôles** : à quel endroit on vérifie, quoi, par qui, avec quel critère d'acceptation et que fait-on si le critère n'est pas atteint (renvoi vers la compétence `non-conformite-action-corrective`).
 6. **Lister les enregistrements** : pour chacun, nom, support, responsable de la tenue, lieu, durée de conservation. Quand l'enregistrement contient des données personnelles, la durée est justifiée et à valider (voir « À vérifier »).
 7. **Choisir deux à quatre indicateurs** : définition, formule, fréquence, source. Un indicateur qui ne déclenche aucune décision est retiré.
@@ -121,3 +121,10 @@ Extrait de la procédure (v1.0, à approuver) :
 Écart relevé : le texte demande une confirmation écrite du client ; le magasinier dit confirmer parfois par téléphone sans trace. Décision demandée à la direction : exiger l'écrit ou accepter un compte rendu d'appel.
 
 Cas d'échec : deux personnes décrivent des ordres différents (l'une vérifie le stock avant d'enregistrer, l'autre après). La compétence ne choisit pas : elle écrit « ordre à confirmer par la direction » à l'étape 1 et laisse le statut « à approuver » avec la question en tête de page. Elle ne livre pas une procédure qui aurait l'air définitive.
+
+## Origine de la méthode
+
+Matrice RACI et tableau des exceptions adaptés et traduits de github.com/anthropics/knowledge-work-plugins,
+`operations/skills/process-doc/SKILL.md`, sections « Output » et « Tips », commit
+33eeda1e8fd856455b05479d13a0f85b5f803744, licence Apache 2.0. Modifications : traduction, un seul « A » par étape,
+validation humaine. Texte des licences et liste des reprises : `organisation/skills/LICENCES-TIERS.md`.

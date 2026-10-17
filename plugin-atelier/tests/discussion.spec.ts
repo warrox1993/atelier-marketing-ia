@@ -99,6 +99,19 @@ describe("discussion.ouvrir", () => {
     expect(a).toMatchObject({ identifiant: "DEM-1", messages: [] });
   });
 
+  it("réaffecte le fil existant au coordinateur actuel (Direction : coordinateur général), une seule fois, journalisé", async () => {
+    const f = faux();
+    await f.appeler("discussion.ouvrir");
+    const ancien = id(9);
+    f.issues[0]!.assigneeAgentId = ancien; // fil ouvert du temps de l'ancien coordinateur
+    await f.appeler("discussion.ouvrir");
+    expect(f.miseAJour).toEqual([{ issueId: f.issues[0]!.id, patch: { assigneeAgentId: COORD } }]);
+    expect(f.journal.find((e) => e.type === "discussion.reaffectee")).toMatchObject({ companyId: SOC, donnees: { ancien, coordinateurId: COORD } });
+    await f.appeler("discussion.envoyer", envoyer("Bonjour"));
+    expect(f.miseAJour.filter((m) => "assigneeAgentId" in (m.patch as Ligne))).toHaveLength(1);
+    expect(f.issues[0]).toMatchObject({ assigneeAgentId: COORD });
+  });
+
   it("deux ouvertures simultanées ne créent qu'une issue", async () => {
     const f = faux();
     await Promise.all([f.appeler("discussion.ouvrir"), f.appeler("discussion.ouvrir"), f.appeler("discussion.envoyer", envoyer("Bonjour"))]);

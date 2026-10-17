@@ -1,0 +1,3 @@
+# Récit d'un accident (fictif, rédigé par le responsable)
+
+Le mardi 06/10/2026, vers 17 h 50, Madame Corinne Hanin (gestionnaire de portefeuille) a glissé dans l'escalier principal, entre le 1er et le rez-de-chaussée, en descendant avec un carton de dossiers. Elle a chuté sur trois marches et s'est blessée au poignet gauche. Un collègue, Monsieur Pascal Rigo, était présent. Le sol avait été lavé à 17 h 30 ; aucun panneau de sol glissant n'était posé. Les chaussures de Madame Hanin étaient à semelle lisse. Elle a été conduite aux urgences ; le médecin a prescrit un arrêt de travail de 14 jours, jusqu'au 20/10/2026. Aucune déclaration à l'assureur n'a encore été faite.

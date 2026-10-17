@@ -9,6 +9,7 @@
  * comptent pas : ils ne bloquent personne et laisseraient la pastille allumée en permanence.
  */
 import { useEffect, useSyncExternalStore } from "react";
+import { compteDansAFaire } from "../contrats/departements.js";
 import { useContexteDonnees } from "./donnees.js";
 import { appelRoute } from "./routes-prospection.js";
 
@@ -32,7 +33,7 @@ const notifier = () => {
 
 /** Éléments qui comptent dans la pastille : tout sauf les rappels de basse urgence. */
 export function compterAFaire(elements: ReadonlyArray<{ urgence: string }>): number {
-  return elements.filter((e) => e.urgence !== "basse").length;
+  return elements.filter(compteDansAFaire).length;
 }
 
 /** Publie un nombre déjà connu (la page d'Accueil vient de charger la liste). */

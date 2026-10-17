@@ -2,9 +2,12 @@
 
 Document de référence pour l'installateur et pour le client. Il décrit comment l'Atelier organise ses agents en services,
 qui peut parler à qui, quelles compétences existent et comment doter un client de ces services.
-Les chiffres (28 services, 118 flux, 100 compétences) sont recalculés depuis `organisation/registre/services.json`,
-`organisation/services/*/agents/*/AGENTS.md`, `organisation/agents/*/AGENTS.md` et `organisation/skills/*/SKILL.md`
-(registre version 1.0.0 du 16/10/2026).
+Les chiffres (28 services, 213 agents, 756 flux, 184 compétences) sont recalculés depuis `organisation/registre/services.json`,
+`organisation/registre/agents.json`, `organisation/services/*/agents/*/AGENTS.md` et `organisation/skills/*/SKILL.md`
+(registre version 1.0.0 du 16/10/2026, extension du 17/10/2026).
+
+Répartition : 199 agents dans 27 services (marketing exclu) et 14 agents marketing, soit 213 agents.
+Un service compte de 2 à 12 agents (borne vérifiée par `scripts/verifier-organisation.py`) ; les services hors marketing en comptent de 6 à 9.
 
 ## 1. Principe
 
@@ -15,12 +18,12 @@ Les chiffres (28 services, 118 flux, 100 compétences) sont recalculés depuis `
   La Direction est la seule à voir l'ensemble, par les rapports et les escalades que chaque service lui envoie.
 - **Échanges uniquement par le bureau de liaison.** Un coordinateur ne délègue jamais hors de son service. Pour une information
   d'un autre service, il passe par le bureau de liaison (route `liaison.demander`) : une demande tracée avec un objet, une question
-  et les seuls extraits nécessaires, jamais un dossier complet. La règle est fermée : pas de flux déclaré dans la matrice du
-  chapitre 3, pas d'échange.
-- **Services sensibles et approbation humaine.** 5 services sont sensibles : juridique, ressources humaines, fiscalité, HSE (santé, sécurité, environnement)
-  et juridique social. Tout flux qui part d'un service sensible ou qui y arrive exige l'approbation d'un humain avant
-  que la demande ne soit transmise (42 flux sur 118). Cinq autres flux, entre services non sensibles, l'exigent aussi
-  (chapitre 3). Au total, 47 flux sur 118 demandent une approbation humaine.
+  et les seuls extraits nécessaires, jamais un dossier complet. La règle reste fermée : un échange n'existe que s'il figure dans la matrice
+  du chapitre 3 ou dans le réseau des coordinateurs (chapitre « Coordination »).
+- **Services sensibles et approbation humaine.** 5 services sont sensibles : juridique, ressources humaines, fiscalité, hygiène, sécurité et environnement, juridique social.
+  Tout flux qui part d'un service sensible ou qui y arrive exige l'approbation d'un humain avant que la demande ne soit transmise
+  (42 flux métier sur 118, 208 flux du réseau des coordinateurs sur 638). 5 autres flux métier, entre services non sensibles,
+  l'exigent aussi (chapitre 3). Au total, 255 flux sur 756 demandent une approbation humaine.
 - **Rien n'est publié, envoyé, dépensé ni signé sans un humain.** Les agents préparent des brouillons, des dossiers et des analyses.
   Chaque service déclare dans le registre ce qui reste humain (signature d'un document engageant, envoi d'un courrier officiel,
   publication sur un canal externe, budget engagé, décision stratégique, etc.). Les agents sont créés en pause et ne travaillent
@@ -30,49 +33,51 @@ Les chiffres (28 services, 118 flux, 100 compétences) sont recalculés depuis `
 
 ## 2. Les 28 services
 
-Les agents listés sont ceux qui ont un fichier de consignes : 83 au total. Pour le marketing, la liste vient de `organisation/agents/`
-(le registre renvoie à `agents.json` sans dupliquer) : onze agents plus la Porte de contrôle, agent déterministe sans modèle. Le Gardien des connexions,
-agent natif sans modèle, est créé par le système et n'a pas de dossier de consignes.
+Les agents comptés sont ceux qui ont un fichier de consignes : 213 au total. Pour le marketing, la liste vient de `organisation/registre/agents.json`
+(le registre des services y renvoie sans dupliquer) : 14 agents dont la Porte de contrôle, agent déterministe sans modèle. Le Gardien des connexions,
+agent natif sans modèle, est créé par le système et n'a pas de dossier de consignes. Dans la Direction, le coordinateur général (`coordinateur-general`, rôle `ceo`)
+est le seul interlocuteur de l'humain ; le coordinateur de la Direction (`coordinateur-direction`) se comporte comme celui des autres services.
 
-| Service | Préfixe | Sensible | Coordinateur | Spécialistes | Compétences |
-| --- | --- | --- | --- | --- | --- |
-| Marketing (`marketing`) | MKT | non | `coordinateur` | `contenus`, `crm-conversion`, `exigences`, `mesure`, `porte`, `prospection`, `relecteur`, `sea`, `seo-local-geo`, `tests-techniques`, `veille` | `redaction-declinaison-canal`, `charte-marque`, `contenu-recherche-ia`, `recherche-connaissances`, `cadrage-exigences`, `planification-livrables`, `dossier-validation-humaine`, `conversion-crm`, `controle-couverture`, `mesure-experiences`, `recherche-prospects`, `qualification-prospects`, `recherche-sourcee`, `relecture-independante`, `preparation-campagnes-sea`, `audit-seo`, `audit-local-etablissements`, `controles-techniques-liens`, `analyse-concurrentielle` |
-| Direction (`direction`) | DIR | non | `coordinateur-direction` | `synthese`, `tableau-de-bord` | `cadrage-exigences`, `planification-livrables`, `dossier-validation-humaine`, `recherche-connaissances`, `pilotage-strategique`, `synthese-direction`, `tableau-de-bord-pme` |
-| Administratif (`administratif`) | ADM | non | `coordinateur-administratif` | `agenda-documents`, `courrier` | `cadrage-exigences`, `planification-livrables`, `dossier-validation-humaine`, `recherche-connaissances`, `courrier-officiel`, `classement-archivage`, `agenda-echeances-legales` |
-| Juridique (`juridique`) | JUR | oui | `coordinateur-juridique` | `lecture-contrats`, `registre-rgpd` | `cadrage-exigences`, `planification-livrables`, `dossier-validation-humaine`, `recherche-connaissances`, `revue-contrat-commercial`, `registre-traitements-rgpd`, `mentions-legales-site` |
-| Commercial (`commercial`) | COM | non | `coordinateur-commercial` | `preparation-rdv`, `propositions`, `renouvellements` | `cadrage-exigences`, `planification-livrables`, `dossier-validation-humaine`, `recherche-connaissances`, `preparation-rendez-vous-b2b`, `proposition-commerciale`, `renouvellement-fidelisation` |
-| Recouvrement (`recouvrement`) | REC | non | `coordinateur-recouvrement` | `balance-agee`, `relances` | `cadrage-exigences`, `planification-livrables`, `dossier-validation-humaine`, `recherche-connaissances`, `procedure-recouvrement-judiciaire`, `balance-agee-creances`, `relance-amiable-b2b-b2c` |
-| Service après-vente et sinistres (`sav-sinistres`) | SAV | non | `coordinateur-sav` | `faq`, `reclamations`, `sinistres` | `cadrage-exigences`, `planification-livrables`, `dossier-validation-humaine`, `recherche-connaissances`, `base-connaissances-faq`, `traitement-reclamation`, `gestion-dossier-sinistre` |
-| Commerce extérieur (`commerce-exterieur`) | CEX | non | `coordinateur-export` | `dossiers-export` | `cadrage-exigences`, `planification-livrables`, `dossier-validation-humaine`, `recherche-connaissances`, `prospection-marche-etranger`, `classement-douanier-origine`, `dossier-export` |
-| Conformité (`conformite`) | CNF | non | `coordinateur-conformite` | `veille-reglementaire`, `vigilance-clients` | `cadrage-exigences`, `planification-livrables`, `dossier-validation-humaine`, `recherche-connaissances`, `vigilance-clientele-lbc`, `veille-reglementaire`, `controle-communications-reglementees` |
-| Comptabilité et finance (`comptabilite-finance`) | CPT | non | `coordinateur-comptabilite` | `commissions`, `tresorerie` | `cadrage-exigences`, `planification-livrables`, `dossier-validation-humaine`, `recherche-connaissances`, `plan-tresorerie`, `cloture-mensuelle`, `analyse-rentabilite` |
-| Ressources humaines (`ressources-humaines`) | RHU | oui | `coordinateur-rh` | `accueil`, `offres-emploi` | `cadrage-exigences`, `planification-livrables`, `dossier-validation-humaine`, `recherche-connaissances`, `entretien-evaluation`, `accueil-nouveau-collaborateur`, `offre-emploi-non-discriminante` |
-| Informatique (`informatique`) | INF | non | `coordinateur-informatique` | `documentation`, `procedures-incident` | `cadrage-exigences`, `planification-livrables`, `dossier-validation-humaine`, `recherche-connaissances`, `gestion-incident-informatique`, `documentation-technique`, `cybersecurite-pme` |
-| Achats (`achats`) | ACH | non | `coordinateur-achats` | `comparaison-offres` | `cadrage-exigences`, `planification-livrables`, `dossier-validation-humaine`, `recherche-connaissances`, `cahier-des-charges-achat`, `contrat-fournisseur`, `comparaison-offres-fournisseurs` |
-| Qualité (`qualite`) | QUA | non | `coordinateur-qualite` | `procedures` | `cadrage-exigences`, `planification-livrables`, `dossier-validation-humaine`, `recherche-connaissances`, `procedure-qualite`, `non-conformite-action-corrective`, `audit-interne` |
-| Logistique (`logistique`) | LOG | non | `coordinateur-logistique` | `prevision-demande`, `transport-douane` | `cadrage-exigences`, `planification-livrables`, `dossier-validation-humaine`, `recherche-connaissances`, `prevision-demande-stocks`, `organisation-transport`, `gestion-retours-logistique`, `classement-douanier-origine` |
-| Production (`production`) | PRD | non | `coordinateur-production` | `ordonnancement`, `amelioration-continue` | `cadrage-exigences`, `planification-livrables`, `dossier-validation-humaine`, `recherche-connaissances`, `planification-production`, `indicateurs-trs`, `amelioration-continue-lean`, `non-conformite-action-corrective` |
-| Recherche et innovation (`recherche-innovation`) | RDI | non | `coordinateur-rdi` | `veille-brevets`, `dossiers-subsides` | `cadrage-exigences`, `planification-livrables`, `dossier-validation-humaine`, `recherche-connaissances`, `veille-brevets-anteriorite`, `dossier-subside-innovation`, `incitants-fiscaux-rd` |
-| Communication (`communication`) | CMN | non | `coordinateur-communication` | `relations-presse`, `communication-interne` | `cadrage-exigences`, `planification-livrables`, `dossier-validation-humaine`, `recherche-connaissances`, `communique-de-presse`, `communication-de-crise`, `communication-interne`, `charte-marque`, `controle-communications-reglementees` |
-| Service client (`service-client`) | SCL | non | `coordinateur-service-client` | `tri-tickets`, `base-connaissances` | `cadrage-exigences`, `planification-livrables`, `dossier-validation-humaine`, `recherche-connaissances`, `tri-tickets-support`, `reponse-client-multicanal`, `mesure-satisfaction`, `base-connaissances-faq` |
-| Fiscalité (`fiscalite`) | FIS | oui | `coordinateur-fiscalite` | `calendrier-fiscal` | `cadrage-exigences`, `planification-livrables`, `dossier-validation-humaine`, `recherche-connaissances`, `preparation-tva`, `impot-des-societes`, `precompte-professionnel`, `agenda-echeances-legales`, `cloture-mensuelle` |
-| Gestion de projets (`gestion-projets`) | PMO | non | `coordinateur-pmo` | `suivi-portefeuille` | `cadrage-exigences`, `planification-livrables`, `dossier-validation-humaine`, `recherche-connaissances`, `pilotage-strategique`, `cadrage-projet`, `suivi-avancement-projet`, `registre-risques-projet` |
-| Hygiène, sécurité et environnement (`hse`) | HSE | oui | `coordinateur-hse` | `analyse-risques` | `cadrage-exigences`, `planification-livrables`, `dossier-validation-humaine`, `recherche-connaissances`, `analyse-risques-poste`, `accident-du-travail`, `conformite-environnementale` |
-| Formation (`formation`) | FOR | non | `coordinateur-formation` | `ingenierie-formation` | `cadrage-exigences`, `planification-livrables`, `dossier-validation-humaine`, `recherche-connaissances`, `plan-formation`, `financement-formation`, `conception-module-formation` |
-| Juridique social (`juridique-social`) | JSO | oui | `coordinateur-juridique-social` | `contrats-travail` | `cadrage-exigences`, `planification-livrables`, `dossier-validation-humaine`, `recherche-connaissances`, `redaction-contrat-travail`, `fin-contrat-travail`, `temps-travail-conges` |
-| Données et BI (`donnees-bi`) | DAT | non | `coordinateur-donnees` | `analyste-donnees` | `cadrage-exigences`, `planification-livrables`, `dossier-validation-humaine`, `recherche-connaissances`, `gouvernance-donnees`, `qualite-donnees`, `analyse-donnees-decision`, `tableau-de-bord-pme`, `registre-traitements-rgpd` |
-| Événementiel (`evenementiel`) | EVT | non | `coordinateur-evenementiel` | `logistique-evenement` | `cadrage-exigences`, `planification-livrables`, `dossier-validation-humaine`, `recherche-connaissances`, `cadrage-projet`, `organisation-evenement`, `salon-professionnel`, `bilan-evenement`, `registre-risques-projet`, `cahier-des-charges-achat` |
-| Services généraux (`services-generaux`) | SGX | non | `coordinateur-services-generaux` | `energie-batiments` | `cadrage-exigences`, `planification-livrables`, `dossier-validation-humaine`, `recherche-connaissances`, `gestion-bail-commercial`, `suivi-energie-batiment`, `maintenance-batiment`, `contrat-fournisseur`, `comparaison-offres-fournisseurs` |
-| Partenariats (`partenariats`) | PAR | non | `coordinateur-partenariats` | `suivi-partenaires` | `cadrage-exigences`, `planification-livrables`, `dossier-validation-humaine`, `recherche-connaissances`, `selection-partenaire`, `accord-de-partenariat`, `pilotage-partenaires`, `revue-contrat-commercial`, `preparation-rendez-vous-b2b` |
+| Service | Préfixe | Sensible | Coordinateurs | Agents | Spécialistes | Compétences |
+| --- | --- | --- | --- | --- | --- | --- |
+| Marketing (`marketing`) | MKT | non | `coordinateur` | 14 | `veille`, `prospection`, `seo-local-geo`, `sea`, `contenus`, `crm-conversion`, `mesure`, `reseaux-sociaux`, `conformite-publicitaire`, `exigences`, `relecteur`, `tests-techniques`, `porte` | 23 |
+| Direction (`direction`) | DIR | non | `coordinateur-direction`, `coordinateur-general` | 9 | `synthese`, `tableau-de-bord`, `pilotage-objectifs`, `registre-decisions`, `secretariat-instances`, `risques-entreprise`, `contradicteur` | 13 |
+| Administratif (`administratif`) | ADM | non | `coordinateur-administratif` | 7 | `agenda-documents`, `courrier`, `classement-archivage`, `courriers-sortants`, `preparation-signatures`, `vie-societe` | 11 |
+| Juridique (`juridique`) | JUR | oui | `coordinateur-juridique` | 9 | `lecture-contrats`, `registre-rgpd`, `accords-confidentialite`, `droits-personnes`, `litiges`, `mentions-legales`, `risques-juridiques`, `sous-traitants-rgpd` | 13 |
+| Commercial (`commercial`) | COM | non | `coordinateur-commercial` | 8 | `preparation-rdv`, `propositions`, `renouvellements`, `accueil-leads`, `appels-offres`, `comptes-entreprises`, `pilotage-commercial` | 14 |
+| Recouvrement (`recouvrement`) | REC | non | `coordinateur-recouvrement` | 7 | `balance-agee`, `relances`, `contestations`, `plans-paiement`, `precontentieux`, `verification-encaissements` | 11 |
+| Service après-vente et sinistres (`sav-sinistres`) | SAV | non | `coordinateur-sav` | 7 | `faq`, `reclamations`, `sinistres-particuliers`, `ouverture-sinistres`, `registre-plaintes`, `sinistres-entreprises` | 11 |
+| Commerce extérieur (`commerce-exterieur`) | CEX | non | `coordinateur-export` | 6 | `dossiers-export`, `classement-origine`, `controle-sanctions`, `incoterms-paiement`, `marches-etrangers` | 10 |
+| Conformité (`conformite`) | CNF | non | `coordinateur-conformite` | 9 | `veille-reglementaire`, `vigilance-clients`, `conformite-ia`, `conformite-sectorielle`, `controle-communications`, `inventaire-obligations`, `signalements`, `verification-initiatives` | 13 |
+| Comptabilité et finance (`comptabilite-finance`) | CPT | non | `coordinateur-comptabilite` | 9 | `commissions`, `tresorerie`, `cloture-reporting`, `comptabilite-clients`, `comptabilite-fournisseurs`, `comptes-annuels`, `controle-gestion`, `rapprochements` | 15 |
+| Ressources humaines (`ressources-humaines`) | RHU | oui | `coordinateur-rh` | 9 | `accueil`, `offres-emploi`, `depart`, `entretiens-fonctionnement`, `entretiens-recrutement`, `indicateurs-rh`, `planification-effectifs`, `politiques-rh` | 13 |
+| Informatique (`informatique`) | INF | non | `coordinateur-informatique` | 9 | `documentation`, `procedures-incident`, `changements`, `conformite-cyber`, `continuite-sauvegardes`, `infrastructure`, `postes-et-acces`, `support-utilisateurs` | 13 |
+| Achats (`achats`) | ACH | non | `coordinateur-achats` | 8 | `comparaison-offres`, `analyse-depenses`, `commandes-approvisionnement`, `contrats-fournisseurs`, `evaluation-fournisseurs`, `expression-besoins`, `sourcing` | 13 |
+| Qualité (`qualite`) | QUA | non | `coordinateur-qualite` | 7 | `procedures`, `maitrise-documentaire`, `non-conformites`, `audit-interne`, `revue-direction`, `amelioration-processus` | 12 |
+| Logistique (`logistique`) | LOG | non | `coordinateur-logistique` | 7 | `prevision-demande`, `gestion-stocks`, `transport`, `douane-origine`, `retours`, `litiges-transport` | 12 |
+| Production (`production`) | PRD | non | `coordinateur-production` | 8 | `plan-capacite`, `ordonnancement`, `performance-trs`, `amelioration-continue`, `non-conformites-atelier`, `maintenance-equipements`, `methodes-industrialisation` | 11 |
+| Recherche et innovation (`recherche-innovation`) | RDI | non | `coordinateur-rdi` | 6 | `veille-brevets`, `dossiers-subsides`, `incitants-fiscaux-rd`, `veille-technologique`, `portefeuille-innovation` | 10 |
+| Communication (`communication`) | CMN | non | `coordinateur-communication` | 7 | `relations-presse`, `communication-interne`, `adaptation-linguistique`, `cellule-crise`, `editorial-institutionnel`, `veille-medias` | 13 |
+| Service client (`service-client`) | SCL | non | `coordinateur-service-client` | 7 | `tri-tickets`, `base-connaissances`, `avis-en-ligne`, `escalades`, `reponses-courantes`, `voix-du-client` | 12 |
+| Fiscalité (`fiscalite`) | FIS | oui | `coordinateur-fiscalite` | 7 | `calendrier-fiscal`, `avantages-mobilite`, `controle-et-veille-fiscale`, `impot-societes`, `precompte-fiches-281`, `tva` | 13 |
+| Gestion de projets (`gestion-projets`) | PMO | non | `coordinateur-pmo` | 7 | `suivi-portefeuille`, `cadrage-projets`, `planification-ressources`, `risques-projets`, `reporting-comites`, `conduite-changement-projets` | 12 |
+| Hygiène, sécurité et environnement (`hse`) | HSE | oui | `coordinateur-hse` | 7 | `analyse-risques`, `plan-prevention`, `accidents-travail`, `prevention-psychosociale`, `plan-urgence`, `environnement` | 11 |
+| Formation (`formation`) | FOR | non | `coordinateur-formation` | 7 | `conception-modules`, `plan-formation`, `financement`, `evaluation-formation`, `formations-obligatoires`, `conduite-changement` | 11 |
+| Juridique social (`juridique-social`) | JSO | oui | `coordinateur-juridique-social` | 7 | `contrats-travail`, `absences-incapacite`, `fin-contrat`, `relations-collectives`, `temps-travail-reglement`, `veille-sociale` | 11 |
+| Données et BI (`donnees-bi`) | DAT | non | `coordinateur-donnees` | 7 | `analyste-donnees`, `controle-analyses`, `gouvernance-rgpd`, `ingenierie-donnees`, `qualite-donnees`, `tableaux-de-bord` | 12 |
+| Événementiel (`evenementiel`) | EVT | non | `coordinateur-evenementiel` | 6 | `conception-evenement`, `logistique-evenement`, `invitations-inscriptions`, `salons`, `bilan-suivi` | 13 |
+| Services généraux (`services-generaux`) | SGX | non | `coordinateur-services-generaux` | 6 | `energie-batiments`, `maintenance-batiments`, `baux-et-espaces`, `flotte-mobilite`, `services-occupants` | 12 |
+| Partenariats (`partenariats`) | PAR | non | `coordinateur-partenariats` | 6 | `recherche-selection`, `accords`, `pilotage-portefeuille`, `co-marketing`, `fournisseurs-produits` | 12 |
 
-La colonne « Compétences » reprend l'en-tête `skills:` des fichiers de consignes, y compris les quatre compétences communes aux coordinateurs (chapitre 4).
+La colonne « Compétences » compte les compétences déclarées dans l'en-tête `skills:` des agents du service, y compris les 5 compétences communes aux coordinateurs (chapitre 4).
 
 ## 3. Matrice des échanges
 
-Lecture : « Envoie à » liste les services auxquels le service peut adresser une demande ; « Reçoit de » ceux qui peuvent lui en adresser.
+Cette matrice décrit les 118 flux métier du registre (champ `flux`). Les 638 autres flux du réseau des coordinateurs sont générés (chapitre « Coordination »).
+Lecture : « Envoie à » liste les services auxquels le service peut adresser une demande métier ; « Reçoit de » ceux qui peuvent lui en adresser.
 Une étoile (`*`) signale un flux qui exige l'approbation d'un humain. Un flux n'a de sens que si les deux services
 existent chez le client : la déclaration (chapitre 5) ne retient que les flux dont les deux extrémités appartiennent au client.
-Les flux « Rapport périodique et escalade » vers la Direction sont au nombre de 24 ; les 94 autres portent chacun un objet précis dans le registre.
+Les flux « Rapport périodique et escalade » vers la Direction sont au nombre de 27 ; les 91 autres portent chacun un objet précis dans le registre.
 
 | Service | Échange avec (approbation humaine marquée *) |
 | --- | --- |
@@ -105,227 +110,377 @@ Les flux « Rapport périodique et escalade » vers la Direction sont au nombre 
 | Services généraux (`services-generaux`) | Envoie à : `direction`, `achats`, `hse`*. Reçoit de : `achats`, `hse`* |
 | Partenariats (`partenariats`) | Envoie à : `direction`, `commercial`, `juridique`*. Reçoit de : `commercial`, `juridique`* |
 
-Les cinq flux entre services non sensibles qui exigent une approbation sont : données et BI vers Direction pour les indicateurs et analyses,
-logistique vers achats pour une commande à passer, communication vers marketing pour la cohérence des messages de marque,
-données et BI vers informatique pour l'accès aux sources de données, communication vers événementiel pour les messages et le calendrier de communication.
+Les 5 flux entre services non sensibles qui exigent une approbation sont :
+
+- `donnees-bi` vers `direction` : Rapport périodique et escalade ; Indicateurs et analyses
+- `logistique` vers `achats` : Commande à passer, livraison attendue
+- `communication` vers `marketing` : Cohérence des messages de marque
+- `donnees-bi` vers `informatique` : Accès aux sources de données
+- `communication` vers `evenementiel` : Messages et calendrier de communication
+
+## Coordination
+
+Chaque service a un coordinateur ; la Direction porte en plus le coordinateur général. Ce chapitre résume la règle, détaillée dans la compétence
+`protocole-inter-coordinateurs` (`organisation/skills/protocole-inter-coordinateurs/SKILL.md`).
+
+- **Coordinateur général.** Rôle `ceo` de l'entreprise Direction, seul interlocuteur de l'humain. Il répartit une demande entre les départements,
+  consolide les réponses et ne décide jamais à la place de l'humain. Les demandes adressées à la Direction arrivent chez lui.
+- **Réseau des coordinateurs.** Toute paire ordonnée de services du même client que la matrice métier ne couvre pas reçoit un flux généré par
+  `scripts/atelier_services.py` (jamais listé à la main) : 638 flux, dont 24 touchent la Direction (objet du coordinateur général) et 614 relient deux coordinateurs de département.
+  Avec les 118 flux métier, la matrice déclarée au plugin compte 756 flux.
+- **Services sensibles.** Un flux généré qui part d'un service sensible ou y arrive exige l'approbation d'un humain (208 des 638 flux générés), comme pour les flux métier.
+  Une donnée personnelle sensible ne traverse jamais le protocole sans approbation.
+- **Deux relais au plus.** Une chaîne de demandes compte au plus deux relais ; aucune demande circulaire, jamais deux fois la même question au même service,
+  au plus 5 liaisons ouvertes par service (30 pour la Direction, afin que le coordinateur général puisse interroger tous les coordinateurs, sans exemption
+  d'approbation). Au-delà, on suppose (hypothèse écrite) ou on remonte à l'humain. Le bureau de liaison l'impose : la chaîne de chaque liaison est dérivée
+  de la tâche d'origine et de ses ancêtres (une sous-tâche d'une tâche reçue hérite de la chaîne reçue), il refuse le troisième relais et tout service
+  déjà présent dans la chaîne. Seul le coordinateur déclaré (rôle `ceo` du service) ou le coordinateur général ouvre une liaison.
+- **Teinte.** La réponse d'une liaison approuvée par un humain (service sensible) teinte la tâche qui la reçoit, ainsi que la tâche reçue par une
+  liaison approuvée : toute liaison ouverte ensuite depuis elle ou ses sous-tâches attend l'approbation humaine, même entre services non sensibles.
+- **Prudence face aux tâches racines.** Un coordinateur peut recopier une demande reçue, ou une réponse teintée, dans une nouvelle tâche racine qui
+  n'en descend pas ; la lignée ne suffit donc pas. Le bureau de liaison applique deux règles à l'échelle du service entier, quelle que soit la tâche
+  d'où part la nouvelle demande :
+  - *relais supposé* : tant qu'une demande reçue par le service (déjà arrivée chez lui) n'est ni terminée ni annulée, toute liaison qu'il ouvre hérite
+    de la chaîne et de la profondeur les plus longues de ses demandes reçues ouvertes, et de leur teinte. Le troisième relais et tout service déjà
+    présent dans l'une de ces chaînes sont refusés (`details.prudence`) jusqu'à la clôture de la demande reçue ;
+  - *teinte supposée* : si le service a reçu une réponse teintée depuis moins de 7 jours, ou sur une tâche encore ouverte, toute liaison qu'il ouvre
+    attend l'approbation humaine (au-delà de 200 réponses teintées à examiner, le service est tenu pour teinté).
+  *Exemption pour la vraie racine humaine* : ces deux règles ne s'appliquent pas quand la lignée de la tâche d'origine remonte jusqu'à une tâche
+  créée par un humain (champ `createdByUserId` de la tâche renseigné et `createdByAgentId` vide, lu chez l'hôte) et qu'aucun ancêtre n'est une
+  tâche reçue par liaison. C'est le cas d'une demande que l'opérateur pose au coordinateur général depuis la Discussion : seule la lignée réelle compte, les
+  escalades reçues en parallèle ne bloquent ni ne teintent rien. Toute racine créée par un agent, ou dont le créateur est absent ou illisible
+  (parent introuvable compris), garde la prudence. Le flux sensible exige toujours l'approbation par lui-même.
+  En complément, Paperclip refuse à un agent (pas à l'humain) de détacher ou de déplacer une tâche reçue par liaison ou une de ses sous-tâches.
+  **Compromis, à valider par l'opérateur** (pour les tâches créées par un agent) : ces règles produisent des faux positifs. Un service qui traite une demande reçue ne peut pas, pendant ce temps,
+  interroger le service demandeur ni ouvrir un troisième relais sur un autre sujet (exemple : la Direction qui traite une escalade du marketing ne
+  peut pas envoyer une autre consigne au marketing avant de l'avoir close). Un service qui a reçu une réponse sensible voit toutes ses liaisons
+  soumises à approbation pendant au moins 7 jours, même sans rapport. Le coût est une approbation humaine de plus (ou une attente), jamais une fuite.
+
+Les études qui ont fondé cette extension sont dans `docs/etude-usine-v2/` (trois groupes : gouvernance et personnes, commerce et client, finance, opérations et technique).
+Deux outils complètent l'usine : l'observabilité Phoenix (`docs/phoenix.md`) et le banc d'essais des agents (`docs/banc-essais.md`).
 
 ## 4. Compétences
 
-Les 100 compétences sont dans `organisation/skills/<nom>/SKILL.md`. Chacune a les mêmes sections : objectif, quand l'utiliser, prérequis,
+Les 184 compétences sont dans `organisation/skills/<nom>/SKILL.md`. Chacune a les mêmes sections : objectif, quand l'utiliser, prérequis,
 entrées, étapes, livrable, critères de réussite, limites, exemple.
 
 **Règle de qualité.**
-- 79 compétences sur 100 ont une section « Sources officielles » : les pages consultées, avec l'adresse, la date de lecture
+- 142 compétences sur 184 ont une section « Sources officielles » : les pages consultées, avec l'adresse, la date de lecture
   et ce que chaque source établit. Une règle ou un délai sans source consultée n'est pas présenté comme acquis.
-- 75 compétences ont une section « À vérifier par un professionnel » qui nomme le métier à consulter selon le sujet (par exemple le conseiller en prévention, le secrétariat social ou l'assureur pour un accident du travail, un juriste ou un avocat pour une question de responsabilité).
+- 159 compétences ont une section « À vérifier par un professionnel » qui nomme le métier à consulter selon le sujet (par exemple le conseiller en prévention, le secrétariat social ou l'assureur pour un accident du travail, un juriste ou un avocat pour une question de responsabilité).
 - Tout article de loi, taux, délai ou montant incertain est marqué « à vérifier » dans le texte.
 - Aucune compétence n'envoie, ne signe, ne dépose ni ne déclare quoi que ce soit : elle prépare, l'humain décide.
 
 Compétences communes à tous les coordinateurs de service : `cadrage-exigences` (transforme une demande en brief et exigences numérotées),
 `planification-livrables` (plan de tâches avec responsables et dépendances), `dossier-validation-humaine` (dossier soumis à la décision humaine),
-`recherche-connaissances` (interroge les connaissances du client avant d'écrire un chiffre, cite la source, signale l'information manquante).
+`recherche-connaissances` (interroge les connaissances du client avant d'écrire un chiffre, cite la source, signale l'information manquante)
+et `protocole-inter-coordinateurs` (échanges entre services par le bureau de liaison, voir « Coordination »).
 Elles ne sont pas répétées ci-dessous, sauf pour le marketing et la Direction où elles sont déclarées en plus des compétences propres.
+Les compétences listées sous un service sont celles de l'en-tête `skills:` de ses agents.
 
 ### Marketing (`marketing`)
 
-- `redaction-declinaison-canal` : Rédige un contenu principal puis le décline par canal (site, blog, réseaux sociaux, courriel, fiche d'établissement) en respectant les contraintes de chaque canal, la charte de marque et les sources.
-- `charte-marque` : Applique la charte de marque à un texte ou à un brief de visuel.
-- `contenu-recherche-ia` : Conçoit ou améliore des contenus utiles à la fois pour la recherche classique et pour les réponses des moteurs d'IA (GEO).
+- `cadrage-exigences` : Transforme une demande marketing en brief structuré et en exigences numérotées REQ-001, REQ-002...
+- `planification-livrables` : Construit le plan d'une campagne sous forme de tâches Paperclip : un livrable par tâche, un responsable, des dépendances sans cycle, les relectures requises et les exigences couvertes.
+- `dossier-validation-humaine` : Prépare le dossier soumis à la décision humaine : brief, périmètre, livrables et versions, matrice exigences et preuves, sources, revues exécutées, corrections, limites, questions restantes, coûts disponibles, et le périmètre exact de l'approbation demandée.
 - `recherche-connaissances` : Interroge les connaissances du client (conditions générales, fiches produit, tarifs, FAQ, notes) avant d'écrire un chiffre d'offre, et cite l'adresse connaissance:// rendue ; sans source, signale l'information manquante.
-- `cadrage-exigences` : Transforme une demande marketing en brief structuré et en exigences numérotées REQ-001, REQ-002.
-- `planification-livrables` : Construit le plan d'une campagne sous forme de tâches Paperclip.
-- `dossier-validation-humaine` : Prépare le dossier soumis à la décision humaine.
-- `conversion-crm` : Conçoit pages de conversion, formulaires, segments et scénarios de suivi en documentant entrées, déclencheurs, exclusions, consentements et conditions d'envoi, sans aucune prospection réelle automatique.
-- `controle-couverture` : Contrôle indépendant de la couverture d'un livrable.
-- `mesure-experiences` : Vérifie des données marketing importées (périodes, provenance, doublons, conversions), présente coûts, attribution et incertitudes, et conçoit des expériences avec hypothèse, métrique et condition d'arrêt ; répond « non mesurable » quand les données manquent.
-- `recherche-prospects` : Cherche des prospects B2B par secteur NACE et zone, des particuliers B2C aux seules origines légales et des partenaires, par les outils de prospection en lecture (bce, bnb, fsma, osm, b2c), et dépose chaque réponse brute signée sur la tâche.
-- `qualification-prospects` : Qualifie les prospects déposés.
-- `recherche-sourcee` : Mène une recherche documentaire et vérifie les faits.
-- `relecture-independante` : Relecture métier et factuelle indépendante d'un livrable.
-- `preparation-campagnes-sea` : Prépare en brouillon une campagne de liens sponsorisés.
-- `audit-seo` : Audite le référencement technique accessible et éditorial d'un site.
-- `audit-local-etablissements` : Audite, établissement par établissement, la cohérence des informations locales (nom, adresse, téléphone, horaires, zone desservie, services) entre le site, les fiches d'établissement publiques et les contenus.
-- `controles-techniques-liens` : Exécute les contrôles techniques d'un livrable.
+- `protocole-inter-coordinateurs` : Protocole commun des coordinateurs de l'atelier pour se parler entre services du même client par le bureau de liaison : format d'une demande (objet, question, raison, conséquence sans réponse, extraits), format fixe de la réponse, au plus deux relais, aucune demande circulaire, hypothèses et conflits écrits, diffusion à tous réservée au coordinateur général.
+- `plan-campagne` : Rédige le brief d'une campagne marketing en dix rubriques (vue d'ensemble et objectif mesurable, public, messages clés avec preuves, canaux, calendrier par semaine avec dépendances, pièces à produire, indicateurs, budget si fourni, risques, prochaines étapes), adapté à une PME belge (langues FR, NL ou EN, mentions réglementées, consentements).
+- `recherche-sourcee` : Mène une recherche documentaire et vérifie les faits : chaque observation porte sa source, sa date de collecte, son statut d'accès et sa limite, et distingue fait vérifié, inférence, hypothèse et recommandation.
 - `analyse-concurrentielle` : Compare des concurrents sur des critères identiques (offres, zones, preuves, canaux, messages) à partir de sources datées, et en tire des opportunités et risques étiquetés comme recommandations.
+- `recherche-prospects` : Cherche des prospects B2B par secteur NACE et zone, des particuliers B2C aux seules origines légales et des partenaires, par les outils de prospection en lecture (bce, bnb, fsma, osm, b2c), dépose chaque réponse brute signée sur la tâche, applique les garde-fous de collecte et le contrôle de la liste « Ne m'appelez plus » avant tout fichier d'appel.
+- `qualification-prospects` : Qualifie les prospects déposés : lecture protégée de leur site, justification sourcée de chaque critère, points du score expliqués et présentés comme une estimation, barème adéquation et intention commun avec le commercial, contrôle de l'opposition et de la liste « Ne m'appelez plus », sans chiffre inventé ni conseil d'assurance.
+- `audit-seo` : Audite le référencement technique accessible et éditorial d'un site : indexabilité, titres, structure, maillage, performance observable, intentions de recherche et qualité des contenus, avec des recommandations hiérarchisées et vérifiables.
+- `audit-local-etablissements` : Audite, établissement par établissement, la cohérence des informations locales (nom, adresse, téléphone, horaires, zone desservie, services) entre le site, les fiches d'établissement publiques et les contenus.
+- `contenu-recherche-ia` : Conçoit ou améliore des contenus utiles à la fois pour la recherche classique et pour les réponses des moteurs d'IA (GEO) : réponses directes, faits sourcés, entités et informations locales claires, sans promesse de citation ni de classement.
+- `preparation-campagnes-sea` : Prépare en brouillon une campagne de liens sponsorisés : structure, groupes d'annonces, mots-clés et exclusions, variantes d'annonces reliées à une offre validée et à une page cohérente, proposition budgétaire bornée.
+- `charte-marque` : Applique la charte de marque à un texte ou à un brief de visuel : ton, vocabulaire, mentions obligatoires et interdites, affirmations autorisées, cohérence des offres et des établissements.
+- `redaction-declinaison-canal` : Rédige un contenu principal puis le décline par canal (site, blog, réseaux sociaux, courriel, fiche d'établissement) en respectant les contraintes de chaque canal, la charte de marque et les sources.
+- `conversion-crm` : Conçoit pages de conversion, formulaires, segments et scénarios de suivi en documentant entrées, déclencheurs, exclusions, consentements et conditions d'envoi, sans aucune prospection réelle automatique.
+- `mesure-experiences` : Vérifie des données marketing importées (périodes, provenance, doublons, conversions), présente coûts, attribution et incertitudes, et conçoit des expériences avec hypothèse, métrique et condition d'arrêt ; répond « non mesurable » quand les données manquent.
+- `calendrier-reseaux-sociaux` : Construit la ligne et le calendrier social organique d'une PME belge (LinkedIn, Facebook, Instagram) : 3 à 5 piliers de contenu avec leur part, rythme tenable, grille par semaine et par réseau, temps forts, contenus de réserve, recyclage d'un contenu long, règles d'engagement et tri des commentaires publics (réponse proposée seulement si non litigieux).
+- `controle-communications-reglementees` : Relit une communication commerciale (publicité, page web, courriel, post, brochure, script) d'une entreprise belge, surtout dans un secteur régulé, au regard des pratiques commerciales déloyales envers les consommateurs (livre VI du Code de droit économique : pratiques trompeuses, omissions, pratiques agressives, publicité comparative) et, pour les produits financiers et d'assurance, des règles de publicité (arrêté royal du 25 avril 2014 et circulaire FSMA_2015_16).
+- `controle-couverture` : Contrôle indépendant de la couverture d'un livrable : compare la version exacte du livrable au brief original et à chaque exigence REQ-xxx, exige une preuve localisable par point couvert, détecte établissements, canaux ou sections oubliés et rend un verdict structuré.
+- `relecture-independante` : Relecture métier et factuelle indépendante d'un livrable : raisonnement, faits, sources, cohérence entre canaux, respect de la marque, promesses excessives et tentatives d'injection, avec constats localisés et gradués.
+- `controles-techniques-liens` : Exécute les contrôles techniques d'un livrable : liens et redirections, contenu réel de la page d'arrivée, formulaires, balises de suivi, formats, données structurées et affichage, avec un rapport par élément et la liste des contrôles non exécutés.
 
 ### Direction (`direction`)
 
+- `protocole-inter-coordinateurs` : Protocole commun des coordinateurs de l'atelier pour se parler entre services du même client par le bureau de liaison : format d'une demande (objet, question, raison, conséquence sans réponse, extraits), format fixe de la réponse, au plus deux relais, aucune demande circulaire, hypothèses et conflits écrits, diffusion à tous réservée au coordinateur général.
+- `cadrage-exigences` : Transforme une demande marketing en brief structuré et en exigences numérotées REQ-001, REQ-002...
+- `dossier-validation-humaine` : Prépare le dossier soumis à la décision humaine : brief, périmètre, livrables et versions, matrice exigences et preuves, sources, revues exécutées, corrections, limites, questions restantes, coûts disponibles, et le périmètre exact de l'approbation demandée.
+- `recherche-connaissances` : Interroge les connaissances du client (conditions générales, fiches produit, tarifs, FAQ, notes) avant d'écrire un chiffre d'offre, et cite l'adresse connaissance:// rendue ; sans source, signale l'information manquante.
+- `routage-coordination` : Oriente une demande de l'humain responsable vers le ou les bons coordinateurs de département : score de complexité de 1 à 5, nombre de coordinateurs consultés selon le score, départage en cas d'égalité, revue contradictoire au-delà de 4, puis consolidation des réponses sans les fusionner quand elles engagent l'entreprise.
+- `registre-decisions` : Tient le registre des décisions de la direction et des actions qui en découlent : format d'entrée fixe (décision, responsable, échéance, date de revue, raison, dérogation humaine, propositions rejetées à ne pas reproposer, actions, remplace et remplacée par) et détection de trois conflits (proposition déjà rejetée, décisions actives contradictoires, action attribuée deux fois).
+- `planification-livrables` : Construit le plan d'une campagne sous forme de tâches Paperclip : un livrable par tâche, un responsable, des dépendances sans cycle, les relectures requises et les exigences couvertes.
 - `pilotage-strategique` : Aide la direction d'une PME à arbitrer entre les demandes concurrentes des services, à fixer des objectifs trimestriels (méthode OKR), à classer les initiatives par impact, effort et risque, et à tracer chaque décision dans un registre.
-- `synthese-direction` : Rédige la note de synthèse d'une page destinée au dirigeant à partir des rapports et extraits des services.
-- `tableau-de-bord-pme` : Construit le tableau de bord de pilotage d'une PME belge.
+- `synthese-direction` : Rédige la note de synthèse d'une page destinée au dirigeant à partir des rapports et extraits des services : situation en trois lignes, faits sourcés et datés, décisions attendues avec échéance, risques, informations manquantes, dans un format fixe.
+- `tableau-de-bord-pme` : Construit le tableau de bord de pilotage d'une PME belge : indicateurs clés (trésorerie, DSO, carnet de commandes, marge brute, absentéisme, productivité, qualité de service) avec définition exacte, formule, fréquence, seuil d'alerte et source de données dans l'application.
+- `compte-rendu-instances` : Prépare l'ordre du jour, le calendrier de convocation et le projet de procès-verbal d'une instance de société belge (conseil d'administration, assemblée générale de SRL ou de SA, comité de direction) : délais du Code des sociétés et des associations, liste des présences, décisions et votes rapportés, actions avec responsable et échéance, trous marqués [à attribuer], signatures et conflits d'intérêts signalés.
+- `registre-risques-entreprise` : Tient le registre des risques de l'entreprise, consolidé depuis les risques remontés par les services : six catégories (opérationnel, financier, conformité, stratégique, réputation, sécurité), matrice gravité × probabilité de 5 × 5 présentée comme convention d'entreprise, quatre niveaux (vert 1-4, jaune 5-9, orange 10-15, rouge 16-25), mesures, responsable, statut et source.
+- `revue-contradictoire` : Relit de façon contradictoire une synthèse à fort enjeu avant qu'elle n'arrive à l'humain : contributions des services lues séparément, puis recherche de l'accord trop facile, de l'hypothèse partagée non vérifiée, de la voix absente, du risque que personne n'a cité et de l'avis rendu hors de son domaine.
 
 ### Administratif (`administratif`)
 
 - `courrier-officiel` : Prépare les courriers et courriels formels d'une PME belge (réponse à une administration, mise en demeure simple, envoi recommandé, relance formelle) avec les mentions obligatoires d'une personne morale sur ses documents (dénomination, forme, siège, numéro d'entreprise, RPM et tribunal) et les durées de conservation à appliquer à l'original et à la preuve d'envoi.
-- `classement-archivage` : Conçoit et applique le plan de classement, les règles de nommage et le calendrier de conservation des documents d'une PME belge.
-- `agenda-echeances-legales` : Construit et tient le calendrier des échéances légales récurrentes d'une PME belge.
+- `classement-archivage` : Conçoit et applique le plan de classement, les règles de nommage et le calendrier de conservation des documents d'une PME belge : pièces comptables et fiscales (7 ans), documents sociaux (5 ans), documents de sociétés (durée de vie plus 5 ans), contrats et courriers, avec les principes du RGPD (minimisation, limitation de la conservation, accès sur besoin).
+- `agenda-echeances-legales` : Construit et tient le calendrier des échéances légales récurrentes d'une PME belge : TVA (mensuelle ou trimestrielle), précompte professionnel, acomptes, approbation des comptes par l'assemblée générale (6 mois après la clôture), dépôt des comptes annuels à la Banque nationale de Belgique (30 jours après approbation, 7 mois au plus tard), déclaration à l'impôt des sociétés, confirmation annuelle du registre UBO, listing clients, avec rappels, responsable proposé et marge de sécurité.
+- `tri-courrier-entrant` : Trie le courrier et les courriels entrants d'une PME belge : catégorie, service destinataire, échéance de réponse, urgence, et repérage des plis sensibles qui ne suivent jamais le circuit ordinaire (acte d'huissier, courrier d'un tribunal, d'une inspection, d'une autorité, d'un avocat adverse, mise en demeure).
+- `preparation-signature` : Contrôle un document avant sa signature par une PME belge : version définitive sans modification ouverte, annexes jointes, dénomination exacte des entités et numéro d'entreprise, dates, pouvoirs des signataires au regard des statuts et des publications, approbations internes obtenues, relecture juridique faite, puis ordre et liste des signataires et destinataires de la copie signée.
+- `vie-societe` : Tient le calendrier et les dossiers de la vie juridique d'une société belge : décisions à déposer au greffe du tribunal de l'entreprise dans les trente jours (statuts, nominations et fins de mandat des administrateurs, commissaires, liquidateurs), publication aux Annexes du Moniteur belge et opposabilité, mentions obligatoires sur les documents de la société, registres internes, mandats et procurations, lien avec le registre des bénéficiaires effectifs.
 
 ### Juridique (`juridique`)
 
-- `revue-contrat-commercial` : Prépare la revue d'un contrat commercial pour une PME belge.
-- `registre-traitements-rgpd` : Établit ou met à jour le registre des activités de traitement (article 30 du RGPD) d'une PME belge.
-- `mentions-legales-site` : Prépare les textes juridiques du site web d'une entreprise belge.
+- `revue-contrat-commercial` : Prépare la revue d'un contrat commercial pour une PME belge : grille de lecture en dix points (parties, objet, prix, durée, résiliation, responsabilité et plafond, force majeure, confidentialité, propriété intellectuelle, droit applicable et for), détection des clauses à risque, rapprochement avec les clauses abusives entre entreprises (articles VI.91/3 à VI.91/6 du Code de droit économique, loi du 4 avril 2019) et synthèse en feux rouges, orange et verts avec questions pour l'avocat.
+- `registre-traitements-rgpd` : Établit ou met à jour le registre des activités de traitement (article 30 du RGPD) d'une PME belge : une fiche par traitement avec les rubriques de l'article 30, paragraphe 1, une base légale proposée parmi celles de l'article 6, des durées de conservation à justifier, la liste des sous-traitants et la vérification du contrat de l'article 28, puis un test d'analyse d'impact (article 35) qui dit si elle est probablement nécessaire.
+- `mentions-legales-site` : Prépare les textes juridiques du site web d'une entreprise belge : mentions légales (identification de l'entreprise et numéro d'entreprise selon l'article III.74 du Code de droit économique, informations de l'article XII.6 pour les services de la société de l'information), politique de confidentialité (articles 12 à 14 du RGPD), politique de cookies avec recueil du consentement, et conditions générales de vente en ligne pour clients entreprises ou consommateurs (articles VI.45 à VI.53 du Code de droit économique), avec liste de contrôle des rubriques manquantes.
+- `evaluation-risque-juridique` : Évalue un risque juridique d'une PME belge sur une matrice gravité × probabilité de 5 × 5 (score de 1 à 25, quatre niveaux), rédige une note en dix rubriques avec options de traitement et risque résiduel, et dit si le recours à un avocat externe est obligatoire, fortement recommandé ou à envisager.
+- `triage-accord-confidentialite` : Trie un accord de confidentialité (NDA) reçu par une PME belge en dix points de lecture et le classe vert (signature possible selon la délégation interne), orange (relecture juridique ciblée) ou rouge (ne pas signer en l'état), avec les clauses citées, les positions de départ sur les problèmes fréquents et les questions au juriste.
+- `reponse-droits-personnes` : Traite une demande d'exercice de droits RGPD reçue par une PME belge (accès, rectification, effacement, limitation, portabilité, opposition) : qualification, vérification d'identité proportionnée, calcul du délai d'un mois et de sa prolongation possible, exceptions à documenter, journal de la demande et brouillon de réponse mentionnant le droit de plainte auprès de l'Autorité de protection des données.
+- `dossier-litige` : Prépare pour l'avocat le dossier de précontentieux d'une PME belge face à une mise en demeure, une citation, une réclamation sérieuse ou une demande d'une autorité : situation, chronologie sourcée, points juridiques immédiats (délais, conservation des pièces, notification), accords et assurances concernés, actions urgentes proposées, informations manquantes et sources consultées.
+- `revue-sous-traitance-rgpd` : Relit un contrat ou avenant de sous-traitance de données personnelles (article 28 du RGPD) proposé à une PME belge par un fournisseur (logiciel en ligne, hébergeur, secrétariat social, prestataire marketing) : éléments obligatoires, obligations du sous-traitant, sous-traitants ultérieurs, notification des violations, transferts hors EEE, problèmes fréquents, puis état des accords par fournisseur et analyse des manques.
 
 ### Commercial (`commercial`)
 
-- `preparation-rendez-vous-b2b` : Prépare un rendez-vous commercial avec une entreprise belge.
-- `proposition-commerciale` : Rédige le projet de proposition commerciale d'une entreprise belge, centré sur le problème du client.
-- `renouvellement-fidelisation` : Tient le calendrier des échéances de contrats d'une entreprise belge, repère les signaux de départ d'un client, prépare l'offre de reconduction et applique les règles de reconduction tacite (clause signalée, délai raisonnable pour s'opposer, préavis).
+- `preparation-rendez-vous-b2b` : Prépare un rendez-vous commercial avec une entreprise belge : fiche entreprise à partir des données publiques (BCE, comptes annuels de la Banque nationale), besoins probables, carte des interlocuteurs (rôle, engagement, position, preuve), questions de découverte, objections probables, prochaine étape à obtenir.
+- `proposition-commerciale` : Rédige le projet de proposition commerciale d'une entreprise belge, centré sur le problème du client : contexte compris, solution, périmètre et exclusions, prix hors et avec TVA, conditions, validité, mentions obligatoires B2B ou B2C (information précontractuelle, droit de rétractation du consommateur à distance), plan d'action commun jusqu'à la signature, prochaines étapes.
+- `renouvellement-fidelisation` : Tient le calendrier des échéances de contrats d'une entreprise belge, repère les signaux de départ d'un client, rend un verdict « en bonne voie, à surveiller, à risque » avec preuve, contrôle la propreté du portefeuille, prépare l'offre de reconduction et applique les règles de reconduction tacite (clause signalée, délai raisonnable pour s'opposer, préavis).
+- `qualification-leads-entrants` : Qualifie une demande entrante (formulaire, appel, courriel, recommandation) pour une entreprise belge : adéquation notée forte, partielle ou absente avec preuve, intention selon quatre signaux, priorité P0, P1, P2 ou hors cible, routage, délai de rappel proposé et contrôles avant tout rappel (base légale RGPD, opposition, liste « Ne m'appelez plus »).
+- `reponse-objection` : Aide à répondre à une objection d'un client ou prospect (trop cher, pas le moment, on a déjà un fournisseur, je dois en parler à ma direction, pas convaincu) : classement de l'objection, distinction entre objection et manœuvre de négociation, questions de clarification, preuves tirées de l'historique et des verbatims clients, réponse orale et réponse écrite honnêtes à valider.
+- `compte-rendu-rendez-vous` : Transforme les notes ou la transcription d'un rendez-vous commercial en trois livrables à valider : brouillon de suivi au client de moins de 150 mots, synthèse interne « nous / eux », mises à jour du CRM proposées champ par champ avec leur citation.
+- `reponse-appel-offres` : Analyse un cahier des charges, un appel d'offres privé ou un questionnaire fournisseur d'une entreprise cliente : matrice de toutes les exigences classées obligatoire, pondérée ou souhaitée, couverture forte, partielle ou écart avec la preuve, liste des écarts, contraintes de forme et de délai, et avis « répondre, répondre avec un partenaire, ne pas répondre » posé comme décision humaine.
+- `plan-de-compte` : Établit le plan de compte d'un client entreprise : carte des interlocuteurs (rôle, engagement, position, preuve), rôles manquants et risque d'interlocuteur unique, santé de la relation en cinq dimensions (relation, tendance d'engagement, commercial, support, valeur rendue) avec un verdict vert, jaune ou rouge, potentiel et prochaines démarches à valider.
+- `revue-pipeline` : Passe en revue le portefeuille d'affaires commerciales d'une entreprise : drapeaux de risque par affaire (sans activité, date dépassée ou repoussée, prochaine étape vide, affaire bloquée, interlocuteur unique), propreté du CRM et analyse gagné/perdu (taux par source, taille et type, étape de perte, plus grosses pertes et gains cités).
 
 ### Recouvrement (`recouvrement`)
 
-- `procedure-recouvrement-judiciaire` : Prépare le dossier de décision pour passer du recouvrement amiable au recouvrement judiciaire d'une créance d'une PME belge.
-- `balance-agee-creances` : Construit et analyse la balance âgée des créances clients d'une PME belge.
-- `relance-amiable-b2b-b2c` : Rédige une séquence graduée de relances amiables d'une facture ou d'une prime impayée, adaptée au débiteur.
+- `procedure-recouvrement-judiciaire` : Prépare le dossier de décision pour passer du recouvrement amiable au recouvrement judiciaire d'une créance d'une PME belge : critères pour décider, choix entre la procédure de recouvrement de dettes d'argent non contestées entre entreprises (articles 1394/20 à 1394/27 du Code judiciaire, par huissier de justice à la demande de l'avocat du créancier), l'injonction de payer (articles 1338 à 1344) et la voie ordinaire, étapes, délais, coûts à chiffrer et pièces à réunir.
+- `balance-agee-creances` : Construit et analyse la balance âgée des créances clients d'une PME belge : classement par tranche de retard, contrôle des totaux contre la comptabilité, concentration par débiteur, priorisation des relances (montant, ancienneté, risque), DSO, base d'une proposition de réductions de valeur et signaux d'alerte.
+- `relance-amiable-b2b-b2c` : Rédige une séquence graduée de relances amiables d'une facture ou d'une prime impayée, adaptée au débiteur : entre entreprises (loi du 2 août 2002 : intérêts de retard de plein droit, indemnité forfaitaire de 40 euros) ou envers un consommateur (livre XIX du Code de droit économique, loi du 4 mai 2023 : premier rappel gratuit, délai de 14 jours avant toute clause indemnitaire, mentions de la mise en demeure, pratiques interdites).
+- `contestation-creance` : Traite une facture ou une prime contestée par un débiteur belge : arrêt immédiat de la séquence de relance (sans approbation nécessaire pour arrêter), qualification de la contestation, pièces à demander ou à fournir, questions aux services concernés par la liaison, brouillon de réponse relu avec une liste de contrôle et suspension des mesures prévue par la loi.
+- `plan-de-paiement` : Prépare une proposition d'échéancier de paiement argumentée pour un débiteur (entreprise ou consommateur belge) à partir de sa capacité déclarée : montant, nombre et dates des échéances, intérêts, clause de déchéance du terme à faire valider, effets d'une demande de plan d'apurement d'un consommateur (suspension des mesures, intérêts arrêtés après 30 jours sans décision), confirmation sur support durable et suivi des échéances.
+- `verification-encaissements` : Contrôle, avant toute relance, qu'un impayé l'est vraiment : paiement reçu dans les 14 derniers jours, avoir non imputé, contestation ou réclamation ouverte, médiation en cours, correspondance par communication structurée, par adresse électronique ou par nom seulement.
 
 ### Service après-vente et sinistres (`sav-sinistres`)
 
-- `base-connaissances-faq` : Construit et tient à jour la FAQ et la base de connaissances du service après-vente d'une PME belge à partir des tickets réellement reçus.
-- `traitement-reclamation` : Conduit le traitement d'une réclamation client d'une PME belge de bout en bout.
-- `gestion-dossier-sinistre` : Organise le suivi administratif d'un dossier de sinistre par un intermédiaire d'assurance en Belgique.
+- `base-connaissances-faq` : Construit et tient à jour la FAQ et la base de connaissances du service après-vente d'une PME belge à partir des tickets réellement reçus : regroupement des questions récurrentes, rédaction d'une réponse courte en langage clair, validation par un humain, date de revue, anonymisation et mesure de l'utilité (questions évitées, avis des lecteurs, tickets restants).
+- `traitement-reclamation` : Conduit le traitement d'une réclamation client d'une PME belge de bout en bout : reconnaissance de la plainte, accusé de réception, délais de réponse, analyse des faits, réponse motivée, escalade interne, information sur la médiation (Service de médiation pour le consommateur, Ombudsman des assurances pour l'assurance), garantie légale de conformité pour les ventes aux consommateurs et registre des plaintes.
+- `dossier-mediation` : Prépare le dossier d'une plainte portée ou annoncée devant un service de médiation (Ombudsman des assurances, Service de médiation pour le consommateur) : chronologie datée, pièces, ce qui a été tenté, ce que demande le client, position de l'entreprise à valider, effets de la saisine (prescription et recouvrement suspendus) et réponse aux demandes d'information du médiateur.
+- `gestion-dossier-sinistre` : Organise le suivi administratif d'un dossier de sinistre par un intermédiaire d'assurance en Belgique : ouverture, pièces à réunir, délais de déclaration à l'assureur, suivi avec l'assureur, communication régulière avec l'assuré, clôture et conservation.
+- `escalade-interne` : Décide s'il faut escalader un dossier client vers un autre service (informatique, commercial, juridique, direction) ou le garder, mesure l'impact en six dimensions, rédige le dossier d'escalade (gravité, impact, description, ce qui a été tenté, étapes de reproduction, communication client, demande précise et échéance), fixe une cadence de suivi et prépare la désescalade.
+- `registre-plaintes` : Tient et analyse le registre des plaintes d'une entreprise belge, en particulier d'un intermédiaire d'assurance : champs obligatoires de chaque plainte, classement par cause, délais de traitement calculés, tendances, causes récurrentes appuyées par des extraits anonymisés et rapport périodique à la direction avec des mesures proposées.
 
 ### Commerce extérieur (`commerce-exterieur`)
 
-- `prospection-marche-etranger` : Prépare l'approche d'un marché étranger par une PME belge.
+- `prospection-marche-etranger` : Prépare l'approche d'un marché étranger par une PME belge : étude de marché pays à partir de sources publiques, repérage des aides et services régionaux à l'export (Wallonia Export Investment, ex-AWEX, Flanders Investment & Trade, hub.brussels), adaptation de l'offre (produit, langue, prix, normes, canaux) et choix d'un mode de paiement sécurisé (paiement d'avance, crédit documentaire, assurance-crédit comme celle de Credendo).
 - `classement-douanier-origine` : Prépare, pour une PME belge qui exporte ou importe, la proposition de classement douanier (code SH, NC, TARIC), l'analyse de l'origine préférentielle au titre des accords de l'UE, le statut d'exportateur enregistré (REX) et le premier examen des sanctions et des biens à double usage (règlement (UE) 2021/821), avec signal d'arrêt et escalade.
-- `dossier-export` : Constitue et contrôle le dossier d'une opération d'exportation hors UE par une PME belge.
+- `controle-sanctions-double-usage` : Filtre toutes les parties d'une opération d'exportation ou d'importation (acheteur, destinataire, utilisateur final, transitaire, banque, intermédiaires) sur les sanctions de l'UE, vérifie si le bien relève du double usage (règlement (UE) 2021/821) et relève les signaux d'alerte, puis analyse chaque correspondance sans la bloquer ni la lever d'office.
+- `incoterms-paiement-international` : Prépare le choix d'un Incoterm et du moyen de paiement d'une vente ou d'un achat international par une liste de questions (qui paie le transport, où passe le risque, qui dédouane, qui assure) et compare les moyens de paiement et l'assurance-crédit, sans reproduire le texte des Incoterms.
+- `dossier-export` : Constitue et contrôle le dossier d'une opération d'exportation hors UE par une PME belge : liste des pièces (facture commerciale, liste de colisage, document de transport, certificat ou déclaration d'origine, déclaration d'exportation, numéro EORI), choix et vérification de l'Incoterm, répartition des responsabilités et des risques, contrôle de cohérence avant expédition.
 
 ### Conformité (`conformite`)
 
 - `vigilance-clientele-lbc` : Prépare le dossier de vigilance d'un client au regard de la loi belge du 18 septembre 2017 (prévention du blanchiment de capitaux et du financement du terrorisme) : l'entreprise est-elle assujettie, identification et vérification du client et de ses bénéficiaires effectifs (registre UBO), évaluation individuelle du risque, indices de vigilance renforcée (personnes politiquement exposées, pays à haut risque), pièces manquantes, et points à soumettre au responsable de la conformité (AMLCO).
 - `veille-reglementaire` : Organise la veille réglementaire d'une PME belge à partir de sources officielles (Moniteur belge et Justel, Journal officiel de l'Union européenne sur EUR-Lex, autorités de contrôle comme la FSMA) : choix des sources et des sujets, relevé des textes nouveaux ou modifiés, fiche d'impact (qui est concerné, quoi, à partir de quand, quelle action), registre des obligations et priorisation par échéance et gravité.
 - `controle-communications-reglementees` : Relit une communication commerciale (publicité, page web, courriel, post, brochure, script) d'une entreprise belge, surtout dans un secteur régulé, au regard des pratiques commerciales déloyales envers les consommateurs (livre VI du Code de droit économique : pratiques trompeuses, omissions, pratiques agressives, publicité comparative) et, pour les produits financiers et d'assurance, des règles de publicité (arrêté royal du 25 avril 2014 et circulaire FSMA_2015_16).
+- `inventaire-obligations-conformite` : Construit et tient l'inventaire des obligations de conformité d'une PME belge : chaque obligation reliée à son texte source, au contrôle interne qui la couvre, à son responsable, à la preuve attendue (quoi, où, date de dernière collecte), au calendrier des échéances et des audits, puis l'analyse des écarts priorisée avec un plan de correction.
+- `inventaire-systemes-ia` : Tient l'inventaire des systèmes d'intelligence artificielle utilisés ou fournis par une PME belge et prépare, pour chacun, le classement provisoire selon le règlement européen sur l'IA (pratique interdite, haut risque, obligation de transparence, risque minimal), le rôle de l'entreprise (fournisseur, déployeur, importateur, distributeur) et la liste des obligations qui en découlent.
+- `autodiagnostic-nis2` : Aide une organisation belge à faire un premier autodiagnostic NIS2 (loi du 26 avril 2024) : est-elle probablement concernée selon son secteur et sa taille, comme entité essentielle ou importante, quelles obligations en découleraient (enregistrement, mesures de gestion des risques, notification des incidents, responsabilité de la direction) et par quoi commencer, en renvoyant au Centre pour la Cybersécurité Belgique (CCB) pour la qualification officielle.
+- `canal-signalement` : Aide une entreprise belge du secteur privé à mettre en place et à suivre son canal de signalement interne (loi du 28 novembre 2022, lanceurs d'alerte) : champ d'application (50 travailleurs et plus, ou secteur financier), procédure écrite, gestionnaire indépendant, accusé de réception en 7 jours, retour en 3 mois, registre anonymisé, interdiction des représailles et information sur les canaux externes.
+- `verification-conformite-initiative` : Rend un avis préalable de conformité sur un projet d'une PME belge (nouveau produit, nouvel outil ou logiciel, campagne, traitement de données, partenariat) : synthèse en trois issues (poursuivre, poursuivre sous conditions, examen approfondi), textes applicables, exigences avec statut, zones de risque, actions recommandées, approbations nécessaires et revue complémentaire à demander.
 
 ### Comptabilité et finance (`comptabilite-finance`)
 
-- `plan-tresorerie` : Construit le plan de trésorerie d'une PME belge sur 13 semaines.
-- `cloture-mensuelle` : Prépare et contrôle la clôture mensuelle comptable d'une PME belge.
-- `analyse-rentabilite` : Analyse la rentabilité d'une PME belge par produit, client ou canal.
+- `plan-tresorerie` : Construit le plan de trésorerie d'une PME belge sur 13 semaines : solde de départ, encaissements (par échéance et retard probable), décaissements (fournisseurs, salaires, TVA, impôts, crédits), solde cumulé par semaine, trois scénarios et seuils d'alerte écrits.
+- `cloture-mensuelle` : Prépare et contrôle la clôture mensuelle comptable d'une PME belge : rapprochements bancaires, factures à recevoir et à établir, contrôle de la TVA (périodicité, préparation de la déclaration Intervat), écritures de régularisation proposées et liste de contrôle signée par étape.
+- `analyse-rentabilite` : Analyse la rentabilité d'une PME belge par produit, client ou canal : chiffre d'affaires, coûts directs, marge brute et marge de contribution, répartition explicite des coûts indirects, seuil de rentabilité et recommandations chiffrées.
+- `rapprochement-comptes` : Rapproche un compte d'une PME belge (banque, compte d'attente, compte de tiers ou compte collectif contre son détail) : liste des écarts, classement en décalage temporel, ajustement requis ou à investiguer, ancienneté par tranche, seuils d'escalade et statut de clôture.
+- `analyse-ecarts-budgetaires` : Analyse les écarts entre budget et réalisé (ou entre deux périodes, ou contre une prévision) d'une PME et les explique dans une note d'une page pour la direction : chiffres recalculés, seuils de signalement, ordre de priorité, décomposition prix et volume, commentaire structuré par poste avec cause, perspective et action.
+- `facturation-clients-peppol` : Prépare la facturation sortante d'une PME belge : contrôle des données avant émission (client, numéro d'entreprise, mentions, taux de TVA, échéance), choix du canal (Peppol entre assujettis, autre canal pour un particulier), notes de crédit, lettrage des encaissements et transmission de la balance âgée au recouvrement.
+- `balance-agee-creances` : Construit et analyse la balance âgée des créances clients d'une PME belge : classement par tranche de retard, contrôle des totaux contre la comptabilité, concentration par débiteur, priorisation des relances (montant, ancienneté, risque), DSO, base d'une proposition de réductions de valeur et signaux d'alerte.
+- `traitement-factures-fournisseurs` : Traite les factures fournisseurs d'une PME belge reçues par Peppol ou en PDF : extraction des champs en nommant ce qui est illisible, imputation proposée, rapprochement à trois voies commande, réception et facture, doublons, notes de crédit, puis proposition de lot de paiement soumise à une approbation distincte.
+- `comptes-annuels-depot` : Prépare le dossier de fin d'exercice d'une société belge pour l'expert-comptable ou le réviseur, puis le dépôt des comptes annuels à la Centrale des bilans de la Banque nationale : calendrier depuis la clôture jusqu'au dépôt, choix du schéma à confirmer, pièces à réunir, contrôles de cohérence, rappel de l'approbation par l'assemblée.
+- `tableau-de-bord-pme` : Construit le tableau de bord de pilotage d'une PME belge : indicateurs clés (trésorerie, DSO, carnet de commandes, marge brute, absentéisme, productivité, qualité de service) avec définition exacte, formule, fréquence, seuil d'alerte et source de données dans l'application.
 
 ### Ressources humaines (`ressources-humaines`)
 
-- `entretien-evaluation` : Prépare un entretien d'évaluation ou de fonctionnement dans une PME belge.
-- `accueil-nouveau-collaborateur` : Prépare le plan d'accueil d'un nouveau collaborateur d'une PME belge.
+- `accueil-nouveau-collaborateur` : Prépare le plan d'accueil d'un nouveau collaborateur d'une PME belge : formalités à vérifier avant le premier jour (Dimona, règlement de travail, accueil sécurité), documents à remettre, accès informatiques à ouvrir, parrainage, plan d'intégration à 30, 60 et 90 jours et points de suivi.
 - `offre-emploi-non-discriminante` : Rédige ou relit une offre d'emploi d'une PME belge conforme à la législation antidiscrimination (loi du 10 mai 2007, critères protégés, exigences justifiées par la fonction, langue, formulation neutre H/F/X), choisit les canaux de diffusion (Forem, VDAB, Actiris) et prépare l'information RGPD des candidats avec une durée de conservation à décider par l'humain.
+- `depart-collaborateur` : Prépare le départ d'un collaborateur d'une PME belge une fois la fin du contrat décidée par l'humain : calendrier à rebours, matériel et documents à restituer, accès informatiques à fermer dans l'ordre, passation des dossiers, documents sociaux de sortie à vérifier avec le secrétariat social et entretien de sortie facultatif.
+- `entretien-evaluation` : Prépare un entretien d'évaluation ou de fonctionnement dans une PME belge : préparation du manager, grille de critères observables, objectifs SMART, trame d'entretien, compte rendu équitable et traçable, suites possibles (formation, plan d'accompagnement ou d'amélioration) et garde-fous de confidentialité.
+- `grille-entretien-structure` : Construit la grille d'un entretien d'embauche structuré pour une PME belge à partir d'une offre ou d'une fiche de poste : 4 à 6 compétences liées au poste, questions comportementales et situationnelles avec relances, échelle ancrée de 1 à 4, déroulé minuté, questions à ne pas poser et fiche de notation individuelle.
+- `indicateurs-rh-agreges` : Calcule et commente les indicateurs RH agrégés d'une PME belge (effectif et équivalents temps plein, entrées et sorties, taux de rotation, ancienneté moyenne, absentéisme, délai de recrutement) à partir d'un export anonymisé, avec méthode écrite, données manquantes signalées et aucun agrégat sur un groupe trop petit.
+- `planification-effectifs` : Aide la direction d'une PME belge à planifier ses effectifs : besoins par rôle et par échéance, structure et lignes hiérarchiques, ordre des recrutements, coût estimé à partir des hypothèses fournies, et repères d'organisation (étendue d'encadrement, taille d'équipe) présentés comme pratiques et non comme normes.
+- `reponse-politique-interne` : Répond à une question d'un membre du personnel sur les règles internes d'une PME belge (congés, horaires, télétravail, frais, formation, conduite) à partir des seuls documents de l'entreprise : réponse courte, détails, exceptions, à qui s'adresser et source citée, et « aucune règle trouvée » quand c'est le cas.
 
 ### Informatique (`informatique`)
 
-- `gestion-incident-informatique` : Prépare la gestion d'un incident informatique ou de sécurité dans une PME belge.
-- `documentation-technique` : Établit la documentation technique d'une PME belge.
+- `gestion-incident-informatique` : Prépare la gestion d'un incident informatique ou de sécurité dans une PME belge : tri, niveau de gravité, communication, résolution, retour d'expérience, avec les obligations de notification à vérifier (NIS2 : loi du 26 avril 2024, notification au CCB ; violation de données RGPD : Autorité de protection des données, 72 heures) et la règle d'escalade.
+- `documentation-technique` : Établit la documentation technique d'une PME belge : inventaire des actifs informatiques, procédures d'exploitation, plan de sauvegarde 3-2-1 avec test de restauration, registre des comptes et des accès (moindre privilège, authentification multifacteur).
 - `cybersecurite-pme` : Définit et explique les mesures de cybersécurité de base d'une PME belge selon le cadre CyberFundamentals du Centre pour la Cybersécurité Belgique (CCB) : authentification multifacteur, mises à jour, sauvegardes, comptes, mots de passe, sensibilisation à l'hameçonnage.
+- `demande-de-changement` : Rédige le dossier d'une demande de changement informatique (migration, mise à jour majeure, nouveau service, modification de configuration en production) : description, justification, analyse d'impact sur les utilisateurs, systèmes, processus et coûts, risques, plan de mise en œuvre, plan de communication, plan de retour arrière avec déclencheurs chiffrés, approbations.
+- `gestion-arrivees-departs-acces` : Prépare la liste ordonnée et datée des actions informatiques pour l'arrivée, le changement de fonction ou le départ d'un collaborateur : comptes, droits d'accès selon le moindre privilège, authentification multifacteur, matériel et licences, puis au départ blocage de la connexion, révocation des sessions, retrait des licences et des groupes, sort de la boîte et des fichiers décidé par l'humain.
+- `plan-continuite-sauvegarde` : Établit le plan de continuité informatique d'une PME : activités critiques, durée d'interruption tolérable et perte de données tolérable fixées par la direction, sauvegardes qui les respectent (3-2-1 avec une copie protégée), scénarios de reprise, calendrier et compte rendu des tests de restauration.
+- `tri-tickets-support` : Trie les tickets d'un service client de PME belge : catégorie, priorité, niveau de service, routage vers la bonne personne ou le bon service, règles d'escalade et détection des réclamations ou sinistres à transférer au service après-vente.
+- `base-connaissances-faq` : Construit et tient à jour la FAQ et la base de connaissances du service après-vente d'une PME belge à partir des tickets réellement reçus : regroupement des questions récurrentes, rédaction d'une réponse courte en langage clair, validation par un humain, date de revue, anonymisation et mesure de l'utilité (questions évitées, avis des lecteurs, tickets restants).
 
 ### Achats (`achats`)
 
-- `cahier-des-charges-achat` : Rédige le cahier des charges d'un achat de PME belge (fourniture, service, logiciel, sous-traitance).
-- `contrat-fournisseur` : Contrôle un projet de contrat ou des conditions générales de fournisseur pour une PME belge.
-- `comparaison-offres-fournisseurs` : Compare les offres reçues de plusieurs fournisseurs pour un achat de PME belge sur une grille explicite.
+- `cahier-des-charges-achat` : Rédige le cahier des charges d'un achat de PME belge (fourniture, service, logiciel, sous-traitance) : besoin et contexte, spécifications obligatoires et souhaitables, critères d'attribution pondérés sur 100, conditions de réponse et demande de prix envoyée à trois fournisseurs au minimum.
+- `contrat-fournisseur` : Contrôle un projet de contrat ou des conditions générales de fournisseur pour une PME belge : durée et reconduction, résiliation, prix et indexation, délais de paiement (loi du 2 août 2002), pénalités, responsabilité et garanties, confidentialité, propriété, réversibilité, clause de sous-traitance de données personnelles (article 28 du RGPD), clauses abusives entre entreprises ; produit une fiche de points de contrôle et une liste d'escalade vers le juriste.
+- `comparaison-offres-fournisseurs` : Compare les offres reçues de plusieurs fournisseurs pour un achat de PME belge sur une grille explicite : coût total de possession, délais, niveau de service (SLA), solvabilité à partir des données publiques (BCE, comptes annuels déposés à la Banque nationale), références ; détecte les offres anormalement basses ou incomplètes et rédige une recommandation motivée, la décision restant humaine.
+- `verification-fournisseur-belge` : Vérifie un fournisseur avant un premier contact, une commande ou un paiement, avec des sources publiques belges et européennes : existence et statut à la Banque-Carrefour des Entreprises, numéro de TVA (VIES pour un fournisseur d'un autre État membre), comptes déposés à la Centrale des bilans, obligation de retenue pour dettes sociales et fiscales dans les secteurs concernés.
+- `analyse-depenses-achats` : Analyse les dépenses d'achat d'une PME à partir d'un export (fournisseur, catégorie, montant, échéance) : Pareto des catégories, grappes de fonctions en double (outils qui font la même chose), économies estimées nettes du coût de migration, refus de tout fournisseur unique sur une catégorie critique sans plan de secours, alerte quand trois contrats ou plus se renouvellent le même mois.
+- `commande-approvisionnement` : Prépare un bon de commande et suit la réception d'un achat pour une PME belge : contenu du bon (fournisseur vérifié, lignes, quantités, prix de l'offre retenue, date attendue, imputation), seuil d'approbation, bon de réception, puis trace transmise à la comptabilité pour le rapprochement à trois voies avec la facture.
+- `evaluation-fournisseurs` : Évalue un fournisseur en cours de contrat : note sur 100 en cinq dimensions pondérées (fiabilité, support, sécurité, conditions commerciales, adéquation), verdict garder, revoir ou remplacer, conformité aux engagements de service avec tendance et avoir réclamable, risque tiers sur quatre axes.
+- `recherche-sourcee` : Mène une recherche documentaire et vérifie les faits : chaque observation porte sa source, sa date de collecte, son statut d'accès et sa limite, et distingue fait vérifié, inférence, hypothèse et recommandation.
 
 ### Qualité (`qualite`)
 
 - `procedure-qualite` : Rédige ou révise une procédure écrite d'une PME belge (objet, champ d'application, responsabilités par fonction, étapes, contrôles, enregistrements, indicateurs, versionnage) selon la logique de l'approche processus et de l'amélioration continue de l'ISO 9001.
 - `non-conformite-action-corrective` : Enregistre une non-conformité ou une réclamation client dans une PME belge, en analyse la cause (5 pourquoi, diagramme d'Ishikawa), propose des actions de correction, corrective et préventive avec responsable et échéance, puis prépare la vérification d'efficacité.
-- `audit-interne` : Prépare et documente un audit interne dans une PME belge.
+- `audit-interne` : Prépare et documente un audit interne dans une PME belge : programme et plan d'audit, liste de contrôle tirée de la procédure auditée, classement des constats (conformité, point sensible, écart mineur, écart majeur) avec preuve, rapport et suivi des actions, selon les principes de l'audit des systèmes de management (ISO 19011).
+- `cartographie-processus` : Cartographie un processus administratif ou de service d'une PME (état actuel avec étapes, décisions, transferts, durées de traitement et d'attente), repère les gaspillages (attentes, reprises, transferts, surtraitement, travail manuel répétitif), propose un état futur et mesure le gain (temps, erreurs, coût) avant et après.
+- `maitrise-documentaire` : Organise la maîtrise des documents qualité d'une PME : numérotation (type, domaine, numéro, révision), cycle de vie (brouillon, en relecture, approuvé, en vigueur, remplacé, obsolète), relecteurs et approbateurs par type de document, traitement des commentaires, classes de modification, liste maîtresse, diffusion et retrait des versions obsolètes.
+- `revue-de-direction-qualite` : Prépare le dossier de la revue de direction qualité d'une PME : état des actions des revues précédentes, indicateurs de qualité et de satisfaction, résultats d'audits, état des non-conformités et actions correctives (ouvertes, en retard, efficacité, sources), changements à prendre en compte, ressources, risques, avec un statut vert, jaune ou rouge par rubrique et la liste des décisions attendues.
+- `amelioration-continue-lean` : Structure une démarche d'amélioration continue dans une PME belge : cycle PDCA, 5S, kaizen, cartographie de la chaîne de valeur actuelle et cible, standard de travail, chiffrage prudent du gain et suivi de la tenue.
 
 ### Logistique (`logistique`)
 
-- `prevision-demande-stocks` : Prépare la prévision de la demande et le pilotage des stocks d'une PME belge.
-- `organisation-transport` : Prépare l'organisation d'un transport de marchandises pour une PME belge.
-- `gestion-retours-logistique` : Organise le traitement logistique des retours de marchandises d'une PME belge.
+- `prevision-demande-stocks` : Prépare la prévision de la demande et le pilotage des stocks d'une PME belge : méthodes simples (moyenne mobile, lissage exponentiel, saisonnalité), stock de sécurité, point de commande, quantité de réapprovisionnement, rotation, couverture, ruptures et surstocks, avec mesure de l'erreur de prévision.
+- `organisation-transport` : Prépare l'organisation d'un transport de marchandises pour une PME belge : choix du mode (route, rail, mer, air, messagerie, palette, camion complet), demande et comparaison de cotations, répartition des tâches selon l'Incoterm côté logistique, lettre de voiture CMR et convention CMR pour la route internationale, suivi, réserves à la livraison et litiges.
+- `gestion-retours-logistique` : Organise le traitement logistique des retours de marchandises d'une PME belge : réception, contrôle et tri (remise en stock, reconditionnement, déclassement, destruction, renvoi au fournisseur), traçabilité, calcul du coût réel d'un retour et des motifs récurrents, en tenant compte du droit de rétractation de 14 jours et de la garantie légale pour les ventes aux consommateurs.
+- `gestion-stocks-inventaire` : Classe les articles en stock (ABC par marge, XYZ par régularité de la demande), fixe une politique de réapprovisionnement par classe, prépare l'inventaire annuel et les comptages tournants, et repère le surstock et le stock dormant avec la trésorerie immobilisée.
+- `evaluation-transporteurs` : Évalue les transporteurs d'une entreprise sur un tableau de bord court (ponctualité à l'enlèvement et à la livraison, acceptation des demandes, ratio de réclamations, exactitude des factures, délai d'enlèvement), vérifie leur licence de transport, et propose de concentrer ou de diversifier les volumes et les critères de sortie.
+- `gestion-exceptions-transport` : Traite un incident de transport (retard, avarie apparente ou non apparente, manquant, perte, livraison refusée ou erronée) : chronologie, classement de gravité, réserves encore possibles selon la convention CMR pour le transport routier international, arbitrage chiffré entre absorber et réclamer, projet de réclamation au transporteur.
 - `classement-douanier-origine` : Prépare, pour une PME belge qui exporte ou importe, la proposition de classement douanier (code SH, NC, TARIC), l'analyse de l'origine préférentielle au titre des accords de l'UE, le statut d'exportateur enregistré (REX) et le premier examen des sanctions et des biens à double usage (règlement (UE) 2021/821), avec signal d'arrêt et escalade.
 
 ### Production (`production`)
 
-- `planification-production` : Prépare le plan de production d'une PME belge industrielle ou de services.
-- `indicateurs-trs` : Calcule et interprète le TRS (taux de rendement synthétique, OEE en anglais) d'un équipement ou d'une ligne.
-- `amelioration-continue-lean` : Structure une démarche d'amélioration continue dans une PME belge.
+- `planification-production` : Prépare le plan de production d'une PME belge industrielle ou de services : charge et capacité par poste ou équipe, plan directeur, ordonnancement des ordres de fabrication ou des interventions, repérage des goulots et simulation de scénarios.
+- `indicateurs-trs` : Calcule et interprète le TRS (taux de rendement synthétique, OEE en anglais) d'un équipement ou d'une ligne : disponibilité, performance, qualité, formules exactes, saisie des arrêts et des rebuts, classement des pertes.
+- `amelioration-continue-lean` : Structure une démarche d'amélioration continue dans une PME belge : cycle PDCA, 5S, kaizen, cartographie de la chaîne de valeur actuelle et cible, standard de travail, chiffrage prudent du gain et suivi de la tenue.
+- `maintenance-equipements` : Organise la maintenance des équipements de travail d'un atelier : inventaire des équipements, plan de maintenance préventive, traitement des pannes, vérifications initiales, périodiques et exceptionnelles avec leurs preuves, et registre des interventions, selon le Code du bien-être au travail (livre IV).
+- `methodes-temps-gammes` : Établit ou met à jour les gammes de fabrication (suite d'opérations, poste, temps de réglage et temps unitaire), mesure ou estime les temps standards, et réduit les temps de changement de série par la méthode SMED (séparer les opérations internes et externes, transférer, simplifier).
 - `non-conformite-action-corrective` : Enregistre une non-conformité ou une réclamation client dans une PME belge, en analyse la cause (5 pourquoi, diagramme d'Ishikawa), propose des actions de correction, corrective et préventive avec responsable et échéance, puis prépare la vérification d'efficacité.
 
 ### Recherche et innovation (`recherche-innovation`)
 
 - `veille-brevets-anteriorite` : Prépare une recherche d'antériorité dans les bases publiques de brevets (Espacenet de l'Office européen des brevets), choisit les classes CPC, lit les revendications élément par élément et rédige une note préliminaire de liberté d'exploitation avec ses limites.
-- `dossier-subside-innovation` : Prépare le dossier de demande d'un subside de recherche ou d'innovation pour une PME belge.
-- `incitants-fiscaux-rd` : Explique en principe et prépare les pièces des incitants fiscaux belges de recherche et développement.
+- `dossier-subside-innovation` : Prépare le dossier de demande d'un subside de recherche ou d'innovation pour une PME belge : choix du dispositif selon la Région (Wallonie, Flandre, Bruxelles) ou le programme européen (Horizon Europe, EIC), éligibilité, budget, indicateurs, calendrier à rebours et risques de divulgation.
+- `incitants-fiscaux-rd` : Explique en principe et prépare les pièces des incitants fiscaux belges de recherche et développement : déduction pour investissement, déduction pour revenus d'innovation et dispense partielle de versement du précompte professionnel pour chercheurs, avec questions à poser au conseiller fiscal.
+- `selection-projets-innovation` : Trie et classe les idées et projets d'innovation internes d'une PME : fiche d'idée, cinq contrôles d'aller ou non (adéquation à la stratégie, conditions impératives, faisabilité, capacité, intérêt et chances), note de priorité (impact et risque multipliés par la facilité), preuve de concept cadrée avec critère d'arrêt.
+- `recherche-sourcee` : Mène une recherche documentaire et vérifie les faits : chaque observation porte sa source, sa date de collecte, son statut d'accès et sa limite, et distingue fait vérifié, inférence, hypothèse et recommandation.
 
 ### Communication (`communication`)
 
-- `communique-de-presse` : Rédige un communiqué de presse d'une PME belge, FR et NL si utile.
-- `communication-de-crise` : Prépare et conduit la communication de crise d'une PME belge.
-- `communication-interne` : Organise la communication interne d'une PME belge.
-- `charte-marque` : Applique la charte de marque à un texte ou à un brief de visuel.
+- `communique-de-presse` : Rédige un communiqué de presse d'une PME belge, FR et NL si utile : angle, structure en pyramide inversée, citations validées par leur auteur, embargo, informations pratiques, liste de médias ciblée et préparation d'une éventuelle réponse au droit de réponse (loi du 23 juin 1961).
+- `communication-de-crise` : Prépare et conduit la communication de crise d'une PME belge : cellule de crise, rôles, message d'attente, porte-parole, questions-réponses, journal de crise, coordination interne et externe, retour d'expérience.
+- `communication-interne` : Organise la communication interne d'une PME belge : plan éditorial interne, intranet ou lettre, annonces de direction, messages aux managers, information des représentants du personnel quand elle est requise (conseil d'entreprise, CPPT, délégation syndicale), FAQ interne.
+- `charte-marque` : Applique la charte de marque à un texte ou à un brief de visuel : ton, vocabulaire, mentions obligatoires et interdites, affirmations autorisées, cohérence des offres et des établissements.
 - `controle-communications-reglementees` : Relit une communication commerciale (publicité, page web, courriel, post, brochure, script) d'une entreprise belge, surtout dans un secteur régulé, au regard des pratiques commerciales déloyales envers les consommateurs (livre VI du Code de droit économique : pratiques trompeuses, omissions, pratiques agressives, publicité comparative) et, pour les produits financiers et d'assurance, des règles de publicité (arrêté royal du 25 avril 2014 et circulaire FSMA_2015_16).
+- `adaptation-fr-nl-en` : Adapte un texte d'entreprise entre le français, le néerlandais et l'anglais pour un public belge ou international (communiqué, page du site, courriel client, annonce interne, offre d'emploi) en adaptant le registre, les conventions locales et la terminologie plutôt qu'en traduisant mot à mot, avec le contrôle de cohérence entre versions, la liste des choix faits et les passages à faire relire par un locuteur natif.
+- `redaction-declinaison-canal` : Rédige un contenu principal puis le décline par canal (site, blog, réseaux sociaux, courriel, fiche d'établissement) en respectant les contraintes de chaque canal, la charte de marque et les sources.
+- `veille-medias` : Tient la revue de presse et mesure les retombées médiatiques d'une entreprise belge : retombées retenues ou écartées avec le motif, chaque article daté et lié, indicateurs utiles (nombre de retombées, trafic issu des articles, hausse des recherches de la marque, citation par les moteurs d'IA, conversations commerciales qui citent l'article), alertes de réputation et erreurs factuelles à faire rectifier.
 
 ### Service client (`service-client`)
 
-- `tri-tickets-support` : Trie les tickets d'un service client de PME belge.
+- `tri-tickets-support` : Trie les tickets d'un service client de PME belge : catégorie, priorité, niveau de service, routage vers la bonne personne ou le bon service, règles d'escalade et détection des réclamations ou sinistres à transférer au service après-vente.
 - `reponse-client-multicanal` : Rédige des brouillons de réponse à des clients d'une PME belge sur plusieurs canaux (courriel, formulaire, chat, réseaux sociaux, courrier, script téléphonique) en français, néerlandais ou anglais : ton, gabarits, délais annoncés, accessibilité et protection des données personnelles.
-- `mesure-satisfaction` : Conçoit et lit une mesure de satisfaction client pour une PME belge.
-- `base-connaissances-faq` : Construit et tient à jour la FAQ et la base de connaissances du service après-vente d'une PME belge à partir des tickets réellement reçus.
+- `mesure-satisfaction` : Conçoit et lit une mesure de satisfaction client pour une PME belge : CSAT, NPS et CES avec leur définition exacte, la question, l'échelle, le moment d'envoi, la taille d'échantillon, les biais et un plan d'action chiffré.
+- `escalade-interne` : Décide s'il faut escalader un dossier client vers un autre service (informatique, commercial, juridique, direction) ou le garder, mesure l'impact en six dimensions, rédige le dossier d'escalade (gravité, impact, description, ce qui a été tenté, étapes de reproduction, communication client, demande précise et échéance), fixe une cadence de suivi et prépare la désescalade.
+- `base-connaissances-faq` : Construit et tient à jour la FAQ et la base de connaissances du service après-vente d'une PME belge à partir des tickets réellement reçus : regroupement des questions récurrentes, rédaction d'une réponse courte en langage clair, validation par un humain, date de revue, anonymisation et mesure de l'utilité (questions évitées, avis des lecteurs, tickets restants).
+- `reponse-avis-en-ligne` : Lit les avis publics d'une entreprise belge (Google, Facebook, plateformes d'avis) et rédige un brouillon de réponse pour chacun, positif, négatif, mitigé ou faux, en moins de 60 mots, sans donnée personnelle ni détail de dossier, avec les thèmes récurrents cités mot pour mot et les transferts au SAV.
+- `synthese-voix-client` : Synthétise ce que disent les clients d'une entreprise belge à partir de ses propres contenus (tickets, réclamations transférées, verbatims d'enquêtes, avis, comptes rendus) : thèmes classés par fréquence et intensité, citations exactes attribuées et datées, niveau de confiance de chaque constat, biais d'échantillon et rapport mensuel.
 
 ### Fiscalité (`fiscalite`)
 
-- `preparation-tva` : Prépare le contrôle de la TVA d'une PME belge avant la déclaration périodique.
-- `impot-des-societes` : Prépare la déclaration à l'impôt des sociétés d'une PME belge.
-- `precompte-professionnel` : Prépare le suivi du précompte professionnel d'une PME belge.
-- `agenda-echeances-legales` : Construit et tient le calendrier des échéances légales récurrentes d'une PME belge.
-- `cloture-mensuelle` : Prépare et contrôle la clôture mensuelle comptable d'une PME belge.
+- `preparation-tva` : Prépare le contrôle de la TVA d'une PME belge avant la déclaration périodique : vérification des opérations, des taux, de l'autoliquidation et des opérations intracommunautaires, préparation du listing annuel des clients et du relevé intracommunautaire, contrôle des factures électroniques structurées obligatoires entre assujettis depuis 2026.
+- `impot-des-societes` : Prépare la déclaration à l'impôt des sociétés d'une PME belge : documents à réunir, contrôle de la cohérence entre comptes annuels et résultat fiscal, repérage des dépenses non admises à valider, suivi des versements anticipés et de la majoration, vérification des conditions du taux réduit PME.
+- `precompte-professionnel` : Prépare le suivi du précompte professionnel d'une PME belge : principes de retenue et de versement par l'employeur, calendrier de déclaration et de paiement, dispenses de versement possibles (chercheurs, heures supplémentaires, travail de nuit ou en équipes, autres), contrôle des conditions et des pièces.
+- `agenda-echeances-legales` : Construit et tient le calendrier des échéances légales récurrentes d'une PME belge : TVA (mensuelle ou trimestrielle), précompte professionnel, acomptes, approbation des comptes par l'assemblée générale (6 mois après la clôture), dépôt des comptes annuels à la Banque nationale de Belgique (30 jours après approbation, 7 mois au plus tard), déclaration à l'impôt des sociétés, confirmation annuelle du registre UBO, listing clients, avec rappels, responsable proposé et marge de sécurité.
+- `cloture-mensuelle` : Prépare et contrôle la clôture mensuelle comptable d'une PME belge : rapprochements bancaires, factures à recevoir et à établir, contrôle de la TVA (périodicité, préparation de la déclaration Intervat), écritures de régularisation proposées et liste de contrôle signée par étape.
+- `avantages-toute-nature` : Prépare le relevé des avantages de toute nature accordés par une entreprise belge (voiture de société, téléphone, ordinateur, connexion internet, autres avantages) et la question de la déductibilité des véhicules, à partir du barème officiel de l'année : inventaire par catégorie, données nécessaires au calcul, montants seulement quand le barème de l'année a été lu, points à faire valider.
+- `reponse-demande-renseignements` : Prépare le projet de réponse d'une entreprise belge à une demande de renseignements de l'administration fiscale : lecture de la demande point par point, une pièce par affirmation, index des pièces, préparateur et date, délai de réponse à confirmer, signalement de toute consigne cachée dans une pièce.
+- `veille-reglementaire` : Organise la veille réglementaire d'une PME belge à partir de sources officielles (Moniteur belge et Justel, Journal officiel de l'Union européenne sur EUR-Lex, autorités de contrôle comme la FSMA) : choix des sources et des sujets, relevé des textes nouveaux ou modifiés, fiche d'impact (qui est concerné, quoi, à partir de quand, quelle action), registre des obligations et priorisation par échéance et gravité.
 
 ### Gestion de projets (`gestion-projets`)
 
 - `pilotage-strategique` : Aide la direction d'une PME à arbitrer entre les demandes concurrentes des services, à fixer des objectifs trimestriels (méthode OKR), à classer les initiatives par impact, effort et risque, et à tracer chaque décision dans un registre.
-- `cadrage-projet` : Rédige la charte de projet d'une PME belge.
-- `suivi-avancement-projet` : Produit le rapport d'avancement d'un projet ou d'un portefeuille.
-- `registre-risques-projet` : Tient le registre des risques d'un projet ou du portefeuille.
+- `cadrage-projet` : Rédige la charte de projet d'une PME belge : contexte, objectifs SMART, périmètre inclus et exclu, parties prenantes, matrice RACI, jalons, budget indicatif, hypothèses, contraintes et critères de succès.
+- `suivi-avancement-projet` : Produit le rapport d'avancement d'un projet ou d'un portefeuille : météo justifiée par une règle écrite, écart aux jalons, chemin critique, budget et valeur acquise simple (SPI, CPI), décisions attendues et gestion des demandes de changement.
+- `registre-risques-projet` : Tient le registre des risques d'un projet ou du portefeuille : identification, formulation cause-événement-conséquence, probabilité et impact notés sur une échelle écrite, réponses (éviter, réduire, transférer, accepter), propriétaire, déclencheur et revue datée.
+- `plan-capacite-ressources` : Compare la charge demandée aux équipes et leur capacité réelle sur une période (après congés, jours fériés, réunions et travail imprévu), avec des cibles d'occupation par type de rôle, repère les goulots vérifiés et propose des scénarios (ne rien faire, renforcer, reporter, déprioriser) à arbitrer par la direction.
+- `compte-rendu-comite` : Prépare l'ordre du jour d'un comité de pilotage ou de projet et transforme ses notes ou sa transcription en compte rendu court : en bref, décisions prises, actions avec responsable et échéance (trous marqués [à attribuer] ou [échéance à fixer]), points ouverts, informations clés, prochaine réunion et message de diffusion en brouillon.
+- `conduite-changement` : Prépare l'accompagnement d'un changement dans une PME belge (nouvel outil, nouvelle procédure, réorganisation) en cinq étapes (sensibilisation, adhésion, connaissance, capacité, renforcement), avec séquence de communication datée, liste de ce qui ne change pas, lecture des résistances comme des signaux, détection de la fatigue du changement et obligations d'information du personnel à vérifier.
 
 ### Hygiène, sécurité et environnement (`hse`)
 
-- `analyse-risques-poste` : Prépare l'analyse des risques d'un poste de travail dans une PME belge.
-- `accident-du-travail` : Prépare le dossier administratif et l'analyse d'un accident du travail dans une PME belge.
-- `conformite-environnementale` : Prépare les repères de conformité environnementale d'une PME belge selon sa Région (Wallonie, Bruxelles-Capitale, Flandre).
+- `analyse-risques-poste` : Prépare l'analyse des risques d'un poste de travail dans une PME belge : identification des dangers, définition et évaluation des risques, mesures dans l'ordre de prévention, projet de plan global de prévention (cinq ans) et de plan d'action annuel, suivi.
+- `accident-du-travail` : Prépare le dossier administratif et l'analyse d'un accident du travail dans une PME belge : premiers gestes administratifs, projet de déclaration à l'assureur, fiche d'accident, analyse des causes, mesures correctives, avec les délais à vérifier.
+- `conformite-environnementale` : Prépare les repères de conformité environnementale d'une PME belge selon sa Région (Wallonie, Bruxelles-Capitale, Flandre) : permis d'environnement ou omgevingsvergunning, déchets et registre, énergie, avec les questions à poser à l'administration régionale.
+- `plan-global-prevention` : Prépare le plan global de prévention sur cinq ans et le plan d'action annuel d'un employeur belge selon le Code du bien-être au travail (art.
+- `prevention-psychosociale` : Prépare la prévention collective des risques psychosociaux au travail d'un employeur belge : analyse des situations à risque sur les cinq composantes du Code du bien-être (organisation, contenu, conditions de travail, conditions de vie au travail, relations interpersonnelles), mesures collectives, information du personnel sur la procédure interne et ses intervenants.
+- `plan-urgence` : Prépare le plan d'urgence interne d'un employeur belge et ses procédures utilisables sous stress (incendie, malaise ou accident, violence d'origine externe, alerte) selon le Code du bien-être au travail : six familles de procédures (art.
 
 ### Formation (`formation`)
 
-- `plan-formation` : Prépare le plan de formation annuel d'une PME belge.
-- `financement-formation` : Identifie les pistes de financement d'une formation en Belgique selon la Région du lieu de travail.
-- `conception-module-formation` : Conçoit un module de formation en entreprise.
+- `plan-formation` : Prépare le plan de formation annuel d'une PME belge : analyse des besoins, priorités, budget, calendrier, suivi du droit individuel à la formation (jours par travailleur, compte-formation individuel) et du réalisé.
+- `financement-formation` : Identifie les pistes de financement d'une formation en Belgique selon la Région du lieu de travail : congé-éducation payé en Wallonie, à Bruxelles et en Communauté germanophone, congé-formation flamand, chèques-formation, aides des fonds sectoriels.
+- `conception-module-formation` : Conçoit un module de formation en entreprise : objectifs pédagogiques mesurables, séquences, méthodes actives, supports, évaluation à quatre niveaux (modèle de Kirkpatrick) et plan de transfert sur le poste.
+- `evaluation-formation` : Évalue une formation et vérifie son efficacité : dispositif à quatre niveaux (réaction, apprentissage, comportement, résultats), délai d'attente avant la mesure, comparaison avant et après sur le même indicateur, méthode de mesure adaptée au type de problème visé, verdict efficace, à prolonger ou inefficace, plan de transfert et bilan agrégé.
+- `registre-formations-obligatoires` : Établit et tient le registre des formations obligatoires d'une entreprise belge par fonction : bien-être au travail, secouristes, incendie et évacuation, recyclage des intermédiaires d'assurance inscrits à la FSMA, prévention du blanchiment et autres obligations sectorielles, avec base légale citée et datée, périodicité sourcée, dernière date connue et prochaine échéance.
+- `conduite-changement` : Prépare l'accompagnement d'un changement dans une PME belge (nouvel outil, nouvelle procédure, réorganisation) en cinq étapes (sensibilisation, adhésion, connaissance, capacité, renforcement), avec séquence de communication datée, liste de ce qui ne change pas, lecture des résistances comme des signaux, détection de la fatigue du changement et obligations d'information du personnel à vérifier.
 
 ### Juridique social (`juridique-social`)
 
-- `redaction-contrat-travail` : Prépare le projet d'un contrat de travail pour une PME belge.
-- `fin-contrat-travail` : Prépare l'analyse d'une fin de contrat de travail pour une PME belge.
-- `temps-travail-conges` : Explique à une PME belge les principes du temps de travail et des congés.
+- `redaction-contrat-travail` : Prépare le projet d'un contrat de travail pour une PME belge : choix du type de contrat, mentions à prévoir, clauses sensibles (non-concurrence, écolage), commission paritaire, lien avec le règlement de travail, et points d'attention pour validation.
+- `absences-incapacite` : Prépare pour une PME belge la procédure d'absence et d'incapacité de travail sans jamais traiter de donnée médicale : avertissement immédiat de l'employeur, certificat médical et délai, dispense de certificat pour le premier jour dans les limites prévues, contrôle par un médecin contrôleur, conséquence sur le salaire garanti, préparation de la reprise du travail et questions au secrétariat social.
+- `fin-contrat-travail` : Prépare l'analyse d'une fin de contrat de travail pour une PME belge : calcul indicatif du préavis selon l'ancienneté, exigences de motivation (CCT n° 109), calendrier de la procédure, motif grave et ses délais stricts, documents de sortie (C4).
+- `relations-collectives` : Aide une PME belge à situer ses obligations de concertation sociale selon son effectif (comité pour la prévention et la protection au travail dès 50 travailleurs, conseil d'entreprise dès 100, délégation syndicale selon les règles sectorielles, participation directe à défaut), à tenir le calendrier des élections sociales et à préparer l'information ou la consultation des représentants sur un projet.
+- `temps-travail-conges` : Explique à une PME belge les principes du temps de travail et des congés : durée du travail, heures supplémentaires, jours fériés légaux et jours de remplacement, congés annuels, mentions du règlement de travail, avec renvoi au secrétariat social pour tout calcul.
+- `veille-reglementaire` : Organise la veille réglementaire d'une PME belge à partir de sources officielles (Moniteur belge et Justel, Journal officiel de l'Union européenne sur EUR-Lex, autorités de contrôle comme la FSMA) : choix des sources et des sujets, relevé des textes nouveaux ou modifiés, fiche d'impact (qui est concerné, quoi, à partir de quand, quelle action), registre des obligations et priorisation par échéance et gravité.
 
 ### Données et BI (`donnees-bi`)
 
-- `gouvernance-donnees` : Met en place la gouvernance des données d'une PME belge.
-- `qualite-donnees` : Mesure et améliore la qualité d'un jeu de données d'une PME belge selon cinq dimensions (exactitude, complétude, cohérence, fraîcheur, unicité).
-- `analyse-donnees-decision` : Mène une analyse de données au service d'une décision d'une PME belge.
-- `tableau-de-bord-pme` : Construit le tableau de bord de pilotage d'une PME belge.
-- `registre-traitements-rgpd` : Établit ou met à jour le registre des activités de traitement (article 30 du RGPD) d'une PME belge.
+- `gouvernance-donnees` : Met en place la gouvernance des données d'une PME belge : catalogue des jeux de données, propriétaire et responsable de chacun, droits d'accès par rôle, durées de conservation, règles de pseudonymisation, circuit d'extraction et de partage, et cadrage de l'usage de l'IA (obligations du règlement européen sur l'IA selon le niveau de risque, à vérifier).
+- `qualite-donnees` : Mesure et améliore la qualité d'un jeu de données d'une PME belge selon cinq dimensions (exactitude, complétude, cohérence, fraîcheur, unicité) : règles de contrôle écrites, tableau de qualité chiffré par dimension, anomalies classées, plan de correction à la source.
+- `analyse-donnees-decision` : Mène une analyse de données au service d'une décision d'une PME belge : question précise, données retenues, méthode, biais et limites, incertitude chiffrée, visualisation honnête, conclusion actionnable avec niveau de confiance.
+- `tableau-de-bord-pme` : Construit le tableau de bord de pilotage d'une PME belge : indicateurs clés (trésorerie, DSO, carnet de commandes, marge brute, absentéisme, productivité, qualité de service) avec définition exacte, formule, fréquence, seuil d'alerte et source de données dans l'application.
+- `registre-traitements-rgpd` : Établit ou met à jour le registre des activités de traitement (article 30 du RGPD) d'une PME belge : une fiche par traitement avec les rubriques de l'article 30, paragraphe 1, une base légale proposée parmi celles de l'article 6, des durées de conservation à justifier, la liste des sous-traitants et la vérification du contrat de l'article 28, puis un test d'analyse d'impact (article 35) qui dit si elle est probablement nécessaire.
+- `validation-analyse` : Contrôle de façon indépendante une analyse de données avant sa diffusion : sources et fraîcheur, complétude, valeurs nulles, doublons, filtres, agrégation, dénominateurs, alignement des périodes, jointures, définitions, sous-totaux, ordre de grandeur, continuité, recoupement avec d'autres sources, présentation honnête, puis verdict prêt à diffuser, diffusable avec réserves listées, ou à réviser.
+- `dictionnaire-donnees` : Établit et tient le dictionnaire des données d'une PME : une fiche par table ou fichier (contenu, clé, fréquence de mise à jour, colonnes, liens), une fiche par indicateur (définition, formule, source, pièges) et une fiche par entité métier (client, contrat, facture), avec propriétaire et date de revue.
 
 ### Événementiel (`evenementiel`)
 
-- `cadrage-projet` : Rédige la charte de projet d'une PME belge.
-- `organisation-evenement` : Prépare l'organisation d'un événement de PME belge.
-- `salon-professionnel` : Prépare la participation d'une PME belge à un salon professionnel.
-- `bilan-evenement` : Établit le bilan d'un événement ou d'un salon d'une PME belge.
-- `registre-risques-projet` : Tient le registre des risques d'un projet ou du portefeuille.
-- `cahier-des-charges-achat` : Rédige le cahier des charges d'un achat de PME belge (fourniture, service, logiciel, sous-traitance).
+- `cadrage-projet` : Rédige la charte de projet d'une PME belge : contexte, objectifs SMART, périmètre inclus et exclu, parties prenantes, matrice RACI, jalons, budget indicatif, hypothèses, contraintes et critères de succès.
+- `organisation-evenement` : Prépare l'organisation d'un événement de PME belge : objectifs, public, format, budget, rétroplanning, prestataires, plan B météo et annulation, accessibilité, sécurité, autorisations communales selon la taille et assurance responsabilité civile.
+- `salon-professionnel` : Prépare la participation d'une PME belge à un salon professionnel : choix du salon, stand, préparation des équipes, collecte de contacts conforme au RGPD (information, consentement) et suivi des contacts dans les 48 heures.
+- `bilan-evenement` : Établit le bilan d'un événement ou d'un salon d'une PME belge : indicateurs de participation, coût par contact, satisfaction et opportunités générées, puis retour d'expérience avec décisions pour la prochaine édition.
+- `invitations-inscriptions` : Prépare la liste des invités d'un événement d'une PME belge, vérifie la base légale de chaque contact, rédige en brouillon l'invitation, les rappels J-7 et J-1, le formulaire d'inscription et la liste d'accueil, avec désinscription et information sur les photos.
+- `registre-risques-projet` : Tient le registre des risques d'un projet ou du portefeuille : identification, formulation cause-événement-conséquence, probabilité et impact notés sur une échelle écrite, réponses (éviter, réduire, transférer, accepter), propriétaire, déclencheur et revue datée.
+- `cahier-des-charges-achat` : Rédige le cahier des charges d'un achat de PME belge (fourniture, service, logiciel, sous-traitance) : besoin et contexte, spécifications obligatoires et souhaitables, critères d'attribution pondérés sur 100, conditions de réponse et demande de prix envoyée à trois fournisseurs au minimum.
+- `suivi-contacts-evenement` : Prépare le suivi des contacts après un événement ou un salon dans les 24 à 48 heures, par paliers (conversation chaude, tiède, badge scanné sans conversation), en citant ce qui a été dit, et propose la source « événement » pour le CRM.
 
 ### Services généraux (`services-generaux`)
 
-- `gestion-bail-commercial` : Prépare le suivi d'un bail commercial belge.
-- `suivi-energie-batiment` : Suit la consommation d'énergie des bâtiments d'une PME belge.
-- `maintenance-batiment` : Organise la maintenance d'un bâtiment de PME belge.
-- `contrat-fournisseur` : Contrôle un projet de contrat ou des conditions générales de fournisseur pour une PME belge.
-- `comparaison-offres-fournisseurs` : Compare les offres reçues de plusieurs fournisseurs pour un achat de PME belge sur une grille explicite.
+- `gestion-bail-commercial` : Prépare le suivi d'un bail commercial belge : fiche des clauses (durée, renouvellement, indexation, état des lieux, garantie locative, charges), calendrier des échéances à surveiller et questions à poser à un avocat.
+- `suivi-energie-batiment` : Suit la consommation d'énergie des bâtiments d'une PME belge : relevés de compteurs, consommation par mètre carré, comparaison dans le temps, échéances des contrats d'énergie, repérage des dérives, rappel du certificat PEB, des audits énergétiques et des primes régionales avec renvoi à l'administration régionale.
+- `maintenance-batiment` : Organise la maintenance d'un bâtiment de PME belge : plan d'entretien préventif, calendrier des contrôles périodiques obligatoires (installation électrique, extincteurs, ascenseurs, chauffage et autres), registre des interventions et suivi des prestataires.
+- `contrat-fournisseur` : Contrôle un projet de contrat ou des conditions générales de fournisseur pour une PME belge : durée et reconduction, résiliation, prix et indexation, délais de paiement (loi du 2 août 2002), pénalités, responsabilité et garanties, confidentialité, propriété, réversibilité, clause de sous-traitance de données personnelles (article 28 du RGPD), clauses abusives entre entreprises ; produit une fiche de points de contrôle et une liste d'escalade vers le juriste.
+- `comparaison-offres-fournisseurs` : Compare les offres reçues de plusieurs fournisseurs pour un achat de PME belge sur une grille explicite : coût total de possession, délais, niveau de service (SLA), solvabilité à partir des données publiques (BCE, comptes annuels déposés à la Banque nationale), références ; détecte les offres anormalement basses ou incomplètes et rédige une recommandation motivée, la décision restant humaine.
+- `gestion-flotte-vehicules` : Tient le parc de véhicules d'une PME belge : inventaire, échéances (fin de leasing, contrôle technique, assurance, entretien), kilométrages, sinistres de flotte, calendrier de remplacement et d'électrification, avec liaison obligatoire au service fiscalité pour tout avantage de toute nature ou toute déductibilité.
+- `demandes-occupants` : Organise le traitement des demandes internes des occupants des locaux (réservation de salles, fournitures, courrier, nettoyage, petites réparations, badges) et le suivi des prestataires : processus écrit avec matrice RACI, étapes, exceptions et indicateurs, tri et suivi des demandes, contrôle des prestations.
 
 ### Partenariats (`partenariats`)
 
-- `selection-partenaire` : Évalue un partenaire potentiel pour une PME belge (distributeur, agent commercial, revendeur, partenaire de co-marketing, apporteur d'affaires).
-- `accord-de-partenariat` : Prépare le dossier d'un accord de partenariat pour une PME belge.
-- `pilotage-partenaires` : Pilote le portefeuille de partenaires d'une PME belge.
-- `revue-contrat-commercial` : Prépare la revue d'un contrat commercial pour une PME belge.
-- `preparation-rendez-vous-b2b` : Prépare un rendez-vous commercial avec une entreprise belge.
+- `selection-partenaire` : Évalue un partenaire potentiel pour une PME belge (distributeur, agent commercial, revendeur, partenaire de co-marketing, apporteur d'affaires) : objectifs du partenariat, critères pondérés, vérification de solvabilité et de réputation par sources publiques, complémentarité, risques, recommandation.
+- `accord-de-partenariat` : Prépare le dossier d'un accord de partenariat pour une PME belge : choix du type (distribution, agence commerciale, co-marketing, revendeur), grille de clauses, points d'attention (exclusivité, territoire, indemnités de fin de contrat de l'agent commercial, droit de la concurrence, données), questions pour l'avocat, structure de projet à faire valider.
+- `pilotage-partenaires` : Pilote le portefeuille de partenaires d'une PME belge : indicateurs par partenaire, revue trimestrielle, plan d'action conjoint, détection des dérapages et fin de partenariat ordonnée (préavis, stock, clientèle, communication).
+- `revue-contrat-commercial` : Prépare la revue d'un contrat commercial pour une PME belge : grille de lecture en dix points (parties, objet, prix, durée, résiliation, responsabilité et plafond, force majeure, confidentialité, propriété intellectuelle, droit applicable et for), détection des clauses à risque, rapprochement avec les clauses abusives entre entreprises (articles VI.91/3 à VI.91/6 du Code de droit économique, loi du 4 avril 2019) et synthèse en feux rouges, orange et verts avec questions pour l'avocat.
+- `preparation-rendez-vous-b2b` : Prépare un rendez-vous commercial avec une entreprise belge : fiche entreprise à partir des données publiques (BCE, comptes annuels de la Banque nationale), besoins probables, carte des interlocuteurs (rôle, engagement, position, preuve), questions de découverte, objections probables, prochaine étape à obtenir.
+- `co-marketing-partenaire` : Structure une campagne de co-marketing avec un partenaire (webinaire commun, contenu, événement, offre conjointe) en un plan d'accord en 8 points : description, responsabilités, calendrier, traitement des contacts, promotion, marque, coûts, partage des indicateurs, avec la couche RGPD du partage de contacts entre entreprises.
+- `recherche-sourcee` : Mène une recherche documentaire et vérifie les faits : chaque observation porte sa source, sa date de collecte, son statut d'accès et sa limite, et distingue fait vérifié, inférence, hypothèse et recommandation.
 
 ## 5. Mise en place chez un client
 
@@ -342,8 +497,8 @@ rien ne travaille tant qu'un humain ne les a pas activés. Le détail de l'insta
 3. **Client existant.** `python3 -I scripts/bootstrap-organisation.py nouveau-client --fiche <fiche> --ajouter-services --entreprise <UUID> [--slug <slug>] [--reel]`
    dote d'un seul coup d'un client déjà en place de tous les services de la fiche : l'entreprise `<UUID>` devient le service marketing, les autres services et la Direction sont créés par le chemin habituel,
    en pause. La fiche doit contenir le service marketing (`services: "tous"` convient). `--a-blanc` n'écrit rien.
-4. **Déclarer les services.** `python3 -I scripts/declarer-services.py <slug-client>` envoie au plugin quelles entreprises sont quels services, avec les seuls flux dont les deux services appartiennent au client.
-   La commande est idempotente (la déclaration remplace la précédente) et ne fait aucun appel de modèle. Elle donne aussi une configuration vide du plugin aux entreprises qui n'en ont pas : sans cela,
+4. **Déclarer les services.** `python3 -I scripts/declarer-services.py <slug-client>` envoie au plugin quelles entreprises sont quels services, avec les seuls flux dont les deux services appartiennent au client
+   (flux métier et réseau des coordinateurs). La commande est idempotente (la déclaration remplace la précédente) et ne fait aucun appel de modèle. Elle donne aussi une configuration vide du plugin aux entreprises qui n'en ont pas : sans cela,
    une demande entre services resterait en file sans arriver à destination.
 5. **Activer.** Un humain active les agents du ou des services utiles, un service à la fois, et valide chaque approbation de flux sensible.
 

@@ -2,7 +2,7 @@
 name: "traitement-reclamation"
 description: "Conduit le traitement d'une réclamation client d'une PME belge de bout en bout : reconnaissance de la plainte, accusé de réception, délais de réponse, analyse des faits, réponse motivée, escalade interne, information sur la médiation (Service de médiation pour le consommateur, Ombudsman des assurances pour l'assurance), garantie légale de conformité pour les ventes aux consommateurs et registre des plaintes. À utiliser dès qu'un client exprime une insatisfaction qui attend une réponse ; jamais pour décider seul d'une compensation, d'un refus ou d'un remboursement, ni pour affirmer à un client ce que dit la loi sans le faire valider."
 metadata:
-  version: "1.0.0"
+  version: "1.1.0"
   langue: "fr"
   domaine: "sav"
 ---
@@ -44,17 +44,19 @@ Chaque réclamation reçoit un accusé de réception rapide, une analyse fondée
    - *Défaut d'un bien vendu à un consommateur* : appliquer la grille « garantie légale » ci-dessous.
    - *Retard, erreur de facturation, service mal exécuté* : comparer à ce qui était promis (devis, contrat, conditions générales, date annoncée).
    - *Assurance (intermédiaire)* : séparer ce qui relève de l'intermédiaire (conseil, information, transmission du dossier, suivi) de ce qui relève de l'assureur (décision de couverture et d'indemnisation). L'intermédiaire répond sur son propre service ; la décision de l'assureur lui est renvoyée avec transmission du dossier, sans la commenter comme si elle était la sienne.
-6. **Préparer la réponse motivée** : reconnaître le problème sans langue de bois, expliquer ce qui s'est passé d'après les faits du dossier, proposer une solution dans les limites validées, indiquer la suite et la date. Pas de formule défensive, pas de promesse que l'humain n'a pas validée, pas de reproche au client.
+6. **Préparer la réponse motivée** : reconnaître le problème sans langue de bois, expliquer ce qui s'est passé d'après les faits du dossier, proposer une solution dans les limites validées, indiquer la suite et la date. Pas de formule défensive, pas de promesse que l'humain n'a pas validée, pas de reproche au client. Relire avec la liste de contrôle : ton adapté à la situation ; aucun engagement au-delà de ce qui est autorisé ; aucune information interne ; renvois exacts aux échanges précédents ; prochaine étape et responsable clairs ; longueur adaptée au canal.
+   **Tenir le client informé** pendant le traitement, même sans nouvelle (« voici ce que nous savons à ce jour ») : repères de cadence à fixer par la direction, par exemple tous les 2 jours ouvrables pour une plainte ordinaire, chaque jour pour une plainte grave ; chaque message est un brouillon validé.
 7. **Escalader** quand un seuil est atteint : montant au-delà des limites, menace de procédure ou de médiation, suspicion de faute professionnelle, atteinte à la sécurité ou aux données personnelles, client vulnérable, deuxième plainte sur le même dossier. L'escalade passe à la direction avec la note interne (voir Livrable), jamais directement au client.
 8. **Informer sur la suite en cas de désaccord.** Si le client maintient son désaccord après la réponse définitive, la réponse précise qu'il peut saisir le service de médiation compétent :
    - *Ventes et services aux consommateurs, hors secteurs financiers* : le Service de médiation pour le consommateur, service public indépendant et gratuit. Il n'ouvre un dossier que si le client prouve qu'il a d'abord tenté de trouver une solution avec l'entreprise, et la plainte est refusable si elle a été soumise à l'entreprise plus d'un an auparavant. Il ne traite pas les affaires déjà soumises à un tribunal.
    - *Assurance* : l'Ombudsman des assurances, compétent pour les plaintes visant les entreprises d'assurances et les intermédiaires d'assurance. La loi du 4 avril 2014 relative aux assurances prévoit ce système extrajudiciaire et suspend les délais de prescription dès la réception d'une demande complète (voir sources).
    Le choix du service est vérifié sur le dossier : en cas de doute, l'humain tranche.
-9. **Clôturer et apprendre.** Noter dans le registre : date et contenu de la réponse définitive, solution, délai réel, satisfaction du client si connue, cause racine (hypothèse marquée comme telle). Chaque trimestre, regrouper par cause et proposer une correction (fiche produit, procédure, FAQ), à transmettre à la compétence `base-connaissances-faq` pour les réponses réutilisables.
+9. **Désescalader** quand la cause est trouvée et traitable par le service, qu'une solution débloque le client ou que la gravité baisse : prévenir la direction ou le service saisi, mettre à jour le registre, proposer le message au client.
+10. **Clôturer et apprendre.** Noter dans le registre : date et contenu de la réponse définitive, solution, délai réel, satisfaction du client si connue, cause racine (hypothèse marquée comme telle). Chaque trimestre, regrouper par cause et proposer une correction (fiche produit, procédure, FAQ), à transmettre à la compétence `base-connaissances-faq` pour les réponses réutilisables.
 
 ### Grille « garantie légale de conformité » (vente d'un bien à un consommateur)
 
-Droit applicable à la date de rédaction (16/10/2026) : articles 1649bis et suivants de l'ancien Code civil, pour les contrats conclus à partir du 1er juin 2022. Le nouveau livre 7 du Code civil, adopté par la Chambre le 16 juillet 2026, n'est pas encore en vigueur : il s'applique en principe aux contrats conclus après son entrée en vigueur (voir sources).
+Droit applicable à la date de rédaction (17/10/2026) : articles 1649bis et suivants de l'ancien Code civil, dans leur version modifiée par la loi du 20 mars 2022, en vigueur le 1er juin 2022 (mention de Justel). Le nouveau livre 7 du Code civil n'apparaît pas dans le Code civil consolidé sur Justel au 17/10/2026 : il n'est pas appliqué ici, et sa date d'entrée en vigueur est à vérifier (voir « À vérifier par un professionnel »).
 
 | Question | Règle (art. 1649quater et 1649quinquies) | Ce que fait la compétence |
 | --- | --- | --- |
@@ -88,30 +90,28 @@ Rien n'est envoyé, signé, payé ni déposé : l'humain valide et agit.
 
 ## Sources officielles
 
-Consultées le 16/10/2026 :
+Consultées le 16/10/2026 et le 17/10/2026 (loi du 4 avril 2014 et ancien Code civil relus sur Justel le 17/10/2026) :
 
 - Loi du 4 avril 2014 relative aux assurances, Justel (texte mis à jour au 04/08/2026), https://www.ejustice.just.fgov.be/cgi_loi/article.pl?language=fr&lg_txt=f&type=&sort=&numac_search=2014011239&cn_search=2014040446&caller=article&&view_numac=2014011239n : article 265 (les intermédiaires établissent des politiques et procédures internes pour que les réclamations soient examinées de manière experte et honnête et que le réclamant reçoive en tout cas une réponse) ; article 266, 7° (l'intermédiaire adhère au système extrajudiciaire de traitement des plaintes, directement ou par une association professionnelle) ; article 322 (système extrajudiciaire de traitement des plaintes, service ombudsman des assurances compétent pour les plaintes visant les entreprises d'assurances et les intermédiaires, suspension de la prescription de l'article 88 dès réception d'une demande complète).
 - Ancien Code civil, livre III, articles 1649bis à 1649octies, Justel (version consultée, mise à jour au 28/05/2024), https://www.ejustice.just.fgov.be/cgi_loi/article.pl?language=fr&lg_txt=f&type=&sort=&numac_search=1804032154&cn_search=1804032130&caller=article&&view_numac=1804032154n : délai de deux ans, présomption de deux ans, information du vendeur dans les deux mois, prescription d'un an, ordre des remèdes, nullité des clauses contraires. Le texte consulté date de mai 2024 : vérifier qu'il n'a pas été modifié depuis.
 - « Service de médiation pour le consommateur », accueil et page de questions fréquentes, https://www.mediationconsommateur.be/fr et https://www.mediationconsommateur.be/fr/faq : service public indépendant et gratuit, traitement visé en 90 jours, démarche préalable auprès de l'entreprise exigée, plainte refusable après un an, affaires déjà devant un tribunal exclues.
 - Source secondaire : « Règles de conduite pour la gestion des réclamations dans les entreprises d'assurances », Assuralia (adoptées le 14 janvier 2008), https://files.assuralia.be/werking-verzekering_fonctionnement-assurance/gedragsregels/FR_code_plaintes.pdf : définition de la réclamation, accusé de réception sous 3 jours ouvrables, réponse visée sous 2 semaines, réponse définitive sous un mois, information sur l'Ombudsman en cas de désaccord, enregistrement des réclamations. Règles professionnelles d'une union professionnelle d'assureurs, sans valeur légale ; les délais servent de repère de bonne pratique.
-- Source secondaire : « Q&A : nouvelles règles relatives à la vente aux consommateurs à compter du 1er juin 2022 », FEB et Eubelius, https://www.vbo-feb.be/globalassets/publicaties/qa-nieuwe-regels-consumentenkoop-vanaf-1-juni-2022/brochure-qa--nouvelles-regles-relatives--la-vente-aux-consommateurs-a-compter-du-1er-juin-2022.pdf : application aux contrats conclus à partir du 1er juin 2022, passage de la présomption de 6 mois à 2 ans, exclusion des ventes à des entreprises, garantie légale distincte de la garantie du fabricant.
-- Source secondaire : article « Le nouveau livre 7 du Code civil belge », Lexgo, https://www.lexgo.be/en/news-and-articles/15026-new-book-7-of-the-belgian-civil-code-a-landmark-reform-of-belgian-contract-law : entrée en vigueur le premier jour du douzième mois suivant la publication, contrats antérieurs soumis à l'ancien régime. Texte du livre 7 non consulté.
-- Source secondaire : « Contrats de vente : quelles modifications apporte le livre 7 du Code civil », Lexgo, https://www.lexgo.be/fr/actualites-et-articles/15061-contrats-de-vente-quelles-modifications-apporte-le-livre-7-du-code-civil : mentionne l'approbation du livre 7 par la Chambre le 16 juillet 2026 ; ne précise ni la date de publication ni celle d'entrée en vigueur.
 
-Le site de l'Ombudsman des assurances n'a pas pu être ouvert le 16/10/2026 (certificat du site non reconnu) : ses conditions de saisine, délais et coordonnées ne sont pas reprises ici et sont à vérifier sur son site.
+- Ancien Code civil, art. 1649bis et suivants, Justel : la mention « L 2022-03-20/05, art. 3 ; En vigueur : 01-06-2022 » fonde la date d'application ; le Code civil consolidé (https://www.ejustice.just.fgov.be/eli/loi/2019/04/13/2019A12168/justel) ne contient pas encore de livre 7 au 17/10/2026. Les articles de vulgarisation de Lexgo et de la FEB cités auparavant ont été retirés.
+- Ombudsman des Assurances, « Introduire une plainte », https://www.ombudsman-insurance.be/introduire-une-plainte/ (17/10/2026) : le client interroge d'abord l'entreprise ou l'intermédiaire ; la plainte est écrite (brève description, coordonnées de l'entreprise ou de l'intermédiaire, référence du dossier) ; pas de plainte par téléphone. L'ancienne adresse du site ne répondait pas le 16/10/2026.
 
 ## À vérifier par un professionnel
 
-Toute réponse qui cite un droit du client (garantie légale, médiation, délai) est relue par le dirigeant ou un juriste avant envoi. Pour une plainte d'assurance, la position à tenir sur la couverture ou l'indemnisation vient de l'assureur ; l'intermédiaire n'en prend pas la place. Le règlement de procédure du service de médiation, les secteurs qui relèvent d'un service sectoriel et les règles de notification propres à l'entreprise sont à confirmer par le responsable.
+Le régime des contrats conclus avant le 1er juin 2022 et la date d'entrée en vigueur du nouveau livre 7 du Code civil sont à vérifier par un juriste. Toute réponse qui cite un droit du client (garantie légale, médiation, délai) est relue par le dirigeant ou un juriste avant envoi. Pour une plainte d'assurance, la position à tenir sur la couverture ou l'indemnisation vient de l'assureur ; l'intermédiaire n'en prend pas la place. Le règlement de procédure du service de médiation, les secteurs qui relèvent d'un service sectoriel et les règles de notification propres à l'entreprise sont à confirmer par le responsable.
 
 ## Limites
 
 - Aucune décision d'indemnisation, de remboursement ou de refus : elle est humaine, et pour l'assurance elle appartient à l'assureur.
-- Le droit cité vaut pour les contrats conclus à partir du 1er juin 2022 et jusqu'à l'entrée en vigueur du livre 7 ; un contrat antérieur au 1er juin 2022 relève de l'ancien régime (présomption de 6 mois).
+- Le droit cité vaut pour les contrats conclus à partir du 1er juin 2022 et jusqu'à l'entrée en vigueur du livre 7 ; un contrat antérieur au 1er juin 2022 relève de l'ancien régime (présomption de 6 mois). Le régime antérieur n'a pas été relu à la source officielle : à vérifier.
 - La compétence ne qualifie pas juridiquement une faute et ne conseille pas de saisir un tribunal.
 - Les délais de réponse hors assurance ne sont pas fixés par un texte général cité ici : ils sont ceux de la fiche de l'entreprise.
 - Une plainte émise par un tiers, un concurrent ou une personne non cliente est escaladée sans réponse sur le fond.
-- Les ventes de contenus et services numériques suivent un autre régime (art. 1701/10 et suivants de l'ancien Code civil, mentionné par la brochure FEB) non détaillé ici.
+- Les ventes de contenus et services numériques suivent un autre régime (art. 1701/10 et suivants de l'ancien Code civil, à vérifier sur Justel) non détaillé ici.
 
 ## Exemple
 
@@ -122,3 +122,11 @@ Un client consommateur écrit le 12/10/2026 : le lave-linge livré le 20/03/2026
 - Brouillon : accusé du 13/10, puis réponse motivée proposant la réparation à domicile sous 10 jours ouvrables (à valider par le responsable), avec la mention de la voie de médiation si le désaccord persiste.
 
 Cas d'échec : le client écrit « votre produit est nul, je veux mon argent, sinon j'écris à tout le monde », sans date, sans référence ni description. La compétence ne rejette pas la plainte et ne devine pas la date de livraison : elle enregistre la réclamation, prépare l'accusé de réception, pose les questions manquantes (numéro de commande, date de livraison, nature du défaut, date de constat) et marque le dossier « escalade : menace de publicité négative ». Elle ne promet aucun remboursement et ne cite aucune date limite de garantie tant que la date de livraison est inconnue.
+
+## Origine de la méthode
+
+Cadence d'information et désescalade adaptées et traduites de github.com/anthropics/knowledge-work-plugins,
+`customer-support/skills/customer-escalation/SKILL.md` (« Follow-up Cadence After Escalation », « De-escalation ») ;
+liste de contrôle de `customer-support/skills/draft-response/SKILL.md`, étape 4 ; commit
+33eeda1e8fd856455b05479d13a0f85b5f803744, licence Apache 2.0. Modifications : réécriture en français, cadences
+présentées comme repères, droit belge. Texte de la licence et liste des reprises : `organisation/skills/LICENCES-TIERS.md`.

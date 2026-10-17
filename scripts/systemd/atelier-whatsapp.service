@@ -1,0 +1,37 @@
+[Unit]
+Description=Passerelle WhatsApp de l'Atelier marketing IA (webhook Meta, boucle locale)
+After=network-online.target
+Wants=network-online.target
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+# Secrets (0600, hors dépôt) : modèle dans config/whatsapp.env.exemple. Le service refuse de démarrer si le
+# fichier est lisible par d'autres comptes (WHATSAPP_FICHIER_ENV) ou si une valeur est douteuse (code 2).
+EnvironmentFile=%h/.config/atelier/whatsapp.env
+Environment=WHATSAPP_FICHIER_ENV=%h/.config/atelier/whatsapp.env
+WorkingDirectory=%h/Projets/atelier-marketing-ia/whatsapp
+# N'écoute que sur 127.0.0.1 (WHATSAPP_HOTE ne peut valoir que 127.0.0.1 ou ::1) ; Tailscale Funnel publie ce port.
+ExecStart=/usr/bin/env node dist/src/demarrer.js
+Restart=on-failure
+RestartSec=10
+RestartPreventExitStatus=2
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=atelier-whatsapp
+# Durcissement. ProtectSystem=/ReadWritePaths= ne sont PAS appliqués aux unités utilisateur de ce poste (essai du
+# 17/10/2026 : écriture dans ~ toujours possible sous ProtectSystem=strict) : non mis, pour ne pas laisser croire
+# à une protection absente.
+NoNewPrivileges=yes
+UMask=0077
+# Essais jetables du 17/10/2026 sur ce poste (systemd-run --user) : APPLIQUÉS sur une unité utilisateur.
+# - RestrictAddressFamilies : socket(AF_NETLINK) et socket(AF_PACKET) refusés (EAFNOSUPPORT), INET/INET6/UNIX permis
+#   (le témoin sans l'option crée la socket NETLINK) ;
+# - MemoryMax : plafond de 256 Mo effectif ; MemorySwapMax=0 est nécessaire, sinon le dépassement part en swap sans
+#   rien limiter (mesuré : 400 Mo alloués sous MemoryMax=64M passent par le swap ; avec MemorySwapMax=0, oom-kill).
+MemoryMax=256M
+MemorySwapMax=0
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+
+[Install]
+WantedBy=default.target

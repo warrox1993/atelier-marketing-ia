@@ -1,0 +1,974 @@
+From 824cc4f51004119a3fb4ea92ba92845ce5b91dfe Mon Sep 17 00:00:00 2001
+From: Jean-Baptiste Dhondt <114347858+warrox1993@users.noreply.github.com>
+Date: Sat, 17 Oct 2026 22:44:22 +0200
+Subject: [PATCH 70/78] =?UTF-8?q?feat(ui):=20libell=C3=A9s=20fran=C3=A7ais?=
+ =?UTF-8?q?=20des=20t=C3=A2ches,=20organisations,=20routines,=20approbatio?=
+ =?UTF-8?q?ns=20et=20s=C3=A9lecteur=20d'organisation?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Fil d'Ariane « Tâches » (l'ancien « Tasks » d'un historique enregistré reste
+reconnu), page Organisations (états, compteurs, création, suppression),
+état des routines (en pause, brouillon, archivée), approbations de la boîte
+de réception (types, états, « demandée par », « mise à jour »), menu et
+sélecteur d'organisation (« Inviter des personnes dans … »), compte local
+affiché « Utilisateur » au lieu de « Board ». Les valeurs stockées et les
+étiquettes d'accessibilité du sélecteur ne changent pas. Audit visuel D08.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01DP85vPq2MHkZg8VNtRvCzB
+---
+ ui/src/components/ApprovalPayload.test.tsx    |  4 +-
+ ui/src/components/ApprovalPayload.tsx         | 46 +++++++++----------
+ ui/src/components/BreadcrumbBar.tsx           |  3 +-
+ ui/src/components/CompanySwitcher.tsx         | 10 ++--
+ ui/src/components/RoutineList.tsx             |  2 +-
+ ui/src/components/SidebarAccountMenu.tsx      |  4 +-
+ .../SidebarCompanyMenu.production.tsx         | 10 ++--
+ ui/src/components/SidebarCompanyMenu.test.tsx | 34 +++++++-------
+ ui/src/components/SidebarCompanyMenu.tsx      | 10 ++--
+ ui/src/lib/inbox.test.ts                      |  2 +-
+ ui/src/lib/inbox.ts                           |  2 +-
+ ui/src/lib/issueDetailBreadcrumb.test.ts      |  4 +-
+ ui/src/lib/issueDetailBreadcrumb.ts           | 18 ++++++--
+ ui/src/pages/Companies.test.tsx               |  4 +-
+ ui/src/pages/Companies.tsx                    | 31 ++++++++-----
+ ui/src/pages/CompanyAccess.test.tsx           | 18 ++++----
+ ui/src/pages/CompanyAccess.tsx                |  2 +-
+ ui/src/pages/Inbox.test.tsx                   |  6 +--
+ ui/src/pages/Inbox.tsx                        | 15 ++++--
+ ui/src/pages/Issues.tsx                       | 12 ++---
+ ui/src/pages/LegacyInbox.tsx                  | 11 ++++-
+ ui/src/pages/ProfileSettings.tsx              |  4 +-
+ 22 files changed, 145 insertions(+), 107 deletions(-)
+
+diff --git a/ui/src/components/ApprovalPayload.test.tsx b/ui/src/components/ApprovalPayload.test.tsx
+index 953394747..66d7ae8aa 100644
+--- a/ui/src/components/ApprovalPayload.test.tsx
++++ b/ui/src/components/ApprovalPayload.test.tsx
+@@ -15,7 +15,7 @@ describe("approvalLabel", () => {
+       approvalLabel("request_board_approval", {
+         title: "Reply with an ASCII frog",
+       }),
+-    ).toBe("Board Approval: Reply with an ASCII frog");
++    ).toBe("Approbation demandée : Reply with an ASCII frog");
+   });
+ });
+ 
+@@ -203,7 +203,7 @@ describe("ApprovalPayloadRenderer", () => {
+     });
+ 
+     expect(container.textContent).toContain("Board asked for approval before posting the frog.");
+-    expect(container.textContent).not.toContain("TitleReply with an ASCII frog");
++    expect(container.textContent).not.toContain("TitreReply with an ASCII frog");
+ 
+     act(() => {
+       root.unmount();
+diff --git a/ui/src/components/ApprovalPayload.tsx b/ui/src/components/ApprovalPayload.tsx
+index 6f8f9752d..1d4d50577 100644
+--- a/ui/src/components/ApprovalPayload.tsx
++++ b/ui/src/components/ApprovalPayload.tsx
+@@ -3,10 +3,10 @@ import { MarkdownBody } from "./MarkdownBody";
+ import { formatCents } from "../lib/utils";
+ 
+ export const typeLabel: Record<string, string> = {
+-  hire_agent: "Hire Agent",
+-  approve_ceo_strategy: "CEO Strategy",
+-  budget_override_required: "Budget Override",
+-  request_board_approval: "Board Approval",
++  hire_agent: "Recrutement d'agent",
++  approve_ceo_strategy: "Stratégie de la direction",
++  budget_override_required: "Dépassement de budget",
++  request_board_approval: "Approbation demandée",
+ };
+ 
+ function firstNonEmptyString(...values: unknown[]): string | null {
+@@ -27,12 +27,12 @@ export function approvalSubject(payload?: Record<string, unknown> | null): strin
+   );
+ }
+ 
+-/** Build a contextual label for an approval, e.g. "Hire Agent: Designer" */
++/** Libellé contextuel d'une approbation, par exemple « Recrutement d'agent : Designer ». */
+ export function approvalLabel(type: string, payload?: Record<string, unknown> | null): string {
+   const base = typeLabel[type] ?? type;
+   const subject = approvalSubject(payload);
+   if (subject) {
+-    return `${base}: ${subject}`;
++    return `${base} : ${subject}`;
+   }
+   return base;
+ }
+@@ -66,7 +66,7 @@ function SkillList({ values }: { values: unknown }) {
+ 
+   return (
+     <div className="flex items-start gap-2">
+-      <span className="text-muted-foreground w-20 sm:w-24 shrink-0 text-xs pt-0.5">Skills</span>
++      <span className="text-muted-foreground w-20 sm:w-24 shrink-0 text-xs pt-0.5">Compétences</span>
+       <div className="flex flex-wrap gap-1.5">
+         {items.map((item) => (
+           <span
+@@ -85,21 +85,21 @@ export function HireAgentPayload({ payload }: { payload: Record<string, unknown>
+   return (
+     <div className="mt-3 space-y-1.5 text-sm">
+       <div className="flex items-center gap-2">
+-        <span className="text-muted-foreground w-20 sm:w-24 shrink-0 text-xs">Name</span>
+-        <span className="font-medium">{String(payload.name ?? "—")}</span>
++        <span className="text-muted-foreground w-20 sm:w-24 shrink-0 text-xs">Nom</span>
++        <span className="font-medium">{String(payload.name ?? "-")}</span>
+       </div>
+-      <PayloadField label="Role" value={payload.role} />
+-      <PayloadField label="Title" value={payload.title} />
+-      <PayloadField label="Icon" value={payload.icon} />
++      <PayloadField label="Rôle" value={payload.role} />
++      <PayloadField label="Titre" value={payload.title} />
++      <PayloadField label="Icône" value={payload.icon} />
+       {!!payload.capabilities && (
+         <div className="flex items-start gap-2">
+-          <span className="text-muted-foreground w-20 sm:w-24 shrink-0 text-xs pt-0.5">Capabilities</span>
++          <span className="text-muted-foreground w-20 sm:w-24 shrink-0 text-xs pt-0.5">Capacités</span>
+           <span className="text-muted-foreground">{String(payload.capabilities)}</span>
+         </div>
+       )}
+       {!!payload.adapterType && (
+         <div className="flex items-center gap-2">
+-          <span className="text-muted-foreground w-20 sm:w-24 shrink-0 text-xs">Adapter</span>
++          <span className="text-muted-foreground w-20 sm:w-24 shrink-0 text-xs">Adaptateur</span>
+           <span className="font-mono text-xs bg-muted px-1.5 py-0.5 rounded">
+             {String(payload.adapterType)}
+           </span>
+@@ -114,7 +114,7 @@ export function CeoStrategyPayload({ payload }: { payload: Record<string, unknow
+   const plan = payload.plan ?? payload.description ?? payload.strategy ?? payload.text;
+   return (
+     <div className="mt-3 space-y-1.5 text-sm">
+-      <PayloadField label="Title" value={payload.title} />
++      <PayloadField label="Titre" value={payload.title} />
+       {!!plan && (
+         <div className="mt-2 rounded-md bg-muted/40 px-3 py-2 text-sm text-muted-foreground whitespace-pre-wrap font-mono text-xs max-h-48 overflow-y-auto">
+           {String(plan)}
+@@ -134,12 +134,12 @@ export function BudgetOverridePayload({ payload }: { payload: Record<string, unk
+   const observedAmount = typeof payload.observedAmount === "number" ? payload.observedAmount : null;
+   return (
+     <div className="mt-3 space-y-1.5 text-sm">
+-      <PayloadField label="Scope" value={payload.scopeName ?? payload.scopeType} />
+-      <PayloadField label="Window" value={payload.windowKind} />
+-      <PayloadField label="Metric" value={payload.metric} />
++      <PayloadField label="Portée" value={payload.scopeName ?? payload.scopeType} />
++      <PayloadField label="Période" value={payload.windowKind} />
++      <PayloadField label="Mesure" value={payload.metric} />
+       {(budgetAmount !== null || observedAmount !== null) ? (
+         <div className="rounded-md bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
+-          Limit {budgetAmount !== null ? formatCents(budgetAmount) : "—"} · Observed {observedAmount !== null ? formatCents(observedAmount) : "—"}
++          Limite {budgetAmount !== null ? formatCents(budgetAmount) : "-"} · Constaté {observedAmount !== null ? formatCents(observedAmount) : "-"}
+         </div>
+       ) : null}
+       {!!payload.guidance && (
+@@ -187,13 +187,13 @@ function BoardApprovalPayloadContent({ payload }: { payload: Record<string, unkn
+     <div className="mt-4 space-y-3.5 text-sm">
+       {title && (
+         <div className="space-y-1">
+-          <p className="text-(length:--text-micro) font-medium uppercase tracking-(--tracking-label) text-muted-foreground">Title</p>
++          <p className="text-(length:--text-micro) font-medium uppercase tracking-(--tracking-label) text-muted-foreground">Titre</p>
+           <p className="font-medium leading-6 text-foreground">{title}</p>
+         </div>
+       )}
+       {summary && (
+         <div className="space-y-1">
+-          <p className="text-(length:--text-micro) font-medium uppercase tracking-(--tracking-label) text-muted-foreground">Summary</p>
++          <p className="text-(length:--text-micro) font-medium uppercase tracking-(--tracking-label) text-muted-foreground">Résumé</p>
+           <MarkdownBody className="leading-6 text-foreground/90">{summary}</MarkdownBody>
+         </div>
+       )}
+@@ -207,13 +207,13 @@ function BoardApprovalPayloadContent({ payload }: { payload: Record<string, unkn
+       )}
+       {nextActionOnApproval && (
+         <div className="rounded-lg border border-border/60 bg-background/60 px-3.5 py-3">
+-          <p className="text-(length:--text-micro) font-medium uppercase tracking-(--tracking-label) text-muted-foreground">On approval</p>
++          <p className="text-(length:--text-micro) font-medium uppercase tracking-(--tracking-label) text-muted-foreground">Après approbation</p>
+           <MarkdownBody className="mt-1 leading-6 text-foreground">{nextActionOnApproval}</MarkdownBody>
+         </div>
+       )}
+       {risks.length > 0 && (
+         <div className="space-y-1.5">
+-          <p className="text-(length:--text-micro) font-medium uppercase tracking-(--tracking-label) text-muted-foreground">Risks</p>
++          <p className="text-(length:--text-micro) font-medium uppercase tracking-(--tracking-label) text-muted-foreground">Risques</p>
+           <ul className="space-y-1 text-sm text-muted-foreground">
+             {risks.map((risk, index) => (
+               <li key={`${index}-${risk}`} className="flex items-start gap-2">
+diff --git a/ui/src/components/BreadcrumbBar.tsx b/ui/src/components/BreadcrumbBar.tsx
+index f16b2075f..6b87ca144 100644
+--- a/ui/src/components/BreadcrumbBar.tsx
++++ b/ui/src/components/BreadcrumbBar.tsx
+@@ -17,6 +17,7 @@ import { Fragment, useMemo, type ReactNode } from "react";
+ import { PluginSlotOutlet, usePluginSlots } from "@/plugins/slots";
+ import { PluginLauncherOutlet, usePluginLaunchers } from "@/plugins/launchers";
+ import { cn } from "../lib/utils";
++import { estLibelleTaches } from "../lib/issueDetailBreadcrumb";
+ 
+ type GlobalToolbarContext = { companyId: string | null; companyPrefix: string | null };
+ 
+@@ -109,7 +110,7 @@ export function BreadcrumbBar({ taskDetailLayout = false }: { taskDetailLayout?:
+   );
+ 
+   const currentCrumb = breadcrumbs[breadcrumbs.length - 1];
+-  if (isMobile && breadcrumbs[0]?.label === "Tasks" && currentCrumb.identifier) {
++  if (isMobile && estLibelleTaches(breadcrumbs[0]?.label) && currentCrumb.identifier) {
+     return (
+       <div className="h-(--sz-60px) shrink-0 flex items-center border-b border-border px-4">
+         {menuButton}
+diff --git a/ui/src/components/CompanySwitcher.tsx b/ui/src/components/CompanySwitcher.tsx
+index ee3d61a1d..a7f86ad61 100644
+--- a/ui/src/components/CompanySwitcher.tsx
++++ b/ui/src/components/CompanySwitcher.tsx
+@@ -50,14 +50,14 @@ export function CompanySwitcher({ open: controlledOpen, onOpenChange }: CompanyS
+               <span className={`h-2 w-2 rounded-full shrink-0 ${statusDotColor(selectedCompany.status)}`} />
+             )}
+             <span className="text-sm font-medium truncate">
+-              {selectedCompany?.name ?? "Select organization"}
++              {selectedCompany?.name ?? "Choisir une organisation"}
+             </span>
+           </div>
+           <ChevronsUpDown className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+         </Button>
+       </DropdownMenuTrigger>
+       <DropdownMenuContent align="start" className="w-(--sz-220px)">
+-        <DropdownMenuLabel>Organizations</DropdownMenuLabel>
++        <DropdownMenuLabel>Organisations</DropdownMenuLabel>
+         <DropdownMenuSeparator />
+         {sidebarCompanies.map((company) => (
+           <DropdownMenuItem
+@@ -75,7 +75,7 @@ export function CompanySwitcher({ open: controlledOpen, onOpenChange }: CompanyS
+           // give the customer the way out, since nothing else in the app does.
+           companyListUnavailable ? (
+             <>
+-              <DropdownMenuItem disabled>Couldn't load organizations</DropdownMenuItem>
++              <DropdownMenuItem disabled>Impossible de charger les organisations</DropdownMenuItem>
+               <DropdownMenuItem
+                 onSelect={(event) => {
+                   // Keep the menu open so the result of the retry is visible.
+@@ -88,7 +88,7 @@ export function CompanySwitcher({ open: controlledOpen, onOpenChange }: CompanyS
+               </DropdownMenuItem>
+             </>
+           ) : (
+-            <DropdownMenuItem disabled>No organizations</DropdownMenuItem>
++            <DropdownMenuItem disabled>Aucune organisation</DropdownMenuItem>
+           )
+         )}
+         <DropdownMenuSeparator />
+@@ -101,7 +101,7 @@ export function CompanySwitcher({ open: controlledOpen, onOpenChange }: CompanyS
+         <DropdownMenuItem asChild>
+           <Link to="/companies" className="no-underline text-inherit">
+             <Plus className="h-4 w-4 mr-2" />
+-            Manage Organizations
++            Gérer les organisations
+           </Link>
+         </DropdownMenuItem>
+       </DropdownMenuContent>
+diff --git a/ui/src/components/RoutineList.tsx b/ui/src/components/RoutineList.tsx
+index 047019331..ab509e217 100644
+--- a/ui/src/components/RoutineList.tsx
++++ b/ui/src/components/RoutineList.tsx
+@@ -136,7 +136,7 @@ export function RoutineListRow<TRoutine extends RoutineListRowItem>({
+           <span className="truncate text-sm font-medium">{routine.title}</span>
+           {(isArchived || routine.status === "paused" || isDraft) ? (
+             <span className="text-xs text-muted-foreground">
+-              {isArchived ? "archived" : isDraft ? "draft" : "paused"}
++              {isArchived ? "archivée" : isDraft ? "brouillon" : "en pause"}
+             </span>
+           ) : null}
+           {managedByLabel ? (
+diff --git a/ui/src/components/SidebarAccountMenu.tsx b/ui/src/components/SidebarAccountMenu.tsx
+index 018f10cb9..d1a8ea63b 100644
+--- a/ui/src/components/SidebarAccountMenu.tsx
++++ b/ui/src/components/SidebarAccountMenu.tsx
+@@ -153,7 +153,9 @@ export function SidebarAccountMenu({
+ 
+   const signOutMutation = useSignOut({ onSignedOut: closeNavigationChrome });
+ 
+-  const displayName = session?.user.name?.trim() || "Board";
++  // Le compte local de confiance porte le nom anglais « Board » en base : on l'affiche en français.
++  const storedName = session?.user.name?.trim();
++  const displayName = !storedName || (session?.user.id === "local-board" && storedName === "Board") ? "Utilisateur" : storedName;
+   const secondaryLabel =
+     session?.user.email?.trim() || (deploymentMode === "authenticated" ? "Connecté" : "Humain de l'espace de travail local");
+   const initials = deriveInitials(displayName);
+diff --git a/ui/src/components/SidebarCompanyMenu.production.tsx b/ui/src/components/SidebarCompanyMenu.production.tsx
+index 4cc32804b..36d71ab0e 100644
+--- a/ui/src/components/SidebarCompanyMenu.production.tsx
++++ b/ui/src/components/SidebarCompanyMenu.production.tsx
+@@ -306,7 +306,7 @@ function BuiltinCompanyMenu({ open: controlledOpen, onOpenChange }: SidebarCompa
+               )}
+               title={currentName ?? undefined}
+             >
+-              {currentName ?? `Select ${switcherNoun}`}
++              {currentName ?? "Choisir une organisation"}
+             </span>
+           </span>
+           {!rail && <ChevronsUpDown className="size-3.5 shrink-0 text-muted-foreground" />}
+@@ -319,7 +319,7 @@ function BuiltinCompanyMenu({ open: controlledOpen, onOpenChange }: SidebarCompa
+       >
+         <div className="flex h-(--organization-popover-header-height) items-center justify-between gap-2 px-3.5">
+           <DropdownMenuLabel className="p-0 text-(length:--text-compact) font-semibold text-foreground">
+-            Organizations
++            Organisations
+           </DropdownMenuLabel>
+           <button
+             type="button"
+@@ -361,7 +361,7 @@ function BuiltinCompanyMenu({ open: controlledOpen, onOpenChange }: SidebarCompa
+             // offer the way back.
+             companyListUnavailable ? (
+               <>
+-                <DropdownMenuItem disabled>Couldn&apos;t load companies</DropdownMenuItem>
++                <DropdownMenuItem disabled>Impossible de charger les organisations</DropdownMenuItem>
+                 <DropdownMenuItem
+                   onSelect={(event) => {
+                     // Keep the menu open so the result of the retry is visible.
+@@ -412,8 +412,8 @@ function BuiltinCompanyMenu({ open: controlledOpen, onOpenChange }: SidebarCompa
+                 </span>
+                 <span className="min-w-0 flex-1 truncate">
+                   {currentName
+-                    ? `Invite people to ${currentName}`
+-                    : "Invite people"}
++                    ? `Inviter des personnes dans ${currentName}`
++                    : "Inviter des personnes"}
+                 </span>
+               </Link>
+             </DropdownMenuItem>
+diff --git a/ui/src/components/SidebarCompanyMenu.test.tsx b/ui/src/components/SidebarCompanyMenu.test.tsx
+index 25202f45d..242b27bf9 100644
+--- a/ui/src/components/SidebarCompanyMenu.test.tsx
++++ b/ui/src/components/SidebarCompanyMenu.test.tsx
+@@ -219,8 +219,8 @@ describe("SidebarCompanyMenu", () => {
+     await flushReact();
+     await openMenu("Open Acme Labs organization switcher");
+ 
+-    expect(document.body.textContent).toContain("Couldn't load organizations");
+-    expect(document.body.textContent).not.toContain("No organizations");
++    expect(document.body.textContent).toContain("Impossible de charger les organisations");
++    expect(document.body.textContent).not.toContain("Aucune organisation");
+ 
+     const retryItem = Array.from(document.body.querySelectorAll('[role="menuitem"]')).find(
+       (item) => item.textContent?.includes("Réessayer"),
+@@ -248,8 +248,8 @@ describe("SidebarCompanyMenu", () => {
+     await flushReact();
+     await openMenu("Open Acme Labs organization switcher");
+ 
+-    expect(document.body.textContent).toContain("No organizations");
+-    expect(document.body.textContent).not.toContain("Couldn't load organizations");
++    expect(document.body.textContent).toContain("Aucune organisation");
++    expect(document.body.textContent).not.toContain("Impossible de charger les organisations");
+ 
+     act(() => {
+       root.unmount();
+@@ -327,12 +327,12 @@ describe("SidebarCompanyMenu", () => {
+     });
+     await flushReact();
+ 
+-    expect(document.body.textContent).toContain("Organizations");
++    expect(document.body.textContent).toContain("Organisations");
+     expect(document.body.textContent).toContain("Modifier");
+     expect(document.body.textContent).toContain("Strata");
+     expect(document.body.textContent).toContain("ANA");
+     expect(document.body.textContent).toContain("Créer une organisation");
+-    expect(document.body.textContent).toContain("Invite people to Acme Labs");
++    expect(document.body.textContent).toContain("Inviter des personnes dans Acme Labs");
+     expect(document.body.textContent).not.toContain("Company settings");
+     expect(document.body.textContent).toContain("Se déconnecter");
+ 
+@@ -348,7 +348,7 @@ describe("SidebarCompanyMenu", () => {
+     expect(mockAuthApi.signOut).toHaveBeenCalledTimes(1);
+     expect(mockNavigateTopLevel).not.toHaveBeenCalled();
+     expect(queryClient.getQueryState(queryKeys.health)?.isInvalidated).toBe(true);
+-    expect(document.body.textContent).not.toContain("Organizations");
++    expect(document.body.textContent).not.toContain("Organisations");
+ 
+     act(() => {
+       root.unmount();
+@@ -371,7 +371,7 @@ describe("SidebarCompanyMenu", () => {
+ 
+     await openMenu("Open Acme Labs company switcher");
+ 
+-    expect(document.body.textContent).toContain("Invite people to Acme Labs");
++    expect(document.body.textContent).toContain("Inviter des personnes dans Acme Labs");
+ 
+     act(() => {
+       root.unmount();
+@@ -397,8 +397,8 @@ describe("SidebarCompanyMenu", () => {
+ 
+     await openMenu("Open Acme Labs company switcher");
+ 
+-    expect(document.body.textContent).toContain("Organizations");
+-    expect(document.body.textContent).not.toContain("Invite people");
++    expect(document.body.textContent).toContain("Organisations");
++    expect(document.body.textContent).not.toContain("Inviter des personnes");
+ 
+     act(() => {
+       root.unmount();
+@@ -414,8 +414,8 @@ describe("SidebarCompanyMenu", () => {
+ 
+     await openMenu("Open Acme Labs organization switcher");
+ 
+-    expect(document.body.textContent).toContain("Organizations");
+-    expect(document.body.textContent).not.toContain("Invite people");
++    expect(document.body.textContent).toContain("Organisations");
++    expect(document.body.textContent).not.toContain("Inviter des personnes");
+ 
+     act(() => {
+       root.unmount();
+@@ -431,8 +431,8 @@ describe("SidebarCompanyMenu", () => {
+ 
+     await openMenu("Open Acme Labs organization switcher");
+ 
+-    expect(document.body.textContent).toContain("Organizations");
+-    expect(document.body.textContent).not.toContain("Invite people");
++    expect(document.body.textContent).toContain("Organisations");
++    expect(document.body.textContent).not.toContain("Inviter des personnes");
+ 
+     act(() => {
+       root.unmount();
+@@ -448,8 +448,8 @@ describe("SidebarCompanyMenu", () => {
+ 
+     await openMenu("Open Acme Labs organization switcher");
+ 
+-    expect(document.body.textContent).toContain("Organizations");
+-    expect(document.body.textContent).not.toContain("Invite people");
++    expect(document.body.textContent).toContain("Organisations");
++    expect(document.body.textContent).not.toContain("Inviter des personnes");
+ 
+     act(() => {
+       root.unmount();
+@@ -729,7 +729,7 @@ describe("SidebarCompanyMenu", () => {
+       expect(mockAuthApi.signOut).not.toHaveBeenCalled();
+       expect(mockNavigateTopLevel).toHaveBeenCalledOnce();
+       expect(mockNavigateTopLevel).toHaveBeenCalledWith("/cloud/logout");
+-      expect(document.body.textContent).not.toContain("Organizations");
++      expect(document.body.textContent).not.toContain("Organisations");
+ 
+       act(() => {
+         root.unmount();
+diff --git a/ui/src/components/SidebarCompanyMenu.tsx b/ui/src/components/SidebarCompanyMenu.tsx
+index e5e7d56f7..b9da9a8de 100644
+--- a/ui/src/components/SidebarCompanyMenu.tsx
++++ b/ui/src/components/SidebarCompanyMenu.tsx
+@@ -306,7 +306,7 @@ function BuiltinCompanyMenu({ open: controlledOpen, onOpenChange }: SidebarCompa
+               )}
+               title={currentName ?? undefined}
+             >
+-              {currentName ?? `Select ${switcherNoun}`}
++              {currentName ?? "Choisir une organisation"}
+             </span>
+           </span>
+           {!rail && <ChevronsUpDown className="size-3.5 shrink-0 text-muted-foreground" />}
+@@ -319,7 +319,7 @@ function BuiltinCompanyMenu({ open: controlledOpen, onOpenChange }: SidebarCompa
+       >
+         <div className="flex h-(--organization-popover-header-height) items-center justify-between gap-2 px-3.5">
+           <DropdownMenuLabel className="p-0 text-(length:--text-compact) font-semibold text-foreground">
+-            Organizations
++            Organisations
+           </DropdownMenuLabel>
+           <button
+             type="button"
+@@ -361,7 +361,7 @@ function BuiltinCompanyMenu({ open: controlledOpen, onOpenChange }: SidebarCompa
+             // offer the way back.
+             companyListUnavailable ? (
+               <>
+-                <DropdownMenuItem disabled>Couldn&apos;t load organizations</DropdownMenuItem>
++                <DropdownMenuItem disabled>Impossible de charger les organisations</DropdownMenuItem>
+                 <DropdownMenuItem
+                   onSelect={(event) => {
+                     // Keep the menu open so the result of the retry is visible.
+@@ -374,7 +374,7 @@ function BuiltinCompanyMenu({ open: controlledOpen, onOpenChange }: SidebarCompa
+                 </DropdownMenuItem>
+               </>
+             ) : (
+-              <DropdownMenuItem disabled>No organizations</DropdownMenuItem>
++              <DropdownMenuItem disabled>Aucune organisation</DropdownMenuItem>
+             )
+           ) : null}
+         </div>
+@@ -407,7 +407,7 @@ function BuiltinCompanyMenu({ open: controlledOpen, onOpenChange }: SidebarCompa
+                   <UserPlus className="size-4" />
+                 </span>
+                 <span className="min-w-0 flex-1 truncate">
+-                  {currentName ? `Invite people to ${currentName}` : "Invite people"}
++                  {currentName ? `Inviter des personnes dans ${currentName}` : "Inviter des personnes"}
+                 </span>
+               </Link>
+             </DropdownMenuItem>
+diff --git a/ui/src/lib/inbox.test.ts b/ui/src/lib/inbox.test.ts
+index 604c18324..5f15d403c 100644
+--- a/ui/src/lib/inbox.test.ts
++++ b/ui/src/lib/inbox.test.ts
+@@ -1394,7 +1394,7 @@ describe("inbox helpers", () => {
+ 
+     expect(groupInboxWorkItems(items, "none")).toEqual([{ key: "__all", label: null, items }]);
+     expect(groupInboxWorkItems(items, "type")).toEqual([
+-      { key: "issue", label: "Tasks", items: [items[1], items[2]] },
++      { key: "issue", label: "Tâches", items: [items[1], items[2]] },
+       { key: "approval", label: "Approbations", items: [items[0]] },
+       { key: "failed_run", label: "Exécutions échouées", items: [items[3]] },
+       { key: "join_request", label: "Demandes d'adhésion", items: [items[4]] },
+diff --git a/ui/src/lib/inbox.ts b/ui/src/lib/inbox.ts
+index 84f651b23..0f8fd49c5 100644
+--- a/ui/src/lib/inbox.ts
++++ b/ui/src/lib/inbox.ts
+@@ -869,7 +869,7 @@ const inboxWorkItemKindOrder: InboxWorkItem["kind"][] = [
+ ];
+ 
+ const inboxWorkItemKindLabels: Record<InboxWorkItem["kind"], string> = {
+-  issue: "Tasks",
++  issue: "Tâches",
+   approval: "Approbations",
+   failed_run: "Exécutions échouées",
+   join_request: "Demandes d'adhésion",
+diff --git a/ui/src/lib/issueDetailBreadcrumb.test.ts b/ui/src/lib/issueDetailBreadcrumb.test.ts
+index 4c756d389..1f7841e02 100644
+--- a/ui/src/lib/issueDetailBreadcrumb.test.ts
++++ b/ui/src/lib/issueDetailBreadcrumb.test.ts
+@@ -136,7 +136,7 @@ describe("issueDetailBreadcrumb", () => {
+ 
+   it("falls back to the source query param when route state is unavailable", () => {
+     expect(readIssueDetailBreadcrumb("PAP-465", null, "?from=inbox")).toEqual({
+-      label: "Inbox",
++      label: "Boîte de réception",
+       href: "/inbox",
+     });
+   });
+@@ -150,7 +150,7 @@ describe("issueDetailBreadcrumb", () => {
+     expect(
+       readIssueDetailBreadcrumb("PAP-465", null, "?from=inbox&fromHref=%2FPAP%2Finbox%2Funread"),
+     ).toEqual({
+-      label: "Inbox",
++      label: "Boîte de réception",
+       href: "/PAP/inbox/unread",
+     });
+   });
+diff --git a/ui/src/lib/issueDetailBreadcrumb.ts b/ui/src/lib/issueDetailBreadcrumb.ts
+index 442aa7f1c..25f1e5dce 100644
+--- a/ui/src/lib/issueDetailBreadcrumb.ts
++++ b/ui/src/lib/issueDetailBreadcrumb.ts
+@@ -130,6 +130,16 @@ function readIssueDetailBreadcrumbHrefFromSearch(search?: string): string | null
+   return href && href.startsWith("/") ? href : null;
+ }
+ 
++/** Libellé français de la liste des tâches dans le fil d'Ariane. */
++export const LIBELLE_TACHES = "Tâches";
++/** Libellé français de la boîte de réception dans le fil d'Ariane. */
++export const LIBELLE_BOITE = "Boîte de réception";
++
++/** Vrai pour le libellé de la liste des tâches, y compris l'ancien « Tasks » d'un historique de navigation déjà enregistré. */
++export function estLibelleTaches(label: string | undefined): boolean {
++  return label === LIBELLE_TACHES || label === "Tasks";
++}
++
+ export function isInboxBackedTaskViewHref(href: string): boolean {
+   const query = href.slice(href.indexOf("?") + 1);
+   if (!href.includes("?")) return false;
+@@ -148,14 +158,14 @@ function inferIssueDetailSource(
+   // Since PAP-670 the inbox is a set of views on /issues, so the href alone no
+   // longer separates the two sources — the view key does.
+   if (isInboxBackedTaskViewHref(breadcrumb.href)) return "inbox";
+-  if (breadcrumb.label === "Inbox") return "inbox";
+-  if (breadcrumb.label === "Tasks" || breadcrumb.href.includes("/issues")) return "issues";
++  if (breadcrumb.label === "Inbox" || breadcrumb.label === LIBELLE_BOITE) return "inbox";
++  if (estLibelleTaches(breadcrumb.label) || breadcrumb.href.includes("/issues")) return "issues";
+   return null;
+ }
+ 
+ function breadcrumbForSource(source: IssueDetailSource): IssueDetailBreadcrumb {
+-  if (source === "inbox") return { label: "Inbox", href: "/inbox" };
+-  return { label: "Tasks", href: "/issues" };
++  if (source === "inbox") return { label: LIBELLE_BOITE, href: "/inbox" };
++  return { label: LIBELLE_TACHES, href: "/issues" };
+ }
+ 
+ export function createIssueDetailLocationState(
+diff --git a/ui/src/pages/Companies.test.tsx b/ui/src/pages/Companies.test.tsx
+index 6ee7c306b..48eb7c5a1 100644
+--- a/ui/src/pages/Companies.test.tsx
++++ b/ui/src/pages/Companies.test.tsx
+@@ -103,7 +103,7 @@ describe("Companies page", () => {
+   it("offers the company wizard when self-hosted", async () => {
+     const root = await renderPage();
+ 
+-    expect(container.textContent).toContain("New Organization");
++    expect(container.textContent).toContain("Nouvelle organisation");
+ 
+     act(() => {
+       root.unmount();
+@@ -115,7 +115,7 @@ describe("Companies page", () => {
+ 
+     // Cloud stacks hold exactly one company and POST /companies is a 403 floor,
+     // so the entry point must not be offered at all.
+-    expect(container.textContent).not.toContain("New Organization");
++    expect(container.textContent).not.toContain("Nouvelle organisation");
+     expect(container.textContent).toContain("Acme Labs");
+     expect(mockOpenOnboarding).not.toHaveBeenCalled();
+ 
+diff --git a/ui/src/pages/Companies.tsx b/ui/src/pages/Companies.tsx
+index 8a4a01205..359a5291a 100644
+--- a/ui/src/pages/Companies.tsx
++++ b/ui/src/pages/Companies.tsx
+@@ -32,6 +32,13 @@ import {
+   ArchiveRestore,
+ } from "lucide-react";
+ 
++/** Libellés français de l'état d'une organisation (la valeur envoyée à l'API ne change pas). */
++const LIBELLES_STATUT_ORGANISATION: Record<string, string> = {
++  active: "active",
++  paused: "en pause",
++  archived: "archivée",
++};
++
+ export function Companies() {
+   const {
+     companies,
+@@ -89,7 +96,7 @@ export function Companies() {
+   });
+ 
+   useEffect(() => {
+-    setBreadcrumbs([{ label: "Organizations" }]);
++    setBreadcrumbs([{ label: "Organisations" }]);
+   }, [setBreadcrumbs]);
+ 
+   function startEdit(companyId: string, currentName: string) {
+@@ -113,13 +120,13 @@ export function Companies() {
+         {isCloud ? null : (
+           <Button size="sm" onClick={() => openOnboarding()}>
+             <Plus className="h-3.5 w-3.5 mr-1.5" />
+-            New Organization
++            Nouvelle organisation
+           </Button>
+         )}
+       </div>
+ 
+       <div className="h-6">
+-        {loading && <p className="text-sm text-muted-foreground">Loading organizations...</p>}
++        {loading && <p className="text-sm text-muted-foreground">Chargement des organisations…</p>}
+         {error && <p className="text-sm text-destructive">{error.message}</p>}
+       </div>
+ 
+@@ -197,7 +204,7 @@ export function Companies() {
+                               : "bg-muted text-muted-foreground"
+                         }`}
+                       >
+-                        {company.status}
++                        {LIBELLES_STATUT_ORGANISATION[company.status] ?? company.status}
+                       </Badge>
+                       <Button
+                         variant="ghost"
+@@ -236,7 +243,7 @@ export function Companies() {
+                         onClick={() => startEdit(company.id, company.name)}
+                       >
+                         <Pencil className="h-3.5 w-3.5" />
+-                        Rename
++                        Renommer
+                       </DropdownMenuItem>
+                       {company.status === "archived" && (
+                         <DropdownMenuItem
+@@ -244,7 +251,7 @@ export function Companies() {
+                           onClick={() => unarchiveMutation.mutate(company.id)}
+                         >
+                           <ArchiveRestore className="h-3.5 w-3.5" />
+-                          Unarchive
++                          Désarchiver
+                         </DropdownMenuItem>
+                       )}
+                       <DropdownMenuSeparator />
+@@ -253,7 +260,7 @@ export function Companies() {
+                         onClick={() => setConfirmDeleteId(company.id)}
+                       >
+                         <Trash2 className="h-3.5 w-3.5" />
+-                        Delete Organization
++                        Supprimer l'organisation
+                       </DropdownMenuItem>
+                     </DropdownMenuContent>
+                   </DropdownMenu>
+@@ -271,7 +278,7 @@ export function Companies() {
+                 <div className="flex items-center gap-1.5">
+                   <CircleDot className="h-3.5 w-3.5" />
+                   <span>
+-                    {issueCount} {issueCount === 1 ? "task" : "tasks"}
++                    {issueCount} {issueCount === 1 ? "tâche" : "tâches"}
+                   </span>
+                 </div>
+                 <div className="flex items-center gap-1.5 tabular-nums">
+@@ -280,12 +287,12 @@ export function Companies() {
+                     {formatCents(company.spentMonthlyCents)}
+                     {company.budgetMonthlyCents > 0
+                       ? <> / {formatCents(company.budgetMonthlyCents)} <span className="text-xs">({budgetPct}%)</span></>
+-                      : <span className="text-xs ml-1">Unlimited budget</span>}
++                      : <span className="text-xs ml-1">Budget illimité</span>}
+                   </span>
+                 </div>
+                 <div className="flex items-center gap-1.5 ml-auto">
+                   <Calendar className="h-3.5 w-3.5" />
+-                  <span>Created {relativeTime(company.createdAt)}</span>
++                  <span>Créée {relativeTime(company.createdAt)}</span>
+                 </div>
+               </div>
+ 
+@@ -296,7 +303,7 @@ export function Companies() {
+                   onClick={(e) => e.stopPropagation()}
+                 >
+                   <p className="text-sm text-destructive font-medium">
+-                    Delete this organization and all its data? This cannot be undone.
++                    Supprimer cette organisation et toutes ses données ? Cette action est irréversible.
+                   </p>
+                   <div className="flex items-center gap-2 ml-4 shrink-0">
+                     <Button
+@@ -313,7 +320,7 @@ export function Companies() {
+                       onClick={() => deleteMutation.mutate(company.id)}
+                       disabled={deleteMutation.isPending}
+                     >
+-                      {deleteMutation.isPending ? "Deleting…" : "Delete"}
++                      {deleteMutation.isPending ? "Suppression…" : "Supprimer"}
+                     </Button>
+                   </div>
+                 </div>
+diff --git a/ui/src/pages/CompanyAccess.test.tsx b/ui/src/pages/CompanyAccess.test.tsx
+index 3e5b2fe76..e44ba425d 100644
+--- a/ui/src/pages/CompanyAccess.test.tsx
++++ b/ui/src/pages/CompanyAccess.test.tsx
+@@ -547,7 +547,7 @@ describe("CompanyAccess invites tab", () => {
+     expect(tabLabels).toEqual(["Members", "Invites"]);
+     expect(container.textContent).toContain("Organization Members");
+     expect(container.textContent).not.toContain("Invite a person");
+-    expect(container.textContent).not.toContain("Invite people");
++    expect(container.textContent).not.toContain("Inviter des personnes");
+     expect(listCloudStacksMock).not.toHaveBeenCalled();
+ 
+     await act(async () => {
+@@ -601,7 +601,7 @@ describe("CompanyAccess invites tab", () => {
+     listCloudStacksMock.mockResolvedValue({ stacks: [cloudStack("owner", false), cloudStack(role)] });
+     const root = await renderPage(cloudClient());
+ 
+-    const invite = [...container.querySelectorAll("a")].find((link) => link.textContent === "Invite people");
++    const invite = [...container.querySelectorAll("a")].find((link) => link.textContent === "Inviter des personnes");
+     expect(invite?.getAttribute("href")).toBe("https://cloud.example.test/workspaces/current-team/settings?section=people");
+     expect(invite?.getAttribute("target")).toBeNull();
+     expect(container.querySelectorAll('[role="tab"]')).toHaveLength(0);
+@@ -613,7 +613,7 @@ describe("CompanyAccess invites tab", () => {
+   it.each(["member", "support", "unknown"])("does not expose Cloud invitations to a %s who owns another stack", async (role) => {
+     listCloudStacksMock.mockResolvedValue({ stacks: [cloudStack("owner", false), cloudStack(role)] });
+     const root = await renderPage(cloudClient());
+-    expect(container.textContent).not.toContain("Invite people");
++    expect(container.textContent).not.toContain("Inviter des personnes");
+     await act(async () => root.unmount());
+   });
+ 
+@@ -621,10 +621,10 @@ describe("CompanyAccess invites tab", () => {
+     let resolveStacks!: (value: { stacks: ReturnType<typeof cloudStack>[] }) => void;
+     listCloudStacksMock.mockReturnValue(new Promise((resolve) => { resolveStacks = resolve; }));
+     const root = await renderPage(cloudClient());
+-    expect(container.textContent).not.toContain("Invite people");
++    expect(container.textContent).not.toContain("Inviter des personnes");
+     await act(async () => resolveStacks({ stacks: [cloudStack("admin")] }));
+     await flushReact();
+-    expect(container.textContent).toContain("Invite people");
++    expect(container.textContent).toContain("Inviter des personnes");
+     await act(async () => root.unmount());
+   });
+ 
+@@ -632,23 +632,23 @@ describe("CompanyAccess invites tab", () => {
+     const client = cloudClient();
+     client.setQueryData(["cloud", "stacks"], { stacks: [cloudStack("owner")] });
+     const root = await renderPage(client);
+-    expect(container.textContent).toContain("Invite people");
++    expect(container.textContent).toContain("Inviter des personnes");
+     listCloudStacksMock.mockRejectedValue(new Error("Portfolio unavailable"));
+     await act(async () => { await client.invalidateQueries({ queryKey: ["cloud", "stacks"] }); });
+     await flushReact();
+-    expect(container.textContent).not.toContain("Invite people");
++    expect(container.textContent).not.toContain("Inviter des personnes");
+     await act(async () => root.unmount());
+   });
+ 
+   it("requires an identified current stack and a configured Cloud destination", async () => {
+     listCloudStacksMock.mockResolvedValue({ stacks: [cloudStack("owner", false)] });
+     const root = await renderPage(cloudClient());
+-    expect(container.textContent).not.toContain("Invite people");
++    expect(container.textContent).not.toContain("Inviter des personnes");
+     await act(async () => root.unmount());
+ 
+     listCloudStacksMock.mockResolvedValue({ stacks: [cloudStack("owner")] });
+     const secondRoot = await renderPage(cloudClient(null));
+-    expect(container.textContent).not.toContain("Invite people");
++    expect(container.textContent).not.toContain("Inviter des personnes");
+     await act(async () => secondRoot.unmount());
+   });
+ });
+diff --git a/ui/src/pages/CompanyAccess.tsx b/ui/src/pages/CompanyAccess.tsx
+index 8201a8490..f3fe36793 100644
+--- a/ui/src/pages/CompanyAccess.tsx
++++ b/ui/src/pages/CompanyAccess.tsx
+@@ -287,7 +287,7 @@ export function CompanyAccess() {
+         </div>
+         {cloudInviteUrl && (
+           <Button asChild>
+-            <a href={cloudInviteUrl}><UserPlus />Invite people</a>
++            <a href={cloudInviteUrl}><UserPlus />Inviter des personnes</a>
+           </Button>
+         )}
+       </div>
+diff --git a/ui/src/pages/Inbox.test.tsx b/ui/src/pages/Inbox.test.tsx
+index 43be80fe6..c122f74fc 100644
+--- a/ui/src/pages/Inbox.test.tsx
++++ b/ui/src/pages/Inbox.test.tsx
+@@ -520,7 +520,7 @@ describe("Inbox toolbar", () => {
+       );
+     });
+     await vi.waitFor(() => {
+-      expect(container.textContent).toContain("Hire Agent: New teammate");
++      expect(container.textContent).toContain("Recrutement d'agent : New teammate");
+       expect(container.textContent).toContain("Failed run");
+       expect(container.textContent).toContain("Jordan Example");
+     });
+@@ -529,7 +529,7 @@ describe("Inbox toolbar", () => {
+       [...container.querySelectorAll("[data-inbox-item]")]
+         .find((row) => row.textContent?.includes(text));
+ 
+-    for (const text of ["Hire Agent: New teammate", "Failed run", "Jordan Example"]) {
++    for (const text of ["Recrutement d'agent : New teammate", "Failed run", "Jordan Example"]) {
+       const row = rowFor(text);
+       expect(row, `missing inbox row for ${text}`).toBeDefined();
+       expect(row?.querySelector('button[aria-label="Marquer comme lu"]')).not.toBeNull();
+@@ -540,7 +540,7 @@ describe("Inbox toolbar", () => {
+       expect(row?.querySelector("[data-inbox-row-surface]")).not.toBeNull();
+     }
+ 
+-    const approvalRow = rowFor("Hire Agent: New teammate");
++    const approvalRow = rowFor("Recrutement d'agent : New teammate");
+     const approvalActions = [...(approvalRow?.querySelectorAll("button") ?? [])]
+       .filter((button) => button.textContent === "Approuver" || button.textContent === "Rejeter");
+     expect(approvalActions.length).toBeGreaterThanOrEqual(2);
+diff --git a/ui/src/pages/Inbox.tsx b/ui/src/pages/Inbox.tsx
+index 3b61a8b04..7c6906673 100644
+--- a/ui/src/pages/Inbox.tsx
++++ b/ui/src/pages/Inbox.tsx
+@@ -287,8 +287,17 @@ function runFailureMessage(run: HeartbeatRun): string {
+   return firstNonEmptyLine(run.error) ?? firstNonEmptyLine(run.stderrExcerpt) ?? "L'exécution s'est terminée par une erreur.";
+ }
+ 
++/** Libellés français de l'état d'une demande d'approbation (la valeur stockée ne change pas). */
++const LIBELLES_STATUT_APPROBATION: Record<string, string> = {
++  pending: "en attente",
++  revision_requested: "révision demandée",
++  approved: "approuvée",
++  rejected: "refusée",
++  cancelled: "annulée",
++};
++
+ function approvalStatusLabel(status: Approval["status"]): string {
+-  return status.replaceAll("_", " ");
++  return LIBELLES_STATUT_APPROBATION[status] ?? status.replaceAll("_", " ");
+ }
+ 
+ function readIssueIdFromRun(run: HeartbeatRun): string | null {
+@@ -577,8 +586,8 @@ function ApprovalInboxRow({
+             </span>
+             <span className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
+               <span className="capitalize">{approvalStatusLabel(approval.status)}</span>
+-              {requesterName ? <span>requested by {requesterName}</span> : null}
+-              <span>updated {timeAgo(approval.updatedAt)}</span>
++              {requesterName ? <span>demandée par {requesterName}</span> : null}
++              <span>mise à jour {timeAgo(approval.updatedAt)}</span>
+             </span>
+           </span>
+         </Link>
+diff --git a/ui/src/pages/Issues.tsx b/ui/src/pages/Issues.tsx
+index 0653d2758..317f75a48 100644
+--- a/ui/src/pages/Issues.tsx
++++ b/ui/src/pages/Issues.tsx
+@@ -11,7 +11,7 @@ import { useBreadcrumbs } from "../context/BreadcrumbContext";
+ import { collectLiveIssueIds } from "../lib/liveIssueIds";
+ import { usePublishSharedQueryData, useSharedPollingQuery } from "@/hooks/useSharedPolling";
+ import { queryKeys } from "../lib/queryKeys";
+-import { createIssueDetailLocationState } from "../lib/issueDetailBreadcrumb";
++import { createIssueDetailLocationState, LIBELLE_TACHES } from "../lib/issueDetailBreadcrumb";
+ import { EmptyState } from "../components/EmptyState";
+ import { IssuesList } from "../components/IssuesList";
+ import { TaskViewsMenu } from "../components/TaskViewsMenu";
+@@ -141,13 +141,13 @@ function StreamlinedTasks() {
+     return (
+       <Inbox
+         tab={definition.inboxTab}
+-        surfaceLabel="Tasks"
++        surfaceLabel={LIBELLE_TACHES}
+         toolbarContext={(
+           <div className="flex min-w-0 items-center gap-2">
+             {viewsMenu}
+-            <Button size="sm" variant="outline" aria-label="New Task" onClick={() => openNewIssue()}>
++            <Button size="sm" variant="outline" aria-label="Nouvelle tâche" onClick={() => openNewIssue()}>
+               <Plus className="h-4 w-4 sm:mr-1" />
+-              <span className="hidden sm:inline">New Task</span>
++              <span className="hidden sm:inline">Nouvelle tâche</span>
+             </Button>
+           </div>
+         )}
+@@ -225,7 +225,7 @@ function OrganizationIssues({
+   const issueLinkState = useMemo(
+     () =>
+       createIssueDetailLocationState(
+-        "Tasks",
++        LIBELLE_TACHES,
+         `${location.pathname}${location.search}${location.hash}`,
+         "issues",
+       ),
+@@ -233,7 +233,7 @@ function OrganizationIssues({
+   );
+ 
+   useEffect(() => {
+-    setBreadcrumbs([{ label: "Tasks" }]);
++    setBreadcrumbs([{ label: LIBELLE_TACHES }]);
+   }, [setBreadcrumbs]);
+ 
+   const issuePageSize = workspaceIdFilter ? WORKSPACE_FILTER_ISSUE_LIMIT : ISSUES_PAGE_SIZE;
+diff --git a/ui/src/pages/LegacyInbox.tsx b/ui/src/pages/LegacyInbox.tsx
+index b9dc009b5..f374e0c5e 100644
+--- a/ui/src/pages/LegacyInbox.tsx
++++ b/ui/src/pages/LegacyInbox.tsx
+@@ -222,8 +222,17 @@ function runFailureMessage(run: HeartbeatRun): string {
+   return firstNonEmptyLine(run.error) ?? firstNonEmptyLine(run.stderrExcerpt) ?? "L'exécution s'est terminée par une erreur.";
+ }
+ 
++/** Libellés français de l'état d'une demande d'approbation (la valeur stockée ne change pas). */
++const LIBELLES_STATUT_APPROBATION: Record<string, string> = {
++  pending: "en attente",
++  revision_requested: "révision demandée",
++  approved: "approuvée",
++  rejected: "refusée",
++  cancelled: "annulée",
++};
++
+ function approvalStatusLabel(status: Approval["status"]): string {
+-  return status.replaceAll("_", " ");
++  return LIBELLES_STATUT_APPROBATION[status] ?? status.replaceAll("_", " ");
+ }
+ 
+ function readIssueIdFromRun(run: HeartbeatRun): string | null {
+diff --git a/ui/src/pages/ProfileSettings.tsx b/ui/src/pages/ProfileSettings.tsx
+index 1b7717c5a..58933561f 100644
+--- a/ui/src/pages/ProfileSettings.tsx
++++ b/ui/src/pages/ProfileSettings.tsx
+@@ -69,7 +69,7 @@ export function ProfileSettings() {
+   }
+ 
+   function resolveProfileName() {
+-    return name.trim() || sessionQuery.data?.user.name || "Board";
++    return name.trim() || sessionQuery.data?.user.name || "Utilisateur";
+   }
+ 
+   const updateMutation = useMutation({
+@@ -131,7 +131,7 @@ export function ProfileSettings() {
+     );
+   }
+ 
+-  const currentName = name.trim() || sessionQuery.data.user.name || "Board";
++  const currentName = name.trim() || sessionQuery.data.user.name || "Utilisateur";
+   const currentImage = image.trim() || null;
+   const initials = deriveInitials(currentName);
+   const isSavingProfile = updateMutation.isPending || uploadAvatarMutation.isPending || removeAvatarMutation.isPending;
+-- 
+2.53.0
+

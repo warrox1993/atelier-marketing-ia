@@ -1,0 +1,24 @@
+id;date_reception;delai_reponse_jours;cause;verbatim_anonymise
+PL-01;02/09/2026;4;délai de traitement;Je n'ai aucune nouvelle de mon dossier depuis trois semaines
+PL-02;03/09/2026;12;délai de traitement;Je n'ai aucune nouvelle de mon dossier depuis trois semaines
+PL-03;04/09/2026;9;délai de traitement;Je n'ai aucune nouvelle de mon dossier depuis trois semaines
+PL-04;05/09/2026;14;délai de traitement;Je n'ai aucune nouvelle de mon dossier depuis trois semaines
+PL-05;06/09/2026;6;délai de traitement;Je n'ai aucune nouvelle de mon dossier depuis trois semaines
+PL-06;07/09/2026;11;délai de traitement;Je n'ai aucune nouvelle de mon dossier depuis trois semaines
+PL-07;08/09/2026;8;délai de traitement;Je n'ai aucune nouvelle de mon dossier depuis trois semaines
+PL-08;09/09/2026;15;délai de traitement;Je n'ai aucune nouvelle de mon dossier depuis trois semaines
+PL-09;10/09/2026;7;erreur de facturation;La prime facturée ne correspond pas au contrat signé
+PL-10;11/09/2026;10;erreur de facturation;La prime facturée ne correspond pas au contrat signé
+PL-11;12/09/2026;5;erreur de facturation;La prime facturée ne correspond pas au contrat signé
+PL-12;13/09/2026;13;erreur de facturation;La prime facturée ne correspond pas au contrat signé
+PL-13;14/09/2026;9;erreur de facturation;La prime facturée ne correspond pas au contrat signé
+PL-14;15/09/2026;8;erreur de facturation;La prime facturée ne correspond pas au contrat signé
+PL-15;16/09/2026;12;communication insuffisante;Personne ne m'a expliqué la décision
+PL-16;17/09/2026;6;communication insuffisante;Personne ne m'a expliqué la décision
+PL-17;18/09/2026;9;communication insuffisante;Personne ne m'a expliqué la décision
+PL-18;19/09/2026;10;communication insuffisante;Personne ne m'a expliqué la décision
+PL-19;20/09/2026;7;refus d'indemnisation;Je ne comprends pas pourquoi on refuse de payer
+PL-20;21/09/2026;11;refus d'indemnisation;Je ne comprends pas pourquoi on refuse de payer
+PL-21;22/09/2026;8;refus d'indemnisation;Je ne comprends pas pourquoi on refuse de payer
+PL-22;23/09/2026;6;autre;Courrier reçu avec le nom d'un autre client
+PL-23;24/09/2026;7;autre;Courrier reçu avec le nom d'un autre client

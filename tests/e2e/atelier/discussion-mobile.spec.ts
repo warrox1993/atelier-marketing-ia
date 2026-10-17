@@ -139,7 +139,8 @@ test.describe("téléphone 390x844", () => {
     await envoyer.tap();
     await expect(page.getByLabel("Votre message au Coordinateur")).toHaveValue("", { timeout: 30_000 });
     expect(envois, "un seul envoi").toHaveLength(1);
-    await expect(page.locator(".atl-disc-bulle", { hasText: "Bonjour (essai mobile)" })).toBeVisible();
+    // Le fil est persistant : une bulle identique d'un essai précédent peut exister, la dernière est la nôtre.
+    await expect(page.locator(".atl-disc-bulle", { hasText: "Bonjour (essai mobile)" }).last()).toBeVisible();
     await sansDebordement(page);
     await capturer(page, "mobile-2-discussion-apres-envoi");
 
@@ -150,16 +151,16 @@ test.describe("téléphone 390x844", () => {
     const erreurs = surveillerConsole(page);
     await ouvrir(page, "/parametres");
     await expect(page.locator(".atl-entete h1")).toHaveText("Paramètres et diagnostic");
-    const sommaire = page.getByRole("navigation", { name: "Sections des paramètres" });
+    const sommaire = page.getByRole("tablist", { name: "Sections des paramètres" });
     await expect(sommaire).toBeVisible();
     await sansDebordement(page);
     await capturer(page, "mobile-3-parametres-sommaire");
 
-    const lien = sommaire.getByRole("link", { name: "Remise à zéro", exact: true });
+    const lien = sommaire.getByRole("tab", { name: "Avancé", exact: true });
     await expect(lien).toBeVisible();
     await lien.tap();
-    const ancre = (await lien.getAttribute("href"))!.slice(1);
-    const section = page.locator(`#${ancre}`);
+    await expect(lien).toHaveAttribute("aria-selected", "true");
+    const section = page.locator("#param-reglages")  // première section du panneau « Avancé », celle que l'adresse désigne;
     await expect(section).toBeVisible();
     // Sur téléphone, la section est repliable : le clic sur le sommaire doit l'avoir ouverte.
     await expect(section.locator("details").first()).toHaveAttribute("open", "", { timeout: 10_000 });

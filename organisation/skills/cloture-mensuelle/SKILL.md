@@ -2,7 +2,7 @@
 name: "cloture-mensuelle"
 description: "Prépare et contrôle la clôture mensuelle comptable d'une PME belge : rapprochements bancaires, factures à recevoir et à établir, contrôle de la TVA (périodicité, préparation de la déclaration Intervat), écritures de régularisation proposées et liste de contrôle signée par étape. À utiliser pour fermer un mois avec des chiffres fiables ou repérer ce qui manque ; jamais pour passer une écriture, déposer une déclaration, ni valider les comptes à la place du comptable."
 metadata:
-  version: "1.0.0"
+  version: "1.1.0"
   langue: "fr"
   domaine: "comptabilite-finance"
 ---
@@ -38,12 +38,29 @@ Un dossier de clôture où chaque rapprochement est soldé ou ses écarts expliq
 
 ## Étapes
 
+### Ordre de la clôture : dépendances et chemin critique
+
+Les tâches se suivent par niveaux ; une tâche ne démarre que lorsque le niveau dont elle dépend est terminé.
+
+| Niveau | Tâches | Dépend de |
+| --- | --- | --- |
+| 1. Saisies | encaissements et décaissements jusqu'à la fin du mois, récupération des extraits, factures à recevoir, reports de charges payées d'avance, amortissements du mois | rien, démarre à J+1 |
+| 2. Rapprochements | rapprochement bancaire, rapprochement des comptes clients et fournisseurs avec leur balance âgée, écritures de rattachement restantes | niveau 1 terminé |
+| 3. Bilan et balance provisoire | rapprochement de tous les comptes de bilan, écritures d'ajustement issues des rapprochements, balance provisoire | niveau 2 terminé |
+| 4. États | contrôle de la TVA du mois, états mensuels, analyse des variations | niveau 3 terminé |
+| 5. Revue et verrouillage | revue par le comptable, derniers ajustements, verrouillage de la période par l'humain, dossier transmis | niveau 4 terminé |
+
+Le chemin critique (saisies, rapprochements, balance provisoire, états, revue) fixe la durée minimale de la clôture.
+Chaque tâche est suivie dans un tableau d'état : tâche, responsable, échéance en J+n, statut (à faire, en cours, fait,
+bloqué), blocage et sa cause. Un blocage sur le chemin critique est signalé au coordinateur le jour même.
+
 ### 1. Rapprochement bancaire
 
 1. Pour chaque compte, comparer le solde de l'extrait à la date de coupure avec le solde comptable.
-2. Lister les écarts : opérations en banque absentes de la comptabilité (frais, intérêts, prélèvements), opérations en comptabilité absentes de la banque (chèques, virements non exécutés), erreurs de montant, doublons.
-3. Pour chaque écart, indiquer la cause probable (marquée « hypothèse » si elle n'est pas prouvée), la pièce qui le prouve, et l'écriture proposée. Aucun écart « divers » sans explication au-delà de la tolérance fixée par la comptabilité.
-4. Vérifier que les paiements clients encaissés sont imputés sur les bonnes factures (balance âgée à jour).
+2. Lister les écarts : opérations en banque absentes de la comptabilité (frais, intérêts, prélèvements), opérations en comptabilité absentes de la banque (chèques, virements non exécutés), erreurs de montant, doublons. Le détail du classement des écarts et de leur ancienneté suit la compétence `rapprochement-comptes`.
+3. **Doublons suspects** : une opération est signalée comme doublon suspect quand les trois critères concordent : même montant à 0,01 euro près, même tiers, dates à 5 jours calendrier ou moins l'une de l'autre. Le rapport dit aussi ce qui a été balayé (journaux, période, nombre de lignes) et, s'il n'y a aucun doublon, l'écrit.
+4. Pour chaque écart, indiquer la cause probable (marquée « hypothèse » si elle n'est pas prouvée), la pièce qui le prouve, et l'écriture proposée. Aucun écart « divers » sans explication au-delà de la tolérance fixée par la comptabilité.
+5. Vérifier que les paiements clients encaissés sont imputés sur les bonnes factures (balance âgée à jour).
 
 ### 2. Factures à recevoir et à établir
 
@@ -74,7 +91,7 @@ Pour chaque régularisation (rattachement de charges ou de produits, report, amo
 
 ### 6. Liste de contrôle
 
-Dernier tableau : chaque étape ci-dessus avec statut (fait, partiel, bloqué), la pièce manquante, la personne qui doit agir et la date. La clôture n'est « prête pour validation » que lorsque les étapes 1 à 5 sont faites ou expliquées.
+Dernier tableau, sur le modèle du tableau d'état : chaque étape ci-dessus avec son niveau de dépendance, son statut (fait, partiel, bloqué), la pièce manquante, la personne qui doit agir et l'échéance en J+n. La clôture n'est « prête pour validation » que lorsque les étapes 1 à 5 sont faites ou expliquées.
 
 ## Livrable
 
@@ -87,6 +104,8 @@ Un dossier avec : le tableau de rapprochement par compte, la liste des factures 
 - Le total de TVA des journaux égale celui du grand livre, ou l'écart est expliqué.
 - Aucune écriture n'est passée par la compétence ; chaque proposition porte la mention « à passer par le comptable ».
 - La liste de contrôle ne contient aucune étape sans responsable ni date.
+- Aucune tâche marquée « faite » alors qu'une tâche du niveau dont elle dépend est ouverte.
+- Chaque doublon suspect répond aux trois critères ; le périmètre balayé est écrit.
 
 ## Sources officielles
 
@@ -121,3 +140,11 @@ Clôture de septembre 2026, PME de services. Compte courant : solde de l'extrait
 TVA : journaux de ventes 18 900 euros de TVA collectée, comptes du grand livre 18 900 ; achats 6 240 euros contre 6 120 euros au grand livre : écart de 120 euros, facture n° A-102 enregistrée sans TVA. Tableau préparé avec mention « écart à lever avant dépôt Intervat ».
 
 Cas d'échec : la périodicité TVA est inconnue et la déclaration préparée sur un mois alors que l'entreprise dépose par trimestre. La compétence n'aurait pas dû présumer : elle écrit « périodicité TVA non confirmée, déclaration non préparée » et demande l'information au comptable.
+
+## Origine de la méthode
+
+Carte des dépendances en cinq niveaux, chemin critique et tableau d'état adaptés et traduits de
+github.com/anthropics/knowledge-work-plugins, `finance/skills/close-management/SKILL.md` ; règle du doublon suspect
+adaptée de `small-business/skills/month-end-prep/SKILL.md` (étape 4) ; commit 33eeda1e8fd856455b05479d13a0f85b5f803744,
+licence Apache 2.0. Modifications : traduction, regroupement des tâches selon une clôture de PME belge (TVA, Intervat),
+validation humaine. Licence et reprises : `organisation/skills/LICENCES-TIERS.md`.

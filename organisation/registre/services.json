@@ -2,7 +2,7 @@
   "schema": "atelier/registre-services/v1",
   "version": "1.0.0",
   "dateVersion": "2026-10-16",
-  "description": "Registre des services de l'Atelier. Chaque service est une entreprise Paperclip distincte dans l'instance du client ; la Direction voit tout. Les services échangent uniquement par des demandes tracées entre coordinateurs (bureau de liaison, construit plus tard dans le plugin), selon la matrice « flux » : pas de flux déclaré, pas d'échange. Le service marketing renvoie à organisation/registre/agents.json (champ agentsRef) sans dupliquer ses agents. Un service « sensible » impose l'approbation humaine sur tous ses flux.",
+  "description": "Registre des services de l'Atelier. Chaque service est une entreprise Paperclip distincte dans l'instance du client ; la Direction voit tout. Les services échangent uniquement par des demandes tracées entre coordinateurs (bureau de liaison, construit plus tard dans le plugin), selon la matrice « flux » (flux métier) complétée à la déclaration par le réseau des coordinateurs, généré par scripts/atelier_services.py (toute paire de services du même client, jamais listée ici) : pas de flux déclaré, pas d'échange. Le service marketing renvoie à organisation/registre/agents.json (champ agentsRef) sans dupliquer ses agents. Un service « sensible » impose l'approbation humaine sur tous ses flux.",
   "services": [
     {
       "slug": "marketing",
@@ -35,12 +35,19 @@
       "nom": "Direction",
       "prefixe": "DIR",
       "actif": true,
-      "description": "Vue d'ensemble de l'entreprise : voit tous les services, arbitre et tranche.\nReçoit les rapports et escalades de chaque service par des demandes tracées.",
+      "description": "Vue d'ensemble de l'entreprise : voit tous les services, arbitre et tranche.\nReçoit les rapports et escalades de chaque service par des demandes tracées.\nPorte le coordinateur général, seul interlocuteur de l'humain : il délègue aux coordinateurs de département, consolide leurs réponses et ne décide jamais à la place de l'humain.",
       "coordinateur": "coordinateur-direction",
+      "coordinateurGeneral": "coordinateur-general",
       "agents": [
+        "coordinateur-general",
         "coordinateur-direction",
         "synthese",
-        "tableau-de-bord"
+        "tableau-de-bord",
+        "pilotage-objectifs",
+        "registre-decisions",
+        "secretariat-instances",
+        "risques-entreprise",
+        "contradicteur"
       ],
       "humainSeul": [
         "Toute décision stratégique",
@@ -66,7 +73,11 @@
       "agents": [
         "coordinateur-administratif",
         "agenda-documents",
-        "courrier"
+        "courrier",
+        "classement-archivage",
+        "courriers-sortants",
+        "preparation-signatures",
+        "vie-societe"
       ],
       "humainSeul": [
         "Signature de tout document engageant",
@@ -91,7 +102,13 @@
       "agents": [
         "coordinateur-juridique",
         "lecture-contrats",
-        "registre-rgpd"
+        "registre-rgpd",
+        "accords-confidentialite",
+        "droits-personnes",
+        "litiges",
+        "mentions-legales",
+        "risques-juridiques",
+        "sous-traitants-rgpd"
       ],
       "humainSeul": [
         "Tout avis juridique engageant",
@@ -122,7 +139,11 @@
         "coordinateur-commercial",
         "preparation-rdv",
         "propositions",
-        "renouvellements"
+        "renouvellements",
+        "accueil-leads",
+        "appels-offres",
+        "comptes-entreprises",
+        "pilotage-commercial"
       ],
       "humainSeul": [
         "Conseil en assurance au client (devoir de conseil)",
@@ -151,7 +172,11 @@
       "agents": [
         "coordinateur-recouvrement",
         "balance-agee",
-        "relances"
+        "relances",
+        "contestations",
+        "plans-paiement",
+        "precontentieux",
+        "verification-encaissements"
       ],
       "humainSeul": [
         "Mise en demeure",
@@ -182,7 +207,10 @@
         "coordinateur-sav",
         "faq",
         "reclamations",
-        "sinistres"
+        "sinistres-particuliers",
+        "ouverture-sinistres",
+        "registre-plaintes",
+        "sinistres-entreprises"
       ],
       "humainSeul": [
         "Décision de couverture ou de refus d'un sinistre",
@@ -200,7 +228,8 @@
         "Dossiers sinistres des compagnies",
         "CRM",
         "Base de connaissances"
-      ]
+      ],
+      "sensible": true
     },
     {
       "slug": "commerce-exterieur",
@@ -211,7 +240,11 @@
       "coordinateur": "coordinateur-export",
       "agents": [
         "coordinateur-export",
-        "dossiers-export"
+        "dossiers-export",
+        "classement-origine",
+        "controle-sanctions",
+        "incoterms-paiement",
+        "marches-etrangers"
       ],
       "humainSeul": [
         "Dépôt d'une déclaration en douane",
@@ -240,7 +273,13 @@
       "agents": [
         "coordinateur-conformite",
         "veille-reglementaire",
-        "vigilance-clients"
+        "vigilance-clients",
+        "conformite-ia",
+        "conformite-sectorielle",
+        "controle-communications",
+        "inventaire-obligations",
+        "signalements",
+        "verification-initiatives"
       ],
       "humainSeul": [
         "Déclaration de soupçon à la CTIF",
@@ -258,7 +297,8 @@
         "Dossiers clients (identification)",
         "Registre des traitements",
         "Canal d'alerte"
-      ]
+      ],
+      "sensible": true
     },
     {
       "slug": "comptabilite-finance",
@@ -270,7 +310,13 @@
       "agents": [
         "coordinateur-comptabilite",
         "commissions",
-        "tresorerie"
+        "tresorerie",
+        "cloture-reporting",
+        "comptabilite-clients",
+        "comptabilite-fournisseurs",
+        "comptes-annuels",
+        "controle-gestion",
+        "rapprochements"
       ],
       "humainSeul": [
         "Validation des comptes et clôtures",
@@ -300,7 +346,13 @@
       "agents": [
         "coordinateur-rh",
         "accueil",
-        "offres-emploi"
+        "offres-emploi",
+        "depart",
+        "entretiens-fonctionnement",
+        "entretiens-recrutement",
+        "indicateurs-rh",
+        "planification-effectifs",
+        "politiques-rh"
       ],
       "humainSeul": [
         "Sélection de candidats",
@@ -331,7 +383,13 @@
       "agents": [
         "coordinateur-informatique",
         "documentation",
-        "procedures-incident"
+        "procedures-incident",
+        "changements",
+        "conformite-cyber",
+        "continuite-sauvegardes",
+        "infrastructure",
+        "postes-et-acces",
+        "support-utilisateurs"
       ],
       "humainSeul": [
         "Attribution d'un accès privilégié",
@@ -357,7 +415,13 @@
       "coordinateur": "coordinateur-achats",
       "agents": [
         "coordinateur-achats",
-        "comparaison-offres"
+        "comparaison-offres",
+        "analyse-depenses",
+        "commandes-approvisionnement",
+        "contrats-fournisseurs",
+        "evaluation-fournisseurs",
+        "expression-besoins",
+        "sourcing"
       ],
       "humainSeul": [
         "Engagement d'une dépense",
@@ -383,7 +447,12 @@
       "coordinateur": "coordinateur-qualite",
       "agents": [
         "coordinateur-qualite",
-        "procedures"
+        "procedures",
+        "maitrise-documentaire",
+        "non-conformites",
+        "audit-interne",
+        "revue-direction",
+        "amelioration-processus"
       ],
       "humainSeul": [
         "Validation d'une nouvelle procédure",
@@ -409,7 +478,11 @@
       "agents": [
         "coordinateur-logistique",
         "prevision-demande",
-        "transport-douane"
+        "gestion-stocks",
+        "transport",
+        "douane-origine",
+        "retours",
+        "litiges-transport"
       ],
       "humainSeul": [
         "Passation d'une commande",
@@ -435,8 +508,13 @@
       "coordinateur": "coordinateur-production",
       "agents": [
         "coordinateur-production",
+        "plan-capacite",
         "ordonnancement",
-        "amelioration-continue"
+        "performance-trs",
+        "amelioration-continue",
+        "non-conformites-atelier",
+        "maintenance-equipements",
+        "methodes-industrialisation"
       ],
       "humainSeul": [
         "Lancement d'un ordre de fabrication",
@@ -462,7 +540,10 @@
       "agents": [
         "coordinateur-rdi",
         "veille-brevets",
-        "dossiers-subsides"
+        "dossiers-subsides",
+        "incitants-fiscaux-rd",
+        "veille-technologique",
+        "portefeuille-innovation"
       ],
       "humainSeul": [
         "Dépôt d'un brevet",
@@ -489,7 +570,11 @@
       "agents": [
         "coordinateur-communication",
         "relations-presse",
-        "communication-interne"
+        "communication-interne",
+        "adaptation-linguistique",
+        "cellule-crise",
+        "editorial-institutionnel",
+        "veille-medias"
       ],
       "humainSeul": [
         "Toute diffusion externe ou interne",
@@ -515,7 +600,11 @@
       "agents": [
         "coordinateur-service-client",
         "tri-tickets",
-        "base-connaissances"
+        "base-connaissances",
+        "avis-en-ligne",
+        "escalades",
+        "reponses-courantes",
+        "voix-du-client"
       ],
       "humainSeul": [
         "Geste commercial",
@@ -540,7 +629,12 @@
       "coordinateur": "coordinateur-fiscalite",
       "agents": [
         "coordinateur-fiscalite",
-        "calendrier-fiscal"
+        "calendrier-fiscal",
+        "avantages-mobilite",
+        "controle-et-veille-fiscale",
+        "impot-societes",
+        "precompte-fiches-281",
+        "tva"
       ],
       "humainSeul": [
         "Dépôt d'une déclaration fiscale",
@@ -568,7 +662,12 @@
       "coordinateur": "coordinateur-pmo",
       "agents": [
         "coordinateur-pmo",
-        "suivi-portefeuille"
+        "suivi-portefeuille",
+        "cadrage-projets",
+        "planification-ressources",
+        "risques-projets",
+        "reporting-comites",
+        "conduite-changement-projets"
       ],
       "humainSeul": [
         "Lancement ou arrêt d'un projet",
@@ -592,7 +691,12 @@
       "coordinateur": "coordinateur-hse",
       "agents": [
         "coordinateur-hse",
-        "analyse-risques"
+        "analyse-risques",
+        "plan-prevention",
+        "accidents-travail",
+        "prevention-psychosociale",
+        "plan-urgence",
+        "environnement"
       ],
       "humainSeul": [
         "Arrêt d'une activité dangereuse",
@@ -620,7 +724,12 @@
       "coordinateur": "coordinateur-formation",
       "agents": [
         "coordinateur-formation",
-        "ingenierie-formation"
+        "conception-modules",
+        "plan-formation",
+        "financement",
+        "evaluation-formation",
+        "formations-obligatoires",
+        "conduite-changement"
       ],
       "humainSeul": [
         "Engagement d'une dépense de formation",
@@ -645,7 +754,12 @@
       "coordinateur": "coordinateur-juridique-social",
       "agents": [
         "coordinateur-juridique-social",
-        "contrats-travail"
+        "contrats-travail",
+        "absences-incapacite",
+        "fin-contrat",
+        "relations-collectives",
+        "temps-travail-reglement",
+        "veille-sociale"
       ],
       "humainSeul": [
         "Signature d'un contrat de travail",
@@ -672,7 +786,12 @@
       "coordinateur": "coordinateur-donnees",
       "agents": [
         "coordinateur-donnees",
-        "analyste-donnees"
+        "analyste-donnees",
+        "controle-analyses",
+        "gouvernance-rgpd",
+        "ingenierie-donnees",
+        "qualite-donnees",
+        "tableaux-de-bord"
       ],
       "humainSeul": [
         "Traitement de données personnelles",
@@ -697,7 +816,11 @@
       "coordinateur": "coordinateur-evenementiel",
       "agents": [
         "coordinateur-evenementiel",
-        "logistique-evenement"
+        "conception-evenement",
+        "logistique-evenement",
+        "invitations-inscriptions",
+        "salons",
+        "bilan-suivi"
       ],
       "humainSeul": [
         "Engagement d'une dépense événementielle",
@@ -722,7 +845,11 @@
       "coordinateur": "coordinateur-services-generaux",
       "agents": [
         "coordinateur-services-generaux",
-        "energie-batiments"
+        "energie-batiments",
+        "maintenance-batiments",
+        "baux-et-espaces",
+        "flotte-mobilite",
+        "services-occupants"
       ],
       "humainSeul": [
         "Engagement de travaux",
@@ -747,7 +874,11 @@
       "coordinateur": "coordinateur-partenariats",
       "agents": [
         "coordinateur-partenariats",
-        "suivi-partenaires"
+        "recherche-selection",
+        "accords",
+        "pilotage-portefeuille",
+        "co-marketing",
+        "fournisseurs-produits"
       ],
       "humainSeul": [
         "Signature d'une convention de partenariat",
@@ -799,7 +930,7 @@
       "source": "sav-sinistres",
       "cible": "direction",
       "objet": "Rapport périodique et escalade",
-      "approbationHumaine": false
+      "approbationHumaine": true
     },
     {
       "source": "commerce-exterieur",
@@ -811,7 +942,7 @@
       "source": "conformite",
       "cible": "direction",
       "objet": "Rapport périodique et escalade",
-      "approbationHumaine": false
+      "approbationHumaine": true
     },
     {
       "source": "comptabilite-finance",
@@ -871,25 +1002,25 @@
       "source": "sav-sinistres",
       "cible": "comptabilite-finance",
       "objet": "Demande de règlement d'une indemnité",
-      "approbationHumaine": false
+      "approbationHumaine": true
     },
     {
       "source": "sav-sinistres",
       "cible": "commercial",
       "objet": "Opportunité détectée lors d'un échange avec le client",
-      "approbationHumaine": false
+      "approbationHumaine": true
     },
     {
       "source": "sav-sinistres",
       "cible": "qualite",
       "objet": "Réclamations à analyser",
-      "approbationHumaine": false
+      "approbationHumaine": true
     },
     {
       "source": "commercial",
       "cible": "conformite",
       "objet": "Identification du client et analyse de risque",
-      "approbationHumaine": false
+      "approbationHumaine": true
     },
     {
       "source": "commercial",
@@ -919,7 +1050,7 @@
       "source": "marketing",
       "cible": "conformite",
       "objet": "Contenu à valider avant publication (règles d'assurance et RGPD)",
-      "approbationHumaine": false
+      "approbationHumaine": true
     },
     {
       "source": "conformite",
@@ -931,13 +1062,13 @@
       "source": "conformite",
       "cible": "informatique",
       "objet": "Exigences de sécurité et de conservation",
-      "approbationHumaine": false
+      "approbationHumaine": true
     },
     {
       "source": "conformite",
       "cible": "marketing",
       "objet": "Avis de conformité sur un contenu",
-      "approbationHumaine": false
+      "approbationHumaine": true
     },
     {
       "source": "juridique",
@@ -979,7 +1110,7 @@
       "source": "informatique",
       "cible": "conformite",
       "objet": "Incident de sécurité ou violation de données possible",
-      "approbationHumaine": false
+      "approbationHumaine": true
     },
     {
       "source": "informatique",
@@ -1027,7 +1158,7 @@
       "source": "commerce-exterieur",
       "cible": "conformite",
       "objet": "Contrôle de sanctions et d'embargos",
-      "approbationHumaine": false
+      "approbationHumaine": true
     },
     {
       "source": "administratif",
@@ -1147,13 +1278,13 @@
       "source": "logistique",
       "cible": "sav-sinistres",
       "objet": "Livraison endommagée ou perdue",
-      "approbationHumaine": false
+      "approbationHumaine": true
     },
     {
       "source": "sav-sinistres",
       "cible": "logistique",
       "objet": "Retour ou remplacement à organiser",
-      "approbationHumaine": false
+      "approbationHumaine": true
     },
     {
       "source": "production",
@@ -1249,13 +1380,13 @@
       "source": "service-client",
       "cible": "sav-sinistres",
       "objet": "Dossier client à traiter",
-      "approbationHumaine": false
+      "approbationHumaine": true
     },
     {
       "source": "sav-sinistres",
       "cible": "service-client",
       "objet": "Statut et décision sur le dossier",
-      "approbationHumaine": false
+      "approbationHumaine": true
     },
     {
       "source": "service-client",

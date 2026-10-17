@@ -1,0 +1,818 @@
+From d105d22790cabdc93180da22df66f3613f2bd53b Mon Sep 17 00:00:00 2001
+From: Jean-Baptiste Dhondt <114347858+warrox1993@users.noreply.github.com>
+Date: Sat, 17 Oct 2026 20:35:28 +0200
+Subject: [PATCH] =?UTF-8?q?feat(ui):=20un=20client=20de=20l'atelier=20n'oc?=
+ =?UTF-8?q?cupe=20qu'une=20entr=C3=A9e=20du=20s=C3=A9lecteur=20(marqueur?=
+ =?UTF-8?q?=20atelier-client),=20arriv=C3=A9e=20sur=20le=20tableau=20des?=
+ =?UTF-8?q?=20d=C3=A9partements=20;=20le=20pont=20des=20plugins=20garde=20?=
+ =?UTF-8?q?un=20lien=20vers=20une=20autre=20entreprise=20de=20l'utilisateu?=
+ =?UTF-8?q?r?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01DP85vPq2MHkZg8VNtRvCzB
+---
+ ui/src/components/CompanyHomeRedirect.tsx     |   3 +
+ .../SidebarCompanyMenu.production.tsx         |  71 ++++++++----
+ ui/src/components/SidebarCompanyMenu.test.tsx | 106 +++++++++++++++++
+ ui/src/components/SidebarCompanyMenu.tsx      |  71 ++++++++----
+ ui/src/lib/company-groups.test.ts             |  72 ++++++++++++
+ ui/src/lib/company-groups.ts                  | 108 ++++++++++++++++++
+ ui/src/plugins/bridge.test.ts                 |   9 ++
+ ui/src/plugins/bridge.ts                      |  22 +++-
+ 8 files changed, 410 insertions(+), 52 deletions(-)
+ create mode 100644 ui/src/lib/company-groups.test.ts
+ create mode 100644 ui/src/lib/company-groups.ts
+
+diff --git a/ui/src/components/CompanyHomeRedirect.tsx b/ui/src/components/CompanyHomeRedirect.tsx
+index 2650904c4..2bb072f1d 100644
+--- a/ui/src/components/CompanyHomeRedirect.tsx
++++ b/ui/src/components/CompanyHomeRedirect.tsx
+@@ -10,6 +10,9 @@ import { PaperclipLoading } from "./AnimatedPaperclipIcon";
+  */
+ export const CHEMIN_PAGE_ATELIER = "atelier";
+ 
++/** Tableau des départements d'un client à plusieurs services (vue « departements » du plugin). */
++export const CHEMIN_DEPARTEMENTS_ATELIER = `${CHEMIN_PAGE_ATELIER}/departements`;
++
+ /** Vrai si un plugin prêt déclare la page principale de l'atelier. */
+ export function atelierDisponible(contributions: PluginUiContribution[] | undefined): boolean {
+   return (contributions ?? []).some((contribution) =>
+diff --git a/ui/src/components/SidebarCompanyMenu.production.tsx b/ui/src/components/SidebarCompanyMenu.production.tsx
+index 6bc5ec2c9..4cc32804b 100644
+--- a/ui/src/components/SidebarCompanyMenu.production.tsx
++++ b/ui/src/components/SidebarCompanyMenu.production.tsx
+@@ -39,6 +39,9 @@ import { useCompanyOrder } from "@/hooks/useCompanyOrder";
+ import { useSignOut } from "@/hooks/useSignOut";
+ import { queryKeys } from "@/lib/queryKeys";
+ import { cn, SIDEBAR_RAIL_HIDDEN_LABEL } from "@/lib/utils";
++import { pluginsApi } from "@/api/plugins";
++import { deplierOrdre, entreeDe, grouperEntreprises, type CompanyGroupEntry } from "@/lib/company-groups";
++import { atelierDisponible, CHEMIN_DEPARTEMENTS_ATELIER } from "./CompanyHomeRedirect";
+ import { useSidebar } from "../context/SidebarContext";
+ import { CompanyPatternIcon } from "./CompanyPatternIcon";
+ 
+@@ -57,10 +60,10 @@ const ORGANIZATION_ROW_CLASS =
+ const ORGANIZATION_ACTION_CLASS =
+   "h-(--organization-popover-action-row-height) gap-(--organization-popover-row-gap) rounded-lg px-2.5 py-0 text-(length:--text-compact) font-medium leading-(--organization-popover-action-line-height) text-foreground focus:bg-accent/50 focus:text-foreground";
+ 
+-function WorkspaceIcon({ company, inPopover = false }: { company: Company; inPopover?: boolean }) {
++function WorkspaceIcon({ company, name, inPopover = false }: { company: Company; name?: string; inPopover?: boolean }) {
+   return (
+     <CompanyPatternIcon
+-      companyName={company.name}
++      companyName={name ?? company.name}
+       logoUrl={company.logoUrl}
+       className={inPopover ? POPOVER_WORKSPACE_ICON_CLASS : TRIGGER_WORKSPACE_ICON_CLASS}
+     />
+@@ -68,16 +71,17 @@ function WorkspaceIcon({ company, inPopover = false }: { company: Company; inPop
+ }
+ 
+ function SortableCompanyItem({
+-  company,
++  entry,
+   isEditing,
+   isSelected,
+   onSelect,
+ }: {
+-  company: Company;
++  entry: CompanyGroupEntry<Company>;
+   isEditing: boolean;
+   isSelected: boolean;
+-  onSelect: (company: Company) => void;
++  onSelect: (entry: CompanyGroupEntry<Company>) => void;
+ }) {
++  const company = entry.primary;
+   const {
+     attributes,
+     listeners,
+@@ -86,7 +90,7 @@ function SortableCompanyItem({
+     transform,
+     transition,
+     isDragging,
+-  } = useSortable({ id: company.id, disabled: !isEditing });
++  } = useSortable({ id: entry.key, disabled: !isEditing });
+ 
+   return (
+     <DropdownMenuItem
+@@ -101,7 +105,7 @@ function SortableCompanyItem({
+           event.preventDefault();
+           return;
+         }
+-        onSelect(company);
++        onSelect(entry);
+       }}
+       className={cn(
+         ORGANIZATION_ROW_CLASS,
+@@ -109,14 +113,14 @@ function SortableCompanyItem({
+         isDragging && "opacity-80",
+       )}
+     >
+-      <WorkspaceIcon company={company} inPopover />
++      <WorkspaceIcon company={company} name={entry.label} inPopover />
+       <span className="min-w-0 flex-1">
+         <span className="block truncate font-medium leading-(--organization-popover-name-line-height)">
+-          {company.name}
++          {entry.label}
+         </span>
+         {isEditing ? null : (
+           <span className="block truncate text-(length:--text-nano) leading-(--organization-popover-prefix-line-height) text-muted-foreground">
+-            {company.issuePrefix}
++            {entry.grouped ? `${entry.members.length} départements` : company.issuePrefix}
+           </span>
+         )}
+       </span>
+@@ -124,7 +128,7 @@ function SortableCompanyItem({
+         <button
+           type="button"
+           ref={setActivatorNodeRef}
+-          aria-label={`Reorder ${company.name}`}
++          aria-label={`Reorder ${entry.label}`}
+           className="inline-flex size-8 shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-(length:--rad-2) focus-visible:ring-ring"
+           onClick={(event) => {
+             event.preventDefault();
+@@ -186,6 +190,14 @@ function BuiltinCompanyMenu({ open: controlledOpen, onOpenChange }: SidebarCompa
+     companies: sidebarCompanies,
+     userId: currentUserId,
+   });
++  // Atelier marketing : un client (une entreprise par service) n'occupe qu'une entrée, à son nom.
++  const entries = useMemo(() => grouperEntreprises(orderedCompanies), [orderedCompanies]);
++  const selectedEntry = entreeDe(entries, selectedCompany?.id);
++  const { data: uiContributions } = useQuery({
++    queryKey: queryKeys.plugins.uiContributions,
++    queryFn: () => pluginsApi.listUiContributions(),
++  });
++  const atelierPret = atelierDisponible(uiContributions);
+ 
+   // Keep invitation links hidden until the operator policy is known.
+   const { hidden: hiddenSettings, loaded: hiddenSettingsLoaded } = useHiddenSettings();
+@@ -194,7 +206,7 @@ function BuiltinCompanyMenu({ open: controlledOpen, onOpenChange }: SidebarCompa
+     !hidesCompanyPage(hiddenSettings, "company.members") &&
+     !hidesCompanyPage(hiddenSettings, "company.invites");
+   const switcherNoun = "company";
+-  const currentName = selectedCompany?.name ?? null;
++  const currentName = selectedEntry?.label ?? selectedCompany?.name ?? null;
+   // Managed hosts forbid local company creation. Their extension owns that action.
+   const companyCreationManaged = Boolean(useCloudInstance());
+ 
+@@ -211,7 +223,16 @@ function BuiltinCompanyMenu({ open: controlledOpen, onOpenChange }: SidebarCompa
+     if (isMobile) setSidebarOpen(false);
+   }
+ 
+-  function selectCompany(company: Company) {
++  function selectEntry(entry: CompanyGroupEntry<Company>) {
++    const company = entry.primary;
++    if (entry.grouped) {
++      // Choisir un client ouvre son tableau des départements (ou le tableau de bord sans atelier).
++      setSelectedCompanyId(company.id);
++      setOpen(false);
++      if (isMobile) setSidebarOpen(false);
++      navigate(`/${company.issuePrefix}/${atelierPret ? CHEMIN_DEPARTEMENTS_ATELIER : "dashboard"}`);
++      return;
++    }
+     const pathPrefix = location.pathname.split("/")[1]?.toUpperCase();
+     const isCompanyRoute = sidebarCompanies.some((sidebarCompany) => (
+       sidebarCompany.issuePrefix.toUpperCase() === pathPrefix
+@@ -242,14 +263,14 @@ function BuiltinCompanyMenu({ open: controlledOpen, onOpenChange }: SidebarCompa
+       const { active, over } = event;
+       if (!over || active.id === over.id) return;
+ 
+-      const ids = orderedCompanies.map((company) => company.id);
+-      const oldIndex = ids.indexOf(active.id as string);
+-      const newIndex = ids.indexOf(over.id as string);
++      const keys = entries.map((entry) => entry.key);
++      const oldIndex = keys.indexOf(active.id as string);
++      const newIndex = keys.indexOf(over.id as string);
+       if (oldIndex === -1 || newIndex === -1) return;
+ 
+-      persistOrder(arrayMove(ids, oldIndex, newIndex));
++      persistOrder(deplierOrdre(arrayMove(entries, oldIndex, newIndex)));
+     },
+-    [orderedCompanies, persistOrder],
++    [entries, persistOrder],
+   );
+ 
+   return (
+@@ -273,7 +294,7 @@ function BuiltinCompanyMenu({ open: controlledOpen, onOpenChange }: SidebarCompa
+           }
+         >
+           <span className="flex min-w-0 flex-1 items-center gap-2">
+-            {selectedCompany ? <WorkspaceIcon company={selectedCompany} /> : null}
++            {selectedCompany ? <WorkspaceIcon company={selectedEntry?.primary ?? selectedCompany} name={currentName ?? undefined} /> : null}
+             {/* The header has room for ~110px of name beside the collapse
+                 control (~142px on mobile, which hides it) — search moved to
+                 the nav to buy that width. A name that still
+@@ -319,16 +340,16 @@ function BuiltinCompanyMenu({ open: controlledOpen, onOpenChange }: SidebarCompa
+             onDragEnd={handleDragEnd}
+           >
+             <SortableContext
+-              items={orderedCompanies.map((company) => company.id)}
++              items={entries.map((entry) => entry.key)}
+               strategy={verticalListSortingStrategy}
+             >
+-              {orderedCompanies.map((company) => (
++              {entries.map((entry) => (
+                 <SortableCompanyItem
+-                  key={company.id}
+-                  company={company}
++                  key={entry.key}
++                  entry={entry}
+                   isEditing={isEditingOrder}
+-                  isSelected={company.id === selectedCompany?.id}
+-                  onSelect={selectCompany}
++                  isSelected={entry === selectedEntry}
++                  onSelect={selectEntry}
+                 />
+               ))}
+             </SortableContext>
+diff --git a/ui/src/components/SidebarCompanyMenu.test.tsx b/ui/src/components/SidebarCompanyMenu.test.tsx
+index 263f313b7..25202f45d 100644
+--- a/ui/src/components/SidebarCompanyMenu.test.tsx
++++ b/ui/src/components/SidebarCompanyMenu.test.tsx
+@@ -29,6 +29,13 @@ const mockSidebarPreferencesApi = vi.hoisted(() => ({
+   updateCompanyOrder: vi.fn(),
+ }));
+ const mockNavigateTopLevel = vi.hoisted(() => vi.fn());
++const mockPluginsApi = vi.hoisted(() => ({
++  listUiContributions: vi.fn(),
++}));
++
++vi.mock("@/api/plugins", () => ({
++  pluginsApi: mockPluginsApi,
++}));
+ 
+ vi.mock("@/api/auth", () => ({
+   authApi: mockAuthApi,
+@@ -160,6 +167,7 @@ describe("SidebarCompanyMenu", () => {
+     mockLocation.pathname = "/PAP/dashboard";
+     mockCompanyState.companies = null;
+     mockCompanyState.companyListUnavailable = false;
++    mockPluginsApi.listUiContributions.mockResolvedValue([]);
+   });
+ 
+   afterEach(() => {
+@@ -551,6 +559,104 @@ describe("SidebarCompanyMenu", () => {
+     });
+   });
+ 
++  // Atelier (local) : un client de l'atelier est une entreprise par service ; le sélecteur n'en
++  // montre qu'une entrée, au nom du client, repérée par le marqueur de la description.
++  describe("atelier : une entrée par client", () => {
++    const marqueur = (client: string, service: string) =>
++      `Entreprise cliente de l'Atelier Marketing IA. Marqueur de périmètre : atelier-client:${client}:${service}.`;
++    const clientFictif = [
++      { id: "company-1", issuePrefix: "PAP", name: "Acme Labs", status: "active" },
++      { id: "fic-com", issuePrefix: "FICAA", name: "Fictive SA · Commercial", status: "active", description: marqueur("fictive-sa", "commercial") },
++      { id: "fic-mkt", issuePrefix: "FIC", name: "Fictive SA · Marketing", status: "active", description: marqueur("fictive-sa", "marketing") },
++      { id: "fic-dir", issuePrefix: "FICAB", name: "Fictive SA · Direction", status: "active", description: marqueur("fictive-sa", "direction") },
++    ];
++    const contributionAtelier = {
++      pluginId: "atelier",
++      pluginKey: "atelier",
++      displayName: "Atelier",
++      version: "1.0.0",
++      uiEntryFile: "index.js",
++      slots: [{ type: "page", id: "atelier", displayName: "Atelier", exportName: "Page", routePath: "atelier" }],
++      launchers: [],
++    };
++
++    for (const production of [false, true]) {
++      const variante = production ? "production" : "streamlined";
++
++      it(`montre une seule entrée au nom du client (${variante})`, async () => {
++        mockCompanyState.companies = clientFictif;
++        mockSidebarPreferencesApi.getCompanyOrder.mockResolvedValue({
++          orderedIds: clientFictif.map((c) => c.id),
++          updatedAt: null,
++        });
++        const { root } = renderMenu({ production });
++        await flushReact();
++        await flushReact();
++        await openMenu(production ? "Open Acme Labs company switcher" : "Open Acme Labs organization switcher");
++
++        const items = Array.from(document.body.querySelectorAll('[data-slot="dropdown-menu-item"]'))
++          .map((element) => element.textContent ?? "");
++        const lignesClient = items.filter((texte) => texte.includes("Fictive SA"));
++        expect(lignesClient).toHaveLength(1);
++        expect(lignesClient[0]).toContain("3 départements");
++        expect(lignesClient[0]).not.toContain("Marketing");
++        expect(document.body.textContent).not.toContain("FICAB");
++        expect(items.some((texte) => texte.includes("Acme Labs") && texte.includes("PAP"))).toBe(true);
++
++        act(() => {
++          root.unmount();
++        });
++      });
++
++      it(`choisir le client ouvre son service Marketing sur le tableau des départements (${variante})`, async () => {
++        mockCompanyState.companies = clientFictif;
++        mockPluginsApi.listUiContributions.mockResolvedValue([contributionAtelier]);
++        const { root } = renderMenu({ production });
++        await flushReact();
++        await flushReact();
++        await openMenu(production ? "Open Acme Labs company switcher" : "Open Acme Labs organization switcher");
++
++        const ligne = Array.from(document.body.querySelectorAll('[data-slot="dropdown-menu-item"]'))
++          .find((element) => element.textContent?.includes("Fictive SA"));
++        expect(ligne).toBeTruthy();
++        act(() => {
++          ligne?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
++        });
++        await flushReact();
++
++        expect(mockSetSelectedCompanyId).toHaveBeenCalledWith("fic-mkt");
++        expect(mockNavigate).toHaveBeenCalledWith("/FIC/atelier/departements");
++
++        act(() => {
++          root.unmount();
++        });
++      });
++    }
++
++    it("sans atelier prêt, choisir le client ouvre le tableau de bord", async () => {
++      mockCompanyState.companies = clientFictif;
++      mockPluginsApi.listUiContributions.mockResolvedValue([]);
++      const { root } = renderMenu();
++      await flushReact();
++      await flushReact();
++      await openMenu("Open Acme Labs organization switcher");
++
++      const ligne = Array.from(document.body.querySelectorAll('[data-slot="dropdown-menu-item"]'))
++        .find((element) => element.textContent?.includes("Fictive SA"));
++      act(() => {
++        ligne?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
++      });
++      await flushReact();
++
++      expect(mockSetSelectedCompanyId).toHaveBeenCalledWith("fic-mkt");
++      expect(mockNavigate).toHaveBeenCalledWith("/FIC/dashboard");
++
++      act(() => {
++        root.unmount();
++      });
++    });
++  });
++
+   it("keeps the in-app company wizard and never leaves the app when self-hosted", async () => {
+     const { root } = renderMenu();
+     await flushReact();
+diff --git a/ui/src/components/SidebarCompanyMenu.tsx b/ui/src/components/SidebarCompanyMenu.tsx
+index 709b7b343..e5e7d56f7 100644
+--- a/ui/src/components/SidebarCompanyMenu.tsx
++++ b/ui/src/components/SidebarCompanyMenu.tsx
+@@ -39,6 +39,9 @@ import { useCompanyOrder } from "@/hooks/useCompanyOrder";
+ import { useSignOut } from "@/hooks/useSignOut";
+ import { queryKeys } from "@/lib/queryKeys";
+ import { cn, SIDEBAR_RAIL_HIDDEN_LABEL } from "@/lib/utils";
++import { pluginsApi } from "@/api/plugins";
++import { deplierOrdre, entreeDe, grouperEntreprises, type CompanyGroupEntry } from "@/lib/company-groups";
++import { atelierDisponible, CHEMIN_DEPARTEMENTS_ATELIER } from "./CompanyHomeRedirect";
+ import { useSidebar } from "../context/SidebarContext";
+ import { CompanyPatternIcon } from "./CompanyPatternIcon";
+ 
+@@ -57,10 +60,10 @@ const ORGANIZATION_ROW_CLASS =
+ const ORGANIZATION_ACTION_CLASS =
+   "h-(--organization-popover-action-row-height) gap-(--organization-popover-row-gap) rounded-lg px-2.5 py-0 text-(length:--text-compact) font-medium leading-(--organization-popover-action-line-height) text-foreground focus:bg-accent/50 focus:text-foreground";
+ 
+-function WorkspaceIcon({ company, inPopover = false }: { company: Company; inPopover?: boolean }) {
++function WorkspaceIcon({ company, name, inPopover = false }: { company: Company; name?: string; inPopover?: boolean }) {
+   return (
+     <CompanyPatternIcon
+-      companyName={company.name}
++      companyName={name ?? company.name}
+       logoUrl={company.logoUrl}
+       className={inPopover ? POPOVER_WORKSPACE_ICON_CLASS : TRIGGER_WORKSPACE_ICON_CLASS}
+     />
+@@ -68,16 +71,17 @@ function WorkspaceIcon({ company, inPopover = false }: { company: Company; inPop
+ }
+ 
+ function SortableCompanyItem({
+-  company,
++  entry,
+   isEditing,
+   isSelected,
+   onSelect,
+ }: {
+-  company: Company;
++  entry: CompanyGroupEntry<Company>;
+   isEditing: boolean;
+   isSelected: boolean;
+-  onSelect: (company: Company) => void;
++  onSelect: (entry: CompanyGroupEntry<Company>) => void;
+ }) {
++  const company = entry.primary;
+   const {
+     attributes,
+     listeners,
+@@ -86,7 +90,7 @@ function SortableCompanyItem({
+     transform,
+     transition,
+     isDragging,
+-  } = useSortable({ id: company.id, disabled: !isEditing });
++  } = useSortable({ id: entry.key, disabled: !isEditing });
+ 
+   return (
+     <DropdownMenuItem
+@@ -101,7 +105,7 @@ function SortableCompanyItem({
+           event.preventDefault();
+           return;
+         }
+-        onSelect(company);
++        onSelect(entry);
+       }}
+       className={cn(
+         ORGANIZATION_ROW_CLASS,
+@@ -109,14 +113,14 @@ function SortableCompanyItem({
+         isDragging && "opacity-80",
+       )}
+     >
+-      <WorkspaceIcon company={company} inPopover />
++      <WorkspaceIcon company={company} name={entry.label} inPopover />
+       <span className="min-w-0 flex-1">
+         <span className="block truncate font-medium leading-(--organization-popover-name-line-height)">
+-          {company.name}
++          {entry.label}
+         </span>
+         {isEditing ? null : (
+           <span className="block truncate text-(length:--text-nano) leading-(--organization-popover-prefix-line-height) text-muted-foreground">
+-            {company.issuePrefix}
++            {entry.grouped ? `${entry.members.length} départements` : company.issuePrefix}
+           </span>
+         )}
+       </span>
+@@ -124,7 +128,7 @@ function SortableCompanyItem({
+         <button
+           type="button"
+           ref={setActivatorNodeRef}
+-          aria-label={`Reorder ${company.name}`}
++          aria-label={`Reorder ${entry.label}`}
+           className="inline-flex size-8 shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-(length:--rad-2) focus-visible:ring-ring"
+           onClick={(event) => {
+             event.preventDefault();
+@@ -186,6 +190,14 @@ function BuiltinCompanyMenu({ open: controlledOpen, onOpenChange }: SidebarCompa
+     companies: sidebarCompanies,
+     userId: currentUserId,
+   });
++  // Atelier marketing : un client (une entreprise par service) n'occupe qu'une entrée, à son nom.
++  const entries = useMemo(() => grouperEntreprises(orderedCompanies), [orderedCompanies]);
++  const selectedEntry = entreeDe(entries, selectedCompany?.id);
++  const { data: uiContributions } = useQuery({
++    queryKey: queryKeys.plugins.uiContributions,
++    queryFn: () => pluginsApi.listUiContributions(),
++  });
++  const atelierPret = atelierDisponible(uiContributions);
+ 
+   // Keep invitation links hidden until the operator policy is known.
+   const { hidden: hiddenSettings, loaded: hiddenSettingsLoaded } = useHiddenSettings();
+@@ -194,7 +206,7 @@ function BuiltinCompanyMenu({ open: controlledOpen, onOpenChange }: SidebarCompa
+     !hidesCompanyPage(hiddenSettings, "company.members") &&
+     !hidesCompanyPage(hiddenSettings, "company.invites");
+   const switcherNoun = "organization";
+-  const currentName = selectedCompany?.name ?? null;
++  const currentName = selectedEntry?.label ?? selectedCompany?.name ?? null;
+   // Managed hosts forbid local company creation. Their extension owns that action.
+   const companyCreationManaged = Boolean(useCloudInstance());
+ 
+@@ -211,7 +223,16 @@ function BuiltinCompanyMenu({ open: controlledOpen, onOpenChange }: SidebarCompa
+     if (isMobile) setSidebarOpen(false);
+   }
+ 
+-  function selectCompany(company: Company) {
++  function selectEntry(entry: CompanyGroupEntry<Company>) {
++    const company = entry.primary;
++    if (entry.grouped) {
++      // Choisir un client ouvre son tableau des départements (ou le tableau de bord sans atelier).
++      setSelectedCompanyId(company.id);
++      setOpen(false);
++      if (isMobile) setSidebarOpen(false);
++      navigate(`/${company.issuePrefix}/${atelierPret ? CHEMIN_DEPARTEMENTS_ATELIER : "dashboard"}`);
++      return;
++    }
+     const pathPrefix = location.pathname.split("/")[1]?.toUpperCase();
+     const isCompanyRoute = sidebarCompanies.some((sidebarCompany) => (
+       sidebarCompany.issuePrefix.toUpperCase() === pathPrefix
+@@ -242,14 +263,14 @@ function BuiltinCompanyMenu({ open: controlledOpen, onOpenChange }: SidebarCompa
+       const { active, over } = event;
+       if (!over || active.id === over.id) return;
+ 
+-      const ids = orderedCompanies.map((company) => company.id);
+-      const oldIndex = ids.indexOf(active.id as string);
+-      const newIndex = ids.indexOf(over.id as string);
++      const keys = entries.map((entry) => entry.key);
++      const oldIndex = keys.indexOf(active.id as string);
++      const newIndex = keys.indexOf(over.id as string);
+       if (oldIndex === -1 || newIndex === -1) return;
+ 
+-      persistOrder(arrayMove(ids, oldIndex, newIndex));
++      persistOrder(deplierOrdre(arrayMove(entries, oldIndex, newIndex)));
+     },
+-    [orderedCompanies, persistOrder],
++    [entries, persistOrder],
+   );
+ 
+   return (
+@@ -273,7 +294,7 @@ function BuiltinCompanyMenu({ open: controlledOpen, onOpenChange }: SidebarCompa
+           }
+         >
+           <span className="flex min-w-0 flex-1 items-center gap-2">
+-            {selectedCompany ? <WorkspaceIcon company={selectedCompany} /> : null}
++            {selectedCompany ? <WorkspaceIcon company={selectedEntry?.primary ?? selectedCompany} name={currentName ?? undefined} /> : null}
+             {/* The header has room for ~110px of name beside the collapse
+                 control (~142px on mobile, which hides it) — search moved to
+                 the nav to buy that width. A name that still
+@@ -319,16 +340,16 @@ function BuiltinCompanyMenu({ open: controlledOpen, onOpenChange }: SidebarCompa
+             onDragEnd={handleDragEnd}
+           >
+             <SortableContext
+-              items={orderedCompanies.map((company) => company.id)}
++              items={entries.map((entry) => entry.key)}
+               strategy={verticalListSortingStrategy}
+             >
+-              {orderedCompanies.map((company) => (
++              {entries.map((entry) => (
+                 <SortableCompanyItem
+-                  key={company.id}
+-                  company={company}
++                  key={entry.key}
++                  entry={entry}
+                   isEditing={isEditingOrder}
+-                  isSelected={company.id === selectedCompany?.id}
+-                  onSelect={selectCompany}
++                  isSelected={entry === selectedEntry}
++                  onSelect={selectEntry}
+                 />
+               ))}
+             </SortableContext>
+diff --git a/ui/src/lib/company-groups.test.ts b/ui/src/lib/company-groups.test.ts
+new file mode 100644
+index 000000000..881560afc
+--- /dev/null
++++ b/ui/src/lib/company-groups.test.ts
+@@ -0,0 +1,72 @@
++import { describe, expect, it } from "vitest";
++import { deplierOrdre, entreeDe, grouperEntreprises, lireMarqueurClient } from "./company-groups";
++
++const svc = (id: string, nom: string, client: string, service: string | null) => ({
++  id,
++  name: nom,
++  description: `Entreprise cliente de l'Atelier Marketing IA. Marqueur de périmètre : atelier-client:${client}${service ? `:${service}` : ""}.`,
++});
++
++describe("lireMarqueurClient", () => {
++  it("lit le client et le service", () => {
++    expect(lireMarqueurClient("… Marqueur de périmètre : atelier-client:fictive-sa:juridique.")).toEqual({ client: "fictive-sa", service: "juridique" });
++    expect(lireMarqueurClient("Marqueur : atelier-client:fictive-sa.")).toEqual({ client: "fictive-sa", service: null });
++  });
++
++  it("refuse un marqueur collé à un autre mot ou absent", () => {
++    expect(lireMarqueurClient("xatelier-client:fictive-sa")).toBeNull();
++    expect(lireMarqueurClient("Une entreprise ordinaire")).toBeNull();
++    expect(lireMarqueurClient(null)).toBeNull();
++  });
++});
++
++describe("grouperEntreprises", () => {
++  const isolee = { id: "i", name: "Boulangerie · Atelier", description: "Sans marqueur" };
++  const seule = svc("s", "Mono SA · Marketing", "mono-sa", "marketing");
++  const companies = [
++    svc("c1", "Fictive SA · Commercial", "fictive-sa", "commercial"),
++    isolee,
++    svc("c2", "Fictive SA · Marketing", "fictive-sa", "marketing"),
++    svc("c3", "Fictive SA · Direction", "fictive-sa", "direction"),
++    seule,
++  ];
++
++  it("une entrée par client, à la place de son premier membre, au nom du client", () => {
++    const entries = grouperEntreprises(companies);
++    expect(entries.map((e) => e.label)).toEqual(["Fictive SA", "Boulangerie · Atelier", "Mono SA · Marketing"]);
++    const client = entries[0]!;
++    expect(client.grouped).toBe(true);
++    expect(client.members.map((m) => m.id)).toEqual(["c1", "c2", "c3"]);
++    // L'entrée ouvre le service Marketing.
++    expect(client.primary.id).toBe("c2");
++    expect(client.key).toBe("c2");
++  });
++
++  it("une entreprise sans marqueur et un client à un seul service restent des entrées normales", () => {
++    const entries = grouperEntreprises(companies);
++    expect(entries[1]).toMatchObject({ grouped: false, label: "Boulangerie · Atelier", members: [isolee] });
++    expect(entries[2]).toMatchObject({ grouped: false, label: "Mono SA · Marketing", members: [seule] });
++  });
++
++  it("ne regroupe jamais sur le nom seul", () => {
++    const memesNoms = [
++      { id: "a", name: "Café · Bar", description: null },
++      { id: "b", name: "Café · Salle", description: null },
++    ];
++    expect(grouperEntreprises(memesNoms).map((e) => e.grouped)).toEqual([false, false]);
++  });
++
++  it("Direction faute de Marketing, sinon le premier ; slug faute de préfixe commun", () => {
++    const sansMarketing = [svc("j", "Juridique", "x-y", "juridique"), svc("d", "Direction", "x-y", "direction")];
++    const [e] = grouperEntreprises(sansMarketing);
++    expect(e!.primary.id).toBe("d");
++    expect(e!.label).toBe("x-y");
++  });
++
++  it("retrouve l'entrée d'une entreprise et déplie l'ordre", () => {
++    const entries = grouperEntreprises(companies);
++    expect(entreeDe(entries, "c3")?.label).toBe("Fictive SA");
++    expect(entreeDe(entries, "inconnue")).toBeNull();
++    expect(deplierOrdre([entries[1]!, entries[0]!, entries[2]!])).toEqual(["i", "c1", "c2", "c3", "s"]);
++  });
++});
+diff --git a/ui/src/lib/company-groups.ts b/ui/src/lib/company-groups.ts
+new file mode 100644
+index 000000000..f311de1e7
+--- /dev/null
++++ b/ui/src/lib/company-groups.ts
+@@ -0,0 +1,108 @@
++/**
++ * Atelier marketing (local) : regroupement des entreprises d'un même client dans le sélecteur
++ * d'organisations. Un client de l'atelier est une entreprise par service (« Client · Marketing »,
++ * « Client · Direction », …) ; le sélecteur n'en montre qu'une entrée, au nom du client.
++ *
++ * Source du regroupement : le marqueur de périmètre que l'atelier écrit dans la description de chaque
++ * entreprise (`atelier-client:<client>` ou `atelier-client:<client>:<service>`,
++ * scripts/bootstrap-organisation.py). Il survit à un renommage dans l'interface, contrairement au nom.
++ * Il ne sert qu'à l'affichage : le plugin garde la déclaration de référence des services. Aucun repli
++ * sur le nom (« X · Y » est un nom banal) : une entreprise sans marqueur reste une entrée normale, et
++ * un client à un seul service aussi.
++ */
++
++export interface MarqueurClient {
++  client: string;
++  service: string | null;
++}
++
++/** Même règle de mot entier que `porte_marqueur` (bootstrap-organisation.py). */
++const MOTIF_MARQUEUR = /(?<![A-Za-z0-9_-])atelier-client:([a-z0-9][a-z0-9-]*)(?::([a-z0-9][a-z0-9-]*))?(?![A-Za-z0-9_:-])/u;
++
++export function lireMarqueurClient(description: string | null | undefined): MarqueurClient | null {
++  const m = MOTIF_MARQUEUR.exec(description ?? "");
++  if (!m) return null;
++  return { client: m[1]!, service: m[2] ?? null };
++}
++
++export interface CompanyLike {
++  id: string;
++  name: string;
++  description?: string | null;
++}
++
++export interface CompanyGroupEntry<C extends CompanyLike> {
++  /** Identifiant stable de l'entrée : celui de l'entreprise principale (sert au glisser-déposer). */
++  key: string;
++  /** Nom affiché : celui du client pour un groupe, celui de l'entreprise sinon. */
++  label: string;
++  /** Entreprise ouverte quand on choisit l'entrée (Marketing, sinon Direction, sinon la première). */
++  primary: C;
++  members: C[];
++  grouped: boolean;
++}
++
++const SEPARATEUR = " · ";
++
++function nomClient(members: CompanyLike[], slug: string): string {
++  const prefixes = members.map((c) => {
++    const i = c.name.indexOf(SEPARATEUR);
++    return i > 0 ? c.name.slice(0, i).trim() : null;
++  });
++  const premier = prefixes[0];
++  if (premier && prefixes.every((p) => p === premier)) return premier;
++  const majoritaire = prefixes.find((p): p is string => Boolean(p));
++  return majoritaire ?? slug;
++}
++
++/**
++ * Entrées du sélecteur, dans l'ordre reçu : un groupe prend la place de son premier membre.
++ * Un groupe n'existe qu'à partir de deux entreprises du même client.
++ */
++export function grouperEntreprises<C extends CompanyLike>(companies: readonly C[]): CompanyGroupEntry<C>[] {
++  const parClient = new Map<string, Array<{ company: C; service: string | null }>>();
++  for (const company of companies) {
++    const marqueur = lireMarqueurClient(company.description);
++    if (!marqueur) continue;
++    const liste = parClient.get(marqueur.client) ?? [];
++    liste.push({ company, service: marqueur.service });
++    parClient.set(marqueur.client, liste);
++  }
++
++  const entries: CompanyGroupEntry<C>[] = [];
++  const vus = new Set<string>();
++  for (const company of companies) {
++    const marqueur = lireMarqueurClient(company.description);
++    const membres = marqueur ? parClient.get(marqueur.client) ?? [] : [];
++    if (!marqueur || membres.length < 2) {
++      entries.push({ key: company.id, label: company.name, primary: company, members: [company], grouped: false });
++      continue;
++    }
++    if (vus.has(marqueur.client)) continue;
++    vus.add(marqueur.client);
++    const primaire =
++      membres.find((m) => m.service === "marketing" || m.service === null)
++      ?? membres.find((m) => m.service === "direction")
++      ?? membres[0]!;
++    const liste = membres.map((m) => m.company);
++    entries.push({
++      key: primaire.company.id,
++      label: nomClient(liste, marqueur.client),
++      primary: primaire.company,
++      members: liste,
++      grouped: true,
++    });
++  }
++  return entries;
++}
++
++/** Entrée qui contient cette entreprise. */
++export function entreeDe<C extends CompanyLike>(entries: readonly CompanyGroupEntry<C>[], companyId: string | null | undefined) {
++  if (!companyId) return null;
++  return entries.find((e) => e.members.some((m) => m.id === companyId)) ?? null;
++}
++
++/** Ordre complet (identifiants d'entreprises) à persister après avoir réordonné des entrées. */
++export function deplierOrdre(entries: readonly CompanyGroupEntry<CompanyLike>[]): string[] {
++  return entries.flatMap((e) => e.members.map((m) => m.id));
++}
+diff --git a/ui/src/plugins/bridge.test.ts b/ui/src/plugins/bridge.test.ts
+index 651db57ef..63b9c6c21 100644
+--- a/ui/src/plugins/bridge.test.ts
++++ b/ui/src/plugins/bridge.test.ts
+@@ -64,6 +64,15 @@ describe("plugin host navigation", () => {
+     expect(resolveHostNavigationHref("/pap/wiki", "PAP")).toBe("/pap/wiki");
+   });
+ 
++  it("keeps a link to another company of the user (atelier, local)", () => {
++    expect(resolveHostNavigationHref("/FICAB/atelier", "FIC", ["FIC", "FICAB"])).toBe("/FICAB/atelier");
++    expect(resolveHostNavigationHref("/FICAB/atelier?x=1#a", "FIC", ["FIC", "FICAB"])).toBe("/FICAB/atelier?x=1#a");
++    // Un préfixe inconnu ou un chemin relatif en minuscules reste relatif à l'entreprise courante.
++    expect(resolveHostNavigationHref("/AUTRE/atelier", "FIC", ["FIC", "FICAB"])).toBe("/FIC/AUTRE/atelier");
++    expect(resolveHostNavigationHref("/ficab/atelier", "FIC", ["FIC", "FICAB"])).toBe("/FIC/ficab/atelier");
++    expect(resolveHostNavigationHref("/wiki", "FIC", ["FIC", "FICAB"])).toBe("/FIC/wiki");
++  });
++
+   it("rewrites legacy instance settings paths into the active company settings scope", () => {
+     expect(resolveHostNavigationHref("/instance/settings/plugins", "PAP")).toBe(
+       "/PAP/company/settings/instance/plugins",
+diff --git a/ui/src/plugins/bridge.ts b/ui/src/plugins/bridge.ts
+index fcdf35af4..c06bb3c3c 100644
+--- a/ui/src/plugins/bridge.ts
++++ b/ui/src/plugins/bridge.ts
+@@ -37,6 +37,7 @@ import { pluginsApi } from "@/api/plugins";
+ import { ApiError } from "@/api/client";
+ import { useToastActions, type ToastInput } from "@/context/ToastContext";
+ import { useSidebar } from "@/context/SidebarContext";
++import { useOptionalCompany } from "@/context/CompanyContext";
+ import { isGlobalPath, normalizeCompanyPrefix } from "@/lib/company-routes";
+ import { normalizeRememberedInstanceSettingsPath } from "@/lib/instance-settings";
+ 
+@@ -301,6 +302,13 @@ function isLegacyInstanceSettingsPath(pathname: string): boolean {
+ export function resolveHostNavigationHref(
+   to: string,
+   companyPrefix: string | null | undefined,
++  /**
++   * Atelier (local) : préfixes des entreprises de l'utilisateur. Un chemin dont le premier segment est
++   * EXACTEMENT l'un d'eux (casse comprise : les préfixes sont en capitales, les chemins relatifs en
++   * minuscules) vise déjà cette entreprise et n'est pas repréfixé. Sans cela, un lien d'un plugin vers
++   * une autre entreprise (`/AUTRE/atelier`) devenait `/COURANTE/AUTRE/atelier`.
++   */
++  knownCompanyPrefixes?: readonly string[],
+ ): string {
+   const sameOriginPath = sameOriginPathFromHref(to);
+   if (sameOriginPath === null) return to;
+@@ -320,6 +328,11 @@ export function resolveHostNavigationHref(
+     return sameOriginPath;
+   }
+ 
++  const [firstSegment] = pathname.split("/").filter(Boolean);
++  if (firstSegment && knownCompanyPrefixes?.includes(firstSegment)) {
++    return sameOriginPath;
++  }
++
+   return `/${normalizeCompanyPrefix(companyPrefix)}${pathname}${search}${hash}`;
+ }
+ 
+@@ -498,10 +511,15 @@ export function useHostNavigation(): HostNavigation {
+   const routerNavigate = useRouterNavigate();
+   const { isMobile, setSidebarOpen } = useSidebar();
+   const companyPrefix = hostContext.companyPrefix;
++  const companies = useOptionalCompany()?.companies;
++  const knownCompanyPrefixes = useMemo(
++    () => (companies ?? []).map((company) => company.issuePrefix).filter((prefix): prefix is string => Boolean(prefix)),
++    [companies],
++  );
+ 
+   const resolveHref = useCallback(
+-    (to: string) => resolveHostNavigationHref(to, companyPrefix),
+-    [companyPrefix],
++    (to: string) => resolveHostNavigationHref(to, companyPrefix, knownCompanyPrefixes),
++    [companyPrefix, knownCompanyPrefixes],
+   );
+ 
+   const navigate = useCallback(
+-- 
+2.53.0
+

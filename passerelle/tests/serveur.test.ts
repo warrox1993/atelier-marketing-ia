@@ -5,6 +5,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { RegistreFournisseurs } from "../src/fournisseurs.js";
+import { creerServeur } from "../src/serveur.js";
 import { FICHES_PAR_DEFAUT } from "../src/services.js";
 import { MENTION_DONNEES_TIERCES } from "../src/outils.js";
 import {
@@ -249,6 +250,27 @@ describe("registre des fournisseurs (point d'extension)", () => {
       expect(mauvais.corps.result.isError).toBe(true);
     } finally {
       await p.arreter();
+    }
+  });
+});
+
+describe("passerelle : option sansAuthentification réservée aux tests (audit F2)", () => {
+  it("refusée au démarrage hors test, acceptée en test", () => {
+    const registre = new RegistreFournisseurs().enregistrer(fournisseurFactice());
+    const avant = { NODE_ENV: process.env.NODE_ENV, VITEST: process.env.VITEST };
+    try {
+      delete process.env.VITEST;
+      process.env.NODE_ENV = "production";
+      expect(() => creerServeur({ port: 0, registre, sansAuthentification: true })).toThrow(/réservée aux tests/);
+      // Sans l'option, le démarrage n'est pas affecté par l'environnement.
+      expect(() => creerServeur({ port: 0, registre })).not.toThrow();
+      process.env.NODE_ENV = "test";
+      expect(() => creerServeur({ port: 0, registre, sansAuthentification: true })).not.toThrow();
+    } finally {
+      for (const [cle, valeur] of Object.entries(avant)) {
+        if (valeur === undefined) delete process.env[cle];
+        else process.env[cle] = valeur;
+      }
     }
   });
 });

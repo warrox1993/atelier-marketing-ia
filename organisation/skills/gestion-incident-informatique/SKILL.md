@@ -2,7 +2,7 @@
 name: "gestion-incident-informatique"
 description: "Prépare la gestion d'un incident informatique ou de sécurité dans une PME belge : tri, niveau de gravité, communication, résolution, retour d'expérience, avec les obligations de notification à vérifier (NIS2 : loi du 26 avril 2024, notification au CCB ; violation de données RGPD : Autorité de protection des données, 72 heures) et la règle d'escalade. À utiliser pour rédiger ou mettre à jour un runbook, trier un incident décrit par le responsable, ou préparer un brouillon de notification ; jamais pour exécuter une commande sur les systèmes, déclarer un incident à une autorité à la place de l'humain, ni trancher seul si l'entreprise est soumise à NIS2 ou si une violation est notifiable."
 metadata:
-  version: "1.0.0"
+  version: "1.1.0"
   langue: "fr"
   domaine: "informatique"
 ---
@@ -37,10 +37,20 @@ Qu'une personne non spécialiste, sous stress, sache en trois minutes : quelle e
 2. **Trier** : est-ce un incident (service dégradé ou donnée atteinte) ou une simple demande ? Poser quatre questions : quel service est touché, combien de personnes, des données sont-elles lues, copiées, perdues ou chiffrées, l'attaque est-elle encore en cours ?
 3. **Attribuer la gravité** selon le tableau ci-dessous. En cas de doute entre deux niveaux, retenir le plus élevé.
 4. **Limiter les dégâts sans détruire les preuves** (gestes à demander à l'humain, jamais exécutés par la compétence) : débrancher du réseau l'appareil atteint sans l'éteindre si possible, changer les mots de passe du compte touché depuis un autre appareil sain, suspendre le compte, ne pas payer de rançon sans avis de la direction et des conseils, ne pas supprimer les courriels ni les journaux.
-5. **Communiquer** selon le tableau « Qui prévenir » : message interne court (fait, impact, consigne, prochaine nouvelle à telle heure), puis message aux clients ou partenaires seulement après validation de la direction.
+5. **Communiquer** selon le tableau « Qui prévenir », à cadence fixe annoncée d'avance (repère : toutes les heures
+   pour les niveaux 3 et 4, deux fois par jour pour le niveau 2). Chaque mise à jour interne suit le même format :
+   niveau et statut (en analyse, cause identifiée, sous surveillance, résolu), ce qui se passe, qui est touché, ce qui
+   a été fait, ce qui vient ensuite, heure de la prochaine mise à jour. Une mise à jour sans nouveauté est envoyée
+   quand même à l'heure dite. Message aux clients ou partenaires seulement après validation de la direction.
 6. **Évaluer les obligations de notification** (section suivante) et préparer les brouillons. L'humain décide et envoie.
 7. **Résoudre et rétablir** : cause identifiée, correctif appliqué par le responsable, restauration depuis une sauvegarde saine, surveillance renforcée pendant au moins sept jours (repère de départ, à ajuster).
-8. **Retour d'expérience** dans les deux semaines : chronologie, cause, ce qui a marché, ce qui a manqué, actions avec responsable et échéance. Sans recherche de coupable.
+8. **Retour d'expérience** dans les deux semaines, obligatoire pour : tout incident de niveau 3 ou 4, toute
+   interruption visible des clients de plus de 15 minutes, toute perte de données ou incident de sécurité, tout
+   incident évité de justesse qui aurait pu être grave, toute panne d'un type jamais vu. Structure fixe : résumé en
+   deux ou trois phrases, impact (personnes, durée, effet chiffré si possible), chronologie horodatée, cause, analyse
+   des « 5 pourquoi » (cinq questions successives jusqu'à la cause de fond), ce qui a marché, ce qui a manqué, actions
+   avec responsable et échéance, enseignements. Sans recherche de coupable : la question est « quelles conditions ont
+   permis l'incident ? », jamais « qui l'a causé ? » ; aucune personne n'est nommée comme fautive.
 
 ### Niveaux de gravité (repères de départ, à adapter)
 
@@ -81,6 +91,8 @@ Un dossier d'incident en Markdown : heure de prise de connaissance, description,
 - Aucune commande, aucun secret, aucun mot de passe dans le dossier.
 - Le retour d'expérience donne au moins trois actions avec responsable et date.
 - Le dossier ne nomme aucune personne comme fautive.
+- Chaque mise à jour d'incident suit le format fixe et annonce l'heure de la suivante.
+- Le retour d'expérience contient les neuf rubriques, dont les « 5 pourquoi ».
 
 ## Sources officielles
 
@@ -113,3 +125,12 @@ Mardi 13/10, 09 h 10 : une comptable signale que les fichiers du dossier partag�
 Prise de connaissance : 13/10 à 09 h 10. Gravité 4 (serveur de fichiers chiffré, données personnelles de salariés). Gestes demandés au responsable : débrancher le câble réseau du serveur sans l'éteindre, suspendre le compte de la comptable, garder la note de rançon en capture d'écran. Notifications : RGPD, échéance indicative au plus tard le 16/10 à 09 h 10 (à vérifier : risque pour les salariés probable) ; NIS2, statut inconnu, question posée à la direction (« l'entreprise relève-t-elle d'un secteur de l'annexe et dépasse-t-elle la taille moyenne ? »). Si oui, alerte précoce au plus tard le 14/10 à 09 h 10.
 
 Cas d'échec : le responsable informatique appelle à 14 h en disant « incident de niveau 1, un poste lent », sans mention des fichiers chiffrés. La compétence ne peut pas deviner : elle écrit « information manquante » sur les données atteintes, pose les quatre questions du tri, et fixe provisoirement le niveau 3 en attendant les réponses plutôt que de sous-estimer.
+
+## Origine de la méthode
+
+Mise à jour d'incident à cadence fixe et structure du retour d'expérience (dont les « 5 pourquoi ») adaptées et
+traduites de github.com/anthropics/knowledge-work-plugins, `engineering/skills/incident-response/SKILL.md`, commit
+33eeda1e8fd856455b05479d13a0f85b5f803744, licence Apache 2.0 ; principe sans recherche de coupable et déclencheurs du
+retour d'expérience adaptés de github.com/wshobson/agents, `plugins/incident-response/skills/postmortem-writing/SKILL.md`,
+commit 044b4b21f083948e69ec878a7b07c8d0951a6ffa, licence MIT, Copyright (c) 2024 Seth Hobson. Modifications :
+traduction, délais belges (NIS2, RGPD) conservés. Licences et reprises : `organisation/skills/LICENCES-TIERS.md`.

@@ -1113,15 +1113,15 @@ démarrage). `PASSERELLE_OSM_INDEX` désigne l'index importé (sinon `passerelle
 
 - Pour `osm` seulement : le fournisseur réel répond (index SQLite local), `atelier_identite` annonce `reel`, l'enveloppe `_atelier`
   porte `mode: "reel"` (signée si la passerelle a sa clé de signature), **sans** la mention de démonstration ; les autres services
-  gardent leur mention. `/sante` ajoute `services_reels: ["osm"]` ; son `mode` reste `demonstration`.
+  gardent leur mention. `/sante` liste `services: ["osm"]` (anciennement `services_reels`) ; son `mode` reste `demonstration`.
 - Un service listé mais sans fournisseur réel enregistré reste en démonstration (jamais de service « réel » fantôme). Sans index
   importé, `osm` répond « aucun fichier importé » (erreur claire), jamais des données fictives.
 - **Accès : celui de la démonstration** (OAuth local, jeton exigé), pour que les connexions Paperclip déjà faites continuent de
   marcher sans reconfiguration ; le jeton statique `PASSERELLE_PROSPECTION_JETON` n'est pas utilisé dans ce mode. La passerelle
   n'écoute que sur la boucle locale. Le mode `reel` complet (jeton statique) reste inchangé.
 - **Partout** : `instance/passerelle.env` (non suivi, 0600 ; chargé par `set -a; source instance/passerelle.env; set +a; npm start`)
-  contient `PASSERELLE_SERVICES_REELS=osm` et le chemin de l'index ; l'instance de démonstration d'aperçu (3580) : passerelles
-  3581 et 3582 lancées avec le même réglage (`scripts/demo/peupler-prospects.py` le pose pour 3582).
+  contient `PASSERELLE_SERVICES_REELS=osm` et le chemin de l'index ; l'ancienne instance d'aperçu (3580) et ses passerelles 3581 et 3582
+  sont arrêtées définitivement depuis le 17/10/2026 ; seule la passerelle 3190 de l'instance 3100 reste (l'ancien script `peupler-prospects.py` est retiré).
 - Test : `passerelle/tests/reel-prospection/melange.test.ts` (osm réel et signé, `bce` en démonstration, témoin sans réglage).
 
 **Import réel du 15/10/2026** (mesuré) : `cli.js osm-telecharger` (697 Mo), `osmium tags-filter` (31 Mo), `osmium export`

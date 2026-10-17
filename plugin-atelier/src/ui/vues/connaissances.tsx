@@ -465,7 +465,7 @@ function Liste({ companyId, version, onChange }: { companyId: string; version: n
   const [selection, setSelection] = useState<ReadonlySet<string>>(new Set());
   const [confirmationGroupe, setConfirmationGroupe] = useState(false);
   const [groupeEnCours, setGroupeEnCours] = useState(false);
-  const [bilanGroupe, setBilanGroupe] = useState<{ reussis: number; echecs: Array<{ titre: string; message: string }> } | null>(null);
+  const [bilanGroupe, setBilanGroupe] = useState<{ reussis: number; echecs: Array<{ id: string; titre: string; message: string }> } | null>(null);
 
   function basculer(id: string) {
     setConfirmationGroupe(false);
@@ -491,7 +491,7 @@ function Liste({ companyId, version, onChange }: { companyId: string; version: n
         echecs.push({ titre: doc.titre, id: doc.id, message: classerErreur(e).message });
       }
     }
-    setBilanGroupe({ reussis, echecs: echecs.map(({ titre, message }) => ({ titre, message })) });
+    setBilanGroupe({ reussis, echecs });
     setSelection(new Set(echecs.map((e) => e.id)));
     setConfirmationGroupe(false);
     setGroupeEnCours(false);
@@ -536,6 +536,31 @@ function Liste({ companyId, version, onChange }: { companyId: string; version: n
         <Vide titre="Aucun document pour le moment." action={<BoutonAller cible="atl-ajout-document">Ajouter un document</BoutonAller>}>
           Importez les conditions générales, les fiches produit et les tarifs : les agents pourront alors les citer au lieu d'inventer.
         </Vide>
+      ) : null}
+      {bilanGroupe ? (
+        <>
+          {bilanGroupe.echecs.length === 0 ? (
+            <p role="status" className="atl-succes">
+              {bilanGroupe.reussis} document{bilanGroupe.reussis > 1 ? "s mis" : " mis"} à la corbeille.
+            </p>
+          ) : (
+            <div role="alert" className="atl-erreur">
+              <p>
+                {bilanGroupe.reussis} document{bilanGroupe.reussis > 1 ? "s mis" : " mis"} à la corbeille, {bilanGroupe.echecs.length} en échec (ils restent cochés pour un nouvel essai) :
+              </p>
+              <ul>
+                {bilanGroupe.echecs.map((e) => (
+                  <li key={e.id}>
+                    « {e.titre} » : {e.message}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+          <Bouton variante="discret" onClick={() => setBilanGroupe(null)}>
+            Fermer
+          </Bouton>
+        </>
       ) : null}
       {nbRevoir > 0 ? (
         <div className="atl-encart" data-ton="attention" role="status">
@@ -588,26 +613,6 @@ function Liste({ companyId, version, onChange }: { companyId: string; version: n
                 </Bouton>
               </div>
             </div>
-          ) : null}
-          {bilanGroupe ? (
-            bilanGroupe.echecs.length === 0 ? (
-              <p role="status" className="atl-succes">
-                {bilanGroupe.reussis} document{bilanGroupe.reussis > 1 ? "s mis" : " mis"} à la corbeille.
-              </p>
-            ) : (
-              <div role="alert" className="atl-erreur">
-                <p>
-                  {bilanGroupe.reussis} document{bilanGroupe.reussis > 1 ? "s mis" : " mis"} à la corbeille, {bilanGroupe.echecs.length} en échec (ils restent cochés pour un nouvel essai) :
-                </p>
-                <ul>
-                  {bilanGroupe.echecs.map((e) => (
-                    <li key={e.titre}>
-                      « {e.titre} » : {e.message}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )
           ) : null}
           <div className="atl-table-cadre">
             <table className="atl-table">

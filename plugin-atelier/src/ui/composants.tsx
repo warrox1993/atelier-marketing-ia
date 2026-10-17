@@ -4,11 +4,14 @@
  * boutons dont la désactivation porte toujours une raison visible.
  */
 import { cloneElement, useEffect, useId, useRef, useState, type ReactElement, type ReactNode } from "react";
-import { useHostContext, useHostNavigation, type PluginBridgeError } from "@paperclipai/plugin-sdk/ui";
+import { useHostContext, useHostLocation, useHostNavigation, type PluginBridgeError } from "@paperclipai/plugin-sdk/ui";
 import type { EtatConnexion } from "../contrats/communs.js";
 import type { StatutFonctionnel } from "../contrats/statuts.js";
 import { DELAI_PERIME_MS, useContexteDonnees, useDonnees } from "./donnees.js";
 import { appelHote } from "./hote.js";
+import { aPlusieursDepartements, nomClient, useDepartements } from "./departements-sonde.js";
+import { chemin, lireRoute } from "./route.js";
+import { STYLES_DEPARTEMENTS } from "./styles-departements.js";
 import { classerErreur, dateHeure, dateSeule, decalageBruxelles, ETATS_CONNEXION, heureSeule, ilYA, libelleStatut, TON_STATUT, type Ton } from "./format.js";
 
 export function Pastille({ ton = "neutre", children, titre }: { ton?: Ton; children: ReactNode; titre?: string }) {
@@ -308,10 +311,13 @@ export function Champ({ libelle, aide, className, children }: { libelle: ReactNo
 
 /**
  * Bandeau « entreprise courante » en tête de chaque vue : le nom complet de l'entreprise,
- * sans pastille de mode.
+ * sans pastille de mode. Pour un client à plusieurs services, il devient un fil « Client › Département »
+ * avec un lien « Tous les départements » vers le tableau du client.
  */
 export function BandeauEntreprise() {
   const { companyId } = useHostContext();
+  const departements = useDepartements(companyId);
+  const { pathname } = useHostLocation();
   const [nom, setNom] = useState<string | null>(null);
   useEffect(() => {
     if (!companyId) return;
@@ -326,6 +332,30 @@ export function BandeauEntreprise() {
     };
   }, [companyId]);
   const affiche = nom ?? "Entreprise courante";
+  const courant = departements?.departements.find((d) => d.courant);
+  if (departements && courant && aPlusieursDepartements(departements)) {
+    const surTableau = lireRoute(pathname).vue === "departements";
+    return (
+      <nav className="atl-bandeau-entreprise atl-fil" aria-label="Fil d'Ariane">
+        <style href="atelier-departements" precedence="default">
+          {STYLES_DEPARTEMENTS}
+        </style>
+        <ol>
+          <li className="atl-fil-client">{nomClient(nom ? [nom] : [], departements.client)}</li>
+          <li>
+            <strong className="atl-bandeau-nom" title={affiche} aria-current={surTableau ? undefined : "page"}>
+              {surTableau ? "Départements" : courant.nom}
+            </strong>
+          </li>
+        </ol>
+        {surTableau ? null : (
+          <LienHote vers={chemin("departements")} className="atl-lien atl-fil-tous">
+            Tous les départements
+          </LienHote>
+        )}
+      </nav>
+    );
+  }
   return (
     <p className="atl-bandeau-entreprise">
       <span className="atl-bandeau-etiquette">Entreprise :</span>

@@ -2,7 +2,7 @@
 name: "audit-interne"
 description: "Prépare et documente un audit interne dans une PME belge : programme et plan d'audit, liste de contrôle tirée de la procédure auditée, classement des constats (conformité, point sensible, écart mineur, écart majeur) avec preuve, rapport et suivi des actions, selon les principes de l'audit des systèmes de management (ISO 19011). À utiliser pour auditer une procédure, un processus ou un service par rapport à ses propres règles ; jamais pour auditer son propre travail, évaluer des personnes, certifier une conformité ni conclure sans preuve observée."
 metadata:
-  version: "1.0.0"
+  version: "1.1.0"
   langue: "fr"
   domaine: "qualite"
 ---
@@ -35,7 +35,11 @@ Un audit dont chaque constat repose sur une preuve observable (document vu, enre
 
 ## Étapes
 
-1. **Cadrer le programme** : objectifs (vérifier l'application, la maîtrise des risques, l'efficacité), fréquence selon l'importance du processus et les résultats précédents, auditeurs, ressources. Un processus déjà en difficulté est audité plus tôt.
+1. **Cadrer le programme** : objectifs (vérifier l'application, la maîtrise des risques, l'efficacité), fréquence selon l'importance du processus et les résultats précédents, auditeurs, ressources. Un processus déjà en difficulté est audité plus tôt. Fréquence par défaut selon le risque : élevé, trimestrielle (au moins 4 audits par an) ; moyen, semestrielle ; faible, annuelle.
+   Indépendance de l'auditeur, vérifiée avant chaque désignation sur quatre points : il n'est pas responsable du
+   processus audité ; il n'a pas de lien hiérarchique direct avec l'audité (il n'audite donc ni son propre processus ni
+   celui de son supérieur direct) ; il n'a pas pris part récemment aux activités auditées ; sa qualification pour ce
+   périmètre est documentée. Un auditeur qui ne passe pas les quatre points est remplacé.
 2. **Préparer le plan d'audit** : date, durée, lieu, personnes (fonctions) à rencontrer, documents à demander, horaire, confidentialité. Le plan est envoyé à l'avance aux audités.
 3. **Construire la liste de contrôle** à partir de la procédure : une question par exigence, formulée de façon ouverte (« montrez-moi le dernier enregistrement de... »), avec la preuve attendue. Ne pas inventer d'exigence absente du référentiel.
 4. **Ouvrir la réunion** : rappeler objet, méthode, échelle des constats, confidentialité, déroulement.
@@ -44,7 +48,7 @@ Un audit dont chaque constat repose sur une preuve observable (document vu, enre
 7. **Faire la réunion de clôture** : présenter les constats avant le rapport, vérifier avec les audités qu'ils sont factuels, noter les désaccords.
 8. **Rédiger le rapport** : périmètre, dates, auditeur, personnes rencontrées (fonctions), points forts, constats classés avec preuve, conclusion, actions demandées avec échéance.
 9. **Suivre** : chaque écart ouvre un dossier de non-conformité (compétence `non-conformite-action-corrective`) ; l'audit n'est clos qu'après vérification d'efficacité de chaque action ou décision motivée de l'humain responsable.
-10. **Mettre à jour le programme** : résultats, processus à ré-auditer, procédures à corriger (compétence `procedure-qualite`).
+10. **Mettre à jour le programme** : résultats, processus à ré-auditer, procédures à corriger (compétence `procedure-qualite`). Indicateurs du programme : respect du calendrier (audits faits à la date prévue), délai de clôture des constats, constats répétés d'un audit à l'autre.
 
 ### Échelle des constats
 
@@ -116,3 +120,12 @@ Audit de la procédure « traitement des commandes » (v1.0, voir la compétence
 Conclusion : processus partiellement maîtrisé ; deux dossiers de non-conformité ouverts, le majeur avec escalade à la direction sous 5 jours ouvrables.
 
 Cas d'échec : l'audité propose cinq dossiers « bien tenus » à montrer. L'auditeur refuse l'échantillon fourni et tire lui-même les dix commandes. S'il ne peut pas le faire (accès au logiciel refusé), le rapport écrit « point non vérifié : accès aux données refusé » et ne conclut pas à la conformité. Règle : la compétence n'écrit pas « conforme » sur la base d'une déclaration orale seule.
+
+## Origine de la méthode
+
+Fréquence d'audit selon le risque, indépendance de l'auditeur et indicateurs du programme adaptés et traduits de
+github.com/alirezarezvani/claude-skills, `ra-qm-team/skills/qms-audit-expert/SKILL.md`, sections « Risk-Based Audit
+Frequency », « Auditor Independence » et « Audit Program Metrics », commit 19392f7a08264ed00486a251f5b2098321771f94,
+licence MIT, Copyright (c) 2025 Alireza Rezvani ; les clauses ISO 13485 propres aux dispositifs médicaux ne sont pas
+reprises. Modifications : traduction, adaptation à une PME. Texte des licences et liste des reprises :
+`organisation/skills/LICENCES-TIERS.md`.

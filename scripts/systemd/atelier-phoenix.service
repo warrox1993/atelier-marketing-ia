@@ -1,0 +1,37 @@
+[Unit]
+Description=Arize Phoenix local de l'Atelier marketing IA (traces, écoute sur 127.0.0.1 seulement)
+Documentation=https://arize.com/docs/phoenix/self-hosting/configuration
+
+# Installation (une fois) :
+#   python3 -m venv ~/.local/share/atelier-phoenix/venv
+#   ~/.local/share/atelier-phoenix/venv/bin/pip install "arize-phoenix==20.23.0"   (version stable vérifiée le 17/10/2026)
+#   install -m 644 scripts/systemd/atelier-phoenix.service ~/.config/systemd/user/
+#   systemctl --user daemon-reload && systemctl --user enable --now atelier-phoenix
+# Interface : http://127.0.0.1:6006  ; journal : « journalctl --user -u atelier-phoenix ».
+
+[Service]
+Type=simple
+Environment=PHOENIX_HOST=127.0.0.1
+Environment=PHOENIX_PORT=6006
+Environment=PHOENIX_GRPC_PORT=4317
+# Données (SQLite) sur le disque local ; sauvegardées avec l'atelier.
+Environment=PHOENIX_WORKING_DIR=%h/.local/share/atelier-phoenix/donnees
+# Tout reste sur le PC : ni télémétrie ni ressource Internet chargée par Phoenix.
+Environment=PHOENIX_TELEMETRY_ENABLED=false
+Environment=PHOENIX_ALLOW_EXTERNAL_RESOURCES=false
+Environment=PHOENIX_ENABLE_PROMETHEUS=false
+# Le lanceur force aussi le collecteur gRPC sur 127.0.0.1 (Phoenix l'ouvre sinon sur toutes les interfaces).
+ExecStartPre=/usr/bin/mkdir -p %h/.local/share/atelier-phoenix/donnees
+ExecStart=%h/.local/share/atelier-phoenix/venv/bin/python -I %h/Projets/atelier-marketing-ia/scripts/phoenix-lancer.py
+Restart=on-failure
+RestartSec=10
+Nice=10
+MemoryHigh=1500M
+MemoryMax=2G
+NoNewPrivileges=yes
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=atelier-phoenix
+
+[Install]
+WantedBy=default.target

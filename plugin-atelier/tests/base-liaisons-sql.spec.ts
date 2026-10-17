@@ -78,3 +78,44 @@ describe("file de sortie du facteur : règles SQL de l'hôte", () => {
     expect(lectures[1]).toMatch(/statut in \('repondue', 'annulee'\) and source_notifiee_le is null/u);
   });
 });
+
+describe("chaîne et teinte (migration 017) : règles SQL de l'hôte", () => {
+  it("liaisonsEntrantes et retourTeinte lisent par query, la liste des tâches en JSON (jamais un paramètre tableau)", async () => {
+    const { db, lectures } = fauxHote(0);
+    const stock = creerStockLiaisons(db);
+    expect(await stock.liaisonsEntrantes("c", ["AAAAAAAA-0000-4000-8000-000000000001"])).toEqual([]);
+    expect(await stock.retourTeinte("c", ["AAAAAAAA-0000-4000-8000-000000000001"])).toBe(false);
+    expect(lectures[0]).toMatch(/entreprise_cible_id = \$1 and tache_cible_id::text in \(select jsonb_array_elements_text\(\$2::jsonb\)\)/u);
+    expect(lectures[1]).toMatch(/company_id = \$1 and teinte_retour = true and tache_origine_id::text in/u);
+    // Aucune tâche : aucune requête.
+    expect(await stock.liaisonsEntrantes("c", [])).toEqual([]);
+    expect(lectures).toHaveLength(2);
+  });
+
+  it("prudence (revue de f525e9b) : liaisons reçues ouvertes et transmises, réponses teintées récentes d'abord, sans paramètre tableau", async () => {
+    const { db, lectures } = fauxHote(0);
+    const stock = creerStockLiaisons(db);
+    expect(await stock.liaisonsEntrantesOuvertes("c")).toEqual([]);
+    expect(await stock.retoursTeintesDe("c", 7, 200)).toEqual([]);
+    expect(lectures[0]).toMatch(/where entreprise_cible_id = \$1 and statut = 'ouverte' and tache_cible_id is not null/u);
+    expect(lectures[1]).toMatch(/coalesce\(repondu_le > now\(\) - make_interval\(days => \$2::int\), true\) as recente/u);
+    expect(lectures[1]).toMatch(/company_id = \$1 and teinte_retour = true order by repondu_le desc nulls first limit \$3/u);
+  });
+
+  it("transiter marque la teinte sans jamais la retirer ; inserer écrit chaîne, profondeur et approbation", async () => {
+    const { db, execute, parametres } = fauxHote(1);
+    const stock = creerStockLiaisons(db);
+    await stock.transiter("c", "l", ["ouverte"], { statut: "repondue", reponse: "r", repondu: true, teinte: true });
+    expect(execute[0]).toMatch(/teinte_retour = teinte_retour or \$7::boolean/u);
+    expect(parametres[0]![6]).toBe(true);
+    await stock.transiter("c", "l", ["ouverte"], { statut: "annulee", repondu: true });
+    expect(parametres[1]![6]).toBe(false);
+    await stock.inserer({
+      id: "l", entrepriseSource: "c", entrepriseCible: "d", tacheOrigine: "t", tacheCible: null, statut: "ouverte", objet: "o", extraits: [], creeLe: "", reponduLe: null,
+      serviceSource: "marketing", serviceCible: "direction", question: "q", cleIdempotence: "k", interactionId: null, demandePar: "a",
+      chaine: ["marketing", "direction"], profondeur: 1, approbationRequise: false,
+    });
+    expect(execute[2]).toMatch(/chaine, profondeur, approbation_requise\)/u);
+    expect(parametres[2]!.slice(14)).toEqual(['["marketing","direction"]', 1, false]);
+  });
+});

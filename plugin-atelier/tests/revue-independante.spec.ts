@@ -177,7 +177,7 @@ describe("M1 : une même publication n'est acceptée qu'une fois", () => {
     banc.decision({ portee });
     const corps = (cle: string) => ({ revisionId: REV1, action: "publier", canal: "linkedin", cleIdempotence: cle });
     const a = await route(banc, "tache.diffusions", humain, corps("cle-numero-1"), { issueId: ISSUE });
-    expect(a).toMatchObject({ statut: 201, corps: { etat: "simulee" } });
+    expect(a).toMatchObject({ statut: 201, corps: { etat: "preparee" } });
     const b = await route(banc, "tache.diffusions", agent(PRODUCTEUR), corps("cle-numero-2"), { issueId: ISSUE });
     expect(b).toMatchObject({ statut: 403, corps: { etat: "refusee" } });
     const rejeu = await route(banc, "tache.diffusions", humain, corps("cle-numero-1"), { issueId: ISSUE });
@@ -236,12 +236,23 @@ describe("M3 : les entrées hors couverture et revues périment aussi l'évaluat
     expect(banc.t.journal.find((j) => j.type === "reglages.modifies")?.donnees).toMatchObject({ modeParDefaut: "reel", modeAvant: "demonstration", evaluationsPerimees: true });
   });
   it("même mode renvoyé : rien n'est périmé", async () => {
-    const banc = creerBanc({ modeEntreprise: "demonstration" });
+    const banc = creerBanc({ modeEntreprise: "reel" });
     banc.tacheSousPorte({ status: "in_review" });
     banc.passe();
     const services = creerServices(banc.ctx, { base: banc.base });
-    await services.routes["reglages.enregistrer"]!({ cle: "reglages.enregistrer", params: {}, query: {}, companyId: SOC, acteur: humain, corps: { companyId: SOC, modeParDefaut: "demonstration" } });
+    await services.routes["reglages.enregistrer"]!({ cle: "reglages.enregistrer", params: {}, query: {}, companyId: SOC, acteur: humain, corps: { companyId: SOC, modeParDefaut: "reel" } });
     expect(banc.t.evaluations[0]!.perimee).toBe(false);
+  });
+  it("E1 : le mode « demonstration » ne peut plus être choisi comme réglage (entrée invalide, rien n'est écrit)", async () => {
+    const banc = creerBanc({ modeEntreprise: "reel" });
+    banc.tacheSousPorte({ status: "in_review" });
+    banc.passe();
+    const services = creerServices(banc.ctx, { base: banc.base });
+    const appel = services.routes["reglages.enregistrer"]!({ cle: "reglages.enregistrer", params: {}, query: {}, companyId: SOC, acteur: humain, corps: { companyId: SOC, modeParDefaut: "demonstration" } });
+    await expect(appel).rejects.toMatchObject({ code: "entree_invalide" });
+    expect(banc.t.reglages[0]).toMatchObject({ modeParDefaut: "reel" });
+    expect(banc.t.evaluations[0]!.perimee).toBe(false);
+    expect(banc.t.journal.some((j) => j.type === "reglages.modifies")).toBe(false);
   });
 });
 

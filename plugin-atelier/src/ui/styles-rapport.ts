@@ -9,12 +9,14 @@ export const STYLES_RAPPORT = `
 .atl-rapport-commandes select { min-height: 2.25rem; padding: 0 0.5rem; }
 .atl-rapport-titre { margin: 0 0 0.25rem; font-size: 1.5rem; line-height: 1.2; }
 .atl-rapport-periode { margin: 0 0 1.5rem; color: var(--atl-attenue-fort); }
-.atl-rapport-table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+.atl-rapport-table { width: 100%; table-layout: fixed; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+.atl-rapport-table th:first-child { width: 28%; }
+.atl-rapport-table .atl-num { width: 8rem; }
 .atl-rapport-table th, .atl-rapport-table td { padding: 0.4rem 0.6rem; border-bottom: 1px solid var(--atl-trait); text-align: left; vertical-align: top; }
 .atl-rapport-table thead th { font-size: 0.8125rem; font-weight: 600; border-bottom: 2px solid var(--atl-texte); }
 .atl-rapport-table .atl-num { text-align: right; white-space: nowrap; }
 .atl-rapport-table tr { break-inside: avoid; }
-.atl-rapport-note { display: block; font-size: 0.8125rem; color: var(--atl-attenue-fort); }
+.atl-rapport-note { display: block; font-size: 0.8125rem; font-weight: 400; color: var(--atl-attenue-fort); }
 .atl-rapport-non-mesure { font-style: italic; }
 .atl-rapport-liste { margin: 0; padding-left: 1.25rem; }
 .atl-rapport-liste li { margin-block: 0.35rem; }

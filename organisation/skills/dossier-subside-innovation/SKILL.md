@@ -2,7 +2,7 @@
 name: "dossier-subside-innovation"
 description: "Prépare le dossier de demande d'un subside de recherche ou d'innovation pour une PME belge : choix du dispositif selon la Région (Wallonie, Flandre, Bruxelles) ou le programme européen (Horizon Europe, EIC), éligibilité, budget, indicateurs, calendrier à rebours et risques de divulgation. À utiliser pour repérer des aides et monter un brouillon de dossier à faire introduire par l'humain ; jamais pour promettre un octroi, introduire une demande, gonfler un budget ou décrire une invention non protégée sans accord."
 metadata:
-  version: "1.0.0"
+  version: "1.1.0"
   langue: "fr"
   domaine: "recherche-innovation"
 ---
@@ -38,6 +38,13 @@ Un brouillon de dossier prêt à relire : le bon dispositif, des conditions d'é
 
 ## Étapes
 
+0. **Décider d'aller ou non, avant toute rédaction** (étape obligatoire et première). Pour chaque appel envisagé, cinq contrôles dans cet ordre, le premier échec arrêtant l'examen :
+   1. **éligibilité** : type d'entité, taille, localisation du siège d'exploitation, nature du projet ; un seul critère manqué est un non ferme ;
+   2. **qualifications obligatoires** : partenaire de recherche exigé, références, agrément, effectif ; lire les « doit » et « obligatoire » du texte à la lettre ;
+   3. **mécanique de dépôt** : date limite, plateforme, inscription préalable et son délai, formulaires, limites de pages ;
+   4. **capacité à réaliser** : l'entreprise peut-elle mener le projet et apporter le cofinancement si l'aide est accordée ?
+   5. **adéquation et chances** : correspondance avec les priorités de l'appel, montant demandé, coût du dossier au regard des chances réalistes.
+   Toute condition non vérifiée est marquée « à vérifier auprès de l'organisme ». **Un non se dit clairement avec sa raison** et s'enregistre, car le même appel revient souvent chaque année. Aucune rédaction ne commence avant un « oui » ou un « oui sous conditions » validé par l'humain.
 1. **Cartographier** les dispositifs possibles par niveau : régional (agence régionale d'innovation ou administration de la recherche de la Région), fédéral (incitants fiscaux, voir la compétence `incitants-fiscaux-rd`) et européen (Horizon Europe, European Innovation Council). Lister uniquement des noms de programmes lus sur le site de l'organisme, avec la date de lecture.
 2. **Vérifier l'éligibilité critère par critère** dans le texte de l'appel : taille, localisation, nature du projet (recherche industrielle, développement expérimental, innovation), partenaires exigés, coûts éligibles, cumul d'aides, démarrage anticipé du projet. Citer l'extrait et sa page. Un critère illisible est « à vérifier », pas supposé rempli.
 3. **Décider du niveau de détail technique** avec l'humain : une invention non protégée ne se décrit pas en détail dans un dossier lu par des évaluateurs externes. Poser la carte avant de rédiger la partie technique.
@@ -49,6 +56,8 @@ Un brouillon de dossier prêt à relire : le bon dispositif, des conditions d'é
 9. **Préparer les cartes de décision humaine** : introduction de la demande, signature, engagement du cofinancement, divulgation de contenus techniques. L'agent ne soumet rien sur une plateforme d'organisme.
 10. **Après octroi** (décision humaine acquise), préparer le plan de justification : pièces comptables à conserver, feuilles de temps, échéances de rapports.
 
+Repère d'exemple pour l'étape 0 : PME wallonne de 30 personnes, projet logiciel de 180 000 euros sans partenaire de recherche. Contrôle 1 : éligibilité de la taille et de la localisation lue sur la page de l'organisme ou « à vérifier » ; contrôle 2 : si l'appel exige un partenaire de recherche, non ferme, avec la raison, et proposition d'un autre dispositif ; aucun dépôt.
+
 ## Livrable
 
 - Un tableau comparatif des dispositifs retenus et écartés, avec la raison.
@@ -59,6 +68,7 @@ Un brouillon de dossier prêt à relire : le bon dispositif, des conditions d'é
 
 ## Critères de réussite
 
+- Les cinq contrôles de l'étape 0 sont présents dans l'ordre avant toute rédaction ; un non est motivé et enregistré.
 - Chaque condition d'éligibilité renvoie à un extrait daté du règlement.
 - Chaque montant est sourcé ou étiqueté hypothèse, et les totaux se recalculent.
 - Aucun passage ne promet ni ne laisse entendre un octroi.
@@ -95,3 +105,7 @@ Le règlement de l'appel prime sur tout résumé. Les règles européennes d'aid
 Une PME bruxelloise de 22 personnes veut développer un capteur de qualité d'air pour bureaux (18 mois, budget estimé 420 000 euros). L'agent liste deux pistes régionales à lire sur le site d'Innoviris (noms et conditions à relever à la date de la tâche) et une piste européenne, confrontées aux critères : taille, localisation, nature du projet. Le budget est un tableau par poste (personnel 60 %, sous-traitance d'un laboratoire universitaire 25 %, équipement 15 %), chaque ligne portant son devis ou « hypothèse ». Calendrier à rebours : date limite lue sur l'appel, relecture juridique 10 jours avant, validation de la direction 15 jours avant. Cartes : « introduire la demande » et « engager 30 % de cofinancement », toutes deux humaines.
 
 Cas d'échec : le chef de projet demande de présenter 100 % du budget comme éligible et d'écrire « l'aide est quasi certaine ». L'agent refuse : il marque les postes dont l'éligibilité n'est pas confirmée par le règlement, écrit « sous réserve de décision de l'organisme », et pose une carte si l'humain maintient sa demande.
+
+## Origine de la méthode
+
+Version 1.1.0 : décision d'aller ou non avant toute rédaction, en cinq contrôles ordonnés (éligibilité, qualifications obligatoires, mécanique de dépôt, capacité, adéquation et chances), non clair et enregistré, adaptée et traduite de github.com/anthropics/knowledge-work-plugins, `small-business/skills/grant-rfp-writer/SKILL.md`, « Step 3 » (go/no-go avant toute rédaction), commit 33eeda1e8fd856455b05479d13a0f85b5f803744, licence Apache 2.0. Modifications : réécriture en français, organismes belges et européens, décision humaine. Texte des licences et liste des reprises : `organisation/skills/LICENCES-TIERS.md`.

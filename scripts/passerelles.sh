@@ -93,7 +93,7 @@ etat_un() {
   local port="$1" pid rep
   pid="$(pid_du_port "$port")" || pid="-"
   if rep="$(curl -fs --max-time 3 "http://127.0.0.1:$port/sante" 2>/dev/null)"; then
-    echo "port $port : actif (pid $pid) services_reels=$(printf '%s' "$rep" | grep -o '"services_reels":\[[^]]*\]' | cut -d: -f2)"
+    echo "port $port : actif (pid $pid) services=$(printf '%s' "$rep" | grep -o '"services":\[[^]]*\]' | cut -d: -f2)"
   else
     echo "port $port : arrêté"
     return 1

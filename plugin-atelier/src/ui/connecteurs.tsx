@@ -61,6 +61,8 @@ function ActionConnexion({ ligne }: { ligne: LigneService }) {
 }
 
 function TableServices({ lignes }: { lignes: LigneService[] }) {
+  // Sans aucune connexion native, les colonnes « Santé » et « Dernière vérification » n'auraient que des cellules fusionnées : on les retire.
+  const avecConnexion = lignes.some((l) => l.connexionId !== null);
   return (
     <div className="atl-table-cadre">
       <table className="atl-table">
@@ -69,8 +71,12 @@ function TableServices({ lignes }: { lignes: LigneService[] }) {
           <tr>
             <th scope="col">Service</th>
             <th scope="col">État</th>
-            <th scope="col">Santé</th>
-            <th scope="col">Dernière vérification</th>
+            {avecConnexion ? (
+              <>
+                <th scope="col">Santé</th>
+                <th scope="col">Dernière vérification</th>
+              </>
+            ) : null}
             <th scope="col">Action</th>
           </tr>
         </thead>
@@ -83,7 +89,7 @@ function TableServices({ lignes }: { lignes: LigneService[] }) {
               </th>
               {l.connexionId === null ? (
                 // Aucune connexion native : une seule cellule, sans colonnes vides ni tirets répétés.
-                <td data-libelle="État" colSpan={3}>
+                <td data-libelle="État" colSpan={avecConnexion ? 3 : 1}>
                   <span className="atl-pile-ligne">
                     <PastilleConnexion etat={l.etat} />
                     <span className="atl-attenue">{l.detail}</span>

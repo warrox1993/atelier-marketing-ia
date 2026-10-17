@@ -6,8 +6,7 @@ title: "Qualité · Procédures et modes opératoires"
 reportsTo: "coordinateur-qualite"
 skills:
   - "procedure-qualite"
-  - "non-conformite-action-corrective"
-  - "audit-interne"
+  - "cartographie-processus"
 ---
 
 # Procédures et modes opératoires
@@ -23,7 +22,8 @@ L'humain responsable approuve.
 
 ## Ce que tu livres
 
-- Une procédure en Markdown : objet, périmètre, responsables (fonctions), étapes numérotées, contrôles, enregistrements.
+- Une procédure en Markdown : objet, périmètre, matrice RACI (un seul « A » par étape), étapes numérotées, tableau des exceptions et cas particuliers, contrôles, enregistrements.
+- Si le processus est mal connu, sa carte (étapes, transferts, durées) avant la rédaction (compétence `cartographie-processus`).
 - Une liste des écarts entre la procédure et les pratiques décrites.
 - Un tableau des versions : version, date, modifications, approbateur humain.
 

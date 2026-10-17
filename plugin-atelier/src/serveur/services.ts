@@ -75,6 +75,7 @@ import {
 } from "./regles-plafonds.js";
 import { autoriserMessage, chercherClesInterdites } from "./regles-messages.js";
 import { routesAccueil } from "./services-accueil.js";
+import { routesDepartements } from "./services-departements.js";
 import { creerRedispatch } from "./redispatch.js";
 import { routesCarte, PLAFOND_QUALIFIES } from "./services-carte.js";
 import { entreesCouverturePorte, routesCouverture } from "./services-couverture.js";
@@ -1822,8 +1823,8 @@ export function creerServices(ctx: PluginContext, options: { transportReel?: Tra
     if (entree.plafondPub !== null || entree.budgetMaxCents !== null) {
       erreur("elevation_refusee", "Création de campagne refusée : un agent ne fixe jamais de plafond publicitaire (plafondPub, budgetMaxCents). Retirer le plafond du corps : il reste une décision humaine.");
     }
-    if (entree.mode === "reel") {
-      erreur("elevation_refusee", "Création de campagne refusée : un agent ne crée qu'une campagne en mode demonstration. Le mode réel est une décision humaine.");
+    if (entree.mode === "demonstration") {
+      erreur("elevation_refusee", "Création de campagne refusée : le mode demonstration n'existe plus pour un agent, tout est réel (« reel » par défaut). Retirer le champ mode.");
     }
     if (!entree.issueId) {
       erreur("elevation_refusee", "Création de campagne refusée : le corps doit porter issueId, la tâche (assignée à l'agent) dont le plan a été accepté par un humain.");
@@ -1844,9 +1845,8 @@ export function creerServices(ctx: PluginContext, options: { transportReel?: Tra
   async function creerCampagne(companyId: string, brute: unknown, acteur: ActeurHote) {
     const entree = analyser(CreerCampagneEntree, brute, "Campagne");
     if (entree.companyId !== companyId) erreur("hors_entreprise", "Entreprise incohérente.");
-    // Lot G1 : le défaut du contrat est « reel », mais le mode réel reste une décision humaine. Un agent qui ne demande
-    // aucun mode crée donc une campagne déclarée en démonstration (le mode effectif suit l'entreprise) ; un « reel » explicite reste refusé.
-    if (acteur.type === "agent" && !(typeof brute === "object" && brute !== null && "mode" in brute)) entree.mode = "demonstration";
+    // Décision de l'opérateur : plus de mode démonstration, tout est réel (défaut « reel » du contrat). Une campagne réelle ne
+    // diffuse, n'envoie et ne dépense rien sans décision humaine d'approbation (voir `verifierDiffusion`, regles-diffusion.ts).
     const issueOrigineId = acteur.type === "agent" ? await verifierCreationParAgent(companyId, entree, acteur) : null;
     // Un agent coordonne la campagne qu'il crée : sans cela le brief resterait sans assigné et il ne pourrait pas enregistrer ses exigences.
     if (acteur.type === "agent" && entree.coordinateurAgentId === null) entree.coordinateurAgentId = acteur.agentId;
@@ -1874,11 +1874,11 @@ export function creerServices(ctx: PluginContext, options: { transportReel?: Tra
     });
     await base.creerBrief({ companyId, campagneId: id, issueId: briefIssue.id, texte: entree.brief });
     const reglages = await base.lireReglages(companyId);
-    if (!reglages.existe) await base.enregistrerReglages({ companyId, maxRunsActifs: reglages.maxRunsActifs, maxCyclesCorrection: reglages.maxCyclesCorrection, modeParDefaut: entree.mode, retentionJours: reglages.retentionJours });
+    if (!reglages.existe) await base.enregistrerReglages({ companyId, maxRunsActifs: reglages.maxRunsActifs, maxCyclesCorrection: reglages.maxCyclesCorrection, modeParDefaut: "reel", retentionJours: reglages.retentionJours });
     await base.journaliser({ companyId, type: "campagne.creee", entite: "campagne", entiteId: id, issueId: briefIssue.id, acteur: acteur.id, donnees: { nom: entree.nom, mode: entree.mode, ...(issueOrigineId ? { creeParAgent: true, agentId: acteur.agentId, issueOrigineId } : {}) } });
     if (issueOrigineId) {
       await ctx.activity.log({
-        companyId, message: `Atelier : campagne « ${entree.nom} » créée par l'agent ${acteur.agentId} (mode démonstration) depuis la tâche ${issueOrigineId}, dont le plan a été accepté par un humain.`,
+        companyId, message: `Atelier : campagne « ${entree.nom} » créée par l'agent ${acteur.agentId} depuis la tâche ${issueOrigineId}, dont le plan a été accepté par un humain.`,
         entityType: "project", entityId: entree.projectId, metadata: { acteur: `agent:${acteur.agentId}`, issueOrigineId },
       }).catch(() => undefined);
     }
@@ -2098,7 +2098,7 @@ export function creerServices(ctx: PluginContext, options: { transportReel?: Tra
     const alerteDestinataire =
       regle === null
         ? mode === "authenticated" ? "Destinataire humain des blocages : non réglé ; renseignez humainDestinataire" : null
-        : FORME_ID_UTILISATEUR.test(regle) ? null : `Destinataire humain des blocages : « ${regle.slice(0, 80)} » ne ressemble pas à un identifiant d'utilisateur Paperclip ; vérifiez humainDestinataire`;
+        : FORME_ID_UTILISATEUR.test(regle) ? null : `Destinataire humain des blocages : « ${regle.slice(0, 80)} » ne ressemble pas à un identifiant d'utilisateur de l'application ; vérifiez le destinataire humain des blocages dans les réglages`;
     return {
       plugin: { id: PLUGIN_ID, version: "0.1.0" },
       destinataireHumain: { modeDeploiement: mode, regle, alerte: alerteDestinataire },
@@ -2112,7 +2112,7 @@ export function creerServices(ctx: PluginContext, options: { transportReel?: Tra
           detail: aClaude ? "Agents configurés en mode réel (abonnement). Le dernier passage réel n'est pas lu par ce diagnostic." : "Aucun agent claude_local configuré.",
           verifieLe: null,
         },
-        { cle: "lecture_url", nom: "Lecture d'URL protégée et vérification de liens", capacites: ["lecture" as const], etat: "demonstration" as EtatConnexion, niveau: "implemente_teste" as const, detail: "Lecture réseau protégée (anti-SSRF, redirections bornées).", verifieLe: null },
+        { cle: "lecture_url", nom: "Lecture d'URL protégée et vérification de liens", capacites: ["lecture" as const], etat: "configure_non_verifie" as EtatConnexion, niveau: "implemente_teste" as const, detail: "Lecture réseau protégée (anti-SSRF, redirections bornées).", verifieLe: null },
         { cle: "recherche_web", nom: "Recherche Web", capacites: ["lecture" as const], etat: "non_connecte" as EtatConnexion, niveau: "non_implemente" as const, detail: "Aucun connecteur de recherche Web propre à l'atelier. Les sources de données disponibles sont listées dans « Sources de données réelles ».", verifieLe: null },
         { cle: "diffusion", nom: "Diffusion (réseaux, e-mail, publicité)", capacites: ["preparation_action" as const], etat: "non_connecte" as EtatConnexion, niveau: "contrat_seulement" as const, detail: "Aucun connecteur de diffusion : en réel, une diffusion approuvée est seulement « préparée ».", verifieLe: null },
         // Services de la passerelle marketing (mêmes clés que `SERVICES_PASSERELLE` de l'interface L8).
@@ -2278,7 +2278,7 @@ export function creerServices(ctx: PluginContext, options: { transportReel?: Tra
       usage: {
         coutIaCents: couts.totalCents,
         estimation: false,
-        sourceUsage: `Coûts déclarés par Paperclip (cost_events, ${couts.evenements} événement(s)).`,
+        sourceUsage: `Coûts déclarés par la plateforme (${couts.evenements} ${couts.evenements > 1 ? "événements" : "événement"}).`,
         depensesPublicitairesCents: null,
       },
     };
@@ -2426,7 +2426,7 @@ export function creerServices(ctx: PluginContext, options: { transportReel?: Tra
       mesures,
       absenceDonnees: mesures.length === 0 ? { nonMesurable: true, connexionsNecessaires: ["Google Search Console", "Google Analytics 4", "CRM (HubSpot)"], explication: "Aucune mesure importée : non mesurable. Aucune performance n'est inventée." } : null,
       coutsIa: {
-        totalCents: couts.totalCents, estimation: false, detail: `Coûts IA déclarés à Paperclip (${couts.evenements} événement(s)), séparés des dépenses publicitaires.`,
+        totalCents: couts.totalCents, estimation: false, detail: `Coûts IA déclarés par la plateforme (${couts.evenements} ${couts.evenements > 1 ? "événements" : "événement"}), séparés des dépenses publicitaires.`,
         moisCents, budgetMensuelCents: societe?.budgetMonthlyCents ?? 0,
       },
       depensesPublicitaires: null,
@@ -2519,7 +2519,7 @@ export function creerServices(ctx: PluginContext, options: { transportReel?: Tra
     });
     await ctx.activity.log({
       companyId,
-      message: `Atelier : budget IA mensuel ${portee === "agent" ? "de l'agent" : "de l'entreprise"} ${illimite ? "réglé sur « aucune limite »" : `réglé à ${(budget / 100).toFixed(2)} €`} par ${acteur.userId ?? acteur.id} (budget natif de Paperclip).`,
+      message: `Atelier : budget IA mensuel ${portee === "agent" ? "de l'agent" : "de l'entreprise"} ${illimite ? "réglé sur « aucune limite »" : `réglé à ${(budget / 100).toFixed(2)} €`} par ${acteur.userId ?? acteur.id} (budget natif de l'application).`,
       entityType: portee === "agent" ? "agent" : "company", entityId: agentId ?? companyId, metadata: { budgetMensuelCents: budget, illimite },
     }).catch(() => undefined);
     return { portee, agentId, budgetMensuelCents: budget, illimite };
@@ -2564,7 +2564,7 @@ export function creerServices(ctx: PluginContext, options: { transportReel?: Tra
     return campagneAvecEngagement(companyId, campagne.id);
   };
   const pauseNonDisponible: GestionnaireAction = async () =>
-    erreur("non_implemente", "Pause de campagne non disponible : Paperclip ne met un projet en pause que par budget, et le SDK des plugins n'expose pas cette action. Utilisez la pause des agents concernés.");
+    erreur("non_implemente", "Pause de campagne non disponible : l'application ne met un projet en pause que par budget et n'offre pas cette action aux extensions. Utilisez la pause des agents concernés.");
   actions["atelier.campagne.pause"] = pauseNonDisponible;
   actions["atelier.campagne.reprendre"] = pauseNonDisponible;
   actions["atelier.donnees.reinitialiser"] = async (_p, companyId, acteur) => {
@@ -2575,9 +2575,10 @@ export function creerServices(ctx: PluginContext, options: { transportReel?: Tra
     if (trace.decisions > 0 || trace.diffusions > 0) {
       erreur("conflit", `Cette entreprise garde une trace (${trace.decisions} décision(s), ${trace.diffusions} diffusion(s)) : remise à zéro refusée.`);
     }
-    const supprimes = await base.supprimerDonneesEntreprise(companyId);
-    await base.journaliser({ companyId, type: "donnees.reinitialisees", entite: "entreprise", entiteId: companyId, acteur: acteur.id, donnees: { supprimes } });
-    return { supprimes };
+    // M1 : oppositions, DNCM, bases légales et journal sont conservés par `supprimerDonneesEntreprise` lui-même.
+    const { supprimes, conserves } = await base.supprimerDonneesEntreprise(companyId);
+    await base.journaliser({ companyId, type: "donnees.reinitialisees", entite: "entreprise", entiteId: companyId, acteur: acteur.id, donnees: { supprimes, conserves } });
+    return { supprimes, conserves };
   };
 
   // Lot R7 : services des connaissances (routes versées plus bas ; `evaluer` lit `entreesPorte`).
@@ -2658,6 +2659,11 @@ export function creerServices(ctx: PluginContext, options: { transportReel?: Tra
   Object.assign(routes, routesDiscussion({ ctx, base }));
   // Bureau de liaison entre services (demande, déclaration des services ; humain ou coordinateur).
   Object.assign(routes, routesLiaisons({ ctx, base, stock: stockLiaisons }));
+  // Tableau des départements du client (une case par service, lue dans sa propre entreprise ; humain seulement).
+  Object.assign(routes, routesDepartements({
+    ctx, stock: stockLiaisons,
+    aFaire: async (r) => ((await routes["accueil.lister"]!(r)).corps as { elements?: Array<{ type: string; urgence: string }> }).elements ?? [],
+  }));
   Object.assign(routes, routesDictee({ ctx, base, fetchLocal: options.fetchBoucleLocale }));
   Object.assign(routes, routesVoix({ ctx, base }));
   // Réglages des leads, poids du score et décisions humaines sur un critère (humain seulement).

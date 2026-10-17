@@ -110,6 +110,11 @@ export const EnregistrerReglagesEntree = ReglagesEntreprise.omit({ modifieLe: tr
     companyId: IdNatif,
     /** Choix du plafond publicitaire (humain seulement) ; `null` retire le choix ; absent : inchangé. */
     plafondPub: PlafondEntree.nullable().optional(),
+    /**
+     * Mode par défaut : `reel` seulement (faille E1). Le marqueur `demonstration` reste réservé à l'origine
+     * d'une donnée simulée (garde des données) et ne peut plus être choisi comme réglage d'une entreprise.
+     */
+    modeParDefaut: z.literal("reel").optional(),
   });
 export type EnregistrerReglagesEntree = z.infer<typeof EnregistrerReglagesEntree>;
 

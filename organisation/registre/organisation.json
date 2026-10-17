@@ -5,7 +5,7 @@
     "nom": "Rénovation Liège (démonstration)",
     "slug": "renovation-liege-demonstration",
     "marqueur": "atelier-demo:renovation-liege",
-    "description": "Entreprise fictive de rénovation à Liège, créée pour la démonstration de l'Atelier Marketing IA. Aucune coordonnée réelle. Marqueur de périmètre : atelier-demo:renovation-liege.",
+    "description": "Entreprise fictive de rénovation à Liège, créée pour l'Atelier Marketing IA. Aucune coordonnée réelle. Marqueur de périmètre : atelier-demo:renovation-liege.",
     "approbationHumainePourNouveauxAgents": true
   },
   "responsableHumain": {

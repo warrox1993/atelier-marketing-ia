@@ -4,8 +4,10 @@
 
 À lancer avec « python3 -I ». Lit le registre local du client (instance/atelier-client/<slug>/entreprise.json,
 écrit par « bootstrap-organisation.py nouveau-client ») et la matrice des flux du registre des services
-(organisation/registre/services.json), puis appelle la route « services.declarer » (humain seulement) avec
-les seuls flux dont les deux services appartiennent au client. Idempotent : la déclaration remplace la précédente.
+(organisation/registre/services.json), complétée par le réseau des coordinateurs que génère scripts/atelier_services.py
+(toute paire de services du client que la matrice métier ne couvre pas ; le coordinateur général de la Direction
+compris), puis appelle la route « services.declarer » (humain seulement) avec les seuls flux dont les deux services
+appartiennent au client : jamais un flux vers un autre client. Idempotent : la déclaration remplace la précédente.
 Aucun appel de modèle. « nouveau-client » crée déjà ces configurations (même fonction) dès que le client a plusieurs
 services ; la déclaration des services reste à lancer ici.
 
@@ -20,6 +22,7 @@ Variables : ATELIER_API (défaut http://127.0.0.1:3100/api), ATELIER_DONNEES_LOC
 from __future__ import annotations
 
 import argparse
+import importlib.util
 import json
 import os
 import sys
@@ -31,6 +34,14 @@ RACINE = Path(__file__).resolve().parent.parent
 PLUGIN_CLE = "atelier.marketing-ia"
 
 
+def _atelier_services():
+    """scripts/atelier_services.py chargé par fichier (le script tourne en « python3 -I » : pas de sys.path local)."""
+    spec = importlib.util.spec_from_file_location("atelier_services", RACINE / "scripts" / "atelier_services.py")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
 def construire_corps(registre: dict, local: dict) -> dict:
     """Corps de services.declarer : entreprises du client (avec leur slug de service) et flux entre elles."""
     entreprises = [
@@ -40,7 +51,7 @@ def construire_corps(registre: dict, local: dict) -> dict:
     presents = {e["serviceSlug"] for e in entreprises}
     flux = [
         {"source": f["source"], "cible": f["cible"], "objet": f["objet"], "approbationHumaine": bool(f["approbationHumaine"])}
-        for f in registre["flux"]
+        for f in _atelier_services().flux_complets(registre)
         if f["source"] in presents and f["cible"] in presents
     ]
     return {

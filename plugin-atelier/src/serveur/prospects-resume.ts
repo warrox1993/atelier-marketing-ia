@@ -16,6 +16,8 @@ export interface PageProspectsComplete {
   page: number;
   pages: number;
   prospects: Prospect[];
+  /** Fiches chiffrées avec l'ancienne clé (migration 016) : exclues de la liste, à réimporter. */
+  aReimporter?: number;
 }
 
 /** Longueur maximale d'une dénomination dans une fiche courte (le détail la donne en entier). */
@@ -51,5 +53,6 @@ export function resumerProspects(page: PageProspectsComplete): Dict {
     page: page.page,
     pages: page.pages,
     prospects: page.prospects.map(fichePourResume),
+    ...((page.aReimporter ?? 0) > 0 ? { aReimporter: page.aReimporter, informationReimport: `${page.aReimporter} fiche(s) à réimporter (non affichées).` } : {}),
   };
 }

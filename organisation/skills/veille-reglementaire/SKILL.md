@@ -2,7 +2,7 @@
 name: "veille-reglementaire"
 description: "Organise la veille réglementaire d'une PME belge à partir de sources officielles (Moniteur belge et Justel, Journal officiel de l'Union européenne sur EUR-Lex, autorités de contrôle comme la FSMA) : choix des sources et des sujets, relevé des textes nouveaux ou modifiés, fiche d'impact (qui est concerné, quoi, à partir de quand, quelle action), registre des obligations et priorisation par échéance et gravité. Volet spécifique pour les entités soumises à une autorité (intermédiaires d'assurance, comptables, agents immobiliers). À utiliser pour lancer ou mettre à jour une veille, ou pour évaluer l'impact d'un texte ; jamais pour interpréter un texte comme un avis juridique, citer une référence de mémoire, modifier une procédure de l'entreprise ni écrire ou déposer quoi que ce soit auprès d'une autorité."
 metadata:
-  version: "1.0.0"
+  version: "1.1.0"
   langue: "fr"
   domaine: "conformite"
 ---
@@ -46,6 +46,7 @@ Une veille régulière, courte et traçable : pour chaque changement, une fiche 
 5. **Rédiger la fiche d'impact** (modèle ci-dessous) : une page au plus par changement.
 6. **Mettre à jour le registre des obligations** : une ligne par obligation (voir le tableau ci-dessous).
 7. **Prioriser** (voir la grille) et proposer l'ordre des actions avec responsable et échéance, à valider par l'humain.
+   Escalader sans attendre au responsable conformité et à la direction quand : un texte nouveau touche directement l'activité principale de l'entreprise ; une sanction d'une autorité dans le secteur annonce un contrôle plus strict ; une échéance de mise en conformité approche et demande des changements d'organisation ; un mécanisme sur lequel l'entreprise s'appuie (par exemple une garantie de transfert de données) est contesté ou annulé ; une autorité ouvre une demande ou une enquête visant l'entreprise.
 8. **Lister les textes non vérifiés ou inaccessibles** : source indisponible, texte tronqué, version non consolidée, traduction. Un point non vérifié n'entre pas dans le registre comme obligation certaine.
 9. **Planifier la prochaine lecture** et les rappels d'échéance (par exemple avec la compétence d'agenda des échéances légales de l'atelier).
 
@@ -142,3 +143,10 @@ Période octobre 2026, entreprise fictive « Courtage Exemple SRL », intermédi
 Fiche d'impact : texte et adresse indiqués ; statut : communication de l'autorité, mise à jour ; qui : entités qui diffusent des communications publicitaires sur des parts d'OPC (le courtier ne commercialise que de l'assurance : « à qualifier », question au responsable de la conformité) ; quoi : changements à lire dans la page d'historique ; quand : date de l'update ; action proposée : comparer avec la version précédente et confirmer la non-application ; priorité 3 (à surveiller).
 
 Cas d'échec : l'utilisateur transmet un article de presse annonçant « une nouvelle obligation pour tous les courtiers à partir du 1er janvier » sans lien officiel. La compétence ne crée pas de ligne d'obligation dans le registre : elle la place en « à qualifier », indique « source secondaire, texte officiel non trouvé » et demande l'adresse du texte publié au Moniteur belge ou au Journal officiel. Elle ne date aucune échéance tant que le texte officiel n'est pas lu.
+
+## Origine de la méthode
+
+Critères d'escalade de l'étape 7 adaptés de github.com/anthropics/knowledge-work-plugins,
+`legal/skills/compliance-check/SKILL.md` (« Regulatory Monitoring Basics », « Escalation Criteria »), commit
+33eeda1e8fd856455b05479d13a0f85b5f803744, licence Apache 2.0. Les sources officielles belges et européennes restent la
+base de la veille. Liste des reprises : `organisation/skills/LICENCES-TIERS.md`.

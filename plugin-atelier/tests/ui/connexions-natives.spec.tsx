@@ -364,7 +364,13 @@ describe("page Paramètres : tableau des connexions natives", () => {
     expect(tableaux).toHaveLength(2);
     for (const t of tableaux) {
       expect(t.querySelector("caption")?.textContent).toBeTruthy();
-      expect(t.querySelectorAll('thead th[scope="col"]').length).toBeGreaterThan(3);
+      // Sans connexion native, le tableau des services n'a plus que Service, État et Action (D17) ; chaque cellule de ligne garde son en-tête.
+      const entetes = t.querySelectorAll('thead th[scope="col"]').length;
+      expect(entetes).toBeGreaterThanOrEqual(3);
+      for (const l of Array.from(t.querySelectorAll("tbody tr"))) {
+        const colonnes = Array.from(l.children).reduce((n, cel) => n + Number(cel.getAttribute("colspan") ?? 1), 0);
+        expect(colonnes).toBe(entetes);
+      }
     }
     expect(ligne(c, "Facebook").querySelector("a")?.textContent).toBe("Connecter Facebook");
   });

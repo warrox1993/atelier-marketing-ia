@@ -1,0 +1,133 @@
+From 791b90a320693db5df0d57ebbd8a4fe62c6138f6 Mon Sep 17 00:00:00 2001
+From: Jean-Baptiste Dhondt <114347858+warrox1993@users.noreply.github.com>
+Date: Sat, 17 Oct 2026 22:49:41 +0200
+Subject: [PATCH 73/78] =?UTF-8?q?feat(ui):=20ic=C3=B4ne=20euro=20=C3=A0=20?=
+ =?UTF-8?q?c=C3=B4t=C3=A9=20des=20d=C3=A9penses=20et=20budgets?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Tableau de bord, organisations, marqueur de budget, barre latérale et liens
+d'audit de l'agent : l'icône dollar suivait encore l'ancienne devise.
+Audit visuel D09.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01DP85vPq2MHkZg8VNtRvCzB
+---
+ ui/src/components/AgentContextualSidebar.tsx | 4 ++--
+ ui/src/components/BudgetSidebarMarker.tsx    | 4 ++--
+ ui/src/components/Sidebar.tsx                | 4 ++--
+ ui/src/pages/Companies.tsx                   | 4 ++--
+ ui/src/pages/Dashboard.tsx                   | 4 ++--
+ 5 files changed, 10 insertions(+), 10 deletions(-)
+
+diff --git a/ui/src/components/AgentContextualSidebar.tsx b/ui/src/components/AgentContextualSidebar.tsx
+index 0d4e011e9..740dd43c9 100644
+--- a/ui/src/components/AgentContextualSidebar.tsx
++++ b/ui/src/components/AgentContextualSidebar.tsx
+@@ -1,7 +1,7 @@
+ import { useQuery } from "@tanstack/react-query";
+ import {
+   Activity,
+-  BadgeDollarSign,
++  BadgeEuro,
+   BookOpenText,
+   History,
+   KeyRound,
+@@ -44,7 +44,7 @@ const auditItems = [
+   { section: "activity", label: "Activité", icon: Activity },
+   { section: "runs", label: "Exécutions", icon: PlayCircle },
+   { section: "costs", label: "Coûts", icon: ReceiptText },
+-  { section: "budgets", label: "Budgets", icon: BadgeDollarSign },
++  { section: "budgets", label: "Budgets", icon: BadgeEuro },
+ ] as const;
+ 
+ export function AgentContextualSidebar({
+diff --git a/ui/src/components/BudgetSidebarMarker.tsx b/ui/src/components/BudgetSidebarMarker.tsx
+index 2e5b9ae8e..71e39006c 100644
+--- a/ui/src/components/BudgetSidebarMarker.tsx
++++ b/ui/src/components/BudgetSidebarMarker.tsx
+@@ -1,4 +1,4 @@
+-import { DollarSign } from "lucide-react";
++import { Euro } from "lucide-react";
+ 
+ export type BudgetSidebarMarkerLevel = "healthy" | "warning" | "critical";
+ 
+@@ -29,7 +29,7 @@ export function BudgetSidebarMarker({
+       aria-label={accessibleTitle}
+       className={`ml-auto inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full shadow-(--shadow-extract-3) ${levelClasses[level]}`}
+     >
+-      <DollarSign className="h-3 w-3" />
++      <Euro className="h-3 w-3" />
+     </span>
+   );
+ }
+diff --git a/ui/src/components/Sidebar.tsx b/ui/src/components/Sidebar.tsx
+index 7b3be7f0a..b12960a34 100644
+--- a/ui/src/components/Sidebar.tsx
++++ b/ui/src/components/Sidebar.tsx
+@@ -4,7 +4,7 @@ import {
+   CircleCheck,
+   Target,
+   LayoutDashboard,
+-  DollarSign,
++  Euro,
+   History,
+   Search,
+   SquarePen,
+@@ -318,7 +318,7 @@ export function Sidebar({ children }: { children?: ReactNode }) {
+                   <SidebarNavItem to="/org" label="Organigramme" icon={Network} />
+                   <SidebarNavItem to="/apps" label="Connecteurs" icon={Unplug} />
+                   <SidebarNavItem to="/timeline" label="Chronologie" icon={GanttChartSquare} />
+-                  <SidebarNavItem to="/costs" label="Coûts" icon={DollarSign} />
++                  <SidebarNavItem to="/costs" label="Coûts" icon={Euro} />
+                   <SidebarNavItem to="/activity" label="Activité" icon={History} />
+                   <SidebarNavItem to="/company/settings" label="Paramètres" icon={Settings} />
+                 </SidebarSection>
+diff --git a/ui/src/pages/Companies.tsx b/ui/src/pages/Companies.tsx
+index 359a5291a..cfeb57e83 100644
+--- a/ui/src/pages/Companies.tsx
++++ b/ui/src/pages/Companies.tsx
+@@ -27,7 +27,7 @@ import {
+   Trash2,
+   Users,
+   CircleDot,
+-  DollarSign,
++  Euro,
+   Calendar,
+   ArchiveRestore,
+ } from "lucide-react";
+@@ -282,7 +282,7 @@ export function Companies() {
+                   </span>
+                 </div>
+                 <div className="flex items-center gap-1.5 tabular-nums">
+-                  <DollarSign className="h-3.5 w-3.5" />
++                  <Euro className="h-3.5 w-3.5" />
+                   <span>
+                     {formatCents(company.spentMonthlyCents)}
+                     {company.budgetMonthlyCents > 0
+diff --git a/ui/src/pages/Dashboard.tsx b/ui/src/pages/Dashboard.tsx
+index 0e2d30c47..4de55b7f7 100644
+--- a/ui/src/pages/Dashboard.tsx
++++ b/ui/src/pages/Dashboard.tsx
+@@ -28,7 +28,7 @@ import { ActivityRow } from "../components/ActivityRow";
+ import { timeAgo } from "../lib/timeAgo";
+ import { cn, formatCents } from "../lib/utils";
+ import { SHOW_TASK_PRIORITY_UI } from "../lib/ui-flags";
+-import { Bot, CircleDot, DollarSign, ShieldCheck, LayoutDashboard, PauseCircle } from "lucide-react";
++import { Bot, CircleDot, Euro, ShieldCheck, LayoutDashboard, PauseCircle } from "lucide-react";
+ import { ActiveAgentsPanel } from "../components/ActiveAgentsPanel";
+ import { ChartCard, RunActivityChart, PriorityChart, IssueStatusChart, SuccessRateChart } from "../components/ActivityCharts";
+ import { PageSkeleton } from "../components/PageSkeleton";
+@@ -424,7 +424,7 @@ export function Dashboard() {
+               }
+             />
+             <MetricCard
+-              icon={DollarSign}
++              icon={Euro}
+               value={formatCents(data.costs.monthSpendCents)}
+               label="Dépenses du mois"
+               to="/costs"
+-- 
+2.53.0
+

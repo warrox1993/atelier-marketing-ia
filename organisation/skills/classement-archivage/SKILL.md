@@ -2,7 +2,7 @@
 name: "classement-archivage"
 description: "Conçoit et applique le plan de classement, les règles de nommage et le calendrier de conservation des documents d'une PME belge : pièces comptables et fiscales (7 ans), documents sociaux (5 ans), documents de sociétés (durée de vie plus 5 ans), contrats et courriers, avec les principes du RGPD (minimisation, limitation de la conservation, accès sur besoin). À utiliser pour créer ou auditer une arborescence, nommer des fichiers, dresser un tableau de conservation ou préparer une proposition d'élimination ; jamais pour détruire, déplacer ou renommer un original, ni pour fixer seul une durée de conservation, ni pour trier des données de santé ou judiciaires sans instruction humaine écrite."
 metadata:
-  version: "1.0.0"
+  version: "1.1.0"
   langue: "fr"
   domaine: "administratif"
 ---
@@ -34,6 +34,8 @@ Un plan simple, stable et documenté : on sait où ranger, comment nommer, qui y
 - `existant` : arborescence actuelle, si elle existe.
 
 ## Étapes
+
+Avant de créer un plan, une règle ou une procédure, chercher dans les connaissances et les documents du service s'il en existe déjà une version : la mettre à jour plutôt que créer un doublon, et noter la version remplacée.
 
 1. **Inventorier par type de document**, pas par dossier : facture de vente, facture d'achat, extrait bancaire, contrat de travail, fiche de paie, procès-verbal d'assemblée, contrat client, courrier officiel, etc.
 2. **Attribuer une classe** à chaque type (tableau « Classes et durées »). En cas de doute entre deux classes, retenir la durée la plus longue en attendant l'avis du comptable.
@@ -143,3 +145,9 @@ Les sites du SPF Finances et du SPF Economie étaient protégés par un test ant
 Une société de 12 personnes fournit un inventaire de 38 types de documents. La compétence les range en huit classes, propose le plan type et le nommage `2026-10-05_facture-achat_fournisseur-x_F2026-0412.pdf`. Pour la classe « factures d'achat 2019 », elle calcule : exercice clos le 31/12/2019, point de départ prudent 01/01/2020, 7 ans, échéance 31/12/2026 ; action proposée : liste d'élimination à valider en janvier 2027, sauf si une perte reportée de 2019 existe encore (question posée au comptable).
 
 Cas d'échec : l'humain demande « supprime tout ce qui date d'avant 2018 ». La compétence refuse de supprimer. Elle produit la liste des documents d'avant 2018 par classe, signale ceux dont la durée n'est pas échue (contrats toujours en cours, pièces liées à une perte reportée, dossier de litige, actes de société à durée de vie), ceux dont la durée est échue, et demande la validation écrite du comptable avant toute élimination par l'humain.
+
+## Origine de la méthode
+
+Recherche d'un document existant à mettre à jour avant d'en créer un nouveau adaptée de github.com/anthropics/knowledge-work-plugins,
+`operations/skills/process-doc/SKILL.md` (« If Connectors Available »), commit 33eeda1e8fd856455b05479d13a0f85b5f803744, licence Apache 2.0. Les durées de conservation belges sont
+propres à l'atelier. Liste des reprises : `organisation/skills/LICENCES-TIERS.md`.

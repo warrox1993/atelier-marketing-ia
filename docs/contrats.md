@@ -331,7 +331,7 @@ et la journalise (`budget_ia.modifie`) avec l'activité native.
 qu'une valeur informative : `campagnes.budget_max_cents` (contrats `Campagne` et `CreerCampagneEntree`,
 nullable, jamais appliquée), `Diffusion.montantCents` (aucun contrôle de cumul), `regles-diffusion.ts`
 (montant approuvé par demande) et le « 1 500 € » de la démonstration (`organisation/demo/
-brief-campagne-printemps.md`, exemple `budgetMaxCents: 150000`). Il devient un réglage optionnel :
+brief-campagne-printemps.md`, retiré le 16/10/2026, exemple `budgetMaxCents: 150000`). Il devient un réglage optionnel :
 
 | État | Représentation | Effet serveur |
 | --- | --- | --- |

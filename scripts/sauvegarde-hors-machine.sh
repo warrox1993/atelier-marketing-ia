@@ -5,11 +5,14 @@
 # la dernière sauvegarde logique de `data/backups/`).
 #
 # Usage : scripts/sauvegarde-hors-machine.sh <destination> [--instances a,b] [--garder N] [--essai]
-#                                            [--meme-disque] [--source <racine>]
+#                                            [--meme-disque] [--source <racine>] [--phoenix <dossier>]
 #         scripts/sauvegarde-hors-machine.sh --verifier <dossier-de-copie>
-# Par instance (défaut : atelier,atelier-apercu) : dernière sauvegarde de base, secrets/ (dont master.key),
+# Par instance (défaut : atelier) : dernière sauvegarde de base, secrets/ (dont master.key),
 # companies/, data/storage/ (s'il existe). Une fois : instance/cles, instance/secrets, instance/passerelles,
-# instance/plugin-jb, instance/plugin-apercu, instance/demo-client (lien suivi), passerelle/etat.
+# instance/plugin-jb, instance/demo-client (lien suivi), passerelle/etat.
+# Phoenix (traces) : sa base SQLite (WAL) est copiée par l'API de sauvegarde SQLite, sans arrêter le service,
+# vers phoenix/phoenix.db ; dossier absent = message et la sauvegarde continue (défaut : --phoenix
+# ~/.local/share/atelier-phoenix/donnees).
 # Copie : <destination>/atelier-AAAAMMJJ-HHMM/ (0700), rotation sur les N dernières (défaut 14).
 # Code de sortie : 0 = tout va bien ; 1 = échec (élément manquant, empreinte différente, etc.) ; 2 = mauvais usage.
 set -uo pipefail
@@ -17,8 +20,9 @@ umask 077
 
 RACINE_DEPOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SOURCE="${RACINE_DEPOT}"
-DESTINATION=""; INSTANCES="atelier,atelier-apercu"; GARDER=14
+DESTINATION=""; INSTANCES="atelier"; GARDER=14
 ESSAI=0; MEME_DISQUE=0; VERIFIER=""
+PHOENIX="${HOME}/.local/share/atelier-phoenix/donnees"
 
 echec() { echo "ERREUR : $*" >&2; exit 1; }
 usage() { echo "ERREUR : $*" >&2; sed -n '9,11p' "${BASH_SOURCE[0]}" | sed 's/^# //' >&2; exit 2; }
@@ -30,8 +34,9 @@ while [[ $# -gt 0 ]]; do
     --garder) [[ $# -ge 2 ]] || usage "--garder demande un nombre"; GARDER="$2"; shift ;;
     --instances) [[ $# -ge 2 ]] || usage "--instances demande une liste"; INSTANCES="$2"; shift ;;
     --source) [[ $# -ge 2 ]] || usage "--source demande un dossier"; SOURCE="$2"; shift ;;
+    --phoenix) [[ $# -ge 2 ]] || usage "--phoenix demande un dossier"; PHOENIX="$2"; shift ;;
     --verifier) [[ $# -ge 2 ]] || usage "--verifier demande un dossier"; VERIFIER="$2"; shift ;;
-    -h|--aide) sed -n '2,15p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    -h|--aide) sed -n '2,18p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 0 ;;
     -*) usage "Argument inconnu : $1" ;;
     *) [[ -z "${DESTINATION}" ]] || usage "Une seule destination attendue"; DESTINATION="$1" ;;
   esac
@@ -110,7 +115,7 @@ for id in "${LISTE_INSTANCES[@]}"; do
   exiger "${base}/companies"
   [[ -d "${SOURCE}/${base}/data/storage" ]] && ELEMENTS+=("${base}/data/storage")
 done
-for rel in instance/cles instance/secrets instance/passerelles instance/plugin-jb instance/plugin-apercu instance/demo-client passerelle/etat; do
+for rel in instance/cles instance/secrets instance/passerelles instance/plugin-jb instance/demo-client passerelle/etat; do
   exiger "${rel}"
 done
 
@@ -134,6 +139,11 @@ TEMP="${DESTINATION}/.${NOM}.en-cours"
 if [[ "${ESSAI}" -eq 1 ]]; then
   echo "ESSAI (rien n'est copié). Source : ${SOURCE} (disque ${DISQUE_SRC}) ; destination : ${FINAL} (disque ${DISQUE_DST})"
   for rel in "${ELEMENTS[@]}"; do printf '  %8s  %s\n' "$(taille_de "${rel}")" "${rel}"; done
+  if [[ -f "${PHOENIX}/phoenix.db" ]]; then
+    printf '  %8s  %s\n' "$(du -sh -- "${PHOENIX}/phoenix.db" | cut -f1)" "phoenix/phoenix.db (copie SQLite cohérente de ${PHOENIX})"
+  else
+    echo "  Phoenix : ${PHOENIX}/phoenix.db absent, ignoré."
+  fi
   TOTAL="$(cd "${SOURCE}" && du -shc -- "${ELEMENTS[@]}" 2>/dev/null | tail -n 1 | cut -f1)"
   echo "Total à copier : ${TOTAL} ; rotation : garder ${GARDER} copie(s)."
   df -h --output=avail -- "${DESTINATION}" | tail -n 1 | sed 's/^ */Espace libre sur la destination : /'
@@ -155,6 +165,32 @@ for rel in "${ELEMENTS[@]}"; do
     abandon "rsync a échoué pour ${rel}"
   fi
 done
+
+# Phoenix : copie cohérente de la base SQLite en mode WAL, sans arrêter le service (API de sauvegarde SQLite,
+# vers un fichier temporaire dans la copie en cours, donc jamais de copie à moitié écrite dans la destination).
+if [[ -f "${PHOENIX}/phoenix.db" ]]; then
+  mkdir -m 0700 -- "${TEMP}/phoenix" || abandon "création de ${TEMP}/phoenix impossible"
+  PHX_TMP="${TEMP}/phoenix/.phoenix.db.en-cours"
+  if command -v sqlite3 >/dev/null 2>&1; then
+    sqlite3 -cmd '.timeout 30000' "file:${PHOENIX}/phoenix.db?mode=ro" ".backup '${PHX_TMP}'" \
+      || abandon "sauvegarde SQLite de Phoenix impossible (sqlite3)"
+  else
+    python3 -I -c 'import sqlite3, sys
+src = sqlite3.connect("file:" + sys.argv[1] + "?mode=ro", uri=True, timeout=30)
+dst = sqlite3.connect(sys.argv[2])
+with dst:
+    src.backup(dst)
+dst.close(); src.close()' "${PHOENIX}/phoenix.db" "${PHX_TMP}" \
+      || abandon "sauvegarde SQLite de Phoenix impossible (python3)"
+  fi
+  [[ "$(sqlite3 "${PHX_TMP}" 'PRAGMA integrity_check' 2>/dev/null || echo ok)" == "ok" ]] \
+    || abandon "la copie de la base Phoenix est corrompue"
+  mv -- "${PHX_TMP}" "${TEMP}/phoenix/phoenix.db" || abandon "renommage de la copie Phoenix impossible"
+  chmod 600 "${TEMP}/phoenix/phoenix.db"
+  echo "Phoenix : base copiée (${PHOENIX}/phoenix.db)."
+else
+  echo "Phoenix : ${PHOENIX}/phoenix.db absent, données Phoenix non sauvegardées (la sauvegarde continue)." >&2
+fi
 
 if [[ -L "${SOURCE}/instance/demo-client" ]]; then
   readlink "${SOURCE}/instance/demo-client" > "${TEMP}/instance/demo-client.lien"

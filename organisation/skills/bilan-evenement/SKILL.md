@@ -2,7 +2,7 @@
 name: "bilan-evenement"
 description: "Établit le bilan d'un événement ou d'un salon d'une PME belge : indicateurs de participation, coût par contact, satisfaction et opportunités générées, puis retour d'expérience avec décisions pour la prochaine édition. À utiliser dans les deux semaines suivant un événement ; jamais pour présenter un chiffre sans source, attribuer à l'événement un chiffre d'affaires non établi ni diffuser des réponses nominatives des participants."
 metadata:
-  version: "1.0.0"
+  version: "1.1.0"
   langue: "fr"
   domaine: "evenementiel"
 ---
@@ -44,18 +44,27 @@ Un bilan d'une à deux pages : les objectifs de départ, les résultats mesurés
 4. **Mesurer la satisfaction** : note moyenne et répartition sur les questions posées, nombre de réponses et taux de réponse. Sous 10 réponses, ne pas présenter de pourcentage comme représentatif. Les commentaires libres sont synthétisés par thèmes, sans citer de personne identifiable.
 5. **Relever les opportunités** : rendez-vous obtenus, devis émis, affaires conclues, avec montants hors TVA. Une affaire est rattachée à l'événement seulement si le commercial le confirme ; sinon « attribution non établie ». Le chiffre d'affaires ne s'estime pas, il se constate, et le délai de conversion peut dépasser la date du bilan : prévoir un point à trois ou six mois.
 6. **Contrôler le suivi** : proportion de contacts relancés dans les 48 heures (voir `salon-professionnel`), consentements recueillis, demandes d'opposition ou de suppression reçues et traitées.
-7. **Comparer** aux objectifs et, si elle existe, à l'édition précédente. Écrire l'écart en valeur et en pourcentage. Une rupture de méthode est notée.
-8. **Retour d'expérience** : trois choses à garder, trois à changer, un incident à ne pas reproduire, avec cause probable marquée « hypothèse ». Inclure les prestataires (à reconduire ou non), le plan B (a-t-il servi ?), l'accessibilité et la sécurité.
-9. **Proposer des décisions** : rééditer, ajuster, arrêter, avec le coût et le bénéfice attendus. La décision est humaine.
-10. **Clôturer les données** : confirmer la durée de conservation des listes d'invités et de contacts, la suppression des données sans suite, et la mise à jour du registre des traitements par le juridique.
+7. **Classer les indicateurs en trois niveaux** :
+   - **vanité** : inscriptions, badges scannés, passages, impressions ; suivis, jamais présentés comme un succès ;
+   - **réels** : conversations qualifiées, rendez-vous obtenus, opportunités créées ou influencées ;
+   - **décisifs** : coût par rendez-vous qualifié, coût par opportunité, affaires conclues confirmées ; ce sont eux qui
+     décident de refaire ou non.
+   Comparer le coût par rendez-vous qualifié à celui des autres canaux de l'entreprise (publicité, prospection directe)
+   s'il est connu, sinon le demander par le bureau de liaison. Un événement touche plusieurs étapes d'une affaire : ne
+   jamais lui attribuer seul une affaire qu'il a seulement influencée.
+8. **Comparer** aux objectifs et, si elles existent, aux éditions précédentes. Écrire l'écart en valeur et en pourcentage. Une rupture de méthode est notée. Un format récurrent se juge sur la tendance de deux ou trois éditions, pas sur une seule : la première édition sous-performe souvent.
+9. **Retour d'expérience** : trois choses à garder, trois à changer, un incident à ne pas reproduire, avec cause probable marquée « hypothèse ». Inclure les prestataires (à reconduire ou non), le plan B (a-t-il servi ?), l'accessibilité et la sécurité.
+10. **Proposer des décisions** : rééditer, ajuster, arrêter, avec le coût et le bénéfice attendus. La décision est humaine.
+11. **Clôturer les données** : confirmer la durée de conservation des listes d'invités et de contacts, la suppression des données sans suite, et la mise à jour du registre des traitements par le juridique.
 
 ## Livrable
 
-Un bilan en Markdown : tableau des indicateurs (valeur, formule, source, date d'extraction, écart à l'objectif) ; synthèse de la satisfaction ; opportunités ; retour d'expérience ; décisions proposées ; liste des données manquantes et du point de suivi à trois ou six mois. Une version courte destinée à la direction (rapport périodique) et, si le flux le permet, un extrait pour le marketing.
+Un bilan en Markdown : tableau des indicateurs par niveau (vanité, réels, décisifs ; valeur, formule, source, date d'extraction, écart à l'objectif) ; synthèse de la satisfaction ; opportunités ; retour d'expérience ; décisions proposées ; liste des données manquantes et du point de suivi à trois ou six mois. Une version courte destinée à la direction (rapport périodique) et, si le flux le permet, un extrait pour le marketing.
 
 ## Critères de réussite
 
 - Chaque chiffre est recalculable à partir de sources listées.
+- Les indicateurs sont classés en trois niveaux et la recommandation repose sur les indicateurs décisifs.
 - Les objectifs comparés sont ceux fixés avant l'événement.
 - Aucune attribution de chiffre d'affaires sans confirmation du commercial.
 - Aucun nom de participant dans le bilan ; les réponses sont agrégées.
@@ -85,3 +94,9 @@ La durée de conservation des listes et des réponses, ainsi que l'usage des com
 Soirée clients, objectif « 40 présents, 10 rendez-vous ». Inscrits 52, présents 41 : taux de présence 78,8 %. Coût total réel 4 120 euros hors TVA (factures du 12/10) : 100,5 euros par participant. Contacts qualifiés 14 : 294,3 euros par contact qualifié. Satisfaction : 23 réponses sur 41 (56 %), note moyenne 4,2 sur 5. Rendez-vous obtenus 9 (objectif 10, écart -10 %). Attribution du chiffre d'affaires : non établie, point à trois mois. Retour d'expérience : le traiteur à reconduire, l'accueil trop lent à l'entrée (hypothèse : un seul poste d'enregistrement).
 
 Cas d'échec : la direction demande « combien de chiffre d'affaires grâce à la soirée ? » alors que le commercial n'a rien confirmé. Le bilan écrit « attribution non établie » et pose la question « quelles affaires conclues ont pour origine l'événement ? » au commercial via le bureau de liaison, au lieu de répartir un chiffre d'affaires au prorata.
+
+Cas d'échec évité (version 1.1.0) : le rapport du prestataire annonce « 600 badges scannés, succès ». Le bilan range ce chiffre en indicateur de vanité, constate 11 rendez-vous qualifiés pour 8 000 euros (727 euros par rendez-vous contre 310 euros en prospection directe, chiffre transmis par le commercial) et propose d'ajuster le format avant la deuxième édition plutôt que de conclure sur une seule.
+
+## Origine de la méthode
+
+Version 1.1.0 : étapes 7 et 8 adaptées et traduites de github.com/coreyhaines31/marketingskills, `skills/events/SKILL.md`, section « Measurement: Pipeline, Not Applause » (trois niveaux d'indicateurs, comparaison du coût par rendez-vous qualifié aux autres canaux, attribution multi-étapes, jugement sur deux ou trois éditions), commit dda3841f0b294e01e93b1541486beefbfab0915e, licence MIT, Copyright (c) 2025 Corey Haines. Modifications : réécriture en français, attribution confirmée par le commercial, RGPD. Texte des licences et liste des reprises : `organisation/skills/LICENCES-TIERS.md`.

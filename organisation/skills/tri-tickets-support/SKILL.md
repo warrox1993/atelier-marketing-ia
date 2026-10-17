@@ -2,7 +2,7 @@
 name: "tri-tickets-support"
 description: "Trie les tickets d'un service client de PME belge : catégorie, priorité, niveau de service, routage vers la bonne personne ou le bon service, règles d'escalade et détection des réclamations ou sinistres à transférer au service après-vente. À utiliser pour classer des demandes entrantes (courriel, formulaire, téléphone, réseaux sociaux) ; jamais pour répondre au client, décider d'un geste commercial, ni classer un ticket sans lire son contenu entier."
 metadata:
-  version: "1.0.0"
+  version: "1.1.0"
   langue: "fr"
   domaine: "service-client"
 ---
@@ -42,8 +42,9 @@ Pour chaque ticket : une catégorie, une priorité, un niveau de service avec so
 5. **Attribuer la priorité** (P1 à P4) selon l'impact (client bloqué, argent en jeu, sécurité, délai légal) et non selon le ton du message.
 6. **Calculer l'échéance** : heure de réception plus le délai de la grille, en jours ouvrables de l'entreprise. Un message reçu le week-end part du premier jour ouvrable suivant.
 7. **Router** vers un destinataire nominatif ou un service, avec la raison. Un ticket sans destinataire disponible va au coordinateur, jamais dans le vide.
-8. **Vérifier l'escalade** : appliquer les déclencheurs ci-dessous et le noter dans la ligne de tri.
-9. **Relire** : chaque ligne a catégorie, priorité, échéance, destinataire, justification d'une phrase ; les doutes sont écrits, pas masqués.
+8. **Chercher les doublons et les problèmes connus** avant de router : même symptôme ou même message d'erreur, même client avec un ticket ouvert sur le même sujet, même domaine (produit, outil, page) dans les derniers jours, problème déjà documenté. Un doublon est lié au ticket existant, l'information nouvelle y est ajoutée, et le client peut être informé que le problème est connu et suivi (brouillon).
+9. **Vérifier l'escalade** : appliquer les déclencheurs ci-dessous et le noter dans la ligne de tri.
+10. **Relire** : chaque ligne a catégorie, priorité, échéance, destinataire, justification d'une phrase ; les doutes sont écrits, pas masqués.
 
 ### Catégories (liste fermée)
 
@@ -81,7 +82,17 @@ Pour chaque ticket : une catégorie, une priorité, un niveau de service avec so
 - Réclamation de plus de 5 jours ouvrables sans réponse : prévenir la direction par le coordinateur.
 - Signal de risque légal (avocat, médiation, autorité) : carte de décision humaine, aucune réponse automatique.
 - Données personnelles exposées ou demande d'exercice de droits : alerte à la personne chargée de la protection des données ; le délai légal court dès réception.
-- Même problème signalé par trois clients ou plus en 48 heures : incident collectif, alerte au service informatique ou à la direction.
+- Même problème signalé par trois clients ou plus en 48 heures : incident collectif, alerte au service informatique ou à la direction (compétence `escalade-interne`).
+
+### Hausse de priorité
+
+La priorité monte d'un cran, avec la raison écrite, quand :
+
+- le client attend au-delà du délai de la grille ;
+- un doublon montre que plusieurs clients sont touchés ;
+- le client demande explicitement l'intervention d'un responsable ou de la direction ;
+- un contournement qui fonctionnait cesse de fonctionner ;
+- le problème s'étend (plus de clients, plus de données, nouveaux symptômes).
 
 ## Livrable
 
@@ -94,12 +105,13 @@ Un tableau de tri, une ligne par demande : numéro de ticket, canal, date et heu
 - Aucune réponse, aucun geste commercial, aucune promesse de délai au client dans le livrable de tri.
 - Aucun ticket P1 ou RGP n'attend plus que son seuil sans alerte.
 - Aucune donnée personnelle recopiée au-delà du numéro de ticket et de ce que le tri exige.
+- Chaque doublon est lié au ticket existant et chaque hausse de priorité porte sa raison.
 
 ## Sources officielles
 
-Consultées le 16/10/2026 :
+Consultées le 16/10/2026 et le 17/10/2026 :
 
-- Règlement général sur la protection des données, article 12, paragraphe 3, texte reproduit par gdpr-info.eu (source secondaire, texte non publié par l'Union sur cette page), https://gdpr-info.eu/art-12-gdpr/ : réponse à une demande d'une personne concernée sans retard indu et dans un délai d'un mois, prorogeable de deux mois si nécessaire avec information de la personne dans le premier mois. Fonde la catégorie RGP et son alerte. La version officielle sur EUR-Lex n'a pas pu être lue (page vide au moment de la consultation).
+- Autorité de protection des données, « Droits des citoyens », https://www.autoriteprotectiondonnees.be/professionnel/rgpd-/droits-des-citoyens (consultée le 17/10/2026) : réponse à la personne qui exerce un droit dans un délai d'un mois, prolongeable de deux mois pour une demande complexe si la personne en est informée dans le premier mois ; en cas de refus, information des motifs dans le mois. Remplace la source secondaire gdpr-info.eu ; le texte du RGPD sur EUR-Lex reste illisible (page de vérification antirobot).
 - Le Service de médiation pour le consommateur et la plateforme Belmed du SPF Economie existent (mention trouvée dans les résultats de recherche) mais les pages officielles de economie.fgov.be étaient protégées par un contrôle anti-robot le 16/10/2026 et n'ont pas pu être ouvertes : conditions et délais non vérifiés ici. Les règles du droit de la consommation (Code de droit économique) n'ont pas été consultées pour cette compétence.
 
 Les catégories, priorités et délais du tableau sont des conventions de gestion courantes, pas des textes officiels : aucune source officielle n'est citée pour elles.
@@ -130,3 +142,10 @@ Ticket reçu le vendredi 9 octobre 2026 à 17 h 40 par formulaire, en français 
 | Remarque | aucun remboursement ni promesse : décision humaine |
 
 Cas d'échec : le tri classe ce ticket en ADM (« facture ») parce que le mot est dans le sujet, et le range dans la file des copies de documents. La réclamation attend quatre jours, le client saisit la médiation. Correctif : le signal de reproche prime sur le sujet ; la relecture exige un signal cité pour chaque ADM contenant une demande d'argent.
+
+## Origine de la méthode
+
+Recherche de doublons et déclencheurs de hausse de priorité adaptés et traduits de github.com/anthropics/knowledge-work-plugins,
+`customer-support/skills/ticket-triage/SKILL.md`, sections « Duplicate Detection » et « Priority Escalation Triggers »,
+commit 33eeda1e8fd856455b05479d13a0f85b5f803744, licence Apache 2.0. Modifications : réécriture en français, liste
+fermée belge et catégorie RGP conservées. Texte de la licence et liste des reprises : `organisation/skills/LICENCES-TIERS.md`.

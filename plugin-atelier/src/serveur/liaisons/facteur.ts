@@ -23,6 +23,7 @@
  * seul journal d'échec que l'humain voit. Un rejeu explicite de la demande (ou de la décision) remet les essais à zéro.
  */
 import type { LiaisonStockee, StockLiaisons } from "./base-liaisons.js";
+import { cloturerCibleSupprimee } from "./cible-supprimee.js";
 import { corpsReponse, estTronquee, notifierSource } from "./retour.js";
 import { creerTransmission, type DependancesLiaisons } from "./transmission.js";
 
@@ -81,15 +82,7 @@ export function creerFacteur(d: DependancesLiaisons) {
     try {
       if (l.entrepriseCible === null) {
         // Entreprise cible supprimee : la liaison de la source survit, rien ne part, etat final explicite.
-        if (!(await stock.transiter(l.entrepriseSource, l.id, ["ouverte"], { statut: "cible_supprimee", repondu: true }))) return;
-        r.refusees.push(l.id);
-        const corps = `**Demande au service « ${l.serviceCible} » non transmise** : « ${l.objet.replace(/\s+/gu, " ")} ». Ce service n'existe plus (entreprise supprimée).`;
-        const { erreurCommentaire, erreurReveil } = await notifierSource(ctx, l, corps, "atelier_liaison_refusee");
-        if (!erreurCommentaire) await stock.marquerNotifiee(l.entrepriseSource, l.id);
-        await base.journaliser({
-          companyId: l.entrepriseSource, type: "liaison.non_transmise", entite: "liaison", entiteId: l.id, issueId: l.tacheOrigine, acteur: FACTEUR.acteur, runId: null,
-          donnees: { liaisonId: l.id, serviceCible: l.serviceCible, raison: "cible_supprimee", ...(erreurCommentaire ? { erreurCommentaire } : {}), ...(erreurReveil ? { erreurReveil } : {}) },
-        });
+        if (await cloturerCibleSupprimee(d, l, FACTEUR.acteur)) r.refusees.push(l.id);
         return;
       }
       if (!(await toujoursAutorisee(l, stock))) {
@@ -106,6 +99,16 @@ export function creerFacteur(d: DependancesLiaisons) {
       }
       await transmettre(l, l.demandePar, null);
       r.transmises.push(l.id);
+    } catch (e) {
+      await echec(l, "transmission", message(e), r);
+    }
+  }
+
+  /** Liaison dont la cible a disparu (transmise ou non, en attente d'approbation ou ouverte) : clôture, source informée une fois. */
+  async function cibleSupprimeeUne(l: LiaisonStockee, r: ResultatFacteur) {
+    if (!(await stock.reserverEssai(l.entrepriseSource, l.id, attenteFacteur(l.facteurEssais ?? 0), FACTEUR.essaisMax))) return;
+    try {
+      if (await cloturerCibleSupprimee(d, l, FACTEUR.acteur)) r.refusees.push(l.id);
     } catch (e) {
       await echec(l, "transmission", message(e), r);
     }
@@ -138,6 +141,7 @@ export function creerFacteur(d: DependancesLiaisons) {
     enCours = true;
     try {
       const etapes: Array<[() => Promise<LiaisonStockee[]>, (l: LiaisonStockee, r: ResultatFacteur) => Promise<void>, "transmission" | "notification"]> = [
+        [() => stock.listerCibleSupprimee(FACTEUR.lot, FACTEUR.essaisMax), cibleSupprimeeUne, "transmission"],
         [() => stock.listerATransmettre(FACTEUR.lot, FACTEUR.essaisMax), transmissionUne, "transmission"],
         [() => stock.listerANotifier(FACTEUR.lot, FACTEUR.essaisMax), notificationUne, "notification"],
       ];

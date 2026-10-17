@@ -137,7 +137,7 @@ def preparer(code_scenario, extra_agents=(), env_agents=None, nom=None):
             "capabilities": f"Agent de démonstration ({role_demo})",
         }, attendu=(200, 201))
         ids[nom_agent] = a["id"]
-    code, reg = api("POST", f"{PLUGIN}/reglages", {"companyId": S, "maxRunsActifs": 3, "maxCyclesCorrection": 3, "modeParDefaut": "demonstration"})
+    code, reg = api("POST", f"{PLUGIN}/reglages", {"companyId": S, "maxRunsActifs": 3, "maxCyclesCorrection": 3, "modeParDefaut": "reel"})
     note("INFO", "réglages de l'entreprise", {"code": code, "maxRunsActifs": (reg or {}).get("maxRunsActifs")})
     _, projet = api("POST", f"/companies/{S}/projects", {"name": "Toitures avant l'hiver (démonstration)", "status": "in_progress"}, attendu=(200, 201))
     return S, ids, projet["id"]

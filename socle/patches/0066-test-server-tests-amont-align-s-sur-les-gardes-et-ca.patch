@@ -1,0 +1,148 @@
+From 3ea71e4962059adba5ee4bf47a0e84cfa22b7351 Mon Sep 17 00:00:00 2001
+From: Jean-Baptiste Dhondt <114347858+warrox1993@users.noreply.github.com>
+Date: Fri, 16 Oct 2026 23:41:47 +0200
+Subject: [PATCH] =?UTF-8?q?test(server):=20tests=20amont=20align=C3=A9s=20?=
+ =?UTF-8?q?sur=20les=20gardes=20et=20cartes=20de=20l'atelier=20(0004,=2000?=
+ =?UTF-8?q?14,=200015,=200018)?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+31 tests amont échouaient à cause de nos propres patches, sans défaut de code :
+- tool-access-service : la carte « atelier-liens » (0018) porte le compte des cartes à 17 ;
+- connection-aggregator-fallback (14) : la carte native « atelier-hubspot » (0004) court-circuite
+  le repli par agrégateur vérifié sur HubSpot ; cartes atelier retirées du catalogue dans ce fichier ;
+- chat-project-tools (7) : garde de délégation (0015) neutralisée comme dans les autres tests amont ;
+- agent-hire-ai-connections (9) : un agent ne change plus de modèle (0014) ; enregistrement sur une
+  autre clé de configuration, modèle posé d'avance pour le changement de harnais.
+Les règles de l'atelier restent couvertes par atelier-garde-modele, atelier-garde-delegation et
+atelier-marketing-apps.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01DP85vPq2MHkZg8VNtRvCzB
+---
+ .../__tests__/agent-hire-ai-connections.test.ts | 13 +++++++++----
+ server/src/__tests__/chat-project-tools.test.ts |  8 +++++++-
+ .../connection-aggregator-fallback.test.ts      | 17 ++++++++++++++++-
+ .../src/__tests__/tool-access-service.test.ts   |  6 +++---
+ 4 files changed, 35 insertions(+), 9 deletions(-)
+
+diff --git a/server/src/__tests__/agent-hire-ai-connections.test.ts b/server/src/__tests__/agent-hire-ai-connections.test.ts
+index cd12debd6..dc0454060 100644
+--- a/server/src/__tests__/agent-hire-ai-connections.test.ts
++++ b/server/src/__tests__/agent-hire-ai-connections.test.ts
+@@ -201,7 +201,9 @@ describe("agent-created hires use managed AI connections", () => {
+     }
+     const p = await poolFixture(f, extra);
+     await db.insert(principalPermissionGrants).values({ companyId: f.companyId, principalType: "user", principalId: f.userId, permissionKey: "agents:configure" });
+-    await db.update(agents).set({ runtimeConfig: { aiConnection: p.binding } }).where(eq(agents.id, f.agentId));
++    // Atelier (patch local 0014) : un agent ne change pas de modèle. Le modèle est posé d'avance
++    // (décision humaine) pour que la requête de l'agent ne change que le harnais, cas vérifié ici.
++    await db.update(agents).set({ adapterConfig: { model: "claude-sonnet-5" }, runtimeConfig: { aiConnection: p.binding } }).where(eq(agents.id, f.agentId));
+     const response = await request(f.app).patch(`/api/agents/${f.agentId}`).send({ adapterType: "claude_local", adapterConfig: { model: "claude-sonnet-5" } });
+     expect(response.status, JSON.stringify(response.body)).toBe(compatible ? 200 : 422);
+     const [saved] = await db.select().from(agents).where(eq(agents.id, f.agentId));
+@@ -209,6 +211,9 @@ describe("agent-created hires use managed AI connections", () => {
+     expect(saved.runtimeConfig.aiConnection).toEqual(p.binding);
+   });
+ 
++  // Atelier (patch local 0014) : l'amont enregistrait ici un changement de MODÈLE par l'agent ;
++  // modèle et effort sont réservés aux humains, l'enregistrement porte donc sur une autre clé
++  // de configuration, qui déclenche la même vérification de la connexion.
+   for (const operation of ["test", "save"] as const) {
+     it.each([401, 403, 429, 503, null])(`${operation} changes API-key health only for a provider rejection (status: %s)`, async (status) => {
+       const f = await fixture("anthropic", "api_key");
+@@ -221,7 +226,7 @@ describe("agent-created hires use managed AI connections", () => {
+       try {
+         const response = operation === "test"
+           ? await request(f.app).post(`/api/companies/${f.companyId}/adapters/${f.adapterType}/test-environment`).send({ agentId: f.agentId, aiConnection: f.binding, adapterConfig: {} })
+-          : await request(f.app).patch(`/api/agents/${f.agentId}`).send({ adapterConfig: { model: "changed-model" } });
++          : await request(f.app).patch(`/api/agents/${f.agentId}`).send({ adapterConfig: { maxTurnsPerRun: 40 } });
+         expect(response.status, JSON.stringify(response.body)).toBe(operation === "test" ? 200 : 422);
+         const rejected = status === 401 || status === 403;
+         expect(await aiConnectionService(db).list(f.companyId, f.userId)).toEqual([expect.objectContaining({ status: rejected ? "needs_attention" : "connected" })]);
+@@ -240,7 +245,7 @@ describe("agent-created hires use managed AI connections", () => {
+     try {
+       const response = operation === "test"
+         ? await request(f.app).post(`/api/companies/${f.companyId}/adapters/${f.adapterType}/test-environment`).send({ agentId: f.agentId, aiConnection: f.binding, adapterConfig: {} })
+-        : await request(f.app).patch(`/api/agents/${f.agentId}`).send({ adapterConfig: { model: "changed-model" } });
++        : await request(f.app).patch(`/api/agents/${f.agentId}`).send({ adapterConfig: { maxTurnsPerRun: 40 } });
+       expect(response.status, JSON.stringify(response.body)).toBe(operation === "test" ? 200 : 422);
+       if (operation === "test") expect(response.body.status).toBe("fail");
+       const service = aiConnectionService(db);
+@@ -258,7 +263,7 @@ describe("agent-created hires use managed AI connections", () => {
+         adapterType: f.adapterType, status: "pass", testedAt: new Date().toISOString(),
+         checks: [{ code: "claude_hello_probe_passed", level: "info", message: "hello" }],
+       }) });
+-      const saved = await request(f.app).patch(`/api/agents/${f.agentId}`).send({ adapterConfig: { model: "changed-model" } });
++      const saved = await request(f.app).patch(`/api/agents/${f.agentId}`).send({ adapterConfig: { maxTurnsPerRun: 40 } });
+       expect(saved.status, JSON.stringify(saved.body)).toBe(200);
+       const runtime = await prepareManagedAiRuntime(db, { companyId: f.companyId, agentId: f.agentId, responsibleUserId: f.userId, adapterType: f.adapterType, binding: f.binding, config: saved.body.adapterConfig });
+       try {
+diff --git a/server/src/__tests__/chat-project-tools.test.ts b/server/src/__tests__/chat-project-tools.test.ts
+index 81739407d..b9c123789 100644
+--- a/server/src/__tests__/chat-project-tools.test.ts
++++ b/server/src/__tests__/chat-project-tools.test.ts
+@@ -2,7 +2,13 @@ import { projectService } from "../services/projects.js";
+ import { callProjectTool } from "../services/project-tools.js";
+ import { createLocalAgentJwt } from "../agent-auth-jwt.js";
+ import { randomUUID } from "node:crypto";
+-import { afterAll, beforeAll, describe, expect, it } from "vitest";
++import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
++
++// Atelier (patch local 0015) : la garde de délégation (un spécialiste ne délègue pas, 2 niveaux,
++// 4 sous-tâches ouvertes) est neutralisée ici pour que ces tests amont continuent de vérifier
++// leur propre règle ; elle est testée dans atelier-garde-delegation.test.ts et
++// issue-workspace-command-authz.test.ts.
++vi.mock("../atelier/garde-delegation.js", () => ({ refuserDelegationParAgent: async () => undefined }));
+ import { eq } from "drizzle-orm";
+ import { agents, issues, heartbeatRuns, projects, companyMemberships, executionWorkspaces } from "@paperclipai/db";
+ import { startRunnerApiTestServer } from "./helpers/runner-api-server.js";
+diff --git a/server/src/__tests__/connection-aggregator-fallback.test.ts b/server/src/__tests__/connection-aggregator-fallback.test.ts
+index 4ccea4c46..bda02cedf 100644
+--- a/server/src/__tests__/connection-aggregator-fallback.test.ts
++++ b/server/src/__tests__/connection-aggregator-fallback.test.ts
+@@ -1,6 +1,21 @@
+ import { randomUUID } from "node:crypto";
+ import { eq } from "drizzle-orm";
+-import { afterAll, beforeAll, describe, expect, it } from "vitest";
++import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
++
++// Atelier (patch local 0004) : la carte native « atelier-hubspot » répond désormais à « hubspot »,
++// ce qui court-circuite le repli par agrégateur que ces tests amont vérifient sur HubSpot. Les cartes
++// de l'atelier sont retirées du catalogue ici seulement, pour que ces tests continuent de vérifier
++// leur propre règle sur le catalogue amont ; les cartes sont testées dans atelier-marketing-apps.test.ts.
++vi.mock("@paperclipai/shared", async (importOriginal) => {
++  const actual = await importOriginal<typeof import("@paperclipai/shared")>();
++  const amont = (slug: string) => !slug.startsWith(actual.ATELIER_APP_SLUG_PREFIX);
++  return {
++    ...actual,
++    CONNECTABLE_APP_DEFINITIONS: actual.CONNECTABLE_APP_DEFINITIONS.filter((app) => amont(app.slug)),
++    APP_STORE_DEFINITIONS: actual.APP_STORE_DEFINITIONS.filter((app) => amont(app.slug)),
++    getAppStoreDefinition: (slug: string) => (amont(slug) ? actual.getAppStoreDefinition(slug) : null),
++  };
++});
+ import {
+   agents,
+   authUsers,
+diff --git a/server/src/__tests__/tool-access-service.test.ts b/server/src/__tests__/tool-access-service.test.ts
+index 1a237d54e..7ab1452c3 100644
+--- a/server/src/__tests__/tool-access-service.test.ts
++++ b/server/src/__tests__/tool-access-service.test.ts
+@@ -5174,10 +5174,10 @@ describeEmbeddedPostgres("tool access service", () => {
+         "youcom",
+       ]),
+     );
+-    // Atelier Marketing IA (local patch 0004 adds 11 marketing gateway cards, patch 0011 adds 5 prospecting cards;
+-    // count adjusted in patch 0005): 59 upstream apps plus the atelier cards.
++    // Atelier Marketing IA (local patch 0004 adds 11 marketing gateway cards, patch 0011 adds 5 prospecting cards,
++    // patch 0018 adds the link-check card; count adjusted in patch 0005): 59 upstream apps plus the atelier cards.
+     expect(res.body.apps.filter((app: { slug: string }) => !app.slug.startsWith("atelier-"))).toHaveLength(59);
+-    expect(res.body.apps.filter((app: { slug: string }) => app.slug.startsWith("atelier-"))).toHaveLength(16);
++    expect(res.body.apps.filter((app: { slug: string }) => app.slug.startsWith("atelier-"))).toHaveLength(17);
+     expect(
+       res.body.apps.find((app: { slug: string }) => app.slug === "gmail")
+         .ownershipAvailability,
+-- 
+2.53.0
+

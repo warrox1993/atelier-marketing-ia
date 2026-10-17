@@ -3,7 +3,7 @@
  * aperçu, résultat), suppression totale avec confirmation saisie, ajout d'une opposition.
  * L'usine ne contacte personne : cet écran ne sert qu'à charger, effacer et protéger des données.
  */
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { useHostContext } from "@paperclipai/plugin-sdk/ui";
 import {
   ColonneCible,
@@ -289,7 +289,7 @@ function ImportGuide({ etatBase, onChange }: { etatBase: EtatBase | null; onChan
       {etape === 0 ? (
         <div className="atl-formulaire">
           <Champ libelle="Fichier de la base clients (.csv ou .xlsx)" aide={`${LIMITES_PROSPECTION.baseClientsTailleMaxOctets / 1024 / 1024} Mo au maximum. Première feuille seulement pour un .xlsx.`}>
-            <input type="file" accept=".csv,.xlsx" onChange={(e) => void choisir(e.target.files?.[0])} />
+            <ChoixFichier accept=".csv,.xlsx" nom={fichier?.nom ?? null} onChoisir={(f) => void choisir(f)} />
           </Champ>
           {erreurFichier ? (
             <p className="atl-texte-danger" role="alert">
@@ -714,6 +714,22 @@ function TableauVentesCroisees({ version }: { version: number }) {
         </>
       ) : null}
     </Section>
+  );
+}
+
+/**
+ * Sélecteur de fichier au même modèle que « Ajouter un document » (Connaissances) : le champ natif reste
+ * dans la page mais invisible, un vrai bouton ouvre la fenêtre de choix, le nom du fichier s'affiche à côté.
+ * `Champ` lui fournit son `id` et son `aria-describedby`.
+ */
+export function ChoixFichier({ accept, nom, onChoisir, id, "aria-describedby": decrit }: { accept: string; nom: string | null; onChoisir: (f: File | undefined) => void; id?: string; "aria-describedby"?: string }) {
+  const entree = useRef<HTMLInputElement>(null);
+  return (
+    <span className="atl-pile-ligne">
+      <input ref={entree} id={id} aria-describedby={decrit} className="atl-sr" type="file" accept={accept} tabIndex={-1} onChange={(e) => onChoisir(e.target.files?.[0])} />
+      <Bouton onClick={() => entree.current?.click()}>{nom ? "Choisir un autre fichier" : "Choisir un fichier"}</Bouton>
+      <span className="atl-attenue">{nom ?? "Aucun fichier choisi"}</span>
+    </span>
   );
 }
 

@@ -233,18 +233,24 @@ export function creerConnaissances(d: DependancesConnaissances): ServicesConnais
 
   /* ---------------- pseudonymisation ---------------- */
 
-  async function clePseudonymes(companyId: string, reel: boolean): Promise<string> {
+  /**
+   * Clé des pseudonymes : TOUJOURS le secret natif « donneesCleHmac » du coffre de l'hôte (le même que celui
+   * des empreintes de prospection), quel que soit le mode. Aucune clé dérivée ni de repli : l'ancienne clé
+   * de démonstration, sha256 d'une constante et de l'identifiant de l'entreprise, était calculable par
+   * quiconque connaissait cet identifiant, et ses pseudonymes réversibles par dictionnaire (même défaut
+   * que la faille E1). Sans secret lisible, l'import pseudonymisé est refusé (403 `acces_refuse`).
+   */
+  async function clePseudonymes(companyId: string): Promise<string> {
     const ref = (await d.configEntreprise(companyId)).donneesCleHmac;
     if (ref && typeof ref === "object" && (ref as { type?: unknown }).type === "secret_ref") {
       try {
         const valeur = await ctx.secrets.resolve(ref as never, { companyId, configPath: "donneesCleHmac" } as never);
         if (typeof valeur === "string" && valeur.length >= 16) return valeur;
       } catch {
-        // Message sans valeur secrète : traité ci-dessous.
+        // Message sans valeur secrète : refus ci-dessous.
       }
     }
-    if (reel) erreur("import_refuse", "Pseudonymisation impossible : la clé des empreintes (secret « donneesCleHmac » de la configuration du plugin) est absente ou illisible.");
-    return createHash("sha256").update(`atelier-demonstration-pseudonymes:${companyId.toLowerCase()}`).digest("hex");
+    return erreur("acces_refuse", "Pseudonymisation impossible : aucune clé des empreintes configurée (secret natif « donneesCleHmac » du plugin), ou secret illisible. Aucun document à pseudonymiser n'est enregistré sans elle.");
   }
 
   /* ---------------- vues ---------------- */
@@ -275,7 +281,8 @@ export function creerConnaissances(d: DependancesConnaissances): ServicesConnais
    */
   interface Preparation {
     v: Vectoriseur;
-    cle: { valeur: string } | { erreur: unknown } | null;
+    /** Clé des pseudonymes lue dans le coffre ; null : pas de pseudonymisation demandée. */
+    cle: string | null;
   }
 
   /** Extraction, pseudonymisation, passages, vecteurs, activation ; la version passe à `indexe` ou `refuse`. */
@@ -287,9 +294,8 @@ export function creerConnaissances(d: DependancesConnaissances): ServicesConnais
       if (passages.length === 0) throw new Error("Aucun passage exploitable dans le document.");
       let rapport: RapportPseudonymisation | null = null;
       if (meta.pseudonymiser) {
-        if (!prep.cle) throw new Error("Clé de pseudonymisation non préparée.");
-        if ("erreur" in prep.cle) throw prep.cle.erreur;
-        const cle = prep.cle.valeur;
+        if (prep.cle === null) throw new Error("Clé de pseudonymisation non préparée.");
+        const cle = prep.cle;
         rapport = { ...RAPPORT_VIDE };
         passages = passages.map((p) => {
           const r = pseudonymiser(p.texte, { cle });
@@ -346,6 +352,9 @@ export function creerConnaissances(d: DependancesConnaissances): ServicesConnais
       await base.journaliser({ companyId, type: "connaissance.refusee", entite: "connaissance", entiteId: meta.documentId ?? "nouveau", acteur: acteur.id, donnees: { motif: sante.motif, titre: meta.titre } });
       erreur("import_refuse", sante.motif ?? "Données de santé : import refusé.");
     }
+    // Clé des pseudonymes résolue AVANT toute écriture (et pendant la portée d'invocation de l'hôte) :
+    // sans secret, refus explicite et rien n'est enregistré.
+    const clePseudo = meta.pseudonymiser ? await clePseudonymes(companyId) : null;
     const mode = (await d.modeEffectif(companyId, null)).mode;
     let doc: LigneDocument;
     let precedentes: LigneVersion[] = [];
@@ -381,9 +390,7 @@ export function creerConnaissances(d: DependancesConnaissances): ServicesConnais
     const v = await vectoriseurPour(doc.companyId);
     const prep: Preparation = {
       v,
-      cle: meta.pseudonymiser
-        ? await clePseudonymes(companyId, mode === "reel").then((valeur) => ({ valeur }), (erreur: unknown) => ({ erreur }))
-        : null,
+      cle: clePseudo,
     };
     if (v.type !== "aucun") {
       // Avec un modèle : indexation en tâche de fond, état visible (« en file », puis « indexé » ou « refusé »).

@@ -1,0 +1,22 @@
+[Unit]
+Description=Export du journal de l'atelier vers Phoenix (instance 3100, PostgreSQL 54329)
+After=atelier-phoenix.service
+
+# Installation (une fois) :
+#   install -d -m 700 ~/.config/atelier
+#   install -m 600 config/phoenix-export.env.exemple ~/.config/atelier/phoenix-export.env
+#   (puis renseigner PGPASSWORD dans ce fichier : mot de passe de l'instance embarquée, hors dépôt)
+#   install -m 644 scripts/systemd/atelier-phoenix-export.{service,timer} ~/.config/systemd/user/
+#   systemctl --user daemon-reload && systemctl --user enable --now atelier-phoenix-export.timer
+# Code de sortie non nul = échec : « journalctl --user -u atelier-phoenix-export ».
+
+[Service]
+Type=oneshot
+# PGPASSWORD vient de ce fichier (0600, hors dépôt) ; jamais dans une unité suivie par git.
+EnvironmentFile=%h/.config/atelier/phoenix-export.env
+ExecStart=%h/.local/share/atelier-phoenix/venv/bin/python -I %h/Projets/atelier-marketing-ia/scripts/phoenix-exporter.py --pg-port 54329
+Nice=15
+IOSchedulingClass=idle
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=atelier-phoenix-export

@@ -1,0 +1,3 @@
+[Notes brutes du comité de pilotage du 14/10/2026, fictives]
+
+Marc : le fournisseur du CRM n'a toujours pas livré l'API, ça m'inquiète. Aline dit que le budget formation risque de manquer. Karim : on n'a pas testé la sauvegarde depuis mars. Valérie s'inquiète de la date limite de dépôt du dossier de subside (31/12) si le prototype n'est pas prêt. Murielle rappelle que deux gestionnaires partent en congé en décembre pile quand arrive la migration. Didier craint que les clients ne comprennent pas le nouveau portail. Quelqu'un dit que le chef de projet du portail est à 120 % de charge. Décision : on en reparle le mois prochain.

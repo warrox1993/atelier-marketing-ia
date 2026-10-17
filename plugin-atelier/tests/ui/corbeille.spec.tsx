@@ -118,6 +118,39 @@ describe("corbeille", () => {
     expect((c.querySelector('input[aria-label="Sélectionner « Tarifs 2026 »"]') as HTMLInputElement).checked).toBe(true);
   });
 
+  it("restauration groupée qui vide la corbeille : le bilan reste affiché jusqu'à « Fermer »", async () => {
+    const base = serveur;
+    serveur = (m, u, b) => {
+      if (u.endsWith("/restauration")) {
+        elements = [];
+        return { statut: 200, corps: {} };
+      }
+      return base(m, u, b);
+    };
+    const c = await ouvrir();
+    await cliquer(Array.from(c.querySelectorAll("label")).find((l) => l.textContent === "Tout sélectionner")!.querySelector("input")!);
+    await cliquer(parTexte(c, "button", "Restaurer (2)"));
+    expect(c.textContent).toContain("La corbeille est vide.");
+    expect(c.querySelectorAll("tbody tr")).toHaveLength(0);
+    expect(c.querySelector('[role="status"]')?.textContent).toContain("2 éléments restaurés");
+    await cliquer(parTexte(c, "button", "Fermer"));
+    expect(c.textContent).not.toContain("2 éléments restaurés");
+  });
+
+  it("restauration groupée : deux échecs de même titre sont listés tous les deux (clés uniques)", async () => {
+    elements = [ligne({}), ligne({ id: "l2", elementId: "e2" })];
+    const base = serveur;
+    serveur = (m, u, b) => (u.endsWith("/restauration") ? { statut: 404, corps: { erreur: "Introuvable." } } : base(m, u, b));
+    const erreurs: unknown[][] = [];
+    const spy = vi.spyOn(console, "error").mockImplementation((...a) => void erreurs.push(a));
+    const c = await ouvrir();
+    await cliquer(Array.from(c.querySelectorAll("label")).find((l) => l.textContent === "Tout sélectionner")!.querySelector("input")!);
+    await cliquer(parTexte(c, "button", "Restaurer (2)"));
+    spy.mockRestore();
+    expect(c.querySelectorAll('[role="alert"] li')).toHaveLength(2);
+    expect(erreurs.filter((e) => String(e[0]).includes("same key"))).toHaveLength(0);
+  });
+
   it("affiche l'erreur du serveur si la restauration échoue", async () => {
     const base = serveur;
     serveur = (m, u, b) => (u.endsWith("/restauration") ? { statut: 404, corps: { erreur: "Cet élément n'est pas à la corbeille." } } : base(m, u, b));

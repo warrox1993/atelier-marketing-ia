@@ -1,0 +1,268 @@
+From 59696d4388278c5d33e1a65cf6691143e5367684 Mon Sep 17 00:00:00 2001
+From: Jean-Baptiste Dhondt <114347858+warrox1993@users.noreply.github.com>
+Date: Sat, 17 Oct 2026 22:52:11 +0200
+Subject: [PATCH 75/78] =?UTF-8?q?fix(ui):=20activit=C3=A9=20r=C3=A9cente?=
+ =?UTF-8?q?=20lisible,=20baux=20d'environnement=20regroup=C3=A9s?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Chaque battement planifié produisait deux lignes « environment lease … »
+coupées à mi-largeur. Les baux consécutifs d'un même agent sont résumés en
+une ligne (« a utilisé un environnement d'exécution, N fois »), le fil lit
+50 événements pour garder 10 lignes, et l'acteur et le verbe prennent toute
+la largeur quand rien n'est affiché à droite. Verbes français des baux,
+séparateur « : » au lieu du tiret cadratin. Audit visuel D20.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01DP85vPq2MHkZg8VNtRvCzB
+---
+ ui/src/components/ActivityRow.tsx    | 23 ++++++++---
+ ui/src/lib/activity-format.ts        |  2 +
+ ui/src/lib/activity-grouping.test.ts | 58 ++++++++++++++++++++++++++++
+ ui/src/lib/activity-grouping.ts      | 50 ++++++++++++++++++++++++
+ ui/src/pages/Dashboard.tsx           | 11 ++++--
+ 5 files changed, 136 insertions(+), 8 deletions(-)
+ create mode 100644 ui/src/lib/activity-grouping.test.ts
+ create mode 100644 ui/src/lib/activity-grouping.ts
+
+diff --git a/ui/src/components/ActivityRow.tsx b/ui/src/components/ActivityRow.tsx
+index 8a85dc444..29f9e5516 100644
+--- a/ui/src/components/ActivityRow.tsx
++++ b/ui/src/components/ActivityRow.tsx
+@@ -26,11 +26,22 @@ interface ActivityRowProps {
+   userProfileMap?: Map<string, CompanyUserProfile>;
+   entityNameMap: Map<string, string>;
+   entityTitleMap?: Map<string, string>;
++  /** Nombre de battements résumés par cette ligne (voir `regrouperActivite`). */
++  repetitions?: number;
+   className?: string;
+ }
+ 
+-export function ActivityRow({ event, agentMap, userProfileMap, entityNameMap, entityTitleMap, className }: ActivityRowProps) {
+-  const verb = formatActivityVerb(event.action, event.details, { agentMap, userProfileMap });
++/** Verbe d'une ligne qui résume les baux d'environnement d'un agent. */
++function verbeBauxEnvironnement(repetitions: number): string {
++  return repetitions > 1
++    ? `a utilisé un environnement d'exécution, ${repetitions} fois`
++    : "a utilisé un environnement d'exécution";
++}
++
++export function ActivityRow({ event, agentMap, userProfileMap, entityNameMap, entityTitleMap, repetitions, className }: ActivityRowProps) {
++  const verb = repetitions !== undefined && event.action.startsWith("environment.lease_")
++    ? verbeBauxEnvironnement(repetitions)
++    : formatActivityVerb(event.action, event.details, { agentMap, userProfileMap });
+ 
+   const isHeartbeatEvent = event.entityType === "heartbeat_run";
+   const heartbeatAgentId = isHeartbeatEvent
+@@ -52,6 +63,8 @@ export function ActivityRow({ event, agentMap, userProfileMap, entityNameMap, en
+   const userProfile = event.actorType === "user" ? userProfileMap?.get(event.actorId) : null;
+   const actorName = actor?.name ?? (event.actorType === "system" ? "Système" : userProfile?.label ?? (event.actorType === "user" ? "Humain" : event.actorId || "Inconnu"));
+   const actorAvatarUrl = userProfile?.image ?? null;
++  // Sans objet à droite, l'acteur et le verbe prennent toute la largeur au lieu d'être coupés à mi-ligne.
++  const hasEntityText = event.entityType === "issue" ? Boolean(entityTitle) : Boolean(name || entityTitle);
+ 
+   const inner = (
+     <div className="space-y-2">
+@@ -67,16 +80,16 @@ export function ActivityRow({ event, agentMap, userProfileMap, entityNameMap, en
+         <div className="flex min-w-0 flex-1 flex-col gap-1 @xl:contents">
+           <div className="flex min-w-0 items-baseline gap-2 @xl:contents">
+             <p className="flex h-6 min-w-0 flex-1 items-center gap-1.5">
+-              <span className="max-w-1/2 shrink-0 truncate" title={`${actorName} ${verb}`}>
++              <span className={cn("truncate", hasEntityText ? "max-w-1/2 shrink-0" : "min-w-0 flex-1")} title={`${actorName} ${verb}`}>
+                 <span>{actorName}</span>{" "}
+                 <span className="text-muted-foreground">{verb}</span>
+               </span>
+-              {event.entityType === "issue" ? (
++              {!hasEntityText ? null : event.entityType === "issue" ? (
+                 <span className="min-w-0 flex-1 truncate" title={entityTitle}>{entityTitle}</span>
+               ) : (
+                 <span className="min-w-0 flex-1 truncate">
+                   {name && <span className="font-medium">{name}</span>}
+-                  {entityTitle && <span className="text-muted-foreground"> — {entityTitle}</span>}
++                  {entityTitle && <span className="text-muted-foreground"> : {entityTitle}</span>}
+                 </span>
+               )}
+             </p>
+diff --git a/ui/src/lib/activity-format.ts b/ui/src/lib/activity-format.ts
+index 201858648..1a574d006 100644
+--- a/ui/src/lib/activity-format.ts
++++ b/ui/src/lib/activity-format.ts
+@@ -23,6 +23,8 @@ interface ActivityFormatOptions {
+ }
+ 
+ const ACTIVITY_ROW_VERBS: Record<string, string> = {
++  "environment.lease_acquired": "a ouvert un environnement d'exécution",
++  "environment.lease_released": "a libéré un environnement d'exécution",
+   "issue.created": "a créé",
+   "issue.updated": "a mis à jour",
+   "issue.read_marked": "a marqué comme lu",
+diff --git a/ui/src/lib/activity-grouping.test.ts b/ui/src/lib/activity-grouping.test.ts
+new file mode 100644
+index 000000000..64a12dc49
+--- /dev/null
++++ b/ui/src/lib/activity-grouping.test.ts
+@@ -0,0 +1,58 @@
++import { describe, expect, it } from "vitest";
++import type { ActivityEvent } from "@paperclipai/shared";
++import { regrouperActivite } from "./activity-grouping";
++
++function evenement(id: string, action: string, actorId = "agent-1", actorType: ActivityEvent["actorType"] = "agent"): ActivityEvent {
++  return {
++    id,
++    companyId: "c-1",
++    actorType,
++    actorId,
++    action,
++    entityType: action.startsWith("environment.") ? "environment_lease" : "issue",
++    entityId: `e-${id}`,
++    details: null,
++    createdAt: new Date("2026-10-17T12:00:00Z"),
++  } as unknown as ActivityEvent;
++}
++
++describe("regrouperActivite", () => {
++  it("résume en une ligne les baux consécutifs d'un même agent et compte les ouvertures", () => {
++    const lignes = regrouperActivite([
++      evenement("1", "environment.lease_released"),
++      evenement("2", "environment.lease_acquired"),
++      evenement("3", "environment.lease_released"),
++      evenement("4", "environment.lease_acquired"),
++      evenement("5", "issue.created"),
++    ], 10);
++
++    expect(lignes.map((l) => [l.event.id, l.repetitions])).toEqual([["1", 2], ["5", 1]]);
++  });
++
++  it("ne mélange pas les baux de deux agents différents", () => {
++    const lignes = regrouperActivite([
++      evenement("1", "environment.lease_acquired", "agent-1"),
++      evenement("2", "environment.lease_acquired", "agent-2"),
++      evenement("3", "environment.lease_released", "agent-2"),
++    ], 10);
++
++    expect(lignes.map((l) => [l.event.id, l.repetitions])).toEqual([["1", 1], ["2", 1]]);
++  });
++
++  it("compte au moins une répétition pour un bail libéré seul", () => {
++    expect(regrouperActivite([evenement("1", "environment.lease_released")], 10)).toEqual([
++      { event: expect.objectContaining({ id: "1" }), repetitions: 1 },
++    ]);
++  });
++
++  it("garde les autres événements identiques séparés et respecte la limite", () => {
++    const lignes = regrouperActivite([
++      evenement("1", "issue.created"),
++      evenement("2", "issue.created"),
++      evenement("3", "environment.lease_acquired"),
++      evenement("4", "issue.created"),
++    ], 3);
++
++    expect(lignes.map((l) => l.event.id)).toEqual(["1", "2", "3"]);
++  });
++});
+diff --git a/ui/src/lib/activity-grouping.ts b/ui/src/lib/activity-grouping.ts
+new file mode 100644
+index 000000000..25740a025
+--- /dev/null
++++ b/ui/src/lib/activity-grouping.ts
+@@ -0,0 +1,50 @@
++import type { ActivityEvent } from "@paperclipai/shared";
++
++/** Une ligne du fil d'activité : un événement, ou une série répétée résumée par son plus récent. */
++export interface LigneActiviteGroupee {
++  event: ActivityEvent;
++  /** Nombre d'exécutions résumées (1 pour un événement isolé). */
++  repetitions: number;
++}
++
++const PREFIXE_BAIL_ENVIRONNEMENT = "environment.lease_";
++
++function estBailEnvironnement(event: ActivityEvent): boolean {
++  return event.action.startsWith(PREFIXE_BAIL_ENVIRONNEMENT);
++}
++
++/**
++ * Chaque battement planifié d'un agent ouvre puis libère un environnement d'exécution :
++ * deux lignes par battement noyaient le fil. Les baux consécutifs d'un même acteur sont
++ * regroupés en une ligne (l'événement le plus récent), qui compte les ouvertures.
++ * Les autres événements restent tels quels et l'ordre est conservé.
++ */
++export function regrouperActivite(events: readonly ActivityEvent[], limite: number): LigneActiviteGroupee[] {
++  const lignes: LigneActiviteGroupee[] = [];
++  let serie: { event: ActivityEvent; ouvertures: number } | null = null;
++
++  const fermerSerie = () => {
++    if (serie) lignes.push({ event: serie.event, repetitions: Math.max(1, serie.ouvertures) });
++    serie = null;
++  };
++
++  for (const event of events) {
++    if (lignes.length >= limite) break;
++    if (estBailEnvironnement(event)) {
++      const ouverture = event.action === "environment.lease_acquired" ? 1 : 0;
++      if (serie && serie.event.actorType === event.actorType && serie.event.actorId === event.actorId) {
++        serie.ouvertures += ouverture;
++        continue;
++      }
++      fermerSerie();
++      if (lignes.length >= limite) break;
++      serie = { event, ouvertures: ouverture };
++      continue;
++    }
++    fermerSerie();
++    if (lignes.length >= limite) break;
++    lignes.push({ event, repetitions: 1 });
++  }
++  fermerSerie();
++  return lignes.slice(0, limite);
++}
+diff --git a/ui/src/pages/Dashboard.tsx b/ui/src/pages/Dashboard.tsx
+index 4de55b7f7..1c6472740 100644
+--- a/ui/src/pages/Dashboard.tsx
++++ b/ui/src/pages/Dashboard.tsx
+@@ -25,6 +25,7 @@ import { StatusIcon } from "../components/StatusIcon";
+ import { usePublishSharedQueryData, useSharedPollingQuery } from "../hooks/useSharedPolling";
+ 
+ import { ActivityRow } from "../components/ActivityRow";
++import { regrouperActivite } from "../lib/activity-grouping";
+ import { timeAgo } from "../lib/timeAgo";
+ import { cn, formatCents } from "../lib/utils";
+ import { SHOW_TASK_PRIORITY_UI } from "../lib/ui-flags";
+@@ -39,7 +40,9 @@ import type { Agent, Issue } from "@paperclipai/shared";
+ import { PluginSlotOutlet } from "@/plugins/slots";
+ import { SmokeLabDashboardCard } from "../components/SmokeLabDashboardCard";
+ 
+-const DASHBOARD_ACTIVITY_LIMIT = 10;
++/** Événements lus pour le fil : plus que les lignes affichées, car les baux répétés sont regroupés. */
++const DASHBOARD_ACTIVITY_LIMIT = 50;
++const DASHBOARD_ACTIVITY_ROWS = 10;
+ 
+ function getRecentIssues(issues: Issue[]): Issue[] {
+   return [...issues]
+@@ -210,7 +213,8 @@ export function Dashboard() {
+   );
+ 
+   const recentIssues = issues ? getRecentIssues(issues) : [];
+-  const recentActivity = useMemo(() => (activity ?? []).slice(0, 10), [activity]);
++  const recentActivityRows = useMemo(() => regrouperActivite(activity ?? [], DASHBOARD_ACTIVITY_ROWS), [activity]);
++  const recentActivity = useMemo(() => recentActivityRows.map((row) => row.event), [recentActivityRows]);
+ 
+   useEffect(() => {
+     for (const timer of activityAnimationTimersRef.current) {
+@@ -487,10 +491,11 @@ export function Dashboard() {
+                   Activité récente
+                 </h3>
+                 <Card className="@container block py-0 divide-y divide-border overflow-hidden">
+-                  {recentActivity.map((event) => (
++                  {recentActivityRows.map(({ event, repetitions }) => (
+                     <ActivityRow
+                       key={event.id}
+                       event={event}
++                      repetitions={repetitions}
+                       agentMap={agentMap}
+                       userProfileMap={userProfileMap}
+                       entityNameMap={entityNameMap}
+-- 
+2.53.0
+

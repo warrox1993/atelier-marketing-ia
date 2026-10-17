@@ -1,0 +1,15 @@
+[
+ {
+  "critere": "les deux mois en manquement",
+  "nombres": [
+   99.12,
+   98.74
+  ]
+ },
+ {
+  "critere": "avoir total de 630 euros",
+  "un_parmi": [
+   630.0
+  ]
+ }
+]

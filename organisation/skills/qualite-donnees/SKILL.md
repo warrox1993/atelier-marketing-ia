@@ -2,7 +2,7 @@
 name: "qualite-donnees"
 description: "Mesure et améliore la qualité d'un jeu de données d'une PME belge selon cinq dimensions (exactitude, complétude, cohérence, fraîcheur, unicité) : règles de contrôle écrites, tableau de qualité chiffré par dimension, anomalies classées, plan de correction à la source. À utiliser avant tout tableau de bord ou analyse, lors d'une migration ou quand deux chiffres censés être identiques diffèrent ; jamais pour corriger des données en production sans accord du propriétaire, ni pour deviner une valeur manquante."
 metadata:
-  version: "1.0.0"
+  version: "1.1.0"
   langue: "fr"
   domaine: "donnees"
 ---
@@ -44,8 +44,18 @@ Savoir, chiffres à l'appui, si un jeu de données est assez fiable pour l'usage
    - unicité : doublons exacts et quasi-doublons (même entité écrite de deux façons), mesurés sur une clé définie.
 4. **Classer les anomalies** par cause : saisie, import, règle de gestion absente, doublon de source, changement de définition. Une anomalie sans cause identifiée est notée « cause à investiguer ».
 5. **Calculer le tableau de qualité** : taux par dimension et par champ critique, nombre de lignes concernées, comparaison au seuil, feu vert, orange ou rouge, ou « seuil à définir » si aucun n'est convenu.
-6. **Proposer la correction à la source** : qui corrige (propriétaire du processus), où (formulaire, logiciel, procédure), comment empêcher la récidive (champ obligatoire, liste de valeurs, contrôle à la saisie). Une correction faite seulement dans l'entrepôt ou dans le tableau de bord reviendra : elle est notée comme palliatif.
-7. **Statuer sur l'usage** : utilisable, utilisable avec réserves écrites, ou non utilisable en l'état, avec la condition pour passer au niveau suivant.
+6. **Calculer le score de qualité sur 100**, pondéré, en tête du rapport : complétude 30, cohérence 25, validité
+   (valeurs dans le domaine attendu : plages, listes, formats ; l'exactitude contrôlée sur échantillon y contribue)
+   20, unicité 15, fraîcheur 10. Score = somme des taux par dimension (en %) multipliés par leur poids, divisée par
+   100 ; le calcul est montré. Niveaux de départ : 85 et plus, utilisable ; 65 à 84, utilisable avec réserves écrites ;
+   moins de 65, à corriger avant usage. Les poids et seuils sont des repères que le propriétaire peut changer, par écrit.
+7. **Signaler d'office les risques cachés**, même si la question ne les vise pas : valeurs manquantes déguisées
+   (« 0 », chaîne vide, « N/A », « null », date par défaut) comptées comme manquantes ; dates futures ou antérieures à
+   la mise en service du système ; clés censées être uniques en double ; absences concentrées sur une période, un
+   segment ou une région (absence non aléatoire, qui fausse toute moyenne) ; champ libre utilisé comme liste de
+   valeurs avec des centaines de variantes.
+8. **Proposer la correction à la source** : qui corrige (propriétaire du processus), où (formulaire, logiciel, procédure), comment empêcher la récidive (champ obligatoire, liste de valeurs, contrôle à la saisie). Une correction faite seulement dans l'entrepôt ou dans le tableau de bord reviendra : elle est notée comme palliatif.
+9. **Statuer sur l'usage** à partir du score et des règles bloquantes : utilisable, utilisable avec réserves écrites, ou non utilisable en l'état, avec la condition pour passer au niveau suivant.
 
 Repères de départ (à confirmer par le propriétaire) : exactitude et cohérence des champs financiers à 99 % ou plus ; complétude des champs critiques à 95 % ou plus ; doublons sous 1 % ; fraîcheur compatible avec la fréquence de décision (un tableau hebdomadaire n'accepte pas des données de plus de 7 jours). Ce sont des ordres de grandeur de départ, pas des normes.
 
@@ -56,6 +66,8 @@ Un rapport de qualité : périmètre, dictionnaire utilisé, liste des règles `
 ## Critères de réussite
 
 - Les cinq dimensions sont traitées ou l'absence d'une dimension est justifiée.
+- Le score pondéré est en tête du rapport, avec son calcul et les poids utilisés.
+- Les valeurs « N/A », « 0 » ou vides d'un champ obligatoire sont comptées comme manquantes.
 - Chaque taux est reproductible à partir de la règle et du jeu indiqués.
 - Aucune valeur manquante n'est remplie par une moyenne ou une supposition ; aucune donnée n'est modifiée dans la source par l'agent.
 - Les exemples d'anomalies ne contiennent aucune donnée personnelle superflue (identifiants pseudonymisés ou lignes décrites sans nom).
@@ -94,3 +106,11 @@ Usage : suivre les ventes mensuelles à partir d'un export de facturation de 4 2
 Cause des 42 doublons : hypothèse, double import du 30/09 ; à confirmer avec l'informatique. Correction à la source : contrôle d'unicité à l'import. Statut : utilisable avec réserve (retirer les doublons dans l'analyse, sans les supprimer de la source).
 
 Cas d'échec : le rapport affiche « complétude 100 % » parce que les codes clients absents ont été remplis par « 0000 » à l'export. Les « 0000 » sont comptés comme absents ; le taux réel est de 91 %, le statut passe à orange et la question est posée à l'informatique sur l'origine de ce code par défaut.
+
+## Origine de la méthode
+
+Score de qualité pondéré sur 100, trois niveaux et liste des risques à signaler d'office adaptés et traduits de
+github.com/alirezarezvani/claude-skills, `engineering/data-quality-auditor/skills/data-quality-auditor/SKILL.md`
+(« Data Quality Score », « Proactive Risk Triggers »), commit 19392f7a08264ed00486a251f5b2098321771f94, licence MIT,
+Copyright (c) 2025 Alireza Rezvani. Les scripts ne sont pas repris. Modifications : traduction, correction à la source,
+statut d'usage. Licence et reprises : `organisation/skills/LICENCES-TIERS.md`.

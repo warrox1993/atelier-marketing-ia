@@ -1,5 +1,7 @@
 /**
  * Discussion avec le Coordinateur (humain seulement) : un fil de messages pour piloter l'atelier.
+ * Pour un client à plusieurs services, l'interface l'ouvre dans l'entreprise Direction, dont le coordinateur (rôle
+ * ceo) est le coordinateur général : seul interlocuteur de l'humain, il délègue aux coordinateurs de département.
  *
  * Le fil est le fil de commentaires d'UNE issue native par entreprise, « Discussion avec le Coordinateur »,
  * assignée au Coordinateur. Aucune table, aucune migration, aucune nouvelle capacité :
@@ -86,13 +88,27 @@ export function routesDiscussion(d: DependancesDiscussion): Partial<Record<CleRo
     return valides.sort((a, b) => iso(a.createdAt).localeCompare(iso(b.createdAt)))[0] ?? null;
   }
 
+  /**
+   * Le fil suit le coordinateur ACTUEL de l'entreprise (rôle ceo) : quand il change (Direction : le coordinateur
+   * général remplace le coordinateur du service comme interlocuteur de l'humain), l'issue existante lui est réaffectée,
+   * pour que le réveil de `discussion.envoyer` le vise lui. Aucune réaffectation si l'entreprise n'a pas de coordinateur.
+   */
+  async function suivreCoordinateur(companyId: string, issue: Issue, acteur: ActeurHote): Promise<Issue> {
+    const coord = await coordinateur(companyId);
+    if (!coord || issue.assigneeAgentId === coord.id) return issue;
+    const ancien = issue.assigneeAgentId ?? null;
+    await ctx.issues.update(issue.id, { assigneeAgentId: coord.id }, companyId, acteur.userId ? { actorUserId: acteur.userId } : undefined);
+    await base.journaliser({ companyId, type: "discussion.reaffectee", entite: "tache", entiteId: issue.id, issueId: issue.id, acteur: acteur.id, donnees: { ancien, coordinateurId: coord.id } });
+    return { ...issue, assigneeAgentId: coord.id };
+  }
+
   function retrouverOuCreer(companyId: string, acteur: ActeurHote): Promise<Issue> {
     const cle = companyId.toLowerCase();
     const enCours = creations.get(cle);
     if (enCours) return enCours;
     const p = (async () => {
       const existante = await chercher(companyId);
-      if (existante) return existante;
+      if (existante) return suivreCoordinateur(companyId, existante, acteur);
       const coord = await coordinateur(companyId);
       if (!coord) erreur("introuvable", "Aucun Coordinateur dans cette entreprise : la discussion ne peut pas être ouverte.");
       const issue = await ctx.issues.create({

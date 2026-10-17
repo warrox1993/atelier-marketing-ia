@@ -75,4 +75,10 @@ describe("diagnostic : sources réelles lues sur la passerelle", () => {
     expect(texte).not.toContain("Recherche Web non connectée");
     expect(d.connecteurs.find((c: any) => c.cle === "claude_local").detail).toContain("Agents configurés en mode réel (abonnement)"); // eslint-disable-line @typescript-eslint/no-explicit-any
   });
+  it("lecture d'URL : transport toujours réel, jamais l'état « demonstration »", async () => {
+    const d = await sante({ config: { passerelleUrl: "pas une adresse" } });
+    const ligne = d.connecteurs.find((c: any) => c.cle === "lecture_url"); // eslint-disable-line @typescript-eslint/no-explicit-any
+    expect(ligne.etat).toBe("configure_non_verifie");
+    expect(ligne.etat).not.toBe("demonstration");
+  });
 });

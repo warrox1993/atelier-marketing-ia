@@ -207,7 +207,7 @@ programmation réelle (`publicationProgrammee` reste `null` sans connecteur).
 - **Étalonnage** : statut `estimation` ou `probabilite_mesuree` ; méthode `platt` ou `isotonique` (≥ 1 000 exemples).
 - **Export vers le CRM** : mêmes états qu'une diffusion (`refusee`, `simulee`, `preparee`, `confirmee`,
   `ambigue_a_reconcilier`) ; jamais `confirmee` en démonstration.
-- **Import de base clients** : lignes lues = retenues + rejetées ; purge à `purgeLe` ; les oppositions survivent à la purge.
+- **Import de base clients** : lignes lues = retenues + rejetées ; purge à `purgeLe` ; les oppositions sont supprimées avec l'entreprise (ON DELETE CASCADE) ; elles ne survivent que dans l'export fait avant la suppression (donnees-plugin/oppositions.json).
 - **Version d'un document de connaissances** : statut `en_vigueur`, `a_venir`, `perime`, `retire` ; indexation `en_file`,
   `en_cours`, `indexe`, `refuse` (motif) ; `active` seulement si indexée, une seule active par document.
 - **Recherche** : `aucuneSource` vrai ⇔ aucun passage (motif obligatoire) ; tout passage hors vigueur est marqué « périmé ».

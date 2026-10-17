@@ -2,7 +2,7 @@
 name: "precompte-professionnel"
 description: "Prépare le suivi du précompte professionnel d'une PME belge : principes de retenue et de versement par l'employeur, calendrier de déclaration et de paiement, dispenses de versement possibles (chercheurs, heures supplémentaires, travail de nuit ou en équipes, autres), contrôle des conditions et des pièces. À utiliser pour planifier et contrôler les versements avec le secrétariat social ; jamais pour calculer un précompte individuel, décider qu'une dispense s'applique ni déposer une déclaration."
 metadata:
-  version: "1.0.0"
+  version: "1.1.0"
   langue: "fr"
   domaine: "fiscalite"
 ---
@@ -40,7 +40,13 @@ Un dossier qui montre, par échéance, le précompte à verser selon le secréta
 4. **Comparer** le montant déclaré de la période avec l'historique (agrégats seulement) ; tout écart important est listé avec les deux montants et une hypothèse marquée « hypothèse » (nouvelle embauche, prime exceptionnelle, dispense nouvelle).
 5. **Examiner chaque dispense invoquée** : nature, pourcentage ou plafond annoncé par la source datée, conditions, pièces exigées, personne de l'entreprise responsable de la preuve. Une dispense dont une condition n'est pas documentée est classée « preuve manquante » ; elle n'est jamais retenue par défaut.
 6. **Vérifier la séparation des données** : les dossiers restent agrégés (totaux, nombre de travailleurs concernés) ; aucun nom, numéro national ni salaire individuel dans le dossier.
-7. **Préparer les questions** au secrétariat social : exactitude du calendrier, éligibilité de chaque dispense, déclaration spécifique à introduire pour une dispense, délai de régularisation en cas de versement manqué.
+7. **Fiches 281 et Belcotax-on-web** : préparer le contrôle des fiches fiscales annuelles (281.10 pour les salariés,
+   281.20 pour les dirigeants, 281.50 pour les commissions, courtages et honoraires versés à des tiers, et les autres
+   fiches applicables) : liste des bénéficiaires attendus par type de fiche (comptages seulement), concordance entre le
+   total des fiches et le précompte déclaré sur l'année, date limite d'introduction à confirmer. L'introduction se fait
+   par Belcotax-on-web, par l'humain ou le secrétariat social ; pour les fiches 281.50, l'information sur les sommes
+   versées vient de la comptabilité par le bureau de liaison.
+8. **Préparer les questions** au secrétariat social : exactitude du calendrier, éligibilité de chaque dispense, déclaration spécifique à introduire pour une dispense, délai de régularisation en cas de versement manqué.
 
 ## Livrable
 
@@ -48,6 +54,7 @@ Un dossier en Markdown : calendrier de la période, comparaison avec l'historiqu
 
 ## Critères de réussite
 
+- Le total des fiches 281 est rapproché du précompte déclaré, ou l'écart est listé.
 - Chaque date a une source datée ou la mention « à confirmer par le secrétariat social ».
 - Chaque dispense a ses conditions et son statut de preuve ; aucune n'est retenue sans pièce.
 - Aucun précompte individuel n'est calculé, aucune donnée nominative n'apparaît.
@@ -61,6 +68,13 @@ Sources secondaires ouvertes le 16/10/2026 :
 
 - « Précompte professionnel », MyFid, https://www.myfid.be/ressources/comptabilite/precompte-professionnel/ : déclaration en ligne par la plateforme FinProf, échéance de déclaration et de paiement situés autour du 15 du mois suivant la paie (ou du trimestre), distinction entre exonération effective de retenue (allocations familiales, certains frais, rémunérations de chercheurs selon la page) et dispense de versement (certaines heures supplémentaires, travail de nuit, secteur maritime), exemple de date de la page contenant une incohérence (janvier 2027 pour une paie de décembre 2025) : la date exacte est donc à confirmer.
 - « Réductions fiscales (dispenses de versement du précompte professionnel) », Securex, https://www.securex.be/fr/lex4you/employeur/themes/optimiser-la-politique-salariale/reductions-fiscales-(dispenses-de-versement-du-precompte-professionnel) : liste des catégories de dispense (heures supplémentaires avec plafond de 180 heures par an et par travailleur, recherche scientifique jusqu'à 80 %, travail de nuit, en équipes ou continu, sportifs, zones d'aide, entreprises en démarrage, sinistres naturels) ; pourcentages et conditions précis à lire sur les pages détaillées de l'éditeur ou à faire confirmer.
+
+Brochure officielle du SPF Finances « Belcotax-on-web », version du 06/12/2024,
+https://finances.belgium.be/sites/default/files/downloads/161-belcotax-on-web-brochure-2024-20241206-fr.pdf : selon
+l'étude de groupe 3 du 17/10/2026 qui l'a lue, l'introduction électronique est obligatoire pour les fiches 281.10 à
+281.30 et 281.50 depuis le 1er janvier 2009. Lors du contrôle du 17/10/2026 au soir, ce fichier a renvoyé une
+vérification anti-robot : il n'est pas contourné et la règle reste « à vérifier par un professionnel », comme la date
+limite annuelle d'introduction des fiches.
 
 Une page de la société Partena Professional sur la dispense pour la recherche, citée par une recherche du 16/10/2026, a renvoyé une erreur d'accès (403) et n'a pas pu être lue.
 

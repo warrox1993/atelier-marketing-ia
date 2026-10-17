@@ -79,7 +79,7 @@ def psql(args, entree: str) -> str:
 
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
-    ap.add_argument("port", type=int, help="port PostgreSQL (54329 : instance 3100, 54780 : instance 3580)")
+    ap.add_argument("port", type=int, help="port PostgreSQL (54329 : instance 3100)")
     ap.add_argument("--appliquer", action="store_true", help="écrit les positions (sinon : à blanc, aucune écriture)")
     ap.add_argument("--hote", default="127.0.0.1")
     ap.add_argument("--utilisateur", default="paperclip")

@@ -17,7 +17,7 @@ export function VueEquipeAtelier({ agentId }: { agentId: string | null }) {
     <>
       <EnTete
         titre="Équipe et coordination"
-        description="Les agents Paperclip de cette entreprise, ce qu'ils font maintenant et ce qui les bloque. Les états viennent de Paperclip ; rien n'est animé sans événement réel."
+        description="Les agents de cette entreprise, ce qu'ils font maintenant et ce qui les bloque. Les états viennent du tableau de bord ; rien n'est animé sans événement réel."
       />
       <Fraicheur chargeLe={r.chargeLe} actualisation={r.loading && r.data !== null} />
       <Lecture r={r} libelle="équipe" estVide={(d) => d.agents.length === 0} vide={<Vide titre="Aucun agent dans cette entreprise.">Créez ou importez l'organisation de l'entreprise (scripts/bootstrap-organisation.py), puis actualisez.</Vide>}>
@@ -178,7 +178,7 @@ function Competences({ agent }: { agent: AgentVue }) {
     <span className="atl-pile">
       <span>{agent.competences.length} compétence{agent.competences.length > 1 ? "s" : ""}</span>
       <span className="atl-sous">
-        {transmises.length ? `${transmises.length} transmise(s) au dernier passage` : "prêtes, pas encore utilisées"}
+        {transmises.length ? `${transmises.length} ${transmises.length > 1 ? "transmises" : "transmise"} au dernier passage` : "prêtes, pas encore utilisées"}
       </span>
     </span>
   );
@@ -193,7 +193,7 @@ function DetailAgent({ agent, equipe }: { agent: AgentVue; equipe: VueEquipe }) 
       actions={
         <>
           <LienHote vers={`/agents/${agent.id}`} className="atl-bouton">
-            Fiche Paperclip
+            Fiche dans le tableau de bord
           </LienHote>
           <LienHote vers={chemin("equipe")} className="atl-bouton">
             Fermer
@@ -247,7 +247,7 @@ function DetailAgent({ agent, equipe }: { agent: AgentVue; equipe: VueEquipe }) 
         ) : null}
       </dl>
       <h3 className="atl-h3">Tâches et résultats de l'agent</h3>
-      <p className="atl-section-aide">Liste native de Paperclip, filtrée sur cet agent (toutes ses tâches, y compris terminées).</p>
+      <p className="atl-section-aide">Liste du tableau de bord, filtrée sur cet agent (toutes ses tâches, y compris terminées).</p>
       <div className="atl-natif">
         <IssuesList companyId={contexte.companyId} filters={{ assigneeAgentId: agent.id }} viewStateKey={`atelier-agent-${agent.id}`} />
       </div>

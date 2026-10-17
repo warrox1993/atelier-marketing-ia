@@ -187,7 +187,9 @@ export function assemblerProspect(l: Awaited<ReturnType<BaseAtelier["listerProsp
   }));
   const parsees = basesLegales.map((b) => BaseLegaleContact.safeParse(b));
   if (parsees.some((x) => !x.success)) return null;
-  const r = Prospect.safeParse({ ...l, empreintes: (det.empreintes.get(l.id) ?? []).slice(0, 20), score: null, basesLegales: parsees.map((x) => (x as { data: unknown }).data) });
+  // `cleAReimporter` (marque de stockage) n'appartient pas au contrat strict `Prospect` : retirée avant validation.
+  const { cleAReimporter: _marque, ...ligne } = l;
+  const r = Prospect.safeParse({ ...ligne, empreintes: (det.empreintes.get(l.id) ?? []).slice(0, 20), score: null, basesLegales: parsees.map((x) => (x as { data: unknown }).data) });
   return r.success ? r.data : null;
 }
 

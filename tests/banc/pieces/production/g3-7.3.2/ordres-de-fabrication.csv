@@ -1,0 +1,9 @@
+ordre;produit;quantite;echeance_semaine;gamme_heures_par_poste
+OF-101;Support S1;200;1;P1:14 + P2:10 + P3:14 + P4:6
+OF-102;Boîtier B2;150;1;P2:20 + P4:12
+OF-103;Châssis C3;80;2;P1:12 + P3:30 + P4:8
+OF-104;Capot K4;120;2;P2:16 + P3:28 + P4:10
+OF-105;Bras A5;90;3;P1:18 + P3:16 + P4:8
+OF-106;Axe X6;300;2;P1:10 + P3:20 + P2:6
+OF-107;Coque H7;60;3;P2:14 + P3:12
+OF-108;Plaque L8;250;4;P1:20 + P4:14

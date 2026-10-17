@@ -12,5 +12,5 @@ Projet de démonstration. Il regroupe le brief, les exigences `REQ-xxx`, les tâ
 spécialistes, les revues des trois contrôleurs et le dossier soumis à l'humain.
 
 Périmètre confirmé : trois établissements (Liège-Centre, Liège-Outremeuse, Ans). Offres
-validées : voir `organisation/demo/offres.md`. Budget publicitaire maximal : fixé par
+validées : fixées par l'humain dans le brief. Budget publicitaire maximal : fixé par
 l'humain dans le brief ; aucune dépense réelle en démonstration.

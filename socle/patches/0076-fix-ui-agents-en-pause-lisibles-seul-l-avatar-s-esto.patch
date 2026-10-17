@@ -1,0 +1,133 @@
+From 9faac1b3a0eef6fe06d7659544683f6b46bc0381 Mon Sep 17 00:00:00 2001
+From: Jean-Baptiste Dhondt <114347858+warrox1993@users.noreply.github.com>
+Date: Sat, 17 Oct 2026 22:52:46 +0200
+Subject: [PATCH 76/78] fix(ui): agents en pause lisibles, seul l'avatar
+ s'estompe
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+La ligne entière passait à 50 % d'opacité : nom, rôle et libellé
+« Claude Code » tombaient sous 3:1 de contraste. Seul l'avatar s'estompe ;
+la pastille « En pause » garde sa couleur et le libellé de l'adaptateur
+retrouve la couleur secondaire pleine. Liste et organigramme. Audit
+visuel D23.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01DP85vPq2MHkZg8VNtRvCzB
+---
+ ui/src/pages/Agents.production.tsx | 11 +++++------
+ ui/src/pages/Agents.tsx            | 11 +++++------
+ 2 files changed, 10 insertions(+), 12 deletions(-)
+
+diff --git a/ui/src/pages/Agents.production.tsx b/ui/src/pages/Agents.production.tsx
+index 3a978029e..e0156548f 100644
+--- a/ui/src/pages/Agents.production.tsx
++++ b/ui/src/pages/Agents.production.tsx
+@@ -398,13 +398,13 @@ export function Agents() {
+         to={agentUrl(agent)}
+         className={cn(
+           "group",
+-          agent.pausedAt && tab !== "paused" ? "opacity-50" : "",
+           resourceMembershipState(membershipsQuery.data, "agent", agent.id) === "left" ? "sm:text-foreground/55" : "",
+         )}
+         leading={hasInvalidOrgChain ? (
+           <AlertTriangle className="h-3.5 w-3.5 text-amber-500" aria-label="Chaîne hiérarchique invalide" />
+         ) : (
+-          <AgentAvatar agent={agent} size={32} />
++          // En pause : seul l'avatar s'estompe ; le nom et la pastille d'état gardent leur contraste.
++          <AgentAvatar agent={agent} size={32} className={agent.pausedAt && tab !== "paused" ? "opacity-50" : undefined} />
+         )}
+         secondaryRow={
+           builtInCluster ? (
+@@ -650,14 +650,13 @@ function OrgTreeNode({
+         to={agent ? agentUrl(agent) : `/agents/${node.id}`}
+         className={cn(
+           "group flex items-center gap-3 rounded-lg px-3 py-2 hover:bg-accent/50 transition-colors w-full text-left no-underline text-inherit",
+-          agent?.pausedAt && tab !== "paused" && "opacity-50",
+           membershipState === "left" && "sm:text-foreground/55",
+         )}
+       >
+         {hasInvalidOrgChain ? (
+           <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-amber-500" aria-label="Chaîne hiérarchique invalide" />
+         ) : (
+-          <AgentAvatar agent={agent ?? node} size={24} />
++          <AgentAvatar agent={agent ?? node} size={24} className={agent?.pausedAt && tab !== "paused" ? "opacity-50" : undefined} />
+         )}
+         <div className="flex-1 min-w-0 flex flex-wrap items-center gap-2">
+           {/* Name floor + `truncate` keeps the primary identifier readable; the
+@@ -811,7 +810,7 @@ function AgentMetaColumns({
+         >
+           {model ?? "—"}
+         </div>
+-        <div className="truncate font-mono text-(length:--text-micro) text-muted-foreground/70" title={adapterLabel}>
++        <div className="truncate font-mono text-(length:--text-micro) text-muted-foreground" title={adapterLabel}>
+           {adapterLabel}
+         </div>
+       </div>
+@@ -820,7 +819,7 @@ function AgentMetaColumns({
+           <div className="truncate text-xs text-muted-foreground" title={environment.title}>
+             {environment.label}
+           </div>
+-          <div className="truncate text-(length:--text-micro) text-muted-foreground/70">
++          <div className="truncate text-(length:--text-micro) text-muted-foreground">
+             {environment.detail}
+           </div>
+         </div>
+diff --git a/ui/src/pages/Agents.tsx b/ui/src/pages/Agents.tsx
+index e8edddd3e..eb1be8f0f 100644
+--- a/ui/src/pages/Agents.tsx
++++ b/ui/src/pages/Agents.tsx
+@@ -396,13 +396,13 @@ export function Agents({ initialView = "list" }: { initialView?: AgentsView } =
+         to={agentUrl(agent)}
+         className={cn(
+           "group py-3",
+-          agent.pausedAt && tab !== "paused" ? "opacity-50" : "",
+           resourceMembershipState(membershipsQuery.data, "agent", agent.id) === "left" ? "sm:text-foreground/55" : "",
+         )}
+         leading={hasInvalidOrgChain ? (
+           <AlertTriangle className="h-3.5 w-3.5 text-amber-500" aria-label="Chaîne hiérarchique invalide" />
+         ) : (
+-          <AgentAvatar agent={agent} size={32} />
++          // En pause : seul l'avatar s'estompe ; le nom et la pastille d'état gardent leur contraste.
++          <AgentAvatar agent={agent} size={32} className={agent.pausedAt && tab !== "paused" ? "opacity-50" : undefined} />
+         )}
+         secondaryRow={builtInCluster && (
+           <div className="@5xl:hidden flex flex-wrap items-center gap-1.5">
+@@ -631,14 +631,13 @@ function OrgTreeNode({
+         to={agent ? agentUrl(agent) : `/agents/${node.id}`}
+         className={cn(
+           "group flex items-center gap-3 rounded-lg px-3 py-2 hover:bg-accent/50 transition-colors w-full text-left no-underline text-inherit",
+-          agent?.pausedAt && tab !== "paused" && "opacity-50",
+           membershipState === "left" && "sm:text-foreground/55",
+         )}
+       >
+         {hasInvalidOrgChain ? (
+           <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-amber-500" aria-label="Chaîne hiérarchique invalide" />
+         ) : (
+-          <AgentAvatar agent={agent ?? node} size={24} />
++          <AgentAvatar agent={agent ?? node} size={24} className={agent?.pausedAt && tab !== "paused" ? "opacity-50" : undefined} />
+         )}
+         <div className="flex-1 min-w-0 flex flex-wrap items-center gap-2">
+           {/* Name floor + `truncate` keeps the primary identifier readable; the
+@@ -792,7 +791,7 @@ function AgentMetaColumns({
+         >
+           {model ?? "—"}
+         </div>
+-        <div className="truncate font-mono text-(length:--text-micro) text-muted-foreground/70" title={adapterLabel}>
++        <div className="truncate font-mono text-(length:--text-micro) text-muted-foreground" title={adapterLabel}>
+           {adapterLabel}
+         </div>
+       </div>
+@@ -801,7 +800,7 @@ function AgentMetaColumns({
+           <div className="truncate text-xs text-muted-foreground" title={environment.title}>
+             {environment.label}
+           </div>
+-          <div className="truncate text-(length:--text-micro) text-muted-foreground/70">
++          <div className="truncate text-(length:--text-micro) text-muted-foreground">
+             {environment.detail}
+           </div>
+         </div>
+-- 
+2.53.0
+

@@ -3,20 +3,21 @@
 Version 1.2, 15/10/2026. Socle : Paperclip `v2026.1012.0`. Contrats du moteur : `docs/contrats.md`
 (lot A). Ce guide décrit ce qui est construit et vérifié ; les limites sont listées au §9.
 
+Le présent guide décrit les 14 agents du service marketing. Les 199 agents des 27 autres services (dont le coordinateur général, rôle `ceo`, dans la Direction), la matrice des échanges et le réseau des coordinateurs sont dans `docs/usine-services.md`.
+
 ## 1. Où se trouve quoi
 
 | chemin | rôle | modifié à la main |
 | --- | --- | --- |
-| `organisation/registre/agents.json` | **source canonique** des dix agents (champs du cahier §4) | oui |
+| `organisation/registre/agents.json` | **source canonique** des quatorze agents marketing (champs du cahier §4) | oui |
 | `organisation/registre/organisation.json` | entreprise, marqueur de périmètre, objectifs, projets, routines | oui |
 | `organisation/agents/<slug>/AGENTS.md` | instructions de chaque agent (corps) ; en-tête généré | corps seulement |
-| `organisation/skills/<slug>/SKILL.md` (+ `references/`) | les 16 compétences, format Agent Skills | oui |
+| `organisation/skills/<slug>/SKILL.md` (+ `references/`) | les compétences (toutes celles de l'usine, 184 au total), format Agent Skills | oui |
 | `organisation/projects/**/PROJECT.md`, `TASK.md` | projets et routines récurrentes | oui |
 | `organisation/COMPANY.md` | entreprise (corps) ; en-tête généré | corps seulement |
 | `organisation/.paperclip.yaml` | extension Paperclip : adaptateur, budgets, métadonnées, routines | **généré** |
 | `organisation/company-package.lock.json` | empreinte sha256 de chaque compétence (verrou facultatif, spécification AgentCompanies §18) | **généré** |
 | `organisation/politiques/*.json` | gabarits de politiques d'exécution (revues puis approbation humaine) | oui |
-| `organisation/demo/` | corpus fictif (marque, offres, établissements, brief, sources, page piégée) | oui |
 | `scripts/bootstrap-organisation.py` | génération, application idempotente, état, export, remise à zéro, jeton, test réel (bibliothèque standard ; PyYAML, paquet Ubuntu `python3-yaml`, pour `exporter` seulement) | |
 | `scripts/verifier-organisation.py` | validation hors ligne du modèle (et d'un export) ; utilise PyYAML | |
 | `scripts/bootstrap-tests.sh` | tests du lot B (format, cas négatifs, idempotence, export, aller-retour) | |
@@ -31,22 +32,26 @@ python3 -I scripts/bootstrap-organisation.py generer
 python3 -I scripts/verifier-organisation.py
 ```
 
-## 2. Les dix agents
+## 2. Les quatorze agents marketing
 
 | agent (slug) | titre | rôle Paperclip | rend compte à | compétences (obligatoires en gras) | modèle, effort | budget mensuel (centimes) | tours max |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| `coordinateur` | Coordinateur marketing | cmo | humain responsable | **cadrage-exigences**, planification-livrables, **dossier-validation-humaine** | claude-opus-5-5, high | 3 000 | 60 |
-| `veille` | Marché et veille concurrentielle | researcher | Coordinateur | **recherche-sourcee**, analyse-concurrentielle | claude-sonnet-5-5, medium | 1 500 | 60 |
-| `seo-local-geo` | Référencement naturel, local et GEO | general | Coordinateur | audit-seo, **audit-local-etablissements**, contenu-recherche-ia, recherche-sourcee | claude-sonnet-5-5, medium | 1 500 | 60 |
-| `sea` | Publicité et SEA | general | Coordinateur | **preparation-campagnes-sea**, charte-marque | claude-sonnet-5-5, medium | 1 500 | 60 |
-| `contenus` | Contenus et création | designer | Coordinateur | redaction-declinaison-canal, **charte-marque**, contenu-recherche-ia | claude-sonnet-5-5, medium | 1 500 | 60 |
-| `crm-conversion` | CRM et conversion | general | Coordinateur | **conversion-crm**, charte-marque | claude-sonnet-5-5, medium | 1 500 | 60 |
-| `mesure` | Mesure et optimisation | researcher | Coordinateur | **mesure-experiences** | claude-sonnet-5-5, medium | 1 000 | 40 |
-| `exigences` | Contrôleur des exigences | qa | humain responsable | **controle-couverture** | claude-opus-5-5, high | 2 000 | 40 |
-| `relecteur` | Relecteur métier et factuel | qa | humain responsable | **relecture-independante**, recherche-sourcee, charte-marque | claude-opus-5-5, high | 2 000 | 40 |
-| `tests-techniques` | Vérificateur technique | qa | humain responsable | **controles-techniques-liens** | claude-sonnet-5-5, medium | 1 000 | 40 |
+| `coordinateur` | Coordinateur marketing | ceo | humain responsable | **cadrage-exigences**, planification-livrables, **dossier-validation-humaine**, recherche-connaissances, protocole-inter-coordinateurs, plan-campagne | claude-opus-5-5, high | 3 000 | 60 |
+| `veille` | Pôle Intelligence · Marché et veille concurrentielle | researcher | Coordinateur | **recherche-sourcee**, analyse-concurrentielle | claude-sonnet-5-5, medium | 1 500 | 60 |
+| `prospection` | Pôle Intelligence · Recherche et qualification de prospects | researcher | Coordinateur | **recherche-prospects**, **qualification-prospects**, recherche-sourcee | claude-sonnet-5-5, medium | 1 500 | 90 |
+| `seo-local-geo` | Pôle Production · Référencement naturel, local et GEO | general | Coordinateur | audit-seo, **audit-local-etablissements**, contenu-recherche-ia, recherche-sourcee, recherche-connaissances | claude-sonnet-5-5, medium | 1 500 | 60 |
+| `sea` | Pôle Production · Publicité et SEA | general | Coordinateur | **preparation-campagnes-sea**, charte-marque, recherche-connaissances | claude-sonnet-5-5, medium | 1 500 | 90 |
+| `contenus` | Pôle Production · Contenus et création | designer | Coordinateur | redaction-declinaison-canal, **charte-marque**, contenu-recherche-ia, recherche-connaissances | claude-sonnet-5-5, medium | 1 500 | 60 |
+| `crm-conversion` | Pôle Production · CRM et conversion | general | Coordinateur | **conversion-crm**, charte-marque, recherche-connaissances | claude-sonnet-5-5, medium | 1 500 | 60 |
+| `mesure` | Pôle Intelligence · Mesure et optimisation | researcher | Coordinateur | **mesure-experiences** | claude-sonnet-5-5, medium | 1 000 | 40 |
+| `reseaux-sociaux` | Pôle Contenus · Calendrier social, posts et réponses publiques | designer | Coordinateur | **calendrier-reseaux-sociaux**, **charte-marque**, redaction-declinaison-canal | claude-sonnet-5-5, medium | 1 500 | 60 |
+| `conformite-publicitaire` | Pôle Contrôle préalable · Communications commerciales réglementées | general | Coordinateur | **controle-communications-reglementees**, charte-marque | claude-sonnet-5-5, medium | 1 000 | 40 |
+| `exigences` | Contrôleur des exigences | qa | Relecteur | **controle-couverture** | claude-opus-5-5, high | 2 000 | 40 |
+| `relecteur` | Responsable qualité | qa | humain responsable | **relecture-independante**, recherche-sourcee, charte-marque | claude-opus-5-5, high | 2 000 | 40 |
+| `tests-techniques` | Vérificateur technique | qa | Relecteur | **controles-techniques-liens** | claude-sonnet-5-5, medium | 1 000 | 40 |
+| `porte` | Porte de contrôle | qa | Relecteur | aucune | aucun (déterministe) | 100 | 1 |
 
-**Onzième agent, déterministe : `porte` (Porte de contrôle, ajouté le 15/10/2026).** Rôle `qa`,
+**Agent déterministe : `porte` (Porte de contrôle, ajoutée le 15/10/2026).** Rôle `qa`,
 rend compte à l'humain responsable, aucune compétence, aucun modèle, budget 100 centimes (aucun
 coût réel). Adaptateur natif `process` dans les deux modes (`node demo/agent-demo.mjs porte`,
 `cwd` = dossier du plugin posé par la liaison locale). Il tient l'unique étape native de revue
@@ -148,26 +153,33 @@ réelle serait `networkScope: "allowlist"` (moteur CLI et Bubblewrap), non activ
 testée. Une compétence n'ajoute aucune permission : le vérificateur refuse
 `allowed-tools` dans un `SKILL.md`.
 
-## 5. Les seize compétences
+## 5. Les vingt-trois compétences du marketing
 
 | compétence | objet | agents |
 | --- | --- | --- |
 | `cadrage-exigences` | brief, exigences REQ-xxx, informations manquantes | coordinateur |
 | `planification-livrables` | graphe de tâches sans cycle, relectures prévues | coordinateur |
-| `recherche-sourcee` | sources datées, statut d'accès, fait, inférence, hypothèse | veille, seo-local-geo, relecteur |
+| `dossier-validation-humaine` | dossier et approbation bornée à une version | coordinateur |
+| `recherche-connaissances` | interroge les connaissances du client | coordinateur, seo-local-geo, sea, contenus, crm-conversion |
+| `protocole-inter-coordinateurs` | protocole commun des coordinateurs de l'atelier pour se parler entre services du même client par le bureau de liaison | coordinateur |
+| `plan-campagne` | rédige le brief d'une campagne marketing en dix rubriques | coordinateur |
+| `recherche-sourcee` | sources datées, statut d'accès, fait, inférence, hypothèse | veille, prospection, seo-local-geo, relecteur |
 | `analyse-concurrentielle` | grille identique par concurrent, recommandations séparées | veille |
+| `recherche-prospects` | cherche des prospects B2B par secteur NACE et zone | prospection |
+| `qualification-prospects` | qualifie les prospects déposés | prospection |
 | `audit-seo` | indexabilité, structure, contenu, maillage | seo-local-geo |
 | `audit-local-etablissements` | une ligne par établissement du périmètre confirmé | seo-local-geo |
 | `contenu-recherche-ia` | contenu utile pour la recherche et les moteurs d'IA, sans promesse | seo-local-geo, contenus |
 | `preparation-campagnes-sea` | campagne en brouillon, budget borné, rien d'activé | sea |
-| `redaction-declinaison-canal` | contenu principal et déclinaisons, briefs de visuels, appel de publication à faire approuver (1.3.0) | contenus |
-| `charte-marque` | ton, vocabulaire, affirmations autorisées | sea, contenus, crm-conversion, relecteur |
+| `charte-marque` | ton, vocabulaire, affirmations autorisées | sea, contenus, crm-conversion, reseaux-sociaux, conformite-publicitaire, relecteur |
+| `redaction-declinaison-canal` | contenu principal et déclinaisons, briefs de visuels, appel de publication à faire approuver (1.3.0) | contenus, reseaux-sociaux |
 | `conversion-crm` | page, formulaire, scénarios avec consentement | crm-conversion |
 | `mesure-experiences` | données datées, « non mesurable », expériences bornées | mesure |
+| `calendrier-reseaux-sociaux` | construit la ligne et le calendrier social organique d'une PME belge (LinkedIn, Facebook, Instagram) | reseaux-sociaux |
+| `controle-communications-reglementees` | relit une communication commerciale | conformite-publicitaire |
 | `controle-couverture` | verdict par exigence avec preuve localisée | exigences |
 | `relecture-independante` | faits, sources, cohérence, injection | relecteur |
 | `controles-techniques-liens` | liens, contenu réel, formulaires, schémas | tests-techniques |
-| `dossier-validation-humaine` | dossier et approbation bornée à une version | coordinateur |
 
 Format vérifié par `scripts/verifier-organisation.py` :
 
@@ -279,8 +291,8 @@ humaine (`POST /agents/:id/resume`).
 
 **Plus de mode démonstration.** `appliquer` n'accepte que le mode `reel` (`--mode reel`, ou sans option) ;
 `--reel` est accepté sans effet, avec un avertissement. Un connecteur non branché est « non connecté ». Les
-anciens scripts de démonstration (`scripts/demonstration.sh`, `scripts/demo/`, `organisation/demo/`) restent
-en place en attente de retrait ; l'agent automatique « porte » lance encore `demo/agent-demo.mjs`.
+anciens scripts de démonstration (`scripts/demonstration.sh`, `scripts/demo/`, `organisation/demo/`) ont été retirés
+du dépôt le 16/10/2026 ; l'agent automatique « porte » lance encore `demo/agent-demo.mjs` (dans `plugin-atelier/`).
 
 ## 8. Bootstrap, remise à zéro, export
 

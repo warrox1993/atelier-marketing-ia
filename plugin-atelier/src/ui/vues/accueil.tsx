@@ -90,16 +90,15 @@ export function VueAccueil() {
         {confirmation ? (
           <MessageFait className="atl-succes atl-afaire-confirmation" texte={confirmation} />
         ) : null}
-        {etat.data ? (
-          <ApprobationGroupee
-            elements={etat.data.elements.filter((e) => e.type === "contenu_a_valider" && e.issueId && !traites.has(e.id)).map((e) => ({ issueId: e.issueId as string, titre: e.titre }))}
-            onFait={(ids) => {
-              const elementsTraites = (etat.data?.elements ?? []).filter((e) => e.issueId && ids.includes(e.issueId) && e.type === "contenu_a_valider");
-              setTraites((t) => new Set([...t, ...elementsTraites.map((e) => e.id)]));
-              recharger();
-            }}
-          />
-        ) : null}
+        {/* Toujours monté : le bilan de l'approbation groupée reste affiché jusqu'à « Fermer », même si la liste se vide ou se recharge en erreur. */}
+        <ApprobationGroupee
+          elements={(etat.data?.elements ?? []).filter((e) => e.type === "contenu_a_valider" && e.issueId && !traites.has(e.id)).map((e) => ({ issueId: e.issueId as string, titre: e.titre }))}
+          onFait={(ids) => {
+            const elementsTraites = (etat.data?.elements ?? []).filter((e) => e.issueId && ids.includes(e.issueId) && e.type === "contenu_a_valider");
+            setTraites((t) => new Set([...t, ...elementsTraites.map((e) => e.id)]));
+            recharger();
+          }}
+        />
         {etat.data ? <AFaire elements={etat.data.elements.filter((e) => !traites.has(e.id))} onFait={surTraite} /> : null}
       </Section>
       <Section titre="Missions en cours" id="accueil-missions">
@@ -241,7 +240,7 @@ function DemanderAEquipe({ companyId, onEnvoyee, modeleExterne }: { companyId: s
         <div className="atl-demande-modeles">
           <span className="atl-demande-aide">Modèles de demande</span>
           {MODELES_DEMANDE.map((m) => (
-            <Bouton key={m.libelle} variante="discret" onClick={() => appliquerModele(m.texte)}>
+            <Bouton key={m.libelle} variante="secondaire" onClick={() => appliquerModele(m.texte)}>
               {m.libelle}
             </Bouton>
           ))}

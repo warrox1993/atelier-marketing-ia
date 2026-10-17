@@ -185,6 +185,33 @@ describe("paramètres : coûts IA = budgets natifs de Paperclip, un seul tableau
     expect(champBudget(c, "Veille").value).toBe("40");
   });
 
+  it("budget écrit mais trace en échec : message exact, et seule la trace est retentée", async () => {
+    const appels = simulerHote([{ id: AGENT, name: "Contenus", budgetMonthlyCents: 1500 }]);
+    let essais = 0;
+    pont.actions["atelier.budget-ia.tracer"] = async () => {
+      essais += 1;
+      if (essais === 1) throw { code: "WORKER_ERROR", message: "[indisponible] Journal fermé." };
+      return {};
+    };
+    const c = await page("/RNO/atelier/parametres");
+    await vi.waitFor(() => expect(c.textContent).toContain("Contenus"));
+    await saisir(champBudget(c, "Contenus"), "30");
+    await cliquer(parTexte(c, "button", "Enregistrer les budgets (1 modifié)"));
+    await vi.waitFor(() => expect(c.textContent).toContain("trace non écrite : réessayer la trace"));
+    expect(c.textContent).not.toContain("non enregistré");
+    expect(ligneTableau(c, "Contenus").textContent).toContain("enregistré, trace non écrite : réessayer la trace");
+    expect(appels.filter((a) => a.methode === "PATCH")).toHaveLength(1);
+    await cliquer(parTexte(c, "button", "Réessayer la trace"));
+    expect(essais).toBe(2);
+    expect(appels.filter((a) => a.methode === "PATCH")).toHaveLength(1);
+    expect(pont.appelsActions.filter((a) => a.cle === "atelier.budget-ia.tracer").map((a) => a.params)).toEqual([
+      { portee: "agent", agentId: AGENT, avantCents: 1500 },
+      { portee: "agent", agentId: AGENT, avantCents: 1500 },
+    ]);
+    expect(c.textContent).toContain("Trace écrite");
+    expect(c.textContent).not.toContain("trace non écrite");
+  });
+
   it("un montant invalide bloque l'enregistrement avec la raison sur la ligne", async () => {
     simulerHote([{ id: AGENT, name: "Contenus", budgetMonthlyCents: 1500 }]);
     const c = await page("/RNO/atelier/parametres");

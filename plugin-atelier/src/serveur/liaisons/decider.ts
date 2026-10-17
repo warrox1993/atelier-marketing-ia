@@ -13,6 +13,7 @@ import { DeciderLiaisonEntree, type CleRouteApi } from "../../contrats/index.js"
 import type { ActeurHote, GestionnaireRoute } from "../atelier.js";
 import { erreur, erreurValidation } from "../erreurs.js";
 import { enPublic } from "./demander.js";
+import { cloturerCibleSupprimee } from "./cible-supprimee.js";
 import { notifierSource } from "./retour.js";
 import type { DependancesLiaisons } from "./transmission.js";
 
@@ -33,6 +34,12 @@ export function routeDecider(d: DependancesLiaisons): Partial<Record<CleRouteApi
     const l = await stock.lireParId(r.companyId, e.liaisonId);
     if (!l) erreur("hors_entreprise", "Liaison introuvable dans cette entreprise.");
     const liaison = l!;
+
+    // Cible supprimée : rien ne peut plus partir ; la liaison est clôturée (et non laissée en attente), la source informée une fois.
+    if (e.decision === "approuver" && liaison.entrepriseCible === null && (liaison.statut === "en_attente_approbation" || liaison.statut === "ouverte")) {
+      await cloturerCibleSupprimee({ ctx, base, stock }, liaison, r.acteur.id);
+      erreur("liaison_refusee", "Le service cible n'existe plus (entreprise supprimée) : la liaison est clôturée, la demande ne peut pas être transmise.", { garde: "cible_supprimee" });
+    }
 
     if (e.decision === "approuver") {
       if (liaison.statut === "en_attente_approbation") {

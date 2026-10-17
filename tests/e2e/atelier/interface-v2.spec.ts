@@ -190,7 +190,8 @@ for (const f of FORMATS) {
       for (const nom of ["Accueil", "Discussion", "Prospects", "Marketing", "Réglages"]) {
         await expect(dedans.getByRole("link", { name: new RegExp(`^${nom}`, "u") })).toBeVisible();
       }
-      expect(await dedans.getByRole("link").count(), "cinq rubriques exactement").toBe(5);
+      // Sur ordinateur, le menu porte en plus le lien de sortie « Menu principal » (classe atl-nav-sortie), qui n'est pas une rubrique.
+      expect(await dedans.locator("a:not(.atl-nav-sortie)").count(), "cinq rubriques exactement").toBe(5);
 
       // Bandeau d'entreprise visible, avec le nom complet.
       await expect(page.locator(".atl-bandeau-entreprise")).toContainText(NOM_ENTREPRISE);
@@ -198,8 +199,8 @@ for (const f of FORMATS) {
 
       const parcours: Array<[string, string, string[]]> = [
         ["Prospects", "Prospects : sections", ["Liste", "Carte"]],
-        ["Marketing", "Marketing : sections", ["Campagnes", "Contenus", "Calendrier", "Résultats", "Équipe"]],
-        ["Réglages", "Réglages : sections", ["Mise en place", "Marque et sources", "Connaissances", "Passage au réel", "Paramètres", "Corbeille"]],
+        ["Marketing", "Marketing : sections", ["Campagnes", "Contenus", "Calendrier", "Résultats", "Équipe", "Rapport du mois"]],
+        ["Réglages", "Réglages : sections", ["Mise en place", "Marque et sources", "Connaissances", "Connexions", "Paramètres", "Corbeille"]],
       ];
       for (const [rubrique, etiquette, onglets] of parcours) {
         await dedans.getByRole("link", { name: new RegExp(`^${rubrique}`, "u") }).click();
@@ -212,16 +213,21 @@ for (const f of FORMATS) {
         await expect(page.locator("[aria-busy='true']")).toHaveCount(0, { timeout: 30_000 });
         await capturer(page, `${f.nom}-5-${rubrique.toLowerCase()}`);
 
-        // Clavier : flèche droite active l'onglet suivant, Fin le dernier, Début le premier, flèche gauche boucle.
+        // Clavier (activation manuelle, motif ARIA des onglets) : les flèches, Fin et Début DÉPLACENT LE FOCUS sans changer
+        // l'onglet affiché ; seuls Entrée, Espace ou un clic l'activent. La flèche gauche boucle.
+        const focalise = liste.locator("[role='tab']:focus");
         await liste.getByRole("tab", { selected: true }).focus();
         await page.keyboard.press("ArrowRight");
-        await expect(liste.getByRole("tab", { selected: true })).toHaveText(onglets[1]!);
-        await expect(liste.getByRole("tab", { selected: true })).toBeFocused();
-        await page.keyboard.press("End");
-        await expect(liste.getByRole("tab", { selected: true })).toHaveText(onglets[onglets.length - 1]!);
-        await page.keyboard.press("Home");
+        await expect(focalise).toHaveText(onglets[1]!);
         await expect(liste.getByRole("tab", { selected: true })).toHaveText(onglets[0]!);
+        await page.keyboard.press("End");
+        await expect(focalise).toHaveText(onglets[onglets.length - 1]!);
+        await page.keyboard.press("Home");
+        await expect(focalise).toHaveText(onglets[0]!);
         await page.keyboard.press("ArrowLeft");
+        await expect(focalise).toHaveText(onglets[onglets.length - 1]!);
+        await expect(liste.getByRole("tab", { selected: true })).toHaveText(onglets[0]!);
+        await page.keyboard.press("Enter");
         await expect(liste.getByRole("tab", { selected: true })).toHaveText(onglets[onglets.length - 1]!);
         // Un seul onglet dans l'ordre de tabulation (tabindex itinérant).
         await expect(liste.locator("[role='tab'][tabindex='0']")).toHaveCount(1);
@@ -240,7 +246,7 @@ for (const f of FORMATS) {
       const cas: Array<[string, string, string]> = [
         ["/carte", "Prospects : sections", "Carte"],
         ["/prospects", "Prospects : sections", "Liste"],
-        ["/parametres#param-reel", "Réglages : sections", "Passage au réel"],
+        ["/parametres#param-reel", "Réglages : sections", "Connexions"],
         ["/parametres", "Réglages : sections", "Paramètres"],
         ["/marque", "Réglages : sections", "Marque et sources"],
         ["/corbeille", "Réglages : sections", "Corbeille"],

@@ -1,0 +1,26 @@
+fiche;nom;courriel;activite;notes_de_conversation
+F-01;Visiteur 01;v01@exemple.invalid;consultant;
+F-02;Visiteur 02;v02@exemple.invalid;artisan;Veut un devis RC pro avant fin novembre
+F-03;Visiteur 03;v03@exemple.invalid;médecin;
+F-04;Visiteur 04;v04@exemple.invalid;commerçant;
+F-05;Visiteur 05;v05@exemple.invalid;restaurateur;Attend un rappel de son comptable
+F-06;Visiteur 06;v06@exemple.invalid;consultant;
+F-07;Visiteur 07;v07@exemple.invalid;artisan;
+F-08;Visiteur 08;v08@exemple.invalid;médecin;Déjà client chez un concurrent, content
+F-09;Visiteur 09;v09@exemple.invalid;commerçant;
+F-10;Visiteur 10;v10@exemple.invalid;restaurateur;
+F-11;Visiteur 11;v11@exemple.invalid;consultant;Souhaite une démonstration du portail
+F-12;Visiteur 12;v12@exemple.invalid;artisan;
+F-13;Visiteur 13;v13@exemple.invalid;médecin;
+F-14;Visiteur 14;v14@exemple.invalid;commerçant;Ne veut plus être contacté par téléphone
+F-15;Visiteur 15;v15@exemple.invalid;restaurateur;
+F-16;Visiteur 16;v16@exemple.invalid;consultant;
+F-17;Visiteur 17;v17@exemple.invalid;artisan;Recherche une assurance flotte, 12 véhicules
+F-18;Visiteur 18;v18@exemple.invalid;médecin;
+F-19;Visiteur 19;v19@exemple.invalid;commerçant;
+F-20;Visiteur 20;v20@exemple.invalid;restaurateur;Parle néerlandais, préfère un courriel dans cette langue
+F-21;Visiteur 21;v21@exemple.invalid;consultant;
+F-22;Visiteur 22;v22@exemple.invalid;artisan;
+F-23;Visiteur 23;v23@exemple.invalid;médecin;A demandé la brochure uniquement
+F-24;Visiteur 24;v24@exemple.invalid;commerçant;
+F-25;Visiteur 25;v25@exemple.invalid;restaurateur;
