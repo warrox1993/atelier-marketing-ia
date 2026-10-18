@@ -1,16 +1,14 @@
 // @vitest-environment jsdom
 /**
- * Vue « Organigramme » dessinée, interface : entrée de menu, agents lus par service avec le companyId de SON service, plan
- * reportsTo, zoom et déplacement, filtre, lien vers la fiche d'un agent, service choisi avec voisins
- * surlignés et flux listés, états d'erreur. Routes du plugin et API de l'hôte servies par un `fetch` simulé.
+ * Vue « Organigramme », interface : entrée de menu, carte des services (28 nœuds, aucune flèche au repos, aperçu au
+ * survol, flèches et panneau après sélection, Échap), recherche d'un agent ou d'un service, onglet matrice, vue d'un
+ * service, ancre et retour, téléphone, états d'erreur. Routes du plugin et API de l'hôte servies par un `fetch` simulé.
  */
 import { createElement } from "react";
 import { act } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { DepartementDeclare, FluxServiceLu } from "../../src/contrats/departements.js";
 import { EntreeAtelier, PageAtelier } from "../../src/ui/index.js";
-import { STYLES_ORGANIGRAMME } from "../../src/ui/styles-organigramme.js";
-import { disposerOrganigramme, transformationAjustee } from "../../src/ui/organigramme-disposition.js";
 import { oublierDepartements } from "../../src/ui/departements-sonde.js";
 import { oublierAccesDirection } from "../../src/ui/vues/echanges.js";
 import { cliquer, ENTREPRISE, installerPont, parTexte, rendre, saisir, type Rendu } from "./pont.js";
@@ -42,6 +40,7 @@ let appels: string[] = [];
 let serveur: (url: string) => { statut: number; corps: unknown };
 
 beforeEach(() => {
+  window.location.hash = "";
   oublierDepartements();
   oublierAccesDirection();
   appels = [];
@@ -56,18 +55,21 @@ beforeEach(() => {
   );
 });
 afterEach(() => {
+  window.location.hash = "";
   rendu?.demonter();
   rendu = null;
   vi.unstubAllGlobals();
 });
 
-const servir = (o: { departements?: DepartementDeclare[]; flux?: FluxServiceLu[] | "panne"; agentsParService?: Record<string, unknown[] | "panne">; entreprises?: unknown[] } = {}) => (url: string) => {
+const servir = (o: { departements?: DepartementDeclare[]; flux?: FluxServiceLu[] | "panne"; agentsParService?: Record<string, unknown[] | "panne">; entreprises?: unknown[]; aTraiter?: Record<string, number> } = {}) => (url: string) => {
   const parService = o.agentsParService ?? AGENTS;
   const m = /\/api\/companies\/([^/?]+)\/agents/u.exec(url);
   if (m) {
     const a = parService[decodeURIComponent(m[1]!)];
     return a === "panne" || a === undefined ? { statut: 500, corps: { error: "hôte injoignable" } } : { statut: 200, corps: a };
   }
+  const e = /\/departements\/etat\?companyId=([^&]+)/u.exec(url);
+  if (e) return { statut: 200, corps: { validations: { total: o.aTraiter?.[decodeURIComponent(e[1]!)] ?? 0 }, taches: { bloquees: 0, enCours: 0 }, alertes: [] } };
   if (url.includes("/services/flux?companyId=")) return o.flux === "panne" ? { statut: 500, corps: { error: "flux en panne" } } : { statut: 200, corps: { client: "fictive-sa", flux: o.flux ?? FLUX } };
   if (url.includes("/departements?companyId=")) return { statut: 200, corps: { client: "fictive-sa", departements: o.departements ?? TROIS } };
   if (url.endsWith("/api/companies")) return { statut: 200, corps: o.entreprises ?? ENTREPRISES };
@@ -75,39 +77,45 @@ const servir = (o: { departements?: DepartementDeclare[]; flux?: FluxServiceLu[]
 };
 
 const laisser = async (n = 6) => {
-  for (let i = 0; i < n; i += 1) await cliquer(document.body);
+  for (let i = 0; i < n; i += 1) {
+    await cliquer(document.body);
+    // Laisse passer une tâche : jsdom signale `hashchange` de façon asynchrone.
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 0));
+    });
+  }
 };
+
 const ouvrir = async () => {
   const pont = installerPont("/RNO/atelier/organigramme");
   rendu = await rendre(createElement(PageAtelier, { context: contexte }));
   await laisser();
   return { c: rendu.conteneur, pont };
 };
-const carte = (c: HTMLElement, nom: string) => {
-  const trouvee = Array.from(c.querySelectorAll<HTMLElement>(".atl-org-service")).find((e) => e.querySelector(".atl-org-nom")?.textContent === nom);
-  if (!trouvee) throw new Error(`Service introuvable : ${nom}`);
-  return trouvee;
-};
+
 const textes = (e: ParentNode, s: string) => Array.from(e.querySelectorAll(s)).map((x) => x.textContent);
-/** Échelle et translation du plan, lues sur sa transformation CSS. */
-const vueActuelle = (c: HTMLElement) => {
-  const m = /translate\((-?[\d.]+)px, (-?[\d.]+)px\) scale\(([\d.]+)\)/u.exec(c.querySelector<HTMLElement>(".atl-org-plan")!.style.transform);
-  if (!m) throw new Error("Pas de transformation sur le plan");
-  return { x: Number(m[1]), y: Number(m[2]), echelle: Number(m[3]) };
+const noeud = (c: ParentNode, nom: string) => {
+  const trouve = Array.from(c.querySelectorAll<HTMLElement>(".atl-car-noeud")).find((e) => e.querySelector(".atl-car-nom")?.textContent === nom);
+  if (!trouve) throw new Error(`Nœud introuvable : ${nom}`);
+  return trouve;
 };
-const bouton = (c: HTMLElement, libelle: string) => c.querySelector<HTMLElement>(`button[aria-label="${libelle}"]`)!;
-const pointeur = async (el: Element, type: string, x: number, y: number) => {
-  await act(async () => {
-    const e = new MouseEvent(type, { bubbles: true, cancelable: true, clientX: x, clientY: y, button: 0 });
-    Object.defineProperty(e, "pointerId", { value: 1 });
-    el.dispatchEvent(e);
-  });
-};
-const toucheClavier = async (el: Element, key: string) => {
+const touche = async (el: Element, key: string) => {
   await act(async () => {
     el.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true }));
   });
 };
+const doubleClic = async (el: Element) => {
+  await act(async () => {
+    el.dispatchEvent(new MouseEvent("dblclick", { bubbles: true, cancelable: true }));
+  });
+};
+const focaliser = async (el: HTMLElement) => {
+  await act(async () => {
+    el.focus();
+  });
+};
+const onglet = (c: ParentNode, libelle: string) => parTexte(c, '[role="tab"]', libelle);
+
 /** Jeu réel en miniature : 28 services, 218 agents dont un coordinateur (rôle ceo) par service. */
 function grandJeu() {
   const ids = Array.from({ length: 28 }, (_, i) => `00000000-0000-4000-8000-${String(i + 1).padStart(12, "0")}`);
@@ -126,6 +134,7 @@ function grandJeu() {
   });
   return { departements, entreprises, agentsParService, ids };
 }
+
 
 describe("entrée de menu", () => {
   it("lien « Organigramme » sous « Départements » pour un client à plusieurs services", async () => {
@@ -146,241 +155,288 @@ describe("entrée de menu", () => {
   });
 });
 
-describe("vue « Organigramme »", () => {
-  it("lit les agents de chaque service avec le companyId de SON service et dessine le général, une carte par service et un trait vers chacune", async () => {
-    serveur = servir();
+
+describe("carte des services", () => {
+  it("lit les agents de chaque service avec le companyId de SON service et dessine le général, un nœud par service et un trait fin vers chacun", async () => {
+    serveur = servir({ aTraiter: { [JUR]: 2 } });
     const { c } = await ouvrir();
     const lus = appels.filter((u) => /\/agents/u.test(u)).map((u) => /companies\/([^/]+)\/agents/u.exec(u)![1]).sort();
     expect(lus).toEqual([DIR, JUR, ENTREPRISE].sort());
-    expect(textes(c, ".atl-org-service .atl-org-nom")).toEqual(["Direction", "Juridique", "Marketing"]);
-    expect(carte(c, "Juridique").querySelector(".atl-org-compteur")?.textContent).toBe("3 agents");
-    expect(carte(c, "Juridique").querySelector(".atl-org-coord")?.textContent).toContain("Coordinateur juridique");
-    expect(c.querySelector(".atl-org-carte-general")?.textContent).toContain("Coordinateur général");
-    expect(c.querySelector("svg.atl-org-traits path")?.getAttribute("d")).toMatch(/^M/u);
-    const legende = c.querySelector(".atl-org-legende")?.textContent ?? "";
-    expect(legende).toBe("Chaque service est relié au Coordinateur général par les échanges entre services.");
-    expect(legende).not.toMatch(/Paperclip|entreprises/u);
-    // Longueur de ligne bornée à 75 caractères au plus.
-    expect(Number(/\.atl-org-legende \{[^}]*max-width: (\d+)ch/u.exec(STYLES_ORGANIGRAMME)![1])).toBeLessThanOrEqual(75);
-    // Un cadre par service, derrière les cartes.
-    expect(c.querySelectorAll(".atl-org-cadre")).toHaveLength(3);
+    expect(textes(c, ".atl-car-noeud .atl-car-nom").sort()).toEqual(["Direction", "Juridique", "Marketing"]);
+    expect(noeud(c, "Juridique").querySelector(".atl-car-agents")?.textContent).toBe("3 agents");
+    expect(noeud(c, "Marketing").querySelector(".atl-car-agents")?.textContent).toBe("1 agent");
+    expect(noeud(c, "Juridique").textContent).toContain("À traiter");
+    expect(noeud(c, "Marketing").textContent).not.toContain("À traiter");
+    expect(c.querySelector(".atl-car-general")?.textContent).toContain("Coordinateur général");
+    expect(c.querySelectorAll("line.atl-car-hierarchie")).toHaveLength(3);
+    expect(c.textContent).toContain("Tous les coordinateurs peuvent aussi se parler entre eux et avec le Coordinateur général.");
+    // Aucun agent n'est dessiné sur la carte.
+    expect(c.textContent).not.toContain("Veille légale");
   });
 
-  it("agents empilés sous leur coordinateur avec retrait par niveau, statuts en texte et lien vers la fiche dans le socle", async () => {
-    serveur = servir();
-    const { c, pont } = await ouvrir();
-    const cartes = Array.from(c.querySelectorAll<HTMLElement>(".atl-org-carte-agent"));
-    const de = (nom: string) => cartes.find((k) => k.textContent?.includes(nom))!;
-    const gauche = (k: HTMLElement) => Number.parseFloat(k.style.left);
-    const haut = (k: HTMLElement) => Number.parseFloat(k.style.top);
-    expect(de("Contrats").textContent).toContain("en erreur");
-    expect(gauche(de("Veille légale"))).toBeGreaterThan(gauche(de("Contrats")));
-    expect(haut(de("Veille légale"))).toBeGreaterThan(haut(de("Contrats")));
-    expect(carte(c, "Juridique").textContent).toContain("en pause");
-    await cliquer(parTexte(c, "a.atl-org-agent-lien", "Veille légale"));
-    expect(pont.navigations).toContain("/RNOAC/agents/j3");
-  });
-
-  it("28 services et 218 agents : 28 cartes de coordinateur, 190 cartes d'agents, chacun une seule fois", async () => {
+  it("28 services et 218 agents : 28 nœuds, aucune flèche au repos, pas de chevauchement de position", async () => {
     const jeu = grandJeu();
     serveur = servir({ departements: jeu.departements, entreprises: jeu.entreprises, agentsParService: jeu.agentsParService, flux: [] });
     const { c } = await ouvrir();
     await laisser(12);
-    expect(c.querySelectorAll(".atl-org-carte-service")).toHaveLength(28);
-    const agents = Array.from(c.querySelectorAll<HTMLAnchorElement>(".atl-org-carte-agent a.atl-org-agent-lien"));
-    expect(agents).toHaveLength(190);
-    expect(new Set(agents.map((a) => a.textContent)).size).toBe(190);
-    expect(c.querySelectorAll(".atl-org-coord a")).toHaveLength(28);
-    expect(c.querySelector(".atl-org-carte-general")?.textContent).toContain("Coordinateur général");
-    expect(c.querySelector(".atl-org-vue")?.textContent).toContain("Agent numéro 190");
-    expect(c.querySelector(".atl-org-carte-general")?.textContent).toContain("actif");
+    expect(c.querySelectorAll(".atl-car-noeud")).toHaveLength(28);
+    expect(c.querySelectorAll(".atl-car-fleche")).toHaveLength(0);
+    expect(c.querySelectorAll(".atl-car-apercu")).toHaveLength(0);
+    expect(c.querySelectorAll(".atl-car-carte-agent, .atl-orgs-carte")).toHaveLength(0);
+    const positions = Array.from(c.querySelectorAll<HTMLElement>(".atl-car-noeud")).map((e) => `${e.style.left}|${e.style.top}`);
+    expect(new Set(positions).size).toBe(28);
+    expect(c.querySelector("#atl-org-titre")?.textContent).toContain("Organigramme");
+    expect(c.querySelector("header")?.textContent).toContain("218 agents");
   });
 
-  it("boutons de zoom : plus, moins et ajuster à l'écran, sans redessiner les cartes", async () => {
-    const jeu = grandJeu();
-    serveur = servir({ departements: jeu.departements, entreprises: jeu.entreprises, agentsParService: jeu.agentsParService, flux: [] });
-    const { c } = await ouvrir();
-    await laisser(12);
-    const premiereCarte = c.querySelector(".atl-org-carte-agent")!;
-    // Ouverture lisible (au moins 0,6), pas « tout faire tenir ».
-    const ajustee = vueActuelle(c);
-    expect(ajustee.echelle).toBeGreaterThanOrEqual(0.6);
-    expect(ajustee.echelle).toBeLessThan(1);
-    await cliquer(bouton(c, "Zoom avant"));
-    const avant = vueActuelle(c);
-    expect(avant.echelle).toBeCloseTo(ajustee.echelle * 1.25, 3);
-    await cliquer(bouton(c, "Zoom arrière"));
-    await cliquer(bouton(c, "Zoom arrière"));
-    expect(vueActuelle(c).echelle).toBeLessThan(ajustee.echelle);
-    await cliquer(bouton(c, "Ajuster à l'écran"));
-    const plan = c.querySelector<HTMLElement>(".atl-org-plan")!;
-    const entier = transformationAjustee({ largeur: Number.parseFloat(plan.style.width), hauteur: Number.parseFloat(plan.style.height) }, 1000, 600);
-    expect(vueActuelle(c)).toEqual({ x: entier.x, y: entier.y, echelle: entier.echelle });
-    expect(vueActuelle(c).echelle).toBeLessThan(ajustee.echelle);
-    expect(vueActuelle(c).echelle).toBeGreaterThan(0.1);
-    // Les cartes sont les mêmes éléments du DOM : aucun rendu pendant le zoom.
-    expect(c.querySelector(".atl-org-carte-agent")).toBe(premiereCarte);
-  });
-
-  it("glisser déplace le plan, un clic reste un clic, les flèches déplacent et + / - / 0 zooment", async () => {
+  it("le survol (focus) d'un nœud montre un aperçu léger de ses liaisons métier, sans sélection ni flèche", async () => {
     serveur = servir();
-    const { c, pont } = await ouvrir();
-    const vue = c.querySelector<HTMLElement>(".atl-org-vue")!;
-    const depart = vueActuelle(c);
-    await pointeur(vue, "pointerdown", 100, 100);
-    await pointeur(vue, "pointermove", 160, 130);
-    await pointeur(vue, "pointerup", 160, 130);
-    const apres = vueActuelle(c);
-    expect(apres.x).toBeCloseTo(depart.x + 60, 3);
-    expect(apres.y).toBeCloseTo(depart.y + 30, 3);
-    expect(apres.echelle).toBe(depart.echelle);
-    // Le clic qui suit le glissement n'active pas le lien situé sous le pointeur.
-    await act(async () => {
-      parTexte(c, "a.atl-org-agent-lien", "Veille légale").click();
-    });
-    expect(pont.navigations).not.toContain("/RNOAC/agents/j3");
-    // Un petit mouvement (sous le seuil) ne déplace rien.
-    await new Promise((r) => setTimeout(r, 5));
-    await pointeur(vue, "pointerdown", 10, 10);
-    await pointeur(vue, "pointermove", 12, 11);
-    await pointeur(vue, "pointerup", 12, 11);
-    expect(vueActuelle(c)).toEqual(apres);
-    await toucheClavier(vue, "ArrowLeft");
-    expect(vueActuelle(c).x).toBe(apres.x + 80);
-    await toucheClavier(vue, "ArrowDown");
-    expect(vueActuelle(c).y).toBe(apres.y - 80);
-    const e0 = vueActuelle(c).echelle;
-    await toucheClavier(vue, "+");
-    expect(vueActuelle(c).echelle).toBeGreaterThan(e0);
-    await toucheClavier(vue, "-");
-    expect(vueActuelle(c).echelle).toBeCloseTo(e0, 5);
-    await toucheClavier(vue, "0");
-    const plan = c.querySelector<HTMLElement>(".atl-org-plan")!;
-    const entier = transformationAjustee({ largeur: Number.parseFloat(plan.style.width), hauteur: Number.parseFloat(plan.style.height) }, 1000, 600);
-    expect(vueActuelle(c)).toEqual({ x: entier.x, y: entier.y, echelle: entier.echelle });
-    expect(vue.getAttribute("tabindex")).toBe("0");
-    expect(vue.getAttribute("aria-label")).toContain("Flèches");
+    const { c } = await ouvrir();
+    await focaliser(noeud(c, "Marketing"));
+    expect(c.querySelectorAll(".atl-car-apercu").length).toBeGreaterThan(0);
+    expect(c.querySelectorAll(".atl-car-fleche")).toHaveLength(0);
+    expect(noeud(c, "Marketing").getAttribute("aria-pressed")).toBe("false");
+    await act(async () => noeud(c, "Marketing").blur());
+    expect(c.querySelectorAll(".atl-car-apercu")).toHaveLength(0);
   });
 
-  it("sur téléphone (640 px et moins) : liste accordéon à la place de la toile, avec cibles de 44 px", async () => {
-    const ancien = window.matchMedia;
-    window.matchMedia = ((q: string) => ({ matches: q.includes("640"), media: q, addEventListener: () => undefined, removeEventListener: () => undefined })) as never;
-    try {
-      serveur = servir();
-      const { c, pont } = await ouvrir();
-      expect(c.querySelector(".atl-org-vue")).toBeNull();
-      const liste = c.querySelector<HTMLElement>('[data-testid="organigramme-liste"]')!;
-      expect(liste).not.toBeNull();
-      expect(liste.querySelector(".atl-orgl-general")?.textContent).toContain("Coordinateur général");
-      const blocs = Array.from(liste.querySelectorAll<HTMLElement>("details.atl-orgl-service"));
-      expect(blocs.map((b) => b.querySelector(".atl-orgl-nom")?.textContent)).toEqual(["Direction", "Juridique", "Marketing"]);
-      const juridique = blocs[1]!;
-      expect(juridique.textContent).toContain("Coordinateur juridique");
-      // Retrait de reportsTo : l'agent subordonné est plus indenté que le coordinateur.
-      const lignes = Array.from(juridique.querySelectorAll<HTMLElement>(".atl-orgl-agents li"));
-      expect(lignes.length).toBeGreaterThan(0);
-      expect(juridique.querySelector(".atl-orgl-agents li")?.getAttribute("style")).toContain("padding-left");
-      await cliquer(parTexte(juridique, "a.atl-orgl-lien", "Veille légale"));
-      expect(pont.navigations).toContain("/RNOAC/agents/j3");
-      // Cibles de 44 px (2,75 rem) au moins pour le résumé, les liens et le bouton.
-      for (const sel of [".atl-orgl-service > summary", ".atl-orgl-lien", ".atl-orgl-liens"]) {
-        expect(STYLES_ORGANIGRAMME, sel).toMatch(new RegExp(`${sel.replace(/\./gu, "\\.")}[^}]*min-height: 2\\.75rem`, "u"));
-      }
-      // « Voir les liens » reste disponible.
-      await cliquer(parTexte(juridique, "button", "Voir les liens"));
-      expect(c.textContent).toContain("Liens de Juridique");
-    } finally {
-      window.matchMedia = ancien;
+  it("un clic sélectionne : flèches pleines (sortant) et pointillées (entrant), partenaires en avant, autres atténués, panneau des liaisons", async () => {
+    serveur = servir();
+    const { c } = await ouvrir();
+    await cliquer(noeud(c, "Marketing"));
+    expect(noeud(c, "Marketing").getAttribute("aria-pressed")).toBe("true");
+    const fleches = Array.from(c.querySelectorAll<SVGGElement>(".atl-car-fleche"));
+    expect(fleches.map((f) => f.dataset["sens"]).sort()).toEqual(["entrant", "sortant"]);
+    for (const f of fleches) {
+      expect(f.querySelector("path.atl-car-courbe")?.getAttribute("d")).toMatch(/^M/u);
+      expect(f.querySelector("path.atl-car-tete")?.getAttribute("transform")).toMatch(/rotate/u);
     }
+    expect(noeud(c, "Juridique").dataset["relie"]).toBe("true");
+    expect(noeud(c, "Direction").dataset["estompe"]).toBe("true");
+    expect(noeud(c, "Direction").dataset["relie"]).toBeUndefined();
+    const panneau = c.querySelector(".atl-car-panneau")!;
+    expect(panneau.querySelector("h2")?.textContent).toBe("Marketing");
+    expect(panneau.textContent).toContain("1 service relié");
+    const vers = panneau.querySelector('[data-sens="sortant"]')!;
+    const depuis = panneau.querySelector('[data-sens="entrant"]')!;
+    expect(vers.textContent).toContain("Vers");
+    expect(vers.textContent).toContain("Relecture légale");
+    expect(vers.textContent).not.toContain("approbation humaine");
+    expect(depuis.textContent).toContain("Depuis");
+    expect(depuis.textContent).toContain("Avis sur une mention");
+    expect(depuis.textContent).toContain("approbation humaine");
+    // Le nom du partenaire est cliquable : il devient la sélection.
+    await cliquer(parTexte(panneau, "button.atl-car-nom-partenaire", "Juridique"));
+    expect(c.querySelector(".atl-car-panneau h2")?.textContent).toBe("Juridique");
+    expect(noeud(c, "Juridique").getAttribute("aria-pressed")).toBe("true");
+    // Juridique a trois partenaires possibles dans le jeu : Marketing (aller et retour) et Direction (entrant).
+    expect(c.querySelectorAll(".atl-car-fleche")).toHaveLength(3);
   });
 
-  it("Ctrl + molette zoome, la molette seule laisse la page défiler", async () => {
+  it("Échap désélectionne ; le bouton du panneau aussi", async () => {
     serveur = servir();
     const { c } = await ouvrir();
-    const vue = c.querySelector<HTMLElement>(".atl-org-vue")!;
-    const e0 = vueActuelle(c).echelle;
-    const simple = new WheelEvent("wheel", { bubbles: true, cancelable: true, deltaY: -100 });
-    await act(async () => void vue.dispatchEvent(simple));
-    expect(simple.defaultPrevented).toBe(false);
-    expect(vueActuelle(c).echelle).toBe(e0);
-    const avecCtrl = new WheelEvent("wheel", { bubbles: true, cancelable: true, deltaY: -100, ctrlKey: true });
-    await act(async () => void vue.dispatchEvent(avecCtrl));
-    expect(avecCtrl.defaultPrevented).toBe(true);
-    expect(vueActuelle(c).echelle).toBeGreaterThan(e0);
+    await cliquer(noeud(c, "Marketing"));
+    expect(c.querySelectorAll(".atl-car-fleche").length).toBeGreaterThan(0);
+    await touche(document.body, "Escape");
+    expect(c.querySelectorAll(".atl-car-fleche")).toHaveLength(0);
+    expect(c.querySelector("[data-selection]")).toBeNull();
+    expect(c.querySelector(".atl-car-panneau h2")).toBeNull();
+    await cliquer(noeud(c, "Marketing"));
+    await cliquer(parTexte(c, ".atl-car-panneau button", "Désélectionner"));
+    expect(c.querySelector("[data-selection]")).toBeNull();
   });
 
-  it("le filtre met en évidence les cartes qui correspondent, atténue les autres et « Ajuster » centre la première", async () => {
+  it("le réseau des coordinateurs n'est jamais tracé : un flux de coordinateurs ne crée aucune flèche", async () => {
+    const reseau: FluxServiceLu[] = [{ source: "marketing", cible: "direction", objet: "Liaison entre coordinateurs", approbationHumaine: false, origine: "coordinateurs" }];
+    serveur = servir({ flux: reseau });
+    const { c } = await ouvrir();
+    await cliquer(noeud(c, "Marketing"));
+    expect(c.querySelectorAll(".atl-car-fleche")).toHaveLength(0);
+    expect(c.querySelector(".atl-car-panneau")?.textContent).toContain("aucune liaison métier");
+  });
+
+  it("double-clic ou « Ouvrir le service » : vue du service, adresse avec #service=", async () => {
     serveur = servir();
     const { c } = await ouvrir();
-    await saisir(c.querySelector<HTMLInputElement>('input[type="search"]')!, "veille");
-    const trouvees = Array.from(c.querySelectorAll<HTMLElement>("[data-trouve]"));
-    expect(trouvees).toHaveLength(1);
-    expect(trouvees[0]!.textContent).toContain("Veille légale");
-    expect(c.querySelectorAll("[data-carte][data-estompe]").length).toBe(c.querySelectorAll("[data-carte]").length - 1);
-    expect(c.querySelector('[role="status"].atl-org-etat')?.textContent).toContain("1 carte correspond");
-    // Le plan est centré sur la carte trouvée, à 80 % au moins.
-    const centre = () => {
-      const v = vueActuelle(c);
-      const k = trouvees[0]!;
-      return { echelle: v.echelle, cx: (Number.parseFloat(k.style.left) + Number.parseFloat(k.style.width) / 2) * v.echelle + v.x, cy: (Number.parseFloat(k.style.top) + Number.parseFloat(k.style.height) / 2) * v.echelle + v.y };
-    };
-    expect(centre().echelle).toBeGreaterThanOrEqual(0.8);
-    expect(centre().cx).toBeCloseTo(500, 3);
-    expect(centre().cy).toBeCloseTo(300, 3);
-    await toucheClavier(c.querySelector(".atl-org-vue")!, "ArrowRight");
-    await cliquer(bouton(c, "Ajuster à l'écran"));
-    expect(centre().cx).toBeCloseTo(500, 3);
-    await saisir(c.querySelector<HTMLInputElement>('input[type="search"]')!, "marketing");
-    expect(Array.from(c.querySelectorAll("[data-trouve]")).map((e) => e.querySelector(".atl-org-nom")?.textContent)).toEqual(["Marketing"]);
-    await saisir(c.querySelector<HTMLInputElement>('input[type="search"]')!, "introuvable-xyz");
-    expect(c.querySelector("[data-trouve]")).toBeNull();
-    expect(c.textContent).toContain("Aucune carte ne correspond");
+    await doubleClic(noeud(c, "Juridique"));
+    await laisser();
+    expect(window.location.hash).toBe("#service=juridique");
+    expect(c.querySelector('section[aria-label="Service Juridique"]')).not.toBeNull();
+    expect(c.querySelector(".atl-car")).toBeNull();
+    expect(c.textContent).toContain("Veille légale");
+    await cliquer(parTexte(c, ".atl-orgs-fil button", "Organigramme"));
+    await laisser();
+    expect(c.querySelector(".atl-car")).not.toBeNull();
+    await cliquer(noeud(c, "Direction"));
+    await cliquer(parTexte(c, ".atl-car-panneau button", "Ouvrir le service"));
+    await laisser();
+    expect(window.location.hash).toBe("#service=direction");
   });
 
-  it("« Voir les liens » surligne les services reliés par un flux et ouvre le panneau des flux dans les deux sens", async () => {
+  it("la sélection est gardée quand on ouvre un service puis qu'on revient", async () => {
     serveur = servir();
     const { c } = await ouvrir();
-    await cliquer(parTexte(carte(c, "Marketing"), "button", "Voir les liens"));
-    const panneau = c.querySelector(".atl-org-panneau")!;
-    expect(panneau.querySelector("h2")?.textContent).toBe("Liens de Marketing");
-    const [sortants, entrants] = Array.from(panneau.querySelectorAll(".atl-org-flux"));
-    expect(sortants!.textContent).toContain("vers Juridique");
-    expect(sortants!.textContent).toContain("Relecture légale");
-    expect(entrants!.textContent).toContain("depuis Juridique");
-    expect(entrants!.textContent).toContain("approbation humaine");
-    expect(sortants!.textContent).not.toContain("approbation humaine");
-    expect(parTexte(carte(c, "Marketing"), "button", "Masquer les liens").getAttribute("aria-pressed")).toBe("true");
-    expect(carte(c, "Juridique").dataset["relie"]).toBe("true");
-    expect(carte(c, "Direction").dataset["relie"]).toBeUndefined();
-    expect(carte(c, "Direction").dataset["estompe"]).toBe("true");
-    await cliquer(parTexte(panneau, "button.atl-org-flux-service", "Juridique"));
-    expect(c.querySelector(".atl-org-panneau h2")?.textContent).toBe("Liens de Juridique");
-    await cliquer(parTexte(c, ".atl-org-panneau button", "Fermer"));
-    expect(c.querySelector(".atl-org-panneau")).toBeNull();
-    expect(c.querySelector("[data-relie]")).toBeNull();
+    await cliquer(noeud(c, "Marketing"));
+    await cliquer(parTexte(c, ".atl-car-panneau button", "Ouvrir le service"));
+    await laisser();
+    await cliquer(parTexte(c, ".atl-orgs-fil button", "Organigramme"));
+    await laisser();
+    expect(noeud(c, "Marketing").getAttribute("aria-pressed")).toBe("true");
+  });
+});
+
+describe("recherche", () => {
+  it("un agent trouvé ouvre la vue de son service avec l'agent mis en évidence (clavier : bas, Entrée)", async () => {
+    serveur = servir();
+    const { c } = await ouvrir();
+    const champ = c.querySelector<HTMLInputElement>('input[role="combobox"]')!;
+    await saisir(champ, "veille");
+    const options = Array.from(c.querySelectorAll('[role="option"]'));
+    expect(options).toHaveLength(1);
+    expect(options[0]!.textContent).toContain("Veille légale");
+    expect(options[0]!.textContent).toContain("Juridique");
+    expect(champ.getAttribute("aria-expanded")).toBe("true");
+    await touche(champ, "Enter");
+    await laisser();
+    expect(window.location.hash).toBe("#service=juridique&agent=j3");
+    expect(c.querySelector('section[aria-label="Service Juridique"]')).not.toBeNull();
+    expect(c.querySelector('[data-agent="j3"]')?.getAttribute("data-mis-en-evidence")).toBe("true");
+    expect(c.querySelector<HTMLInputElement>('input[role="combobox"]')!.value).toBe("");
   });
 
-  it("un service en panne n'empêche pas les autres et propose de réessayer", async () => {
+  it("un service trouvé ouvre sa vue ; flèches haut et bas parcourent les résultats, huit au plus", async () => {
+    const jeu = grandJeu();
+    serveur = servir({ departements: jeu.departements, entreprises: jeu.entreprises, agentsParService: jeu.agentsParService, flux: [] });
+    const { c } = await ouvrir();
+    await laisser(12);
+    const champ = c.querySelector<HTMLInputElement>('input[role="combobox"]')!;
+    await saisir(champ, "agent numéro");
+    const options = () => Array.from(c.querySelectorAll('[role="option"]'));
+    expect(options()).toHaveLength(8);
+    expect(options()[0]!.getAttribute("aria-selected")).toBe("true");
+    await touche(champ, "ArrowDown");
+    expect(options()[1]!.getAttribute("aria-selected")).toBe("true");
+    expect(champ.getAttribute("aria-activedescendant")).toBe(options()[1]!.id);
+    await touche(champ, "ArrowUp");
+    await touche(champ, "ArrowUp");
+    expect(options()[7]!.getAttribute("aria-selected")).toBe("true");
+    await saisir(champ, "service 5");
+    await cliquer(options().find((o) => o.textContent?.startsWith("Service 5"))!);
+    await laisser();
+    expect(window.location.hash).toBe("#service=service5");
+    expect(c.querySelector('section[aria-label="Service Service 5"]')).not.toBeNull();
+  });
+
+  it("aucun résultat : message ; Échap vide le champ", async () => {
+    serveur = servir();
+    const { c } = await ouvrir();
+    const champ = c.querySelector<HTMLInputElement>('input[role="combobox"]')!;
+    await saisir(champ, "introuvable-xyz");
+    expect(c.querySelector("#atl-org-resultats")?.textContent).toContain("Aucun agent ni service ne correspond");
+    await touche(champ, "Escape");
+    expect(c.querySelector<HTMLInputElement>('input[role="combobox"]')!.value).toBe("");
+    expect(c.querySelector("#atl-org-resultats")).toBeNull();
+  });
+});
+
+describe("onglets et adresse", () => {
+  it("onglets Carte | Matrice accessibles ; la matrice s'affiche et l'adresse porte #vue=matrice", async () => {
+    serveur = servir();
+    const { c } = await ouvrir();
+    expect(c.querySelector('[role="tablist"]')?.getAttribute("aria-label")).toBe("Affichage de l'organigramme");
+    expect(textes(c, '[role="tab"]')).toEqual(["Carte", "Matrice"]);
+    expect(onglet(c, "Carte").getAttribute("aria-selected")).toBe("true");
+    await cliquer(onglet(c, "Matrice"));
+    await laisser();
+    expect(window.location.hash).toBe("#vue=matrice");
+    expect(onglet(c, "Matrice").getAttribute("aria-selected")).toBe("true");
+    expect(c.querySelector(".atl-mx")).not.toBeNull();
+    expect(c.querySelector(".atl-car")).toBeNull();
+    // Depuis la matrice, ouvrir un service puis revenir ramène à la matrice.
+    await cliquer(parTexte(c, ".atl-mx button", "Juridique"));
+    await laisser();
+    expect(window.location.hash).toContain("service=juridique");
+    await cliquer(parTexte(c, ".atl-orgs-fil button", "Organigramme"));
+    await laisser();
+    expect(window.location.hash).toBe("#vue=matrice");
+    expect(c.querySelector(".atl-mx")).not.toBeNull();
+    await cliquer(onglet(c, "Carte"));
+    await laisser();
+    expect(c.querySelector(".atl-car")).not.toBeNull();
+  });
+
+  it("le rechargement avec #service=… rouvre le service ; #vue=matrice rouvre la matrice", async () => {
+    window.location.hash = "service=juridique";
+    serveur = servir();
+    const a = await ouvrir();
+    expect(a.c.querySelector('section[aria-label="Service Juridique"]')).not.toBeNull();
+    expect(a.c.querySelector('[role="tablist"]')).toBeNull();
+    rendu?.demonter();
+    rendu = null;
+    window.location.hash = "vue=matrice";
+    const b = await ouvrir();
+    expect(b.c.querySelector(".atl-mx")).not.toBeNull();
+  });
+
+  it("un service inconnu dans l'adresse retombe sur la carte", async () => {
+    window.location.hash = "service=inexistant";
+    serveur = servir();
+    const { c } = await ouvrir();
+    expect(c.querySelector(".atl-car")).not.toBeNull();
+  });
+});
+
+describe("téléphone (640 px et moins)", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("la carte devient la liste des services ; « Voir les liens » déplie les partenaires", async () => {
+    serveur = servir({ aTraiter: { [JUR]: 1 } });
+    vi.stubGlobal("matchMedia", (q: string) => ({ matches: q.includes("640"), media: q, addEventListener() {}, removeEventListener() {} }));
+    const { c } = await ouvrir();
+    expect(c.querySelector(".atl-car-scene")).toBeNull();
+    const lignes = Array.from(c.querySelectorAll<HTMLElement>(".atl-car-ligne"));
+    expect(lignes.map((l) => l.querySelector(".atl-car-nom")?.textContent)).toEqual(["Direction", "Juridique", "Marketing"]);
+    expect(lignes[1]!.textContent).toContain("À traiter");
+    const voir = parTexte(lignes[2]!, "button", "Voir les liens");
+    expect(voir.getAttribute("aria-expanded")).toBe("false");
+    await cliquer(voir);
+    const marketing = c.querySelector<HTMLElement>('.atl-car-ligne[data-service="marketing"]')!;
+    expect(parTexte(marketing, "button", "Masquer les liens").getAttribute("aria-expanded")).toBe("true");
+    expect(marketing.querySelector(".atl-car-partenaires")?.textContent).toContain("Juridique");
+    expect(marketing.textContent).toContain("Relecture légale");
+    await cliquer(parTexte(marketing, "button", "Ouvrir le service"));
+    await laisser();
+    expect(window.location.hash).toBe("#service=marketing");
+  });
+});
+
+describe("états d'erreur", () => {
+  it("un service en panne n'empêche pas les autres : « Agents indisponibles », puis relecture depuis sa vue", async () => {
     serveur = servir({ agentsParService: { ...AGENTS, [JUR]: "panne" } });
     const { c } = await ouvrir();
-    expect(carte(c, "Juridique").textContent).toContain("Lecture impossible");
-    expect(c.textContent).toContain("Gouvernance");
-    serveur = servir();
-    await cliquer(parTexte(carte(c, "Juridique"), "button", "Réessayer"));
+    expect(noeud(c, "Juridique").textContent).toContain("Agents indisponibles");
+    expect(noeud(c, "Marketing").textContent).toContain("1 agent");
+    await doubleClic(noeud(c, "Juridique"));
     await laisser();
-    expect(carte(c, "Juridique").querySelector(".atl-org-compteur")?.textContent).toBe("3 agents");
+    expect(c.querySelector('[role="alert"]')?.textContent).toContain("Lecture impossible des agents de Juridique");
+    serveur = servir();
+    await cliquer(parTexte(c, '[role="alert"] button', "Réessayer"));
+    await laisser();
+    expect(c.querySelector('section[aria-label="Service Juridique"]')).not.toBeNull();
   });
 
-  it("flux indisponibles : message dans le panneau, le dessin fonctionne, nouvel essai possible", async () => {
+  it("flux indisponibles : message, la carte fonctionne sans flèche, nouvel essai possible", async () => {
     serveur = servir({ flux: "panne" });
     const { c } = await ouvrir();
-    expect(c.textContent).toContain("Gouvernance");
-    await cliquer(parTexte(carte(c, "Marketing"), "button", "Voir les liens"));
-    expect(c.querySelector(".atl-org-panneau")?.textContent).toContain("Flux indisponibles");
+    expect(c.querySelector('[role="alert"]')?.textContent).toContain("Liaisons indisponibles");
+    await cliquer(noeud(c, "Marketing"));
+    expect(c.querySelectorAll(".atl-car-fleche")).toHaveLength(0);
     serveur = servir();
-    await cliquer(parTexte(c, ".atl-org-panneau button", "Réessayer"));
+    await cliquer(parTexte(c, '[role="alert"] button', "Réessayer"));
     await laisser();
-    expect(c.querySelector(".atl-org-panneau")?.textContent).toContain("vers Juridique");
+    expect(c.querySelector('[role="alert"]')).toBeNull();
+    expect(c.querySelectorAll(".atl-car-fleche").length).toBeGreaterThan(0);
   });
 
   it("erreur de la liste des services : état d'erreur avec nouvel essai", async () => {
@@ -392,6 +448,8 @@ describe("vue « Organigramme »", () => {
   it("aucun tiret cadratin dans la vue", async () => {
     serveur = servir();
     const { c } = await ouvrir();
+    expect(c.textContent).not.toContain("—");
+    await cliquer(noeud(c, "Marketing"));
     expect(c.textContent).not.toContain("—");
   });
 });

@@ -1,90 +1,91 @@
 /**
- * Styles de la vue « Organigramme » : barre de filtre, panneau des flux et toile dessinée (cartes positionnées sur un plan
- * zoomable, traits fins neutres en SVG). Mêmes jetons --atl-* que les départements, donc clair et sombre de l'hôte :
- * trait fin, aucune ombre ni dégradé ; l'état (statut, relié, choisi, trouvé) est toujours écrit ou souligné, jamais
- * seulement une couleur.
+ * Styles de la vue « Organigramme » (page, recherche, onglets) et de la carte des services (nœuds HTML sur un plan SVG,
+ * panneau des liaisons, liste téléphone). Mêmes jetons --atl-* que le reste de l'atelier, donc clair et sombre de
+ * l'hôte : trait fin, aucune ombre ni dégradé ; l'état (choisi, relié, à traiter, sens des flèches) est toujours écrit
+ * ou porté par un motif (plein, pointillé), jamais par la seule couleur.
  */
 export const STYLES_ORGANIGRAMME = `
 .atl-org { display: flex; flex-direction: column; gap: 1rem; }
 .atl-org-barre { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 0.75rem 1rem; }
-.atl-org-filtre { display: flex; flex-direction: column; gap: 0.25rem; flex: 1 1 16rem; min-width: 0; font-size: 0.8125rem; color: var(--atl-attenue-fort); }
-.atl-org-filtre input { min-height: 2.25rem; padding: 0 0.75rem; border: 1px solid var(--atl-trait); border-radius: calc(var(--atl-rayon) * 0.8); background: var(--atl-surface); color: var(--atl-texte); font: inherit; }
-.atl-org-filtre input:focus-visible, .atl-org-flux-service:focus-visible { outline: 2px solid var(--atl-anneau); outline-offset: 2px; }
-.atl-org-etat { flex-basis: 100%; margin: 0; min-height: 1.2em; font-size: 0.8125rem; color: var(--atl-attenue-fort); }
-
-.atl-org-legende { margin: 0; font-size: 0.8125rem; color: var(--atl-attenue-fort); max-width: 70ch; }
-.atl-org-vide { margin: 0; font-size: 0.8125rem; color: var(--atl-attenue); }
-
-.atl-org-toile { position: relative; border: 1px solid var(--atl-trait); border-radius: var(--atl-rayon); background: var(--atl-surface-2); overflow: hidden; }
-.atl-org-vue { position: relative; height: calc(100vh - 9rem); min-height: 22rem; overflow: hidden; cursor: grab; touch-action: none; user-select: none; -webkit-user-select: none; }
-.atl-org-vue[data-deplace] { cursor: grabbing; }
-.atl-org-vue:focus-visible { outline: 2px solid var(--atl-anneau); outline-offset: -2px; }
-.atl-org-plan { position: absolute; left: 0; top: 0; transform-origin: 0 0; will-change: transform; }
-.atl-org-traits { position: absolute; left: 0; top: 0; overflow: visible; pointer-events: none; }
-.atl-org-traits path { fill: none; stroke: var(--atl-attenue); stroke-width: 1; stroke-linecap: square; vector-effect: non-scaling-stroke; opacity: 0.7; }
-.atl-org-zoom { position: absolute; top: 0.5rem; right: 0.5rem; display: flex; gap: 0.375rem; }
-.atl-org-zoom .atl-bouton { min-width: 2.25rem; padding: 0 0.625rem; }
-
-.atl-org-cadre { position: absolute; box-sizing: border-box; border: 1px solid var(--atl-trait); border-radius: var(--atl-rayon); background: color-mix(in oklab, var(--atl-surface) 35%, transparent); pointer-events: none; }
-.atl-org-carte { position: absolute; box-sizing: border-box; display: flex; flex-direction: column; justify-content: center; gap: 0.125rem; min-width: 0; padding: 0.375rem 0.625rem; border: 1px solid var(--atl-trait); border-radius: calc(var(--atl-rayon) * 0.8); background: var(--atl-surface); color: var(--atl-texte); font-size: 0.8125rem; line-height: 1.3; overflow: hidden; }
-.atl-org-carte-general { padding: 0.5rem 0.75rem; border-color: var(--atl-texte); }
-.atl-org-carte-service { justify-content: space-between; padding: 0.5rem 0.625rem; gap: 0.25rem; }
-.atl-org-carte[data-relie] { border-color: var(--atl-texte); background: var(--atl-surface-2); }
-.atl-org-carte[data-selection] { border: 2px solid var(--atl-texte); padding: calc(0.5rem - 1px) calc(0.625rem - 1px); background: var(--atl-surface-2); }
-.atl-org-carte[data-trouve] { border-color: var(--atl-attention); outline: 1px solid var(--atl-attention); outline-offset: -2px; }
-.atl-org-carte[data-trouve] .atl-org-agent-lien, .atl-org-carte[data-trouve] .atl-org-nom { background: color-mix(in oklab, var(--atl-attention) 25%, transparent); }
-.atl-org-carte[data-estompe] { opacity: 0.4; }
-.atl-org-etiquette { font-size: 0.75rem; color: var(--atl-attenue-fort); }
-.atl-org-nom { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 0.9375rem; font-weight: 600; }
-.atl-org-ligne { display: flex; align-items: baseline; gap: 0.5rem; min-width: 0; }
-.atl-org-agent-lien { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--atl-texte); font-weight: 500; text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: 3px; }
-.atl-org-agent-lien:focus-visible, .atl-org-flux-service:focus-visible { outline: 2px solid var(--atl-anneau); outline-offset: 2px; border-radius: 2px; }
-.atl-org-statut { flex: none; margin-left: auto; font-size: 0.75rem; color: var(--atl-attenue-fort); white-space: nowrap; }
-.atl-org-statut[data-famille="erreur"] { color: var(--atl-danger); font-weight: 600; }
-.atl-org-statut[data-famille="pause"] { color: var(--atl-attention); }
-.atl-org-titre { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 0.75rem; color: var(--atl-attenue); }
-.atl-org-compteur { font-size: 0.8125rem; font-variant-numeric: tabular-nums; color: var(--atl-attenue-fort); white-space: nowrap; }
-.atl-org-flux-bloc .atl-org-compteur { margin-left: 0.25rem; }
-.atl-org-liens { align-self: flex-start; min-height: 1.75rem; padding: 0.25rem 0.625rem; font-size: 0.8125rem; }
+.atl-org-recherche { position: relative; display: flex; flex-direction: column; gap: 0.25rem; flex: 1 1 18rem; max-width: 34rem; min-width: 0; font-size: 0.8125rem; color: var(--atl-attenue-fort); }
+.atl-org-recherche input { min-height: 2.5rem; padding: 0 0.75rem; border: 1px solid var(--atl-trait); border-radius: calc(var(--atl-rayon) * 0.8); background: var(--atl-surface); color: var(--atl-texte); font: inherit; font-size: 0.875rem; }
+.atl-org-recherche input:focus-visible { outline: 2px solid var(--atl-anneau); outline-offset: 2px; }
+.atl-org-resultats { position: absolute; top: 100%; left: 0; right: 0; z-index: 5; margin: 0.25rem 0 0; padding: 0.25rem; list-style: none; border: 1px solid var(--atl-texte); border-radius: calc(var(--atl-rayon) * 0.8); background: var(--atl-surface); max-height: 22rem; overflow-y: auto; }
+.atl-org-resultat { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.125rem 0.625rem; min-height: 2.75rem; padding: 0.375rem 0.625rem; border-radius: calc(var(--atl-rayon) * 0.6); color: var(--atl-texte); font-size: 0.875rem; cursor: pointer; }
+.atl-org-resultat[aria-selected="true"], .atl-org-resultat:hover { background: var(--atl-surface-2); outline: 1px solid var(--atl-texte); outline-offset: -1px; }
+.atl-org-resultat-nom { font-weight: 600; min-width: 0; overflow-wrap: anywhere; }
+.atl-org-resultat-suite { color: var(--atl-attenue-fort); font-size: 0.8125rem; }
+.atl-org-resultat-vide { padding: 0.5rem 0.625rem; color: var(--atl-attenue-fort); font-size: 0.8125rem; }
+.atl-org-etat { margin: 0; min-height: 1.2em; font-size: 0.8125rem; color: var(--atl-attenue-fort); }
 .atl-org-erreur { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; font-size: 0.8125rem; color: var(--atl-danger); }
-.atl-org-erreur .atl-bouton { min-height: 1.75rem; padding: 0.25rem 0.625rem; font-size: 0.8125rem; }
+.atl-org-erreur .atl-bouton { min-height: 2.25rem; padding: 0.25rem 0.75rem; font-size: 0.8125rem; }
+.atl-org-vue-onglet[hidden] { display: none; }
 
-.atl-org-panneau { display: flex; flex-direction: column; gap: 0.75rem; padding: 1rem; border: 1px solid var(--atl-texte); border-radius: var(--atl-rayon); background: var(--atl-surface); }
-.atl-org-panneau-tete { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0.5rem; }
-.atl-org-panneau-tete h2 { margin: 0; font-size: 1.0625rem; font-weight: 600; }
-.atl-org-panneau-texte { margin: 0; font-size: 0.875rem; color: var(--atl-attenue-fort); }
-.atl-org-flux-grille { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 22rem), 1fr)); gap: 1rem; }
-.atl-org-flux-bloc h3 { margin: 0 0 0.5rem; font-size: 0.9375rem; font-weight: 600; }
-.atl-org-flux { display: flex; flex-direction: column; margin: 0; padding: 0; list-style: none; border-top: 1px solid var(--atl-trait); }
-.atl-org-flux li { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.125rem 0.75rem; padding: 0.5rem 0; border-bottom: 1px solid var(--atl-trait); font-size: 0.8125rem; min-width: 0; }
-.atl-org-flux-sens { color: var(--atl-attenue-fort); }
-.atl-org-flux-service { padding: 0.125rem 0; border: 0; background: none; color: var(--atl-texte); font: inherit; font-weight: 600; text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: 3px; cursor: pointer; }
-.atl-org-flux-objet { flex: 1 1 12rem; min-width: 0; overflow-wrap: anywhere; }
-.atl-org-approbation { padding: 0 0.5rem; border: 1px solid var(--atl-attention); border-radius: 999px; font-size: 0.75rem; color: var(--atl-texte); white-space: nowrap; }
+/* Carte des services */
+.atl-car { display: flex; flex-direction: column; gap: 0.75rem; }
+.atl-car-corps { display: grid; grid-template-columns: minmax(0, 1fr) 22rem; gap: 1rem; align-items: start; }
+.atl-car-zone { position: relative; height: calc(100vh - 17rem); min-height: 34rem; overflow: auto; border: 1px solid var(--atl-trait); border-radius: var(--atl-rayon); background: var(--atl-surface-2); }
+.atl-car-scene { position: relative; min-width: 100%; min-height: 100%; }
+.atl-car-traits { position: absolute; left: 0; top: 0; overflow: visible; pointer-events: none; }
+.atl-car-hierarchie { stroke: var(--atl-attenue); stroke-width: 1; opacity: 0.4; }
+.atl-car-apercu { fill: none; stroke: var(--atl-attenue-fort); stroke-width: 1.25; opacity: 0.7; }
+.atl-car-courbe { fill: none; stroke-linecap: round; }
+.atl-car-courbe[data-sens="sortant"] { stroke: var(--atl-info); }
+.atl-car-courbe[data-sens="entrant"] { stroke: var(--atl-attention); stroke-dasharray: 7 5; }
+.atl-car-tete[data-sens="sortant"] { fill: var(--atl-info); }
+.atl-car-tete[data-sens="entrant"] { fill: var(--atl-attention); }
 
+.atl-car-general { position: absolute; box-sizing: border-box; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.125rem; padding: 0.375rem 0.625rem; border: 2px solid var(--atl-texte); border-radius: calc(var(--atl-rayon) * 0.8); background: var(--atl-surface); text-align: center; font-size: 0.8125rem; }
+.atl-car-general strong { font-size: 0.9375rem; font-weight: 600; }
+.atl-car-general span { color: var(--atl-attenue-fort); }
+.atl-car-noeud { position: absolute; box-sizing: border-box; display: flex; flex-direction: column; justify-content: center; align-items: stretch; gap: 0.25rem; min-width: 0; padding: 0.375rem 0.625rem; border: 1px solid var(--atl-trait); border-radius: calc(var(--atl-rayon) * 0.8); background: var(--atl-surface); color: var(--atl-texte); font: inherit; text-align: left; cursor: pointer; transition: opacity 150ms ease-out, border-color 150ms ease-out; }
+.atl-car-noeud:hover { border-color: var(--atl-texte); }
+.atl-car-noeud:focus-visible { outline: 2px solid var(--atl-anneau); outline-offset: 2px; }
+.atl-car-noeud[data-relie] { border-color: var(--atl-texte); background: var(--atl-surface); }
+.atl-car-noeud[data-selection] { border: 2px solid var(--atl-texte); padding: calc(0.375rem - 1px) calc(0.625rem - 1px); }
+.atl-car-noeud[data-estompe] { opacity: 0.62; }
+.atl-car-nom { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 0.875rem; font-weight: 600; line-height: 1.25; }
+.atl-car-meta { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; min-width: 0; font-size: 0.75rem; color: var(--atl-attenue-fort); white-space: nowrap; }
+.atl-car-agents { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.atl-car-traiter { flex: none; padding: 0 0.375rem; border: 1px solid var(--atl-attention); border-radius: 999px; color: var(--atl-texte); font-size: 0.6875rem; font-weight: 600; }
 
-/* Liste accordéon (téléphone) */
-.atl-orgl { display: flex; flex-direction: column; gap: 0.5rem; }
-.atl-orgl-general, .atl-orgl-service { border: 1px solid var(--atl-trait); border-radius: var(--atl-rayon); background: var(--atl-surface); }
-.atl-orgl-general { display: flex; flex-direction: column; gap: 0.25rem; padding: 0.75rem; border-color: var(--atl-texte); }
-.atl-orgl-titre { font-size: 0.8125rem; color: var(--atl-attenue-fort); }
-.atl-orgl-service > summary { display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; min-height: 2.75rem; padding: 0 0.75rem; cursor: pointer; list-style: none; }
-.atl-orgl-service > summary::-webkit-details-marker { display: none; }
-.atl-orgl-service > summary:focus-visible { outline: 2px solid var(--atl-anneau); outline-offset: 2px; border-radius: var(--atl-rayon); }
-.atl-orgl-service[open] > summary { border-bottom: 1px solid var(--atl-trait); }
-.atl-orgl-nom { min-width: 0; font-weight: 600; overflow-wrap: anywhere; }
-.atl-orgl-corps { display: flex; flex-direction: column; gap: 0.25rem; padding: 0.25rem 0.75rem 0.75rem; }
-.atl-orgl-agents { display: flex; flex-direction: column; margin: 0; padding: 0; list-style: none; }
-.atl-orgl-agents li { display: flex; flex-direction: column; justify-content: center; min-height: 2.75rem; border-top: 1px solid var(--atl-trait); }
-.atl-orgl-agent { display: flex; align-items: baseline; gap: 0.5rem; min-width: 0; min-height: 2.75rem; align-items: center; }
-.atl-orgl-agents li .atl-orgl-agent { min-height: 2rem; }
-.atl-orgl-lien { display: inline-flex; align-items: center; min-height: 2.75rem; min-width: 0; color: var(--atl-texte); font-weight: 500; text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: 3px; overflow-wrap: anywhere; }
-.atl-orgl-agent[data-trouve], .atl-orgl-service[data-trouve] > summary { background: color-mix(in oklab, var(--atl-attention) 25%, transparent); }
-.atl-orgl-liens { align-self: flex-start; min-height: 2.75rem; margin-top: 0.5rem; }
+.atl-car-panneau { display: flex; flex-direction: column; gap: 0.75rem; max-height: calc(100vh - 17rem); min-height: 12rem; overflow-y: auto; padding: 1rem; border: 1px solid var(--atl-trait); border-radius: var(--atl-rayon); background: var(--atl-surface); }
+.atl-car-panneau-tete { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0.5rem; }
+.atl-car-panneau-tete h2 { font-size: 1.0625rem; font-weight: 600; min-width: 0; overflow-wrap: anywhere; }
+.atl-car-panneau-resume, .atl-car-aide, .atl-car-vide, .atl-car-mention { font-size: 0.8125rem; color: var(--atl-attenue-fort); max-width: 62ch; }
+.atl-car-ouvrir { align-self: flex-start; }
+.atl-car-partenaires { display: flex; flex-direction: column; border-top: 1px solid var(--atl-trait); }
+.atl-car-partenaire { display: flex; flex-direction: column; gap: 0.25rem; padding: 0.625rem 0; border-bottom: 1px solid var(--atl-trait); font-size: 0.8125rem; }
+.atl-car-nom-partenaire { align-self: flex-start; min-height: 1.75rem; padding: 0.125rem 0; border: 0; background: none; color: var(--atl-texte); font: inherit; font-size: 0.875rem; font-weight: 600; text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: 3px; cursor: pointer; text-align: left; }
+.atl-car-sens { display: flex; align-items: baseline; gap: 0.5rem; margin: 0; }
+.atl-car-sens-texte { min-width: 0; overflow-wrap: anywhere; }
+.atl-car-echantillon { flex: none; align-self: center; width: 1.5rem; border-top: 2px solid var(--atl-info); }
+.atl-car-sens[data-sens="entrant"] .atl-car-echantillon { border-top: 2px dashed var(--atl-attention); }
+.atl-car-approbation { display: inline-block; margin-left: 0.5rem; padding: 0 0.5rem; border: 1px solid var(--atl-attention); border-radius: 999px; font-size: 0.75rem; white-space: nowrap; }
 
+.atl-car-legende { display: flex; flex-direction: column; gap: 0.375rem; font-size: 0.8125rem; color: var(--atl-attenue-fort); }
+.atl-car-legende ul { display: flex; flex-wrap: wrap; gap: 0.25rem 1.5rem; }
+.atl-car-legende li { display: flex; align-items: center; gap: 0.5rem; }
+.atl-car-trait { flex: none; width: 1.75rem; border-top: 2px solid var(--atl-info); }
+.atl-car-trait[data-sens="entrant"] { border-top: 2px dashed var(--atl-attention); }
+.atl-car-trait[data-sens="hierarchie"] { border-top: 1px solid var(--atl-attenue); }
+.atl-car-legende p { max-width: 70ch; }
+
+/* Liste (téléphone) */
+.atl-car-liste { display: flex; flex-direction: column; gap: 0.5rem; }
+.atl-car-ligne { display: flex; flex-direction: column; gap: 0.5rem; padding: 0.75rem; border: 1px solid var(--atl-trait); border-radius: var(--atl-rayon); background: var(--atl-surface); }
+.atl-car-ligne[data-selection] { border-color: var(--atl-texte); }
+.atl-car-ligne-tete { display: flex; flex-direction: column; gap: 0.125rem; }
+.atl-car-ligne .atl-car-nom { white-space: normal; font-size: 0.9375rem; }
+.atl-car-ligne-actions { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+.atl-car-ligne .atl-bouton { min-height: 2.75rem; }
+
+@media (max-width: 900px) {
+  .atl-car-corps { grid-template-columns: minmax(0, 1fr); }
+  .atl-car-panneau { max-height: none; }
+}
 @media (max-width: 640px) {
-  .atl-org-vue { height: 70vh; }
-  .atl-org-zoom .atl-bouton { min-height: 2.75rem; min-width: 2.75rem; }
-  .atl-org-flux-service { min-height: 2.75rem; }
+  .atl-car-nom-partenaire { min-height: 2.75rem; }
+  .atl-org-recherche input { min-height: 2.75rem; }
 }
 `;
