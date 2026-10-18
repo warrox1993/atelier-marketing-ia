@@ -39,6 +39,9 @@ Sous-commandes :
                          pause. Les agents hors registre (renommés, scindés) sont listés ; --pause-hors-registre les met en pause
                          (jamais de suppression). Objectifs, description et budget des entreprises existantes ne sont pas réécrits.
                          Idempotent ; --a-blanc n'écrit rien.
+  nettoyer-doublons --client SLUG [--confirmer]
+                         doublons « <nom> N » laissés par un import mal apparié : à blanc par défaut ; --confirmer met en
+                         pause puis supprime ceux qui n'ont aucune tâche ni exécution (journal local JSONL).
   assurer-connexions     étape légère et idempotente : réserve aux rôles déclarés chaque connexion de la
                          passerelle créée depuis le dernier « appliquer » (accès natif, installations,
                          politiques « block » des rôles en lecture). Lancée toutes les minutes par le
@@ -1457,7 +1460,108 @@ def importer(api: Api, fichiers, cible: dict, collision: str, selection, pause: 
     return api.appel("POST", "/companies/import", corps)
 
 
-CLES_CONSERVEES = ("paperclipSkillSync", "instructionsFilePath", "instructionsRootPath",
+# Appariement de l'import natif « replace » : Paperclip rapproche un agent du paquet d'un agent existant par la SEULE clé
+# normalizeAgentUrlKey(nom de l'agent existant) == slug du paquet (server/src/services/company-portability.ts, preview :
+# existingSlugToAgent puis existingSlugToAgent.get(manifestAgent.slug)), jamais par identifiant. Un agent nommé
+# « Douane et origine » (clé douane-et-origine) ou « Prévision demande » (clé pr-vision-demande, l'accent devient un tiret)
+# n'est donc pas reconnu par le slug douane-origine ou prevision-demande : l'import le CRÉE à nouveau et agents.create le
+# suffixe (« Douane et origine 2 », deduplicateAgentName dans server/src/services/agents.ts). Parade : avant l'import, ces
+# agents reçoivent un nom temporaire dont la clé vaut le slug du dépôt, et leur nom est rétabli juste après.
+RE_SUFFIXE_DOUBLON = re.compile(r"(.+) ([2-9]|[1-9][0-9]+)")
+
+
+def nom_appariement(slug: str) -> str:
+    """Nom temporaire dont la clé Paperclip (normaliser_slug) vaut exactement le slug du dépôt."""
+    for candidat in (libelle_agent(slug), slug):
+        if normaliser_slug(candidat) == slug:
+            return candidat
+    raise ErreurAtelier(f"aucun nom d'appariement possible pour le slug {slug!r} (slug non normalisé)")
+
+
+def appariements_import(api: Api, company_id: str, reg_agents: dict) -> list[tuple[str, str, str, str]]:
+    """Agents du registre présents dans l'entreprise dont la clé Paperclip diffère du slug du dépôt : sans appariement,
+    l'import « replace » les créerait en double. Rend (slug, identifiant, nom actuel, nom temporaire). Lecture seule ;
+    ErreurAtelier si la clé voulue est déjà portée par un autre agent (l'import mettrait à jour le mauvais agent)."""
+    tous = [a for a in api.get(f"/companies/{company_id}/agents") if a.get("status") != "terminated"]
+    porteurs, par_slug = {}, {}
+    for a in tous:
+        porteurs.setdefault(normaliser_slug(a["name"]), []).append(a)
+        par_slug.setdefault(slug_canonique(slug_depuis_nom(a["name"])), []).append(a)
+    sortie, collisions = [], []
+    for agent in reg_agents["agents"]:
+        candidats = par_slug.get(agent["slug"], [])
+        if len(candidats) > 1:
+            collisions.append(f"{agent['slug']} : plusieurs agents y correspondent ("
+                              + ", ".join(f"« {o['name']} » {o['id']}" for o in candidats) + ")")
+            continue
+        a = candidats[0] if candidats else None
+        if not a or normaliser_slug(a["name"]) == agent["slug"]:
+            continue
+        autres = [o for o in porteurs.get(agent["slug"], []) if o["id"] != a["id"]]
+        if autres:
+            collisions.append(f"{agent['slug']} : la clé est déjà portée par « {autres[0]['name']} » ({autres[0]['id']}), "
+                              f"l'agent du registre est « {a['name']} » ({a['id']})")
+            continue
+        sortie.append((agent["slug"], a["id"], a["name"], nom_appariement(agent["slug"])))
+    if collisions:
+        raise ErreurAtelier("collision de clé d'agent avant import (rien n'est écrit) : " + " | ".join(collisions))
+    return sortie
+
+
+def garde_creations_import(api: Api, company_id: str, avant: set[str], attendus: set[str]) -> list[str]:
+    """Après un import dans une entreprise existante : tout agent créé par ce passage est mis en pause s'il ne l'est pas
+    (un import n'allume jamais un agent) ; ErreurAtelier si l'un d'eux n'était pas attendu (slug hors des créations prévues
+    ou nom suffixé « … N » d'un agent existant). Rend les noms des agents créés attendus."""
+    agents = [a for a in api.get(f"/companies/{company_id}/agents") if a.get("status") != "terminated"]
+    noms = {unicodedata.normalize("NFC", a["name"]) for a in agents if a["id"] in avant}
+    crees, imprevus = [], []
+    for a in agents:
+        if a["id"] in avant:
+            continue
+        nom = unicodedata.normalize("NFC", a["name"])
+        if a.get("status") not in STATUTS_AGENT_INACTIFS:
+            api.appel("POST", f"/agents/{a['id']}/pause")
+            print(f"  agent créé par l'import, mis en pause aussitôt (statut {a.get('status')}) : « {nom} »")
+        m = RE_SUFFIXE_DOUBLON.fullmatch(nom)
+        if slug_canonique(slug_depuis_nom(nom)) not in attendus or (m and m.group(1) in noms):
+            imprevus.append(f"« {nom} » ({a['id']})")
+        else:
+            crees.append(nom)
+    if imprevus:
+        raise ErreurAtelier(f"l'import a créé {len(imprevus)} agent(s) que le registre n'attendait pas (doublons probables), "
+                            f"tous mis en pause : {', '.join(imprevus)}. Contrôle et nettoyage : "
+                            "« bootstrap-organisation.py nettoyer-doublons --client <slug> » (à blanc), puis --confirmer.")
+    return crees
+
+
+def importer_en_place(api: Api, fichiers, company_id: str, reg_agents: dict, selection, pause: bool) -> dict:
+    """Import natif « replace » dans une entreprise existante, sans doublon possible : appariement des agents dont la clé
+    Paperclip diffère du slug (nom temporaire, rétabli ensuite même si l'import échoue), puis garde sur les créations."""
+    avant = {a["id"] for a in api.get(f"/companies/{company_id}/agents")}
+    attendus = {a["slug"] for a in reg_agents["agents"]} - set(agents_par_slug(api, company_id))
+    appariements = appariements_import(api, company_id, reg_agents)
+    faits = []
+    try:
+        for slug, aid, actuel, temporaire in appariements:
+            api.appel("PATCH", f"/agents/{aid}", {"name": temporaire})
+            faits.append((slug, aid, actuel))
+            print(f"  appariement avant import : {slug} : « {actuel} » -> « {temporaire} » (nom rétabli après l'import)")
+        resultat = importer(api, fichiers, {"mode": "existing_company", "companyId": company_id}, "replace", selection,
+                            pause=pause)
+    finally:
+        echecs = []
+        for slug, aid, actuel in faits:
+            try:
+                api.appel("PATCH", f"/agents/{aid}", {"name": actuel})
+            except ErreurAtelier as e:
+                echecs.append(f"{slug} ({aid}) -> « {actuel} » : {e}")
+        if echecs:
+            raise ErreurAtelier("nom d'agent non rétabli après l'import (le relancer le rétablit) : " + " | ".join(echecs))
+    garde_creations_import(api, company_id, avant, attendus)
+    return resultat
+
+
+CLES_CONSERVEES =("paperclipSkillSync", "instructionsFilePath", "instructionsRootPath",
                    "instructionsEntryFile", "instructionsBundleMode")
 
 
@@ -1950,10 +2054,7 @@ def appliquer_organisation(api: Api, reg_agents: dict, reg_orga: dict, fichiers:
             # pauseAutomations est vrai. On ne le demande que si un agent doit être créé :
             # une mise à jour ne rallume ni n'éteint un agent que l'opérateur aurait activé.
             creation = any(r.startswith("agent absent") for r in raisons)
-            import_fait = importer(
-                api, fichiers, {"mode": "existing_company", "companyId": company_id}, "replace", selection,
-                pause=creation,
-            )
+            import_fait = importer_en_place(api, fichiers, company_id, reg_agents, selection, pause=creation)
     if import_fait is not None:
         for w in import_fait.get("warnings") or []:
             print(f"  avertissement Paperclip : {w}")
@@ -3766,7 +3867,7 @@ def appliquer_service(api: Api, reg_agents: dict, reg_orga: dict, fichiers: dict
             for r in raisons:
                 print(f"  - {r}")
             creation = any(r.startswith("agent absent") for r in raisons)
-            import_fait = importer(api, fichiers, {"mode": "existing_company", "companyId": company_id}, "replace", None, pause=creation)
+            import_fait = importer_en_place(api, fichiers, company_id, reg_agents, None, pause=creation)
     if import_fait is not None:
         for w in import_fait.get("warnings") or []:
             print(f"  avertissement Paperclip : {w}")
@@ -4146,7 +4247,8 @@ def fichiers_mise_a_jour(plan: dict) -> dict[str, str]:
 def diagnostic_mise_a_jour(api: Api, plan: dict, mode: str) -> dict:
     """Lecture seule : agents du registre à créer, agents hors registre, raisons de mise à jour des agents existants."""
     slugs = [a["slug"] for a in plan["reg_agents"]["agents"]]
-    diag = {"creer": list(slugs), "hors_registre": [], "raisons": [], "renommages": []}
+    diag = {"creer": list(slugs), "hors_registre": [], "raisons": [], "renommages": [], "appariements": [], "collision": None,
+            "doublons": []}
     if plan["existante"] is None:
         return diag
     cid = plan["existante"]["id"]
@@ -4163,6 +4265,11 @@ def diagnostic_mise_a_jour(api: Api, plan: dict, mode: str) -> dict:
         raisons = etat_service_a_jour(api, cid, plan["reg_agents"], fichiers, empreinte, jeton_id, mode)
     diag["raisons"] = [r for r in raisons if not r.startswith("agent absent")]
     diag["renommages"] = renommages_agents(api, cid, plan["reg_agents"])
+    try:
+        diag["appariements"] = appariements_import(api, cid, plan["reg_agents"])
+    except ErreurAtelier as e:
+        diag["collision"] = str(e)
+    diag["doublons"] = doublons_entreprise(api, cid)
     return diag
 
 
@@ -4233,13 +4340,27 @@ def cmd_mettre_a_jour_client(args) -> int:
     for plan in plans:
         for s_, _, actuel, voulu in plan["diag"]["renommages"]:
             print(f"  [{plan['svc']['slug']}] renommage prévu : {s_} : « {actuel} » -> « {voulu} »")
+    for plan in plans:
+        d, etiquette = plan["diag"], plan["svc"]["slug"]
+        for s_, _, actuel, temporaire in d["appariements"]:
+            print(f"  [{etiquette}] risque de doublon écarté : la clé Paperclip de « {actuel} » diffère du slug {s_} ; si l'import "
+                  f"natif a lieu, nom temporaire « {temporaire} » avant l'import, rétabli après (sinon : « {actuel} 2 » créé)")
+        if d["collision"]:
+            print(f"  [{etiquette}] RISQUE DE COLLISION, la mise à jour s'arrêtera avant toute écriture : {d['collision']}")
+        if d["doublons"]:
+            print(f"  [{etiquette}] {len(d['doublons'])} doublon(s) probable(s) déjà présent(s) : "
+                  + ", ".join(f"« {x['doublon']['name']} » ({x['doublon'].get('status')})" for x in d["doublons"])
+                  + f" ; contrôle : nettoyer-doublons --client {slug}")
+    collisions = [f"[{p['svc']['slug']}] {p['diag']['collision']}" for p in plans if p["diag"]["collision"]]
     if args.a_blanc:
         encore_actifs = sum(1 for p in plans for _, _, st in p["diag"]["hors_registre"] if st != "paused")
         if args.pause_hors_registre:
             print(f"  --pause-hors-registre : {encore_actifs} agent(s) hors registre encore actif(s) seraient mis en pause (aucune suppression).")
         elif total_hors:
             print(f"  sans --pause-hors-registre, aucun agent hors registre n'est touché ({encore_actifs} encore actif(s) : décision humaine).")
-        return 0
+        return 1 if collisions else 0
+    if collisions:
+        raise ErreurAtelier("collision de clé d'agent, rien n'est écrit : " + " ; ".join(collisions))
 
     if cmd_generer(argparse.Namespace(verifier=True)) != 0:
         return 1
@@ -4291,6 +4412,93 @@ def cmd_mettre_a_jour_client(args) -> int:
         configurer_plugin_client(api, slug)
     print(f"Client « {fiche['nomCommercial']} » à jour : {len(plans)} entreprise(s), {mis_en_pause} agent(s) hors registre mis en pause, "
           f"{len(restes)} laissé(s) actif(s).")
+    return 0
+
+
+FICHIER_JOURNAL_DOUBLONS = "journal-nettoyage-doublons.jsonl"
+
+
+def doublons_entreprise(api: Api, company_id: str) -> list[dict]:
+    """Agents « <nom> N » (N >= 2) créés APRÈS un agent existant nommé exactement « <nom> », de même rôle et même titre,
+    dans la même entreprise : doublons laissés par un import natif mal apparié. Lecture seule."""
+    agents = [a for a in api.get(f"/companies/{company_id}/agents") if a.get("status") != "terminated"]
+    par_nom: dict[str, list[dict]] = {}
+    for a in agents:
+        par_nom.setdefault(unicodedata.normalize("NFC", a["name"]), []).append(a)
+    sortie = []
+    for a in agents:
+        m = RE_SUFFIXE_DOUBLON.fullmatch(unicodedata.normalize("NFC", a["name"]))
+        if not m:
+            continue
+        originaux = [o for o in par_nom.get(m.group(1), []) if o["id"] != a["id"] and o.get("role") == a.get("role")
+                     and o.get("title") == a.get("title") and str(o.get("createdAt") or "") < str(a.get("createdAt") or "~")]
+        if originaux:
+            sortie.append({"doublon": a, "original": originaux[0]})
+    return sorted(sortie, key=lambda x: x["doublon"]["name"])
+
+
+def activite_agent(api: Api, company_id: str, agent_id: str) -> list[str]:
+    """Traces de travail d'un agent : tâches qui lui sont affectées ou qu'il a créées, exécutions. Vide = aucune."""
+    traces = []
+    affectees = api.get(f"/companies/{company_id}/issues?assigneeAgentId={agent_id}")
+    creees = [i for i in api.get(f"/companies/{company_id}/issues") if i.get("createdByAgentId") == agent_id]
+    ids = {i.get("id") for i in affectees} | {i.get("id") for i in creees}
+    if ids:
+        traces.append(f"{len(ids)} tâche(s)")
+    if api.get(f"/companies/{company_id}/heartbeat-runs?agentId={agent_id}&limit=1&summary=true"):
+        traces.append("exécution(s)")
+    return traces
+
+
+def cmd_nettoyer_doublons(args) -> int:
+    """Doublons « <nom> N » laissés par un import natif mal apparié, dans les entreprises du client (registre local). À blanc
+    par défaut : liste et contrôle. --confirmer : met en pause puis supprime (DELETE /agents/<id>) ceux qui n'ont aucune
+    tâche ni exécution ; ceux qui en ont sont signalés et laissés tels quels (décision humaine). Journal JSONL local."""
+    slug = args.client
+    registre = lire_registre_client(slug)
+    if registre is None:
+        raise ErreurAtelier(f"aucun registre local pour le client {slug} ({dossier_client(slug) / FICHIER_REGISTRE_CLIENT}).")
+    api = Api(url_api())
+    prefixe = "" if args.confirmer else "À blanc : rien n'est écrit. "
+    candidats = []
+    for service, e in sorted(registre["entreprises"].items()):
+        cid = e.get("entrepriseId")
+        if not cid:
+            continue
+        for x in doublons_entreprise(api, cid):
+            traces = activite_agent(api, cid, x["doublon"]["id"])
+            candidats.append({"service": service, "companyId": cid, **x, "traces": traces})
+    supprimables = [c for c in candidats if not c["traces"]]
+    print(f"{prefixe}Client {slug} : {len(candidats)} doublon(s) probable(s), {len(supprimables)} sans tâche ni exécution "
+          f"(supprimable(s)), {len(candidats) - len(supprimables)} avec activité (laissé(s) tel(s) quel(s)).")
+    for c in candidats:
+        d, o = c["doublon"], c["original"]
+        etat = "AVEC ACTIVITÉ (" + ", ".join(c["traces"]) + "), non touché" if c["traces"] else (
+            "sera mis en pause puis supprimé" if args.confirmer else "serait mis en pause puis supprimé avec --confirmer")
+        print(f"  [{c['service']}] « {d['name']} » {d['id']} (statut {d.get('status')}, créé {d.get('createdAt')}) "
+              f"doublon de « {o['name']} » {o['id']} (statut {o.get('status')}) : {etat}")
+    if not args.confirmer:
+        return 0
+    journal = dossier_client(slug) / FICHIER_JOURNAL_DOUBLONS
+    supprimes = 0
+    with verrou_ecriture("nettoyer-doublons"):
+        journal.parent.mkdir(parents=True, exist_ok=True)
+        for c in supprimables:
+            d = c["doublon"]
+            if activite_agent(api, c["companyId"], d["id"]):  # nouveau contrôle juste avant d'écrire
+                print(f"  activité apparue entre-temps, non touché : « {d['name']} » {d['id']}")
+                continue
+            if d.get("status") != "paused":
+                api.appel("POST", f"/agents/{d['id']}/pause")
+            api.appel("DELETE", f"/agents/{d['id']}")
+            supprimes += 1
+            ligne = {"date": dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"), "action": "pause+suppression",
+                     "service": c["service"], "companyId": c["companyId"], "agentId": d["id"], "nom": d["name"],
+                     "statutAvant": d.get("status"), "originalId": c["original"]["id"], "original": c["original"]["name"]}
+            with open(journal, "a", encoding="utf-8") as f:
+                f.write(json.dumps(ligne, ensure_ascii=False) + "\n")
+            print(f"  supprimé : [{c['service']}] « {d['name']} » {d['id']}")
+    print(f"{supprimes} doublon(s) supprimé(s) ; journal : {journal}")
     return 0
 
 
@@ -4753,6 +4961,9 @@ def main(argv=None) -> int:
     pm.add_argument("--motif", required=True, help="texte qui désigne la personne (nom, courriel, numéro), cherché sans casse")
     pm.add_argument("--confirmer", action="store_true", help="efface vraiment ; sans lui : à blanc (liste les comptes, n'écrit rien)")
     pm.add_argument("--a-blanc", "--a_blanc", action="store_true", dest="a_blanc", help="à blanc (défaut) : n'écrit rien")
+    nd = sp.add_parser("nettoyer-doublons")
+    nd.add_argument("--client", required=True)
+    nd.add_argument("--confirmer", action="store_true", help="met en pause puis supprime les doublons sans activité (défaut : à blanc)")
     r = sp.add_parser("reinitialiser")
     r.add_argument("--confirmer", default="")
     j = sp.add_parser("jeton")
@@ -4774,6 +4985,7 @@ def main(argv=None) -> int:
         "etat": cmd_etat,
         "nouveau-client": cmd_nouveau_client,
         "mettre-a-jour-client": cmd_mettre_a_jour_client,
+        "nettoyer-doublons": cmd_nettoyer_doublons,
         "assurer-connexions": cmd_assurer_connexions,
         "exporter": cmd_exporter,
         "purger": cmd_purger,
