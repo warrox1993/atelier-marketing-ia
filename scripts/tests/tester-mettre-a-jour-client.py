@@ -206,6 +206,44 @@ class MiseAJourClient(unittest.TestCase):
         self.lancer(sans_nouveaux_services=False)
         self.assertEqual(self.api.journal, [])  # le service ajouté existe maintenant : plus de budget ni de création
 
+    def test_nom_affiche_pris_de_agents_md_avec_accents(self):
+        reg_agents, _ = bo.registres()
+        svc = next(x for x in bo.registre_services()["services"] if x["slug"] == "direction")
+        agents, _, _ = bo.agents_service(reg_agents, svc)
+        noms = {a["slug"]: a["nom"] for a in agents}
+        self.assertEqual(noms["coordinateur-general"], "Coordinateur général")
+        for slug, nom in noms.items():  # le slug reste retrouvable depuis le nom accentué
+            self.assertTrue(bo.nom_correspond(nom, slug), (nom, slug))
+
+    def test_slug_depuis_nom_sans_accents(self):
+        self.assertEqual(bo.slug_depuis_nom("Coordinateur général"), "coordinateur-general")
+        self.assertEqual(bo.slug_depuis_nom("Conformité publicitaire"), "conformite-publicitaire")
+
+    def test_nom_correspond_aux_mots_outils_pres(self):
+        self.assertTrue(bo.nom_correspond("Cellule de crise", "cellule-crise"))
+        self.assertTrue(bo.nom_correspond("Plan et capacité", "plan-capacite"))
+        self.assertTrue(bo.nom_correspond("Tableau de bord", "tableau-de-bord"))
+        self.assertFalse(bo.nom_correspond("Cellule de veille", "cellule-crise"))
+        self.assertFalse(bo.nom_correspond("Plan", "plan-capacite"))
+
+    def test_agents_par_slug_retrouve_un_nom_avec_mots_outils(self):
+        self.api.agents[ID_DIR] = [agent("Cellule de crise", "paused", "a-cc"), agent("Tableau de bord", "paused", "a-tb"),
+                                   agent("Gardien des connexions", "idle", "a-g")]
+        presents = bo.agents_par_slug(self.api, ID_DIR)
+        self.assertEqual(set(presents), {"cellule-crise", "tableau-de-bord", bo.GARDIEN_SLUG})
+        self.assertEqual(presents["cellule-crise"]["id"], "a-cc")
+        self.assertEqual(presents["tableau-de-bord"]["id"], "a-tb")
+
+    def test_agent_existant_renomme_a_blanc_puis_en_ecriture(self):
+        self.api.agents[ID_DIR] = [agent("Coordinateur general", "idle", "a-cg")]
+        code, sortie = self.lancer(a_blanc=True)
+        self.assertEqual(self.api.ecritures, 0)
+        self.assertIn("renommage prévu : coordinateur-general : « Coordinateur general » -> « Coordinateur général »", sortie)
+        self.assertIn("1 agent(s) à renommer", sortie)
+        code, sortie = self.lancer()
+        self.assertIn(("PATCH", "/agents/a-cg", {"name": "Coordinateur général"}), self.api.journal)
+        self.assertIn("agent renommé", sortie)
+
     def test_refus_client_inconnu(self):
         with self.assertRaises(bo.ErreurAtelier):
             self.lancer(client="inconnu")

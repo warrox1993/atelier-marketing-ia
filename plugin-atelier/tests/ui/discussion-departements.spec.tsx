@@ -82,6 +82,9 @@ describe("discussion : « À faire » de tous les départements", () => {
     const cartes = Array.from(c.querySelectorAll('.atl-disc-bulle[data-carte="oui"]'));
     expect(cartes.map((b) => b.getAttribute("data-service"))).toEqual(["Marketing", "Juridique", "Juridique"]);
     expect(cartes[0]!.querySelector(".atl-disc-dep")!.textContent).toBe("Marketing");
+    // Teinte de l'étiquette : accent par défaut, couleur d'attention pour un service sensible (juridique).
+    expect(cartes[0]!.querySelector(".atl-disc-dep")!.hasAttribute("data-sensible")).toBe(false);
+    expect(cartes[1]!.querySelector(".atl-disc-dep")!.getAttribute("data-sensible")).toBe("oui");
     expect(cartes[0]!.textContent).toContain("Mettre l'agent Veille en pause ?");
     expect(cartes[1]!.textContent).toContain("Demande du marketing au juridique");
     expect(c.querySelector('[role="alert"]')).toBeNull();
@@ -114,6 +117,10 @@ describe("discussion : « À faire » de tous les départements", () => {
     const c = await ouvrir();
     const actions = c.querySelector(".atl-disc-actions")!;
     expect(actions.querySelector(".atl-disc-dep")!.textContent).toBe("Marketing");
+    // Étiquette et bouton forment une paire groupée (étiquette au-dessus de son bouton).
+    const paire = actions.querySelector(".atl-disc-paire")!;
+    expect(paire.firstElementChild!.classList.contains("atl-disc-dep")).toBe(true);
+    expect(paire.querySelector("button")).toBeTruthy();
     expect(parTexte(actions as HTMLElement, "button", "Répondre à la demande de confirmation")).toBeTruthy();
   });
 

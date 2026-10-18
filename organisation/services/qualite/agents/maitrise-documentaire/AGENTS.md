@@ -1,7 +1,7 @@
 ---
 kind: "agent"
 slug: "maitrise-documentaire"
-name: "Maitrise documentaire"
+name: "Maîtrise documentaire"
 title: "Qualité · Maîtrise des documents et des versions"
 reportsTo: "coordinateur-qualite"
 skills:

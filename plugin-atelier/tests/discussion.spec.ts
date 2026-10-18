@@ -74,7 +74,9 @@ function faux(o: { reveilEchoue?: boolean; cartesEchouent?: boolean } = {}) {
   const refus = async (p: Promise<unknown>) => ((await p.then(() => null, (e: unknown) => e)) as ErreurAtelier | null);
   /** Réponse du Coordinateur dans le fil natif. */
   const repondreCoordinateur = (issueId: string, texte: string) => ctx.issues.createComment(issueId, texte, SOC, { authorAgentId: COORD });
-  return { appeler, refus, issues, commentaires, reveils, miseAJour, journal, repondreCoordinateur, cartes, lecturesCartes };
+  /** Crée le fil comme le fait le premier message envoyé (l'ouverture de la page, elle, ne crée rien). */
+  const creerFil = () => ctx.issues.create({ companyId: SOC, title: "Discussion avec le Coordinateur", status: "backlog", priority: "medium", assigneeAgentId: COORD, originKind: ORIGINE_DISCUSSION as never, originId: `discussion:${SOC}` } as never);
+  return { appeler, refus, creerFil, issues, commentaires, reveils, miseAJour, journal, repondreCoordinateur, cartes, lecturesCartes };
 }
 
 const envoyer = (texte: unknown, companyId: string = SOC) => ({ corps: { companyId, texte } });
@@ -89,19 +91,26 @@ describe("discussion : routes déclarées", () => {
 });
 
 describe("discussion.ouvrir", () => {
-  it("crée l'issue unique assignée au Coordinateur, avec un marqueur stable, sans doublon au second appel", async () => {
+  it("ne crée rien à l'ouverture : fil vide, aucune tâche, aucun journal ; la tâche unique naît au premier message, sans doublon", async () => {
     const f = faux();
     const a = (await f.appeler("discussion.ouvrir")).corps as Ligne;
     const b = (await f.appeler("discussion.ouvrir")).corps as Ligne;
+    expect(f.issues).toHaveLength(0);
+    expect(f.journal).toEqual([]);
+    expect(a).toEqual({ issueId: null, identifiant: null, messages: [], cartes: [], cartesIndisponibles: false });
+    expect(b).toEqual(a);
+    await f.appeler("discussion.envoyer", envoyer("Bonjour"));
+    await f.appeler("discussion.envoyer", envoyer("Encore"));
     expect(f.issues).toHaveLength(1);
     expect(f.issues[0]).toMatchObject({ title: "Discussion avec le Coordinateur", assigneeAgentId: COORD, originKind: ORIGINE_DISCUSSION, originId: `discussion:${SOC}` });
-    expect(b.issueId).toBe(a.issueId);
-    expect(a).toMatchObject({ identifiant: "DEM-1", messages: [] });
+    const c = (await f.appeler("discussion.ouvrir")).corps as Ligne;
+    expect(c).toMatchObject({ issueId: f.issues[0]!.id, identifiant: "DEM-1" });
+    expect(c.messages).toHaveLength(2);
   });
 
   it("réaffecte le fil existant au coordinateur actuel (Direction : coordinateur général), une seule fois, journalisé", async () => {
     const f = faux();
-    await f.appeler("discussion.ouvrir");
+    await f.creerFil();
     const ancien = id(9);
     f.issues[0]!.assigneeAgentId = ancien; // fil ouvert du temps de l'ancien coordinateur
     await f.appeler("discussion.ouvrir");
@@ -120,7 +129,7 @@ describe("discussion.ouvrir", () => {
 
   it("rend les messages du plus ancien au plus récent, humain et agent distingués, 100 au plus", async () => {
     const f = faux();
-    await f.appeler("discussion.ouvrir");
+    await f.creerFil();
     const issueId = f.issues[0]!.id as string;
     for (let i = 0; i < 60; i += 1) {
       await f.appeler("discussion.envoyer", envoyer(`Question ${i}`));
@@ -223,7 +232,7 @@ const ouvrirMessages = async (f: ReturnType<typeof faux>) => ((await f.appeler("
 describe("discussion : actions du Coordinateur (télécommande)", () => {
   it("valide les actions, retire le bloc du texte et rend `actions`", async () => {
     const f = faux();
-    await f.appeler("discussion.ouvrir");
+    await f.creerFil();
     const issueId = f.issues[0]!.id as string;
     await f.repondreCoordinateur(issueId, bloc([{ type: "ouvrir", cible: "prospects" }, { type: "ouvrir", cible: "prospects", filtre: { statut: "qualifie", segment: "medecins" } }, { type: "traiter", element: "contenu:abc-12" }]));
     const m = (await ouvrirMessages(f)).messages[0]!;
@@ -234,7 +243,7 @@ describe("discussion : actions du Coordinateur (télécommande)", () => {
 
   it("rejette type inconnu, cible inconnue, URL libre, HTML, identifiant d'entreprise et élément mal formé, en journalisant une seule fois", async () => {
     const f = faux();
-    await f.appeler("discussion.ouvrir");
+    await f.creerFil();
     const issueId = f.issues[0]!.id as string;
     await f.repondreCoordinateur(
       issueId,
@@ -260,7 +269,7 @@ describe("discussion : actions du Coordinateur (télécommande)", () => {
 
   it("JSON illisible ou non tableau : aucune action, message conservé, journalisé", async () => {
     const f = faux();
-    await f.appeler("discussion.ouvrir");
+    await f.creerFil();
     const issueId = f.issues[0]!.id as string;
     await f.repondreCoordinateur(issueId, bloc("{pas du json"));
     await f.repondreCoordinateur(issueId, bloc({ type: "ouvrir", cible: "prospects" }));
@@ -272,7 +281,7 @@ describe("discussion : actions du Coordinateur (télécommande)", () => {
 
   it("au plus 6 actions par message", async () => {
     const f = faux();
-    await f.appeler("discussion.ouvrir");
+    await f.creerFil();
     await f.repondreCoordinateur(f.issues[0]!.id as string, bloc(["accueil", "prospects", "carte", "campagnes", "contenus", "calendrier", "resultats"].map((cible) => ({ type: "ouvrir", cible }))));
     expect(((await ouvrirMessages(f)).messages[0]!.actions as unknown[]).length).toBe(6);
   });
@@ -288,7 +297,7 @@ describe("discussion : actions du Coordinateur (télécommande)", () => {
 
   it("les actions d'un agent autre que le Coordinateur sont écartées (texte conservé, bloc retiré, motif journalisé)", async () => {
     const f = faux();
-    await f.appeler("discussion.ouvrir");
+    await f.creerFil();
     const issueId = f.issues[0]!.id as string;
     await f.repondreCoordinateur(issueId, bloc([{ type: "ouvrir", cible: "prospects" }]));
     const autre = id(2);
@@ -304,7 +313,7 @@ describe("discussion : actions du Coordinateur (télécommande)", () => {
 
   it("isolation : la discussion d'une autre entreprise ne rend ni ses messages, ni ses actions, ni ses cartes", async () => {
     const f = faux();
-    await f.appeler("discussion.ouvrir");
+    await f.creerFil();
     await f.repondreCoordinateur(f.issues[0]!.id as string, bloc([{ type: "ouvrir", cible: "prospects" }]));
     f.cartes.push({ id: "k1", issueId: f.issues[0]!.id, companyId: SOC, kind: "request_confirmation", status: "pending", title: "Confirmer ?", payload: { prompt: "Pause ?" } });
     const autre = (await f.appeler("discussion.messages", { companyId: AUTRE_SOC })).corps as { messages: unknown[]; cartes: unknown[] };
@@ -315,7 +324,7 @@ describe("discussion : actions du Coordinateur (télécommande)", () => {
 describe("discussion : cartes en attente dans le fil", () => {
   it("rend les cartes en attente de la discussion et des demandes ouvertes, pas les autres", async () => {
     const f = faux();
-    await f.appeler("discussion.ouvrir");
+    await f.creerFil();
     const disc = f.issues[0]!;
     f.issues.push({ id: id(300), identifier: "DEM-9", title: "Demande de test", companyId: SOC, status: "in_progress", originKind: "plugin:atelier.marketing-ia:demande", originId: "demande:x", createdAt: new Date() });
     f.issues.push({ id: id(301), identifier: "DEM-10", title: "Terminée", companyId: SOC, status: "done", originKind: "plugin:atelier.marketing-ia:demande", originId: "demande:y", createdAt: new Date() });
@@ -329,7 +338,7 @@ describe("discussion : cartes en attente dans le fil", () => {
 
   it("une lecture de cartes en panne n'empêche pas d'ouvrir le fil", async () => {
     const f = faux({ cartesEchouent: true });
-    await f.appeler("discussion.ouvrir");
+    await f.creerFil();
     await f.appeler("discussion.envoyer", envoyer("Bonjour"));
     const corps = (await f.appeler("discussion.ouvrir")).corps as { cartes: unknown[]; messages: unknown[] };
     expect(corps.cartes).toEqual([]);
@@ -338,6 +347,7 @@ describe("discussion : cartes en attente dans le fil", () => {
 
   it("une lecture de cartes en panne est signalée à l'interface (cartesIndisponibles), sans cache de la panne", async () => {
     const f = faux({ cartesEchouent: true });
+    await f.creerFil();
     const o = (await f.appeler("discussion.ouvrir")).corps as { cartesIndisponibles: boolean };
     expect(o.cartesIndisponibles).toBe(true);
     const avant = f.lecturesCartes.n;
@@ -352,7 +362,8 @@ describe("discussion : cartes en attente dans le fil", () => {
       let t = Date.parse("2026-10-16T12:00:00Z");
       vi.spyOn(Date, "now").mockImplementation(() => t);
       const f = faux();
-      await f.appeler("discussion.ouvrir");
+      await f.creerFil();
+      await f.appeler("discussion.ouvrir"); // première lecture des cartes
       const apres = f.lecturesCartes.n;
       for (let i = 0; i < 5; i++) {
         t += 4000;

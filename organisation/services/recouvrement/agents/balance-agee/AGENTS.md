@@ -1,7 +1,7 @@
 ---
 kind: "agent"
 slug: "balance-agee"
-name: "Balance agee"
+name: "Balance âgée"
 title: "Recouvrement · Balance âgée et priorités"
 reportsTo: "coordinateur-recouvrement"
 skills:

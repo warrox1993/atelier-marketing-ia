@@ -1,7 +1,7 @@
 ---
 kind: "agent"
 slug: "synthese"
-name: "Synthese"
+name: "Synthèse"
 title: "Direction · Note de synthèse et de décision"
 reportsTo: "coordinateur-direction"
 skills:

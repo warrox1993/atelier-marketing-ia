@@ -299,7 +299,7 @@ function ImportGuide({ etatBase, onChange }: { etatBase: EtatBase | null; onChan
           <Champ libelle="Finalité du traitement" aide="Pourquoi cette base est chargée (obligation d'information, 10 caractères au moins).">
             <input value={finalite} onChange={(e) => setFinalite(e.target.value)} maxLength={500} autoComplete="off" />
           </Champ>
-          <Champ libelle="Durée de conservation (mois)" aide={`Au terme de cette durée sans nouvel import, la base est purgée. Défaut : ${LIMITES_PROSPECTION.conservationMoisDefaut} mois.`} className="atl-champ-etroit">
+          <Champ libelle="Durée de conservation (mois)" aide={`Au terme de cette durée sans nouvel import, la base est purgée. Défaut : ${LIMITES_PROSPECTION.conservationMoisDefaut} mois.`}>
             <input value={duree} onChange={(e) => setDuree(e.target.value)} inputMode="numeric" autoComplete="off" />
           </Champ>
           {erreur ? <EtatErreur erreur={erreur} contexte="lecture du fichier" /> : null}
@@ -430,7 +430,7 @@ function ResultatImport({ r, onRecommencer }: { r: ImportBaseClients; onRecommen
   );
 }
 
-function SuppressionBase({ onChange }: { onChange(): void }) {
+function SuppressionBase({ onChange, baseExiste }: { onChange(): void; baseExiste: boolean }) {
   const { companyId } = useHostContext();
   const [ouvert, setOuvert] = useState(false);
   const [confirmation, setConfirmation] = useState("");
@@ -458,6 +458,8 @@ function SuppressionBase({ onChange }: { onChange(): void }) {
     }
   }
 
+  // Sans base à effacer, le bouton rouge n'a pas de raison d'être ; le message de réussite reste affiché après une suppression.
+  if (!baseExiste && !fait) return null;
   return (
     <Section titre="Supprimer la base clients" aide="Effacement total et irréversible, journalisé. Les oppositions sont gardées : elles protègent les personnes qui ont refusé d'être contactées.">
       {fait ? (
@@ -664,10 +666,9 @@ function TableauVentesCroisees({ version }: { version: number }) {
       {etat.chargement && !d && !etat.erreur ? <p className="atl-attenue">Calcul des ventes croisées.</p> : null}
       {d ? (
         <>
-         
-          <p className="atl-sous">
+          {d.clients === 0 && d.opportunites.length === 0 ? null : <p className="atl-sous">
             {d.origineRegles === "client" ? `Règles du client : ${regles}.` : d.origineRegles === "demonstration" ? `Règles : ${regles}.` : "Aucune règle de vente croisée enregistrée par le client."}
-          </p>
+          </p>}
           {d.opportunites.length === 0 ? (
             <p>{d.clients === 0 ? "Aucune base clients chargée : importez-en une pour voir les ventes croisées." : "Aucune opportunité dans la base actuelle."}</p>
           ) : (
@@ -757,7 +758,7 @@ export function BaseClients() {
       <ImportGuide etatBase={etat.data} onChange={rafraichir} />
       <TableauVentesCroisees version={version} />
       <Opposition />
-      <SuppressionBase onChange={rafraichir} />
+      <SuppressionBase onChange={rafraichir} baseExiste={etat.data?.existe === true} />
     </>
   );
 }

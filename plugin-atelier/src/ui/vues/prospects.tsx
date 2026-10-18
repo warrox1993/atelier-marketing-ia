@@ -1192,13 +1192,14 @@ function EtalonnerScore({ companyId, onTermine }: { companyId: string; onTermine
               ))}
             </select>
           </Champ>
-          <Champ libelle="Historique des résultats (.csv ou .xlsx)" aide="Facultatif : sans fichier, les résultats déjà enregistrés sont utilisés.">
+          <Champ libelle="Historique des résultats (.csv ou .xlsx), facultatif">
             <ChoixFichier accept=".csv,.xlsx" nom={historique?.nomFichier ?? null} onChoisir={(f) => void choisir(f)} />
           </Champ>
           <Bouton variante="principal" enCours={enCours} raisonDesactive={erreurFichier ? "Corrigez le fichier." : null} onClick={() => void calculer()}>
             Calculer l'étalonnage
           </Bouton>
         </div>
+        <p className="atl-aide">Sans fichier, les résultats déjà enregistrés sont utilisés.</p>
         {erreurFichier ? (
           <p className="atl-texte-danger" role="alert">
             {erreurFichier}

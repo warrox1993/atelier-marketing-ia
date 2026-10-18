@@ -194,7 +194,7 @@ function ancreVisee(ancre: string | undefined): boolean {
  * Section de page. Avec `repliable`, le titre devient le résumé d'un `details` : ouvert sur grand écran,
  * replié sur téléphone sauf si l'adresse vise l'ancre de la section (`ancre`, posée sur l'élément).
  */
-export function Section({ titre, id, children, actions, aide, ancre, repliable }: { titre: string; id?: string; children: ReactNode; actions?: ReactNode; aide?: ReactNode; ancre?: string; repliable?: boolean }) {
+export function Section({ titre, titreMasque, id, children, actions, aide, ancre, repliable }: { titre: string; titreMasque?: boolean; id?: string; children: ReactNode; actions?: ReactNode; aide?: ReactNode; ancre?: string; repliable?: boolean }) {
   const auto = useId();
   const idTitre = id ?? auto;
   const [ouvert, setOuvert] = useState(() => !ecranEtroit() || ancreVisee(ancre));
@@ -230,7 +230,7 @@ export function Section({ titre, id, children, actions, aide, ancre, repliable }
   return (
     <section className="atl-section" aria-labelledby={idTitre} id={ancre}>
       <div className="atl-section-tete">
-        <h2 id={idTitre}>{titre}</h2>
+        <h2 id={idTitre} className={titreMasque ? "atl-sr" : undefined}>{titre}</h2>
         {actions ? <div className="atl-section-actions">{actions}</div> : null}
       </div>
       {corps}

@@ -1,7 +1,7 @@
 ---
 kind: "agent"
 slug: "evaluation-formation"
-name: "Evaluation formation"
+name: "Évaluation formation"
 title: "Formation · Évaluation et efficacité des formations"
 reportsTo: "coordinateur-formation"
 skills:

@@ -2,7 +2,7 @@
   "schema": "atelier/registre-agents/v1",
   "version": "1.7.0",
   "dateVersion": "2026-10-17",
-  "description": "Registre canonique des treize agents marketing de l'Atelier et de l'agent déterministe « Porte de contrôle » (deterministe: true, adaptateur process, aucun modèle). Source unique : le fichier .paperclip.yaml et l'en-tête des AGENTS.md en sont générés par « python3 -I scripts/bootstrap-organisation.py generer ». Les noms courts (champ nom) sont sans accent parce que Paperclip dérive l'identifiant d'un agent de son nom en supprimant les lettres accentuées ; le titre porte le libellé français complet.",
+  "description": "Registre canonique des treize agents marketing de l'Atelier et de l'agent déterministe « Porte de contrôle » (deterministe: true, adaptateur process, aucun modèle). Source unique : le fichier .paperclip.yaml et l'en-tête des AGENTS.md en sont générés par « python3 -I scripts/bootstrap-organisation.py generer ». Les noms courts (champ nom) portent leurs accents : l'identifiant (slug) d'un agent en est dérivé en retirant les accents (NFKD) avant la normalisation, comme le fait le bootstrap ; le titre porte le libellé français complet.",
   "adaptateur": {
     "type": "claude_local",
     "engine": "cli",
@@ -645,7 +645,7 @@
     },
     {
       "slug": "reseaux-sociaux",
-      "nom": "Reseaux sociaux",
+      "nom": "Réseaux sociaux",
       "titre": "Pôle Contenus · Calendrier social, posts et réponses publiques",
       "role": "designer",
       "rapporteA": "coordinateur",
@@ -705,7 +705,7 @@
     },
     {
       "slug": "conformite-publicitaire",
-      "nom": "Conformite publicitaire",
+      "nom": "Conformité publicitaire",
       "titre": "Pôle Contrôle préalable · Communications commerciales réglementées",
       "role": "general",
       "rapporteA": "coordinateur",

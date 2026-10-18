@@ -1,0 +1,46 @@
+From 5cda45d3b32e484406cd52ff948436cca8814c81 Mon Sep 17 00:00:00 2001
+From: Jean-Baptiste Dhondt <114347858+warrox1993@users.noreply.github.com>
+Date: Sun, 18 Oct 2026 01:39:57 +0200
+Subject: [PATCH] =?UTF-8?q?fix(ui):=20acteur=20humain=20affich=C3=A9=20?=
+ =?UTF-8?q?=C2=AB=20Utilisateur=20=C2=BB=20dans=20le=20d=C3=A9tail=20du=20?=
+ =?UTF-8?q?pipeline=20et=20le=20fil=20de=20t=C3=A2che?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01DP85vPq2MHkZg8VNtRvCzB
+---
+ ui/src/lib/issue-chat-messages.ts  | 2 +-
+ ui/src/lib/pipeline-item-detail.ts | 2 +-
+ 2 files changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/ui/src/lib/issue-chat-messages.ts b/ui/src/lib/issue-chat-messages.ts
+index 13018920f..672683313 100644
+--- a/ui/src/lib/issue-chat-messages.ts
++++ b/ui/src/lib/issue-chat-messages.ts
+@@ -652,7 +652,7 @@ function createTimelineEventMessage(args: {
+     ? (agentMap?.get(event.actorId)?.name ?? event.actorId.slice(0, 8))
+     : event.actorType === "system"
+       ? "System"
+-      : (formatAssigneeUserLabel(event.actorId, currentUserId, userLabelMap) ?? "Board");
++      : (formatAssigneeUserLabel(event.actorId, currentUserId, userLabelMap) ?? "Utilisateur");
+ 
+   const lines: string[] = [
+     event.followUpRequested ? `${actorName} requested follow-up` : `${actorName} updated this issue`,
+diff --git a/ui/src/lib/pipeline-item-detail.ts b/ui/src/lib/pipeline-item-detail.ts
+index 8c20e05f7..5113d358c 100644
+--- a/ui/src/lib/pipeline-item-detail.ts
++++ b/ui/src/lib/pipeline-item-detail.ts
+@@ -290,7 +290,7 @@ function readDecision(payload: Record<string, unknown>) {
+ 
+ function actorName(event: PipelineCaseEvent) {
+   if (event.actorAgent?.name) return event.actorAgent.name;
+-  if (event.actorType === "user") return "Board";
++  if (event.actorType === "user") return "Utilisateur";
+   if (event.actorType === "system") return "Paperclip";
+   return null;
+ }
+-- 
+2.53.0
+

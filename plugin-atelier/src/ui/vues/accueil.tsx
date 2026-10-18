@@ -156,7 +156,7 @@ function EncartProspection({ companyId, onModele }: { companyId: string | null; 
             <p>Aucun lead pour l'instant : demandez une prospection à l'équipe.</p>
             <div className="atl-prospection-actions">
               <Bouton variante="principal" onClick={onModele}>
-                Utiliser le modèle « Prospection d'une zone »
+                Prospecter une zone
               </Bouton>
             </div>
           </>

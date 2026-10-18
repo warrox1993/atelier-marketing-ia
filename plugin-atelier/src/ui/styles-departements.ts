@@ -10,7 +10,9 @@ export const STYLES_DEPARTEMENTS = `
 .atl-dep-case { position: relative; display: flex; flex-direction: column; gap: 0.875rem; min-width: 0; padding: 1rem; border: 1px solid var(--atl-trait); border-radius: var(--atl-rayon); background: var(--atl-surface); }
 .atl-dep-case:hover { border-color: var(--atl-attenue); background: color-mix(in oklab, var(--atl-surface-2) 55%, var(--atl-surface)); }
 .atl-dep-case[data-courant] { background: var(--atl-surface-2); }
-.atl-dep-nom { display: flex; flex-direction: column; gap: 0.375rem; min-width: 0; }
+.atl-dep-case { cursor: pointer; }
+/* Hauteur de deux lignes pour tous les noms : les chiffres restent alignés d'une case à l'autre. */
+.atl-dep-nom { display: flex; flex-direction: column; gap: 0.375rem; min-width: 0; min-height: 2.6rem; }
 .atl-dep-nom h2 { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.125rem 0.625rem; margin: 0; font-size: 1rem; font-weight: 600; line-height: 1.3; min-width: 0; overflow-wrap: anywhere; }
 .atl-dep-lien { color: inherit; text-decoration: none; }
 .atl-dep-lien::after { content: ""; position: absolute; inset: 0; border-radius: inherit; }

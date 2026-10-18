@@ -1,7 +1,7 @@
 ---
 kind: "agent"
 slug: "secretariat-instances"
-name: "Secretariat instances"
+name: "Secrétariat instances"
 title: "Direction · Secrétariat du conseil, de l'assemblée et du comité de direction"
 reportsTo: "coordinateur-direction"
 skills:

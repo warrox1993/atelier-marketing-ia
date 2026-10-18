@@ -169,9 +169,30 @@ describe("discussion : envoi", () => {
   it("le bouton Envoyer est inactif sans texte et envoie sinon", async () => {
     const c = await ouvrir();
     const bouton = parTexte(c, "button", "Envoyer");
+    // Aucune consigne d'erreur avant toute tentative.
+    expect(c.textContent).not.toContain("Écrivez d'abord votre message.");
     await cliquer(bouton);
     expect(posts()).toHaveLength(0);
+    // Après une tentative à vide, l'aide apparaît ; elle disparaît dès qu'on saisit.
+    expect(c.textContent).toContain("Écrivez d'abord votre message.");
+    await saisir(champParLibelle(c, "Votre message au Coordinateur"), "S");
+    expect(c.textContent).not.toContain("Écrivez d'abord votre message.");
+    await saisir(champParLibelle(c, "Votre message au Coordinateur"), "");
     await saisir(champParLibelle(c, "Votre message au Coordinateur"), "Salut");
+    await cliquer(parTexte(c, "button", "Envoyer"));
+    expect(posts()).toHaveLength(1);
+  });
+
+  it("fil encore inexistant (aucune tâche) : la page s'affiche vide, sans erreur, et l'envoi reste possible", async () => {
+    const base = (fetch as unknown as ReturnType<typeof vi.fn>).getMockImplementation() as (u: string, i?: unknown) => Promise<Response>;
+    (fetch as unknown as ReturnType<typeof vi.fn>).mockImplementation(async (url: string, init?: { method?: string; body?: string }) => {
+      if ((init?.method ?? "GET") === "GET" && url.includes("/discussion") && !url.includes("/messages")) return new Response(JSON.stringify({ issueId: null, identifiant: null, messages: [], cartes: [], cartesIndisponibles: false }), { status: 200 });
+      return base(url, init);
+    });
+    const c = await ouvrir();
+    expect(c.querySelector('[role="alert"]')).toBeNull();
+    expect(c.querySelector(".atl-disc-vide")).not.toBeNull();
+    await saisir(champParLibelle(c, "Votre message au Coordinateur"), "Premier message");
     await cliquer(parTexte(c, "button", "Envoyer"));
     expect(posts()).toHaveLength(1);
   });

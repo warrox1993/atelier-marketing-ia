@@ -388,6 +388,7 @@ export function EditeurMarque({ initiale, onFait }: { initiale: ReferentielClien
               <Champ libelle={<>Description<span className="atl-sr"> de l'offre {i + 1}</span></>}>
                 <input value={o.description} onChange={(e) => setOffres((l) => l.map((x, j) => (j === i ? { ...x, description: e.target.value } : x)))} />
               </Champ>
+              <div className="atl-repeteur-actions">
               <label className="atl-case">
                 <input type="checkbox" checked={o.confirmee} onChange={(e) => setOffres((l) => l.map((x, j) => (j === i ? { ...x, confirmee: e.target.checked } : x)))} /> Confirmée<span className="atl-sr"> (offre {i + 1})</span>
               </label>
@@ -397,6 +398,7 @@ export function EditeurMarque({ initiale, onFait }: { initiale: ReferentielClien
               <Bouton variante="discret" onClick={() => setOffres((l) => l.filter((_, j) => j !== i))}>
                 Retirer<span className="atl-sr"> l'offre {i + 1}</span>
               </Bouton>
+              </div>
             </div>
           ))}
           <Bouton variante="discret" onClick={() => setOffres((l) => [...l, { nom: "", description: "", confirmee: false }])}>
@@ -413,20 +415,23 @@ export function EditeurMarque({ initiale, onFait }: { initiale: ReferentielClien
               <Champ libelle={<>Adresse<span className="atl-sr"> de l'établissement {i + 1}</span></>}>
                 <input value={x.adresse} onChange={(e) => setEtabs((l) => l.map((y, j) => (j === i ? { ...y, adresse: e.target.value } : y)))} />
               </Champ>
-              <Champ libelle={<>Latitude<span className="atl-sr"> de l'établissement {i + 1}</span></>} aide="Facultatif : sert à la carte des prospects et à la distance au bureau. Clic droit sur le lieu dans OpenStreetMap ou Google Maps pour copier les coordonnées.">
+              <Champ libelle={<>Latitude<span className="atl-sr"> de l'établissement {i + 1}</span></>}>
                 <input inputMode="decimal" value={x.lat} onChange={(e) => setEtabs((l) => l.map((y, j) => (j === i ? { ...y, lat: e.target.value } : y)))} />
               </Champ>
               <Champ libelle={<>Longitude<span className="atl-sr"> de l'établissement {i + 1}</span></>}>
                 <input inputMode="decimal" value={x.lon} onChange={(e) => setEtabs((l) => l.map((y, j) => (j === i ? { ...y, lon: e.target.value } : y)))} />
               </Champ>
+              <p className="atl-aide atl-repeteur-large">Latitude et longitude sont facultatives : elles servent à la carte des prospects et à la distance au bureau. Clic droit sur le lieu dans OpenStreetMap ou Google Maps pour copier les coordonnées.</p>
               {erreursPosition[i] ? <p className="atl-widget-erreur" role="alert">{erreursPosition[i]}</p> : null}
               <Champ
+                className="atl-repeteur-large"
                 libelle={<>Segments suivis<span className="atl-sr"> par l'établissement {i + 1}</span></>}
                 aide={codesSegments.length > 0 ? `Facultatif : codes séparés par des virgules, parmi ${codesSegments.join(", ")}. Sert au critère « bureau spécialisé proche ».` : "Facultatif. Aucun segment n'est encore défini dans le référentiel du client : il faut d'abord les définir pour les attribuer à un bureau."}
               >
                 <input value={x.segmentsTexte} onChange={(e) => setEtabs((l) => l.map((y, j) => (j === i ? { ...y, segmentsTexte: e.target.value } : y)))} />
               </Champ>
               {erreursSegments[i] ? <p className="atl-widget-erreur" role="alert">{erreursSegments[i]}</p> : null}
+              <div className="atl-repeteur-actions">
               <label className="atl-case">
                 <input type="checkbox" checked={x.confirme} onChange={(e) => setEtabs((l) => l.map((y, j) => (j === i ? { ...y, confirme: e.target.checked } : y)))} /> Confirmé<span className="atl-sr"> (établissement {i + 1})</span>
               </label>
@@ -436,6 +441,7 @@ export function EditeurMarque({ initiale, onFait }: { initiale: ReferentielClien
               <Bouton variante="discret" onClick={() => setEtabs((l) => l.filter((_, j) => j !== i))}>
                 Retirer<span className="atl-sr"> l'établissement {i + 1}</span>
               </Bouton>
+              </div>
             </div>
           ))}
           <Bouton variante="discret" onClick={() => setEtabs((l) => [...l, { nom: "", adresse: "", confirme: false, lat: "", lon: "", segmentsTexte: segmentsDejaUtilises(l.map((x) => x.segmentsTexte)) }])}>

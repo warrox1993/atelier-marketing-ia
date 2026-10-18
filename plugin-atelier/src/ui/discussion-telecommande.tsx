@@ -110,6 +110,8 @@ export function useElementsAFaire(
 export interface OrigineElement {
   companyId: string;
   nom: string;
+  /** Identifiant court du service (juridique, ressources-humaines…) : sert à teinter l'étiquette. */
+  slug?: string;
   estDirection: boolean;
 }
 
@@ -185,7 +187,7 @@ export function useAFaireClient(
           erreur = true;
           continue;
         }
-        const origine: OrigineElement = { companyId: s.companyId, nom: s.nom, estDirection: s.estDirection };
+        const origine: OrigineElement = { companyId: s.companyId, nom: s.nom, slug: s.slug, estDirection: s.estDirection };
         for (const brut of liste) {
           // Lien relatif à l'entreprise d'origine : préfixé pour rester valable depuis la Direction.
           const element = prefixe && brut.lien.startsWith("/") ? { ...brut, lien: `/${prefixe}${brut.lien}` } : brut;
@@ -230,9 +232,12 @@ export interface PropsActions {
 }
 
 /** Étiquette du service d'origine d'un élément. */
-export function EtiquetteService({ nom }: { nom: string }) {
+/** Services dont la décision engage la responsabilité de l'entreprise : leur étiquette prend la couleur d'attention. */
+export const SERVICES_SENSIBLES: ReadonlySet<string> = new Set(["juridique", "ressources-humaines", "juridique-social", "fiscalite", "hse", "conformite", "sav-sinistres"]);
+
+export function EtiquetteService({ nom, slug }: { nom: string; slug?: string }) {
   return (
-    <span className="atl-disc-dep" title="Service concerné">
+    <span className="atl-disc-dep" title="Service concerné" data-sensible={slug && SERVICES_SENSIBLES.has(slug) ? "oui" : undefined}>
       {nom}
     </span>
   );
@@ -240,7 +245,7 @@ export function EtiquetteService({ nom }: { nom: string }) {
 
 export function ActionsMessage({ idMessage, actions, elements, faits, onFait, origines }: PropsActions) {
   const [ouverts, setOuverts] = useState<ReadonlySet<string>>(new Set());
-  const boutons: Array<{ cle: string; bouton: ReactElement; panneau: ReactElement | null; service?: string }> = [];
+  const boutons: Array<{ cle: string; bouton: ReactElement; panneau: ReactElement | null; service?: string; slug?: string }> = [];
   for (const a of actions) {
     const cle = `${idMessage}:${cleAction(a)}`;
     if (a.type === "ouvrir") {
@@ -276,6 +281,7 @@ export function ActionsMessage({ idMessage, actions, elements, faits, onFait, or
           ),
           panneau: null,
           service: origine?.nom,
+          slug: origine?.slug,
         });
         continue;
       }
@@ -296,6 +302,7 @@ export function ActionsMessage({ idMessage, actions, elements, faits, onFait, or
         ),
         panneau: ouvert ? <SurPlace element={e} companyId={origine?.companyId} onFait={(m) => onFait(cle, m)} /> : null,
         service: origine?.nom,
+          slug: origine?.slug,
       });
     } else {
       console.warn("Discussion : type d'action inconnu, bouton ignoré", (a as { type?: unknown }).type);
@@ -306,8 +313,8 @@ export function ActionsMessage({ idMessage, actions, elements, faits, onFait, or
     <div className="atl-disc-actions">
       <div className="atl-disc-actions-boutons">
         {boutons.map((b) => (
-          <span key={b.cle}>
-            {b.service ? <EtiquetteService nom={b.service} /> : null}
+          <span key={b.cle} className="atl-disc-paire">
+            {b.service ? <EtiquetteService nom={b.service} slug={b.slug} /> : null}
             {b.bouton}
           </span>
         ))}
@@ -322,7 +329,7 @@ export function CarteFil({ element, onFait, origine }: { element: ElementAccueil
   return (
     <div className="atl-disc-bulle" data-auteur="agent" data-carte="oui" data-service={origine ? origine.nom : undefined}>
       <span className="atl-disc-meta">
-        {origine ? <EtiquetteService nom={origine.nom} /> : null}
+        {origine ? <EtiquetteService nom={origine.nom} slug={origine.slug} /> : null}
         {origine ? "En attente de votre décision" : "Coordinateur · en attente de votre réponse"}
       </span>
       <div className="atl-disc-texte atl-disc-carte">

@@ -1,7 +1,7 @@
 ---
 kind: "agent"
 slug: "reclamations"
-name: "Reclamations"
+name: "Réclamations"
 title: "SAV · Réponses aux réclamations"
 reportsTo: "coordinateur-sav"
 skills:

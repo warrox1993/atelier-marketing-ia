@@ -105,7 +105,7 @@ describe("VoixEnDirect", () => {
     expect(connexions[0]!.ferme).toBe(true);
     expect(arrets).toBe(1);
     expect(bouton(c).textContent).toBe("Parler en direct");
-    expect(c.querySelector("[role=status]")!.textContent).toBe("Arrêté");
+    expect(c.querySelector("[role=status]")!.textContent).toBe("Micro arrêté");
   });
 
   it("affiche la transcription des deux côtés et l'état réfléchit / parle / écoute", async () => {

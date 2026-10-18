@@ -1,7 +1,7 @@
 ---
 kind: "agent"
 slug: "non-conformites"
-name: "Non conformites"
+name: "Non conformités"
 title: "Qualité · Non-conformités et actions correctives"
 reportsTo: "coordinateur-qualite"
 skills:

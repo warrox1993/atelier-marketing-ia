@@ -7,6 +7,7 @@ export const STYLES_ACCUEIL = `
 .atl-demande textarea { width: 100%; min-height: 6rem; resize: vertical; padding: 0.625rem 0.75rem; border: 1px solid var(--atl-trait); border-radius: calc(var(--atl-rayon) * 0.8); background: var(--atl-fond); color: inherit; font: inherit; line-height: 1.5; }
 .atl-demande textarea:focus-visible { outline-offset: 0; border-color: var(--atl-anneau); }
 .atl-demande-modeles { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; }
+.atl-demande-modeles > .atl-demande-aide { flex: 1 0 100%; }
 .atl-demande-pied { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem 1rem; }
 .atl-demande-aide { color: var(--atl-attenue-fort); }
 .atl-demande-retour { color: var(--atl-succes); }

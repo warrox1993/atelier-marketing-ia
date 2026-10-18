@@ -1,7 +1,7 @@
 ---
 kind: "agent"
 slug: "procedures"
-name: "Procedures"
+name: "Procédures"
 title: "Qualité · Procédures et modes opératoires"
 reportsTo: "coordinateur-qualite"
 skills:

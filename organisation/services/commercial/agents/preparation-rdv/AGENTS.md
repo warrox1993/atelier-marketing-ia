@@ -1,7 +1,7 @@
 ---
 kind: "agent"
 slug: "preparation-rdv"
-name: "Preparation rdv"
+name: "Préparation rdv"
 title: "Commercial · Préparation et suivi des rendez-vous"
 reportsTo: "coordinateur-commercial"
 skills:

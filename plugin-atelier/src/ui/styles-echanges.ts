@@ -17,7 +17,9 @@ export const STYLES_ECHANGES = `
 .atl-ech-extraits summary { display: flex; align-items: center; min-height: 2.75rem; cursor: pointer; font-weight: 500; }
 .atl-ech-extraits details > .atl-ech-texte { padding: 0 0 0.75rem; }
 .atl-ech-reponse { padding: 0.75rem 0.875rem; background: var(--atl-surface-2); border-radius: var(--atl-rayon); }
-.atl-ech-filtres { display: grid; grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr)); gap: 0.75rem 1rem; align-items: end; margin-bottom: 1rem; }
+.atl-ech-filtres { display: grid; grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr)); gap: 0.75rem 1rem; align-items: start; margin-bottom: 1rem; }
+.atl-ech-filtres .atl-champ input, .atl-ech-filtres .atl-champ select { box-sizing: border-box; height: 2.75rem; }
+.atl-ech > .atl-entete { padding-bottom: 0.75rem; }
 .atl-ech-barre { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0.5rem 1rem; margin-top: 0.75rem; }
 .atl-ech-pages { display: flex; align-items: center; gap: 0.5rem; }
 .atl-ech-filtres .atl-champ select, .atl-ech-filtres .atl-champ input { min-height: 2.75rem; }

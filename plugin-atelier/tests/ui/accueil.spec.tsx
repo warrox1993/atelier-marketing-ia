@@ -104,7 +104,7 @@ describe("accueil", () => {
     const encart = c.querySelector(".atl-prospection")!;
     expect(encart.textContent).toContain("Aucun lead pour l'instant : demandez une prospection à l'équipe");
     expect(encart.querySelector("a")).toBeNull();
-    await cliquer(parTexte(encart, "button", "Utiliser le modèle « Prospection d'une zone »"));
+    await cliquer(parTexte(encart, "button", "Prospecter une zone"));
     const champ = champParLibelle(c, "Votre demande") as HTMLTextAreaElement;
     expect(champ.value).toContain("Trouve les prospects les plus pertinents pour <segment>");
   });

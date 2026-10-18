@@ -1,7 +1,7 @@
 ---
 kind: "agent"
 slug: "prevention-psychosociale"
-name: "Prevention psychosociale"
+name: "Prévention psychosociale"
 title: "Sécurité, santé et environnement · Prévention collective des risques psychosociaux"
 reportsTo: "coordinateur-hse"
 skills:

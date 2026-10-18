@@ -1,7 +1,7 @@
 ---
 kind: "agent"
 slug: "tresorerie"
-name: "Tresorerie"
+name: "Trésorerie"
 title: "Comptabilité · Synthèse et prévision de trésorerie"
 reportsTo: "coordinateur-comptabilite"
 skills:

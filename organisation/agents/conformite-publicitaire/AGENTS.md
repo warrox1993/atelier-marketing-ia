@@ -1,7 +1,7 @@
 ---
 kind: "agent"
 slug: "conformite-publicitaire"
-name: "Conformite publicitaire"
+name: "Conformité publicitaire"
 title: "Pôle Contrôle préalable · Communications commerciales réglementées"
 reportsTo: "coordinateur"
 skills:

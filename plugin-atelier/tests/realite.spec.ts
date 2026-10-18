@@ -188,7 +188,7 @@ describe("realite.etat : état de chaque branchement", () => {
     expect(declaree.detail).toContain("non vérifiée");
     const absente = branchement(await faux({ config: {} }).lire(), "voix");
     expect(absente).toMatchObject({ etat: "non_branche", preuve: "mesure" });
-    expect(absente.detail).toContain("voix_non_configuree");
+    expect(absente.detail).toContain("Aucune clé OpenAI : la voix en direct n'est pas disponible.");
     expect(branchement(await faux({ config: "erreur" }).lire(), "voix")).toMatchObject({ etat: "non_branche", preuve: "aucune" });
   });
 

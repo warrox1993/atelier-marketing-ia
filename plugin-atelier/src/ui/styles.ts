@@ -115,7 +115,6 @@ details[open] > .atl-section-resume::after, details[open] > .atl-filtres-resume:
 .atl-vide-action { display: flex; flex-wrap: wrap; justify-content: center; gap: 0.5rem; margin-top: 0.25rem; }
 
 /* Mise en place du client */
-.atl-etapes { display: flex; flex-direction: column; border: 1px solid var(--atl-trait); border-radius: var(--atl-rayon); }
 
 /* Parcours de mise en place : barre de progression, liste des étapes, panneau de l'étape affichée */
 .atl-progression { height: 0.5rem; border-radius: 999px; background: var(--atl-surface-2); overflow: hidden; }
@@ -296,9 +295,11 @@ details[open] > .atl-section-resume::after, details[open] > .atl-filtres-resume:
 .atl .atl-levier-aide { margin-left: 1.375rem; }
 .atl-portee { padding: 0.875rem 1rem; border: 1px solid var(--atl-trait); border-radius: var(--atl-rayon); gap: 0.75rem; }
 .atl-portee legend { padding: 0 0.25rem; }
-.atl-repeteur { display: grid; grid-template-columns: minmax(8rem, 1fr) minmax(10rem, 2fr) auto auto; gap: 0.5rem 0.75rem; align-items: end; padding-bottom: 0.75rem; }
-/* Offres : case, Dupliquer et Retirer tiennent sur la même rangée que le nom et la description. */
-.atl-repeteur[aria-label^="Offre"] { grid-template-columns: minmax(8rem, 1fr) minmax(10rem, 2fr) auto auto auto; }
+.atl-repeteur { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.75rem 1rem; align-items: start; padding-bottom: 0.875rem; border-bottom: 1px solid var(--atl-trait); }
+.atl-repeteur:last-of-type { border-bottom: 0; }
+/* Champs larges, messages d'erreur et rangée d'actions : toute la largeur, aides sous leur champ. */
+.atl-repeteur > .atl-repeteur-large, .atl-repeteur > .atl-widget-erreur, .atl-repeteur > .atl-repeteur-actions { grid-column: 1 / -1; }
+.atl-repeteur-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 0.25rem 1rem; }
 .atl-case { display: inline-flex; align-items: center; min-height: 2.25rem; }
 .atl-actions > .atl-case { align-self: center; }
 .atl-details > summary { cursor: pointer; font-weight: 500; padding: 0.25rem 0; }

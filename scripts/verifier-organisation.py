@@ -341,7 +341,7 @@ def controler_registre(bootstrap):
         return
     for a in agents:
         s = a["slug"]
-        if bootstrap.normaliser_slug(a["nom"]) != s:
+        if bootstrap.slug_depuis_nom(a["nom"]) != s:
             erreur(f"agent {s} : le nom « {a['nom']} » ne se normalise pas en {s} (correspondance d'import cassée)")
         if not (ORGA / "agents" / s / "AGENTS.md").exists():
             erreur(f"agent {s} : AGENTS.md absent")

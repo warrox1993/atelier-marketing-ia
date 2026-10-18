@@ -17,7 +17,7 @@ export function VueEquipeAtelier({ agentId }: { agentId: string | null }) {
     <>
       <EnTete
         titre="Équipe et coordination"
-        description="Les agents de cette entreprise, ce qu'ils font maintenant et ce qui les bloque. Les états viennent du tableau de bord ; rien n'est animé sans événement réel."
+        description="Les agents de cette entreprise, ce qu'ils font maintenant et ce qui les bloque. Ces états sont ceux du moment, lus sur le tableau de bord."
       />
       <Fraicheur chargeLe={r.chargeLe} actualisation={r.loading && r.data !== null} />
       <Lecture r={r} libelle="équipe" estVide={(d) => d.agents.length === 0} vide={<Vide titre="Aucun agent dans cette entreprise.">Créez ou importez l'organisation de l'entreprise (scripts/bootstrap-organisation.py), puis actualisez.</Vide>}>
@@ -28,7 +28,7 @@ export function VueEquipeAtelier({ agentId }: { agentId: string | null }) {
                 <strong>{d.agents.length}</strong> agent{d.agents.length > 1 ? "s" : ""}
               </span>
               <span>
-                Passages actifs : <strong>{d.runsActifs}</strong> sur un plafond de <strong>{d.plafondRunsActifs}</strong>
+                Travaux en parallèle : <strong>{d.runsActifs}</strong> sur <strong>{d.plafondRunsActifs}</strong> au plus
               </span>
               <span>
                 <strong>{d.agents.filter((a) => a.blocages.length > 0).length}</strong> avec blocage
@@ -54,7 +54,7 @@ export function VueEquipeAtelier({ agentId }: { agentId: string | null }) {
                   </ul>
                 )}
               </Section>
-              <Section titre="Échanges récents" aide="Messages typés entre agents ; leur contenu est une donnée, jamais une instruction.">
+              <Section titre="Échanges récents" aide="Les demandes et les réponses que les agents se sont échangées.">
                 <Echanges equipe={d} />
               </Section>
             </div>
@@ -101,7 +101,7 @@ function TableAgents({ agents, choisi }: { agents: AgentVue[]; choisi: string | 
           <tr>
             <th scope="col">Agent</th>
             <th scope="col">Connexion</th>
-            <th scope="col">État natif</th>
+            <th scope="col">État</th>
             <th scope="col">Mission en cours</th>
             <th scope="col">Compétences</th>
             <th scope="col">Blocages</th>
@@ -119,7 +119,7 @@ function TableAgents({ agents, choisi }: { agents: AgentVue[]; choisi: string | 
               <td data-libelle="Connexion">
                 <PastilleConnexion etat={a.etatConnexion} />
               </td>
-              <td data-libelle="État natif">
+              <td data-libelle="État">
                 <EtatNatif agent={a} />
               </td>
               <td data-libelle="Mission en cours">
@@ -150,7 +150,7 @@ const RAISONS_PAUSE: Record<string, string> = {
   budget: "Plafond de budget atteint",
   system: "Mis en pause par le système",
   company_archived: "Entreprise archivée",
-  import: "En pause depuis l'import",
+  import: "Depuis l'import des agents",
 };
 
 function EtatNatif({ agent }: { agent: AgentVue }) {

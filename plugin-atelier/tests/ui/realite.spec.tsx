@@ -195,14 +195,15 @@ describe("Paramètres : rendu mobile", () => {
     }
   });
 
-  it("sur téléphone la section est repliée, sauf quand l'adresse la vise", async () => {
+  it("sur téléphone les sections sont repliées, sauf quand l'adresse les vise ; la vue Connexions seule n'a plus de pli", async () => {
     simulerEcran(true);
     let c = await ouvrir("/RNO/atelier/parametres");
-    expect(c.querySelector<HTMLDetailsElement>("section#param-reel details")?.open).toBe(false);
+    expect(c.querySelector<HTMLDetailsElement>("section#param-sources details")?.open).toBe(false);
+    expect(c.querySelector("section#param-reel details")).toBeNull();
     rendu?.demonter();
-    window.location.hash = "#param-reel";
+    window.location.hash = "#param-sources";
     c = await ouvrir("/RNO/atelier/parametres");
-    expect(c.querySelector<HTMLDetailsElement>("section#param-reel details")?.open).toBe(true);
+    expect(c.querySelector<HTMLDetailsElement>("section#param-sources details")?.open).toBe(true);
   });
 });
 

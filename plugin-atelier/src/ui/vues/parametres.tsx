@@ -70,9 +70,9 @@ export function VueParametres() {
       ) : (
         <EnTete titre="Paramètres et diagnostic" description="État vérifié des gardes et des connecteurs ; une configuration enregistrée ne vaut pas preuve de fonctionnement." />
       )}
-      <Fraicheur chargeLe={diag.chargeLe} actualisation={diag.loading && diag.data !== null} />
+      {surReel ? null : <Fraicheur chargeLe={diag.chargeLe} actualisation={diag.loading && diag.data !== null} />}
       <div hidden={!surReel}>
-        <SectionPassageAuReel />
+        <SectionPassageAuReel seule />
       </div>
       <div hidden={surReel}>
         <ListeOnglets etiquette="Sections des paramètres" base={BASE_PARAMETRES} secondaire actif={panneau} onglets={PANNEAUX_PARAMETRES.map((p) => ({ cle: p.cle, libelle: p.libelle }))} choisir={choisir} />
@@ -84,16 +84,8 @@ export function VueParametres() {
               <>
                 <dl className="atl-champs atl-champs-grille">
                   <div>
-                    <dt>Plugin</dt>
-                    <dd>
-                      {d.plugin.id} {d.plugin.version}
-                    </dd>
-                  </div>
-                  <div>
-                    <dt>Espace de base</dt>
-                    <dd>
-                      <code>{d.espaceBase}</code> {d.migrationsAppliquees ? "(migrations appliquées)" : "(migrations NON appliquées)"}
-                    </dd>
+                    <dt>Base de données de l'atelier</dt>
+                    <dd>{d.migrationsAppliquees ? "À jour" : "Mises à jour non appliquées"}</dd>
                   </div>
                   <div>
                     <dt>Politique de relecture verrouillée par le socle</dt>
@@ -126,6 +118,23 @@ export function VueParametres() {
                     </dd>
                   </div>
                 </dl>
+                <details className="atl-details">
+                  <summary>Détails techniques pour l'assistance</summary>
+                  <dl className="atl-champs atl-champs-grille">
+                    <div>
+                      <dt>Plugin</dt>
+                      <dd>
+                        {d.plugin.id} {d.plugin.version}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt>Espace de base</dt>
+                      <dd>
+                        <code>{d.espaceBase}</code>
+                      </dd>
+                    </div>
+                  </dl>
+                </details>
                 <TableauConnecteurs diagnostic={d.connecteurs} />
               </>
             )}

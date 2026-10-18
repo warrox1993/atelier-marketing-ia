@@ -1,0 +1,1004 @@
+From ddb9093a564eff8ce83d34718853637590d461cd Mon Sep 17 00:00:00 2001
+From: Jean-Baptiste Dhondt <114347858+warrox1993@users.noreply.github.com>
+Date: Sun, 18 Oct 2026 01:38:53 +0200
+Subject: [PATCH] =?UTF-8?q?fix(ui):=20fran=C3=A7ais=20restant,=20mises=20?=
+ =?UTF-8?q?=C3=A0=20jour=20d'agents=20regroup=C3=A9es,=20liste=20des=20age?=
+ =?UTF-8?q?nts=20lisible?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Aucune exécution récente, acteur Utilisateur, notifications et libellés du sélecteur en français, « Agents au total », regroupement des mises à jour d'agents consécutives, sous-titre d'agent sans séparateur mélangé ni tiret cadratin.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01DP85vPq2MHkZg8VNtRvCzB
+---
+ ui/src/components/ActiveAgentsPanel.tsx       |  2 +-
+ ui/src/components/ActivityFeed.tsx            |  6 +-
+ ui/src/components/ActivityRow.tsx             | 23 ++++--
+ .../ContextualSidebarFrame.test.tsx           |  2 +-
+ ui/src/components/FeedCard.tsx                |  6 +-
+ .../SidebarCompanyMenu.production.tsx         |  6 +-
+ ui/src/components/SidebarCompanyMenu.test.tsx | 36 ++++-----
+ ui/src/components/SidebarCompanyMenu.tsx      |  6 +-
+ .../context/LiveUpdatesProvider.hook.test.tsx |  4 +-
+ ui/src/context/LiveUpdatesProvider.test.ts    | 20 ++---
+ ui/src/context/LiveUpdatesProvider.tsx        | 73 ++++++++++---------
+ ui/src/lib/activity-grouping.test.ts          | 31 ++++++++
+ ui/src/lib/activity-grouping.ts               | 36 +++++++++
+ ui/src/lib/agent-role-labels.test.ts          | 21 ++++++
+ ui/src/lib/agent-role-labels.ts               | 13 ++++
+ ui/src/lib/company-members.test.ts            |  9 +++
+ ui/src/lib/company-members.ts                 |  2 +
+ ui/src/pages/Agents.production.tsx            | 14 ++--
+ ui/src/pages/Agents.tsx                       | 14 ++--
+ ui/src/pages/Dashboard.tsx                    |  5 +-
+ 20 files changed, 224 insertions(+), 105 deletions(-)
+ create mode 100644 ui/src/lib/agent-role-labels.test.ts
+
+diff --git a/ui/src/components/ActiveAgentsPanel.tsx b/ui/src/components/ActiveAgentsPanel.tsx
+index 39efc6043..52e40346f 100644
+--- a/ui/src/components/ActiveAgentsPanel.tsx
++++ b/ui/src/components/ActiveAgentsPanel.tsx
+@@ -55,7 +55,7 @@ export function ActiveAgentsPanel({
+   cardLimit = DASHBOARD_RUN_CARD_LIMIT,
+   gridClassName,
+   cardClassName,
+-  emptyMessage = "No recent agent runs.",
++  emptyMessage = "Aucune exécution récente des agents.",
+   queryScope = "dashboard",
+   showMoreLink = true,
+   showTranscripts = false,
+diff --git a/ui/src/components/ActivityFeed.tsx b/ui/src/components/ActivityFeed.tsx
+index 4d840f0ac..8eb389b04 100644
+--- a/ui/src/components/ActivityFeed.tsx
++++ b/ui/src/components/ActivityFeed.tsx
+@@ -258,9 +258,9 @@ function CollapsedFeedGroup({
+     ? agentMap.get(group.latestEvent.actorId)
+     : null;
+   const actorName = actor?.name
+-    ?? (group.latestEvent.actorType === "system" ? "System"
+-      : group.latestEvent.actorType === "user" ? "Board"
+-      : "Unknown");
++    ?? (group.latestEvent.actorType === "system" ? "Système"
++      : group.latestEvent.actorType === "user" ? "Utilisateur"
++      : "Inconnu");
+   const entityName = entityNameMap.get(`${group.entityType}:${group.entityId}`);
+ 
+   return (
+diff --git a/ui/src/components/ActivityRow.tsx b/ui/src/components/ActivityRow.tsx
+index 29f9e5516..ac7638eee 100644
+--- a/ui/src/components/ActivityRow.tsx
++++ b/ui/src/components/ActivityRow.tsx
+@@ -28,6 +28,8 @@ interface ActivityRowProps {
+   entityTitleMap?: Map<string, string>;
+   /** Nombre de battements résumés par cette ligne (voir `regrouperActivite`). */
+   repetitions?: number;
++  /** Nombre de mises à jour d'agents résumées par cette ligne (voir `regrouperActivite`). */
++  agentsMisAJour?: number;
+   className?: string;
+ }
+ 
+@@ -38,8 +40,11 @@ function verbeBauxEnvironnement(repetitions: number): string {
+     : "a utilisé un environnement d'exécution";
+ }
+ 
+-export function ActivityRow({ event, agentMap, userProfileMap, entityNameMap, entityTitleMap, repetitions, className }: ActivityRowProps) {
+-  const verb = repetitions !== undefined && event.action.startsWith("environment.lease_")
++export function ActivityRow({ event, agentMap, userProfileMap, entityNameMap, entityTitleMap, repetitions, agentsMisAJour, className }: ActivityRowProps) {
++  const groupe = agentsMisAJour !== undefined && agentsMisAJour > 1 && event.action === "agent.updated";
++  const verb = groupe
++    ? `a mis à jour ${agentsMisAJour} agents`
++    : repetitions !== undefined && event.action.startsWith("environment.lease_")
+     ? verbeBauxEnvironnement(repetitions)
+     : formatActivityVerb(event.action, event.details, { agentMap, userProfileMap });
+ 
+@@ -48,14 +53,18 @@ export function ActivityRow({ event, agentMap, userProfileMap, entityNameMap, en
+     ? (event.details as Record<string, unknown> | null)?.agentId as string | undefined
+     : undefined;
+ 
+-  const name = isHeartbeatEvent
+-    ? (heartbeatAgentId ? entityNameMap.get(`agent:${heartbeatAgentId}`) : null)
+-    : entityNameMap.get(`${event.entityType}:${event.entityId}`);
++  const name = groupe
++    ? null
++    : isHeartbeatEvent
++      ? (heartbeatAgentId ? entityNameMap.get(`agent:${heartbeatAgentId}`) : null)
++      : entityNameMap.get(`${event.entityType}:${event.entityId}`);
+ 
+-  const entityTitle = entityTitleMap?.get(`${event.entityType}:${event.entityId}`)
++  const entityTitle = groupe ? undefined : entityTitleMap?.get(`${event.entityType}:${event.entityId}`)
+     ?? (event.entityType === "issue" && typeof event.details?.issueTitle === "string" ? event.details.issueTitle : undefined);
+ 
+-  const link = isHeartbeatEvent && heartbeatAgentId
++  const link = groupe
++    ? "/agents"
++    : isHeartbeatEvent && heartbeatAgentId
+     ? `/agents/${heartbeatAgentId}/runs/${event.entityId}`
+     : entityLink(event.entityType, event.entityId, name);
+ 
+diff --git a/ui/src/components/ContextualSidebarFrame.test.tsx b/ui/src/components/ContextualSidebarFrame.test.tsx
+index 110d70a74..7066e6417 100644
+--- a/ui/src/components/ContextualSidebarFrame.test.tsx
++++ b/ui/src/components/ContextualSidebarFrame.test.tsx
+@@ -61,7 +61,7 @@ describe("ContextualSidebarFrame", () => {
+     const root = render();
+     expect(container.textContent).toContain("Paperclip");
+     expect(container.querySelector('[data-testid="contextual-company-switcher"]')).toBeNull();
+-    expect(container.querySelector('button[aria-label*="organization switcher"]')).toBeNull();
++    expect(container.querySelector(`button[aria-label*="sélecteur d'organisation"]`)).toBeNull();
+     act(() => root.unmount());
+   });
+ 
+diff --git a/ui/src/components/FeedCard.tsx b/ui/src/components/FeedCard.tsx
+index 8dd04c653..3f94c0fc3 100644
+--- a/ui/src/components/FeedCard.tsx
++++ b/ui/src/components/FeedCard.tsx
+@@ -295,10 +295,10 @@ function resolveContent(
+   const actorName =
+     actor?.name ??
+     (event.actorType === "system"
+-      ? "System"
++      ? "Système"
+       : event.actorType === "user"
+-        ? "Board"
+-        : event.actorId || "Unknown");
++        ? "Utilisateur"
++        : event.actorId || "Inconnu");
+ 
+   const entityTitle = entityTitleMap?.get(`${event.entityType}:${event.entityId}`) ?? null;
+ 
+diff --git a/ui/src/components/SidebarCompanyMenu.production.tsx b/ui/src/components/SidebarCompanyMenu.production.tsx
+index 36d71ab0e..43f6d858f 100644
+--- a/ui/src/components/SidebarCompanyMenu.production.tsx
++++ b/ui/src/components/SidebarCompanyMenu.production.tsx
+@@ -205,7 +205,7 @@ function BuiltinCompanyMenu({ open: controlledOpen, onOpenChange }: SidebarCompa
+     hiddenSettingsLoaded &&
+     !hidesCompanyPage(hiddenSettings, "company.members") &&
+     !hidesCompanyPage(hiddenSettings, "company.invites");
+-  const switcherNoun = "company";
++  const switcherNoun = "entreprise";
+   const currentName = selectedEntry?.label ?? selectedCompany?.name ?? null;
+   // Managed hosts forbid local company creation. Their extension owns that action.
+   const companyCreationManaged = Boolean(useCloudInstance());
+@@ -289,8 +289,8 @@ function BuiltinCompanyMenu({ open: controlledOpen, onOpenChange }: SidebarCompa
+           className="h-9 min-w-0 flex-1 justify-start gap-2 px-4 text-left hover:bg-accent/50 hover:text-foreground has-[>svg]:px-4 dark:hover:bg-accent/50"
+           aria-label={
+             currentName
+-              ? `Open ${currentName} ${switcherNoun} switcher`
+-              : `Open ${switcherNoun} switcher`
++              ? `Ouvrir le sélecteur d'${switcherNoun} ${currentName}`
++              : `Ouvrir le sélecteur d'${switcherNoun}`
+           }
+         >
+           <span className="flex min-w-0 flex-1 items-center gap-2">
+diff --git a/ui/src/components/SidebarCompanyMenu.test.tsx b/ui/src/components/SidebarCompanyMenu.test.tsx
+index 242b27bf9..8dc00bc22 100644
+--- a/ui/src/components/SidebarCompanyMenu.test.tsx
++++ b/ui/src/components/SidebarCompanyMenu.test.tsx
+@@ -217,7 +217,7 @@ describe("SidebarCompanyMenu", () => {
+ 
+     const { root } = renderMenu();
+     await flushReact();
+-    await openMenu("Open Acme Labs organization switcher");
++    await openMenu("Ouvrir le sélecteur d'organisation Acme Labs");
+ 
+     expect(document.body.textContent).toContain("Impossible de charger les organisations");
+     expect(document.body.textContent).not.toContain("Aucune organisation");
+@@ -246,7 +246,7 @@ describe("SidebarCompanyMenu", () => {
+ 
+     const { root } = renderMenu();
+     await flushReact();
+-    await openMenu("Open Acme Labs organization switcher");
++    await openMenu("Ouvrir le sélecteur d'organisation Acme Labs");
+ 
+     expect(document.body.textContent).toContain("Aucune organisation");
+     expect(document.body.textContent).not.toContain("Impossible de charger les organisations");
+@@ -272,7 +272,7 @@ describe("SidebarCompanyMenu", () => {
+     await flushReact();
+     await flushReact();
+ 
+-    const trigger = container.querySelector('button[aria-label="Open Acme Labs organization switcher"]');
++    const trigger = container.querySelector(`button[aria-label="Ouvrir le sélecteur d'organisation Acme Labs"]`);
+     expect(trigger).not.toBeNull();
+     expect(trigger?.classList).toContain("px-4");
+     expect(trigger?.classList).toContain("has-[>svg]:px-4");
+@@ -318,7 +318,7 @@ describe("SidebarCompanyMenu", () => {
+ 
+     expect(container.textContent).toContain("Acme Labs");
+ 
+-    const trigger = container.querySelector('button[aria-label="Open Acme Labs organization switcher"]');
++    const trigger = container.querySelector(`button[aria-label="Ouvrir le sélecteur d'organisation Acme Labs"]`);
+     expect(trigger).not.toBeNull();
+ 
+     act(() => {
+@@ -369,7 +369,7 @@ describe("SidebarCompanyMenu", () => {
+     await flushReact();
+     await flushReact();
+ 
+-    await openMenu("Open Acme Labs company switcher");
++    await openMenu("Ouvrir le sélecteur d'entreprise Acme Labs");
+ 
+     expect(document.body.textContent).toContain("Inviter des personnes dans Acme Labs");
+ 
+@@ -395,7 +395,7 @@ describe("SidebarCompanyMenu", () => {
+     await flushReact();
+     await flushReact();
+ 
+-    await openMenu("Open Acme Labs company switcher");
++    await openMenu("Ouvrir le sélecteur d'entreprise Acme Labs");
+ 
+     expect(document.body.textContent).toContain("Organisations");
+     expect(document.body.textContent).not.toContain("Inviter des personnes");
+@@ -412,7 +412,7 @@ describe("SidebarCompanyMenu", () => {
+     await flushReact();
+     await flushReact();
+ 
+-    await openMenu("Open Acme Labs organization switcher");
++    await openMenu("Ouvrir le sélecteur d'organisation Acme Labs");
+ 
+     expect(document.body.textContent).toContain("Organisations");
+     expect(document.body.textContent).not.toContain("Inviter des personnes");
+@@ -429,7 +429,7 @@ describe("SidebarCompanyMenu", () => {
+     await flushReact();
+     await flushReact();
+ 
+-    await openMenu("Open Acme Labs organization switcher");
++    await openMenu("Ouvrir le sélecteur d'organisation Acme Labs");
+ 
+     expect(document.body.textContent).toContain("Organisations");
+     expect(document.body.textContent).not.toContain("Inviter des personnes");
+@@ -446,7 +446,7 @@ describe("SidebarCompanyMenu", () => {
+     await flushReact();
+     await flushReact();
+ 
+-    await openMenu("Open Acme Labs organization switcher");
++    await openMenu("Ouvrir le sélecteur d'organisation Acme Labs");
+ 
+     expect(document.body.textContent).toContain("Organisations");
+     expect(document.body.textContent).not.toContain("Inviter des personnes");
+@@ -472,7 +472,7 @@ describe("SidebarCompanyMenu", () => {
+     await flushReact();
+     await flushReact();
+ 
+-    const trigger = container.querySelector('button[aria-label="Open Acme Labs organization switcher"]');
++    const trigger = container.querySelector(`button[aria-label="Ouvrir le sélecteur d'organisation Acme Labs"]`);
+     expect(trigger).not.toBeNull();
+ 
+     act(() => {
+@@ -533,7 +533,7 @@ describe("SidebarCompanyMenu", () => {
+     await flushReact();
+     await flushReact();
+ 
+-    const trigger = container.querySelector('button[aria-label="Open Acme Labs organization switcher"]');
++    const trigger = container.querySelector(`button[aria-label="Ouvrir le sélecteur d'organisation Acme Labs"]`);
+     expect(trigger).not.toBeNull();
+ 
+     act(() => {
+@@ -592,7 +592,7 @@ describe("SidebarCompanyMenu", () => {
+         const { root } = renderMenu({ production });
+         await flushReact();
+         await flushReact();
+-        await openMenu(production ? "Open Acme Labs company switcher" : "Open Acme Labs organization switcher");
++        await openMenu(production ? "Ouvrir le sélecteur d'entreprise Acme Labs" : "Ouvrir le sélecteur d'organisation Acme Labs");
+ 
+         const items = Array.from(document.body.querySelectorAll('[data-slot="dropdown-menu-item"]'))
+           .map((element) => element.textContent ?? "");
+@@ -614,7 +614,7 @@ describe("SidebarCompanyMenu", () => {
+         const { root } = renderMenu({ production });
+         await flushReact();
+         await flushReact();
+-        await openMenu(production ? "Open Acme Labs company switcher" : "Open Acme Labs organization switcher");
++        await openMenu(production ? "Ouvrir le sélecteur d'entreprise Acme Labs" : "Ouvrir le sélecteur d'organisation Acme Labs");
+ 
+         const ligne = Array.from(document.body.querySelectorAll('[data-slot="dropdown-menu-item"]'))
+           .find((element) => element.textContent?.includes("Fictive SA"));
+@@ -639,7 +639,7 @@ describe("SidebarCompanyMenu", () => {
+       const { root } = renderMenu();
+       await flushReact();
+       await flushReact();
+-      await openMenu("Open Acme Labs organization switcher");
++      await openMenu("Ouvrir le sélecteur d'organisation Acme Labs");
+ 
+       const ligne = Array.from(document.body.querySelectorAll('[data-slot="dropdown-menu-item"]'))
+         .find((element) => element.textContent?.includes("Fictive SA"));
+@@ -662,7 +662,7 @@ describe("SidebarCompanyMenu", () => {
+     await flushReact();
+     await flushReact();
+ 
+-    await openMenu("Open Acme Labs organization switcher");
++    await openMenu("Ouvrir le sélecteur d'organisation Acme Labs");
+ 
+     const createItem = Array.from(document.body.querySelectorAll('[data-slot="dropdown-menu-item"]'))
+       .find((element) => element.textContent?.includes("Créer une organisation"));
+@@ -691,7 +691,7 @@ describe("SidebarCompanyMenu", () => {
+     const { root } = renderMenu();
+     await flushReact();
+ 
+-    const trigger = container.querySelector('button[aria-label="Open Acme Labs organization switcher"]');
++    const trigger = container.querySelector(`button[aria-label="Ouvrir le sélecteur d'organisation Acme Labs"]`);
+     expect(trigger).not.toBeNull();
+     expect(trigger?.className).toContain("min-w-0");
+ 
+@@ -715,7 +715,7 @@ describe("SidebarCompanyMenu", () => {
+       const { root } = renderMenu({ cloud: true });
+       await flushReact();
+       await flushReact();
+-      await openMenu("Open Acme Labs organization switcher");
++      await openMenu("Ouvrir le sélecteur d'organisation Acme Labs");
+ 
+       const signOutItem = Array.from(document.body.querySelectorAll('[data-slot="dropdown-menu-item"]'))
+         .find((element) => element.textContent?.includes("Se déconnecter"));
+@@ -740,7 +740,7 @@ describe("SidebarCompanyMenu", () => {
+       const { root } = renderMenu({ cloud: true, production });
+       await flushReact();
+       await flushReact();
+-      await openMenu(`Open Acme Labs ${production ? "company" : "organization"} switcher`);
++      await openMenu(`Ouvrir le sélecteur d'${production ? "entreprise" : "organisation"} Acme Labs`);
+       expect(document.body.textContent).toContain("Anachronist Wiki");
+       expect(document.body.textContent).toContain("ANA");
+       expect(document.body.textContent).not.toContain("Créer une organisation");
+diff --git a/ui/src/components/SidebarCompanyMenu.tsx b/ui/src/components/SidebarCompanyMenu.tsx
+index b9da9a8de..d1fa29a70 100644
+--- a/ui/src/components/SidebarCompanyMenu.tsx
++++ b/ui/src/components/SidebarCompanyMenu.tsx
+@@ -205,7 +205,7 @@ function BuiltinCompanyMenu({ open: controlledOpen, onOpenChange }: SidebarCompa
+     hiddenSettingsLoaded &&
+     !hidesCompanyPage(hiddenSettings, "company.members") &&
+     !hidesCompanyPage(hiddenSettings, "company.invites");
+-  const switcherNoun = "organization";
++  const switcherNoun = "organisation";
+   const currentName = selectedEntry?.label ?? selectedCompany?.name ?? null;
+   // Managed hosts forbid local company creation. Their extension owns that action.
+   const companyCreationManaged = Boolean(useCloudInstance());
+@@ -289,8 +289,8 @@ function BuiltinCompanyMenu({ open: controlledOpen, onOpenChange }: SidebarCompa
+           className="h-9 min-w-0 flex-1 justify-start gap-2 px-4 text-left hover:bg-sidebar-accent hover:text-sidebar-accent-foreground has-[>svg]:px-4 dark:hover:bg-sidebar-accent dark:hover:text-sidebar-accent-foreground"
+           aria-label={
+             currentName
+-              ? `Open ${currentName} ${switcherNoun} switcher`
+-              : `Open ${switcherNoun} switcher`
++              ? `Ouvrir le sélecteur d'${switcherNoun} ${currentName}`
++              : `Ouvrir le sélecteur d'${switcherNoun}`
+           }
+         >
+           <span className="flex min-w-0 flex-1 items-center gap-2">
+diff --git a/ui/src/context/LiveUpdatesProvider.hook.test.tsx b/ui/src/context/LiveUpdatesProvider.hook.test.tsx
+index 8650bfc35..446e0cbe5 100644
+--- a/ui/src/context/LiveUpdatesProvider.hook.test.tsx
++++ b/ui/src/context/LiveUpdatesProvider.hook.test.tsx
+@@ -251,8 +251,8 @@ describe("LiveUpdatesProvider socket run notification scope", () => {
+     // exact run identity but deliberately omits issueId and provider output.
+     await receiveStatus({ runId: "unrelated-run", agentId, status: "failed", startedAt: "2026-09-09T17:59:00.000Z", finishedAt: "2026-09-09T18:00:00.000Z", deliveryId: "status-delivery" });
+     expect(pushToast).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({
+-      title: "Agent run failed", dedupeKey: "run-status:unrelated-run:failed",
+-      action: { label: "View run", href: `/agents/${agentId}/runs/unrelated-run` },
++      title: "Agent : exécution échouée", dedupeKey: "run-status:unrelated-run:failed",
++      action: { label: "Voir l'exécution", href: `/agents/${agentId}/runs/unrelated-run` },
+     }));
+   });
+ 
+diff --git a/ui/src/context/LiveUpdatesProvider.test.ts b/ui/src/context/LiveUpdatesProvider.test.ts
+index fde36aa5d..dabfb272a 100644
+--- a/ui/src/context/LiveUpdatesProvider.test.ts
++++ b/ui/src/context/LiveUpdatesProvider.test.ts
+@@ -1261,7 +1261,7 @@ describe("LiveUpdatesProvider run lifecycle toasts", () => {
+         "company-1",
+       ),
+     ).toMatchObject({
+-      title: "CodexCoder errored",
++      title: "CodexCoder est en erreur",
+       body: "Software Engineer",
+       tone: "error",
+     });
+@@ -1277,7 +1277,7 @@ describe("LiveUpdatesProvider run lifecycle toasts", () => {
+         () => "CodexCoder",
+       ),
+     ).toMatchObject({
+-      title: "CodexCoder run failed",
++      title: "CodexCoder : exécution échouée",
+       body: "boom",
+       tone: "error",
+     });
+@@ -1297,11 +1297,11 @@ describe("LiveUpdatesProvider run lifecycle toasts", () => {
+         () => "Maya E2E",
+       ),
+     ).toEqual({
+-      title: "Maya E2E couldn't start this chat",
+-      body: "This external chat identity isn't linked, and isolated guest workspaces are disabled. Link the identity in Connectors or enable isolated workspaces, then start a new task.",
++      title: "Maya E2E n'a pas pu démarrer cette discussion",
++      body: "Cette identité de discussion externe n'est pas liée et les espaces invités isolés sont désactivés. Liez l'identité dans Connecteurs ou activez les espaces isolés, puis démarrez une nouvelle tâche.",
+       tone: "warn",
+       ttlMs: 10_000,
+-      action: { label: "Open chat connections", href: "/apps" },
++      action: { label: "Ouvrir les connexions de discussion", href: "/apps" },
+       dedupeKey: "run-status:run-low-trust:failed",
+     });
+ 
+@@ -1316,7 +1316,7 @@ describe("LiveUpdatesProvider run lifecycle toasts", () => {
+         },
+         () => null,
+       )?.title,
+-    ).toBe("Agent couldn't start this chat");
++    ).toBe("Agent n'a pas pu démarrer cette discussion");
+   });
+ 
+   it("keeps non-chat and genuine runtime failures on the ordinary error path", () => {
+@@ -1333,9 +1333,9 @@ describe("LiveUpdatesProvider run lifecycle toasts", () => {
+         () => "CodexCoder",
+       ),
+     ).toMatchObject({
+-      title: "CodexCoder run failed",
++      title: "CodexCoder : exécution échouée",
+       tone: "error",
+-      action: { label: "View run" },
++      action: { label: "Voir l'exécution" },
+     });
+ 
+     expect(
+@@ -1351,10 +1351,10 @@ describe("LiveUpdatesProvider run lifecycle toasts", () => {
+         () => "CodexCoder",
+       ),
+     ).toMatchObject({
+-      title: "CodexCoder run failed",
++      title: "CodexCoder : exécution échouée",
+       body: "Adapter process exited",
+       tone: "error",
+-      action: { label: "View run" },
++      action: { label: "Voir l'exécution" },
+     });
+   });
+ });
+diff --git a/ui/src/context/LiveUpdatesProvider.tsx b/ui/src/context/LiveUpdatesProvider.tsx
+index 3a38ad3b4..b26b0d352 100644
+--- a/ui/src/context/LiveUpdatesProvider.tsx
++++ b/ui/src/context/LiveUpdatesProvider.tsx
+@@ -48,6 +48,7 @@ import { queryKeys } from "../lib/queryKeys";
+ import { extractCompanyPrefixFromPath, toCompanyRelativePath } from "../lib/company-routes";
+ import { useLocation } from "../lib/router";
+ import { agentRouteRef } from "../lib/utils";
++import { LIBELLES_VALEURS } from "../lib/activity-format";
+ import { buildSameOriginWebSocketUrl } from "../lib/websocket-url";
+ import { tryCreateWebSocket } from "../lib/websocket";
+ 
+@@ -184,11 +185,11 @@ function resolveActorLabel(
+       `Agent ${shortId(actorId)}`
+     );
+   }
+-  if (actorType === "system") return "System";
++  if (actorType === "system") return "Système";
+   if (actorType === "user" && actorId) {
+-    return resolveUserName(queryClient, companyId, actorId) ?? "Board";
++    return resolveUserName(queryClient, companyId, actorId) ?? "Utilisateur";
+   }
+-  return "Someone";
++  return "Quelqu'un";
+ }
+ 
+ interface IssueToastContext {
+@@ -883,29 +884,29 @@ function describeIssueUpdate(
+   if (!details) return null;
+   const changes: string[] = [];
+   if (typeof details.status === "string")
+-    changes.push(`status -> ${details.status.replace(/_/g, " ")}`);
++    changes.push(`statut : ${LIBELLES_VALEURS[details.status] ?? details.status.replace(/_/g, " ")}`);
+   if (typeof details.priority === "string")
+-    changes.push(`priority -> ${details.priority}`);
++    changes.push(`priorité : ${LIBELLES_VALEURS[details.priority] ?? details.priority}`);
+   if (
+     typeof details.assigneeAgentId === "string" ||
+     typeof details.assigneeUserId === "string"
+   ) {
+-    changes.push("reassigned");
++    changes.push("réassignée");
+   } else if (
+     details.assigneeAgentId === null ||
+     details.assigneeUserId === null
+   ) {
+-    changes.push("unassigned");
++    changes.push("non assignée");
+   }
+   if (details.reopened === true) {
+     const from = readString(details.reopenedFrom);
+     changes.push(
+-      from ? `reopened from ${from.replace(/_/g, " ")}` : "reopened",
++      from ? `rouverte depuis « ${LIBELLES_VALEURS[from] ?? from.replace(/_/g, " ")} »` : "rouverte",
+     );
+   }
+-  if (typeof details.title === "string") changes.push("title changed");
++  if (typeof details.title === "string") changes.push("titre modifié");
+   if (typeof details.description === "string")
+-    changes.push("description changed");
++    changes.push("description modifiée");
+   if (changes.length > 0) return changes.join(", ");
+   return null;
+ }
+@@ -950,10 +951,10 @@ function buildActivityToast(
+ 
+   if (action === "issue.created") {
+     return {
+-      title: `${actor} created ${issue.ref}`,
++      title: `${actor} a créé ${issue.ref}`,
+       body: issue.title ? truncate(issue.title, 96) : undefined,
+       tone: "success",
+-      action: { label: `View ${issue.ref}`, href: issue.href },
++      action: { label: `Voir ${issue.ref}`, href: issue.href },
+       dedupeKey: `activity:${action}:${entityId}`,
+     };
+   }
+@@ -972,10 +973,10 @@ function buildActivityToast(
+         ? truncate(issue.title, 96)
+         : issue.label;
+     return {
+-      title: `${actor} updated ${issue.ref}`,
++      title: `${actor} a mis à jour ${issue.ref}`,
+       body: truncate(body, 100),
+       tone: "info",
+-      action: { label: `View ${issue.ref}`, href: issue.href },
++      action: { label: `Voir ${issue.ref}`, href: issue.href },
+       dedupeKey: `activity:${action}:${entityId}`,
+     };
+   }
+@@ -987,14 +988,14 @@ function buildActivityToast(
+   const reopenedFrom = readString(details?.reopenedFrom);
+   const reopenedLabel = reopened
+     ? reopenedFrom
+-      ? `reopened from ${reopenedFrom.replace(/_/g, " ")}`
+-      : "reopened"
++      ? `rouverte depuis « ${LIBELLES_VALEURS[reopenedFrom] ?? reopenedFrom.replace(/_/g, " ")} »`
++      : "rouverte"
+     : null;
+   const title = reopened
+-    ? `${actor} reopened and commented on ${issue.ref}`
++    ? `${actor} a rouvert et commenté ${issue.ref}`
+     : updated
+-      ? `${actor} commented and updated ${issue.ref}`
+-      : `${actor} commented on ${issue.ref}`;
++      ? `${actor} a commenté et mis à jour ${issue.ref}`
++      : `${actor} a commenté ${issue.ref}`;
+   const body = bodySnippet
+     ? reopenedLabel
+       ? `${reopenedLabel} - ${bodySnippet.replace(/^#+\s*/m, "").replace(/\n/g, " ")}`
+@@ -1008,7 +1009,7 @@ function buildActivityToast(
+     title,
+     body: body ? truncate(body, 96) : undefined,
+     tone: "info",
+-    action: { label: `View ${issue.ref}`, href: issue.href },
++    action: { label: `Voir ${issue.ref}`, href: issue.href },
+     dedupeKey: `activity:${action}:${entityId}:${commentId ?? "na"}`,
+   };
+ }
+@@ -1026,13 +1027,13 @@ function buildJoinRequestToast(
+     return null;
+ 
+   const requestType = readString(details?.requestType);
+-  const label = requestType === "agent" ? "Agent" : "Someone";
++  const label = requestType === "agent" ? "Agent" : "Quelqu'un";
+ 
+   return {
+-    title: `${label} wants to join`,
+-    body: "A new join request is waiting for approval.",
++    title: `${label} demande à rejoindre`,
++    body: "Une nouvelle demande d'adhésion attend votre approbation.",
+     tone: "info",
+-    action: { label: "View inbox", href: "/inbox/mine" },
++    action: { label: "Voir la boîte de réception", href: "/inbox/mine" },
+     dedupeKey: `join-request:${entityId}`,
+   };
+ }
+@@ -1049,7 +1050,7 @@ function buildAgentStatusToast(
+ 
+   const tone = status === "error" ? "error" : "info";
+   const name = nameOf(agentId) ?? `Agent ${shortId(agentId)}`;
+-  const title = status === "running" ? `${name} started` : `${name} errored`;
++  const title = status === "running" ? `${name} a démarré` : `${name} est en erreur`;
+ 
+   const agents = queryClient.getQueryData<Agent[]>(
+     queryKeys.agents.list(companyId),
+@@ -1061,7 +1062,7 @@ function buildAgentStatusToast(
+     title,
+     body,
+     tone,
+-    action: { label: "View agent", href: `/agents/${agentId}` },
++    action: { label: "Voir l'agent", href: `/agents/${agentId}` },
+     dedupeKey: `agent-status:${agentId}:${status}`,
+   };
+ }
+@@ -1092,11 +1093,11 @@ function buildRunStatusToast(
+     contextSource?.startsWith("chat:")
+   ) {
+     return {
+-      title: `${name} couldn't start this chat`,
+-      body: "This external chat identity isn't linked, and isolated guest workspaces are disabled. Link the identity in Connectors or enable isolated workspaces, then start a new task.",
++      title: `${name} n'a pas pu démarrer cette discussion`,
++      body: "Cette identité de discussion externe n'est pas liée et les espaces invités isolés sont désactivés. Liez l'identité dans Connecteurs ou activez les espaces isolés, puis démarrez une nouvelle tâche.",
+       tone: "warn",
+       ttlMs: 10_000,
+-      action: { label: "Open chat connections", href: "/apps" },
++      action: { label: "Ouvrir les connexions de discussion", href: "/apps" },
+       dedupeKey: `run-status:${runId}:${status}`,
+     };
+   }
+@@ -1108,19 +1109,19 @@ function buildRunStatusToast(
+         : "error";
+   const statusLabel =
+     status === "succeeded"
+-      ? "succeeded"
++      ? "réussie"
+       : status === "failed"
+-        ? "failed"
++        ? "échouée"
+         : status === "timed_out"
+-          ? "timed out"
+-          : "cancelled";
+-  const title = `${name} run ${statusLabel}`;
++          ? "expirée"
++          : "annulée";
++  const title = `${name} : exécution ${statusLabel}`;
+ 
+   let body: string | undefined;
+   if (error) {
+     body = truncate(error, 100);
+   } else if (triggerDetail) {
+-    body = `Trigger: ${triggerDetail}`;
++    body = `Déclencheur : ${triggerDetail}`;
+   }
+ 
+   return {
+@@ -1128,7 +1129,7 @@ function buildRunStatusToast(
+     body,
+     tone,
+     ttlMs: status === "succeeded" ? 5000 : 7000,
+-    action: { label: "View run", href: `/agents/${agentId}/runs/${runId}` },
++    action: { label: "Voir l'exécution", href: `/agents/${agentId}/runs/${runId}` },
+     dedupeKey: `run-status:${runId}:${status}`,
+   };
+ }
+diff --git a/ui/src/lib/activity-grouping.test.ts b/ui/src/lib/activity-grouping.test.ts
+index 64a12dc49..fc9bb49a8 100644
+--- a/ui/src/lib/activity-grouping.test.ts
++++ b/ui/src/lib/activity-grouping.test.ts
+@@ -55,4 +55,35 @@ describe("regrouperActivite", () => {
+ 
+     expect(lignes.map((l) => l.event.id)).toEqual(["1", "2", "3"]);
+   });
++
++  it("résume en une ligne les mises à jour d'agents consécutives d'un même acteur et les compte", () => {
++    const lignes = regrouperActivite([
++      evenement("1", "agent.updated", "local-board", "user"),
++      evenement("2", "agent.updated", "local-board", "user"),
++      evenement("3", "agent.updated", "local-board", "user"),
++      evenement("4", "issue.created", "local-board", "user"),
++    ], 10);
++
++    expect(lignes.map((l) => [l.event.id, l.agentsMisAJour])).toEqual([["1", 3], ["4", undefined]]);
++  });
++
++  it("ne regroupe pas une mise à jour isolée ni celles de deux acteurs différents", () => {
++    const lignes = regrouperActivite([
++      evenement("1", "agent.updated", "u-1", "user"),
++      evenement("2", "agent.updated", "u-2", "user"),
++      evenement("3", "agent.updated", "u-2", "user"),
++    ], 10);
++
++    expect(lignes.map((l) => [l.event.id, l.agentsMisAJour])).toEqual([["1", undefined], ["2", 2]]);
++  });
++
++  it("une autre action entre deux mises à jour interrompt la série", () => {
++    const lignes = regrouperActivite([
++      evenement("1", "agent.updated", "u-1", "user"),
++      evenement("2", "issue.created", "u-1", "user"),
++      evenement("3", "agent.updated", "u-1", "user"),
++    ], 10);
++
++    expect(lignes.map((l) => l.event.id)).toEqual(["1", "2", "3"]);
++  });
+ });
+diff --git a/ui/src/lib/activity-grouping.ts b/ui/src/lib/activity-grouping.ts
+index 25740a025..f4d7e4946 100644
+--- a/ui/src/lib/activity-grouping.ts
++++ b/ui/src/lib/activity-grouping.ts
+@@ -5,10 +5,18 @@ export interface LigneActiviteGroupee {
+   event: ActivityEvent;
+   /** Nombre d'exécutions résumées (1 pour un événement isolé). */
+   repetitions: number;
++  /** Nombre de mises à jour d'agents résumées (défini seulement au-delà d'une seule). */
++  agentsMisAJour?: number;
+ }
+ 
+ const PREFIXE_BAIL_ENVIRONNEMENT = "environment.lease_";
+ 
++const ACTION_MISE_A_JOUR_AGENT = "agent.updated";
++
++function estMiseAJourAgent(event: ActivityEvent): boolean {
++  return event.action === ACTION_MISE_A_JOUR_AGENT;
++}
++
+ function estBailEnvironnement(event: ActivityEvent): boolean {
+   return event.action.startsWith(PREFIXE_BAIL_ENVIRONNEMENT);
+ }
+@@ -17,18 +25,45 @@ function estBailEnvironnement(event: ActivityEvent): boolean {
+  * Chaque battement planifié d'un agent ouvre puis libère un environnement d'exécution :
+  * deux lignes par battement noyaient le fil. Les baux consécutifs d'un même acteur sont
+  * regroupés en une ligne (l'événement le plus récent), qui compte les ouvertures.
++ * Les mises à jour d'agents consécutives d'un même acteur (par exemple un import) sont
++ * résumées de la même façon par leur plus récente, avec leur nombre.
+  * Les autres événements restent tels quels et l'ordre est conservé.
+  */
+ export function regrouperActivite(events: readonly ActivityEvent[], limite: number): LigneActiviteGroupee[] {
+   const lignes: LigneActiviteGroupee[] = [];
+   let serie: { event: ActivityEvent; ouvertures: number } | null = null;
++  let miseAJour: { event: ActivityEvent; nombre: number } | null = null;
+ 
+   const fermerSerie = () => {
+     if (serie) lignes.push({ event: serie.event, repetitions: Math.max(1, serie.ouvertures) });
+     serie = null;
+   };
+ 
++  const fermerMisesAJour = () => {
++    if (miseAJour) {
++      lignes.push(
++        miseAJour.nombre > 1
++          ? { event: miseAJour.event, repetitions: 1, agentsMisAJour: miseAJour.nombre }
++          : { event: miseAJour.event, repetitions: 1 },
++      );
++    }
++    miseAJour = null;
++  };
++
+   for (const event of events) {
++    if (lignes.length >= limite) break;
++    if (estMiseAJourAgent(event)) {
++      fermerSerie();
++      if (miseAJour && miseAJour.event.actorType === event.actorType && miseAJour.event.actorId === event.actorId) {
++        miseAJour.nombre += 1;
++        continue;
++      }
++      fermerMisesAJour();
++      if (lignes.length >= limite) break;
++      miseAJour = { event, nombre: 1 };
++      continue;
++    }
++    fermerMisesAJour();
+     if (lignes.length >= limite) break;
+     if (estBailEnvironnement(event)) {
+       const ouverture = event.action === "environment.lease_acquired" ? 1 : 0;
+@@ -46,5 +81,6 @@ export function regrouperActivite(events: readonly ActivityEvent[], limite: numb
+     lignes.push({ event, repetitions: 1 });
+   }
+   fermerSerie();
++  fermerMisesAJour();
+   return lignes.slice(0, limite);
+ }
+diff --git a/ui/src/lib/agent-role-labels.test.ts b/ui/src/lib/agent-role-labels.test.ts
+new file mode 100644
+index 000000000..1baaa4a98
+--- /dev/null
++++ b/ui/src/lib/agent-role-labels.test.ts
+@@ -0,0 +1,21 @@
++import { describe, expect, it } from "vitest";
++import { sousTitreAgent } from "./agent-role-labels";
++
++describe("sousTitreAgent", () => {
++  it("affiche le titre seul pour le rôle générique", () => {
++    expect(sousTitreAgent("general", "Direction · Revue contradictoire")).toBe("Direction · Revue contradictoire");
++  });
++
++  it("garde le libellé du rôle quand il n'y a pas de titre", () => {
++    expect(sousTitreAgent("general", null)).toBe("Généraliste");
++    expect(sousTitreAgent("qa", "  ")).toBe("Contrôle qualité");
++  });
++
++  it("sépare le rôle précis et le titre par un point médian, jamais par un tiret", () => {
++    expect(sousTitreAgent("engineer", "Front")).toBe("Développement · Front");
++  });
++
++  it("laisse un rôle inconnu tel quel", () => {
++    expect(sousTitreAgent("autre", "X")).toBe("autre · X");
++  });
++});
+diff --git a/ui/src/lib/agent-role-labels.ts b/ui/src/lib/agent-role-labels.ts
+index a46eaeb27..5f952cb67 100644
+--- a/ui/src/lib/agent-role-labels.ts
++++ b/ui/src/lib/agent-role-labels.ts
+@@ -19,3 +19,16 @@ export const LIBELLES_ROLES_AGENT: Record<AgentRole, string> = {
+   researcher: "Recherche",
+   general: "Généraliste",
+ };
++
++/**
++ * Sous-titre d'un agent dans les listes : « rôle · titre ». Le rôle générique
++ * « Généraliste » n'apprend rien : on affiche alors le titre seul. Un seul séparateur
++ * (le point médian) est utilisé, comme dans les titres d'agents eux-mêmes.
++ */
++export function sousTitreAgent(role: string, titre: string | null | undefined): string {
++  const libelleRole = (LIBELLES_ROLES_AGENT as Record<string, string>)[role] ?? role;
++  const titreNet = titre?.trim() ?? "";
++  if (!titreNet) return libelleRole;
++  if (role === "general") return titreNet;
++  return `${libelleRole} · ${titreNet}`;
++}
+diff --git a/ui/src/lib/company-members.test.ts b/ui/src/lib/company-members.test.ts
+index eb646ce24..8bf8bd00f 100644
+--- a/ui/src/lib/company-members.test.ts
++++ b/ui/src/lib/company-members.test.ts
+@@ -24,6 +24,15 @@ const activeMember = (overrides: Partial<CompanyMember>): CompanyMember => ({
+ });
+ 
+ describe("company-members helpers", () => {
++  it("affiche « Utilisateur » pour l'utilisateur local nommé Board, et garde les autres noms", () => {
++    const labels = buildCompanyUserLabelMap([
++      activeMember({ principalId: "local-board", user: { id: "local-board", name: "Board", email: "", image: null } }),
++      activeMember({ id: "member-2", principalId: "user-2", user: { id: "user-2", name: "Board", email: "", image: null } }),
++    ]);
++    expect(labels.get("local-board")).toBe("Utilisateur");
++    expect(labels.get("user-2")).toBe("Board");
++  });
++
+   it("builds labels from company member profiles", () => {
+     const labels = buildCompanyUserLabelMap([
+       activeMember({ principalId: "user-1", user: { id: "user-1", name: "Taylor", email: "taylor@example.com", image: null } }),
+diff --git a/ui/src/lib/company-members.ts b/ui/src/lib/company-members.ts
+index c66381cc6..74d3c8706 100644
+--- a/ui/src/lib/company-members.ts
++++ b/ui/src/lib/company-members.ts
+@@ -18,6 +18,8 @@ function fallbackUserLabel(userId: string): string {
+ 
+ function baseMemberLabel(member: Pick<CompanyUserRecord, "principalId" | "user">): string {
+   const name = member.user?.name?.trim();
++  // Même règle que le menu du compte : l'utilisateur local « Board » s'affiche « Utilisateur ».
++  if (name && member.principalId === "local-board" && name === "Board") return "Utilisateur";
+   if (name) return name;
+   const email = member.user?.email?.trim();
+   if (email) return email;
+diff --git a/ui/src/pages/Agents.production.tsx b/ui/src/pages/Agents.production.tsx
+index e0156548f..9135dc185 100644
+--- a/ui/src/pages/Agents.production.tsx
++++ b/ui/src/pages/Agents.production.tsx
+@@ -35,9 +35,8 @@ import {
+ import { usePublishSharedQueryData, useSharedPollingQuery } from "../hooks/useSharedPolling";
+ 
+ import { getAdapterLabel } from "../adapters/adapter-display-registry";
+-import { LIBELLES_ROLES_AGENT } from "../lib/agent-role-labels";
++import { sousTitreAgent } from "../lib/agent-role-labels";
+ 
+-const roleLabels = LIBELLES_ROLES_AGENT as Record<string, string>;
+ 
+ // Lazy-loaded so the roster page doesn't statically pull in the full
+ // AgentConfigForm module graph (the modal reuses its adapter/model pickers).
+@@ -75,7 +74,7 @@ const localEnvironmentDescriptor: EnvironmentDescriptor = {
+ };
+ 
+ const loadingEnvironmentDescriptor: EnvironmentDescriptor = {
+-  label: "—",
++  label: "",
+   detail: "Chargement de l'environnement",
+   title: "Chargement de l'environnement",
+ };
+@@ -394,7 +393,7 @@ export function Agents() {
+         titleClassName="flex-1 xl:flex-none xl:w-56"
+         titleTextClassName="whitespace-normal break-words xl:truncate xl:whitespace-nowrap"
+         subtitleClassName="whitespace-normal break-words xl:truncate xl:whitespace-nowrap"
+-        subtitle={`${roleLabels[agent.role] ?? agent.role}${agent.title ? ` - ${agent.title}` : ""}`}
++        subtitle={sousTitreAgent(agent.role, agent.title)}
+         to={agentUrl(agent)}
+         className={cn(
+           "group",
+@@ -665,8 +664,7 @@ function OrgTreeNode({
+           <div className="min-w-(--sz-7rem) truncate">
+             <span className="text-sm font-medium">{node.name}</span>
+             <span className="text-xs text-muted-foreground ml-2">
+-              {roleLabels[node.role] ?? node.role}
+-              {agent?.title ? ` - ${agent.title}` : ""}
++              {sousTitreAgent(node.role, agent?.title)}
+             </span>
+           </div>
+           {builtInState && showBuiltInLifecycle && (
+@@ -808,7 +806,7 @@ function AgentMetaColumns({
+           className="truncate font-mono text-xs text-muted-foreground"
+           title={model ?? undefined}
+         >
+-          {model ?? "—"}
++          {model ?? "Modèle non défini"}
+         </div>
+         <div className="truncate font-mono text-(length:--text-micro) text-muted-foreground" title={adapterLabel}>
+           {adapterLabel}
+@@ -825,7 +823,7 @@ function AgentMetaColumns({
+         </div>
+       )}
+       <span className="w-24 whitespace-nowrap text-right text-xs text-muted-foreground">
+-        {agent.lastHeartbeatAt ? relativeTime(agent.lastHeartbeatAt) : "—"}
++        {agent.lastHeartbeatAt ? relativeTime(agent.lastHeartbeatAt) : "Jamais"}
+       </span>
+     </>
+   );
+diff --git a/ui/src/pages/Agents.tsx b/ui/src/pages/Agents.tsx
+index eb1be8f0f..47a693b2e 100644
+--- a/ui/src/pages/Agents.tsx
++++ b/ui/src/pages/Agents.tsx
+@@ -38,9 +38,8 @@ import {
+ import { usePublishSharedQueryData, useSharedPollingQuery } from "../hooks/useSharedPolling";
+ 
+ import { getAdapterLabel } from "../adapters/adapter-display-registry";
+-import { LIBELLES_ROLES_AGENT } from "../lib/agent-role-labels";
++import { sousTitreAgent } from "../lib/agent-role-labels";
+ 
+-const roleLabels = LIBELLES_ROLES_AGENT as Record<string, string>;
+ 
+ // Lazy-loaded so the roster page doesn't statically pull in the full
+ // AgentConfigForm module graph (the modal reuses its adapter/model pickers).
+@@ -78,7 +77,7 @@ const localEnvironmentDescriptor: EnvironmentDescriptor = {
+ };
+ 
+ const loadingEnvironmentDescriptor: EnvironmentDescriptor = {
+-  label: "—",
++  label: "",
+   detail: "Chargement de l'environnement",
+   title: "Chargement de l'environnement",
+ };
+@@ -392,7 +391,7 @@ export function Agents({ initialView = "list" }: { initialView?: AgentsView } =
+         titleClassName="flex-1 @5xl:flex-none @5xl:w-56"
+         titleTextClassName="truncate"
+         subtitleClassName="truncate"
+-        subtitle={`${roleLabels[agent.role] ?? agent.role}${agent.title ? ` - ${agent.title}` : ""}`}
++        subtitle={sousTitreAgent(agent.role, agent.title)}
+         to={agentUrl(agent)}
+         className={cn(
+           "group py-3",
+@@ -646,8 +645,7 @@ function OrgTreeNode({
+           <div className="min-w-(--sz-7rem) truncate">
+             <span className="text-sm font-medium">{node.name}</span>
+             <span className="text-xs text-muted-foreground ml-2">
+-              {roleLabels[node.role] ?? node.role}
+-              {agent?.title ? ` - ${agent.title}` : ""}
++              {sousTitreAgent(node.role, agent?.title)}
+             </span>
+           </div>
+           {builtInState && showBuiltInLifecycle && (
+@@ -789,7 +787,7 @@ function AgentMetaColumns({
+           className="truncate font-mono text-xs text-muted-foreground"
+           title={model ?? undefined}
+         >
+-          {model ?? "—"}
++          {model ?? "Modèle non défini"}
+         </div>
+         <div className="truncate font-mono text-(length:--text-micro) text-muted-foreground" title={adapterLabel}>
+           {adapterLabel}
+@@ -806,7 +804,7 @@ function AgentMetaColumns({
+         </div>
+       )}
+       <span className="w-24 whitespace-nowrap text-right text-xs text-muted-foreground">
+-        {agent.lastHeartbeatAt ? relativeTime(agent.lastHeartbeatAt) : "—"}
++        {agent.lastHeartbeatAt ? relativeTime(agent.lastHeartbeatAt) : "Jamais"}
+       </span>
+     </>
+   );
+diff --git a/ui/src/pages/Dashboard.tsx b/ui/src/pages/Dashboard.tsx
+index a40f1045e..87e5c89aa 100644
+--- a/ui/src/pages/Dashboard.tsx
++++ b/ui/src/pages/Dashboard.tsx
+@@ -405,7 +405,7 @@ export function Dashboard() {
+             <MetricCard
+               icon={Bot}
+               value={data.agents.active + data.agents.running + data.agents.paused + data.agents.error}
+-              label="Agents activés"
++              label="Agents au total"
+               to="/agents"
+               description={
+                 <span>
+@@ -491,11 +491,12 @@ export function Dashboard() {
+                   Activité récente
+                 </h3>
+                 <Card className="@container block py-0 divide-y divide-border overflow-hidden">
+-                  {recentActivityRows.map(({ event, repetitions }) => (
++                  {recentActivityRows.map(({ event, repetitions, agentsMisAJour }) => (
+                     <ActivityRow
+                       key={event.id}
+                       event={event}
+                       repetitions={repetitions}
++                      agentsMisAJour={agentsMisAJour}
+                       agentMap={agentMap}
+                       userProfileMap={userProfileMap}
+                       entityNameMap={entityNameMap}
+-- 
+2.53.0
+

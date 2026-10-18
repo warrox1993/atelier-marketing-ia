@@ -1,7 +1,7 @@
 ---
 kind: "agent"
 slug: "procedures-incident"
-name: "Procedures incident"
+name: "Procédures incident"
 title: "Informatique · Procédures d'incident"
 reportsTo: "coordinateur-informatique"
 skills:

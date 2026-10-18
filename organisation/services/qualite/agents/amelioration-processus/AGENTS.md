@@ -1,7 +1,7 @@
 ---
 kind: "agent"
 slug: "amelioration-processus"
-name: "Amelioration processus"
+name: "Amélioration processus"
 title: "Qualité · Cartographie et amélioration des processus"
 reportsTo: "coordinateur-qualite"
 skills:

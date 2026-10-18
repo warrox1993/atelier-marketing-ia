@@ -1002,13 +1002,77 @@ def liaison_conforme(agent: dict, liaison: dict) -> bool:
 # Application idempotente
 # ---------------------------------------------------------------------------
 
+def slug_depuis_nom(nom: str) -> str:
+    """Slug d'un nom d'agent, sans accents : « Coordinateur général » -> « coordinateur-general ». Le nom affiché peut être
+    accentué (source : AGENTS.md du service), le slug reste la clé de rapprochement : toute recherche d'agent par son nom
+    passe par cette fonction (normaliser_slug seule transformerait « é » en « - »)."""
+    return normaliser_slug(unicodedata.normalize("NFKD", nom).encode("ascii", "ignore").decode())
+
+
+MOTS_OUTILS = frozenset({"de", "des", "du", "d", "et", "la", "le", "les", "l", "a", "au", "aux", "en"})
+
+
+def cle_souple(slug: str) -> str:
+    """Slug sans mots outils : « Cellule de crise » (cellule-de-crise) et le dossier cellule-crise se rapprochent."""
+    return "-".join(t for t in slug.split("-") if t not in MOTS_OUTILS)
+
+
+def nom_correspond(nom: str, slug: str) -> bool:
+    """Le nom affiché correspond au slug, exactement ou aux mots outils près."""
+    s = slug_depuis_nom(nom)
+    return s == slug or cle_souple(s) == cle_souple(slug)
+
+
+_SLUGS_CONNUS: dict[str, str] | None = None
+
+
+def slug_canonique(slug: str) -> str:
+    """Slug du dépôt qui correspond à un slug tiré d'un nom : exact s'il existe, sinon celui qui lui correspond aux mots
+    outils près (« Cellule de crise » -> cellule-crise), sinon le slug tel quel. Index des slugs connus : dossiers
+    d'agents des services et du marketing, plus le Gardien ; une clé souple partagée par deux slugs n'est pas utilisée."""
+    global _SLUGS_CONNUS
+    if _SLUGS_CONNUS is None:
+        connus = {GARDIEN_SLUG}
+        connus.update(d.name for d in (ORGA / "agents").glob("*") if d.is_dir())
+        connus.update(d.name for d in (ORGA / "services").glob("*/agents/*") if d.is_dir())
+        souples: dict[str, str | None] = {}
+        for c in connus:
+            k = cle_souple(c)
+            souples[k] = c if k not in souples else None
+        _SLUGS_CONNUS = {**{k: v for k, v in souples.items() if v}, **{c: c for c in connus}}
+    return _SLUGS_CONNUS.get(slug) or _SLUGS_CONNUS.get(cle_souple(slug)) or slug
+
+
 def agents_par_slug(api: Api, company_id: str) -> dict[str, dict]:
+    """Agents non résiliés indexés par le slug du dépôt qui correspond à leur nom (voir slug_canonique)."""
     sortie = {}
     for a in api.get(f"/companies/{company_id}/agents"):
         if a.get("status") == "terminated":
             continue
-        sortie[normaliser_slug(a["name"])] = a
+        sortie[slug_canonique(slug_depuis_nom(a["name"]))] = a
     return sortie
+
+
+def renommages_agents(api: Api, company_id: str, reg_agents: dict) -> list[tuple[str, str, str, str]]:
+    """Agents existants dont le nom diffère de celui du registre (slug, identifiant, nom actuel, nom voulu). Lecture seule."""
+    presents = agents_par_slug(api, company_id)
+    sortie = []
+    for agent in reg_agents["agents"]:
+        a = presents.get(agent["slug"])
+        if not a:
+            continue
+        actuel, voulu = unicodedata.normalize("NFC", a["name"]), unicodedata.normalize("NFC", agent["nom"])
+        if actuel != voulu:
+            sortie.append((agent["slug"], a["id"], actuel, voulu))
+    return sortie
+
+
+def renommer_agents(api: Api, company_id: str, reg_agents: dict) -> list[tuple[str, str, str, str]]:
+    """Renomme (PATCH /agents/<id>, nom seul) les agents dont le nom diffère du registre ; rend les renommages faits."""
+    faits = renommages_agents(api, company_id, reg_agents)
+    for _, aid, _, voulu in faits:
+        api.appel("PATCH", f"/agents/{aid}", {"name": voulu})
+    return faits
 
 
 def detail_agent(api: Api, agent_id: str) -> dict:
@@ -3392,7 +3456,7 @@ def agents_service(reg_agents: dict, svc: dict) -> tuple[list[dict], dict[str, s
         if fichier.is_file():
             competences = competences_entete(fichier.read_text(encoding="utf-8"), svc["slug"], slug)
             entete, corps_brut = entete_simple(fichier.read_text(encoding="utf-8"))
-            if isinstance(entete.get("name"), str) and normaliser_slug(entete["name"]) == slug:
+            if isinstance(entete.get("name"), str) and nom_correspond(entete["name"], slug):
                 nom = entete["name"]
             if isinstance(entete.get("title"), str) and entete["title"].strip():
                 titre = entete["title"]
@@ -3948,7 +4012,7 @@ def fichiers_mise_a_jour(plan: dict) -> dict[str, str]:
 def diagnostic_mise_a_jour(api: Api, plan: dict, mode: str) -> dict:
     """Lecture seule : agents du registre à créer, agents hors registre, raisons de mise à jour des agents existants."""
     slugs = [a["slug"] for a in plan["reg_agents"]["agents"]]
-    diag = {"creer": list(slugs), "hors_registre": [], "raisons": []}
+    diag = {"creer": list(slugs), "hors_registre": [], "raisons": [], "renommages": []}
     if plan["existante"] is None:
         return diag
     cid = plan["existante"]["id"]
@@ -3964,6 +4028,7 @@ def diagnostic_mise_a_jour(api: Api, plan: dict, mode: str) -> dict:
     else:
         raisons = etat_service_a_jour(api, cid, plan["reg_agents"], fichiers, empreinte, jeton_id, mode)
     diag["raisons"] = [r for r in raisons if not r.startswith("agent absent")]
+    diag["renommages"] = renommages_agents(api, cid, plan["reg_agents"])
     return diag
 
 
@@ -4017,9 +4082,10 @@ def cmd_mettre_a_jour_client(args) -> int:
         plans.append(plan)
     total_creer = sum(len(p["diag"]["creer"]) for p in plans)
     total_hors = sum(len(p["diag"]["hors_registre"]) for p in plans)
+    total_renommer = sum(len(p["diag"]["renommages"]) for p in plans)
     prefixe = "À blanc : rien n'est écrit. " if args.a_blanc else ""
     print(f"{prefixe}Client « {fiche['nomCommercial']} » ({slug}) : {len(plans)} service(s), "
-          f"{total_creer} agent(s) à créer en pause, {total_hors} agent(s) hors registre.")
+          f"{total_creer} agent(s) à créer en pause, {total_hors} agent(s) hors registre, {total_renommer} agent(s) à renommer.")
     for s in inconnus:
         print(f"  service du registre local absent du registre des services (ou inactif), laissé tel quel : {s}")
     for plan in plans:
@@ -4030,6 +4096,9 @@ def cmd_mettre_a_jour_client(args) -> int:
         detail = f"{len(d['creer'])} à créer" + (f" ({', '.join(d['creer'])})" if d["creer"] else "")
         print(f"  [{etiquette}] {plan['existante']['id']} : {detail} ; {len(d['raisons'])} écart(s) à réconcilier sur les agents existants ; "
               f"{len(d['hors_registre'])} hors registre" + (f" ({', '.join(s for s, _, _ in d['hors_registre'])})" if d["hors_registre"] else ""))
+    for plan in plans:
+        for s_, _, actuel, voulu in plan["diag"]["renommages"]:
+            print(f"  [{plan['svc']['slug']}] renommage prévu : {s_} : « {actuel} » -> « {voulu} »")
     if args.a_blanc:
         encore_actifs = sum(1 for p in plans for _, _, st in p["diag"]["hors_registre"] if st != "paused")
         if args.pause_hors_registre:
@@ -4064,6 +4133,8 @@ def cmd_mettre_a_jour_client(args) -> int:
             registre = noter_entreprise_registre(slug, fiche["numeroBce"], registre, svc["slug"],
                                                  {"entrepriseId": cid, "nom": plan["nom"], "marqueur": plan["marqueur"]})
             plan["cid"] = cid
+            for s_, _, actuel, voulu in renommer_agents(api, cid, plan["reg_agents"]):
+                print(f"  agent renommé : {s_} : « {actuel} » -> « {voulu} »")
             for rallume in remettre_agents_actifs(api, cid, avant):
                 print(f"  agent déjà actif avant la mise à jour, rallumé : {rallume}")
             if plan["existante"] is None:  # budget posé à la création seulement : celui d'une entreprise existante n'est pas touché

@@ -1,7 +1,7 @@
 ---
 kind: "agent"
 slug: "plan-prevention"
-name: "Plan prevention"
+name: "Plan prévention"
 title: "Sécurité, santé et environnement · Plan global de prévention et plan d'action annuel"
 reportsTo: "coordinateur-hse"
 skills:

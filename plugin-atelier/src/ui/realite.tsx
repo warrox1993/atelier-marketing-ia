@@ -115,7 +115,7 @@ const NOMS_AFFICHES = 4;
 
 const pluriel = (n: number, un: string, plusieurs: string) => `${n} ${n === 1 ? un : plusieurs}`;
 
-function TableauBranchements({ branchements }: { branchements: readonly Branchement[] }) {
+function TableauBranchements({ branchements, aucunLead }: { branchements: readonly Branchement[]; aucunLead: boolean }) {
   return (
     <div className="atl-table-cadre">
       <table className="atl-table atl-table-realite">
@@ -149,7 +149,7 @@ function TableauBranchements({ branchements }: { branchements: readonly Branchem
                 </td>
                 <td data-libelle="Qui agit">{LIBELLES_ACTEUR[b.acteur]}</td>
                 <td data-libelle="Leads" className="atl-num">
-                  {b.leadsConcernes === null ? (
+                  {b.leadsConcernes === null || (aucunLead && b.leadsConcernes === 0) ? (
                     <span className="atl-attenue" aria-label="non calculable">
                       <span aria-hidden="true">–</span>
                     </span>
@@ -173,7 +173,7 @@ function Contenu({ realite, branchements }: { realite: RealiteEtat; branchements
       <p className="atl-encart-titre" role="status">
         {manquants.length === 0 ? "Toutes les sources sont connectées." : `Connexions à établir : ${manquants.length} sur ${branchements.length}.`}
       </p>
-      <TableauBranchements branchements={branchements} />
+      <TableauBranchements branchements={branchements} aucunLead={realite.leads.analyses === 0} />
       <h3 className="atl-h3">Ce que les leads attendent</h3>
       {realite.leads.analyses === 0 ? (
         <p className="atl-vide-texte">Aucun lead à qualifier pour l'instant.</p>
@@ -223,7 +223,7 @@ export function RecapPassageAuReel({ lecture, relire }: { lecture: LectureRealit
 }
 
 /** Section de tête de la vue Paramètres. */
-export function SectionPassageAuReel() {
+export function SectionPassageAuReel({ seule = false }: { seule?: boolean } = {}) {
   const [lecture, relire] = useRealite();
   // Arrivée depuis l'accueil : la section est en tête, mais on y amène aussi le regard si l'adresse la vise.
   useEffect(() => {
@@ -231,7 +231,7 @@ export function SectionPassageAuReel() {
     document.getElementById(ANCRE_PASSAGE_AU_REEL)?.scrollIntoView?.();
   }, []);
   return (
-    <Section titre="Connexions" ancre={ANCRE_PASSAGE_AU_REEL} repliable aide="Ce qui est branché et ce qui ne l'est pas encore : où on en est, ce que chaque connexion débloque, et qui doit agir. Une source sans accès réel s'affiche « Non connecté ».">
+    <Section titre="Connexions" titreMasque={seule} ancre={ANCRE_PASSAGE_AU_REEL} repliable={!seule} aide={seule ? undefined : "Ce qui est branché et ce qui ne l'est pas encore : où on en est, ce que chaque connexion débloque, et qui doit agir. Une source sans accès réel s'affiche « Non connecté »."}>
       {lecture.etat === "chargement" ? <Chargement libelle="Chargement des connexions" /> : null}
       {lecture.etat === "erreur" ? <EtatErreur erreur={lecture.erreur} onReessayer={relire} contexte="les connexions" /> : null}
       {lecture.etat === "pret" ? <Contenu realite={lecture.realite} branchements={lecture.branchements} /> : null}

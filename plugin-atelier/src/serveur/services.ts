@@ -2067,7 +2067,7 @@ export function creerServices(ctx: PluginContext, options: { transportReel?: Tra
       passerelle,
       sources: SOURCES_REELLES.map(([cle, nom, reel, demo]) => ({ cle, nom, reelle: reelles.has(cle), detail: reelles.has(cle) ? reel : passerelle === "joignable" ? demo : motif, verifieLe: maintenant })),
     });
-    if (!adresse) return construire("non_configuree", new Set(), "Adresse de la passerelle non configurée ou hors de cette machine (réglage passerelleUrl, boucle locale seulement) : mode non vérifié.");
+    if (!adresse) return construire("non_configuree", new Set(), "Adresse de la passerelle non configurée ou hors de cette machine (l'adresse de la passerelle doit être celle de cette machine) : mode non vérifié.");
     try {
       const reponse = await (options.fetchBoucleLocale ?? globalThis.fetch)(new URL("/sante", adresse).toString(), { signal: AbortSignal.timeout(3000), redirect: "error" });
       if (!reponse.ok) throw new Error(`HTTP ${reponse.status}`);
@@ -2114,7 +2114,7 @@ export function creerServices(ctx: PluginContext, options: { transportReel?: Tra
         },
         { cle: "lecture_url", nom: "Lecture d'URL protégée et vérification de liens", capacites: ["lecture" as const], etat: "configure_non_verifie" as EtatConnexion, niveau: "implemente_teste" as const, detail: "Lecture réseau protégée (anti-SSRF, redirections bornées).", verifieLe: null },
         { cle: "recherche_web", nom: "Recherche Web", capacites: ["lecture" as const], etat: "non_connecte" as EtatConnexion, niveau: "non_implemente" as const, detail: "Aucun connecteur de recherche Web propre à l'atelier. Les sources de données disponibles sont listées dans « Sources de données réelles ».", verifieLe: null },
-        { cle: "diffusion", nom: "Diffusion (réseaux, e-mail, publicité)", capacites: ["preparation_action" as const], etat: "non_connecte" as EtatConnexion, niveau: "contrat_seulement" as const, detail: "Aucun connecteur de diffusion : en réel, une diffusion approuvée est seulement « préparée ».", verifieLe: null },
+        { cle: "diffusion", nom: "Diffusion (réseaux, e-mail, publicité)", capacites: ["preparation_action" as const], etat: "non_connecte" as EtatConnexion, niveau: "contrat_seulement" as const, detail: "Aucun connecteur de diffusion : en réel, une diffusion approuvée est seulement « préparée ».", verifieLe: null },
         // Services de la passerelle marketing (mêmes clés que `SERVICES_PASSERELLE` de l'interface L8).
         // Le worker n'a pas accès aux connexions natives (aucun client SDK) : l'état réel de la
         // connexion est lu par l'interface. Ici : ce que le code garantit, sans rien supposer.

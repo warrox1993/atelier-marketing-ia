@@ -1,7 +1,7 @@
 ---
 kind: "agent"
 slug: "reseaux-sociaux"
-name: "Reseaux sociaux"
+name: "Réseaux sociaux"
 title: "Pôle Contenus · Calendrier social, posts et réponses publiques"
 reportsTo: "coordinateur"
 skills:

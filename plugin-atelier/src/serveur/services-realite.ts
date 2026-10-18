@@ -328,7 +328,7 @@ export function routesRealite(d: DependancesRealite): Partial<Record<CleRouteApi
         ? fabrique("voix", "non_branche", "aucune", "Configuration illisible : clé non vérifiable.")
         : refVoix && typeof refVoix === "object"
           ? fabrique("voix", "configure_non_verifie", "declare", "Clé OpenAI déclarée dans la configuration (valeur jamais lue, non vérifiée auprès d'OpenAI).")
-          : fabrique("voix", "non_branche", "mesure", "Aucune clé OpenAI : la voix en direct répondrait « voix_non_configuree » (503).");
+          : fabrique("voix", "non_branche", "mesure", "Aucune clé OpenAI : la voix en direct n'est pas disponible.");
 
     const branchements: Branchement[] = [
       source("bce"),

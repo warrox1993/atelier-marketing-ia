@@ -586,8 +586,15 @@ describe("base clients", () => {
     expect(c.querySelector('[role="alert"]')!.textContent).toContain("macros");
   });
 
+  it("sans base clients, aucun bouton de suppression n'est proposé", async () => {
+    serveur = (m, u) => (m === "GET" && u.includes("/base-clients?") ? { statut: 200, corps: { existe: false, clients: 0, actifs: 0, importId: null, nomFichier: null, format: null, importeLe: null, importePar: null, purgeLe: null, finalite: null, dureeConservationMois: null, mode: null, aPurger: false } } : { statut: 200, corps: page() });
+    const c = await ouvrirBase();
+    expect(Array.from(c.querySelectorAll("button")).some((b) => b.textContent?.includes("Supprimer la base clients"))).toBe(false);
+  });
+
   it("la suppression exige la confirmation exacte, puis envoie la demande", async () => {
-    serveur = (m, u) => (m === "POST" && u.endsWith("/base-clients/suppression") ? { statut: 200, corps: { supprimee: true } } : { statut: 200, corps: page() });
+    const baseExistante = { existe: true, clients: 1234, actifs: 1100, importId: "c1111111-1111-4111-8111-111111111111", nomFichier: "base-2026.csv", format: "csv", importeLe: "2026-10-01T10:00:00.000Z", importePar: "local-board", purgeLe: "2027-10-01T10:00:00.000Z", finalite: "Suivi de la clientèle existante", dureeConservationMois: 12, mode: "reel", aPurger: false };
+    serveur = (m, u) => (m === "POST" && u.endsWith("/base-clients/suppression") ? { statut: 200, corps: { supprimee: true } } : m === "GET" && u.includes("/base-clients?") ? { statut: 200, corps: baseExistante } : { statut: 200, corps: page() });
     const c = await ouvrirBase();
     await cliquer(parTexte(c, "button", "Supprimer la base clients"));
     const final = parTexte(c, "button", "Supprimer définitivement la base clients");

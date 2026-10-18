@@ -36,7 +36,7 @@ export interface MessageFil {
   actions?: ActionDiscussion[];
 }
 interface Ouverture {
-  issueId: string;
+  issueId: string | null;
   identifiant: string | null;
   messages: MessageFil[];
   /** Cartes natives en attente sur les tâches liées à la discussion. */
@@ -129,6 +129,8 @@ export function VueDiscussion() {
   const [messages, setMessages] = useState<MessageFil[]>([]);
   const [texte, setTexte] = useState("");
   const [envoi, setEnvoi] = useState(false);
+  /** Vrai après une tentative d'envoi à vide : le message d'aide n'apparaît qu'alors. */
+  const [tentativeVide, setTentativeVide] = useState(false);
   const [erreurEnvoi, setErreurEnvoi] = useState<string | null>(null);
   /** Instant (ms) du dernier envoi sans réponse reçue ; `null` si le Coordinateur a répondu. */
   const [attenteDepuis, setAttenteDepuis] = useState<number | null>(null);
@@ -241,6 +243,7 @@ export function VueDiscussion() {
   const surTouche = (e: KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
       e.preventDefault();
+      if (texte.trim() === "") setTentativeVide(true);
       void envoyer(texte);
     }
   };
@@ -329,6 +332,7 @@ export function VueDiscussion() {
         className="atl-disc-saisie"
         onSubmit={(e) => {
           e.preventDefault();
+          if (texte.trim() === "") setTentativeVide(true);
           void envoyer(texte);
         }}
       >
@@ -346,10 +350,13 @@ export function VueDiscussion() {
           rows={1}
           maxLength={MAX_TEXTE}
           value={texte}
-          onChange={(e) => setTexte(e.target.value)}
+          onChange={(e) => {
+            setTexte(e.target.value);
+            setTentativeVide(false);
+          }}
           onKeyDown={surTouche}
         />
-        <Bouton type="submit" variante="principal" enCours={envoi} raisonDesactive={texte.trim() === "" ? "Écrivez d'abord votre message." : null}>
+        <Bouton type="submit" variante="principal" enCours={envoi} raisonDesactive={tentativeVide && texte.trim() === "" ? "Écrivez d'abord votre message." : null}>
           Envoyer
         </Bouton>
       </form>

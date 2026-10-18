@@ -223,7 +223,10 @@ export function routesDiscussion(d: DependancesDiscussion): Partial<Record<CleRo
 
   routes["discussion.ouvrir"] = async (r) => {
     exigerHumain(r.acteur);
-    const issue = await retrouverOuCreer(r.companyId, r.acteur);
+    // Ouvrir la page ne crée rien : la tâche native naît au premier message envoyé (`discussion.envoyer`).
+    const trouvee = await chercher(r.companyId);
+    if (!trouvee) return { corps: { issueId: null, identifiant: null, messages: [], cartes: [], cartesIndisponibles: false } };
+    const issue = await suivreCoordinateur(r.companyId, trouvee, r.acteur);
     const { cartes, indisponible } = await cartesEnAttente(r.companyId, issue, true);
     return { corps: { issueId: issue.id, identifiant: issue.identifier ?? null, messages: await lireMessages(r.companyId, issue.id, null), cartes, cartesIndisponibles: indisponible } };
   };

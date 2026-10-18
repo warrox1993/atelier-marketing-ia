@@ -22,7 +22,7 @@ export interface LigneVoix {
 }
 
 const LIBELLES_ETAT: Record<EtatVoix, string> = {
-  inactif: "Arrêté",
+  inactif: "Micro arrêté",
   connexion: "Connexion…",
   ecoute: "Je vous écoute",
   reflechit: "Je réfléchis",

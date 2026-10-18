@@ -1,7 +1,7 @@
 ---
 kind: "agent"
 slug: "registre-decisions"
-name: "Registre decisions"
+name: "Registre décisions"
 title: "Direction · Registre des décisions et des actions"
 reportsTo: "coordinateur-direction"
 skills:

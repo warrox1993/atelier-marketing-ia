@@ -1,7 +1,7 @@
 ---
 kind: "agent"
 slug: "veille-reglementaire"
-name: "Veille reglementaire"
+name: "Veille réglementaire"
 title: "Conformité · Veille réglementaire"
 reportsTo: "coordinateur-conformite"
 skills:
