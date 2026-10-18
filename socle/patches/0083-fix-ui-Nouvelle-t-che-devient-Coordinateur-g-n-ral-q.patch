@@ -1,0 +1,156 @@
+From cbbf1065197f92de4d76f515829264070e0e1269 Mon Sep 17 00:00:00 2001
+From: Jean-Baptiste Dhondt <114347858+warrox1993@users.noreply.github.com>
+Date: Sun, 18 Oct 2026 14:05:17 +0200
+Subject: [PATCH] =?UTF-8?q?fix(ui):=20=C2=AB=20Nouvelle=20t=C3=A2che=20?=
+ =?UTF-8?q?=C2=BB=20devient=20=C2=AB=20Coordinateur=20g=C3=A9n=C3=A9ral=20?=
+ =?UTF-8?q?=C2=BB=20quand=20l'atelier=20est=20pr=C3=AAt?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_012wNMctSYPLnKWnVjmhdZQv
+---
+ ui/src/components/MobileBottomNav.test.tsx |  6 +++---
+ ui/src/components/MobileBottomNav.tsx      |  7 ++++---
+ ui/src/components/Sidebar.test.tsx         | 12 +++++++++---
+ ui/src/components/Sidebar.tsx              | 14 ++++++++------
+ 4 files changed, 24 insertions(+), 15 deletions(-)
+
+diff --git a/ui/src/components/MobileBottomNav.test.tsx b/ui/src/components/MobileBottomNav.test.tsx
+index afcf55a48..f30938ab8 100644
+--- a/ui/src/components/MobileBottomNav.test.tsx
++++ b/ui/src/components/MobileBottomNav.test.tsx
+@@ -118,15 +118,15 @@ describe("MobileBottomNav", () => {
+     flushSync(() => root.unmount());
+   });
+ 
+-  it("avec l'atelier : une seule barre, Atelier, Tâches, Nouvelle tâche, Boîte, Menu", async () => {
++  it("avec l'atelier : une seule barre, Atelier, Tâches, Coordinateur, Boîte, Menu", async () => {
+     mockPluginsApi.listUiContributions.mockResolvedValue([contributionAtelier]);
+     const root = await rendre();
+-    expect(libelles()).toEqual(["Atelier", "Tâches", "Nouvelle tâche", "Boîte", "Menu"]);
++    expect(libelles()).toEqual(["Atelier", "Tâches", "Coordinateur", "Boîte", "Menu"]);
+     const hrefs = [...container.querySelectorAll("nav a")].map((a) => a.getAttribute("href"));
+     expect(hrefs).toEqual(["/atelier", "/issues", "/inbox", "/dashboard"]);
+     expect(new Set(hrefs).size).toBe(hrefs.length);
+     expect(container.querySelector('a[aria-label="Menu : tableau de bord"]')).not.toBeNull();
+-    boutonNouvelleTache().click();
++    ([...container.querySelectorAll("button")].find((b) => b.textContent?.trim() === "Coordinateur") as HTMLButtonElement).click();
+     expect(mockNavigate).toHaveBeenCalledWith("/atelier/discussion");
+     expect(mockOpenNewIssue).not.toHaveBeenCalled();
+     flushSync(() => root.unmount());
+diff --git a/ui/src/components/MobileBottomNav.tsx b/ui/src/components/MobileBottomNav.tsx
+index 17fbf0021..692091405 100644
+--- a/ui/src/components/MobileBottomNav.tsx
++++ b/ui/src/components/MobileBottomNav.tsx
+@@ -5,6 +5,7 @@ import {
+   House,
+   CircleCheck,
+   SquarePen,
++  MessagesSquare,
+   Users,
+   MessageCircle,
+   Inbox,
+@@ -75,12 +76,12 @@ export function MobileBottomNav({ visible }: MobileBottomNavProps) {
+       : { type: "link", to: "/dashboard", label: "Accueil", icon: House },
+     [atelierPret],
+   );
+-  // « Nouvelle tâche » ouvre la Discussion de l'atelier quand il est prêt (comme la barre latérale).
++  // « Nouvelle tâche » ouvre la Discussion de l'atelier quand il est prêt, sous le nom « Coordinateur » (comme la barre latérale).
+   const nouvelleTache = useMemo<MobileNavActionItem>(
+     () => ({
+       type: "action",
+-      label: "Nouvelle tâche",
+-      icon: SquarePen,
++      label: atelierPret ? "Coordinateur" : "Nouvelle tâche",
++      icon: atelierPret ? MessagesSquare : SquarePen,
+       onClick: () => (atelierPret ? navigate(`/${CHEMIN_PAGE_ATELIER}/discussion`) : openNewIssue()),
+     }),
+     [atelierPret, navigate, openNewIssue],
+diff --git a/ui/src/components/Sidebar.test.tsx b/ui/src/components/Sidebar.test.tsx
+index 40c10a45a..2e84f360f 100644
+--- a/ui/src/components/Sidebar.test.tsx
++++ b/ui/src/components/Sidebar.test.tsx
+@@ -197,6 +197,11 @@ describe("Sidebar", () => {
+     return [...container.querySelectorAll("button")].find((b) => b.textContent?.trim() === "Nouvelle tâche") as HTMLButtonElement;
+   }
+ 
++  /** Atelier prêt : la même entrée devient « Coordinateur général ». */
++  function boutonCoordinateur() {
++    return [...container.querySelectorAll("button")].find((b) => b.textContent?.trim() === "Coordinateur général") as HTMLButtonElement;
++  }
++
+   describe("atelier actif : le menu complet reste toujours affiché", () => {
+     const libellesNav = () =>
+       [...container.querySelectorAll("nav a")].map((a) => a.textContent?.trim());
+@@ -210,7 +215,8 @@ describe("Sidebar", () => {
+       const visibles = libellesNav();
+       for (const libelle of entrees) expect(visibles).toContain(libelle);
+       expect(container.querySelector('[data-plugin-slot-types="sidebar"]')).not.toBeNull();
+-      expect(boutonNouvelleTache()).toBeTruthy();
++      expect(boutonCoordinateur()).toBeTruthy();
++      expect(boutonNouvelleTache()).toBeUndefined();
+       expect(container.querySelector('button[role="switch"]')).toBeNull();
+       expect(container.textContent).not.toContain("Mode expert");
+       flushSync(() => root.unmount());
+@@ -231,8 +237,8 @@ describe("Sidebar", () => {
+     mockPluginsApi.listUiContributions.mockResolvedValue([contributionAtelier]);
+     const root = await renderSidebar();
+ 
+-    const bouton = boutonNouvelleTache();
+-    expect(bouton.getAttribute("aria-label")).toBe("Discuter avec le Coordinateur (nouvelle demande, question, action)");
++    const bouton = boutonCoordinateur();
++    expect(bouton.getAttribute("aria-label")).toBe("Discuter avec le Coordinateur général (nouvelle demande, question, action)");
+     flushSync(() => {
+       bouton.click();
+     });
+diff --git a/ui/src/components/Sidebar.tsx b/ui/src/components/Sidebar.tsx
+index 7b3be7f0a..73856ef6a 100644
+--- a/ui/src/components/Sidebar.tsx
++++ b/ui/src/components/Sidebar.tsx
+@@ -56,7 +56,7 @@ import { primarySidebarStyles } from "./primary-sidebar-styles";
+ export function Sidebar({ children }: { children?: ReactNode }) {
+   const { openNewIssue } = useDialogActions();
+   const navigate = useNavigate();
+-  // Atelier marketing prêt : « Nouvelle tâche » ouvre la Discussion avec le Coordinateur
++  // Atelier prêt : l'entrée « Coordinateur général » ouvre la Discussion avec le Coordinateur de la Direction
+   // au lieu du dialogue de création d'issue (même détection que l'accueil d'entreprise).
+   const { data: contributionsPlugins } = useQuery({
+     queryKey: queryKeys.plugins.uiContributions,
+@@ -175,25 +175,27 @@ export function Sidebar({ children }: { children?: ReactNode }) {
+                 data-slot="icon-button"
+                 aria-label={
+                   atelierPret
+-                    ? "Discuter avec le Coordinateur (nouvelle demande, question, action)"
++                    ? "Discuter avec le Coordinateur général (nouvelle demande, question, action)"
+                     : rail
+                       ? "Nouvelle tâche"
+                       : undefined
+                 }
+-                title={atelierPret ? "Discuter avec le Coordinateur (nouvelle demande, question, action)" : undefined}
++                title={atelierPret ? "Discuter avec le Coordinateur général (nouvelle demande, question, action)" : undefined}
+                 className={cn(
+                   "flex items-center gap-2.5 mx-2 rounded-lg px-2 py-1.5 pointer-coarse:min-h-11 pointer-coarse:py-1 text-(length:--text-compact) font-medium text-foreground/80 transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
+                 )}
+               >
+-                <SquarePen className="h-4 w-4 shrink-0" />
+-                <span className={rail ? SIDEBAR_RAIL_HIDDEN_LABEL : "truncate"}>Nouvelle tâche</span>
++                {atelierPret ? <MessagesSquare className="h-4 w-4 shrink-0" /> : <SquarePen className="h-4 w-4 shrink-0" />}
++                <span className={rail ? SIDEBAR_RAIL_HIDDEN_LABEL : "truncate"}>
++                  {atelierPret ? "Coordinateur général" : "Nouvelle tâche"}
++                </span>
+               </button>
+             );
+             return rail ? (
+               <Tooltip>
+                 <TooltipTrigger asChild>{newTaskButton}</TooltipTrigger>
+                 <TooltipContent side="right">
+-                  {atelierPret ? "Discuter avec le Coordinateur (nouvelle demande, question, action)" : "Nouvelle tâche"}
++                  {atelierPret ? "Discuter avec le Coordinateur général (nouvelle demande, question, action)" : "Nouvelle tâche"}
+                 </TooltipContent>
+               </Tooltip>
+             ) : (
+-- 
+2.53.0
+

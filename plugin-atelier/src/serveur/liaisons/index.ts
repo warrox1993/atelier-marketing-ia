@@ -22,7 +22,7 @@ export function stockLiaisonsParesseux(ctx: PluginContext): StockLiaisons {
   const p = (): StockLiaisons => (reel ??= creerStockLiaisons(ctx.db));
   return {
     serviceDeEntreprise: (c) => p().serviceDeEntreprise(c), clientExiste: (m) => p().clientExiste(m), servicesParSlug: (s) => p().servicesParSlug(s), servicesDuClient: (m) => p().servicesDuClient(m),
-    lireFlux: (c, s, t) => p().lireFlux(c, s, t), declarer: (x) => p().declarer(x), lireParCle: (c, k) => p().lireParCle(c, k),
+    lireFlux: (c, s, t) => p().lireFlux(c, s, t), fluxDuClient: (m) => p().fluxDuClient(m), declarer: (x) => p().declarer(x), lireParCle: (c, k) => p().lireParCle(c, k),
     compterOuvertes: (c) => p().compterOuvertes(c), estTacheDeLiaison: (c, i) => p().estTacheDeLiaison(c, i),
     liaisonsEntrantes: (c, i) => p().liaisonsEntrantes(c, i), retourTeinte: (c, i) => p().retourTeinte(c, i),
     liaisonsEntrantesOuvertes: (c) => p().liaisonsEntrantesOuvertes(c), retoursTeintesDe: (c, j, n) => p().retoursTeintesDe(c, j, n),

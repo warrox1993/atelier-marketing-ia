@@ -280,6 +280,8 @@ export interface TitreConnaissance {
   produit: string | null;
   statut: string;
   valideAu: string | null;
+  /** Base d'origine, présente quand la base commune du groupe (Direction du client) est consultée. */
+  portee?: "service" | "commune";
 }
 
 export interface DependancesFaits {

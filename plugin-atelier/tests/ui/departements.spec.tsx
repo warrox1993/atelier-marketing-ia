@@ -9,6 +9,7 @@ import { createElement } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { DepartementDeclare, EtatDepartement } from "../../src/contrats/departements.js";
 import { NavigationAtelier, PageAtelier } from "../../src/ui/index.js";
+import { rubriquesVisibles } from "../../src/ui/rubriques.js";
 import { oublierDepartements } from "../../src/ui/departements-sonde.js";
 import { enParallele, LECTURES_SIMULTANEES } from "../../src/ui/vues/departements.js";
 import { oublierAccesDirection } from "../../src/ui/vues/echanges.js";
@@ -74,27 +75,38 @@ const laisser = async (n = 4) => {
 };
 const liens = (c: HTMLElement) => Array.from(c.querySelectorAll("nav a")).map((a) => a.textContent?.trim());
 
-describe("rubrique « Départements »", () => {
-  const navigation = async () => {
-    installerPont("/RNO/atelier/accueil");
+describe("navigation et vues d'ensemble", () => {
+  const navigation = async (chemin = "/RNO/atelier/accueil") => {
+    installerPont(chemin);
     rendu = await rendre(createElement(NavigationAtelier, { context: contexte }));
     await laisser();
     return rendu.conteneur;
   };
 
-  it("apparaît en tête pour un client à plusieurs services", async () => {
+  it("la deuxième colonne ne propose ni « Départements » ni « Organigramme », même à plusieurs services", async () => {
     serveur = servir(TROIS);
-    expect(liens(await navigation())[0]).toBe("Départements");
+    const textes = liens(await navigation());
+    expect(textes).not.toContain("Départements");
+    expect(textes).not.toContain("Organigramme");
+    expect(textes.map((t) => t?.replace(/\d+ à valider$/u, ""))).toEqual(["Accueil", "Discussion", "Prospects", "Marketing", "Réglages"]);
   });
 
-  it("n'apparaît pas pour un client à un seul service, ni quand la sonde échoue", async () => {
-    serveur = servir([TROIS[2]!]);
-    expect(liens(await navigation())).not.toContain("Départements");
-    rendu?.demonter();
-    rendu = null;
-    oublierDepartements();
-    serveur = () => ({ statut: 500, corps: {} });
-    expect(liens(await navigation())).not.toContain("Départements");
+  it("la rubrique de l'échange entre services s'appelle « Registre des échanges », pas « Direction »", () => {
+    const libelles = rubriquesVisibles(true).map((r) => r.libelle);
+    expect(libelles).toContain("Registre des échanges");
+    expect(libelles).not.toContain("Direction");
+    expect(rubriquesVisibles(false).map((r) => r.libelle)).not.toContain("Registre des échanges");
+  });
+
+  it("sur Départements et Organigramme, la deuxième colonne ne rend rien", async () => {
+    serveur = servir(TROIS);
+    for (const vue of ["departements", "organigramme"]) {
+      const c = await navigation(`/RNO/atelier/${vue}`);
+      expect(c.querySelector("nav.atl-nav")).toBeNull();
+      expect(c.textContent).toBe("");
+      rendu?.demonter();
+      rendu = null;
+    }
   });
 });
 
@@ -136,6 +148,21 @@ describe("vue « Départements »", () => {
     expect(c.textContent).not.toContain("—");
   });
 
+  it("ligne de résumé calculée, cases triées par urgence (Direction n'est plus forcée en premier) et repère « À traiter »", async () => {
+    serveur = servir(TROIS, {
+      [DIR]: etat(DIR, { agents: { actifs: 3, enPause: 1, enErreur: 0 } }),
+      [JUR]: etat(JUR, { validations: { total: 4, parType: {} }, taches: { enCours: 1, bloquees: 2 } }),
+      [ENTREPRISE]: etat(ENTREPRISE, { taches: { enCours: 5, bloquees: 0 } }),
+    });
+    const { c } = await ouvrir();
+    expect(c.querySelector('[data-testid="resume-departements"]')?.textContent).toBe("3 services · 4 à valider · 8 en cours · 2 bloquées · 9 agents actifs sur 10");
+    const cases = Array.from(c.querySelectorAll<HTMLElement>(".atl-dep-case"));
+    expect(cases.map((x) => x.querySelector(".atl-dep-lien")?.textContent)).toEqual(["Juridique", "Marketing", "Direction"]);
+    expect(cases[0]!.querySelector(".atl-dep-traiter")?.textContent).toBe("À traiter");
+    expect(c.querySelectorAll(".atl-dep-traiter")).toHaveLength(1);
+    expect(cases[2]!.querySelector(".atl-dep-chiffre[data-zero] dd")?.textContent).toBe("0");
+  });
+
   it("n'affiche pas un service déclaré auquel l'utilisateur n'a pas accès, et ne le lit pas", async () => {
     const invisible = "55555555-5555-4555-8555-555555555555";
     serveur = servir([...TROIS, declare(invisible, "achats", "Achats")], { [DIR]: etat(DIR), [JUR]: etat(JUR), [ENTREPRISE]: etat(ENTREPRISE) });
@@ -156,14 +183,15 @@ describe("vue « Départements »", () => {
     expect(parTexte(c, ".atl-dep-case", "Juridique").textContent).toContain("En cours");
   });
 
-  it("fil « Client › Département » et lien « Tous les départements » depuis une autre rubrique", async () => {
+  it("fil « Client › Département » sans lien « Tous les départements » (le menu principal suffit)", async () => {
     serveur = servir(TROIS);
     const { c, pont } = await ouvrir("/RNO/atelier/accueil");
     const fil = c.querySelector<HTMLElement>('nav[aria-label="Fil d\'Ariane"]');
     expect(fil).not.toBeNull();
     expect(Array.from(fil!.querySelectorAll("li")).map((l) => l.textContent)).toEqual(["Fictive SA", "Marketing"]);
-    await cliquer(parTexte(fil!, "a", "Tous les départements"));
-    expect(pont.navigations).toContain("/atelier/departements");
+    expect(fil!.querySelector("a")).toBeNull();
+    expect(fil!.textContent).not.toContain("Tous les départements");
+    expect(pont.navigations).toEqual([]);
   });
 
   it("un client à un seul service garde le bandeau habituel", async () => {

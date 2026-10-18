@@ -377,6 +377,13 @@
         "SKILL.md"
       ]
     },
+    "cout-rendu-regimes-douaniers": {
+      "version": "1.0.0",
+      "sha256": "fb5dbe0a834f0790b0c48a480f4b393573b8d495cfad49c74efd9ca19df53be3",
+      "fichiers": [
+        "SKILL.md"
+      ]
+    },
     "cybersecurite-pme": {
       "version": "1.0.0",
       "sha256": "177620ee01d8e2983c44ad683748f8cb6bfc1d7cf9b50ebffd49bd763e2d4aec",
@@ -663,6 +670,15 @@
       "sha256": "f565f3188c6ea991b7fe8d9515b1e28d45e1d9254a5bd8fbb870934b1803f5f6",
       "fichiers": [
         "SKILL.md"
+      ]
+    },
+    "memoire-para": {
+      "version": "1.0.0",
+      "sha256": "11515944e7233bfb7d459d66545c98ed284ee1dfd1ebe08889c99e893a2fe44b",
+      "fichiers": [
+        "SKILL.md",
+        "references/origine-paperclip.md",
+        "references/schemas.md"
       ]
     },
     "mentions-legales-site": {
@@ -1140,6 +1156,13 @@
         "SKILL.md"
       ]
     },
+    "selection-organisme-formation": {
+      "version": "1.0.0",
+      "sha256": "6c792ef50df0aba795bc333e4288a90208618234c7359e728965d567ca596dcd",
+      "fichiers": [
+        "SKILL.md"
+      ]
+    },
     "selection-partenaire": {
       "version": "1.1.0",
       "sha256": "bb61d81264b65512ee9f30ff18fe98c0bba4b78c80d2426c4faf0d821c79af30",
@@ -1150,6 +1173,13 @@
     "selection-projets-innovation": {
       "version": "1.0.0",
       "sha256": "55c5e1efcb20f29dcd91a527892ea7c352fa9f429164be95ebf8557889f0bb52",
+      "fichiers": [
+        "SKILL.md"
+      ]
+    },
+    "sinistre-conteste-recours": {
+      "version": "1.0.0",
+      "sha256": "b37340ef12c9b38f742021672d689fcb8e9139ea91b950c34053ada51a464d2e",
       "fichiers": [
         "SKILL.md"
       ]
@@ -1171,6 +1201,13 @@
     "suivi-energie-batiment": {
       "version": "1.1.0",
       "sha256": "9c503c5a2cf7ae2d9718c9532e90ab0ce13a469c943c1bb978d0db704fe86629",
+      "fichiers": [
+        "SKILL.md"
+      ]
+    },
+    "suivi-execution-convention": {
+      "version": "1.0.0",
+      "sha256": "e06cd464a86d6483bd3c0e7a7a73166724295f0397f9b9c70db08be8daebc4a7",
       "fichiers": [
         "SKILL.md"
       ]

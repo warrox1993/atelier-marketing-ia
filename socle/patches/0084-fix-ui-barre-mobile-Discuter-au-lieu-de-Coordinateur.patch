@@ -1,0 +1,61 @@
+From 614636d461eb4a68e9a52c7315f1ffff7b28db4e Mon Sep 17 00:00:00 2001
+From: Jean-Baptiste Dhondt <114347858+warrox1993@users.noreply.github.com>
+Date: Sun, 18 Oct 2026 14:29:31 +0200
+Subject: [PATCH] =?UTF-8?q?fix(ui):=20barre=20mobile,=20=C2=AB=20Discuter?=
+ =?UTF-8?q?=20=C2=BB=20au=20lieu=20de=20=C2=AB=20Coordinateur=20=C2=BB=20(?=
+ =?UTF-8?q?le=20libell=C3=A9=20se=20coupait=20=C3=A0=20390=20px)?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_012wNMctSYPLnKWnVjmhdZQv
+---
+ ui/src/components/MobileBottomNav.test.tsx | 6 +++---
+ ui/src/components/MobileBottomNav.tsx      | 4 ++--
+ 2 files changed, 5 insertions(+), 5 deletions(-)
+
+diff --git a/ui/src/components/MobileBottomNav.test.tsx b/ui/src/components/MobileBottomNav.test.tsx
+index f30938ab8..deb5375eb 100644
+--- a/ui/src/components/MobileBottomNav.test.tsx
++++ b/ui/src/components/MobileBottomNav.test.tsx
+@@ -118,15 +118,15 @@ describe("MobileBottomNav", () => {
+     flushSync(() => root.unmount());
+   });
+ 
+-  it("avec l'atelier : une seule barre, Atelier, Tâches, Coordinateur, Boîte, Menu", async () => {
++  it("avec l'atelier : une seule barre, Atelier, Tâches, Discuter, Boîte, Menu", async () => {
+     mockPluginsApi.listUiContributions.mockResolvedValue([contributionAtelier]);
+     const root = await rendre();
+-    expect(libelles()).toEqual(["Atelier", "Tâches", "Coordinateur", "Boîte", "Menu"]);
++    expect(libelles()).toEqual(["Atelier", "Tâches", "Discuter", "Boîte", "Menu"]);
+     const hrefs = [...container.querySelectorAll("nav a")].map((a) => a.getAttribute("href"));
+     expect(hrefs).toEqual(["/atelier", "/issues", "/inbox", "/dashboard"]);
+     expect(new Set(hrefs).size).toBe(hrefs.length);
+     expect(container.querySelector('a[aria-label="Menu : tableau de bord"]')).not.toBeNull();
+-    ([...container.querySelectorAll("button")].find((b) => b.textContent?.trim() === "Coordinateur") as HTMLButtonElement).click();
++    ([...container.querySelectorAll("button")].find((b) => b.textContent?.trim() === "Discuter") as HTMLButtonElement).click();
+     expect(mockNavigate).toHaveBeenCalledWith("/atelier/discussion");
+     expect(mockOpenNewIssue).not.toHaveBeenCalled();
+     flushSync(() => root.unmount());
+diff --git a/ui/src/components/MobileBottomNav.tsx b/ui/src/components/MobileBottomNav.tsx
+index 692091405..5f729f25c 100644
+--- a/ui/src/components/MobileBottomNav.tsx
++++ b/ui/src/components/MobileBottomNav.tsx
+@@ -76,11 +76,11 @@ export function MobileBottomNav({ visible }: MobileBottomNavProps) {
+       : { type: "link", to: "/dashboard", label: "Accueil", icon: House },
+     [atelierPret],
+   );
+-  // « Nouvelle tâche » ouvre la Discussion de l'atelier quand il est prêt, sous le nom « Coordinateur » (comme la barre latérale).
++  // « Nouvelle tâche » ouvre la Discussion de l'atelier quand il est prêt, sous le nom « Discuter » (« Coordinateur » se coupait sur deux lignes à 390 px) (comme la barre latérale).
+   const nouvelleTache = useMemo<MobileNavActionItem>(
+     () => ({
+       type: "action",
+-      label: atelierPret ? "Coordinateur" : "Nouvelle tâche",
++      label: atelierPret ? "Discuter" : "Nouvelle tâche",
+       icon: atelierPret ? MessagesSquare : SquarePen,
+       onClick: () => (atelierPret ? navigate(`/${CHEMIN_PAGE_ATELIER}/discussion`) : openNewIssue()),
+     }),
+-- 
+2.53.0
+

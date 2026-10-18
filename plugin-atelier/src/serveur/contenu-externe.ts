@@ -4,6 +4,7 @@
  * de texte. Le contenu externe reste une DONNÉE non fiable : il est signalé,
  * jamais exécuté (cahier §14). Fonctions pures.
  */
+import motifsInjection from "./motifs-injection.json" with { type: "json" };
 
 const MOTIFS_PAGE_ERREUR: ReadonlyArray<[RegExp, string]> = [
   [/\b404\b/iu, "mention 404"],
@@ -66,21 +67,11 @@ export function indicesPageErreur(entree: { corps: string; typeContenu: string |
   return [...new Set(indices)];
 }
 
-const MOTIFS_INJECTION: ReadonlyArray<[RegExp, string]> = [
-  [/ignore[sz]?\s+(?:all\s+|the\s+|any\s+)?(?:previous|prior|above|earlier)\s+instructions/iu, "ignore previous instructions"],
-  [/ignore[rz]?\s+(?:toutes\s+)?(?:les|tes|vos)\s+(?:instructions|consignes|r[eè]gles)/iu, "ignore les instructions"],
-  [/oublie[rz]?\s+(?:toutes\s+)?(?:les|tes|vos)\s+(?:instructions|consignes)/iu, "oublie les instructions"],
-  [/negeer\s+(?:alle\s+)?(?:vorige\s+)?instructies/iu, "negeer instructies"],
-  [/\b(?:system prompt|prompt syst[eè]me|instructions? syst[eè]me)\b/iu, "référence au prompt système"],
-  [/\byou are now\b|\btu es maintenant\b|\bd[ée]sormais tu\b/iu, "réaffectation de rôle"],
-  [/\bpublie[rz]?\b.{0,40}\b(?:ceci|cela|imm[ée]diatement|maintenant|sans validation)\b|\bpublish (?:this|now|immediately)\b/iu, "ordre de publication"],
-  [/\b(?:approuve|valide)[rz]?\b.{0,30}\b(?:toi-m[eê]me|automatiquement|sans relecture)\b/iu, "auto-approbation demandée"],
-  [/\b(?:curl|wget)\s+https?:\/\/|\brm\s+-rf\b|\bsudo\b|\bchmod\s+\d{3}\b/iu, "commande système"],
-  [/<\s*script\b/iu, "balise script"],
-  // Début de ligne (drapeau m) et espaces horizontaux seulement : « \s* » franchissait les sauts de
-  // ligne et rendait la recherche quadratique sur une suite de lignes vides (ReDoS corrigé).
-  [/^[ \t]*(?:assistant|system)[ \t]*:/imu, "faux tour de dialogue"],
-];
+// Source unique : motifs-injection.json, recopié aussi par le générateur (scripts/bootstrap-organisation.py) à côté
+// du hook qui contrôle la mémoire des agents (organisation/hooks/garde-memoire.mjs, revue du 18/10/2026, M4) : le même
+// détecteur, sans copie à la main. Le motif « faux tour de dialogue » est ancré en début de ligne (drapeau m) avec des
+// espaces horizontaux seulement : « \s* » franchissait les sauts de ligne et rendait la recherche quadratique (ReDoS corrigé).
+export const MOTIFS_INJECTION: ReadonlyArray<[RegExp, string]> = motifsInjection.motifs.map((m) => [new RegExp(m.source, m.drapeaux), m.libelle]);
 
 /** Instructions suspectes repérées dans un contenu externe (signalées, jamais suivies). */
 export function injectionsSignalees(texte: string): string[] {

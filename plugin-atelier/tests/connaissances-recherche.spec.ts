@@ -185,7 +185,7 @@ function fauxExecuteur(monde: { passages: PassageFaux[]; index: IndexFaux[] }) {
         .map(({ x, nb, score }) => ({ id: x.id, nb, score }))
         .sort((a, b) => b.nb - a.nb || b.score - a.score || (a.id < b.id ? -1 : 1))
         .slice(0, lim)
-        .map(({ id, score }) => ({ id, score }));
+        .map(({ id, nb, score }) => ({ id, nb, score }));
     }
     if (n.startsWith("SELECT p.id FROM")) return lignes.map((x) => ({ id: x.id }));
     if (n.includes("to_char(v.date_document")) {
@@ -698,5 +698,123 @@ describe("cache des vecteurs borné (revue du 16/10, m6)", () => {
     const cache = new CacheVecteurs();
     for (let i = 0; i < 100; i++) cache.ranger(entree(`e${i}`, 1));
     expect(cache.entreprises().length).toBeLessThan(100);
+  });
+});
+
+describe("base commune du groupe (Direction du client, décision du 18/10/2026)", () => {
+  const ENT_D = "dddddddd-0000-4000-8000-0000000000d1";
+  const ENT_X = "99999999-0000-4000-8000-0000000000e1";
+  /** S = service de la tâche, D = Direction du même client, X = un AUTRE service du même client. */
+  function troisEntreprises(plusD: Partial<IndexFaux> = {}) {
+    const idxS = index(ENT_A);
+    const idxD = index(ENT_D, plusD);
+    const idxX = index(ENT_X);
+    const pS = passage(ENT_A, idxS.id, "franchise indexee vehicule service zephyrin", [1, 0, 0, 0.2]);
+    const pD = passage(ENT_D, idxD.id, "franchise indexee vehicule charte groupe quasar", [1, 0, 0, 0.1], { d_titre: "Charte du groupe" });
+    const pX = passage(ENT_X, idxX.id, "franchise indexee vehicule autre service quolibet", [1, 0, 0, 0]);
+    return { monde: { passages: [pS, pD, pX], index: [idxS, idxD, idxX] }, pS, pD, pX, idxS, idxD };
+  }
+
+  it("service + commune : une seule fusion RRF sur les listes réunies, chaque passage porte sa provenance", async () => {
+    const { monde, pS, pD } = troisEntreprises();
+    const { executer } = fauxExecuteur(monde);
+    const { v, appels } = fauxVectoriseur(() => [1, 0, 0, 0]);
+    const r = await rechercherConnaissances(deps(executer, v), CTX_A, { question: "franchise indexee vehicule", nombre: 20 }, { baseCommune: ENT_D });
+    const parEmpreinte = new Map(r.passages.map((p) => [p.citation.empreintePassage, p]));
+    expect(new Set(parEmpreinte.keys())).toEqual(new Set([pS.empreinte, pD.empreinte]));
+    expect(parEmpreinte.get(pS.empreinte)!.portee).toBe("service");
+    expect(parEmpreinte.get(pD.empreinte)!.portee).toBe("commune");
+    expect(parEmpreinte.get(pD.empreinte)!.citation.titre).toBe("Charte du groupe");
+    // Rangs pris dans les listes RÉUNIES : un seul premier par liste, pas un premier par base.
+    const rangsTexte = r.passages.map((p) => p.classement.rangTexte).sort();
+    expect(rangsTexte).toEqual([1, 2]);
+    const rangsSens = r.passages.map((p) => p.classement.rangSens).sort();
+    expect(rangsSens).toEqual([1, 2]);
+    // Sens : le passage de D est plus proche de la question ([1,0,0,0.1] contre [1,0,0,0.2]) : rang 1.
+    expect(parEmpreinte.get(pD.empreinte)!.classement.rangSens).toBe(1);
+    // Vecteur de la question calculé une seule fois pour les deux bases.
+    expect(appels).toHaveLength(1);
+    // L'index rendu reste celui de l'entreprise de la tâche.
+    expect(r.index?.id).toBe(monde.index[0]!.id);
+    valider(r);
+  });
+
+  it("accès croisé à trois entreprises : jamais un passage d'un AUTRE service, même premier par le sens et par le mot témoin", async () => {
+    const { monde, pX } = troisEntreprises();
+    const { executer, journal } = fauxExecuteur(monde);
+    // Question = vecteur exact du passage de X, et mot témoin de X.
+    const { v } = fauxVectoriseur(() => [1, 0, 0, 0]);
+    const cache = new CacheVecteurs();
+    for (const question of ["quolibet", "franchise indexee vehicule autre service quolibet"]) {
+      const r = await rechercherConnaissances(deps(executer, v, cache), CTX_A, { question, nombre: 20 }, { baseCommune: ENT_D });
+      const texte = JSON.stringify({ ...r, question: "" });
+      expect(texte).not.toContain("quolibet");
+      expect(texte).not.toContain(pX.id);
+      expect(texte).not.toContain(pX.document_id);
+      expect(texte).not.toContain(ENT_X);
+    }
+    // Viser explicitement un document de X par les filtres : rien.
+    const vise = await rechercherConnaissances(deps(executer, v, cache), CTX_A, { question: "franchise quolibet", filtres: { documentIds: [pX.document_id] } }, { baseCommune: ENT_D });
+    expect(vise.aucuneSource).toBe(true);
+    // Toute requête est bornée à S ou à D par son premier paramètre ; X n'est jamais interrogée ; aucun cache de X.
+    for (const j of journal) expect([ENT_A, ENT_D]).toContain(j.params[0]);
+    expect(cache.entreprises().sort()).toEqual([ENT_A, ENT_D].sort());
+  });
+
+  it("Direction elle-même ou base commune absente : une seule base, sans provenance (comportement d'origine)", async () => {
+    const { monde, pS } = troisEntreprises();
+    const { executer, journal } = fauxExecuteur(monde);
+    const { v } = fauxVectoriseur(() => [1, 0, 0, 0]);
+    const sansDuree = (r: Awaited<ReturnType<typeof rechercherConnaissances>>) => ({ ...r, dureeMs: 0 });
+    const seul = await rechercherConnaissances(deps(executer, v), CTX_A, { question: "franchise indexee vehicule", nombre: 20 });
+    const elleMeme = await rechercherConnaissances(deps(executer, v), CTX_A, { question: "franchise indexee vehicule", nombre: 20 }, { baseCommune: ENT_A });
+    const nulle = await rechercherConnaissances(deps(executer, v), CTX_A, { question: "franchise indexee vehicule", nombre: 20 }, { baseCommune: null });
+    expect(seul.passages.map((p) => p.citation.empreintePassage)).toEqual([pS.empreinte]);
+    expect(seul.passages[0]!.portee).toBeUndefined();
+    expect(sansDuree(elleMeme)).toEqual(sansDuree(seul));
+    expect(sansDuree(nulle)).toEqual(sansDuree(seul));
+    for (const j of journal) expect(j.params[0]).toBe(ENT_A);
+  });
+
+  it("document périmé de la base commune : exclu par défaut, rendu marqué « périmé » seulement sur demande", async () => {
+    const idxS = index(ENT_A);
+    const idxD = index(ENT_D);
+    const pS = passage(ENT_A, idxS.id, "tarif auto service", [1, 0, 0, 0]);
+    const dPerime = passage(ENT_D, idxD.id, "tarif auto groupe 2024", [1, 0, 0, 0], { v_statut: "perime", v_valide_au: "2025-01-01" });
+    const dExpire = passage(ENT_D, idxD.id, "tarif auto groupe 2025", [1, 0, 0, 0], { v_valide_au: "2026-06-01" });
+    const dActuel = passage(ENT_D, idxD.id, "tarif auto groupe 2026", [1, 0, 0, 0]);
+    const { executer } = fauxExecuteur({ passages: [pS, dPerime, dExpire, dActuel], index: [idxS, idxD] });
+    const { v } = fauxVectoriseur(() => [1, 0, 0, 0]);
+    const defaut = await rechercherConnaissances(deps(executer, v), CTX_A, { question: "tarif auto", nombre: 20 }, { baseCommune: ENT_D });
+    expect(new Set(defaut.passages.map((p) => p.citation.empreintePassage))).toEqual(new Set([pS.empreinte, dActuel.empreinte]));
+    const avec = await rechercherConnaissances(deps(executer, v), CTX_A, { question: "tarif auto", nombre: 20, filtres: { inclurePerimes: true } }, { baseCommune: ENT_D });
+    const perime = avec.passages.find((p) => p.citation.empreintePassage === dPerime.empreinte);
+    expect(perime?.citation.perime).toBe(true);
+    expect(perime?.portee).toBe("commune");
+    expect(avec.passages.some((p) => p.citation.empreintePassage === dExpire.empreinte)).toBe(false);
+  });
+
+  it("index de la Direction construit avec un autre modèle : pas d'erreur, base commune en plein texte seulement", async () => {
+    const { monde, pD } = troisEntreprises({ empreinte_modele: "f".repeat(64) });
+    const { executer } = fauxExecuteur(monde);
+    const { v } = fauxVectoriseur(() => [1, 0, 0, 0]);
+    const r = await rechercherConnaissances(deps(executer, v), CTX_A, { question: "franchise indexee vehicule", nombre: 20 }, { baseCommune: ENT_D });
+    const commun = r.passages.find((p) => p.citation.empreintePassage === pD.empreinte)!;
+    expect(commun.portee).toBe("commune");
+    expect(commun.classement.rangSens).toBeNull();
+    expect(commun.classement.rangTexte).not.toBeNull();
+    // Le modèle différent sur la base du SERVICE reste une erreur explicite (inchangé).
+    const autre = troisEntreprises();
+    autre.idxS.empreinte_modele = "f".repeat(64);
+    await expect(
+      rechercherConnaissances(deps(fauxExecuteur(autre.monde).executer, v), CTX_A, { question: "franchise" }, { baseCommune: ENT_D }),
+    ).rejects.toThrow(/Modèle de vectorisation différent/);
+  });
+
+  it("base commune invalide (pas un identifiant) : refusée", async () => {
+    const { monde } = troisEntreprises();
+    const { executer } = fauxExecuteur(monde);
+    const { v } = fauxVectoriseur(() => [1, 0, 0, 0]);
+    await expect(rechercherConnaissances(deps(executer, v), CTX_A, { question: "franchise" }, { baseCommune: "x' or 1=1" })).rejects.toThrow();
   });
 });

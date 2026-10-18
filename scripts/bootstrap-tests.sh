@@ -1207,10 +1207,15 @@ def skills_depot(svc_, ag_):
 skills_coord_d = skills_depot("direction", "coordinateur-direction")
 assert {"cadrage-exigences", "planification-livrables"} <= set(skills_coord_d) and len(skills_coord_d) == len(set(skills_coord_d)), skills_coord_d
 par_slug_d = {a["slug"]: a for a in etat["agents"]["Client Trio · Direction"]["agents"]}
-assert par_slug_d["coordinateur-direction"]["competences"] == skills_depot("direction", "coordinateur-direction")
+# Compétences livrées = celles de l'en-tête, puis les compétences communes du générateur (décision de l'opérateur du 18/10/2026) ;
+# un coordinateur n'écrit aucun fichier (Write et Edit interdits) : pas de memoire-para (revue du 18/10/2026, M2).
+livrees_coord_d = b.avec_competences_communes(skills_coord_d, ecrit=False)
+assert livrees_coord_d[: len(skills_coord_d)] == skills_coord_d and "recherche-connaissances" in livrees_coord_d
+assert "memoire-para" not in livrees_coord_d
+assert par_slug_d["coordinateur-direction"]["competences"] == livrees_coord_d
 paquet_d = etat["paquets"]["Client Trio · Direction"]
 entete_d = paquet_d["agents/coordinateur-direction/AGENTS.md"].split("\n---\n")[0]
-assert "skills:\n" + "".join(f'  - "{c_}"\n' for c_ in skills_coord_d) in entete_d + "\n", entete_d
+assert "skills:\n" + "".join(f'  - "{c_}"\n' for c_ in livrees_coord_d) in entete_d + "\n", entete_d
 for c_ in par_slug_d["coordinateur-direction"]["competences"]:
     assert f"skills/{c_}/SKILL.md" in paquet_d, c_
 assert paquet_d["skills/cadrage-exigences/SKILL.md"] == (racine / "organisation/skills/cadrage-exigences/SKILL.md").read_text(encoding="utf-8")
@@ -1221,10 +1226,13 @@ par_slug_j = {a["slug"]: a for a in reg_j}
 assert b.competences_entete('---\nkind: "agent"\nskills: []\n---\n', "juridique", "x") == []
 for a_ in reg_j:
     if "skills: []" in (racine / "organisation/services/juridique/agents" / a_["slug"] / "AGENTS.md").read_text(encoding="utf-8").split("\n---\n")[0]:
-        assert a_["competences"] == [] and skills_depot("juridique", a_["slug"]) == []
-        assert "skills: []" in paquet_j[f"agents/{a_['slug']}/AGENTS.md"].split("\n---\n")[0]
-for a_ in reg_j:  # chaque agent juridique livre exactement les compétences de son en-tête
-    assert a_["competences"] == skills_depot("juridique", a_["slug"]), a_["slug"]
+        assert a_["competences"] == b.avec_competences_communes([], b.ecrit_des_fichiers(a_["outils"])) and skills_depot("juridique", a_["slug"]) == []
+        assert "skills: []" not in paquet_j[f"agents/{a_['slug']}/AGENTS.md"].split("\n---\n")[0]
+for a_ in reg_j:  # chaque agent juridique livre exactement les compétences de son en-tête, puis les communes, sans doublon
+    # Communes : recherche-connaissances pour tous, memoire-para seulement pour un agent qui écrit (M2, 18/10/2026).
+    assert a_["competences"] == b.avec_competences_communes(skills_depot("juridique", a_["slug"]), b.ecrit_des_fichiers(a_["outils"])), a_["slug"]
+    assert ("memoire-para" in a_["competences"]) == b.ecrit_des_fichiers(a_["outils"]), a_["slug"]
+    assert len(a_["competences"]) == len(set(a_["competences"])), a_["slug"]
 assert not any(c_.startswith("skills/") and c_.split("/")[1] not in {x for a in reg_j for x in a["competences"]} for c_ in paquet_j)
 assert b.competences_entete('---\nskills: ["cadrage-exigences", "audit-seo"]\n---\n', "direction", "x") == ["cadrage-exigences", "audit-seo"]  # liste en ligne
 assert skills_depot("commercial", "preparation-rdv") == ["preparation-rendez-vous-b2b", "reponse-objection", "compte-rendu-rendez-vous"]

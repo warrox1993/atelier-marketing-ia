@@ -130,14 +130,14 @@ for (const f of FORMATS) {
       if (f.mobile) {
         await page.getByRole("button", { name: /^(Open sidebar|Ouvrir le menu)$/iu }).first().tap();
       }
-      return page.getByRole("navigation").filter({ hasText: "Atelier marketing" }).first();
+      return page.getByRole("navigation").filter({ hasText: "Atelier" }).first();
     }
 
     test("menu du socle : toujours complet, aucun interrupteur", async ({ page }) => {
       const erreurs = surveillerConsole(page);
       await page.goto(`/${prefixe}/dashboard`);
       const menu = await menuSocle(page);
-      await expect(menu.getByRole("link", { name: /Atelier marketing/u })).toBeVisible({ timeout: 30_000 });
+      await expect(menu.getByRole("link", { name: /^Atelier(?! marketing)/u })).toBeVisible({ timeout: 30_000 });
       await expect(page.getByRole("switch", { name: "Mode expert" })).toHaveCount(0);
       for (const entree of ["Tâches", "Agents", "Routines", "Projets"]) {
         await expect(menu.getByRole("link", { name: entree, exact: true }), `${entree} visible`).toBeVisible();
@@ -149,7 +149,7 @@ for (const f of FORMATS) {
     });
 
     if (f.mobile) {
-      test("barre du bas : Atelier, Tâches, Nouvelle tâche, Boîte, Menu", async ({ page }) => {
+      test("barre du bas : Atelier, Tâches, Discuter, Boîte, Menu", async ({ page }) => {
         const erreurs = surveillerConsole(page);
         await page.goto(`/${prefixe}/dashboard`);
         const barre = page.getByRole("navigation", { name: "Navigation mobile" });
@@ -158,7 +158,7 @@ for (const f of FORMATS) {
         expect(textes.length, `éléments de la barre : ${textes.join(" | ")}`).toBe(5);
         expect(textes[0]).toContain("Atelier");
         expect(textes[1]).toContain("Tâches");
-        expect(textes[2]).toContain("Nouvelle tâche");
+        expect(textes[2]).toBe("Discuter");
         expect(textes[3]).toContain("Boîte");
         expect(textes[4]).toContain("Menu");
         await capturer(page, "mobile-3-barre-du-bas");
@@ -173,11 +173,11 @@ for (const f of FORMATS) {
       });
     }
 
-    test("« Nouvelle tâche » du menu du socle ouvre la Discussion de l'atelier", async ({ page }) => {
+    test("« Coordinateur général » du menu du socle ouvre la Discussion de l'atelier", async ({ page }) => {
       const erreurs = surveillerConsole(page);
       await page.goto(`/${prefixe}/dashboard`);
-      if (f.mobile) await page.getByRole("navigation", { name: "Navigation mobile" }).getByRole("button", { name: /Nouvelle tâche/u }).tap();
-      else await page.getByRole("button", { name: /Discuter avec le Coordinateur|Nouvelle tâche/u }).first().click();
+      if (f.mobile) await page.getByRole("navigation", { name: "Navigation mobile" }).getByRole("button", { name: /^Discuter$/u }).tap();
+      else await page.getByRole("button", { name: /^Discuter avec le Coordinateur général/u }).first().click();
       await expect(page).toHaveURL(new RegExp(`/${prefixe}/atelier/discussion`, "u"), { timeout: 30_000 });
       await expect(page.getByRole("heading", { name: "Discussion avec le Coordinateur", level: 1 })).toBeVisible({ timeout: 30_000 });
       expect(erreurs, erreurs.join("\n")).toEqual([]);

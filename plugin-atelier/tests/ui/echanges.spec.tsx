@@ -115,11 +115,11 @@ describe("rubrique « Direction » et registre", () => {
 
   it("n'apparaît pas hors Direction (acces: false) ni quand la réponse n'est pas celle de la sonde, et ne sonde jamais le registre", async () => {
     serveur = () => ({ statut: 200, corps: { acces: false } });
-    expect(liens(await navigation())).not.toContain("Direction");
+    expect(liens(await navigation())).not.toContain("Registre des échanges");
     rendu?.demonter();
     oublierAccesDirection();
     serveur = () => ({ statut: 200, corps: { points: [], total: 0 } });
-    expect(liens(await navigation())).not.toContain("Direction");
+    expect(liens(await navigation())).not.toContain("Registre des échanges");
     expect(appels.some((a) => a.url.includes("/liaisons/registre"))).toBe(false);
     expect(appels.some((a) => a.url.includes("/liaisons/acces?companyId="))).toBe(true);
   });
@@ -127,8 +127,8 @@ describe("rubrique « Direction » et registre", () => {
   it("apparaît avant Réglages quand la sonde répond acces: true", async () => {
     serveur = (url) => (url.includes("/liaisons/acces") ? { statut: 200, corps: { acces: true } } : { statut: 404, corps: {} });
     const l = liens(await navigation());
-    expect(l).toContain("Direction");
-    expect(l.indexOf("Direction")).toBe(l.indexOf("Réglages") - 1);
+    expect(l).toContain("Registre des échanges");
+    expect(l.indexOf("Registre des échanges")).toBe(l.indexOf("Réglages") - 1);
   });
 
   const registre = async () => {

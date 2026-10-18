@@ -133,6 +133,36 @@ class TestDeclaration(unittest.TestCase):
                 self.assertTrue(f["approbationHumaine"], f)
         self.assertEqual({e["serviceSlug"] for e in corps["entreprises"] if e["estDirection"]}, {"direction"})
 
+    def test_route_depuis_la_direction(self):
+        # M1 : le plugin n'accepte comme Direction que l'entreprise de la route (ou une entreprise déjà déclarée).
+        reg = json.loads((RACINE / "organisation/registre/services.json").read_text(encoding="utf-8"))
+        corps = declarer.construire_corps(reg, self.local("duo", ["marketing", "direction", "juridique"]))
+        self.assertEqual(corps["companyId"], "duo-direction")
+        sans = declarer.construire_corps(reg, self.local("solo", ["marketing", "juridique"]))
+        self.assertEqual(sans["companyId"], "solo-marketing")
+
+    def test_deux_temps_si_direction_ajoutee_a_un_client_existant(self):
+        import io
+        import urllib.error
+        reg = json.loads((RACINE / "organisation/registre/services.json").read_text(encoding="utf-8"))
+        corps = declarer.construire_corps(reg, self.local("duo", ["marketing", "direction"]))
+        envois = []
+
+        def envoyer(c):
+            envois.append(c)
+            if len(envois) == 1:
+                raise urllib.error.HTTPError("x", 403, "refus", {}, io.BytesIO(b"{}"))
+            return "ok"
+        self.assertEqual(declarer.etapes_declaration(corps, envoyer), ["ok", "ok"])
+        self.assertEqual([e["companyId"] for e in envois], ["duo-direction", "duo-marketing", "duo-direction"])
+        self.assertFalse(any(x["estDirection"] for x in envois[1]["entreprises"]))
+        self.assertEqual(envois[2], corps)
+        # Un autre refus (409, ou 403 sans Direction à la route) remonte tel quel.
+        def refus(c):
+            raise urllib.error.HTTPError("x", 409, "conflit", {}, io.BytesIO(b"{}"))
+        with self.assertRaises(urllib.error.HTTPError):
+            declarer.etapes_declaration(corps, refus)
+
     def test_deux_clients_jamais_meles(self):
         reg = json.loads((RACINE / "organisation/registre/services.json").read_text(encoding="utf-8"))
         a = declarer.construire_corps(reg, self.local("a", ["marketing", "direction"]))

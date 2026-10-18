@@ -210,7 +210,8 @@
         "sinistres-particuliers",
         "ouverture-sinistres",
         "registre-plaintes",
-        "sinistres-entreprises"
+        "sinistres-entreprises",
+        "sinistres"
       ],
       "humainSeul": [
         "Décision de couverture ou de refus d'un sinistre",
@@ -482,7 +483,8 @@
         "transport",
         "douane-origine",
         "retours",
-        "litiges-transport"
+        "litiges-transport",
+        "transport-douane"
       ],
       "humainSeul": [
         "Passation d'une commande",
@@ -729,7 +731,8 @@
         "financement",
         "evaluation-formation",
         "formations-obligatoires",
-        "conduite-changement"
+        "conduite-changement",
+        "ingenierie-formation"
       ],
       "humainSeul": [
         "Engagement d'une dépense de formation",
@@ -878,7 +881,8 @@
         "accords",
         "pilotage-portefeuille",
         "co-marketing",
-        "fournisseurs-produits"
+        "fournisseurs-produits",
+        "suivi-partenaires"
       ],
       "humainSeul": [
         "Signature d'une convention de partenariat",

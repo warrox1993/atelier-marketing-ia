@@ -16,7 +16,7 @@ const manifest: PaperclipPluginManifestV1 = {
   id: PLUGIN_ID,
   apiVersion: 1,
   version: "0.1.0",
-  displayName: "Atelier Marketing IA",
+  displayName: "Atelier",
   description:
     "Exigences, preuves, revues structurées, contrôle automatique, messages typés, sources protégées et vues marketing en français.",
   author: "Atelier Marketing IA (local)",
@@ -186,11 +186,11 @@ const manifest: PaperclipPluginManifestV1 = {
   })),
   ui: {
     slots: [
-      { type: "page", id: "atelier-page", displayName: "Atelier marketing", exportName: EXPORTS_UI.page, routePath: ROUTE_ATELIER },
-      { type: "routeSidebar", id: "atelier-navigation", displayName: "Atelier marketing", exportName: EXPORTS_UI.navigation, routePath: ROUTE_ATELIER },
-      { type: "sidebar", id: "atelier-entree", displayName: "Atelier marketing", exportName: EXPORTS_UI.entreeBarreLaterale },
+      { type: "page", id: "atelier-page", displayName: "Atelier", exportName: EXPORTS_UI.page, routePath: ROUTE_ATELIER },
+      { type: "routeSidebar", id: "atelier-navigation", displayName: "Atelier", exportName: EXPORTS_UI.navigation, routePath: ROUTE_ATELIER },
+      { type: "sidebar", id: "atelier-entree", displayName: "Atelier", exportName: EXPORTS_UI.entreeBarreLaterale },
       { type: "detailTab", id: "atelier-onglet-tache", displayName: "Atelier", exportName: EXPORTS_UI.ongletTache, entityTypes: ["issue"] },
-      { type: "dashboardWidget", id: "atelier-widget", displayName: "Atelier marketing", exportName: EXPORTS_UI.widget },
+      { type: "dashboardWidget", id: "atelier-widget", displayName: "Atelier", exportName: EXPORTS_UI.widget },
     ],
   },
 };

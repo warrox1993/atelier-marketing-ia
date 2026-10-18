@@ -19,12 +19,12 @@ const PREFIXE = process.env.ATELIER_E2E_PREFIXE ?? "RNO";
 const DANS_ATELIER = /\/atelier(\/|$|\?|#)/u;
 const DELAI_SORTIE = 8_000;
 
-const RETOUR = (page: Page) => page.getByRole("button", { name: /Retour au menu principal \(quitter Atelier marketing\)/u });
+const RETOUR = (page: Page) => page.getByRole("button", { name: /Retour au menu principal \(quitter Atelier\)/u });
 
 async function ouvrirTableauDeBord(page: Page) {
   await page.goto(`/${PREFIXE}/dashboard`);
   await expect(page).toHaveURL(new RegExp(`/${PREFIXE}/dashboard`, "u"));
-  await expect(page.getByRole("link", { name: /^Atelier marketing/u }).first()).toBeVisible({ timeout: 20_000 });
+  await expect(page.getByRole("link", { name: /^Atelier(?! marketing)/u }).first()).toBeVisible({ timeout: 20_000 });
 }
 
 async function cliquerRubrique(page: Page, nom: string) {
@@ -47,7 +47,7 @@ async function quitterParLeBouton(page: Page, contexte: string) {
 /** La barre latérale principale (sélecteur d'entreprise) est visible. */
 async function verifierMenuPrincipal(page: Page, contexte: string) {
   await expect(
-    page.getByRole("button", { name: /^Open .+ or/u }).first(),
+    page.getByRole("button", { name: /^Ouvrir le sélecteur d/u }).first(),
     `${contexte} : sélecteur d'entreprise visible (URL ${page.url()})`,
   ).toBeVisible({ timeout: DELAI_SORTIE });
 }
@@ -57,7 +57,7 @@ test.describe("Quitter l'atelier : bureau", () => {
 
   test("1. dashboard → atelier → trois rubriques → retour au menu principal", async ({ page }) => {
     await ouvrirTableauDeBord(page);
-    await page.getByRole("link", { name: /^Atelier marketing/u }).first().click();
+    await page.getByRole("link", { name: /^Atelier(?! marketing)/u }).first().click();
     await expect(page).toHaveURL(DANS_ATELIER);
     for (const rubrique of ["Discussion", "Prospects", "Marketing"]) {
       await cliquerRubrique(page, rubrique);
@@ -85,7 +85,7 @@ test.describe("Quitter l'atelier : bureau", () => {
 
   test("3. après sortie, goBack puis re-sortie : jamais de boucle", async ({ page }) => {
     await ouvrirTableauDeBord(page);
-    await page.getByRole("link", { name: /^Atelier marketing/u }).first().click();
+    await page.getByRole("link", { name: /^Atelier(?! marketing)/u }).first().click();
     await expect(page).toHaveURL(DANS_ATELIER);
     await cliquerRubrique(page, "Prospects");
     await quitterParLeBouton(page, "scénario 3, première sortie");
@@ -104,7 +104,7 @@ test.describe("Quitter l'atelier : bureau", () => {
   test("4. depuis l'atelier, le menu principal reste complet (Tâches, Agents) puis sortie", async ({ page }) => {
     await ouvrirTableauDeBord(page);
     await expect(page.getByRole("switch", { name: "Mode expert" })).toHaveCount(0);
-    await page.getByRole("link", { name: /^Atelier marketing/u }).first().click();
+    await page.getByRole("link", { name: /^Atelier(?! marketing)/u }).first().click();
     await expect(page).toHaveURL(DANS_ATELIER);
     // La barre de l'atelier s'affiche à côté de la barre principale, jamais à sa place.
     for (const entree of ["Tâches", "Agents", "Routines", "Projets"]) {

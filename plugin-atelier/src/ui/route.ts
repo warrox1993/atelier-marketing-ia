@@ -6,7 +6,7 @@
 import { ROUTE_ATELIER, RUBRIQUES } from "../contrats/ui-constantes.js";
 
 export type CleRubrique = (typeof RUBRIQUES)[number]["cle"];
-export type CleVue = "discussion" | "accueil" | CleRubrique | "prospects" | "carte" | "connaissances" | "mise-en-place" | "parametres" | "corbeille" | "rapport" | "echanges" | "departements";
+export type CleVue = "discussion" | "accueil" | CleRubrique | "prospects" | "carte" | "connaissances" | "mise-en-place" | "parametres" | "corbeille" | "rapport" | "echanges" | "departements" | "organigramme";
 
 export interface RouteAtelier {
   vue: CleVue;
@@ -36,7 +36,10 @@ export const VUE_DIRECTION = { cle: "echanges", libelle: "Registre des échanges
 /** Tableau des départements du client : hors `VUES`, présent au menu seulement pour un client à plusieurs services. */
 export const VUE_DEPARTEMENTS = { cle: "departements", libelle: "Départements" } as const satisfies { cle: CleVue; libelle: string };
 
-const CLES = new Set<string>([...VUES.map((v) => v.cle), VUE_DIRECTION.cle, VUE_DEPARTEMENTS.cle]);
+/** Organigramme des agents et des interconnexions du client : même condition d'affichage que les départements. */
+export const VUE_ORGANIGRAMME = { cle: "organigramme", libelle: "Organigramme" } as const satisfies { cle: CleVue; libelle: string };
+
+const CLES = new Set<string>([...VUES.map((v) => v.cle), VUE_DIRECTION.cle, VUE_DEPARTEMENTS.cle, VUE_ORGANIGRAMME.cle]);
 
 /** Lit la vue depuis le chemin de l'hôte ; vue par défaut : accueil (« À faire »). */
 export function lireRoute(pathname: string): RouteAtelier {

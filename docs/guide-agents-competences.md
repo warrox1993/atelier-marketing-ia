@@ -141,6 +141,55 @@ clés de l'instance et de `config/` (chemins absolus calculés à la génératio
 git), coupe la mémoire automatique (`autoMemoryEnabled: false`) et n'autorise la lecture que des
 `tool-results` de l'agent sous sa propre configuration.
 
+Mémoire persistante (décision de l'opérateur du 18/10/2026) : la mémoire automatique de Claude reste coupée ;
+chaque agent `claude_local` tient sa mémoire avec la compétence `memoire-para`, adaptation de
+`para-memory-files` du socle (licence MIT, texte d'origine inchangé dans
+`organisation/skills/memoire-para/references/origine-paperclip.md`), dans le dossier `memoire/` de son
+répertoire de travail (`instance/agents-atelier/<id entreprise>/<rôle>/memoire/`, jamais suivi par
+git). Pourquoi pas `$AGENT_HOME` : pour un bundle d'instructions géré, le socle le place dans
+`companies/<id>/agents/<id>/file-sync/runs/<run>/live` (`heartbeat.ts`,
+`agent-directory-working-copies.ts`), hors du cwd et non monté par le confinement Bubblewrap de
+`claude_local` (`managedPaths` de l'adaptateur), qui refuse en plus tout chemin inscriptible hors de
+l'espace synchronisé. `./memoire/` est couvert par `Edit(./**)` : aucune permission n'est ajoutée ni
+élargie, et le confinement ne monte que l'espace de l'agent, donc aucun agent ne voit la mémoire d'un
+autre agent, d'un autre service (une entreprise par service) ni d'un autre client. Le nom diffère de
+celui du socle parce que Paperclip importe déjà `para-memory-files` dans chaque entreprise : deux
+compétences du même slug rendent la référence ambiguë (`resolveSkillReference`,
+`company-skills.ts`). Garde-fous : section « Mémoire et connaissances » de
+`organisation/consignes/communes.md`.
+
+Garde de la mémoire (revue de sécurité du 18/10/2026, M4 : défense en profondeur, pas seulement des consignes).
+`appliquer` recopie `scripts/hooks/garde-memoire.mjs` et les motifs d'injection du plugin
+(`plugin-atelier/src/serveur/motifs-injection.json`, source unique : le plugin les lit aussi, dans
+`contenu-externe.ts`) dans `<configuration de l'agent>/hooks/` (droits 0500 et 0400), hors du répertoire de travail,
+et déclare le hook dans le `settings.json` dédié, lancé par `/usr/bin/node` (monté en lecture dans le confinement) :
+- `PostToolUse` (`Write|Edit|MultiEdit|NotebookEdit|Bash`, agents qui portent `memoire-para`) : relit tout `./memoire/`
+  (une écriture par Bash n'y échappe pas) ; un fichier qui porte un motif d'injection, un lien symbolique, un
+  `MEMORY.md` de plus de 20 Ko ou ce qui dépasse 200 Ko au total part dans `./memoire/.quarantaine/` (plafond 1 Mo, au-delà
+  le fichier est supprimé) et l'agent reçoit un message sur la sortie d'erreur (code 2), sans le contenu ;
+- `PreToolUse` (`Bash`, tous les agents) : refuse un `curl` qui écrirait un fichier (`-o`, `-O`, `--output`, `-D`, `-c`,
+  `-K`, `--trace`…, y compris groupées comme `-sSo`) ou lirait `file:`.
+Le `settings.json` porte aussi des refus `Bash(curl * -o *)`, `Bash(curl *--output*)`, `Bash(curl * -O*)`,
+`Bash(curl *--remote-name*)`, `Bash(curl *file:*)` et leurs variantes (`REFUS_CURL_ECRITURE`) : la documentation des
+permissions dit que les refus priment (« deny, then ask, then allow ») mais aussi qu'un motif qui contraint les arguments
+est fragile, d'où le hook. Protection du hook : le confinement monte la configuration de l'agent en écriture
+(`execute.ts`, `managedPaths`), donc des refus `Edit(//…/claude-config/**/hooks/**)`, `Edit(//…/claude-config/**/settings.json)`
+et `Read`/`Edit` de `//…/agents-atelier/**/memoire/.quarantaine/**` s'ajoutent. Ce qui reste possible : un agent n'a ni
+Bash hors `curl` ni écriture hors de son cwd (mode `dontAsk`) ; seul un `curl` qui écrit sous une forme que ni les refus
+ni le hook ne reconnaissent (par exemple un binaire curl appelé par un autre chemin que ceux reconnus, ou une option
+inconnue) pourrait encore écrire un fichier, et le confinement Bubblewrap borne alors l'écriture à l'espace et à la
+configuration de l'agent. Ces règles n'ont pas été rejouées contre un vrai `claude -p` (aucun agent lancé) : seul le hook
+est testé (`scripts/tests/tester-garde-memoire.py`).
+
+Compétences communes : le générateur (`COMPETENCES_COMMUNES` de `scripts/bootstrap-organisation.py`)
+ajoute `memoire-para` et `recherche-connaissances` à la liste déclarée de chaque agent `claude_local`
+(registre du marketing et en-tête `skills:` des services), sans doublon et après les compétences du
+rôle ; la Porte (déterministe) n'en reçoit aucune. `memoire-para` n'est donnée qu'aux agents qui ont la
+règle d'écriture effective `Edit(./**)` (revue de sécurité du 18/10/2026, M2) : les rôles qui ont `Write`
+et `Edit` interdits (coordinateur, exigences, relecteur, tests-techniques du marketing, coordinateurs des
+services) gardent seulement `recherche-connaissances`. Les `AGENTS.md` des services ne les déclarent donc
+pas eux-mêmes.
+
 `Bash(curl *)` sert aux échanges avec Paperclip (API native et routes du moteur de
 l'atelier). Les mutations dans Paperclip sont autorisées ou refusées par le serveur
 (un agent ne peut ni approuver, ni modifier une politique de revue grâce à la garde P1 du
@@ -160,7 +209,7 @@ testée. Une compétence n'ajoute aucune permission : le vérificateur refuse
 | `cadrage-exigences` | brief, exigences REQ-xxx, informations manquantes | coordinateur |
 | `planification-livrables` | graphe de tâches sans cycle, relectures prévues | coordinateur |
 | `dossier-validation-humaine` | dossier et approbation bornée à une version | coordinateur |
-| `recherche-connaissances` | interroge les connaissances du client | coordinateur, seo-local-geo, sea, contenus, crm-conversion |
+| `recherche-connaissances` | interroge les connaissances du client | déclarée par coordinateur, seo-local-geo, sea, contenus, crm-conversion ; livrée à tous par le générateur (compétence commune) |
 | `protocole-inter-coordinateurs` | protocole commun des coordinateurs de l'atelier pour se parler entre services du même client par le bureau de liaison | coordinateur |
 | `plan-campagne` | rédige le brief d'une campagne marketing en dix rubriques | coordinateur |
 | `recherche-sourcee` | sources datées, statut d'accès, fait, inférence, hypothèse | veille, prospection, seo-local-geo, relecteur |

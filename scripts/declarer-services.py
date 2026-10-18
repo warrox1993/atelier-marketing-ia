@@ -54,8 +54,11 @@ def construire_corps(registre: dict, local: dict) -> dict:
         for f in _atelier_services().flux_complets(registre)
         if f["source"] in presents and f["cible"] in presents
     ]
+    # La route part de la Direction quand le client en a une : le plugin n'accepte comme Direction que l'entreprise
+    # de la route ou une entreprise déjà déclarée pour ce client (revue du 18/10/2026, M1).
+    route = next((e for e in entreprises if e["estDirection"]), entreprises[0])
     return {
-        "companyId": entreprises[0]["companyId"],
+        "companyId": route["companyId"],
         "clientMarqueur": local["slug"],
         "entreprises": entreprises,
         "flux": flux,
@@ -108,13 +111,9 @@ def main(argv=None) -> int:
         print(f"API injoignable : {e}", file=sys.stderr)
         return 1
     print(f"Configuration du plugin créée pour {len(creees)} entreprise(s), {len(corps['entreprises']) - len(creees)} déjà configurée(s).")
-    requete = urllib.request.Request(
-        f"{args.api}/plugins/{PLUGIN_CLE}/api/services/declarer",
-        data=json.dumps(corps).encode("utf-8"), method="POST", headers={"Content-Type": "application/json"},
-    )
     try:
-        with urllib.request.urlopen(requete, timeout=30) as r:
-            print(r.read().decode("utf-8"))
+        for etape in etapes_declaration(corps, envoyer_declaration(args.api)):
+            print(etape)
     except urllib.error.HTTPError as e:
         print(f"Refus HTTP {e.code} : {e.read().decode('utf-8', 'replace')}", file=sys.stderr)
         return 1
@@ -122,6 +121,33 @@ def main(argv=None) -> int:
         print(f"API injoignable : {e}", file=sys.stderr)
         return 1
     return 0
+
+
+def envoyer_declaration(api: str):
+    def envoyer(corps: dict) -> str:
+        requete = urllib.request.Request(
+            f"{api}/plugins/{PLUGIN_CLE}/api/services/declarer",
+            data=json.dumps(corps).encode("utf-8"), method="POST", headers={"Content-Type": "application/json"},
+        )
+        with urllib.request.urlopen(requete, timeout=30) as r:
+            return r.read().decode("utf-8")
+    return envoyer
+
+
+def etapes_declaration(corps: dict, envoyer) -> list[str]:
+    """Envoie la déclaration depuis la Direction. Cas d'un client déjà déclaré SANS sa Direction (elle s'ajoute
+    maintenant) : le plugin refuse (403) qu'une entreprise encore inconnue redéclare un client existant. On passe
+    alors en deux temps : la Direction est d'abord ajoutée comme simple service depuis une entreprise déjà membre,
+    puis elle se déclare Direction depuis sa propre route (l'hôte prouve l'accès de l'humain à chaque route)."""
+    try:
+        return [envoyer(corps)]
+    except urllib.error.HTTPError as e:
+        autres = [x for x in corps["entreprises"] if x["companyId"] != corps["companyId"]]
+        if e.code != 403 or not autres or not any(x["estDirection"] and x["companyId"] == corps["companyId"] for x in corps["entreprises"]):
+            raise
+    sans_direction = {**corps, "companyId": autres[0]["companyId"],
+                      "entreprises": [{**x, "estDirection": False} for x in corps["entreprises"]]}
+    return [envoyer(sans_direction), envoyer(corps)]
 
 
 if __name__ == "__main__":

@@ -1,0 +1,60 @@
+{
+  "note": "Source unique des motifs d'injection : lue par le plugin (contenu-externe.ts) et recopiée par le générateur à côté du hook de mémoire des agents (organisation/hooks/garde-memoire.mjs).",
+  "motifs": [
+    {
+      "source": "ignore[sz]?\\s+(?:all\\s+|the\\s+|any\\s+)?(?:previous|prior|above|earlier)\\s+instructions",
+      "drapeaux": "iu",
+      "libelle": "ignore previous instructions"
+    },
+    {
+      "source": "ignore[rz]?\\s+(?:toutes\\s+)?(?:les|tes|vos)\\s+(?:instructions|consignes|r[eè]gles)",
+      "drapeaux": "iu",
+      "libelle": "ignore les instructions"
+    },
+    {
+      "source": "oublie[rz]?\\s+(?:toutes\\s+)?(?:les|tes|vos)\\s+(?:instructions|consignes)",
+      "drapeaux": "iu",
+      "libelle": "oublie les instructions"
+    },
+    {
+      "source": "negeer\\s+(?:alle\\s+)?(?:vorige\\s+)?instructies",
+      "drapeaux": "iu",
+      "libelle": "negeer instructies"
+    },
+    {
+      "source": "\\b(?:system prompt|prompt syst[eè]me|instructions? syst[eè]me)\\b",
+      "drapeaux": "iu",
+      "libelle": "référence au prompt système"
+    },
+    {
+      "source": "\\byou are now\\b|\\btu es maintenant\\b|\\bd[ée]sormais tu\\b",
+      "drapeaux": "iu",
+      "libelle": "réaffectation de rôle"
+    },
+    {
+      "source": "\\bpublie[rz]?\\b.{0,40}\\b(?:ceci|cela|imm[ée]diatement|maintenant|sans validation)\\b|\\bpublish (?:this|now|immediately)\\b",
+      "drapeaux": "iu",
+      "libelle": "ordre de publication"
+    },
+    {
+      "source": "\\b(?:approuve|valide)[rz]?\\b.{0,30}\\b(?:toi-m[eê]me|automatiquement|sans relecture)\\b",
+      "drapeaux": "iu",
+      "libelle": "auto-approbation demandée"
+    },
+    {
+      "source": "\\b(?:curl|wget)\\s+https?:\\/\\/|\\brm\\s+-rf\\b|\\bsudo\\b|\\bchmod\\s+\\d{3}\\b",
+      "drapeaux": "iu",
+      "libelle": "commande système"
+    },
+    {
+      "source": "<\\s*script\\b",
+      "drapeaux": "iu",
+      "libelle": "balise script"
+    },
+    {
+      "source": "^[ \\t]*(?:assistant|system)[ \\t]*:",
+      "drapeaux": "imu",
+      "libelle": "faux tour de dialogue"
+    }
+  ]
+}

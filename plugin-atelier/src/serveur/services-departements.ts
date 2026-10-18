@@ -17,6 +17,7 @@ import {
   type DepartementDeclare,
   type EtatDepartement,
   type ReponseDepartements,
+  type ReponseFluxServices,
 } from "../contrats/index.js";
 import { nomService } from "../contrats/liaisons-lecture.js";
 import type { GestionnaireRoute, RequeteRoute } from "./atelier.js";
@@ -27,7 +28,7 @@ import { exigerHumainLecture } from "./liaisons/lire.js";
 
 export interface DependancesDepartements {
   ctx: Pick<PluginContext, "agents" | "issues" | "companies" | "logger">;
-  stock: Pick<StockLiaisons, "serviceDeEntreprise" | "servicesDuClient">;
+  stock: Pick<StockLiaisons, "serviceDeEntreprise" | "servicesDuClient" | "fluxDuClient">;
   /** Éléments d'« À faire » de l'entreprise de la requête (gestionnaire `accueil.lister`, même requête). */
   aFaire(r: RequeteRoute): Promise<ReadonlyArray<{ type: string; urgence: string }>>;
 }
@@ -56,6 +57,20 @@ export function routesDepartements(d: DependancesDepartements): Partial<Record<C
       .map((s): DepartementDeclare => ({ companyId: s.companyId, slug: s.serviceSlug, nom: nomService(s.serviceSlug), estDirection: s.estDirection, courant: s.companyId === r.companyId }))
       .sort(ordonner);
     const corps: ReponseDepartements = { client: service.clientMarqueur, departements };
+    return { statut: 200, corps };
+  };
+
+  // Matrice des flux du client de la requête, pour la vue Organigramme : même garde que `departements.lister`,
+  // lecture de la seule table du plugin, aucun appel à l'hôte.
+  routes["services.flux"] = async (r) => {
+    exigerHumainLecture(r.acteur, "L'organigramme");
+    const service = await stock.serviceDeEntreprise(r.companyId);
+    if (!service) {
+      const corps: ReponseFluxServices = { client: null, flux: [] };
+      return { statut: 200, corps };
+    }
+    const flux = await stock.fluxDuClient(service.clientMarqueur);
+    const corps: ReponseFluxServices = { client: service.clientMarqueur, flux };
     return { statut: 200, corps };
   };
 

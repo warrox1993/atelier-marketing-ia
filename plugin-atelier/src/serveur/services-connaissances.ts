@@ -62,6 +62,15 @@ export interface DependancesConnaissances {
   apresEntreeTache(companyId: string, issueId: string): Promise<void>;
   /** Tests : vectoriseur imposé (sinon : configuration `connaissancesVectorisation`). */
   vectoriseur?: (companyId: string) => Promise<Vectoriseur>;
+  /**
+   * Base commune du groupe (18/10/2026) : entreprise Direction du client de `companyId`, résolue côté serveur
+   * (`directionDuClient`) ; null ou absente : une seule base (comportement d'origine).
+   */
+  baseCommune?: (companyId: string) => Promise<string | null>;
+  /** Effacement d'une personne (M3) : entreprises du même client (elle comprise) ; absente : elle seule. */
+  entreprisesDuClient?: (companyId: string) => Promise<string[]>;
+  /** m1 : entreprises qui lisent la base de `companyId` comme base commune (elle est leur Direction) ; absente : aucune. */
+  lecteursBaseCommune?: (companyId: string) => Promise<string[]>;
   maintenant?: () => Date;
 }
 
@@ -78,8 +87,8 @@ export interface ServicesConnaissances {
   entreesPorte(companyId: string, issueId: string, livrable: { corps: string } | null): Promise<EntreesConnaissancesPorte | undefined>;
   /** Garde-fous de vérité : titres (sans doublon) des documents dont un passage répond à la question, sans aucune trace. */
   rechercherTitres(companyId: string, mode: "demonstration" | "reel", question: string): Promise<string[]>;
-  /** Garde-fous de vérité : documents en vigueur, sans contenu. */
-  titresEnVigueur(companyId: string): Promise<Array<{ documentId: string; titre: string; type: string; produit: string | null; statut: string; valideAu: string | null }>>;
+  /** Garde-fous de vérité : documents en vigueur, sans contenu (base du service, puis base commune du groupe). */
+  titresEnVigueur(companyId: string): Promise<Array<{ documentId: string; titre: string; type: string; produit: string | null; statut: string; valideAu: string | null; portee?: "service" | "commune" }>>;
 }
 
 /** Métadonnées d'un fichier à importer (après validation de l'entrée). */
@@ -116,7 +125,7 @@ function stockParDefaut(ctx: PluginContext): StockConnaissances {
   const vide: StockConnaissances = {
     executer: async () => [],
     lireDocument: async () => null, listerDocuments: async () => [], listerVersions: async () => [], passagesContenant: async () => [],
-    compterPassages: async () => 0, indexActif: async () => null, adressesRendues: async () => [], tachesCitant: async () => [], compterSourcesDocument: async () => 0,
+    compterPassages: async () => 0, effacerExtraitsSources: async () => [], indexActif: async () => null, adressesRendues: async () => [], tachesCitant: async () => [], compterSourcesDocument: async () => 0,
     supprimerDocument: async () => 0, supprimerPassages: async () => 0,
     insererDocument: indisponible, insererVersion: indisponible, majVersion: indisponible, insererPassage: indisponible, activerVersion: indisponible,
     creerIndex: indisponible, ajouterPassagesIndex: indisponible, insererSource: indisponible,
@@ -139,6 +148,18 @@ export function creerConnaissances(d: DependancesConnaissances): ServicesConnais
   const cache = new CacheVecteurs();
   const maintenant = () => (d.maintenant ? d.maintenant() : new Date());
   const aujourdhui = () => dateDuJourBruxelles(maintenant());
+  /** Direction du même client (base commune), jamais l'entreprise elle-même ; null : une seule base. */
+  const communeDe = async (companyId: string): Promise<string | null> => {
+    const c = d.baseCommune ? await d.baseCommune(companyId) : null;
+    return c && c.toLowerCase() !== companyId.toLowerCase() ? c.toLowerCase() : null;
+  };
+  /**
+   * m1 (revue du 18/10/2026) : un document de la Direction supprimé ou remplacé change la vérité de tous les services
+   * qui la lisent comme base commune : aucune de leurs évaluations ne reste fraîche.
+   */
+  const perimerLecteurs = async (companyId: string): Promise<void> => {
+    for (const c of d.lecteursBaseCommune ? await d.lecteursBaseCommune(companyId) : []) await base.perimerEvaluationsEntreprise(c);
+  };
   const files = new Map<string, Promise<unknown>>();
   let vectoriseurLocal: { dossier: string; v: Vectoriseur } | null = null;
   /** Entreprises pour lesquelles « local » a été lu au moins une fois (avertir d'un repli ultérieur). */
@@ -331,6 +352,7 @@ export function creerConnaissances(d: DependancesConnaissances): ServicesConnais
       }
       await stock.activerVersion(companyId, doc.id, version.id, passages.length);
       cache.invalider(companyId);
+      await perimerLecteurs(companyId);
       await base.journaliser({
         companyId, type: "connaissance.indexee", entite: "connaissance", entiteId: doc.id, acteur: version.importePar,
         donnees: { version: version.version, passages: passages.length, vecteurs: index !== null, injections: injections.size, pseudonymise: meta.pseudonymiser },
@@ -437,10 +459,21 @@ export function creerConnaissances(d: DependancesConnaissances): ServicesConnais
     const adresses = [...new Set((await Promise.all((await tachesDeLaMission(companyId, issueId)).map((id) => stock.adressesRendues(companyId, id)))).flat())];
     // La règle s'applique dès que la tâche a reçu des passages, que le livrable cite une adresse
     // `connaissance://`, ou que l'entreprise a des connaissances indexées (chiffres d'offre à sourcer).
-    const actif = adresses.length > 0 || /connaissance:\/\//iu.test(livrable.corps) || (await stock.compterPassages(companyId)) > 0;
+    // m2 : les passages de la base commune (Direction) comptent aussi : un chiffre d'offre du groupe se source.
+    const communeActive = async () => {
+      const c = await communeDe(companyId);
+      return c !== null && (await stock.compterPassages(c)) > 0;
+    };
+    const actif = adresses.length > 0 || /connaissance:\/\//iu.test(livrable.corps) || (await stock.compterPassages(companyId)) > 0 || (await communeActive());
     if (!actif) return undefined;
     const ids = [...new Set(adresses.map((a) => lireAdresseConnaissance(a)?.documentId).filter((x): x is string => typeof x === "string"))];
-    const versions = (await stock.listerVersions(companyId, ids)).map((v) => ({ documentId: v.documentId, version: v.version, statut: v.statut, valideDu: v.valideDu, valideAu: v.valideAu }));
+    const lues = await stock.listerVersions(companyId, ids);
+    // Base commune : les versions des documents de la Direction RENDUS à cette tâche (et à eux seuls) sont lues
+    // dans la Direction. Une adresse d'un autre service n'est jamais rendue à la tâche : elle reste inconnue.
+    const manquants = ids.filter((id) => !lues.some((v) => v.documentId === id));
+    const commune = manquants.length > 0 ? await communeDe(companyId) : null;
+    if (commune) lues.push(...(await stock.listerVersions(commune, manquants)));
+    const versions = lues.map((v) => ({ documentId: v.documentId, version: v.version, statut: v.statut, valideDu: v.valideDu, valideAu: v.valideAu }));
     return { livrable: livrable.corps, passagesRendus: adresses, versions, date: aujourdhui() };
   }
 
@@ -528,6 +561,7 @@ export function creerConnaissances(d: DependancesConnaissances): ServicesConnais
       ]);
       await stock.supprimerDocument(r.companyId, doc.id);
       cache.invalider(r.companyId);
+      await perimerLecteurs(r.companyId);
       for (const issueId of taches) await d.apresEntreeTache(r.companyId, issueId);
       const supprime = { documentId: doc.id, titre: doc.titre, versions: versions.length, passages: versions.reduce((s, v) => s + v.passages, 0), sources };
       await base.journaliser({ companyId: r.companyId, type: "connaissance.supprimee", entite: "connaissance", entiteId: doc.id, acteur: r.acteur.id, donnees: { ...supprime, motif: e.motif } });
@@ -539,13 +573,25 @@ export function creerConnaissances(d: DependancesConnaissances): ServicesConnais
     if (!e.portee.confirmer) {
       return { corps: { portee: "personne", confirme: false, passages: trouves.map((t) => ({ id: t.id, documentId: t.documentId, version: t.version, extrait: t.texte.slice(0, 200) })) } };
     }
+    // Les sources qui citent un passage supprimé partent par la cascade (connaissance_passage_id), dans toutes les
+    // entreprises. M3 (revue du 18/10/2026) : les extraits (500 caractères) recopiés dans les sources des tâches de
+    // CHAQUE service du client et qui contiennent encore la personne (passage d'une autre base) sont effacés aussi.
     const n = await stock.supprimerPassages(r.companyId, trouves.map((t) => t.id));
     cache.invalider(r.companyId);
+    const entreprises = d.entreprisesDuClient ? await d.entreprisesDuClient(r.companyId) : [r.companyId.toLowerCase()];
+    const effacees = await stock.effacerExtraitsSources(entreprises, cible);
+    for (const t of new Set(effacees.filter((x) => x.issueId !== null).map((x) => `${x.companyId}|${x.issueId}`))) {
+      const [c, issueId] = t.split("|") as [string, string];
+      await d.apresEntreeTache(c, issueId);
+    }
     await base.journaliser({
       companyId: r.companyId, type: "connaissance.personne.purgee", entite: "connaissance", entiteId: empreinteCible.slice(0, 16), acteur: r.acteur.id,
-      donnees: { passages: n, documents: [...new Set(trouves.map((t) => t.documentId))], motif: e.motif, empreinte: empreinteCible },
+      donnees: {
+        passages: n, documents: [...new Set(trouves.map((t) => t.documentId))], motif: e.motif, empreinte: empreinteCible,
+        extraitsEffaces: effacees.length, entreprises: [...new Set(effacees.map((x) => x.companyId))].length,
+      },
     });
-    return { corps: { portee: "personne", confirme: true, passagesSupprimes: n } };
+    return { corps: { portee: "personne", confirme: true, passagesSupprimes: n, extraitsEffaces: effacees.length } };
   };
 
   routes["tache.connaissances.rechercher"] = async (r) => {
@@ -554,7 +600,10 @@ export function creerConnaissances(d: DependancesConnaissances): ServicesConnais
     const mode = (await d.modeEffectif(r.companyId, campagne)).mode;
     let resultat;
     try {
-      resultat = await rechercherConnaissances({ executer: stock.executer, vectoriseur: await vectoriseurPour(r.companyId), cache, maintenant }, { companyId: r.companyId, mode }, r.corps);
+      // Le vectoriseur est celui du service (la configuration de la Direction n'est pas lisible pendant cette
+      // invocation) ; la base commune n'est cherchée par le sens que si son index a le même modèle.
+      const baseCommune = await communeDe(r.companyId);
+      resultat = await rechercherConnaissances({ executer: stock.executer, vectoriseur: await vectoriseurPour(r.companyId), cache, maintenant }, { companyId: r.companyId, mode }, r.corps, { baseCommune });
     } catch (err) {
       if (err && typeof err === "object" && "issues" in err && Array.isArray((err as { issues: unknown }).issues)) {
         erreurValidation("Recherche de connaissances", (err as { issues: Array<{ path: PropertyKey[]; message: string }> }).issues);
@@ -576,7 +625,10 @@ export function creerConnaissances(d: DependancesConnaissances): ServicesConnais
     if (sourceIds.length > 0) await d.apresEntreeTache(r.companyId, issue.id);
     await base.journaliser({
       companyId: r.companyId, type: "connaissances.recherche", entite: "tache", entiteId: issue.id, issueId: issue.id, runId: r.acteur.runId, acteur: r.acteur.id,
-      donnees: { passages: resultat.passages.length, aucuneSource: resultat.aucuneSource, adresses: resultat.passages.map((p) => p.citation.adresse) },
+      donnees: {
+        passages: resultat.passages.length, aucuneSource: resultat.aucuneSource, adresses: resultat.passages.map((p) => p.citation.adresse),
+        communs: resultat.passages.filter((p) => p.portee === "commune").length,
+      },
     });
     const valide = ResultatRechercheConnaissances.parse({ ...resultat, sourceIds });
     const marques = marquerPassages(valide.passages);
@@ -590,11 +642,13 @@ export function creerConnaissances(d: DependancesConnaissances): ServicesConnais
   };
 
   async function rechercherTitres(companyId: string, mode: "demonstration" | "reel", question: string): Promise<string[]> {
-    const resultat = await rechercherConnaissances({ executer: stock.executer, vectoriseur: await vectoriseurPour(companyId), cache, maintenant }, { companyId, mode }, { question });
+    // m2 : même portée que la recherche de l'agent (base du service et base commune du groupe).
+    const baseCommune = await communeDe(companyId);
+    const resultat = await rechercherConnaissances({ executer: stock.executer, vectoriseur: await vectoriseurPour(companyId), cache, maintenant }, { companyId, mode }, { question }, { baseCommune });
     return [...new Set(resultat.passages.map((p) => p.citation.titre))];
   }
 
-  async function titresEnVigueur(companyId: string) {
+  async function titresDe(companyId: string) {
     const [docs, versions] = await Promise.all([stock.listerDocuments(companyId), stock.listerVersions(companyId)]);
     const date = aujourdhui();
     return docs.flatMap((doc) => {
@@ -604,6 +658,15 @@ export function creerConnaissances(d: DependancesConnaissances): ServicesConnais
       if (statut !== "en_vigueur") return [];
       return [{ documentId: doc.id, titre: doc.titre, type: doc.type, produit: doc.produit, statut, valideAu: active.valideAu }];
     });
+  }
+
+  /** Titres du service, puis ceux de la base commune du groupe (chacun marqué) ; une seule base sinon. */
+  async function titresEnVigueur(companyId: string) {
+    const propres = await titresDe(companyId);
+    const commune = await communeDe(companyId);
+    if (!commune) return propres;
+    const communs = await titresDe(commune);
+    return [...propres.map((t) => ({ ...t, portee: "service" as const })), ...communs.map((t) => ({ ...t, portee: "commune" as const }))];
   }
 
   return { routes, entreesPorte, rechercherTitres, titresEnVigueur };

@@ -10,10 +10,13 @@ import { describe, expect, it, vi } from "vitest";
 import { ESPACE_BASE } from "../src/contrats/index.js";
 import { creerAiguillage } from "../src/serveur/atelier.js";
 import type { BaseAtelier } from "../src/serveur/base.js";
-import { creerStockConnaissances, type LigneDocument, type LigneIndex, type LigneVersion, type NouveauPassage, type SourceConnaissance, type StockConnaissances } from "../src/serveur/base-connaissances.js";
+import { creerStockConnaissances, EXTRAIT_EFFACE, type LigneDocument, type LigneIndex, type LigneVersion, type NouveauPassage, type SourceConnaissance, type StockConnaissances } from "../src/serveur/base-connaissances.js";
 import { requeteDetails, requeteIdsFiltres, requeteMotsCles } from "../src/serveur/connaissances/recherche.js";
 import type { Vectoriseur } from "../src/serveur/connaissances/vectorisation.js";
 import { creerServices } from "../src/serveur/services.js";
+import { directionDuClient } from "../src/serveur/connaissances/base-commune.js";
+import { stockLiaisonsParesseux, type StockLiaisons } from "../src/serveur/liaisons/index.js";
+import type { ServiceEntreprise } from "../src/serveur/liaisons/base-liaisons.js";
 import { ISSUE, PORTE_AGENT, SOC, creerBanc } from "./outils-base.js";
 import { createHash } from "node:crypto";
 import { pseudonymiser } from "../src/serveur/regles-connaissances.js";
@@ -113,6 +116,11 @@ function stockMemoire() {
       t.sources = t.sources.filter((s) => !ids.includes(s.passageId));
       return avant - t.passages.length;
     },
+    effacerExtraitsSources: async (ids, txt) => {
+      const touchees = t.sources.filter((x) => ids.includes(x.companyId.toLowerCase()) && x.extrait.toLowerCase().includes(txt));
+      for (const x of touchees) x.extrait = EXTRAIT_EFFACE;
+      return touchees.map((x) => ({ companyId: x.companyId.toLowerCase(), issueId: x.issueId }));
+    },
     compterPassages: async (c) => t.passages.filter((p) => p.companyId === c && t.versions.find((v) => v.id === p.versionId)?.active).length,
     indexActif: async (c) => structuredClone(t.index.find((i) => i.companyId === c && i.actif) ?? null),
     creerIndex: async (i) => void t.index.push({ ...i, actif: true, passagesIndexes: 0, creeLe: MAINTENANT.toISOString() }),
@@ -130,7 +138,17 @@ function stockMemoire() {
  * références (clés absentes ou illisibles). Par défaut, la clé des pseudonymes est servie par le coffre de
  * test (`outils-cles-donnees.ts`) : le serveur n'a plus aucune clé de repli.
  */
-function banc(o: { sourcesWeb?: string[]; vectoriseur?: (companyId: string) => Promise<Vectoriseur>; sansCles?: boolean; config?: Record<string, unknown>; modeEntreprise?: "demonstration" | "reel" } = {}) {
+/** Déclaration des services en mémoire (lectures de la base commune) ; tout le reste du bureau de liaison est le stock d'origine. */
+function liaisonsDeclarees(ctx: PluginContext, services: ServiceEntreprise[]): StockLiaisons {
+  const origine = stockLiaisonsParesseux(ctx);
+  const lues: Pick<StockLiaisons, "serviceDeEntreprise" | "servicesDuClient"> = {
+    serviceDeEntreprise: async (c) => structuredClone(services.find((s) => s.companyId === c) ?? null),
+    servicesDuClient: async (m) => structuredClone(services.filter((s) => s.clientMarqueur === m)),
+  };
+  return new Proxy(origine, { get: (cible, cle) => (cle in lues ? lues[cle as keyof typeof lues] : cible[cle as keyof StockLiaisons]) });
+}
+
+function banc(o: { sourcesWeb?: string[]; vectoriseur?: (companyId: string) => Promise<Vectoriseur>; sansCles?: boolean; config?: Record<string, unknown>; modeEntreprise?: "demonstration" | "reel"; services?: ServiceEntreprise[] } = {}) {
   const b = creerBanc({ modeEntreprise: o.modeEntreprise ?? "demonstration", config: { ...(o.sansCles ? {} : REFS_CLES), ...o.config } });
   if (!o.sansCles) avecClesDonnees(b.ctx);
   const k = stockMemoire();
@@ -142,7 +160,10 @@ function banc(o: { sourcesWeb?: string[]; vectoriseur?: (companyId: string) => P
           ? async () => o.sourcesWeb!.map((url, i) => ({ id: `s${i}`, mode: "reel", provenance: "web", url, service: null, outil: null, chiffres: [] }))
           : cible[cle as string],
   }) as unknown as BaseAtelier;
-  const aiguillage = creerAiguillage(b.ctx, creerServices(b.ctx, { base, connaissances: { stock: k.stock, maintenant: () => MAINTENANT, ...(o.vectoriseur ? { vectoriseur: o.vectoriseur } : {}) } }));
+  const aiguillage = creerAiguillage(b.ctx, creerServices(b.ctx, {
+    base, connaissances: { stock: k.stock, maintenant: () => MAINTENANT, ...(o.vectoriseur ? { vectoriseur: o.vectoriseur } : {}) },
+    ...(o.services ? { stockLiaisons: liaisonsDeclarees(b.ctx, o.services) } : {}),
+  }));
   /** Portée d'invocation de l'hôte : ouverte seulement pendant le traitement d'une requête. */
   const portee = { active: false };
   async function appeler(routeKey: string, o: { params?: Record<string, string>; query?: Record<string, string | string[]>; body?: unknown; companyId?: string; agent?: boolean }) {
@@ -569,6 +590,23 @@ describe("SQL des connaissances (base-connaissances.ts réelle, règles de l'hô
     await s.adressesRendues(SOC, id);
     await s.tachesCitant(SOC, id);
     await s.compterSourcesDocument(SOC, id);
+    // M3 : effacement des extraits, une requête gardée par entreprise ; la mise à jour aussi passe les règles.
+    const ecritures: unknown[][] = [];
+    const s2 = creerStockConnaissances({
+      ...db,
+      async query(sql: string, params: unknown[] = []) {
+        controlerSql(sql, params, true);
+        return [{ issue_id: id }];
+      },
+      async execute(sql: string, params: unknown[] = []) {
+        controlerSql(sql, params, false);
+        ecritures.push(params);
+        return { rowCount: 1 };
+      },
+    } as never);
+    expect(await s2.effacerExtraitsSources([SOC, SOC2], "zorglub")).toEqual([{ companyId: SOC, issueId: id }, { companyId: SOC2, issueId: id }]);
+    expect(ecritures.map((p) => p[0])).toEqual([SOC, SOC2]);
+    expect(ecritures.every((p) => p[2] === EXTRAIT_EFFACE && !String(p[2]).includes("zorglub"))).toBe(true);
   });
 });
 
@@ -673,5 +711,179 @@ describe("vectorisation : portée d'invocation de l'hôte", () => {
     (f.ctx as unknown as { config: { get: () => Promise<Record<string, unknown>> } }).config.get = async () => ({ connaissancesVectorisation: "Local" });
     await f.rechercher("prime responsabilité civile");
     expect(f.journauxLogger.some((l) => l.includes("connaissancesVectorisation inconnue"))).toBe(true);
+  });
+});
+
+/* ------------------------------------------------------------------ */
+/* Base commune du groupe (Direction du client, 18/10/2026)            */
+/* ------------------------------------------------------------------ */
+
+describe("base commune du groupe : service de la tâche + Direction du même client, jamais un autre service", () => {
+  const DIR = "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
+  const AUTRE_SERVICE = SOC2;
+  const service = (companyId: string, serviceSlug: string, estDirection = false, clientMarqueur = "client-trois"): ServiceEntreprise => ({ companyId, clientMarqueur, serviceSlug, estDirection });
+  const CLIENT_TROIS = [service(SOC, "marketing"), service(DIR, "direction", true), service(AUTRE_SERVICE, "commercial")];
+
+  /** Trois bases : service (SOC), Direction (DIR), autre service (SOC2), chacune avec un mot témoin. */
+  async function troisBases(services: ServiceEntreprise[] = CLIENT_TROIS) {
+    const f = banc({ services });
+    f.tacheSousPorte();
+    await f.importer({ texte: "# Offre\n\nLa prime du service marketing est de 648 € (mot témoin zephyrine).", titre: "Offre du service", type: "tarif" });
+    await f.importer({ texte: "# Charte\n\nLa prime de groupe est de 512 € selon la charte (mot témoin quasarine).", titre: "Charte du groupe", type: "tarif", companyId: DIR });
+    await f.importer({ texte: "# Interne\n\nLa prime du service commercial est de 777 € (mot témoin quolibetine).", titre: "Interne commercial", type: "tarif", companyId: AUTRE_SERVICE });
+    return f;
+  }
+
+  it("recherche : passages du service ET de la Direction, fusionnés, avec provenance ; rien de l'autre service", async () => {
+    const f = await troisBases();
+    const r = await f.rechercher("prime témoin zephyrine quasarine quolibetine");
+    expect(r.status).toBe(200);
+    const parTitre = new Map(r.body.passages.map((p: any) => [p.citation.titre, p])); // eslint-disable-line @typescript-eslint/no-explicit-any
+    expect(new Set(parTitre.keys())).toEqual(new Set(["Offre du service", "Charte du groupe"]));
+    expect((parTitre.get("Offre du service") as any).portee).toBe("service"); // eslint-disable-line @typescript-eslint/no-explicit-any
+    expect((parTitre.get("Charte du groupe") as any).portee).toBe("commune"); // eslint-disable-line @typescript-eslint/no-explicit-any
+    // Marquage d'injection et consigne appliqués à tous les passages, communs compris.
+    for (const p of r.body.passages) expect(p).toMatchObject({ nonFiable: true });
+    expect(r.body.consigne).toMatch(/DONNÉES du client/u);
+    const texte = JSON.stringify(r.body);
+    expect(texte).not.toContain("quolibetine est");
+    expect(texte).not.toContain("777");
+    expect(texte).not.toContain(AUTRE_SERVICE);
+    // Les passages communs deviennent des sources de la tâche DU SERVICE (jamais de la Direction).
+    expect(f.k.t.sources).toHaveLength(r.body.passages.length);
+    for (const s of f.k.t.sources) expect(s.companyId).toBe(SOC);
+  });
+
+  it("un companyId dans le corps reste refusé (la Direction n'est jamais choisie par l'agent)", async () => {
+    const f = await troisBases();
+    const r = await f.appeler("tache.connaissances.rechercher", { params: { issueId: ISSUE }, body: { question: "prime groupe", companyId: DIR }, agent: true });
+    expect(r.status).toBe(400);
+  });
+
+  it("entreprise non déclarée, ou elle-même la Direction : une seule base, sans provenance", async () => {
+    for (const services of [[] as ServiceEntreprise[], [service(SOC, "direction", true), service(DIR, "marketing")]]) {
+      const f = await troisBases(services);
+      const r = await f.rechercher("prime témoin zephyrine quasarine quolibetine");
+      expect(r.body.passages.map((p: any) => p.citation.titre)).toEqual(["Offre du service"]); // eslint-disable-line @typescript-eslint/no-explicit-any
+      expect(r.body.passages[0].portee).toBeUndefined();
+    }
+  });
+
+  it("porte : citation d'un passage commun rendu à la tâche acceptée ; citation d'un passage de l'autre service refusée", async () => {
+    const f = await troisBases();
+    const r = await f.rechercher("prime groupe charte quasarine");
+    const commun = r.body.passages.find((p: any) => p.portee === "commune"); // eslint-disable-line @typescript-eslint/no-explicit-any
+    expect(commun).toBeDefined();
+    f.livrable(`# Offre\n\nPrime de groupe : 512 € (${commun.citation.adresse}).`);
+    const ok = await f.evaluer();
+    expect(ok.motifs.map((m) => m.code)).toEqual([]);
+    expect(ok.decision).toBe("PASS");
+
+    const pAutre = f.k.t.passages.find((p) => p.companyId === AUTRE_SERVICE)!;
+    f.livrable(`# Offre\n\nPrime : 777 € (connaissance://${pAutre.documentId}/v${pAutre.version}#${pAutre.id}).`);
+    const refus = await f.evaluer();
+    expect(refus.decision).toBe("REFUS");
+    expect(refus.motifs.map((m) => m.code)).toContain("citation_connaissance_inconnue");
+  });
+
+  it("porte : un passage commun dont la version a été remplacée depuis est refusé comme périmé", async () => {
+    const f = await troisBases();
+    const r = await f.rechercher("prime groupe charte quasarine");
+    const commun = r.body.passages.find((p: any) => p.portee === "commune"); // eslint-disable-line @typescript-eslint/no-explicit-any
+    await f.importer({ texte: "# Charte\n\nLa prime de groupe est de 530 € selon la charte (mot témoin quasarine).", titre: "Charte du groupe", type: "tarif", companyId: DIR, documentId: commun.citation.documentId, valideDu: "2026-10-01" });
+    f.livrable(`# Offre\n\nPrime de groupe : 512 € (${commun.citation.adresse}).`);
+    const ev = await f.evaluer();
+    expect(ev.decision).toBe("REFUS");
+    expect(ev.motifs.map((m) => m.code)).toContain("citation_connaissance_perimee");
+  });
+
+  it("connaissances.titres : titres du service puis de la base commune, marqués ; jamais ceux de l'autre service", async () => {
+    const f = await troisBases();
+    const r = await f.appeler("connaissances.titres", { query: { companyId: SOC }, agent: true });
+    expect(r.status).toBe(200);
+    expect(r.body.documents.map((d: any) => [d.titre, d.portee])).toEqual([["Offre du service", "service"], ["Charte du groupe", "commune"]]); // eslint-disable-line @typescript-eslint/no-explicit-any
+    expect(r.body.total).toBe(2);
+    const seul = await (await troisBases([])).appeler("connaissances.titres", { query: { companyId: SOC }, agent: true });
+    expect(seul.body.documents.map((d: any) => d.titre)).toEqual(["Offre du service"]); // eslint-disable-line @typescript-eslint/no-explicit-any
+    expect(seul.body.documents[0].portee).toBeUndefined();
+  });
+
+  it("M3 : purge d'une personne dans la Direction : les sources des services qui citaient ses passages disparaissent", async () => {
+    const f = await troisBases();
+    await f.importer({ texte: "# Dossier\n\nLe gestionnaire Hyacinthe Zorglub suit le contrat de groupe.", titre: "Dossier groupe", type: "faq", companyId: DIR });
+    const r = await f.rechercher("gestionnaire Hyacinthe Zorglub contrat");
+    expect(f.k.t.sources.some((x) => x.companyId === SOC && x.extrait.includes("Zorglub"))).toBe(true);
+    const purge = await f.appeler("connaissances.supprimer", { companyId: DIR, body: { companyId: DIR, motif: "Effacement", portee: { type: "personne", identifiant: "Zorglub", confirmer: true } } });
+    expect(purge.body).toMatchObject({ confirme: true, passagesSupprimes: 1 });
+    expect(r.status).toBe(200);
+    expect(JSON.stringify(f.k.t)).not.toContain("Zorglub");
+    expect(JSON.stringify(f.t.journal)).not.toContain("Zorglub");
+  });
+
+  it("M3 : purge depuis un service : les extraits qui contiennent la personne sont effacés dans TOUTES les entreprises du client, jamais ailleurs", async () => {
+    const f = await troisBases();
+    await f.importer({ texte: "# Dossier\n\nLe gestionnaire Hyacinthe Zorglub suit le contrat de groupe.", titre: "Dossier groupe", type: "faq", companyId: DIR });
+    await f.rechercher("gestionnaire Hyacinthe Zorglub contrat");
+    const avant = f.k.t.sources.filter((x) => x.extrait.includes("Zorglub"));
+    expect(avant.length).toBeGreaterThan(0);
+    // Source d'un autre client (même motif) : hors du client, jamais touchée.
+    f.k.t.sources.push({ ...structuredClone(avant[0]!), id: "99999999-9999-4999-8999-999999999999", companyId: "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee" });
+    f.passe();
+    expect(f.t.evaluations.filter((e) => e.companyId === SOC).some((e) => !e.perimee)).toBe(true);
+    // L'humain du service commercial (même client) purge : rien dans sa base, mais l'extrait recopié chez le marketing part.
+    const purge = await f.appeler("connaissances.supprimer", { companyId: AUTRE_SERVICE, body: { companyId: AUTRE_SERVICE, motif: "Effacement", portee: { type: "personne", identifiant: "ZORGLUB", confirmer: true } } });
+    expect(purge.body).toMatchObject({ confirme: true, passagesSupprimes: 0, extraitsEffaces: avant.length });
+    expect(f.k.t.sources.filter((x) => x.companyId === SOC && x.extrait.includes("Zorglub"))).toHaveLength(0);
+    expect(f.k.t.sources.filter((x) => x.companyId === SOC && x.extrait === EXTRAIT_EFFACE)).toHaveLength(avant.length);
+    expect(f.k.t.sources.find((x) => x.companyId === "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee")!.extrait).toContain("Zorglub");
+    // Les évaluations de la tâche dont la source a changé sont périmées.
+    expect(f.t.evaluations.filter((e) => e.companyId === SOC).every((e) => e.perimee)).toBe(true);
+    expect(JSON.stringify(f.t.journal)).not.toContain("orglub");
+  });
+
+  it("m1 : supprimer ou remplacer un document de la Direction périme les évaluations des services du client", async () => {
+    const f = await troisBases();
+    const charte = f.k.t.docs.find((x) => x.companyId === DIR)!;
+    f.passe();
+    expect(f.t.evaluations.some((e) => e.companyId === SOC && !e.perimee)).toBe(true);
+    await f.importer({ texte: "# Charte\n\nLa prime de groupe est de 530 € (mot témoin quasarine).", titre: "Charte du groupe", type: "tarif", companyId: DIR, documentId: charte.id, valideDu: "2026-10-01" });
+    expect(f.t.evaluations.filter((e) => e.companyId === SOC).every((e) => e.perimee)).toBe(true);
+    f.passe();
+    const sup = await f.appeler("connaissances.supprimer", { companyId: DIR, body: { companyId: DIR, motif: "Retrait", portee: { type: "document", documentId: charte.id } } });
+    expect(sup.status).toBe(200);
+    expect(f.t.evaluations.filter((e) => e.companyId === SOC).every((e) => e.perimee)).toBe(true);
+    // Un document d'un service (non Direction) ne périme pas les autres services.
+    f.passe();
+    const autre = f.k.t.docs.find((x) => x.companyId === AUTRE_SERVICE)!;
+    await f.appeler("connaissances.supprimer", { companyId: AUTRE_SERVICE, body: { companyId: AUTRE_SERVICE, motif: "Retrait", portee: { type: "document", documentId: autre.id } } });
+    expect(f.t.evaluations.at(-1)!.perimee).toBe(false);
+  });
+
+  it("m2 : garde-fous de vérité et porte : la base commune compte (titres trouvés, règle active)", async () => {
+    const f = banc({ services: CLIENT_TROIS });
+    f.tacheSousPorte();
+    await f.importer({ texte: "# Charte\n\nLa prime de groupe est de 512 € selon la charte (mot témoin quasarine).", titre: "Charte du groupe", type: "tarif", companyId: DIR });
+    // Le service n'a aucun passage : sans la base commune, la règle des connaissances ne s'appliquerait pas.
+    f.livrable("# Offre\n\nPrime de groupe : 512 € par an.");
+    const ev = await f.evaluer();
+    expect(ev.motifs.length).toBeGreaterThan(0);
+    // Contrôle du plan : « aucune source » est démenti par un passage de la base commune.
+    f.documents.set(`${ISSUE}:plan`, { latestRevisionId: "88888888-8888-4888-8888-888888888882", latestRevisionNumber: 1, title: "Charte du groupe prime",
+      body: "# Plan\n\nObjectif : préparer la page de la prime de groupe selon la charte.\n\nLes connaissances sont vides, aucune source n'est disponible.", updatedByAgentId: "p", createdByAgentId: "p" });
+    const plan = await f.appeler("tache.plan.controler", { params: { issueId: ISSUE }, agent: true });
+    expect(plan.body.erreurs?.[0], JSON.stringify(plan.body)).toMatchObject({ code: "source_niee_a_tort" });
+    expect(plan.body.erreurs[0].explication).toContain("Charte du groupe");
+  });
+
+  it("directionDuClient : Direction du même client seulement ; aucune, plusieurs ou d'un autre client : null", async () => {
+    const stock = (services: ServiceEntreprise[]) => ({
+      serviceDeEntreprise: async (c: string) => services.find((s) => s.companyId === c) ?? null,
+      servicesDuClient: async (m: string) => services.filter((s) => s.clientMarqueur === m),
+    });
+    expect(await directionDuClient(stock(CLIENT_TROIS), SOC)).toBe(DIR);
+    expect(await directionDuClient(stock(CLIENT_TROIS), DIR)).toBeNull();
+    expect(await directionDuClient(stock([]), SOC)).toBeNull();
+    expect(await directionDuClient(stock([service(SOC, "marketing"), service(DIR, "direction", true, "autre-client")]), SOC)).toBeNull();
+    expect(await directionDuClient(stock([...CLIENT_TROIS, service("eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee", "direction-bis", true)]), SOC)).toBeNull();
   });
 });

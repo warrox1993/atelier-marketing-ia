@@ -25,7 +25,7 @@ import { useEnvoiDemande } from "./demande.js";
 import { FournisseurDonnees, useDonnees } from "./donnees.js";
 import { ListeOnglets, PanneauOnglet, useAncre } from "./onglets.js";
 import { chemin, lireRoute, type CleVue } from "./route.js";
-import { cheminOnglet, rubriquesVisibles, rubriqueDe, type CleRubriqueNav, type RubriqueNav } from "./rubriques.js";
+import { cheminOnglet, estVueEnsemble, rubriquesVisibles, rubriqueDe, type CleRubriqueNav, type RubriqueNav } from "./rubriques.js";
 import { STYLES_ATELIER } from "./styles.js";
 import { VueAccueil } from "./vues/accueil.js";
 import { VueCalendrier } from "./vues/calendrier.js";
@@ -44,6 +44,7 @@ import { VueResultatsAtelier } from "./vues/resultats.js";
 import { VueRapport } from "./vues/rapport.js";
 import { OngletEchanges, useAccesDirection, useLiaisonsTache, VueRegistre } from "./vues/echanges.js";
 import { VueDepartements } from "./vues/departements.js";
+import { VueOrganigramme } from "./vues/organigramme.js";
 import { aPlusieursDepartements, useDepartements } from "./departements-sonde.js";
 
 /** Racine commune : styles (dédupliqués par React), langue, portée `.atl`. */
@@ -98,6 +99,8 @@ function Vue({ vue, id }: { vue: CleVue; id: string | null }) {
       return <VueRegistre />;
     case "departements":
       return <VueDepartements />;
+    case "organigramme":
+      return <VueOrganigramme />;
   }
 }
 
@@ -147,7 +150,7 @@ export function PageAtelier({ context }: PluginPageProps) {
   const route = lireRoute(pathname);
   const { rubrique, onglet } = rubriqueDe(route.vue, useAncre());
   const base = `atl-rub-${rubrique.cle}`;
-  const rubriques = rubriquesVisibles(useAccesDirection(context.companyId), aPlusieursDepartements(useDepartements(context.companyId)));
+  const rubriques = rubriquesVisibles(useAccesDirection(context.companyId));
   const vue = context.companyId ? <Vue key={`${route.vue}:${route.id ?? ""}`} vue={route.vue} id={route.id} /> : <SansEntreprise />;
   return (
     <Racine>
@@ -155,7 +158,8 @@ export function PageAtelier({ context }: PluginPageProps) {
         <TitreOnglet companyId={context.companyId} />
         <main className="atl-page">
           {context.companyId ? <BandeauEntreprise /> : null}
-          <Rubriques courante={rubrique.cle} rubriques={rubriques} />
+          {/* Vues de groupe (tous les services) : pas de rubriques d'un service, sur téléphone non plus. */}
+          {route.vue === "departements" || route.vue === "organigramme" ? null : <Rubriques courante={rubrique.cle} rubriques={rubriques} />}
           {rubrique.onglets.length > 1 ? (
             <ListeOnglets
               etiquette={`${rubrique.libelle} : sections`}
@@ -205,30 +209,20 @@ export function NavigationAtelier({ context }: PluginRouteSidebarProps) {
   const { pathname } = useHostLocation();
   const route = lireRoute(pathname);
   const { rubrique } = rubriqueDe(route.vue, useAncre());
-  const rubriques = rubriquesVisibles(useAccesDirection(context.companyId), aPlusieursDepartements(useDepartements(context.companyId)));
+  const rubriques = rubriquesVisibles(useAccesDirection(context.companyId));
+  // Départements et Organigramme : pas de deuxième colonne (le menu principal les propose déjà).
+  if (estVueEnsemble(route.vue)) return null;
   return (
     <Racine>
       <FournisseurDonnees veille={false}>
         <nav className="atl-nav" aria-label="Rubriques de l'atelier">
-          {rubriques.map((r) => {
-            const lien = (
-              <LienHote key={r.cle} vers={cheminOnglet(r.onglets[0]!)} courant={rubrique.cle === r.cle} className="">
-                <span>{r.libelle}</span>
-                {r.cle === "marketing" && context.companyId ? <CompteurContenus /> : null}
-                {r.cle === "accueil" && context.companyId ? <PastilleAFaire companyId={context.companyId} /> : null}
-              </LienHote>
-            );
-            return r.cle === "reglages" ? (
-              <div key={r.cle} className="atl-nav-pied">
-                {lien}
-                <LienHote vers="/dashboard" className="atl-nav-sortie">
-                  <span>Menu principal (tableau de bord)</span>
-                </LienHote>
-              </div>
-            ) : (
-              lien
-            );
-          })}
+          {rubriques.map((r) => (
+            <LienHote key={r.cle} vers={cheminOnglet(r.onglets[0]!)} courant={rubrique.cle === r.cle} className="">
+              <span>{r.libelle}</span>
+              {r.cle === "marketing" && context.companyId ? <CompteurContenus /> : null}
+              {r.cle === "accueil" && context.companyId ? <PastilleAFaire companyId={context.companyId} /> : null}
+            </LienHote>
+          ))}
         </nav>
       </FournisseurDonnees>
     </Racine>
@@ -238,16 +232,46 @@ export function NavigationAtelier({ context }: PluginRouteSidebarProps) {
 export function EntreeAtelier({ context }: PluginSidebarProps) {
   const { pathname } = useHostLocation();
   const actif = /\/atelier(\/|$)/u.test(pathname);
+  const departements = useDepartements(context.companyId);
+  const vueCourante = lireRoute(pathname).vue;
+  const surDepartements = vueCourante === "departements";
+  const surOrganigramme = vueCourante === "organigramme";
   return (
     <Racine>
-      <LienHote vers={chemin("accueil")} className="atl-entree" courant={actif}>
+      <LienHote vers={chemin("accueil")} className="atl-entree" courant={actif && !surDepartements && !surOrganigramme}>
         <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
           <path d="M2.5 13.5V6l5.5-3.5L13.5 6v7.5" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" />
           <path d="M6 13.5v-4h4v4" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" />
         </svg>
-        Atelier marketing
+        Atelier
         {context.companyId ? <PastilleAFaire companyId={context.companyId} /> : null}
       </LienHote>
+      {/* Client à plusieurs services : la vue d'ensemble des départements, accessible depuis le menu principal. */}
+      {aPlusieursDepartements(departements) ? (
+        <LienHote vers={chemin("departements")} className="atl-entree" courant={surDepartements}>
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+            {/* Départements : une grille de quatre cartes (même trait que l'icône de l'atelier). */}
+            <rect x="1.75" y="1.75" width="5.25" height="5.25" rx="0.75" stroke="currentColor" strokeWidth="1.4" />
+            <rect x="9" y="1.75" width="5.25" height="5.25" rx="0.75" stroke="currentColor" strokeWidth="1.4" />
+            <rect x="1.75" y="9" width="5.25" height="5.25" rx="0.75" stroke="currentColor" strokeWidth="1.4" />
+            <rect x="9" y="9" width="5.25" height="5.25" rx="0.75" stroke="currentColor" strokeWidth="1.4" />
+          </svg>
+          Départements
+        </LienHote>
+      ) : null}
+      {aPlusieursDepartements(departements) ? (
+        <LienHote vers={chemin("organigramme")} className="atl-entree" courant={surOrganigramme}>
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+            {/* Organigramme : un service en tête relié à trois services (même trait que l'icône de l'atelier). */}
+            <rect x="6" y="1.75" width="4" height="3.25" rx="0.75" stroke="currentColor" strokeWidth="1.4" />
+            <path d="M8 5v2.5M3.25 10V7.5h9.5V10M8 7.5V10" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" />
+            <rect x="1.5" y="10" width="3.5" height="3.25" rx="0.75" stroke="currentColor" strokeWidth="1.4" />
+            <rect x="6.25" y="10" width="3.5" height="3.25" rx="0.75" stroke="currentColor" strokeWidth="1.4" />
+            <rect x="11" y="10" width="3.5" height="3.25" rx="0.75" stroke="currentColor" strokeWidth="1.4" />
+          </svg>
+          Organigramme
+        </LienHote>
+      ) : null}
     </Racine>
   );
 }
@@ -306,9 +330,9 @@ function ContenuWidget() {
   const equipe = useDonnees<VueEquipe>("atelier.equipe");
   const contexte = useHostContext();
   if (contenus.error) return <EtatErreur erreur={contenus.error} onReessayer={contenus.refresh} contexte="atelier" />;
-  if (!contenus.data) return <Chargement libelle="Atelier marketing" lignes={2} />;
+  if (!contenus.data) return <Chargement libelle="Atelier" lignes={2} />;
   return (
-    <section className="atl-widget" aria-label="Atelier marketing">
+    <section className="atl-widget" aria-label="Atelier">
       <div className="atl-widget-ligne">
         <span>
           <strong>{contenus.data.prets.length}</strong> à valider

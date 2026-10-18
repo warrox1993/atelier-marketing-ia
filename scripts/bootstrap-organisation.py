@@ -64,6 +64,12 @@ Sous-commandes :
                          plugin (toutes les tables, connaissances comprises), entreprise côté socle, fichiers
                          Paperclip et espaces locaux. --a-blanc liste tout avec les comptes par table. Rapport
                          JSON horodaté à côté de l'export. Les sauvegardes existantes ne sont PAS modifiées.
+  purger-memoires --client SLUG --motif TEXTE [--confirmer]
+                         droit à l'effacement d'une personne dans la mémoire des agents (memoire-para) : cherche le
+                         motif, sans casse, dans instance/agents-atelier/<UUID de chaque entreprise du client>/*/memoire/
+                         et efface les lignes qui le contiennent (un fichier dont le nom le contient est supprimé).
+                         À blanc par défaut (comptes seulement) ; --confirmer efface. Journal sans le motif ni les
+                         lignes (empreinte SHA-256) : instance/atelier-client/<slug>/journal-purges-memoires.jsonl.
   reinitialiser --confirmer "<nom exact>"
                          supprime l'entreprise modèle, ses dossiers locaux et les
                          fichiers que Paperclip a rangés pour elle sous
@@ -108,6 +114,7 @@ import importlib.util
 import json
 import os
 import re
+import shlex
 import shutil
 import subprocess
 import sys
@@ -150,6 +157,7 @@ FICHIER_VERROU_EXECUTION = INSTANCE / ".bootstrap-ecriture.lock"
 # instances déjà installées (registre des entreprises appliquées, empreintes). Il ne désigne plus aucun mode.
 ETAT_LOCAL = INSTANCE / "atelier-demo"
 ESPACES = INSTANCE / "agents-atelier"
+QUARANTAINE_MEMOIRE = ".quarantaine"  # memoire/.quarantaine/ : même nom que dans scripts/hooks/garde-memoire.mjs
 CONFIGS_CLAUDE = INSTANCE / "claude-config"
 FICHIER_VERROU = "company-package.lock.json"
 PLUGIN = RACINE / "plugin-atelier"
@@ -179,6 +187,45 @@ class ErreurAtelier(Exception):
     pass
 
 
+# Compétences communes à TOUS les agents claude_local (décision de l'opérateur du 18/10/2026), ajoutées par le
+# générateur à la liste déclarée de chaque agent (registre du marketing et en-tête « skills: » des
+# AGENTS.md des services), sans doublon et après les compétences propres au rôle. Aucune n'est ajoutée
+# à un agent déterministe (adaptateur process, aucun modèle).
+# - memoire-para : mémoire persistante en fichiers dans ./memoire/ du cwd de l'agent. Ce n'est PAS
+#   la compétence « para-memory-files » du socle sous son nom : le socle l'importe déjà dans chaque
+#   entreprise (paperclip/server/src/services/company-skills.ts, PAPERCLIP_CORE_SKILL_KEYS) et deux
+#   compétences de même slug rendent la référence ambiguë (resolveSkillReference, même fichier).
+#   Elle n'écrit pas dans $AGENT_HOME : pour un bundle géré, AGENT_HOME est
+#   companies/<id>/agents/<id>/file-sync/runs/<run>/live (heartbeat.ts, agent-directory-working-copies.ts),
+#   hors du cwd et non monté par le confinement Bubblewrap de claude_local (managedPaths de
+#   packages/adapters/claude-local/src/server/execute.ts) ; ./memoire/ est couvert par « Edit(./**) ».
+# - recherche-connaissances : chercher dans les connaissances (base du service et base commune du
+#   groupe) avant d'affirmer.
+COMPETENCES_COMMUNES = ("memoire-para", "recherche-connaissances")
+# Compétence commune qui exige d'écrire des fichiers (./memoire/) : un agent sans règle d'écriture effective
+# (« Edit(./**) », voir arguments_outils) ne la reçoit pas (revue du 18/10/2026, M2 : coordinateur, exigences,
+# relecteur, tests-techniques ont Write et Edit interdits) ; il garde recherche-connaissances.
+COMPETENCE_MEMOIRE = "memoire-para"
+
+
+def ecrit_des_fichiers(outils: dict) -> bool:
+    """Vrai si arguments_outils donne à l'agent la règle d'écriture « Edit(./**) » (Write ou Edit autorisé)."""
+    return any(o in ("Write", "Edit") for o in outils.get("recherche", []) + outils.get("mutation", []))
+
+
+def avec_competences_communes(competences: list[str], ecrit: bool = True) -> list[str]:
+    """Compétences d'un agent claude_local : les siennes (ordre gardé, doublons retirés), puis les
+    compétences communes qu'il ne déclare pas déjà. Sans écriture (ecrit=False), memoire-para n'est ni
+    ajoutée ni gardée."""
+    resultat: list[str] = []
+    for nom in [*competences, *COMPETENCES_COMMUNES]:
+        if nom == COMPETENCE_MEMOIRE and not ecrit:
+            continue
+        if nom not in resultat:
+            resultat.append(nom)
+    return resultat
+
+
 # ---------------------------------------------------------------------------
 # Lecture du registre
 # ---------------------------------------------------------------------------
@@ -189,7 +236,12 @@ def lire_json(chemin: Path):
 
 
 def registres():
-    return lire_json(REGISTRE_AGENTS), lire_json(REGISTRE_ORGA)
+    """Registres du marketing ; chaque agent claude_local y reçoit les compétences communes."""
+    reg_agents = lire_json(REGISTRE_AGENTS)
+    for agent in reg_agents["agents"]:
+        if not agent.get("deterministe"):
+            agent["competences"] = avec_competences_communes(agent["competences"], ecrit_des_fichiers(agent["outils"]))
+    return reg_agents, lire_json(REGISTRE_ORGA)
 
 
 # ---------------------------------------------------------------------------
@@ -883,7 +935,49 @@ def migrer_dossiers_anciens(company_id: str, slug: str) -> list[str]:
     return avertissements
 
 
-def reglages_agent(reg_agents: dict, config: Path) -> dict:
+# Revue de sécurité du 18/10/2026, M4 : curl ne doit écrire aucun fichier (un « curl -o » dans ./.claude/ ou dans la
+# configuration de l'agent changerait ses permissions ou son hook au prochain run) ni lire une URL file:. Règles
+# « deny » (elles priment sur toute autorisation, code.claude.com/docs/en/permissions, « Rules are evaluated in order:
+# deny, then ask, then allow », relevé le 18/10/2026). La même page prévient qu'un motif qui contraint les arguments est
+# fragile (« Bash permission patterns that try to constrain command arguments are fragile ») : options groupées
+# (-sSo) et variantes sont refusées par le hook PreToolUse de scripts/hooks/garde-memoire.mjs, qui découpe la commande.
+REFUS_CURL_ECRITURE = (
+    "Bash(curl -o *)", "Bash(curl * -o *)", "Bash(curl -o*)", "Bash(curl * -o*)",
+    "Bash(curl *--output*)",
+    "Bash(curl -O*)", "Bash(curl * -O*)", "Bash(curl *--remote-name*)", "Bash(curl * -J*)",
+    "Bash(curl -D *)", "Bash(curl * -D *)", "Bash(curl *--dump-header*)",
+    "Bash(curl -c *)", "Bash(curl * -c *)", "Bash(curl *--cookie-jar*)",
+    "Bash(curl -K*)", "Bash(curl * -K*)", "Bash(curl *--config*)",
+    "Bash(curl *--trace*)", "Bash(curl *--stderr*)", "Bash(curl *--libcurl*)", "Bash(curl *--etag-save*)",
+    "Bash(curl *--hsts*)", "Bash(curl *--alt-svc*)", "Bash(curl *--create-dirs*)",
+    "Bash(curl *file:*)", "Bash(curl *FILE:*)",
+)
+# Hook de la mémoire (M4) : script et motifs recopiés dans <configuration de l'agent>/hooks/, hors du cwd de l'agent.
+# Le confinement Bubblewrap monte cette configuration en écriture (paperclip/packages/adapters/claude-local/src/server/
+# execute.ts, managedPaths : sharedClaudeConfigDir « rw ») : des refus Edit sur ces chemins absolus (et sur la
+# quarantaine) s'ajoutent donc ; l'agent n'a ni Bash hors curl ni écriture hors de son cwd (mode dontAsk).
+SOURCE_HOOK_MEMOIRE = RACINE / "scripts" / "hooks" / "garde-memoire.mjs"
+SOURCE_MOTIFS_INJECTION = PLUGIN / "src" / "serveur" / "motifs-injection.json"
+NOEUD_HOOK = "/usr/bin/node"  # sous /usr, monté en lecture dans le confinement (local-process-sandbox.ts)
+OUTILS_HOOK_MEMOIRE = "Write|Edit|MultiEdit|NotebookEdit|Bash"
+
+
+def chemins_hook(config: Path) -> tuple[Path, Path]:
+    return config / "hooks" / "garde-memoire.mjs", config / "hooks" / "motifs-injection.json"
+
+
+def hooks_agent(config: Path, espace: Path, memoire: bool) -> dict:
+    """Section « hooks » du settings.json : contrôle de curl pour tout agent, contrôle de ./memoire/ après chaque
+    écriture pour un agent qui porte memoire-para."""
+    script, motifs = chemins_hook(config)
+    commande = " ".join(shlex.quote(str(x)) for x in (NOEUD_HOOK, script, espace / "memoire", motifs))
+    hooks = {"PreToolUse": [{"matcher": "Bash", "hooks": [{"type": "command", "command": commande, "timeout": 10}]}]}
+    if memoire:
+        hooks["PostToolUse"] = [{"matcher": OUTILS_HOOK_MEMOIRE, "hooks": [{"type": "command", "command": commande, "timeout": 20}]}]
+    return hooks
+
+
+def reglages_agent(reg_agents: dict, config: Path, agent: dict | None = None, espace: Path | None = None) -> dict:
     """settings.json dédié d'un agent : réglages du registre + chemins propres à la machine.
 
     Les refus portant sur les secrets de l'instance et de la racine du dépôt ont besoin de
@@ -905,9 +999,40 @@ def reglages_agent(reg_agents: dict, config: Path) -> dict:
         refus.append(f"Read({chemin})")
     for chemin in secrets:
         refus.append(f"Edit({chemin})")
+    refus.extend(REFUS_CURL_ECRITURE)
+    # M4 : hook et réglages de chaque agent, et quarantaine de la mémoire, jamais modifiables par un agent (mêmes
+    # règles pour toutes les entreprises : motifs sur les racines des configurations et des espaces).
+    refus.extend([
+        f"Edit(/{CONFIGS_CLAUDE}/**/hooks/**)", f"Edit(/{CONFIGS_CLAUDE}/**/settings.json)",
+        f"Read(/{ESPACES}/**/memoire/{QUARANTAINE_MEMOIRE}/**)", f"Edit(/{ESPACES}/**/memoire/{QUARANTAINE_MEMOIRE}/**)",
+    ])
     permissions["deny"] = refus
     permissions["allow"] = [f"Read(/{config}/projects/**)"]
+    if agent is not None and espace is not None:
+        reglages["hooks"] = hooks_agent(config, espace, COMPETENCE_MEMOIRE in agent.get("competences", []))
     return reglages
+
+
+def installer_hook(config: Path) -> int:
+    """Recopie le hook et les motifs d'injection dans la configuration de l'agent (lecture et exécution seules) ;
+    rend le nombre de fichiers écrits (0 s'ils sont déjà à jour)."""
+    ecrits = 0
+    dossier = config / "hooks"
+    if dossier.is_symlink():
+        dossier.unlink()
+    dossier.mkdir(parents=True, exist_ok=True)
+    os.chmod(dossier, 0o700)
+    for source, cible, mode in ((SOURCE_HOOK_MEMOIRE, chemins_hook(config)[0], 0o500), (SOURCE_MOTIFS_INJECTION, chemins_hook(config)[1], 0o400)):
+        contenu = source.read_bytes()
+        if cible.is_symlink():
+            cible.unlink()
+        if not cible.is_file() or cible.read_bytes() != contenu:
+            if cible.exists():
+                os.chmod(cible, 0o600)
+            cible.write_bytes(contenu)
+            ecrits += 1
+        os.chmod(cible, mode)
+    return ecrits
 
 
 def preparer_dossiers_locaux(company_id: str, reg_agents: dict) -> int:
@@ -928,7 +1053,8 @@ def preparer_dossiers_locaux(company_id: str, reg_agents: dict) -> int:
             os.chmod(d, 0o700)
         for avertissement in migrer_dossiers_anciens(company_id, agent["slug"]):
             print(f"  Attention migration : {avertissement}")
-        reglages = json.dumps(reglages_agent(reg_agents, config), ensure_ascii=False, indent=2) + "\n"
+        reglages = json.dumps(reglages_agent(reg_agents, config, agent, espace), ensure_ascii=False, indent=2) + "\n"
+        ecrits += installer_hook(config)
         if ecrire_si_change(config / "settings.json", reglages):
             os.chmod(config / "settings.json", 0o600)
             ecrits += 1
@@ -2059,6 +2185,7 @@ def controler_export(fichiers: dict[str, str]) -> list[str]:
 
 
 FICHIER_MANIFESTE_EXPORT = "manifeste-export.json"
+DOSSIER_MEMOIRES_EXPORT = "memoires-agents"
 RE_UUID = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}")
 
 
@@ -2229,6 +2356,8 @@ def cmd_exporter(args) -> int:
     # Données du plugin (seulement avec --entreprise : l'export de l'organisation modèle n'en a pas besoin).
     donnees_plugin = exporter_donnees_plugin(api, e["id"]) if args.entreprise else {}
     donnees_socle, comptes_socle = exporter_donnees_socle(args.pg_port, e["id"]) if args.entreprise else ({}, {})
+    # Mémoire des agents (memoire-para, ./memoire/ de chaque espace) : portabilité du client (M3).
+    memoires = memoires_pour_export(e["id"]) if args.entreprise else {}
     sortie.mkdir(parents=True, exist_ok=True)
     ecrits: dict[str, bytes] = {}
     for chemin, contenu in fichiers.items():
@@ -2239,12 +2368,16 @@ def cmd_exporter(args) -> int:
         octets = contenu.encode("utf-8") if isinstance(contenu, str) else base64.b64decode(contenu["data"])
         cible.write_bytes(octets)
         ecrits[chemin] = octets
-    for chemin, octets in {**donnees_plugin, **donnees_socle}.items():
-        cible = sortie / chemin
+    for chemin, octets in {**donnees_plugin, **donnees_socle, **memoires}.items():
+        cible = (sortie / chemin).resolve()
+        if not str(cible).startswith(str(sortie) + os.sep):
+            raise ErreurAtelier(f"chemin d'export hors du dossier : {chemin}")
         cible.parent.mkdir(parents=True, exist_ok=True)
         cible.write_bytes(octets)
         ecrits[chemin] = octets
     print(f"{len(fichiers)} fichier(s) exporté(s) dans {sortie}")
+    if memoires:
+        print(f"Mémoire des agents : {len(memoires)} fichier(s) dans {DOSSIER_MEMOIRES_EXPORT}/")
     if donnees_plugin:
         lignes_plugin = sum(len(json.loads(o)) for o in donnees_plugin.values())
         print(f"Données du plugin : {lignes_plugin} ligne(s) dans {len(donnees_plugin)} table(s), écrites dans {DOSSIER_DONNEES_PLUGIN}/ (colonnes chiffrées non déchiffrées)")
@@ -3472,7 +3605,8 @@ def agents_service(reg_agents: dict, svc: dict) -> tuple[list[dict], dict[str, s
                         "et prépare le dossier de validation humaine." if coordinateur
                         else f"{titre} : traite les tâches que le coordinateur du service {svc['nom']} lui affecte."),
             "entrees": list(ENTREES_SERVICE), "sorties": list(SORTIES_SERVICE), "criteresReussite": list(CRITERES_SERVICE),
-            "competences": competences, "competencesObligatoires": [], "connexions": {}, "relit": [], "roleRevue": None,
+            "competences": avec_competences_communes(competences, ecrit_des_fichiers(a["outils"])), "competencesObligatoires": [], "connexions": {},
+            "relit": [], "roleRevue": None,
         })
         if not coordinateur:
             a["outils"]["recherche"] = [o for o in a["outils"]["recherche"] if o != "WebSearch"]
@@ -4166,10 +4300,19 @@ def cmd_mettre_a_jour_client(args) -> int:
 
 DELAI_EXPORT_HEURES = 24
 ROTATION_SAUVEGARDES_JOURS = 14
+# Sauvegarde du poste (hors du dépôt, ~/.local/bin/sauvegarde-quotidienne.sh, rotation « restic forget --keep-daily 7
+# --keep-weekly 4 --keep-monthly 6 ») : elle couvre tout $HOME, donc instance/ ; une donnée purgée y reste jusqu'à environ
+# 6 mois (revue du 18/10/2026, M3). Depuis le 18/10/2026, instance/ est exclue de cette sauvegarde (décision de l'opérateur) ;
+# seuls les instantanés antérieurs la contiennent encore. Le script ne la modifie pas.
+RETENTION_SAUVEGARDE_POSTE_MOIS = 6
 AVERTISSEMENT_SAUVEGARDES = (
     "Les sauvegardes existantes ne sont PAS modifiées : elles contiennent encore les données de ce client "
-    f"jusqu'à leur expiration par rotation ({ROTATION_SAUVEGARDES_JOURS} jours). Une restauration d'avant la purge "
-    "les ferait revenir : la purge doit alors être rejouée."
+    f"jusqu'à leur expiration par rotation ({ROTATION_SAUVEGARDES_JOURS} jours pour les sauvegardes de l'instance ; "
+    f"et, pour les instantanés restic du poste pris AVANT le 18/10/2026, jusqu'à environ {RETENTION_SAUVEGARDE_POSTE_MOIS} "
+    "mois : depuis le 18/10/2026, instance/ est exclue de la sauvegarde du poste (~/.config/backup/excludes.txt, "
+    "décision de l'exploitant). Une restauration d'avant la purge les ferait revenir : la purge doit alors être rejouée. "
+    "Pour effacer plus tôt des anciens instantanés (décision de l'exploitant, jamais faite par ce script) : "
+    "« restic forget <id> » puis « restic prune »."
 )
 LIMITE_EXPORT = (
     "L'export contient le paquet de l'organisation (agents, projets, tâches, compétences), dans donnees-socle/ le journal "
@@ -4318,6 +4461,101 @@ def resume_comptes(tables: dict) -> str:
         return f"0 ligne dans les {len(tables)} tables"
     return (f"{sum(non_vides.values())} ligne(s) dans {len(non_vides)} table(s) sur {len(tables)} : "
             + ", ".join(f"{t} {n}" for t, n in sorted(non_vides.items())))
+
+
+# ---------------------------------------------------------------------------
+# Effacement d'une personne dans la mémoire des agents (memoire-para, revue du 18/10/2026, M3)
+# ---------------------------------------------------------------------------
+
+FICHIER_JOURNAL_PURGES_MEMOIRES = "journal-purges-memoires.jsonl"
+MOTIF_MEMOIRE_MIN = 3
+
+
+def _cle_motif(texte: str) -> str:
+    return unicodedata.normalize("NFC", texte).casefold()
+
+
+def fichiers_memoire(company_id: str):
+    """(rôle, chemin relatif au dossier memoire/, chemin) de chaque fichier ordinaire sous ESPACES/<id>/<rôle>/memoire/,
+    quarantaine comprise. Aucun lien symbolique n'est suivi (l'agent écrit dans ce dossier : un lien pourrait viser un
+    fichier hors de son espace)."""
+    racine = ESPACES / company_id
+    if not racine.is_dir() or racine.is_symlink():
+        return
+    for role in sorted(racine.iterdir()):
+        memoire = role / "memoire"
+        if role.is_symlink() or not role.is_dir() or memoire.is_symlink() or not memoire.is_dir():
+            continue
+        for dossier, sous, noms in os.walk(memoire, followlinks=False):
+            sous[:] = sorted(d for d in sous if not (Path(dossier) / d).is_symlink())
+            for nom in sorted(noms):
+                f = Path(dossier) / nom
+                if f.is_symlink() or not f.is_file():
+                    continue
+                yield role.name, f.relative_to(memoire), f
+
+
+def purger_memoires(slug: str, motif: str, confirmer: bool) -> dict:
+    """Cherche le motif (sans casse) dans la mémoire de tous les agents de toutes les entreprises du client, et, si
+    `confirmer`, efface les lignes qui le contiennent (un fichier dont le NOM contient le motif est supprimé en entier).
+    Rend le bilan, sans le motif ni aucune ligne : comptes par fichier, chemins (masqués s'ils contiennent le motif)."""
+    if len(motif.strip()) < MOTIF_MEMOIRE_MIN:
+        raise ErreurAtelier(f"--motif doit compter au moins {MOTIF_MEMOIRE_MIN} caractères (sinon trop de lignes seraient effacées)")
+    registre = lire_registre_client(slug)
+    if registre is None:
+        raise ErreurAtelier(f"aucun registre local pour le client {slug} : rien n'est cherché")
+    cle = _cle_motif(motif.strip())
+    fichiers = []
+    for service, e in sorted(registre["entreprises"].items()):
+        cid = e["entrepriseId"]
+        for role, relatif, chemin in fichiers_memoire(cid):
+            nom_vise = cle in _cle_motif(str(relatif))
+            texte = chemin.read_bytes().decode("utf-8", "surrogateescape")
+            lignes = texte.splitlines(keepends=True)
+            gardees = [l for l in lignes if cle not in _cle_motif(l)]
+            if not nom_vise and len(gardees) == len(lignes):
+                continue
+            affiche = "<chemin contenant le motif>" if nom_vise else str(relatif)
+            fichiers.append({"service": service, "entreprise": cid, "role": role, "fichier": affiche,
+                             "lignes": len(lignes) - len(gardees), "supprime": nom_vise})
+            if not confirmer:
+                continue
+            if nom_vise:
+                chemin.unlink()
+                continue
+            temporaire = chemin.with_name(f".{chemin.name}.purge-{os.getpid()}")
+            temporaire.write_bytes("".join(gardees).encode("utf-8", "surrogateescape"))
+            os.chmod(temporaire, chemin.stat().st_mode & 0o777)
+            os.replace(temporaire, chemin)
+    bilan = {
+        "date": dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "client": slug, "aBlanc": not confirmer,
+        "empreinteMotif": hashlib.sha256(cle.encode("utf-8")).hexdigest(),
+        "fichiers": fichiers, "lignes": sum(f["lignes"] for f in fichiers),
+    }
+    if confirmer:
+        journal = dossier_client(slug) / FICHIER_JOURNAL_PURGES_MEMOIRES
+        with open(journal, "a", encoding="utf-8") as j:
+            j.write(json.dumps(bilan, ensure_ascii=False) + "\n")
+        os.chmod(journal, 0o600)
+    return bilan
+
+
+def cmd_purger_memoires(args) -> int:
+    bilan = purger_memoires(args.client, args.motif, args.confirmer and not args.a_blanc)
+    prefixe = "À blanc (rien n'est effacé ; --confirmer pour effacer) : " if bilan["aBlanc"] else "Effacé : "
+    print(f"{prefixe}{bilan['lignes']} ligne(s) dans {len(bilan['fichiers'])} fichier(s) de mémoire d'agents du client {args.client}.")
+    for f in bilan["fichiers"]:
+        print(f"  {f['service']}/{f['role']}/memoire/{f['fichier']} : {f['lignes']} ligne(s)" + (" (fichier supprimé : son nom contient le motif)" if f["supprime"] else ""))
+    if not bilan["aBlanc"]:
+        print(f"Journal (sans le motif ni les lignes) : {dossier_client(args.client) / FICHIER_JOURNAL_PURGES_MEMOIRES}")
+    print(AVERTISSEMENT_SAUVEGARDES)
+    return 0
+
+
+def memoires_pour_export(company_id: str) -> dict[str, bytes]:
+    """Mémoire des agents de l'entreprise (portabilité, M3) : fichiers sous memoires-agents/<rôle>/, sans lien suivi."""
+    return {f"{DOSSIER_MEMOIRES_EXPORT}/{role}/{relatif.as_posix()}": chemin.read_bytes() for role, relatif, chemin in fichiers_memoire(company_id)}
 
 
 def cmd_purger(args) -> int:
@@ -4510,6 +4748,11 @@ def main(argv=None) -> int:
                     help="autorise la purge d'une entreprise sans registre local (instance/atelier-client/<slug>/entreprise.json) ; exige --nom-confirme")
     pg.add_argument("--nom-confirme", default=None, dest="nom_confirme",
                     help="avec --hors-marqueur : nom exact de l'entreprise, retapé à l'identique")
+    pm = sp.add_parser("purger-memoires")
+    pm.add_argument("--client", required=True, help="identifiant (slug) du client enregistré sous instance/atelier-client/<slug>/")
+    pm.add_argument("--motif", required=True, help="texte qui désigne la personne (nom, courriel, numéro), cherché sans casse")
+    pm.add_argument("--confirmer", action="store_true", help="efface vraiment ; sans lui : à blanc (liste les comptes, n'écrit rien)")
+    pm.add_argument("--a-blanc", "--a_blanc", action="store_true", dest="a_blanc", help="à blanc (défaut) : n'écrit rien")
     r = sp.add_parser("reinitialiser")
     r.add_argument("--confirmer", default="")
     j = sp.add_parser("jeton")
@@ -4534,6 +4777,7 @@ def main(argv=None) -> int:
         "assurer-connexions": cmd_assurer_connexions,
         "exporter": cmd_exporter,
         "purger": cmd_purger,
+        "purger-memoires": cmd_purger_memoires,
         "reinitialiser": cmd_reinitialiser,
         "jeton": cmd_jeton,
         "test-reel": cmd_test_reel,

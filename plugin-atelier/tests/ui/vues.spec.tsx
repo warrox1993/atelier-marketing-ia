@@ -44,18 +44,17 @@ describe("navigation", () => {
     pont.chemin = "/RNO/atelier/calendrier";
     rendu = await rendre(createElement(NavigationAtelier, { context: contexte }));
     const liens = Array.from(rendu.conteneur.querySelectorAll("nav.atl-nav a"));
-    expect(liens.map((a) => a.querySelector("span")?.textContent)).toEqual(["Accueil", "Discussion", "Prospects", "Marketing", "Réglages", "Menu principal (tableau de bord)"]);
+    expect(liens.map((a) => a.querySelector("span")?.textContent)).toEqual(["Accueil", "Discussion", "Prospects", "Marketing", "Réglages"]);
     expect(rendu.conteneur.querySelector('a[aria-current="page"]')?.textContent).toContain("Marketing");
     expect(rendu.conteneur.querySelector('a[aria-current="page"]')?.getAttribute("href")).toBe("/RNO/atelier/campagnes");
   });
-  it("le pied de la barre latérale offre une sortie vers le tableau de bord de l'hôte", async () => {
+  it("la barre latérale n'offre plus de seconde sortie : l'hôte propose déjà « Retour au menu principal »", async () => {
     pont.chemin = "/RNO/atelier/accueil";
     rendu = await rendre(createElement(NavigationAtelier, { context: contexte }));
-    const sortie = parTexte(rendu.conteneur.querySelector(".atl-nav-pied")!, "a", "Menu principal (tableau de bord)");
-    expect(sortie.getAttribute("href")).toBe("/RNO/dashboard");
-    expect(sortie.hasAttribute("aria-current")).toBe(false);
-    await cliquer(sortie);
-    expect(pont.navigations).toContain("/dashboard");
+    expect(rendu.conteneur.querySelector(".atl-nav-pied")).toBeNull();
+    expect(rendu.conteneur.querySelector(".atl-nav-sortie")).toBeNull();
+    expect(rendu.conteneur.textContent).not.toContain("Menu principal");
+    expect(rendu.conteneur.querySelectorAll("nav.atl-nav a")).toHaveLength(5);
   });
   it("la barre latérale marque Prospects pour la carte et Réglages pour la corbeille", async () => {
     pont.chemin = "/RNO/atelier/carte";
@@ -77,6 +76,16 @@ describe("navigation", () => {
     expect(rubriques?.querySelectorAll("a")).toHaveLength(5);
     await cliquer(parTexte(rubriques!, "a", "Réglages"));
     expect(pont.navigations).toContain("/atelier/mise-en-place");
+  });
+  it("les vues de groupe (départements, organigramme) n'affichent pas les rubriques d'un service", async () => {
+    for (const vue of ["departements", "organigramme"]) {
+      rendu?.demonter();
+      const c = await page(`/RNO/atelier/${vue}`);
+      expect(c.querySelector("nav.atl-onglets")).toBeNull();
+    }
+    rendu?.demonter();
+    const c = await page("/RNO/atelier/equipe");
+    expect(c.querySelector("nav.atl-onglets")).not.toBeNull();
   });
   it("l'entrée de la barre latérale mène à l'atelier", async () => {
     rendu = await rendre(createElement(EntreeAtelier, { context: contexte }));

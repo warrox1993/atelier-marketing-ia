@@ -1,0 +1,107 @@
+From 75bd533d4460550329fcb11ba72a317d86a7167b Mon Sep 17 00:00:00 2001
+From: Jean-Baptiste Dhondt <114347858+warrox1993@users.noreply.github.com>
+Date: Sun, 18 Oct 2026 15:57:10 +0200
+Subject: [PATCH] =?UTF-8?q?fix(ui):=20vues=20de=20groupe=20de=20l'atelier?=
+ =?UTF-8?q?=20(d=C3=A9partements,=20organigramme)=20en=20pleine=20largeur,?=
+ =?UTF-8?q?=20sans=20colonne=20de=20service?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_012wNMctSYPLnKWnVjmhdZQv
+---
+ ui/src/components/CompanyHomeRedirect.tsx       |  8 ++++++++
+ .../CompanyHomeRedirect.vue-groupe.test.ts      | 17 +++++++++++++++++
+ ui/src/components/Layout.production.tsx         |  6 ++++--
+ ui/src/components/Layout.tsx                    |  6 ++++--
+ 4 files changed, 33 insertions(+), 4 deletions(-)
+ create mode 100644 ui/src/components/CompanyHomeRedirect.vue-groupe.test.ts
+
+diff --git a/ui/src/components/CompanyHomeRedirect.tsx b/ui/src/components/CompanyHomeRedirect.tsx
+index 2bb072f1d..158a6dcf5 100644
+--- a/ui/src/components/CompanyHomeRedirect.tsx
++++ b/ui/src/components/CompanyHomeRedirect.tsx
+@@ -14,6 +14,14 @@ export const CHEMIN_PAGE_ATELIER = "atelier";
+ export const CHEMIN_DEPARTEMENTS_ATELIER = `${CHEMIN_PAGE_ATELIER}/departements`;
+ 
+ /** Vrai si un plugin prêt déclare la page principale de l'atelier. */
++/**
++ * Vues de niveau GROUPE de l'atelier (tous les services du client) : affichées en pleine largeur,
++ * sans la colonne de navigation d'un service (patch local de l'Atelier).
++ */
++export function estVueGroupeAtelier(pathname: string): boolean {
++  return new RegExp(`/${CHEMIN_PAGE_ATELIER}/(departements|organigramme)(/|$)`, "u").test(pathname);
++}
++
+ export function atelierDisponible(contributions: PluginUiContribution[] | undefined): boolean {
+   return (contributions ?? []).some((contribution) =>
+     contribution.slots.some((slot) => slot.type === "page" && slot.routePath === CHEMIN_PAGE_ATELIER),
+diff --git a/ui/src/components/CompanyHomeRedirect.vue-groupe.test.ts b/ui/src/components/CompanyHomeRedirect.vue-groupe.test.ts
+new file mode 100644
+index 000000000..b8577c81d
+--- /dev/null
++++ b/ui/src/components/CompanyHomeRedirect.vue-groupe.test.ts
+@@ -0,0 +1,17 @@
++import { describe, expect, it } from "vitest";
++import { estVueGroupeAtelier } from "./CompanyHomeRedirect";
++
++describe("estVueGroupeAtelier", () => {
++  it("reconnaît les vues de groupe de l'atelier, pour tout préfixe d'entreprise", () => {
++    expect(estVueGroupeAtelier("/CLIA/atelier/departements")).toBe(true);
++    expect(estVueGroupeAtelier("/CLIA/atelier/organigramme")).toBe(true);
++    expect(estVueGroupeAtelier("/CLIAAAA/atelier/organigramme/")).toBe(true);
++  });
++
++  it("garde la colonne du service partout ailleurs", () => {
++    expect(estVueGroupeAtelier("/CLIA/atelier")).toBe(false);
++    expect(estVueGroupeAtelier("/CLIA/atelier/accueil")).toBe(false);
++    expect(estVueGroupeAtelier("/CLIA/atelier/departements-archives")).toBe(false);
++    expect(estVueGroupeAtelier("/CLIA/agents/organigramme")).toBe(false);
++  });
++});
+diff --git a/ui/src/components/Layout.production.tsx b/ui/src/components/Layout.production.tsx
+index 9de08a091..215a83c3e 100644
+--- a/ui/src/components/Layout.production.tsx
++++ b/ui/src/components/Layout.production.tsx
+@@ -1,3 +1,4 @@
++import { estVueGroupeAtelier } from "./CompanyHomeRedirect";
+ import { ChatSetupSidebarProvider } from "@/context/ChatSetupSidebarContext";
+ import { PluginAppShellOverlays } from "./PluginAppShellOverlays";
+ import {
+@@ -207,8 +208,9 @@ export function Layout() {
+     enabled: Boolean(routeSidebarCompanyId && pluginRoutePath),
+   });
+   const routeSidebarSlot = useMemo(
+-    () => resolveRouteSidebarSlot(routeSidebarSlots, pluginRoutePath),
+-    [pluginRoutePath, routeSidebarSlots],
++    // Vues de groupe de l'atelier : pas de colonne de service (pleine largeur).
++    () => (estVueGroupeAtelier(location.pathname) ? null : resolveRouteSidebarSlot(routeSidebarSlots, pluginRoutePath)),
++    [location.pathname, pluginRoutePath, routeSidebarSlots],
+   );
+   const sidebarContext = useMemo(
+     () => ({
+diff --git a/ui/src/components/Layout.tsx b/ui/src/components/Layout.tsx
+index 368395b97..ddc7328c7 100644
+--- a/ui/src/components/Layout.tsx
++++ b/ui/src/components/Layout.tsx
+@@ -1,3 +1,4 @@
++import { estVueGroupeAtelier } from "./CompanyHomeRedirect";
+ import { SetupWizardSidebarOutlet } from "./SetupWizard";
+ import { ChatSetupSidebarProvider } from "@/context/ChatSetupSidebarContext";
+ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
+@@ -163,8 +164,9 @@ export function Layout({ sidebarSections }: { sidebarSections?: ReactNode }) {
+     enabled: Boolean(routeSidebarCompanyId && pluginRoutePath),
+   });
+   const routeSidebarSlot = useMemo(
+-    () => resolveRouteSidebarSlot(routeSidebarSlots, pluginRoutePath),
+-    [pluginRoutePath, routeSidebarSlots],
++    // Vues de groupe de l'atelier : pas de colonne de service (pleine largeur).
++    () => (estVueGroupeAtelier(location.pathname) ? null : resolveRouteSidebarSlot(routeSidebarSlots, pluginRoutePath)),
++    [location.pathname, pluginRoutePath, routeSidebarSlots],
+   );
+   const sidebarContext = useMemo(
+     () => ({
+-- 
+2.53.0
+

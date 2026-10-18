@@ -2,7 +2,8 @@
 
 Certaines compétences de `organisation/skills/` reprennent une **méthode** (étapes, grille, seuils de départ, liste de
 contrôle, format de sortie) publiée dans un dépôt tiers sous licence libre. La méthode est réécrite en français et
-adaptée au droit belge ; aucun texte n'est recopié tel quel. Chaque compétence concernée a une section « Origine de la
+adaptée au droit belge ; aucun texte n'est recopié tel quel, sauf la copie inchangée du texte d'origine de S8,
+conservée pour la licence (voir sa ligne ci-dessous). Chaque compétence concernée a une section « Origine de la
 méthode » qui renvoie ici. Seules les licences Apache 2.0 et MIT sont admises. Les compétences `docx`, `xlsx`, `pdf`
 et `pptx` du dépôt github.com/anthropics/skills sont sous licence propriétaire : rien n'en est repris.
 
@@ -20,6 +21,7 @@ adaptées (droit belge, validation humaine, sources officielles) par l'Atelier M
 | S5 | github.com/anthropics/skills | b9e19e6f44773509fbdd7001d77ff41a49a486c1 (20/04/2026, dernier commit du dossier `skills/internal-comms`) | Apache 2.0 (fichier `skills/internal-comms/LICENSE.txt`) | Copyright 2026 Anthropic, PBC |
 | S6 | github.com/warrox1993/skills-claude-entreprise | 474785fbcba8429cb034ef35fca20bbfcfd68554 (28/09/2026) | MIT | Copyright (c) 2026 Jean-Baptiste Dhondt (même auteur que l'atelier) |
 | S7 | github.com/affaan-m/ECC | ef648e01899ba3e8dc6371642deaaf64b4477775 (01/10/2026) | dépôt sous MIT (fichier `LICENSE`) ; les compétences métiers reprises portent `license: Apache-2.0` dans leur en-tête (auteur « evos ») : Apache 2.0 appliquée à ces reprises | Copyright (c) 2026 Affaan Mustafa (dépôt) ; auteur des compétences : evos |
+| S8 | github.com/paperclipai/paperclip (socle de l'atelier) | bba6a45f0d364cfd962ac59b3bdf2426a8222adb (12/10/2026, version v2026.1012.0, `socle/VERSION`) | MIT (copie : `socle/patches/LICENSE-Paperclip`) | Copyright (c) 2025 Paperclip AI |
 
 ## Reprises par compétence
 
@@ -177,6 +179,7 @@ adaptées (droit belge, validation humaine, sources officielles) par l'Atelier M
 | `compte-rendu-comite` | S6 | `plugins/entreprise-direction/skills/compte-rendu-reunion/SKILL.md` | décisions, actions avec responsable et échéance, trous marqués, points ouverts, message de diffusion (même auteur) |
 | `suivi-energie-batiment` | S7 | `skills/energy-procurement/SKILL.md` (« Pricing Structures and Utility Bill Anatomy », « Procurement Strategy Selection ») | facture lue par composantes, questions de stratégie d'achat fixe, variable ou mixte (composantes belges selon la CREG) |
 | `demandes-occupants` | S1 | `operations/skills/process-doc/SKILL.md` (« Output », « If Connectors Available », « Tips ») | processus écrit avec RACI, étapes, exceptions, indicateurs ; document existant mis à jour d'abord |
+| `memoire-para` | S8 | `skills/para-memory-files/SKILL.md` et `skills/para-memory-files/references/schemas.md` | méthode PARA en trois couches, règles des faits, schéma des faits, décroissance ; traduite et adaptée (emplacement `./memoire/`, Grep au lieu de `qmd`, pas de personnes privées, source et date obligatoires) ; texte d'origine recopié INCHANGÉ dans `memoire-para/references/origine-paperclip.md` |
 
 ## Texte de la licence MIT de S2
 
@@ -261,6 +264,32 @@ SOFTWARE. ```
 MIT License
 
 Copyright (c) 2026 Jean-Baptiste Dhondt
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+```
+
+## Texte de la licence MIT de S8
+
+```
+MIT License
+
+Copyright (c) 2025 Paperclip AI
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal

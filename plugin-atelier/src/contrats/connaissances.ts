@@ -338,6 +338,10 @@ export const CitationConnaissance = z
   });
 export type CitationConnaissance = z.infer<typeof CitationConnaissance>;
 
+/** Base d'où vient un passage : celle du service de la tâche, ou la base commune du groupe (Direction du client). */
+export const PorteeConnaissance = z.enum(["service", "commune"]);
+export type PorteeConnaissance = z.infer<typeof PorteeConnaissance>;
+
 /** Passage remis à un agent : donnée non fiable, avec la consigne fixe et sa citation. */
 export const PassageRendu = z
   .object({
@@ -355,6 +359,11 @@ export const PassageRendu = z
       })
       .strict()
       .refine((c) => c.rangTexte !== null || c.rangSens !== null, { message: "Un passage rendu vient d'au moins une des deux listes" }),
+    /**
+     * Provenance (décision du 18/10/2026) : `service` = base de l'entreprise de la tâche, `commune` = base de la
+     * Direction du même client. Présente seulement quand la base commune a été consultée (rétrocompatible).
+     */
+    portee: PorteeConnaissance.optional(),
   })
   .strict();
 export type PassageRendu = z.infer<typeof PassageRendu>;

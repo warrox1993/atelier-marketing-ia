@@ -243,12 +243,13 @@ def competences_des_services():
     return noms
 
 
-def controler_competences():
+def controler_competences(bootstrap):
     dossiers = sorted(p.name for p in (ORGA / "skills").iterdir() if p.is_dir())
-    attendues = sorted(set(COMPETENCES_ATTENDUES) | competences_des_services())
+    attendues = sorted(set(COMPETENCES_ATTENDUES) | competences_des_services() | set(bootstrap.COMPETENCES_COMMUNES))
     if dossiers != attendues:
         erreur(f"compétences : attendu {attendues}, trouvé {dossiers} "
-               "(marketing du registre + compétences déclarées par les services ; un dossier orphelin est une erreur)")
+               "(marketing du registre + compétences déclarées par les services + compétences communes du "
+               "générateur ; un dossier orphelin est une erreur)")
     for nom in dossiers:
         dossier = ORGA / "skills" / nom
         chemin = dossier / "SKILL.md"
@@ -707,7 +708,7 @@ def main():
         SOCLE = RACINE / "paperclip"
     bootstrap = charger_bootstrap()
     etape(controler_generation, bootstrap)
-    etape(controler_competences)
+    etape(controler_competences, bootstrap)
     etape(controler_registre, bootstrap)
     etape(controler_connexions)
     etape(controler_services)

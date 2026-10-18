@@ -2,12 +2,12 @@
 
 Document de référence pour l'installateur et pour le client. Il décrit comment l'Atelier organise ses agents en services,
 qui peut parler à qui, quelles compétences existent et comment doter un client de ces services.
-Les chiffres (28 services, 213 agents, 756 flux, 184 compétences) sont recalculés depuis `organisation/registre/services.json`,
+Les chiffres (28 services, 217 agents, 756 flux, 188 compétences) sont recalculés depuis `organisation/registre/services.json`,
 `organisation/registre/agents.json`, `organisation/services/*/agents/*/AGENTS.md` et `organisation/skills/*/SKILL.md`
 (registre version 1.0.0 du 16/10/2026, extension du 17/10/2026).
 
-Répartition : 199 agents dans 27 services (marketing exclu) et 14 agents marketing, soit 213 agents.
-Un service compte de 2 à 12 agents (borne vérifiée par `scripts/verifier-organisation.py`) ; les services hors marketing en comptent de 6 à 9.
+Répartition : 203 agents dans 27 services (marketing exclu) et 14 agents marketing, soit 217 agents.
+Un service compte de 2 à 12 agents (borne vérifiée par `scripts/verifier-organisation.py`) ; les services hors marketing en comptent de 6 à 9 (les 4 agents repris de l'instance, `sinistres`, `transport-douane`, `ingenierie-formation` et `suivi-partenaires`, ont été intégrés le 18/10/2026).
 
 ## 1. Principe
 
@@ -33,7 +33,7 @@ Un service compte de 2 à 12 agents (borne vérifiée par `scripts/verifier-orga
 
 ## 2. Les 28 services
 
-Les agents comptés sont ceux qui ont un fichier de consignes : 213 au total. Pour le marketing, la liste vient de `organisation/registre/agents.json`
+Les agents comptés sont ceux qui ont un fichier de consignes : 217 au total. Pour le marketing, la liste vient de `organisation/registre/agents.json`
 (le registre des services y renvoie sans dupliquer) : 14 agents dont la Porte de contrôle, agent déterministe sans modèle. Le Gardien des connexions,
 agent natif sans modèle, est créé par le système et n'a pas de dossier de consignes. Dans la Direction, le coordinateur général (`coordinateur-general`, rôle `ceo`)
 est le seul interlocuteur de l'humain ; le coordinateur de la Direction (`coordinateur-direction`) se comporte comme celui des autres services.
@@ -46,7 +46,7 @@ est le seul interlocuteur de l'humain ; le coordinateur de la Direction (`coordi
 | Juridique (`juridique`) | JUR | oui | `coordinateur-juridique` | 9 | `lecture-contrats`, `registre-rgpd`, `accords-confidentialite`, `droits-personnes`, `litiges`, `mentions-legales`, `risques-juridiques`, `sous-traitants-rgpd` | 13 |
 | Commercial (`commercial`) | COM | non | `coordinateur-commercial` | 8 | `preparation-rdv`, `propositions`, `renouvellements`, `accueil-leads`, `appels-offres`, `comptes-entreprises`, `pilotage-commercial` | 14 |
 | Recouvrement (`recouvrement`) | REC | non | `coordinateur-recouvrement` | 7 | `balance-agee`, `relances`, `contestations`, `plans-paiement`, `precontentieux`, `verification-encaissements` | 11 |
-| Service après-vente et sinistres (`sav-sinistres`) | SAV | non | `coordinateur-sav` | 7 | `faq`, `reclamations`, `sinistres-particuliers`, `ouverture-sinistres`, `registre-plaintes`, `sinistres-entreprises` | 11 |
+| Service après-vente et sinistres (`sav-sinistres`) | SAV | non | `coordinateur-sav` | 8 | `faq`, `reclamations`, `sinistres-particuliers`, `ouverture-sinistres`, `registre-plaintes`, `sinistres-entreprises`, `sinistres` | 12 |
 | Commerce extérieur (`commerce-exterieur`) | CEX | non | `coordinateur-export` | 6 | `dossiers-export`, `classement-origine`, `controle-sanctions`, `incoterms-paiement`, `marches-etrangers` | 10 |
 | Conformité (`conformite`) | CNF | non | `coordinateur-conformite` | 9 | `veille-reglementaire`, `vigilance-clients`, `conformite-ia`, `conformite-sectorielle`, `controle-communications`, `inventaire-obligations`, `signalements`, `verification-initiatives` | 13 |
 | Comptabilité et finance (`comptabilite-finance`) | CPT | non | `coordinateur-comptabilite` | 9 | `commissions`, `tresorerie`, `cloture-reporting`, `comptabilite-clients`, `comptabilite-fournisseurs`, `comptes-annuels`, `controle-gestion`, `rapprochements` | 15 |
@@ -54,7 +54,7 @@ est le seul interlocuteur de l'humain ; le coordinateur de la Direction (`coordi
 | Informatique (`informatique`) | INF | non | `coordinateur-informatique` | 9 | `documentation`, `procedures-incident`, `changements`, `conformite-cyber`, `continuite-sauvegardes`, `infrastructure`, `postes-et-acces`, `support-utilisateurs` | 13 |
 | Achats (`achats`) | ACH | non | `coordinateur-achats` | 8 | `comparaison-offres`, `analyse-depenses`, `commandes-approvisionnement`, `contrats-fournisseurs`, `evaluation-fournisseurs`, `expression-besoins`, `sourcing` | 13 |
 | Qualité (`qualite`) | QUA | non | `coordinateur-qualite` | 7 | `procedures`, `maitrise-documentaire`, `non-conformites`, `audit-interne`, `revue-direction`, `amelioration-processus` | 12 |
-| Logistique (`logistique`) | LOG | non | `coordinateur-logistique` | 7 | `prevision-demande`, `gestion-stocks`, `transport`, `douane-origine`, `retours`, `litiges-transport` | 12 |
+| Logistique (`logistique`) | LOG | non | `coordinateur-logistique` | 8 | `prevision-demande`, `gestion-stocks`, `transport`, `douane-origine`, `retours`, `litiges-transport`, `transport-douane` | 14 |
 | Production (`production`) | PRD | non | `coordinateur-production` | 8 | `plan-capacite`, `ordonnancement`, `performance-trs`, `amelioration-continue`, `non-conformites-atelier`, `maintenance-equipements`, `methodes-industrialisation` | 11 |
 | Recherche et innovation (`recherche-innovation`) | RDI | non | `coordinateur-rdi` | 6 | `veille-brevets`, `dossiers-subsides`, `incitants-fiscaux-rd`, `veille-technologique`, `portefeuille-innovation` | 10 |
 | Communication (`communication`) | CMN | non | `coordinateur-communication` | 7 | `relations-presse`, `communication-interne`, `adaptation-linguistique`, `cellule-crise`, `editorial-institutionnel`, `veille-medias` | 13 |
@@ -62,12 +62,12 @@ est le seul interlocuteur de l'humain ; le coordinateur de la Direction (`coordi
 | Fiscalité (`fiscalite`) | FIS | oui | `coordinateur-fiscalite` | 7 | `calendrier-fiscal`, `avantages-mobilite`, `controle-et-veille-fiscale`, `impot-societes`, `precompte-fiches-281`, `tva` | 13 |
 | Gestion de projets (`gestion-projets`) | PMO | non | `coordinateur-pmo` | 7 | `suivi-portefeuille`, `cadrage-projets`, `planification-ressources`, `risques-projets`, `reporting-comites`, `conduite-changement-projets` | 12 |
 | Hygiène, sécurité et environnement (`hse`) | HSE | oui | `coordinateur-hse` | 7 | `analyse-risques`, `plan-prevention`, `accidents-travail`, `prevention-psychosociale`, `plan-urgence`, `environnement` | 11 |
-| Formation (`formation`) | FOR | non | `coordinateur-formation` | 7 | `conception-modules`, `plan-formation`, `financement`, `evaluation-formation`, `formations-obligatoires`, `conduite-changement` | 11 |
+| Formation (`formation`) | FOR | non | `coordinateur-formation` | 8 | `conception-modules`, `plan-formation`, `financement`, `evaluation-formation`, `formations-obligatoires`, `conduite-changement`, `ingenierie-formation` | 13 |
 | Juridique social (`juridique-social`) | JSO | oui | `coordinateur-juridique-social` | 7 | `contrats-travail`, `absences-incapacite`, `fin-contrat`, `relations-collectives`, `temps-travail-reglement`, `veille-sociale` | 11 |
 | Données et BI (`donnees-bi`) | DAT | non | `coordinateur-donnees` | 7 | `analyste-donnees`, `controle-analyses`, `gouvernance-rgpd`, `ingenierie-donnees`, `qualite-donnees`, `tableaux-de-bord` | 12 |
 | Événementiel (`evenementiel`) | EVT | non | `coordinateur-evenementiel` | 6 | `conception-evenement`, `logistique-evenement`, `invitations-inscriptions`, `salons`, `bilan-suivi` | 13 |
 | Services généraux (`services-generaux`) | SGX | non | `coordinateur-services-generaux` | 6 | `energie-batiments`, `maintenance-batiments`, `baux-et-espaces`, `flotte-mobilite`, `services-occupants` | 12 |
-| Partenariats (`partenariats`) | PAR | non | `coordinateur-partenariats` | 6 | `recherche-selection`, `accords`, `pilotage-portefeuille`, `co-marketing`, `fournisseurs-produits` | 12 |
+| Partenariats (`partenariats`) | PAR | non | `coordinateur-partenariats` | 7 | `recherche-selection`, `accords`, `pilotage-portefeuille`, `co-marketing`, `fournisseurs-produits`, `suivi-partenaires` | 13 |
 
 La colonne « Compétences » compte les compétences déclarées dans l'en-tête `skills:` des agents du service, y compris les 5 compétences communes aux coordinateurs (chapitre 4).
 
@@ -161,13 +161,13 @@ Deux outils complètent l'usine : l'observabilité Phoenix (`docs/phoenix.md`) e
 
 ## 4. Compétences
 
-Les 184 compétences sont dans `organisation/skills/<nom>/SKILL.md`. Chacune a les mêmes sections : objectif, quand l'utiliser, prérequis,
+Les 188 compétences sont dans `organisation/skills/<nom>/SKILL.md`. Chacune a les mêmes sections : objectif, quand l'utiliser, prérequis,
 entrées, étapes, livrable, critères de réussite, limites, exemple.
 
 **Règle de qualité.**
-- 142 compétences sur 184 ont une section « Sources officielles » : les pages consultées, avec l'adresse, la date de lecture
+- 145 compétences sur 188 ont une section « Sources officielles » : les pages consultées, avec l'adresse, la date de lecture
   et ce que chaque source établit. Une règle ou un délai sans source consultée n'est pas présenté comme acquis.
-- 159 compétences ont une section « À vérifier par un professionnel » qui nomme le métier à consulter selon le sujet (par exemple le conseiller en prévention, le secrétariat social ou l'assureur pour un accident du travail, un juriste ou un avocat pour une question de responsabilité).
+- 163 compétences ont une section « À vérifier par un professionnel » qui nomme le métier à consulter selon le sujet (par exemple le conseiller en prévention, le secrétariat social ou l'assureur pour un accident du travail, un juriste ou un avocat pour une question de responsabilité).
 - Tout article de loi, taux, délai ou montant incertain est marqué « à vérifier » dans le texte.
 - Aucune compétence n'envoie, ne signe, ne dépose ni ne déclare quoi que ce soit : elle prépare, l'humain décide.
 
@@ -269,6 +269,7 @@ Les compétences listées sous un service sont celles de l'en-tête `skills:` de
 - `gestion-dossier-sinistre` : Organise le suivi administratif d'un dossier de sinistre par un intermédiaire d'assurance en Belgique : ouverture, pièces à réunir, délais de déclaration à l'assureur, suivi avec l'assureur, communication régulière avec l'assuré, clôture et conservation.
 - `escalade-interne` : Décide s'il faut escalader un dossier client vers un autre service (informatique, commercial, juridique, direction) ou le garder, mesure l'impact en six dimensions, rédige le dossier d'escalade (gravité, impact, description, ce qui a été tenté, étapes de reproduction, communication client, demande précise et échéance), fixe une cadence de suivi et prépare la désescalade.
 - `registre-plaintes` : Tient et analyse le registre des plaintes d'une entreprise belge, en particulier d'un intermédiaire d'assurance : champs obligatoires de chaque plainte, classement par cause, délais de traitement calculés, tendances, causes récurrentes appuyées par des extraits anonymisés et rapport périodique à la direction avec des mesures proposées.
+- `sinistre-conteste-recours` : Prépare le dossier d'un sinistre dont la décision de l'assureur est contestée (refus total ou partiel, réduction, chiffrage d'expertise, retard) ou qui ouvre un recours contre un tiers responsable : tableau de confrontation motifs de l'assureur, clause citée, faits et pièces, échéancier des délais à vérifier, projet de demande de réexamen et question à l'avocat. À utiliser quand un client conteste ce que l'assureur a décidé sur son sinistre, avant toute médiation ; jamais pour juger la couverture ni la responsabilité.
 
 ### Commerce extérieur (`commerce-exterieur`)
 
@@ -354,6 +355,8 @@ Les compétences listées sous un service sont celles de l'en-tête `skills:` de
 - `evaluation-transporteurs` : Évalue les transporteurs d'une entreprise sur un tableau de bord court (ponctualité à l'enlèvement et à la livraison, acceptation des demandes, ratio de réclamations, exactitude des factures, délai d'enlèvement), vérifie leur licence de transport, et propose de concentrer ou de diversifier les volumes et les critères de sortie.
 - `gestion-exceptions-transport` : Traite un incident de transport (retard, avarie apparente ou non apparente, manquant, perte, livraison refusée ou erronée) : chronologie, classement de gravité, réserves encore possibles selon la convention CMR pour le transport routier international, arbitrage chiffré entre absorber et réclamer, projet de réclamation au transporteur.
 - `classement-douanier-origine` : Prépare, pour une PME belge qui exporte ou importe, la proposition de classement douanier (code SH, NC, TARIC), l'analyse de l'origine préférentielle au titre des accords de l'UE, le statut d'exportateur enregistré (REX) et le premier examen des sanctions et des biens à double usage (règlement (UE) 2021/821), avec signal d'arrêt et escalade.
+- `cout-rendu-regimes-douaniers` : Chiffre le coût rendu (landed cost) d'une expédition hors UE ou d'une importation et compare les régimes douaniers possibles (mise en libre pratique, admission temporaire, perfectionnement, entrepôt) à partir de la valeur en douane, des droits, de la TVA à l'importation, du transport et de l'Incoterm, avec chaque taux sourcé ou marqué à vérifier. À utiliser avant d'accepter un devis ou une importation hors UE, quand le prix rendu de la marchandise ou le choix d'un régime pèse sur la marge ; jamais pour déclarer, classer ou choisir un régime seule.
+- `incoterms-paiement-international` : Prépare le choix d'un Incoterm et du moyen de paiement d'une vente ou d'un achat international par une liste de questions (qui paie le transport, où passe le risque, qui dédouane, qui assure) et compare les moyens de paiement et l'assurance-crédit, sans reproduire le texte des Incoterms. À utiliser avant une offre ou une commande internationale ; jamais pour fixer seul les conditions de vente, signer ou engager un paiement ou une assurance.
 
 ### Production (`production`)
 
@@ -431,6 +434,8 @@ Les compétences listées sous un service sont celles de l'en-tête `skills:` de
 - `evaluation-formation` : Évalue une formation et vérifie son efficacité : dispositif à quatre niveaux (réaction, apprentissage, comportement, résultats), délai d'attente avant la mesure, comparaison avant et après sur le même indicateur, méthode de mesure adaptée au type de problème visé, verdict efficace, à prolonger ou inefficace, plan de transfert et bilan agrégé.
 - `registre-formations-obligatoires` : Établit et tient le registre des formations obligatoires d'une entreprise belge par fonction : bien-être au travail, secouristes, incendie et évacuation, recyclage des intermédiaires d'assurance inscrits à la FSMA, prévention du blanchiment et autres obligations sectorielles, avec base légale citée et datée, périodicité sourcée, dernière date connue et prochaine échéance.
 - `conduite-changement` : Prépare l'accompagnement d'un changement dans une PME belge (nouvel outil, nouvelle procédure, réorganisation) en cinq étapes (sensibilisation, adhésion, connaissance, capacité, renforcement), avec séquence de communication datée, liste de ce qui ne change pas, lecture des résistances comme des signaux, détection de la fatigue du changement et obligations d'information du personnel à vérifier.
+- `selection-organisme-formation` : Compare des organismes de formation externes pour un besoin donné sur une grille écrite (adéquation au programme, formateur, modalités, reconnaissance pour les dispositifs de financement, références, prix total, conditions d'annulation) à partir de leurs offres et devis, et prépare le dossier de choix et le brouillon de demande de précisions. À utiliser quand plusieurs organismes ou un seul devis doivent être évalués avant une inscription ou une commande ; jamais pour concevoir le module, inscrire ou choisir seule.
+- `comparaison-offres-fournisseurs` : Compare les offres reçues de plusieurs fournisseurs pour un achat de PME belge sur une grille explicite : coût total de possession, délais, niveau de service (SLA), solvabilité à partir des données publiques (BCE, comptes annuels déposés à la Banque nationale), références ; détecte les offres anormalement basses ou incomplètes et rédige une recommandation motivée, la décision restant humaine. À utiliser dès que deux offres ou plus répondent à une même demande ; jamais pour extrapoler un prix absent, divulguer les prix d'un fournisseur à un autre, contacter un fournisseur ou choisir à la place de l'humain.
 
 ### Juridique social (`juridique-social`)
 
@@ -481,6 +486,7 @@ Les compétences listées sous un service sont celles de l'en-tête `skills:` de
 - `preparation-rendez-vous-b2b` : Prépare un rendez-vous commercial avec une entreprise belge : fiche entreprise à partir des données publiques (BCE, comptes annuels de la Banque nationale), besoins probables, carte des interlocuteurs (rôle, engagement, position, preuve), questions de découverte, objections probables, prochaine étape à obtenir.
 - `co-marketing-partenaire` : Structure une campagne de co-marketing avec un partenaire (webinaire commun, contenu, événement, offre conjointe) en un plan d'accord en 8 points : description, responsabilités, calendrier, traitement des contacts, promotion, marque, coûts, partage des indicateurs, avec la couche RGPD du partage de contacts entre entreprises.
 - `recherche-sourcee` : Mène une recherche documentaire et vérifie les faits : chaque observation porte sa source, sa date de collecte, son statut d'accès et sa limite, et distingue fait vérifié, inférence, hypothèse et recommandation.
+- `suivi-execution-convention` : Tient le registre des conventions de partenariat signées et suit leur exécution : échéancier (terme, préavis, reconduction, révision), obligations réciproques constatées, avenants à demander, manquements à signaler, brouillons de rappel au partenaire et plan de renouvellement ou de fin. À utiliser après la signature d'une convention, avant chaque échéance contractuelle ou quand une obligation paraît ne pas être tenue ; jamais pour rédiger la convention, la notifier, la rompre ou conclure à un manquement.
 
 ## 5. Mise en place chez un client
 
@@ -498,7 +504,7 @@ rien ne travaille tant qu'un humain ne les a pas activés. Le détail de l'insta
    dote d'un seul coup d'un client déjà en place de tous les services de la fiche : l'entreprise `<UUID>` devient le service marketing, les autres services et la Direction sont créés par le chemin habituel,
    en pause. La fiche doit contenir le service marketing (`services: "tous"` convient). `--a-blanc` n'écrit rien.
 4. **Déclarer les services.** `python3 -I scripts/declarer-services.py <slug-client>` envoie au plugin quelles entreprises sont quels services, avec les seuls flux dont les deux services appartiennent au client
-   (flux métier et réseau des coordinateurs). La commande est idempotente (la déclaration remplace la précédente) et ne fait aucun appel de modèle. Elle donne aussi une configuration vide du plugin aux entreprises qui n'en ont pas : sans cela,
+   (flux métier et réseau des coordinateurs). La déclaration part de la route de la Direction : le plugin n'accepte comme Direction que l'entreprise de la route ou une entreprise déjà déclarée pour ce client, et jamais une entreprise ajoutée à un client qui a déjà sa Direction (revue de sécurité du 18/10/2026, M1). Si la Direction s'ajoute à un client déjà déclaré sans elle, le script passe en deux temps (Direction ajoutée comme simple service depuis un membre, puis déclarée Direction depuis sa propre route). La commande est idempotente (la déclaration remplace la précédente) et ne fait aucun appel de modèle. Elle donne aussi une configuration vide du plugin aux entreprises qui n'en ont pas : sans cela,
    une demande entre services resterait en file sans arriver à destination.
 5. **Activer.** Un humain active les agents du ou des services utiles, un service à la fois, et valide chaque approbation de flux sensible.
 

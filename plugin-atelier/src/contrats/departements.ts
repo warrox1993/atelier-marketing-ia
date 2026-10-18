@@ -27,6 +27,22 @@ export interface ReponseDepartements {
   departements: DepartementDeclare[];
 }
 
+/** Un flux autorisé entre deux services du client (matrice `flux_services`), tel que rendu par `services.flux`. */
+export interface FluxServiceLu {
+  /** Slug du service source. */
+  source: string;
+  /** Slug du service cible. */
+  cible: string;
+  objet: string;
+  approbationHumaine: boolean;
+}
+
+/** Réponse de `services.flux` : la matrice des flux du client de l'entreprise de la requête (jamais d'un autre client). */
+export interface ReponseFluxServices {
+  client: string | null;
+  flux: FluxServiceLu[];
+}
+
 export type NiveauAlerte = "haute" | "moyenne";
 
 export interface AlerteDepartement {

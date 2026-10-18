@@ -345,7 +345,7 @@ export function requeteMotsCles(
     sql:
       `WITH t AS (SELECT websearch_to_tsquery('french', m.mot) || websearch_to_tsquery('dutch', m.mot) AS tsq ` +
       `FROM jsonb_array_elements_text($${q}::jsonb) AS m(mot)) ` +
-      `SELECT p.id, c.rang AS score FROM ${from} ` +
+      `SELECT p.id, c.nb AS nb, c.rang AS score FROM ${from} ` +
       `CROSS JOIN LATERAL (SELECT count(*) FILTER (WHERE p.tsv @@ t.tsq) AS nb, ` +
       `COALESCE(sum(ts_rank_cd(p.tsv, t.tsq)) FILTER (WHERE p.tsv @@ t.tsq), 0) AS rang FROM t) c ` +
       `WHERE ${where} AND c.nb >= $${s}::int ORDER BY c.nb DESC, score DESC, p.id ASC LIMIT $${l}`,
@@ -526,19 +526,117 @@ function lireIndex(ligne: Record<string, unknown> | undefined): IndexActif | nul
   };
 }
 
+/** Listes de candidats d'UNE base, avant la fusion (chaque liste déjà triée, meilleur d'abord). */
+interface CandidatsBase {
+  companyId: string;
+  index: IndexActif | null;
+  /** Mots-clés : nombre de termes trouvés puis somme des `ts_rank_cd` (même ordre que le SQL). */
+  texte: Array<{ id: string; nb: number; score: number }>;
+  /** Sens : produit scalaire (cosinus, vecteurs normalisés), au-dessus de `similariteMin`. */
+  sens: Array<{ id: string; score: number }>;
+}
+
+/** Options de la recherche, résolues par la route (jamais par l'entrée de l'agent). */
+export interface OptionsRecherche {
+  /**
+   * Base commune du groupe (décision du 18/10/2026) : l'entreprise Direction du même client, résolue côté
+   * serveur depuis `services_entreprises`. Absente, nulle ou égale à l'entreprise de la tâche : une seule base.
+   */
+  baseCommune?: string | null;
+}
+
+/**
+ * Candidats d'une base : index actif, liste mots-clés, liste sens. Toutes les requêtes sont bornées à
+ * `ctx.companyId` (`company_id = $1`). `strict` : un modèle d'index différent du vectoriseur lève (base du
+ * service, comportement d'origine) ; sinon la base est cherchée en plein texte seulement (base commune : son
+ * index a pu être construit avec un autre modèle, et la configuration de la Direction n'est pas lisible pendant
+ * une invocation portée par le service).
+ */
+async function candidatsDeBase(
+  deps: DependancesRecherche,
+  executer: ExecuteurRequetes,
+  ctx: ContexteRecherche,
+  filtres: FiltresResolus,
+  termes: readonly string[],
+  vecteurQuestion: () => Promise<Float32Array>,
+  similariteMin: number,
+  strict: boolean,
+): Promise<CandidatsBase> {
+  const ri = requeteIndexActif(ctx.companyId);
+  const index = lireIndex((await executer(ri.sql, ri.params))[0]);
+
+  let texte: CandidatsBase["texte"] = [];
+  if (termes.length > 0) {
+    const rm = requeteMotsCles(ctx, filtres, termes, CANDIDATS_PAR_LISTE);
+    texte = (await executer(rm.sql, rm.params)).map((l) => ({ id: String(l.id), nb: Number(l.nb ?? 0) || 0, score: Number(l.score ?? 0) || 0 }));
+  }
+
+  let sens: CandidatsBase["sens"] = [];
+  if (index && index.fournisseur !== "aucun" && deps.vectoriseur.type !== "aucun" && index.dimension) {
+    let compatible = true;
+    if (strict) verifierEmpreinteIndex(empreinteAttendue(index), deps.vectoriseur);
+    else compatible = empreinteAttendue(index) === deps.vectoriseur.empreinte;
+    if (compatible) {
+      const cle = cleCache(index, deps.vectoriseur);
+      let entreeCache = deps.cache.obtenir(ctx.companyId, cle);
+      if (!entreeCache) {
+        entreeCache = await chargerCache(executer, ctx.companyId, index, index.dimension, cle);
+        deps.cache.ranger(entreeCache);
+      }
+      const rf = requeteIdsFiltres(ctx, filtres, index.id);
+      const idsRetenus = (await executer(rf.sql, rf.params)).map((l) => String(l.id));
+      const autorisees = filtrerCache(entreeCache, idsRetenus);
+      if (autorisees.length > 0) {
+        const requete = await vecteurQuestion();
+        if (requete.length !== index.dimension) throw new Error("Vecteur de la question de dimension incorrecte");
+        const ids = entreeCache.ids;
+        sens = rechercheExacte(entreeCache.matrice, requete, CANDIDATS_PAR_LISTE, autorisees)
+          .filter((r) => r.score >= similariteMin)
+          .map((r) => ({ id: ids[r.ligne]!, score: r.score }));
+      }
+    }
+  }
+  return { companyId: ctx.companyId, index, texte, sens };
+}
+
+/**
+ * Réunit les listes de plusieurs bases en UNE liste par méthode, triée par le score propre à la méthode, puis
+ * une seule fusion RRF (`fusionRrf`, inchangée). Justification : un rang RRF n'a de sens que dans une liste ;
+ * fusionner deux résultats RRF déjà calculés donnerait deux « premiers » ex aequo quelle que soit leur
+ * pertinence. Les scores, eux, sont comparables d'une base à l'autre : le nombre de termes et `ts_rank_cd` ne
+ * dépendent que du passage et de la requête (aucune statistique du corpus), le cosinus ne dépend que des deux
+ * vecteurs (même vectoriseur, base commune sans vecteurs si son modèle diffère). Le classement obtenu est donc
+ * celui d'une base unique qui contiendrait les deux corpus. Avec une seule base, les listes restent telles que le
+ * SQL et la recherche exacte les rendent (comportement d'origine).
+ */
+function reunirListes(bases: readonly CandidatsBase[]): { listeTexte: string[]; listeSens: string[] } {
+  if (bases.length === 1) return { listeTexte: bases[0]!.texte.map((x) => x.id), listeSens: bases[0]!.sens.map((x) => x.id) };
+  const parId = (a: { id: string }, b: { id: string }) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
+  const texte = bases.flatMap((b) => b.texte).sort((a, b) => b.nb - a.nb || b.score - a.score || parId(a, b));
+  const sens = bases.flatMap((b) => b.sens).sort((a, b) => b.score - a.score || parId(a, b));
+  return { listeTexte: texte.slice(0, CANDIDATS_PAR_LISTE).map((x) => x.id), listeSens: sens.slice(0, CANDIDATS_PAR_LISTE).map((x) => x.id) };
+}
+
 /**
  * Recherche hybride. `contexte` (entreprise, mode) vient de l'appelant, jamais de l'entrée ; l'entrée est
  * revalidée par `RechercherConnaissancesEntree` (strict : aucun champ en trop). Le résultat n'a pas encore
  * de `sourceIds` : la route (R7) enregistre les passages comme sources de la tâche puis les ajoute.
+ *
+ * `options.baseCommune` (résolue par la route) ajoute la base de la Direction du client : mêmes filtres, même
+ * mode, chaque requête bornée à SON entreprise ; chaque passage porte alors sa `portee`. L'index rendu reste
+ * celui de l'entreprise de la tâche.
  */
 export async function rechercherConnaissances(
   deps: DependancesRecherche,
   contexte: ContexteRecherche,
   entreeBrute: unknown,
+  options: OptionsRecherche = {},
 ): Promise<ResultatRecherche> {
   const debut = Date.now();
   const companyId = IdNatif.parse(contexte.companyId).toLowerCase();
   const ctx: ContexteRecherche = { companyId, mode: contexte.mode };
+  const commune = options.baseCommune ? IdNatif.parse(options.baseCommune).toLowerCase() : null;
+  const ctxCommun: ContexteRecherche | null = commune && commune !== companyId ? { companyId: commune, mode: contexte.mode } : null;
   const entree = RechercherConnaissancesEntree.parse(entreeBrute);
   const seuils = deps.seuils ?? SEUILS_PROVISOIRES;
   const filtres: FiltresResolus = {
@@ -553,50 +651,40 @@ export async function rechercherConnaissances(
     verifierRequeteLecture(sql);
     return deps.executer(sql, params);
   };
+  // Vecteur de la question : calculé une fois, au premier besoin, partagé entre les bases.
+  let vecteur: Promise<Float32Array> | null = null;
+  const vecteurQuestion = () =>
+    (vecteur ??= deps.vectoriseur.vectoriser([entree.question], "requete").then(([brut]) => {
+      if (!brut) throw new Error("Vecteur de la question de dimension incorrecte");
+      return normaliser(brut);
+    }));
 
-  // Index actif de l'entreprise.
-  const ri = requeteIndexActif(companyId);
-  const index = lireIndex((await executer(ri.sql, ri.params))[0]);
-
-  // Mots-clés.
   const termes = termesSignificatifs(sansAccents(entree.question));
-  let listeTexte: string[] = [];
-  if (termes.length > 0) {
-    const rm = requeteMotsCles(ctx, filtres, termes, CANDIDATS_PAR_LISTE);
-    listeTexte = (await executer(rm.sql, rm.params)).map((l) => String(l.id));
-  }
+  const bases = [await candidatsDeBase(deps, executer, ctx, filtres, termes, vecteurQuestion, seuils.similariteMin, true)];
+  if (ctxCommun) bases.push(await candidatsDeBase(deps, executer, ctxCommun, filtres, termes, vecteurQuestion, seuils.similariteMin, false));
+  const index = bases[0]!.index;
 
-  // Sens : seulement si l'entreprise a un index vectorisé et que le vectoriseur en a un aussi.
-  let listeSens: string[] = [];
-  if (index && index.fournisseur !== "aucun" && deps.vectoriseur.type !== "aucun" && index.dimension) {
-    verifierEmpreinteIndex(empreinteAttendue(index), deps.vectoriseur);
-    const cle = cleCache(index, deps.vectoriseur);
-    let entreeCache = deps.cache.obtenir(companyId, cle);
-    if (!entreeCache) {
-      entreeCache = await chargerCache(executer, companyId, index, index.dimension, cle);
-      deps.cache.ranger(entreeCache);
-    }
-    const rf = requeteIdsFiltres(ctx, filtres, index.id);
-    const idsRetenus = (await executer(rf.sql, rf.params)).map((l) => String(l.id));
-    const autorisees = filtrerCache(entreeCache, idsRetenus);
-    if (autorisees.length > 0) {
-      const [brut] = await deps.vectoriseur.vectoriser([entree.question], "requete");
-      if (!brut || brut.length !== index.dimension) throw new Error("Vecteur de la question de dimension incorrecte");
-      const requete = normaliser(brut);
-      listeSens = rechercheExacte(entreeCache.matrice, requete, CANDIDATS_PAR_LISTE, autorisees)
-        .filter((r) => r.score >= seuils.similariteMin)
-        .map((r) => entreeCache!.ids[r.ligne]!);
-    }
-  }
-
+  const { listeTexte, listeSens } = reunirListes(bases);
   const retenus = appliquerSeuil(fusionRrf(listeTexte, listeSens), seuils.rrfMin, entree.nombre);
   let passages: PassageRendu[] = [];
   if (retenus.length > 0) {
-    const rd = requeteDetails(ctx, filtres, retenus.map((e) => e.id));
-    const details = new Map((await executer(rd.sql, rd.params)).map((l) => [String(l.id), l as unknown as LignePassage]));
+    // Détails lus base par base, chacun borné à son entreprise (filtres réappliqués) ; un identifiant n'est
+    // cherché que dans la base qui l'a proposé.
+    const details = new Map<string, { ligne: LignePassage; companyId: string }>();
+    for (const b of bases) {
+      const siens = new Set([...b.texte.map((x) => x.id), ...b.sens.map((x) => x.id)]);
+      const ids = retenus.map((e) => e.id).filter((id) => siens.has(id));
+      if (ids.length === 0) continue;
+      const rd = requeteDetails({ companyId: b.companyId, mode: ctx.mode }, filtres, ids);
+      for (const l of await executer(rd.sql, rd.params)) {
+        if (!details.has(String(l.id))) details.set(String(l.id), { ligne: l as unknown as LignePassage, companyId: b.companyId });
+      }
+    }
     passages = retenus.flatMap((e) => {
-      const ligne = details.get(e.id);
-      return ligne ? [construirePassageRendu(ligne, e)] : [];
+      const d = details.get(e.id);
+      if (!d) return [];
+      const rendu = construirePassageRendu(d.ligne, e);
+      return [ctxCommun ? { ...rendu, portee: d.companyId === companyId ? ("service" as const) : ("commune" as const) } : rendu];
     });
   }
 

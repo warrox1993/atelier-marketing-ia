@@ -7,12 +7,11 @@
 export const STYLES_DEPARTEMENTS = `
 .atl-dep { display: flex; flex-direction: column; gap: 1rem; }
 .atl-dep-grille { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 17rem), 1fr)); gap: 0.75rem; margin: 0; padding: 0; list-style: none; }
-.atl-dep-case { position: relative; display: flex; flex-direction: column; gap: 0.875rem; min-width: 0; padding: 1rem; border: 1px solid var(--atl-trait); border-radius: var(--atl-rayon); background: var(--atl-surface); }
+.atl-dep-case { position: relative; display: flex; flex-direction: column; gap: 0.5rem; min-width: 0; padding: 0.75rem 1rem; border: 1px solid var(--atl-trait); border-radius: var(--atl-rayon); background: var(--atl-surface); }
 .atl-dep-case:hover { border-color: var(--atl-attenue); background: color-mix(in oklab, var(--atl-surface-2) 55%, var(--atl-surface)); }
 .atl-dep-case[data-courant] { background: var(--atl-surface-2); }
 .atl-dep-case { cursor: pointer; }
-/* Hauteur de deux lignes pour tous les noms : les chiffres restent alignés d'une case à l'autre. */
-.atl-dep-nom { display: flex; flex-direction: column; gap: 0.375rem; min-width: 0; min-height: 2.6rem; }
+.atl-dep-nom { display: flex; flex-direction: column; gap: 0.25rem; min-width: 0; }
 .atl-dep-nom h2 { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.125rem 0.625rem; margin: 0; font-size: 1rem; font-weight: 600; line-height: 1.3; min-width: 0; overflow-wrap: anywhere; }
 .atl-dep-lien { color: inherit; text-decoration: none; }
 .atl-dep-lien::after { content: ""; position: absolute; inset: 0; border-radius: inherit; }
@@ -25,14 +24,16 @@ export const STYLES_DEPARTEMENTS = `
 .atl-dep-alertes li::before { content: ""; position: absolute; left: 0.125rem; top: 0.55em; width: 0.375rem; height: 0.375rem; border-radius: 50%; background: var(--atl-attention); }
 .atl-dep-alertes li[data-niveau="haute"] { color: var(--atl-texte); }
 .atl-dep-alertes li[data-niveau="haute"]::before { background: var(--atl-danger); }
-.atl-dep-chiffres { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.5rem; margin: 0; padding-top: 0.875rem; border-top: 1px solid var(--atl-trait); }
-.atl-dep-chiffre { display: flex; flex-direction: column-reverse; justify-content: flex-end; gap: 0.125rem; min-width: 0; }
-.atl-dep-chiffre dt { font-size: 0.75rem; color: var(--atl-attenue); }
-.atl-dep-chiffre dd { margin: 0; font-size: 1.375rem; font-weight: 600; line-height: 1.2; font-variant-numeric: tabular-nums; }
-.atl-dep-chiffre[data-zero] dd { font-weight: 400; color: var(--atl-attenue); }
-.atl-dep-chiffre[data-ton="attention"] dd { color: var(--atl-attention); }
-.atl-dep-chiffre[data-ton="danger"] dd { color: var(--atl-danger); }
-.atl-dep-meta { display: flex; flex-direction: column; gap: 0.125rem; min-width: 0; margin-top: auto; font-size: 0.8125rem; }
+/* Les trois nombres tiennent sur une ligne : « 2 à valider », zéros atténués, nombres non nuls en texte plein. */
+.atl-dep-chiffres { display: flex; flex-wrap: wrap; gap: 0.125rem 0.875rem; margin: 0; }
+.atl-dep-chiffre { display: flex; flex-direction: row-reverse; justify-content: flex-end; align-items: baseline; gap: 0.3rem; min-width: 0; font-size: 0.8125rem; }
+.atl-dep-chiffre dt { color: var(--atl-attenue-fort); }
+.atl-dep-chiffre dd { margin: 0; font-size: 0.9375rem; font-weight: 600; color: var(--atl-texte); font-variant-numeric: tabular-nums; }
+.atl-dep-chiffre[data-zero] dt, .atl-dep-chiffre[data-zero] dd { font-weight: 400; color: var(--atl-attenue); }
+.atl-dep-traiter { padding: 0 0.4rem; border: 1px solid var(--atl-attenue-fort); border-radius: 999px; font-size: 0.6875rem; font-weight: 600; line-height: 1.5; color: var(--atl-texte); }
+.atl-dep-case[data-a-traiter] { border-color: var(--atl-attenue-fort); }
+.atl-dep-resume { margin: 0; font-size: 0.875rem; color: var(--atl-attenue-fort); font-variant-numeric: tabular-nums; }
+.atl-dep-meta { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 0.75rem; min-width: 0; margin-top: auto; font-size: 0.8125rem; }
 .atl-dep-agents { margin: 0; color: var(--atl-texte); }
 .atl-dep-activite { margin: 0; color: var(--atl-attenue); font-size: 0.75rem; }
 .atl-dep-attente, .atl-dep-erreur { min-width: 0; margin-top: auto; }
@@ -46,9 +47,4 @@ export const STYLES_DEPARTEMENTS = `
 .atl-fil li { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .atl-fil li + li::before { content: "\\203A"; margin-right: 0.375rem; color: var(--atl-attenue); }
 .atl-fil-client { color: var(--atl-attenue-fort); }
-.atl-fil-tous { margin-left: auto; font-size: 0.8125rem; }
-
-@media (max-width: 640px) {
-  .atl-fil-tous { margin-left: 0; flex-basis: 100%; min-height: 2.75rem; display: inline-flex; align-items: center; }
-}
 `;

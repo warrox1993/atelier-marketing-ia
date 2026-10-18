@@ -83,6 +83,7 @@ import { routesCorbeille } from "./services-corbeille.js";
 import { routesPurge } from "./services-purge.js";
 import { routesDiscussion } from "./services-discussion.js";
 import { creerRetour, liaisonsPourAccueil, routesLiaisons, stockLiaisonsParesseux, type StockLiaisons } from "./liaisons/index.js";
+import { directionDuClient, entreprisesDuClient, lecteursBaseCommune } from "./connaissances/base-commune.js";
 import { routesRealite } from "./services-realite.js";
 import { lecturesRapportSql, routesRapport } from "./services-rapport.js";
 import { routesDictee } from "./services-dictee.js";
@@ -2583,7 +2584,16 @@ export function creerServices(ctx: PluginContext, options: { transportReel?: Tra
 
   // Lot R7 : services des connaissances (routes versées plus bas ; `evaluer` lit `entreesPorte`).
   const connaissances = creerConnaissances({
-    ctx, base, tache, campagneDeTache, modeEffectif, configEntreprise, ...options.connaissances,
+    ctx, base, tache, campagneDeTache, modeEffectif, configEntreprise,
+    // Base commune du groupe (18/10/2026) : Direction du client, lue dans `services_entreprises`. Sans base du
+    // plugin (bancs de test des autres lots) ni stock de liaisons fourni, aucun client n'est déclaré.
+    baseCommune: async (companyId) =>
+      options.stockLiaisons || (ctx as { db?: unknown }).db ? directionDuClient(stockLiaisons, companyId) : null,
+    entreprisesDuClient: async (companyId) =>
+      options.stockLiaisons || (ctx as { db?: unknown }).db ? entreprisesDuClient(stockLiaisons, companyId) : [companyId.toLowerCase()],
+    lecteursBaseCommune: async (companyId) =>
+      options.stockLiaisons || (ctx as { db?: unknown }).db ? lecteursBaseCommune(stockLiaisons, companyId) : [],
+    ...options.connaissances,
     apresEntreeTache: async (companyId, issueId) => {
       await base.toucherPorte(companyId, issueId);
       await invaliderApresEntree(companyId, issueId);

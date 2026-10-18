@@ -9,7 +9,7 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 import type { PluginContext } from "@paperclipai/plugin-sdk";
 import { describe, expect, it } from "vitest";
-import { ROUTES_API, type EtatDepartement, type ReponseDepartements } from "../src/contrats/index.js";
+import { ROUTES_API, type EtatDepartement, type ReponseDepartements, type ReponseFluxServices } from "../src/contrats/index.js";
 import type { ActeurHote, RequeteRoute } from "../src/serveur/atelier.js";
 import type { ErreurAtelier } from "../src/serveur/erreurs.js";
 import type { ServiceEntreprise } from "../src/serveur/liaisons/base-liaisons.js";
@@ -25,6 +25,11 @@ const AUTRE_MKT = id(4);
 const AUTRE_DIR = id(5);
 const ORPHELINE = id(6); // entreprise déclarée dans aucun client
 const HUMAIN: ActeurHote = { type: "humain", id: "local-board", agentId: null, userId: "local-board", runId: null };
+const FLUX_BRUTS = [
+  { client: "fictive-sa", source: "marketing", cible: "juridique", objet: "Relecture d'une mention légale", approbationHumaine: false },
+  { client: "fictive-sa", source: "juridique", cible: "direction", objet: "Avis sur un contrat", approbationHumaine: true },
+  { client: "autre-sprl", source: "marketing", cible: "direction", objet: "Budget d'une campagne", approbationHumaine: false },
+];
 const AGENT: ActeurHote = { type: "agent", id: id(11), agentId: id(11), userId: null, runId: "run-1" };
 
 const SERVICES: ServiceEntreprise[] = [
@@ -80,6 +85,7 @@ function monde(o: { pannes?: string[]; pause?: string | null; aFaire?: Record<st
   const stock = {
     serviceDeEntreprise: async (c: string) => (lectures.push(`service:${c}`), SERVICES.find((s) => s.companyId === c) ?? null),
     servicesDuClient: async (m: string) => (lectures.push(`client:${m}`), SERVICES.filter((s) => s.clientMarqueur === m)),
+    fluxDuClient: async (m: string) => (lectures.push(`flux:${m}`), FLUX_BRUTS.filter((f) => f.client === m).map(({ client: _c, ...f }) => f)),
   };
   const brutes = routesDepartements({
     ctx, stock,
@@ -89,7 +95,7 @@ function monde(o: { pannes?: string[]; pause?: string | null; aFaire?: Record<st
       return aFaire[r.companyId] ?? [];
     },
   });
-  const appeler = (cle: "departements.lister" | "departement.etat", companyId: string, acteur: ActeurHote = HUMAIN) =>
+  const appeler = (cle: "departements.lister" | "departement.etat" | "services.flux", companyId: string, acteur: ActeurHote = HUMAIN) =>
     portee.run({ companyId }, () => brutes[cle]!({ cle, params: {}, query: { companyId }, corps: null, acteur, companyId } satisfies RequeteRoute));
   const refus = async (p: Promise<unknown>) => (await p.then(() => null, (e: unknown) => e)) as ErreurAtelier | null;
   return { appeler, appels, lectures, refus, portee, ctx };
@@ -123,6 +129,36 @@ describe("departements.lister", () => {
   it("est réservée à un humain", async () => {
     const m = monde();
     expect((await m.refus(m.appeler("departements.lister", MKT, AGENT)))?.code).toBe("elevation_refusee");
+    expect(m.lectures).toEqual([]);
+  });
+});
+
+describe("services.flux", () => {
+  it("rend les flux du MÊME client seulement, sans aucun appel à l'hôte", async () => {
+    const m = monde();
+    const r = (await m.appeler("services.flux", MKT)).corps as ReponseFluxServices;
+    expect(r.client).toBe("fictive-sa");
+    expect(r.flux).toEqual([
+      { source: "marketing", cible: "juridique", objet: "Relecture d'une mention légale", approbationHumaine: false },
+      { source: "juridique", cible: "direction", objet: "Avis sur un contrat", approbationHumaine: true },
+    ]);
+    expect(m.lectures).toContain("flux:fictive-sa");
+    expect(m.lectures).not.toContain("flux:autre-sprl");
+    expect(m.appels).toEqual([]);
+    const autre = (await m.appeler("services.flux", AUTRE_MKT)).corps as ReponseFluxServices;
+    expect(autre.client).toBe("autre-sprl");
+    expect(autre.flux.map((f) => f.objet)).toEqual(["Budget d'une campagne"]);
+  });
+
+  it("une entreprise déclarée dans aucun client reçoit une matrice vide, sans lire de flux", async () => {
+    const m = monde();
+    expect((await m.appeler("services.flux", ORPHELINE)).corps).toEqual({ client: null, flux: [] });
+    expect(m.lectures.some((l) => l.startsWith("flux:"))).toBe(false);
+  });
+
+  it("est réservée à un humain et ne lit rien pour un agent", async () => {
+    const m = monde();
+    expect((await m.refus(m.appeler("services.flux", MKT, AGENT)))?.code).toBe("elevation_refusee");
     expect(m.lectures).toEqual([]);
   });
 });
@@ -192,11 +228,11 @@ describe("departement.etat", () => {
 });
 
 describe("contrat et manifeste", () => {
-  it("deux routes GET, humain, entreprise résolue par la requête", () => {
-    for (const [cle, chemin] of [["departements.lister", "/departements"], ["departement.etat", "/departements/etat"]] as const) {
+  it("trois routes GET, humain, entreprise résolue par la requête", () => {
+    for (const [cle, chemin] of [["departements.lister", "/departements"], ["departement.etat", "/departements/etat"], ["services.flux", "/services/flux"]] as const) {
       expect(ROUTES_API.find((r) => r.cle === cle)).toMatchObject({ methode: "GET", chemin, auth: "board", resolution: { from: "query", key: "companyId" } });
     }
-    expect((manifest.apiRoutes ?? []).map((r) => r.routeKey)).toEqual(expect.arrayContaining(["departements.lister", "departement.etat"]));
+    expect((manifest.apiRoutes ?? []).map((r) => r.routeKey)).toEqual(expect.arrayContaining(["departements.lister", "departement.etat", "services.flux"]));
   });
 
   it("n'ajoute aucune capacité au manifeste", () => {

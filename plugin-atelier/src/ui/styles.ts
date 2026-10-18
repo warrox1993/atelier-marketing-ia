@@ -8,7 +8,9 @@ export const STYLES_ATELIER = `
 .atl {
   --atl-fond: var(--background, #fff);
   --atl-texte: var(--foreground, #1a1a1a);
-  --atl-attenue: var(--muted-foreground, #6b6b6b);
+  /* Gris de l'hôte rapproché du texte : au moins 4,5:1 sur le fond ET sur la surface grisée, en clair (le gris brut de l'hôte
+     tombe à 4,3:1 sur la surface grisée) comme en sombre (plus clair encore). */
+  --atl-attenue: color-mix(in oklab, var(--muted-foreground, #6b6b6b) 85%, var(--atl-texte));
   /* Texte secondaire posé sur la surface grisée : contraste AA garanti. */
   --atl-attenue-fort: color-mix(in oklab, var(--atl-attenue) 62%, var(--atl-texte));
   --atl-trait: var(--border, #e4e4e4);
@@ -171,13 +173,13 @@ details[open] > .atl-section-resume::after, details[open] > .atl-filtres-resume:
 
 /* Boutons */
 .atl-bouton-groupe { display: inline-flex; flex-direction: column; align-items: flex-start; gap: 0.25rem; max-width: 100%; }
-.atl-bouton { display: inline-flex; align-items: center; justify-content: center; gap: 0.375rem; min-height: 2.25rem; padding: 0 0.875rem; border-radius: calc(var(--atl-rayon) * 0.8); border: 1px solid var(--atl-trait); background: var(--atl-surface); color: var(--atl-texte); font: inherit; font-weight: 500; cursor: pointer; text-decoration: none; white-space: nowrap; transition: background-color 150ms ease-out, border-color 150ms ease-out; }
+.atl-bouton { display: inline-flex; align-items: center; justify-content: center; gap: 0.375rem; min-height: 2.25rem; padding: 0.5rem 0.875rem; border-radius: calc(var(--atl-rayon) * 0.8); border: 1px solid var(--atl-trait); background: var(--atl-surface); color: var(--atl-texte); font: inherit; font-weight: 500; cursor: pointer; text-decoration: none; white-space: nowrap; transition: background-color 150ms ease-out, border-color 150ms ease-out; }
 .atl-bouton:hover { background: var(--atl-surface-2); }
 .atl-bouton[data-variante="principal"] { background: var(--atl-accent); color: var(--atl-accent-texte); border-color: var(--atl-accent); }
 .atl-bouton[data-variante="principal"]:hover { background: color-mix(in oklab, var(--atl-accent) 86%, var(--atl-fond)); }
 .atl-bouton[data-variante="danger"] { color: var(--atl-danger); border-color: color-mix(in oklab, var(--atl-danger) 45%, var(--atl-trait)); }
 .atl-bouton[data-variante="danger"]:hover { background: color-mix(in oklab, var(--atl-danger) 8%, var(--atl-fond)); }
-.atl-bouton[data-variante="discret"] { border-color: transparent; background: transparent; padding: 0 0.5rem; }
+.atl-bouton[data-variante="discret"] { border-color: transparent; background: transparent; padding: 0.375rem 0.5rem; }
 .atl-bouton[data-variante="discret"]:hover { background: var(--atl-surface-2); }
 .atl-bouton[aria-disabled="true"], .atl-bouton:disabled { cursor: not-allowed; color: var(--atl-attenue); background: var(--atl-surface-2); border-color: var(--atl-trait); }
 .atl-raison { font-size: 0.75rem; color: var(--atl-attenue); max-width: 34ch; white-space: normal; }
@@ -327,13 +329,13 @@ details[open] > .atl-section-resume::after, details[open] > .atl-filtres-resume:
 .atl-nav a { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; padding: 0.4375rem 0.75rem; border-radius: calc(var(--atl-rayon) * 0.8); color: var(--atl-texte); text-decoration: none; font-size: 0.8125rem; font-weight: 500; }
 .atl-nav a:hover { background: var(--atl-surface-2); }
 .atl-nav a[aria-current="page"] { background: var(--atl-surface-2); box-shadow: inset 0 0 0 1px var(--atl-trait); }
-.atl-nav-pied { margin-top: auto; padding-top: 0.5rem; border-top: 1px solid var(--atl-trait); }
-.atl-nav-pied { display: flex; flex-direction: column; gap: 0.25rem; }
-.atl-nav a.atl-nav-sortie { justify-content: flex-start; color: var(--atl-attenue-fort); font-weight: 400; }
 .atl-nav-compte { font-size: 0.6875rem; min-width: 1.25rem; text-align: center; padding: 0 0.375rem; border-radius: 999px; background: var(--atl-accent); color: var(--atl-accent-texte); }
 .atl-onglets-cadre, .atl-onglets { display: none; }
-.atl-entree { display: flex; align-items: center; gap: 0.625rem; padding: 0.5rem 0.75rem; font-size: 0.8125rem; font-weight: 500; color: inherit; text-decoration: none; border-radius: calc(var(--atl-rayon) * 0.8); }
-.atl-entree:hover { background: var(--atl-surface-2); }
+/* Entrées du menu principal du socle : mêmes mesures que ses lignes (mx-2, px-2, py-1.5, gap-2.5, texte à 80 %). */
+.atl-entree { display: flex; align-items: center; gap: 0.625rem; margin: 0 0.5rem; padding: 0.375rem 0.5rem; font-size: var(--text-compact, 0.8125rem); font-weight: 500; color: color-mix(in oklab, var(--foreground, currentColor) 80%, transparent); text-decoration: none; border-radius: var(--radius-lg, 0.5rem); transition: background-color 150ms, color 150ms; }
+.atl-entree:hover, .atl-entree[aria-current="page"] { background: var(--sidebar-accent, var(--atl-surface-2)); color: var(--sidebar-accent-foreground, inherit); }
+.atl-entree:focus-visible { outline: 2px solid var(--ring, currentColor); outline-offset: -2px; }
+@media (pointer: coarse) { .atl-entree { min-height: 2.75rem; padding-block: 0.25rem; } }
 .atl-entree svg { flex: none; }
 .atl-entree .atl-nav-compte { margin-left: auto; }
 
@@ -378,13 +380,13 @@ details[open] > .atl-section-resume::after, details[open] > .atl-filtres-resume:
 .atl-table button.atl-lien { background: none; border: 0; padding: 0; font: inherit; font-weight: 500; cursor: pointer; text-align: left; }
 /* Onglets d'une rubrique : trait sous l'onglet actif, défilement horizontal sur écran étroit, cibles d'au moins 44 px. */
 .atl-onglets-rub { margin: 0 0 1rem; border-bottom: 1px solid var(--atl-trait); }
-.atl-onglets-rub [role="tablist"] { display: flex; gap: 0.125rem; overflow-x: auto; scrollbar-width: thin; }
-.atl-onglets-rub [role="tab"] { flex: none; display: inline-flex; align-items: center; gap: 0.375rem; min-height: 2.75rem; padding: 0 0.875rem; margin-bottom: -1px; border: 0; border-bottom: 2px solid transparent; background: none; font: inherit; font-size: 0.875rem; font-weight: 500; color: var(--atl-attenue-fort); text-decoration: none; white-space: nowrap; cursor: pointer; }
+.atl-onglets-rub [role="tablist"] { display: flex; gap: 0.125rem; overflow-x: auto; overflow-y: hidden; scrollbar-width: thin; }
+.atl-onglets-rub [role="tab"] { flex: none; display: inline-flex; align-items: center; gap: 0.375rem; min-height: 2.75rem; padding: 0.25rem 0.875rem 0.5rem; margin-bottom: -1px; border: 0; border-bottom: 2px solid transparent; background: none; font: inherit; font-size: 0.875rem; font-weight: 500; color: var(--atl-attenue-fort); text-decoration: none; white-space: nowrap; cursor: pointer; }
 .atl-onglets-rub [role="tab"]:hover { color: var(--atl-texte); }
 .atl-onglets-rub [role="tab"][aria-selected="true"] { color: var(--atl-texte); border-bottom-color: var(--atl-texte); }
 .atl-onglets-rub [role="tab"]:focus-visible { outline: 2px solid var(--atl-anneau); outline-offset: -2px; border-radius: 2px; }
 .atl-onglets-rub-2 { border-bottom-color: color-mix(in srgb, var(--atl-trait) 55%, transparent); margin-bottom: 0.75rem; }
-.atl-onglets-rub-2 [role="tab"] { font-size: 0.8125rem; font-weight: 400; padding: 0 0.75rem; }
+.atl-onglets-rub-2 [role="tab"] { font-size: 0.8125rem; font-weight: 400; padding: 0.25rem 0.75rem 0.5rem; }
 .atl-onglets-rub-2 [role="tab"][aria-selected="true"] { font-weight: 500; }
 .atl-panneau:focus-visible { outline: 2px solid var(--atl-anneau); outline-offset: 4px; border-radius: 2px; }
 .atl-panneau:not([hidden]) { display: flex; flex-direction: column; gap: 1.25rem; min-width: 0; }
@@ -434,6 +436,9 @@ details[open] > .atl-section-resume::after, details[open] > .atl-filtres-resume:
 /* Mobile (audit M2) : cibles tactiles de 44 px, champs en 16 px (pas de zoom automatique de iOS) */
 @media (max-width: 640px) {
   .atl-bouton, .atl-segment, .atl-table button.atl-lien { min-height: 2.75rem; }
+  /* Liens et entrées de menu qui se touchent du doigt : même cible de 44 px. */
+  .atl-retour .atl-lien, .atl-table a.atl-lien { display: inline-flex; align-items: center; min-height: 2.75rem; }
+  .atl-nav a, .atl-onglets-rub [role="tab"] { min-height: 2.75rem; }
   .atl-mission-titre { display: inline-flex; align-items: center; min-height: 2.75rem; }
   .atl input:not([type="radio"]):not([type="checkbox"]):not([type="file"]), .atl textarea, .atl select { min-height: 2.75rem; font-size: 1rem; }
   .atl input[type="radio"], .atl input[type="checkbox"] { width: 1.375rem; height: 1.375rem; }

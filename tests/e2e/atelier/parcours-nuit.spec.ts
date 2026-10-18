@@ -213,13 +213,13 @@ test("carte des prospects : au moins un point et la légende (sinon état vide h
 test("écrans de l'après-midi : ouverture, menus, encart d'accueil, statut du lead et fiche au clic", async ({ page }) => {
   const erreurs = surveillerConsole(page);
 
-  // 1. Ouvrir l'entreprise mène à l'atelier ; dans le menu du socle, « Atelier marketing » est le premier lien.
+  // 1. Ouvrir l'entreprise mène à l'atelier ; dans le menu du socle, « Atelier » est le premier lien.
   await page.goto(`/${prefixe}`);
   await expect(page).toHaveURL(new RegExp(`/${prefixe}/atelier(/|$)`, "u"), { timeout: 30_000 });
   await page.goto(`/${prefixe}/dashboard`);
   const menuSocle = page.locator("aside nav").first();
   // Le menu du socle reçoit l'entrée du plugin après son chargement ; elle porte la pastille « N à faire ».
-  await expect(menuSocle.getByRole("link").first()).toHaveText(/^Atelier marketing/u);
+  await expect(menuSocle.getByRole("link").first()).toHaveText(/^Atelier(?! marketing)/u);
 
   // 2. Menu de l'atelier : les cinq rubriques, puis « Prospects » avec ses deux onglets (Liste, Carte).
   await ouvrir(page, "");

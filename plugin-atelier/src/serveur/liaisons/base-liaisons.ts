@@ -60,6 +60,8 @@ export interface StockLiaisons {
   /** Services déclarés de CE client seulement (tableau des départements), au plus 200. */
   servicesDuClient(clientMarqueur: string): Promise<ServiceEntreprise[]>;
   lireFlux(clientMarqueur: string, source: string, cible: string): Promise<FluxLu | null>;
+  /** Tous les flux déclarés de CE client seulement (vue Organigramme), au plus 2 000. */
+  fluxDuClient(clientMarqueur: string): Promise<FluxService[]>;
   /** Remplace la déclaration d'un client (entreprises et flux). */
   declarer(d: { clientMarqueur: string; entreprises: Array<{ companyId: string; serviceSlug: string; estDirection: boolean }>; flux: FluxService[]; par: string }): Promise<void>;
   lireParCle(companyId: string, cleIdempotence: string): Promise<LiaisonStockee | null>;
@@ -209,6 +211,10 @@ export function creerStockLiaisons(db: PluginContext["db"]): StockLiaisons {
     async lireFlux(clientMarqueur, source, cible) {
       const [r] = await q(`select objet, approbation_humaine from ${ns}.flux_services where client_marqueur = $1 and source_slug = $2 and cible_slug = $3`, [clientMarqueur, source, cible]);
       return r ? { objet: String(r["objet"]), approbationHumaine: r["approbation_humaine"] === true } : null;
+    },
+    async fluxDuClient(clientMarqueur) {
+      const lignes = await q(`select source_slug, cible_slug, objet, approbation_humaine from ${ns}.flux_services where client_marqueur = $1 order by source_slug, cible_slug limit 2000`, [clientMarqueur]);
+      return lignes.map((r) => ({ source: String(r["source_slug"]), cible: String(r["cible_slug"]), objet: String(r["objet"]), approbationHumaine: r["approbation_humaine"] === true }));
     },
     async declarer(d) {
       for (const e of d.entreprises) {

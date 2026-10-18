@@ -312,7 +312,7 @@ export function Champ({ libelle, aide, className, children }: { libelle: ReactNo
 /**
  * Bandeau « entreprise courante » en tête de chaque vue : le nom complet de l'entreprise,
  * sans pastille de mode. Pour un client à plusieurs services, il devient un fil « Client › Département »
- * avec un lien « Tous les départements » vers le tableau du client.
+ * (ou « Client › Départements » / « Client › Organigramme » sur les vues d'ensemble).
  */
 export function BandeauEntreprise() {
   const { companyId } = useHostContext();
@@ -334,7 +334,9 @@ export function BandeauEntreprise() {
   const affiche = nom ?? "Entreprise courante";
   const courant = departements?.departements.find((d) => d.courant);
   if (departements && courant && aPlusieursDepartements(departements)) {
-    const surTableau = lireRoute(pathname).vue === "departements";
+    const vue = lireRoute(pathname).vue;
+    // Vues d'ensemble du client : le fil nomme la vue, pas le service courant.
+    const surTableau = vue === "departements" || vue === "organigramme";
     return (
       <nav className="atl-bandeau-entreprise atl-fil" aria-label="Fil d'Ariane">
         <style href="atelier-departements" precedence="default">
@@ -344,15 +346,10 @@ export function BandeauEntreprise() {
           <li className="atl-fil-client">{nomClient(nom ? [nom] : [], departements.client)}</li>
           <li>
             <strong className="atl-bandeau-nom" title={affiche} aria-current={surTableau ? undefined : "page"}>
-              {surTableau ? "Départements" : courant.nom}
+              {surTableau ? (vue === "organigramme" ? "Organigramme" : "Départements") : courant.nom}
             </strong>
           </li>
         </ol>
-        {surTableau ? null : (
-          <LienHote vers={chemin("departements")} className="atl-lien atl-fil-tous">
-            Tous les départements
-          </LienHote>
-        )}
       </nav>
     );
   }

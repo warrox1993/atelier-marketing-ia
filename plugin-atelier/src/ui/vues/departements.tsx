@@ -34,7 +34,7 @@ export interface DepartementVisible extends DepartementDeclare {
   nomEntreprise: string;
 }
 
-type Case = { etat: "chargement" } | { etat: "pret"; donnees: EtatDepartement } | { etat: "erreur"; message: string };
+export type Case = { etat: "chargement" } | { etat: "pret"; donnees: EtatDepartement } | { etat: "erreur"; message: string };
 
 /** Exécute `travail` sur chaque élément, `limite` à la fois au plus, dans l'ordre. */
 export async function enParallele<T>(elements: readonly T[], limite: number, travail: (x: T) => Promise<void>): Promise<void> {
@@ -77,6 +77,68 @@ function Chiffre({ valeur, libelle, ton, tronque }: { valeur: number; libelle: s
   );
 }
 
+/** Totaux de la ligne de résumé, calculés sur les services lus (rien d'estimé). */
+export interface ResumeDepartements {
+  services: number;
+  aValider: number;
+  enCours: number;
+  bloquees: number;
+  agentsActifs: number;
+  agentsTotal: number;
+  illisibles: number;
+}
+
+export function resumer(departements: readonly DepartementVisible[], cases: Readonly<Record<string, Case>>): ResumeDepartements {
+  const r: ResumeDepartements = { services: departements.length, aValider: 0, enCours: 0, bloquees: 0, agentsActifs: 0, agentsTotal: 0, illisibles: 0 };
+  for (const d of departements) {
+    const c = cases[d.companyId];
+    if (c?.etat === "erreur") r.illisibles += 1;
+    if (c?.etat !== "pret") continue;
+    r.aValider += c.donnees.validations.total;
+    r.enCours += c.donnees.taches.enCours;
+    r.bloquees += c.donnees.taches.bloquees;
+    r.agentsActifs += c.donnees.agents.actifs;
+    r.agentsTotal += c.donnees.agents.actifs + c.donnees.agents.enPause + c.donnees.agents.enErreur;
+  }
+  return r;
+}
+
+/** Texte de la ligne de résumé : « 28 services · 3 à valider · 5 en cours · 1 bloquée · 40 agents actifs sur 218 ». */
+export function texteResume(r: ResumeDepartements): string {
+  const parties = [
+    pluriel(r.services, "service", "services"),
+    `${nombre(r.aValider)} à valider`,
+    `${nombre(r.enCours)} en cours`,
+    `${nombre(r.bloquees)} ${r.bloquees > 1 ? "bloquées" : "bloquée"}`,
+    `${nombre(r.agentsActifs)} ${r.agentsActifs > 1 ? "agents actifs" : "agent actif"} sur ${nombre(r.agentsTotal)}`,
+  ];
+  if (r.illisibles) parties.push(`${nombre(r.illisibles)} ${r.illisibles > 1 ? "services illisibles" : "service illisible"}`);
+  return parties.join(" · ");
+}
+
+const aTraiter = (c: Case): boolean => c.etat === "pret" && (c.donnees.validations.total > 0 || c.donnees.taches.bloquees > 0);
+
+/**
+ * Ordre des cases : le plus urgent d'abord (à valider décroissant, puis bloquées, en cours, alertes), puis le nom.
+ * Tant que toutes les cases ne sont pas lues, l'ordre alphabétique évite que les cases sautent pendant le chargement.
+ */
+export function trierParUrgence(departements: readonly DepartementVisible[], cases: Readonly<Record<string, Case>>): DepartementVisible[] {
+  const nom = (a: DepartementVisible, b: DepartementVisible) => a.nom.localeCompare(b.nom, "fr");
+  const toutLu = departements.every((d) => cases[d.companyId] && cases[d.companyId]!.etat !== "chargement");
+  if (!toutLu) return [...departements].sort(nom);
+  const cle = (d: DepartementVisible) => {
+    const c = cases[d.companyId]!;
+    return c.etat === "pret"
+      ? { v: c.donnees.validations.total, b: c.donnees.taches.bloquees, e: c.donnees.taches.enCours, a: c.donnees.alertes.length }
+      : { v: 0, b: 0, e: 0, a: 0 };
+  };
+  return [...departements].sort((x, y) => {
+    const kx = cle(x);
+    const ky = cle(y);
+    return ky.v - kx.v || ky.b - kx.b || ky.e - kx.e || ky.a - kx.a || nom(x, y);
+  });
+}
+
 function niveauAlerte(c: Case): "haute" | "moyenne" | undefined {
   if (c.etat !== "pret") return undefined;
   if (c.donnees.alertes.some((a) => a.niveau === "haute")) return "haute";
@@ -86,13 +148,14 @@ function niveauAlerte(c: Case): "haute" | "moyenne" | undefined {
 /** Une case : le service (et ses alertes), trois nombres, puis l'équipe et la dernière activité. Toute la case est le lien. */
 function CaseDepartement({ d, c, relire }: { d: DepartementVisible; c: Case; relire: () => void }) {
   return (
-    <li className="atl-dep-case" data-alerte={niveauAlerte(c)} data-courant={d.courant || undefined}>
+    <li className="atl-dep-case" data-alerte={niveauAlerte(c)} data-courant={d.courant || undefined} data-a-traiter={aTraiter(c) || undefined}>
       <div className="atl-dep-nom">
         <h2>
           <LienHote vers={`/${d.prefixe}/atelier`} className="atl-dep-lien">
             {d.nom}
           </LienHote>
           {d.courant ? <span className="atl-dep-ici">Vous êtes ici</span> : null}
+          {aTraiter(c) ? <span className="atl-dep-traiter">À traiter</span> : null}
         </h2>
         {c.etat === "pret" && c.donnees.alertes.length ? (
           <ul className="atl-dep-alertes" aria-label={`Alertes du service ${d.nom}`}>
@@ -208,8 +271,11 @@ export function VueDepartements() {
       <span id="atl-dep-titre" className="atl-sr">
         Départements de {liste.client}
       </span>
+      <p className="atl-dep-resume" data-testid="resume-departements">
+        {texteResume(resumer(liste.departements, cases))}
+      </p>
       <ul className="atl-dep-grille">
-        {liste.departements.map((d) => (
+        {trierParUrgence(liste.departements, cases).map((d) => (
           <CaseDepartement key={d.companyId} d={d} c={cases[d.companyId] ?? { etat: "chargement" }} relire={() => void lireCase(d, { annule: false })} />
         ))}
       </ul>

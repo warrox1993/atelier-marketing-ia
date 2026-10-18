@@ -122,6 +122,12 @@ export interface StockConnaissances {
   supprimerDocument(companyId: string, documentId: string): Promise<number>;
   passagesContenant(companyId: string, texteMinuscule: string): Promise<Array<{ id: string; documentId: string; version: number; texte: string }>>;
   supprimerPassages(companyId: string, ids: readonly string[]): Promise<number>;
+  /**
+   * Effacement d'une personne (M3) : remplace l'extrait des sources de provenance connaissance des entreprises
+   * `companyIds` dont l'extrait contient `texteMinuscule` (même règle que `passagesContenant`). Les sources qui citent
+   * un passage supprimé disparaissent déjà par la cascade de `connaissance_passage_id`. Rend les lignes touchées.
+   */
+  effacerExtraitsSources(companyIds: readonly string[], texteMinuscule: string): Promise<Array<{ companyId: string; issueId: string | null }>>;
   compterPassages(companyId: string): Promise<number>;
   indexActif(companyId: string): Promise<LigneIndex | null>;
   creerIndex(i: Omit<LigneIndex, "creeLe" | "passagesIndexes" | "actif">): Promise<void>;
@@ -200,6 +206,9 @@ const COLONNES_MAJ: Record<keyof ChampsVersion, { colonne: string; cast?: string
   injectionsSignalees: { colonne: "injections_signalees", cast: "::jsonb", json: true },
   pseudonymisation: { colonne: "pseudonymisation", cast: "::jsonb", json: true },
 };
+
+/** Extrait d'une source après l'effacement d'une personne : aucune donnée, ni recopie du motif. */
+export const EXTRAIT_EFFACE = "[extrait effacé : purge d'une personne]";
 
 export function creerStockConnaissances(db: Db): StockConnaissances {
   const ns = db.namespace;
@@ -281,6 +290,18 @@ export function creerStockConnaissances(db: Db): StockConnaissances {
     async supprimerPassages(companyId, ids) {
       if (ids.length === 0) return 0;
       return x(`delete from ${ns}.connaissances_passages where company_id = $1 and id in (select (jsonb_array_elements_text($2::jsonb))::uuid)`, [companyId, JSON.stringify([...ids])]);
+    },
+    async effacerExtraitsSources(companyIds, texteMinuscule) {
+      const touchees: Array<{ companyId: string; issueId: string | null }> = [];
+      // Une requête par entreprise : la garde « company_id = $1 » de l'hôte reste vraie pour chacune.
+      for (const companyId of companyIds) {
+        const cond = `company_id = $1 and provenance = 'connaissance' and position($2 in lower(coalesce(extrait, ''))) > 0`;
+        const lignes = await q(`select issue_id from ${ns}.sources where ${cond}`, [companyId, texteMinuscule]);
+        if (lignes.length === 0) continue;
+        await x(`update ${ns}.sources set extrait = $3 where ${cond}`, [companyId, texteMinuscule, EXTRAIT_EFFACE]);
+        for (const r of lignes) touchees.push({ companyId, issueId: r.issue_id == null ? null : String(r.issue_id) });
+      }
+      return touchees;
     },
     async compterPassages(companyId) {
       const [r] = await q(

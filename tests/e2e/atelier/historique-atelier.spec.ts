@@ -24,11 +24,11 @@ const DANS_ATELIER = /\/atelier(\/|$|\?|#)/u;
 async function ouvrirTableauDeBord(page: Page) {
   await page.goto(`/${PREFIXE}/dashboard`);
   await expect(page).toHaveURL(new RegExp(`/${PREFIXE}/dashboard`, "u"));
-  await expect(page.getByRole("link", { name: /^Atelier marketing/u }).first()).toBeVisible({ timeout: 20_000 });
+  await expect(page.getByRole("link", { name: /^Atelier(?! marketing)/u }).first()).toBeVisible({ timeout: 20_000 });
 }
 
 async function entrerDansAtelier(page: Page) {
-  await page.getByRole("link", { name: /^Atelier marketing/u }).first().click();
+  await page.getByRole("link", { name: /^Atelier(?! marketing)/u }).first().click();
   await expect(page).toHaveURL(DANS_ATELIER);
   await expect(page.locator(".atl-page")).toBeVisible({ timeout: 30_000 });
 }

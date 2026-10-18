@@ -15,6 +15,9 @@ Parties concernées :
 - scripts/bootstrap-organisation.py : la fonction normaliser_slug est un
   portage en Python de normalizeAgentUrlKey (packages/shared/src/agent-url-key.ts)
   de Paperclip.
+- organisation/skills/memoire-para/ : adaptation en français de la compétence
+  skills/para-memory-files de Paperclip ; references/origine-paperclip.md en
+  contient le texte d'origine inchangé (voir organisation/skills/LICENCES-TIERS.md).
 
 Le dossier paperclip/ (clone du socle, reconstruit par scripts/preparer-socle.sh)
 n'est pas versionné ici : il se télécharge depuis le dépôt amont à la version
