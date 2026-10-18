@@ -156,7 +156,8 @@ export function PageAtelier({ context }: PluginPageProps) {
     <Racine>
       <FournisseurDonnees>
         <TitreOnglet companyId={context.companyId} />
-        <main className="atl-page">
+        {/* Organigramme : toute la largeur de l'écran (le plan de 28 services en a besoin). */}
+        <main className={route.vue === "organigramme" ? "atl-page atl-page-large" : "atl-page"}>
           {context.companyId ? <BandeauEntreprise /> : null}
           {/* Vues de groupe (tous les services) : pas de rubriques d'un service, sur téléphone non plus. */}
           {route.vue === "departements" || route.vue === "organigramme" ? null : <Rubriques courante={rubrique.cle} rubriques={rubriques} />}

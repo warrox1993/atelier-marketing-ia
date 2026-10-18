@@ -87,6 +87,13 @@ describe("navigation", () => {
     const c = await page("/RNO/atelier/equipe");
     expect(c.querySelector("nav.atl-onglets")).not.toBeNull();
   });
+  it("seul l'organigramme occupe toute la largeur de l'écran", async () => {
+    let c = await page("/RNO/atelier/organigramme");
+    expect(c.querySelector("main.atl-page")?.classList.contains("atl-page-large")).toBe(true);
+    rendu?.demonter();
+    c = await page("/RNO/atelier/departements");
+    expect(c.querySelector("main.atl-page")?.classList.contains("atl-page-large")).toBe(false);
+  });
   it("l'entrée de la barre latérale mène à l'atelier", async () => {
     rendu = await rendre(createElement(EntreeAtelier, { context: contexte }));
     expect(rendu.conteneur.querySelector("a")?.getAttribute("href")).toBe("/RNO/atelier/accueil");

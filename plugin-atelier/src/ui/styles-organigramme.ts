@@ -16,7 +16,7 @@ export const STYLES_ORGANIGRAMME = `
 .atl-org-vide { margin: 0; font-size: 0.8125rem; color: var(--atl-attenue); }
 
 .atl-org-toile { position: relative; border: 1px solid var(--atl-trait); border-radius: var(--atl-rayon); background: var(--atl-surface-2); overflow: hidden; }
-.atl-org-vue { position: relative; height: min(78vh, 56rem); min-height: 22rem; overflow: hidden; cursor: grab; touch-action: none; user-select: none; -webkit-user-select: none; }
+.atl-org-vue { position: relative; height: calc(100vh - 9rem); min-height: 22rem; overflow: hidden; cursor: grab; touch-action: none; user-select: none; -webkit-user-select: none; }
 .atl-org-vue[data-deplace] { cursor: grabbing; }
 .atl-org-vue:focus-visible { outline: 2px solid var(--atl-anneau); outline-offset: -2px; }
 .atl-org-plan { position: absolute; left: 0; top: 0; transform-origin: 0 0; will-change: transform; }

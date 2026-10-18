@@ -6,12 +6,12 @@
  * Gestes : glisser pour se déplacer (souris ou doigt), Ctrl + molette ou pincement pour zoomer, boutons « + », « − » et
  * « Ajuster à l'écran » ; au clavier, flèches pour se déplacer, + et − pour zoomer, 0 pour ajuster.
  */
-import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, type KeyboardEvent as ToucheClavier, type PointerEvent as EvenementPointeur } from "react";
+import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent as ToucheClavier, type PointerEvent as EvenementPointeur } from "react";
 import { nombre } from "./format.js";
 import { LienHote } from "./composants.js";
 import { familleStatut, libelleStatutAgent, type AgentHote } from "./organigramme-arbre.js";
 import {
-  cartesCorrespondantes, disposerOrganigramme, premiereCorrespondance, transformationAjustee, transformationCentree, transformationOuverture, zoomerAutour,
+  FORMAT_CIBLE, cartesCorrespondantes, disposerOrganigramme, premiereCorrespondance, transformationAjustee, transformationCentree, transformationOuverture, zoomerAutour,
   type CarteDisposee, type Disposition, type ServiceADisposer, type Transformation,
 } from "./organigramme-disposition.js";
 
@@ -163,7 +163,10 @@ export interface PropsToile {
 }
 
 export function ToileOrganigramme({ services, prefixes, filtre, selection, voisins, selectionActive, choisir, relire }: PropsToile) {
-  const dispo = useMemo(() => disposerOrganigramme(services), [services]);
+  // Format de la grille = format réel de la vue (arrondi au dixième pour ne pas recalculer à chaque pixel) :
+  // un écran large reçoit plus de colonnes, et « Ajuster » remplit alors la largeur.
+  const [format, setFormat] = useState(FORMAT_CIBLE);
+  const dispo = useMemo(() => disposerOrganigramme(services, { format }), [services, format]);
   const filtreActif = filtre.trim() !== "";
   const trouvees = useMemo(() => cartesCorrespondantes(dispo, services, filtre), [dispo, services, filtre]);
   const premiere = useMemo(() => premiereCorrespondance(dispo, trouvees), [dispo, trouvees]);
@@ -171,6 +174,19 @@ export function ToileOrganigramme({ services, prefixes, filtre, selection, voisi
   const prefixeGeneral = (direction && prefixes[direction.slug]) || "";
 
   const vue = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    const el = vue.current;
+    if (!el) return;
+    const mesurer = () => {
+      const { width, height } = el.getBoundingClientRect();
+      if (width > 0 && height > 0) setFormat(Math.round((width / height) * 10) / 10);
+    };
+    mesurer();
+    if (typeof ResizeObserver === "undefined") return;
+    const obs = new ResizeObserver(mesurer);
+    obs.observe(el);
+    return () => obs.disconnect();
+  }, []);
   const plan = useRef<HTMLDivElement>(null);
   const t = useRef<Transformation>({ echelle: 1, x: 0, y: 0 });
   const interagi = useRef(false);

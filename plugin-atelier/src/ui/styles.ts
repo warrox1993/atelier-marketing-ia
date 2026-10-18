@@ -49,6 +49,7 @@ export const STYLES_ATELIER = `
 
 /* Page et en-tête */
 .atl-page { max-width: 76rem; margin: 0 auto; padding: 1.5rem 1.5rem 4rem; display: flex; flex-direction: column; gap: 1.25rem; }
+.atl-page-large { max-width: none; }
 .atl-entete { display: flex; flex-direction: column; gap: 0.375rem; }
 .atl-entete-ligne { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0.75rem; }
 .atl-entete h1 { font-size: 1.5rem; line-height: 1.25; font-weight: 600; letter-spacing: -0.01em; text-wrap: balance; }
