@@ -15,7 +15,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import { useHostContext } from "@paperclipai/plugin-sdk/ui";
 import type { EtatDepartement, ReponseFluxServices } from "../../contrats/departements.js";
-import { Chargement, EnTete, EtatErreur, Vide } from "../composants.js";
+import { Chargement, EtatErreur, Vide } from "../composants.js";
 import { lireDepartements, nomClient } from "../departements-sonde.js";
 import { nombre } from "../format.js";
 import { appelHote } from "../hote.js";
@@ -96,10 +96,10 @@ function ChampRecherche({ resultats, texte, changer, choisir }: { resultats: Res
   };
   return (
     <div className="atl-org-recherche">
-      <label htmlFor="atl-org-recherche-champ">Chercher un agent ou un service</label>
       <input
         id="atl-org-recherche-champ"
         ref={entree}
+        aria-label="Chercher un agent ou un service"
         type="search"
         role="combobox"
         aria-expanded={ouvert}
@@ -110,7 +110,7 @@ function ChampRecherche({ resultats, texte, changer, choisir }: { resultats: Res
         onChange={(e) => changer(e.target.value)}
         onKeyDown={surTouche}
         autoComplete="off"
-        placeholder="Nom d'un agent, d'un titre ou d'un service"
+        placeholder="Agent, titre ou service"
       />
       {ouvert ? (
         <ul id="atl-org-resultats" className="atl-org-resultats" role="listbox" aria-label="Résultats de la recherche">
@@ -308,16 +308,6 @@ export function VueOrganigramme() {
     )
   ) : (
     <>
-      <ListeOnglets
-        etiquette="Affichage de l'organigramme"
-        base={BASE_ONGLETS}
-        actif={nav.vue}
-        onglets={[
-          { cle: "carte", libelle: "Carte" },
-          { cle: "matrice", libelle: "Matrice" },
-        ]}
-        choisir={(cle) => aller({ vue: cle === "matrice" ? "matrice" : "carte", service: null, agent: null })}
-      />
       <PanneauOnglet base={BASE_ONGLETS} cle="carte" actif={nav.vue === "carte"}>
         {nav.vue === "carte" ? <CarteServices services={servicesAffiches} flux={fluxListe} selection={selection} choisir={setSelection} ouvrirService={(slug) => ouvrirService(slug)} /> : null}
       </PanneauOnglet>
@@ -332,16 +322,33 @@ export function VueOrganigramme() {
       <style href="atelier-organigramme" precedence="default">
         {STYLES_ORGANIGRAMME}
       </style>
-      <EnTete
-        titre="Organigramme"
-        description={`${liste.client} : ${pluriel(departements.length, "service", "services")}, ${pluriel(total, "agent", "agents")}${enLecture ? " lus pour l'instant" : ""}.`}
-      />
+      <header className="atl-org-tete">
+        <div className="atl-org-titrage">
+          <h1>Organigramme</h1>
+          <p className="atl-org-compte">
+            {pluriel(departements.length, "service", "services")} · {pluriel(total, "agent", "agents")}
+            {enLecture ? " lus pour l'instant" : ""}
+          </p>
+        </div>
+        <div className="atl-org-outils">
+          <ChampRecherche resultats={resultats} texte={texte} changer={setTexte} choisir={choisirResultat} />
+          {serviceOuvert ? null : (
+            <ListeOnglets
+              etiquette="Affichage de l'organigramme"
+              base={BASE_ONGLETS}
+              actif={nav.vue}
+              onglets={[
+                { cle: "carte", libelle: "Carte" },
+                { cle: "matrice", libelle: "Matrice" },
+              ]}
+              choisir={(cle) => aller({ vue: cle === "matrice" ? "matrice" : "carte", service: null, agent: null })}
+            />
+          )}
+        </div>
+      </header>
       <span id="atl-org-titre" className="atl-sr">
         Organigramme de {liste.client}
       </span>
-      <div className="atl-org-barre">
-        <ChampRecherche resultats={resultats} texte={texte} changer={setTexte} choisir={choisirResultat} />
-      </div>
       {fluxEnPanne ? (
         <div className="atl-org-erreur" role="alert">
           <p>Liaisons indisponibles : {fluxEnPanne}</p>

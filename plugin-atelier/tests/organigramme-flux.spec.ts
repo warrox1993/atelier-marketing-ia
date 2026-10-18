@@ -9,8 +9,8 @@ import { describe, expect, it } from "vitest";
 import type { FluxServiceLu } from "../src/contrats/departements.js";
 import type { AgentHote } from "../src/ui/organigramme-arbre.js";
 import {
-  chercher, courbeLiaison, dispositionAnneau, fluxMetier, indexRecherche, liaisonsDe, matriceEchanges, objetsDuFlux, ordonnerServices, sansChevauchement,
-  SERVICES_PAR_ANNEAU_MAX, volumeDuFlux, type CourbeLiaison, type DispositionAnneau, type FluxBrut, type NoeudAnneau, type Point, type ServiceCarte,
+  chercher, courbeLiaison, dispositionAnneau, fluxMetier, indexRecherche, liaisonsDe, matriceEchanges, objetsDuFlux, ordonnerServices, pointsSurEllipse, rayonsGeneral, sansChevauchement,
+  volumeDuFlux, type CourbeLiaison, type DispositionAnneau, type FluxBrut, type NoeudAnneau, type Point, type ServiceCarte,
 } from "../src/ui/organigramme-flux.js";
 
 const RACINE = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
@@ -116,71 +116,172 @@ describe("matriceEchanges", () => {
 
 // ---------------------------------------------------------------------------------------------------------------
 
-const VUE = { largeur: 1912, hauteur: 956 };
+/** Zone de la carte à 1912 x 956 (haut de la zone vers y = 216, bas de la fenêtre moins 1 rem) et à 1366 x 768. */
+const VUE = { largeur: 1568, hauteur: 724 };
+const PETITE_VUE = { largeur: 1100, hauteur: 540 };
 const services28 = services(28);
 const services60 = services(60);
 const rect = (n: NoeudAnneau) => ({ x0: n.x - n.largeur / 2, y0: n.y - n.hauteur / 2, x1: n.x + n.largeur / 2, y1: n.y + n.hauteur / 2 });
 const dedans = (p: Point, r: ReturnType<typeof rect>) => p.x > r.x0 && p.x < r.x1 && p.y > r.y0 && p.y < r.y1;
+/** Position d'un point par rapport à l'ellipse (rx, ry) centrée sur `c` : < 1 dedans, 1 dessus, > 1 dehors. */
+const dansEllipse = (p: Point, c: Point, e: { rx: number; ry: number }) => ((p.x - c.x) / e.rx) ** 2 + ((p.y - c.y) / e.ry) ** 2;
+
+describe("pointsSurEllipse", () => {
+  it("n points à longueur d'arc égale, sur l'ellipse, le premier en haut", () => {
+    for (const [rx, ry, n] of [[800, 300, 28], [500, 500, 12], [900, 120, 40]] as const) {
+      const pts = pointsSurEllipse(n, rx, ry, -Math.PI / 2);
+      expect(pts).toHaveLength(n);
+      expect(pts[0]!.x).toBeCloseTo(0, 6);
+      expect(pts[0]!.y).toBeCloseTo(-ry, 6);
+      // Longueur d'arc entre deux points consécutifs, intégrée à part (paramètre retrouvé par atan2 sur l'ellipse unité).
+      const parametre = (p: Point) => Math.atan2(p.y / ry, p.x / rx);
+      const arc = (p: Point, q: Point) => {
+        let t0 = parametre(p);
+        let t1 = parametre(q);
+        if (t1 <= t0) t1 += 2 * Math.PI;
+        let l = 0;
+        const pas = 4000;
+        for (let k = 0; k < pas; k += 1) {
+          const ta = t0 + ((t1 - t0) * k) / pas;
+          const tb = t0 + ((t1 - t0) * (k + 1)) / pas;
+          l += Math.hypot(rx * (Math.cos(tb) - Math.cos(ta)), ry * (Math.sin(tb) - Math.sin(ta)));
+        }
+        return l;
+      };
+      const longueurs = pts.map((p, i) => arc(p, pts[(i + 1) % n]!));
+      const moyenne = longueurs.reduce((a, b) => a + b, 0) / n;
+      for (const l of longueurs) expect(Math.abs(l - moyenne) / moyenne).toBeLessThan(0.003);
+      for (const p of pts) expect((p.x / rx) ** 2 + (p.y / ry) ** 2).toBeCloseTo(1, 6);
+    }
+  });
+});
 
 describe("dispositionAnneau", () => {
-  it("jusqu'à 24 services : un anneau, le général au centre, la Direction en haut, aucun chevauchement", () => {
-    for (const n of [1, 2, 5, 12, SERVICES_PAR_ANNEAU_MAX]) {
+  it("jusqu'à 28 services : UN anneau elliptique, le général au centre, la Direction en haut, aucun chevauchement", () => {
+    for (const n of [1, 2, 5, 12, 24, 28]) {
       const d = dispositionAnneau(services(n), VUE);
-      expect(d.rayons, `n=${n}`).toHaveLength(1);
+      expect(d.anneaux, `n=${n}`).toHaveLength(1);
+      expect(d.compact, `n=${n}`).toBe(false);
       expect(d.noeuds).toHaveLength(n + 1);
-      expect(sansChevauchement(d.noeuds), `n=${n}`).toBe(true);
+      expect(sansChevauchement(d.noeuds, 8), `n=${n}`).toBe(true);
       const g = d.noeuds.find((x) => x.genre === "general")!;
       expect(g).toMatchObject({ id: "general", x: d.centre.x, y: d.centre.y, anneau: 0 });
       const dir = d.noeuds.find((x) => x.id === "direction")!;
       expect(dir.x).toBeCloseTo(d.centre.x, 6);
       expect(dir.y).toBeLessThan(d.centre.y);
-      expect(Math.hypot(dir.x - d.centre.x, dir.y - d.centre.y)).toBeCloseTo(d.rayons[0]!, 6);
+      // Tous les services sont SUR l'ellipse, dont les axes suivent la largeur et la hauteur de la scène.
+      for (const x of d.noeuds.filter((q) => q.genre === "service")) expect(dansEllipse(x, d.centre, d.anneaux[0]!), `n=${n} ${x.id}`).toBeCloseTo(1, 6);
+      expect(d.anneaux[0]!.rx).toBeGreaterThan(d.anneaux[0]!.ry);
     }
   });
 
-  it("au-delà de 24 : deux anneaux concentriques, la Direction en haut de l'anneau extérieur, aucun chevauchement", () => {
-    for (const n of [25, 28, 40, 60]) {
+  it("28 services : la scène a exactement le format de la zone, y tient à l'échelle d'ajustement (au moins 0,8) et ne réserve rien d'inutile", () => {
+    const d = dispositionAnneau(services28, VUE);
+    expect(d.largeur / d.hauteur).toBeCloseTo(VUE.largeur / VUE.hauteur, 6);
+    expect(d.echelle).toBeGreaterThanOrEqual(0.8);
+    expect(d.largeur * d.echelle).toBeCloseTo(VUE.largeur, 6);
+    // Les nœuds extrêmes frôlent le bord de la scène (marge de 8 px seulement, aucune réserve extérieure).
+    const bornes = d.noeuds.map(rect);
+    expect(Math.min(...bornes.map((r) => r.x0))).toBeLessThan(20);
+    expect(Math.max(...bornes.map((r) => r.x1))).toBeGreaterThan(d.largeur - 20);
+    expect(Math.min(...bornes.map((r) => r.y0))).toBeLessThan(20);
+    expect(Math.max(...bornes.map((r) => r.y1))).toBeGreaterThan(d.hauteur - 20);
+  });
+
+  it("au-delà de 32 : nœuds compacts et second anneau intérieur, la Direction sur l'anneau extérieur, aucun chevauchement", () => {
+    for (const n of [33, 40, 60]) {
       const d = dispositionAnneau(services(n), VUE);
-      expect(d.rayons, `n=${n}`).toHaveLength(2);
-      expect(d.rayons[0]!).toBeLessThan(d.rayons[1]!);
-      expect(sansChevauchement(d.noeuds, 12), `n=${n}`).toBe(true);
+      expect(d.anneaux, `n=${n}`).toHaveLength(2);
+      expect(d.anneaux[0]!.rx).toBeLessThan(d.anneaux[1]!.rx);
+      expect(d.compact).toBe(true);
+      expect(sansChevauchement(d.noeuds, 8), `n=${n}`).toBe(true);
       expect(d.noeuds.filter((x) => x.anneau === 1).length + d.noeuds.filter((x) => x.anneau === 2).length).toBe(n);
       const dir = d.noeuds.find((x) => x.id === "direction")!;
       expect(dir.anneau).toBe(2);
       expect(dir.y).toBeLessThan(d.centre.y);
-      for (const x of d.noeuds.filter((q) => q.genre === "service")) expect(Math.hypot(x.x - d.centre.x, x.y - d.centre.y)).toBeCloseTo(d.rayons[x.anneau - 1]!, 6);
+      for (const x of d.noeuds.filter((q) => q.genre === "service")) expect(dansEllipse(x, d.centre, d.anneaux[x.anneau - 1]!), `n=${n} ${x.id}`).toBeCloseTo(1, 6);
     }
   });
 
-  it("tout tient dans la carte rendue, qui n'est jamais plus petite que la vue demandée", () => {
-    for (const n of [0, 3, 28, 60]) {
-      const d = dispositionAnneau(services(n), VUE);
-      expect(d.largeur).toBeGreaterThanOrEqual(VUE.largeur);
-      expect(d.hauteur).toBeGreaterThanOrEqual(VUE.hauteur);
+  it("zone étroite : nœuds compacts puis second anneau plutôt qu'un texte minuscule (échelle d'ajustement la plus haute)", () => {
+    const d = dispositionAnneau(services28, PETITE_VUE);
+    expect(d.compact).toBe(true);
+    expect(sansChevauchement(d.noeuds, 8)).toBe(true);
+    expect(d.echelle).toBeGreaterThanOrEqual(0.6);
+    expect(d.echelle).toBeLessThanOrEqual(1);
+  });
+
+  it("tout tient dans la scène, jamais plus petite que la zone, et l'échelle d'ajustement fait tenir la scène dans la zone", () => {
+    for (const [n, vue] of [[0, VUE], [3, VUE], [28, VUE], [60, VUE], [28, PETITE_VUE], [60, PETITE_VUE]] as const) {
+      const d = dispositionAnneau(services(n), vue);
+      expect(d.largeur).toBeGreaterThanOrEqual(vue.largeur - 1e-6);
+      expect(d.hauteur).toBeGreaterThanOrEqual(vue.hauteur - 1e-6);
+      expect(d.largeur * d.echelle).toBeLessThanOrEqual(vue.largeur + 1e-6);
+      expect(d.hauteur * d.echelle).toBeLessThanOrEqual(vue.hauteur + 1e-6);
+      expect(d.echelle).toBeGreaterThanOrEqual(0.4);
       for (const x of d.noeuds) {
         const r = rect(x);
-        expect(r.x0).toBeGreaterThanOrEqual(0);
-        expect(r.y0).toBeGreaterThanOrEqual(0);
-        expect(r.x1).toBeLessThanOrEqual(d.largeur);
-        expect(r.y1).toBeLessThanOrEqual(d.hauteur);
+        expect(r.x0, `${n} ${x.id}`).toBeGreaterThanOrEqual(-1e-6);
+        expect(r.y0).toBeGreaterThanOrEqual(-1e-6);
+        expect(r.x1).toBeLessThanOrEqual(d.largeur + 1e-6);
+        expect(r.y1).toBeLessThanOrEqual(d.hauteur + 1e-6);
       }
     }
   });
 
-  it("le rayon grandit pour que les nœuds ne se chevauchent pas, quelle que soit la vue ; slugs en double ignorés", () => {
+  it("la scène grandit pour que les nœuds ne se chevauchent pas, quelle que soit la zone ; slugs en double ignorés", () => {
     const petite = dispositionAnneau(services(20), { largeur: 300, hauteur: 300 });
     expect(sansChevauchement(petite.noeuds)).toBe(true);
     expect(petite.largeur).toBeGreaterThan(300);
+    expect(petite.echelle).toBeLessThan(1);
     const doublons = dispositionAnneau([...services(5), ...services(5)], VUE);
     expect(doublons.noeuds).toHaveLength(6);
     expect(dispositionAnneau([], VUE).noeuds.map((x) => x.id)).toEqual(["general"]);
   });
 
-  it("des nœuds plus grands donnent un rayon plus grand, toujours sans chevauchement", () => {
+  it("des nœuds imposés plus grands donnent une scène plus grande, toujours sans chevauchement", () => {
     const normal = dispositionAnneau(services(18), VUE);
     const gros = dispositionAnneau(services(18), VUE, { noeud: { largeur: 260, hauteur: 100 } });
-    expect(gros.rayons[0]!).toBeGreaterThan(normal.rayons[0]!);
+    expect(gros.largeur).toBeGreaterThan(normal.largeur);
     expect(sansChevauchement(gros.noeuds)).toBe(true);
+  });
+});
+
+describe("dispositionAnneau : surimpressions réservées", () => {
+  /** Légende en haut à gauche, commandes en haut à droite, aide en bas à gauche (px de la zone, marge de 8 px comprise). */
+  const reservesDe = (z: { largeur: number; hauteur: number }) => [
+    { x0: 4, y0: 4, x1: 280, y1: 100 },
+    { x0: z.largeur - 220, y0: 4, x1: z.largeur - 4, y1: 70 },
+    { x0: 4, y0: z.hauteur - 64, x1: 260, y1: z.hauteur - 4 },
+  ];
+  const noeudsSousUneReserve = (d: DispositionAnneau, reserves: ReturnType<typeof reservesDe>) =>
+    d.noeuds.filter((n) => {
+      const r = rect(n);
+      const [x0, y0, x1, y1] = [r.x0 * d.echelle, r.y0 * d.echelle, r.x1 * d.echelle, r.y1 * d.echelle];
+      return reserves.some((q) => x0 < q.x1 && q.x0 < x1 && y0 < q.y1 && q.y0 < y1);
+    }).map((n) => n.id);
+
+  it("aucun nœud, à l'échelle d'ajustement, ne passe sous une surimpression (28, 33 et 60 services, zone large et étroite)", () => {
+    for (const [n, vue] of [[28, VUE], [28, PETITE_VUE], [33, VUE], [60, VUE]] as const) {
+      const reserves = reservesDe(vue);
+      const d = dispositionAnneau(services(n), vue, { reserves });
+      expect(noeudsSousUneReserve(d, reserves), `n=${n} ${vue.largeur}`).toEqual([]);
+      expect(sansChevauchement(d.noeuds, 8), `n=${n}`).toBe(true);
+      expect(d.largeur / d.hauteur).toBeCloseTo(vue.largeur / vue.hauteur, 6);
+      expect(d.echelle).toBeGreaterThanOrEqual(0.4);
+    }
+  });
+
+  it("sans réserve la disposition ne change pas ; une réserve qui gêne resserre l'ellipse sans agrandir inutilement la scène", () => {
+    const sans = dispositionAnneau(services28, VUE);
+    expect(dispositionAnneau(services28, VUE, { reserves: [] })).toEqual(sans);
+    // Une réserve posée sur un nœud de l'ellipse libre : l'ellipse se resserre (axes plus courts) pour la dégager.
+    const gene = sans.noeuds.find((n) => n.id === "service-3")!;
+    const r = rect(gene);
+    const reserve = { x0: r.x0 * sans.echelle - 2, y0: r.y0 * sans.echelle - 2, x1: r.x1 * sans.echelle + 2, y1: r.y1 * sans.echelle + 2 };
+    const avec = dispositionAnneau(services28, VUE, { reserves: [reserve] });
+    expect(noeudsSousUneReserve(avec, [reserve])).toEqual([]);
+    expect(avec.anneaux[0]!.rx * avec.echelle).toBeLessThan(sans.anneaux[0]!.rx * sans.echelle);
   });
 });
 
@@ -301,12 +402,70 @@ describe("courbeLiaison", () => {
     }
   }, 60_000);
 
+  it("28 services : toutes les liaisons passent par l'intérieur de l'ellipse (milieu dedans, aucun point au-delà du bord des nœuds)", () => {
+    const d = disposition28;
+    const e = d.anneaux[0]!;
+    const sv = duService(d);
+    const [mx, my] = [sv[0]!.largeur / 2, sv[0]!.hauteur / 2];
+    for (const a of sv) for (const b of sv) {
+      if (a.id === b.id) continue;
+      const pts = echantillonnerChemin(courbeLiaison(a, b, d.noeuds).chemin);
+      expect(dansEllipse(pts[Math.floor(pts.length / 2)]!, d.centre, e), `${a.id} > ${b.id}`).toBeLessThan(1);
+      for (const p of pts) expect(dansEllipse(p, d.centre, { rx: e.rx + mx, ry: e.ry + my }), `${a.id} > ${b.id}`).toBeLessThanOrEqual(1.0001);
+    }
+  });
+
+  it("28 services en zone étroite (deux anneaux) : aucune courbe ne traverse un autre nœud", () => {
+    const d = dispositionAnneau(services28, PETITE_VUE);
+    expect(d.anneaux).toHaveLength(2);
+    const sv = duService(d);
+    for (const a of [sv[0]!, sv[5]!, sv[14]!, sv[27]!]) for (const b of sv) {
+      if (a.id === b.id) continue;
+      const c = courbeLiaison(a, b, d.noeuds);
+      expect(c.libre, `${a.id} > ${b.id}`).toBe(true);
+      expect(traverses(c, a, b, d), `${a.id} > ${b.id}`).toEqual([]);
+    }
+  });
+
   it("les 27 liaisons d'un service sont tracées vite (une sélection dans la carte)", () => {
     const d = dispositionAnneau(services28, VUE);
     const a = d.noeuds.find((n) => n.id === "service-5")!;
     const t0 = performance.now();
     for (const b of duService(d)) if (b.id !== a.id) courbeLiaison(a, b, d.noeuds);
     expect(performance.now() - t0).toBeLessThan(2000);
+  });
+});
+
+describe("rayonsGeneral", () => {
+  /** Rayons rendus, tels que le dessin les trace, lus et échantillonnés à part : nœuds tiers traversés (hors extrémités). */
+  const tiersTraverses = (d: DispositionAnneau) => {
+    const g = d.noeuds.find((n) => n.genre === "general")!;
+    const rayons = rayonsGeneral(d.noeuds);
+    const fautes: string[] = [];
+    for (const r of rayons) {
+      const pts = echantillonnerChemin(r.chemin);
+      for (const n of d.noeuds) if (n.id !== g.id && n.id !== r.id && pts.some((p) => dedans(p, rect(n)))) fautes.push(`${r.id} sous ${n.id}`);
+    }
+    return { rayons, fautes };
+  };
+
+  it("28 services : un rayon par service, tous droits, aucun ne passe sous un nœud", () => {
+    const { rayons, fautes } = tiersTraverses(dispositionAnneau(services28, VUE));
+    expect(rayons).toHaveLength(28);
+    expect(rayons.every((r) => r.droit)).toBe(true);
+    expect(fautes).toEqual([]);
+  });
+
+  it("zone étroite, 33 et 60 services : aucun rayon ne passe sous un nœud, même avec deux anneaux (courbe d'évitement au besoin)", () => {
+    for (const [n, vue] of [[28, PETITE_VUE], [33, VUE], [60, VUE]] as const) {
+      const { rayons, fautes } = tiersTraverses(dispositionAnneau(services(n), vue));
+      expect(rayons, `n=${n}`).toHaveLength(n);
+      expect(fautes, `n=${n}`).toEqual([]);
+    }
+  }, 60_000);
+
+  it("sans Coordinateur général : aucun rayon", () => {
+    expect(rayonsGeneral([])).toEqual([]);
   });
 });
 

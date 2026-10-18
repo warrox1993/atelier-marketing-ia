@@ -160,29 +160,52 @@ export interface NoeudAnneau {
 }
 
 export interface DispositionAnneau {
-  /** Dimensions de la carte : au moins celles demandées, agrandies si les nœuds ne tiennent pas autrement. */
+  /** Dimensions de la scène : au moins celles de la zone demandée, agrandies (même format) si les nœuds ne tiennent pas autrement. */
   largeur: number;
   hauteur: number;
   centre: { x: number; y: number };
-  /** Rayons des anneaux, du plus petit au plus grand (un seul rayon jusqu'à 24 services). */
-  rayons: number[];
+  /** Ellipses des anneaux, de l'intérieur vers l'extérieur (une seule jusqu'à SERVICES_PAR_ANNEAU_MAX services). */
+  anneaux: Array<{ rx: number; ry: number }>;
   noeuds: NoeudAnneau[];
+  /** Vrai si les nœuds sont en taille compacte (zone étroite ou beaucoup de services). */
+  compact: boolean;
+  /** Échelle (au plus 1) qui fait tenir toute la scène dans la zone demandée : c'est l'échelle d'« Ajuster à l'écran ». */
+  echelle: number;
 }
 
 export interface OptionsAnneau {
-  /** Taille d'un nœud de service (défaut 168 x 60). */
+  /** Taille imposée d'un nœud de service (défaut : adaptée à la zone, voir NOEUD_SERVICE et NOEUD_COMPACT). */
   noeud?: Dimensions;
   /** Taille du nœud du Coordinateur général (défaut 176 x 72). */
   general?: Dimensions;
-  /** Marge minimale entre deux nœuds et autour de la carte (défaut 12). */
+  /** Marge minimale entre deux nœuds et autour de la scène (défaut 8). */
   marge?: number;
+  /**
+   * Rectangles (px de la zone, origine en haut à gauche) que les surimpressions de la carte occupent (légende, commandes,
+   * aide) : aucun nœud n'y est placé. L'ellipse se resserre au besoin, plutôt que de laisser un nœud sous une surimpression.
+   */
+  reserves?: ReadonlyArray<RectReserve>;
 }
 
-/** Au-delà de ce nombre de services, deux anneaux concentriques. */
-export const SERVICES_PAR_ANNEAU_MAX = 24;
-export const NOEUD_SERVICE = { largeur: 168, hauteur: 60 } as const;
+export interface RectReserve {
+  x0: number;
+  y0: number;
+  x1: number;
+  y1: number;
+}
+
+/** Au-delà de ce nombre de services : nœuds compacts et second anneau. */
+export const SERVICES_PAR_ANNEAU_MAX = 32;
+export const NOEUD_SERVICE = { largeur: 120, hauteur: 72 } as const;
+export const NOEUD_COMPACT = { largeur: 112, hauteur: 58 } as const;
 export const NOEUD_GENERAL = { largeur: 176, hauteur: 72 } as const;
 export const ID_GENERAL = "general";
+/** En dessous de cette échelle d'ajustement, on essaie des nœuds plus compacts puis un second anneau (le texte reste lisible). */
+export const ECHELLE_CONFORT = 0.8;
+/** Rapport des axes de l'anneau intérieur à ceux de l'anneau extérieur (disposition à deux anneaux). */
+const RAPPORT_ANNEAU_INTERIEUR = 0.6;
+/** Facteurs de resserrement de l'ellipse essayés, du plus large au plus serré, quand une surimpression gêne un nœud. */
+const RESSERREMENTS = [1, 0.97, 0.94, 0.91, 0.88, 0.85, 0.82, 0.79, 0.76, 0.73, 0.7];
 
 interface Rect {
   x0: number;
@@ -202,89 +225,132 @@ export function sansChevauchement(noeuds: readonly NoeudAnneau[], marge = 0): bo
   return true;
 }
 
-function placerAnneau(ids: readonly string[], rayon: number, depart: number, anneau: 1 | 2, taille: Dimensions): NoeudAnneau[] {
-  return ids.map((id, i) => {
-    const angle = depart + (2 * Math.PI * i) / ids.length;
-    return { id, genre: "service", x: rayon * Math.cos(angle), y: rayon * Math.sin(angle), largeur: taille.largeur, hauteur: taille.hauteur, angle, anneau };
+/**
+ * `n` points espacés à LONGUEUR D'ARC ÉGALE sur l'ellipse (rx, ry) centrée en (0, 0), le premier à l'angle `depart`
+ * (-PI/2 = en haut), décalés de `decalage` pas (0 à 1). La longueur d'arc est intégrée par échantillonnage fin.
+ */
+export function pointsSurEllipse(n: number, rx: number, ry: number, depart: number, decalage = 0): Array<Point & { angle: number }> {
+  if (n <= 0) return [];
+  const PAS = 1440;
+  const parametre = (k: number) => depart + (2 * Math.PI * k) / PAS;
+  const cumul = new Array<number>(PAS + 1).fill(0);
+  for (let k = 1; k <= PAS; k += 1) {
+    const t0 = parametre(k - 1);
+    const t1 = parametre(k);
+    cumul[k] = cumul[k - 1]! + Math.hypot(rx * (Math.cos(t1) - Math.cos(t0)), ry * (Math.sin(t1) - Math.sin(t0)));
+  }
+  const perimetre = cumul[PAS]!;
+  return Array.from({ length: n }, (_, i) => {
+    const s = (((i + decalage) * perimetre) / n) % perimetre;
+    let bas = 0;
+    let haut = PAS;
+    while (haut - bas > 1) {
+      const milieu = (bas + haut) >> 1;
+      if (cumul[milieu]! <= s) bas = milieu; else haut = milieu;
+    }
+    const segment = cumul[haut]! - cumul[bas]!;
+    const t = parametre(bas + (segment > 0 ? (s - cumul[bas]!) / segment : 0));
+    const x = rx * Math.cos(t);
+    const y = ry * Math.sin(t);
+    return { x, y, angle: Math.atan2(y, x) };
   });
 }
 
-/** Plus petit rayon (par pas de 2 px, à partir de `min`) pour lequel `construire(rayon)` ne chevauche rien. */
-function rayonSansChevauchement(min: number, construire: (r: number) => NoeudAnneau[], marge: number): number {
-  let r = Math.max(min, 1);
-  for (let tour = 0; tour < 5000; tour += 1, r += 2) if (sansChevauchement(construire(r), marge)) return r;
-  return r;
+interface ReglageAnneau {
+  noeud: Dimensions;
+  deuxAnneaux: boolean;
+  compact: boolean;
 }
 
 /**
- * Carte des services : le Coordinateur général au centre, les services sur un anneau (deux anneaux concentriques
- * au-delà de 24), la Direction en haut. Les services gardent l'ordre donné après la Direction (l'appelant peut
- * rapprocher les services qui échangent le plus). Le rayon est calculé pour qu'aucun nœud ne se chevauche, quelle que
- * soit la taille demandée : la carte grandit au besoin (`largeur` et `hauteur` du résultat), jamais l'inverse.
+ * Une disposition pour un réglage donné : la scène a le format de la zone (agrandie du facteur g, le plus petit pour
+ * lequel plus aucun nœud ne se chevauche), l'ellipse prend la largeur et la hauteur de la scène.
+ */
+function disposerReglage(ids: readonly string[], taille: Dimensions, ng: Dimensions, reglage: ReglageAnneau, marge: number, reserves: ReadonlyArray<RectReserve>): DispositionAnneau {
+  const { noeud: nd } = reglage;
+  const haut = -Math.PI / 2;
+  const n = ids.length;
+  const general: NoeudAnneau = { id: ID_GENERAL, genre: "general", x: 0, y: 0, largeur: ng.largeur, hauteur: ng.hauteur, angle: 0, anneau: 0 };
+  const l0 = Math.max(taille.largeur, 1);
+  const h0 = Math.max(taille.hauteur, 1);
+  // Répartition entre les deux anneaux (Bresenham) : la Direction (premier service) reste sur l'anneau extérieur.
+  const nInterieur = reglage.deuxAnneaux ? Math.floor(n * 0.4) : 0;
+  const exterieur: string[] = [];
+  const interieur: string[] = [];
+  ids.forEach((id, i) => {
+    const versInterieur = i > 0 && Math.floor(((i + 1) * nInterieur) / n) > Math.floor((i * nInterieur) / n);
+    (versInterieur ? interieur : exterieur).push(id);
+  });
+  const poser = (liste: readonly string[], rx: number, ry: number, decalage: number, anneau: 1 | 2): NoeudAnneau[] =>
+    pointsSurEllipse(liste.length, rx, ry, haut, decalage).map((p, i) => ({ id: liste[i]!, genre: "service", x: p.x, y: p.y, largeur: nd.largeur, hauteur: nd.hauteur, angle: p.angle, anneau }));
+
+  let g = 1;
+  for (let tour = 0; tour < 400; tour += 1, g *= 1.02) {
+    const largeur = l0 * g;
+    const hauteur = h0 * g;
+    const rx0 = Math.max(1, (largeur - nd.largeur) / 2 - marge);
+    const ry0 = Math.max(1, (hauteur - nd.hauteur) / 2 - marge);
+    // Les surimpressions sont en px de la zone ; la scène est g fois plus grande (elle est réduite de 1/g à l'ajustement).
+    const interdits = reserves.map((r) => ({ x0: r.x0 * g, y0: r.y0 * g, x1: r.x1 * g, y1: r.y1 * g }));
+    const dernier = tour === 399;
+    for (const f of dernier ? [1] : RESSERREMENTS) {
+      const rx = rx0 * f;
+      const ry = ry0 * f;
+      const anneaux = interieur.length > 0 ? [{ rx: rx * RAPPORT_ANNEAU_INTERIEUR, ry: ry * RAPPORT_ANNEAU_INTERIEUR }, { rx, ry }] : [{ rx, ry }];
+      const noeuds = [
+        general,
+        ...(interieur.length > 0 ? poser(interieur, anneaux[0]!.rx, anneaux[0]!.ry, 0.5, 1) : []),
+        ...poser(exterieur, rx, ry, 0, interieur.length > 0 ? 2 : 1),
+      ];
+      const centre = { x: largeur / 2, y: hauteur / 2 };
+      const places = noeuds.map((p) => ({ ...p, x: p.x + centre.x, y: p.y + centre.y }));
+      if (!dernier) {
+        if (!sansChevauchement(noeuds, marge)) continue;
+        if (places.some((n) => interdits.some((r) => seChevauchent(rectDe(n, marge / 2), r)))) continue;
+      }
+      return { largeur, hauteur, centre, anneaux, compact: reglage.compact, noeuds: places, echelle: Math.min(1, taille.largeur / largeur, taille.hauteur / hauteur) };
+    }
+  }
+  throw new Error("disposition impossible");
+}
+
+/**
+ * Carte des services : le Coordinateur général au centre, les services sur UN anneau elliptique adapté au format de la
+ * zone (axes pris sur sa largeur et sa hauteur), espacés à longueur d'arc égale, la Direction en haut. Au-delà de
+ * SERVICES_PAR_ANNEAU_MAX services, ou si la zone est trop étroite pour un texte lisible (échelle d'ajustement sous
+ * ECHELLE_CONFORT), les nœuds deviennent compacts puis un second anneau, intérieur, apparaît. La scène grandit (même
+ * format, `echelle` < 1) quand les nœuds ne tiennent pas autrement : aucun chevauchement, jamais. Les services gardent
+ * l'ordre donné après la Direction.
  */
 export function dispositionAnneau(services: readonly ServiceCarte[], taille: Dimensions, options: OptionsAnneau = {}): DispositionAnneau {
-  const marge = options.marge ?? 12;
-  const nd = options.noeud ?? NOEUD_SERVICE;
+  const marge = options.marge ?? 8;
   const ng = options.general ?? NOEUD_GENERAL;
   const vus = new Set<string>();
   const uniques = services.filter((s) => (vus.has(s.slug) ? false : (vus.add(s.slug), true)));
-  const direction = uniques.filter((s) => s.estDirection === true);
-  const ordonnes = [...direction, ...uniques.filter((s) => s.estDirection !== true)];
-  const n = ordonnes.length;
-  const haut = -Math.PI / 2;
-  const general: NoeudAnneau = { id: ID_GENERAL, genre: "general", x: 0, y: 0, largeur: ng.largeur, hauteur: ng.hauteur, angle: 0, anneau: 0 };
-  // Rayon qui remplit l'espace demandé (le plus petit des deux axes) quand il est plus grand que le minimum.
-  const rayonLibreMax = Math.max(0, Math.min((taille.largeur - nd.largeur) / 2, (taille.hauteur - nd.hauteur) / 2) - marge);
-
-  let noeuds: NoeudAnneau[];
-  let rayons: number[];
-  if (n === 0) {
-    noeuds = [general];
-    rayons = [];
-  } else if (n <= SERVICES_PAR_ANNEAU_MAX) {
-    const ids = ordonnes.map((s) => s.slug);
-    const construire = (r: number) => [general, ...placerAnneau(ids, r, haut, 1, nd)];
-    const minimum = rayonSansChevauchement(Math.hypot(ng.largeur, ng.hauteur) / 2 + Math.hypot(nd.largeur, nd.hauteur) / 2 * 0.6, construire, marge);
-    const r = Math.max(minimum, rayonLibreMax);
-    noeuds = construire(r);
-    rayons = [r];
-  } else {
-    // Deux anneaux : la Direction (premier service) est sur l'anneau extérieur, les autres se répartissent régulièrement.
-    const nInterieur = Math.floor(n * 0.45);
-    const exterieur: string[] = [];
-    const interieur: string[] = [];
-    ordonnes.forEach((s, i) => {
-      // Répartition régulière (Bresenham) ; la Direction (i = 0) reste sur l'anneau extérieur.
-      const versInterieur = i > 0 && Math.floor(((i + 1) * nInterieur) / n) > Math.floor((i * nInterieur) / n);
-      (versInterieur ? interieur : exterieur).push(s.slug);
-    });
-    const decalageInterieur = interieur.length > 0 ? Math.PI / interieur.length : 0;
-    const construire = (rInt: number, rExt: number) => [general, ...placerAnneau(interieur, rInt, haut + decalageInterieur, 1, nd), ...placerAnneau(exterieur, rExt, haut, 2, nd)];
-    // 1) rayon intérieur minimal (autour du général), 2) rayon extérieur minimal avec un écart radial suffisant.
-    const rInt0 = rayonSansChevauchement(Math.hypot(ng.largeur, ng.hauteur) / 2 + nd.hauteur, (r) => [general, ...placerAnneau(interieur, r, haut + decalageInterieur, 1, nd)], marge);
-    const rExt0 = rayonSansChevauchement(rInt0 + nd.hauteur * 2, (r) => placerAnneau(exterieur, r, haut, 2, nd), marge);
-    let rExt = Math.max(rExt0, rayonLibreMax);
-    let rInt = Math.max(rInt0, Math.min(rExt - nd.hauteur * 2.2, rExt * 0.55));
-    while (!sansChevauchement(construire(rInt, rExt), marge)) {
-      rExt += 4;
-      rInt = Math.max(rInt0, Math.min(rExt - nd.hauteur * 2.2, rExt * 0.55));
-    }
-    noeuds = construire(rInt, rExt);
-    rayons = [rInt, rExt];
+  const ordonnes = [...uniques.filter((s) => s.estDirection === true), ...uniques.filter((s) => s.estDirection !== true)];
+  const ids = ordonnes.map((s) => s.slug);
+  const beaucoup = ids.length > SERVICES_PAR_ANNEAU_MAX;
+  if (ids.length === 0) {
+    const general: NoeudAnneau = { id: ID_GENERAL, genre: "general", x: Math.max(taille.largeur, ng.largeur) / 2, y: Math.max(taille.hauteur, ng.hauteur) / 2, largeur: ng.largeur, hauteur: ng.hauteur, angle: 0, anneau: 0 };
+    return { largeur: Math.max(taille.largeur, ng.largeur), hauteur: Math.max(taille.hauteur, ng.hauteur), centre: { x: general.x, y: general.y }, anneaux: [], noeuds: [general], compact: false, echelle: 1 };
   }
-
-  const rayonMax = rayons.length > 0 ? rayons[rayons.length - 1]! : 0;
-  const dessinLargeur = n === 0 ? ng.largeur : Math.max(ng.largeur, (rayonMax + nd.largeur / 2) * 2);
-  const dessinHauteur = n === 0 ? ng.hauteur : Math.max(ng.hauteur, (rayonMax + nd.hauteur / 2) * 2);
-  // Place pour les arcs qui contournent l'anneau extérieur quand aucun passage intérieur n'existe.
-  const largeur = Math.max(taille.largeur, dessinLargeur + 2 * (marge + LOBE_EXTERIEUR));
-  const hauteur = Math.max(taille.hauteur, dessinHauteur + 2 * (marge + LOBE_EXTERIEUR));
-  const centre = { x: largeur / 2, y: hauteur / 2 };
-  return { largeur, hauteur, centre, rayons, noeuds: noeuds.map((p) => ({ ...p, x: p.x + centre.x, y: p.y + centre.y })) };
+  const reglages: ReglageAnneau[] = options.noeud
+    ? [{ noeud: options.noeud, deuxAnneaux: beaucoup, compact: false }]
+    : beaucoup
+      ? [{ noeud: NOEUD_COMPACT, deuxAnneaux: true, compact: true }]
+      : [
+          { noeud: NOEUD_SERVICE, deuxAnneaux: false, compact: false },
+          { noeud: NOEUD_COMPACT, deuxAnneaux: false, compact: true },
+          { noeud: NOEUD_COMPACT, deuxAnneaux: true, compact: true },
+        ];
+  let meilleure: DispositionAnneau | null = null;
+  for (const r of reglages) {
+    const d = disposerReglage(ids, taille, ng, r, marge, options.reserves ?? []);
+    if (d.echelle >= ECHELLE_CONFORT) return d;
+    if (!meilleure || d.echelle > meilleure.echelle + 1e-9) meilleure = d;
+  }
+  return meilleure!;
 }
-
-/** Réserve autour de l'anneau extérieur pour les courbes de dernier recours qui le contournent. */
-const LOBE_EXTERIEUR = 56;
 
 // ---------------------------------------------------------------------------------------------------------------
 // Courbes de liaison
@@ -311,6 +377,8 @@ export interface CourbeLiaison {
 const ECHANTILLONS = 64;
 /** Écart minimal entre une courbe et le rectangle d'un autre nœud. */
 const MARGE_COURBE = 6;
+/** Creux maximal (px) d'une liaison courbée vers le centre. */
+const CREUX_MAX = 120;
 
 const soustraire = (a: Point, b: Point): Point => ({ x: a.x - b.x, y: a.y - b.y });
 const norme = (a: Point): number => Math.hypot(a.x, a.y);
@@ -547,14 +615,17 @@ export function courbeLiaison(a: NoeudAnneau, b: NoeudAnneau, noeuds: readonly N
   const signe = decalage < 0 ? -1 : 1;
 
   // Candidats triés par coût : creux vers l'intérieur (k > 0) ou, en dernier, vers l'extérieur (k < 0), puis déport latéral.
+  // Le creux est plafonné (CREUX_MAX) : une liaison entre deux nœuds éloignés reste une corde presque droite tirée vers le
+  // centre, elle ne s'enfle pas jusqu'au bord de l'anneau.
   const creux = [0.32, 0.6, 1.0, 1.6, -0.5];
   const deports = [0, 1, -1, 2.5, -2.5].map((k) => k * 28);
-  const candidats = creux.flatMap((k) => deports.map((lat) => ({ k, lat, cout: Math.abs(k) * dist * (k < 0 ? 3 : 1) + 1.5 * Math.abs(lat) + (Math.sign(lat) * signe < 0 ? 12 : 0) })))
+  const profondeur = (k: number) => (k < 0 ? k * dist : Math.min(Math.max(k * dist, 24), CREUX_MAX));
+  const candidats = creux.flatMap((k) => deports.map((lat) => ({ k, lat, cout: Math.abs(profondeur(k)) * (k < 0 ? 3 : 1) + 1.5 * Math.abs(lat) + (Math.sign(lat) * signe < 0 ? 12 : 0) })))
     .sort((p, q) => p.cout - q.cout);
 
   let retenu: { chemin: string; points: Point[]; depart: Point; arrivee: Point; avantArrivee: Point; nb: number } | null = null;
   for (const { k, lat } of candidats) {
-    const creuse = k < 0 ? k * dist : Math.max(k * dist, 24);
+    const creuse = profondeur(k);
     const ctrl: Point = {
       x: m.x + interieur.x * creuse + gauche.x * (decalage + lat * signe),
       y: m.y + interieur.y * creuse + gauche.y * (decalage + lat * signe),
@@ -599,6 +670,32 @@ export function courbeLiaison(a: NoeudAnneau, b: NoeudAnneau, noeuds: readonly N
     points: retenu.points,
     libre: retenu.nb === 0,
   };
+}
+
+export interface RayonGeneral {
+  /** Slug du service au bout du rayon. */
+  id: string;
+  /** Chemin SVG : segment droit du bord du général au bord du service, ou courbe d'évitement s'il croiserait un autre nœud. */
+  chemin: string;
+  /** Vrai si le rayon est un segment droit (toujours le cas avec un seul anneau). */
+  droit: boolean;
+}
+
+/**
+ * Rayons du Coordinateur général vers chaque service (affichés au survol ou au focus du général). Un rayon ne passe
+ * jamais sous un autre nœud : segment droit quand rien ne le gêne (toujours vrai avec un seul anneau), sinon la
+ * courbe d'évitement de `courbeLiaison`.
+ */
+export function rayonsGeneral(noeuds: readonly NoeudAnneau[]): RayonGeneral[] {
+  const general = noeuds.find((n) => n.genre === "general");
+  if (!general) return [];
+  return noeuds.filter((n) => n.genre === "service").map((n) => {
+    const depart = sortieDuRectangle(general, n);
+    const arrivee = sortieDuRectangle(n, general);
+    const obstacles = noeuds.filter((x) => x.id !== general.id && x.id !== n.id).map((x) => rectDe(x, MARGE_COURBE));
+    if (collisions([depart, arrivee], obstacles) === 0) return { id: n.id, chemin: `M ${pt(depart)} L ${pt(arrivee)}`, droit: true };
+    return { id: n.id, chemin: courbeLiaison(general, n, noeuds, 0).chemin, droit: false };
+  });
 }
 
 // ---------------------------------------------------------------------------------------------------------------

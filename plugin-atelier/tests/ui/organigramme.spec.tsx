@@ -10,6 +10,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { DepartementDeclare, FluxServiceLu } from "../../src/contrats/departements.js";
 import { EntreeAtelier, PageAtelier } from "../../src/ui/index.js";
 import { oublierDepartements } from "../../src/ui/departements-sonde.js";
+import { STYLES_ORGANIGRAMME } from "../../src/ui/styles-organigramme.js";
 import { oublierAccesDirection } from "../../src/ui/vues/echanges.js";
 import { cliquer, ENTREPRISE, installerPont, parTexte, rendre, saisir, type Rendu } from "./pont.js";
 
@@ -115,6 +116,20 @@ const focaliser = async (el: HTMLElement) => {
   });
 };
 const onglet = (c: ParentNode, libelle: string) => parTexte(c, '[role="tab"]', libelle);
+/** Échelle et translation du plan de la carte, lues sur sa transformation CSS. */
+const vueActuelle = (c: ParentNode) => {
+  const m = /translate\((-?[\d.]+)px, (-?[\d.]+)px\) scale\(([\d.]+)\)/u.exec(c.querySelector<HTMLElement>(".atl-car-plan")!.style.transform);
+  if (!m) throw new Error("Pas de transformation sur le plan");
+  return { x: Number(m[1]), y: Number(m[2]), echelle: Number(m[3]) };
+};
+const pointeur = async (el: Element, type: string, x: number, y: number) => {
+  await act(async () => {
+    const e = new MouseEvent(type, { bubbles: true, cancelable: true, clientX: x, clientY: y, button: 0 });
+    Object.defineProperty(e, "pointerId", { value: 1 });
+    el.dispatchEvent(e);
+  });
+};
+const boutonZoom = (c: ParentNode, libelle: string) => c.querySelector<HTMLElement>(`.atl-car-commandes button[aria-label="${libelle}"]`)!;
 
 /** Jeu réel en miniature : 28 services, 218 agents dont un coordinateur (rôle ceo) par service. */
 function grandJeu() {
@@ -157,7 +172,7 @@ describe("entrée de menu", () => {
 
 
 describe("carte des services", () => {
-  it("lit les agents de chaque service avec le companyId de SON service et dessine le général, un nœud par service et un trait fin vers chacun", async () => {
+  it("lit les agents de chaque service avec le companyId de SON service, dessine le général, un nœud par service et l'ellipse ; aucun rayon au repos", async () => {
     serveur = servir({ aTraiter: { [JUR]: 2 } });
     const { c } = await ouvrir();
     const lus = appels.filter((u) => /\/agents/u.test(u)).map((u) => /companies\/([^/]+)\/agents/u.exec(u)![1]).sort();
@@ -168,10 +183,30 @@ describe("carte des services", () => {
     expect(noeud(c, "Juridique").textContent).toContain("À traiter");
     expect(noeud(c, "Marketing").textContent).not.toContain("À traiter");
     expect(c.querySelector(".atl-car-general")?.textContent).toContain("Coordinateur général");
-    expect(c.querySelectorAll("line.atl-car-hierarchie")).toHaveLength(3);
+    // Au repos : l'ellipse en trait fin, aucun des rayons du général, aucun panneau vide.
+    expect(c.querySelectorAll("ellipse.atl-car-anneau")).toHaveLength(1);
+    expect(c.querySelectorAll(".atl-car-hierarchie")).toHaveLength(0);
+    expect(c.querySelector(".atl-car-panneau")).toBeNull();
+    expect(c.querySelector(".atl-car-note")?.textContent).toContain("Cliquez un service pour voir ses échanges ; double-cliquez pour l'ouvrir.");
     expect(c.textContent).toContain("Tous les coordinateurs peuvent aussi se parler entre eux et avec le Coordinateur général.");
     // Aucun agent n'est dessiné sur la carte.
     expect(c.textContent).not.toContain("Veille légale");
+  });
+
+  it("survol ou focus du Coordinateur général : un rayon par service, qui disparaît au départ ; un clic les épingle", async () => {
+    serveur = servir();
+    const { c } = await ouvrir();
+    const general = c.querySelector<HTMLElement>(".atl-car-general")!;
+    await focaliser(general);
+    expect(c.querySelectorAll("path.atl-car-hierarchie")).toHaveLength(3);
+    await act(async () => general.blur());
+    expect(c.querySelectorAll(".atl-car-hierarchie")).toHaveLength(0);
+    await cliquer(general);
+    expect(general.getAttribute("aria-pressed")).toBe("true");
+    await act(async () => general.blur());
+    expect(c.querySelectorAll("path.atl-car-hierarchie")).toHaveLength(3);
+    await cliquer(general);
+    expect(c.querySelectorAll(".atl-car-hierarchie")).toHaveLength(0);
   });
 
   it("28 services et 218 agents : 28 nœuds, aucune flèche au repos, pas de chevauchement de position", async () => {
@@ -243,7 +278,7 @@ describe("carte des services", () => {
     expect(c.querySelector("[data-selection]")).toBeNull();
     expect(c.querySelector(".atl-car-panneau h2")).toBeNull();
     await cliquer(noeud(c, "Marketing"));
-    await cliquer(parTexte(c, ".atl-car-panneau button", "Désélectionner"));
+    await cliquer(parTexte(c, ".atl-car-panneau button", "Fermer"));
     expect(c.querySelector("[data-selection]")).toBeNull();
   });
 
@@ -283,6 +318,143 @@ describe("carte des services", () => {
     await cliquer(parTexte(c, ".atl-orgs-fil button", "Organigramme"));
     await laisser();
     expect(noeud(c, "Marketing").getAttribute("aria-pressed")).toBe("true");
+  });
+});
+
+describe("carte : toile, zoom, déplacement et tiroir", () => {
+  it("en-tête compact : titre et décompte à gauche, recherche et commutateur Carte / Matrice à droite, libellé de la recherche en aria-label", async () => {
+    serveur = servir();
+    const { c } = await ouvrir();
+    const tete = c.querySelector(".atl-org-tete")!;
+    expect(tete.querySelector("h1")?.textContent).toBe("Organigramme");
+    expect(tete.querySelector(".atl-org-compte")?.textContent).toBe("3 services · 6 agents");
+    const outils = tete.querySelector(".atl-org-outils")!;
+    const champ = outils.querySelector<HTMLInputElement>('input[type="search"]')!;
+    expect(champ.getAttribute("aria-label")).toBe("Chercher un agent ou un service");
+    expect(outils.querySelector("label")).toBeNull();
+    expect(Array.from(outils.querySelectorAll('[role="tab"]')).map((t) => t.textContent)).toEqual(["Carte", "Matrice"]);
+    // Un seul rang avant la carte : la zone suit directement l'en-tête.
+    expect(tete.nextElementSibling?.id).toBe("atl-org-titre");
+  });
+
+  it("la zone occupe la hauteur de la fenêtre moins 1 rem ; à l'ouverture la carte est ajustée à l'écran (échelle de 0,4 à 1)", async () => {
+    serveur = servir();
+    const { c } = await ouvrir();
+    const zone = c.querySelector<HTMLElement>(".atl-car-zone")!;
+    expect(zone.style.height).toBe(`${window.innerHeight - 16}px`);
+    const ouverture = vueActuelle(c);
+    expect(ouverture.echelle).toBeGreaterThanOrEqual(0.4);
+    expect(ouverture.echelle).toBeLessThanOrEqual(1);
+    expect(c.querySelector(".atl-car-echelle")?.textContent).toBe(`${Math.round(ouverture.echelle * 100)} %`);
+  });
+
+  it("légende en surimpression (trois échantillons) et commandes de 44 px avec leur aria-label", async () => {
+    serveur = servir();
+    const { c } = await ouvrir();
+    const legende = c.querySelector(".atl-car-legende")!;
+    expect(legende.querySelectorAll("p")).toHaveLength(3);
+    expect(legende.textContent).toContain("Plein : demandes envoyées");
+    expect(legende.textContent).toContain("Pointillé : demandes reçues");
+    expect(legende.querySelectorAll("p")[2]?.textContent).toBe("approbation humaine exigée");
+    expect(Array.from(c.querySelectorAll(".atl-car-commandes button")).map((b) => b.getAttribute("aria-label"))).toEqual(["Zoom avant", "Zoom arrière", "Ajuster à l'écran"]);
+    expect(STYLES_ORGANIGRAMME).toMatch(/\.atl-car-commande \{[^}]*width: 2\.75rem; height: 2\.75rem/u);
+  });
+
+  it("boutons : + et - zooment de 25 % autour du centre, bornés de 0,3 à 2,5, Ajuster revient à l'ouverture, sans redessiner les nœuds", async () => {
+    serveur = servir();
+    const { c } = await ouvrir();
+    const premier = c.querySelector(".atl-car-noeud")!;
+    const ouverture = vueActuelle(c);
+    await cliquer(boutonZoom(c, "Zoom avant"));
+    expect(vueActuelle(c).echelle).toBeCloseTo(ouverture.echelle * 1.25, 3);
+    await cliquer(boutonZoom(c, "Zoom arrière"));
+    await cliquer(boutonZoom(c, "Zoom arrière"));
+    expect(vueActuelle(c).echelle).toBeLessThan(ouverture.echelle);
+    for (let i = 0; i < 20; i += 1) await cliquer(boutonZoom(c, "Zoom avant"));
+    expect(vueActuelle(c).echelle).toBeCloseTo(2.5, 5);
+    for (let i = 0; i < 30; i += 1) await cliquer(boutonZoom(c, "Zoom arrière"));
+    expect(vueActuelle(c).echelle).toBeCloseTo(0.3, 5);
+    await cliquer(boutonZoom(c, "Ajuster à l'écran"));
+    expect(vueActuelle(c)).toEqual(ouverture);
+    expect(c.querySelector(".atl-car-noeud")).toBe(premier);
+  });
+
+  it("glisser déplace la carte ; le clic qui suit n'active aucun nœud, sans minuterie ; un petit mouvement reste un clic", async () => {
+    serveur = servir();
+    const { c } = await ouvrir();
+    const vue = c.querySelector<HTMLElement>(".atl-car-vue")!;
+    const depart = vueActuelle(c);
+    await pointeur(vue, "pointerdown", 100, 100);
+    await pointeur(vue, "pointermove", 160, 130);
+    await pointeur(vue, "pointerup", 160, 130);
+    const apres = vueActuelle(c);
+    expect(apres.x).toBeCloseTo(depart.x + 60, 3);
+    expect(apres.y).toBeCloseTo(depart.y + 30, 3);
+    expect(apres.echelle).toBe(depart.echelle);
+    // Le clic qui suit le glissement n'active pas le nœud situé sous le pointeur.
+    await cliquer(noeud(c, "Marketing"));
+    expect(noeud(c, "Marketing").getAttribute("aria-pressed")).toBe("false");
+    // Prochain appui : le drapeau est effacé, un clic normal sélectionne.
+    await pointeur(vue, "pointerdown", 10, 10);
+    await pointeur(vue, "pointermove", 12, 11);
+    await pointeur(vue, "pointerup", 12, 11);
+    expect(vueActuelle(c)).toEqual(apres);
+    await cliquer(noeud(c, "Marketing"));
+    expect(noeud(c, "Marketing").getAttribute("aria-pressed")).toBe("true");
+  });
+
+  it("molette (sans Ctrl) : zoom autour du pointeur, page non défilée ; clavier : flèches déplacent, + et - zooment, 0 ajuste", async () => {
+    serveur = servir();
+    const { c } = await ouvrir();
+    const vue = c.querySelector<HTMLElement>(".atl-car-vue")!;
+    const ouverture = vueActuelle(c);
+    const molette = new WheelEvent("wheel", { bubbles: true, cancelable: true, deltaY: -100, clientX: 300, clientY: 200 });
+    await act(async () => void vue.dispatchEvent(molette));
+    expect(molette.defaultPrevented).toBe(true);
+    const zoome = vueActuelle(c);
+    expect(zoome.echelle).toBeGreaterThan(ouverture.echelle);
+    // Le point sous le pointeur reste fixe : (px - x) / echelle est inchangé.
+    expect((300 - zoome.x) / zoome.echelle).toBeCloseTo((300 - ouverture.x) / ouverture.echelle, 3);
+    await touche(vue, "ArrowLeft");
+    expect(vueActuelle(c).x).toBeCloseTo(zoome.x + 80, 3);
+    await touche(vue, "ArrowDown");
+    expect(vueActuelle(c).y).toBeCloseTo(zoome.y - 80, 3);
+    const e0 = vueActuelle(c).echelle;
+    await touche(vue, "+");
+    expect(vueActuelle(c).echelle).toBeGreaterThan(e0);
+    await touche(vue, "-");
+    expect(vueActuelle(c).echelle).toBeCloseTo(e0, 5);
+    await touche(vue, "0");
+    expect(vueActuelle(c)).toEqual(ouverture);
+    expect(vue.getAttribute("tabindex")).toBe("0");
+    expect(vue.getAttribute("aria-label")).toContain("zoomer");
+  });
+
+  it("le tiroir n'existe qu'avec un service choisi, flotte dans la carte (Fermer, Échap) et la vue se décale pour garder le service visible hors du tiroir", async () => {
+    const jeu = grandJeu();
+    serveur = servir({ departements: jeu.departements, entreprises: jeu.entreprises, agentsParService: jeu.agentsParService, flux: [] });
+    const { c } = await ouvrir();
+    await laisser(12);
+    expect(c.querySelector(".atl-car-tiroir")).toBeNull();
+    // Le nœud le plus à droite à l'ouverture : il serait sous le tiroir.
+    const noeuds = Array.from(c.querySelectorAll<HTMLElement>(".atl-car-noeud"));
+    const droite = noeuds.reduce((m, e) => (parseFloat(e.style.left) > parseFloat(m.style.left) ? e : m));
+    await cliquer(droite);
+    const tiroir = c.querySelector(".atl-car-zone > .atl-car-tiroir");
+    expect(tiroir).not.toBeNull();
+    expect(c.querySelector(".atl-car-zone")?.getAttribute("data-tiroir")).toBe("ouvert");
+    const v = vueActuelle(c);
+    const bordDroit = (parseFloat(droite.style.left) + parseFloat(droite.style.width)) * v.echelle + v.x;
+    const largeurZone = 1100; // largeur supposée sans mise en page (jsdom)
+    expect(bordDroit).toBeLessThanOrEqual(largeurZone - 352 - 12);
+    await touche(document.body, "Escape");
+    expect(c.querySelector(".atl-car-tiroir")).toBeNull();
+    expect(c.querySelector(".atl-car-zone")?.getAttribute("data-tiroir")).toBeNull();
+  });
+
+  it("nœuds non liés à la sélection estompés à 35 % (contenu), partenaires et service choisi en pleine intensité (styles)", () => {
+    expect(STYLES_ORGANIGRAMME).toMatch(/\.atl-car-noeud\[data-estompe\] > \* \{ opacity: 0\.35;/u);
+    expect(STYLES_ORGANIGRAMME).not.toMatch(/\.atl-car-noeud\[data-(relie|selection)\][^}]*opacity/u);
   });
 });
 

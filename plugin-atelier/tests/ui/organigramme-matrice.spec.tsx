@@ -182,3 +182,83 @@ describe("MatriceEchangesVue (téléphone)", () => {
     expect(STYLES_ORGANIGRAMME_MATRICE).toMatch(/\.atl-mx-service > summary \{[^}]*min-height: 2\.75rem/);
   });
 });
+
+describe("MatriceEchangesVue : masquer les services sans échange", () => {
+  const SERVICES_AVEC_INACTIFS = [...SERVICES, { slug: "rh", nom: "Ressources humaines" }, { slug: "it", nom: "Informatique" }];
+  const case_ = (el: ParentNode) => el.querySelector<HTMLInputElement>('.atl-mx-option input[type="checkbox"]');
+  const telephone = () => vi.stubGlobal("matchMedia", (q: string) => ({ matches: q.includes("640"), media: q, addEventListener() {}, removeEventListener() {} }));
+
+  it("pas de case à cocher quand tous les services ont au moins un échange", async () => {
+    const { el } = await monter();
+    expect(case_(el)).toBeNull();
+  });
+
+  it("case décochée par défaut, avec le nombre de services concernés ; le réseau des coordinateurs ne compte pas comme un échange", async () => {
+    // « it » n'a que des échanges du réseau des coordinateurs : il compte comme sans échange.
+    const flux = [...FLUX, f("it", "direction", "Réseau des coordinateurs", false, "coordinateurs")];
+    const { el } = await monter({ services: SERVICES_AVEC_INACTIFS, flux });
+    const c = case_(el)!;
+    expect(c.checked).toBe(false);
+    expect(el.querySelector(".atl-mx-option")!.textContent).toBe("Masquer les services sans échange (2)");
+    expect(el.querySelectorAll("tbody tr")).toHaveLength(5);
+    expect(c.closest("label")).not.toBeNull();
+  });
+
+  it("cochée : la matrice se recalcule sans ces services, les totaux restent ; décochée : ils reviennent", async () => {
+    const { el } = await monter({ services: SERVICES_AVEC_INACTIFS });
+    const noms = () => [...el.querySelectorAll("tbody th button.atl-mx-nom")].map((b) => b.textContent);
+    expect(noms()).toContain("Informatique");
+    await cliquer(case_(el)!);
+    expect(case_(el)!.checked).toBe(true);
+    expect(noms().sort()).toEqual(["Direction", "Juridique", "Marketing"]);
+    expect(el.querySelectorAll('thead th[scope="col"]')).toHaveLength(1 + 3 + 1);
+    expect([...el.querySelectorAll("tfoot td")].map((t) => t.textContent)).toEqual(["0", "3", "1", "4"]);
+    expect(bouton(el, "De Marketing vers Juridique : 2 échanges")?.textContent).toBe("2");
+    await cliquer(case_(el)!);
+    expect(noms()).toHaveLength(5);
+    expect(noms()).toContain("Ressources humaines");
+  });
+
+  it("services tous sans échange : la case reste disponible et le message explique pourquoi la matrice est vide", async () => {
+    const { el } = await monter({ flux: [] });
+    await cliquer(case_(el)!);
+    expect(el.querySelector("table")).toBeNull();
+    expect(el.textContent).toContain("Aucun échange métier déclaré entre ces services.");
+    expect(case_(el)).not.toBeNull();
+  });
+
+  it("téléphone : la liste « service → partenaires » ne montre plus les services masqués", async () => {
+    telephone();
+    const { el } = await monter({ services: SERVICES_AVEC_INACTIFS });
+    expect(el.querySelectorAll("details.atl-mx-service")).toHaveLength(5);
+    await cliquer(case_(el)!);
+    expect(el.querySelectorAll("details.atl-mx-service")).toHaveLength(3);
+  });
+});
+
+describe("MatriceEchangesVue : noms de colonnes complets", () => {
+  const NOMS = ["Comptabilité et finance", "Hygiène, sécurité et environnement", "Recherche et innovation"];
+  const longs = NOMS.map((nom, k) => ({ slug: `s${k}`, nom }));
+
+  it("chaque nom de colonne est écrit en entier (titre et contenu), jamais remplacé par des points de suspension", async () => {
+    const { el } = await monter({ services: longs, flux: [f("s0", "s1", "x")] });
+    const colonnes = [...el.querySelectorAll<HTMLButtonElement>("thead button.atl-mx-nom-colonne")];
+    expect(colonnes.map((b) => b.textContent)).toEqual([...NOMS].sort((a, b) => a.localeCompare(b, "fr")));
+    for (const b of colonnes) expect(b.getAttribute("title")).toBe(b.textContent);
+  });
+
+  it("styles : en-têtes plus hauts (11 rem), noms sur plusieurs lignes sans points de suspension, marge intérieure du cadre défilant", async () => {
+    const { STYLES_ORGANIGRAMME_MATRICE: css } = await import("../../src/ui/styles-organigramme-matrice.js");
+    const entete = /\.atl-mx-table thead th \{[^}]*?height: ([\d.]+)rem/.exec(css);
+    expect(Number(entete?.[1])).toBeGreaterThanOrEqual(11);
+    const colonne = /\.atl-mx-nom-colonne \{([^}]*)\}/.exec(css)![1]!;
+    expect(colonne).toMatch(/white-space: normal/);
+    expect(colonne).not.toMatch(/text-overflow: ellipsis/);
+    expect(Number(/max-height: ([\d.]+)rem/.exec(colonne)![1])).toBeLessThan(Number(entete![1]));
+    const defile = /\.atl-mx-defile \{([^}]*)\}/.exec(css)![1]!;
+    expect(defile).toMatch(/padding: 0\.5rem/);
+    // Case à cocher : cible d'au moins 24 px, 44 px sur téléphone.
+    expect(css).toMatch(/\.atl-mx-option \{[^}]*min-height: 1\.5rem/);
+    expect(css).toMatch(/@media \(max-width: 640px\) \{ \.atl-mx-option \{ min-height: 2\.75rem/);
+  });
+});

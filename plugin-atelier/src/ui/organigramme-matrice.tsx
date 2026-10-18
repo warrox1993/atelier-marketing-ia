@@ -5,7 +5,8 @@
  * choisie. Sur téléphone (640 px et moins) : pas de tableau, une liste « service → partenaires ».
  *
  * Composant autonome : il ne lit que ses propriétés (services, flux bruts de `services.flux`, case choisie) ; le réseau des
- * coordinateurs n'est jamais compté (`fluxMetier`). Le rendu ne dépend que du nombre de services.
+ * coordinateurs n'est jamais compté (`fluxMetier`). Le rendu ne dépend que du nombre de services. Une case à cocher masque les
+ * services qui n'ont aucun échange (ni envoyé ni reçu) : la matrice est alors recalculée sans eux, totaux inchangés.
  */
 import { memo, useCallback, useMemo, useState, type FocusEvent, type MouseEvent } from "react";
 import { fluxMetier, matriceEchanges, objetsDuFlux, type CaseMatrice, type FluxBrut, type Matrice, type ServiceCarte } from "./organigramme-flux.js";
@@ -254,7 +255,12 @@ function ListeTelephone({ m, max, choisie, choisirCase, ouvrirService }: { m: Ma
 
 export function MatriceEchangesVue({ services, flux, caseChoisie = null, choisirCase, ouvrirService }: PropsMatriceEchanges) {
   const telephone = useTelephone();
-  const m = useMemo(() => matriceEchanges(services, fluxMetier(flux)), [services, flux]);
+  const [masquerSansEchange, setMasquerSansEchange] = useState(false);
+  const complete = useMemo(() => matriceEchanges(services, fluxMetier(flux)), [services, flux]);
+  // Services sans aucun échange métier, ni envoyé ni reçu : ceux que la case à cocher peut masquer.
+  const sansEchange = useMemo(() => new Set(complete.ordre.filter((_, i) => complete.totalLigne[i] === 0 && complete.totalColonne[i] === 0)), [complete]);
+  const masque = masquerSansEchange && sansEchange.size > 0;
+  const m = useMemo(() => (masque ? matriceEchanges(services.filter((s) => !sansEchange.has(s.slug)), fluxMetier(flux)) : complete), [masque, services, flux, sansEchange, complete]);
   const max = useMemo(() => m.cases.reduce((a, ligne) => ligne.reduce((b, c) => Math.max(b, c.nombre), a), 0), [m]);
   const choisie = useMemo(() => {
     if (!caseChoisie) return null;
@@ -278,8 +284,15 @@ export function MatriceEchangesVue({ services, flux, caseChoisie = null, choisir
         <p>{MENTION_COORDINATEURS}</p>
       </div>
 
+      {sansEchange.size > 0 || masquerSansEchange ? (
+        <label className="atl-mx-option">
+          <input type="checkbox" checked={masquerSansEchange} onChange={(e) => setMasquerSansEchange(e.target.checked)} />
+          <span>{`Masquer les services sans échange (${sansEchange.size})`}</span>
+        </label>
+      ) : null}
+
       {m.ordre.length === 0 ? (
-        <p className="atl-mx-rien">Aucun service à afficher.</p>
+        <p className="atl-mx-rien">{complete.ordre.length > 0 ? "Aucun échange métier déclaré entre ces services." : "Aucun service à afficher."}</p>
       ) : (
         <>
           {total === 0 ? <p className="atl-mx-rien">Aucun échange métier déclaré entre ces services.</p> : null}
