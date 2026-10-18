@@ -179,7 +179,7 @@ for (const f of FORMATS) {
       if (f.mobile) await page.getByRole("navigation", { name: "Navigation mobile" }).getByRole("button", { name: /^Discuter$/u }).tap();
       else await page.getByRole("button", { name: /^Discuter avec le Coordinateur général/u }).first().click();
       await expect(page).toHaveURL(new RegExp(`/${prefixe}/atelier/discussion`, "u"), { timeout: 30_000 });
-      await expect(page.getByRole("heading", { name: "Discussion avec le Coordinateur", level: 1 })).toBeVisible({ timeout: 30_000 });
+      await expect(page.getByRole("heading", { name: /^Coordinateur/u, level: 1 })).toBeVisible({ timeout: 30_000 });
       expect(erreurs, erreurs.join("\n")).toEqual([]);
     });
 
@@ -237,7 +237,7 @@ for (const f of FORMATS) {
 
       // Discussion : rubrique sans onglets multiples.
       await dedans.getByRole("link", { name: /^Discussion/u }).click();
-      await expect(page.getByRole("heading", { name: "Discussion avec le Coordinateur", level: 1 })).toBeVisible({ timeout: 30_000 });
+      await expect(page.getByRole("heading", { name: /^Coordinateur/u, level: 1 })).toBeVisible({ timeout: 30_000 });
       expect(erreurs, erreurs.join("\n")).toEqual([]);
     });
 

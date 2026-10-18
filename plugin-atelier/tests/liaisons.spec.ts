@@ -69,7 +69,7 @@ function stockMemoire(): StockLiaisons & { liaisons: LiaisonMemoire[]; services:
       const f = flux.find((x) => x.client === m && x.source === s && x.cible === c);
       return f ? { objet: f.objet, approbationHumaine: f.approbationHumaine } : null;
     },
-    fluxDuClient: async (m) => flux.filter((x) => x.client === m).map((x) => ({ source: x.source, cible: x.cible, objet: x.objet, approbationHumaine: x.approbationHumaine })),
+    fluxDuClient: async (m) => flux.filter((x) => x.client === m).map((x) => ({ source: x.source, cible: x.cible, objet: x.objet, approbationHumaine: x.approbationHumaine, origine: x.origine ?? "metier" })),
     declarer: async (d) => {
       for (let i = services.length - 1; i >= 0; i--) if (services[i]!.clientMarqueur === d.clientMarqueur) services.splice(i, 1);
       for (let i = flux.length - 1; i >= 0; i--) if (flux[i]!.client === d.clientMarqueur) flux.splice(i, 1);
@@ -561,6 +561,31 @@ describe("services.declarer", () => {
     expect(m.stock.services.map((s) => s.serviceSlug).sort()).toEqual(["direction", "marketing"]);
     expect(m.journal[0]).toMatchObject({ type: "services.declares", companyId: DIR });
     expect((await m.demander(demande())).statut).toBe(201);
+  });
+
+  it("stocke l'origine fournie et la rend dans fluxDuClient (route services.declarer)", async () => {
+    const m = monde();
+    await declarer(m, corps({ flux: [{ ...FLUX[0], origine: "coordinateurs" }, { ...FLUX[2], origine: "metier" }] }));
+    expect((await m.stock.fluxDuClient("courtier")).map((f) => [f.source, f.cible, f.origine])).toEqual([
+      ["marketing", "direction", "coordinateurs"], ["direction", "marketing", "metier"],
+    ]);
+  });
+
+  it("sans origine (anciens scripts), la déduit de l'objet des flux générés et garde le reste en métier", async () => {
+    const m = monde();
+    await declarer(m, corps({ entreprises: [{ companyId: MKT, serviceSlug: "marketing" }, { companyId: DIR, serviceSlug: "direction", estDirection: true }, { companyId: JUR, serviceSlug: "juridique" }], flux: [
+      { source: "marketing", cible: "direction", objet: "Liaison entre coordinateurs (compétence protocole-inter-coordinateurs) : question bornée", approbationHumaine: false },
+      { source: "direction", cible: "marketing", objet: "Coordinateur général et coordinateurs de département (compétence protocole-inter-coordinateurs) : délégation", approbationHumaine: false },
+      { source: "juridique", cible: "direction", objet: "Rapport périodique et escalade", approbationHumaine: false },
+    ] }));
+    expect((await m.stock.fluxDuClient("courtier")).map((f) => f.origine)).toEqual(["coordinateurs", "coordinateurs", "metier"]);
+  });
+
+  it("refuse une origine inconnue", async () => {
+    const m = monde();
+    const r = await m.refus(declarer(m, corps({ flux: [{ ...FLUX[0], origine: "autre" }] })));
+    expect(r).not.toBeNull();
+    expect(m.stock.flux).toEqual([]);
   });
 
   it("F5 : redéclarer son propre client est accepté et idempotent", async () => {

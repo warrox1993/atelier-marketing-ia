@@ -6,7 +6,7 @@
 import { act, createElement } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { STYLES_DISCUSSION } from "../../src/ui/styles-discussion.js";
-import { INTERVALLE_MS, VueDiscussion } from "../../src/ui/vues/discussion.js";
+import { INTERVALLE_MS, SUGGESTIONS, VueDiscussion } from "../../src/ui/vues/discussion.js";
 import { cliquer, ENTREPRISE, installerPont, parTexte, rendre, saisir, type Rendu } from "./pont.js";
 
 let rendu: Rendu | null = null;
@@ -113,6 +113,64 @@ describe("discussion : affichage", () => {
   });
 });
 
+describe("discussion : présentation façon assistant", () => {
+  it("en-tête discret : nom du Coordinateur, identifiant de tâche en petit avec infobulle", async () => {
+    const c = await ouvrir();
+    expect(c.querySelector("h1")!.textContent).toBe("Coordinateur");
+    const ident = c.querySelector(".atl-disc-ident") as HTMLElement | null;
+    if (ident) expect(ident.title).toContain(ident.textContent!);
+  });
+
+  it("bulles : l'humain à droite sans nom visible, le Coordinateur en texte libre avec son nom", async () => {
+    messages = [msg({ auteur: "humain", nom: "Vous", texte: "Bonjour" }), msg({ texte: "Bonjour, je vous écoute." })];
+    const c = await ouvrir();
+    const [humain, agent] = Array.from(c.querySelectorAll(".atl-disc-bulle")) as HTMLElement[];
+    expect(humain!.querySelector(".atl-disc-nom")).toBeNull();
+    expect(humain!.querySelector(".atl-sr")!.textContent).toBe("Vous");
+    expect(humain!.querySelector(".atl-disc-texte")!.textContent).toBe("Bonjour");
+    expect(agent!.querySelector(".atl-disc-nom")!.textContent).toBe("Coordinateur");
+    expect(agent!.querySelector(".atl-disc-avatar")!.getAttribute("aria-hidden")).toBe("true");
+    expect(STYLES_DISCUSSION).toMatch(/\.atl-disc-bulle\[data-auteur="agent"\] \.atl-disc-texte \{[^}]*background: transparent/u);
+  });
+
+  it("fil vide : phrase d'accueil dans le fil, quatre pastilles de suggestion hors du fil, au-dessus du compositeur", async () => {
+    const c = await ouvrir();
+    const fil = c.querySelector('[role="log"]')!;
+    expect(fil.querySelector(".atl-disc-vide p")!.textContent).toContain("Que voulez-vous savoir");
+    const pastilles = c.querySelector(".atl-disc-suggestions")!;
+    expect(fil.contains(pastilles)).toBe(false);
+    expect(Array.from(pastilles.querySelectorAll("button")).map((b) => b.textContent)).toEqual([...SUGGESTIONS]);
+    expect(pastilles.nextElementSibling!.tagName).toBe("FORM");
+    expect(STYLES_DISCUSSION).toMatch(/\.atl-disc-suggestion \{[^}]*border-radius: 999px/u);
+  });
+
+  it("compositeur : micro, voix en direct et envoi sont des boutons icônes nommés, dans le formulaire", async () => {
+    const c = await ouvrir();
+    const form = c.querySelector("form.atl-disc-saisie")!;
+    for (const nom of ["Dicter", "Parler en direct", "Envoyer"]) {
+      const b = parTexte(form, "button", nom);
+      expect(b.querySelector("svg[aria-hidden='true']"), nom).not.toBeNull();
+      expect(b.querySelector(".atl-sr")!.textContent).toBe(nom);
+      expect(b.title, nom).not.toBe("");
+    }
+    expect(form.querySelector('[role="status"]')!.getAttribute("data-etat")).toBe("inactif");
+    expect(form.querySelector('[role="status"]')!.textContent).toBe("Micro arrêté");
+  });
+
+  it("Entrée envoie, Maj+Entrée n'envoie pas, Entrée sur champ vide n'envoie rien", async () => {
+    const c = await ouvrir();
+    const champ = champParLibelle(c, "Votre message au Coordinateur");
+    await saisir(champ, "Ligne un");
+    await touche(champ, { key: "Enter", shiftKey: true });
+    expect(posts()).toHaveLength(0);
+    await touche(champ, { key: "Enter" });
+    expect(posts()).toHaveLength(1);
+    expect(posts()[0]!.corps).toMatchObject({ texte: "Ligne un" });
+    await touche(champ, { key: "Enter" });
+    expect(posts()).toHaveLength(1);
+  });
+});
+
 describe("discussion : destinataire", () => {
   const avecDirection = () => {
     departements = { statut: 200, corps: { client: "fictive-sa", departements: [
@@ -126,7 +184,8 @@ describe("discussion : destinataire", () => {
     avecDirection();
     const c = await ouvrir();
     expect(appels.some((a) => a.url.includes(`/departements?companyId=${encodeURIComponent(ENTREPRISE)}`))).toBe(true);
-    expect(parTexte(c, "span", "Coordinateur général (Direction) : il transmet aux départements")).toBeTruthy();
+    expect(c.querySelector("h1")!.textContent).toBe("Coordinateur général");
+    expect(parTexte(c, "span", "Direction : il transmet aux départements")).toBeTruthy();
     await saisir(champParLibelle(c, "Votre message au Coordinateur"), "Où en est le recrutement ?");
     await touche(champParLibelle(c, "Votre message au Coordinateur"), { key: "Enter" });
     expect(entreprisesVisees().length).toBeGreaterThanOrEqual(2);
@@ -300,7 +359,9 @@ describe("styles de la discussion sur mobile", () => {
   it("réserve la hauteur de la barre de navigation fixe de l'hôte sous la zone de saisie", () => {
     const mobile = STYLES_DISCUSSION.slice(STYLES_DISCUSSION.indexOf("@media (max-width: 768px)"));
     expect(mobile).toContain("--atl-nav-hote-mobile: calc(4rem + env(safe-area-inset-bottom, 0px))");
-    expect(mobile).toMatch(/\.atl-disc-saisie \{[^}]*bottom: var\(--atl-nav-hote-mobile\)/u);
+    // Le pied collant (pastilles + zone de saisie) porte la réserve : la saisie reste au-dessus de la barre de l'hôte.
+    expect(mobile).toMatch(/\.atl-disc-pied \{[^}]*bottom: var\(--atl-nav-hote-mobile\)/u);
+    expect(STYLES_DISCUSSION).toMatch(/\.atl-disc-pied \{[^}]*position: sticky/u);
   });
 });
 

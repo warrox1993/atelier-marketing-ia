@@ -155,11 +155,13 @@ describe("discussion : étiquette « Coordinateur général » (B4)", () => {
   it("s'affiche aussi quand l'entreprise courante est la Direction elle-même", async () => {
     departements = { statut: 200, corps: { client: "fictive-sa", departements: [{ ...SERVICES[0], companyId: MARKETING, courant: true }, SERVICES[2]] } };
     const c = await ouvrir();
-    expect(parTexte(c, "span", "Coordinateur général (Direction) : il transmet aux départements")).toBeTruthy();
+    expect(c.querySelector("h1")!.textContent).toBe("Coordinateur général");
+    expect(parTexte(c, "span", "Direction : il transmet aux départements")).toBeTruthy();
   });
 
   it("s'affiche depuis un département (comportement conservé)", async () => {
     const c = await ouvrir();
-    expect(parTexte(c, "span", "Coordinateur général (Direction) : il transmet aux départements")).toBeTruthy();
+    expect(c.querySelector("h1")!.textContent).toBe("Coordinateur général");
+    expect(parTexte(c, "span", "Direction : il transmet aux départements")).toBeTruthy();
   });
 });

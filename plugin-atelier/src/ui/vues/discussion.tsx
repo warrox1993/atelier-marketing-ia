@@ -13,13 +13,14 @@
  * reste celui de l'entreprise courante. Une lecture en échec n'aiguille jamais en silence vers un autre destinataire :
  * elle s'affiche en erreur avec « Réessayer ».
  */
-import { Fragment, useCallback, useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
+import { Fragment, useCallback, useId, useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import { useHostContext } from "@paperclipai/plugin-sdk/ui";
 import type { ActionDiscussion } from "../../serveur/discussion-actions.js";
 import type { ElementAccueil } from "../../serveur/services-accueil.js";
 import { BoutonDicter } from "../composants/dictee.js";
 import { VoixEnDirect } from "../composants/voix-en-direct.js";
-import { Bouton, Chargement, EtatErreur, LienHote, MessageFait } from "../composants.js";
+import { Chargement, EtatErreur, LienHote, MessageFait } from "../composants.js";
+import { IconeEnvoi } from "../composants/icones-discussion.js";
 import { dateHeure, classerErreur } from "../format.js";
 import { ActionsIndisponibles, ActionsMessage, CarteFil, elementsVises, useAFaireClient } from "../discussion-telecommande.js";
 import { appelRoute } from "../routes-prospection.js";
@@ -146,6 +147,8 @@ export function VueDiscussion() {
     setVersionElements((v) => v + 1);
   };
   const fil = useRef<HTMLDivElement | null>(null);
+  const champ = useRef<HTMLTextAreaElement | null>(null);
+  const idRaison = useId();
   const messagesRef = useRef<MessageFil[]>([]);
   messagesRef.current = messages;
   const enVol = useRef(false);
@@ -220,6 +223,14 @@ export function VueDiscussion() {
     if (el) el.scrollTop = el.scrollHeight;
   }, [messages.length, cartes.length, autres.length, attenteDepuis]);
 
+  // Le champ grandit avec le texte (repli pour les navigateurs sans `field-sizing`), puis se plafonne par le style.
+  useEffect(() => {
+    const el = champ.current;
+    if (!el) return;
+    el.style.height = "auto";
+    if (el.scrollHeight > 0) el.style.height = `${el.scrollHeight}px`;
+  }, [texte]);
+
   const envoyer = useCallback(
     async (brut: string) => {
       const propre = brut.trim();
@@ -252,31 +263,50 @@ export function VueDiscussion() {
   if (etat.erreur) return <EtatErreur erreur={etat.erreur} onReessayer={() => setVersion((v) => v + 1)} contexte="la discussion" />;
   if (etat.chargement && !etat.ouverture) return <Chargement libelle="Ouverture de la discussion" lignes={3} />;
 
+  const vide = messages.length === 0 && cartes.length === 0 && autres.length === 0;
+  const raison = tentativeVide && texte.trim() === "" ? "Écrivez d'abord votre message." : null;
+  const nomCoordinateur = general ? "Coordinateur général" : "Coordinateur";
+
   return (
     <section className="atl-disc" aria-label="Discussion avec le Coordinateur">
       <style>{STYLES_DISCUSSION}</style>
       <div className="atl-disc-entete">
-        <h1>Discussion avec le Coordinateur</h1>
-        {general ? <span className="atl-attenue">Coordinateur général (Direction) : il transmet aux départements</span> : null}
-        {etat.ouverture?.identifiant ? <span className="atl-attenue">{etat.ouverture.identifiant}</span> : null}
+        <span className="atl-disc-avatar atl-disc-avatar-grand" aria-hidden="true">
+          C
+        </span>
+        <div className="atl-disc-entete-texte">
+          <h1>{nomCoordinateur}</h1>
+          {general ? <span className="atl-attenue">Direction : il transmet aux départements</span> : null}
+        </div>
+        {etat.ouverture?.identifiant ? (
+          <span className="atl-disc-ident" title={`Tâche de la discussion : ${etat.ouverture.identifiant}`}>
+            {etat.ouverture.identifiant}
+          </span>
+        ) : null}
       </div>
       <div ref={fil} className="atl-disc-fil" role="log" aria-live="polite" aria-label="Messages de la discussion">
-        {messages.length === 0 && cartes.length === 0 && autres.length === 0 ? (
+        {vide ? (
           <div className="atl-disc-vide">
-            <p>Demandez ce que vous voulez à l'équipe : état des missions, blocages, nouveaux leads, nouvelle prospection.</p>
-            <div className="atl-disc-suggestions">
-              {SUGGESTIONS.map((s) => (
-                <button key={s} type="button" className="atl-disc-suggestion" disabled={envoi} onClick={() => void envoyer(s)}>
-                  {s}
-                </button>
-              ))}
-            </div>
+            <span className="atl-disc-avatar atl-disc-avatar-grand" aria-hidden="true">
+              C
+            </span>
+            <p>Que voulez-vous savoir ou demander à l'équipe ? État des missions, blocages, nouveaux leads, nouvelle prospection.</p>
           </div>
         ) : (
           messages.map((m) => (
             <div key={m.id} className="atl-disc-bulle" data-auteur={m.auteur} data-actions={m.actions && m.actions.length > 0 ? "oui" : undefined}>
               <span className="atl-disc-meta">
-                {m.nom} · <time dateTime={m.date}>{dateHeure(m.date)}</time>
+                {m.auteur === "agent" ? (
+                  <>
+                    <span className="atl-disc-avatar" aria-hidden="true">
+                      C
+                    </span>
+                    <span className="atl-disc-nom">{m.nom}</span>
+                  </>
+                ) : (
+                  <span className="atl-sr">{m.nom}</span>
+                )}
+                <time dateTime={m.date}>{dateHeure(m.date)}</time>
               </span>
               {m.texte.trim() !== "" ? (
                 <p className="atl-disc-texte">
@@ -324,42 +354,68 @@ export function VueDiscussion() {
         ) : null}
       </div>
       {erreurEnvoi ? (
-        <p className="atl-disc-erreur" role="alert">
+        <p className="atl-disc-erreur atl-disc-colonne" role="alert">
           {erreurEnvoi}
         </p>
       ) : null}
-      <form
-        className="atl-disc-saisie"
-        onSubmit={(e) => {
-          e.preventDefault();
-          if (texte.trim() === "") setTentativeVide(true);
-          void envoyer(texte);
-        }}
-      >
-        <div className="atl-disc-emplacements">
-          <div data-emplacement="dicter">
-            <BoutonDicter companyId={companyId ?? null} onTexte={(t) => setTexte((actuel) => (actuel.trim() === "" ? t : `${actuel.trimEnd()} ${t}`))} />
+      {/* Pied collant : pastilles et compositeur restent ensemble au bas de l'écran (jamais l'un sur l'autre). */}
+      <div className="atl-disc-pied">
+        {vide ? (
+          <div className="atl-disc-suggestions atl-disc-colonne">
+            {SUGGESTIONS.map((s) => (
+              <button key={s} type="button" className="atl-disc-suggestion" disabled={envoi} onClick={() => void envoyer(s)}>
+                {s}
+              </button>
+            ))}
           </div>
-          <div data-emplacement="parler-en-direct">
-            <VoixEnDirect companyId={companyId ?? null} />
-          </div>
-        </div>
-        <textarea
-          aria-label="Votre message au Coordinateur"
-          placeholder="Écrivez au Coordinateur"
-          rows={1}
-          maxLength={MAX_TEXTE}
-          value={texte}
-          onChange={(e) => {
-            setTexte(e.target.value);
-            setTentativeVide(false);
+        ) : null}
+        <form
+          className="atl-disc-saisie"
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (texte.trim() === "") setTentativeVide(true);
+            void envoyer(texte);
           }}
-          onKeyDown={surTouche}
-        />
-        <Bouton type="submit" variante="principal" enCours={envoi} raisonDesactive={tentativeVide && texte.trim() === "" ? "Écrivez d'abord votre message." : null}>
-          Envoyer
-        </Bouton>
-      </form>
+        >
+          <textarea
+            ref={champ}
+            aria-label="Votre message au Coordinateur"
+            placeholder="Écrivez au Coordinateur"
+            rows={1}
+            maxLength={MAX_TEXTE}
+            value={texte}
+            onChange={(e) => {
+              setTexte(e.target.value);
+              setTentativeVide(false);
+            }}
+            onKeyDown={surTouche}
+          />
+          <div className="atl-disc-emplacements">
+            <div data-emplacement="dicter">
+              <BoutonDicter companyId={companyId ?? null} onTexte={(t) => setTexte((actuel) => (actuel.trim() === "" ? t : `${actuel.trimEnd()} ${t}`))} />
+            </div>
+            <div data-emplacement="parler-en-direct">
+              <VoixEnDirect companyId={companyId ?? null} />
+            </div>
+          </div>
+          {raison ? (
+            <span id={idRaison} className="atl-disc-raison">
+              {raison}
+            </span>
+          ) : null}
+          <button
+            type="submit"
+            className="atl-disc-envoyer"
+            title="Envoyer (Entrée)"
+            aria-disabled={texte.trim() === "" || envoi ? "true" : undefined}
+            aria-busy={envoi || undefined}
+            aria-describedby={raison ? idRaison : undefined}
+          >
+            <IconeEnvoi />
+            <span className="atl-sr">{envoi ? "Envoi…" : "Envoyer"}</span>
+          </button>
+        </form>
+      </div>
     </section>
   );
 }

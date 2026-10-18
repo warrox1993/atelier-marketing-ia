@@ -118,4 +118,21 @@ describe("chaîne et teinte (migration 017) : règles SQL de l'hôte", () => {
     expect(execute[2]).toMatch(/chaine, profondeur, approbation_requise\)/u);
     expect(parametres[2]!.slice(14)).toEqual(['["marketing","direction"]', 1, false]);
   });
+
+  it("declarer écrit l'origine des flux (fournie, sinon déduite de l'objet) et fluxDuClient la relit", async () => {
+    const { db, execute, parametres } = fauxHote(1);
+    const stock = creerStockLiaisons(db);
+    await stock.declarer({
+      clientMarqueur: "c", entreprises: [], par: "t",
+      flux: [
+        { source: "a", cible: "b", objet: "Relecture", approbationHumaine: false },
+        { source: "b", cible: "a", objet: "Liaison entre coordinateurs (compétence protocole-inter-coordinateurs) : x", approbationHumaine: false },
+        { source: "a", cible: "c", objet: "Relecture", approbationHumaine: false, origine: "coordinateurs" },
+      ],
+    });
+    const ecritures = execute.map((sql, i) => ({ sql, p: parametres[i]! })).filter((x) => /into [\w.]+flux_services/u.test(x.sql));
+    expect(ecritures).toHaveLength(3);
+    for (const e of ecritures) expect(e.sql).toMatch(/\(client_marqueur, source_slug, cible_slug, objet, approbation_humaine, origine\)/u);
+    expect(ecritures.map((e) => e.p[5])).toEqual(["metier", "coordinateurs", "coordinateurs"]);
+  });
 });

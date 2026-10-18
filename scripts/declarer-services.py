@@ -50,7 +50,8 @@ def construire_corps(registre: dict, local: dict) -> dict:
     ]
     presents = {e["serviceSlug"] for e in entreprises}
     flux = [
-        {"source": f["source"], "cible": f["cible"], "objet": f["objet"], "approbationHumaine": bool(f["approbationHumaine"])}
+        {"source": f["source"], "cible": f["cible"], "objet": f["objet"], "approbationHumaine": bool(f["approbationHumaine"]),
+         "origine": _atelier_services().origine_plugin(f)}
         for f in _atelier_services().flux_complets(registre)
         if f["source"] in presents and f["cible"] in presents
     ]

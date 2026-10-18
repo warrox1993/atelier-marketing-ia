@@ -3,7 +3,7 @@
  * liaisons. Interface `StockLiaisons` remplaçable par une version en mémoire dans les tests.
  */
 import type { PluginContext } from "@paperclipai/plugin-sdk";
-import { ESPACE_BASE, type ExtraitLiaison, type FluxService, type LiaisonEnregistree, type StatutLiaison } from "../../contrats/index.js";
+import { ESPACE_BASE, origineDepuisObjet, type ExtraitLiaison, type FluxService, type LiaisonEnregistree, type OrigineFlux, type StatutLiaison } from "../../contrats/index.js";
 import { iso } from "../base.js";
 
 export interface ServiceEntreprise {
@@ -61,7 +61,7 @@ export interface StockLiaisons {
   servicesDuClient(clientMarqueur: string): Promise<ServiceEntreprise[]>;
   lireFlux(clientMarqueur: string, source: string, cible: string): Promise<FluxLu | null>;
   /** Tous les flux déclarés de CE client seulement (vue Organigramme), au plus 2 000. */
-  fluxDuClient(clientMarqueur: string): Promise<FluxService[]>;
+  fluxDuClient(clientMarqueur: string): Promise<Array<FluxService & { origine: OrigineFlux }>>;
   /** Remplace la déclaration d'un client (entreprises et flux). */
   declarer(d: { clientMarqueur: string; entreprises: Array<{ companyId: string; serviceSlug: string; estDirection: boolean }>; flux: FluxService[]; par: string }): Promise<void>;
   lireParCle(companyId: string, cleIdempotence: string): Promise<LiaisonStockee | null>;
@@ -213,8 +213,8 @@ export function creerStockLiaisons(db: PluginContext["db"]): StockLiaisons {
       return r ? { objet: String(r["objet"]), approbationHumaine: r["approbation_humaine"] === true } : null;
     },
     async fluxDuClient(clientMarqueur) {
-      const lignes = await q(`select source_slug, cible_slug, objet, approbation_humaine from ${ns}.flux_services where client_marqueur = $1 order by source_slug, cible_slug limit 2000`, [clientMarqueur]);
-      return lignes.map((r) => ({ source: String(r["source_slug"]), cible: String(r["cible_slug"]), objet: String(r["objet"]), approbationHumaine: r["approbation_humaine"] === true }));
+      const lignes = await q(`select source_slug, cible_slug, objet, approbation_humaine, origine from ${ns}.flux_services where client_marqueur = $1 order by source_slug, cible_slug limit 2000`, [clientMarqueur]);
+      return lignes.map((r) => ({ source: String(r["source_slug"]), cible: String(r["cible_slug"]), objet: String(r["objet"]), approbationHumaine: r["approbation_humaine"] === true, origine: r["origine"] === "coordinateurs" ? "coordinateurs" : "metier" }));
     },
     async declarer(d) {
       for (const e of d.entreprises) {
@@ -229,11 +229,11 @@ export function creerStockLiaisons(db: PluginContext["db"]): StockLiaisons {
       }
       for (const f of d.flux) {
         await db.execute(
-          `insert into ${ns}.flux_services (client_marqueur, source_slug, cible_slug, objet, approbation_humaine)
-           values ($1, $2, $3, $4, $5)
+          `insert into ${ns}.flux_services (client_marqueur, source_slug, cible_slug, objet, approbation_humaine, origine)
+           values ($1, $2, $3, $4, $5, $6)
            on conflict (client_marqueur, source_slug, cible_slug) do update set objet = excluded.objet,
-             approbation_humaine = excluded.approbation_humaine, declare_le = now()`,
-          [d.clientMarqueur, f.source, f.cible, f.objet, f.approbationHumaine],
+             approbation_humaine = excluded.approbation_humaine, origine = excluded.origine, declare_le = now()`,
+          [d.clientMarqueur, f.source, f.cible, f.objet, f.approbationHumaine, f.origine ?? origineDepuisObjet(f.objet)],
         );
       }
       // Ménage seulement après les écritures : un échec en cours de route laisse un surensemble, jamais un trou.

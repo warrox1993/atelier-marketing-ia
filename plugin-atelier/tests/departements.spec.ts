@@ -26,9 +26,10 @@ const AUTRE_DIR = id(5);
 const ORPHELINE = id(6); // entreprise déclarée dans aucun client
 const HUMAIN: ActeurHote = { type: "humain", id: "local-board", agentId: null, userId: "local-board", runId: null };
 const FLUX_BRUTS = [
-  { client: "fictive-sa", source: "marketing", cible: "juridique", objet: "Relecture d'une mention légale", approbationHumaine: false },
-  { client: "fictive-sa", source: "juridique", cible: "direction", objet: "Avis sur un contrat", approbationHumaine: true },
-  { client: "autre-sprl", source: "marketing", cible: "direction", objet: "Budget d'une campagne", approbationHumaine: false },
+  { client: "fictive-sa", source: "marketing", cible: "juridique", objet: "Relecture d'une mention légale", approbationHumaine: false, origine: "metier" as const },
+  { client: "fictive-sa", source: "juridique", cible: "direction", objet: "Avis sur un contrat", approbationHumaine: true, origine: "metier" as const },
+  { client: "fictive-sa", source: "direction", cible: "marketing", objet: "Coordinateur général et coordinateurs de département (compétence protocole-inter-coordinateurs) : délégation", approbationHumaine: false, origine: "coordinateurs" as const },
+  { client: "autre-sprl", source: "marketing", cible: "direction", objet: "Budget d'une campagne", approbationHumaine: false, origine: "metier" as const },
 ];
 const AGENT: ActeurHote = { type: "agent", id: id(11), agentId: id(11), userId: null, runId: "run-1" };
 
@@ -139,8 +140,9 @@ describe("services.flux", () => {
     const r = (await m.appeler("services.flux", MKT)).corps as ReponseFluxServices;
     expect(r.client).toBe("fictive-sa");
     expect(r.flux).toEqual([
-      { source: "marketing", cible: "juridique", objet: "Relecture d'une mention légale", approbationHumaine: false },
-      { source: "juridique", cible: "direction", objet: "Avis sur un contrat", approbationHumaine: true },
+      { source: "marketing", cible: "juridique", objet: "Relecture d'une mention légale", approbationHumaine: false, origine: "metier" },
+      { source: "juridique", cible: "direction", objet: "Avis sur un contrat", approbationHumaine: true, origine: "metier" },
+      { source: "direction", cible: "marketing", objet: expect.stringContaining("protocole-inter-coordinateurs"), approbationHumaine: false, origine: "coordinateurs" },
     ]);
     expect(m.lectures).toContain("flux:fictive-sa");
     expect(m.lectures).not.toContain("flux:autre-sprl");

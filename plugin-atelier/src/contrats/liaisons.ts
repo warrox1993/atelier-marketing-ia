@@ -104,13 +104,36 @@ export type LiaisonEnregistree = z.infer<typeof LiaisonEnregistree>;
 /** Entreprises (services) d'un même client dans une déclaration. */
 export const MAX_ENTREPRISES_DECLAREES = 40;
 
-/** Un flux autorisé de la matrice (registre des services : `flux`). */
+/**
+ * Origine d'un flux de la matrice : « metier » (flux du registre des services) ou « coordinateurs » (réseau des
+ * coordinateurs, généré par `flux_coordinateurs` de scripts/atelier_services.py : liaison entre coordinateurs et
+ * liaison avec le coordinateur général).
+ */
+export const ORIGINES_FLUX = ["metier", "coordinateurs"] as const;
+export type OrigineFlux = (typeof ORIGINES_FLUX)[number];
+
+/**
+ * Début exact des objets générés par `flux_coordinateurs` (OBJET_ENTRE_COORDINATEURS et OBJET_COORDINATEUR_GENERAL
+ * dans scripts/atelier_services.py). Sert de repli quand l'origine n'est pas fournie ; la migration 018 applique les
+ * mêmes motifs aux lignes déjà en base.
+ */
+export const PREFIXES_OBJETS_COORDINATEURS = [
+  "Liaison entre coordinateurs (compétence protocole-inter-coordinateurs)",
+  "Coordinateur général et coordinateurs de département (compétence protocole-inter-coordinateurs)",
+] as const;
+
+/** Origine déduite de l'objet d'un flux (repli pour les déclarations et lectures sans origine). */
+export const origineDepuisObjet = (objet: string): OrigineFlux =>
+  PREFIXES_OBJETS_COORDINATEURS.some((p) => objet.startsWith(p)) ? "coordinateurs" : "metier";
+
+/** Un flux autorisé de la matrice (registre des services : `flux`). `origine` est facultative à l'entrée (rétrocompatible). */
 export const FluxService = z
   .object({
     source: SlugService,
     cible: SlugService,
     objet: z.string().trim().min(1).max(LIMITES_LIAISON.objetMax),
     approbationHumaine: z.boolean(),
+    origine: z.enum(ORIGINES_FLUX).optional(),
   })
   .strict();
 export type FluxService = z.infer<typeof FluxService>;

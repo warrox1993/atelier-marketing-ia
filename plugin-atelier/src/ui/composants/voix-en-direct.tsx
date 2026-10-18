@@ -11,6 +11,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { classerErreur } from "../format.js";
 import { appelRoute } from "../routes-prospection.js";
+import { IconeArret, IconeOndes } from "./icones-discussion.js";
 
 export const URL_APPELS_REALTIME = "https://api.openai.com/v1/realtime/calls";
 
@@ -270,13 +271,15 @@ export function VoixEnDirect({ companyId }: { companyId: string | null }) {
       <div className="atl-voix-ligne">
         <button
           type="button"
-          className="atl-bouton"
+          className="atl-bouton atl-disc-icone"
           data-variante={enMarche ? "danger" : undefined}
-          style={{ minHeight: "2.75rem", minWidth: "2.75rem", padding: "0 1.25rem" }}
+          style={{ minHeight: "2.75rem", minWidth: "2.75rem" }}
+          title={enMarche ? "Arrêter la voix en direct" : "Parler en direct"}
           onClick={enMarche ? fermer : () => void demarrer()}
           disabled={!companyId}
         >
-          {enMarche ? "Arrêter" : "Parler en direct"}
+          {enMarche ? <IconeArret /> : <IconeOndes />}
+          <span className="atl-sr">{enMarche ? "Arrêter" : "Parler en direct"}</span>
         </button>
         <span role="status" aria-live="polite" data-etat={etat}>
           {LIBELLES_ETAT[etat]}

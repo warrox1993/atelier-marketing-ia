@@ -32,9 +32,9 @@ const AGENTS: Record<string, unknown[]> = {
   [ENTREPRISE]: [ag("m1", "Coordinateur marketing", { role: "ceo" })],
 };
 const FLUX: FluxServiceLu[] = [
-  { source: "marketing", cible: "juridique", objet: "Relecture légale", approbationHumaine: false },
-  { source: "juridique", cible: "marketing", objet: "Avis sur une mention", approbationHumaine: true },
-  { source: "direction", cible: "juridique", objet: "Contrat à signer", approbationHumaine: false },
+  { source: "marketing", cible: "juridique", objet: "Relecture légale", approbationHumaine: false, origine: "metier" },
+  { source: "juridique", cible: "marketing", objet: "Avis sur une mention", approbationHumaine: true, origine: "metier" },
+  { source: "direction", cible: "juridique", objet: "Contrat à signer", approbationHumaine: false, origine: "metier" },
 ];
 
 let rendu: Rendu | null = null;

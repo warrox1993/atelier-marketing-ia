@@ -6,7 +6,7 @@
  * déclarée est l'entreprise de la route ou une entreprise déjà déclarée pour ce client (M1 : la base commune).
  * `lireServicesDeclares` est la fonction de lecture : service d'une entreprise et services de son client.
  */
-import { DeclarerServicesEntree, type CleRouteApi } from "../../contrats/index.js";
+import { DeclarerServicesEntree, origineDepuisObjet, type CleRouteApi } from "../../contrats/index.js";
 import type { ActeurHote, GestionnaireRoute } from "../atelier.js";
 import { erreur, erreurValidation } from "../erreurs.js";
 import type { DependancesLiaisons } from "./demander.js";
@@ -72,7 +72,9 @@ export function routeDeclarer(d: Pick<DependancesLiaisons, "base" | "stock">): P
         erreur("acces_refuse", "Ce client a déjà une Direction : une entreprise ajoutée ne peut pas la remplacer.");
       }
     }
-    await stock.declarer({ clientMarqueur: e.clientMarqueur, entreprises: e.entreprises, flux: e.flux, par: r.acteur.id });
+    // L'origine vient de l'entrée ; absente (anciens scripts), elle se déduit de l'objet des flux générés.
+    const flux = e.flux.map((f) => ({ ...f, origine: f.origine ?? origineDepuisObjet(f.objet) }));
+    await stock.declarer({ clientMarqueur: e.clientMarqueur, entreprises: e.entreprises, flux, par: r.acteur.id });
     await base.journaliser({
       companyId: r.companyId, type: "services.declares", entite: "entreprise", entiteId: r.companyId, acteur: r.acteur.id,
       donnees: { clientMarqueur: e.clientMarqueur, entreprises: e.entreprises.length, flux: e.flux.length },

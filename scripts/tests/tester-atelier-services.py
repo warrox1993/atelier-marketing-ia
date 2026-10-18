@@ -119,7 +119,11 @@ class TestDeclaration(unittest.TestCase):
         corps = declarer.construire_corps(reg, self.local("trio", tous))
         self.assertEqual(len(corps["flux"]), 756)
         self.assertLessEqual(len(corps["flux"]), 40 * 39, "borne du contrat FluxService du plugin")
-        self.assertTrue(all(set(f) == {"source", "cible", "objet", "approbationHumaine"} for f in corps["flux"]))
+        self.assertTrue(all(set(f) == {"source", "cible", "objet", "approbationHumaine", "origine"} for f in corps["flux"]))
+        # L'origine déclarée au plugin sépare le métier du réseau des coordinateurs (614 + 24 générés).
+        self.assertEqual(sum(f["origine"] == "metier" for f in corps["flux"]), 118)
+        self.assertEqual(sum(f["origine"] == "coordinateurs" for f in corps["flux"]), 638)
+        self.assertTrue(all((f["origine"] == "coordinateurs") == ("protocole-inter-coordinateurs" in f["objet"]) for f in corps["flux"]))
 
     def test_sous_ensemble_du_client(self):
         reg = json.loads((RACINE / "organisation/registre/services.json").read_text(encoding="utf-8"))

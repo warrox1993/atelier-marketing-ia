@@ -6,6 +6,7 @@
 import { useEffect, useRef, useState } from "react";
 import { classerErreur } from "../format.js";
 import { appelRoute } from "../routes-prospection.js";
+import { IconeArret, IconeMicro } from "./icones-discussion.js";
 
 const TYPES_PREFERES = ["audio/webm", "audio/ogg", "audio/mp4"];
 /** Taille décodée maximale que le serveur accepte (l'hôte limite le corps à 1 000 000 d'octets, base64 compris). */
@@ -101,14 +102,15 @@ export function BoutonDicter({ companyId, onTexte }: { companyId: string | null;
     <span className="atl-bouton-groupe">
       <button
         type="button"
-        className="atl-bouton"
+        className="atl-bouton atl-disc-icone"
         aria-pressed={etat === "enregistre"}
         aria-disabled={indisponible || etat === "transcrit" ? "true" : undefined}
         disabled={indisponible || etat === "transcrit"}
-        title={disponible === false ? "La dictée vocale locale n'est pas disponible." : undefined}
+        title={disponible === false ? "La dictée vocale locale n'est pas disponible." : etat === "enregistre" ? "Arrêter la dictée" : "Dicter"}
         onClick={() => (etat === "enregistre" ? arreter() : void demarrer())}
       >
-        {etat === "enregistre" ? "Arrêter la dictée" : etat === "transcrit" ? "Transcription…" : "Dicter"}
+        {etat === "enregistre" ? <IconeArret /> : <IconeMicro />}
+        <span className="atl-sr">{etat === "enregistre" ? "Arrêter la dictée" : etat === "transcrit" ? "Transcription…" : "Dicter"}</span>
       </button>
       {erreur ? (
         <span role="alert" className="atl-disc-erreur">

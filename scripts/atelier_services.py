@@ -206,6 +206,12 @@ def flux_coordinateurs(registre: dict) -> list[dict]:
     return generes
 
 
+def origine_plugin(flux: dict) -> str:
+    """Origine telle que la porte la table flux_services du plugin : « metier » ou « coordinateurs ». Les deux familles
+    générées par flux_coordinateurs (« coordinateurs » et « coordinateur-general ») sont le réseau des coordinateurs."""
+    return "metier" if flux.get("origine", "metier") == "metier" else "coordinateurs"
+
+
 def flux_complets(registre: dict) -> list[dict]:
     """Matrice déclarée au plugin : flux métier du registre (origine « metier »), puis réseau des coordinateurs."""
     return [{**f, "origine": "metier"} for f in registre["flux"]] + flux_coordinateurs(registre)

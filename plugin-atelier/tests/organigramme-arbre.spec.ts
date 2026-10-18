@@ -64,7 +64,7 @@ describe("statuts", () => {
 });
 
 describe("liensDuService", () => {
-  const f = (source: string, cible: string, objet = "o", approbationHumaine = false): FluxServiceLu => ({ source, cible, objet, approbationHumaine });
+  const f = (source: string, cible: string, objet = "o", approbationHumaine = false): FluxServiceLu => ({ source, cible, objet, approbationHumaine, origine: "metier" });
   const flux = [f("sav", "juridique", "Avis"), f("juridique", "sav", "Réponse", true), f("sav", "direction"), f("achats", "direction"), f("sav", "sav", "boucle")];
 
   it("sépare sortants et entrants, liste les voisins, ignore un flux d'un service vers lui-même", () => {

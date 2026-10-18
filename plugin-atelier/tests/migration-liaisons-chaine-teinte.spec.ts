@@ -16,11 +16,11 @@ describe("migration 017 : chaîne et teinte des liaisons", () => {
   const sql = readFileSync(join(DOSSIER, NOM), "utf8");
   const instructions = sql.split("\n").filter((l) => !l.trimStart().startsWith("--")).join("\n");
 
-  it("est numérotée immédiatement après 016 et reste la dernière", () => {
+  it("est numérotée immédiatement après 016 et avant 018", () => {
     const i = fichiers.indexOf(NOM);
     expect(i).toBeGreaterThan(0);
     expect(fichiers[i - 1]).toMatch(/^016_/u);
-    expect(i).toBe(fichiers.length - 1);
+    expect(fichiers[i + 1]).toMatch(/^018_/u);
   });
 
   it("ajoute les quatre colonnes avec des valeurs par défaut sûres", () => {

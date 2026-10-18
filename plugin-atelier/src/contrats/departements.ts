@@ -9,6 +9,8 @@
  * `departement.etat` portant SON `companyId`, que l'hôte autorise seulement si l'utilisateur a accès à ce service.
  */
 
+import type { OrigineFlux } from "./liaisons.js";
+
 /** Un service du client, tel que déclaré dans `services_entreprises` (jamais un service d'un autre client). */
 export interface DepartementDeclare {
   companyId: string;
@@ -35,6 +37,8 @@ export interface FluxServiceLu {
   cible: string;
   objet: string;
   approbationHumaine: boolean;
+  /** « metier » : flux du registre des services ; « coordinateurs » : réseau des coordinateurs généré. */
+  origine: OrigineFlux;
 }
 
 /** Réponse de `services.flux` : la matrice des flux du client de l'entreprise de la requête (jamais d'un autre client). */

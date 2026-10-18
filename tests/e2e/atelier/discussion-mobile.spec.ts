@@ -66,7 +66,7 @@ test.describe("ordinateur 1440x900", () => {
     const erreurs = surveillerConsole(page);
     await ouvrir(page, "/discussion");
 
-    await expect(page.getByRole("heading", { name: "Discussion avec le Coordinateur", level: 1 })).toBeVisible();
+    await expect(page.getByRole("heading", { name: /^Coordinateur/u, level: 1 })).toBeVisible();
     await expect(page.getByRole("button", { name: "Dicter", exact: true })).toBeVisible();
     await expect(page.getByRole("button", { name: "Parler en direct", exact: true })).toBeVisible();
     const champ = page.getByLabel("Votre message au Coordinateur");
@@ -94,7 +94,7 @@ test.describe("ordinateur 1440x900", () => {
 
     // Le fil est persistant : après rechargement, le message est toujours là.
     await page.reload();
-    await expect(page.getByRole("heading", { name: "Discussion avec le Coordinateur", level: 1 })).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByRole("heading", { name: /^Coordinateur/u, level: 1 })).toBeVisible({ timeout: 30_000 });
     await expect(page.locator(".atl-disc-bulle", { hasText: MESSAGE })).toBeVisible({ timeout: 30_000 });
     await capturer(page, "bureau-3-apres-rechargement");
 
@@ -108,7 +108,7 @@ test.describe("téléphone 390x844", () => {
   test("discussion : « Envoyer » visible, non recouvert par la barre de l'hôte, sans débordement horizontal", async ({ page }) => {
     const erreurs = surveillerConsole(page);
     await ouvrir(page, "/discussion");
-    await expect(page.getByRole("heading", { name: "Discussion avec le Coordinateur", level: 1 })).toBeVisible();
+    await expect(page.getByRole("heading", { name: /^Coordinateur/u, level: 1 })).toBeVisible();
 
     // « Envoyer » est inactif tant que le champ est vide : on saisit d'abord.
     await page.getByLabel("Votre message au Coordinateur").fill("Bonjour (essai mobile)");
