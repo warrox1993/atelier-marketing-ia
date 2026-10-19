@@ -5,6 +5,7 @@
  */
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { LienHote } from "../composants.js";
+import { ReglageNotifications } from "./bandeau-decisions.js";
 import { IconeReglages } from "./icones-discussion.js";
 
 export interface ReglagesChat {
@@ -162,6 +163,7 @@ export function ReglagesDuChat({ reglages, onChange, identifiant }: { reglages: 
             <input type="checkbox" className="atl-case-tactile" checked={reglages.dictee} onChange={(e) => onChange({ dictee: e.target.checked })} />
             <span>Dictée vocale (bouton micro)</span>
           </label>
+          <ReglageNotifications />
         </div>
       ) : null}
     </div>

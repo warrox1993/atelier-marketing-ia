@@ -20,6 +20,8 @@ import {
 } from "@paperclipai/plugin-sdk/ui";
 import type { VueContenusAValider, VueEquipe } from "../contrats/ui.js";
 import { BandeauEntreprise, Bouton, Champ, Chargement, EtatErreur, LienHote } from "./composants.js";
+import { BandeauDecisions, VeilleDecisions } from "./composants/bandeau-decisions.js";
+import { useCartesServices, useDirectionId } from "./cartes-services.js";
 import { useNombreAFaire, useTitreOnglet } from "./compteur-afaire.js";
 import { useEnvoiDemande } from "./demande.js";
 import { FournisseurDonnees, useDonnees } from "./donnees.js";
@@ -135,9 +137,14 @@ function Rubriques({ courante, rubriques }: { courante: CleRubriqueNav; rubrique
   );
 }
 
-/** Titre de l'onglet du navigateur : « (3) Atelier » selon le nombre d'éléments en attente. */
+/**
+ * Titre de l'onglet du navigateur : « (3) Atelier » selon le nombre d'éléments en attente, décisions des autres
+ * services comprises.
+ */
 function TitreOnglet({ companyId }: { companyId: string | null | undefined }) {
-  useTitreOnglet(useNombreAFaire(companyId));
+  const aFaire = useNombreAFaire(companyId);
+  const decisions = useCartesServices(useDirectionId(companyId)).cartes.length;
+  useTitreOnglet(aFaire === null && decisions === 0 ? null : (aFaire ?? 0) + decisions);
   return null;
 }
 
@@ -162,6 +169,8 @@ export function PageAtelier({ context }: PluginPageProps) {
         {/* Vue d'ensemble (Départements et Organigramme) : toute la largeur de l'écran pour les deux vues, afin que la bascule ne change ni de largeur ni de place d'une vue à l'autre. */}
         <main className={estVueEnsemble(route.vue) ? "atl-page atl-page-large" : "atl-page"}>
           {context.companyId ? <BandeauEntreprise /> : null}
+          {/* Décisions qui attendent dans un service : bandeau persistant, sauf dans le chat où les cartes sont dans le fil. */}
+          {context.companyId && route.vue !== "discussion" ? <BandeauDecisions companyId={context.companyId} /> : null}
           {/* Chat, Réglages et vues de groupe : pas de rubriques d'un bureau, sur téléphone non plus. */}
           {sansRubriques ? null : <Rubriques courante={rubrique.cle} rubriques={rubriques} />}
           {rubrique.onglets.length > 1 ? (
@@ -232,6 +241,8 @@ export function EntreeAtelier({ context }: PluginSidebarProps) {
   const surReglages = actif && rubriqueDe(vueCourante, ancre).rubrique.cle === "reglages";
   return (
     <Racine>
+      {/* Veille des décisions en attente : alimente la pastille « Coordinateur général » du menu, où que soit la personne. */}
+      <VeilleDecisions companyId={context.companyId} />
       {/* Client à plusieurs services : la vue d'ensemble (grille des départements ou organigramme), depuis le menu principal. */}
       {aPlusieursDepartements(departements) ? (
         <LienHote vers={chemin("departements")} className="atl-entree" courant={surEnsemble}>

@@ -330,6 +330,10 @@ details[open] > .atl-section-resume::after, details[open] > .atl-filtres-resume:
 .atl-nav a { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; padding: 0.4375rem 0.75rem; border-radius: calc(var(--atl-rayon) * 0.8); color: var(--atl-texte); text-decoration: none; font-size: 0.8125rem; font-weight: 500; }
 .atl-nav a:hover { background: var(--atl-surface-2); }
 .atl-nav a[aria-current="page"] { background: var(--atl-surface-2); box-shadow: inset 0 0 0 1px var(--atl-trait); }
+.atl-decisions { display: flex; flex-wrap: wrap; align-items: center; gap: 0.25rem 1rem; padding: 0.5rem 0.75rem; border: 1px solid color-mix(in oklab, var(--atl-attention) 50%, var(--atl-trait)); border-radius: var(--atl-rayon); background: var(--atl-surface-2); font-size: 0.875rem; }
+.atl-decisions-texte { flex: 1 1 14rem; margin: 0; min-width: 0; overflow-wrap: anywhere; }
+.atl-decisions-lien { flex: none; font-weight: 600; color: var(--atl-texte); text-underline-offset: 0.2em; }
+@media (pointer: coarse) { .atl-decisions-lien { display: inline-flex; align-items: center; min-height: 2.75rem; } }
 .atl-nav-compte { font-size: 0.6875rem; min-width: 1.25rem; text-align: center; padding: 0 0.375rem; border-radius: 999px; background: var(--atl-accent); color: var(--atl-accent-texte); }
 .atl-onglets-cadre, .atl-onglets { display: none; }
 /* Entrées du menu principal du socle : mêmes mesures que ses lignes (mx-2, px-2, py-1.5, gap-2.5, texte à 80 %). */

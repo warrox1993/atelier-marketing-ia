@@ -18,6 +18,10 @@ import { IdNatif, PLUGIN_ID, ROUTE_ATELIER, type CleRouteApi, type StatutFonctio
 import type { ActeurHote, GestionnaireRoute } from "./atelier.js";
 import type { BaseAtelier } from "./base.js";
 import { erreur, erreurValidation } from "./erreurs.js";
+import { elementDepuisCarte, interactionAccueil, lienTache, texteOuNul } from "../contrats/carte-decision.js";
+
+// Logique pure partagée avec l'interface (src/contrats/carte-decision.ts), toujours exposée d'ici pour les appelants existants.
+export { elementDepuisCarte, interactionAccueil };
 
 type Issue = NonNullable<Awaited<ReturnType<PluginContext["issues"]["get"]>>>;
 
@@ -227,35 +231,6 @@ export function raisonTacheBloquee(statut: StatutFonctionnel, issue: { status: s
   }
 }
 
-const texteOuNul = (v: unknown): string | null => (typeof v === "string" && v.trim() !== "" ? v.trim() : null);
-
-/** Réduit une carte native en attente à ce que l'Accueil affiche (lecture défensive : la charge vient de l'hôte). */
-export function interactionAccueil(carte: { id: string; kind: string; payload?: unknown }): InteractionAccueil {
-  const p = (carte.payload ?? {}) as Record<string, unknown>;
-  const questions = Array.isArray(p.questions) ? (p.questions as Array<Record<string, unknown>>) : [];
-  return {
-    id: carte.id,
-    kind: carte.kind === "ask_user_questions" ? "ask_user_questions" : "request_confirmation",
-    invite: texteOuNul(p.prompt),
-    details: texteOuNul(p.detailsMarkdown),
-    libelleAccepter: texteOuNul(p.acceptLabel),
-    libelleRefuser: texteOuNul(p.rejectLabel),
-    refusRaisonObligatoire: p.rejectRequiresReason === true,
-    natifSeulement: p.toolAction != null || p.secretProposal != null,
-    questions: carte.kind !== "ask_user_questions" ? [] : questions.map((q) => ({
-      id: String(q.id ?? ""),
-      invite: texteOuNul(q.prompt) ?? "",
-      aide: texteOuNul(q.helpText),
-      choix: q.selectionMode === "multi" ? "multi" : "single",
-      obligatoire: q.required === true,
-      autre: q.allowOther === true,
-      options: (Array.isArray(q.options) ? (q.options as Array<Record<string, unknown>>) : []).map((o) => ({
-        id: String(o.id ?? ""), libelle: texteOuNul(o.label) ?? "", description: texteOuNul(o.description), texteLibre: o.freeText === true,
-      })),
-    })),
-  };
-}
-
 /**
  * Types d'approbation décidables sur place : leur approbation n'a aucun effet caché. `hire_agent` active un
  * agent avec l'adaptateur et la configuration de la demande, `budget_override_required` s'approuve sans
@@ -302,7 +277,6 @@ const exigerHumain = (acteur: ActeurHote, quoi: string) => {
 };
 
 const lienRubrique = (rubrique: string, id?: string) => `/${ROUTE_ATELIER}/${rubrique}${id ? `/${encodeURIComponent(id)}` : ""}`;
-const lienTache = (i: { id: string; identifier?: string | null }) => `/issues/${i.identifier ?? i.id}`;
 const iso = (d: Date | string | null | undefined) => (d instanceof Date ? d.toISOString() : typeof d === "string" ? d : new Date(0).toISOString());
 
 const DemanderEntree = z
@@ -334,18 +308,6 @@ async function enParallele<T, R>(elements: readonly T[], n: number, f: (e: T) =>
   };
   await Promise.all(Array.from({ length: Math.min(n, elements.length) }, ouvrier));
   return resultats;
-}
-
-/** Élément « À faire » d'une carte native en attente (question ou confirmation) ; `null` pour toute autre carte. */
-export function elementDepuisCarte(issue: Pick<Issue, "id" | "identifier" | "title">, carte: Awaited<ReturnType<PluginContext["issues"]["listInteractions"]>>[number]): ElementAccueil | null {
-  if (carte.status !== "pending" || (carte.kind !== "ask_user_questions" && carte.kind !== "request_confirmation")) return null;
-  const question = carte.kind === "ask_user_questions";
-  return {
-    id: `question:${carte.id}`, type: "information_manquante", urgence: "haute", enTete: true,
-    titre: carte.title?.trim() || (question ? "L'équipe vous pose une question" : "L'équipe attend votre confirmation"),
-    raison: `${question ? "Il manque une information que l'équipe ne peut pas obtenir seule" : "Une décision vous revient"} (${issue.identifier ?? "tâche"} · ${issue.title}). Le travail attend votre réponse.`,
-    lien: lienTache(issue), action: question ? "Répondre" : "Confirmer", issueId: issue.id, interaction: interactionAccueil(carte),
-  };
 }
 
 export function routesAccueil(d: DependancesAccueil): Partial<Record<CleRouteApi, GestionnaireRoute>> {

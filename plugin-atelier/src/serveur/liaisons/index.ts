@@ -2,6 +2,7 @@
 import type { PluginContext } from "@paperclipai/plugin-sdk";
 import type { CleRouteApi } from "../../contrats/index.js";
 import type { GestionnaireRoute } from "../atelier.js";
+import { routeCartesServices } from "./cartes-services.js";
 import { routeDecider } from "./decider.js";
 import { routeDeclarer } from "./declarer.js";
 import { routeDemander } from "./demander.js";
@@ -43,5 +44,5 @@ export const liaisonsPourAccueil = (stock: StockLiaisons) => async (companyId: s
 export function routesLiaisons(d: Omit<DependancesLiaisons, "stock"> & { stock?: DependancesLiaisons["stock"]; /** Tests : lectures de l'onglet Échanges et du registre en mémoire. */ lecture?: LectureLiaisons }): Partial<Record<CleRouteApi, GestionnaireRoute>> {
   const stock: StockLiaisons = d.stock ?? stockLiaisonsParesseux(d.ctx);
   const lecture = d.lecture ?? lectureLiaisonsParesseuse(d.ctx);
-  return { ...routeDemander({ ...d, stock }), ...routeDecider({ ...d, stock }), ...routeDeclarer({ base: d.base, stock }), ...routeLire({ ctx: d.ctx, lecture }), ...routeRegistre({ stock, lecture }) };
+  return { ...routeDemander({ ...d, stock }), ...routeDecider({ ...d, stock }), ...routeDeclarer({ base: d.base, stock }), ...routeLire({ ctx: d.ctx, lecture }), ...routeRegistre({ stock, lecture }), ...routeCartesServices({ ctx: d.ctx, stock, lecture }) };
 }

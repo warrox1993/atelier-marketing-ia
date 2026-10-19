@@ -1,0 +1,74 @@
+From 9f5607063f95d74a36563baef95b70730cd5d9ad Mon Sep 17 00:00:00 2001
+From: Jean-Baptiste Dhondt <114347858+warrox1993@users.noreply.github.com>
+Date: Mon, 19 Oct 2026 22:23:50 +0200
+Subject: [PATCH] =?UTF-8?q?fix(ui):=20bloc=20atelier-actions=20masqu=C3=A9?=
+ =?UTF-8?q?=20dans=20la=20vue=20native=20(boutons=20du=20chat=20de=20l'ate?=
+ =?UTF-8?q?lier)?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ .../MarkdownBody.atelier-actions.test.tsx     | 19 +++++++++++++++++++
+ ui/src/components/MarkdownBody.tsx            | 11 +++++++++++
+ 2 files changed, 30 insertions(+)
+ create mode 100644 ui/src/components/MarkdownBody.atelier-actions.test.tsx
+
+diff --git a/ui/src/components/MarkdownBody.atelier-actions.test.tsx b/ui/src/components/MarkdownBody.atelier-actions.test.tsx
+new file mode 100644
+index 000000000..f69b5c514
+--- /dev/null
++++ b/ui/src/components/MarkdownBody.atelier-actions.test.tsx
+@@ -0,0 +1,19 @@
++// @vitest-environment node
++
++import { createElement } from "react";
++import { describe, expect, it } from "vitest";
++import { estBlocActionsAtelier } from "./MarkdownBody";
++
++// Patch local de l'Atelier : le bloc ```atelier-actions``` (boutons du chat de l'atelier) n'est pas affiché en JSON brut.
++describe("estBlocActionsAtelier", () => {
++  it("reconnaît le bloc de code atelier-actions", () => {
++    expect(estBlocActionsAtelier(createElement("code", { className: "language-atelier-actions" }, "[]"))).toBe(true);
++  });
++
++  it("laisse passer tout autre bloc de code", () => {
++    expect(estBlocActionsAtelier(createElement("code", { className: "language-json" }, "[]"))).toBe(false);
++    expect(estBlocActionsAtelier(createElement("code", { className: "language-atelier" }, "[]"))).toBe(false);
++    expect(estBlocActionsAtelier(createElement("code", {}, "[]"))).toBe(false);
++    expect(estBlocActionsAtelier("texte")).toBe(false);
++  });
++});
+diff --git a/ui/src/components/MarkdownBody.tsx b/ui/src/components/MarkdownBody.tsx
+index 6c4a9f11b..a8f4023cb 100644
+--- a/ui/src/components/MarkdownBody.tsx
++++ b/ui/src/components/MarkdownBody.tsx
+@@ -362,6 +362,16 @@ function extractMermaidSource(children: ReactNode): string | null {
+   return flattenText(childProps.children).replace(/\n$/, "");
+ }
+ 
++/**
++ * Bloc ```atelier-actions``` (patch local de l'Atelier) : boutons du chat de l'atelier, lus par le plugin.
++ * La vue native n'en affiche pas le JSON brut.
++ */
++export function estBlocActionsAtelier(children: ReactNode): boolean {
++  if (!isValidElement(children)) return false;
++  const childProps = children.props as { className?: unknown };
++  return typeof childProps.className === "string" && /\blanguage-atelier-actions\b/i.test(childProps.className);
++}
++
+ function safeMarkdownUrlTransform(url: string): string {
+   if (url.startsWith(WORKSPACE_FILE_HREF_PREFIX)) return url;
+   return parseMentionChipHref(url) ? url : defaultUrlTransform(url);
+@@ -844,6 +854,7 @@ function MarkdownBodyImpl({
+       </th>
+     ),
+     pre: ({ node: _node, children: preChildren, ...preProps }) => {
++      if (estBlocActionsAtelier(preChildren)) return null;
+       const mermaidSource = extractMermaidSource(preChildren);
+       if (mermaidSource && mediaMode === "render") {
+         return <MermaidDiagramBlock source={mermaidSource} darkMode={theme === "dark"} />;
+-- 
+2.53.0
+

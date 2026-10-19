@@ -11,6 +11,7 @@ import type { ElementAccueil } from "../../serveur/services-accueil.js";
 import { AFaire, trierParUrgence } from "./chat-a-faire.js";
 import { LienHote, MessageFait } from "../composants.js";
 import { ApprobationGroupee } from "../decision-livrable.js";
+import { phraseDecisions, type CarteService } from "../cartes-services.js";
 import { branchementsManquants, LIEN_PASSAGE_AU_REEL, useRealite } from "../realite.js";
 
 /** Connexions nommées dans le message ; le détail est dans les paramètres. */
@@ -49,6 +50,7 @@ export function MessageSituation({
   onFait,
   confirmation,
   onFaitGroupe,
+  decisionsServices = [],
 }: {
   nom: string;
   connexions: readonly string[];
@@ -56,11 +58,14 @@ export function MessageSituation({
   onFait(element: ElementAccueil, message: string): void;
   confirmation?: string | null;
   onFaitGroupe?(issueIds: string[]): void;
+  /** Décisions qui attendent dans les autres services (cartes du fil) : comptées parmi les points en attente. */
+  decisionsServices?: readonly CarteService[];
 }) {
   const [toutVoir, setToutVoir] = useState(false);
   const [groupeActif, setGroupeActif] = useState(false);
   // Le bilan d'une approbation groupée reste affiché jusqu'à « Fermer », même si la liste se vide ou ne se recharge pas.
-  if (connexions.length === 0 && elements.length === 0 && !groupeActif && !confirmation) return null;
+  if (connexions.length === 0 && elements.length === 0 && decisionsServices.length === 0 && !groupeActif && !confirmation) return null;
+  const total = elements.length + decisionsServices.length;
   const tries = trierParUrgence(elements);
   const visibles = toutVoir ? tries : tries.slice(0, POINTS_AFFICHES);
   const autres = tries.length - POINTS_AFFICHES;
@@ -85,10 +90,11 @@ export function MessageSituation({
           </div>
         ) : null}
         {confirmation ? <MessageFait className="atl-succes atl-afaire-confirmation" texte={confirmation} /> : null}
-        {elements.length > 0 ? (
+        {total > 0 ? (
           <div className="atl-disc-situation-bloc" data-testid="situation-points">
-            <p>{phrasePointsEnAttente(elements.length, connexions.length > 0)}</p>
-            <AFaire elements={visibles} onFait={onFait} />
+            <p>{phrasePointsEnAttente(total, connexions.length > 0)}</p>
+            {decisionsServices.length > 0 ? <p data-testid="situation-services">{phraseDecisions(decisionsServices)} Les cartes sont dans le fil ci-dessous.</p> : null}
+            {elements.length > 0 ? <AFaire elements={visibles} onFait={onFait} /> : null}
             {autres > 0 ? (
               <div className="atl-disc-situation-actions">
                 <button type="button" className="atl-bouton" aria-expanded={toutVoir} onClick={() => setToutVoir((v) => !v)}>

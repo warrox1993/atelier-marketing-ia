@@ -1,0 +1,158 @@
+From fde44ec7e0d8263db92f76d407b1595328e95904 Mon Sep 17 00:00:00 2001
+From: Jean-Baptiste Dhondt <114347858+warrox1993@users.noreply.github.com>
+Date: Mon, 19 Oct 2026 22:39:59 +0200
+Subject: [PATCH] =?UTF-8?q?feat(ui):=20pastille=20des=20d=C3=A9cisions=20e?=
+ =?UTF-8?q?n=20attente=20sur=20l'entr=C3=A9e=20=C2=AB=20Coordinateur=20g?=
+ =?UTF-8?q?=C3=A9n=C3=A9ral=20=C2=BB=20de=20l'atelier?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ ui/src/components/Sidebar.test.tsx  | 26 ++++++++++++++++++++++++++
+ ui/src/components/Sidebar.tsx       | 27 +++++++++++++++++++++++----
+ ui/src/hooks/useDecisionsAtelier.ts | 23 +++++++++++++++++++++++
+ 3 files changed, 72 insertions(+), 4 deletions(-)
+ create mode 100644 ui/src/hooks/useDecisionsAtelier.ts
+
+diff --git a/ui/src/components/Sidebar.test.tsx b/ui/src/components/Sidebar.test.tsx
+index 2e84f360f..757b7e0a1 100644
+--- a/ui/src/components/Sidebar.test.tsx
++++ b/ui/src/components/Sidebar.test.tsx
+@@ -250,6 +250,32 @@ describe("Sidebar", () => {
+     });
+   });
+ 
++  it("pastille de décisions sur « Coordinateur général » : publiée par le plugin, mise à jour par l'événement, absente sans l'atelier", async () => {
++    const w = window as unknown as { __atelierDecisions?: number };
++    mockPluginsApi.listUiContributions.mockResolvedValue([contributionAtelier]);
++    w.__atelierDecisions = 2;
++    const root = await renderSidebar();
++    const badge = () => container.querySelector('[data-slot="atelier-decisions-badge"]');
++    try {
++      expect(badge()?.textContent).toBe("2");
++      expect(container.querySelector('button[aria-label*="Coordinateur général"]')?.getAttribute("aria-label")).toContain("2 décisions en attente");
++      flushSync(() => {
++        w.__atelierDecisions = 1;
++        window.dispatchEvent(new CustomEvent("atelier:decisions", { detail: { nombre: 1 } }));
++      });
++      expect(badge()?.textContent).toBe("1");
++      expect(container.querySelector('button[aria-label*="Coordinateur général"]')?.getAttribute("aria-label")).toContain("1 décision en attente");
++      flushSync(() => {
++        w.__atelierDecisions = 0;
++        window.dispatchEvent(new CustomEvent("atelier:decisions", { detail: { nombre: 0 } }));
++      });
++      expect(badge()).toBeNull();
++    } finally {
++      delete w.__atelierDecisions;
++      flushSync(() => root.unmount());
++    }
++  });
++
+   it("ouvre le dialogue de création sans l'atelier", async () => {
+     const root = await renderSidebar();
+ 
+diff --git a/ui/src/components/Sidebar.tsx b/ui/src/components/Sidebar.tsx
+index 73856ef6a..cd0018f72 100644
+--- a/ui/src/components/Sidebar.tsx
++++ b/ui/src/components/Sidebar.tsx
+@@ -41,8 +41,10 @@ import { instanceSettingsApi } from "../api/instanceSettings";
+ import { queryKeys } from "../lib/queryKeys";
+ import { attentionBadgeCount } from "../lib/attention";
+ import { useInboxBadge } from "../hooks/useInboxBadge";
++import { useDecisionsAtelier } from "../hooks/useDecisionsAtelier";
+ import { useStreamlinedUiEnabled } from "../hooks/useStreamlinedUiEnabled";
+ import { usePublishSharedQueryData, useSharedPollingQuery } from "../hooks/useSharedPolling";
++import { Badge } from "@/components/ui/badge";
+ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+ import { cn, SIDEBAR_RAIL_HIDDEN_LABEL } from "../lib/utils";
+ import { PluginSlotOutlet } from "@/plugins/slots";
+@@ -63,6 +65,10 @@ export function Sidebar({ children }: { children?: ReactNode }) {
+     queryFn: () => pluginsApi.listUiContributions(),
+   });
+   const atelierPret = atelierDisponible(contributionsPlugins);
++  // Décisions qui attendent dans les services (publiées par le plugin) : pastille sur « Coordinateur général ».
++  const decisionsAtelier = useDecisionsAtelier();
++  const decisionsAffichees = atelierPret ? decisionsAtelier : 0;
++  const suffixeDecisions = decisionsAffichees > 0 ? ` : ${decisionsAffichees} décision${decisionsAffichees > 1 ? "s" : ""} en attente` : "";
+   const { enabled: agentChatEnabled } = useAgentChatEnabled();
+   // Every labeled section is collapsible (session-scoped, default open) —
+   // one policy across static nav groups and the data-driven sections.
+@@ -175,27 +181,40 @@ export function Sidebar({ children }: { children?: ReactNode }) {
+                 data-slot="icon-button"
+                 aria-label={
+                   atelierPret
+-                    ? "Discuter avec le Coordinateur général (nouvelle demande, question, action)"
++                    ? `Discuter avec le Coordinateur général (nouvelle demande, question, action)${suffixeDecisions}`
+                     : rail
+                       ? "Nouvelle tâche"
+                       : undefined
+                 }
+-                title={atelierPret ? "Discuter avec le Coordinateur général (nouvelle demande, question, action)" : undefined}
++                title={atelierPret ? `Discuter avec le Coordinateur général (nouvelle demande, question, action)${suffixeDecisions}` : undefined}
+                 className={cn(
+                   "flex items-center gap-2.5 mx-2 rounded-lg px-2 py-1.5 pointer-coarse:min-h-11 pointer-coarse:py-1 text-(length:--text-compact) font-medium text-foreground/80 transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
+                 )}
+               >
+-                {atelierPret ? <MessagesSquare className="h-4 w-4 shrink-0" /> : <SquarePen className="h-4 w-4 shrink-0" />}
++                <span className="relative shrink-0">
++                  {atelierPret ? <MessagesSquare className="h-4 w-4 shrink-0" /> : <SquarePen className="h-4 w-4 shrink-0" />}
++                  {/* Menu replié : un point sur l'icône (le nombre est dit aux lecteurs d'écran). */}
++                  {rail && decisionsAffichees > 0 ? (
++                    <span data-slot="atelier-decisions-point" className="absolute -right-0.5 -top-0.5 h-2 w-2 rounded-full bg-red-600 shadow-(--shadow-sidebar-icon-badge)" aria-hidden="true" />
++                  ) : null}
++                </span>
+                 <span className={rail ? SIDEBAR_RAIL_HIDDEN_LABEL : "truncate"}>
+                   {atelierPret ? "Coordinateur général" : "Nouvelle tâche"}
+                 </span>
++                {decisionsAffichees > 0 ? (
++                  !rail ? (
++                    <Badge variant="ghost" data-slot="atelier-decisions-badge" aria-hidden="true" className="ml-auto bg-red-600/90 px-1.5 leading-none text-red-50">
++                      {decisionsAffichees}
++                    </Badge>
++                  ) : null
++                ) : null}
+               </button>
+             );
+             return rail ? (
+               <Tooltip>
+                 <TooltipTrigger asChild>{newTaskButton}</TooltipTrigger>
+                 <TooltipContent side="right">
+-                  {atelierPret ? "Discuter avec le Coordinateur général (nouvelle demande, question, action)" : "Nouvelle tâche"}
++                  {atelierPret ? `Discuter avec le Coordinateur général (nouvelle demande, question, action)${suffixeDecisions}` : "Nouvelle tâche"}
+                 </TooltipContent>
+               </Tooltip>
+             ) : (
+diff --git a/ui/src/hooks/useDecisionsAtelier.ts b/ui/src/hooks/useDecisionsAtelier.ts
+new file mode 100644
+index 000000000..2db1ccfcf
+--- /dev/null
++++ b/ui/src/hooks/useDecisionsAtelier.ts
+@@ -0,0 +1,23 @@
++import { useSyncExternalStore } from "react";
++
++/**
++ * Nombre de décisions humaines qui attendent dans les services de l'atelier (plans à valider, questions, accords),
++ * publié par le plugin Atelier (`window.__atelierDecisions` + événement `atelier:decisions`) : le menu du socle n'a pas
++ * accès aux données du plugin. Zéro tant que le plugin n'a rien publié.
++ */
++export const EVENEMENT_DECISIONS_ATELIER = "atelier:decisions";
++
++export function lireDecisionsAtelier(): number {
++  if (typeof window === "undefined") return 0;
++  const n = (window as unknown as { __atelierDecisions?: unknown }).__atelierDecisions;
++  return typeof n === "number" && Number.isFinite(n) && n > 0 ? Math.floor(n) : 0;
++}
++
++function abonner(fn: () => void): () => void {
++  window.addEventListener(EVENEMENT_DECISIONS_ATELIER, fn);
++  return () => window.removeEventListener(EVENEMENT_DECISIONS_ATELIER, fn);
++}
++
++export function useDecisionsAtelier(): number {
++  return useSyncExternalStore(abonner, lireDecisionsAtelier, () => 0);
++}
+-- 
+2.53.0
+

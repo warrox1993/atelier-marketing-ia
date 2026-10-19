@@ -60,6 +60,7 @@ import {
   usePrefixesServices,
 } from "../discussion-telecommande.js";
 import { appelRoute } from "../routes-prospection.js";
+import { useCartesServices, type CarteService } from "../cartes-services.js";
 import { STYLES_DISCUSSION } from "../styles-discussion.js";
 import type {
   DepartementDeclare,
@@ -259,9 +260,18 @@ export function VueDiscussion() {
     versionElements,
   );
   const prefixesServices = usePrefixesServices(services, messages);
+  // Décisions qui attendent dans les autres services (tâches reçues par liaison depuis ce chat) : lecture partagée avec
+  // le menu, le bandeau et le titre de l'onglet, relue toutes les 15 s.
+  const svc = useCartesServices(general ? companyId : null);
+  /** Cartes des services déjà vues : une carte traitée garde sa place (message de confirmation) après avoir quitté la liste. */
+  const cartesVues = useRef(new Map<string, CarteService>());
+  for (const c of svc.cartes) cartesVues.current.set(c.element.id, c);
+  const idsServices = new Set(svc.cartes.map((c) => c.element.id));
   const traite = (cle: string, message: string) => {
     setFaits((f) => ({ ...f, [cle]: message }));
     setVersionElements((v) => v + 1);
+    if (cle.startsWith("carte:") && cartesVues.current.has(cle.slice(6)))
+      svc.rafraichir();
   };
   const [reglages, changerReglages] = useReglagesChat();
   const afaire = useAFaireAccueil(companyId, INTERVALLE_AFAIRE_MS);
@@ -373,7 +383,13 @@ export function VueDiscussion() {
   useEffect(() => {
     const el = fil.current;
     if (el) el.scrollTop = el.scrollHeight;
-  }, [messages.length, cartes.length, autres.length, attenteDepuis]);
+  }, [
+    messages.length,
+    cartes.length,
+    autres.length,
+    svc.cartes.length,
+    attenteDepuis,
+  ]);
 
   // Le champ grandit avec le texte (repli pour les navigateurs sans `field-sizing`), puis se plafonne par le style.
   useEffect(() => {
@@ -467,8 +483,23 @@ export function VueDiscussion() {
   if (etat.chargement && !etat.ouverture)
     return <Chargement libelle="Ouverture de la discussion" lignes={3} />;
 
+  // Fil chronologique : messages et cartes des services mêlés, par date de création.
+  const cartesServices = [...cartesVues.current.values()].filter(
+    (c) => idsServices.has(c.element.id) || faits[`carte:${c.element.id}`],
+  );
+  const filChrono: Array<{
+    date: string;
+    message?: MessageFil;
+    carte?: CarteService;
+  }> = [
+    ...messages.map((message) => ({ date: message.date, message })),
+    ...cartesServices.map((carte) => ({ date: carte.date, carte })),
+  ].sort((a, b) => a.date.localeCompare(b.date) || ("message" in a ? -1 : 1));
   const vide =
-    messages.length === 0 && cartes.length === 0 && autres.length === 0;
+    messages.length === 0 &&
+    cartes.length === 0 &&
+    autres.length === 0 &&
+    cartesServices.length === 0;
   const raison =
     tentativeVide && texte.trim() === ""
       ? "Écrivez d'abord votre message."
@@ -518,6 +549,7 @@ export function VueDiscussion() {
             onFait={afaire.surTraite}
             confirmation={afaire.confirmation}
             onFaitGroupe={afaire.surTraiteGroupe}
+            decisionsServices={svc.cartes}
           />
           {vide ? (
             <div className="atl-disc-vide">
@@ -533,48 +565,74 @@ export function VueDiscussion() {
               </p>
             </div>
           ) : (
-            messages.map((m) => (
-              <div
-                key={m.id}
-                className="atl-disc-bulle"
-                data-auteur={m.auteur}
-                data-actions={
-                  m.actions && m.actions.length > 0 ? "oui" : undefined
-                }
-              >
-                <span className="atl-disc-meta">
-                  {m.auteur === "agent" ? (
-                    <>
-                      <span className="atl-disc-avatar" aria-hidden="true">
-                        C
-                      </span>
-                      <span className="atl-disc-nom">{m.nom}</span>
-                    </>
-                  ) : (
-                    <span className="atl-sr">{m.nom}</span>
-                  )}
-                  <time dateTime={m.date}>{dateHeure(m.date)}</time>
-                </span>
-                {m.texte.trim() !== "" ? (
-                  <p className="atl-disc-texte">
-                    <TexteSur texte={m.texte} />
-                  </p>
-                ) : null}
-                {m.auteur === "agent" && m.actions && m.actions.length > 0 ? (
-                  <ActionsMessage
-                    idMessage={m.id}
-                    actions={m.actions}
-                    elements={elements}
-                    origines={origines}
-                    faits={faits}
-                    onFait={traite}
-                    services={services}
-                    prefixes={prefixesServices}
-                    actionnable={m.id === dernierAgentId}
+            filChrono.map(({ message: m, carte, date }) =>
+              carte ? (
+                faits[`carte:${carte.element.id}`] ? (
+                  <MessageFait
+                    key={`svc-${carte.element.id}`}
+                    className="atl-disc-attente"
+                    texte={faits[`carte:${carte.element.id}`]!}
                   />
-                ) : null}
-              </div>
-            ))
+                ) : (
+                  <CarteFil
+                    key={`svc-${carte.element.id}`}
+                    element={carte.element}
+                    origine={{
+                      companyId: carte.companyId,
+                      nom: carte.nom,
+                      slug: carte.slug,
+                      estDirection: false,
+                    }}
+                    date={date}
+                    libelleService
+                    onFait={(message) =>
+                      traite(`carte:${carte.element.id}`, message)
+                    }
+                  />
+                )
+              ) : m ? (
+                <div
+                  key={m.id}
+                  className="atl-disc-bulle"
+                  data-auteur={m.auteur}
+                  data-actions={
+                    m.actions && m.actions.length > 0 ? "oui" : undefined
+                  }
+                >
+                  <span className="atl-disc-meta">
+                    {m.auteur === "agent" ? (
+                      <>
+                        <span className="atl-disc-avatar" aria-hidden="true">
+                          C
+                        </span>
+                        <span className="atl-disc-nom">{m.nom}</span>
+                      </>
+                    ) : (
+                      <span className="atl-sr">{m.nom}</span>
+                    )}
+                    <time dateTime={m.date}>{dateHeure(m.date)}</time>
+                  </span>
+                  {m.texte.trim() !== "" ? (
+                    <p className="atl-disc-texte">
+                      <TexteSur texte={m.texte} />
+                    </p>
+                  ) : null}
+                  {m.auteur === "agent" && m.actions && m.actions.length > 0 ? (
+                    <ActionsMessage
+                      idMessage={m.id}
+                      actions={m.actions}
+                      elements={elements}
+                      origines={origines}
+                      faits={faits}
+                      onFait={traite}
+                      services={services}
+                      prefixes={prefixesServices}
+                      actionnable={m.id === dernierAgentId}
+                    />
+                  ) : null}
+                </div>
+              ) : null,
+            )
           )}
           {cartes
             .filter((c) => faits[`carte:${c.id}`])
@@ -595,6 +653,11 @@ export function VueDiscussion() {
               />
             ))}
           {autres
+            .filter(
+              ({ element }) =>
+                !idsServices.has(element.id) &&
+                !cartesVues.current.has(element.id),
+            )
             .filter(({ element }) => faits[`carte:${element.id}`])
             .map(({ element }) => (
               <MessageFait
@@ -604,6 +667,11 @@ export function VueDiscussion() {
               />
             ))}
           {autres
+            .filter(
+              ({ element }) =>
+                !idsServices.has(element.id) &&
+                !cartesVues.current.has(element.id),
+            )
             .filter(({ element }) => !faits[`carte:${element.id}`])
             .map(({ element, origine }) => (
               <CarteFil
@@ -613,10 +681,11 @@ export function VueDiscussion() {
                 onFait={(message) => traite(`carte:${element.id}`, message)}
               />
             ))}
-          {erreurElements || cartesIndisponibles ? (
+          {erreurElements || cartesIndisponibles || svc.indisponible ? (
             <ActionsIndisponibles
               onReessayer={() => {
                 reessayerElements();
+                svc.rafraichir();
                 if (cartesIndisponibles) setVersion((v) => v + 1);
               }}
             />

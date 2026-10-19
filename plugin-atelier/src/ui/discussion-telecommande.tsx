@@ -18,6 +18,7 @@ import type { ElementAccueil } from "../serveur/services-accueil.js";
 import { SERVICES_SENSIBLES, type DepartementDeclare } from "../contrats/departements.js";
 import { SurPlace, natifSeulement, traitableSurPlace } from "./accueil-sur-place.js";
 import { LienHote, MessageFait } from "./composants.js";
+import { dateHeure } from "./format.js";
 import { EVENEMENT_OUVRIR_AGENTS } from "./composants/agents-en-service.js";
 import { CarteAgents } from "./discussion-agents.js";
 import { MINIMUM_DEPARTEMENTS } from "./departements-sonde.js";
@@ -400,13 +401,22 @@ export function ActionsMessage({ idMessage, actions, elements, faits, onFait, or
   );
 }
 
-/** Carte native en attente, affichée dans le fil comme un message du Coordinateur, répondable en place. */
-export function CarteFil({ element, onFait, origine }: { element: ElementAccueil; onFait(message: string): void; origine?: OrigineElement }) {
+/** Phrase d'une carte d'un autre service : « demande votre accord » (confirmation) ou « vous pose une question ». */
+export function libelleCarteService(element: ElementAccueil): string {
+  return element.interaction?.kind === "ask_user_questions" ? "vous pose une question" : "demande votre accord";
+}
+
+/**
+ * Carte native en attente, affichée dans le fil comme un message du Coordinateur, répondable en place. Une carte d'un
+ * autre service (`libelleService`) dit qui la pose et quand (« Marketing demande votre accord », heure de création).
+ */
+export function CarteFil({ element, onFait, origine, date, libelleService }: { element: ElementAccueil; onFait(message: string): void; origine?: OrigineElement; date?: string; libelleService?: boolean }) {
   return (
     <div className="atl-disc-bulle" data-auteur="agent" data-carte="oui" data-service={origine ? origine.nom : undefined}>
       <span className="atl-disc-meta">
         {origine ? <EtiquetteService nom={origine.nom} slug={origine.slug} /> : null}
-        {origine ? "En attente de votre décision" : "Coordinateur · en attente de votre réponse"}
+        {origine ? (libelleService ? libelleCarteService(element) : "En attente de votre décision") : "Coordinateur · en attente de votre réponse"}
+        {date ? <time dateTime={date}>{dateHeure(date)}</time> : null}
       </span>
       <div className="atl-disc-texte atl-disc-carte">
         <p className="atl-disc-carte-titre">{element.titre}</p>
