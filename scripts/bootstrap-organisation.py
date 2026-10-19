@@ -2550,32 +2550,84 @@ def _reinitialiser(args) -> int:
     return 0
 
 
+def lire_jeton() -> str:
+    """Lit le jeton UNE fois (entrée standard non interactive, sinon saisie masquée) : jamais affiché ni écrit."""
+    valeur = sys.stdin.readline().strip() if not sys.stdin.isatty() else getpass.getpass("Jeton (non affiché) : ").strip()
+    if not valeur:
+        raise ErreurAtelier("jeton vide")
+    return valeur
+
+
+def ranger_secret_jeton(api: Api, cid: str, valeur: str) -> tuple[str, bool]:
+    """Crée le secret du jeton dans l'entreprise, ou le renouvelle s'il existe. Rend (identifiant, renouvelé)."""
+    existant = secret_jeton(api, cid)
+    if existant:
+        api.appel("POST", f"/secrets/{existant['id']}/rotate", {"value": valeur})
+        return existant["id"], True
+    s = api.appel("POST", f"/companies/{cid}/secrets", {
+        "name": "Jeton Claude Code (claude setup-token)",
+        "key": CLE_SECRET_JETON,
+        "value": valeur,
+        "description": "Jeton OAuth longue durée de l'abonnement de l'opérateur. Usage personnel uniquement.",
+    })
+    return s["id"], False
+
+
+def lier_jeton_agents_locaux(api: Api, cid: str, secret_id: str) -> int:
+    """Lie le secret (secret_ref) à TOUS les agents claude_local non résiliés de l'entreprise, sans toucher au reste de leur
+    adapterConfig (modèle, moteur, autres variables conservés ; les valeurs masquées sont restaurées côté serveur). Ni pause ni
+    reprise : chaque agent reste dans son état. Rend le nombre d'agents modifiés (ceux déjà liés à ce secret sont laissés)."""
+    modifies = 0
+    for a in api.get(f"/companies/{cid}/agents"):
+        if a.get("status") == "terminated":
+            continue
+        d = detail_agent(api, a["id"])
+        if d.get("adapterType") != "claude_local":
+            continue
+        config = dict(d.get("adapterConfig") or {})
+        env = dict(config.get("env") or {})
+        ref = {"type": "secret_ref", "secretId": secret_id, "version": "latest"}
+        if env.get(VARIABLE_JETON) == ref:
+            continue
+        env[VARIABLE_JETON] = ref
+        config["env"] = env
+        api.appel("PATCH", f"/agents/{a['id']}", {"adapterConfig": config})
+        modifies += 1
+    return modifies
+
+
+def cmd_jeton_client(args) -> int:
+    registre = lire_registre_client(args.client)
+    if registre is None:
+        raise ErreurAtelier(f"aucun registre local pour le client {args.client} ({dossier_client(args.client) / FICHIER_REGISTRE_CLIENT}).")
+    api = Api(url_api())
+    valeur = lire_jeton()
+    entreprises, agents = 0, 0
+    for service, e in sorted(registre["entreprises"].items()):
+        secret_id, renouvele = ranger_secret_jeton(api, e["entrepriseId"], valeur)
+        entreprises += 1
+        n = lier_jeton_agents_locaux(api, e["entrepriseId"], secret_id)
+        agents += n
+        print(f"  [{service}] secret {'renouvelé' if renouvele else 'créé'}, lié à {n} agent(s).")
+    del valeur
+    print(f"Secret rangé dans {entreprises} entreprise(s), lié à {agents} agent(s). Les agents restent dans leur état.")
+    return 0
+
+
 def cmd_jeton(args) -> int:
     if not args.confirmer:
         raise ErreurAtelier("ajoutez --confirmer : le jeton sera rangé comme secret et lié aux agents")
+    if getattr(args, "client", None):
+        return cmd_jeton_client(args)
     reg_agents, reg_orga = registres()
     api = Api(url_api())
     e = trouver_entreprise(api, reg_orga)
     if not e:
         raise ErreurAtelier("lancez d'abord « appliquer »")
-    valeur = sys.stdin.readline().strip() if not sys.stdin.isatty() else getpass.getpass("Jeton (non affiché) : ").strip()
-    if not valeur:
-        raise ErreurAtelier("jeton vide")
+    valeur = lire_jeton()
     cid = e["id"]
-    existant = secret_jeton(api, cid)
-    if existant:
-        api.appel("POST", f"/secrets/{existant['id']}/rotate", {"value": valeur})
-        secret_id = existant["id"]
-        print("Secret existant renouvelé (nouvelle version).")
-    else:
-        s = api.appel("POST", f"/companies/{cid}/secrets", {
-            "name": "Jeton Claude Code (claude setup-token)",
-            "key": CLE_SECRET_JETON,
-            "value": valeur,
-            "description": "Jeton OAuth longue durée de l'abonnement de l'opérateur. Usage personnel uniquement.",
-        })
-        secret_id = s["id"]
-        print("Secret créé dans le coffre de Paperclip.")
+    secret_id, renouvele = ranger_secret_jeton(api, cid, valeur)
+    print("Secret existant renouvelé (nouvelle version)." if renouvele else "Secret créé dans le coffre de Paperclip.")
     del valeur
     etat = lire_json(ETAT_LOCAL / "etat-bootstrap.json") if (ETAT_LOCAL / "etat-bootstrap.json").exists() else {}
     mode = "reel"
@@ -2585,6 +2637,30 @@ def cmd_jeton(args) -> int:
     return 0
 
 
+def agent_du_client(api: Api, slug: str, agent: str, service: str | None) -> tuple[dict, dict]:
+    """(entreprise {id}, agent) du client désigné par son slug de dépôt ou son nom (sans casse). Plusieurs correspondances
+    dans des services différents : erreur qui les liste, à lever avec --service."""
+    registre = lire_registre_client(slug)
+    if registre is None:
+        raise ErreurAtelier(f"aucun registre local pour le client {slug} ({dossier_client(slug) / FICHIER_REGISTRE_CLIENT}).")
+    voulu = agent.casefold()
+    trouves = []
+    for svc, ent in sorted(registre["entreprises"].items()):
+        if service and svc != service:
+            continue
+        for a in api.get(f"/companies/{ent['entrepriseId']}/agents"):
+            if a.get("status") == "terminated":
+                continue
+            if voulu in (slug_canonique(slug_depuis_nom(a["name"])).casefold(), a["name"].casefold()):
+                trouves.append((svc, ent["entrepriseId"], a))
+    if not trouves:
+        raise ErreurAtelier(f"agent inconnu chez le client {slug} : {agent}")
+    if len(trouves) > 1:
+        raise ErreurAtelier(f"agent « {agent} » présent dans plusieurs services ({', '.join(t[0] for t in trouves)}) : précisez --service")
+    _, cid, a = trouves[0]
+    return {"id": cid}, a
+
+
 def cmd_test_reel(args) -> int:
     """Test réel minimal de l'adaptateur claude_local : sonde native de Paperclip
     (« Respond with hello. », POST /companies/:id/adapters/claude_local/test-environment).
@@ -2592,15 +2668,22 @@ def cmd_test_reel(args) -> int:
     Sans --confirmer : n'envoie rien, affiche la requête qui serait faite (sans secret).
     Avec --confirmer : UN appel de modèle réel, facturé sur le jeton rangé (abonnement de l'opérateur).
     """
-    reg_agents, reg_orga = registres()
     api = Api(url_api())
-    e = trouver_entreprise(api, reg_orga)
-    if not e:
-        raise ErreurAtelier("lancez d'abord « appliquer »")
-    agents = agents_par_slug(api, e["id"])
-    if args.agent not in agents:
-        raise ErreurAtelier(f"agent inconnu : {args.agent}")
-    detail = detail_agent(api, agents[args.agent]["id"])
+    if getattr(args, "client", None):
+        if not args.agent:
+            raise ErreurAtelier("avec --client, précisez --agent <slug ou nom>")
+        e, a_cible = agent_du_client(api, args.client, args.agent, getattr(args, "service", None))
+    else:
+        args.agent = args.agent or "tests-techniques"
+        reg_agents, reg_orga = registres()
+        e = trouver_entreprise(api, reg_orga)
+        if not e:
+            raise ErreurAtelier("lancez d'abord « appliquer »")
+        agents = agents_par_slug(api, e["id"])
+        if args.agent not in agents:
+            raise ErreurAtelier(f"agent inconnu : {args.agent}")
+        a_cible = agents[args.agent]
+    detail = detail_agent(api, a_cible["id"])
     if detail.get("adapterType") != "claude_local":
         raise ErreurAtelier("l'agent n'est pas en mode réel (claude_local) : lancez « appliquer --mode reel »")
     secret = secret_jeton(api, e["id"])
@@ -4968,8 +5051,11 @@ def main(argv=None) -> int:
     r.add_argument("--confirmer", default="")
     j = sp.add_parser("jeton")
     j.add_argument("--confirmer", action="store_true")
+    j.add_argument("--client", default=None, help="range et lie le jeton dans CHAQUE entreprise de ce client (slug sous instance/atelier-client/)")
     tr = sp.add_parser("test-reel")
-    tr.add_argument("--agent", default="tests-techniques")
+    tr.add_argument("--agent", default=None, help="agent à vérifier (défaut : tests-techniques ; avec --client : slug ou nom, obligatoire)")
+    tr.add_argument("--client", default=None, help="vérifie un agent d'un client (slug sous instance/atelier-client/)")
+    tr.add_argument("--service", default=None, help="avec --client : service du client si l'agent existe dans plusieurs")
     tr.add_argument("--confirmer", action="store_true")
     cl = sp.add_parser("cles")
     cl.add_argument("--confirmer", action="store_true")

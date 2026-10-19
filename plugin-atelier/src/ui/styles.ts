@@ -452,4 +452,27 @@ details[open] > .atl-section-resume::after, details[open] > .atl-filtres-resume:
 .atl-statut-lead-bloc { display: flex; flex-direction: column; align-items: flex-start; gap: 0.25rem; margin: 0 0 1rem; max-width: 46rem; }
 .atl-statut-tris { display: flex; gap: 0.75rem; font-weight: 400; margin-top: 0.125rem; }
 .atl-nav-intertitre { padding: 0.25rem 0.75rem 0.125rem; font-size: 0.6875rem; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--atl-attenue-fort); }
+.atl-equipe-mention { margin: 0 0 0.75rem; color: var(--atl-attenue); }
+.atl-equipe-groupe { margin-top: 1.25rem; }
+.atl-equipe-groupe > .atl-h3 { margin: 0 0 0.5rem; }
+.atl-equipe-controles > summary { cursor: pointer; font-weight: 600; font-size: 0.9375rem; padding: 0.5rem 0; min-height: 2.75rem; }
+.atl-equipe-controles[open] > summary { margin-bottom: 0.5rem; }
+.atl-synthese { margin: 0 0 1.5rem; padding: 0.25rem 0 1rem; border-bottom: 1px solid var(--atl-trait); }
+.atl-synthese-liste { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; }
+.atl-synthese-liste > li { flex: 1 1 9rem; min-width: 0; border-left: 1px solid var(--atl-trait); }
+.atl-synthese-liste > li:first-child { border-left: 0; }
+.atl-synthese-lien { display: flex; flex-direction: column; gap: 0.125rem; padding: 0.5rem 1rem; min-height: 2.75rem; color: var(--atl-texte); text-decoration: none; border-radius: calc(var(--atl-rayon) * 0.8); }
+.atl-synthese-liste > li:first-child .atl-synthese-lien { padding-left: 0; }
+.atl-synthese-lien:hover { background: var(--atl-surface-2); }
+.atl-synthese-valeur { font-size: 1.375rem; font-weight: 600; line-height: 1.2; font-variant-numeric: tabular-nums; }
+.atl-synthese-valeur small { font-size: 0.8125rem; font-weight: 400; color: var(--atl-attenue); }
+.atl-synthese-valeur[data-non-mesure] { font-size: 0.9375rem; font-weight: 500; color: var(--atl-attenue); line-height: 1.8; }
+.atl-synthese-libelle { font-size: 0.8125rem; color: var(--atl-attenue); }
+.atl-synthese-action { margin: 0.75rem 0 0; }
+.atl-synthese-action strong { font-weight: 600; }
+@media (max-width: 640px) {
+  .atl-synthese-liste > li { flex: 1 1 45%; border-left: 0; border-top: 1px solid var(--atl-trait); }
+  .atl-synthese-liste > li:nth-child(-n+2) { border-top: 0; }
+  .atl-synthese-lien { padding-left: 0; padding-right: 0.5rem; }
+}
 `;

@@ -5,6 +5,7 @@
 import { useState } from "react";
 import { useHostNavigation } from "@paperclipai/plugin-sdk/ui";
 import { classerErreur } from "./format.js";
+import { chemin } from "./route.js";
 import { appelRoute } from "./routes-prospection.js";
 
 export interface DemandeEnvoyee {
@@ -56,4 +57,15 @@ export function useEnvoiDemande(companyId: string | null) {
   };
 
   return { envoyer, enCours, erreur, envoyee };
+}
+
+/** Adresse du chat (la Direction l'héberge, la redirection du bureau s'en charge) avec un modèle à préremplir, sans l'envoyer. */
+export function cheminDemandeModele(libelle: string): string {
+  return `${chemin("discussion")}?modele=${encodeURIComponent(libelle)}`;
+}
+
+/** Texte du modèle de demande nommé `libelle` (ou null s'il n'existe pas). */
+export function texteModele(libelle: string | null): string | null {
+  if (!libelle) return null;
+  return MODELES_DEMANDE.find((m) => m.libelle === libelle)?.texte ?? null;
 }

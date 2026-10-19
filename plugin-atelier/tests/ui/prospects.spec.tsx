@@ -196,7 +196,8 @@ describe("liste des prospects", () => {
     let c = await ouvrir();
     expect(c.textContent).toContain("Aucun prospect pour le moment.");
     expect(c.textContent).toContain("Demandez une recherche au Coordinateur");
-    expect(parTexte(c, "a", "Demander une recherche au Coordinateur")).toBeTruthy();
+    // Le lien mène au chat avec le modèle « Prospection d'une zone » (état vide guidé, décision du 19/10/2026).
+    expect(parTexte(c, "a", "Demandez au Coordinateur").getAttribute("href")).toBe("/RNO/atelier/discussion?modele=Prospection%20d'une%20zone");
     rendu?.demonter();
     serveur = () => ({ statut: 403, corps: { error: "Réservé à un humain." } });
     c = await ouvrir();

@@ -15,6 +15,8 @@ type Reponse = { data: unknown; loading: boolean; error: { code: string; message
 
 export interface Pont {
   chemin: string;
+  /** Requête de l adresse courante (« ?a=1 »), vide par défaut. */
+  recherche: string;
   appelsDonnees: Array<{ cle: string; params?: Record<string, unknown> }>;
   appelsActions: Array<{ cle: string; params?: Record<string, unknown> }>;
   navigations: string[];
@@ -31,7 +33,7 @@ export interface Pont {
 (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
 
 export function installerPont(chemin = "/RNO/atelier/equipe"): Pont {
-  const pont: Pont = { chemin, appelsDonnees: [], appelsActions: [], navigations: [], donnees: {}, actions: {}, rafraichissements: 0, violations: [] };
+  const pont: Pont = { chemin, recherche: "", appelsDonnees: [], appelsActions: [], navigations: [], donnees: {}, actions: {}, rafraichissements: 0, violations: [] };
   const exemples = EXEMPLES_DONNEES as Record<string, unknown>;
   (globalThis as unknown as { __paperclipPluginBridge__: unknown }).__paperclipPluginBridge__ = {
     sdkUi: {
@@ -61,7 +63,7 @@ export function installerPont(chemin = "/RNO/atelier/equipe"): Pont {
         return f ? f(params) : {};
       },
       useHostContext: () => ({ companyId: ENTREPRISE, companyPrefix: "RNO", projectId: null, entityId: null, entityType: null, userId: "local-board" }),
-      useHostLocation: () => ({ pathname: pont.chemin, search: "", hash: "" }),
+      useHostLocation: () => ({ pathname: pont.chemin, search: pont.recherche, hash: "" }),
       useHostNavigation: () => ({
         resolveHref: (to: string) => `/RNO${to}`,
         navigate: (to: string) => {

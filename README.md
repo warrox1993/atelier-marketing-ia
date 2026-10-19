@@ -72,6 +72,18 @@ python3 -I scripts/bootstrap-organisation.py test-reel --confirmer # un appel r�
 python3 -I scripts/bootstrap-organisation.py cles --confirmer      # clés de signature (preuves d'approbation, réponses de la passerelle)
 ```
 
+Pour un client enregistré sous `instance/atelier-client/<slug>/` (une entreprise par service), le jeton se range et se lie en une
+seule fois, dans CHAQUE entreprise du client et pour tous ses agents `claude_local` (modèle, moteur et autres variables conservés,
+agents laissés dans leur état) ; le jeton est lu une fois, sur l'entrée standard ou en saisie masquée, jamais affiché ni écrit :
+
+```bash
+python3 -I scripts/bootstrap-organisation.py jeton --client <slug> --confirmer                # bilan : « Secret rangé dans N entreprise(s), lié à M agent(s) »
+python3 -I scripts/bootstrap-organisation.py test-reel --client <slug> --agent coordinateur-general --service direction            # à blanc
+python3 -I scripts/bootstrap-organisation.py test-reel --client <slug> --agent coordinateur-general --service direction --confirmer  # UN appel réel
+```
+
+`--agent` accepte le slug ou le nom ; `--service` n'est requis que si l'agent existe dans plusieurs services du client.
+
 La commande `cles` génère les deux paires Ed25519, range la clé privée du plugin comme secret natif, écrit les fichiers 0600 sous
 `instance/cles/` et `instance/passerelle.env` (à charger avant de relancer la passerelle) ; sans `--confirmer`, elle affiche l'état.
 Rotation, perte et sauvegarde des clés : `docs/exploitation.md` §11.

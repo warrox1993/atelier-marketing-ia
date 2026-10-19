@@ -7,7 +7,7 @@ import { IssuesList, useHostContext } from "@paperclipai/plugin-sdk/ui";
 import type { AgentVue, VueEquipe } from "../../contrats/ui.js";
 import { EnTete, Fraicheur, Horodatage, LienHote, Lecture, PastilleConnexion, PastilleStatut, Pastille, Section, Vide } from "../composants.js";
 import { useDonnees } from "../donnees.js";
-import { ETATS_MESSAGE, idCourt, resumeMessage, TYPES_MESSAGE } from "../format.js";
+import { ETATS_CONNEXION, ETATS_MESSAGE, idCourt, resumeMessage, TYPES_MESSAGE } from "../format.js";
 import { chemin } from "../route.js";
 
 export function VueEquipeAtelier({ agentId }: { agentId: string | null }) {
@@ -37,7 +37,8 @@ export function VueEquipeAtelier({ agentId }: { agentId: string | null }) {
             {agentId && !agentChoisi ? <Vide titre="Agent introuvable dans cette entreprise.">Il a peut-être été supprimé ou appartient à une autre entreprise.</Vide> : null}
             {agentChoisi ? <DetailAgent agent={agentChoisi} equipe={d} /> : null}
             <Section titre="Agents" aide="Sélectionnez un agent pour ouvrir ses tâches et résultats.">
-              <TableAgents agents={d.agents} choisi={agentId} />
+              {d.agents.some(aTravaille) ? null : <p className="atl-equipe-mention">Aucun agent n'a encore travaillé pour ce client.</p>}
+              <GroupesAgents agents={d.agents} choisi={agentId} />
             </Section>
             <div className="atl-deux-colonnes">
               <Section titre="Dépendances non résolues">
@@ -93,6 +94,63 @@ function Echanges({ equipe }: { equipe: VueEquipe }) {
   );
 }
 
+/** Un agent a travaillé s'il a une mission, un passage en cours, des compétences transmises ou une connexion éprouvée. */
+export function aTravaille(a: AgentVue): boolean {
+  return a.runActifId !== null || a.tacheEnCours !== null || a.etatConnexion === "reel_teste" || a.competences.some((c) => c.source === "dernier_run");
+}
+
+/** Le sous-titre d'un agent commence par « Pôle X · » : on en tire le pôle et le rôle lisible. */
+export function decouperTitre(a: AgentVue): { pole: string | null; role: string } {
+  const brut = a.titre ?? a.role;
+  const m = /^Pôle ([^·]+?)\s*·\s*(.*)$/u.exec(brut);
+  return m ? { pole: m[1]!.trim(), role: m[2]!.trim() } : { pole: null, role: brut };
+}
+
+/** « (déterministe, sans modèle) » est une précision d'ingénieur : elle reste en info-bulle, pas à l'écran. */
+const PRECISION_TECHNIQUE = /\s*\((?:déterministe|deterministe)[^)]*\)/iu;
+
+/** Contrôles automatiques : agents sans pôle qui vérifient (connexions, porte, tests, exigences), pas de travail de fond. */
+export function estControleAutomatique(a: AgentVue): boolean {
+  if (decouperTitre(a).pole !== null) return false;
+  const texte = `${a.nom} ${a.titre ?? ""} ${a.role}`;
+  return PRECISION_TECHNIQUE.test(texte) || /^(Gardien des connexions|Porte|Tests techniques|Exigences)\b/iu.test(a.nom) || /Vérificateur technique|Contrôleur des exigences|Porte de contrôle/iu.test(texte);
+}
+
+const ORDRE_POLES = ["Intelligence", "Production", "Contenus", "Contrôle préalable"];
+const GROUPE_AUTRES = "Coordination et qualité";
+
+export function grouperAgents(agents: AgentVue[]): { groupes: Array<{ titre: string; agents: AgentVue[] }>; controles: AgentVue[] } {
+  const controles = agents.filter(estControleAutomatique);
+  const reste = agents.filter((a) => !estControleAutomatique(a));
+  const poleDe = (a: AgentVue) => decouperTitre(a).pole ?? GROUPE_AUTRES;
+  const titres = [GROUPE_AUTRES, ...ORDRE_POLES, ...Array.from(new Set(reste.map(poleDe))).filter((t) => t !== GROUPE_AUTRES && !ORDRE_POLES.includes(t))];
+  const groupes = titres.map((titre) => ({ titre: titre === GROUPE_AUTRES ? titre : `Pôle ${titre}`, agents: reste.filter((a) => poleDe(a) === titre) })).filter((g) => g.agents.length > 0);
+  return { groupes, controles };
+}
+
+function GroupesAgents({ agents, choisi }: { agents: AgentVue[]; choisi: string | null }) {
+  const { groupes, controles } = grouperAgents(agents);
+  return (
+    <>
+      {groupes.map((g) => (
+        <div key={g.titre} className="atl-equipe-groupe">
+          <h3 className="atl-h3">{g.titre}</h3>
+          <TableAgents agents={g.agents} choisi={choisi} />
+        </div>
+      ))}
+      {controles.length > 0 ? (
+        <details className="atl-equipe-groupe atl-equipe-controles" open={controles.some((a) => a.id === choisi) || undefined}>
+          <summary>
+            Contrôles automatiques ({controles.length})
+            <span className="atl-sous">Vérifications faites sans modèle d'IA : connexions, porte de contrôle, tests techniques, exigences.</span>
+          </summary>
+          <TableAgents agents={controles} choisi={choisi} />
+        </details>
+      ) : null}
+    </>
+  );
+}
+
 function TableAgents({ agents, choisi }: { agents: AgentVue[]; choisi: string | null }) {
   return (
     <div className="atl-table-cadre">
@@ -114,10 +172,18 @@ function TableAgents({ agents, choisi }: { agents: AgentVue[]; choisi: string | 
                 <LienHote vers={chemin("equipe", a.id)} courant={a.id === choisi}>
                   {a.nom}
                 </LienHote>
-                <span className="atl-sous">{a.titre ?? a.role}</span>
+                <span className="atl-sous" title={a.titre ?? a.role}>
+                  {decouperTitre(a).role.replace(PRECISION_TECHNIQUE, "")}
+                </span>
               </th>
               <td data-libelle="Connexion">
-                <PastilleConnexion etat={a.etatConnexion} />
+                {a.etatConnexion === "configure_non_verifie" ? (
+                  <span className="atl-attenue" title={ETATS_CONNEXION.configure_non_verifie.aide}>
+                    Jamais lancé
+                  </span>
+                ) : (
+                  <PastilleConnexion etat={a.etatConnexion} />
+                )}
               </td>
               <td data-libelle="État">
                 <EtatNatif agent={a} />
@@ -150,7 +216,6 @@ const RAISONS_PAUSE: Record<string, string> = {
   budget: "Plafond de budget atteint",
   system: "Mis en pause par le système",
   company_archived: "Entreprise archivée",
-  import: "Depuis l'import des agents",
 };
 
 function EtatNatif({ agent }: { agent: AgentVue }) {
@@ -166,7 +231,7 @@ function EtatNatif({ agent }: { agent: AgentVue }) {
   return (
     <span>
       {libelles[agent.statutNatif] ?? agent.statutNatif}
-      {agent.pauseRaison ? <span className="atl-sous">{RAISONS_PAUSE[agent.pauseRaison] ?? `Raison : ${agent.pauseRaison}`}</span> : null}
+      {agent.pauseRaison && agent.pauseRaison !== "import" ? <span className="atl-sous">{RAISONS_PAUSE[agent.pauseRaison] ?? `Raison : ${agent.pauseRaison}`}</span> : null}
     </span>
   );
 }
@@ -177,9 +242,7 @@ function Competences({ agent }: { agent: AgentVue }) {
   return (
     <span className="atl-pile">
       <span>{agent.competences.length} compétence{agent.competences.length > 1 ? "s" : ""}</span>
-      <span className="atl-sous">
-        {transmises.length ? `${transmises.length} ${transmises.length > 1 ? "transmises" : "transmise"} au dernier passage` : "prêtes, pas encore utilisées"}
-      </span>
+      {transmises.length ? <span className="atl-sous">{`${transmises.length} ${transmises.length > 1 ? "transmises" : "transmise"} au dernier passage`}</span> : null}
     </span>
   );
 }

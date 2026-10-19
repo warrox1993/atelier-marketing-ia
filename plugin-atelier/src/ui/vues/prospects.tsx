@@ -27,6 +27,7 @@ import { naceDeduitOsm } from "../../serveur/categories-osm-nace.js";
 import { expliquerConfiance } from "./explication-confiance.js";
 import { useDonnees } from "../donnees.js";
 import { BaseClients, ChoixFichier, lireBase64 } from "../base-clients.js";
+import { DemanderCoordinateur } from "../composants/demander-coordinateur.js";
 import { Bouton, Champ, Chargement, ecranEtroit, EnTete, EtatErreur, Horodatage, LienHote, Pastille, Section, Vide } from "../composants.js";
 import { idCourt, nombre, type Ton } from "../format.js";
 import { chemin } from "../route.js";
@@ -1332,7 +1333,7 @@ function ListeProspects() {
       {etat.data && lignes.length === 0 ? (
         <Vide
           titre={filtre ? "Aucun prospect ne correspond à ces filtres." : "Aucun prospect pour le moment."}
-          action={filtre ? undefined : <LienHote vers={chemin("equipe")} className="atl-bouton">Demander une recherche au Coordinateur</LienHote>}
+          action={filtre ? undefined : <DemanderCoordinateur modele="Prospection d'une zone" />}
         >
           {filtre ? "Élargissez la zone ou baissez le score minimal, ou effacez les filtres." : "Demandez une recherche au Coordinateur : les prospects arrivent quand une campagne de prospection a collecté des données publiques ou qu'un particulier est enregistré."}
         </Vide>

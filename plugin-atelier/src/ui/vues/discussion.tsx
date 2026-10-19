@@ -23,7 +23,7 @@ import {
   type KeyboardEvent,
   type ReactNode,
 } from "react";
-import { useHostContext } from "@paperclipai/plugin-sdk/ui";
+import { useHostContext, useHostLocation } from "@paperclipai/plugin-sdk/ui";
 import type { ActionDiscussion } from "../../serveur/discussion-actions.js";
 import type { ElementAccueil } from "../../serveur/services-accueil.js";
 import { GererLesAgents } from "../composants/agents-en-service.js";
@@ -49,7 +49,7 @@ import {
   MessageFait,
 } from "../composants.js";
 import { IconeEnvoi } from "../composants/icones-discussion.js";
-import { MODELES_DEMANDE } from "../demande.js";
+import { MODELES_DEMANDE, texteModele } from "../demande.js";
 import { dateHeure, classerErreur } from "../format.js";
 import {
   ActionsIndisponibles,
@@ -428,6 +428,17 @@ export function VueDiscussion() {
       el.setSelectionRange(el.value.length, el.value.length);
     });
   };
+
+  // Un lien « Demandez au Coordinateur » (`?modele=<libellé>`) arrive avec le modèle à préremplir : jamais envoyé tout seul.
+  const { search } = useHostLocation();
+  const modeleDemande = texteModele(new URLSearchParams(search).get("modele"));
+  const modelePose = useRef<string | null>(null);
+  useEffect(() => {
+    if (modeleDemande === null || modelePose.current === modeleDemande) return;
+    modelePose.current = modeleDemande;
+    poserModele(modeleDemande);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [modeleDemande]);
 
   const surTouche = (e: KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {

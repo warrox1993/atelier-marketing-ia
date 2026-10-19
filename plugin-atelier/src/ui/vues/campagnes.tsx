@@ -9,6 +9,8 @@ import { useHostContext, useHostNavigation } from "@paperclipai/plugin-sdk/ui";
 import type { Campagne, Connecteur } from "../../contrats/campagnes.js";
 import type { Exigence } from "../../contrats/exigences.js";
 import type { DetailCampagne, VueEquipe } from "../../contrats/ui.js";
+import { DemanderCoordinateur } from "../composants/demander-coordinateur.js";
+import { SyntheseMarketing } from "../composants/synthese-marketing.js";
 import { Champ, Bouton, EnTete, EtatErreur, Fraicheur, Horodatage, LienHote, Lecture, ListeOuAucun, Pastille, PastilleConnexion, PastilleStatut, Section, Vide } from "../composants.js";
 import { ConfirmationLot, type ElementLot } from "../decision-groupee.js";
 import { useAction, useDonnees } from "../donnees.js";
@@ -47,13 +49,22 @@ function ListeCampagnes() {
           </LienHote>
         }
       />
+      <SyntheseMarketing />
       <Fraicheur chargeLe={r.chargeLe} actualisation={r.loading && r.data !== null} />
       <Lecture
         r={r}
         libelle="campagnes"
         estVide={(d) => d.length === 0}
         vide={
-          <Vide titre="Aucune campagne pour l'instant." action={<LienHote vers={chemin("campagnes", "nouvelle")} className="atl-bouton">Créer une campagne depuis un brief</LienHote>}>
+          <Vide
+            titre="Aucune campagne pour l'instant."
+            action={
+              <>
+                <DemanderCoordinateur modele="Campagne Google Ads" />
+                <LienHote vers={chemin("campagnes", "nouvelle")} className="atl-bouton">Créer une campagne depuis un brief</LienHote>
+              </>
+            }
+          >
             Une campagne part d'un brief : le coordinateur en extrait les exigences (chacune avec son titre), puis les agents produisent sous contrôle.
           </Vide>
         }
