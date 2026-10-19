@@ -9,6 +9,7 @@ import { EnTete, Fraicheur, Horodatage, LienHote, Lecture, PastilleConnexion, Pa
 import { useDonnees } from "../donnees.js";
 import { ETATS_CONNEXION, ETATS_MESSAGE, idCourt, resumeMessage, TYPES_MESSAGE } from "../format.js";
 import { chemin } from "../route.js";
+import { FicheAgent, ficheDeAgent, ParcoursEquipe } from "./equipe-fiche.js";
 
 export function VueEquipeAtelier({ agentId }: { agentId: string | null }) {
   const r = useDonnees<VueEquipe>("atelier.equipe");
@@ -34,8 +35,10 @@ export function VueEquipeAtelier({ agentId }: { agentId: string | null }) {
                 <strong>{d.agents.filter((a) => a.blocages.length > 0).length}</strong> avec blocage
               </span>
             </p>
+            {agentChoisi ? null : <ParcoursEquipe agents={d.agents} />}
             {agentId && !agentChoisi ? <Vide titre="Agent introuvable dans cette entreprise.">Il a peut-être été supprimé ou appartient à une autre entreprise.</Vide> : null}
             {agentChoisi ? <DetailAgent agent={agentChoisi} equipe={d} /> : null}
+            {agentChoisi ? <ParcoursEquipe agents={d.agents} /> : null}
             <Section titre="Agents" aide="Sélectionnez un agent pour ouvrir ses tâches et résultats.">
               {d.agents.some(aTravaille) ? null : <p className="atl-equipe-mention">Aucun agent n'a encore travaillé pour ce client.</p>}
               <GroupesAgents agents={d.agents} choisi={agentId} />
@@ -250,6 +253,54 @@ function Competences({ agent }: { agent: AgentVue }) {
 function DetailAgent({ agent, equipe }: { agent: AgentVue; equipe: VueEquipe }) {
   const contexte = useHostContext();
   const chef = agent.rapporteA ? equipe.agents.find((a) => a.id === agent.rapporteA) : null;
+  const fiche = ficheDeAgent(agent);
+  const technique = (
+    <dl className="atl-champs">
+      <div>
+        <dt>Rôle</dt>
+        <dd>{agent.titre ?? agent.role}</dd>
+      </div>
+      <div>
+        <dt>Rattaché à</dt>
+        <dd>{chef ? <LienHote vers={chemin("equipe", chef.id)}>{chef.nom}</LienHote> : <span className="atl-attenue">personne</span>}</dd>
+      </div>
+      <div>
+        <dt>Adaptateur</dt>
+        <dd>
+          {agent.adaptateur} <PastilleConnexion etat={agent.etatConnexion} />
+        </dd>
+      </div>
+      <div>
+        <dt>Compétences</dt>
+        <dd>
+          {agent.competences.length ? (
+            <ul className="atl-liste-compacte">
+              {agent.competences.map((c) => (
+                <li key={c.cle}>
+                  <code>{c.cle}</code>{" "}
+                  <span className="atl-attenue">{c.source === "dernier_run" ? `transmise au dernier passage${c.empreinte ? `, empreinte ${c.empreinte.slice(0, 12)}` : ""}` : "configuration seulement (non prouvée par un passage)"}</span>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <span className="atl-attenue">aucune</span>
+          )}
+        </dd>
+      </div>
+      {agent.blocages.length ? (
+        <div>
+          <dt>Blocages</dt>
+          <dd>
+            <ul className="atl-liste-compacte">
+              {agent.blocages.map((b, i) => (
+                <li key={`${i}-${b}`}>{b}</li>
+              ))}
+            </ul>
+          </dd>
+        </div>
+      ) : null}
+    </dl>
+  );
   return (
     <Section
       titre={agent.nom}
@@ -264,51 +315,7 @@ function DetailAgent({ agent, equipe }: { agent: AgentVue; equipe: VueEquipe }) 
         </>
       }
     >
-      <dl className="atl-champs">
-        <div>
-          <dt>Rôle</dt>
-          <dd>{agent.titre ?? agent.role}</dd>
-        </div>
-        <div>
-          <dt>Rattaché à</dt>
-          <dd>{chef ? <LienHote vers={chemin("equipe", chef.id)}>{chef.nom}</LienHote> : <span className="atl-attenue">personne</span>}</dd>
-        </div>
-        <div>
-          <dt>Adaptateur</dt>
-          <dd>
-            {agent.adaptateur} <PastilleConnexion etat={agent.etatConnexion} />
-          </dd>
-        </div>
-        <div>
-          <dt>Compétences</dt>
-          <dd>
-            {agent.competences.length ? (
-              <ul className="atl-liste-compacte">
-                {agent.competences.map((c) => (
-                  <li key={c.cle}>
-                    <code>{c.cle}</code>{" "}
-                    <span className="atl-attenue">{c.source === "dernier_run" ? `transmise au dernier passage${c.empreinte ? `, empreinte ${c.empreinte.slice(0, 12)}` : ""}` : "configuration seulement (non prouvée par un passage)"}</span>
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <span className="atl-attenue">aucune</span>
-            )}
-          </dd>
-        </div>
-        {agent.blocages.length ? (
-          <div>
-            <dt>Blocages</dt>
-            <dd>
-              <ul className="atl-liste-compacte">
-                {agent.blocages.map((b, i) => (
-                  <li key={`${i}-${b}`}>{b}</li>
-                ))}
-              </ul>
-            </dd>
-          </div>
-        ) : null}
-      </dl>
+      {fiche ? <FicheAgent fiche={fiche} technique={technique} /> : technique}
       <h3 className="atl-h3">Tâches et résultats de l'agent</h3>
       <p className="atl-section-aide">Liste du tableau de bord, filtrée sur cet agent (toutes ses tâches, y compris terminées).</p>
       <div className="atl-natif">
