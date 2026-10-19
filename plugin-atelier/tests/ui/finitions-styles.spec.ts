@@ -4,6 +4,7 @@
  */
 import { describe, expect, it } from "vitest";
 import { STYLES_ATELIER } from "../../src/ui/styles.js";
+import { STYLES_DEPARTEMENTS } from "../../src/ui/styles-departements.js";
 
 /** Luminance relative d'un gris OKLCH (a = b = 0) : le canal linéaire vaut L au cube. */
 const luminance = (l: number) => l ** 3;
@@ -48,5 +49,19 @@ describe("finitions de la feuille", () => {
       expect(telephone, sel).toContain(`${sel}`);
     }
     expect(telephone).toMatch(/\.atl-nav a, \.atl-onglets-rub \[role="tab"\] \{ min-height: 2\.75rem; \}/u);
+  });
+});
+
+describe("grille des départements : cible et focus du lien", () => {
+  it("le lien d'une case fait 44 px au moins (20,8 px de ligne + 2 × 0,875 rem) sans agrandir la ligne du titre, et couvre toute la case", () => {
+    const regle = /\.atl-dep-lien \{([^}]*)\}/u.exec(STYLES_DEPARTEMENTS)![1]!;
+    const marge = Number(/padding-block: ([\d.]+)rem/u.exec(regle)![1]);
+    expect(20.8 + 2 * marge * 16).toBeGreaterThanOrEqual(44);
+    expect(regle).toContain(`margin-block: -${marge}rem`);
+    expect(STYLES_DEPARTEMENTS).toMatch(/\.atl-dep-lien::after \{[^}]*inset: 0/u);
+  });
+  it("le focus clavier entoure toute la case avec le trait et le jeton du reste de l'atelier", () => {
+    expect(STYLES_DEPARTEMENTS).toMatch(/\.atl-dep-case:has\(\.atl-dep-lien:focus-visible\) \{ outline: 2px solid var\(--atl-anneau\); outline-offset: 2px; \}/u);
+    expect(STYLES_ATELIER).toMatch(/\.atl :focus-visible \{ outline: 2px solid var\(--atl-anneau\)/u);
   });
 });

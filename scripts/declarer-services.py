@@ -8,6 +8,10 @@
 (toute paire de services du client que la matrice métier ne couvre pas ; le coordinateur général de la Direction
 compris), puis appelle la route « services.declarer » (humain seulement) avec les seuls flux dont les deux services
 appartiennent au client : jamais un flux vers un autre client. Idempotent : la déclaration remplace la précédente.
+Déclaration en deux temps (revue de sécurité du 19/10/2026, E1) : le plugin n'accorde tout de suite le statut de service
+du client qu'à l'entreprise de la route ; chaque autre entreprise reste « à confirmer » (ignorée de tous les lecteurs) tant
+que la route « services.confirmer » n'a pas été appelée avec SON identifiant, ce qui prouve l'accès de l'humain à cette
+entreprise. Ce script appelle donc « services.confirmer » pour chaque entreprise du client après la déclaration.
 Aucun appel de modèle. « nouveau-client » crée déjà ces configurations (même fonction) dès que le client a plusieurs
 services ; la déclaration des services reste à lancer ici.
 
@@ -113,7 +117,7 @@ def main(argv=None) -> int:
         return 1
     print(f"Configuration du plugin créée pour {len(creees)} entreprise(s), {len(corps['entreprises']) - len(creees)} déjà configurée(s).")
     try:
-        for etape in etapes_declaration(corps, envoyer_declaration(args.api)):
+        for etape in etapes_declaration(corps, envoyer_declaration(args.api), envoyer_confirmation(args.api)):
             print(etape)
     except urllib.error.HTTPError as e:
         print(f"Refus HTTP {e.code} : {e.read().decode('utf-8', 'replace')}", file=sys.stderr)
@@ -135,20 +139,43 @@ def envoyer_declaration(api: str):
     return envoyer
 
 
-def etapes_declaration(corps: dict, envoyer) -> list[str]:
-    """Envoie la déclaration depuis la Direction. Cas d'un client déjà déclaré SANS sa Direction (elle s'ajoute
-    maintenant) : le plugin refuse (403) qu'une entreprise encore inconnue redéclare un client existant. On passe
-    alors en deux temps : la Direction est d'abord ajoutée comme simple service depuis une entreprise déjà membre,
-    puis elle se déclare Direction depuis sa propre route (l'hôte prouve l'accès de l'humain à chaque route)."""
+def envoyer_confirmation(api: str):
+    def confirmer(company_id: str) -> str:
+        requete = urllib.request.Request(
+            f"{api}/plugins/{PLUGIN_CLE}/api/services/confirmer",
+            data=json.dumps({"companyId": company_id}).encode("utf-8"), method="POST", headers={"Content-Type": "application/json"},
+        )
+        with urllib.request.urlopen(requete, timeout=30) as r:
+            return r.read().decode("utf-8")
+    return confirmer
+
+
+def confirmer_entreprises(corps: dict, confirmer) -> str:
+    """Confirme chaque entreprise du client (appel portant SON identifiant : l'hôte en prouve l'accès). Idempotent."""
+    ids = [x["companyId"] for x in corps["entreprises"]]
+    for cid in ids:
+        confirmer(cid)
+    return f"{len(ids)} entreprise(s) confirmée(s) (services.confirmer)"
+
+
+def etapes_declaration(corps: dict, envoyer, confirmer) -> list[str]:
+    """Envoie la déclaration depuis la Direction, puis confirme chaque entreprise (E1 : sans confirmation, une entreprise
+    autre que celle de la route reste « à confirmer » et n'est lue par rien). Cas d'un client déjà déclaré SANS sa
+    Direction (elle s'ajoute maintenant) : le plugin refuse (403) qu'une entreprise encore inconnue redéclare un client
+    existant. On passe alors en plusieurs temps : la Direction est d'abord ajoutée comme simple service depuis une
+    entreprise déjà membre, toutes les entreprises sont confirmées (la Direction doit être membre confirmée), puis elle se
+    déclare Direction depuis sa propre route (l'hôte prouve l'accès de l'humain à chaque route)."""
     try:
-        return [envoyer(corps)]
+        premiere = envoyer(corps)
     except urllib.error.HTTPError as e:
         autres = [x for x in corps["entreprises"] if x["companyId"] != corps["companyId"]]
         if e.code != 403 or not autres or not any(x["estDirection"] and x["companyId"] == corps["companyId"] for x in corps["entreprises"]):
             raise
+    else:
+        return [premiere, confirmer_entreprises(corps, confirmer)]
     sans_direction = {**corps, "companyId": autres[0]["companyId"],
                       "entreprises": [{**x, "estDirection": False} for x in corps["entreprises"]]}
-    return [envoyer(sans_direction), envoyer(corps)]
+    return [envoyer(sans_direction), confirmer_entreprises(corps, confirmer), envoyer(corps), confirmer_entreprises(corps, confirmer)]
 
 
 if __name__ == "__main__":

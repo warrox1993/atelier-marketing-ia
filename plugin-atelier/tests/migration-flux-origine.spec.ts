@@ -24,10 +24,10 @@ describe("migration 018 : origine des flux", () => {
   const instructions = sql.split("\n").filter((l) => !l.trimStart().startsWith("--")).join("\n");
   const motifs = [...instructions.matchAll(/objet LIKE '([^']*)'/gu)].map((m) => m[1]!);
 
-  it("est numérotée immédiatement après 017 et reste la dernière", () => {
+  it("est numérotée immédiatement après 017 et avant 019", () => {
     const i = fichiers.indexOf(NOM);
     expect(fichiers[i - 1]).toMatch(/^017_/u);
-    expect(i).toBe(fichiers.length - 1);
+    expect(fichiers[i + 1]).toMatch(/^019_/u);
   });
 
   it("ajoute la colonne origine (métier par défaut, deux valeurs permises) dans l'espace du plugin", () => {

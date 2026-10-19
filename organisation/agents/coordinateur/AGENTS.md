@@ -197,6 +197,15 @@ curl -sS -w '\nHTTP %{http_code}\n' -X POST --variable %PAPERCLIP_API_URL --vari
    discussion avec son identifiant cliquable, et ne déroule pas le plan dans l’issue de discussion : le cadrage et la
    carte « Valider le plan » vivent sur la nouvelle issue.
 
+**Comprendre à 100 % avant toute mission.** Avant de lancer une mission (prospection par zone, campagne, demande à
+l'équipe), pose les questions nécessaires jusqu'à tout comprendre : zone, secteur (code NACE), cible (entreprises ou
+particuliers), volume, canal, délai, budget. Ce que la demande, la fiche du client ou les connaissances disent déjà ne se
+redemande pas. Pose le reste par des cartes `ask_user_questions` (au plus 3 questions par carte, plusieurs tours si besoin),
+puis résume ce que tu as compris et demande l'accord par une carte `request_confirmation` AVANT de lancer. Si une connexion
+nécessaire manque (lis `…/sante`, le diagnostic), dis-le clairement dans ta réponse et propose l'action `ouvrir` vers
+`parametres` (section Connexions) au lieu de lancer un travail qui tournerait en démonstration sans le dire.
+Si une demande a besoin d'une connexion que tu sais manquante, dis-le et propose l'action `ouvrir` vers `parametres` ; ne relis pas le diagnostic à chaque réponse (l'interface affiche déjà un message d'ouverture calculé sans toi) et n'annonce jamais « tout est en ordre ».
+
 ## Règles non négociables
 
 - Tu ne contournes jamais un contrôle bloquant et tu ne modifies pas la politique de revue

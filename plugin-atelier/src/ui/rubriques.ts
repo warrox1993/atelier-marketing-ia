@@ -1,5 +1,6 @@
 /**
- * Navigation de l'atelier en cinq rubriques. Les treize vues et leurs adresses (`/atelier/<vue>`)
+ * Navigation de l'atelier : un menu secondaire de bureau (Prospects, Marketing, registre de la Direction) ;
+ * le chat, les Réglages et les vues d'ensemble s'ouvrent depuis le menu principal. Les treize vues et leurs adresses (`/atelier/<vue>`)
  * ne changent pas : une rubrique regroupe des vues sous forme d'onglets, et chaque ancienne
  * adresse ouvre la bonne rubrique sur le bon onglet. Fonctions pures (testées).
  */
@@ -23,9 +24,39 @@ export interface RubriqueNav {
   onglets: ReadonlyArray<OngletRubrique>;
 }
 
+/** Chat de l'atelier : plus de rubrique affichée (le menu principal l'ouvre), reconnue seulement depuis l'adresse. */
+export const RUBRIQUE_DISCUSSION: RubriqueNav = {
+  cle: "discussion",
+  libelle: "Discussion",
+  onglets: [{ cle: "discussion", libelle: "Discussion", vue: "discussion" }],
+};
+
+/** Ancienne page « À faire » : son adresse ouvre le chat ; reconnue seulement depuis l'adresse. */
+export const RUBRIQUE_ACCUEIL: RubriqueNav = {
+  cle: "accueil",
+  libelle: "Accueil",
+  onglets: [{ cle: "accueil", libelle: "Accueil", vue: "accueil" }],
+};
+
+/**
+ * Réglages de l'atelier : ses onglets s'affichent en tête de page, mais la rubrique n'est plus dans le menu
+ * secondaire (le menu principal propose « Réglages de l'atelier »).
+ */
+export const RUBRIQUE_REGLAGES: RubriqueNav = {
+  cle: "reglages",
+  libelle: "Réglages",
+  onglets: [
+    { cle: "mise-en-place", libelle: "Mise en place", vue: "mise-en-place" },
+    { cle: "marque", libelle: "Marque et sources", vue: "marque" },
+    { cle: "connaissances", libelle: "Connaissances", vue: "connaissances" },
+    { cle: "reel", libelle: "Connexions", vue: "parametres", ancre: ANCRE_PASSAGE_AU_REEL },
+    { cle: "parametres", libelle: "Paramètres", vue: "parametres" },
+    { cle: "corbeille", libelle: "Corbeille", vue: "corbeille" },
+  ],
+};
+
+/** Rubriques du menu secondaire d'un bureau de prospection et de marketing. */
 export const RUBRIQUES_NAV: ReadonlyArray<RubriqueNav> = [
-  { cle: "accueil", libelle: "Accueil", onglets: [{ cle: "accueil", libelle: "Accueil", vue: "accueil" }] },
-  { cle: "discussion", libelle: "Discussion", onglets: [{ cle: "discussion", libelle: "Discussion", vue: "discussion" }] },
   {
     cle: "prospects",
     libelle: "Prospects",
@@ -46,19 +77,10 @@ export const RUBRIQUES_NAV: ReadonlyArray<RubriqueNav> = [
       { cle: "rapport", libelle: "Rapport du mois", vue: "rapport" },
     ],
   },
-  {
-    cle: "reglages",
-    libelle: "Réglages",
-    onglets: [
-      { cle: "mise-en-place", libelle: "Mise en place", vue: "mise-en-place" },
-      { cle: "marque", libelle: "Marque et sources", vue: "marque" },
-      { cle: "connaissances", libelle: "Connaissances", vue: "connaissances" },
-      { cle: "reel", libelle: "Connexions", vue: "parametres", ancre: ANCRE_PASSAGE_AU_REEL },
-      { cle: "parametres", libelle: "Paramètres", vue: "parametres" },
-      { cle: "corbeille", libelle: "Corbeille", vue: "corbeille" },
-    ],
-  },
 ];
+
+/** Slug du service qui porte la prospection et le marketing. */
+export const SLUG_MARKETING = "marketing";
 
 /** Rubrique visible dans la seule entreprise Direction du client (le serveur refuse le registre ailleurs). */
 export const RUBRIQUE_DIRECTION: RubriqueNav = {
@@ -89,9 +111,24 @@ export function estVueEnsemble(vue: CleVue): boolean {
   return vue === "departements" || vue === "organigramme";
 }
 
-/** Rubriques affichées : les cinq habituelles, plus « Registre des échanges » seulement quand le serveur l'autorise. */
-export function rubriquesVisibles(estDirection: boolean): ReadonlyArray<RubriqueNav> {
-  return estDirection ? [...RUBRIQUES_NAV.slice(0, -1), RUBRIQUE_DIRECTION, RUBRIQUES_NAV[RUBRIQUES_NAV.length - 1]!] : RUBRIQUES_NAV;
+/** Vraie pour les vues qui s'affichent sans menu secondaire : vues d'ensemble, chat et Réglages. */
+export function sansMenuSecondaire(vue: CleVue, hash = ""): boolean {
+  return estVueEnsemble(vue) || vue === "discussion" || vue === "accueil" || rubriqueDe(vue, hash).rubrique.cle === "reglages";
+}
+
+export interface ContexteRubriques {
+  estDirection: boolean;
+  /** Slug du service de l'entreprise courante ; null si le client n'a pas de départements (un seul bureau). */
+  slugService: string | null;
+}
+
+/**
+ * Rubriques du menu secondaire : Prospects et Marketing pour le bureau marketing (ou un client sans départements),
+ * « Registre des échanges » seulement dans l'entreprise Direction quand le serveur l'autorise.
+ */
+export function rubriquesVisibles({ estDirection, slugService }: ContexteRubriques): ReadonlyArray<RubriqueNav> {
+  const bureau = slugService === null || slugService === SLUG_MARKETING ? RUBRIQUES_NAV : [];
+  return estDirection ? [...bureau, RUBRIQUE_DIRECTION] : bureau;
 }
 
 /** Adresse relative d'un onglet : l'ancienne adresse de sa vue, avec son ancre éventuelle. */
@@ -102,8 +139,8 @@ export function cheminOnglet(o: OngletRubrique): string {
 /** Rubrique et onglet d'une vue ; `hash` (sans « # ») départage Connexions et Paramètres. */
 export function rubriqueDe(vue: CleVue, hash = ""): { rubrique: RubriqueNav; onglet: OngletRubrique } {
   const ancre = hash.replace(/^#/u, "");
-  const candidats = [...RUBRIQUES_NAV, RUBRIQUE_DIRECTION, RUBRIQUE_DEPARTEMENTS, RUBRIQUE_ORGANIGRAMME].flatMap((r) => r.onglets.filter((o) => o.vue === vue).map((onglet) => ({ rubrique: r, onglet })));
+  const candidats = [RUBRIQUE_ACCUEIL, RUBRIQUE_DISCUSSION, ...RUBRIQUES_NAV, RUBRIQUE_REGLAGES, RUBRIQUE_DIRECTION, RUBRIQUE_DEPARTEMENTS, RUBRIQUE_ORGANIGRAMME].flatMap((r) => r.onglets.filter((o) => o.vue === vue).map((onglet) => ({ rubrique: r, onglet })));
   const exact = candidats.find((c) => c.onglet.ancre !== undefined && c.onglet.ancre === ancre);
   const resultat = exact ?? candidats.find((c) => c.onglet.ancre === undefined) ?? candidats[0];
-  return resultat ?? { rubrique: RUBRIQUES_NAV[0]!, onglet: RUBRIQUES_NAV[0]!.onglets[0]! };
+  return resultat ?? { rubrique: RUBRIQUE_DISCUSSION, onglet: RUBRIQUE_DISCUSSION.onglets[0]! };
 }

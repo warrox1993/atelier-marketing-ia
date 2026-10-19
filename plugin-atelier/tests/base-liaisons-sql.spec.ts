@@ -136,3 +136,44 @@ describe("chaîne et teinte (migration 017) : règles SQL de l'hôte", () => {
     expect(ecritures.map((e) => e.p[5])).toEqual(["metier", "coordinateurs", "coordinateurs"]);
   });
 });
+
+describe("déclaration des services en deux temps (revue du 19/10/2026, E1) : règles SQL", () => {
+  it("tous les lecteurs du stock ignorent les lignes non confirmées", async () => {
+    const { db, lectures } = fauxHote(0);
+    const stock = creerStockLiaisons(db);
+    await stock.serviceDeEntreprise("c");
+    await stock.clientExiste("m");
+    await stock.servicesParSlug("marketing");
+    await stock.servicesDuClient("m");
+    expect(lectures).toHaveLength(4);
+    for (const sql of lectures) expect(sql).toMatch(/services_entreprises where .*confirme_le is not null/u);
+  });
+
+  it("le registre des échanges ne retient que les entreprises confirmées du client", async () => {
+    const { db, lectures } = fauxHote(0);
+    const { creerLectureLiaisons } = await import("../src/serveur/liaisons/lecture-liaisons.js");
+    await creerLectureLiaisons(db).registre("m", {}, 20, 0);
+    expect(lectures[0]).toMatch(/services_entreprises where client_marqueur = \$1 and confirme_le is not null/u);
+  });
+
+  it("declarer : seule une ligne du même client ou non confirmée est reprise, une ligne confirmée du même client le reste", async () => {
+    const { db, execute, parametres } = fauxHote(1);
+    await creerStockLiaisons(db).declarer({
+      clientMarqueur: "m", par: "u", flux: [],
+      entreprises: [{ companyId: "a", serviceSlug: "direction", estDirection: true, confirmee: true }, { companyId: "b", serviceSlug: "marketing", estDirection: false, confirmee: false }],
+    });
+    const insertions = execute.filter((s) => /insert into \S+\.services_entreprises/u.test(s));
+    expect(insertions).toHaveLength(2);
+    expect(insertions[0]).toMatch(/where \S+\.services_entreprises\.client_marqueur = excluded\.client_marqueur or \S+\.services_entreprises\.confirme_le is null/u);
+    expect(insertions[0]).toMatch(/confirme_le = case when \S+\.client_marqueur = excluded\.client_marqueur and \S+\.confirme_le is not null\s+then \S+\.confirme_le else excluded\.confirme_le end/u);
+    expect(parametres[0]![5]).toBe(true);
+    expect(parametres[1]![5]).toBe(false);
+  });
+
+  it("confirmer écrit par execute, ne touche que les lignes non confirmées et rend vrai si une ligne a changé", async () => {
+    const a = fauxHote(1);
+    expect(await creerStockLiaisons(a.db).confirmer("c")).toBe(true);
+    expect(a.execute[0]).toMatch(/update \S+\.services_entreprises set confirme_le = now\(\) where company_id = \$1 and confirme_le is null/u);
+    expect(await creerStockLiaisons(fauxHote(0).db).confirmer("c")).toBe(false);
+  });
+});

@@ -7,12 +7,13 @@
  * - Chaque case est lue par `departement.etat` avec le companyId de SON service (l'hôte refuse tout autre appel et
  *   vérifie l'accès de l'utilisateur à chaque service), six lectures à la fois au plus ; chaque case se remplit et
  *   échoue indépendamment.
- * - Un clic sur un service ouvre son atelier (`/<PRÉFIXE>/atelier`).
+ * - Un clic sur un service : « marketing » ouvre son bureau (Prospects), « direction » son chat, les autres services
+ *   ouvrent leur vue dans l'organigramme (`#service=<slug>`).
  */
 import { useCallback, useEffect, useState } from "react";
 import { useHostContext } from "@paperclipai/plugin-sdk/ui";
 import type { DepartementDeclare, EtatDepartement } from "../../contrats/departements.js";
-import { Chargement, EnTete, EtatErreur, LienHote, Vide } from "../composants.js";
+import { Chargement, EtatErreur, LienHote, Vide } from "../composants.js";
 import { aPlusieursDepartements, lireDepartements, nomClient } from "../departements-sonde.js";
 import { enDate, ilYA, nombre } from "../format.js";
 import { appelHote } from "../hote.js";
@@ -61,6 +62,13 @@ export function departementsVisibles(declares: readonly DepartementDeclare[], en
     const e = parId.get(d.companyId);
     return e ? [{ ...d, prefixe: e.issuePrefix, nomEntreprise: e.name }] : [];
   });
+}
+
+/** Où mène la case d'un service : bureau marketing, chat de la Direction, sinon sa vue dans l'organigramme. */
+export function destinationService(d: Pick<DepartementVisible, "slug" | "prefixe" | "estDirection">): { type: "hote"; vers: string } | { type: "ancre"; ancre: string } {
+  if (d.slug === "marketing") return { type: "hote", vers: `/${d.prefixe}/atelier/prospects` };
+  if (d.estDirection || d.slug === "direction") return { type: "hote", vers: `/${d.prefixe}/atelier/discussion` };
+  return { type: "ancre", ancre: `service=${encodeURIComponent(d.slug)}` };
 }
 
 const pluriel = (n: number, un: string, plusieurs: string) => `${nombre(n)} ${n > 1 ? plusieurs : un}`;
@@ -147,13 +155,20 @@ function niveauAlerte(c: Case): "haute" | "moyenne" | undefined {
 
 /** Une case : le service (et ses alertes), trois nombres, puis l'équipe et la dernière activité. Toute la case est le lien. */
 function CaseDepartement({ d, c, relire }: { d: DepartementVisible; c: Case; relire: () => void }) {
+  const cible = destinationService(d);
   return (
     <li className="atl-dep-case" data-alerte={niveauAlerte(c)} data-courant={d.courant || undefined} data-a-traiter={aTraiter(c) || undefined}>
       <div className="atl-dep-nom">
         <h2>
-          <LienHote vers={`/${d.prefixe}/atelier`} className="atl-dep-lien">
-            {d.nom}
-          </LienHote>
+          {cible.type === "hote" ? (
+            <LienHote vers={cible.vers} className="atl-dep-lien">
+              {d.nom}
+            </LienHote>
+          ) : (
+            <a href={`#${cible.ancre}`} className="atl-dep-lien">
+              {d.nom}
+            </a>
+          )}
           {d.courant ? <span className="atl-dep-ici">Vous êtes ici</span> : null}
           {aTraiter(c) ? <span className="atl-dep-traiter">À traiter</span> : null}
         </h2>
@@ -267,10 +282,11 @@ export function VueDepartements() {
       <style href="atelier-departements" precedence="default">
         {STYLES_DEPARTEMENTS}
       </style>
-      <EnTete titre="Départements" description={`${liste.client} : ${pluriel(liste.departements.length, "service", "services")}. Choisissez-en un pour ouvrir son atelier.`} />
-      <span id="atl-dep-titre" className="atl-sr">
+      {/* La bascule « Départements | Organigramme » sert de titre visible : le h1 reste pour les lecteurs d'écran. */}
+      <h1 id="atl-dep-titre" className="atl-sr">
         Départements de {liste.client}
-      </span>
+      </h1>
+      <p className="atl-entete-description">{`${liste.client} : ${pluriel(liste.departements.length, "service", "services")}. Choisissez-en un pour l'ouvrir.`}</p>
       <p className="atl-dep-resume" data-testid="resume-departements">
         {texteResume(resumer(liste.departements, cases))}
       </p>

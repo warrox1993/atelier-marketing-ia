@@ -125,9 +125,9 @@ describe("Onglets de l'atelier", () => {
     const ancien = Element.prototype.scrollIntoView;
     Element.prototype.scrollIntoView = defilement;
     try {
-      const c = await ouvrir("/RNO/atelier/parametres");
+      const c = await ouvrir("/RNO/atelier/campagnes");
       const actif = c.querySelector<HTMLElement>('nav.atl-onglets a[aria-current="page"]')!;
-      expect(actif.textContent).toBe("Réglages");
+      expect(actif.textContent).toBe("Marketing");
       expect(defilement).toHaveBeenCalledWith({ inline: "nearest", block: "nearest" });
       expect(defilement.mock.contexts[0]).toBe(actif);
     } finally {
@@ -136,7 +136,7 @@ describe("Onglets de l'atelier", () => {
   });
 
   it("n'indique de suite que s'il reste des onglets à faire défiler", async () => {
-    const c = await ouvrir("/RNO/atelier/parametres");
+    const c = await ouvrir("/RNO/atelier/campagnes");
     const cadre = c.querySelector<HTMLElement>(".atl-onglets-cadre")!;
     expect(cadre.dataset.suite).toBeUndefined();
     const barre = cadre.querySelector<HTMLElement>("nav")!;

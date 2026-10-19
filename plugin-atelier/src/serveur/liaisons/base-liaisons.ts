@@ -51,19 +51,26 @@ export interface LiaisonEntrante {
 }
 
 export interface StockLiaisons {
-  /** Service déclaré pour cette entreprise, ou null. */
+  /** Service déclaré ET CONFIRMÉ pour cette entreprise, ou null (une ligne « à confirmer » est ignorée, faille E1). */
   serviceDeEntreprise(companyId: string): Promise<ServiceEntreprise | null>;
-  /** Vrai si au moins une entreprise est déjà déclarée sous ce marqueur de client. */
+  /** Vrai si au moins une entreprise CONFIRMÉE est déjà déclarée sous ce marqueur de client. */
   clientExiste(clientMarqueur: string): Promise<boolean>;
-  /** Toutes les entreprises déclarées sous ce slug (tous clients confondus). */
+  /** Toutes les entreprises confirmées déclarées sous ce slug (tous clients confondus). */
   servicesParSlug(slug: string): Promise<ServiceEntreprise[]>;
-  /** Services déclarés de CE client seulement (tableau des départements), au plus 200. */
+  /** Services confirmés de CE client seulement (tableau des départements), au plus 200. */
   servicesDuClient(clientMarqueur: string): Promise<ServiceEntreprise[]>;
   lireFlux(clientMarqueur: string, source: string, cible: string): Promise<FluxLu | null>;
   /** Tous les flux déclarés de CE client seulement (vue Organigramme), au plus 2 000. */
   fluxDuClient(clientMarqueur: string): Promise<Array<FluxService & { origine: OrigineFlux }>>;
-  /** Remplace la déclaration d'un client (entreprises et flux). */
-  declarer(d: { clientMarqueur: string; entreprises: Array<{ companyId: string; serviceSlug: string; estDirection: boolean }>; flux: FluxService[]; par: string }): Promise<void>;
+  /**
+   * Remplace la déclaration d'un client (entreprises et flux). `confirmee` : l'accès de l'humain à cette entreprise est
+   * prouvé (c'est l'entreprise de la route, ou déjà un membre confirmé du client) ; sinon la ligne reste « à confirmer »
+   * jusqu'à `confirmer`. Une ligne déjà confirmée du même client le reste ; une ligne « à confirmer » d'un autre client
+   * est reprise, une ligne confirmée d'un autre client n'est jamais touchée.
+   */
+  declarer(d: { clientMarqueur: string; entreprises: Array<{ companyId: string; serviceSlug: string; estDirection: boolean; confirmee: boolean }>; flux: FluxService[]; par: string }): Promise<void>;
+  /** Confirme la ligne « à confirmer » de cette entreprise ; vrai si une ligne vient d'être confirmée (faux : absente ou déjà confirmée). */
+  confirmer(companyId: string): Promise<boolean>;
   lireParCle(companyId: string, cleIdempotence: string): Promise<LiaisonStockee | null>;
   /** Liaisons ouvertes ou en attente d'approbation dont l'entreprise est la source. */
   compterOuvertes(companyId: string): Promise<number>;
@@ -195,18 +202,18 @@ export function creerStockLiaisons(db: PluginContext["db"]): StockLiaisons {
   const q = <T = Ligne>(sql: string, params: unknown[] = []) => db.query<T>(sql, params);
   return {
     async serviceDeEntreprise(companyId) {
-      const [r] = await q(`select company_id, client_marqueur, service_slug, est_direction from ${ns}.services_entreprises where company_id = $1`, [companyId]);
+      const [r] = await q(`select company_id, client_marqueur, service_slug, est_direction from ${ns}.services_entreprises where company_id = $1 and confirme_le is not null`, [companyId]);
       return r ? enService(r) : null;
     },
     async clientExiste(clientMarqueur) {
-      const [r] = await q<{ n: number | string }>(`select count(*)::int as n from ${ns}.services_entreprises where client_marqueur = $1`, [clientMarqueur]);
+      const [r] = await q<{ n: number | string }>(`select count(*)::int as n from ${ns}.services_entreprises where client_marqueur = $1 and confirme_le is not null`, [clientMarqueur]);
       return Number(r?.n ?? 0) > 0;
     },
     async servicesParSlug(slug) {
-      return (await q(`select company_id, client_marqueur, service_slug, est_direction from ${ns}.services_entreprises where service_slug = $1 limit 50`, [slug])).map(enService);
+      return (await q(`select company_id, client_marqueur, service_slug, est_direction from ${ns}.services_entreprises where service_slug = $1 and confirme_le is not null limit 50`, [slug])).map(enService);
     },
     async servicesDuClient(clientMarqueur) {
-      return (await q(`select company_id, client_marqueur, service_slug, est_direction from ${ns}.services_entreprises where client_marqueur = $1 order by service_slug limit 200`, [clientMarqueur])).map(enService);
+      return (await q(`select company_id, client_marqueur, service_slug, est_direction from ${ns}.services_entreprises where client_marqueur = $1 and confirme_le is not null order by service_slug limit 200`, [clientMarqueur])).map(enService);
     },
     async lireFlux(clientMarqueur, source, cible) {
       const [r] = await q(`select objet, approbation_humaine from ${ns}.flux_services where client_marqueur = $1 and source_slug = $2 and cible_slug = $3`, [clientMarqueur, source, cible]);
@@ -218,13 +225,18 @@ export function creerStockLiaisons(db: PluginContext["db"]): StockLiaisons {
     },
     async declarer(d) {
       for (const e of d.entreprises) {
+        // Reprise d'une ligne : seulement si elle est du même client, ou si elle n'est pas confirmée (une ligne « à
+        // confirmer » posée par un tiers ne bloque jamais la déclaration légitime). Une ligne confirmée du même client le reste.
         await db.execute(
-          `insert into ${ns}.services_entreprises (company_id, client_marqueur, service_slug, est_direction, declare_par)
-           values ($1, $2, $3, $4, $5)
-           on conflict (company_id) do update set client_marqueur = excluded.client_marqueur, service_slug = excluded.service_slug,
+          `insert into ${ns}.services_entreprises (company_id, client_marqueur, service_slug, est_direction, declare_par, confirme_le)
+           values ($1, $2, $3, $4, $5, case when $6::boolean then now() else null end)
+           on conflict (company_id) do update set
+             confirme_le = case when ${ns}.services_entreprises.client_marqueur = excluded.client_marqueur and ${ns}.services_entreprises.confirme_le is not null
+                                then ${ns}.services_entreprises.confirme_le else excluded.confirme_le end,
+             client_marqueur = excluded.client_marqueur, service_slug = excluded.service_slug,
              est_direction = excluded.est_direction, declare_par = excluded.declare_par, declare_le = now()
-           where ${ns}.services_entreprises.client_marqueur = excluded.client_marqueur`,
-          [e.companyId, d.clientMarqueur, e.serviceSlug, e.estDirection, d.par],
+           where ${ns}.services_entreprises.client_marqueur = excluded.client_marqueur or ${ns}.services_entreprises.confirme_le is null`,
+          [e.companyId, d.clientMarqueur, e.serviceSlug, e.estDirection, d.par, e.confirmee],
         );
       }
       for (const f of d.flux) {
@@ -245,6 +257,10 @@ export function creerStockLiaisons(db: PluginContext["db"]): StockLiaisons {
         `delete from ${ns}.flux_services where client_marqueur = $1 and (source_slug || '>' || cible_slug) not in (select jsonb_array_elements_text($2::jsonb))`,
         [d.clientMarqueur, JSON.stringify(d.flux.map((f) => `${f.source}>${f.cible}`))],
       );
+    },
+    async confirmer(companyId) {
+      const { rowCount } = await db.execute(`update ${ns}.services_entreprises set confirme_le = now() where company_id = $1 and confirme_le is null`, [companyId]);
+      return rowCount > 0;
     },
     async lireParCle(companyId, cle) {
       const [r] = await q(`select * from ${ns}.liaisons where company_id = $1 and cle_idempotence = $2`, [companyId, cle]);

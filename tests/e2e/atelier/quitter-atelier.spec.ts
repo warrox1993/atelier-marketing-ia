@@ -24,7 +24,7 @@ const RETOUR = (page: Page) => page.getByRole("button", { name: /Retour au menu 
 async function ouvrirTableauDeBord(page: Page) {
   await page.goto(`/${PREFIXE}/dashboard`);
   await expect(page).toHaveURL(new RegExp(`/${PREFIXE}/dashboard`, "u"));
-  await expect(page.getByRole("link", { name: /^Atelier(?! marketing)/u }).first()).toBeVisible({ timeout: 20_000 });
+  await expect(page.getByRole("link", { name: "Réglages de l'atelier" }).first()).toBeVisible({ timeout: 20_000 });
 }
 
 async function cliquerRubrique(page: Page, nom: string) {
@@ -57,9 +57,10 @@ test.describe("Quitter l'atelier : bureau", () => {
 
   test("1. dashboard → atelier → trois rubriques → retour au menu principal", async ({ page }) => {
     await ouvrirTableauDeBord(page);
-    await page.getByRole("link", { name: /^Atelier(?! marketing)/u }).first().click();
+    await page.getByRole("link", { name: "Réglages de l'atelier" }).first().click();
     await expect(page).toHaveURL(DANS_ATELIER);
-    for (const rubrique of ["Discussion", "Prospects", "Marketing"]) {
+    await page.goto(`/${PREFIXE}/atelier/prospects`);
+    for (const rubrique of ["Prospects", "Marketing"]) {
       await cliquerRubrique(page, rubrique);
       await expect(page).toHaveURL(DANS_ATELIER);
     }
@@ -76,17 +77,24 @@ test.describe("Quitter l'atelier : bureau", () => {
     await verifierMenuPrincipal(page, "scénario 2");
   });
 
-  test("2b. ouverture par la racine de l'instance (redirigée vers l'atelier) puis retour", async ({ page }) => {
+  test("2b. ouverture par la racine de l'instance (redirigée vers le chat) : menu principal déjà là, sortie par son lien", async ({ page }) => {
     await page.goto(`/${PREFIXE}`);
-    await expect(RETOUR(page)).toBeVisible({ timeout: 20_000 });
-    await quitterParLeBouton(page, "scénario 2b");
+    await expect(page).toHaveURL(DANS_ATELIER, { timeout: 20_000 });
+    // Le chat n'a pas de menu secondaire : le menu principal est déjà affiché et il n'y a donc pas de bouton « Retour ».
+    await expect(page.getByRole("heading", { name: /^Coordinateur/u, level: 1 })).toBeVisible({ timeout: 30_000 });
     await verifierMenuPrincipal(page, "scénario 2b");
+    await expect(RETOUR(page), "le chat n'a pas de menu secondaire, donc pas de bouton retour").toHaveCount(0);
+    await page.getByRole("link", { name: "Tableau de bord", exact: true }).first().click();
+    await expect.poll(() => page.url(), { timeout: DELAI_SORTIE, message: "sortie du chat par le menu principal" }).not.toMatch(DANS_ATELIER);
+    await page.waitForTimeout(2_500);
+    expect(page.url(), `rebond dans l'atelier après la sortie, URL finale ${page.url()}`).not.toMatch(DANS_ATELIER);
   });
 
   test("3. après sortie, goBack puis re-sortie : jamais de boucle", async ({ page }) => {
     await ouvrirTableauDeBord(page);
-    await page.getByRole("link", { name: /^Atelier(?! marketing)/u }).first().click();
+    await page.getByRole("link", { name: "Réglages de l'atelier" }).first().click();
     await expect(page).toHaveURL(DANS_ATELIER);
+    await page.goto(`/${PREFIXE}/atelier/prospects`);
     await cliquerRubrique(page, "Prospects");
     await quitterParLeBouton(page, "scénario 3, première sortie");
     const apresSortie = page.url();
@@ -104,13 +112,14 @@ test.describe("Quitter l'atelier : bureau", () => {
   test("4. depuis l'atelier, le menu principal reste complet (Tâches, Agents) puis sortie", async ({ page }) => {
     await ouvrirTableauDeBord(page);
     await expect(page.getByRole("switch", { name: "Mode expert" })).toHaveCount(0);
-    await page.getByRole("link", { name: /^Atelier(?! marketing)/u }).first().click();
+    await page.getByRole("link", { name: "Réglages de l'atelier" }).first().click();
     await expect(page).toHaveURL(DANS_ATELIER);
     // La barre de l'atelier s'affiche à côté de la barre principale, jamais à sa place.
     for (const entree of ["Tâches", "Agents", "Routines", "Projets"]) {
       await expect(page.getByRole("link", { name: entree, exact: true }).first(), `${entree} visible depuis l'atelier`).toBeVisible();
     }
-    await cliquerRubrique(page, "Discussion");
+    await page.goto(`/${PREFIXE}/atelier/prospects`);
+    await cliquerRubrique(page, "Marketing");
     await quitterParLeBouton(page, "scénario 4");
     await verifierMenuPrincipal(page, "scénario 4");
   });
@@ -123,6 +132,10 @@ test.describe("Quitter l'atelier : téléphone", () => {
     await page.goto(`/${PREFIXE}/dashboard`);
     await page.getByRole("navigation", { name: "Navigation mobile" }).getByRole("link", { name: "Atelier" }).first().tap();
     await expect(page).toHaveURL(DANS_ATELIER);
+    // La barre du bas ouvre le chat, qui n'a pas de menu secondaire : pas de bouton retour. Il existe dans une rubrique à menu secondaire.
+    await expect(page.getByRole("heading", { name: /^Coordinateur/u, level: 1 })).toBeVisible({ timeout: 30_000 });
+    await expect(RETOUR(page)).toHaveCount(0);
+    await page.goto(`/${PREFIXE}/atelier/prospects`);
     // Sur téléphone, le bouton retour est dans le tiroir du menu principal.
     await page.getByRole("button", { name: /^(Open sidebar|Ouvrir le menu)$/u }).tap();
     await quitterParLeBouton(page, "scénario 5a");

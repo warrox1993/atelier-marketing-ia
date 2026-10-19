@@ -106,7 +106,7 @@ describe("onglet « Échanges » d'une tâche", () => {
 
 describe("rubrique « Direction » et registre", () => {
   const navigation = async () => {
-    installerPont("/RNO/atelier/accueil");
+    installerPont("/RNO/atelier/campagnes");
     rendu = await rendre(createElement(NavigationAtelier, { context: contexte }));
     await cliquer(document.body); // laisse les promesses se résoudre
     return rendu.conteneur;
@@ -124,11 +124,12 @@ describe("rubrique « Direction » et registre", () => {
     expect(appels.some((a) => a.url.includes("/liaisons/acces?companyId="))).toBe(true);
   });
 
-  it("apparaît avant Réglages quand la sonde répond acces: true", async () => {
+  it("apparaît après Marketing quand la sonde répond acces: true", async () => {
     serveur = (url) => (url.includes("/liaisons/acces") ? { statut: 200, corps: { acces: true } } : { statut: 404, corps: {} });
     const l = liens(await navigation());
     expect(l).toContain("Registre des échanges");
-    expect(l.indexOf("Registre des échanges")).toBe(l.indexOf("Réglages") - 1);
+    expect(l.indexOf("Registre des échanges")).toBe(l.findIndex((t) => t?.startsWith("Marketing")) + 1);
+    expect(l.indexOf("Registre des échanges")).toBeGreaterThan(0);
   });
 
   const registre = async () => {

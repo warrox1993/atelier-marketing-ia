@@ -285,12 +285,15 @@ function ChargeurDossier({ issueId, onDossier }: { issueId: string; onDossier(is
  * `raisonDecision`) ; les autres restent à traiter un par un. L'approbation ne porte que sur le contenu :
  * aucune action externe (pas de publication, d'envoi ni de dépense). Récapitulatif puis confirmation unique.
  */
-export function ApprobationGroupee({ elements, onFait }: { elements: ReadonlyArray<{ issueId: string; titre: string }>; onFait(issueIds: string[]): void }) {
+export function ApprobationGroupee({ elements, onFait, onActif }: { elements: ReadonlyArray<{ issueId: string; titre: string }>; onFait(issueIds: string[]): void; onActif?(actif: boolean): void }) {
   const decider = useAction<DecisionHumaine>("atelier.decision");
   const [dossiers, setDossiers] = useState<Record<string, DossierHumain | null>>({});
   const [lot, setLot] = useState<ElementLot[] | null>(null);
   const [commentaire, setCommentaire] = useState("");
   const recu = (issueId: string, d: DossierHumain | null) => setDossiers((x) => (x[issueId] === d ? x : { ...x, [issueId]: d }));
+  // Récapitulatif ou bilan affiché : l'hôte garde la zone visible même si la liste se vide ou se recharge en erreur.
+  const actif = lot !== null;
+  useEffect(() => onActif?.(actif), [actif, onActif]);
   const lus = elements.filter((e) => e.issueId in dossiers).length;
   const eligibles = elements.filter((e) => {
     const d = dossiers[e.issueId];

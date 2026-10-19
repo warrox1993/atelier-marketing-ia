@@ -36,6 +36,24 @@ async function capturer(page: Page, nom: string) {
   await page.screenshot({ path: join(DOSSIER_CAPTURES, `${nom}.png`) });
 }
 
+/** L'en-tête n'est jamais recouvert, le pied (pastilles + saisie) reste sous 35 % de la fenêtre, la section tient dans la fenêtre. */
+async function mesurerDisposition(page: Page) {
+  const m = await page.evaluate(() => {
+    const boite = (sel: string) => {
+      const el = document.querySelector(sel);
+      if (!el) return null;
+      const r = el.getBoundingClientRect();
+      return { haut: r.top, bas: r.bottom, hauteur: r.height };
+    };
+    return { fenetre: window.innerHeight, section: boite(".atl-disc"), entete: boite(".atl-disc-entete"), titre: boite(".atl-disc-entete h1"), fil: boite(".atl-disc-fil"), pied: boite(".atl-disc-pied") };
+  });
+  expect(m.entete && m.titre && m.fil && m.pied && m.section, "boîtes du chat").toBeTruthy();
+  expect(m.pied!.hauteur, "le pied ne dépasse pas 35 % de la fenêtre").toBeLessThanOrEqual(m.fenetre * 0.35 + 1);
+  expect(m.titre!.bas, "le nom du Coordinateur est au-dessus du fil").toBeLessThanOrEqual(m.fil!.haut + 1);
+  expect(m.fil!.bas, "le fil finit où le pied commence").toBeLessThanOrEqual(m.pied!.haut + 1);
+  expect(m.entete!.hauteur, "en-tête sur une seule ligne").toBeLessThanOrEqual(80);
+}
+
 async function ouvrir(page: Page, chemin: string) {
   await page.goto(`/${prefixe}/atelier${chemin}`);
   await expect(page.locator(".atl-page, .atl-disc").first()).toBeVisible({ timeout: 30_000 });
@@ -71,12 +89,15 @@ test.describe("ordinateur 1440x900", () => {
     await expect(page.getByRole("button", { name: "Parler en direct", exact: true })).toBeVisible();
     const champ = page.getByLabel("Votre message au Coordinateur");
     await expect(champ).toBeVisible();
-    // Les suggestions n'existent que tant que le fil est vide : on ne les exige que dans ce cas.
+    // Les pastilles n'existent que tant que le fil est vide : on ne les exige que dans ce cas. Toutes REMPLISSENT la saisie, aucune n'envoie.
     const vide = await page.locator(".atl-disc-suggestion").count();
     if (vide > 0) {
       await expect(page.locator(".atl-disc-suggestion")).toHaveCount(4);
-      await expect(page.getByRole("button", { name: "Où en sont les missions ?", exact: true })).toBeVisible();
+      await page.getByRole("button", { name: "Où en sont les missions ?", exact: true }).click();
+      await expect(champ).toHaveValue("Où en sont les missions ?");
+      await expect(page.locator(".atl-disc-bulle[data-auteur='humain']", { hasText: /^Où en sont les missions \?$/u })).toHaveCount(0);
     }
+    await mesurerDisposition(page);
     await capturer(page, "bureau-1-ouverture");
 
     await champ.fill(MESSAGE);
@@ -129,6 +150,7 @@ test.describe("téléphone 390x844", () => {
     expect(haut.y, "le centre du bouton est dans la fenêtre").toBeLessThan(haut.hauteur);
 
     await sansDebordement(page);
+    await mesurerDisposition(page);
     await capturer(page, "mobile-1-discussion-saisie");
 
     // Cliquable pour de vrai (le clic tactile atteint le bouton) : le message part et la saisie se vide.

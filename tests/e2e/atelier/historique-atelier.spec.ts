@@ -24,11 +24,11 @@ const DANS_ATELIER = /\/atelier(\/|$|\?|#)/u;
 async function ouvrirTableauDeBord(page: Page) {
   await page.goto(`/${PREFIXE}/dashboard`);
   await expect(page).toHaveURL(new RegExp(`/${PREFIXE}/dashboard`, "u"));
-  await expect(page.getByRole("link", { name: /^Atelier(?! marketing)/u }).first()).toBeVisible({ timeout: 20_000 });
+  await expect(page.getByRole("link", { name: "Réglages de l'atelier" }).first()).toBeVisible({ timeout: 20_000 });
 }
 
 async function entrerDansAtelier(page: Page) {
-  await page.getByRole("link", { name: /^Atelier(?! marketing)/u }).first().click();
+  await page.getByRole("link", { name: "Réglages de l'atelier" }).first().click();
   await expect(page).toHaveURL(DANS_ATELIER);
   await expect(page.locator(".atl-page")).toBeVisible({ timeout: 30_000 });
 }
@@ -43,12 +43,15 @@ const longueurHistorique = (page: Page) => page.evaluate(() => window.history.le
 test.describe("Historique de l'atelier : bureau", () => {
   test.use({ viewport: { width: 1440, height: 900 } });
 
-  test("1. cinq rubriques visitées : chaque Précédent remonte d'une seule adresse, jusqu'au tableau de bord", async ({ page }) => {
+  test("1. rubriques du bureau visitées : chaque Précédent remonte d'une seule adresse, jusqu'au tableau de bord", async ({ page }) => {
     await ouvrirTableauDeBord(page);
     const adresses: string[] = [page.url()];
     await entrerDansAtelier(page);
     adresses.push(page.url());
-    for (const rubrique of ["Discussion", "Prospects", "Marketing", "Réglages", "Accueil"]) {
+    // L'entrée du menu principal ouvre les Réglages (sans menu secondaire) : on passe au bureau par son adresse.
+    await page.goto(`/${PREFIXE}/atelier/prospects`);
+    adresses.push(page.url());
+    for (const rubrique of ["Marketing", "Prospects"]) {
       const avant = page.url();
       await cliquerRubrique(page, rubrique);
       await expect.poll(() => page.url(), { message: `${rubrique} : l'adresse doit changer` }).not.toBe(avant);
@@ -67,8 +70,9 @@ test.describe("Historique de l'atelier : bureau", () => {
 
   test("2. onglet de Réglages : une seule entrée d'historique, Précédent revient à l'onglet puis sort de Réglages", async ({ page }) => {
     await ouvrirTableauDeBord(page);
+    // Réglages : entrée du menu principal (plus de rubrique du menu secondaire) ; entrerDansAtelier clique déjà dessus
+    // et arrive sur Réglages. Un second clic ajouterait une entrée d'historique en double : on ne le refait pas.
     await entrerDansAtelier(page);
-    await cliquerRubrique(page, "Réglages");
     const liste = page.getByRole("tablist", { name: "Réglages : sections" });
     await expect(liste).toBeVisible({ timeout: 30_000 });
     await expect(page.locator("[aria-busy='true']")).toHaveCount(0, { timeout: 30_000 });

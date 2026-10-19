@@ -137,7 +137,7 @@ for (const f of FORMATS) {
       const erreurs = surveillerConsole(page);
       await page.goto(`/${prefixe}/dashboard`);
       const menu = await menuSocle(page);
-      await expect(menu.getByRole("link", { name: /^Atelier(?! marketing)/u })).toBeVisible({ timeout: 30_000 });
+      await expect(menu.getByRole("link", { name: "Réglages de l'atelier" })).toBeVisible({ timeout: 30_000 });
       await expect(page.getByRole("switch", { name: "Mode expert" })).toHaveCount(0);
       for (const entree of ["Tâches", "Agents", "Routines", "Projets"]) {
         await expect(menu.getByRole("link", { name: entree, exact: true }), `${entree} visible`).toBeVisible();
@@ -167,7 +167,8 @@ for (const f of FORMATS) {
           await barre.getByRole("link", { name: lien }).tap();
           await expect(page).toHaveURL(new RegExp(`/${prefixe}/atelier$`, "u"), { timeout: 30_000 });
           await expect(page.getByText("Organization not found")).toHaveCount(0);
-          await expect(page.getByRole("heading", { name: "Accueil", level: 1 })).toBeVisible({ timeout: 30_000 });
+          // L'adresse de l'atelier ouvre maintenant le chat avec le Coordinateur.
+          await expect(page.getByRole("heading", { name: /^Coordinateur/u, level: 1 })).toBeVisible({ timeout: 30_000 });
         }
         expect(erreurs, erreurs.join("\n")).toEqual([]);
       });
@@ -183,15 +184,15 @@ for (const f of FORMATS) {
       expect(erreurs, erreurs.join("\n")).toEqual([]);
     });
 
-    test("cinq rubriques, onglets et clavier, bandeau d'entreprise", async ({ page }) => {
+    test("deux rubriques de bureau, onglets et clavier, Réglages et chat sans menu secondaire, bandeau d'entreprise", async ({ page }) => {
       const erreurs = surveillerConsole(page);
-      await ouvrir(page, "");
+      await ouvrir(page, "/prospects");
       const dedans = f.mobile ? page.locator("nav.atl-onglets") : page.locator("nav.atl-nav");
-      for (const nom of ["Accueil", "Discussion", "Prospects", "Marketing", "Réglages"]) {
+      for (const nom of ["Prospects", "Marketing"]) {
         await expect(dedans.getByRole("link", { name: new RegExp(`^${nom}`, "u") })).toBeVisible();
       }
       // Sur ordinateur, le menu porte en plus le lien de sortie « Menu principal » (classe atl-nav-sortie), qui n'est pas une rubrique.
-      expect(await dedans.locator("a:not(.atl-nav-sortie)").count(), "cinq rubriques exactement").toBe(5);
+      expect(await dedans.locator("a:not(.atl-nav-sortie)").count(), "deux rubriques exactement").toBe(2);
 
       // Bandeau d'entreprise visible, avec le nom complet.
       await expect(page.locator(".atl-bandeau-entreprise")).toContainText(NOM_ENTREPRISE);
@@ -203,7 +204,11 @@ for (const f of FORMATS) {
         ["Réglages", "Réglages : sections", ["Mise en place", "Marque et sources", "Connaissances", "Connexions", "Paramètres", "Corbeille"]],
       ];
       for (const [rubrique, etiquette, onglets] of parcours) {
-        await dedans.getByRole("link", { name: new RegExp(`^${rubrique}`, "u") }).click();
+        // Réglages n'est plus une rubrique du menu secondaire : on l'ouvre par son adresse, sans menu secondaire.
+        if (rubrique === "Réglages") {
+          await ouvrir(page, "/mise-en-place");
+          await expect(page.locator("nav.atl-nav, nav.atl-onglets")).toHaveCount(0);
+        } else await dedans.getByRole("link", { name: new RegExp(`^${rubrique}`, "u") }).click();
         const liste = page.getByRole("tablist", { name: etiquette });
         await expect(liste).toBeVisible({ timeout: 30_000 });
         await expect(liste.getByRole("tab")).toHaveText(onglets);
@@ -235,9 +240,12 @@ for (const f of FORMATS) {
         await sansDebordement(page);
       }
 
-      // Discussion : rubrique sans onglets multiples.
-      await dedans.getByRole("link", { name: /^Discussion/u }).click();
-      await expect(page.getByRole("heading", { name: /^Coordinateur/u, level: 1 })).toBeVisible({ timeout: 30_000 });
+      // Discussion (et l'ancienne adresse « accueil ») : le chat seul, sans menu secondaire.
+      for (const chemin of ["/discussion", "/accueil"]) {
+        await ouvrir(page, chemin);
+        await expect(page.getByRole("heading", { name: /^Coordinateur/u, level: 1 })).toBeVisible({ timeout: 30_000 });
+        await expect(page.locator("nav.atl-nav")).toHaveCount(0);
+      }
       expect(erreurs, erreurs.join("\n")).toEqual([]);
     });
 
@@ -264,10 +272,15 @@ for (const f of FORMATS) {
       expect(erreurs, erreurs.join("\n")).toEqual([]);
     });
 
-    test("accueil : un élément « À faire » se déplie et se traite sur place, la pastille baisse", async ({ page, request }) => {
+    test("chat : un point en attente du message du Coordinateur se traite sur place, le nombre baisse", async ({ page, request }) => {
       const TITRE_CARTE = await poserCarte(request);
       const erreurs = surveillerConsole(page);
       await ouvrir(page, "");
+      // Les points en attente sont dans le message du Coordinateur en tête du fil (trois d'abord, puis « Voir les N autres »).
+      const message = page.locator('[data-testid="chat-situation"]');
+      await expect(message.locator("ul.atl-afaire li").first()).toBeVisible({ timeout: 30_000 });
+      const voirPlus = message.getByRole("button", { name: /^Voir (les \d+ autres|l'autre point)$/u });
+      if (await voirPlus.count()) await voirPlus.click();
       const ligne = page.locator("ul.atl-afaire li", { hasText: TITRE_CARTE });
       await expect(ligne).toBeVisible({ timeout: 30_000 });
       const avant = await page.locator("ul.atl-afaire li").count();

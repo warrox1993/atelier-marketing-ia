@@ -14,7 +14,7 @@ import { AsyncLocalStorage } from "node:async_hooks";
 import type { PluginContext } from "@paperclipai/plugin-sdk";
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { DemandeLiaisonEntree, DeclarerServicesEntree, LIMITES_LIAISON, ROUTES_API } from "../src/contrats/index.js";
+import { DemandeLiaisonEntree, DeclarerServicesEntree, LIMITES_LIAISON, ROUTES_API, type FluxService } from "../src/contrats/index.js";
 import type { ActeurHote, RequeteRoute } from "../src/serveur/atelier.js";
 import type { BaseAtelier } from "../src/serveur/base.js";
 import type { ErreurAtelier } from "../src/serveur/erreurs.js";
@@ -51,31 +51,50 @@ const FLUX = [
 
 type LiaisonMemoire = LiaisonStockee & { facteurProchainLe?: number; facteurErreur?: string | null };
 
-function stockMemoire(): StockLiaisons & { liaisons: LiaisonMemoire[]; services: ServiceEntreprise[]; flux: Ligne[]; echecInsertion: { actif: boolean }; horloge: { t: number } } {
-  const services: ServiceEntreprise[] = [];
+type ServiceMemoire = ServiceEntreprise & { confirme: boolean };
+type EntreeSemis = { clientMarqueur: string; entreprises: Array<{ companyId: string; serviceSlug: string; estDirection: boolean }>; flux: FluxService[]; par: string };
+
+function stockMemoire(): StockLiaisons & { liaisons: LiaisonMemoire[]; services: ServiceMemoire[]; /** Jeu de données : déclare l'entreprise comme déjà CONFIRMÉE (cas des clients existants). */ semer: (d: EntreeSemis) => Promise<void>; flux: Ligne[]; echecInsertion: { actif: boolean }; horloge: { t: number } } {
+  const services: ServiceMemoire[] = [];
   const flux: Ligne[] = [];
+  // Lecteurs : seules les lignes confirmées existent (faille E1, même règle que le SQL).
+  const confirmes = () => services.filter((s) => s.confirme);
   const liaisons: LiaisonMemoire[] = [];
   const echecInsertion = { actif: false };
   const horloge = { t: Date.UTC(2026, 9, 16, 12) };
   const due = (l: LiaisonMemoire, max: number) => (l.facteurEssais ?? 0) < max && (l.facteurProchainLe == null || l.facteurProchainLe <= horloge.t);
   const trouver = (c: string, i: string) => liaisons.find((x) => x.entrepriseSource === c && x.id === i);
+  const declarer: StockLiaisons["declarer"] = async (d) => {
+    // Même règle que le SQL : une ligne est reprise si elle est du même client ou non confirmée ; une ligne confirmée du même client le reste.
+    const avant = services.filter((s) => s.clientMarqueur === d.clientMarqueur);
+    for (let i = services.length - 1; i >= 0; i--) if (services[i]!.clientMarqueur === d.clientMarqueur) services.splice(i, 1);
+    for (let i = flux.length - 1; i >= 0; i--) if (flux[i]!.client === d.clientMarqueur) flux.splice(i, 1);
+    for (const e of d.entreprises) {
+      const existante = services.find((s) => s.companyId === e.companyId);
+      if (existante && existante.confirme) continue;
+      if (existante) services.splice(services.indexOf(existante), 1);
+      const dejaConfirme = avant.some((s) => s.companyId === e.companyId && s.confirme);
+      services.push({ companyId: e.companyId, clientMarqueur: d.clientMarqueur, serviceSlug: e.serviceSlug, estDirection: e.estDirection, confirme: e.confirmee || dejaConfirme });
+    }
+    for (const f of d.flux) flux.push({ client: d.clientMarqueur, ...f });
+  };
   return {
-    liaisons, services, flux, echecInsertion, horloge,
-    serviceDeEntreprise: async (c) => services.find((s) => s.companyId === c) ?? null,
-    clientExiste: async (m) => services.some((x) => x.clientMarqueur === m),
-    servicesParSlug: async (slug) => services.filter((s) => s.serviceSlug === slug),
-    servicesDuClient: async (m) => services.filter((s) => s.clientMarqueur === m),
+    liaisons, services, flux, echecInsertion, horloge, declarer,
+    semer: (d) => declarer({ ...d, entreprises: d.entreprises.map((e) => ({ ...e, confirmee: true })) }),
+    confirmer: async (c) => {
+      const ligne = services.find((s) => s.companyId === c && !s.confirme);
+      if (ligne) ligne.confirme = true;
+      return ligne !== undefined;
+    },
+    serviceDeEntreprise: async (c) => confirmes().find((s) => s.companyId === c) ?? null,
+    clientExiste: async (m) => confirmes().some((x) => x.clientMarqueur === m),
+    servicesParSlug: async (slug) => confirmes().filter((s) => s.serviceSlug === slug),
+    servicesDuClient: async (m) => confirmes().filter((s) => s.clientMarqueur === m),
     lireFlux: async (m, s, c) => {
       const f = flux.find((x) => x.client === m && x.source === s && x.cible === c);
       return f ? { objet: f.objet, approbationHumaine: f.approbationHumaine } : null;
     },
     fluxDuClient: async (m) => flux.filter((x) => x.client === m).map((x) => ({ source: x.source, cible: x.cible, objet: x.objet, approbationHumaine: x.approbationHumaine, origine: x.origine ?? "metier" })),
-    declarer: async (d) => {
-      for (let i = services.length - 1; i >= 0; i--) if (services[i]!.clientMarqueur === d.clientMarqueur) services.splice(i, 1);
-      for (let i = flux.length - 1; i >= 0; i--) if (flux[i]!.client === d.clientMarqueur) flux.splice(i, 1);
-      for (const e of d.entreprises) services.push({ companyId: e.companyId, clientMarqueur: d.clientMarqueur, serviceSlug: e.serviceSlug, estDirection: e.estDirection });
-      for (const f of d.flux) flux.push({ client: d.clientMarqueur, ...f });
-    },
     lireParCle: async (c, k) => liaisons.find((l) => l.entrepriseSource === c && l.cleIdempotence === k) ?? null,
     compterOuvertes: async (c) => liaisons.filter((l) => l.entrepriseSource === c && (l.statut === "ouverte" || l.statut === "en_attente_approbation")).length,
     estTacheDeLiaison: async (c, i) => liaisons.some((l) => l.entrepriseCible === c && l.tacheCible === i),
@@ -218,8 +237,8 @@ function monde(o: { reveilEchoue?: boolean; commentaireEchoue?: boolean; creatio
   const avancer = (ms: number = FACTEUR.attenteMaxMs + 1) => void (stock.horloge.t += ms);
   /** Déclare MKT, DIR, JUR (client « courtier ») et ETRANGER (client « autre »). */
   const declarer = async () => {
-    await stock.declarer({ clientMarqueur: "courtier", entreprises: [{ companyId: MKT, serviceSlug: "marketing", estDirection: false }, { companyId: DIR, serviceSlug: "direction", estDirection: true }, { companyId: JUR, serviceSlug: "juridique", estDirection: false }], flux: FLUX, par: "test" });
-    await stock.declarer({ clientMarqueur: "autre", entreprises: [{ companyId: ETRANGER, serviceSlug: "conformite", estDirection: false }], flux: [], par: "test" });
+    await stock.semer({ clientMarqueur: "courtier", entreprises: [{ companyId: MKT, serviceSlug: "marketing", estDirection: false }, { companyId: DIR, serviceSlug: "direction", estDirection: true }, { companyId: JUR, serviceSlug: "juridique", estDirection: false }], flux: FLUX, par: "test" });
+    await stock.semer({ clientMarqueur: "autre", entreprises: [{ companyId: ETRANGER, serviceSlug: "conformite", estDirection: false }], flux: [], par: "test" });
   };
   const demander = (corps: unknown, o2: { acteur?: ActeurHote; companyId?: string; issueId?: string } = {}) =>
     routes["liaison.demander"]!({
@@ -250,6 +269,7 @@ describe("contrats de liaison", () => {
   it("déclare les deux routes", () => {
     expect(ROUTES_API.find((r) => r.cle === "liaison.demander")).toMatchObject({ methode: "POST", chemin: "/taches/:issueId/liaisons", auth: "board-or-agent", resolution: { from: "issue", param: "issueId" } });
     expect(ROUTES_API.find((r) => r.cle === "services.declarer")).toMatchObject({ methode: "POST", auth: "board" });
+    expect(ROUTES_API.find((r) => r.cle === "services.confirmer")).toMatchObject({ methode: "POST", auth: "board", resolution: { from: "body", key: "companyId" } });
   });
 });
 
@@ -326,7 +346,7 @@ describe("liaison.demander : gardes", () => {
     const m = monde();
     await m.declarer();
     // juridique n'est pas la cible visée ici : on vise un service connu mais sans flux depuis le marketing.
-    await m.stock.declarer({ clientMarqueur: "courtier", entreprises: [{ companyId: MKT, serviceSlug: "marketing", estDirection: false }, { companyId: DIR, serviceSlug: "direction", estDirection: true }, { companyId: JUR, serviceSlug: "juridique", estDirection: false }], flux: [FLUX[1]!], par: "t" });
+    await m.stock.semer({ clientMarqueur: "courtier", entreprises: [{ companyId: MKT, serviceSlug: "marketing", estDirection: false }, { companyId: DIR, serviceSlug: "direction", estDirection: true }, { companyId: JUR, serviceSlug: "juridique", estDirection: false }], flux: [FLUX[1]!], par: "t" });
     const e = await m.refus(m.demander(demande()));
     expect(e).toMatchObject({ code: "liaison_refusee", details: { garde: "b" } });
     expect(m.issues.some((i) => i.originKind === ORIGINE_LIAISON)).toBe(false);
@@ -387,7 +407,7 @@ describe("liaison.demander : gardes", () => {
     expect(e).toMatchObject({ code: "liaison_refusee", details: { garde: "e" } });
     expect(m.issues.some((i) => i.originKind === ORIGINE_LIAISON)).toBe(false);
     // Même un service de même nom chez l'autre client ne prend pas le pas sur celui du bon client.
-    await m.stock.declarer({ clientMarqueur: "autre", entreprises: [{ companyId: ETRANGER, serviceSlug: "direction", estDirection: true }], flux: [], par: "t" });
+    await m.stock.semer({ clientMarqueur: "autre", entreprises: [{ companyId: ETRANGER, serviceSlug: "direction", estDirection: true }], flux: [], par: "t" });
     const r = await m.demander(demande());
     expect((r.corps as Ligne).liaison.entrepriseCible).toBe(DIR);
   });
@@ -553,6 +573,9 @@ describe("services.declarer", () => {
   });
   const declarer = (m: ReturnType<typeof monde>, c: unknown, acteur: ActeurHote = HUMAIN, companyId = DIR) =>
     m.routes["services.declarer"]!({ cle: "services.declarer", params: {}, query: {}, corps: c, acteur, companyId });
+  /** Seconde étape de la déclaration (E1) : l'humain qui a accès à CETTE entreprise la confirme. */
+  const confirmer = (m: ReturnType<typeof monde>, companyId: string, acteur: ActeurHote = HUMAIN) =>
+    m.routes["services.confirmer"]!({ cle: "services.confirmer", params: {}, query: {}, corps: { companyId }, acteur, companyId });
 
   it("écrit les services et les flux, journalise, et permet ensuite une liaison", async () => {
     const m = monde();
@@ -560,6 +583,10 @@ describe("services.declarer", () => {
     expect(r.corps).toMatchObject({ clientMarqueur: "courtier", entreprises: 2, flux: 1 });
     expect(m.stock.services.map((s) => s.serviceSlug).sort()).toEqual(["direction", "marketing"]);
     expect(m.journal[0]).toMatchObject({ type: "services.declares", companyId: DIR });
+    // E1 : MKT n'est qu'« à confirmer » (accès non prouvé) ; la liaison n'est possible qu'après sa confirmation.
+    expect(r.corps).toMatchObject({ aConfirmer: 1 });
+    await m.refus(m.demander(demande()));
+    expect((await confirmer(m, MKT)).corps).toMatchObject({ clientMarqueur: "courtier", serviceSlug: "marketing", dejaConfirmee: false });
     expect((await m.demander(demande())).statut).toBe(201);
   });
 
@@ -646,7 +673,7 @@ describe("services.declarer", () => {
     expect(m.stock.services).toHaveLength(0);
     expect(m.journal).toHaveLength(0);
     // Même chose pour une Direction déjà déclarée d'un autre client (ETRANGER) : jamais lisible par un nouveau client.
-    await m.stock.declarer({ clientMarqueur: "autre", entreprises: [{ companyId: ETRANGER, serviceSlug: "direction", estDirection: true }], flux: [], par: "t" });
+    await m.stock.semer({ clientMarqueur: "autre", entreprises: [{ companyId: ETRANGER, serviceSlug: "direction", estDirection: true }], flux: [], par: "t" });
     expect(await m.refus(declarer(m, corps({ companyId: MKT, clientMarqueur: "neuf", entreprises: [{ companyId: MKT, serviceSlug: "marketing" }, { companyId: ETRANGER, serviceSlug: "direction", estDirection: true }] }), HUMAIN, MKT))).toBeTruthy();
     expect(await m.stock.serviceDeEntreprise(MKT)).toBeNull();
   });
@@ -657,8 +684,11 @@ describe("services.declarer", () => {
     const r = await m.refus(declarer(m, corps({ companyId: MKT }), HUMAIN, MKT));
     expect(r).toMatchObject({ code: "acces_refuse" });
     expect(m.stock.services.map((s) => s.companyId)).toEqual([MKT]);
-    // Chemin légitime en deux temps : DIR ajoutée comme simple service, puis DIR (accès prouvé par la route) se déclare Direction.
+    // Chemin légitime en trois temps : DIR ajoutée comme simple service, confirmée par son humain (E1), puis DIR (accès
+    // prouvé par la route) se déclare Direction.
     await declarer(m, corps({ companyId: MKT, entreprises: [{ companyId: MKT, serviceSlug: "marketing" }, { companyId: DIR, serviceSlug: "direction" }] }), HUMAIN, MKT);
+    expect(await m.stock.serviceDeEntreprise(DIR)).toBeNull();
+    await confirmer(m, DIR);
     expect((await declarer(m, corps())).corps).toMatchObject({ entreprises: 2 });
     expect((await m.stock.serviceDeEntreprise(DIR))?.estDirection).toBe(true);
   });
@@ -666,19 +696,82 @@ describe("services.declarer", () => {
   it("M1 : une entreprise ajoutée à un client qui a déjà une Direction ne peut pas devenir Direction", async () => {
     const m = monde();
     await declarer(m, corps());
+    await confirmer(m, MKT);
     // DIR est Direction ; depuis la route DIR, on tente de remplacer la Direction par JUR, ajoutée dans la même déclaration.
     const r = await m.refus(declarer(m, corps({ entreprises: [{ companyId: MKT, serviceSlug: "marketing" }, { companyId: DIR, serviceSlug: "direction" }, { companyId: JUR, serviceSlug: "juridique", estDirection: true }] })));
     expect(r).toMatchObject({ code: "acces_refuse" });
     expect((await m.stock.serviceDeEntreprise(DIR))?.estDirection).toBe(true);
     expect(await m.stock.serviceDeEntreprise(JUR)).toBeNull();
-    // Redéclarer depuis un membre (MKT) en gardant la Direction existante reste accepté.
-    expect((await declarer(m, corps({ companyId: MKT }), HUMAIN, MKT)).corps).toMatchObject({ entreprises: 2 });
+    // E2 : redéclarer depuis un membre (MKT), même en gardant la Direction existante, est désormais refusé (changement de spécification).
+    expect(await m.refus(declarer(m, corps({ companyId: MKT }), HUMAIN, MKT))).toMatchObject({ code: "acces_refuse" });
+    // La Direction, elle, peut redéclarer son client.
+    expect((await declarer(m, corps())).corps).toMatchObject({ entreprises: 2 });
   });
 
   it("n'accepte pas de reprendre une entreprise déjà déclarée pour un autre client", async () => {
     const m = monde();
     await m.declarer();
     expect(await m.refus(declarer(m, corps({ clientMarqueur: "intrus" })))).toMatchObject({ code: "conflit" });
+  });
+
+  it("E1 : une entreprise ajoutée depuis une autre route reste « à confirmer » et n'existe pour aucun lecteur du stock", async () => {
+    const m = monde();
+    // L'humain de ETRANGER ne prouve l'accès qu'à ETRANGER : il déclare MKT (jamais déclarée) dans son client.
+    const r = await declarer(m, corps({ companyId: ETRANGER, clientMarqueur: "pirate", entreprises: [{ companyId: ETRANGER, serviceSlug: "direction", estDirection: true }, { companyId: MKT, serviceSlug: "marketing" }], flux: [] }), HUMAIN, ETRANGER);
+    expect(r.corps).toMatchObject({ entreprises: 2, aConfirmer: 1 });
+    expect(m.stock.services.map((x) => [x.companyId, x.confirme])).toEqual([[ETRANGER, true], [MKT, false]]);
+    expect(await m.stock.serviceDeEntreprise(MKT)).toBeNull();
+    expect((await m.stock.servicesDuClient("pirate")).map((x) => x.companyId)).toEqual([ETRANGER]);
+    expect(await m.stock.servicesParSlug("marketing")).toEqual([]);
+    expect(m.journal[0]).toMatchObject({ type: "services.declares", donnees: expect.objectContaining({ aConfirmer: 1 }) });
+  });
+
+  it("E1 : une ligne « à confirmer » ne bloque ni la déclaration légitime ni la confirmation, et le client réel n'est pas touché", async () => {
+    const m = monde();
+    await declarer(m, corps({ companyId: ETRANGER, clientMarqueur: "pirate", entreprises: [{ companyId: ETRANGER, serviceSlug: "direction", estDirection: true }, { companyId: MKT, serviceSlug: "marketing" }], flux: [] }), HUMAIN, ETRANGER);
+    // La déclaration légitime de MKT dans son vrai client reprend la ligne « à confirmer » du pirate.
+    await declarer(m, corps());
+    expect(m.stock.services.find((x) => x.companyId === MKT)).toMatchObject({ clientMarqueur: "courtier", confirme: false });
+    // Une entreprise déjà CONFIRMÉE dans un client n'est jamais reprise par un autre.
+    await confirmer(m, MKT);
+    expect(await m.refus(declarer(m, corps({ companyId: ETRANGER, clientMarqueur: "pirate", entreprises: [{ companyId: ETRANGER, serviceSlug: "direction", estDirection: true }, { companyId: MKT, serviceSlug: "marketing" }], flux: [] }), HUMAIN, ETRANGER))).toMatchObject({ code: "conflit" });
+    expect((await m.stock.serviceDeEntreprise(MKT))?.clientMarqueur).toBe("courtier");
+  });
+
+  it("E1 : redéclarer le client garde confirmées les entreprises déjà confirmées", async () => {
+    const m = monde();
+    await declarer(m, corps());
+    await confirmer(m, MKT);
+    await declarer(m, corps());
+    expect(m.stock.services.map((x) => [x.companyId, x.confirme]).sort()).toEqual([[DIR, true], [MKT, true]].sort());
+  });
+
+  it("services.confirmer : idempotente, humain seulement, entreprise de la requête seulement, 404 sans déclaration", async () => {
+    const m = monde();
+    await declarer(m, corps());
+    expect((await confirmer(m, MKT)).corps).toMatchObject({ dejaConfirmee: false });
+    expect((await confirmer(m, MKT)).corps).toMatchObject({ dejaConfirmee: true });
+    expect(m.journal.filter((j) => j.type === "services.confirme")).toHaveLength(1);
+    expect(await m.refus(confirmer(m, MKT, agent(MKT_COORD)))).toMatchObject({ code: "elevation_refusee" });
+    expect(await m.refus(m.routes["services.confirmer"]!({ cle: "services.confirmer", params: {}, query: {}, corps: { companyId: JUR }, acteur: HUMAIN, companyId: MKT }))).toMatchObject({ code: "hors_entreprise" });
+    expect(await m.refus(confirmer(m, JUR))).toMatchObject({ code: "introuvable" });
+    expect(await m.refus(m.routes["services.confirmer"]!({ cle: "services.confirmer", params: {}, query: {}, corps: {}, acteur: HUMAIN, companyId: MKT }))).toMatchObject({ code: "entree_invalide" });
+  });
+
+  it("E2 : un membre d'un service seul ne peut pas redéclarer un client qui a une Direction, ni se déclarer Direction", async () => {
+    const m = monde();
+    await m.declarer();
+    const avant = JSON.stringify([m.stock.services, m.stock.flux]);
+    // MKT (membre confirmé, accès à ce seul service) se redéclare Direction du client « courtier ».
+    const r = await m.refus(declarer(m, corps({ companyId: MKT, entreprises: [{ companyId: MKT, serviceSlug: "marketing", estDirection: true }, { companyId: DIR, serviceSlug: "direction" }, { companyId: JUR, serviceSlug: "juridique" }] }), HUMAIN, MKT));
+    expect(r).toMatchObject({ code: "acces_refuse" });
+    expect(r!.statut).toBe(403);
+    // Même en gardant la Direction en place.
+    expect(await m.refus(declarer(m, corps({ companyId: MKT }), HUMAIN, MKT))).toMatchObject({ code: "acces_refuse" });
+    expect(JSON.stringify([m.stock.services, m.stock.flux])).toBe(avant);
+    expect(m.journal).toHaveLength(0);
+    expect((await m.stock.serviceDeEntreprise(DIR))?.estDirection).toBe(true);
+    expect((await m.stock.serviceDeEntreprise(MKT))?.estDirection).toBe(false);
   });
 });
 
@@ -786,7 +879,7 @@ describe("liaison.decider", () => {
   it("refuse d'approuver si le flux a été retiré de la matrice depuis la demande", async () => {
     const m = monde();
     const { id: liaisonId } = await enAttente(m);
-    await m.stock.declarer({ clientMarqueur: "courtier", entreprises: [{ companyId: MKT, serviceSlug: "marketing", estDirection: false }, { companyId: DIR, serviceSlug: "direction", estDirection: true }, { companyId: JUR, serviceSlug: "juridique", estDirection: false }], flux: [FLUX[0]!], par: "t" });
+    await m.stock.semer({ clientMarqueur: "courtier", entreprises: [{ companyId: MKT, serviceSlug: "marketing", estDirection: false }, { companyId: DIR, serviceSlug: "direction", estDirection: true }, { companyId: JUR, serviceSlug: "juridique", estDirection: false }], flux: [FLUX[0]!], par: "t" });
     expect(await m.refus(decider(m, { companyId: MKT, liaisonId, decision: "approuver" }))).toMatchObject({ code: "liaison_refusee", details: { garde: "b" } });
     expect(m.stock.liaisons[0]!.statut).toBe("en_attente_approbation");
   });
@@ -1072,7 +1165,7 @@ describe("facteur : gardes revérifiées et bornes", () => {
     const m = monde();
     await m.declarer();
     await m.demander(demande());
-    await m.stock.declarer({ clientMarqueur: "courtier", entreprises: [{ companyId: MKT, serviceSlug: "marketing", estDirection: false }, { companyId: DIR, serviceSlug: "direction", estDirection: true }, { companyId: JUR, serviceSlug: "juridique", estDirection: false }], flux: [FLUX[1]!], par: "t" });
+    await m.stock.semer({ clientMarqueur: "courtier", entreprises: [{ companyId: MKT, serviceSlug: "marketing", estDirection: false }, { companyId: DIR, serviceSlug: "direction", estDirection: true }, { companyId: JUR, serviceSlug: "juridique", estDirection: false }], flux: [FLUX[1]!], par: "t" });
     const p = await m.poster();
     expect(p.refusees).toHaveLength(1);
     expect(m.issues.some((i) => i.originKind === ORIGINE_LIAISON)).toBe(false);
@@ -1236,7 +1329,7 @@ async function declarerReseau(m: ReturnType<typeof monde>, sensibles: string[] =
   const flux = SERVICES_RESEAU.flatMap((a) =>
     SERVICES_RESEAU.filter((b) => b !== a).map((b) => ({ source: a.serviceSlug, cible: b.serviceSlug, objet: "Réseau des coordinateurs", approbationHumaine: sensibles.includes(a.serviceSlug) || sensibles.includes(b.serviceSlug) })),
   );
-  await m.stock.declarer({ clientMarqueur: "courtier", entreprises: SERVICES_RESEAU, flux, par: "test" });
+  await m.stock.semer({ clientMarqueur: "courtier", entreprises: SERVICES_RESEAU, flux, par: "test" });
 }
 
 let numeroSousTache = 0;

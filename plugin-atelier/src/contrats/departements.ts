@@ -89,3 +89,9 @@ export const MOTIFS_PAUSE: Readonly<Record<string, string>> = {
   company_archived: "entreprise archivée",
   import: "import en cours",
 };
+
+/**
+ * Services dont la décision engage la responsabilité de l'entreprise : l'interface colore leur étiquette et la
+ * synthèse du Coordinateur général n'y expose aucun identifiant de tâche.
+ */
+export const SERVICES_SENSIBLES: ReadonlySet<string> = new Set(["juridique", "ressources-humaines", "juridique-social", "fiscalite", "hse", "conformite", "sav-sinistres"]);

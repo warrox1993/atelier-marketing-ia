@@ -88,7 +88,7 @@ export function creerLectureLiaisons(db: PluginContext["db"]): LectureLiaisons {
     },
     async registre(clientMarqueur, critere, limite, decalage) {
       const params: unknown[] = [clientMarqueur];
-      const conditions = [`company_id in (select company_id from ${ns}.services_entreprises where client_marqueur = $1)`];
+      const conditions = [`company_id in (select company_id from ${ns}.services_entreprises where client_marqueur = $1 and confirme_le is not null)`];
       const lier = (v: unknown) => `$${params.push(v)}`;
       if (critere.service) {
         const p = lier(critere.service);

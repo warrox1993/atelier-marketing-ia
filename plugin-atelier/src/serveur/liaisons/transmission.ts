@@ -8,6 +8,7 @@ import type { PluginContext } from "@paperclipai/plugin-sdk";
 import { PLUGIN_ID, type DemandeLiaisonEntree } from "../../contrats/index.js";
 import type { BaseAtelier } from "../base.js";
 import { injectionsSignalees } from "../contenu-externe.js";
+import { neutraliserJetonActions } from "../discussion-actions.js";
 import { erreur } from "../erreurs.js";
 import type { LiaisonStockee, StockLiaisons } from "./base-liaisons.js";
 
@@ -48,7 +49,8 @@ export function descriptionLiaison(d: { serviceSource: string; objet: string; qu
     lignes.push("", `## Extraits choisis par le service demandeur (${d.extraits.length})`);
     d.extraits.forEach((e, i) => lignes.push("", `### Extrait ${i + 1}`, "Titre :", cloture(e.titre), "Texte :", cloture(e.texte)));
   }
-  return lignes.join("\n");
+  // F1 (revue du 19/10/2026) : le jeton des blocs d'actions ne traverse jamais le bureau de liaison.
+  return neutraliserJetonActions(lignes.join("\n"));
 }
 
 export type Agent = Awaited<ReturnType<PluginContext["agents"]["list"]>>[number];

@@ -25,9 +25,8 @@ import { useEnvoiDemande } from "./demande.js";
 import { FournisseurDonnees, useDonnees } from "./donnees.js";
 import { ListeOnglets, PanneauOnglet, useAncre } from "./onglets.js";
 import { chemin, lireRoute, type CleVue } from "./route.js";
-import { cheminOnglet, estVueEnsemble, rubriquesVisibles, rubriqueDe, type CleRubriqueNav, type RubriqueNav } from "./rubriques.js";
+import { cheminOnglet, estVueEnsemble, rubriquesVisibles, rubriqueDe, sansMenuSecondaire, type CleRubriqueNav, type RubriqueNav } from "./rubriques.js";
 import { STYLES_ATELIER } from "./styles.js";
-import { VueAccueil } from "./vues/accueil.js";
 import { VueCalendrier } from "./vues/calendrier.js";
 import { VueCampagnes } from "./vues/campagnes.js";
 import { VueCarte } from "./vues/carte.js";
@@ -43,9 +42,9 @@ import { VueDiscussion } from "./vues/discussion.js";
 import { VueResultatsAtelier } from "./vues/resultats.js";
 import { VueRapport } from "./vues/rapport.js";
 import { OngletEchanges, useAccesDirection, useLiaisonsTache, VueRegistre } from "./vues/echanges.js";
-import { VueDepartements } from "./vues/departements.js";
-import { VueOrganigramme } from "./vues/organigramme.js";
-import { aPlusieursDepartements, useDepartements } from "./departements-sonde.js";
+import { VueEnsembleClient } from "./vues/ensemble.js";
+import { aPlusieursDepartements, slugDuService, useDepartements } from "./departements-sonde.js";
+import { useRedirectionBureau } from "./redirections.js";
 
 /** Racine commune : styles (dédupliqués par React), langue, portée `.atl`. */
 function Racine({ children, className }: { children: ReactNode; className?: string }) {
@@ -67,8 +66,6 @@ function Vue({ vue, id }: { vue: CleVue; id: string | null }) {
   switch (vue) {
     case "discussion":
       return <VueDiscussion />;
-    case "accueil":
-      return <VueAccueil />;
     case "equipe":
       return <VueEquipeAtelier agentId={id} />;
     case "campagnes":
@@ -98,9 +95,8 @@ function Vue({ vue, id }: { vue: CleVue; id: string | null }) {
     case "echanges":
       return <VueRegistre />;
     case "departements":
-      return <VueDepartements />;
     case "organigramme":
-      return <VueOrganigramme />;
+      return <VueEnsembleClient vueAdresse={vue} />;
   }
 }
 
@@ -148,19 +144,26 @@ function TitreOnglet({ companyId }: { companyId: string | null | undefined }) {
 export function PageAtelier({ context }: PluginPageProps) {
   const { pathname } = useHostLocation();
   const route = lireRoute(pathname);
-  const { rubrique, onglet } = rubriqueDe(route.vue, useAncre());
+  const ancre = useAncre();
+  const { rubrique, onglet } = rubriqueDe(route.vue, ancre);
   const base = `atl-rub-${rubrique.cle}`;
-  const rubriques = rubriquesVisibles(useAccesDirection(context.companyId));
-  const vue = context.companyId ? <Vue key={`${route.vue}:${route.id ?? ""}`} vue={route.vue} id={route.id} /> : <SansEntreprise />;
+  const departements = useDepartements(context.companyId);
+  const slugService = slugDuService(departements, context.companyId);
+  const rubriques = rubriquesVisibles({ estDirection: useAccesDirection(context.companyId), slugService });
+  // Chat, Réglages et vues d'ensemble : pas de rubriques de bureau (Prospects, Marketing, Registre).
+  const sansRubriques = sansMenuSecondaire(route.vue, ancre) || rubriques.length === 0;
+  // Vue ouverte dans le mauvais bureau (chat hors Direction, Prospects ou Marketing hors Marketing) : redirection.
+  const redirection = useRedirectionBureau(context.companyId, route.vue, route.id, departements);
+  const vue = !context.companyId ? <SansEntreprise /> : redirection ? <Chargement libelle="Ouverture du bureau concerné" lignes={2} /> : <Vue key={`${route.vue}:${route.id ?? ""}`} vue={route.vue} id={route.id} />;
   return (
     <Racine>
       <FournisseurDonnees>
         <TitreOnglet companyId={context.companyId} />
-        {/* Organigramme : toute la largeur de l'écran (le plan de 28 services en a besoin). */}
-        <main className={route.vue === "organigramme" ? "atl-page atl-page-large" : "atl-page"}>
+        {/* Vue d'ensemble (Départements et Organigramme) : toute la largeur de l'écran pour les deux vues, afin que la bascule ne change ni de largeur ni de place d'une vue à l'autre. */}
+        <main className={estVueEnsemble(route.vue) ? "atl-page atl-page-large" : "atl-page"}>
           {context.companyId ? <BandeauEntreprise /> : null}
-          {/* Vues de groupe (tous les services) : pas de rubriques d'un service, sur téléphone non plus. */}
-          {route.vue === "departements" || route.vue === "organigramme" ? null : <Rubriques courante={rubrique.cle} rubriques={rubriques} />}
+          {/* Chat, Réglages et vues de groupe : pas de rubriques d'un bureau, sur téléphone non plus. */}
+          {sansRubriques ? null : <Rubriques courante={rubrique.cle} rubriques={rubriques} />}
           {rubrique.onglets.length > 1 ? (
             <ListeOnglets
               etiquette={`${rubrique.libelle} : sections`}
@@ -182,18 +185,6 @@ export function PageAtelier({ context }: PluginPageProps) {
   );
 }
 
-/** Pastille du nombre d'éléments en attente (entrée du menu et rubrique « À faire »). */
-function PastilleAFaire({ companyId }: { companyId: string | null | undefined }) {
-  const n = useNombreAFaire(companyId);
-  if (!n) return null;
-  return (
-    <span className="atl-nav-compte" data-testid="pastille-afaire">
-      {n}
-      <span className="atl-sr"> à faire</span>
-    </span>
-  );
-}
-
 function CompteurContenus() {
   const r = useDonnees<VueContenusAValider>("atelier.contenus-a-valider");
   const n = r.data?.prets.length ?? 0;
@@ -209,10 +200,12 @@ function CompteurContenus() {
 export function NavigationAtelier({ context }: PluginRouteSidebarProps) {
   const { pathname } = useHostLocation();
   const route = lireRoute(pathname);
-  const { rubrique } = rubriqueDe(route.vue, useAncre());
-  const rubriques = rubriquesVisibles(useAccesDirection(context.companyId));
-  // Départements et Organigramme : pas de deuxième colonne (le menu principal les propose déjà).
-  if (estVueEnsemble(route.vue)) return null;
+  const ancre = useAncre();
+  const { rubrique } = rubriqueDe(route.vue, ancre);
+  const slugService = slugDuService(useDepartements(context.companyId), context.companyId);
+  const rubriques = rubriquesVisibles({ estDirection: useAccesDirection(context.companyId), slugService });
+  // Chat (pleine largeur), Réglages et vues d'ensemble : pas de deuxième colonne (le menu principal les propose).
+  if (sansMenuSecondaire(route.vue, ancre) || rubriques.length === 0) return null;
   return (
     <Racine>
       <FournisseurDonnees veille={false}>
@@ -221,7 +214,6 @@ export function NavigationAtelier({ context }: PluginRouteSidebarProps) {
             <LienHote key={r.cle} vers={cheminOnglet(r.onglets[0]!)} courant={rubrique.cle === r.cle} className="">
               <span>{r.libelle}</span>
               {r.cle === "marketing" && context.companyId ? <CompteurContenus /> : null}
-              {r.cle === "accueil" && context.companyId ? <PastilleAFaire companyId={context.companyId} /> : null}
             </LienHote>
           ))}
         </nav>
@@ -232,26 +224,19 @@ export function NavigationAtelier({ context }: PluginRouteSidebarProps) {
 
 export function EntreeAtelier({ context }: PluginSidebarProps) {
   const { pathname } = useHostLocation();
-  const actif = /\/atelier(\/|$)/u.test(pathname);
   const departements = useDepartements(context.companyId);
   const vueCourante = lireRoute(pathname).vue;
-  const surDepartements = vueCourante === "departements";
-  const surOrganigramme = vueCourante === "organigramme";
+  const actif = /\/atelier(\/|$)/u.test(pathname);
+  const surEnsemble = vueCourante === "departements" || vueCourante === "organigramme";
+  const ancre = useAncre();
+  const surReglages = actif && rubriqueDe(vueCourante, ancre).rubrique.cle === "reglages";
   return (
     <Racine>
-      <LienHote vers={chemin("accueil")} className="atl-entree" courant={actif && !surDepartements && !surOrganigramme}>
-        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-          <path d="M2.5 13.5V6l5.5-3.5L13.5 6v7.5" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" />
-          <path d="M6 13.5v-4h4v4" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" />
-        </svg>
-        Atelier
-        {context.companyId ? <PastilleAFaire companyId={context.companyId} /> : null}
-      </LienHote>
-      {/* Client à plusieurs services : la vue d'ensemble des départements, accessible depuis le menu principal. */}
+      {/* Client à plusieurs services : la vue d'ensemble (grille des départements ou organigramme), depuis le menu principal. */}
       {aPlusieursDepartements(departements) ? (
-        <LienHote vers={chemin("departements")} className="atl-entree" courant={surDepartements}>
+        <LienHote vers={chemin("departements")} className="atl-entree" courant={surEnsemble}>
           <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-            {/* Départements : une grille de quatre cartes (même trait que l'icône de l'atelier). */}
+            {/* Départements : une grille de quatre cartes (même trait que les autres icônes de l'atelier). */}
             <rect x="1.75" y="1.75" width="5.25" height="5.25" rx="0.75" stroke="currentColor" strokeWidth="1.4" />
             <rect x="9" y="1.75" width="5.25" height="5.25" rx="0.75" stroke="currentColor" strokeWidth="1.4" />
             <rect x="1.75" y="9" width="5.25" height="5.25" rx="0.75" stroke="currentColor" strokeWidth="1.4" />
@@ -260,19 +245,15 @@ export function EntreeAtelier({ context }: PluginSidebarProps) {
           Départements
         </LienHote>
       ) : null}
-      {aPlusieursDepartements(departements) ? (
-        <LienHote vers={chemin("organigramme")} className="atl-entree" courant={surOrganigramme}>
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-            {/* Organigramme : un service en tête relié à trois services (même trait que l'icône de l'atelier). */}
-            <rect x="6" y="1.75" width="4" height="3.25" rx="0.75" stroke="currentColor" strokeWidth="1.4" />
-            <path d="M8 5v2.5M3.25 10V7.5h9.5V10M8 7.5V10" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" />
-            <rect x="1.5" y="10" width="3.5" height="3.25" rx="0.75" stroke="currentColor" strokeWidth="1.4" />
-            <rect x="6.25" y="10" width="3.5" height="3.25" rx="0.75" stroke="currentColor" strokeWidth="1.4" />
-            <rect x="11" y="10" width="3.5" height="3.25" rx="0.75" stroke="currentColor" strokeWidth="1.4" />
-          </svg>
-          Organigramme
-        </LienHote>
-      ) : null}
+      <LienHote vers={chemin("mise-en-place")} className="atl-entree" courant={surReglages}>
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+          {/* Réglages : deux curseurs (même trait que les autres icônes de l'atelier). */}
+          <path d="M2 4.5h12M2 11.5h12" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+          <circle cx="10" cy="4.5" r="1.75" fill="var(--atl-fond, #fff)" stroke="currentColor" strokeWidth="1.4" />
+          <circle cx="6" cy="11.5" r="1.75" fill="var(--atl-fond, #fff)" stroke="currentColor" strokeWidth="1.4" />
+        </svg>
+        Réglages de l'atelier
+      </LienHote>
     </Racine>
   );
 }

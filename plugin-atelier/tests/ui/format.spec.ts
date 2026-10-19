@@ -117,9 +117,11 @@ describe("routes de la page", () => {
     expect(VUES.map((v) => v.cle)).toEqual(["discussion", "accueil", "prospects", "carte", ...RUBRIQUES.map((r) => r.cle), "connaissances", "mise-en-place", "parametres", "corbeille", "rapport"]);
   });
   it("lit la rubrique et l'identifiant depuis le chemin de l'hôte", () => {
-    expect(lireRoute("/RNO/atelier")).toEqual({ vue: "accueil", id: null });
+    expect(lireRoute("/RNO/atelier")).toEqual({ vue: "discussion", id: null });
+    // L'ancienne adresse « accueil » ouvre le chat.
+    expect(lireRoute("/RNO/atelier/accueil")).toEqual({ vue: "discussion", id: null });
     expect(lireRoute("/RNO/atelier/contenus/abc")).toEqual({ vue: "contenus", id: "abc" });
-    expect(lireRoute("/RNO/atelier/inconnue")).toEqual({ vue: "accueil", id: null });
+    expect(lireRoute("/RNO/atelier/inconnue")).toEqual({ vue: "discussion", id: null });
     expect(chemin("campagnes", "nouvelle")).toBe("/atelier/campagnes/nouvelle");
   });
 });

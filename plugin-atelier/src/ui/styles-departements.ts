@@ -13,11 +13,13 @@ export const STYLES_DEPARTEMENTS = `
 .atl-dep-case { cursor: pointer; }
 .atl-dep-nom { display: flex; flex-direction: column; gap: 0.25rem; min-width: 0; }
 .atl-dep-nom h2 { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.125rem 0.625rem; margin: 0; font-size: 1rem; font-weight: 600; line-height: 1.3; min-width: 0; overflow-wrap: anywhere; }
-.atl-dep-lien { color: inherit; text-decoration: none; }
+/* Le lien couvre toute la case (::after) et son propre cadre fait 44 px au moins, sans agrandir la ligne du titre (marge négative). */
+.atl-dep-lien { padding-block: 0.875rem; margin-block: -0.875rem; color: inherit; text-decoration: none; }
 .atl-dep-lien::after { content: ""; position: absolute; inset: 0; border-radius: inherit; }
 .atl-dep-case:hover .atl-dep-lien { text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: 3px; }
+/* Focus clavier : l'anneau entoure toute la case (même trait que le reste de l'atelier : 2 px, jeton --atl-anneau). */
 .atl-dep-lien:focus-visible { outline: none; }
-.atl-dep-lien:focus-visible::after { outline: 2px solid var(--atl-anneau); outline-offset: 2px; }
+.atl-dep-case:has(.atl-dep-lien:focus-visible) { outline: 2px solid var(--atl-anneau); outline-offset: 2px; }
 .atl-dep-ici { font-size: 0.75rem; font-weight: 400; color: var(--atl-attenue-fort); }
 .atl-dep-alertes { display: flex; flex-direction: column; gap: 0.125rem; margin: 0; padding: 0; list-style: none; font-size: 0.8125rem; color: var(--atl-attenue-fort); }
 .atl-dep-alertes li { position: relative; padding-left: 0.875rem; }

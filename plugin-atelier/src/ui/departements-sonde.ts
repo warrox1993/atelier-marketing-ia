@@ -64,3 +64,8 @@ export function nomClient(noms: ReadonlyArray<string>, marqueur: string | null):
   if (premier && prefixes.every((p) => p === premier)) return premier;
   return prefixes.find((p): p is string => Boolean(p)) ?? marqueur ?? "Client";
 }
+
+/** Slug du service de l'entreprise courante ; null si le client n'a pas de départements (ou si elle n'y figure pas). */
+export function slugDuService(r: ReponseDepartements | null, companyId: string | null | undefined): string | null {
+  return r?.departements.find((d) => d.companyId === companyId)?.slug ?? null;
+}

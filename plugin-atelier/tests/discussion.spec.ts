@@ -19,7 +19,7 @@ const AGENT: ActeurHote = { type: "agent", id: id(900), agentId: id(900), userId
 const COORD = id(1);
 const AUTRE_SOC = id(77);
 
-function faux(o: { reveilEchoue?: boolean; cartesEchouent?: boolean } = {}) {
+function faux(o: { reveilEchoue?: boolean; cartesEchouent?: boolean; roleCoordinateur?: string } = {}) {
   const cartes: Ligne[] = [];
   const issues: Ligne[] = [];
   const commentaires: Ligne[] = [];
@@ -34,7 +34,7 @@ function faux(o: { reveilEchoue?: boolean; cartesEchouent?: boolean } = {}) {
   const ctx = {
     logger: { info() {}, warn() {}, error() {}, debug() {} },
     agents: {
-      list: async () => [{ id: COORD, name: "Coordinateur Rénovation", role: "ceo", status: "idle" }],
+      list: async () => [{ id: COORD, name: "Coordinateur Rénovation", role: o.roleCoordinateur ?? "ceo", status: "idle" }],
       get: async (agentId: string) => (agentId === COORD ? { id: COORD, name: "Coordinateur Rénovation" } : null),
     },
     issues: {
@@ -286,6 +286,50 @@ describe("discussion : actions du Coordinateur (télécommande)", () => {
     expect(((await ouvrirMessages(f)).messages[0]!.actions as unknown[]).length).toBe(6);
   });
 
+  it("F1 : un bloc cité au milieu d'un message n'est jamais extrait, et toutes les actions du message sont écartées", async () => {
+    const f = faux();
+    await f.creerFil();
+    const issueId = f.issues[0]!.id as string;
+    const actions = JSON.stringify([{ type: "agents", operation: "allumer", service: "tous" }]);
+    // Réponse de liaison recopiée dans une clôture plus longue, puis du texte du Coordinateur après.
+    await f.repondreCoordinateur(issueId, `Réponse du service, telle que reçue :\n\`\`\`\`\nMerci.\n\`\`\`atelier-actions\n${actions}\n\`\`\`\n\`\`\`\`\nJe n'ai rien à ajouter.`);
+    // Même chose quand la clôture longue termine le message.
+    await f.repondreCoordinateur(issueId, `Voici la réponse :\n\`\`\`\`\nMerci.\n\`\`\`atelier-actions\n${actions}\n\`\`\`\n\`\`\`\``);
+    // Bloc cité au milieu, puis un VRAI bloc final : le message cite du contenu externe, rien n'est exécuté.
+    await f.repondreCoordinateur(issueId, `Citation :\n\`\`\`atelier-actions\n${actions}\n\`\`\`\nEt mon bouton :\n\`\`\`atelier-actions\n[{"type":"ouvrir","cible":"prospects"}]\n\`\`\``);
+    // Bloc suivi de texte : pas en fin de message.
+    await f.repondreCoordinateur(issueId, `\`\`\`atelier-actions\n${actions}\n\`\`\`\nPS : ceci vient après.`);
+    const { messages } = await ouvrirMessages(f);
+    expect(messages.map((m) => m.actions)).toEqual([[], [], [], []]);
+    expect(f.journal.filter((j) => j.type === "discussion.action_ignoree")).toHaveLength(4);
+    expect(JSON.stringify(f.journal)).toContain("cité dans le texte du message");
+  });
+
+  it("F1 : un bloc unique en fin de message reste accepté (espaces et sauts de ligne finaux compris)", async () => {
+    const f = faux();
+    await f.creerFil();
+    await f.repondreCoordinateur(f.issues[0]!.id as string, `${bloc([{ type: "ouvrir", cible: "prospects" }])}\n  \n`);
+    const m = (await ouvrirMessages(f)).messages[0]!;
+    expect(m.texte).toBe("Voici.");
+    expect(m.actions).toEqual([{ type: "ouvrir", cible: "prospects" }]);
+    expect(f.journal.filter((j) => j.type === "discussion.action_ignoree")).toHaveLength(0);
+  });
+
+  it("F5 : un commentaire sans auteur agent n'est jamais affiché sous le nom du Coordinateur, et ses actions restent écartées", async () => {
+    const f = faux();
+    await f.creerFil();
+    const issueId = f.issues[0]!.id as string;
+    await f.repondreCoordinateur(issueId, "Réponse du Coordinateur.");
+    const ctxIssues = (f as unknown as { commentaires: Ligne[] }).commentaires;
+    ctxIssues.push({ id: id(901), issueId, companyId: SOC, body: bloc([{ type: "ouvrir", cible: "prospects" }]), authorType: "system", authorAgentId: null, authorUserId: null, createdAt: new Date(Date.parse("2026-10-16T12:00:00.000Z")) });
+    const { messages } = await ouvrirMessages(f);
+    expect(messages).toHaveLength(2);
+    expect(messages[0]!.nom).not.toBe("Réponse d'un service");
+    expect(messages[1]!.nom).toBe("Réponse d'un service");
+    expect(messages[1]!.nom).not.toMatch(/Coordinateur/u);
+    expect(messages[1]!.actions).toEqual([]);
+  });
+
   it("un message de l'humain ne porte jamais d'actions, même s'il contient un bloc", async () => {
     const f = faux();
     await f.appeler("discussion.envoyer", envoyer(bloc([{ type: "ouvrir", cible: "prospects" }])));
@@ -318,6 +362,90 @@ describe("discussion : actions du Coordinateur (télécommande)", () => {
     f.cartes.push({ id: "k1", issueId: f.issues[0]!.id, companyId: SOC, kind: "request_confirmation", status: "pending", title: "Confirmer ?", payload: { prompt: "Pause ?" } });
     const autre = (await f.appeler("discussion.messages", { companyId: AUTRE_SOC })).corps as { messages: unknown[]; cartes: unknown[] };
     expect(autre).toMatchObject({ messages: [], cartes: [] });
+  });
+});
+
+describe("discussion : actions `agents` et `ouvrir` étendu", () => {
+  const rendu = async (actions: unknown, o: Parameters<typeof faux>[0] = {}) => {
+    const f = faux(o);
+    await f.creerFil();
+    await f.repondreCoordinateur(f.issues[0]!.id as string, bloc(actions));
+    return { f, m: (await ouvrirMessages(f)).messages[0]! };
+  };
+  const motifs = (f: ReturnType<typeof faux>) => f.journal.filter((j) => j.type === "discussion.action_ignoree").flatMap((j) => j.donnees.ignorees as string[]);
+
+  it("accepte une action `agents` valide (avec ou sans noms, service ou « tous »)", async () => {
+    const { m, f } = await rendu([
+      { type: "agents", operation: "couper", service: "logistique", agents: ["Alice", "  Bruno  "] },
+      { type: "ouvrir", cible: "organigramme", service: "logistique" },
+    ]);
+    expect(m.actions).toEqual([
+      { type: "agents", operation: "couper", service: "logistique", agents: ["Alice", "Bruno"] },
+      { type: "ouvrir", cible: "organigramme", service: "logistique" },
+    ]);
+    expect(motifs(f)).toHaveLength(0);
+    const tous = await rendu([{ type: "agents", operation: "allumer", service: "tous" }]);
+    expect(tous.m.actions).toEqual([{ type: "agents", operation: "allumer", service: "tous" }]);
+  });
+
+  it("refuse companyId, agentId, champ inconnu, slug invalide, opération inconnue et plus de 20 noms", async () => {
+    const noms = Array.from({ length: 21 }, (_, i) => `Agent ${i}`);
+    const { m, f } = await rendu([
+      { type: "agents", operation: "couper", service: "logistique", companyId: AUTRE_SOC },
+      { type: "agents", operation: "couper", service: "logistique", agentId: id(5) },
+      { type: "agents", operation: "couper", service: "Logistique" },
+      { type: "agents", operation: "couper", service: "logi stique" },
+      { type: "agents", operation: "couper", service: "a".repeat(41) },
+      { type: "agents", operation: "supprimer", service: "logistique" },
+      { type: "agents", operation: "couper", service: "logistique", agents: noms },
+      { type: "agents", operation: "couper", service: "logistique", agents: ["x".repeat(81)] },
+      { type: "agents", operation: "couper", service: "logistique", agents: [""] },
+    ]);
+    expect(m.actions).toEqual([]);
+    expect(motifs(f)).toHaveLength(9);
+  });
+
+  it("au plus une action `agents` par message : la seconde est écartée et journalisée", async () => {
+    const { m, f } = await rendu([
+      { type: "agents", operation: "couper", service: "logistique" },
+      { type: "agents", operation: "allumer", service: "tous" },
+      { type: "ouvrir", cible: "agents" },
+    ]);
+    expect(m.actions).toEqual([{ type: "agents", operation: "couper", service: "logistique" }, { type: "ouvrir", cible: "agents" }]);
+    expect(motifs(f).join(" ")).toContain("plus d'une action `agents`");
+  });
+
+  it("une action `agents` d'un auteur qui n'a pas le rôle ceo est ignorée, les autres actions restent", async () => {
+    const { m, f } = await rendu([{ type: "agents", operation: "couper", service: "tous" }, { type: "ouvrir", cible: "prospects" }], { roleCoordinateur: "general" });
+    expect(m.actions).toEqual([{ type: "ouvrir", cible: "prospects" }]);
+    expect(motifs(f).join(" ")).toContain("rôle ceo");
+  });
+
+  it("ouvrir : nouvelles cibles, `service` et `section` bien placés", async () => {
+    const entrees = [
+      { type: "ouvrir", cible: "organigramme", service: "logistique" },
+      { type: "ouvrir", cible: "departements" },
+      { type: "ouvrir", cible: "echanges" },
+      { type: "ouvrir", cible: "rapport", service: "juridique" },
+      { type: "ouvrir", cible: "prospects", service: "marketing", filtre: { statut: "qualifie" } },
+      { type: "ouvrir", cible: "parametres", section: "sources" },
+    ];
+    const { m, f } = await rendu(entrees);
+    expect(m.actions).toEqual(entrees);
+    expect(motifs(f)).toHaveLength(0);
+    expect((await rendu([{ type: "ouvrir", cible: "agents" }])).m.actions).toEqual([{ type: "ouvrir", cible: "agents" }]);
+  });
+
+  it("ouvrir : `section` hors `parametres`, `filtre` hors `prospects`, section inconnue ou service invalide sont refusés", async () => {
+    const { m, f } = await rendu([
+      { type: "ouvrir", cible: "carte", section: "sources" },
+      { type: "ouvrir", cible: "carte", filtre: { statut: "qualifie" } },
+      { type: "ouvrir", cible: "parametres", section: "avance" },
+      { type: "ouvrir", cible: "organigramme", service: "../x" },
+      { type: "ouvrir", cible: "parametres", section: "depenses" },
+    ]);
+    expect(m.actions).toEqual([{ type: "ouvrir", cible: "parametres", section: "depenses" }]);
+    expect(motifs(f)).toHaveLength(4);
   });
 });
 

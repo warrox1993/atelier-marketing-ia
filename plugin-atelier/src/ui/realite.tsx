@@ -3,7 +3,8 @@
  *
  * - `SectionPassageAuReel` : en tête de la vue Paramètres, un tableau (liste de cartes sur téléphone) :
  *   état, ce que le branchement débloque, qui doit agir, leads concernés, puis la synthèse par critère.
- * - `EncartPassageAuReel` : sur l'accueil, « Ce qui manque pour le réel : N branchements » et le lien vers la section.
+ * Le message du Coordinateur en tête du chat (`composants/chat-situation.tsx`) lit les mêmes états (`useRealite`) pour dire
+ * ce qui manque.
  *
  * Les états viennent de la route `realite.etat` (diagnostic des sources, import de la base clients, fiche du client,
  * configuration) ; les lignes Google et diffusion viennent du tableau des connecteurs existant
@@ -13,7 +14,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useHostContext } from "@paperclipai/plugin-sdk/ui";
 import { BRANCHEMENTS_INTERFACE, CleBranchement, RealiteEtat, type ActeurBranchement, type Branchement, type EtatBranchement } from "../contrats/realite.js";
 import type { EtatConnexion } from "../contrats/communs.js";
-import { Chargement, EtatErreur, LienHote, Pastille, Section } from "./composants.js";
+import { Chargement, EtatErreur, Pastille, Section } from "./composants.js";
 import { lireConnexionsNatives, lignesServices, SERVICES_PASSERELLE, type LigneService } from "./connexions-natives.js";
 import type { Ton } from "./format.js";
 import { chemin } from "./route.js";
@@ -109,9 +110,6 @@ export function useRealite(): [LectureRealite, () => void] {
   }, [charger]);
   return [etat, () => void charger()];
 }
-
-/** Branchements nommés dans l'encart de l'accueil ; le détail est dans Paramètres. */
-const NOMS_AFFICHES = 4;
 
 const pluriel = (n: number, un: string, plusieurs: string) => `${n} ${n === 1 ? un : plusieurs}`;
 
@@ -240,42 +238,6 @@ export function SectionPassageAuReel({ seule = false }: { seule?: boolean } = {}
           Actualiser les connexions
         </button>
       ) : null}
-    </Section>
-  );
-}
-
-/** Encart d'accueil : combien de branchements manquent, avec le lien vers la section. */
-export function EncartPassageAuReel() {
-  const [lecture] = useRealite();
-  if (lecture.etat === "chargement") return null;
-  const lien = (
-    <LienHote vers={LIEN_PASSAGE_AU_REEL} className="atl-bouton">
-      Voir les connexions
-    </LienHote>
-  );
-  if (lecture.etat === "erreur") {
-    return (
-      <Section titre="Connexions" id="accueil-reel">
-        <p className="atl-vide-texte">L'état des connexions n'a pas pu être lu.</p>
-        {lien}
-      </Section>
-    );
-  }
-  const manquants = branchementsManquants(lecture.branchements);
-  return (
-    <Section titre="Connexions" id="accueil-reel">
-      <div className="atl-encart" data-ton={manquants.length > 0 ? "attention" : undefined}>
-        <p className="atl-encart-titre">
-          {manquants.length > 0 ? `Connexions à établir : ${manquants.length}` : "Toutes les sources sont connectées."}
-        </p>
-        {manquants.length > 0 ? (
-          <p className="atl-vide-texte">
-            {manquants.slice(0, NOMS_AFFICHES).map((b) => b.nom).join(" ; ")}
-            {manquants.length > NOMS_AFFICHES ? ` ; et ${manquants.length - NOMS_AFFICHES} autres` : ""}.
-          </p>
-        ) : null}
-        {lien}
-      </div>
     </Section>
   );
 }

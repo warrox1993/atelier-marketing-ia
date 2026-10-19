@@ -41,13 +41,13 @@ export const VUE_ORGANIGRAMME = { cle: "organigramme", libelle: "Organigramme" }
 
 const CLES = new Set<string>([...VUES.map((v) => v.cle), VUE_DIRECTION.cle, VUE_DEPARTEMENTS.cle, VUE_ORGANIGRAMME.cle]);
 
-/** Lit la vue depuis le chemin de l'hôte ; vue par défaut : accueil (« À faire »). */
+/** Lit la vue depuis le chemin de l'hôte ; vue par défaut : la discussion (l'ancienne adresse « accueil » y mène aussi). */
 export function lireRoute(pathname: string): RouteAtelier {
   const segments = pathname.split("/").filter(Boolean).map((s) => decodeURIComponent(s));
   const i = segments.indexOf(ROUTE_ATELIER);
-  if (i < 0) return { vue: "accueil", id: null };
+  if (i < 0) return { vue: "discussion", id: null };
   const vue = segments[i + 1];
-  if (!vue || !CLES.has(vue)) return { vue: "accueil", id: null };
+  if (!vue || !CLES.has(vue) || vue === "accueil") return { vue: "discussion", id: null };
   return { vue: vue as CleVue, id: segments[i + 2] ?? null };
 }
 

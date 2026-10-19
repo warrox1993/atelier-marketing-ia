@@ -2,14 +2,14 @@
 /**
  * Décisions groupées : cases à cocher et « Autoriser / Refuser la sélection » sur les demandes
  * d'exclusion (Campagnes), « Approuver tout ce qui a passé le contrôle automatique » (Contenus et
- * Accueil). Vérifie la sélection, la confirmation unique avec récapitulatif, le filtre « contrôle
+ * bloc « À faire » du chat). Vérifie la sélection, la confirmation unique avec récapitulatif, le filtre « contrôle
  * réussi » et l'échec partiel (les autres continuent, bilan des échecs).
  */
 import { act, createElement, useState } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { EXEMPLES_DONNEES } from "../../src/contrats/exemples/index.js";
 import { PageAtelier } from "../../src/ui/index.js";
-import { VueAccueil } from "../../src/ui/vues/accueil.js";
+import { VueDiscussion } from "../../src/ui/vues/discussion.js";
 import { champParLibelle, cliquer, ENTREPRISE, installerPont, parTexte, rendre, saisir, type Pont, type Rendu } from "./pont.js";
 
 const contexte = { companyId: ENTREPRISE, companyPrefix: "RNO", projectId: null, entityId: null, entityType: null, userId: "local-board" };
@@ -140,19 +140,24 @@ describe("Contenus : approuver tout ce qui a passé le contrôle automatique", (
   });
 });
 
-describe("Accueil : approuver tout ce qui a passé le contrôle automatique", () => {
+describe("Chat : approuver tout ce qui a passé le contrôle automatique", () => {
   it("ne propose que les contenus dont le contrôle est réussi", async () => {
     const elem = (id: string, issueId: string, titre: string) => ({ id: `contenu:${id}`, type: "contenu_a_valider", urgence: "haute", titre, raison: "Attend votre décision.", lien: `/atelier/contenus/${issueId}`, action: "Relire et décider", issueId });
     vi.stubGlobal(
       "fetch",
-      vi.fn(async (url: string) => {
+      vi.fn(async (url: string, init?: { method?: string }) => {
         if (url.includes("/accueil?")) return new Response(JSON.stringify({ companyId: "c", elements: [elem("a", A, "Page Liège"), elem("c", C, "Page Seraing"), { id: "manque:marque", type: "information_manquante", urgence: "basse", titre: "Marque", raison: "x", lien: "/atelier/marque", action: "Décrire" }], missions: [] }), { status: 200 });
-        if (url.includes("/prospects?")) return new Response(JSON.stringify({ total: 0, page: 1, pages: 1, prospects: [] }), { status: 200 });
+        if (url.includes("/discussion/messages")) return new Response(JSON.stringify({ messages: [], cartes: [] }), { status: 200 });
+        if (url.includes("/dictee/etat")) return new Response(JSON.stringify({ disponible: true }), { status: 200 });
+        if ((init?.method ?? "GET") === "GET") return new Response(JSON.stringify({ issueId: "i1", identifiant: "DEM-1", messages: [], cartes: [] }), { status: 200 });
         return new Response(JSON.stringify({ status: "done" }), { status: 200 });
       }),
     );
     pont.actions["atelier.decision"] = async (p) => ({ id: "d", ...p });
-    rendu = await rendre(createElement(VueAccueil));
+    rendu = await rendre(createElement(VueDiscussion));
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 0));
+    });
     const c = rendu.conteneur;
     await cliquer(parTexte(c, "button", "Approuver tout ce qui a passé le contrôle automatique (1)"));
     const recap = c.querySelector('[aria-label="Confirmation de la décision groupée"]') as HTMLElement;
@@ -165,25 +170,30 @@ describe("Accueil : approuver tout ce qui a passé le contrôle automatique", ()
   });
 });
 
-describe("Accueil : le bilan de l'approbation groupée survit à la liste vide", () => {
+describe("Chat : le bilan de l'approbation groupée survit à la liste vide", () => {
   it("le rechargement de la liste échoue : le bilan reste jusqu'à « Fermer »", async () => {
     const elem = { id: "contenu:a", type: "contenu_a_valider", urgence: "haute", titre: "Page Liège", raison: "Attend votre décision.", lien: `/atelier/contenus/${A}`, action: "Relire et décider", issueId: A };
     let accueils = 0;
     vi.stubGlobal(
       "fetch",
-      vi.fn(async (url: string) => {
+      vi.fn(async (url: string, init?: { method?: string }) => {
         if (url.includes("/accueil?")) {
           accueils += 1;
           // Premier relevé : un contenu ; rechargement après le lot : le serveur répond en erreur.
           if (accueils > 1) return new Response(JSON.stringify({ error: "indisponible" }), { status: 500 });
           return new Response(JSON.stringify({ companyId: "c", elements: [elem], missions: [] }), { status: 200 });
         }
-        if (url.includes("/prospects?")) return new Response(JSON.stringify({ total: 0, page: 1, pages: 1, prospects: [] }), { status: 200 });
+        if (url.includes("/discussion/messages")) return new Response(JSON.stringify({ messages: [], cartes: [] }), { status: 200 });
+        if (url.includes("/dictee/etat")) return new Response(JSON.stringify({ disponible: true }), { status: 200 });
+        if ((init?.method ?? "GET") === "GET") return new Response(JSON.stringify({ issueId: "i1", identifiant: "DEM-1", messages: [], cartes: [] }), { status: 200 });
         return new Response(JSON.stringify({ status: "done" }), { status: 200 });
       }),
     );
     pont.actions["atelier.decision"] = async (p) => ({ id: "d", ...p });
-    rendu = await rendre(createElement(VueAccueil));
+    rendu = await rendre(createElement(VueDiscussion));
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 0));
+    });
     const c = rendu.conteneur;
     await cliquer(parTexte(c, "button", "Approuver tout ce qui a passé le contrôle automatique (1)"));
     const recap = c.querySelector('[aria-label="Confirmation de la décision groupée"]') as HTMLElement;

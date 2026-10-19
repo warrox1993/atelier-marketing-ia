@@ -156,3 +156,10 @@ export const DeclarerServicesEntree = z
   })
   .strict();
 export type DeclarerServicesEntree = z.infer<typeof DeclarerServicesEntree>;
+
+/**
+ * Corps de `services.confirmer` (humain seulement) : l'entreprise à confirmer comme membre du client sous lequel elle a
+ * été déclarée. `companyId` est celle de la requête : l'hôte en prouve l'accès de l'humain (revue du 19/10/2026, E1).
+ */
+export const ConfirmerServiceEntree = z.object({ companyId: IdNatif }).strict();
+export type ConfirmerServiceEntree = z.infer<typeof ConfirmerServiceEntree>;

@@ -440,7 +440,6 @@ details[open] > .atl-section-resume::after, details[open] > .atl-filtres-resume:
   /* Liens et entrées de menu qui se touchent du doigt : même cible de 44 px. */
   .atl-retour .atl-lien, .atl-table a.atl-lien { display: inline-flex; align-items: center; min-height: 2.75rem; }
   .atl-nav a, .atl-onglets-rub [role="tab"] { min-height: 2.75rem; }
-  .atl-mission-titre { display: inline-flex; align-items: center; min-height: 2.75rem; }
   .atl input:not([type="radio"]):not([type="checkbox"]):not([type="file"]), .atl textarea, .atl select { min-height: 2.75rem; font-size: 1rem; }
   .atl input[type="radio"], .atl input[type="checkbox"] { width: 1.375rem; height: 1.375rem; }
   .atl label:has(> input[type="radio"]), .atl label:has(> input[type="checkbox"]) { display: inline-flex; align-items: center; min-height: 2.75rem; }

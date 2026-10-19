@@ -8,6 +8,7 @@ import { act, createElement } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Branchement, RealiteEtat } from "../../src/contrats/index.js";
 import { PageAtelier } from "../../src/ui/index.js";
+import { VueDiscussion } from "../../src/ui/vues/discussion.js";
 import { fusionnerBranchements, branchementsManquants, LIEN_PASSAGE_AU_REEL } from "../../src/ui/realite.js";
 import { lignesServices, analyserConnexion, type ConnexionNative } from "../../src/ui/connexions-natives.js";
 import { cliquer, ENTREPRISE, installerPont, parTexte, rendre, type Pont, type Rendu } from "./pont.js";
@@ -56,7 +57,7 @@ function stubReseau(opts: { realite?: Reponse; connexions?: Reponse } = {}) {
   vi.stubGlobal(
     "fetch",
     vi.fn(async (url: string) => {
-      const r: Reponse = url.includes("/realite?") ? opts.realite ?? { corps: REALITE } : url.endsWith("/tools/connections") ? opts.connexions ?? { corps: { connections: CONNEXIONS_GOOGLE } } : url.includes("/accueil?") ? { corps: { companyId: ENTREPRISE, elements: [], missions: [] } } : url.includes("/prospects?") ? { corps: { total: 0, page: 1, pages: 1, prospects: [] } } : { corps: {} };
+      const r: Reponse = url.includes("/realite?") ? opts.realite ?? { corps: REALITE } : url.endsWith("/tools/connections") ? opts.connexions ?? { corps: { connections: CONNEXIONS_GOOGLE } } : url.includes("/accueil?") ? { corps: { companyId: ENTREPRISE, elements: [], missions: [] } } : url.includes("/prospects?") ? { corps: { total: 0, page: 1, pages: 1, prospects: [] } } : url.includes("/discussion") ? { corps: { issueId: "i1", identifiant: "DEM-1", messages: [], cartes: [] } } : { corps: {} };
       return new Response(JSON.stringify(r.corps), { status: r.statut ?? 200 });
     }),
   );
@@ -80,6 +81,15 @@ afterEach(() => {
 async function ouvrir(chemin: string) {
   pont = installerPont(chemin);
   rendu = await rendre(createElement(PageAtelier, { context: contexte }));
+  await act(async () => {
+    await new Promise((r) => setTimeout(r, 0));
+  });
+  return rendu.conteneur;
+}
+/** Le message « connexions manquantes » est rendu par le chat seul (il remplace l'encart de l'ancienne page Accueil). */
+async function ouvrirChat() {
+  pont = installerPont("/RNO/atelier/discussion");
+  rendu = await rendre(createElement(VueDiscussion));
   await act(async () => {
     await new Promise((r) => setTimeout(r, 0));
   });
@@ -207,35 +217,38 @@ describe("Paramètres : rendu mobile", () => {
   });
 });
 
-describe("Accueil : encart « Connexions »", () => {
+describe("Chat : message du Coordinateur sur les connexions manquantes", () => {
+  const message = (c: HTMLElement) => c.querySelector<HTMLElement>('[data-testid="situation-connexions"]');
+
   it("annonce le nombre de branchements qui manquent et nomme les premiers", async () => {
-    const c = await ouvrir("/RNO/atelier/accueil");
-    const encart = c.querySelector("section[aria-labelledby=accueil-reel]")!;
-    expect(encart.textContent).toContain("Connexions à établir : 10");
-    expect(encart.textContent).toContain("Registre BCE ; Banque nationale ; OpenStreetMap ; Base clients ; et 6 autres.");
+    const c = await ouvrirChat();
+    expect(message(c)!.querySelector("p")!.textContent).toBe(
+      "Avant de commencer : il me manque 10 connexions pour travailler sur vos vraies données (Registre BCE, Banque nationale et OpenStreetMap et 7 autres). Tant qu'elles ne sont pas faites, je travaille en démonstration.".replace("Banque nationale et OpenStreetMap", "Banque nationale, OpenStreetMap"),
+    );
   });
 
   it("le lien mène à la section de Paramètres", async () => {
-    const c = await ouvrir("/RNO/atelier/accueil");
-    const lien = parTexte(c.querySelector("section[aria-labelledby=accueil-reel]")!, "a", "Voir les connexions");
+    const c = await ouvrirChat();
+    const lien = parTexte(message(c)!, "a", "Ouvrir les connexions");
     expect(lien.getAttribute("href")).toBe(`/RNO${LIEN_PASSAGE_AU_REEL}`);
     await cliquer(lien);
     expect(pont.navigations).toContain("/atelier/parametres#param-reel");
     expect(LIEN_PASSAGE_AU_REEL).toBe("/atelier/parametres#param-reel");
   });
 
-  it("tout en réel : le dit, sans compter de manque", async () => {
+  it("tout en réel : seules restent les deux lignes lues par l'interface (google, diffusion), comptées elles aussi", async () => {
     stubReseau({ realite: { corps: { ...REALITE, branchements: REALITE.branchements.map((b) => ({ ...b, etat: "reel" })) } }, connexions: { corps: { connections: [] } } });
-    const c = await ouvrir("/RNO/atelier/accueil");
-    // Les deux lignes de l'interface (sans connexion) manquent encore : l'encart compte AUSSI ce que seule l'interface lit.
-    expect(c.querySelector("section[aria-labelledby=accueil-reel]")?.textContent).toContain("Connexions à établir : 2");
+    const c = await ouvrirChat();
+    expect(message(c)!.querySelector("p")!.textContent).toMatch(/^Avant de commencer : il me manque 2 connexions pour travailler sur vos vraies données \(/u);
   });
 
-  it("route illisible : une phrase et le lien, sans casser l'accueil", async () => {
+  it("route illisible : pas de message (la section Paramètres porte l'erreur), le chat reste utilisable", async () => {
     stubReseau({ realite: { statut: 500, corps: {} } });
-    const c = await ouvrir("/RNO/atelier/accueil");
-    expect(c.querySelector("section[aria-labelledby=accueil-reel]")?.textContent).toContain("n'a pas pu être lu");
-    expect(c.textContent).toContain("Demander à l'équipe");
+    const c = await ouvrirChat();
+    expect(message(c)).toBeNull();
+    expect(c.querySelector('[data-testid="chat-situation"]')).toBeNull();
+    expect(c.querySelector('textarea[aria-label="Votre message au Coordinateur"]')).toBeTruthy();
+    expect(c.querySelector('[role="group"][aria-label="Pour commencer"]')).toBeTruthy();
   });
 });
 

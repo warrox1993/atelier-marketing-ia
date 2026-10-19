@@ -76,6 +76,7 @@ import {
 import { autoriserMessage, chercherClesInterdites } from "./regles-messages.js";
 import { routesAccueil } from "./services-accueil.js";
 import { routesDepartements } from "./services-departements.js";
+import { routesSynthese } from "./services-synthese.js";
 import { creerRedispatch } from "./redispatch.js";
 import { routesCarte, PLAFOND_QUALIFIES } from "./services-carte.js";
 import { entreesCouverturePorte, routesCouverture } from "./services-couverture.js";
@@ -2674,6 +2675,8 @@ export function creerServices(ctx: PluginContext, options: { transportReel?: Tra
     ctx, stock: stockLiaisons,
     aFaire: async (r) => ((await routes["accueil.lister"]!(r)).corps as { elements?: Array<{ type: string; urgence: string }> }).elements ?? [],
   }));
+  // Synthèse du client en agrégats pour le Coordinateur général (Direction seulement, SQL cloisonné sur les services du client).
+  Object.assign(routes, routesSynthese({ ctx, stock: stockLiaisons }));
   Object.assign(routes, routesDictee({ ctx, base, fetchLocal: options.fetchBoucleLocale }));
   Object.assign(routes, routesVoix({ ctx, base }));
   // Réglages des leads, poids du score et décisions humaines sur un critère (humain seulement).

@@ -55,6 +55,11 @@
       "source": "^[ \\t]*(?:assistant|system)[ \\t]*:",
       "drapeaux": "imu",
       "libelle": "faux tour de dialogue"
+    },
+    {
+      "source": "atelier[-\\u2010\\u2011]actions",
+      "drapeaux": "iu",
+      "libelle": "bloc d'actions du Coordinateur cité"
     }
   ]
 }

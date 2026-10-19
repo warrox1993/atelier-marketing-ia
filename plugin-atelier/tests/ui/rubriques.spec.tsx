@@ -1,12 +1,12 @@
 // @vitest-environment jsdom
 /**
- * Navigation en cinq rubriques : onglets de chaque rubrique, anciennes adresses, ancres des Paramètres,
- * clavier des onglets, pastille de l'Accueil.
+ * Navigation : rubriques du bureau (Prospects, Marketing), onglets des Réglages, anciennes adresses, ancres des
+ * Paramètres, clavier des onglets.
  */
 import { act, createElement } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { NavigationAtelier, PageAtelier } from "../../src/ui/index.js";
-import { cheminOnglet, RUBRIQUES_NAV, rubriqueDe } from "../../src/ui/rubriques.js";
+import { PageAtelier } from "../../src/ui/index.js";
+import { cheminOnglet, RUBRIQUES_NAV, RUBRIQUE_REGLAGES, rubriqueDe } from "../../src/ui/rubriques.js";
 import { STYLES_ATELIER } from "../../src/ui/styles.js";
 import { VUES } from "../../src/ui/route.js";
 import { cliquer, ENTREPRISE, installerPont, rendre, type Pont, type Rendu } from "./pont.js";
@@ -17,7 +17,7 @@ let rendu: Rendu | null = null;
 
 beforeEach(() => {
   window.location.hash = "";
-  vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ points: [], etablissements: [], prospects: [], total: 0, page: 1, pages: 1 }), { status: 200 })));
+  vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ points: [], etablissements: [], prospects: [], messages: [], total: 0, page: 1, pages: 1 }), { status: 200 })));
 });
 afterEach(() => {
   expect(pont?.violations ?? []).toEqual([]);
@@ -46,7 +46,11 @@ describe("rubriques : table de correspondance", () => {
       expect(onglet.vue, v.cle).toBe(v.cle);
       expect(rubrique.onglets).toContain(onglet);
     }
-    expect(RUBRIQUES_NAV.map((r) => r.libelle)).toEqual(["Accueil", "Discussion", "Prospects", "Marketing", "Réglages"]);
+    // Le menu secondaire ne garde que Prospects et Marketing ; Accueil, Discussion et Réglages restent reconnus par l'adresse.
+    expect(RUBRIQUES_NAV.map((r) => r.libelle)).toEqual(["Prospects", "Marketing"]);
+    expect(rubriqueDe("accueil").rubrique.cle).toBe("accueil");
+    expect(rubriqueDe("discussion").rubrique.cle).toBe("discussion");
+    expect(rubriqueDe("corbeille").rubrique).toBe(RUBRIQUE_REGLAGES);
   });
   it("Connexions et Paramètres partagent la vue et se distinguent par l'ancre", () => {
     expect(rubriqueDe("parametres", "param-reel").onglet.libelle).toBe("Connexions");
@@ -71,8 +75,13 @@ describe("rubriques : onglets et vues", () => {
       expect(panneau.querySelector("h1")).not.toBeNull();
     });
   }
-  it("Accueil et Discussion n'ont pas d'onglets", async () => {
-    expect((await ouvrir("/RNO/atelier/accueil")).querySelector('[role="tablist"]')).toBeNull();
+  it("Discussion n'a pas d'onglets, et l'adresse « accueil » ouvre le chat sans page blanche", async () => {
+    expect((await ouvrir("/RNO/atelier/discussion")).querySelector('[role="tablist"]')).toBeNull();
+    rendu?.demonter();
+    const c = await ouvrir("/RNO/atelier/accueil");
+    expect(c.querySelector('[role="tablist"]')).toBeNull();
+    expect(c.textContent).not.toBe("");
+    expect(c.querySelector(".atl-disc, [class*='atl-disc']")).not.toBeNull();
   });
   it("un clic sur un onglet passe par la navigation de l'hôte, vers l'adresse de sa vue", async () => {
     const c = await ouvrir("/RNO/atelier/campagnes");
@@ -102,7 +111,9 @@ describe("rubriques : anciennes adresses", () => {
   for (const [chemin, hash, rubrique, onglet] of adresses) {
     it(`${chemin}${hash} ouvre ${rubrique} sur « ${onglet} »`, async () => {
       const c = await ouvrir(chemin, hash);
-      expect(c.querySelector('nav.atl-onglets a[aria-current="page"]')?.textContent).toBe(rubrique);
+      // Réglages n'a plus de rubrique dans la barre des rubriques (menu principal) : seuls ses onglets l'identifient.
+      if (rubrique !== "Réglages") expect(c.querySelector('nav.atl-onglets a[aria-current="page"]')?.textContent).toBe(rubrique);
+      else expect(c.querySelector("nav.atl-onglets")).toBeNull();
       expect(choisi(c, `${rubrique} : sections`)).toBe(onglet);
     });
   }
@@ -205,19 +216,5 @@ describe("onglets accessibles", () => {
     expect(STYLES_ATELIER).toMatch(/\.atl-onglets-rub \[role="tab"\] \{[^}]*min-height: 2\.75rem/u);
     expect(STYLES_ATELIER).toMatch(/\.atl-onglets-rub \[role="tablist"\] \{[^}]*overflow-x: auto/u);
     expect(STYLES_ATELIER).toMatch(/\.atl-onglets a \{[^}]*min-height: 2\.75rem/u);
-  });
-});
-
-describe("Accueil : pastille intacte", () => {
-  it("la barre latérale garde la pastille « à faire » sur Accueil", async () => {
-    pont = installerPont("/RNO/atelier/accueil");
-    rendu = await rendre(createElement(NavigationAtelier, { context: contexte }));
-    await act(async () => {
-      await new Promise((r) => setTimeout(r, 0));
-    });
-    const lien = rendu.conteneur.querySelector('a[aria-current="page"]')!;
-    expect(lien.querySelector("span")?.textContent).toBe("Accueil");
-    // La pastille est celle du lot A : même composant, même repère de test.
-    expect(rendu.conteneur.querySelectorAll('[data-testid="pastille-afaire"]').length).toBeLessThanOrEqual(1);
   });
 });

@@ -52,6 +52,7 @@ beforeEach(() => {
   );
 });
 afterEach(() => {
+  window.location.hash = ""; // un clic sur une case « organigramme » change l'ancre : ne pas la laisser au test suivant
   rendu?.demonter();
   rendu = null;
   vi.unstubAllGlobals();
@@ -85,17 +86,40 @@ describe("navigation et vues d'ensemble", () => {
 
   it("la deuxième colonne ne propose ni « Départements » ni « Organigramme », même à plusieurs services", async () => {
     serveur = servir(TROIS);
-    const textes = liens(await navigation());
+    const textes = liens(await navigation("/RNO/atelier/campagnes"));
     expect(textes).not.toContain("Départements");
     expect(textes).not.toContain("Organigramme");
-    expect(textes.map((t) => t?.replace(/\d+ à valider$/u, ""))).toEqual(["Accueil", "Discussion", "Prospects", "Marketing", "Réglages"]);
+    // Le service courant est « marketing » : Prospects et Marketing seulement (plus d'Accueil, de Discussion ni de Réglages).
+    expect(textes.map((t) => t?.replace(/\d+ à valider$/u, ""))).toEqual(["Prospects", "Marketing"]);
+  });
+
+  it("un service qui n'est pas le marketing n'a ni Prospects ni Marketing ; sans départements (un seul bureau), le comportement reste", async () => {
+    const juridique = [declare(DIR, "direction", "Direction", { estDirection: true }), declare(JUR, "juridique", "Juridique"), declare(ENTREPRISE, "juridique", "Juridique bis", { courant: true })];
+    serveur = servir(juridique);
+    expect(liens(await navigation("/RNO/atelier/campagnes"))).toEqual([]);
+    rendu?.demonter();
+    oublierDepartements();
+    serveur = () => ({ statut: 404, corps: {} });
+    expect(liens(await navigation("/RNO/atelier/campagnes")).map((t) => t?.replace(/\d+ à valider$/u, ""))).toEqual(["Prospects", "Marketing"]);
+  });
+
+  it("le chat et les Réglages n'ont pas de deuxième colonne ; l'adresse « accueil » ouvre le chat", async () => {
+    serveur = servir(TROIS);
+    for (const vue of ["discussion", "accueil", "mise-en-place", "parametres", "corbeille"]) {
+      const c = await navigation(`/RNO/atelier/${vue}`);
+      expect(c.querySelector("nav.atl-nav"), vue).toBeNull();
+      rendu?.demonter();
+      rendu = null;
+    }
   });
 
   it("la rubrique de l'échange entre services s'appelle « Registre des échanges », pas « Direction »", () => {
-    const libelles = rubriquesVisibles(true).map((r) => r.libelle);
-    expect(libelles).toContain("Registre des échanges");
-    expect(libelles).not.toContain("Direction");
-    expect(rubriquesVisibles(false).map((r) => r.libelle)).not.toContain("Registre des échanges");
+    const libelles = rubriquesVisibles({ estDirection: true, slugService: "direction" }).map((r) => r.libelle);
+    expect(libelles).toEqual(["Registre des échanges"]);
+    expect(rubriquesVisibles({ estDirection: false, slugService: "direction" })).toEqual([]);
+    expect(rubriquesVisibles({ estDirection: false, slugService: null }).map((r) => r.libelle)).toEqual(["Prospects", "Marketing"]);
+    expect(rubriquesVisibles({ estDirection: false, slugService: "marketing" }).map((r) => r.libelle)).toEqual(["Prospects", "Marketing"]);
+    expect(rubriquesVisibles({ estDirection: false, slugService: "juridique" })).toEqual([]);
   });
 
   it("sur Départements et Organigramme, la deuxième colonne ne rend rien", async () => {
@@ -127,7 +151,7 @@ describe("vue « Départements »", () => {
     const { c, pont } = await ouvrir();
     const cases = Array.from(c.querySelectorAll<HTMLElement>(".atl-dep-case"));
     expect(cases.map((x) => x.querySelector(".atl-dep-lien")?.textContent)).toEqual(["Direction", "Juridique", "Marketing"]);
-    expect(c.querySelector(".atl-entete")?.textContent).toContain("Fictive SA");
+    expect(c.querySelector(".atl-entete-description")?.textContent).toContain("Fictive SA");
     const dir = cases[0]!;
     expect(dir.textContent).toContain("À valider");
     // Plus d'en-tête de tableau : chaque case porte ses propres libellés (À valider, En cours, Bloquées).
@@ -143,8 +167,18 @@ describe("vue « Départements »", () => {
     const lus = appels.filter((u) => u.includes("/departements/etat")).map((u) => decodeURIComponent(u.split("companyId=")[1]!)).sort();
     expect(lus).toEqual([DIR, JUR, ENTREPRISE].sort());
     expect(appels.some((u) => u.includes(AUTRE))).toBe(false);
+    // Marketing ouvre son bureau, Direction son chat, les autres services leur vue dans l'organigramme.
+    await cliquer(parTexte(c, ".atl-dep-lien", "Marketing"));
+    await cliquer(parTexte(c, ".atl-dep-lien", "Direction"));
+    expect(pont.navigations).toEqual(["/RNO/atelier/prospects", "/RNOAB/atelier/discussion"]);
+    pont.navigations.length = 0;
+    expect(parTexte(c, ".atl-dep-lien", "Juridique").getAttribute("href")).toBe("#service=juridique");
     await cliquer(parTexte(c, ".atl-dep-lien", "Juridique"));
-    expect(pont.navigations).toContain("/RNOAC/atelier");
+    await new Promise((r) => setTimeout(r, 20)); // la navigation vers une ancre est asynchrone dans jsdom
+    await laisser();
+    expect(window.location.hash).toBe("#service=juridique");
+    expect(c.querySelector(".atl-org")).not.toBeNull();
+    expect(pont.navigations).toEqual([]);
     expect(c.textContent).not.toContain("—");
   });
 
@@ -185,7 +219,8 @@ describe("vue « Départements »", () => {
 
   it("fil « Client › Département » sans lien « Tous les départements » (le menu principal suffit)", async () => {
     serveur = servir(TROIS);
-    const { c, pont } = await ouvrir("/RNO/atelier/accueil");
+    // Page du bureau Marketing : l'adresse « accueil » (le chat) mène désormais au chat de la Direction.
+    const { c, pont } = await ouvrir("/RNO/atelier/prospects");
     const fil = c.querySelector<HTMLElement>('nav[aria-label="Fil d\'Ariane"]');
     expect(fil).not.toBeNull();
     expect(Array.from(fil!.querySelectorAll("li")).map((l) => l.textContent)).toEqual(["Fictive SA", "Marketing"]);

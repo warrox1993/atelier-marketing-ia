@@ -2,19 +2,24 @@
  * Télécommande de la Discussion : boutons d'actions sous un message du Coordinateur et cartes de
  * questions en attente dans le fil.
  *
- * - `ouvrir` : lien vers une rubrique de l'atelier (liste fermée, libellé fixe, jamais d'URL libre) ;
+ * - `ouvrir` : lien vers une rubrique de l'atelier (liste fermée, libellé fixe, jamais d'URL libre) ; `service` ancre
+ *   l'organigramme (`#service=`) ou mène à l'écran dans l'entreprise de ce service ; `section` ancre Paramètres
+ *   (`#param-`) ; la cible `agents` ouvre le tiroir « Agents en service » (événement de fenêtre) ;
+ * - `agents` : carte d'allumage ou de coupure d'agents (`discussion-agents.tsx`), rien ne part sans le clic de l'humain ;
  * - `traiter` : déplie EN PLACE le panneau de `accueil-sur-place.tsx` (aucune logique dupliquée) pour
  *   l'élément « À faire » visé. L'élément est cherché dans l'Accueil de l'entreprise courante : un
  *   identifiant inconnu ou d'une autre entreprise n'y figure pas, et le bouton est alors ignoré.
  * Une action de type ou de cible inconnus est ignorée (avertissement console), jamais une erreur visible.
  */
-import { useEffect, useState, type ReactElement } from "react";
+import { useEffect, useMemo, useState, type ReactElement } from "react";
 import { parametresDepuisFiltre } from "../contrats/filtre-prospects.js";
 import type { ActionDiscussion } from "../serveur/discussion-actions.js";
 import type { ElementAccueil } from "../serveur/services-accueil.js";
-import type { DepartementDeclare } from "../contrats/departements.js";
+import { SERVICES_SENSIBLES, type DepartementDeclare } from "../contrats/departements.js";
 import { SurPlace, natifSeulement, traitableSurPlace } from "./accueil-sur-place.js";
 import { LienHote, MessageFait } from "./composants.js";
+import { EVENEMENT_OUVRIR_AGENTS } from "./composants/agents-en-service.js";
+import { CarteAgents } from "./discussion-agents.js";
 import { MINIMUM_DEPARTEMENTS } from "./departements-sonde.js";
 import { appelRoute } from "./routes-prospection.js";
 import { chemin, type CleVue } from "./route.js";
@@ -34,6 +39,11 @@ export const LIBELLES_CIBLES: Readonly<Record<string, string>> = {
   "mise-en-place": "Voir la mise en place",
   parametres: "Voir les paramètres",
   corbeille: "Voir la corbeille",
+  organigramme: "Voir l'organigramme",
+  departements: "Voir les départements",
+  echanges: "Voir le registre des échanges",
+  rapport: "Voir le rapport du mois",
+  agents: "Voir les agents en service",
 };
 
 /** Libellé du bouton « traiter », tiré de l'élément visé (le Coordinateur ne fournit aucun libellé libre). */
@@ -48,17 +58,31 @@ export function libelleTraiter(e: ElementAccueil): string {
   return "Voir pourquoi c'est bloqué";
 }
 
-export const cleAction = (a: ActionDiscussion): string => (a.type === "ouvrir" ? `ouvrir:${a.cible}${a.filtre ? `:${JSON.stringify(a.filtre)}` : ""}` : `traiter:${a.element}`);
+export const cleAction = (a: ActionDiscussion): string => {
+  if (a.type === "agents") return `agents:${a.operation}:${a.service}:${(a.agents ?? []).join(",")}`;
+  if (a.type === "traiter") return `traiter:${a.element}`;
+  return `ouvrir:${a.cible}${a.filtre ? `:${JSON.stringify(a.filtre)}` : ""}${a.service ? `:s=${a.service}` : ""}${a.section ? `:p=${a.section}` : ""}`;
+};
+
+/** Action `ouvrir` qui doit se résoudre dans l'entreprise d'un autre service (prefixe nécessaire). */
+export const viseUnAutreService = (a: Extract<ActionDiscussion, { type: "ouvrir" }>): boolean => a.service !== undefined && a.cible !== "organigramme" && a.cible !== "agents";
 
 /**
  * Adresse d'une action `ouvrir`. Le filtre (facultatif) n'a de sens que pour les prospects : correspondance
- * explicite vers les paramètres d'adresse lus par la liste, champ inconnu ou invalide ignoré.
+ * explicite vers les paramètres d'adresse lus par la liste, champ inconnu ou invalide ignoré. `service` : organigramme
+ * = ancre `#service=<slug>` ; autre cible = même écran préfixé par l'entreprise du service (`prefixeService`, issu de
+ * l'hôte). `section` : ancre `#param-<section>`, avec `parametres` seulement.
  */
-export function cheminOuvrir(a: Extract<ActionDiscussion, { type: "ouvrir" }>): string {
-  const base = chemin(a.cible as CleVue);
-  if (a.cible !== "prospects") return base;
-  const q = parametresDepuisFiltre(a.filtre).toString();
-  return q ? `${base}?${q}` : base;
+export function cheminOuvrir(a: Extract<ActionDiscussion, { type: "ouvrir" }>, prefixeService?: string): string {
+  let base = chemin(a.cible as CleVue);
+  if (a.cible === "prospects") {
+    const q = parametresDepuisFiltre(a.filtre).toString();
+    if (q) base = `${base}?${q}`;
+  }
+  if (a.service && viseUnAutreService(a) && prefixeService) base = `/${prefixeService}${base}`;
+  if (a.cible === "organigramme" && a.service) return `${base}#service=${encodeURIComponent(a.service)}`;
+  if (a.cible === "parametres" && a.section) return `${base}#param-${a.section}`;
+  return base;
 }
 
 /** Identifiants d'éléments visés par des actions `traiter` (ordre stable, sans doublon). */
@@ -229,11 +253,37 @@ export interface PropsActions {
   onFait(cle: string, message: string): void;
   /** Service d'origine des éléments (client à plusieurs services) : affiché devant le bouton, décision prise là. */
   origines?: ReadonlyMap<string, OrigineElement>;
+  /** Services déclarés du client : résolvent le `service` des actions `ouvrir` et `agents`. */
+  services?: readonly DepartementDeclare[] | null;
+  /** Préfixe d'entreprise de chaque service (companyId vers préfixe), lu seulement si une action le demande. */
+  prefixes?: ReadonlyMap<string, string>;
+  /** Faux pour un message du Coordinateur qui n'est pas le dernier : ses cartes d'agents restent inertes. */
+  actionnable?: boolean;
+}
+
+/**
+ * Préfixes d'entreprise des services, lus (GET `/companies`) seulement quand un message porte une action `ouvrir` visant
+ * un autre service. Une lecture ratée laisse la table vide : les boutons concernés ne s'affichent pas.
+ */
+export function usePrefixesServices(services: readonly DepartementDeclare[] | null | undefined, messages: ReadonlyArray<{ actions?: ActionDiscussion[] }>): ReadonlyMap<string, string> {
+  const besoin = (services?.length ?? 0) > 0 && messages.some((m) => (m.actions ?? []).some((a) => a.type === "ouvrir" && viseUnAutreService(a)));
+  const [prefixes, setPrefixes] = useState<ReadonlyMap<string, string>>(new Map());
+  useEffect(() => {
+    if (!besoin) return;
+    let annule = false;
+    lireEntreprises()
+      .then((l) => !annule && setPrefixes(new Map(l.map((e) => [e.id, e.issuePrefix]))))
+      .catch(() => !annule && setPrefixes(new Map()));
+    return () => {
+      annule = true;
+    };
+  }, [besoin]);
+  return useMemo(() => prefixes, [prefixes]);
 }
 
 /** Étiquette du service d'origine d'un élément. */
 /** Services dont la décision engage la responsabilité de l'entreprise : leur étiquette prend la couleur d'attention. */
-export const SERVICES_SENSIBLES: ReadonlySet<string> = new Set(["juridique", "ressources-humaines", "juridique-social", "fiscalite", "hse", "conformite", "sav-sinistres"]);
+export { SERVICES_SENSIBLES };
 
 export function EtiquetteService({ nom, slug }: { nom: string; slug?: string }) {
   return (
@@ -243,9 +293,9 @@ export function EtiquetteService({ nom, slug }: { nom: string; slug?: string }) 
   );
 }
 
-export function ActionsMessage({ idMessage, actions, elements, faits, onFait, origines }: PropsActions) {
+export function ActionsMessage({ idMessage, actions, elements, faits, onFait, origines, services, prefixes, actionnable = true }: PropsActions) {
   const [ouverts, setOuverts] = useState<ReadonlySet<string>>(new Set());
-  const boutons: Array<{ cle: string; bouton: ReactElement; panneau: ReactElement | null; service?: string; slug?: string }> = [];
+  const boutons: Array<{ cle: string; bouton: ReactElement | null; panneau: ReactElement | null; service?: string; slug?: string }> = [];
   for (const a of actions) {
     const cle = `${idMessage}:${cleAction(a)}`;
     if (a.type === "ouvrir") {
@@ -254,15 +304,41 @@ export function ActionsMessage({ idMessage, actions, elements, faits, onFait, or
         console.warn("Discussion : cible d'action inconnue, bouton ignoré", a.cible);
         continue;
       }
+      if (a.cible === "agents") {
+        // Tiroir « Agents en service » : ouvert par événement de fenêtre, aucune navigation.
+        boutons.push({
+          cle,
+          bouton: (
+            <button type="button" className="atl-bouton" onClick={() => window.dispatchEvent(new Event(EVENEMENT_OUVRIR_AGENTS))}>
+              {libelle}
+            </button>
+          ),
+          panneau: null,
+        });
+        continue;
+      }
+      let prefixe: string | undefined;
+      if (viseUnAutreService(a)) {
+        // Écran d'un autre service : le service doit être déclaré pour ce client et son préfixe connu, sinon pas de bouton.
+        const service = services?.find((s) => s.slug === a.service);
+        if (!service) {
+          console.warn("Discussion : service d'action inconnu, bouton ignoré", a.service);
+          continue;
+        }
+        prefixe = prefixes?.get(service.companyId);
+        if (!prefixe) continue;
+      }
       boutons.push({
         cle,
         bouton: (
-          <LienHote vers={cheminOuvrir(a)} className="atl-bouton">
+          <LienHote vers={cheminOuvrir(a, prefixe)} className="atl-bouton">
             {libelle}
           </LienHote>
         ),
         panneau: null,
       });
+    } else if (a.type === "agents") {
+      boutons.push({ cle, bouton: null, panneau: <CarteAgents action={a} services={services} fait={faits[cle]} onFait={(m) => onFait(cle, m)} actionnable={actionnable} /> });
     } else if (a.type === "traiter") {
       const e = elements.get(a.element);
       const origine = origines?.get(a.element);
@@ -312,7 +388,7 @@ export function ActionsMessage({ idMessage, actions, elements, faits, onFait, or
   return (
     <div className="atl-disc-actions">
       <div className="atl-disc-actions-boutons">
-        {boutons.map((b) => (
+        {boutons.filter((b) => b.bouton).map((b) => (
           <span key={b.cle} className="atl-disc-paire">
             {b.service ? <EtiquetteService nom={b.service} slug={b.slug} /> : null}
             {b.bouton}

@@ -20,6 +20,7 @@
 import type { PluginContext } from "@paperclipai/plugin-sdk";
 import { LIMITES_LIAISON } from "../../contrats/index.js";
 import type { BaseAtelier } from "../base.js";
+import { neutraliserJetonActions } from "../discussion-actions.js";
 import type { LiaisonStockee, StockLiaisons } from "./base-liaisons.js";
 import { cloture, creerTransmission } from "./transmission.js";
 
@@ -43,7 +44,10 @@ export interface EvenementIssue {
 export const estTronquee = (reponse: string | null | undefined): boolean => typeof reponse === "string" && reponse.endsWith(MARQUE_TRONQUEE);
 
 /** Commentaire de réponse (ou d'annulation) posé sur la tâche d'origine ; la réponse est présentée comme DONNÉE. */
-export function corpsReponse(l: Pick<LiaisonStockee, "serviceCible" | "objet" | "statut" | "reponse">): string {
+/** F1 (revue du 19/10/2026) : le jeton des blocs d'actions est neutralisé dans tout ce qui est recopié. */
+export const corpsReponse = (l: Pick<LiaisonStockee, "serviceCible" | "objet" | "statut" | "reponse">): string => neutraliserJetonActions(corpsReponseBrut(l));
+
+function corpsReponseBrut(l: Pick<LiaisonStockee, "serviceCible" | "objet" | "statut" | "reponse">): string {
   const entete = `**Réponse du service « ${l.serviceCible} » à votre demande « ${l.objet.replace(/\s+/gu, " ")} »**`;
   if (l.statut === "annulee") return `${entete}\n\nLe service « ${l.serviceCible} » a annulé la tâche : aucune réponse n'a été donnée.`;
   if (l.reponse == null) return `${entete}\n\nLe service « ${l.serviceCible} » a terminé la tâche sans laisser de réponse écrite de son coordinateur.`;

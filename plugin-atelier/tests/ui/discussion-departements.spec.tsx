@@ -145,7 +145,8 @@ describe("discussion : « À faire » de tous les départements", () => {
   it("repli : un seul service, aucune agrégation", async () => {
     departements = { statut: 200, corps: { client: "fictive-sa", departements: [SERVICES[1]] } };
     const c = await ouvrir();
-    expect(accueilsLus()).toEqual([]);
+    // Aucune agrégation entre services : la seule lecture est celle de l'entreprise courante (message de situation du chat).
+    expect([...new Set(accueilsLus())]).toEqual([ENTREPRISE]);
     expect(c.querySelector('.atl-disc-bulle[data-carte="oui"]')).toBeNull();
     expect(c.textContent).not.toContain("Coordinateur général");
   });

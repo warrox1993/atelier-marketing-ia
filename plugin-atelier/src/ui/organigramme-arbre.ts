@@ -13,6 +13,8 @@ export interface AgentHote {
   status: string;
   reportsTo: string | null;
   adapterType: string | null;
+  /** Motif natif de la pause (`manual`, `budget`, `company_archived`…), présent seulement s'il est fourni. */
+  pauseReason?: string;
 }
 
 export interface NoeudAgent {
@@ -28,7 +30,8 @@ export function agentsDepuisHote(brut: unknown): AgentHote[] {
     const id = texte(a?.["id"]);
     const name = texte(a?.["name"]);
     if (!id || !name || a["status"] === "terminated") return [];
-    return [{ id, name, role: texte(a["role"]) ?? "general", title: texte(a["title"]), status: texte(a["status"]) ?? "inconnu", reportsTo: texte(a["reportsTo"]), adapterType: texte(a["adapterType"]) }];
+    const pauseReason = texte(a["pauseReason"]);
+    return [{ id, name, role: texte(a["role"]) ?? "general", title: texte(a["title"]), status: texte(a["status"]) ?? "inconnu", reportsTo: texte(a["reportsTo"]), adapterType: texte(a["adapterType"]), ...(pauseReason ? { pauseReason } : {}) }];
   });
 }
 

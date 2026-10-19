@@ -1,0 +1,65 @@
+From 18734a2addb2bcec07be2bfdfdda5c17ec5b55ce Mon Sep 17 00:00:00 2001
+From: Jean-Baptiste Dhondt <114347858+warrox1993@users.noreply.github.com>
+Date: Mon, 19 Oct 2026 16:27:04 +0200
+Subject: [PATCH] =?UTF-8?q?fix(ui):=20chat=20du=20Coordinateur=20et=20R?=
+ =?UTF-8?q?=C3=A9glages=20de=20l'atelier=20sans=20colonne=20de=20service?=
+ =?UTF-8?q?=20vide?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ ui/src/components/CompanyHomeRedirect.tsx            |  9 ++++++---
+ .../CompanyHomeRedirect.vue-groupe.test.ts           | 12 ++++++++++--
+ 2 files changed, 16 insertions(+), 5 deletions(-)
+
+diff --git a/ui/src/components/CompanyHomeRedirect.tsx b/ui/src/components/CompanyHomeRedirect.tsx
+index 158a6dcf5..0252d9957 100644
+--- a/ui/src/components/CompanyHomeRedirect.tsx
++++ b/ui/src/components/CompanyHomeRedirect.tsx
+@@ -15,11 +15,14 @@ export const CHEMIN_DEPARTEMENTS_ATELIER = `${CHEMIN_PAGE_ATELIER}/departements`
+ 
+ /** Vrai si un plugin prêt déclare la page principale de l'atelier. */
+ /**
+- * Vues de niveau GROUPE de l'atelier (tous les services du client) : affichées en pleine largeur,
+- * sans la colonne de navigation d'un service (patch local de l'Atelier).
++ * Vues de l'atelier SANS colonne de navigation d'un service (patch local de l'Atelier) : vues de groupe
++ * (départements, organigramme), chat du Coordinateur général (adresse nue, `discussion`, ancienne `accueil`)
++ * et Réglages de l'atelier. Le plugin n'y rend aucune rubrique : la colonne resterait vide.
+  */
++const VUES_SANS_COLONNE = ["discussion", "accueil", "departements", "organigramme", "mise-en-place", "marque", "connaissances", "parametres", "corbeille"];
++
+ export function estVueGroupeAtelier(pathname: string): boolean {
+-  return new RegExp(`/${CHEMIN_PAGE_ATELIER}/(departements|organigramme)(/|$)`, "u").test(pathname);
++  return new RegExp(`/${CHEMIN_PAGE_ATELIER}(/?$|/(${VUES_SANS_COLONNE.join("|")})(/|$))`, "u").test(pathname);
+ }
+ 
+ export function atelierDisponible(contributions: PluginUiContribution[] | undefined): boolean {
+diff --git a/ui/src/components/CompanyHomeRedirect.vue-groupe.test.ts b/ui/src/components/CompanyHomeRedirect.vue-groupe.test.ts
+index b8577c81d..f32b1583f 100644
+--- a/ui/src/components/CompanyHomeRedirect.vue-groupe.test.ts
++++ b/ui/src/components/CompanyHomeRedirect.vue-groupe.test.ts
+@@ -8,9 +8,17 @@ describe("estVueGroupeAtelier", () => {
+     expect(estVueGroupeAtelier("/CLIAAAA/atelier/organigramme/")).toBe(true);
+   });
+ 
++  it("chat du Coordinateur et Réglages : pas de colonne de service (elle serait vide)", () => {
++    for (const v of ["", "/", "/discussion", "/accueil", "/mise-en-place", "/marque", "/connaissances", "/parametres", "/corbeille"]) {
++      expect(estVueGroupeAtelier(`/CLIA/atelier${v}`)).toBe(true);
++    }
++  });
++
+   it("garde la colonne du service partout ailleurs", () => {
+-    expect(estVueGroupeAtelier("/CLIA/atelier")).toBe(false);
+-    expect(estVueGroupeAtelier("/CLIA/atelier/accueil")).toBe(false);
++    expect(estVueGroupeAtelier("/CLIA/atelier/prospects")).toBe(false);
++    expect(estVueGroupeAtelier("/CLIA/atelier/campagnes")).toBe(false);
++    expect(estVueGroupeAtelier("/CLIA/atelier/echanges")).toBe(false);
++    expect(estVueGroupeAtelier("/CLIA/atelier/discussions")).toBe(false);
+     expect(estVueGroupeAtelier("/CLIA/atelier/departements-archives")).toBe(false);
+     expect(estVueGroupeAtelier("/CLIA/agents/organigramme")).toBe(false);
+   });
+-- 
+2.53.0
+

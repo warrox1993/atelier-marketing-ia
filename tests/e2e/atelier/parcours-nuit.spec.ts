@@ -1,7 +1,7 @@
 /**
  * Parcours de bout en bout des nouveautés de la nuit (item 45), contre l'instance d'essai jetable
- * « atelier-e2e » (port 3590, PostgreSQL 54790) : accueil « À faire », modèle de demande, envoi par
- * Entrée, redirection vers la tâche créée, puis les vues Corbeille, Carte des prospects, Prospects et
+ * « atelier-e2e » (port 3590, PostgreSQL 54790) : chat d'accueil, pastille de modèle de demande, envoi par
+ * Entrée au Coordinateur, puis les vues Corbeille, Carte des prospects, Prospects et
  * Paramètres et diagnostic, sans erreur dans la console.
  *
  * Aucun modèle n'est appelé : l'entreprise est en mode démonstration, sans agent en mode réel
@@ -104,30 +104,43 @@ test.beforeAll(async ({ request }) => {
   prospectPositionne = placé.ok();
 });
 
-test("accueil : un modèle remplit le champ sans rien envoyer, Entrée envoie et ouvre la tâche créée", async ({ page }) => {
+test("chat : une pastille de modèle remplit la saisie sans rien envoyer, Entrée envoie la demande au Coordinateur", async ({ page, request }) => {
   const erreurs = surveillerConsole(page);
   const envois: string[] = [];
   page.on("request", (r) => {
-    if (r.method() === "POST" && r.url().includes("/equipe/demande")) envois.push(r.url());
+    if (r.method() === "POST" && r.url().includes("/discussion/message")) envois.push(r.url());
   });
 
-  await ouvrir(page, "");
-  await expect(page.getByRole("heading", { name: "À faire", exact: true })).toBeVisible();
-
-  // Un clic sur un modèle remplit le champ, rien n'est envoyé.
+  // Les pastilles n'existent que dans un fil VIDE (placées dans le fil, sous l'accueil) : le fil de l'entreprise d'essai
+  // est déjà rempli par les autres essais, on les vérifie donc dans une entreprise neuve (fil vierge, rien n'y est envoyé).
+  const neuve = await request.post("/api/companies", { data: { name: `Chat vierge e2e ${Date.now()}` } });
+  expect(neuve.status(), "création de l'entreprise au fil vierge").toBe(201);
+  const { issuePrefix: prefixeVierge } = (await neuve.json()) as { issuePrefix: string };
+  await page.goto(`/${prefixeVierge}/atelier`);
+  await expect(page.getByRole("heading", { name: /^Coordinateur/u, level: 1 })).toBeVisible({ timeout: 30_000 });
+  await expect(page.locator(".atl-disc-fil .atl-disc-pastilles .atl-disc-suggestion")).toHaveCount(4);
+  // Un clic sur une pastille de modèle remplit la saisie du chat, rien n'est envoyé.
   await page.getByRole("button", { name: "Campagne Google Ads" }).click();
-  const champ = page.getByLabel("Votre demande");
-  await expect(champ).toHaveValue(/Prépare une campagne Google Ads pour/u);
-  await expect(champ).toBeFocused();
+  const champVierge = page.getByLabel("Votre message au Coordinateur");
+  await expect(champVierge).toHaveValue(/Prépare une campagne Google Ads pour/u);
+  await expect(champVierge).toBeFocused();
   await page.waitForTimeout(500);
   expect(envois, "le clic sur un modèle ne doit rien envoyer").toHaveLength(0);
-  await expect(page).toHaveURL(new RegExp(`/${prefixe}/atelier/?$`, "u"));
+  await expect(page).toHaveURL(new RegExp(`/${prefixeVierge}/atelier/?$`, "u"));
 
-  // Entrée envoie ; l'adresse devient celle de la tâche créée.
-  await champ.fill("Prépare une campagne Google Ads pour des fenêtres en PVC à Liège (essai automatique).");
+  // Entrée envoie la demande dans l'entreprise d'essai.
+  await ouvrir(page, "");
+  await expect(page.getByRole("heading", { name: /^Coordinateur/u, level: 1 })).toBeVisible({ timeout: 30_000 });
+  const champ = page.getByLabel("Votre message au Coordinateur");
+
+  // Entrée envoie ; la saisie se vide et le message apparaît dans le fil, sans quitter le chat.
+  const message = "Prépare une campagne Google Ads pour des fenêtres en PVC à Liège (essai automatique).";
+  await champ.fill(message);
   await champ.press("Enter");
-  await expect(page).toHaveURL(new RegExp(`/${prefixe}/issues/${prefixe}-\\d+`, "u"), { timeout: 30_000 });
+  await expect(page.locator(".atl-disc-bulle[data-auteur='humain']", { hasText: "fenêtres en PVC" })).toBeVisible({ timeout: 30_000 });
+  await expect(champ).toHaveValue("");
   expect(envois, "une seule demande envoyée").toHaveLength(1);
+  await expect(page).toHaveURL(new RegExp(`/${prefixe}/atelier/?$`, "u"));
   expect(erreurs, erreurs.join("\n")).toEqual([]);
 });
 
@@ -210,37 +223,40 @@ test("carte des prospects : au moins un point et la légende (sinon état vide h
   expect(erreurs, erreurs.join("\n")).toEqual([]);
 });
 
-test("écrans de l'après-midi : ouverture, menus, encart d'accueil, statut du lead et fiche au clic", async ({ page }) => {
+test("écrans de l'après-midi : ouverture, menus, chat d'accueil, statut du lead et fiche au clic", async ({ page, request }) => {
   const erreurs = surveillerConsole(page);
 
-  // 1. Ouvrir l'entreprise mène à l'atelier ; dans le menu du socle, « Atelier » est le premier lien.
+  // 1. Ouvrir l'entreprise mène à l'atelier ; dans le menu du socle, « Réglages de l'atelier » remplace l'ancienne entrée « Atelier ».
   await page.goto(`/${prefixe}`);
   await expect(page).toHaveURL(new RegExp(`/${prefixe}/atelier(/|$)`, "u"), { timeout: 30_000 });
   await page.goto(`/${prefixe}/dashboard`);
   const menuSocle = page.locator("aside nav").first();
   // Le menu du socle reçoit l'entrée du plugin après son chargement ; elle porte la pastille « N à faire ».
-  await expect(menuSocle.getByRole("link").first()).toHaveText(/^Atelier(?! marketing)/u);
+  await expect(menuSocle.getByRole("link", { name: "Réglages de l'atelier" })).toBeVisible();
 
-  // 2. Menu de l'atelier : les cinq rubriques, puis « Prospects » avec ses deux onglets (Liste, Carte).
-  await ouvrir(page, "");
+  // 2. Menu de l'atelier : les deux rubriques du bureau, puis « Prospects » avec ses deux onglets (Liste, Carte).
+  await ouvrir(page, "/prospects");
   const menu = page.locator("nav.atl-nav").first();
   const liens = await menu.getByRole("link").allInnerTexts();
-  expect(liens.slice(0, 5).map((t) => t.trim().split("\n")[0])).toEqual(["Accueil", "Discussion", "Prospects", "Marketing", "Réglages"]);
+  expect(liens.slice(0, 2).map((t) => t.trim().split("\n")[0])).toEqual(["Prospects", "Marketing"]);
   await menu.getByRole("link", { name: /^Prospects/u }).click();
   const onglets = page.getByRole("tablist", { name: "Prospects : sections" });
   await expect(onglets.getByRole("tab")).toHaveText(["Liste", "Carte"]);
   await ouvrir(page, "");
 
-  // 3. Accueil : l'encart « Prospection » (total, qualifiés, deux liens) vient avant « Demander à l'équipe ».
-  const titreProspection = page.getByRole("heading", { name: "Prospection", exact: true });
-  await expect(titreProspection).toBeVisible();
-  await expect(page.getByText(/leads? au total/u)).toBeVisible();
-  await expect(page.getByText(/leads? qualifiés?/u)).toBeVisible();
-  await expect(page.getByRole("link", { name: "Voir les prospects", exact: true })).toBeVisible();
-  await expect(page.getByRole("link", { name: "Voir la carte", exact: true })).toBeVisible();
-  const yProspection = (await titreProspection.boundingBox())?.y ?? Infinity;
-  const yDemande = (await page.getByRole("heading", { name: "Demander à l'équipe" }).boundingBox())?.y ?? -1;
-  expect(yProspection, "l'encart Prospection doit être au-dessus de « Demander à l'équipe »").toBeLessThan(yDemande);
+  // 3. Accueil = le chat : la pastille « Prospection d'une zone » remplace l'ancien encart « Prospection » (les totaux
+  // et les accès aux prospects et à la carte sont dans la rubrique Prospects, étape 4 et menu ci-dessus).
+  await expect(page.getByRole("heading", { name: /^Coordinateur/u, level: 1 })).toBeVisible({ timeout: 30_000 });
+  // Les pastilles n'existent que dans un fil vide : entreprise neuve (fil vierge), la saisie est remplie sans rien envoyer.
+  const neuve = await request.post("/api/companies", { data: { name: `Chat vierge e2e ${Date.now()}` } });
+  expect(neuve.status(), "création de l'entreprise au fil vierge").toBe(201);
+  const { issuePrefix: prefixeVierge } = (await neuve.json()) as { issuePrefix: string };
+  await page.goto(`/${prefixeVierge}/atelier`);
+  await expect(page.getByRole("heading", { name: /^Coordinateur/u, level: 1 })).toBeVisible({ timeout: 30_000 });
+  await page.getByRole("button", { name: "Prospection d'une zone", exact: true }).click();
+  await expect(page.getByLabel("Votre message au Coordinateur")).toHaveValue(/Trouve les prospects les plus pertinents pour/u);
+  await expect(page.getByRole("heading", { name: "Prospection", exact: true })).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: "Demander à l'équipe" })).toHaveCount(0);
 
   // 4. Prospects : colonne « Statut du lead » avec badge, colonne « Étape », clic sur une cellule = fiche.
   await ouvrir(page, "/prospects");

@@ -46,7 +46,8 @@ test.beforeAll(async ({ request }) => {
   entreprise = await trouverEntreprise(request);
 });
 
-const RUBRIQUES_MENU = ["Accueil", "Discussion", "Prospects", "Marketing", "Réglages"] as const;
+// Le menu secondaire du bureau marketing ne garde que Prospects et Marketing (chat et Réglages : menu principal).
+const RUBRIQUES_MENU = ["Prospects", "Marketing"] as const;
 const ONGLETS_MARKETING = [
   ["Campagnes", "/campagnes"],
   ["Contenus", "/contenus"],
@@ -56,7 +57,7 @@ const ONGLETS_MARKETING = [
   ["Rapport du mois", "/rapport"],
 ] as const;
 
-test("navigation réelle dans les cinq rubriques du menu de l'atelier, puis les onglets de Marketing et de Réglages", async ({ page }) => {
+test("navigation réelle dans les deux rubriques du menu de l'atelier, puis les onglets de Marketing et de Réglages", async ({ page }) => {
   await ouvrir(page, "/equipe");
   const nav = page.locator("nav.atl-nav");
   for (const nom of RUBRIQUES_MENU) {
@@ -75,7 +76,9 @@ test("navigation réelle dans les cinq rubriques du menu de l'atelier, puis les 
     await expect(marketing.getByRole("tab", { name: libelle, exact: true })).toHaveAttribute("aria-selected", "true");
     await expect(page.locator(".atl-page [role='alert']")).toHaveCount(0);
   }
-  await nav.getByRole("link", { name: /^Réglages/u }).click();
+  // Réglages : plus de rubrique du menu secondaire, on y va par son adresse (le menu principal propose « Réglages de l'atelier »).
+  await ouvrir(page, "/mise-en-place");
+  await expect(page.locator("nav.atl-nav")).toHaveCount(0);
   const reglages = page.getByRole("tablist", { name: "Réglages : sections" });
   await reglages.getByRole("tab", { name: "Paramètres", exact: true }).click();
   await expect(page.locator(".atl-entete h1")).toHaveText("Paramètres et diagnostic");

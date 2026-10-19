@@ -23,3 +23,4 @@ export * from "./rapport.js";
 export * from "./liaisons.js";
 export * from "./departements.js";
 export * from "./ui.js";
+export * from "./synthese.js";

@@ -145,27 +145,52 @@ class TestDeclaration(unittest.TestCase):
         sans = declarer.construire_corps(reg, self.local("solo", ["marketing", "juridique"]))
         self.assertEqual(sans["companyId"], "solo-marketing")
 
+    def test_confirmation_de_chaque_entreprise_apres_la_declaration(self):
+        # E1 (revue du 19/10/2026) : seule l'entreprise de la route compte tout de suite ; les autres sont confirmées une à une,
+        # chacune par un appel qui porte SON identifiant (l'hôte en prouve l'accès).
+        reg = json.loads((RACINE / "organisation/registre/services.json").read_text(encoding="utf-8"))
+        corps = declarer.construire_corps(reg, self.local("trio", ["marketing", "direction", "juridique"]))
+        ordre = []
+        etapes = declarer.etapes_declaration(corps, lambda c: (ordre.append(("declarer", c["companyId"])), "ok")[1], lambda cid: (ordre.append(("confirmer", cid)), "ok")[1])
+        self.assertEqual(ordre[0], ("declarer", "trio-direction"))
+        self.assertEqual(sorted(cid for quoi, cid in ordre[1:] if quoi == "confirmer"), sorted(e["companyId"] for e in corps["entreprises"]))
+        self.assertTrue(all(quoi == "confirmer" for quoi, _ in ordre[1:]))
+        self.assertEqual(len(etapes), 2)
+        self.assertIn("3 entreprise(s) confirmée(s)", etapes[1])
+
     def test_deux_temps_si_direction_ajoutee_a_un_client_existant(self):
         import io
         import urllib.error
         reg = json.loads((RACINE / "organisation/registre/services.json").read_text(encoding="utf-8"))
         corps = declarer.construire_corps(reg, self.local("duo", ["marketing", "direction"]))
         envois = []
+        ordre = []
 
         def envoyer(c):
             envois.append(c)
+            ordre.append(("declarer", c["companyId"]))
             if len(envois) == 1:
                 raise urllib.error.HTTPError("x", 403, "refus", {}, io.BytesIO(b"{}"))
             return "ok"
-        self.assertEqual(declarer.etapes_declaration(corps, envoyer), ["ok", "ok"])
+
+        def confirmer(cid):
+            ordre.append(("confirmer", cid))
+            return "ok"
+        self.assertEqual(len(declarer.etapes_declaration(corps, envoyer, confirmer)), 4)
         self.assertEqual([e["companyId"] for e in envois], ["duo-direction", "duo-marketing", "duo-direction"])
         self.assertFalse(any(x["estDirection"] for x in envois[1]["entreprises"]))
         self.assertEqual(envois[2], corps)
-        # Un autre refus (409, ou 403 sans Direction à la route) remonte tel quel.
+        # La Direction est confirmée AVANT de se déclarer Direction depuis sa propre route (sinon le plugin la refuse).
+        confirmees_avant = [cid for quoi, cid in ordre[:ordre.index(("declarer", "duo-direction"), 1)] if quoi == "confirmer"]
+        self.assertIn("duo-direction", confirmees_avant)
+        # Un autre refus (409, ou 403 sans Direction à la route) remonte tel quel, sans aucune confirmation.
         def refus(c):
             raise urllib.error.HTTPError("x", 409, "conflit", {}, io.BytesIO(b"{}"))
+
+        def pas_de_confirmation(cid):
+            raise AssertionError("aucune confirmation après un refus")
         with self.assertRaises(urllib.error.HTTPError):
-            declarer.etapes_declaration(corps, refus)
+            declarer.etapes_declaration(corps, refus, pas_de_confirmation)
 
     def test_deux_clients_jamais_meles(self):
         reg = json.loads((RACINE / "organisation/registre/services.json").read_text(encoding="utf-8"))

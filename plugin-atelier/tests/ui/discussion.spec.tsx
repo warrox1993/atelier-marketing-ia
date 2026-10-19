@@ -6,7 +6,7 @@
 import { act, createElement } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { STYLES_DISCUSSION } from "../../src/ui/styles-discussion.js";
-import { INTERVALLE_MS, SUGGESTIONS, VueDiscussion } from "../../src/ui/vues/discussion.js";
+import { INTERVALLE_MS, PASTILLES, VueDiscussion } from "../../src/ui/vues/discussion.js";
 import { cliquer, ENTREPRISE, installerPont, parTexte, rendre, saisir, type Rendu } from "./pont.js";
 
 let rendu: Rendu | null = null;
@@ -91,7 +91,12 @@ describe("discussion : affichage", () => {
     const c = await ouvrir();
     const fil = c.querySelector('[role="log"]')!;
     expect(fil.getAttribute("aria-live")).toBe("polite");
-    for (const s of ["Où en sont les missions ?", "Qu'est-ce qui est bloqué ?", "Résume les nouveaux leads", "Lance une prospection sur une zone"]) expect(parTexte(c, "button", s)).toBeTruthy();
+    for (const s of ["Où en sont les missions ?", "Prospection d'une zone", "Campagne Google Ads", "Veille concurrentielle hebdomadaire"]) expect(parTexte(c, "button", s)).toBeTruthy();
+    // Quatre pastilles au plus : les anciennes suggestions qui envoyaient tout de suite n'existent plus.
+    for (const s of ["Qu'est-ce qui est bloqué ?", "Résume les nouveaux leads"]) expect(Array.from(c.querySelectorAll("button")).some((b) => b.textContent === s)).toBe(false);
+    // Pas de doublon : la prospection n'existe plus qu'en modèle de demande.
+    expect(Array.from(c.querySelectorAll("button")).some((b) => b.textContent?.trim() === "Lance une prospection sur une zone")).toBe(false);
+    expect(parTexte(c, "button", "Prospection d'une zone")).toBeTruthy();
     expect(c.querySelector('[data-emplacement="dicter"]')).toBeTruthy();
     expect(c.querySelector('[data-emplacement="parler-en-direct"]')).toBeTruthy();
     expect(champParLibelle(c, "Votre message au Coordinateur").tagName).toBe("TEXTAREA");
@@ -133,15 +138,18 @@ describe("discussion : présentation façon assistant", () => {
     expect(STYLES_DISCUSSION).toMatch(/\.atl-disc-bulle\[data-auteur="agent"\] \.atl-disc-texte \{[^}]*background: transparent/u);
   });
 
-  it("fil vide : phrase d'accueil dans le fil, quatre pastilles de suggestion hors du fil, au-dessus du compositeur", async () => {
+  it("fil vide : phrase d'accueil dans le fil, quatre pastilles sous le journal dans la zone qui défile, hors du pied collant", async () => {
     const c = await ouvrir();
     const fil = c.querySelector('[role="log"]')!;
     expect(fil.querySelector(".atl-disc-vide p")!.textContent).toContain("Que voulez-vous savoir");
-    const pastilles = c.querySelector(".atl-disc-suggestions")!;
+    const pastilles = c.querySelector(".atl-disc-pastilles")!;
+    // Hors du journal annoncé, mais dans la zone qui défile, juste après lui ; le pied collant ne garde que le compositeur.
     expect(fil.contains(pastilles)).toBe(false);
-    expect(Array.from(pastilles.querySelectorAll("button")).map((b) => b.textContent)).toEqual([...SUGGESTIONS]);
-    expect(pastilles.nextElementSibling!.tagName).toBe("FORM");
-    expect(STYLES_DISCUSSION).toMatch(/\.atl-disc-suggestion \{[^}]*border-radius: 999px/u);
+    expect(pastilles.parentElement!.classList.contains("atl-disc-fil")).toBe(true);
+    expect(pastilles.previousElementSibling).toBe(fil);
+    expect(c.querySelector(".atl-disc-pied")!.contains(pastilles)).toBe(false);
+    expect(Array.from(pastilles.querySelectorAll("button")).map((b) => b.textContent)).toEqual(PASTILLES.map((p) => p.libelle));
+    expect(STYLES_DISCUSSION).toMatch(/\.atl-disc-suggestion \{[^}]*border-radius: 1\.375rem/u);
   });
 
   it("compositeur : micro, voix en direct et envoi sont des boutons icônes nommés, dans le formulaire", async () => {
@@ -256,11 +264,15 @@ describe("discussion : envoi", () => {
     expect(posts()).toHaveLength(1);
   });
 
-  it("une suggestion envoie son texte", async () => {
+  it("une pastille remplit la saisie sans rien envoyer ; c'est « Envoyer » qui envoie, et les pastilles disparaissent avec le premier message", async () => {
     const c = await ouvrir();
-    await cliquer(parTexte(c, "button", "Résume les nouveaux leads"));
-    expect(posts()[0]!.corps).toMatchObject({ texte: "Résume les nouveaux leads" });
-    expect(c.querySelector(".atl-disc-suggestions")).toBeNull();
+    await cliquer(parTexte(c, "button", "Où en sont les missions ?"));
+    expect(posts()).toHaveLength(0);
+    expect(champParLibelle(c, "Votre message au Coordinateur").value).toBe("Où en sont les missions ?");
+    expect(c.querySelector(".atl-disc-pastilles")).not.toBeNull();
+    await cliquer(parTexte(c, "button", "Envoyer"));
+    expect(posts()[0]!.corps).toMatchObject({ texte: "Où en sont les missions ?" });
+    expect(c.querySelector(".atl-disc-pastilles")).toBeNull();
   });
 
   it("erreur d'envoi : message d'alerte et texte conservé", async () => {
@@ -357,8 +369,10 @@ describe("discussion : dictée", () => {
 
 describe("styles de la discussion sur mobile", () => {
   it("réserve la hauteur de la barre de navigation fixe de l'hôte sous la zone de saisie", () => {
-    const mobile = STYLES_DISCUSSION.slice(STYLES_DISCUSSION.indexOf("@media (max-width: 768px)"));
+    const mobile = STYLES_DISCUSSION.slice(STYLES_DISCUSSION.indexOf("@media (max-width: 767px)"));
     expect(mobile).toContain("--atl-nav-hote-mobile: calc(4rem + env(safe-area-inset-bottom, 0px))");
+    // La section s'arrête au-dessus de cette barre : l'en-tête du chat n'est jamais recouvert.
+    expect(mobile).toContain("--atl-hote-haut: calc(14.25rem + env(safe-area-inset-top, 0px) + env(safe-area-inset-bottom, 0px))");
     // Le pied collant (pastilles + zone de saisie) porte la réserve : la saisie reste au-dessus de la barre de l'hôte.
     expect(mobile).toMatch(/\.atl-disc-pied \{[^}]*bottom: var\(--atl-nav-hote-mobile\)/u);
     expect(STYLES_DISCUSSION).toMatch(/\.atl-disc-pied \{[^}]*position: sticky/u);
@@ -408,7 +422,24 @@ describe("discussion : télécommande (actions dans les messages)", () => {
     expect(lien.getAttribute("href")).toBe("/RNO/atelier/prospects");
     expect(parTexte(c, "a", "Voir les contenus").getAttribute("href")).toBe("/RNO/atelier/contenus");
     expect(STYLES_DISCUSSION).toMatch(/\.atl-disc-actions \.atl-bouton \{ min-height: 2\.75rem/u);
-    expect(appels.some((a) => a.url.includes("/accueil?"))).toBe(false);
+    // Le message de situation du chat lit l'Accueil de l'entreprise courante, et d'elle seule.
+    expect(appels.filter((a) => a.url.includes("/accueil?")).every((a) => a.url.includes(`companyId=${ENTREPRISE}`))).toBe(true);
+  });
+
+  it("seule la carte « agents » du dernier message du Coordinateur est actionnable (les anciennes restent inertes)", async () => {
+    departements = { statut: 200, corps: { client: "fictive-sa", departements: [
+      { companyId: DIRECTION, slug: "direction", nom: "Direction", estDirection: true, courant: false },
+      { companyId: ENTREPRISE, slug: "marketing", nom: "Marketing", estDirection: false, courant: true },
+    ] } };
+    messages = [
+      msg({ texte: "Ancienne demande.", actions: [{ type: "agents", operation: "couper", service: "tous" }] }),
+      msg({ texte: "Dernière demande.", actions: [{ type: "agents", operation: "allumer", service: "marketing" }] }),
+    ];
+    const c = await ouvrir();
+    await act(async () => {});
+    expect(c.textContent).toContain("Action d'un message précédent");
+    expect(c.textContent).not.toContain("Couper");
+    expect(appels.filter((a) => a.methode === "POST" && /\/agents\//.test(a.url))).toEqual([]);
   });
 
   it("cible inconnue ou type inconnu : bouton ignoré, aucune erreur visible, texte intact", async () => {
@@ -459,7 +490,9 @@ describe("discussion : télécommande (actions dans les messages)", () => {
     const liens = Array.from(c.querySelectorAll<HTMLAnchorElement>(".atl-disc-actions a")).map((a) => a.getAttribute("href"));
     expect(liens).toEqual(["/RNO/approvals/h1", "/RNO/approvals/b1", "/RNO/approvals/u1"]);
     expect(parTexte(c, "a", "Examiner dans la page native")).toBeTruthy();
-    expect(c.querySelector("button[aria-expanded]")).toBeNull();
+    // Dans le fil (le bloc « À faire » et l'engrenage du chat ont leurs propres boutons à déplier).
+    const fil = c.querySelector('[role="log"]')!;
+    expect(fil.querySelector("button[aria-expanded]")).toBeNull();
     expect(Array.from(c.querySelectorAll("button")).some((b) => /Approuver|Refuser/.test(b.textContent ?? ""))).toBe(false);
   });
 
@@ -475,8 +508,10 @@ describe("discussion : télécommande (actions dans les messages)", () => {
     elementsAccueil = [CONTENU];
     messages = [msg({ actions: [{ type: "traiter", element: "contenu:iss-AUTRE-ENTREPRISE" }, { type: "traiter", element: "approbation:zzz" }] })];
     const c = await ouvrir();
-    expect(c.querySelector(".atl-disc-actions")).toBeNull();
-    expect(c.querySelector("button[aria-expanded]")).toBeNull();
+    const fil = c.querySelector('[role="log"]')!;
+    expect(fil.querySelector(".atl-disc-actions")).toBeNull();
+    // Le message de situation (en tête du fil) porte le « Traiter ici » de l'élément de l'entreprise courante : on regarde les messages du fil.
+    expect(fil.querySelector(".atl-disc-bulle:not([data-situation]) button[aria-expanded]")).toBeNull();
     expect(appels.filter((a) => a.url.includes("/accueil?")).every((a) => a.url.includes("companyId=11111111-1111-4111-8111-111111111111"))).toBe(true);
   });
 
@@ -491,7 +526,7 @@ describe("discussion : télécommande (actions dans les messages)", () => {
     });
     const c = await ouvrir();
     expect(parTexte(c, "a", "Voir les prospects")).toBeTruthy();
-    expect(c.querySelector("button[aria-expanded]")).toBeNull();
+    expect(c.querySelector('[role="log"] button[aria-expanded]')).toBeNull();
     expect(c.querySelector('[role="alert"]')?.textContent).toContain("Actions indisponibles");
     panne = false;
     await cliquer(parTexte(c, "button", "Réessayer"));

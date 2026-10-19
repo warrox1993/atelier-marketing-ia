@@ -125,8 +125,11 @@ export function routesDiscussion(d: DependancesDiscussion): Partial<Record<CleRo
   }
 
   const noms = new Map<string, string>();
+  const NOM_SANS_AUTEUR = "Réponse d'un service";
   async function nomAgent(companyId: string, agentId: string | null): Promise<string> {
-    if (!agentId) return "Coordinateur";
+    // F5 (revue du 19/10/2026) : un commentaire sans auteur agent (réponse recopiée par le bureau de liaison, par exemple)
+    // ne s'affiche jamais sous le nom du Coordinateur.
+    if (!agentId) return NOM_SANS_AUTEUR;
     const cle = `${companyId}:${agentId}`;
     if (!noms.has(cle)) {
       try {
@@ -141,7 +144,7 @@ export function routesDiscussion(d: DependancesDiscussion): Partial<Record<CleRo
   /** Une action écartée est journalisée une seule fois par commentaire (le fil est relu toutes les 4 s). */
   const dejaJournalees = new Set<string>();
 
-  async function versMessage(companyId: string, issueId: string, c: Commentaire, coordinateurId: string | null): Promise<MessageDiscussion | null> {
+  async function versMessage(companyId: string, issueId: string, c: Commentaire, coordinateurId: string | null, ceoId: string | null = null): Promise<MessageDiscussion | null> {
     if (c.deletedAt || c.body.trim() === "") return null;
     const deAgent = c.authorAgentId != null || c.authorType === "agent";
     if (!deAgent && (c.authorType === "user" || c.body.startsWith(PREFIXE_HUMAIN))) {
@@ -152,9 +155,15 @@ export function routesDiscussion(d: DependancesDiscussion): Partial<Record<CleRo
     // Seules les actions du Coordinateur de l'entreprise sont des boutons : un autre agent peut commenter
     // la tâche, mais ne pilote pas l'interface.
     const duCoordinateur = coordinateurId !== null && c.authorAgentId === coordinateurId;
-    const actions = duCoordinateur ? extrait.actions : [];
+    let actions = duCoordinateur ? extrait.actions : [];
     if (!duCoordinateur && extrait.actions.length > 0) {
       ignorees.push("actions d'un agent autre que le Coordinateur : écartées");
+    }
+    // Allumer ou couper des agents : réservé à l'agent de rôle ceo. Le repli sur un nom « Coordinateur… » (fil d'une
+    // entreprise dont le ceo est introuvable) ne suffit pas pour piloter les agents.
+    if (duCoordinateur && actions.some((a) => a.type === "agents") && (ceoId === null || c.authorAgentId !== ceoId)) {
+      actions = actions.filter((a) => a.type !== "agents");
+      ignorees.push("action `agents` d'un auteur qui n'a pas le rôle ceo : écartée");
     }
     if (ignorees.length > 0 && !dejaJournalees.has(c.id)) {
       dejaJournalees.add(c.id);
@@ -172,10 +181,12 @@ export function routesDiscussion(d: DependancesDiscussion): Partial<Record<CleRo
     const commentaires = await ctx.issues.listComments(issueId, companyId);
     const tries = [...commentaires].sort((a, b) => iso(a.createdAt).localeCompare(iso(b.createdAt)) || a.id.localeCompare(b.id));
     const sortie: MessageDiscussion[] = [];
-    const coordinateurId = (await coordinateur(companyId))?.id ?? null;
+    const coord = await coordinateur(companyId);
+    const coordinateurId = coord?.id ?? null;
+    const ceoId = coord?.role === "ceo" ? coord.id : null;
     for (const c of tries) {
       if (depuis && iso(c.createdAt) <= depuis) continue;
-      const m = await versMessage(companyId, issueId, c, coordinateurId);
+      const m = await versMessage(companyId, issueId, c, coordinateurId, ceoId);
       if (m) sortie.push(m);
     }
     return sortie.slice(-MAX_MESSAGES);

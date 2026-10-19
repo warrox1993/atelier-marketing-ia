@@ -65,6 +65,8 @@ function ecrireNavigation(e: EtatNavigation): void {
   if (e.service) p.set("service", e.service);
   if (e.service && e.agent) p.set("agent", e.agent);
   if (e.vue === "matrice") p.set("vue", "matrice");
+  // Ancre vide : `vue=carte` garde l'organigramme choisi quand la page est ouverte sur « Départements ».
+  else if (!e.service) p.set("vue", "carte");
   window.location.hash = p.toString();
 }
 
