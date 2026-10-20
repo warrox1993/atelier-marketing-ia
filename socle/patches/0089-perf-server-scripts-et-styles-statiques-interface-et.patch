@@ -1,0 +1,250 @@
+From efbba67af6b1ec5064f48cc366e0aa162b9850f8 Mon Sep 17 00:00:00 2001
+From: Jean-Baptiste Dhondt <114347858+warrox1993@users.noreply.github.com>
+Date: Tue, 20 Oct 2026 13:23:18 +0200
+Subject: [PATCH] =?UTF-8?q?perf(server):=20scripts=20et=20styles=20statiqu?=
+ =?UTF-8?q?es=20(interface=20et=20plugins)=20servis=20compress=C3=A9s=20en?=
+ =?UTF-8?q?=20gzip?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ server/src/__tests__/static-gzip.test.ts | 84 +++++++++++++++++++++++
+ server/src/app.ts                        |  6 ++
+ server/src/middleware/static-gzip.ts     | 85 ++++++++++++++++++++++++
+ server/src/routes/plugin-ui-static.ts    |  4 ++
+ 4 files changed, 179 insertions(+)
+ create mode 100644 server/src/__tests__/static-gzip.test.ts
+ create mode 100644 server/src/middleware/static-gzip.ts
+
+diff --git a/server/src/__tests__/static-gzip.test.ts b/server/src/__tests__/static-gzip.test.ts
+new file mode 100644
+index 000000000..3bd9621c7
+--- /dev/null
++++ b/server/src/__tests__/static-gzip.test.ts
+@@ -0,0 +1,84 @@
++import express from "express";
++import fs from "node:fs";
++import { createServer, request as httpRequest } from "node:http";
++import type { AddressInfo } from "node:net";
++import os from "node:os";
++import path from "node:path";
++import { gunzipSync } from "node:zlib";
++import { afterEach, describe, expect, it } from "vitest";
++import { accepteGzip, staticGzip } from "../middleware/static-gzip.js";
++
++// Patch local de l'Atelier : compression gzip des scripts et styles servis en fichiers statiques.
++
++const serveurs: Array<ReturnType<typeof createServer>> = [];
++afterEach(async () => {
++  await Promise.all(serveurs.splice(0).map((s) => new Promise<void>((r) => s.close(() => r()))));
++});
++
++function dossier(): string {
++  const d = fs.mkdtempSync(path.join(os.tmpdir(), "static-gzip-"));
++  fs.writeFileSync(path.join(d, "app-abc123.js"), "console.log('atelier');\n".repeat(400));
++  fs.writeFileSync(path.join(d, "petit.js"), "x");
++  fs.writeFileSync(path.join(d, "image.png"), Buffer.alloc(4096, 7));
++  return d;
++}
++
++async function demarrer(racine: string): Promise<number> {
++  const app = express();
++  app.use("/assets", staticGzip(racine, (res) => res.set("Cache-Control", "public, max-age=31536000, immutable")));
++  app.use("/assets", express.static(racine));
++  const serveur = createServer(app);
++  serveurs.push(serveur);
++  await new Promise<void>((r) => serveur.listen(0, "127.0.0.1", r));
++  return (serveur.address() as AddressInfo).port;
++}
++
++function obtenir(port: number, chemin: string, encodage?: string) {
++  return new Promise<{ code: number; entetes: Record<string, unknown>; corps: Buffer }>((resolve, reject) => {
++    const req = httpRequest({ host: "127.0.0.1", port, path: chemin, headers: encodage ? { "accept-encoding": encodage } : {} }, (res) => {
++      const morceaux: Buffer[] = [];
++      res.on("data", (m: Buffer) => morceaux.push(m));
++      res.on("end", () => resolve({ code: res.statusCode ?? 0, entetes: res.headers, corps: Buffer.concat(morceaux) }));
++    });
++    req.on("error", reject);
++    req.end();
++  });
++}
++
++describe("staticGzip", () => {
++  it("compresse un script quand le client accepte gzip, avec le cache immuable et Vary", async () => {
++    const d = dossier();
++    const port = await demarrer(d);
++    const r = await obtenir(port, "/assets/app-abc123.js", "gzip, deflate, br");
++    expect(r.code).toBe(200);
++    expect(r.entetes["content-encoding"]).toBe("gzip");
++    expect(String(r.entetes.vary)).toMatch(/Accept-Encoding/i);
++    expect(r.entetes["cache-control"]).toBe("public, max-age=31536000, immutable");
++    expect(gunzipSync(r.corps).toString()).toBe(fs.readFileSync(path.join(d, "app-abc123.js"), "utf8"));
++    expect(r.corps.length).toBeLessThan(fs.statSync(path.join(d, "app-abc123.js")).size / 4);
++  });
++
++  it("laisse le fichier brut sans gzip accepté, pour un petit fichier ou une image", async () => {
++    const d = dossier();
++    const port = await demarrer(d);
++    for (const [chemin, enc] of [["/assets/app-abc123.js", undefined], ["/assets/petit.js", "gzip"], ["/assets/image.png", "gzip"]] as const) {
++      const r = await obtenir(port, chemin, enc);
++      expect(r.code).toBe(200);
++      expect(r.entetes["content-encoding"]).toBeUndefined();
++    }
++  });
++
++  it("refuse de sortir du dossier et laisse le 404 au service suivant", async () => {
++    const port = await demarrer(dossier());
++    expect((await obtenir(port, "/assets/../../etc/passwd", "gzip")).code).toBe(404);
++    expect((await obtenir(port, "/assets/absent.js", "gzip")).code).toBe(404);
++  });
++
++  it("lit Accept-Encoding avec ses poids", () => {
++    expect(accepteGzip("gzip")).toBe(true);
++    expect(accepteGzip("br, gzip;q=0.5")).toBe(true);
++    expect(accepteGzip("gzip;q=0")).toBe(false);
++    expect(accepteGzip("br")).toBe(false);
++    expect(accepteGzip(undefined)).toBe(false);
++  });
++});
+diff --git a/server/src/app.ts b/server/src/app.ts
+index c187602ec..bca4542b3 100644
+--- a/server/src/app.ts
++++ b/server/src/app.ts
+@@ -185,6 +185,7 @@ import {
+ } from "./http/body-limits.js";
+ import { COMPANY_IMPORT_API_PATH } from "./routes/company-import-paths.js";
+ import { apiCompression } from "./middleware/api-compression.js";
++import { staticGzip } from "./middleware/static-gzip.js";
+ import { chatWebhookBodyParser } from "./middleware/chat-webhook-body.js";
+ import { createChatWebhookDiagnostics } from "./services/chat-webhook-diagnostics.js";
+ 
+@@ -1017,6 +1018,11 @@ export async function createApp(
+     if (uiDist) {
+       // Hashed asset files (Vite emits them under /assets/<name>.<hash>.<ext>)
+       // never change once built, so they can be cached aggressively.
++      // Patch local de l'Atelier : scripts et styles servis compressés (gzip), même cache immuable.
++      staticUi.use(
++        "/assets",
++        staticGzip(path.join(uiDist, "assets"), (res) => res.set("Cache-Control", "public, max-age=31536000, immutable")),
++      );
+       staticUi.use(
+         "/assets",
+         express.static(path.join(uiDist, "assets"), {
+diff --git a/server/src/middleware/static-gzip.ts b/server/src/middleware/static-gzip.ts
+new file mode 100644
+index 000000000..d1f568b8c
+--- /dev/null
++++ b/server/src/middleware/static-gzip.ts
+@@ -0,0 +1,85 @@
++/**
++ * Compression gzip des fichiers statiques (scripts, styles) : patch local de l'Atelier.
++ *
++ * Le serveur ne compresse que l'API (`api-compression.ts`) ; les scripts de l'interface (plusieurs Mo) partaient
++ * bruts, ce qui ralentit le premier chargement à distance (tunnel Tailscale). Chaque fichier est compressé une
++ * seule fois puis gardé en mémoire (clé : chemin, taille, date de modification) ; les fichiers sont immuables
++ * une fois construits, le cache ne grossit donc qu'au fil des versions déployées.
++ */
++import type { Request, RequestHandler, Response } from "express";
++import fs from "node:fs";
++import path from "node:path";
++import { promisify } from "node:util";
++import { gzip } from "node:zlib";
++
++const gzipAsync = promisify(gzip);
++
++/** Types compressibles (les images et polices déjà compressées sont laissées telles quelles). */
++const TYPES_COMPRESSIBLES: Record<string, string> = {
++  ".js": "application/javascript; charset=utf-8",
++  ".mjs": "application/javascript; charset=utf-8",
++  ".css": "text/css; charset=utf-8",
++  ".svg": "image/svg+xml",
++  ".json": "application/json; charset=utf-8",
++  ".map": "application/json; charset=utf-8",
++};
++
++const SEUIL_OCTETS = 1024;
++const PLAFOND_CACHE = 64;
++const cache = new Map<string, Buffer>();
++
++export function accepteGzip(valeur: string | string[] | undefined): boolean {
++  const brut = Array.isArray(valeur) ? valeur.join(",") : valeur ?? "";
++  return brut.split(",").some((partie) => {
++    const [nom, ...params] = partie.trim().toLowerCase().split(";");
++    if (nom !== "gzip" && nom !== "*") return false;
++    const q = params.map((p) => p.trim()).find((p) => p.startsWith("q="));
++    return !q || Number(q.slice(2)) > 0;
++  });
++}
++
++/**
++ * Envoie `chemin` compressé si le client accepte gzip et que le type s'y prête ; sinon ne fait rien et rend faux
++ * (l'appelant envoie alors le fichier normalement). Les en-têtes de cache déjà posés par l'appelant sont conservés.
++ */
++export async function envoyerCompresse(req: Request, res: Response, chemin: string, stat: fs.Stats): Promise<boolean> {
++  const type = TYPES_COMPRESSIBLES[path.extname(chemin).toLowerCase()];
++  if (!type || stat.size < SEUIL_OCTETS || !accepteGzip(req.headers["accept-encoding"])) return false;
++  const cle = `${chemin}:${stat.size}:${stat.mtimeMs}`;
++  let corps = cache.get(cle);
++  if (!corps) {
++    corps = await gzipAsync(await fs.promises.readFile(chemin), { level: 9 });
++    if (cache.size >= PLAFOND_CACHE) cache.delete(cache.keys().next().value as string);
++    cache.set(cle, corps);
++  }
++  res.vary("Accept-Encoding");
++  res.set("Content-Type", type);
++  res.set("Content-Encoding", "gzip");
++  res.set("Content-Length", String(corps.length));
++  res.status(200).end(req.method === "HEAD" ? undefined : corps);
++  return true;
++}
++
++/** Intergiciel pour un dossier de fichiers statiques : compresse ce qui s'y prête, passe la main sinon. */
++export function staticGzip(racine: string, entetes?: (res: Response, chemin: string) => void): RequestHandler {
++  const racineReelle = path.resolve(racine);
++  return (req, res, next) => {
++    if (req.method !== "GET" && req.method !== "HEAD") return next();
++    let relatif: string;
++    try {
++      relatif = decodeURIComponent(req.path);
++    } catch {
++      return next();
++    }
++    const chemin = path.resolve(racineReelle, `.${relatif}`);
++    if (!chemin.startsWith(racineReelle + path.sep)) return next();
++    fs.promises
++      .stat(chemin)
++      .then(async (stat) => {
++        if (!stat.isFile()) return next();
++        entetes?.(res, chemin);
++        if (!(await envoyerCompresse(req, res, chemin, stat))) next();
++      })
++      .catch(() => next());
++  };
++}
+diff --git a/server/src/routes/plugin-ui-static.ts b/server/src/routes/plugin-ui-static.ts
+index ca9cae7db..4fffec49f 100644
+--- a/server/src/routes/plugin-ui-static.ts
++++ b/server/src/routes/plugin-ui-static.ts
+@@ -36,6 +36,7 @@ import { pluginRegistryService } from "../services/plugin-registry.js";
+ import { logger } from "../middleware/logger.js";
+ import { assertCompanyAccess } from "./authz.js";
+ import { badRequest } from "../errors.js";
++import { envoyerCompresse } from "../middleware/static-gzip.js";
+ 
+ // ---------------------------------------------------------------------------
+ // Constants
+@@ -488,6 +489,9 @@ export function pluginUiStaticRoutes(db: Db, options: PluginUiStaticRouteOptions
+     // Step 9: Set CORS headers (plugin UI may be loaded from different origin in dev)
+     res.set("Access-Control-Allow-Origin", "*");
+ 
++    // Patch local de l'Atelier : scripts et styles du plugin servis compressés (gzip) quand le client l'accepte.
++    if (await envoyerCompresse(req, res, resolvedFilePath, fileStat)) return;
++
+     // Step 10: Send the file
+     // The plugin source can live in Git worktrees (e.g. ".worktrees/...").
+     // `send` defaults to dotfiles:"ignore", which treats dot-directories as
+-- 
+2.53.0
+
