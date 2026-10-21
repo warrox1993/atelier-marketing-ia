@@ -17,6 +17,7 @@ import {
   Fragment,
   useCallback,
   useId,
+  useMemo,
   useEffect,
   useRef,
   useState,
@@ -60,8 +61,10 @@ import {
   usePrefixesServices,
 } from "../discussion-telecommande.js";
 import { appelRoute } from "../routes-prospection.js";
-import { useCartesServices, type CarteService } from "../cartes-services.js";
-import { STYLES_DISCUSSION } from "../styles-discussion.js";
+import { useCartesServices, useMissionsServices, type CarteService } from "../cartes-services.js";
+import { avancements } from "../avancement-missions.js";
+import { FrisesMissions } from "../composants/frise-mission.js";
+import { STYLES_DISCUSSION, STYLES_FRISE } from "../styles-discussion.js";
 import type {
   DepartementDeclare,
   ReponseDepartements,
@@ -263,6 +266,12 @@ export function VueDiscussion() {
   // Décisions qui attendent dans les autres services (tâches reçues par liaison depuis ce chat) : lecture partagée avec
   // le menu, le bandeau et le titre de l'onglet, relue toutes les 15 s.
   const svc = useCartesServices(general ? companyId : null);
+  // Frises d'avancement des missions : même lecture, même rythme (15 s) que les cartes, aucune lecture en plus.
+  const missionsLues = useMissionsServices(general ? companyId : null);
+  const frises = useMemo(
+    () => avancements(missionsLues, new Set(svc.cartes.map((c) => c.tache))),
+    [missionsLues, svc.cartes],
+  );
   /** Cartes des services déjà vues : une carte traitée garde sa place (message de confirmation) après avoir quitté la liste. */
   const cartesVues = useRef(new Map<string, CarteService>());
   for (const c of svc.cartes) cartesVues.current.set(c.element.id, c);
@@ -508,7 +517,7 @@ export function VueDiscussion() {
 
   return (
     <section className="atl-disc" aria-label="Discussion avec le Coordinateur">
-      <style>{STYLES_DISCUSSION}</style>
+      <style>{STYLES_DISCUSSION}{STYLES_FRISE}</style>
       <div className="atl-disc-entete">
         <span
           className="atl-disc-avatar atl-disc-avatar-grand"
@@ -535,6 +544,7 @@ export function VueDiscussion() {
         </div>
       </div>
       <div ref={fil} className="atl-disc-fil">
+        {general ? <FrisesMissions enCours={frises.enCours} terminees={frises.terminees} /> : null}
         <div
           className="atl-disc-messages"
           role="log"

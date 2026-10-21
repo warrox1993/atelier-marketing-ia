@@ -84,6 +84,17 @@ async function ouvrir() {
 const lecturesCartes = () => appels.filter((a) => a.methode === "GET" && a.url.includes("/discussion/cartes-services"));
 
 describe("chat : décisions des autres services dans le fil", () => {
+  it("la frise de la mission est en tête du fil (lecture partagée avec les cartes) : phase qui attend la décision, aucune lecture en double de la tâche", async () => {
+    const c = await ouvrir();
+    const frise = c.querySelector("[data-testid=frise-mission]");
+    expect(frise).not.toBeNull();
+    expect(frise!.querySelectorAll("li.atl-frise-phase")).toHaveLength(6);
+    // La sous-tâche MKT-3 (sans agent connu : repli sur le titre, donc Production) porte une question en attente.
+    expect(frise!.querySelector("[data-phase=production]")!.textContent).toContain("attend votre décision");
+    expect(frise!.querySelector("[data-phase=reponse]")!.textContent).toContain("attend votre décision");
+    expect(appels.filter((x) => x.methode === "GET" && x.url.endsWith("/issues/iss-mkt-2"))).toHaveLength(1);
+  });
+
   it("la carte du service est mêlée aux messages à sa date de création, avec le nom du service", async () => {
     const c = await ouvrir();
     const fil = Array.from(c.querySelectorAll('[role="log"] > .atl-disc-bulle')).filter((b) => !b.hasAttribute("data-situation"));

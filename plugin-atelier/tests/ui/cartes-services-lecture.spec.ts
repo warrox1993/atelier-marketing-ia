@@ -52,6 +52,43 @@ function lecteur(h: Hote, journal: string[] = []): LecteurHote {
 }
 
 describe("lireCartesDesServices", () => {
+  it("rapporte aussi les missions : tâche reçue (même terminée), sous-tâches de tous statuts avec agent, et agents du service", async () => {
+    const h: Hote = {
+      taches: [
+        tache("t1", MKT, "MKT-2", { status: "done" }),
+        tache("t2", MKT, "MKT-3", { parentId: "t1", status: "done", assigneeAgentId: "ag1", updatedAt: "2026-10-18T10:00:00Z" }),
+        tache("t3", MKT, "MKT-4", { parentId: "t1", status: "in_progress", assigneeAgentId: "ag2" }),
+      ],
+      cartes: {},
+    };
+    const base = lecteur(h);
+    const journal: string[] = [];
+    const avecAgents: LecteurHote = async (chemin) => {
+      journal.push(chemin);
+      if (chemin === `/companies/${MKT}/agents`) return [{ id: "ag1", name: "Relecteur", urlKey: "relecteur", role: "qa" }, { id: "ag2", name: "Porte", urlKey: "porte" }, { name: "sans id" }];
+      return base(chemin);
+    };
+    const r = await lireCartesDesServices([aSuivre(MKT, "t1", "marketing", "Marketing")], avecAgents);
+    expect(r.indisponible).toBe(false);
+    expect(r.missions).toHaveLength(1);
+    const m = r.missions[0]!;
+    expect(m).toMatchObject({ companyId: MKT, slug: "marketing", nom: "Marketing", racine: { id: "t1", identifier: "MKT-2", status: "done" } });
+    expect(m.filles.map((f) => [f.identifier, f.status, f.agentId, f.maj])).toEqual([["MKT-3", "done", "ag1", "2026-10-18T10:00:00Z"], ["MKT-4", "in_progress", "ag2", null]]);
+    expect(m.agents.map((a) => [a.id, a.nom, a.cle])).toEqual([["ag1", "Relecteur", "relecteur"], ["ag2", "Porte", "porte"]]);
+    // Une seule lecture des agents par entreprise, partagée avec les cartes (aucune lecture en double).
+    expect(journal.filter((c) => c.endsWith("/agents"))).toHaveLength(1);
+    expect(journal.filter((c) => c === "/issues/t1")).toHaveLength(1);
+  });
+
+  it("agents illisibles : la mission est rapportée quand même (classement par titre), sans marquer la lecture indisponible", async () => {
+    const h: Hote = { taches: [tache("t1", MKT, "MKT-2"), tache("t2", MKT, "MKT-3", { parentId: "t1" })], cartes: {} };
+    const base = lecteur(h);
+    const r = await lireCartesDesServices([aSuivre(MKT, "t1", "marketing", "Marketing")], async (c) => (c.endsWith("/agents") ? Promise.reject({ code: "HTTP_500", message: "panne" }) : base(c)));
+    expect(r.indisponible).toBe(false);
+    expect(r.missions[0]!.agents).toEqual([]);
+    expect(r.missions[0]!.filles).toHaveLength(1);
+  });
+
   it("lit la tâche reçue, ses sous-tâches à tous les niveaux et leurs cartes en attente, du plus ancien au plus récent, avec le lien de leur entreprise", async () => {
     const h: Hote = {
       taches: [tache("t1", MKT, "MKT-2"), tache("t2", MKT, "MKT-3", { parentId: "t1" }), tache("t3", MKT, "MKT-4", { parentId: "t2" })],
@@ -128,7 +165,7 @@ describe("lireCartesDesServices", () => {
   it("rien à suivre : aucune lecture", async () => {
     const journal: string[] = [];
     const r = await lireCartesDesServices([], lecteur({ taches: [], cartes: {} }, journal));
-    expect(r).toEqual({ cartes: [], indisponible: false });
+    expect(r).toEqual({ cartes: [], missions: [], indisponible: false });
     expect(journal).toEqual([]);
   });
 

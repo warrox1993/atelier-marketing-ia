@@ -14,6 +14,7 @@
  */
 import { useEffect, useSyncExternalStore } from "react";
 import type { CarteService, TacheASuivre } from "../contrats/carte-decision.js";
+import type { MissionLue } from "./avancement-missions.js";
 import { lireCartesDesServices } from "./cartes-services-lecture.js";
 import { MINIMUM_DEPARTEMENTS, useDepartements } from "./departements-sonde.js";
 import { appelRoute } from "./routes-prospection.js";
@@ -34,6 +35,7 @@ export const CLE_NOTIFICATIONS = "atelier.notifications";
 interface Etat {
   directionId: string | null;
   cartes: readonly CarteService[];
+  missions: readonly MissionLue[];
   indisponible: boolean;
   /** Au moins une lecture a abouti pour cette entreprise. */
   lue: boolean;
@@ -42,6 +44,7 @@ interface Etat {
 const VIDE: Etat = {
   directionId: null,
   cartes: [],
+  missions: [],
   indisponible: false,
   lue: false,
   lueLe: 0,
@@ -142,6 +145,7 @@ export function actualiserCartesServices(
       changer({
         directionId,
         cartes,
+        missions: lues.missions,
         indisponible: r?.indisponible === true || lues.indisponible,
         lue: true,
         lueLe: Date.now(),
@@ -197,6 +201,19 @@ export interface CartesServices {
 }
 
 const SANS_CARTES: readonly CarteService[] = [];
+const SANS_MISSIONS: readonly MissionLue[] = [];
+
+/** Missions suivies (lues avec les cartes, même minuteur : aucune lecture en double). L'abonnement vient de `useCartesServices`. */
+export function useMissionsServices(directionId: string | null): readonly MissionLue[] {
+  return useSyncExternalStore(
+    (fn) => {
+      abonnes.add(fn);
+      return () => void abonnes.delete(fn);
+    },
+    () => (directionId && etat.directionId === directionId ? etat.missions : SANS_MISSIONS),
+    () => SANS_MISSIONS,
+  );
+}
 
 /**
  * Cartes des services pour la Direction `directionId` (`null` : rien à lire, liste vide). Tous les emplacements montés

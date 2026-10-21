@@ -196,6 +196,18 @@ describe("passerelle : service à autorisation locale (parcours OAuth local)", (
     expect(locale.status).toBe(200);
   });
 
+  it("garde Origin : « null » passe seulement pour le POST d'un formulaire de consentement", async () => {
+    const formulaire = await fetch(`${p.url}/oauth/authorize`, { method: "POST", headers: { origin: "null" } });
+    expect(formulaire.status).not.toBe(403);
+    expect(await formulaire.text()).not.toContain("origine_refusee");
+    const autreRoute = await fetch(`${p.url}/sante`, { headers: { origin: "null" } });
+    expect(autreRoute.status).toBe(403);
+    const getFormulaire = await fetch(`${p.url}/oauth/authorize`, { headers: { origin: "null" } });
+    expect(await getFormulaire.text()).toContain("origine_refusee");
+    const enregistrement = await fetch(`${p.url}/oauth/register`, { method: "POST", headers: { origin: "null", "content-type": "application/json" }, body: "{}" });
+    expect(enregistrement.status).toBe(403);
+  });
+
   it("n'écoute pas hors de la boucle locale : l'adresse du socket est 127.0.0.1", async () => {
     // Le port est lié à 127.0.0.1 : une connexion par une autre adresse locale échoue.
     const port = Number(new URL(p.url).port);

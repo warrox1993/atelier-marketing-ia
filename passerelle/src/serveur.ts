@@ -71,6 +71,9 @@ function hoteLocalAutorise(entete: string | undefined, port: number): boolean {
   return autorises.includes(entete.toLowerCase());
 }
 
+/** Formulaires de consentement servis par la passerelle (serveurs d'autorisation local, Google, réseaux et CRM). */
+const FORMULAIRES_CONSENTEMENT = new Set(["/oauth/authorize", "/oauth/formulaire", "/oauth/choisir"]);
+
 function origineLocaleAutorisee(origine: string, port: number): boolean {
   try {
     const url = new URL(origine);
@@ -228,13 +231,16 @@ export function creerServeur(options: OptionsServeur): ServeurPasserelle {
       envoyerJson(res, 403, { error: "hote_refuse", message: "En-tête Host refusé." });
       return;
     }
+    const url = new URL(req.url ?? "/", urlDeBase);
+    const chemin = url.pathname;
     const origine = req.headers.origin;
-    if (typeof origine === "string" && !origineLocaleAutorisee(origine, portReel)) {
+    // « Origin: null » n'est permis que pour le POST de nos propres formulaires de consentement : ils l'envoient
+    // (politique de référent no-referrer) et sont protégés par leur identifiant de transaction (garde-oauth.ts).
+    const formulaireConsentement = origine === "null" && req.method === "POST" && FORMULAIRES_CONSENTEMENT.has(chemin);
+    if (typeof origine === "string" && !formulaireConsentement && !origineLocaleAutorisee(origine, portReel)) {
       envoyerJson(res, 403, { error: "origine_refusee", message: "Origine refusée." });
       return;
     }
-    const url = new URL(req.url ?? "/", urlDeBase);
-    const chemin = url.pathname;
 
     if (chemin === "/sante" && req.method === "GET") {
       // `mode: "reel"` est conservé pour le plugin (il lit `mode` puis `services`) ; `services` = services connectés.

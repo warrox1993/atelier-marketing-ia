@@ -176,3 +176,68 @@ ${STYLES_CASE_TACTILE}
   .atl-disc-panneau { padding-left: 0.5rem; }
 }
 `;
+
+/**
+ * Frise d'avancement des missions (en tête du fil). Six phases en rangée sur bureau, en colonne sur téléphone (390 px).
+ * Chaque état a sa forme (coche, demi-disque, point d'exclamation, cercle vide, tiret) ET son texte : la couleur n'est
+ * qu'un renfort. Jetons `--atl-*` : clair et sombre suivent l'hôte.
+ */
+export const STYLES_FRISE = `
+.atl-frises { display: flex; flex-direction: column; gap: 0.75rem; flex: none; min-width: 0; }
+.atl-frise { border: 1px solid var(--atl-trait); border-radius: var(--atl-rayon); background: var(--atl-surface); padding: 0.75rem 0.875rem 0.5rem; min-width: 0; }
+.atl-frise-entete { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 0.125rem 0.75rem; margin-bottom: 0.5rem; }
+.atl-frise-titre { margin: 0; display: flex; align-items: baseline; gap: 0.5rem; min-width: 0; flex: 1 1 14rem; font-size: 0.875rem; }
+.atl-frise-service { font-weight: 600; flex: none; }
+.atl-frise-mission { color: var(--atl-attenue-fort); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.atl-frise-resume { margin: 0; font-size: 0.8125rem; color: var(--atl-attenue-fort); }
+.atl-frise-pas { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); }
+.atl-frise-phase { --ton: var(--atl-attenue); position: relative; min-width: 0; }
+.atl-frise-phase[data-etat="faite"] { --ton: var(--atl-succes); }
+.atl-frise-phase[data-etat="en_cours"] { --ton: var(--atl-info); }
+.atl-frise-phase[data-etat="attend_decision"] { --ton: var(--atl-attention); }
+.atl-frise-phase[data-etat="non_prevue"] { opacity: 0.72; }
+/* Trait qui relie un marqueur au suivant (derrière les marqueurs, plein une fois la phase faite). */
+.atl-frise-phase::before { content: ""; position: absolute; top: 1.0625rem; left: calc(50% + 0.875rem); width: calc(100% - 1.75rem); height: 0; border-top: 2px solid var(--atl-trait); }
+.atl-frise-phase:last-child::before { display: none; }
+.atl-frise-phase[data-etat="faite"]::before { border-top-color: var(--atl-succes); }
+.atl-frise-phase[data-etat="non_prevue"]::before { border-top-style: dashed; }
+.atl-frise-bouton { display: flex; flex-direction: column; align-items: center; gap: 0.375rem; width: 100%; min-height: 2.75rem; padding: 0.5rem 0.25rem; border: 0; border-radius: calc(var(--atl-rayon) * 0.8); background: none; color: var(--atl-texte); font: inherit; text-align: center; }
+button.atl-frise-bouton { cursor: pointer; transition: background-color 150ms ease-out; }
+button.atl-frise-bouton:hover, button.atl-frise-bouton[aria-expanded="true"] { background: var(--atl-surface-2); }
+button.atl-frise-bouton:focus-visible { outline: 2px solid var(--atl-anneau); outline-offset: 1px; }
+.atl-frise-marqueur { flex: none; color: var(--ton); position: relative; background: var(--atl-surface); border-radius: 50%; }
+.atl-frise-texte { display: flex; flex-direction: column; align-items: center; gap: 0.0625rem; min-width: 0; max-width: 100%; }
+.atl-frise-nom { font-weight: 600; font-size: 0.875rem; overflow-wrap: anywhere; }
+.atl-frise-etat { font-size: 0.8125rem; color: var(--atl-attenue-fort); }
+.atl-frise-phase[data-etat="attend_decision"] .atl-frise-etat { color: var(--atl-attention); font-weight: 600; }
+.atl-frise-phase[data-etat="en_cours"] .atl-frise-etat { color: var(--atl-info); }
+.atl-frise-detail { font-size: 0.75rem; color: var(--atl-attenue); }
+.atl-frise-taches { margin: 0.25rem 0 0.5rem; padding-top: 0.5rem; border-top: 1px solid var(--atl-trait); }
+.atl-frise-taches ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.atl-frise-taches li { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 0 0.625rem; align-items: baseline; padding: 0.375rem 0; }
+.atl-frise-taches li + li { border-top: 1px solid var(--atl-trait); }
+.atl-frise-tache-id { font-variant-numeric: tabular-nums; font-weight: 600; font-size: 0.8125rem; color: var(--atl-texte); text-underline-offset: 2px; }
+a.atl-frise-tache-id { display: inline-flex; align-items: center; min-height: 1.5rem; }
+.atl-frise-tache-titre { overflow-wrap: anywhere; font-size: 0.875rem; }
+.atl-frise-tache-meta { grid-column: 2; font-size: 0.75rem; color: var(--atl-attenue-fort); }
+.atl-frise-finies { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.atl-frise-finies li { display: flex; align-items: center; gap: 0.5rem; min-height: 2rem; font-size: 0.8125rem; color: var(--atl-attenue-fort); min-width: 0; }
+.atl-frise-finies li + li { border-top: 1px solid var(--atl-trait); }
+.atl-frise-fini-marque { --ton: var(--atl-succes); display: inline-flex; flex: none; color: var(--ton); }
+.atl-frise-fini-marque .atl-frise-marqueur { width: 1rem; height: 1rem; color: var(--atl-succes); }
+.atl-frise-fini-texte { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.atl-frise-fini-etat { flex: none; font-weight: 600; color: var(--atl-succes); }
+.atl-frise-fini-reste { padding-left: 1.5rem; }
+@media (max-width: 40rem) {
+  .atl-frise-pas { grid-template-columns: minmax(0, 1fr); }
+  .atl-frise-phase::before { top: 2rem; left: 0.8125rem; width: 0; height: calc(100% - 1.5rem); border-top: 0; border-left: 2px solid var(--atl-trait); }
+  .atl-frise-phase[data-etat="faite"]::before { border-left-color: var(--atl-succes); }
+  .atl-frise-phase[data-etat="non_prevue"]::before { border-left-style: dashed; }
+  .atl-frise-bouton { flex-direction: row; align-items: flex-start; gap: 0.75rem; text-align: left; padding: 0.5rem 0.5rem 0.5rem 0.25rem; }
+  .atl-frise-texte { align-items: flex-start; flex: 1 1 auto; }
+  .atl-frise-texte > * { text-align: left; }
+  .atl-frise-marqueur { margin-top: 0.125rem; }
+  .atl-frise-phase:last-child::before { display: none; }
+}
+@media (prefers-reduced-motion: reduce) { button.atl-frise-bouton { transition: none; } }
+`;

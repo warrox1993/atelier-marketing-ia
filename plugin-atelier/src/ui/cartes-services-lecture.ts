@@ -14,6 +14,7 @@
  */
 import { elementDepuisCarte, type CarteNative, type CarteService, type TacheASuivre } from "../contrats/carte-decision.js";
 import { appelHote } from "./hote.js";
+import type { AgentMission, MissionLue, TacheMission } from "./avancement-missions.js";
 import { enParallele, LECTURES_SIMULTANEES } from "./vues/departements.js";
 
 /** Tâches dont on lit les cartes et sous-tâches lues au plus par entreprise (mêmes plafonds que l'ancienne route). */
@@ -36,6 +37,8 @@ interface TacheHote {
   title: string;
   status: string;
   parentId: string | null;
+  assigneeAgentId: string | null;
+  updatedAt: string | null;
 }
 
 const texte = (x: unknown): string | null => (typeof x === "string" && x !== "" ? x : null);
@@ -48,7 +51,7 @@ function tacheDepuisHote(brut: unknown): TacheHote | null {
   const companyId = texte(o["companyId"]);
   const title = texte(o["title"]);
   if (!id || !companyId || !title) return null;
-  return { id, companyId, identifier: texte(o["identifier"]), title, status: texte(o["status"]) ?? "", parentId: texte(o["parentId"]) };
+  return { id, companyId, identifier: texte(o["identifier"]), title, status: texte(o["status"]) ?? "", parentId: texte(o["parentId"]), assigneeAgentId: texte(o["assigneeAgentId"]), updatedAt: texte(o["updatedAt"]) };
 }
 
 function liste(brut: unknown): unknown[] {
@@ -64,8 +67,12 @@ function carteDepuisHote(brut: unknown): (CarteNative & { createdAt: string }) |
   return { id, kind, status, title: texte(o["title"]), payload: o["payload"], createdAt: texte(o["createdAt"]) ?? new Date(0).toISOString() };
 }
 
+const tacheMission = (t: TacheHote): TacheMission => ({ id: t.id, identifier: t.identifier, title: t.title, status: t.status, agentId: t.assigneeAgentId, maj: t.updatedAt });
+
 export interface LectureCartes {
   cartes: CarteService[];
+  /** Les missions suivies (tâche reçue + sous-tâches de tous statuts + agents), lues dans le même passage que les cartes. */
+  missions: MissionLue[];
   /** Une lecture a échoué (tâche ou service illisible) : les cartes lues sont gardées, l'interface propose de réessayer. */
   indisponible: boolean;
 }
@@ -80,6 +87,7 @@ export async function lireCartesDesServices(aSuivre: readonly TacheASuivre[], li
   // 1) Pour chaque tâche reçue : la tâche elle-même puis ses sous-tâches.
   const parTache = new Map<string, { tache: TacheHote; service: TacheASuivre }>();
   const groupes = new Array<Array<{ tache: TacheHote; service: TacheASuivre }>>(aSuivre.length).fill([]);
+  const lues = new Array<{ racine: TacheHote; filles: TacheHote[]; service: TacheASuivre } | null>(aSuivre.length).fill(null);
   await enParallele(aSuivre.map((s, i) => ({ s, i })), LECTURES_SIMULTANEES, async ({ s, i }) => {
     try {
       const racine = tacheDepuisHote(await lire(`/issues/${encodeURIComponent(s.tacheId)}`));
@@ -92,6 +100,7 @@ export async function lireCartesDesServices(aSuivre: readonly TacheASuivre[], li
         if (t && memeId(t.companyId, s.companyId)) trouvees.push(t);
       }
       groupes[i] = trouvees.map((tache) => ({ tache, service: s }));
+      lues[i] = { racine, filles: trouvees.slice(1), service: s };
     } catch {
       echec();
     }
@@ -148,6 +157,28 @@ export async function lireCartesDesServices(aSuivre: readonly TacheASuivre[], li
       echec();
     }
   });
+  // Agents de chaque service suivi (nom et identifiant d'URL), une lecture par entreprise : classement des étapes.
+  const agentsParService = new Map<string, AgentMission[]>();
+  const entreprises = [...new Set(lues.flatMap((m) => (m ? [m.service.companyId.toLowerCase()] : [])))];
+  await enParallele(entreprises, LECTURES_SIMULTANEES, async (cid) => {
+    try {
+      const brut = liste(await lire(`/companies/${encodeURIComponent(cid)}/agents`));
+      agentsParService.set(
+        cid,
+        brut.flatMap((a) => {
+          const o = (a ?? {}) as Record<string, unknown>;
+          const id = texte(o["id"]);
+          const nom = texte(o["name"]);
+          return id && nom ? [{ id, nom, cle: texte(o["urlKey"]), role: texte(o["role"]) }] : [];
+        }),
+      );
+    } catch {
+      // Sans la liste des agents, le classement se rabat sur les titres : la frise reste affichée.
+    }
+  });
+  const missions: MissionLue[] = lues.flatMap((m) =>
+    m ? [{ companyId: m.service.companyId, slug: m.service.slug, nom: m.service.nom, racine: tacheMission(m.racine), filles: m.filles.map(tacheMission), agents: agentsParService.get(m.service.companyId.toLowerCase()) ?? [] }] : [],
+  );
   cartes.sort((a, b) => a.date.localeCompare(b.date) || a.element.id.localeCompare(b.element.id));
-  return { cartes, indisponible };
+  return { cartes, missions, indisponible };
 }
