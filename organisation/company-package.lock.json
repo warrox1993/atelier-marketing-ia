@@ -370,6 +370,20 @@
         "SKILL.md"
       ]
     },
+    "coordonnees-recherche": {
+      "version": "1.0.0",
+      "sha256": "4d35cffc78bf9f31096fe401cc4eb558575e78548cb5d4e4a2e3b0f423f74dc9",
+      "fichiers": [
+        "SKILL.md"
+      ]
+    },
+    "coordonnees-recoupement": {
+      "version": "1.0.0",
+      "sha256": "f174124f7f6afaca57f84eb761e47a65b3aeac9b8bb569ef5e04d4f0d25a4211",
+      "fichiers": [
+        "SKILL.md"
+      ]
+    },
     "courrier-officiel": {
       "version": "1.1.0",
       "sha256": "073e393843f363e6bb695ebc4981ff388dd0613ee9dafcf7ab2d4eed36262c60",

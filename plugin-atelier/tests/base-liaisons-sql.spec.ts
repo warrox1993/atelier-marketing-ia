@@ -176,4 +176,17 @@ describe("déclaration des services en deux temps (revue du 19/10/2026, E1) : r�
     expect(a.execute[0]).toMatch(/update \S+\.services_entreprises set confirme_le = now\(\) where company_id = \$1 and confirme_le is null/u);
     expect(await creerStockLiaisons(fauxHote(0).db).confirmer("c")).toBe(false);
   });
+
+  it("M5 : la sélection des liaisons à relayer est faite en SQL (tâche cible in_review) avec un curseur, sans paramètre tableau", async () => {
+    const { db, lectures } = fauxHote(0);
+    const stock = creerStockLiaisons(db);
+    await stock.listerOuvertesTransmises(50, "liaison-9");
+    await stock.listerOuvertesTransmises(50);
+    expect(lectures).toHaveLength(2);
+    expect(lectures[0]).toContain("t.status = 'in_review'");
+    expect(lectures[0]).toContain("join public.issues t on t.id = l.tache_cible_id and t.company_id = l.entreprise_cible_id");
+    expect(lectures[0]).toContain("l.id::text > $2::text");
+    expect(lectures[0]).toContain("order by l.id::text limit $1");
+  });
 });
+

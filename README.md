@@ -65,7 +65,7 @@ en lecture ; `bootstrap-organisation.py etat` signale une connexion encore ouver
 
 ```bash
 claude setup-token                                                 # dans un terminal de l'opérateur
-python3 -I scripts/bootstrap-organisation.py appliquer             # liaison réelle (claude_local) des 13 agents marketing
+python3 -I scripts/bootstrap-organisation.py appliquer             # liaison réelle (claude_local) des 14 agents marketing
 python3 -I scripts/bootstrap-organisation.py jeton --confirmer     # coller le jeton : secret natif chiffré
 python3 -I scripts/bootstrap-organisation.py test-reel             # à blanc : agent, modèle, jeton
 python3 -I scripts/bootstrap-organisation.py test-reel --confirmer # un appel réel minimal (non exécuté à ce jour)

@@ -8,6 +8,8 @@
 
 # Configuration locale : seul l'exemple sans secret est suivi.
 /config/*.env
+# Copies locales de config/atelier.env (ex. .avant-transfert-<horodatage>) : elles contiennent des secrets.
+/config/*.env.avant-transfert-*
 !/config/*.env.example
 /config/atelier-distant.env
 

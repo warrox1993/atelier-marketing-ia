@@ -1,8 +1,8 @@
 {
   "schema": "atelier/registre-agents/v1",
-  "version": "1.7.0",
-  "dateVersion": "2026-10-17",
-  "description": "Registre canonique des treize agents marketing de l'Atelier et de l'agent déterministe « Porte de contrôle » (deterministe: true, adaptateur process, aucun modèle). Source unique : le fichier .paperclip.yaml et l'en-tête des AGENTS.md en sont générés par « python3 -I scripts/bootstrap-organisation.py generer ». Les noms courts (champ nom) portent leurs accents : l'identifiant (slug) d'un agent en est dérivé en retirant les accents (NFKD) avant la normalisation, comme le fait le bootstrap ; le titre porte le libellé français complet.",
+  "version": "1.8.0",
+  "dateVersion": "2026-10-21",
+  "description": "Registre canonique des quatorze agents marketing de l'Atelier et de l'agent déterministe « Porte de contrôle » (deterministe: true, adaptateur process, aucun modèle). Source unique : le fichier .paperclip.yaml et l'en-tête des AGENTS.md en sont générés par « python3 -I scripts/bootstrap-organisation.py generer ». Les noms courts (champ nom) portent leurs accents : l'identifiant (slug) d'un agent en est dérivé en retirant les accents (NFKD) avant la normalisation, comme le fait le bootstrap ; le titre porte le libellé français complet.",
   "adaptateur": {
     "type": "claude_local",
     "engine": "cli",
@@ -302,6 +302,74 @@
         "chaque prospect provient d'une réponse d'outil signée et déposée, jamais d'une saisie à la main",
         "aucune personne physique de la BCE, aucun particulier sans origine légale prouvée",
         "aucun conseil d'assurance ni comparaison de garanties ; le score reste une « estimation » tant que l'étalonnage n'est pas mesuré"
+      ]
+    },
+    {
+      "slug": "enrichissement-coordonnees",
+      "nom": "Enrichissement coordonnées",
+      "titre": "Pôle Intelligence · Enrichissement des coordonnées professionnelles",
+      "role": "researcher",
+      "rapporteA": "coordinateur",
+      "mission": "Reçoit la liste de fiches de la Prospection et relève, de sources licites seulement (site entier, PDF publiés, annuaires professionnels, fiche Google Business, BCE/KBO, coordonnées publiées par la personne sur LinkedIn), les numéros de téléphone professionnels ; recoupe chaque numéro sur deux sources, le classe, contrôle la liste « Ne m'appelez plus » et indique source, date et base légale ; ne contacte jamais personne.",
+      "entrees": [
+        "liste de fiches livrée par la Prospection",
+        "brief et exigences",
+        "résultat de la comparaison avec la liste « Ne m'appelez plus » s'il est fourni"
+      ],
+      "sorties": [
+        "relevé des numéros par fiche avec URL, date et extrait",
+        "numéros recoupés : fiable ou à vérifier, type, base légale",
+        "contrôle « Ne m'appelez plus » (non inscrit, inscrit, non vérifié) et appel conseillé ou non",
+        "liste des étapes non faites et des limites"
+      ],
+      "competences": [
+        "coordonnees-recherche",
+        "coordonnees-recoupement",
+        "recherche-sourcee",
+        "recherche-connaissances"
+      ],
+      "competencesObligatoires": [
+        "coordonnees-recherche",
+        "coordonnees-recoupement"
+      ],
+      "outils": {
+        "recherche": [
+          "Read",
+          "Grep",
+          "Glob",
+          "WebSearch",
+          "WebFetch",
+          "mcp__paperclip-assigned",
+          "mcp__Paperclip_connections__connections_search",
+          "mcp__Paperclip_connections__connection_request"
+        ],
+        "mutation": [
+          "Bash(curl *)",
+          "Write"
+        ],
+        "interdits": [
+          "Edit",
+          "NotebookEdit",
+          "Agent",
+          "Task"
+        ]
+      },
+      "connexions": {
+        "gbp": "lecture"
+      },
+      "modele": {
+        "id": "claude-sonnet-5-5",
+        "effort": "medium"
+      },
+      "budgetMensuelCentimes": 1500,
+      "maxToursParExecution": 90,
+      "relit": [],
+      "roleRevue": null,
+      "criteresReussite": [
+        "chaque numéro porte une URL source réelle, une date de relevé et sa base légale, jamais une saisie de mémoire",
+        "un numéro n'est « fiable » qu'avec deux sources indépendantes ; sinon « à vérifier »",
+        "aucune fuite de données, aucun darkweb, aucun numéro volé ou deviné, aucun numéro de particulier non publié",
+        "aucun appel conseillé sans contrôle de la liste « Ne m'appelez plus » fait ; sans résultat fourni : « non vérifié »"
       ]
     },
     {
@@ -814,6 +882,7 @@
         "coordinateur",
         "veille",
         "prospection",
+        "enrichissement-coordonnees",
         "seo-local-geo",
         "sea",
         "contenus",
@@ -885,6 +954,7 @@
         "coordinateur",
         "veille",
         "prospection",
+        "enrichissement-coordonnees",
         "seo-local-geo",
         "sea",
         "contenus",

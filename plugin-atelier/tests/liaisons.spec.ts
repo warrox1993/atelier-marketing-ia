@@ -133,6 +133,7 @@ function stockMemoire(): StockLiaisons & { liaisons: LiaisonMemoire[]; services:
     },
     listerATransmettre: async (n, max) => liaisons.filter((l) => l.statut === "ouverte" && !l.tacheCible && due(l, max)).slice(0, n).map((l) => ({ ...l })),
     listerCibleSupprimee: async (n, max) => liaisons.filter((l) => (l.statut === "ouverte" || l.statut === "en_attente_approbation") && l.entrepriseCible === null && due(l, max)).slice(0, n).map((l) => ({ ...l })),
+    listerOuvertesTransmises: async (n) => liaisons.filter((l) => l.statut === "ouverte" && l.tacheCible && l.entrepriseCible !== null).slice(0, n).map((l) => ({ ...l })),
     listerANotifier: async (n, max) => liaisons.filter((l) => (l.statut === "repondue" || l.statut === "annulee") && !l.sourceNotifieeLe && due(l, max)).slice(0, n).map((l) => ({ ...l })),
     reserverEssai: async (c, i, attente, max) => {
       const l = trouver(c, i);
@@ -220,7 +221,7 @@ function monde(o: { reveilEchoue?: boolean; commentaireEchoue?: boolean; creatio
       listComments: async (issueId: string, companyId: string) => (exigerPortee("issues.listComments", companyId), commentaires.filter((c) => c.issueId === issueId && c.companyId === companyId)),
     },
   } as unknown as PluginContext;
-  const base = { journaliser: async (e: Ligne) => void journal.push(e) } as unknown as BaseAtelier;
+  const base = { journaliser: async (e: Ligne) => void journal.push(e), journalExiste: async (c: string, t: string, ent: string) => journal.some((j) => j.companyId === c && j.type === t && j.entiteId === ent) } as unknown as BaseAtelier;
   const stock = stockMemoire();
   const routesBrutes = routesLiaisons({ ctx, base, stock });
   /** Chaque route s'exécute dans une invocation portée par l'entreprise résolue par l'hôte. */

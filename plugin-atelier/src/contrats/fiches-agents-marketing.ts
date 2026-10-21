@@ -201,6 +201,60 @@ export const FICHES_AGENTS_MARKETING: readonly FicheAgentMarketing[] = [
     "pourquoi": "Le repérage de prospects est cadré par des origines légales et par des réponses d'outils conservées telles quelles ; l'agent ne contacte personne, la décision d'agir reste humaine."
   },
   {
+    "slug": "enrichissement-coordonnees",
+    "nom": "Enrichissement coordonnées",
+    "pole": "Intelligence",
+    "role": "Enrichissement des coordonnées professionnelles",
+    "mission": "Reçoit la liste de fiches de la Prospection et relève, de sources licites seulement (site entier, PDF publiés, annuaires professionnels, fiche Google Business, BCE/KBO, coordonnées publiées par la personne sur LinkedIn), les numéros de téléphone professionnels ; recoupe chaque numéro sur deux sources, le classe, contrôle la liste « Ne m'appelez plus » et indique source, date et base légale ; ne contacte jamais personne.",
+    "recoit": [
+      "liste de fiches livrée par la Prospection",
+      "brief et exigences",
+      "résultat de la comparaison avec la liste « Ne m'appelez plus » s'il est fourni"
+    ],
+    "livre": [
+      "relevé des numéros par fiche avec URL, date et extrait",
+      "numéros recoupés : fiable ou à vérifier, type, base légale",
+      "contrôle « Ne m'appelez plus » (non inscrit, inscrit, non vérifié) et appel conseillé ou non",
+      "liste des étapes non faites et des limites"
+    ],
+    "competences": [
+      {
+        "cle": "coordonnees-recherche",
+        "nom": "Recherche des coordonnées professionnelles",
+        "sert": "Cherche, pour chaque fiche d'une liste de prospects, les numéros de téléphone professionnels publiés par des sources licites : site entier (contact, équipe, mentions légales), PDF publiés, annuaires professionnels, fiche Google Business, BCE/KBO et coordonnées que la personne publie elle-même sur LinkedIn."
+      },
+      {
+        "cle": "coordonnees-recoupement",
+        "nom": "Recoupement et classement des numéros",
+        "sert": "Recoupe chaque numéro de téléphone relevé sur deux sources indépendantes (fiable ou à vérifier), le classe (standard, ligne directe, portable professionnel publié), contrôle la liste belge « Ne m'appelez plus » et rend, par fiche, un format de sortie fixe avec source, date et base légale."
+      },
+      {
+        "cle": "recherche-sourcee",
+        "nom": "Recherche sourcée et vérification des faits",
+        "sert": "Mène une recherche documentaire et vérifie les faits : chaque observation porte sa source, sa date de collecte, son statut d'accès et sa limite, et distingue fait vérifié, inférence, hypothèse et recommandation."
+      },
+      {
+        "cle": "recherche-connaissances",
+        "nom": "Recherche dans les connaissances du client",
+        "sert": "Interroge les connaissances du client (conditions générales, fiches produit, tarifs, FAQ, notes) avant d'écrire un chiffre d'offre, et cite l'adresse connaissance:// rendue ; sans source, signale l'information manquante."
+      },
+      {
+        "cle": "memoire-para",
+        "nom": "Mémoire en fichiers (méthode PARA)",
+        "sert": "Tient la mémoire persistante de l'agent en fichiers, selon la méthode PARA (graphe de connaissances, notes du jour, savoir tacite), dans le dossier ./memoire/ de son répertoire de travail, avec la source et la date de chaque fait."
+      }
+    ],
+    "interdits": [
+      "Tu ne contactes personne : ni appel, ni courriel, ni message, ni formulaire, ni appel de test pour vérifier un numéro.",
+      "Aucune aspiration massive d'un site, d'un annuaire ou d'un réseau social ; aucun contournement d'une connexion, d'une vérification anti-robot ou d'une limite d'accès. Sur LinkedIn, seulement ce qui est visible publiquement sans connexion."
+    ],
+    "outilsRetires": [
+      "modifier des fichiers",
+      "lancer d'autres agents"
+    ],
+    "pourquoi": "Les numéros de téléphone viennent uniquement de sources publiées par les professionnels eux-mêmes, recoupés sur deux sources et notés avec leur origine ; jamais de fuite de données ni de numéro deviné, et la liste « Ne m'appelez plus » est contrôlée avant tout appel."
+  },
+  {
     "slug": "seo-local-geo",
     "nom": "SEO local GEO",
     "pole": "Production",
@@ -722,10 +776,11 @@ export const PARCOURS_DEMANDE: readonly EtapeParcours[] = [
   },
   {
     "titre": "Production par les agents spécialisés",
-    "texte": "Chaque spécialiste prépare son livrable en brouillon : veille de marché, prospects, référencement, publicité, contenus, conversion, mesure, réseaux sociaux.",
+    "texte": "Chaque spécialiste prépare son livrable en brouillon : veille de marché, prospects, coordonnées professionnelles, référencement, publicité, contenus, conversion, mesure, réseaux sociaux.",
     "agents": [
       "veille",
       "prospection",
+      "enrichissement-coordonnees",
       "seo-local-geo",
       "sea",
       "contenus",

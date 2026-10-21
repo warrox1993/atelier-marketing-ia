@@ -14,6 +14,8 @@
  * instructions), et le réveil du coordinateur source sont donc posés par le facteur (`facteur.ts`), hors invocation.
  * Teinte : si la liaison a exigé l'approbation humaine, la réponse est marquée teintée dans la même écriture
  * (`teinte_retour`, migration 017) ; la tâche d'origine et ses descendantes sont alors teintées (voir `demander.ts`).
+ * Comptes rendus d'étape (21/10/2026) : le relais d'un commentaire de la tâche cible `in_review` vers la tâche d'origine
+ * écrit chez l'entreprise SOURCE ; il est donc fait par le facteur (`etapes.ts`), hors invocation, pas par cet événement.
  * Idempotence : le changement de statut est conditionnel (`ouverte` seulement) ; un rejeu de l'événement ne fait rien.
  * Isolation : la liaison est cherchée avec l'entreprise de l'événement comme entreprise CIBLE.
  */
@@ -59,7 +61,9 @@ export async function notifierSource(
   ctx: PluginContext,
   l: Pick<LiaisonStockee, "id" | "tacheOrigine" | "entrepriseSource">,
   corps: string,
-  raison: "atelier_liaison_reponse" | "atelier_liaison_refusee",
+  raison: "atelier_liaison_reponse" | "atelier_liaison_refusee" | "atelier_liaison_etape",
+  /** Suffixe de la clé d'idempotence du réveil quand plusieurs notifications visent la même liaison (comptes rendus d'étape). */
+  suffixeCle: string = "",
 ): Promise<{ erreurCommentaire: string | null; erreurReveil: string | null }> {
   let erreurCommentaire: string | null = null;
   let erreurReveil: string | null = null;
@@ -70,7 +74,7 @@ export async function notifierSource(
     ctx.logger.warn("Liaison : commentaire sur la tâche d'origine impossible", { liaisonId: l.id, erreur: erreurCommentaire });
   }
   try {
-    await ctx.issues.requestWakeup(l.tacheOrigine, l.entrepriseSource, { reason: raison, contextSource: "atelier.liaison", idempotencyKey: `${raison.replace(/_/gu, "-")}-${l.id}` });
+    await ctx.issues.requestWakeup(l.tacheOrigine, l.entrepriseSource, { reason: raison, contextSource: "atelier.liaison", idempotencyKey: `${raison.replace(/_/gu, "-")}-${l.id}${suffixeCle ? `-${suffixeCle}` : ""}` });
   } catch (e) {
     erreurReveil = e instanceof Error ? e.message : String(e);
     ctx.logger.warn("Liaison : réveil du coordinateur source impossible", { liaisonId: l.id, erreur: erreurReveil });

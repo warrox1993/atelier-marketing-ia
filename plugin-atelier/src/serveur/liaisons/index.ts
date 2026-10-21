@@ -29,7 +29,7 @@ export function stockLiaisonsParesseux(ctx: PluginContext): StockLiaisons {
     liaisonsEntrantesOuvertes: (c) => p().liaisonsEntrantesOuvertes(c), retoursTeintesDe: (c, j, n) => p().retoursTeintesDe(c, j, n),
     inserer: (l) => p().inserer(l), lireParId: (c, i) => p().lireParId(c, i), lireParTacheCible: (c, t) => p().lireParTacheCible(c, t),
     listerEnAttente: (c, n) => p().listerEnAttente(c, n), transiter: (c, i, d, v) => p().transiter(c, i, d, v), attacher: (c, i, x) => p().attacher(c, i, x),
-    listerATransmettre: (n, m) => p().listerATransmettre(n, m), listerCibleSupprimee: (n, m) => p().listerCibleSupprimee(n, m), listerANotifier: (n, m) => p().listerANotifier(n, m),
+    listerATransmettre: (n, m) => p().listerATransmettre(n, m), listerCibleSupprimee: (n, m) => p().listerCibleSupprimee(n, m), listerANotifier: (n, m) => p().listerANotifier(n, m), listerOuvertesTransmises: (n, a) => p().listerOuvertesTransmises(n, a),
     reserverEssai: (c, i, a, m) => p().reserverEssai(c, i, a, m), noterErreurFacteur: (c, i, e) => p().noterErreurFacteur(c, i, e),
     marquerNotifiee: (c, i) => p().marquerNotifiee(c, i), relancerFacteur: (c, i) => p().relancerFacteur(c, i),
   };

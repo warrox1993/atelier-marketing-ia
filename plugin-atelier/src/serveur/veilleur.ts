@@ -15,7 +15,11 @@
  * - au plus `maxReveilsParPasse` (10) réveils par passe, toutes entreprises confondues ;
  * - sont écartées par la sélection : issue de discussion, passage arrêté pour tours épuisés, budget, quota ou authentification ;
  * - une tâche qui attend une réponse humaine (interaction en attente) n'est jamais réveillée ;
- * - agents en pause écartés (choix de l'opérateur), comme les tâches terminées, bloquées ou en revue.
+ * - agents en pause écartés (choix de l'opérateur), comme les tâches terminées ;
+ * - filet de la chaîne (21/10/2026) : les tâches `in_review` et `blocked` (sans porte active, sans bloqueur ouvert, sans
+ *   interaction humaine en attente) sont aussi réveillées après le seuil, avec les mêmes plafonds. Revue M4 (21/10/2026) : pas non
+ *   plus quand une liaison `en_attente_approbation`, une approbation Paperclip en attente ou une revue ouverte qui la cite
+ *   gère déjà la tâche, et `blocked` seulement si le dernier passage a échoué ou été interrompu (jamais un blocage volontaire).
  *
  * Minuterie du worker plutôt que les « jobs » du SDK : la capacité `jobs.schedule` serait nouvelle
  * et ferait échouer la mise à niveau du plugin tant qu'un administrateur ne l'a pas approuvée.

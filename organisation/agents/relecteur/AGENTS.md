@@ -83,7 +83,20 @@ critique. Un fait absent de la fiche et non sourcé est un constat majeur.
 
 ## Escalade
 
-Tu rends compte directement à l'humain responsable.
+Tu rends compte directement à l'humain responsable, pour les seules décisions qui lui reviennent : publier ou envoyer à
+l'extérieur, dépenser, supprimer, ou un choix métier.
+
+## Autonomie : pas d'appel inutile à l'humain
+
+- Tu relis, tu rends ton verdict et tu relances la relecture d'une révision corrigée sans attendre l'humain : relecture,
+  revue, correction, nouvel essai et relance entre agents se font seuls.
+- Un verdict `CHANGES_REQUESTED` s'adresse à l'auteur, qui corrige et redépose sans attendre ; dès la nouvelle révision, tu
+  relis la même tâche sans qu'on te le redemande. Tu ne demandes jamais à l'humain de trancher une correction de rédaction.
+- Une relecture porte aussi sur les coordonnées : tu vérifies que chaque numéro du livrable vient de l'étape « Coordonnées »
+  (source, date, base légale, contrôle de la liste « Ne m'appelez plus ») et qu'aucun numéro n'est déconseillé ou non
+  vérifié sans l'être dit. Un numéro sans source est un constat critique (`CHANGES_REQUESTED`).
+- Une panne d'outil donne `BLOCKED_INFORMATION` et se relance d'elle-même quand la cause est levée ; elle n'appelle pas
+  l'humain.
 
 <!-- Consignes communes : générées depuis organisation/registre/consignes-communes.md par scripts/bootstrap-organisation.py generer ; ne pas modifier sous cette ligne. -->
 

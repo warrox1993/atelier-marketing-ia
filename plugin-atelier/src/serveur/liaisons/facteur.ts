@@ -15,6 +15,8 @@
  *   coordinateur cible (retrouvée par `originId` si elle existe déjà), réveil avec clé d'idempotence, journal ;
  * - notification : liaison `repondue` ou `annulee` dont la source n'a pas reçu la réponse : commentaire sur la tâche
  *   d'origine (DONNÉE, jamais instruction), réveil du coordinateur source, journal des deux côtés.
+ * - comptes rendus d'étape (`etapes.ts`) : commentaire d'agent d'une tâche cible `in_review` d'une liaison encore ouverte,
+ *   relayé une seule fois à la tâche d'origine ;
  * Le facteur n'agit que sur des liaisons enregistrées par les routes après leurs gardes, et seulement dans les deux
  * entreprises de chaque liaison. Aucune capacité de plus : minuterie du worker, comme le veilleur.
  *
@@ -24,6 +26,8 @@
  */
 import type { LiaisonStockee, StockLiaisons } from "./base-liaisons.js";
 import { cloturerCibleSupprimee } from "./cible-supprimee.js";
+import { toujoursAutorisee } from "./autorisation.js";
+import { creerRelaisEtapes } from "./etapes.js";
 import { corpsReponse, estTronquee, notifierSource } from "./retour.js";
 import { creerTransmission, type DependancesLiaisons } from "./transmission.js";
 
@@ -42,27 +46,20 @@ export const attenteFacteur = (essaisFaits: number): number => Math.min(FACTEUR.
 export interface ResultatFacteur {
   transmises: string[];
   notifiees: string[];
+  /** Liaisons ouvertes dont un compte rendu d'étape a été relayé à la source. */
+  etapesRelayees: string[];
   refusees: string[];
   echecs: Array<{ liaisonId: string; etape: "transmission" | "notification"; erreur: string }>;
 }
 
 const message = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
-export function creerFacteur(d: DependancesLiaisons) {
+export function creerFacteur(d: DependancesLiaisons & { maintenant?: () => number }) {
   const { ctx, base, stock } = d;
+  const relaisEtapes = creerRelaisEtapes(d);
   const { transmettre } = creerTransmission(d);
   let enCours = false;
   let minuterie: ReturnType<typeof setInterval> | null = null;
-
-  /** Les règles qui ont autorisé la demande valent toujours (déclarations et matrice relues en base). */
-  async function toujoursAutorisee(l: LiaisonStockee, s: Pick<StockLiaisons, "serviceDeEntreprise" | "lireFlux">): Promise<boolean> {
-    if (l.entrepriseCible === null) return false;
-    const [source, cible] = await Promise.all([s.serviceDeEntreprise(l.entrepriseSource), s.serviceDeEntreprise(l.entrepriseCible)]);
-    if (!source || !cible) return false;
-    if (source.clientMarqueur !== cible.clientMarqueur || source.serviceSlug !== l.serviceSource || cible.serviceSlug !== l.serviceCible) return false;
-    if (l.entrepriseSource.toLowerCase() === l.entrepriseCible.toLowerCase()) return false;
-    return (await s.lireFlux(source.clientMarqueur, source.serviceSlug, cible.serviceSlug)) !== null;
-  }
 
   async function echec(l: LiaisonStockee, etape: "transmission" | "notification", erreur: string, r: ResultatFacteur) {
     r.echecs.push({ liaisonId: l.id, etape, erreur });
@@ -136,7 +133,7 @@ export function creerFacteur(d: DependancesLiaisons) {
 
   /** Un passage : transmissions puis notifications dues. Un seul passage à la fois ; ne lève jamais. */
   async function passe(): Promise<ResultatFacteur> {
-    const r: ResultatFacteur = { transmises: [], notifiees: [], refusees: [], echecs: [] };
+    const r: ResultatFacteur = { transmises: [], notifiees: [], etapesRelayees: [], refusees: [], echecs: [] };
     if (enCours) return r;
     enCours = true;
     try {
@@ -162,6 +159,7 @@ export function creerFacteur(d: DependancesLiaisons) {
           }
         }
       }
+      r.etapesRelayees.push(...(await relaisEtapes.passe()));
     } finally {
       enCours = false;
     }

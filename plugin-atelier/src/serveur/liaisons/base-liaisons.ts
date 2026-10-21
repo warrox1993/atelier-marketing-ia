@@ -114,6 +114,11 @@ export interface StockLiaisons {
    * (`entreprise_cible_id` NULL), transmises ou non, à clôturer en `cible_supprimee`.
    */
   listerCibleSupprimee(limite: number, essaisMax: number): Promise<LiaisonStockee[]>;
+  /**
+   * Liaisons `ouverte` déjà transmises dont la tâche cible est `in_review` (sélection SQL), triées par identifiant : relais des comptes
+   * rendus d'étape. `apres` = identifiant de la dernière liaison examinée (curseur tournant : le passage suivant reprend après elle).
+   */
+  listerOuvertesTransmises(limite: number, apres?: string | null): Promise<LiaisonStockee[]>;
   /** File de sortie : liaisons `repondue` ou `annulee` dont la tâche d'origine n'a pas encore reçu la réponse. */
   listerANotifier(limite: number, essaisMax: number): Promise<LiaisonStockee[]>;
   /**
@@ -361,6 +366,16 @@ export function creerStockLiaisons(db: PluginContext["db"]): StockLiaisons {
         `select * from ${ns}.liaisons where statut in ('ouverte', 'en_attente_approbation') and entreprise_cible_id is null and facteur_essais < $2
            and (facteur_prochain_le is null or facteur_prochain_le <= now()) order by cree_le limit $1`,
         [limite, essaisMax],
+      )).map(enLiaison);
+    },
+    async listerOuvertesTransmises(limite, apres = null) {
+      return (await q(
+        `select l.* from ${ns}.liaisons l
+           join public.issues t on t.id = l.tache_cible_id and t.company_id = l.entreprise_cible_id
+          where l.statut = 'ouverte' and l.tache_cible_id is not null and l.entreprise_cible_id is not null and t.status = 'in_review'
+            and ($2::text is null or l.id::text > $2::text)
+          order by l.id::text limit $1`,
+        [limite, apres],
       )).map(enLiaison);
     },
     async listerANotifier(limite, essaisMax) {

@@ -17,10 +17,10 @@ describe("migration 019 : confirmation des services", () => {
   const instructions = sql.split("\n").filter((l) => !l.trimStart().startsWith("--")).join("\n");
   const T = "plugin_atelier_f0322cc62c.services_entreprises";
 
-  it("est numérotée immédiatement après 018 et reste la dernière", () => {
+  it("est numérotée immédiatement après 018 et avant 020", () => {
     const i = fichiers.indexOf(NOM);
     expect(fichiers[i - 1]).toMatch(/^018_/u);
-    expect(i).toBe(fichiers.length - 1);
+    expect(fichiers[i + 1]).toMatch(/^020_/u);
   });
 
   it("les lignes existantes naissent confirmées, puis le défaut est retiré (une ligne nouvelle n'est jamais confirmée d'office)", () => {

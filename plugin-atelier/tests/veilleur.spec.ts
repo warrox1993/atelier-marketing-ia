@@ -182,6 +182,24 @@ describe("sélection SQL des tâches orphelines : exclusions", () => {
     return vues[0]!;
   }
 
+  it("M4 : in_review et blocked écartées si une liaison en attente d'approbation, une approbation Paperclip ou une revue ouverte les gère", async () => {
+    const sql = await requete();
+    expect(sql).toContain("li.tache_origine_id = i.id and li.statut = 'en_attente_approbation'");
+    expect(sql).toContain("from public.approvals ap where ap.company_id = i.company_id and ap.status = 'pending' and ap.payload::text like '%' || i.id::text || '%'");
+    expect(sql).toMatch(/rv\.title ~ \('\(\^\|\[\^A-Za-z0-9-\]\)' \|\| i\.identifier \|\| '\(\[\^0-9\]\|\$\)'\)/u);
+    expect(sql).toContain("rv.status not in ('done', 'cancelled')");
+    expect(sql).toContain("rv.assignee_agent_id <> i.assignee_agent_id");
+    // Ces trois exclusions ne s'appliquent qu'à in_review et blocked (todo et in_progress ne sont pas concernées).
+    expect(sql).toContain("i.status in ('todo', 'in_progress') or (");
+  });
+
+  it("M4 : blocked n'est prise que si le dernier passage a échoué ou été interrompu, jamais un blocage volontaire sans passage", async () => {
+    const sql = await requete();
+    expect(sql).toContain("when i.status = 'blocked' then d.status in ('interrupted', 'failed', 'timed_out', 'scheduled_retry')");
+    expect(sql).not.toContain("or i.status in ('in_review', 'blocked') or");
+    expect(sql).toContain("else (d.id is null or i.status = 'in_review' or d.status in");
+  });
+
   it("écarte les passages arrêtés pour tours épuisés, budget, quota ou authentification", async () => {
     const sql = await requete();
     expect(sql).toContain("r.error_code");
@@ -196,5 +214,34 @@ describe("sélection SQL des tâches orphelines : exclusions", () => {
     const sql = await requete();
     expect(sql).toContain("i.origin_kind like 'plugin:%:discussion'");
     expect(sql).toContain("i.origin_id, '') like 'discussion:%'");
+  });
+
+  describe("filet de la chaîne : tâches en revue ou bloquées (21/10/2026)", () => {
+    const enRevue = (statut: string): Candidat => ({ issueId: ORPHELINE, identifier: "ABC-8", statut, agentId: AGENT, dernierRun: { id: "run-1", statut: "succeeded", le: "2026-10-16T11:00:00.000Z" } });
+
+    it.each(["in_review", "blocked"])("une tâche %s sans exécution depuis le seuil est réveillée, journalisée avec son statut", async (statut) => {
+      const b = banc({ candidats: [enRevue(statut)] });
+      const r = await b.veilleur.passe();
+      expect(r.reveillees).toEqual([ORPHELINE]);
+      expect(b.journal[0]!.donnees).toMatchObject({ statut, dernierRun: { statut: "succeeded" } });
+    });
+
+    it("jamais de réveil quand une carte attend l'humain", async () => {
+      const b = banc({ candidats: [enRevue("in_review")], interactions: [{ status: "pending" }] });
+      const r = await b.veilleur.passe();
+      expect(r.reveillees).toEqual([]);
+      expect(r.ignorees).toEqual([{ issueId: ORPHELINE, raison: "attente_humaine" }]);
+      expect(b.reveils).toHaveLength(0);
+    });
+
+    it("mêmes plafonds : 3 réveils au plus puis un seul abandon journalisé", async () => {
+      const b = banc({ candidats: [enRevue("in_review")] });
+      for (let i = 0; i < 6; i++) {
+        await b.veilleur.passe();
+        b.avancer(16);
+      }
+      expect(b.reveils).toHaveLength(VEILLEUR.maxReveils);
+      expect(b.journal.filter((j) => j.type === VEILLEUR.typeAbandon)).toHaveLength(1);
+    });
   });
 });

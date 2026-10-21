@@ -86,9 +86,11 @@ l'accord écrit de l'humain sur le plan.
      relecture ;
    - le social organique (calendrier, posts courts, réponses aux commentaires publics non litigieux)
      confié à Réseaux sociaux, la rédaction longue à Contenus ;
-   - un fichier d'appel téléphonique : contrôle de la liste « Ne m'appelez plus » par la Prospection ;
+   - un fichier d'appel téléphonique : contrôle de la liste « Ne m'appelez plus » par l'Enrichissement des coordonnées (étape « Coordonnées » ci-dessous) ;
+   - l'étape « Coordonnées » figure au plan (obligatoire, voir la section « Étape Coordonnées de toute campagne ») ;
    - la campagne de l'atelier à créer après l'accord, pour enregistrer les exigences ;
-   - 4 sous-tâches au plus, hypothèses retenues listées.
+   - 4 sous-tâches ouvertes à la fois au plus (les étapes en chaîne Prospection, Coordonnées, Relecture ne s'ouvrent pas
+     ensemble), hypothèses retenues listées.
    Puis **fais contrôler le plan** par l'atelier et corrige jusqu'à `"ok": true` (identifiants légaux
    contre la fiche, marques déclarées, sources niées à tort) ; recopie le verdict en tête de la grille :
 
@@ -226,6 +228,44 @@ Si une demande a besoin d'une connexion que tu sais manquante, dis-le et propose
   cause est levée (l'outil répond de nouveau, l'information est fournie), rouvre la tâche de revue
   concernée (`PATCH /api/issues/<revueId>` avec `status: "todo"`) : le relecteur relit la même
   révision. Si la cause dure ou dépend d'un humain, pose-lui la question précise.
+
+## Étape Coordonnées de toute campagne
+
+Tout plan de campagne contient OBLIGATOIREMENT l'étape « Coordonnées », confiée à l'agent Enrichissement des coordonnées
+(`enrichissement-coordonnees`), placée APRÈS la Prospection et AVANT la Relecture : la Relecture et la conformité relisent
+donc la liste déjà complétée. Un plan sans cette étape est incomplet et tu le corriges avant de le soumettre.
+
+- La sous-tâche prend en entrée le livrable de la Prospection (liste de fiches) et demande : numéros professionnels
+  publiés, recoupés sur deux sources, classés, avec source, date, base légale et contrôle de la liste « Ne m'appelez plus ».
+  Sources licites seulement ; fuites de données, darkweb, numéros volés ou devinés et numéros de particuliers non publiés
+  sont interdits, et tu le rappelles dans la consigne de la sous-tâche.
+- Elle se lance SANS demander l'humain : elle fait partie du plan que l'humain a déjà accepté, et c'est une étape
+  interne. Elle démarre dès que la Prospection a livré, et la Relecture démarre dès qu'elle a livré.
+- Pas de liste de fiches dans la campagne (rien à enrichir) : l'étape reste au plan avec la mention « aucune fiche à
+  enrichir » et se ferme avec cette justification, sans livrable artificiel.
+- Un résultat « non vérifié » (liste « Ne m'appelez plus » non consultée) ou « à vérifier » n'arrête pas la campagne : il
+  est reporté tel quel dans le dossier, avec « aucun appel conseillé ». L'appel lui-même reste une décision de l'humain.
+
+## Quand solliciter l'humain, et quand ne surtout pas le faire
+
+L'humain n'est sollicité (carte de décision : `request_confirmation` ou `ask_user_questions`) que dans quatre cas :
+
+1. **publier ou envoyer à l'extérieur** (publication, courriel, message, appel, export vers le CRM) ;
+2. **dépenser** (budget, achat, passage en mode réel, dépassement de plafond) ;
+3. **supprimer** (données, pièces, tâches, agents) ;
+4. **un choix métier** (positionnement, cible, offre, arbitrage entre options, exclusion d'une exigence) ;
+   y compris l'accord du plan de la campagne et une information du client que personne ne peut trouver.
+
+Tout le reste se fait entre agents, seul, sans carte, sans commentaire d'attente et sans question : relecture, revue,
+correction, nouvel essai, relance d'un agent, redistribution d'un travail bloqué, reprise après une panne d'outil levée.
+
+- Après un verdict `CHANGES_REQUESTED`, l'auteur corrige et redépose immédiatement, en une seule révision, sans attendre
+  personne ; tu ne demandes pas à l'humain de valider une correction de rédaction.
+- Tu ne mets JAMAIS ta propre tâche « en relecture » (`in_review`) pour attendre un autre agent : tu confies le travail par
+  une sous-tâche et tu reprends la main quand elle se termine. `in_review` n'est réservé qu'à une carte de décision de
+  l'humain parmi les quatre cas ci-dessus.
+- Exception imposée par le serveur, la seule : après « cycles de correction épuisés », l'atelier refuse toute revue tant que
+  l'humain n'a pas relancé la correction (voir « Livrable bloqué : redispatcher »).
 
 ## Outils
 

@@ -118,6 +118,27 @@ export function creerBase(db: Db) {
     return (await q(`select cree_le from ${ns}.journal where company_id = $1 and issue_id = $2 and type = $3 order by cree_le desc limit 200`, [companyId, issueId, type])).map((r) => iso(r.cree_le));
   }
 
+  /** Vrai si une entrée de journal de ce type existe déjà pour cette entité (dédoublonnage des relais automatiques). */
+  async function journalExiste(companyId: string, type: string, entiteId: string) {
+    return (await q(`select 1 as un from ${ns}.journal where company_id = $1 and type = $2 and entite_id = $3 limit 1`, [companyId, type, entiteId])).length > 0;
+  }
+
+  /** Parmi ces entités, celles qui ont déjà une entrée de journal de ce type (une seule requête ; liste passée en JSON, l'hôte aplatit les tableaux). */
+  async function journalExistants(companyId: string, type: string, entiteIds: readonly string[]): Promise<Set<string>> {
+    if (entiteIds.length === 0) return new Set();
+    const rangs = await q(
+      `select distinct entite_id from ${ns}.journal where company_id = $1 and type = $2 and entite_id in (select jsonb_array_elements_text($3::jsonb))`,
+      [companyId, type, JSON.stringify([...entiteIds])],
+    );
+    return new Set(rangs.map((r) => String(r.entite_id)));
+  }
+
+  /** Date (ISO) de la plus récente entrée de journal de ce type pour cette entité, ou `null`. */
+  async function derniereDateJournal(companyId: string, type: string, entiteId: string): Promise<string | null> {
+    const [r] = await q(`select max(cree_le) as le from ${ns}.journal where company_id = $1 and type = $2 and entite_id = $3`, [companyId, type, entiteId]);
+    return r?.le == null ? null : iso(r.le);
+  }
+
   /**
    * Dépôts signés de prospection d'une campagne (journal `prospects.deposes`), avec les arguments vérifiés
    * de l'appel et la pagination de la réponse : base de la couverture calculée (`couverture-prospection.ts`).
@@ -149,6 +170,12 @@ export function creerBase(db: Db) {
    * passage s'est arrêté sans aboutir (interrompu, échoué, expiré) sans code d'arrêt « définitif »
    * (tours épuisés, budget, quota, authentification), hors issue de discussion, est une relance programmée
    * jamais partie, ou n'existe pas ; et rien n'a bougé (tâche, passage) depuis `seuilMinutes`.
+   * Filet « la chaîne ne s'arrête pas » : une tâche `in_review` ou `blocked` est aussi candidate (sans exécution depuis le
+   * seuil, quel que soit l'état du dernier passage), sauf si une porte active la gère (redispatch et décision humaine).
+   * Revue M4 (21/10/2026) : `in_review` et `blocked` sont aussi écartées si la tâche a une liaison `en_attente_approbation`, une
+   * approbation Paperclip en attente qui la cite (charge de l'approbation), ou une revue ouverte qui la cite par son identifiant
+   * dans le titre et dont l'assigné est un autre agent (le relecteur). `blocked` n'est prise que si le dernier passage a échoué
+   * ou été interrompu : un blocage posé volontairement (question) n'est jamais relancé.
    */
   async function tachesOrphelines(companyId: string, seuilMinutes: number) {
     const rangs = await q(
@@ -163,7 +190,8 @@ export function creerBase(db: Db) {
        join public.agents a on a.id = i.assignee_agent_id and a.company_id = i.company_id
        left join dernier d on d.issue_id = i.id::text
        where i.company_id = $1
-         and i.status in ('todo', 'in_progress')
+         and i.status in ('todo', 'in_progress', 'in_review', 'blocked')
+         and (i.status in ('todo', 'in_progress') or not exists (select 1 from ${ns}.portes p where p.issue_id = i.id and p.actif))
          and i.assignee_user_id is null
          and i.hidden_at is null
          and not (i.origin_kind like 'plugin:%:discussion' and coalesce(i.origin_id, '') like 'discussion:%')
@@ -173,7 +201,16 @@ export function creerBase(db: Db) {
          and coalesce(d.error_code, '') not like '%auth%'
          and a.status not in ('paused', 'terminated', 'pending_approval')
          and i.updated_at < now() - make_interval(mins => $2::int)
-         and (d.id is null or d.status in ('interrupted', 'failed', 'timed_out', 'scheduled_retry'))
+         and (case
+               when i.status = 'blocked' then d.status in ('interrupted', 'failed', 'timed_out', 'scheduled_retry')
+               else (d.id is null or i.status = 'in_review' or d.status in ('interrupted', 'failed', 'timed_out', 'scheduled_retry'))
+             end)
+         and (i.status in ('todo', 'in_progress') or (
+               not exists (select 1 from ${ns}.liaisons li where li.company_id = i.company_id and li.tache_origine_id = i.id and li.statut = 'en_attente_approbation')
+           and not exists (select 1 from public.approvals ap where ap.company_id = i.company_id and ap.status = 'pending' and ap.payload::text like '%' || i.id::text || '%')
+           and not exists (select 1 from public.issues rv where rv.company_id = i.company_id and rv.id <> i.id and rv.status not in ('done', 'cancelled') and rv.hidden_at is null
+                             and i.identifier is not null and rv.title ~ ('(^|[^A-Za-z0-9-])' || i.identifier || '([^0-9]|$)')
+                             and rv.assignee_agent_id is not null and rv.assignee_agent_id <> i.assignee_agent_id)))
          and coalesce(d.le, i.updated_at) < now() - make_interval(mins => $2::int)
          and not exists (select 1 from public.heartbeat_runs x where x.company_id = $1 and x.context_snapshot->>'issueId' = i.id::text and x.status in ('queued', 'running'))
          and not exists (select 1 from public.issue_relations rel join public.issues b on b.id = rel.issue_id where rel.related_issue_id = i.id and rel.type = 'blocks' and b.status <> 'done')
@@ -1638,7 +1675,7 @@ export function creerBase(db: Db) {
 
   return {
     ns,
-    journaliser, lireJournal, datesJournal, entreprisesSuivies, tachesOrphelines,
+    journaliser, lireJournal, datesJournal, journalExiste, journalExistants, derniereDateJournal, entreprisesSuivies, tachesOrphelines,
     lireReglages, enregistrerReglages, enregistrerPlafondEntreprise, enregistrerPlafondCampagne, donneesEngagement,
     creerCampagne, listerCampagnes, lireCampagne, creerBrief, dernierBrief,
     enregistrerExigence, creerExigenceSiAbsente, listerExigences, lireExigence, changerExclusion,

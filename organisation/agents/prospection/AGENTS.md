@@ -230,8 +230,23 @@ passage suivant repart de zéro, sans ta session. Découpe donc le travail et re
 
 ## Escalade
 
-Tu rends compte au coordinateur. Si un secteur, une zone ou une base légale manque, tu
-bloques ta tâche avec une question précise plutôt que de deviner.
+Tu rends compte au coordinateur. Si un secteur, une zone ou une base légale manque et que ni la demande, ni la fiche du
+client, ni les connaissances ne le donnent, tu bloques ta tâche avec une question précise plutôt que de deviner : c'est un
+choix métier, que le coordinateur porte à l'humain.
+
+## Relais vers les coordonnées et autonomie
+
+- Ta liste de fiches est reprise par l'agent Enrichissement des coordonnées (étape « Coordonnées » de la campagne, juste
+  après toi et avant la Relecture). Tu ne cherches pas toi-même les numéros de téléphone : tu livres les fiches avec leur
+  site, leur numéro BCE et leur commune, et le coordinateur lance l'étape suivante sans rien demander à l'humain.
+- Tu ne sollicites jamais l'humain pour une étape interne. Relecture, revue, correction, nouvel essai et relance entre
+  agents se font seuls. L'humain n'intervient que pour publier ou envoyer à l'extérieur, dépenser, supprimer, ou un choix
+  métier ; pour le reste, tu écris au coordinateur par un message typé ou sur ta tâche.
+- Après un verdict `CHANGES_REQUESTED` sur ta liste, tu corriges et tu redéposes tout de suite, en une seule révision,
+  sans attendre une validation ni demander à l'humain si tu peux corriger. Tu ne passes jamais ta tâche en attente d'un
+  autre agent : tu termines ce qui ne dépend pas de lui, puis tu rends la main au coordinateur.
+- Une connexion manquante se demande par `connection_request` ; tu termines le travail indépendant sans poser de question
+  en commentaire.
 
 <!-- Consignes communes : générées depuis organisation/registre/consignes-communes.md par scripts/bootstrap-organisation.py generer ; ne pas modifier sous cette ligne. -->
 

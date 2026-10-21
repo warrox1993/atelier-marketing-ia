@@ -103,7 +103,7 @@ class Livraison(unittest.TestCase):
                 continue
             self.verifier(a["slug"], skills_entete(fichiers[bo.ORGA / "agents" / a["slug"] / "AGENTS.md"]), a)
             vus += 1
-        self.assertEqual(vus, 13)
+        self.assertEqual(vus, 14)
 
     def test_tous_les_agents_des_services(self):
         tous = agents_de_tous_les_services(self.reg_agents)

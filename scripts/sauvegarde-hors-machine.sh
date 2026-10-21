@@ -8,7 +8,7 @@
 #                                            [--meme-disque] [--source <racine>] [--phoenix <dossier>]
 #         scripts/sauvegarde-hors-machine.sh --verifier <dossier-de-copie>
 # Par instance (défaut : atelier) : dernière sauvegarde de base, secrets/ (dont master.key),
-# companies/, data/storage/ (s'il existe). Une fois : instance/cles, instance/secrets, instance/passerelles,
+# companies/, data/storage/ (s'il existe), .env et config.json de l'instance. Une fois : instance/cles, instance/secrets, instance/passerelles,
 # instance/plugin-jb, instance/demo-client (lien suivi), passerelle/etat.
 # Phoenix (traces) : sa base SQLite (WAL) est copiée par l'API de sauvegarde SQLite, sans arrêter le service,
 # vers phoenix/phoenix.db ; dossier absent = message et la sauvegarde continue (défaut : --phoenix
@@ -114,6 +114,10 @@ for id in "${LISTE_INSTANCES[@]}"; do
   [[ -f "${SOURCE}/${base}/secrets/master.key" ]] || MANQUANTS+=("${base}/secrets/master.key")
   exiger "${base}/companies"
   [[ -d "${SOURCE}/${base}/data/storage" ]] && ELEMENTS+=("${base}/data/storage")
+  # Secrets de signature de l'instance (jetons des agents, actions d'outils) et sa configuration :
+  # sans le .env, le docteur de Paperclip refuse de démarrer l'instance restaurée.
+  [[ -f "${SOURCE}/${base}/.env" ]] && ELEMENTS+=("${base}/.env")
+  [[ -f "${SOURCE}/${base}/config.json" ]] && ELEMENTS+=("${base}/config.json")
 done
 for rel in instance/cles instance/secrets instance/passerelles instance/plugin-jb instance/demo-client passerelle/etat; do
   exiger "${rel}"

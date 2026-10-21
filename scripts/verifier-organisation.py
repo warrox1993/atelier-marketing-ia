@@ -10,7 +10,7 @@ Contrôles :
   1. fichiers générés à jour par rapport au registre (aucune dérive) ;
   2. compétences au format SKILL.md (celles du marketing déclarées au registre, plus celles des
      services ; Agent Skills + rubriques du cahier §5 ; aucun dossier orphelin) ;
-  3. registre des 13 agents (champs, modèles acceptés par claude_local, efforts,
+  3. registre des 14 agents (champs, modèles acceptés par claude_local, efforts,
      outils de recherche séparés des outils de mutation, hiérarchie, indépendance des
      contrôleurs) ;
   4. dialecte YAML : chaque en-tête et .paperclip.yaml est lu à l'identique par le
@@ -50,6 +50,7 @@ COMPETENCES_ATTENDUES = [
     "recherche-prospects", "qualification-prospects", "recherche-connaissances",
     "dossier-validation-humaine", "protocole-inter-coordinateurs",
     "plan-campagne", "calendrier-reseaux-sociaux", "controle-communications-reglementees",
+    "coordonnees-recherche", "coordonnees-recoupement",
 ]
 RUBRIQUES = [
     "Quand l'utiliser", "Objectif", "Prérequis", "Entrées", "Étapes", "Livrable",
@@ -317,8 +318,8 @@ def controler_registre(bootstrap):
     tous = reg["agents"]
     deterministes = [a for a in tous if a.get("deterministe")]
     agents = [a for a in tous if not a.get("deterministe")]
-    if len(agents) != 13:
-        erreur(f"registre : 13 agents marketing attendus, {len(agents)} trouvés")
+    if len(agents) != 14:
+        erreur(f"registre : 14 agents marketing attendus, {len(agents)} trouvés")
     # Circuit 1.1 (docs/contrats.md §6 bis) : un seul agent déterministe, la Porte de contrôle.
     if [a.get("slug") for a in deterministes] != ["porte"]:
         erreur(f"registre : un agent déterministe « porte » attendu, trouvé {[a.get('slug') for a in deterministes]}")

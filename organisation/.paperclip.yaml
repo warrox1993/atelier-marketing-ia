@@ -47,7 +47,7 @@ agents:
     metadata:
       atelier:
         registre: "atelier/registre-agents/v1"
-        versionRegistre: "1.7.0"
+        versionRegistre: "1.8.0"
         titre: "Coordinateur marketing"
         entrees:
           - "demande du client ou de l'opérateur"
@@ -140,7 +140,7 @@ agents:
     metadata:
       atelier:
         registre: "atelier/registre-agents/v1"
-        versionRegistre: "1.7.0"
+        versionRegistre: "1.8.0"
         titre: "Pôle Intelligence · Marché et veille concurrentielle"
         entrees:
           - "brief et exigences"
@@ -231,7 +231,7 @@ agents:
     metadata:
       atelier:
         registre: "atelier/registre-agents/v1"
-        versionRegistre: "1.7.0"
+        versionRegistre: "1.8.0"
         titre: "Pôle Intelligence · Recherche et qualification de prospects"
         entrees:
           - "brief et exigences"
@@ -273,6 +273,104 @@ agents:
           - "chaque prospect provient d'une réponse d'outil signée et déposée, jamais d'une saisie à la main"
           - "aucune personne physique de la BCE, aucun particulier sans origine légale prouvée"
           - "aucun conseil d'assurance ni comparaison de garanties ; le score reste une « estimation » tant que l'étalonnage n'est pas mesuré"
+    inputs:
+      env:
+        CLAUDE_CODE_OAUTH_TOKEN:
+          kind: "secret"
+          requirement: "optional"
+          description: "Jeton longue durée produit par « claude setup-token » (abonnement Claude de l'opérateur, usage personnel). Stocké comme secret Paperclip, jamais dans un fichier."
+        CLAUDE_CONFIG_DIR:
+          kind: "plain"
+          requirement: "optional"
+          portability: "system_dependent"
+          description: "Dossier de configuration Claude dédié à l'agent, créé par le bootstrap sous instance/claude-config/<id entreprise>/<slug> (un dossier par entreprise et par rôle). Jamais le ~/.claude de l'opérateur."
+  enrichissement-coordonnees:
+    role: "researcher"
+    capabilities: "Reçoit la liste de fiches de la Prospection et relève, de sources licites seulement (site entier, PDF publiés, annuaires professionnels, fiche Google Business, BCE/KBO, coordonnées publiées par la personne sur LinkedIn), les numéros de téléphone professionnels ; recoupe chaque numéro sur deux sources, le classe, contrôle la liste « Ne m'appelez plus » et indique source, date et base légale ; ne contacte jamais personne."
+    adapter:
+      type: "claude_local"
+      config:
+        engine: "cli"
+        model: "claude-sonnet-5-5"
+        effort: "medium"
+        dangerouslySkipPermissions: false
+        maxTurnsPerRun: 90
+        timeoutSec: 1800
+        graceSec: 30
+        extraArgs:
+          - "--permission-mode"
+          - "dontAsk"
+          - "--allowedTools"
+          - "WebSearch"
+          - "WebFetch"
+          - "mcp__paperclip-assigned"
+          - "mcp__Paperclip_connections__connections_search"
+          - "mcp__Paperclip_connections__connection_request"
+          - "Bash(curl *)"
+          - "Edit(./**)"
+          - "--disallowedTools"
+          - "Edit"
+          - "NotebookEdit"
+          - "Agent"
+          - "Task"
+        env:
+          DISABLE_TELEMETRY:
+            type: "plain"
+            value: "1"
+          CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC:
+            type: "plain"
+            value: "1"
+        filesystemScope: "workspace"
+        networkScope: "allowlist"
+        networkAllowlist:
+          - "api.anthropic.com"
+    runtime:
+      heartbeat:
+        maxConcurrentRuns: 1
+    budgetMonthlyCents: 1500
+    metadata:
+      atelier:
+        registre: "atelier/registre-agents/v1"
+        versionRegistre: "1.8.0"
+        titre: "Pôle Intelligence · Enrichissement des coordonnées professionnelles"
+        entrees:
+          - "liste de fiches livrée par la Prospection"
+          - "brief et exigences"
+          - "résultat de la comparaison avec la liste « Ne m'appelez plus » s'il est fourni"
+        sorties:
+          - "relevé des numéros par fiche avec URL, date et extrait"
+          - "numéros recoupés : fiable ou à vérifier, type, base légale"
+          - "contrôle « Ne m'appelez plus » (non inscrit, inscrit, non vérifié) et appel conseillé ou non"
+          - "liste des étapes non faites et des limites"
+        competencesObligatoires:
+          - "coordonnees-recherche"
+          - "coordonnees-recoupement"
+        outilsRecherche:
+          - "Read"
+          - "Grep"
+          - "Glob"
+          - "WebSearch"
+          - "WebFetch"
+          - "mcp__paperclip-assigned"
+          - "mcp__Paperclip_connections__connections_search"
+          - "mcp__Paperclip_connections__connection_request"
+        outilsMutation:
+          - "Bash(curl *)"
+          - "Write"
+        outilsInterdits:
+          - "Edit"
+          - "NotebookEdit"
+          - "Agent"
+          - "Task"
+        relit: []
+        roleRevue: null
+        connexions:
+          gbp: "lecture"
+        criteresReussite:
+          - "chaque numéro porte une URL source réelle, une date de relevé et sa base légale, jamais une saisie de mémoire"
+          - "un numéro n'est « fiable » qu'avec deux sources indépendantes ; sinon « à vérifier »"
+          - "aucune fuite de données, aucun darkweb, aucun numéro volé ou deviné, aucun numéro de particulier non publié"
+          - "aucun appel conseillé sans contrôle de la liste « Ne m'appelez plus » fait ; sans résultat fourni : « non vérifié »"
     inputs:
       env:
         CLAUDE_CODE_OAUTH_TOKEN:
@@ -331,7 +429,7 @@ agents:
     metadata:
       atelier:
         registre: "atelier/registre-agents/v1"
-        versionRegistre: "1.7.0"
+        versionRegistre: "1.8.0"
         titre: "Pôle Production · Référencement naturel, local et GEO"
         entrees:
           - "brief et exigences"
@@ -429,7 +527,7 @@ agents:
     metadata:
       atelier:
         registre: "atelier/registre-agents/v1"
-        versionRegistre: "1.7.0"
+        versionRegistre: "1.8.0"
         titre: "Pôle Production · Publicité et SEA"
         entrees:
           - "brief et exigences"
@@ -525,7 +623,7 @@ agents:
     metadata:
       atelier:
         registre: "atelier/registre-agents/v1"
-        versionRegistre: "1.7.0"
+        versionRegistre: "1.8.0"
         titre: "Pôle Production · Contenus et création"
         entrees:
           - "brief et exigences"
@@ -626,7 +724,7 @@ agents:
     metadata:
       atelier:
         registre: "atelier/registre-agents/v1"
-        versionRegistre: "1.7.0"
+        versionRegistre: "1.8.0"
         titre: "Pôle Production · CRM et conversion"
         entrees:
           - "brief et exigences"
@@ -724,7 +822,7 @@ agents:
     metadata:
       atelier:
         registre: "atelier/registre-agents/v1"
-        versionRegistre: "1.7.0"
+        versionRegistre: "1.8.0"
         titre: "Pôle Intelligence · Mesure et optimisation"
         entrees:
           - "exports de données importés avec période et provenance"
@@ -817,7 +915,7 @@ agents:
     metadata:
       atelier:
         registre: "atelier/registre-agents/v1"
-        versionRegistre: "1.7.0"
+        versionRegistre: "1.8.0"
         titre: "Pôle Contenus · Calendrier social, posts et réponses publiques"
         entrees:
           - "brief et exigences"
@@ -906,7 +1004,7 @@ agents:
     metadata:
       atelier:
         registre: "atelier/registre-agents/v1"
-        versionRegistre: "1.7.0"
+        versionRegistre: "1.8.0"
         titre: "Pôle Contrôle préalable · Communications commerciales réglementées"
         entrees:
           - "contenu à contrôler, canal et public"
@@ -993,7 +1091,7 @@ agents:
     metadata:
       atelier:
         registre: "atelier/registre-agents/v1"
-        versionRegistre: "1.7.0"
+        versionRegistre: "1.8.0"
         titre: "Contrôleur des exigences"
         entrees:
           - "brief original"
@@ -1024,6 +1122,7 @@ agents:
           - "coordinateur"
           - "veille"
           - "prospection"
+          - "enrichissement-coordonnees"
           - "seo-local-geo"
           - "sea"
           - "contenus"
@@ -1092,7 +1191,7 @@ agents:
     metadata:
       atelier:
         registre: "atelier/registre-agents/v1"
-        versionRegistre: "1.7.0"
+        versionRegistre: "1.8.0"
         titre: "Responsable qualité"
         entrees:
           - "brief original"
@@ -1123,6 +1222,7 @@ agents:
           - "coordinateur"
           - "veille"
           - "prospection"
+          - "enrichissement-coordonnees"
           - "seo-local-geo"
           - "sea"
           - "contenus"
@@ -1194,7 +1294,7 @@ agents:
     metadata:
       atelier:
         registre: "atelier/registre-agents/v1"
-        versionRegistre: "1.7.0"
+        versionRegistre: "1.8.0"
         titre: "Vérificateur technique"
         entrees:
           - "version précise du livrable"
@@ -1263,7 +1363,7 @@ agents:
     metadata:
       atelier:
         registre: "atelier/registre-agents/v1"
-        versionRegistre: "1.7.0"
+        versionRegistre: "1.8.0"
         titre: "Porte de contrôle"
         entrees:
           - "tâche sous porte en étape de revue"

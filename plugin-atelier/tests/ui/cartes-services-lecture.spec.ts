@@ -3,7 +3,7 @@
  * Lecteur de l'hôte simulé (aucun réseau).
  */
 import { describe, expect, it } from "vitest";
-import { lireCartesDesServices, MAX_TACHES_LUES, type LecteurHote } from "../../src/ui/cartes-services-lecture.js";
+import { lireCartesDesServices, MAX_INTERACTIONS_LUES, MAX_TACHES_LUES, TACHES_OUVERTES_LUES, type LecteurHote } from "../../src/ui/cartes-services-lecture.js";
 import { LECTURES_SIMULTANEES } from "../../src/ui/vues/departements.js";
 
 const MKT = "22222222-2222-4222-8222-222222222222";
@@ -30,6 +30,10 @@ function lecteur(h: Hote, journal: string[] = []): LecteurHote {
     if (h.pannes?.has(id)) throw { code: "HTTP_500", message: "panne" };
     if (inter) return h.cartes[id] ?? [];
     if (une) return h.taches.find((t) => t.id === id) ?? Promise.reject({ code: "HTTP_404", message: "introuvable" });
+    if (liste && !parent) {
+      const statuts = (new URLSearchParams(requete).get("status") ?? "").split(",");
+      return h.taches.filter((t) => t.companyId === liste[1] && (statuts[0] === "" || statuts.includes(t.status)));
+    }
     if (liste && parent) {
       const ids = new Set([parent]);
       const res: unknown[] = [];
@@ -95,7 +99,7 @@ describe("lireCartesDesServices", () => {
     expect(r.cartes.map((c) => c.element.id)).toEqual(["question:a"]);
   });
 
-  it("au plus six lectures simultanées et au plus 30 tâches dont on lit les cartes", async () => {
+  it("au plus six lectures simultanées ; 30 tâches de la descendance au plus ; les tâches avec parent ne sont pas relues en supplément", async () => {
     const taches = [tache("r", MKT, "MKT-1"), ...Array.from({ length: 50 }, (_, i) => tache(`s${i}`, MKT, `MKT-${i + 2}`, { parentId: "r" }))];
     const h: Hote = { taches, cartes: Object.fromEntries(taches.map((t) => [t.id, [carte(`c-${t.id}`, "2026-10-18T10:00:00Z")]])) };
     const base = lecteur(h);
@@ -116,6 +120,7 @@ describe("lireCartesDesServices", () => {
     const r = await lireCartesDesServices([aSuivre(MKT, "r", "marketing", "Marketing")], mesure);
     expect(max).toBeLessThanOrEqual(LECTURES_SIMULTANEES);
     expect(max).toBeGreaterThan(1);
+    // Seule la racine n'a pas de parent et elle est déjà lue : 30 lectures, jamais les 20 sous-tâches au-delà du plafond.
     expect(interactionsLues).toBe(MAX_TACHES_LUES);
     expect(r.cartes).toHaveLength(MAX_TACHES_LUES);
   });
@@ -125,5 +130,59 @@ describe("lireCartesDesServices", () => {
     const r = await lireCartesDesServices([], lecteur({ taches: [], cartes: {} }, journal));
     expect(r).toEqual({ cartes: [], indisponible: false });
     expect(journal).toEqual([]);
+  });
+
+  it("une carte sur une tâche ouverte SANS parent du service (hors descendance de la tâche reçue) apparaît, sans doublon avec les tâches déjà lues", async () => {
+    const h: Hote = {
+      taches: [tache("t1", MKT, "MKT-9"), tache("t2", MKT, "MKT-10", { parentId: "t1" }), tache("o1", MKT, "MKT-8"), tache("f1", MKT, "MKT-7", { status: "done" }), tache("e1", ETR, "ETR-1")],
+      cartes: { t1: [carte("a", "2026-10-18T10:05:00Z")], t2: [carte("b", "2026-10-18T10:06:00Z")], o1: [carte("c", "2026-10-18T10:07:00Z", { title: "Valider la liste ABC-8" })], f1: [carte("d", "2026-10-18T10:08:00Z")], e1: [carte("x", "2026-10-18T10:09:00Z")] },
+    };
+    const journal: string[] = [];
+    const r = await lireCartesDesServices([aSuivre(MKT, "t1", "marketing", "Marketing"), aSuivre(MKT, "t1", "marketing", "Marketing")], lecteur(h, journal));
+    expect(r.cartes.map((c) => c.element.id).sort()).toEqual(["question:a", "question:b", "question:c"]);
+    expect(r.cartes.find((c) => c.element.id === "question:c")!.tache).toBe("MKT-8");
+    // Chaque tâche n'est lue qu'une fois (pas de doublon) et l'autre entreprise n'est jamais interrogée.
+    expect(journal.filter((c) => c.endsWith("/interactions")).sort()).toEqual(["/issues/o1/interactions", "/issues/t1/interactions", "/issues/t2/interactions"]);
+    expect(journal.filter((c) => c.includes("status=")).length).toBe(1);
+    expect(journal.some((c) => c.includes(ETR) || c.includes("e1"))).toBe(false);
+  });
+
+  it("plafond : au plus 40 tâches ouvertes lues en plus par entreprise, les plus récentes d'abord", async () => {
+    const taches = [tache("r", MKT, "MKT-1"), ...Array.from({ length: 60 }, (_, i) => tache(`o${i}`, MKT, `MKT-${i + 2}`, { updatedAt: `2026-10-18T10:${String(i).padStart(2, "0")}:00Z` }))];
+    const h: Hote = { taches, cartes: Object.fromEntries(taches.map((t) => [t.id, [carte(`c-${t.id}`, "2026-10-18T10:00:00Z")]])) };
+    const journal: string[] = [];
+    const r = await lireCartesDesServices([aSuivre(MKT, "r", "marketing", "Marketing")], lecteur(h, journal));
+    const lues = journal.filter((c) => c.endsWith("/interactions"));
+    expect(lues).toHaveLength(1 + TACHES_OUVERTES_LUES);
+    expect(lues).toContain("/issues/o59/interactions");
+    expect(lues).not.toContain("/issues/o0/interactions");
+    expect(r.cartes).toHaveLength(1 + TACHES_OUVERTES_LUES);
+  });
+
+  it("seules les tâches sans parent sont lues en supplément : une sous-tâche d'une autre racine est ignorée", async () => {
+    const h: Hote = {
+      taches: [tache("r", MKT, "MKT-1"), tache("a", MKT, "MKT-2"), tache("b", MKT, "MKT-3", { parentId: "a" })],
+      cartes: { r: [carte("cr", "2026-10-18T10:00:00Z")], a: [carte("ca", "2026-10-18T10:01:00Z")], b: [carte("cb", "2026-10-18T10:02:00Z")] },
+    };
+    const journal: string[] = [];
+    await lireCartesDesServices([aSuivre(MKT, "r", "marketing", "Marketing")], lecteur(h, journal));
+    const lues = journal.filter((c) => c.endsWith("/interactions")).sort();
+    expect(lues).toEqual(["/issues/a/interactions", "/issues/r/interactions"]);
+  });
+
+  it("plafond GLOBAL : au plus 60 lectures d'interactions par interrogation, toutes entreprises confondues", async () => {
+    const taches = [
+      tache("r1", MKT, "MKT-1"),
+      tache("r2", JUR, "JUR-1"),
+      ...Array.from({ length: 40 }, (_, i) => tache(`m${i}`, MKT, `MKT-${i + 2}`, { updatedAt: `2026-10-18T10:${String(i).padStart(2, "0")}:00Z` })),
+      ...Array.from({ length: 40 }, (_, i) => tache(`j${i}`, JUR, `JUR-${i + 2}`, { updatedAt: `2026-10-18T10:${String(i).padStart(2, "0")}:00Z` })),
+    ];
+    const h: Hote = { taches, cartes: Object.fromEntries(taches.map((t) => [t.id, [carte(`c-${t.id}`, "2026-10-18T10:00:00Z")]])) };
+    const journal: string[] = [];
+    const r = await lireCartesDesServices([aSuivre(MKT, "r1", "marketing", "Marketing"), aSuivre(JUR, "r2", "juridique", "Juridique")], lecteur(h, journal));
+    const lues = journal.filter((c) => c.endsWith("/interactions"));
+    // Sans plafond global : 2 racines + 40 + 40 = 82 lectures.
+    expect(lues).toHaveLength(MAX_INTERACTIONS_LUES);
+    expect(r.cartes).toHaveLength(MAX_INTERACTIONS_LUES);
   });
 });

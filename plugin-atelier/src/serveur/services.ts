@@ -77,6 +77,7 @@ import { autoriserMessage, chercherClesInterdites } from "./regles-messages.js";
 import { routesAccueil } from "./services-accueil.js";
 import { routesDepartements } from "./services-departements.js";
 import { routesSynthese } from "./services-synthese.js";
+import { creerChaine } from "./chaine.js";
 import { creerRedispatch } from "./redispatch.js";
 import { routesCarte, PLAFOND_QUALIFIES } from "./services-carte.js";
 import { entreesCouverturePorte, routesCouverture } from "./services-couverture.js";
@@ -1546,11 +1547,17 @@ export function creerServices(ctx: PluginContext, options: { transportReel?: Tra
   };
   // Retour de la réponse d'une liaison entre services : tâche cible terminée ou annulée (un seul abonné `issue.updated`).
   const surRetourLiaison = creerRetour({ ctx, base, stock: stockLiaisons });
+  // Chaîne entre agents (R1 verdict de revue, R4 discussion laissée en revue) : voir `chaine.ts`.
+  const surChaine = creerChaine({ ctx, base });
   ctx.events.on("issue.updated", async (event) => {
     try {
       await surDecisionHumaineSocle(event);
     } finally {
-      await surRetourLiaison(event);
+      try {
+        await surRetourLiaison(event);
+      } finally {
+        await surChaine(event);
+      }
     }
   });
 
