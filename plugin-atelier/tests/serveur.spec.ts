@@ -48,8 +48,20 @@ describe("diagnostic : sources réelles lues sur la passerelle", () => {
     expect(par.bce.verifieLe).toMatch(/^\d{4}-\d{2}-\d{2}T/u);
   });
 
+  it("extraction et audit : réels quand la passerelle les sert en réel, sinon ils disent pourquoi", async () => {
+    const reel = await sante({ config: { passerelleUrl: "http://127.0.0.1:3190" }, http: reponse({ ok: true, mode: "demonstration", services: ["extraction", "audit"], services_reels: ["extraction", "audit"] }) });
+    const parReel = Object.fromEntries(reel.sourcesReelles.sources.map((s: any) => [s.cle, s])); // eslint-disable-line @typescript-eslint/no-explicit-any
+    expect(parReel.extraction).toMatchObject({ nom: "Lecture de sites", reelle: true, detail: "Lecture de sites réelle servie par la passerelle." });
+    expect(parReel.audit).toMatchObject({ nom: "Audit de pages", reelle: true, detail: "Audit de pages réel servi par la passerelle." });
+    const demo = await sante({ config: { passerelleUrl: "http://127.0.0.1:3190" }, http: reponse({ ok: true, mode: "demonstration", services: ["osm"], services_reels: ["osm"] }) });
+    const parDemo = Object.fromEntries(demo.sourcesReelles.sources.map((s: any) => [s.cle, s])); // eslint-disable-line @typescript-eslint/no-explicit-any
+    expect(parDemo.extraction).toMatchObject({ reelle: false, detail: "Lecture de sites non réelle : non branchée sur la passerelle." });
+    expect(parDemo.audit).toMatchObject({ reelle: false, detail: "Audit de pages non réel : non branché sur la passerelle." });
+  });
+
   it("BCE branchée : elle devient réelle", async () => {
-    const d = await sante({ config: { passerelleUrl: "http://127.0.0.1:3190" }, http: reponse({ ok: true, mode: "demonstration", services: [], services_reels: ["bce", "bnb", "osm", "liens"] }) });
+    const d = await sante({ config: { passerelleUrl: "http://127.0.0.1:3190" }, http: reponse({ ok: true, mode: "demonstration", services: [], services_reels: ["bce", "bnb", "osm", "liens", "extraction", "audit"] }) });
+    expect(d.sourcesReelles.sources.map((s: any) => s.cle)).toEqual(["bce", "bnb", "osm", "liens", "extraction", "audit"]); // eslint-disable-line @typescript-eslint/no-explicit-any
     expect(d.sourcesReelles.sources.every((s: any) => s.reelle)).toBe(true); // eslint-disable-line @typescript-eslint/no-explicit-any
   });
 

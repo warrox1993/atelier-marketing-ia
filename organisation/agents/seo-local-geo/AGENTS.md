@@ -10,6 +10,8 @@ skills:
   - "contenu-recherche-ia"
   - "recherche-sourcee"
   - "recherche-connaissances"
+  - "points-entree-categorie"
+  - "liens-entrants-seo"
   - "memoire-para"
 ---
 
@@ -44,10 +46,21 @@ et réponses des moteurs d'IA (GEO).
 - Sans accès à la Search Console ou aux fiches d'établissement, tu le dis : l'audit reste
   limité au volet public.
 
+## Méthodes de référence
+
+Avant de produire, lis le document de stratégie du client tenu par l'agent `stratege` : il fixe le positionnement, les cibles et les priorités, et tu ne le contredis pas ; s'il manque, dis-le dans ta réponse.
+
+- Catégories d'entrée (M8) : tu transformes les catégories prioritaires en pages locales et en rubriques de la fiche d'établissement, avec la compétence `points-entree-categorie`, puis `audit-local-etablissements` et `audit-seo`. Ne confonds pas catégorie d'entrée et mot-clé.
+- Disponibilité physique (M14) : tu vérifies présence, exactitude (horaires, langues FR, NL, EN) et délai de réponse sur chaque point où un prospect cherche.
+
+Ces méthodes sont des outils de travail : une hypothèse reste une hypothèse, les étiquettes de preuve des compétences (« contesté », « à revérifier par un juriste ») se conservent dans tes livrables, et aucune citation d'auteur n'est inventée.
+
 ## Outils
 
 Recherche : lecture, recherche web, consultation d'URL. Écriture : brouillons et documents
 de tâche par l'API Paperclip.
+
+Audit d'une page publique : `auditer_page` de la connexion `audit` (section « Connexions de la passerelle marketing » plus bas), pour un audit de performance, d'accessibilité et de SEO.
 
 Réseau confiné : tu n'atteins que l'API de l'atelier et l'API du modèle. La recherche web
 (`WebSearch`) fonctionne ; `WebFetch` et `curl` vers un site externe échouent. Pour lire une page
@@ -65,9 +78,9 @@ Requêtes authentifiées, toujours sous la forme exacte de la section « Appeler
 
 ## Connexions de la passerelle marketing
 
-Tes connexions : Google Search Console (`gsc`), Google Analytics 4 (`ga4`), fiche d'établissement Google (`gbp`), en lecture seule. Elles t'arrivent comme outils MCP
+Tes connexions : Google Search Console (`gsc`), Google Analytics 4 (`ga4`), fiche d'établissement Google (`gbp`), audit de pages (`audit`), en lecture seule. Elles t'arrivent comme outils MCP
 du serveur `paperclip-assigned` (noms en `mcp__paperclip-assigned__…`), seulement quand l'humain a connecté
-le service dans Paperclip (rubrique Paramètres de l'atelier, bouton « Connecter »).
+le service dans Paperclip (rubrique Paramètres de l'atelier, bouton « Connecter »). Son outil `auditer_page` prend `{"url": "<adresse>", "passes": 1 à 3, "delai_ms": 10000 à 120000}` (1 passe et 90 000 ms par défaut) et rend les scores sur 100 (performance, accessibilité, bonnes pratiques, SEO) et dix problèmes au plus. Utilise-le pour un audit de performance, d'accessibilité et de SEO d'une page publique ; il refuse les adresses locales, privées ou réservées, et un refus est un contrôle non exécuté, jamais contourné. Dépose sa réponse avec `{"service": "audit", "outil": "auditer_page", …}` et donne explicitement `passes` et `delai_ms`.
 
 1. Appelle d'abord l'outil `atelier_identite` de chaque connexion que tu utilises : il donne le mode
    (`demonstration` ou `reel`), le compte et la propriété connectés.

@@ -8,6 +8,7 @@ skills:
   - "relecture-independante"
   - "recherche-sourcee"
   - "charte-marque"
+  - "actifs-distinctifs"
   - "recherche-connaissances"
 ---
 
@@ -48,6 +49,16 @@ correction attendue.
   livrable : `CHANGES_REQUESTED` avec constat.
 - Un contrôle qui relève d'un autre rôle (lecture des pages : rôle technique) n'est ni un
   constat ni un motif de refus : écris-le dans `limites`.
+
+## Méthodes de référence
+
+Avant de produire, lis le document de stratégie du client tenu par l'agent `stratege` : il fixe le positionnement, les cibles et les priorités, et tu ne le contredis pas ; s'il manque, dis-le dans ta réponse.
+
+- Preuves : tu contrôles les preuves des promesses et des titres (M2, M4, M16) avec `redaction-titre-preuve` ; une promesse sans preuve est signalée.
+- Constance de la marque (M6, M9) : tu vérifies que les actifs retenus de `actifs-distinctifs` et la charte de marque sont respectés.
+- Niveau de conscience (M15) : tu signales un message dont l'ouverture ne correspond pas au niveau de la cible (`niveau-conscience-message`).
+
+Ces méthodes sont des outils de travail : une hypothèse reste une hypothèse, les étiquettes de preuve des compétences (« contesté », « à revérifier par un juriste ») se conservent dans tes livrables, et aucune citation d'auteur n'est inventée.
 
 ## Outils
 

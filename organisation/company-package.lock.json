@@ -30,6 +30,13 @@
         "SKILL.md"
       ]
     },
+    "actifs-distinctifs": {
+      "version": "1.0.0",
+      "sha256": "9ed9013d0aa35936bf01718270075bf98302838e3201335356369308916c9644",
+      "fichiers": [
+        "SKILL.md"
+      ]
+    },
     "adaptation-fr-nl-en": {
       "version": "1.0.0",
       "sha256": "6f2c40b92d63d059781a3f378ab10d46083ec9e47e72a272e5cbae5ae722b6dd",
@@ -79,6 +86,13 @@
         "SKILL.md"
       ]
     },
+    "analyse-jobs-a-faire": {
+      "version": "1.0.0",
+      "sha256": "250d5692fc15598f0f286d4a09ef302684ab0a9d5a3ecda78c6f966e069c8306",
+      "fichiers": [
+        "SKILL.md"
+      ]
+    },
     "analyse-rentabilite": {
       "version": "1.0.0",
       "sha256": "bbe6474f5655181053665c647ec5324d36d767bc2dad75f75a24b9b4e71f9ed1",
@@ -109,7 +123,7 @@
     },
     "audit-seo": {
       "version": "1.2.0",
-      "sha256": "a573f4e7d65531ccbf5f7012e5f5fd9cf79a0312362c0b986063b7c58344aef6",
+      "sha256": "4e119855a4fcfcc5bc50372a2c235be1897bf0aa4da1009d75c4bb61a3ff7a57",
       "fichiers": [
         "SKILL.md",
         "references/liste-controles-seo.md"
@@ -299,6 +313,13 @@
         "SKILL.md"
       ]
     },
+    "conception-offre-reglementee": {
+      "version": "1.0.0",
+      "sha256": "3ab6671a175564a4533dc5d3d8d1f4f9599aa9543782910545780f67bea07920",
+      "fichiers": [
+        "SKILL.md"
+      ]
+    },
     "conduite-changement": {
       "version": "1.0.0",
       "sha256": "bf8649168229c3c496f20cc1e56df098762f4eb60366e05d691f16eab8962ee9",
@@ -335,8 +356,8 @@
       ]
     },
     "controle-communications-reglementees": {
-      "version": "1.0.0",
-      "sha256": "b7b2e960c8231d85f0927062787046d605350d0144c065bede9cf81ae61e9666",
+      "version": "1.1.0",
+      "sha256": "fbeb1ec8bf0a52e7507933ed8f51d5470f5d6b8afbc1d81e45405d18c35af7e1",
       "fichiers": [
         "SKILL.md"
       ]
@@ -372,7 +393,7 @@
     },
     "coordonnees-recherche": {
       "version": "1.0.0",
-      "sha256": "4d35cffc78bf9f31096fe401cc4eb558575e78548cb5d4e4a2e3b0f423f74dc9",
+      "sha256": "770fd4743f5c9aa4515777f10b41c7ef75b7dc54a13b9ac1746a44acded5b56a",
       "fichiers": [
         "SKILL.md"
       ]
@@ -426,6 +447,13 @@
         "SKILL.md"
       ]
     },
+    "diagnostic-marketing": {
+      "version": "1.0.0",
+      "sha256": "a5a7a6f137b7d113e03983fe2f3198fcb75eb477ddfa3c433939165f480f772d",
+      "fichiers": [
+        "SKILL.md"
+      ]
+    },
     "dictionnaire-donnees": {
       "version": "1.0.0",
       "sha256": "f10007804a54d758cc47b748be26ff4aec5e537afa62df1d89dabad83093d7d4",
@@ -474,6 +502,13 @@
       "fichiers": [
         "SKILL.md",
         "references/gabarit-dossier.md"
+      ]
+    },
+    "entretien-client-sans-biais": {
+      "version": "1.0.0",
+      "sha256": "8cf1fd16a3a97825982e8038fff64cc78adace9e75b1682b5a79319af9d85dc4",
+      "fichiers": [
+        "SKILL.md"
       ]
     },
     "entretien-evaluation": {
@@ -665,6 +700,20 @@
         "SKILL.md"
       ]
     },
+    "leviers-influence-ethiques": {
+      "version": "1.0.0",
+      "sha256": "93fed7e3b8fc5ab4c78d628cc78a6e44522d83e13a544e4b2bcbfdc0b8e998c7",
+      "fichiers": [
+        "SKILL.md"
+      ]
+    },
+    "liens-entrants-seo": {
+      "version": "1.0.0",
+      "sha256": "6992ba8b8265220f218be3149e881636901357f2103a1fada55bec05facadd0a",
+      "fichiers": [
+        "SKILL.md"
+      ]
+    },
     "maintenance-batiment": {
       "version": "1.0.0",
       "sha256": "f1be4c6d81946dfb3f9937ac8646abfce5441ba5104efcd34fc62a37216424e8",
@@ -703,8 +752,8 @@
       ]
     },
     "mesure-experiences": {
-      "version": "1.2.0",
-      "sha256": "141c1b1a9ba9c829081fa1741cd87649951a029a992d1f6498f35a68054fef46",
+      "version": "1.3.0",
+      "sha256": "a7313dda03afce2608f899f3944e086f568e58db89f7fba0549375bed26b7f7f",
       "fichiers": [
         "SKILL.md"
       ]
@@ -723,9 +772,23 @@
         "SKILL.md"
       ]
     },
+    "niveau-conscience-message": {
+      "version": "1.0.0",
+      "sha256": "6089a0ac54adb67d8b4e8c63f5fa59142a8406090a35fa4486d923addf36cf73",
+      "fichiers": [
+        "SKILL.md"
+      ]
+    },
     "non-conformite-action-corrective": {
       "version": "1.2.0",
       "sha256": "ebd9bd7e53f9d03d72aa57ae2db9a4282192d69737af708f92a9ddefbb25de6f",
+      "fichiers": [
+        "SKILL.md"
+      ]
+    },
+    "objectifs-marque-activation": {
+      "version": "1.0.0",
+      "sha256": "6fc24a483159bd6b33ca3d13e3ff4df4350287ba9283dc4333adb4f60ea967e5",
       "fichiers": [
         "SKILL.md"
       ]
@@ -766,8 +829,8 @@
       ]
     },
     "plan-campagne": {
-      "version": "1.0.0",
-      "sha256": "32665b6ed03f91041d520c51ef7837ba37c0524941d0455a37114536b49b32e0",
+      "version": "1.1.0",
+      "sha256": "55c5bbe6dfae37e677017da581a98877bbeb6a1e47e6597000038fbebc0b0ff4",
       "fichiers": [
         "SKILL.md"
       ]
@@ -814,6 +877,13 @@
         "SKILL.md"
       ]
     },
+    "plan-strategique-marketing": {
+      "version": "1.0.0",
+      "sha256": "244bbf4bb5b71c8a6f9b029360830f1f7454af5eef75346564a88cb699b9035d",
+      "fichiers": [
+        "SKILL.md"
+      ]
+    },
     "plan-tresorerie": {
       "version": "1.0.0",
       "sha256": "3abaa83f546c58c8d25856a630582dd646ca70d9f6069a0669df5e1884a3e6fa",
@@ -845,6 +915,20 @@
     "planification-production": {
       "version": "1.1.0",
       "sha256": "fe6fbfad10c498f6e2e8de5cbdf991590c9c09999e2ed0b095942b53251ddace",
+      "fichiers": [
+        "SKILL.md"
+      ]
+    },
+    "points-entree-categorie": {
+      "version": "1.0.0",
+      "sha256": "9da858843bb3a7d28d567ebcc83b1347594f1466992df3d22d188a9b30a5c698",
+      "fichiers": [
+        "SKILL.md"
+      ]
+    },
+    "positionnement-concurrentiel": {
+      "version": "1.0.0",
+      "sha256": "e19123bbc5968b567e9712f016691f059d480e189f7a5e994679bb558bb7d3d0",
       "fichiers": [
         "SKILL.md"
       ]
@@ -942,8 +1026,8 @@
       ]
     },
     "qualification-prospects": {
-      "version": "1.1.0",
-      "sha256": "625484d050f649a2079e39d659893a089c43a610de82102e03380e9a80fefd37",
+      "version": "1.2.0",
+      "sha256": "1b436c7ff8aab9bda8657269d557a9e935575c313078ab3e4225fdd78c3e7768",
       "fichiers": [
         "SKILL.md",
         "references/fiche-qualification.md"
@@ -972,8 +1056,8 @@
       ]
     },
     "recherche-prospects": {
-      "version": "1.1.0",
-      "sha256": "a28d5ed0086dae140c7b5e5b7d78cc0834bafe1783c1c68498502e0f2bb5f151",
+      "version": "1.3.0",
+      "sha256": "86d6e16213afeeb7a0274888ebdd28e11fa9c6a86f00b790b3a43c1161ee7f7b",
       "fichiers": [
         "SKILL.md",
         "references/journal-recherche.md"
@@ -987,6 +1071,13 @@
         "references/fiche-source.md"
       ]
     },
+    "recit-de-marque-guide": {
+      "version": "1.0.0",
+      "sha256": "b93c22bfd822bdecc40eb9e44dbe8d2fcc55cb7081da2f4230327e3190034aa6",
+      "fichiers": [
+        "SKILL.md"
+      ]
+    },
     "redaction-contrat-travail": {
       "version": "1.1.0",
       "sha256": "e6cd5d54d27eb7203c9fa43a8da9432001d491d0029e350ffef21edd571a3ebd",
@@ -997,6 +1088,13 @@
     "redaction-declinaison-canal": {
       "version": "1.4.0",
       "sha256": "11100ff1ea2061c710b078ef305d526b6c90ab4f73a93dfc0f09474cd048ebff",
+      "fichiers": [
+        "SKILL.md"
+      ]
+    },
+    "redaction-titre-preuve": {
+      "version": "1.0.0",
+      "sha256": "623ba69efe70fe815f045109bb5687021bd840663decb8894a1b0dcf3aec1f97",
       "fichiers": [
         "SKILL.md"
       ]
@@ -1066,8 +1164,8 @@
       ]
     },
     "renouvellement-fidelisation": {
-      "version": "1.1.0",
-      "sha256": "64348e7539f9f58d360023b1c27c0d0fda606c301e102d488a63d846ce749f71",
+      "version": "1.2.0",
+      "sha256": "9f942a2b08ea494a3dbd3217e3f4403f8eb5637962c4d70b7a41449c2918cc1d",
       "fichiers": [
         "SKILL.md"
       ]
@@ -1170,6 +1268,20 @@
         "SKILL.md"
       ]
     },
+    "segmentation-ciblage": {
+      "version": "1.0.0",
+      "sha256": "511cd012dee39ff3be17aa78eba8d0e1d37d1aec87c4d75191dde260e9be4f47",
+      "fichiers": [
+        "SKILL.md"
+      ]
+    },
+    "selection-canaux-bullseye": {
+      "version": "1.0.0",
+      "sha256": "6dbd6e476639b693b843cd385d26be4b4446f5ed7b410f89fac8a846408d2f49",
+      "fichiers": [
+        "SKILL.md"
+      ]
+    },
     "selection-organisme-formation": {
       "version": "1.0.0",
       "sha256": "6c792ef50df0aba795bc333e4288a90208618234c7359e728965d567ca596dcd",
@@ -1208,6 +1320,13 @@
     "suivi-contacts-evenement": {
       "version": "1.0.0",
       "sha256": "267e6bd932516e204d3b8ae63ea1d319be895c15f4e631b10314fe0e2bb315b4",
+      "fichiers": [
+        "SKILL.md"
+      ]
+    },
+    "suivi-conversions": {
+      "version": "1.0.0",
+      "sha256": "b305d03ab35c40ca74785ed3ea356bb48052de1ebf796890c7f68d58a90def80",
       "fichiers": [
         "SKILL.md"
       ]

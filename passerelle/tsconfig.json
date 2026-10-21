@@ -10,6 +10,7 @@
     "noImplicitOverride": true,
     "exactOptionalPropertyTypes": false,
     "esModuleInterop": true,
+    "resolveJsonModule": true,
     "skipLibCheck": true,
     "outDir": "dist",
     "rootDir": ".",

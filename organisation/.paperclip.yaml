@@ -47,7 +47,7 @@ agents:
     metadata:
       atelier:
         registre: "atelier/registre-agents/v1"
-        versionRegistre: "1.8.0"
+        versionRegistre: "1.9.0"
         titre: "Coordinateur marketing"
         entrees:
           - "demande du client ou de l'opérateur"
@@ -115,6 +115,9 @@ agents:
           - "--allowedTools"
           - "WebSearch"
           - "WebFetch"
+          - "mcp__paperclip-assigned"
+          - "mcp__Paperclip_connections__connections_search"
+          - "mcp__Paperclip_connections__connection_request"
           - "Bash(curl *)"
           - "Edit(./**)"
           - "--disallowedTools"
@@ -140,7 +143,7 @@ agents:
     metadata:
       atelier:
         registre: "atelier/registre-agents/v1"
-        versionRegistre: "1.8.0"
+        versionRegistre: "1.9.0"
         titre: "Pôle Intelligence · Marché et veille concurrentielle"
         entrees:
           - "brief et exigences"
@@ -158,6 +161,9 @@ agents:
           - "Glob"
           - "WebSearch"
           - "WebFetch"
+          - "mcp__paperclip-assigned"
+          - "mcp__Paperclip_connections__connections_search"
+          - "mcp__Paperclip_connections__connection_request"
         outilsMutation:
           - "Bash(curl *)"
           - "Write"
@@ -168,11 +174,109 @@ agents:
           - "Task"
         relit: []
         roleRevue: null
-        connexions: {}
+        connexions:
+          extraction: "lecture"
         criteresReussite:
           - "chaque observation porte une source, une date de collecte et un statut d'accès"
           - "aucune généralisation à partir d'un échantillon incomplet sans le dire"
           - "les pages non consultées sont listées comme telles"
+    inputs:
+      env:
+        CLAUDE_CODE_OAUTH_TOKEN:
+          kind: "secret"
+          requirement: "optional"
+          description: "Jeton longue durée produit par « claude setup-token » (abonnement Claude de l'opérateur, usage personnel). Stocké comme secret Paperclip, jamais dans un fichier."
+        CLAUDE_CONFIG_DIR:
+          kind: "plain"
+          requirement: "optional"
+          portability: "system_dependent"
+          description: "Dossier de configuration Claude dédié à l'agent, créé par le bootstrap sous instance/claude-config/<id entreprise>/<slug> (un dossier par entreprise et par rôle). Jamais le ~/.claude de l'opérateur."
+  stratege:
+    role: "researcher"
+    capabilities: "Produit et tient à jour, pour chaque client, le document de stratégie versionné (diagnostic, cible, positionnement, objectifs, offre, plan de canaux) avec ses preuves et ses hypothèses ; propose les choix métier à l'humain sans les trancher ; n'écrit aucun contenu de campagne et ne publie rien."
+    adapter:
+      type: "claude_local"
+      config:
+        engine: "cli"
+        model: "claude-opus-5-5"
+        effort: "medium"
+        dangerouslySkipPermissions: false
+        maxTurnsPerRun: 60
+        timeoutSec: 1800
+        graceSec: 30
+        extraArgs:
+          - "--permission-mode"
+          - "dontAsk"
+          - "--allowedTools"
+          - "WebSearch"
+          - "WebFetch"
+          - "mcp__paperclip-assigned"
+          - "mcp__Paperclip_connections__connections_search"
+          - "mcp__Paperclip_connections__connection_request"
+          - "Bash(curl *)"
+          - "Edit(./**)"
+          - "--disallowedTools"
+          - "Edit"
+          - "NotebookEdit"
+          - "Agent"
+          - "Task"
+        env:
+          DISABLE_TELEMETRY:
+            type: "plain"
+            value: "1"
+          CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC:
+            type: "plain"
+            value: "1"
+        filesystemScope: "workspace"
+        networkScope: "allowlist"
+        networkAllowlist:
+          - "api.anthropic.com"
+    runtime:
+      heartbeat:
+        maxConcurrentRuns: 1
+    budgetMonthlyCents: 2500
+    metadata:
+      atelier:
+        registre: "atelier/registre-agents/v1"
+        versionRegistre: "1.9.0"
+        titre: "Pôle Intelligence · Stratégie marketing"
+        entrees:
+          - "brief, exigences et fiche de cadrage"
+          - "note de marché de la veille, chiffres de la mesure, comptes rendus d'entretiens réels"
+          - "document de stratégie courant du client et son historique"
+        sorties:
+          - "document de stratégie versionné d'une à deux pages"
+          - "livrable de l'étape demandée (diagnostic, segments et niche, positionnement, objectifs, offre, plan de canaux)"
+          - "liste des hypothèses et des inconnus avec l'action qui les lèverait"
+        competencesObligatoires:
+          - "diagnostic-marketing"
+          - "plan-strategique-marketing"
+        outilsRecherche:
+          - "Read"
+          - "Grep"
+          - "Glob"
+          - "WebSearch"
+          - "WebFetch"
+          - "mcp__paperclip-assigned"
+          - "mcp__Paperclip_connections__connections_search"
+          - "mcp__Paperclip_connections__connection_request"
+        outilsMutation:
+          - "Bash(curl *)"
+          - "Write"
+        outilsInterdits:
+          - "Edit"
+          - "NotebookEdit"
+          - "Agent"
+          - "Task"
+        relit: []
+        roleRevue: null
+        connexions:
+          extraction: "lecture"
+        criteresReussite:
+          - "chaque décision du document de stratégie a une preuve réelle (source, date) ou la mention « hypothèse », jamais une hypothèse présentée comme un fait ou une règle"
+          - "les inconnus sont listés avec l'action qui les lèverait ; aucune réponse d'entretien ni aucun chiffre inventé"
+          - "une étape ne démarre que si la précédente a livré sa sortie validée, et le statut des portes de passage est écrit"
+          - "aucune affirmation de positionnement ou d'offre retenue sans retour de la conformité publicitaire ; le choix de la cible, de l'offre et du budget reste proposé à l'humain"
     inputs:
       env:
         CLAUDE_CODE_OAUTH_TOKEN:
@@ -231,7 +335,7 @@ agents:
     metadata:
       atelier:
         registre: "atelier/registre-agents/v1"
-        versionRegistre: "1.8.0"
+        versionRegistre: "1.9.0"
         titre: "Pôle Intelligence · Recherche et qualification de prospects"
         entrees:
           - "brief et exigences"
@@ -269,6 +373,7 @@ agents:
           fsma: "lecture"
           osm: "lecture"
           b2c: "lecture"
+          extraction: "lecture"
         criteresReussite:
           - "chaque prospect provient d'une réponse d'outil signée et déposée, jamais d'une saisie à la main"
           - "aucune personne physique de la BCE, aucun particulier sans origine légale prouvée"
@@ -331,7 +436,7 @@ agents:
     metadata:
       atelier:
         registre: "atelier/registre-agents/v1"
-        versionRegistre: "1.8.0"
+        versionRegistre: "1.9.0"
         titre: "Pôle Intelligence · Enrichissement des coordonnées professionnelles"
         entrees:
           - "liste de fiches livrée par la Prospection"
@@ -366,6 +471,7 @@ agents:
         roleRevue: null
         connexions:
           gbp: "lecture"
+          extraction: "lecture"
         criteresReussite:
           - "chaque numéro porte une URL source réelle, une date de relevé et sa base légale, jamais une saisie de mémoire"
           - "un numéro n'est « fiable » qu'avec deux sources indépendantes ; sinon « à vérifier »"
@@ -429,7 +535,7 @@ agents:
     metadata:
       atelier:
         registre: "atelier/registre-agents/v1"
-        versionRegistre: "1.8.0"
+        versionRegistre: "1.9.0"
         titre: "Pôle Production · Référencement naturel, local et GEO"
         entrees:
           - "brief et exigences"
@@ -465,6 +571,7 @@ agents:
           gsc: "lecture"
           ga4: "lecture"
           gbp: "lecture"
+          audit: "lecture"
         criteresReussite:
           - "chaque établissement du périmètre a sa propre ligne d'audit"
           - "aucune promesse de position, de classement ou de citation par une IA"
@@ -527,7 +634,7 @@ agents:
     metadata:
       atelier:
         registre: "atelier/registre-agents/v1"
-        versionRegistre: "1.8.0"
+        versionRegistre: "1.9.0"
         titre: "Pôle Production · Publicité et SEA"
         entrees:
           - "brief et exigences"
@@ -623,7 +730,7 @@ agents:
     metadata:
       atelier:
         registre: "atelier/registre-agents/v1"
-        versionRegistre: "1.8.0"
+        versionRegistre: "1.9.0"
         titre: "Pôle Production · Contenus et création"
         entrees:
           - "brief et exigences"
@@ -724,7 +831,7 @@ agents:
     metadata:
       atelier:
         registre: "atelier/registre-agents/v1"
-        versionRegistre: "1.8.0"
+        versionRegistre: "1.9.0"
         titre: "Pôle Production · CRM et conversion"
         entrees:
           - "brief et exigences"
@@ -822,7 +929,7 @@ agents:
     metadata:
       atelier:
         registre: "atelier/registre-agents/v1"
-        versionRegistre: "1.8.0"
+        versionRegistre: "1.9.0"
         titre: "Pôle Intelligence · Mesure et optimisation"
         entrees:
           - "exports de données importés avec période et provenance"
@@ -915,7 +1022,7 @@ agents:
     metadata:
       atelier:
         registre: "atelier/registre-agents/v1"
-        versionRegistre: "1.8.0"
+        versionRegistre: "1.9.0"
         titre: "Pôle Contenus · Calendrier social, posts et réponses publiques"
         entrees:
           - "brief et exigences"
@@ -1004,7 +1111,7 @@ agents:
     metadata:
       atelier:
         registre: "atelier/registre-agents/v1"
-        versionRegistre: "1.8.0"
+        versionRegistre: "1.9.0"
         titre: "Pôle Contrôle préalable · Communications commerciales réglementées"
         entrees:
           - "contenu à contrôler, canal et public"
@@ -1091,7 +1198,7 @@ agents:
     metadata:
       atelier:
         registre: "atelier/registre-agents/v1"
-        versionRegistre: "1.8.0"
+        versionRegistre: "1.9.0"
         titre: "Contrôleur des exigences"
         entrees:
           - "brief original"
@@ -1121,6 +1228,7 @@ agents:
         relit:
           - "coordinateur"
           - "veille"
+          - "stratege"
           - "prospection"
           - "enrichissement-coordonnees"
           - "seo-local-geo"
@@ -1191,7 +1299,7 @@ agents:
     metadata:
       atelier:
         registre: "atelier/registre-agents/v1"
-        versionRegistre: "1.8.0"
+        versionRegistre: "1.9.0"
         titre: "Responsable qualité"
         entrees:
           - "brief original"
@@ -1221,6 +1329,7 @@ agents:
         relit:
           - "coordinateur"
           - "veille"
+          - "stratege"
           - "prospection"
           - "enrichissement-coordonnees"
           - "seo-local-geo"
@@ -1294,7 +1403,7 @@ agents:
     metadata:
       atelier:
         registre: "atelier/registre-agents/v1"
-        versionRegistre: "1.8.0"
+        versionRegistre: "1.9.0"
         titre: "Vérificateur technique"
         entrees:
           - "version précise du livrable"
@@ -1331,6 +1440,7 @@ agents:
         roleRevue: "technique"
         connexions:
           liens: "lecture"
+          audit: "lecture"
         criteresReussite:
           - "chaque URL a un statut, une destination finale et un contrôle de contenu"
           - "un code 200 sur une page d'erreur est classé en échec"
@@ -1363,7 +1473,7 @@ agents:
     metadata:
       atelier:
         registre: "atelier/registre-agents/v1"
-        versionRegistre: "1.8.0"
+        versionRegistre: "1.9.0"
         titre: "Porte de contrôle"
         entrees:
           - "tâche sous porte en étape de revue"

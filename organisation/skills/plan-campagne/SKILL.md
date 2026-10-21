@@ -2,7 +2,7 @@
 name: "plan-campagne"
 description: "Rédige le brief d'une campagne marketing en dix rubriques (vue d'ensemble et objectif mesurable, public, messages clés avec preuves, canaux, calendrier par semaine avec dépendances, pièces à produire, indicateurs, budget si fourni, risques, prochaines étapes), adapté à une PME belge (langues FR, NL ou EN, mentions réglementées, consentements). À utiliser par le coordinateur marketing pour cadrer une campagne avant de créer les sous-tâches ; jamais pour engager un budget, publier ou présenter le plan comme validé sans l'accord de l'humain."
 metadata:
-  version: "1.0.0"
+  version: "1.1.0"
   langue: "fr"
   domaine: "marketing"
 ---
@@ -23,6 +23,7 @@ saura si ça a marché, et qui sert de base aux exigences REQ-xxx et aux sous-t�
 ## Prérequis
 
 - La fiche de l'entreprise et la charte de marque.
+- Le document de stratégie du client, tenu par l'agent `stratege` : le brief s'y réfère (positionnement, cibles, catégories d'entrée retenues) et ne le contredit pas ; s'il manque, le dire dans le brief.
 - La demande de l'humain, recopiée telle quelle.
 - Le budget s'il est donné ; sinon, le plan ne propose aucun montant.
 
@@ -39,7 +40,7 @@ saura si ça a marché, et qui sert de base aux exigences REQ-xxx et aux sous-t�
 2. **Public** : segment principal et secondaire, problèmes et motivations, lieux où il se trouve (canaux, médias
    locaux), étape d'achat visée (découverte, considération, décision), langues (FR, NL, EN selon la zone).
 3. **Messages clés** : message central en une phrase, trois ou quatre messages d'appui, déclinaisons par canal, et
-   pour chaque message sa preuve. Une affirmation sans preuve (superlatif, chiffre, garantie) est retirée ou envoyée au
+   pour chaque message sa preuve et le niveau de conscience de sa cible (compétence `niveau-conscience-message`). Une affirmation sans preuve (superlatif, chiffre, garantie) est retirée ou envoyée au
    rôle Conformité publicitaire.
 4. **Canaux** : propres (site, courriel, réseaux sociaux), gagnés (presse, partenaires, communauté), payants (liens
    sponsorisés, publicité sociale) ; pour chacun, pourquoi il convient, format, effort (faible, moyen, élevé) et part du
@@ -63,7 +64,8 @@ attendues ; le plan est marqué « proposé » jusqu'à l'accord écrit de l'hum
 ## Critères de réussite
 
 - L'objectif principal est mesurable et daté.
-- Chaque message clé a sa preuve ou est retiré.
+- Chaque message clé a sa preuve ou est retiré, et porte le niveau de conscience de sa cible.
+- Le brief renvoie au document de stratégie du client.
 - Le calendrier montre les dépendances entre pièces.
 - Aucun montant n'est proposé sans budget fourni ; aucune publication ni dépense n'est présentée comme décidée.
 

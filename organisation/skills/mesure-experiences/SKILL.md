@@ -2,7 +2,7 @@
 name: "mesure-experiences"
 description: "Vérifie des données marketing importées (périodes, provenance, doublons, conversions), présente coûts, attribution et incertitudes, et conçoit des expériences avec hypothèse, métrique et condition d'arrêt ; répond « non mesurable » quand les données manquent. À utiliser pour tout bilan chiffré, tableau de résultats ou test A/B."
 metadata:
-  version: "1.2.0"
+  version: "1.3.0"
   langue: "fr"
   domaine: "mesure"
 ---
@@ -43,6 +43,15 @@ savent quand s'arrêter.
 5. Pour chaque indicateur sans données : « non mesurable » et la connexion nécessaire.
 6. Expériences : hypothèse, variante, métrique principale, métriques de garde, durée
    minimale, taille minimale, condition d'arrêt, décision prévue selon le résultat.
+7. **Deux horizons** : mesurer séparément l'effet long (marque) et l'effet court (activation).
+   - Indicateurs longs : notoriété assistée et spontanée (si sondage), catégories d'entrée associées
+     (`points-entree-categorie`), recherches de la marque, demandes entrantes spontanées, part des nouveaux clients venus
+     par recommandation.
+   - Indicateurs courts : demandes de devis, rendez-vous, taux de transformation, coût par rendez-vous.
+   - Indicateur d'activité du courtier : nouveaux contrats et rétention au renouvellement, à partir des données fournies
+     par le client ; sans ces données : « non mesurable ».
+8. **Boucle d'apprentissage** : une revue mensuelle vers l'agent `stratege` dit ce qui confirme ou infirme la stratégie du
+   client ; ne pas attribuer au dernier clic des ventes que la marque a préparées ; ne pas conclure sur 10 demandes.
 
 ## Livrable
 
@@ -53,6 +62,7 @@ données manquantes et connexions nécessaires, fiches d'expériences.
 
 - Aucun chiffre sans période ni provenance ; aucun chiffre inventé.
 - Chaque expérience a une condition d'arrêt.
+- Les indicateurs de marque et d'activation sont rapportés séparément ; un indicateur sans données est « non mesurable ».
 
 ## Limites
 

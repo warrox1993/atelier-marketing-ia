@@ -32,6 +32,7 @@ POURQUOI = {
     "veille": "La recherche de marché est séparée de la rédaction : les contenus s'appuient sur des observations sourcées et datées, pas sur des impressions.",
     "prospection": "Le repérage de prospects est cadré par des origines légales et par des réponses d'outils conservées telles quelles ; l'agent ne contacte personne, la décision d'agir reste humaine.",
     "enrichissement-coordonnees": "Les numéros de téléphone viennent uniquement de sources publiées par les professionnels eux-mêmes, recoupés sur deux sources et notés avec leur origine ; jamais de fuite de données ni de numéro deviné, et la liste « Ne m'appelez plus » est contrôlée avant tout appel.",
+    "stratege": "La stratégie est décidée avant les tactiques, par un agent qui tient un document versionné par client : chaque choix y est rattaché à une preuve ou marqué « hypothèse », et l'humain tranche la cible, l'offre et le budget.",
     "seo-local-geo": "Le référencement et la cohérence des informations locales se vérifient point par point ; l'agent distingue ce qui est mesuré de ce qui est supposé, sans garantie de classement.",
     "sea": "La publicité payante est préparée en brouillon et reliée à une offre validée, mais rien n'est activé ni dépensé sans décision humaine.",
     "contenus": "Les textes et les briefs de visuels sont produits selon la charte de la marque, avec leurs sources et droits signalés, pour que la relecture porte sur un contenu déjà cadré.",
@@ -73,8 +74,8 @@ PARCOURS = [
     },
     {
         "titre": "Production par les agents spécialisés",
-        "texte": "Chaque spécialiste prépare son livrable en brouillon : veille de marché, prospects, coordonnées professionnelles, référencement, publicité, contenus, conversion, mesure, réseaux sociaux.",
-        "agents": ["veille", "prospection", "enrichissement-coordonnees", "seo-local-geo", "sea", "contenus", "crm-conversion", "mesure", "reseaux-sociaux"],
+        "texte": "Chaque spécialiste prépare son livrable en brouillon : veille de marché, stratégie, prospects, coordonnées professionnelles, référencement, publicité, contenus, conversion, mesure, réseaux sociaux.",
+        "agents": ["veille", "stratege", "prospection", "enrichissement-coordonnees", "seo-local-geo", "sea", "contenus", "crm-conversion", "mesure", "reseaux-sociaux"],
     },
     {
         "titre": "Conformité publicitaire",

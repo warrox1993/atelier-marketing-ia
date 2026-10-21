@@ -1161,3 +1161,53 @@ Vérification : `npx tsc --noEmit` et `npx vitest run` dans `passerelle/`.
 - Réglages : `PASSERELLE_MENTION_IA` (texte personnalisé) et `PASSERELLE_MENTION_IA_LANGUE` (`fr` par défaut, `nl` ou `en`).
 - Désactivation : `PASSERELLE_MENTION_IA_DESACTIVEE=oui` exige `PASSERELLE_MENTION_IA_MOTIF` (motif écrit) ; sans motif, la passerelle refuse de démarrer (code 2).
 - Code : `src/mention-ia.ts` ; tests : `tests/reel-social-crm/mention-ia.test.ts` (le mode démonstration ne change pas).
+
+## Extraction de sites et audit de pages (21/10/2026)
+
+Deux services locaux de lecture, sans compte de tiers (accès par l'autorisation locale de la passerelle), réponses signées, mode réel
+seulement. Activation : `PASSERELLE_SERVICES_REELS=osm,liens,extraction,audit` dans `instance/passerelles/<port>.env`.
+
+### `extraction` : outil `extraire_site` (Crawl4AI 0.9.5, Apache-2.0)
+
+- Conteneur Podman rootless, image épinglée `docker.io/unclecode/crawl4ai:0.9.5`, publié sur `127.0.0.1:11235` seulement, démarré par
+  l'unité utilisateur `scripts/systemd/atelier-crawl4ai.service` (mode d'installation en tête du fichier).
+- Jeton d'accès obligatoire : fichier `~/.config/atelier/crawl4ai.jeton` (0600, hors dépôt, `openssl rand -hex 32`). La passerelle le lit par
+  `PASSERELLE_CRAWL4AI_JETON_FICHIER` (chemin seulement dans le fichier de réglages). Sans lui, le service n'est pas servi (« non_connecte »).
+  Adresse du conteneur : `PASSERELLE_CRAWL4AI_URL` (boucle locale en http seulement, `http://127.0.0.1:11235` par défaut).
+- Entrée : `url` (publique), `profondeur` (0 à 2, 0 par défaut), `pages_max` (1 à 20, 5 par défaut). Sortie : pages en markdown
+  (6 000 caractères par page, 40 000 au total, `tronque` indiqué), code HTTP, titre, profondeur ; `pagesEcartees` compte les pages en échec
+  ou dont l'adresse finale est interne.
+- Garde-fous : même filtre anti-SSRF que `verifier_url` (`exigerUrlPublique`), appliqué avant l'envoi et à l'adresse finale de chaque page ;
+  requête FIXE construite par la passerelle (aucun script, `/execute_js`, crochet ni MCP du conteneur, parcours limité au même site) ;
+  le conteneur applique en plus sa propre garde d'adresses internes.
+- Revue de sécurité du 21/10/2026 :
+  - **Mémoire (M2)** : la réponse du conteneur est lue en flux avec un plafond ferme de 16 Mio (« réponse trop volumineuse » au-delà) ; au plus
+    **2 extractions simultanées**, 4 en file d'attente au plus, 60 s d'attente au plus, sinon « Extraction occupée, réessayer ». La requête
+    allège la réponse (`exclude_all_images`, `excluded_tags` style/iframe/svg, liens de réseaux sociaux exclus) ; l'API `/crawl` 0.9.5 n'a pas
+    de filtre de champs de sortie (le HTML brut est toujours rendu), d'où le plafond.
+  - **Bac à sable de Chromium (M3)** : l'unité passe `-e CRAWL4AI_CHROMIUM_SANDBOX=true` (variable lue par `server.py` et `browser_manager`) ;
+    vérifié le 21/10/2026 avec `kernel.apparmor_restrict_unprivileged_userns=1` inchangé : une extraction réelle réussit et aucun processus
+    Chromium du conteneur ne porte plus `--no-sandbox`. Si une mise à jour de l'image ou du noyau le casse, retirer cette variable (retour à
+    l'état précédent) et compenser par un redémarrage quotidien du conteneur (minuteur utilisateur `atelier-crawl4ai-redemarrage.timer`) ;
+    dans tous les cas, suivre les versions de l'image (`docker.io/unclecode/crawl4ai`, épinglée en 0.9.5) et du Chromium qu'elle embarque.
+  - **Texte tiers (M4)** : chaque page porte `signalements` (motifs d'injection du plugin, `motifs-injection.json` copié dans
+    `src/reel/extraction/`, test d'identité avec la source du plugin), `caracteresInvisiblesRetires` (largeur nulle, contrôles bidirectionnels,
+    balises U+E0000 à U+E007F, retirés du texte et du titre avant la détection) et `source: "contenu tiers non fiable"`. Les champs sont dans la
+    structure signée de l'enveloppe ; le plugin ne les lit pas (il ne voit que l'enveloppe), rien ne casse.
+  - **Délais (F5)** : `page_timeout` 20 s par page (5 pages par défaut = 100 s, sous les 150 s de la passerelle).
+  - **Contexte partagé (F6)** : Crawl4AI 0.9.5 n'autorise pas `create_isolated_context` dans une requête (liste blanche des champs non fiables) ; à
+    la place, la requête fixe `max_pages_before_recycle: 20` (le navigateur est recyclé après 20 pages).
+- Piège constaté : le poste n'a pas de route IPv6 (VPN) ; sans `--network pasta:--ipv4-only` le conteneur choisit l'IPv6 et Chromium échoue en
+  `net::ERR_TUNNEL_CONNECTION_FAILED`.
+
+### `audit` : outil `auditer_page` (Lighthouse 13.5.0, Apache-2.0, paquet npm épinglé dans `passerelle/`)
+
+- Chrome du poste (`/usr/bin/google-chrome`, ou `CHROME_PATH`) en `--headless=new`, lancé par `chrome-launcher` 1.2.1, profil temporaire supprimé.
+- Entrée : `url` (publique), `passes` (1 à 3, 1 par défaut ; plusieurs passes = médiane des scores), `delai_ms` (10 000 à 120 000, 90 000 par défaut).
+- Sortie : scores sur 100 (performance, accessibilité, bonnes pratiques, SEO) et 10 problèmes au plus (catégorie, audit, titre, score, valeur).
+- Une seule exécution de navigateur à la fois (file interne) ; même filtre d'URL, revérifié sur l'adresse finale.
+
+### Tests
+
+`passerelle/tests/reel-extraction/` (extraction, services-web) et `passerelle/tests/reel-audit/` : appels factices, adresses privées refusées,
+plafonds, troncature, réponses signées vérifiées par la clé publique de la passerelle. Preuve réelle du 21/10/2026 : voir le rapport de la session.

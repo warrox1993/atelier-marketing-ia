@@ -2,7 +2,7 @@
 name: "renouvellement-fidelisation"
 description: "Tient le calendrier des échéances de contrats d'une entreprise belge, repère les signaux de départ d'un client, rend un verdict « en bonne voie, à surveiller, à risque » avec preuve, contrôle la propreté du portefeuille, prépare l'offre de reconduction et applique les règles de reconduction tacite (clause signalée, délai raisonnable pour s'opposer, préavis). À utiliser pour un portefeuille de contrats à échéance, une fiche de renouvellement ou un message de rappel à valider ; jamais pour contacter le client, résilier, fixer une prime ou déduire une résiliation d'un silence."
 metadata:
-  version: "1.1.0"
+  version: "1.2.0"
   langue: "fr"
   domaine: "commercial"
 ---
@@ -49,6 +49,20 @@ metadata:
    | Discussion d'extension en cours | baisse |
    | Contrat pluriannuel ou client de longue date satisfait (preuve écrite) | baisse |
    Les poids s'ajustent à ce qui a réellement précédé les départs dans l'entreprise.
+   Si l'entreprise tient un score de santé du client (de 0 à 100), appliquer ces garde-fous (méthode amont 2.13.0) :
+   - chaque composante (usage, sentiment, facturation) est ramenée d'abord à la même échelle de 0 à 100, où plus haut
+     veut dire en meilleure santé, par une correspondance écrite ; ne jamais additionner tels quels un nombre de
+     connexions, une note de 1 à 5 et un pourcentage ;
+   - un signal manquant ou périmé est « indisponible », jamais compté comme sain ni comme nul ; fixer une durée de
+     fraîcheur et une couverture minimale avant d'utiliser le score ;
+   - si un score partiel est permis, il vaut la somme (poids × score observé) divisée par la somme des poids observés,
+     et la couverture (somme des poids observés) est écrite à côté ; sinon le résultat est « données insuffisantes »
+     (exemple : connexions 80 et usage 60 seuls, poids 0,30 et 0,25, donnent 70,9 avec 55 % de couverture, trop peu
+     pour classer un client comme sain sans règle de couverture) ;
+   - les poids et les seuils d'intervention sont des points de départ illustratifs : les valider sur les départs et
+     renouvellements réellement observés avant de s'y fier ;
+   - une note individuelle de recommandation de 0 à 6 est un détracteur ; ne pas la confondre avec le NPS agrégé
+     (de -100 à 100).
 4. Rendre un verdict par renouvellement : « en bonne voie », « à surveiller » ou « à risque », avec les signaux qui le portent. Les dossiers « à risque » forment un bloc à traiter dans la semaine (signal précis et démarche proposée).
 5. Contrôler la propreté du portefeuille : échéance sans dossier de renouvellement, montant manquant, date de suivi postérieure à l'échéance, préavis absent. Chaque correction est proposée, jamais appliquée.
 6. Écrire les écarts entre le contrat actuel et la situation connue (nouveaux besoins, changement de taille), sans conseiller un produit.
@@ -114,6 +128,7 @@ Table de signaux, verdicts et contrôle de propreté adaptés et traduits de git
 `sales/skills/renewal-radar/SKILL.md`, étapes 3 et 4, commit 33eeda1e8fd856455b05479d13a0f85b5f803744, licence
 Apache 2.0 ; liste des signaux faibles de départ adaptée de github.com/coreyhaines31/marketingskills,
 `skills/churn-prevention/SKILL.md`, section « Churn Prediction & Proactive Retention », commit
-dda3841f0b294e01e93b1541486beefbfab0915e, licence MIT, Copyright (c) 2025 Corey Haines. Modifications : réécriture en
+dda3841f0b294e01e93b1541486beefbfab0915e, licence MIT, Copyright (c) 2025 Corey Haines (garde-fous du score de santé : version 2.13.0, commit
+e85f3cbc2e4a79bf33b2a12e9bdd9087d414735b). Modifications : réécriture en
 français, signaux propres à l'assurance, droit belge. Texte des licences et liste des reprises :
 `organisation/skills/LICENCES-TIERS.md`.

@@ -2,7 +2,7 @@
 name: "recherche-prospects"
 description: "Cherche des prospects B2B par secteur NACE et zone, des particuliers B2C aux seules origines légales et des partenaires, par les outils de prospection en lecture (bce, bnb, fsma, osm, b2c), dépose chaque réponse brute signée sur la tâche, applique les garde-fous de collecte et le contrôle de la liste « Ne m'appelez plus » avant tout fichier d'appel. À utiliser pour toute constitution ou mise à jour d'une liste de prospects ; jamais pour contacter quelqu'un ni écrire au CRM."
 metadata:
-  version: "1.1.0"
+  version: "1.3.0"
   langue: "fr"
   domaine: "prospection"
 ---
@@ -76,6 +76,30 @@ l'origine de chaque prospect avant tout export.
 10. **Contrôles de qualité avant de rendre la liste** : doublons retirés (par numéro d'entreprise en B2B, par personne
     et adresse en B2C) ; chaque contact a une source et une date ; aucun prospect issu d'une collecte interdite ; nombre
     final égal à la demande, ou écart expliqué.
+11. **Déclencheurs, part en marché, groupe d'achat** : après lecture du document de stratégie du client tenu par l'agent
+    `stratege`, repérer pour chaque entreprise les déclencheurs publics (création, changement d'adresse, embauche,
+    croissance) avec leur source et leur date ; viser la part en marché utile (entreprises susceptibles d'acheter à la
+    période, pas seulement celles déjà intéressées) ; noter, quand la source publique le permet, les rôles du groupe d'achat
+    (dirigeant, comptable, responsable RH ou flotte), sans donnée personnelle privée. Une liste du registre des entreprises
+    n'est pas une liste d'envoi : elle sert à préparer, pas à contacter.
+12. **Vérification des adresses, liste de suppression et traçabilité** (ajout de la méthode amont 2.13.0) :
+    - une adresse électronique professionnelle n'entre dans la liste qu'après vérification de sa délivrabilité, refaite
+      dans les 7 jours qui précèdent un envoi si la liste a attendu (les données B2B vieillissent vite) ; une adresse
+      invalide, jetable ou piège est retirée définitivement, une adresse de rôle (info@, ventes@) n'entre pas dans une
+      séquence personnelle (sauf entreprise locale dont c'est le canal public), une adresse « inconnue » est retentée
+      une fois puis écartée ;
+    - un domaine « attrape-tout » (qui accepte toute adresse) se traite par une règle écrite, jamais au jugé : résoudre
+      avec un vérificateur plus fin, sinon n'envoyer qu'aux comptes de rang 1 et surveiller les rebonds ; rebonds sous
+      2 % par campagne, pause au-delà ;
+    - une seule liste de suppression (désinscriptions, rebonds, clients actuels et affaires ouvertes, concurrents,
+      partenaires, refus, demandes d'effacement) sert à tous les canaux et se consulte avant tout envoi, clé par
+      adresse, numéro de téléphone et profil ;
+    - chaque contact porte sa source, sa date de collecte, la base légale (RGPD) et la date et le résultat de la
+      dernière vérification, de façon à répondre à « d'où tenez-vous mon adresse ? » et aux demandes d'effacement ;
+    - jamais d'aspiration d'un réseau social professionnel : définir l'audience par les filtres de l'outil de
+      recherche du réseau (lecture humaine), puis tirer les contacts d'une base de données sous licence aux mêmes
+      critères ; pour une chaîne de sources, s'arrêter au premier résultat qui passe la vérification et noter quel
+      fournisseur a rempli chaque champ.
 
 ## Livrable
 
@@ -132,6 +156,8 @@ relues ici.
 
 Garde-fous de collecte et contrôles de qualité adaptés et traduits de github.com/coreyhaines31/marketingskills,
 `skills/prospecting/SKILL.md`, sections « Compliance Guardrails » et « Quality Checks », commit
-dda3841f0b294e01e93b1541486beefbfab0915e, licence MIT, Copyright (c) 2025 Corey Haines. Modifications : traduction,
+dda3841f0b294e01e93b1541486beefbfab0915e, licence MIT, Copyright (c) 2025 Corey Haines ; vérification, suppression et
+traçabilité (étape 12) reprises de `skills/prospecting/references/sourcing-and-enrichment.md`, version 2.13.0, commit
+e85f3cbc2e4a79bf33b2a12e9bdd9087d414735b. Modifications : traduction,
 droit belge (liste « Ne m'appelez plus »), dépôts signés de l'atelier. Texte des licences et liste des reprises :
 `organisation/skills/LICENCES-TIERS.md`.

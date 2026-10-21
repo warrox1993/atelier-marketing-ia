@@ -129,6 +129,11 @@ export const FICHES_AGENTS_MARKETING: readonly FicheAgentMarketing[] = [
         "sert": "Compare des concurrents sur des critères identiques (offres, zones, preuves, canaux, messages) à partir de sources datées, et en tire des opportunités et risques étiquetés comme recommandations."
       },
       {
+        "cle": "points-entree-categorie",
+        "nom": "Points d'entrée de la catégorie",
+        "sert": "Relève les catégories d'entrée (situations, besoins, signaux qui font penser à l'achat d'une assurance, méthode des 7W de Jenni Romaniuk), les rédige en langage client, les classe par fréquence et importance avec preuve, puis les affecte aux agents de canal ; propose des métriques de disponibilité mentale si un sondage est possible."
+      },
+      {
         "cle": "memoire-para",
         "nom": "Mémoire en fichiers (méthode PARA)",
         "sert": "Tient la mémoire persistante de l'agent en fichiers, selon la méthode PARA (graphe de connaissances, notes du jour, savoir tacite), dans le dossier ./memoire/ de son répertoire de travail, avec la source et la date de chaque fait."
@@ -147,6 +152,100 @@ export const FICHES_AGENTS_MARKETING: readonly FicheAgentMarketing[] = [
       "lancer d'autres agents"
     ],
     "pourquoi": "La recherche de marché est séparée de la rédaction : les contenus s'appuient sur des observations sourcées et datées, pas sur des impressions."
+  },
+  {
+    "slug": "stratege",
+    "nom": "Stratège",
+    "pole": "Intelligence",
+    "role": "Stratégie marketing",
+    "mission": "Produit et tient à jour, pour chaque client, le document de stratégie versionné (diagnostic, cible, positionnement, objectifs, offre, plan de canaux) avec ses preuves et ses hypothèses ; propose les choix métier à l'humain sans les trancher ; n'écrit aucun contenu de campagne et ne publie rien.",
+    "recoit": [
+      "brief, exigences et fiche de cadrage",
+      "note de marché de la veille, chiffres de la mesure, comptes rendus d'entretiens réels",
+      "document de stratégie courant du client et son historique"
+    ],
+    "livre": [
+      "document de stratégie versionné d'une à deux pages",
+      "livrable de l'étape demandée (diagnostic, segments et niche, positionnement, objectifs, offre, plan de canaux)",
+      "liste des hypothèses et des inconnus avec l'action qui les lèverait"
+    ],
+    "competences": [
+      {
+        "cle": "diagnostic-marketing",
+        "nom": "Diagnostic marketing",
+        "sert": "Produit le dossier de diagnostic d'un client avant toute stratégie ou tactique : cinq volets (marché, clients, concurrents, marque, données internes), 3 à 5 constats chacun avec sa preuve et son niveau de confiance, liste des inconnus."
+      },
+      {
+        "cle": "segmentation-ciblage",
+        "nom": "Segmentation et ciblage",
+        "sert": "Découpe le marché d'un client en segments, les note (attractivité, capacité à les servir, accessibilité), retient 1 à 3 segments puis choisit une seule niche tête de pont avec son « produit total »."
+      },
+      {
+        "cle": "positionnement-concurrentiel",
+        "nom": "Positionnement concurrentiel",
+        "sert": "Construit le positionnement d'un client à partir de ses vraies alternatives : tableau alternatives, attributs prouvés, valeur, preuve, segment, catégorie ; carte des positions déjà occupées dans l'esprit des clients ; énoncé de positionnement ; renvoi obligatoire vers la conformité publicitaire."
+      },
+      {
+        "cle": "objectifs-marque-activation",
+        "nom": "Objectifs, marque et activation",
+        "sert": "Fixe les objectifs chiffrés et datés d'un client, répartit le budget entre construction de marque et activation (hypothèse de départ B2B 46/54 présentée comme hypothèse), estime la part d'acheteurs « en marché » et fixe les indicateurs longs et courts."
+      },
+      {
+        "cle": "conception-offre-reglementee",
+        "nom": "Conception d'une offre réglementée",
+        "sert": "Conçoit l'offre d'un client d'un secteur réglementé (assurance, finance) avec l'équation de valeur : inventaire des obstacles du client, une solution par variable, liste des leviers interdits ou à risque (rareté, urgence, garanties de résultat), fiche d'offre à faire valider par la conformité."
+      },
+      {
+        "cle": "selection-canaux-bullseye",
+        "nom": "Sélection des canaux (Bullseye)",
+        "sert": "Choisit les canaux d'acquisition d'un client avec la méthode Bullseye : revue des 19 canaux, une idée concrète par canal, classement en prometteur, possible ou improbable, plan de 2 ou 3 tests avec budget, durée et seuil de succès fixés d'avance, verdict et revue trimestrielle."
+      },
+      {
+        "cle": "plan-strategique-marketing",
+        "nom": "Plan stratégique de marketing",
+        "sert": "Assemble le document de stratégie d'un client en une à deux pages à partir du diagnostic, de la cible, du positionnement, des objectifs, de l'offre et du plan de canaux, avec les portes de passage entre étapes et les règles de retour arrière."
+      },
+      {
+        "cle": "entretien-client-sans-biais",
+        "nom": "Entretien client sans biais",
+        "sert": "Prépare un guide d'entretien client fondé sur des faits passés (règles de The Mom Test de Rob Fitzpatrick), interdit les questions qui flattent une idée, fournit la grille de classement des notes (faits, douleurs, engagements, compliments, opinions) et la synthèse sur 5 à 10 entretiens."
+      },
+      {
+        "cle": "analyse-jobs-a-faire",
+        "nom": "Analyse des jobs à faire",
+        "sert": "Reconstitue la chronologie d'un changement de solution chez des clients récents (premier doute, recherche, décision, usage), classe leurs propos dans les quatre forces du progrès (poussée, attraction, anxiété, habitude) et formule 2 à 4 fiches « job » avec preuves, déclencheurs et anxiétés."
+      },
+      {
+        "cle": "points-entree-categorie",
+        "nom": "Points d'entrée de la catégorie",
+        "sert": "Relève les catégories d'entrée (situations, besoins, signaux qui font penser à l'achat d'une assurance, méthode des 7W de Jenni Romaniuk), les rédige en langage client, les classe par fréquence et importance avec preuve, puis les affecte aux agents de canal ; propose des métriques de disponibilité mentale si un sondage est possible."
+      },
+      {
+        "cle": "recherche-sourcee",
+        "nom": "Recherche sourcée et vérification des faits",
+        "sert": "Mène une recherche documentaire et vérifie les faits : chaque observation porte sa source, sa date de collecte, son statut d'accès et sa limite, et distingue fait vérifié, inférence, hypothèse et recommandation."
+      },
+      {
+        "cle": "recherche-connaissances",
+        "nom": "Recherche dans les connaissances du client",
+        "sert": "Interroge les connaissances du client (conditions générales, fiches produit, tarifs, FAQ, notes) avant d'écrire un chiffre d'offre, et cite l'adresse connaissance:// rendue ; sans source, signale l'information manquante."
+      },
+      {
+        "cle": "memoire-para",
+        "nom": "Mémoire en fichiers (méthode PARA)",
+        "sert": "Tient la mémoire persistante de l'agent en fichiers, selon la méthode PARA (graphe de connaissances, notes du jour, savoir tacite), dans le dossier ./memoire/ de son répertoire de travail, avec la source et la date de chaque fait."
+      }
+    ],
+    "interdits": [
+      "Tu n'inventes ni chiffre, ni citation d'auteur, ni verbatim de client, ni réponse d'entretien : sans donnée réelle, la case est « inconnu ». Un agent ne mène pas d'entretien : il prépare le guide et analyse les comptes rendus.",
+      "Tu ne présentes jamais un ratio ou un chiffre de la littérature (46/54, 95/5, 60/40) comme une loi : c'est une hypothèse de départ, à ajuster avec les données du client.",
+      "Tu ne contactes personne et tu ne publies rien."
+    ],
+    "outilsRetires": [
+      "modifier des fichiers",
+      "lancer d'autres agents"
+    ],
+    "pourquoi": "La stratégie est décidée avant les tactiques, par un agent qui tient un document versionné par client : chaque choix y est rattaché à une preuve ou marqué « hypothèse », et l'humain tranche la cible, l'offre et le budget."
   },
   {
     "slug": "prospection",
@@ -298,6 +397,16 @@ export const FICHES_AGENTS_MARKETING: readonly FicheAgentMarketing[] = [
         "sert": "Interroge les connaissances du client (conditions générales, fiches produit, tarifs, FAQ, notes) avant d'écrire un chiffre d'offre, et cite l'adresse connaissance:// rendue ; sans source, signale l'information manquante."
       },
       {
+        "cle": "points-entree-categorie",
+        "nom": "Points d'entrée de la catégorie",
+        "sert": "Relève les catégories d'entrée (situations, besoins, signaux qui font penser à l'achat d'une assurance, méthode des 7W de Jenni Romaniuk), les rédige en langage client, les classe par fréquence et importance avec preuve, puis les affecte aux agents de canal ; propose des métriques de disponibilité mentale si un sondage est possible."
+      },
+      {
+        "cle": "liens-entrants-seo",
+        "nom": "Liens entrants et mentions tierces",
+        "sert": "Construit un plan de liens entrants et de mentions tierces pour une PME ou un courtier belge : vérifie d'abord que les liens sont bien le frein (écart de liens par page), choisit les tactiques par effort et qualité, qualifie les sites cibles, prépare des messages à faire valider, impose les attributs sponsored ou nofollow aux placements payants et mesure liens, positions et citations par les assistants d'IA."
+      },
+      {
         "cle": "memoire-para",
         "nom": "Mémoire en fichiers (méthode PARA)",
         "sert": "Tient la mémoire persistante de l'agent en fichiers, selon la méthode PARA (graphe de connaissances, notes du jour, savoir tacite), dans le dossier ./memoire/ de son répertoire de travail, avec la source et la date de chaque fait."
@@ -345,6 +454,21 @@ export const FICHES_AGENTS_MARKETING: readonly FicheAgentMarketing[] = [
         "cle": "recherche-connaissances",
         "nom": "Recherche dans les connaissances du client",
         "sert": "Interroge les connaissances du client (conditions générales, fiches produit, tarifs, FAQ, notes) avant d'écrire un chiffre d'offre, et cite l'adresse connaissance:// rendue ; sans source, signale l'information manquante."
+      },
+      {
+        "cle": "niveau-conscience-message",
+        "nom": "Niveau de conscience d'un message",
+        "sert": "Fixe pour chaque contenu le niveau de conscience de la cible (inconscient du problème, conscient du problème, des solutions, du produit, pleinement conscient, selon Eugene Schwartz), choisit l'ouverture adaptée, contrôle la sophistication du marché et associe le niveau au canal."
+      },
+      {
+        "cle": "redaction-titre-preuve",
+        "nom": "Rédaction de titre et preuve",
+        "sert": "Applique les règles de rédaction publicitaire tirées d'Ogilvy : étudier le produit et le client avant d'écrire, mettre la promesse et la cible dans le titre, écrire plusieurs titres, appuyer chaque promesse sur un fait précis ou une preuve, écrire au lecteur dans sa langue et prévoir un test de variantes."
+      },
+      {
+        "cle": "suivi-conversions",
+        "nom": "Suivi des conversions",
+        "sert": "Met en place, audite ou répare le suivi des conversions d'un site (formulaire, rendez-vous réservé, appel, devis, achat) vers GA4 et les régies publicitaires : définit ce qui compte comme conversion, déclenche sur le succès confirmé et jamais sur la tentative, choisit navigateur ou serveur, exige le consentement avant tout marqueur, vérifie qu'une conversion de test est réellement arrivée et dit ce qui reste non vérifié."
       },
       {
         "cle": "memoire-para",
@@ -401,6 +525,36 @@ export const FICHES_AGENTS_MARKETING: readonly FicheAgentMarketing[] = [
         "sert": "Interroge les connaissances du client (conditions générales, fiches produit, tarifs, FAQ, notes) avant d'écrire un chiffre d'offre, et cite l'adresse connaissance:// rendue ; sans source, signale l'information manquante."
       },
       {
+        "cle": "niveau-conscience-message",
+        "nom": "Niveau de conscience d'un message",
+        "sert": "Fixe pour chaque contenu le niveau de conscience de la cible (inconscient du problème, conscient du problème, des solutions, du produit, pleinement conscient, selon Eugene Schwartz), choisit l'ouverture adaptée, contrôle la sophistication du marché et associe le niveau au canal."
+      },
+      {
+        "cle": "recit-de-marque-guide",
+        "nom": "Récit de marque en sept éléments",
+        "sert": "Remplit la grille de récit de marque en sept éléments (le client est le héros, la marque est le guide : personnage, problème, guide, plan, appel à l'action, enjeux, réussite), en tire une phrase de présentation courte et la structure d'une page d'accueil avec un seul appel à l'action principal."
+      },
+      {
+        "cle": "redaction-titre-preuve",
+        "nom": "Rédaction de titre et preuve",
+        "sert": "Applique les règles de rédaction publicitaire tirées d'Ogilvy : étudier le produit et le client avant d'écrire, mettre la promesse et la cible dans le titre, écrire plusieurs titres, appuyer chaque promesse sur un fait précis ou une preuve, écrire au lecteur dans sa langue et prévoir un test de variantes."
+      },
+      {
+        "cle": "leviers-influence-ethiques",
+        "nom": "Leviers d'influence éthiques",
+        "sert": "Passe en revue les sept principes d'influence de Robert Cialdini (réciprocité, engagement et cohérence, preuve sociale, sympathie, autorité, rareté, unité) dans un contenu, exige un fondement factuel pour chacun, raye les leviers sans fondement et envoie obligatoirement la rareté et l'urgence à la conformité publicitaire."
+      },
+      {
+        "cle": "actifs-distinctifs",
+        "nom": "Actifs distinctifs de marque",
+        "sert": "Inventorie les actifs distinctifs d'une marque (logo, couleur, formule, personnage, ton, visage du courtier), mesure si possible leur notoriété et leur unicité par sondage, les classe en à utiliser, à investir, à éviter et fournit des règles d'usage à reporter dans la charte de marque."
+      },
+      {
+        "cle": "liens-entrants-seo",
+        "nom": "Liens entrants et mentions tierces",
+        "sert": "Construit un plan de liens entrants et de mentions tierces pour une PME ou un courtier belge : vérifie d'abord que les liens sont bien le frein (écart de liens par page), choisit les tactiques par effort et qualité, qualifie les sites cibles, prépare des messages à faire valider, impose les attributs sponsored ou nofollow aux placements payants et mesure liens, positions et citations par les assistants d'IA."
+      },
+      {
         "cle": "memoire-para",
         "nom": "Mémoire en fichiers (méthode PARA)",
         "sert": "Tient la mémoire persistante de l'agent en fichiers, selon la méthode PARA (graphe de connaissances, notes du jour, savoir tacite), dans le dossier ./memoire/ de son répertoire de travail, avec la source et la date de chaque fait."
@@ -448,6 +602,11 @@ export const FICHES_AGENTS_MARKETING: readonly FicheAgentMarketing[] = [
         "sert": "Interroge les connaissances du client (conditions générales, fiches produit, tarifs, FAQ, notes) avant d'écrire un chiffre d'offre, et cite l'adresse connaissance:// rendue ; sans source, signale l'information manquante."
       },
       {
+        "cle": "leviers-influence-ethiques",
+        "nom": "Leviers d'influence éthiques",
+        "sert": "Passe en revue les sept principes d'influence de Robert Cialdini (réciprocité, engagement et cohérence, preuve sociale, sympathie, autorité, rareté, unité) dans un contenu, exige un fondement factuel pour chacun, raye les leviers sans fondement et envoie obligatoirement la rareté et l'urgence à la conformité publicitaire."
+      },
+      {
         "cle": "memoire-para",
         "nom": "Mémoire en fichiers (méthode PARA)",
         "sert": "Tient la mémoire persistante de l'agent en fichiers, selon la méthode PARA (graphe de connaissances, notes du jour, savoir tacite), dans le dossier ./memoire/ de son répertoire de travail, avec la source et la date de chaque fait."
@@ -484,6 +643,11 @@ export const FICHES_AGENTS_MARKETING: readonly FicheAgentMarketing[] = [
         "cle": "mesure-experiences",
         "nom": "Mesure, attribution et conception d'expériences",
         "sert": "Vérifie des données marketing importées (périodes, provenance, doublons, conversions), présente coûts, attribution et incertitudes, et conçoit des expériences avec hypothèse, métrique et condition d'arrêt ; répond « non mesurable » quand les données manquent."
+      },
+      {
+        "cle": "suivi-conversions",
+        "nom": "Suivi des conversions",
+        "sert": "Met en place, audite ou répare le suivi des conversions d'un site (formulaire, rendez-vous réservé, appel, devis, achat) vers GA4 et les régies publicitaires : définit ce qui compte comme conversion, déclenche sur le succès confirmé et jamais sur la tentative, choisit navigateur ou serveur, exige le consentement avant tout marqueur, vérifie qu'une conversion de test est réellement arrivée et dit ce qui reste non vérifié."
       },
       {
         "cle": "memoire-para",
@@ -538,6 +702,16 @@ export const FICHES_AGENTS_MARKETING: readonly FicheAgentMarketing[] = [
         "sert": "Rédige un contenu principal puis le décline par canal (site, blog, réseaux sociaux, courriel, fiche d'établissement) en respectant les contraintes de chaque canal, la charte de marque et les sources."
       },
       {
+        "cle": "points-entree-categorie",
+        "nom": "Points d'entrée de la catégorie",
+        "sert": "Relève les catégories d'entrée (situations, besoins, signaux qui font penser à l'achat d'une assurance, méthode des 7W de Jenni Romaniuk), les rédige en langage client, les classe par fréquence et importance avec preuve, puis les affecte aux agents de canal ; propose des métriques de disponibilité mentale si un sondage est possible."
+      },
+      {
+        "cle": "niveau-conscience-message",
+        "nom": "Niveau de conscience d'un message",
+        "sert": "Fixe pour chaque contenu le niveau de conscience de la cible (inconscient du problème, conscient du problème, des solutions, du produit, pleinement conscient, selon Eugene Schwartz), choisit l'ouverture adaptée, contrôle la sophistication du marché et associe le niveau au canal."
+      },
+      {
         "cle": "memoire-para",
         "nom": "Mémoire en fichiers (méthode PARA)",
         "sert": "Tient la mémoire persistante de l'agent en fichiers, selon la méthode PARA (graphe de connaissances, notes du jour, savoir tacite), dans le dossier ./memoire/ de son répertoire de travail, avec la source et la date de chaque fait."
@@ -588,6 +762,11 @@ export const FICHES_AGENTS_MARKETING: readonly FicheAgentMarketing[] = [
         "sert": "Applique la charte de marque à un texte ou à un brief de visuel : ton, vocabulaire, mentions obligatoires et interdites, affirmations autorisées, cohérence des offres et des établissements."
       },
       {
+        "cle": "leviers-influence-ethiques",
+        "nom": "Leviers d'influence éthiques",
+        "sert": "Passe en revue les sept principes d'influence de Robert Cialdini (réciprocité, engagement et cohérence, preuve sociale, sympathie, autorité, rareté, unité) dans un contenu, exige un fondement factuel pour chacun, raye les leviers sans fondement et envoie obligatoirement la rareté et l'urgence à la conformité publicitaire."
+      },
+      {
         "cle": "memoire-para",
         "nom": "Mémoire en fichiers (méthode PARA)",
         "sert": "Tient la mémoire persistante de l'agent en fichiers, selon la méthode PARA (graphe de connaissances, notes du jour, savoir tacite), dans le dossier ./memoire/ de son répertoire de travail, avec la source et la date de chaque fait."
@@ -631,6 +810,16 @@ export const FICHES_AGENTS_MARKETING: readonly FicheAgentMarketing[] = [
         "cle": "controle-couverture",
         "nom": "Contrôle de couverture des exigences",
         "sert": "Contrôle indépendant de la couverture d'un livrable : compare la version exacte du livrable au brief original et à chaque exigence REQ-xxx, exige une preuve localisable par point couvert, détecte établissements, canaux ou sections oubliés et rend un verdict structuré."
+      },
+      {
+        "cle": "entretien-client-sans-biais",
+        "nom": "Entretien client sans biais",
+        "sert": "Prépare un guide d'entretien client fondé sur des faits passés (règles de The Mom Test de Rob Fitzpatrick), interdit les questions qui flattent une idée, fournit la grille de classement des notes (faits, douleurs, engagements, compliments, opinions) et la synthèse sur 5 à 10 entretiens."
+      },
+      {
+        "cle": "analyse-jobs-a-faire",
+        "nom": "Analyse des jobs à faire",
+        "sert": "Reconstitue la chronologie d'un changement de solution chez des clients récents (premier doute, recherche, décision, usage), classe leurs propos dans les quatre forces du progrès (poussée, attraction, anxiété, habitude) et formule 2 à 4 fiches « job » avec preuves, déclencheurs et anxiétés."
       },
       {
         "cle": "recherche-connaissances",
@@ -682,6 +871,11 @@ export const FICHES_AGENTS_MARKETING: readonly FicheAgentMarketing[] = [
         "cle": "charte-marque",
         "nom": "Application de la charte de marque",
         "sert": "Applique la charte de marque à un texte ou à un brief de visuel : ton, vocabulaire, mentions obligatoires et interdites, affirmations autorisées, cohérence des offres et des établissements."
+      },
+      {
+        "cle": "actifs-distinctifs",
+        "nom": "Actifs distinctifs de marque",
+        "sert": "Inventorie les actifs distinctifs d'une marque (logo, couleur, formule, personnage, ton, visage du courtier), mesure si possible leur notoriété et leur unicité par sondage, les classe en à utiliser, à investir, à éviter et fournit des règles d'usage à reporter dans la charte de marque."
       },
       {
         "cle": "recherche-connaissances",
@@ -780,9 +974,10 @@ export const PARCOURS_DEMANDE: readonly EtapeParcours[] = [
   },
   {
     "titre": "Production par les agents spécialisés",
-    "texte": "Chaque spécialiste prépare son livrable en brouillon : veille de marché, prospects, coordonnées professionnelles, référencement, publicité, contenus, conversion, mesure, réseaux sociaux.",
+    "texte": "Chaque spécialiste prépare son livrable en brouillon : veille de marché, stratégie, prospects, coordonnées professionnelles, référencement, publicité, contenus, conversion, mesure, réseaux sociaux.",
     "agents": [
       "veille",
+      "stratege",
       "prospection",
       "enrichissement-coordonnees",
       "seo-local-geo",

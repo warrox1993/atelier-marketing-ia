@@ -116,11 +116,13 @@ function normaliserTexte(t: string): string {
  * fournisseur réel présent dans `passerelle/src/reel/` (L4 : Google seulement, commit e5939f1)].
  */
 /** Sources de données dont le mode est lu sur la passerelle : [clé, nom, texte si réelle, texte si non réelle]. */
-const SOURCES_REELLES: ReadonlyArray<readonly ["bce" | "bnb" | "osm" | "liens", string, string, string]> = [
+const SOURCES_REELLES: ReadonlyArray<readonly ["bce" | "bnb" | "osm" | "liens" | "extraction" | "audit", string, string, string]> = [
   ["bce", "Banque-Carrefour des Entreprises (BCE)", "Index BCE réel branché sur la passerelle.", "Index BCE réel non branché : inscription au portail de la BCE à terminer."],
   ["bnb", "Banque nationale de Belgique (BNB)", "Accès réel à la Banque nationale branché sur la passerelle.", "Clé de la Banque nationale en attente d'approbation."],
   ["osm", "OpenStreetMap", "Extrait OpenStreetMap réel servi par la passerelle.", "OpenStreetMap non réel : extrait non branché sur la passerelle."],
   ["liens", "Vérification de liens", "Vérification de liens réelle servie par la passerelle.", "Vérification de liens non réelle : non branchée sur la passerelle."],
+  ["extraction", "Lecture de sites", "Lecture de sites réelle servie par la passerelle.", "Lecture de sites non réelle : non branchée sur la passerelle."],
+  ["audit", "Audit de pages", "Audit de pages réel servi par la passerelle.", "Audit de pages non réel : non branché sur la passerelle."],
 ];
 
 const SERVICES_PASSERELLE_SANTE: ReadonlyArray<readonly [string, string, boolean, boolean]> = [

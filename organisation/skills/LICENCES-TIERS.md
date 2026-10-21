@@ -15,7 +15,7 @@ adaptées (droit belge, validation humaine, sources officielles) par l'Atelier M
 | Id | Dépôt | Commit lu | Licence | Titulaire des droits |
 | --- | --- | --- | --- | --- |
 | S1 | github.com/anthropics/knowledge-work-plugins | 33eeda1e8fd856455b05479d13a0f85b5f803744 (15/10/2026) | Apache 2.0 | Anthropic (fichier `LICENSE` du dépôt, sans fichier NOTICE) |
-| S2 | github.com/coreyhaines31/marketingskills | dda3841f0b294e01e93b1541486beefbfab0915e (02/10/2026, version 2.11.17) | MIT | Copyright (c) 2025 Corey Haines |
+| S2 | github.com/coreyhaines31/marketingskills | e85f3cbc2e4a79bf33b2a12e9bdd9087d414735b (21/10/2026, version v2.13.0 ; ancien commit lu : dda3841f0b294e01e93b1541486beefbfab0915e, version 2.11.17) | MIT | Copyright (c) 2025 Corey Haines |
 | S3 | github.com/alirezarezvani/claude-skills | 19392f7a08264ed00486a251f5b2098321771f94 (26/08/2026) | MIT | Copyright (c) 2025 Alireza Rezvani |
 | S4 | github.com/wshobson/agents | 044b4b21f083948e69ec878a7b07c8d0951a6ffa (15/10/2026) | MIT | Copyright (c) 2024 Seth Hobson |
 | S5 | github.com/anthropics/skills | b9e19e6f44773509fbdd7001d77ff41a49a486c1 (20/04/2026, dernier commit du dossier `skills/internal-comms`) | Apache 2.0 (fichier `skills/internal-comms/LICENSE.txt`) | Copyright 2026 Anthropic, PBC |
@@ -87,7 +87,7 @@ adaptées (droit belge, validation humaine, sources officielles) par l'Atelier M
 | `preparation-rendez-vous-b2b` | S1 | `sales/skills/stakeholder-map/SKILL.md` (étapes 3 et 4) | carte des interlocuteurs |
 | `proposition-commerciale` | S1 | `sales/skills/close-plan/SKILL.md` (étape 4) | plan d'action commun à rebours, dates impossibles signalées |
 | `renouvellement-fidelisation` | S1 | `sales/skills/renewal-radar/SKILL.md` (étapes 3 et 4) | table de signaux, verdicts, contrôle de propreté |
-| `renouvellement-fidelisation` | S2 | `skills/churn-prevention/SKILL.md` (« Churn Prediction & Proactive Retention ») | signaux faibles de départ, adaptés à l'assurance |
+| `renouvellement-fidelisation` | S2 | `skills/churn-prevention/SKILL.md` (« Churn Prediction & Proactive Retention ») | signaux faibles de départ, adaptés à l'assurance ; garde-fous du score de santé (échelle commune, signal indisponible, couverture, validation des seuils) ajoutés avec la version 2.13.0 |
 | `redaction-contrat-travail` | S4 | `plugins/hr-legal-compliance/agents/hr-pro.md (« Operating Principles », « Information to Collect »)` | droit inconnu : demander ; plusieurs pays : norme la plus protectrice ; au plus trois questions |
 | `fin-contrat-travail` | S1 | `legal/skills/legal-response/SKILL.md (étape 3, « Universal Escalation Triggers »)` | déclencheurs d'escalade d'office |
 | `fin-contrat-travail` | S4 | `plugins/hr-legal-compliance/agents/hr-pro.md (« Guardrails »)` | liste des actes à haut risque |
@@ -166,7 +166,11 @@ adaptées (droit belge, validation humaine, sources officielles) par l'Atelier M
 | `calendrier-reseaux-sociaux` | S2 | `skills/social/SKILL.md` (« Content Pillars Framework », « Content Calendar Structure », « Content Repurposing System », « Engagement Strategy ») | piliers et questions pour les définir, grille de calendrier, recyclage, règles d'engagement |
 | `calendrier-reseaux-sociaux` | S6 | `plugins/entreprise-marketing/skills/calendrier-editorial/SKILL.md` | rythme tenable, temps forts d'abord, marges et contenus de réserve (même auteur) |
 | `recherche-prospects` | S2 | `skills/prospecting/SKILL.md` (« Compliance Guardrails », « Quality Checks ») | garde-fous de collecte (pas d'aspiration ni de contournement, canaux publics, source et date, aucune donnée sans origine ni sensible), contrôles de qualité avant de rendre la liste |
+| `recherche-prospects` | S2 | `skills/prospecting/references/sourcing-and-enrichment.md` (« Sourcing without scraping LinkedIn », « Verification », « Suppression list », « Provenance »), version 2.13.0 | vérification des adresses, domaines attrape-tout, liste de suppression unique, traçabilité de chaque contact, pas d'aspiration d'un réseau social professionnel |
 | `qualification-prospects` | S2 | `skills/prospecting/SKILL.md` (« Quality Checks ») | prioritaire seulement avec un signal sourcé, confiance élevée avec deux sources indépendantes |
+| `qualification-prospects` | S2 | `skills/prospecting/references/signal-plays.md` (« Rank signals », « Freshness windows », « Account tiers ») et `references/account-research.md` (« The brief », « Rules for agent research »), version 2.13.0 | classement et fraîcheur des signaux, rangs de compte, fiche de compte, règles de recherche par agent |
+| `liens-entrants-seo` | S2 | `skills/link-building/SKILL.md` et `references/risk-policy.md` (version 2.13.0) | diagnostic du frein par page, tactiques par effort, règles sur les liens payants, évaluation d'un fournisseur, mesure par page |
+| `suivi-conversions` | S2 | `skills/conversion-tracking/SKILL.md` (version 2.13.0 ; ni scripts ni extraits de balises repris) | définition de la conversion, succès confirmé, trajet navigateur ou serveur, règles de verdict, discipline de vérification |
 | `planification-production` | S7 | `skills/production-scheduling/SKILL.md` (« Bottleneck Management », « Disruption Response », « Job Priority Sequencing », « Disruption Re-Sequencing », « Bottleneck Identification », « ERP/MES Interaction Patterns ») | goulot vérifié causalement, tambour, tampon et corde, règles de priorité, réponse aux perturbations, cohérence avec le progiciel |
 | `methodes-temps-gammes` | S7 | `skills/production-scheduling/SKILL.md` (« Changeover Optimization ») | SMED en quatre phases, matrice des réglages selon l'ordre des séries |
 | `non-conformite-action-corrective` | S7 | `skills/quality-nonconformance/SKILL.md` (« NCR Disposition Decision Logic ») | ordre de décision de la destination d'un produit non conforme |

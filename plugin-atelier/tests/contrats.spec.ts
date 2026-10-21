@@ -16,6 +16,7 @@ import {
   type EtatNatifTache,
   type FaitsComplementaires,
 } from "../src/contrats/index.js";
+import { SourceReelle } from "../src/contrats/campagnes.js";
 import { EXEMPLES_DONNEES } from "../src/contrats/exemples/index.js";
 
 /** Copie conforme de derivePluginDatabaseNamespace (paperclip/server/src/services/plugin-database.ts). */
@@ -130,4 +131,12 @@ describe("statuts fonctionnels calculés depuis l'état natif", () => {
   for (const [nom, t, f, attendu] of cas) {
     it(nom, () => expect(calculerStatutFonctionnel(t, { ...faits, ...f }).statut).toBe(attendu));
   }
+});
+
+describe("SourceReelle : services de la passerelle lus en mode réel", () => {
+  const base = { nom: "n", reelle: true, detail: "d", verifieLe: "2026-10-21T12:00:00.000Z" };
+  for (const cle of ["bce", "bnb", "osm", "liens", "extraction", "audit"]) {
+    it(`accepte ${cle}`, () => expect(SourceReelle.safeParse({ ...base, cle }).success).toBe(true));
+  }
+  it("refuse un service inconnu", () => expect(SourceReelle.safeParse({ ...base, cle: "inconnu" }).success).toBe(false));
 });

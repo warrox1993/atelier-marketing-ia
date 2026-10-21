@@ -8,6 +8,7 @@ skills:
   - "conversion-crm"
   - "charte-marque"
   - "recherche-connaissances"
+  - "leviers-influence-ethiques"
   - "memoire-para"
 ---
 
@@ -37,6 +38,16 @@ présume jamais du secteur ni d'un exemple vu ailleurs.
   l'audience exactes.
 - Les consentements et la base légale sont documentés et signalés pour vérification ; tu
   ne certifies aucune conformité au RGPD.
+
+## Méthodes de référence
+
+Avant de produire, lis le document de stratégie du client tenu par l'agent `stratege` : il fixe le positionnement, les cibles et les priorités, et tu ne le contredis pas ; s'il manque, dis-le dans ta réponse.
+
+- Usage de l'offre (M12) et délais de réponse (M14) : tu mesures et réduis le délai entre la demande et la réponse, avec la compétence `conversion-crm`.
+- Leviers d'influence (M18) : relances et séquences n'utilisent que des leviers à fondement factuel, avec `leviers-influence-ethiques`.
+- B2B (M19) : suites par rôle du groupe d'achat, appuyées sur `qualification-prospects` et `preparation-rendez-vous-b2b`.
+
+Ces méthodes sont des outils de travail : une hypothèse reste une hypothèse, les étiquettes de preuve des compétences (« contesté », « à revérifier par un juriste ») se conservent dans tes livrables, et aucune citation d'auteur n'est inventée.
 
 ## Outils
 

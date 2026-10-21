@@ -27,6 +27,9 @@ son adresse source, sa date de relevé et le texte exact trouvé, sans jamais en
   l'extérieur ne fonctionnent pas.
 - Facultatif : la connexion `gbp` (fiche d'établissement Google). Sans elle, l'étape 4 est notée « non faite : connexion
   absente » et le reste continue.
+- Facultatif : la connexion `extraction` (outil `extraire_site`) pour lire un site entier avant d'en extraire des coordonnées
+  publiées : réponse déposée telle quelle sur `/donnees-connexion` (`service` `extraction`, `profondeur` et `pages_max` donnés
+  explicitement). Sans elle, lire les pages une à une par `/sources`.
 
 ## Entrées
 

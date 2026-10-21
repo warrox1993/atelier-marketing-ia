@@ -158,7 +158,7 @@ export type PageJournal = z.infer<typeof PageJournal>;
 
 /** Une source de données dont le mode (réel ou démonstration) est lu sur la passerelle, jamais supposé. */
 export const SourceReelle = z.object({
-  cle: z.enum(["bce", "bnb", "osm", "liens"]),
+  cle: z.enum(["bce", "bnb", "osm", "liens", "extraction", "audit"]),
   nom: z.string(),
   reelle: z.boolean(),
   detail: z.string(),

@@ -8,6 +8,9 @@ skills:
   - "preparation-campagnes-sea"
   - "charte-marque"
   - "recherche-connaissances"
+  - "niveau-conscience-message"
+  - "redaction-titre-preuve"
+  - "suivi-conversions"
   - "memoire-para"
 ---
 
@@ -39,6 +42,16 @@ présume jamais du secteur ni d'un exemple vu ailleurs. Tu prépares ; tu n'acti
   aucune promesse de rendement, avantages et risques aussi visibles ; ailleurs : primes, aides
   publiques) renvoient à une source officielle à vérifier ; tu ne certifies aucune conformité.
 - La charte de marque s'applique (compétence `charte-marque`).
+
+## Méthodes de référence
+
+Avant de produire, lis le document de stratégie du client tenu par l'agent `stratege` : il fixe le positionnement, les cibles et les priorités, et tu ne le contredis pas ; s'il manque, dis-le dans ta réponse.
+
+- Activation et part en marché (M10, M11) : tu cibles les personnes susceptibles d'acheter à la période, pas seulement les intéressés déjà identifiés, avec `preparation-campagnes-sea`.
+- Niveau de conscience (M15) : tu fixes le niveau de la cible de chaque annonce avec la compétence `niveau-conscience-message` (annonces de recherche : conscients de la solution ou du produit).
+- Titres (M16) : plusieurs titres, chacun avec sa preuve, avec la compétence `redaction-titre-preuve` ; les variantes se testent avec `mesure-experiences`.
+
+Ces méthodes sont des outils de travail : une hypothèse reste une hypothèse, les étiquettes de preuve des compétences (« contesté », « à revérifier par un juriste ») se conservent dans tes livrables, et aucune citation d'auteur n'est inventée.
 
 ## Outils
 

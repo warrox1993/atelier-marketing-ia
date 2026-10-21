@@ -73,6 +73,20 @@ export const FICHE_LIENS: FicheService = {
   proprietes: [{ id: "web/public", libelle: "Web public (lecture seule, adresses publiques uniquement)" }],
 };
 
+export const FICHE_EXTRACTION: FicheService = {
+  id: "extraction",
+  libelle: "Extraction de sites web (Crawl4AI local)",
+  portees: ["extraction:lecture"],
+  proprietes: [{ id: "web/public", libelle: "Web public (lecture seule, adresses publiques uniquement, conteneur local)" }],
+};
+
+export const FICHE_AUDIT: FicheService = {
+  id: "audit",
+  libelle: "Audit de pages (Lighthouse)",
+  portees: ["audit:lecture"],
+  proprietes: [{ id: "web/public", libelle: "Web public (lecture seule, adresses publiques uniquement)" }],
+};
+
 /** Jeu de fiches livré par défaut : services de tiers (comptes et jetons de la plateforme). Aucune donnée n'est simulée. */
 export const FICHES_PAR_DEFAUT: readonly FicheService[] = [
   { id: "gsc", libelle: "Search Console", portees: ["https://www.googleapis.com/auth/webmasters.readonly"] },
@@ -91,4 +105,6 @@ export const FICHES_PAR_DEFAUT: readonly FicheService[] = [
   FICHE_BCE,
   FICHE_BNB,
   FICHE_LIENS,
+  FICHE_EXTRACTION,
+  FICHE_AUDIT,
 ];

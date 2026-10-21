@@ -31,6 +31,9 @@ effort.
   les arguments exacts de l'appel (`POST …/taches/<issueId>/donnees-connexion`, champ `arguments`),
   mention « démonstration » sur chaque chiffre de démonstration, aucun chiffre absent d'une réponse
   déposée (section « Connexions de la passerelle marketing » des consignes de l'agent).
+- Facultatif : la connexion `audit` (outil `auditer_page`) pour un audit de performance, d'accessibilité et de SEO d'une page
+  publique : scores sur 100 et dix problèmes au plus, déposés tels quels (`service` `audit`, `passes` et `delai_ms` donnés
+  explicitement). Sans elle, la performance reste « non mesurable » et le reste de l'audit continue.
 
 ## Entrées
 

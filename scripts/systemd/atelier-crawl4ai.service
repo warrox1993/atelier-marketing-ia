@@ -1,0 +1,49 @@
+[Unit]
+Description=Crawl4AI 0.9.5 de l'Atelier marketing IA (Podman rootless, écoute sur 127.0.0.1:11235 seulement)
+Documentation=https://github.com/unclecode/crawl4ai
+After=network-online.target
+Wants=network-online.target
+
+# Installation (une fois) :
+#   podman pull docker.io/unclecode/crawl4ai:0.9.5          # image épinglée sur la version, jamais « latest »
+#   umask 077; mkdir -p ~/.config/atelier
+#   openssl rand -hex 32 > ~/.config/atelier/crawl4ai.jeton  # jeton d'accès : fichier 0600, JAMAIS dans le dépôt
+#   chmod 600 ~/.config/atelier/crawl4ai.jeton
+#   install -m 644 scripts/systemd/atelier-crawl4ai.service ~/.config/systemd/user/
+#   systemctl --user daemon-reload && systemctl --user enable --now atelier-crawl4ai
+# Côté passerelle (instance/passerelles/3190.env, chemins seulement) :
+#   PASSERELLE_SERVICES_REELS=osm,liens,extraction,audit
+#   PASSERELLE_CRAWL4AI_JETON_FICHIER=%h/.config/atelier/crawl4ai.jeton
+# Contrôle : « curl -s http://127.0.0.1:11235/health » (sans jeton, /crawl répond 401) et « ss -ltnp | grep 11235 ».
+#
+# Choix de sécurité :
+#   - port publié sur 127.0.0.1 seulement ; jeton d'accès obligatoire (CRAWL4AI_API_TOKEN, passé à Podman par un fichier
+#     d'environnement temporaire 0600 dans le répertoire d'exécution, donc pas dans la ligne de commande ; Podman l'écrit ensuite dans
+#     le config.json du conteneur, sous son dossier de données en 0700, lisible par le seul propriétaire) ;
+#   - /execute_js, hooks et MCP du conteneur restent désactivés (réglages par défaut de l'image) et la passerelle ne les appelle jamais ;
+#   - parcours multi-pages permis (CRAWL4AI_ALLOW_DEEP_CRAWL) mais plafonné côté passerelle (profondeur 2, 20 pages) et côté
+#     conteneur (limits.max_pages 100, max_depth 5, 300 s) ; adresses internes refusées par le conteneur (ALLOW_INTERNAL_URLS absent) ;
+#   - pasta en IPv4 seulement : le poste n'a pas de route IPv6 (VPN), le conteneur essayait l'IPv6 en premier et échouait
+#     (net::ERR_TUNNEL_CONNECTION_FAILED) ;
+#   - 3 Go de mémoire au plus, 1 Go de mémoire partagée (Chromium).
+
+[Service]
+Type=simple
+ExecStartPre=-/usr/bin/podman rm -f crawl4ai
+ExecStartPre=/bin/sh -c 'umask 077; printf "CRAWL4AI_API_TOKEN=%%s\\n" "$(cat %h/.config/atelier/crawl4ai.jeton)" > %t/crawl4ai.env'
+ExecStart=/usr/bin/podman run --rm --name crawl4ai --shm-size=1g --memory=3g \
+  --network pasta:--ipv4-only -p 127.0.0.1:11235:11235 \
+  --env-file %t/crawl4ai.env -e CRAWL4AI_ALLOW_DEEP_CRAWL=true -e CRAWL4AI_CHROMIUM_SANDBOX=true \
+  docker.io/unclecode/crawl4ai:0.9.5
+ExecStop=/usr/bin/podman stop -t 10 crawl4ai
+ExecStopPost=-/bin/rm -f %t/crawl4ai.env
+Restart=on-failure
+RestartSec=15
+TimeoutStartSec=180
+NoNewPrivileges=yes
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=atelier-crawl4ai
+
+[Install]
+WantedBy=default.target

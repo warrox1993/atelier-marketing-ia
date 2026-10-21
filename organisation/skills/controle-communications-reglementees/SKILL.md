@@ -2,7 +2,7 @@
 name: "controle-communications-reglementees"
 description: "Relit une communication commerciale (publicité, page web, courriel, post, brochure, script) d'une entreprise belge, surtout dans un secteur régulé, au regard des pratiques commerciales déloyales envers les consommateurs (livre VI du Code de droit économique : pratiques trompeuses, omissions, pratiques agressives, publicité comparative) et, pour les produits financiers et d'assurance, des règles de publicité (arrêté royal du 25 avril 2014 et circulaire FSMA_2015_16). Rend une liste de contrôle complétée, les passages à risque avec le motif, et soit une validation conditionnelle, soit un refus motivé avec propositions de reformulation. À utiliser avant publication d'un contenu qui promeut un produit ou un service régulé ; jamais pour inventer un fait ou une performance, publier, valider à la place du responsable de la conformité, ni donner un avis juridique."
 metadata:
-  version: "1.0.0"
+  version: "1.1.0"
   langue: "fr"
   domaine: "conformite"
 ---
@@ -79,6 +79,35 @@ metadata:
 | 13 | Consentement de prospection valable pour le canal | | |
 | 14 | Langue, lisibilité, absence de jargon non expliqué | | |
 
+### Points propres au courtage en assurance en Belgique
+
+Le courtier est un intermédiaire inscrit à la FSMA, soumis aux règles de conduite issues de la directive sur la distribution
+d'assurances (IDD) : toute communication est un acte réglementé. Cette liste complète la précédente ; chaque point est à
+confirmer par un juriste avant usage client, et les articles marqués « à revérifier par un juriste » ne se citent jamais sans
+ouverture du texte officiel.
+
+1. Communication « correcte, claire et non trompeuse » et reconnaissable comme publicitaire : directive (UE) 2016/97, article
+   17, paragraphe 2 [mémoire de l'article], transposée par la loi du 4 avril 2014 relative aux assurances [articles exacts : à
+   revérifier par un juriste].
+2. Exigences et besoins : avant tout conseil, ils doivent être collectés ; la FSMA a constaté en novembre 2025 que la majorité
+   des conseillers inspectés ne collectaient pas toutes les informations obligatoires [vérifié]. Distinguer information
+   générale et conseil personnalisé : un contenu marketing ne se présente jamais comme un conseil personnalisé.
+3. Document d'information normalisé (IPID) pour les produits non-vie : IDD, article 20 [mémoire ; article à revérifier par un
+   juriste].
+4. Guide pratique FSMA sur les règles de conduite IDD (janvier 2022, mis à jour) : explicatif, seuls les textes légaux lient
+   [vérifié].
+5. Pratiques du commerce : livre VI du Code de droit économique (pratiques trompeuses, agressives, comparatives).
+6. Courriel publicitaire : consentement préalable (loi du 11 mars 2003, article 14, aujourd'hui intégrée au livre XII du Code
+   de droit économique [mémoire ; articles à revérifier par un juriste]). Une exception est rapportée pour les personnes
+   morales jointes à une adresse impersonnelle, selon une interprétation du SPF Économie datant d'environ 2005 [à revérifier,
+   source ancienne] : ne pas s'y fier sans avis.
+7. Téléphone vers des consommateurs : respecter la liste « Ne m'appelez plus » [mémoire].
+8. RGPD : base légale par traitement, information, droit d'opposition, durées de conservation (registre via
+   `registre-traitements-rgpd`).
+
+La sortie liste les points vérifiés, les points incertains et la demande de validation humaine
+(`dossier-validation-humaine`) : l'agent ne conclut jamais seul qu'un message est conforme.
+
 ## Livrable
 
 Un rapport de contrôle d'une à deux pages : décision proposée, tableau de la liste de contrôle complété avec les passages cités, liste des corrections ou le refus motivé, liste des faits à vérifier (preuves manquantes), questions pour le responsable de la conformité, mention de validation humaine. Les passages reformulés sont proposés dans le style de l'entreprise, sans fait nouveau.
@@ -106,7 +135,7 @@ Non consultés ou inaccessibles : le site de la CTIF (indisponible), et les text
 
 ## À vérifier par un professionnel
 
-Cette compétence prépare un contrôle ; elle ne remplace ni le responsable de la conformité ni un avocat. Avant publication d'une communication sur un produit régulé, la décision doit être validée par le responsable de la conformité de l'entreprise, et au besoin par un avocat. Pour un produit soumis à approbation préalable de l'autorité (par exemple un prospectus), la communication ne peut, selon un résultat de recherche secondaire, être diffusée avant l'accord de cette autorité : à confirmer auprès de la FSMA. Les circulaires sont mises à jour : relire la version en vigueur à la date de publication. Les règles en matière de données personnelles, de consentement à la prospection électronique et de droit d'auteur sont hors du champ de cette liste.
+Les articles de la directive (UE) 2016/97, de la loi du 4 avril 2014 et du livre XII du Code de droit économique cités dans la liste propre au courtage sont à revérifier par un juriste avant tout usage client. Cette compétence prépare un contrôle ; elle ne remplace ni le responsable de la conformité ni un avocat. Avant publication d'une communication sur un produit régulé, la décision doit être validée par le responsable de la conformité de l'entreprise, et au besoin par un avocat. Pour un produit soumis à approbation préalable de l'autorité (par exemple un prospectus), la communication ne peut, selon un résultat de recherche secondaire, être diffusée avant l'accord de cette autorité : à confirmer auprès de la FSMA. Les circulaires sont mises à jour : relire la version en vigueur à la date de publication. Les règles en matière de données personnelles, de consentement à la prospection électronique et de droit d'auteur sont hors du champ de cette liste.
 
 ## Limites
 

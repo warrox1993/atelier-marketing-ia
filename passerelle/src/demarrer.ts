@@ -2,7 +2,7 @@
 // Il n'y a plus de mode démonstration : seuls les fournisseurs réels sont enregistrés, et un service sans
 // fournisseur configuré répond « non_connecte ».
 // Réglages par variables d'environnement : PASSERELLE_HOTE (127.0.0.1 ou ::1 seulement),
-// PASSERELLE_PORT (3190 par défaut), PASSERELLE_SERVICES_REELS (services locaux à brancher : osm, bce, bnb, liens),
+// PASSERELLE_PORT (3190 par défaut), PASSERELLE_SERVICES_REELS (services locaux à brancher : osm, bce, bnb, liens, extraction, audit),
 // PASSERELLE_ETAT (fichier d'état de l'autorisation locale, passerelle/etat/oauth-demo.json par défaut : nom
 // d'origine conservé pour ne pas perdre les connexions existantes).
 
@@ -15,6 +15,8 @@ import { signataireDepuisEnv, type SignataireEnveloppe } from "./signature-envel
 import { enregistrerGoogleReel } from "./reel/google/enregistrer.js";
 import { enregistrerSocialCrmReel } from "./reel/social-crm/enregistrer.js";
 import { fournisseurLiensReel } from "./reel/liens/verifier-url.js";
+import { fournisseurAuditReel } from "./reel/audit/auditer-page.js";
+import { fournisseurExtractionReel, optionsExtractionDepuisEnv } from "./reel/extraction/extraire-site.js";
 import { enregistrerBceReelSeul, enregistrerBnbReelSeul, enregistrerOsmReelSeul, enregistrerProspectionReel } from "./reel/prospection/enregistrer.js";
 
 // Par défaut : passerelle/etat/oauth-demo.json (état de l'autorisation locale), quel que soit le répertoire de lancement
@@ -50,6 +52,19 @@ function principal(): void {
   if (servicesLocaux.includes("liens")) {
     registre.enregistrer(fournisseurLiensReel());
     console.log("liens branché : verifier_url, adresses publiques seulement");
+  }
+  if (servicesLocaux.includes("audit")) {
+    registre.enregistrer(fournisseurAuditReel({ journal }));
+    console.log("audit branché : auditer_page (Lighthouse), adresses publiques seulement");
+  }
+  if (servicesLocaux.includes("extraction")) {
+    try {
+      registre.enregistrer(fournisseurExtractionReel({ ...optionsExtractionDepuisEnv(process.env), journal }));
+      console.log("extraction branchée : extraire_site (Crawl4AI local), adresses publiques seulement");
+    } catch (erreur) {
+      // Jeton ou adresse du conteneur invalide : le service n'est pas servi (il répond « non_connecte »), le reste démarre.
+      journal(`extraction non servie : ${erreur instanceof Error ? erreur.message : String(erreur)}`);
+    }
   }
   try {
     enregistrerSocialCrmReel(registre, process.env, { hote: reglages.hote, urlPasserelle, journal, signataire }); // réseaux sociaux et CRM : seulement si configurés
