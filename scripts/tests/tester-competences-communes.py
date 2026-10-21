@@ -89,7 +89,7 @@ class Livraison(unittest.TestCase):
 
     def test_m2_agents_sans_ecriture_sans_memoire(self):
         sans = {a["slug"] for a in self.reg_agents["agents"] if not a.get("deterministe") and not ecriture_effective(self.reg_agents, a)}
-        self.assertEqual(sans, {"coordinateur", "exigences", "relecteur", "tests-techniques"})
+        self.assertEqual(sans, {"coordinateur", "exigences", "relecteur"})
         for a in self.reg_agents["agents"]:
             if a["slug"] in sans:
                 self.assertNotIn("memoire-para", a["competences"], a["slug"])

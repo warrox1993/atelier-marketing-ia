@@ -722,6 +722,11 @@ export const FICHES_AGENTS_MARKETING: readonly FicheAgentMarketing[] = [
         "sert": "Exécute les contrôles techniques d'un livrable : liens et redirections, contenu réel de la page d'arrivée, formulaires, balises de suivi, formats, données structurées et affichage, avec un rapport par élément et la liste des contrôles non exécutés."
       },
       {
+        "cle": "memoire-para",
+        "nom": "Mémoire en fichiers (méthode PARA)",
+        "sert": "Tient la mémoire persistante de l'agent en fichiers, selon la méthode PARA (graphe de connaissances, notes du jour, savoir tacite), dans le dossier ./memoire/ de son répertoire de travail, avec la source et la date de chaque fait."
+      },
+      {
         "cle": "recherche-connaissances",
         "nom": "Recherche dans les connaissances du client",
         "sert": "Interroge les connaissances du client (conditions générales, fiches produit, tarifs, FAQ, notes) avant d'écrire un chiffre d'offre, et cite l'adresse connaissance:// rendue ; sans source, signale l'information manquante."
@@ -733,7 +738,6 @@ export const FICHES_AGENTS_MARKETING: readonly FicheAgentMarketing[] = [
     ],
     "outilsRetires": [
       "chercher sur le web",
-      "créer des fichiers",
       "modifier des fichiers",
       "lancer d'autres agents"
     ],

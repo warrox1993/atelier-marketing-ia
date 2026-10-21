@@ -1004,11 +1004,11 @@
           "mcp__Paperclip_connections__connection_request"
         ],
         "mutation": [
-          "Bash(curl *)"
+          "Bash(curl *)",
+          "Write"
         ],
         "interdits": [
           "WebSearch",
-          "Write",
           "Edit",
           "NotebookEdit",
           "Agent",

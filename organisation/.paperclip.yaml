@@ -1269,9 +1269,9 @@ agents:
           - "mcp__Paperclip_connections__connections_search"
           - "mcp__Paperclip_connections__connection_request"
           - "Bash(curl *)"
+          - "Edit(./**)"
           - "--disallowedTools"
           - "WebSearch"
-          - "Write"
           - "Edit"
           - "NotebookEdit"
           - "Agent"
@@ -1316,9 +1316,9 @@ agents:
           - "mcp__Paperclip_connections__connection_request"
         outilsMutation:
           - "Bash(curl *)"
+          - "Write"
         outilsInterdits:
           - "WebSearch"
-          - "Write"
           - "Edit"
           - "NotebookEdit"
           - "Agent"

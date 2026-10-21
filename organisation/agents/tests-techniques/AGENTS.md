@@ -6,6 +6,7 @@ title: "Vérificateur technique"
 reportsTo: "relecteur"
 skills:
   - "controles-techniques-liens"
+  - "memoire-para"
   - "recherche-connaissances"
 ---
 
