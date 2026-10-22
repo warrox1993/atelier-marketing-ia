@@ -30,6 +30,13 @@
         "SKILL.md"
       ]
     },
+    "achat-coordonnees-fournisseur": {
+      "version": "1.0.0",
+      "sha256": "83c3703c71ea296bd44f11353ae9be1ca500587857106851692e56fcae691a8b",
+      "fichiers": [
+        "SKILL.md"
+      ]
+    },
     "actifs-distinctifs": {
       "version": "1.0.0",
       "sha256": "9ed9013d0aa35936bf01718270075bf98302838e3201335356369308916c9644",
@@ -47,6 +54,13 @@
     "agenda-echeances-legales": {
       "version": "1.2.0",
       "sha256": "a4f282c982112188c8876015825ae9da441b0f608c451fbe130ea622c3540ac0",
+      "fichiers": [
+        "SKILL.md"
+      ]
+    },
+    "aimant-a-prospects": {
+      "version": "1.0.0",
+      "sha256": "f4749c8481c0406d46e627497f6ba57c44a440ffe370ff00b61236aff434ef66",
       "fichiers": [
         "SKILL.md"
       ]
@@ -391,6 +405,13 @@
         "SKILL.md"
       ]
     },
+    "coordonnees-cartes-visite": {
+      "version": "1.0.0",
+      "sha256": "712ddc63fcc6614769957d0661a752415910c1765068a98de3bc63cb4daad91c",
+      "fichiers": [
+        "SKILL.md"
+      ]
+    },
     "coordonnees-recherche": {
       "version": "1.0.0",
       "sha256": "770fd4743f5c9aa4515777f10b41c7ef75b7dc54a13b9ac1746a44acded5b56a",
@@ -401,6 +422,13 @@
     "coordonnees-recoupement": {
       "version": "1.0.0",
       "sha256": "f174124f7f6afaca57f84eb761e47a65b3aeac9b8bb569ef5e04d4f0d25a4211",
+      "fichiers": [
+        "SKILL.md"
+      ]
+    },
+    "coordonnees-signatures-email": {
+      "version": "1.0.0",
+      "sha256": "f92403b23bd6f0a3eb48846ee8accb23908365e94a950e9cf64ae6d44b3d0c26",
       "fichiers": [
         "SKILL.md"
       ]
@@ -433,6 +461,13 @@
         "SKILL.md"
       ]
     },
+    "demande-numero-linkedin": {
+      "version": "1.0.0",
+      "sha256": "8f8100da36a5fac5864dee8bd607627b45f2a972f66bb80ed15f14987c3b62ab",
+      "fichiers": [
+        "SKILL.md"
+      ]
+    },
     "demandes-occupants": {
       "version": "1.0.0",
       "sha256": "a6e383d46f2a9873b9f181d679fdd7b152f85038f8198e4412c9f59a333bcefd",
@@ -448,8 +483,8 @@
       ]
     },
     "diagnostic-marketing": {
-      "version": "1.0.0",
-      "sha256": "a5a7a6f137b7d113e03983fe2f3198fcb75eb477ddfa3c433939165f480f772d",
+      "version": "1.1.0",
+      "sha256": "a9a2ea07d9fdb4eb96fcdbbaf38e93c7b7075b2075a643f4ce46e282211cb255",
       "fichiers": [
         "SKILL.md"
       ]
@@ -505,8 +540,8 @@
       ]
     },
     "entretien-client-sans-biais": {
-      "version": "1.0.0",
-      "sha256": "8cf1fd16a3a97825982e8038fff64cc78adace9e75b1682b5a79319af9d85dc4",
+      "version": "1.1.0",
+      "sha256": "88851799d9f1b35b1c8554d375460d4f9ff425dbd5c6f0e92ee2ba1e0a01513e",
       "fichiers": [
         "SKILL.md"
       ]
@@ -773,8 +808,8 @@
       ]
     },
     "niveau-conscience-message": {
-      "version": "1.0.0",
-      "sha256": "6089a0ac54adb67d8b4e8c63f5fa59142a8406090a35fa4486d923addf36cf73",
+      "version": "1.1.0",
+      "sha256": "8a17fa4762f063f6658e9068f19590786546d5b833c0c92b5882036ff8b6f3b5",
       "fichiers": [
         "SKILL.md"
       ]
@@ -787,8 +822,8 @@
       ]
     },
     "objectifs-marque-activation": {
-      "version": "1.0.0",
-      "sha256": "6fc24a483159bd6b33ca3d13e3ff4df4350287ba9283dc4333adb4f60ea967e5",
+      "version": "1.1.0",
+      "sha256": "a4e561b868d932556b751b403bc97e01c0f887c7a20369eff9059bc051bec50b",
       "fichiers": [
         "SKILL.md"
       ]
@@ -920,15 +955,15 @@
       ]
     },
     "points-entree-categorie": {
-      "version": "1.0.0",
-      "sha256": "9da858843bb3a7d28d567ebcc83b1347594f1466992df3d22d188a9b30a5c698",
+      "version": "1.1.0",
+      "sha256": "98d463ffe045e942113015b0df90cc184d8e30706e687d1e32c60826d3fc4ee7",
       "fichiers": [
         "SKILL.md"
       ]
     },
     "positionnement-concurrentiel": {
-      "version": "1.0.0",
-      "sha256": "e19123bbc5968b567e9712f016691f059d480e189f7a5e994679bb558bb7d3d0",
+      "version": "1.1.0",
+      "sha256": "90b510f8f3ab4bc9e589a58e0e2b9eacbc39cc159d3461282cb28f749087d1cb",
       "fichiers": [
         "SKILL.md"
       ]
@@ -1268,6 +1303,13 @@
         "SKILL.md"
       ]
     },
+    "script-appel-secretariat": {
+      "version": "1.0.0",
+      "sha256": "98210c292e0dec05b80baaba7cd29ae7662c35341dd29cbb3065155ce110c644",
+      "fichiers": [
+        "SKILL.md"
+      ]
+    },
     "segmentation-ciblage": {
       "version": "1.0.0",
       "sha256": "511cd012dee39ff3be17aa78eba8d0e1d37d1aec87c4d75191dde260e9be4f47",
@@ -1276,8 +1318,8 @@
       ]
     },
     "selection-canaux-bullseye": {
-      "version": "1.0.0",
-      "sha256": "6dbd6e476639b693b843cd385d26be4b4446f5ed7b410f89fac8a846408d2f49",
+      "version": "1.1.0",
+      "sha256": "a4934de8e8ad5f514b9bdfd0a07431a95d3a5e7a9e38fe0de86596294ddea89c",
       "fichiers": [
         "SKILL.md"
       ]

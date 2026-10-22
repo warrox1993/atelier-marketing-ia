@@ -2,7 +2,7 @@
 name: "diagnostic-marketing"
 description: "Produit le dossier de diagnostic d'un client avant toute stratégie ou tactique : cinq volets (marché, clients, concurrents, marque, données internes), 3 à 5 constats chacun avec sa preuve et son niveau de confiance, liste des inconnus. À utiliser quand un client n'a pas de document de stratégie à jour, avant de choisir une cible, un positionnement ou un canal ; jamais pour recopier des généralités sur le secteur."
 metadata:
-  version: "1.0.0"
+  version: "1.1.0"
   langue: "fr"
   domaine: "marketing"
 ---
@@ -61,6 +61,32 @@ Le « dossier de diagnostic » : cinq volets, 3 à 5 constats sourcés avec nive
 - Contesté : Ritson défend un ciblage marqué, alors que Sharp (voir `objectifs-marque-activation`) plaide pour une large portée. Les deux se concilient : ciblage serré pour le positionnement et l'activation, portée large pour la construction de marque [contesté].
 - Un agent IA ne mène pas d'entretien et n'invente aucune réponse « type » : sans donnée réelle, la case est « inconnu ».
 - Aucune citation d'auteur entre guillemets sans l'avoir vérifiée : citer l'idée et l'ouvrage.
+
+### Règles de vérité
+
+- Tout chiffre du dossier vient de l'entrée et est cité tel quel avec sa source. Une valeur absente de l'entrée (budget, taux de conversion, part de marché, volume, cycle) s'écrit « inconnu » ou « non mesurable », jamais estimée ni reprise d'un chiffre de secteur.
+- Un fait cité par une seule source est « isolé » et son niveau de confiance le reflète. Une supposition porte « hypothèse », jamais « vérifié ».
+- Le dossier ne recommande rien : ni canal, ni outil, ni campagne, ni action commerciale, ni calendrier, ni budget, y compris dans la colonne « implication ». L'implication s'écrit comme une question à traiter par l'étape suivante (par exemple « à examiner au positionnement »), pas comme une action. Toute tactique demandée est notée dans « demandes en attente », sans être déduite.
+- Les inconnus et les sources non consultées sont des listes séparées : chaque inconnu nomme qui peut le lever et par quel moyen.
+
+### Modèle de livrable
+
+À recopier, tous les champs sont obligatoires.
+
+**Cinq volets** : marché, clients, concurrents, marque, données internes. Pour chacun : faits connus avec source et date, ou « inconnu ».
+
+**Constats (3 à 5)**
+
+| N° | Constat | Preuve (source, extrait, date) | Confiance (vérifié, secondaire, hypothèse, contesté) | Question pour l'étape suivante |
+| --- | --- | --- | --- | --- |
+
+**Inconnus** : liste (inconnu, qui peut le fournir, moyen).
+
+**Sources non consultées** : liste.
+
+**Demandes de tactique en attente** : liste, ou « aucune ».
+
+**Recommandation de canal ou de campagne** : aucune à ce stade.
 
 ## Exemple
 

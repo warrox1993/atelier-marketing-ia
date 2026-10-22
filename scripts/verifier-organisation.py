@@ -57,6 +57,8 @@ COMPETENCES_ATTENDUES = [
     "entretien-client-sans-biais", "analyse-jobs-a-faire", "points-entree-categorie",
     "niveau-conscience-message", "recit-de-marque-guide", "redaction-titre-preuve",
     "leviers-influence-ethiques", "actifs-distinctifs",
+    "coordonnees-signatures-email", "coordonnees-cartes-visite", "script-appel-secretariat",
+    "demande-numero-linkedin", "aimant-a-prospects", "achat-coordonnees-fournisseur",
 ]
 RUBRIQUES = [
     "Quand l'utiliser", "Objectif", "Prérequis", "Entrées", "Étapes", "Livrable",
@@ -540,6 +542,9 @@ SERVICES_PASSERELLE = {
     "liens": "atelier-liens",  # vérification de liens (verifier_url), service réel sans compte
     "extraction": "atelier-extraction",  # lecture de sites (extraire_site, Crawl4AI local), service réel sans compte
     "audit": "atelier-audit",  # audit de pages (auditer_page, Lighthouse), service réel sans compte
+    "emailing": "atelier-emailing",  # e-mailing (listmonk local) : l'envoi n'est pas un outil, il passe par la route emailing.envoyer du plugin
+    "statbel": "atelier-statbel",  # statistiques ouvertes de Statbel par commune (lecture seule, aucune donnée personnelle)
+    "captation": "atelier-captation",  # pages de destination locales (captation de prospects) : aucune mise en ligne par un outil ; chaque envoi crée un prospect par la route du plugin
 }
 # Services de prospection (lot P10) : leurs réponses se déposent par tache.prospects.deposer (/prospects),
 # pas par tache.donnees.deposer (/donnees-connexion).

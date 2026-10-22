@@ -1,0 +1,31 @@
+[Unit]
+Description=PostgreSQL 18.6 d'Umami (Atelier marketing IA, Podman rootless, réseau privé, aucun port publié)
+Documentation=https://umami.is/docs/install
+After=network-online.target
+Wants=network-online.target
+Before=atelier-umami.service
+
+# Installation : scripts/installer-umami.sh (génère les secrets, tire les images, installe et démarre les deux unités).
+# Le conteneur n'est joint que par Umami, sur le réseau Podman « atelier-umami » : aucun port n'est publié sur l'hôte.
+# Identifiants : ~/.config/atelier/umami-db.env (0600, hors dépôt). Données : volume Podman « atelier-umami-db »
+# (PostgreSQL 18 range ses fichiers sous /var/lib/postgresql/18/docker : on monte donc /var/lib/postgresql).
+
+[Service]
+Type=simple
+ExecStartPre=-/usr/bin/podman network create atelier-umami
+ExecStartPre=-/usr/bin/podman rm -f atelier-umami-db
+ExecStart=/usr/bin/podman run --rm --name atelier-umami-db --network atelier-umami --memory=512m \
+  --env-file %h/.config/atelier/umami-db.env \
+  -v atelier-umami-db:/var/lib/postgresql \
+  docker.io/library/postgres:18.6
+ExecStop=/usr/bin/podman stop -t 20 atelier-umami-db
+Restart=on-failure
+RestartSec=15
+TimeoutStartSec=120
+NoNewPrivileges=yes
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=atelier-umami-db
+
+[Install]
+WantedBy=default.target

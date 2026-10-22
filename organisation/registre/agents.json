@@ -75,7 +75,10 @@
       "b2c": "atelier-b2c",
       "liens": "atelier-liens",
       "extraction": "atelier-extraction",
-      "audit": "atelier-audit"
+      "audit": "atelier-audit",
+      "emailing": "atelier-emailing",
+      "captation": "atelier-captation",
+      "statbel": "atelier-statbel"
     },
     "acces": {
       "lecture": "lecture seule : toute écriture du service est bloquée pour ce rôle",
@@ -227,7 +230,8 @@
         ]
       },
       "connexions": {
-        "extraction": "lecture"
+        "extraction": "lecture",
+        "statbel": "lecture"
       },
       "modele": {
         "id": "claude-sonnet-5-5",
@@ -301,7 +305,8 @@
         ]
       },
       "connexions": {
-        "extraction": "lecture"
+        "extraction": "lecture",
+        "statbel": "lecture"
       },
       "modele": {
         "id": "claude-opus-5-5",
@@ -338,7 +343,9 @@
       "competences": [
         "recherche-prospects",
         "qualification-prospects",
-        "recherche-sourcee"
+        "recherche-sourcee",
+        "script-appel-secretariat",
+        "demande-numero-linkedin"
       ],
       "competencesObligatoires": [
         "recherche-prospects",
@@ -372,7 +379,8 @@
         "fsma": "lecture",
         "osm": "lecture",
         "b2c": "lecture",
-        "extraction": "lecture"
+        "extraction": "lecture",
+        "captation": "lecture"
       },
       "modele": {
         "id": "claude-sonnet-5-5",
@@ -410,7 +418,10 @@
         "coordonnees-recherche",
         "coordonnees-recoupement",
         "recherche-sourcee",
-        "recherche-connaissances"
+        "recherche-connaissances",
+        "coordonnees-signatures-email",
+        "coordonnees-cartes-visite",
+        "achat-coordonnees-fournisseur"
       ],
       "competencesObligatoires": [
         "coordonnees-recherche",
@@ -626,7 +637,8 @@
         "redaction-titre-preuve",
         "leviers-influence-ethiques",
         "actifs-distinctifs",
-        "liens-entrants-seo"
+        "liens-entrants-seo",
+        "aimant-a-prospects"
       ],
       "competencesObligatoires": [
         "charte-marque"
@@ -656,7 +668,9 @@
       "connexions": {
         "facebook": "ecriture_sur_accord",
         "instagram": "ecriture_sur_accord",
-        "linkedin": "ecriture_sur_accord"
+        "linkedin": "ecriture_sur_accord",
+        "emailing": "ecriture_sur_accord",
+        "captation": "ecriture_sur_accord"
       },
       "outilsBloques": {
         "facebook": [
@@ -730,7 +744,8 @@
         "crm": "ecriture_sur_accord",
         "pipedrive": "ecriture_sur_accord",
         "odoo": "ecriture_sur_accord",
-        "teamleader": "ecriture_sur_accord"
+        "teamleader": "ecriture_sur_accord",
+        "emailing": "ecriture_sur_accord"
       },
       "modele": {
         "id": "claude-sonnet-5-5",
@@ -794,7 +809,9 @@
       "connexions": {
         "ga4": "lecture",
         "ads": "lecture",
-        "gsc": "lecture"
+        "gsc": "lecture",
+        "emailing": "lecture",
+        "captation": "lecture"
       },
       "modele": {
         "id": "claude-sonnet-5-5",
@@ -891,7 +908,8 @@
       "competences": [
         "controle-communications-reglementees",
         "charte-marque",
-        "leviers-influence-ethiques"
+        "leviers-influence-ethiques",
+        "aimant-a-prospects"
       ],
       "competencesObligatoires": [
         "controle-communications-reglementees"

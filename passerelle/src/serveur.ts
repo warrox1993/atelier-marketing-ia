@@ -45,6 +45,16 @@ export interface OptionsServeur {
   fichierEtat?: string;
   /** Signature de l'enveloppe `_atelier` de chaque réponse d'outil (revue S9) ; absente : réponses non signées. */
   signataire?: SignataireEnveloppe | null;
+  /**
+   * Routes internes (hors MCP) réservées au plugin de l'atelier, par exemple l'envoi d'e-mails après décision humaine. Chacune
+   * contrôle elle-même sa preuve d'approbation ; seul POST est permis, corps JSON de 1 Mio au plus.
+   */
+  routesInternes?: ReadonlyArray<RouteInterne>;
+}
+
+export interface RouteInterne {
+  chemin: string;
+  traiter(corps: unknown): Promise<{ statut: number; corps: unknown }>;
 }
 
 export interface ServeurPasserelle {
@@ -246,6 +256,18 @@ export function creerServeur(options: OptionsServeur): ServeurPasserelle {
       // `mode: "reel"` est conservé pour le plugin (il lit `mode` puis `services`) ; `services` = services connectés.
       const tous = registre.fiches().map((f) => f.id);
       envoyerJson(res, 200, { ok: true, mode, version: VERSION_PASSERELLE, services: tous.filter(serviceConnecte), services_non_connectes: tous.filter((id) => !serviceConnecte(id)), _atelier: enveloppeAtelier(mode) });
+      return;
+    }
+
+    const interne = req.method === "POST" ? options.routesInternes?.find((r) => r.chemin === chemin) : undefined;
+    if (interne) {
+      const corps = await lireCorpsJson(req);
+      if (!corps.ok) {
+        envoyerJson(res, corps.statut, { error: corps.statut === 413 ? "corps_trop_gros" : "json_invalide" });
+        return;
+      }
+      const reponse = await interne.traiter(corps.valeur);
+      envoyerJson(res, reponse.statut, reponse.corps);
       return;
     }
 

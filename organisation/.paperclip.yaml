@@ -176,6 +176,7 @@ agents:
         roleRevue: null
         connexions:
           extraction: "lecture"
+          statbel: "lecture"
         criteresReussite:
           - "chaque observation porte une source, une date de collecte et un statut d'accès"
           - "aucune généralisation à partir d'un échantillon incomplet sans le dire"
@@ -272,6 +273,7 @@ agents:
         roleRevue: null
         connexions:
           extraction: "lecture"
+          statbel: "lecture"
         criteresReussite:
           - "chaque décision du document de stratégie a une preuve réelle (source, date) ou la mention « hypothèse », jamais une hypothèse présentée comme un fait ou une règle"
           - "les inconnus sont listés avec l'action qui les lèverait ; aucune réponse d'entretien ni aucun chiffre inventé"
@@ -374,6 +376,7 @@ agents:
           osm: "lecture"
           b2c: "lecture"
           extraction: "lecture"
+          captation: "lecture"
         criteresReussite:
           - "chaque prospect provient d'une réponse d'outil signée et déposée, jamais d'une saisie à la main"
           - "aucune personne physique de la BCE, aucun particulier sans origine légale prouvée"
@@ -766,6 +769,8 @@ agents:
           facebook: "ecriture_sur_accord"
           instagram: "ecriture_sur_accord"
           linkedin: "ecriture_sur_accord"
+          emailing: "ecriture_sur_accord"
+          captation: "ecriture_sur_accord"
         outilsBloques:
           facebook:
             - "facebook_envoyer_message"
@@ -867,6 +872,7 @@ agents:
           pipedrive: "ecriture_sur_accord"
           odoo: "ecriture_sur_accord"
           teamleader: "ecriture_sur_accord"
+          emailing: "ecriture_sur_accord"
         criteresReussite:
           - "chaque scénario documente entrée, déclencheur, exclusions, consentement et condition d'envoi"
           - "seuls des prospects fictifs apparaissent en démonstration"
@@ -963,6 +969,8 @@ agents:
           ga4: "lecture"
           ads: "lecture"
           gsc: "lecture"
+          emailing: "lecture"
+          captation: "lecture"
         criteresReussite:
           - "aucun chiffre sans période ni provenance"
           - "« non mesurable » plutôt qu'une performance inventée"

@@ -237,10 +237,11 @@ describe("contrat et manifeste", () => {
     expect((manifest.apiRoutes ?? []).map((r) => r.routeKey)).toEqual(expect.arrayContaining(["departements.lister", "departement.etat", "services.flux"]));
   });
 
-  it("n'ajoute aucune capacité au manifeste", () => {
+  it("n'ajoute aucune capacité au manifeste (seule exception : création de la carte d'envoi e-mailing, 22/10/2026)", () => {
     expect([...manifest.capabilities].sort()).toEqual(
       [
         "companies.read", "projects.read", "issues.read", "issue.relations.read", "issue.comments.read", "issue.documents.read", "issue.interactions.read",
+        "issue.interactions.create",
         "agents.read", "approvals.read", "activity.read", "costs.read", "issues.orchestration.read", "issues.create", "issues.update", "issue.comments.create",
         "issues.wakeup", "activity.log.write", "plugin.state.read", "plugin.state.write", "events.subscribe", "api.routes.register", "http.outbound",
         "database.namespace.migrate", "database.namespace.read", "database.namespace.write", "secrets.read-ref", "ui.page.register", "ui.sidebar.register",

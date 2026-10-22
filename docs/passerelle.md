@@ -1162,6 +1162,10 @@ Vérification : `npx tsc --noEmit` et `npx vitest run` dans `passerelle/`.
 - Désactivation : `PASSERELLE_MENTION_IA_DESACTIVEE=oui` exige `PASSERELLE_MENTION_IA_MOTIF` (motif écrit) ; sans motif, la passerelle refuse de démarrer (code 2).
 - Code : `src/mention-ia.ts` ; tests : `tests/reel-social-crm/mention-ia.test.ts` (le mode démonstration ne change pas).
 
+## Captation de prospects (22/10/2026)
+
+Service local `captation` (`creer_page_destination`, `lister_pages`, `statistiques_page`) : pages de destination à formulaire, servies par un serveur séparé (`127.0.0.1:3195`), statistiques Umami local. Activation : `captation` dans `PASSERELLE_SERVICES_REELS`. Détails, protections, installation et publication : `docs/captation.md`.
+
 ## Extraction de sites et audit de pages (21/10/2026)
 
 Deux services locaux de lecture, sans compte de tiers (accès par l'autorisation locale de la passerelle), réponses signées, mode réel
@@ -1211,3 +1215,32 @@ seulement. Activation : `PASSERELLE_SERVICES_REELS=osm,liens,extraction,audit` d
 
 `passerelle/tests/reel-extraction/` (extraction, services-web) et `passerelle/tests/reel-audit/` : appels factices, adresses privées refusées,
 plafonds, troncature, réponses signées vérifiées par la clé publique de la passerelle. Preuve réelle du 21/10/2026 : voir le rapport de la session.
+
+## Statistiques publiques belges : service `statbel` (22/10/2026)
+
+Service LOCAL (aucun compte ni clé) pour les agents Veille et Stratège : segmentation et taille de marché par commune. Code :
+`passerelle/src/reel/statbel/` ; tests : `passerelle/tests/reel-statbel/` ; branchement : `statbel` dans `PASSERELLE_SERVICES_REELS`.
+
+| Jeu (Statbel, open data, licence CC BY 4.0) | Dernière année obtenue | Fichier |
+| --- | --- | --- |
+| Population par lieu de résidence, nationalité, état civil, âge et sexe ([page](https://statbel.fgov.be/en/open-data/population-place-residence-nationality-marital-status-age-and-sex-16)) | 2026 (1er janvier ; la page annonçait 2025, le fichier 2026 existe) | `TF_SOC_POP_STRUCT_AAAA.zip` |
+| Statistiques fiscales des revenus par commune ([page](https://statbel.fgov.be/en/open-data/fiscal-statistics-income)) | revenus 2023 | `TF_PSNL_INC_TAX_MUNTY.zip` |
+| Entreprises assujetties à la TVA par commune et section d'activité ([page](https://statbel.fgov.be/en/open-data/enterprises-subject-vat-according-legal-form-11)) | 2024 (la page annonçait 2023) | `TF_VAT_NACE_AAAA.zip` |
+| Table code postal / commune de bpost via Opendatasoft (aide à la recherche, aucune statistique ; licence propre à bpost, millésime 2021) | 2021 | export CSV `georef-belgium-postal-codes` |
+
+**Mise à jour** : `scripts/statbel-mise-a-jour.sh` (journal `instance/donnees/statbel/maj.log`, index `instance/donnees/statbel/statbel.sqlite`,
+hors dépôt). Il cherche seul la dernière année publiée de la population et de la TVA, télécharge, importe (Node, `better-sqlite3`),
+remplace l'index d'un seul geste (fichier temporaire puis renommage). Statbel publie une fois par an : une exécution par an suffit.
+Codes de sortie : 0 succès, 1 échec, 4 installation incomplète. **Piège** : `statbel.fgov.be` ne répond pas depuis certains relais du
+VPN Mullvad (délai dépassé) : `STATBEL_HORS_VPN=1 scripts/statbel-mise-a-jour.sh` lance les téléchargements avec `mullvad-exclude`
+(données publiques, le kill switch reste actif pour le reste). Prérequis : `npm run build` dans `passerelle/`.
+
+**Outils** (lecture seule, réponses signées) : `profil_commune` (population, sexe, nationalité, 7 tranches d'âge, revenus moyens par
+déclaration et par habitant, assujettis TVA et principales sections) et `comparer_communes` (2 à 10 communes). La commune se donne par nom
+(français ou néerlandais), code postal ou code INS ; une référence ambiguë (par exemple 1000) renvoie la liste des candidates, jamais une
+commune devinée. Chaque chiffre est `{ valeur, unite, annee, source }` ; une valeur absente ou masquée (secret statistique, commune
+fusionnée depuis) vaut `null` avec une `note`.
+
+**Limites connues** : pas de revenu médian ni de nombre de ménages dans les données ouvertes par commune (`declarations_fiscales` en est un
+ordre de grandeur) ; 29 codes INS des statistiques fiscales sont d'avant les fusions de communes de 2025 (revenus `null` pour ces communes) ;
+la table des codes postaux date de 2021 ; les années diffèrent selon le jeu. Aucune donnée d'un quartier ni d'une personne.

@@ -1,0 +1,35 @@
+[Unit]
+Description=Umami 3.4.0 de l'Atelier marketing IA (statistiques sans cookie, Podman rootless, écoute sur 127.0.0.1:3196 seulement)
+Documentation=https://umami.is/docs
+After=network-online.target atelier-umami-db.service
+Wants=network-online.target
+Requires=atelier-umami-db.service
+
+# Installation : scripts/installer-umami.sh. Version épinglée (jamais « latest » ni « postgresql-latest »).
+# Secrets (0600, hors dépôt) : ~/.config/atelier/umami.env (DATABASE_URL, APP_SECRET, TWO_FACTOR_ENCRYPTION_KEY).
+# Contrôle : « curl -s http://127.0.0.1:3196/api/heartbeat » et « ss -ltnp | grep 3196 ».
+# Choix de sécurité :
+#   - port publié sur 127.0.0.1 seulement ; Umami n'est jamais exposé : les pages de destination relaient son script et
+#     son point de collecte (/_s/...), et la passerelle lit ses statistiques par l'API locale ;
+#   - télémétrie coupée (DISABLE_TELEMETRY), pas de suivi des pages d'administration ;
+#   - 1 Go de mémoire au plus.
+
+[Service]
+Type=simple
+ExecStartPre=-/usr/bin/podman rm -f atelier-umami
+ExecStart=/usr/bin/podman run --rm --name atelier-umami --network atelier-umami --memory=1g \
+  -p 127.0.0.1:3196:3000 \
+  --env-file %h/.config/atelier/umami.env \
+  -e DISABLE_TELEMETRY=1 -e TRACKER_SCRIPT_NAME=script.js \
+  ghcr.io/umami-software/umami:3.4.0
+ExecStop=/usr/bin/podman stop -t 10 atelier-umami
+Restart=on-failure
+RestartSec=15
+TimeoutStartSec=240
+NoNewPrivileges=yes
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=atelier-umami
+
+[Install]
+WantedBy=default.target

@@ -33,6 +33,7 @@ export const STYLES_RAPPORT = `
   .atl-rapport-table th, .atl-rapport-table td { border-bottom: 0.5pt solid #000; color: #000; }
   .atl-rapport-note, .atl-rapport-periode, .atl-rapport-pied { color: #000; }
   .atl-rapport section { break-inside: avoid-page; margin-bottom: 1.2rem; }
+  .atl-rapport-connecter { break-before: page; }
   .atl-rapport h2 { border-bottom: 1pt solid #000; padding-bottom: 0.15rem; }
   @page { margin: 18mm; }
 }

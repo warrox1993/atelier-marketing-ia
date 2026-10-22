@@ -63,8 +63,8 @@ import {
 import { appelRoute } from "../routes-prospection.js";
 import { useCartesServices, useMissionsServices, type CarteService } from "../cartes-services.js";
 import { avancements } from "../avancement-missions.js";
-import { FrisesMissions } from "../composants/frise-mission.js";
-import { STYLES_DISCUSSION, STYLES_FRISE } from "../styles-discussion.js";
+import { BandeauMissions } from "../composants/bandeau-missions.js";
+import { STYLES_BANDE, STYLES_DISCUSSION, STYLES_FRISE } from "../styles-discussion.js";
 import type {
   DepartementDeclare,
   ReponseDepartements,
@@ -517,7 +517,7 @@ export function VueDiscussion() {
 
   return (
     <section className="atl-disc" aria-label="Discussion avec le Coordinateur">
-      <style>{STYLES_DISCUSSION}{STYLES_FRISE}</style>
+      <style>{STYLES_DISCUSSION}{STYLES_FRISE}{STYLES_BANDE}</style>
       <div className="atl-disc-entete">
         <span
           className="atl-disc-avatar atl-disc-avatar-grand"
@@ -543,8 +543,9 @@ export function VueDiscussion() {
           />
         </div>
       </div>
+      {/* Bande d'avancement épinglée : hors du fil (elle ne défile pas) et hors de la zone role="log". */}
+      {general ? <BandeauMissions enCours={frises.enCours} terminees={frises.terminees} /> : null}
       <div ref={fil} className="atl-disc-fil">
-        {general ? <FrisesMissions enCours={frises.enCours} terminees={frises.terminees} /> : null}
         <div
           className="atl-disc-messages"
           role="log"

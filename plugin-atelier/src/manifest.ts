@@ -30,6 +30,8 @@ const manifest: PaperclipPluginManifestV1 = {
     "issue.comments.read",
     "issue.documents.read",
     "issue.interactions.read",
+    // Envoi d'e-mails : le plugin crée lui-même la carte de confirmation (texte construit côté serveur).
+    "issue.interactions.create",
     "agents.read",
     "approvals.read",
     "activity.read",
@@ -93,6 +95,19 @@ const manifest: PaperclipPluginManifestV1 = {
           "Clé(s) publique(s) Ed25519 de la passerelle (ligne « clé publique à donner au plugin » de son journal de démarrage, SPKI DER en base64). Plusieurs clés : rotation. Sans clé, aucune donnée de connexion n'est tenue pour réelle.",
         maxItems: 5,
         items: { type: "string", minLength: 40, maxLength: 4000 },
+      },
+      // Revue F5 : les rôles « Mesure » et « Stratège » (clôture des expériences, tâche d'apprentissage) sont des
+      // identifiants d'agent fixés par l'humain ou par l'amorçage, jamais déduits du nom d'un agent (qu'il peut changer).
+      rolesAgents: {
+        type: "object",
+        title: "Rôles d'agents (identifiants)",
+        description:
+          "Identifiants des agents qui tiennent les rôles « mesure » et « stratege » dans cette entreprise. Remplis par scripts/bootstrap-organisation.py ; sans eux, aucun agent n'a ces rôles dans les expériences A/B.",
+        additionalProperties: false,
+        properties: {
+          mesure: { type: "string", minLength: 8, maxLength: 64 },
+          stratege: { type: "string", minLength: 8, maxLength: 64 },
+        },
       },
       passerelleUrl: {
         type: "string",

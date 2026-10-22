@@ -32,6 +32,7 @@ import { Bouton, Champ, Chargement, ecranEtroit, EnTete, EtatErreur, Horodatage,
 import { idCourt, nombre, type Ton } from "../format.js";
 import { chemin } from "../route.js";
 import { appelRoute, telechargerBase64 } from "../routes-prospection.js";
+import { RegistreConsentements } from "../registre-consentements.js";
 
 const LIBELLES_CIBLES: Readonly<Record<CibleProspect, string>> = { entreprise: "Entreprises", particulier: "Particuliers", partenaire: "Partenaires" };
 const LIBELLE_CIBLE_UNIQUE: Readonly<Record<CibleProspect, string>> = { entreprise: "Entreprise", particulier: "Particulier", partenaire: "Partenaire" };
@@ -1460,7 +1461,7 @@ function ListeProspects() {
 /* ------------------------------------------------------------------ */
 
 export function VueProspects() {
-  const [onglet, setOnglet] = useState<"prospects" | "base">("prospects");
+  const [onglet, setOnglet] = useState<"prospects" | "base" | "consentements">("prospects");
   return (
     <>
       <EnTete
@@ -1474,8 +1475,11 @@ export function VueProspects() {
         <button type="button" className="atl-segment" aria-pressed={onglet === "base"} onClick={() => setOnglet("base")}>
           Base clients et oppositions
         </button>
+        <button type="button" className="atl-segment" aria-pressed={onglet === "consentements"} onClick={() => setOnglet("consentements")}>
+          Registre des consentements
+        </button>
       </div>
-      {onglet === "prospects" ? <ListeProspects /> : <BaseClients />}
+      {onglet === "prospects" ? <ListeProspects /> : onglet === "base" ? <BaseClients /> : <RegistreConsentements />}
     </>
   );
 }

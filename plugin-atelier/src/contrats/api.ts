@@ -126,6 +126,7 @@ export const CODES_ERREUR = [
   "dictee_indisponible",
   "voix_non_configuree",
   "voix_indisponible",
+  "emailing_indisponible",
   "conflit",
   "non_implemente",
   "erreur_interne",

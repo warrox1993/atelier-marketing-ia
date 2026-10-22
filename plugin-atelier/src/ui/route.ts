@@ -6,7 +6,7 @@
 import { ROUTE_ATELIER, RUBRIQUES } from "../contrats/ui-constantes.js";
 
 export type CleRubrique = (typeof RUBRIQUES)[number]["cle"];
-export type CleVue = "discussion" | "accueil" | CleRubrique | "prospects" | "carte" | "connaissances" | "mise-en-place" | "parametres" | "corbeille" | "rapport" | "echanges" | "departements" | "organigramme";
+export type CleVue = "discussion" | "accueil" | CleRubrique | "prospects" | "carte" | "connaissances" | "mise-en-place" | "parametres" | "corbeille" | "rapport" | "tableau" | "echanges" | "departements" | "organigramme";
 
 export interface RouteAtelier {
   vue: CleVue;
@@ -27,6 +27,7 @@ export const VUES: ReadonlyArray<{ cle: CleVue; libelle: string; groupe?: typeof
   { cle: "mise-en-place", libelle: "Mise en place du client" },
   { cle: "parametres", libelle: "Paramètres et diagnostic" },
   { cle: "corbeille", libelle: "Corbeille" },
+  { cle: "tableau", libelle: "Tableau de direction" },
   { cle: "rapport", libelle: "Rapport du mois" },
 ];
 

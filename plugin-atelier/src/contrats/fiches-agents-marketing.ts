@@ -280,6 +280,16 @@ export const FICHES_AGENTS_MARKETING: readonly FicheAgentMarketing[] = [
         "sert": "Mène une recherche documentaire et vérifie les faits : chaque observation porte sa source, sa date de collecte, son statut d'accès et sa limite, et distingue fait vérifié, inférence, hypothèse et recommandation."
       },
       {
+        "cle": "script-appel-secretariat",
+        "nom": "Script d'appel au standard ou au secrétariat",
+        "sert": "Prépare le script d'un appel au standard ou au secrétariat d'une entreprise pour obtenir la ligne directe ou le bon interlocuteur : présentation honnête, objet dit clairement, réponses aux objections courantes, ce qu'on note et ce qu'on ne demande jamais."
+      },
+      {
+        "cle": "demande-numero-linkedin",
+        "nom": "Message LinkedIn pour demander un échange téléphonique",
+        "sert": "Rédige un message LinkedIn court qui demande à une personne si elle accepte un échange téléphonique et, si elle le souhaite, son numéro."
+      },
+      {
         "cle": "memoire-para",
         "nom": "Mémoire en fichiers (méthode PARA)",
         "sert": "Tient la mémoire persistante de l'agent en fichiers, selon la méthode PARA (graphe de connaissances, notes du jour, savoir tacite), dans le dossier ./memoire/ de son répertoire de travail, avec la source et la date de chaque fait."
@@ -336,6 +346,21 @@ export const FICHES_AGENTS_MARKETING: readonly FicheAgentMarketing[] = [
         "cle": "recherche-connaissances",
         "nom": "Recherche dans les connaissances du client",
         "sert": "Interroge les connaissances du client (conditions générales, fiches produit, tarifs, FAQ, notes) avant d'écrire un chiffre d'offre, et cite l'adresse connaissance:// rendue ; sans source, signale l'information manquante."
+      },
+      {
+        "cle": "coordonnees-signatures-email",
+        "nom": "Coordonnées tirées des signatures d'e-mails reçus",
+        "sert": "Extrait nom, fonction et numéros de téléphone (fixe, ligne directe, GSM professionnel) de la signature d'e-mails REÇUS et fournis à la tâche, avec la source, la date et la base « publié par la personne dans sa correspondance »."
+      },
+      {
+        "cle": "coordonnees-cartes-visite",
+        "nom": "Coordonnées lues sur une carte de visite",
+        "sert": "Lit la photo d'une carte de visite jointe à la tâche, transcrit champ par champ avec un niveau de confiance par champ, signale ce qui est illisible et note la base « remise par la personne » avec la date et le lieu de la rencontre s'ils sont donnés."
+      },
+      {
+        "cle": "achat-coordonnees-fournisseur",
+        "nom": "Achat de coordonnées auprès d'un fournisseur sous licence",
+        "sert": "À utiliser avant toute dépense chez un fournisseur : prépare une carte de DÉCISION de dépense avant toute requête à un fournisseur B2B de coordonnées sous licence (Lusha, Kaspr ou équivalent) : fiches prioritaires dont les sources gratuites ont échoué, liste exacte, coût estimé par contact et total, base légale du fournisseur, conservation de la preuve d'achat."
       },
       {
         "cle": "memoire-para",
@@ -555,6 +580,11 @@ export const FICHES_AGENTS_MARKETING: readonly FicheAgentMarketing[] = [
         "sert": "Construit un plan de liens entrants et de mentions tierces pour une PME ou un courtier belge : vérifie d'abord que les liens sont bien le frein (écart de liens par page), choisit les tactiques par effort et qualité, qualifie les sites cibles, prépare des messages à faire valider, impose les attributs sponsored ou nofollow aux placements payants et mesure liens, positions et citations par les assistants d'IA."
       },
       {
+        "cle": "aimant-a-prospects",
+        "nom": "Aimant à prospects : un guide gratuit contre des coordonnées",
+        "sert": "Conçoit un guide gratuit (aimant à prospects) remis en échange de coordonnées sur la page de captation : sujet utile à la cible, sommaire, promesse sans garantie de rendement (cadre de l'assurance belge, mentions FSMA si produit d'assurance), champ téléphone facultatif et justifié."
+      },
+      {
         "cle": "memoire-para",
         "nom": "Mémoire en fichiers (méthode PARA)",
         "sert": "Tient la mémoire persistante de l'agent en fichiers, selon la méthode PARA (graphe de connaissances, notes du jour, savoir tacite), dans le dossier ./memoire/ de son répertoire de travail, avec la source et la date de chaque fait."
@@ -765,6 +795,11 @@ export const FICHES_AGENTS_MARKETING: readonly FicheAgentMarketing[] = [
         "cle": "leviers-influence-ethiques",
         "nom": "Leviers d'influence éthiques",
         "sert": "Passe en revue les sept principes d'influence de Robert Cialdini (réciprocité, engagement et cohérence, preuve sociale, sympathie, autorité, rareté, unité) dans un contenu, exige un fondement factuel pour chacun, raye les leviers sans fondement et envoie obligatoirement la rareté et l'urgence à la conformité publicitaire."
+      },
+      {
+        "cle": "aimant-a-prospects",
+        "nom": "Aimant à prospects : un guide gratuit contre des coordonnées",
+        "sert": "Conçoit un guide gratuit (aimant à prospects) remis en échange de coordonnées sur la page de captation : sujet utile à la cible, sommaire, promesse sans garantie de rendement (cadre de l'assurance belge, mentions FSMA si produit d'assurance), champ téléphone facultatif et justifié."
       },
       {
         "cle": "memoire-para",

@@ -87,6 +87,27 @@ export const FICHE_AUDIT: FicheService = {
   proprietes: [{ id: "web/public", libelle: "Web public (lecture seule, adresses publiques uniquement)" }],
 };
 
+export const FICHE_EMAILING: FicheService = {
+  id: "emailing",
+  libelle: "E-mailing (listmonk local, envoi de test vers Mailpit)",
+  portees: ["emailing:lecture", "emailing:ecriture"],
+  proprietes: [{ id: "listmonk/local", libelle: "listmonk local (listes, abonnés avec consentement, brouillons ; envoi de test seulement)" }],
+};
+
+export const FICHE_CAPTATION: FicheService = {
+  id: "captation",
+  libelle: "Captation de prospects (pages de destination avec formulaire, Umami local)",
+  portees: ["captation:lecture", "captation:ecriture"],
+  proprietes: [{ id: "pages/local", libelle: "Pages de destination locales (contacts donnés par la personne avec son consentement ; aucune mise en ligne par un outil)" }],
+};
+
+export const FICHE_STATBEL: FicheService = {
+  id: "statbel",
+  libelle: "Statbel (statistiques publiques belges par commune)",
+  portees: ["statbel:lecture"],
+  proprietes: [{ id: "statistiques/statbel-local", libelle: "Index Statbel local (population, revenus fiscaux, assujettis TVA par commune ; open data CC BY 4.0)" }],
+};
+
 /** Jeu de fiches livré par défaut : services de tiers (comptes et jetons de la plateforme). Aucune donnée n'est simulée. */
 export const FICHES_PAR_DEFAUT: readonly FicheService[] = [
   { id: "gsc", libelle: "Search Console", portees: ["https://www.googleapis.com/auth/webmasters.readonly"] },
@@ -107,4 +128,7 @@ export const FICHES_PAR_DEFAUT: readonly FicheService[] = [
   FICHE_LIENS,
   FICHE_EXTRACTION,
   FICHE_AUDIT,
+  FICHE_EMAILING,
+  FICHE_CAPTATION,
+  FICHE_STATBEL,
 ];

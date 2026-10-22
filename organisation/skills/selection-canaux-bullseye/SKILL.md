@@ -2,7 +2,7 @@
 name: "selection-canaux-bullseye"
 description: "Choisit les canaux d'acquisition d'un client avec la méthode Bullseye : revue des 19 canaux, une idée concrète par canal, classement en prometteur, possible ou improbable, plan de 2 ou 3 tests avec budget, durée et seuil de succès fixés d'avance, verdict et revue trimestrielle. À utiliser après les objectifs, pour décider où concentrer l'effort ; jamais pour se limiter aux canaux que l'Atelier sait automatiser, ni pour déclarer un gagnant sur un volume trop faible."
 metadata:
-  version: "1.0.0"
+  version: "1.1.0"
   langue: "fr"
   domaine: "marketing"
 ---
@@ -61,6 +61,35 @@ Le tableau des 19 canaux notés, le plan de 2 ou 3 tests (budget, durée, seuil)
 - Le chiffre Gartner (environ 17 % du temps d'achat passé avec les fournisseurs) n'a été lu qu'en source secondaire ; « 6 à 10 décideurs » concerne des solutions B2B complexes et n'est pas valable pour une petite entreprise [secondaire].
 - Tout canal qui envoie des messages (courriel, téléphone, publicité) est soumis aux règles de consentement et de conformité : `conformite-publicitaire` valide avant l'activation.
 - L'activation de tout canal payant ou la dépense sont des décisions de l'humain.
+
+### Règles de vérité
+
+- Les 19 canaux sont nommés un par un, chacun sur sa ligne, avec idée concrète, classement (prometteur, possible, improbable) et raison, y compris ceux écartés ou non automatisés. Un tableau de moins de 19 lignes est incomplet.
+- Un taux de conversion, un coût par contact, un volume ou un délai absents de l'entrée s'écrivent « inconnu ». Un seuil de décision qui en dépend est soit « inconnu, à fixer après mesure », soit fixé par une hypothèse déclarée comme telle, jamais présenté comme un fait.
+- Il y a 2 ou 3 tests, pas plus. Chacun a : budget, durée, indicateur, seuil fixé avant le test et décision prévue. La somme des budgets de test est calculée, écrite, et ne dépasse jamais l'enveloppe fournie.
+- La prochaine revue porte une date calendaire précise (jour, mois, année), calculée à partir de la durée des tests. Le verdict de chaque test reste « à remplir par `mesure` » tant qu'il n'a pas eu lieu.
+
+### Modèle de livrable
+
+À recopier, tous les champs sont obligatoires.
+
+**Les 19 canaux** (une ligne chacun)
+
+| N° | Canal | Idée concrète | Classement | Raison | Test (oui ou non) |
+| --- | --- | --- | --- | --- | --- |
+
+**Plan de tests (2 ou 3)**
+
+| Canal | Budget (euros) | Durée | Indicateur | Seuil (ou « inconnu, hypothèse : ... ») | Décision prévue |
+| --- | --- | --- | --- | --- | --- |
+
+Somme des budgets : (total) pour une enveloppe de (montant).
+
+**Parcours** : points de contact, état, délai (ou « inconnu »).
+
+**Verdict par canal après test** : à remplir par `mesure`.
+
+**Date de la prochaine revue** : (jour, mois, année).
 
 ## Exemple
 

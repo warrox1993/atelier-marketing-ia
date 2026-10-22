@@ -74,6 +74,8 @@ type Campagne = { id: string; mode: "demonstration" | "reel"; canaux: string[]; 
 export interface ServicesProspection {
   /** Prospects qualifiés du filtre en un seul parcours, pour l'entreprise donnée, jusqu'à `plafond` (à une page près). */
   listerQualifies?: (companyId: string, query: Record<string, string | string[]>, plafond: number) => Promise<Prospect[]>;
+  /** Clés de chiffrement des données de l'entreprise (secret natif) : le registre des consentements déchiffre puis masque. */
+  clesDonnees?: (companyId: string) => Promise<ClesDonnees>;
 }
 
 export interface DependancesProspection {
@@ -1179,6 +1181,7 @@ export function routesProspection(d: DependancesProspection): Partial<Record<Cle
   }
 
   if (d.services) {
+    d.services.clesDonnees = clesDonnees;
     d.services.listerQualifies = (companyId, query, plafond) => parcourirQualifies(companyId, filtresDeRequete(companyId, query), plafond);
   }
 

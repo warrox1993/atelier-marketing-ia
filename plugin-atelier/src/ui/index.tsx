@@ -43,6 +43,7 @@ import { VueCorbeille } from "./vues/corbeille.js";
 import { VueDiscussion } from "./vues/discussion.js";
 import { VueResultatsAtelier } from "./vues/resultats.js";
 import { VueRapport } from "./vues/rapport.js";
+import { VueTableau } from "./vues/tableau.js";
 import { OngletEchanges, useAccesDirection, useLiaisonsTache, VueRegistre } from "./vues/echanges.js";
 import { VueEnsembleClient } from "./vues/ensemble.js";
 import { aPlusieursDepartements, slugDuService, useDepartements } from "./departements-sonde.js";
@@ -92,6 +93,8 @@ function Vue({ vue, id }: { vue: CleVue; id: string | null }) {
       return <VueParametres />;
     case "corbeille":
       return <VueCorbeille />;
+    case "tableau":
+      return <VueTableau />;
     case "rapport":
       return <VueRapport />;
     case "echanges":

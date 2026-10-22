@@ -65,7 +65,7 @@ describe("Rapport du mois", () => {
   it("est un onglet de Marketing, après les autres qui restent en place", async () => {
     const c = await ouvrir();
     const onglets = Array.from(c.querySelectorAll('[role="tablist"][aria-label="Marketing : sections"] [role="tab"]'));
-    expect(onglets.map((o) => o.firstChild?.textContent?.trim())).toEqual(["Campagnes", "Contenus", "Calendrier", "Résultats", "Équipe", "Rapport du mois"]);
+    expect(onglets.map((o) => o.firstChild?.textContent?.trim())).toEqual(["Campagnes", "Contenus", "Calendrier", "Résultats", "Équipe", "Tableau de direction", "Rapport du mois"]);
     expect(onglets.find((o) => o.getAttribute("aria-selected") === "true")?.firstChild?.textContent?.trim()).toBe("Rapport du mois");
     expect(pont.violations).toEqual([]);
   });

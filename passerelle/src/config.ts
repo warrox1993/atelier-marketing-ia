@@ -53,11 +53,11 @@ export function lireReglages(env: NodeJS.ProcessEnv): ReglagesEnvironnement {
 /**
  * Lit PASSERELLE_SERVICES_REELS : liste de services LOCAUX (séparés par des virgules ou des espaces) à brancher sur leur
  * fournisseur réel. Seuls les services sans compte de tiers sont permis : `osm` et `bce` (index locaux), `bnb` (API de la
- * BNB par simple clé), `liens` (lecture d'URL protégée), `extraction` (Crawl4AI local) et `audit` (Lighthouse) ; l'accès y est accordé par le serveur d'autorisation local.
+ * BNB par simple clé), `liens` (lecture d'URL protégée), `extraction` (Crawl4AI local), `audit` (Lighthouse), `emailing` (listmonk local), `captation` (pages de destination locales) et `statbel` (index Statbel local) ; l'accès y est accordé par le serveur d'autorisation local.
  * Les autres services (Google, réseaux sociaux, CRM) se branchent par leurs propres réglages (comptes et jetons de tiers).
  * Un service non listé et non configuré répond « non_connecte ».
  */
-export const SERVICES_LOCAUX: readonly string[] = ["osm", "liens", "bce", "bnb", "extraction", "audit"];
+export const SERVICES_LOCAUX: readonly string[] = ["osm", "liens", "bce", "bnb", "extraction", "audit", "emailing", "captation", "statbel"];
 
 export function lireServicesLocaux(env: NodeJS.ProcessEnv): string[] {
   const brut = env["PASSERELLE_SERVICES_REELS"]?.trim() ?? "";

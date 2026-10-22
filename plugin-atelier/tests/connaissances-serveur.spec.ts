@@ -747,7 +747,10 @@ describe("base commune du groupe : service de la tâche + Direction du même cli
     expect(r.body.consigne).toMatch(/DONNÉES du client/u);
     const texte = JSON.stringify(r.body);
     expect(texte).not.toContain("quolibetine est");
-    expect(texte).not.toContain("777");
+    // Montant témoin de l'autre service : « 777 € » et non « 777 », qu'un identifiant aléatoire peut contenir
+    // (échec intermittent constaté le 22/10/2026).
+    expect(texte).not.toContain("777 €");
+    expect(texte).not.toContain("777 €");
     expect(texte).not.toContain(AUTRE_SERVICE);
     // Les passages communs deviennent des sources de la tâche DU SERVICE (jamais de la Direction).
     expect(f.k.t.sources).toHaveLength(r.body.passages.length);

@@ -2,7 +2,7 @@
 name: "points-entree-categorie"
 description: "Relève les catégories d'entrée (situations, besoins, signaux qui font penser à l'achat d'une assurance, méthode des 7W de Jenni Romaniuk), les rédige en langage client, les classe par fréquence et importance avec preuve, puis les affecte aux agents de canal ; propose des métriques de disponibilité mentale si un sondage est possible. À utiliser pour décider quoi dire, où et quand : pages locales, annonces, contenus. Ne confond pas une catégorie d'entrée avec un mot-clé."
 metadata:
-  version: "1.0.0"
+  version: "1.1.0"
   langue: "fr"
   domaine: "etudes"
 ---
@@ -59,6 +59,25 @@ ou la mention « non mesuré ».
 - Sans entretiens ni données de recherche, la liste est une hypothèse à valider, signalée comme telle.
 - Les métriques de disponibilité mentale exigent un sondage mené auprès d'un échantillon réel (agent `mesure`).
 - Les requêtes de recherche montrent des mots, pas toujours la situation qui les a provoqués.
+
+### Règles de vérité
+
+- La fréquence, l'importance et toute métrique de sondage (pénétration mentale, taille du réseau, part de marché mentale) qui ne figurent pas dans les pièces s'écrivent « non mesuré ». Aucun pourcentage, aucun comptage, aucun mot d'intensité (« très fréquent », « majeur ») n'est inventé.
+- La preuve d'une ligne est un élément réellement présent dans l'entrée (entretien, demande de devis, avis, requête), cité avec sa source. Sans preuve, la ligne est une « hypothèse ». Une situation citée par une seule source est « isolée ».
+- Chaque situation de l'entrée est reprise, en langage client à la première personne ou en situation vécue, sans terme d'assureur, de garantie ni mot-clé. Ne pas compléter la liste par des situations inventées pour atteindre un nombre : si les sources en donnent moins de dix, le dire (« liste incomplète, à enrichir par entretiens et données de recherche »).
+- Aucune ligne sans agent et canal affectés. Tant qu'aucune métrique de sondage n'existe, la prochaine étape écrite est un sondage de disponibilité mentale mené par `mesure` auprès d'un échantillon réel.
+
+### Modèle de livrable
+
+À recopier, tous les champs sont obligatoires.
+
+| CEP en langage client | Fréquence | Importance | Preuve (source dans l'entrée) | Agent | Canal |
+| --- | --- | --- | --- | --- | --- |
+| (situation vécue) | non mesuré | non mesuré | (citation et source, ou « hypothèse ») | (agent) | (canal) |
+
+**Métriques de sondage** : pénétration mentale : non mesuré ; taille du réseau : non mesuré ; part de marché mentale : non mesuré (ou valeur du sondage fourni, avec sa source).
+
+**Prochaine étape** : sondage de disponibilité mentale (agent `mesure`, échantillon réel, date prévue).
 
 ## Exemple
 

@@ -2,7 +2,7 @@
 name: "objectifs-marque-activation"
 description: "Fixe les objectifs chiffrés et datés d'un client, répartit le budget entre construction de marque et activation (hypothèse de départ B2B 46/54 présentée comme hypothèse), estime la part d'acheteurs « en marché » et fixe les indicateurs longs et courts. À utiliser après le positionnement et avant le plan de canaux ; jamais pour appliquer un ratio comme une loi."
 metadata:
-  version: "1.0.0"
+  version: "1.1.0"
   langue: "fr"
   domaine: "marketing"
 ---
@@ -62,6 +62,37 @@ Objectifs chiffrés et datés, tableau de répartition marque et activation (ave
 - Relancer en boucle des prospects hors marché provoque des rejets et un risque RGPD en cas d'opposition.
 - Sans données, un indicateur est « non mesurable », pas estimé.
 - Conclure sur 10 demandes est interdit : voir les seuils de `mesure-experiences`.
+
+### Règles de vérité
+
+- Toute valeur de départ vient de l'entrée ; sinon elle s'écrit « inconnue ». Aucune valeur de départ, aucun cycle de renouvellement, aucune taille de marché n'est estimé de mémoire.
+- Chaque objectif porte quatre champs fixes : valeur de départ (ou « inconnue »), cible chiffrée, date (jour, mois, année) et indicateur. Un objectif sans chiffre ou sans date est refusé et réécrit. Les cibles chiffrées sont des hypothèses de travail à valider par l'humain, et le disent.
+- La répartition marque et activation est chiffrée en euros, la somme est égale à l'enveloppe fournie (la vérifier et l'écrire), et le tableau et le ratio portent la mention « hypothèse » avec la raison de l'ajustement.
+- La part « en marché » est « inconnue » tant que le cycle réel ou le nombre d'acheteurs par an n'est pas fourni. Un ordre de grandeur issu de la règle de Dawes n'est permis que marqué « illustration, non mesurée », avec le cycle supposé écrit, et la limite est dite.
+- Chaque indicateur, long ou court, nomme l'agent qui le mesure (`mesure` en général) et indique s'il est « mesurable » ou « non mesurable aujourd'hui ».
+
+### Modèle de livrable
+
+À recopier, tous les champs sont obligatoires.
+
+**Objectifs** (2 à 4)
+
+| Objectif | Valeur de départ | Cible chiffrée | Date | Indicateur | Agent mesureur |
+| --- | --- | --- | --- | --- | --- |
+
+**Répartition du budget (hypothèse)** : enveloppe fournie : (montant, période).
+
+| Ligne | Type (marque ou activation) | Montant (euros) | Part | Mention |
+| --- | --- | --- | --- | --- |
+| (ligne) | (type) | (montant) | (part) | hypothèse |
+
+Total des lignes : (somme) = enveloppe. Raison de l'ajustement du ratio : (texte).
+
+**Part « en marché »** : valeur ou « inconnue ». Limite : (ce qui manque pour la mesurer).
+
+**Indicateurs longs** et **indicateurs courts** : listes séparées, chacune avec agent mesureur et état de mesure.
+
+**Validation humaine** : la répartition est un choix métier, en attente de décision.
 
 ## Exemple
 

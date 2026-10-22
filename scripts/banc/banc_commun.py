@@ -24,6 +24,7 @@ ETUDES = [
     "docs/etude-usine-v2/groupe-1-gouvernance-personnes.md",
     "docs/etude-usine-v2/groupe-2-commerce-client.md",
     "docs/etude-usine-v2/groupe-3-finance-operations-tech.md",
+    "docs/etude-usine-v2/groupe-4-marketing-expert.md",
 ]
 # Dossier de travail hors dépôt : propositions, résultats, cache. Jamais organisation/.
 DOSSIER_BANC = os.environ.get("ATELIER_BANC_DIR", os.path.expanduser("~/.local/share/atelier-banc"))

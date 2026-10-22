@@ -13,7 +13,7 @@ import { enDate, ilYA } from "../format.js";
 export const TERMINEES_AFFICHEES = 3;
 
 /** Marqueur dessiné : coche (faite), disque à moitié plein (en cours), point d'exclamation (attend), cercle vide (à venir), tiret (non prévue). */
-function Marqueur({ etat }: { etat: EtatPhase }) {
+export function Marqueur({ etat }: { etat: EtatPhase }) {
   const trait = { fill: "none", stroke: "currentColor", strokeWidth: 1.75, strokeLinecap: "round", strokeLinejoin: "round" } as const;
   return (
     <svg className="atl-frise-marqueur" viewBox="0 0 20 20" width="20" height="20" aria-hidden="true" focusable="false">
@@ -42,12 +42,12 @@ function Marqueur({ etat }: { etat: EtatPhase }) {
   );
 }
 
-function derniere(p: Phase): string | null {
+export function derniere(p: Phase): string | null {
   const d = enDate(p.derniere);
   return d ? ilYA(d) : null;
 }
 
-function PanneauTaches({ phase, id }: { phase: Phase; id: string }) {
+export function PanneauTaches({ phase, id }: { phase: Phase; id: string }) {
   return (
     <div id={id} className="atl-frise-taches" data-testid={`frise-taches-${phase.id}`}>
       <ul role="list">

@@ -121,6 +121,18 @@ describe("route tache.donnees.deposer (service complet, fausse base)", () => {
     expect(f.activite).toEqual([]);
   });
 
+  it("E2-A : réponse réelle signée qui ne fait que renvoyer la saisie de l'agent (référence numérique) : aucun chiffre retenu", async () => {
+    const f = fausseBase({ modeEntreprise: "reel" });
+    const args = { commune: "123456" };
+    const donnees = { statut: "introuvable", reference: "123456", echo: "123456", raison: "Aucune commune." };
+    const rep = emballer(SIGNATAIRE, "reel", donnees, { service: "gsc", outil: "gsc_requete_performances", compte: "sc-domain:client-reel.be", args }) as { texte: string; structuredContent: Record<string, unknown> };
+    const r = await deposer(f, { service: "gsc", outil: "gsc_requete_performances", reponse: rep, arguments: args });
+    expect(r.status).toBe(201);
+    expect((r.body as { mode: string; chiffresRetenus: number }).mode).toBe("reel");
+    expect((r.body as { chiffresRetenus: number }).chiffresRetenus).toBe(0);
+    expect(JSON.parse(String(f.tables.sources![0]!.chiffres))).toEqual([]);
+  });
+
   it("§6 bis : réponse « réelle » non signée, modifiée, d'un autre outil ou d'autres arguments : refusée, rien n'est enregistré comme réel", async () => {
     const cas: Array<[string, unknown]> = [
       ["non signée", { service: "gsc", outil: "gsc_requete_performances", reponse: reponse("reel", false) }],

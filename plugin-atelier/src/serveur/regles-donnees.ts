@@ -215,7 +215,7 @@ export interface Chiffre {
 }
 
 /** Clés techniques dont les nombres ne sont pas des chiffres marketing. */
-const CLES_IGNOREES = /^(?:_atelier|id|.*Id|.*_id|resourceName|name|customerId|siteUrl|property|parent|location|pageToken|nextPageToken|pageSize|startRow|rowLimit|limit|offset|rowCount|totalResultsCount|keys|dimensionValues|dimensionHeaders|metricHeaders|fieldMask|kind|version|date|startDate|endDate|createTime|updateTime|year|month|day)$/u;
+const CLES_IGNOREES = /^(?:_atelier|id|.*Id|.*_id|resourceName|name|customerId|siteUrl|property|parent|location|pageToken|nextPageToken|pageSize|startRow|rowLimit|limit|offset|rowCount|totalResultsCount|reference|keys|dimensionValues|dimensionHeaders|metricHeaders|fieldMask|kind|version|date|startDate|endDate|createTime|updateTime|year|month|day)$/u;
 const NOMBRE_TEXTE = /^-?\d+(?:\.\d+)?$/u;
 
 function nombre(v: unknown): number | null {
@@ -232,9 +232,21 @@ function nombre(v: unknown): number | null {
  * (`costMicros`, et `averageCpc` qui l'est aussi chez Google Ads) sont aussi retenus en unités. Pour chaque colonne
  * d'un tableau (même chemin, indices effacés), la somme et la moyenne sont ajoutées.
  */
-export function extraireChiffres(structures: readonly unknown[], max = 2000): Chiffre[] {
+export function extraireChiffres(structures: readonly unknown[], max = 2000, argumentsAppel: readonly unknown[] = []): Chiffre[] {
+  // Revue E2-A : une valeur qui figure dans les arguments signés de l'appel (nombre ou chaîne numérique,
+  // à n'importe quelle profondeur) peut n'être que l'écho de la saisie de l'agent : jamais un chiffre.
+  const saisies = new Set<number>();
+  const collecter = (v: unknown, profondeur: number) => {
+    if (profondeur > 12) return;
+    const n = nombre(v);
+    if (n !== null) { saisies.add(n); return; }
+    if (Array.isArray(v)) for (const x of v) collecter(x, profondeur + 1);
+    else if (estObjet(v)) for (const x of Object.values(v)) collecter(x, profondeur + 1);
+  };
+  for (const a of argumentsAppel) collecter(a, 0);
   const parChemin = new Map<string, number[]>();
   const ajouter = (chemin: string, valeur: number) => {
+    if (saisies.has(valeur)) return;
     const liste = parChemin.get(chemin) ?? [];
     liste.push(valeur);
     parChemin.set(chemin, liste);
@@ -259,6 +271,7 @@ export function extraireChiffres(structures: readonly unknown[], max = 2000): Ch
   const chiffres: Chiffre[] = [];
   const vus = new Set<string>();
   const pousser = (valeur: number, chemin: string) => {
+    if (saisies.has(valeur)) return;
     const cle = `${valeur}`;
     if (vus.has(cle) || chiffres.length >= max) return;
     vus.add(cle);

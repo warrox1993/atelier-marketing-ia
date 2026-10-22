@@ -64,9 +64,11 @@ Requêtes authentifiées, toujours sous la forme exacte de la section « Appeler
 
 ## Connexions de la passerelle marketing
 
-Tes connexions : HubSpot (CRM) (`crm`), Pipedrive (`pipedrive`), Odoo (`odoo`), Teamleader (`teamleader`), en lecture, écriture seulement sur accord. Elles t'arrivent comme outils MCP
+Tes connexions : HubSpot (CRM) (`crm`), Pipedrive (`pipedrive`), Odoo (`odoo`), Teamleader (`teamleader`), e-mailing (`emailing`), en lecture, écriture seulement sur accord. Elles t'arrivent comme outils MCP
 du serveur `paperclip-assigned` (noms en `mcp__paperclip-assigned__…`), seulement quand l'humain a connecté
 le service dans Paperclip (rubrique Paramètres de l'atelier, bouton « Connecter »).
+
+Ta connexion `emailing` (listmonk local) sert la relation par e-mail : `lister_listes`, `creer_liste`, `ajouter_abonnes` (chaque abonné porte la preuve de son consentement : date, source et texte accepté ; sans elle l'appel entier est refusé), `creer_campagne_brouillon` (toujours un brouillon, désinscription obligatoire) et `etat_campagne`. Aucun de ces outils n'envoie : l'envoi est une décision humaine, en deux appels. D'abord `POST /api/plugins/atelier.marketing-ia/api/emailing/demander-envoi` avec `{"companyId": "<entreprise>", "issueId": "<tâche>", "campagneId": <numéro>, "empreinte": "<empreinte>"}` (tu ne déclares ni sujet, ni liste, ni nombre de destinataires : le plugin les lit lui-même dans la campagne, chez la passerelle, et refuse si l'empreinte ne correspond plus au contenu) : c'est le plugin lui-même qui pose sur la tâche la carte de confirmation (sujet, listes, nombre réel d'abonnés, empreintes, lus dans la campagne), avec un texte qu'il construit (tu ne rédiges jamais cette carte et tu n'en poses aucune toi-même : une carte posée par toi est refusée). Puis, quand un humain a accepté cette carte, `POST /api/plugins/atelier.marketing-ia/api/emailing/envoyer` avec `{"companyId": "<entreprise>", "issueId": "<tâche>", "campagneId": <numéro>, "empreinte": "<empreinte>"}` ; la carte ne sert qu'une fois, seulement pour les destinataires que l'humain a vus (abonnés ajoutés ou retirés après son accord : envoi refusé, redemande la confirmation), et si la réponse dit « issue inconnue » tu ne renvoies rien : vérifie d'abord `etat_campagne` ; la ligne `[envoi-emailing:…]` du brouillon n'est plus à citer nulle part. Tant que le SMTP réel n'est pas configuré, l'envoi va à Mailpit (« envoi de test, rien n'est parti »).
 
 1. Appelle d'abord l'outil `atelier_identite` de chaque connexion que tu utilises : il donne le mode
    (`demonstration` ou `reel`), le compte et la propriété connectés.
@@ -491,4 +493,42 @@ Exemple minimal valide :
 
 ```json
 {"question":"exemple"}
+```
+
+### POST /emailing/demander-envoi
+
+Clé : `emailing.demander_envoi`. Demande l'envoi d'une campagne e-mail : le PLUGIN crée lui-même, sur la tâche issueId, la carte request_confirmation (texte construit côté serveur, jamais ré...
+
+Aucun champ en plus de ceux listés (les champs inconnus sont refusés).
+
+| Champ | Type | Obligatoire | Bornes |
+| --- | --- | --- | --- |
+| `companyId` | uuid | oui |  |
+| `issueId` | uuid | oui |  |
+| `campagneId` | entier | oui | 1 à ∞ |
+| `empreinte` | texte | oui | motif `^[0-9a-f]{64}$` |
+
+Exemple minimal valide :
+
+```json
+{"companyId":"123e4567-e89b-42d3-a456-426614174000","issueId":"123e4567-e89b-42d3-a456-426614174001","campagneId":12,"empreinte":"0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"}
+```
+
+### POST /emailing/envoyer
+
+Clé : `emailing.envoyer`. Envoie une campagne e-mail (brouillon créé par l'outil creer_campagne_brouillon de la passerelle) SEULEMENT si la carte créée par le plugin via emailing.dema...
+
+Aucun champ en plus de ceux listés (les champs inconnus sont refusés).
+
+| Champ | Type | Obligatoire | Bornes |
+| --- | --- | --- | --- |
+| `companyId` | uuid | oui |  |
+| `issueId` | uuid | oui |  |
+| `campagneId` | entier | oui | 1 à ∞ |
+| `empreinte` | texte | oui | motif `^[0-9a-f]{64}$` |
+
+Exemple minimal valide :
+
+```json
+{"companyId":"123e4567-e89b-42d3-a456-426614174000","issueId":"123e4567-e89b-42d3-a456-426614174001","campagneId":12,"empreinte":"0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"}
 ```

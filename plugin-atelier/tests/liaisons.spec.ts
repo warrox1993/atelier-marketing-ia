@@ -789,9 +789,19 @@ async function enAttente(m: ReturnType<typeof monde>) {
   return (r.corps as Ligne).liaison as { id: string };
 }
 
-describe("manifeste : aucune capacité ajoutée", () => {
-  it("n'ajoute pas issue.interactions.create (une capacité de plus bloquerait la mise à jour des instances)", () => {
-    expect(manifest.capabilities).not.toContain("issue.interactions.create");
+describe("manifeste : création de cartes réservée à l'envoi e-mailing", () => {
+  // Décision du 22/10/2026 (revue de sécurité, constat élevé n° 1) : le plugin crée lui-même la carte de
+  // confirmation d'un envoi e-mailing, pour que son texte ne soit jamais écrit par un agent. Ajouter cette
+  // capacité met le plugin en « upgrade_pending » une fois : l'opérateur l'approuve à la mise à jour.
+  it("issue.interactions.create présente, et seule la route emailing.demander_envoi crée une carte", async () => {
+    expect(manifest.capabilities).toContain("issue.interactions.create");
+    const fs = await import("node:fs");
+    const path = await import("node:path");
+    const dossier = path.resolve(__dirname, "../src/serveur");
+    const appelants = fs.readdirSync(dossier, { recursive: true })
+      .map(String)
+      .filter((f) => f.endsWith(".ts") && fs.readFileSync(path.join(dossier, f), "utf8").includes("requestConfirmation("));
+    expect(appelants).toEqual(["services-emailing.ts"]);
   });
 });
 

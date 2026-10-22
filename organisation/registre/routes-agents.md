@@ -496,6 +496,123 @@ Exemple minimal valide :
 {"companyId":"123e4567-e89b-42d3-a456-426614174000","statut":"verifie","justification":"Page officielle consultée","sources":["https://exemple.be/page"]}
 ```
 
+## POST /experiences
+
+Clé : `experiences.creer`. Ouvre une expérience A/B (hypothèse, métrique de type taux, 2 à 4 variantes dont la première est la référence, essais minimaux par variante, durée maximale, ...
+
+Aucun champ en plus de ceux listés (les champs inconnus sont refusés).
+
+Règle croisée : `variantes` : 2 à 4, la première est la référence ; `alpha` vaut 0,05 par défaut. Tu dois être l'assigné de la tâche `issueId`.
+
+| Champ | Type | Obligatoire | Bornes |
+| --- | --- | --- | --- |
+| `companyId` | uuid | oui |  |
+| `issueId` | uuid | oui |  |
+| `campagneId` | uuid | non | peut valoir null |
+| `hypothese` | texte | oui | 1 à 600 caractères |
+| `metrique` | texte | oui | 1 à 120 caractères |
+| `variantes` | tableau d'objets | oui | 2 à 4 éléments |
+| `variantes[].nom` | texte | oui | 1 à 80 caractères ; motif `^[^\u0000-\u001f\u007f-\u009f\u2028\u2029]*$` |
+| `variantes[].description` | texte | oui | 1 à 500 caractères |
+| `conditionArret` | objet | oui |  |
+| `conditionArret.essaisMinParVariante` | entier | oui | 1 à 1000000000 |
+| `conditionArret.dureeMaxJours` | entier | oui | 1 à 365 |
+| `alpha` | nombre | non | -∞ à 0.1 ; défaut 0.05 |
+
+Exemple minimal valide :
+
+```json
+{"companyId":"123e4567-e89b-42d3-a456-426614174000","issueId":"123e4567-e89b-42d3-a456-426614174001","hypothese":"Un objet plus court augmente le taux de réponse","metrique":"taux de réponse","variantes":[{"nom":"Actuel","description":"Objet habituel"},{"nom":"Court","description":"Objet de moins de 40 caractères"}],"conditionArret":{"essaisMinParVariante":200,"dureeMaxJours":30}}
+```
+
+## POST /experiences/resultats
+
+Clé : `experiences.resultats`. Dépose les résultats (essais et succès) d'une ou plusieurs variantes d'une expérience en cours.
+
+Aucun champ en plus de ceux listés (les champs inconnus sont refusés).
+
+Règle croisée : Un agent cite des chiffres d'une réponse signée déjà déposée (`sourceId` et `chemin` tels que listés dans les chiffres retenus de la source) et ne saisit JAMAIS de nombres ; seul un humain saisit `{variante, essais, succes}`. Ne pas mélanger les deux formes pour une variante.
+
+| Champ | Type | Obligatoire | Bornes |
+| --- | --- | --- | --- |
+| `companyId` | uuid | oui |  |
+| `experienceId` | uuid | oui |  |
+| `resultats` | tableau d'objets | oui | 1 à 4 éléments |
+| `resultats[]` | une des variantes ci-dessous | oui |  |
+| `resultats[]{variante}` | objet | oui |  |
+| `resultats[]{variante}.variante` | texte | oui | 1 à 80 caractères ; motif `^[^\u0000-\u001f\u007f-\u009f\u2028\u2029]*$` |
+| `resultats[]{variante}.essais` | entier | oui | 0 à ∞ |
+| `resultats[]{variante}.succes` | entier | oui | 0 à ∞ |
+| `resultats[]{variante}` | objet | oui |  |
+| `resultats[]{variante}.variante` | texte | oui | 1 à 80 caractères ; motif `^[^\u0000-\u001f\u007f-\u009f\u2028\u2029]*$` |
+| `resultats[]{variante}.essais` | objet | oui |  |
+| `resultats[]{variante}.essais.sourceId` | uuid | oui |  |
+| `resultats[]{variante}.essais.chemin` | texte | oui | 1 à 300 caractères |
+| `resultats[]{variante}.succes` | objet | oui |  |
+| `resultats[]{variante}.succes.sourceId` | uuid | oui |  |
+| `resultats[]{variante}.succes.chemin` | texte | oui | 1 à 300 caractères |
+
+Exemple minimal valide :
+
+```json
+{"companyId":"123e4567-e89b-42d3-a456-426614174000","experienceId":"123e4567-e89b-42d3-a456-426614174002","resultats":[{"variante":"Actuel","essais":{"sourceId":"123e4567-e89b-42d3-a456-426614174003","chemin":"envois"},"succes":{"sourceId":"123e4567-e89b-42d3-a456-426614174003","chemin":"reponses"}}]}
+```
+
+## POST /experiences/cloturer
+
+Clé : `experiences.cloturer`. Clôt l'expérience : le serveur calcule et fige le verdict (test z de deux proportions, Bonferroni au-delà de deux variantes, intervalle de confiance à 95 % d...
+
+Aucun champ en plus de ceux listés (les champs inconnus sont refusés).
+
+| Champ | Type | Obligatoire | Bornes |
+| --- | --- | --- | --- |
+| `companyId` | uuid | oui |  |
+| `experienceId` | uuid | oui |  |
+
+Exemple minimal valide :
+
+```json
+{"companyId":"123e4567-e89b-42d3-a456-426614174000","experienceId":"123e4567-e89b-42d3-a456-426614174000"}
+```
+
+## POST /emailing/demander-envoi
+
+Clé : `emailing.demander_envoi`. Demande l'envoi d'une campagne e-mail : le PLUGIN crée lui-même, sur la tâche issueId, la carte request_confirmation (texte construit côté serveur, jamais ré...
+
+Aucun champ en plus de ceux listés (les champs inconnus sont refusés).
+
+| Champ | Type | Obligatoire | Bornes |
+| --- | --- | --- | --- |
+| `companyId` | uuid | oui |  |
+| `issueId` | uuid | oui |  |
+| `campagneId` | entier | oui | 1 à ∞ |
+| `empreinte` | texte | oui | motif `^[0-9a-f]{64}$` |
+
+Exemple minimal valide :
+
+```json
+{"companyId":"123e4567-e89b-42d3-a456-426614174000","issueId":"123e4567-e89b-42d3-a456-426614174001","campagneId":12,"empreinte":"0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"}
+```
+
+## POST /emailing/envoyer
+
+Clé : `emailing.envoyer`. Envoie une campagne e-mail (brouillon créé par l'outil creer_campagne_brouillon de la passerelle) SEULEMENT si la carte créée par le plugin via emailing.dema...
+
+Aucun champ en plus de ceux listés (les champs inconnus sont refusés).
+
+| Champ | Type | Obligatoire | Bornes |
+| --- | --- | --- | --- |
+| `companyId` | uuid | oui |  |
+| `issueId` | uuid | oui |  |
+| `campagneId` | entier | oui | 1 à ∞ |
+| `empreinte` | texte | oui | motif `^[0-9a-f]{64}$` |
+
+Exemple minimal valide :
+
+```json
+{"companyId":"123e4567-e89b-42d3-a456-426614174000","issueId":"123e4567-e89b-42d3-a456-426614174001","campagneId":12,"empreinte":"0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"}
+```
+
 ## POST /taches/:issueId/liaisons
 
 Clé : `liaison.demander`. Demande d'un service à un autre par le bureau de liaison : tâche d'origine = celle du chemin (corps {tacheOrigineId, serviceCible, objet, question, extraits}).

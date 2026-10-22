@@ -1,0 +1,43 @@
+[Unit]
+Description=Serveur des pages de destination de l'Atelier marketing IA (captation de prospects, écoute sur 127.0.0.1:3195 seulement)
+After=network-online.target atelier-umami.service
+Wants=network-online.target
+StartLimitIntervalSec=0
+
+# Installation (une fois) :
+#   cd ~/Projets/atelier-marketing-ia/passerelle && npm run build        # produit dist/src/pages/demarrer.js
+#   umask 077; mkdir -p ~/.config/atelier
+#   openssl rand -hex 32 > ~/.config/atelier/pages-secret                # secret anti-CSRF : fichier 0600, JAMAIS dans le dépôt
+#   chmod 600 ~/.config/atelier/pages-secret
+#   install -m 644 scripts/systemd/atelier-pages.service ~/.config/systemd/user/
+#   systemctl --user daemon-reload && systemctl --user enable --now atelier-pages
+# Réglages (fichier facultatif ~/.config/atelier/pages.env, chemins et adresses seulement, voir docs/captation.md) :
+#   PAGES_URL_PUBLIQUE, PAGES_HOTES_AUTORISES, PAGES_COOKIE_SECURISE, PAGES_CONFIANCE_PROXY, ATELIER_CLE_BOARD_FICHIER, PAGES_INDEXABLE.
+# Contrôle : « curl -s http://127.0.0.1:3195/sante » et « ss -ltnp | grep 3195 ».
+#
+# Choix de sécurité :
+#   - écoute sur la boucle locale seulement : AUCUNE mise en ligne publique ; publier = tunnel ou proxy inverse vers ce port (docs/captation.md) ;
+#   - le serveur ne garde aucune donnée personnelle : chaque envoi part, coordonnées en clair seulement pendant la requête, vers la route
+#     du plugin de l'atelier (chiffrement à la réception) ; il ne garde que le statut et l'identifiant du prospect créé ;
+#   - base des pages : ~/.local/share/atelier/pages/pages.sqlite (partagée avec la passerelle, qui crée les pages).
+
+[Service]
+Type=simple
+EnvironmentFile=-%h/.config/atelier/pages.env
+Environment=PAGES_SECRET_FICHIER=%h/.config/atelier/pages-secret
+Environment=PAGES_UMAMI_FICHIER=%h/.config/atelier/umami-admin.env
+WorkingDirectory=%h/Projets/atelier-marketing-ia/passerelle
+ExecStart=/usr/bin/env node dist/src/pages/demarrer.js
+Restart=on-failure
+RestartSec=10
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=%h/.local/share/atelier/pages
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=atelier-pages
+
+[Install]
+WantedBy=default.target

@@ -1,0 +1,36 @@
+[Unit]
+Description=PostgreSQL 18.6 de listmonk (Atelier marketing IA, Podman rootless, réseau dédié, aucun port publié)
+Documentation=https://www.postgresql.org/docs/18/
+After=network-online.target
+Wants=network-online.target
+
+# Installé par scripts/emailing-installer.sh (secrets, images, unités, démarrage). Choix de sécurité :
+#   - base DANS un réseau Podman dédié (atelier-emailing) et AUCUN port publié sur l'hôte : seuls les conteneurs de ce réseau
+#     (listmonk) la joignent ;
+#   - mot de passe lu dans ~/.config/atelier/emailing-db.mdp (0600), passé par un fichier d'environnement temporaire 0600 du
+#     répertoire d'exécution, jamais dans la ligne de commande ni dans le dépôt ;
+#   - données dans instance/emailing/pg (dossier ignoré par git), propriétaire = l'utilisateur (userns keep-id) ;
+#   - image épinglée sur la version exacte, jamais « latest » ; 512 Mo de mémoire au plus.
+
+[Service]
+Type=simple
+ExecStartPre=-/usr/bin/podman network create atelier-emailing
+ExecStartPre=-/usr/bin/podman rm -f atelier-emailing-db
+ExecStartPre=/bin/sh -c 'umask 077; mkdir -p %h/Projets/atelier-marketing-ia/instance/emailing/pg; printf "POSTGRES_PASSWORD=%%s\\n" "$(cat %h/.config/atelier/emailing-db.mdp)" > %t/atelier-emailing-db.env'
+ExecStart=/usr/bin/podman run --rm --name atelier-emailing-db --network atelier-emailing --memory=512m \
+  --userns=keep-id --user %U:%G --env-file %t/atelier-emailing-db.env \
+  -e POSTGRES_USER=listmonk -e POSTGRES_DB=listmonk \
+  -v %h/Projets/atelier-marketing-ia/instance/emailing/pg:/var/lib/postgresql \
+  docker.io/library/postgres:18.6
+ExecStop=/usr/bin/podman stop -t 20 atelier-emailing-db
+ExecStopPost=-/bin/rm -f %t/atelier-emailing-db.env
+Restart=on-failure
+RestartSec=15
+TimeoutStartSec=120
+NoNewPrivileges=yes
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=atelier-emailing-db
+
+[Install]
+WantedBy=default.target

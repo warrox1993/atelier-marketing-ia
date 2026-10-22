@@ -11,6 +11,9 @@ import { Chargement, EnTete, EtatErreur, Section } from "../composants.js";
 import { dateSeule, euros, nombre } from "../format.js";
 import { appelRoute } from "../routes-prospection.js";
 import { STYLES_RAPPORT } from "../styles-rapport.js";
+import { STYLES_TABLEAU } from "../styles-tableau.js";
+import { ListeSources, TableIndicateurs } from "../composants/tableau-direction.js";
+import { useTableauDirection } from "../tableau-lecture.js";
 
 const NB_MOIS_PROPOSES = 24;
 
@@ -87,6 +90,9 @@ export function VueRapport() {
     <>
       <style href="atelier-rapport" precedence="default">
         {STYLES_RAPPORT}
+      </style>
+      <style href="atelier-tableau" precedence="default">
+        {STYLES_TABLEAU}
       </style>
       <div className="atl-rapport-non-imprimable">
         <EnTete titre="Rapport du mois" description="Ce que l'équipe a fait et obtenu sur le mois, avec la source de chaque chiffre. Rien n'est estimé : ce qui n'est pas mesuré est écrit comme tel." />
@@ -194,6 +200,37 @@ function Contenu({ rapport: r }: { rapport: RapportMensuel }) {
         )}
         <p className="atl-rapport-note">Source : {r.enAttenteClient.source}. {r.enAttenteClient.note}</p>
       </Section>
+      <SectionsDirection mois={r.mois} />
     </article>
+  );
+}
+
+/**
+ * Suite du rapport, remplie par les mêmes sources que le tableau de direction : entonnoir, missions, décisions,
+ * captation et e-mailing, comparés au mois précédent ; puis, sur une page à part, ce qu'il faudrait connecter.
+ * Si la lecture échoue, le rapport reste complet : seule cette suite le dit.
+ */
+function SectionsDirection({ mois }: { mois: string }) {
+  const { lecture } = useTableauDirection(mois);
+  if (lecture.etat === "chargement") return <p className="atl-rapport-note">Chargement de la suite du rapport…</p>;
+  if (lecture.etat === "erreur") return <p className="atl-rapport-non-mesure">La suite du rapport (entonnoir, missions, décisions) n'a pas pu être lue : non mesuré.</p>;
+  const t = lecture.tableau;
+  return (
+    <>
+      <Section titre="Entonnoir de prospection">
+        <TableIndicateurs titre="Entonnoir de prospection" indicateurs={t.entonnoir} />
+      </Section>
+      <Section titre="Missions et décisions">
+        <TableIndicateurs titre="Missions et décisions" indicateurs={[t.missions.enCours, t.missions.terminees, t.missions.dureeMoyenne, t.decisions.enAttente, t.decisions.delaiMoyen, t.decisions.delaiMedian]} />
+      </Section>
+      <Section titre="Captation et e-mailing">
+        <TableIndicateurs titre="Captation et e-mailing" indicateurs={t.captation} />
+      </Section>
+      <div className="atl-rapport-connecter">
+        <Section titre="Ce qu'il faudrait connecter pour mesurer davantage">
+          <ListeSources sources={t.sources} />
+        </Section>
+      </div>
+    </>
   );
 }

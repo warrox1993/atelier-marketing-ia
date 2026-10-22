@@ -74,6 +74,7 @@ export const RUBRIQUES_NAV: ReadonlyArray<RubriqueNav> = [
       { cle: "calendrier", libelle: "Calendrier", vue: "calendrier" },
       { cle: "resultats", libelle: "Résultats", vue: "resultats" },
       { cle: "equipe", libelle: "Équipe", vue: "equipe" },
+      { cle: "tableau", libelle: "Tableau de direction", vue: "tableau" },
       { cle: "rapport", libelle: "Rapport du mois", vue: "rapport" },
     ],
   },

@@ -1,0 +1,438 @@
+From 8a68087d06c38a421917208aae750553a6041eb9 Mon Sep 17 00:00:00 2001
+From: Jean-Baptiste Dhondt <114347858+warrox1993@users.noreply.github.com>
+Date: Thu, 22 Oct 2026 21:18:54 +0200
+Subject: [PATCH] =?UTF-8?q?fix(sandbox):=20exiger=20un=20jeton=20Bearer=20?=
+ =?UTF-8?q?pour=20joindre=20l'API=20Paperclip=20depuis=20le=20bac=20=C3=A0?=
+ =?UTF-8?q?=20sable?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+En mode local_trusted, une requête sans en-tête Authorization Bearer est traitée
+comme l'administrateur local-board. Le mandataire réseau du bac à sable relayait
+les en-têtes tels quels (et ouvrait un tunnel CONNECT brut vers l'API) : un agent
+confiné pouvait donc joindre l'API sans son jeton.
+
+- nouvelle option networkProtectedOrigins, transmise explicitement par les adaptateurs
+  claude-local et codex-local (PAPERCLIP_API_URL) ;
+- toute requête relayée vers cette origine doit porter un seul en-tête authorization
+  conforme à /^Bearer\s+\S+$/i, sinon 403 {"error":"sandbox_api_token_required"} sans
+  contacter le serveur ; le mandataire n'ajoute jamais de jeton ;
+- CONNECT vers l'origine protégée (http) : plus de tunnel brut, la socket est confiée
+  à un http.Server interne qui applique le même contrôle via le même code de relais ;
+  CONNECT vers une origine protégée en https refusé (tunnel TLS incontrôlable) ;
+- CONNECT vers les autres hôtes de confiance : inchangé ;
+- tests vitest dédiés (HTTP direct, CONNECT, hôtes inchangés).
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ ...local-process-sandbox.api-protegee.test.ts | 205 ++++++++++++++++++
+ .../src/local-process-sandbox.ts              | 101 ++++++++-
+ .../claude-local/src/server/execute.ts        |   1 +
+ .../codex-local/src/server/execute.ts         |   1 +
+ 4 files changed, 300 insertions(+), 8 deletions(-)
+ create mode 100644 packages/adapter-utils/src/local-process-sandbox.api-protegee.test.ts
+
+diff --git a/packages/adapter-utils/src/local-process-sandbox.api-protegee.test.ts b/packages/adapter-utils/src/local-process-sandbox.api-protegee.test.ts
+new file mode 100644
+index 000000000..32781d4d4
+--- /dev/null
++++ b/packages/adapter-utils/src/local-process-sandbox.api-protegee.test.ts
+@@ -0,0 +1,205 @@
++import http from "node:http";
++import net from "node:net";
++import { afterEach, describe, expect, it } from "vitest";
++import { buildLocalProcessSandboxSpawnTarget } from "./local-process-sandbox.js";
++
++// Tests de l'origine protégée : l'API Paperclip n'est joignable depuis le bac à sable
++// qu'avec un en-tête Authorization: Bearer, par HTTP direct comme à travers CONNECT.
++
++const aNettoyer: Array<() => Promise<void>> = [];
++afterEach(async () => {
++  for (const nettoyer of aNettoyer.splice(0)) await nettoyer();
++});
++
++interface Banc {
++  socketPath: string;
++  apiPort: number;
++  autrePort: number;
++  appelsApi: Array<{ authorization: string | string[] | undefined; url: string | undefined }>;
++  appelsAutre: number;
++}
++
++async function ecouter(serveur: http.Server): Promise<number> {
++  await new Promise<void>((resolve) => serveur.listen(0, "127.0.0.1", resolve));
++  const adresse = serveur.address();
++  if (!adresse || typeof adresse === "string") throw new Error("Adresse TCP attendue.");
++  aNettoyer.push(() => new Promise<void>((resolve) => {
++    serveur.closeAllConnections?.();
++    serveur.close(() => resolve());
++  }));
++  return adresse.port;
++}
++
++async function monterBanc(): Promise<Banc> {
++  const banc = { appelsApi: [], appelsAutre: 0 } as unknown as Banc;
++  banc.appelsApi = [];
++  banc.appelsAutre = 0;
++  const api = http.createServer((requete, reponse) => {
++    banc.appelsApi.push({ authorization: requete.headers.authorization, url: requete.url });
++    reponse.end("reponse-api");
++  });
++  const autre = http.createServer((_requete, reponse) => {
++    banc.appelsAutre += 1;
++    reponse.end("reponse-autre");
++  });
++  banc.apiPort = await ecouter(api);
++  banc.autrePort = await ecouter(autre);
++  const cible = await buildLocalProcessSandboxSpawnTarget({
++    executable: process.execPath,
++    args: ["-e", "process.exit(0)"],
++    cwd: "/tmp",
++    options: {
++      workspaceDir: "/tmp",
++      networkScope: "allowlist",
++      networkAllowlist: [`127.0.0.1:${banc.autrePort}`],
++      networkTrustedUrls: [`http://127.0.0.1:${banc.apiPort}/api`],
++      networkProtectedOrigins: [`http://127.0.0.1:${banc.apiPort}/api`],
++    },
++  });
++  aNettoyer.push(async () => { await cible.cleanup?.(); });
++  banc.socketPath = cible.args[cible.args.indexOf("--") + 3]!;
++  return banc;
++}
++
++interface Reponse { statut: number; corps: string }
++
++/** Requête HTTP brute sur la socket du mandataire (permet de forcer des en-têtes en double). */
++function requeteBrute(socketPath: string, texte: string, attendreFin = true): Promise<string> {
++  return new Promise((resolve, reject) => {
++    const socket = net.createConnection(socketPath, () => socket.write(texte));
++    let recu = "";
++    socket.setEncoding("utf8");
++    socket.on("data", (morceau) => { recu += morceau; });
++    socket.on("end", () => resolve(recu));
++    socket.on("error", reject);
++    if (!attendreFin) setTimeout(() => { socket.destroy(); resolve(recu); }, 300);
++  });
++}
++
++function analyser(brut: string): Reponse {
++  const statut = Number(/^HTTP\/1\.1 (\d+)/.exec(brut)?.[1] ?? 0);
++  return { statut, corps: brut.split("\r\n\r\n").slice(1).join("\r\n\r\n") };
++}
++
++function httpDirect(banc: Banc, entetes: string[]): Promise<Reponse> {
++  const url = `http://127.0.0.1:${banc.apiPort}/api/issues/1`;
++  const texte = [`GET ${url} HTTP/1.1`, `Host: 127.0.0.1:${banc.apiPort}`, ...entetes, "Connection: close", "", ""].join("\r\n");
++  return requeteBrute(banc.socketPath, texte).then(analyser);
++}
++
++/** CONNECT vers `cible`, puis une requête relative à travers le tunnel (Connection: close pour finir proprement). */
++function viaConnect(banc: Banc, cible: string, entetes: string[]): Promise<{ connect: string; reponse: Reponse }> {
++  return new Promise((resolve, reject) => {
++    const socket = net.createConnection(banc.socketPath, () => {
++      socket.write(`CONNECT ${cible} HTTP/1.1\r\nHost: ${cible}\r\n\r\n`);
++    });
++    let recu = "";
++    let ligneConnect: string | null = null;
++    let requeteEnvoyee = false;
++    socket.setEncoding("utf8");
++    socket.on("data", (morceau) => {
++      recu += morceau;
++      if (!requeteEnvoyee && recu.includes("\r\n\r\n")) {
++        if (!recu.startsWith("HTTP/1.1 200")) return;
++        ligneConnect = recu.split("\r\n")[0]!;
++        recu = recu.slice(recu.indexOf("\r\n\r\n") + 4);
++        requeteEnvoyee = true;
++        socket.write(["GET /api/issues/1 HTTP/1.1", `Host: ${cible}`, ...entetes, "Connection: close", "", ""].join("\r\n"));
++      }
++    });
++    socket.on("end", () => {
++      if (ligneConnect === null) resolve({ connect: recu.split("\r\n")[0] ?? "", reponse: analyser(recu) });
++      else resolve({ connect: ligneConnect, reponse: analyser(recu) });
++    });
++    socket.on("error", reject);
++  });
++}
++
++describe.runIf(process.platform === "linux")("origine protégée du mandataire de bac à sable", () => {
++  it("refuse en 403 une requête HTTP sans Authorization, sans contacter le serveur", async () => {
++    const banc = await monterBanc();
++    const reponse = await httpDirect(banc, []);
++    expect(reponse.statut).toBe(403);
++    expect(JSON.parse(reponse.corps)).toEqual({ error: "sandbox_api_token_required" });
++    expect(banc.appelsApi).toHaveLength(0);
++  });
++
++  it.each([
++    ["schéma Basic", ["Authorization: Basic x"]],
++    ["valeur vide", ["Authorization:"]],
++    ["schéma Token", ["Authorization: Token abc"]],
++    ["Bearer sans jeton", ["Authorization: Bearer"]],
++    ["liste de valeurs", ["Authorization: Bearer abc, Bearer def"]],
++    ["deux en-têtes", ["Authorization: Bearer abc", "Authorization: Bearer def"]],
++    ["deux en-têtes (casse mixte)", ["Authorization: Bearer abc", "authorization: Bearer def"]],
++  ])("refuse en 403 : %s", async (_nom, entetes) => {
++    const banc = await monterBanc();
++    const reponse = await httpDirect(banc, entetes);
++    expect(reponse.statut).toBe(403);
++    expect(JSON.parse(reponse.corps)).toEqual({ error: "sandbox_api_token_required" });
++    expect(banc.appelsApi).toHaveLength(0);
++  });
++
++  it("relaie une requête HTTP avec Bearer, en-tête transmis intact", async () => {
++    const banc = await monterBanc();
++    const reponse = await httpDirect(banc, ["Authorization: Bearer abc"]);
++    expect(reponse.statut).toBe(200);
++    expect(reponse.corps).toBe("reponse-api");
++    expect(banc.appelsApi).toEqual([{ authorization: "Bearer abc", url: "/api/issues/1" }]);
++  });
++
++  it("CONNECT vers l'API puis requête sans jeton : 403, serveur non contacté", async () => {
++    const banc = await monterBanc();
++    const { connect, reponse } = await viaConnect(banc, `127.0.0.1:${banc.apiPort}`, []);
++    expect(connect).toBe("HTTP/1.1 200 Connection established");
++    expect(reponse.statut).toBe(403);
++    expect(JSON.parse(reponse.corps)).toEqual({ error: "sandbox_api_token_required" });
++    expect(banc.appelsApi).toHaveLength(0);
++  });
++
++  it("CONNECT vers l'API puis deux en-têtes Authorization : 403", async () => {
++    const banc = await monterBanc();
++    const { reponse } = await viaConnect(banc, `127.0.0.1:${banc.apiPort}`, ["Authorization: Bearer a", "Authorization: Bearer b"]);
++    expect(reponse.statut).toBe(403);
++    expect(banc.appelsApi).toHaveLength(0);
++  });
++
++  it("CONNECT vers l'API puis requête avec Bearer : 200, en-tête transmis intact", async () => {
++    const banc = await monterBanc();
++    const { connect, reponse } = await viaConnect(banc, `127.0.0.1:${banc.apiPort}`, ["Authorization: Bearer abc"]);
++    expect(connect).toBe("HTTP/1.1 200 Connection established");
++    expect(reponse.statut).toBe(200);
++    expect(reponse.corps).toBe("reponse-api");
++    expect(banc.appelsApi).toEqual([{ authorization: "Bearer abc", url: "/api/issues/1" }]);
++  });
++
++  it("dans le tunnel, l'en-tête Host n'oriente pas la requête vers une autre origine", async () => {
++    const banc = await monterBanc();
++    const { reponse } = await viaConnect(banc, `127.0.0.1:${banc.apiPort}`, [`Host: 127.0.0.1:${banc.autrePort}`, "Authorization: Bearer abc"]);
++    expect(reponse.statut).toBe(200);
++    expect(banc.appelsApi).toHaveLength(1);
++    expect(banc.appelsAutre).toBe(0);
++  });
++
++  it("CONNECT vers un autre hôte de confiance : tunnel brut inchangé, sans contrôle du jeton", async () => {
++    const banc = await monterBanc();
++    const { connect, reponse } = await viaConnect(banc, `127.0.0.1:${banc.autrePort}`, []);
++    expect(connect).toBe("HTTP/1.1 200 Connection Established");
++    expect(reponse.statut).toBe(200);
++    expect(reponse.corps).toBe("reponse-autre");
++    expect(banc.appelsAutre).toBe(1);
++  });
++
++  it("hôte non autorisé : refus inchangé (HTTP et CONNECT)", async () => {
++    const banc = await monterBanc();
++    const http403 = analyser(await requeteBrute(
++      banc.socketPath,
++      "GET http://example.com/ HTTP/1.1\r\nHost: example.com\r\nConnection: close\r\n\r\n",
++    ));
++    expect(http403.statut).toBe(403);
++    expect(http403.corps).toContain("network_target_denied");
++    const connect = analyser(await requeteBrute(banc.socketPath, "CONNECT example.com:443 HTTP/1.1\r\nHost: example.com:443\r\n\r\n"));
++    expect(connect.statut).toBe(403);
++    expect(connect.corps).toContain("network_target_denied");
++  });
++});
+diff --git a/packages/adapter-utils/src/local-process-sandbox.ts b/packages/adapter-utils/src/local-process-sandbox.ts
+index 3da6f2fa2..77ee3d3eb 100644
+--- a/packages/adapter-utils/src/local-process-sandbox.ts
++++ b/packages/adapter-utils/src/local-process-sandbox.ts
+@@ -28,6 +28,13 @@ export interface LocalProcessSandboxOptions {
+   networkScope?: LocalProcessNetworkScope | null;
+   networkAllowlist?: string[];
+   networkTrustedUrls?: string[];
++  /**
++   * URL de l'API Paperclip (origine protégée). Toute requête relayée vers cette origine
++   * doit porter un en-tête `Authorization: Bearer <jeton>`, sinon le mandataire répond 403
++   * sans contacter le serveur (en mode local_trusted, une requête sans Bearer serait
++   * traitée comme l'administrateur). Les URL qui ne sont pas http(s) sont ignorées.
++   */
++  networkProtectedOrigins?: string[];
+   command?: string;
+ }
+ 
+@@ -252,9 +259,34 @@ function connectProxyError(code: string, message: string): string {
+   ].join("\r\n");
+ }
+ 
++const BEARER_AUTHORIZATION = /^Bearer\s+\S+$/i;
++
++function writeSandboxTokenRequired(response: http.ServerResponse): void {
++  const body = `${JSON.stringify({ error: "sandbox_api_token_required" })}\n`;
++  response.writeHead(403, {
++    "Content-Type": "application/json; charset=utf-8",
++    "Content-Length": Buffer.byteLength(body),
++    Connection: "close",
++  }).end(body);
++}
++
++/** Exige exactement un en-tête `authorization` de la forme `Bearer <jeton>` (rawHeaders : Node écarte les doublons). */
++function hasSingleBearerAuthorization(request: http.IncomingMessage): boolean {
++  let count = 0;
++  let value = "";
++  for (let index = 0; index < request.rawHeaders.length; index += 2) {
++    if (request.rawHeaders[index]!.toLowerCase() === "authorization") {
++      count += 1;
++      value = request.rawHeaders[index + 1] ?? "";
++    }
++  }
++  return count === 1 && BEARER_AUTHORIZATION.test(value.trim());
++}
++
+ async function startNetworkAllowlistProxy(
+   allowlist: string[],
+   trustedUrls: string[],
++  protectedOriginUrls: string[],
+   socketPath: string,
+ ): Promise<NetworkAllowlistProxy> {
+   assertUnixSocketPathLength(socketPath);
+@@ -267,14 +299,19 @@ async function startNetworkAllowlistProxy(
+       'networkScope="allowlist" requires at least one valid networkAllowlist hostname or HTTP(S) networkTrustedUrl.',
+     );
+   }
+-  const server = http.createServer((request, response) => {
+-    let target: URL;
+-    try {
+-      target = new URL(request.url ?? "");
+-    } catch {
+-      writeProxyError(response, 400, "invalid_request_url", "Paperclip sandbox proxy requires an absolute request URL.");
+-      return;
+-    }
++  // Origines protégées : l'API Paperclip est toujours autorisée, mais sous contrôle du jeton.
++  const protectedOrigins: Array<{ rule: NetworkAllowlistRule; secure: boolean }> = [];
++  for (const url of protectedOriginUrls) {
++    const rule = parseTrustedNetworkUrl(url);
++    if (!rule) continue;
++    protectedOrigins.push({ rule, secure: url.toLowerCase().startsWith("https:") });
++    if (!isNetworkTargetAllowed(rule.hostname, rule.port ?? "", rules)) rules.push(rule);
++  }
++  const findProtectedOrigin = (hostname: string, port: string) =>
++    protectedOrigins.find((entry) => isNetworkTargetAllowed(hostname, port, [entry.rule]));
++
++  // Chemin commun de relais HTTP (requête directe ou requête passée dans un tunnel CONNECT).
++  const relayHttpRequest = (request: http.IncomingMessage, response: http.ServerResponse, target: URL) => {
+     const port = target.port || (target.protocol === "https:" ? "443" : "80");
+     if (target.protocol !== "http:") {
+       writeProxyError(response, 400, "https_requires_connect", "HTTPS targets must use CONNECT through the Paperclip sandbox proxy.");
+@@ -284,6 +321,10 @@ async function startNetworkAllowlistProxy(
+       writeProxyError(response, 403, "network_target_denied", "Network target denied by Paperclip sandbox policy.");
+       return;
+     }
++    if (findProtectedOrigin(target.hostname, port) && !hasSingleBearerAuthorization(request)) {
++      writeSandboxTokenRequired(response);
++      return;
++    }
+     const upstream = http.request(target, {
+       method: request.method,
+       headers: { ...request.headers, host: target.host },
+@@ -293,7 +334,32 @@ async function startNetworkAllowlistProxy(
+     });
+     upstream.on("error", (error) => response.destroy(error));
+     request.pipe(upstream);
++  };
++
++  const server = http.createServer((request, response) => {
++    let target: URL;
++    try {
++      target = new URL(request.url ?? "");
++    } catch {
++      writeProxyError(response, 400, "invalid_request_url", "Paperclip sandbox proxy requires an absolute request URL.");
++      return;
++    }
++    relayHttpRequest(request, response, target);
+   });
++
++  // Serveur interne, jamais en écoute : il reçoit les sockets des CONNECT vers une origine protégée.
++  // Chaque socket est liée à l'origine visée par le CONNECT ; l'hôte de la requête n'est jamais cru.
++  const tunnelOrigins = new WeakMap<object, string>();
++  const tunnelServer = http.createServer((request, response) => {
++    const origin = tunnelOrigins.get(request.socket);
++    const path = request.url ?? "";
++    if (!origin || !path.startsWith("/")) {
++      writeProxyError(response, 400, "invalid_request_url", "Paperclip sandbox proxy requires an origin-form request URL inside a tunnel.");
++      return;
++    }
++    relayHttpRequest(request, response, new URL(path, origin));
++  });
++
+   server.on("connect", (request, clientSocket, head) => {
+     const separator = request.url?.lastIndexOf(":") ?? -1;
+     const hostname = separator > 0 ? request.url!.slice(0, separator).replace(/^\[|\]$/g, "") : "";
+@@ -305,6 +371,23 @@ async function startNetworkAllowlistProxy(
+       ));
+       return;
+     }
++    const protectedOrigin = findProtectedOrigin(hostname, port);
++    if (protectedOrigin) {
++      // Pas de tunnel brut vers l'API : un tunnel TLS ne peut pas être contrôlé, donc refusé ;
++      // en http, la requête est relue par le serveur interne qui applique le contrôle du jeton.
++      if (protectedOrigin.secure) {
++        clientSocket.end(connectProxyError(
++          "network_target_denied",
++          "CONNECT to a protected HTTPS API origin is not permitted by Paperclip sandbox policy.",
++        ));
++        return;
++      }
++      tunnelOrigins.set(clientSocket, `http://${request.url}`);
++      clientSocket.write("HTTP/1.1 200 Connection established\r\n\r\n");
++      if (head.length > 0) clientSocket.unshift(head);
++      tunnelServer.emit("connection", clientSocket);
++      return;
++    }
+     const upstream = net.connect(Number(port), hostname, () => {
+       clientSocket.write("HTTP/1.1 200 Connection Established\r\n\r\n");
+       if (head.length > 0) upstream.write(head);
+@@ -466,6 +549,7 @@ export async function buildLocalProcessSandboxSpawnTarget(input: {
+       const proxy = await startNetworkAllowlistProxy(
+         input.options.networkAllowlist ?? [],
+         input.options.networkTrustedUrls ?? [],
++        input.options.networkProtectedOrigins ?? [],
+         socketPath,
+       ).catch(async (error) => {
+         await fs.rm(tempDir, { recursive: true, force: true });
+@@ -489,6 +573,7 @@ export async function buildLocalProcessSandboxSpawnTarget(input: {
+       const proxy = await startNetworkAllowlistProxy(
+         input.options.networkAllowlist ?? [],
+         input.options.networkTrustedUrls ?? [],
++        input.options.networkProtectedOrigins ?? [],
+         socketPath,
+       ).catch(async (error) => {
+         await fs.rm(tempDir, { recursive: true, force: true });
+diff --git a/packages/adapters/claude-local/src/server/execute.ts b/packages/adapters/claude-local/src/server/execute.ts
+index c595e1f8f..b3f0f2202 100644
+--- a/packages/adapters/claude-local/src/server/execute.ts
++++ b/packages/adapters/claude-local/src/server/execute.ts
+@@ -591,6 +591,7 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
+             env.PAPERCLIP_API_URL,
+             ...runtimeMcpServers.map((server) => server.url),
+           ].filter((value): value is string => typeof value === "string" && value.length > 0),
++          networkProtectedOrigins: env.PAPERCLIP_API_URL ? [env.PAPERCLIP_API_URL] : [],
+           command: asString(config.filesystemSandboxCommand, "bwrap"),
+         }
+       : null;
+diff --git a/packages/adapters/codex-local/src/server/execute.ts b/packages/adapters/codex-local/src/server/execute.ts
+index fe2fa38b5..5a3cef3c3 100644
+--- a/packages/adapters/codex-local/src/server/execute.ts
++++ b/packages/adapters/codex-local/src/server/execute.ts
+@@ -1014,6 +1014,7 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
+               paperclipBaseEnv.PAPERCLIP_API_URL,
+               ...runtimeMcpGateways.map((gateway) => gateway.endpointPath),
+             ],
++            networkProtectedOrigins: paperclipBaseEnv.PAPERCLIP_API_URL ? [paperclipBaseEnv.PAPERCLIP_API_URL] : [],
+             command: asString(config.filesystemSandboxCommand, "bwrap"),
+           }
+         : null;
+-- 
+2.53.0
+

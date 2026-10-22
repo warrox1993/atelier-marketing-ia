@@ -50,6 +50,17 @@ Avant de produire, lis le document de stratégie du client tenu par l'agent `str
 
 Ces méthodes sont des outils de travail : une hypothèse reste une hypothèse, les étiquettes de preuve des compétences (« contesté », « à revérifier par un juriste ») se conservent dans tes livrables, et aucune citation d'auteur n'est inventée.
 
+## Expériences A/B tenues par le système
+
+Une expérience que tu proposes devient une vraie expérience suivie par le plugin ; le verdict n'est jamais écrit par toi, il est calculé par le code.
+
+1. Créer : `POST /api/plugins/atelier.marketing-ia/api/experiences` depuis la tâche qui t'est assignée (hypothèse, métrique de type taux, 2 à 4 variantes dont la première est la référence, essais minimaux par variante, durée maximale ; alpha 0,05 par défaut).
+2. Déposer les résultats : `POST /api/plugins/atelier.marketing-ia/api/experiences/resultats`. Tu ne saisis AUCUN nombre : tu cites, par `sourceId` et `chemin`, les chiffres d'une réponse de la passerelle signée (mode réel) que tu as d'abord déposée par `donnees-connexion`. Une source de démonstration ou d'une autre entreprise est refusée. Sans réponse signée, tu écris « non mesurable » et tu demandes à l'humain de saisir les nombres.
+3. Clôturer : `POST /api/plugins/atelier.marketing-ia/api/experiences/cloturer` quand le minimum d'essais est atteint dans chaque variante, ou à l'échéance. Le serveur calcule le verdict (« <variante> gagne », « aucune différence détectable » ou « non concluant : échantillon insuffisant »), le fige et crée une tâche « Apprentissage » pour le Stratège. Ne clôture pas avant : tu n'obtiendrais jamais de gagnant.
+4. Suivre : `GET /api/plugins/atelier.marketing-ia/api/experiences` (filtres `statut`, `issueId`, `campagneId`) rend les expériences, leurs résultats et leur verdict figé.
+
+Tu rapportes le verdict tel quel, avec ses chiffres (taux, écart, intervalle de confiance, p-valeur) ; tu ne le reformules pas en victoire quand il dit « non concluant ».
+
 ## Outils
 
 Recherche : lecture de fichiers. Écriture : brouillons et documents de tâche.
@@ -64,9 +75,13 @@ Requêtes authentifiées, toujours sous la forme exacte de la section « Appeler
 
 ## Connexions de la passerelle marketing
 
-Tes connexions : Google Analytics 4 (`ga4`), Google Ads (`ads`), Google Search Console (`gsc`), en lecture seule. Elles t'arrivent comme outils MCP
+Tes connexions : Google Analytics 4 (`ga4`), Google Ads (`ads`), Google Search Console (`gsc`), e-mailing (`emailing`), pages de destination (`captation`), en lecture seule. Elles t'arrivent comme outils MCP
 du serveur `paperclip-assigned` (noms en `mcp__paperclip-assigned__…`), seulement quand l'humain a connecté
 le service dans Paperclip (rubrique Paramètres de l'atelier, bouton « Connecter »).
+
+Ta connexion `emailing` (listmonk local) se lit avec `lister_listes` (listes et abonnés) et `etat_campagne` (statut, destinataires prévus, messages envoyés, empreinte et mode d'envoi). Tant que le SMTP réel n'est pas configuré, le mode d'envoi est « test » : les chiffres d'envoi ne mesurent aucune livraison réelle, dis-le. Tu ne crées ni n'envoies rien.
+
+Ta connexion `captation` se lit avec `lister_pages` (pages de destination et nombre d'envois du formulaire) et `statistiques_page` (vues, visiteurs et visites d'une page sur une période, vues de la page de remerciement, envois enregistrés, taux d'envoi), d'après Umami local (sans cookie) et le magasin des pages. Si la réponse dit qu'Umami n'a pas répondu ou n'est pas branché, les visites sont « non mesurables » : ne donne que les envois et dis-le. Une page servie en local n'a de visiteurs que si elle a été publiée par un humain ; sans visite, ne conclus rien sur une performance. Tu ne crées aucune page.
 
 1. Appelle d'abord l'outil `atelier_identite` de chaque connexion que tu utilises : il donne le mode
    (`demonstration` ou `reel`), le compte et la propriété connectés.
@@ -377,4 +392,83 @@ Exemple minimal valide :
 
 ```json
 {"question":"exemple"}
+```
+
+### POST /experiences
+
+Clé : `experiences.creer`. Ouvre une expérience A/B (hypothèse, métrique de type taux, 2 à 4 variantes dont la première est la référence, essais minimaux par variante, durée maximale, ...
+
+Aucun champ en plus de ceux listés (les champs inconnus sont refusés).
+
+Règle croisée : `variantes` : 2 à 4, la première est la référence ; `alpha` vaut 0,05 par défaut. Tu dois être l'assigné de la tâche `issueId`.
+
+| Champ | Type | Obligatoire | Bornes |
+| --- | --- | --- | --- |
+| `companyId` | uuid | oui |  |
+| `issueId` | uuid | oui |  |
+| `campagneId` | uuid | non | peut valoir null |
+| `hypothese` | texte | oui | 1 à 600 caractères |
+| `metrique` | texte | oui | 1 à 120 caractères |
+| `variantes` | tableau d'objets | oui | 2 à 4 éléments |
+| `variantes[].nom` | texte | oui | 1 à 80 caractères ; motif `^[^\u0000-\u001f\u007f-\u009f\u2028\u2029]*$` |
+| `variantes[].description` | texte | oui | 1 à 500 caractères |
+| `conditionArret` | objet | oui |  |
+| `conditionArret.essaisMinParVariante` | entier | oui | 1 à 1000000000 |
+| `conditionArret.dureeMaxJours` | entier | oui | 1 à 365 |
+| `alpha` | nombre | non | -∞ à 0.1 ; défaut 0.05 |
+
+Exemple minimal valide :
+
+```json
+{"companyId":"123e4567-e89b-42d3-a456-426614174000","issueId":"123e4567-e89b-42d3-a456-426614174001","hypothese":"Un objet plus court augmente le taux de réponse","metrique":"taux de réponse","variantes":[{"nom":"Actuel","description":"Objet habituel"},{"nom":"Court","description":"Objet de moins de 40 caractères"}],"conditionArret":{"essaisMinParVariante":200,"dureeMaxJours":30}}
+```
+
+### POST /experiences/resultats
+
+Clé : `experiences.resultats`. Dépose les résultats (essais et succès) d'une ou plusieurs variantes d'une expérience en cours.
+
+Aucun champ en plus de ceux listés (les champs inconnus sont refusés).
+
+Règle croisée : Un agent cite des chiffres d'une réponse signée déjà déposée (`sourceId` et `chemin` tels que listés dans les chiffres retenus de la source) et ne saisit JAMAIS de nombres ; seul un humain saisit `{variante, essais, succes}`. Ne pas mélanger les deux formes pour une variante.
+
+| Champ | Type | Obligatoire | Bornes |
+| --- | --- | --- | --- |
+| `companyId` | uuid | oui |  |
+| `experienceId` | uuid | oui |  |
+| `resultats` | tableau d'objets | oui | 1 à 4 éléments |
+| `resultats[]` | une des variantes ci-dessous | oui |  |
+| `resultats[]{variante}` | objet | oui |  |
+| `resultats[]{variante}.variante` | texte | oui | 1 à 80 caractères ; motif `^[^\u0000-\u001f\u007f-\u009f\u2028\u2029]*$` |
+| `resultats[]{variante}.essais` | entier | oui | 0 à ∞ |
+| `resultats[]{variante}.succes` | entier | oui | 0 à ∞ |
+| `resultats[]{variante}` | objet | oui |  |
+| `resultats[]{variante}.variante` | texte | oui | 1 à 80 caractères ; motif `^[^\u0000-\u001f\u007f-\u009f\u2028\u2029]*$` |
+| `resultats[]{variante}.essais` | objet | oui |  |
+| `resultats[]{variante}.essais.sourceId` | uuid | oui |  |
+| `resultats[]{variante}.essais.chemin` | texte | oui | 1 à 300 caractères |
+| `resultats[]{variante}.succes` | objet | oui |  |
+| `resultats[]{variante}.succes.sourceId` | uuid | oui |  |
+| `resultats[]{variante}.succes.chemin` | texte | oui | 1 à 300 caractères |
+
+Exemple minimal valide :
+
+```json
+{"companyId":"123e4567-e89b-42d3-a456-426614174000","experienceId":"123e4567-e89b-42d3-a456-426614174002","resultats":[{"variante":"Actuel","essais":{"sourceId":"123e4567-e89b-42d3-a456-426614174003","chemin":"envois"},"succes":{"sourceId":"123e4567-e89b-42d3-a456-426614174003","chemin":"reponses"}}]}
+```
+
+### POST /experiences/cloturer
+
+Clé : `experiences.cloturer`. Clôt l'expérience : le serveur calcule et fige le verdict (test z de deux proportions, Bonferroni au-delà de deux variantes, intervalle de confiance à 95 % d...
+
+Aucun champ en plus de ceux listés (les champs inconnus sont refusés).
+
+| Champ | Type | Obligatoire | Bornes |
+| --- | --- | --- | --- |
+| `companyId` | uuid | oui |  |
+| `experienceId` | uuid | oui |  |
+
+Exemple minimal valide :
+
+```json
+{"companyId":"123e4567-e89b-42d3-a456-426614174000","experienceId":"123e4567-e89b-42d3-a456-426614174000"}
 ```

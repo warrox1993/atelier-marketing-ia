@@ -120,6 +120,20 @@ export function libellePlafond(p: PlafondPub | null): string {
   return p.type === "montant" ? `${euros(p.montantCents)} maximum` : "Aucune limite";
 }
 
+/** Part du plafond à partir de laquelle l'interface prévient que le budget approche de sa limite. */
+export const SEUIL_ALERTE_BUDGET = 0.8;
+
+/**
+ * Niveau d'alerte du budget : `atteint` (le serveur refusera toute nouvelle dépense), `approche`
+ * (80 % engagés ou plus) ou `null` (sans plafond chiffré, ou sous le seuil).
+ */
+export function niveauAlerteBudget(engagement: EngagementPub): "atteint" | "approche" | null {
+  if (!engagement.choisi || engagement.limiteCents === null) return null;
+  if (engagement.engageCents >= engagement.limiteCents) return "atteint";
+  if (engagement.engageCents >= engagement.limiteCents * SEUIL_ALERTE_BUDGET) return "approche";
+  return null;
+}
+
 /** Montants engagés face à la limite, ou « sans limite ». */
 export function EngagementFaceLimite({ plafond, engagement }: { plafond: PlafondPub | null; engagement: EngagementPub }) {
   const engage = euros(engagement.engageCents);
@@ -138,9 +152,23 @@ export function EngagementFaceLimite({ plafond, engagement }: { plafond: Plafond
       </p>
     );
   }
+  const alerte = niveauAlerteBudget(engagement);
+  const reste = Math.max(0, engagement.limiteCents - engagement.engageCents);
   return (
-    <p>
-      {engage} engagés sur {euros(engagement.limiteCents)}. <span className="atl-sous">{detail}.</span>
-    </p>
+    <>
+      <p>
+        {engage} engagés sur {euros(engagement.limiteCents)}. <span className="atl-sous">{detail}.</span>
+      </p>
+      {alerte ? (
+        <div className="atl-encart" data-ton={alerte === "atteint" ? "danger" : "attention"} role="status" data-alerte-budget={alerte}>
+          <p className="atl-encart-titre">{alerte === "atteint" ? "Plafond atteint" : "Le budget approche de son plafond"}</p>
+          <p>
+            {alerte === "atteint"
+              ? "Toute nouvelle dépense sera refusée par le serveur tant que le plafond n'est pas relevé."
+              : `Il reste ${euros(reste)} avant le plafond : les prochaines approbations de dépense peuvent être refusées.`}
+          </p>
+        </div>
+      ) : null}
+    </>
   );
 }

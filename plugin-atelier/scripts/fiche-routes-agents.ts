@@ -45,6 +45,11 @@ export const SCHEMAS_CORPS: Record<string, SchemaZod> = {
   "prospects.exclure": C.ExclureProspectEntree,
   "prospects.critere.evaluer": C.EvaluerCritereEntree,
   "liaison.demander": C.DemandeLiaisonEntree,
+  "emailing.demander_envoi": C.DemanderEnvoiEmailingEntree,
+  "emailing.envoyer": C.EnvoyerEmailingEntree,
+  "experiences.creer": C.CreerExperienceEntree,
+  "experiences.resultats": C.DeposerResultatsExperienceEntree,
+  "experiences.cloturer": C.CloturerExperienceEntree,
 };
 
 /** Routes d'agent en écriture dont le serveur ne lit aucun corps. */
@@ -56,6 +61,10 @@ export const ROUTES_SANS_CORPS: readonly string[] = ["tache.porte.evaluer", "tac
  * vérifie que chaque exemple passe son schéma zod.
  */
 const EXEMPLES_MANUELS: Record<string, unknown> = {
+  "emailing.demander_envoi": { companyId: "123e4567-e89b-42d3-a456-426614174000", issueId: "123e4567-e89b-42d3-a456-426614174001", campagneId: 12, empreinte: "0123456789abcdef".repeat(4) },
+  "emailing.envoyer": { companyId: "123e4567-e89b-42d3-a456-426614174000", issueId: "123e4567-e89b-42d3-a456-426614174001", campagneId: 12, empreinte: "0123456789abcdef".repeat(4) },
+  "experiences.creer": { companyId: "123e4567-e89b-42d3-a456-426614174000", issueId: "123e4567-e89b-42d3-a456-426614174001", hypothese: "Un objet plus court augmente le taux de réponse", metrique: "taux de réponse", variantes: [{ nom: "Actuel", description: "Objet habituel" }, { nom: "Court", description: "Objet de moins de 40 caractères" }], conditionArret: { essaisMinParVariante: 200, dureeMaxJours: 30 } },
+  "experiences.resultats": { companyId: "123e4567-e89b-42d3-a456-426614174000", experienceId: "123e4567-e89b-42d3-a456-426614174002", resultats: [{ variante: "Actuel", essais: { sourceId: "123e4567-e89b-42d3-a456-426614174003", chemin: "envois" }, succes: { sourceId: "123e4567-e89b-42d3-a456-426614174003", chemin: "reponses" } }] },
   "tache.donnees.deposer": { service: "gsc", outil: "gsc_requete_performances", reponse: { texte: "texte brut de la réponse de l'outil" } },
   "tache.prospects.deposer": { service: "bce", outil: "bce_entreprise", reponse: { texte: "texte brut de la réponse de l'outil" } },
   "tache.diffusions.issue": { reponse: { texte: "texte brut de la réponse de l'outil" } },
@@ -69,6 +78,8 @@ const EXEMPLES_MANUELS: Record<string, unknown> = {
 
 /** Règles croisées entre champs, invisibles dans un schéma JSON : une phrase par route concernée. */
 const NOTES_CROISEES: Record<string, string> = {
+  "experiences.creer": "`variantes` : 2 à 4, la première est la référence ; `alpha` vaut 0,05 par défaut. Tu dois être l'assigné de la tâche `issueId`.",
+  "experiences.resultats": "Un agent cite des chiffres d'une réponse signée déjà déposée (`sourceId` et `chemin` tels que listés dans les chiffres retenus de la source) et ne saisit JAMAIS de nombres ; seul un humain saisit `{variante, essais, succes}`. Ne pas mélanger les deux formes pour une variante.",
   "tache.donnees.deposer": "`reponse` doit contenir `texte` ou `structuredContent` (au moins l'un des deux). `arguments` devient obligatoire en mode réel.",
   "tache.prospects.deposer": "`reponse` doit contenir `texte` ou `structuredContent` (au moins l'un des deux).",
   "tache.diffusions.issue": "`reponse` doit contenir `texte` ou `structuredContent` (au moins l'un des deux).",

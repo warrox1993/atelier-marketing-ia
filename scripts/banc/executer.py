@@ -151,6 +151,7 @@ def main(argv=None, retour=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--competence", required=True)
     ap.add_argument("--departement")
+    ap.add_argument("--cas", help="clés de cas séparées par des virgules (g4-3.3.1,g4-3.3.2) : ne jouer que ceux-là")
     ap.add_argument("--version-a", help="par défaut organisation/skills/<compétence>/SKILL.md")
     ap.add_argument("--version-b")
     ap.add_argument("--sans-phoenix", action="store_true", help="n'enregistre pas d'expérience dans Phoenix")
@@ -181,6 +182,12 @@ def main(argv=None, retour=None) -> int:
         if dept not in bc.departements_valides(a.racine):
             raise bc.ErreurBanc(f"département inconnu ({dept}) : préciser --departement")
         cas = [c for c in bc.tous_les_cas(a.racine) if c["departement"] == dept]
+        if a.cas:
+            voulues = [k.strip() for k in a.cas.split(",") if k.strip()]
+            inconnues = [k for k in voulues if k not in {c["cle"] for c in cas}]
+            if inconnues:
+                raise bc.ErreurBanc(f"cas inconnu(s) pour {dept} : {inconnues}")
+            cas = [c for c in cas if c["cle"] in voulues]
         if not cas:
             raise bc.ErreurBanc(f"aucun cas pour {dept}")
         if a.juge_claude and not a.version_b:

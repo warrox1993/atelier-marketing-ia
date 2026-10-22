@@ -241,3 +241,46 @@ a.atl-frise-tache-id { display: inline-flex; align-items: center; min-height: 1.
 }
 @media (prefers-reduced-motion: reduce) { button.atl-frise-bouton { transition: none; } }
 `;
+
+/* Bande d'avancement épinglée sous l'en-tête du chat : au plus 140 px repliée sur ordinateur, 96 px sur téléphone. */
+export const STYLES_BANDE = `
+.atl-bande-zone { flex: none; min-width: 0; padding: 0.375rem max(0.25rem, calc((100% - var(--atl-colonne)) / 2)) 0; }
+.atl-bande { display: flex; flex-direction: column; gap: 0.125rem; min-width: 0; padding: 0.25rem 0.75rem; border: 1px solid var(--atl-trait); border-radius: var(--atl-rayon); background: var(--atl-surface); }
+.atl-bande-haut { display: flex; align-items: center; gap: 0.75rem; min-height: 1.5rem; min-width: 0; }
+.atl-bande-titre { margin: 0; display: flex; align-items: baseline; gap: 0.5rem; flex: 1 1 auto; min-width: 0; font-size: 0.8125rem; }
+.atl-bande-service { flex: none; font-weight: 600; }
+.atl-bande-mission { flex: 1 1 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--atl-attenue-fort); }
+.atl-bande-resume { flex: none; margin-left: auto; color: var(--atl-attenue-fort); }
+.atl-bande-resume[data-attend="oui"] { color: var(--atl-attention); font-weight: 600; }
+.atl-bande-voir { flex: none; min-height: 1.625rem; padding: 0 0.625rem; border: 1px solid var(--atl-trait); border-radius: calc(var(--atl-rayon) * 0.8); background: none; color: var(--atl-texte); font: inherit; font-size: 0.8125rem; cursor: pointer; transition: background-color 150ms ease-out; }
+.atl-bande-voir:hover, .atl-bande-voir[aria-expanded="true"] { background: var(--atl-surface-2); }
+.atl-bande-voir:focus-visible, button.atl-bande-bouton:focus-visible { outline: 2px solid var(--atl-anneau); outline-offset: 1px; }
+.atl-bande-scene { height: 3.75rem; cursor: pointer; min-width: 0; }
+.atl-bande-scene canvas { display: block; }
+.atl-bande-pas { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); }
+.atl-bande-phase { --ton: var(--atl-attenue); min-width: 0; }
+.atl-bande-phase[data-etat="faite"] { --ton: var(--atl-succes); }
+.atl-bande-phase[data-etat="en_cours"] { --ton: var(--atl-info); }
+.atl-bande-phase[data-etat="attend_decision"] { --ton: var(--atl-attention); }
+.atl-bande-phase[data-etat="non_prevue"] { opacity: 0.72; }
+.atl-bande-bouton { display: flex; align-items: center; justify-content: center; gap: 0.375rem; width: 100%; min-height: 2.125rem; padding: 0.0625rem 0.125rem; border: 0; border-radius: calc(var(--atl-rayon) * 0.8); background: none; color: var(--atl-texte); font: inherit; text-align: left; }
+button.atl-bande-bouton { cursor: pointer; transition: background-color 150ms ease-out; }
+button.atl-bande-bouton:hover, button.atl-bande-bouton[aria-expanded="true"] { background: var(--atl-surface-2); }
+.atl-bande .atl-frise-marqueur { width: 1rem; height: 1rem; }
+.atl-bande-texte { display: flex; flex-direction: column; min-width: 0; line-height: 1.2; }
+.atl-bande-nom { font-weight: 600; font-size: 0.8125rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.atl-bande-etat { font-size: 0.75rem; color: var(--atl-attenue-fort); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.atl-bande-phase[data-etat="en_cours"] .atl-bande-etat { color: var(--atl-info); }
+.atl-bande-phase[data-etat="attend_decision"] .atl-bande-etat { color: var(--atl-attention); font-weight: 600; }
+/* En 3D, la scène dit déjà l'état par la forme : les étiquettes se centrent sous leur station, sans marqueur dessiné. */
+.atl-bande[data-mode="3d"] .atl-frise-marqueur { display: none; }
+.atl-bande[data-mode="3d"] .atl-bande-bouton { flex-direction: column; gap: 0; text-align: center; }
+.atl-bande[data-mode="3d"] .atl-bande-texte { align-items: center; max-width: 100%; }
+/* Sur téléphone : le résumé remplace le titre, les six marqueurs tiennent sur une ligne (nom et état restent dans l'étiquette parlée). */
+.atl-bande[data-etroit="oui"] .atl-bande-service, .atl-bande[data-etroit="oui"] .atl-bande-mission, .atl-bande[data-etroit="oui"] .atl-bande-texte { display: none; }
+.atl-bande[data-etroit="oui"] .atl-bande-resume { margin-left: 0; flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.atl-bande[data-etroit="oui"] .atl-bande-bouton { min-height: 2.5rem; }
+.atl-bande-taches { max-height: min(40vh, 16rem); overflow: auto; }
+.atl-bande-panneau { margin-top: 0.5rem; max-height: min(50vh, 28rem); overflow: auto; }
+@media (prefers-reduced-motion: reduce) { .atl-bande-voir, button.atl-bande-bouton { transition: none; } }
+`;

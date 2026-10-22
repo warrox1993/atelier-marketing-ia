@@ -1,0 +1,39 @@
+[Unit]
+Description=listmonk v6.2.0 de l'Atelier marketing IA (e-mailing, Podman rootless, 127.0.0.1:19000 seulement)
+Documentation=https://listmonk.app/docs/
+After=network-online.target atelier-emailing-db.service atelier-mailpit.service
+Requires=atelier-emailing-db.service
+Wants=network-online.target atelier-mailpit.service
+
+# Installé par scripts/emailing-installer.sh. Version stable v6.2.0 épinglée : JAMAIS la v7 bêta, jamais « latest ».
+#   - interface et API sur 127.0.0.1:19000 seulement ; base dans le conteneur atelier-emailing-db (réseau dédié) ;
+#   - identifiants lus dans ~/.config/atelier/ (0600), passés par un fichier d'environnement temporaire 0600 ;
+#   - l'installation du schéma (idempotente) et la mise à niveau tournent avant chaque démarrage ;
+#   - l'envoi passe par Mailpit (réglage SMTP posé par le script d'installation) tant que le SMTP réel n'est pas configuré.
+
+[Service]
+Type=simple
+ExecStartPre=-/usr/bin/podman network create atelier-emailing
+ExecStartPre=-/usr/bin/podman rm -f atelier-listmonk
+ExecStartPre=/bin/sh -c 'umask 077; { printf "LISTMONK_db__password=%%s\\n" "$(cat %h/.config/atelier/emailing-db.mdp)"; cat %h/.config/atelier/emailing-listmonk.env; } > %t/atelier-listmonk.env'
+ExecStartPre=/bin/sh -c 'for i in $(seq 1 40); do /usr/bin/podman exec atelier-emailing-db pg_isready -U listmonk -q && exit 0; sleep 2; done; exit 1'
+ExecStartPre=/usr/bin/podman run --rm --network atelier-emailing --env-file %t/atelier-listmonk.env \
+  -e LISTMONK_db__host=atelier-emailing-db -e LISTMONK_db__port=5432 -e LISTMONK_db__user=listmonk -e LISTMONK_db__database=listmonk -e LISTMONK_db__ssl_mode=disable \
+  docker.io/listmonk/listmonk:v6.2.0 sh -c './listmonk --install --idempotent --yes && ./listmonk --upgrade --yes'
+ExecStart=/usr/bin/podman run --rm --name atelier-listmonk --network atelier-emailing --memory=512m \
+  --env-file %t/atelier-listmonk.env -p 127.0.0.1:19000:9000 \
+  -e LISTMONK_app__address=0.0.0.0:9000 \
+  -e LISTMONK_db__host=atelier-emailing-db -e LISTMONK_db__port=5432 -e LISTMONK_db__user=listmonk -e LISTMONK_db__database=listmonk -e LISTMONK_db__ssl_mode=disable \
+  docker.io/listmonk/listmonk:v6.2.0
+ExecStop=/usr/bin/podman stop -t 15 atelier-listmonk
+ExecStopPost=-/bin/rm -f %t/atelier-listmonk.env
+Restart=on-failure
+RestartSec=15
+TimeoutStartSec=300
+NoNewPrivileges=yes
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=atelier-listmonk
+
+[Install]
+WantedBy=default.target

@@ -1,0 +1,36 @@
+[Unit]
+Description=Mailpit v1.31.6 de l'Atelier marketing IA (serveur SMTP de TEST : rien ne sort de la machine, 127.0.0.1 seulement)
+Documentation=https://mailpit.axllent.org/docs/
+After=network-online.target
+Wants=network-online.target
+
+# Installé par scripts/emailing-installer.sh. Mailpit capture tout ce que listmonk envoie : aucun message n'est relayé vers
+# l'extérieur. Tant que le SMTP réel n'est pas configuré, c'est LE serveur d'envoi de l'atelier.
+#   - le SMTP n'est PAS publié sur l'hôte : listmonk le joint par le réseau Podman dédié sous le nom atelier-mailpit:1025 ;
+#   - interface et API sur 127.0.0.1:18025, protégées par un mot de passe (MP_UI_AUTH_FILE, fichier htpasswd 0600 généré par l'installeur dans
+#     ~/.config/atelier/emailing-mailpit.htpasswd, jamais dans le dépôt) : sans lui, l'API rendrait tous les messages à n'importe quel processus local ;
+#   - messages conservés dans instance/emailing/mailpit (ignoré par git), 5000 messages au plus.
+
+[Service]
+Type=simple
+ExecStartPre=-/usr/bin/podman network create atelier-emailing
+ExecStartPre=-/usr/bin/podman rm -f atelier-mailpit
+ExecStartPre=/bin/sh -c 'mkdir -p %h/Projets/atelier-marketing-ia/instance/emailing/mailpit'
+ExecStart=/usr/bin/podman run --rm --name atelier-mailpit --network atelier-emailing --memory=256m \
+  --userns=keep-id --user %U:%G \
+  -p 127.0.0.1:18025:8025 \
+  -e MP_DATABASE=/data/mailpit.db -e MP_MAX_MESSAGES=5000 -e MP_UI_AUTH_FILE=/run/secrets/mailpit-ui.htpasswd \
+  -v %h/.config/atelier/emailing-mailpit.htpasswd:/run/secrets/mailpit-ui.htpasswd:ro \
+  -v %h/Projets/atelier-marketing-ia/instance/emailing/mailpit:/data \
+  docker.io/axllent/mailpit:v1.31.6
+ExecStop=/usr/bin/podman stop -t 10 atelier-mailpit
+Restart=on-failure
+RestartSec=15
+TimeoutStartSec=120
+NoNewPrivileges=yes
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=atelier-mailpit
+
+[Install]
+WantedBy=default.target

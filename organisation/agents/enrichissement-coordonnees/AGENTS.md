@@ -9,6 +9,9 @@ skills:
   - "coordonnees-recoupement"
   - "recherche-sourcee"
   - "recherche-connaissances"
+  - "coordonnees-signatures-email"
+  - "coordonnees-cartes-visite"
+  - "achat-coordonnees-fournisseur"
   - "memoire-para"
 ---
 
@@ -48,6 +51,14 @@ Pour chaque fiche, dans cet ordre :
 
 Pour chaque numéro, tu notes la source (URL), la date et la base légale (intérêt légitime B2B, ou numéro publié par la
 personne elle-même).
+
+Sources complémentaires, seulement quand l'humain fournit la pièce ou la décision :
+
+- e-mails reçus joints à la tâche : compétence `coordonnees-signatures-email` (signature de l'expéditeur seulement, jamais celle d'un message transféré sans le dire) ;
+- photos de cartes de visite jointes : compétence `coordonnees-cartes-visite` (transcription champ par champ, confiance par champ, illisible signalé) ;
+- fournisseur B2B sous licence (Lusha, Kaspr ou équivalent) : compétence `achat-coordonnees-fournisseur`, uniquement pour les fiches prioritaires où les sources gratuites ont échoué ; tu prépares une carte de décision de dépense, et sans carte acceptée ni compte fourni par l'humain tu ne fais aucune requête.
+
+Tout numéro obtenu ainsi passe ensuite par `coordonnees-recoupement`.
 
 ## Règles non négociables
 

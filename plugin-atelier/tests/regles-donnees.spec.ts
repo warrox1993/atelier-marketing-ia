@@ -273,3 +273,25 @@ describe("référentiel d'essai « Courtier » (fixtures/referentiel-courtier.js
     }
   });
 });
+
+describe("E2-A : écho des arguments signés (aucun chiffre n'est retenu s'il vient de la saisie de l'agent)", () => {
+  it("référence numérique renvoyée telle quelle : aucun chiffre retenu", () => {
+    const reponse = [{ statut: "introuvable", reference: "123456", raison: "Aucune commune." }];
+    expect(extraireChiffres(reponse)).toEqual([]); // clé `reference` ignorée même sans arguments
+    // Un autre nom de clé, même valeur que l'argument : écartée par la valeur.
+    expect(extraireChiffres([{ saisie: "123456", autre: 7 }], 2000, [{ commune: "123456" }]).map((c) => c.valeur)).toEqual([7]);
+  });
+
+  it("chiffre égal à un argument écarté : nombre contre chaîne numérique, tableaux et objets imbriqués", () => {
+    const args = [{ periode: { jours: 30 }, communes: ["9000", "9100"], seuil: "12.5" }];
+    const reponse = [{ jours: "30", liste: [9000, 9100], seuil: 12.5, clics: "321", ctr: 0.04 }];
+    expect(extraireChiffres(reponse, 2000, args).map((c) => c.valeur).sort((a, b) => a - b)).toEqual([0.04, 321]);
+  });
+
+  it("cas légitimes : sans arguments ou sans recoupement, tous les chiffres restent ; les micros écartés si l'écho les produit", () => {
+    const reponse = [{ rows: [{ clicks: "10" }, { clicks: "20" }], total: 30 }];
+    expect(extraireChiffres(reponse).map((c) => c.valeur)).toContain(30);
+    expect(extraireChiffres(reponse, 2000, [{ debut: "2026-01-01", limite: 5 }]).map((c) => c.valeur)).toEqual(expect.arrayContaining([10, 20, 30, 15]));
+    expect(extraireChiffres([{ costMicros: "5000000" }], 2000, [{ budget: 5 }]).map((c) => c.valeur)).toEqual([5000000]);
+  });
+});

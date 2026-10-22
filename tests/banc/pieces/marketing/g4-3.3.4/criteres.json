@@ -1,0 +1,4 @@
+[
+ {"critere": "mention hypothèse et budget de 18 000", "nombres": [18000.0], "mots": ["hypothèse"]},
+ {"critere": "part en marché non mesurable", "mots": ["non mesurable|non mesuré|inconnu|inconnue"]}
+]

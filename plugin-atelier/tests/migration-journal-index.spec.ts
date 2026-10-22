@@ -15,10 +15,10 @@ describe("migration 020 : index du journal", () => {
   const sql = readFileSync(join(DOSSIER, NOM), "utf8");
   const instructions = sql.split("\n").filter((l) => !l.trimStart().startsWith("--")).join("\n");
 
-  it("est numérotée immédiatement après 019 et c'est la dernière", () => {
+  it("est numérotée immédiatement après 019 et suivie de 021", () => {
     const i = fichiers.indexOf(NOM);
     expect(fichiers[i - 1]).toMatch(/^019_/u);
-    expect(fichiers[i + 1]).toBeUndefined();
+    expect(fichiers[i + 1]).toMatch(/^021_/u);
   });
 
   it("crée l'index (company_id, type, entite_id) sur le journal du plugin, sans toucher aux données, relançable", () => {

@@ -53,6 +53,11 @@ attendre "plugin non prêt"                      non0 "non prêt"               
 attendre "plugin absent de la liste"            non0 "absent"                 --fichier-reponse "${TMP}/ok.json" --fichier-plugins "${TMP}/plugins-absent.json"
 attendre "passerelle ko"                        non0 "passerelle"             --fichier-reponse "${TMP}/ok.json" --fichier-passerelle "${TMP}/pass-ko.json"
 attendre "passerelle muette"                    non0 "passerelle"             --fichier-reponse "${TMP}/ok.json" --fichier-passerelle "${TMP}/muet.json"
+ecrire unites-ok.txt $'atelier-listmonk active\natelier-pages active\n'
+ecrire unites-ko.txt $'atelier-listmonk active\natelier-umami failed\n'
+attendre "services annexes actifs"              0    "tout va bien"           --fichier-reponse "${TMP}/ok.json" --fichier-unites "${TMP}/unites-ok.txt"
+attendre "service annexe arrêté"                non0 "atelier-umami arrêté"   --fichier-reponse "${TMP}/ok.json" --fichier-unites "${TMP}/unites-ko.txt"
+attendre "états des services illisibles"        non0 "aucun état"             --fichier-reponse "${TMP}/ok.json" --fichier-unites "${TMP}/muet.json"
 attendre "port sans instance (appel réel local refusé)" non0 "pas de réponse" --port 1
 attendre "argument inconnu"                     non0 "Argument inconnu"       --bidon
 

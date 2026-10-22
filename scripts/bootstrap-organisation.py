@@ -2064,6 +2064,12 @@ def appliquer_organisation(api: Api, reg_agents: dict, reg_orga: dict, fichiers:
 
     liaisons = lier_agents(api, company_id, reg_agents, empreinte, jeton_id, mode)
     agents = agents_par_slug(api, company_id)
+    try:
+        if assurer_roles_agents(api, company_id, agents):
+            print("Rôles des agents Mesure et Stratège inscrits dans la configuration du plugin (rolesAgents).")
+    except ErreurAtelier as e:
+        # Plugin absent ou d'une version sans ce réglage : sans lui, personne n'a ces rôles (refus par défaut).
+        print(f"  avertissement : rôles Mesure et Stratège non inscrits dans la configuration du plugin ({e}) ; relancer après mise à jour du plugin.")
     objectifs, ecr_obj = assurer_objectifs(api, company_id, reg_orga, agents)
     projets, ecr_proj = assurer_liens_projets(api, company_id, reg_orga, objectifs)
     ecr_routines = assurer_routines(api, company_id, reg_orga, agents, projets)
@@ -2908,10 +2914,30 @@ def creer_secret_approbation(api: Api, cid: str, cle: str, pem: str, libelle: st
     return s["id"]
 
 
-def fusionner_config(api: Api, cid: str, *, secret_id: str | None = None, publiques: list[str] | None = None) -> bool:
+ROLES_EXPERIENCES = ("mesure", "stratege")  # rôles que le plugin reconnaît par identifiant (revue F5), pas par le nom
+
+
+def roles_agents_voulus(agents: dict[str, dict]) -> dict[str, str]:
+    """Identifiants des agents tenant les rôles d'expérience (slug du registre), pour la configuration du plugin."""
+    return {r: agents[r]["id"] for r in ROLES_EXPERIENCES if r in agents and agents[r].get("id")}
+
+
+def assurer_roles_agents(api: Api, cid: str, agents: dict[str, dict]) -> bool:
+    """Écrit `rolesAgents` dans la configuration du plugin (revue F5) ; True si elle a changé. Une organisation
+    sans agent Mesure ni Stratège (organisation de service) n'est pas touchée."""
+    roles = roles_agents_voulus(agents)
+    if not roles:
+        return False
+    return fusionner_config(api, cid, roles=roles)
+
+
+def fusionner_config(api: Api, cid: str, *, secret_id: str | None = None, publiques: list[str] | None = None,
+                     roles: dict[str, str] | None = None) -> bool:
     """Met la configuration du plugin à jour sans toucher aux autres clés ; True si elle a été écrite."""
     actuelle = config_plugin(api, cid)
     voulue = dict(actuelle)
+    if roles is not None:
+        voulue["rolesAgents"] = {**(actuelle.get("rolesAgents") or {}), **roles}
     if secret_id is not None:
         ref = actuelle.get("approbationClePrivee") or {}
         if not (isinstance(ref, dict) and ref.get("type") == "secret_ref" and ref.get("secretId") == secret_id):

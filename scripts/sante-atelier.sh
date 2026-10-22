@@ -7,9 +7,9 @@
 #
 # Usage : scripts/sante-atelier.sh [--port N] [--passerelle URL] [--age-max-heures H] [--notifier]
 #                                  [--fichier-reponse sante.json] [--fichier-plugins plugins.json]
-#                                  [--fichier-passerelle passerelle.json]
+#                                  [--fichier-passerelle passerelle.json] [--fichier-unites unites.txt]
 # Variables : ATELIER_PORT (défaut 3100), ATELIER_PASSERELLE_URL (vide = passerelle non contrôlée),
-#             ATELIER_SANTE_AGE_MAX_HEURES (défaut 2).
+#             ATELIER_SANTE_AGE_MAX_HEURES (défaut 2), ATELIER_SANTE_UNITES (unités systemd annexes).
 # Test avec réponse simulée : --fichier-reponse remplace l'appel à /api/health ; dans ce mode,
 # plugins et passerelle ne sont contrôlés que si leur fichier simulé est donné aussi.
 # Un fichier simulé absent ou vide équivaut à « pas de réponse ».
@@ -19,7 +19,8 @@ PORT="${ATELIER_PORT:-3100}"
 PASSERELLE="${ATELIER_PASSERELLE_URL:-}"
 AGE_MAX="${ATELIER_SANTE_AGE_MAX_HEURES:-2}"
 NOTIFIER=0
-F_SANTE=""; F_PLUGINS=""; F_PASSERELLE=""
+F_SANTE=""; F_PLUGINS=""; F_PASSERELLE=""; F_UNITES=""
+UNITES="${ATELIER_SANTE_UNITES:-}"
 SIMULE=0
 PLUGIN_ID="atelier.marketing-ia"
 
@@ -34,6 +35,7 @@ while [[ $# -gt 0 ]]; do
     --fichier-reponse) F_SANTE="${2:-}"; SIMULE=1; shift 2 || { usage; exit 2; } ;;
     --fichier-plugins) F_PLUGINS="${2:-}"; shift 2 || { usage; exit 2; } ;;
     --fichier-passerelle) F_PASSERELLE="${2:-}"; shift 2 || { usage; exit 2; } ;;
+    --fichier-unites) F_UNITES="${2:-}"; shift 2 || { usage; exit 2; } ;;
     -h|--help) usage; exit 0 ;;
     *) echo "Argument inconnu : $1" >&2; usage; exit 2 ;;
   esac
@@ -117,6 +119,28 @@ if [[ -n "${F_PASSERELLE}" || ( "${SIMULE}" -eq 0 && -n "${PASSERELLE}" ) ]]; th
     [[ "$(jq -r '.ok' <<<"${PASS}")" == "true" ]] || alerte "passerelle ${PASSERELLE:-simulée} : /sante ne renvoie pas ok"
   else
     alerte "pas de réponse de la passerelle (${PASSERELLE:-simulée})"
+  fi
+fi
+
+# --- 4. Services annexes (unités systemd utilisateur : e-mailing, pages, mesure d'audience, extraction…) ---
+# Liste dans ATELIER_SANTE_UNITES (noms séparés par des espaces, vide = non contrôlé). En simulation,
+# --fichier-unites donne une ligne « unité état » par service à la place de systemctl.
+if [[ -n "${F_UNITES}" || ( "${SIMULE}" -eq 0 && -n "${UNITES}" ) ]]; then
+  if [[ -n "${F_UNITES}" ]]; then
+    if [[ -s "${F_UNITES}" ]]; then
+      while read -r unite etat _; do
+        [[ -n "${unite}" ]] || continue
+        [[ "${etat}" == "active" ]] || alerte "service ${unite} arrêté (état : ${etat:-inconnu})"
+      done < "${F_UNITES}"
+    else
+      alerte "aucun état de service lisible (${F_UNITES})"
+    fi
+  else
+    for unite in ${UNITES}; do
+      [[ "${unite}" =~ ^[A-Za-z0-9@._][A-Za-z0-9@._-]*$ ]] || { alerte "nom d'unité invalide : ${unite}"; continue; }
+      etat="$(systemctl --user is-active -- "${unite}" 2>/dev/null)"
+      [[ "${etat}" == "active" ]] || alerte "service ${unite} arrêté (état : ${etat:-inconnu})"
+    done
   fi
 fi
 

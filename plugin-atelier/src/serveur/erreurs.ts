@@ -22,6 +22,7 @@ const STATUT_PAR_CODE: Record<CodeErreur, number> = {
   dictee_indisponible: 503,
   voix_non_configuree: 503,
   voix_indisponible: 503,
+  emailing_indisponible: 503,
   conflit: 409,
   non_implemente: 501,
   erreur_interne: 500,

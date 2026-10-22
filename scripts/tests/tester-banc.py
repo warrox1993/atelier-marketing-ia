@@ -224,16 +224,18 @@ class Base(unittest.TestCase):
 # ------------------------------------------------------------------------------------------------ cas d'essai
 
 class TestsCas(unittest.TestCase):
-    def test_84_cas_28_departements_existants(self):
+    def test_97_cas_28_departements_existants(self):
         cas = bc.tous_les_cas()
-        self.assertEqual(len(cas), 84)
+        self.assertEqual(len(cas), 97)
         par_dept = {}
         for c in cas:
             par_dept.setdefault(c["departement"], []).append(c)
         self.assertEqual(len(par_dept), 28)
-        self.assertTrue(all(len(v) == 3 for v in par_dept.values()))
+        # Marketing : 3 cas du groupe 2 et 13 cas du groupe 4 (compétences stratégiques) ; 3 cas ailleurs.
+        self.assertEqual(len(par_dept["marketing"]), 16)
+        self.assertTrue(all(len(v) == 3 for d, v in par_dept.items() if d != "marketing"))
         self.assertLessEqual(set(par_dept), bc.departements_valides())
-        self.assertEqual(len({c["cle"] for c in cas}), 84)
+        self.assertEqual(len({c["cle"] for c in cas}), 97)
         for c in cas:
             self.assertTrue(c["entree"] and c["sortie_attendue"] and c["criteres"], c["cle"])
             self.assertRegex(c["source"], r"^docs/etude-usine-v2/groupe-\d-.+\.md:\d+$")
@@ -279,7 +281,7 @@ class TestsChargement(Base):
                                    "--interdits", os.path.join(self.tmp, "absent"))
         self.assertEqual(code, 0, out)
         self.assertEqual(len(ph.etat["jeux"]), 28)
-        self.assertEqual(sum(len(j["ex"]) for j in ph.etat["jeux"].values()), 84)
+        self.assertEqual(sum(len(j["ex"]) for j in ph.etat["jeux"].values()), 97)
         self.assertEqual(json.loads(out.strip().splitlines()[-1])["crees"], 28)
         ex1 = ph.etat["jeux"]["banc-recouvrement"]["ex"]["g2-11.3.3"]
         self.assertEqual(ex1["metadata"]["departement"], "recouvrement")
@@ -809,6 +811,17 @@ class TestsRepetitions(Base):
                                    "--repetitions", "0", "--sans-phoenix", "--ollama", ol.url)
         self.assertEqual(code, 1)
         self.assertIn("--repetitions", err)
+
+    def test_filtre_cas(self):
+        ol = self.serveur(faux_ollama())
+        base = ("--competence", "essai", "--racine", self.racine, "--version-a", self.skill,
+                "--repetitions", "1", "--sans-phoenix", "--ollama", ol.url)
+        code, out, err = self.lancer(ex.main, *base, "--cas", "g1-3.3.1")
+        self.assertEqual(code, 0, err)
+        self.assertIn("(direction, 1 cas)", out)
+        code, _, err = self.lancer(ex.main, *base, "--cas", "g1-3.3.1,g9-9.3.9")
+        self.assertEqual(code, 1)
+        self.assertIn("g9-9.3.9", err)
 
 
 class TestsPiecesInjectees(Base):

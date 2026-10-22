@@ -88,8 +88,12 @@ import { creerRetour, liaisonsPourAccueil, routesLiaisons, stockLiaisonsParesseu
 import { directionDuClient, entreprisesDuClient, lecteursBaseCommune } from "./connaissances/base-commune.js";
 import { routesRealite } from "./services-realite.js";
 import { lecturesRapportSql, routesRapport } from "./services-rapport.js";
+import { lecturesTableauSql, routesTableau } from "./services-tableau.js";
+import { lecturesConsentementsSql, routesConsentements } from "./services-consentements.js";
+import { creerStockExperiences, routesExperiences } from "./services-experiences.js";
 import { routesDictee } from "./services-dictee.js";
 import { routesVoix } from "./services-voix.js";
+import { routesEmailing } from "./services-emailing.js";
 import { lireQualification, routesReglagesLeads, stockReglagesParDefaut, type StockReglagesLeads } from "./services-reglages-leads.js";
 import { routesImportUrl } from "./services-import-url.js";
 import { faitsDeLaFiche, routesFaits } from "./services-faits.js";
@@ -1079,7 +1083,7 @@ export function creerServices(ctx: PluginContext, options: { transportReel?: Tra
       }
     }
     const effectif = await modeEffectif(r.companyId, campagne);
-    const chiffres = extraireChiffres(deduction.structures, LIMITES.chiffresConnexionMax);
+    const chiffres = extraireChiffres(deduction.structures, LIMITES.chiffresConnexionMax, entree.arguments === undefined ? [] : [entree.arguments]);
     const texte = entree.reponse.texte ?? JSON.stringify(entree.reponse.structuredContent ?? {}, null, 2);
     const id = randomUUID();
     await base.insererSource({
@@ -2688,6 +2692,20 @@ export function creerServices(ctx: PluginContext, options: { transportReel?: Tra
   Object.assign(routes, routesSynthese({ ctx, stock: stockLiaisons }));
   Object.assign(routes, routesDictee({ ctx, base, fetchLocal: options.fetchBoucleLocale }));
   Object.assign(routes, routesVoix({ ctx, base }));
+  // Envoi d'une campagne e-mail après décision humaine (carte de confirmation acceptée) : signe la preuve et appelle la passerelle locale.
+  Object.assign(routes, routesEmailing({
+    ctx, base, cleApprobation,
+    revocations: async (companyId) => String(((await routes["preuves.revocations"]!({ cle: "preuves.revocations", params: {}, query: {}, corps: null, acteur: { type: "systeme", id: "systeme", agentId: null, userId: null, runId: null }, companyId })).corps as { liste: string }).liste),
+    adressePasserelle: async (companyId) => {
+      const brute = (await configEntreprise(companyId)).passerelleUrl;
+      if (typeof brute !== "string") return null;
+      try {
+        const u = new URL(brute);
+        return (u.protocol === "http:" || u.protocol === "https:") && ["127.0.0.1", "[::1]", "localhost"].includes(u.hostname) ? u : null;
+      } catch { return null; }
+    },
+    fetchLocal: options.fetchBoucleLocale,
+  }));
   // Réglages des leads, poids du score et décisions humaines sur un critère (humain seulement).
   Object.assign(routes, routesReglagesLeads({ ctx, base, stock: stockReglagesLeads }));
   // « Passage au réel » : état des branchements et leads concernés (humain seulement, lecture seule).
@@ -2701,6 +2719,19 @@ export function creerServices(ctx: PluginContext, options: { transportReel?: Tra
       return liste.elements;
     },
   }));
+
+  // Tableau de direction du bureau Marketing : complément du rapport, lecture seule.
+  Object.assign(routes, routesTableau({ lectures: lecturesTableauSql(ctx.db) }));
+
+  // Registre des consentements des particuliers : humain seulement, coordonnées masquées par défaut (complet=1 journalisé).
+  Object.assign(routes, routesConsentements({
+    lectures: lecturesConsentementsSql(ctx.db),
+    cles: (companyId) => servicesProspection.clesDonnees!(companyId),
+    journaliser: base.journaliser,
+  }));
+
+  // Expériences A/B : verdict calculé par le code, retour automatique au Stratège (migration 021).
+  Object.assign(routes, routesExperiences({ ctx, base, stock: creerStockExperiences(ctx.db) }));
 
   // Carte des prospects et distance au bureau le plus proche (lecture seule, mêmes filtres que la liste).
   Object.assign(routes, routesCarte({

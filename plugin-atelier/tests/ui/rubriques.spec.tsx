@@ -62,7 +62,7 @@ describe("rubriques : table de correspondance", () => {
 describe("rubriques : onglets et vues", () => {
   const cas: Array<[string, string, string[], string]> = [
     ["Prospects", "/RNO/atelier/prospects", ["Liste", "Carte"], "Liste"],
-    ["Marketing", "/RNO/atelier/campagnes", ["Campagnes", "Contenus", "Calendrier", "Résultats", "Équipe", "Rapport du mois"], "Campagnes"],
+    ["Marketing", "/RNO/atelier/campagnes", ["Campagnes", "Contenus", "Calendrier", "Résultats", "Équipe", "Tableau de direction", "Rapport du mois"], "Campagnes"],
     ["Réglages", "/RNO/atelier/mise-en-place", ["Mise en place", "Marque et sources", "Connaissances", "Connexions", "Paramètres", "Corbeille"], "Mise en place"],
   ];
   for (const [rubrique, chemin, attendus, premier] of cas) {
@@ -155,7 +155,7 @@ describe("Paramètres en onglets", () => {
 describe("onglets accessibles", () => {
   it("un seul onglet dans l'ordre de tabulation (tabindex itinérant)", async () => {
     const c = await ouvrir("/RNO/atelier/campagnes");
-    expect(onglets(c, "Marketing : sections").map((o) => o.tabIndex)).toEqual([0, -1, -1, -1, -1, -1]);
+    expect(onglets(c, "Marketing : sections").map((o) => o.tabIndex)).toEqual([0, -1, -1, -1, -1, -1, -1]);
   });
   it("les flèches, Fin et Début déplacent seulement le focus (activation manuelle)", async () => {
     const c = await ouvrir("/RNO/atelier/campagnes");

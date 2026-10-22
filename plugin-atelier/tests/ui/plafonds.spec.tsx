@@ -8,6 +8,7 @@ import { createElement } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { EXEMPLES_DONNEES } from "../../src/contrats/exemples/index.js";
 import { PageAtelier } from "../../src/ui/index.js";
+import { niveauAlerteBudget } from "../../src/ui/plafonds.js";
 import { champParLibelle, cliquer, ENTREPRISE, installerPont, parTexte, radio, rendre, saisir, type Pont, type Rendu } from "./pont.js";
 
 const contexte = { companyId: ENTREPRISE, companyPrefix: "RNO", projectId: null, entityId: null, entityType: null, userId: "local-board" };
@@ -250,5 +251,42 @@ describe("résultats : montants engagés face à la limite", () => {
     expect(c.textContent).toMatch(/70,00\s€ engagés, sans limite/u);
     expect(c.textContent).toMatch(/70,00\s€ engagés sur 1\s500,00\s€/u);
     expect(c.textContent).toMatch(/Ce mois : 8,00\s€, budget mensuel sans limite/u);
+  });
+});
+
+describe("alerte de budget : 80 % engagés, puis plafond atteint", () => {
+  const engagement = (engageCents: number, limiteCents: number | null, choisi = true) => ({ engageCents, diffuseCents: engageCents, reserveCents: 0, limiteCents, choisi });
+
+  it("niveauAlerteBudget : seuils exacts, rien sans plafond chiffré", () => {
+    expect(niveauAlerteBudget(engagement(7999, 10000))).toBeNull();
+    expect(niveauAlerteBudget(engagement(8000, 10000))).toBe("approche");
+    expect(niveauAlerteBudget(engagement(9999, 10000))).toBe("approche");
+    expect(niveauAlerteBudget(engagement(10000, 10000))).toBe("atteint");
+    expect(niveauAlerteBudget(engagement(12000, 10000))).toBe("atteint");
+    expect(niveauAlerteBudget(engagement(50000, null))).toBeNull();
+    expect(niveauAlerteBudget(engagement(50000, 10000, false))).toBeNull();
+  });
+
+  it("résultats : encart « approche » avec le reste exact, encart « atteint » en danger", async () => {
+    const base = EXEMPLES_DONNEES["atelier.resultats"] as { plafondsPub: { campagnes: Array<Record<string, unknown>> } } & Record<string, unknown>;
+    pont.donnees["atelier.resultats"] = {
+      data: {
+        ...base,
+        coutsIa: { totalCents: 800, estimation: false, detail: "d", moisCents: 800, budgetMensuelCents: 0 },
+        plafondsPub: {
+          entreprise: { plafondPub: { type: "montant", montantCents: 100000, decidePar: "u", decideLe: "2026-10-15T10:00:00.000Z" }, engagementPub: engagement(100000, 100000) },
+          campagnes: [{ ...base.plafondsPub.campagnes[0], engagementPub: engagement(127500, 150000) }],
+        },
+      },
+      loading: false,
+      error: null,
+    };
+    const c = await page("/RNO/atelier/resultats");
+    const approche = c.querySelector('[data-alerte-budget="approche"]');
+    expect(approche?.getAttribute("data-ton")).toBe("attention");
+    expect(approche?.textContent).toMatch(/Il reste 225,00\s€ avant le plafond/u);
+    const atteint = c.querySelector('[data-alerte-budget="atteint"]');
+    expect(atteint?.getAttribute("data-ton")).toBe("danger");
+    expect(atteint?.textContent).toContain("Toute nouvelle dépense sera refusée");
   });
 });

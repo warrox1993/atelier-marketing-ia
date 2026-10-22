@@ -2,7 +2,7 @@
 name: "niveau-conscience-message"
 description: "Fixe pour chaque contenu le niveau de conscience de la cible (inconscient du problème, conscient du problème, des solutions, du produit, pleinement conscient, selon Eugene Schwartz), choisit l'ouverture adaptée, contrôle la sophistication du marché et associe le niveau au canal. À utiliser avant de rédiger une annonce, une page, un post ou un courriel, et pour relire un message qui s'adresse au mauvais niveau."
 metadata:
-  version: "1.0.0"
+  version: "1.1.0"
   langue: "fr"
   domaine: "creation"
 ---
@@ -60,6 +60,29 @@ Une table par pièce : cible, niveau de conscience, ouverture choisie, preuve, c
 - Le niveau est un diagnostic à confirmer par un test, pas une mesure.
 - Ne jamais écrire tous les messages pour le niveau « pleinement conscient ».
 - Le niveau ne dispense pas du contrôle réglementaire (`controle-communications-reglementees`).
+
+### Règles de vérité
+
+- Une ligne par pièce fournie, avec l'identifiant de la pièce, sans pièce ajoutée ni oubliée.
+- Aucun fait n'est ajouté aux pièces : ni chiffre, ni agrément, ni délai, ni nom, ni promesse qui n'y figure pas. La preuve d'une pièce est un passage cité entre guillemets, mot pour mot, ou « aucune preuve dans la pièce ». Ne pas inventer de preuve pour boucher le trou.
+- La cible, le niveau et le canal se déduisent de la pièce et de sa description. Ce qui n'est pas dit est « inconnu », pas supposé.
+- La remarque de sophistication se prononce clairement (marché saturé de promesses, peu saturé, ou « inconnu faute d'annonces concurrentes fournies »), s'appuie sur ce que la pièce promet réellement, et dit ce qui remplacerait un superlatif (preuve ou mécanisme). Une phrase valable pour n'importe quelle pièce est refusée.
+- Le niveau est un diagnostic à confirmer par un test : l'écrire « à confirmer ».
+
+### Modèle de livrable
+
+À recopier, une table par pièce, tous les champs sont obligatoires.
+
+**Pièce (identifiant)**
+
+| Champ | Contenu |
+| --- | --- |
+| Cible | (qui, ce qu'elle sait déjà) |
+| Niveau de conscience | (un des cinq niveaux, « à confirmer ») |
+| Ouverture choisie | (type d'ouverture et phrase de la pièce) |
+| Preuve | (passage cité entre guillemets, ou « aucune preuve dans la pièce ») |
+| Canal | (canal) |
+| Remarque de sophistication | (saturé, peu saturé ou inconnu, avec la raison tirée de la pièce) |
 
 ## Exemple
 

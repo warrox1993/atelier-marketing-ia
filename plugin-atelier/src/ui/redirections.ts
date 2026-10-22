@@ -22,7 +22,7 @@ import { useAncre } from "./onglets.js";
 import { lireEntreprises, type EntrepriseHote } from "./vues/departements.js";
 
 /** Vues qui n'existent que dans le bureau Marketing du client. */
-export const VUES_BUREAU_MARKETING: ReadonlyArray<CleVue> = ["prospects", "carte", "campagnes", "contenus", "calendrier", "resultats", "equipe", "rapport"];
+export const VUES_BUREAU_MARKETING: ReadonlyArray<CleVue> = ["prospects", "carte", "campagnes", "contenus", "calendrier", "resultats", "equipe", "tableau", "rapport"];
 
 /** Bureau (service) où la vue doit s'ouvrir : « direction » pour le chat, « marketing » pour ses vues ; null ailleurs. */
 export function bureauAttendu(vue: CleVue): "direction" | "marketing" | null {

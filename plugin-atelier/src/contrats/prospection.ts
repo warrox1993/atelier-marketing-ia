@@ -291,6 +291,17 @@ export const PreuveConsentement = z
     reference: z.string().min(3).max(500),
     /** Retrait du consentement : la date suffit à l'invalider pour tous les canaux. */
     retireLe: Horodatage.nullable().default(null),
+    /** Page où le consentement a été capté (adresse de la page du formulaire), quand la captation la transmet. */
+    pageCaptation: z.string().min(3).max(2048).optional(),
+    /** Adresse IP TRONQUÉE de la personne (IPv4 au dernier octet à zéro, IPv6 réduite à ses 48 premiers bits, ex. 2001:db8:1::) ; jamais l'adresse complète. */
+    adresseIpTronquee: z
+      .string()
+      .max(45)
+      .refine(
+        (v) => /^(?:\d{1,3}\.){3}0$/u.test(v) || /^(?:[0-9a-fA-F]{1,4}:){1,3}:$/u.test(v),
+        "Adresse IP tronquée attendue (a.b.c.0 en IPv4, a:b:c:: en IPv6), jamais l'adresse complète",
+      )
+      .optional(),
   })
   .strict()
   .refine((c) => new Set(c.canauxAutorises).size === c.canauxAutorises.length, { message: "Canal en double", path: ["canauxAutorises"] })

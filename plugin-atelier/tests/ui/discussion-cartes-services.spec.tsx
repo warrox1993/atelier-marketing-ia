@@ -84,14 +84,19 @@ async function ouvrir() {
 const lecturesCartes = () => appels.filter((a) => a.methode === "GET" && a.url.includes("/discussion/cartes-services"));
 
 describe("chat : décisions des autres services dans le fil", () => {
-  it("la frise de la mission est en tête du fil (lecture partagée avec les cartes) : phase qui attend la décision, aucune lecture en double de la tâche", async () => {
+  it("la bande de la mission est épinglée sous l'en-tête, hors du fil et du log (lecture partagée avec les cartes) : phase qui attend la décision, aucune lecture en double de la tâche", async () => {
     const c = await ouvrir();
-    const frise = c.querySelector("[data-testid=frise-mission]");
-    expect(frise).not.toBeNull();
-    expect(frise!.querySelectorAll("li.atl-frise-phase")).toHaveLength(6);
+    const bande = c.querySelector("[data-testid=bandeau-missions] .atl-bande");
+    expect(bande).not.toBeNull();
+    // Épinglée : ni dans la zone qui défile, ni dans la zone annoncée comme journal de messages.
+    expect(bande!.closest(".atl-disc-fil")).toBeNull();
+    expect(bande!.closest('[role="log"]')).toBeNull();
+    expect(c.querySelector(".atl-disc-entete")!.nextElementSibling).toBe(bande!.parentElement);
+    expect(bande!.parentElement!.nextElementSibling!.classList.contains("atl-disc-fil")).toBe(true);
+    expect(bande!.querySelectorAll("li.atl-bande-phase")).toHaveLength(6);
     // La sous-tâche MKT-3 (sans agent connu : repli sur le titre, donc Production) porte une question en attente.
-    expect(frise!.querySelector("[data-phase=production]")!.textContent).toContain("attend votre décision");
-    expect(frise!.querySelector("[data-phase=reponse]")!.textContent).toContain("attend votre décision");
+    expect(bande!.querySelector("[data-phase=production]")!.textContent).toContain("attend votre décision");
+    expect(bande!.querySelector("[data-phase=reponse]")!.textContent).toContain("attend votre décision");
     expect(appels.filter((x) => x.methode === "GET" && x.url.endsWith("/issues/iss-mkt-2"))).toHaveLength(1);
   });
 

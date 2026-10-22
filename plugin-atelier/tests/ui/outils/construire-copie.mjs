@@ -30,6 +30,7 @@ await Promise.all([
   esbuild.build({ ...configs.extraction, outfile: path.join(dist, "extraction-worker.js") }),
   esbuild.build({ ...configs.manifest, outdir: dist }),
   esbuild.build({ ...configs.ui, outdir: path.join(dist, "ui") }),
+  esbuild.build({ ...configs.scene3d, outdir: path.join(dist, "ui") }),
 ]);
 cpSync("package.json", path.join(cible, "package.json"));
 cpSync("migrations", path.join(cible, "migrations"), { recursive: true });

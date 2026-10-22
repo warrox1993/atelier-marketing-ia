@@ -125,6 +125,28 @@ export const LireUrlEntree = z.object({
 });
 export type LireUrlEntree = z.infer<typeof LireUrlEntree>;
 
+/** Corps de `emailing.envoyer` : la campagne et l'empreinte de son contenu, citées par la carte de confirmation acceptée par un humain. */
+export const EnvoyerEmailingEntree = z
+  .object({
+    companyId: IdNatif,
+    issueId: IdNatif,
+    campagneId: z.number().int().min(1),
+    empreinte: z.string().regex(/^[0-9a-f]{64}$/, "empreinte de 64 caractères hexadécimaux attendue"),
+  })
+  .strict();
+export type EnvoyerEmailingEntree = z.infer<typeof EnvoyerEmailingEntree>;
+
+/** Corps de `emailing.demander_envoi` : seulement la campagne et son empreinte ; sujet, listes et destinataires sont LUS par le plugin chez la passerelle, jamais déclarés par l'agent. */
+export const DemanderEnvoiEmailingEntree = z
+  .object({
+    companyId: IdNatif,
+    issueId: IdNatif,
+    campagneId: z.number().int().min(1),
+    empreinte: z.string().regex(/^[0-9a-f]{64}$/, "empreinte de 64 caractères hexadécimaux attendue"),
+  })
+  .strict();
+export type DemanderEnvoiEmailingEntree = z.infer<typeof DemanderEnvoiEmailingEntree>;
+
 export const ResultatVerificationLien = z.object({
   url: z.string().max(2048),
   urlFinale: z.string().max(2048).nullable(),

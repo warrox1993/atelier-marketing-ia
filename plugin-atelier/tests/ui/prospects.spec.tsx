@@ -1027,3 +1027,113 @@ describe("fiche : décision humaine sur un critère de qualification", () => {
     }
   });
 });
+
+describe("registre des consentements", () => {
+  const LIGNE = {
+    prospectId: B2C.id, pseudonyme: "[client-7f3a]", nom: "J••• D•••", courriel: "j•••@exemple.be", telephone: "+32 4•• •• •• 56", adresse: null,
+    canauxAutorises: ["courriel", "telephone"], consentementLe: "2026-10-01T09:00:00.000Z", retireLe: null, source: "https://exemple.be/devis", reference: "soumission-42",
+    texteAccepte: "J'accepte de recevoir des offres par courriel.", responsableNomme: "Société Exemple", pageCaptation: "https://exemple.be/devis?etape=3",
+    adresseIpTronquee: "203.0.113.0", campagneId: null, campagne: "Toitures 2026", origine: "formulaire_entrant",
+    origineCoordonnees: { type: "formulaire", collecteLe: "2026-10-01T09:00:00.000Z", url: "https://exemple.be/devis" }, basesLegales: [{ canal: "courriel", base: "consentement" }], mode: "reel",
+  };
+  const reponse = (lignes: unknown[], o: Record<string, unknown> = {}) => ({ companyId: ENTREPRISE, complet: false, lignes, total: lignes.length, page: 1, taille: 25, pages: 1, ...o });
+  const registre = () => appels.filter((a) => a.methode === "GET" && a.url.includes("/consentements/registre"));
+  async function ouvrirRegistre(corps: unknown) {
+    serveur = (methode, url) => (url.includes("/consentements/registre") ? { statut: 200, corps: typeof corps === "function" ? (corps as (u: string) => unknown)(url) : corps } : { statut: 200, corps: page(B2B, B2C) });
+    const c = await ouvrir();
+    await cliquer(parTexte(c, "button", "Registre des consentements"));
+    return c;
+  }
+
+  it("onglet de la rubrique : preuve complète, coordonnées masquées, aucun tiret cadratin", async () => {
+    const c = await ouvrirRegistre(reponse([LIGNE]));
+    expect(parTexte(c, "button", "Registre des consentements").getAttribute("aria-pressed")).toBe("true");
+    expect(registre()[0]!.url).toContain(`/consentements/registre?companyId=${ENTREPRISE}&page=1&taille=25`);
+    expect(registre()[0]!.url).not.toContain("complet");
+    const ligne = c.querySelectorAll("tbody tr");
+    expect(ligne).toHaveLength(1);
+    const t = ligne[0]!.textContent!;
+    for (const attendu of ["[client-7f3a]", "j•••@exemple.be", "+32 4•• •• •• 56", "J'accepte de recevoir", "https://exemple.be/devis?etape=3", "203.0.113.0", "Toitures 2026", "soumission-42", "formulaire", "Courriel (consentement)"]) {
+      expect(t).toContain(attendu);
+    }
+    expect(c.textContent).not.toMatch(/jeanne|dupont/iu);
+    expect(c.textContent).not.toContain("—");
+  });
+
+  it("une preuve sans IP ni page le dit clairement", async () => {
+    const c = await ouvrirRegistre(reponse([{ ...LIGNE, pageCaptation: null, adresseIpTronquee: null }]));
+    expect(c.textContent).toContain("Page de captation : non transmise");
+    expect(c.textContent).toContain("Adresse IP tronquée : non conservée");
+  });
+
+  it("état vide clair, sans filtre puis avec filtre", async () => {
+    const c = await ouvrirRegistre(reponse([]));
+    expect(c.textContent).toContain("Aucun consentement enregistré pour le moment.");
+    expect(c.querySelector("table")).toBeNull();
+    expect(parTexte(c, "button", "Exporter (CSV)").getAttribute("aria-disabled")).toBe("true");
+    await saisir(champParLibelle(c, "Consentement donné à partir du") as HTMLInputElement, "2026-10-01");
+    await cliquer(parTexte(c, "button", "Appliquer"));
+    expect(c.textContent).toContain("Aucun consentement ne correspond à ces filtres.");
+    expect(registre().at(-1)!.url).toContain("du=2026-10-01");
+  });
+
+  it("filtres période et mission envoyés à la route ; période inversée bloquée", async () => {
+    const M1 = "11111111-1111-4111-8111-aaaaaaaaaaaa";
+    pont.donnees["atelier.campagnes"] = { data: [{ id: M1, nom: "Professions médicales" }], loading: false, error: null };
+    const c2 = await ouvrirRegistre(reponse([LIGNE]));
+    await saisir(champParLibelle(c2, "Consentement donné à partir du") as HTMLInputElement, "2026-10-10");
+    await saisir(champParLibelle(c2, "Jusqu'au (inclus)") as HTMLInputElement, "2026-10-01");
+    expect(parTexte(c2, "button", "Appliquer").getAttribute("aria-disabled")).toBe("true");
+    await saisir(champParLibelle(c2, "Jusqu'au (inclus)") as HTMLInputElement, "2026-10-31");
+    await saisir(champParLibelle(c2, "Mission") as HTMLSelectElement, M1);
+    await cliquer(parTexte(c2, "button", "Appliquer"));
+    const u = registre().at(-1)!.url;
+    expect(u).toContain("du=2026-10-10");
+    expect(u).toContain("au=2026-10-31");
+    expect(u).toContain(`campagneId=${M1}`);
+  });
+
+  it("« Afficher les coordonnées en clair » relit avec complet=1 et prévient que l'accès est journalisé", async () => {
+    const c = await ouvrirRegistre((url: string) => (url.includes("complet=1") ? reponse([{ ...LIGNE, courriel: "jeanne.dupont@exemple.be", nom: "Jeanne Dupont" }], { complet: true }) : reponse([LIGNE])));
+    await cliquer(parTexte(c, "button", "Afficher les coordonnées en clair"));
+    expect(registre().at(-1)!.url).toContain("complet=1");
+    expect(c.textContent).toContain("jeanne.dupont@exemple.be");
+    expect(c.textContent).toContain("inscrits au journal");
+    await cliquer(parTexte(c, "button", "Masquer les coordonnées"));
+    expect(registre().at(-1)!.url).not.toContain("complet");
+    expect(c.textContent).not.toContain("jeanne.dupont");
+  });
+
+  it("« Exporter (CSV) » appelle format=csv avec les filtres et remet le fichier au navigateur", async () => {
+    const telecharges: string[] = [];
+    vi.stubGlobal("URL", Object.assign(URL, { createObjectURL: () => "blob:x", revokeObjectURL: () => undefined }));
+    const clic = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(function (this: HTMLAnchorElement) {
+      telecharges.push(this.download);
+    });
+    const csv = { companyId: ENTREPRISE, complet: false, fichier: { nom: "registre-des-consentements-2026-10-22.csv", typeMime: "text/csv;charset=utf-8", contenuBase64: Buffer.from("a;b").toString("base64") }, lignes: 1, tronque: false };
+    const c = await ouvrirRegistre((url: string) => (url.includes("format=csv") ? csv : reponse([LIGNE])));
+    await cliquer(parTexte(c, "button", "Exporter (CSV)"));
+    const u = registre().at(-1)!.url;
+    expect(u).toContain("format=csv");
+    expect(u).not.toContain("taille=");
+    expect(telecharges).toEqual(["registre-des-consentements-2026-10-22.csv"]);
+    expect(c.textContent).toContain("Fichier téléchargé : registre-des-consentements-2026-10-22.csv (1 ligne)");
+    clic.mockRestore();
+  });
+
+  it("pagination : page suivante demandée au serveur, boutons désactivés aux extrémités", async () => {
+    const c = await ouvrirRegistre((url: string) => reponse([LIGNE], { total: 60, pages: 3, page: Number(new URL(url, "http://x").searchParams.get("page")) }));
+    expect(parTexte(c, "button", "Page précédente").getAttribute("aria-disabled")).toBe("true");
+    await cliquer(parTexte(c, "button", "Page suivante"));
+    expect(registre().at(-1)!.url).toContain("page=2");
+    expect(c.textContent).toContain("page 2 sur 3");
+  });
+
+  it("un refus du serveur (agent ou entreprise) s'affiche comme une erreur d'accès, sans données", async () => {
+    serveur = (_m, url) => (url.includes("/consentements/registre") ? { statut: 403, corps: { error: "Le registre des consentements est réservé à un humain.", code: "elevation_refusee" } } : { statut: 200, corps: page(B2B, B2C) });
+    const c = await ouvrir();
+    await cliquer(parTexte(c, "button", "Registre des consentements"));
+    expect(c.querySelector('[role="alert"]')).not.toBeNull();
+    expect(c.querySelector("table")).toBeNull();
+  });
+});

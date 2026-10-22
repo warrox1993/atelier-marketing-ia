@@ -2,7 +2,7 @@
 name: "entretien-client-sans-biais"
 description: "Prépare un guide d'entretien client fondé sur des faits passés (règles de The Mom Test de Rob Fitzpatrick), interdit les questions qui flattent une idée, fournit la grille de classement des notes (faits, douleurs, engagements, compliments, opinions) et la synthèse sur 5 à 10 entretiens. L'entretien est mené par un humain : sans entretien réel, la réponse est « inconnu ». À utiliser pour comprendre pourquoi des clients choisissent ou quittent un courtier, avant de fixer un positionnement ou un message."
 metadata:
-  version: "1.0.0"
+  version: "1.1.0"
   langue: "fr"
   domaine: "etudes"
 ---
@@ -65,6 +65,32 @@ ceux des notes fournies, jamais reformulés comme citations.
 - Un agent IA ne mène pas l'entretien et n'invente jamais de réponses « types » de clients.
 - Cinq à dix entretiens donnent des pistes, pas une mesure statistique.
 - Un client qui parle de lui par politesse reste un biais : l'engagement concret (rendez-vous, introduction) pèse plus que le compliment.
+
+### Règles de vérité
+
+- Les occurrences se comptent entretien par entretien : chaque fait liste les identifiants des entretiens où il apparaît (E1, E2...) et son total « n sur N ». Un compte qui ne se retrouve pas dans les notes est faux.
+- Un fait cité par un seul client est « isolé (1 sur N) ». Il n'est jamais écrit comme récurrent, fréquent ou général. Un fait n'est récurrent qu'à partir de deux entretiens distincts.
+- Les verbatims sont copiés mot pour mot depuis les notes, entre guillemets, avec l'identifiant anonyme de l'entretien. Un propos reformulé n'est pas un verbatim : il se range dans la synthèse, sans guillemets. Pas de passage exact dans les notes, pas de verbatim.
+- Aucune réponse, aucun fait, aucune cause n'est déduit au-delà des notes. Ce que les notes ne disent pas va dans les inconnues restantes. Aucun nom, aucune coordonnée n'est repris.
+- Compliments et opinions sont séparés des faits et ne comptent pas dans la conclusion.
+
+### Modèle de livrable
+
+À recopier, tous les champs sont obligatoires.
+
+**Questions d'apprentissage** : trois.
+
+**Faits** (classés par nombre d'occurrences)
+
+| Fait | Entretiens | Occurrences | Statut (récurrent ou isolé) |
+| --- | --- | --- | --- |
+| (fait tiré des notes) | (E1, E3...) | (n sur N) | (récurrent ou isolé) |
+
+**Douleurs, engagements concrets, compliments et opinions** : une rubrique chacune, avec identifiant d'entretien.
+
+**Verbatims anonymisés** : « (propos exact) » (E3), un par fait important.
+
+**Inconnues restantes** : liste de ce que les notes ne permettent pas de dire.
 
 ## Exemple
 

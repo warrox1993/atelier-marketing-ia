@@ -2,7 +2,7 @@
 name: "positionnement-concurrentiel"
 description: "Construit le positionnement d'un client à partir de ses vraies alternatives : tableau alternatives, attributs prouvés, valeur, preuve, segment, catégorie ; carte des positions déjà occupées dans l'esprit des clients ; énoncé de positionnement ; renvoi obligatoire vers la conformité publicitaire. À utiliser après le choix de la cible et avant l'offre ou les contenus ; jamais pour affirmer une supériorité invérifiable."
 metadata:
-  version: "1.0.0"
+  version: "1.1.0"
   langue: "fr"
   domaine: "marketing"
 ---
@@ -65,6 +65,35 @@ Un tableau « alternatives, attributs, valeur, preuve, segment, catégorie », l
 - Changer de message à chaque campagne annule le positionnement.
 - Ce travail n'est pas un conseil juridique : la conformité signale, un humain valide.
 - Étape 9 de Dunford (ajouter une tendance) : à utiliser avec prudence, jamais comme preuve.
+
+### Règles de vérité
+
+- Tout chiffre (délai, nombre d'avis, note, prix, taux) vient des pièces fournies, repris tel quel avec son échantillon, sa période et sa source. Un chiffre absent des pièces s'écrit « inconnu ». Ne jamais en produire un autre : ni seuil, ni plafond, ni promesse chiffrée, ni arrondi favorable.
+- Chaque alternative citée dans l'entrée a sa propre ligne de comparaison, une par une, sans regroupement ni oubli. « Ne rien faire » compte comme alternative si l'entrée la mentionne.
+- Toute affirmation souhaitée par le client (rang, supériorité, prix, rapidité) est classée : « prouvée » (preuve des pièces citée) ou « sans preuve » (retirée ou reformulée). Les affirmations sans preuve et toutes les comparaisons sont envoyées explicitement à `conformite-publicitaire`, une ligne par affirmation, avec le statut « envoyée, retour en attente ». Rien n'est « validé » sans ce retour.
+- Une partie non prouvée est marquée « hypothèse ». Aucun fait n'est ajouté aux pièces.
+
+### Modèle de livrable
+
+À recopier, tous les champs sont obligatoires ; un champ sans donnée porte « inconnu ».
+
+**Alternatives de la cible** (une ligne par alternative de l'entrée)
+
+| Alternative | Attribut du client | Valeur pour la cible | Preuve et source (ou « inconnu ») | Segment | Catégorie |
+| --- | --- | --- | --- | --- | --- |
+
+**Carte des positions occupées** : position de chaque concurrent cité, créneau libre retenu (ou « inconnu »).
+
+**Idée unique** : une phrase.
+
+**Énoncé de positionnement** : un seul, au gabarit de l'étape 9.
+
+**Affirmations envoyées à `conformite-publicitaire`**
+
+| Affirmation | Preuve disponible (ou « aucune ») | Décision (retirée, reformulée, conservée) | Statut |
+| --- | --- | --- | --- |
+
+**Hypothèses** : liste. **Inconnus** : liste.
 
 ## Exemple
 

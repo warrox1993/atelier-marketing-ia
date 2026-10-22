@@ -46,6 +46,17 @@ export function creerConfigurations() {
     },
     manifest: presets.esbuild.manifest,
     ui: presets.esbuild.ui,
+    // Scène 3D de la frise (three.js) : fichier voisin de l'interface, chargé à la demande par import dynamique
+    // (l'hôte importe l'entrée de l'interface depuis une adresse blob:, donc pas de découpage relatif automatique).
+    scene3d: {
+      ...presets.esbuild.ui,
+      entryPoints: { "frise-3d": "src/ui/frise3d/frise-3d.ts" },
+      // Le modèle Blender est embarqué dans le fichier (octets bruts) : pas de route de plus à servir.
+      loader: { ".glb": "binary" },
+      external: [],
+      minify: true,
+      sourcemap: false,
+    },
   };
 }
 
@@ -65,12 +76,13 @@ if (lanceDirectement) {
   const extractionCtx = await esbuild.context(configs.extraction);
   const manifestCtx = await esbuild.context(configs.manifest);
   const uiCtx = await esbuild.context(configs.ui);
+  const scene3dCtx = await esbuild.context(configs.scene3d);
 
   if (watch) {
-    await Promise.all([workerCtx.watch(), vectoriseurCtx.watch(), extractionCtx.watch(), manifestCtx.watch(), uiCtx.watch()]);
+    await Promise.all([workerCtx.watch(), vectoriseurCtx.watch(), extractionCtx.watch(), manifestCtx.watch(), uiCtx.watch(), scene3dCtx.watch()]);
     console.log("esbuild watch mode enabled for worker, extraction worker, manifest, and ui");
   } else {
-    await Promise.all([workerCtx.rebuild(), vectoriseurCtx.rebuild(), extractionCtx.rebuild(), manifestCtx.rebuild(), uiCtx.rebuild()]);
-    await Promise.all([workerCtx.dispose(), vectoriseurCtx.dispose(), extractionCtx.dispose(), manifestCtx.dispose(), uiCtx.dispose()]);
+    await Promise.all([workerCtx.rebuild(), vectoriseurCtx.rebuild(), extractionCtx.rebuild(), manifestCtx.rebuild(), uiCtx.rebuild(), scene3dCtx.rebuild()]);
+    await Promise.all([workerCtx.dispose(), vectoriseurCtx.dispose(), extractionCtx.dispose(), manifestCtx.dispose(), uiCtx.dispose(), scene3dCtx.dispose()]);
   }
 }
