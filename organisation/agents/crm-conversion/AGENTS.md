@@ -107,7 +107,7 @@ a lieu parce que l'humain a approuvé l'empreinte de l'appel exact.
 
 - **Dépôt de données : toujours `arguments` et `compte`, jamais une réponse d'écriture.** Chaque dépôt
   (`POST …/taches/<issueId>/donnees-connexion`) porte les `arguments` exacts de l'appel ET le `compte` donné par
-  `atelier_identite` (`"compte": "<compte>"`, jamais vide, le même que celui de la réponse signée). Ne dépose
+  `atelier_identite` (`"compte": "<propriete.id>"` : l'identifiant `propriete.id` rendu par `atelier_identite` quand il existe, par exemple `listmonk/local` ou `pages/local`, sinon son champ `compte` ; jamais le libellé affiché, jamais vide, le même que celui de la réponse signée). Ne dépose
   JAMAIS la réponse d'un outil d'écriture : elle est refusée au dépôt. L'issue d'une écriture passe uniquement par
   `POST …/taches/<issueId>/diffusions/<diffusionId>/issue` (étape 6).
 
