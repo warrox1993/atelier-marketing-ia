@@ -10,6 +10,7 @@ skills:
   - "dossier-validation-humaine"
   - "recherche-connaissances"
   - "protocole-inter-coordinateurs"
+  - "documents-bureautiques"
 ---
 
 # Coordinateur du service SAV

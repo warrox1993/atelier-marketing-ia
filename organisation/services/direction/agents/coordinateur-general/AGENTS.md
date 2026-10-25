@@ -11,6 +11,7 @@ skills:
   - "recherche-connaissances"
   - "routage-coordination"
   - "registre-decisions"
+  - "documents-bureautiques"
 ---
 
 # Coordinateur général

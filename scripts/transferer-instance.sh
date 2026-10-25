@@ -215,11 +215,14 @@ envoyer() {
 controler_api() {   # controler_api <port> ; affiche « N entreprise(s), M agent(s) » ; code 1 si l'API ne répond pas
   local port="$1" url="http://127.0.0.1:$1/api" entreprises ids id agents total=0
   command -v jq >/dev/null 2>&1 || { echo "ERREUR : jq requis pour le contrôle par l'API" >&2; return 1; }
-  entreprises="$(curl -fsS -m 10 "${url}/companies" 2>/dev/null)" || return 1
+  # Clé board facultative (mode authentifié) : ~/.config/atelier/board-<port>.key, voir lib-cle-board.sh.
+  # shellcheck disable=SC1091
+  source "$(dirname "${BASH_SOURCE[0]}")/lib-cle-board.sh"
+  entreprises="$(curl_atelier "${port}" -fsS -m 10 "${url}/companies" 2>/dev/null)" || return 1
   ids="$(jq -r '.[].id' <<<"${entreprises}" 2>/dev/null)" || return 1
   local n; n="$(jq 'length' <<<"${entreprises}")"
   for id in ${ids}; do
-    agents="$(curl -fsS -m 20 "${url}/companies/${id}/agents" 2>/dev/null | jq 'length' 2>/dev/null)" || return 1
+    agents="$(curl_atelier "${port}" -fsS -m 20 "${url}/companies/${id}/agents" 2>/dev/null | jq 'length' 2>/dev/null)" || return 1
     total=$((total + agents))
   done
   echo "API (port ${port}) : ${n} entreprise(s), ${total} agent(s)."

@@ -16,6 +16,8 @@ skills:
   - "actifs-distinctifs"
   - "liens-entrants-seo"
   - "aimant-a-prospects"
+  - "humanisation-texte-fr"
+  - "design-visuel-sobre"
   - "memoire-para"
 ---
 
@@ -479,6 +481,7 @@ Clé : `tache.diffusions`. Demande d'action externe : refusée côté serveur sa
 | `service` | énumération | non | "facebook" \| "instagram" \| "linkedin" \| "crm" \| "pipedrive" \| "odoo" \| "teamleader" |
 | `outil` | texte | non | motif `^[a-z][a-z0-9_]{0,63}$` |
 | `arguments` | objet libre | non |  |
+| `travauxFabrique` | tableau de uuid | non | 0 à 10 éléments |
 
 Exemple minimal valide :
 

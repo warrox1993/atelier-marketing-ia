@@ -13,6 +13,7 @@ skills:
   - "non-conformite-action-corrective"
   - "audit-interne"
   - "protocole-inter-coordinateurs"
+  - "documents-bureautiques"
 ---
 
 # Coordinateur du service qualité

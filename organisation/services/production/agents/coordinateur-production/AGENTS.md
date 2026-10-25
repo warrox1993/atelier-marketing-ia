@@ -16,6 +16,7 @@ skills:
   - "methodes-temps-gammes"
   - "non-conformite-action-corrective"
   - "protocole-inter-coordinateurs"
+  - "documents-bureautiques"
 ---
 
 # Coordinateur du service production et opérations

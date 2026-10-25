@@ -1,0 +1,7 @@
+chatterbox-tts==0.1.7
+resemble-perth==1.0.1
+kokoro==0.7.16
+# resemble-perth importe pkg_resources (sans lui, PerthImplicitWatermarker vaut None) : setuptools d'avant le retrait de pkg_resources.
+setuptools==80.9.0
+# kokoro 0.7.16 attend l'interface de misaki 0.7.x : misaki 0.9 renvoie un couple (phonèmes, jetons) pour le français et le son est alors tronqué à 0,5 s.
+misaki[en]==0.7.17

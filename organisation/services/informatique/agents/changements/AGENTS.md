@@ -6,6 +6,7 @@ title: "Informatique · Dossiers de changement"
 reportsTo: "coordinateur-informatique"
 skills:
   - "demande-de-changement"
+  - "fiche-transmission-developpeurs"
 ---
 
 # Changements

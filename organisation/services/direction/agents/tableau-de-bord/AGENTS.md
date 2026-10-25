@@ -6,6 +6,8 @@ title: "Direction · Tableau de bord de pilotage"
 reportsTo: "coordinateur-direction"
 skills:
   - "tableau-de-bord-pme"
+  - "documents-bureautiques"
+  - "visualisation-donnees"
 ---
 
 # Tableau de bord de pilotage

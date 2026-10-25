@@ -6,6 +6,7 @@ title: "Données et BI · Contrôle indépendant avant diffusion"
 reportsTo: "coordinateur-donnees"
 skills:
   - "validation-analyse"
+  - "visualisation-donnees"
 ---
 
 # Contrôle des analyses

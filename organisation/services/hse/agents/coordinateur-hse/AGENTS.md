@@ -13,6 +13,7 @@ skills:
   - "accident-du-travail"
   - "conformite-environnementale"
   - "protocole-inter-coordinateurs"
+  - "documents-bureautiques"
 ---
 
 # Coordinateur du service sécurité, santé et environnement

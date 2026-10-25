@@ -1,0 +1,383 @@
+{
+ "description": "Contrat de provenance.json : `provenance` est produit par fabrique.service._provenance_document (code reel, document). Le plugin (verifierProvenance) doit accepter ou refuser chaque variante. Les variantes `base_video` derivent de la base avec le bloc video indique.",
+ "contenu_fichier_utf8": "contenu de document de test",
+ "entreprise": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+ "maintenant": "2026-10-24T12:00:00Z",
+ "provenance": {
+  "travail": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+  "entreprise": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+  "type": "document",
+  "format": "docx",
+  "fichier": "document.docx",
+  "outils": {
+   "python-docx": "1.2.0"
+  },
+  "voix": [],
+  "musique": null,
+  "digital_source_type": "http://cv.iptc.org/newscodes/digitalsourcetype/trainedAlgorithmicMedia",
+  "mention_visible": false,
+  "sha256": "6380ef903cec8144656b51ba252b0d4508a198c5d20d26a6996254853986fdfa"
+ },
+ "registres": {
+  "ok": {
+   "voix": [
+    {
+     "id": "synthese-chatterbox-fr",
+     "expire_le": "2027-01-01",
+     "entreprises": [
+      "*"
+     ]
+    }
+   ]
+  },
+  "expire": {
+   "voix": [
+    {
+     "id": "synthese-chatterbox-fr",
+     "expire_le": "2026-10-01",
+     "entreprises": [
+      "*"
+     ]
+    }
+   ]
+  },
+  "autre_entreprise": {
+   "voix": [
+    {
+     "id": "synthese-chatterbox-fr",
+     "expire_le": "2027-01-01",
+     "entreprises": [
+      "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"
+     ]
+    }
+   ]
+  },
+  "illisible": null
+ },
+ "cas": [
+  {
+   "nom": "document produit par le code reel",
+   "valide": true,
+   "sha_reel": "conforme"
+  },
+  {
+   "nom": "fichier modifie depuis la pose (empreinte reelle differente)",
+   "valide": false,
+   "sha_reel": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+  },
+  {
+   "nom": "fichier illisible (empreinte reelle absente)",
+   "valide": false,
+   "sha_reel": null
+  },
+  {
+   "nom": "sha256 faux dans la provenance",
+   "valide": false,
+   "sha_reel": "conforme",
+   "remplacer": {
+    "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+   }
+  },
+  {
+   "nom": "sha256 absent",
+   "valide": false,
+   "sha_reel": "conforme",
+   "supprimer": [
+    "sha256"
+   ]
+  },
+  {
+   "nom": "sha256 non texte",
+   "valide": false,
+   "sha_reel": "conforme",
+   "remplacer": {
+    "sha256": 12
+   }
+  },
+  {
+   "nom": "mention IA absente (digital_source_type retire)",
+   "valide": false,
+   "sha_reel": "conforme",
+   "supprimer": [
+    "digital_source_type"
+   ]
+  },
+  {
+   "nom": "digital_source_type altere",
+   "valide": false,
+   "sha_reel": "conforme",
+   "remplacer": {
+    "digital_source_type": "http://cv.iptc.org/newscodes/digitalsourcetype/digitalCapture"
+   }
+  },
+  {
+   "nom": "champ fichier manquant",
+   "valide": false,
+   "sha_reel": "conforme",
+   "supprimer": [
+    "fichier"
+   ]
+  },
+  {
+   "nom": "provenance d'un autre fichier",
+   "valide": false,
+   "sha_reel": "conforme",
+   "remplacer": {
+    "fichier": "autre.docx"
+   }
+  },
+  {
+   "nom": "champ type manquant",
+   "valide": false,
+   "sha_reel": "conforme",
+   "supprimer": [
+    "type"
+   ]
+  },
+  {
+   "nom": "type inconnu",
+   "valide": false,
+   "sha_reel": "conforme",
+   "remplacer": {
+    "type": "image"
+   }
+  },
+  {
+   "nom": "champ voix manquant",
+   "valide": false,
+   "sha_reel": "conforme",
+   "supprimer": [
+    "voix"
+   ]
+  },
+  {
+   "nom": "voix non liste",
+   "valide": false,
+   "sha_reel": "conforme",
+   "remplacer": {
+    "voix": "synthese-chatterbox-fr"
+   }
+  },
+  {
+   "nom": "voix avec chemin",
+   "valide": false,
+   "sha_reel": "conforme",
+   "remplacer": {
+    "voix": [
+     "../x"
+    ]
+   }
+  },
+  {
+   "nom": "document avec voix mais sans filigrane PerTh",
+   "valide": false,
+   "sha_reel": "conforme",
+   "remplacer": {
+    "voix": [
+     "synthese-chatterbox-fr"
+    ]
+   }
+  },
+  {
+   "nom": "document sans mention_visible reste accepte (mention visible exigee seulement pour une video)",
+   "valide": true,
+   "sha_reel": "conforme",
+   "supprimer": [
+    "mention_visible"
+   ]
+  },
+  {
+   "nom": "provenance absente (null)",
+   "valide": false,
+   "sha_reel": "conforme",
+   "provenance_nulle": true
+  },
+  {
+   "nom": "video complete acceptee",
+   "valide": true,
+   "sha_reel": "conforme",
+   "remplacer": {
+    "type": "video",
+    "format": "mp4",
+    "fichier": "video.mp4",
+    "voix": [
+     "synthese-chatterbox-fr"
+    ],
+    "mention_visible": true,
+    "filigrane_perth": {
+     "detecte": true
+    }
+   },
+   "base_video": true
+  },
+  {
+   "nom": "video sans mention visible",
+   "valide": false,
+   "sha_reel": "conforme",
+   "remplacer": {
+    "type": "video",
+    "format": "mp4",
+    "fichier": "video.mp4",
+    "voix": [
+     "synthese-chatterbox-fr"
+    ],
+    "mention_visible": false,
+    "filigrane_perth": {
+     "detecte": true
+    }
+   },
+   "base_video": true
+  },
+  {
+   "nom": "video sans champ mention_visible",
+   "valide": false,
+   "sha_reel": "conforme",
+   "remplacer": {
+    "type": "video",
+    "format": "mp4",
+    "fichier": "video.mp4",
+    "voix": [
+     "synthese-chatterbox-fr"
+    ],
+    "mention_visible": true,
+    "filigrane_perth": {
+     "detecte": true
+    }
+   },
+   "supprimer": [
+    "mention_visible"
+   ],
+   "base_video": true
+  },
+  {
+   "nom": "video sans voix declaree",
+   "valide": false,
+   "sha_reel": "conforme",
+   "remplacer": {
+    "type": "video",
+    "format": "mp4",
+    "fichier": "video.mp4",
+    "voix": [],
+    "mention_visible": true,
+    "filigrane_perth": {
+     "detecte": true
+    }
+   },
+   "base_video": true
+  },
+  {
+   "nom": "video avec filigrane non detecte",
+   "valide": false,
+   "sha_reel": "conforme",
+   "remplacer": {
+    "type": "video",
+    "format": "mp4",
+    "fichier": "video.mp4",
+    "voix": [
+     "synthese-chatterbox-fr"
+    ],
+    "mention_visible": true,
+    "filigrane_perth": {
+     "detecte": false
+    }
+   },
+   "base_video": true
+  },
+  {
+   "nom": "video sans bloc filigrane",
+   "valide": false,
+   "sha_reel": "conforme",
+   "remplacer": {
+    "type": "video",
+    "format": "mp4",
+    "fichier": "video.mp4",
+    "voix": [
+     "synthese-chatterbox-fr"
+    ],
+    "mention_visible": true,
+    "filigrane_perth": {
+     "detecte": true
+    }
+   },
+   "supprimer": [
+    "filigrane_perth"
+   ],
+   "base_video": true
+  },
+  {
+   "nom": "video dont la voix a quitte le registre",
+   "valide": false,
+   "sha_reel": "conforme",
+   "remplacer": {
+    "type": "video",
+    "format": "mp4",
+    "fichier": "video.mp4",
+    "voix": [
+     "voix-inconnue"
+    ],
+    "mention_visible": true,
+    "filigrane_perth": {
+     "detecte": true
+    }
+   },
+   "base_video": true
+  },
+  {
+   "nom": "video dont la voix est expiree",
+   "valide": false,
+   "sha_reel": "conforme",
+   "remplacer": {
+    "type": "video",
+    "format": "mp4",
+    "fichier": "video.mp4",
+    "voix": [
+     "synthese-chatterbox-fr"
+    ],
+    "mention_visible": true,
+    "filigrane_perth": {
+     "detecte": true
+    }
+   },
+   "base_video": true,
+   "registre": "expire"
+  },
+  {
+   "nom": "video dont la voix n'est pas permise a l'entreprise",
+   "valide": false,
+   "sha_reel": "conforme",
+   "remplacer": {
+    "type": "video",
+    "format": "mp4",
+    "fichier": "video.mp4",
+    "voix": [
+     "synthese-chatterbox-fr"
+    ],
+    "mention_visible": true,
+    "filigrane_perth": {
+     "detecte": true
+    }
+   },
+   "base_video": true,
+   "registre": "autre_entreprise"
+  },
+  {
+   "nom": "video avec registre illisible",
+   "valide": false,
+   "sha_reel": "conforme",
+   "remplacer": {
+    "type": "video",
+    "format": "mp4",
+    "fichier": "video.mp4",
+    "voix": [
+     "synthese-chatterbox-fr"
+    ],
+    "mention_visible": true,
+    "filigrane_perth": {
+     "detecte": true
+    }
+   },
+   "base_video": true,
+   "registre": "illisible"
+  }
+ ]
+}

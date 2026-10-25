@@ -1,0 +1,19 @@
+{
+  "voix": [
+    {
+      "id": "synthese-chatterbox-fr",
+      "moteur": "chatterbox",
+      "type": "synthese",
+      "entreprises": ["*"],
+      "expire_le": "2030-12-31"
+    },
+    {
+      "id": "synthese-kokoro-fr",
+      "moteur": "kokoro",
+      "type": "synthese",
+      "voix_moteur": "ff_siwis",
+      "entreprises": ["*"],
+      "expire_le": "2030-12-31"
+    }
+  ]
+}

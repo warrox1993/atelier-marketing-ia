@@ -1,0 +1,2 @@
+#chiffre { font-size: calc(var(--base) * 3.2); font-weight: 700; line-height: 1; letter-spacing: -0.02em; color: #8a3b12; }
+#titre { font-size: calc(var(--base) * 0.85); font-weight: 700; line-height: 1.2; }

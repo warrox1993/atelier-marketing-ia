@@ -7,6 +7,7 @@ reportsTo: "coordinateur-pmo"
 skills:
   - "suivi-avancement-projet"
   - "compte-rendu-comite"
+  - "documents-bureautiques"
 ---
 
 # Reporting et comités

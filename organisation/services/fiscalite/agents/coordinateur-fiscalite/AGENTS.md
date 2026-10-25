@@ -14,6 +14,7 @@ skills:
   - "precompte-professionnel"
   - "protocole-inter-coordinateurs"
   - "agenda-echeances-legales"
+  - "documents-bureautiques"
 ---
 
 # Coordinateur du service fiscalité

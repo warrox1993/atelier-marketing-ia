@@ -7,6 +7,8 @@ reportsTo: "coordinateur-direction"
 skills:
   - "synthese-direction"
   - "pilotage-strategique"
+  - "documents-bureautiques"
+  - "visualisation-donnees"
 ---
 
 # Note de synthèse et de décision

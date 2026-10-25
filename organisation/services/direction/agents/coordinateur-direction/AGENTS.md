@@ -11,6 +11,8 @@ skills:
   - "recherche-connaissances"
   - "pilotage-strategique"
   - "protocole-inter-coordinateurs"
+  - "documents-bureautiques"
+  - "visualisation-donnees"
 ---
 
 # Coordinateur du service direction

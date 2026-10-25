@@ -59,6 +59,9 @@ COMPETENCES_ATTENDUES = [
     "leviers-influence-ethiques", "actifs-distinctifs",
     "coordonnees-signatures-email", "coordonnees-cartes-visite", "script-appel-secretariat",
     "demande-numero-linkedin", "aimant-a-prospects", "achat-coordonnees-fournisseur",
+    "documents-bureautiques", "humanisation-texte-fr", "visualisation-donnees", "design-visuel-sobre",
+    "textes-interface", "fiche-transmission-developpeurs", "mise-a-jour-crm", "accessibilite-wcag",
+    "script-video-publicitaire", "conformite-publicite-ia", "declinaison-regies-video",
 ]
 RUBRIQUES = [
     "Quand l'utiliser", "Objectif", "Prérequis", "Entrées", "Étapes", "Livrable",
@@ -73,7 +76,17 @@ RUBRIQUES_FACULTATIVES = ["Sources officielles", "À vérifier par un profession
 OUTIL_SERVEUR_CONNEXIONS = "mcp__paperclip-assigned"
 OUTILS_NATIFS_CONNEXIONS = {"mcp__Paperclip_connections__connections_search", "mcp__Paperclip_connections__connection_request"}
 OUTILS_RECHERCHE = {"Read", "Grep", "Glob", "WebSearch", "WebFetch", OUTIL_SERVEUR_CONNEXIONS} | OUTILS_NATIFS_CONNEXIONS
-OUTILS_MUTATION = {"Write", "Edit", "Bash(curl *)", OUTIL_SERVEUR_CONNEXIONS}
+# Outils de la fabrique (plugin atelier.marketing-ia, lot 12) : noms mesurés sur l'usine réelle (voir
+# docs/conception-execution-etroite.md). La règle nue du serveur couvre aussi ces outils : seuls les rôles
+# retenus par l'opérateur les ont en autorisation explicite, tous les autres les ont dans les interdits.
+PREFIXE_OUTILS_FABRIQUE = "mcp__paperclip-assigned__atelier_marketing-ia_"
+OUTIL_FABRIQUE_DOCUMENT = PREFIXE_OUTILS_FABRIQUE + "fabriquer_document"
+OUTIL_FABRIQUE_VIDEO = PREFIXE_OUTILS_FABRIQUE + "fabriquer_video"
+OUTIL_FABRIQUE_ETAT = PREFIXE_OUTILS_FABRIQUE + "etat_fabrication"
+OUTILS_FABRIQUE = {OUTIL_FABRIQUE_DOCUMENT, OUTIL_FABRIQUE_VIDEO, OUTIL_FABRIQUE_ETAT}
+ROLES_FABRIQUE_DOCUMENT = {"contenus", "stratege", "prospection", "crm-conversion", "mesure"}
+ROLES_FABRIQUE_VIDEO = {"reseaux-sociaux"}
+OUTILS_MUTATION = {"Write", "Edit", "Bash(curl *)", OUTIL_SERVEUR_CONNEXIONS} | OUTILS_FABRIQUE
 # Outils de sous-agents de Claude Code (« Agent », ancien nom « Task ») : interdits à tous les
 # agents de l'atelier. La délégation passe par les tâches Paperclip, visibles et soumises à la porte.
 OUTILS_SOUS_AGENTS = {"Agent", "Task"}
@@ -381,6 +394,15 @@ def controler_registre(bootstrap):
             erreur(f"agent {s} : outil inconnu")
         if not OUTILS_SOUS_AGENTS <= set(o["interdits"]):
             erreur(f"agent {s} : les outils de sous-agents (Agent, Task) doivent être interdits explicitement")
+        attendus = set()
+        if s in ROLES_FABRIQUE_DOCUMENT:
+            attendus |= {OUTIL_FABRIQUE_DOCUMENT, OUTIL_FABRIQUE_ETAT}
+        if s in ROLES_FABRIQUE_VIDEO:
+            attendus |= {OUTIL_FABRIQUE_VIDEO, OUTIL_FABRIQUE_ETAT}
+        if (autorises & OUTILS_FABRIQUE) != attendus:
+            erreur(f"agent {s} : outils de la fabrique autorisés {sorted(autorises & OUTILS_FABRIQUE)}, attendus {sorted(attendus)}")
+        if (OUTILS_FABRIQUE - attendus) - set(o["interdits"]):
+            erreur(f"agent {s} : les outils de la fabrique non retenus doivent être interdits explicitement (règle nue du serveur)")
         if a["budgetMensuelCentimes"] <= 0 or a["maxToursParExecution"] <= 0:
             erreur(f"agent {s} : budget et plafond de tours doivent être positifs")
         if a["rapporteA"] is not None and a["rapporteA"] not in par_slug:

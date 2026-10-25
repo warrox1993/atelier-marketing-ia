@@ -8,6 +8,7 @@ skills:
   - "recherche-sourcee"
   - "analyse-concurrentielle"
   - "points-entree-categorie"
+  - "documents-bureautiques"
   - "memoire-para"
   - "recherche-connaissances"
 ---

@@ -14,6 +14,7 @@ skills:
   - "mentions-legales-site"
   - "protocole-inter-coordinateurs"
   - "evaluation-risque-juridique"
+  - "documents-bureautiques"
 ---
 
 # Coordinateur du service juridique

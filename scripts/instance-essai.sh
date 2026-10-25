@@ -30,6 +30,14 @@ set +a
 export PAPERCLIP_INSTANCE_ID="${ID}" PORT="${PORT_HTTP}"
 DOSSIER="${PAPERCLIP_HOME}/instances/${ID}"
 CONFIG="${DOSSIER}/config.json"
+# Mode authentifié FACULTATIF de cette instance d'essai (écrit par passer-en-mode-authentifie.sh --essai) :
+# chargé après config/atelier.env, il remplace son PAPERCLIP_DEPLOYMENT_MODE=local_trusted. Absent : rien ne change.
+SURCHARGE_AUTH="${DOSSIER}/atelier-auth.env"
+if [[ "${ACTION}" == "demarrer" && -f "${SURCHARGE_AUTH}" ]]; then
+  # shellcheck disable=SC1091
+  source "${RACINE}/scripts/lib-mode-auth.sh"
+  exporter_surcharge_auth "${SURCHARGE_AUTH}" || exit 1
+fi
 
 pid_ecoute() { ss -ltnpH "sport = :$1" 2>/dev/null | grep -o 'pid=[0-9]*' | head -1 | cut -d= -f2; }
 

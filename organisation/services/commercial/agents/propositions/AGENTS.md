@@ -4,7 +4,7 @@ slug: "propositions"
 name: "Propositions"
 title: "Commercial · Projets de propositions commerciales"
 reportsTo: "coordinateur-commercial"
-skills: ["proposition-commerciale"]
+skills: ["proposition-commerciale", "documents-bureautiques", "humanisation-texte-fr", "plaquette-commerciale"]
 ---
 
 # Projets de propositions commerciales

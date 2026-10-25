@@ -15,6 +15,8 @@ skills:
   - "selection-projets-innovation"
   - "recherche-sourcee"
   - "protocole-inter-coordinateurs"
+  - "documents-bureautiques"
+  - "reflexion-produit"
 ---
 
 # Coordinateur du service recherche et innovation

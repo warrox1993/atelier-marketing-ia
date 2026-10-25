@@ -7,6 +7,7 @@ reportsTo: "coordinateur-evenementiel"
 skills:
   - "bilan-evenement"
   - "suivi-contacts-evenement"
+  - "documents-bureautiques"
 ---
 
 # Bilan et suivi des contacts

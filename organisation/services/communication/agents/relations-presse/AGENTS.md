@@ -9,6 +9,7 @@ skills:
   - "communication-de-crise"
   - "charte-marque"
   - "controle-communications-reglementees"
+  - "humanisation-texte-fr"
 ---
 
 # Relations presse

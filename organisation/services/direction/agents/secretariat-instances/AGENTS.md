@@ -6,6 +6,7 @@ title: "Direction · Secrétariat du conseil, de l'assemblée et du comité de d
 reportsTo: "coordinateur-direction"
 skills:
   - "compte-rendu-instances"
+  - "documents-bureautiques"
 ---
 
 # Secrétariat des instances

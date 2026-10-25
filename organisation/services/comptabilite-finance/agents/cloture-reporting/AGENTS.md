@@ -7,6 +7,7 @@ reportsTo: "coordinateur-comptabilite"
 skills:
   - "cloture-mensuelle"
   - "analyse-ecarts-budgetaires"
+  - "documents-bureautiques"
 ---
 
 # Clôture mensuelle et reporting

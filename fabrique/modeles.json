@@ -1,0 +1,66 @@
+{
+  "_note": "Poids des modèles de voix, révisions Hugging Face figées (identifiant de commit). Empreintes sha256 relevées par scripts/telecharger-modeles-voix.py --noter et recoupées avec celles de l'API Hugging Face pour les fichiers LFS.",
+  "modeles": [
+    {
+      "nom": "chatterbox",
+      "depot": "ResembleAI/chatterbox",
+      "revision": "5bb1f6ee58e50c3b8d408bc82a6d3740c2db6e18",
+      "licence": "MIT",
+      "fichiers": {
+        "ve.pt": {
+          "sha256": "4b16d836bc598509860f6fa068165a8bb5e9ac84f05582dfcf278a5a372879f1",
+          "taille": 5698626
+        },
+        "t3_mtl23ls_v2.safetensors": {
+          "sha256": "b1237586127ce98e7800a68e49938eb5092846862aabcb6e17b2fda7889a6c75",
+          "taille": 2143989752
+        },
+        "s3gen.pt": {
+          "sha256": "9b9ff07e60b20c136e2b1b3d7563a24604e8d2c4c267888d1ee929dd0151d2a3",
+          "taille": 1057165844
+        },
+        "grapheme_mtl_merged_expanded_v1.json": {
+          "sha256": "69632f47220a788a52ce2661d096453c5655e9bf25289d89a8d832c46ee07dbf",
+          "taille": 69989
+        },
+        "conds.pt": {
+          "sha256": "6552d70568833628ba019c6b03459e77fe71ca197d5c560cef9411bee9d87f4e",
+          "taille": 107374
+        },
+        "Cangjie5_TC.json": {
+          "sha256": "7073fd9de919443ae88e0bd2449917a65fe54898a4413ed1edcc4b67f28bce8c",
+          "taille": 1920163
+        }
+      },
+      "pickle_weights_only": [
+        "ve.pt",
+        "s3gen.pt",
+        "conds.pt"
+      ]
+    },
+    {
+      "nom": "kokoro",
+      "depot": "hexgrad/Kokoro-82M",
+      "revision": "f3ff3571791e39611d31c381e3a41a3af07b4987",
+      "licence": "Apache-2.0",
+      "fichiers": {
+        "config.json": {
+          "sha256": "5abb01e2403b072bf03d04fde160443e209d7a0dad49a423be15196b9b43c17f",
+          "taille": 2351
+        },
+        "kokoro-v1_0.pth": {
+          "sha256": "496dba118d1a58f5f3db2efc88dbdc216e0483fc89fe6e47ee1f2c53f18ad1e4",
+          "taille": 327212226
+        },
+        "voices/ff_siwis.pt": {
+          "sha256": "8073bf2d2c4b9543a90f2f0fd2144de4ed157e2d4b79ddeb0d5123066171fbc9",
+          "taille": 523425
+        }
+      },
+      "pickle_weights_only": [
+        "kokoro-v1_0.pth",
+        "voices/ff_siwis.pt"
+      ]
+    }
+  ]
+}

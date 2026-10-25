@@ -12,6 +12,7 @@ skills:
   - "plan-formation"
   - "financement-formation"
   - "protocole-inter-coordinateurs"
+  - "documents-bureautiques"
 ---
 
 # Coordinateur du service formation

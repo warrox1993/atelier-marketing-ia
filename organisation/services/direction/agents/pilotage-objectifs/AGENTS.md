@@ -6,6 +6,7 @@ title: "Direction · Priorités et objectifs trimestriels"
 reportsTo: "coordinateur-direction"
 skills:
   - "pilotage-strategique"
+  - "visualisation-donnees"
 ---
 
 # Pilotage des objectifs

@@ -17,6 +17,7 @@ skills:
   - "points-entree-categorie"
   - "recherche-sourcee"
   - "recherche-connaissances"
+  - "documents-bureautiques"
   - "memoire-para"
 ---
 

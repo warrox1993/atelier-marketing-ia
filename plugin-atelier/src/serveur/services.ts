@@ -80,6 +80,9 @@ import { routesSynthese } from "./services-synthese.js";
 import { creerChaine } from "./chaine.js";
 import { creerRedispatch } from "./redispatch.js";
 import { routesCarte, PLAFOND_QUALIFIES } from "./services-carte.js";
+import { routesLivrables } from "./fabrique-remise.js";
+import { dossierFile } from "./fabrique-outils.js";
+import { controlerLivrablesFabrique, travauxFabriqueCites } from "./fabrique-provenance.js";
 import { entreesCouverturePorte, routesCouverture } from "./services-couverture.js";
 import { routesCorbeille } from "./services-corbeille.js";
 import { routesPurge } from "./services-purge.js";
@@ -1183,6 +1186,15 @@ export function creerServices(ctx: PluginContext, options: { transportReel?: Tra
     if (mode === "reel") {
       const garde = verifierDiffusionDonneesDemo({ modeDiffusion: mode, livrable: f.liv ? { revisionId: f.liv.revisionId, corps: f.liv.corps } : null, sources: await base.sourcesPourGarde(companyId, issue.id) });
       if (!garde.ok) verdict = { ok: false, motif: garde.motif };
+    }
+    // Lot 11 : un livrable de la fabrique (cité par son lien ou déclaré) ne part qu'avec une provenance IA valide.
+    if (verdict.ok) {
+      const travaux = travauxFabriqueCites(f.liv?.corps ?? "", entree.travauxFabrique ?? []);
+      if (travaux.length > 0) {
+        const racine = dossierFile(await configEntreprise(companyId));
+        const garde = await controlerLivrablesFabrique({ racine, cheminRegistre: `${racine}/voix-autorisees/registre.json` }, companyId, travaux);
+        if (!garde.ok) verdict = { ok: false, motif: garde.motif };
+      }
     }
     if (verdict.ok && entree.action === "activer_campagne_payante" && exclure === null) {
       // Même avec une approbation valide, la diffusion ne doit pas faire dépasser un plafond (campagne ou entreprise),
@@ -2741,6 +2753,11 @@ export function creerServices(ctx: PluginContext, options: { transportReel?: Tra
     etablissements: async (companyId) => (await base.marques(companyId))[0]?.etablissements ?? [] }));
   // Couverture de prospection calculée (lecture seule, agents et humains).
   Object.assign(routes, routesCouverture({ ctx, base, tache }));
+
+  // Fabrique (lot 6) : téléchargement d'un livrable par un membre de l'entreprise.
+  Object.assign(routes, routesLivrables({
+    racine: async (companyId) => dossierFile((await ctx.config.get(companyId)) as Record<string, unknown> | null),
+  }));
 
   return { routes, donnees, actions };
 }

@@ -1,6 +1,7 @@
 import type { PaperclipPluginManifestV1 } from "@paperclipai/plugin-sdk";
 import { PLUGIN_ID, SLUG_ESPACE_BASE } from "./contrats/identifiants.js";
 import { ROUTES_API } from "./contrats/routes.js";
+import { DECLARATION_ETAT_FABRICATION, DECLARATION_FABRIQUER_DOCUMENT, DECLARATION_FABRIQUER_VIDEO } from "./contrats/fabrique-outils-schemas.js";
 import { EXPORTS_UI, ROUTE_ATELIER } from "./contrats/ui-constantes.js";
 
 /**
@@ -46,6 +47,8 @@ const manifest: PaperclipPluginManifestV1 = {
     "plugin.state.write",
     "events.subscribe",
     "api.routes.register",
+    // Fabrique (lot 2) : outils d'agent qui déposent un travail dans la file de fichiers (le plugin ne lance aucun programme).
+    "agent.tools.register",
     "http.outbound",
     "database.namespace.migrate",
     "database.namespace.read",
@@ -161,6 +164,29 @@ const manifest: PaperclipPluginManifestV1 = {
         title: "Clé d'API OpenAI (voix en direct)",
         description: "Secret natif de Paperclip contenant la clé d'API OpenAI de la voix en direct ; lue à chaque ouverture de session, jamais copiée en configuration ni envoyée au navigateur (il ne reçoit qu'un secret éphémère de 60 secondes).",
       },
+      // Fabrique (lot 2, docs/conception-execution-etroite.md) : rôles autorisés (défaut vide = tout refusé) et file.
+      fabriqueAgentsDocuments: {
+        type: "array",
+        title: "Fabrique : agents autorisés à fabriquer des documents",
+        description:
+          "Identifiants (UUID) des agents autorisés à utiliser l'outil fabriquer_document. Le champ « role » de Paperclip est trop grossier et n'est pas utilisé. Vide par défaut : tout est refusé.",
+        maxItems: 30,
+        items: { type: "string", minLength: 1, maxLength: 64 },
+      },
+      fabriqueAgentsVideo: {
+        type: "array",
+        title: "Fabrique : agents autorisés à fabriquer des vidéos",
+        description:
+          "Identifiants (UUID) des agents autorisés à utiliser l'outil fabriquer_video. Le champ « role » de Paperclip est trop grossier et n'est pas utilisé. Vide par défaut : tout est refusé.",
+        maxItems: 30,
+        items: { type: "string", minLength: 1, maxLength: 64 },
+      },
+      fabriqueDossierFile: {
+        type: "string",
+        title: "Fabrique : dossier de la file",
+        description: "Dossier de la file de la fabrique (sous-dossiers entrant/ et livrables/). Défaut /var/lib/atelier-fabrique.",
+        maxLength: 300,
+      },
       connaissancesVoyageCle: {
         type: "object",
         format: "secret-ref",
@@ -169,6 +195,7 @@ const manifest: PaperclipPluginManifestV1 = {
       },
     },
   },
+  tools: [DECLARATION_FABRIQUER_DOCUMENT, DECLARATION_FABRIQUER_VIDEO, DECLARATION_ETAT_FABRICATION],
   entrypoints: {
     worker: "./dist/worker.js",
     ui: "./dist/ui",

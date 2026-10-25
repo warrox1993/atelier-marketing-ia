@@ -3,7 +3,7 @@
  * hors dépôt, chargé par l'unité systemd). Toute valeur douteuse fait refuser le démarrage : mieux vaut une passerelle
  * arrêtée qu'une passerelle qui accepte n'importe qui ou qui parle à une instance distante.
  */
-import { statSync } from "node:fs";
+import { readFileSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 
@@ -28,7 +28,10 @@ export interface Config {
   pluginId: string;
   /** Entreprise Direction du client (coordinateur général) ; les autres services sont lus par `departements.lister`. */
   entreprise: string;
-  /** Clé « board » facultative, si l'instance n'est plus en mode local_trusted. */
+  /**
+   * Clé « board » facultative, si l'instance n'est plus en mode local_trusted : ATELIER_CLE_BOARD, ou de préférence
+   * ATELIER_CLE_BOARD_FICHIER (fichier 0600 hors dépôt écrit par scripts/passer-en-mode-authentifie.sh).
+   */
   cleBoard: string | null;
   /** Modèle utilitaire préapprouvé pour les alertes hors fenêtre de 24 h. */
   modeleNom: string | null;
@@ -131,7 +134,7 @@ export function lireConfig(env: NodeJS.ProcessEnv = process.env): Config {
     atelierApi,
     pluginId: env["ATELIER_PLUGIN"]?.trim() || "atelier.marketing-ia",
     entreprise,
-    cleBoard: env["ATELIER_CLE_BOARD"]?.trim() || null,
+    cleBoard: lireCleBoard(env),
     modeleNom,
     modeleLangue: env["WHATSAPP_MODELE_LANGUE"]?.trim() || "fr",
     modeleHorsFenetre: horsFenetre === "oui",
@@ -142,6 +145,22 @@ export function lireConfig(env: NodeJS.ProcessEnv = process.env): Config {
     intervalleDiscussionMs: entier(env, "WHATSAPP_INTERVALLE_DISCUSSION_S", 10, 2, 600) * 1000,
     debitParMinute: entier(env, "WHATSAPP_DEBIT_PAR_MINUTE", 20, 1, 120),
   };
+}
+
+/**
+ * Clé board : ATELIER_CLE_BOARD si elle est donnée, sinon le fichier ATELIER_CLE_BOARD_FICHIER (0600 exigé, contenu
+ * vérifié). Ni l'une ni l'autre : null (mode local_trusted). Un fichier désigné mais absent ou trop ouvert fait refuser
+ * le démarrage : une clé attendue qui manque donnerait sinon des 401 silencieux.
+ */
+export function lireCleBoard(env: NodeJS.ProcessEnv): string | null {
+  const directe = env["ATELIER_CLE_BOARD"]?.trim();
+  if (directe) return directe;
+  const fichier = env["ATELIER_CLE_BOARD_FICHIER"]?.trim();
+  if (!fichier) return null;
+  verifierDroitsFichier(fichier);
+  const cle = readFileSync(fichier, "utf8").trim();
+  if (!/^[A-Za-z0-9_.-]{16,512}$/u.test(cle)) throw new ErreurConfig(`ATELIER_CLE_BOARD_FICHIER : contenu de ${fichier} invalide.`);
+  return cle;
 }
 
 /** Refuse un fichier de secrets lisible par le groupe ou les autres (0600 attendu). */

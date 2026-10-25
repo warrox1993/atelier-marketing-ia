@@ -13,6 +13,7 @@ skills:
   - "communication-de-crise"
   - "communication-interne"
   - "protocole-inter-coordinateurs"
+  - "documents-bureautiques"
 ---
 
 # Coordinateur du service communication

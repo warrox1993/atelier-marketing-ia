@@ -1,0 +1,21 @@
+{
+  "_note": "Modèle de transcription (lot 8). Dépôt officiel Hugging Face ggerganov/whisper.cpp, révision figée (identifiant de commit). large-v3-turbo : multilingue, bon en français, 1,6 Go en fp16, tient largement dans 10 Go de mémoire vidéo ; plus rapide que large-v3 pour une qualité voisine. sha256 recoupé avec l'API Hugging Face (oid LFS).",
+  "binaire": {
+    "depot": "https://github.com/ggml-org/whisper.cpp",
+    "etiquette": "v1.9.5",
+    "commit": "d1be6fde11ac6e0407606b4e42fe72d34add8037"
+  },
+  "modeles": [
+    {
+      "nom": "whisper-large-v3-turbo",
+      "depot": "ggerganov/whisper.cpp",
+      "revision": "5359861c739e955e79d9a303bcbc70fb988958b1",
+      "licence": "MIT",
+      "fichier": {
+        "nom": "ggml-large-v3-turbo.bin",
+        "sha256": "1fc70f774d38eb169993ac391eea357ef47c88757ef72ee5943879b7e8e2bc69",
+        "taille": 1624555275
+      }
+    }
+  ]
+}

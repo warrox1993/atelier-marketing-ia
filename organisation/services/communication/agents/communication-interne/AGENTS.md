@@ -8,6 +8,7 @@ skills:
   - "communication-interne"
   - "communication-de-crise"
   - "charte-marque"
+  - "humanisation-texte-fr"
 ---
 
 # Communication interne

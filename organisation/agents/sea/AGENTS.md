@@ -11,6 +11,7 @@ skills:
   - "niveau-conscience-message"
   - "redaction-titre-preuve"
   - "suivi-conversions"
+  - "humanisation-texte-fr"
   - "memoire-para"
 ---
 

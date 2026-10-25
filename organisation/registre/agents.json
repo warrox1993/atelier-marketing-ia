@@ -141,7 +141,8 @@
         "dossier-validation-humaine",
         "recherche-connaissances",
         "protocole-inter-coordinateurs",
-        "plan-campagne"
+        "plan-campagne",
+        "documents-bureautiques"
       ],
       "competencesObligatoires": [
         "cadrage-exigences",
@@ -163,7 +164,10 @@
           "Edit",
           "NotebookEdit",
           "Agent",
-          "Task"
+          "Task",
+          "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_document",
+          "mcp__paperclip-assigned__atelier_marketing-ia_etat_fabrication",
+          "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_video"
         ]
       },
       "connexions": {},
@@ -202,7 +206,8 @@
       "competences": [
         "recherche-sourcee",
         "analyse-concurrentielle",
-        "points-entree-categorie"
+        "points-entree-categorie",
+        "documents-bureautiques"
       ],
       "competencesObligatoires": [
         "recherche-sourcee"
@@ -226,7 +231,10 @@
           "Edit",
           "NotebookEdit",
           "Agent",
-          "Task"
+          "Task",
+          "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_document",
+          "mcp__paperclip-assigned__atelier_marketing-ia_etat_fabrication",
+          "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_video"
         ]
       },
       "connexions": {
@@ -276,7 +284,8 @@
         "analyse-jobs-a-faire",
         "points-entree-categorie",
         "recherche-sourcee",
-        "recherche-connaissances"
+        "recherche-connaissances",
+        "documents-bureautiques"
       ],
       "competencesObligatoires": [
         "diagnostic-marketing",
@@ -295,13 +304,16 @@
         ],
         "mutation": [
           "Bash(curl *)",
-          "Write"
+          "Write",
+          "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_document",
+          "mcp__paperclip-assigned__atelier_marketing-ia_etat_fabrication"
         ],
         "interdits": [
           "Edit",
           "NotebookEdit",
           "Agent",
-          "Task"
+          "Task",
+          "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_video"
         ]
       },
       "connexions": {
@@ -364,13 +376,16 @@
         ],
         "mutation": [
           "Bash(curl *)",
-          "Write"
+          "Write",
+          "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_document",
+          "mcp__paperclip-assigned__atelier_marketing-ia_etat_fabrication"
         ],
         "interdits": [
           "Edit",
           "NotebookEdit",
           "Agent",
-          "Task"
+          "Task",
+          "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_video"
         ]
       },
       "connexions": {
@@ -446,7 +461,10 @@
           "Edit",
           "NotebookEdit",
           "Agent",
-          "Task"
+          "Task",
+          "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_document",
+          "mcp__paperclip-assigned__atelier_marketing-ia_etat_fabrication",
+          "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_video"
         ]
       },
       "connexions": {
@@ -517,7 +535,10 @@
           "Edit",
           "NotebookEdit",
           "Agent",
-          "Task"
+          "Task",
+          "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_document",
+          "mcp__paperclip-assigned__atelier_marketing-ia_etat_fabrication",
+          "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_video"
         ]
       },
       "connexions": {
@@ -565,7 +586,8 @@
         "recherche-connaissances",
         "niveau-conscience-message",
         "redaction-titre-preuve",
-        "suivi-conversions"
+        "suivi-conversions",
+        "humanisation-texte-fr"
       ],
       "competencesObligatoires": [
         "preparation-campagnes-sea"
@@ -589,7 +611,10 @@
           "Edit",
           "NotebookEdit",
           "Agent",
-          "Task"
+          "Task",
+          "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_document",
+          "mcp__paperclip-assigned__atelier_marketing-ia_etat_fabrication",
+          "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_video"
         ]
       },
       "connexions": {
@@ -638,7 +663,9 @@
         "leviers-influence-ethiques",
         "actifs-distinctifs",
         "liens-entrants-seo",
-        "aimant-a-prospects"
+        "aimant-a-prospects",
+        "humanisation-texte-fr",
+        "design-visuel-sobre"
       ],
       "competencesObligatoires": [
         "charte-marque"
@@ -656,13 +683,16 @@
           "Bash(curl *)",
           "Write",
           "Edit",
-          "mcp__paperclip-assigned"
+          "mcp__paperclip-assigned",
+          "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_document",
+          "mcp__paperclip-assigned__atelier_marketing-ia_etat_fabrication"
         ],
         "interdits": [
           "WebSearch",
           "NotebookEdit",
           "Agent",
-          "Task"
+          "Task",
+          "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_video"
         ]
       },
       "connexions": {
@@ -713,7 +743,11 @@
         "conversion-crm",
         "charte-marque",
         "recherche-connaissances",
-        "leviers-influence-ethiques"
+        "leviers-influence-ethiques",
+        "humanisation-texte-fr",
+        "textes-interface",
+        "fiche-transmission-developpeurs",
+        "mise-a-jour-crm"
       ],
       "competencesObligatoires": [
         "conversion-crm"
@@ -730,14 +764,17 @@
           "Bash(curl *)",
           "Write",
           "Edit",
-          "mcp__paperclip-assigned"
+          "mcp__paperclip-assigned",
+          "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_document",
+          "mcp__paperclip-assigned__atelier_marketing-ia_etat_fabrication"
         ],
         "interdits": [
           "WebSearch",
           "WebFetch",
           "NotebookEdit",
           "Agent",
-          "Task"
+          "Task",
+          "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_video"
         ]
       },
       "connexions": {
@@ -779,7 +816,9 @@
       ],
       "competences": [
         "mesure-experiences",
-        "suivi-conversions"
+        "suivi-conversions",
+        "documents-bureautiques",
+        "visualisation-donnees"
       ],
       "competencesObligatoires": [
         "mesure-experiences"
@@ -795,7 +834,9 @@
         ],
         "mutation": [
           "Bash(curl *)",
-          "Write"
+          "Write",
+          "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_document",
+          "mcp__paperclip-assigned__atelier_marketing-ia_etat_fabrication"
         ],
         "interdits": [
           "WebSearch",
@@ -803,7 +844,8 @@
           "Edit",
           "NotebookEdit",
           "Agent",
-          "Task"
+          "Task",
+          "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_video"
         ]
       },
       "connexions": {
@@ -849,7 +891,12 @@
         "charte-marque",
         "redaction-declinaison-canal",
         "points-entree-categorie",
-        "niveau-conscience-message"
+        "niveau-conscience-message",
+        "humanisation-texte-fr",
+        "design-visuel-sobre",
+        "script-video-publicitaire",
+        "conformite-publicite-ia",
+        "declinaison-regies-video"
       ],
       "competencesObligatoires": [
         "calendrier-reseaux-sociaux",
@@ -864,14 +911,17 @@
         ],
         "mutation": [
           "Bash(curl *)",
-          "Write"
+          "Write",
+          "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_video",
+          "mcp__paperclip-assigned__atelier_marketing-ia_etat_fabrication"
         ],
         "interdits": [
           "WebFetch",
           "Edit",
           "NotebookEdit",
           "Agent",
-          "Task"
+          "Task",
+          "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_document"
         ]
       },
       "connexions": {},
@@ -930,7 +980,10 @@
           "Edit",
           "NotebookEdit",
           "Agent",
-          "Task"
+          "Task",
+          "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_document",
+          "mcp__paperclip-assigned__atelier_marketing-ia_etat_fabrication",
+          "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_video"
         ]
       },
       "connexions": {},
@@ -990,7 +1043,10 @@
           "Edit",
           "NotebookEdit",
           "Agent",
-          "Task"
+          "Task",
+          "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_document",
+          "mcp__paperclip-assigned__atelier_marketing-ia_etat_fabrication",
+          "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_video"
         ]
       },
       "connexions": {},
@@ -1064,7 +1120,10 @@
           "Edit",
           "NotebookEdit",
           "Agent",
-          "Task"
+          "Task",
+          "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_document",
+          "mcp__paperclip-assigned__atelier_marketing-ia_etat_fabrication",
+          "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_video"
         ]
       },
       "connexions": {},
@@ -1113,7 +1172,8 @@
         "liste des contrôles non exécutés"
       ],
       "competences": [
-        "controles-techniques-liens"
+        "controles-techniques-liens",
+        "accessibilite-wcag"
       ],
       "competencesObligatoires": [
         "controles-techniques-liens"
@@ -1137,7 +1197,10 @@
           "Edit",
           "NotebookEdit",
           "Agent",
-          "Task"
+          "Task",
+          "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_document",
+          "mcp__paperclip-assigned__atelier_marketing-ia_etat_fabrication",
+          "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_video"
         ]
       },
       "connexions": {
@@ -1183,7 +1246,11 @@
       "outils": {
         "recherche": [],
         "mutation": [],
-        "interdits": []
+        "interdits": [
+          "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_document",
+          "mcp__paperclip-assigned__atelier_marketing-ia_etat_fabrication",
+          "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_video"
+        ]
       },
       "connexions": {},
       "modele": null,

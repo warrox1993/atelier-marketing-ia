@@ -8,6 +8,7 @@ skills:
   - "analyse-ecarts-budgetaires"
   - "analyse-rentabilite"
   - "tableau-de-bord-pme"
+  - "documents-bureautiques"
 ---
 
 # Contrôle de gestion

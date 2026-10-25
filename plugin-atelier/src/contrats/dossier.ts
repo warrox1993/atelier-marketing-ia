@@ -290,6 +290,8 @@ export const DemanderDiffusionEntree = z.object({
   service: ServicePublication.optional(),
   outil: z.string().regex(/^[a-z][a-z0-9_]{0,63}$/u).optional(),
   arguments: z.record(z.string(), z.unknown()).optional(),
+  /** Lot 11 : travaux de la fabrique diffusés (en plus de ceux cités par un lien dans le livrable) ; leur provenance IA est contrôlée. */
+  travauxFabrique: z.array(z.string().uuid()).max(10).optional(),
 });
 export type DemanderDiffusionEntree = z.infer<typeof DemanderDiffusionEntree>;
 

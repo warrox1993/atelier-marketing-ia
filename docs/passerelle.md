@@ -1244,3 +1244,17 @@ fusionnée depuis) vaut `null` avec une `note`.
 **Limites connues** : pas de revenu médian ni de nombre de ménages dans les données ouvertes par commune (`declarations_fiscales` en est un
 ordre de grandeur) ; 29 codes INS des statistiques fiscales sont d'avant les fusions de communes de 2025 (revenus `null` pour ces communes) ;
 la table des codes postaux date de 2021 ; les années diffèrent selon le jeu. Aucune donnée d'un quartier ni d'une personne.
+
+## Registre FSMA : pourquoi `fsma` reste sans fournisseur réel (22/10/2026)
+
+Vérifié le 22/10/2026, hors VPN (décision de l'opérateur : lecture polie seulement, robots.txt respecté), 7 requêtes à 30 s :
+
+- aucun export complet du registre (ni CSV, ni XLSX, ni API publique) : le portail `https://www.fsma.be/en/data-portal`
+  est une interface de listes filtrables ; le seul export est par fiche (`/en/export/party/<id>`) ;
+- `robots.txt` impose `Crawl-delay: 30` et interdit `/search/` et les filtres `data-portal?f[`, seuls moyens de
+  sélectionner les intermédiaires d'assurance ; les 18 934 fiches « Party » ne sont pas énumérables autrement
+  (le plan du site n'en contient aucune) ;
+- conditions de réutilisation : CC BY 4.0 (ce n'est pas le blocage).
+
+Un index local poli est donc impossible : le service `fsma` continue de répondre « non_connecte ». Le vérifier à la main
+reste possible sur le site de la FSMA ; à reconsidérer si la FSMA publie un export ou une API.

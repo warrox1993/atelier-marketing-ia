@@ -1,0 +1,4 @@
+#titre { font-size: calc(var(--base) * 1.1); font-weight: 700; line-height: 1.15; margin-bottom: calc(var(--base) * 0.3); }
+#points { list-style: none; display: flex; flex-direction: column; gap: calc(var(--base) * 0.55); }
+.point { display: flex; align-items: baseline; gap: calc(var(--base) * 0.5); font-size: calc(var(--base) * 0.7); line-height: 1.25; }
+.numero { flex: none; font-weight: 700; color: #8a3b12; min-width: 1ch; }

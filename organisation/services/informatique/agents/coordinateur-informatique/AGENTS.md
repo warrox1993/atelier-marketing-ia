@@ -16,6 +16,7 @@ skills:
   - "demande-de-changement"
   - "gestion-arrivees-departs-acces"
   - "plan-continuite-sauvegarde"
+  - "documents-bureautiques"
 ---
 
 # Coordinateur du service informatique

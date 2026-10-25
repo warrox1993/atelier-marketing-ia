@@ -9,6 +9,10 @@ skills:
   - "charte-marque"
   - "recherche-connaissances"
   - "leviers-influence-ethiques"
+  - "humanisation-texte-fr"
+  - "textes-interface"
+  - "fiche-transmission-developpeurs"
+  - "mise-a-jour-crm"
   - "memoire-para"
 ---
 
@@ -424,6 +428,7 @@ Clé : `tache.diffusions`. Demande d'action externe : refusée côté serveur sa
 | `service` | énumération | non | "facebook" \| "instagram" \| "linkedin" \| "crm" \| "pipedrive" \| "odoo" \| "teamleader" |
 | `outil` | texte | non | motif `^[a-z][a-z0-9_]{0,63}$` |
 | `arguments` | objet libre | non |  |
+| `travauxFabrique` | tableau de uuid | non | 0 à 10 éléments |
 
 Exemple minimal valide :
 

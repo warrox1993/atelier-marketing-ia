@@ -14,6 +14,7 @@ skills:
   - "protocole-inter-coordinateurs"
   - "comparaison-offres-fournisseurs"
   - "verification-fournisseur-belge"
+  - "documents-bureautiques"
 ---
 
 # Coordinateur du service achats

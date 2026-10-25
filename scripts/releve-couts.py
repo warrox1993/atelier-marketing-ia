@@ -24,6 +24,7 @@ import datetime
 import io
 import json
 import os
+import re
 import sys
 import urllib.error
 import urllib.parse
@@ -38,6 +39,59 @@ COLONNES = [
 ]
 
 
+def lire_cle_fichier(port) -> str | None:
+    """Clé board lue dans un fichier 0600 hors dépôt : ATELIER_CLE_BOARD_FICHIER, sinon ~/.config/atelier/board-<port>.key.
+
+    Absent : None (mode local_trusted, comportement historique). Fichier qui ne m'appartient pas, ouvert au groupe
+    ou aux autres, ou contenu invalide : ignoré avec un avertissement. Créé par scripts/passer-en-mode-authentifie.sh.
+    (Recopié dans chaque script : ils tournent en `python3 -I`.)
+    """
+    chemin = os.environ.get("ATELIER_CLE_BOARD_FICHIER") or os.path.join(
+        os.path.expanduser("~"), ".config", "atelier", f"board-{port}.key")
+    try:
+        st = os.stat(chemin)
+    except OSError:
+        return None
+    if st.st_uid != os.getuid() or st.st_mode & 0o077:
+        print(f"AVERTISSEMENT : {chemin} ignoré (il doit m'appartenir et être en 0600).", file=sys.stderr)
+        return None
+    try:
+        with open(chemin, encoding="utf-8") as f:
+            cle = f.read().strip()
+    except OSError:
+        return None
+    if not re.fullmatch(r"[A-Za-z0-9_.-]{16,512}", cle):
+        print(f"AVERTISSEMENT : contenu de {chemin} invalide : clé non envoyée.", file=sys.stderr)
+        return None
+    return cle
+
+
+def ajouter_cle_tableau(req):
+    """Mode authentifié : ajoute la clé d'API du tableau (board), facultative.
+
+    Source : PAPERCLIP_BOARD_KEY si elle est définie, sinon le fichier de clé de l'instance visée
+    (lire_cle_fichier, seulement vers la boucle locale). Sans clé, la requête part sans jeton (local_trusted).
+    La clé n'est envoyée que vers http://127.0.0.1:<port>, http://localhost:<port> ou https://<nom>.ts.net ;
+    ailleurs, rien n'est envoyé (avertissement sans la clé). L'en-tête est « non redirigeable » : il n'est
+    jamais recopié lors d'une redirection. (Recopié dans chaque script : ils tournent en `python3 -I`.)
+    """
+    u = urllib.parse.urlsplit(req.full_url)
+    h = (u.hostname or "").lower()
+    boucle_locale = u.scheme == "http" and h in ("127.0.0.1", "localhost") and u.port is not None
+    cle = os.environ.get("PAPERCLIP_BOARD_KEY") or (lire_cle_fichier(u.port) if boucle_locale else None)
+    if not cle:
+        return
+    if boucle_locale:
+        autorise = True
+    else:
+        autorise = u.scheme == "https" and h.endswith(".ts.net") and len(h) > len(".ts.net")
+    if autorise:
+        req.add_unredirected_header("Authorization", "Bearer " + cle)
+    else:
+        print("AVERTISSEMENT : PAPERCLIP_BOARD_KEY non envoyée (destination hors 127.0.0.1, localhost et *.ts.net : "
+              + (u.hostname or "?") + ").", file=sys.stderr)
+
+
 class ErreurReleve(Exception):
     def __init__(self, message, code):
         super().__init__(message)
@@ -50,7 +104,9 @@ def appeler_api(base, chemin, parametres=None):
     if parametres:
         url += "?" + urllib.parse.urlencode(parametres)
     try:
-        with urllib.request.urlopen(url, timeout=DELAI_SECONDES) as reponse:
+        req = urllib.request.Request(url)
+        ajouter_cle_tableau(req)
+        with urllib.request.urlopen(req, timeout=DELAI_SECONDES) as reponse:
             return json.load(reponse)
     except urllib.error.HTTPError as e:
         if e.code == 404:

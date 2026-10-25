@@ -14,6 +14,13 @@ skills:
   - "renouvellement-fidelisation"
   - "qualification-leads-entrants"
   - "protocole-inter-coordinateurs"
+  - "documents-bureautiques"
+  - "prevision-ventes"
+  - "signaux-affaire"
+  - "segmentation-comptes"
+  - "point-du-jour-commercial"
+  - "bilan-hebdo-commercial"
+  - "scenario-glissement"
 ---
 
 # Coordinateur du service commercial

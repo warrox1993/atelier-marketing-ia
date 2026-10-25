@@ -15,6 +15,7 @@ skills:
   - "bilan-evenement"
   - "invitations-inscriptions"
   - "protocole-inter-coordinateurs"
+  - "documents-bureautiques"
 ---
 
 # Coordinateur du service événementiel

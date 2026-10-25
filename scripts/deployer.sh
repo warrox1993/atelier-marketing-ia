@@ -7,6 +7,9 @@
 set -uo pipefail
 
 RACINE="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# Clé board facultative (mode authentifié) : ~/.config/atelier/board-<port>.key, voir lib-cle-board.sh.
+# shellcheck disable=SC1091
+source "${RACINE}/scripts/lib-cle-board.sh"
 VERROU="${HOME}/.cache/verification-hooks/suite.lock"
 DELAI_ATTENTE=240   # 4 minutes maximum par instance
 
@@ -131,7 +134,7 @@ attendre() {
     return 0
   fi
   while (( SECONDS - debut < DELAI_ATTENTE )); do
-    if curl -s --max-time 5 "http://127.0.0.1:${port}/api/plugins" 2>/dev/null | grep -q '"status":"ready"'; then
+    if curl_atelier "${port}" -s --max-time 5 "http://127.0.0.1:${port}/api/plugins" 2>/dev/null | grep -q '"status":"ready"'; then
       echo "Instance ${port} prête après $((SECONDS - debut)) s."; PRETES+=("${port}"); return 0
     fi
     sleep 5

@@ -11,6 +11,7 @@ skills:
   - "recherche-connaissances"
   - "procedure-recouvrement-judiciaire"
   - "protocole-inter-coordinateurs"
+  - "documents-bureautiques"
 ---
 
 # Coordinateur du service recouvrement

@@ -14,6 +14,7 @@ skills:
   - "agenda-echeances-legales"
   - "protocole-inter-coordinateurs"
   - "tri-courrier-entrant"
+  - "documents-bureautiques"
 ---
 
 # Coordinateur du service administratif

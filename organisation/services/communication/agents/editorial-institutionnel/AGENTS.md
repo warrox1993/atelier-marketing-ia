@@ -8,6 +8,10 @@ skills:
   - "redaction-declinaison-canal"
   - "charte-marque"
   - "communication-interne"
+  - "documents-bureautiques"
+  - "humanisation-texte-fr"
+  - "design-visuel-sobre"
+  - "accessibilite-wcag"
 ---
 
 # Éditorial institutionnel

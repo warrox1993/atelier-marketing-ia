@@ -17,6 +17,7 @@ skills:
   - "gestion-exceptions-transport"
   - "classement-douanier-origine"
   - "protocole-inter-coordinateurs"
+  - "documents-bureautiques"
 ---
 
 # Coordinateur du service logistique

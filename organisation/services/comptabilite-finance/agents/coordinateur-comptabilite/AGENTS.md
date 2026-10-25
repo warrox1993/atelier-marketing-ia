@@ -15,6 +15,7 @@ skills:
   - "protocole-inter-coordinateurs"
   - "rapprochement-comptes"
   - "analyse-ecarts-budgetaires"
+  - "documents-bureautiques"
 ---
 
 # Coordinateur du service comptabilité

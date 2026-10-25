@@ -23,6 +23,9 @@ F_SANTE=""; F_PLUGINS=""; F_PASSERELLE=""; F_UNITES=""
 UNITES="${ATELIER_SANTE_UNITES:-}"
 SIMULE=0
 PLUGIN_ID="atelier.marketing-ia"
+# Clé board facultative (mode authentifié) : ~/.config/atelier/board-<port>.key, voir lib-cle-board.sh.
+# shellcheck disable=SC1091
+source "$(dirname "${BASH_SOURCE[0]}")/lib-cle-board.sh"
 
 usage() { sed -n '2,15p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//' >&2; }
 
@@ -56,7 +59,7 @@ recuperer() {
     [[ -s "${fichier}" ]] || return 1
     cat "${fichier}"; return 0
   fi
-  corps="$(curl -fsS --max-time 10 "${url}" 2>/dev/null)" || return 1
+  corps="$(curl_atelier "${PORT}" -fsS --max-time 10 "${url}" 2>/dev/null)" || return 1
   [[ -n "${corps}" ]] || return 1
   printf '%s' "${corps}"
 }
@@ -90,7 +93,7 @@ if [[ "${SANTE_OK}" -eq 1 ]]; then
       # Le serveur compte son heure de sauvegarde depuis son démarrage : après un redémarrage, la
       # suivante peut tarder. On déclenche donc d'abord une sauvegarde (route native, même que le bouton
       # de l'interface) et on n'alerte que si elle échoue. Jamais en simulation.
-      if [[ "${SIMULE}" -eq 0 ]] && reponse="$(curl -fsS --max-time 300 -X POST -H 'Content-Type: application/json' -d '{}' \
+      if [[ "${SIMULE}" -eq 0 ]] && reponse="$(curl_atelier "${PORT}" -fsS --max-time 300 -X POST -H 'Content-Type: application/json' -d '{}' \
           "http://127.0.0.1:${PORT}/api/instance/database-backups" 2>/dev/null)" \
           && [[ -n "$(jq -r '.backupFile // empty' <<<"${reponse}" 2>/dev/null)" ]]; then
         echo "Atelier (port ${PORT}) : sauvegarde de ${age} h, nouvelle sauvegarde faite : $(jq -r '.backupFile' <<<"${reponse}")"

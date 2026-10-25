@@ -6,6 +6,7 @@ title: "Recherche et innovation · Recueil, sélection des idées et preuves de 
 reportsTo: "coordinateur-rdi"
 skills:
   - "selection-projets-innovation"
+  - "reflexion-produit"
 ---
 
 # Portefeuille d'innovation

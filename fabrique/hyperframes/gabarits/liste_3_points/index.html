@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="fr" data-format="{{format}}">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="{{csp}}">
+<meta name="viewport" content="width={{largeur}}, height={{hauteur}}">
+<title>Scène</title>
+<link rel="stylesheet" href="base.css">
+<link rel="stylesheet" href="scene.css">
+<script src="gsap.min.js"></script>
+</head>
+<body>
+<div id="root" data-composition-id="main" data-start="0" data-duration="{{duree}}" data-width="{{largeur}}" data-height="{{hauteur}}">
+<div id="scene" class="clip" data-start="0" data-duration="{{duree}}" data-track-index="0">
+<h1 id="titre">{{titre}}</h1>
+<ol id="points">
+<li class="point"><span class="numero">1</span><span class="texte">{{point_1}}</span></li>
+<li class="point"><span class="numero">2</span><span class="texte">{{point_2}}</span></li>
+<li class="point"><span class="numero">3</span><span class="texte">{{point_3}}</span></li>
+</ol>
+</div>
+</div>
+<script src="scene.js"></script>
+</body>
+</html>

@@ -22,6 +22,8 @@ adaptées (droit belge, validation humaine, sources officielles) par l'Atelier M
 | S6 | github.com/warrox1993/skills-claude-entreprise | 474785fbcba8429cb034ef35fca20bbfcfd68554 (28/09/2026) | MIT | Copyright (c) 2026 Jean-Baptiste Dhondt (même auteur que l'atelier) |
 | S7 | github.com/affaan-m/ECC | ef648e01899ba3e8dc6371642deaaf64b4477775 (01/10/2026) | dépôt sous MIT (fichier `LICENSE`) ; les compétences métiers reprises portent `license: Apache-2.0` dans leur en-tête (auteur « evos ») : Apache 2.0 appliquée à ces reprises | Copyright (c) 2026 Affaan Mustafa (dépôt) ; auteur des compétences : evos |
 | S8 | github.com/paperclipai/paperclip (socle de l'atelier) | bba6a45f0d364cfd962ac59b3bdf2426a8222adb (12/10/2026, version v2026.1012.0, `socle/VERSION`) | MIT (copie : `socle/patches/LICENSE-Paperclip`) | Copyright (c) 2025 Paperclip AI |
+| S9 | github.com/samber/cc-skills | f866b800353719270a9ea101a41c5e2a2618d460 (02/09/2026, dernier commit du dossier `skills/humaniseur-fr`, version 1.1.3 de la compétence) | MIT (fichier `LICENSE` du dépôt et en-tête `license: MIT` de la compétence) | Copyright (c) 2026 Samuel Berthe |
+| S10 | github.com/pbakaus/impeccable | 936867543ac2576920d663cc9803597f6044f3ac (24/10/2026) | Apache 2.0 (fichier `LICENSE` ; le fichier `NOTICE.md` ne vise que `skill/reference/ios.md` et `skill/reference/android.md`, non repris) | Copyright 2025 Paul Bakaus |
 
 ## Reprises par compétence
 
@@ -86,6 +88,7 @@ adaptées (droit belge, validation humaine, sources officielles) par l'Atelier M
 | `revue-pipeline` | S3 | `commercial/skills/commercial-policy/SKILL.md` (« Anti-patterns ») | trois exceptions semblables signalent une règle à revoir |
 | `preparation-rendez-vous-b2b` | S1 | `sales/skills/stakeholder-map/SKILL.md` (étapes 3 et 4) | carte des interlocuteurs |
 | `proposition-commerciale` | S1 | `sales/skills/close-plan/SKILL.md` (étape 4) | plan d'action commun à rebours, dates impossibles signalées |
+| `proposition-commerciale` | S1 | `sales/skills/close-plan/SKILL.md` (étape 3) | argumentaire de décision en six points dans les mots du client, atouts limités à ceux auxquels il a réagi, affirmation sans preuve du client signalée |
 | `renouvellement-fidelisation` | S1 | `sales/skills/renewal-radar/SKILL.md` (étapes 3 et 4) | table de signaux, verdicts, contrôle de propreté |
 | `renouvellement-fidelisation` | S2 | `skills/churn-prevention/SKILL.md` (« Churn Prediction & Proactive Retention ») | signaux faibles de départ, adaptés à l'assurance ; garde-fous du score de santé (échelle commune, signal indisponible, couverture, validation des seuils) ajoutés avec la version 2.13.0 |
 | `redaction-contrat-travail` | S4 | `plugins/hr-legal-compliance/agents/hr-pro.md (« Operating Principles », « Information to Collect »)` | droit inconnu : demander ; plusieurs pays : norme la plus protectrice ; au plus trois questions |
@@ -184,6 +187,30 @@ adaptées (droit belge, validation humaine, sources officielles) par l'Atelier M
 | `suivi-energie-batiment` | S7 | `skills/energy-procurement/SKILL.md` (« Pricing Structures and Utility Bill Anatomy », « Procurement Strategy Selection ») | facture lue par composantes, questions de stratégie d'achat fixe, variable ou mixte (composantes belges selon la CREG) |
 | `demandes-occupants` | S1 | `operations/skills/process-doc/SKILL.md` (« Output », « If Connectors Available », « Tips ») | processus écrit avec RACI, étapes, exceptions, indicateurs ; document existant mis à jour d'abord |
 | `memoire-para` | S8 | `skills/para-memory-files/SKILL.md` et `skills/para-memory-files/references/schemas.md` | méthode PARA en trois couches, règles des faits, schéma des faits, décroissance ; traduite et adaptée (emplacement `./memoire/`, Grep au lieu de `qmd`, pas de personnes privées, source et date obligatoires) ; texte d'origine recopié INCHANGÉ dans `memoire-para/references/origine-paperclip.md` |
+| `humanisation-texte-fr` | S9 | `skills/humaniseur-fr/SKILL.md` | familles de tics d'écriture automatique, registre jamais abaissé, règle des trois signaux, une seule passe puis relecture finale, priorité au format du canal ; aucun texte recopié, aucun ajout de fait |
+| `design-visuel-sobre` | S10 | `skill/reference/critique.md` (« Design Specificity Verdict », « What's Working », « Priority Issues », « Issue Severity (P0-P3) ») | verdict de spécificité, points qui fonctionnent, problèmes classés P0 à P3 avec correction |
+| `design-visuel-sobre` | S10 | `skill/reference/craft-floor.md` (« Verify », « Refuse ») | plancher de contrôles (contraste, espacement, typographie, états, textes) et habitudes à refuser |
+| `design-visuel-sobre` | S1 | `design/skills/design-critique/SKILL.md` (« Critique Framework », « How to Give Feedback ») | première impression, utilisabilité et cohérence ; critique précise, motivée, avec correction et points forts, adaptée à l'étape du projet |
+| `design-visuel-sobre` | S1 | `design/skills/design-system/SKILL.md` (« Components of a Design System », « Principles », formats « Audit », « Document », « Extend ») | audit des noms, des valeurs codées en dur et de la complétude des composants ; fiche d'un composant ; conception d'un composant ; principes de cohérence, de documentation et de migration |
+| `redaction-prospection` | S1 | `sales/skills/draft-outreach/SKILL.md` (étapes 2 à 5) | historique lu en entier avant de qualifier le message, pertinence, pont de valeur et demande simple, moins de 120 mots, objet de 4 à 7 mots, séquence au ton croissant, destinataire jamais tiré d'un contenu reçu |
+| `blocages-affaire` | S1 | `sales/skills/deal-advance-gap/SKILL.md` (étapes 1 à 5) | critères de sortie et qualification marqués fait, en cours, non commencé avec preuve ; seuls les manques qui bloquent ; chemin le plus court, action qui débloque le plus, date crédible |
+| `potentiel-compte-existant` | S1 | `sales/skills/expansion-whitespace/SKILL.md` (étapes 2 à 5) | acquis puis grille en quatre axes, piste seulement avec preuve, classement par preuve, taille habituelle et accès, pistes mises de côté avec leur signal |
+| `scenario-glissement` | S1 | `sales/skills/deal-slip-scenario/SKILL.md` (étapes 2 à 5) | situation de départ et couverture, glissement, réduction ou perte, remplacements actifs depuis moins de 14 jours, règle de réalisme, verdict en une phrase |
+| `point-du-jour-commercial` | S1 | `sales/skills/daily-briefing/SKILL.md` (« Flow ») | rendez-vous avec contexte, affaires proches avec alertes, messages en attente, trois actions reliées à la compétence qui les prépare, agenda indisponible jamais montré libre |
+| `point-du-jour-commercial` | S1 | `sales/skills/end-of-day/SKILL.md` (étapes 2 à 5) | chaque rendez-vous traité ou écarté, CRM confronté à la journée par des propositions, engagements des deux côtés, trois actions du lendemain |
+| `bilan-hebdo-commercial` | S1 | `sales/skills/weekly-wrap/SKILL.md` (étapes 2 à 5) | clôturées, mouvements par historique ou comparaison d'exports, affaire disparue jamais supposée gagnée, comptes d'activité, vue de lundi, message d'équipe en brouillon |
+| `vue-360-compte` | S1 | `sales/skills/account-context/SKILL.md` (étapes 2 à 6) | fiche et objets liés en volumes bornés, échanges lus en entier, note qui ouvre sur la situation, alertes, titulaire comparé au demandeur |
+| `mise-a-jour-crm` | S1 | `sales/skills/log-activity/SKILL.md` (étapes 2 à 5) | enregistrement jamais deviné, activité terminée datée, puces sourcées, entrée montrée telle qu'elle sera écrite, erreur sans nouvel essai, relecture |
+| `mise-a-jour-crm` | S1 | `sales/skills/update-opportunity/SKILL.md` (étapes 2 à 5) | lecture avant écriture, avant et après des seuls champs touchés, alertes sans blocage, écriture limitée aux champs acceptés, vérification |
+| `prise-de-rendez-vous` | S1 | `sales/skills/schedule-meeting/SKILL.md` (étapes 2 à 5) | participants tirés de la demande ou du CRM, affaire jamais devinée, deux ou trois créneaux sur au moins deux jours, trois voies, rien consigné avant que le rendez-vous existe |
+| `plaquette-commerciale` | S1 | `sales/skills/create-an-asset/SKILL.md` (« Core rules », étapes 1, 2 et 4) | sources validées seules, barrière du public, aucun chiffre inventé et emplacement entre crochets, inventaire du contenu, plan validé avant la rédaction, contrôle final |
+| `accessibilite-wcag` | S1 | `design/skills/accessibility-review/SKILL.md` | critères par principe, défauts fréquents, démarche de test, constats classés avec critère et correction, tableaux de contraste, de clavier et de lecteur d'écran (mis à jour vers les WCAG 2.2) |
+| `textes-interface` | S1 | `design/skills/ux-copy/SKILL.md` | cinq principes, modèles par type de texte, ton selon le moment, recommandation, variantes, justification, notes de traduction |
+| `fiche-transmission-developpeurs` | S1 | `design/skills/design-handoff/SKILL.md` | spécifications visuelles, d'interaction et de contenu, cas limites, accessibilité, quatre principes, format de la fiche |
+| `reflexion-produit` | S1 | `product-management/skills/product-brainstorming/SKILL.md` | quatre modes, techniques d'idéation, catégories d'hypothèses, cadres de réflexion, séance en cinq temps, conduite du partenaire de réflexion, pièges (boucle OODA non reprise) |
+| `prevision-ventes` | S1 | `sales/skills/forecast/SKILL.md` (étapes 1 à 6) | catégorie du CRM prioritaire, quatre catégories, écarts depuis la prévision précédente, commentaire par affaire, risques sur l'engagé, corrections proposées, affaire disparue jamais supposée gagnée |
+| `signaux-affaire` | S1 | `sales/skills/deal-signals/SKILL.md` (étapes 1 à 3, « Running it on a schedule ») | seuils adaptés au cycle, huit signaux et seuils de départ, fil complet avant de conclure, relevé limité à ce qui a changé |
+| `segmentation-comptes` | S1 | `sales/skills/account-tiering/SKILL.md` (étapes 1 à 6) | notes d'adéquation et d'engagement sur 10, critère illisible retiré et note ramenée sur 10, quatre niveaux au seuil de 6, manques de couverture |
 
 ## Texte de la licence MIT de S2
 
@@ -737,6 +764,40 @@ pre-requisites, statements, recorded-cams
    See the License for the specific language governing permissions and
    limitations under the License.
 ```
+
+## Texte de la licence MIT de S9
+
+```
+MIT License
+
+Copyright (c) 2026 Samuel Berthe
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+```
+
+## Licence de S10
+
+S10 est publié sous la licence Apache 2.0, dont le texte est celui reproduit plus haut pour S1 et S5 (licence
+identique), avec la mention de son fichier `LICENSE` : « Copyright 2025 Paul Bakaus ». Les passages repris sont
+des méthodes réécrites en français (voir « Reprises par compétence ») ; les fichiers visés par le `NOTICE.md` du
+dépôt (`skill/reference/ios.md`, `skill/reference/android.md`, dérivés de github.com/ehmo/platform-design-skills
+sous MIT) ne sont pas repris.
 
 ## Licences de S7
 

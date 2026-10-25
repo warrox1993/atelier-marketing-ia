@@ -29,6 +29,9 @@ agents:
           - "NotebookEdit"
           - "Agent"
           - "Task"
+          - "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_document"
+          - "mcp__paperclip-assigned__atelier_marketing-ia_etat_fabrication"
+          - "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_video"
         env:
           DISABLE_TELEMETRY:
             type: "plain"
@@ -77,6 +80,9 @@ agents:
           - "NotebookEdit"
           - "Agent"
           - "Task"
+          - "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_document"
+          - "mcp__paperclip-assigned__atelier_marketing-ia_etat_fabrication"
+          - "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_video"
         relit: []
         roleRevue: null
         connexions: {}
@@ -125,6 +131,9 @@ agents:
           - "NotebookEdit"
           - "Agent"
           - "Task"
+          - "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_document"
+          - "mcp__paperclip-assigned__atelier_marketing-ia_etat_fabrication"
+          - "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_video"
         env:
           DISABLE_TELEMETRY:
             type: "plain"
@@ -172,6 +181,9 @@ agents:
           - "NotebookEdit"
           - "Agent"
           - "Task"
+          - "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_document"
+          - "mcp__paperclip-assigned__atelier_marketing-ia_etat_fabrication"
+          - "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_video"
         relit: []
         roleRevue: null
         connexions:
@@ -216,11 +228,14 @@ agents:
           - "mcp__Paperclip_connections__connection_request"
           - "Bash(curl *)"
           - "Edit(./**)"
+          - "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_document"
+          - "mcp__paperclip-assigned__atelier_marketing-ia_etat_fabrication"
           - "--disallowedTools"
           - "Edit"
           - "NotebookEdit"
           - "Agent"
           - "Task"
+          - "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_video"
         env:
           DISABLE_TELEMETRY:
             type: "plain"
@@ -264,11 +279,14 @@ agents:
         outilsMutation:
           - "Bash(curl *)"
           - "Write"
+          - "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_document"
+          - "mcp__paperclip-assigned__atelier_marketing-ia_etat_fabrication"
         outilsInterdits:
           - "Edit"
           - "NotebookEdit"
           - "Agent"
           - "Task"
+          - "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_video"
         relit: []
         roleRevue: null
         connexions:
@@ -314,11 +332,14 @@ agents:
           - "mcp__Paperclip_connections__connection_request"
           - "Bash(curl *)"
           - "Edit(./**)"
+          - "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_document"
+          - "mcp__paperclip-assigned__atelier_marketing-ia_etat_fabrication"
           - "--disallowedTools"
           - "Edit"
           - "NotebookEdit"
           - "Agent"
           - "Task"
+          - "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_video"
         env:
           DISABLE_TELEMETRY:
             type: "plain"
@@ -362,11 +383,14 @@ agents:
         outilsMutation:
           - "Bash(curl *)"
           - "Write"
+          - "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_document"
+          - "mcp__paperclip-assigned__atelier_marketing-ia_etat_fabrication"
         outilsInterdits:
           - "Edit"
           - "NotebookEdit"
           - "Agent"
           - "Task"
+          - "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_video"
         relit: []
         roleRevue: null
         connexions:
@@ -421,6 +445,9 @@ agents:
           - "NotebookEdit"
           - "Agent"
           - "Task"
+          - "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_document"
+          - "mcp__paperclip-assigned__atelier_marketing-ia_etat_fabrication"
+          - "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_video"
         env:
           DISABLE_TELEMETRY:
             type: "plain"
@@ -470,6 +497,9 @@ agents:
           - "NotebookEdit"
           - "Agent"
           - "Task"
+          - "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_document"
+          - "mcp__paperclip-assigned__atelier_marketing-ia_etat_fabrication"
+          - "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_video"
         relit: []
         roleRevue: null
         connexions:
@@ -520,6 +550,9 @@ agents:
           - "NotebookEdit"
           - "Agent"
           - "Task"
+          - "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_document"
+          - "mcp__paperclip-assigned__atelier_marketing-ia_etat_fabrication"
+          - "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_video"
         env:
           DISABLE_TELEMETRY:
             type: "plain"
@@ -568,6 +601,9 @@ agents:
           - "NotebookEdit"
           - "Agent"
           - "Task"
+          - "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_document"
+          - "mcp__paperclip-assigned__atelier_marketing-ia_etat_fabrication"
+          - "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_video"
         relit: []
         roleRevue: null
         connexions:
@@ -619,6 +655,9 @@ agents:
           - "NotebookEdit"
           - "Agent"
           - "Task"
+          - "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_document"
+          - "mcp__paperclip-assigned__atelier_marketing-ia_etat_fabrication"
+          - "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_video"
         env:
           DISABLE_TELEMETRY:
             type: "plain"
@@ -668,6 +707,9 @@ agents:
           - "NotebookEdit"
           - "Agent"
           - "Task"
+          - "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_document"
+          - "mcp__paperclip-assigned__atelier_marketing-ia_etat_fabrication"
+          - "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_video"
         relit: []
         roleRevue: null
         connexions:
@@ -710,11 +752,14 @@ agents:
           - "Bash(curl *)"
           - "Edit(./**)"
           - "mcp__paperclip-assigned"
+          - "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_document"
+          - "mcp__paperclip-assigned__atelier_marketing-ia_etat_fabrication"
           - "--disallowedTools"
           - "WebSearch"
           - "NotebookEdit"
           - "Agent"
           - "Task"
+          - "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_video"
         env:
           DISABLE_TELEMETRY:
             type: "plain"
@@ -758,11 +803,14 @@ agents:
           - "Write"
           - "Edit"
           - "mcp__paperclip-assigned"
+          - "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_document"
+          - "mcp__paperclip-assigned__atelier_marketing-ia_etat_fabrication"
         outilsInterdits:
           - "WebSearch"
           - "NotebookEdit"
           - "Agent"
           - "Task"
+          - "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_video"
         relit: []
         roleRevue: null
         connexions:
@@ -812,12 +860,15 @@ agents:
           - "Bash(curl *)"
           - "Edit(./**)"
           - "mcp__paperclip-assigned"
+          - "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_document"
+          - "mcp__paperclip-assigned__atelier_marketing-ia_etat_fabrication"
           - "--disallowedTools"
           - "WebSearch"
           - "WebFetch"
           - "NotebookEdit"
           - "Agent"
           - "Task"
+          - "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_video"
         env:
           DISABLE_TELEMETRY:
             type: "plain"
@@ -859,12 +910,15 @@ agents:
           - "Write"
           - "Edit"
           - "mcp__paperclip-assigned"
+          - "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_document"
+          - "mcp__paperclip-assigned__atelier_marketing-ia_etat_fabrication"
         outilsInterdits:
           - "WebSearch"
           - "WebFetch"
           - "NotebookEdit"
           - "Agent"
           - "Task"
+          - "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_video"
         relit: []
         roleRevue: null
         connexions:
@@ -910,6 +964,8 @@ agents:
           - "mcp__Paperclip_connections__connection_request"
           - "Bash(curl *)"
           - "Edit(./**)"
+          - "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_document"
+          - "mcp__paperclip-assigned__atelier_marketing-ia_etat_fabrication"
           - "--disallowedTools"
           - "WebSearch"
           - "WebFetch"
@@ -917,6 +973,7 @@ agents:
           - "NotebookEdit"
           - "Agent"
           - "Task"
+          - "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_video"
         env:
           DISABLE_TELEMETRY:
             type: "plain"
@@ -956,6 +1013,8 @@ agents:
         outilsMutation:
           - "Bash(curl *)"
           - "Write"
+          - "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_document"
+          - "mcp__paperclip-assigned__atelier_marketing-ia_etat_fabrication"
         outilsInterdits:
           - "WebSearch"
           - "WebFetch"
@@ -963,6 +1022,7 @@ agents:
           - "NotebookEdit"
           - "Agent"
           - "Task"
+          - "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_video"
         relit: []
         roleRevue: null
         connexions:
@@ -1006,12 +1066,15 @@ agents:
           - "WebSearch"
           - "Bash(curl *)"
           - "Edit(./**)"
+          - "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_video"
+          - "mcp__paperclip-assigned__atelier_marketing-ia_etat_fabrication"
           - "--disallowedTools"
           - "WebFetch"
           - "Edit"
           - "NotebookEdit"
           - "Agent"
           - "Task"
+          - "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_document"
         env:
           DISABLE_TELEMETRY:
             type: "plain"
@@ -1051,12 +1114,15 @@ agents:
         outilsMutation:
           - "Bash(curl *)"
           - "Write"
+          - "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_video"
+          - "mcp__paperclip-assigned__atelier_marketing-ia_etat_fabrication"
         outilsInterdits:
           - "WebFetch"
           - "Edit"
           - "NotebookEdit"
           - "Agent"
           - "Task"
+          - "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_document"
         relit: []
         roleRevue: null
         connexions: {}
@@ -1101,6 +1167,9 @@ agents:
           - "NotebookEdit"
           - "Agent"
           - "Task"
+          - "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_document"
+          - "mcp__paperclip-assigned__atelier_marketing-ia_etat_fabrication"
+          - "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_video"
         env:
           DISABLE_TELEMETRY:
             type: "plain"
@@ -1144,6 +1213,9 @@ agents:
           - "NotebookEdit"
           - "Agent"
           - "Task"
+          - "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_document"
+          - "mcp__paperclip-assigned__atelier_marketing-ia_etat_fabrication"
+          - "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_video"
         relit: []
         roleRevue: null
         connexions: {}
@@ -1188,6 +1260,9 @@ agents:
           - "NotebookEdit"
           - "Agent"
           - "Task"
+          - "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_document"
+          - "mcp__paperclip-assigned__atelier_marketing-ia_etat_fabrication"
+          - "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_video"
         env:
           DISABLE_TELEMETRY:
             type: "plain"
@@ -1233,6 +1308,9 @@ agents:
           - "NotebookEdit"
           - "Agent"
           - "Task"
+          - "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_document"
+          - "mcp__paperclip-assigned__atelier_marketing-ia_etat_fabrication"
+          - "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_video"
         relit:
           - "coordinateur"
           - "veille"
@@ -1289,6 +1367,9 @@ agents:
           - "NotebookEdit"
           - "Agent"
           - "Task"
+          - "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_document"
+          - "mcp__paperclip-assigned__atelier_marketing-ia_etat_fabrication"
+          - "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_video"
         env:
           DISABLE_TELEMETRY:
             type: "plain"
@@ -1334,6 +1415,9 @@ agents:
           - "NotebookEdit"
           - "Agent"
           - "Task"
+          - "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_document"
+          - "mcp__paperclip-assigned__atelier_marketing-ia_etat_fabrication"
+          - "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_video"
         relit:
           - "coordinateur"
           - "veille"
@@ -1393,6 +1477,9 @@ agents:
           - "NotebookEdit"
           - "Agent"
           - "Task"
+          - "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_document"
+          - "mcp__paperclip-assigned__atelier_marketing-ia_etat_fabrication"
+          - "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_video"
         env:
           DISABLE_TELEMETRY:
             type: "plain"
@@ -1440,6 +1527,9 @@ agents:
           - "NotebookEdit"
           - "Agent"
           - "Task"
+          - "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_document"
+          - "mcp__paperclip-assigned__atelier_marketing-ia_etat_fabrication"
+          - "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_video"
         relit:
           - "seo-local-geo"
           - "sea"
@@ -1491,7 +1581,10 @@ agents:
         competencesObligatoires: []
         outilsRecherche: []
         outilsMutation: []
-        outilsInterdits: []
+        outilsInterdits:
+          - "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_document"
+          - "mcp__paperclip-assigned__atelier_marketing-ia_etat_fabrication"
+          - "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_video"
         relit: []
         roleRevue: null
         connexions: {}

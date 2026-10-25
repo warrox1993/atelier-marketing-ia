@@ -1160,6 +1160,15 @@ export function creerBase(db: Db) {
     );
   }
 
+  /** Tâche d'origine d'un passage d'agent (contexte du run), ou null. */
+  async function tacheDuRun(companyId: string, runId: string): Promise<string | null> {
+    const [r] = await q<{ issue_id: string | null }>(
+      `select context_snapshot->>'issueId' as issue_id from public.heartbeat_runs where id = $1 and company_id = $2`,
+      [runId, companyId],
+    );
+    return r?.issue_id ? String(r.issue_id) : null;
+  }
+
   async function coutsEntreprise(companyId: string) {
     const [r] = await q<{ total: number | string | null; n: number | string }>(`select coalesce(sum(cost_cents), 0) as total, count(*) as n from public.cost_events where company_id = $1`, [companyId]);
     return { totalCents: Number(r?.total ?? 0), evenements: Number(r?.n ?? 0) };
@@ -1688,7 +1697,7 @@ export function creerBase(db: Db) {
     rapporterIssueDiffusion, lireDiffusionInterne, figerPreuve, revoquerPreuves, listerRevocations,
     insererAppel, listerAppels, lireAppel, lireAppelParEmpreinte, comptesConnexion,
     insererMarque, marques, planifier, listerPlanifications, listerMesures,
-    tachesDeProjet, bloqueursNonResolus, runsDeTaches, coutsEntreprise, coutsEntrepriseMois, competencesDernierRun,
+    tachesDeProjet, bloqueursNonResolus, runsDeTaches, tacheDuRun, coutsEntreprise, coutsEntrepriseMois, competencesDernierRun,
     supprimerDonneesEntreprise,
     prospectsParIdentifiants, lireProspect, empreintesProspectsEnBase, oppositionsPour, compterAReimporter, clientsActuelsPour, dncmPour, clientExiste, clientParEmpreinte, poidsScoreCourant,
     referentielProspection, insererProspect, majProspect, remplacerProspectAReimporter, exclureProspect, ajouterEmpreintesProspect, prospectsAvecEmpreinte, insererScoreProspect,

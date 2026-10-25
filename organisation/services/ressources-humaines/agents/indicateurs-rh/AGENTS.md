@@ -6,6 +6,7 @@ title: "RH · Indicateurs agrégés"
 reportsTo: "coordinateur-rh"
 skills:
   - "indicateurs-rh-agreges"
+  - "documents-bureautiques"
 ---
 
 # Indicateurs RH

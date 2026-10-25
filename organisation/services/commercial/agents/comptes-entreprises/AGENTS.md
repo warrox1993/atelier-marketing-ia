@@ -6,6 +6,11 @@ title: "Commercial · Plans de compte des clients entreprises"
 reportsTo: "coordinateur-commercial"
 skills:
   - "plan-de-compte"
+  - "signaux-affaire"
+  - "segmentation-comptes"
+  - "blocages-affaire"
+  - "potentiel-compte-existant"
+  - "vue-360-compte"
 ---
 
 # Comptes entreprises

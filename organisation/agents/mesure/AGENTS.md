@@ -7,6 +7,8 @@ reportsTo: "coordinateur"
 skills:
   - "mesure-experiences"
   - "suivi-conversions"
+  - "documents-bureautiques"
+  - "visualisation-donnees"
   - "memoire-para"
   - "recherche-connaissances"
 ---

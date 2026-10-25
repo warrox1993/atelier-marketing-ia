@@ -1,0 +1,36 @@
+/* Base commune des gabarits de la fabrique (lot 10). Aucune ressource externe : la police est
+   un fichier local (polices/), servi par la même origine que la page (font-src 'self'). */
+@font-face { font-family: "Fabrique"; font-weight: 400; src: url("polices/DejaVuSans.ttf"); }
+@font-face { font-family: "Fabrique"; font-weight: 700; src: url("polices/DejaVuSans-Bold.ttf"); }
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+html[data-format="1080x1920"] { --l: 1080px; --h: 1920px; --base: 64px; --marge: 96px; }
+html[data-format="1920x1080"] { --l: 1920px; --h: 1080px; --base: 56px; --marge: 160px; }
+html[data-format="1080x1080"] { --l: 1080px; --h: 1080px; --base: 52px; --marge: 96px; }
+
+html, body {
+  width: var(--l);
+  height: var(--h);
+  overflow: hidden;
+  background: #f4f1ea;
+  color: #1c1b19;
+  font-family: "Fabrique", sans-serif;
+}
+
+#root { position: absolute; inset: 0; }
+
+/* Le moteur place les éléments chronométrés en plein cadre : toute la mise en page vit dans
+   une seule scène chronométrée, dont les enfants restent en flux normal. */
+#scene {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: var(--marge);
+  gap: calc(var(--base) * 0.6);
+  overflow-wrap: anywhere;
+}
+
+.sous-titre { font-size: calc(var(--base) * 0.55); line-height: 1.35; color: #5a564e; }

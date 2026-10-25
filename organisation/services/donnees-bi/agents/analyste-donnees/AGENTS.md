@@ -6,6 +6,8 @@ title: "Données et BI · Analyses au service d'une décision"
 reportsTo: "coordinateur-donnees"
 skills:
   - "analyse-donnees-decision"
+  - "documents-bureautiques"
+  - "visualisation-donnees"
 ---
 
 # Analyste données

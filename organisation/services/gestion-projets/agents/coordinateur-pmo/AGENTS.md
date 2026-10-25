@@ -16,6 +16,7 @@ skills:
   - "plan-capacite-ressources"
   - "compte-rendu-comite"
   - "protocole-inter-coordinateurs"
+  - "documents-bureautiques"
 ---
 
 # Coordinateur du service gestion de projets (PMO)

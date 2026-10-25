@@ -6,6 +6,7 @@ title: "Qualité · Préparation de la revue de direction"
 reportsTo: "coordinateur-qualite"
 skills:
   - "revue-de-direction-qualite"
+  - "documents-bureautiques"
 ---
 
 # Revue de direction qualité

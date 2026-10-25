@@ -40,6 +40,7 @@ import { VueParametres } from "./vues/parametres.js";
 import { VueProspects } from "./vues/prospects.js";
 import { VueConnaissances } from "./vues/connaissances.js";
 import { VueCorbeille } from "./vues/corbeille.js";
+import { VueLivrables } from "./vues/livrables.js";
 import { VueDiscussion } from "./vues/discussion.js";
 import { VueResultatsAtelier } from "./vues/resultats.js";
 import { VueRapport } from "./vues/rapport.js";
@@ -93,6 +94,8 @@ function Vue({ vue, id }: { vue: CleVue; id: string | null }) {
       return <VueParametres />;
     case "corbeille":
       return <VueCorbeille />;
+    case "livrables":
+      return <VueLivrables id={id} />;
     case "tableau":
       return <VueTableau />;
     case "rapport":

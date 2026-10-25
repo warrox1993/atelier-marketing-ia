@@ -14,6 +14,7 @@ skills:
   - "controle-sanctions-double-usage"
   - "incoterms-paiement-international"
   - "protocole-inter-coordinateurs"
+  - "documents-bureautiques"
 ---
 
 # Coordinateur du service commerce extérieur

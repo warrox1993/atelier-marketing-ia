@@ -7,6 +7,7 @@ reportsTo: "coordinateur-informatique"
 skills:
   - "tri-tickets-support"
   - "base-connaissances-faq"
+  - "textes-interface"
 ---
 
 # Support aux utilisateurs

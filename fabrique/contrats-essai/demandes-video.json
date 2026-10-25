@@ -1,0 +1,2218 @@
+{
+ "description": "Demandes du type video (outil fabriquer_video) : verdict attendu identique cote Python (fabrique.demande_video.valider_demande_video) et cote plugin (validerDemandeVideo).",
+ "cas": [
+  {
+   "nom": "video valide 2 scenes",
+   "demande": {
+    "format_sortie": "1080x1920",
+    "sous_titres": true,
+    "scenes": [
+     {
+      "texte_voix": "Bonjour a tous.",
+      "voix": "synthese-chatterbox-fr",
+      "visuel": {
+       "gabarit": "titre_plein_ecran",
+       "champs": {
+        "titre": "Titre"
+       }
+      }
+     },
+     {
+      "texte_voix": "Bonjour a tous.",
+      "voix": "synthese-chatterbox-fr",
+      "visuel": {
+       "gabarit": "liste_3_points",
+       "champs": {
+        "titre": "T",
+        "points": [
+         "a",
+         "b",
+         "c"
+        ]
+       }
+      },
+      "duree_max": 8
+     }
+    ]
+   },
+   "valide": true
+  },
+  {
+   "nom": "video 1 scene",
+   "demande": {
+    "format_sortie": "1080x1920",
+    "sous_titres": true,
+    "scenes": [
+     {
+      "texte_voix": "Bonjour a tous.",
+      "voix": "synthese-chatterbox-fr",
+      "visuel": {
+       "gabarit": "titre_plein_ecran",
+       "champs": {
+        "titre": "Titre"
+       }
+      }
+     }
+    ]
+   },
+   "valide": true
+  },
+  {
+   "nom": "video 30 scenes",
+   "demande": {
+    "format_sortie": "1080x1920",
+    "sous_titres": true,
+    "scenes": [
+     {
+      "texte_voix": "Bonjour a tous.",
+      "voix": "synthese-chatterbox-fr",
+      "visuel": {
+       "gabarit": "titre_plein_ecran",
+       "champs": {
+        "titre": "Titre"
+       }
+      }
+     },
+     {
+      "texte_voix": "Bonjour a tous.",
+      "voix": "synthese-chatterbox-fr",
+      "visuel": {
+       "gabarit": "titre_plein_ecran",
+       "champs": {
+        "titre": "Titre"
+       }
+      }
+     },
+     {
+      "texte_voix": "Bonjour a tous.",
+      "voix": "synthese-chatterbox-fr",
+      "visuel": {
+       "gabarit": "titre_plein_ecran",
+       "champs": {
+        "titre": "Titre"
+       }
+      }
+     },
+     {
+      "texte_voix": "Bonjour a tous.",
+      "voix": "synthese-chatterbox-fr",
+      "visuel": {
+       "gabarit": "titre_plein_ecran",
+       "champs": {
+        "titre": "Titre"
+       }
+      }
+     },
+     {
+      "texte_voix": "Bonjour a tous.",
+      "voix": "synthese-chatterbox-fr",
+      "visuel": {
+       "gabarit": "titre_plein_ecran",
+       "champs": {
+        "titre": "Titre"
+       }
+      }
+     },
+     {
+      "texte_voix": "Bonjour a tous.",
+      "voix": "synthese-chatterbox-fr",
+      "visuel": {
+       "gabarit": "titre_plein_ecran",
+       "champs": {
+        "titre": "Titre"
+       }
+      }
+     },
+     {
+      "texte_voix": "Bonjour a tous.",
+      "voix": "synthese-chatterbox-fr",
+      "visuel": {
+       "gabarit": "titre_plein_ecran",
+       "champs": {
+        "titre": "Titre"
+       }
+      }
+     },
+     {
+      "texte_voix": "Bonjour a tous.",
+      "voix": "synthese-chatterbox-fr",
+      "visuel": {
+       "gabarit": "titre_plein_ecran",
+       "champs": {
+        "titre": "Titre"
+       }
+      }
+     },
+     {
+      "texte_voix": "Bonjour a tous.",
+      "voix": "synthese-chatterbox-fr",
+      "visuel": {
+       "gabarit": "titre_plein_ecran",
+       "champs": {
+        "titre": "Titre"
+       }
+      }
+     },
+     {
+      "texte_voix": "Bonjour a tous.",
+      "voix": "synthese-chatterbox-fr",
+      "visuel": {
+       "gabarit": "titre_plein_ecran",
+       "champs": {
+        "titre": "Titre"
+       }
+      }
+     },
+     {
+      "texte_voix": "Bonjour a tous.",
+      "voix": "synthese-chatterbox-fr",
+      "visuel": {
+       "gabarit": "titre_plein_ecran",
+       "champs": {
+        "titre": "Titre"
+       }
+      }
+     },
+     {
+      "texte_voix": "Bonjour a tous.",
+      "voix": "synthese-chatterbox-fr",
+      "visuel": {
+       "gabarit": "titre_plein_ecran",
+       "champs": {
+        "titre": "Titre"
+       }
+      }
+     },
+     {
+      "texte_voix": "Bonjour a tous.",
+      "voix": "synthese-chatterbox-fr",
+      "visuel": {
+       "gabarit": "titre_plein_ecran",
+       "champs": {
+        "titre": "Titre"
+       }
+      }
+     },
+     {
+      "texte_voix": "Bonjour a tous.",
+      "voix": "synthese-chatterbox-fr",
+      "visuel": {
+       "gabarit": "titre_plein_ecran",
+       "champs": {
+        "titre": "Titre"
+       }
+      }
+     },
+     {
+      "texte_voix": "Bonjour a tous.",
+      "voix": "synthese-chatterbox-fr",
+      "visuel": {
+       "gabarit": "titre_plein_ecran",
+       "champs": {
+        "titre": "Titre"
+       }
+      }
+     },
+     {
+      "texte_voix": "Bonjour a tous.",
+      "voix": "synthese-chatterbox-fr",
+      "visuel": {
+       "gabarit": "titre_plein_ecran",
+       "champs": {
+        "titre": "Titre"
+       }
+      }
+     },
+     {
+      "texte_voix": "Bonjour a tous.",
+      "voix": "synthese-chatterbox-fr",
+      "visuel": {
+       "gabarit": "titre_plein_ecran",
+       "champs": {
+        "titre": "Titre"
+       }
+      }
+     },
+     {
+      "texte_voix": "Bonjour a tous.",
+      "voix": "synthese-chatterbox-fr",
+      "visuel": {
+       "gabarit": "titre_plein_ecran",
+       "champs": {
+        "titre": "Titre"
+       }
+      }
+     },
+     {
+      "texte_voix": "Bonjour a tous.",
+      "voix": "synthese-chatterbox-fr",
+      "visuel": {
+       "gabarit": "titre_plein_ecran",
+       "champs": {
+        "titre": "Titre"
+       }
+      }
+     },
+     {
+      "texte_voix": "Bonjour a tous.",
+      "voix": "synthese-chatterbox-fr",
+      "visuel": {
+       "gabarit": "titre_plein_ecran",
+       "champs": {
+        "titre": "Titre"
+       }
+      }
+     },
+     {
+      "texte_voix": "Bonjour a tous.",
+      "voix": "synthese-chatterbox-fr",
+      "visuel": {
+       "gabarit": "titre_plein_ecran",
+       "champs": {
+        "titre": "Titre"
+       }
+      }
+     },
+     {
+      "texte_voix": "Bonjour a tous.",
+      "voix": "synthese-chatterbox-fr",
+      "visuel": {
+       "gabarit": "titre_plein_ecran",
+       "champs": {
+        "titre": "Titre"
+       }
+      }
+     },
+     {
+      "texte_voix": "Bonjour a tous.",
+      "voix": "synthese-chatterbox-fr",
+      "visuel": {
+       "gabarit": "titre_plein_ecran",
+       "champs": {
+        "titre": "Titre"
+       }
+      }
+     },
+     {
+      "texte_voix": "Bonjour a tous.",
+      "voix": "synthese-chatterbox-fr",
+      "visuel": {
+       "gabarit": "titre_plein_ecran",
+       "champs": {
+        "titre": "Titre"
+       }
+      }
+     },
+     {
+      "texte_voix": "Bonjour a tous.",
+      "voix": "synthese-chatterbox-fr",
+      "visuel": {
+       "gabarit": "titre_plein_ecran",
+       "champs": {
+        "titre": "Titre"
+       }
+      }
+     },
+     {
+      "texte_voix": "Bonjour a tous.",
+      "voix": "synthese-chatterbox-fr",
+      "visuel": {
+       "gabarit": "titre_plein_ecran",
+       "champs": {
+        "titre": "Titre"
+       }
+      }
+     },
+     {
+      "texte_voix": "Bonjour a tous.",
+      "voix": "synthese-chatterbox-fr",
+      "visuel": {
+       "gabarit": "titre_plein_ecran",
+       "champs": {
+        "titre": "Titre"
+       }
+      }
+     },
+     {
+      "texte_voix": "Bonjour a tous.",
+      "voix": "synthese-chatterbox-fr",
+      "visuel": {
+       "gabarit": "titre_plein_ecran",
+       "champs": {
+        "titre": "Titre"
+       }
+      }
+     },
+     {
+      "texte_voix": "Bonjour a tous.",
+      "voix": "synthese-chatterbox-fr",
+      "visuel": {
+       "gabarit": "titre_plein_ecran",
+       "champs": {
+        "titre": "Titre"
+       }
+      }
+     },
+     {
+      "texte_voix": "Bonjour a tous.",
+      "voix": "synthese-chatterbox-fr",
+      "visuel": {
+       "gabarit": "titre_plein_ecran",
+       "champs": {
+        "titre": "Titre"
+       }
+      }
+     }
+    ]
+   },
+   "valide": true
+  },
+  {
+   "nom": "video avec musique",
+   "demande": {
+    "format_sortie": "1080x1920",
+    "sous_titres": true,
+    "scenes": [
+     {
+      "texte_voix": "Bonjour a tous.",
+      "voix": "synthese-chatterbox-fr",
+      "visuel": {
+       "gabarit": "titre_plein_ecran",
+       "champs": {
+        "titre": "Titre"
+       }
+      }
+     },
+     {
+      "texte_voix": "Bonjour a tous.",
+      "voix": "synthese-chatterbox-fr",
+      "visuel": {
+       "gabarit": "liste_3_points",
+       "champs": {
+        "titre": "T",
+        "points": [
+         "a",
+         "b",
+         "c"
+        ]
+       }
+      },
+      "duree_max": 8
+     }
+    ],
+    "musique": "fond-test"
+   },
+   "valide": true
+  },
+  {
+   "nom": "video chiffre cle",
+   "demande": {
+    "format_sortie": "1080x1920",
+    "sous_titres": true,
+    "scenes": [
+     {
+      "texte_voix": "Bonjour a tous.",
+      "voix": "synthese-chatterbox-fr",
+      "visuel": {
+       "gabarit": "chiffre_cle",
+       "champs": {
+        "chiffre": "42 %",
+        "titre": "t"
+       }
+      }
+     },
+     {
+      "texte_voix": "Bonjour a tous.",
+      "voix": "synthese-chatterbox-fr",
+      "visuel": {
+       "gabarit": "liste_3_points",
+       "champs": {
+        "titre": "T",
+        "points": [
+         "a",
+         "b",
+         "c"
+        ]
+       }
+      },
+      "duree_max": 8
+     }
+    ]
+   },
+   "valide": true
+  },
+  {
+   "nom": "video format paysage",
+   "demande": {
+    "format_sortie": "1920x1080",
+    "sous_titres": true,
+    "scenes": [
+     {
+      "texte_voix": "Bonjour a tous.",
+      "voix": "synthese-chatterbox-fr",
+      "visuel": {
+       "gabarit": "titre_plein_ecran",
+       "champs": {
+        "titre": "Titre"
+       }
+      }
+     },
+     {
+      "texte_voix": "Bonjour a tous.",
+      "voix": "synthese-chatterbox-fr",
+      "visuel": {
+       "gabarit": "liste_3_points",
+       "champs": {
+        "titre": "T",
+        "points": [
+         "a",
+         "b",
+         "c"
+        ]
+       }
+      },
+      "duree_max": 8
+     }
+    ]
+   },
+   "valide": true
+  },
+  {
+   "nom": "video format carre",
+   "demande": {
+    "format_sortie": "1080x1080",
+    "sous_titres": true,
+    "scenes": [
+     {
+      "texte_voix": "Bonjour a tous.",
+      "voix": "synthese-chatterbox-fr",
+      "visuel": {
+       "gabarit": "titre_plein_ecran",
+       "champs": {
+        "titre": "Titre"
+       }
+      }
+     },
+     {
+      "texte_voix": "Bonjour a tous.",
+      "voix": "synthese-chatterbox-fr",
+      "visuel": {
+       "gabarit": "liste_3_points",
+       "champs": {
+        "titre": "T",
+        "points": [
+         "a",
+         "b",
+         "c"
+        ]
+       }
+      },
+      "duree_max": 8
+     }
+    ]
+   },
+   "valide": true
+  },
+  {
+   "nom": "video sans sous-titres",
+   "demande": {
+    "format_sortie": "1080x1920",
+    "sous_titres": false,
+    "scenes": [
+     {
+      "texte_voix": "Bonjour a tous.",
+      "voix": "synthese-chatterbox-fr",
+      "visuel": {
+       "gabarit": "titre_plein_ecran",
+       "champs": {
+        "titre": "Titre"
+       }
+      }
+     },
+     {
+      "texte_voix": "Bonjour a tous.",
+      "voix": "synthese-chatterbox-fr",
+      "visuel": {
+       "gabarit": "liste_3_points",
+       "champs": {
+        "titre": "T",
+        "points": [
+         "a",
+         "b",
+         "c"
+        ]
+       }
+      },
+      "duree_max": 8
+     }
+    ]
+   },
+   "valide": true
+  },
+  {
+   "nom": "duree_max au minimum (1)",
+   "demande": {
+    "format_sortie": "1080x1920",
+    "sous_titres": true,
+    "scenes": [
+     {
+      "texte_voix": "Bonjour a tous.",
+      "voix": "synthese-chatterbox-fr",
+      "visuel": {
+       "gabarit": "titre_plein_ecran",
+       "champs": {
+        "titre": "Titre"
+       }
+      },
+      "duree_max": 1
+     },
+     {
+      "texte_voix": "Bonjour a tous.",
+      "voix": "synthese-chatterbox-fr",
+      "visuel": {
+       "gabarit": "liste_3_points",
+       "champs": {
+        "titre": "T",
+        "points": [
+         "a",
+         "b",
+         "c"
+        ]
+       }
+      },
+      "duree_max": 8
+     }
+    ]
+   },
+   "valide": true
+  },
+  {
+   "nom": "duree_max au maximum (60)",
+   "demande": {
+    "format_sortie": "1080x1920",
+    "sous_titres": true,
+    "scenes": [
+     {
+      "texte_voix": "Bonjour a tous.",
+      "voix": "synthese-chatterbox-fr",
+      "visuel": {
+       "gabarit": "titre_plein_ecran",
+       "champs": {
+        "titre": "Titre"
+       }
+      },
+      "duree_max": 60
+     },
+     {
+      "texte_voix": "Bonjour a tous.",
+      "voix": "synthese-chatterbox-fr",
+      "visuel": {
+       "gabarit": "liste_3_points",
+       "champs": {
+        "titre": "T",
+        "points": [
+         "a",
+         "b",
+         "c"
+        ]
+       }
+      },
+      "duree_max": 8
+     }
+    ]
+   },
+   "valide": true
+  },
+  {
+   "nom": "texte_voix de 1500 caracteres",
+   "demande": {
+    "format_sortie": "1080x1920",
+    "sous_titres": true,
+    "scenes": [
+     {
+      "texte_voix": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "voix": "synthese-chatterbox-fr",
+      "visuel": {
+       "gabarit": "titre_plein_ecran",
+       "champs": {
+        "titre": "Titre"
+       }
+      }
+     },
+     {
+      "texte_voix": "Bonjour a tous.",
+      "voix": "synthese-chatterbox-fr",
+      "visuel": {
+       "gabarit": "liste_3_points",
+       "champs": {
+        "titre": "T",
+        "points": [
+         "a",
+         "b",
+         "c"
+        ]
+       }
+      },
+      "duree_max": 8
+     }
+    ]
+   },
+   "valide": true
+  },
+  {
+   "nom": "31 scenes",
+   "demande": {
+    "format_sortie": "1080x1920",
+    "sous_titres": true,
+    "scenes": [
+     {
+      "texte_voix": "Bonjour a tous.",
+      "voix": "synthese-chatterbox-fr",
+      "visuel": {
+       "gabarit": "titre_plein_ecran",
+       "champs": {
+        "titre": "Titre"
+       }
+      }
+     },
+     {
+      "texte_voix": "Bonjour a tous.",
+      "voix": "synthese-chatterbox-fr",
+      "visuel": {
+       "gabarit": "titre_plein_ecran",
+       "champs": {
+        "titre": "Titre"
+       }
+      }
+     },
+     {
+      "texte_voix": "Bonjour a tous.",
+      "voix": "synthese-chatterbox-fr",
+      "visuel": {
+       "gabarit": "titre_plein_ecran",
+       "champs": {
+        "titre": "Titre"
+       }
+      }
+     },
+     {
+      "texte_voix": "Bonjour a tous.",
+      "voix": "synthese-chatterbox-fr",
+      "visuel": {
+       "gabarit": "titre_plein_ecran",
+       "champs": {
+        "titre": "Titre"
+       }
+      }
+     },
+     {
+      "texte_voix": "Bonjour a tous.",
+      "voix": "synthese-chatterbox-fr",
+      "visuel": {
+       "gabarit": "titre_plein_ecran",
+       "champs": {
+        "titre": "Titre"
+       }
+      }
+     },
+     {
+      "texte_voix": "Bonjour a tous.",
+      "voix": "synthese-chatterbox-fr",
+      "visuel": {
+       "gabarit": "titre_plein_ecran",
+       "champs": {
+        "titre": "Titre"
+       }
+      }
+     },
+     {
+      "texte_voix": "Bonjour a tous.",
+      "voix": "synthese-chatterbox-fr",
+      "visuel": {
+       "gabarit": "titre_plein_ecran",
+       "champs": {
+        "titre": "Titre"
+       }
+      }
+     },
+     {
+      "texte_voix": "Bonjour a tous.",
+      "voix": "synthese-chatterbox-fr",
+      "visuel": {
+       "gabarit": "titre_plein_ecran",
+       "champs": {
+        "titre": "Titre"
+       }
+      }
+     },
+     {
+      "texte_voix": "Bonjour a tous.",
+      "voix": "synthese-chatterbox-fr",
+      "visuel": {
+       "gabarit": "titre_plein_ecran",
+       "champs": {
+        "titre": "Titre"
+       }
+      }
+     },
+     {
+      "texte_voix": "Bonjour a tous.",
+      "voix": "synthese-chatterbox-fr",
+      "visuel": {
+       "gabarit": "titre_plein_ecran",
+       "champs": {
+        "titre": "Titre"
+       }
+      }
+     },
+     {
+      "texte_voix": "Bonjour a tous.",
+      "voix": "synthese-chatterbox-fr",
+      "visuel": {
+       "gabarit": "titre_plein_ecran",
+       "champs": {
+        "titre": "Titre"
+       }
+      }
+     },
+     {
+      "texte_voix": "Bonjour a tous.",
+      "voix": "synthese-chatterbox-fr",
+      "visuel": {
+       "gabarit": "titre_plein_ecran",
+       "champs": {
+        "titre": "Titre"
+       }
+      }
+     },
+     {
+      "texte_voix": "Bonjour a tous.",
+      "voix": "synthese-chatterbox-fr",
+      "visuel": {
+       "gabarit": "titre_plein_ecran",
+       "champs": {
+        "titre": "Titre"
+       }
+      }
+     },
+     {
+      "texte_voix": "Bonjour a tous.",
+      "voix": "synthese-chatterbox-fr",
+      "visuel": {
+       "gabarit": "titre_plein_ecran",
+       "champs": {
+        "titre": "Titre"
+       }
+      }
+     },
+     {
+      "texte_voix": "Bonjour a tous.",
+      "voix": "synthese-chatterbox-fr",
+      "visuel": {
+       "gabarit": "titre_plein_ecran",
+       "champs": {
+        "titre": "Titre"
+       }
+      }
+     },
+     {
+      "texte_voix": "Bonjour a tous.",
+      "voix": "synthese-chatterbox-fr",
+      "visuel": {
+       "gabarit": "titre_plein_ecran",
+       "champs": {
+        "titre": "Titre"
+       }
+      }
+     },
+     {
+      "texte_voix": "Bonjour a tous.",
+      "voix": "synthese-chatterbox-fr",
+      "visuel": {
+       "gabarit": "titre_plein_ecran",
+       "champs": {
+        "titre": "Titre"
+       }
+      }
+     },
+     {
+      "texte_voix": "Bonjour a tous.",
+      "voix": "synthese-chatterbox-fr",
+      "visuel": {
+       "gabarit": "titre_plein_ecran",
+       "champs": {
+        "titre": "Titre"
+       }
+      }
+     },
+     {
+      "texte_voix": "Bonjour a tous.",
+      "voix": "synthese-chatterbox-fr",
+      "visuel": {
+       "gabarit": "titre_plein_ecran",
+       "champs": {
+        "titre": "Titre"
+       }
+      }
+     },
+     {
+      "texte_voix": "Bonjour a tous.",
+      "voix": "synthese-chatterbox-fr",
+      "visuel": {
+       "gabarit": "titre_plein_ecran",
+       "champs": {
+        "titre": "Titre"
+       }
+      }
+     },
+     {
+      "texte_voix": "Bonjour a tous.",
+      "voix": "synthese-chatterbox-fr",
+      "visuel": {
+       "gabarit": "titre_plein_ecran",
+       "champs": {
+        "titre": "Titre"
+       }
+      }
+     },
+     {
+      "texte_voix": "Bonjour a tous.",
+      "voix": "synthese-chatterbox-fr",
+      "visuel": {
+       "gabarit": "titre_plein_ecran",
+       "champs": {
+        "titre": "Titre"
+       }
+      }
+     },
+     {
+      "texte_voix": "Bonjour a tous.",
+      "voix": "synthese-chatterbox-fr",
+      "visuel": {
+       "gabarit": "titre_plein_ecran",
+       "champs": {
+        "titre": "Titre"
+       }
+      }
+     },
+     {
+      "texte_voix": "Bonjour a tous.",
+      "voix": "synthese-chatterbox-fr",
+      "visuel": {
+       "gabarit": "titre_plein_ecran",
+       "champs": {
+        "titre": "Titre"
+       }
+      }
+     },
+     {
+      "texte_voix": "Bonjour a tous.",
+      "voix": "synthese-chatterbox-fr",
+      "visuel": {
+       "gabarit": "titre_plein_ecran",
+       "champs": {
+        "titre": "Titre"
+       }
+      }
+     },
+     {
+      "texte_voix": "Bonjour a tous.",
+      "voix": "synthese-chatterbox-fr",
+      "visuel": {
+       "gabarit": "titre_plein_ecran",
+       "champs": {
+        "titre": "Titre"
+       }
+      }
+     },
+     {
+      "texte_voix": "Bonjour a tous.",
+      "voix": "synthese-chatterbox-fr",
+      "visuel": {
+       "gabarit": "titre_plein_ecran",
+       "champs": {
+        "titre": "Titre"
+       }
+      }
+     },
+     {
+      "texte_voix": "Bonjour a tous.",
+      "voix": "synthese-chatterbox-fr",
+      "visuel": {
+       "gabarit": "titre_plein_ecran",
+       "champs": {
+        "titre": "Titre"
+       }
+      }
+     },
+     {
+      "texte_voix": "Bonjour a tous.",
+      "voix": "synthese-chatterbox-fr",
+      "visuel": {
+       "gabarit": "titre_plein_ecran",
+       "champs": {
+        "titre": "Titre"
+       }
+      }
+     },
+     {
+      "texte_voix": "Bonjour a tous.",
+      "voix": "synthese-chatterbox-fr",
+      "visuel": {
+       "gabarit": "titre_plein_ecran",
+       "champs": {
+        "titre": "Titre"
+       }
+      }
+     },
+     {
+      "texte_voix": "Bonjour a tous.",
+      "voix": "synthese-chatterbox-fr",
+      "visuel": {
+       "gabarit": "titre_plein_ecran",
+       "champs": {
+        "titre": "Titre"
+       }
+      }
+     }
+    ]
+   },
+   "valide": false
+  },
+  {
+   "nom": "0 scene",
+   "demande": {
+    "format_sortie": "1080x1920",
+    "sous_titres": true,
+    "scenes": []
+   },
+   "valide": false
+  },
+  {
+   "nom": "scenes non liste",
+   "demande": {
+    "format_sortie": "1080x1920",
+    "sous_titres": true,
+    "scenes": "x"
+   },
+   "valide": false
+  },
+  {
+   "nom": "champ inconnu a la racine",
+   "demande": {
+    "format_sortie": "1080x1920",
+    "sous_titres": true,
+    "scenes": [
+     {
+      "texte_voix": "Bonjour a tous.",
+      "voix": "synthese-chatterbox-fr",
+      "visuel": {
+       "gabarit": "titre_plein_ecran",
+       "champs": {
+        "titre": "Titre"
+       }
+      }
+     },
+     {
+      "texte_voix": "Bonjour a tous.",
+      "voix": "synthese-chatterbox-fr",
+      "visuel": {
+       "gabarit": "liste_3_points",
+       "champs": {
+        "titre": "T",
+        "points": [
+         "a",
+         "b",
+         "c"
+        ]
+       }
+      },
+      "duree_max": 8
+     }
+    ],
+    "ffmpeg": "-i /etc/passwd"
+   },
+   "valide": false
+  },
+  {
+   "nom": "entreprise glissee",
+   "demande": {
+    "format_sortie": "1080x1920",
+    "sous_titres": true,
+    "scenes": [
+     {
+      "texte_voix": "Bonjour a tous.",
+      "voix": "synthese-chatterbox-fr",
+      "visuel": {
+       "gabarit": "titre_plein_ecran",
+       "champs": {
+        "titre": "Titre"
+       }
+      }
+     },
+     {
+      "texte_voix": "Bonjour a tous.",
+      "voix": "synthese-chatterbox-fr",
+      "visuel": {
+       "gabarit": "liste_3_points",
+       "champs": {
+        "titre": "T",
+        "points": [
+         "a",
+         "b",
+         "c"
+        ]
+       }
+      },
+      "duree_max": 8
+     }
+    ],
+    "entreprise": "autre"
+   },
+   "valide": false
+  },
+  {
+   "nom": "echantillon audio fourni",
+   "demande": {
+    "format_sortie": "1080x1920",
+    "sous_titres": true,
+    "scenes": [
+     {
+      "texte_voix": "Bonjour a tous.",
+      "voix": "synthese-chatterbox-fr",
+      "visuel": {
+       "gabarit": "titre_plein_ecran",
+       "champs": {
+        "titre": "Titre"
+       }
+      }
+     },
+     {
+      "texte_voix": "Bonjour a tous.",
+      "voix": "synthese-chatterbox-fr",
+      "visuel": {
+       "gabarit": "liste_3_points",
+       "champs": {
+        "titre": "T",
+        "points": [
+         "a",
+         "b",
+         "c"
+        ]
+       }
+      },
+      "duree_max": 8
+     }
+    ],
+    "echantillon_audio": "/home/x/voix.wav"
+   },
+   "valide": false
+  },
+  {
+   "nom": "champ inconnu dans une scene",
+   "demande": {
+    "format_sortie": "1080x1920",
+    "sous_titres": true,
+    "scenes": [
+     {
+      "texte_voix": "Bonjour a tous.",
+      "voix": "synthese-chatterbox-fr",
+      "visuel": {
+       "gabarit": "titre_plein_ecran",
+       "champs": {
+        "titre": "Titre"
+       }
+      },
+      "chemin": "/etc/passwd"
+     },
+     {
+      "texte_voix": "Bonjour a tous.",
+      "voix": "synthese-chatterbox-fr",
+      "visuel": {
+       "gabarit": "liste_3_points",
+       "champs": {
+        "titre": "T",
+        "points": [
+         "a",
+         "b",
+         "c"
+        ]
+       }
+      },
+      "duree_max": 8
+     }
+    ]
+   },
+   "valide": false
+  },
+  {
+   "nom": "voix chemin ../x",
+   "demande": {
+    "format_sortie": "1080x1920",
+    "sous_titres": true,
+    "scenes": [
+     {
+      "texte_voix": "Bonjour a tous.",
+      "voix": "../x",
+      "visuel": {
+       "gabarit": "titre_plein_ecran",
+       "champs": {
+        "titre": "Titre"
+       }
+      }
+     },
+     {
+      "texte_voix": "Bonjour a tous.",
+      "voix": "synthese-chatterbox-fr",
+      "visuel": {
+       "gabarit": "liste_3_points",
+       "champs": {
+        "titre": "T",
+        "points": [
+         "a",
+         "b",
+         "c"
+        ]
+       }
+      },
+      "duree_max": 8
+     }
+    ]
+   },
+   "valide": false
+  },
+  {
+   "nom": "voix avec majuscules",
+   "demande": {
+    "format_sortie": "1080x1920",
+    "sous_titres": true,
+    "scenes": [
+     {
+      "texte_voix": "Bonjour a tous.",
+      "voix": "Chatterbox",
+      "visuel": {
+       "gabarit": "titre_plein_ecran",
+       "champs": {
+        "titre": "Titre"
+       }
+      }
+     },
+     {
+      "texte_voix": "Bonjour a tous.",
+      "voix": "synthese-chatterbox-fr",
+      "visuel": {
+       "gabarit": "liste_3_points",
+       "champs": {
+        "titre": "T",
+        "points": [
+         "a",
+         "b",
+         "c"
+        ]
+       }
+      },
+      "duree_max": 8
+     }
+    ]
+   },
+   "valide": false
+  },
+  {
+   "nom": "voix vide",
+   "demande": {
+    "format_sortie": "1080x1920",
+    "sous_titres": true,
+    "scenes": [
+     {
+      "texte_voix": "Bonjour a tous.",
+      "voix": "",
+      "visuel": {
+       "gabarit": "titre_plein_ecran",
+       "champs": {
+        "titre": "Titre"
+       }
+      }
+     },
+     {
+      "texte_voix": "Bonjour a tous.",
+      "voix": "synthese-chatterbox-fr",
+      "visuel": {
+       "gabarit": "liste_3_points",
+       "champs": {
+        "titre": "T",
+        "points": [
+         "a",
+         "b",
+         "c"
+        ]
+       }
+      },
+      "duree_max": 8
+     }
+    ]
+   },
+   "valide": false
+  },
+  {
+   "nom": "voix de 65 caracteres",
+   "demande": {
+    "format_sortie": "1080x1920",
+    "sous_titres": true,
+    "scenes": [
+     {
+      "texte_voix": "Bonjour a tous.",
+      "voix": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "visuel": {
+       "gabarit": "titre_plein_ecran",
+       "champs": {
+        "titre": "Titre"
+       }
+      }
+     },
+     {
+      "texte_voix": "Bonjour a tous.",
+      "voix": "synthese-chatterbox-fr",
+      "visuel": {
+       "gabarit": "liste_3_points",
+       "champs": {
+        "titre": "T",
+        "points": [
+         "a",
+         "b",
+         "c"
+        ]
+       }
+      },
+      "duree_max": 8
+     }
+    ]
+   },
+   "valide": false
+  },
+  {
+   "nom": "voix de 64 caracteres",
+   "demande": {
+    "format_sortie": "1080x1920",
+    "sous_titres": true,
+    "scenes": [
+     {
+      "texte_voix": "Bonjour a tous.",
+      "voix": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "visuel": {
+       "gabarit": "titre_plein_ecran",
+       "champs": {
+        "titre": "Titre"
+       }
+      }
+     },
+     {
+      "texte_voix": "Bonjour a tous.",
+      "voix": "synthese-chatterbox-fr",
+      "visuel": {
+       "gabarit": "liste_3_points",
+       "champs": {
+        "titre": "T",
+        "points": [
+         "a",
+         "b",
+         "c"
+        ]
+       }
+      },
+      "duree_max": 8
+     }
+    ]
+   },
+   "valide": true
+  },
+  {
+   "nom": "voix absente",
+   "demande": {
+    "format_sortie": "1080x1920",
+    "sous_titres": true,
+    "scenes": [
+     {
+      "texte_voix": "Bonjour a tous.",
+      "visuel": {
+       "gabarit": "titre_plein_ecran",
+       "champs": {
+        "titre": "Titre"
+       }
+      }
+     }
+    ]
+   },
+   "valide": false
+  },
+  {
+   "nom": "gabarit hors liste",
+   "demande": {
+    "format_sortie": "1080x1920",
+    "sous_titres": true,
+    "scenes": [
+     {
+      "texte_voix": "Bonjour a tous.",
+      "voix": "synthese-chatterbox-fr",
+      "visuel": {
+       "gabarit": "../../etc/x",
+       "champs": {
+        "titre": "t"
+       }
+      }
+     },
+     {
+      "texte_voix": "Bonjour a tous.",
+      "voix": "synthese-chatterbox-fr",
+      "visuel": {
+       "gabarit": "liste_3_points",
+       "champs": {
+        "titre": "T",
+        "points": [
+         "a",
+         "b",
+         "c"
+        ]
+       }
+      },
+      "duree_max": 8
+     }
+    ]
+   },
+   "valide": false
+  },
+  {
+   "nom": "gabarit inconnu",
+   "demande": {
+    "format_sortie": "1080x1920",
+    "sous_titres": true,
+    "scenes": [
+     {
+      "texte_voix": "Bonjour a tous.",
+      "voix": "synthese-chatterbox-fr",
+      "visuel": {
+       "gabarit": "carrousel",
+       "champs": {
+        "titre": "t"
+       }
+      }
+     },
+     {
+      "texte_voix": "Bonjour a tous.",
+      "voix": "synthese-chatterbox-fr",
+      "visuel": {
+       "gabarit": "liste_3_points",
+       "champs": {
+        "titre": "T",
+        "points": [
+         "a",
+         "b",
+         "c"
+        ]
+       }
+      },
+      "duree_max": 8
+     }
+    ]
+   },
+   "valide": false
+  },
+  {
+   "nom": "visuel champ inconnu",
+   "demande": {
+    "format_sortie": "1080x1920",
+    "sous_titres": true,
+    "scenes": [
+     {
+      "texte_voix": "Bonjour a tous.",
+      "voix": "synthese-chatterbox-fr",
+      "visuel": {
+       "gabarit": "titre_plein_ecran",
+       "champs": {
+        "titre": "t"
+       },
+       "url": "http://x"
+      }
+     },
+     {
+      "texte_voix": "Bonjour a tous.",
+      "voix": "synthese-chatterbox-fr",
+      "visuel": {
+       "gabarit": "liste_3_points",
+       "champs": {
+        "titre": "T",
+        "points": [
+         "a",
+         "b",
+         "c"
+        ]
+       }
+      },
+      "duree_max": 8
+     }
+    ]
+   },
+   "valide": false
+  },
+  {
+   "nom": "champs visuel inconnu (html)",
+   "demande": {
+    "format_sortie": "1080x1920",
+    "sous_titres": true,
+    "scenes": [
+     {
+      "texte_voix": "Bonjour a tous.",
+      "voix": "synthese-chatterbox-fr",
+      "visuel": {
+       "gabarit": "titre_plein_ecran",
+       "champs": {
+        "titre": "t",
+        "html": "<b>"
+       }
+      }
+     },
+     {
+      "texte_voix": "Bonjour a tous.",
+      "voix": "synthese-chatterbox-fr",
+      "visuel": {
+       "gabarit": "liste_3_points",
+       "champs": {
+        "titre": "T",
+        "points": [
+         "a",
+         "b",
+         "c"
+        ]
+       }
+      },
+      "duree_max": 8
+     }
+    ]
+   },
+   "valide": false
+  },
+  {
+   "nom": "liste_3_points avec 2 points",
+   "demande": {
+    "format_sortie": "1080x1920",
+    "sous_titres": true,
+    "scenes": [
+     {
+      "texte_voix": "Bonjour a tous.",
+      "voix": "synthese-chatterbox-fr",
+      "visuel": {
+       "gabarit": "liste_3_points",
+       "champs": {
+        "points": [
+         "a",
+         "b"
+        ]
+       }
+      }
+     },
+     {
+      "texte_voix": "Bonjour a tous.",
+      "voix": "synthese-chatterbox-fr",
+      "visuel": {
+       "gabarit": "liste_3_points",
+       "champs": {
+        "titre": "T",
+        "points": [
+         "a",
+         "b",
+         "c"
+        ]
+       }
+      },
+      "duree_max": 8
+     }
+    ]
+   },
+   "valide": false
+  },
+  {
+   "nom": "liste_3_points avec 4 points",
+   "demande": {
+    "format_sortie": "1080x1920",
+    "sous_titres": true,
+    "scenes": [
+     {
+      "texte_voix": "Bonjour a tous.",
+      "voix": "synthese-chatterbox-fr",
+      "visuel": {
+       "gabarit": "liste_3_points",
+       "champs": {
+        "points": [
+         "a",
+         "b",
+         "c",
+         "d"
+        ]
+       }
+      }
+     },
+     {
+      "texte_voix": "Bonjour a tous.",
+      "voix": "synthese-chatterbox-fr",
+      "visuel": {
+       "gabarit": "liste_3_points",
+       "champs": {
+        "titre": "T",
+        "points": [
+         "a",
+         "b",
+         "c"
+        ]
+       }
+      },
+      "duree_max": 8
+     }
+    ]
+   },
+   "valide": false
+  },
+  {
+   "nom": "liste_3_points sans points",
+   "demande": {
+    "format_sortie": "1080x1920",
+    "sous_titres": true,
+    "scenes": [
+     {
+      "texte_voix": "Bonjour a tous.",
+      "voix": "synthese-chatterbox-fr",
+      "visuel": {
+       "gabarit": "liste_3_points",
+       "champs": {
+        "titre": "t"
+       }
+      }
+     },
+     {
+      "texte_voix": "Bonjour a tous.",
+      "voix": "synthese-chatterbox-fr",
+      "visuel": {
+       "gabarit": "liste_3_points",
+       "champs": {
+        "titre": "T",
+        "points": [
+         "a",
+         "b",
+         "c"
+        ]
+       }
+      },
+      "duree_max": 8
+     }
+    ]
+   },
+   "valide": false
+  },
+  {
+   "nom": "point trop long (121)",
+   "demande": {
+    "format_sortie": "1080x1920",
+    "sous_titres": true,
+    "scenes": [
+     {
+      "texte_voix": "Bonjour a tous.",
+      "voix": "synthese-chatterbox-fr",
+      "visuel": {
+       "gabarit": "liste_3_points",
+       "champs": {
+        "points": [
+         "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+         "b",
+         "c"
+        ]
+       }
+      }
+     },
+     {
+      "texte_voix": "Bonjour a tous.",
+      "voix": "synthese-chatterbox-fr",
+      "visuel": {
+       "gabarit": "liste_3_points",
+       "champs": {
+        "titre": "T",
+        "points": [
+         "a",
+         "b",
+         "c"
+        ]
+       }
+      },
+      "duree_max": 8
+     }
+    ]
+   },
+   "valide": false
+  },
+  {
+   "nom": "titre visuel trop long (121)",
+   "demande": {
+    "format_sortie": "1080x1920",
+    "sous_titres": true,
+    "scenes": [
+     {
+      "texte_voix": "Bonjour a tous.",
+      "voix": "synthese-chatterbox-fr",
+      "visuel": {
+       "gabarit": "titre_plein_ecran",
+       "champs": {
+        "titre": "ttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttt"
+       }
+      }
+     },
+     {
+      "texte_voix": "Bonjour a tous.",
+      "voix": "synthese-chatterbox-fr",
+      "visuel": {
+       "gabarit": "liste_3_points",
+       "champs": {
+        "titre": "T",
+        "points": [
+         "a",
+         "b",
+         "c"
+        ]
+       }
+      },
+      "duree_max": 8
+     }
+    ]
+   },
+   "valide": false
+  },
+  {
+   "nom": "titre visuel de 120",
+   "demande": {
+    "format_sortie": "1080x1920",
+    "sous_titres": true,
+    "scenes": [
+     {
+      "texte_voix": "Bonjour a tous.",
+      "voix": "synthese-chatterbox-fr",
+      "visuel": {
+       "gabarit": "titre_plein_ecran",
+       "champs": {
+        "titre": "tttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttt"
+       }
+      }
+     },
+     {
+      "texte_voix": "Bonjour a tous.",
+      "voix": "synthese-chatterbox-fr",
+      "visuel": {
+       "gabarit": "liste_3_points",
+       "champs": {
+        "titre": "T",
+        "points": [
+         "a",
+         "b",
+         "c"
+        ]
+       }
+      },
+      "duree_max": 8
+     }
+    ]
+   },
+   "valide": true
+  },
+  {
+   "nom": "chiffre trop long (21)",
+   "demande": {
+    "format_sortie": "1080x1920",
+    "sous_titres": true,
+    "scenes": [
+     {
+      "texte_voix": "Bonjour a tous.",
+      "voix": "synthese-chatterbox-fr",
+      "visuel": {
+       "gabarit": "chiffre_cle",
+       "champs": {
+        "chiffre": "111111111111111111111"
+       }
+      }
+     },
+     {
+      "texte_voix": "Bonjour a tous.",
+      "voix": "synthese-chatterbox-fr",
+      "visuel": {
+       "gabarit": "liste_3_points",
+       "champs": {
+        "titre": "T",
+        "points": [
+         "a",
+         "b",
+         "c"
+        ]
+       }
+      },
+      "duree_max": 8
+     }
+    ]
+   },
+   "valide": false
+  },
+  {
+   "nom": "sous_titre visuel trop long (201)",
+   "demande": {
+    "format_sortie": "1080x1920",
+    "sous_titres": true,
+    "scenes": [
+     {
+      "texte_voix": "Bonjour a tous.",
+      "voix": "synthese-chatterbox-fr",
+      "visuel": {
+       "gabarit": "titre_plein_ecran",
+       "champs": {
+        "titre": "t",
+        "sous_titre": "sssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssss"
+       }
+      }
+     },
+     {
+      "texte_voix": "Bonjour a tous.",
+      "voix": "synthese-chatterbox-fr",
+      "visuel": {
+       "gabarit": "liste_3_points",
+       "champs": {
+        "titre": "T",
+        "points": [
+         "a",
+         "b",
+         "c"
+        ]
+       }
+      },
+      "duree_max": 8
+     }
+    ]
+   },
+   "valide": false
+  },
+  {
+   "nom": "texte_voix trop long (1501)",
+   "demande": {
+    "format_sortie": "1080x1920",
+    "sous_titres": true,
+    "scenes": [
+     {
+      "texte_voix": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "voix": "synthese-chatterbox-fr",
+      "visuel": {
+       "gabarit": "titre_plein_ecran",
+       "champs": {
+        "titre": "Titre"
+       }
+      }
+     },
+     {
+      "texte_voix": "Bonjour a tous.",
+      "voix": "synthese-chatterbox-fr",
+      "visuel": {
+       "gabarit": "liste_3_points",
+       "champs": {
+        "titre": "T",
+        "points": [
+         "a",
+         "b",
+         "c"
+        ]
+       }
+      },
+      "duree_max": 8
+     }
+    ]
+   },
+   "valide": false
+  },
+  {
+   "nom": "texte_voix vide",
+   "demande": {
+    "format_sortie": "1080x1920",
+    "sous_titres": true,
+    "scenes": [
+     {
+      "texte_voix": "",
+      "voix": "synthese-chatterbox-fr",
+      "visuel": {
+       "gabarit": "titre_plein_ecran",
+       "champs": {
+        "titre": "Titre"
+       }
+      }
+     },
+     {
+      "texte_voix": "Bonjour a tous.",
+      "voix": "synthese-chatterbox-fr",
+      "visuel": {
+       "gabarit": "liste_3_points",
+       "champs": {
+        "titre": "T",
+        "points": [
+         "a",
+         "b",
+         "c"
+        ]
+       }
+      },
+      "duree_max": 8
+     }
+    ]
+   },
+   "valide": false
+  },
+  {
+   "nom": "texte_voix absent",
+   "demande": {
+    "format_sortie": "1080x1920",
+    "sous_titres": true,
+    "scenes": [
+     {
+      "voix": "synthese-chatterbox-fr",
+      "visuel": {
+       "gabarit": "titre_plein_ecran",
+       "champs": {
+        "titre": "Titre"
+       }
+      }
+     }
+    ]
+   },
+   "valide": false
+  },
+  {
+   "nom": "format_sortie hors liste",
+   "demande": {
+    "format_sortie": "4000x4000",
+    "sous_titres": true,
+    "scenes": [
+     {
+      "texte_voix": "Bonjour a tous.",
+      "voix": "synthese-chatterbox-fr",
+      "visuel": {
+       "gabarit": "titre_plein_ecran",
+       "champs": {
+        "titre": "Titre"
+       }
+      }
+     },
+     {
+      "texte_voix": "Bonjour a tous.",
+      "voix": "synthese-chatterbox-fr",
+      "visuel": {
+       "gabarit": "liste_3_points",
+       "champs": {
+        "titre": "T",
+        "points": [
+         "a",
+         "b",
+         "c"
+        ]
+       }
+      },
+      "duree_max": 8
+     }
+    ]
+   },
+   "valide": false
+  },
+  {
+   "nom": "format_sortie absent",
+   "demande": {
+    "sous_titres": true,
+    "scenes": [
+     {
+      "texte_voix": "Bonjour a tous.",
+      "voix": "synthese-chatterbox-fr",
+      "visuel": {
+       "gabarit": "titre_plein_ecran",
+       "champs": {
+        "titre": "Titre"
+       }
+      }
+     },
+     {
+      "texte_voix": "Bonjour a tous.",
+      "voix": "synthese-chatterbox-fr",
+      "visuel": {
+       "gabarit": "liste_3_points",
+       "champs": {
+        "titre": "T",
+        "points": [
+         "a",
+         "b",
+         "c"
+        ]
+       }
+      },
+      "duree_max": 8
+     }
+    ]
+   },
+   "valide": false
+  },
+  {
+   "nom": "sous_titres non booleen",
+   "demande": {
+    "format_sortie": "1080x1920",
+    "sous_titres": "oui",
+    "scenes": [
+     {
+      "texte_voix": "Bonjour a tous.",
+      "voix": "synthese-chatterbox-fr",
+      "visuel": {
+       "gabarit": "titre_plein_ecran",
+       "champs": {
+        "titre": "Titre"
+       }
+      }
+     },
+     {
+      "texte_voix": "Bonjour a tous.",
+      "voix": "synthese-chatterbox-fr",
+      "visuel": {
+       "gabarit": "liste_3_points",
+       "champs": {
+        "titre": "T",
+        "points": [
+         "a",
+         "b",
+         "c"
+        ]
+       }
+      },
+      "duree_max": 8
+     }
+    ]
+   },
+   "valide": false
+  },
+  {
+   "nom": "sous_titres absent",
+   "demande": {
+    "format_sortie": "1080x1920",
+    "scenes": [
+     {
+      "texte_voix": "Bonjour a tous.",
+      "voix": "synthese-chatterbox-fr",
+      "visuel": {
+       "gabarit": "titre_plein_ecran",
+       "champs": {
+        "titre": "Titre"
+       }
+      }
+     },
+     {
+      "texte_voix": "Bonjour a tous.",
+      "voix": "synthese-chatterbox-fr",
+      "visuel": {
+       "gabarit": "liste_3_points",
+       "champs": {
+        "titre": "T",
+        "points": [
+         "a",
+         "b",
+         "c"
+        ]
+       }
+      },
+      "duree_max": 8
+     }
+    ]
+   },
+   "valide": false
+  },
+  {
+   "nom": "musique chemin",
+   "demande": {
+    "format_sortie": "1080x1920",
+    "sous_titres": true,
+    "scenes": [
+     {
+      "texte_voix": "Bonjour a tous.",
+      "voix": "synthese-chatterbox-fr",
+      "visuel": {
+       "gabarit": "titre_plein_ecran",
+       "champs": {
+        "titre": "Titre"
+       }
+      }
+     },
+     {
+      "texte_voix": "Bonjour a tous.",
+      "voix": "synthese-chatterbox-fr",
+      "visuel": {
+       "gabarit": "liste_3_points",
+       "champs": {
+        "titre": "T",
+        "points": [
+         "a",
+         "b",
+         "c"
+        ]
+       }
+      },
+      "duree_max": 8
+     }
+    ],
+    "musique": "../x"
+   },
+   "valide": false
+  },
+  {
+   "nom": "duree_max 0",
+   "demande": {
+    "format_sortie": "1080x1920",
+    "sous_titres": true,
+    "scenes": [
+     {
+      "texte_voix": "Bonjour a tous.",
+      "voix": "synthese-chatterbox-fr",
+      "visuel": {
+       "gabarit": "titre_plein_ecran",
+       "champs": {
+        "titre": "Titre"
+       }
+      },
+      "duree_max": 0
+     },
+     {
+      "texte_voix": "Bonjour a tous.",
+      "voix": "synthese-chatterbox-fr",
+      "visuel": {
+       "gabarit": "liste_3_points",
+       "champs": {
+        "titre": "T",
+        "points": [
+         "a",
+         "b",
+         "c"
+        ]
+       }
+      },
+      "duree_max": 8
+     }
+    ]
+   },
+   "valide": false
+  },
+  {
+   "nom": "duree_max 61",
+   "demande": {
+    "format_sortie": "1080x1920",
+    "sous_titres": true,
+    "scenes": [
+     {
+      "texte_voix": "Bonjour a tous.",
+      "voix": "synthese-chatterbox-fr",
+      "visuel": {
+       "gabarit": "titre_plein_ecran",
+       "champs": {
+        "titre": "Titre"
+       }
+      },
+      "duree_max": 61
+     },
+     {
+      "texte_voix": "Bonjour a tous.",
+      "voix": "synthese-chatterbox-fr",
+      "visuel": {
+       "gabarit": "liste_3_points",
+       "champs": {
+        "titre": "T",
+        "points": [
+         "a",
+         "b",
+         "c"
+        ]
+       }
+      },
+      "duree_max": 8
+     }
+    ]
+   },
+   "valide": false
+  },
+  {
+   "nom": "duree_max booleen",
+   "demande": {
+    "format_sortie": "1080x1920",
+    "sous_titres": true,
+    "scenes": [
+     {
+      "texte_voix": "Bonjour a tous.",
+      "voix": "synthese-chatterbox-fr",
+      "visuel": {
+       "gabarit": "titre_plein_ecran",
+       "champs": {
+        "titre": "Titre"
+       }
+      },
+      "duree_max": true
+     },
+     {
+      "texte_voix": "Bonjour a tous.",
+      "voix": "synthese-chatterbox-fr",
+      "visuel": {
+       "gabarit": "liste_3_points",
+       "champs": {
+        "titre": "T",
+        "points": [
+         "a",
+         "b",
+         "c"
+        ]
+       }
+      },
+      "duree_max": 8
+     }
+    ]
+   },
+   "valide": false
+  },
+  {
+   "nom": "duree_max texte",
+   "demande": {
+    "format_sortie": "1080x1920",
+    "sous_titres": true,
+    "scenes": [
+     {
+      "texte_voix": "Bonjour a tous.",
+      "voix": "synthese-chatterbox-fr",
+      "visuel": {
+       "gabarit": "titre_plein_ecran",
+       "champs": {
+        "titre": "Titre"
+       }
+      },
+      "duree_max": "8"
+     },
+     {
+      "texte_voix": "Bonjour a tous.",
+      "voix": "synthese-chatterbox-fr",
+      "visuel": {
+       "gabarit": "liste_3_points",
+       "champs": {
+        "titre": "T",
+        "points": [
+         "a",
+         "b",
+         "c"
+        ]
+       }
+      },
+      "duree_max": 8
+     }
+    ]
+   },
+   "valide": false
+  },
+  {
+   "nom": "racine non objet",
+   "demande": [],
+   "valide": false
+  }
+ ]
+}

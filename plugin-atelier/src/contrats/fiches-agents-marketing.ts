@@ -85,6 +85,11 @@ export const FICHES_AGENTS_MARKETING: readonly FicheAgentMarketing[] = [
         "cle": "plan-campagne",
         "nom": "Plan de campagne",
         "sert": "Rédige le brief d'une campagne marketing en dix rubriques (vue d'ensemble et objectif mesurable, public, messages clés avec preuves, canaux, calendrier par semaine avec dépendances, pièces à produire, indicateurs, budget si fourni, risques, prochaines étapes), adapté à une PME belge (langues FR, NL ou EN, mentions réglementées, consentements)."
+      },
+      {
+        "cle": "documents-bureautiques",
+        "nom": "Documents bureautiques (Word, Excel, PowerPoint, PDF)",
+        "sert": "Produit et relit de vrais fichiers Word, Excel, PowerPoint et PDF avec des outils libres (python-docx, openpyxl, python-pptx, LibreOffice sans affichage, pypdf) : gabarit et styles nommés, contenu séparé de la mise en forme, contrôle du rendu par conversion en PDF, accessibilité (titres, textes de remplacement, contraste, langue) et relecture d'un fichier reçu."
       }
     ],
     "interdits": [
@@ -132,6 +137,11 @@ export const FICHES_AGENTS_MARKETING: readonly FicheAgentMarketing[] = [
         "cle": "points-entree-categorie",
         "nom": "Points d'entrée de la catégorie",
         "sert": "Relève les catégories d'entrée (situations, besoins, signaux qui font penser à l'achat d'une assurance, méthode des 7W de Jenni Romaniuk), les rédige en langage client, les classe par fréquence et importance avec preuve, puis les affecte aux agents de canal ; propose des métriques de disponibilité mentale si un sondage est possible."
+      },
+      {
+        "cle": "documents-bureautiques",
+        "nom": "Documents bureautiques (Word, Excel, PowerPoint, PDF)",
+        "sert": "Produit et relit de vrais fichiers Word, Excel, PowerPoint et PDF avec des outils libres (python-docx, openpyxl, python-pptx, LibreOffice sans affichage, pypdf) : gabarit et styles nommés, contenu séparé de la mise en forme, contrôle du rendu par conversion en PDF, accessibilité (titres, textes de remplacement, contraste, langue) et relecture d'un fichier reçu."
       },
       {
         "cle": "memoire-para",
@@ -229,6 +239,11 @@ export const FICHES_AGENTS_MARKETING: readonly FicheAgentMarketing[] = [
         "cle": "recherche-connaissances",
         "nom": "Recherche dans les connaissances du client",
         "sert": "Interroge les connaissances du client (conditions générales, fiches produit, tarifs, FAQ, notes) avant d'écrire un chiffre d'offre, et cite l'adresse connaissance:// rendue ; sans source, signale l'information manquante."
+      },
+      {
+        "cle": "documents-bureautiques",
+        "nom": "Documents bureautiques (Word, Excel, PowerPoint, PDF)",
+        "sert": "Produit et relit de vrais fichiers Word, Excel, PowerPoint et PDF avec des outils libres (python-docx, openpyxl, python-pptx, LibreOffice sans affichage, pypdf) : gabarit et styles nommés, contenu séparé de la mise en forme, contrôle du rendu par conversion en PDF, accessibilité (titres, textes de remplacement, contraste, langue) et relecture d'un fichier reçu."
       },
       {
         "cle": "memoire-para",
@@ -496,6 +511,11 @@ export const FICHES_AGENTS_MARKETING: readonly FicheAgentMarketing[] = [
         "sert": "Met en place, audite ou répare le suivi des conversions d'un site (formulaire, rendez-vous réservé, appel, devis, achat) vers GA4 et les régies publicitaires : définit ce qui compte comme conversion, déclenche sur le succès confirmé et jamais sur la tentative, choisit navigateur ou serveur, exige le consentement avant tout marqueur, vérifie qu'une conversion de test est réellement arrivée et dit ce qui reste non vérifié."
       },
       {
+        "cle": "humanisation-texte-fr",
+        "nom": "Humanisation d'un texte français",
+        "sert": "Retire d'un texte français les tics d'écriture des modèles d'IA (vocabulaire gonflé, anglicismes, ouvertures et conclusions toutes faites, participes en -ant en cascade, règle de trois systématique, gras et listes mécaniques, typographie incohérente, uniformité des phrases) sans changer le sens, le registre ni aucun fait."
+      },
+      {
         "cle": "memoire-para",
         "nom": "Mémoire en fichiers (méthode PARA)",
         "sert": "Tient la mémoire persistante de l'agent en fichiers, selon la méthode PARA (graphe de connaissances, notes du jour, savoir tacite), dans le dossier ./memoire/ de son répertoire de travail, avec la source et la date de chaque fait."
@@ -585,6 +605,16 @@ export const FICHES_AGENTS_MARKETING: readonly FicheAgentMarketing[] = [
         "sert": "Conçoit un guide gratuit (aimant à prospects) remis en échange de coordonnées sur la page de captation : sujet utile à la cible, sommaire, promesse sans garantie de rendement (cadre de l'assurance belge, mentions FSMA si produit d'assurance), champ téléphone facultatif et justifié."
       },
       {
+        "cle": "humanisation-texte-fr",
+        "nom": "Humanisation d'un texte français",
+        "sert": "Retire d'un texte français les tics d'écriture des modèles d'IA (vocabulaire gonflé, anglicismes, ouvertures et conclusions toutes faites, participes en -ant en cascade, règle de trois systématique, gras et listes mécaniques, typographie incohérente, uniformité des phrases) sans changer le sens, le registre ni aucun fait."
+      },
+      {
+        "cle": "design-visuel-sobre",
+        "nom": "Design visuel sobre : critique et finition",
+        "sert": "Critique puis finit un visuel, une page ou un document mis en forme : verdict de spécificité (fait pour ce client ou interchangeable), problèmes classés de P0 à P3, hiérarchie, typographie, espacement, contraste, états, et refus des habitudes qui donnent l'allure d'une production d'IA (cartes identiques, gros chiffre décoratif, surtitre, texte en dégradé, émojis en guise d'icônes, tiret cadratin) ; audite aussi un système de design (jetons, valeurs codées en dur, composants et leurs états) et documente ou conçoit un composant."
+      },
+      {
         "cle": "memoire-para",
         "nom": "Mémoire en fichiers (méthode PARA)",
         "sert": "Tient la mémoire persistante de l'agent en fichiers, selon la méthode PARA (graphe de connaissances, notes du jour, savoir tacite), dans le dossier ./memoire/ de son répertoire de travail, avec la source et la date de chaque fait."
@@ -637,6 +667,26 @@ export const FICHES_AGENTS_MARKETING: readonly FicheAgentMarketing[] = [
         "sert": "Passe en revue les sept principes d'influence de Robert Cialdini (réciprocité, engagement et cohérence, preuve sociale, sympathie, autorité, rareté, unité) dans un contenu, exige un fondement factuel pour chacun, raye les leviers sans fondement et envoie obligatoirement la rareté et l'urgence à la conformité publicitaire."
       },
       {
+        "cle": "humanisation-texte-fr",
+        "nom": "Humanisation d'un texte français",
+        "sert": "Retire d'un texte français les tics d'écriture des modèles d'IA (vocabulaire gonflé, anglicismes, ouvertures et conclusions toutes faites, participes en -ant en cascade, règle de trois systématique, gras et listes mécaniques, typographie incohérente, uniformité des phrases) sans changer le sens, le registre ni aucun fait."
+      },
+      {
+        "cle": "textes-interface",
+        "nom": "Textes d'interface",
+        "sert": "Rédige ou relit les textes d'une interface (boutons, messages d'erreur, états vides, fenêtres de confirmation, infobulles, chargement, premiers pas, champs de formulaire) : contexte et état de la personne d'abord, cinq principes (clair, bref, constant, utile, humain), modèles par type de texte, ton adapté au moment, recommandation et deux ou trois variantes, justification et notes pour la traduction en néerlandais et en anglais."
+      },
+      {
+        "cle": "fiche-transmission-developpeurs",
+        "nom": "Fiche de transmission aux développeurs",
+        "sert": "Rédige la fiche de transmission d'une maquette validée à ceux qui vont la développer (prestataire web, développeur interne) : vue d'ensemble et contexte, grille et points de rupture, jetons de design utilisés plutôt que des valeurs brutes, composants et variantes, tous les états (normal, survol, actif, désactivé, chargement, erreur, vide), comportement selon la largeur d'écran, cas limites (texte long, traduction, données manquantes, connexion lente), animations avec durée et courbe, notes d'accessibilité (ordre du focus, rôles, clavier, annonces) et raisons des choix."
+      },
+      {
+        "cle": "mise-a-jour-crm",
+        "nom": "Mise à jour du CRM par la passerelle de l'usine",
+        "sert": "Prépare puis, après accord humain, fait passer par la passerelle CRM de l'usine une mise à jour du CRM : activité à consigner (appel, rendez-vous, courriel déjà faits) ou changement d'une affaire, d'un lead ou d'un contact (étape, date de signature, prochaine étape, montant, champ de contact)."
+      },
+      {
         "cle": "memoire-para",
         "nom": "Mémoire en fichiers (méthode PARA)",
         "sert": "Tient la mémoire persistante de l'agent en fichiers, selon la méthode PARA (graphe de connaissances, notes du jour, savoir tacite), dans le dossier ./memoire/ de son répertoire de travail, avec la source et la date de chaque fait."
@@ -678,6 +728,16 @@ export const FICHES_AGENTS_MARKETING: readonly FicheAgentMarketing[] = [
         "cle": "suivi-conversions",
         "nom": "Suivi des conversions",
         "sert": "Met en place, audite ou répare le suivi des conversions d'un site (formulaire, rendez-vous réservé, appel, devis, achat) vers GA4 et les régies publicitaires : définit ce qui compte comme conversion, déclenche sur le succès confirmé et jamais sur la tentative, choisit navigateur ou serveur, exige le consentement avant tout marqueur, vérifie qu'une conversion de test est réellement arrivée et dit ce qui reste non vérifié."
+      },
+      {
+        "cle": "documents-bureautiques",
+        "nom": "Documents bureautiques (Word, Excel, PowerPoint, PDF)",
+        "sert": "Produit et relit de vrais fichiers Word, Excel, PowerPoint et PDF avec des outils libres (python-docx, openpyxl, python-pptx, LibreOffice sans affichage, pypdf) : gabarit et styles nommés, contenu séparé de la mise en forme, contrôle du rendu par conversion en PDF, accessibilité (titres, textes de remplacement, contraste, langue) et relecture d'un fichier reçu."
+      },
+      {
+        "cle": "visualisation-donnees",
+        "nom": "Visualisation de données dans un rapport",
+        "sert": "Conçoit les graphiques d'un rapport ou d'un tableau de bord : un message par graphique, type choisi selon la question (évolution, comparaison, part, répartition, relation), titre qui énonce la conclusion, axes et unités honnêtes, couleurs lisibles par les personnes daltoniennes, source et date sous chaque graphique, texte de remplacement."
       },
       {
         "cle": "memoire-para",
@@ -740,6 +800,16 @@ export const FICHES_AGENTS_MARKETING: readonly FicheAgentMarketing[] = [
         "cle": "niveau-conscience-message",
         "nom": "Niveau de conscience d'un message",
         "sert": "Fixe pour chaque contenu le niveau de conscience de la cible (inconscient du problème, conscient du problème, des solutions, du produit, pleinement conscient, selon Eugene Schwartz), choisit l'ouverture adaptée, contrôle la sophistication du marché et associe le niveau au canal."
+      },
+      {
+        "cle": "humanisation-texte-fr",
+        "nom": "Humanisation d'un texte français",
+        "sert": "Retire d'un texte français les tics d'écriture des modèles d'IA (vocabulaire gonflé, anglicismes, ouvertures et conclusions toutes faites, participes en -ant en cascade, règle de trois systématique, gras et listes mécaniques, typographie incohérente, uniformité des phrases) sans changer le sens, le registre ni aucun fait."
+      },
+      {
+        "cle": "design-visuel-sobre",
+        "nom": "Design visuel sobre : critique et finition",
+        "sert": "Critique puis finit un visuel, une page ou un document mis en forme : verdict de spécificité (fait pour ce client ou interchangeable), problèmes classés de P0 à P3, hiérarchie, typographie, espacement, contraste, états, et refus des habitudes qui donnent l'allure d'une production d'IA (cartes identiques, gros chiffre décoratif, surtitre, texte en dégradé, émojis en guise d'icônes, tiret cadratin) ; audite aussi un système de design (jetons, valeurs codées en dur, composants et leurs états) et documente ou conçoit un composant."
       },
       {
         "cle": "memoire-para",
@@ -949,6 +1019,11 @@ export const FICHES_AGENTS_MARKETING: readonly FicheAgentMarketing[] = [
         "cle": "controles-techniques-liens",
         "nom": "Contrôles techniques et de liens",
         "sert": "Exécute les contrôles techniques d'un livrable : liens et redirections, contenu réel de la page d'arrivée, formulaires, balises de suivi, formats, données structurées et affichage, avec un rapport par élément et la liste des contrôles non exécutés."
+      },
+      {
+        "cle": "accessibilite-wcag",
+        "nom": "Audit d'accessibilité selon les WCAG",
+        "sert": "Audite l'accessibilité d'une page web, d'un formulaire, d'une application ou d'une maquette selon les WCAG 2.2 niveau AA : critères clés des quatre principes (perceptible, utilisable, compréhensible, robuste), contrastes mesurés, parcours au clavier, ordre et visibilité du focus, étiquettes et messages d'erreur, taille des cibles, agrandissement à 200 % et affichage sur 320 pixels de large, restitution par lecteur d'écran ; constats classés bloquant, majeur ou mineur avec le critère cité et la correction, et liste de ce qui demande un test manuel."
       },
       {
         "cle": "memoire-para",

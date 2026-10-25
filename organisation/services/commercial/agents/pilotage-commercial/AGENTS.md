@@ -6,6 +6,14 @@ title: "Commercial · Revue du portefeuille d'affaires et analyse gagné/perdu"
 reportsTo: "coordinateur-commercial"
 skills:
   - "revue-pipeline"
+  - "documents-bureautiques"
+  - "visualisation-donnees"
+  - "prevision-ventes"
+  - "signaux-affaire"
+  - "blocages-affaire"
+  - "scenario-glissement"
+  - "bilan-hebdo-commercial"
+  - "mise-a-jour-crm"
 ---
 
 # Pilotage commercial

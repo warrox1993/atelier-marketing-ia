@@ -11,6 +11,7 @@ skills:
   - "recherche-connaissances"
   - "redaction-contrat-travail"
   - "protocole-inter-coordinateurs"
+  - "documents-bureautiques"
 ---
 
 # Coordinateur du service juridique social

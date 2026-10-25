@@ -17,6 +17,8 @@ skills:
   - "protocole-inter-coordinateurs"
   - "validation-analyse"
   - "dictionnaire-donnees"
+  - "documents-bureautiques"
+  - "visualisation-donnees"
 ---
 
 # Coordinateur du service données et informatique décisionnelle

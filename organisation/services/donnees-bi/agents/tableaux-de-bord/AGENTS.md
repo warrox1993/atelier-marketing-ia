@@ -6,6 +6,8 @@ title: "Données et BI · Indicateurs, définitions et seuils"
 reportsTo: "coordinateur-donnees"
 skills:
   - "tableau-de-bord-pme"
+  - "documents-bureautiques"
+  - "visualisation-donnees"
 ---
 
 # Tableaux de bord

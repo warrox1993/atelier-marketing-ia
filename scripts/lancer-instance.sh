@@ -8,6 +8,8 @@ set -uo pipefail
 
 RACINE="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 FICHIER_ENV="${RACINE}/config/atelier.env"
+# Surcharge facultative du mode authentifié (passer-en-mode-authentifie.sh) : chargée APRÈS atelier.env.
+FICHIER_AUTH="${RACINE}/config/atelier-auth.env"
 # Surcharge facultative pour l'accès à distance (tailscale serve) : chargée APRÈS atelier.env.
 FICHIER_DISTANT="${RACINE}/config/atelier-distant.env"
 SOCLE="${RACINE}/paperclip"
@@ -44,6 +46,11 @@ if [[ -f "${FICHIER_DISTANT}" ]]; then
   done < "${FICHIER_DISTANT}"
 fi
 set +a
+if [[ -f "${FICHIER_AUTH}" ]]; then
+  # shellcheck disable=SC1091
+  source "${RACINE}/scripts/lib-mode-auth.sh"
+  exporter_surcharge_auth "${FICHIER_AUTH}" || exit 1
+fi
 
 # Refuse de démarrer si l'instance est déjà publiée sur le tailnet (tailscale serve) alors que la
 # surcharge distante (mode authentifié) est absente : ce serait un accès sans authentification.

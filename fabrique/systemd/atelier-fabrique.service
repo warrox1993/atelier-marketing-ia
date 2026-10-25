@@ -1,0 +1,51 @@
+[Unit]
+Description=Fabrique de l'atelier : exécution étroite des travaux de document et de vidéo
+Documentation=file:///opt/atelier-fabrique/lib/fabrique/service.py
+After=local-fs.target
+
+[Service]
+Type=simple
+User=atelier-fabrique
+Group=atelier-fabrique
+# Remplacé à l'installation par l'uid de l'opérateur qui dépose dans entrant/.
+Environment=FABRIQUE_UID_DEPOSANT=__UID_DEPOSANT__
+ExecStart=/usr/bin/python3 -I /opt/atelier-fabrique/lib/fabrique/service.py
+UMask=0027
+Restart=on-failure
+RestartSec=5
+
+# Le dépôt, ses secrets et les configurations des agents sont sous /home : invisibles ici.
+ProtectHome=yes
+ProtectSystem=strict
+StateDirectory=atelier-fabrique
+StateDirectoryMode=0750
+PrivateNetwork=yes
+PrivateTmp=yes
+NoNewPrivileges=yes
+CapabilityBoundingSet=
+
+# GPU : seulement les périphériques NVIDIA nécessaires au rendu.
+DevicePolicy=closed
+DeviceAllow=/dev/nvidia0 rw
+DeviceAllow=/dev/nvidiactl rw
+DeviceAllow=/dev/nvidia-uvm rw
+DeviceAllow=/dev/nvidia-uvm-tools rw
+
+# Ressources : un seul travail à la fois, pas d'échange sur disque.
+MemoryMax=14G
+MemorySwapMax=0
+TasksMax=512
+CPUQuota=600%
+
+# bwrap crée ces espaces de noms (--unshare-all) ; cgroup est indispensable (mesuré : sans lui,
+# bwrap échoue avec « No permissions to create a new namespace »).
+RestrictNamespaces=user mnt pid ipc uts net cgroup
+
+# Appels système : refus des groupes de débogage, de modules noyau, d'accès brut aux ports, de
+# redémarrage, d'échange, d'horloge, d'émulation de processeur et obsolètes (constat M2 de la revue
+# du 24/10). @mount reste permis : bwrap monte la cage. La cage ajoute son propre filtre seccomp
+# (fabrique/filtre_seccomp.py) pour le programme de chaque étape.
+SystemCallFilter=~@debug @module @raw-io @reboot @swap @clock @cpu-emulation @obsolete
+
+[Install]
+WantedBy=multi-user.target

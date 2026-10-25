@@ -6,6 +6,7 @@ title: "Partenariats · Campagnes communes avec les partenaires"
 reportsTo: "coordinateur-partenariats"
 skills:
   - "co-marketing-partenaire"
+  - "humanisation-texte-fr"
 ---
 
 # Co-marketing avec les partenaires

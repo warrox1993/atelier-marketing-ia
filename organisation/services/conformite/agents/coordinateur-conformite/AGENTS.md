@@ -14,6 +14,7 @@ skills:
   - "controle-communications-reglementees"
   - "protocole-inter-coordinateurs"
   - "inventaire-obligations-conformite"
+  - "documents-bureautiques"
 ---
 
 # Coordinateur du service conformité

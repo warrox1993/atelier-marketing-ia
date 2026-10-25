@@ -17,6 +17,7 @@ skills:
   - "gestion-flotte-vehicules"
   - "demandes-occupants"
   - "protocole-inter-coordinateurs"
+  - "documents-bureautiques"
 ---
 
 # Coordinateur du service immobilier et services généraux

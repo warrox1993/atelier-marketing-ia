@@ -48,7 +48,7 @@ copie() {
   local d="${TRAVAIL}/copie-$1"
   mkdir -p "${d}/scripts" "${d}/docs" "${d}/paperclip/packages/adapters/claude-local/src" "${d}/paperclip/server/src/services"
   cp -a "${RACINE}/organisation" "${d}/"
-  cp -a "${RACINE}/scripts/bootstrap-organisation.py" "${RACINE}/scripts/verifier-organisation.py" "${d}/scripts/"
+  cp -a "${RACINE}/scripts/bootstrap-organisation.py" "${RACINE}/scripts/verifier-organisation.py" "${RACINE}/scripts/atelier_services.py" "${d}/scripts/"
   cp -a "${RACINE}/paperclip/packages/adapters/claude-local/src/index.ts" "${d}/paperclip/packages/adapters/claude-local/src/"
   cp -a "${RACINE}/paperclip/server/src/services/company-portability.ts" "${d}/paperclip/server/src/services/"
   echo "${d}"
@@ -135,7 +135,8 @@ d="$(copie connexion-outils)"
 import json, sys
 p = sys.argv[1]
 r = json.load(open(p, encoding="utf-8"))
-next(a for a in r["agents"] if a["slug"] == "veille")["outils"]["recherche"].append("mcp__paperclip-assigned")
+# relecteur : rôle sans connexion déclarée (veille en a reçu depuis, le cas ne testait plus rien).
+next(a for a in r["agents"] if a["slug"] == "relecteur")["outils"]["recherche"].append("mcp__paperclip-assigned")
 json.dump(r, open(p, "w", encoding="utf-8"), ensure_ascii=False, indent=2)
 PY2
 "${PY[@]}" "${d}/scripts/bootstrap-organisation.py" generer > /dev/null
@@ -1235,7 +1236,7 @@ for a_ in reg_j:  # chaque agent juridique livre exactement les compétences de 
     assert len(a_["competences"]) == len(set(a_["competences"])), a_["slug"]
 assert not any(c_.startswith("skills/") and c_.split("/")[1] not in {x for a in reg_j for x in a["competences"]} for c_ in paquet_j)
 assert b.competences_entete('---\nskills: ["cadrage-exigences", "audit-seo"]\n---\n', "direction", "x") == ["cadrage-exigences", "audit-seo"]  # liste en ligne
-assert skills_depot("commercial", "preparation-rdv") == ["preparation-rendez-vous-b2b", "reponse-objection", "compte-rendu-rendez-vous"]
+assert skills_depot("commercial", "preparation-rdv") == ["preparation-rendez-vous-b2b", "reponse-objection", "compte-rendu-rendez-vous", "humanisation-texte-fr", "redaction-prospection", "vue-360-compte", "prise-de-rendez-vous", "mise-a-jour-crm"]
 # Sans clé « skills » : aucune compétence. Compétence inconnue ou nom suspect : refus qui nomme l'agent et la compétence.
 assert b.competences_entete('---\nkind: "agent"\nslug: "x"\n---\n\nCorps\n', "juridique", "x") == []
 assert b.competences_entete('Sans en-tête\n', "juridique", "x") == []

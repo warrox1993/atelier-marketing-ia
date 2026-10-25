@@ -16,6 +16,7 @@ skills:
   - "preparation-rendez-vous-b2b"
   - "co-marketing-partenaire"
   - "protocole-inter-coordinateurs"
+  - "documents-bureautiques"
 ---
 
 # Coordinateur du service partenariats

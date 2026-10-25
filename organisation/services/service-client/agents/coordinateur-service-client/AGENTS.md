@@ -14,6 +14,7 @@ skills:
   - "mesure-satisfaction"
   - "escalade-interne"
   - "protocole-inter-coordinateurs"
+  - "documents-bureautiques"
 ---
 
 # Coordinateur du service client

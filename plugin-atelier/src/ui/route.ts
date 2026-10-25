@@ -6,7 +6,7 @@
 import { ROUTE_ATELIER, RUBRIQUES } from "../contrats/ui-constantes.js";
 
 export type CleRubrique = (typeof RUBRIQUES)[number]["cle"];
-export type CleVue = "discussion" | "accueil" | CleRubrique | "prospects" | "carte" | "connaissances" | "mise-en-place" | "parametres" | "corbeille" | "rapport" | "tableau" | "echanges" | "departements" | "organigramme";
+export type CleVue = "discussion" | "accueil" | CleRubrique | "prospects" | "carte" | "connaissances" | "mise-en-place" | "parametres" | "corbeille" | "livrables" | "rapport" | "tableau" | "echanges" | "departements" | "organigramme";
 
 export interface RouteAtelier {
   vue: CleVue;
@@ -40,7 +40,10 @@ export const VUE_DEPARTEMENTS = { cle: "departements", libelle: "Départements" 
 /** Organigramme des agents et des interconnexions du client : même condition d'affichage que les départements. */
 export const VUE_ORGANIGRAMME = { cle: "organigramme", libelle: "Organigramme" } as const satisfies { cle: CleVue; libelle: string };
 
-const CLES = new Set<string>([...VUES.map((v) => v.cle), VUE_DIRECTION.cle, VUE_DEPARTEMENTS.cle, VUE_ORGANIGRAMME.cle]);
+/** Livrables de la fabrique : hors `VUES`, ouverte depuis le menu principal ou depuis le lien du commentaire de fin de travail. */
+export const VUE_LIVRABLES = { cle: "livrables", libelle: "Livrables" } as const satisfies { cle: CleVue; libelle: string };
+
+const CLES = new Set<string>([...VUES.map((v) => v.cle), VUE_DIRECTION.cle, VUE_DEPARTEMENTS.cle, VUE_ORGANIGRAMME.cle, VUE_LIVRABLES.cle]);
 
 /** Lit la vue depuis le chemin de l'hôte ; vue par défaut : la discussion (l'ancienne adresse « accueil » y mène aussi). */
 export function lireRoute(pathname: string): RouteAtelier {

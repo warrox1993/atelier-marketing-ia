@@ -1,4 +1,7 @@
 import { describe, expect, it, afterEach } from "vitest";
+import { chmodSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { ErreurConfig, lireConfig } from "../src/config.js";
 import { decouper } from "../src/meta.js";
 import { banc, JB, type Banc } from "./aide.js";
@@ -90,6 +93,25 @@ describe("configuration", () => {
     expect(() => lireConfig({ ...base, WHATSAPP_SECRET_APPLICATION: "" })).toThrow(ErreurConfig);
     expect(() => lireConfig({ ...base, WHATSAPP_NUMEROS_AUTORISES: "abc" })).toThrow(ErreurConfig);
     expect(() => lireConfig({ ...base, WHATSAPP_MODELE_HORS_FENETRE: "oui" })).toThrow(ErreurConfig);
+  });
+  it("clé board : absente par défaut (local_trusted), lue dans un fichier 0600, refusée si le fichier est ouvert ou invalide", () => {
+    expect(lireConfig(base).cleBoard).toBeNull();
+    const dossier = mkdtempSync(join(tmpdir(), "cle-board-"));
+    try {
+      const f = join(dossier, "board-3100.key");
+      writeFileSync(f, "pcp_board_0123456789abcdef0123\n");
+      chmodSync(f, 0o600);
+      expect(lireConfig({ ...base, ATELIER_CLE_BOARD_FICHIER: f }).cleBoard).toBe("pcp_board_0123456789abcdef0123");
+      expect(lireConfig({ ...base, ATELIER_CLE_BOARD: "directe-0123456789abcdef", ATELIER_CLE_BOARD_FICHIER: f }).cleBoard).toBe("directe-0123456789abcdef");
+      chmodSync(f, 0o644);
+      expect(() => lireConfig({ ...base, ATELIER_CLE_BOARD_FICHIER: f })).toThrow(ErreurConfig);
+      chmodSync(f, 0o600);
+      writeFileSync(f, "cle avec espaces");
+      expect(() => lireConfig({ ...base, ATELIER_CLE_BOARD_FICHIER: f })).toThrow(ErreurConfig);
+      expect(() => lireConfig({ ...base, ATELIER_CLE_BOARD_FICHIER: join(dossier, "absent.key") })).toThrow(ErreurConfig);
+    } finally {
+      rmSync(dossier, { recursive: true, force: true });
+    }
   });
   it("découpe des longs textes sous la limite de Meta", () => {
     const morceaux = decouper("ligne\n".repeat(2000));

@@ -195,6 +195,9 @@ details[open] > .atl-section-resume::after, details[open] > .atl-filtres-resume:
 .atl-table thead th { font-size: 0.75rem; font-weight: 500; color: var(--atl-attenue-fort); background: var(--atl-surface-2); white-space: nowrap; }
 .atl-table tbody th { font-weight: 500; }
 .atl-table tbody tr[data-choisi="true"] { background: color-mix(in oklab, var(--atl-info) 6%, transparent); }
+.atl-liste-nue { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.5rem; }
+.atl-liste-nue li { display: flex; flex-wrap: wrap; align-items: center; gap: 0.375rem 0.75rem; }
+.atl-liste-nue .atl-progression { flex-basis: 100%; }
 .atl-table tbody tr.atl-ligne-cliquable { cursor: pointer; }
 .atl-table tbody tr.atl-ligne-cliquable:hover { background: color-mix(in oklab, var(--atl-info) 4%, transparent); }
 .atl-fiche:focus { outline: none; }

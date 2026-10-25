@@ -8,6 +8,11 @@ skills:
   - "preparation-rendez-vous-b2b"
   - "reponse-objection"
   - "compte-rendu-rendez-vous"
+  - "humanisation-texte-fr"
+  - "redaction-prospection"
+  - "vue-360-compte"
+  - "prise-de-rendez-vous"
+  - "mise-a-jour-crm"
 ---
 
 # Préparation de rendez-vous

@@ -788,19 +788,49 @@ def url_api() -> str:
     return f"http://127.0.0.1:{port}/api"
 
 
-def ajouter_cle_tableau(req):
-    """Mode authentifié (accès à distance) : ajoute la clé d'API du tableau (PAPERCLIP_BOARD_KEY), facultative.
+def lire_cle_fichier(port) -> str | None:
+    """Clé board lue dans un fichier 0600 hors dépôt : ATELIER_CLE_BOARD_FICHIER, sinon ~/.config/atelier/board-<port>.key.
 
+    Absent : None (mode local_trusted, comportement historique). Fichier qui ne m'appartient pas, ouvert au groupe
+    ou aux autres, ou contenu invalide : ignoré avec un avertissement. Créé par scripts/passer-en-mode-authentifie.sh.
+    (Recopié dans chaque script : ils tournent en `python3 -I`.)
+    """
+    chemin = os.environ.get("ATELIER_CLE_BOARD_FICHIER") or os.path.join(
+        os.path.expanduser("~"), ".config", "atelier", f"board-{port}.key")
+    try:
+        st = os.stat(chemin)
+    except OSError:
+        return None
+    if st.st_uid != os.getuid() or st.st_mode & 0o077:
+        print(f"AVERTISSEMENT : {chemin} ignoré (il doit m'appartenir et être en 0600).", file=sys.stderr)
+        return None
+    try:
+        with open(chemin, encoding="utf-8") as f:
+            cle = f.read().strip()
+    except OSError:
+        return None
+    if not re.fullmatch(r"[A-Za-z0-9_.-]{16,512}", cle):
+        print(f"AVERTISSEMENT : contenu de {chemin} invalide : clé non envoyée.", file=sys.stderr)
+        return None
+    return cle
+
+
+def ajouter_cle_tableau(req):
+    """Mode authentifié : ajoute la clé d'API du tableau (board), facultative.
+
+    Source : PAPERCLIP_BOARD_KEY si elle est définie, sinon le fichier de clé de l'instance visée
+    (lire_cle_fichier, seulement vers la boucle locale). Sans clé, la requête part sans jeton (local_trusted).
     La clé n'est envoyée que vers http://127.0.0.1:<port>, http://localhost:<port> ou https://<nom>.ts.net ;
     ailleurs, rien n'est envoyé (avertissement sans la clé). L'en-tête est « non redirigeable » : il n'est
     jamais recopié lors d'une redirection. (Recopié dans chaque script : ils tournent en `python3 -I`.)
     """
-    cle = os.environ.get("PAPERCLIP_BOARD_KEY")
-    if not cle:
-        return
     u = urllib.parse.urlsplit(req.full_url)
     h = (u.hostname or "").lower()
-    if u.scheme == "http" and h in ("127.0.0.1", "localhost") and u.port is not None:
+    boucle_locale = u.scheme == "http" and h in ("127.0.0.1", "localhost") and u.port is not None
+    cle = os.environ.get("PAPERCLIP_BOARD_KEY") or (lire_cle_fichier(u.port) if boucle_locale else None)
+    if not cle:
+        return
+    if boucle_locale:
         autorise = True
     else:
         autorise = u.scheme == "https" and h.endswith(".ts.net") and len(h) > len(".ts.net")
@@ -1966,6 +1996,15 @@ def _assurer_connexions(args) -> int:
     if manquants:
         raise ErreurAtelier("agents du registre absents (lancer « appliquer » d'abord) : " + ", ".join(manquants))
     ecritures, resume = assurer_connexions(api, entreprise["id"], reg_agents, agents)
+    try:
+        ecr_fabrique = assurer_fabrique(api, entreprise["id"], reg_agents, agents)
+    except ErreurAtelier as e:
+        # Plugin absent ou sans les réglages de la fabrique : la fabrique reste fermée (refus par défaut), on le dit.
+        print(f"assurer-connexions : fabrique non configurée ({e}).")
+    else:
+        if ecr_fabrique:
+            resume.append(f"fabrique : {ecr_fabrique} écriture(s) (agents autorisés du plugin, politiques « block » des agents non retenus)")
+        ecritures += ecr_fabrique
     print(f"assurer-connexions : {ecritures} écriture(s) sur {len(resume)} connexion(s) de la passerelle.")
     if ecritures or args.detail:
         for ligne in resume:
@@ -2070,6 +2109,12 @@ def appliquer_organisation(api: Api, reg_agents: dict, reg_orga: dict, fichiers:
     except ErreurAtelier as e:
         # Plugin absent ou d'une version sans ce réglage : sans lui, personne n'a ces rôles (refus par défaut).
         print(f"  avertissement : rôles Mesure et Stratège non inscrits dans la configuration du plugin ({e}) ; relancer après mise à jour du plugin.")
+    try:
+        ecr_fabrique = assurer_fabrique(api, company_id, reg_agents, agents)
+        if ecr_fabrique:
+            print(f"Fabrique : {ecr_fabrique} écriture(s) (agents autorisés du plugin, politiques « block » des agents non retenus).")
+    except ErreurAtelier as e:
+        print(f"  avertissement : fabrique non configurée ({e}) ; relancer après mise à jour du plugin.")
     objectifs, ecr_obj = assurer_objectifs(api, company_id, reg_orga, agents)
     projets, ecr_proj = assurer_liens_projets(api, company_id, reg_orga, objectifs)
     ecr_routines = assurer_routines(api, company_id, reg_orga, agents, projets)
@@ -2920,6 +2965,80 @@ ROLES_EXPERIENCES = ("mesure", "stratege")  # rôles que le plugin reconnaît pa
 def roles_agents_voulus(agents: dict[str, dict]) -> dict[str, str]:
     """Identifiants des agents tenant les rôles d'expérience (slug du registre), pour la configuration du plugin."""
     return {r: agents[r]["id"] for r in ROLES_EXPERIENCES if r in agents and agents[r].get("id")}
+
+
+# Outils de la fabrique (lot 12). Nom de la passerelle de Paperclip : « <clé du plugin>:<outil> » (mesuré sur
+# l'usine réelle le 24/10/2026, GET /api/plugins/tools). Côté client Claude, le serveur « paperclip-assigned » les
+# livre sous un nom normalisé (voir PREFIXE_OUTILS_FABRIQUE dans verifier-organisation.py).
+OUTILS_FABRIQUE_PASSERELLE = {
+    "document": f"{PLUGIN_CLE}:fabriquer_document",
+    "video": f"{PLUGIN_CLE}:fabriquer_video",
+    "etat": f"{PLUGIN_CLE}:etat_fabrication",
+}
+PREFIXE_CLIENT_FABRIQUE = "mcp__paperclip-assigned__atelier_marketing-ia_"
+OUTILS_CLIENT_FABRIQUE = {
+    "document": PREFIXE_CLIENT_FABRIQUE + "fabriquer_document",
+    "video": PREFIXE_CLIENT_FABRIQUE + "fabriquer_video",
+    "etat": PREFIXE_CLIENT_FABRIQUE + "etat_fabrication",
+}
+
+
+def agents_fabrique(reg_agents: dict) -> dict[str, set[str]]:
+    """Genre de travail (`document`, `video`) -> slugs des rôles qui ont l'outil en autorisation explicite (registre)."""
+    resultat: dict[str, set[str]] = {"document": set(), "video": set()}
+    for agent in reg_agents["agents"]:
+        autorises = set(agent["outils"]["recherche"]) | set(agent["outils"]["mutation"])
+        for genre in resultat:
+            if OUTILS_CLIENT_FABRIQUE[genre] in autorises:
+                resultat[genre].add(agent["slug"])
+    return resultat
+
+
+def assurer_fabrique(api: Api, cid: str, reg_agents: dict, agents: dict[str, dict]) -> int:
+    """Ouvre la fabrique aux seuls rôles retenus ; retourne le nombre d'écritures faites.
+
+    1. Configuration du plugin : `fabriqueAgentsDocuments` et `fabriqueAgentsVideo` = identifiants (UUID) des agents
+       retenus. Le champ `role` de Paperclip est trop grossier (plusieurs agents partagent « researcher », « general »
+       ou « designer ») ; l'UUID est attribué par Paperclip, l'agent ne peut pas le modifier. Les anciennes clés
+       `fabriqueRoles*` sont retirées (le plugin les ignore de toute façon).
+    2. Politique native « block » par agent et par outil, pour chaque agent NON retenu (le filtre de la passerelle
+       cache l'outil à l'agent et refuse son appel) : même mécanisme que les outils bloqués des connexions. Créée si
+       absente, jamais modifiée ni réactivée ensuite. Le registre ajoute en plus l'outil dans --disallowedTools.
+    """
+    retenus = agents_fabrique(reg_agents)
+    identifiants = {genre: sorted({agents[s]["id"] for s in slugs if s in agents and agents[s].get("id")}) for genre, slugs in retenus.items()}
+    ecritures = 0
+    actuelle = config_plugin(api, cid)
+    voulue = dict(actuelle)
+    voulue["fabriqueAgentsDocuments"] = identifiants["document"]
+    voulue["fabriqueAgentsVideo"] = identifiants["video"]
+    voulue.pop("fabriqueRolesDocuments", None)
+    voulue.pop("fabriqueRolesVideo", None)
+    if voulue != actuelle:
+        ecrire_config_plugin(api, cid, voulue)
+        ecritures += 1
+    existantes = {p.get("name") for p in politiques_outils(api, cid)}
+    for slug, agent in sorted(agents.items()):
+        if slug not in {a["slug"] for a in reg_agents["agents"]}:
+            continue  # agent natif hors registre (Gardien des connexions) : pas d'outil de fabrique de toute façon
+        for genre, outil in OUTILS_FABRIQUE_PASSERELLE.items():
+            if genre == "etat":
+                autorise = slug in (retenus["document"] | retenus["video"])
+            else:
+                autorise = slug in retenus[genre]
+            nom = f"atelier-fabrique-interdit:{slug}:{outil.split(':', 1)[1]}"
+            if autorise or nom in existantes:
+                continue
+            api.appel("POST", f"/companies/{cid}/tools/policies", {
+                "name": nom,
+                "description": f"Atelier : le rôle « {slug} » n'est pas retenu pour l'outil de fabrique {outil} (décision de l'opérateur du 24/10/2026).",
+                "policyType": "block",
+                "priority": 10,
+                "selectors": {"toolName": outil},
+                "conditions": {"actor": {"agentId": agent["id"]}},
+            })
+            ecritures += 1
+    return ecritures
 
 
 def assurer_roles_agents(api: Api, cid: str, agents: dict[str, dict]) -> bool:

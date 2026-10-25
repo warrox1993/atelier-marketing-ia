@@ -11,6 +11,7 @@ skills:
   - "recherche-connaissances"
   - "protocole-inter-coordinateurs"
   - "plan-campagne"
+  - "documents-bureautiques"
 ---
 
 # Coordinateur marketing

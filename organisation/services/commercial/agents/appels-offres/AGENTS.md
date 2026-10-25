@@ -6,6 +6,8 @@ title: "Commercial · Cahiers des charges et questionnaires d'entreprises client
 reportsTo: "coordinateur-commercial"
 skills:
   - "reponse-appel-offres"
+  - "documents-bureautiques"
+  - "humanisation-texte-fr"
 ---
 
 # Appels d'offres
