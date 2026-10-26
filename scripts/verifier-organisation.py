@@ -68,7 +68,15 @@ RUBRIQUES = [
     "Critères de réussite", "Limites", "Exemple",
 ]
 # Rubriques facultatives (compétences des services).
-RUBRIQUES_FACULTATIVES = ["Sources officielles", "À vérifier par un professionnel"]
+RUBRIQUES_FACULTATIVES = ["Sources officielles", "À vérifier par un professionnel", "Pièges"]
+
+
+def rubriques_conformes(titres: list[str]) -> bool:
+    """Rubriques obligatoires présentes et ordonnées ; les facultatives peuvent se placer n'importe où.
+    Aucun titre ne peut apparaître plus d'une fois."""
+    if len(set(titres)) != len(titres):
+        return False
+    return [t for t in titres if t not in RUBRIQUES_FACULTATIVES][: len(RUBRIQUES)] == RUBRIQUES
 # Outils MCP des connexions natives (livrés par Paperclip à un run claude_local) : serveur
 # « paperclip-assigned » (outils des connexions, gouvernés par les installations et politiques
 # natives) et serveur « Paperclip connections » (connections_search, connection_request), noms
@@ -297,10 +305,9 @@ def controler_competences(bootstrap):
         elif not re.fullmatch(r"\d+\.\d+\.\d+", meta.get("version", "")):
             erreur(f"{nom} : metadata.version (x.y.z) absente")
         titres = re.findall(r"^## (.+?)\s*$", corps, re.M)
-        # « Sources officielles » et « À vérifier par un professionnel » sont facultatives (n'importe où
-        # après « Critères de réussite ») ; toutes les autres rubriques restent obligatoires et ordonnées.
-        obligatoires = [t for t in titres if t not in RUBRIQUES_FACULTATIVES]
-        if obligatoires[: len(RUBRIQUES)] != RUBRIQUES:
+        # « Sources officielles », « À vérifier par un professionnel » et « Pièges » sont facultatives ;
+        # toutes les autres rubriques restent obligatoires et ordonnées.
+        if not rubriques_conformes(titres):
             erreur(f"{nom} : rubriques attendues dans l'ordre {RUBRIQUES} (facultatives : {RUBRIQUES_FACULTATIVES}), trouvé {titres}")
         sections = re.split(r"^## ", corps, flags=re.M)
         for section in sections[1:]:

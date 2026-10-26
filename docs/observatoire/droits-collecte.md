@@ -19,11 +19,17 @@ Statut : phase 1, politique proposée. Source : J.1, J.2 et Livrable K du plan. 
 | --- | --- | --- | --- |
 | GitHub | API REST authentifiée, flux `releases.atom` | REST 5 000 requêtes/heure ; recherche 30 requêtes/minute (code : 10/minute) ; GraphQL 5 000 points/heure | respecter les en-têtes de limite ; licence du dépôt lue avant toute citation |
 | arXiv | API officielle | 1 requête toutes les 3 secondes, une seule connexion ; métadonnées sous CC0 1.0 | les textes des articles gardent leur licence propre : liens et courtes citations seulement |
-| YouTube | API Data v3 | 10 000 unités/jour ; métadonnées seulement | `captions.download` exige le droit de modification de la vidéo : **aucune transcription de vidéos de tiers** ; `search.list` coûte 100 unités selon la doc habituelle (à relire) |
+| YouTube | API Data v3 pour les métadonnées ; transcription locale de l'audio par le code de collecte K1 (Whisper sur le GPU du poste, jamais par un agent) | 10 000 unités/jour pour l'API ; transcription pour l'étude interne seulement | décision de l'opérateur du 26/10/2026 : le texte de la transcription n'est jamais publié ; le site publie une synthèse originale, le lien vers la vidéo et des extraits courts cités ; `captions.download` reste inutilisable (il exige le droit de modifier la vidéo, d'où la transcription locale) ; `search.list` coûte 100 unités selon la doc habituelle (à relire) |
 | npm, PyPI | API et flux de leurs registres | cadence faible, conditions des registres à relire par le collecteur | métadonnées et notes de version |
 | Blogs et notes de version des éditeurs | flux Atom/RSS en priorité, sinon page | `robots.txt`, une page à la fois, cadence lente | conditions d'utilisation lues par source |
 | Textes officiels de l'UE | sites officiels | réutilisation selon les règles de l'institution (à vérifier par le collecteur) | texte juridique cité avec référence exacte |
 | Listes « awesome » | simples annuaires | chaque entrée est revérifiée à la source primaire | jamais une preuve par elle-même |
+
+**Point à vérifier avant toute collecte vidéo (K4, phase 3).**
+
+- Conditions d'utilisation de YouTube, lues à la source le 26/10/2026 (https://www.youtube.com/t/terms?hl=en), section « Permissions and Restrictions », point 1. Extrait mot pour mot, le reste de la phrase n'ayant pas pu être relevé intégralement : « access, reproduce, download, distribute, transmit, broadcast, display, sell, license, alter, modify ». La phrase interdit ces actes sur tout ou partie du service ou des contenus, sauf si le service les permet expressément, avec l'accord écrit préalable de YouTube et des titulaires de droits, ou si la loi applicable les autorise (reformulation, texte complet non cité : citation intégrale à relever avant la collecte). Reste à trancher si le téléchargement de l'audio pour transcription locale entre dans cette interdiction.
+- Droit d'auteur : usage interne de la transcription, citation courte seulement dans les publications.
+- Si la vérification conclut à un risque, JB décide avant toute collecte.
 
 ## 3. Droit d'auteur et licences
 

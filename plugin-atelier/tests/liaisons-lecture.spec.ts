@@ -85,9 +85,9 @@ describe("contrats de lecture", () => {
     expect((manifest.apiRoutes ?? []).map((r) => r.routeKey)).toEqual(expect.arrayContaining(["liaison.lire", "liaison.registre"]));
   });
 
-  it("connaît le nom exact de chacun des services du registre (28), sans repli sur le slug", () => {
+  it("connaît le nom exact de chacun des services du registre (29), sans repli sur le slug", () => {
     const registre = JSON.parse(readFileSync(new URL("../../organisation/registre/services.json", import.meta.url), "utf8")) as { services: Array<{ slug: string; nom: string }>; flux: unknown[] };
-    expect(registre.services.length).toBe(28);
+    expect(registre.services.length).toBe(29);
     for (const x of registre.services) expect(nomService(x.slug), x.slug).toBe(x.nom);
   });
 

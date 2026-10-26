@@ -2,7 +2,7 @@
  * Migration 018 : origine des flux de la matrice (métier ou réseau des coordinateurs).
  * Lue comme texte (format du validateur de Paperclip) ; le classement des lignes existantes est vérifié en
  * appliquant les motifs LIKE de la migration, traduits en expression régulière, aux objets réellement générés
- * par `flux_coordinateurs` (scripts/atelier_services.py) et aux 118 objets métier du registre.
+ * par `flux_coordinateurs` (scripts/atelier_services.py) et aux 122 objets métier du registre.
  */
 import { execFileSync } from "node:child_process";
 import { readdirSync, readFileSync } from "node:fs";
@@ -48,8 +48,8 @@ describe("migration 018 : origine des flux", () => {
       "import json,sys; sys.path.insert(0, sys.argv[1]); import atelier_services as a; r=a.charger_services(); print(json.dumps({'generes':[f['objet'] for f in a.flux_coordinateurs(r)],'metier':[f['objet'] for f in r['flux']]}))",
       join(RACINE, "scripts")], { encoding: "utf8" });
     const { generes, metier } = JSON.parse(brut) as { generes: string[]; metier: string[] };
-    expect(generes).toHaveLength(638);
-    expect(metier).toHaveLength(118);
+    expect(generes).toHaveLength(690);
+    expect(metier).toHaveLength(122);
     expect(generes.filter((o) => !classe(o))).toEqual([]);
     expect(metier.filter(classe)).toEqual([]);
     // Le repli côté code applique la même règle que la migration.

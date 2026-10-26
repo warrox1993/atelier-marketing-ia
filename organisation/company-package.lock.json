@@ -58,6 +58,13 @@
         "SKILL.md"
       ]
     },
+    "affirmations-preuves": {
+      "version": "1.0.2",
+      "sha256": "b20f1251d7c23aa079023c439bbea5e6fc24dcfd27cafdaf2b121eae06cb9225",
+      "fichiers": [
+        "SKILL.md"
+      ]
+    },
     "agenda-echeances-legales": {
       "version": "1.2.0",
       "sha256": "a4f282c982112188c8876015825ae9da441b0f608c451fbe130ea622c3540ac0",
@@ -110,6 +117,20 @@
     "analyse-jobs-a-faire": {
       "version": "1.0.0",
       "sha256": "250d5692fc15598f0f286d4a09ef302684ab0a9d5a3ecda78c6f966e069c8306",
+      "fichiers": [
+        "SKILL.md"
+      ]
+    },
+    "analyse-mcp-plugins-skills": {
+      "version": "1.0.2",
+      "sha256": "9b963e39dce3db64c6a081c1fd4a8dda1e4e6e648aa27135bdaebcb4d5f1c4ab",
+      "fichiers": [
+        "SKILL.md"
+      ]
+    },
+    "analyse-menaces-outil": {
+      "version": "1.0.3",
+      "sha256": "8237f6886b59282ff7d2ebcaa201f415efeee8b92cb206b31578b15268cfdc1f",
       "fichiers": [
         "SKILL.md"
       ]
@@ -548,6 +569,13 @@
     "documents-bureautiques": {
       "version": "1.0.0",
       "sha256": "e4d18c2efa7e007f71c82b8ccb2f9b94adacae255c915ab52c9010b936a148cc",
+      "fichiers": [
+        "SKILL.md"
+      ]
+    },
+    "dossier-24-chapitres": {
+      "version": "1.0.2",
+      "sha256": "324373bf80155bb24547ca43cde390600468ce3879b3404421e1bd5dd7dc7070",
       "fichiers": [
         "SKILL.md"
       ]
@@ -1151,6 +1179,13 @@
         "SKILL.md"
       ]
     },
+    "protocole-essai-isole": {
+      "version": "1.0.3",
+      "sha256": "f8651bd76edca83239a21cac28daf14c12f05b09d825653e7a1a39f67c4c0736",
+      "fichiers": [
+        "SKILL.md"
+      ]
+    },
     "protocole-inter-coordinateurs": {
       "version": "1.0.0",
       "sha256": "2fe84bc043843eef893184d7211dbc79ac2ecdc527c6dbb4481edf5cddec48cd",
@@ -1161,6 +1196,13 @@
     "qualification-leads-entrants": {
       "version": "1.0.0",
       "sha256": "bc5f351b7e989075ee73d36e6b32fc7d76547e2a498ae74bf4ef7c558828c87b",
+      "fichiers": [
+        "SKILL.md"
+      ]
+    },
+    "qualification-outils": {
+      "version": "1.0.2",
+      "sha256": "655473805f20fe888d2ddf9a51912526c4fe81814479204aa90349c7d1c0a02a",
       "fichiers": [
         "SKILL.md"
       ]
@@ -1621,6 +1663,13 @@
     "veille-medias": {
       "version": "1.0.0",
       "sha256": "25f1492c8f3d7bbabd2c387eb1f5a8bdd72f751f267b88a1f726db1fce2f68ac",
+      "fichiers": [
+        "SKILL.md"
+      ]
+    },
+    "veille-publications-videos": {
+      "version": "1.0.2",
+      "sha256": "fb9a3045ace6adea2ea64547042c92aa5fb89176f423b65118dbf8789dc01f12",
       "fichiers": [
         "SKILL.md"
       ]

@@ -897,6 +897,58 @@
         "Conventions",
         "Suivi des relations"
       ]
+    },
+    {
+      "slug": "observatoire",
+      "nom": "Observatoire",
+      "prefixe": "OBS",
+      "actif": true,
+      "description": "Veille technique sourcée de l'IA (outils, modèles, agents, MCP) et publication bilingue du site « L'Avenue de l'Observatoire ».\nAucune information n'est publiée sans preuve, et la publication reste humaine.",
+      "coordinateur": "directeur",
+      "agents": [
+        "directeur",
+        "veille-technique",
+        "veille-recherche-medias",
+        "analyste-technique",
+        "integrateur-claude-mcp",
+        "ingenieur-essais",
+        "analyste-comparatif",
+        "auditeur-securite",
+        "redacteur-en-chef",
+        "adaptateur-anglais",
+        "relecteur-independant",
+        "explorateur-sources",
+        "porte"
+      ],
+      "deterministes": ["porte"],
+      "outilsInterdits": ["WebFetch"],
+      "reglages": {
+        "auditeur-securite": {"modele": {"id": "claude-opus-5-5", "effort": "high"}},
+        "relecteur-independant": {"modele": {"id": "claude-opus-5-5", "effort": "high"}, "outilsInterdits": ["Write"]},
+        "explorateur-sources": {"outilsInterdits": ["Write"]},
+        "veille-technique": {"outilsInterdits": ["Write"]},
+        "veille-recherche-medias": {"outilsInterdits": ["Write"]}
+      },
+      "humainSeul": [
+        "Publication sur le site",
+        "Exécution d'un outil tiers en machine virtuelle",
+        "Ouverture d'une nouvelle source payante",
+        "Engagement d'un budget",
+        "Publication d'une faille critique"
+      ],
+      "obligations": [
+        "Droit d'auteur (citations et sources)",
+        "RGPD",
+        "Conditions d'utilisation des API et des sources consultées",
+        "Règlement européen sur l'IA (AI Act) pour le contenu publié"
+      ],
+      "donnees": [
+        "Sources",
+        "Instantanés de pages",
+        "Affirmations et preuves",
+        "Dossiers et chapitres",
+        "Éditions bilingues"
+      ]
     }
   ],
   "flux": [
@@ -1607,6 +1659,30 @@
       "cible": "partenariats",
       "objet": "Analyse juridique de la convention",
       "approbationHumaine": true
+    },
+    {
+      "source": "observatoire",
+      "cible": "direction",
+      "objet": "Rapport périodique et escalade",
+      "approbationHumaine": false
+    },
+    {
+      "source": "observatoire",
+      "cible": "informatique",
+      "objet": "Fiches d'outils et de serveurs MCP évalués, failles constatées",
+      "approbationHumaine": false
+    },
+    {
+      "source": "observatoire",
+      "cible": "recherche-innovation",
+      "objet": "Dossiers de veille sur les modèles et outils émergents",
+      "approbationHumaine": false
+    },
+    {
+      "source": "observatoire",
+      "cible": "formation",
+      "objet": "Dossiers et éditions utiles aux parcours de formation",
+      "approbationHumaine": false
     }
   ]
 }

@@ -70,6 +70,15 @@ def _texte_ok(valeur) -> bool:
     return isinstance(valeur, str) and valeur.strip() != ""
 
 
+EFFORTS = ("low", "medium", "high", "xhigh", "max")
+
+
+def _erreurs_outils(pre: str, champ: str, valeur) -> list[str]:
+    if isinstance(valeur, list) and all(_texte_ok(o) for o in valeur):
+        return []
+    return [f"{pre}{champ} doit être une liste de noms d'outils"]
+
+
 def valider(registre) -> list[str]:
     """Renvoie la liste des erreurs (vide si le registre est valide)."""
     erreurs: list[str] = []
@@ -143,11 +152,38 @@ def valider(registre) -> list[str]:
                 erreurs.append(f"{pre}registre d'agents référencé illisible : {s['agentsRefErreur']}")
             if len(set(agents)) != len(agents):
                 erreurs.append(f"{pre}agents en double")
-            if not s.get("agentsRef") and not 2 <= len(agents) <= 12:
-                erreurs.append(f"{pre}2 à 12 agents attendus, {len(agents)} trouvé(s)")
+            if not s.get("agentsRef") and not 2 <= len(agents) <= 13:
+                erreurs.append(f"{pre}2 à 13 agents attendus, {len(agents)} trouvé(s)")
             coord = s.get("coordinateur")
             if _texte_ok(coord) and coord not in agents:
                 erreurs.append(f"{pre}coordinateur « {coord} » absent de la liste des agents")
+            # Agents déterministes (adaptateur process, aucun modèle) : jamais un coordinateur.
+            deterministes = s.get("deterministes", [])
+            if not isinstance(deterministes, list) or not all(_texte_ok(d) for d in deterministes):
+                erreurs.append(f"{pre}deterministes doit être une liste de slugs")
+            else:
+                for d in deterministes:
+                    if d not in agents:
+                        erreurs.append(f"{pre}agent « {d} » déterministe absent de la liste des agents")
+                    if d in (coord, s.get("coordinateurGeneral")):
+                        erreurs.append(f"{pre}« {d} » : un coordinateur ne peut pas être déterministe")
+            # Réglages : outils retirés à tout le service ou à un agent, modèle propre à un agent (jamais un programme).
+            erreurs += _erreurs_outils(pre, "outilsInterdits", s.get("outilsInterdits", []))
+            reglages = s.get("reglages", {})
+            if not isinstance(reglages, dict):
+                erreurs.append(f"{pre}reglages doit être un objet {{agent: réglage}}")
+                reglages = {}
+            for slug, r in reglages.items():
+                if slug not in agents or not isinstance(r, dict):
+                    erreurs.append(f"{pre}réglage pour un agent absent de la liste des agents : « {slug} »")
+                    continue
+                if isinstance(deterministes, list) and slug in deterministes:
+                    erreurs.append(f"{pre}« {slug} » : agent déterministe sans réglage (aucun modèle, aucun outil)")
+                m = r.get("modele")
+                if m is not None and not (isinstance(m, dict) and str(m.get("id", "")).startswith("claude-")
+                                          and m.get("effort") in EFFORTS):
+                    erreurs.append(f"{pre}« {slug} » : modèle invalide (id claude-…, effort parmi {EFFORTS})")
+                erreurs += _erreurs_outils(f"{pre}« {slug} » : ", "outilsInterdits", r.get("outilsInterdits", []))
 
     if not any(isinstance(s, dict) and _texte_ok(s.get("coordinateurGeneral")) for s in services):
         erreurs.append(f"aucun coordinateur général : le service {SERVICE_DIRECTION} doit porter « coordinateurGeneral »")

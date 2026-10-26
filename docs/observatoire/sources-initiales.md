@@ -61,3 +61,20 @@ Une vérification porte sur la réponse de l'URL et la forme du flux, pas sur le
 Vérifiées (14) : anthropic.com/news, platform.claude.com (notes de version), flux Atom de claude-code, de rea et du Model Context Protocol, openai.com/news/rss.xml, blog.google (RSS), huggingface.co (RSS), github.blog/changelog (RSS), pypi.org (RSS anthropic), registry.npmjs.org (astro), export.arxiv.org (cs.AI), digital-strategy.ec.europa.eu (AI Act), docs.github.com (limite de recherche).
 
 Non vérifiées, à confirmer par le collecteur : eur-lex.europa.eu (réponse vide), arXiv cs.CL, cs.LG et cs.MA (schéma d'URL identique à cs.AI), requête de recherche GitHub par sujet, annuaires « awesome », autres éditeurs et outils.
+
+## 8. Base mondiale des sources (recensement du 26/10/2026)
+
+`docs/observatoire/sources/base-sources.jsonl` : 709 sources uniques (presse, éditeurs, laboratoires, institutions,
+chaînes YouTube, podcasts, newsletters, forums, annuaires) en 26 langues, recensées par 20 éclaireurs puis contrôlées par
+programme le 26/10/2026. Une source par ligne JSON ; champs déclarés par l'éclaireur (`nom`, `url`, `pays`, `langue`,
+`type`, `sujets`, `flux`, `frequence`, `editeur`, `verifie`, `verifie_le`, `note`, `lot`) et champs du contrôle
+(`controle` : code HTTP de l'adresse, flux valide ou non, date la plus récente du flux ; `fiabilite`).
+
+- `fiabilite` A (282) : adresse joignable et flux valide publié depuis moins de 6 mois ; B (378) : adresse ou flux
+  joignable, activité non mesurée par flux ; C (49) : injoignable ou bloquée aux robots (403, 429, délai), à retester.
+- C'est un **annuaire de candidates**, jamais une preuve : la qualification (K5) et les droits de collecte (K4,
+  `droits-collecte.md`) s'appliquent à chaque source avant toute collecte. Les médias généralistes se filtrent sur l'IA.
+- Les sources des sections 1 à 6 restent la référence primaire (versions GitHub, registres, arXiv, textes de l'UE) ;
+  la base les complète sans les remplacer.
+- Trous connus : peu de sources IA dédiées en hindi, arabe, turc, d'Afrique de l'Est et d'Europe de l'Est ; Reddit
+  refuse la lecture automatique ; pays non renseigné pour 194 sources.

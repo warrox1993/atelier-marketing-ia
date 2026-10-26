@@ -18,24 +18,24 @@ const RACINE = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const f = (source: string, cible: string, objet = "Objet", approbationHumaine = false, origine: FluxServiceLu["origine"] = "metier"): FluxServiceLu => ({ source, cible, objet, approbationHumaine, origine });
 const services = (n: number): ServiceCarte[] => Array.from({ length: n }, (_, i) => ({ slug: i === 0 ? "direction" : `service-${i}`, nom: i === 0 ? "Direction" : `Service ${String(i).padStart(2, "0")}`, estDirection: i === 0 }));
 
-describe("fluxMetier : classement sur le jeu réel (756 flux)", () => {
+describe("fluxMetier : classement sur le jeu réel (812 flux)", () => {
   // Jeu exporté du registre réel, tel que la déclaration l'envoie au plugin (origine « metier » ou « coordinateurs »).
   const reel = JSON.parse(execFileSync("python3", ["-I", "-c",
     "import json,sys; sys.path.insert(0, sys.argv[1]); import atelier_services as a; r=a.charger_services(); print(json.dumps([{'source':x['source'],'cible':x['cible'],'objet':x['objet'],'approbationHumaine':bool(x['approbationHumaine']),'origine':a.origine_plugin(x)} for x in a.flux_complets(r)]))",
     join(RACINE, "scripts")], { encoding: "utf8", maxBuffer: 16 * 1024 * 1024 })) as FluxServiceLu[];
 
-  it("rend les 118 flux métier sur 756 et écarte le réseau des coordinateurs (614 + 24)", () => {
-    expect(reel).toHaveLength(756);
-    expect(fluxMetier(reel)).toHaveLength(118);
-    expect(reel.filter((x) => x.origine === "coordinateurs")).toHaveLength(638);
-    expect(reel.filter((x) => x.objet.startsWith("Liaison entre coordinateurs"))).toHaveLength(614);
-    expect(reel.filter((x) => x.objet.startsWith("Coordinateur général et coordinateurs"))).toHaveLength(24);
+  it("rend les 122 flux métier sur 812 et écarte le réseau des coordinateurs (665 + 25)", () => {
+    expect(reel).toHaveLength(812);
+    expect(fluxMetier(reel)).toHaveLength(122);
+    expect(reel.filter((x) => x.origine === "coordinateurs")).toHaveLength(690);
+    expect(reel.filter((x) => x.objet.startsWith("Liaison entre coordinateurs"))).toHaveLength(665);
+    expect(reel.filter((x) => x.objet.startsWith("Coordinateur général et coordinateurs"))).toHaveLength(25);
     expect(reel.filter((x) => x.objet.startsWith("Rapport périodique et escalade")).every((x) => x.origine === "metier")).toBe(true);
   });
 
   it("sans champ origine (ancien serveur), le repli par préfixe d'objet donne le même classement", () => {
     const sans: FluxBrut[] = reel.map(({ origine: _o, ...reste }) => reste);
-    expect(fluxMetier(sans)).toHaveLength(118);
+    expect(fluxMetier(sans)).toHaveLength(122);
     expect(fluxMetier(sans).map((x) => `${x.source}>${x.cible}`)).toEqual(fluxMetier(reel).map((x) => `${x.source}>${x.cible}`));
   });
 
@@ -104,13 +104,13 @@ describe("matriceEchanges", () => {
     expect(m.totalLigne.reduce((a, b) => a + b, 0)).toBe(4);
   });
 
-  it("sur le jeu réel : somme des cases = somme des volumes des 118 flux métier", () => {
+  it("sur le jeu réel : somme des cases = somme des volumes des 122 flux métier", () => {
     const reg = JSON.parse(execFileSync("python3", ["-I", "-c", "import json,sys; sys.path.insert(0, sys.argv[1]); import atelier_services as a; r=a.charger_services(); print(json.dumps({'services':[{'slug':s['slug'],'nom':s['nom'],'estDirection':s['slug']=='direction'} for s in r['services']],'flux':[{'source':x['source'],'cible':x['cible'],'objet':x['objet'],'approbationHumaine':bool(x['approbationHumaine']),'origine':'metier'} for x in r['flux']]}))", join(RACINE, "scripts")], { encoding: "utf8" })) as { services: ServiceCarte[]; flux: FluxServiceLu[] };
     const m = matriceEchanges(reg.services, reg.flux);
-    expect(m.ordre).toHaveLength(28);
+    expect(m.ordre).toHaveLength(29);
     expect(m.ordre[0]).toBe("direction");
     expect(m.cases.flat().reduce((a, c) => a + c.nombre, 0)).toBe(reg.flux.reduce((a, x) => a + volumeDuFlux(x), 0));
-    expect(m.cases.flat().reduce((a, c) => a + c.flux.length, 0)).toBe(118);
+    expect(m.cases.flat().reduce((a, c) => a + c.flux.length, 0)).toBe(122);
   });
 });
 

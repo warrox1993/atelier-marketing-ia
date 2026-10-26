@@ -39,3 +39,11 @@ Les 24 rôles sont ramenés à **11 agents Claude et 1 porte déterministe**, so
 
 - Plan : Livrable A (D1), D.1 (correspondance 24 rôles vers 12 agents), Livrable E.
 - Dépôt : `scripts/atelier_services.py:146`, `scripts/generer-fiches-agents.py`, `docs/usine-services.md`.
+
+## Révision du 26/10/2026
+
+JB a autorisé un 13e agent, `explorateur-sources` : il tient la base des sources (sites, presse, chaînes YouTube,
+podcasts, toutes langues) et étudie les transcriptions locales et les métadonnées de vidéos que le code de collecte
+lui fournit. La borne de l'usine (`scripts/atelier_services.py`) passe de 12 à 13 agents pour tous les services ;
+c'est une borne de l'usine, pas une limite de Paperclip. La porte reste un programme déterministe, déclaré par le
+champ `deterministes` du registre des services. Le nom du fichier est gardé pour les liens existants.

@@ -7,7 +7,7 @@ Fiches de décision de la phase 1 d'« Avenue de l'Observatoire ». Source : le 
 | N° | Titre | Statut |
 | --- | --- | --- |
 | [001](ADR-001-observatoire-29e-service.md) | L'Observatoire, 29e service de l'organisation actuelle (phase 1 bis annulée) | Accepté (JB, 26/10/2026) |
-| [002](ADR-002-douze-agents-roles-mecaniques-en-code.md) | 12 agents (11 Claude et une porte), rôles mécaniques en code | Accepté |
+| [002](ADR-002-douze-agents-roles-mecaniques-en-code.md) | 12 agents (11 Claude et une porte), rôles mécaniques en code ; révisé à 13 le 26/10/2026 | Accepté, révisé |
 | [003](ADR-003-orchestration-native-paperclip.md) | Réutiliser l'orchestration native de Paperclip | Accepté |
 | [004](ADR-004-verite-documentaire-en-base-publication-markdown.md) | Vérité en base (`obs_*`), publication en Markdown | Accepté |
 | [005](ADR-005-site-astro-starlight-pagefind.md) | Site Astro 7, Starlight 0.42, Pagefind | Accepté (JB, 26/10/2026), dérogation Starlight |

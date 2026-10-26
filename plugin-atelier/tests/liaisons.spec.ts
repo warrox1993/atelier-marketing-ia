@@ -518,13 +518,13 @@ describe("liaison.demander : isolation et entrée", () => {
 });
 
 describe("services.declarer : registre complet", () => {
-  it("accepte les 28 services et les 118 flux du registre réel (une paire source-cible déclarée une seule fois)", () => {
+  it("accepte les 29 services et les 122 flux du registre réel (une paire source-cible déclarée une seule fois)", () => {
     const reg = JSON.parse(readFileSync(new URL("../../organisation/registre/services.json", import.meta.url), "utf8")) as {
       services: Array<{ slug: string }>;
       flux: Array<{ source: string; cible: string; objet: string; approbationHumaine: boolean }>;
     };
-    expect(reg.services.length).toBe(28);
-    expect(reg.flux.length).toBe(118);
+    expect(reg.services.length).toBe(29);
+    expect(reg.flux.length).toBe(122);
     // La déclaration refuse deux flux sur la même paire : le registre ne doit pas en contenir.
     expect(new Set(reg.flux.map((f) => `${f.source}>${f.cible}`)).size).toBe(reg.flux.length);
     const r = DeclarerServicesEntree.safeParse({
@@ -536,7 +536,7 @@ describe("services.declarer : registre complet", () => {
     expect(r.success, JSON.stringify(r.success ? "" : r.error.issues.slice(0, 3))).toBe(true);
   });
 
-  it("accepte la matrice complète avec le réseau des coordinateurs : 28 x 27 = 756 paires (118 métier + 638 générées)", () => {
+  it("accepte la matrice complète avec le réseau des coordinateurs : 29 x 28 = 812 paires (122 métier + 690 générées)", () => {
     const reg = JSON.parse(readFileSync(new URL("../../organisation/registre/services.json", import.meta.url), "utf8")) as {
       services: Array<{ slug: string; sensible?: boolean }>;
       flux: Array<{ source: string; cible: string; objet: string; approbationHumaine: boolean }>;
@@ -547,7 +547,7 @@ describe("services.declarer : registre complet", () => {
     const generes = reg.services.flatMap((a) => reg.services
       .filter((b) => b.slug !== a.slug && !metier.has(`${a.slug}>${b.slug}`))
       .map((b) => ({ source: a.slug, cible: b.slug, objet: "Liaison entre coordinateurs", approbationHumaine: sensibles.has(a.slug) || sensibles.has(b.slug) })));
-    expect(generes.length).toBe(638);
+    expect(generes.length).toBe(690);
     const entreprises = reg.services.map((x, i) => ({ companyId: `22222222-2222-4222-8222-${String(i).padStart(12, "0")}`, serviceSlug: x.slug, estDirection: x.slug === "direction" }));
     const r = DeclarerServicesEntree.safeParse({ companyId: entreprises[0]!.companyId, clientMarqueur: "client-test", entreprises, flux: [...reg.flux, ...generes] });
     expect(r.success, JSON.stringify(r.success ? "" : r.error.issues.slice(0, 3))).toBe(true);

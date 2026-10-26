@@ -6,9 +6,10 @@
 
 ## Contexte
 
-L'instance Paperclip 3100 porte une organisation qui sert le client courtier et compte 28 services. JB veut que la
-veille de l'Observatoire serve ses agents existants et améliore l'usine au quotidien : l'Observatoire doit donc vivre
-dans cette organisation, pas à côté. La version précédente de la décision voulait généraliser l'usine (nom neutre,
+L'instance Paperclip 3100 porte une organisation qui sert le client courtier et compte 28 services. L'Observatoire a
+plusieurs buts, dans cet ordre (JB, 26/10/2026) : permettre à l'opérateur lui-même de progresser par une veille technique
+fiable ; produire le site « L'Avenue de l'Observatoire », réalisé par Smidjan ; et, en plus, nourrir et améliorer
+les agents de l'usine au quotidien. Ce dernier but impose que l'Observatoire vive dans cette organisation, pas à côté. La version précédente de la décision voulait généraliser l'usine (nom neutre,
 client courtier sorti vers un client distinct). Des constats techniques l'ont rendue irréaliste :
 
 - les préfixes de tâches ne sont pas modifiables par l'API ;
@@ -30,7 +31,7 @@ client courtier sorti vers un client distinct). Des constats techniques l'ont re
 
 - **Organisation générique et usine généraliste (phase 1 bis)** : écartée et annulée, pour les trois motifs
   techniques du contexte. Le chantier de migration aurait en outre risqué l'existant sans bénéfice pour l'opérateur.
-- **Usine neuve et séparée, ou instance Paperclip séparée** : écartée, elle ne servirait pas les agents existants,
+- **Usine neuve et séparée, ou instance Paperclip séparée** : écartée, elle couperait la veille des agents existants,
   et deux instances doublent l'exploitation (ports, sauvegardes, mises à jour du socle).
 - **Une organisation par service** : écartée, elle casse les budgets et le tableau de bord communs.
 

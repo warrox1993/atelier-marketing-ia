@@ -10,7 +10,7 @@ Décisions de l'opérateur du 26/10/2026 prises en compte : abonnement Max pour 
 
 | # | Risque | Proba. | Impact | Détection | Prévention | Correction | Résiduel | Responsable |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| R01 | Architecture trop complexe | moyenne | fort | lots qui débordent du créneau de 15 à 30 min | réutilisation de l'existant, 12 agents au plus, monolithe | couper des éléments P1 | faible | JB (arbitrage), orchestrateur |
+| R01 | Architecture trop complexe | moyenne | fort | lots qui débordent du créneau de 15 à 30 min | réutilisation de l'existant, 13 agents au plus, monolithe | couper des éléments P1 | faible | JB (arbitrage), orchestrateur |
 | R02 | Quota saturé par l'usine | **forte** | fort | relevé hebdomadaire de consommation (voir `finops.md`) | plafond de sujets par semaine, Sonnet par défaut, contexte court | baisser le volume | moyen | orchestrateur, JB |
 | R03 | Dépendance à Anthropic | moyenne | moyenne | revue de phase | contenu en Markdown dans git, RAG local, recherche sans LLM | autre modèle pour les questions | faible | JB |
 | R04 | Agents inefficaces | moyenne | moyenne | taux PASS de la porte, nombre de corrections | compétences ciblées, porte déterministe | réécrire les consignes | moyen | orchestrateur |
@@ -46,7 +46,7 @@ Remarque sur R12 : la décision du 26/10 retire l'instance séparée. L'isolemen
 
 | # | Risque | Proba. | Impact | Détection | Prévention | Correction | Résiduel | Responsable |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| R25 | Dépassement de la limite de 12 agents ou de leurs rôles qui se recouvrent | faible | moyenne | validateur du registre | correspondance 24 rôles vers 12 agents (D.1) | fusionner des rôles | faible | orchestrateur |
+| R25 | Dépassement de la limite de 13 agents ou de leurs rôles qui se recouvrent | faible | moyenne | validateur du registre | correspondance 24 rôles vers 13 agents (D.1, 13e agent le 26/10/2026) | fusionner des rôles | faible | orchestrateur |
 | R26 | Agent activé trop tôt (avant tests de bootstrap) | moyenne | fort | statut des agents (pause par défaut) | activation soumise à approbation de l'opérateur | remise en pause | faible | JB |
 | R27 | Budget natif absent ou mal réglé sur un agent ou un service | moyenne | fort | test « budget atteint » du bootstrap | budgets déclarés dans la liste des services, arrêt bloquant testé | corriger puis rejouer le test | faible | exécutant |
 | R28 | Dérive des consignes `AGENTS.md` par rapport au contrat type | moyenne | moyenne | validateur de contrats, génération des fiches | schémas, génération des fiches depuis une source unique | régénération | faible | exécutant |

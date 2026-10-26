@@ -110,6 +110,9 @@ class Livraison(unittest.TestCase):
         self.assertGreaterEqual(len(tous), 190)
         avec = 0
         for svc, a in tous:
+            if a.get("deterministe"):  # porte d'un service : programme sans modèle, aucune compétence (comme au marketing)
+                self.assertEqual(a["competences"], [], f"{svc}/{a['slug']}")
+                continue
             self.verifier(f"{svc}/{a['slug']}", a["competences"], a)
             avec += "memoire-para" in a["competences"]
         self.assertGreater(avec, 0)

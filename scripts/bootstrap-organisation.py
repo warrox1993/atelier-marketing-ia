@@ -3848,6 +3848,7 @@ def enregistrer_existante(args, fiche: dict) -> int:
 # outils) : le coordinateur du service part du « coordinateur », ses spécialistes de la « veille », sans la recherche
 # sur le web (WebSearch devient interdit : un service n'en a pas besoin pour traiter ses propres dossiers).
 GABARIT_COORDINATEUR, GABARIT_SPECIALISTE = "coordinateur", "veille"
+GABARIT_DETERMINISTE = "porte"  # agents listés dans « deterministes » d'un service : programme sans modèle
 ENTREES_SERVICE = ["demandes affectées par le coordinateur du service", "documents et données de l'entreprise cliente"]
 SORTIES_SERVICE = ["livrables du service avec sources et réserves", "demandes tracées vers les autres services (par leur coordinateur)"]
 CRITERES_SERVICE = ["aucune information présentée comme un fait sans source",
@@ -3922,7 +3923,9 @@ def agents_service(reg_agents: dict, svc: dict) -> tuple[list[dict], dict[str, s
     for slug in svc["agents"]:
         est_general = slug == general
         coordinateur = slug == svc["coordinateur"] or est_general
-        a = json.loads(json.dumps(gabarits[GABARIT_COORDINATEUR if coordinateur else GABARIT_SPECIALISTE]))
+        deterministe = slug in svc.get("deterministes", [])
+        gabarit = GABARIT_DETERMINISTE if deterministe else GABARIT_COORDINATEUR if coordinateur else GABARIT_SPECIALISTE
+        a = json.loads(json.dumps(gabarits[gabarit]))
         nom, titre = libelle_agent(slug), f"{svc['nom']} · {libelle_agent(slug)}"
         fichier = ORGA / "services" / svc["slug"] / "agents" / slug / "AGENTS.md"
         corps = None
@@ -3949,10 +3952,22 @@ def agents_service(reg_agents: dict, svc: dict) -> tuple[list[dict], dict[str, s
             "competences": avec_competences_communes(competences, ecrit_des_fichiers(a["outils"])), "competencesObligatoires": [], "connexions": {},
             "relit": [], "roleRevue": None,
         })
-        if not coordinateur:
-            a["outils"]["recherche"] = [o for o in a["outils"]["recherche"] if o != "WebSearch"]
-            if "WebSearch" not in a["outils"]["interdits"]:
-                a["outils"]["interdits"].append("WebSearch")
+        if deterministe:
+            # Programme sans modèle : rôle et outils du gabarit porte, aucune compétence (l'adaptateur process n'en lit pas).
+            a.update({"role": gabarits[GABARIT_DETERMINISTE]["role"], "competences": [],
+                      "mission": f"Porte de contrôle déterministe du service {svc['nom']} : aucun modèle ; vérifie les preuves "
+                                 "avant toute validation."})
+        else:
+            reglage = svc.get("reglages", {}).get(slug, {})
+            retires = (["WebSearch"] if not coordinateur else []) + svc.get("outilsInterdits", []) + reglage.get("outilsInterdits", [])
+            for outil in retires:
+                a["outils"]["recherche"] = [o for o in a["outils"]["recherche"] if o != outil]
+                a["outils"]["mutation"] = [o for o in a["outils"]["mutation"] if o != outil]
+                if outil not in a["outils"]["interdits"]:
+                    a["outils"]["interdits"].append(outil)
+            if "modele" in reglage:
+                a["modele"] = dict(reglage["modele"])
+            a["competences"] = avec_competences_communes(competences, ecrit_des_fichiers(a["outils"]))
         if not corps:
             avertissements.append(
                 f"AVERTISSEMENT : consigne à rédiger pour l'agent {slug} du service {svc['slug']} "
@@ -4030,8 +4045,9 @@ def fichiers_service(reg_agents_s: dict, reg_s: dict, svc: dict, corps_par_slug:
             fichiers[f.relative_to(ORGA).as_posix()] = f.read_text(encoding="utf-8")
     for a in reg_agents_s["agents"]:
         corps = corps_par_slug[a["slug"]]
-        fiche = fiche_routes_agent(a, corps)
-        corps += "\n" + MARQUEUR_CONSIGNES_COMMUNES + "\n\n" + communes + ("\n" + fiche if fiche else "")
+        if not a.get("deterministe"):  # comme le marketing : un programme ne lit pas les consignes communes
+            fiche = fiche_routes_agent(a, corps)
+            corps += "\n" + MARQUEUR_CONSIGNES_COMMUNES + "\n\n" + communes + ("\n" + fiche if fiche else "")
         fichiers[f"agents/{a['slug']}/AGENTS.md"] = avec_frontmatter(
             {"kind": "agent", "slug": a["slug"], "name": a["nom"], "title": a["titre"], "reportsTo": a["rapporteA"], "skills": a["competences"]}, corps)
     return fichiers

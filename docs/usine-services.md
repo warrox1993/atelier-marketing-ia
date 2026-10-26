@@ -7,7 +7,11 @@ Les chiffres (28 services, 217 agents, 756 flux, 188 compétences) sont recalcul
 (registre version 1.0.0 du 16/10/2026, extension du 17/10/2026).
 
 Répartition : 203 agents dans 27 services (marketing exclu) et 14 agents marketing, soit 217 agents.
-Un service compte de 2 à 12 agents (borne vérifiée par `scripts/verifier-organisation.py`) ; les services hors marketing en comptent de 6 à 9 (les 4 agents repris de l'instance, `sinistres`, `transport-douane`, `ingenierie-formation` et `suivi-partenaires`, ont été intégrés le 18/10/2026).
+Un service compte de 2 à 13 agents (borne vérifiée par `scripts/verifier-organisation.py` ; relevée de 12 à 13 le 26/10/2026 pour le 13e agent de l'Observatoire) ; le champ facultatif `deterministes` (liste de slugs) déclare les agents sans modèle (adaptateur `process`, gabarit `porte`), jamais un coordinateur ; les services hors marketing en comptent de 6 à 9 (les 4 agents repris de l'instance, `sinistres`, `transport-douane`, `ingenierie-formation` et `suivi-partenaires`, ont été intégrés le 18/10/2026).
+
+Le champ facultatif `outilsInterdits` (liste de noms d'outils) retire ces outils à tous les agents non déterministes du service : ils sortent de la liste « recherche » et de la liste « mutation » et entrent dans « interdits ». Retirer `Write` retire aussi la règle d'écriture `Edit(./**)` et la compétence commune `memoire-para`.
+
+Le champ facultatif `reglages` est un objet `{slug: {modele?: {id, effort}, outilsInterdits?: [...]}}` qui ajuste un agent précis. Validation par `scripts/atelier_services.py verifier` : le slug doit être un agent du service et jamais un agent déterministe ; le modèle doit être un identifiant `claude-…` et l'effort l'un de `low`, `medium`, `high`, `xhigh`, `max`. Exemple, Observatoire : `"outilsInterdits": ["WebFetch"]` pour tout le service (une page publique se lit par la lecture protégée du plugin, qui enregistre la source datée) et `"reglages": {"auditeur-securite": {"modele": {"id": "claude-opus-5-5", "effort": "high"}}, "veille-technique": {"outilsInterdits": ["Write"]}}` (extrait).
 
 ## 1. Principe
 
@@ -168,6 +172,7 @@ entrées, étapes, livrable, critères de réussite, limites, exemple.
 - 145 compétences sur 188 ont une section « Sources officielles » : les pages consultées, avec l'adresse, la date de lecture
   et ce que chaque source établit. Une règle ou un délai sans source consultée n'est pas présenté comme acquis.
 - 163 compétences ont une section « À vérifier par un professionnel » qui nomme le métier à consulter selon le sujet (par exemple le conseiller en prévention, le secrétariat social ou l'assureur pour un accident du travail, un juriste ou un avocat pour une question de responsabilité).
+- Rubrique facultative « Pièges » (ajoutée le 26/10/2026) : les erreurs déjà rencontrées ou prévisibles, une puce par piège ; c'est la partie la plus utile d'une compétence, enrichie au fil des échecs observés. Les 7 compétences de l'Observatoire l'ont.
 - Tout article de loi, taux, délai ou montant incertain est marqué « à vérifier » dans le texte.
 - Aucune compétence n'envoie, ne signe, ne dépose ni ne déclare quoi que ce soit : elle prépare, l'humain décide.
 

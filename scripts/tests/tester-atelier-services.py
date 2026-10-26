@@ -43,16 +43,16 @@ class TestFichierReel(unittest.TestCase):
 
     def test_contenu_attendu(self):
         reg = svc.charger_services()
-        # Usine complète (16/10/2026) : 14 services d'origine + 14 ajoutés, liste exacte.
+        # Usine complète (16/10/2026) : 14 services d'origine + 14 ajoutés, puis l'Observatoire (26/10/2026), liste exacte.
         attendus = {
             "marketing", "direction", "administratif", "juridique", "commercial", "recouvrement",
             "sav-sinistres", "commerce-exterieur", "conformite", "comptabilite-finance",
             "ressources-humaines", "informatique", "achats", "qualite",
             "logistique", "production", "recherche-innovation", "communication", "service-client",
             "fiscalite", "gestion-projets", "hse", "formation", "juridique-social", "donnees-bi",
-            "evenementiel", "services-generaux", "partenariats",
+            "evenementiel", "services-generaux", "partenariats", "observatoire",
         }
-        self.assertEqual(len(reg["services"]), 28)
+        self.assertEqual(len(reg["services"]), 29)
         self.assertEqual({s["slug"] for s in reg["services"]}, attendus)
         self.assertTrue(all(s["actif"] is True for s in reg["services"]))
         marketing = next(s for s in reg["services"] if s["slug"] == "marketing")
@@ -76,14 +76,14 @@ class TestFichierReel(unittest.TestCase):
         self.assertTrue((RACINE / "organisation/services/direction/agents/coordinateur-general/AGENTS.md").is_file())
 
     def test_reseau_coordinateurs_reel(self):
-        # Toutes les paires ordonnées de services distincts : 28 x 27 = 756, dont 118 flux métier et 638 générés.
+        # Toutes les paires ordonnées de services distincts : 29 x 28 = 812, dont 122 flux métier et 690 générés.
         reg = svc.charger_services()
         n = len(reg["services"])
         generes = svc.flux_coordinateurs(reg)
         complets = svc.flux_complets(reg)
-        self.assertEqual(len(reg["flux"]), 118)
-        self.assertEqual(len(generes), n * (n - 1) - 118)
-        self.assertEqual(len(generes), 638)
+        self.assertEqual(len(reg["flux"]), 122)
+        self.assertEqual(len(generes), n * (n - 1) - 122)
+        self.assertEqual(len(generes), 690)
         paires = [(f["source"], f["cible"]) for f in complets]
         self.assertEqual(len(paires), len(set(paires)), "aucune paire déclarée deux fois")
         self.assertEqual(set(paires), {(a["slug"], b["slug"]) for a in reg["services"] for b in reg["services"] if a is not b})
@@ -104,7 +104,7 @@ class TestFichierReel(unittest.TestCase):
         self.assertEqual({f["cible"] for f in complets if f["source"] == "direction"}, autres)
         self.assertEqual({f["source"] for f in complets if f["cible"] == "direction"}, autres)
         # Les flux métier gardent leur objet et leur approbation.
-        self.assertEqual(complets[:118], [{**f, "origine": "metier"} for f in reg["flux"]])
+        self.assertEqual(complets[:122], [{**f, "origine": "metier"} for f in reg["flux"]])
 
 
 class TestDeclaration(unittest.TestCase):
@@ -117,12 +117,12 @@ class TestDeclaration(unittest.TestCase):
         reg = json.loads((RACINE / "organisation/registre/services.json").read_text(encoding="utf-8"))
         tous = [s["slug"] for s in reg["services"]]
         corps = declarer.construire_corps(reg, self.local("trio", tous))
-        self.assertEqual(len(corps["flux"]), 756)
+        self.assertEqual(len(corps["flux"]), 812)
         self.assertLessEqual(len(corps["flux"]), 40 * 39, "borne du contrat FluxService du plugin")
         self.assertTrue(all(set(f) == {"source", "cible", "objet", "approbationHumaine", "origine"} for f in corps["flux"]))
         # L'origine déclarée au plugin sépare le métier du réseau des coordinateurs (614 + 24 générés).
-        self.assertEqual(sum(f["origine"] == "metier" for f in corps["flux"]), 118)
-        self.assertEqual(sum(f["origine"] == "coordinateurs" for f in corps["flux"]), 638)
+        self.assertEqual(sum(f["origine"] == "metier" for f in corps["flux"]), 122)
+        self.assertEqual(sum(f["origine"] == "coordinateurs" for f in corps["flux"]), 690)
         self.assertTrue(all((f["origine"] == "coordinateurs") == ("protocole-inter-coordinateurs" in f["objet"]) for f in corps["flux"]))
 
     def test_sous_ensemble_du_client(self):
@@ -236,13 +236,41 @@ class TestRefus(unittest.TestCase):
 
     def test_nombre_agents(self):
         e = self.erreurs(lambda r: r["services"][0].update(agents=["coord-aaa"]))
-        self.contient(e, "2 à 12 agents")
-        treize = ["coord-aaa"] + [f"specialiste-{i}" for i in range(12)]
+        self.contient(e, "2 à 13 agents")
+        quatorze = ["coord-aaa"] + [f"specialiste-{i}" for i in range(13)]
+        e = self.erreurs(lambda r: r["services"][0].update(agents=quatorze))
+        self.contient(e, "2 à 13 agents")
+        treize = quatorze[:13]
         e = self.erreurs(lambda r: r["services"][0].update(agents=treize))
-        self.contient(e, "2 à 12 agents")
-        douze = treize[:12]
-        e = self.erreurs(lambda r: r["services"][0].update(agents=douze))
         self.assertFalse([x for x in e if "agents attendus" in x], e)
+
+    def test_deterministes(self):
+        e = self.erreurs(lambda r: r["services"][0].update(deterministes=["inconnu"]))
+        self.contient(e, "déterministe absent de la liste des agents")
+        e = self.erreurs(lambda r: r["services"][0].update(deterministes=["coord-aaa"]))
+        self.contient(e, "coordinateur ne peut pas être déterministe")
+        e = self.erreurs(lambda r: r["services"][2].update(deterministes=["general"]))
+        self.contient(e, "coordinateur ne peut pas être déterministe")
+        e = self.erreurs(lambda r: r["services"][0].update(deterministes="autre-aaa"))
+        self.contient(e, "deterministes doit être une liste")
+        self.assertEqual(self.erreurs(lambda r: r["services"][0].update(deterministes=["autre-aaa"])), [])
+
+    def test_reglages(self):
+        e = self.erreurs(lambda r: r["services"][0].update(reglages={"inconnu": {}}))
+        self.contient(e, "réglage pour un agent absent")
+        e = self.erreurs(lambda r: r["services"][0].update(reglages={"autre-aaa": {"modele": {"id": "gpt-5", "effort": "high"}}}))
+        self.contient(e, "modèle invalide")
+        e = self.erreurs(lambda r: r["services"][0].update(reglages={"autre-aaa": {"modele": {"id": "claude-opus-5-5", "effort": "turbo"}}}))
+        self.contient(e, "modèle invalide")
+        e = self.erreurs(lambda r: r["services"][0].update(deterministes=["autre-aaa"], reglages={"autre-aaa": {"outilsInterdits": ["Write"]}}))
+        self.contient(e, "agent déterministe sans réglage")
+        e = self.erreurs(lambda r: r["services"][0].update(outilsInterdits="WebFetch"))
+        self.contient(e, "outilsInterdits doit être une liste")
+        e = self.erreurs(lambda r: r["services"][0].update(reglages={"autre-aaa": {"outilsInterdits": "Write"}}))
+        self.contient(e, "outilsInterdits doit être une liste")
+        self.assertEqual(self.erreurs(lambda r: r["services"][0].update(
+            outilsInterdits=["WebFetch"],
+            reglages={"autre-aaa": {"modele": {"id": "claude-opus-5-5", "effort": "high"}, "outilsInterdits": ["Write"]}})), [])
 
     def test_flux_service_inconnu(self):
         e = self.erreurs(lambda r: r["flux"][0].update(cible="fantome"))
@@ -326,6 +354,102 @@ class TestRefus(unittest.TestCase):
             r["services"][0]["agentsRef"] = "absent.json"
             r["services"][0]["agentsRefErreur"] = "FileNotFoundError : absent.json"
         self.contient(self.erreurs(modif), "illisible")
+
+
+class TestPorteDeterministe(unittest.TestCase):
+    """Un agent déclaré dans « deterministes » est construit depuis le gabarit porte (adaptateur process, aucun modèle)."""
+
+    @classmethod
+    def setUpClass(cls):
+        import os
+        import tempfile
+        os.environ.setdefault("ATELIER_DONNEES_LOCALES", tempfile.mkdtemp(prefix="atelier-test-porte-"))
+        spec = importlib.util.spec_from_file_location("bootstrap_organisation", RACINE / "scripts" / "bootstrap-organisation.py")
+        cls.bo = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(cls.bo)
+        cls.reg_agents, cls.reg_orga = cls.bo.registres()
+        cls.services = {s["slug"]: s for s in cls.bo.registre_services()["services"]}
+
+    def test_porte_observatoire_deterministe(self):
+        bo, svc_obs = self.bo, self.services["observatoire"]
+        agents, corps, _ = bo.agents_service(self.reg_agents, svc_obs)
+        porte = next(a for a in agents if a["slug"] == "porte")
+        self.assertTrue(porte["deterministe"])
+        self.assertIsNone(porte["modele"])
+        self.assertEqual((porte["competences"], porte["role"], porte["rapporteA"]), ([], "qa", svc_obs["coordinateur"]))
+        self.assertFalse([a["slug"] for a in agents if a["slug"] != "porte" and a.get("deterministe")])
+        reg_s = bo.reg_agents_service(self.reg_agents, agents)
+        ext = bo.construire_extension(reg_s, self.reg_orga)["agents"]
+        self.assertEqual(ext["porte"]["adapter"]["type"], "process")
+        self.assertEqual(ext["porte"]["adapter"]["config"]["args"], ["agents/porte.mjs"])
+        self.assertEqual({ext[s]["adapter"]["type"] for s in ext if s != "porte"}, {"claude_local"})
+        orga = {"version": self.reg_orga["version"], "objectifs": [], "projets": [], "routines": [],
+                "entreprise": {**self.reg_orga["entreprise"], "nom": "Essai", "slug": "essai-obs",
+                               "marqueur": "atelier-client:essai:observatoire", "description": "Essai."}}
+        fichiers = bo.fichiers_service(reg_s, orga, svc_obs, corps)
+        texte = fichiers["agents/porte/AGENTS.md"]
+        self.assertNotIn(bo.MARQUEUR_CONSIGNES_COMMUNES, texte)
+        self.assertIn('reportsTo: "directeur"', texte)
+        self.assertIn(bo.MARQUEUR_CONSIGNES_COMMUNES, fichiers["agents/directeur/AGENTS.md"])
+
+    def test_explorateur_sources_13e_agent(self):
+        agents, _, avert = self.bo.agents_service(self.reg_agents, self.services["observatoire"])
+        self.assertEqual(len(agents), 13)
+        e = next(a for a in agents if a["slug"] == "explorateur-sources")
+        self.assertNotIn("WebSearch", e["outils"]["recherche"])
+        self.assertIn("affirmations-preuves", e["competences"])
+        self.assertFalse([x for x in avert if "explorateur-sources" in x], avert)
+
+    def test_reglages_observatoire(self):
+        bo, svc_obs = self.bo, self.services["observatoire"]
+        agents, _, _ = bo.agents_service(self.reg_agents, svc_obs)
+        par = {a["slug"]: a for a in agents}
+        opus = {"id": "claude-opus-5-5", "effort": "high"}
+        self.assertEqual((par["auditeur-securite"]["modele"], par["relecteur-independant"]["modele"]), (opus, opus))
+        self.assertEqual(par["veille-technique"]["modele"]["id"], "claude-sonnet-5-5")
+        for slug, a in par.items():
+            if a.get("deterministe"):
+                continue
+            self.assertNotIn("WebFetch", a["outils"]["recherche"], slug)
+            self.assertIn("WebFetch", a["outils"]["interdits"], slug)
+        for slug in ("explorateur-sources", "relecteur-independant", "veille-technique", "veille-recherche-medias", "directeur"):
+            self.assertNotIn("Write", par[slug]["outils"]["mutation"], slug)
+            self.assertIn("Write", par[slug]["outils"]["interdits"], slug)
+        self.assertIn("Write", par["analyste-technique"]["outils"]["mutation"])  # brouillons permis par sa consigne
+        ext = bo.construire_extension(bo.reg_agents_service(self.reg_agents, agents), self.reg_orga)["agents"]
+        config = ext["relecteur-independant"]["adapter"]["config"]
+        self.assertEqual(config["model"], "claude-opus-5-5")
+        self.assertNotIn("Edit(./**)", config["extraArgs"])
+        self.assertNotIn("WebFetch", config["extraArgs"][: config["extraArgs"].index("--disallowedTools")])
+
+    def test_autres_services_sans_deterministe(self):
+        agents, _, _ = self.bo.agents_service(self.reg_agents, self.services["juridique"])
+        self.assertFalse([a["slug"] for a in agents if a.get("deterministe")])
+        self.assertTrue(all("WebFetch" in a["outils"]["recherche"] for a in agents))  # réglages propres à l'Observatoire
+
+
+class TestRubriques(unittest.TestCase):
+    """Plan des compétences : rubriques obligatoires ordonnées, rubriques facultatives (dont « Pièges ») placées n'importe où."""
+
+    @classmethod
+    def setUpClass(cls):
+        spec = importlib.util.spec_from_file_location("verifier_organisation", RACINE / "scripts" / "verifier-organisation.py")
+        cls.vo = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(cls.vo)
+
+    def test_pieges_facultatif(self):
+        r = list(self.vo.RUBRIQUES)
+        self.assertTrue(self.vo.rubriques_conformes(r))
+        self.assertTrue(self.vo.rubriques_conformes(r[:-1] + ["Pièges"] + r[-1:]))
+        self.assertTrue(self.vo.rubriques_conformes(r + ["Pièges", "Sources officielles"]))
+        self.assertFalse(self.vo.rubriques_conformes(r[:-1] + ["Truc"] + r[-1:]))
+        self.assertFalse(self.vo.rubriques_conformes(r[:-1]))
+
+    def test_rubrique_en_double(self):
+        r = list(self.vo.RUBRIQUES)
+        self.assertFalse(self.vo.rubriques_conformes(r + ["Pièges", "Pièges"]))
+        self.assertFalse(self.vo.rubriques_conformes(r[:-1] + ["Pièges"] + r[-1:] + ["Pièges"]))
+        self.assertFalse(self.vo.rubriques_conformes(r + ["Sources officielles", "Sources officielles"]))
 
 
 if __name__ == "__main__":
