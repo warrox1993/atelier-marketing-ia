@@ -58,6 +58,10 @@ class ErreurExport(Exception):
     pass
 
 
+class InstanceArretee(ErreurExport):
+    """PostgreSQL de l'instance refuse la connexion : instance arrêtée, ce n'est pas une panne de l'export."""
+
+
 # ---------------------------------------------------------------------------------------------------------------
 # Lecture du journal (psql, lecture seule)
 
@@ -76,6 +80,8 @@ def executer_lecture(port: int, requetes: str) -> list:
     except (OSError, subprocess.SubprocessError) as e:
         raise ErreurExport(f"lecture du journal impossible (psql) : {e}") from None
     if r.returncode != 0:
+        if re.search(r"connection refused|connexion refusée", r.stderr, re.IGNORECASE):
+            raise InstanceArretee(f"connexion refusée sur le port {port}")
         raise ErreurExport(f"psql a échoué (code {r.returncode}) : {r.stderr.strip()[:300]}. "
                            "Mot de passe dans PGPASSWORD, bon --pg-port ?")
     objets = []
@@ -400,6 +406,9 @@ def main(argv=None) -> int:
         p.error("--lot doit être entre 1 et 10000")
     try:
         return exporter(args)
+    except InstanceArretee as e:
+        print(f"phoenix-exporter : instance arrêtée, export reporté ({e}).")
+        return 0
     except ErreurExport as e:
         print(f"phoenix-exporter : {e}", file=sys.stderr)
         return 1

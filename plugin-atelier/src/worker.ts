@@ -21,6 +21,8 @@ let facteur: ReturnType<typeof creerFacteur> | null = null;
 let signalement: ReturnType<typeof creerSignalement> | null = null;
 
 const plugin = definePlugin({
+  // Réglages lus par entreprise (ctx.config.get(companyId)) et aucun onConfigChanged : sans ce drapeau, le SDK refuse 27 entreprises sur 28 à chaque démarrage.
+  multiCompanyConfig: true,
   async setup(ctx) {
     atelier = creerAtelier(ctx);
     atelier.enregistrer();

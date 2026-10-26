@@ -127,7 +127,7 @@ def lire_entree(fd_dossier: int, nom: str, uid_deposant: int) -> dict:
     try:
         fd = os.open(nom, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=fd_dossier)
     except OSError as erreur:
-        raise Refus(f"ouverture impossible ({erreur.strerror}), lien symbolique ou fichier disparu")
+        raise Refus(f"ouverture impossible ({erreur.strerror}), lien symbolique ou fichier disparu") from None
     try:
         info = os.fstat(fd)
         if not stat.S_ISREG(info.st_mode):
@@ -145,7 +145,7 @@ def lire_entree(fd_dossier: int, nom: str, uid_deposant: int) -> dict:
     try:
         donnees = json.loads(brut)
     except (ValueError, UnicodeDecodeError):
-        raise Refus("JSON invalide")
+        raise Refus("JSON invalide") from None
     if not isinstance(donnees, dict):
         raise Refus("le JSON n'est pas un objet")
     if donnees.get("travail") != identifiant:
@@ -207,14 +207,14 @@ def uuid_deja_vu(racine: Path, identifiant: str) -> str | None:
             for entreprise in it:
                 if os.path.lexists(os.path.join(entreprise.path, identifiant)):
                     return "travail déjà connu (livrable existant)"
-    except OSError:
-        pass
+    except OSError as erreur:
+        journal(f"lecture de livrables/ impossible ({erreur.strerror}) : contrôle d'UUID sur les livrables sauté")
     try:
         with open(racine / FICHIER_UUID_VUS, encoding="ascii", errors="replace") as flux:
             if any(ligne.strip() == identifiant for ligne in flux):
                 return "travail déjà connu (UUID déjà vu)"
     except FileNotFoundError:
-        pass
+        journal(f"{FICHIER_UUID_VUS} absent : aucun UUID déjà vu")
     return None
 
 
@@ -477,7 +477,7 @@ def _generer_document(demande: dict, entree: Path, sortie: Path, budget: _Budget
         annonce = json.loads(resultat.sortie)
         nom = annonce["fichier"]
     except (ValueError, KeyError, TypeError):
-        raise Echec("la génération du document a échoué")
+        raise Echec("la génération du document a échoué") from None
     if nom not in NOMS_DOCUMENT:
         raise Echec("la génération du document a échoué")
     trouves = cage.recuperer_sortie(sortie, [nom])
@@ -495,7 +495,7 @@ def _controler_archive(fichier: Path, budget: _Budget) -> None:
             timeout=budget.pour(DELAI_CONTROLE_S),
         )
     except subprocess.TimeoutExpired:
-        raise Echec("délai dépassé pendant le contrôle du document")
+        raise Echec("délai dépassé pendant le contrôle du document") from None
     if resultat.returncode == 3:
         journal(f"document refusé : {resultat.stderr[:300].decode('utf-8', 'replace')!r}")
         raise Echec("document refusé par le contrôle de sécurité")
@@ -679,7 +679,7 @@ def _lire_voix_wav(chemin: Path) -> bytes:
                 raise Echec("la voix produite n'a pas le format attendu")
             pcm = f.readframes(f.getnframes())
     except (wave.Error, EOFError):
-        raise Echec("la voix produite est illisible")
+        raise Echec("la voix produite est illisible") from None
     if not pcm:
         raise Echec("la voix produite est vide")
     return pcm
@@ -750,7 +750,7 @@ def _rendre_visuel(scene: SceneDemandee, format_sortie: str, duree_s: float, dos
         with _Plafonner(cage, DELAI_RENDU_HTML_S=budget.pour(cage.DELAI_RENDU_HTML_S)):
             resultat = visuels.rendre_scene(dossier_travail, scene.gabarit, scene.champs, format_sortie, duree_s)
     except ValueError as erreur:
-        raise Echec(f"visuel invalide : {erreur}")
+        raise Echec(f"visuel invalide : {erreur}") from erreur
     if not resultat.ok or resultat.video is None:
         journal(f"rendu du visuel en échec : {resultat.motif[:300]!r}")
         raise Echec("délai dépassé pendant le rendu d'un visuel" if "délai" in resultat.motif
@@ -764,7 +764,7 @@ def _sous_titrer(dossier_travail: Path, wav: Path, reference: str, budget: _Budg
         with _Plafonner(cage, DELAI_SOUS_TITRES_S=budget.pour(cage.DELAI_SOUS_TITRES_S)):
             resultat = sous_titres.sous_titrer(dossier_travail, wav, reference)
     except ValueError as erreur:
-        raise Echec(f"sous-titres impossibles : {erreur}")
+        raise Echec(f"sous-titres impossibles : {erreur}") from erreur
     if not resultat.ok or resultat.ass is None or resultat.srt is None:
         journal(f"sous-titres en échec : {resultat.motif[:300]!r}")
         raise Echec("délai dépassé pendant les sous-titres" if "délai" in resultat.motif
@@ -777,7 +777,7 @@ def _monter(dossier_travail: Path, plan: montage.PlanMontage, budget: _Budget) -
         with _Plafonner(montage, DELAI_MONTAGE_S=budget.pour(cage.DELAI_MONTAGE_S)):
             resultat = montage.monter(dossier_travail, plan)
     except ValueError as erreur:
-        raise Echec(f"plan de montage invalide : {erreur}")
+        raise Echec(f"plan de montage invalide : {erreur}") from erreur
     if not resultat.ok or resultat.video is None:
         journal(f"montage en échec : {resultat.motif[:300]!r}")
         raise Echec("délai dépassé pendant le montage" if "délai" in resultat.motif
@@ -789,7 +789,7 @@ def _poser_provenance(video: Path, plan: montage.PlanMontage, infos: provenance.
     try:
         resultat = provenance.poser_provenance(video, plan, infos)
     except ValueError as erreur:
-        raise Echec(f"provenance IA invalide : {erreur}")
+        raise Echec(f"provenance IA invalide : {erreur}") from erreur
     if not resultat.ok or resultat.chemin_json is None:
         journal(f"provenance en échec : {resultat.motif[:300]!r}")
         raise Echec("la provenance IA n'a pas pu être posée (vérification en échec)")
@@ -815,7 +815,7 @@ def traiter_video(donnees: dict, dossier_travail: Path, dossier_livrable: Path) 
     try:
         demande = valider_demande_video(donnees.get("demande"))
     except DemandeVideoInvalide as erreur:
-        raise Echec(f"demande invalide : {erreur}")
+        raise Echec(f"demande invalide : {erreur}") from erreur
     entree = dossier_travail / "entree"
     entree.mkdir(mode=0o700)
     durees: list[float] = []
@@ -851,7 +851,7 @@ def traiter_video(donnees: dict, dossier_travail: Path, dossier_livrable: Path) 
         try:
             fiche = bibliotheque_musique.preparer_musique(demande.musique, entree)
         except bibliotheque_musique.ErreurImport as erreur:
-            raise Echec(f"musique refusée : {erreur}")
+            raise Echec(f"musique refusée : {erreur}") from erreur
     plan = montage.PlanMontage(
         tuple(montage.SceneMontage(i, "mp4", d) for i, d in enumerate(durees, 1)),
         demande.format_sortie, avec_musique=fiche is not None)

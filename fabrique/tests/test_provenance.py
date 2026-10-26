@@ -26,7 +26,7 @@ if not Path(PYTHON_VOIX).exists() or not Path("/opt/atelier-fabrique/polices/Dej
 
 from fabrique import provenance  # noqa: E402
 from fabrique.generateurs.montage import PlanMontage, SceneMontage, monter  # noqa: E402
-from fabrique.tests.test_montage import ffmpeg, preparer_entree  # noqa: E402
+from fabrique.tests.test_montage import preparer_entree  # noqa: E402
 
 TRAVAIL = "cccccccc-cccc-4ccc-8ccc-cccccccccccc"
 INFOS = provenance.InfosProvenance(

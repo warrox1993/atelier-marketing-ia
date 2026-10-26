@@ -1,0 +1,37 @@
+From d7b531857f71f22377050c1b89380de594f791cb Mon Sep 17 00:00:00 2001
+From: Jean-Baptiste Dhondt <114347858+warrox1993@users.noreply.github.com>
+Date: Sun, 25 Oct 2026 15:35:09 +0100
+Subject: [PATCH] =?UTF-8?q?fix(local):=20un=20run=20faible=20confiance=20q?=
+ =?UTF-8?q?ui=20passe=20la=20main=20reste=20annul=C3=A9?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Restreint le correctif local « un run qui passe la main sur sa propre tâche
+n'est plus annulé » aux runs qui ne sont pas en revue faible confiance. Sinon,
+une réaffectation board en backlog redonnait l'autorité sur la tâche au run
+vivant, dont le contexte peut contenir du contenu en quarantaine (test amont
+low-trust-red-team-routes).
+---
+ server/src/routes/issues.ts | 5 ++++-
+ 1 file changed, 4 insertions(+), 1 deletion(-)
+
+diff --git a/server/src/routes/issues.ts b/server/src/routes/issues.ts
+index c362d9c6c..6c5a593b2 100644
+--- a/server/src/routes/issues.ts
++++ b/server/src/routes/issues.ts
+@@ -14309,7 +14309,10 @@ export function issueRoutes(
+           req.actor.source === "agent_jwt" &&
+           !!req.actor.runId &&
+           req.actor.runId === runToStopForReassignment.id &&
+-          req.actor.agentId === existing.assigneeAgentId;
++          req.actor.agentId === existing.assigneeAgentId &&
++          // A low-trust run keeps the upstream cancel: if it survived, a later
++          // board backlog assignment would hand it back authority over the issue.
++          !(await actorIsLowTrustReview(req, existing.companyId, existing));
+         if (runToStopForReassignment && !isSelfHandoff) {
+           const cancelled = await heartbeat.cancelRun(
+             runToStopForReassignment.id,
+-- 
+2.53.0
+

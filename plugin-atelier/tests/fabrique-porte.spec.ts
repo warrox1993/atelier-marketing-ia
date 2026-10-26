@@ -131,6 +131,12 @@ describe("porte de diffusion : provenance IA de la fabrique", () => {
     expect(v.ok).toBe(false);
   });
 
+  it("refuse plus de 10 travaux cités avant de calculer la moindre empreinte", async () => {
+    const travaux = Array.from({ length: 11 }, (_, i) => `cccccccc-cccc-4ccc-8ccc-${String(i).padStart(12, "0")}`);
+    const v = await controlerLivrablesFabrique({ racine: join(racine, "absente"), cheminRegistre, maintenant: () => MAINTENANT }, ENTREPRISE, travaux);
+    expect(v).toEqual({ ok: false, motif: "Trop de travaux de la fabrique cités (11, 10 au plus)." });
+  });
+
   it("relève les travaux cités par lien dans le livrable et déclarés", () => {
     const corps = `Vidéo : [page](/ATELIER/livrables/${TRAVAIL.toUpperCase()}) et une autre /livrables/dddddddd-dddd-4ddd-8ddd-dddddddddddd`;
     expect(travauxFabriqueCites(corps, ["eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee"]).sort()).toEqual([

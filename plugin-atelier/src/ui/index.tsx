@@ -262,6 +262,14 @@ export function EntreeAtelier({ context }: PluginSidebarProps) {
           Départements
         </LienHote>
       ) : null}
+      <LienHote vers={chemin("livrables")} className="atl-entree" courant={actif && vueCourante === "livrables"}>
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+          {/* Livrables : une boîte ouverte (même trait que les autres icônes de l'atelier). */}
+          <path d="M2 6.25h12v7a.75.75 0 0 1-.75.75H2.75A.75.75 0 0 1 2 13.25z" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" />
+          <path d="M1.75 3.25h12.5v3H1.75zM6.5 9h3" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+        Livrables
+      </LienHote>
       <LienHote vers={chemin("mise-en-place")} className="atl-entree" courant={surReglages}>
         <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
           {/* Réglages : deux curseurs (même trait que les autres icônes de l'atelier). */}

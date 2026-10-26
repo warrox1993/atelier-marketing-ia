@@ -1167,7 +1167,7 @@ export function creerServices(ctx: PluginContext, options: { transportReel?: Tra
   type Faits = Awaited<ReturnType<typeof faitsDiffusion>>;
 
   /** Règle de diffusion complète (approbation, non-répétition, données de démonstration, plafonds). */
-  async function jugerDiffusion(companyId: string, issue: Issue, entree: DemanderDiffusionEntree, f: Faits, exclure: string | null) {
+  async function jugerDiffusion(companyId: string, issue: Issue, entree: DemanderDiffusionEntree, f: Faits, exclure: string | null, travauxEnregistres: readonly string[] = []) {
     let verdict: ReturnType<typeof verifierDiffusion> = verifierDiffusion({
       demande: { revisionId: entree.revisionId, action: entree.action, canal: entree.canal, compte: entree.compte, audience: entree.audience, montantCents: entree.montantCents },
       revisionCourante: f.liv?.revisionId ?? null,
@@ -1189,7 +1189,8 @@ export function creerServices(ctx: PluginContext, options: { transportReel?: Tra
     }
     // Lot 11 : un livrable de la fabrique (cité par son lien ou déclaré) ne part qu'avec une provenance IA valide.
     if (verdict.ok) {
-      const travaux = travauxFabriqueCites(f.liv?.corps ?? "", entree.travauxFabrique ?? []);
+      // M1 (revue du 25/10) : union des travaux déjà enregistrés avec la diffusion, de ceux de la requête, du livrable et des arguments.
+      const travaux = travauxFabriqueCites(f.liv?.corps ?? "", [...travauxEnregistres, ...(entree.travauxFabrique ?? [])], entree.arguments);
       if (travaux.length > 0) {
         const racine = dossierFile(await configEntreprise(companyId));
         const garde = await controlerLivrablesFabrique({ racine, cheminRegistre: `${racine}/voix-autorisees/registre.json` }, companyId, travaux);
@@ -1257,7 +1258,7 @@ export function creerServices(ctx: PluginContext, options: { transportReel?: Tra
         const memeDemande = deja.revisionId === entree.revisionId && deja.action === entree.action && deja.canal === entree.canal && (deja.compte ?? null) === (entree.compte ?? null) && (interne.audience ?? null) === (entree.audience ?? null);
         if (!memeDemande) erreur("conflit", "Clé d'idempotence déjà utilisée pour une autre demande.");
         const f = await faitsDiffusion(companyId, issue);
-        const { verdict, mode } = await jugerDiffusion(companyId, issue, entree, f, deja.id);
+        const { verdict, mode } = await jugerDiffusion(companyId, issue, entree, f, deja.id, interne.travauxFabrique);
         if (verdict.ok && mode === "reel" && verdict.decisionId === deja.decisionId && f.liv) {
           const signee = await signerSiPossible(companyId, entree, verdict, deja.id, f.liv.corps, interne);
           if (signee.ok) {
@@ -1301,6 +1302,7 @@ export function creerServices(ctx: PluginContext, options: { transportReel?: Tra
       canal: entree.canal, compte: entree.compte, audience: entree.audience, montantCents: entree.montantCents, etat, cleIdempotence: entree.cleIdempotence,
       motifRefus: motif, mode, par: `${acteur.type}:${acteur.id}`,
       service: entree.service ?? null, outil: entree.outil ?? null, empreinteArguments: empreinteDemande(entree), preuveCharge: charge,
+      travauxFabrique: travauxFabriqueCites(f.liv?.corps ?? "", entree.travauxFabrique ?? [], entree.arguments),
     });
     await base.journaliser({
       companyId, type: verdict.ok ? `diffusion.${etat}` : "diffusion.refusee", entite: "diffusion", entiteId: id, issueId: issue.id, runId: acteur.runId,

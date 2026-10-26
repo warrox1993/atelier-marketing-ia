@@ -30,6 +30,7 @@ interface TravailLivrable {
 const ETATS: Readonly<Record<string, { libelle: string; ton: Ton }>> = {
   termine: { libelle: "Terminé", ton: "succes" },
   en_cours: { libelle: "En cours", ton: "attention" },
+  en_attente_gpu: { libelle: "En attente de la carte graphique", ton: "attention" },
   echec: { libelle: "Échec", ton: "danger" },
 };
 

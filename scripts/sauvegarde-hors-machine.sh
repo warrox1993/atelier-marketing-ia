@@ -90,23 +90,39 @@ if [[ "${DISQUE_SRC}" == "${DISQUE_DST}" && "${MEME_DISQUE}" -ne 1 ]]; then
 fi
 
 # Construction de la liste des éléments (chemins relatifs à SOURCE) ; manquants obligatoires cumulés.
-ELEMENTS=(); MANQUANTS=()
+ELEMENTS=(); MANQUANTS=(); DUMPS_PERIMES=()
 exiger() { [[ -e "${SOURCE}/$1" ]] && ELEMENTS+=("$1") || MANQUANTS+=("$1"); }
 
 IFS=',' read -r -a LISTE_INSTANCES <<< "${INSTANCES}"
 for id in "${LISTE_INSTANCES[@]}"; do
   [[ -n "${id}" ]] || continue
   base="instance/instances/${id}"
-  derniere=""
+  # Dump le plus récent par date de modification (le tri par nom met « paperclip-transfert-… » après
+  # « paperclip-2026… »), en ignorant ceux modifiés il y a moins de 60 s : Paperclip écrit le .sql.gz
+  # sous son nom final, sans fichier temporaire, donc un dump récent peut être en cours d'écriture.
+  derniere=""; invalides=0
   if [[ -d "${SOURCE}/${base}/data/backups" ]]; then
-    derniere="$(cd "${SOURCE}/${base}/data/backups" && ls -1 paperclip-*.sql.gz 2>/dev/null | sort | tail -n 1)"
+    while IFS= read -r -d '' f; do
+      [[ -n "${derniere}" ]] && break
+      nom="${f##*/}"
+      if gzip -t "${f}" 2>/dev/null; then
+        derniere="${nom}"
+      else
+        invalides=$((invalides + 1)); echo "Dump ignoré (illisible ou incomplet) : ${id}/${nom}" >&2
+      fi
+    done < <(find "${SOURCE}/${base}/data/backups" -maxdepth 1 -name 'paperclip-*.sql.gz' -type f ! -newermt '60 seconds ago' -printf '%T@ %p\0' \
+               | sort -z -rn | sed -z 's/^[0-9.]* //')
   fi
   if [[ -n "${derniere}" ]]; then
-    if gzip -t "${SOURCE}/${base}/data/backups/${derniere}" 2>/dev/null; then
-      ELEMENTS+=("${base}/data/backups/${derniere}")
-    else
-      echo "ERREUR : la dernière sauvegarde de base de ${id} est corrompue : ${derniere}" >&2; exit 1
+    echo "Dump retenu pour ${id} : ${derniere}"
+    ELEMENTS+=("${base}/data/backups/${derniere}")
+    # Tri du plus récent au plus ancien : tout dump invalide compté ici est plus récent que celui retenu.
+    if [[ "${invalides}" -gt 0 ]]; then
+      DUMPS_PERIMES+=("${id}")
+      echo "ATTENTION : ${id} : ${invalides} dump(s) plus récent(s) illisible(s) ; copie faite avec ${derniere}, plus ancien." >&2
     fi
+  elif [[ "${invalides}" -gt 0 ]]; then
+    echo "ERREUR : aucun dump valide pour ${id} (${invalides} dump(s) illisible(s) ou incomplet(s)) dans ${base}/data/backups" >&2; exit 1
   else
     MANQUANTS+=("${base}/data/backups/paperclip-*.sql.gz (aucune sauvegarde de base)")
   fi
@@ -232,5 +248,10 @@ if [[ "${NB_COPIES}" -gt "${GARDER}" ]]; then
       echo "Rotation : ${COPIES[i]} ignorée (pas de EMPREINTES.sha256, dossier non reconnu)." >&2
     fi
   done
+fi
+# Copie faite mais sur un dump plus ancien que le dernier : sortie non nulle pour que l'alerte (OnFailure) parte.
+if [[ ${#DUMPS_PERIMES[@]} -gt 0 ]]; then
+  echo "ERREUR : dernier dump illisible pour ${DUMPS_PERIMES[*]} : copie faite avec un dump plus ancien, à vérifier." >&2
+  exit 2
 fi
 exit 0

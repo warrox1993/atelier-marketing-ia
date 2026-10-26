@@ -128,7 +128,7 @@ export function lireConfig(env: NodeJS.ProcessEnv = process.env): Config {
     })(),
     numerosAutorises: numeros,
     hote,
-    port: entier(env, "WHATSAPP_PORT", 3195, 1024, 65535),
+    port: entier(env, "WHATSAPP_PORT", 3197, 1024, 65535),
     graphUrl,
     graphVersion,
     atelierApi,

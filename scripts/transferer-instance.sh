@@ -30,6 +30,8 @@ umask 077
 
 RACINE_DEPOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
+# creer_prive <dossier…> : crée chaque dossier absent en 0700 (les dossiers déjà présents gardent leurs droits).
+creer_prive() { local d; for d in "$@"; do [[ -d "${d}" ]] || { mkdir -p -- "${d}" && chmod 700 -- "${d}"; } || return 1; done; }
 echec() { echo "ERREUR : $*" >&2; exit 1; }
 usage() { echo "ERREUR : $*" >&2; sed -n '/^# Usage :/,/^# Après/p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//' >&2; exit 2; }
 aide() { sed -n '2,/^# Code de sortie/p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; }
@@ -75,13 +77,13 @@ esac
 
 # Valeurs communes aux sous-commandes.
 INSTANCE="atelier"; CHEMIN_DISTANT="atelier-transfert"; SOURCE="${RACINE_DEPOT}"
-CIBLE="${RACINE_DEPOT}"; RACINE_EXPLICITE=0; REMPLACER=0; PORT_HTTP=""; PORT_PG=""; ARGUMENT=""
+CIBLE="${RACINE_DEPOT}"; REMPLACER=0; PORT_HTTP=""; PORT_PG=""; ARGUMENT=""
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --instance) [[ $# -ge 2 ]] || usage "--instance demande un identifiant"; INSTANCE="$2"; shift ;;
     --chemin-distant) [[ $# -ge 2 ]] || usage "--chemin-distant demande un dossier"; CHEMIN_DISTANT="$2"; shift ;;
     --source) [[ $# -ge 2 ]] || usage "--source demande un dossier"; SOURCE="$2"; shift ;;
-    --racine) [[ $# -ge 2 ]] || usage "--racine demande un dossier"; CIBLE="$2"; RACINE_EXPLICITE=1; shift ;;
+    --racine) [[ $# -ge 2 ]] || usage "--racine demande un dossier"; CIBLE="$2"; shift ;;
     --remplacer) REMPLACER=1 ;;
     --garder-copie) GARDER_COPIE=1 ;;
     --transport-test) TRANSPORT_TEST=1 ;;
@@ -128,7 +130,7 @@ envoyer() {
     transport=(tailscale ssh "${hote}")
   fi
 
-  mkdir -p -m 700 -- "${SOURCE}/instance/transferts" || echec "création de ${SOURCE}/instance/transferts impossible"
+  creer_prive "${SOURCE}/instance/transferts" || echec "création de ${SOURCE}/instance/transferts impossible"
   BROUILLON="$(mktemp -d "${SOURCE}/instance/transferts/brouillon-XXXXXX")" || echec "brouillon impossible"
   local brouillon="${BROUILLON}"   # supprimé par nettoyage_final (trap EXIT)
 
@@ -262,7 +264,7 @@ recevoir() {
   if [[ -f "${copie}/complement/base-fraiche.sql.gz" ]]; then
     sauvegarde="${copie}/complement/base-fraiche.sql.gz"
   else
-    sauvegarde="$(find "${copie}/${base}/data/backups" -maxdepth 1 -name 'paperclip-*.sql.gz' 2>/dev/null | LC_ALL=C sort | tail -n 1)"
+    sauvegarde="$(find "${copie}/${base}/data/backups" -maxdepth 1 -name 'paperclip-*.sql.gz' -printf '%T@ %p\n' 2>/dev/null | sort -rn | head -n 1 | cut -d' ' -f2-)"
     echo "Avertissement : pas de dump frais dans la copie, repli sur la dernière sauvegarde horaire." >&2
   fi
   [[ -n "${sauvegarde}" ]] || echec "aucune sauvegarde de base pour l'instance ${INSTANCE} dans la copie"
@@ -304,24 +306,24 @@ recevoir() {
   fi
 
   echo "== 3. Fichiers (secrets, entreprises, stockage, clés, passerelles, agents)"
-  mkdir -p -m 700 -- "${racine}/instance" "${racine}/passerelle" "${racine}/config" || echec "création des dossiers impossible"
+  creer_prive "${racine}/instance" "${racine}/passerelle" "${racine}/config" || echec "création des dossiers impossible"
   # Clés, secrets et passerelles déjà présents : jamais écrasés sans copie (rsync --backup, suffixe daté).
   local suffixe=".avant-transfert-${horodatage}" d
   rsync -a --exclude 'data/backups/' --exclude 'demo-client.lien' --exclude '/cles/' --exclude '/secrets/' --exclude '/passerelles/' \
     -- "${copie}/instance/" "${racine}/instance/" || echec "rsync de instance/ a échoué"
   for d in cles secrets passerelles; do
     if [[ -d "${copie}/instance/${d}" ]]; then
-      mkdir -p -m 700 -- "${racine}/instance/${d}" && rsync -a --backup --suffix="${suffixe}" -- "${copie}/instance/${d}/" "${racine}/instance/${d}/" \
+      creer_prive "${racine}/instance/${d}" && rsync -a --backup --suffix="${suffixe}" -- "${copie}/instance/${d}/" "${racine}/instance/${d}/" \
         || echec "rsync de instance/${d} a échoué"
     fi
   done
   if [[ -d "${copie}/passerelle/etat" ]]; then
-    mkdir -p -m 700 -- "${racine}/passerelle/etat" && rsync -a --backup --suffix="${suffixe}" -- "${copie}/passerelle/etat/" "${racine}/passerelle/etat/" \
+    creer_prive "${racine}/passerelle/etat" && rsync -a --backup --suffix="${suffixe}" -- "${copie}/passerelle/etat/" "${racine}/passerelle/etat/" \
       || echec "rsync de passerelle/etat a échoué"
   fi
   for d in agents-atelier claude-config; do
     if [[ -d "${copie}/complement/${d}" ]]; then
-      mkdir -p -m 700 -- "${racine}/instance/${d}" && rsync -a --backup --suffix="${suffixe}" -- "${copie}/complement/${d}/" "${racine}/instance/${d}/" \
+      creer_prive "${racine}/instance/${d}" && rsync -a --backup --suffix="${suffixe}" -- "${copie}/complement/${d}/" "${racine}/instance/${d}/" \
         || echec "rsync de ${d} a échoué"
     else
       echo "Avertissement : ${d} absent de la copie." >&2
@@ -358,7 +360,7 @@ for dossier in dossiers:
                 n += 1
 print(f"Chemins réécrits dans {n} fichier(s) des agents.")
 PY
-  mkdir -p -m 700 -- "${dest}/data/backups" || echec "création de data/backups impossible"
+  creer_prive "${dest}/data/backups" || echec "création de data/backups impossible"
   /usr/bin/cp -f -- "${sauvegarde}" "${dest}/data/backups/paperclip-transfert-${horodatage}.sql.gz" || echec "copie de la sauvegarde de base impossible"
   [[ -f "${dest}/secrets/master.key" ]] || echec "secrets/master.key absente après la restauration des fichiers"
   chmod 700 "${dest}/secrets"; chmod 600 "${dest}/secrets/master.key"

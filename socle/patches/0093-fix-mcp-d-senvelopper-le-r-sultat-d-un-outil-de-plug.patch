@@ -1,0 +1,160 @@
+From 9b09608b868797eea2b16317cf2e065a6c15446e Mon Sep 17 00:00:00 2001
+From: Jean-Baptiste Dhondt <114347858+warrox1993@users.noreply.github.com>
+Date: Sat, 24 Oct 2026 21:42:57 +0200
+Subject: [PATCH 93/95] =?UTF-8?q?fix(mcp):=20d=C3=A9senvelopper=20le=20r?=
+ =?UTF-8?q?=C3=A9sultat=20d'un=20outil=20de=20plugin=20et=20ne=20jamais=20?=
+ =?UTF-8?q?renvoyer=20structuredContent=20null?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+La passerelle MCP lisait content et data une enveloppe trop haut : l'exécution d'un outil de plugin
+rend { pluginId, toolName, result: ToolResult }. content/data valaient donc undefined et
+structuredContent partait à null, que le client MCP de Claude rejette (l'agent ne recevait pas
+l'identifiant du travail). Le résultat est désormais désenveloppé, structuredContent est l'objet data
+ou absent, jamais null (y compris pour les outils de contexte).
+---
+ .../tool-gateway-structured-content.test.ts   | 54 +++++++++++++++++++
+ server/src/routes/tool-gateway.ts             | 51 ++++++++++++------
+ 2 files changed, 89 insertions(+), 16 deletions(-)
+ create mode 100644 server/src/__tests__/tool-gateway-structured-content.test.ts
+
+diff --git a/server/src/__tests__/tool-gateway-structured-content.test.ts b/server/src/__tests__/tool-gateway-structured-content.test.ts
+new file mode 100644
+index 000000000..418c967ec
+--- /dev/null
++++ b/server/src/__tests__/tool-gateway-structured-content.test.ts
+@@ -0,0 +1,54 @@
++import express from "express";
++import request from "supertest";
++import { describe, expect, it } from "vitest";
++import { buildMcpToolCallResult, mcpGatewayProtocolRoutes } from "../routes/tool-gateway.js";
++
++describe("résultat MCP d'un outil de plugin", () => {
++  it("renvoie structuredContent objet égal à data pour un outil de plugin", () => {
++    const resultat = buildMcpToolCallResult({
++      pluginId: "atelier",
++      toolName: "fabriquer_document",
++      result: { content: "{\"travail\":\"t1\"}", data: { travail: "t1" } },
++    });
++    expect(resultat.content).toEqual([{ type: "text", text: "{\"travail\":\"t1\"}" }]);
++    expect(resultat.structuredContent).toEqual({ travail: "t1" });
++    expect(resultat.isError).toBe(false);
++  });
++
++  it("omet structuredContent quand data est absent (jamais null)", () => {
++    const resultat = buildMcpToolCallResult({
++      pluginId: "atelier",
++      toolName: "ping",
++      result: { content: "ok" },
++    });
++    expect("structuredContent" in resultat).toBe(false);
++    expect(resultat.content).toEqual([{ type: "text", text: "ok" }]);
++  });
++
++  it("omet structuredContent quand data n'est pas un objet", () => {
++    const resultat = buildMcpToolCallResult({ pluginId: "a", toolName: "b", result: { content: "x", data: [1] } });
++    expect("structuredContent" in resultat).toBe(false);
++  });
++
++  it("garde le comportement des outils d'application MCP (data objet conservé)", () => {
++    const data = { content: [], structuredContent: null, isError: false, transport: "mcp_http" };
++    const resultat = buildMcpToolCallResult({ content: "texte", data });
++    expect(resultat.structuredContent).toEqual(data);
++  });
++
++  it("de bout en bout par la route tools/call : pas de structuredContent null", async () => {
++    const passerelle = {
++      executeTool: async () => ({
++        result: { pluginId: "atelier", toolName: "x", result: { content: "ok" } },
++      }),
++    };
++    const app = express().use(express.json()).use(mcpGatewayProtocolRoutes(passerelle as never));
++    const reponse = await request(app)
++      .post("/mcp/gateways/pub")
++      .set("Authorization", "Bearer jeton")
++      .send({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "x", arguments: {} } });
++    expect(reponse.status).toBe(200);
++    expect(reponse.body.result.structuredContent).toBeUndefined();
++    expect(reponse.body.result.content[0].text).toBe("ok");
++  });
++});
+diff --git a/server/src/routes/tool-gateway.ts b/server/src/routes/tool-gateway.ts
+index 55818267a..0f328ab12 100644
+--- a/server/src/routes/tool-gateway.ts
++++ b/server/src/routes/tool-gateway.ts
+@@ -70,6 +70,39 @@ async function discoveryRequest<T>(req: Request, res: Response, work: (signal: A
+   }
+ }
+ 
++function isPlainRecord(value: unknown): value is Record<string, unknown> {
++  return value !== null && typeof value === "object" && !Array.isArray(value);
++}
++
++/**
++ * `structuredContent` MCP : objet ou absent, jamais `null` (le client MCP de Claude rejette `null`).
++ */
++function structuredContentField(value: unknown): { structuredContent?: Record<string, unknown> } {
++  return isPlainRecord(value) ? { structuredContent: value } : {};
++}
++
++/**
++ * Construit le résultat MCP d'un `tools/call` à partir du résultat brut de la passerelle.
++ * Un outil de plugin arrive enveloppé dans `{ pluginId, toolName, result: ToolResult }` :
++ * on le désenveloppe pour lire `content` et `data` du plugin.
++ */
++export function buildMcpToolCallResult(raw: unknown) {
++  let record = isPlainRecord(raw) ? raw : null;
++  const pluginEnvelope = record !== null
++    && typeof record.pluginId === "string"
++    && typeof record.toolName === "string"
++    && isPlainRecord(record.result);
++  if (pluginEnvelope) record = record!.result as Record<string, unknown>;
++  const contentText = typeof record?.content === "string"
++    ? record.content
++    : JSON.stringify(record?.data ?? raw ?? null);
++  return {
++    content: [{ type: "text", text: contentText }],
++    ...structuredContentField(record?.data),
++    isError: pluginEnvelope && typeof record?.error === "string",
++  };
++}
++
+ async function handleMcpGatewayProtocol(
+   req: Request,
+   res: Response,
+@@ -177,7 +210,7 @@ async function handleMcpGatewayProtocol(
+             : {},
+           callerHeaders: headers,
+         });
+-        res.json({ jsonrpc: "2.0", id, result: { content: [{ type: "text", text: JSON.stringify(result) }], structuredContent: result, isError: false } });
++        res.json({ jsonrpc: "2.0", id, result: { content: [{ type: "text", text: JSON.stringify(result) }], ...structuredContentField(result), isError: false } });
+         return;
+       }
+       const result = await toolGateway.executeTool({
+@@ -188,21 +221,7 @@ async function handleMcpGatewayProtocol(
+         parameters: params.arguments ?? {},
+         callerHeaders: req.headers,
+       });
+-      const resultRecord = result.result && typeof result.result === "object" && !Array.isArray(result.result)
+-        ? result.result as Record<string, unknown>
+-        : null;
+-      const contentText = typeof resultRecord?.content === "string"
+-        ? resultRecord.content
+-        : JSON.stringify(resultRecord?.data ?? result.result ?? null);
+-      res.json({
+-        jsonrpc: "2.0",
+-        id,
+-        result: {
+-          content: [{ type: "text", text: contentText }],
+-          structuredContent: resultRecord?.data ?? null,
+-          isError: false,
+-        },
+-      });
++      res.json({ jsonrpc: "2.0", id, result: buildMcpToolCallResult(result.result) });
+       return;
+     }
+     if (["resources/list", "resources/read", "prompts/list", "prompts/get"].includes(body.method ?? "")) {
+-- 
+2.53.0
+

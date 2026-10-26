@@ -38,6 +38,9 @@ fabriquer() {
     mkdir -p "${b}/data/backups" "${b}/secrets" "${b}/companies/c1" "${b}/data/storage" "${b}/db"
     echo "ancienne" | gzip > "${b}/data/backups/paperclip-20260101-000000.sql.gz"
     echo "recente ${id}" | gzip > "${b}/data/backups/paperclip-20260102-000000.sql.gz"
+    # Dates de modification anciennes : le script ignore les dumps modifiés il y a moins de 60 s.
+    touch -d '3 hours ago' "${b}/data/backups/paperclip-20260101-000000.sql.gz"
+    touch -d '2 hours ago' "${b}/data/backups/paperclip-20260102-000000.sql.gz"
     echo "cle-${id}" > "${b}/secrets/master.key"
     echo "doc" > "${b}/companies/c1/doc.md"
     echo "piece" > "${b}/data/storage/p.bin"
@@ -53,7 +56,7 @@ fabriquer() {
 
 SRC="${TMP}/source"; DST="${TMP}/dest"; mkdir -p "${SRC}" "${DST}"; fabriquer "${SRC}"
 PHX_ABSENT="${TMP}/phoenix-absent"   # les tests existants ne doivent jamais toucher le vrai Phoenix
-COMMUN=(--source "${SRC}" --meme-disque --instances atelier,atelier-essai --phoenix "${PHX_ABSENT}")
+COMMUN=(--source "${SRC}" --meme-disque --instances "atelier,atelier-essai" --phoenix "${PHX_ABSENT}")
 
 # 1. Copie complète et empreintes identiques.
 attendre "copie complète" 0 "empreintes vérifiées" "${DST}" "${COMMUN[@]}"
@@ -86,6 +89,39 @@ mv "${SRC}/instance/instances/atelier-essai/data/backups" "${TMP}/backups.sauve"
 attendre "aucune sauvegarde de base"        non0 "aucune sauvegarde de base" "${DST}" "${COMMUN[@]}"
 mv "${TMP}/backups.sauve" "${SRC}/instance/instances/atelier-essai/data/backups"
 verifie "aucune copie créée en cas d'échec"  test "$(find "${DST}" -mindepth 1 -maxdepth 1 | wc -l)" = "${AVANT}"
+
+# 3 bis. Dumps : choix par date de modification, jamais un dump en cours d'écriture.
+BK="${SRC}/instance/instances/atelier-essai/data/backups"
+# a) dump récent (< 60 s) tronqué = écriture en cours : ignoré, repli sur le dernier dump complet.
+head -c 10 "${BK}/paperclip-20260102-000000.sql.gz" > "${BK}/paperclip-20260103-000000.sql.gz"
+D6="${TMP}/dest-dump-en-cours"; mkdir -p "${D6}"
+attendre "dump en cours d'écriture ignoré" 0 "paperclip-20260102-000000.sql.gz" "${D6}" "${COMMUN[@]}"
+C6="$(find "${D6}" -mindepth 1 -maxdepth 1 -type d -name 'atelier-*' | head -n 1)"
+verifie "dump en cours : le dump complet est copié"  test -f "${C6}/instance/instances/atelier-essai/data/backups/paperclip-20260102-000000.sql.gz"
+verifie "dump en cours : le dump tronqué n'est pas copié" test ! -e "${C6}/instance/instances/atelier-essai/data/backups/paperclip-20260103-000000.sql.gz"
+rm -f "${BK}/paperclip-20260103-000000.sql.gz"
+# b) « paperclip-transfert-… » ancien ne doit pas passer devant un dump plus récent (tri par nom piégeux).
+cp "${BK}/paperclip-20260101-000000.sql.gz" "${BK}/paperclip-transfert-20251231.sql.gz"
+touch -d '5 hours ago' "${BK}/paperclip-transfert-20251231.sql.gz"
+D7="${TMP}/dest-tri-date"; mkdir -p "${D7}"
+attendre "tri par date de modification" 0 "paperclip-20260102-000000.sql.gz" "${D7}" "${COMMUN[@]}"
+C7="$(find "${D7}" -mindepth 1 -maxdepth 1 -type d -name 'atelier-*' | head -n 1)"
+verifie "tri par date : transfert ancien non copié"  test ! -e "${C7}/instance/instances/atelier-essai/data/backups/paperclip-transfert-20251231.sql.gz"
+rm -f "${BK}/paperclip-transfert-20251231.sql.gz"
+# b bis) dernier dump terminé mais corrompu (> 60 s) : l'ancien valide est copié, mais la sortie est non nulle (alerte).
+head -c 10 "${BK}/paperclip-20260102-000000.sql.gz" > "${BK}/paperclip-20260103-000000.sql.gz"
+touch -d '10 minutes ago' "${BK}/paperclip-20260103-000000.sql.gz"
+D8="${TMP}/dest-dump-corrompu"; mkdir -p "${D8}"
+attendre "dernier dump corrompu signalé" non0 "plus ancien" "${D8}" "${COMMUN[@]}"
+C8="$(find "${D8}" -mindepth 1 -maxdepth 1 -type d -name 'atelier-*' | head -n 1)"
+verifie "dump corrompu : copie faite avec le dump valide" test -f "${C8}/instance/instances/atelier-essai/data/backups/paperclip-20260102-000000.sql.gz"
+rm -f "${BK}/paperclip-20260103-000000.sql.gz"
+# c) aucun dump valide : échec clair.
+mkdir -p "${TMP}/bk-valides"; mv "${BK}"/*.sql.gz "${TMP}/bk-valides/"
+head -c 10 "${TMP}/bk-valides/paperclip-20260102-000000.sql.gz" > "${BK}/paperclip-20260102-000000.sql.gz"
+touch -d '2 hours ago' "${BK}/paperclip-20260102-000000.sql.gz"
+attendre "aucun dump valide" non0 "aucun dump valide" "${DST}" "${COMMUN[@]}"
+rm -f "${BK}"/*.sql.gz; mv "${TMP}/bk-valides"/*.sql.gz "${BK}/"
 
 # 4. Destination absente ; argument inconnu ; --garder invalide.
 attendre "destination inexistante"          non0 "n'existe pas" "${TMP}/absent" "${COMMUN[@]}"

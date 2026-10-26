@@ -15,11 +15,11 @@
     "start": "node dist/src/demarrer.js"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "1.32.1",
+    "@modelcontextprotocol/sdk": "1.32.2",
     "better-sqlite3": "13.0.3",
-    "chrome-launcher": "1.2.1",
+    "chrome-launcher": "1.2.2",
     "lighthouse": "13.5.0",
-    "puppeteer-core": "25.15.0",
+    "puppeteer-core": "25.16.0",
     "yauzl": "3.4.0",
     "zod": "4.6.7"
   },
@@ -28,6 +28,6 @@
     "@types/node": "24.19.2",
     "@types/yauzl": "3.4.0",
     "typescript": "7.0.2",
-    "vitest": "4.1.12"
+    "vitest": "5.0.5"
   }
 }

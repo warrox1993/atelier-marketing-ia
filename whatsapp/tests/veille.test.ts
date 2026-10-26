@@ -81,7 +81,7 @@ describe("configuration", () => {
   it("valeurs par défaut sûres", () => {
     const c = lireConfig(base);
     expect(c.hote).toBe("127.0.0.1");
-    expect(c.port).toBe(3195);
+    expect(c.port).toBe(3197);
     expect(c.atelierApi).toBe("http://127.0.0.1:3100/api");
     expect(c.graphUrl).toBe("https://graph.facebook.com");
     expect(c.modeleHorsFenetre).toBe(false);

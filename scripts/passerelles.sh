@@ -152,10 +152,10 @@ dictee_demarrer() {
 }
 
 dictee_arreter() {
-  local pid i
+  local pid
   if ! pid="$(whisper_pid)"; then echo "dictée : rien à arrêter"; rm -f "$WHISPER_PID"; return 0; fi
   kill "$pid" 2>/dev/null
-  for i in $(seq 1 20); do
+  for _ in $(seq 1 20); do
     kill -0 "$pid" 2>/dev/null || { rm -f "$WHISPER_PID"; echo "dictée : arrêtée (pid $pid)"; return 0; }
     sleep 0.5
   done

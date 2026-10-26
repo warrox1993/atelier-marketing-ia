@@ -9,7 +9,7 @@ fabrique/tests/test_cage.py.
 
 Comportement : architecture autre que x86-64 -> le processus est tué (le filtre ne couvre que les
 numéros x86-64) ; ABI x32 (bit 0x40000000), qui contournerait la liste -> EPERM ; appel listé
--> EPERM ; tout le reste -> autorisé. Le filtre est chargé par bwrap (--seccomp FD) juste avant
+-> EPERM ; io_uring -> ENOSYS (libuv de Node se replie alors sur un autre mode) ; tout le reste -> autorisé. Le filtre est chargé par bwrap (--seccomp FD) juste avant
 l'exécution du programme de l'étape : bwrap a déjà monté la cage, seuls le programme et ses fils
 sont filtrés.
 """
@@ -20,6 +20,7 @@ import platform
 import struct
 
 EPERM = 1
+ENOSYS = 38
 AUDIT_ARCH_X86_64 = 0xC000003E
 BIT_X32 = 0x40000000
 
@@ -72,6 +73,14 @@ APPELS_REFUSES: dict[str, int] = {
     "mount_setattr": 442,
 }
 
+# io_uring : surface d'attaque du noyau, refusée avec ENOSYS (« appel inconnu ») et non EPERM, car libuv
+# (Node) interprète ENOSYS comme « io_uring indisponible » et se replie sur ses autres modes d'E/S.
+APPELS_ENOSYS: dict[str, int] = {
+    "io_uring_setup": 425,
+    "io_uring_enter": 426,
+    "io_uring_register": 427,
+}
+
 
 def _instruction(code: int, jt: int, jf: int, k: int) -> bytes:
     return struct.pack("=HBBI", code, jt, jf, k)
@@ -83,10 +92,12 @@ def construire_filtre() -> bytes:
         raise RuntimeError(f"filtre seccomp prévu pour x86-64 seulement (machine : {platform.machine()})")
     numeros = sorted(set(APPELS_REFUSES.values()))
     # Disposition : 0 ld arch | 1 jeq arch | 2 kill | 3 ld nr | 4 jset x32 | 5.. jeq par appel |
-    # autoriser | refuser (EPERM).
+    # jeq par appel ENOSYS | autoriser | refuser (EPERM) | refuser (ENOSYS).
+    numeros_enosys = sorted(set(APPELS_ENOSYS.values()))
     premier_test = 5
-    indice_autoriser = premier_test + len(numeros)
+    indice_autoriser = premier_test + len(numeros) + len(numeros_enosys)
     indice_refuser = indice_autoriser + 1
+    indice_enosys = indice_autoriser + 2
     programme = [
         _instruction(_LD_W_ABS, 0, 0, _OFFSET_ARCH),
         _instruction(_JEQ_K, 1, 0, AUDIT_ARCH_X86_64),
@@ -100,6 +111,10 @@ def construire_filtre() -> bytes:
         if saut > 255:
             raise RuntimeError("saut BPF trop long")
         programme.append(_instruction(_JEQ_K, saut, 0, numero))
+    for position, numero in enumerate(numeros_enosys):
+        courant = premier_test + len(numeros) + position
+        programme.append(_instruction(_JEQ_K, indice_enosys - courant - 1, 0, numero))
     programme.append(_instruction(_RET_K, 0, 0, SECCOMP_RET_ALLOW))
     programme.append(_instruction(_RET_K, 0, 0, SECCOMP_RET_ERRNO | EPERM))
+    programme.append(_instruction(_RET_K, 0, 0, SECCOMP_RET_ERRNO | ENOSYS))
     return b"".join(programme)

@@ -1,5 +1,6 @@
 [Unit]
 Description=Sauvegarde hors machine de l'Atelier marketing IA (copie vers le disque de données)
+OnFailure=atelier-alerte@%n.service
 
 [Service]
 # pnpm est dans ~/.local/bin, absent du PATH par défaut des services utilisateur (constaté le 16/10).

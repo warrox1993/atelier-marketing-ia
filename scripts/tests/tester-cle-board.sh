@@ -66,6 +66,12 @@ attendre_egal "curl avec fichier 0600 : clé envoyée" "$(auth_curl)" "Bearer ${
 for q in bootstrap releve declarer; do attendre_egal "${q} avec fichier 0600 : clé envoyée" "$(auth_py "${q}")" "Bearer ${CLE}"; done
 if grep -q -- "${CLE}" <(declare -f curl_atelier); then ko "la clé apparaît dans le texte de curl_atelier"; else ok "curl_atelier ne contient aucune clé"; fi
 
+# 2 bis. Fichier 0700 (aucun droit pour le groupe ni les autres) : accepté, comme dans les copies Python.
+chmod 700 "${CLE_FICHIER}"
+attendre_egal "curl avec fichier 0700 : clé envoyée" "$(auth_curl)" "Bearer ${CLE}"
+for q in bootstrap releve declarer; do attendre_egal "${q} avec fichier 0700 : clé envoyée" "$(auth_py "${q}")" "Bearer ${CLE}"; done
+chmod 600 "${CLE_FICHIER}"
+
 # 3. La variable PAPERCLIP_BOARD_KEY garde la priorité dans les scripts Python.
 attendre_egal "bootstrap : PAPERCLIP_BOARD_KEY prioritaire" "$(PAPERCLIP_BOARD_KEY=pcp_board_env_0123456789abcdef auth_py bootstrap)" "Bearer pcp_board_env_0123456789abcdef"
 

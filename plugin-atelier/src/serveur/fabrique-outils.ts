@@ -38,7 +38,7 @@ import {
   TYPES_CELLULE,
 } from "../contrats/fabrique-outils-schemas.js";
 
-import { ajouterAuSuivi, dossierTravail, lireApercu } from "./fabrique-remise.js";
+import { ajouterAuSuivi, dossierTravail, lireApercu, sousVerrouSuivi, type TravailSuivi } from "./fabrique-remise.js";
 
 export const DOSSIER_FILE_DEFAUT = "/var/lib/atelier-fabrique";
 export const QUOTA_TRAVAUX_PAR_JOUR = 50;
@@ -446,11 +446,13 @@ export function creerOutilsFabrique(deps: DependancesFabrique) {
       return erreur("Dépôt impossible : la file de la fabrique n'est pas disponible. Réessayer plus tard.");
     }
     if (deps.suiviLire && deps.suiviEcrire) {
-      // Échec du suivi : le travail est déposé, seul le signalement de fin est perdu (journal côté appelant).
-      await sousVerrou("suivi", async () => {
+      // Échec du suivi : le travail est déposé, seul le signalement de fin est perdu (avertissement journalisé).
+      await sousVerrouSuivi(async () => {
         const nouveau = { entreprise: run.companyId, travail, agent: run.agentId, run: run.runId, tache, cree: maintenant().toISOString(), essais: 0 };
         await deps.suiviEcrire!(ajouterAuSuivi(await deps.suiviLire!(), nouveau));
-      }).catch(() => undefined);
+      }).catch((e) =>
+        deps.avertir?.(`Fabrique : suivi du travail ${travail} impossible, sa fin ne sera pas signalée (${e instanceof Error ? e.message : String(e)}).`),
+      );
     }
     return succes({ travail, etat: "en_file" });
   }
@@ -484,6 +486,17 @@ export function creerOutilsFabrique(deps: DependancesFabrique) {
       run,
     );
 
+  /** Agent autorisé à fabriquer (documents ou vidéos) ou agent qui a déposé ce travail. */
+  async function agentAdmisSurTravail(config: Record<string, unknown> | null, run: ContexteExecution, travail: string): Promise<boolean> {
+    if (agentsAutorises(config, "fabriqueAgentsDocuments").includes(run.agentId) || agentsAutorises(config, "fabriqueAgentsVideo").includes(run.agentId)) return true;
+    if (!deps.suiviLire) return false;
+    const suivi = await deps.suiviLire().catch(() => null);
+    return (
+      Array.isArray(suivi) &&
+      suivi.some((t: Partial<TravailSuivi>) => t?.travail === travail.toLowerCase() && t.entreprise === run.companyId && t.agent === run.agentId)
+    );
+  }
+
   async function etatFabrication(params: unknown, run: ContexteExecution): Promise<ToolResult> {
     let brut: Record<string, unknown>;
     try {
@@ -494,7 +507,9 @@ export function creerOutilsFabrique(deps: DependancesFabrique) {
     const travail = brut.travail;
     if (typeof travail !== "string" || !UUID.test(travail)) return erreur("Demande refusée : travail doit être un identifiant UUID.");
     if (!UUID.test(run.companyId)) return erreur("Refusé : entreprise invalide.");
-    const racine = dossierFile(await deps.config(run.companyId));
+    const config = await deps.config(run.companyId);
+    if (!(await agentAdmisSurTravail(config, run, travail))) return erreur("Refusé : cet agent n'est pas autorisé à consulter ce travail.");
+    const racine = dossierFile(config);
     const dossier = dossierTravail(racine, run.companyId, travail);
     if (!dossier) return erreur("Demande refusée : identifiant invalide.");
     const lire = async (nom: string): Promise<unknown | null> => {

@@ -3003,7 +3003,7 @@ def assurer_fabrique(api: Api, cid: str, reg_agents: dict, agents: dict[str, dic
        `fabriqueRoles*` sont retirées (le plugin les ignore de toute façon).
     2. Politique native « block » par agent et par outil, pour chaque agent NON retenu (le filtre de la passerelle
        cache l'outil à l'agent et refuse son appel) : même mécanisme que les outils bloqués des connexions. Créée si
-       absente, jamais modifiée ni réactivée ensuite. Le registre ajoute en plus l'outil dans --disallowedTools.
+       absente, jamais modifiée ni réactivée ensuite ; supprimée si l'agent est retenu plus tard. Le registre ajoute en plus l'outil dans --disallowedTools.
     """
     retenus = agents_fabrique(reg_agents)
     identifiants = {genre: sorted({agents[s]["id"] for s in slugs if s in agents and agents[s].get("id")}) for genre, slugs in retenus.items()}
@@ -3017,7 +3017,7 @@ def assurer_fabrique(api: Api, cid: str, reg_agents: dict, agents: dict[str, dic
     if voulue != actuelle:
         ecrire_config_plugin(api, cid, voulue)
         ecritures += 1
-    existantes = {p.get("name") for p in politiques_outils(api, cid)}
+    existantes = {p.get("name"): p for p in politiques_outils(api, cid)}
     for slug, agent in sorted(agents.items()):
         if slug not in {a["slug"] for a in reg_agents["agents"]}:
             continue  # agent natif hors registre (Gardien des connexions) : pas d'outil de fabrique de toute façon
@@ -3027,7 +3027,19 @@ def assurer_fabrique(api: Api, cid: str, reg_agents: dict, agents: dict[str, dic
             else:
                 autorise = slug in retenus[genre]
             nom = f"atelier-fabrique-interdit:{slug}:{outil.split(':', 1)[1]}"
-            if autorise or nom in existantes:
+            if autorise:
+                # Agent retenu après coup : la politique block créée quand il ne l'était pas le bloquerait encore.
+                ancienne = existantes.get(nom)
+                if ancienne and ancienne.get("id"):
+                    # Seulement la forme exacte créée ci-dessous : une politique du même nom retouchée à la main est gardée.
+                    if (ancienne.get("policyType") == "block" and ancienne.get("selectors") == {"toolName": outil}
+                            and ancienne.get("conditions") == {"actor": {"agentId": agent["id"]}}):
+                        api.appel("DELETE", f"/companies/{cid}/tools/policies/{ancienne['id']}")
+                        ecritures += 1
+                    else:
+                        print(f"AVERTISSEMENT : politique « {nom} » modifiée à la main : non supprimée, à revoir.", file=sys.stderr)
+                continue
+            if nom in existantes:
                 continue
             api.appel("POST", f"/companies/{cid}/tools/policies", {
                 "name": nom,
@@ -3971,13 +3983,14 @@ def budget_service(fiche: dict, svc: dict, agents: list[dict] | None) -> int:
 def identite_service(fiche: dict, svc: dict, registre: dict | None) -> tuple[str, str]:
     """(nom, marqueur) de l'entreprise d'un service. L'identité déjà inscrite au registre local prime (une entreprise
     existante n'est jamais renommée). Sinon : marketing seul = nom commercial et « atelier-client:<slug> » (compatible
-    avec l'existant) ; autrement « <nom commercial> · <service> » et « atelier-client:<slug>:<service> »."""
+    avec l'existant) ; autrement « <préfixe> · <service> · <nom commercial> » (le préfixe du registre donne à Paperclip des
+    préfixes de tâches lisibles) et « atelier-client:<slug>:<service> »."""
     entree = ((registre or {}).get("entreprises") or {}).get(svc["slug"])
     if entree:
         return entree.get("nom") or fiche["nomCommercial"], entree["marqueur"]
     if svc["slug"] == "marketing" and fiche["services"] == ["marketing"]:
         return fiche["nomCommercial"], f"{PREFIXE_MARQUEUR_CLIENT}{fiche['slug']}"
-    return f"{fiche['nomCommercial']} · {svc['nom']}", f"{PREFIXE_MARQUEUR_CLIENT}{fiche['slug']}:{svc['slug']}"
+    return f"{svc['prefixe']} · {svc['nom']} · {fiche['nomCommercial']}", f"{PREFIXE_MARQUEUR_CLIENT}{fiche['slug']}:{svc['slug']}"
 
 
 def organisation_service(reg_orga: dict, fiche: dict, svc: dict, nom: str, marqueur: str) -> dict:

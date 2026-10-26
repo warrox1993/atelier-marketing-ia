@@ -1,0 +1,125 @@
+From 141062c9c30ca7e9a513dde8a5e1e28d46b3d006 Mon Sep 17 00:00:00 2001
+From: Jean-Baptiste Dhondt <114347858+warrox1993@users.noreply.github.com>
+Date: Sun, 25 Oct 2026 13:01:32 +0100
+Subject: [PATCH 95/95] =?UTF-8?q?test(server):=20tests=20amont=20de=20la?=
+ =?UTF-8?q?=20v2026.1023.0=20align=C3=A9s=20sur=20les=20gardes=20et=20cart?=
+ =?UTF-8?q?es=20de=20l'atelier?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Onze tests amont échouaient à cause de nos propres patches, sans défaut de code (même motif que
+le commit « tests amont alignés sur les gardes et cartes de l'atelier ») :
+- issue-creation-source-routes (6), task-title-routes (2), permissions-upgrade-boundary-routes (1),
+  low-trust-red-team-routes LT-26 (1) : garde de délégation (0015) neutralisée dans ces fichiers ;
+- native-connection-baseline-fixture (1) : la carte « atelier-hubspot » (0004) répond à « HubSpot » ;
+  cartes atelier retirées du catalogue dans ce fichier.
+Les règles de l'atelier restent couvertes par atelier-garde-delegation et atelier-marketing-apps.
+Reste volontairement en échec : low-trust-red-team-routes « allows the human-requested run… »,
+qui attend l'annulation d'un run passant la main sur sa propre tâche (comportement changé par 0009).
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_018gDD2rkwHNLjceGXdqTLg7
+---
+ .../__tests__/issue-creation-source-routes.test.ts |  7 ++++++-
+ .../__tests__/low-trust-red-team-routes.test.ts    |  7 ++++++-
+ .../native-connection-baseline-fixture.test.ts     | 14 ++++++++++++++
+ .../permissions-upgrade-boundary-routes.test.ts    |  5 +++++
+ server/src/__tests__/task-title-routes.test.ts     |  5 +++++
+ 5 files changed, 36 insertions(+), 2 deletions(-)
+
+diff --git a/server/src/__tests__/issue-creation-source-routes.test.ts b/server/src/__tests__/issue-creation-source-routes.test.ts
+index 1d259b374..400700e3f 100644
+--- a/server/src/__tests__/issue-creation-source-routes.test.ts
++++ b/server/src/__tests__/issue-creation-source-routes.test.ts
+@@ -2,7 +2,12 @@ import { randomUUID } from "node:crypto";
+ import express from "express";
+ import request from "supertest";
+ import { and, eq } from "drizzle-orm";
+-import { afterAll, beforeAll, describe, expect, it } from "vitest";
++import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
++
++// Atelier (patch local 0015) : la garde de délégation (un spécialiste ne délègue pas, 2 niveaux,
++// 4 sous-tâches ouvertes) est neutralisée ici pour que ces tests amont continuent de vérifier
++// leur propre règle ; elle est testée dans atelier-garde-delegation.test.ts.
++vi.mock("../atelier/garde-delegation.js", () => ({ refuserDelegationParAgent: async () => undefined }));
+ import { activityLog, agents, companies, createDb, heartbeatRuns, issues } from "@paperclipai/db";
+ import { getEmbeddedPostgresTestSupport, startEmbeddedPostgresTestDatabase } from "./helpers/embedded-postgres.js";
+ import { issueRoutes } from "../routes/issues.js";
+diff --git a/server/src/__tests__/low-trust-red-team-routes.test.ts b/server/src/__tests__/low-trust-red-team-routes.test.ts
+index bafcdfce5..fa34794c6 100644
+--- a/server/src/__tests__/low-trust-red-team-routes.test.ts
++++ b/server/src/__tests__/low-trust-red-team-routes.test.ts
+@@ -4,7 +4,12 @@ import express from "express";
+ import request from "supertest";
+ import { WebSocketServer } from "ws";
+ import { and, eq } from "drizzle-orm";
+-import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
++import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
++
++// Atelier (patch local 0015) : la garde de délégation (un spécialiste ne délègue pas, 2 niveaux,
++// 4 sous-tâches ouvertes) est neutralisée ici pour que ces tests amont continuent de vérifier
++// leur propre règle ; elle est testée dans atelier-garde-delegation.test.ts.
++vi.mock("../atelier/garde-delegation.js", () => ({ refuserDelegationParAgent: async () => undefined }));
+ import {
+   costEvents,
+   activityLog,
+diff --git a/server/src/__tests__/native-connection-baseline-fixture.test.ts b/server/src/__tests__/native-connection-baseline-fixture.test.ts
+index 3605bed84..ec88380a5 100644
+--- a/server/src/__tests__/native-connection-baseline-fixture.test.ts
++++ b/server/src/__tests__/native-connection-baseline-fixture.test.ts
+@@ -1,6 +1,20 @@
+ import { randomUUID } from "node:crypto";
+ import { request } from "@playwright/test";
+ import { afterAll, beforeAll, expect, it, vi } from "vitest";
++
++// Atelier (patch local 0004) : la carte native « atelier-hubspot » répond à « HubSpot » et court-circuite
++// la question de fournisseur que ce test amont vérifie. Les cartes de l'atelier sont retirées du catalogue
++// ici seulement ; elles sont testées dans atelier-marketing-apps.test.ts.
++vi.mock("@paperclipai/shared", async (importOriginal) => {
++  const actual = await importOriginal<typeof import("@paperclipai/shared")>();
++  const amont = (slug: string) => !slug.startsWith(actual.ATELIER_APP_SLUG_PREFIX);
++  return {
++    ...actual,
++    CONNECTABLE_APP_DEFINITIONS: actual.CONNECTABLE_APP_DEFINITIONS.filter((app) => amont(app.slug)),
++    APP_STORE_DEFINITIONS: actual.APP_STORE_DEFINITIONS.filter((app) => amont(app.slug)),
++    getAppStoreDefinition: (slug: string) => (amont(slug) ? actual.getAppStoreDefinition(slug) : null),
++  };
++});
+ import { startRunnerApiTestServer } from "./helpers/runner-api-server.js";
+ import { RunnerApi } from "../../../tests/runner-e2e/api.js";
+ import { setupAggregatorFixture } from "../../../tests/runner-e2e/aggregator-fixture.js";
+diff --git a/server/src/__tests__/permissions-upgrade-boundary-routes.test.ts b/server/src/__tests__/permissions-upgrade-boundary-routes.test.ts
+index 89c00485e..1cdde0fdf 100644
+--- a/server/src/__tests__/permissions-upgrade-boundary-routes.test.ts
++++ b/server/src/__tests__/permissions-upgrade-boundary-routes.test.ts
+@@ -2,6 +2,11 @@ import { randomUUID } from "node:crypto";
+ import express from "express";
+ import request from "supertest";
+ import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
++
++// Atelier (patch local 0015) : la garde de délégation (un spécialiste ne délègue pas, 2 niveaux,
++// 4 sous-tâches ouvertes) est neutralisée ici pour que ces tests amont continuent de vérifier
++// leur propre règle ; elle est testée dans atelier-garde-delegation.test.ts.
++vi.mock("../atelier/garde-delegation.js", () => ({ refuserDelegationParAgent: async () => undefined }));
+ import {
+   activityLog,
+   agents,
+diff --git a/server/src/__tests__/task-title-routes.test.ts b/server/src/__tests__/task-title-routes.test.ts
+index 5146729da..8d84382dd 100644
+--- a/server/src/__tests__/task-title-routes.test.ts
++++ b/server/src/__tests__/task-title-routes.test.ts
+@@ -1,5 +1,10 @@
+ import { randomUUID } from "node:crypto";
+ import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
++
++// Atelier (patch local 0015) : la garde de délégation (un spécialiste ne délègue pas, 2 niveaux,
++// 4 sous-tâches ouvertes) est neutralisée ici pour que ces tests amont continuent de vérifier
++// leur propre règle ; elle est testée dans atelier-garde-delegation.test.ts.
++vi.mock("../atelier/garde-delegation.js", () => ({ refuserDelegationParAgent: async () => undefined }));
+ import * as chat from "chat";
+ 
+ vi.mock("chat", async importOriginal => {
+-- 
+2.53.0
+

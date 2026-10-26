@@ -27,3 +27,4 @@ export * from "./ui.js";
 export * from "./synthese.js";
 export * from "./tableau-direction.js";
 export * from "./experiences.js";
+export * from "./observatoire.js";

@@ -1,0 +1,10 @@
+[Unit]
+Description=Alerte bureau : échec de %i
+
+# Unité modèle appelée par « OnFailure=atelier-alerte@%n.service » (sauvegarde, export Phoenix).
+# Installation : install -m 644 scripts/systemd/atelier-alerte@.service ~/.config/systemd/user/
+# Même mécanisme que scripts/sante-atelier.sh : notify-send en urgence critique.
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/notify-send --urgency=critical --icon=dialog-error "Atelier marketing IA : échec de %i" "Détails : journalctl --user -u %i -n 50"

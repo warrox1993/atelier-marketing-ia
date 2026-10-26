@@ -152,12 +152,13 @@ function grandJeu() {
 
 
 describe("entrée de menu", () => {
-  it("« Départements » et « Réglages de l'atelier » (plus d'« Atelier » ni d'« Organigramme ») pour un client à plusieurs services", async () => {
+  it("« Départements », « Livrables » et « Réglages de l'atelier » (plus d'« Atelier » ni d'« Organigramme ») pour un client à plusieurs services", async () => {
     serveur = servir();
     installerPont("/RNO/atelier/accueil");
     rendu = await rendre(createElement(EntreeAtelier, { context: contexte }));
     await laisser();
-    expect(textes(rendu.conteneur, "a.atl-entree").map((t) => t?.trim())).toEqual(["Départements", "Réglages de l'atelier"]);
+    expect(textes(rendu.conteneur, "a.atl-entree").map((t) => t?.trim())).toEqual(["Départements", "Livrables", "Réglages de l'atelier"]);
+    expect(parTexte(rendu.conteneur, "a.atl-entree", "Livrables").getAttribute("href")).toContain("/RNO/atelier/livrables");
     expect(parTexte(rendu.conteneur, "a.atl-entree", "Départements").getAttribute("href")).toContain("/RNO/atelier/departements");
     expect(parTexte(rendu.conteneur, "a.atl-entree", "Réglages de l'atelier").getAttribute("href")).toContain("/RNO/atelier/mise-en-place");
   });

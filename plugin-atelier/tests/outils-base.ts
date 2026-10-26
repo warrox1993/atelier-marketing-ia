@@ -151,7 +151,7 @@ export function creerBanc(o: { mode?: "demonstration" | "reel"; modeEntreprise?:
       return d
         ? {
             id: d.id, issueId: d.issueId, audience: d.audience ?? null, empreinteArguments: d.empreinteArguments ?? null, service: d.service ?? null, outil: d.outil ?? null,
-            preuveCharge: d.preuveCharge ? structuredClone(d.preuveCharge) : null, revocation: d.revoqueeLe ? { le: d.revoqueeLe, motif: d.revocationMotif } : null,
+            preuveCharge: d.preuveCharge ? structuredClone(d.preuveCharge) : null, travauxFabrique: d.travauxFabrique ?? [], revocation: d.revoqueeLe ? { le: d.revoqueeLe, motif: d.revocationMotif } : null,
           }
         : null;
     },

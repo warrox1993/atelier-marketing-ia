@@ -205,6 +205,8 @@ describe("outils : agent, quota, dépôt, étanchéité", () => {
   let connus: Set<string>;
   let avertissements: string[];
   let jour: string;
+  let suivi: unknown;
+  let suiviEchec: boolean;
 
   const fabrique = () => {
     const deps: DependancesFabrique = {
@@ -213,6 +215,11 @@ describe("outils : agent, quota, dépôt, étanchéité", () => {
       config: async () => config,
       etatLire: async (cle, entreprise) => etat.get(`${entreprise}/${cle}`) ?? null,
       etatEcrire: async (cle, entreprise, v) => void etat.set(`${entreprise}/${cle}`, v),
+      suiviLire: async () => suivi,
+      suiviEcrire: async (v) => {
+        if (suiviEchec) throw new Error("disque plein");
+        suivi = v;
+      },
       maintenant: () => new Date(`${jour}T10:00:00Z`),
     };
     return creerOutilsFabrique(deps);
@@ -226,6 +233,8 @@ describe("outils : agent, quota, dépôt, étanchéité", () => {
     connus = new Set([AGENT, AUTRE_AGENT]);
     avertissements = [];
     jour = "2026-10-24";
+    suivi = [];
+    suiviEchec = false;
   });
   afterEach(() => rmSync(dossier, { recursive: true, force: true }));
 
@@ -307,6 +316,31 @@ describe("outils : agent, quota, dépôt, étanchéité", () => {
     expect(autre.error).toBe("Travail introuvable.");
     expect(inexistant.error).toBe(autre.error);
     expect((await fabrique().etatFabrication({ travail: T }, run(ENTREPRISE_B))).error).toBeUndefined();
+  });
+  it("etat_fabrication : un agent hors liste et non déposant est refusé, sans aucun contenu", async () => {
+    poser(ENTREPRISE_A, T, "etat.json", { etat: "termine" });
+    poser(ENTREPRISE_A, T, "apercu.txt", "secret");
+    const r = await fabrique().etatFabrication({ travail: T }, { ...run(), agentId: AUTRE_AGENT });
+    expect(r.error).toContain("Refusé");
+    expect(r.data).toBeUndefined();
+    expect(r.content).toBeUndefined();
+  });
+  it("etat_fabrication : l'agent déposant reste admis même retiré des listes autorisées", async () => {
+    poser(ENTREPRISE_A, T, "etat.json", { etat: "en_cours" });
+    suivi = [{ entreprise: ENTREPRISE_A, travail: T, agent: AUTRE_AGENT, run: RUN, tache: null, cree: "2026-10-24T10:00:00.000Z", essais: 0 }];
+    expect((await fabrique().etatFabrication({ travail: T }, { ...run(), agentId: AUTRE_AGENT })).error).toBeUndefined();
+  });
+  it("etat_fabrication : un agent autorisé à fabriquer des vidéos seulement est admis", async () => {
+    config = { fabriqueDossierFile: dossier, fabriqueAgentsVideo: [AUTRE_AGENT] };
+    poser(ENTREPRISE_A, T, "etat.json", { etat: "en_cours" });
+    expect((await fabrique().etatFabrication({ travail: T }, { ...run(), agentId: AUTRE_AGENT })).error).toBeUndefined();
+  });
+  it("échec de l'écriture du suivi : le dépôt réussit et l'échec est journalisé avec le travail", async () => {
+    suiviEchec = true;
+    const r = await fabrique().fabriquerDocument(valide(), run());
+    const { travail } = r.data as { travail: string };
+    expect(r.error).toBeUndefined();
+    expect(avertissements.some((m) => m.includes(travail))).toBe(true);
   });
   it("etat_fabrication : un identifiant non UUID est refusé", async () => {
     for (const mauvais of ["../../etc/passwd", "abc", "", 42, ENTREPRISE_A + "/.."]) {

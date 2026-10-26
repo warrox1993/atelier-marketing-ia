@@ -13,7 +13,7 @@ WhatsApp (votre téléphone)
 Meta (Cloud API) ── webhook signé (X-Hub-Signature-256) ──► Tailscale Funnel (https://<machine>.<tailnet>.ts.net)
                                                               │
                                                               ▼
-                                         passerelle WhatsApp 127.0.0.1:3195 (whatsapp/)
+                                         passerelle WhatsApp 127.0.0.1:3197 (whatsapp/)
                                            │ 1. corps 256 Kio au plus (413 et connexion fermée au-delà), puis signature
                                            │    HMAC-SHA256 (secret de l'application), sinon 401 ; plafond global compté
                                            │    sur les seules requêtes signées
@@ -163,7 +163,7 @@ systemctl --user daemon-reload && systemctl --user enable --now atelier-whatsapp
 journalctl --user -u atelier-whatsapp -n 20 --no-pager     # attendu : "evenement":"demarrage"
 ```
 
-### 8. Tailscale Funnel (publie le port 3195, et lui seul)
+### 8. Tailscale Funnel (publie le port 3197, et lui seul)
 
 Le 17/10/2026, `tailscaled` était arrêté et désactivé sur le poste de développement : `tailscale funnel status` n'a donc pas pu être lu.
 
@@ -180,11 +180,11 @@ attribut `funnel` autorisé pour cette machine dans la politique d'accès (la co
 Puis :
 
 ```
-tailscale funnel --bg 3195
-tailscale funnel status           # attendu : https://<machine>.<tailnet>.ts.net (Funnel on) → http://127.0.0.1:3195
+tailscale funnel --bg 3197
+tailscale funnel status           # attendu : https://<machine>.<tailnet>.ts.net (Funnel on) → http://127.0.0.1:3197
 ```
 
-Seul le chemin `/webhook` répond (tout le reste : 404). Pour retirer la publication : `tailscale funnel --bg 3195 off`
+Seul le chemin `/webhook` répond (tout le reste : 404). Pour retirer la publication : `tailscale funnel --bg 3197 off`
 (ou `tailscale funnel reset`, qui retire TOUTE la configuration Funnel de la machine). Si `funnel status` montrait déjà
 une configuration, ne lancez pas `reset` : dites-le et on choisira un autre port HTTPS (443, 8443 ou 10000).
 

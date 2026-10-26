@@ -70,6 +70,7 @@ mkdir -p "${B}/data/backups" "${B}/secrets" "${B}/companies/c1" "${B}/data/stora
          "${SRC}/instance/claude-config/c1/ag"
 chmod 755 "${TMP}/distant"   # dossier distant déjà présent et trop ouvert : « envoyer » doit le forcer en 700
 /usr/bin/cp -f -- "${REELLE}" "${B}/data/backups/"
+touch -d "2 hours ago" "${B}/data/backups/$(basename "${REELLE}")"   # la sauvegarde hors machine ignore les dumps de moins de 60 s
 rsync -a --exclude __pycache__ "${RACINE}/scripts/" "${SRC}/scripts/"   # la source a l'allure d'un clone (garde « même arborescence »)
 printf '%s' "$(openssl rand -base64 32)" > "${B}/secrets/master.key"   # clé synthétique valide (32 octets en base64)
 printf 'PAPERCLIP_AGENT_JWT_SECRET=jwt-synthetique-ne-pas-afficher\nPAPERCLIP_TOOL_ACTION_SIGNING_SECRET=signature-synthetique-ne-pas-afficher\n' > "${B}/.env"

@@ -33,8 +33,9 @@
   "//": "Installation : utiliser `pnpm run installer` (ONNXRUNTIME_NODE_INSTALL=skip), sinon le postinstall d'onnxruntime-node télécharge 272 Mo de fournisseurs CUDA inutiles (vectorisation sur processeur seul). Le modèle bge-m3 (560 Mo) se télécharge par `pnpm run modele` vers .modeles/ (ignoré par git).",
   "pnpm": {
     "overrides": {
-      "@paperclipai/shared": "2026.1012.0",
-      "argparse": "^2.0.1"
+      "@paperclipai/shared": "2026.1023.0",
+      "argparse": "^2.0.1",
+      "undici": "8.12.3"
     }
   },
   "dependencies": {
@@ -43,23 +44,23 @@
     "onnxruntime-node": "1.30.0",
     "pdfjs-dist": "6.4.299",
     "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz",
-    "zod": "4.4.3"
+    "zod": "4.6.7"
   },
   "devDependencies": {
     "@paperclipai/plugin-sdk": "file:.paperclip-sdk/paperclipai-plugin-sdk-1.0.0.tgz",
-    "@paperclipai/shared": "2026.1012.0",
+    "@paperclipai/shared": "2026.1023.0",
     "@types/node": "^24.0.0",
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.3",
     "@types/three": "0.186.0",
     "esbuild": "0.28.2",
-    "jsdom": "30.0.1",
+    "jsdom": "30.1.3",
     "jszip": "3.10.2",
-    "react": "19.2.8",
-    "react-dom": "19.2.8",
-    "three": "0.186.0",
+    "react": "19.3.1",
+    "react-dom": "19.3.1",
+    "three": "0.186.1",
     "typescript": "7.0.2",
-    "vitest": "4.1.12"
+    "vitest": "5.0.5"
   },
   "peerDependencies": {
     "react": ">=18"

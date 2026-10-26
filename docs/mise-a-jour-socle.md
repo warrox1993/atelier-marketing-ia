@@ -1,16 +1,18 @@
 # Mise à jour du socle Paperclip et retour arrière
 
-Document du lot B, rédigé le 15/10/2026. Socle actuel : tag stable `v2026.1012.0`
-(SHA `bba6a45f0d364cfd962ac59b3bdf2426a8222adb`), branche locale `atelier-marketing` = ce tag + 6 patches
-(`socle/patches/0001` à `0006`). Les chemins `paperclip/...` ci-dessous sont ceux du socle ; chaque affirmation
+Document du lot B, rédigé le 15/10/2026, mis à jour le 25/10/2026. Socle actuel : tag stable `v2026.1023.0`
+(SHA `1b4c803816e82b0265c8422e1a804327a7ed8c54`), branche locale `atelier-marketing-v2026.1023.0` = ce tag + 95 patches
+(`socle/patches/0001` à `0095`, régénérés le 25/10/2026 ; voir « Mise à jour vers v2026.1023.0 » en section 3).
+Branche précédente conservée : `atelier-marketing` (v2026.1012.0 + 95 patches), copie de retour
+`atelier-marketing-AVANT-20261025`. Les chemins `paperclip/...` ci-dessous sont ceux du socle ; chaque affirmation
 cite le fichier et la ligne, ou une mesure faite ce jour.
 
 ## 0. Ce qu'il faut savoir avant de commencer
 
 - **Stable seulement.** Les tags locaux contiennent aussi des `canary/` et `nightly/` (`git tag` dans `paperclip/`).
   Règle de travail : pas de bêta pour les outils de travail. Le format stable est `vAAAA.MJJ.P` (`doc/RELEASING.md:21-26`).
-  Lister les stables : `git ls-remote --tags origin 'v20*' | sed 's/.*tags\///' | sort -V | tail`. Au 15/10/2026
-  le plus récent est `v2026.1012.0` : **il n'y a rien à mettre à jour aujourd'hui** (lecture seule du dépôt amont).
+  Lister les stables : `git ls-remote --tags origin 'v20*' | sed 's/.*tags\///' | sort -V | tail`. Au 25/10/2026
+  le plus récent est `v2026.1023.0`, en place depuis ce jour.
 - **Les migrations vont toujours vers l'avant.** `packages/db/src/migrations/` contient 305 fichiers SQL
   (`0000` à `0305`), aucune migration inverse. Revenir à une version plus ancienne du code sur une base déjà
   migrée n'est donc pas supporté : le retour arrière passe par la **restauration d'une sauvegarde faite avant la
@@ -51,7 +53,7 @@ git -C paperclip rev-parse HEAD                      # à noter : c'est le point
 
 ## 3. Rejouer les patches sur le nouveau tag
 
-Les six patches sont des commits locaux (`git format-patch`). Procédure :
+Les patches sont des commits locaux (`git format-patch`). Procédure :
 
 ```bash
 cd ~/Projets/atelier-marketing-ia/paperclip
@@ -110,6 +112,21 @@ celui de la branche `atelier-marketing` (commit `5729d9235`).
 `git am --3way socle/patches/*.patch` : les trois patches s'appliquent sans conflit et l'arbre obtenu est
 **identique** à celui de `atelier-marketing` (même empreinte d'arbre `0d6707d6cddf0cf0ab1baf34ca3f5287c53d51a4`).
 Le rejeu est donc reproductible ; il reste à l'éprouver face à un vrai nouveau tag, qui n'existe pas encore.
+
+**Mise à jour vers v2026.1023.0 (25/10/2026)** : `git am --3way` des 95 patches de la branche `atelier-marketing`
+sur `v2026.1023.0`, conflits résolus un par un (intention du patch gardée, évolution amont gardée). Particularité :
+**`v2026.1023.0` ne descend pas de `v2026.1012.0`** (`git merge-base --is-ancestor` répond non ; ancêtre commun
+`22a3ea3414e9`, et la date du commit du tag 1023, 2026-10-12T05:48:29Z, précède celle du tag 1012) : ne pas raisonner
+en « diff 1012..1023 » mais en rejeu complet. Principaux déplacements amont : `server/src/services/heartbeat.ts` découpé
+(`heartbeat/queue.ts`, `heartbeat/run-lifecycle.ts`), suppression d'entreprise déplacée dans
+`server/src/services/company-deletion.ts` (agents purgés par le module agent-lifecycle, qui exige des agents terminés).
+Patch retiré : l'ancien `0001` (resynchronisation du lockfile), le lockfile 1023 portant déjà les spécificateurs
+(installation figée réussie). Les correctifs des anciens `0047` et `0062` sont intégrés en amont (seuls leurs tests
+restent). Ajouts : tables vocales `chat_voice_*` supprimées avant `chat_endpoints` (clé composite sans cascade) et
+`0095` (tests amont alignés sur les gardes et cartes). Rejeu des patches régénérés dans un clone jetable : arbre
+`5939d95e1a56c772b3f400d27a7a7aa333da1786`, identique à la branche. Suite serveur (6 workers) : 47 échecs dont 35
+identiques sur le tag nu (environnement : umask 027, git, runner), 11 alignés par `0095`, 1 laissé ouvert
+(`low-trust-red-team-routes`, annulation d'un run qui passe la main sur sa propre tâche, comportement voulu par `0009`).
 
 ## 4. Reconstruire, migrer, tester
 

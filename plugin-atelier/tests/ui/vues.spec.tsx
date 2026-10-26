@@ -97,10 +97,13 @@ describe("navigation", () => {
     c = await page("/RNO/atelier/equipe");
     expect(c.querySelector("main.atl-page")?.classList.contains("atl-page-large")).toBe(false);
   });
-  it("l'entrée de la barre latérale mène aux Réglages de l'atelier (plus d'entrée « Atelier »)", async () => {
+  it("la barre latérale mène aux Livrables et aux Réglages de l'atelier (plus d'entrée « Atelier »)", async () => {
     rendu = await rendre(createElement(EntreeAtelier, { context: contexte }));
-    expect(rendu.conteneur.querySelector("a")?.getAttribute("href")).toBe("/RNO/atelier/mise-en-place");
-    expect(rendu.conteneur.textContent).toBe("Réglages de l'atelier");
+    const liens = [...rendu.conteneur.querySelectorAll("a")];
+    expect(liens.map((a) => [a.textContent, a.getAttribute("href")])).toEqual([
+      ["Livrables", "/RNO/atelier/livrables"],
+      ["Réglages de l'atelier", "/RNO/atelier/mise-en-place"],
+    ]);
   });
 });
 

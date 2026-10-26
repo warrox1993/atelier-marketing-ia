@@ -9,7 +9,6 @@ import contextlib
 import importlib.util
 import io
 import os
-import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -193,11 +192,24 @@ class MiseAJourClient(unittest.TestCase):
         registre = bo.lire_registre_client("client-test")
         self.assertEqual(registre["entreprises"]["administratif"]["entrepriseId"], ID_NOUVEAU)
         self.assertEqual(registre["entreprises"]["administratif"]["marqueur"], "atelier-client:client-test:administratif")
-        self.assertEqual(registre["entreprises"]["administratif"]["nom"], "Client Test · Administratif")
+        self.assertEqual(registre["entreprises"]["administratif"]["nom"], "ADM · Administratif · Client Test")
         budgets = [j for j in self.api.journal if j[1] == f"/companies/{ID_NOUVEAU}/budgets"]
         self.assertEqual(len(budgets), 1)
         self.assertTrue(budgets[0][2]["budgetMonthlyCents"] > 0)
         self.assertFalse([j for j in self.api.journal if j[1] in (f"/companies/{ID_MKT}/budgets", f"/companies/{ID_DIR}/budgets")])
+
+    def test_identite_nouvelle_entreprise_prefixee_et_existante_conservee(self):
+        """Nouvelle entreprise (absente du registre local) : « <préfixe> · <service> · <client> » ; existante : nom du registre tel quel."""
+        fiche = {"nomCommercial": "Client Test", "slug": "client-test", "services": ["marketing", "direction"]}
+        svc_adm = {"slug": "administratif", "nom": "Administratif", "prefixe": "ADM"}
+        self.assertEqual(bo.identite_service(fiche, svc_adm, None),
+                         ("ADM · Administratif · Client Test", "atelier-client:client-test:administratif"))
+        registre = {"entreprises": {"administratif": {"nom": "Ancien nom du client", "marqueur": "atelier-client:client-test:administratif"}}}
+        self.assertEqual(bo.identite_service(fiche, svc_adm, registre),
+                         ("Ancien nom du client", "atelier-client:client-test:administratif"))
+        seul = {"nomCommercial": "Client Test", "slug": "client-test", "services": ["marketing"]}
+        svc_mkt = {"slug": "marketing", "nom": "Marketing", "prefixe": "MKT"}
+        self.assertEqual(bo.identite_service(seul, svc_mkt, None), ("Client Test", "atelier-client:client-test"))
 
     def test_idempotent_deuxieme_passage_sans_ecriture_directe(self):
         self.lancer(sans_nouveaux_services=False)

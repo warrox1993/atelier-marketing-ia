@@ -1,6 +1,7 @@
 [Unit]
 Description=Export du journal de l'atelier vers Phoenix (instance 3100, PostgreSQL 54329)
 After=atelier-phoenix.service
+OnFailure=atelier-alerte@%n.service
 
 # Installation (une fois) :
 #   install -d -m 700 ~/.config/atelier

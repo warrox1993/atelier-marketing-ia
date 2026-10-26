@@ -357,6 +357,14 @@ export interface DependancesSignalement {
   maintenant?: () => Date;
 }
 
+const verrousSuivi: { fin: Promise<unknown> } = { fin: Promise.resolve() };
+/** Verrou unique de la liste de suivi, partagé par le dépôt (fabrique-outils) et la tournée de signalement : toute lecture-puis-écriture de la liste passe ici. */
+export function sousVerrouSuivi<T>(fn: () => Promise<T>): Promise<T> {
+  const suite = verrousSuivi.fin.then(fn, fn);
+  verrousSuivi.fin = suite.catch(() => undefined);
+  return suite;
+}
+
 function suiviValide(v: unknown): TravailSuivi[] {
   if (!Array.isArray(v)) return [];
   return v.filter((e): e is TravailSuivi => !!e && typeof e === "object" && typeof (e as TravailSuivi).travail === "string" && typeof (e as TravailSuivi).entreprise === "string");
@@ -402,37 +410,49 @@ export function creerSignalement(d: DependancesSignalement) {
     if (enCours) return r;
     enCours = true;
     try {
-      const restants: TravailSuivi[] = [];
+      const retires = new Set<string>();
+      const remplaces = new Map<string, TravailSuivi>();
       for (const t of suiviValide(await d.suiviLire())) {
         const dossier = dossierTravail(await d.racine(t.entreprise), t.entreprise, t.travail);
         const etat = dossier ? ((await lireJson(join(dossier, "etat.json"))) as Record<string, unknown> | null) : null;
         const fini = etat !== null && (etat.etat === "termine" || etat.etat === "echec");
         if (!fini || !dossier || !etat) {
-          if (maintenant().getTime() - Date.parse(t.cree) < SUIVI.ageMaxMs) restants.push(t);
-          else r.abandonnes.push(t.travail);
+          if (maintenant().getTime() - Date.parse(t.cree) >= SUIVI.ageMaxMs) {
+            r.abandonnes.push(t.travail);
+            retires.add(t.travail);
+          }
           continue;
         }
         if (!t.tache) {
           d.logger.warn("Fabrique : travail fini sans tâche d'origine, non signalé", { travail: t.travail });
           r.abandonnes.push(t.travail);
+          retires.add(t.travail);
           continue;
         }
         try {
           await d.commenter(t.tache, await texteFinal(t, etat, dossier), t.entreprise);
         } catch (e) {
           // Le commentaire n'est pas posé : nouvel essai au prochain passage, dans la limite fixée.
-          if (t.essais + 1 < SUIVI.essaisMax) restants.push({ ...t, essais: t.essais + 1 });
-          else r.abandonnes.push(t.travail);
+          if (t.essais + 1 < SUIVI.essaisMax) remplaces.set(t.travail, { ...t, essais: t.essais + 1 });
+          else {
+            r.abandonnes.push(t.travail);
+            retires.add(t.travail);
+          }
           d.logger.warn("Fabrique : commentaire de fin de travail impossible", { travail: t.travail, erreur: e instanceof Error ? e.message : String(e) });
           continue;
         }
         // Commentaire posé : le travail est signalé, quoi qu'il arrive au réveil (jamais de second commentaire).
         r.signales.push(t.travail);
+        retires.add(t.travail);
         await d.reveiller(t.tache, t.entreprise, `atelier-fabrique-${t.travail}`).catch((e) =>
           d.logger.warn("Fabrique : réveil de l'agent impossible", { travail: t.travail, erreur: e instanceof Error ? e.message : String(e) }),
         );
       }
-      await d.suiviEcrire(restants);
+      // Relecture sous le verrou commun : les travaux déposés pendant la tournée sont conservés, seuls les travaux traités changent.
+      await sousVerrouSuivi(async () => {
+        const courant = suiviValide(await d.suiviLire());
+        await d.suiviEcrire(courant.filter((t) => !retires.has(t.travail)).map((t) => remplaces.get(t.travail) ?? t));
+      });
     } finally {
       enCours = false;
     }

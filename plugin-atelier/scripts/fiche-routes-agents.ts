@@ -192,6 +192,8 @@ function bornes(s: Json): string {
   }
   if (typeof s.pattern === "string" && !s.format) p.push(`motif ${"`"}${s.pattern.replace(/\|/gu, "\\|")}${"`"}`);
   if (s.default !== undefined && s.default !== null && !(Array.isArray(s.default) && s.default.length === 0)) p.push(`défaut ${JSON.stringify(s.default)}`);
+  // zod 4.6 écrit `type: ["string","null"]` (et non plus `anyOf`) pour un champ nullable simple.
+  if (Array.isArray(s.type) && s.type.includes("null")) p.push("peut valoir null");
   return p.join(" ; ");
 }
 

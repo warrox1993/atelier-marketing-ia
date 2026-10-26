@@ -23,6 +23,14 @@ PrivateNetwork=yes
 PrivateTmp=yes
 NoNewPrivileges=yes
 CapabilityBoundingSet=
+# Durcissement du noyau (B6). ProtectKernelTunables, ProtectProc=invisible et ProtectKernelLogs sont volontairement absents :
+# ils masquent ou surimposent des entrées de /proc et bwrap ne peut plus y monter son --proc (mesuré pour ProtectKernelLogs).
+ProtectKernelModules=yes
+ProtectClock=yes
+LockPersonality=yes
+RestrictSUIDSGID=yes
+RestrictRealtime=yes
+SystemCallArchitectures=native
 
 # GPU : seulement les périphériques NVIDIA nécessaires au rendu.
 DevicePolicy=closed

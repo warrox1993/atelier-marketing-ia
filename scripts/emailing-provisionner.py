@@ -22,7 +22,6 @@ import http.cookiejar
 import json
 import os
 import re
-import secrets
 import sys
 import urllib.error
 import urllib.parse

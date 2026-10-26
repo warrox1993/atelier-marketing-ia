@@ -65,7 +65,7 @@ def preparer_entree(tmp_path, durees, format_sortie="1080x1080", texte="Bonjour 
     for position, (duree, genre) in enumerate(zip(durees, types), start=1):
         nom = f"scene-{position:02d}.{genre}"
         if genre == "png":
-            ffmpeg("-f", "lavfi", "-i", f"color=c=0x203040:s=640x360:d=1", "-frames:v", "1", str(entree / nom))
+            ffmpeg("-f", "lavfi", "-i", "color=c=0x203040:s=640x360:d=1", "-frames:v", "1", str(entree / nom))
         else:
             ffmpeg("-f", "lavfi", "-i", "testsrc=s=320x240:r=30:d=0.5", "-pix_fmt", "yuv420p", str(entree / nom))
         ffmpeg("-f", "lavfi", "-i", f"sine=frequency={300 + 100 * position}:duration={duree}:sample_rate=22050",
@@ -278,7 +278,7 @@ def test_cage_montage_ne_voit_ni_bibliotheque_ni_reseau(tmp_path):
     try:
         code = ("import os,socket,sys\n"
                 "vu = os.path.exists('/var/lib/atelier-fabrique') or os.path.exists('/home')\n"
-                f"s = socket.socket(); s.settimeout(2)\n"
+                "s = socket.socket(); s.settimeout(2)\n"
                 "try:\n s.connect(('127.0.0.1', %d)); joint = True\nexcept OSError:\n joint = False\n"
                 "sys.exit(1 if vu or joint else 0)\n" % port)
         resultat = executer(Etape("cpu", "/usr/bin/python3", ("-I", "-c", code), str(entree), str(sortie)), 30)

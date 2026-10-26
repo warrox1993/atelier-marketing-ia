@@ -30,6 +30,7 @@ export interface VoixRegistre {
 
 type Verdict = { ok: true } | { ok: false; motif: string };
 const refus = (motif: string): Verdict => ({ ok: false, motif });
+const TRAVAUX_CITES_MAX = 10;
 const objet = (v: unknown): Record<string, unknown> | null => (v && typeof v === "object" && !Array.isArray(v) ? (v as Record<string, unknown>) : null);
 
 /** Registre des voix : null si illisible ou invalide (la porte refuse alors). */
@@ -121,11 +122,20 @@ async function lireRegistre(chemin: string): Promise<VoixRegistre[] | null> {
   }
 }
 
-/** Travaux de la fabrique cités par le texte du livrable (liens `.../livrables/<travail>`), plus ceux déclarés. */
-export function travauxFabriqueCites(corps: string, declares: readonly string[] = []): string[] {
+/**
+ * Travaux de la fabrique cités par le texte du livrable ET par les arguments de l'appel (liens `.../livrables/<travail>`),
+ * plus ceux déclarés. Liste normalisée : minuscules, triée, sans doublon.
+ */
+export function travauxFabriqueCites(corps: string, declares: readonly string[] = [], argumentsAppel: unknown = undefined): string[] {
   const trouves = new Set(declares.map((t) => t.toLowerCase()));
-  for (const m of corps.matchAll(UUID_G)) trouves.add(m[1]!.toLowerCase());
-  return [...trouves];
+  let charge = "";
+  try {
+    charge = argumentsAppel === undefined ? "" : (JSON.stringify(argumentsAppel) ?? "");
+  } catch {
+    // Arguments non sérialisables : ils ne peuvent pas partir tels quels, rien à chercher.
+  }
+  for (const texte of [corps, charge]) for (const m of texte.matchAll(UUID_G)) trouves.add(m[1]!.toLowerCase());
+  return [...trouves].sort();
 }
 
 /** Contrôle tous les fichiers vidéo et documents d'un travail terminé de la fabrique. */
@@ -155,6 +165,8 @@ export async function controlerTravailFabrique(d: DependancesControle, companyId
 
 /** Contrôle de tous les travaux cités ; premier refus rendu. */
 export async function controlerLivrablesFabrique(d: DependancesControle, companyId: string, travaux: readonly string[]): Promise<Verdict> {
+  // Revue du 25/10 : chaque travail coûte une empreinte SHA-256 de ses fichiers (jusqu'à 600 Mio) ; même plafond que les travaux déclarés.
+  if (travaux.length > TRAVAUX_CITES_MAX) return refus(`Trop de travaux de la fabrique cités (${travaux.length}, ${TRAVAUX_CITES_MAX} au plus).`);
   for (const t of travaux) {
     const v = await controlerTravailFabrique(d, companyId, t);
     if (!v.ok) return v;

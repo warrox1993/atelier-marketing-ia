@@ -812,6 +812,21 @@ export const FICHES_AGENTS_MARKETING: readonly FicheAgentMarketing[] = [
         "sert": "Critique puis finit un visuel, une page ou un document mis en forme : verdict de spécificité (fait pour ce client ou interchangeable), problèmes classés de P0 à P3, hiérarchie, typographie, espacement, contraste, états, et refus des habitudes qui donnent l'allure d'une production d'IA (cartes identiques, gros chiffre décoratif, surtitre, texte en dégradé, émojis en guise d'icônes, tiret cadratin) ; audite aussi un système de design (jetons, valeurs codées en dur, composants et leurs états) et documente ou conçoit un composant."
       },
       {
+        "cle": "script-video-publicitaire",
+        "nom": "Script de publicité vidéo",
+        "sert": "Écrit le script d'une publicité vidéo courte et le transforme en demande valide pour l'outil fabriquer_video : choix de la structure (accroche des trois premières secondes, problème-solution, AIDA, PAS, preuve, appel à l'action), découpage en scènes adapté aux trois gabarits visuels (titre plein écran, chiffre clé, liste de trois points), durée par format, écriture pensée pour une voix de synthèse."
+      },
+      {
+        "cle": "conformite-publicite-ia",
+        "nom": "Conformité d'une publicité faite avec l'IA",
+        "sert": "Liste de contrôle à cocher avant et après la fabrication d'une publicité vidéo ou audio faite avec une voix ou des images de synthèse : signalement de l'IA dès la première seconde (règlement européen sur l'IA, article 50 ; article 9 du Code belge de la publicité), voix et visages de vraies personnes, célébrités, étiquettes de TikTok et de Meta, registre de la musique, publicité trompeuse et comparaison déloyale (Code de droit économique), produits d'assurance."
+      },
+      {
+        "cle": "declinaison-regies-video",
+        "nom": "Déclinaison d'une vidéo par régie",
+        "sert": "Décline une publicité vidéo faite avec l'outil fabriquer_video pour chaque régie : Meta (Reels, Stories, fil), TikTok, YouTube Shorts, LinkedIn."
+      },
+      {
         "cle": "memoire-para",
         "nom": "Mémoire en fichiers (méthode PARA)",
         "sert": "Tient la mémoire persistante de l'agent en fichiers, selon la méthode PARA (graphe de connaissances, notes du jour, savoir tacite), dans le dossier ./memoire/ de son répertoire de travail, avec la source et la date de chaque fait."

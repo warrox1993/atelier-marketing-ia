@@ -20,7 +20,6 @@ import pytest
 
 DEPOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(DEPOT))
-from fabrique import cage  # noqa: E402
 from fabrique.cage import Etape, executer  # noqa: E402
 from fabrique.generateurs import sous_titres as st  # noqa: E402
 

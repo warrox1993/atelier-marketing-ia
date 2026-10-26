@@ -693,7 +693,7 @@ def scenario_S():
     verifier(all(c in (401, 403, 404) for c in croises.values()) and legitime == 200, "accès croisé refusé pour un agent d'une autre entreprise ; accès légitime accepté", {"croises": croises, "legitime": legitime})
     code_dest, corps_dest = api("POST", f"{PLUGIN}/taches/{t1}/messages", {"recipient": {"type": "agent", "id": ids2["Contrôleur des exigences"]}, "contenu": {"type": "blocage", "raison": "x", "informationManquante": "y"}})
     verifier(code_dest == 404, "un message vers un agent d'une autre entreprise est refusé", {"code": code_dest, "erreur": (corps_dest or {}).get("erreur")})
-    code_pont, corps_pont = api("POST", f"/plugins/atelier.marketing-ia/data/atelier.dossier", {"companyId": S1, "params": {"issueId": t2}})
+    code_pont, corps_pont = api("POST", "/plugins/atelier.marketing-ia/data/atelier.dossier", {"companyId": S1, "params": {"issueId": t2}})
     verifier(code_pont != 200, "pont de l'interface : un dossier d'une autre entreprise n'est pas lisible", {"code": code_pont, "erreur": str(corps_pont)[:200]})
     code_p1, corps_p1 = api("PATCH", f"/issues/{t1}", {"executionPolicy": None}, jeton=jeton)
     note("INFO", "P1 par clé d'agent hors run sur une tâche sans politique", {"code": code_p1, "erreur": (corps_p1 or {}).get("error")})
@@ -712,7 +712,7 @@ def scenario_S():
              {"csv": (imp_ok[0], (imp_ok[1] or {}).get("apercu", "")[:80]), "exe": (imp_ko[0], (imp_ko[1] or {}).get("erreur")), "md": (imp_inj[0], (imp_inj[1] or {}).get("injectionsSignalees"))})
     elev = api("POST", f"{PLUGIN}/taches/{t1}/messages", {"recipient": {"type": "humain", "id": "local-board"}, "contenu": {"type": "resultat", "resume": "ok", "approvalId": "x"}}, jeton=jeton)
     verifier(elev[0] == 403, "un message ne peut pas transporter d'approbation ni de droit", {"code": elev[0], "erreur": (elev[1] or {}).get("erreur")})
-    dec_agent = api("POST", f"/plugins/atelier.marketing-ia/actions/atelier.decision", {"companyId": S1, "params": {"issueId": t1, "revisionId": t1, "action": "approuver", "commentaire": "auto"}}, jeton=jeton)
+    dec_agent = api("POST", "/plugins/atelier.marketing-ia/actions/atelier.decision", {"companyId": S1, "params": {"issueId": t1, "revisionId": t1, "action": "approuver", "commentaire": "auto"}}, jeton=jeton)
     verifier(dec_agent[0] != 200, "un agent ne peut pas enregistrer de décision humaine", {"code": dec_agent[0], "erreur": str(dec_agent[1])[:200]})
     return [S1, S2]
 

@@ -1,8 +1,32 @@
 # Reprise : Atelier Marketing IA
 
-## État au 16/10/2026, au soir
+## État au 25/10/2026
 
-Cette section prime sur les suivantes en cas de doute. Elle suffit pour reprendre sans rien redemander. Historique des lots
+Cette section prime sur les suivantes en cas de doute. Travail du jour (panne de l'instance 3100, audit complet, mises à
+jour) : `git log --oneline 6bec142^..HEAD`.
+
+- **Socle** : Paperclip `v2026.1023.0` (branche locale `atelier-marketing-v2026.1023.0`) et 96 patches `socle/patches/0001`
+  à `0096` ; `/api/health` affiche `2026.1023.0+96`. Procédure et conflits du rejeu : `docs/mise-a-jour-socle.md`.
+  Retour arrière : la base a reçu 28 migrations, il faut donc restaurer
+  `instance/instances/atelier/data/backups/paperclip-20261025-115126.sql.gz` puis revenir sur la branche
+  `atelier-marketing-AVANT-20261025` (socle 1012).
+- **Budgets** : depuis la 1023, l'usage sans prix est bloqué par défaut ; les 27 politiques de l'atelier sont en `allow`.
+- **Plugin** : `multiCompanyConfig: true` (plus de refus `configChanged` au démarrage), menu « Livrables », migration
+  `022_diffusions_travaux_fabrique` (travaux de la fabrique enregistrés avec chaque diffusion et revérifiés au rejeu).
+- **Unités** : `atelier-alerte@.service` (notification bureau) appelée par `OnFailure=` de `atelier-sauvegarde` et
+  `atelier-phoenix-export`. La sauvegarde sort en code 2 quand le dernier dump est illisible (copie faite avec le précédent).
+- **WhatsApp** : port 3197 (3195 est celui du serveur de pages).
+- **Fabrique** : seccomp refuse `io_uring` (ENOSYS), unité durcie, `entreprises.json` ne contient plus que l'entreprise
+  réelle ; tests GPU sur demande (`ATELIER_TESTS_GPU=1`), jamais pendant que l'opérateur joue.
+- **Déploiement** : `scripts/deployer.sh` refuse l'arbre tant que les trois fichiers non suivis du mode authentifié
+  (`docs/mode-authentifie.md`, `scripts/passer-en-mode-authentifie.{py,sh}`) sont là ; ils appartiennent à l'opérateur, ne pas
+  les ajouter ni les supprimer.
+- **Tests du socle connus en échec** (même résultat sur le tag nu) : environ 35 liés à l'umask 027 du poste, 2 dans
+  `shared` (cartes sans illustration, méthodes sans revue de permissions).
+
+## État au 16/10/2026, au soir (historique)
+
+Section d'origine, gardée pour l'historique. Elle suffit pour reprendre sans rien redemander. Historique des lots
 de l'après-midi et du soir : `git log --oneline 51be4b1..HEAD` (tête `7bc4dd2`, copie de travail propre).
 
 ### 1. Ce qui tourne

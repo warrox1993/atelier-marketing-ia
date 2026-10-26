@@ -91,6 +91,13 @@ describe("page Livrables", () => {
     expect(c.textContent).not.toContain("—");
   });
 
+  it("affiche un libellé lisible pour un travail en attente de la carte graphique", async () => {
+    travaux = [travail({ etat: "en_attente_gpu", fichiers: [] })];
+    const c = await ouvrir();
+    expect(c.querySelector("tbody tr")!.textContent).toContain("En attente de la carte graphique");
+    expect(c.textContent).not.toContain("en_attente_gpu");
+  });
+
   it("met en avant le travail désigné par l'adresse", async () => {
     const c = await ouvrir(T2);
     const lignes = c.querySelectorAll("tbody tr");

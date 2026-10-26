@@ -19,6 +19,8 @@
 # Idempotente : tout ce qui est créé l'est sous l'entreprise `recette-fabrique` et retiré à la fin (et au
 # début, si une exécution précédente a été interrompue). Le nettoyage de dossiers appartenant au service
 # passe par `sudo -n`, limité aux chemins construits à partir des identifiants que cette recette a créés.
+# L'entreprise `recette-fabrique` est ajoutée à `entreprises.json` (propriété de root, via `sudo -n`) au début
+# et retirée à la fin, y compris en cas d'échec ou d'interruption (trap) : elle ne reste pas autorisée en production.
 set -uo pipefail
 
 DEPOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -70,8 +72,30 @@ retirer_refuses() {
   return 0
 }
 
+LISTE_ENTREPRISES="$RACINE/entreprises.json"
+ENTREPRISE_AJOUTEE=0
+
+# modifier_entreprises <ajouter|retirer> : réécrit entreprises.json en entier (fichier neuf puis renommage, jamais
+# lu à moitié par le service), avec le propriétaire et les droits d'origine (root:atelier-fabrique 0640).
+# Ne touche à rien si la liste est déjà dans l'état voulu.
+modifier_entreprises() {
+  local action="$1" filtre nouveau contenu
+  case "$action" in
+    ajouter) filtre='if any(.[]; . == $e) then . else . + [$e] end' ;;
+    retirer) filtre='map(select(. != $e))' ;;
+    *) return 1 ;;
+  esac
+  contenu="$(sudo -n cat -- "$LISTE_ENTREPRISES" 2>/dev/null)" || return 1
+  nouveau="$(printf '%s' "$contenu" | jq --arg e "$ENTREPRISE" "$filtre")" || return 1
+  [[ "$nouveau" == "$(printf '%s' "$contenu" | jq .)" ]] && return 0
+  printf '%s\n' "$nouveau" > "$TMP/entreprises.json" || return 1
+  sudo -n install -m 0640 -o root -g atelier-fabrique -- "$TMP/entreprises.json" "$LISTE_ENTREPRISES.recette.tmp" \
+    && sudo -n mv -f -- "$LISTE_ENTREPRISES.recette.tmp" "$LISTE_ENTREPRISES"
+}
+
 nettoyer() {
   local id
+  ((ENTREPRISE_AJOUTEE == 1)) && { modifier_entreprises retirer || echo "ATTENTION : $ENTREPRISE n'a pas pu être retirée de $LISTE_ENTREPRISES" >&2; }
   for id in "${CREES[@]:-}"; do [[ -n "$id" ]] && retirer_travail "$id"; done
   retirer_refuses "${CREES[@]:-}"
   # Reste d'une exécution précédente interrompue : les identifiants sont tous sous l'entreprise de la recette.
@@ -93,6 +117,8 @@ prerequis() {
   [[ -w "$RACINE/entrant" ]] || { echo "dépôt impossible dans $RACINE/entrant (ACL de l'opérateur)" >&2; manque=1; }
   sudo -n true 2>/dev/null || { echo "sudo -n indisponible (nettoyage impossible)" >&2; manque=1; }
   ((manque == 0)) || exit 2
+  ENTREPRISE_AJOUTEE=1  # avant l'ajout : un ajout à moitié fait doit aussi être défait
+  modifier_entreprises ajouter || { echo "ajout de $ENTREPRISE à $LISTE_ENTREPRISES impossible" >&2; exit 2; }
   # Reste d'une exécution précédente interrompue.
   [[ -d "$RACINE/livrables/$ENTREPRISE" ]] && sudo -n rm -r --one-file-system -- "$RACINE/livrables/$ENTREPRISE" 2>/dev/null
   return 0

@@ -9,6 +9,7 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { creerOutilsFabrique } from "../src/serveur/fabrique-outils.js";
 import {
+  ajouterAuSuivi,
   creerSignalement,
   MENTION_APERCU_DEBUT,
   MENTION_APERCU_FIN,
@@ -133,7 +134,7 @@ describe("route livrables.telecharger", () => {
 });
 
 describe("aperçu dans etat_fabrication", () => {
-  const outils = () => creerOutilsFabrique({ agentConnu: async () => true, config: async () => ({ fabriqueDossierFile: racine }), etatLire: async () => null, etatEcrire: async () => {} });
+  const outils = () => creerOutilsFabrique({ agentConnu: async () => true, config: async () => ({ fabriqueDossierFile: racine, fabriqueAgentsDocuments: [AGENT] }), etatLire: async () => null, etatEcrire: async () => {} });
   const lire = async () => (await outils().etatFabrication({ travail: TRAVAIL }, { agentId: AGENT, runId: RUN, companyId: A })) as { data?: any; error?: string };
 
   it("tronque à 20 000 caractères, entoure de la mention et signale les injections", async () => {
@@ -167,6 +168,23 @@ describe("signalement de fin de travail", () => {
     return { s, journal };
   }
   const entree = (): TravailSuivi => ({ entreprise: A, travail: TRAVAIL, agent: AGENT, run: RUN, tache: TACHE, cree: new Date().toISOString(), essais: 0 });
+
+  it("un travail ajouté pendant la tournée reste suivi (pas d'écrasement de la liste)", async () => {
+    livrer(A, TRAVAIL, { etat: "termine" }, { "offre.docx": OCTETS });
+    const nouveau: TravailSuivi = { ...entree(), travail: B, tache: "t2" };
+    let suivi: unknown = [entree()];
+    const s = creerSignalement({
+      suiviLire: async () => suivi,
+      suiviEcrire: async (v) => void (suivi = v),
+      racine: async () => racine,
+      // Pendant le commentaire, un dépôt concurrent ajoute un travail au suivi.
+      commenter: async () => void (suivi = ajouterAuSuivi(suivi, nouveau)),
+      reveiller: async () => undefined,
+      logger: { info: () => {}, warn: () => {} },
+    });
+    await s.passe();
+    expect((suivi as TravailSuivi[]).map((x) => x.travail)).toEqual([B]);
+  });
 
   it("ne signale rien tant que le travail est en cours", async () => {
     livrer(A, TRAVAIL, { etat: "en_cours" });

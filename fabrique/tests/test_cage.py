@@ -12,7 +12,7 @@ import pytest
 import subprocess
 
 from fabrique.cage import Etape, construire_arguments, executer, recuperer_sortie
-from fabrique.filtre_seccomp import APPELS_REFUSES, construire_filtre
+from fabrique.filtre_seccomp import APPELS_ENOSYS, APPELS_REFUSES, construire_filtre
 
 BWRAP = shutil.which("bwrap")
 needs_bwrap = pytest.mark.skipif(BWRAP is None, reason="bwrap absent")
@@ -267,13 +267,18 @@ def test_arguments_durcissement(tmp_path):
 def test_filtre_est_un_programme_bpf_valide():
     filtre = construire_filtre()
     assert len(filtre) % 8 == 0 and 0 < len(filtre) // 8 <= 4096
-    # Une instruction de comparaison par appel refusé, plus 5 d'en-tête et 2 de retour.
-    assert len(filtre) // 8 == 5 + len(set(APPELS_REFUSES.values())) + 2
+    # Une instruction de comparaison par appel refusé (EPERM ou ENOSYS), plus 5 d'en-tête et 3 de retour.
+    assert len(filtre) // 8 == 5 + len(set(APPELS_REFUSES.values())) + len(set(APPELS_ENOSYS.values())) + 3
     noms = {"ptrace", "process_vm_readv", "process_vm_writev", "kexec_load", "kexec_file_load",
             "init_module", "finit_module", "delete_module", "bpf", "perf_event_open", "userfaultfd",
             "keyctl", "add_key", "request_key", "mount", "umount2", "pivot_root", "unshare", "setns",
             "iopl", "ioperm", "swapon", "swapoff", "reboot", "open_by_handle_at"}
     assert noms <= set(APPELS_REFUSES)
+
+
+def test_io_uring_refuse_avec_enosys():
+    assert APPELS_ENOSYS == {"io_uring_setup": 425, "io_uring_enter": 426, "io_uring_register": 427}
+    assert not set(APPELS_ENOSYS.values()) & set(APPELS_REFUSES.values())
 
 
 # Appelle un appel système par son numéro et imprime « <valeur de retour> <errno> ».
@@ -301,6 +306,14 @@ def test_appel_refuse_par_seccomp_dans_la_cage(tmp_path, nom, arguments):
     e = etape(tmp_path, programme=commande[0], arguments=commande[1:])
     r = dans_cage(e)
     assert r.sortie.split() == [b"-1", b"1"], (nom, r.sortie, r.erreur)  # -1, EPERM
+
+
+@needs_bwrap
+@pytest.mark.parametrize("nom", ["io_uring_setup", "io_uring_enter", "io_uring_register"])
+def test_io_uring_enosys_dans_la_cage(tmp_path, nom):
+    commande = ["/usr/bin/python3", "-c", SONDE_APPEL, str(APPELS_ENOSYS[nom]), "0", "0", "0"]
+    r = dans_cage(etape(tmp_path, programme=commande[0], arguments=commande[1:]))
+    assert r.sortie.split() == [b"-1", b"38"], (nom, r.sortie, r.erreur)  # -1, ENOSYS
 
 
 @needs_bwrap

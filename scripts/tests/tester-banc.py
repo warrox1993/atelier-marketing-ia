@@ -805,7 +805,7 @@ class TestsRepetitions(Base):
                           for o in [c[2]["options"]]}, {0.0})  # le juge reste déterministe
 
     def test_repetitions_invalides(self):
-        ph = self.serveur(faux_phoenix())
+        self.serveur(faux_phoenix())
         ol = self.serveur(faux_ollama())
         code, _, err = self.lancer(ex.main, "--competence", "essai", "--racine", self.racine, "--version-a", self.skill,
                                    "--repetitions", "0", "--sans-phoenix", "--ollama", ol.url)

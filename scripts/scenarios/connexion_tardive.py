@@ -131,7 +131,7 @@ def main(argv):
     print(f"Connexion « {resume.get('nom')} » créée et finalisée par la carte (tous les agents, défaut natif) ; "
           f"fenêtre ouverte : {len(fenetre)} agent(s) la voient ({', '.join(fenetre)}) ; installations : {installs(cx)}")
     attendu_voient = sorted(prevus)
-    mesures = {"carte": carte, "connexion": cx, "prevus": prevus, "fenetreOuverte": fenetre}
+    mesures = {"carte": carte, "connexion": cx, "prevus": prevus, "fenetreOuverte": fenetre, "dureeCreationS": round(cree, 2)}
     if fenetre == attendu_voient:
         print("ÉCART : la connexion était déjà réservée à la création (rien à prouver avec cette carte).")
 

@@ -3,6 +3,7 @@
 Prérequis : `sudo scripts/installer-fabrique-voix.sh` (venv, poids, registre). Les poids sont lisibles par
 le groupe atelier-fabrique : lancer sous ce groupe tant que la session de l'opérateur ne l'a pas reçu,
 par exemple `sg atelier-fabrique -c "pytest fabrique/tests/test_voix.py -q"`.
+Accord GPU : les tests qui chargent le vrai modèle ou CUDA ne tournent que si `ATELIER_TESTS_GPU=1` (la carte peut servir à jouer).
 """
 
 import datetime
@@ -43,6 +44,11 @@ if not (DOSSIERS_MODELES["chatterbox"] / "ve.pt").is_file():
 TEXTE = ("Bonjour, ceci est un essai de synthèse vocale en français. "
          "La fabrique de l'atelier produit une voix claire.")
 EXPIRATION_LOINTAINE = "2099-12-31"
+
+necessite_accord_gpu = pytest.mark.skipif(
+    os.environ.get("ATELIER_TESTS_GPU") != "1",
+    reason="charge le vrai modèle ou CUDA : accord explicite requis, lancer avec ATELIER_TESTS_GPU=1",
+)
 
 
 def charger_module(chemin: Path, nom: str):
@@ -148,6 +154,7 @@ def gpu_libre_sinon_sauter():
     if not libre:
         pytest.skip(f"carte graphique occupée, essai réel GPU reporté : {raison}")
 
+@necessite_accord_gpu
 def test_phrase_francaise_synthetisee_dans_la_cage_gpu(tmp_path, capsys):
     gpu_libre_sinon_sauter()
     with SondeMemoire() as sonde:
@@ -167,6 +174,7 @@ def test_phrase_francaise_synthetisee_dans_la_cage_gpu(tmp_path, capsys):
               f"mémoire vidéo maximale +{sonde.supplement_mio} Mio (taux PerTh {mesure['taux']})")
 
 
+@necessite_accord_gpu
 def test_kokoro_en_cage_gpu_porte_aussi_le_filigrane(tmp_path, capsys):
     gpu_libre_sinon_sauter()
     with SondeMemoire() as sonde:
@@ -194,6 +202,7 @@ def test_texte_de_1500_caracteres_accepte_au_dela_refuse(tmp_path):
     assert all(len(m) <= voix.LONGUEUR_MORCEAU for m in voix.decouper("Un mot, " * 150))
 
 
+@necessite_accord_gpu
 def test_filigrane_absent_d_un_signal_non_synthetise(tmp_path):
     import math
     chemin = tmp_path / "sinus.wav"

@@ -941,12 +941,14 @@ export function creerBase(db: Db) {
     service?: string | null; outil?: string | null; empreinteArguments?: string | null;
     /** v1.6 (S-4) : charge de la première preuve signée (figée) ; le jeton n'est jamais stocké. */
     preuveCharge?: unknown;
+    /** M1 (revue du 25/10) : travaux de la fabrique (UUID normalisés, triés) dont la provenance a été contrôlée ; rejoués au rejeu. */
+    travauxFabrique?: readonly string[];
   }) {
     const { rowCount } = await x(
-      `insert into ${ns}.diffusions (id, company_id, issue_id, revision_id, decision_id, action, canal, compte, audience, montant_cents, etat, cle_idempotence, motif_refus, mode, demandee_par, service, outil, empreinte_arguments, preuve_charge)
-       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19::jsonb) on conflict (company_id, cle_idempotence) do nothing`,
+      `insert into ${ns}.diffusions (id, company_id, issue_id, revision_id, decision_id, action, canal, compte, audience, montant_cents, etat, cle_idempotence, motif_refus, mode, demandee_par, service, outil, empreinte_arguments, preuve_charge, travaux_fabrique)
+       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19::jsonb, $20::jsonb) on conflict (company_id, cle_idempotence) do nothing`,
       [d.id, d.companyId, d.issueId, d.revisionId, d.decisionId, d.action, d.canal, d.compte, d.audience, d.montantCents, d.etat, d.cleIdempotence, d.motifRefus, d.mode, d.par,
-        d.service ?? null, d.outil ?? null, d.empreinteArguments ?? null, d.preuveCharge === undefined || d.preuveCharge === null ? null : json(d.preuveCharge)],
+        d.service ?? null, d.outil ?? null, d.empreinteArguments ?? null, d.preuveCharge === undefined || d.preuveCharge === null ? null : json(d.preuveCharge), json([...new Set(d.travauxFabrique ?? [])].sort())],
     );
     return rowCount === 1;
   }
@@ -1057,11 +1059,13 @@ export function creerBase(db: Db) {
 
   /** Données internes d'une diffusion (jamais renvoyées telles quelles) : audience, empreinte des arguments, charge figée, révocation. */
   async function lireDiffusionInterne(companyId: string, id: string) {
-    const [r] = await q(`select id, issue_id, audience, empreinte_arguments, service, outil, preuve_charge, revoquee_le, revocation_motif from ${ns}.diffusions where company_id = $1 and id = $2`, [companyId, id]);
+    const [r] = await q(`select id, issue_id, audience, empreinte_arguments, service, outil, preuve_charge, travaux_fabrique, revoquee_le, revocation_motif from ${ns}.diffusions where company_id = $1 and id = $2`, [companyId, id]);
     return r
       ? {
           id: String(r.id), issueId: String(r.issue_id), audience: (r.audience as string | null) ?? null, empreinteArguments: (r.empreinte_arguments as string | null) ?? null,
           service: (r.service as string | null) ?? null, outil: (r.outil as string | null) ?? null, preuveCharge: chargeDe(r.preuve_charge),
+          // Anciennes diffusions (colonne absente ou nulle) : liste vide.
+          travauxFabrique: Array.isArray(r.travaux_fabrique) ? (r.travaux_fabrique as unknown[]).filter((t): t is string => typeof t === "string") : [],
           revocation: r.revoquee_le ? { le: iso(r.revoquee_le), motif: String(r.revocation_motif ?? "") } : null,
         }
       : null;

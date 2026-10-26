@@ -14,8 +14,10 @@ chemin_cle_board() {
   local port="${1:-}" f
   f="${ATELIER_CLE_BOARD_FICHIER:-${HOME}/.config/atelier/board-${port}.key}"
   [[ -f "${f}" ]] || return 0
-  if [[ ! -O "${f}" ]] || [[ "$(stat -c '%a' "${f}" 2>/dev/null)" != "600" && "$(stat -c '%a' "${f}" 2>/dev/null)" != "400" ]]; then
-    echo "AVERTISSEMENT : ${f} ignoré (il doit m'appartenir et être en 0600) : requêtes envoyées sans clé." >&2
+  local droits; droits="$(stat -c '%a' "${f}" 2>/dev/null)"
+  # Même règle que les copies Python (st_mode & 0o077 == 0) : aucun droit pour le groupe ni les autres.
+  if [[ ! -O "${f}" ]] || [[ ! "${droits}" =~ ^[0-7]*00$ ]]; then
+    echo "AVERTISSEMENT : ${f} ignoré (il doit m'appartenir et être sans droit pour le groupe ni les autres, ex. 0600) : requêtes envoyées sans clé." >&2
     return 0
   fi
   printf '%s\n' "${f}"

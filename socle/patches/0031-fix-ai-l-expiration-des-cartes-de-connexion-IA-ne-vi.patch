@@ -1,0 +1,113 @@
+From db2496629c6a5e61217e8f4301687d36a08439b1 Mon Sep 17 00:00:00 2001
+From: Jean-Baptiste Dhondt <114347858+warrox1993@users.noreply.github.com>
+Date: Fri, 16 Oct 2026 13:22:07 +0200
+Subject: [PATCH 31/95] fix(ai): l'expiration des cartes de connexion IA ne
+ vise que le fournisseur du passage sain et la phase requested
+
+Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01DP85vPq2MHkZg8VNtRvCzB
+---
+ server/src/__tests__/ai-connections.test.ts   | 20 +++++++++++++++++--
+ .../src/services/heartbeat/run-lifecycle.ts   | 14 +++++++++++--
+ .../src/services/issue-thread-interactions.ts |  8 +++++++-
+ 3 files changed, 37 insertions(+), 5 deletions(-)
+
+diff --git a/server/src/__tests__/ai-connections.test.ts b/server/src/__tests__/ai-connections.test.ts
+index 3a5e5e46c..41ab670fb 100644
+--- a/server/src/__tests__/ai-connections.test.ts
++++ b/server/src/__tests__/ai-connections.test.ts
+@@ -1051,8 +1051,8 @@ console.log(JSON.stringify({ type: "result", subtype: "success", result: "hello"
+       sourceRunId: otherRunId, createdByAgentId: otherId, addresseeUserId: "alice", payload: { version: 1, purpose: "ai", phase: "requested", serviceSlug: "anthropic", serviceName: "Anthropic" } }).returning();
+     const interactions = issueThreadInteractionService(db);
+     // A run that started before the card was raised proves nothing about it.
+-    expect(await interactions.expireAiConnectionIntentsAfterHealthyRun({ companyId, agentId: id, healthySince: new Date(Date.now() - 60_000) })).toEqual([]);
+-    const expired = await interactions.expireAiConnectionIntentsAfterHealthyRun({ companyId, agentId: id, healthySince: new Date(Date.now() + 1000) });
++    expect(await interactions.expireAiConnectionIntentsAfterHealthyRun({ companyId, agentId: id, healthySince: new Date(Date.now() - 60_000), provider: "anthropic" })).toEqual([]);
++    const expired = await interactions.expireAiConnectionIntentsAfterHealthyRun({ companyId, agentId: id, healthySince: new Date(Date.now() + 1000), provider: "anthropic" });
+     expect(expired.map((row) => row.id)).toEqual([card!.interactionId]);
+     const [row] = await db.select().from(issueThreadInteractions).where(eq(issueThreadInteractions.id, card!.interactionId!));
+     expect(row).toMatchObject({ status: "expired", result: { version: 1, outcome: "expired", reason: expect.stringContaining("Connexion rétablie") } });
+@@ -1062,6 +1062,22 @@ console.log(JSON.stringify({ type: "result", subtype: "success", result: "hello"
+     expect(other.status).toBe("pending");
+   });
+ 
++  it.each([
++    ["même fournisseur et phase requested : la carte expire", "anthropic", "requested", "anthropic", "expired"],
++    ["autre fournisseur : la carte reste", "openai", "requested", "anthropic", "pending"],
++    ["phase authorizing : la carte reste", "anthropic", "authorizing", "anthropic", "pending"],
++  ])("expiration après passage sain : %s", async (_libelle, serviceSlug, phase, provider, attendu) => {
++    const id = randomUUID();
++    const issueId = randomUUID();
++    await db.insert(agents).values({ id, companyId, name: "Filtre carte", adapterType: "claude_local" });
++    await db.insert(issues).values({ id: issueId, companyId, title: "Filtre carte", status: "in_progress", assigneeAgentId: id });
++    const [card] = await db.insert(issueThreadInteractions).values({ companyId, issueId, kind: "connection_intent", status: "pending",
++      createdByAgentId: id, addresseeUserId: "alice", payload: { version: 1, purpose: "ai", phase, serviceSlug, serviceName: serviceSlug } }).returning();
++    await issueThreadInteractionService(db).expireAiConnectionIntentsAfterHealthyRun({ companyId, agentId: id, healthySince: new Date(Date.now() + 1000), provider });
++    const [row] = await db.select().from(issueThreadInteractions).where(eq(issueThreadInteractions.id, card.id));
++    expect(row.status).toBe(attendu);
++  });
++
+   it("lists quotas only for the current member's accessible subscription accounts", async () => {
+     const user = `quota-${randomUUID()}`;
+     await db.insert(companyMemberships).values({ companyId, principalId: user, principalType: "user", status: "active", membershipRole: "member" });
+diff --git a/server/src/services/heartbeat/run-lifecycle.ts b/server/src/services/heartbeat/run-lifecycle.ts
+index aab13a0d7..432b36f01 100644
+--- a/server/src/services/heartbeat/run-lifecycle.ts
++++ b/server/src/services/heartbeat/run-lifecycle.ts
+@@ -33,6 +33,7 @@ import {
+ } from "../acknowledged-native-stop.js";
+ import { connectionIntentService } from "../connection-intents.js";
+ import { issueThreadInteractionService } from "../issue-thread-interactions.js";
++import { aiBindingForAuthRecovery } from "../ai-auth-failure.js";
+ import {
+   CONVERSATION_CONTINUATION_POLICY,
+   isConversationAdapter,
+@@ -2936,8 +2937,17 @@ export function createHeartbeatLifecycle(db: Db, dependencies: HeartbeatLifecycl
+     // A succeeded run, or one stopped by its turn limit, made authenticated
+     // provider calls: earlier AI reconnection cards of this agent are stale.
+     if (run.status === "succeeded" || run.errorCode === "max_turns_exhausted") {
+-      await issueThreadInteractionService(db).expireAiConnectionIntentsAfterHealthyRun({
+-        companyId: run.companyId, agentId: run.agentId, healthySince: run.startedAt ?? run.createdAt,
++      // Only a card for the provider this run really used is stale; when the
++      // provider cannot be determined, nothing is expired.
++      const usedProvider = await (async () => {
++        const saved = parseObject(run.contextSnapshot?.aiConnection);
++        if (typeof saved.provider === "string" && saved.provider) return saved.provider;
++        const [agent] = await db.select({ adapterType: agents.adapterType, adapterConfig: agents.adapterConfig })
++          .from(agents).where(eq(agents.id, run.agentId)).limit(1);
++        return agent ? aiBindingForAuthRecovery(agent.adapterType, parseObject(agent.adapterConfig))?.provider ?? null : null;
++      })().catch(() => null);
++      if (usedProvider) await issueThreadInteractionService(db).expireAiConnectionIntentsAfterHealthyRun({
++        companyId: run.companyId, agentId: run.agentId, healthySince: run.startedAt ?? run.createdAt, provider: usedProvider,
+       }).catch(() => {
+         logger.warn({ runId: run.id }, "Could not expire stale AI connection requests after a healthy run");
+       });
+diff --git a/server/src/services/issue-thread-interactions.ts b/server/src/services/issue-thread-interactions.ts
+index 858b03475..77f5751ce 100644
+--- a/server/src/services/issue-thread-interactions.ts
++++ b/server/src/services/issue-thread-interactions.ts
+@@ -4757,7 +4757,11 @@ export function issueThreadInteractionService(
+     // A later run of the same agent completed with a working AI connection, so
+     // its pending AI reconnection cards are stale. Only cards created before
+     // that run started are expired: a card raised during or after it stays.
+-    expireAiConnectionIntentsAfterHealthyRun: async (input: { companyId: string; agentId: string; healthySince: Date }) => {
++    // Only a card of the provider the healthy run used, still in phase
++    // "requested", is stale: another provider's card is a real outage, and an
++    // "authorizing" card is a human mid-way through OAuth.
++    expireAiConnectionIntentsAfterHealthyRun: async (input: { companyId: string; agentId: string; healthySince: Date; provider: string }) => {
++      if (!input.provider) return [];
+       const resolvedAt = now();
+       const expired = await db.update(issueThreadInteractions).set({
+         status: "expired",
+@@ -4769,6 +4773,8 @@ export function issueThreadInteractionService(
+         eq(issueThreadInteractions.kind, "connection_intent"),
+         eq(issueThreadInteractions.status, "pending"),
+         sql`${issueThreadInteractions.payload}->>'purpose' = 'ai'`,
++        sql`${issueThreadInteractions.payload}->>'phase' = 'requested'`,
++        sql`${issueThreadInteractions.payload}->>'serviceSlug' = ${input.provider}`,
+         sql`${issueThreadInteractions.createdAt} < ${input.healthySince.toISOString()}::timestamptz`,
+       )).returning();
+       if (expired.length) {
+-- 
+2.53.0
+

@@ -36,6 +36,8 @@ import json, os, re, sys
 sql = sys.stdin.read()
 with open(os.environ["FAUX_PSQL_SQL"], "a", encoding="utf-8") as f:
     f.write(sql + "\n-----\n")
+if os.environ.get("FAUX_PSQL_REFUS"):
+    print('psql: error: connection to server at "127.0.0.1", port 54329 failed: Connection refused', file=sys.stderr); sys.exit(2)
 if not sql.startswith("BEGIN READ ONLY"):
     print("pas en lecture seule", file=sys.stderr); sys.exit(3)
 d = json.load(open(os.environ["FAUX_PSQL_DONNEES"], encoding="utf-8"))
@@ -235,6 +237,30 @@ class TestsExport(Base):
         self.recepteur.code = 200
         self.assertEqual(self.lancer()[0], 0)
         self.assertEqual(len(self.recepteur.spans()), 2)
+
+    def test_instance_arretee_export_reporte(self):
+        # Connexion refusée sur le port PostgreSQL : l'instance est arrêtée, ce n'est pas un échec de l'unité.
+        self.ecrire([ligne(1, "porte.franchie")])
+        os.environ["FAUX_PSQL_REFUS"] = "1"
+        try:
+            code, sortie, _ = self.lancer(phoenix=self.recepteur.url)
+        finally:
+            os.environ.pop("FAUX_PSQL_REFUS", None)
+        self.assertEqual(code, 0)
+        self.assertIn("instance arrêtée, export reporté", sortie)
+        self.assertFalse(os.path.exists(self.etat))
+        self.assertEqual(self.recepteur.spans(), [])
+
+    def test_autre_erreur_psql_reste_un_echec(self):
+        # Une erreur psql qui n'est pas une connexion refusée (ex. mot de passe) doit toujours échouer.
+        self.ecrire([ligne(1, "porte.franchie")])
+        os.environ["FAUX_PSQL_DONNEES"] = os.path.join(self.dossier.name, "absent.json")  # lecture impossible -> code non nul
+        try:
+            code, _, erreur = self.lancer()
+        finally:
+            os.environ["FAUX_PSQL_DONNEES"] = self.donnees
+        self.assertEqual(code, 1)
+        self.assertIn("psql a échoué", erreur)
 
     def test_url_hors_boucle_locale_refusee(self):
         self.ecrire([ligne(1, "porte.franchie")])

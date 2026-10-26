@@ -4,6 +4,7 @@
 Usage : python3 -I scripts/test-assurer-fabrique.py
 """
 import importlib.util
+import copy
 import json
 import pathlib
 import sys
@@ -26,6 +27,7 @@ class FauxApi:
         self.config = dict(config)
         self.politiques = []
         self.ecritures_config = 0
+        self.suppressions = 0
 
     def get(self, chemin):
         if chemin.startswith("/plugins/"):
@@ -39,7 +41,11 @@ class FauxApi:
             self.config = dict(corps["configJson"])
             self.ecritures_config += 1
         elif chemin.endswith("/tools/policies"):
-            self.politiques.append(corps)
+            self.politiques.append({**corps, "id": f"pol-{len(self.politiques)}-{len(corps['name'])}"})
+        elif methode == "DELETE" and "/tools/policies/" in chemin:
+            identifiant = chemin.rsplit("/", 1)[1]
+            self.politiques = [p for p in self.politiques if p["id"] != identifiant]
+            self.suppressions += 1
         else:
             raise AssertionError(chemin)
 
@@ -72,6 +78,38 @@ class TestAssurerFabrique(unittest.TestCase):
         self.assertEqual(bo.assurer_fabrique(api, "cid", self.reg, self.agents), 0)
         self.assertEqual(api.ecritures_config, ecritures)
         self.assertEqual(len(api.politiques), nb_politiques)
+
+    def test_agent_retenu_plus_tard_perd_sa_politique_block(self):
+        # « veille » n'est pas retenu : politiques block créées. JB le retient ensuite : elles doivent disparaître.
+        api = FauxApi({})
+        bo.assurer_fabrique(api, "cid", self.reg, self.agents)
+        self.assertTrue([p for p in api.politiques if ":veille:" in p["name"]])
+        autre = [p["name"] for p in api.politiques if ":veille:" not in p["name"]]
+        reg2 = copy.deepcopy(self.reg)
+        veille = next(a for a in reg2["agents"] if a["slug"] == "veille")
+        veille["outils"]["mutation"].append(bo.OUTILS_CLIENT_FABRIQUE["document"])
+        bo.assurer_fabrique(api, "cid", reg2, self.agents)
+        self.assertIn("id-veille", api.config["fabriqueAgentsDocuments"])
+        restantes = [p["name"] for p in api.politiques if ":veille:" in p["name"]]
+        # Documents et état de fabrication ouverts ; la vidéo reste interdite.
+        self.assertEqual(restantes, ["atelier-fabrique-interdit:veille:fabriquer_video"])
+        self.assertEqual([p["name"] for p in api.politiques if ":veille:" not in p["name"]], autre)
+        # Rejeu : plus rien à faire.
+        self.assertEqual(bo.assurer_fabrique(api, "cid", reg2, self.agents), 0)
+
+    def test_politique_du_meme_nom_retouchee_a_la_main_conservee(self):
+        # Revue du 25/10 : on ne supprime que la forme exacte créée par le script, jamais une politique élargie à la main.
+        api = FauxApi({})
+        bo.assurer_fabrique(api, "cid", self.reg, self.agents)
+        nom = "atelier-fabrique-interdit:veille:fabriquer_document"
+        retouchee = next(p for p in api.politiques if p["name"] == nom)
+        retouchee["selectors"] = {"toolName": retouchee["selectors"]["toolName"], "serverName": "autre"}
+        reg2 = copy.deepcopy(self.reg)
+        veille = next(a for a in reg2["agents"] if a["slug"] == "veille")
+        veille["outils"]["mutation"].append(bo.OUTILS_CLIENT_FABRIQUE["document"])
+        bo.assurer_fabrique(api, "cid", reg2, self.agents)
+        self.assertIn(nom, [p["name"] for p in api.politiques])
+        self.assertNotIn("atelier-fabrique-interdit:veille:etat_fabrication", [p["name"] for p in api.politiques])
 
 
 if __name__ == "__main__":
