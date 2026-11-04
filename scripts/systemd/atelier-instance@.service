@@ -1,13 +1,18 @@
 [Unit]
 Description=Instance Paperclip de l'Atelier marketing IA (%i)
+OnFailure=atelier-alerte@%n.service
+# 10 démarrages ratés en 10 min : l'unité passe en « failed » et alerte au lieu de boucler (EXP-C5).
+StartLimitIntervalSec=600
+StartLimitBurst=10
 After=network-online.target
 Wants=network-online.target
-# Pas de limite de redémarrages rapides : on laisse RestartSec espacer les essais.
-StartLimitIntervalSec=0
 
 [Service]
 # pnpm est dans ~/.local/bin, absent du PATH par défaut des services utilisateur (constaté le 16/10).
 Environment=PATH=%h/.local/bin:/usr/local/bin:/usr/bin:/bin
+# Hors production, Paperclip journalise au niveau « debug » par défaut : « info » limite le journal (EXP-C9,
+# 20 Mo par jour, journal système plein en 12 jours).
+Environment=PAPERCLIP_LOG_LEVEL=info
 Type=simple
 # Variables de l'instance (ports, URL de la passerelle), sans aucun secret :
 #   ATELIER_PORT=3590          (exemple d'une instance d'essai ; l'instance « atelier » prend ses ports dans config/atelier.env)
@@ -24,6 +29,10 @@ Restart=on-failure
 RestartSec=15
 # Laisse à Paperclip le temps d'arrêter son PostgreSQL embarqué proprement.
 TimeoutStopSec=90
+# Limite douce (AFC-A13) : serveur lancé par tsx, PostgreSQL embarqué et processus des agents partagent ce cgroup ;
+# pic mesuré 3,19 Go le 30/10/2026. Au-delà de 8 Go le noyau freine l'instance au lieu d'affamer le poste ; pas de
+# MemoryMax : un arrêt brutal tuerait PostgreSQL en pleine écriture.
+MemoryHigh=8G
 KillMode=mixed
 StandardOutput=journal
 StandardError=journal

@@ -152,7 +152,7 @@ function grandJeu() {
 
 
 describe("entrée de menu", () => {
-  it("« Départements », « Livrables » et « Réglages de l'atelier » (plus d'« Atelier » ni d'« Organigramme ») pour un client à plusieurs services", async () => {
+  it("« Départements », « Livrables » et « Réglages de l'atelier » (ni « Agents », porté par l'entrée native du socle, ni « Atelier », ni « Organigramme ») pour un client à plusieurs services", async () => {
     serveur = servir();
     installerPont("/RNO/atelier/accueil");
     rendu = await rendre(createElement(EntreeAtelier, { context: contexte }));
@@ -169,6 +169,15 @@ describe("entrée de menu", () => {
     rendu = await rendre(createElement(EntreeAtelier, { context: contexte }));
     await laisser();
     expect(textes(rendu.conteneur, "a.atl-entree").join(" ")).not.toContain("Départements");
+  });
+
+  it("sur la page des agents, aucune entrée du plugin n'est courante (l'entrée « Agents » est celle du socle)", async () => {
+    serveur = servir();
+    installerPont("/RNO/atelier/agents");
+    rendu = await rendre(createElement(EntreeAtelier, { context: contexte }));
+    await laisser();
+    expect(rendu.conteneur.querySelector('a.atl-entree[aria-current="page"]')).toBeNull();
+    expect(parTexte(rendu.conteneur, "a.atl-entree", "Départements").getAttribute("aria-current")).toBeNull();
   });
 });
 

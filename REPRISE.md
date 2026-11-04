@@ -1,5 +1,19 @@
 # Reprise : Atelier Marketing IA
 
+## État au 30/10/2026
+
+Prime sur la section du 25/10 pour les deux points ci-dessous (mesures de l'audit du 29/10 par l'API, en lecture).
+
+- **Socle** : 139 patches dans le dépôt le 30/10/2026 au soir (`socle/patches/0001` à `0139` ; nombre à jour : `ls socle/patches`) ;
+  l'audit du 29/10 en a compté 107 appliqués sur 3100.
+  Les suivants partent au prochain déploiement ; contrôle : suffixe `+<n>` de `/api/health`.
+- **Budgets** : politiques « usage non tarifé » mesurées le 29/10 : 28 d'entreprise en `allow`, 13 d'agent en `allow`
+  (Observatoire), 219 d'agent en `block`, dont la Porte du Marketing (adaptateur `process`). Le piège mesuré sur la Porte de
+  l'Observatoire le 27/10 (premier passage = mise en pause) la menace probablement aussi (non mesuré). Décision du 30/10
+  (option recommandée) : passer la Porte du Marketing en `allow` comme celle de l'Observatoire, par la route et la méthode de
+  `docs/observatoire/deploiement-phase-3.md` §6 bis (`GET` avant et après, seul `unpricedUsagePolicy` change). Pas encore fait.
+- **Gardien du Marketing** : en pause (audit du 29/10) ; à reprendre après le lot S (`docs/exploitation.md` §10).
+
 ## État au 25/10/2026
 
 Cette section prime sur les suivantes en cas de doute. Travail du jour (panne de l'instance 3100, audit complet, mises à

@@ -28,14 +28,22 @@ l'humain compétent.
 - Tu es coordinateur d'un service (ou le coordinateur général de la Direction) : seul un coordinateur ouvre une liaison.
 - La demande part d'une tâche de ton propre service qui n'est pas elle-même une tâche reçue par liaison (garde « c »).
   Une sous-tâche d'une tâche reçue peut relayer la question une fois de plus : au plus 2 relais dans une chaîne, et
-  jamais vers un service déjà présent dans la chaîne (cycle refusé).
+  jamais vers un service déjà présent dans la chaîne (cycle refusé). Pour répondre ou remonter une escalade au service
+  qui t'a fait une demande encore ouverte, n'ouvre pas de liaison vers lui (refusée comme circulaire) : écris un compte
+  rendu d'étape sur la tâche reçue et passe-la en `in_review`, le bureau le relaie.
+- Une liaison sans activité pendant 72 h est close à l'échéance, et rien ne part vers un service dont le coordinateur
+  est en pause : le bureau prévient le demandeur, qui avance sans réponse en écrivant son hypothèse.
 - Une réponse venue d'un flux soumis à approbation « teinte » ta tâche et ses sous-tâches : toute demande qui en part
   attend à son tour l'approbation d'un humain, même vers un service non sensible.
 - Le service visé appartient au même client. Il n'existe aucun échange entre deux clients, quel que soit le motif.
+- Le flux de ton service vers le service visé doit exister (garde « b ») : un flux métier du registre, ou le
+  coordinateur général, que chaque coordinateur joint et qui joint chacun. Deux départements sans flux métier entre eux
+  ne se parlent pas directement : adresse ta demande au coordinateur général (`direction`), qui la relaie.
 - Au plus 5 liaisons ouvertes ou en attente d'approbation par service (30 pour le coordinateur général de la
   Direction) : au-delà, attends des réponses ou annule.
 - Un flux qui touche un service sensible (juridique, ressources humaines, juridique social, fiscalité, HSE et tout
-  autre service marqué sensible) attend l'approbation d'un humain avant de partir.
+  autre service marqué sensible) ou public (l'Observatoire, qui publie sur un site public) attend l'approbation d'un
+  humain avant de partir.
 
 ## Entrées
 
@@ -93,6 +101,15 @@ Décision humaine requise : <aucune, ou laquelle et quel humain du client doit l
 
 Si tu as délégué une partie à tes spécialistes, c'est toi qui écris la réponse finale sur la tâche reçue.
 Tu ne réponds qu'à la question posée, avec les seules données utiles.
+
+Écris la réponse COMPLÈTE dans ce commentaire, 8 000 caractères au plus (au-delà, elle est tronquée) : un document
+livrable n'est pas recopié chez le demandeur. Poste-le avant de passer la tâche à `done`, ou au plus tard dans la
+minute qui suit ; un commentaire plus tardif n'est plus pris pour la réponse.
+
+### Relancer ce qui dort
+
+Une sous-tâche ouverte sans activité depuis 24 h te réveille sur sa tâche parente : relance l'assigné par un
+commentaire précis ou redistribue-la, sans la laisser dormir.
 
 ### 5. Consolider plusieurs réponses (coordinateur général surtout)
 

@@ -1,8 +1,11 @@
 [Unit]
 Description=Passerelle de l'Atelier marketing IA (port %i)
+OnFailure=atelier-alerte@%n.service
+# 10 démarrages ratés en 10 min : l'unité passe en « failed » et alerte au lieu de boucler (EXP-C5).
+StartLimitIntervalSec=600
+StartLimitBurst=10
 After=network-online.target
 Wants=network-online.target
-StartLimitIntervalSec=0
 
 [Service]
 Type=simple

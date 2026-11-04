@@ -170,7 +170,7 @@ et déclare le hook dans le `settings.json` dédié, lancé par `/usr/bin/node` 
 - `PreToolUse` (`Bash`, tous les agents) : refuse un `curl` qui écrirait un fichier (`-o`, `-O`, `--output`, `-D`, `-c`,
   `-K`, `--trace`…, y compris groupées comme `-sSo`) ou lirait `file:`.
 Le `settings.json` porte aussi des refus `Bash(curl * -o *)`, `Bash(curl *--output*)`, `Bash(curl * -O*)`,
-`Bash(curl *--remote-name*)`, `Bash(curl *file:*)` et leurs variantes (`REFUS_CURL_ECRITURE`) : la documentation des
+`Bash(curl *--remote-name*)`, `Bash(curl * file:/*)` et leurs variantes (`REFUS_CURL_ECRITURE`) : la documentation des
 permissions dit que les refus priment (« deny, then ask, then allow ») mais aussi qu'un motif qui contraint les arguments
 est fragile, d'où le hook. Protection du hook : le confinement monte la configuration de l'agent en écriture
 (`execute.ts`, `managedPaths`), donc des refus `Edit(//…/claude-config/**/hooks/**)`, `Edit(//…/claude-config/**/settings.json)`

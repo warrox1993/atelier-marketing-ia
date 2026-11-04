@@ -371,13 +371,13 @@ function critereEvenementRecent(p: Prospect, ctx: ContexteQualification): Result
   return { r: resultat("verifie", premier.source, `Événement de moins de ${MOIS_EVENEMENT_RECENT} mois : ${trace} (BCE, relevé du ${dateCourte(premier.source.collecteLe)})`), besoins };
 }
 
-/** A7 : un besoin détecté (A1, A2, A3) correspond à une offre confirmée de la fiche du client. */
+/** A7 : un besoin détecté (A1, A2, A3) correspond à une offre de la fiche du client (confirmée ou marquée non confirmée). */
 function critereBesoinOffre(besoins: readonly BesoinCourtier[], ctx: ContexteQualification): Resultat {
   if (besoins.length === 0) return sansObjet("Aucun besoin détecté : rien à rapprocher des offres");
   const offres = ctx.offres ?? [];
   for (const b of besoins) {
     const trouvees = offresActivesPourBesoin(b, offres);
-    if (trouvees.length > 0) return resultat("verifie", null, `Besoin « ${LIBELLE_BESOIN[b]} » couvert par l'offre active ${trouvees.map((o) => o.nom).join(", ")} (fiche du client)`, "fiche du client");
+    if (trouvees.length > 0) return resultat("verifie", null, `Besoin « ${LIBELLE_BESOIN[b]} » couvert par l'offre active ${trouvees.map((o) => (o.confirmee ? o.nom : `${o.nom} (non confirmé par le client)`)).join(", ")} (fiche du client)`, "fiche du client");
   }
   return resultat("non_verifie", null, `Besoins détectés (${besoins.map((b) => LIBELLE_BESOIN[b]).join(", ")}) sans offre active correspondante dans la fiche du client`, "fiche du client");
 }

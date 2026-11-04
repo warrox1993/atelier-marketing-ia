@@ -1,0 +1,28 @@
+/* Liste de trois points : titre au plus au palier moyen en haut ; en bas, trois lignes numérotées séparées par un
+   filet fin, puis l'appel à l'action. */
+#titre { font-size: calc(var(--u) * min(var(--t-titre), var(--titre-m)) * var(--kt)); }
+#points {
+  list-style: none;
+  counter-reset: point;
+  border-top: 1px solid color-mix(in srgb, var(--texte) 30%, var(--fond));
+}
+#points li {
+  counter-increment: point;
+  display: grid;
+  grid-template-columns: 1.6em minmax(0, 1fr);
+  align-items: baseline;
+  padding: calc(var(--u) * var(--t-point) * var(--k) * 0.42) 0;
+  border-bottom: 1px solid color-mix(in srgb, var(--texte) 30%, var(--fond));
+  font-size: calc(var(--u) * var(--t-point) * var(--k));
+  line-height: 1.24;
+  text-wrap: pretty;
+}
+#points li::before {
+  content: counter(point);
+  font-family: "Titre", "Repli";
+  font-weight: var(--chiffre-graisse);
+  font-variant-numeric: lining-nums tabular-nums;
+  color: var(--accent);
+}
+#appel { margin-top: calc(var(--u) * var(--ecart)); }
+#appel::after { content: "\00a0\2192"; }

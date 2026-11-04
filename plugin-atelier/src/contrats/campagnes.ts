@@ -188,6 +188,8 @@ export const Diagnostic = z.object({
   connecteurs: z.array(Connecteur),
   /** Sources de données lues sur `/sante` de la passerelle (optionnel : absent d'un ancien worker). */
   sourcesReelles: SourcesReelles.optional(),
+  /** MK-01 : tâches à livrable sans porte (optionnel : absent d'un ancien worker). `alerte` : texte à afficher, ou null. */
+  portesManquantes: z.object({ taches: z.array(z.string()), alerte: z.string().nullable() }).optional(),
   verifieLe: Horodatage,
 });
 export type Diagnostic = z.infer<typeof Diagnostic>;

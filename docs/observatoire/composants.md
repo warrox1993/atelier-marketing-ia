@@ -179,6 +179,8 @@ autres services (voir sa fiche), d'où une fiche séparée.
 - **Finalité** : produire la Fiche (niveau 1) et le Dossier en 24 chapitres : tutoriels, diagrammes Mermaid,
   comparaisons, compatibilité, API, déploiement, permissions, coûts, menaces (capacités 17 à 25 et 27 à 30).
 - **Entrée** : Fiche acceptée, instantanés, Affirmations existantes.
+- **Fiche à 26 champs** : `dateDerniereVersion` (AAAA-MM-JJ, publication de la dernière version STABLE, remplace l'ancien critère « Maturité » du comparateur) suit
+  `derniereVersion` : retenue seulement si `derniereVersion` l'est et si la date égale `derniereStable(versions).publieeLe`, sinon « inconnu ».
 - **Sortie** : Dossier, Chapitres et Revisions brouillon, avec leurs Affirmations.
 - **Consommateurs** : la porte, `relecteur-independant`, K9.
 - **Dépendances** : compétences existantes `recherche-sourcee`, `recherche-connaissances`, `contenu-recherche-ia` ;
@@ -260,3 +262,25 @@ autres services (voir sa fiche), d'où une fiche séparée.
   extrait cité qui disparaît signale l'Affirmation ; une Revision française nouvelle signale la traduction anglaise.
 - **Réutilisation** : la détection « source changée, affirmation impactée » sert la veille réglementaire des autres
   services (texte de loi modifié).
+
+## Spécifié, pas encore construit (état au 30/10/2026)
+
+Relevé de l'audit du 29/10 (paquet OA5), vérifié dans le code du jour : ces éléments des spécifications n'ont encore
+aucun code. Ils ne sont pas faits ; aucune page ni aucun agent ne doit les présenter comme faits.
+
+| Élément | Spécification | État | Composant ou phase |
+| --- | --- | --- | --- |
+| Changelog documentaire généré depuis les révisions | `politique-versions.md` §3 | aucune table ni aucun export | K9, K10 |
+| Chapitres `a_actualiser` après une nouvelle version | `politique-versions.md` §4 | statut déclaré dans le contrat, jamais calculé | K10 |
+| Projet « non maintenu » | `politique-versions.md` §6 | aucun critère ni statut en code | K10 |
+| Lien mort cité par sa capture Wayback | `politique-versions.md` §7 | compteur d'échecs seul (`echecs_consecutifs`, `en_echec`) | K10 |
+| Corrections traçables d'une édition (`obs_editions`) | `politique-versions.md` §8, `modele-donnees.md` | table absente | phase 5 |
+| Taxonomie bilingue (`obs_categories`) | `i18n.md` §3 | table absente | K9 |
+| Tâche de diff pour `adaptateur-anglais` quand une révision FR plus récente est publiée | `i18n.md` §6 | rien ne la crée ; le bandeau « traduction périmée » du site existe (`TraductionPerimee.astro`) et la porte refuse la base périmée (OBS-08) | K10 |
+| Moteur des questions (`claude -p`), index public du seul contenu publié, citations vérifiées par code, jeu des 60 questions | ADR-006, ADR-007, `plan-tests.md` §4 | absents | phase 4 |
+| Configuration plein texte `english` du RAG | ADR-007 | absente : le RAG n'accepte que `fr` et `nl` (`contrats/connaissances.ts`, `LangueConnaissance`), donc aucun dossier anglais n'y entre ; à ajouter avec l'index public | phase 4 |
+| Plafond de sujets par semaine, estimation avant un lot lourd, rapport hebdomadaire de consommation | ADR-010, `finops.md` §5 | budgets natifs par agent seuls ; `scripts/observatoire/mesure_quota.py` est une mesure à la main, pas un rapport | pilote (phase 3) |
+
+Une révision copiée n'est jamais modifiée (`politique-versions.md` §1) : le code n'a aucune requête de mise à jour sur
+`obs_revisions` (test de garde SKMK-O1). Un déclencheur en base n'est pas possible : le socle refuse `CREATE TRIGGER` et
+`CREATE FUNCTION` dans une migration de plugin.

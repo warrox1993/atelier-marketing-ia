@@ -87,6 +87,8 @@ describe("permissions et objets introuvables", () => {
     const r = await appeler(clients.get("linkedin")!, "linkedin_statistiques", SEPT);
     expect(r.erreur).toBe(true);
     expect(r.texte).toMatch(/permission_manquante.*Community Management.*administratrice/s);
+    // Le profil personnel partage la plateforme linkedin : le conseil doit aussi le couvrir.
+    expect(r.texte).toMatch(/profil.*Share on LinkedIn/s);
   });
 
   it("Facebook (#10) : permission non accordée ou App Review non obtenue", async () => {

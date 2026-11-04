@@ -15,7 +15,7 @@
 // Écoute uniquement sur la boucle locale ; en-tête Host et Origin contrôlés
 // (protection contre le rebond DNS).
 
-import { createServer, type IncomingMessage, type Server as ServeurHttp, type ServerResponse } from "node:http";
+import { createServer, type IncomingHttpHeaders, type IncomingMessage, type Server as ServeurHttp, type ServerResponse } from "node:http";
 import type { AddressInfo } from "node:net";
 import { Server as ServeurMcp } from "@modelcontextprotocol/sdk/server/index.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
@@ -26,6 +26,7 @@ import { MESSAGE_PORTEE_RETIREE, ServeurAutorisationLocal } from "./oauth-local.
 import { appelerOutil, construireCatalogue, enveloppeAtelier, VERSION_PASSERELLE } from "./outils.js";
 import { COMPTE_LOCAL, MOTIF_SERVICE, type Service } from "./services.js";
 import type { SignataireEnveloppe } from "./signature-enveloppe.js";
+import type { ReponsesGardees } from "./reponses-gardees.js";
 
 const MAX_CORPS_MCP_OCTETS = 1024 * 1024;
 
@@ -45,6 +46,8 @@ export interface OptionsServeur {
   fichierEtat?: string;
   /** Signature de l'enveloppe `_atelier` de chaque réponse d'outil (revue S9) ; absente : réponses non signées. */
   signataire?: SignataireEnveloppe | null;
+  /** Gardien des références à usage unique des réponses de lecture (la route interne qui les relit est à brancher à part). */
+  reponsesGardees?: ReponsesGardees;
   /**
    * Routes internes (hors MCP) réservées au plugin de l'atelier, par exemple l'envoi d'e-mails après décision humaine. Chacune
    * contrôle elle-même sa preuve d'approbation ; seul POST est permis, corps JSON de 1 Mio au plus.
@@ -54,7 +57,7 @@ export interface OptionsServeur {
 
 export interface RouteInterne {
   chemin: string;
-  traiter(corps: unknown): Promise<{ statut: number; corps: unknown }>;
+  traiter(corps: unknown, entetes: IncomingHttpHeaders): Promise<{ statut: number; corps: unknown }>;
 }
 
 export interface ServeurPasserelle {
@@ -224,7 +227,7 @@ export function creerServeur(options: OptionsServeur): ServeurPasserelle {
     );
     serveurMcp.setRequestHandler(ListToolsRequestSchema, async () => ({ tools: catalogue.descripteurs }));
     serveurMcp.setRequestHandler(CallToolRequestSchema, async (requete) =>
-      appelerOutil(catalogue, requete.params.name, requete.params.arguments, contexte, options.signataire ?? null),
+      appelerOutil(catalogue, requete.params.name, requete.params.arguments, contexte, options.signataire ?? null, options.reponsesGardees),
     );
     const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined, enableJsonResponse: true });
     res.on("close", () => {
@@ -266,7 +269,7 @@ export function creerServeur(options: OptionsServeur): ServeurPasserelle {
         envoyerJson(res, corps.statut, { error: corps.statut === 413 ? "corps_trop_gros" : "json_invalide" });
         return;
       }
-      const reponse = await interne.traiter(corps.valeur);
+      const reponse = await interne.traiter(corps.valeur, req.headers);
       envoyerJson(res, reponse.statut, reponse.corps);
       return;
     }

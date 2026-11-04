@@ -1,0 +1,653 @@
+From 2ba108b9da3997da50a78fe8036a60c08891b4d9 Mon Sep 17 00:00:00 2001
+From: Jean-Baptiste Dhondt <114347858+warrox1993@users.noreply.github.com>
+Date: Tue, 27 Oct 2026 23:07:49 +0100
+Subject: [PATCH] =?UTF-8?q?fix(couts):=20claude-local=20prend=20la=20r?=
+ =?UTF-8?q?=C3=A9f=C3=A9rence=20de=20reprise=20dans=20la=20transcription?=
+ =?UTF-8?q?=20de=20Claude=20Code?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Sur --resume, Claude Code repart de la dernière ligne cost-state de la
+transcription de la session (<CLAUDE_CONFIG_DIR>/projects/*/<sessionId>.jsonl).
+L'adaptateur lit maintenant cette ligne (par la fin du fichier, 64 Mo au plus)
+comme référence du run, avec repli sur sessionTotals puis sur le brut.
+
+- Run sans événement result (délai dépassé, processus coupé, crash) : la
+  nouvelle cost-state, écrite par Claude Code à la sortie y compris sur SIGTERM
+  (mesuré avec 2.1.308), donne usage, coût et reçus par modèle du run.
+- Relance clé d'API -> abonnement : la référence est relue après le premier
+  essai, qui n'est plus recompté.
+- Étiquette « mixed » et usageByModel décidés sur le modelUsage du run, en
+  écartant les modèles dont la différence est entièrement nulle.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_012hDEUaJZ3u1rGj4CzNXrhC
+---
+ .../server/execute.resume-accounting.test.ts  | 233 ++++++++++++++++++
+ .../claude-local/src/server/execute.ts        |  43 +++-
+ .../claude-local/src/server/parse.test.ts     |  32 +++
+ .../adapters/claude-local/src/server/parse.ts |  50 +++-
+ .../src/server/session-cost.test.ts           |  51 ++++
+ .../claude-local/src/server/session-cost.ts   |  55 +++++
+ 6 files changed, 448 insertions(+), 16 deletions(-)
+ create mode 100644 packages/adapters/claude-local/src/server/execute.resume-accounting.test.ts
+ create mode 100644 packages/adapters/claude-local/src/server/session-cost.test.ts
+ create mode 100644 packages/adapters/claude-local/src/server/session-cost.ts
+
+diff --git a/packages/adapters/claude-local/src/server/execute.resume-accounting.test.ts b/packages/adapters/claude-local/src/server/execute.resume-accounting.test.ts
+new file mode 100644
+index 000000000..ba8314459
+--- /dev/null
++++ b/packages/adapters/claude-local/src/server/execute.resume-accounting.test.ts
+@@ -0,0 +1,233 @@
++import { mkdir, mkdtemp, rm, appendFile, writeFile } from "node:fs/promises";
++import os from "node:os";
++import path from "node:path";
++import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
++
++// A scripted fake `claude` process: each call appends cost-state lines to the
++// session transcript (as Claude Code 2.1.308 does on exit, even on SIGTERM) and
++// returns the stdout the CLI would have printed.
++type FakeRun = {
++  stdout: string;
++  transcript?: string[];
++  exitCode?: number;
++  timedOut?: boolean;
++};
++const { script, seenEnvs, runAdapterExecutionTargetProcess } = vi.hoisted(() => {
++  const script: { runs: Array<() => Promise<FakeRun>> } = { runs: [] };
++  const seenEnvs: Array<Record<string, string>> = [];
++  return {
++    script,
++    seenEnvs,
++    runAdapterExecutionTargetProcess: vi.fn(
++      async (_runId: string, _target: unknown, _command: string, _args: string[], opts: { env: Record<string, string> }) => {
++        seenEnvs.push(opts.env);
++        const next = script.runs.shift();
++        if (!next) throw new Error("no scripted run left");
++        const run = await next();
++        return {
++          exitCode: run.exitCode ?? 0,
++          signal: null,
++          timedOut: run.timedOut ?? false,
++          stdout: run.stdout,
++          stderr: "",
++          pid: 123,
++          startedAt: new Date().toISOString(),
++        };
++      },
++    ),
++  };
++});
++
++vi.mock("./acp.js", () => ({
++  createClaudeAcpExecutor: () => vi.fn(),
++  resolveClaudeExecutionEngineForRun: async () => ({ engine: "cli", explicit: true }),
++}));
++
++vi.mock("@paperclipai/adapter-utils/execution-target", async () => {
++  const actual = await vi.importActual<typeof import("@paperclipai/adapter-utils/execution-target")>(
++    "@paperclipai/adapter-utils/execution-target",
++  );
++  return {
++    ...actual,
++    ensureAdapterExecutionTargetCommandResolvable: vi.fn(async () => undefined),
++    ensureAdapterExecutionTargetRuntimeCommandInstalled: vi.fn(async () => undefined),
++    resolveAdapterExecutionTargetCommandForLogs: vi.fn(async () => "claude"),
++    runAdapterExecutionTargetProcess,
++  };
++});
++
++import { execute } from "./execute.js";
++
++const SESSION = "11111111-1111-4111-8111-111111111111";
++const MODEL = "claude-haiku-5-5";
++const OTHER_MODEL = "claude-opus-5-5";
++type Usage = { inputTokens: number; outputTokens: number; cacheReadInputTokens: number; cacheCreationInputTokens: number; costUSD: number };
++const usage = (outputTokens: number, costUSD: number): Usage => ({
++  inputTokens: 2,
++  outputTokens,
++  cacheReadInputTokens: 1000,
++  cacheCreationInputTokens: 500,
++  costUSD,
++});
++const totalsOf = (modelUsage: Record<string, Usage>) => ({
++  modelUsage,
++  costUsd: Object.values(modelUsage).reduce((sum, u) => sum + u.costUSD, 0),
++});
++const R1 = { [MODEL]: usage(100, 0.1) };
++const R2 = { [MODEL]: usage(130, 0.13) };
++const R3 = { [MODEL]: usage(170, 0.17) };
++
++const costState = (modelUsage: Record<string, Usage>) =>
++  JSON.stringify({
++    type: "cost-state",
++    sessionId: SESSION,
++    totalCostUSD: totalsOf(modelUsage).costUsd,
++    modelUsage: Object.fromEntries(Object.entries(modelUsage).map(([m, u]) => [m, { ...u, thinkingTokens: 0, webSearchRequests: 0 }])),
++  });
++const resultStdout = (modelUsage: Record<string, Usage>, extra: Record<string, unknown> = {}) =>
++  [
++    JSON.stringify({ type: "system", subtype: "init", session_id: SESSION, model: MODEL }),
++    JSON.stringify({
++      type: "result",
++      subtype: "success",
++      session_id: SESSION,
++      result: "ok",
++      total_cost_usd: totalsOf(modelUsage).costUsd,
++      modelUsage,
++      ...extra,
++    }),
++  ].join("\n");
++const noResultStdout = () =>
++  [
++    JSON.stringify({ type: "system", subtype: "init", session_id: SESSION, model: MODEL }),
++    JSON.stringify({ type: "assistant", session_id: SESSION, message: { content: [{ type: "text", text: "..." }] } }),
++  ].join("\n");
++
++describe("claude_local resumed session accounting (execute wiring)", () => {
++  let root: string;
++  let configDir: string;
++  let transcript: string;
++
++  const appendTranscript = (lines: string[] = []) =>
++    appendFile(transcript, lines.map((line) => `${line}\n`).join(""), "utf8");
++
++  const buildContext = (sessionTotals: unknown, env: Record<string, string> = {}) => ({
++    runId: "run-1",
++    agent: { id: "agent-1", companyId: "company-1", name: "Claude Coder", adapterType: "claude_local", adapterConfig: {} },
++    runtime: {
++      sessionId: SESSION,
++      sessionParams: { sessionId: SESSION, cwd: root, ...(sessionTotals ? { sessionTotals } : {}) },
++      sessionDisplayId: SESSION,
++      taskKey: null,
++    },
++    config: { engine: "cli", cwd: root, env: { CLAUDE_CONFIG_DIR: configDir, ...env } },
++    context: {},
++    onLog: vi.fn(async () => {}),
++  });
++
++  beforeEach(async () => {
++    root = await mkdtemp(path.join(os.tmpdir(), "claude-resume-accounting-"));
++    configDir = path.join(root, "config");
++    const projectDir = path.join(configDir, "projects", "-some-encoded-cwd");
++    await mkdir(projectDir, { recursive: true });
++    transcript = path.join(projectDir, `${SESSION}.jsonl`);
++    await writeFile(transcript, [JSON.stringify({ type: "user" }), costState(R1)].map((l) => `${l}\n`).join(""), "utf8");
++    script.runs.length = 0;
++    seenEnvs.length = 0;
++    runAdapterExecutionTargetProcess.mockClear();
++  });
++
++  afterEach(async () => {
++    await rm(root, { recursive: true, force: true });
++  });
++
++  it("takes the reference from the transcript, not from the stale stored sessionTotals", async () => {
++    const stale = totalsOf({ [MODEL]: usage(10, 0.01) });
++    script.runs.push(async () => {
++      await appendTranscript([costState(R2)]);
++      return { stdout: resultStdout(R2) };
++    });
++    const result = await execute(buildContext(stale) as never);
++    expect(result.costUsd).toBeCloseTo(0.03, 9);
++    expect(result.usage?.outputTokens).toBe(30);
++    expect(result.usageByModel?.[0]?.costUsd).toBeCloseTo(0.03, 9);
++    expect(result.sessionParams?.sessionTotals).toEqual(totalsOf(R2));
++  });
++
++  it("falls back to the stored sessionTotals when the transcript cannot be read", async () => {
++    await rm(transcript);
++    script.runs.push(async () => ({ stdout: resultStdout(R2) }));
++    const result = await execute(buildContext(totalsOf(R1)) as never);
++    expect(result.costUsd).toBeCloseTo(0.03, 9);
++    expect(result.usage?.outputTokens).toBe(30);
++  });
++
++  it.each([
++    ["the process is cut without a result event", { exitCode: 1 }],
++    ["the run times out", { exitCode: null, timedOut: true }],
++  ])("counts a run without result by the new cost-state when %s", async (_label, outcome) => {
++    script.runs.push(async () => {
++      await appendTranscript([costState(R2)]);
++      return { stdout: noResultStdout(), ...outcome } as FakeRun;
++    });
++    const result = await execute(buildContext(totalsOf({ [MODEL]: usage(1, 0.001) })) as never);
++    expect(result.usageComplete).toBe(false);
++    expect(result.costUsd).toBeCloseTo(0.03, 9);
++    expect(result.usage?.outputTokens).toBe(30);
++    expect(result.usageByModel).toHaveLength(1);
++    expect(result.usageByModel?.[0]?.costUsd).toBeCloseTo(0.03, 9);
++  });
++
++  it("does not invent a cost for a run without result that wrote no new cost-state", async () => {
++    script.runs.push(async () => ({ stdout: noResultStdout(), exitCode: 1 }));
++    const result = await execute(buildContext(null) as never);
++    expect(result.costUsd ?? null).toBeNull();
++  });
++
++  it("does not count the first attempt again when the API key fails and the subscription retries", async () => {
++    script.runs.push(
++      async () => {
++        await appendTranscript([costState(R2)]);
++        return {
++          exitCode: 1,
++          stdout: resultStdout(R2, { is_error: true, subtype: "error_during_execution", result: "authentication_failed" }),
++        };
++      },
++      async () => {
++        await appendTranscript([costState(R3)]);
++        return { stdout: resultStdout(R3) };
++      },
++    );
++    const result = await execute(buildContext(totalsOf(R1), { ANTHROPIC_API_KEY: "sk-ant-test-key" }) as never);
++    expect(runAdapterExecutionTargetProcess).toHaveBeenCalledTimes(2);
++    expect(seenEnvs[0].ANTHROPIC_API_KEY).toBe("sk-ant-test-key");
++    expect(seenEnvs[1].ANTHROPIC_API_KEY).toBeUndefined();
++    expect(result.costUsd).toBeCloseTo(0.04, 9);
++    expect(result.usage?.outputTokens).toBe(40);
++  });
++
++  it("labels the run with its single active model and drops models whose difference is zero", async () => {
++    const before = { ...R1, [OTHER_MODEL]: usage(50, 0.5) };
++    await appendTranscript([costState(before)]);
++    const after = { ...R2, [OTHER_MODEL]: usage(50, 0.5) };
++    script.runs.push(async () => {
++      await appendTranscript([costState(after)]);
++      return { stdout: resultStdout(after) };
++    });
++    const result = await execute(buildContext(null) as never);
++    expect(result.model).toBe(MODEL);
++    expect(result.usageByModel?.map((r) => r.model)).toEqual([MODEL]);
++    expect(result.costUsd).toBeCloseTo(0.03, 9);
++  });
++
++  it("keeps the label mixed when two models really worked in the run", async () => {
++    const after = { [MODEL]: usage(130, 0.13), [OTHER_MODEL]: usage(20, 0.2) };
++    script.runs.push(async () => {
++      await appendTranscript([costState(after)]);
++      return { stdout: resultStdout(after) };
++    });
++    const result = await execute(buildContext(null) as never);
++    expect(result.model).toBe("mixed");
++    expect(result.usageByModel?.map((r) => r.model).sort()).toEqual([MODEL, OTHER_MODEL].sort());
++  });
++});
+diff --git a/packages/adapters/claude-local/src/server/execute.ts b/packages/adapters/claude-local/src/server/execute.ts
+index 588f3b180..890fe86ac 100644
+--- a/packages/adapters/claude-local/src/server/execute.ts
++++ b/packages/adapters/claude-local/src/server/execute.ts
+@@ -62,10 +62,12 @@ import {
+   parseLocalProcessNetworkScope,
+   type LocalProcessSandboxOptions,
+ } from "@paperclipai/adapter-utils/local-process-sandbox";
++import { readTranscriptCostState } from "./session-cost.js";
+ import {
+   claudeModelUsageTotals,
+   claudeModelReceipts,
+   parseClaudeStreamJson, createClaudeStreamParser, readClaudeSessionTotals,
++  claudeModelLabel, runAccountingFromTotals, type ClaudeSessionBaseline, type ClaudeSessionTotals,
+   describeClaudeFailure,
+   detectClaudeLoginRequired,
+   extractClaudeRetryNotBefore,
+@@ -113,6 +115,8 @@ import {
+ 
+ const __moduleDir = path.dirname(fileURLToPath(import.meta.url));
+ const executeClaudeAcp = createClaudeAcpExecutor();
++// Reference of a session that started during the run: nothing was counted before it.
++const EMPTY_SESSION_TOTALS: ClaudeSessionTotals = { modelUsage: {}, costUsd: 0 };
+ 
+ interface ClaudeExecutionInput {
+   agentIdentity?: AdapterExecutionContext["agentIdentity"];
+@@ -817,6 +821,9 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
+   // Cumulative totals of the resumed session: the CLI reports modelUsage and cost
+   // since the session began, so each resumed run is accounted as the difference.
+   const runtimeSessionTotals = readClaudeSessionTotals(runtimeSessionParams.sessionTotals);
++  // Last cumulative totals seen for a session during this execution (stored params, then each attempt).
++  let knownTotals: ClaudeSessionBaseline | null =
++    runtimeSessionTotals && runtimeSessionId ? { sessionId: runtimeSessionId, totals: runtimeSessionTotals } : null;
+   if (runtimeSessionId && !isValidUuid) {
+     await onLog(
+       "stdout",
+@@ -989,10 +996,16 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
+       });
+     }
+ 
+-    const accountingBaseline =
+-      resumeSessionId && resumeSessionId === runtimeSessionId && runtimeSessionTotals
+-        ? { sessionId: resumeSessionId, totals: runtimeSessionTotals }
++    // The reference is where Claude Code itself restarts the session: the last cost-state of its
++    // transcript (local runs). Stored totals are only the fallback, which also covers remote runs.
++    const transcriptTotals =
++      resumeSessionId && !executionTargetIsRemote
++        ? await readTranscriptCostState(sharedClaudeConfigDir, resumeSessionId)
+         : null;
++    const referenceTotals =
++      transcriptTotals ?? (resumeSessionId && knownTotals?.sessionId === resumeSessionId ? knownTotals.totals : null);
++    const accountingBaseline =
++      resumeSessionId && referenceTotals ? { sessionId: resumeSessionId, totals: referenceTotals } : null;
+     const consumeAccounting = createClaudeStreamParser(accountingBaseline);
+     // Un essai à clé qui échoue sur la clé ne rapporte parfois aucun coût : le reçu vaut alors 0, jamais « non tarifé »
+     // (sinon la politique `block` de l'Observatoire mettrait l'entreprise en pause).
+@@ -1014,7 +1027,7 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
+       const parsed = consumeAccounting(stdout);
+       return { usage: parsed.usage ?? undefined, usageBasis: "per_run", costUsd: parsed.costUsd,
+         provider: "anthropic", biller: isBedrockAuth(effectiveEnv) ? "aws_bedrock" : "anthropic",
+-        billingType, model: Object.keys(parseObject(parsed.resultJson?.modelUsage)).length > 1 ? "mixed" : parsed.model || model,
++        billingType, model: claudeModelLabel(parsed.modelUsage, parsed.model || model),
+           usageByModel: claudeModelReceipts(parsed.modelUsage), complete: parsed.resultJson !== null };
+     });
+     const proc = await runAdapterExecutionTargetProcess(runId, runtimeExecutionTarget, command, args, {
+@@ -1040,7 +1053,21 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
+     });
+     await accountingLog.flush();
+ 
+-    const parsedStream = parseClaudeStreamJson(proc.stdout, accountingBaseline);
++    let parsedStream: ReturnType<typeof parseClaudeStreamJson> = parseClaudeStreamJson(proc.stdout, accountingBaseline);
++    // No result event (timeout, cut process, crash): Claude Code still wrote a cost-state on exit,
++    // so the run is what was added since the reference.
++    const endedSessionId = parsedStream.sessionId ?? resumeSessionId;
++    if (parsedStream.resultJson === null && endedSessionId && !executionTargetIsRemote) {
++      const after = await readTranscriptCostState(sharedClaudeConfigDir, endedSessionId);
++      const before = endedSessionId === resumeSessionId ? referenceTotals : EMPTY_SESSION_TOTALS;
++      const delta = after && before ? runAccountingFromTotals(after, before) : null;
++      if (after && delta) {
++        parsedStream = { ...parsedStream, usage: delta.usage, costUsd: delta.costUsd, modelUsage: delta.modelUsage, sessionTotals: after, resultJson: null } as ReturnType<typeof parseClaudeStreamJson>;
++      }
++    }
++    if (parsedStream.sessionId && parsedStream.sessionTotals) {
++      knownTotals = { sessionId: parsedStream.sessionId, totals: parsedStream.sessionTotals };
++    }
+     const parsed = parsedStream.resultJson ?? parseJson(proc.stdout);
+     return { proc, parsedStream, parsed, billingType };
+   };
+@@ -1077,7 +1104,7 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
+         usageBasis: "per_run",
+         provider: "anthropic",
+         biller: isBedrockAuth(effectiveEnv) ? "aws_bedrock" : "anthropic",
+-        model: Object.keys(parseObject(parsedStream.resultJson?.modelUsage)).length > 1 ? "mixed" : parsedStream.model || model,
++        model: claudeModelLabel(parsedStream.modelUsage, parsedStream.model || model),
+         usageByModel: claudeModelReceipts(parsedStream.modelUsage),
+         billingType,
+         costUsd: parsedStream.costUsd,
+@@ -1147,7 +1174,7 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
+         usageBasis: "per_run",
+         provider: "anthropic",
+         biller: isBedrockAuth(effectiveEnv) ? "aws_bedrock" : "anthropic",
+-        model: Object.keys(parseObject(parsedStream.resultJson?.modelUsage)).length > 1 ? "mixed" : parsedStream.model || model,
++        model: claudeModelLabel(parsedStream.modelUsage, parsedStream.model || model),
+         usageByModel: claudeModelReceipts(parsedStream.modelUsage),
+         billingType,
+         costUsd: parsedStream.costUsd,
+@@ -1332,7 +1359,7 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
+       sessionDisplayId: resolvedSessionId,
+       provider: "anthropic",
+       biller: isBedrockAuth(effectiveEnv) ? "aws_bedrock" : "anthropic",
+-      model: Object.keys(parseObject(parsed.modelUsage)).length > 1 ? "mixed" : parsedStream.model || asString(parsed.model, model),
++      model: claudeModelLabel(parsedStream.modelUsage ?? parsed.modelUsage, parsedStream.model || asString(parsed.model, model)),
+       billingType,
+       costUsd: parsedStream.costUsd,
+       resultJson: mergedResultJson,
+diff --git a/packages/adapters/claude-local/src/server/parse.test.ts b/packages/adapters/claude-local/src/server/parse.test.ts
+index 824bd08ef..8ac5210ff 100644
+--- a/packages/adapters/claude-local/src/server/parse.test.ts
++++ b/packages/adapters/claude-local/src/server/parse.test.ts
+@@ -5,6 +5,8 @@ import {
+   claudeModelReceipts,
+   createClaudeStreamParser,
+   readClaudeSessionTotals,
++  lastCostStateTotals,
++  runAccountingFromTotals,
+   detectClaudeLoginRequired,
+   extractClaudeRetryNotBefore,
+   isClaudeProviderQuotaError,
+@@ -708,3 +710,33 @@ describe("readClaudeSessionTotals and sessionCodec", () => {
+     expect(readClaudeSessionTotals({ modelUsage: { ["x".repeat(201)]: entry }, costUsd: 0 })).toBeNull();
+   });
+ });
++
++describe("cost-state transcript lines and run accounting from totals", () => {
++  const SESSION = "11111111-1111-4111-8111-111111111111";
++  const entry = (outputTokens: number, costUSD: number) => ({ inputTokens: 1, outputTokens, cacheReadInputTokens: 2, cacheCreationInputTokens: 3, costUSD, thinkingTokens: 9, webSearchRequests: 0 });
++  const line = (outputTokens: number, costUSD: number, sessionId = SESSION) =>
++    JSON.stringify({ type: "cost-state", sessionId, totalCostUSD: costUSD, modelUsage: { m: entry(outputTokens, costUSD) } });
++
++  it("returns the last cost-state of the session, ignoring other lines and sessions", () => {
++    const text = [line(1, 0.1), JSON.stringify({ type: "user" }), line(5, 0.5), line(99, 9, "22222222-2222-4222-8222-222222222222"), "not json"].join("\n");
++    expect(lastCostStateTotals(text, SESSION)).toEqual({
++      modelUsage: { m: { inputTokens: 1, outputTokens: 5, cacheReadInputTokens: 2, cacheCreationInputTokens: 3, costUSD: 0.5 } },
++      costUsd: 0.5,
++    });
++  });
++
++  it("treats an invalid last cost-state as no reference and returns null without any", () => {
++    expect(lastCostStateTotals([line(1, 0.1), line(-4, 0.5)].join("\n"), SESSION)).toBeNull();
++    expect(lastCostStateTotals("{}", SESSION)).toBeNull();
++  });
++
++  it("computes the run as the difference and reports no activity or a reset as null", () => {
++    const before = lastCostStateTotals(line(5, 0.5), SESSION)!;
++    const after = lastCostStateTotals(line(8, 0.75), SESSION)!;
++    const run = runAccountingFromTotals(after, before);
++    expect(run?.costUsd).toBeCloseTo(0.25, 9);
++    expect(run?.usage).toEqual({ inputTokens: 0, outputTokens: 3, cachedInputTokens: 0 });
++    expect(runAccountingFromTotals(before, before)).toBeNull();
++    expect(runAccountingFromTotals(before, after)).toBeNull();
++  });
++});
+diff --git a/packages/adapters/claude-local/src/server/parse.ts b/packages/adapters/claude-local/src/server/parse.ts
+index 07cb502f2..5df8d5b98 100644
+--- a/packages/adapters/claude-local/src/server/parse.ts
++++ b/packages/adapters/claude-local/src/server/parse.ts
+@@ -82,6 +82,8 @@ export interface ClaudeSessionBaseline {
+   totals: ClaudeSessionTotals;
+ }
+ 
++const ZERO_USAGE: UsageSummary = { inputTokens: 0, outputTokens: 0, cachedInputTokens: 0 };
++
+ const isNonNegativeFinite = (value: unknown): value is number =>
+   typeof value === "number" && Number.isFinite(value) && value >= 0;
+ 
+@@ -110,7 +112,7 @@ export function readClaudeSessionTotals(raw: unknown): ClaudeSessionTotals | nul
+  * field and model by model (a model absent from the reference keeps its values).
+  * A negative difference means the session was reset: keep the raw values.
+  */
+-function subtractSessionTotals(
++export function subtractSessionTotals(
+   modelUsage: Record<string, unknown>,
+   costUsd: number | null,
+   reference: ClaudeSessionTotals,
+@@ -119,24 +121,56 @@ function subtractSessionTotals(
+   for (const [model, raw] of Object.entries(modelUsage)) {
+     const entry = parseObject(raw);
+     const before = reference.modelUsage[model];
+-    if (!before) {
+-      delta[model] = entry;
+-      continue;
+-    }
+     const next: Record<string, unknown> = { ...entry };
++    let changed = false;
+     for (const field of USAGE_FIELDS) {
+       if (typeof entry[field] !== "number") continue;
+-      const diff = entry[field] - before[field];
++      const diff = entry[field] - (before?.[field] ?? 0);
+       if (diff < 0) return null;
++      if (diff > 0) changed = true;
+       next[field] = diff;
+     }
+-    delta[model] = next;
++    // A model that did not work in this run (all differences zero) is not part of it.
++    if (changed) delta[model] = next;
+   }
+   if (costUsd === null) return { modelUsage: delta, costUsd };
+   const costDiff = costUsd - reference.costUsd;
+   return costDiff < 0 ? null : { modelUsage: delta, costUsd: costDiff };
+ }
+ 
++/**
++ * Totals recorded by the last cost-state line of a session transcript (Claude Code
++ * writes one when a process exits, SIGTERM included; a resume restarts from it).
++ * The last cost-state line is authoritative: when it is invalid, there is none.
++ */
++export function lastCostStateTotals(text: string, sessionId: string): ClaudeSessionTotals | null {
++  const lines = text.split(/\r?\n/);
++  for (let index = lines.length - 1; index >= 0; index--) {
++    const line = lines[index].trim();
++    if (!line.startsWith("{") || !line.includes('"cost-state"')) continue;
++    const event = parseJson(line);
++    if (!event || event.type !== "cost-state" || event.sessionId !== sessionId) continue;
++    return readClaudeSessionTotals({ modelUsage: event.modelUsage, costUsd: event.totalCostUSD });
++  }
++  return null;
++}
++
++/** A run's own accounting from cumulative totals; null when nothing was added or the session was reset. */
++export function runAccountingFromTotals(after: ClaudeSessionTotals, reference: ClaudeSessionTotals) {
++  const delta = subtractSessionTotals(after.modelUsage, after.costUsd, reference);
++  if (!delta || (Object.keys(delta.modelUsage).length === 0 && !delta.costUsd)) return null;
++  return {
++    modelUsage: delta.modelUsage,
++    costUsd: delta.costUsd,
++    usage: claudeModelUsageTotals(delta.modelUsage) ?? ZERO_USAGE,
++  };
++}
++
++/** Receipt label: "mixed" only when more than one model really worked in the run. */
++export function claudeModelLabel(modelUsage: unknown, fallback: string): string {
++  return Object.keys(parseObject(modelUsage)).length > 1 ? "mixed" : fallback;
++}
++
+ export function parseClaudeStreamJson(stdout: string, baseline?: ClaudeSessionBaseline | null) {
+   return createClaudeStreamParser(baseline)(stdout);
+ }
+@@ -226,7 +260,7 @@ export function createClaudeStreamParser(baseline?: ClaudeSessionBaseline | null
+         : null;
+     const modelUsage = perRun?.modelUsage ?? (Object.keys(rawModelUsage).length > 0 ? rawModelUsage : undefined);
+     const costUsd = perRun ? perRun.costUsd : rawCostUsd;
+-    const modelUsageTotals = claudeModelUsageTotals(modelUsage);
++    const modelUsageTotals = claudeModelUsageTotals(modelUsage) ?? (perRun ? ZERO_USAGE : null);
+     const usageObj = parseObject(finalResult.usage);
+     const usage: UsageSummary = modelUsageTotals ?? {
+       inputTokens: asNumber(usageObj.input_tokens, 0) + asNumber(usageObj.cache_creation_input_tokens, 0),
+diff --git a/packages/adapters/claude-local/src/server/session-cost.test.ts b/packages/adapters/claude-local/src/server/session-cost.test.ts
+new file mode 100644
+index 000000000..664967b1a
+--- /dev/null
++++ b/packages/adapters/claude-local/src/server/session-cost.test.ts
+@@ -0,0 +1,51 @@
++import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
++import os from "node:os";
++import path from "node:path";
++import { afterEach, beforeEach, describe, expect, it } from "vitest";
++import { readTranscriptCostState } from "./session-cost.js";
++
++const SESSION = "11111111-1111-4111-8111-111111111111";
++const costState = (costUSD: number) =>
++  JSON.stringify({
++    type: "cost-state",
++    sessionId: SESSION,
++    totalCostUSD: costUSD,
++    modelUsage: { m: { inputTokens: 1, outputTokens: 2, cacheReadInputTokens: 3, cacheCreationInputTokens: 4, costUSD } },
++  });
++
++describe("readTranscriptCostState", () => {
++  let configDir: string;
++  let file: string;
++
++  beforeEach(async () => {
++    configDir = await mkdtemp(path.join(os.tmpdir(), "claude-session-cost-"));
++    await mkdir(path.join(configDir, "projects", "-a"), { recursive: true });
++    await mkdir(path.join(configDir, "projects", "-b"), { recursive: true });
++    file = path.join(configDir, "projects", "-b", `${SESSION}.jsonl`);
++  });
++
++  afterEach(async () => {
++    await rm(configDir, { recursive: true, force: true });
++  });
++
++  it("finds the transcript by session id under any project directory and reads the last cost-state", async () => {
++    await writeFile(file, `${costState(0.1)}\n{"type":"user"}\n${costState(0.2)}\n{"type":"assistant"}\n`);
++    expect((await readTranscriptCostState(configDir, SESSION))?.costUsd).toBe(0.2);
++  });
++
++  it("reads a cost-state far from the end of a large file by growing the tail window", async () => {
++    const filler = `${JSON.stringify({ type: "user", text: "x".repeat(1000) })}\n`.repeat(600);
++    await writeFile(file, `${costState(0.3)}\n${filler}`);
++    expect((await readTranscriptCostState(configDir, SESSION))?.costUsd).toBe(0.3);
++  });
++
++  it("returns null for a missing file, a non-UUID id, no cost-state or a file over the size cap", async () => {
++    expect(await readTranscriptCostState(configDir, SESSION)).toBeNull();
++    await writeFile(file, `${costState(0.1)}\n`);
++    expect(await readTranscriptCostState(configDir, "../etc/passwd")).toBeNull();
++    expect(await readTranscriptCostState(configDir, SESSION, 10)).toBeNull();
++    await writeFile(file, '{"type":"user"}\n');
++    expect(await readTranscriptCostState(configDir, SESSION)).toBeNull();
++    expect(await readTranscriptCostState(path.join(configDir, "absent"), SESSION)).toBeNull();
++  });
++});
+diff --git a/packages/adapters/claude-local/src/server/session-cost.ts b/packages/adapters/claude-local/src/server/session-cost.ts
+new file mode 100644
+index 000000000..813324c13
+--- /dev/null
++++ b/packages/adapters/claude-local/src/server/session-cost.ts
+@@ -0,0 +1,55 @@
++import { open, readdir, stat } from "node:fs/promises";
++import path from "node:path";
++import { lastCostStateTotals, type ClaudeSessionTotals } from "./parse.js";
++
++const MAX_TRANSCRIPT_BYTES = 64 * 1024 * 1024;
++const FIRST_CHUNK_BYTES = 256 * 1024;
++const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
++
++/** Find `<configDir>/projects/<encoded cwd>/<sessionId>.jsonl`; the newest one when several exist. */
++async function findTranscript(configDir: string, sessionId: string): Promise<string | null> {
++  const projectsDir = path.join(configDir, "projects");
++  let best: { file: string; mtimeMs: number } | null = null;
++  for (const entry of await readdir(projectsDir)) {
++    const file = path.join(projectsDir, entry, `${sessionId}.jsonl`);
++    const info = await stat(file).catch(() => null);
++    if (info?.isFile() && (!best || info.mtimeMs > best.mtimeMs)) best = { file, mtimeMs: info.mtimeMs };
++  }
++  return best?.file ?? null;
++}
++
++/**
++ * Last cost-state of a session transcript, read from the end of the file. Null when the
++ * session id is not a UUID, the file is missing, unreadable, larger than `maxBytes` or has
++ * no valid cost-state: the caller then falls back to another reference.
++ */
++export async function readTranscriptCostState(
++  configDir: string,
++  sessionId: string,
++  maxBytes = MAX_TRANSCRIPT_BYTES,
++): Promise<ClaudeSessionTotals | null> {
++  if (!configDir || !UUID_RE.test(sessionId)) return null;
++  try {
++    const file = await findTranscript(configDir, sessionId);
++    if (!file) return null;
++    const handle = await open(file, "r");
++    try {
++      const { size } = await handle.stat();
++      if (size > maxBytes) return null;
++      for (let chunk = FIRST_CHUNK_BYTES; ; chunk *= 4) {
++        const length = Math.min(chunk, size);
++        const buffer = Buffer.alloc(length);
++        await handle.read(buffer, 0, length, size - length);
++        // The first line of a partial chunk may be cut: drop it.
++        const text = buffer.toString("utf8");
++        const usable = length < size ? text.slice(text.indexOf("\n") + 1) : text;
++        const totals = lastCostStateTotals(usable, sessionId);
++        if (totals || length >= size) return totals;
++      }
++    } finally {
++      await handle.close();
++    }
++  } catch {
++    return null;
++  }
++}
+-- 
+2.53.0
+

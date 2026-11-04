@@ -126,7 +126,10 @@ export function BandeauMissions({ enCours, terminees, chargerScene = chargerScen
       if (r.width <= 0) return;
       const i = Math.min(mission.phases.length - 1, Math.max(0, Math.floor(((e.clientX - r.left) / r.width) * mission.phases.length)));
       const p = mission.phases[i];
-      if (p && p.taches.length > 0) setOuverte((o) => (o === p.id ? null : p.id));
+      if (p && p.taches.length > 0) {
+        setDepliee(false);
+        setOuverte((o) => (o === p.id ? null : p.id));
+      }
     },
     [mission],
   );
@@ -161,7 +164,11 @@ export function BandeauMissions({ enCours, terminees, chargerScene = chargerScen
               {resume}
             </span>
           </p>
-          <button type="button" className="atl-bande-voir" aria-expanded={depliee} aria-controls={depliee ? `${base}-panneau` : undefined} onClick={() => setDepliee((d) => !d)}>
+          <button type="button" className="atl-bande-voir" aria-expanded={depliee} aria-controls={depliee ? `${base}-panneau` : undefined} onClick={() => {
+              // UI-13 : un seul panneau ouvert à la fois, pour garder la carte de décision en vue.
+              setOuverte(null);
+              setDepliee((d) => !d);
+            }}>
             {depliee ? "Replier" : libelleVoir}
           </button>
         </div>
@@ -190,7 +197,10 @@ export function BandeauMissions({ enCours, terminees, chargerScene = chargerScen
                         aria-expanded={ouverte === p.id}
                         aria-controls={`${base}-${p.id}`}
                         aria-label={`${annoncePhase(p)}${quand ? `, dernière activité ${quand}` : ""}`}
-                        onClick={() => setOuverte((o) => (o === p.id ? null : p.id))}
+                        onClick={() => {
+                          setDepliee(false);
+                          setOuverte((o) => (o === p.id ? null : p.id));
+                        }}
                       >
                         {corps}
                       </button>

@@ -202,15 +202,35 @@ describe("lecture interne d'une campagne (carte de confirmation)", () => {
     expect(m.faux.etat.appels.every((a) => a.methode === "GET")).toBe(true);
   });
 
+  it("DROIT-2.2 : rend les adresses des abonnés confirmés ciblés, pour le contrôle des oppositions et du consentement par le plugin", async () => {
+    const m = await montage({ abonnes: 2 });
+    m.faux.etat.abonnes.push({ id: 902, email: "Majuscule@Exemple.test", name: "M", status: "enabled", lists: [{ id: 1, subscription_status: "confirmed" }] });
+    m.faux.etat.abonnes.push({ id: 903, email: "attente@exemple.test", name: "U", status: "enabled", lists: [{ id: 1, subscription_status: "unconfirmed" }] });
+    const r = await m.lire({ campagne_id: 5 });
+    expect(r.corps["courriels"]).toEqual(["a0@exemple.test", "a1@exemple.test", "majuscule@exemple.test"]);
+    expect(r.corps["destinataires"]).toBe(3);
+  });
+
   it("l'empreinte des abonnés change quand un abonné est ajouté ; l'extrait est borné", async () => {
     const m = await montage();
-    m.faux.etat.campagnes[0]!.altbody = "x".repeat(5000);
+    m.faux.etat.campagnes[0]!.body = `<p>${"x".repeat(5000)}</p>`;
     const avant = (await m.lire({ campagne_id: 5 })).corps;
     m.faux.etat.abonnes.push({ id: 901, email: "n@exemple.test", name: "N", status: "enabled", lists: [{ id: 1, subscription_status: "confirmed" }] });
     const apres = (await m.lire({ campagne_id: 5 })).corps;
     expect(apres["empreinte_abonnes"]).not.toBe(avant["empreinte_abonnes"]);
     expect(apres["destinataires"]).toBe(3);
     expect(String(apres["extrait"]).length).toBe(400);
+  });
+
+  // V2-4 : la carte montre ce que lisent les destinataires (le HTML), pas le texte de repli fourni par l'agent.
+  it("l'extrait vient du texte visible du HTML, et les domaines des liens et images sont listés", async () => {
+    const m = await montage();
+    m.faux.etat.campagnes[0]!.body = `<html><head><title>T</title><style>p{}</style></head><body><p>Bonjour &amp; bienvenue <a href="https://Tiers.example/offre">ici</a></p>`
+      + `<img src='https://pixel.example/p.png'><a href="https://tiers.example/2">2</a><a href="{{ UnsubscribeURL }}">désinscription</a></body></html>`;
+    m.faux.etat.campagnes[0]!.altbody = "Texte de repli tout autre";
+    const r = (await m.lire({ campagne_id: 5 })).corps;
+    expect(r["extrait"]).toBe("Bonjour & bienvenue ici 2 désinscription");
+    expect(r["domaines"]).toEqual(["pixel.example", "tiers.example"]);
   });
 
   it("campagne inconnue : 502 ; corps invalide : 400", async () => {

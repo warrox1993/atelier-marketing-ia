@@ -89,6 +89,11 @@ export const STYLES_ORGANIGRAMME_SERVICE = `
 .atl-orgs-groupe-ligne { min-height: 2.75rem; padding: 0 0.5rem; border: 1px dashed var(--atl-attenue-fort); border-radius: 3px; background: none; color: var(--atl-texte); font: inherit; font-weight: 600; cursor: pointer; }
 .atl-orgs-partenaires-liste { display: flex; flex-direction: column; margin: 0; padding: 0; list-style: none; border: 1px solid var(--atl-trait); border-radius: var(--atl-rayon); }
 .atl-orgs-partenaires-liste li + li { border-top: 1px solid var(--atl-trait); }
+.atl-orgs-traiter { display: flex; flex-direction: column; gap: 0.5rem; }
+.atl-orgs-traiter-liste { display: flex; flex-direction: column; margin: 0; padding: 0; list-style: none; border: 1px solid var(--atl-trait); border-radius: var(--atl-rayon); }
+.atl-orgs-traiter-liste li { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.25rem 0.75rem; padding: 0.625rem 0.875rem; }
+.atl-orgs-traiter-liste li + li { border-top: 1px solid var(--atl-trait); }
+.atl-orgs-traiter-detail { font-size: 0.8125rem; color: var(--atl-attenue-fort); font-variant-numeric: tabular-nums; }
 .atl-orgs-satellite-ligne { display: flex; flex-direction: column; align-items: flex-start; gap: 0.125rem; width: 100%; min-height: 2.75rem; padding: 0.5rem 0.75rem; border: 0; background: none; color: var(--atl-texte); font: inherit; text-align: left; cursor: pointer; }
 .atl-orgs-satellite-ligne .atl-orgs-satellite-nom { font-size: 0.9375rem; }
 

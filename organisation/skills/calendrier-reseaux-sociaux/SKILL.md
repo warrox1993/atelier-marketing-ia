@@ -53,7 +53,9 @@ brouillons de réponses qui ne prennent aucun risque public.
    réponse ; litigieux (réclamation, sinistre, menace, donnée personnelle, sujet juridique ou médical, critique
    virulente) : aucune réponse proposée, signalement au coordinateur pour traitement par le service client ou un humain.
 9. **Indicateurs** : deux ou trois, cohérents avec l'objectif (pas le nombre de mentions « j'aime » si l'objectif est
-   le recrutement), suivis par le rôle Mesure.
+   le recrutement). Mesure n'a aucune connexion aux réseaux sociaux : un indicateur lu sur un réseau s'écrit « non
+   mesurable, connexion à demander » ; seuls les effets visibles sur le site (visites venues des réseaux, demandes)
+   sont suivis par le rôle Mesure.
 
 ## Livrable
 

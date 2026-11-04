@@ -48,6 +48,10 @@ demarrer_un() {
   if pid_du_port "$port" >/dev/null; then echo "port $port : déjà démarré (pid $(pid_du_port "$port"))"; return 0; fi
   if ss -ltnH "sport = :$port" 2>/dev/null | grep -q .; then erreur "port $port occupé par un autre processus"; return 1; fi
   if [ ! -f "$RACINE/passerelle/dist/src/demarrer.js" ]; then erreur "passerelle non compilée (passerelle/dist/src/demarrer.js)"; return 1; fi
+  # tsc (sans incremental) réécrit toute la sortie : une source plus récente que demarrer.js = ancienne version compilée.
+  if [ -n "$(find "$RACINE/passerelle/src" -name '*.ts' -newer "$RACINE/passerelle/dist/src/demarrer.js" -print -quit 2>/dev/null)" ]; then
+    erreur "passerelle compilée avant ses sources : (cd passerelle && pnpm build) d'abord"; return 1
+  fi
   local node_bin; node_bin="$(command -v node)" || { erreur "node introuvable"; return 1; }
 
   # Environnement minimal : seules les variables du fichier, plus PATH et HOME.

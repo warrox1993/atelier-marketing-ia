@@ -23,6 +23,7 @@ export interface ListeListmonk { id: number; name: string; type: string; optin: 
 export interface AbonneListmonk {
   id: number; email: string; name: string; status: string;
   lists?: Array<{ id: number; name?: string; subscription_status: string }>;
+  attribs?: Record<string, unknown>;
 }
 export interface CampagneListmonk {
   id: number; name: string; subject: string; status: string; body: string; altbody: string | null; content_type: string; template_id: number;
@@ -125,10 +126,15 @@ export class ClientListmonk {
    * destinataires réels. Erreur si listmonk rend moins d'abonnés que son total (liste tronquée : on ne devine pas).
    */
   async idsConfirmes(listeId: number): Promise<number[]> {
-    const rep = await this.appeler<{ results?: Array<{ id: number }>; total?: number }>("GET", `/api/subscribers?list_id=${listeId}&subscription_status=confirmed&per_page=all`);
-    const ids = (rep?.results ?? []).map((a) => a.id);
-    if (typeof rep?.total === "number" && rep.total > ids.length) throw new ErreurListmonk(`listmonk a rendu ${ids.length} abonnés sur ${rep.total} pour la liste ${listeId}.`, 502);
-    return ids;
+    return (await this.confirmes(listeId)).map((a) => a.id);
+  }
+
+  /** Abonnés confirmés d'une liste (identifiant et adresse), tous ; même refus d'une liste tronquée. */
+  async confirmes(listeId: number): Promise<Array<{ id: number; email: string }>> {
+    const rep = await this.appeler<{ results?: Array<{ id: number; email: string }>; total?: number }>("GET", `/api/subscribers?list_id=${listeId}&subscription_status=confirmed&per_page=all`);
+    const abonnes = (rep?.results ?? []).map((a) => ({ id: a.id, email: String(a.email ?? "") }));
+    if (typeof rep?.total === "number" && rep.total > abonnes.length) throw new ErreurListmonk(`listmonk a rendu ${abonnes.length} abonnés sur ${rep.total} pour la liste ${listeId}.`, 502);
+    return abonnes;
   }
 
   creerListe(nom: string, description: string): Promise<ListeListmonk> {
@@ -136,8 +142,9 @@ export class ClientListmonk {
     return this.appeler<ListeListmonk>("POST", "/api/lists", { name: nom, type: "private", optin: "single", tags: [], description });
   }
 
+  /** E2 : tous les résultats de la recherche (`per_page=all`) : l'adresse exacte peut venir après 20 adresses voisines. */
   async chercherAbonne(email: string): Promise<AbonneListmonk | null> {
-    const rep = await this.appeler<{ results: AbonneListmonk[] }>("GET", `/api/subscribers?search=${encodeURIComponent(email)}&per_page=20`);
+    const rep = await this.appeler<{ results: AbonneListmonk[] }>("GET", `/api/subscribers?search=${encodeURIComponent(email)}&per_page=all`);
     return (rep?.results ?? []).find((a) => a.email.toLowerCase() === email.toLowerCase()) ?? null;
   }
 
@@ -145,6 +152,11 @@ export class ClientListmonk {
     return this.appeler<AbonneListmonk>("POST", "/api/subscribers", {
       email: a.email, name: a.nom, status: "enabled", lists: [a.listeId], preconfirm_subscriptions: true, attribs: a.attribs,
     });
+  }
+
+  /** PATCH v6.2.0 : seuls les attributs envoyés changent (fusion de premier niveau) ; sans `lists`, les abonnements restent intacts. */
+  async fusionnerAttributs(abonneId: number, attribs: Record<string, unknown>): Promise<void> {
+    await this.appeler<AbonneListmonk>("PATCH", `/api/subscribers/${abonneId}`, { attribs });
   }
 
   async ajouterALaListe(abonneId: number, listeId: number): Promise<void> {

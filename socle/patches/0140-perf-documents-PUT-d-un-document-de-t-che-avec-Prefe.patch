@@ -1,0 +1,69 @@
+From f9ee5d18b26f341893e9fd3005ce01ef5cc1a0cd Mon Sep 17 00:00:00 2001
+From: Jean-Baptiste Dhondt <114347858+warrox1993@users.noreply.github.com>
+Date: Fri, 30 Oct 2026 16:20:20 +0100
+Subject: [PATCH 140/141] =?UTF-8?q?perf(documents):=20PUT=20d'un=20documen?=
+ =?UTF-8?q?t=20de=20t=C3=A2che=20avec=20Prefer:=20return=3Dminimal=20ne=20?=
+ =?UTF-8?q?renvoie=20pas=20le=20corps=20(Atelier=20PARC-14)?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Comme PATCH /api/issues/:id, la route PUT /api/issues/:id/documents/:key respecte
+l'en-tête Prefer: return=minimal : réponse sans body (identifiant, clé, titre,
+révision, dates), en-tête Preference-Applied. La réponse par défaut ne change pas.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01EThpSSDGc5NRYwbgjNqoTJ
+---
+ .../__tests__/multilingual-issues-routes.test.ts | 16 ++++++++++++++++
+ server/src/routes/issues.ts                      |  7 +++++++
+ 2 files changed, 23 insertions(+)
+
+diff --git a/server/src/__tests__/multilingual-issues-routes.test.ts b/server/src/__tests__/multilingual-issues-routes.test.ts
+index 3ed24b5b8e..7ed092d94f 100644
+--- a/server/src/__tests__/multilingual-issues-routes.test.ts
++++ b/server/src/__tests__/multilingual-issues-routes.test.ts
+@@ -164,6 +164,22 @@ describeEmbeddedPostgres("multilingual issue routes", () => {
+     expect(documentRes.body.body).toBe(documentBody);
+   });
+ 
++  it("ne renvoie pas le corps du document quand l'agent demande Prefer: return=minimal (Atelier PARC-14)", async () => {
++    const minimalRes = await request(app)
++      .put("/api/issues/LNG-1/documents/qa-notes-courtes")
++      .set("Prefer", "return=minimal")
++      .send({ title: "Notes courtes", format: "markdown", body: documentBody });
++    expect(minimalRes.status, JSON.stringify(minimalRes.body)).toBe(201);
++    expect(minimalRes.headers["preference-applied"]).toBe("return=minimal");
++    expect(minimalRes.body).not.toHaveProperty("body");
++    expect(minimalRes.body).toMatchObject({ key: "qa-notes-courtes", title: "Notes courtes", latestRevisionNumber: 1 });
++    expect(typeof minimalRes.body.id).toBe("string");
++    expect(typeof minimalRes.body.latestRevisionId).toBe("string");
++
++    const fullRes = await request(app).get("/api/issues/LNG-1/documents/qa-notes-courtes");
++    expect(fullRes.body.body).toBe(documentBody);
++  });
++
+   it("preserves multilingual completion comments", async () => {
+     const completeRes = await request(app)
+       .patch("/api/issues/LNG-1")
+diff --git a/server/src/routes/issues.ts b/server/src/routes/issues.ts
+index babd1e7c2d..0d68f9ed89 100644
+--- a/server/src/routes/issues.ts
++++ b/server/src/routes/issues.ts
+@@ -10880,6 +10880,13 @@ export function issueRoutes(
+         documentChanged: true,
+       });
+ 
++      if (prefersMinimalIssueUpdateResponse(req)) {
++        // Atelier PARC-14 : l'agent qui vient d'écrire le document ne relit pas son corps.
++        const { body: _body, ...summary } = doc;
++        res.setHeader("Preference-Applied", "return=minimal");
++        res.status(result.created ? 201 : 200).json(summary);
++        return;
++      }
+       res.status(result.created ? 201 : 200).json(doc);
+     },
+   );
+-- 
+2.53.0
+

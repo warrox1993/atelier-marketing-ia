@@ -1,0 +1,8 @@
+/* Chiffre clé : le chiffre (en accent, chiffres alignés de largeur fixe) domine, le titre est sa légende, composé
+   au plus petit palier pour rester prévisible ; la précision ou la source se pose en bas. */
+#titre {
+  margin-top: calc(var(--u) * var(--ecart) * 0.7);
+  font-size: calc(var(--u) * var(--titre-p) * var(--kt) * 0.8);
+  line-height: 1.08;
+  max-width: 16em;
+}

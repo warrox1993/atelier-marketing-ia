@@ -1,0 +1,577 @@
+From 35df8d145d5e2dfbb4ec8d621c8a8fa9c6aa3436 Mon Sep 17 00:00:00 2001
+From: Jean-Baptiste Dhondt <114347858+warrox1993@users.noreply.github.com>
+Date: Fri, 30 Oct 2026 16:08:14 +0100
+Subject: [PATCH 139/139] =?UTF-8?q?fix(i18n):=20boutons=20=C2=AB=20Cancel?=
+ =?UTF-8?q?=20=C2=BB=20de=20l'interface=20en=20=C2=AB=20Annuler=20=C2=BB?=
+ =?UTF-8?q?=20(Atelier=20LANG-L6)?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Les 31 fichiers .tsx qui affichaient encore >Cancel< (connexions, applications,
+environnements, profils d'outils, plugins, catalogue d'équipe, dépôts, secrets,
+partage, annotations...) passent à « Annuler », comme les patchs de traduction
+0040 à 0044 (libellés écrits en dur, sans nouvelle dépendance). Les deux tests
+qui cherchaient le bouton par son texte passent au français.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01EThpSSDGc5NRYwbgjNqoTJ
+---
+ ui/src/components/BuiltInBundlePanel.tsx                  | 4 ++--
+ ui/src/components/DocumentAnnotationPopover.tsx           | 2 +-
+ ui/src/components/IssueShareSheet.tsx                     | 2 +-
+ ui/src/components/LegacyProjectRepository.tsx             | 2 +-
+ ui/src/components/RepositoryEditor.tsx                    | 2 +-
+ ui/src/components/SecretBindingPicker.tsx                 | 2 +-
+ ui/src/components/SubscriptionCostCard.tsx                | 2 +-
+ ui/src/components/WorkspaceBaseRefRecoveryNotice.tsx      | 2 +-
+ .../ai-connections/AiConnectionCredentialStep.tsx         | 2 +-
+ .../ai-connections/AiConnectionPoolConnector.tsx          | 4 ++--
+ .../components/primary-agent/PrimaryAgentPresentation.tsx | 2 +-
+ ui/src/features/connections/ConnectionInstructions.tsx    | 2 +-
+ ui/src/features/connections/ConnectionSetupFlow.tsx       | 2 +-
+ ui/src/features/connections/HonchoWorkspaceSettings.tsx   | 2 +-
+ .../connections/remote-mcp/RemoteMcpManagement.tsx        | 2 +-
+ ui/src/pages/AdapterManager.tsx                           | 4 ++--
+ ui/src/pages/CompanyEnvironments.tsx                      | 2 +-
+ ui/src/pages/DesignGuide.tsx                              | 6 +++---
+ ui/src/pages/McpConnect.test.tsx                          | 4 ++--
+ ui/src/pages/McpConnect.tsx                               | 2 +-
+ ui/src/pages/PluginManager.tsx                            | 4 ++--
+ ui/src/pages/TeamCatalog.tsx                              | 2 +-
+ ui/src/pages/apps/AppsConnect.tsx                         | 2 +-
+ ui/src/pages/apps/ArcadeDiscoverySetup.tsx                | 2 +-
+ ui/src/pages/apps/Connections.tsx                         | 2 +-
+ ui/src/pages/apps/ExecutorManagementSetup.tsx             | 2 +-
+ ui/src/pages/apps/chat/ChatCommunicationInstructions.tsx  | 2 +-
+ ui/src/pages/apps/chat/ChatEndpointDetail.tsx             | 2 +-
+ ui/src/pages/apps/chat/EmailEndpointSetup.test.tsx        | 2 +-
+ ui/src/pages/apps/chat/EmailEndpointSetup.tsx             | 2 +-
+ ui/src/pages/tools/ProfilesTab.tsx                        | 4 ++--
+ ui/src/pages/tools/profiles/ProfileActionDialog.tsx       | 2 +-
+ ui/src/pages/tools/profiles/ProfileDetail.tsx             | 8 ++++----
+ 33 files changed, 44 insertions(+), 44 deletions(-)
+
+diff --git a/ui/src/components/BuiltInBundlePanel.tsx b/ui/src/components/BuiltInBundlePanel.tsx
+index a65c4d4c2f..a766f199f6 100644
+--- a/ui/src/components/BuiltInBundlePanel.tsx
++++ b/ui/src/components/BuiltInBundlePanel.tsx
+@@ -126,7 +126,7 @@ function ResourceActionButton({
+           <AlertDialogDescription>{copy.body}</AlertDialogDescription>
+         </AlertDialogHeader>
+         <AlertDialogFooter>
+-          <AlertDialogCancel>Cancel</AlertDialogCancel>
++          <AlertDialogCancel>Annuler</AlertDialogCancel>
+           <AlertDialogAction onClick={onConfirm}>{copy.confirmLabel}</AlertDialogAction>
+         </AlertDialogFooter>
+       </AlertDialogContent>
+@@ -162,7 +162,7 @@ function ConfirmActionButton({
+           <AlertDialogDescription>{body}</AlertDialogDescription>
+         </AlertDialogHeader>
+         <AlertDialogFooter>
+-          <AlertDialogCancel>Cancel</AlertDialogCancel>
++          <AlertDialogCancel>Annuler</AlertDialogCancel>
+           <AlertDialogAction onClick={onConfirm}>{confirmLabel}</AlertDialogAction>
+         </AlertDialogFooter>
+       </AlertDialogContent>
+diff --git a/ui/src/components/DocumentAnnotationPopover.tsx b/ui/src/components/DocumentAnnotationPopover.tsx
+index 274c1ed38b..85d3d5ece4 100644
+--- a/ui/src/components/DocumentAnnotationPopover.tsx
++++ b/ui/src/components/DocumentAnnotationPopover.tsx
+@@ -107,7 +107,7 @@ export function DocumentAnnotationPopover(props: DocumentAnnotationPopoverProps)
+             className="resize-y text-sm"
+           />
+           <div className="mt-2 flex justify-end gap-2">
+-            <Button type="button" size="sm" variant="ghost" onClick={props.onClose}>Cancel</Button>
++            <Button type="button" size="sm" variant="ghost" onClick={props.onClose}>Annuler</Button>
+             <Button type="button" size="sm" disabled={!composer.trim() || createThread.isPending || props.newCommentDisabled || !props.baseRevisionId} onClick={submitComposer}>
+               {createThread.isPending ? "Posting…" : "Comment"}
+             </Button>
+diff --git a/ui/src/components/IssueShareSheet.tsx b/ui/src/components/IssueShareSheet.tsx
+index c2269bc397..a29c02e92b 100644
+--- a/ui/src/components/IssueShareSheet.tsx
++++ b/ui/src/components/IssueShareSheet.tsx
+@@ -487,7 +487,7 @@ export function IssueShareSheet({
+             </AlertDialogDescription>
+           </AlertDialogHeader>
+           <AlertDialogFooter>
+-            <AlertDialogCancel>Cancel</AlertDialogCancel>
++            <AlertDialogCancel>Annuler</AlertDialogCancel>
+             <AlertDialogAction
+               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+               onClick={(event) => {
+diff --git a/ui/src/components/LegacyProjectRepository.tsx b/ui/src/components/LegacyProjectRepository.tsx
+index ad79bd8fa4..e3407c40a8 100644
+--- a/ui/src/components/LegacyProjectRepository.tsx
++++ b/ui/src/components/LegacyProjectRepository.tsx
+@@ -33,7 +33,7 @@ export function LegacyProjectRepository({ workspace, projectRef }: { workspace:
+     </div> : <form className="flex flex-col gap-2" onSubmit={(event) => { event.preventDefault(); if (!save.isPending) save.mutate(); }}>
+       <Input aria-label="Existing repo URL" type="url" value={draft} disabled={save.isPending} onChange={(event) => setDraft(event.target.value)} />
+       {save.isError && <p role="alert" className="text-sm text-destructive">{save.error.message}</p>}
+-      <div className="flex justify-end gap-2"><Button type="button" variant="ghost" disabled={save.isPending} onClick={() => setDraft(null)}>Cancel</Button><Button type="submit" disabled={save.isPending}>Save URL</Button></div>
++      <div className="flex justify-end gap-2"><Button type="button" variant="ghost" disabled={save.isPending} onClick={() => setDraft(null)}>Annuler</Button><Button type="submit" disabled={save.isPending}>Save URL</Button></div>
+     </form>}
+   </div>;
+ }
+diff --git a/ui/src/components/RepositoryEditor.tsx b/ui/src/components/RepositoryEditor.tsx
+index 7a9c85f595..045463a829 100644
+--- a/ui/src/components/RepositoryEditor.tsx
++++ b/ui/src/components/RepositoryEditor.tsx
+@@ -75,7 +75,7 @@ export function RepositoryEditor({ selected, onChange, state = "ready", availabl
+           />
+           <div className="flex items-center justify-between gap-2">
+             <p className="text-xs text-muted-foreground">{"All GitHub connections you can use."}</p>
+-            <Button type="button" variant="ghost" size="sm" onClick={() => setShowPicker(false)}>Cancel</Button>
++            <Button type="button" variant="ghost" size="sm" onClick={() => setShowPicker(false)}>Annuler</Button>
+           </div>
+         </div>
+       ) : <Button type="button" variant="outline" className={addClassName} onClick={() => setShowPicker(true)}><GithubIcon className="size-4" />{addLabel}</Button>}
+diff --git a/ui/src/components/SecretBindingPicker.tsx b/ui/src/components/SecretBindingPicker.tsx
+index f04033ae54..f0e2416973 100644
+--- a/ui/src/components/SecretBindingPicker.tsx
++++ b/ui/src/components/SecretBindingPicker.tsx
+@@ -324,7 +324,7 @@ export function SecretBindingPicker({
+             {createError ? <p className="text-xs text-destructive">{createError}</p> : null}
+           </div>
+           <DialogFooter>
+-            <Button type="button" variant="outline" onClick={() => setCreateOpen(false)}>Cancel</Button>
++            <Button type="button" variant="outline" onClick={() => setCreateOpen(false)}>Annuler</Button>
+             <Button
+               type="button"
+               onClick={() => createMutation.mutate()}
+diff --git a/ui/src/components/SubscriptionCostCard.tsx b/ui/src/components/SubscriptionCostCard.tsx
+index 83bccc8c8a..c472cdb29c 100644
+--- a/ui/src/components/SubscriptionCostCard.tsx
++++ b/ui/src/components/SubscriptionCostCard.tsx
+@@ -51,7 +51,7 @@ function SubscriptionEditor({ account, accounts, companyId, onDone }: {
+       </div>
+       <p className="text-xs text-muted-foreground">Enter the full amount for one account or seat. Annual prices are divided by 12. Changes apply from now. Ending tracking here does not cancel your provider subscription.</p>
+       {save.error && <p role="alert" className="text-sm text-destructive">Could not save this price. Check the amount, or reopen the account if another person updated it.</p>}
+-      <div className="flex items-center justify-between"><Button type="button" variant="ghost" disabled={busy} onClick={onDone}>Cancel</Button><Button type="submit" disabled={busy}>{save.isPending ? "Saving…" : "Save price"}</Button></div>
++      <div className="flex items-center justify-between"><Button type="button" variant="ghost" disabled={busy} onClick={onDone}>Annuler</Button><Button type="submit" disabled={busy}>{save.isPending ? "Saving…" : "Save price"}</Button></div>
+     </form>
+     {targets.length > 0 && <div className="space-y-2 border-t border-border pt-4">
+       <Label htmlFor="subscription-link">Same subscription as another account?</Label>
+diff --git a/ui/src/components/WorkspaceBaseRefRecoveryNotice.tsx b/ui/src/components/WorkspaceBaseRefRecoveryNotice.tsx
+index d8082b6804..789b2e3a04 100644
+--- a/ui/src/components/WorkspaceBaseRefRecoveryNotice.tsx
++++ b/ui/src/components/WorkspaceBaseRefRecoveryNotice.tsx
+@@ -87,7 +87,7 @@ export function WorkspaceBaseRefRecoveryNotice({
+                   <Input id={`${id}-branch`} autoFocus value={branch} disabled={pending || Boolean(unavailableReason)} onChange={event => setBranch(event.target.value)} placeholder="Branch name" className="font-mono" aria-describedby={error ? `${id}-error` : undefined} autoComplete="off" spellCheck={false} />
+                 </div>
+                 <div className="flex flex-wrap items-center justify-between gap-2">
+-                  {defaultBranch ? <Button type="button" variant="ghost" size="sm" disabled={pending} onClick={() => { setEditing(false); setError(null); }}>Cancel</Button> : <span />}
++                  {defaultBranch ? <Button type="button" variant="ghost" size="sm" disabled={pending} onClick={() => { setEditing(false); setError(null); }}>Annuler</Button> : <span />}
+                   <Button type="submit" size="sm" disabled={pending || !changed || Boolean(unavailableReason)} aria-describedby={unavailableReason ? `${id}-unavailable` : undefined}>
+                     {pending && <Loader2 aria-hidden className="size-3.5 animate-spin motion-reduce:animate-none" />}{pending ? "Saving & requesting retry…" : "Save branch & retry"}
+                   </Button>
+diff --git a/ui/src/components/ai-connections/AiConnectionCredentialStep.tsx b/ui/src/components/ai-connections/AiConnectionCredentialStep.tsx
+index 2043569e51..8550199823 100644
+--- a/ui/src/components/ai-connections/AiConnectionCredentialStep.tsx
++++ b/ui/src/components/ai-connections/AiConnectionCredentialStep.tsx
+@@ -114,6 +114,6 @@ function ApiKeyConnectionStep({ companyId, provider, connectionId, name: initial
+     {save.error && <p role="alert" className="text-sm text-destructive">{save.error.message}</p>}
+     <ProviderApiKeyCard providerName={provider === "google" ? "Google" : "OpenRouter"} value={apiKey} onChange={setApiKey} onSubmit={() => save.mutate()} disabled={disabled || save.isPending} placeholder="Enter API key here" autoFocus />
+     {defaults}
+-    <div className="flex justify-between gap-2"><Button variant="ghost" onClick={onCancel}>Cancel</Button><Button disabled={disabled || !name.trim() || !apiKey.trim() || save.isPending} onClick={() => save.mutate()}>{save.isPending ? "Connecting…" : "Connect"}</Button></div>
++    <div className="flex justify-between gap-2"><Button variant="ghost" onClick={onCancel}>Annuler</Button><Button disabled={disabled || !name.trim() || !apiKey.trim() || save.isPending} onClick={() => save.mutate()}>{save.isPending ? "Connecting…" : "Connect"}</Button></div>
+   </div>;
+ }
+diff --git a/ui/src/components/ai-connections/AiConnectionPoolConnector.tsx b/ui/src/components/ai-connections/AiConnectionPoolConnector.tsx
+index 7eb2ee6e9d..023575649d 100644
+--- a/ui/src/components/ai-connections/AiConnectionPoolConnector.tsx
++++ b/ui/src/components/ai-connections/AiConnectionPoolConnector.tsx
+@@ -167,8 +167,8 @@ function PoolConnector({ companyId, pluginKey, connection }: { companyId: string
+       <Button variant="ghost" disabled={busy} onClick={() => connection ? navigate("/apps") : step ? setStep(0) : navigate("/apps")}>{!connection && step ? "Back" : "Cancel"}</Button>
+       <Button disabled={disabled || draft.members.length === 0 || !Number.isInteger(draft.thresholdPercent) || draft.thresholdPercent < 1 || draft.thresholdPercent > 100} onClick={() => !connection && step === 0 ? setStep(1) : void save()}>{busy && <Loader2 className="size-4 animate-spin" />}{busy ? "Saving…" : connection ? "Save changes" : step ? "Create pool" : "Continue"}</Button>
+     </div>
+-    <Dialog open={pickerOpen} onOpenChange={setPickerOpen}><DialogContent className="sm:max-w-2xl"><DialogHeader><DialogTitle>Add connections</DialogTitle><DialogDescription>Choose connections you already use.</DialogDescription></DialogHeader><ConnectionPicker accounts={accounts} selected={pickerMembers} disabled={disabled} onChange={setPickerMembers} onRefresh={() => void accountsQuery.refetch()} /><div className="flex items-center justify-between gap-3"><Button variant="ghost" onClick={() => setPickerOpen(false)}>Cancel</Button><Button onClick={() => { setDraft({ ...draft, members: pickerMembers }); setPickerOpen(false); }}>Done</Button></div></DialogContent></Dialog>
+-    <AlertDialog open={removing} onOpenChange={open => { if (!busy) setRemoving(open); }}><AlertDialogContent><AlertDialogHeader><AlertDialogTitle>Remove {draft.name}?</AlertDialogTitle><AlertDialogDescription>The connections in this pool are kept.</AlertDialogDescription></AlertDialogHeader>{error && <p role="alert" className="text-sm text-destructive">{error}</p>}<AlertDialogFooter className="sm:justify-between"><AlertDialogCancel disabled={busy}>Cancel</AlertDialogCancel><AlertDialogAction className="bg-destructive text-destructive-foreground hover:bg-destructive/90" disabled={busy} onClick={event => { event.preventDefault(); void remove(); }}>{busy ? "Removing…" : "Remove connection"}</AlertDialogAction></AlertDialogFooter></AlertDialogContent></AlertDialog>
++    <Dialog open={pickerOpen} onOpenChange={setPickerOpen}><DialogContent className="sm:max-w-2xl"><DialogHeader><DialogTitle>Add connections</DialogTitle><DialogDescription>Choose connections you already use.</DialogDescription></DialogHeader><ConnectionPicker accounts={accounts} selected={pickerMembers} disabled={disabled} onChange={setPickerMembers} onRefresh={() => void accountsQuery.refetch()} /><div className="flex items-center justify-between gap-3"><Button variant="ghost" onClick={() => setPickerOpen(false)}>Annuler</Button><Button onClick={() => { setDraft({ ...draft, members: pickerMembers }); setPickerOpen(false); }}>Done</Button></div></DialogContent></Dialog>
++    <AlertDialog open={removing} onOpenChange={open => { if (!busy) setRemoving(open); }}><AlertDialogContent><AlertDialogHeader><AlertDialogTitle>Remove {draft.name}?</AlertDialogTitle><AlertDialogDescription>The connections in this pool are kept.</AlertDialogDescription></AlertDialogHeader>{error && <p role="alert" className="text-sm text-destructive">{error}</p>}<AlertDialogFooter className="sm:justify-between"><AlertDialogCancel disabled={busy}>Annuler</AlertDialogCancel><AlertDialogAction className="bg-destructive text-destructive-foreground hover:bg-destructive/90" disabled={busy} onClick={event => { event.preventDefault(); void remove(); }}>{busy ? "Removing…" : "Remove connection"}</AlertDialogAction></AlertDialogFooter></AlertDialogContent></AlertDialog>
+   </div>;
+ }
+ function ConnectionPicker({ accounts, selected, disabled, onChange, onRefresh }: { accounts: AiManagedConnectionSummary[]; selected: AiConnectionPoolMember[]; disabled: boolean; onChange: (members: AiConnectionPoolMember[]) => void; onRefresh: () => void }) {
+diff --git a/ui/src/components/primary-agent/PrimaryAgentPresentation.tsx b/ui/src/components/primary-agent/PrimaryAgentPresentation.tsx
+index 4a978f7234..9a540686f6 100644
+--- a/ui/src/components/primary-agent/PrimaryAgentPresentation.tsx
++++ b/ui/src/components/primary-agent/PrimaryAgentPresentation.tsx
+@@ -86,7 +86,7 @@ export function SetPrimaryAgentButton({ agent }: {
+         </AlertDialogDescription>
+       </AlertDialogHeader>
+       <AlertDialogFooter className="flex-row justify-between sm:justify-between">
+-        <AlertDialogCancel>Cancel</AlertDialogCancel>
++        <AlertDialogCancel>Annuler</AlertDialogCancel>
+         <AlertDialogAction disabled={disabled} onClick={() => primary.onChange(agent.id)}>Set as my primary</AlertDialogAction>
+       </AlertDialogFooter>
+     </AlertDialogContent>
+diff --git a/ui/src/features/connections/ConnectionInstructions.tsx b/ui/src/features/connections/ConnectionInstructions.tsx
+index 07402d714d..2f0bb24223 100644
+--- a/ui/src/features/connections/ConnectionInstructions.tsx
++++ b/ui/src/features/connections/ConnectionInstructions.tsx
+@@ -69,7 +69,7 @@ export function ConnectionInstructionsSettings({ connection, provider, template,
+     <ConnectionInstructionsEditor provider={provider} template={template} value={value} onChange={setDraft} disabled={!canConfigure || mutation.isPending} />
+     {mutation.isError && <div role="alert"><InlineBanner tone="danger">{mutation.error instanceof Error ? mutation.error.message : "Couldn’t save instructions. Try again."}</InlineBanner></div>}
+     {dirty && <div className="flex items-center justify-between">
+-      <Button variant="ghost" disabled={mutation.isPending} onClick={() => { setDraft(null); mutation.reset(); }}>Cancel</Button>
++      <Button variant="ghost" disabled={mutation.isPending} onClick={() => { setDraft(null); mutation.reset(); }}>Annuler</Button>
+       <Button disabled={!canConfigure || mutation.isPending || !value.text.trim()} onClick={() => mutation.mutate()}>{mutation.isPending ? "Saving…" : "Save instructions"}</Button>
+     </div>}
+   </div>;
+diff --git a/ui/src/features/connections/ConnectionSetupFlow.tsx b/ui/src/features/connections/ConnectionSetupFlow.tsx
+index 1288f2e8d9..1dbdbe6825 100644
+--- a/ui/src/features/connections/ConnectionSetupFlow.tsx
++++ b/ui/src/features/connections/ConnectionSetupFlow.tsx
+@@ -2043,7 +2043,7 @@ function StandardConnectionSetupFlow({
+           <Button type="button" variant="outline" onClick={() => setShowConnectionChoice(false)}>
+             {configuredConnection ? "Review connection setup" : "Connect new"}
+           </Button>
+-          {onCancel ? <Button type="button" variant="ghost" onClick={onCancel}>Cancel</Button> : null}
++          {onCancel ? <Button type="button" variant="ghost" onClick={onCancel}>Annuler</Button> : null}
+         </div>
+       </div>
+     );
+diff --git a/ui/src/features/connections/HonchoWorkspaceSettings.tsx b/ui/src/features/connections/HonchoWorkspaceSettings.tsx
+index be2c97b52d..b7b24acbfb 100644
+--- a/ui/src/features/connections/HonchoWorkspaceSettings.tsx
++++ b/ui/src/features/connections/HonchoWorkspaceSettings.tsx
+@@ -24,7 +24,7 @@ export function HonchoWorkspaceSettings({ connection, canConfigure }: { connecti
+     {!value.trim() && <InlineBanner tone="warning">Enter a workspace to include Honcho instructions. Existing tools remain available.</InlineBanner>}
+     {mutation.isError && <div role="alert"><InlineBanner tone="danger">{mutation.error.message}</InlineBanner></div>}
+     {draft !== null && draft !== saved && <div className="flex items-center justify-between">
+-      <Button variant="ghost" disabled={mutation.isPending} onClick={() => { setDraft(null); mutation.reset(); }}>Cancel</Button>
++      <Button variant="ghost" disabled={mutation.isPending} onClick={() => { setDraft(null); mutation.reset(); }}>Annuler</Button>
+       <Button disabled={!canConfigure || mutation.isPending || !value.trim()} onClick={() => mutation.mutate()}>{mutation.isPending ? "Saving…" : "Save workspace"}</Button>
+     </div>}
+   </section>;
+diff --git a/ui/src/features/connections/remote-mcp/RemoteMcpManagement.tsx b/ui/src/features/connections/remote-mcp/RemoteMcpManagement.tsx
+index 87861307db..e61050e15f 100644
+--- a/ui/src/features/connections/remote-mcp/RemoteMcpManagement.tsx
++++ b/ui/src/features/connections/remote-mcp/RemoteMcpManagement.tsx
+@@ -27,7 +27,7 @@ export function RemoteMcpManagement({ providerName, connected = true, canReconne
+             <AlertDialogDescription>Delete this connection’s saved credentials and stop further calls through Paperclip. Other connections are unaffected. Actions already sent to the provider may still complete. Connecting again requires a new sign-in or key.</AlertDialogDescription>
+           </AlertDialogHeader>
+           <AlertDialogFooter>
+-            <AlertDialogCancel disabled={busy}>Cancel</AlertDialogCancel>
++            <AlertDialogCancel disabled={busy}>Annuler</AlertDialogCancel>
+             <AlertDialogAction disabled={busy} onClick={async (event) => {
+               event.preventDefault();
+               try { await onDisconnect(); setConfirming(false); } catch { /* The controller displays the failure. */ }
+diff --git a/ui/src/pages/AdapterManager.tsx b/ui/src/pages/AdapterManager.tsx
+index dd4fb67544..3273a857cf 100644
+--- a/ui/src/pages/AdapterManager.tsx
++++ b/ui/src/pages/AdapterManager.tsx
+@@ -495,7 +495,7 @@ export function AdapterManager() {
+               )}
+             </div>
+             <DialogFooter>
+-              <Button variant="outline" onClick={() => setInstallDialogOpen(false)}>Cancel</Button>
++              <Button variant="outline" onClick={() => setInstallDialogOpen(false)}>Annuler</Button>
+               <Button
+                 onClick={() =>
+                   installMutation.mutate({
+@@ -654,7 +654,7 @@ export function AdapterManager() {
+             </DialogDescription>
+           </DialogHeader>
+           <DialogFooter>
+-            <Button variant="outline" onClick={() => setRemoveType(null)}>Cancel</Button>
++            <Button variant="outline" onClick={() => setRemoveType(null)}>Annuler</Button>
+             <Button
+               variant="destructive"
+               disabled={removeMutation.isPending}
+diff --git a/ui/src/pages/CompanyEnvironments.tsx b/ui/src/pages/CompanyEnvironments.tsx
+index 29e997506d..9b5cba3379 100644
+--- a/ui/src/pages/CompanyEnvironments.tsx
++++ b/ui/src/pages/CompanyEnvironments.tsx
+@@ -2594,7 +2594,7 @@ export function CompanyEnvironments({ mode = "list" }: CompanyEnvironmentsProps)
+                   </div>
+                 ) : null}
+                 <AlertDialogFooter>
+-                  <AlertDialogCancel disabled={deleteEnvironmentMutation.isPending}>Cancel</AlertDialogCancel>
++                  <AlertDialogCancel disabled={deleteEnvironmentMutation.isPending}>Annuler</AlertDialogCancel>
+                   <AlertDialogAction
+                     className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                     data-testid="environment-delete-confirm"
+diff --git a/ui/src/pages/DesignGuide.tsx b/ui/src/pages/DesignGuide.tsx
+index 44eb6cb0c1..6ea3c3c8bf 100644
+--- a/ui/src/pages/DesignGuide.tsx
++++ b/ui/src/pages/DesignGuide.tsx
+@@ -1176,7 +1176,7 @@ export function DesignGuide() {
+               </div>
+             </div>
+             <SheetFooter>
+-              <Button variant="outline">Cancel</Button>
++              <Button variant="outline">Annuler</Button>
+               <Button>Save</Button>
+             </SheetFooter>
+           </SheetContent>
+@@ -1286,7 +1286,7 @@ export function DesignGuide() {
+             </CardContent>
+             <CardFooter className="gap-2">
+               <Button size="sm">Action</Button>
+-              <Button variant="outline" size="sm">Cancel</Button>
++              <Button variant="outline" size="sm">Annuler</Button>
+             </CardFooter>
+           </Card>
+         </SubSection>
+@@ -1613,7 +1613,7 @@ export function DesignGuide() {
+               </div>
+             </div>
+             <DialogFooter>
+-              <Button variant="outline">Cancel</Button>
++              <Button variant="outline">Annuler</Button>
+               <Button>Save</Button>
+             </DialogFooter>
+           </DialogContent>
+diff --git a/ui/src/pages/McpConnect.test.tsx b/ui/src/pages/McpConnect.test.tsx
+index e316e867ee..9ef8257b44 100644
+--- a/ui/src/pages/McpConnect.test.tsx
++++ b/ui/src/pages/McpConnect.test.tsx
+@@ -195,7 +195,7 @@ it("keeps hosted organization identity fixed and defaults each new request to el
+     await vi.waitFor(() => expect(page.container.textContent).toContain("selected organization is no longer available"));
+     expect(page.container.querySelector('input[type="radio"]')).toBeNull();
+     expect(page.connect().disabled).toBe(true);
+-    expect(Array.from(page.container.querySelectorAll("button")).find(item => item.textContent === "Cancel")!.disabled).toBe(false);
++    expect(Array.from(page.container.querySelectorAll("button")).find(item => item.textContent === "Annuler")!.disabled).toBe(false);
+   } finally { page.cleanup(); }
+ });
+ 
+@@ -240,7 +240,7 @@ it("denies without granting default work or configuration access", async () => {
+   const page = setup();
+   try {
+     await vi.waitFor(() => expect(page.checkbox()?.getAttribute("aria-checked")).toBe("true"));
+-    flushSync(() => Array.from(page.container.querySelectorAll("button")).find(button => button.textContent === "Cancel")!.click());
++    flushSync(() => Array.from(page.container.querySelectorAll("button")).find(button => button.textContent === "Annuler")!.click());
+     await vi.waitFor(() => expect(api.post).toHaveBeenCalledWith("/mcp/requests/request-one/consent", { decision: "deny", companyId: "company-one", allowWrites: false, allowConfiguration: false }));
+   } finally { page.cleanup(); }
+ });
+diff --git a/ui/src/pages/McpConnect.tsx b/ui/src/pages/McpConnect.tsx
+index 0933e7c93b..1126938939 100644
+--- a/ui/src/pages/McpConnect.tsx
++++ b/ui/src/pages/McpConnect.tsx
+@@ -139,7 +139,7 @@ function McpConnectRequest({ id, device = false, agentPairingOnly = false, onEdi
+           {company && !company.canWrite && <p className="text-sm text-muted-foreground">Your role in this organization is read-only.</p>}
+           {consent.error && <p className="text-sm text-destructive">{consent.error.message}</p>}
+           <div className="flex items-center justify-between gap-3">
+-            <Button variant="outline" disabled={consent.isPending} onClick={() => consent.mutate("deny")}>Cancel</Button>
++            <Button variant="outline" disabled={consent.isPending} onClick={() => consent.mutate("deny")}>Annuler</Button>
+             <Button className="h-auto min-h-10 min-w-0 shrink whitespace-normal" disabled={!company || (data.agentConnection && !company.canWrite) || consent.isPending} onClick={() => consent.mutate("approve")}>{consent.isPending ? "Connecting…" : data.agentConnection ? "Connect Dot agent" : "Connect organization"}</Button>
+           </div>
+         </>}
+diff --git a/ui/src/pages/PluginManager.tsx b/ui/src/pages/PluginManager.tsx
+index e1cccb4060..9719c974ef 100644
+--- a/ui/src/pages/PluginManager.tsx
++++ b/ui/src/pages/PluginManager.tsx
+@@ -222,7 +222,7 @@ export function PluginManager() {
+               </div>
+             </div>
+             <DialogFooter>
+-              <Button variant="outline" onClick={() => setInstallDialogOpen(false)}>Cancel</Button>
++              <Button variant="outline" onClick={() => setInstallDialogOpen(false)}>Annuler</Button>
+               <Button
+                 onClick={() => installMutation.mutate({ packageName: installPackage })}
+                 disabled={!installPackage || installMutation.isPending}
+@@ -507,7 +507,7 @@ export function PluginManager() {
+             </DialogDescription>
+           </DialogHeader>
+           <DialogFooter>
+-            <Button variant="outline" onClick={() => setUninstallPluginId(null)}>Cancel</Button>
++            <Button variant="outline" onClick={() => setUninstallPluginId(null)}>Annuler</Button>
+             <Button
+               variant="destructive"
+               disabled={uninstallMutation.isPending}
+diff --git a/ui/src/pages/TeamCatalog.tsx b/ui/src/pages/TeamCatalog.tsx
+index fc031ceaba..0b7105140c 100644
+--- a/ui/src/pages/TeamCatalog.tsx
++++ b/ui/src/pages/TeamCatalog.tsx
+@@ -1384,7 +1384,7 @@ function TeamInstallerDialog({
+           {stepIndex > 0 ? (
+             <Button variant="ghost" onClick={goBack}>Back</Button>
+           ) : (
+-            <Button variant="ghost" onClick={onClose}>Cancel</Button>
++            <Button variant="ghost" onClick={onClose}>Annuler</Button>
+           )}
+         </div>
+         <div className="flex items-center gap-3">
+diff --git a/ui/src/pages/apps/AppsConnect.tsx b/ui/src/pages/apps/AppsConnect.tsx
+index afa5e5ba88..a72dd8f16a 100644
+--- a/ui/src/pages/apps/AppsConnect.tsx
++++ b/ui/src/pages/apps/AppsConnect.tsx
+@@ -48,7 +48,7 @@ export function AppsConnect({ byoOnly = false, credentialSource = "paperclip_vau
+   if (reuseComposio && selectedCompanyId && (saved.isPending || hasSavedComposio)) return <p role="status" className="text-sm text-muted-foreground">Checking saved Composio accounts…</p>;
+   if (reuseComposio && saved.isError) return <div className="space-y-3">
+     <p role="alert" className="text-sm text-destructive">Couldn’t load your Composio accounts.</p>
+-    <div className="flex items-center justify-between"><Button variant="ghost" onClick={() => navigate("/apps")}>Cancel</Button><Button onClick={() => void saved.refetch()}>Try again</Button></div>
++    <div className="flex items-center justify-between"><Button variant="ghost" onClick={() => navigate("/apps")}>Annuler</Button><Button onClick={() => void saved.refetch()}>Try again</Button></div>
+   </div>;
+   const returningToSkills = source === "github" && selectedCompanyId && skillSourceReturnPath(selectedCompanyId);
+   function returnToSkills() {
+diff --git a/ui/src/pages/apps/ArcadeDiscoverySetup.tsx b/ui/src/pages/apps/ArcadeDiscoverySetup.tsx
+index 9914bc77cc..ced3548022 100644
+--- a/ui/src/pages/apps/ArcadeDiscoverySetup.tsx
++++ b/ui/src/pages/apps/ArcadeDiscoverySetup.tsx
+@@ -34,7 +34,7 @@ export function ArcadeDiscoverySetup({ connection, onClose }: { connection: Tool
+         <Input id="arcade-discovery-user" autoComplete="off" required value={userId} onChange={event => setUserId(event.target.value)} />
+       </div>
+       {save.isError ? <p role="alert" className="text-sm text-destructive">{save.error instanceof Error ? save.error.message : "Couldn’t save account sync. Try again."}</p> : null}
+-      <DialogFooter className="sm:justify-between"><Button type="button" variant="ghost" disabled={save.isPending} onClick={onClose}>Cancel</Button>
++      <DialogFooter className="sm:justify-between"><Button type="button" variant="ghost" disabled={save.isPending} onClick={onClose}>Annuler</Button>
+         <Button type="submit" disabled={!settled || save.isPending || !apiKey.trim() || !userId.trim()}>{save.isPending ? "Saving…" : "Save and sync"}</Button>
+       </DialogFooter>
+     </form>
+diff --git a/ui/src/pages/apps/Connections.tsx b/ui/src/pages/apps/Connections.tsx
+index 0d22348177..b820041366 100644
+--- a/ui/src/pages/apps/Connections.tsx
++++ b/ui/src/pages/apps/Connections.tsx
+@@ -554,7 +554,7 @@ export function Connections() {
+             </AlertDialogDescription>
+           </AlertDialogHeader>
+           <AlertDialogFooter>
+-            <AlertDialogCancel disabled={deleteConnection.isPending}>Cancel</AlertDialogCancel>
++            <AlertDialogCancel disabled={deleteConnection.isPending}>Annuler</AlertDialogCancel>
+             <AlertDialogAction
+               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+               disabled={!connectionToDelete || deleteConnection.isPending}
+diff --git a/ui/src/pages/apps/ExecutorManagementSetup.tsx b/ui/src/pages/apps/ExecutorManagementSetup.tsx
+index b7236af3b8..16ab94e6b7 100644
+--- a/ui/src/pages/apps/ExecutorManagementSetup.tsx
++++ b/ui/src/pages/apps/ExecutorManagementSetup.tsx
+@@ -27,7 +27,7 @@ export function ExecutorManagementSetup({ connection, onClose }: { connection: T
+     <form className="space-y-4" onSubmit={event => { event.preventDefault(); save.mutate(); }}>
+       <div className="space-y-2"><Label htmlFor="executor-console-url">Console URL</Label><Input id="executor-console-url" type="url" required value={url} onChange={event => setUrl(event.target.value)} /></div>
+       {save.isError ? <p role="alert" className="text-sm text-destructive">{save.error.message}</p> : null}
+-      <DialogFooter className="sm:justify-between"><Button type="button" variant="ghost" onClick={onClose} disabled={save.isPending}>Cancel</Button><Button type="submit" disabled={!settled || save.isPending || !url.trim()}>{save.isPending ? "Saving…" : "Save"}</Button></DialogFooter>
++      <DialogFooter className="sm:justify-between"><Button type="button" variant="ghost" onClick={onClose} disabled={save.isPending}>Annuler</Button><Button type="submit" disabled={!settled || save.isPending || !url.trim()}>{save.isPending ? "Saving…" : "Save"}</Button></DialogFooter>
+     </form>
+   </DialogContent></Dialog>;
+ }
+diff --git a/ui/src/pages/apps/chat/ChatCommunicationInstructions.tsx b/ui/src/pages/apps/chat/ChatCommunicationInstructions.tsx
+index d4b8e25d9d..69884e4140 100644
+--- a/ui/src/pages/apps/chat/ChatCommunicationInstructions.tsx
++++ b/ui/src/pages/apps/chat/ChatCommunicationInstructions.tsx
+@@ -49,7 +49,7 @@ export function ChatCommunicationInstructions({ value, onSave }: {
+       {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
+       <div className="flex items-center justify-between gap-3">
+         <div>
+-          {dirty ? <Button type="button" variant="ghost" disabled={pending} onClick={() => { setDraft(null); setError(null); setSaved(false); }}>Cancel</Button>
++          {dirty ? <Button type="button" variant="ghost" disabled={pending} onClick={() => { setDraft(null); setError(null); setSaved(false); }}>Annuler</Button>
+             : saved ? <span role="status" className="text-sm text-muted-foreground">Saved. Applies to new tasks.</span> : null}
+         </div>
+         <Button type="submit" disabled={!dirty || pending}>{pending ? "Saving…" : "Save instructions"}</Button>
+diff --git a/ui/src/pages/apps/chat/ChatEndpointDetail.tsx b/ui/src/pages/apps/chat/ChatEndpointDetail.tsx
+index d26e6b7541..4d17aabed3 100644
+--- a/ui/src/pages/apps/chat/ChatEndpointDetail.tsx
++++ b/ui/src/pages/apps/chat/ChatEndpointDetail.tsx
+@@ -1360,7 +1360,7 @@ function Activity({
+             </AlertDialogDescription>
+           </AlertDialogHeader>
+           <AlertDialogFooter>
+-            <AlertDialogCancel>Cancel</AlertDialogCancel>
++            <AlertDialogCancel>Annuler</AlertDialogCancel>
+             <AlertDialogAction
+               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+               disabled={lifecycle.isPending}
+diff --git a/ui/src/pages/apps/chat/EmailEndpointSetup.test.tsx b/ui/src/pages/apps/chat/EmailEndpointSetup.test.tsx
+index 8789c9fada..ec2ad8ea63 100644
+--- a/ui/src/pages/apps/chat/EmailEndpointSetup.test.tsx
++++ b/ui/src/pages/apps/chat/EmailEndpointSetup.test.tsx
+@@ -131,7 +131,7 @@ describe("AgentMail two-step setup", () => {
+ 
+   it("returns Cancel to Connectors rather than the credential permissions page", async () => {
+     await mount();
+-    await click("Cancel");
++    await click("Annuler");
+     expect(container.querySelector('[data-testid="location"]')?.textContent).toBe("/apps");
+   });
+ 
+diff --git a/ui/src/pages/apps/chat/EmailEndpointSetup.tsx b/ui/src/pages/apps/chat/EmailEndpointSetup.tsx
+index a1d1654789..1bba95a61a 100644
+--- a/ui/src/pages/apps/chat/EmailEndpointSetup.tsx
++++ b/ui/src/pages/apps/chat/EmailEndpointSetup.tsx
+@@ -356,7 +356,7 @@ function EmailEndpointSetupForm({ companyId }: { companyId: string }) {
+       </div>}
+       {error && <p role="alert" className="text-sm text-destructive">{error.message}</p>}
+       <div className="flex items-center justify-between gap-3 border-t border-border pt-5">
+-        <Button type="button" variant="ghost" disabled={busy} onClick={cancel}>Cancel</Button>
++        <Button type="button" variant="ghost" disabled={busy} onClick={cancel}>Annuler</Button>
+         <Button disabled={!canContinue}>{connect.isPending ? "Connecting…" : "Continue"}<ArrowRight className="size-4" /></Button>
+       </div>
+     </form>}
+diff --git a/ui/src/pages/tools/ProfilesTab.tsx b/ui/src/pages/tools/ProfilesTab.tsx
+index 24d0b4dd2c..224a971c2f 100644
+--- a/ui/src/pages/tools/ProfilesTab.tsx
++++ b/ui/src/pages/tools/ProfilesTab.tsx
+@@ -1137,7 +1137,7 @@ export function ProfilesTab({ companyId }: { companyId: string }) {
+             connections={connectionOptions}
+           />
+           <DialogFooter>
+-            <Button variant="outline" onClick={() => setEntryProfile(null)}>Cancel</Button>
++            <Button variant="outline" onClick={() => setEntryProfile(null)}>Annuler</Button>
+             <Button disabled={addEntry.isPending} onClick={saveEntry}>
+               Add entry
+             </Button>
+@@ -1209,7 +1209,7 @@ export function ProfilesTab({ companyId }: { companyId: string }) {
+             </div>
+           </div>
+           <DialogFooter>
+-            <Button variant="outline" onClick={() => setBindProfileFor(null)}>Cancel</Button>
++            <Button variant="outline" onClick={() => setBindProfileFor(null)}>Annuler</Button>
+             <Button disabled={bind.isPending} onClick={saveBinding}>
+               Bind
+             </Button>
+diff --git a/ui/src/pages/tools/profiles/ProfileActionDialog.tsx b/ui/src/pages/tools/profiles/ProfileActionDialog.tsx
+index 2142332b62..327df63b06 100644
+--- a/ui/src/pages/tools/profiles/ProfileActionDialog.tsx
++++ b/ui/src/pages/tools/profiles/ProfileActionDialog.tsx
+@@ -69,7 +69,7 @@ export function ProfileActionDialog({
+           </div>
+         ) : null}
+         <DialogFooter>
+-          <Button variant="ghost" onClick={onClose}>Cancel</Button>
++          <Button variant="ghost" onClick={onClose}>Annuler</Button>
+           <Button
+             variant={kind === "delete" ? "destructive" : "default"}
+             disabled={pending || defaultDeleteBlocked}
+diff --git a/ui/src/pages/tools/profiles/ProfileDetail.tsx b/ui/src/pages/tools/profiles/ProfileDetail.tsx
+index 43501edd05..0c2146a2ca 100644
+--- a/ui/src/pages/tools/profiles/ProfileDetail.tsx
++++ b/ui/src/pages/tools/profiles/ProfileDetail.tsx
+@@ -433,7 +433,7 @@ function NewToolsReviewDialog({
+           </div>
+         )}
+         <DialogFooter>
+-          <Button variant="ghost" onClick={onClose}>Cancel</Button>
++          <Button variant="ghost" onClick={onClose}>Annuler</Button>
+           <Button disabled={pending || loading || tools.length === 0} onClick={onSubmit}>
+             Submit review
+           </Button>
+@@ -660,7 +660,7 @@ function ProfileDialogs({
+             ) : null}
+           </div>
+           <DialogFooter>
+-            <Button variant="ghost" onClick={onClose}>Cancel</Button>
++            <Button variant="ghost" onClick={onClose}>Annuler</Button>
+             <Button disabled={!name.trim() || duplicateName || pending} onClick={() => onUpdate({ name: name.trim(), description: description.trim() || null, profileKey: profileKey.trim() })}>
+               Save
+             </Button>
+@@ -690,7 +690,7 @@ function ProfileDialogs({
+             </label>
+           </div>
+           <DialogFooter>
+-            <Button variant="ghost" onClick={onClose}>Cancel</Button>
++            <Button variant="ghost" onClick={onClose}>Annuler</Button>
+             <Button disabled={!copyName.trim() || duplicateCopyName || pending} onClick={() => onDuplicate({ name: copyName.trim(), includeAssignments: copyAssignments })}>
+               Duplicate
+             </Button>
+@@ -738,7 +738,7 @@ function RemoveAssignmentDialog({
+           </DialogDescription>
+         </DialogHeader>
+         <DialogFooter>
+-          <Button variant="ghost" onClick={onClose}>Cancel</Button>
++          <Button variant="ghost" onClick={onClose}>Annuler</Button>
+           <Button disabled={pending} onClick={onConfirm}>Remove</Button>
+         </DialogFooter>
+       </DialogContent>
+-- 
+2.53.0
+

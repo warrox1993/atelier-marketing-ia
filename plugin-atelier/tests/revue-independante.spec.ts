@@ -87,7 +87,8 @@ describe("H2 : aucune tâche sous porte sans étape d'approbation humaine finale
     const banc = creerBanc();
     banc.t.exigences.push({ id: "ex-1", code: "REQ-001", companyId: SOC, campagneId: CAMP, version: 1, exclusion: { etat: "aucune" }, modifieLe: banc.horloge() });
     banc.issues.set(ISSUE, { id: ISSUE, companyId: SOC, projectId: null, status: "todo", assigneeAgentId: PRODUCTEUR, executionPolicy: politique, title: "Page" });
-    return route(banc, "portes.creer", coordinateur, { companyId: SOC, issueId: ISSUE, campagneId: CAMP, exigencesCiblees: ["REQ-001"], revuesRequises: [{ role: "metier", agentId: RELECTEUR }] });
+    // Revues d'un gabarit (M2 de la revue de sécurité finale) : seul le contrôle H2 de la politique peut refuser.
+    return route(banc, "portes.creer", coordinateur, { companyId: SOC, issueId: ISSUE, campagneId: CAMP, exigencesCiblees: ["REQ-001"], revuesRequises: [{ role: "exigences", agentId: RELECTEUR }] });
   }
   const revue = { type: "review", participants: [{ type: "agent", agentId: PORTE_AGENT }] };
 
@@ -219,6 +220,7 @@ describe("M3 : les entrées hors couverture et revues périment aussi l'évaluat
     banc.tacheSousPorte({ status: "in_progress", etape: null });
     banc.passe();
     const avant = banc.t.portes[0]!.modifieLe;
+    banc.noms.set(PRODUCTEUR, "Contenus"); // N2 : rôle dont la consigne documente la lecture de sources
     const r = await route(banc, "tache.sources.lire", agent(PRODUCTEUR), { url: "https://renovation-liege.example/" }, { issueId: ISSUE });
     expect([201, 422]).toContain(r.statut);
     expect(banc.t.evaluations[0]!.perimee).toBe(true);

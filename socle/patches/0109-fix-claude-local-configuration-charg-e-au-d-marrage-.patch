@@ -1,0 +1,209 @@
+From f55bbc868aa705b3f85a24134083ebf7bd3309e3 Mon Sep 17 00:00:00 2001
+From: Jean-Baptiste Dhondt <114347858+warrox1993@users.noreply.github.com>
+Date: Fri, 30 Oct 2026 02:20:01 +0100
+Subject: [PATCH] =?UTF-8?q?fix(claude-local):=20configuration=20charg?=
+ =?UTF-8?q?=C3=A9e=20au=20d=C3=A9marrage=20et=20skills=20mont=C3=A9es=20en?=
+ =?UTF-8?q?=20lecture=20seule=20dans=20la=20cage?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Atelier, lot S (AFD-É1, AFA-P1-1). Dans la cage locale (filesystemScope « workspace »), le
+dossier de configuration de l'agent reste en écriture (mémoire, transcriptions, .claude.json,
+sessions...), mais settings.json, hooks, rules, skills, agents, commands et CLAUDE.md sont
+remontés en lecture seule par-dessus : un agent ne réécrit plus son propre hook ni ne dépose
+une règle chargée comme consigne de l'utilisateur. Les sources des skills voulues sont
+montées en lecture seule à leur chemin : les liens du paquet se résolvent dans la cage
+(skills de nouveau chargées), sans rien exposer d'autre de la bibliothèque.
+
+Test avec le vrai Bubblewrap (PAPERCLIP_TEST_BWRAP) ; banc hors dépôt : le vrai Claude Code
+démarre dans la cage avec ces montages, écrit son état et envoie sa requête comme le témoin.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01EThpSSDGc5NRYwbgjNqoTJ
+---
+ .../claude-local/src/server/claude-config.ts  | 24 +++++
+ .../claude-local/src/server/execute.ts        | 13 +--
+ .../src/server/sandbox-paths.test.ts          | 97 +++++++++++++++++++
+ 3 files changed, 128 insertions(+), 6 deletions(-)
+ create mode 100644 packages/adapters/claude-local/src/server/sandbox-paths.test.ts
+
+diff --git a/packages/adapters/claude-local/src/server/claude-config.ts b/packages/adapters/claude-local/src/server/claude-config.ts
+index e42edd4186..108cf89d1d 100644
+--- a/packages/adapters/claude-local/src/server/claude-config.ts
++++ b/packages/adapters/claude-local/src/server/claude-config.ts
+@@ -15,6 +15,7 @@ import {
+   type AdapterExecutionTarget,
+   type AdapterExecutionTargetShellOptions,
+ } from "@paperclipai/adapter-utils/execution-target";
++import type { LocalProcessSandboxPath } from "@paperclipai/adapter-utils/local-process-sandbox";
+ import { resolvePaperclipInstanceRootForAdapter } from "@paperclipai/adapter-utils/server-utils";
+ import { shellQuote } from "@paperclipai/adapter-utils/ssh";
+ import { classifyThrownErrorClass, logSandboxProbeDiagnostic } from "./probe-diagnostics.js";
+@@ -134,6 +135,29 @@ export function resolveSharedClaudeConfigDir(
+  * the server user's ~/.claude (credentials, settings, hooks) to the confined CLI
+  * and silently drop the agent's own settings.
+  */
++// Atelier (AFD-É1) : ce que Claude Code charge au démarrage depuis CLAUDE_CONFIG_DIR. Monté en lecture seule après le
++// dossier en écriture, pour qu'un agent ne réécrive ni ses réglages, ni ses hooks, ni ses règles (chargées comme
++// consignes de l'utilisateur). Le reste (memoire, projects, .claude.json, sessions...) reste en écriture.
++export const CLAUDE_CONFIG_READ_ONLY_ENTRIES = ["settings.json", "hooks", "rules", "skills", "agents", "commands", "CLAUDE.md"] as const;
++
++/** Montages de la cage locale d'un run Claude (l'ordre compte : un montage plus loin recouvre un plus large). */
++export function claudeSandboxManagedPaths(input: {
++  sharedClaudeConfigDir: string;
++  promptBundleDir: string;
++  mcpConfigDir: string;
++  skillSources: string[];
++}): LocalProcessSandboxPath[] {
++  return [
++    { path: input.sharedClaudeConfigDir, access: "rw" },
++    ...CLAUDE_CONFIG_READ_ONLY_ENTRIES.map((entry) => ({ path: path.join(input.sharedClaudeConfigDir, entry), access: "ro" as const })),
++    { path: path.join(path.dirname(input.sharedClaudeConfigDir), ".claude.json"), access: "rw" },
++    { path: input.promptBundleDir, access: "ro" },
++    { path: input.mcpConfigDir, access: "ro" },
++    // Atelier (AFA-P1-1) : sources des skills voulues, en lecture seule, pour que les liens du paquet se résolvent.
++    ...input.skillSources.map((source) => ({ path: source, access: "ro" as const })),
++  ];
++}
++
+ export function resolveSandboxClaudeConfigDir(input: {
+   managedAiConnection: unknown;
+   configEnv: Record<string, unknown>;
+diff --git a/packages/adapters/claude-local/src/server/execute.ts b/packages/adapters/claude-local/src/server/execute.ts
+index ffe9863097..65834ac004 100644
+--- a/packages/adapters/claude-local/src/server/execute.ts
++++ b/packages/adapters/claude-local/src/server/execute.ts
+@@ -89,6 +89,7 @@ import {
+   marquerCreditsEpuises,
+ } from "./credits-memoire.js";
+ import {
++  claudeSandboxManagedPaths,
+   materializeRemoteClaudeConfig,
+   prepareClaudeConfigSeed,
+   resolveManagedClaudeRuntimeStateDir,
+@@ -600,12 +601,12 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
+       ? {
+           workspaceDir: effectiveExecutionCwd,
+           filesystemScope,
+-          managedPaths: [
+-            { path: sharedClaudeConfigDir, access: "rw" },
+-            { path: path.join(path.dirname(sharedClaudeConfigDir), ".claude.json"), access: "rw" },
+-            { path: promptBundle.addDir, access: "ro" },
+-            { path: localMcpConfigDir, access: "ro" },
+-          ],
++          managedPaths: claudeSandboxManagedPaths({
++            sharedClaudeConfigDir,
++            promptBundleDir: promptBundle.addDir,
++            mcpConfigDir: localMcpConfigDir,
++            skillSources: mountableSkillEntries.map((entry) => entry.source),
++          }),
+           extraPaths: parseLocalProcessSandboxExtraPaths(config.filesystemExtraPaths),
+           homeDir: filesystemScope ? path.dirname(sharedClaudeConfigDir) : null,
+           networkScope,
+diff --git a/packages/adapters/claude-local/src/server/sandbox-paths.test.ts b/packages/adapters/claude-local/src/server/sandbox-paths.test.ts
+new file mode 100644
+index 0000000000..85a49e39bc
+--- /dev/null
++++ b/packages/adapters/claude-local/src/server/sandbox-paths.test.ts
+@@ -0,0 +1,97 @@
++/**
++ * Atelier Marketing IA (patch local 0109, AFD-É1 et AFA-P1-1) : dans la cage locale, l'agent écrit dans son dossier de
++ * configuration (mémoire, transcriptions, état de Claude Code) mais pas dans ce que Claude Code charge au démarrage
++ * (réglages, hooks, règles...), et les skills voulues se lisent par les liens du paquet, en lecture seule.
++ */
++import fs from "node:fs/promises";
++import os from "node:os";
++import path from "node:path";
++import { afterEach, describe, expect, it } from "vitest";
++import { runChildProcess } from "@paperclipai/adapter-utils/server-utils";
++import { CLAUDE_CONFIG_READ_ONLY_ENTRIES, claudeSandboxManagedPaths } from "./claude-config.js";
++
++const nettoyer: string[] = [];
++afterEach(async () => {
++  await Promise.all(nettoyer.splice(0).map((dossier) => fs.rm(dossier, { recursive: true, force: true })));
++});
++
++describe("atelier : montages de la cage d'un run Claude", () => {
++  it("monte le dossier de configuration en écriture puis, par-dessus, les entrées chargées au démarrage en lecture seule", () => {
++    const chemins = claudeSandboxManagedPaths({
++      sharedClaudeConfigDir: "/x/claude-config/c/agent",
++      promptBundleDir: "/x/paquet",
++      mcpConfigDir: "/x/mcp",
++      skillSources: ["/x/skills/a", "/x/skills/b"],
++    });
++    expect(chemins[0]).toEqual({ path: "/x/claude-config/c/agent", access: "rw" });
++    for (const entree of ["settings.json", "hooks", "rules", "skills", "agents", "commands", "CLAUDE.md"]) {
++      const i = chemins.findIndex((c) => c.path === `/x/claude-config/c/agent/${entree}`);
++      expect(i, entree).toBeGreaterThan(0);
++      expect(chemins[i]!.access).toBe("ro");
++    }
++    expect(chemins).toContainEqual({ path: "/x/claude-config/c/.claude.json", access: "rw" });
++    expect(chemins.slice(-2)).toEqual([{ path: "/x/skills/a", access: "ro" }, { path: "/x/skills/b", access: "ro" }]);
++    expect(CLAUDE_CONFIG_READ_ONLY_ENTRIES).not.toContain("memoire");
++    expect(CLAUDE_CONFIG_READ_ONLY_ENTRIES).not.toContain("projects");
++  });
++
++  it.runIf(Boolean(process.env.PAPERCLIP_TEST_BWRAP))(
++    "avec Bubblewrap : réglages, hooks et règles en lecture seule, mémoire et transcriptions en écriture, skill lue par le lien",
++    async () => {
++      const racine = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), "atelier-cage-config-")));
++      nettoyer.push(racine);
++      const config = path.join(racine, "claude-config", "agent");
++      const espace = path.join(racine, "espace");
++      const source = path.join(racine, "bibliotheque", "skill-a");
++      const paquet = path.join(racine, "paquet");
++      const mcp = path.join(racine, "mcp");
++      for (const d of [path.join(config, "hooks"), path.join(config, "rules"), path.join(config, "memoire"),
++        path.join(config, "projects"), espace, source, path.join(paquet, ".claude", "skills"), mcp]) {
++        await fs.mkdir(d, { recursive: true });
++      }
++      await fs.writeFile(path.join(config, "settings.json"), "{}\n");
++      await fs.writeFile(path.join(config, "hooks", "garde.sh"), "exit 2\n");
++      await fs.writeFile(path.join(source, "SKILL.md"), "contenu-skill");
++      await fs.symlink(source, path.join(paquet, ".claude", "skills", "skill-a"));
++
++      const etapes: Array<[string, string]> = [
++        ["ecrire-refuse", path.join(config, "settings.json")],
++        ["ecrire-refuse", path.join(config, "hooks", "garde.sh")],
++        ["ecrire-refuse", path.join(config, "rules", "injectee.md")],
++        ["ecrire-refuse", path.join(source, "SKILL.md")],
++        ["ecrire-ok", path.join(config, "memoire", "MEMORY.md")],
++        ["ecrire-ok", path.join(config, "projects", "session.jsonl")],
++        ["ecrire-ok", path.join(config, ".claude.json")],
++        ["lire-skill", path.join(paquet, ".claude", "skills", "skill-a", "SKILL.md")],
++      ];
++      const script = [
++        "const fs = require('node:fs');",
++        `const etapes = ${JSON.stringify(etapes)};`,
++        "etapes.forEach(([genre, chemin], i) => {",
++        "  if (genre === 'lire-skill') { if (fs.readFileSync(chemin, 'utf8') !== 'contenu-skill') process.exit(20 + i); return; }",
++        "  try { fs.writeFileSync(chemin, 'x'); if (genre === 'ecrire-refuse') process.exit(20 + i); }",
++        "  catch (e) { if (genre === 'ecrire-ok' || !['EROFS', 'EACCES', 'EPERM'].includes(e.code)) { console.error(chemin, e.code); process.exit(40 + i); } }",
++        "});",
++      ].join("\n");
++      const resultat = await runChildProcess("atelier-cage-config", process.execPath, ["-e", script], {
++        cwd: espace,
++        env: {},
++        timeoutSec: 10,
++        graceSec: 1,
++        onLog: async () => {},
++        localProcessSandbox: {
++          workspaceDir: espace,
++          filesystemScope: "workspace",
++          managedPaths: claudeSandboxManagedPaths({
++            sharedClaudeConfigDir: config, promptBundleDir: paquet, mcpConfigDir: mcp, skillSources: [source],
++          }),
++          command: process.env.PAPERCLIP_TEST_BWRAP,
++        },
++      });
++
++      expect(resultat.exitCode, resultat.stderr).toBe(0);
++      await expect(fs.readFile(path.join(config, "settings.json"), "utf8")).resolves.toBe("{}\n");
++      await expect(fs.readFile(path.join(config, "memoire", "MEMORY.md"), "utf8")).resolves.toBe("x");
++    },
++  );
++});
+-- 
+2.53.0
+

@@ -86,6 +86,15 @@ describe("contexte de tâche : résumé par défaut", () => {
     expect(c.vue).toBe("resume");
   });
 
+  it("1 bis. pourAllerPlus reste présent (cité par les consignes communes) mais court : les parties et la vue complète, sans le mode d'emploi du livrable", async () => {
+    const banc = creerBanc();
+    remplir(banc);
+    const c = (await lire(banc)).corps as { pourAllerPlus: string };
+    expect(c.pourAllerPlus).toContain("?vue=complete");
+    expect(c.pourAllerPlus).toContain("?partie=");
+    expect(c.pourAllerPlus.length).toBeLessThan(110);
+  });
+
   it("2. constats ouverts complets (sans companyId, issueId, reviewer) et clés de suivi présentes", async () => {
     const banc = creerBanc();
     remplir(banc);
@@ -168,8 +177,8 @@ describe("contexte de tâche : résumé par défaut", () => {
     expect(c.constatsOuverts[0].reviewer).toBeDefined();
     expect(c).not.toHaveProperty("vue");
     expect(c.tache.companyId).toBeUndefined(); // la tâche n'a jamais porté companyId dans le corps historique
-    // Même clés qu'avant : aucune clé ajoutée ni perdue.
-    expect(Object.keys(c).sort()).toEqual(["boiteReception", "brief", "campagne", "couvertures", "cyclesConsommes", "cyclesMaximum", "donneesConnexion", "exigences", "constatsOuverts", "livrable", "mentionDemonstration", "mode", "porte", "regleDonneesDemo", "relances", "revuesRevisionCourante", "rappelSecurite", "tache", "verdicts"].sort());
+    // Mêmes clés qu'avant, plus `dossierSujet` (option B, 30/10/2026) : aucune autre clé ajoutée ni perdue.
+    expect(Object.keys(c).sort()).toEqual(["boiteReception", "brief", "campagne", "couvertures", "cyclesConsommes", "cyclesMaximum", "donneesConnexion", "dossierSujet", "exigences", "constatsOuverts", "livrable", "mentionDemonstration", "mode", "porte", "regleDonneesDemo", "relances", "revuesRevisionCourante", "rappelSecurite", "tache", "verdicts"].sort());
   });
 
   it("5. partie inconnue refusée ; les parties entières renvoient le détail ; isolement entre entreprises pour chaque partie", async () => {

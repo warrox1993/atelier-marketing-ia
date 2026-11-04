@@ -27,6 +27,8 @@ export interface TacheASuivre {
   tacheId: string;
   slug: string;
   nom: string;
+  /** Discussion racine dont la liaison est issue ; `null` sans discussion d'origine (le fil d'une discussion ne la montre pas). */
+  discussionId?: string | null;
 }
 
 /** Carte en attente d'un autre service, avec sa date de création (placement chronologique dans le fil) et son service. */
@@ -39,6 +41,10 @@ export interface CarteService {
   nom: string;
   /** Identifiant lisible de la tâche qui porte la carte (ex. MKT-2). */
   tache: string;
+  /** Tâche reçue (cible de la liaison) dont descend la tâche de la carte ; absente pour une tâche sans parent du service. */
+  racine?: string;
+  /** Discussion d'origine de la tâche reçue ; `null` pour une tâche sans discussion d'origine (ex. tâche ouverte sans parent). */
+  discussionId: string | null;
 }
 
 export const texteOuNul = (v: unknown): string | null => (typeof v === "string" && v.trim() !== "" ? v.trim() : null);
@@ -46,9 +52,26 @@ export const texteOuNul = (v: unknown): string | null => (typeof v === "string" 
 /** Lien relatif à l'entreprise vers une tâche native. */
 export const lienTache = (i: { id: string; identifier?: string | null }) => `/issues/${i.identifier ?? i.id}`;
 
+/**
+ * Document cité par une confirmation (`target` de type `issue_document`), même règle que l'hôte
+ * (`getRequestConfirmationTargetHref`) mais en lien interne seulement : un `href` externe ou inconnu est ignoré.
+ */
+function documentCible(target: unknown, issueId: string | undefined): { libelle: string; lien: string } | undefined {
+  const t = (target ?? {}) as Record<string, unknown>;
+  const cle = texteOuNul(t.key);
+  if (t.type !== "issue_document" || !cle) return undefined;
+  const href = texteOuNul(t.href);
+  const tache = texteOuNul(t.issueId) ?? issueId;
+  const lien = href && href.startsWith("/") && !href.startsWith("//") ? href : tache ? `/issues/${tache}#document-${encodeURIComponent(cle)}` : null;
+  if (!lien) return undefined;
+  const revision = typeof t.revisionNumber === "number" ? ` (révision ${t.revisionNumber})` : "";
+  return { libelle: texteOuNul(t.label) ?? `le document ${cle}${revision}`, lien };
+}
+
 /** Réduit une carte native en attente à ce que l'Accueil affiche (lecture défensive : la charge vient de l'hôte). */
-export function interactionAccueil(carte: { id: string; kind: string; payload?: unknown }): InteractionAccueil {
+export function interactionAccueil(carte: { id: string; kind: string; payload?: unknown }, issueId?: string): InteractionAccueil {
   const p = (carte.payload ?? {}) as Record<string, unknown>;
+  const document = carte.kind === "request_confirmation" ? documentCible(p.target, issueId) : undefined;
   const questions = Array.isArray(p.questions) ? (p.questions as Array<Record<string, unknown>>) : [];
   return {
     id: carte.id,
@@ -59,6 +82,7 @@ export function interactionAccueil(carte: { id: string; kind: string; payload?: 
     libelleRefuser: texteOuNul(p.rejectLabel),
     refusRaisonObligatoire: p.rejectRequiresReason === true,
     natifSeulement: p.toolAction != null || p.secretProposal != null,
+    ...(document ? { document } : {}),
     questions: carte.kind !== "ask_user_questions" ? [] : questions.map((q) => ({
       id: String(q.id ?? ""),
       invite: texteOuNul(q.prompt) ?? "",
@@ -81,6 +105,6 @@ export function elementDepuisCarte(issue: TacheNative, carte: CarteNative): Elem
     id: `question:${carte.id}`, type: "information_manquante", urgence: "haute", enTete: true,
     titre: carte.title?.trim() || (question ? "L'équipe vous pose une question" : "L'équipe attend votre confirmation"),
     raison: `${question ? "Il manque une information que l'équipe ne peut pas obtenir seule" : "Une décision vous revient"} (${issue.identifier ?? "tâche"} · ${issue.title}). Le travail attend votre réponse.`,
-    lien: lienTache(issue), action: question ? "Répondre" : "Confirmer", issueId: issue.id, interaction: interactionAccueil(carte),
+    lien: lienTache(issue), action: question ? "Répondre" : "Confirmer", issueId: issue.id, interaction: interactionAccueil(carte, issue.id),
   };
 }

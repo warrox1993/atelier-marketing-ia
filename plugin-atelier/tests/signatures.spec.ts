@@ -105,6 +105,24 @@ describe("§6 : preuve d'approbation signée par le plugin", () => {
     const ko = preparerPreuve(entree({ ...base, corpsRevision: "Passer le contact en client.", demande: { ...base.demande, arguments: { contact_id: "123", properties: { lifecyclestage: "customer" } } } }));
     expect(ko.ok ? "" : ko.motif).toMatch(/properties\.lifecyclestage/u);
   });
+
+  it("profil personnel LinkedIn (linkedinprofil) : preuve acceptée par la passerelle, lien lié au texte approuvé, jamais « tout compte »", () => {
+    const personne = "urn:li:person:782bbtaQ";
+    const args = { ...ARGS, lien: "https://exemple.invalid/chantier", titre_lien: "Chantier de Seraing" };
+    const corps = `${CORPS}\nhttps://exemple.invalid/chantier\nChantier de Seraing\n`;
+    const base = { corpsRevision: corps, demande: { canal: "linkedinprofil", compte: personne, service: "linkedinprofil", outil: "linkedin_profil_publier", arguments: args }, portee: { canal: "linkedinprofil", compte: personne } };
+    const r = preparerPreuve(entree(base));
+    expect(r.ok, r.ok ? "" : r.motif).toBe(true);
+    if (!r.ok) return;
+    expect(r.charge).toMatchObject({ service: "linkedinprofil", outil: "linkedin_profil_publier", compte: personne });
+    expect(VERIFICATEUR.verifier(r.preuve, { service: "linkedinprofil", outil: "linkedin_profil_publier", args, compte: personne, maintenantS: S }).ok).toBe(true);
+    // Le lien publié doit figurer tel quel dans la révision approuvée ; le canal des pages ne vaut pas pour le profil.
+    const lienModifie = preparerPreuve(entree({ ...base, demande: { ...base.demande, arguments: { ...args, lien: "https://exemple.invalid/autre" } } }));
+    expect(lienModifie.ok ? "" : lienModifie.motif).toMatch(/ne figure pas tel quel/u);
+    expect(preparerPreuve(entree({ ...base, portee: { ...base.portee, canal: "linkedin" } })).ok).toBe(false);
+    const sansCompte = preparerPreuve(entree({ ...base, demande: { ...base.demande, compte: null }, portee: { canal: "linkedinprofil", compte: null } }));
+    expect(sansCompte.ok ? "" : sansCompte.motif).toMatch(/compte non lié/u);
+  });
 });
 
 describe("§6 bis : signature `_atelier` vérifiée au dépôt", () => {

@@ -1,0 +1,219 @@
+From 7239c0ae42fb7859ff514d0f17c170fa38988a68 Mon Sep 17 00:00:00 2001
+From: Jean-Baptiste Dhondt <114347858+warrox1993@users.noreply.github.com>
+Date: Fri, 30 Oct 2026 18:37:25 +0100
+Subject: [PATCH] =?UTF-8?q?fix(plugins):=20participants=20de=20l'entrepris?=
+ =?UTF-8?q?e=20seulement,=20=C3=A9tapes=20pos=C3=A9es=20verrouill=C3=A9es?=
+ =?UTF-8?q?=20pour=20un=20plugin?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Revue de sécurité finale, constat B2 (patch 0129).
+
+Avant : l'hôte des plugins acceptait n'importe quel agentId ou userId de
+participant (seule la forme était vérifiée), et un plugin qui n'annonçait
+pas d'agent acteur pouvait remettre la politique à null, la garde P1 ne
+s'appliquant qu'aux agents.
+
+Après :
+- chaque participant posé par un plugin est un agent de l'entreprise non
+  licencié ou un membre actif de l'entreprise, sinon 422 ;
+- un plugin ne retire, ne vide ni ne change des étapes déjà posées, quel
+  que soit l'acteur annoncé (non vérifié par l'hôte), sinon 403
+  atelier_politique_verrouillee ; reposer la même politique reste permis ;
+  un humain passe par le board ;
+- le contrôle vaut sous le verrou de la tâche (expectedExecutionPolicy :
+  409 si la politique a changé entre la lecture et l'écriture).
+
+Les appels sans acteur hors plugin viennent du serveur lui-même : les
+routes exigent un acteur authentifié (getActorInfo).
+
+Test MK-01 aligné : approbateur membre réel, retrait par plugin refusé.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01EThpSSDGc5NRYwbgjNqoTJ
+---
+ .../plugin-orchestration-apis.test.ts         | 71 ++++++++++++++++++-
+ server/src/services/plugin-host-services.ts   | 46 ++++++++++--
+ 2 files changed, 110 insertions(+), 7 deletions(-)
+
+diff --git a/server/src/__tests__/plugin-orchestration-apis.test.ts b/server/src/__tests__/plugin-orchestration-apis.test.ts
+index 684d65080d..0caa97a5fb 100644
+--- a/server/src/__tests__/plugin-orchestration-apis.test.ts
++++ b/server/src/__tests__/plugin-orchestration-apis.test.ts
+@@ -316,6 +316,8 @@ describeEmbeddedPostgres("plugin orchestration APIs", () => {
+ 
+   it("Atelier MK-01 : un plugin pose et relit une politique de revue puis d'approbation, validée comme à la route", async () => {
+     const { companyId, agentId } = await seedCompanyAndAgent();
++    // Atelier B2 (patch local 0154) : l'approbateur doit être un membre actif de l'entreprise.
++    await db.insert(companyMemberships).values({ companyId, principalType: "user", principalId: "board-user", status: "active", membershipRole: "owner" });
+     const services = buildHostServices(db, "plugin-record-id", "paperclip.missions", createEventBusStub());
+     const politique = {
+       stages: [
+@@ -356,8 +358,73 @@ describeEmbeddedPostgres("plugin orchestration APIs", () => {
+     const gardee = await services.issues.update({ issueId: tache.id, companyId, patch: { executionPolicy: politique } });
+     expect((gardee.executionPolicy as { authorizationPolicy?: unknown }).authorizationPolicy).toEqual(confinement);
+     expect((gardee.executionPolicy as { stages: unknown[] }).stages).toHaveLength(2);
+-    const retiree = await services.issues.update({ issueId: tache.id, companyId, patch: { executionPolicy: null } });
+-    expect(retiree.executionPolicy).toEqual(expect.objectContaining({ stages: [], authorizationPolicy: confinement }));
++    // Atelier B2 (patch local 0154) : un plugin ne retire plus les étapes posées ; seul un humain le fait, par le board.
++    await expect(services.issues.update({ issueId: tache.id, companyId, patch: { executionPolicy: null } }))
++      .rejects.toMatchObject({ status: 403, details: { code: "atelier_politique_verrouillee" } });
++    const apresRefus = await services.issues.get({ issueId: tache.id, companyId });
++    expect(apresRefus?.executionPolicy).toEqual(expect.objectContaining({ authorizationPolicy: confinement }));
++    expect((apresRefus?.executionPolicy as { stages: unknown[] }).stages).toHaveLength(2);
++  });
++
++  it("Atelier B2 (patch local 0154) : un plugin ne pose que des participants de l'entreprise, et ne retire ni ne change des étapes posées, avec ou sans acteur", async () => {
++    const { companyId, agentId } = await seedCompanyAndAgent();
++    const autre = await seedCompanyAndAgent();
++    const membre = `membre-${randomUUID()}`;
++    const etranger = `etranger-${randomUUID()}`;
++    await db.insert(companyMemberships).values([
++      { companyId, principalType: "user", principalId: membre, status: "active", membershipRole: "owner" },
++      { companyId: autre.companyId, principalType: "user", principalId: etranger, status: "active", membershipRole: "owner" },
++    ]);
++    const licencie = randomUUID();
++    await db.insert(agents).values({
++      id: licencie, companyId, name: "Ancien", role: "engineer", status: "terminated",
++      adapterType: "process", adapterConfig: { command: "true" }, runtimeConfig: {}, permissions: {},
++    });
++    const services = buildHostServices(db, "plugin-record-id", "paperclip.missions", createEventBusStub());
++    const avec = (relecteur: { type: "agent"; agentId: string } | { type: "user"; userId: string }, approbateur: { type: "user"; userId: string } = { type: "user", userId: membre }) => ({
++      stages: [
++        { type: "review", participants: [relecteur] },
++        { type: "approval", participants: [approbateur] },
++      ],
++    });
++
++    // Participant hors de l'entreprise, inconnu ou licencié : 422, à la création comme à la mise à jour.
++    for (const politique of [
++      avec({ type: "agent", agentId: autre.agentId }),
++      avec({ type: "agent", agentId: randomUUID() }),
++      avec({ type: "agent", agentId: licencie }),
++      avec({ type: "agent", agentId }, { type: "user", userId: etranger }),
++      avec({ type: "user", userId: `inconnu-${randomUUID()}` }),
++    ]) {
++      await expect(services.issues.create({ companyId, title: "Hors entreprise", executionPolicy: politique }))
++        .rejects.toMatchObject({ status: 422 });
++    }
++    const tache = await services.issues.create({ companyId, title: "Livrable" });
++    await expect(services.issues.update({ issueId: tache.id, companyId, patch: { executionPolicy: avec({ type: "agent", agentId: autre.agentId }) } }))
++      .rejects.toMatchObject({ status: 422 });
++    expect((await services.issues.get({ issueId: tache.id, companyId }))?.executionPolicy ?? null).toBeNull();
++
++    // Participants de l'entreprise : acceptés ; reposer la même politique sans acteur reste permis.
++    const politique = avec({ type: "agent", agentId });
++    await services.issues.update({ issueId: tache.id, companyId, patch: { executionPolicy: politique } });
++    const reposee = await services.issues.update({ issueId: tache.id, companyId, patch: { executionPolicy: politique } });
++    expect((reposee.executionPolicy as { stages: unknown[] }).stages).toHaveLength(2);
++
++    // Retrait, vidage ou changement des étapes par un plugin : refusé, sans acteur comme avec un humain annoncé.
++    for (const patch of [
++      { executionPolicy: null },
++      { executionPolicy: { stages: [] } },
++      { executionPolicy: { stages: [{ type: "review", participants: [{ type: "user", userId: membre }] }] } },
++      { executionPolicy: null, actorUserId: membre },
++    ]) {
++      await expect(services.issues.update({ issueId: tache.id, companyId, patch }))
++        .rejects.toMatchObject({ status: 403, details: { code: "atelier_politique_verrouillee" } });
++    }
++    const gardee = await services.issues.get({ issueId: tache.id, companyId });
++    expect((gardee?.executionPolicy as { stages: Array<{ participants: unknown[] }> }).stages.map((e) => e.participants)).toEqual([
++      [expect.objectContaining({ type: "agent", agentId })],
++      [expect.objectContaining({ type: "user", userId: membre })],
++    ]);
+   });
+ 
+   it("creates plugin operation issues with the generic operation origin", async () => {
+diff --git a/server/src/services/plugin-host-services.ts b/server/src/services/plugin-host-services.ts
+index 159c6c3356..f4ea849bd2 100644
+--- a/server/src/services/plugin-host-services.ts
++++ b/server/src/services/plugin-host-services.ts
+@@ -68,6 +68,8 @@ import {
+ } from "./plugin-local-folders.js";
+ import { createPluginSecretsHandler } from "./plugin-secrets-handler.js";
+ import { logActivity } from "./activity-log.js";
++import { forbidden, unprocessable } from "../errors.js";
++import { signaturePolitiqueRelecture } from "../atelier/gardes-atelier.js";
+ import type { PluginEventBus } from "./plugin-event-bus.js";
+ import type { PluginWorkerManager } from "./plugin-worker-manager.js";
+ import { lookup as dnsLookup } from "node:dns/promises";
+@@ -1189,7 +1191,10 @@ export function buildHostServices(
+ 
+   // Atelier MK-01 : un plugin pose les étapes de revue et d'approbation, validées comme à la route.
+   // Surveillance et confinement de confiance ne passent jamais par un plugin : ceux de la tâche sont gardés.
+-  const normalizePluginExecutionPolicy = (requested: unknown, existing: unknown) => {
++  // Atelier B2 (patch local 0154) : chaque participant est un agent actif ou un membre actif de l'entreprise, et des
++  // étapes posées ne se retirent ni ne changent par un plugin, quel que soit l'acteur qu'il annonce (non vérifié ici) :
++  // P1 ne couvre que les agents, un humain passe par le board.
++  const normalizePluginExecutionPolicy = async (companyId: string, requested: unknown, existing: unknown) => {
+     const policy = normalizeIssueExecutionPolicy(requested);
+     if (policy?.monitor || policy?.reviewPreset || policy?.authorizationPolicy) {
+       throw new Error("Plugin may only set the review and approval stages of an execution policy");
+@@ -1200,8 +1205,37 @@ export function buildHostServices(
+       ...(previous?.reviewPreset ? { reviewPreset: previous.reviewPreset } : {}),
+       ...(previous?.authorizationPolicy ? { authorizationPolicy: previous.authorizationPolicy } : {}),
+     };
+-    if (!policy && Object.keys(kept).length === 0) return null;
+-    return { ...(policy ?? { mode: "normal" as const, commentRequired: true as const, stages: [] }), ...kept };
++    const result = !policy && Object.keys(kept).length === 0
++      ? null
++      : { ...(policy ?? { mode: "normal" as const, commentRequired: true as const, stages: [] }), ...kept };
++    const posee = signaturePolitiqueRelecture(previous);
++    if (posee !== null) {
++      if (signaturePolitiqueRelecture(normalizeIssueExecutionPolicy(result)) !== posee) {
++        throw forbidden("Plugin may not remove or change the review stages of a task that already has them; a human does it from the board", { code: "atelier_politique_verrouillee" });
++      }
++      return result;
++    }
++    for (const participant of policy?.stages.flatMap((stage) => stage.participants) ?? []) {
++      if (participant.type === "agent") {
++        const agent = participant.agentId ? await agents.getById(participant.agentId) : null;
++        if (!agent || agent.companyId !== companyId || agent.status === "terminated") {
++          throw unprocessable("Execution policy participant must be an active agent of this company");
++        }
++        continue;
++      }
++      const [membership] = participant.userId ? await db
++        .select({ id: companyMemberships.id })
++        .from(companyMemberships)
++        .where(and(
++          eq(companyMemberships.companyId, companyId),
++          eq(companyMemberships.principalType, "user"),
++          eq(companyMemberships.principalId, participant.userId),
++          eq(companyMemberships.status, "active"),
++        ))
++        .limit(1) : [];
++      if (!membership) throw unprocessable("Execution policy participant must be an active member of this company");
++    }
++    return result;
+   };
+ 
+   const assertReadableOriginFilter = (originKind: unknown) => {
+@@ -2108,7 +2142,7 @@ export function buildHostServices(
+         const issue = (await issues.create(companyId, {
+           ...(issueInput as any),
+           ...("executionPolicy" in issueInput
+-            ? { executionPolicy: normalizePluginExecutionPolicy(issueInput.executionPolicy, null) }
++            ? { executionPolicy: await normalizePluginExecutionPolicy(companyId, issueInput.executionPolicy, null) }
+             : {}),
+           originKind: normalizedOriginKind,
+           originId: params.originId ?? null,
+@@ -2151,10 +2185,12 @@ export function buildHostServices(
+           patch.originKind = normalizePluginOriginKind(patch.originKind);
+         }
+         if (patch.executionPolicy !== undefined) {
+-          patch.executionPolicy = normalizePluginExecutionPolicy(patch.executionPolicy, existing.executionPolicy);
++          patch.executionPolicy = await normalizePluginExecutionPolicy(companyId, patch.executionPolicy, existing.executionPolicy);
+         }
+         const updated = (await issues.update(params.issueId, {
+           ...(patch as any),
++          // Atelier B2 : le contrôle ci-dessus vaut sous le verrou de la tâche (409 si sa politique a changé entre-temps).
++          ...(patch.executionPolicy !== undefined ? { expectedExecutionPolicy: existing.executionPolicy ?? null } : {}),
+           actorAgentId,
+           actorUserId,
+         })) as Issue;
+-- 
+2.53.0
+

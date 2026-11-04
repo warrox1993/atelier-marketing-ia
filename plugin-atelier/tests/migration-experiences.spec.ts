@@ -14,11 +14,11 @@ describe("migration 021 : expériences", () => {
   const sql = readFileSync(join(DOSSIER, NOM), "utf8");
   const instructions = sql.split("\n").filter((l) => !l.trimStart().startsWith("--")).join("\n");
 
-  it("est numérotée immédiatement après 020 et suivie de 022 (la dernière)", () => {
+  it("est numérotée immédiatement après 020 et suivie de 022 puis 023", () => {
     const i = fichiers.indexOf(NOM);
     expect(fichiers[i - 1]).toMatch(/^020_/u);
     expect(fichiers[i + 1]).toBe("022_diffusions_travaux_fabrique.sql");
-    expect(fichiers[i + 2]).toBeUndefined();
+    expect(fichiers[i + 2]).toBe("023_obs_documentaire.sql");
   });
 
   it("crée la table experiences avec company_id, relançable, sans rien supprimer", () => {

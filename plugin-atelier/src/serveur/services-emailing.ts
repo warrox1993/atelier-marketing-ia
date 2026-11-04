@@ -61,6 +61,7 @@ type RegistreCartesEnvoi = Record<string, CarteEnvoiEnregistree>;
 const LIMITE_SUJET = 200;
 const LIMITE_LISTE = 100;
 const LIMITE_EXTRAIT = 300;
+const LIMITE_DOMAINE = 253;
 
 /** Ce que la passerelle rend pour une campagne (route interne de lecture). */
 const CampagneLue = z.object({
@@ -72,6 +73,10 @@ const CampagneLue = z.object({
   empreinte: z.string().regex(/^[0-9a-f]{64}$/),
   empreinte_abonnes: z.string().regex(/^[0-9a-f]{64}$/),
   extrait: z.string().max(2000),
+  /** V2-4 : hôtes des liens et images du HTML ; absent d'une passerelle d'avant le 30/10 (la carte dit alors « non lus »). */
+  domaines: z.array(z.string().max(LIMITE_DOMAINE)).max(100).optional(),
+  /** DROIT-2.1 et 2.2 : adresses des abonnés confirmés ciblés ; absentes d'une passerelle d'avant le 30/10 (carte refusée). */
+  courriels: z.array(z.string().max(254)).max(100_000).optional(),
 });
 type CampagneLue = z.infer<typeof CampagneLue>;
 
@@ -99,10 +104,11 @@ export function neutraliserMarkdown(texte: string, max: number): string {
 }
 
 /** Texte de la carte, construit côté serveur à partir de valeurs LUES chez la passerelle ; les textes libres sont neutralisés, l'empreinte hexadécimale validée n'est affichée qu'en code. */
-export function texteCarteEnvoi(e: { campagneId: number; empreinte: string; sujet: string; listes: Array<{ id: number; nom: string }>; destinataires: number; empreinteAbonnes: string; extrait: string }): { prompt: string; detailsMarkdown: string } {
+export function texteCarteEnvoi(e: { campagneId: number; empreinte: string; sujet: string; listes: Array<{ id: number; nom: string }>; destinataires: number; empreinteAbonnes: string; extrait: string; domaines?: string[] }): { prompt: string; detailsMarkdown: string } {
   const sujet = neutraliserMarkdown(e.sujet, LIMITE_SUJET);
   const listes = e.listes.map((l) => ({ id: l.id, nom: neutraliserMarkdown(l.nom, LIMITE_LISTE) })).filter((l) => l.nom.length > 0);
   const extrait = neutraliserMarkdown(e.extrait, LIMITE_EXTRAIT);
+  const domaines = e.domaines?.map((d) => neutraliserMarkdown(d, LIMITE_DOMAINE)).filter((d) => d.length > 0);
   return {
     // Titre en texte simple, sans aucun texte libre : seuls des nombres entiers y figurent.
     prompt: `Envoyer la campagne numéro ${e.campagneId} à ${e.destinataires} destinataire${e.destinataires > 1 ? "s" : ""} ?`,
@@ -112,6 +118,7 @@ export function texteCarteEnvoi(e: { campagneId: number; empreinte: string; suje
       `- Listes : ${listes.length > 0 ? listes.map((l) => `liste ${l.id} « ${l.nom} »`).join(", ") : "aucune"}`,
       `- Destinataires confirmés, lus dans listmonk : ${e.destinataires}`,
       `- Début du texte : ${extrait.length > 0 ? extrait : "vide"}`,
+      `- Domaines des liens et images : ${domaines === undefined ? "non lus, passerelle à mettre à jour" : domaines.length > 0 ? domaines.join(", ") : "aucun"}`,
       `- Empreinte du contenu : \`${e.empreinte}\``,
       `- Empreinte des abonnés : \`${e.empreinteAbonnes}\``,
       "",
@@ -129,6 +136,8 @@ export interface DependancesEmailing {
   base: BaseAtelier;
   /** Clé privée d'approbation de l'entreprise (secret natif), ou null avec le motif. */
   cleApprobation: (companyId: string) => Promise<{ cle: KeyObject | null; motif?: string }>;
+  /** Adresses ciblées rapprochées des oppositions et des bases légales « courriel » de l'atelier (nombres seulement). */
+  controlerDestinataires: (companyId: string, courriels: readonly string[]) => Promise<{ opposes: number; sansBase: number }>;
   /** Liste de révocation signée (arv1) fraîche de l'entreprise. */
   revocations: (companyId: string) => Promise<string>;
   /** Adresse de la passerelle (réglage `passerelleUrl`), boucle locale seulement ; null si absente ou illisible. */
@@ -207,7 +216,13 @@ export function routesEmailing(d: DependancesEmailing): Partial<Record<CleRouteA
     const lue = await lireCampagne(r.companyId, campagneId);
     if (lue.statut !== "draft") erreur("conflit", `La campagne ${campagneId} est « ${lue.statut} » et non en brouillon : aucun envoi à confirmer.`);
     if (lue.empreinte !== empreinte) erreur("conflit", `L'empreinte indiquée n'est pas celle de la campagne ${campagneId} (le contenu a changé ou l'empreinte est fausse) : relire l'empreinte avec etat_campagne.`);
-    const texte = texteCarteEnvoi({ campagneId, empreinte, sujet: lue.sujet, listes: lue.listes, destinataires: lue.destinataires, empreinteAbonnes: lue.empreinte_abonnes, extrait: lue.extrait });
+    // DROIT-2.1 et 2.2 : la preuve écrite par l'agent dans listmonk ne suffit pas ; chaque adresse doit être connue de l'atelier.
+    if (!lue.courriels || lue.courriels.length !== lue.destinataires) erreur("emailing_indisponible", "La passerelle n'a pas rendu toutes les adresses des destinataires (passerelle à mettre à jour) : oppositions et bases légales non contrôlées, aucune carte n'est créée.");
+    const controle = await d.controlerDestinataires(r.companyId, lue.courriels);
+    if (controle.opposes > 0 || controle.sansBase > 0) {
+      erreur("conflit", `Envoi refusé : ${controle.opposes} adresse(s) dans les oppositions (RGPD, art. 21, § 3) et ${controle.sansBase} sans base légale « courriel » enregistrée dans l'atelier (consentement, client existant pour des produits analogues, ou adresse impersonnelle d'une personne morale). Retirer ces abonnés de la liste ou faire enregistrer leur base légale par un humain, puis redemander.`);
+    }
+    const texte = texteCarteEnvoi({ campagneId, empreinte, sujet: lue.sujet, listes: lue.listes, destinataires: lue.destinataires, empreinteAbonnes: lue.empreinte_abonnes, extrait: lue.extrait, domaines: lue.domaines });
     const signature = empreinteTexte(texte);
 
     const resultat = await avecVerrou(tache.id, async () => {
@@ -268,7 +283,7 @@ export function routesEmailing(d: DependancesEmailing): Partial<Record<CleRouteA
       await ecrireRegistre(tache.id, registre);
       return { carte: trouvee, entree: e, preuve: p, revocations: rev, adresse: adr };
     });
-    /** Rend la carte (rien n'a pu partir), sur un registre relu sous le verrou. */
+    /** Rend la carte, sur un registre relu sous le verrou. */
     const rendre = () => modifierRegistre(tache.id, (reg) => { if (reg[carte.id]) reg[carte.id] = { ...reg[carte.id]!, utilisee: null }; });
     /** L'issue est inconnue : la carte reste consommée, on le journalise et on dit de vérifier la campagne. */
     const incertain = async (cause: string): Promise<never> => {
@@ -288,7 +303,7 @@ export function routesEmailing(d: DependancesEmailing): Partial<Record<CleRouteA
     } catch (e) {
       if (estDelaiDepasse(e)) return incertain("délai dépassé");
       await rendre();
-      erreur("emailing_indisponible", "La passerelle ne répond pas : rien n'a été envoyé.");
+      erreur("emailing_indisponible", "La passerelle n'a pas répondu (connexion coupée) : l'issue est inconnue, vérifier l'état de la campagne avec etat_campagne avant tout nouvel essai.");
     }
     let corps: Record<string, unknown> = {};
     let lisible = true;

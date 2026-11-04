@@ -5,7 +5,8 @@ Voir docs/conception-execution-etroite.md §4.1 et §4.2. Un seul travail à la 
 fichier étranger, nom hors UUID, JSON invalide ou entreprise douteuse sont déplacés dans `refuses/`.
 
 Types de travaux : `document` (Office ou PDF, 120 s), `video` (voix en cage GPU, visuels, sous-titres,
-montage, provenance IA, 30 min). La carte graphique est partagée avec les jeux de l'opérateur : une vidéo dont
+montage, provenance IA, 30 min), `image` (PNG publicitaire composé en HTML/CSS et rendu en cage par Chrome,
+provenance IA, 5 min, processeur seul). La carte graphique est partagée avec les jeux de l'opérateur : une vidéo dont
 l'étape de voix trouve le GPU occupé n'occupe pas la file, elle passe en `en_attente_gpu` (etat.json)
 et les documents passent devant ; elle est reprise quand le GPU se libère, et abandonnée après 12 h.
 """
@@ -34,9 +35,9 @@ if not __package__:
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
     __package__ = "fabrique"
 
-from fabrique import bibliotheque_musique, cage, gpu, provenance  # noqa: E402
+from fabrique import bibliotheque_musique, cage, gpu, provenance, registre_charte  # noqa: E402
 from fabrique.demande_video import DemandeVideoInvalide, SceneDemandee, valider_demande_video  # noqa: E402
-from fabrique.generateurs import montage, sous_titres, visuels  # noqa: E402
+from fabrique.generateurs import illustration, images, montage, sous_titres, visuels  # noqa: E402
 
 RACINE_ETAT = "/var/lib/atelier-fabrique"
 INTERVALLE_SCRUTATION_S = 2.0
@@ -50,9 +51,14 @@ DELAI_TOTAL_DOCUMENT_S = 120  # durée maximale d'un travail document, toutes é
 DELAI_CONTROLE_S = 30  # contrôle de l'archive Office (hors cage)
 DELAI_CONTROLE_PDF_S = 15  # contrôle du PDF dans la cage, réservé à la fin du délai global
 DELAI_TOTAL_VIDEO_S = 30 * 60  # durée maximale d'un travail vidéo, toutes étapes comprises (décision de l'opérateur)
+DELAI_TOTAL_IMAGE_S = 5 * 60  # durée maximale d'un travail image : rendu Chrome puis provenance
+DELAI_TOTAL_IMAGE_ILLUSTREE_S = 15 * 60  # avec une illustration IA : chargement des poids (19 Gio), génération, rendu, provenance
+MEMOIRE_MIN_ILLUSTRATION_OCTETS = 14 * 1024**3  # RAM disponible exigée : plafond de la cage (12 Gio, pic mesuré 11,05) + 2 Gio pour le bureau
+TAILLE_MAX_ILLUSTRATION = 32 * 1024**2
 DELAI_ATTENTE_GPU_S = 12 * 3600  # au-delà, la vidéo en attente du GPU est abandonnée
 INTERVALLE_GPU_S = 30.0  # entre deux relevés du GPU pour les travaux en attente
 DUREE_MAX_VIDEO_S = 180.0
+CLES_CONTROLE_VIDEO = {"sonie_lufs", "crete_vraie_dbtp", "debit_video_kbps", "alertes"}  # lues pour l'aperçu
 MARGE_SCENE_S = 0.4  # silence ajouté après la voix de chaque scène
 DUREE_MIN_SCENE_S = 1.0  # plancher du rendu HyperFrames
 TAILLE_MAX_WAV_VOIX = 30 * 1024**2
@@ -64,6 +70,7 @@ FICHIER_QUOTAS = "quotas.json"  # compteur persistant du jour, par entreprise
 UID_PROPRIETAIRE_LISTE = 0  # la liste des entreprises doit appartenir à root (remplaçable dans les tests)
 QUOTA_TRAVAUX_PAR_JOUR = 50  # par entreprise et par jour UTC, toutes natures confondues
 QUOTA_VIDEOS_PAR_JOUR = 10  # dont au plus 10 vidéos
+QUOTA_IMAGES_PAR_JOUR = 30  # et au plus 30 images
 MAX_ENTREES_EN_ATTENTE = 200  # fichiers conservés dans entrant/ ; au-delà : refus daté
 REFUS_EXCES_PAR_PASSAGE = 100  # excédent refusé au plus à chaque passage de la boucle
 TAILLE_MAX_FILE_GPU = 20  # vidéos en attente du GPU ; au-delà : refus à l'entrée
@@ -71,8 +78,11 @@ RETENTION_REFUSES_S = 7 * 86400  # refuses/ purgé au-delà de 7 jours
 RETENTION_LIVRABLES_S = 30 * 86400  # livrables/ supprimés au-delà de 30 jours (après quoi l'agent ne peut plus les télécharger)
 INTERVALLE_PURGE_S = 3600.0  # entre deux purges
 MENTION_VISIBLE_DOCUMENT = False  # configuration : pas de mention incrustée dans un document (métadonnées seulement)
+MENTION_VISIBLE_IMAGE = False  # idem pour les images, fond IA compris (choix de l'opérateur du 01/11 : mention dans le texte du post ; provenance en métadonnées)
+DOSSIER_CHARTES = "chartes-autorisees"  # registre humain des chartes graphiques : <entreprise>/<id>.json
 PYTHON_VENV = "/opt/atelier-fabrique/venv/bin/python"
 PYTHON_VOIX = "/opt/atelier-fabrique/venv-voix/bin/python"
+PYTHON_IMAGE = "/opt/atelier-fabrique/venv-image/bin/python"
 # Versions épinglées des outils de la chaîne vidéo (fabrique/entrees-voix.in, installer-fabrique-whisper.sh).
 VERSIONS_VOIX = {"chatterbox": "0.1.7", "kokoro": "0.7.16"}
 VERSION_PERTH = "1.0.1"
@@ -275,6 +285,8 @@ def verifier_quota(racine: Path, entreprise: str, type_travail: str) -> str | No
         return f"quota de {QUOTA_TRAVAUX_PAR_JOUR} travaux par jour atteint"
     if type_travail == "video" and int(compteur.get("videos", 0)) >= QUOTA_VIDEOS_PAR_JOUR:
         return f"quota de {QUOTA_VIDEOS_PAR_JOUR} vidéos par jour atteint"
+    if type_travail == "image" and int(compteur.get("images", 0)) >= QUOTA_IMAGES_PAR_JOUR:
+        return f"quota de {QUOTA_IMAGES_PAR_JOUR} images par jour atteint"
     return None
 
 
@@ -282,10 +294,12 @@ def compter_travail(racine: Path, entreprise: str, type_travail: str) -> None:
     """Ajoute un travail au compteur persistant du jour ; les jours passés sont oubliés."""
     jour = _jour()
     quotas = {e: c for e, c in _lire_quotas(racine).items() if isinstance(c, dict) and c.get("jour") == jour}
-    compteur = quotas.get(entreprise, {"jour": jour, "travaux": 0, "videos": 0})
+    compteur = quotas.get(entreprise, {"jour": jour, "travaux": 0, "videos": 0, "images": 0})
     compteur["travaux"] = int(compteur.get("travaux", 0)) + 1
     if type_travail == "video":
         compteur["videos"] = int(compteur.get("videos", 0)) + 1
+    if type_travail == "image":
+        compteur["images"] = int(compteur.get("images", 0)) + 1
     quotas[entreprise] = compteur
     ecrire_json_atomique(racine / FICHIER_QUOTAS, quotas)
 
@@ -744,11 +758,14 @@ def _synthese_voix(scene: SceneDemandee, entreprise: str, dossier_travail: Path,
 
 
 def _rendre_visuel(scene: SceneDemandee, format_sortie: str, duree_s: float, dossier_travail: Path,
-                   budget: _Budget) -> Path:
-    """Clip HyperFrames de la scène (cage, sans réseau). Rend le chemin du MP4."""
+                   budget: _Budget, fond: Path | None = None, sens: int = 1) -> Path:
+    """Clip HyperFrames de la scène (cage, sans réseau). Rend le chemin du MP4.
+
+    `fond` : PNG de l'illustration de la scène, en plein cadre sous un voile, avec un lent zoom dans le sens `sens`."""
     try:
         with _Plafonner(cage, DELAI_RENDU_HTML_S=budget.pour(cage.DELAI_RENDU_HTML_S)):
-            resultat = visuels.rendre_scene(dossier_travail, scene.gabarit, scene.champs, format_sortie, duree_s)
+            resultat = visuels.rendre_scene(dossier_travail, scene.gabarit, scene.champs, format_sortie, duree_s,
+                                            fond, sens)
     except ValueError as erreur:
         raise Echec(f"visuel invalide : {erreur}") from erreur
     if not resultat.ok or resultat.video is None:
@@ -758,11 +775,12 @@ def _rendre_visuel(scene: SceneDemandee, format_sortie: str, duree_s: float, dos
     return resultat.video
 
 
-def _sous_titrer(dossier_travail: Path, wav: Path, reference: str, budget: _Budget) -> tuple[Path, str]:
+def _sous_titrer(dossier_travail: Path, wav: Path, reference: str, budget: _Budget,
+                 format_sortie: str) -> tuple[Path, str]:
     """Sous-titres de la voix assemblée (whisper.cpp en cage). Rend (fichier ASS, texte du SRT)."""
     try:
         with _Plafonner(cage, DELAI_SOUS_TITRES_S=budget.pour(cage.DELAI_SOUS_TITRES_S)):
-            resultat = sous_titres.sous_titrer(dossier_travail, wav, reference)
+            resultat = sous_titres.sous_titrer(dossier_travail, wav, reference, format_sortie=format_sortie)
     except ValueError as erreur:
         raise Echec(f"sous-titres impossibles : {erreur}") from erreur
     if not resultat.ok or resultat.ass is None or resultat.srt is None:
@@ -773,6 +791,8 @@ def _sous_titrer(dossier_travail: Path, wav: Path, reference: str, budget: _Budg
 
 
 def _monter(dossier_travail: Path, plan: montage.PlanMontage, budget: _Budget) -> Path:
+    """Montage et contrôle de qualité en cage. Rend `sortie/video.mp4`, à côté de `planche.png` et
+    `controle-qualite.json` ; un rendu hors norme lève Echec avec le motif du refus."""
     try:
         with _Plafonner(montage, DELAI_MONTAGE_S=budget.pour(cage.DELAI_MONTAGE_S)):
             resultat = montage.monter(dossier_travail, plan)
@@ -781,6 +801,7 @@ def _monter(dossier_travail: Path, plan: montage.PlanMontage, budget: _Budget) -
     if not resultat.ok or resultat.video is None:
         journal(f"montage en échec : {resultat.motif[:300]!r}")
         raise Echec("délai dépassé pendant le montage" if "délai" in resultat.motif
+                    else f"rendu refusé : {resultat.motif}" if resultat.motif_clair
                     else "le montage de la vidéo a échoué")
     return resultat.video
 
@@ -796,12 +817,34 @@ def _poser_provenance(video: Path, plan: montage.PlanMontage, infos: provenance.
     return resultat.chemin_json
 
 
-def _apercu_video(demande, duree_s: float, srt: str | None) -> str:
-    """Aperçu pour l'agent : durée, résolution, puis transcription (SRT) ou texte dit."""
+def _apercu_video(demande, duree_s: float, srt: str | None, controle: dict) -> str:
+    """Aperçu pour l'agent : durée, résolution, mesures de qualité, puis transcription (SRT) ou texte dit."""
     texte = srt if srt else "\n\n".join(s.texte_voix for s in demande.scenes)
     titre = "Transcription (SRT)" if srt else "Texte dit (sous-titres non demandés)"
+    alertes = "\n".join(f"- {a}" for a in controle["alertes"]) or "aucune"
     return (f"Vidéo {demande.format_sortie}, {duree_s:.1f} s, {len(demande.scenes)} scène(s)\n"
+            f"Qualité mesurée : sonie {controle['sonie_lufs']} LUFS, crête vraie {controle['crete_vraie_dbtp']} dBTP, "
+            f"débit vidéo {controle['debit_video_kbps']} kb/s\n"
+            f"Alertes (non bloquantes) : {alertes}\n"
             f"{titre} :\n{texte}\n")
+
+
+def _livrer_revue_video(video: Path, dossier_livrable: Path) -> tuple[dict, dict]:
+    """Copie `planche.png` et `controle-qualite.json` (à côté de la vidéo montée) vers le livrable.
+
+    Rend (clé `revue` de resultat.json, contenu du contrôle). Ces fichiers ne sont pas dans `fichiers` :
+    ils servent à la revue (le relecteur voit la planche) et ne se diffusent pas.
+    """
+    try:
+        planche = copier_vers_livrable(video.parent / montage.NOM_PLANCHE, dossier_livrable)
+        copier_vers_livrable(video.parent / montage.NOM_CONTROLE, dossier_livrable)
+        controle = json.loads(lire_texte_livrable(dossier_livrable / montage.NOM_CONTROLE))
+        if not CLES_CONTROLE_VIDEO <= controle.keys():
+            raise ValueError("clés manquantes dans controle-qualite.json")
+    except (OSError, ValueError, AttributeError) as erreur:
+        journal(f"planche ou contrôle de qualité absent : {erreur!r}")
+        raise Echec("la planche de revue ou le contrôle de qualité est absent") from erreur
+    return {"fichier": planche["fichier"], "sha256": planche["sha256"]}, controle
 
 
 def traiter_video(donnees: dict, dossier_travail: Path, dossier_livrable: Path) -> dict:
@@ -831,7 +874,13 @@ def traiter_video(donnees: dict, dossier_travail: Path, dossier_livrable: Path) 
         duree = min(voulue, scene.duree_max_s or visuels.DUREE_MAX_S)
         if sum(durees) + duree > DUREE_MAX_VIDEO_S:
             raise Echec(f"durée totale supérieure à {DUREE_MAX_VIDEO_S:g} s")
-        clip = _rendre_visuel(scene, demande.format_sortie, duree, dossier_travail, budget)
+        options = {}
+        if scene.illustration:
+            # Graine propre à la scène (sinon toutes les images se ressemblent) ; le zoom alterne d'une scène à l'autre.
+            fond = _illustrer(scene.illustration, demande.format_sortie, donnees["travail"], dossier_travail, budget,
+                              dimensions=visuels.FORMATS[demande.format_sortie], rang=rang)
+            options = {"fond": fond, "sens": 1 if rang % 2 else -1}
+        clip = _rendre_visuel(scene, demande.format_sortie, duree, dossier_travail, budget, **options)
         shutil.copyfile(clip, entree / f"scene-{rang:02d}.mp4")
         shutil.copyfile(wav, entree / f"voix-{rang:02d}.wav")
         durees.append(duree)
@@ -842,10 +891,10 @@ def traiter_video(donnees: dict, dossier_travail: Path, dossier_livrable: Path) 
         assemblee = dossier_travail / "voix-assemblee.wav"
         _ecrire_wav(assemblee, b"".join(_caler_pcm(p, d) for p, d in zip(pcms, durees)))
         ass, srt = _sous_titrer(dossier_travail, assemblee,
-                                " ".join(s.texte_voix for s in demande.scenes), budget)
+                                " ".join(s.texte_voix for s in demande.scenes), budget, demande.format_sortie)
         shutil.copyfile(ass, entree / "sous-titres.ass")
     else:
-        (entree / "sous-titres.ass").write_text(sous_titres.ecrire_ass([]), encoding="utf-8")
+        (entree / "sous-titres.ass").write_text(sous_titres.ecrire_ass([], demande.format_sortie), encoding="utf-8")
     fiche = None
     if demande.musique:
         try:
@@ -858,6 +907,9 @@ def traiter_video(donnees: dict, dossier_travail: Path, dossier_livrable: Path) 
     video = _monter(dossier_travail, plan, budget)
     outils = {**{m: VERSIONS_VOIX[m] for m in sorted(set(moteurs))}, "resemble-perth": VERSION_PERTH,
               "hyperframes": visuels.VERSION_HYPERFRAMES}
+    if any(s.illustration for s in demande.scenes):
+        modele = _modele_illustration()
+        outils[modele["nom"]] = modele["revision"][:12]
     if demande.sous_titres:
         outils["whisper.cpp"] = VERSION_WHISPER
     infos = provenance.InfosProvenance(
@@ -868,7 +920,155 @@ def traiter_video(donnees: dict, dossier_travail: Path, dossier_livrable: Path) 
     chemin_provenance = _poser_provenance(video, plan, infos)
     copie = copier_vers_livrable(video, dossier_livrable)
     copier_vers_livrable(chemin_provenance, dossier_livrable)
-    return {"fichiers": [copie], "apercu": _apercu_video(demande, sum(durees), srt)}
+    revue, controle = _livrer_revue_video(video, dossier_livrable)
+    return {"fichiers": [copie], "revue": revue, "controle_qualite": montage.NOM_CONTROLE,
+            "apercu": _apercu_video(demande, sum(durees), srt, controle)}
+
+
+# ---------- type image ----------
+
+CHAMPS_DEMANDE_IMAGE = ("format", "gabarit", "champs", "charte")
+CHAMP_ILLUSTRATION = "illustration"  # facultatif : scène de 20 à 2500 caractères, générée par l'IA en fond plein cadre
+
+
+def _modele_illustration() -> dict:
+    """Entrée de modeles.json du modèle d'illustration (dépôt et révision des poids), désignée par la section « illustration »."""
+    donnees = json.loads((DOSSIER_FABRIQUE / "modeles.json").read_text(encoding="utf-8"))
+    nom = donnees["illustration"]["modele"]
+    return next(m for m in donnees["modeles"] if m["nom"] == nom)
+
+
+def _illustrer(texte: str, format_sortie: str, identifiant: str, dossier_travail: Path, budget: _Budget,
+               *, dimensions: tuple[int, int] | None = None, rang: int = 0) -> Path:
+    """Illustration du fond dans la cage GPU (hors ligne, 12 Gio de RAM au plus). Rend le PNG. GPU ou RAM occupés : AttenteGpu.
+
+    Une vidéo illustre plusieurs scènes : `dimensions` donne la taille du format vidéo et `rang` (1, 2...) décale la
+    graine et le nom des dossiers, pour que chaque scène ait son image. Une image seule : `rang` 0, format des images."""
+    libre, raison = gpu.gpu_disponible()
+    if not libre:
+        raise AttenteGpu(raison)
+    if memoire_disponible_octets() < MEMOIRE_MIN_ILLUSTRATION_OCTETS:
+        raise AttenteGpu("mémoire vive insuffisante pour charger le modèle d'illustration")
+    largeur, hauteur = dimensions or images.valider_format(format_sortie)
+    modele = _modele_illustration()
+    nom = "illustration" if rang == 0 else f"illustration-{rang:02d}"
+    entree, sortie = dossier_travail / f"{nom}-e", dossier_travail / f"{nom}-s"
+    (entree / "code").mkdir(mode=0o700, parents=True)
+    sortie.mkdir(mode=0o700)
+    shutil.copyfile(DOSSIER_GENERATEURS / "illustration.py", entree / "code" / "illustration.py")
+    shutil.copyfile(DOSSIER_FABRIQUE / "modeles.json", entree / "code" / "modeles.json")
+    (entree / "demande.json").write_text(json.dumps(
+        {"illustration": texte, "largeur": largeur, "hauteur": hauteur, "graine": (int(identifiant.replace("-", "")[:8], 16) + rang) % 2**32}),
+        encoding="utf-8")
+    etape = cage.Etape(
+        type="gpu", programme=PYTHON_IMAGE,
+        arguments=("-I", "/entree/code/illustration.py", "/entree/demande.json", "/sortie"),
+        dossier_entree=str(entree), dossier_sortie=str(sortie),
+        montages_modeles=((str(racine_donnees() / "modeles" / f"{modele['nom']}@{modele['revision']}"), str(illustration.POIDS)),),
+        hors_ligne=True)
+    resultat = cage.executer(etape, budget.pour(cage.DELAI_ILLUSTRATION_S), fsize_octets=200 * 1024**2,
+                             donnees_octets=cage.LIMITE_DONNEES_ILLUSTRATION_OCTETS)
+    if resultat.delai_depasse:
+        raise Echec("délai dépassé pendant la génération de l'illustration")
+    if resultat.code == 5:
+        raise Echec("illustration refusée : bandes noires persistantes")
+    if resultat.code != 0:
+        journal(f"illustration en erreur (code {resultat.code}) : {resultat.erreur[-300:].decode('utf-8', 'replace')!r}")
+        raise Echec("la génération de l'illustration a échoué")
+    trouves = cage.recuperer_sortie(sortie, [illustration.NOM_SORTIE])
+    if len(trouves) != 1 or trouves[0].stat().st_size > TAILLE_MAX_ILLUSTRATION:
+        raise Echec("illustration absente ou trop volumineuse")
+    try:
+        lu_l, lu_h, profondeur, type_couleur = registre_charte.lire_ihdr(trouves[0].read_bytes()[:33])
+    except ValueError:
+        raise Echec("l'illustration produite n'est pas un PNG") from None
+    if (lu_l, lu_h) != (largeur, hauteur) or profondeur != 8 or type_couleur not in (0, 2):
+        raise Echec("l'illustration produite n'a pas le format attendu")
+    return trouves[0]
+
+
+def _rendre_image(gabarit: str, champs: dict, format_sortie: str, charte: registre_charte.Charte,
+                  dossier_travail: Path, budget: _Budget, fond: Path | None = None) -> images.Resultat:
+    """PNG de la demande (Chrome en cage, sans réseau). Rend le résultat du rendu, ok=True ; sinon lève Echec.
+
+    Aucune mention IA incrustée (choix de l'opérateur du 01/11) : la provenance la porte en métadonnées."""
+    options = {} if fond is None else {"fond": fond}
+    try:
+        with _Plafonner(images, DELAI_IMAGE_S=budget.pour(images.DELAI_IMAGE_S)):
+            resultat = images.rendre_image(dossier_travail, gabarit, champs, format_sortie, charte,
+                                           mention=MENTION_VISIBLE_IMAGE, **options)
+    except ValueError as erreur:
+        raise Echec(f"image invalide : {erreur}") from erreur
+    if not resultat.ok or resultat.image is None:
+        journal(f"rendu de l'image en échec : {resultat.motif[:300]!r}")
+        raise Echec("délai dépassé pendant le rendu de l'image" if "délai" in resultat.motif
+                    else "le rendu de l'image a échoué")
+    return resultat
+
+
+def _poser_provenance_image(image: Path, infos: provenance.InfosProvenanceImage) -> Path:
+    try:
+        resultat = provenance.poser_provenance_image(image, infos)
+    except ValueError as erreur:
+        raise Echec(f"provenance IA invalide : {erreur}") from erreur
+    if not resultat.ok or resultat.chemin_json is None:
+        journal(f"provenance de l'image en échec : {resultat.motif[:300]!r}")
+        raise Echec("la provenance IA n'a pas pu être posée (vérification en échec)")
+    return resultat.chemin_json
+
+
+def _apercu_image(gabarit: str, format_sortie: str, charte: str, copie: dict, fond_ia: bool = False) -> str:
+    """Aperçu pour l'agent : ce qui permet de reconnaître l'image sans l'ouvrir."""
+    return (f"Image {format_sortie}, gabarit {gabarit}, charte {charte}\n"
+            f"Poids : {copie['taille']} octets, sha256 : {copie['sha256']}\n"
+            f"fond IA : {'oui' if fond_ia else 'non'}, mention visible : {'oui' if MENTION_VISIBLE_IMAGE else 'non'}\n")
+
+
+def traiter_image(donnees: dict, dossier_travail: Path, dossier_livrable: Path) -> dict:
+    """Image publicitaire : validation, charte du registre, rendu Chrome en cage, provenance IA (XMP et JSON).
+
+    L'agent ne fournit qu'un format, un gabarit, des champs bornés et l'identifiant d'une charte du registre
+    humain (couleurs, police, logo), plus facultativement la description d'une illustration à générer en fond :
+    jamais de fichier, d'URL ni de couleur. Budget : 5 min, processeur seul ; 15 min avec une illustration (GPU).
+    """
+    demande = donnees.get("demande")
+    if not isinstance(demande, dict):
+        raise Echec("demande invalide : objet attendu")
+    texte_illustration = demande.get(CHAMP_ILLUSTRATION)
+    avec_illustration = CHAMP_ILLUSTRATION in demande
+    budget = (_Budget(DELAI_TOTAL_IMAGE_ILLUSTREE_S, "délai dépassé (15 min au plus par image illustrée)") if avec_illustration
+              else _Budget(DELAI_TOTAL_IMAGE_S, "délai dépassé (5 min au plus par image)"))
+    inconnus = set(demande) - set(CHAMPS_DEMANDE_IMAGE) - {CHAMP_ILLUSTRATION}
+    manquants = [c for c in CHAMPS_DEMANDE_IMAGE if c not in demande]
+    if inconnus or manquants:
+        raise Echec(f"demande invalide : champs inconnus {sorted(map(str, inconnus))}, manquants {manquants}"[:TAILLE_MAX_MESSAGE])
+    try:
+        images.valider_format(demande["format"])
+        images.valider_champs(demande["gabarit"], demande["champs"])
+        if avec_illustration:
+            texte_illustration = illustration.valider_illustration(texte_illustration)
+    except ValueError as erreur:  # DemandeInvalide en est une
+        raise Echec(f"demande invalide : {erreur}"[:TAILLE_MAX_MESSAGE]) from erreur
+    try:
+        charte = registre_charte.resoudre(demande["charte"], donnees["entreprise"],
+                                          racine_donnees() / DOSSIER_CHARTES, uid_proprietaire=UID_PROPRIETAIRE_LISTE)
+    except registre_charte.CharteRefusee as erreur:
+        raise Echec(f"charte refusée : {erreur}" if "/" not in str(erreur) else "charte refusée") from erreur
+    fond, outils = None, {"chrome-headless-shell": images.VERSION_CHROME}
+    if avec_illustration:
+        fond = _illustrer(texte_illustration, demande["format"], donnees["travail"], dossier_travail, budget)
+        modele = _modele_illustration()
+        outils[modele["nom"]] = modele["revision"][:12]
+    resultat = _rendre_image(demande["gabarit"], demande["champs"], demande["format"], charte, dossier_travail, budget, fond)
+    infos = provenance.InfosProvenanceImage(
+        travail=donnees["travail"], entreprise=donnees["entreprise"], gabarit=demande["gabarit"],
+        format=demande["format"], charte=charte.id, outils=outils,
+        mention_visible=MENTION_VISIBLE_IMAGE, fond_ia=avec_illustration)
+    budget.pour(1)  # la provenance a ses propres délais : on ne la lance pas si le budget est épuisé
+    chemin_provenance = _poser_provenance_image(resultat.image, infos)
+    copie = copier_vers_livrable(resultat.image, dossier_livrable)  # après la provenance : c'est l'image portant le XMP
+    copier_vers_livrable(chemin_provenance, dossier_livrable)
+    return {"fichiers": [copie], "apercu": _apercu_image(demande["gabarit"], demande["format"], charte.id, copie, avec_illustration)}
 
 
 # Un traitement rend {"fichiers": [...]} et, facultativement, "apercu" : texte lisible par l'agent
@@ -877,6 +1077,7 @@ def traiter_video(donnees: dict, dossier_travail: Path, dossier_livrable: Path) 
 REGISTRE: dict[str, Callable[[dict, Path, Path], dict]] = {
     "document": traiter_document,
     "video": traiter_video,
+    "image": traiter_image,
 }
 
 
@@ -1037,6 +1238,12 @@ def accepter(racine: Path, fd_entrant: int, nom: str, donnees: dict) -> None:
         journal(f"avertissement : entrée {nom!r} non retirée ({erreur.strerror})")
 
 
+def _utilise_le_gpu(donnees: dict) -> bool:
+    """Vidéo, ou image avec une illustration : travaux qui peuvent attendre le GPU."""
+    demande = donnees.get("demande")
+    return donnees["type"] == "video" or (donnees["type"] == "image" and isinstance(demande, dict) and CHAMP_ILLUSTRATION in demande)
+
+
 def traiter_une_entree(racine: Path, uid_deposant: int, nom: str,
                        file_gpu: FileAttenteGpu | None = None, **options) -> None:
     """Valide l'entrée `nom` puis l'exécute ; ou la refuse. Une vidéo qui attend le GPU va dans `file_gpu`."""
@@ -1052,7 +1259,7 @@ def traiter_une_entree(racine: Path, uid_deposant: int, nom: str,
         motif = (uuid_deja_vu(racine, donnees["travail"])
                  or (None if donnees["entreprise"] in entreprises_autorisees(racine) else "entreprise non autorisée")
                  or verifier_quota(racine, donnees["entreprise"], donnees["type"])
-                 or ("file d'attente du GPU pleine" if donnees["type"] == "video" and file_gpu is not None
+                 or ("file d'attente du GPU pleine" if _utilise_le_gpu(donnees) and file_gpu is not None
                      and file_gpu.pleine() else None))
         if motif:
             refuser(fd_entrant, nom, str(dossier_refuses), motif)
@@ -1085,7 +1292,7 @@ def _depuis_etat(livrable: Path) -> float | None:
 def recuperer_interrompus(racine: Path, file_gpu: FileAttenteGpu | None = None) -> None:
     """Au démarrage : un dossier de travail resté en place est un travail interrompu.
 
-    Sauf une vidéo en `en_attente_gpu` : si `file_gpu` est fourni, elle y reprend sa place d'attente.
+    Sauf un travail (image ou vidéo) en `en_attente_gpu` : si `file_gpu` est fourni, il y reprend sa place d'attente.
     """
     for dossier in sorted((racine / "travaux").iterdir()):
         try:

@@ -46,8 +46,8 @@ applique lui-même.
 
 1. **Identifier l'enregistrement** par une lecture. Plusieurs correspondances plausibles : demander laquelle, jamais
    deviner l'affaire à laquelle un appel se rattache.
-2. **Lire l'état actuel** des champs visés et déposer la réponse brute sur la tâche
-   (`/donnees-connexion`) : l'avant montre des valeurs réelles, pas supposées.
+2. **Lire l'état actuel** des champs visés et déposer la réponse sur la tâche par sa
+   référence `_atelier.reference` (`/donnees-connexion`) : l'avant montre des valeurs réelles, pas supposées.
 3. **Rédiger l'activité**, si c'est le cas : objet « Type : sujet », type (appel, rendez-vous, courriel), date réelle
    (passée), trois à six puces (ce qui a été dit, convenu, engagements des deux côtés) avec la source nommée, enregistrements
    liés. C'est une activité terminée, pas une tâche à faire.

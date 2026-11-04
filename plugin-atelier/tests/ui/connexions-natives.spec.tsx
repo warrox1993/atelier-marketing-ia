@@ -130,7 +130,7 @@ describe("connexions créées par les cartes de galerie natives", () => {
     expect(SERVICES_PASSERELLE.map((x) => [x.cle, x.slug])).toEqual([
       ["gsc", "atelier-google-search-console"], ["ga4", "atelier-google-analytics"], ["ads", "atelier-google-ads"],
       ["gbp", "atelier-google-business-profile"], ["facebook", "atelier-facebook"], ["instagram", "atelier-instagram"],
-      ["linkedin", "atelier-linkedin"], ["crm", "atelier-hubspot"], ["pipedrive", "atelier-pipedrive"],
+      ["linkedin", "atelier-linkedin"], ["linkedinprofil", "atelier-linkedin-profil"], ["crm", "atelier-hubspot"], ["pipedrive", "atelier-pipedrive"],
       ["odoo", "atelier-odoo"], ["teamleader", "atelier-teamleader"],
     ]);
     for (const x of SERVICES_PASSERELLE) expect(serviceDepuisCarte(x.slug)).toBe(x.cle);
@@ -178,9 +178,9 @@ describe("module connexions-natives : correspondance avec les six états", () =>
     expect(etatDepuisConnexion({ ...base, statut: "archived" }).etat).toBe("indisponible");
     for (const sante of ["failed", "error", "missing_secret"] as const) expect(etatDepuisConnexion({ ...base, sante }).etat).toBe("erreur");
   });
-  it("onze services, toujours dans le même ordre ; la meilleure connexion l'emporte", () => {
+  it("douze services, toujours dans le même ordre ; la meilleure connexion l'emporte", () => {
     const lignes = lignesServices([{ ...base, id: "vieille", statut: "draft", activee: false, sante: "error" }, { ...base, id: "bonne" }]);
-    expect(lignes.map((l) => l.cle)).toEqual(["gsc", "ga4", "ads", "gbp", "facebook", "instagram", "linkedin", "crm", "pipedrive", "odoo", "teamleader"]);
+    expect(lignes.map((l) => l.cle)).toEqual(["gsc", "ga4", "ads", "gbp", "facebook", "instagram", "linkedin", "linkedinprofil", "crm", "pipedrive", "odoo", "teamleader"]);
     expect(lignes[0]).toMatchObject({ etat: "non_connecte", connexionId: "bonne" });
     expect(lignes[1]).toMatchObject({ etat: "non_connecte", connexionId: null });
   });
@@ -202,13 +202,13 @@ describe("module connexions-natives : correspondance avec les six états", () =>
 });
 
 describe("page Paramètres : tableau des connexions natives", () => {
-  it("aucune connexion : message clair et onze lignes « Non connecté » ; Connecter ouvre la carte native du service", async () => {
+  it("aucune connexion : message clair et douze lignes « Non connecté » ; Connecter ouvre la carte native du service", async () => {
     stubReseau({ connexions: { corps: VIDE }, agents: { corps: [] } });
     const c = await pageParametres();
     expect(appels).toContain(`/api/companies/${ENTREPRISE}/tools/connections`);
     expect(c.textContent).toContain("Aucun service marketing n'est connecté");
     const lignes = Array.from(c.querySelectorAll("table")[0]!.querySelectorAll("tbody tr"));
-    expect(lignes).toHaveLength(11);
+    expect(lignes).toHaveLength(12);
     for (const l of lignes) expect(l.textContent).toContain("Non connecté");
     const connecter = parTexte(ligne(c, "Google Search Console"), "a", "Connecter");
     // Carte de galerie native (patch socle 0004), plus jamais la connexion générique « byo ».

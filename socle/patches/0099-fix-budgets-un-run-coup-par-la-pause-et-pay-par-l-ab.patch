@@ -1,0 +1,134 @@
+From 4fbce7636dfb9fc7df8a2a998851430b35170049 Mon Sep 17 00:00:00 2001
+From: Jean-Baptiste Dhondt <114347858+warrox1993@users.noreply.github.com>
+Date: Tue, 27 Oct 2026 14:32:24 +0100
+Subject: [PATCH] =?UTF-8?q?fix(budgets):=20un=20run=20coup=C3=A9=20par=20l?=
+ =?UTF-8?q?a=20pause=20et=20pay=C3=A9=20par=20l'abonnement=20solde=20sa=20?=
+ =?UTF-8?q?comptabilit=C3=A9=20apr=C3=A8s=205=20min?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Cause : la pause d'un agent (cancelActiveForAgent, errorCode agent_paused)
+tue le processus avant tout reçu complet. usageJson garde
+accountingReceiptReady=false et accountRunCost refusait toujours ce run :
+il restait costAccountingPending pour toujours, et budgets.observedBlocks
+bloquait l'entreprise (incident hard à 0 €, retry-accounting et reprise
+refusés).
+
+Correctif : accountRunCost solde quand même ce run, avec la consommation
+déjà relevée, si et seulement si status=cancelled, errorCode=agent_paused,
+billingType=subscription_included, sans accountingCaptureFailed, et
+finishedAt plus vieux que PAUSED_SUBSCRIPTION_RECEIPT_GRACE_MS (5 min).
+Le filtre de reconcileRunCosts reprend la même exception : la reprise
+périodique solde le run toute seule. metered_api, autres arrêts et reçu
+complet arrivé plus tôt : inchangés.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_012hDEUaJZ3u1rGj4CzNXrhC
+---
+ .../src/__tests__/cost-data-quality.test.ts   | 41 +++++++++++++++++++
+ server/src/services/run-cost-accounting.ts    | 17 +++++++-
+ 2 files changed, 56 insertions(+), 2 deletions(-)
+
+diff --git a/server/src/__tests__/cost-data-quality.test.ts b/server/src/__tests__/cost-data-quality.test.ts
+index 376b05ad0..a6514936c 100644
+--- a/server/src/__tests__/cost-data-quality.test.ts
++++ b/server/src/__tests__/cost-data-quality.test.ts
+@@ -6,6 +6,7 @@ import { agents, companies, costEvents, createDb, heartbeatRuns, issues, nativeR
+ import { costDataQualityReport, RECEIPT_WAIT_MS } from "../services/cost-data-quality.js";
+ import { accountingIntegrityService } from "../services/accounting-integrity.js";
+ import { costService } from "../services/costs.js";
++import { PAUSED_SUBSCRIPTION_RECEIPT_GRACE_MS, reconcileRunCosts } from "../services/run-cost-accounting.js";
+ import { startEmbeddedPostgresTestDatabase } from "./helpers/embedded-postgres.js";
+ 
+ const now = new Date("2026-10-09T13:00:00Z");
+@@ -213,4 +214,44 @@ describe("actionable cost data quality", () => {
+     const other = await company();
+     await expect(integrity.retry(other.companyId, pending.id, "board")).rejects.toThrow("Accounting run not found");
+   });
++  // Patch 0099 : la pause tue le processus avant tout reçu complet. Sans argent
++  // en jeu, le run se solde avec la consommation relevée après le délai de grâce.
++  it("solde un run coupé par la pause et payé par l'abonnement, après le délai de grâce seulement", async () => {
++    const owner = await company();
++    const ancien = new Date(Date.now() - PAUSED_SUBSCRIPTION_RECEIPT_GRACE_MS - 60_000);
++    const partiel = { accountingReceiptReady: false, billingType: "subscription_included", provider: "anthropic", model: "claude-opus-5-5", costUsd: null, costStatus: null, inputTokens: 120, cachedInputTokens: 40, outputTokens: 7 };
++    const pause = { status: "cancelled", errorCode: "agent_paused" } as const;
++    const solde = await run(owner, { ...pause, finishedAt: ancien, usageJson: partiel });
++    const tropTot = await run(owner, { ...pause, finishedAt: new Date(), usageJson: partiel });
++    const facture = await run(owner, { ...pause, finishedAt: ancien, usageJson: { ...partiel, billingType: "metered_api" } });
++    const autreArret = await run(owner, { status: "cancelled", errorCode: "cancelled", finishedAt: ancien, usageJson: partiel });
++    const captureRatee = await run(owner, { ...pause, finishedAt: ancien, usageJson: { ...partiel, accountingCaptureFailed: true } });
++    const integrity = accountingIntegrityService(db);
++    expect(await integrity.retry(owner.companyId, solde.id, "board")).toEqual({ accounted: true });
++    for (const attente of [tropTot, facture, autreArret, captureRatee]) {
++      expect(await integrity.retry(owner.companyId, attente.id, "board")).toEqual({ accounted: false });
++    }
++    const charges = await db.select().from(costEvents).where(eq(costEvents.companyId, owner.companyId));
++    expect(charges).toHaveLength(1);
++    expect(charges[0]).toMatchObject({ heartbeatRunId: solde.id, billingType: "subscription_included", costCents: 0, inputTokens: 120, cachedInputTokens: 40, outputTokens: 7 });
++    const [apres] = await db.select().from(heartbeatRuns).where(eq(heartbeatRuns.id, solde.id));
++    expect(apres.costAccountingPending).toBe(false);
++    for (const attente of [tropTot, facture, autreArret, captureRatee]) {
++      const [ligne] = await db.select().from(heartbeatRuns).where(eq(heartbeatRuns.id, attente.id));
++      expect(ligne.costAccountingPending).toBe(true);
++    }
++  });
++
++  it("la reprise périodique solde d'elle-même un run de pause abonnement après le délai", async () => {
++    const owner = await company();
++    const ancien = new Date(Date.now() - PAUSED_SUBSCRIPTION_RECEIPT_GRACE_MS - 60_000);
++    const partiel = { accountingReceiptReady: false, billingType: "subscription_included", inputTokens: 9, outputTokens: 2 };
++    const auto = await run(owner, { status: "cancelled", errorCode: "agent_paused", finishedAt: ancien, usageJson: partiel });
++    const facture = await run(owner, { status: "cancelled", errorCode: "agent_paused", finishedAt: ancien, usageJson: { ...partiel, billingType: "metered_api" } });
++    await reconcileRunCosts(db);
++    const [apres] = await db.select().from(heartbeatRuns).where(eq(heartbeatRuns.id, auto.id));
++    const [reste] = await db.select().from(heartbeatRuns).where(eq(heartbeatRuns.id, facture.id));
++    expect(apres.costAccountingPending).toBe(false);
++    expect(reste.costAccountingPending).toBe(true);
++  });
+ });
+diff --git a/server/src/services/run-cost-accounting.ts b/server/src/services/run-cost-accounting.ts
+index 6a3b4263b..a3b917ce3 100644
+--- a/server/src/services/run-cost-accounting.ts
++++ b/server/src/services/run-cost-accounting.ts
+@@ -13,6 +13,14 @@ const terminalStatuses = ["succeeded", "failed", "timed_out", "cancelled", "inte
+ const object = (value: unknown): Record<string, unknown> => value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
+ const text = (value: unknown) => typeof value === "string" && value.length > 0 ? value : null;
+ const amount = (value: unknown) => typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : null;
++/** Délai laissé à un reçu tardif avant de solder un run coupé par la pause et
++ * payé par l'abonnement avec la consommation déjà relevée (patch 0099). */
++export const PAUSED_SUBSCRIPTION_RECEIPT_GRACE_MS = 5 * 60 * 1000;
++// accountingCaptureFailed est déjà refusé plus haut dans accountRunCost.
++const pausedSubscriptionRunSettles = (run: typeof heartbeatRuns.$inferSelect, now = Date.now()) =>
++  run.status === "cancelled" && run.errorCode === "agent_paused"
++  && object(run.usageJson).billingType === "subscription_included"
++  && run.finishedAt !== null && now - run.finishedAt.getTime() >= PAUSED_SUBSCRIPTION_RECEIPT_GRACE_MS;
+ 
+ /** The run's persisted usage is a durable receipt. Ledger, runtime totals, and
+  * acknowledgement commit together, including after a restart or failed run. */
+@@ -63,7 +71,9 @@ export async function accountRunCost(db: Db, runId: string, hooks: BudgetService
+     // A stop can mark the run terminal before the provider's shutdown receipt
+     // arrives. Keep the debt pending instead of acknowledging an invented zero
+     // and permanently discarding that late receipt.
+-    if (!preProviderFailure && object(run.usageJson).accountingReceiptReady === false) return false;
++    // Exception (patch 0099) : la pause tue le processus, aucun reçu complet ne
++    // viendra ; sans argent en jeu, on solde la consommation relevée après le délai.
++    if (!preProviderFailure && object(run.usageJson).accountingReceiptReady === false && !pausedSubscriptionRunSettles(run)) return false;
+     // Acknowledgement is part of the same transaction. Budget checks inside
+     // this transaction must not mistake this receipt for missing accounting.
+     await tx.update(heartbeatRuns).set({ costAccountingPending: false, costAccountedAt: new Date() }).where(eq(heartbeatRuns.id, run.id));
+@@ -163,7 +173,10 @@ export async function reconcileRunCosts(db: Db, hooks: BudgetServiceHooks = {})
+       or not exists (select 1 from ${nativeRunFinalizations} where ${nativeRunFinalizations.runId} = ${heartbeatRuns.id}
+       and ${heartbeatRuns.runtimeMode} = 'native' and ${nativeRunFinalizations.resultId} is null
+       and ${nativeRunFinalizations.phase} <> 'terminal_failure'))`,
+-    sql`(${heartbeatRuns.usageJson}->>'accountingReceiptReady' is distinct from 'false' or ${heartbeatRuns.resultJson}->'executionRecovery'->>'providerWorkStarted' = 'false' or ${heartbeatRuns.usageJson}->>'accountingProviderWorkStarted' = 'false')`,
++    sql`(${heartbeatRuns.usageJson}->>'accountingReceiptReady' is distinct from 'false' or ${heartbeatRuns.resultJson}->'executionRecovery'->>'providerWorkStarted' = 'false' or ${heartbeatRuns.usageJson}->>'accountingProviderWorkStarted' = 'false'
++      or (${heartbeatRuns.status} = 'cancelled' and ${heartbeatRuns.errorCode} = 'agent_paused'
++        and ${heartbeatRuns.usageJson}->>'billingType' = 'subscription_included'
++        and ${heartbeatRuns.finishedAt} <= ${new Date(Date.now() - PAUSED_SUBSCRIPTION_RECEIPT_GRACE_MS).toISOString()}::timestamptz))`,
+   )).orderBy(asc(heartbeatRuns.updatedAt), asc(heartbeatRuns.id)).limit(100);
+   let accounted = 0;
+   const receiptIndex = pending.length > 0 ? await indexPendingUsageReceipts() : undefined;
+-- 
+2.53.0
+

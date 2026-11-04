@@ -41,7 +41,8 @@ n'est attribuée à l'auteur. Cette compétence se branche dans `redaction-decli
 3. Pour chaque titre, associer un fait précis ou une preuve datée ; supprimer les superlatifs sans source.
 4. Écrire au lecteur dans sa langue, avec des mots simples et courts.
 5. Garder deux ou trois titres et définir un test : hypothèse, mesure, seuil, durée (`mesure-experiences`).
-6. Envoyer les titres retenus au `relecteur` (preuves) et, pour un produit d'assurance, à `conformite-publicitaire`.
+6. Signaler au Coordinateur, qui organise les relectures, les titres retenus à contrôler par `relecteur` (preuves) et,
+   pour un produit d'assurance, par `conformite-publicitaire`.
 
 ## Livrable
 

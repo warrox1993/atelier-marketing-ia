@@ -14,7 +14,8 @@ doit pas dépendre d'un framework de site particulier.
 1. **Vérité en base**, dans le schéma du plugin (migrations additives `023_obs_*`) : `obs_projets`, `obs_sources`,
    `obs_instantanes` (empreinte SHA-256, jamais republiés tels quels), `obs_affirmations` (statut de vérification
    strict), `obs_preuves` (extrait exact et position), `obs_essais`, `obs_revisions`, `obs_chapitres`,
-   `obs_editions`, `obs_publications`.
+   `obs_editions`, `obs_publications`. État au 30/10/2026 : `obs_essais`, `obs_chapitres` et `obs_editions` ne sont pas
+   créées (phase ultérieure, voir `modele-donnees.md`).
 2. **Publication** : chaque révision approuvée est exportée en **Markdown avec frontmatter** vers un dépôt git de
    contenu distinct. L'export est tracé dans `obs_publications` (empreinte de l'artefact, commit de contenu).
 3. Les entités natives de Paperclip (agents, tâches, approbations, budgets, journal) ne sont pas dupliquées.

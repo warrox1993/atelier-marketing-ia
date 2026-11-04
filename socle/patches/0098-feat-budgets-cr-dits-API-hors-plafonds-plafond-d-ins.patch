@@ -1,0 +1,273 @@
+From 7a1671c10871c8f0b1c0fdf700e6b02bf3672fc5 Mon Sep 17 00:00:00 2001
+From: Jean-Baptiste Dhondt <114347858+warrox1993@users.noreply.github.com>
+Date: Tue, 27 Oct 2026 10:04:12 +0100
+Subject: [PATCH] =?UTF-8?q?feat(budgets):=20cr=C3=A9dits=20API=20hors=20pl?=
+ =?UTF-8?q?afonds,=20plafond=20d'instance=20par=20cycle?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_012hDEUaJZ3u1rGj4CzNXrhC
+---
+ server/src/__tests__/budgets-credits.test.ts  | 170 ++++++++++++++++++
+ server/src/services/budgets.ts                |  35 +++-
+ .../services/heartbeat/runtime-execution.ts   |   5 +
+ 3 files changed, 209 insertions(+), 1 deletion(-)
+ create mode 100644 server/src/__tests__/budgets-credits.test.ts
+
+diff --git a/server/src/__tests__/budgets-credits.test.ts b/server/src/__tests__/budgets-credits.test.ts
+new file mode 100644
+index 000000000..ee6300e67
+--- /dev/null
++++ b/server/src/__tests__/budgets-credits.test.ts
+@@ -0,0 +1,170 @@
++import { randomUUID } from "node:crypto";
++import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
++import {
++  agents,
++  budgetIncidents,
++  budgetPolicies,
++  approvals,
++  companies,
++  costEvents,
++  createDb,
++  projects,
++} from "@paperclipai/db";
++import { usdToCents } from "@paperclipai/shared";
++import { computeObservedSpend, depenseCreditsInstance, fenetreCycleCredits, plafondCreditsClaude } from "../services/budgets.ts";
++import { costService } from "../services/costs.ts";
++import {
++  getEmbeddedPostgresTestSupport,
++  startEmbeddedPostgresTestDatabase,
++} from "./helpers/embedded-postgres.js";
++
++vi.mock("../services/activity-log.js", () => ({ logActivity: vi.fn() }));
++
++const embeddedPostgresSupport = await getEmbeddedPostgresTestSupport();
++const describeEmbeddedPostgres = embeddedPostgresSupport.supported ? describe : describe.skip;
++
++describe("fenetreCycleCredits", () => {
++  it("fenetreCycleCredits: 2026-10-27 -> 2026-10-12T00:00Z .. 2026-11-12T00:00Z", () => {
++    const { start, end } = fenetreCycleCredits(new Date("2026-10-27T10:00:00Z"), 12);
++    expect(start.toISOString()).toBe("2026-10-12T00:00:00.000Z");
++    expect(end.toISOString()).toBe("2026-11-12T00:00:00.000Z");
++  });
++
++  it("fenetreCycleCredits: 2026-11-05 -> 2026-10-12 .. 2026-11-12", () => {
++    const { start, end } = fenetreCycleCredits(new Date("2026-11-05T23:59:59Z"), 12);
++    expect(start.toISOString()).toBe("2026-10-12T00:00:00.000Z");
++    expect(end.toISOString()).toBe("2026-11-12T00:00:00.000Z");
++  });
++
++  it("fenetreCycleCredits: exactly 2026-11-12T00:00Z starts the new cycle", () => {
++    const { start, end } = fenetreCycleCredits(new Date("2026-11-12T00:00:00Z"), 12);
++    expect(start.toISOString()).toBe("2026-11-12T00:00:00.000Z");
++    expect(end.toISOString()).toBe("2026-12-12T00:00:00.000Z");
++  });
++
++  it("fenetreCycleCredits: day 31 in February ends on the last day", () => {
++    const { start, end } = fenetreCycleCredits(new Date("2026-02-15T00:00:00Z"), 31);
++    expect(start.toISOString()).toBe("2026-01-31T00:00:00.000Z");
++    expect(end.toISOString()).toBe("2026-02-28T00:00:00.000Z");
++  });
++});
++
++describeEmbeddedPostgres("les credits API hors des totaux de budget", () => {
++  let db!: ReturnType<typeof createDb>;
++  let tempDb: Awaited<ReturnType<typeof startEmbeddedPostgresTestDatabase>> | null = null;
++
++  beforeAll(async () => {
++    tempDb = await startEmbeddedPostgresTestDatabase("paperclip-budgets-credits-");
++    db = createDb(tempDb.connectionString);
++  }, 20_000);
++
++  afterEach(async () => {
++    await db.delete(budgetIncidents);
++    await db.delete(approvals);
++    await db.delete(budgetPolicies);
++    await db.delete(costEvents);
++    await db.delete(projects);
++    await db.delete(agents);
++    await db.delete(companies);
++  });
++
++  afterAll(async () => {
++    await tempDb?.cleanup();
++  });
++
++  async function amorcer() {
++    const companyId = randomUUID();
++    const agentId = randomUUID();
++    const projectId = randomUUID();
++    await db.insert(companies).values({
++      id: companyId, name: "Paperclip", issuePrefix: `C${companyId.replace(/-/g, "").slice(0, 6).toUpperCase()}`,
++      requireBoardApprovalForNewAgents: false,
++    });
++    await db.insert(agents).values({
++      id: agentId, companyId, name: "Agent credits", role: "engineer", status: "active",
++      adapterType: "claude_local", adapterConfig: {}, runtimeConfig: {}, permissions: {},
++    });
++    await db.insert(projects).values({ id: projectId, companyId, name: "Projet credits", status: "in_progress" });
++    return { companyId, agentId, projectId };
++  }
++
++  async function evenement(f: { companyId: string; agentId: string; projectId?: string | null }, o: {
++    billingType: string; costCents: number; costStatus?: string; occurredAt?: Date;
++  }) {
++    await db.insert(costEvents).values({
++      companyId: f.companyId, agentId: f.agentId, projectId: f.projectId ?? null,
++      provider: "anthropic", biller: "anthropic", billingType: o.billingType, model: "claude-test",
++      inputTokens: 1, cachedInputTokens: 0, outputTokens: 1, costCents: o.costCents,
++      costStatus: o.costStatus ?? "reported", occurredAt: o.occurredAt ?? new Date(),
++    });
++  }
++
++  const politique = (companyId: string, scopeType: "company" | "agent" | "project", scopeId: string) =>
++    ({ companyId, scopeType, scopeId, windowKind: "lifetime", metric: "billed_cents" }) as const;
++
++  it("a credits event is excluded from a company policy total; a metered_api event is included", async () => {
++    const f = await amorcer();
++    await evenement(f, { billingType: "credits", costCents: 5000 });
++    await evenement(f, { billingType: "metered_api", costCents: 300 });
++    const observe = await computeObservedSpend(db, politique(f.companyId, "company", f.companyId));
++    expect(observe.total).toBe(300);
++  });
++
++  it("same exclusion for agent and project policies", async () => {
++    const f = await amorcer();
++    await evenement(f, { ...f, billingType: "credits", costCents: 5000 });
++    await evenement(f, { ...f, billingType: "metered_api", costCents: 300 });
++    expect((await computeObservedSpend(db, politique(f.companyId, "agent", f.agentId))).total).toBe(300);
++    expect((await computeObservedSpend(db, politique(f.companyId, "project", f.projectId))).total).toBe(300);
++  });
++
++  it("an unpriced credits event still counts in unpricedEventCount", async () => {
++    const f = await amorcer();
++    await evenement(f, { billingType: "credits", costCents: 0, costStatus: "unpriced" });
++    const observe = await computeObservedSpend(db, politique(f.companyId, "company", f.companyId));
++    expect(observe.unpricedEventCount).toBe(1);
++  });
++
++  it("a 2.00 USD credits receipt is stored as 200 cost_cents", async () => {
++    // Le reçu passe par le service de coûts avec la conversion du socle (usdToCents), sans cycle de heartbeat.
++    const f = await amorcer();
++    const recu = await costService(db).createEvent(f.companyId, {
++      agentId: f.agentId, provider: "anthropic", biller: "anthropic", billingType: "credits", model: "claude-test",
++      inputTokens: 1, cachedInputTokens: 0, outputTokens: 1, costCents: usdToCents("2.00"), occurredAt: new Date(),
++    });
++    expect(Number(recu.costCents)).toBe(200);
++  });
++
++  const cycle = fenetreCycleCredits(new Date("2026-10-27T10:00:00Z"), 12);
++  const dansLeCycle = new Date("2026-10-20T00:00:00Z");
++
++  it("depenseCreditsInstance sums credits events of all companies inside the cycle only", async () => {
++    const a = await amorcer();
++    const b = await amorcer();
++    await evenement(a, { billingType: "credits", costCents: 1000, occurredAt: dansLeCycle });
++    await evenement(b, { billingType: "credits", costCents: 2500, occurredAt: dansLeCycle });
++    await evenement(a, { billingType: "credits", costCents: 9999, occurredAt: new Date("2026-10-11T23:59:59Z") });
++    await evenement(a, { billingType: "metered_api", costCents: 700, occurredAt: dansLeCycle });
++    expect(await depenseCreditsInstance(db, cycle)).toBe(3500);
++  });
++
++  it("plafondCreditsClaude: atteint at 20000 cents by default, not at 19999", async () => {
++    const f = await amorcer();
++    const maintenant = new Date("2026-10-27T10:00:00Z");
++    await evenement(f, { billingType: "credits", costCents: 19999, occurredAt: dansLeCycle });
++    expect(await plafondCreditsClaude(db, maintenant, {})).toEqual({ atteint: false, depenseCentimes: 19999, plafondCentimes: 20000 });
++    await evenement(f, { billingType: "credits", costCents: 1, occurredAt: dansLeCycle });
++    expect(await plafondCreditsClaude(db, maintenant, {})).toEqual({ atteint: true, depenseCentimes: 20000, plafondCentimes: 20000 });
++  });
++
++  it("plafondCreditsClaude honours PAPERCLIP_CLAUDE_CREDITS_PLAFOND_CENTIMES and PAPERCLIP_CLAUDE_CREDITS_JOUR_CYCLE", async () => {
++    const f = await amorcer();
++    await evenement(f, { billingType: "credits", costCents: 500, occurredAt: new Date("2026-10-25T00:00:00Z") });
++    const maintenant = new Date("2026-10-27T10:00:00Z");
++    // Cycle du 1er : l'événement du 25 est dans le cycle ; plafond abaissé à 500.
++    const env = { PAPERCLIP_CLAUDE_CREDITS_PLAFOND_CENTIMES: "500", PAPERCLIP_CLAUDE_CREDITS_JOUR_CYCLE: "1" };
++    expect(await plafondCreditsClaude(db, maintenant, env)).toEqual({ atteint: true, depenseCentimes: 500, plafondCentimes: 500 });
++    // Cycle du 26 : l'événement du 25 sort de la fenêtre.
++    expect((await plafondCreditsClaude(db, maintenant, { ...env, PAPERCLIP_CLAUDE_CREDITS_JOUR_CYCLE: "26" })).depenseCentimes).toBe(0);
++  });
++});
+diff --git a/server/src/services/budgets.ts b/server/src/services/budgets.ts
+index f938b168e..db29edded 100644
+--- a/server/src/services/budgets.ts
++++ b/server/src/services/budgets.ts
+@@ -199,7 +199,7 @@ async function computeObservedSpends(db: Db, policies: SpendPolicy[]): Promise<O
+         and coalesce(${heartbeatRuns.finishedAt}, ${heartbeatRuns.createdAt}) < ${end.toISOString()}::timestamptz` : undefined,
+     )!;
+     ledgerPredicates.push(ledger); pendingPredicates.push(pending);
+-    ledgerColumns[`total${index}`] = sql`coalesce(sum(${costEvents.costCents}) filter (where ${ledger}), 0)::text`;
++    ledgerColumns[`total${index}`] = sql`coalesce(sum(${costEvents.costCents}) filter (where ${ledger} and ${costEvents.billingType} <> 'credits'), 0)::text`;
+     ledgerColumns[`unpriced${index}`] = sql`count(*) filter (where ${ledger} and ${costEvents.costStatus} = 'unpriced' and ${costEvents.billingType} <> 'subscription_included')::int`;
+     pendingColumns[`pending${index}`] = sql`count(*) filter (where ${pending})::int`;
+     pendingColumns[`recovering${index}`] = sql`count(*) filter (where ${pending} and ${heartbeatRuns.runtimeMode} = 'native'
+@@ -221,6 +221,39 @@ export async function computeObservedSpend(db: Db, policy: SpendPolicy) {
+   return (await computeObservedSpends(db, [policy]))[0];
+ }
+ 
++/** Cycle des crédits API : minuit UTC du jour `jourDebut`; un jour absent du mois (29 à 31) devient le dernier jour. */
++export function fenetreCycleCredits(maintenant: Date, jourDebut: number): { start: Date; end: Date } {
++  const borne = (annee: number, mois: number) =>
++    new Date(Date.UTC(annee, mois, Math.min(jourDebut, new Date(Date.UTC(annee, mois + 1, 0)).getUTCDate())));
++  const annee = maintenant.getUTCFullYear(), mois = maintenant.getUTCMonth();
++  const ceMois = borne(annee, mois);
++  if (maintenant >= ceMois) return { start: ceMois, end: borne(annee, mois + 1) };
++  return { start: borne(annee, mois - 1), end: ceMois };
++}
++
++/** Dépense en crédits API de toute l'instance (toutes entreprises) sur la fenêtre, en centimes. */
++export async function depenseCreditsInstance(db: Db, fenetre: { start: Date; end: Date }): Promise<number> {
++  const [ligne] = await db.select({ total: sql<string>`coalesce(sum(${costEvents.costCents}), 0)::text` }).from(costEvents)
++    .where(and(eq(costEvents.billingType, "credits"), gte(costEvents.occurredAt, fenetre.start), lt(costEvents.occurredAt, fenetre.end)));
++  return Number(ligne?.total ?? 0);
++}
++
++const PLAFOND_CREDITS_DEFAUT_CENTIMES = 20000;
++const JOUR_CYCLE_CREDITS_DEFAUT = 12;
++
++function entierEnv(valeur: string | undefined, defaut: number, min: number, max: number) {
++  const n = Number(valeur);
++  return valeur !== undefined && Number.isInteger(n) && n >= min && n <= max ? n : defaut;
++}
++
++/** Plafond d'instance des crédits API : atteint quand la dépense du cycle courant >= plafond. */
++export async function plafondCreditsClaude(db: Db, maintenant: Date = new Date(), env: NodeJS.ProcessEnv = process.env) {
++  const plafondCentimes = entierEnv(env.PAPERCLIP_CLAUDE_CREDITS_PLAFOND_CENTIMES, PLAFOND_CREDITS_DEFAUT_CENTIMES, 1, Number.MAX_SAFE_INTEGER);
++  const jour = entierEnv(env.PAPERCLIP_CLAUDE_CREDITS_JOUR_CYCLE, JOUR_CYCLE_CREDITS_DEFAUT, 1, 31);
++  const depenseCentimes = await depenseCreditsInstance(db, fenetreCycleCredits(maintenant, jour));
++  return { atteint: depenseCentimes >= plafondCentimes, depenseCentimes, plafondCentimes };
++}
++
+ function observedBlocks(policy: PolicyRow, observed: Awaited<ReturnType<typeof computeObservedSpend>>) {
+   if (!policy.isActive || !policy.hardStopEnabled || policy.amount <= 0) return false;
+   return compareCents(observed.totalExact, policy.amount) >= 0 || (observed.pendingRunCount - observed.recoveringRunCount) > 0 || (policy.unpricedUsagePolicy !== "allow" && observed.unpricedEventCount > 0);
+diff --git a/server/src/services/heartbeat/runtime-execution.ts b/server/src/services/heartbeat/runtime-execution.ts
+index 814ffa2e7..6c00f7317 100644
+--- a/server/src/services/heartbeat/runtime-execution.ts
++++ b/server/src/services/heartbeat/runtime-execution.ts
+@@ -39,6 +39,7 @@ import { resolveManagedOpenAiBilling } from "@paperclipai/adapter-utils";
+ import { and, eq, isNull, sql } from "drizzle-orm";
+ import { heartbeatRuns, nativeRunFinalizations, workspaceOperations } from "@paperclipai/db";
+ import { conflict } from "../../errors.js";
++import { plafondCreditsClaude } from "../budgets.js";
+ import { getStartupTraceContext } from "../../instrumentation.js";
+ import { logger } from "../../middleware/logger.js";
+ import {
+@@ -786,6 +787,10 @@ export async function executeHeartbeatRuntime(db: Db, input: HeartbeatRuntimeExe
+       if (managedMcpConfig) {
+         adapterContext.paperclipManagedMcp = managedMcpConfig;
+       }
++      if (agent.adapterType === "claude_local") {
++        const plafondCredits = await plafondCreditsClaude(db);
++        if (plafondCredits.atteint) adapterContext.paperclipClaudeCreditsPlafond = plafondCredits;
++      }
+       const guardedDispatch =
+         await dispatchResolvedInteractionContinuationWithAtomicGate(
+           (markDispatchStarted) => {
+-- 
+2.53.0
+

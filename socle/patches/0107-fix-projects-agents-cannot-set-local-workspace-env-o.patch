@@ -1,0 +1,332 @@
+From 0c64cd63d3251d683ce8df8523374a8eb83c0e32 Mon Sep 17 00:00:00 2001
+From: Jean-Baptiste Dhondt <114347858+warrox1993@users.noreply.github.com>
+Date: Thu, 29 Oct 2026 16:02:52 +0100
+Subject: [PATCH] fix(projects): agents cannot set local workspace, env or
+ execution policy
+
+---
+ .../project-agent-host-fields-routes.test.ts  | 227 ++++++++++++++++++
+ server/src/routes/projects.ts                 |   6 +
+ server/src/routes/workspace-command-authz.ts  |  27 +++
+ 3 files changed, 260 insertions(+)
+ create mode 100644 server/src/__tests__/project-agent-host-fields-routes.test.ts
+
+diff --git a/server/src/__tests__/project-agent-host-fields-routes.test.ts b/server/src/__tests__/project-agent-host-fields-routes.test.ts
+new file mode 100644
+index 000000000..a57f7969b
+--- /dev/null
++++ b/server/src/__tests__/project-agent-host-fields-routes.test.ts
+@@ -0,0 +1,227 @@
++import express from "express";
++import request from "supertest";
++import { beforeEach, describe, expect, it, vi } from "vitest";
++
++/**
++ * Un agent ne doit jamais fixer un dossier local, des variables d'environnement
++ * (références de secrets) ni une politique d'exécution sur un projet : sinon la
++ * tâche s'exécuterait hors du confinement. Le board garde tous ces droits.
++ * (Ancien en-tête, repris de l'amorce : managed-sandbox-only policy (`enableManagedSandboxOnly`): a project workspace
++ * `cwd` is an absolute path on the execution host. When every agent runs in the
++ * platform-managed environment there is no host for a user to point at, so the
++ * project-workspace write routes refuse a payload that carries one. These tests
++ * pin the floor behind the hidden UI field on all three write paths.
++ */
++
++
++const mockProjectService = vi.hoisted(() => ({
++  list: vi.fn(),
++  getById: vi.fn(),
++  create: vi.fn(),
++  update: vi.fn(),
++  createWorkspace: vi.fn(),
++  listWorkspaces: vi.fn(),
++  updateWorkspace: vi.fn(),
++  removeWorkspace: vi.fn(),
++  remove: vi.fn(),
++  resolveByReference: vi.fn(),
++}));
++const mockSecretService = vi.hoisted(() => ({
++  normalizeEnvBindingsForPersistence: vi.fn(),
++}));
++const mockEnvironmentService = vi.hoisted(() => ({
++  getById: vi.fn(),
++}));
++const mockInstanceSettingsService = vi.hoisted(() => ({
++  getExperimental: vi.fn(),
++}));
++const mockWorkspaceOperationService = vi.hoisted(() => ({}));
++const mockLogActivity = vi.hoisted(() => vi.fn());
++const mockGetTelemetryClient = vi.hoisted(() => vi.fn());
++const mockAccessService = vi.hoisted(() => ({
++  decide: vi.fn(),
++}));
++
++vi.mock("../telemetry.js", () => ({
++  getTelemetryClient: mockGetTelemetryClient,
++}));
++
++vi.mock("../services/index.js", () => ({
++  accessService: () => mockAccessService,
++  environmentService: () => mockEnvironmentService,
++  logActivity: mockLogActivity,
++  projectService: () => mockProjectService,
++  secretService: () => mockSecretService,
++  workspaceOperationService: () => mockWorkspaceOperationService,
++}));
++
++vi.mock("../services/environments.js", () => ({
++  environmentService: () => mockEnvironmentService,
++}));
++
++vi.mock("../services/secrets.js", () => ({
++  secretService: () => mockSecretService,
++}));
++
++vi.mock("../services/instance-settings.js", () => ({
++  instanceSettingsService: () => mockInstanceSettingsService,
++}));
++
++vi.mock("../services/workspace-runtime.js", () => ({
++  startRuntimeServicesForWorkspaceControl: vi.fn(),
++  stopRuntimeServicesForProjectWorkspace: vi.fn(),
++}));
++
++function registerModuleMocks() {
++  vi.doMock("../services/activity-log.js", async () => ({
++    ...await vi.importActual<typeof import("../services/activity-log.js")>("../services/activity-log.js"),
++    persistActivity: async (db: unknown, input: unknown) => { await mockLogActivity(db, input); return { activity: { id: "activity" }, publication: null }; },
++    publishActivity: vi.fn(),
++  }));
++  vi.doMock("../telemetry.js", () => ({
++    getTelemetryClient: mockGetTelemetryClient,
++  }));
++
++  vi.doMock("../services/index.js", () => ({
++    accessService: () => mockAccessService,
++    environmentService: () => mockEnvironmentService,
++    logActivity: mockLogActivity,
++    projectService: () => mockProjectService,
++    secretService: () => mockSecretService,
++    workspaceOperationService: () => mockWorkspaceOperationService,
++  }));
++
++  vi.doMock("../services/environments.js", () => ({
++    environmentService: () => mockEnvironmentService,
++  }));
++
++  vi.doMock("../services/secrets.js", () => ({
++    secretService: () => mockSecretService,
++  }));
++
++  vi.doMock("../services/instance-settings.js", () => ({
++    instanceSettingsService: () => mockInstanceSettingsService,
++  }));
++
++  vi.doMock("../services/workspace-runtime.js", () => ({
++    startRuntimeServicesForWorkspaceControl: vi.fn(),
++    stopRuntimeServicesForProjectWorkspace: vi.fn(),
++  }));
++}
++
++async function createApp() {
++  const [{ projectRoutes }, { errorHandler }] = await Promise.all([
++    vi.importActual<typeof import("../routes/projects.js")>("../routes/projects.js"),
++    vi.importActual<typeof import("../middleware/index.js")>("../middleware/index.js"),
++  ]);
++  const app = express();
++  app.use(express.json());
++  app.use((req, _res, next) => {
++    // eslint-disable-next-line @typescript-eslint/no-explicit-any
++    (req as any).actor = req.header("x-test-actor") === "agent"
++      ? { type: "agent", agentId: "agent-1", companyId: "company-1", source: "agent_key" }
++      : {
++        type: "board",
++        userId: "board-user",
++        companyIds: ["company-1"],
++        source: "local_implicit",
++        isInstanceAdmin: false,
++      };
++    next();
++  });
++  // eslint-disable-next-line @typescript-eslint/no-explicit-any
++  app.use("/api", projectRoutes({ transaction: async (effect: (tx: unknown) => unknown) => effect({}) } as any));
++  app.use(errorHandler);
++  return app;
++}
++
++
++function buildProject() {
++  return {
++    id: "project-1", companyId: "company-1", urlKey: "project-1", goalId: null, goalIds: [], goals: [],
++    name: "Project", description: null, status: "backlog", leadAgentId: null, env: null,
++    executionWorkspacePolicy: null, workspaces: [], primaryWorkspace: null, archivedAt: null,
++    createdAt: new Date(), updatedAt: new Date(),
++  };
++}
++const WORKSPACE = { id: "workspace-1", companyId: "company-1", projectId: "project-1", name: "W", sourceType: "local_path", cwd: "/home/x", repoUrl: null, isPrimary: true };
++
++describe("projets : champs hôte interdits aux agents", () => {
++  beforeEach(() => {
++    vi.resetModules();
++    vi.doUnmock("../routes/projects.js");
++    vi.doUnmock("../routes/authz.js");
++    vi.doUnmock("../middleware/index.js");
++    vi.doUnmock("../services/environments.js");
++    vi.doUnmock("../services/instance-settings.js");
++    vi.doUnmock("../services/secrets.js");
++    registerModuleMocks();
++    vi.clearAllMocks();
++    mockAccessService.decide.mockResolvedValue({ allowed: true, action: "project:read", reason: "allow_test", explanation: "ok" });
++    mockGetTelemetryClient.mockReturnValue({ track: vi.fn() });
++    mockProjectService.resolveByReference.mockResolvedValue({ ambiguous: false, project: null });
++    mockProjectService.getById.mockResolvedValue(buildProject());
++    mockProjectService.create.mockResolvedValue({ project: buildProject(), duplicate: false });
++    mockProjectService.update.mockResolvedValue(buildProject());
++    mockProjectService.list.mockResolvedValue([buildProject()]);
++    mockProjectService.createWorkspace.mockResolvedValue(WORKSPACE);
++    mockProjectService.updateWorkspace.mockResolvedValue(WORKSPACE);
++    mockProjectService.listWorkspaces.mockResolvedValue([WORKSPACE]);
++    mockSecretService.normalizeEnvBindingsForPersistence.mockImplementation(async (_c, env) => env);
++    mockInstanceSettingsService.getExperimental.mockResolvedValue({ enableManagedSandboxOnly: false });
++  });
++
++  const asAgent = (r: request.Test) => r.set("x-test-actor", "agent");
++  const ENV = { TOKEN: { type: "plain", value: "x" } };
++  const POLICY = { enabled: true, defaultMode: "shared_workspace" };
++
++  const refusals: Array<[string, "post" | "patch", string, Record<string, unknown>]> = [
++    ["création avec workspace.cwd", "post", "/api/companies/company-1/projects", { name: "P", workspace: { cwd: "/home/x" } }],
++    ["création avec workspace non_git_path", "post", "/api/companies/company-1/projects", { name: "P", workspace: { sourceType: "non_git_path", cwd: "/home/x" } }],
++    ["création avec env", "post", "/api/companies/company-1/projects", { name: "P", env: ENV }],
++    ["création avec executionWorkspacePolicy", "post", "/api/companies/company-1/projects", { name: "P", executionWorkspacePolicy: POLICY }],
++    ["modification avec env", "patch", "/api/projects/project-1", { env: ENV }],
++    ["modification avec executionWorkspacePolicy", "patch", "/api/projects/project-1", { executionWorkspacePolicy: POLICY }],
++    ["création d'un workspace avec cwd", "post", "/api/projects/project-1/workspaces", { name: "W", cwd: "/home/x" }],
++    ["modification d'un workspace avec cwd", "patch", "/api/projects/project-1/workspaces/workspace-1", { cwd: "/home/x" }],
++    ["modification d'un workspace en local_path", "patch", "/api/projects/project-1/workspaces/workspace-1", { sourceType: "local_path" }],
++  ];
++
++  it.each(refusals)("refuse à un agent : %s", async (_nom, method, url, payload) => {
++    const app = await createApp();
++    const res = await asAgent(request(app)[method](url)).send(payload);
++    expect(res.status, JSON.stringify(res.body)).toBe(403);
++    expect(res.body.error).toMatch(/Agent keys cannot set local workspace folders, env or execution policy on projects/);
++    expect(mockProjectService.create).not.toHaveBeenCalled();
++    expect(mockProjectService.update).not.toHaveBeenCalled();
++    expect(mockProjectService.createWorkspace).not.toHaveBeenCalled();
++    expect(mockProjectService.updateWorkspace).not.toHaveBeenCalled();
++  });
++
++  it("accepte d'un agent un projet sans dossier local", async () => {
++    const app = await createApp();
++    const res = await asAgent(request(app).post("/api/companies/company-1/projects"))
++      .send({ name: "P", description: "d", repositoryUrls: ["https://github.com/a/b"] });
++    expect(res.status, JSON.stringify(res.body)).toBe(201);
++    expect(mockProjectService.create).toHaveBeenCalled();
++  });
++
++  it("accepte d'un agent une modification sans champ hôte", async () => {
++    const app = await createApp();
++    const res = await asAgent(request(app).patch("/api/projects/project-1")).send({ name: "Nouveau nom" });
++    expect(res.status, JSON.stringify(res.body)).toBe(200);
++  });
++
++  it("laisse le board créer un projet avec cwd, env et politique", async () => {
++    const app = await createApp();
++    const res = await request(app).post("/api/companies/company-1/projects")
++      .send({ name: "P", workspace: { cwd: "/home/x" }, env: ENV, executionWorkspacePolicy: POLICY });
++    expect(res.status, JSON.stringify(res.body)).toBe(201);
++  });
++
++  it("laisse le board modifier un workspace avec cwd", async () => {
++    const app = await createApp();
++    const res = await request(app).patch("/api/projects/project-1/workspaces/workspace-1").send({ cwd: "/home/x" });
++    expect(res.status, JSON.stringify(res.body)).toBe(200);
++  });
++});
+diff --git a/server/src/routes/projects.ts b/server/src/routes/projects.ts
+index edfb4a2f1..64ee5ee96 100644
+--- a/server/src/routes/projects.ts
++++ b/server/src/routes/projects.ts
+@@ -43,6 +43,8 @@ import {
+ } from "../services/workspace-runtime.js";
+ import {
+   assertNoAgentHostWorkspaceCommandMutation,
++  assertNoAgentProjectHostFields,
++  collectProjectHostFieldPaths,
+   collectProjectExecutionWorkspaceCommandPaths,
+   collectProjectWorkspaceCommandPaths,
+ } from "./workspace-command-authz.js";
+@@ -354,6 +356,7 @@ export function projectRoutes(db: Db) {
+     projectData.privacyOwnerUserId = req.actor.type === "board" ? req.actor.userId ?? null : req.actor.type === "agent" ? req.actor.onBehalfOfUserId ?? null : null;
+     const runContext = req.actor.type === "agent" && req.actor.source === "agent_jwt" && req.actor.runId
+       ? await projectToolContext(db, req.actor, true) : null;
++    assertNoAgentProjectHostFields(req, collectProjectHostFieldPaths(projectData, workspace));
+     await assertProjectEnvironmentSelection(
+       companyId,
+       readProjectPolicyEnvironmentId(projectData.executionWorkspacePolicy),
+@@ -445,6 +448,7 @@ export function projectRoutes(db: Db) {
+       if (!(await assertCanManageProjectPrivacy(req, res, existing))) return;
+     }
+     if (body.visibility === "private") await addActorAsPrivateProjectPrincipal(req, existing);
++    assertNoAgentProjectHostFields(req, collectProjectHostFieldPaths(body));
+     assertNoAgentHostWorkspaceCommandMutation(
+       req,
+       collectProjectExecutionWorkspaceCommandPaths(body.executionWorkspacePolicy),
+@@ -600,6 +604,7 @@ export function projectRoutes(db: Db) {
+     const existing = await getAccessibleResource(req, res, svc.getById(id), "Project not found");
+     if (!existing) return;
+     if (!(await assertProjectReadAllowed(req, res, existing))) return;
++    assertNoAgentProjectHostFields(req, collectProjectHostFieldPaths({}, req.body, ""));
+     assertNoAgentHostWorkspaceCommandMutation(
+       req,
+       collectProjectWorkspaceCommandPaths(req.body),
+@@ -640,6 +645,7 @@ export function projectRoutes(db: Db) {
+       const existing = await getAccessibleResource(req, res, svc.getById(id), "Project not found");
+       if (!existing) return;
+       if (!(await assertProjectReadAllowed(req, res, existing))) return;
++      assertNoAgentProjectHostFields(req, collectProjectHostFieldPaths({}, req.body, ""));
+       assertNoAgentHostWorkspaceCommandMutation(
+         req,
+         collectProjectWorkspaceCommandPaths(req.body),
+diff --git a/server/src/routes/workspace-command-authz.ts b/server/src/routes/workspace-command-authz.ts
+index 7ca79a1c0..eed1f977f 100644
+--- a/server/src/routes/workspace-command-authz.ts
++++ b/server/src/routes/workspace-command-authz.ts
+@@ -74,6 +74,33 @@ export function assertNoAgentHostWorkspaceCommandMutation(req: Request, paths: s
+   );
+ }
+ 
++const LOCAL_WORKSPACE_SOURCE_TYPES = new Set(["local_path", "non_git_path"]);
++
++/** Champs d'un projet qui pointent l'hôte (dossier local, secrets, politique d'exécution) : réservés au board. */
++export function collectProjectHostFieldPaths(
++  input: { env?: unknown; executionWorkspacePolicy?: unknown },
++  workspace?: unknown,
++  workspacePrefix = "workspace",
++): string[] {
++  const paths: string[] = [];
++  if (input.env != null) paths.push("env");
++  if (input.executionWorkspacePolicy != null) paths.push("executionWorkspacePolicy");
++  if (isRecord(workspace)) {
++    if (workspace.cwd != null) paths.push(prefixPath(workspacePrefix, "cwd"));
++    if (typeof workspace.sourceType === "string" && LOCAL_WORKSPACE_SOURCE_TYPES.has(workspace.sourceType)) {
++      paths.push(prefixPath(workspacePrefix, "sourceType"));
++    }
++  }
++  return paths;
++}
++
++export function assertNoAgentProjectHostFields(req: Request, paths: string[]) {
++  if (req.actor.type !== "agent" || paths.length === 0) return;
++  throw forbidden(
++    `Agent keys cannot set local workspace folders, env or execution policy on projects (${paths.join(", ")}).`,
++  );
++}
++
+ export function collectAgentAdapterWorkspaceCommandPaths(
+   adapterConfig: unknown,
+   prefix = "adapterConfig",
+-- 
+2.53.0
+

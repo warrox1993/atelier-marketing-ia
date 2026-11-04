@@ -1,0 +1,80 @@
+From 80e60c4ef94bb4abe01521d796b6943782af1a17 Mon Sep 17 00:00:00 2001
+From: Jean-Baptiste Dhondt <114347858+warrox1993@users.noreply.github.com>
+Date: Fri, 30 Oct 2026 16:50:05 +0100
+Subject: [PATCH 148/148] =?UTF-8?q?test(natif):=20retraite=20d'un=20dossie?=
+ =?UTF-8?q?r=20distant=20=C3=A0=20chaud=20align=C3=A9e=20sur=20AFD-C1?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Constat AFD-C1 (patchs 0108 et 0110) : un agent n'enregistre plus son dossier. Dans le test
+« composes remote warm ownership » de native-session-executor, les variantes collect,
+close-failure, claim-edit, claim-add et claim-remove vérifient désormais le refus exact à la
+retraite (état unavailable, AGENT_FILES_SAVE_FAILED, message exact) et un dossier canonique
+inchangé ; adoption, propriété distante, baux et nettoyage restent vérifiés à l'identique.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01EThpSSDGc5NRYwbgjNqoTJ
+---
+ .../native-session-executor.test.ts           | 23 +++++++++++++------
+ 1 file changed, 16 insertions(+), 7 deletions(-)
+
+diff --git a/server/src/services/native-runtime/native-session-executor.test.ts b/server/src/services/native-runtime/native-session-executor.test.ts
+index 375cbf61cc..a5b4442149 100644
+--- a/server/src/services/native-runtime/native-session-executor.test.ts
++++ b/server/src/services/native-runtime/native-session-executor.test.ts
+@@ -6741,6 +6741,9 @@ describe("native warm session supervision", () => {
+     const { resolveManagedInstructionsRoot } = await import("../agent-instructions.js");
+     const canonical = resolveManagedInstructionsRoot({ id: agentId, companyId, name: "Warm remote", adapterConfig: {} }), remoteCwd = join(home, "remote");
+     let currentLease = "", failCleanup = false, failProbe = false, closed = false;
++    // Atelier (AFD-C1, patchs 0108 et 0110) : la retraite refuse d'enregistrer le dossier modifié par l'agent.
++    const refusRetraite = { state: "unavailable", errorCode: "AGENT_FILES_SAVE_FAILED",
++      errorMessage: "Atelier : seul un humain modifie la configuration, les consignes ou les skills d'un agent.. This run's agent-folder changes were not saved; the temporary copy is discarded." };
+     const commands: Array<{ leaseId: string; command: string }> = [];
+     const commandRunner = (leaseId: string): import("@paperclipai/adapter-utils/command-managed-runtime").CommandManagedRuntimeRunner => ({ execute: async input => {
+       expect(leaseId).toBe(currentLease); // The replaced collector must never execute.
+@@ -6854,9 +6857,15 @@ describe("native warm session supervision", () => {
+             expect(compact).toMatchObject({ materializationRunId, cleanupPending: false });
+             expect(compact?.baseline).toBeUndefined();
+             await expect(access(originalRoot)).rejects.toMatchObject({ code: "ENOENT" });
+-            if (ending === "claim-edit") expect(await readFile(join(canonical, "AGENTS.md"), "utf8")).toBe("Remote edit before next claim\n");
+-            if (ending === "claim-add") expect(await readFile(join(canonical, "memory.txt"), "utf8")).toBe("Remote addition before next claim\n");
+-            if (ending === "claim-remove") await expect(access(join(canonical, "optional-memory.txt"))).rejects.toMatchObject({ code: "ENOENT" });
++            // Atelier (AFD-C1, patchs 0108 et 0110) : la retraite refuse d'enregistrer le dossier modifié par l'agent ;
++            // le dossier canonique ne change pas et le nettoyage reste le même.
++            if (["claim-edit", "claim-add", "claim-remove"].includes(ending)) {
++              expect((await copies.get(companyId, runId))!).toMatchObject({ state: "unavailable", errorCode: "AGENT_FILES_SAVE_FAILED",
++                errorMessage: "Atelier : seul un humain modifie la configuration, les consignes ou les skills d'un agent.. This run's agent-folder changes were not saved; the temporary copy is discarded." });
++              expect(await readFile(join(canonical, "AGENTS.md"), "utf8")).toBe("Retain this exact directory.\n");
++              expect(await readFile(join(canonical, "optional-memory.txt"), "utf8")).toBe("Optional memory\n");
++              await expect(access(join(canonical, "memory.txt"))).rejects.toMatchObject({ code: "ENOENT" });
++            }
+             if (ending === "claim-remove-entry") {
+               expect((await copies.get(companyId, runId))!).toMatchObject({ state: "unavailable", errorCode: "AGENT_FILES_SAVE_FAILED" });
+               expect(await readFile(join(canonical, "AGENTS.md"), "utf8")).toBe("Retain this exact directory.\n");
+@@ -6922,8 +6931,8 @@ describe("native warm session supervision", () => {
+         expect(commands).toHaveLength(before);
+         expect(await readFile(join(originalRoot, "late-memory.txt"), "utf8")).toBe("Latest owner's remote bytes");
+         expect(await closeWarmNativeSessionsForEnvironment({ environmentId, reason: "verified later retirement" })).toMatchObject({ closed: 1, failed: 0 });
+-        expect(await copies.get(companyId, prior!.binding.runId)).toMatchObject({ state: "saved", receipt: { cleanupPending: false } });
+-        expect(await readFile(join(canonical, "late-memory.txt"), "utf8")).toBe("Latest owner's remote bytes");
++        expect(await copies.get(companyId, prior!.binding.runId)).toMatchObject({ ...refusRetraite, receipt: { cleanupPending: false } });
++        await expect(access(join(canonical, "late-memory.txt"))).rejects.toMatchObject({ code: "ENOENT" });
+         await expect(access(originalRoot)).rejects.toMatchObject({ code: "ENOENT" });
+         return;
+       }
+@@ -6953,9 +6962,9 @@ describe("native warm session supervision", () => {
+       failCleanup = true;
+       await closeWarmNativeSessionsForEnvironment({ environmentId, reason: "test retirement" });
+       expect(session.close).toHaveBeenCalledOnce();
+-      expect(await readFile(join(canonical, "late-memory.txt"), "utf8")).toBe("Latest owner's remote bytes");
++      await expect(access(join(canonical, "late-memory.txt"))).rejects.toMatchObject({ code: "ENOENT" });
+       const saved = (await copies.get(companyId, prior!.binding.runId))!;
+-      expect(saved).toMatchObject({ state: "saved", receipt: { cleanupPending: true, materializationRunId, cleanup: { leaseId: currentLease } } });
++      expect(saved).toMatchObject({ ...refusRetraite, receipt: { cleanupPending: true, materializationRunId, cleanup: { leaseId: currentLease } } });
+       const cleanup = vi.fn(async input => {
+         expect(input.lease.id).toBe(currentLease);
+         expect(input.lease.heartbeatRunId).toBe(prior!.binding.runId);
+-- 
+2.53.0
+

@@ -2,9 +2,11 @@
 # -*- coding: utf-8 -*-
 """Tests du registre des services (python3 -I scripts/tests/tester-atelier-services.py)."""
 
+import atexit
 import copy
 import importlib.util
 import json
+import shutil
 import sys
 import unittest
 from pathlib import Path
@@ -50,9 +52,9 @@ class TestFichierReel(unittest.TestCase):
             "ressources-humaines", "informatique", "achats", "qualite",
             "logistique", "production", "recherche-innovation", "communication", "service-client",
             "fiscalite", "gestion-projets", "hse", "formation", "juridique-social", "donnees-bi",
-            "evenementiel", "services-generaux", "partenariats", "observatoire",
+            "evenementiel", "services-generaux", "partenariats", "observatoire", "complements",
         }
-        self.assertEqual(len(reg["services"]), 29)
+        self.assertEqual(len(reg["services"]), 30)
         self.assertEqual({s["slug"] for s in reg["services"]}, attendus)
         self.assertTrue(all(s["actif"] is True for s in reg["services"]))
         marketing = next(s for s in reg["services"] if s["slug"] == "marketing")
@@ -62,6 +64,29 @@ class TestFichierReel(unittest.TestCase):
         slugs = {s["slug"] for s in reg["services"]}
         for autre in slugs - {"direction"}:
             self.assertTrue(any(f["source"] == autre and f["cible"] == "direction" for f in reg["flux"]), autre)
+
+    def test_cadence_observatoire_declaree(self):
+        """P1-5 (audit du 29/10/2026) : seul l'Observatoire déclare un projet et des routines ; chaque routine a son TASK.md."""
+        reg = svc.charger_services()
+        avec = {s["slug"] for s in reg["services"] if s.get("projets") or s.get("routines")}
+        self.assertEqual(avec, {"observatoire"})
+        obs = next(s for s in reg["services"] if s["slug"] == "observatoire")
+        self.assertEqual([p["slug"] for p in obs["projets"]], ["cadence-observatoire"])
+        racine = RACINE / "organisation/services/observatoire/projects/cadence-observatoire"
+        self.assertTrue((racine / "PROJECT.md").is_file())
+        self.assertEqual({r["slug"]: r["cron"] for r in obs["routines"]}, {
+            "veille-technique-hebdomadaire": "30 10 * * 1", "exploration-sources-hebdomadaire": "30 10 * * 3",
+            "arbitrage-hebdomadaire": "30 10 * * 4", "edition-hebdomadaire": "30 10 * * 5"})
+        for r in obs["routines"]:
+            self.assertTrue((racine / "tasks" / r["slug"] / "TASK.md").is_file(), r["slug"])
+
+    def test_marketing_peut_saisir_le_juridique_sous_approbation(self):
+        # LIV-MK-3 (audit du 29/10/2026) : un BESOIN juridique du Marketing ouvre une liaison vers le Juridique
+        # (service sensible), donc toujours sous approbation humaine.
+        reg = svc.charger_services()
+        flux = [f for f in reg["flux"] if f["source"] == "marketing" and f["cible"] == "juridique"]
+        self.assertEqual(len(flux), 1)
+        self.assertIs(flux[0]["approbationHumaine"], True)
 
     def test_cli(self):
         self.assertEqual(svc.main(["verifier"]), 0)
@@ -76,35 +101,54 @@ class TestFichierReel(unittest.TestCase):
         self.assertTrue((RACINE / "organisation/services/direction/agents/coordinateur-general/AGENTS.md").is_file())
 
     def test_reseau_coordinateurs_reel(self):
-        # Toutes les paires ordonnées de services distincts : 29 x 28 = 812, dont 122 flux métier et 690 générés.
+        # COORD-P2-7 (décision du 30/10) : le réseau généré relie seulement le coordinateur général (Direction) et chaque
+        # coordinateur, dans les deux sens, pour les paires que la matrice métier ne couvre pas ; plus aucun flux généré
+        # entre deux départements (690 avant, 26 maintenant : les 28 « X vers direction » et 3 « direction vers X » sont métier).
         reg = svc.charger_services()
-        n = len(reg["services"])
         generes = svc.flux_coordinateurs(reg)
         complets = svc.flux_complets(reg)
-        self.assertEqual(len(reg["flux"]), 122)
-        self.assertEqual(len(generes), n * (n - 1) - 122)
-        self.assertEqual(len(generes), 690)
+        self.assertEqual(len(reg["flux"]), 126)  # LIV-MK-3 : + marketing vers juridique (approbation humaine)
+        self.assertEqual(len(generes), 26)
+        self.assertTrue(all("direction" in (f["source"], f["cible"]) for f in generes), "aucun flux généré entre deux départements")
         paires = [(f["source"], f["cible"]) for f in complets]
         self.assertEqual(len(paires), len(set(paires)), "aucune paire déclarée deux fois")
-        self.assertEqual(set(paires), {(a["slug"], b["slug"]) for a in reg["services"] for b in reg["services"] if a is not b})
         # Le registre ne liste aucun flux généré : ils naissent seulement de la liste des services.
         self.assertFalse(any("protocole-inter-coordinateurs" in f["objet"] for f in reg["flux"]))
-        # Règle sensible inchangée : tout flux qui touche un service sensible exige l'approbation humaine.
+        # Règle sensible inchangée, étendue au service public (V2-6) : tout flux qui en touche un exige l'approbation humaine.
         sensibles = {s["slug"] for s in reg["services"] if s.get("sensible")}
         self.assertEqual(sensibles, {"juridique", "ressources-humaines", "fiscalite", "hse", "juridique-social", "conformite", "sav-sinistres"})
+        publics = {s["slug"] for s in reg["services"] if s.get("public")}
+        self.assertEqual(publics, {"observatoire"})
         for f in complets:
-            if f["source"] in sensibles or f["cible"] in sensibles:
+            if {f["source"], f["cible"]} & (sensibles | publics):
                 self.assertTrue(f["approbationHumaine"], f)
         for f in generes:
-            self.assertEqual(f["approbationHumaine"], f["source"] in sensibles or f["cible"] in sensibles, f)
-            self.assertEqual(f["origine"], "coordinateur-general" if "direction" in (f["source"], f["cible"]) else "coordinateurs")
+            self.assertEqual(f["approbationHumaine"], bool({f["source"], f["cible"]} & (sensibles | publics)), f)
+            self.assertEqual(f["origine"], "coordinateur-general")
             self.assertLessEqual(len(f["objet"]), 200)
         # Le coordinateur général (Direction) joint chaque service et chaque service le joint.
         autres = {s["slug"] for s in reg["services"]} - {"direction"}
         self.assertEqual({f["cible"] for f in complets if f["source"] == "direction"}, autres)
         self.assertEqual({f["source"] for f in complets if f["cible"] == "direction"}, autres)
         # Les flux métier gardent leur objet et leur approbation.
-        self.assertEqual(complets[:122], [{**f, "origine": "metier"} for f in reg["flux"]])
+        self.assertEqual(complets[:126], [{**f, "origine": "metier"} for f in reg["flux"]])
+
+    def test_protocole_annonce_le_reseau_reduit(self):
+        # COORD-P2-7 et V2-6 : la compétence des coordinateurs dit comment joindre un département sans flux métier.
+        texte = (RACINE / "organisation/skills/protocole-inter-coordinateurs/SKILL.md").read_text(encoding="utf-8")
+        self.assertIn("adresse ta demande au coordinateur général (`direction`), qui la relaie", texte)
+        self.assertIn("ou public (l'Observatoire", texte)
+
+    def test_observatoire_public_tous_ses_flux_approuves(self):
+        # V2-6 : l'Observatoire publie sur un site public ; aucune donnée n'y entre ni n'en sort sans l'accord d'un humain.
+        reg = svc.charger_services()
+        self.assertIs(next(s for s in reg["services"] if s["slug"] == "observatoire").get("public"), True)
+        touches = [f for f in svc.flux_complets(reg) if "observatoire" in (f["source"], f["cible"])]
+        self.assertEqual({(f["source"], f["cible"]) for f in touches if f["origine"] == "metier"},
+                         {("observatoire", c) for c in ("direction", "informatique", "recherche-innovation", "formation", "complements")}
+                         | {("complements", "observatoire")})
+        self.assertIn(("direction", "observatoire"), {(f["source"], f["cible"]) for f in touches})
+        self.assertTrue(all(f["approbationHumaine"] for f in touches), touches)
 
 
 class TestDeclaration(unittest.TestCase):
@@ -117,19 +161,21 @@ class TestDeclaration(unittest.TestCase):
         reg = json.loads((RACINE / "organisation/registre/services.json").read_text(encoding="utf-8"))
         tous = [s["slug"] for s in reg["services"]]
         corps = declarer.construire_corps(reg, self.local("trio", tous))
-        self.assertEqual(len(corps["flux"]), 812)
+        self.assertEqual(len(corps["flux"]), 152)  # COORD-P2-7 : 126 métier + 26 générés avec la Direction (812 avant)
         self.assertLessEqual(len(corps["flux"]), 40 * 39, "borne du contrat FluxService du plugin")
         self.assertTrue(all(set(f) == {"source", "cible", "objet", "approbationHumaine", "origine"} for f in corps["flux"]))
-        # L'origine déclarée au plugin sépare le métier du réseau des coordinateurs (614 + 24 générés).
-        self.assertEqual(sum(f["origine"] == "metier" for f in corps["flux"]), 122)
-        self.assertEqual(sum(f["origine"] == "coordinateurs" for f in corps["flux"]), 690)
+        # L'origine déclarée au plugin sépare le métier du réseau des coordinateurs.
+        self.assertEqual(sum(f["origine"] == "metier" for f in corps["flux"]), 126)
+        self.assertEqual(sum(f["origine"] == "coordinateurs" for f in corps["flux"]), 26)
         self.assertTrue(all((f["origine"] == "coordinateurs") == ("protocole-inter-coordinateurs" in f["objet"]) for f in corps["flux"]))
 
     def test_sous_ensemble_du_client(self):
         reg = json.loads((RACINE / "organisation/registre/services.json").read_text(encoding="utf-8"))
         corps = declarer.construire_corps(reg, self.local("duo", ["marketing", "direction", "juridique"]))
         paires = {(f["source"], f["cible"]) for f in corps["flux"]}
-        self.assertEqual(paires, {(a, b) for a in ("marketing", "direction", "juridique") for b in ("marketing", "direction", "juridique") if a != b})
+        # Seul flux métier entre eux : marketing vers juridique (LIV-MK-3) ; le reste passe par le coordinateur général (COORD-P2-7).
+        self.assertEqual(paires, {("marketing", "direction"), ("direction", "marketing"), ("juridique", "direction"), ("direction", "juridique"),
+                                  ("marketing", "juridique")})
         presents = {"marketing", "direction", "juridique"}
         self.assertTrue(all(f["source"] in presents and f["cible"] in presents for f in corps["flux"]))
         for f in corps["flux"]:
@@ -197,7 +243,7 @@ class TestDeclaration(unittest.TestCase):
         a = declarer.construire_corps(reg, self.local("a", ["marketing", "direction"]))
         b = declarer.construire_corps(reg, self.local("b", ["marketing", "commercial"]))
         self.assertEqual({e["companyId"] for e in a["entreprises"]} & {e["companyId"] for e in b["entreprises"]}, set())
-        self.assertEqual({(f["source"], f["cible"]) for f in b["flux"]}, {("marketing", "commercial"), ("commercial", "marketing")})
+        self.assertEqual({(f["source"], f["cible"]) for f in b["flux"]}, {("marketing", "commercial")})  # flux métier seul, sans Direction
         self.assertEqual((a["clientMarqueur"], b["clientMarqueur"]), ("a", "b"))
 
 
@@ -264,6 +310,16 @@ class TestRefus(unittest.TestCase):
         self.contient(e, "modèle invalide")
         e = self.erreurs(lambda r: r["services"][0].update(deterministes=["autre-aaa"], reglages={"autre-aaa": {"outilsInterdits": ["Write"]}}))
         self.contient(e, "agent déterministe sans réglage")
+        for n in (0, 51, "3", True):  # T3 : nombre de runs par session, entier de 1 à 50
+            e = self.erreurs(lambda r: r["services"][0].update(reglages={"autre-aaa": {"sessionsParRotation": n}}))
+            self.contient(e, "sessionsParRotation")
+        self.assertEqual(self.erreurs(lambda r: r["services"][0].update(reglages={"autre-aaa": {"sessionsParRotation": 3}})), [])
+        # AFB-8 : seules les variables déjà communes peuvent être surchargées par agent, en texte.
+        for env in ({"LD_PRELOAD": "x"}, {"CLAUDE_CODE_PROMPT_CACHE_TTL": 1}, "1h"):
+            e = self.erreurs(lambda r: r["services"][0].update(reglages={"autre-aaa": {"envPortable": env}}))
+            self.contient(e, "envPortable")
+        self.assertEqual(self.erreurs(lambda r: r["services"][0].update(
+            reglages={"autre-aaa": {"envPortable": {"CLAUDE_CODE_PROMPT_CACHE_TTL": "1h"}}})), [])
         e = self.erreurs(lambda r: r["services"][0].update(outilsInterdits="WebFetch"))
         self.contient(e, "outilsInterdits doit être une liste")
         e = self.erreurs(lambda r: r["services"][0].update(reglages={"autre-aaa": {"outilsInterdits": "Write"}}))
@@ -271,6 +327,32 @@ class TestRefus(unittest.TestCase):
         self.assertEqual(self.erreurs(lambda r: r["services"][0].update(
             outilsInterdits=["WebFetch"],
             reglages={"autre-aaa": {"modele": {"id": "claude-opus-5-5", "effort": "high"}, "outilsInterdits": ["Write"]}})), [])
+
+    def test_projets_et_routines(self):
+        """P1-5 : projets et routines d'un service, facultatifs, contrôlés comme ceux du marketing."""
+        projet = {"slug": "cadence", "responsable": "coord-aaa", "statut": "in_progress", "couleur": "#2f6f5e", "objectifs": []}
+        routine = {"slug": "hebdo", "cron": "30 10 * * 1", "fuseau": "Europe/Brussels",
+                   "concurrence": "skip_if_active", "rattrapage": "skip_missed"}
+        self.assertEqual(self.erreurs(lambda r: r["services"][0].update(projets=[projet], routines=[routine])), [])
+        cas = [
+            ({"projets": {"slug": "x"}}, "projets doit être une liste"),
+            ({"projets": [{**projet, "slug": "Cadence"}]}, "slug de projet invalide"),
+            ({"projets": [{**projet, "responsable": "inconnu"}]}, "responsable « inconnu » absent"),
+            ({"projets": [{**projet, "statut": "ouvert"}]}, "statut de projet invalide"),
+            ({"projets": [{**projet, "couleur": "vert"}]}, "couleur invalide"),
+            ({"projets": [{**projet, "objectifs": ["OBJ-1"]}]}, "objectifs"),
+            ({"projets": [projet, projet]}, "projet en double"),
+            ({"routines": "hebdo"}, "routines doit être une liste"),
+            ({"routines": [{**routine, "cron": "0 9 * * 1"}]}, "à partir de 10 h"),
+            ({"routines": [{**routine, "cron": "30 10 * *"}]}, "cron invalide"),
+            ({"routines": [{**routine, "fuseau": ""}]}, "fuseau"),
+            ({"routines": [{**routine, "concurrence": "toujours"}]}, "concurrence invalide"),
+            ({"routines": [{**routine, "rattrapage": "tout"}]}, "rattrapage invalide"),
+            ({"routines": [routine, routine]}, "routine en double"),
+        ]
+        for modif, texte in cas:
+            with self.subTest(texte=texte):
+                self.contient(self.erreurs(lambda r: r["services"][0].update(**modif)), texte)
 
     def test_flux_service_inconnu(self):
         e = self.erreurs(lambda r: r["flux"][0].update(cible="fantome"))
@@ -300,6 +382,13 @@ class TestRefus(unittest.TestCase):
             {"source": "bbb", "cible": "aaa", "objet": "o", "approbationHumaine": False}))
         self.contient(e, "sensible")
 
+    def test_flux_public_sans_approbation(self):
+        def public(r):
+            r["services"][0]["public"] = True  # aaa, dont le flux métier vers direction est sans approbation
+        self.contient(self.erreurs(public), "service public « aaa » impose l'approbation humaine")
+        self.contient(self.erreurs(lambda r: r["services"][0].update(public="oui")), "« public » doit être un booléen")
+        self.contient(self.erreurs(lambda r: r["services"][0].update(interne="oui")), "« interne » doit être un booléen")
+
     def test_champs_manquants_service(self):
         for champ in ("slug", "nom", "prefixe", "actif", "description", "coordinateur",
                       "agents", "humainSeul", "obligations", "donnees"):
@@ -326,10 +415,12 @@ class TestRefus(unittest.TestCase):
     def test_flux_generes_minimal(self):
         reg = minimal()
         generes = svc.flux_coordinateurs(reg)
-        self.assertEqual({(f["source"], f["cible"]) for f in generes},
-                         {("aaa", "bbb"), ("bbb", "aaa"), ("bbb", "direction"), ("direction", "bbb"), ("direction", "aaa")})
+        self.assertEqual({(f["source"], f["cible"]) for f in generes}, {("bbb", "direction"), ("direction", "bbb"), ("direction", "aaa")})
         self.assertEqual({(f["source"], f["cible"]): f["approbationHumaine"] for f in generes},
-                         {("aaa", "bbb"): True, ("bbb", "aaa"): True, ("bbb", "direction"): True, ("direction", "bbb"): True, ("direction", "aaa"): False})
+                         {("bbb", "direction"): True, ("direction", "bbb"): True, ("direction", "aaa"): False})
+        # Un service public (V2-6) impose l'approbation, comme un sensible.
+        reg["services"][0]["public"] = True
+        self.assertTrue(next(f for f in svc.flux_coordinateurs(reg) if (f["source"], f["cible"]) == ("direction", "aaa"))["approbationHumaine"])
 
     def test_coordinateur_general_absent(self):
         self.contient(self.erreurs(lambda r: r["services"][2].pop("coordinateurGeneral")), "aucun coordinateur général")
@@ -363,7 +454,9 @@ class TestPorteDeterministe(unittest.TestCase):
     def setUpClass(cls):
         import os
         import tempfile
-        os.environ.setdefault("ATELIER_DONNEES_LOCALES", tempfile.mkdtemp(prefix="atelier-test-porte-"))
+        donnees = tempfile.mkdtemp(prefix="atelier-test-porte-")
+        atexit.register(shutil.rmtree, donnees, ignore_errors=True)  # /tmp est en mémoire vive : rien ne reste
+        os.environ.setdefault("ATELIER_DONNEES_LOCALES", donnees)
         spec = importlib.util.spec_from_file_location("bootstrap_organisation", RACINE / "scripts" / "bootstrap-organisation.py")
         cls.bo = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(cls.bo)
@@ -392,6 +485,27 @@ class TestPorteDeterministe(unittest.TestCase):
         self.assertIn('reportsTo: "directeur"', texte)
         self.assertIn(bo.MARQUEUR_CONSIGNES_COMMUNES, fichiers["agents/directeur/AGENTS.md"])
 
+    def test_couverture_documentee_observatoire(self):
+        """Pilote du 27/10 : sans base du plugin ni route de couverture dans sa fiche, le rédacteur a appelé
+        /api/plugins/obs/… (404) et l'article est resté bloqué. Le directeur, assigné de l'article (confier.py),
+        déclare ; les autres producteurs connaissent la route ; le relecteur lit la partie couvertures."""
+        bo, svc_obs = self.bo, self.services["observatoire"]
+        agents, corps, _ = bo.agents_service(self.reg_agents, svc_obs)
+        orga = {"version": self.reg_orga["version"], "objectifs": [], "projets": [], "routines": [],
+                "entreprise": {**self.reg_orga["entreprise"], "nom": "Essai", "slug": "essai-obs",
+                               "marqueur": "atelier-client:essai:observatoire", "description": "Essai."}}
+        fichiers = bo.fichiers_service(bo.reg_agents_service(self.reg_agents, agents), orga, svc_obs, corps)
+        base = "/api/plugins/atelier.marketing-ia/api/taches/<issueId>"
+        for slug in ("directeur", "redacteur-en-chef", "analyste-technique", "adaptateur-anglais"):
+            texte = fichiers[f"agents/{slug}/AGENTS.md"]
+            self.assertIn(f"`POST {base}/couverture`", texte, slug)
+            self.assertIn("### POST /taches/:issueId/couverture", texte, slug)  # corps recopié de la fiche routes-agents
+        self.assertIn(f"{base}/contexte?partie=couvertures", fichiers["agents/relecteur-independant/AGENTS.md"])
+        # Pilote du 27/10, 17 h 20 : sans outil Write, un curl de 12 979 caractères est refusé (9 572 passent).
+        self.assertIn("8 000 caractères", fichiers["agents/directeur/AGENTS.md"])
+        for slug in (a["slug"] for a in agents):
+            self.assertNotRegex(fichiers[f"agents/{slug}/AGENTS.md"], r"/api/plugins/(?!atelier\.marketing-ia/api\b)", slug)
+
     def test_explorateur_sources_13e_agent(self):
         agents, _, avert = self.bo.agents_service(self.reg_agents, self.services["observatoire"])
         self.assertEqual(len(agents), 13)
@@ -407,6 +521,11 @@ class TestPorteDeterministe(unittest.TestCase):
         opus = {"id": "claude-opus-5-5", "effort": "high"}
         self.assertEqual((par["auditeur-securite"]["modele"], par["relecteur-independant"]["modele"]), (opus, opus))
         self.assertEqual(par["veille-technique"]["modele"]["id"], "claude-sonnet-5-5")
+        # T3 (audit du 29/10/2026) : la session du directeur gonflait de 26 k à 297 k jetons ; nouvelle session tous les 3 runs.
+        self.assertEqual(par["directeur"].get("sessionsParRotation"), 3)
+        self.assertEqual([s for s, a in par.items() if a.get("sessionsParRotation")], ["directeur"])
+        battement = bo.construire_extension(bo.reg_agents_service(self.reg_agents, agents), bo.registres()[1])["agents"]["directeur"]["runtime"]["heartbeat"]
+        self.assertEqual(battement["sessionCompaction"], {"enabled": True, "maxSessionRuns": 3})
         for slug, a in par.items():
             if a.get("deterministe"):
                 continue
@@ -425,7 +544,193 @@ class TestPorteDeterministe(unittest.TestCase):
     def test_autres_services_sans_deterministe(self):
         agents, _, _ = self.bo.agents_service(self.reg_agents, self.services["juridique"])
         self.assertFalse([a["slug"] for a in agents if a.get("deterministe")])
-        self.assertTrue(all("WebFetch" in a["outils"]["recherche"] for a in agents))  # réglages propres à l'Observatoire
+        # N5 (30/10/2026) : WebFetch est mort dans la cage (réseau borné à api.anthropic.com), donc interdit partout.
+        self.assertFalse([a["slug"] for a in agents if "WebFetch" in a["outils"]["recherche"]])
+        self.assertTrue(all("WebFetch" in a["outils"]["interdits"] for a in agents))
+
+    def test_tous_sans_les_services_internes(self):
+        # DOC-A2 : l'Observatoire est interne à l'usine (projet de l'opérateur) ; « tous » ne l'installe pas chez un client,
+        # mettre-a-jour-client ne l'ajoute pas, mais il reste installable en le nommant.
+        self.assertIs(self.services["observatoire"].get("interne"), True)
+        erreurs: list[str] = []
+        tous, _ = self.bo.valider_services_fiche({"services": "tous"}, erreurs)
+        self.assertEqual(erreurs, [])
+        self.assertNotIn("observatoire", tous)
+        self.assertEqual(len(tous), len([s for s in self.services.values() if s.get("actif") and not s.get("interne")]))
+        nomme, _ = self.bo.valider_services_fiche({"services": ["observatoire"]}, erreurs)
+        self.assertEqual((nomme, erreurs), (["observatoire"], []))
+
+
+class TestCadenceService(unittest.TestCase):
+    """P1-5 (audit du 29/10/2026) : les entreprises de service importent leurs projets et routines (l'Observatoire : 1 projet,
+    4 routines hebdomadaires), créées EN PAUSE ; une seconde application n'écrit rien ; les autres services et le marketing
+    restent inchangés. L'import natif est simulé d'après le socle (server/src/services/company-portability.ts : routine
+    toujours CRÉÉE, jamais mise à jour ; statut = « paused » si pauseAutomations, sinon celui de l'extension, sinon « active »)."""
+
+    @classmethod
+    def setUpClass(cls):
+        import os
+        import tempfile
+        donnees = tempfile.mkdtemp(prefix="atelier-test-cadence-")
+        atexit.register(shutil.rmtree, donnees, ignore_errors=True)  # /tmp est en mémoire vive : rien ne reste
+        os.environ.setdefault("ATELIER_DONNEES_LOCALES", donnees)
+        spec = importlib.util.spec_from_file_location("bootstrap_organisation", RACINE / "scripts" / "bootstrap-organisation.py")
+        cls.bo = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(cls.bo)
+        cls.reg_agents, cls.reg_orga = cls.bo.registres()
+        cls.services = {s["slug"]: s for s in cls.bo.registre_services()["services"]}
+
+    def paquet(self, slug):
+        bo, s = self.bo, self.services[slug]
+        agents, corps, _ = bo.agents_service(self.reg_agents, s)
+        reg_s = bo.organisation_service(self.reg_orga, {"slug": "essai", "mode": "reel"}, s, f"Essai {slug}",
+                                        f"atelier-client:essai:{slug}")
+        reg_agents_s = bo.reg_agents_service(self.reg_agents, agents)
+        return reg_agents_s, reg_s, bo.fichiers_service(reg_agents_s, reg_s, s, corps)
+
+    def test_paquet_observatoire(self):
+        _, reg_s, fichiers = self.paquet("observatoire")
+        self.assertEqual([p["slug"] for p in reg_s["projets"]], ["cadence-observatoire"])
+        self.assertEqual(len(reg_s["routines"]), 4)
+        self.assertEqual(reg_s["objectifs"], [])
+        base = "projects/cadence-observatoire/"
+        self.assertIn(base + "PROJECT.md", fichiers)
+        self.assertIn("importées en pause", fichiers[base + "PROJECT.md"])
+        self.assertEqual(sorted(c for c in fichiers if c.endswith("/TASK.md")), sorted(
+            f"{base}tasks/{r['slug']}/TASK.md" for r in reg_s["routines"]))
+        ext = self.bo.charger_yaml_sur(fichiers[".paperclip.yaml"])
+        self.assertEqual(ext["projects"]["cadence-observatoire"]["leadAgentSlug"], "directeur")
+        self.assertEqual({r["status"] for r in ext["routines"].values()}, {"paused"})
+
+    def test_autre_service_et_marketing_inchanges(self):
+        _, reg_s, fichiers = self.paquet("juridique")
+        self.assertEqual((reg_s["projets"], reg_s["routines"]), ([], []))
+        self.assertFalse([c for c in fichiers if c.startswith("projects/")])
+        ext_mkt = self.bo.charger_yaml_sur(self.bo.fichiers_paquet()[".paperclip.yaml"])
+        self.assertFalse([s for s, r in ext_mkt["routines"].items() if "status" in r])
+
+    def test_a_blanc_annonce_projets_et_routines(self):
+        bo = self.bo
+        for slug, attendu in (("observatoire", True), ("juridique", False)):
+            s = self.services[slug]
+            agents, _, _ = bo.agents_service(self.reg_agents, s)
+            reg_s = bo.organisation_service(self.reg_orga, {"slug": "essai", "mode": "reel"}, s, "Essai", "atelier-client:essai")
+            plan = {"svc": s, "nom": "Essai", "marqueur": "atelier-client:essai", "existante": None, "budget": 1,
+                    "agents": agents, "avertissements": [], "reg_s": reg_s}
+            lignes = bo.ecritures_service(plan, {"mode": "reel"}, None, None)
+            annonce = [l for l in lignes if "routine(s)" in l]
+            with self.subTest(service=slug):
+                if attendu:
+                    self.assertEqual(annonce, ["projets et routines du service : 1 projet(s) (cadence-observatoire), 4 routine(s) "
+                                               "créée(s) en pause, statut jamais touché ensuite"])
+                else:
+                    self.assertEqual(annonce, [])
+
+    def faux_socle(self, reg_agents_s):
+        bo = self.bo
+        etat = {"projets": [], "routines": [], "journal": [], "imports": []}
+        ids = {a["slug"]: {"id": f"id-{a['slug']}", "name": a["nom"]} for a in reg_agents_s["agents"]}
+
+        class Api:
+            base = "http://faux"
+
+            def get(self, chemin):
+                return self.appel("GET", chemin)
+
+            def appel(self, methode, chemin, corps=None):
+                if methode == "GET" and chemin.endswith("/projects"):
+                    return [dict(p) for p in etat["projets"]]
+                if methode == "GET" and chemin.endswith("/routines"):
+                    return [dict(r, triggers=[dict(t) for t in r["triggers"]]) for r in etat["routines"]]
+                if methode == "GET":
+                    raise AssertionError(f"lecture non prévue : {chemin}")
+                etat["journal"].append((methode, chemin, corps))
+                return {}
+
+        def importer_en_place(api, fichiers, company_id, reg_agents, selection, pause):
+            if selection is not None:
+                fichiers = {k: v for k, v in fichiers.items() if k in set(selection)}
+            etat["imports"].append(sorted(fichiers))
+            ext = bo.charger_yaml_sur(fichiers[".paperclip.yaml"])
+            for chemin, texte in fichiers.items():
+                entete, corps = bo.entete_simple(texte)
+                if chemin.endswith("/PROJECT.md") and not any(p["urlKey"] == entete["slug"] for p in etat["projets"]):
+                    etat["projets"].append({"id": f"p-{entete['slug']}", "urlKey": entete["slug"], "goalIds": []})
+                if chemin.endswith("/TASK.md") and entete.get("recurring") is True:
+                    r = ext["routines"][entete["slug"]]
+                    etat["routines"].append({
+                        "id": f"r-{len(etat['routines'])}", "title": entete["name"], "description": corps,
+                        "assigneeAgentId": ids[entete["assignee"]]["id"], "projectId": f"p-{entete['project']}",
+                        "concurrencyPolicy": r["concurrencyPolicy"], "catchUpPolicy": r["catchUpPolicy"],
+                        "status": "paused" if pause else r.get("status", "active"),
+                        "triggers": [{"id": f"t-{len(etat['routines'])}", **t} for t in r["triggers"]]})
+            return {"warnings": []}
+
+        remplace = {
+            "trouver_entreprise": lambda api, reg: {"id": "cid-essai"},
+            "preparer_dossiers_locaux": lambda cid, reg: 0,
+            "secret_jeton": lambda *a, **k: None,
+            "synchroniser_instructions_service": lambda *a, **k: 0,
+            "etat_service_a_jour": lambda *a, **k: list(etat.get("raisons", ["empreinte différente : directeur"])),
+            "importer_en_place": importer_en_place,
+            "lier_agents": lambda *a, **k: 0,
+            "agents_par_slug": lambda api, cid: ids,
+            "assurer_permissions_agents": lambda api, agents: 0,
+            "assurer_gouvernance": lambda *a, **k: None,
+        }
+        sauve = {n: getattr(bo, n) for n in remplace}
+        for n, v in remplace.items():
+            setattr(bo, n, v)
+        self.addCleanup(lambda: [setattr(bo, n, v) for n, v in sauve.items()])
+        return Api(), etat
+
+    def appliquer(self, slug):
+        import contextlib
+        import io
+        import tempfile
+        reg_agents_s, reg_s, fichiers = self.paquet(slug)
+        api, etat = self.faux_socle(reg_agents_s)
+        dossier = Path(tempfile.mkdtemp(prefix="atelier-test-cadence-etat-"))
+        self.addCleanup(shutil.rmtree, dossier, ignore_errors=True)
+
+        def lancer():
+            with contextlib.redirect_stdout(io.StringIO()):
+                return self.bo.appliquer_service(api, reg_agents_s, reg_s, fichiers, "reel", dossier)
+        return lancer, etat
+
+    def test_observatoire_importe_un_projet_et_quatre_routines_en_pause(self):
+        lancer, etat = self.appliquer("observatoire")
+        self.assertEqual(lancer(), "cid-essai")
+        self.assertEqual([p["urlKey"] for p in etat["projets"]], ["cadence-observatoire"])
+        self.assertEqual(len(etat["routines"]), 4)
+        self.assertEqual({r["status"] for r in etat["routines"]}, {"paused"})
+        self.assertEqual({r["triggers"][0]["timezone"] for r in etat["routines"]}, {"Europe/Brussels"})
+        self.assertEqual(etat["journal"], [])  # tout vient de l'import, aucune réconciliation à faire
+        # Seconde application, paquet à reprendre (empreinte) : l'import exclut les routines déjà là, aucun doublon.
+        lancer()
+        self.assertEqual(len(etat["routines"]), 4)
+        self.assertFalse([c for c in etat["imports"][1] if c.endswith("/TASK.md")])
+        self.assertEqual(etat["journal"], [])
+        # Seconde application, déjà à jour : aucun import, aucune écriture ; une routine activée par un humain le reste.
+        etat["raisons"] = []
+        etat["routines"][0]["status"] = "active"
+        lancer()
+        self.assertEqual((len(etat["imports"]), etat["journal"]), (2, []))
+        self.assertEqual(etat["routines"][0]["status"], "active")
+
+    def test_routine_realignee_sans_toucher_au_statut(self):
+        lancer, etat = self.appliquer("observatoire")
+        lancer()
+        etat["raisons"] = []
+        etat["routines"][1]["concurrencyPolicy"] = "always_enqueue"
+        lancer()
+        self.assertEqual([(m, c, sorted(b)) for m, c, b in etat["journal"]],
+                         [("PATCH", "/routines/r-1", ["concurrencyPolicy"])])
+
+    def test_autre_service_sans_projet_ni_routine(self):
+        lancer, etat = self.appliquer("juridique")
+        lancer()
+        self.assertEqual((etat["projets"], etat["routines"], etat["journal"]), ([], [], []))
 
 
 class TestRubriques(unittest.TestCase):
@@ -450,6 +755,23 @@ class TestRubriques(unittest.TestCase):
         self.assertFalse(self.vo.rubriques_conformes(r + ["Pièges", "Pièges"]))
         self.assertFalse(self.vo.rubriques_conformes(r[:-1] + ["Pièges"] + r[-1:] + ["Pièges"]))
         self.assertFalse(self.vo.rubriques_conformes(r + ["Sources officielles", "Sources officielles"]))
+
+
+class FuiteTmp(unittest.TestCase):
+    """AFC-A17 (fuite /tmp, autres suites) : un lancement ne laisse aucun dossier dans /tmp, qui est en mémoire vive."""
+
+    def test_lancement_ne_laisse_rien_dans_tmp(self):
+        # Un TMPDIR neuf isole le compte des dossiers des autres agents ; le dernier lancement échoue exprès.
+        import os
+        import subprocess
+        import tempfile
+        env = {k: v for k, v in os.environ.items() if k != "ATELIER_DONNEES_LOCALES"}
+        for noms in (["TestPorteDeterministe.test_autres_services_sans_deterministe", "TestCadenceService.test_paquet_observatoire", "TestCadenceService.test_observatoire_importe_un_projet_et_quatre_routines_en_pause"], ["FuiteTmp.test_inexistant"]):
+            with tempfile.TemporaryDirectory() as tmp:
+                fini = subprocess.run([sys.executable, "-I", __file__, *noms], env={**env, "TMPDIR": tmp},
+                                      capture_output=True, text=True, check=False)
+                self.assertEqual(fini.returncode != 0, noms[0].endswith("inexistant"), fini.stderr[-500:])
+                self.assertEqual(os.listdir(tmp), [], noms)
 
 
 if __name__ == "__main__":

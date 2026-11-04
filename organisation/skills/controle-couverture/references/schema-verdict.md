@@ -1,8 +1,7 @@
 # Dépôt d'un verdict structuré
 
-Le schéma qui fait autorité est celui du moteur de l'atelier :
-`DeposerVerdictEntree` dans `plugin-atelier/src/contrats/revues.ts` (contrats gelés, voir
-`docs/contrats.md` du dépôt). Cette page en donne la forme pratique.
+Le schéma qui fait autorité est celui que le serveur de l'atelier applique au dépôt ; cette page le recopie
+(ne lis jamais le code source du plugin). Un dépôt refusé (400) dit quel champ corriger.
 
 ## Route
 
@@ -41,6 +40,13 @@ Seul l'agent désigné pour le rôle peut déposer ; le producteur ne le peut ja
 }
 ```
 
+Limites des champs : `revisionId` est un identifiant (UUID) ; `verdict` vaut `PASS`, `CHANGES_REQUESTED`,
+`BLOCKED_INFORMATION` ou `NOT_APPLICABLE_JUSTIFIED` ; codes d'exigence au format `REQ-001` ;
+`exigencesExaminees` et `preuvesVerifiees` : 200 au plus ; `constats` et `constatsResolus` : 100 au plus ;
+`requirementIds` d'un constat : 50 au plus ; `emplacement` : 300 caractères au plus ; `description`, `preuve`,
+`correctionAttendue` et `justification` : 4 000 caractères au plus, jamais vides ; `limites` et
+`controlesNonExecutes` : 30 lignes de 1 000 caractères au plus. Seuls `revisionId`, `role` et `verdict` sont obligatoires : un autre champ omis vaut liste vide (`justification` : `null`).
+
 Le serveur attribue `findingId`, relecteur et horodatage. Catégories admises :
 `exigence_manquante`, `preuve_absente`, `affirmation_non_sourcee`, `offre_non_confirmee`,
 `promesse_excessive`, `lien_defectueux`, `page_erreur`, `incoherence_canaux`, `marque`,
@@ -50,7 +56,8 @@ Le serveur attribue `findingId`, relecteur et horodatage. Catégories admises :
 ## Règles vérifiées par le serveur
 
 - `PASS` refusé s'il contient un constat `critique` ou `majeure`.
-- `CHANGES_REQUESTED` exige au moins un constat nouveau, ou un constat bloquant du même rôle encore ouvert.
+- `CHANGES_REQUESTED` exige au moins un constat nouveau, ou un constat bloquant du même rôle encore ouvert ;
+  sans constat nouveau, une `justification` (constats maintenus et pourquoi) est obligatoire.
 - `NOT_APPLICABLE_JUSTIFIED` exige une `justification`.
 - Un verdict sur une révision qui n'est plus la courante est périmé : la porte déterministe
   ne le compte pas.

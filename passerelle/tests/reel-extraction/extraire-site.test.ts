@@ -1,11 +1,11 @@
 // Service réel « extraction » (outil extraire_site) : essais avec un appel Crawl4AI factice (aucun conteneur).
 
-import { mkdtempSync, writeFileSync, chmodSync } from "node:fs";
+import { mkdtempSync, writeFileSync, chmodSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { describe, expect, it } from "vitest";
+import { afterAll, describe, expect, it } from "vitest";
 import { creerLimiteur } from "../../src/reel/extraction/contenu-tiers.js";
-import { corpsCrawl, DELAI_MS, DELAI_PAGE_MS, PAGES_DEFAUT, lireCorpsPlafonne, RECYCLAGE_PAGES, extraireSite, optionsExtractionDepuisEnv, outilsExtraction, PAGES_MAX, PROFONDEUR_MAX, MARKDOWN_MAX_PAGE, MARKDOWN_MAX_TOTAL, type AppelCrawl } from "../../src/reel/extraction/extraire-site.js";
+import { ATTENTE_FILE_MAX_MS, corpsCrawl, DELAI_MS, DELAI_PAGE_MS, PAGES_DEFAUT, lireCorpsPlafonne, RECYCLAGE_PAGES, extraireSite, optionsExtractionDepuisEnv, outilsExtraction, PAGES_MAX, PROFONDEUR_MAX, MARKDOWN_MAX_PAGE, MARKDOWN_MAX_TOTAL, type AppelCrawl } from "../../src/reel/extraction/extraire-site.js";
 
 const publique = { resoudre: async () => ["93.184.216.34"] };
 const page = (url: string, md: string, extra: Record<string, unknown> = {}) => ({ url, success: true, status_code: 200, redirected_url: url, markdown: { raw_markdown: md, fit_markdown: "" }, metadata: { title: "Titre", depth: 0 }, ...extra });
@@ -72,6 +72,7 @@ describe("extraire_site", () => {
 
 describe("réglages de l'extraction", () => {
   const dossier = mkdtempSync(join(tmpdir(), "essai-crawl-"));
+  afterAll(() => rmSync(dossier, { recursive: true, force: true }));
   const fichier = (mode: number, contenu = "jeton-essai\n") => { const f = join(dossier, `j${mode.toString(8)}`); writeFileSync(f, contenu); chmodSync(f, mode); return f; };
 
   it("lit le jeton depuis un fichier 0600", () => {
@@ -92,6 +93,10 @@ describe("réglages de l'extraction", () => {
 });
 
 describe("revue de sécurité : plafonds, simultanéité, texte tiers", () => {
+  it("file d'attente et extraction tiennent sous le délai de 60 s d'un appel par le socle (T1)", () => {
+    expect(ATTENTE_FILE_MAX_MS + DELAI_MS).toBeLessThanOrEqual(55_000);
+  });
+
   it("délai par page : pages par défaut x délai reste sous le délai total", () => {
     expect(PAGES_DEFAUT * DELAI_PAGE_MS).toBeLessThan(DELAI_MS);
     const params = (corpsCrawl("https://exemple.be/", 0, 5) as { crawler_config: { params: { page_timeout: number } }; browser_config: { params: { max_pages_before_recycle: number } } });

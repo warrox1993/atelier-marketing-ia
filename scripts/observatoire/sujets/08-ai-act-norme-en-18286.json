@@ -1,0 +1,188 @@
+{
+  "numero": 8,
+  "slug": "ai-act-norme-en-18286",
+  "projet": {
+    "companyId": "<OBS>",
+    "slug": "article-8-ai-act-norme-en-18286",
+    "nom": "AI Act : la première norme harmonisée, EN 18286, publiée au Journal officiel",
+    "alias": [
+      {
+        "type": "site",
+        "valeur": "https://digital-strategy.ec.europa.eu/en/library/first-harmonised-standard-supporting-ai-act-published-official-journal"
+      },
+      {
+        "type": "site",
+        "valeur": "https://www.cencenelec.eu/news-events/news/2026/en-in-the-spotlight/2026-10-15-en-18286-2026-published-in-ojeu/"
+      },
+      {
+        "type": "site",
+        "valeur": "http://publications.europa.eu/resource/cellar/05805dc1-c76c-11f1-a77b-01aa75ed71a1.0006.03/DOC_1"
+      },
+      {
+        "type": "site",
+        "valeur": "http://publications.europa.eu/resource/cellar/b459c07f-86fb-11f1-bf5e-01aa75ed71a1.0006.03/DOC_1"
+      },
+      {
+        "type": "site",
+        "valeur": "https://digital-strategy.ec.europa.eu/en/policies/regulatory-framework-ai"
+      }
+    ]
+  },
+  "motifSansProjet": null,
+  "aliasRefuses": [],
+  "brief": {
+    "tache": "Rédiger l'article n° 8 du magazine : AI Act : la première norme harmonisée, EN 18286, publiée au Journal officiel",
+    "categorie": "reglementation-ue",
+    "publie_le": "2026-10-19",
+    "angle": "Pour un fournisseur de système d'IA à haut risque, appliquer EN 18286 donne une présomption de conformité à l'article 17 de l'AI Act (système de gestion de la qualité). Texte à écrire pour deux lecteurs : le développeur (ce qu'il peut faire ou doit vérifier) et le décideur (ce que cela change pour un choix d'outil, de coût ou de conformité), sans rien ajouter qui ne figure pas dans les faits ci-dessous.",
+    "plan": [
+      "Ce qui est annoncé ou publié : les faits datés, tels que la source les énonce",
+      "Ce que cela change pour un développeur : usage concret, uniquement à partir des faits listés",
+      "Ce que cela change pour un décideur : choix, coûts, risques, uniquement à partir des faits listés",
+      "Ce qui n'est pas établi : points ouverts, chiffres d'éditeur non mesurés de façon indépendante",
+      "Sources et méthode de vérification : liste des URL lues le 27/10/2026"
+    ],
+    "faits": [
+      {
+        "texte": "La Commission a publié au Journal officiel la référence de la première norme harmonisée à l'appui de l'AI Act.",
+        "source_url": "https://digital-strategy.ec.europa.eu/en/library/first-harmonised-standard-supporting-ai-act-published-official-journal",
+        "extrait_exact": "The European Commission has published the reference to the first harmonised standard supporting the implementation of the AI Act in the Official Journal of the European Union.",
+        "statut_propose": "confirme_doc_officielle"
+      },
+      {
+        "texte": "La norme s'intitule EN 18286:2026 et porte sur le système de gestion de la qualité.",
+        "source_url": "https://digital-strategy.ec.europa.eu/en/library/first-harmonised-standard-supporting-ai-act-published-official-journal",
+        "extrait_exact": "EN 18286:2026 - Artificial intelligence - Quality management system for EU AI Act regulatory purposes",
+        "statut_propose": "confirme_doc_officielle"
+      },
+      {
+        "texte": "Elle est publiée par la décision d'exécution (UE) 2026/2274 et donne une présomption de conformité à l'article 17.",
+        "source_url": "https://digital-strategy.ec.europa.eu/en/library/first-harmonised-standard-supporting-ai-act-published-official-journal",
+        "extrait_exact": "Its publication through Commission Implementing Decision (EU) 2026/2274 means that providers implementing this standard will benefit from a presumption of conformity with the Article 17 requirements covered by the standard.",
+        "statut_propose": "confirme_doc_officielle"
+      },
+      {
+        "texte": "Selon la Commission, c'est la seule norme de gestion de la qualité pour l'IA qui donne cette présomption.",
+        "source_url": "https://digital-strategy.ec.europa.eu/en/library/first-harmonised-standard-supporting-ai-act-published-official-journal",
+        "extrait_exact": "It is the only AI QMS standard with a presumption of conformity.",
+        "statut_propose": "confirme_doc_officielle"
+      },
+      {
+        "texte": "Elle se superpose aux normes existantes comme ISO/IEC 42001 ou ISO 9001 au lieu de les remplacer.",
+        "source_url": "https://digital-strategy.ec.europa.eu/en/library/first-harmonised-standard-supporting-ai-act-published-official-journal",
+        "extrait_exact": "designed to be layered on top of the existing international standards – such as ISO/IEC 42001, ISO 9001 or a sectoral QMS (e.g. ISO 13485) – rather than replace them",
+        "statut_propose": "confirme_doc_officielle"
+      },
+      {
+        "texte": "D'autres normes harmonisées doivent suivre.",
+        "source_url": "https://digital-strategy.ec.europa.eu/en/library/first-harmonised-standard-supporting-ai-act-published-official-journal",
+        "extrait_exact": "with further harmonised standards expected to follow",
+        "statut_propose": "confirme_doc_officielle"
+      },
+      {
+        "texte": "Le CEN-CENELEC situe la publication au Journal officiel le jour de la Journée mondiale de la normalisation.",
+        "source_url": "https://www.cencenelec.eu/news-events/news/2026/en-in-the-spotlight/2026-10-15-en-18286-2026-published-in-ojeu/",
+        "extrait_exact": "World Standards Day this year marked an additional milestone for Europe's AI ecosystem. The day coincided with the publication in the Official Journal of the European Union (OJEU)",
+        "statut_propose": "rapporte_editeur"
+      },
+      {
+        "texte": "La page de la Commission est datée du 19 octobre 2026 (« Publication »), dernière mise à jour le 21 octobre 2026.",
+        "source_url": "https://digital-strategy.ec.europa.eu/en/library/first-harmonised-standard-supporting-ai-act-published-official-journal",
+        "extrait_exact": "Publication 19 October 2026",
+        "statut_propose": "confirme_doc_officielle"
+      },
+      {
+        "texte": "La page du CEN-CENELEC est publiée le 15 octobre 2026 ; elle ne donne pas la date de parution au Journal officiel, seulement qu'elle coïncide avec la Journée mondiale de la normalisation.",
+        "source_url": "https://www.cencenelec.eu/news-events/news/2026/en-in-the-spotlight/2026-10-15-en-18286-2026-published-in-ojeu/",
+        "extrait_exact": "POSTED: 2026-10-15",
+        "statut_propose": "rapporte_editeur"
+      },
+      {
+        "texte": "La décision d'exécution (UE) 2026/2274 est parue au Journal officiel, série L, le 14 octobre 2026 (date imprimée en en-tête, juste après le numéro 2026/2274).",
+        "source_url": "http://publications.europa.eu/resource/cellar/05805dc1-c76c-11f1-a77b-01aa75ed71a1.0006.03/DOC_1",
+        "extrait_exact": "14.10.2026",
+        "statut_propose": "confirme_doc_officielle"
+      },
+      {
+        "texte": "Elle a été adoptée à Bruxelles le 12 octobre 2026.",
+        "source_url": "http://publications.europa.eu/resource/cellar/05805dc1-c76c-11f1-a77b-01aa75ed71a1.0006.03/DOC_1",
+        "extrait_exact": "Done at Brussels, 12 October 2026",
+        "statut_propose": "confirme_doc_officielle"
+      },
+      {
+        "texte": "Elle entre en vigueur le jour de sa publication au Journal officiel, donc le 14 octobre 2026.",
+        "source_url": "http://publications.europa.eu/resource/cellar/05805dc1-c76c-11f1-a77b-01aa75ed71a1.0006.03/DOC_1",
+        "extrait_exact": "This Decision shall enter into force on the day of its publication in the Official Journal of the European Union",
+        "statut_propose": "confirme_doc_officielle"
+      },
+      {
+        "texte": "Son annexe liste une seule référence : EN 18286:2026, intitulée « Artificial intelligence – Quality management system for EU AI Act regulatory purposes ».",
+        "source_url": "http://publications.europa.eu/resource/cellar/05805dc1-c76c-11f1-a77b-01aa75ed71a1.0006.03/DOC_1",
+        "extrait_exact": "Artificial intelligence – Quality management system for EU AI Act regulatory purposes",
+        "statut_propose": "confirme_doc_officielle"
+      },
+      {
+        "texte": "Depuis le règlement (UE) 2026/1744 (omnibus numérique sur l'IA, Journal officiel du 24 juillet 2026), les exigences du chapitre III, sections 1 à 3, pour les systèmes à haut risque de l'annexe III (article 6, paragraphe 2) s'appliquent à partir du 2 décembre 2027.",
+        "source_url": "http://publications.europa.eu/resource/cellar/b459c07f-86fb-11f1-bf5e-01aa75ed71a1.0006.03/DOC_1",
+        "extrait_exact": "2 December 2027 as regards AI systems classified as high-risk pursuant to Article 6(2) and Annex III; and",
+        "statut_propose": "confirme_doc_officielle"
+      },
+      {
+        "texte": "Pour les systèmes à haut risque de l'annexe I (article 6, paragraphe 1, produits réglementés), la date d'application est le 2 août 2028.",
+        "source_url": "http://publications.europa.eu/resource/cellar/b459c07f-86fb-11f1-bf5e-01aa75ed71a1.0006.03/DOC_1",
+        "extrait_exact": "2 August 2028 as regards AI systems classified as high-risk pursuant to Article 6(1) and Annex I;",
+        "statut_propose": "confirme_doc_officielle"
+      },
+      {
+        "texte": "La page de la Commission sur le cadre réglementaire de l'IA confirme la date du 2 décembre 2027 pour les cas d'usage à haut risque de l'annexe III.",
+        "source_url": "https://digital-strategy.ec.europa.eu/en/policies/regulatory-framework-ai",
+        "extrait_exact": "will apply from 2 December 2027",
+        "statut_propose": "confirme_doc_officielle"
+      },
+      {
+        "texte": "L'en-tête du texte de la décision, servi par l'Office des publications, porte : Journal officiel, série L, 2026/2274, 14.10.2026, décision d'exécution (UE) 2026/2274 du 12 octobre 2026 sur les normes harmonisées pour les systèmes d'IA à haut risque. (lu le 27/10/2026 à 04:48 UTC)",
+        "source_url": "http://publications.europa.eu/resource/cellar/05805dc1-c76c-11f1-a77b-01aa75ed71a1.0006.03/DOC_1",
+        "extrait_exact": "Official Journal of the European Union EN L series 2026/2274 14.10.2026 COMMISSION IMPLEMENTING DECISION (EU) 2026/2274 of 12 October 2026 on the harmonised standards for high-risk AI systems",
+        "statut_propose": "confirme_doc_officielle"
+      },
+      {
+        "texte": "La notice du Cellar (Office des publications), interrogée par SPARQL, donne au 14 octobre 2026 la date de publication de l'acte au Journal officiel. (lu le 27/10/2026 à 04:47 UTC)",
+        "source_url": "https://publications.europa.eu/webapi/rdf/sparql",
+        "extrait_exact": "cdm#official-journal-act_date_publication\" } , \"o\": { \"type\": \"literal\", \"datatype\": \"http://www.w3.org/2001/XMLSchema#date\", \"value\": \"2026-10-14\" }",
+        "statut_propose": "confirme_doc_officielle"
+      },
+      {
+        "texte": "La même notice donne au 14 octobre 2026 la date d'entrée en vigueur de la décision. (lu le 27/10/2026 à 04:47 UTC)",
+        "source_url": "https://publications.europa.eu/webapi/rdf/sparql",
+        "extrait_exact": "cdm#resource_legal_date_entry-into-force\" } , \"o\": { \"type\": \"literal\", \"datatype\": \"http://www.w3.org/2001/XMLSchema#date\", \"value\": \"2026-10-14\" }",
+        "statut_propose": "confirme_doc_officielle"
+      },
+      {
+        "texte": "La même notice donne au 12 octobre 2026 la date du document. (lu le 27/10/2026 à 04:47 UTC)",
+        "source_url": "https://publications.europa.eu/webapi/rdf/sparql",
+        "extrait_exact": "cdm#work_date_document\" } , \"o\": { \"type\": \"literal\", \"datatype\": \"http://www.w3.org/2001/XMLSchema#date\", \"value\": \"2026-10-12\" }",
+        "statut_propose": "confirme_doc_officielle"
+      },
+      {
+        "texte": "La même notice donne la référence interne de la Commission : C(2026)7073. (lu le 27/10/2026 à 04:47 UTC)",
+        "source_url": "https://publications.europa.eu/webapi/rdf/sparql",
+        "extrait_exact": "cdm#resource_legal_manuscript_ref\" } , \"o\": { \"type\": \"literal\", \"datatype\": \"http://www.w3.org/2001/XMLSchema#string\", \"value\": \"C(2026)7073/5061403 - PE_2026_7229\" }",
+        "statut_propose": "confirme_doc_officielle"
+      },
+      {
+        "texte": "Le règlement (UE) 2026/1744, source distincte de la décision d'exécution, modifie le troisième alinéa de l'article 113 de l'AI Act. (lu le 27/10/2026 à 04:48 UTC)",
+        "source_url": "http://publications.europa.eu/resource/cellar/b459c07f-86fb-11f1-bf5e-01aa75ed71a1.0006.03/DOC_1",
+        "extrait_exact": "in Article 113, the third paragraph is amended as follows:",
+        "statut_propose": "confirme_doc_officielle"
+      },
+      {
+        "texte": "Texte complet du point modifié de l'article 113 : application à partir du 2 décembre 2027 pour les systèmes à haut risque de l'article 6, paragraphe 2, et de l'annexe III, et à partir du 2 août 2028 pour ceux de l'article 6, paragraphe 1, et de l'annexe I. (lu le 27/10/2026 à 04:48 UTC)",
+        "source_url": "http://publications.europa.eu/resource/cellar/b459c07f-86fb-11f1-bf5e-01aa75ed71a1.0006.03/DOC_1",
+        "extrait_exact": "shall apply from: (i) 2 December 2027 as regards AI systems classified as high-risk pursuant to Article 6(2) and Annex III; and (ii) 2 August 2028 as regards AI systems classified as high-risk pursuant to Article 6(1) and Annex I;",
+        "statut_propose": "confirme_doc_officielle"
+      }
+    ],
+    "points_ouverts": [],
+    "regles": "Aucun fait, date ou chiffre hors des faits listés. Chaque affirmation renvoie à un fait et à son extrait exact. Pas de tiret cadratin."
+  }
+}

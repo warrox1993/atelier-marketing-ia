@@ -13,6 +13,7 @@ import { lireConfigSocialCrm, SERVICES_SOCIAL_CRM_REELS, servicesServis, type Co
 import { construireConnecteurs } from "./connecteurs.js";
 import { fournisseurHubspotReel } from "./hubspot.js";
 import { fournisseurLinkedinReel } from "./linkedin.js";
+import { fournisseurLinkedinProfilReel } from "./linkedin-profil.js";
 import { fournisseurFacebookReel, fournisseurInstagramReel, type DependancesOutils } from "./meta.js";
 import { fournisseurOdooReel } from "./odoo.js";
 import { fournisseurPipedriveReel } from "./pipedrive.js";
@@ -46,6 +47,7 @@ const FABRIQUES: Record<ServiceSocialCrm, (dep: DependancesOutils) => Fournisseu
   facebook: fournisseurFacebookReel,
   instagram: fournisseurInstagramReel,
   linkedin: fournisseurLinkedinReel,
+  linkedinprofil: fournisseurLinkedinProfilReel,
   crm: fournisseurHubspotReel,
   pipedrive: fournisseurPipedriveReel,
   odoo: fournisseurOdooReel,

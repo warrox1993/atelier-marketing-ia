@@ -1,6 +1,6 @@
 ---
 name: "veille-medias"
-description: "Tient la revue de presse et mesure les retombées médiatiques d'une entreprise belge : retombées retenues ou écartées avec le motif, chaque article daté et lié, indicateurs utiles (nombre de retombées, trafic issu des articles, hausse des recherches de la marque, citation par les moteurs d'IA, conversations commerciales qui citent l'article), alertes de réputation et erreurs factuelles à faire rectifier. À utiliser pour une revue de presse périodique, un bilan après un communiqué ou une alerte ; jamais pour calculer un équivalent en valeur publicitaire, répondre à un journaliste ni exercer un droit de réponse sans validation."
+description: "Tient la revue de presse et mesure les retombées médiatiques d'une entreprise belge ou d'un sujet suivi (presse technique sur un outil ou un modèle) : retombées retenues ou écartées avec le motif, chaque article daté et lié, indicateurs utiles (nombre de retombées, trafic issu des articles, hausse des recherches de la marque, citation par les moteurs d'IA, conversations commerciales qui citent l'article), alertes de réputation et erreurs factuelles à faire rectifier. À utiliser pour une revue de presse périodique, un bilan après un communiqué ou une alerte ; jamais pour calculer un équivalent en valeur publicitaire, répondre à un journaliste ni exercer un droit de réponse sans validation."
 metadata:
   version: "1.0.0"
   langue: "fr"
@@ -51,6 +51,14 @@ dit ce que la couverture a réellement produit, sans indicateur trompeur.
    la compétence `communique-de-presse` et le juriste), saisine d'une instance de déontologie : toutes en carte de
    décision.
 6. **Rédiger la synthèse** : faits marquants, tendances, messages repris, points d'attention.
+
+### Variante : sujet suivi (presse technique)
+
+Pour la veille d'un sujet (un outil, un modèle, une technologie) et non d'une entreprise : les retombées sont les articles
+et publications qui en parlent, retenus ou écartés avec le motif, datés et liés, comme pour une entreprise. Les
+indicateurs propres à une marque (trafic issu des articles, recherches de la marque, conversations commerciales) et
+l'alerte de réputation ne s'appliquent pas ; une erreur factuelle relevée dans un article se signale dans le livrable,
+sans contacter son auteur.
 
 ## Livrable
 

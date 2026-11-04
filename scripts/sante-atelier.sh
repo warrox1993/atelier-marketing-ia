@@ -1,17 +1,26 @@
 #!/usr/bin/env bash
 # Contrôle de santé d'une instance de l'Atelier marketing IA (lecture seule).
 # Vérifie : /api/health (statut ok, sauvegarde de base présente, sans échec, de moins de 2 h),
-# /api/plugins (plugin atelier.marketing-ia à « ready ») et /sante de la passerelle (facultatif).
+# /api/plugins (plugin atelier.marketing-ia à « ready »), /sante de la passerelle (facultatif), les services
+# annexes, les agents des entreprises actives (statut error, 3 runs de suite en échec, connexion Claude perdue),
+# l'espace disque et les limites inotify de l'utilisateur.
 # Code de sortie : 0 = tout va bien ; 1 = au moins une anomalie ; 2 = mauvais usage.
 # Chaque anomalie est écrite sur la sortie d'erreur (donc dans journald sous systemd).
 #
 # Usage : scripts/sante-atelier.sh [--port N] [--passerelle URL] [--age-max-heures H] [--notifier]
 #                                  [--fichier-reponse sante.json] [--fichier-plugins plugins.json]
 #                                  [--fichier-passerelle passerelle.json] [--fichier-unites unites.txt]
+#                                  [--fichier-agents agents.json --fichier-runs runs.json]
+#                                  [--fichier-disques disques.txt] [--fichier-inotify inotify.txt]
 # Variables : ATELIER_PORT (défaut 3100), ATELIER_PASSERELLE_URL (vide = passerelle non contrôlée),
-#             ATELIER_SANTE_AGE_MAX_HEURES (défaut 2), ATELIER_SANTE_UNITES (unités systemd annexes).
-# Test avec réponse simulée : --fichier-reponse remplace l'appel à /api/health ; dans ce mode,
-# plugins et passerelle ne sont contrôlés que si leur fichier simulé est donné aussi.
+#             ATELIER_SANTE_AGE_MAX_HEURES (défaut 2), ATELIER_SANTE_UNITES (unités systemd annexes),
+#             ATELIER_SANTE_DISQUES (défaut « / /mnt/donnees », dossiers absents ignorés),
+#             ATELIER_SANTE_DISQUE_MAX (défaut 90 %), ATELIER_SANTE_ETAT (empreinte de la dernière alerte
+#             envoyée par courriel, défaut ~/.local/state/atelier/sante-<port>.alerte).
+# --notifier : notification bureau à chaque anomalie ; courriel (scripts/alerte-courriel.sh) seulement quand
+# la liste des anomalies change, et un courriel « rétabli » au retour à la normale.
+# Test avec réponse simulée : --fichier-reponse remplace l'appel à /api/health ; dans ce mode, chaque autre
+# contrôle n'a lieu que si son fichier simulé est donné aussi.
 # Un fichier simulé absent ou vide équivaut à « pas de réponse ».
 set -uo pipefail
 
@@ -19,7 +28,10 @@ PORT="${ATELIER_PORT:-3100}"
 PASSERELLE="${ATELIER_PASSERELLE_URL:-}"
 AGE_MAX="${ATELIER_SANTE_AGE_MAX_HEURES:-2}"
 NOTIFIER=0
-F_SANTE=""; F_PLUGINS=""; F_PASSERELLE=""; F_UNITES=""
+F_SANTE=""; F_PLUGINS=""; F_PASSERELLE=""; F_UNITES=""; F_AGENTS=""; F_RUNS=""; F_DISQUES=""; F_INOTIFY=""
+DISQUES="${ATELIER_SANTE_DISQUES:-/ /mnt/donnees}"
+DISQUE_MAX="${ATELIER_SANTE_DISQUE_MAX:-90}"
+ETAT="${ATELIER_SANTE_ETAT:-}"
 UNITES="${ATELIER_SANTE_UNITES:-}"
 SIMULE=0
 PLUGIN_ID="atelier.marketing-ia"
@@ -27,7 +39,7 @@ PLUGIN_ID="atelier.marketing-ia"
 # shellcheck disable=SC1091
 source "$(dirname "${BASH_SOURCE[0]}")/lib-cle-board.sh"
 
-usage() { sed -n '2,15p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//' >&2; }
+usage() { sed -n '2,24p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//' >&2; }
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -39,6 +51,10 @@ while [[ $# -gt 0 ]]; do
     --fichier-plugins) F_PLUGINS="${2:-}"; shift 2 || { usage; exit 2; } ;;
     --fichier-passerelle) F_PASSERELLE="${2:-}"; shift 2 || { usage; exit 2; } ;;
     --fichier-unites) F_UNITES="${2:-}"; shift 2 || { usage; exit 2; } ;;
+    --fichier-agents) F_AGENTS="${2:-}"; shift 2 || { usage; exit 2; } ;;
+    --fichier-runs) F_RUNS="${2:-}"; shift 2 || { usage; exit 2; } ;;
+    --fichier-disques) F_DISQUES="${2:-}"; shift 2 || { usage; exit 2; } ;;
+    --fichier-inotify) F_INOTIFY="${2:-}"; shift 2 || { usage; exit 2; } ;;
     -h|--help) usage; exit 0 ;;
     *) echo "Argument inconnu : $1" >&2; usage; exit 2 ;;
   esac
@@ -46,6 +62,8 @@ done
 
 [[ "${PORT}" =~ ^[0-9]+$ ]] || { echo "Port invalide : ${PORT}" >&2; exit 2; }
 [[ "${AGE_MAX}" =~ ^[0-9]+([.][0-9]+)?$ ]] || { echo "Âge maximal invalide : ${AGE_MAX}" >&2; exit 2; }
+[[ "${DISQUE_MAX}" =~ ^[0-9]+$ ]] || { echo "Seuil disque invalide : ${DISQUE_MAX}" >&2; exit 2; }
+ETAT="${ETAT:-${XDG_STATE_HOME:-${HOME}/.local/state}/atelier/sante-${PORT}.alerte}"
 command -v jq >/dev/null 2>&1 || { echo "jq est requis (sudo apt install jq)." >&2; exit 2; }
 
 PROBLEMES=()
@@ -127,12 +145,14 @@ fi
 
 # --- 4. Services annexes (unités systemd utilisateur : e-mailing, pages, mesure d'audience, extraction…) ---
 # Liste dans ATELIER_SANTE_UNITES (noms séparés par des espaces, vide = non contrôlé). En simulation,
-# --fichier-unites donne une ligne « unité état » par service à la place de systemctl.
+# --fichier-unites donne une ligne « unité état [activation] » par service à la place de systemctl.
+# Un service désactivé (is-enabled = disabled) est « à la demande » : il n'est contrôlé que s'il est activé.
 if [[ -n "${F_UNITES}" || ( "${SIMULE}" -eq 0 && -n "${UNITES}" ) ]]; then
   if [[ -n "${F_UNITES}" ]]; then
     if [[ -s "${F_UNITES}" ]]; then
-      while read -r unite etat _; do
+      while read -r unite etat activation _; do
         [[ -n "${unite}" ]] || continue
+        [[ "${activation}" == "disabled" ]] && continue
         [[ "${etat}" == "active" ]] || alerte "service ${unite} arrêté (état : ${etat:-inconnu})"
       done < "${F_UNITES}"
     else
@@ -141,20 +161,115 @@ if [[ -n "${F_UNITES}" || ( "${SIMULE}" -eq 0 && -n "${UNITES}" ) ]]; then
   else
     for unite in ${UNITES}; do
       [[ "${unite}" =~ ^[A-Za-z0-9@._][A-Za-z0-9@._-]*$ ]] || { alerte "nom d'unité invalide : ${unite}"; continue; }
+      # Service désactivé = « à la demande » (règle de l'opérateur du 01/11/2026) : arrêté, ce n'est pas une anomalie.
+      [[ "$(systemctl --user is-enabled -- "${unite}" 2>/dev/null)" == "disabled" ]] && continue
       etat="$(systemctl --user is-active -- "${unite}" 2>/dev/null)"
       [[ "${etat}" == "active" ]] || alerte "service ${unite} arrêté (état : ${etat:-inconnu})"
     done
   fi
 fi
 
+# --- 5. Agents et runs des entreprises actives (EXP-C1, EXP-C4) ---
+# Par agent hors pause : statut error, 3 derniers runs en échec (failed ou timed_out), ou dernier run
+# refusé faute de connexion Claude. Les runs d'un agent absent de la liste (supprimé) sont ignorés.
+controler_runs() {
+  local entreprise="$1" agents="$2" runs="$3" ligne
+  while IFS= read -r ligne; do
+    [[ -n "${ligne}" ]] && alerte "${entreprise}${ligne}"
+  done < <(jq -r --argjson A "${agents}" '
+    ($A | map({key: .id, value: .}) | from_entries) as $par
+    | ($A[] | select(.status == "error") | "agent \(.name) en erreur (statut error)"),
+      (group_by(.agentId)[] | sort_by(.createdAt) | reverse | . as $r | $par[$r[0].agentId]
+       | select(. != null and ((.status // "") | IN("paused", "terminated") | not)) | .name as $nom
+       | (if $r[0].errorCode == "claude_auth_required"
+          then "agent \($nom) : dernier run refusé, connexion Claude à refaire (claude_auth_required)" else empty end),
+         (if ($r | length) >= 3 and ($r[:3] | all(.status == "failed" or .status == "timed_out"))
+          then "agent \($nom) : 3 runs de suite en échec (dernier : \($r[0].errorCode // $r[0].status))" else empty end))
+  ' <<<"${runs}" 2>/dev/null || echo "runs ou agents illisibles")
+}
+if [[ -n "${F_RUNS}" ]]; then
+  AGENTS_SIM="[]"; [[ -s "${F_AGENTS}" ]] && AGENTS_SIM="$(cat "${F_AGENTS}")"
+  if RUNS="$(recuperer "${F_RUNS}" "")" && jq -e 'type == "array"' >/dev/null 2>&1 <<<"${RUNS}"; then
+    controler_runs "" "${AGENTS_SIM}" "${RUNS}"
+  else
+    alerte "runs simulés illisibles (${F_RUNS})"
+  fi
+elif [[ "${SIMULE}" -eq 0 && "${SANTE_OK}" -eq 1 ]]; then
+  if ENTREPRISES="$(recuperer "" "http://127.0.0.1:${PORT}/api/companies")"; then
+    while IFS=$'\t' read -r cid cnom; do
+      [[ "${cid}" =~ ^[A-Za-z0-9-]+$ ]] || continue
+      if AGENTS="$(recuperer "" "http://127.0.0.1:${PORT}/api/companies/${cid}/agents")" \
+          && RUNS="$(recuperer "" "http://127.0.0.1:${PORT}/api/companies/${cid}/heartbeat-runs?limit=200&summary=true")"; then
+        # shortcut: 200 runs par entreprise, un agent rare peut n'y avoir que 1 ou 2 runs ; passer par agentId si besoin.
+        controler_runs "${cnom} : " "${AGENTS}" "${RUNS}"
+      else
+        alerte "${cnom} : agents ou runs illisibles"
+      fi
+    done < <(jq -r '.[] | select(.status == "active") | [.id, .name] | @tsv' <<<"${ENTREPRISES}" 2>/dev/null)
+  else
+    alerte "pas de réponse exploitable de /api/companies"
+  fi
+fi
+
+# --- 6. Espace disque (EXP-C4) : une ligne « dossier pourcentage » par disque ---
+if [[ -n "${F_DISQUES}" || "${SIMULE}" -eq 0 ]]; then
+  if [[ -n "${F_DISQUES}" ]]; then
+    ETAT_DISQUES="$(cat "${F_DISQUES}" 2>/dev/null)"
+  else
+    ETAT_DISQUES="$(for d in ${DISQUES}; do [[ -d "${d}" ]] && printf '%s %s\n' "${d}" "$(df --output=pcent -- "${d}" | tail -1 | tr -dc '0-9')"; done)"
+  fi
+  while read -r d pct; do
+    [[ -n "${d}" ]] || continue
+    [[ "${pct}" =~ ^[0-9]+$ ]] || { alerte "espace disque illisible pour ${d}"; continue; }
+    (( pct < DISQUE_MAX )) || alerte "disque ${d} plein à ${pct} % (seuil ${DISQUE_MAX} %)"
+  done <<<"${ETAT_DISQUES}"
+fi
+
+# --- 7. Limites inotify de l'utilisateur (EXP-C11 : 486 « No space left on device » le 21/10) ---
+# Une ligne « limites <max instances> <max surveillances> », puis une ligne « processus surveillances » par
+# instance inotify. Seuil : 90 % de l'une des deux limites ; l'alerte nomme le plus gros consommateur.
+if [[ -n "${F_INOTIFY}" || "${SIMULE}" -eq 0 ]]; then
+  if [[ -n "${F_INOTIFY}" ]]; then
+    ETAT_INOTIFY="$(cat "${F_INOTIFY}" 2>/dev/null)"
+  else
+    ETAT_INOTIFY="limites $(cat /proc/sys/fs/inotify/max_user_instances) $(cat /proc/sys/fs/inotify/max_user_watches)"$'\n'
+    while read -r dossier fd; do
+      ETAT_INOTIFY+="$(tr ' ' '_' < "${dossier%/fd}/comm" 2>/dev/null || echo inconnu) $(grep -c '^inotify' "${dossier%/fd}/fdinfo/${fd}" 2>/dev/null)"$'\n'
+    done < <(find /proc/[0-9]*/fd -lname 'anon_inode:inotify' -printf '%h %f\n' 2>/dev/null)
+  fi
+  while IFS= read -r ligne; do
+    [[ -n "${ligne}" ]] && alerte "${ligne}"
+  done < <(awk '$1 == "limites" {mi = $2; mw = $3; next}
+    NF == 2 {n++; w += $2; par[$1] += $2}
+    END {
+      if (mi == "" || mw == "") { print "limites inotify illisibles"; exit }
+      for (p in par) if (par[p] > max) { max = par[p]; gros = p }
+      if (n >= 0.9 * mi) printf "instances inotify : %d sur %d (plus gros : %s)\n", n, mi, gros
+      if (w >= 0.9 * mw) printf "surveillances inotify : %d sur %d (plus gros : %s (%d))\n", w, mw, gros, max
+    }' <<<"${ETAT_INOTIFY}")
+fi
+
+# --- Courriel (EXP-C3) : seulement quand la liste des anomalies change ; chiffres ignorés (âges, pourcentages) ---
+courriel() { "$(dirname "${BASH_SOURCE[0]}")/alerte-courriel.sh" "$1" "$2"; }
+
 # --- Verdict ---
 if [[ "${#PROBLEMES[@]}" -eq 0 ]]; then
   echo "Atelier (port ${PORT}) : tout va bien."
+  if [[ "${NOTIFIER}" -eq 1 && -f "${ETAT}" ]]; then
+    courriel "Atelier marketing IA : rétabli (port ${PORT})" "Plus aucune anomalie au contrôle de $(date '+%d/%m/%Y %H:%M') sur $(hostname)." \
+      && rm -f "${ETAT}"
+  fi
   exit 0
 fi
 
 for p in "${PROBLEMES[@]}"; do echo "ALERTE Atelier (port ${PORT}) : ${p}" >&2; done
 if [[ "${NOTIFIER}" -eq 1 ]]; then
+  empreinte="$(printf '%s\n' "${PROBLEMES[@]}" | tr -d '0-9' | sha256sum | cut -d' ' -f1)"
+  if [[ "$(cat "${ETAT}" 2>/dev/null)" != "${empreinte}" ]]; then
+    courriel "Atelier marketing IA : alerte (port ${PORT})" "$(printf -- '- %s\n' "${PROBLEMES[@]}")
+Contrôle du $(date '+%d/%m/%Y %H:%M') sur $(hostname). Historique : journalctl --user -u atelier-sante@atelier" \
+      && mkdir -p "$(dirname "${ETAT}")" && printf '%s\n' "${empreinte}" > "${ETAT}"
+  fi
   if command -v notify-send >/dev/null 2>&1; then
     notify-send -u critical "Atelier marketing IA : alerte" "$(printf '%s\n' "${PROBLEMES[@]}")" \
       || echo "notify-send a échoué (pas de session graphique ?)" >&2

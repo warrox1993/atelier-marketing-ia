@@ -10,7 +10,9 @@ import { useCallback, useEffect, useState } from "react";
 import { useHostContext } from "@paperclipai/plugin-sdk/ui";
 import type { StatutLiaison } from "../../contrats/liaisons.js";
 import { NOMS_SERVICES, type LigneRegistre, type ReponseAccesRegistre, type ReponseExportRegistre, type ReponseLireLiaisons, type ReponseRegistre, type VueLiaison } from "../../contrats/liaisons-lecture.js";
-import { Bouton, Champ, Chargement, EnTete, EtatErreur, Horodatage, Pastille, Section, Vide } from "../composants.js";
+import type { CarteService } from "../../contrats/carte-decision.js";
+import { useCartesServices, useDirectionId } from "../cartes-services.js";
+import { Bouton, Champ, Chargement, EnTete, EtatErreur, Horodatage, LienHote, Pastille, Section, Vide } from "../composants.js";
 import { classerErreur, type Ton } from "../format.js";
 import { appelRoute, telechargerBase64 } from "../routes-prospection.js";
 import { STYLES_ECHANGES } from "../styles-echanges.js";
@@ -167,6 +169,16 @@ const STATUTS: ReadonlyArray<{ cle: StatutLiaison; libelle: string }> = [
 ];
 const TAILLE = 25;
 
+/**
+ * Statut affiché d'une ligne : une demande transmise dont la tâche sollicitée (ou une de ses sous-tâches) porte une
+ * carte en attente attend la personne, pas le service ; « Transmise » le cacherait.
+ */
+export function statutRegistre(l: Pick<LigneRegistre, "statut" | "libelleStatut" | "tacheCible">, cartes: readonly CarteService[]): { libelle: string; ton: Ton } {
+  const cible = l.tacheCible;
+  if (l.statut === "ouverte" && cible && cartes.some((c) => c.racine === cible || c.element.issueId === cible)) return { libelle: "Attend votre décision", ton: "attention" };
+  return { libelle: l.libelleStatut, ton: TON[l.statut] };
+}
+
 interface Filtres {
   service: string;
   statut: string;
@@ -183,6 +195,7 @@ function requete(companyId: string, f: Filtres, page: number, extra: Record<stri
 
 export function VueRegistre() {
   const { companyId } = useHostContext();
+  const { cartes } = useCartesServices(useDirectionId(companyId));
   const [filtres, setFiltres] = useState<Filtres>(AUCUN);
   const [page, setPage] = useState(1);
   const [version, setVersion] = useState(0);
@@ -260,7 +273,7 @@ export function VueRegistre() {
         {etat.erreur ? <EtatErreur erreur={etat.erreur} onReessayer={() => setVersion((v) => v + 1)} contexte="le registre des échanges" /> : null}
         {etat.chargement && !d ? <Chargement libelle="Chargement du registre" /> : null}
         {d && d.lignes.length === 0 ? <Vide titre="Aucun échange ne correspond.">Modifiez les filtres, ou attendez qu'un service adresse une demande à un autre.</Vide> : null}
-        {d && d.lignes.length > 0 ? <TableRegistre lignes={d.lignes} /> : null}
+        {d && d.lignes.length > 0 ? <TableRegistre lignes={d.lignes} cartes={cartes} /> : null}
         <div className="atl-ech-barre">
           <p className="atl-attenue" role="status">
             {d ? `${d.total} échange${d.total > 1 ? "s" : ""}, page ${d.page} sur ${d.pages}` : ""}
@@ -291,7 +304,7 @@ export function VueRegistre() {
   );
 }
 
-function TableRegistre({ lignes }: { lignes: readonly LigneRegistre[] }) {
+function TableRegistre({ lignes, cartes }: { lignes: readonly LigneRegistre[]; cartes: readonly CarteService[] }) {
   return (
     <div className="atl-table-cadre">
       <table className="atl-table">
@@ -306,22 +319,27 @@ function TableRegistre({ lignes }: { lignes: readonly LigneRegistre[] }) {
           </tr>
         </thead>
         <tbody>
-          {lignes.map((l) => (
-            <tr key={l.id}>
-              <th scope="row">{l.objet}</th>
-              <td data-libelle="De">{l.nomServiceSource}</td>
-              <td data-libelle="Vers">{l.nomServiceCible}</td>
-              <td data-libelle="Statut">
-                <Pastille ton={TON[l.statut]}>{l.libelleStatut}</Pastille>
-              </td>
-              <td data-libelle="Demandée">
-                <Horodatage iso={l.creeLe} />
-              </td>
-              <td data-libelle="Répondue">
-                <Horodatage iso={l.reponduLe} />
-              </td>
-            </tr>
-          ))}
+          {lignes.map((l) => {
+            const statut = statutRegistre(l, cartes);
+            return (
+              <tr key={l.id}>
+                <th scope="row">
+                  <LienHote vers={`/issues/${l.tacheCible ?? l.tacheOrigine}`}>{l.objet}</LienHote>
+                </th>
+                <td data-libelle="De">{l.nomServiceSource}</td>
+                <td data-libelle="Vers">{l.nomServiceCible}</td>
+                <td data-libelle="Statut">
+                  <Pastille ton={statut.ton}>{statut.libelle}</Pastille>
+                </td>
+                <td data-libelle="Demandée">
+                  <Horodatage iso={l.creeLe} />
+                </td>
+                <td data-libelle="Répondue">
+                  <Horodatage iso={l.reponduLe} />
+                </td>
+              </tr>
+            );
+          })}
         </tbody>
       </table>
     </div>

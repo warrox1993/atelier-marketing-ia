@@ -19,7 +19,7 @@ const AGENT: ActeurHote = { type: "agent", id: id(900), agentId: id(900), userId
 const COORD = id(1);
 const AUTRE_SOC = id(77);
 
-function faux(o: { reveilEchoue?: boolean; cartesEchouent?: boolean; roleCoordinateur?: string } = {}) {
+function faux(o: { reveilEchoue?: boolean; cartesEchouent?: boolean; roleCoordinateur?: string; titreEchoue?: boolean } = {}) {
   const cartes: Ligne[] = [];
   const issues: Ligne[] = [];
   const commentaires: Ligne[] = [];
@@ -38,16 +38,18 @@ function faux(o: { reveilEchoue?: boolean; cartesEchouent?: boolean; roleCoordin
       get: async (agentId: string) => (agentId === COORD ? { id: COORD, name: "Coordinateur Rénovation" } : null),
     },
     issues: {
-      list: async (f: Ligne) => issues.filter((i) => i.companyId === f.companyId && (!f.originKind || i.originKind === f.originKind) && (!f.originId || i.originId === f.originId)),
+      list: async (f: Ligne) => issues.filter((i) => i.companyId === f.companyId && (!f.originKind || i.originKind === f.originKind) && (!f.originId || i.originId === f.originId)).slice(0, f.limit ?? Infinity),
       get: async (issueId: string, companyId: string) => issues.find((i) => i.id === issueId && i.companyId === companyId) ?? null,
       create: async (input: Ligne) => {
-        const issue = { id: id(100 + issues.length), identifier: `DEM-${issues.length + 1}`, createdAt: tic(), ...input };
+        const date = tic();
+        const issue = { id: id(100 + issues.length), identifier: `DEM-${issues.length + 1}`, createdAt: date, updatedAt: date, ...input };
         issues.push(issue);
         return issue;
       },
       update: async (issueId: string, patch: Ligne) => {
+        if (o.titreEchoue && "title" in patch) throw new Error("hôte indisponible");
         miseAJour.push({ issueId, patch });
-        Object.assign(issues.find((i) => i.id === issueId)!, patch);
+        Object.assign(issues.find((i) => i.id === issueId)!, patch, { updatedAt: tic() });
       },
       listInteractions: async (issueId: string, companyId: string) => {
         lecturesCartes.n++;
@@ -58,6 +60,8 @@ function faux(o: { reveilEchoue?: boolean; cartesEchouent?: boolean; roleCoordin
       createComment: async (issueId: string, body: string, companyId: string, o?: Ligne) => {
         const c = { id: id(500 + n++), issueId, companyId, body, authorType: o?.authorAgentId ? "agent" : "system", authorAgentId: o?.authorAgentId ?? null, authorUserId: null, createdAt: tic() };
         commentaires.push(c);
+        const cible = issues.find((i) => i.id === issueId);
+        if (cible) cible.updatedAt = c.createdAt; // l'hôte réel date l'activité de l'issue au dernier commentaire
         return c;
       },
       requestWakeup: async (issueId: string, _c: string, o: Ligne) => {
@@ -69,14 +73,23 @@ function faux(o: { reveilEchoue?: boolean; cartesEchouent?: boolean; roleCoordin
   } as unknown as PluginContext;
   const base = { journaliser: async (e: Ligne) => void journal.push(e) } as unknown as BaseAtelier;
   const routes = routesDiscussion({ ctx, base });
-  const appeler = (cle: "discussion.ouvrir" | "discussion.envoyer" | "discussion.messages", r: Partial<RequeteRoute> = {}) =>
+  const appeler = (cle: "discussion.ouvrir" | "discussion.envoyer" | "discussion.messages" | "discussion.nouvelle" | "discussion.lister" | "discussion.supprimer", r: Partial<RequeteRoute> = {}) =>
     routes[cle]!({ cle, params: {}, query: {}, corps: null, acteur: HUMAIN, companyId: SOC, ...r });
   const refus = async (p: Promise<unknown>) => ((await p.then(() => null, (e: unknown) => e)) as ErreurAtelier | null);
   /** Réponse du Coordinateur dans le fil natif. */
   const repondreCoordinateur = (issueId: string, texte: string) => ctx.issues.createComment(issueId, texte, SOC, { authorAgentId: COORD });
   /** Crée le fil comme le fait le premier message envoyé (l'ouverture de la page, elle, ne crée rien). */
   const creerFil = () => ctx.issues.create({ companyId: SOC, title: "Discussion avec le Coordinateur", status: "backlog", priority: "medium", assigneeAgentId: COORD, originKind: ORIGINE_DISCUSSION as never, originId: `discussion:${SOC}` } as never);
-  return { appeler, refus, creerFil, issues, commentaires, reveils, miseAJour, journal, repondreCoordinateur, cartes, lecturesCartes };
+  /** Issue brute (autre entreprise, sans marqueur, annulée…) injectée telle quelle dans l'hôte. */
+  const injecter = (ligne: Ligne) => {
+    const date = tic();
+    const issue = { id: id(100 + issues.length), identifier: `DEM-${issues.length + 1}`, createdAt: date, updatedAt: date, title: "Autre", status: "backlog", ...ligne };
+    issues.push(issue);
+    return issue;
+  };
+  const nouvelle = async () => ((await appeler("discussion.nouvelle", { corps: { companyId: SOC } })).corps as Ligne);
+  const lister = async () => ((await appeler("discussion.lister")).corps as { discussions: Ligne[] }).discussions;
+  return { appeler, refus, creerFil, injecter, nouvelle, lister, issues, commentaires, reveils, miseAJour, journal, repondreCoordinateur, cartes, lecturesCartes };
 }
 
 const envoyer = (texte: unknown, companyId: string = SOC) => ({ corps: { companyId, texte } });
@@ -450,7 +463,7 @@ describe("discussion : actions `agents` et `ouvrir` étendu", () => {
 });
 
 describe("discussion : cartes en attente dans le fil", () => {
-  it("rend les cartes en attente de la discussion et des demandes ouvertes, pas les autres", async () => {
+  it("rend les cartes en attente de CETTE discussion seulement, pas celles des demandes à l'équipe ni des autres tâches", async () => {
     const f = faux();
     await f.creerFil();
     const disc = f.issues[0]!;
@@ -460,7 +473,7 @@ describe("discussion : cartes en attente dans le fil", () => {
     const carte = (n: string, issueId: string, o: Ligne = {}) => ({ id: n, issueId, companyId: SOC, kind: "request_confirmation", status: "pending", title: `Carte ${n}`, payload: { prompt: "OK ?" }, ...o });
     f.cartes.push(carte("c1", disc.id), carte("c2", id(300)), carte("c3", id(301)), carte("c4", id(302)), carte("c5", disc.id, { status: "accepted" }));
     const { cartes } = await ouvrirMessages(f);
-    expect(cartes.map((c) => c.id)).toEqual(["question:c1", "question:c2"]);
+    expect(cartes.map((c) => c.id)).toEqual(["question:c1"]);
     expect(cartes[0]).toMatchObject({ issueId: disc.id, interaction: { id: "c1", kind: "request_confirmation" } });
   });
 
@@ -505,5 +518,234 @@ describe("discussion : cartes en attente dans le fil", () => {
       await f.appeler("discussion.ouvrir");
       expect(f.lecturesCartes.n).toBeGreaterThan(milieu); // ouverture : lecture fraîche
     });
+  });
+});
+
+describe("discussions multiples : routes déclarées", () => {
+  it("lister (GET) et nouvelle (POST) sont réservées à l'humain", () => {
+    expect(ROUTES_API.find((x) => x.cle === "discussion.lister")).toMatchObject({ methode: "GET", chemin: "/discussion/liste", auth: "board" });
+    expect(ROUTES_API.find((x) => x.cle === "discussion.nouvelle")).toMatchObject({ methode: "POST", chemin: "/discussion/nouvelle", auth: "board" });
+  });
+});
+
+describe("discussion.nouvelle", () => {
+  it("crée une issue marquée, au titre provisoire, assignée au coordinateur, sans commentaire ni réveil, et laisse l'ancienne ouverte", async () => {
+    const f = faux();
+    await f.creerFil();
+    const r = await f.nouvelle();
+    expect(f.issues).toHaveLength(2);
+    expect(f.issues[1]).toMatchObject({ title: "Nouvelle discussion", status: "backlog", assigneeAgentId: COORD, originKind: ORIGINE_DISCUSSION });
+    expect(f.issues[1]!.originId).toMatch(new RegExp(`^discussion:${SOC}:[0-9a-f-]{36}$`));
+    expect(f.issues[0]).toMatchObject({ status: "backlog" });
+    expect(f.miseAJour).toEqual([]);
+    expect(r).toEqual({ issueId: f.issues[1]!.id, identifiant: "DEM-2", messages: [], cartes: [], cartesIndisponibles: false });
+    expect(f.commentaires).toHaveLength(0);
+    expect(f.reveils).toHaveLength(0);
+    expect(f.journal.at(-1)).toMatchObject({ type: "discussion.nouvelle", companyId: SOC, issueId: f.issues[1]!.id });
+  });
+
+  it("deux appels créent deux discussions distinctes ; refus de l'agent et d'une entreprise incohérente, rien d'écrit", async () => {
+    const f = faux();
+    await f.nouvelle();
+    await f.nouvelle();
+    expect(f.issues).toHaveLength(2);
+    expect(f.issues[0]!.originId).not.toBe(f.issues[1]!.originId);
+    expect((await f.refus(f.appeler("discussion.nouvelle", { corps: { companyId: SOC }, acteur: AGENT })))?.statut).toBe(403);
+    expect((await f.refus(f.appeler("discussion.nouvelle", { corps: { companyId: AUTRE_SOC } })))?.code).toBe("hors_entreprise");
+    expect(f.issues).toHaveLength(2);
+  });
+});
+
+describe("discussion.lister", () => {
+  it("le fil historique apparaît ; les autres entreprises, issues sans marqueur, ressemblances et annulées sont exclues ; plus récente d'abord", async () => {
+    const f = faux();
+    await f.creerFil();
+    const nouvelle = await f.nouvelle();
+    f.injecter({ companyId: AUTRE_SOC, originKind: ORIGINE_DISCUSSION, originId: `discussion:${AUTRE_SOC}:abc` });
+    f.injecter({ companyId: SOC, originKind: ORIGINE_DISCUSSION, originId: `discussion:${AUTRE_SOC}:abc` });
+    f.injecter({ companyId: SOC, originKind: ORIGINE_DISCUSSION, originId: `discussion:${SOC}x` });
+    f.injecter({ companyId: SOC, originKind: "manual", originId: `discussion:${SOC}:zzz` });
+    f.injecter({ companyId: SOC, originKind: ORIGINE_DISCUSSION, originId: `discussion:${SOC}:annulee`, status: "cancelled" });
+    const liste = await f.lister();
+    expect(liste.map((d) => d.issueId)).toEqual([nouvelle.issueId, f.issues[0]!.id]);
+    expect(liste[1]).toEqual({ issueId: f.issues[0]!.id, identifiant: "DEM-1", titre: "Discussion avec le Coordinateur", majLe: f.issues[0]!.updatedAt.toISOString(), statut: "backlog" });
+  });
+
+  it("l'ordre suit la dernière activité (un message dans l'ancien fil le remonte) et la liste est limitée à 50", async () => {
+    const f = faux();
+    await f.creerFil();
+    await f.nouvelle();
+    await f.appeler("discussion.envoyer", { corps: { companyId: SOC, texte: "Bonjour", issueId: f.issues[0]!.id } });
+    expect((await f.lister())[0]!.issueId).toBe(f.issues[0]!.id);
+    for (let i = 0; i < 60; i += 1) await f.nouvelle();
+    expect(await f.lister()).toHaveLength(50);
+  });
+
+  it("refuse l'agent", async () => {
+    const f = faux();
+    expect((await f.refus(f.appeler("discussion.lister", { acteur: AGENT })))?.statut).toBe(403);
+  });
+});
+
+describe("discussion : issueId facultatif et contrôle d'appartenance", () => {
+  it("un issueId d'une autre entreprise, sans marqueur, d'une ressemblance ou inconnu : introuvable pour ouvrir, messages et envoyer, rien d'écrit", async () => {
+    const f = faux();
+    await f.creerFil();
+    const etrangere = f.injecter({ companyId: AUTRE_SOC, originKind: ORIGINE_DISCUSSION, originId: `discussion:${AUTRE_SOC}:abc` });
+    const sansMarqueur = f.injecter({ companyId: SOC, originKind: "manual", originId: null });
+    const ressemblance = f.injecter({ companyId: SOC, originKind: ORIGINE_DISCUSSION, originId: `discussion:${AUTRE_SOC}:abc` });
+    const annulee = f.injecter({ companyId: SOC, originKind: ORIGINE_DISCUSSION, originId: `discussion:${SOC}:x`, status: "cancelled" });
+    const avant = { issues: f.issues.length, miseAJour: f.miseAJour.length };
+    for (const issueId of [etrangere.id, sansMarqueur.id, ressemblance.id, annulee.id, id(999)]) {
+      expect((await f.refus(f.appeler("discussion.ouvrir", { query: { issueId } })))?.code, `ouvrir ${issueId}`).toBe("introuvable");
+      expect((await f.refus(f.appeler("discussion.messages", { query: { issueId } })))?.code, `messages ${issueId}`).toBe("introuvable");
+      expect((await f.refus(f.appeler("discussion.envoyer", { corps: { companyId: SOC, texte: "Bonjour", issueId } })))?.code, `envoyer ${issueId}`).toBe("introuvable");
+    }
+    expect(f.commentaires).toHaveLength(0);
+    expect(f.reveils).toHaveLength(0);
+    expect(f.journal).toEqual([]);
+    expect({ issues: f.issues.length, miseAJour: f.miseAJour.length }).toEqual(avant);
+  });
+
+  it("avec issueId, ouvrir et messages lisent cette discussion, envoyer y écrit et la remonte", async () => {
+    const f = faux();
+    await f.creerFil();
+    const n = await f.nouvelle();
+    await f.appeler("discussion.envoyer", { corps: { companyId: SOC, texte: "Dans la nouvelle", issueId: n.issueId } });
+    expect(f.commentaires).toHaveLength(1);
+    expect(f.commentaires[0]!.issueId).toBe(n.issueId);
+    expect(f.reveils[0]).toMatchObject({ issueId: n.issueId });
+    const ancien = (await f.appeler("discussion.ouvrir", { query: { issueId: f.issues[0]!.id } })).corps as Ligne;
+    expect(ancien).toMatchObject({ issueId: f.issues[0]!.id, messages: [] });
+    const recent = (await f.appeler("discussion.messages", { query: { issueId: n.issueId } })).corps as Ligne;
+    expect(recent.messages.map((m: Ligne) => m.texte)).toEqual(["Dans la nouvelle"]);
+  });
+
+  it("sans issueId, envoyer, ouvrir et messages visent la discussion la plus récemment active, pas le fil historique (pont WhatsApp)", async () => {
+    const f = faux();
+    await f.creerFil();
+    const n = await f.nouvelle();
+    await f.appeler("discussion.envoyer", envoyer("Sans identifiant"));
+    expect(f.commentaires[0]!.issueId).toBe(n.issueId);
+    expect(f.issues).toHaveLength(2);
+    expect(((await f.appeler("discussion.ouvrir")).corps as Ligne).issueId).toBe(n.issueId);
+    expect(((await f.appeler("discussion.messages")).corps as Ligne).messages).toHaveLength(1);
+    // Un message dans l'ancien fil le rend à nouveau le plus récent.
+    await f.appeler("discussion.envoyer", { corps: { companyId: SOC, texte: "Retour", issueId: f.issues[0]!.id } });
+    await f.appeler("discussion.envoyer", envoyer("Suite"));
+    expect(f.commentaires.at(-1)!.issueId).toBe(f.issues[0]!.id);
+  });
+
+  it("écrire dans une discussion terminée la rouvre", async () => {
+    const f = faux();
+    const n = await f.nouvelle();
+    f.issues[0]!.status = "done";
+    await f.appeler("discussion.envoyer", { corps: { companyId: SOC, texte: "On reprend", issueId: n.issueId } });
+    expect(f.issues[0]!.status).toBe("todo");
+  });
+});
+
+describe("discussion : /clear et titre", () => {
+  it("/clear, /nouveau, casse et espaces ignorés : nouvelle discussion, aucun commentaire, aucun réveil ; la réponse porte `nouvelle`", async () => {
+    const f = faux();
+    await f.creerFil();
+    for (const texte of ["/clear", "  /CLEAR  ", "/Nouveau", " /nouveau\n"]) {
+      const r = await f.appeler("discussion.envoyer", envoyer(texte));
+      expect(r.statut, texte).toBe(201);
+      expect(r.corps, texte).toMatchObject({ nouvelle: { messages: [], cartes: [], cartesIndisponibles: false } });
+      expect(((r.corps as Ligne).nouvelle as Ligne).issueId).toBe(f.issues.at(-1)!.id);
+    }
+    expect(f.issues).toHaveLength(5);
+    expect(f.commentaires).toHaveLength(0);
+    expect(f.reveils).toHaveLength(0);
+  });
+
+  it("/clear sans aucune discussion existante en crée une ; /clear merci et /aide sont envoyés tels quels", async () => {
+    const f = faux();
+    await f.appeler("discussion.envoyer", envoyer("/clear"));
+    expect(f.issues).toHaveLength(1);
+    expect(f.commentaires).toHaveLength(0);
+    for (const texte of ["/clear merci", "/aide", "/clear/clear"]) {
+      const r = await f.appeler("discussion.envoyer", envoyer(texte));
+      expect((r.corps as Ligne).nouvelle, texte).toBeUndefined();
+      expect((r.corps as Ligne).texte, texte).toBe(texte);
+    }
+    expect(f.commentaires).toHaveLength(3);
+    expect(f.reveils).toHaveLength(3);
+  });
+
+  it("un titre impossible à poser n'empêche ni le message ni le réveil du Coordinateur", async () => {
+    const f = faux({ titreEchoue: true });
+    const n = await f.nouvelle();
+    const r = await f.appeler("discussion.envoyer", { corps: { companyId: SOC, texte: "Plan de novembre", issueId: n.issueId } });
+    expect(r.statut).toBe(201);
+    expect((r.corps as Ligne).reveilDemande).toBe(true);
+    expect(f.reveils).toHaveLength(1);
+    expect(f.issues[0]!.title).toBe("Nouvelle discussion");
+  });
+
+  it("le premier message donne le titre : aplati sur une ligne, 60 caractères au plus ; les suivants ne le changent pas", async () => {
+    const f = faux();
+    const n = await f.nouvelle();
+    const long = `Prépare   le plan\nde la campagne ${"très ".repeat(30)}fin`;
+    await f.appeler("discussion.envoyer", { corps: { companyId: SOC, texte: long, issueId: n.issueId } });
+    const titre = f.issues[0]!.title as string;
+    expect(titre).toBe("Prépare le plan de la campagne très très très très très très");
+    expect(Array.from(titre)).toHaveLength(60);
+    await f.appeler("discussion.envoyer", { corps: { companyId: SOC, texte: "Autre chose", issueId: n.issueId } });
+    expect(f.issues[0]!.title).toBe(titre);
+    expect((await f.lister())[0]!.titre).toBe(titre);
+  });
+
+  it("un message court donne tel quel son titre ; le fil historique garde son titre", async () => {
+    const f = faux();
+    await f.creerFil();
+    const n = await f.nouvelle();
+    await f.appeler("discussion.envoyer", { corps: { companyId: SOC, texte: "Bonjour", issueId: n.issueId } });
+    await f.appeler("discussion.envoyer", { corps: { companyId: SOC, texte: "Salut", issueId: f.issues[0]!.id } });
+    expect(f.issues[1]!.title).toBe("Bonjour");
+    expect(f.issues[0]!.title).toBe("Discussion avec le Coordinateur");
+  });
+});
+
+describe("discussion.supprimer", () => {
+  const supprimer = (f: ReturnType<typeof faux>, issueId: unknown, companyId: string = SOC, r: Partial<RequeteRoute> = {}) =>
+    f.appeler("discussion.supprimer", { corps: { companyId, issueId }, ...r });
+
+  it("est déclarée : POST /discussion/supprimer, auth board", () => {
+    expect(ROUTES_API.find((x) => x.cle === "discussion.supprimer")).toMatchObject({ methode: "POST", chemin: "/discussion/supprimer", auth: "board" });
+  });
+
+  it("annule la discussion : elle quitte la liste, les autres restent, et l'action est journalisée", async () => {
+    const f = faux();
+    await f.creerFil();
+    const seconde = await f.nouvelle();
+    await supprimer(f, seconde.issueId);
+    expect(f.issues.find((i) => i.id === seconde.issueId)).toMatchObject({ status: "cancelled" });
+    expect((await f.lister()).map((d) => d.issueId)).toEqual([f.issues[0]!.id]);
+    expect(f.journal.find((e) => e.type === "discussion.supprimee")).toMatchObject({ companyId: SOC, issueId: seconde.issueId });
+  });
+
+  it("refuse (introuvable) une issue d'une autre entreprise, une issue qui n'est pas une discussion, une discussion déjà supprimée et un identifiant inconnu", async () => {
+    const f = faux();
+    await f.creerFil();
+    const autreEntreprise = f.injecter({ companyId: AUTRE_SOC, originKind: ORIGINE_DISCUSSION, originId: `discussion:${AUTRE_SOC}` });
+    const sansMarqueur = f.injecter({ companyId: SOC, originKind: "manual", originId: null });
+    const annulee = f.injecter({ companyId: SOC, originKind: ORIGINE_DISCUSSION, originId: `discussion:${SOC}:abc`, status: "cancelled" });
+    for (const cible of [autreEntreprise.id, sansMarqueur.id, annulee.id, id(999)]) {
+      expect((await f.refus(supprimer(f, cible)))?.code, cible).toBe("introuvable");
+    }
+    expect(f.issues.find((i) => i.id === autreEntreprise.id)).toMatchObject({ status: "backlog" });
+    expect(f.issues.find((i) => i.id === sansMarqueur.id)).toMatchObject({ status: "backlog" });
+    expect((await f.lister()).map((d) => d.issueId)).toEqual([f.issues[0]!.id]);
+  });
+
+  it("refuse un agent, une entreprise incohérente et une entrée mal formée, sans rien écrire", async () => {
+    const f = faux();
+    const fil = await f.creerFil();
+    expect((await f.refus(supprimer(f, fil.id, SOC, { acteur: AGENT })))?.code).toBe("elevation_refusee");
+    expect((await f.refus(supprimer(f, fil.id, AUTRE_SOC)))?.code).toBe("hors_entreprise");
+    expect((await f.refus(f.appeler("discussion.supprimer", { corps: { companyId: SOC } })))?.code).toBe("entree_invalide");
+    expect(f.miseAJour).toEqual([]);
   });
 });

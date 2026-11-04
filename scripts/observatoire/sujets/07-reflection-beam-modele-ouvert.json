@@ -1,0 +1,153 @@
+{
+  "numero": 7,
+  "slug": "reflection-beam-modele-ouvert",
+  "projet": {
+    "companyId": "<OBS>",
+    "slug": "article-7-reflection-beam-modele-ouvert",
+    "nom": "Beam, le premier modèle de Reflection : 501 milliards de paramètres sous licence Apache 2.0",
+    "alias": [
+      {
+        "type": "site",
+        "valeur": "https://huggingface.co/reflection/Beam-1.0-501B-A23B-FP8"
+      },
+      {
+        "type": "site",
+        "valeur": "https://reflection.ai/blog/beam-is-available"
+      },
+      {
+        "type": "site",
+        "valeur": "https://reflection.ai/blog/introducing-beam"
+      }
+    ]
+  },
+  "motifSansProjet": null,
+  "aliasRefuses": [],
+  "brief": {
+    "tache": "Rédiger l'article n° 7 du magazine : Beam, le premier modèle de Reflection : 501 milliards de paramètres sous licence Apache 2.0",
+    "categorie": "open-source-modele",
+    "publie_le": "2026-10-16",
+    "angle": "Un modèle de cette taille sous Apache 2.0, pensé pour le code et les agents et compatible MCP, est une option sérieuse pour qui veut héberger lui-même son modèle. Texte à écrire pour deux lecteurs : le développeur (ce qu'il peut faire ou doit vérifier) et le décideur (ce que cela change pour un choix d'outil, de coût ou de conformité), sans rien ajouter qui ne figure pas dans les faits ci-dessous.",
+    "plan": [
+      "Ce qui est annoncé ou publié : les faits datés, tels que la source les énonce",
+      "Ce que cela change pour un développeur : usage concret, uniquement à partir des faits listés",
+      "Ce que cela change pour un décideur : choix, coûts, risques, uniquement à partir des faits listés",
+      "Ce qui n'est pas établi : points ouverts, chiffres d'éditeur non mesurés de façon indépendante",
+      "Sources et méthode de vérification : liste des URL lues le 27/10/2026"
+    ],
+    "faits": [
+      {
+        "texte": "Beam est publié sous licence Apache 2.0 par Reflection.",
+        "source_url": "https://huggingface.co/reflection/Beam-1.0-501B-A23B-FP8",
+        "extrait_exact": "License : Apache 2.0 | Authors : Reflection",
+        "statut_propose": "confirme_doc_officielle"
+      },
+      {
+        "texte": "Architecture : mélange d'experts, 501 milliards de paramètres au total et 23 milliards actifs, contexte d'un million de jetons.",
+        "source_url": "https://huggingface.co/reflection/Beam-1.0-501B-A23B-FP8",
+        "extrait_exact": "Beam uses a sparse mixture-of-experts (MoE) architecture with 501B total parameters and 23B active parameters. It supports a context window of 1M tokens and was developed predominantly for English.",
+        "statut_propose": "confirme_doc_officielle"
+      },
+      {
+        "texte": "La fiche cite l'intégration d'outils par MCP parmi les capacités principales.",
+        "source_url": "https://huggingface.co/reflection/Beam-1.0-501B-A23B-FP8",
+        "extrait_exact": "Agentic tool use: Long-horizon task completion, MCP-based tool integration, and browsing.",
+        "statut_propose": "rapporte_editeur"
+      },
+      {
+        "texte": "Date limite des connaissances : 30 juin 2026.",
+        "source_url": "https://huggingface.co/reflection/Beam-1.0-501B-A23B-FP8",
+        "extrait_exact": "Knowledge cutoff June 30, 2026",
+        "statut_propose": "confirme_doc_officielle"
+      },
+      {
+        "texte": "Hugging Face présente Beam comme le premier modèle du nouveau laboratoire américain Reflection.",
+        "source_url": "https://huggingface.co/blog/reflection-beam",
+        "extrait_exact": "It is the first model from the new US lab, Reflection, and it’s open!",
+        "statut_propose": "rapporte_tiers"
+      },
+      {
+        "texte": "Prise en charge dès le premier jour dans transformers, SGLang et vLLM.",
+        "source_url": "https://huggingface.co/blog/reflection-beam",
+        "extrait_exact": "Day-0 libraries: transformers, SGLang, vLLM.",
+        "statut_propose": "rapporte_tiers"
+      },
+      {
+        "texte": "Ollama propose Beam gratuitement, pour une durée limitée, dans son offre cloud.",
+        "source_url": "https://ollama.com/blog/reflection-beam",
+        "extrait_exact": "we’re day-zero partners rolling it out on Ollama for free (for a limited time only!)",
+        "statut_propose": "rapporte_tiers"
+      },
+      {
+        "texte": "Ollama documente une commande pour lancer Claude Code avec Beam comme modèle.",
+        "source_url": "https://ollama.com/blog/reflection-beam",
+        "extrait_exact": "ollama launch claude --model beam:cloud",
+        "statut_propose": "rapporte_tiers"
+      },
+      {
+        "texte": "Reflection a annoncé la disponibilité de Beam le 16 octobre 2026 sur son blog.",
+        "source_url": "https://reflection.ai/blog/beam-is-available",
+        "extrait_exact": "October 16, 2026",
+        "statut_propose": "confirme_doc_officielle"
+      },
+      {
+        "texte": "Selon l'annonce, Beam est le premier modèle à poids ouverts de Reflection, conçu pour le code avancé, le raisonnement et les tâches d'agents de longue durée.",
+        "source_url": "https://reflection.ai/blog/beam-is-available",
+        "extrait_exact": "Beam is our first open-weight model, built for advanced coding, reasoning, and long-horizon agentic workloads with frontier reasoning efficiency.",
+        "statut_propose": "rapporte_editeur"
+      },
+      {
+        "texte": "L'annonce confirme la licence Apache 2.0 des poids publiés sur Hugging Face.",
+        "source_url": "https://reflection.ai/blog/beam-is-available",
+        "extrait_exact": "under an Apache 2.0 license.",
+        "statut_propose": "confirme_doc_officielle"
+      },
+      {
+        "texte": "Beam est un mélange d'experts épars de 501 milliards de paramètres au total dont 23 milliards actifs.",
+        "source_url": "https://reflection.ai/blog/beam-is-available",
+        "extrait_exact": "Beam is a sparse Mixture-of-Experts model with 501 billion total parameters, 23 billion active, built for coding, reasoning, and agentic workloads.",
+        "statut_propose": "rapporte_editeur"
+      },
+      {
+        "texte": "Reflection publie les poids en BF16, FP8 et NVFP4, avec un modèle de brouillon pour le décodage spéculatif.",
+        "source_url": "https://reflection.ai/blog/beam-is-available",
+        "extrait_exact": "We are releasing Beam’s model weights in BF16, FP8, and NVFP4 precision formats, along with a speculative decoding drafter model.",
+        "statut_propose": "rapporte_editeur"
+      },
+      {
+        "texte": "Le lancement s'accompagne, selon Reflection, de plus de 40 partenaires et intégrations.",
+        "source_url": "https://reflection.ai/blog/beam-is-available",
+        "extrait_exact": "we’re launching with an ecosystem of over 40 partners and integrations",
+        "statut_propose": "rapporte_editeur"
+      },
+      {
+        "texte": "L'annonce renvoie vers un rapport technique de sécurité (Beam Safety Technical Report), distinct du « Technical Report (coming) » de la fiche Hugging Face.",
+        "source_url": "https://reflection.ai/blog/beam-is-available",
+        "extrait_exact": "Beam Safety Technical Report",
+        "statut_propose": "rapporte_editeur"
+      },
+      {
+        "texte": "Reflection a publié sur son blog l'annonce « Introducing Beam: Reflection’s 501B open-weight model » le 5 octobre 2026. (lu le 27/10/2026 à 04:52 UTC)",
+        "source_url": "https://reflection.ai/blog/introducing-beam",
+        "extrait_exact": "Introducing Beam: Reflection’s 501B open-weight model October 5, 2026",
+        "statut_propose": "confirme_doc_officielle"
+      },
+      {
+        "texte": "Reflection a publié le 16 octobre 2026 la page « Beam is now available », distincte de l'annonce du 5 octobre. (lu le 27/10/2026 à 04:52 UTC)",
+        "source_url": "https://reflection.ai/blog/beam-is-available",
+        "extrait_exact": "Beam is now available October 16, 2026",
+        "statut_propose": "confirme_doc_officielle"
+      },
+      {
+        "texte": "Reflection écrit, dans la page du 16 octobre 2026, avoir publié les poids de Beam sur Hugging Face sous licence Apache 2.0. (lu le 27/10/2026 à 04:52 UTC)",
+        "source_url": "https://reflection.ai/blog/beam-is-available",
+        "extrait_exact": "Today, we have released Beam’s model weights on Hugging Face under an Apache 2.0 license.",
+        "statut_propose": "confirme_doc_officielle"
+      }
+    ],
+    "points_ouverts": [
+      "Le « Technical Report » est marqué « coming » sur la fiche Hugging Face. L'annonce de Reflection cite en revanche un « Beam Safety Technical Report » (lien reflection.ai/beam-safety-report, répond 200), non lu ici : il couvre la sécurité, pas forcément le rapport technique du modèle. (relu le 27/10 à 04:52 UTC, toujours inconnu : la fiche dit toujours « coming »)",
+      "La durée de la gratuité chez Ollama n'est pas précisée. (relu le 27/10 à 04:52 UTC, toujours inconnu : Ollama écrit seulement « pour un temps limité »)"
+    ],
+    "regles": "Aucun fait, date ou chiffre hors des faits listés. Chaque affirmation renvoie à un fait et à son extrait exact. Pas de tiret cadratin."
+  }
+}

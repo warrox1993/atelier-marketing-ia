@@ -1,6 +1,6 @@
 ---
 name: "planification-livrables"
-description: "Construit le plan d'une campagne sous forme de tâches Paperclip : un livrable par tâche, un responsable, des dépendances sans cycle, les relectures requises et les exigences couvertes. À utiliser après le cadrage, et à chaque changement de brief ou blocage qui modifie l'ordre du travail."
+description: "Construit le plan de travail d'une demande (campagne, dossier, mission d'un service) sous forme de tâches Paperclip : un livrable par tâche, un responsable, des dépendances sans cycle, les relectures requises et les exigences couvertes. À utiliser après le cadrage, et à chaque changement de brief ou blocage qui modifie l'ordre du travail."
 metadata:
   version: "1.0.0"
   langue: "fr"

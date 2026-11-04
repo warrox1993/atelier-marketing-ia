@@ -1,5 +1,9 @@
 [Unit]
 Description=PostgreSQL 18.6 d'Umami (Atelier marketing IA, Podman rootless, réseau privé, aucun port publié)
+OnFailure=atelier-alerte@%n.service
+# 10 démarrages ratés en 10 min : l'unité passe en « failed » et alerte au lieu de boucler (EXP-C5).
+StartLimitIntervalSec=600
+StartLimitBurst=10
 Documentation=https://umami.is/docs/install
 After=network-online.target
 Wants=network-online.target

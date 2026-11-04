@@ -1,0 +1,94 @@
+From e7b5910f3ee2a6e72d90ec5640ae445c3cf64c0b Mon Sep 17 00:00:00 2001
+From: Jean-Baptiste Dhondt <114347858+warrox1993@users.noreply.github.com>
+Date: Tue, 27 Oct 2026 23:15:02 +0100
+Subject: [PATCH] =?UTF-8?q?feat(agents):=20libell=C3=A9=20=C2=AB=20Voir=20?=
+ =?UTF-8?q?tous=20les=20agents=20=C2=BB=20dans=20la=20barre=20lat=C3=A9ral?=
+ =?UTF-8?q?e=20native?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Traduit « See all agents » (texte, aria-label du rail, infobulle) dans
+SidebarAgents.tsx et SidebarAgents.production.tsx ; test natif ajusté avec la
+même précision (le lien /agents/all doit contenir le nouveau texte).
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_012hDEUaJZ3u1rGj4CzNXrhC
+---
+ ui/src/components/SidebarAgents.production.tsx | 6 +++---
+ ui/src/components/SidebarAgents.test.tsx       | 2 +-
+ ui/src/components/SidebarAgents.tsx            | 6 +++---
+ 3 files changed, 7 insertions(+), 7 deletions(-)
+
+diff --git a/ui/src/components/SidebarAgents.production.tsx b/ui/src/components/SidebarAgents.production.tsx
+index a69adbaf9..238c78ff9 100644
+--- a/ui/src/components/SidebarAgents.production.tsx
++++ b/ui/src/components/SidebarAgents.production.tsx
+@@ -668,20 +668,20 @@ export function SidebarAgents({ streamlined = false }: { streamlined?: boolean }
+           <Link
+             to="/agents/all"
+             state={SIDEBAR_SCROLL_RESET_STATE}
+-            aria-label={rail ? "See all agents" : undefined}
++            aria-label={rail ? "Voir tous les agents" : undefined}
+             onClick={() => {
+               if (isMobile) setSidebarOpen(false);
+             }}
+             className="flex items-center gap-2.5 mx-2 rounded-lg px-2 py-1.5 pointer-coarse:py-1 text-(length:--text-compact) font-medium text-muted-foreground transition-colors hover:bg-accent/50 hover:text-foreground"
+           >
+             <Users className="shrink-0 h-4 w-4" />
+-            <span className={rail ? SIDEBAR_RAIL_HIDDEN_LABEL : undefined}>See all agents</span>
++            <span className={rail ? SIDEBAR_RAIL_HIDDEN_LABEL : undefined}>Voir tous les agents</span>
+           </Link>
+         );
+         return rail ? (
+           <Tooltip>
+             <TooltipTrigger asChild>{seeAllLink}</TooltipTrigger>
+-            <TooltipContent side="right">See all agents</TooltipContent>
++            <TooltipContent side="right">Voir tous les agents</TooltipContent>
+           </Tooltip>
+         ) : (
+           seeAllLink
+diff --git a/ui/src/components/SidebarAgents.test.tsx b/ui/src/components/SidebarAgents.test.tsx
+index db8bef254..d77195a8a 100644
+--- a/ui/src/components/SidebarAgents.test.tsx
++++ b/ui/src/components/SidebarAgents.test.tsx
+@@ -206,7 +206,7 @@ function agentLinkLabels(container: HTMLElement) {
+ function seeAllAgentsLink(container: HTMLElement) {
+   return (
+     Array.from(container.querySelectorAll('a[href="/agents/all"]')).find((anchor) =>
+-      anchor.textContent?.includes("See all agents"),
++      anchor.textContent?.includes("Voir tous les agents"),
+     ) ?? null
+   );
+ }
+diff --git a/ui/src/components/SidebarAgents.tsx b/ui/src/components/SidebarAgents.tsx
+index c73c35f53..f98e67434 100644
+--- a/ui/src/components/SidebarAgents.tsx
++++ b/ui/src/components/SidebarAgents.tsx
+@@ -668,20 +668,20 @@ export function SidebarAgents({ streamlined = false }: { streamlined?: boolean }
+           <Link
+             to="/agents/all"
+             state={SIDEBAR_SCROLL_RESET_STATE}
+-            aria-label={rail ? "See all agents" : undefined}
++            aria-label={rail ? "Voir tous les agents" : undefined}
+             onClick={() => {
+               if (isMobile) setSidebarOpen(false);
+             }}
+             className="flex items-center gap-2.5 mx-2 rounded-lg px-2 py-1.5 pointer-coarse:py-1 text-(length:--text-compact) font-medium text-muted-foreground transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+           >
+             <Users className="shrink-0 h-4 w-4" />
+-            <span className={rail ? SIDEBAR_RAIL_HIDDEN_LABEL : undefined}>See all agents</span>
++            <span className={rail ? SIDEBAR_RAIL_HIDDEN_LABEL : undefined}>Voir tous les agents</span>
+           </Link>
+         );
+         return rail ? (
+           <Tooltip>
+             <TooltipTrigger asChild>{seeAllLink}</TooltipTrigger>
+-            <TooltipContent side="right">See all agents</TooltipContent>
++            <TooltipContent side="right">Voir tous les agents</TooltipContent>
+           </Tooltip>
+         ) : (
+           seeAllLink
+-- 
+2.53.0
+

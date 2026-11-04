@@ -1,0 +1,909 @@
+From 8e5c8ced3cc2d30138cb16fb9db5817a6f09f526 Mon Sep 17 00:00:00 2001
+From: Jean-Baptiste Dhondt <114347858+warrox1993@users.noreply.github.com>
+Date: Tue, 27 Oct 2026 09:58:34 +0100
+Subject: [PATCH] =?UTF-8?q?feat(claude-local):=20cr=C3=A9dits=20API=20d'ab?=
+ =?UTF-8?q?ord,=20bascule=20sur=20l'abonnement?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Cause : JB dispose de 200 $ de crédits API par mois, jamais consommés tant que l'usine tourne sur l'abonnement.
+Raison : l'agent qui porte une clé ANTHROPIC_API_KEY (secret de l'agent) tourne d'abord sur l'API ; si la clé échoue sur les
+crédits, la facturation, le plafond ou un refus (401), la même exécution est relancée tout de suite sans la clé, sur
+l'abonnement, en reprenant la session de l'essai échoué. Une mémoire du processus (6 h, par empreinte de clé) évite de
+réessayer l'API à chaque exécution ; le plafond d'instance lu dans le contexte (paperclipClaudeCreditsPlafond) démarre
+directement sans clé. Une clé refusée bascule avec l'alerte au journal, sans jamais arrêter l'usine (décision 2 de l'opérateur).
+
+La bascule est décidée avant detectClaudeLoginRequired, la facturation est calculée par essai (credits, api ou
+subscription), le reçu d'un essai à clé échoué vaut 0 et n'est jamais non tarifé. Sans clé sur l'agent, rien ne change
+(test de caractérisation). Une clé dans l'environnement du serveur est refusée (claude_cle_api_hote). La clé n'est jamais
+journalisée : seule l'empreinte circule.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_012hDEUaJZ3u1rGj4CzNXrhC
+---
+ .../src/server/__fixtures__/credits-cli.json  |  37 +++
+ .../src/server/credits-memoire.test.ts        |  60 ++++
+ .../src/server/credits-memoire.ts             |  43 +++
+ .../claude-local/src/server/execute.ts        | 145 ++++++++-
+ .../adapters/claude-local/src/server/index.ts |  10 +
+ .../src/server/parse.credits.test.ts          |  65 ++++
+ .../adapters/claude-local/src/server/parse.ts |  44 +++
+ .../claude-local-credits-bascule.test.ts      | 294 ++++++++++++++++++
+ 8 files changed, 681 insertions(+), 17 deletions(-)
+ create mode 100644 packages/adapters/claude-local/src/server/__fixtures__/credits-cli.json
+ create mode 100644 packages/adapters/claude-local/src/server/credits-memoire.test.ts
+ create mode 100644 packages/adapters/claude-local/src/server/credits-memoire.ts
+ create mode 100644 packages/adapters/claude-local/src/server/parse.credits.test.ts
+ create mode 100644 server/src/__tests__/claude-local-credits-bascule.test.ts
+
+diff --git a/packages/adapters/claude-local/src/server/__fixtures__/credits-cli.json b/packages/adapters/claude-local/src/server/__fixtures__/credits-cli.json
+new file mode 100644
+index 000000000..f3435a746
+--- /dev/null
++++ b/packages/adapters/claude-local/src/server/__fixtures__/credits-cli.json
+@@ -0,0 +1,37 @@
++{
++  "cliVersion": "2.1.308",
++  "releveLe": "2026-10-27",
++  "note": "Seul cleRefusee.evenement est une sortie reelle (essai 401, cle fausse, sans cout). Les autres valeurs viennent des chaines du binaire (strings -n 8) ; la forme exacte des evenements de credits n'a jamais ete observee.",
++  "creditsEpuises": {
++    "brutApi": "Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.",
++    "affiche": "Credit balance is too low",
++    "afficheAvecLien": "Credit balance too low · Add funds: https://platform.claude.com/settings/billing",
++    "evenement": {
++      "type": "assistant",
++      "message": { "role": "assistant", "content": [{ "type": "text", "text": "Credit balance is too low" }] },
++      "error": "billing_error"
++    }
++  },
++  "plafondDepense": {
++    "texte": null,
++    "raison": "Introuvable : 'You've hit your monthly spend limit' (l.296322) est le texte de l'utilisation supplementaire de l'abonnement, pas celui d'une cle d'API."
++  },
++  "plafondPalier": {
++    "texte": null,
++    "raison": "Introuvable dans le binaire."
++  },
++  "cleRefusee": {
++    "texte": "Invalid API key · Fix external API key",
++    "evenement": {
++      "type": "result",
++      "subtype": "success",
++      "is_error": true,
++      "terminal_reason": "api_error",
++      "api_error_status": 401,
++      "api_error_origin": "first_party",
++      "result": "Invalid API key · Fix external API key",
++      "total_cost_usd": 0,
++      "usage": { "input_tokens": 0, "output_tokens": 0, "fallback_credit": null }
++    }
++  }
++}
+diff --git a/packages/adapters/claude-local/src/server/credits-memoire.test.ts b/packages/adapters/claude-local/src/server/credits-memoire.test.ts
+new file mode 100644
+index 000000000..43c837907
+--- /dev/null
++++ b/packages/adapters/claude-local/src/server/credits-memoire.test.ts
+@@ -0,0 +1,60 @@
++import { afterEach, describe, expect, it, vi } from "vitest";
++import {
++  delaiReessaiCreditsHeures,
++  effacerCreditsEpuises,
++  empreinteCleApi,
++  lireCreditsEpuises,
++  marquerCreditsEpuises,
++  resetClaudeCreditsMemoireForTests,
++} from "./credits-memoire.js";
++
++const CLE_ESSAI = "sk-ant-api03-ZZtestfactice0123456789abcdef";
++const T0 = new Date("2026-10-27T10:00:00.000Z");
++
++afterEach(() => {
++  resetClaudeCreditsMemoireForTests();
++  vi.restoreAllMocks();
++});
++
++describe("credits-memoire", () => {
++  it("empreinteCleApi returns 8 lowercase hex chars and never the key", () => {
++    const empreinte = empreinteCleApi(CLE_ESSAI);
++    expect(empreinte).toMatch(/^[0-9a-f]{8}$/);
++    for (let i = 0; i + 8 <= CLE_ESSAI.length; i++) {
++      expect(empreinte).not.toBe(CLE_ESSAI.slice(i, i + 8));
++    }
++  });
++
++  it("marquerCreditsEpuises stores now + heures and lireCreditsEpuises returns it", () => {
++    vi.spyOn(console, "warn").mockImplementation(() => {});
++    const echeance = marquerCreditsEpuises("abcd1234", T0, 6);
++    expect(echeance.toISOString()).toBe("2026-10-27T16:00:00.000Z");
++    expect(lireCreditsEpuises("abcd1234")?.toISOString()).toBe("2026-10-27T16:00:00.000Z");
++    expect(lireCreditsEpuises("autre000")).toBeNull();
++  });
++
++  it("effacerCreditsEpuises returns true once then false", () => {
++    vi.spyOn(console, "warn").mockImplementation(() => {});
++    marquerCreditsEpuises("abcd1234", T0, 6);
++    expect(effacerCreditsEpuises("abcd1234")).toBe(true);
++    expect(effacerCreditsEpuises("abcd1234")).toBe(false);
++    expect(lireCreditsEpuises("abcd1234")).toBeNull();
++  });
++
++  it("delaiReessaiCreditsHeures defaults to 6 and ignores 0, negative or non-numeric values", () => {
++    const nom = "PAPERCLIP_CLAUDE_CREDITS_REESSAI_HEURES";
++    expect(delaiReessaiCreditsHeures({})).toBe(6);
++    expect(delaiReessaiCreditsHeures({ [nom]: "2" })).toBe(2);
++    for (const mauvais of ["0", "-3", "abc", ""]) {
++      expect(delaiReessaiCreditsHeures({ [nom]: mauvais })).toBe(6);
++    }
++  });
++
++  it("warns once per transition, not on a second marquer within the window", () => {
++    const avertir = vi.spyOn(console, "warn").mockImplementation(() => {});
++    marquerCreditsEpuises("abcd1234", T0, 6);
++    marquerCreditsEpuises("abcd1234", new Date(T0.getTime() + 60_000), 6);
++    expect(avertir).toHaveBeenCalledTimes(1);
++    expect(String(avertir.mock.calls[0]?.[0])).toContain("abcd1234");
++  });
++});
+diff --git a/packages/adapters/claude-local/src/server/credits-memoire.ts b/packages/adapters/claude-local/src/server/credits-memoire.ts
+new file mode 100644
+index 000000000..0a2926047
+--- /dev/null
++++ b/packages/adapters/claude-local/src/server/credits-memoire.ts
+@@ -0,0 +1,43 @@
++import { createHash } from "node:crypto";
++
++// Mémoire du processus : empreinte de la clé d'API -> instant jusqu'auquel les crédits sont réputés épuisés.
++// La clé n'est jamais conservée, seule son empreinte (8 hexadécimaux du SHA-256) circule.
++const epuisesJusqua = new Map<string, Date>();
++
++const VARIABLE_DELAI = "PAPERCLIP_CLAUDE_CREDITS_REESSAI_HEURES";
++const DELAI_DEFAUT_HEURES = 6;
++
++export function empreinteCleApi(cle: string): string {
++  return createHash("sha256").update(cle).digest("hex").slice(0, 8);
++}
++
++export function lireCreditsEpuises(empreinte: string): Date | null {
++  return epuisesJusqua.get(empreinte) ?? null;
++}
++
++export function marquerCreditsEpuises(empreinte: string, maintenant: Date, heures: number): Date {
++  const precedent = epuisesJusqua.get(empreinte);
++  const echeance = new Date(maintenant.getTime() + heures * 3_600_000);
++  epuisesJusqua.set(empreinte, echeance);
++  if (!precedent || precedent.getTime() <= maintenant.getTime()) {
++    console.warn(
++      `[paperclip] Crédits API épuisés pour la clé ${empreinte} ; nouvel essai de l'API après ${echeance.toISOString()}.`,
++    );
++  }
++  return echeance;
++}
++
++export function effacerCreditsEpuises(empreinte: string): boolean {
++  const existait = epuisesJusqua.delete(empreinte);
++  if (existait) console.warn(`[paperclip] Crédits API de nouveau disponibles pour la clé ${empreinte}.`);
++  return existait;
++}
++
++export function delaiReessaiCreditsHeures(env: NodeJS.ProcessEnv = process.env): number {
++  const valeur = Number(env[VARIABLE_DELAI]);
++  return Number.isFinite(valeur) && valeur > 0 ? valeur : DELAI_DEFAUT_HEURES;
++}
++
++export function resetClaudeCreditsMemoireForTests(): void {
++  epuisesJusqua.clear();
++}
+diff --git a/packages/adapters/claude-local/src/server/execute.ts b/packages/adapters/claude-local/src/server/execute.ts
+index 0b8c0c150..a0971ef56 100644
+--- a/packages/adapters/claude-local/src/server/execute.ts
++++ b/packages/adapters/claude-local/src/server/execute.ts
+@@ -3,7 +3,7 @@ import { createUsageCheckpointLog } from "@paperclipai/adapter-utils/usage-check
+ import fs from "node:fs/promises";
+ import path from "node:path";
+ import { fileURLToPath } from "node:url";
+-import type { AdapterExecutionContext, AdapterExecutionResult } from "@paperclipai/adapter-utils";
++import type { AdapterExecutionContext, AdapterExecutionResult, AdapterUsageCheckpoint } from "@paperclipai/adapter-utils";
+ import type { RunProcessResult } from "@paperclipai/adapter-utils/server-utils";
+ import {
+   adapterExecutionTargetIsRemote,
+@@ -77,7 +77,15 @@ import {
+   isClaudePoisonedPreviousMessageIdError,
+   isClaudeImageProcessingError,
+   isClaudeModelNotFoundError,
++  classifyClaudeApiKeyFailure,
+ } from "./parse.js";
++import {
++  delaiReessaiCreditsHeures,
++  effacerCreditsEpuises,
++  empreinteCleApi,
++  lireCreditsEpuises,
++  marquerCreditsEpuises,
++} from "./credits-memoire.js";
+ import {
+   materializeRemoteClaudeConfig,
+   prepareClaudeConfigSeed,
+@@ -160,6 +168,10 @@ function hasNonEmptyEnvValue(env: Record<string, string>, key: string): boolean
+   return typeof raw === "string" && raw.trim().length > 0;
+ }
+ 
++function omitApiKey(env: Record<string, string>): Record<string, string> {
++  return Object.fromEntries(Object.entries(env).filter(([key]) => key !== "ANTHROPIC_API_KEY"));
++}
++
+ function isBedrockAuth(env: Record<string, string>): boolean {
+   return (
+     env.CLAUDE_CODE_USE_BEDROCK === "1" ||
+@@ -168,9 +180,10 @@ function isBedrockAuth(env: Record<string, string>): boolean {
+   );
+ }
+ 
+-function resolveClaudeBillingType(env: Record<string, string>): "api" | "subscription" | "metered_api" {
++function resolveClaudeBillingType(env: Record<string, string>): "api" | "credits" | "subscription" | "metered_api" {
+   if (isBedrockAuth(env)) return "metered_api";
+-  return hasNonEmptyEnvValue(env, "ANTHROPIC_API_KEY") ? "api" : "subscription";
++  if (!hasNonEmptyEnvValue(env, "ANTHROPIC_API_KEY")) return "subscription";
++  return env.PAPERCLIP_CLAUDE_CLE_API === "credits_inclus" ? "credits" : "api";
+ }
+ 
+ async function buildClaudeRuntimeConfig(input: ClaudeExecutionInput): Promise<ClaudeRuntimeConfig> {
+@@ -904,7 +917,9 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
+       : `Claude exited with code ${proc.exitCode ?? -1}`;
+   };
+ 
+-  const runAttempt = async (resumeSessionId: string | null) => {
++  const runAttempt = async (resumeSessionId: string | null, attemptEnv: Record<string, string> = env) => {
++    // L'essai sans clé hérite de process.env (clé d'hôte exclue par la garde) : on recalcule donc la facturation par essai.
++    const billingType = resolveClaudeBillingType(attemptEnv === env ? effectiveEnv : { ...omitApiKey(effectiveEnv), ...attemptEnv });
+     await hydrateFreshSessionHandoff(ctx, { resumedSession: Boolean(resumeSessionId) });
+     const renderedBootstrapPrompt =
+       !resumeSessionId && bootstrapPromptTemplate.trim().length > 0
+@@ -964,7 +979,7 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
+         cwd: effectiveExecutionCwd,
+         commandArgs: args,
+         commandNotes,
+-        env: loggedEnv,
++        env: attemptEnv === env ? loggedEnv : omitApiKey(loggedEnv),
+         prompt,
+         promptMetrics,
+         context,
+@@ -972,7 +987,23 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
+     }
+ 
+     const consumeAccounting = createClaudeStreamParser();
+-    const accountingLog = createUsageCheckpointLog(onLog, ctx.onUsage, stdout => {
++    // Un essai à clé qui échoue sur la clé ne rapporte parfois aucun coût : le reçu vaut alors 0, jamais « non tarifé »
++    // (sinon la politique `block` de l'Observatoire mettrait l'entreprise en pause).
++    let stdoutVu = "";
++    const recuUsage: typeof ctx.onUsage =
++      ctx.onUsage && (billingType === "credits" || billingType === "api")
++        ? async (receipt: AdapterUsageCheckpoint) => {
++            let recu = receipt;
++            if (recu.costUsd == null && recu.complete) {
++              const flux = parseClaudeStreamJson(stdoutVu);
++              if (flux.resultJson && classifyClaudeApiKeyFailure({ parsed: flux.resultJson, stdout: stdoutVu })) {
++                recu = { ...recu, costUsd: 0 };
++              }
++            }
++            await ctx.onUsage?.(recu);
++          }
++        : ctx.onUsage;
++    const accountingLog = createUsageCheckpointLog(onLog, recuUsage, stdout => {
+       const parsed = consumeAccounting(stdout);
+       return { usage: parsed.usage ?? undefined, usageBasis: "per_run", costUsd: parsed.costUsd,
+         provider: "anthropic", biller: isBedrockAuth(effectiveEnv) ? "aws_bedrock" : "anthropic",
+@@ -982,13 +1013,16 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
+     const proc = await runAdapterExecutionTargetProcess(runId, runtimeExecutionTarget, command, args, {
+       onProcessStopped: providerStop.beginInvocation(),
+       cwd,
+-      env,
++      env: attemptEnv,
+       stdin: prompt,
+       timeoutSec,
+       graceSec,
+       onSpawn,
+       onRuntimeProgress: ctx.onRuntimeProgress,
+-      onLog: accountingLog,
++      onLog: async (stream, chunk) => {
++        if (stream === "stdout" && recuUsage !== ctx.onUsage) stdoutVu += chunk;
++        await accountingLog(stream, chunk);
++      },
+       runLogTail: paperclipBridge?.runLogTail,
+       settleRunDisposition: paperclipBridge?.settleRunDisposition,
+       terminalResultCleanup: {
+@@ -1001,7 +1035,7 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
+ 
+     const parsedStream = parseClaudeStreamJson(proc.stdout);
+     const parsed = parsedStream.resultJson ?? parseJson(proc.stdout);
+-    return { proc, parsedStream, parsed };
++    return { proc, parsedStream, parsed, billingType };
+   };
+ 
+   const toAdapterResult = (
+@@ -1009,10 +1043,11 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
+       proc: RunProcessResult;
+       parsedStream: ReturnType<typeof parseClaudeStreamJson>;
+       parsed: Record<string, unknown> | null;
++      billingType: ReturnType<typeof resolveClaudeBillingType>;
+     },
+     opts: { fallbackSessionId: string | null; clearSessionOnMissingSession?: boolean },
+   ): AdapterExecutionResult => {
+-    const { proc, parsedStream, parsed } = attempt;
++    const { proc, parsedStream, parsed, billingType } = attempt;
+     const loginMeta = detectClaudeLoginRequired({
+       parsed,
+       stdout: proc.stdout,
+@@ -1344,9 +1379,85 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
+       }
+     }
+ 
+-    const initial = await runAttempt(sessionId ?? null);
++    const cleAgent = hasNonEmptyEnvValue(env, "ANTHROPIC_API_KEY") && !isBedrockAuth(effectiveEnv);
++    let attemptEnv = env;
++    let lastResumeId = sessionId ?? null;
++    let bascule: Record<string, unknown> | null = null;
++    const empreinteCle = cleAgent ? empreinteCleApi(env.ANTHROPIC_API_KEY ?? "") : "";
++    let memoireEchue = false;
++    if (cleAgent) {
++      // Une clé dans l'environnement du serveur serait héritée par l'essai « sans clé » : pas de bascule possible.
++      if ((process.env.ANTHROPIC_API_KEY ?? "").trim().length > 0) {
++        const errorMessage =
++          "la clé d'API est dans l'environnement du serveur : la bascule vers l'abonnement est impossible ; retirez-la de l'environnement de l'instance";
++        await onLog("stderr", `[paperclip] ${errorMessage}\n`);
++        return {
++          exitCode: 1,
++          signal: null,
++          timedOut: false,
++          errorMessage,
++          errorCode: "claude_cle_api_hote",
++          provider: "anthropic",
++          biller: "anthropic",
++          model,
++          billingType,
++          resultJson: { stopReason: "claude_cle_api_hote" },
++        };
++      }
++      const epuiseJusqua = lireCreditsEpuises(empreinteCle);
++      const plafond = parseObject(context.paperclipClaudeCreditsPlafond);
++      const departDirect = (raison: "memoire" | "plafond_instance", essaiApiApres: string | null) => {
++        bascule = { de: billingType, vers: "subscription", raison, empreinteCle, essaiApiApres };
++        attemptEnv = omitApiKey(env);
++      };
++      if (epuiseJusqua && epuiseJusqua.getTime() > Date.now()) {
++        await onLog("stdout", `[paperclip] Crédits API marqués épuisés jusqu'à ${epuiseJusqua.toISOString()} : exécution sur l'abonnement.\n`);
++        departDirect("memoire", epuiseJusqua.toISOString());
++      } else if (plafond.atteint === true) {
++        await onLog(
++          "stdout",
++          `[paperclip] Plafond des crédits API de l'instance atteint (${asNumber(plafond.depenseCentimes, 0)} / ${asNumber(plafond.plafondCentimes, 0)} centimes) : exécution sur l'abonnement.\n`,
++        );
++        departDirect("plafond_instance", null);
++      } else {
++        memoireEchue = epuiseJusqua !== null;
++      }
++    }
++    let initial = await runAttempt(lastResumeId, attemptEnv);
++    // La bascule est décidée AVANT detectClaudeLoginRequired (toAdapterResult) : sinon un 401 de clé deviendrait claude_auth_required.
++    const essaiAvecCle = cleAgent && attemptEnv === env;
++    const echecDeCle = essaiAvecCle && !initial.proc.timedOut && ((initial.proc.exitCode ?? 0) !== 0 || asBoolean(initial.parsed?.is_error, false))
++      ? classifyClaudeApiKeyFailure({ parsed: initial.parsed, stdout: initial.proc.stdout, stderr: initial.proc.stderr })
++      : null;
++    if (essaiAvecCle && echecDeCle) {
++      const echeance = marquerCreditsEpuises(empreinteCle, new Date(), delaiReessaiCreditsHeures());
++      const apres = echeance.toISOString();
++      if (echecDeCle === "cle_refusee") {
++        await onLog(
++          "stdout",
++          `[paperclip] ALERTE clé d'API refusée (401). Relance immédiate sur l'abonnement ; refaire « bootstrap-organisation.py cle-api » ou la retirer par « cle-api --retirer ». Nouvel essai de l'API après ${apres}.\n`,
++        );
++      } else {
++        const releve = ((initial.parsed ? describeClaudeFailure(initial.parsed) : null) ?? initial.proc.stderr.trim().split(/\r?\n/)[0] ?? "").slice(0, 200);
++        await onLog(
++          "stdout",
++          `[paperclip] Crédits API épuisés (${echecDeCle} : « ${releve} »). Relance immédiate sur l'abonnement ; nouvel essai de l'API après ${apres}.\n`,
++        );
++      }
++      bascule = { de: initial.billingType, vers: "subscription", raison: echecDeCle, empreinteCle, essaiApiApres: apres };
++      attemptEnv = omitApiKey(env);
++      lastResumeId = initial.parsedStream.sessionId ?? sessionId ?? null;
++      initial = await runAttempt(lastResumeId, attemptEnv);
++    }
++    if (essaiAvecCle && memoireEchue && !echecDeCle && !initial.proc.timedOut && (initial.proc.exitCode ?? 0) === 0 && !asBoolean(initial.parsed?.is_error, false)) {
++      effacerCreditsEpuises(empreinteCle);
++      await onLog("stdout", `[paperclip] Crédits API de nouveau utilisés (empreinte ${empreinteCle}).\n`);
++    }
++    const basculeFinale = bascule as Record<string, unknown> | null;
++    const avecBascule = (resultat: AdapterExecutionResult): AdapterExecutionResult =>
++      basculeFinale ? { ...resultat, resultJson: { ...(resultat.resultJson ?? {}), atelierBascule: basculeFinale } } : resultat;
+     const sessionErrorKind =
+-      sessionId &&
++      lastResumeId &&
+       !initial.proc.timedOut &&
+       (initial.proc.exitCode ?? 0) !== 0 &&
+       initial.parsed
+@@ -1368,13 +1479,13 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
+           : "is unavailable";
+       await onLog(
+         "stdout",
+-        `[paperclip] Claude resume session "${sessionId}" ${reason}; retrying with a fresh session.\n`,
++        `[paperclip] Claude resume session "${lastResumeId}" ${reason}; retrying with a fresh session.\n`,
+       );
+       if (sessionErrorKind === "poisoned" && !executionTargetIsRemote) {
+         const claudeConfigDir = resolveSharedClaudeConfigDir(effectiveEnv);
+         // Mirrors Claude Code's project-dir encoding: non-alphanumeric chars become "-"; existing hyphens pass through.
+         const encodedCwd = effectiveExecutionCwd.replace(/[^a-zA-Z0-9-]/g, "-");
+-        const poisonedJsonlPath = path.join(claudeConfigDir, "projects", encodedCwd, `${sessionId}.jsonl`);
++        const poisonedJsonlPath = path.join(claudeConfigDir, "projects", encodedCwd, `${lastResumeId}.jsonl`);
+         let unlinked = false;
+         try {
+           await fs.unlink(poisonedJsonlPath);
+@@ -1390,11 +1501,11 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
+           }
+         }
+       }
+-      const retry = await runAttempt(null);
+-      return toAdapterResult(retry, { fallbackSessionId: null, clearSessionOnMissingSession: true });
++      const retry = await runAttempt(null, attemptEnv);
++      return avecBascule(toAdapterResult(retry, { fallbackSessionId: null, clearSessionOnMissingSession: true }));
+     }
+ 
+-    return toAdapterResult(initial, { fallbackSessionId: runtimeSessionId || runtime.sessionId });
++    return avecBascule(toAdapterResult(initial, { fallbackSessionId: runtimeSessionId || runtime.sessionId }));
+   } finally {
+     try {
+       await providerStop.collectBeforeRestore();
+diff --git a/packages/adapters/claude-local/src/server/index.ts b/packages/adapters/claude-local/src/server/index.ts
+index bfba059d1..071d1d6c4 100644
+--- a/packages/adapters/claude-local/src/server/index.ts
++++ b/packages/adapters/claude-local/src/server/index.ts
+@@ -8,6 +8,14 @@ export {
+   claudeCommandSupportsEffortFlag,
+   resetClaudeCliCapabilitiesCacheForTests,
+ } from "./cli-capabilities.js";
++export {
++  delaiReessaiCreditsHeures,
++  effacerCreditsEpuises,
++  empreinteCleApi,
++  lireCreditsEpuises,
++  marquerCreditsEpuises,
++  resetClaudeCreditsMemoireForTests,
++} from "./credits-memoire.js";
+ export {
+   parseClaudeStreamJson,
+   describeClaudeFailure,
+@@ -15,6 +23,8 @@ export {
+   isClaudeProviderQuotaError,
+   isClaudeRefusalResult,
+   isClaudeUnknownSessionError,
++  classifyClaudeApiKeyFailure,
++  type ClaudeApiKeyFailure,
+ } from "./parse.js";
+ export {
+   getQuotaWindows,
+diff --git a/packages/adapters/claude-local/src/server/parse.credits.test.ts b/packages/adapters/claude-local/src/server/parse.credits.test.ts
+new file mode 100644
+index 000000000..696c1c29e
+--- /dev/null
++++ b/packages/adapters/claude-local/src/server/parse.credits.test.ts
+@@ -0,0 +1,65 @@
++import { describe, expect, it } from "vitest";
++import { readFileSync } from "node:fs";
++import { classifyClaudeApiKeyFailure } from "./parse.js";
++
++const cli = JSON.parse(
++  readFileSync(new URL("./__fixtures__/credits-cli.json", import.meta.url), "utf8"),
++);
++
++describe("classifyClaudeApiKeyFailure", () => {
++  it('classifies the displayed "Credit balance is too low" result as credits_epuises', () => {
++    const parsed = { is_error: true, result: cli.creditsEpuises.affiche };
++    expect(classifyClaudeApiKeyFailure({ parsed })).toBe("credits_epuises");
++    const lien = { is_error: true, result: cli.creditsEpuises.afficheAvecLien };
++    expect(classifyClaudeApiKeyFailure({ parsed: lien })).toBe("credits_epuises");
++  });
++
++  it('classifies the raw API message "Your credit balance is too low…" as credits_epuises', () => {
++    expect(classifyClaudeApiKeyFailure({ stderr: cli.creditsEpuises.brutApi })).toBe("credits_epuises");
++    expect(classifyClaudeApiKeyFailure({ errorMessage: cli.creditsEpuises.brutApi })).toBe("credits_epuises");
++  });
++
++  it("classifies a billing_error assistant event as credits_epuises", () => {
++    const stdout = JSON.stringify(cli.creditsEpuises.evenement);
++    expect(classifyClaudeApiKeyFailure({ stdout })).toBe("credits_epuises");
++  });
++
++  it("classifies the spend-limit text captured from the CLI as plafond_depense", () => {
++    // A1 n'a pas trouve ce texte (null) : le classifieur ne doit rien deviner.
++    expect(cli.plafondDepense.texte).toBeNull();
++    const parsed = { is_error: true, api_error_status: 400, result: "Bad request" };
++    expect(classifyClaudeApiKeyFailure({ parsed })).toBeNull();
++    const abonnement = { is_error: true, result: "You've hit your monthly spend limit. resets Nov 1" };
++    expect(classifyClaudeApiKeyFailure({ parsed: abonnement })).toBeNull();
++  });
++
++  it("classifies authentication_failed / Invalid API key as cle_refusee", () => {
++    expect(classifyClaudeApiKeyFailure({ parsed: cli.cleRefusee.evenement })).toBe("cle_refusee");
++    const auth = { is_error: true, result: "authentication_failed" };
++    expect(classifyClaudeApiKeyFailure({ parsed: auth })).toBe("cle_refusee");
++  });
++
++  it("returns null for 529 overloaded_error", () => {
++    const parsed = { is_error: true, api_error_status: 529, result: "API Error: 529 overloaded_error" };
++    expect(classifyClaudeApiKeyFailure({ parsed })).toBeNull();
++  });
++
++  it("returns null for a 429 rate_limit_error with retry-after", () => {
++    const parsed = { is_error: true, api_error_status: 429, result: "rate_limit_error, retry-after: 30" };
++    expect(classifyClaudeApiKeyFailure({ parsed, stderr: "retry-after: 30" })).toBeNull();
++  });
++
++  it('returns null for subscription quota text ("You\'ve hit your limit … resets 5pm")', () => {
++    const parsed = { is_error: true, result: "You've hit your limit · resets 5pm (Europe/Brussels)" };
++    expect(classifyClaudeApiKeyFailure({ parsed })).toBeNull();
++  });
++
++  it('returns null when a successful run\'s assistant prose quotes "credit balance is too low"', () => {
++    const stdout = JSON.stringify({
++      type: "assistant",
++      message: { content: [{ type: "text", text: 'Le message "credit balance is too low" vient de l\'API.' }] },
++    });
++    const parsed = { is_error: false, subtype: "success", result: "Voici l'explication." };
++    expect(classifyClaudeApiKeyFailure({ parsed, stdout })).toBeNull();
++  });
++});
+diff --git a/packages/adapters/claude-local/src/server/parse.ts b/packages/adapters/claude-local/src/server/parse.ts
+index 558a0c3ef..a8f7cd214 100644
+--- a/packages/adapters/claude-local/src/server/parse.ts
++++ b/packages/adapters/claude-local/src/server/parse.ts
+@@ -600,3 +600,47 @@ export function isClaudeProviderQuotaError(input: {
+   if (!haystack) return false;
+   return CLAUDE_PROVIDER_QUOTA_RE.test(haystack);
+ }
++
++// Textes de la clé d'API (relevés dans le binaire 2.1.308, voir __fixtures__/credits-cli.json).
++const CLAUDE_CREDIT_BALANCE_RE = /credit\s+balance\s+(?:is\s+)?too\s+low/i;
++const CLAUDE_KEY_REFUSED_RE = /invalid\s+api\s+key/i;
++
++export type ClaudeApiKeyFailure = "credits_epuises" | "facturation" | "plafond_depense" | "cle_refusee";
++
++// shortcut: plafond_depense n'est jamais renvoyé, son texte est introuvable dans le CLI (A1) ; à ajouter si relevé.
++export function classifyClaudeApiKeyFailure(input: {
++  parsed?: Record<string, unknown> | null;
++  stdout?: string | null;
++  stderr?: string | null;
++  errorMessage?: string | null;
++}): ClaudeApiKeyFailure | null {
++  const parsed = input.parsed ?? null;
++  // `subtype` vaut "success" même en erreur : on s'appuie sur is_error, le statut et le texte.
++  const failed = parsed !== null && claudeResultIndicatesAuthFailure(parsed);
++  const status = parsed ? asNumber(parsed.api_error_status, 0) || asNumber(parsed.error_status, 0) : 0;
++  // Champs terminaux seulement : jamais la prose des événements d'assistant.
++  const terminal = [
++    failed && parsed ? collectClaudeTerminalText(parsed) : "",
++    input.stderr ?? "",
++    input.errorMessage ?? "",
++  ].join("\n");
++  const eventErrors = new Set<string>();
++  for (const line of (input.stdout ?? "").split(/\r?\n/)) {
++    if (!line.startsWith("{")) continue;
++    const event = parseJson(line.trim());
++    const code = event?.error;
++    if (typeof code === "string") eventErrors.add(code);
++  }
++
++  if (CLAUDE_CREDIT_BALANCE_RE.test(terminal) || eventErrors.has("billing_error")) return "credits_epuises";
++  if (status === 402 || (failed && /\b402\b|payment\s+required/i.test(terminal))) return "facturation";
++  if (
++    status === 401 ||
++    eventErrors.has("authentication_failed") ||
++    CLAUDE_KEY_REFUSED_RE.test(terminal) ||
++    CLAUDE_AUTH_TOKEN_FAILURE_RE.test(terminal)
++  ) {
++    return "cle_refusee";
++  }
++  return null;
++}
+diff --git a/server/src/__tests__/claude-local-credits-bascule.test.ts b/server/src/__tests__/claude-local-credits-bascule.test.ts
+new file mode 100644
+index 000000000..eca7a566b
+--- /dev/null
++++ b/server/src/__tests__/claude-local-credits-bascule.test.ts
+@@ -0,0 +1,294 @@
++import { afterEach, beforeEach, describe, expect, it } from "vitest";
++import fs from "node:fs/promises";
++import os from "node:os";
++import path from "node:path";
++import type { AdapterUsageCheckpoint } from "@paperclipai/adapter-utils";
++import {
++  empreinteCleApi,
++  execute,
++  lireCreditsEpuises,
++  marquerCreditsEpuises,
++  resetClaudeCliCapabilitiesCacheForTests,
++  resetClaudeCreditsMemoireForTests,
++} from "@paperclipai/adapter-claude-local/server";
++
++type OnKey = "succeed" | "credits" | "raw-credits" | "auth" | "overloaded" | "rate-limit";
++
++const CLE = "sk-ant-test-cle";
++const SESSION_CLE = "33333333-3333-4333-8333-333333333333";
++const SESSION_SANS_CLE = "22222222-2222-4222-8222-222222222222";
++
++// Faux binaire : avec clé, comportement `onKey` (code de sortie 1 pour les échecs) ; sans clé, succès,
++// ou échec de quota de l'abonnement si PAPERCLIP_TEST_SUB_QUOTA=1.
++async function writeCreditsClaudeCommand(commandPath: string, onKey: OnKey): Promise<void> {
++  const script = `#!/usr/bin/env node
++const fs = require("node:fs");
++const argv = process.argv.slice(2);
++fs.readFileSync(0, "utf8");
++const capturePath = process.env.PAPERCLIP_TEST_CAPTURE_PATH;
++if (capturePath) {
++  const entries = fs.existsSync(capturePath) ? JSON.parse(fs.readFileSync(capturePath, "utf8")) : [];
++  entries.push({
++    argv,
++    apiKey: process.env.ANTHROPIC_API_KEY ?? null,
++    oauth: process.env.CLAUDE_CODE_OAUTH_TOKEN ?? null,
++    resumed: argv.includes("--resume"),
++  });
++  fs.writeFileSync(capturePath, JSON.stringify(entries), "utf8");
++}
++const say = (event) => console.log(JSON.stringify(event));
++const failure = (sessionId, text, extra) => {
++  say({ type: "system", subtype: "init", session_id: sessionId, model: "claude-sonnet" });
++  say({ type: "result", subtype: "success", is_error: true, session_id: sessionId, result: text, ...extra });
++  process.exit(1);
++};
++if (process.env.ANTHROPIC_API_KEY) {
++  const onKey = ${JSON.stringify(onKey)};
++  if (onKey === "succeed") {
++    say({ type: "system", subtype: "init", session_id: ${JSON.stringify(SESSION_CLE)}, model: "claude-sonnet" });
++    say({ type: "result", subtype: "success", session_id: ${JSON.stringify(SESSION_CLE)}, result: "ok", total_cost_usd: 0.5, usage: { input_tokens: 10, output_tokens: 5 } });
++    process.exit(0);
++  }
++  if (onKey === "credits") {
++    say({ type: "system", subtype: "init", session_id: ${JSON.stringify(SESSION_CLE)}, model: "claude-sonnet" });
++    say({ type: "assistant", message: { role: "assistant", content: [{ type: "text", text: "Credit balance is too low" }] }, error: "billing_error" });
++    say({ type: "result", subtype: "success", is_error: true, session_id: ${JSON.stringify(SESSION_CLE)}, result: "Credit balance is too low", usage: { input_tokens: 0, output_tokens: 0 } });
++    process.exit(1);
++  }
++  if (onKey === "raw-credits") failure(${JSON.stringify(SESSION_CLE)}, "Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.", { total_cost_usd: 0 });
++  if (onKey === "auth") failure(${JSON.stringify(SESSION_CLE)}, "Invalid API key · Fix external API key", { terminal_reason: "api_error", api_error_status: 401, api_error_origin: "first_party", total_cost_usd: 0 });
++  if (onKey === "overloaded") failure(${JSON.stringify(SESSION_CLE)}, "API Error: 529 overloaded_error", { api_error_status: 529 });
++  if (onKey === "rate-limit") failure(${JSON.stringify(SESSION_CLE)}, "API Error: 429 rate_limit_error. You've hit your limit · resets 4pm (UTC)", { api_error_status: 429 });
++}
++if (process.env.PAPERCLIP_TEST_SUB_QUOTA === "1") {
++  failure(${JSON.stringify(SESSION_SANS_CLE)}, "You've hit your limit · resets 4pm (UTC)", { total_cost_usd: 0 });
++}
++say({ type: "system", subtype: "init", session_id: ${JSON.stringify(SESSION_SANS_CLE)}, model: "claude-sonnet" });
++say({ type: "assistant", session_id: ${JSON.stringify(SESSION_SANS_CLE)}, message: { content: [{ type: "text", text: "hello" }] } });
++say({ type: "result", subtype: "success", session_id: ${JSON.stringify(SESSION_SANS_CLE)}, result: "hello", total_cost_usd: 0.1, usage: { input_tokens: 1, cache_read_input_tokens: 0, output_tokens: 1 } });
++`;
++  await fs.writeFile(commandPath, script, "utf8");
++  await fs.chmod(commandPath, 0o755);
++}
++
++type Capture = { argv: string[]; apiKey: string | null; oauth: string | null; resumed: boolean };
++
++async function lancer(
++  onKey: OnKey,
++  options: {
++    avecCle?: boolean;
++    credits?: boolean;
++    sessionId?: string | null;
++    subQuota?: boolean;
++    context?: Record<string, unknown>;
++    avant?: () => void;
++  } = {},
++) {
++  const { avecCle = true, credits = true, sessionId = null, subQuota = false, context = {} } = options;
++  const root = await fs.mkdtemp(path.join(os.tmpdir(), "paperclip-claude-credits-"));
++  const workspace = path.join(root, "workspace");
++  const binDir = path.join(root, "bin");
++  const commandPath = path.join(binDir, "claude");
++  const capturePath = path.join(root, "capture.json");
++  await fs.mkdir(workspace, { recursive: true });
++  await fs.mkdir(binDir, { recursive: true });
++  await writeCreditsClaudeCommand(commandPath, onKey);
++  const previousHome = process.env.HOME;
++  process.env.HOME = root;
++  options.avant?.();
++  const logs: string[] = [];
++  const receipts: AdapterUsageCheckpoint[] = [];
++  const env: Record<string, string> = {
++    CLAUDE_CODE_OAUTH_TOKEN: "jeton-test",
++    PAPERCLIP_TEST_CAPTURE_PATH: capturePath,
++  };
++  if (subQuota) env.PAPERCLIP_TEST_SUB_QUOTA = "1";
++  if (avecCle) env.ANTHROPIC_API_KEY = CLE;
++  if (avecCle && credits) env.PAPERCLIP_CLAUDE_CLE_API = "credits_inclus";
++  try {
++    const result = await execute({
++      runId: "run-credits",
++      agent: { id: "agent-1", companyId: "co-1", name: "Test", adapterType: "claude_local", adapterConfig: { engine: "cli" } },
++      runtime: { sessionId, sessionParams: null, sessionDisplayId: null, taskKey: null },
++      config: { engine: "cli", command: commandPath, cwd: workspace, env, promptTemplate: "Do work." },
++      context,
++      authToken: "tok",
++      onLog: async (_stream, chunk) => {
++        logs.push(chunk);
++      },
++      onUsage: async (receipt) => {
++        receipts.push(receipt);
++      },
++    });
++    const captured = (await fs.readFile(capturePath, "utf8").catch(() => "[]")) as string;
++    return { result, captured: JSON.parse(captured) as Capture[], logs: logs.join(""), receipts };
++  } finally {
++    if (previousHome === undefined) delete process.env.HOME;
++    else process.env.HOME = previousHome;
++    await fs.rm(root, { recursive: true, force: true });
++  }
++}
++
++describe("claude_local credits first, then subscription", () => {
++  let cleHote: string | undefined;
++
++  beforeEach(() => {
++    resetClaudeCreditsMemoireForTests();
++    resetClaudeCliCapabilitiesCacheForTests();
++    cleHote = process.env.ANTHROPIC_API_KEY;
++    delete process.env.ANTHROPIC_API_KEY;
++  });
++
++  afterEach(() => {
++    if (cleHote === undefined) delete process.env.ANTHROPIC_API_KEY;
++    else process.env.ANTHROPIC_API_KEY = cleHote;
++  });
++
++  // Caractérisation A4 : écrite et verte AVANT toute modification d'execute.ts.
++  it("without an API key: one launch, no key in the child env, billingType subscription, no atelierBascule", async () => {
++    const { result, captured, receipts } = await lancer("succeed", { avecCle: false });
++    expect(captured).toHaveLength(1);
++    expect(captured[0]?.apiKey).toBeNull();
++    expect(captured[0]?.oauth).toBe("jeton-test");
++    expect(result.billingType).toBe("subscription");
++    expect(result.exitCode).toBe(0);
++    expect(result.resultJson?.atelierBascule).toBeUndefined();
++    expect(receipts.every((receipt) => receipt.billingType === "subscription")).toBe(true);
++  });
++
++  it("with credits_inclus and a working key: one launch with the key, billingType credits", async () => {
++    const { result, captured } = await lancer("succeed");
++    expect(captured).toHaveLength(1);
++    expect(captured[0]?.apiKey).toBe(CLE);
++    expect(result.billingType).toBe("credits");
++    expect(result.resultJson?.atelierBascule).toBeUndefined();
++  });
++
++  it("with a key but without PAPERCLIP_CLAUDE_CLE_API: billingType api as today", async () => {
++    const { result, captured } = await lancer("succeed", { credits: false });
++    expect(captured).toHaveLength(1);
++    expect(result.billingType).toBe("api");
++  });
++
++  it("usage receipts of a credits attempt carry billingType credits", async () => {
++    const { receipts } = await lancer("succeed");
++    expect(receipts.length).toBeGreaterThan(0);
++    expect(receipts.every((receipt) => receipt.billingType === "credits")).toBe(true);
++  });
++  it("credits exhausted (billing_error): two launches, second without ANTHROPIC_API_KEY but with CLAUDE_CODE_OAUTH_TOKEN, succeeded, billingType credits then subscription, one log line", async () => {
++    const { result, captured, receipts, logs } = await lancer("credits");
++    expect(captured).toHaveLength(2);
++    expect(captured[0]?.apiKey).toBe(CLE);
++    expect(captured[1]?.apiKey).toBeNull();
++    expect(captured[1]?.oauth).toBe("jeton-test");
++    expect(result.exitCode).toBe(0);
++    expect(result.billingType).toBe("subscription");
++    expect(result.resultJson?.atelierBascule).toMatchObject({ de: "credits", vers: "subscription" });
++    expect(receipts.map((receipt) => receipt.billingType)).toEqual(expect.arrayContaining(["credits", "subscription"]));
++    expect(logs.match(/Crédits API épuisés/g)).toHaveLength(1);
++    expect(logs).toContain("Relance immédiate sur l'abonnement ; nouvel essai de l'API après ");
++  });
++
++  it('raw API "Your credit balance is too low…" triggers the same fallback', async () => {
++    const { result, captured } = await lancer("raw-credits");
++    expect(captured).toHaveLength(2);
++    expect(captured[1]?.apiKey).toBeNull();
++    expect(result.exitCode).toBe(0);
++    expect(result.resultJson?.atelierBascule).toMatchObject({ raison: "credits_epuises" });
++  });
++
++  it('401 on the key: falls back to the subscription with the "ALERTE clé d\'API refusée" log, never claude_auth_required', async () => {
++    const { result, captured, logs } = await lancer("auth");
++    expect(captured).toHaveLength(2);
++    expect(captured[1]?.apiKey).toBeNull();
++    expect(result.errorCode ?? null).not.toBe("claude_auth_required");
++    expect(result.exitCode).toBe(0);
++    expect(logs).toContain("[paperclip] ALERTE clé d'API refusée (401).");
++    expect(logs).toContain("bootstrap-organisation.py");
++    expect(result.resultJson?.atelierBascule).toMatchObject({ raison: "cle_refusee" });
++  });
++
++  it("exhaustion mid-run resumes the session returned by the failed attempt and emits no unpriced receipt", async () => {
++    const { captured, receipts } = await lancer("credits");
++    expect(captured).toHaveLength(2);
++    expect(captured[0]?.resumed).toBe(false);
++    expect(captured[1]?.resumed).toBe(true);
++    expect(captured[1]?.argv).toContain(SESSION_CLE);
++    const recusCredits = receipts.filter((receipt) => receipt.billingType === "credits");
++    expect(recusCredits.length).toBeGreaterThan(0);
++    for (const receipt of recusCredits) expect(typeof receipt.costUsd).toBe("number");
++  });
++
++  it("subscription quota failure during the fallback: no third launch", async () => {
++    const { result, captured } = await lancer("credits", { subQuota: true });
++    expect(captured).toHaveLength(2);
++    expect(result.errorFamily).toBe("provider_quota");
++  });
++
++  it("atelierBascule in resultJson carries de, vers, raison, empreinteCle (8 hex) and essaiApiApres, never the key", async () => {
++    const { result, logs } = await lancer("credits");
++    const bascule = result.resultJson?.atelierBascule as Record<string, unknown>;
++    expect(bascule).toMatchObject({ de: "credits", vers: "subscription", raison: "credits_epuises" });
++    expect(String(bascule.empreinteCle)).toMatch(/^[0-9a-f]{8}$/);
++    expect(Number.isNaN(Date.parse(String(bascule.essaiApiApres)))).toBe(false);
++    expect(JSON.stringify(result)).not.toContain(CLE);
++    expect(logs).not.toContain(CLE);
++  });
++  it("529 overloaded on the key: one launch, existing transient handling, no fallback", async () => {
++    const { result, captured } = await lancer("overloaded");
++    expect(captured).toHaveLength(1);
++    expect(result.errorCode).toBe("claude_transient_upstream");
++    expect(result.resultJson?.atelierBascule).toBeUndefined();
++  });
++
++  it("429 rate limit with retry-after on the key: one launch, retryNotBefore set, no fallback", async () => {
++    const { result, captured } = await lancer("rate-limit");
++    expect(captured).toHaveLength(1);
++    expect(result.retryNotBefore).toBeTruthy();
++    expect(result.resultJson?.atelierBascule).toBeUndefined();
++  });
++
++  it("second run inside the memory window: one launch, directly without the key", async () => {
++    await lancer("credits");
++    const { result, captured, logs } = await lancer("credits");
++    expect(captured).toHaveLength(1);
++    expect(captured[0]?.apiKey).toBeNull();
++    expect(logs).toContain("Crédits API marqués épuisés jusqu'à ");
++    expect(logs).toContain(": exécution sur l'abonnement.");
++    expect(result.billingType).toBe("subscription");
++    expect(result.resultJson?.atelierBascule).toMatchObject({ raison: "memoire", vers: "subscription" });
++  });
++
++  it("memory expired (marquerCreditsEpuises seeded 7 h in the past) and the key works: one launch with the key, billingType credits, memory cleared, return logged", async () => {
++    const empreinte = empreinteCleApi(CLE);
++    marquerCreditsEpuises(empreinte, new Date(Date.now() - 7 * 3_600_000), 6);
++    const { result, captured, logs } = await lancer("succeed");
++    expect(captured).toHaveLength(1);
++    expect(captured[0]?.apiKey).toBe(CLE);
++    expect(result.billingType).toBe("credits");
++    expect(lireCreditsEpuises(empreinte)).toBeNull();
++    expect(logs).toContain(`[paperclip] Crédits API de nouveau utilisés (empreinte ${empreinte}).`);
++  });
++
++  it("ANTHROPIC_API_KEY in the server process.env: no launch, errorCode claude_cle_api_hote", async () => {
++    const { result, captured } = await lancer("succeed", {
++      avant: () => {
++        process.env.ANTHROPIC_API_KEY = "sk-ant-cle-hote";
++      },
++    });
++    expect(captured).toHaveLength(0);
++    expect(result.errorCode).toBe("claude_cle_api_hote");
++    expect(result.errorMessage).toContain("environnement du serveur");
++    expect(JSON.stringify(result)).not.toContain("sk-ant-cle-hote");
++  });
++
++  it("context.paperclipClaudeCreditsPlafond.atteint: one launch without the key, plafond log line", async () => {
++    const { result, captured, logs } = await lancer("succeed", {
++      context: { paperclipClaudeCreditsPlafond: { atteint: true, depenseCentimes: 20100, plafondCentimes: 20000 } },
++    });
++    expect(captured).toHaveLength(1);
++    expect(captured[0]?.apiKey).toBeNull();
++    expect(logs).toContain("Plafond des crédits API de l'instance atteint (20100 / 20000 centimes) : exécution sur l'abonnement.");
++    expect(result.resultJson?.atelierBascule).toMatchObject({ raison: "plafond_instance" });
++  });
++});
+-- 
+2.53.0
+

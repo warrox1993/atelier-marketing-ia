@@ -48,8 +48,9 @@ l'origine de chaque prospect avant tout export.
 3. B2C : interroger seulement `b2c`, qui ne rend que des personnes à l'origine légale
    prouvée (demande de devis, client existant, consentement). Aucune autre source de
    particuliers n'est admise.
-4. Après CHAQUE appel dont la réponse sert, déposer la réponse brute, intégrale, avec les
-   arguments exacts (valeurs par défaut explicites) :
+4. Après CHAQUE appel dont la réponse sert, la déposer par sa référence `_atelier.reference` (la réponse brute,
+   intégrale, recopiée par fichier seulement si la lecture n'en a pas), avec les arguments exacts (valeurs par défaut
+   explicites) :
    `POST /api/plugins/atelier.marketing-ia/api/taches/<issueId>/prospects`
    (clé `tache.prospects.deposer`). Ne jamais envoyer de champ `mode`.
 5. Paginer jusqu'au bout ou jusqu'au plafond fixé par la tâche, et noter où la recherche
@@ -83,14 +84,16 @@ l'origine de chaque prospect avant tout export.
     (dirigeant, comptable, responsable RH ou flotte), sans donnée personnelle privée. Une liste du registre des entreprises
     n'est pas une liste d'envoi : elle sert à préparer, pas à contacter.
 12. **Vérification des adresses, liste de suppression et traçabilité** (ajout de la méthode amont 2.13.0) :
-    - une adresse électronique professionnelle n'entre dans la liste qu'après vérification de sa délivrabilité, refaite
-      dans les 7 jours qui précèdent un envoi si la liste a attendu (les données B2B vieillissent vite) ; une adresse
-      invalide, jetable ou piège est retirée définitivement, une adresse de rôle (info@, ventes@) n'entre pas dans une
-      séquence personnelle (sauf entreprise locale dont c'est le canal public), une adresse « inconnue » est retentée
-      une fois puis écartée ;
-    - un domaine « attrape-tout » (qui accepte toute adresse) se traite par une règle écrite, jamais au jugé : résoudre
-      avec un vérificateur plus fin, sinon n'envoyer qu'aux comptes de rang 1 et surveiller les rebonds ; rebonds sous
-      2 % par campagne, pause au-delà ;
+    - l'atelier n'a aucun outil de vérification de délivrabilité et la Prospection n'envoie rien : chaque adresse
+      électronique de la liste porte « adresse non vérifiée », avec sa source et sa date ; une adresse mal formée ou
+      d'un service d'adresses jetables est écartée ; la vérification avant un envoi revient à l'humain ;
+    - règle belge du courriel publicitaire, écrite une seule fois dans `controle-communications-reglementees/references/rgpd-prospection.md`
+      (AR du 4 avril 2003, art. 1er, lu sur Justel le 30/10/2026) : une adresse
+      impersonnelle d'une personne morale (`info@`, `contact@`) peut recevoir une offre adressée à l'entreprise sans
+      consentement préalable ; une adresse nominative (`prenom.nom@`) est celle d'une personne physique et n'entre dans une
+      séquence qu'avec son consentement ou si elle est cliente pour des produits analogues ; chaque adresse porte son type
+      (impersonnelle ou nominative) ;
+    - les rebonds d'un envoi se suivent dans la compétence `campagne-courriel`, pas ici ;
     - une seule liste de suppression (désinscriptions, rebonds, clients actuels et affaires ouvertes, concurrents,
       partenaires, refus, demandes d'effacement) sert à tous les canaux et se consulte avant tout envoi, clé par
       adresse, numéro de téléphone et profil ;
@@ -105,7 +108,7 @@ l'origine de chaque prospect avant tout export.
 
 Une note courte : périmètre interrogé, journal des appels (service, outil, arguments,
 date, nombre de résultats, dépôt accepté ou refusé), nombre de prospects retenus et
-exclus, recherches sans résultat et limites.
+exclus, recherches sans résultat et limites. Chaque personne physique de la liste porte la mention « information art. 14 : à faire au plus tard au premier contact, et dans le mois qui suit la collecte » (RGPD, art. 14, § 3) ; le modèle de mention que l'humain relit et envoie lui-même est `controle-communications-reglementees/references/information-art14.md`. L'atelier n'envoie rien.
 
 ## Critères de réussite
 

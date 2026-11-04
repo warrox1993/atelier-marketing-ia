@@ -214,7 +214,8 @@ attendrait ses relecteurs PENDANT l'étape est donc incompatible avec le moteur.
    au-delà du maximum, plus de nouvelles revues et escalade explicite vers l'humain.
 
 Règle relâchée : un `CHANGES_REQUESTED` exige un constat nouveau OU un constat bloquant du même
-rôle encore ouvert (vérifié par le service), pour ne pas dupliquer un problème déjà signalé.
+rôle encore ouvert (vérifié par le service), pour ne pas dupliquer un problème déjà signalé ; sans constat
+nouveau, la `justification` est obligatoire (LIV-OB-6, audit du 29/10/2026 : pas de verdict vide).
 
 Pour l'interface (lot C) : la décision humaine se fait en deux appels, d'abord l'action
 `atelier.decision` (portée liée à la révision), puis l'approbation native

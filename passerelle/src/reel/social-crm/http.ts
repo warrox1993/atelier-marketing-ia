@@ -242,7 +242,7 @@ export function verifierReponse(reponse: ReponseHttp, plateforme: Plateforme, ci
   if (reponse.statut === 403 || /AccessError/.test(nomOdoo)) {
     const conseil =
       plateforme === "linkedin"
-        ? " Vérifier que l'application LinkedIn de l'atelier a l'accès Community Management approuvé et que la personne connectée est administratrice de la page."
+        ? " Pour une page : vérifier que l'application LinkedIn de l'atelier a l'accès Community Management approuvé et que la personne connectée est administratrice de la page. Pour le profil personnel : vérifier que son application a le produit Share on LinkedIn et que la connexion a été faite avec la méthode « publication »."
         : plateforme === "hubspot"
           ? " La connexion n'a pas la portée nécessaire (refaire la connexion avec la méthode « publication »)."
           : " Vérifier les droits de l'utilisateur connecté dans la plateforme.";

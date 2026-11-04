@@ -24,6 +24,7 @@ export type { CarteService };
 /** Réponse de la route du plugin : les tâches reçues à suivre dans les autres services. */
 interface ReponseTaches {
   taches: TacheASuivre[];
+  services: Array<Omit<TacheASuivre, "tacheId">>;
   indisponible: boolean;
 }
 export const INTERVALLE_CARTES_SERVICES_MS = 15_000;
@@ -133,7 +134,7 @@ export function actualiserCartesServices(
   )
     .then(async (r) => {
       const taches = Array.isArray(r?.taches) ? r.taches : [];
-      const lues = await lireCartesDesServices(taches);
+      const lues = await lireCartesDesServices(taches, undefined, Array.isArray(r?.services) ? r.services : []);
       const cartes = lues.cartes;
       if (vues === null || etat.directionId !== directionId)
         vues = new Set(cartes.map((c) => c.element.id));
@@ -142,10 +143,14 @@ export function actualiserCartesServices(
         for (const c of nouvelles) vues.add(c.element.id);
         prevenir(nouvelles);
       }
+      // Rien de nouveau : on garde les mêmes tableaux (aucun nouveau rendu visible à chaque relecture de 15 s).
+      const memeDirection = etat.directionId === directionId;
+      const memesCartes = memeDirection && JSON.stringify(etat.cartes) === JSON.stringify(cartes);
+      const memesMissions = memeDirection && JSON.stringify(etat.missions) === JSON.stringify(lues.missions);
       changer({
         directionId,
-        cartes,
-        missions: lues.missions,
+        cartes: memesCartes ? etat.cartes : cartes,
+        missions: memesMissions ? etat.missions : lues.missions,
         indisponible: r?.indisponible === true || lues.indisponible,
         lue: true,
         lueLe: Date.now(),

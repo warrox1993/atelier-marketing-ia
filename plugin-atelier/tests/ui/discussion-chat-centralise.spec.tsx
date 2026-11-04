@@ -87,24 +87,31 @@ describe("message de situation du Coordinateur : connexions manquantes", () => {
     const m = situation(c)!;
     // Les deux lignes lues par l'interface seulement (Google, diffusion) manquent aussi : aucune connexion native.
     const noms = m.querySelector('[data-testid="situation-connexions"] p')!.textContent!;
-    expect(noms).toMatch(/^Avant de commencer : il me manque 4 connexions pour travailler sur vos vraies données \(Registre BCE, OpenStreetMap, Comptes Google \(Ads, Search Console, GA4, fiche d'établissement\) et 1 autre\)\. Tant qu'elles ne sont pas faites, je travaille en démonstration\.$/u);
+    expect(noms).toMatch(/^4 connexions ne sont pas branchées \(Registre BCE, OpenStreetMap, Comptes Google \(Ads, Search Console, GA4, fiche d'établissement\) et 1 autre\) ; les missions qui en ont besoin travaillent sans elles\.$/u);
+    // Un constat de l'atelier, pas une parole du Coordinateur : il ne prétend pas travailler « en démonstration » (UI-7).
+    const bulle = m.querySelector('[data-testid="situation-connexions"]')!.closest(".atl-disc-bulle")!;
+    expect(bulle.querySelector(".atl-disc-nom")!.textContent).toBe("Atelier");
+    expect(m.textContent).not.toMatch(/démonstration/u);
     const lien = parTexte(m, "a", "Ouvrir les connexions");
     expect(lien.getAttribute("href")).toBe(`/RNO${LIEN_PASSAGE_AU_REEL}`);
     expect(LIEN_PASSAGE_AU_REEL).toMatch(/#param-reel$/u);
     expect(m.querySelector('[data-testid="situation-points"]')).toBeNull();
   });
 
-  it("rendu d'une bulle du Coordinateur : en tête du fil, dans la zone annoncée, avatar et nom, hors du pied, rien d'envoyé au serveur", async () => {
+  it("rendu en bulles (connexions signées « Atelier », points signés du Coordinateur) : dans la ligne repliée des points en attente (au-dessus du fil, hors de la zone annoncée), avatar et nom, hors du pied, rien d'envoyé au serveur", async () => {
     branchements = [br("bce", "Registre BCE", "demonstration")];
+    elements = [pastille("haute", 1)];
     const c = await ouvrir();
     const m = situation(c)!;
     const journal = c.querySelector('[role="log"]')!;
     expect(journal.getAttribute("aria-live")).toBe("polite");
-    expect(journal.firstElementChild).toBe(m);
-    expect(m.classList.contains("atl-disc-bulle")).toBe(true);
-    expect(m.getAttribute("data-auteur")).toBe("agent");
-    expect(m.querySelector(".atl-disc-meta .atl-disc-avatar")).not.toBeNull();
-    expect(m.querySelector(".atl-disc-meta .atl-disc-nom")!.textContent).toBe("Coordinateur");
+    // Aucune insertion dans le journal : la situation est dans la ligne repliée qui précède le fil.
+    expect(journal.contains(m)).toBe(false);
+    expect(m.closest('[data-testid="points-en-attente"]')!.nextElementSibling).toBe(journal);
+    const bulles = Array.from(m.querySelectorAll(":scope > .atl-disc-bulle"));
+    expect(bulles.map((b) => b.getAttribute("data-auteur"))).toEqual(["agent", "agent"]);
+    expect(bulles.every((b) => b.querySelector(".atl-disc-meta .atl-disc-avatar") !== null)).toBe(true);
+    expect(bulles.map((b) => b.querySelector(".atl-disc-meta .atl-disc-nom")!.textContent)).toEqual(["Atelier", "Coordinateur"]);
     expect(c.querySelector(".atl-disc-pied")!.contains(m)).toBe(false);
     expect(c.querySelector('section[aria-label="À faire"]')).toBeNull();
     expect(c.querySelector('[data-testid="bandeau-connexions"]')).toBeNull();
@@ -149,12 +156,12 @@ describe("message de situation du Coordinateur : connexions manquantes", () => {
   });
 
   it("singulier : une seule connexion", () => {
-    expect(phraseConnexionsManquantes(["A"])).toBe("Avant de commencer : il me manque 1 connexion pour travailler sur vos vraies données (A). Tant qu'elle n'est pas faite, je travaille en démonstration.");
+    expect(phraseConnexionsManquantes(["A"])).toBe("1 connexion n'est pas branchée (A) ; les missions qui en ont besoin travaillent sans elle.");
     expect(phraseConnexionsManquantes(["A", "B"])).toContain("(A et B)");
     expect(phraseConnexionsManquantes(["A", "B", "C"])).toContain("(A, B et C)");
     expect(phraseConnexionsManquantes(["A", "B", "C", "D", "E"])).toContain("(A, B, C et 2 autres)");
     expect(phraseConnexionsManquantes(["Registre BCE", "Banque nationale", "OpenStreetMap", "d", "e", "f", "g", "h", "i", "j", "k"])).toBe(
-      "Avant de commencer : il me manque 11 connexions pour travailler sur vos vraies données (Registre BCE, Banque nationale, OpenStreetMap et 8 autres). Tant qu'elles ne sont pas faites, je travaille en démonstration.",
+      "11 connexions ne sont pas branchées (Registre BCE, Banque nationale, OpenStreetMap et 8 autres) ; les missions qui en ont besoin travaillent sans elles.",
     );
   });
 
@@ -191,19 +198,21 @@ describe("message de situation du Coordinateur : points en attente", () => {
     expect(titres(m)).toEqual(["Élément 2", "Élément 3", "Élément 1"]);
     expect(Array.from(m.querySelectorAll(".atl-afaire a")).map((a) => a.getAttribute("href"))).toEqual(["/RNO/issues/ATL-2", "/RNO/issues/ATL-3", "/RNO/issues/ATL-1"]);
     expect(Array.from(m.querySelectorAll("button")).some((b) => /Voir/u.test(b.textContent ?? ""))).toBe(false);
-    // En tête du fil, dans la zone annoncée, jamais dans le pied.
-    expect(c.querySelector('[role="log"]')!.firstElementChild).toBe(m);
+    // Dans la ligne repliée qui précède le fil (jamais dans le journal ni dans le pied).
+    expect(c.querySelector('[role="log"]')!.contains(m)).toBe(false);
+    expect(m.closest('[data-testid="points-en-attente"]')!.nextElementSibling).toBe(c.querySelector('[role="log"]'));
     const pied = c.querySelector(".atl-disc-pied")!;
     expect(pied.contains(m)).toBe(false);
     expect(Array.from(pied.children).map((e) => e.className.split(" ")[0])).toEqual(["atl-disc-saisie"]);
   });
 
-  it("deux points avec des connexions manquantes : « J'ai aussi 2 points… » après le paragraphe des connexions", async () => {
+  it("deux points avec des connexions manquantes : la bulle « Atelier » des connexions, puis celle du Coordinateur et ses 2 points", async () => {
     branchements = [br("bce", "Registre BCE", "demonstration")];
     elements = [pastille("moyenne", 1), pastille("haute", 2)];
     const c = await ouvrir();
     const m = situation(c)!;
-    expect(points(c)!.querySelector("p")!.textContent).toBe("J'ai aussi 2 points qui attendent votre décision :");
+    expect(points(c)!.querySelector("p")!.textContent).toBe("J'ai 2 points qui attendent votre décision :");
+    expect(Array.from(m.querySelectorAll(".atl-disc-bulle .atl-disc-nom")).map((n) => n.textContent)).toEqual(["Atelier", "Coordinateur"]);
     const blocs = Array.from(m.querySelectorAll('[data-testid^="situation-"]')).map((b) => b.getAttribute("data-testid"));
     expect(blocs).toEqual(["situation-connexions", "situation-points"]);
   });
@@ -244,7 +253,7 @@ describe("message de situation du Coordinateur : points en attente", () => {
     branchements = [br("bce", "Registre BCE", "demonstration")];
     const c = await ouvrir();
     expect(c.querySelector('[data-testid="situation-connexions"]')).not.toBeNull();
-    expect(points(c)!.querySelector("p")!.textContent).toBe("J'ai aussi 1 point qui attend votre décision :");
+    expect(points(c)!.querySelector("p")!.textContent).toBe("J'ai 1 point qui attend votre décision :");
     expect(titres(c)).toEqual(["Élément 2"]);
     rendu!.demonter();
     realiteEnPanne = true;
@@ -283,7 +292,7 @@ describe("pastilles du fil vide : toutes remplissent la saisie, aucune n'envoie"
     expect(champ.selectionStart).toBe(champ.value.length);
     expect(champ.selectionEnd).toBe(champ.value.length);
     await cliquer(parTexte(groupe, "button", "Veille concurrentielle hebdomadaire"));
-    expect(champ.value).toContain("chaque lundi à 8 h");
+    expect(champ.value).toContain("chaque lundi à 10 h 30 :");
     expect(champ.value).not.toContain("Google Ads");
     const envois = (fetch as unknown as ReturnType<typeof vi.fn>).mock.calls.filter((a) => (a[1] as { method?: string } | undefined)?.method === "POST");
     expect(envois).toHaveLength(0);
@@ -322,8 +331,9 @@ describe("en-tête du chat", () => {
     const entete = c.querySelector(".atl-disc-entete")!;
     expect(STYLES_DISCUSSION).toMatch(/\.atl-disc-entete \{[^}]*flex-wrap: nowrap/u);
     expect(Array.from(entete.children).map((e) => e.className)).toEqual(["atl-disc-avatar atl-disc-avatar-grand", "atl-disc-entete-texte", "atl-disc-entete-actions"]);
+    // « Discussions » (colonne d'historique repliée en fenêtre étroite) ouvre la liste ; masqué par le style en fenêtre large.
     const actions = entete.querySelector(".atl-disc-entete-actions")!;
-    expect(Array.from(actions.querySelectorAll(":scope > button, :scope > .atl-disc-reglages > button")).map((b) => b.getAttribute("aria-label") ?? b.textContent)).toEqual(["Gérer les agents", "Réglages du chat"]);
+    expect(Array.from(actions.querySelectorAll(":scope > button, :scope > .atl-disc-reglages > button")).map((b) => b.getAttribute("aria-label") ?? b.textContent)).toEqual(["Discussions", "Gérer les agents", "Réglages du chat"]);
     expect(entete.textContent).not.toContain("DEM-1");
     expect(entete.querySelector(".atl-disc-ident")).toBeNull();
     await cliquer(c.querySelector('button[aria-label="Réglages du chat"]')!);

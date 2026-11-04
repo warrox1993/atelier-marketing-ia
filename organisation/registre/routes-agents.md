@@ -8,6 +8,8 @@ Une erreur 400 `entree_invalide` rend le détail champ par champ ; les règles c
 
 Clé : `tache.couverture`. Le producteur déclare la couverture de chaque exigence pour une révision, avec preuves localisables.
 
+Règle croisée : Seul le producteur assigné déclare (jamais un relecteur désigné). `revisionId` (et celui de chaque preuve) est la révision courante du livrable, sinon `revision_perimee`. Chaque `extrait` est recopié mot pour mot du livrable (espaces et casse ignorés) ; un `element` doit figurer dans son `extrait` ou son `emplacement`. `code` : seulement une exigence ciblée par la tâche. L'état `bloque` exige une `question` précise.
+
 | Champ | Type | Obligatoire | Bornes |
 | --- | --- | --- | --- |
 | `revisionId` | uuid | oui |  |
@@ -35,12 +37,14 @@ Exemple minimal valide :
 
 Clé : `tache.verdict`. Un relecteur désigné dépose un verdict structuré (jamais le producteur).
 
+Règle croisée : `revisionId` (et celui de chaque preuve) est la révision courante du livrable (`GET …/contexte`), sinon `revision_perimee`. Chaque `extrait` est recopié mot pour mot du livrable (espaces et casse ignorés) ; un `element` doit figurer dans son `extrait` ou son `emplacement`. CHANGES_REQUESTED exige au moins un constat nouveau, ou un constat bloquant de ton rôle encore ouvert et une `justification`. BLOCKED_INFORMATION exige `controlesNonExecutes` ou `justification`. PASS est refusé tant qu'un constat bloquant (critique ou majeure) de ton rôle reste ouvert : cite-le dans `constatsResolus`, qui n'accepte que des constats ouverts de ton rôle. Exigences examinées : seulement celles que la tâche cible.
+
 | Champ | Type | Obligatoire | Bornes |
 | --- | --- | --- | --- |
 | `revisionId` | uuid | oui |  |
-| `role` | énumération | oui | "exigences" \| "metier" \| "technique" |
+| `role` | énumération | oui | "exigences" \| "metier" \| "technique" \| "conformite" |
 | `verdict` | énumération | oui | "PASS" \| "CHANGES_REQUESTED" \| "BLOCKED_INFORMATION" \| "NOT_APPLICABLE_JUSTIFIED" |
-| `exigencesExaminees` | tableau de texte | non | 0 à 200 éléments |
+| `exigencesExaminees` | tableau de texte | non | 0 à 200 éléments ; éléments : motif `^REQ-\d{3,}$` |
 | `preuvesVerifiees` | tableau d'objets | non | 0 à 200 éléments |
 | `preuvesVerifiees[].revisionId` | uuid | oui |  |
 | `preuvesVerifiees[].emplacement` | texte | oui | 1 à 300 caractères |
@@ -48,7 +52,7 @@ Clé : `tache.verdict`. Un relecteur désigné dépose un verdict structuré (ja
 | `preuvesVerifiees[].extrait` | texte | oui | 1 à 1000 caractères |
 | `preuvesVerifiees[].sourceIds` | tableau de uuid | non | 0 à 20 éléments |
 | `constats` | tableau d'objets | non | 0 à 100 éléments |
-| `constats[].requirementIds` | tableau de texte | non | 0 à 50 éléments |
+| `constats[].requirementIds` | tableau de texte | non | 0 à 50 éléments ; éléments : motif `^REQ-\d{3,}$` |
 | `constats[].categorie` | énumération | oui | "exigence_manquante" \| "preuve_absente" \| "affirmation_non_sourcee" \| "offre_non_confirmee" \| "promesse_excessive" \| "lien_defectueux" \| "page_erreur" \| "incoherence_canaux" \| "marque" \| "technique" \| "juridique_a_verifier" \| "autre" |
 | `constats[].gravite` | énumération | oui | "critique" \| "majeure" \| "mineure" \| "info" |
 | `constats[].emplacement` | texte | oui | 1 à 300 caractères |
@@ -94,7 +98,7 @@ Aucun champ en plus de ceux listés (les champs inconnus sont refusés).
 | `contenu{type=contrat_propose}` | variante | oui |  |
 | `contenu{type=contrat_propose}.entrees` | tableau de texte | oui | 1 à 30 éléments |
 | `contenu{type=contrat_propose}.sorties` | tableau de texte | oui | 1 à 30 éléments |
-| `contenu{type=contrat_propose}.exigences` | tableau de texte | non | 0 à 50 éléments |
+| `contenu{type=contrat_propose}.exigences` | tableau de texte | non | 0 à 50 éléments ; éléments : motif `^REQ-\d{3,}$` |
 | `contenu{type=contrat_propose}.echeance` | date ISO | non | peut valoir null |
 | `contenu{type=contrat_accepte}` | variante | oui |  |
 | `contenu{type=contrat_accepte}.contratMessageId` | uuid | oui |  |
@@ -169,9 +173,10 @@ Règle croisée : `reponse` doit contenir `texte` ou `structuredContent` (au moi
 | --- | --- | --- | --- |
 | `service` | texte | oui | motif `^[a-z0-9][a-z0-9_-]{0,39}$` |
 | `outil` | texte | oui | motif `^[a-z0-9][a-z0-9_]{0,79}$` |
-| `reponse` | objet | oui |  |
+| `reponse` | objet | non |  |
 | `reponse.texte` | texte | non | 1 à ∞ caractères |
 | `reponse.structuredContent` | objet libre | non |  |
+| `reference` | texte | non | motif `^[A-Za-z0-9_-]{22}$` |
 | `arguments` | objet libre | non |  |
 | `compte` | texte | non | 1 à 200 caractères |
 
@@ -208,7 +213,7 @@ Clé : `tache.diffusions`. Demande d'action externe : refusée côté serveur sa
 | `audience` | texte | non | 1 à 500 caractères ; peut valoir null |
 | `montantCents` | entier | non | 0 à ∞ ; peut valoir null |
 | `cleIdempotence` | texte | oui | 8 à 200 caractères |
-| `service` | énumération | non | "facebook" \| "instagram" \| "linkedin" \| "crm" \| "pipedrive" \| "odoo" \| "teamleader" |
+| `service` | énumération | non | "facebook" \| "instagram" \| "linkedin" \| "linkedinprofil" \| "crm" \| "pipedrive" \| "odoo" \| "teamleader" |
 | `outil` | texte | non | motif `^[a-z][a-z0-9_]{0,63}$` |
 | `arguments` | objet libre | non |  |
 | `travauxFabrique` | tableau de uuid | non | 0 à 10 éléments |
@@ -248,7 +253,7 @@ Aucun champ en plus de ceux listés (les champs inconnus sont refusés).
 | Champ | Type | Obligatoire | Bornes |
 | --- | --- | --- | --- |
 | `revisionId` | uuid | oui |  |
-| `service` | énumération | oui | "facebook" \| "instagram" \| "linkedin" \| "crm" \| "pipedrive" \| "odoo" \| "teamleader" |
+| `service` | énumération | oui | "facebook" \| "instagram" \| "linkedin" \| "linkedinprofil" \| "crm" \| "pipedrive" \| "odoo" \| "teamleader" |
 | `outil` | texte | oui | motif `^[a-z][a-z0-9_]{0,63}$` |
 | `compte` | texte | oui | 1 à 200 caractères |
 | `arguments` | objet libre | oui |  |
@@ -274,6 +279,24 @@ Exemple minimal valide :
 {"canal":"exemple","dateProposee":"2026-01-15T09:00:00Z"}
 ```
 
+## POST /taches/:issueId/mettre-sous-porte
+
+Clé : `tache.mettre-sous-porte`. MK-01 : le Coordinateur (seul) met une tâche à livrable public sous la porte : politique native du gabarit livrable-public (revue par la Porte de contrôle, p...
+
+Aucun champ en plus de ceux listés (les champs inconnus sont refusés).
+
+| Champ | Type | Obligatoire | Bornes |
+| --- | --- | --- | --- |
+| `campagneId` | uuid | oui |  |
+| `exigencesCiblees` | tableau de texte | oui | 1 à 200 éléments ; éléments : motif `^REQ-\d{3,}$` |
+| `conformite` | booléen | non | défaut false |
+
+Exemple minimal valide :
+
+```json
+{"campagneId":"123e4567-e89b-42d3-a456-426614174000","exigencesCiblees":["REQ-001"]}
+```
+
 ## POST /portes
 
 Clé : `portes.creer`. Place une tâche native sous la porte de l'atelier.
@@ -284,9 +307,9 @@ Clé : `portes.creer`. Place une tâche native sous la porte de l'atelier.
 | `issueId` | uuid | oui |  |
 | `campagneId` | uuid | oui |  |
 | `cleLivrable` | texte | non | 1 à 64 caractères ; défaut "livrable" |
-| `exigencesCiblees` | tableau de texte | oui | 1 à 200 éléments |
-| `revuesRequises` | tableau d'objets | oui | 1 à 3 éléments |
-| `revuesRequises[].role` | énumération | oui | "exigences" \| "metier" \| "technique" |
+| `exigencesCiblees` | tableau de texte | oui | 1 à 200 éléments ; éléments : motif `^REQ-\d{3,}$` |
+| `revuesRequises` | tableau d'objets | oui | 1 à 4 éléments |
+| `revuesRequises[].role` | énumération | oui | "exigences" \| "metier" \| "technique" \| "conformite" |
 | `revuesRequises[].agentId` | uuid | oui |  |
 | `maxCycles` | entier | non | 1 à 10 ; défaut 3 |
 
@@ -340,7 +363,7 @@ Clé : `campagnes.exigences`. Enregistre ou corrige les exigences REQ-xxx extrai
 | `exigences[].interpretation` | texte | oui | 1 à 4000 caractères |
 | `exigences[].obligatoire` | booléen | oui |  |
 | `exigences[].criteres` | tableau de texte | non | 0 à 30 éléments |
-| `exigences[].dependances` | tableau de texte | non | 0 à 30 éléments |
+| `exigences[].dependances` | tableau de texte | non | 0 à 30 éléments ; éléments : motif `^REQ-\d{3,}$` |
 | `exigences[].elementsAttendus` | tableau de texte | non | 0 à 100 éléments |
 
 Exemple minimal valide :
@@ -395,9 +418,10 @@ Règle croisée : `reponse` doit contenir `texte` ou `structuredContent` (au moi
 | --- | --- | --- | --- |
 | `service` | énumération | oui | "bce" \| "bnb" \| "fsma" \| "osm" \| "b2c" |
 | `outil` | texte | oui | motif `^[a-z0-9][a-z0-9_]{0,79}$` |
-| `reponse` | objet | oui |  |
+| `reponse` | objet | non |  |
 | `reponse.texte` | texte | non | 1 à ∞ caractères |
 | `reponse.structuredContent` | objet libre | non |  |
+| `reference` | texte | non | motif `^[A-Za-z0-9_-]{22}$` |
 | `arguments` | objet libre | non |  |
 | `compte` | texte | non | 1 à 200 caractères |
 
@@ -405,6 +429,23 @@ Exemple minimal valide :
 
 ```json
 {"service":"bce","outil":"bce_entreprise","reponse":{"texte":"texte brut de la réponse de l'outil"}}
+```
+
+## POST /taches/:issueId/prospects/:prospectId/telephones
+
+Clé : `tache.prospects.telephone`. DROIT-1.3 : un numéro publié, lu sur une source de la tâche (sourceId), est chiffré dans la fiche du prospect (empreinte, oppositions et liste « Ne m'appelez...
+
+Aucun champ en plus de ceux listés (les champs inconnus sont refusés).
+
+| Champ | Type | Obligatoire | Bornes |
+| --- | --- | --- | --- |
+| `telephone` | texte | oui | 6 à 40 caractères |
+| `sourceId` | uuid | oui |  |
+
+Exemple minimal valide :
+
+```json
+{"telephone":"exemple","sourceId":"123e4567-e89b-42d3-a456-426614174000"}
 ```
 
 ## POST /prospects/:prospectId/exclusion
@@ -489,7 +530,7 @@ Règle croisée : Un statut `verifie` ou `contraire` exige au moins une source ;
 | `companyId` | uuid | oui |  |
 | `statut` | énumération | oui | "verifie" \| "non_verifie" \| "contraire" |
 | `justification` | texte | oui | 3 à 500 caractères |
-| `sources` | tableau de texte | oui | 0 à 10 éléments |
+| `sources` | tableau de texte | oui | 0 à 10 éléments ; éléments : motif `^(https?\\|connaissance):\/\/\S+$` |
 
 Exemple minimal valide :
 
@@ -634,4 +675,92 @@ Exemple minimal valide :
 
 ```json
 {"tacheOrigineId":"123e4567-e89b-42d3-a456-426614174000","serviceCible":"exemple","objet":"exemple","question":"exemple"}
+```
+
+## POST /taches/:issueId/obs/sources/proposer
+
+Clé : `tache.obs.sources.proposer`. Observatoire : ajoute des sources NOUVELLES à la base commune, jamais ne modifie ni ne retire une source existante (URL déjà présente : ignorée et signalée).
+
+Aucun champ en plus de ceux listés (les champs inconnus sont refusés).
+
+| Champ | Type | Obligatoire | Bornes |
+| --- | --- | --- | --- |
+| `sources` | tableau d'objets | oui | 1 à 50 éléments |
+| `sources[].url` | texte | oui | 1 à 500 caractères |
+| `sources[].type` | énumération | oui | "secondaire" \| "communautaire" |
+| `sources[].motif` | texte | oui | 1 à 500 caractères |
+| `sources[].langue` | texte | non | 2 à 16 caractères ; peut valoir null |
+| `sources[].pays` | texte | non | 2 à 16 caractères ; peut valoir null |
+| `sources[].sujets` | tableau de texte | non | 0 à 20 éléments |
+
+Exemple minimal valide :
+
+```json
+{"sources":[{"url":"https://exemple.org/blog-ia","type":"secondaire","motif":"Blog de laboratoire absent de la base commune","langue":"fr","pays":"FR","sujets":["ia"]}]}
+```
+
+## POST /taches/:issueId/obs/collecter
+
+Clé : `tache.obs.collecter`. Observatoire : collecte les sources du projet {slug} et, si demandé, celles de la base commune {communes[]} (20 URL au plus, absente ou suspecte : introuvabl...
+
+Aucun champ en plus de ceux listés (les champs inconnus sont refusés).
+
+| Champ | Type | Obligatoire | Bornes |
+| --- | --- | --- | --- |
+| `slug` | texte | oui | motif `^[a-z0-9][a-z0-9-]{0,63}$` |
+| `communes` | tableau de texte | non | 0 à 20 éléments |
+
+Exemple minimal valide :
+
+```json
+{"slug":"exemple"}
+```
+
+## POST /taches/:issueId/obs/affirmations
+
+Clé : `tache.obs.affirmer`. Observatoire : valide puis enregistre une affirmation {affirmation, preuves[], remplace?} ;
+
+Aucun champ en plus de ceux listés (les champs inconnus sont refusés).
+
+Règle croisée : Chaque preuve vise exactement un lien ; les preuves par essai sont refusées tant que le service d'essais n'est pas branché : `instantaneId` renseigné, `essaiId` à null (donc jamais le statut `verifie_experimentalement`). `extraitExact` compte au moins 20 caractères une fois normalisé et se trouve à l'indice `position` du texte normalisé de l'instantané (`GET …/obs/instantanes/<id>`). `remplace` vise une affirmation du même projet pas encore remplacée.
+
+| Champ | Type | Obligatoire | Bornes |
+| --- | --- | --- | --- |
+| `affirmation` | objet | oui |  |
+| `affirmation.projetId` | uuid | oui |  |
+| `affirmation.chapitre` | texte | oui | motif `^(ch(0[1-9]\\|1\d\\|2[0-4])\\|fiche\.[a-zA-Z]+)$` |
+| `affirmation.texte` | texte | oui | 0 à 4000 caractères |
+| `affirmation.statut` | énumération | oui | "verifie_experimentalement" \| "confirme_doc_officielle" \| "rapporte_editeur" \| "rapporte_tiers" \| "infere" \| "non_verifie" \| "contredit" \| "obsolete" |
+| `affirmation.confiance` | objet | oui |  |
+| `affirmation.confiance.niveau` | entier | oui | 0 à 3 |
+| `affirmation.confiance.motif` | texte | oui | 1 à 1000 caractères |
+| `affirmation.versionConcernee` | texte | oui | 0 à 64 caractères ; peut valoir null |
+| `preuves` | tableau d'objets | oui | 0 à 50 éléments |
+| `preuves[].instantaneId` | uuid | oui | peut valoir null |
+| `preuves[].essaiId` | uuid | oui | peut valoir null |
+| `preuves[].extraitExact` | texte | oui | 1 à ∞ caractères |
+| `preuves[].position` | entier | oui | 0 à ∞ |
+| `remplace` | uuid | non |  |
+
+Exemple minimal valide :
+
+```json
+{"affirmation":{"projetId":"123e4567-e89b-42d3-a456-426614174000","chapitre":"fiche.licence","texte":"MIT","statut":"infere","confiance":{"niveau":1,"motif":"Licence lue dans le dépôt"},"versionConcernee":null},"preuves":[]}
+```
+
+## POST /taches/:issueId/obs/fiche
+
+Clé : `tache.obs.fiche`. Observatoire : assemble la fiche (25 champs) du projet {slug, langue} depuis ses affirmations et la renvoie.
+
+Aucun champ en plus de ceux listés (les champs inconnus sont refusés).
+
+| Champ | Type | Obligatoire | Bornes |
+| --- | --- | --- | --- |
+| `slug` | texte | oui | motif `^[a-z0-9][a-z0-9-]{0,63}$` |
+| `langue` | énumération | oui | "fr" \| "en" |
+
+Exemple minimal valide :
+
+```json
+{"slug":"exemple","langue":"fr"}
 ```

@@ -91,8 +91,8 @@ et le premier contact passe par le canal professionnel impersonnel ou par la fé
 - **RGPD** : prospection = intérêt légitime possible (considérant 47) avec mise en balance, information (art. 13 et 14),
   droit d'opposition absolu (art. 21.3), profilage à annoncer.
 - **ePrivacy, art. 13** et **arrêté royal du 4 avril 2003** (pris en exécution de l'art. 14 de la loi du 11 mars 2003,
-  dispositions reprises au Code de droit économique, livre XII, art. XII.13 : **probable**, numéro d'article à confirmer
-  par le juriste) : publicité par courrier électronique (SMS compris, « tout message sous forme de texte… ») interdite sans
+  dispositions reprises au Code de droit économique, livre XII, art. XII.13, confirmé sur Justel le 30/10/2026 ; texte et
+  citations : `organisation/skills/controle-communications-reglementees/references/rgpd-prospection.md`) : publicité par courrier électronique (SMS compris, « tout message sous forme de texte… ») interdite sans
   consentement préalable, sauf (1°) clients existants pour des produits analogues du même prestataire, opposition offerte
   à la collecte et à chaque message, coordonnées non transmises à un tiers (une société sœur est un tiers), et
   (2°) **personnes morales sur des coordonnées impersonnelles** ; art. 2 : liste d'opposition propre au prestataire.

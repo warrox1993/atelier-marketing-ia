@@ -1,0 +1,154 @@
+From 31047d4478b20d93fc20af2a8f8a27f60ee4b882 Mon Sep 17 00:00:00 2001
+From: Jean-Baptiste Dhondt <114347858+warrox1993@users.noreply.github.com>
+Date: Fri, 30 Oct 2026 12:22:01 +0100
+Subject: [PATCH] =?UTF-8?q?fix(tool-gateway):=20un=20d=C3=A9lai=20d=C3=A9p?=
+ =?UTF-8?q?ass=C3=A9=20ne=20masque=20plus=20les=20outils=20de=20la=20conne?=
+ =?UTF-8?q?xion,=20connection=5Funavailable=20au=20lieu=20de=20tool=5Fnot?=
+ =?UTF-8?q?=5Ffound=20(Atelier=20T3,=20LIV-MK-8)?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Un tool_timeout marquait la connexion distante en erreur ; le filtre de listage
+exige une santé ok, donc tous ses outils répondaient tool_not_found jusqu'à un
+contrôle humain (4 jours le 21/10). Le délai décrit l'appel, pas la connexion :
+session MCP oubliée, santé intacte. Un outil caché par une connexion en erreur
+répond désormais 503 connection_unavailable avec le motif.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01EThpSSDGc5NRYwbgjNqoTJ
+---
+ server/src/__tests__/tool-gateway.test.ts | 56 +++++++++++++++++++++++
+ server/src/services/tool-gateway.ts       | 35 ++++++++++++--
+ 2 files changed, 86 insertions(+), 5 deletions(-)
+
+diff --git a/server/src/__tests__/tool-gateway.test.ts b/server/src/__tests__/tool-gateway.test.ts
+index ae6300bc14..406c0197f6 100644
+--- a/server/src/__tests__/tool-gateway.test.ts
++++ b/server/src/__tests__/tool-gateway.test.ts
+@@ -4436,6 +4436,62 @@ rl.on("line", (line) => {
+     });
+   }
+ 
++  it("garde l'outil distant listé et appelable après un délai dépassé (Atelier T3)", async () => {
++    const company = await createCompany(db);
++    const agent = await createAgent(db, company.id);
++    const { run } = await createIssueAndRun(db, company.id, agent.id);
++    let appels = 0;
++    const fake = await startFakeRemoteMcpServer((req) => {
++      if (req.body?.method !== "tools/call") return { body: { jsonrpc: "2.0", id: req.body?.id ?? null, result: {} } };
++      appels += 1;
++      return appels === 1
++        ? { delayMs: 75, body: { jsonrpc: "2.0", id: req.body?.id, result: { content: [{ type: "text", text: "tard" }] } } }
++        : { body: { jsonrpc: "2.0", id: req.body?.id, result: { content: [{ type: "text", text: "ok" }] } } };
++    });
++    try {
++      const { connection } = await createRemoteMcpTool(db, company.id, { toolName: "verifier_url", url: fake.url });
++      await allowAllToolsForAgent(db, company.id, agent.id);
++      const gateway = createTestToolGatewayService(db);
++      const session = await gateway.createSession({ companyId: company.id, agentId: agent.id, runId: run.id });
++      const outil = (await gateway.listToolsForSession(session.token)).find((t) => t.providerType === "mcp_remote_http")!;
++      await gateway.executeTool({ sessionToken: session.token, tool: outil.name, parameters: { key: "premier" }, timeoutMs: 10 }).then(
++        () => { throw new Error("délai dépassé attendu"); },
++        (error) => expectGatewayError(error, 504, "tool_timeout"),
++      );
++      const [apres] = await db.select().from(toolConnections).where(eq(toolConnections.id, connection.id));
++      expect(apres.healthStatus).toBe("ok");
++      expect((await gateway.listToolsForSession(session.token)).some((t) => t.name === outil.name)).toBe(true);
++      const second = await gateway.executeTool({ sessionToken: session.token, tool: outil.name, parameters: { key: "second" } });
++      expect(JSON.stringify(second)).toContain("ok");
++    } finally {
++      await fake.close();
++    }
++  });
++
++  it("répond connection_unavailable, pas tool_not_found, quand la connexion de l'outil est en erreur (Atelier T3)", async () => {
++    const company = await createCompany(db);
++    const agent = await createAgent(db, company.id);
++    const { run } = await createIssueAndRun(db, company.id, agent.id);
++    const { connection } = await createRemoteMcpTool(db, company.id, { toolName: "verifier_url" });
++    await allowAllToolsForAgent(db, company.id, agent.id);
++    const gateway = createTestToolGatewayService(db);
++    const session = await gateway.createSession({ companyId: company.id, agentId: agent.id, runId: run.id });
++    const outil = (await gateway.listToolsForSession(session.token)).find((t) => t.providerType === "mcp_remote_http")!;
++    await db.update(toolConnections).set({ healthStatus: "error", healthMessage: "Remote MCP tool call failed." })
++      .where(eq(toolConnections.id, connection.id));
++    await gateway.executeTool({ sessionToken: session.token, tool: outil.name, parameters: {} }).then(
++      () => { throw new Error("connexion indisponible attendue"); },
++      (error) => {
++        expectGatewayError(error, 503, "connection_unavailable");
++        expect((error as ToolGatewayHttpError).message).toContain("Remote MCP tool call failed.");
++      },
++    );
++    await gateway.executeTool({ sessionToken: session.token, tool: "mcp.inconnu-00000000:rien", parameters: {} }).then(
++      () => { throw new Error("outil inconnu attendu"); },
++      (error) => expectGatewayError(error, 404, "tool_not_found"),
++    );
++  });
++
+   function initializeFakeMcpSession(request: FakeMcpRequest, sessionId: string) {
+     return {
+       headers: { "mcp-session-id": sessionId },
+diff --git a/server/src/services/tool-gateway.ts b/server/src/services/tool-gateway.ts
+index b95364c8c3..b54c6ef069 100644
+--- a/server/src/services/tool-gateway.ts
++++ b/server/src/services/tool-gateway.ts
+@@ -2786,6 +2786,31 @@ export function createToolGatewayService(
+     return tool;
+   }
+ 
++  // Atelier T3 : un outil caché parce que sa connexion est en erreur doit le dire
++  // (motif, réparation humaine) au lieu de tool_not_found, que l'agent réessaie.
++  async function assertToolConnectionAvailable(companyId: string, toolName: string) {
++    const prefixe = /^mcp\.[a-z0-9-]*-([0-9a-f]{8}):/.exec(toolName)?.[1];
++    if (!prefixe) return;
++    const [connection] = await db
++      .select({ id: toolConnections.id, healthStatus: toolConnections.healthStatus, healthMessage: toolConnections.healthMessage })
++      .from(toolConnections)
++      .where(and(
++        eq(toolConnections.companyId, companyId),
++        sql`replace(${toolConnections.id}::text, '-', '') like ${`${prefixe}%`}`,
++        eq(toolConnections.status, "active"),
++        eq(toolConnections.enabled, true),
++        inArray(toolConnections.healthStatus, ["error", "failed", "degraded"]),
++      ))
++      .limit(1);
++    if (!connection) return;
++    throw new ToolGatewayHttpError(
++      503,
++      `Connection unavailable: ${connection.healthMessage ?? connection.healthStatus}. Its tools stay hidden until a human checks the connection; do not retry.`,
++      "connection_unavailable",
++      { tool: toolName, connectionId: connection.id, healthStatus: connection.healthStatus },
++    );
++  }
++
+   async function findToolForSession(
+     session: ToolGatewaySession,
+     toolName: string,
+@@ -2803,6 +2828,7 @@ export function createToolGatewayService(
+       )
+       .find((candidate) => candidate.name === toolName);
+     if (!tool) {
++      await assertToolConnectionAvailable(session.companyId, toolName);
+       throw new ToolGatewayHttpError(
+         404,
+         `Tool "${toolName}" not found`,
+@@ -6353,11 +6379,10 @@ export function createToolGatewayService(
+         );
+       }
+       if (error instanceof Error && error.name === "AbortError") {
+-        await markRemoteConnectionHealth(
+-          connection,
+-          "error",
+-          "Remote MCP tool call timed out.",
+-        );
++        // Atelier T3 : un délai dépassé décrit cet appel (cible lente), pas la
++        // connexion. La marquer en erreur masquait tous ses outils (tool_not_found
++        // en boucle) jusqu'à un contrôle humain. Session MCP neuve au prochain appel.
++        if (mcpSession) forgetMcpHttpSession(mcpSession);
+         throw new ToolGatewayHttpError(
+           504,
+           "Remote MCP tool call timed out",
+-- 
+2.53.0
+

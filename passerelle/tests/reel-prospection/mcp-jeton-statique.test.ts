@@ -35,11 +35,12 @@ describe("service par une vraie passerelle (client MCP du SDK)", () => {
     return c;
   }
 
-  async function appelerMcp(c: Client, nom: string, args: Record<string, unknown>, attendu: { service: string; erreur?: boolean }): Promise<Record<string, any>> {
+  async function appelerMcp(c: Client, nom: string, args: Record<string, unknown>, attendu: { service: string; erreur?: boolean; mention?: boolean }): Promise<Record<string, any>> {
     const reponse = await c.callTool({ name: nom, arguments: args });
     const donnees = reponse["structuredContent"] as Record<string, any>;
     const texte = (reponse["content"] as { text: string }[])[0]!.text;
-    expect(texte.startsWith(`${MENTION_DONNEES_TIERCES}\n\n`)).toBe(true);
+    // S2 : mention sur les réponses des outils à monde ouvert, jamais sur atelier_identite ni sur une erreur interne.
+    expect(texte, nom).toBe(`${attendu.mention === false ? "" : `${MENTION_DONNEES_TIERCES}\n\n`}${JSON.stringify(donnees)}`);
     expect(donnees["_atelier"]).toMatchObject({ mode: "reel" });
     expect(String(donnees["_atelier"].signature).startsWith(PREFIXE_ENVELOPPE)).toBe(true);
     const verdict = verifierEnveloppe(donnees, signataire.clePubliqueBase64);
@@ -85,7 +86,7 @@ describe("service par une vraie passerelle (client MCP du SDK)", () => {
     const { tools } = await bce.listTools();
     expect(tools.map((t) => t.name).sort()).toEqual(["atelier_identite", "bce_changements", "bce_entreprise", "bce_rechercher"]);
     for (const t of tools) expect(t.annotations?.readOnlyHint, t.name).toBe(true);
-    const id = await appelerMcp(bce, "atelier_identite", {}, { service: "bce" });
+    const id = await appelerMcp(bce, "atelier_identite", {}, { service: "bce", mention: false });
     expect(id).toMatchObject({ mode: "reel", service: "bce", propriete: { id: "registre/bce-local" } });
     const osm = await connecter(passerelle.url, "osm", JETON);
     expect((await osm.listTools()).tools.map((t) => t.name).sort()).toEqual(["atelier_identite", "osm_commerces", "osm_repartition"]);
@@ -112,7 +113,7 @@ describe("service par une vraie passerelle (client MCP du SDK)", () => {
 
   it("erreurs d'outil (arguments invalides, numéro mal formé) : isError, signées elles aussi", async () => {
     const c = await connecter(passerelle.url, "bce", JETON);
-    const invalide = await appelerMcp(c, "bce_rechercher", { nace: ["abc"] }, { service: "bce", erreur: true });
+    const invalide = await appelerMcp(c, "bce_rechercher", { nace: ["abc"] }, { service: "bce", erreur: true, mention: false });
     expect(invalide["erreur"]).toBe("arguments_invalides");
     const mal = await appelerMcp(c, "bce_entreprise", { numero: "12" }, { service: "bce", erreur: true });
     expect(mal["message"]).toMatch(/Numéro BCE invalide/);

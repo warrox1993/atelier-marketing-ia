@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="fr" data-format="{{format}}" data-police="{{police}}" data-titre="{{palier_titre}}" data-chiffre="{{palier_chiffre}}" data-sous="{{palier_sous}}" data-points="{{palier_points}}" data-charge="{{palier_charge}}">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="{{csp}}">
+<title>Image</title>
+<link rel="stylesheet" href="charte.css">
+<link rel="stylesheet" href="base.css">
+<link rel="stylesheet" href="scene.css">
+</head>
+<body>
+{{fond}}
+<div id="page">
+<header id="entete">{{logo}}</header>
+<main id="contenu">
+<div class="tete">
+<i class="filet"></i>
+<h1 id="titre">{{titre}}</h1>
+</div>
+<div class="corps">
+<p id="sous-titre">{{sous_titre}}</p>
+<p id="appel">{{appel_action}}</p>
+</div>
+<i id="temoin"></i>
+</main>
+<footer id="pied"><p id="mentions">{{mentions_legales}}</p>{{bandeau_ia}}</footer>
+</div>
+</body>
+</html>

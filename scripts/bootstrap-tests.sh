@@ -151,7 +151,7 @@ attendre_refus "consigne de dépôt des réponses absente" "${d}" "consigne manq
 
 # Contrats v1.5 : dépôt avec les arguments exacts, et parcours complet d'une diffusion réelle.
 d="$(copie connexion-arguments)"
-sed -i 's|"arguments"|"args"|g' "${d}/organisation/agents/mesure/AGENTS.md"
+sed -i 's|"arguments"|"args"|g' "${d}/organisation/agents/mesure/AGENTS.md" "${d}/organisation/consignes/marketing.md"
 "${PY[@]}" "${d}/scripts/bootstrap-organisation.py" generer > /dev/null
 attendre_refus "dépôt sans les arguments exacts de l'appel" "${d}" "consigne manquante dans AGENTS.md : arguments exacts"
 
@@ -486,16 +486,21 @@ with b.verrou_ecriture("appliquer"):
     attente = time.monotonic() - t0
 assert 1.0 <= attente < 10, attente
 print(f"5. écriture humaine : attente de {attente:.1f} s derrière le Gardien, puis exécutée")
-# 6. Aucune organisation : rien à faire, code 0 ; agent du registre absent : erreur claire, code 2.
+# 6. Aucune organisation : rien à faire, code 0. Agent du registre absent (0ce490d) : nommé, les présents sont servis,
+#    code 0 ; aucun agent présent : code 1.
 etat["entreprise"] = False
 code, sortie = lancer("assurer-connexions")
 assert code == 0 and "rien à faire" in sortie, (code, sortie)
 etat["entreprise"] = True
 sauve = etat["agents"].pop("veille")
 code, sortie = lancer("assurer-connexions")
-assert code == 2 and "agents du registre absents" in sortie and "veille" in sortie, (code, sortie)
+assert code == 0 and "connexions réservées aux seuls agents présents" in sortie and "veille" in sortie, (code, sortie)
 etat["agents"]["veille"] = sauve
-print("6. sans organisation : rien à faire ; agent du registre absent : erreur claire (code 2)")
+tous_ = dict(etat["agents"]); etat["agents"].clear()
+code, sortie = lancer("assurer-connexions")
+assert code == 1 and "aucun agent du registre présent" in sortie, (code, sortie)
+etat["agents"].update(tous_)
+print("6. sans organisation : rien à faire ; agent absent : nommé, présents servis (code 0) ; aucun présent : code 1")
 # 6b. Lancée par le Gardien, la commande agit sur l'entreprise de l'agent (PAPERCLIP_COMPANY_ID),
 #     même si son nom n'est pas celui du registre (seconde entreprise de démonstration) ;
 #     une entreprise inconnue est une erreur claire, jamais un repli sur la recherche par nom.
@@ -518,7 +523,7 @@ api = b.Api(os.environ["ATELIER_API"])
 voulu = b.corps_gardien(api)
 assert voulu["adapterType"] == "process" and "model" not in voulu["adapterConfig"] and voulu["budgetMonthlyCents"] == 0
 assert voulu["permissions"] == {"canCreateAgents": False, "canCreateSkills": False}
-assert voulu["runtimeConfig"]["heartbeat"]["enabled"] is True and voulu["runtimeConfig"]["heartbeat"]["intervalSec"] == 60
+assert voulu["runtimeConfig"]["heartbeat"]["enabled"] is True and voulu["runtimeConfig"]["heartbeat"]["intervalSec"] == 900
 assert voulu["adapterConfig"]["args"][-1] == "assurer-connexions" and voulu["adapterConfig"]["args"][0] == "-I"
 assert voulu["adapterConfig"]["env"]["ATELIER_API"] == api.base
 print("7. définition du Gardien : process sans modèle, permissions nulles, battement 60 s, commande assurer-connexions")
@@ -533,7 +538,7 @@ etat["detail"][aid]["runtimeConfig"]["heartbeat"]["intervalSec"] = 3600  # déri
 etat["detail"][aid]["permissions"] = {"canCreateAgents": True, "canCreateSkills": False}
 ecr, msg = b.assurer_gardien(api, CID)
 assert msg.startswith("réaligné") and "heartbeat.intervalSec" in msg, msg
-assert etat["detail"][aid]["runtimeConfig"]["heartbeat"]["intervalSec"] == 60
+assert etat["detail"][aid]["runtimeConfig"]["heartbeat"]["intervalSec"] == 900
 assert ("PATCH", f"/agents/{aid}/permissions") in etat["ecritures"], "permissions non réalignées"
 etat["detail"][aid]["status"] = "paused"
 avant = ecritures()
@@ -872,6 +877,32 @@ code, s = lancer("nouveau-client", "--fiche", str(racine / "organisation/modeles
 assert code == 0 and "À blanc" in s and "créer l'entreprise" in s and "budget IA mensuel" in s and "référentiel de marque" in s and "intermediaire_assurance" in s, (code, s)
 assert not etat["ecritures"] and etat["creations"] == 0 and etat["appels_coeur"] == 0, etat
 print("1. fiche valide à blanc : écritures prévues listées (entreprise, organisation, budget, référentiel), aucune écriture")
+# 1 bis. Client « personnel » : sans BCE ; refus du BCE, du marketing et du courtier ; une fiche non personnelle sans BCE reste refusée.
+def perso(f, **kw):
+    f.pop("numeroBce", None); f.pop("numeroFsma", None); f.update(personnel=True, courtier=False, services=["juridique"]); f.update(kw)
+code, s = lancer("nouveau-client", "--fiche", ecrire_fiche("perso-ok.json", perso), "--a-blanc")
+assert code == 0 and "À blanc" in s and not etat["ecritures"] and etat["creations"] == 0, (code, s)
+code, s = lancer("nouveau-client", "--fiche", ecrire_fiche("perso-null.json", lambda f: perso(f, numeroBce=None)), "--a-blanc")
+assert code == 0, (code, s)
+code, s = lancer("nouveau-client", "--fiche", ecrire_fiche("perso-nu.json", lambda f: (perso(f), f.pop("bureaux"), f.pop("offres"), f.pop("segmentsCibles", None))), "--a-blanc")
+assert code == 0, ("client personnel sans marketing : ni bureau ni offre exigés", code, s)
+code, s = lancer("nouveau-client", "--fiche", ecrire_fiche("perso-mkt.json", lambda f: perso(f, services=["marketing", "juridique"])), "--a-blanc")
+assert code == 0 and "marketing" in s, ("client personnel avec son marketing (mentions sans BCE)", code, s)
+ent_perso = b.referentiel_client(b.valider_fiche(json.load(open(ecrire_fiche("perso-mkt-ref.json", lambda f: perso(f, services=["marketing"])), encoding="utf-8"))))["entites"][0]
+assert ent_perso["identifiants"] == [] and "BCE" not in ent_perso["mentionsLegales"], ent_perso
+refus_perso = [("perso-bce.json", lambda f: perso(f, numeroBce="0123.456.749"), "numeroBce"),
+               ("perso-sans-offre-mkt.json", lambda f: (perso(f, services=["marketing"]), f.pop("offres")), "offres"),
+               ("perso-courtier.json", lambda f: perso(f, courtier=True, numeroFsma="100100"), "courtier"),
+               ("perso-fsma.json", lambda f: perso(f, numeroFsma="100100"), "numeroFsma"),
+               ("perso-texte.json", lambda f: perso(f, personnel="oui"), "personnel"),
+               ("sans-bce.json", lambda f: (perso(f), f.update(personnel=False)), "numeroBce"),
+               ("sans-bce2.json", lambda f: f.pop("numeroBce"), "numeroBce"),
+               ("sans-bureau.json", lambda f: f.pop("bureaux"), "bureaux"),
+               ("sans-offre.json", lambda f: f.pop("offres"), "offres")]
+for nom_, modif_, motif_ in refus_perso:
+    code, s = lancer("nouveau-client", "--fiche", ecrire_fiche(nom_, modif_), "--a-blanc")
+    assert code != 0 and motif_ in s and "rien n'est écrit" in s, (nom_, code, s); sans_appel()
+print("1 bis. client personnel : fiche valide sans BCE, marketing possible (mentions sans BCE, offres exigées) ; BCE, courtier ou FSMA refusés ; fiche non personnelle sans BCE refusée")
 # 2. BCE invalide : refus, aucun appel d'API.
 code, s = lancer("nouveau-client", "--fiche", ecrire_fiche("bce.json", lambda f: f.update(numeroBce="0123.456.748")))
 assert code != 0 and "BCE" in s and "rien n'est écrit" in s, (code, s); sans_appel()
@@ -1167,13 +1198,13 @@ code, s = lancer("nouveau-client", "--fiche", f3, "--a-blanc")
 assert code == 0 and "4 entreprise(s) : marketing, direction, juridique, commercial" in s, s
 for slug in ("marketing", "direction", "juridique", "commercial"):
     assert f"[{slug}] créer l'entreprise" in s, (slug, s)
-assert "Client Trio · Juridique" in s and "atelier-client:client-trio:juridique" in s and "4242 centimes" in s and "consigne à rédiger" not in s, s
+assert "JUR · Juridique · Client Trio" in s and "atelier-client:client-trio:juridique" in s and "4242 centimes" in s and "consigne à rédiger" not in s, s
 sans_appel(avant)
 creations = etat["creations"]
 code, s = lancer("nouveau-client", "--fiche", f3)
 assert code == 0 and etat["creations"] == creations + 4 and "4 entreprise(s)" in s, (code, s)
 noms = {c["name"]: c for c in etat["societes"]}
-attendus = {"Client Trio · Marketing": "marketing", "Client Trio · Direction": "direction", "Client Trio · Juridique": "juridique", "Client Trio · Commercial": "commercial"}
+attendus = {"MKT · Marketing · Client Trio": "marketing", "DIR · Direction · Client Trio": "direction", "JUR · Juridique · Client Trio": "juridique", "COM · Commercial · Client Trio": "commercial"}
 assert set(attendus) <= set(noms), list(noms)
 assert all("—" not in n and "–" not in n for n in noms), "aucun tiret cadratin"
 rg = registre("client-trio")
@@ -1186,35 +1217,35 @@ assert (donnees / "atelier-client/client-trio/entreprise.json").stat().st_mode &
 assert {e["entrepriseId"] for e in rg["entreprises"].values()} == set(etat["configs"]) and all(v["configJson"] == {} for v in etat["configs"].values()), etat["configs"]
 assert "Configuration du plugin (bureau de liaison) : 4 entreprise(s) configurée(s), 0 déjà configurée(s)" in s, s
 # Budgets : fiche > budget IA (marketing) > somme des budgets des agents.
-assert noms["Client Trio · Juridique"]["budgetMonthlyCents"] == 4242 and noms["Client Trio · Marketing"]["budgetMonthlyCents"] == 5000
+assert noms["JUR · Juridique · Client Trio"]["budgetMonthlyCents"] == 4242 and noms["MKT · Marketing · Client Trio"]["budgetMonthlyCents"] == 5000
 somme = lambda nom_: sum(a["budgetMensuelCentimes"] for a in etat["agents"][nom_]["agents"])
-assert noms["Client Trio · Commercial"]["budgetMonthlyCents"] == somme("Client Trio · Commercial") > 0
-assert noms["Client Trio · Direction"]["budgetMonthlyCents"] == somme("Client Trio · Direction") > 0
+assert noms["COM · Commercial · Client Trio"]["budgetMonthlyCents"] == somme("COM · Commercial · Client Trio") > 0
+assert noms["DIR · Direction · Client Trio"]["budgetMonthlyCents"] == somme("DIR · Direction · Client Trio") > 0
 # Organisation d'un service : agents du registre, coordinateur ceo, spécialistes qui lui rapportent, consignes du dépôt, confinement.
-reg_j = etat["agents"]["Client Trio · Juridique"]["agents"]
+reg_j = etat["agents"]["JUR · Juridique · Client Trio"]["agents"]
 assert [a["slug"] for a in reg_j] == services["juridique"]["agents"], reg_j
 assert reg_j[0]["role"] == "ceo" and reg_j[0]["rapporteA"] is None and all(a["rapporteA"] == "coordinateur-juridique" and a["role"] != "ceo" for a in reg_j[1:])
-paquet_j = etat["paquets"]["Client Trio · Juridique"]
+paquet_j = etat["paquets"]["JUR · Juridique · Client Trio"]
 fichiers_skills_j = {f.relative_to(racine / "organisation").as_posix() for a in reg_j for c in a["competences"] for f in (racine / "organisation/skills" / c).rglob("*") if f.is_file()}
 assert set(paquet_j) == {"COMPANY.md", ".paperclip.yaml"} | {f"agents/{a['slug']}/AGENTS.md" for a in reg_j} | fichiers_skills_j, sorted(paquet_j)
 assert 'filesystemScope: "workspace"' in paquet_j[".paperclip.yaml"] and 'networkScope: "allowlist"' in paquet_j[".paperclip.yaml"]
 assert paquet_j["agents/lecture-contrats/AGENTS.md"].count('reportsTo: "coordinateur-juridique"') == 1 and "Première lecture" in paquet_j["agents/lecture-contrats/AGENTS.md"]
 assert "Consigne à rédiger" not in "".join(paquet_j.values()) and b.MARQUEUR_CONSIGNES_COMMUNES in paquet_j["agents/lecture-contrats/AGENTS.md"]
-assert "Client Trio · Juridique" in paquet_j["COMPANY.md"] and "Client Solo" not in "".join(paquet_j.values())
-print("2. trois services + Direction : 4 entreprises (noms « client · service », marqueurs, registre), budgets, hiérarchie, consignes du dépôt, confinement")
+assert "JUR · Juridique · Client Trio" in paquet_j["COMPANY.md"] and "Client Solo" not in "".join(paquet_j.values())
+print("2. trois services + Direction : 4 entreprises (noms « préfixe · service · client », marqueurs, registre), budgets, hiérarchie, consignes du dépôt, confinement")
 # Compétences des services : celles de l'en-tête « skills: » de chaque AGENTS.md du dépôt, livrées comme au marketing.
 def skills_depot(svc_, ag_):
     return b.competences_entete((racine / "organisation/services" / svc_ / "agents" / ag_ / "AGENTS.md").read_text(encoding="utf-8"), svc_, ag_)
 skills_coord_d = skills_depot("direction", "coordinateur-direction")
 assert {"cadrage-exigences", "planification-livrables"} <= set(skills_coord_d) and len(skills_coord_d) == len(set(skills_coord_d)), skills_coord_d
-par_slug_d = {a["slug"]: a for a in etat["agents"]["Client Trio · Direction"]["agents"]}
+par_slug_d = {a["slug"]: a for a in etat["agents"]["DIR · Direction · Client Trio"]["agents"]}
 # Compétences livrées = celles de l'en-tête, puis les compétences communes du générateur (décision de l'opérateur du 18/10/2026) ;
-# un coordinateur n'écrit aucun fichier (Write et Edit interdits) : pas de memoire-para (revue du 18/10/2026, M2).
-livrees_coord_d = b.avec_competences_communes(skills_coord_d, ecrit=False)
+# depuis le 29/10/2026, un coordinateur a lui aussi memoire-para (seule écriture permise : son dossier de mémoire).
+livrees_coord_d = b.avec_competences_communes(skills_coord_d)
 assert livrees_coord_d[: len(skills_coord_d)] == skills_coord_d and "recherche-connaissances" in livrees_coord_d
-assert "memoire-para" not in livrees_coord_d
+assert "memoire-para" in livrees_coord_d
 assert par_slug_d["coordinateur-direction"]["competences"] == livrees_coord_d
-paquet_d = etat["paquets"]["Client Trio · Direction"]
+paquet_d = etat["paquets"]["DIR · Direction · Client Trio"]
 entete_d = paquet_d["agents/coordinateur-direction/AGENTS.md"].split("\n---\n")[0]
 assert "skills:\n" + "".join(f'  - "{c_}"\n' for c_ in livrees_coord_d) in entete_d + "\n", entete_d
 for c_ in par_slug_d["coordinateur-direction"]["competences"]:
@@ -1227,12 +1258,12 @@ par_slug_j = {a["slug"]: a for a in reg_j}
 assert b.competences_entete('---\nkind: "agent"\nskills: []\n---\n', "juridique", "x") == []
 for a_ in reg_j:
     if "skills: []" in (racine / "organisation/services/juridique/agents" / a_["slug"] / "AGENTS.md").read_text(encoding="utf-8").split("\n---\n")[0]:
-        assert a_["competences"] == b.avec_competences_communes([], b.ecrit_des_fichiers(a_["outils"])) and skills_depot("juridique", a_["slug"]) == []
+        assert a_["competences"] == b.avec_competences_communes([]) and skills_depot("juridique", a_["slug"]) == []
         assert "skills: []" not in paquet_j[f"agents/{a_['slug']}/AGENTS.md"].split("\n---\n")[0]
 for a_ in reg_j:  # chaque agent juridique livre exactement les compétences de son en-tête, puis les communes, sans doublon
-    # Communes : recherche-connaissances pour tous, memoire-para seulement pour un agent qui écrit (M2, 18/10/2026).
-    assert a_["competences"] == b.avec_competences_communes(skills_depot("juridique", a_["slug"]), b.ecrit_des_fichiers(a_["outils"])), a_["slug"]
-    assert ("memoire-para" in a_["competences"]) == b.ecrit_des_fichiers(a_["outils"]), a_["slug"]
+    # Communes : recherche-connaissances et memoire-para pour tous les agents à modèle (29/10/2026).
+    assert a_["competences"] == b.avec_competences_communes(skills_depot("juridique", a_["slug"])), a_["slug"]
+    assert "memoire-para" in a_["competences"], a_["slug"]
     assert len(a_["competences"]) == len(set(a_["competences"])), a_["slug"]
 assert not any(c_.startswith("skills/") and c_.split("/")[1] not in {x for a in reg_j for x in a["competences"]} for c_ in paquet_j)
 assert b.competences_entete('---\nskills: ["cadrage-exigences", "audit-seo"]\n---\n', "direction", "x") == ["cadrage-exigences", "audit-seo"]  # liste en ligne
@@ -1273,23 +1304,32 @@ for titre_ in ("## Livrable en relecture", "## Appeler l'API de Paperclip", "## 
     assert titre_ in communes_service and titre_ in communes_marketing, titre_
 assert "## Échanges entre services" in communes_service and "`liaison.demander`" in communes_service and "demande-la à ton coordinateur" in communes_service
 assert "## Échanges entre services" not in communes_marketing, "le marketing garde son texte d'origine"
-assert all(m in communes_marketing for m in termes_marketing_) and not any(m in communes_service for m in termes_marketing_), [m for m in termes_marketing_ if m in communes_service]
-for nom_, chemin_ in (("Client Trio · Juridique", "agents/lecture-contrats/AGENTS.md"), ("Client Trio · Juridique", "agents/coordinateur-juridique/AGENTS.md"),
-                      ("Client Trio · Commercial", "agents/preparation-rdv/AGENTS.md"), ("Client Trio · Direction", "agents/synthese/AGENTS.md")):
+# PARC-2 (7b8e777) : les coordinateurs de service lisent l'équipe compacte par cette seule route du plugin ; tout autre usage reste au marketing.
+route_equipe_ = "/api/plugins/atelier.marketing-ia/api/equipe?companyId="
+assert route_equipe_ in communes_service, "route de l'équipe compacte absente des consignes des services"
+# OUT-2 (9ad970b) : la règle du préfixe complet des routes du plugin vaut pour tout agent qui appelle le plugin.
+regle_prefixe_ = "- Toutes les routes du plugin commencent par `/api/plugins/atelier.marketing-ia/api` (nom complet du plugin, jamais raccourci) ;"
+assert regle_prefixe_ in communes_service and regle_prefixe_ in communes_marketing, "règle du préfixe complet absente"
+hors_route_ = communes_service.replace(route_equipe_, "").replace(regle_prefixe_, "")
+assert all(m in communes_marketing for m in termes_marketing_) and not any(m in hors_route_ for m in termes_marketing_), [m for m in termes_marketing_ if m in hors_route_]
+for nom_, chemin_ in (("JUR · Juridique · Client Trio", "agents/lecture-contrats/AGENTS.md"), ("JUR · Juridique · Client Trio", "agents/coordinateur-juridique/AGENTS.md"),
+                      ("COM · Commercial · Client Trio", "agents/preparation-rdv/AGENTS.md"), ("DIR · Direction · Client Trio", "agents/synthese/AGENTS.md")):
     corps_ = etat["paquets"][nom_][chemin_].split(b.MARQUEUR_CONSIGNES_COMMUNES)[1].split(b.TITRE_FICHE_ROUTES)[0]
     assert corps_.strip("\n") == communes_service.strip("\n"), (nom_, chemin_)
-    assert "## Échanges entre services" in corps_ and not any(m in corps_ for m in termes_marketing_), (nom_, chemin_)
+    assert "## Échanges entre services" in corps_ and not any(m in corps_.replace(route_equipe_, "").replace(regle_prefixe_, "") for m in termes_marketing_), (nom_, chemin_)
 for chemin_ in ("agents/coordinateur/AGENTS.md", "agents/mesure/AGENTS.md"):
-    corps_ = etat["paquets"]["Client Trio · Marketing"][chemin_].split(b.MARQUEUR_CONSIGNES_COMMUNES)[1].split(b.TITRE_FICHE_ROUTES)[0]
-    assert corps_.strip("\n") == communes_marketing.strip("\n") and "## Faits du client" in corps_ and "## Échanges entre services" not in corps_, chemin_
+    corps_ = etat["paquets"]["MKT · Marketing · Client Trio"][chemin_].split(b.MARQUEUR_CONSIGNES_COMMUNES)[1].split(b.TITRE_FICHE_ROUTES)[0]
+    # MK-20e (14083a8) : la notice de dépôt signé n'est donnée qu'aux rôles qui ont des connexions.
+    connecte_ = bool(next(a_ for a_ in b.registres()[0]["agents"] if a_["slug"] == chemin_.split("/")[1]).get("connexions"))
+    assert corps_.strip("\n") == b.consignes_communes(True, connecte_).strip("\n") and "## Faits du client" in corps_ and "## Échanges entre services" not in corps_, chemin_
 print("2b. consignes communes : tronc commun partout, complément marketing au seul marketing, rien de la marque ni des routes marketing chez un service")
 
 # 3. Isolation : un dossier de travail et une configuration Claude distincts par entreprise, avec les règles deny.
-ids = [c["id"] for c in etat["societes"] if c["name"].startswith("Client Trio")]
+ids = [c["id"] for c in etat["societes"] if c["name"].endswith(" · Client Trio")]
 espaces = [donnees / "agents-atelier" / i / "coordinateur-juridique" for i in ids[:1]]
 for i in ids:
     assert (donnees / "agents-atelier" / i).is_dir() and (donnees / "claude-config" / i).is_dir() and i in str(b.dossiers_agent(i, "x")[0])
-j = noms["Client Trio · Juridique"]["id"]
+j = noms["JUR · Juridique · Client Trio"]["id"]
 reglages = json.loads((donnees / "claude-config" / j / "coordinateur-juridique" / "settings.json").read_text(encoding="utf-8"))
 assert any(r.startswith("Read(~/.ssh") for r in reglages["permissions"]["deny"]) and reglages["autoMemoryEnabled"] is False
 assert (donnees / "agents-atelier" / j / "coordinateur-juridique").is_dir() and not (donnees / "agents-atelier" / j / "coordinateur").exists()
@@ -1309,14 +1349,14 @@ etat["societes"].append({"id": "aaaaaaaa-0000-4000-8000-0000000000a1", "name": "
 d = donnees / "atelier-client" / "client-ancien-sa"; d.mkdir()
 (d / "entreprise.json").write_text(json.dumps({"entrepriseId": "aaaaaaaa-0000-4000-8000-0000000000a1", "numeroBce": "0123456749", "slug": "client-ancien-sa", "creeLe": "2026-10-16T08:00:00Z"}), encoding="utf-8")
 code, s = lancer("nouveau-client", "--fiche", fiche("Client Ancien SA", services=["marketing", "achats"]), "--a-blanc")
-assert code == 0 and "migré vers le format" in s and "[marketing] entreprise « Client Ancien SA » déjà présente" in s and "[achats] créer l'entreprise « Client Ancien SA · Achats »" in s, s
+assert code == 0 and "migré vers le format" in s and "[marketing] entreprise « Client Ancien SA » déjà présente" in s and "[achats] créer l'entreprise « ACH · Achats · Client Ancien SA »" in s, s
 creations = etat["creations"]
 etat["configs"]["aaaaaaaa-0000-4000-8000-0000000000a1"] = {"companyId": "aaaaaaaa-0000-4000-8000-0000000000a1", "configJson": {"passerelleUrl": "http://127.0.0.1:3190"}}
 code, s = lancer("nouveau-client", "--fiche", fiche("Client Ancien SA", services=["marketing", "achats"]))
 assert code == 0 and etat["creations"] == creations + 2, (code, s)  # achats + direction
 rg = registre("client-ancien-sa")
 assert rg["version"] == 2 and rg["entreprises"]["marketing"]["entrepriseId"] == "aaaaaaaa-0000-4000-8000-0000000000a1" and rg["entreprises"]["marketing"]["marqueur"] == "atelier-client:client-ancien-sa" and set(rg["entreprises"]) == {"marketing", "achats", "direction"}, rg
-assert any(c["name"] == "Client Ancien SA" for c in etat["societes"]) and not any(c["name"] == "Client Ancien SA · Marketing" for c in etat["societes"])
+assert any(c["name"] == "Client Ancien SA" for c in etat["societes"]) and not any(c["name"] == "MKT · Marketing · Client Ancien SA" for c in etat["societes"])
 # Une configuration existante (secrets possibles) n'est jamais réécrite ; les entreprises sans configuration en reçoivent une.
 assert etat["configs"]["aaaaaaaa-0000-4000-8000-0000000000a1"]["configJson"] == {"passerelleUrl": "http://127.0.0.1:3190"} and all(e["entrepriseId"] in etat["configs"] for e in rg["entreprises"].values())
 print("5. client historique + nouveaux services : marketing inchangé (nom, marqueur), registre migré, Direction ajoutée")
@@ -1334,10 +1374,10 @@ try:
     assert code == 0 and f"AVERTISSEMENT : consigne à rédiger pour l'agent {manquante}" in s and "1 consigne(s) à rédiger" in s, s
 finally:
     b.ORGA = vrai_orga
-p = etat["paquets"]["Client Qualite · Qualité"][f"agents/{manquante}/AGENTS.md"]
+p = etat["paquets"]["QUA · Qualité · Client Qualite"][f"agents/{manquante}/AGENTS.md"]
 assert "Consigne à rédiger" in p and "Décisions réservées à un humain" in p and f'slug: "{manquante}"' in p
 autre = services["qualite"]["agents"][0]
-assert "Consigne à rédiger" not in etat["paquets"]["Client Qualite · Qualité"][f"agents/{autre}/AGENTS.md"]
+assert "Consigne à rédiger" not in etat["paquets"]["QUA · Qualité · Client Qualite"][f"agents/{autre}/AGENTS.md"]
 assert len(registre("client-qualite")["entreprises"]) == 1  # un seul service : pas de Direction
 print("6. consigne manquante : avertissement (à blanc et réel), consigne minimale générée, les autres consignes lues dans le dépôt, pas de Direction pour un service")
 
@@ -1351,9 +1391,11 @@ for nom_, modif, motif in (("Refus A", {"services": ["inconnu"]}, "service incon
     assert code != 0 and motif in s and "rien n'est écrit" in s, (nom_, code, s)
 sans_appel(avant)
 code, s = lancer("nouveau-client", "--fiche", fiche("Client Tous", services="tous"), "--a-blanc")
-# « tous » = tous les services actifs du registre (Direction comprise) : l'attendu est dérivé du registre, jamais figé.
-nb_tous = sum(1 for s_ in b.registre_services()["services"] if s_.get("actif"))
-assert nb_tous >= 2, nb_tous
+# « tous » = tous les services actifs du registre (Direction comprise), sauf les services internes (DOC-A2, ae6d858 :
+# l'Observatoire ne s'installe que nommé) : l'attendu est dérivé du registre, jamais figé.
+nb_tous = sum(1 for s_ in b.registre_services()["services"] if s_.get("actif") and not s_.get("interne"))
+assert nb_tous >= 2 and any(s_.get("interne") for s_ in b.registre_services()["services"]), nb_tous
+assert "observatoire" not in s.split("entreprise(s) :")[1].split(")")[0], "un service interne est entré dans « tous »"
 assert code == 0 and f"{nb_tous} entreprise(s)" in s, (nb_tous, s)
 print(f"7. service inconnu, liste vide ou en double, budget d'un service non choisi ou négatif : refus sans appel ; « tous » = {nb_tous} entreprises, nombre lu dans le registre (à blanc)")
 
@@ -1371,7 +1413,7 @@ assert code == 0 and "4 entreprise(s) à purger" in s and s.count("Entreprise à
 code, s = lancer("purger", "--entreprise", ids_trio["juridique"], "--confirmer")
 assert code == 0 and "Purge terminée." in s, (code, s)
 assert sorted(etat["supprimees"]) == sorted(ids_trio.values()), etat["supprimees"]
-assert not any(c["name"].startswith("Client Trio") for c in etat["societes"]) and any(c["name"] == "Client Solo" for c in etat["societes"])
+assert not any(c["name"].endswith(" · Client Trio") for c in etat["societes"]) and any(c["name"] == "Client Solo" for c in etat["societes"])
 assert not (donnees / "atelier-client" / "client-trio").exists()
 for i in ids_trio.values():
     assert not (donnees / "agents-atelier" / i).exists() and not (donnees / "claude-config" / i).exists() and not (home / "instances/essai/companies" / i).exists(), i
@@ -1429,7 +1471,7 @@ rg = registre("atelier-test")
 assert set(rg["entreprises"]) == {"marketing", "direction", "juridique"} and rg["entreprises"]["marketing"] == {"entrepriseId": DEMO_ID, "nom": "Atelier Test", "marqueur": "atelier-client:atelier-test"}, rg
 assert rg["entrepriseId"] == DEMO_ID and (donnees / "atelier-client/atelier-test/entreprise.json").stat().st_mode & 0o777 == 0o600
 assert not any(c[1] == "Atelier Test" for c in etat["appels"]), "l'organisation du marketing existant n'est pas réappliquée"
-assert {c["name"] for c in etat["societes"]} >= {"Atelier Test · Direction", "Atelier Test · Juridique"}
+assert {c["name"] for c in etat["societes"]} >= {"DIR · Direction · Atelier Test", "JUR · Juridique · Atelier Test"}
 assert DEMO_ID in etat["configs"], "le marketing existant reçoit aussi la configuration du plugin (bureau de liaison)"
 # Idempotence : rien de recréé, aucune écriture.
 avant = etat_ecr()
@@ -1445,14 +1487,44 @@ f_bis = fiche("Atelier Bis", services=["marketing", "juridique"])
 code, s = lancer("nouveau-client", "--ajouter-services", "--entreprise", D2, "--slug", "bis-perso", "--fiche", f_bis)
 assert code == 0, s
 assert registre("bis-perso")["entreprises"]["marketing"]["entrepriseId"] == D2 and registre("atelier-test")["entreprises"]["marketing"]["entrepriseId"] == DEMO_ID
-assert any(c["name"] == "Atelier Bis · Juridique" and "atelier-client:bis-perso:juridique" in c["description"] for c in etat["societes"])
+assert any(c["name"] == "JUR · Juridique · Atelier Bis" and "atelier-client:bis-perso:juridique" in c["description"] for c in etat["societes"])
 assert next(c for c in etat["societes"] if c["id"] == D2)["name"] == "Atelier Bis"
 # Une entreprise déjà rattachée à un autre client ne peut pas l'être à un second slug.
 avant = etat_ecr()
 code, s = lancer("nouveau-client", "--ajouter-services", "--entreprise", D2, "--slug", "autre-slug", "--fiche", f_bis)
 assert code != 0 and "refusé" in s and etat_ecr() == avant, (code, s)
 print("9. --ajouter-services : refus (UUID, inconnue, nom, marqueur étranger, registre étranger), à blanc sans écriture, migration du marqueur et du nom, registre, services créés, marketing non réappliqué, idempotent, --slug")
-print("services multiples : 9 groupes de vérifications contre une fausse API, tous réussis")
+# 10. Client « personnel » (sans BCE) : un service existant, registre personnel, idempotence, refus croisés.
+def fiche_perso(nom, **modif):
+    chemin = fiche(nom, services=["juridique"], personnel=True, courtier=False, **modif)
+    f = json.load(open(chemin, encoding="utf-8")); f.pop("numeroBce", None); f.pop("numeroFsma", None)
+    chemin = chemin[:-5] + "-perso.json"  # autre fichier que fiche() : la fiche à BCE du même nom ne l'écrase pas
+    open(chemin, "w", encoding="utf-8").write(json.dumps(f, ensure_ascii=False)); return chemin
+f_perso = fiche_perso("Perso Test")
+creations = etat["creations"]
+code, s = lancer("nouveau-client", "--fiche", f_perso)
+assert code == 0 and etat["creations"] == creations + 1 and [a[0] for a in etat["appels"]][-1] == "service", (code, s)
+rg = registre("perso-test")
+assert rg["personnel"] is True and rg["numeroBce"] is None and list(rg["entreprises"]) == ["juridique"], rg
+assert b.slug_client_par_entreprise(rg["entrepriseId"]) == "perso-test", "un registre personnel doit être visible"
+assert not any("BCE" in json.dumps(p) for p in etat["marques"].values() if p.get("companyId") == rg["entrepriseId"]), "pas de référentiel de marque"
+avant = len(etat["ecritures"]); creations = etat["creations"]
+code, s = lancer("nouveau-client", "--fiche", f_perso)
+assert code == 0 and etat["creations"] == creations and len(etat["ecritures"]) == avant, (code, s, etat["ecritures"][avant:])
+avant = (len(etat["appels"]), len(etat["ecritures"]))
+code, s = lancer("nouveau-client", "--fiche", fiche("Perso Test", services=["juridique"]))  # même slug, fiche à BCE
+assert code != 0 and "personnel" in s and "rien n'est écrit" in s.lower(), (code, s); sans_appel(avant)
+f_bce_perso = fiche("Perso Test", services=["juridique"])  # idem avec --a-blanc
+code, s = lancer("nouveau-client", "--fiche", f_bce_perso, "--a-blanc")
+assert code != 0 and "personnel" in s, (code, s); sans_appel(avant)
+code, s = lancer("nouveau-client", "--fiche", fiche("Client Solo", personnel=True, numeroBce=None, services=["juridique"], courtier=False, numeroFsma=None))
+assert code != 0, (code, s); sans_appel(avant)  # slug à BCE existant (client-solo) : refus croisé
+code, s = lancer("nouveau-client", "--enregistrer-existante", "--entreprise", rg["entrepriseId"], "--fiche", f_perso)
+assert code != 0 and "personnel" in s, (code, s); sans_appel(avant)
+code, s = lancer("nouveau-client", "--ajouter-services", "--entreprise", rg["entrepriseId"], "--fiche", f_perso)
+assert code != 0 and "personnel" in s, (code, s); sans_appel(avant)
+print("10. client personnel : registre personnel sans BCE, visible par slug_client_par_entreprise, idempotent ; refus croisés personnel/BCE ; migration refusée")
+print("services multiples : 10 groupes de vérifications contre une fausse API, tous réussis")
 PY
 then
   ok "services multiples : $(tail -1 "${TRAVAIL}/services.txt")"
@@ -1883,8 +1955,8 @@ PY
      && [[ "$(grep -c '^  agent ' "${TRAVAIL}/etat.txt")" -eq 14 ]] \
      && grep -q '  objectifs : 3$' "${TRAVAIL}/etat.txt" \
      && grep -q '  projets : 2$' "${TRAVAIL}/etat.txt" \
-     && grep -q '  routines : 3$' "${TRAVAIL}/etat.txt"; then
-    ok "état : 14 agents (13 + porte), 3 objectifs, 2 projets, 3 routines (aucun doublon)"
+     && grep -q '  routines : 4$' "${TRAVAIL}/etat.txt"; then
+    ok "état : 14 agents (13 + porte), 3 objectifs, 2 projets, 4 routines (aucun doublon)"
   else
     ko "état inattendu"; cat "${TRAVAIL}/etat.txt"
   fi
@@ -1928,7 +2000,7 @@ try:
     assert "configuration modifiée hors registre : veille (adapterConfig.model)" in texte, "dérive du modèle non détectée"
     assert api.get(f"/agents/{veille['id']}")["adapterConfig"]["model"] == "claude-sonnet-5-5", "modèle non rétabli"
     r2 = next(r for r in b.routines_existantes(api, cid) if r["title"] == "Veille concurrentielle hebdomadaire")
-    assert next(t for t in r2["triggers"] if t["kind"] == "schedule")["cronExpression"] == "0 8 * * 1", "cron non rétabli"
+    assert next(t for t in r2["triggers"] if t["kind"] == "schedule")["cronExpression"] == "30 10 * * 1", "cron non rétabli"
     contenu = api.get(f"/agents/{exig['id']}/instructions-bundle/file?path=AGENTS.md")["content"]
     assert contenu == b.corps_instructions("exigences"), "instructions non rétablies"
     assert api.get(f"/agents/{tech['id']}")["status"] != "paused", "la mise à jour a remis en pause un agent activé"
@@ -1993,7 +2065,7 @@ try:
     # Compétences du paquet (toutes celles d'organisation/skills/, recensées par le verrou
     # company-package.lock.json) + 8 intégrées vendorisées par l'export + 8 réinstallées.
     competences_paquet = len(json.loads((racine / "organisation" / "company-package.lock.json").read_text(encoding="utf-8"))["competences"])
-    ok = len(agents) == 14 and len(projets) == 2 and len(routines) == 3 and len(skills) == competences_paquet + 16 \
+    ok = len(agents) == 14 and len(projets) == 2 and len(routines) == 4 and len(skills) == competences_paquet + 16 \
         and all(a.get("status") == "paused" for a in agents)
     print("hiérarchie conservée :", sum(1 for v in hierarchie.values() if v) == 12)
     if not ok or sum(1 for v in hierarchie.values() if v) != 12:
@@ -2064,7 +2136,7 @@ for agent in reg["agents"]:
             raise SystemExit(f"{agent['slug']} : agent déterministe confiné à tort")
         continue
     attendu = {"engine": "cli", "filesystemScope": "workspace", "networkScope": "allowlist",
-               "networkAllowlist": ["api.anthropic.com"]}
+               "networkAllowlist": ["api.anthropic.com:443"]}  # É2 (4ecfd94) : CONNECT HTTPS seul
     obtenu = {k: cfg.get(k) for k in attendu}
     if a["adapter"]["type"] != "claude_local" or obtenu != attendu:
         raise SystemExit(f"{agent['slug']} : confinement {obtenu} au lieu de {attendu}")
@@ -2079,7 +2151,7 @@ else:
 yaml = (racine / "organisation/.paperclip.yaml").read_text(encoding="utf-8")
 if yaml.count('filesystemScope: "workspace"') != confines or yaml.count('networkScope: "allowlist"') != confines:
     raise SystemExit(".paperclip.yaml non régénéré avec le confinement")
-print(f"{confines} agents claude_local confinés (fichiers : espace ; réseau : api.anthropic.com)")
+print(f"{confines} agents claude_local confinés (fichiers : espace ; réseau : api.anthropic.com:443)")
 PY
 then
   ok "confinement des agents : $(tail -1 "${TRAVAIL}/confinement.txt")"
@@ -2124,7 +2196,11 @@ for role in roles:
     ja, jb = json.loads((ca / "settings.json").read_text(encoding="utf-8")), json.loads((cb / "settings.json").read_text(encoding="utf-8"))
     assert ja["permissions"]["deny"] and ja["autoMemoryEnabled"] is False, role
     assert ja["permissions"]["deny"] == jb["permissions"]["deny"], f"{role} : règles deny différentes"
-    assert ja["permissions"]["allow"] == [f"Read(/{ca}/projects/**)"] and jb["permissions"]["allow"] == [f"Read(/{cb}/projects/**)"]
+    agent = next(a for a in reg["agents"] if a["slug"] == role)
+    outils = set(agent.get("outils", {}).get("recherche", [])) | set(agent.get("outils", {}).get("mutation", []))
+    rendus = ["rendus"] if b.OUTILS_CLIENT_FABRIQUE["voir"] in outils else []  # voir_rendu lu au registre : ces rôles lisent en plus leur dossier de rendus
+    assert role != "relecteur" or rendus, "le relecteur doit garder voir_rendu"
+    assert ja["permissions"]["allow"] == [f"Read(/{ca}/projects/**)"] + [f"Read(/{ca}/{r}/**)" for r in rendus] and jb["permissions"]["allow"] == [f"Read(/{cb}/projects/**)"] + [f"Read(/{cb}/{r}/**)" for r in rendus]
     # La liaison locale pointe vers les dossiers de SON entreprise.
     la = b.liaison_voulue(A, reg, role, None, "reel"); lb = b.liaison_voulue(B, reg, role, None, "reel")
     assert la["cwd"] == str(ea) and lb["cwd"] == str(eb) and la["cwd"] != lb["cwd"]

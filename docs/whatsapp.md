@@ -2,8 +2,13 @@
 
 Service séparé `whatsapp/` (TypeScript, aucune dépendance d'exécution). Il reçoit vos messages WhatsApp par l'API
 officielle de Meta (WhatsApp Cloud API), les relaie au coordinateur général, vous renvoie ses réponses et vous
-prévient de ce qui attend une décision. C'est le SEUL service publié sur Internet, par Tailscale Funnel ; l'instance
-Paperclip (3100) et la passerelle marketing (3190) restent sur la boucle locale.
+prévient de ce qui attend une décision. Une fois déployé, ce serait le SEUL service publié sur Internet, par Tailscale
+Funnel ; l'instance Paperclip (3100) et la passerelle marketing (3190) restent sur la boucle locale.
+
+**État au 30/10/2026 : livré, non déployé.** Le code et l'unité `scripts/systemd/atelier-whatsapp.service` sont dans le
+dépôt, mais rien n'écoute sur 3197, l'unité n'est pas installée dans `~/.config/systemd/user/`, aucune publication Funnel
+n'existe et `tailscaled` est en échec sur le poste de développement (`systemctl is-active tailscaled` : `failed`). Le déploiement suit les
+étapes ci-dessous ; il demande les comptes Meta de l'opérateur.
 
 ## Architecture
 
@@ -29,9 +34,12 @@ Meta (Cloud API) ── webhook signé (X-Hub-Signature-256) ──► Tailscale
                            liaison.decider, /agents/:id/pause|resume, PATCH /companies/:id {status}
 ```
 
-- Identité : l'instance est en mode `local_trusted` ; une requête locale sans jeton est attribuée par Paperclip au
-  board humain « local-board » (`paperclip/server/src/middleware/auth.ts`, `actorMiddleware`), que le plugin traduit
-  en acteur humain (`plugin-atelier/src/serveur/atelier.ts`, `acteurDepuisRequete`). Vos décisions WhatsApp sont donc
+- Identité : en mode `local_trusted` (celui de l'instance au 30/10/2026), une requête locale sans jeton est attribuée par
+  Paperclip au board humain « local-board » (`paperclip/server/src/middleware/auth.ts`, `actorMiddleware`), que le plugin
+  traduit en acteur humain (`plugin-atelier/src/serveur/atelier.ts`, `acteurDepuisRequete`). En mode `authenticated`, la
+  passerelle envoie la clé board du compte de l'opérateur (`Authorization: Bearer`, lue dans le fichier 0600 désigné par
+  `ATELIER_CLE_BOARD_FICHIER`, `whatsapp/src/config.ts`) : sans cette ligne dans `~/.config/atelier/whatsapp.env`, les
+  décisions sont refusées (403, voir `docs/mode-authentifie.md`). À vérifier au déploiement. Vos décisions WhatsApp sont donc
   des décisions humaines, enregistrées par la même route que l'écran et soumises aux mêmes gardes (`decider` refuse
   tout acteur non humain, exige la révision courante et le contrôle automatique réussi). Aucune capacité n'a été
   ajoutée au plugin.

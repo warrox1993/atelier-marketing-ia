@@ -20,11 +20,15 @@ d'un Chapitre ou d'une Edition de l'observatoire, avant toute relecture humaine 
 - **Cycles** : tous les nouveaux motifs sont des refus de fond (ils consomment un cycle de correction), sauf
   OBS-08, ajouté à `MOTIFS_SANS_CYCLE` (`porte.ts`, ligne 125) : une base française devenue périmée n'est pas une
   faute du traducteur.
+- **Code dans la prose** (SPEC-E10) : les blocs de code (trois accents graves ou trois tildes, refermés par le même
+  caractère au moins aussi long, comme l'exporteur : O8) échappent aux règles de prose ; le
+  code en ligne aussi, sauf s'il contient une URL ou un chiffre avec unité de performance, qui restent lus par
+  OBS-03, OBS-05 et OBS-06. Un nom versionné entre accents graves reste exempté.
 - **Comparaison de textes** : un extrait est comparé au texte normalisé de l'instantané produit par K2 (Unicode
   NFC, blancs réduits), jamais au HTML brut. La normalisation est la même des deux côtés et sa version est
   enregistrée.
-- **Tests** : un fichier à créer, `plugin-atelier/tests/regles-observatoire.spec.ts`, avec pour chaque règle un
-  cas qui rend FAIL et le cas voisin qui rend PASS. Les noms de tests sont donnés dans la colonne « Test ».
+- **Tests** : `plugin-atelier/tests/observatoire-regles-porte.spec.ts`, avec pour chaque règle un cas qui rend FAIL
+  et le cas voisin qui rend PASS. Les noms de tests sont donnés dans la ligne « Test » de chaque règle.
 
 ## 2. Ce que l'actuelle porte couvre déjà
 
@@ -47,9 +51,10 @@ campagne et par élément attendu, pas par Affirmation. Quatre ont un analogue d
 | OBS-10 citation d'une affirmation remplacée | `citation_connaissance_perimee` (`regles-connaissances.ts`, ligne 310) | version de connaissance périmée, pas Affirmation remplacée |
 | OBS-16 renvoi vers une affirmation inconnue | `citation_connaissance_inconnue` (`regles-connaissances.ts`, ligne 295) | adresse de connaissance, pas identifiant d'Affirmation |
 
-Toutes les règles OBS-xx sont donc **nouvelles** ; elles vivront dans un module pur à créer,
-`plugin-atelier/src/serveur/regles-observatoire.ts`, appelé par `evaluerPorte` comme le sont déjà
-`verifierDonneesDemo` et `controlerCitationsConnaissances` (`porte.ts`, lignes 12 et 14).
+Toutes les règles OBS-xx sont donc **nouvelles** ; elles vivent dans le module pur
+`plugin-atelier/src/serveur/observatoire/regles-porte-obs.ts` (fonction `reglesObservatoire`), appelé par
+`evaluerPorte` quand la tâche porte des entrées de l'Observatoire (`porte.ts`, `if (e.observatoire)`), comme le
+sont déjà `verifierDonneesDemo` et `controlerCitationsConnaissances`.
 
 ## 3. Règles
 
@@ -59,20 +64,33 @@ J.1. « Revision évaluée » désigne la Revision courante soumise à la porte,
 ### OBS-01 `obs_affirmation_sans_preuve`
 
 - **Condition** : une Affirmation citée par la Revision évaluée n'a aucune Preuve liée, quel que soit son statut,
-  sauf `non_verifie` explicitement affiché comme tel dans le texte, et `infere` (traité par OBS-12).
+  `non_verifie` compris (décision du 30/10/2026, V2-3 : plus aucun fait publié sans preuve), sauf `infere` (traité
+  par OBS-12).
 - **Verdict** : FAIL.
-- **Message** : « Affirmation <id> (<chapitre>) : aucune preuve liée. Ajoutez une preuve ou affichez-la comme non
-  vérifiée. »
-- **Test** : `OBS-01 refuse une affirmation rapportée par l'éditeur sans preuve` ; `OBS-01 accepte une affirmation
-  non vérifiée affichée comme telle`.
+- **Message** : « Affirmation <id> (<chapitre>) : aucune preuve liée. Ajoutez une preuve (une affirmation non
+  vérifiée en exige une aussi). »
+- **Test** : `OBS-01 refuse une affirmation rapportée par l'éditeur sans preuve` ; `OBS-01 refuse une affirmation
+  non vérifiée sans preuve, même affichée comme telle` ; `OBS-01 accepte une affirmation non vérifiée qui porte une
+  preuve`.
 
 ### OBS-02 `obs_extrait_absent_instantane`
 
-- **Condition** : l'extrait d'une Preuve, une fois normalisé, n'apparaît pas comme sous-chaîne exacte du texte
-  normalisé de l'instantané qu'elle désigne, ou l'instantané désigné n'existe pas.
+- **Condition** : pour une Preuve qui désigne un instantané, l'un des cas suivants (contrôle réel :
+  `causeExtraitRefuse`, `plugin-atelier/src/serveur/observatoire/normaliseur.ts`) :
+  - l'instantané désigné n'existe pas ;
+  - l'extrait normalisé fait moins de 20 caractères (`EXTRAIT_MIN_CARACTERES`, valeur provisoire à fixer avec K4) ;
+  - l'extrait normalisé ne figure pas comme sous-chaîne exacte du texte normalisé de l'instantané ;
+  - il y figure, mais pas à la `position` déclarée (champ obligatoire de la Preuve : indice du premier caractère de
+    l'extrait dans le texte NORMALISÉ de l'instantané, pas dans le HTML brut ni dans la page affichée).
+- **Faux refus connus** : une position comptée sur le texte brut ou affiché, une citation courte mais exacte (un nom,
+  une version). Un extrait présent plusieurs fois est accepté à la position de n'importe laquelle de ses occurrences.
+  Le message donne la première position trouvée, ce qui permet la correction en une passe.
 - **Verdict** : FAIL.
-- **Message** : « Preuve <id> : l'extrait cité ne figure pas dans l'instantané <id> de la source <url>. »
-- **Test** : `OBS-02 refuse un extrait paraphrasé` ; `OBS-02 accepte un extrait identique aux blancs près`.
+- **Message** (O5 : la cause exacte) : « Preuve <id> (instantané <id>, source <url>) : <cause>. », la cause étant
+  « l'extrait normalisé fait <n> caractères, moins des 20 exigés », « l'extrait figure à la position <x> et non à la
+  position <y> déclarée », « l'extrait cité ne figure pas dans l'instantané » ou « l'instantané est inexistant ».
+- **Test** : `OBS-02 refuse un extrait paraphrasé` ; `OBS-02 accepte un extrait identique aux blancs près` ;
+  `OBS-02 nomme la cause`.
 
 ### OBS-03 `obs_source_non_enregistree`
 
@@ -80,10 +98,13 @@ J.1. « Revision évaluée » désigne la Revision courante soumise à la porte,
   du plugin, provenance `instantane` ou autre provenance admise), ou une adresse citée dans le texte d'un Chapitre
   comme référence n'a pas de source enregistrée.
 - **Verdict** : FAIL.
+- **Comparaison des adresses** (O2) : l'adresse citée et les sources enregistrées sont comparées sans fragment
+  (`#…`) ni barre oblique finale, schéma et hôte en minuscules ; le chemin et la requête restent exacts.
 - **Message** : « <emplacement> : la source <url> n'est pas enregistrée. Lisez-la par la lecture protégée avant de
-  la citer. »
+  la citer. », suivi, s'il en existe une, de « Source enregistrée de ce domaine la plus proche : <url>. »
 - **Test** : `OBS-03 refuse une preuve vers une adresse jamais lue` ; `OBS-03 accepte une preuve vers une source
-  enregistrée`.
+  enregistrée` ; `OBS-03 accepte la source enregistrée avec une barre oblique finale ou un fragment` ;
+  `OBS-03 cite la source enregistrée la plus proche du même domaine`.
 
 ### OBS-04 `obs_verifie_sans_essai`
 
@@ -109,11 +130,22 @@ J.1. « Revision évaluée » désigne la Revision courante soumise à la porte,
 
 ### OBS-06 `obs_performance_sans_essai_ni_source_primaire`
 
-- **Condition** : une Affirmation de nature « performance » (champ structuré du schéma) n'a ni essai réussi lié
+- **Condition** : une Affirmation de nature « performance » n'a ni essai réussi lié
   (statut `verifie_experimentalement`), ni Preuve dans une source primaire de l'éditeur (statut
   `confirme_doc_officielle`, ou `rapporte_editeur` affiché comme annonce de l'éditeur). Également FAIL : dans le
   texte d'un Chapitre, un nombre suivi d'une unité de performance (ms, s, Mo/s, Go/s, requêtes par seconde, jetons
-  par seconde, %, « fois plus rapide ») dans une phrase qui ne renvoie à aucune Affirmation.
+  par seconde, « fois plus rapide ») dans une phrase qui ne renvoie à aucune Affirmation. Un pourcentage ne compte
+  que dans une phrase qui porte un mot de performance (gain, plus rapide, latence, débit, vitesse, performance,
+  faster, speed… : `RE_MOT_PERF`) ou dans un chapitre de performances ; « s » suivi d'une apostrophe n'est pas une
+  durée (« En 2026 s'ouvre… ») (O3). « Affiché comme annonce
+  de l'éditeur » (SPEC-O6) : la ligne qui cite une Affirmation `rapporte_editeur` chiffrée porte une mention
+  d'annonce (annonce, selon, d'après, par l'éditeur, announces, according to : `RE_ANNONCE`).
+- **Nature « performance »** (SPEC-E13 : aucun champ structuré, choix tenu) : l'Affirmation est du chapitre `ch20`
+  (« Performances et benchmarks ») ou son texte contient un chiffre suivi d'une de ces unités (`RE_PERF`,
+  `regles-porte-obs.ts`). Un champ déclaré par l'agent ne remplace pas cette lecture : un chiffre non déclaré
+  passerait la porte. Le faux positif du pourcentage qui n'est pas une performance (part de marché, « 40 % des
+  contributeurs ») est levé hors du chapitre `ch20` (O3) ; dans `ch20`, toute Affirmation reste de nature
+  « performance ».
 - **Verdict** : FAIL.
 - **Message** : « <emplacement> : chiffre de performance « <extrait> » sans essai ni source primaire. »
 - **Test** : `OBS-06 refuse un gain chiffré tiré d'une vidéo` ; `OBS-06 refuse un chiffre nu dans le texte` ;
@@ -123,7 +155,8 @@ J.1. « Revision évaluée » désigne la Revision courante soumise à la porte,
 
 ### OBS-07 `obs_chapitre_complet_sans_affirmation`
 
-- **Condition** : un Chapitre a l'état « complet » et ne cite aucune Affirmation.
+- **Condition** : un Chapitre a l'état « complet » et ne cite aucune Affirmation. L'état se lit aussi écrit en gras
+  ou en italique (`**État** : complet`) (O4).
 - **Verdict** : FAIL.
 - **Message** : « Chapitre <titre> : déclaré complet sans aucune affirmation. Rattachez ses faits ou déclarez-le
   « information manquante ». »
@@ -145,7 +178,9 @@ J.1. « Revision évaluée » désigne la Revision courante soumise à la porte,
 - **Condition** : la suite ordonnée des blocs de code (blocs délimités par trois accents graves) et des segments de
   code en ligne (entre accents graves simples) de la Revision anglaise diffère, octet pour octet, de celle de sa
   base française ; ou un terme du glossaire protégé présent dans la base française est absent ou modifié dans la
-  version anglaise.
+  version anglaise. Le glossaire protégé est l'ensemble des alias `nom` (noms de produit) des projets dont la révision
+  cite une Affirmation, pris avec la casse de leur occurrence dans le français (`entrees-porte.ts`) ; le nom d'un projet
+  n'en fait pas partie (celui d'un article est son titre français, qui se traduit).
 - **Verdict** : FAIL.
 - **Message** : « Version anglaise, <emplacement> : le bloc de code n° <n> (ou l'identifiant « <terme> ») diffère de
   la version française. Les commandes et identifiants ne se traduisent pas. »
@@ -163,6 +198,10 @@ J.1. « Revision évaluée » désigne la Revision courante soumise à la porte,
 ### OBS-11 `obs_contredit_sans_preuve_contraire`
 
 - **Condition** : une Affirmation a le statut `contredit` sans Preuve contraire liée.
+- **Contrôle réel (30/10/2026)** : aucun champ ne dit le sens d'une Preuve (à l'appui ou contraire) ; toute Preuve
+  qui désigne un instantané présent compte comme « preuve contraire » (`preuvesValables`, `regles-porte-obs.ts`).
+  La règle vérifie donc qu'une contradiction est prouvée par une source collectée, pas qu'elle contredit. Un champ
+  de sens sur la Preuve reste à créer (phase ultérieure) ; d'ici là, le relecteur juge le sens.
 - **Verdict** : FAIL.
 - **Message** : « Affirmation <id> : « contredit » sans preuve contraire liée. »
 - **Test** : `OBS-11 refuse une contradiction non prouvée`.
@@ -171,6 +210,10 @@ J.1. « Revision évaluée » désigne la Revision courante soumise à la porte,
 
 - **Condition** : une Affirmation a le statut `infere` sans raisonnement stocké, ou ce raisonnement ne renvoie à
   aucune Affirmation prouvée dont il part.
+- **Contrôle réel (30/10/2026)** : aucun champ « raisonnement » n'existe. C'est une convention de texte : le
+  raisonnement est le texte de l'Affirmation qui suit `Raisonnement :`, et les Affirmations de départ y sont citées
+  par `[aff:<id>]`. Une Affirmation de départ compte si elle a une Preuve sur un instantané présent et un statut
+  prouvé (`verifie_experimentalement`, `confirme_doc_officielle`, `rapporte_editeur`, `rapporte_tiers`).
 - **Verdict** : FAIL.
 - **Message** : « Affirmation <id> : inférence sans raisonnement ni affirmation de départ. »
 - **Test** : `OBS-12 refuse une inférence sans raisonnement` ; `OBS-12 accepte une inférence qui part de deux
@@ -188,7 +231,9 @@ J.1. « Revision évaluée » désigne la Revision courante soumise à la porte,
 ### OBS-14 `obs_doc_officielle_non_primaire`
 
 - **Condition** : une Affirmation a le statut `confirme_doc_officielle` et aucune de ses Preuves n'est dans une
-  source marquée primaire pour cet éditeur (domaine ou dépôt officiel enregistré sur la Fiche).
+  source marquée primaire pour cet éditeur (domaine ou dépôt officiel enregistré sur la Fiche). SPEC-E6 : une source
+  primaire d'un projet ne vaut que pour les Affirmations de ce projet ; une source primaire de la base commune,
+  rattachée à aucun éditeur, vaut pour toutes (limite connue).
 - **Verdict** : FAIL.
 - **Message** : « Affirmation <id> : « confirmé par la documentation officielle » mais la preuve vient de <domaine>,
   qui n'est pas une source de l'éditeur. »
@@ -197,17 +242,61 @@ J.1. « Revision évaluée » désigne la Revision courante soumise à la porte,
 ### OBS-15 `obs_source_collecte_refusee`
 
 - **Condition** : une Preuve s'appuie sur une source dont la décision de droits (K4) est « refusée » ou absente, ou
-  un extrait publié dépasse la longueur maximale fixée par K4 pour cette source.
+  un extrait publié dépasse la longueur maximale fixée par K4 pour cette source, ou les extraits d'une même source
+  cités dans la Revision dépassent ensemble le cumul fixé par K4. Décision K4 d'une source : `politique_collecte`
+  (`autorisee: true`, `extraitMax` et `cumulMax` en caractères, entiers posés par un humain). Sans plafond fixé :
+  500 caractères par extrait et 1500 en cumul (valeurs provisoires, à fixer source par source avant l'ouverture publique).
+  DROIT-5.2 : la source d'une Preuve doit aussi avoir un auteur enregistré (`politique_collecte.auteur`, personne ou
+  organisation, fixé par un humain par `obs.base.importer`, champ `auteur` ; l'importeur de la base reprend `editeur`),
+  car une citation publiée mentionne la source et le nom de l'auteur (Code de droit économique, art. XI.189). Auteur
+  impossible à établir : l'humain écrit pourquoi dans ce champ (par exemple « page sans auteur nommé, éditeur du site »).
+  Les sources publiées par `obs.publications.aexporter` portent leur `auteur`.
 - **Verdict** : FAIL.
-- **Message** : « Preuve <id> : la source <domaine> n'est pas autorisée à la collecte (ou extrait trop long). »
-- **Test** : `OBS-15 refuse une source sans décision de droits` ; `OBS-15 refuse un extrait trop long`.
+- **Message** (O6 : chaque cause présente, séparées par « ; ») : « Preuve <id> : la source <domaine> n'est pas
+  autorisée à la collecte (aucune décision de droits). » ou « … a un extrait de <n> caractères, au-delà des <max>
+  permis. » ;
+  pour le cumul : « Source <domaine> : <n> caractères d'extraits cités dans cette révision, au-delà des <max> permis. » ;
+  sans auteur : « Preuve <id> : la source <domaine> n'a aucun auteur enregistré : une citation publiée nomme son auteur
+  et sa source (CDE, art. XI.189), à faire fixer par l'humain (obs.base.importer, champ auteur). »
+- **Test** : `OBS-15 refuse une source sans décision de droits` ; `OBS-15 refuse un extrait trop long` ;
+  `DROIT-5.1 : OBS-15 applique le plafond d'extrait fixé par la décision K4` ; `DROIT-5.1 : OBS-15 refuse le cumul` ;
+  `DROIT-5.2 : OBS-15 refuse une preuve dont la source n'a pas d'auteur enregistré`.
 
 ### OBS-16 `obs_affirmation_inconnue`
 
 - **Condition** : le texte de la Revision renvoie à un identifiant d'Affirmation qui n'existe pas dans le Dossier.
 - **Verdict** : FAIL.
-- **Message** : « <emplacement> : renvoi à l'affirmation <id>, qui n'existe pas. »
-- **Test** : `OBS-16 refuse un renvoi inventé`.
+- **Message** : « <emplacement> : renvoi à l'affirmation <id>, qui n'existe pas. », une fois par identifiant (première
+  citation, comme OBS-01 et OBS-10 : O7).
+- **Test** : `OBS-16 refuse un renvoi inventé` ; `OBS-16 ne répète pas le motif d'une même affirmation inconnue`.
+
+### OBS-17 `obs_nombre_absent_affirmation`
+
+- **Condition** : une phrase de la Revision qui cite une ou plusieurs Affirmations contient un nombre, une date ou une
+  heure qui ne figure dans le texte d'aucune d'elles (audit du 29/10/2026, LIV-OB-3 : une heure inventée avait passé
+  trois revues). Les nombres d'une date reformulée (« 27 octobre 2026 » pour « 27/10/2026 ») sont admis.
+- **Verdict** : FAIL.
+- **Message** : « <emplacement> : « <nombre> » ne figure dans le texte d'aucune affirmation citée par la phrase. »
+- **Test** : `OBS-17 refuse une heure de la phrase citée absente du texte de l'affirmation`.
+
+### OBS-18 `obs_version_hors_extrait`
+
+- **Condition** : le texte d'une Affirmation contient un numéro de version (ou un nombre décimal) qui ne figure dans
+  aucun de ses extraits (audit du 29/10/2026, LIV-OB-4 : affirmation plus large que sa preuve).
+- **Verdict** : FAIL.
+- **Message** : « Affirmation <id> (<chapitre>) : « <numéro> » ne figure dans aucun de ses extraits ; étendre l'extrait
+  ou scinder l'affirmation. »
+- **Test** : `OBS-18 refuse un numéro de version de l'affirmation absent de tous ses extraits`.
+
+### Règles de rédaction communes (LANG-L3)
+
+- **Portée** : appliquées à toute révision d'un livrable, celles de l'Observatoire comprises, en plus d'OBS-01 à
+  OBS-18 (`controlerRedaction`, `plugin-atelier/src/serveur/regles-redaction.ts`, appelée par `evaluerPorte`).
+  Elles vérifient la consigne commune « Langue et style » sur la seule prose de l'agent : blocs de code, code en
+  ligne, lignes citées (`>`), citations entre guillemets français, liens et balises sont exclus.
+- **Codes** : `redaction_tiret_cadratin` (tiret cadratin hors citation : virgule, deux-points ou parenthèses à la
+  place) ; `redaction_guillemets_droits` (guillemets droits dans le texte : guillemets français « » à la place).
+- **Verdict** : FAIL, un motif par règle avec le nombre d'occurrences et la ligne de la première.
 
 ## 4. Table de référence et correspondance avec la demande
 
@@ -231,6 +320,8 @@ Numérotation définitive (elle fait foi pour les renvois de `agents.md` et `com
 | OBS-14 | `obs_doc_officielle_non_primaire` | statut `confirme_doc_officielle` (F.1) | nouvelle, complément |
 | OBS-15 | `obs_source_collecte_refusee` | collecte illicite (J.1) | nouvelle, complément |
 | OBS-16 | `obs_affirmation_inconnue` | renvoi inventé | nouvelle, complément (analogue `citation_connaissance_inconnue`) |
+| OBS-17 | `obs_nombre_absent_affirmation` | nombre cité absent de l'affirmation citée | audit du 29/10/2026 (LIV-OB-3) |
+| OBS-18 | `obs_version_hors_extrait` | version de l'affirmation absente de ses extraits | audit du 29/10/2026 (LIV-OB-4) |
 
 Un numéro n'est jamais réattribué, même si une règle est retirée.
 

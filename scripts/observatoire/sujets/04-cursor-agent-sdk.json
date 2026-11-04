@@ -1,0 +1,162 @@
+{
+  "numero": 4,
+  "slug": "cursor-agent-sdk",
+  "projet": {
+    "companyId": "<OBS>",
+    "slug": "article-4-cursor-agent-sdk",
+    "nom": "Cursor publie un Agent SDK : un agent devient un dossier de code testé par des évaluations",
+    "alias": [
+      {
+        "type": "site",
+        "valeur": "https://cursor.com/changelog/agent-sdk"
+      },
+      {
+        "type": "site",
+        "valeur": "https://cursor.com/docs/agent-sdk"
+      },
+      {
+        "type": "npm",
+        "valeur": "@grok/agent-sdk"
+      },
+      {
+        "type": "site",
+        "valeur": "https://cursor.com/blog/joining-spacex"
+      }
+    ]
+  },
+  "motifSansProjet": null,
+  "aliasRefuses": [
+    {
+      "type": "npm",
+      "valeur": "@cursor/agent-sdk",
+      "code": "404"
+    }
+  ],
+  "brief": {
+    "tache": "Rédiger l'article n° 4 du magazine : Cursor publie un Agent SDK : un agent devient un dossier de code testé par des évaluations",
+    "categorie": "outils-developpement",
+    "publie_le": "2026-10-20",
+    "angle": "Définir un agent comme un projet versionné (instructions, outils, skills, connexions MCP, évaluations en CI) rapproche l'agent du code ordinaire, ce qui change la façon de le relire et de le tester. Texte à écrire pour deux lecteurs : le développeur (ce qu'il peut faire ou doit vérifier) et le décideur (ce que cela change pour un choix d'outil, de coût ou de conformité), sans rien ajouter qui ne figure pas dans les faits ci-dessous.",
+    "plan": [
+      "Ce qui est annoncé ou publié : les faits datés, tels que la source les énonce",
+      "Ce que cela change pour un développeur : usage concret, uniquement à partir des faits listés",
+      "Ce que cela change pour un décideur : choix, coûts, risques, uniquement à partir des faits listés",
+      "Ce qui n'est pas établi : points ouverts, chiffres d'éditeur non mesurés de façon indépendante",
+      "Sources et méthode de vérification : liste des URL lues le 27/10/2026"
+    ],
+    "faits": [
+      {
+        "texte": "Le SDK permet de définir un agent comme un dossier de code, de le tester par des évaluations et de le déployer chez Cursor ou sur sa propre infrastructure.",
+        "source_url": "https://cursor.com/changelog/agent-sdk",
+        "extrait_exact": "It allows you to define an agent as a folder of code, test it with evals, and deploy it to Cursor or your own infrastructure.",
+        "statut_propose": "rapporte_editeur"
+      },
+      {
+        "texte": "Structure du projet : instructions.md, un fichier par outil, des skills chargés à la demande et des connexions MCP.",
+        "source_url": "https://cursor.com/changelog/agent-sdk",
+        "extrait_exact": "instructions.md is the prompt. Each file in tools/ is one typed action the model can call. skills/ holds procedures the model loads on demand, mcp-connections/ adds tools from MCP servers",
+        "statut_propose": "rapporte_editeur"
+      },
+      {
+        "texte": "Les agents réagissent aux événements de GitHub, GitLab et Bitbucket, à Slack, aux webhooks et à une planification cron.",
+        "source_url": "https://cursor.com/changelog/agent-sdk",
+        "extrait_exact": "Agents wake on pull request, comment, and CI events from GitHub, GitLab, and Bitbucket; on mentions and DMs in Slack; on webhooks from any provider; and on a cron schedule.",
+        "statut_propose": "rapporte_editeur"
+      },
+      {
+        "texte": "Une commande rejoue une vraie pull request sous forme de webhooks signés pour tester l'agent.",
+        "source_url": "https://cursor.com/changelog/agent-sdk",
+        "extrait_exact": "agent-sdk github replay <pr-url> turns a real pull request into signed webhook payloads and sends them to the bot",
+        "statut_propose": "rapporte_editeur"
+      },
+      {
+        "texte": "Le SDK est annoncé en disponibilité générale.",
+        "source_url": "https://cursor.com/changelog/agent-sdk",
+        "extrait_exact": "The Agent SDK is generally available today.",
+        "statut_propose": "rapporte_editeur"
+      },
+      {
+        "texte": "La documentation donne un autre nom de paquet que le journal : @grok/agent-sdk, ex-@cursor/bdk.",
+        "source_url": "https://cursor.com/docs/agent-sdk",
+        "extrait_exact": "Install @grok/agent-sdk , then scaffold and run a project. The package was @cursor/bdk before.",
+        "statut_propose": "confirme_doc_officielle"
+      },
+      {
+        "texte": "Seule la toute première version publiée, 0.0.0-stage (22/10/2026), portait la description provisoire citée ; elle a été remplacée dès la version 0.2.27 et n'est plus la description du paquet.",
+        "source_url": "https://registry.npmjs.org/@grok/agent-sdk",
+        "extrait_exact": "\"description\":\"Temporary package placeholder for staged publishing\"",
+        "statut_propose": "confirme_doc_officielle"
+      },
+      {
+        "texte": "La description actuelle du paquet (dernière version 0.3.0, publiée le 25/10/2026) est un outil pour construire, tester et déployer des agents sur le harnais d'agents de Cursor.",
+        "source_url": "https://registry.npmjs.org/@grok/agent-sdk",
+        "extrait_exact": "\"description\":\"Build, test, and deploy agents as code on Cursor's agent harness.\"",
+        "statut_propose": "confirme_doc_officielle"
+      },
+      {
+        "texte": "Le registre npm rattache le paquet au dépôt GitHub cursor/cursor.",
+        "source_url": "https://registry.npmjs.org/@grok/agent-sdk",
+        "extrait_exact": "\"repository\":{\"url\":\"https://github.com/cursor/cursor\",\"type\":\"git\"}",
+        "statut_propose": "confirme_doc_officielle"
+      },
+      {
+        "texte": "Le registre npm donne cursor.com comme page d'accueil du paquet.",
+        "source_url": "https://registry.npmjs.org/@grok/agent-sdk",
+        "extrait_exact": "\"homepage\":\"https://cursor.com\"",
+        "statut_propose": "confirme_doc_officielle"
+      },
+      {
+        "texte": "Le paquet a été créé sur npm le 22/10/2026 à 18:39 UTC.",
+        "source_url": "https://registry.npmjs.org/@grok/agent-sdk",
+        "extrait_exact": "\"created\":\"2026-10-22T18:39:46.605Z\"",
+        "statut_propose": "confirme_doc_officielle"
+      },
+      {
+        "texte": "Le registre npm donne 0.3.0 comme version « latest » du paquet @grok/agent-sdk.",
+        "source_url": "https://registry.npmjs.org/@grok/agent-sdk",
+        "extrait_exact": "\"dist-tags\":{\"latest\":\"0.3.0\"}",
+        "statut_propose": "confirme_doc_officielle"
+      },
+      {
+        "texte": "Le journal des modifications de Cursor cite la commande « npx @cursor/agent-sdk init ./my-bot », alors que sa documentation installe @grok/agent-sdk.",
+        "source_url": "https://cursor.com/changelog/agent-sdk",
+        "extrait_exact": "Run npx @cursor/agent-sdk init ./my-bot",
+        "statut_propose": "rapporte_editeur"
+      },
+      {
+        "texte": "Le journal de Cursor écrit, à la lecture du 27/10/2026, la commande « npx @cursor/agent-sdk init ./my-bot », suivie de « agent-sdk dev ». (lu le 27/10/2026 à 04:49 UTC)",
+        "source_url": "https://cursor.com/changelog/agent-sdk",
+        "extrait_exact": "Run npx @cursor/agent-sdk init ./my-bot , then agent-sdk dev",
+        "statut_propose": "rapporte_editeur"
+      },
+      {
+        "texte": "Le journal de Cursor l'écrit le 27/10/2026 ; le paquet @cursor/agent-sdk répond 404 sur npm à cette date. Un 404 ne dit pas s'il a existé puis été retiré : c'est inconnu. (lu le 27/10/2026 à 04:49 UTC)",
+        "source_url": "https://registry.npmjs.org/@cursor%2fagent-sdk",
+        "extrait_exact": "{\"error\":\"Not found\"}",
+        "statut_propose": "confirme_doc_officielle"
+      },
+      {
+        "texte": "Dans le registre npm, le paquet @grok/agent-sdk 0.3.0 déclare deux binaires, « bdk » et « agent-sdk ». (lu le 27/10/2026 à 04:49 UTC)",
+        "source_url": "https://registry.npmjs.org/@grok/agent-sdk",
+        "extrait_exact": "\"bin\":{\"bdk\":\"./dist/bin/agent-serve.js\",\"agent-sdk\":\"./dist/bin/agent-serve.js\"}",
+        "statut_propose": "confirme_doc_officielle"
+      },
+      {
+        "texte": "Dans le registre npm, le paquet @cursor/bdk déclare les mêmes deux binaires, « bdk » et « agent-sdk ». (lu le 27/10/2026 à 04:49 UTC)",
+        "source_url": "https://registry.npmjs.org/@cursor%2fbdk",
+        "extrait_exact": "\"bin\":{\"bdk\":\"./dist/bin/agent-serve.js\",\"agent-sdk\":\"./dist/bin/agent-serve.js\"}",
+        "statut_propose": "confirme_doc_officielle"
+      },
+      {
+        "texte": "Cursor annonce lui-même, dans un billet du 14 août 2026, son rachat par SpaceX, après un partenariat d'entraînement de modèles annoncé en avril. Aucune page lue n'explique le choix du nom @grok pour le paquet. (lu le 27/10/2026 à 04:49 UTC)",
+        "source_url": "https://cursor.com/blog/joining-spacex",
+        "extrait_exact": "Aug 14, 2026 · company Cursor is now a part of SpaceX 2 min read Cursor has officially been acquired by SpaceX. This completes the acquisition process that started in April, when we announced our partnership with SpaceXAI to accelerate our model training efforts.",
+        "statut_propose": "rapporte_editeur"
+      }
+    ],
+    "points_ouverts": [
+      "Le journal annonce la « disponibilité générale » ; le registre npm affiche 0.3.0 comme dernière version : donner les deux faits sans les opposer ni interpréter la numérotation. (relu le 27/10 à 04:49 UTC, toujours inconnu : aucune page de Cursor ne relie la disponibilité générale à un numéro de version)"
+    ],
+    "regles": "Aucun fait, date ou chiffre hors des faits listés. Chaque affirmation renvoie à un fait et à son extrait exact. Pas de tiret cadratin."
+  }
+}

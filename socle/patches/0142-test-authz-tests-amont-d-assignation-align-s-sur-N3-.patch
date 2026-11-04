@@ -1,0 +1,105 @@
+From f7c81763fbf475365a5bb8d27fa8146faddae4f3 Mon Sep 17 00:00:00 2001
+From: Jean-Baptiste Dhondt <114347858+warrox1993@users.noreply.github.com>
+Date: Fri, 30 Oct 2026 16:28:05 +0100
+Subject: [PATCH 142/148] =?UTF-8?q?test(authz):=20tests=20amont=20d'assign?=
+ =?UTF-8?q?ation=20align=C3=A9s=20sur=20N3=20(coordinateur=20ou=20destinat?=
+ =?UTF-8?q?aire=20d=C3=A9clar=C3=A9)?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Constat N3 (patchs 0108 et 0119) : seul le coordinateur (ceo) assigne à tout agent ;
+un autre agent assigne à lui-même, à son sous-arbre et à ses destinataires déclarés.
+- issue-creation-source-routes : le refus du spécialiste (403, message et raison exacts)
+  est vérifié, puis le cas d'origine passe avec un destinataire déclaré posé comme le board.
+- permissions-upgrade-boundary-routes : l'assignation libre est faite par le coordinateur ;
+  le spécialiste reçoit le refus exact ; la partie « cible privée » reste sur le spécialiste.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01EThpSSDGc5NRYwbgjNqoTJ
+---
+ .../issue-creation-source-routes.test.ts      | 32 +++++++++++++++----
+ ...ermissions-upgrade-boundary-routes.test.ts | 12 ++++++-
+ 2 files changed, 36 insertions(+), 8 deletions(-)
+
+diff --git a/server/src/__tests__/issue-creation-source-routes.test.ts b/server/src/__tests__/issue-creation-source-routes.test.ts
+index 400700e3f9..c93e5877e8 100644
+--- a/server/src/__tests__/issue-creation-source-routes.test.ts
++++ b/server/src/__tests__/issue-creation-source-routes.test.ts
+@@ -8,7 +8,7 @@ import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+ // 4 sous-tâches ouvertes) est neutralisée ici pour que ces tests amont continuent de vérifier
+ // leur propre règle ; elle est testée dans atelier-garde-delegation.test.ts.
+ vi.mock("../atelier/garde-delegation.js", () => ({ refuserDelegationParAgent: async () => undefined }));
+-import { activityLog, agents, companies, createDb, heartbeatRuns, issues } from "@paperclipai/db";
++import { activityLog, agents, companies, companyMemberships, createDb, heartbeatRuns, issues, principalPermissionGrants } from "@paperclipai/db";
+ import { getEmbeddedPostgresTestSupport, startEmbeddedPostgresTestDatabase } from "./helpers/embedded-postgres.js";
+ import { issueRoutes } from "../routes/issues.js";
+ import { errorHandler } from "../middleware/index.js";
+@@ -139,14 +139,32 @@ describePostgres("agent-created follow-ups: parent links and creation source", (
+   });
+ 
+   it("stays standalone instead of failing when the default parent would be a delegation cycle", async () => {
+-    const created = await request(app(agentActor(qaAgentId, runOnSource)))
++    const send = () => request(app(agentActor(qaAgentId, runOnSource)))
+       .post(`/api/companies/${companyId}/issues`)
+       .send({ title: "Bug for the engineer who delegated to QA", assigneeAgentId: engineerAgentId });
+-    expect(created.status, JSON.stringify(created.body)).toBe(201);
+-    expect(created.body.parentId).toBeNull();
+-    expect(created.body.assigneeAgentId).toBe(engineerAgentId);
+-    const detail = await request(app(boardActor)).get(`/api/issues/${created.body.id}`);
+-    expect(detail.body.createdFrom).toMatchObject({ issue: { id: sourceId } });
++    // Atelier (N3, patch 0108) : un agent non ceo n'assigne à un pair que s'il est un destinataire déclaré par le board.
++    const refused = await send();
++    expect(refused.status, JSON.stringify(refused.body)).toBe(403);
++    expect(refused.body).toEqual({
++      error: "Atelier : seul le coordinateur assigne à tout agent ; un autre agent assigne à son sous-arbre et à ses destinataires déclarés.",
++      details: { reason: "deny_policy_restricted" },
++    });
++    // Destinataire déclaré, comme le pose le board : appartenance active et grant à portée.
++    const [membership] = await db.insert(companyMemberships).values({ companyId, principalType: "agent", principalId: qaAgentId,
++      status: "active", membershipRole: "member" }).returning();
++    const [grant] = await db.insert(principalPermissionGrants).values({ companyId, principalType: "agent", principalId: qaAgentId,
++      permissionKey: "tasks:assign_scope", scope: { assigneeAgentIds: [engineerAgentId] } }).returning();
++    try {
++      const created = await send();
++      expect(created.status, JSON.stringify(created.body)).toBe(201);
++      expect(created.body.parentId).toBeNull();
++      expect(created.body.assigneeAgentId).toBe(engineerAgentId);
++      const detail = await request(app(boardActor)).get(`/api/issues/${created.body.id}`);
++      expect(detail.body.createdFrom).toMatchObject({ issue: { id: sourceId } });
++    } finally {
++      await db.delete(principalPermissionGrants).where(eq(principalPermissionGrants.id, grant!.id));
++      await db.delete(companyMemberships).where(eq(companyMemberships.id, membership!.id));
++    }
+   });
+ 
+   it("stays standalone instead of failing when the default parent is protected without a grant", async () => {
+diff --git a/server/src/__tests__/permissions-upgrade-boundary-routes.test.ts b/server/src/__tests__/permissions-upgrade-boundary-routes.test.ts
+index 1cdde0fdf5..62425b10c8 100644
+--- a/server/src/__tests__/permissions-upgrade-boundary-routes.test.ts
++++ b/server/src/__tests__/permissions-upgrade-boundary-routes.test.ts
+@@ -310,10 +310,20 @@ describeEmbeddedPostgres("permissions upgrade visibility and route boundaries",
+     });
+     const app = await createApp(db, agentActor(company.id, actorAgent.id));
+ 
+-    const openAssignment = await request(app)
++    // Atelier (N3, patch 0108) : l'assignation libre à un pair est réservée au coordinateur (ceo) ; un autre agent
++    // est refusé hors de son sous-arbre et de ses destinataires déclarés.
++    const coordinator = await seedAgent(db, company.id, { role: "ceo" });
++    const openAssignment = await request(await createApp(db, agentActor(company.id, coordinator.id)))
+       .post(`/api/companies/${company.id}/issues`)
+       .send({ title: "Assignable after upgrade", assigneeAgentId: openTargetAgent.id });
+     expect(openAssignment.status, JSON.stringify(openAssignment.body)).toBe(201);
++    const deniedPeerAssignment = await request(app)
++      .post(`/api/companies/${company.id}/issues`)
++      .send({ title: "Peer outside the declared scope", assigneeAgentId: openTargetAgent.id });
++    expect(deniedPeerAssignment.status).toBe(403);
++    expect(deniedPeerAssignment.body).toEqual({
++      error: "Atelier : seul le coordinateur assigne à tout agent ; un autre agent assigne à son sous-arbre et à ses destinataires déclarés.",
++    });
+ 
+     const deniedPrivateAssignment = await request(app)
+       .post(`/api/companies/${company.id}/issues`)
+-- 
+2.53.0
+

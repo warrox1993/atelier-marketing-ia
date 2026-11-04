@@ -1,0 +1,76 @@
+From 220a201d708b2a280684bc706db6daa765bd3121 Mon Sep 17 00:00:00 2001
+From: Jean-Baptiste Dhondt <114347858+warrox1993@users.noreply.github.com>
+Date: Fri, 30 Oct 2026 12:23:39 +0100
+Subject: [PATCH] =?UTF-8?q?feat(tool-gateway):=20d=C3=A9lai=20par=20connex?=
+ =?UTF-8?q?ion=20config.toolTimeoutMs,=20born=C3=A9=20=C3=A0=2060=20s,=20p?=
+ =?UTF-8?q?our=20les=20appels=20MCP=20des=20agents=20(Atelier=20T1)?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+La route MCP des agents n'envoie aucun timeoutMs : tout outil distant tombait à
+10 s alors que l'extraction et l'audit en demandent bien plus. La connexion peut
+désormais porter config.toolTimeoutMs (même borne 1 à 60 000 ms que timeoutMs) ;
+un timeoutMs explicite de l'appelant garde la priorité.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01EThpSSDGc5NRYwbgjNqoTJ
+---
+ server/src/__tests__/tool-gateway.test.ts | 24 +++++++++++++++++++++++
+ server/src/services/tool-gateway.ts       |  5 +++++
+ 2 files changed, 29 insertions(+)
+
+diff --git a/server/src/__tests__/tool-gateway.test.ts b/server/src/__tests__/tool-gateway.test.ts
+index 406c0197f6..9e8a34f471 100644
+--- a/server/src/__tests__/tool-gateway.test.ts
++++ b/server/src/__tests__/tool-gateway.test.ts
+@@ -4468,6 +4468,30 @@ rl.on("line", (line) => {
+     }
+   });
+ 
++  it("applique le délai de la connexion (config.toolTimeoutMs) quand l'appel n'en donne pas (Atelier T1)", async () => {
++    const company = await createCompany(db);
++    const agent = await createAgent(db, company.id);
++    const { run } = await createIssueAndRun(db, company.id, agent.id);
++    const fake = await startFakeRemoteMcpServer((req) => req.body?.method === "tools/call"
++      ? { delayMs: 75, body: { jsonrpc: "2.0", id: req.body?.id, result: { content: [{ type: "text", text: "lent" }] } } }
++      : { body: { jsonrpc: "2.0", id: req.body?.id ?? null, result: {} } });
++    try {
++      await createRemoteMcpTool(db, company.id, { toolName: "extraire_site", url: fake.url, connectionConfig: { toolTimeoutMs: 20 } });
++      await allowAllToolsForAgent(db, company.id, agent.id);
++      const gateway = createTestToolGatewayService(db);
++      const session = await gateway.createSession({ companyId: company.id, agentId: agent.id, runId: run.id });
++      const outil = (await gateway.listToolsForSession(session.token)).find((t) => t.providerType === "mcp_remote_http")!;
++      await gateway.executeTool({ sessionToken: session.token, tool: outil.name, parameters: { key: "sans-delai" } }).then(
++        () => { throw new Error("délai de la connexion attendu"); },
++        (error) => expectGatewayError(error, 504, "tool_timeout"),
++      );
++      const explicite = await gateway.executeTool({ sessionToken: session.token, tool: outil.name, parameters: { key: "explicite" }, timeoutMs: 2_000 });
++      expect(JSON.stringify(explicite)).toContain("lent");
++    } finally {
++      await fake.close();
++    }
++  });
++
+   it("répond connection_unavailable, pas tool_not_found, quand la connexion de l'outil est en erreur (Atelier T3)", async () => {
+     const company = await createCompany(db);
+     const agent = await createAgent(db, company.id);
+diff --git a/server/src/services/tool-gateway.ts b/server/src/services/tool-gateway.ts
+index b54c6ef069..99ea0a2126 100644
+--- a/server/src/services/tool-gateway.ts
++++ b/server/src/services/tool-gateway.ts
+@@ -5977,6 +5977,11 @@ export function createToolGatewayService(
+     // Recheck immediately before dispatch, including previously approved calls
+     // and connections whose stored grant/catalog predates scope reduction.
+     assertGoogleChatToolArgumentsSupported(connection, entry.toolName, parameters);
++    // Atelier T1 : un agent ne peut pas passer timeoutMs par MCP ; la connexion
++    // porte son propre délai (config.toolTimeoutMs), borné comme tout délai à 60 s.
++    if (useDefaultTimeout && typeof connection.config.toolTimeoutMs === "number") {
++      ms = timeoutMs(connection.config.toolTimeoutMs);
++    }
+     if (useDefaultTimeout && isRailwayConnection(connection) && entry.toolName === `${RAILWAY_TOOL_PREFIX}run-command`) {
+       ms = railwayCommandBudgetMs(parameters);
+     }
+-- 
+2.53.0
+

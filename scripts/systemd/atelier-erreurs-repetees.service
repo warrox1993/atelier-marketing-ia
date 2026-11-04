@@ -1,0 +1,18 @@
+[Unit]
+Description=Détecteur des erreurs répétées des agents (journaux de runs, sans modèle ni quota, APP-3)
+OnFailure=atelier-alerte@%n.service
+
+# Installation (une fois) :
+#   install -m 644 scripts/systemd/atelier-erreurs-repetees.{service,timer} ~/.config/systemd/user/
+#   systemctl --user daemon-reload && systemctl --user enable --now atelier-erreurs-repetees.timer
+# Code 1 = erreurs répétées trouvées : l'échec déclenche atelier-alerte@ (bureau et courriel, résumé du journal) ;
+# rapport complet dans ~/.local/share/atelier-erreurs-repetees/AAAA-MM-JJ.json (route et code seulement).
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/python3 -I %h/Projets/atelier-marketing-ia/scripts/detecter-erreurs-repetees.py --jours 7
+Nice=15
+IOSchedulingClass=idle
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=atelier-erreurs-repetees

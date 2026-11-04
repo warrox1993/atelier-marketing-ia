@@ -119,6 +119,11 @@ export interface StockLiaisons {
    * rendus d'étape. `apres` = identifiant de la dernière liaison examinée (curseur tournant : le passage suivant reprend après elle).
    */
   listerOuvertesTransmises(limite: number, apres?: string | null): Promise<LiaisonStockee[]>;
+  /**
+   * COORD-P1-5 : liaisons `ouverte` sans activité depuis `heures` (dernière mise à jour de la tâche cible, ou création de
+   * la liaison si elle n'est pas transmise), dont la tâche cible n'est ni terminée ni annulée, les plus anciennes d'abord.
+   */
+  listerEchues(limite: number, heures: number): Promise<LiaisonStockee[]>;
   /** File de sortie : liaisons `repondue` ou `annulee` dont la tâche d'origine n'a pas encore reçu la réponse. */
   listerANotifier(limite: number, essaisMax: number): Promise<LiaisonStockee[]>;
   /**
@@ -376,6 +381,16 @@ export function creerStockLiaisons(db: PluginContext["db"]): StockLiaisons {
             and ($2::text is null or l.id::text > $2::text)
           order by l.id::text limit $1`,
         [limite, apres],
+      )).map(enLiaison);
+    },
+    async listerEchues(limite, heures) {
+      return (await q(
+        `select l.* from ${ns}.liaisons l
+           left join public.issues t on t.id = l.tache_cible_id and t.company_id = l.entreprise_cible_id
+          where l.statut = 'ouverte' and coalesce(t.updated_at, l.cree_le) < now() - make_interval(hours => $2::int)
+            and (t.status is null or t.status not in ('done', 'cancelled'))
+          order by l.cree_le limit $1`,
+        [limite, heures],
       )).map(enLiaison);
     },
     async listerANotifier(limite, essaisMax) {

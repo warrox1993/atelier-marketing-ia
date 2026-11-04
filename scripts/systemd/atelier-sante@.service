@@ -1,5 +1,6 @@
 [Unit]
 Description=Contrôle de santé de l'Atelier marketing IA (%i)
+OnFailure=atelier-alerte@%n.service
 After=network-online.target
 
 [Service]
@@ -8,7 +9,10 @@ Environment=PATH=%h/.local/bin:/usr/local/bin:/usr/bin:/bin
 Type=oneshot
 # ATELIER_PORT et ATELIER_PASSERELLE_URL viennent du même fichier que l'instance.
 EnvironmentFile=%h/.config/atelier/%i.env
-# Code de sortie non nul = alerte : visible avec « journalctl --user -u atelier-sante@%i ».
+# Code 1 = anomalie, déjà notifiée par le script (bureau et courriel) : comptée comme un succès pour ne pas
+# alerter deux fois. Tout autre code (script cassé, jq absent) passe par OnFailure. Anomalies visibles avec
+# « journalctl --user -u atelier-sante@%i ».
+SuccessExitStatus=1
 ExecStart=%h/Projets/atelier-marketing-ia/scripts/sante-atelier.sh --notifier
 Nice=10
 StandardOutput=journal

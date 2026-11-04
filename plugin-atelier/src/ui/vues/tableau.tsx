@@ -5,7 +5,8 @@
  * `rapport.mensuel` et `tableau.direction` ; les calculs sont ceux du module pur `tableau-direction.ts`.
  * Règle : une source absente s'écrit « non mesuré » ou « connexion à faire », jamais un chiffre inventé.
  */
-import { useMemo, useState } from "react";
+import { useState } from "react";
+import { useHostContext } from "@paperclipai/plugin-sdk/ui";
 import { Chargement, EnTete, EtatErreur, LienHote, Section } from "../composants.js";
 import { Barres, Entonnoir, lignesAgents, lignesPhases, ListeSources, TableIndicateurs } from "../composants/tableau-direction.js";
 import { euros, nombre } from "../format.js";
@@ -14,7 +15,7 @@ import { STYLES_RAPPORT } from "../styles-rapport.js";
 import { STYLES_TABLEAU } from "../styles-tableau.js";
 import { useTableauDirection } from "../tableau-lecture.js";
 import type { TableauDirection } from "../tableau-direction.js";
-import { libelleMois, moisProposes } from "./rapport.js";
+import { libelleMois, useMoisProposes } from "./rapport.js";
 
 export function CorpsTableau({ t }: { t: TableauDirection }) {
   const abonnement = t.couts.total.valeur === 0 && (t.couts.jetons.valeur ?? 0) > 0;
@@ -65,7 +66,8 @@ export function CorpsTableau({ t }: { t: TableauDirection }) {
 }
 
 export function VueTableau() {
-  const mois = useMemo(() => moisProposes(), []);
+  const { companyId } = useHostContext();
+  const mois = useMoisProposes(companyId);
   const [choisi, setChoisi] = useState(mois[0]!);
   const { lecture, recharger } = useTableauDirection(choisi);
   return (

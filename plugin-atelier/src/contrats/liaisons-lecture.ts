@@ -39,6 +39,7 @@ export const NOMS_SERVICES: Readonly<Record<string, string>> = {
   evenementiel: "Événementiel",
   "services-generaux": "Services généraux",
   partenariats: "Partenariats",
+  complements: "Compléments alimentaires",
 };
 
 /** Nom lisible d'un service ; un slug inconnu devient un libellé lisible (tirets remplacés, majuscule initiale). */
@@ -124,6 +125,9 @@ export interface LigneRegistre {
   nombreExtraits: number;
   creeLe: string;
   reponduLe: string | null;
+  /** Identifiants des tâches native d'origine et sollicitée (nulle tant que la demande n'est pas transmise) : liens seulement. */
+  tacheOrigine: string;
+  tacheCible: string | null;
 }
 
 /** Réponse de `liaison.acces` : seulement le droit d'accès au registre, jamais une donnée du registre. */

@@ -5,7 +5,12 @@
 
 * { margin: 0; padding: 0; box-sizing: border-box; }
 
-html[data-format="1080x1920"] { --l: 1080px; --h: 1920px; --base: 64px; --marge: 96px; }
+/* 9:16 : zones sûres de Meta (rien d'important dans les 14 % du haut, les 35 % du bas et les 6 % de
+   chaque côté) ; les sous-titres et la mention IA y sont placés de la même façon (montage.py). */
+html[data-format="1080x1920"] {
+  --l: 1080px; --h: 1920px; --base: 64px; --marge: 96px;
+  --marge-haut: 270px; --marge-bas: 672px; --marge-cotes: 65px;
+}
 html[data-format="1920x1080"] { --l: 1920px; --h: 1080px; --base: 56px; --marge: 160px; }
 html[data-format="1080x1080"] { --l: 1080px; --h: 1080px; --base: 52px; --marge: 96px; }
 
@@ -28,9 +33,18 @@ html, body {
   display: flex;
   flex-direction: column;
   justify-content: center;
-  padding: var(--marge);
+  padding: var(--marge-haut, var(--marge)) var(--marge-cotes, var(--marge)) var(--marge-bas, var(--marge));
   gap: calc(var(--base) * 0.6);
   overflow-wrap: anywhere;
 }
 
 .sous-titre { font-size: calc(var(--base) * 0.55); line-height: 1.35; color: #5a564e; }
+
+/* Illustration IA en fond plein cadre (facultative : sans <img id="fond">, rien ci-dessous ne s'applique). fond.js la
+   zoome lentement. Le voile uniforme (même opacité que les images, images.VOILE_OPACITE) garde le contraste de 4,5:1 sur le
+   pire fond possible, une illustration toute blanche (testé) ; le texte passe au blanc, les accents à un ambre clair. */
+#fond { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+#voile { position: absolute; inset: 0; background: rgba(0, 0, 0, 0.66); }
+body:has(#fond) { color: #fff; }
+body:has(#fond) .sous-titre { color: #fff; }
+body:has(#fond) :is(#chiffre, .numero) { color: #ffd9b8; }

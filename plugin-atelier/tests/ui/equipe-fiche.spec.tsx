@@ -87,7 +87,7 @@ describe("fiche d'un agent", () => {
     expect(dt.length).toBe(f.competences.length);
     expect(dt.some((t) => t!.startsWith("Cadrage et extraction des exigences"))).toBe(true);
     const dd = fiche.querySelector(".atl-fiche-comp dd")!.textContent!;
-    expect(dd).toContain("Transforme une demande marketing en brief structuré");
+    expect(dd).toContain("Transforme une demande adressée à un service (campagne marketing, dossier, mission d'un département) en brief structuré");
     expect(fiche.textContent).toContain("Aucune publication, aucun envoi, aucune dépense");
     expect(fiche.textContent).toContain("Toujours réservé à l'humain");
     expect(fiche.textContent).toContain(f.pourquoi);

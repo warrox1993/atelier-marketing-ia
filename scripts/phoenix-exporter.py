@@ -124,6 +124,9 @@ def requete_journal(schema: str, apres_seq: int, lot: int, entreprise) -> str:
         "'service', se.service_slug, 'agent_id', i.assignee_agent_id, 'agent_role', ag.role, "
         "'competences', ag.metadata->'atelier'->'competencesObligatoires', "
         f"'donnees', jsonb_strip_nulls(jsonb_build_object({donnees})), "
+        # APP-9 : empreinte du paquet de consignes du run (note « Using stable Claude prompt bundle <clé>. » de adapter.invoke).
+        "'prompt_bundle', (SELECT (array_agg((regexp_match(ev.payload->>'commandNotes', 'prompt bundle ([0-9a-f]{64})'))[1] ORDER BY ev.seq DESC))[1] "
+        "FROM public.heartbeat_run_events ev WHERE ev.run_id = j.run_id AND ev.event_type = 'adapter.invoke'), "
         "'corrections', j.corrections)\n"
         f"FROM (SELECT x.seq, x.company_id, x.type, x.entite, x.issue_id, x.run_id, x.acteur, x.donnees, x.cree_le, "
         f"count(*) FILTER (WHERE x.type IN ({types})) OVER (PARTITION BY x.company_id, x.issue_id ORDER BY x.seq) AS corrections "
@@ -187,6 +190,8 @@ def attributs_evenement(e: dict) -> dict:
         a["atelier.entite"] = e["entite"]
     if isinstance(e.get("run_id"), str) and RE_UUID.fullmatch(e["run_id"]):
         a["atelier.run_id"] = e["run_id"]
+    if isinstance(e.get("prompt_bundle"), str) and re.fullmatch(r"[0-9a-f]{64}", e["prompt_bundle"]):
+        a["atelier.prompt_bundle"] = e["prompt_bundle"]
     if isinstance(e.get("acteur_agent_id"), str) and RE_UUID.fullmatch(e["acteur_agent_id"]):
         a["atelier.acteur.type"] = "agent"
         a["atelier.acteur.id"] = e["acteur_agent_id"]
@@ -298,9 +303,11 @@ def verifier_url_locale(url: str) -> str:
     return url.rstrip("/")
 
 
-def envoyer(url: str, corps: bytes) -> None:
+def envoyer(url: str, corps: bytes, cle: str) -> None:
+    # Authentification de Phoenix activée (PHOENIX_ENABLE_AUTH) : clé système en jeton porteur.
     req = urllib.request.Request(url + "/v1/traces", data=corps, method="POST",
-                                 headers={"Content-Type": "application/x-protobuf"})
+                                 headers={"Content-Type": "application/x-protobuf",
+                                          "Authorization": f"Bearer {cle}"})
     try:
         with urllib.request.urlopen(req, timeout=60) as r:
             if not 200 <= r.status < 300:
@@ -353,6 +360,10 @@ def exporter(args) -> int:
     chemin = args.etat or chemin_etat_defaut(args.pg_port, schema)
     etat = lire_etat(chemin)
     racines = set(etat["racines"])
+    cle = os.environ.get("PHOENIX_API_KEY")
+    if not args.a_blanc and not cle:
+        raise ErreurExport("PHOENIX_API_KEY manquant : l’authentification de Phoenix est activée ; créer une clé "
+                           "système et la ranger dans ~/.config/atelier/phoenix-export.env (voir docs/phoenix.md)")
     total_entrees = total_spans = 0
     while True:
         objets = executer_lecture(args.pg_port, requete_journal(schema, etat["dernier_seq"], args.lot, args.entreprise))
@@ -373,7 +384,7 @@ def exporter(args) -> int:
                 print(json.dumps({"trace": s["trace_id"].hex(), "span": s["span_id"].hex(), "nom": s["nom"],
                                   "attributs": s["attributs"]}, ensure_ascii=False, sort_keys=True))
         else:
-            envoyer(url, requete_otlp(spans, args.projet))
+            envoyer(url, requete_otlp(spans, args.projet), cle)
             racines.update(nouvelles)
             etat = {"dernier_seq": dernier, "racines": sorted(racines), "schema": schema}
             ecrire_etat(chemin, etat)

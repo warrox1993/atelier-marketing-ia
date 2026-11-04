@@ -1,0 +1,363 @@
+From 8c5d96abfa004db15988407d8f77b2c5b62c3192 Mon Sep 17 00:00:00 2001
+From: Jean-Baptiste Dhondt <114347858+warrox1993@users.noreply.github.com>
+Date: Fri, 30 Oct 2026 23:38:43 +0100
+Subject: [PATCH] =?UTF-8?q?feat(agents):=20une=20seule=20entr=C3=A9e=20?=
+ =?UTF-8?q?=C2=AB=20Agents=20=C2=BB,=20vers=20la=20page=20de=20tous=20les?=
+ =?UTF-8?q?=20agents=20de=20l'atelier?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Quand le plugin de l'atelier est prêt, l'entrée « Agents » de la section Organisation,
+le lien « Voir tous les agents », l'action « Browse agents » et les routes /agents et
+/agents/all mènent à la page « agents » du plugin (tous les départements). Sans plugin,
+la liste native est inchangée ; les pages de détail /agents/:id restent intactes.
+
+Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01EThpSSDGc5NRYwbgjNqoTJ
+---
+ ui/src/App.tsx                                | 16 +++++-----
+ .../components/CompanyHomeRedirect.test.tsx   | 24 +++++++++++++-
+ ui/src/components/CompanyHomeRedirect.tsx     | 29 ++++++++++++++++-
+ ui/src/components/Sidebar.test.tsx            | 21 +++++++++++++
+ ui/src/components/Sidebar.tsx                 |  6 ++--
+ .../components/SidebarAgents.production.tsx   |  7 +++--
+ ui/src/components/SidebarAgents.test.tsx      | 31 +++++++++++++++++++
+ ui/src/components/SidebarAgents.tsx           |  7 +++--
+ 8 files changed, 124 insertions(+), 17 deletions(-)
+
+diff --git a/ui/src/App.tsx b/ui/src/App.tsx
+index f8d82e68c2..d58c56aff2 100644
+--- a/ui/src/App.tsx
++++ b/ui/src/App.tsx
+@@ -23,7 +23,7 @@ import { CaseDetail } from "./pages/CaseDetail";
+ import { OnboardingWizardVariant } from "./components/OnboardingWizardVariant";
+ import { CloudAccessGate } from "./components/CloudAccessGate";
+ import { PaperclipLoading } from "./components/AnimatedPaperclipIcon";
+-import { CompanyHomeRedirect } from "./components/CompanyHomeRedirect";
++import { CompanyHomeRedirect, ListeAgentsOuAtelier } from "./components/CompanyHomeRedirect";
+ import { Dashboard } from "./pages/Dashboard";
+ import { DashboardLive } from "./pages/DashboardLive";
+ import { Timeline } from "./pages/Timeline";
+@@ -285,14 +285,12 @@ function boardRoutes(streamlinedUiEnabled: boolean, combinedInboxTasksEnabled: b
+         path="org"
+         element={streamlinedUiEnabled ? <Navigate to="/agents/all" replace /> : <ProductionSurface><ProductionOrgChart /></ProductionSurface>}
+       />
+-      <Route path="agents" element={<Navigate to="/agents/all" replace />} />
+-      {AGENT_FILTER_TABS.map((tab) => (
+-        <Route
+-          key={tab}
+-          path={`agents/${tab}`}
+-          element={streamlinedUiEnabled ? <Agents /> : <ProductionSurface><ProductionAgents /></ProductionSurface>}
+-        />
+-      ))}
++      {/* Liste des agents : l'atelier la remplace par sa page « Agents » (tous les départements), le détail d'un agent reste natif. */}
++      <Route path="agents" element={<ListeAgentsOuAtelier natif={<Navigate to="/agents/all" replace />} />} />
++      {AGENT_FILTER_TABS.map((tab) => {
++        const liste = streamlinedUiEnabled ? <Agents /> : <ProductionSurface><ProductionAgents /></ProductionSurface>;
++        return <Route key={tab} path={`agents/${tab}`} element={tab === "all" ? <ListeAgentsOuAtelier natif={liste} /> : liste} />;
++      })}
+       <Route path="agents/new" element={<NewAgent />} />
+       <Route path="agents/:agentId" element={<AgentDetail />} />
+       <Route path="agents/:agentId/:tab" element={<AgentDetail />} />
+diff --git a/ui/src/components/CompanyHomeRedirect.test.tsx b/ui/src/components/CompanyHomeRedirect.test.tsx
+index 294f5d4bf6..d4d76dd517 100644
+--- a/ui/src/components/CompanyHomeRedirect.test.tsx
++++ b/ui/src/components/CompanyHomeRedirect.test.tsx
+@@ -6,7 +6,7 @@ import { createRoot } from "react-dom/client";
+ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+ import { afterEach, describe, expect, it, vi } from "vitest";
+ import type { PluginUiContribution } from "@/api/plugins";
+-import { atelierDisponible, CompanyHomeRedirect } from "./CompanyHomeRedirect";
++import { atelierDisponible, CompanyHomeRedirect, ListeAgentsOuAtelier } from "./CompanyHomeRedirect";
+ 
+ const mockPluginsApi = vi.hoisted(() => ({ listUiContributions: vi.fn() }));
+ 
+@@ -72,3 +72,25 @@ describe("CompanyHomeRedirect", () => {
+     await vi.waitFor(() => expect(container.textContent).toBe("Navigate:dashboard"));
+   });
+ });
++
++describe("ListeAgentsOuAtelier", () => {
++  const natif = <div>Liste native</div>;
++
++  it("redirige vers la page de tous les agents du plugin quand l'atelier est prêt", async () => {
++    mockPluginsApi.listUiContributions.mockResolvedValue([contribution([pageAtelier] as never)]);
++    const { container } = await rendre(<ListeAgentsOuAtelier natif={natif} />);
++    await vi.waitFor(() => expect(container.textContent).toBe("Navigate:/atelier/agents"));
++  });
++
++  it("garde la liste native sans plugin d'atelier", async () => {
++    mockPluginsApi.listUiContributions.mockResolvedValue([contribution([autrePage] as never)]);
++    const { container } = await rendre(<ListeAgentsOuAtelier natif={natif} />);
++    await vi.waitFor(() => expect(container.textContent).toBe("Liste native"));
++  });
++
++  it("garde la liste native si la liste des plugins est en erreur", async () => {
++    mockPluginsApi.listUiContributions.mockRejectedValue(new Error("hors service"));
++    const { container } = await rendre(<ListeAgentsOuAtelier natif={natif} />);
++    await vi.waitFor(() => expect(container.textContent).toBe("Liste native"));
++  });
++});
+diff --git a/ui/src/components/CompanyHomeRedirect.tsx b/ui/src/components/CompanyHomeRedirect.tsx
+index 0252d99570..492a7382ac 100644
+--- a/ui/src/components/CompanyHomeRedirect.tsx
++++ b/ui/src/components/CompanyHomeRedirect.tsx
+@@ -1,3 +1,4 @@
++import type { ReactNode } from "react";
+ import { useQuery } from "@tanstack/react-query";
+ import { Navigate } from "@/lib/router";
+ import { pluginsApi, type PluginUiContribution } from "@/api/plugins";
+@@ -13,7 +14,9 @@ export const CHEMIN_PAGE_ATELIER = "atelier";
+ /** Tableau des départements d'un client à plusieurs services (vue « departements » du plugin). */
+ export const CHEMIN_DEPARTEMENTS_ATELIER = `${CHEMIN_PAGE_ATELIER}/departements`;
+ 
+-/** Vrai si un plugin prêt déclare la page principale de l'atelier. */
++/** Page « Agents » du plugin : tous les agents de tous les départements (remplace la liste native d'un seul département). */
++export const CHEMIN_AGENTS_ATELIER = `${CHEMIN_PAGE_ATELIER}/agents`;
++
+ /**
+  * Vues de l'atelier SANS colonne de navigation d'un service (patch local de l'Atelier) : vues de groupe
+  * (départements, organigramme), chat du Coordinateur général (adresse nue, `discussion`, ancienne `accueil`)
+@@ -25,6 +28,7 @@ export function estVueGroupeAtelier(pathname: string): boolean {
+   return new RegExp(`/${CHEMIN_PAGE_ATELIER}(/?$|/(${VUES_SANS_COLONNE.join("|")})(/|$))`, "u").test(pathname);
+ }
+ 
++/** Vrai si un plugin prêt déclare la page principale de l'atelier. */
+ export function atelierDisponible(contributions: PluginUiContribution[] | undefined): boolean {
+   return (contributions ?? []).some((contribution) =>
+     contribution.slots.some((slot) => slot.type === "page" && slot.routePath === CHEMIN_PAGE_ATELIER),
+@@ -45,3 +49,26 @@ export function CompanyHomeRedirect() {
+   if (isLoading) return <PaperclipLoading />;
+   return <Navigate to={atelierDisponible(data) ? CHEMIN_PAGE_ATELIER : "dashboard"} replace />;
+ }
++
++/**
++ * Destination de la liste des agents : la page du plugin quand l'atelier est prêt, sinon la liste native.
++ * Même requête que l'accueil d'entreprise (cache partagé).
++ */
++export function useCheminListeAgents(cheminNatif: string): string {
++  const { data } = useQuery({
++    queryKey: queryKeys.plugins.uiContributions,
++    queryFn: () => pluginsApi.listUiContributions(),
++  });
++  return atelierDisponible(data) ? `/${CHEMIN_AGENTS_ATELIER}` : cheminNatif;
++}
++
++/** Liste native des agents : redirige vers la page du plugin quand l'atelier est prêt, sinon affiche `natif`. */
++export function ListeAgentsOuAtelier({ natif }: { natif: ReactNode }) {
++  const { data, isLoading } = useQuery({
++    queryKey: queryKeys.plugins.uiContributions,
++    queryFn: () => pluginsApi.listUiContributions(),
++  });
++
++  if (isLoading) return <PaperclipLoading />;
++  return atelierDisponible(data) ? <Navigate to={`/${CHEMIN_AGENTS_ATELIER}`} replace /> : <>{natif}</>;
++}
+diff --git a/ui/src/components/Sidebar.test.tsx b/ui/src/components/Sidebar.test.tsx
+index 757b7e0a1c..100c3dc8f2 100644
+--- a/ui/src/components/Sidebar.test.tsx
++++ b/ui/src/components/Sidebar.test.tsx
+@@ -222,6 +222,27 @@ describe("Sidebar", () => {
+       flushSync(() => root.unmount());
+     });
+ 
++    it("atelier prêt : une seule entrée « Agents », vers la page de tous les agents du plugin", async () => {
++      mockPluginsApi.listUiContributions.mockResolvedValue([contributionAtelier]);
++      mockInstanceSettingsApi.getExperimental.mockResolvedValue({ enableStreamlinedUi: true });
++      const root = await renderSidebar();
++
++      const liens = [...container.querySelectorAll("nav a")].filter((a) => a.textContent?.trim() === "Agents");
++      expect(liens).toHaveLength(1);
++      expect(liens[0]!.getAttribute("href")).toBe("/atelier/agents");
++      expect(container.querySelector('a[href="/agents"]')).toBeNull();
++      flushSync(() => root.unmount());
++    });
++
++    it("sans l'atelier : l'entrée « Agents » garde la liste native", async () => {
++      mockInstanceSettingsApi.getExperimental.mockResolvedValue({ enableStreamlinedUi: true });
++      const root = await renderSidebar();
++
++      expect(container.querySelector('a[href="/agents"]')?.textContent?.trim()).toBe("Agents");
++      expect(container.querySelector('a[href="/atelier/agents"]')).toBeNull();
++      flushSync(() => root.unmount());
++    });
++
+     it("sans l'atelier : mêmes entrées, aucun interrupteur", async () => {
+       mockInstanceSettingsApi.getExperimental.mockResolvedValue({ enableStreamlinedUi: true });
+       const root = await renderSidebar();
+diff --git a/ui/src/components/Sidebar.tsx b/ui/src/components/Sidebar.tsx
+index ea754794b9..4f60bfb471 100644
+--- a/ui/src/components/Sidebar.tsx
++++ b/ui/src/components/Sidebar.tsx
+@@ -51,7 +51,7 @@ import { PluginSlotOutlet } from "@/plugins/slots";
+ import { PluginLauncherOutlet } from "@/plugins/launchers";
+ import { pluginsApi } from "../api/plugins";
+ import { useNavigate } from "@/lib/router";
+-import { atelierDisponible, CHEMIN_PAGE_ATELIER } from "./CompanyHomeRedirect";
++import { atelierDisponible, CHEMIN_PAGE_ATELIER, useCheminListeAgents } from "./CompanyHomeRedirect";
+ import { SidebarCompanyMenu } from "./SidebarCompanyMenu";
+ import { primarySidebarStyles } from "./primary-sidebar-styles";
+ 
+@@ -65,6 +65,8 @@ export function Sidebar({ children }: { children?: ReactNode }) {
+     queryFn: () => pluginsApi.listUiContributions(),
+   });
+   const atelierPret = atelierDisponible(contributionsPlugins);
++  // Une seule entrée « Agents » : la page du plugin (tous les départements) quand l'atelier est prêt.
++  const cheminAgents = useCheminListeAgents("/agents");
+   // Décisions qui attendent dans les services (publiées par le plugin) : pastille sur « Coordinateur général ».
+   const decisionsAtelier = useDecisionsAtelier();
+   const decisionsAffichees = atelierPret ? decisionsAtelier : 0;
+@@ -319,7 +321,7 @@ export function Sidebar({ children }: { children?: ReactNode }) {
+                 label="Organisation"
+                 collapsible={{ open: organizationOpen, onOpenChange: setOrganizationOpen }}
+               >
+-                <SidebarNavItem to="/agents" label="Agents" icon={Users} />
++                <SidebarNavItem to={cheminAgents} label="Agents" icon={Users} />
+                 <SidebarNavItem to="/skills" label="Compétences" icon={Boxes} />
+                 <SidebarNavItem to="/apps" label="Connecteurs" icon={Unplug} />
+                 <SidebarNavItem to="/activity" label="Journal d'audit" icon={History} />
+diff --git a/ui/src/components/SidebarAgents.production.tsx b/ui/src/components/SidebarAgents.production.tsx
+index 238c78ff9b..43201dc534 100644
+--- a/ui/src/components/SidebarAgents.production.tsx
++++ b/ui/src/components/SidebarAgents.production.tsx
+@@ -25,6 +25,7 @@ import { BuiltInLifecycleChip } from "./BuiltInAgentBadges";
+ import { authApi } from "../api/auth";
+ import { heartbeatsApi } from "../api/heartbeats";
+ import { instanceSettingsApi } from "../api/instanceSettings";
++import { useCheminListeAgents } from "./CompanyHomeRedirect";
+ import { SIDEBAR_SCROLL_RESET_STATE } from "../lib/navigation-scroll";
+ import { queryKeys } from "../lib/queryKeys";
+ import { cn, agentRouteRef, agentUrl, SIDEBAR_RAIL_HIDDEN_LABEL } from "../lib/utils";
+@@ -443,6 +444,8 @@ export function SidebarAgents({ streamlined = false }: { streamlined?: boolean }
+   // Always expose "See all agents" whenever the displayed list is a subset of all
+   // agents, so users never lose the entry point to the full list. In classic mode
+   // every agent is already shown, so the link is unnecessary.
++  // Atelier prêt : la liste complète est la page « Agents » du plugin (tous les départements).
++  const cheminListe = useCheminListeAgents("/agents/all");
+   const showSeeAllLink = streamlined && sortedAgents.length > 0;
+ 
+   const agentMatch = location.pathname.match(/^\/(?:[^/]+\/)?agents\/([^/]+)(?:\/([^/]+))?/);
+@@ -647,7 +650,7 @@ export function SidebarAgents({ streamlined = false }: { streamlined?: boolean }
+       menu={{
+         ariaLabel: "Agents section actions",
+         actions: [
+-          { type: "item", label: "Browse agents", icon: Users, href: "/agents/all" },
++          { type: "item", label: "Browse agents", icon: Users, href: cheminListe },
+           { type: "separator" },
+         ],
+         radioLabel: "Agent sort",
+@@ -666,7 +669,7 @@ export function SidebarAgents({ streamlined = false }: { streamlined?: boolean }
+         // (plain Link) that must not adopt nav-row active-route highlighting.
+         const seeAllLink = (
+           <Link
+-            to="/agents/all"
++            to={cheminListe}
+             state={SIDEBAR_SCROLL_RESET_STATE}
+             aria-label={rail ? "Voir tous les agents" : undefined}
+             onClick={() => {
+diff --git a/ui/src/components/SidebarAgents.test.tsx b/ui/src/components/SidebarAgents.test.tsx
+index d77195a8aa..e8cacd6122 100644
+--- a/ui/src/components/SidebarAgents.test.tsx
++++ b/ui/src/components/SidebarAgents.test.tsx
+@@ -31,6 +31,18 @@ const mockHeartbeatsApi = vi.hoisted(() => ({
+   liveRunsForCompany: vi.fn(),
+ }));
+ 
++const mockPluginsApi = vi.hoisted(() => ({ listUiContributions: vi.fn() }));
++
++const contributionAtelier = {
++  pluginId: "p1",
++  pluginKey: "atelier.marketing-ia",
++  displayName: "Atelier marketing",
++  version: "1.0.0",
++  uiEntryFile: "index.js",
++  slots: [{ type: "page", id: "atelier-page", displayName: "Atelier marketing", exportName: "Page", routePath: "atelier" }],
++  launchers: [],
++};
++
+ const mockResourceMembershipsApi = vi.hoisted(() => ({
+   listMine: vi.fn(),
+   updateAgent: vi.fn(),
+@@ -116,6 +128,10 @@ vi.mock("../api/heartbeats", () => ({
+   heartbeatsApi: mockHeartbeatsApi,
+ }));
+ 
++vi.mock("../api/plugins", () => ({
++  pluginsApi: mockPluginsApi,
++}));
++
+ vi.mock("../api/resourceMemberships", () => ({
+   resourceMembershipsApi: mockResourceMembershipsApi,
+ }));
+@@ -237,6 +253,7 @@ describe("SidebarAgents", () => {
+       user: { id: "user-1" },
+     });
+     mockHeartbeatsApi.liveRunsForCompany.mockResolvedValue([]);
++    mockPluginsApi.listUiContributions.mockResolvedValue([]);
+     memberships = {
+       projectMemberships: {},
+       agentMemberships: {},
+@@ -534,6 +551,20 @@ describe("SidebarAgents", () => {
+     expect(browseLink?.getAttribute("href")).toBe("/agents/all");
+   });
+ 
++  it("atelier prêt : « Voir tous les agents » et « Browse agents » mènent à la page de tous les agents du plugin", async () => {
++    mockPluginsApi.listUiContributions.mockResolvedValue([contributionAtelier]);
++    mockAgentsApi.list.mockResolvedValue([makeAgent({})]);
++
++    await renderSidebarAgents();
++
++    const lien = Array.from(container.querySelectorAll("a")).find((a) => a.textContent?.includes("Voir tous les agents"));
++    expect(lien?.getAttribute("href")).toBe("/atelier/agents");
++    await openAgentsSectionMenu();
++    const browseLink = Array.from(document.body.querySelectorAll("a"))
++      .find((element) => element.textContent?.includes("Browse agents"));
++    expect(browseLink?.getAttribute("href")).toBe("/atelier/agents");
++  });
++
+   it("sorts alphabetically and persists the selected mode per company and user", async () => {
+     mockAgentsApi.list.mockResolvedValue([
+       makeAgent({ id: "agent-c", name: "Charlie", urlKey: "charlie" }),
+diff --git a/ui/src/components/SidebarAgents.tsx b/ui/src/components/SidebarAgents.tsx
+index f98e67434d..d6a3c3f7e8 100644
+--- a/ui/src/components/SidebarAgents.tsx
++++ b/ui/src/components/SidebarAgents.tsx
+@@ -25,6 +25,7 @@ import { BuiltInLifecycleChip } from "./BuiltInAgentBadges";
+ import { authApi } from "../api/auth";
+ import { heartbeatsApi } from "../api/heartbeats";
+ import { instanceSettingsApi } from "../api/instanceSettings";
++import { useCheminListeAgents } from "./CompanyHomeRedirect";
+ import { SIDEBAR_SCROLL_RESET_STATE } from "../lib/navigation-scroll";
+ import { queryKeys } from "../lib/queryKeys";
+ import { cn, agentRouteRef, agentUrl, SIDEBAR_RAIL_HIDDEN_LABEL } from "../lib/utils";
+@@ -443,6 +444,8 @@ export function SidebarAgents({ streamlined = false }: { streamlined?: boolean }
+   // Always expose "See all agents" whenever the displayed list is a subset of all
+   // agents, so users never lose the entry point to the full list. In classic mode
+   // every agent is already shown, so the link is unnecessary.
++  // Atelier prêt : la liste complète est la page « Agents » du plugin (tous les départements).
++  const cheminListe = useCheminListeAgents("/agents/all");
+   const showSeeAllLink = streamlined && sortedAgents.length > 0;
+ 
+   const agentMatch = location.pathname.match(/^\/(?:[^/]+\/)?agents\/([^/]+)(?:\/([^/]+))?/);
+@@ -647,7 +650,7 @@ export function SidebarAgents({ streamlined = false }: { streamlined?: boolean }
+       menu={{
+         ariaLabel: "Agents section actions",
+         actions: [
+-          { type: "item", label: "Browse agents", icon: Users, href: "/agents/all" },
++          { type: "item", label: "Browse agents", icon: Users, href: cheminListe },
+           { type: "separator" },
+         ],
+         radioLabel: "Agent sort",
+@@ -666,7 +669,7 @@ export function SidebarAgents({ streamlined = false }: { streamlined?: boolean }
+         // (plain Link) that must not adopt nav-row active-route highlighting.
+         const seeAllLink = (
+           <Link
+-            to="/agents/all"
++            to={cheminListe}
+             state={SIDEBAR_SCROLL_RESET_STATE}
+             aria-label={rail ? "Voir tous les agents" : undefined}
+             onClick={() => {
+-- 
+2.53.0
+

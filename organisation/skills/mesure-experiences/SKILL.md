@@ -23,8 +23,9 @@ savent quand s'arrêter.
 
 - Exports de données avec période et provenance. Sans données : « non mesurable ».
 - Chiffres d'une connexion de la passerelle marketing (Search Console, Analytics, Ads, fiche,
-  réseaux sociaux, CRM) : `atelier_identite` d'abord, chaque réponse d'outil déposée telle quelle avec
-  les arguments exacts de l'appel (`POST …/taches/<issueId>/donnees-connexion`, champ `arguments`),
+  réseaux sociaux, CRM) : `atelier_identite` d'abord, chaque réponse d'outil déposée par sa référence
+  `_atelier.reference` (recopie par fichier seulement pour une réponse sans référence) avec les arguments exacts de
+  l'appel (`POST …/taches/<issueId>/donnees-connexion`, champ `arguments`),
   mention « démonstration » sur chaque chiffre de démonstration, aucun chiffre absent d'une réponse
   déposée (section « Connexions de la passerelle marketing » des consignes de l'agent).
 

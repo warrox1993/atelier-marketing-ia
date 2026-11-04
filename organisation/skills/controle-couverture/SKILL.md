@@ -63,9 +63,9 @@ l'atelier (`references/schema-verdict.md`), puis résumé en commentaire de la t
 
 ## Exemple
 
-Livrable « Article assurance habitation », deuxième révision. REQ-003 Liège : couvert,
-preuve « section Nos bureaux, paragraphe 1 ». REQ-004 Namur : **non traité**. Constat de catégorie
-`exigence_manquante`, gravité `majeure` : « L'établissement de Namur n'apparaît nulle part ;
+Livrable (client fictif) « Article assurance habitation », deuxième révision. REQ-003 [ville A] : couvert,
+preuve « section Nos bureaux, paragraphe 1 ». REQ-004 [ville B] : **non traité**. Constat de catégorie
+`exigence_manquante`, gravité `majeure` : « L'établissement de [ville B] n'apparaît nulle part ;
 ajouter adresse, zone et lien de la page d'agence. » Verdict : `CHANGES_REQUESTED`. Après
-la troisième révision, qui ajoute Namur, nouveau verdict `PASS` avec une preuve par
+la troisième révision, qui ajoute [ville B], nouveau verdict `PASS` avec une preuve par
 établissement.

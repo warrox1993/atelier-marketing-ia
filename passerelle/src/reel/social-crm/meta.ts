@@ -168,7 +168,7 @@ export function fournisseurFacebookReel(dep: DependancesOutils): FournisseurServ
     outil: { ...gabarit(DEFS.facebook_envoyer_message, "Envoie un message privé depuis la Page (POST /{page-id}/messages, type RESPONSE : réponse dans la fenêtre de messagerie standard)."), executer: () => undefined },
     requeteReelle: "POST /{page-id}/messages",
     resume: (a) => `message privé de ${a.texte.length} caractères.`,
-    // Article 50 du règlement européen sur l'IA : la mention est ajoutée à la préparation, donc visible dans ce que l'humain approuve
+    // Mention IA (choix de transparence, voir mention-ia.ts) : elle est ajoutée à la préparation, donc visible dans ce que l'humain approuve
     // et incluse dans l'empreinte signée.
     preparer: (a) => ({ ...a, texte: ajouterMention(a.texte, dep.config.mentionIa ?? MENTION_IA_PAR_DEFAUT) }),
     verifier: (a) => {

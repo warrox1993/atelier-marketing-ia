@@ -18,6 +18,22 @@ import {
 } from "./aide.js";
 import { request } from "node:http";
 import * as z from "zod";
+import { definitionsMeta } from "../src/commun/social-crm/meta.js";
+import { definitionsLinkedin, definitionsLinkedinProfil } from "../src/commun/social-crm/linkedin.js";
+import { definitionsHubspot } from "../src/commun/social-crm/hubspot.js";
+import { definitionsPipedrive } from "../src/commun/social-crm/pipedrive.js";
+import { definitionsTeamleader } from "../src/commun/social-crm/teamleader.js";
+import { definitionsOdoo } from "../src/commun/social-crm/odoo.js";
+import { outilsBce } from "../src/reel/prospection/bce/outils.js";
+import { outilsOsm } from "../src/reel/prospection/osm/outils.js";
+import { outilComptesReel } from "../src/reel/prospection/bnb/outils.js";
+import type { ClientBnb } from "../src/reel/prospection/bnb/client.js";
+import { outilsStatbel } from "../src/reel/statbel/outils.js";
+import { outilsLiens } from "../src/reel/liens/verifier-url.js";
+import { outilsAudit } from "../src/reel/audit/auditer-page.js";
+import { outilsExtraction } from "../src/reel/extraction/extraire-site.js";
+import { outilsGoogleReels } from "../src/reel/google/outils.js";
+import type { ConfigGoogleReel } from "../src/reel/google/config.js";
 
 describe("passerelle : service à autorisation locale (parcours OAuth local)", () => {
   let p: PasserelleDeTest;
@@ -77,7 +93,7 @@ describe("passerelle : service à autorisation locale (parcours OAuth local)", (
   });
 
   it("un service sans fournisseur répond « non_connecte » (503, message en français), jamais des données simulées", async () => {
-    for (const service of ["crm", "ga4", "osm", "bce", "fsma"]) {
+    for (const service of ["crm", "ga4", "osm", "bce", "fsma", "linkedinprofil"]) {
       const sans = await rpc(p.url, service, "tools/list", {});
       expect(sans.statut, service).toBe(503);
       expect(sans.corps.error, service).toBe("non_connecte");
@@ -105,21 +121,23 @@ describe("passerelle : service à autorisation locale (parcours OAuth local)", (
     expect(s._atelier).toEqual({ mode: "reel" });
   });
 
-  it("la mention « données de tiers » figure sur 100 % des réponses d'outils : succès, outil inconnu, arguments invalides, échec", async () => {
-    const appels: Array<[string, unknown]> = [
-      ["atelier_identite", {}],
-      ["gsc_ping", { texte: "bonjour" }],
-      ["gsc_publier_factice", {}],
-      ["gsc_ping", { texte: "" }], // arguments invalides
-      ["gsc_ping", {}], // argument manquant
-      ["outil_qui_n_existe_pas", {}],
-      ["gsc_echec", {}], // l'outil lève une exception
+  it("S2 : mention « données de tiers » sur les outils à monde ouvert et leurs échecs, jamais sur atelier_identite ni sur une erreur interne", async () => {
+    // Factices sans openWorldHint : monde ouvert, valeur par défaut de MCP.
+    const appels: Array<[string, unknown, boolean]> = [
+      ["gsc_ping", { texte: "bonjour" }, true],
+      ["gsc_publier_factice", {}, true],
+      ["gsc_echec", {}, true], // l'outil lève une exception : son message peut venir du service tiers
+      ["atelier_identite", {}, false],
+      ["gsc_ping", { texte: "" }, false], // arguments invalides
+      ["gsc_ping", {}, false], // argument manquant
+      ["outil_qui_n_existe_pas", {}, false],
     ];
-    for (const [nom, args] of appels) {
+    for (const [nom, args, mention] of appels) {
       const r = await rpc(p.url, "gsc", "tools/call", { name: nom, arguments: args }, jeton);
       expect(r.statut, nom).toBe(200);
       const res = r.corps.result;
-      expect(res.content[0].text.startsWith(`${MENTION_DONNEES_TIERCES}\n\n`), nom).toBe(true);
+      const json = JSON.stringify(res.structuredContent);
+      expect(res.content[0].text, nom).toBe(mention ? `${MENTION_DONNEES_TIERCES}\n\n${json}` : json);
       expect(res.structuredContent._atelier, nom).toEqual({ mode: "reel" });
     }
     const invalide = await rpc(p.url, "gsc", "tools/call", { name: "gsc_ping", arguments: { texte: "" } }, jeton);
@@ -422,5 +440,26 @@ describe("registre générique : N services, rien de câblé pour un fournisseur
     expect(() => registre.enregistrer({ service: "inconnu", mode: "reel", outils: [] })).toThrow(/sans fiche/);
     expect(() => registre.declarerFiche({ ...ficheZoho, id: "Mauvais-Id" })).toThrow(/invalide/);
     expect(() => registre.enregistrer({ service: "zoho", mode: "reel", fiche: { ...ficheZoho, id: "autre" }, outils: [] })).toThrow(/ne correspond pas/);
+  });
+});
+
+describe("S2 : tout outil qui rend du texte de tiers est annoncé à monde ouvert (sinon sa réponse perdrait la mention)", () => {
+  it("réseaux sociaux et CRM, registres publics (BCE, OSM, BNB, Statbel), web et Google : openWorldHint: true", () => {
+    const pasOuvert = (): never => {
+      throw new Error("index non ouvert dans ce test");
+    };
+    const outils: Array<{ nom: string; annotations?: { openWorldHint?: boolean } }> = [
+      ...[definitionsMeta, definitionsLinkedin, definitionsLinkedinProfil, definitionsHubspot, definitionsPipedrive, definitionsTeamleader, definitionsOdoo].flatMap((d) => Object.values(d(z.string()))),
+      ...outilsBce(pasOuvert),
+      ...outilsOsm(pasOuvert),
+      outilComptesReel({} as ClientBnb),
+      ...outilsStatbel(pasOuvert),
+      ...outilsLiens(),
+      ...outilsAudit(),
+      ...outilsExtraction(),
+      ...Object.values(outilsGoogleReels({ config: {} as ConfigGoogleReel, jetonGoogle: pasOuvert })).flat(),
+    ];
+    expect(outils.length).toBe(38);
+    for (const o of outils) expect(o.annotations?.openWorldHint, o.nom).toBe(true);
   });
 });

@@ -6,7 +6,7 @@
  */
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useHostContext } from "@paperclipai/plugin-sdk/ui";
-import { Bouton, Chargement, EnTete, EtatErreur, Horodatage, Pastille, Section, Vide } from "../composants.js";
+import { Bouton, Chargement, EnTete, EtatErreur, Horodatage, LienHote, Pastille, Section, Vide } from "../composants.js";
 import { classerErreur, type Ton } from "../format.js";
 import { ErreurTelechargement, recupererLivrable, remettreAuNavigateur } from "../livrables-telechargement.js";
 import { appelRoute } from "../routes-prospection.js";
@@ -25,6 +25,8 @@ interface TravailLivrable {
   fin: string | null;
   message: string | null;
   fichiers: FichierLivrable[];
+  /** Tâche d'origine (UI-11) ; null ou absente si inconnue. */
+  origine?: { issueId: string; identifiant: string | null; titre: string; lien: string } | null;
 }
 
 const ETATS: Readonly<Record<string, { libelle: string; ton: Ton }>> = {
@@ -130,6 +132,12 @@ export function VueLivrables({ id }: { id: string | null }) {
                       <th scope="row">
                         {t.type ?? "Travail"}
                         <span className="atl-sous"> {t.travail.slice(0, 8)}</span>
+                        <br />
+                        {t.origine ? (
+                          <LienHote vers={t.origine.lien}>{`${t.origine.identifiant ?? "Tâche"} · ${t.origine.titre}`}</LienHote>
+                        ) : (
+                          <span className="atl-attenue">Tâche d&apos;origine inconnue</span>
+                        )}
                       </th>
                       <td data-libelle="État">
                         <Pastille ton={e.ton}>{e.libelle}</Pastille>

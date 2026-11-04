@@ -135,9 +135,11 @@ envoyer() {
   local brouillon="${BROUILLON}"   # supprimé par nettoyage_final (trap EXIT)
 
   echo "== 1. Copie vérifiée (sauvegarde-hors-machine.sh)"
-  # Les traces Phoenix ne sont pas transférées (--phoenix vers un dossier inexistant).
+  # Ni les traces Phoenix, ni les pages, ni les bases des conteneurs ne sont transférées (instance seulement).
+  # Copie en clair voulue : le complément s'y ajoute et le portable la lit tel quel (transport tailscale ssh chiffré).
   "${RACINE_DEPOT}/scripts/sauvegarde-hors-machine.sh" "${brouillon}" --source "${SOURCE}" \
-    --instances "${INSTANCE}" --garder 1 --meme-disque --phoenix "${brouillon}/sans-phoenix" 2>&1 | grep -v 'Phoenix' ; [[ "${PIPESTATUS[0]}" -eq 0 ]] || echec "la sauvegarde hors machine a échoué"
+    --instances "${INSTANCE}" --garder 1 --meme-disque --phoenix "${brouillon}/sans-phoenix" \
+    --pages "${brouillon}/sans-pages" --conteneurs "" --sans-chiffrement 2>&1 | grep -v 'Phoenix' ; [[ "${PIPESTATUS[0]}" -eq 0 ]] || echec "la sauvegarde hors machine a échoué"
   local copie nom
   copie="$(find "${brouillon}" -mindepth 1 -maxdepth 1 -type d -name 'atelier-*' | head -n 1)"
   [[ -n "${copie}" ]] || echec "copie introuvable dans le brouillon"

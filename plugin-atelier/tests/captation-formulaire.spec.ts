@@ -154,7 +154,8 @@ describe("formulaire de page de destination -> prospect de l'atelier", () => {
     expect(t["assigneeAgentId"]).toBe(PROSPECTION);
     expect(String(t["title"])).toContain("Rappeler sous 24 h");
     expect(String(t["description"])).toContain("Soir (17 h à 20 h)");
-    expect(JSON.stringify(t)).not.toMatch(/Camille|470/u);
+    // Même motif que pour la base : « 470 » seul se retrouvait parfois dans un identifiant aléatoire (test instable).
+    expect(JSON.stringify(t)).not.toMatch(/Camille|Dupont|470 ?12|\+32470123456/u);
     expect(magasin.compterEnvois(slug)).toBe(1);
   });
 

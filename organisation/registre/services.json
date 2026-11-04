@@ -1,8 +1,8 @@
 {
   "schema": "atelier/registre-services/v1",
-  "version": "1.0.0",
-  "dateVersion": "2026-10-16",
-  "description": "Registre des services de l'Atelier. Chaque service est une entreprise Paperclip distincte dans l'instance du client ; la Direction voit tout. Les services échangent uniquement par des demandes tracées entre coordinateurs (bureau de liaison, construit plus tard dans le plugin), selon la matrice « flux » (flux métier) complétée à la déclaration par le réseau des coordinateurs, généré par scripts/atelier_services.py (toute paire de services du même client, jamais listée ici) : pas de flux déclaré, pas d'échange. Le service marketing renvoie à organisation/registre/agents.json (champ agentsRef) sans dupliquer ses agents. Un service « sensible » impose l'approbation humaine sur tous ses flux.",
+  "version": "1.2.0",
+  "dateVersion": "2026-11-02",
+  "description": "Registre des services de l'Atelier. Chaque service est une entreprise Paperclip distincte dans l'instance du client ; la Direction voit tout. Les services échangent uniquement par des demandes tracées entre coordinateurs (bureau de liaison du plugin, plugin-atelier/src/serveur/liaisons/ : une demande adressée à un service va à son coordinateur ; pour la Direction, à son coordinateur général (champ « coordinateurGeneral », rôle ceo), seul agent de la Direction qui ouvre une liaison vers un autre service), selon la matrice « flux » (flux métier) complétée à la déclaration par le réseau des coordinateurs, généré par scripts/atelier_services.py (toute paire de services du même client, jamais listée ici) : pas de flux déclaré, pas d'échange. Le service marketing renvoie à organisation/registre/agents.json (champ agentsRef) sans dupliquer ses agents. Un service « sensible » impose l'approbation humaine sur tous ses flux.",
   "services": [
     {
       "slug": "marketing",
@@ -61,7 +61,12 @@
         "Rapports de tous les services",
         "Indicateurs financiers",
         "Registre des demandes entre services"
-      ]
+      ],
+      "outilsInterdits": ["mcp__Paperclip_connections__connection_request"],
+      "reglages": {
+        "coordinateur-general": {"envPortable": {"CLAUDE_CODE_PROMPT_CACHE_TTL": "1h"}},
+        "contradicteur": {"outilsInterdits": ["mcp__paperclip-assigned"], "modele": {"id": "claude-opus-5-5", "effort": "high"}}
+      }
     },
     {
       "slug": "administratif",
@@ -884,6 +889,9 @@
         "fournisseurs-produits",
         "suivi-partenaires"
       ],
+      "transferts": {
+        "suivi-partenaires": ["pilotage-portefeuille"]
+      },
       "humainSeul": [
         "Signature d'une convention de partenariat",
         "Engagement financier envers un partenaire"
@@ -900,6 +908,8 @@
     },
     {
       "slug": "observatoire",
+      "public": true,
+      "interne": true,
       "nom": "Observatoire",
       "prefixe": "OBS",
       "actif": true,
@@ -921,10 +931,22 @@
         "porte"
       ],
       "deterministes": ["porte"],
+      "transferts": {
+        "veille-technique": ["directeur", "integrateur-claude-mcp"],
+        "veille-recherche-medias": ["veille-technique", "analyste-technique"],
+        "integrateur-claude-mcp": ["auditeur-securite", "analyste-technique"],
+        "ingenieur-essais": ["analyste-comparatif"],
+        "analyste-comparatif": ["redacteur-en-chef", "directeur"],
+        "auditeur-securite": ["analyste-technique"],
+        "explorateur-sources": ["veille-technique", "veille-recherche-medias", "directeur"]
+      },
       "outilsInterdits": ["WebFetch"],
       "reglages": {
+        "directeur": {"sessionsParRotation": 3, "envPortable": {"CLAUDE_CODE_PROMPT_CACHE_TTL": "1h"}},
+        "analyste-technique": {"modele": {"id": "claude-sonnet-5-5", "effort": "high"}},
+        "redacteur-en-chef": {"modele": {"id": "claude-sonnet-5-5", "effort": "high"}},
         "auditeur-securite": {"modele": {"id": "claude-opus-5-5", "effort": "high"}},
-        "relecteur-independant": {"modele": {"id": "claude-opus-5-5", "effort": "high"}, "outilsInterdits": ["Write"]},
+        "relecteur-independant": {"modele": {"id": "claude-opus-5-5", "effort": "high"}, "outilsInterdits": ["Write", "mcp__paperclip-assigned", "mcp__Paperclip_connections__connection_request"]},
         "explorateur-sources": {"outilsInterdits": ["Write"]},
         "veille-technique": {"outilsInterdits": ["Write"]},
         "veille-recherche-medias": {"outilsInterdits": ["Write"]}
@@ -948,6 +970,50 @@
         "Affirmations et preuves",
         "Dossiers et chapitres",
         "Éditions bilingues"
+      ],
+      "projets": [
+        {
+          "slug": "cadence-observatoire",
+          "responsable": "directeur",
+          "statut": "in_progress",
+          "couleur": "#7a5c2e",
+          "objectifs": []
+        }
+      ],
+      "routines": [
+        {"slug": "veille-technique-hebdomadaire", "cron": "30 10 * * 1", "fuseau": "Europe/Brussels", "concurrence": "skip_if_active", "rattrapage": "skip_missed"},
+        {"slug": "exploration-sources-hebdomadaire", "cron": "30 10 * * 3", "fuseau": "Europe/Brussels", "concurrence": "skip_if_active", "rattrapage": "skip_missed"},
+        {"slug": "arbitrage-hebdomadaire", "cron": "30 10 * * 4", "fuseau": "Europe/Brussels", "concurrence": "skip_if_active", "rattrapage": "skip_missed"},
+        {"slug": "edition-hebdomadaire", "cron": "30 10 * * 5", "fuseau": "Europe/Brussels", "concurrence": "skip_if_active", "rattrapage": "skip_missed"}
+      ]
+    },
+    {
+      "slug": "complements",
+      "nom": "Compléments alimentaires",
+      "prefixe": "CPL",
+      "actif": true,
+      "interne": true,
+      "description": "Étude de la qualité des compléments alimentaires vendus en Belgique et dans l'Union européenne.\nInventorie les vendeurs, lit les étiquettes, évalue les preuves, note et classe ; un contrôleur indépendant revérifie les éliminatoires. Achat, commande et contact d'un fabricant restent humains ; aucun avis médical.",
+      "coordinateur": "analyste-complements",
+      "agents": [
+        "analyste-complements",
+        "controleur-complements"
+      ],
+      "humainSeul": [
+        "Achat ou commande d'un complément alimentaire",
+        "Envoi d'une question ou d'une demande à un fabricant ou à un vendeur",
+        "Tout avis sur la prise d'un complément par une personne (médecin ou pharmacien)"
+      ],
+      "obligations": [
+        "Notification belge des compléments alimentaires (SPF Santé publique)",
+        "Allégations de santé de la liste de l'Union européenne",
+        "Étiquetage et allergènes (règlement (UE) 1169/2011)"
+      ],
+      "donnees": [
+        "Étiquettes et fiches produit",
+        "Certificats d'analyse de lot",
+        "Études cliniques citées",
+        "Inventaire des vendeurs européens"
       ]
     }
   ],
@@ -957,6 +1023,12 @@
       "cible": "direction",
       "objet": "Rapport périodique et escalade",
       "approbationHumaine": false
+    },
+    {
+      "source": "marketing",
+      "cible": "juridique",
+      "objet": "Besoin juridique (RGPD, droit de la consommation) signalé dans une réponse",
+      "approbationHumaine": true
     },
     {
       "source": "administratif",
@@ -1664,25 +1736,43 @@
       "source": "observatoire",
       "cible": "direction",
       "objet": "Rapport périodique et escalade",
-      "approbationHumaine": false
+      "approbationHumaine": true
     },
     {
       "source": "observatoire",
       "cible": "informatique",
       "objet": "Fiches d'outils et de serveurs MCP évalués, failles constatées",
-      "approbationHumaine": false
+      "approbationHumaine": true
     },
     {
       "source": "observatoire",
       "cible": "recherche-innovation",
       "objet": "Dossiers de veille sur les modèles et outils émergents",
-      "approbationHumaine": false
+      "approbationHumaine": true
     },
     {
       "source": "observatoire",
       "cible": "formation",
       "objet": "Dossiers et éditions utiles aux parcours de formation",
+      "approbationHumaine": true
+    },
+    {
+      "source": "complements",
+      "cible": "direction",
+      "objet": "Rapport périodique et escalade",
       "approbationHumaine": false
+    },
+    {
+      "source": "observatoire",
+      "cible": "complements",
+      "objet": "Éléments de veille et dossiers utiles à l'étude des compléments",
+      "approbationHumaine": true
+    },
+    {
+      "source": "complements",
+      "cible": "observatoire",
+      "objet": "Éléments d'étude et sources utiles aux dossiers de l'Observatoire",
+      "approbationHumaine": true
     }
   ]
 }

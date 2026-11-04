@@ -13,7 +13,7 @@
  * La construction de l'élément « À faire » est celle du serveur (`contrats/carte-decision.ts`), sans copie.
  */
 import { elementDepuisCarte, type CarteNative, type CarteService, type TacheASuivre } from "../contrats/carte-decision.js";
-import { appelHote } from "./hote.js";
+import { appelHote, memoriserTache } from "./hote.js";
 import type { AgentMission, MissionLue, TacheMission } from "./avancement-missions.js";
 import { enParallele, LECTURES_SIMULTANEES } from "./vues/departements.js";
 
@@ -28,7 +28,7 @@ const STATUTS_OUVERTS = ["todo", "in_progress", "in_review", "blocked"] as const
 
 /** Lecteur de l'API hôte (GET) ; remplaçable dans les tests. */
 export type LecteurHote = (chemin: string) => Promise<unknown>;
-const lecteurParDefaut: LecteurHote = (chemin) => appelHote<unknown>("GET", chemin);
+const lecteurParDefaut: LecteurHote = async (chemin) => memoriserTache(chemin, await appelHote<unknown>("GET", chemin));
 
 interface TacheHote {
   id: string;
@@ -78,7 +78,7 @@ export interface LectureCartes {
 }
 
 /** Cartes en attente des tâches à suivre, du plus ancien au plus récent. Ne lève jamais : un échec marque `indisponible`. */
-export async function lireCartesDesServices(aSuivre: readonly TacheASuivre[], lire: LecteurHote = lecteurParDefaut): Promise<LectureCartes> {
+export async function lireCartesDesServices(aSuivre: readonly TacheASuivre[], lire: LecteurHote = lecteurParDefaut, autres: readonly Omit<TacheASuivre, "tacheId">[] = []): Promise<LectureCartes> {
   let indisponible = false;
   const echec = () => {
     indisponible = true;
@@ -112,12 +112,13 @@ export async function lireCartesDesServices(aSuivre: readonly TacheASuivre[], li
     }
 
   // 2) Cartes en attente de chaque tâche ouverte.
-  const aLire = [...parTache.values()].slice(0, MAX_TACHES_LUES);
+  const aLire: Array<{ tache: TacheHote; service: TacheASuivre; racine?: string }> = [...parTache.values()].slice(0, MAX_TACHES_LUES).map((e) => ({ ...e, racine: e.service.tacheId }));
 
   // 1 bis) Tâches ouvertes SANS parent du service, hors descendance de la tâche reçue (ex. une tâche créée par son
   // coordinateur) : leurs cartes attendent aussi l'humain. Filtre de statut refait côté client, plafond par entreprise.
   const services = new Map<string, TacheASuivre>();
-  for (const s of aSuivre) if (!services.has(s.companyId.toLowerCase())) services.set(s.companyId.toLowerCase(), s);
+  // Les services confirmés sans tâche reçue (ex. l'Observatoire) comptent aussi (HUM-C7).
+  for (const s of [...aSuivre, ...autres.map((a) => ({ ...a, tacheId: "" }))]) if (!services.has(s.companyId.toLowerCase())) services.set(s.companyId.toLowerCase(), s);
   const vues = new Set(aLire.map((e) => e.tache.id.toLowerCase()));
   const supplements = new Array<Array<{ tache: TacheHote; service: TacheASuivre }>>(services.size).fill([]);
   await enParallele([...services.values()].map((s, i) => ({ s, i })), LECTURES_SIMULTANEES, async ({ s, i }) => {
@@ -127,7 +128,7 @@ export async function lireCartesDesServices(aSuivre: readonly TacheASuivre[], li
         .map((b) => ({ tache: tacheDepuisHote(b), date: texte((b as Record<string, unknown> | null)?.["updatedAt"]) ?? texte((b as Record<string, unknown> | null)?.["createdAt"]) ?? "" }))
         .filter((e): e is { tache: TacheHote; date: string } => !!e.tache && memeId(e.tache.companyId, s.companyId) && (STATUTS_OUVERTS as readonly string[]).includes(e.tache.status) && e.tache.parentId == null)
         .sort((a, b) => b.date.localeCompare(a.date));
-      supplements[i] = ouvertes.slice(0, TACHES_OUVERTES_LUES).map((e) => ({ tache: e.tache, service: s }));
+      supplements[i] = ouvertes.slice(0, TACHES_OUVERTES_LUES).map((e) => ({ tache: e.tache, service: { ...s, discussionId: null } }));
     } catch {
       echec();
     }
@@ -142,7 +143,7 @@ export async function lireCartesDesServices(aSuivre: readonly TacheASuivre[], li
   // Plafond global : la descendance (déjà bornée) passe d'abord, puis les tâches sans parent les plus récentes.
   aLire.splice(MAX_INTERACTIONS_LUES);
   const cartes: CarteService[] = [];
-  await enParallele(aLire, LECTURES_SIMULTANEES, async ({ tache, service }) => {
+  await enParallele(aLire, LECTURES_SIMULTANEES, async ({ tache, service, racine }) => {
     try {
       for (const brut of liste(await lire(`/issues/${encodeURIComponent(tache.id)}/interactions`))) {
         const carte = carteDepuisHote(brut);
@@ -151,7 +152,7 @@ export async function lireCartesDesServices(aSuivre: readonly TacheASuivre[], li
         // Lien relatif à l'entreprise du service (son préfixe est celui de l'identifiant de la tâche).
         const prefixe = tache.identifier?.split("-")[0];
         const element = prefixe && tache.identifier ? { ...e, lien: `/${prefixe}/issues/${tache.identifier}` } : e;
-        cartes.push({ element, date: carte.createdAt, companyId: service.companyId, slug: service.slug, nom: service.nom, tache: tache.identifier ?? tache.id });
+        cartes.push({ element, date: carte.createdAt, companyId: service.companyId, slug: service.slug, nom: service.nom, tache: tache.identifier ?? tache.id, discussionId: service.discussionId ?? null, ...(racine ? { racine } : {}) });
       }
     } catch {
       echec();
@@ -177,7 +178,7 @@ export async function lireCartesDesServices(aSuivre: readonly TacheASuivre[], li
     }
   });
   const missions: MissionLue[] = lues.flatMap((m) =>
-    m ? [{ companyId: m.service.companyId, slug: m.service.slug, nom: m.service.nom, racine: tacheMission(m.racine), filles: m.filles.map(tacheMission), agents: agentsParService.get(m.service.companyId.toLowerCase()) ?? [] }] : [],
+    m ? [{ companyId: m.service.companyId, slug: m.service.slug, nom: m.service.nom, discussionId: m.service.discussionId ?? null, racine: tacheMission(m.racine), filles: m.filles.map(tacheMission), agents: agentsParService.get(m.service.companyId.toLowerCase()) ?? [] }] : [],
   );
   cartes.sort((a, b) => a.date.localeCompare(b.date) || a.element.id.localeCompare(b.element.id));
   return { cartes, missions, indisponible };

@@ -19,6 +19,9 @@
       "description": "Mesuré uniquement à partir de données réellement importées (formulaires, appels suivis). Sans données : « non mesurable ».",
       "niveau": "company",
       "statut": "active",
+      "cible": "donnée manquante",
+      "echeance": "donnée manquante",
+      "pointDeDepart": "donnée manquante",
       "responsable": "coordinateur"
     },
     {
@@ -27,6 +30,9 @@
       "description": "Informations identiques et vérifiées pour Liège-Centre, Liège-Outremeuse et Ans sur le site, les fiches et les contenus. Aucune promesse de classement.",
       "niveau": "company",
       "statut": "active",
+      "cible": "donnée manquante",
+      "echeance": "donnée manquante",
+      "pointDeDepart": "donnée manquante",
       "responsable": "seo-local-geo"
     },
     {
@@ -35,6 +41,9 @@
       "description": "Chaque livrable passe par le contrôle des exigences, la relecture métier et les contrôles techniques applicables, puis par une décision humaine qui vise une version précise.",
       "niveau": "company",
       "statut": "active",
+      "cible": "donnée manquante",
+      "echeance": "donnée manquante",
+      "pointDeDepart": "donnée manquante",
       "responsable": "coordinateur"
     }
   ],
@@ -57,21 +66,28 @@
   "routines": [
     {
       "slug": "veille-concurrentielle-hebdomadaire",
-      "cron": "0 8 * * 1",
+      "cron": "30 10 * * 1",
       "fuseau": "Europe/Brussels",
       "concurrence": "skip_if_active",
       "rattrapage": "skip_missed"
     },
     {
       "slug": "controle-liens-mensuel",
-      "cron": "0 7 1 * *",
+      "cron": "30 10 1 * *",
+      "fuseau": "Europe/Brussels",
+      "concurrence": "skip_if_active",
+      "rattrapage": "skip_missed"
+    },
+    {
+      "slug": "mesure-mensuelle",
+      "cron": "30 10 1 * *",
       "fuseau": "Europe/Brussels",
       "concurrence": "skip_if_active",
       "rattrapage": "skip_missed"
     },
     {
       "slug": "point-coordination-hebdomadaire",
-      "cron": "0 9 * * 5",
+      "cron": "30 10 * * 5",
       "fuseau": "Europe/Brussels",
       "concurrence": "coalesce_if_active",
       "rattrapage": "skip_missed"

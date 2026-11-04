@@ -1,0 +1,3 @@
+/* Accroche : le titre domine en haut ; en bas, la promesse puis l'appel à l'action, en accent, suivi d'une flèche. */
+#appel { margin-top: calc(var(--u) * var(--ecart) * 0.9); }
+#appel::after { content: "\00a0\2192"; }

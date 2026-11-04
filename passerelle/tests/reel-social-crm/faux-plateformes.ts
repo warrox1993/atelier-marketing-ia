@@ -11,6 +11,8 @@ export const IDENTIFIANTS = {
   meta: { clientId: "meta-app-1", clientSecret: "secret-meta-NE-PAS-JOURNALISER" },
   instagram: { clientId: "ig-app-1", clientSecret: "secret-ig-NE-PAS-JOURNALISER" },
   linkedin: { clientId: "li-app-1", clientSecret: "secret-li-NE-PAS-JOURNALISER" },
+  // Seconde application LinkedIn (profil personnel : Share on LinkedIn + OpenID Connect), distincte de celle des pages.
+  linkedinProfil: { clientId: "li-profil-app-1", clientSecret: "secret-li-profil-NE-PAS-JOURNALISER" },
   hubspot: { clientId: "hs-app-1", clientSecret: "secret-hs-NE-PAS-JOURNALISER" },
   pipedrive: { clientId: "pd-app-1", clientSecret: "secret-pd-NE-PAS-JOURNALISER" },
   teamleader: { clientId: "tl-app-1", clientSecret: "secret-tl-NE-PAS-JOURNALISER" },
@@ -24,6 +26,7 @@ export const SECRETS_EMIS = {
   instagram: "IGjetonLong-SECRET",
   linkedin: "AQVjetonLinkedin-SECRET",
   linkedinRafraichi: "AQVjetonLinkedin2-SECRET",
+  linkedinProfil: "AQVjetonProfil-SECRET",
   hubspot: "CJhubspotAcces-SECRET",
   hubspotRafraichi: "CJhubspotAcces2-SECRET",
   pipedrive: "pdOauthAcces-SECRET",
@@ -318,6 +321,17 @@ export class FauxPlateformes {
     }
     // --- LinkedIn ---------------------------------------------------------------------------------
     if (p === "/linkedin-www/oauth/v2/authorization") return this.dialogue(a, envoyer, "code-li");
+    if (p === "/linkedin-www/oauth/v2/accessToken" && this.formulaire(a).get("client_id") === IDENTIFIANTS.linkedinProfil.clientId) {
+      // Application en libre-service : aucun jeton de rafraîchissement (réservé aux partenaires MDP), jeton de 60 jours.
+      const f = this.formulaire(a);
+      if (f.get("client_secret") !== IDENTIFIANTS.linkedinProfil.clientSecret) return envoyer(401, { error: "invalid_client", error_description: "Client authentication failed" });
+      if (f.get("code") !== "code-li") return envoyer(400, { error: "invalid_request", error_description: "Unable to retrieve access token: authorization code not found" });
+      return envoyer(200, { access_token: SECRETS_EMIS.linkedinProfil, expires_in: 5_184_000, scope: "openid,profile,w_member_social", token_type: "Bearer", id_token: "eyJ.factice.jwt" });
+    }
+    if (p === "/linkedin-api/v2/userinfo") {
+      if (this.porteur(a) !== SECRETS_EMIS.linkedinProfil) return envoyer(401, { status: 401, serviceErrorCode: 65600, code: "INVALID_ACCESS_TOKEN", message: "Invalid access token" });
+      return envoyer(200, { sub: "782bbtaQ", name: "Personne Essai", given_name: "Personne", family_name: "Essai", locale: "fr-BE" });
+    }
     if (p === "/linkedin-www/oauth/v2/accessToken") {
       const f = this.formulaire(a);
       if (f.get("client_secret") !== IDENTIFIANTS.linkedin.clientSecret) return envoyer(401, { error: "invalid_client", error_description: "Client authentication failed" });
@@ -328,6 +342,16 @@ export class FauxPlateformes {
     if (p.startsWith("/linkedin-api/rest/")) {
       if (a.entetes["linkedin-version"] !== "202610" || a.entetes["x-restli-protocol-version"] !== "2.0.0") return envoyer(426, { status: 426, code: "NONEXISTENT_VERSION", message: "Requested version is not active" });
       const jeton = this.porteur(a);
+      if (jeton === SECRETS_EMIS.linkedinProfil) {
+        // w_member_social : création seulement, au nom du membre connecté ; la lecture des publications d'un membre exige
+        // r_member_social (restreinte), refusée ici comme chez LinkedIn.
+        if (p !== "/linkedin-api/rest/posts" || a.methode !== "POST") return envoyer(403, { status: 403, serviceErrorCode: 100, code: "ACCESS_DENIED", message: "Not enough permissions to access: partnerApiPostsExternal.FINDER-author" });
+        const j = this.json(a);
+        if (j["author"] !== "urn:li:person:782bbtaQ") return envoyer(403, { status: 403, serviceErrorCode: 100, code: "ACCESS_DENIED", message: "Not enough permissions to access: partnerApiPostsExternal.CREATE" });
+        const id = `urn:li:share:71000000000000${this.compteur++}`;
+        this.effets.push({ type: "linkedin_profil_publication", donnees: { id, ...j } });
+        return envoyer(201, undefined, { "x-restli-id": id });
+      }
       if (jeton !== SECRETS_EMIS.linkedin && jeton !== SECRETS_EMIS.linkedinRafraichi) return envoyer(401, { status: 401, serviceErrorCode: 65601, code: "REVOKED_ACCESS_TOKEN", message: "The token used in the request has been revoked by the user" });
       const reste = p.slice("/linkedin-api/rest/".length);
       if (reste === "organizationAcls") return envoyer(200, { paging: { count: 10, start: 0, links: [] }, elements: [{ roleAssignee: "urn:li:person:abc", state: "APPROVED", role: "ADMINISTRATOR", organization: "urn:li:organization:2414183" }] });

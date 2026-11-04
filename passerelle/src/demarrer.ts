@@ -6,6 +6,7 @@
 // PASSERELLE_ETAT (fichier d'état de l'autorisation locale, passerelle/etat/oauth-demo.json par défaut : nom
 // d'origine conservé pour ne pas perdre les connexions existantes).
 
+import { reponsesGardeesDepuisEnv } from "./reponses-gardees.js";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { lireReglages, lireServicesLocaux } from "./config.js";
@@ -40,7 +41,7 @@ function principal(): void {
     reglages = lireReglages(process.env);
     servicesLocaux = lireServicesLocaux(process.env);
     signataire = signataireDepuisEnv(process.env);
-    lireMentionIa(process.env); // article 50 : désactivation sans motif écrit = refus de démarrer
+    lireMentionIa(process.env); // mention IA (choix de transparence) : désactivation sans motif écrit = refus de démarrer
   } catch (erreur) {
     console.error(erreur instanceof Error ? erreur.message : String(erreur));
     process.exit(2);
@@ -76,6 +77,9 @@ function principal(): void {
     }
   }
   const routesInternes: RouteInterne[] = [];
+  // Références à usage unique des réponses de lecture : route réservée au plugin, protégée par un jeton partagé (en plus des contrôles Host/Origin).
+  const reponsesGardees = reponsesGardeesDepuisEnv(process.env, journal) ?? undefined;
+  if (reponsesGardees) routesInternes.push(reponsesGardees.routeInterne());
   if (servicesLocaux.includes("emailing")) {
     try {
       registre.enregistrer(fournisseurEmailingReel({ ...optionsEmailingDepuisEnv(process.env), journal }));
@@ -123,7 +127,7 @@ function principal(): void {
   else console.log("AVERTISSEMENT : aucune clé de signature (PASSERELLE_SIGNATURE_CLE_PRIVEE) : réponses non signées, le plugin ne doit pas les tenir pour réelles.");
   const nonConnectes = registre.fiches().map((f) => f.id).filter((id) => registre.obtenir(id) === undefined);
   console.log(`services connectés : ${registre.fiches().map((f) => f.id).filter((id) => registre.obtenir(id) !== undefined).join(", ") || "aucun"} ; non connectés (répondent « non_connecte ») : ${nonConnectes.join(", ") || "aucun"}`);
-  const serveur = creerServeur({ ...reglages, registre, signataire, routesInternes, fichierEtat: process.env["PASSERELLE_ETAT"] ?? ETAT_PAR_DEFAUT, journal: (m) => console.log(m) });
+  const serveur = creerServeur({ ...reglages, registre, signataire, reponsesGardees, routesInternes, fichierEtat: process.env["PASSERELLE_ETAT"] ?? ETAT_PAR_DEFAUT, journal: (m) => console.log(m) });
   serveur.ecouter().catch((erreur: unknown) => {
     console.error(`Démarrage impossible : ${erreur instanceof Error ? erreur.message : String(erreur)}`);
     process.exit(1);

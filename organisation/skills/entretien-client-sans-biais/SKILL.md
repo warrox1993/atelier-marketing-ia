@@ -45,7 +45,8 @@ des opinions polies sur une idée, et en tirer une synthèse exploitable par les
 4. Après chaque entretien mené par l'humain, classer chaque note dans une catégorie : fait, douleur, engagement (rendez-vous
    fixé, introduction, achat), compliment (à ignorer), opinion (poids faible).
 5. Agréger sur 5 à 10 entretiens : faits qui reviennent, douleurs, engagements obtenus ; marquer les points vus une seule fois.
-6. Transmettre la synthèse à `analyse-jobs-a-faire` et `points-entree-categorie`.
+6. Signaler au Coordinateur que la synthèse est prête pour `analyse-jobs-a-faire` et `points-entree-categorie` (il
+   organise la suite).
 
 ## Livrable
 

@@ -21,6 +21,7 @@ let urls: string[] = [];
 type Reponse = { statut?: number; corps: unknown };
 let direction: (mois: string) => Reponse;
 let rapport: (mois: string) => Reponse;
+let entreprise: () => Reponse;
 
 function stubReseau() {
   vi.stubGlobal(
@@ -28,7 +29,7 @@ function stubReseau() {
     vi.fn(async (url: string) => {
       urls.push(url);
       const mois = new URL(url, "http://x").searchParams.get("mois") ?? "";
-      const r = url.includes("/tableau/direction?") ? direction(mois) : url.includes("/rapport/mensuel?") ? rapport(mois) : url.includes("/accueil?") ? { corps: { companyId: ENTREPRISE, elements: [], missions: [] } } : { corps: {} };
+      const r = url.endsWith(`/api/companies/${ENTREPRISE}`) ? entreprise() : url.includes("/tableau/direction?") ? direction(mois) : url.includes("/rapport/mensuel?") ? rapport(mois) : url.includes("/accueil?") ? { corps: { companyId: ENTREPRISE, elements: [], missions: [] } } : { corps: {} };
       return new Response(JSON.stringify(r.corps), { status: r.statut ?? 200 });
     }),
   );
@@ -38,6 +39,7 @@ beforeEach(() => {
   vi.stubGlobal("matchMedia", (q: string) => ({ matches: false, media: q, addEventListener() {}, removeEventListener() {} }));
   rapport = (mois) => ({ corps: { ...rapportFictif({ mois: mois, trouves: mois === moisProposes()[0] ? 100 : 80, qualifies: mois === moisProposes()[0] ? 20 : 10, couts: [coutFictif("Contenus", 900), coutFictif("Veille", 300)] }), companyId: ENTREPRISE } });
   direction = (mois) => ({ corps: { ...directionFictive({ mois, prospects: { trouves: 100, avecNumero: 60 } }), companyId: ENTREPRISE } });
+  entreprise = () => ({ corps: {} });
   stubReseau();
 });
 afterEach(() => {
@@ -129,6 +131,21 @@ describe("Tableau de direction", () => {
       await new Promise((r) => setTimeout(r, 0));
     });
     expect(urls.some((u) => u.includes(`/tableau/direction?companyId=${ENTREPRISE}&mois=${autre}`))).toBe(true);
+  });
+
+  it("ne propose pas de mois antérieur à la création de l'entreprise (UI-16)", async () => {
+    const [courant, precedent] = moisProposes();
+    entreprise = () => ({ corps: { id: ENTREPRISE, createdAt: `${precedent}-20T10:00:00.000Z` } });
+    const c = await ouvrir();
+    const options = Array.from(c.querySelectorAll<HTMLOptionElement>(".atl-td-commandes select option")).map((o) => o.value);
+    expect(options).toEqual([courant, precedent]);
+  });
+
+  it("borne pure : premier mois d'activité inclus, jamais moins que le mois courant", () => {
+    const maintenant = new Date(Date.UTC(2026, 9, 30));
+    expect(moisProposes(maintenant, 24, "2026-08")).toEqual(["2026-10", "2026-09", "2026-08"]);
+    expect(moisProposes(maintenant, 24, "2027-01")).toEqual(["2026-10"]);
+    expect(moisProposes(maintenant, 3, null)).toEqual(["2026-10", "2026-09", "2026-08"]);
   });
 
   it("aucun tiret cadratin dans la feuille de style ni dans les textes affichés", async () => {

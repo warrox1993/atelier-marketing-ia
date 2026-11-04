@@ -73,7 +73,7 @@ Un plan en sept parties : diagnostic par page (le frein est-il le lien, écart p
 
 ## Exemple
 
-Un cabinet de courtage liégeois voit sa page « assurance flotte » derrière trois concurrents. Comparaison page contre page : 4 domaines référents contre 25 à 40. La page est indexée et complète, le frein est bien l'autorité. Atouts : un guide chiffré des sinistres flotte (données propres). Tactiques : réclamer deux mentions sans lien, demander l'inscription sur la page d'une fédération professionnelle dont le cabinet est membre, proposer le guide à deux sites sectoriels. Un fournisseur propose dix liens suivis à prix fixe : refusé (vente de crédit de classement). Les messages sont rédigés pour validation.
+Un cabinet de courtage fictif voit sa page « assurance flotte » derrière trois concurrents. Comparaison page contre page : 4 domaines référents contre 25 à 40 (chiffres fictifs). La page est indexée et complète, le frein est bien l'autorité. Atouts : un guide chiffré des sinistres flotte (données propres). Tactiques : réclamer deux mentions sans lien, demander l'inscription sur la page d'une fédération professionnelle dont le cabinet est membre, proposer le guide à deux sites sectoriels. Un fournisseur propose dix liens suivis à prix fixe : refusé (vente de crédit de classement). Les messages sont rédigés pour validation.
 
 ## Origine de la méthode
 

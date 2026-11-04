@@ -5,6 +5,9 @@
 # N'utilise ni l'instance de l'atelier ni ~/.paperclip.
 # Usage : scripts/tests-serveur.sh [fichiers…]   (défaut : tests de l'atelier)
 set -uo pipefail
+# umask du lanceur officiel : sous 007 ou 027 (poste), les tests natifs qui vérifient les droits des fichiers créés
+# échouent (remote-pi-companion : 26 sur 26 sous 007, 0 sous 022 ; AFC-A15). Seuls les dossiers jetables du test en dépendent.
+umask 022
 
 RACINE="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SOCLE="${RACINE}/paperclip"

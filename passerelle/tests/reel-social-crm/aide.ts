@@ -5,8 +5,7 @@
 // suivi des redirections et la soumission des formulaires (choix de Page, clé d'API).
 
 import { createHash, generateKeyPairSync, randomBytes, type KeyObject } from "node:crypto";
-import { mkdtempSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { rmSync } from "node:fs";
 import { join } from "node:path";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
@@ -16,6 +15,7 @@ import { creerServeur, type ServeurPasserelle } from "../../src/serveur.js";
 import { adressesFaussesSocialCrm, type ConfigSocialCrmReel } from "../../src/reel/social-crm/config.js";
 import { construireSocialCrmReel, type SocialCrmReel } from "../../src/reel/social-crm/enregistrer.js";
 import { empreinteArguments, signerPreuve, signerRevocations, type ChargePreuve, type ChargeRevocations } from "../../src/reel/social-crm/approbation.js";
+import { dossierTemporaire } from "../dossier-temporaire.js";
 import { FauxOdoo, FauxPlateformes, IDENTIFIANTS } from "./faux-plateformes.js";
 
 export const REDIRECTION_PAPERCLIP = "http://127.0.0.1:3300/api/tools/oauth/callback";
@@ -42,7 +42,7 @@ export async function monter(options: { sansClePublique?: boolean; delaiAppelMs?
   const odoo17 = new FauxOdoo(17);
   await odoo19.demarrer();
   await odoo17.demarrer();
-  const dossier = mkdtempSync(join(tmpdir(), "passerelle-social-"));
+  const dossier = dossierTemporaire("passerelle-social-");
   const journal: string[] = [];
   const attentes: number[] = [];
   const { publicKey, privateKey } = generateKeyPairSync("ed25519");
@@ -56,6 +56,7 @@ export async function monter(options: { sansClePublique?: boolean; delaiAppelMs?
       facebook: IDENTIFIANTS.meta,
       instagram: IDENTIFIANTS.instagram,
       linkedin: IDENTIFIANTS.linkedin,
+      linkedinprofil: IDENTIFIANTS.linkedinProfil,
       crm: IDENTIFIANTS.hubspot,
       pipedrive: IDENTIFIANTS.pipedrive,
       teamleader: IDENTIFIANTS.teamleader,
@@ -201,6 +202,7 @@ const COMPTE_PAR_DEFAUT: Record<string, string> = {
   facebook: "100000000000001",
   instagram: "17841400000000001",
   linkedin: "urn:li:organization:2414183",
+  linkedinprofil: "urn:li:person:782bbtaQ",
 };
 
 /** Preuve signée comme le ferait le plugin pour ces arguments exacts. */

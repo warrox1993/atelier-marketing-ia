@@ -1,38 +1,25 @@
 # Services de l'entreprise : consignes des agents
 
-Chaque service a un coordinateur et un à quatre spécialistes. Les consignes sont dans
+Chaque service a un coordinateur et ses spécialistes. Les consignes sont dans
 `organisation/services/<service>/agents/<agent>/AGENTS.md`, dans le même format que les consignes du
-marketing (`organisation/agents/`), **sans** le marqueur des consignes communes : le générateur l'ajoutera.
+marketing (`organisation/agents/`), **sans** le marqueur des consignes communes : le générateur l'ajoutera, avec
+en tête de la section « Outils » les outils réellement ouverts et fermés à la session de l'agent (tirés du registre).
 
 Règles communes à tous les agents : jamais inventer (sans source, l'information manque), l'humain
 approuve tout acte qui engage, aucun dossier complet d'un autre service, toute référence légale incertaine
 est marquée « à vérifier ». Un coordinateur ne délègue jamais hors de son service ; pour une information
 d'un autre service, il passe par le bureau de liaison (route `liaison.demander`) : demande au service X avec objet, question et seuls les extraits nécessaires.
 
-| Service (dossier) | Coordinateur | Spécialistes | Ce qui reste humain |
-| --- | --- | --- | --- |
-| direction | coordinateur-direction | synthese, tableau-de-bord | Décisions stratégiques, communications engageantes, approbation de comptes |
-| administratif | coordinateur-administratif | courrier, agenda-documents | Envoi de toute réponse, signature, acceptation d'un rendez-vous, destruction de documents |
-| juridique | coordinateur-juridique | lecture-contrats, registre-rgpd | Avis juridique engageant, signature d'un contrat, réponse à une autorité, notification de violation |
-| commercial | coordinateur-commercial | preparation-rdv, propositions, renouvellements | Conseil en assurance (IDD), envoi d'une offre, remise, prospection |
-| recouvrement | coordinateur-recouvrement | relances, balance-agee | Envoi des relances et de toute mise en demeure, recours judiciaire, plan de paiement, abandon de créance |
-| sav | coordinateur-sav | sinistres, reclamations, faq | Décision de couverture ou d'indemnisation, envoi des réponses, médiation, déclaration à l'assureur |
-| commerce-exterieur | coordinateur-export | dossiers-export | Déclaration en douane, classification et origine, licences et sanctions, signature des documents |
-| conformite | coordinateur-conformite | vigilance-clients, veille-reglementaire | Déclaration à la CTIF, qualification d'un client à risque, vigilance renforcée, échanges avec les autorités |
-| comptabilite | coordinateur-comptabilite | commissions, tresorerie | Paiements, écritures et clôtures, déclarations fiscales, financements |
-| rh | coordinateur-rh | offres-emploi, accueil | Sélection, classement ou refus de candidats, embauche, évaluation, publication d'une offre |
-| informatique | coordinateur-informatique | procedures-incident, documentation | Toute action sur les systèmes et accès, déclaration d'incident à une autorité, communication de crise |
-| achats | coordinateur-achats | comparaison-offres | Choix du fournisseur, commande, signature, paiement |
-| qualite | coordinateur-qualite | procedures | Approbation et mise en application d'une procédure, audits, sanctions |
+La liste des services (slug, préfixe, coordinateur, agents, décisions réservées à un humain, services sensibles) a une
+seule source : `organisation/registre/services.json`. Sa vue lisible, générée et testée, est la table de
+`docs/usine-services.md` ; elle n'est pas recopiée ici.
 
-## Écarts et choix à signaler
+## Choix à signaler
 
-- `organisation/registre/services.json` n'existait pas à la rédaction : les slugs viennent de la consigne
-  de mission et sont à réaligner s'il diffère.
-- Les en-têtes ont `skills: []` pour les spécialistes (aucune compétence de service n'existe encore) ; les
-  coordinateurs reprennent les quatre compétences du coordinateur marketing.
 - Le coordinateur n'a pas de `reportsTo` (il rend compte à l'humain responsable) ; les spécialistes
-  rendent compte à leur coordinateur de service.
+  rendent compte à leur coordinateur de service. À la Direction, c'est le coordinateur général (champ
+  `coordinateurGeneral` du registre) qui ne rapporte à personne : seul interlocuteur de l'humain, il reçoit le compte
+  rendu du coordinateur de la Direction.
 - Le slug du service du commerce extérieur est `commerce-exterieur`, celui de son coordinateur
   `coordinateur-export` (comme demandé).
 

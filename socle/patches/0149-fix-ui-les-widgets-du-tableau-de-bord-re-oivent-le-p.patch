@@ -1,0 +1,163 @@
+From 69dd90610898c329bffd277c6e144bf563e3b40f Mon Sep 17 00:00:00 2001
+From: Jean-Baptiste Dhondt <114347858+warrox1993@users.noreply.github.com>
+Date: Fri, 30 Oct 2026 17:00:43 +0100
+Subject: [PATCH 149/150] =?UTF-8?q?fix(ui):=20les=20widgets=20du=20tableau?=
+ =?UTF-8?q?=20de=20bord=20re=C3=A7oivent=20le=20pr=C3=A9fixe=20de=20l'entr?=
+ =?UTF-8?q?eprise=20(UI-15)?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Le tableau de bord passait au slot dashboardWidget un contexte sans companyPrefix : les liens
+des widgets de plugin (linkProps, navigate) sortaient sans le préfixe de l'entreprise. Le
+contexte reprend celui du menu latéral (selectedCompany.issuePrefix).
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01EThpSSDGc5NRYwbgjNqoTJ
+---
+ .../pages/Dashboard.plugin-widgets.test.tsx   | 110 ++++++++++++++++++
+ ui/src/pages/Dashboard.tsx                    |   4 +-
+ 2 files changed, 112 insertions(+), 2 deletions(-)
+ create mode 100644 ui/src/pages/Dashboard.plugin-widgets.test.tsx
+
+diff --git a/ui/src/pages/Dashboard.plugin-widgets.test.tsx b/ui/src/pages/Dashboard.plugin-widgets.test.tsx
+new file mode 100644
+index 0000000000..1307a6e93e
+--- /dev/null
++++ b/ui/src/pages/Dashboard.plugin-widgets.test.tsx
+@@ -0,0 +1,110 @@
++// @vitest-environment jsdom
++
++import { type ReactNode } from "react";
++import { flushSync } from "react-dom";
++import { createRoot, type Root } from "react-dom/client";
++import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
++import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
++import { resolveHostNavigationHref } from "@/plugins/bridge";
++import { Dashboard } from "./Dashboard";
++
++// Atelier (UI-15) : un widget de plugin du tableau de bord résout ses liens avec le contexte que la page
++// lui passe, exactement comme useHostNavigation (resolveHostNavigationHref sur hostContext.companyPrefix).
++vi.mock("@/plugins/slots", () => ({
++  PluginSlotOutlet: ({ slotTypes, context }: { slotTypes: string[]; context: { companyPrefix?: string | null } }) =>
++    slotTypes.includes("dashboardWidget") ? (
++      <a data-testid="widget-link" href={resolveHostNavigationHref("/atelier/contenus", context.companyPrefix)}>
++        Contenus
++      </a>
++    ) : null,
++}));
++
++vi.mock("@/lib/router", () => ({
++  useLocation: () => ({ pathname: "/PAP/dashboard", search: "", hash: "", state: null }),
++  Link: ({ to, children }: { to: string; children: ReactNode }) => <a href={to}>{children}</a>,
++}));
++
++vi.mock("../context/CompanyContext", () => ({
++  useCompany: () => ({
++    selectedCompanyId: "company-1",
++    selectedCompany: { id: "company-1", issuePrefix: "PAP", name: "Paperclip" },
++    companies: [{ id: "company-1", issuePrefix: "PAP", name: "Paperclip" }],
++  }),
++}));
++
++vi.mock("../context/DialogContext", () => ({ useDialogActions: () => ({ openOnboarding: vi.fn() }) }));
++vi.mock("../context/BreadcrumbContext", () => ({ useBreadcrumbs: () => ({ setBreadcrumbs: vi.fn() }) }));
++vi.mock("../hooks/useSharedPolling", () => ({
++  useSharedPollingQuery: () => null,
++  usePublishSharedQueryData: () => {},
++}));
++vi.mock("../components/ActiveAgentsPanel", () => ({ ActiveAgentsPanel: () => null }));
++vi.mock("../components/SmokeLabDashboardCard", () => ({ SmokeLabDashboardCard: () => null }));
++vi.mock("../components/ActivityCharts", () => ({
++  ChartCard: () => null,
++  RunActivityChart: () => null,
++  PriorityChart: () => null,
++  IssueStatusChart: () => null,
++  SuccessRateChart: () => null,
++}));
++
++vi.mock("../api/dashboard", () => ({
++  dashboardApi: {
++    summary: vi.fn(async () => ({
++      companyId: "company-1",
++      agents: { active: 0, running: 0, paused: 0, error: 0 },
++      tasks: { open: 0, inProgress: 0, blocked: 0, done: 0 },
++      costs: { monthSpendCents: 0, monthBudgetCents: 0, monthUtilizationPercent: 0 },
++      pendingApprovals: 0,
++      budgets: { activeIncidents: 0, pendingApprovals: 0, pausedAgents: 0, pausedProjects: 0 },
++      runActivity: [],
++    })),
++  },
++}));
++vi.mock("../api/activity", () => ({ activityApi: { list: vi.fn(async () => []) } }));
++vi.mock("../api/issues", () => ({ issuesApi: { list: vi.fn(async () => []) } }));
++vi.mock("../api/agents", () => ({ agentsApi: { list: vi.fn(async () => []) } }));
++vi.mock("../api/projects", () => ({ projectsApi: { list: vi.fn(async () => []) } }));
++vi.mock("../api/access", () => ({ accessApi: { listUserDirectory: vi.fn(async () => ({ users: [] })) } }));
++
++// eslint-disable-next-line @typescript-eslint/no-explicit-any
++(globalThis as any).IS_REACT_ACT_ENVIRONMENT = false;
++
++async function flushReact() {
++  for (let i = 0; i < 4; i += 1) {
++    await Promise.resolve();
++    await new Promise((resolve) => window.setTimeout(resolve, 0));
++  }
++  flushSync(() => {});
++}
++
++describe("Dashboard : widgets de plugin", () => {
++  let container: HTMLDivElement;
++  let root: Root;
++
++  beforeEach(() => {
++    container = document.createElement("div");
++    document.body.appendChild(container);
++    root = createRoot(container);
++  });
++
++  afterEach(() => {
++    flushSync(() => root.unmount());
++    container.remove();
++  });
++
++  it("le lien d'un widget garde le préfixe de l'entreprise sélectionnée", async () => {
++    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
++    flushSync(() => {
++      root.render(
++        <QueryClientProvider client={queryClient}>
++          <Dashboard />
++        </QueryClientProvider>,
++      );
++    });
++    await flushReact();
++
++    const link = container.querySelector<HTMLAnchorElement>('[data-testid="widget-link"]');
++    expect(link?.getAttribute("href")).toBe("/PAP/atelier/contenus");
++  });
++});
+diff --git a/ui/src/pages/Dashboard.tsx b/ui/src/pages/Dashboard.tsx
+index ece0c0c6ec..0d1edda7fb 100644
+--- a/ui/src/pages/Dashboard.tsx
++++ b/ui/src/pages/Dashboard.tsx
+@@ -168,7 +168,7 @@ export function ImportedPausedAgentsBanner({
+ }
+ 
+ export function Dashboard() {
+-  const { selectedCompanyId, companies } = useCompany();
++  const { selectedCompanyId, selectedCompany, companies } = useCompany();
+   const { openOnboarding } = useDialogActions();
+   const location = useLocation();
+   const { setBreadcrumbs } = useBreadcrumbs();
+@@ -557,7 +557,7 @@ export function Dashboard() {
+ 
+           <PluginSlotOutlet
+             slotTypes={["dashboardWidget"]}
+-            context={{ companyId: selectedCompanyId }}
++            context={{ companyId: selectedCompanyId, companyPrefix: selectedCompany?.issuePrefix ?? null }}
+             className="grid gap-4 md:grid-cols-2"
+             // design-allow(card-pattern): class-string prop consumed by the plugin outlet; a component can't be passed here (C5a Run 3)
+             itemClassName="rounded-lg border bg-card p-4 shadow-sm"
+-- 
+2.53.0
+

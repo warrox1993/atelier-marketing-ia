@@ -120,7 +120,48 @@ describe("porte de diffusion : provenance IA de la fabrique", () => {
     expect(await controler()).toEqual({ ok: true });
   });
 
-  it("ignore les fichiers non contrôlés (sous-titres, images)", async () => {
+  describe("images (png, jpg)", () => {
+    const IMAGE = Buffer.from("octets d'image de test");
+    const livrerImage = (nom: string, provenance: Record<string, unknown> | null) => {
+      writeFileSync(join(dossier, nom), IMAGE);
+      writeFileSync(join(dossier, "resultat.json"), JSON.stringify({ fichiers: [{ fichier: nom, taille: IMAGE.length, sha256: sha(IMAGE) }] }));
+      rmSync(join(dossier, "provenance.json"), { force: true });
+      if (provenance) writeFileSync(join(dossier, "provenance.json"), JSON.stringify(provenance));
+    };
+    const provenanceImage = (nom: string, plus: Record<string, unknown> = {}) => ({
+      travail: TRAVAIL, entreprise: ENTREPRISE, type: "image", fichier: nom, voix: [], fond_ia: false, mention_visible: false,
+      digital_source_type: DIGITAL_SOURCE_TYPE_IA, sha256: sha(IMAGE), ...plus,
+    });
+
+    it.each(["image.png", "image.jpg"])("refuse %s sans provenance", async (nom) => {
+      livrerImage(nom, null);
+      expect(await motifDuRefus()).toMatch(/Provenance IA absente/u);
+    });
+
+    it("accepte une image typographique complète, sans voix ni mention visible", async () => {
+      livrerImage("image.png", provenanceImage("image.png"));
+      expect(await controler()).toEqual({ ok: true });
+    });
+
+    it("exige la mention visible dès que la provenance indique un fond IA", async () => {
+      livrerImage("image.png", provenanceImage("image.png", { fond_ia: true }));
+      expect(await motifDuRefus()).toMatch(/mention/u);
+      livrerImage("image.png", provenanceImage("image.png", { fond_ia: true, mention_visible: true }));
+      expect(await controler()).toEqual({ ok: true });
+    });
+
+    it("refuse un fond_ia qui n'est pas un booléen", async () => {
+      livrerImage("image.png", provenanceImage("image.png", { fond_ia: "non" }));
+      expect(await motifDuRefus()).toMatch(/fond_ia/u);
+    });
+
+    it("refuse une image modifiée après la pose de sa provenance", async () => {
+      livrerImage("image.png", provenanceImage("image.png", { sha256: sha(Buffer.from("autre")) }));
+      expect(await motifDuRefus()).toMatch(/empreinte différente/u);
+    });
+  });
+
+  it("ignore les fichiers non contrôlés (sous-titres)", async () => {
     writeFileSync(join(dossier, "resultat.json"), JSON.stringify({ fichiers: [{ fichier: "sous-titres.srt", taille: 1, sha256: "x" }] }));
     expect(await controler()).toEqual({ ok: true });
   });

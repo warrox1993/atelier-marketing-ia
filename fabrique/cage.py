@@ -24,9 +24,13 @@ DELAI_VOIX_S = 900
 DELAI_SOUS_TITRES_S = 600
 DELAI_MONTAGE_S = 1200
 DELAI_RENDU_HTML_S = 1200
+DELAI_ILLUSTRATION_S = 600
 
 # Limites de ressources par défaut.
 LIMITE_MEMOIRE_OCTETS = 4 * 1024**3
+# Étape GPU : RLIMIT_AS (--as) n'y est pas posée, CUDA réserve des dizaines de Gio d'adresses virtuelles. RLIMIT_DATA
+# (--data) ne compte que la mémoire privée inscriptible (le tas), donc la RAM réellement prise : poids lus par mmap exclus.
+LIMITE_DONNEES_ILLUSTRATION_OCTETS = 12 * 1024**3
 FSIZE_DOCUMENT_OCTETS = 50 * 1024**2
 FSIZE_VIDEO_OCTETS = 500 * 1024**2
 LIMITE_FICHIERS_OUVERTS = 256
@@ -101,6 +105,7 @@ def construire_arguments(
     racine_fabrique: str = RACINE_FABRIQUE,
     existe: Callable[[str], bool] = os.path.exists,
     memoire_octets: int = LIMITE_MEMOIRE_OCTETS,
+    donnees_octets: int | None = None,
     fsize_octets: int = FSIZE_DOCUMENT_OCTETS,
     cpu_s: int | None = None,
     processus_max: int = LIMITE_PROCESSUS,
@@ -115,6 +120,8 @@ def construire_arguments(
     limites = ["prlimit"]
     if etape.type in ("cpu", "pdf"):
         limites.append(f"--as={memoire_octets}")
+    if donnees_octets is not None:
+        limites.append(f"--data={donnees_octets}")
     limites += [
         f"--fsize={fsize_octets}",
         f"--nofile={LIMITE_FICHIERS_OUVERTS}",

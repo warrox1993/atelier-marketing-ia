@@ -5,7 +5,7 @@
  * et restants, limites, questions, porte, usage) ; décision humaine.
  */
 import { useState, type FormEvent } from "react";
-import { MarkdownBlock } from "@paperclipai/plugin-sdk/ui";
+import { MarkdownBlock, useHostContext } from "@paperclipai/plugin-sdk/ui";
 import type { DecisionHumaine, Diffusion, DossierHumain, LigneMatrice, RelanceCorrection } from "../../contrats/dossier.js";
 import type { Constat, VerdictRevue } from "../../contrats/revues.js";
 import type { ChronologieExecution, ResumeDossier, VueContenusAValider } from "../../contrats/ui.js";
@@ -38,6 +38,8 @@ import { actionRecuperation, appliquerPalierAgent, ecrireVersionHumaine, reprend
 import { CLE_LIVRABLE_DEFAUT } from "../../contrats/identifiants.js";
 import { chemin } from "../route.js";
 import { canalDePasserelle, SectionAppels, SuiviDiffusionReelle } from "./appels.js";
+import { useCartesServices, useDirectionId } from "../cartes-services.js";
+import { elementsATraiter } from "../organigramme-a-traiter.js";
 
 export function VueContenus({ id }: { id: string | null }) {
   return id ? <Dossier issueId={id} /> : <ListeContenus />;
@@ -64,6 +66,7 @@ function ListeContenus() {
                 <TableDossiers lignes={d.prets} />
               )}
             </Section>
+            <DecisionsEnAttente />
             <Section titre={`Bloqués avant validation (${d.bloques.length})`} aide="Information manquante, dépendance, budget, cycles de correction épuisés : ces livrables ne sont pas présentés comme prêts.">
               {d.bloques.length === 0 ? <p className="atl-attenue">Aucun livrable bloqué.</p> : <TableDossiers lignes={d.bloques} bloques />}
             </Section>
@@ -71,6 +74,25 @@ function ListeContenus() {
         )}
       </Lecture>
     </>
+  );
+}
+
+/** Cartes en attente dans les tâches du service (lecture partagée avec le chat) : un livrable n'est pas la seule chose à valider. */
+function DecisionsEnAttente() {
+  const { companyId } = useHostContext();
+  const { cartes } = useCartesServices(useDirectionId(companyId));
+  const elements = companyId ? elementsATraiter([], cartes, companyId, "") : [];
+  if (elements.length === 0) return null;
+  return (
+    <Section titre={`Décisions en attente dans les tâches (${elements.length})`} aide="Questions et confirmations posées par l'équipe dans ses tâches : elles se traitent dans la tâche ou dans le chat du Coordinateur général.">
+      <ul className="atl-liste">
+        {elements.map((e) => (
+          <li key={e.cle}>
+            <LienHote vers={e.lien}>{e.titre}</LienHote> <span className="atl-sous">{e.detail}</span>
+          </li>
+        ))}
+      </ul>
+    </Section>
   );
 }
 
@@ -286,7 +308,7 @@ function Matrice({ lignes, revisionCourante }: { lignes: LigneMatrice[]; revisio
                 <th scope="col">Exigence</th>
                 <th scope="col">Couverture</th>
                 <th scope="col">Preuves</th>
-                {(["exigences", "metier", "technique"] as const).map((r) => (
+                {ORDRE_ROLES.map((r) => (
                   <th scope="col" key={r} title={ROLES_REVUE[r]}>
                     {ROLES_COURTS[r]}
                   </th>
@@ -328,7 +350,7 @@ function Matrice({ lignes, revisionCourante }: { lignes: LigneMatrice[]; revisio
                       ) : null}
                       {preuvesAutre ? <span className="atl-sous">{preuvesAutre} preuve(s) sur une autre révision</span> : null}
                     </td>
-                    {(["exigences", "metier", "technique"] as const).map((role) => {
+                    {ORDRE_ROLES.map((role) => {
                       const v = l.verdictsParRole[role] ?? "absent";
                       return (
                         <td key={role} data-libelle={ROLES_REVUE[role]}>
@@ -347,7 +369,8 @@ function Matrice({ lignes, revisionCourante }: { lignes: LigneMatrice[]; revisio
   );
 }
 
-const ROLES_COURTS = { exigences: "Revue exigences", metier: "Revue métier", technique: "Revue technique" } as const;
+const ROLES_COURTS = { exigences: "Revue exigences", metier: "Revue métier", technique: "Revue technique", conformite: "Revue conformité" } as const;
+const ORDRE_ROLES = Object.keys(ROLES_COURTS) as Array<keyof typeof ROLES_COURTS>;
 
 function ElementsSansPreuve({ attendus, prouves }: { attendus: string[]; prouves: string[] }) {
   const manquants = attendus.filter((a) => !prouves.includes(a));

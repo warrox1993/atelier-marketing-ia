@@ -5,10 +5,12 @@ Prérequis : bwrap, ffmpeg, ffprobe et les polices installées par
 """
 
 import json
+import re
 import shutil
 import socket
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 import pytest
@@ -64,10 +66,15 @@ def preparer_entree(tmp_path, durees, format_sortie="1080x1080", texte="Bonjour 
     scenes = []
     for position, (duree, genre) in enumerate(zip(durees, types), start=1):
         nom = f"scene-{position:02d}.{genre}"
+        # Visuels assez riches pour passer le plancher de débit (516 kb/s) : un aplat ou un test pattern
+        # minuscule, prolongé sur sa dernière image, tomberait à quelques dizaines de kb/s. Le bruit sombre
+        # (luma 16 à 76) ne produit aucun pixel clair, les mesures de texte des tests restent valables.
         if genre == "png":
-            ffmpeg("-f", "lavfi", "-i", "color=c=0x203040:s=640x360:d=1", "-frames:v", "1", str(entree / nom))
+            ffmpeg("-f", "lavfi", "-i", f"nullsrc=s={largeur}x{hauteur}:d=1,geq=lum='16+random(1)*60':cb=128:cr=128",
+                   "-frames:v", "1", str(entree / nom))
         else:
-            ffmpeg("-f", "lavfi", "-i", "testsrc=s=320x240:r=30:d=0.5", "-pix_fmt", "yuv420p", str(entree / nom))
+            ffmpeg("-f", "lavfi", "-i", f"testsrc2=s={largeur}x{hauteur}:r=30:d=0.5", "-pix_fmt", "yuv420p",
+                   str(entree / nom))
         ffmpeg("-f", "lavfi", "-i", f"sine=frequency={300 + 100 * position}:duration={duree}:sample_rate=22050",
                "-ac", "1", str(entree / f"voix-{position:02d}.wav"))
         scenes.append(SceneMontage(position, genre, duree))
@@ -123,7 +130,8 @@ def test_arguments_chemins_seulement_sous_entree_sortie_polices():
         # fragments de filtres (« (ow-iw)/2 », durées) ne sont pas des chemins
         assert not re.match(r"^/(etc|home|var|usr|tmp|proc|root)", chemin), chemin
     assert "movie=" not in texte and "amovie=" not in texte and "subtitles=" not in texte
-    assert texte.count("fontsdir=/opt/atelier-fabrique/polices") == 2
+    # sous-titres seulement : aucune mention IA incrustée (choix de l'opérateur du 01/11)
+    assert texte.count("fontsdir=/opt/atelier-fabrique/polices") == 1 and "mention.ass" not in texte
     assert "sidechaincompress" in texte and "-movflags +faststart" in texte
     assert "libx264" in arguments and "yuv420p" in arguments and "aac" in arguments
 
@@ -157,11 +165,150 @@ def test_ffprobe_refuse_chemin_hors_cage_et_demultiplexeur_inconnu():
         montage.construire_arguments_ffprobe("/entree/video.mp4", "concat")
 
 
-def test_mention_ass_texte_fixe_et_police(tmp_path):
-    chemin = montage.ecrire_mention_ass(tmp_path, 1080, 1920, 30.0)
-    contenu = chemin.read_text(encoding="utf-8")
-    assert "Contenu généré avec l'IA" in contenu and "DejaVu Sans" in contenu
-    assert "0:00:31.00" in contenu  # permanente : toute la vidéo plus une seconde
+# ---------------------------------------------------------------- standard de qualité (lot 1)
+
+SORTIE_MESURES = """\
+[silencedetect @ 0x1] silence_start: 0
+[silencedetect @ 0x1] silence_end: 0.8125 | silence_duration: 0.8125
+[blackdetect @ 0x2] black_start:0 black_end:1 black_duration:1
+[Parsed_ebur128_2 @ 0x3] Summary:
+
+  Integrated loudness:
+    I:         -16.2 LUFS
+    Threshold: -26.5 LUFS
+
+  Loudness range:
+    LRA:         3.1 LU
+    Threshold: -36.4 LUFS
+    LRA low:   -19.0 LUFS
+    LRA high:  -15.9 LUFS
+
+  True peak:
+    Peak:       -1.7 dBFS
+"""
+
+
+def mesures_ok(**surcharge):
+    base = {"sonie_lufs": -16.0, "crete_vraie_dbtp": -1.6, "noir_initial_s": 0.0, "voix_debut_s": 0.1}
+    return {**base, **surcharge}
+
+
+def test_arguments_encodage_haut_de_gamme_et_sonie_normalisee():
+    for avec_musique in (False, True):
+        arguments = construire_arguments_ffmpeg(plan_exemple(avec_musique=avec_musique))
+        assert arguments[arguments.index("-preset") + 1] == "medium"
+        assert arguments[arguments.index("-crf") + 1] == "20"
+        graphe = arguments[arguments.index("-filter_complex") + 1]
+        assert "loudnorm=I=-16:TP=-1.5:LRA=11" in graphe
+        assert graphe.index("loudnorm") > graphe.index("[voix]")  # sur la piste mixée, pas sur la musique seule
+        assert graphe.endswith("[aout]") or "[aout]" in graphe.split(";")[-1]
+        assert "aresample=48000" in graphe.split("loudnorm")[1]  # loudnorm sort en 192 kHz
+
+
+def test_arguments_deux_passes_de_sonie():
+    plan = plan_exemple(avec_musique=True)
+    premiere = montage.construire_arguments_sonie(plan)
+    graphe = premiere[premiere.index("-filter_complex") + 1]
+    assert "concat=n=2:v=0:a=1[voix]" in graphe and "print_format=json" in graphe and "sidechaincompress" in graphe
+    assert premiere[-3:] == ["-f", "null", "/dev/null"] and "libx264" not in premiere
+    mesure = {"input_i": -27.5, "input_tp": -9.25, "input_lra": 4.5, "input_thresh": -38.0, "target_offset": 0.5}
+    definitive = construire_arguments_ffmpeg(plan, mesure)
+    graphe = definitive[definitive.index("-filter_complex") + 1]
+    assert ("loudnorm=I=-16:TP=-1.5:LRA=11:measured_I=-27.50:measured_TP=-9.25:measured_LRA=4.50:"
+            "measured_thresh=-38.00:offset=0.50:linear=true") in graphe
+    with pytest.raises(ValueError):  # jamais un texte venu d'ailleurs dans le filtre
+        construire_arguments_ffmpeg(plan, {**mesure, "input_i": "-27;drawtext"})
+
+
+def test_analyse_de_la_premiere_passe_de_loudnorm():
+    sortie = ('[Parsed_loudnorm_0 @ 0x1] \n{\n\t"input_i" : "-27.61",\n\t"input_tp" : "-9.25",\n'
+              '\t"input_lra" : "4.50",\n\t"input_thresh" : "-38.07",\n\t"output_i" : "-16.5",\n'
+              '\t"target_offset" : "0.51"\n}\n')
+    assert montage.analyser_sonie(sortie) == {"input_i": -27.61, "input_tp": -9.25, "input_lra": 4.5,
+                                              "input_thresh": -38.07, "target_offset": 0.51}
+    assert montage.analyser_sonie(sortie.replace('"-27.61"', '"-inf"')) is None  # voix muette : une seule passe
+    assert montage.analyser_sonie("rien") is None
+
+
+def test_arguments_mesures_en_cage_sans_reseau_ni_fichier_libre():
+    arguments = montage.construire_arguments_mesures()
+    texte = " ".join(arguments)
+    assert "ebur128=peak=true" in texte and "blackdetect" in texte and "silencedetect" in texte
+    assert "trim=end=1" in texte  # la détection du noir ne porte que sur la première seconde
+    assert "/entree/video.mp4" in arguments and arguments.count("-protocol_whitelist") == 1
+    for chemin in re.findall(r"/[A-Za-z0-9_./-]+", texte):
+        assert chemin.startswith("/entree/") or chemin == "/dev/null", chemin
+
+
+def test_analyse_des_mesures_ffmpeg():
+    mesures = montage.analyser_mesures(SORTIE_MESURES)
+    assert mesures == {"sonie_lufs": -16.2, "crete_vraie_dbtp": -1.7, "noir_initial_s": 1.0, "voix_debut_s": 0.8125}
+
+
+def test_analyse_des_mesures_sans_resume_est_refusee():
+    with pytest.raises(ValueError, match="sonie"):
+        montage.analyser_mesures("[silencedetect @ 0x1] silence_start: 0\n")
+
+
+def test_analyse_des_mesures_silence_total_donne_une_sonie_infinie():
+    texte = SORTIE_MESURES.replace("-16.2 LUFS", "-inf LUFS").replace("-1.7 dBFS", "-inf dBFS")
+    mesures = montage.analyser_mesures(texte)
+    assert mesures["sonie_lufs"] == float("-inf") and mesures["crete_vraie_dbtp"] == float("-inf")
+
+
+@pytest.mark.parametrize("surcharge,debit,mot", [
+    ({"sonie_lufs": -18.5}, 5000, "sonie"),
+    ({"sonie_lufs": -14.9}, 5000, "sonie"),
+    ({"sonie_lufs": float("-inf")}, 5000, "sonie"),
+    ({"crete_vraie_dbtp": -0.4}, 5000, "crête"),
+    ({"noir_initial_s": 0.9}, 5000, "noir"),
+    ({}, 515.0, "débit"),
+])
+def test_jugement_refuse_un_rendu_hors_norme(surcharge, debit, mot):
+    ok, motif, _ = montage.juger_controle(mesures_ok(**surcharge), debit)
+    assert not ok and mot in motif
+
+
+def test_jugement_accepte_les_bornes_et_ne_signale_rien_de_trop():
+    for limite in ({"sonie_lufs": -15.0}, {"sonie_lufs": -17.0}, {"crete_vraie_dbtp": -1.0}, {"noir_initial_s": 0.49}):
+        ok, motif, alertes = montage.juger_controle(mesures_ok(**limite), 4000.0)
+        assert ok, motif
+        assert alertes == []
+
+
+def test_jugement_alertes_non_bloquantes():
+    ok, _, alertes = montage.juger_controle(mesures_ok(voix_debut_s=0.8), 3000.0)
+    assert ok
+    assert any("voix" in a for a in alertes) and any("débit" in a for a in alertes)
+    # sans silence initial détecté, la voix démarre tout de suite : pas d'alerte
+    ok, _, alertes = montage.juger_controle(mesures_ok(voix_debut_s=0.0), 4500.0)
+    assert ok and alertes == []
+
+
+def test_indices_de_planche_zero_un_deux_secondes_puis_chaque_scene():
+    scenes = (SceneMontage(1, "mp4", 0.5), SceneMontage(2, "mp4", 1.5), SceneMontage(3, "mp4", 4.0))
+    assert montage.indices_planche(PlanMontage(scenes, "1080x1080")) == [0, 15, 30, 60]
+    # vidéo plus courte que 2 s : aucun indice hors de la vidéo
+    court = PlanMontage((SceneMontage(1, "mp4", 1.2),), "1080x1080")
+    assert montage.indices_planche(court) == [0, 30]
+
+
+def test_indices_de_planche_trente_scenes_au_plus_trente_trois_images():
+    plan = PlanMontage(tuple(SceneMontage(i, "mp4", 5.0) for i in range(1, 31)), "1080x1080")
+    # 30 scènes de 5 s = 150 s ; 0 s est aussi le début de la scène 1 ; 1 s et 2 s s'ajoutent ; pas de doublon
+    indices = montage.indices_planche(plan)
+    assert len(indices) == 32 and indices == sorted(set(indices))
+
+
+def test_arguments_planche_select_tile_et_largeur_360():
+    arguments = montage.construire_arguments_planche([0, 30, 60, 90, 150, 180, 210])
+    graphe = arguments[arguments.index("-filter_complex") + 1] if "-filter_complex" in arguments else arguments[arguments.index("-vf") + 1]
+    assert "eq(n,0)+eq(n,30)" in graphe and "scale=360:-2" in graphe and "tile=6x2" in graphe
+    assert arguments[-1] == "/sortie/planche.png" and "-frames:v" in arguments
+    with pytest.raises(ValueError):
+        montage.construire_arguments_planche([0, "1);drawtext"])
+    with pytest.raises(ValueError):
+        montage.construire_arguments_planche(list(range(37)))
 
 
 # ---------------------------------------------------------------- montage réel
@@ -247,9 +394,9 @@ def test_ass_deja_echappe_rendu_tel_quel(tmp_path):
     # Bas de l'image (ligne 900 à 1000, MarginV 100) : texte visible seulement avec le texte échappé.
     assert pixels_clairs(image_a, 880, 1000) > 200
     assert pixels_clairs(image_b, 880, 1000) < 20
-    # Si la balise \an8 avait été interprétée, le texte serait en haut : rien d'autre qu'un bandeau de mention.
-    # La mention permanente est bien lisible en haut dans les deux vidéos.
-    assert pixels_clairs(image_a, 20, 140) > 500 and pixels_clairs(image_b, 20, 140) > 500
+    # Si la balise \an8 avait été interprétée, le texte serait en haut ; et aucune mention IA n'y est incrustée
+    # (choix de l'opérateur du 01/11) : le haut reste sombre dans les deux vidéos.
+    assert pixels_clairs(image_a, 20, 140) < 20 and pixels_clairs(image_b, 20, 140) < 20
 
 
 def test_mesure_duree_montage_30_secondes_1080x1920(tmp_path, piste_test, capsys):
@@ -262,6 +409,204 @@ def test_mesure_duree_montage_30_secondes_1080x1920(tmp_path, piste_test, capsys
     assert resultat.duree_video_s == pytest.approx(30.0, abs=0.3)
     with capsys.disabled():
         print(f"\n[mesure] montage 30 s en 1080x1920 : {resultat.duree_montage_s:.1f} s")
+
+
+def mesurer_hors_cage(video):
+    """Sonie intégrée et crête vraie lues par un ffmpeg indépendant du module testé."""
+    r = subprocess.run(["ffmpeg", "-nostdin", "-hide_banner", "-i", str(video), "-af", "ebur128=peak=true",
+                        "-f", "null", "-"], capture_output=True, text=True, timeout=120)
+    resume = r.stderr[r.stderr.rindex("Summary:"):]
+    return (float(re.search(r"I:\s+(-?[\d.]+) LUFS", resume).group(1)),
+            float(re.search(r"Peak:\s+(-?[\d.]+) dBFS", resume).group(1)))
+
+
+@pytest.mark.parametrize("avec_musique", [False, True])
+def test_montage_reel_respecte_le_standard_de_sonie_et_ecrit_controle_et_planche(tmp_path, piste_test, avec_musique,
+                                                                                 capsys):
+    racine, identifiant = piste_test
+    travail, plan = preparer_entree(tmp_path, [3.0, 3.0], "1080x1920", types=["png", "mp4"])
+    if avec_musique:
+        bib.preparer_musique(identifiant, travail / "entree", racine)
+        plan = PlanMontage(plan.scenes, "1080x1920", avec_musique=True)
+    resultat = monter(travail, plan)
+    assert resultat.ok, resultat.motif
+    lufs, dbtp = mesurer_hors_cage(resultat.video)
+    assert abs(lufs - (-16.0)) <= 1.0 and dbtp <= -1.0, (lufs, dbtp)
+    controle = json.loads(resultat.controle_qualite.read_text(encoding="utf-8"))
+    assert controle["sonie_lufs"] == pytest.approx(lufs, abs=0.15) and controle["crete_vraie_dbtp"] <= -1.0
+    assert controle["format"] == "1080x1920" and controle["debit_video_kbps"] >= 516
+    assert isinstance(controle["alertes"], list) and controle["noir_initial_s"] == 0.0
+    with capsys.disabled():
+        print(f"\n[mesure] sonie {lufs:.1f} LUFS, crête vraie {dbtp:.1f} dBFS, "
+              f"débit vidéo {controle['debit_video_kbps']} kb/s (musique : {avec_musique})")
+
+
+def test_planche_de_revue_images_de_0_1_2_s_et_de_chaque_scene(tmp_path):
+    travail, plan = preparer_entree(tmp_path, [1.5, 1.5], "1080x1080", types=["png", "mp4"])
+    resultat = monter(travail, plan)
+    assert resultat.ok, resultat.motif
+    planche = resultat.planche
+    assert planche == travail / "sortie" / "planche.png" and planche.read_bytes()[:8] == b"\x89PNG\r\n\x1a\n"
+    images = montage.indices_planche(plan)
+    assert images == [0, 30, 45, 60]  # 0 s, 1 s, début de la scène 2 (1,5 s), 2 s
+    flux = sonde(planche)["streams"][0]
+    assert (flux["width"], flux["height"]) == (4 * 360 + 3 * 6 + 12, 360 + 12)  # 4 vignettes de 360 px en une ligne
+    assert "planche.png" not in [f.name for f in (travail / "sortie").iterdir() if f.suffix == ".mp4"]
+
+
+def test_planche_reduit_les_vignettes_a_360_px_de_large_et_aligne_sur_six_colonnes(tmp_path):
+    travail, plan = preparer_entree(tmp_path, [1.5] * 6, "1920x1080", types=["png"] * 6)
+    resultat = monter(travail, plan)
+    assert resultat.ok, resultat.motif
+    # 6 scènes de 1,5 s : 0 s, 1 s, 2 s, puis les débuts de scène (0, 1,5, 3, 4,5, 6 et 7,5 s) : 8 images
+    assert montage.indices_planche(plan) == [0, 30, 45, 60, 90, 135, 180, 225]
+    flux = sonde(resultat.planche)["streams"][0]
+    assert flux["width"] == 6 * 360 + 5 * 6 + 12 and flux["height"] == 2 * 202 + 6 + 12  # 6 colonnes, 2 lignes
+
+
+@pytest.mark.skipif(shutil.which("espeak-ng") is None, reason="espeak-ng absent")
+@pytest.mark.parametrize("avec_musique", [False, True])
+def test_voix_de_synthese_avec_pauses_tient_la_sonie_cible(tmp_path, piste_test, avec_musique):
+    """Parole réelle (silences, niveaux variables) : la sonie finale reste dans −16 ± 1 LU."""
+    racine, identifiant = piste_test
+    travail, plan = preparer_entree(tmp_path, [6.0, 6.0], "1080x1080", types=["png", "png"])
+    for numero, texte in enumerate(["Bonjour. Bienvenue dans notre boutique. Profitez de nos nouveautés.",
+                                    "Dix pour cent de réduction cette semaine. À très bientôt."], start=1):
+        brut = tmp_path / f"parole-{numero}.wav"
+        subprocess.run(["espeak-ng", "-v", "fr", "-s", "150", "-w", str(brut), texte], check=True, timeout=60)
+        ffmpeg("-i", str(brut), "-af", "apad=whole_dur=6,volume=0.4", "-ac", "1", "-ar", "24000",
+               str(travail / "entree" / f"voix-{numero:02d}.wav"))
+    if avec_musique:
+        bib.preparer_musique(identifiant, travail / "entree", racine)
+        plan = PlanMontage(plan.scenes, "1080x1080", avec_musique=True)
+    resultat = monter(travail, plan)
+    assert resultat.ok, resultat.motif
+    lufs, dbtp = mesurer_hors_cage(resultat.video)
+    assert abs(lufs + 16.0) <= 1.0 and dbtp <= -1.0, (lufs, dbtp)
+
+
+def test_rendu_dont_la_premiere_seconde_est_noire_est_refuse(tmp_path):
+    travail, plan = preparer_entree(tmp_path, [2.0, 2.0], "1080x1080", types=["png", "png"])
+    ffmpeg("-f", "lavfi", "-i", "color=c=black:s=1080x1080:d=1", "-frames:v", "1", str(travail / "entree" / "scene-01.png"))
+    resultat = monter(travail, plan)
+    assert not resultat.ok and "noire" in resultat.motif
+    assert not (travail / "sortie").exists()  # rien n'est livré
+
+
+def espionner_encodages(monkeypatch):
+    """Liste des arguments de chaque encodage vidéo lancé en cage (ceux qui écrivent /sortie/video.mp4)."""
+    encodages = []
+    reel = montage.executer
+
+    def espion(etape, *a, **k):
+        if "/sortie/video.mp4" in etape.arguments:
+            encodages.append(etape.arguments)
+        return reel(etape, *a, **k)
+    monkeypatch.setattr(montage, "executer", espion)
+    return encodages
+
+
+def fond_fixe(travail, couleur="0x203040", format_sortie="1080x1080"):
+    ffmpeg("-f", "lavfi", "-i", f"color=c={couleur}:s={format_sortie}:d=1", "-frames:v", "1",
+           str(travail / "entree" / "scene-01.png"))
+
+
+def test_clip_fixe_depasse_le_plancher_grace_a_la_seconde_passe_en_debit_constant(tmp_path, monkeypatch):
+    """Un fond fixe sort à ~100 kb/s en CRF 20 : une seconde passe en débit constant 600 kb/s le remonte."""
+    encodages = espionner_encodages(monkeypatch)
+    travail, plan = preparer_entree(tmp_path, [4.0], "1080x1080", types=["png"])
+    fond_fixe(travail)
+    resultat = monter(travail, plan)
+    assert resultat.ok, resultat.motif
+    assert len(encodages) == 2 and "-crf" in encodages[0] and "-crf" not in encodages[1]
+    assert encodages[1][encodages[1].index("-b:v") + 1] == "600k" and "nal-hrd=cbr" in " ".join(encodages[1])
+    controle = json.loads(resultat.controle_qualite.read_text(encoding="utf-8"))
+    assert controle["bourrage"] is True and controle["debit_crf_kbps"] < 516
+    assert 516 <= controle["debit_video_kbps"] <= 700
+    video = sonde(resultat.video)
+    flux = next(f for f in video["streams"] if f["codec_type"] == "video")
+    assert float(flux["bit_rate"]) / 1000 == pytest.approx(controle["debit_video_kbps"], abs=2)
+    assert (flux["codec_name"], flux["width"], flux["height"]) == ("h264", 1080, 1080)
+
+
+def test_contenu_charge_n_est_jamais_plafonne(tmp_path, monkeypatch):
+    encodages = espionner_encodages(monkeypatch)
+    travail, plan = preparer_entree(tmp_path, [2.0], "1080x1080", types=["png"])  # bruit sombre : débit élevé
+    resultat = monter(travail, plan)
+    assert resultat.ok, resultat.motif
+    assert len(encodages) == 1 and "-crf" in encodages[0] and "-b:v" not in encodages[0]
+    controle = json.loads(resultat.controle_qualite.read_text(encoding="utf-8"))
+    assert controle["bourrage"] is False and controle["debit_crf_kbps"] == controle["debit_video_kbps"] >= 600
+
+
+def test_le_filet_de_516_kb_s_reste_actif_si_le_debit_constant_ne_suffit_pas(tmp_path, monkeypatch):
+    monkeypatch.setattr(montage, "DEBIT_CONSTANT_KBPS", 300)
+    travail, plan = preparer_entree(tmp_path, [4.0], "1080x1080", types=["png"])
+    fond_fixe(travail)
+    resultat = monter(travail, plan)
+    assert not resultat.ok and "débit" in resultat.motif and "516" in resultat.motif and resultat.motif_clair
+    assert not (travail / "sortie").exists()
+
+
+def test_mesure_temps_ajoute_par_la_seconde_passe(tmp_path, monkeypatch, capsys):
+    """MESURE : montage seul de 15 s en 9:16 (fond fixe), avec puis sans la seconde passe."""
+    durees = {}
+    for nom, seuil in (("avec", 600), ("sans", 0)):
+        monkeypatch.setattr(montage, "DEBIT_BOURRAGE_SEUIL_KBPS", seuil)
+        travail, plan = preparer_entree(tmp_path / nom, [5.0, 5.0, 5.0], "1080x1920", types=["png"] * 3)
+        for numero in (1, 2, 3):
+            ffmpeg("-f", "lavfi", "-i", "color=c=0x203040:s=1080x1920:d=1", "-frames:v", "1",
+                   str(travail / "entree" / f"scene-{numero:02d}.png"))
+        debut = time.monotonic()
+        resultat = monter(travail, plan)
+        durees[nom] = time.monotonic() - debut
+        assert (resultat.ok is True) == (nom == "avec"), resultat.motif  # sans bourrage, le filet refuse
+    with capsys.disabled():
+        print(f"\n[mesure] fond fixe 15 s en 1080x1920 : {durees['avec']:.1f} s avec la seconde passe, "
+              f"{durees['sans']:.1f} s sans (refusée) ; ajout {durees['avec'] - durees['sans']:.1f} s")
+
+
+def test_arguments_debit_constant_remplacent_le_crf_sans_toucher_au_reste():
+    plan = plan_exemple(avec_musique=True)
+    crf, cbr = construire_arguments_ffmpeg(plan), construire_arguments_ffmpeg(plan, debit_constant=True)
+    assert "-crf" in crf and "-b:v" not in crf and "nal-hrd=cbr" not in " ".join(crf)
+    assert "-crf" not in cbr
+    for option in ("-b:v 600k", "-minrate 600k", "-maxrate 600k", "-bufsize 1200k", "-preset medium",
+                   "-x264-params nal-hrd=cbr"):
+        assert option in " ".join(cbr), option
+    sans = [a for a in cbr if a not in ("-b:v", "600k", "-minrate", "-maxrate", "-bufsize", "1200k", "-x264-params",
+                                        "nal-hrd=cbr")]
+    assert sans == [a for a in crf if a not in ("-crf", "20")]
+
+
+def test_voix_tardive_est_une_alerte_et_non_un_refus(tmp_path):
+    travail, plan = preparer_entree(tmp_path, [3.0], "1080x1080", types=["png"])
+    ffmpeg("-f", "lavfi", "-i", "sine=frequency=400:duration=2:sample_rate=22050", "-af", "adelay=1000:all=1,volume=0.5",
+           "-ac", "1", str(travail / "entree" / "voix-01.wav"))
+    resultat = monter(travail, plan)
+    assert resultat.ok, resultat.motif
+    alertes = json.loads(resultat.controle_qualite.read_text(encoding="utf-8"))["alertes"]
+    assert any("voix démarre" in a for a in alertes), alertes
+
+
+def test_sous_titres_trop_rapides_sont_une_alerte(tmp_path):
+    travail, plan = preparer_entree(tmp_path, [2.0], "1080x1080", types=["png"])
+    court = ASS_BASE.replace("0:00:09.00", "0:00:01.00").format(l=1080, h=1080, texte="x" * 40)  # 50 car./s
+    (travail / "entree" / "sous-titres.ass").write_text(court, encoding="utf-8")
+    resultat = monter(travail, plan)
+    assert resultat.ok, resultat.motif
+    alertes = json.loads(resultat.controle_qualite.read_text(encoding="utf-8"))["alertes"]
+    assert any("17" in a and "sous-titre" in a for a in alertes), alertes
+
+
+def test_mesure_encodage_15_secondes_1080x1920(tmp_path, capsys):
+    """MESURE (budget 30 min par vidéo, `fabrique/service.py`) : montage seul d'une vidéo de 15 s en 9:16."""
+    travail, plan = preparer_entree(tmp_path, [5.0, 5.0, 5.0], "1080x1920", types=["png", "png", "mp4"])
+    resultat = monter(travail, plan)
+    assert resultat.ok, resultat.motif
+    with capsys.disabled():
+        print(f"\n[mesure] montage 15 s en 1080x1920 (medium, CRF 20, loudnorm, contrôles, planche) : "
+              f"{resultat.duree_montage_s:.1f} s dans la cage de montage")
 
 
 # ---------------------------------------------------------------- cage : pas de bibliothèque ni de réseau

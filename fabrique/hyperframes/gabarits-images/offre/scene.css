@@ -1,0 +1,14 @@
+/* Offre : le titre et sa description en haut ; en bas, le prix ou la remise en accent, puis l'appel à l'action
+   en bouton plein, aux coins à peine adoucis. */
+#titre { font-size: calc(var(--u) * min(var(--t-titre), var(--titre-m)) * var(--kt)); }
+#sous-titre { margin-top: calc(var(--u) * var(--ecart) * 0.7); }
+#chiffre { font-size: calc(var(--u) * min(var(--t-chiffre), var(--chiffre-m)) * var(--kt)); }
+#appel {
+  align-self: flex-start;
+  max-width: 100%;
+  margin-top: calc(var(--u) * var(--ecart));
+  padding: calc(var(--u) * var(--appel) * var(--k) * 0.48) calc(var(--u) * var(--appel) * var(--k) * 0.95);
+  background: var(--accent);
+  color: var(--texte-accent);
+  border-radius: calc(var(--u) * 0.35);
+}

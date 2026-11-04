@@ -8,6 +8,18 @@
 /** Nombre maximal d'identifiants de tâches bloquées listés par service. */
 export const BORNE_BLOQUEES_SYNTHESE = 5;
 
+/** Nombre maximal de cartes en attente d'un humain listées par service (HUM-C4), les plus anciennes d'abord. */
+export const BORNE_CARTES_SYNTHESE = 10;
+
+/** Carte (question ou confirmation) qui attend un humain : jamais son titre ni son contenu. */
+export interface CarteEnAttenteSynthese {
+  /** Identifiant de la tâche qui porte la carte (ex. COM-12) ; null pour un service sensible. */
+  tache: string | null;
+  sorte: "question" | "confirmation";
+  /** Heures écoulées depuis la pose de la carte (entier, arrondi par défaut). */
+  depuisHeures: number;
+}
+
 export interface LigneSyntheseService {
   slug: string;
   nom: string;
@@ -22,6 +34,8 @@ export interface LigneSyntheseService {
   derniereActivite: string | null;
   prospects: { total: number; qualifies: number };
   liaisonsOuvertes: number;
+  /** Cartes en attente d'un humain (HUM-C4) : le Coordinateur général ne cite jamais une carte absente de cette liste. */
+  cartesEnAttente: CarteEnAttenteSynthese[];
 }
 
 export interface SyntheseClient {

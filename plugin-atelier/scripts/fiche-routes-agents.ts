@@ -16,6 +16,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { z } from "zod";
 import * as C from "../src/contrats/index.js";
 import { ROUTES_API, type RouteApi } from "../src/contrats/routes.js";
+import { Affirmer, Collecter, DemanderFiche, ProposerSources } from "../src/serveur/observatoire/routes-observatoire.js";
 
 export const FICHE_ROUTES_AGENTS = resolve(dirname(fileURLToPath(import.meta.url)), "../../organisation/registre/routes-agents.md");
 
@@ -35,6 +36,7 @@ export const SCHEMAS_CORPS: Record<string, SchemaZod> = {
   "tache.appels.proposer": C.ProposerAppelEntree,
   "tache.planification": C.PlanifierEntree,
   "portes.creer": C.MettreSousPorteEntree,
+  "tache.mettre-sous-porte": C.MettreTacheSousPorteEntree,
   "campagnes.creer": C.CreerCampagneEntree,
   "campagnes.exigences": C.EnregistrerExigencesEntree,
   "exigences.exclusion": C.ExclusionEntree,
@@ -43,6 +45,7 @@ export const SCHEMAS_CORPS: Record<string, SchemaZod> = {
   "tache.prospects.exporter": C.DemanderExportCrmEntree,
   "tache.connaissances.rechercher": C.RechercherConnaissancesEntree,
   "prospects.exclure": C.ExclureProspectEntree,
+  "tache.prospects.telephone": C.DeposerTelephoneEntree,
   "prospects.critere.evaluer": C.EvaluerCritereEntree,
   "liaison.demander": C.DemandeLiaisonEntree,
   "emailing.demander_envoi": C.DemanderEnvoiEmailingEntree,
@@ -50,6 +53,10 @@ export const SCHEMAS_CORPS: Record<string, SchemaZod> = {
   "experiences.creer": C.CreerExperienceEntree,
   "experiences.resultats": C.DeposerResultatsExperienceEntree,
   "experiences.cloturer": C.CloturerExperienceEntree,
+  "tache.obs.collecter": Collecter,
+  "tache.obs.affirmer": Affirmer,
+  "tache.obs.fiche": DemanderFiche,
+  "tache.obs.sources.proposer": ProposerSources,
 };
 
 /** Routes d'agent en écriture dont le serveur ne lit aucun corps. */
@@ -68,6 +75,8 @@ const EXEMPLES_MANUELS: Record<string, unknown> = {
   "tache.donnees.deposer": { service: "gsc", outil: "gsc_requete_performances", reponse: { texte: "texte brut de la réponse de l'outil" } },
   "tache.prospects.deposer": { service: "bce", outil: "bce_entreprise", reponse: { texte: "texte brut de la réponse de l'outil" } },
   "tache.diffusions.issue": { reponse: { texte: "texte brut de la réponse de l'outil" } },
+  "tache.obs.sources.proposer": { sources: [{ url: "https://exemple.org/blog-ia", type: "secondaire", motif: "Blog de laboratoire absent de la base commune", langue: "fr", pays: "FR", sujets: ["ia"] }] },
+  "tache.obs.affirmer": { affirmation: { projetId: "123e4567-e89b-42d3-a456-426614174000", chapitre: "fiche.licence", texte: "MIT", statut: "infere", confiance: { niveau: 1, motif: "Licence lue dans le dépôt" }, versionConcernee: null }, preuves: [] },
   "prospects.critere.evaluer": {
     companyId: "123e4567-e89b-42d3-a456-426614174000",
     statut: "verifie",
@@ -84,6 +93,10 @@ const NOTES_CROISEES: Record<string, string> = {
   "tache.prospects.deposer": "`reponse` doit contenir `texte` ou `structuredContent` (au moins l'un des deux).",
   "tache.diffusions.issue": "`reponse` doit contenir `texte` ou `structuredContent` (au moins l'un des deux).",
   "prospects.critere.evaluer": "Un statut `verifie` ou `contraire` exige au moins une source ; `non_verifie` accepte une liste vide.",
+  // AFA-P2-6 : refus 400 répétés du relecteur indépendant le 27/10 (règles de services.ts:414-427 et 809-860).
+  "tache.verdict": "`revisionId` (et celui de chaque preuve) est la révision courante du livrable (`GET …/contexte`), sinon `revision_perimee`. Chaque `extrait` est recopié mot pour mot du livrable (espaces et casse ignorés) ; un `element` doit figurer dans son `extrait` ou son `emplacement`. CHANGES_REQUESTED exige au moins un constat nouveau, ou un constat bloquant de ton rôle encore ouvert et une `justification`. BLOCKED_INFORMATION exige `controlesNonExecutes` ou `justification`. PASS est refusé tant qu'un constat bloquant (critique ou majeure) de ton rôle reste ouvert : cite-le dans `constatsResolus`, qui n'accepte que des constats ouverts de ton rôle. Exigences examinées : seulement celles que la tâche cible.",
+  "tache.couverture": "Seul le producteur assigné déclare (jamais un relecteur désigné). `revisionId` (et celui de chaque preuve) est la révision courante du livrable, sinon `revision_perimee`. Chaque `extrait` est recopié mot pour mot du livrable (espaces et casse ignorés) ; un `element` doit figurer dans son `extrait` ou son `emplacement`. `code` : seulement une exigence ciblée par la tâche. L'état `bloque` exige une `question` précise.",
+  "tache.obs.affirmer": "Chaque preuve vise exactement un lien ; les preuves par essai sont refusées tant que le service d'essais n'est pas branché : `instantaneId` renseigné, `essaiId` à null (donc jamais le statut `verifie_experimentalement`). `extraitExact` compte au moins 20 caractères une fois normalisé et se trouve à l'indice `position` du texte normalisé de l'instantané (`GET …/obs/instantanes/<id>`). `remplace` vise une affirmation du même projet pas encore remplacée.",
 };
 
 const UUID_EXEMPLE = "123e4567-e89b-42d3-a456-426614174000";
@@ -190,6 +203,10 @@ function bornes(s: Json): string {
     const max = typeof s.maximum === "number" && s.maximum >= Number.MAX_SAFE_INTEGER ? "∞" : (s.maximum ?? "∞");
     p.push(`${s.minimum ?? "-∞"} à ${max}`);
   }
+  const elements = (s.items ?? {}) as Json;
+  // Un format (uuid, date…) nomme déjà l'élément : son motif n'est que du bruit.
+  const motifElements = elements.format ? undefined : elements.pattern;
+  if (typeof motifElements === "string") p.push(`éléments : motif ${"`"}${motifElements.replace(/\|/gu, "\\|")}${"`"}`);
   if (typeof s.pattern === "string" && !s.format) p.push(`motif ${"`"}${s.pattern.replace(/\|/gu, "\\|")}${"`"}`);
   if (s.default !== undefined && s.default !== null && !(Array.isArray(s.default) && s.default.length === 0)) p.push(`défaut ${JSON.stringify(s.default)}`);
   // zod 4.6 écrit `type: ["string","null"]` (et non plus `anyOf`) pour un champ nullable simple.

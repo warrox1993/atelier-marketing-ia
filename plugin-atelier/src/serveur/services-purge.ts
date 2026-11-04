@@ -27,7 +27,7 @@ import type { ActeurHote, GestionnaireRoute } from "./atelier.js";
 import { erreur, erreurValidation } from "./erreurs.js";
 
 /**
- * Toutes les tables du plugin qui portent `company_id` (migrations 001 à 012). Un test relit les migrations
+ * Toutes les tables du plugin qui portent `company_id` (migrations 001 à 027). Un test relit les migrations
  * et échoue si une table s'ajoute sans figurer ici : une purge incomplète serait un défaut de conformité.
  */
 export const TABLES_PURGE: readonly string[] = [
@@ -38,6 +38,8 @@ export const TABLES_PURGE: readonly string[] = [
   "clients_empreintes", "issues_commerciales", "exports_crm", "connaissances_index", "connaissances_documents",
   "connaissances_versions", "connaissances_passages", "corbeille", "reglages_leads", "corrections_criteres", "evaluations_criteres",
   "services_entreprises", "liaisons", "experiences",
+  "obs_preuves", "obs_affirmations", "obs_revisions", "obs_versions", "obs_instantanes", "obs_sources", "obs_alias", "obs_projets",
+  "obs_publications", "obs_confirmations_publication",
 ];
 
 export type ComptesPurge = Record<string, number>;

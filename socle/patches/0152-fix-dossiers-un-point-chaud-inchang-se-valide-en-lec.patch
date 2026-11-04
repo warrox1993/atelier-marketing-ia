@@ -1,0 +1,107 @@
+From 4a662ca141774795aa21cda08fd0a19d571950d2 Mon Sep 17 00:00:00 2001
+From: Jean-Baptiste Dhondt <114347858+warrox1993@users.noreply.github.com>
+Date: Fri, 30 Oct 2026 18:05:40 +0100
+Subject: [PATCH] =?UTF-8?q?fix(dossiers):=20un=20point=20chaud=20inchang?=
+ =?UTF-8?q?=C3=A9=20se=20valide=20en=20lecture,=20la=20reprise=20=C3=A0=20?=
+ =?UTF-8?q?chaud=20revient?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Atelier, paquet SECU-SOCLE (constat warm-checkpoint du rapport socle-tests) :
+
+- agent-directory-working-copies.ts : quand le point de sauvegarde chaud ne
+  change rien, store.locked passe en lecture (write=false) au lieu d'écriture.
+  Depuis 0108, agent_instructions:update est refusé à tout agent : le verrou
+  en écriture rendait chaque point chaud inchangé « AGENT_FILES_CHECKPOINT_UNSTABLE »
+  et aucune réutilisation à chaud n'était plus possible.
+- Sûreté vérifiée dans agent-file-store.ts : le mode lecture prend le même
+  SELECT ... FOR UPDATE sur la ligne de l'agent (sérialisation inchangée avec
+  tous les écrivains) et revérifie la même identité liée au run (clé, run,
+  responsable actif) ; le rappel n'écrit rien. Tout changement passe toujours
+  par store.apply en écriture, donc reste refusé.
+- Tests : un test Atelier (point inchangé validé, réutilisation possible,
+  écriture directe de l'agent refusée, changement suivant refusé) ; « rechecks
+  authorization » revoque désormais le responsable (l'autorisation qui compte
+  encore) ; le collecteur attaché après un échec de reprise refuse
+  l'enregistrement comme les autres tests alignés sur 0108.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01EThpSSDGc5NRYwbgjNqoTJ
+---
+ .../agent-directory-working-copies.test.ts    | 31 ++++++++++++++++---
+ .../agent-directory-working-copies.ts         |  4 ++-
+ 2 files changed, 30 insertions(+), 5 deletions(-)
+
+diff --git a/server/src/__tests__/agent-directory-working-copies.test.ts b/server/src/__tests__/agent-directory-working-copies.test.ts
+index d2a7500631..5a04dfab9e 100644
+--- a/server/src/__tests__/agent-directory-working-copies.test.ts
++++ b/server/src/__tests__/agent-directory-working-copies.test.ts
+@@ -768,10 +768,11 @@ describe("persistent agent directories", () => {
+     await fs.writeFile(path.join(first.localRoot, "last-write.txt"), "saved after failed handoff");
+     // The stale collector cannot touch the successor; the attached collector
+     // still saves and cleans the actual owner after process retirement.
++    // Atelier (AFD-C1, patch 0108) : ce collecteur attaché refuse l'enregistrement de l'agent, mais nettoie quand même.
+     await copies.collectStopped({ companyId, runId: first.runId });
+     expect((await fs.stat(first.localRoot)).isDirectory()).toBe(true);
+-    expect((await copies.collectStopped({ companyId, runId: collectorRunId }))?.state).toBe("saved");
+-    expect(await fs.readFile(path.join(root, "last-write.txt"), "utf8")).toBe("saved after failed handoff");
++    expect(await copies.collectStopped({ companyId, runId: collectorRunId })).toMatchObject({ runId, ...refusCollecteChaude });
++    await absent("last-write.txt");
+     await expect(fs.stat(first.localRoot)).rejects.toMatchObject({ code: "ENOENT" });
+   }, 10_000);
+   it("refuses loaded instruction edits at the warm checkpoint and retires the copy", async () => {
+@@ -817,11 +818,33 @@ describe("persistent agent directories", () => {
+     await expect(fs.stat(copy.localRoot)).rejects.toMatchObject({ code: "ENOENT" });
+     expect(await run({ warm: true })).toBeTruthy();
+   });
++  it("Atelier (patch local 0152) : un point chaud inchangé se valide en lecture, la réutilisation reprend et l'agent n'écrit toujours rien", async () => {
++    const copy = await run({ warm: true });
++    const saved = await copies.checkpointWarm({ companyId, runId: copy.runId });
++    expect(saved).toMatchObject({ state: "warm_saved", errorCode: null });
++    expect(saved?.receipt?.checkpointState).toBe("unchanged");
++    expect(await copies.canReuseWarm(companyId, agentId, copy.runId)).toBe(true);
++    // Même identité que le point chaud : l'écriture directe reste refusée (0108).
++    const agent = { type: "agent" as const, companyId, agentId, runId: copy.runId, onBehalfOfUserId: userId };
++    await expect(agentFileStore(db).write({ ...target(), path: "intrus.txt", bytes: Buffer.from("x"), baseHash: null }, agent))
++      .rejects.toMatchObject({ status: 403 });
++    await absent("intrus.txt");
++    // Un changement au tour suivant reste refusé et ferme la réutilisation.
++    await fs.writeFile(path.join(copy.localRoot, "apres.txt"), "tour 2");
++    expect(await copies.checkpointWarm({ companyId, runId: copy.runId }))
++      .toMatchObject({ errorCode: refusPointChaud.errorCode, errorMessage: refusPointChaud.errorMessage });
++    expect(await copies.canReuseWarm(companyId, agentId, copy.runId)).toBe(false);
++    // Le candidat reste le point inchangé déjà validé : le changement refusé n'est jamais revendiqué.
++    expect(await copies.collectStopped({ companyId, runId: copy.runId })).toMatchObject({ ...refusCollecteChaude, candidateHash: saved!.baseHash });
++    await absent("apres.txt");
++  });
+   it("rechecks authorization even for an unchanged warm checkpoint", async () => {
+     const copy = await run({ warm: true });
+-    await copies.checkpointWarm({ companyId, runId: copy.runId });
++    expect(await copies.checkpointWarm({ companyId, runId: copy.runId })).toMatchObject({ state: "warm_saved", errorCode: null });
++    // Atelier (patch local 0152) : le point inchangé se valide en lecture ; aucun agent n'a le droit d'écriture (0108),
++    // donc l'autorisation revérifiée est l'identité liée au run : on retire le responsable de l'entreprise.
+     await db.delete(principalPermissionGrants).where(eq(principalPermissionGrants.companyId, companyId));
+-    await db.update(companyMemberships).set({ membershipRole: "member" }).where(eq(companyMemberships.companyId, companyId));
++    await db.delete(companyMemberships).where(eq(companyMemberships.principalId, userId));
+     expect((await copies.checkpointWarm({ companyId, runId: copy.runId }))?.errorCode).toBe("AGENT_FILES_CHECKPOINT_UNSTABLE");
+     expect(await copies.canReuseWarm(companyId, agentId, copy.runId)).toBe(false);
+     expect((await copies.collectStopped({ companyId, runId: copy.runId }))?.state).toBe("unavailable");
+diff --git a/server/src/services/agent-directory-working-copies.ts b/server/src/services/agent-directory-working-copies.ts
+index 8bbead8531..6dd5000ef0 100644
+--- a/server/src/services/agent-directory-working-copies.ts
++++ b/server/src/services/agent-directory-working-copies.ts
+@@ -329,7 +329,9 @@ export function agentDirectoryWorkingCopyService(db: Db, get: (companyId: string
+         const changed = nextHash !== row.baseHash;
+         const { storageWarning } = changed
+           ? await store.apply({ companyId: row.companyId, agentId: row.agentId, sourceDir: path.join(captured.directory, "files"), baseline: baseline(row), checkpoint: captured.manifest }, actor(row))
+-          : await store.locked(row.companyId, row.agentId, actor(row), true, async () => ({
++          // Atelier (patch local 0152) : rien à écrire, donc verrou en lecture. Il garde le même FOR UPDATE sur la ligne de
++          // l'agent et la même identité liée ; 0108 refuse l'écriture à tout agent, ce qui bloquait toute reprise à chaud.
++          : await store.locked(row.companyId, row.agentId, actor(row), false, async () => ({
+             storageWarning: typeof row.receipt?.storageWarning === "string" ? row.receipt.storageWarning : null,
+           }));
+         row = await patch(row, { state: stopped ? (changed ? "saved" : "unchanged") : "warm_saved", baseHash: nextHash,
+-- 
+2.53.0
+

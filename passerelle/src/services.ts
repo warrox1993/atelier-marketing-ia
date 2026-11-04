@@ -117,6 +117,7 @@ export const FICHES_PAR_DEFAUT: readonly FicheService[] = [
   { id: "facebook", libelle: "Facebook (Pages)", portees: ["pages_show_list", "pages_read_engagement"] },
   { id: "instagram", libelle: "Instagram professionnel", portees: ["instagram_business_basic"] },
   { id: "linkedin", libelle: "LinkedIn (pages)", portees: ["r_organization_social"] },
+  { id: "linkedinprofil", libelle: "LinkedIn (profil personnel)", portees: ["w_member_social"] },
   { id: "crm", libelle: "CRM (HubSpot)", portees: ["crm.objects.contacts.read"] },
   { id: "pipedrive", libelle: "CRM (Pipedrive)", portees: ["contacts:read", "deals:read"] },
   { id: "odoo", libelle: "CRM (Odoo)", portees: ["crm.lead:read"] },

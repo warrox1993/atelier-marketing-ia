@@ -23,7 +23,7 @@ const TACHE = "00000000-0000-4000-8000-0000000000aa";
 const EMPREINTE = "a".repeat(64);
 const ABONNES = "c".repeat(64);
 /** Ce que la passerelle rend pour la campagne 5 (route interne de lecture) : la SEULE source de ce que montre la carte. */
-const LECTURE = { campagne_id: 5, sujet: "Nouveautés d'octobre", statut: "draft", listes: [{ id: 1, nom: "Clients" }], destinataires: 2, empreinte: EMPREINTE, empreinte_abonnes: ABONNES, extrait: "Bonjour à toutes et à tous" };
+const LECTURE = { campagne_id: 5, sujet: "Nouveautés d'octobre", statut: "draft", listes: [{ id: 1, nom: "Clients" }], destinataires: 2, empreinte: EMPREINTE, empreinte_abonnes: ABONNES, extrait: "Bonjour à toutes et à tous", courriels: ["a@exemple.test", "b@exemple.test"] };
 
 const TEXTE = texteCarteEnvoi({ campagneId: 5, empreinte: EMPREINTE, sujet: LECTURE.sujet, listes: LECTURE.listes, destinataires: 2, empreinteAbonnes: ABONNES, extrait: LECTURE.extrait });
 const SIGNATURE = createHash("sha256").update(`${TEXTE.prompt}\n${TEXTE.detailsMarkdown}`).digest("hex");
@@ -39,10 +39,11 @@ const REGISTRE = { "carte-1": { version: 2, campagneId: 5, empreinte: EMPREINTE,
 
 type Lecture = Ligne | ((campagneId: number) => Ligne) | "panne";
 
-function montage(options: { cartes?: Ligne[]; registre?: Ligne; cle?: KeyObject | null; reponse?: { statut: number; corps: unknown } | "panne" | "delai"; lecture?: Lecture; lenteur?: boolean } = {}) {
+function montage(options: { cartes?: Ligne[]; registre?: Ligne; cle?: KeyObject | null; reponse?: { statut: number; corps: unknown } | "panne" | "delai"; lecture?: Lecture; lenteur?: boolean; controle?: { opposes: number; sansBase: number } } = {}) {
   const { publicKey, privateKey } = generateKeyPairSync("ed25519");
   const appels: Array<{ url: string; corps: Ligne }> = [];
   const lectures: Ligne[] = [];
+  const controles: string[][] = [];
   /** Lenteur simulée des écritures : sans verrou, deux écritures parallèles du registre s'écraseraient. */
   const pause = () => (options.lenteur ? new Promise((ok) => setTimeout(ok, 5)) : Promise.resolve());
   const journal: Ligne[] = [];
@@ -73,6 +74,7 @@ function montage(options: { cartes?: Ligne[]; registre?: Ligne; cle?: KeyObject 
     ctx, base,
     cleApprobation: async () => (options.cle === null ? { cle: null, motif: "aucune clé" } : { cle: options.cle ?? privateKey }),
     revocations: async () => "arv1.liste.signature",
+    controlerDestinataires: async (_companyId, courriels) => { controles.push([...courriels]); return options.controle ?? { opposes: 0, sansBase: 0 }; },
     adressePasserelle: async () => new URL("http://127.0.0.1:3190"),
     fetchLocal: async (url, init) => {
       if (url.endsWith("/interne/emailing/lire-campagne")) {
@@ -94,7 +96,7 @@ function montage(options: { cartes?: Ligne[]; registre?: Ligne; cle?: KeyObject 
   const demander = (corps: Ligne = {}, acteur: ActeurHote = AGENT) =>
     routes["emailing.demander_envoi"]!({ cle: "emailing.demander_envoi", params: {}, query: {}, corps: { companyId: SOC, issueId: TACHE, campagneId: 5, empreinte: EMPREINTE, ...corps }, acteur, companyId: SOC } as RequeteRoute);
   const refus = async (p: Promise<unknown>) => ((await p.then(() => null, (e: unknown) => e)) as ErreurAtelier | null);
-  return { appeler, demander, refus, appels, lectures, journal, publicKey, etat, creees, cartes };
+  return { appeler, demander, refus, appels, lectures, controles, journal, publicKey, etat, creees, cartes };
 }
 
 describe("emailing.envoyer : route déclarée", () => {
@@ -219,6 +221,19 @@ describe("emailing.demander_envoi : carte créée par le plugin", () => {
     expect(neutraliserMarkdown("a\nb [c](d)", 50)).toBe("a b \\[c\\]\\(d\\)");
   });
 
+  // V2-4 : la carte liste les domaines des liens et images du HTML, lus par la passerelle (neutralisés comme tout texte lu).
+  it("la carte liste les domaines des liens et images ; ancienne passerelle sans le champ : « non lus », jamais « aucun »", async () => {
+    const m = montage({ cartes: [], registre: {}, lecture: { ...LECTURE, domaines: ["pixel.example", "tiers.example"] } });
+    await m.demander();
+    expect(String(m.creees[0]!.payload.detailsMarkdown)).toContain("- Domaines des liens et images : pixel\\.example, tiers\\.example");
+    const vide = montage({ cartes: [], registre: {}, lecture: { ...LECTURE, domaines: [] } });
+    await vide.demander();
+    expect(String(vide.creees[0]!.payload.detailsMarkdown)).toContain("- Domaines des liens et images : aucun");
+    const ancienne = montage({ cartes: [], registre: {}, lecture: LECTURE });
+    await ancienne.demander();
+    expect(String(ancienne.creees[0]!.payload.detailsMarkdown)).toContain("- Domaines des liens et images : non lus, passerelle à mettre à jour");
+  });
+
   it("carte identique encore en attente : réutilisée, pas de doublon", async () => {
     const m = montage({ cartes: [], registre: {} });
     await m.demander();
@@ -297,11 +312,19 @@ describe("emailing.envoyer : carte acceptée", () => {
     const m = montage({ reponse: "panne" });
     expect((await m.refus(m.appeler()))?.code).toBe("emailing_indisponible");
   });
+
+  it("connexion coupée : le message ne prétend pas que rien n'est parti et renvoie à etat_campagne (E3)", async () => {
+    const m = montage({ reponse: "panne" });
+    const e = await m.refus(m.appeler());
+    expect(e?.message).not.toMatch(/rien n'a été envoyé/);
+    expect(e?.message).toMatch(/issue est inconnue/);
+    expect(e?.message).toMatch(/etat_campagne/);
+  });
 });
 
 describe("emailing.demander_envoi : la carte montre la VRAIE campagne (constat E1)", () => {
   it("ATTAQUE rejouée : « Test interne, 2 destinataires » déclaré pour une campagne de 480 abonnés : déclaration refusée, carte construite avec les valeurs lues", async () => {
-    const m = montage({ cartes: [], registre: {}, lecture: { ...LECTURE, sujet: "Offre promotionnelle", destinataires: 480, listes: [{ id: 1, nom: "Tous les clients" }] } });
+    const m = montage({ cartes: [], registre: {}, lecture: { ...LECTURE, sujet: "Offre promotionnelle", destinataires: 480, listes: [{ id: 1, nom: "Tous les clients" }], courriels: Array.from({ length: 480 }, (_, i) => `c${i}@exemple.test`) } });
     expect((await m.refus(m.demander({ sujet: "Test interne", destinataires: 2, listes: ["Équipe"] })))?.code).toBe("entree_invalide");
     expect(m.creees).toHaveLength(0);
     await m.demander();
@@ -327,6 +350,30 @@ describe("emailing.demander_envoi : la carte montre la VRAIE campagne (constat E
     const m2 = montage({ cartes: [], registre: {}, lecture: { campagne_id: 5, sujet: 12 } });
     expect((await m2.refus(m2.demander()))?.code).toBe("emailing_indisponible");
     expect(m.creees.length + m2.creees.length).toBe(0);
+  });
+
+  it("DROIT-2.1 et 2.2 : adresses lues chez la passerelle contrôlées ; opposition ou base légale manquante : refus, aucune carte", async () => {
+    const ok = montage({ cartes: [], registre: {} });
+    await ok.demander();
+    expect(ok.controles).toEqual([["a@exemple.test", "b@exemple.test"]]);
+    expect(ok.creees).toHaveLength(1);
+    for (const controle of [{ opposes: 1, sansBase: 0 }, { opposes: 0, sansBase: 2 }]) {
+      const m = montage({ cartes: [], registre: {}, controle });
+      const e = await m.refus(m.demander());
+      expect(e?.code).toBe("conflit");
+      expect(e?.message).toContain(`${controle.opposes} adresse(s) dans les oppositions`);
+      expect(e?.message).not.toContain("@");
+      expect(m.creees).toHaveLength(0);
+    }
+  });
+
+  it("passerelle sans adresses des destinataires (ancienne version) ou adresses incomplètes : refus, aucune carte", async () => {
+    const { courriels: _c, ...sans } = LECTURE;
+    for (const lecture of [sans, { ...LECTURE, courriels: ["a@exemple.test"] }]) {
+      const m = montage({ cartes: [], registre: {}, lecture });
+      expect((await m.refus(m.demander()))?.code).toBe("emailing_indisponible");
+      expect(m.creees).toHaveLength(0);
+    }
   });
 
   it("la liste d'abonnés a changé (autre empreinte) : une nouvelle carte est créée, l'ancienne en attente n'est pas réutilisée", async () => {

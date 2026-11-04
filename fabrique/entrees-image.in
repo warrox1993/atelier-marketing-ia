@@ -1,0 +1,11 @@
+# Illustration IA locale (FLUX 3 Image Klein, transformeur en 8 bits) : versions mesurées sur la RTX 3080 (banc du 31/10/2026).
+torch==2.6.0
+torchvision==0.21.0  # exigé par le pipeline modulaire FLUX 3 (torch 2.6.0)
+diffusers==0.42.1
+transformers==5.22.1
+accelerate==1.15.0
+bitsandbytes==0.50.2
+safetensors==0.8.0
+sentencepiece==0.2.2
+protobuf==7.36.2
+huggingface-hub==2.4.0

@@ -1,6 +1,6 @@
 ---
 name: "veille-reglementaire"
-description: "Organise la veille réglementaire d'une PME belge à partir de sources officielles (Moniteur belge et Justel, Journal officiel de l'Union européenne sur EUR-Lex, autorités de contrôle comme la FSMA) : choix des sources et des sujets, relevé des textes nouveaux ou modifiés, fiche d'impact (qui est concerné, quoi, à partir de quand, quelle action), registre des obligations et priorisation par échéance et gravité. Volet spécifique pour les entités soumises à une autorité (intermédiaires d'assurance, comptables, agents immobiliers). À utiliser pour lancer ou mettre à jour une veille, ou pour évaluer l'impact d'un texte ; jamais pour interpréter un texte comme un avis juridique, citer une référence de mémoire, modifier une procédure de l'entreprise ni écrire ou déposer quoi que ce soit auprès d'une autorité."
+description: "Organise la veille réglementaire d'une PME belge ou d'un sujet suivi (textes qui touchent un outil ou une technologie, comme le règlement européen sur l'IA) à partir de sources officielles (Moniteur belge et Justel, Journal officiel de l'Union européenne sur EUR-Lex, autorités de contrôle comme la FSMA) : choix des sources et des sujets, relevé des textes nouveaux ou modifiés, fiche d'impact (qui est concerné, quoi, à partir de quand, quelle action), registre des obligations et priorisation par échéance et gravité. Volet spécifique pour les entités soumises à une autorité (intermédiaires d'assurance, comptables, agents immobiliers). À utiliser pour lancer ou mettre à jour une veille, ou pour évaluer l'impact d'un texte ; jamais pour interpréter un texte comme un avis juridique, citer une référence de mémoire, modifier une procédure de l'entreprise ni écrire ou déposer quoi que ce soit auprès d'une autorité."
 metadata:
   version: "1.1.0"
   langue: "fr"
@@ -92,6 +92,13 @@ L'ordre d'une même catégorie suit la gravité de la conséquence puis l'effort
 - Les circulaires sont mises à jour sans changer de numéro : relever la mention « update » de la première page (par exemple une circulaire de 2015 mise à jour en 2019, une communication de 2022 mise à jour en 2026) et comparer avec la version déjà analysée.
 - Un texte national qui transpose une directive est lu avec la directive ; un règlement européen s'applique directement : le dire dans la fiche.
 - Un échange avec l'autorité (question, déclaration, dépôt) est préparé en brouillon, jamais envoyé par la compétence.
+
+### Variante : sujet suivi (textes qui touchent un outil ou une technologie)
+
+Pour la veille d'un sujet (par exemple le règlement européen sur l'IA pour des outils d'IA) et non d'une entreprise : les
+sources officielles et le relevé des textes nouveaux ou modifiés restent les mêmes ; la fiche d'impact dit qui le texte
+vise (fournisseurs, déployeurs, utilisateurs de l'outil), quoi et à partir de quand ; le registre des obligations et le
+volet des entités soumises à une autorité ne s'appliquent pas.
 
 ## Livrable
 

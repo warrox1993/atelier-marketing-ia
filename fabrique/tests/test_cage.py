@@ -11,7 +11,7 @@ import pytest
 
 import subprocess
 
-from fabrique.cage import Etape, construire_arguments, executer, recuperer_sortie
+from fabrique.cage import LIMITE_DONNEES_ILLUSTRATION_OCTETS, Etape, construire_arguments, executer, recuperer_sortie
 from fabrique.filtre_seccomp import APPELS_ENOSYS, APPELS_REFUSES, construire_filtre
 
 BWRAP = shutil.which("bwrap")
@@ -70,6 +70,17 @@ def test_arguments_gpu(tmp_path):
     assert "/dev/nvidia-uvm-tools" not in args  # absent : non monté
     assert "/etc/libreoffice" not in args
     assert not any(a.startswith("--as=") for a in args)
+
+
+def test_donnees_octets_plafonne_la_ram_d_une_etape_gpu_sans_poser_as(tmp_path):
+    args = construire_arguments(etape(tmp_path, type="gpu"), existe=lambda _: False, donnees_octets=12 * 1024**3)
+    assert "--data=12884901888" in args and not any(a.startswith("--as=") for a in args)
+    assert args.index("--data=12884901888") < args.index("--")  # posé devant bwrap, hérité par le programme de la cage
+    assert not any(a.startswith("--data=") for a in construire_arguments(etape(tmp_path, type="gpu"), existe=lambda _: False))
+
+
+def test_limite_donnees_de_l_illustration_est_de_12_gio():
+    assert LIMITE_DONNEES_ILLUSTRATION_OCTETS == 12 * 1024**3
 
 
 def test_arguments_racine_fabrique_hors_ligne_et_modeles(tmp_path):
@@ -151,6 +162,15 @@ def test_fsize_coupe_une_ecriture_trop_grosse(tmp_path):
     r = dans_cage(e, delai_s=20, fsize_octets=1024 * 1024)
     assert r.code != 0
     assert (tmp_path / "sortie" / "gros").stat().st_size <= 1024 * 1024
+
+
+@needs_bwrap
+def test_donnees_octets_refuse_une_allocation_au_dela_du_plafond_et_laisse_passer_en_dessous(tmp_path):
+    code = "import sys; b = bytearray(int(sys.argv[1]) * 1024 * 1024); b[::4096] = b'x' * len(b[::4096]); print('ok')"
+    e = lambda mo: etape(tmp_path, programme="/usr/bin/python3", arguments=["-I", "-c", code, str(mo)])  # noqa: E731
+    assert dans_cage(e(40), donnees_octets=200 * 1024**2).sortie == b"ok\n"
+    refuse = dans_cage(e(400), donnees_octets=200 * 1024**2)
+    assert refuse.code != 0 and b"MemoryError" in refuse.erreur
 
 
 def dans_cage(e, delai_s=20, **options):

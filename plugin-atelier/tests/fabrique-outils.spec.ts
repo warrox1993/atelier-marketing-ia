@@ -1,18 +1,22 @@
 /**
  * Outils d'agent de la fabrique (lot 2) : validation fermée, rôle, quota, dépôt atomique, étanchéité entre entreprises.
  */
-import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   creerOutilsFabrique,
   QUOTA_TRAVAUX_PAR_JOUR,
+  QUOTA_IMAGES_PAR_JOUR,
   QUOTA_VIDEOS_PAR_JOUR,
   validerDemandeDocument,
+  validerDemandeImage,
   validerDemandeVideo,
+  validerDemandeVideoPublicitaire,
   type DependancesFabrique,
 } from "../src/serveur/fabrique-outils.js";
+import { creerRechercheDossierSujet, REFUS_AUCUN_DOSSIER, type ResultatDossierSujet } from "../src/serveur/dossier-sujet.js";
 import manifest from "../src/manifest.js";
 
 const ENTREPRISE_A = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
@@ -21,6 +25,9 @@ const AGENT = "11111111-1111-4111-8111-111111111111";
 /** Autre agent de la même entreprise, de même rôle Paperclip mais non retenu. */
 const AUTRE_AGENT = "22222222-2222-4222-8222-222222222222";
 const RUN = "22222222-2222-4222-8222-222222222222";
+const TACHE = "33333333-3333-4333-8333-333333333333";
+const REVISION_DOSSIER = "44444444-4444-4444-8444-444444444444";
+const DOSSIER_OK: ResultatDossierSujet = { ok: true, issueId: TACHE, revisionId: REVISION_DOSSIER, rubriques: ["Sujet"], avertissements: [] };
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
 const valide = (): Record<string, any> => ({
@@ -104,9 +111,9 @@ describe("validation de fabriquer_document", () => {
     expect(validerDemandeDocument({ ...valide(), feuilles: [] }).ok).toBe(false);
     expect(validerDemandeDocument({ format: "xlsx", modele: "sobre", titre: "t", langue: "en" }).ok).toBe(false);
   });
-  it("le manifeste déclare les trois outils et la capacité", () => {
+  it("le manifeste déclare les cinq outils et la capacité", () => {
     expect(manifest.capabilities).toContain("agent.tools.register");
-    expect((manifest.tools ?? []).map((t) => t.name).sort()).toEqual(["etat_fabrication", "fabriquer_document", "fabriquer_video"]);
+    expect((manifest.tools ?? []).map((t) => t.name).sort()).toEqual(["etat_fabrication", "fabriquer_document", "fabriquer_image", "fabriquer_video", "voir_rendu"]);
   });
 });
 
@@ -136,6 +143,20 @@ describe("validation de fabriquer_video", () => {
     const a = video(); a.scenes[0].echantillon = "x"; expect(validerDemandeVideo(a).ok).toBe(false);
     const b = video(); b.scenes[0].visuel.visage = "x"; expect(validerDemandeVideo(b).ok).toBe(false);
     const c = video(); c.scenes[0].visuel.champs.html = "<b>"; expect(validerDemandeVideo(c).ok).toBe(false);
+  });
+  it("illustration de scène : facultative, transmise telle quelle, bornée à 20..2500 caractères", () => {
+    const sans = validerDemandeVideo(video());
+    expect(sans.ok && "illustration" in (sans.demande.scenes as Record<string, unknown>[])[0]!).toBe(false);
+    const texte = "Un renard roux sous la neige, forêt calme, lumière douce du soir, zone dégagée à gauche.";
+    const a = video(); a.scenes[0].illustration = texte;
+    const r = validerDemandeVideo(a);
+    expect(r.ok && (r.demande.scenes as Record<string, unknown>[])[0]!.illustration).toBe(texte);
+    for (const n of [20, 2500]) { const b = video(); b.scenes[0].illustration = "x".repeat(n); expect(validerDemandeVideo(b).ok).toBe(true); }
+    for (const mauvais of ["x".repeat(19), "x".repeat(2501), "", 7, null]) {
+      const c = video(); c.scenes[0].illustration = mauvais; expect(validerDemandeVideo(c).ok).toBe(false);
+    }
+    const d = video(); d.scenes[0].illustration = "ab\uD800" + "x".repeat(30); expect(validerDemandeVideo(d).ok).toBe(false);
+    expect(validerDemandeVideo({ ...video(), illustration: texte }).ok).toBe(false); // le champ est par scène, pas au niveau de la demande
   });
   it("refuse un gabarit ou un format de sortie hors liste", () => {
     const a = video(); a.scenes[0].visuel.gabarit = "libre"; expect(validerDemandeVideo(a).ok).toBe(false);
@@ -184,6 +205,14 @@ describe("validation de fabriquer_video", () => {
     expect(validerDemandeVideo(sans).ok).toBe(false);
     expect(validerDemandeVideo({ ...video(), sous_titres: "oui" }).ok).toBe(false);
   });
+  it("vidéo publicitaire : sous_titres à false refusé avec un message clair, sans toucher au contrat de format", () => {
+    const r = validerDemandeVideoPublicitaire({ ...video(), sous_titres: false });
+    expect(r).toMatchObject({ ok: false });
+    expect((r as { erreur: string }).erreur).toContain("sous-titres sont obligatoires");
+    expect(validerDemandeVideoPublicitaire({ ...video(), sous_titres: true }).ok).toBe(true);
+    expect(validerDemandeVideoPublicitaire({ ...video(), sous_titres: "oui" }).ok).toBe(false);
+    expect(validerDemandeVideo({ ...video(), sous_titres: false }).ok).toBe(true); // contrat partagé avec la fabrique Python
+  });
   it("retire les caractères de contrôle, refuse l'UTF-8 invalide et plus de 256 Kio", () => {
     const a = video(); a.scenes[0].texte_voix = "a\u0000b\nc"; 
     const r = validerDemandeVideo(a);
@@ -192,9 +221,120 @@ describe("validation de fabriquer_video", () => {
     const gros = Array.from({ length: 30 }, () => ({ texte_voix: "é".repeat(1500), voix: "v", visuel: { gabarit: "chiffre_cle", champs: { chiffre: "1", titre: "é".repeat(120), sous_titre: "é".repeat(200) } } }));
     expect(validerDemandeVideo({ ...video(), scenes: gros }).ok).toBe(true); // 30 x ~3,6 Kio : sous la limite
   });
-  it("le manifeste déclare trois outils et les clés fabriqueAgentsDocuments et fabriqueAgentsVideo", () => {
-    expect((manifest.tools ?? []).map((t) => t.name).sort()).toEqual(["etat_fabrication", "fabriquer_document", "fabriquer_video"]);
-    expect(Object.keys((manifest.instanceConfigSchema as any).properties)).toEqual(expect.arrayContaining(["fabriqueAgentsDocuments", "fabriqueAgentsVideo"]));
+  it("le manifeste déclare cinq outils et les clés fabriqueAgentsDocuments, fabriqueAgentsVideo et fabriqueAgentsImage", () => {
+    expect((manifest.tools ?? []).map((t) => t.name).sort()).toEqual(["etat_fabrication", "fabriquer_document", "fabriquer_image", "fabriquer_video", "voir_rendu"]);
+    expect(Object.keys((manifest.instanceConfigSchema as any).properties)).toEqual(expect.arrayContaining(["fabriqueAgentsDocuments", "fabriqueAgentsVideo", "fabriqueAgentsImage"]));
+  });
+});
+
+const image = (): Record<string, any> => ({
+  format: "1080x1350",
+  gabarit: "accroche",
+  champs: { titre: "Un titre", sous_titre: "Une suite" },
+  charte: "charte-principale",
+});
+
+describe("validation de fabriquer_image", () => {
+  it("accepte une demande valide, pour chaque format et chaque gabarit", () => {
+    expect(validerDemandeImage(image()).ok).toBe(true);
+    for (const format of ["1080x1080", "1080x1350", "1440x1800", "1080x1920", "1200x628"]) expect(validerDemandeImage({ ...image(), format }).ok).toBe(true);
+    const parGabarit: Record<string, Record<string, unknown>> = {
+      accroche: { titre: "t", sous_titre: "s", appel_action: "a", mentions_legales: "m" },
+      chiffre_cle: { chiffre: "42 %", titre: "t", sous_titre: "s", mentions_legales: "m" },
+      liste_3_points: { titre: "t", points: ["a", "b", "c"], appel_action: "a", mentions_legales: "m" },
+      offre: { titre: "t", appel_action: "a", chiffre: "-20 %", sous_titre: "s", mentions_legales: "m" },
+    };
+    for (const [gabarit, champs] of Object.entries(parGabarit)) expect(validerDemandeImage({ ...image(), gabarit, champs }).ok).toBe(true);
+  });
+  it("refuse un champ en trop à chaque niveau, dont fond_ia (I2 coupé) et toute couleur, police, fichier ou URL", () => {
+    for (const cle of ["fond_ia", "couleur", "police", "logo", "url", "fichier", "html"]) {
+      const r = validerDemandeImage({ ...image(), [cle]: "x" });
+      expect(r).toMatchObject({ ok: false });
+      expect((r as { erreur: string }).erreur).toContain(cle);
+    }
+    expect(validerDemandeImage({ ...image(), fond_ia: true }).ok).toBe(false);
+    for (const cle of ["couleur", "police", "logo", "url", "html"]) {
+      const a = image(); a.champs[cle] = "x"; expect(validerDemandeImage(a).ok).toBe(false);
+    }
+    const b = image(); b.champs.titre = "#ff0000"; b.champs.sous_titre = "https://exemple.be/a.png"; expect(validerDemandeImage(b).ok).toBe(true); // du texte, rendu échappé par la fabrique
+  });
+  it("refuse un gabarit, un format ou une charte inconnus ; 1200x627 refusé", () => {
+    expect(validerDemandeImage({ ...image(), gabarit: "libre" }).ok).toBe(false);
+    expect(validerDemandeImage({ ...image(), format: "640x480" }).ok).toBe(false);
+    expect(validerDemandeImage({ ...image(), format: "1200x627" }).ok).toBe(false);
+    for (const charte of ["", "Charte", "../charte", "a/b", "x".repeat(65), 7]) expect(validerDemandeImage({ ...image(), charte }).ok).toBe(false);
+    expect(validerDemandeImage({ ...image(), charte: "x".repeat(64) }).ok).toBe(true);
+  });
+  it("refuse un champ obligatoire manquant ou une des quatre clés de la demande absente", () => {
+    for (const cle of ["format", "gabarit", "champs", "charte"]) {
+      const a = image(); delete a[cle]; expect(validerDemandeImage(a).ok).toBe(false);
+    }
+    const b = image(); delete b.champs.titre; expect(validerDemandeImage(b).ok).toBe(false);
+    const c = { ...image(), gabarit: "chiffre_cle", champs: { titre: "t" } }; expect(validerDemandeImage(c).ok).toBe(false);
+    const d = { ...image(), gabarit: "offre", champs: { titre: "t" } }; expect(validerDemandeImage(d).ok).toBe(false);
+    const e = { ...image(), gabarit: "liste_3_points", champs: { titre: "t" } }; expect(validerDemandeImage(e).ok).toBe(false);
+  });
+  it("refuse le champ d'un autre gabarit", () => {
+    const a = image(); a.champs.chiffre = "3"; expect(validerDemandeImage(a).ok).toBe(false); // accroche n'a pas de chiffre
+    const b = { ...image(), gabarit: "chiffre_cle", champs: { chiffre: "3", titre: "t", appel_action: "a" } }; expect(validerDemandeImage(b).ok).toBe(false);
+    const c = { ...image(), gabarit: "offre", champs: { titre: "t", appel_action: "a", points: ["a", "b", "c"] } }; expect(validerDemandeImage(c).ok).toBe(false);
+    const d = { ...image(), gabarit: "liste_3_points", champs: { titre: "t", points: ["a", "b", "c"], sous_titre: "s" } }; expect(validerDemandeImage(d).ok).toBe(false);
+  });
+  it("plafonds : le maximum passe, le maximum + 1 est refusé", () => {
+    const plafonds = { titre: 90, sous_titre: 160, appel_action: 30, mentions_legales: 200 };
+    for (const [champ, max] of Object.entries(plafonds)) {
+      const ok = image(); ok.champs = { titre: "t", [champ]: "x".repeat(max) }; expect(validerDemandeImage(ok).ok).toBe(true);
+      const ko = image(); ko.champs = { titre: "t", [champ]: "x".repeat(max + 1) }; expect(validerDemandeImage(ko).ok).toBe(false);
+    }
+    const chiffre = (n: number) => ({ ...image(), gabarit: "chiffre_cle", champs: { chiffre: "9".repeat(n), titre: "t" } });
+    expect(validerDemandeImage(chiffre(20)).ok).toBe(true);
+    expect(validerDemandeImage(chiffre(21)).ok).toBe(false);
+    const points = (p: string[]) => ({ ...image(), gabarit: "liste_3_points", champs: { titre: "t", points: p } });
+    expect(validerDemandeImage(points(["a", "b", "c".repeat(80)])).ok).toBe(true);
+    expect(validerDemandeImage(points(["a", "b", "c".repeat(81)])).ok).toBe(false);
+  });
+  it("points : exactement 3 textes", () => {
+    const points = (p: unknown) => ({ ...image(), gabarit: "liste_3_points", champs: { titre: "t", points: p } });
+    expect(validerDemandeImage(points(["a", "b"])).ok).toBe(false);
+    expect(validerDemandeImage(points(["a", "b", "c", "d"])).ok).toBe(false);
+    expect(validerDemandeImage(points("abc")).ok).toBe(false);
+    expect(validerDemandeImage(points(["a", "b", 3])).ok).toBe(false);
+  });
+  it("illustration : facultative, transmise telle quelle, bornée à 20..2500 caractères", () => {
+    const sans = validerDemandeImage(image());
+    expect(sans.ok && "illustration" in sans.demande).toBe(false);
+    const texte = "Un renard roux sous la neige, forêt calme, lumière douce du soir, zone dégagée à gauche.";
+    const r = validerDemandeImage({ ...image(), illustration: texte });
+    expect(r.ok && r.demande.illustration).toBe(texte);
+    for (const n of [20, 2500]) expect(validerDemandeImage({ ...image(), illustration: "x".repeat(n) }).ok).toBe(true);
+    for (const mauvais of ["x".repeat(19), "x".repeat(2501), "", 7, null]) expect(validerDemandeImage({ ...image(), illustration: mauvais }).ok).toBe(false);
+    expect(validerDemandeImage({ ...image(), illustration: "ab\uD800" + "x".repeat(30) }).ok).toBe(false);
+    const paragraphes = validerDemandeImage({ ...image(), illustration: "Premier paragraphe de la scène.\n\n\tSecond\r\nparagraphe, même scène." });
+    expect(paragraphes.ok && paragraphes.demande.illustration).toBe("Premier paragraphe de la scène. Second paragraphe, même scène.");
+    expect(validerDemandeImage({ ...image(), illustration: "x".repeat(30) + "\x07" }).ok).toBe(false);
+    expect(validerDemandeImage({ ...image(), illustration: "x".repeat(2490) + "\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n" }).ok).toBe(true); // la suite de sauts compte pour une seule espace
+  });
+  it("les schémas déclarent illustration (image et chaque scène) sans promettre l'absence de fond IA", async () => {
+    const { DECLARATION_FABRIQUER_IMAGE: di, DECLARATION_FABRIQUER_VIDEO: dv } = await import("../src/contrats/fabrique-outils-schemas.js");
+    const attendu = { type: "string", minLength: 20, maxLength: 2500 };
+    const pi = (di.parametersSchema as any).properties;
+    expect(pi.illustration).toEqual(attendu);
+    expect((di.parametersSchema as any).required).not.toContain("illustration");
+    const ps = (dv.parametersSchema as any).properties.scenes.items;
+    expect(ps.properties.illustration).toEqual(attendu);
+    expect(ps.required).not.toContain("illustration");
+    expect(di.description).not.toContain("fond généré par l'IA");
+    expect(di.description).toContain("illustration");
+    expect(dv.description).toContain("illustration");
+  });
+  it("types : texte attendu, objet attendu, UTF-8 valide, contrôles retirés", () => {
+    for (const mauvais of [null, "x", [], 3]) expect(validerDemandeImage(mauvais).ok).toBe(false);
+    expect(validerDemandeImage({ ...image(), champs: "x" }).ok).toBe(false);
+    const a = image(); a.champs.titre = 3; expect(validerDemandeImage(a).ok).toBe(false);
+    const b = image(); b.champs.titre = "ab\uD800"; expect(validerDemandeImage(b).ok).toBe(false);
+    const c = image(); c.champs.titre = "a\u0000b"; const r = validerDemandeImage(c);
+    expect(r.ok && (r.demande.champs as { titre: string }).titre).toBe("ab");
+    const d = image(); d.champs.titre = ""; expect(validerDemandeImage(d).ok).toBe(false); // obligatoire vide
   });
 });
 
@@ -207,6 +347,11 @@ describe("outils : agent, quota, dépôt, étanchéité", () => {
   let jour: string;
   let suivi: unknown;
   let suiviEchec: boolean;
+  let tacheRun: string | null;
+  let dossierRendu: ResultatDossierSujet;
+  let appelsDossier: Array<[string, string]>;
+  let sansLecteur: boolean;
+  let lecteurReel: DependancesFabrique["dossierSujet"] | null;
 
   const fabrique = () => {
     const deps: DependancesFabrique = {
@@ -220,6 +365,14 @@ describe("outils : agent, quota, dépôt, étanchéité", () => {
         if (suiviEchec) throw new Error("disque plein");
         suivi = v;
       },
+      tacheDuRun: async () => tacheRun,
+      dossierSujet: sansLecteur
+        ? undefined
+        : (lecteurReel ??
+          (async (tache, entreprise) => {
+            appelsDossier.push([tache, entreprise]);
+            return dossierRendu;
+          })),
       maintenant: () => new Date(`${jour}T10:00:00Z`),
     };
     return creerOutilsFabrique(deps);
@@ -235,6 +388,11 @@ describe("outils : agent, quota, dépôt, étanchéité", () => {
     jour = "2026-10-24";
     suivi = [];
     suiviEchec = false;
+    tacheRun = TACHE;
+    dossierRendu = DOSSIER_OK;
+    appelsDossier = [];
+    sansLecteur = false;
+    lecteurReel = null;
   });
   afterEach(() => rmSync(dossier, { recursive: true, force: true }));
 
@@ -272,7 +430,7 @@ describe("outils : agent, quota, dépôt, étanchéité", () => {
     const chemin = join(dossier, "entrant", fichiers[0]!);
     expect(statSync(chemin).mode & 0o777).toBe(0o640);
     const contenu = JSON.parse(readFileSync(chemin, "utf8"));
-    expect(Object.keys(contenu).sort()).toEqual(["agent", "cree_le", "demande", "entreprise", "run", "travail", "type"]);
+    expect(Object.keys(contenu).sort()).toEqual(["agent", "cree_le", "demande", "entreprise", "run", "tache", "travail", "type"]);
     expect(contenu).toMatchObject({ travail, entreprise: ENTREPRISE_A, agent: AGENT, run: RUN, type: "document", cree_le: "2026-10-24T10:00:00.000Z" });
     expect(contenu.demande.titre).toBe("Offre");
   });
@@ -373,6 +531,13 @@ describe("outils : agent, quota, dépôt, étanchéité", () => {
       expect(r.error).toContain("Demande refusée");
       expect(etat.size).toBe(0);
     });
+    it("sous_titres à false : l'outil refuse la vidéo, sans dépôt ni quota consommé", async () => {
+      const r = await fabrique().fabriquerVideo({ ...video(), sous_titres: false }, run());
+      expect(r.error).toContain("Demande refusée");
+      expect(r.error).toContain("sous-titres sont obligatoires");
+      expect(etat.size).toBe(0);
+      expect(existsSync(join(dossier, "entrant"))).toBe(false);
+    });
     it("dépôt atomique de type video : fichier final seul, mode 0640, en-tête identique aux documents", async () => {
       const r = await fabrique().fabriquerVideo(video(), run());
       const { travail, etat: e } = r.data as { travail: string; etat: string };
@@ -383,7 +548,8 @@ describe("outils : agent, quota, dépôt, étanchéité", () => {
       const chemin = join(dossier, "entrant", fichiers[0]!);
       expect(statSync(chemin).mode & 0o777).toBe(0o640);
       const contenu = JSON.parse(readFileSync(chemin, "utf8"));
-      expect(Object.keys(contenu).sort()).toEqual(["agent", "cree_le", "demande", "entreprise", "run", "travail", "type"]);
+      expect(Object.keys(contenu).sort()).toEqual(["agent", "cree_le", "demande", "dossierSujet", "entreprise", "run", "tache", "travail", "type"]);
+      expect(contenu.dossierSujet).toEqual({ issueId: TACHE, revisionId: REVISION_DOSSIER });
       expect(contenu).toMatchObject({ travail, entreprise: ENTREPRISE_A, agent: AGENT, run: RUN, type: "video", cree_le: "2026-10-24T10:00:00.000Z" });
       expect(contenu.demande.scenes).toHaveLength(3);
     });
@@ -431,6 +597,240 @@ describe("outils : agent, quota, dépôt, étanchéité", () => {
       const r = await fabrique().etatFabrication({ travail: T }, run());
       expect(r.data).toEqual({ travail: T, etat: { etat: "en_attente_gpu", type: "video", raison: "GPU occupé par un jeu" } });
       expect((await fabrique().etatFabrication({ travail: T }, run(ENTREPRISE_B))).error).toBe("Travail introuvable.");
+    });
+  });
+  describe("fabriquer_image", () => {
+    beforeEach(() => {
+      config = { fabriqueDossierFile: dossier, fabriqueAgentsDocuments: [AGENT], fabriqueAgentsImage: [AGENT] };
+    });
+    it("liste d'agents image vide par défaut : tout est refusé, même pour un agent autorisé aux documents", async () => {
+      config = { fabriqueDossierFile: dossier, fabriqueAgentsDocuments: [AGENT], fabriqueAgentsVideo: [AGENT] };
+      expect((await fabrique().fabriquerImage(image(), run())).error).toContain("Refusé");
+      expect(() => readdirSync(join(dossier, "entrant"))).toThrow();
+    });
+    it("agent hors liste ou inconnu : refusé ; retenu pour l'image seulement : documents refusés", async () => {
+      expect((await fabrique().fabriquerImage(image(), { ...run(), agentId: AUTRE_AGENT })).error).toContain("Refusé");
+      connus = new Set();
+      expect((await fabrique().fabriquerImage(image(), run())).error).toContain("Refusé");
+      connus = new Set([AGENT]);
+      config = { fabriqueDossierFile: dossier, fabriqueAgentsImage: [AGENT] };
+      expect((await fabrique().fabriquerDocument(valide(), run())).error).toContain("Refusé");
+    });
+    it("demande invalide (fond_ia, couleur) : refusée sans dépôt ni quota consommé", async () => {
+      for (const extra of [{ fond_ia: true }, { couleur: "#ff0000" }]) {
+        expect((await fabrique().fabriquerImage({ ...image(), ...extra }, run())).error).toContain("Demande refusée");
+      }
+      expect(etat.size).toBe(0);
+    });
+    it("dépôt atomique de type image : fichier final seul, mode 0640, en-tête identique aux autres types", async () => {
+      const r = await fabrique().fabriquerImage(image(), run());
+      const { travail, etat: e } = r.data as { travail: string; etat: string };
+      expect(e).toBe("en_file");
+      const fichiers = readdirSync(join(dossier, "entrant"));
+      expect(fichiers).toEqual([`${travail}.json`]);
+      const chemin = join(dossier, "entrant", fichiers[0]!);
+      expect(statSync(chemin).mode & 0o777).toBe(0o640);
+      const contenu = JSON.parse(readFileSync(chemin, "utf8"));
+      expect(Object.keys(contenu).sort()).toEqual(["agent", "cree_le", "demande", "dossierSujet", "entreprise", "run", "tache", "travail", "type"]);
+      expect(contenu.dossierSujet).toEqual({ issueId: TACHE, revisionId: REVISION_DOSSIER });
+      expect(contenu).toMatchObject({ travail, entreprise: ENTREPRISE_A, agent: AGENT, run: RUN, type: "image" });
+      expect(Object.keys(contenu.demande).sort()).toEqual(["champs", "charte", "format", "gabarit"]);
+    });
+    it("échec du dépôt : message neutre, quota total et quota image rendus", async () => {
+      writeFileSync(join(dossier, "entrant"), "je suis un fichier");
+      const r = await fabrique().fabriquerImage(image(), run());
+      expect(r.error).toContain("Dépôt impossible");
+      expect((etat.get(`${ENTREPRISE_A}/fabrique-quota`) as { n: number }).n).toBe(0);
+      expect((etat.get(`${ENTREPRISE_A}/fabrique-quota-image`) as { n: number }).n).toBe(0);
+    });
+    it("plafond de 30 images par jour et par entreprise, les documents restent possibles, remise à zéro le lendemain", async () => {
+      expect(QUOTA_IMAGES_PAR_JOUR).toBe(30);
+      const f = fabrique();
+      for (let i = 0; i < QUOTA_IMAGES_PAR_JOUR; i++) expect((await f.fabriquerImage(image(), run())).error).toBeUndefined();
+      expect((await f.fabriquerImage(image(), run())).error).toContain("30 images");
+      expect((etat.get(`${ENTREPRISE_A}/fabrique-quota`) as { n: number }).n).toBe(QUOTA_IMAGES_PAR_JOUR); // le refus ne consomme rien
+      expect((await f.fabriquerDocument(valide(), run())).error).toBeUndefined();
+      expect((await f.fabriquerImage(image(), run(ENTREPRISE_B))).error).toBeUndefined();
+      jour = "2026-10-25";
+      expect((await fabrique().fabriquerImage(image(), run())).error).toBeUndefined();
+    });
+    it("etat_fabrication : l'agent retenu pour l'image seulement suit ses travaux ; un autre agent non", async () => {
+      const d = join(dossier, "livrables", ENTREPRISE_A, T);
+      mkdirSync(d, { recursive: true });
+      writeFileSync(join(d, "etat.json"), JSON.stringify({ etat: "echec", type: "image", erreur: "charte refusée : inconnue" }));
+      config = { fabriqueDossierFile: dossier, fabriqueAgentsImage: [AGENT] };
+      const r = await fabrique().etatFabrication({ travail: T }, run());
+      expect(r.data).toEqual({ travail: T, etat: { etat: "echec", type: "image", erreur: "charte refusée : inconnue" } });
+      expect((await fabrique().etatFabrication({ travail: T }, { ...run(), agentId: AUTRE_AGENT })).error).toContain("Refusé");
+    });
+  });
+  describe("fabriquer_image avec illustration (texte envoyé tel quel à la fabrique)", () => {
+    const DESCRIPTION = "Un mage de Kirin Tor en robe violette lance un sort arcanique dans une taverne animée";
+    const entrant = () => {
+      try {
+        return readdirSync(join(dossier, "entrant")).filter((n) => n.endsWith(".json"));
+      } catch {
+        return [];
+      }
+    };
+    const deposee = (travail: string) => JSON.parse(readFileSync(join(dossier, "entrant", `${travail}.json`), "utf8")).demande;
+
+    beforeEach(() => {
+      config = { fabriqueDossierFile: dossier, fabriqueAgentsImage: [AGENT] };
+    });
+
+    it("illustration déposée telle quelle, seul ce champ ajouté, réponse en_file", async () => {
+      const longue = `${DESCRIPTION} ${"x".repeat(1500)}`;
+      const r = await fabrique().fabriquerImage({ ...image(), illustration: longue }, run());
+      const { travail, etat: e } = r.data as { travail: string; etat: string };
+      expect(e).toBe("en_file");
+      expect(entrant()).toEqual([`${travail}.json`]);
+      const demande = deposee(travail);
+      expect(Object.keys(demande).sort()).toEqual(["champs", "charte", "format", "gabarit", "illustration"]);
+      expect(demande.illustration).toBe(longue);
+    });
+
+    it("description en paragraphes : sauts de ligne et tabulations remplacés par une espace, aucun saut de ligne déposé", async () => {
+      const r = await fabrique().fabriquerImage({ ...image(), illustration: `${DESCRIPTION}.\n\nLumière chaude,\r\n\tfond sombre.` }, run());
+      const { travail, etat: e } = r.data as { travail: string; etat: string };
+      expect(e).toBe("en_file");
+      const { illustration } = deposee(travail);
+      expect(illustration).toBe(`${DESCRIPTION}. Lumière chaude, fond sombre.`);
+      expect(illustration).not.toMatch(/[\n\r\t]/);
+    });
+
+    it("autre caractère de contrôle (\\x07) : refusé, rien déposé", async () => {
+      const r = await fabrique().fabriquerImage({ ...image(), illustration: `${DESCRIPTION}\x07` }, run());
+      expect(r.error).toContain("illustration");
+      expect(entrant()).toEqual([]);
+    });
+
+    it("sans illustration : dépôt immédiat inchangé", async () => {
+      const r = await fabrique().fabriquerImage(image(), run());
+      expect((r.data as { etat: string }).etat).toBe("en_file");
+      expect(entrant()).toHaveLength(1);
+    });
+  });
+  describe("garde du dossier du sujet (image et vidéo)", () => {
+    type Fabrique = ReturnType<typeof fabrique>;
+    const outils: Array<[string, (f: Fabrique) => ReturnType<Fabrique["fabriquerImage"]>, string]> = [
+      ["image", (f) => f.fabriquerImage(image(), run()), "fabrique-quota-image"],
+      ["vidéo", (f) => f.fabriquerVideo(video(), run()), "fabrique-quota-video"],
+    ];
+    beforeEach(() => {
+      config = { fabriqueDossierFile: dossier, fabriqueAgentsDocuments: [AGENT], fabriqueAgentsVideo: [AGENT], fabriqueAgentsImage: [AGENT] };
+    });
+    const entrant = () => {
+      try {
+        return readdirSync(join(dossier, "entrant"));
+      } catch {
+        return [];
+      }
+    };
+    const compteurs = (cleQuota: string) => JSON.stringify([etat.get(`${ENTREPRISE_A}/fabrique-quota`), etat.get(`${ENTREPRISE_A}/${cleQuota}`)]);
+
+    describe.each(outils)("%s", (_nom, fabriquer, cleQuota) => {
+      it("tâche du run introuvable : refus, rien déposé, aucun quota consommé", async () => {
+        tacheRun = null;
+        const r = await fabriquer(fabrique());
+        expect(r.error).toContain("tâche");
+        expect(appelsDossier).toEqual([]);
+        expect(entrant()).toEqual([]);
+        expect(etat.size).toBe(0);
+      });
+      it("aucun dossier : refus avec le message exact, rien déposé, aucun quota consommé", async () => {
+        dossierRendu = { ok: false, refus: REFUS_AUCUN_DOSSIER };
+        const r = await fabriquer(fabrique());
+        expect(r.error).toBe("Aucun dossier du sujet : demander au coordinateur la sous-tâche Dossier du sujet (veille)");
+        expect(appelsDossier).toEqual([[TACHE, ENTREPRISE_A]]);
+        expect(entrant()).toEqual([]);
+        expect(etat.size).toBe(0);
+      });
+      it("dossier invalide : refus avec la liste des défauts, rien déposé, aucun quota consommé", async () => {
+        dossierRendu = { ok: false, refus: "Dossier du sujet invalide (tâche x) : Rubrique « Ton » absente. Rubrique « Droits » vide." };
+        const r = await fabriquer(fabrique());
+        expect(r.error).toContain("Rubrique « Ton » absente. Rubrique « Droits » vide.");
+        expect(entrant()).toEqual([]);
+        expect(etat.size).toBe(0);
+      });
+      it("garde fermée : sans dépendance de lecture du dossier, tout est refusé", async () => {
+        sansLecteur = true;
+        const r = await fabriquer(fabrique());
+        expect(r.error).toContain("dossier du sujet");
+        expect(entrant()).toEqual([]);
+        expect(etat.size).toBe(0);
+      });
+      it("dossier valide : référence {issueId, revisionId} dans le fichier du travail et dans la réponse, avertissements inclus et journalisés", async () => {
+        dossierRendu = { ...DOSSIER_OK, avertissements: ["Fait 2 : extrait « abc » non retrouvé"] };
+        const r = await fabriquer(fabrique());
+        const { travail } = r.data as { travail: string };
+        expect(r.data).toMatchObject({ etat: "en_file", dossierSujet: { issueId: TACHE, revisionId: REVISION_DOSSIER }, avertissements: ["Fait 2 : extrait « abc » non retrouvé"] });
+        const contenu = JSON.parse(readFileSync(join(dossier, "entrant", `${travail}.json`), "utf8"));
+        expect(contenu.dossierSujet).toEqual({ issueId: TACHE, revisionId: REVISION_DOSSIER });
+        expect(contenu.tache).toBe(TACHE);
+        expect(avertissements.some((a) => a.includes(travail) && a.includes("extrait « abc »"))).toBe(true);
+      });
+      it("sans avertissement : la réponse n'en porte pas", async () => {
+        const r = await fabriquer(fabrique());
+        expect(r.data).not.toHaveProperty("avertissements");
+      });
+      it("un refus laisse les compteurs inchangés après un dépôt réussi", async () => {
+        const f = fabrique();
+        expect((await fabriquer(f)).error).toBeUndefined();
+        const avant = compteurs(cleQuota);
+        dossierRendu = { ok: false, refus: REFUS_AUCUN_DOSSIER };
+        expect((await fabriquer(f)).error).toContain("Aucun dossier");
+        expect(compteurs(cleQuota)).toBe(avant);
+        expect(entrant()).toHaveLength(1);
+      });
+    });
+
+    it("une demande invalide est refusée avant la lecture du dossier", async () => {
+      const r = await fabrique().fabriquerImage({ ...image(), couleur: "#fff" }, run());
+      expect(r.error).toContain("Demande refusée");
+      expect(appelsDossier).toEqual([]);
+    });
+
+    it("fabriquer_document inchangé : ni tâche ni dossier exigés, aucune référence dans le fichier", async () => {
+      tacheRun = null;
+      dossierRendu = { ok: false, refus: REFUS_AUCUN_DOSSIER };
+      const r = await fabrique().fabriquerDocument(valide(), run());
+      expect(r.error).toBeUndefined();
+      expect(appelsDossier).toEqual([]);
+      const contenu = JSON.parse(readFileSync(join(dossier, "entrant", entrant()[0]!), "utf8"));
+      expect(contenu).not.toHaveProperty("dossierSujet");
+    });
+
+    const CORPS = [
+      "## Sujet\nUn jeu.",
+      "## Faits vérifiés\n| Fait | Source | Extrait |\n| --- | --- | --- |\n" +
+        ["a", "b", "c"].map((x) => `| ${x} | connaissance://${x} | Une phrase exacte d'au moins vingt caractères ${x} |`).join("\n"),
+      "## Vocabulaire et références du public\nTermes.",
+      "## Ton\nDrôle.",
+      "## À ne pas dire\nRien.",
+      "## Droits\nÀ confirmer.",
+    ].join("\n\n");
+    describe.each([
+      ["la tâche du run", TACHE],
+      ["une tâche bloquante", "bloquante"],
+      ["la tâche parente", "parente"],
+      ["une tâche sœur", "soeur"],
+    ])("recherche réelle du dossier sur %s", (_nom, porteuse) => {
+      it("accepte l'image et la vidéo", async () => {
+        lecteurReel = creerRechercheDossierSujet({
+          parente: async () => "parente",
+          bloquantes: async () => ["bloquante"],
+          soeurs: async () => ["soeur"],
+          document: async (id) => (id === porteuse ? { body: CORPS, revisionId: REVISION_DOSSIER } : null),
+          sources: async () => [],
+          mode: async () => "reel",
+        });
+        const f = fabrique();
+        for (const r of [await f.fabriquerImage(image(), run()), await f.fabriquerVideo(video(), run())]) {
+          expect(r.error).toBeUndefined();
+          expect(r.data).toMatchObject({ dossierSujet: { issueId: porteuse, revisionId: REVISION_DOSSIER } });
+        }
+      });
     });
   });
 });

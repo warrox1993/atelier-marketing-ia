@@ -1,5 +1,9 @@
 [Unit]
 Description=Umami 3.4.0 de l'Atelier marketing IA (statistiques sans cookie, Podman rootless, écoute sur 127.0.0.1:3196 seulement)
+OnFailure=atelier-alerte@%n.service
+# 10 démarrages ratés en 10 min : l'unité passe en « failed » et alerte au lieu de boucler (EXP-C5).
+StartLimitIntervalSec=600
+StartLimitBurst=10
 Documentation=https://umami.is/docs
 After=network-online.target atelier-umami-db.service
 Wants=network-online.target
@@ -13,6 +17,10 @@ Requires=atelier-umami-db.service
 #     son point de collecte (/_s/...), et la passerelle lit ses statistiques par l'API locale ;
 #   - télémétrie coupée (DISABLE_TELEMETRY), pas de suivi des pages d'administration ;
 #   - 1 Go de mémoire au plus.
+# F4 (en-tête Host étranger) : risque P3 accepté. Umami (Next.js) n'a pas de réglage natif d'hôtes autorisés ;
+#   la liaison est déjà stricte (port publié sur 127.0.0.1 seulement, jamais 0.0.0.0) et Umami n'est pas
+#   exposé (les pages de destination relaient son script et son point de collecte, la passerelle lit l'API locale).
+#   Un filtrage d'en-tête Host demanderait un reverse-proxy (server_name) : disproportionné à ce niveau d'exposition.
 
 [Service]
 Type=simple

@@ -91,7 +91,10 @@ const MOTS_DONNEES = /\b(liste|donnees|perimetre|zone|couverture|km|communes?|pr
 export function classerConstat(c: Pick<ConstatRedispatch, "role" | "gravite" | "categorie" | "description" | "correctionAttendue">): ClasseConstat {
   const correction = normaliser(c.correctionAttendue);
   const texte = `${correction} ${normaliser(c.description)}`;
-  if (c.categorie === "offre_non_confirmee" || MOTS_DECISION.test(correction)) return "decision_humaine";
+  // Décision de l'opérateur du 30/10/2026 : une offre non confirmée se cite avec la mention « (non confirmé par le client) » ;
+  // ce constat se corrige par l'agent, il ne remonte jamais à l'humain.
+  if (c.categorie === "offre_non_confirmee") return "correction_redaction";
+  if (MOTS_DECISION.test(correction)) return "decision_humaine";
   if (MOTS_INFORMATION.test(texte) || c.categorie === "affirmation_non_sourcee") return "information_a_obtenir";
   if (c.role === "exigences" && (c.gravite === "critique" || c.gravite === "majeure") && c.categorie === "exigence_manquante" && MOTS_DONNEES.test(texte)) {
     return "information_a_obtenir";

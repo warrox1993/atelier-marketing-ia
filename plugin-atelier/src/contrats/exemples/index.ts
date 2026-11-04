@@ -169,7 +169,7 @@ const dossier = {
         declareePar: AP,
         creeLe: H2,
       },
-      verdictsParRole: { exigences: "PASS", metier: "PASS", technique: "NOT_APPLICABLE_JUSTIFIED" },
+      verdictsParRole: { exigences: "PASS", metier: "PASS", technique: "NOT_APPLICABLE_JUSTIFIED", conformite: "absent" },
       examineeParControleur: true,
     },
   ],

@@ -14,7 +14,6 @@
  * elle s'affiche en erreur avec « Réessayer ».
  */
 import {
-  Fragment,
   useCallback,
   useId,
   useMemo,
@@ -22,9 +21,9 @@ import {
   useRef,
   useState,
   type KeyboardEvent,
-  type ReactNode,
 } from "react";
-import { useHostContext, useHostLocation } from "@paperclipai/plugin-sdk/ui";
+import { MarkdownBlock, useHostContext, useHostLocation } from "@paperclipai/plugin-sdk/ui";
+import { abaisserTitres } from "./contenus.js";
 import type { ActionDiscussion } from "../../serveur/discussion-actions.js";
 import type { ElementAccueil } from "../../serveur/services-accueil.js";
 import { GererLesAgents } from "../composants/agents-en-service.js";
@@ -47,6 +46,7 @@ import {
   Chargement,
   EtatErreur,
   LienHote,
+  TexteSur,
   MessageFait,
 } from "../composants.js";
 import { IconeEnvoi } from "../composants/icones-discussion.js";
@@ -65,6 +65,8 @@ import { useCartesServices, useMissionsServices, type CarteService } from "../ca
 import { avancements } from "../avancement-missions.js";
 import { BandeauMissions } from "../composants/bandeau-missions.js";
 import { STYLES_BANDE, STYLES_DISCUSSION, STYLES_FRISE } from "../styles-discussion.js";
+import { STYLES_HISTORIQUE } from "../styles-historique-discussions.js";
+import { BasculeHistorique, HistoriqueDiscussions, useHistoriqueDiscussions } from "../composants/historique-discussions.js";
 import type {
   DepartementDeclare,
   ReponseDepartements,
@@ -108,32 +110,6 @@ export const PASTILLES: ReadonlyArray<{ libelle: string; texte: string }> = [
   ].flatMap((libelle) => MODELES_DEMANDE.filter((m) => m.libelle === libelle)),
   { libelle: "Où en sont les missions ?", texte: "Où en sont les missions ?" },
 ];
-
-const MOTIF_TACHE = /\b[A-Z]{2,5}-\d+\b/gu;
-
-/** Texte sûr : retours à la ligne conservés par le style, identifiants de tâche en liens. */
-export function TexteSur({ texte }: { texte: string }) {
-  const morceaux: ReactNode[] = [];
-  let dernier = 0;
-  for (const m of texte.matchAll(MOTIF_TACHE)) {
-    const debut = m.index ?? 0;
-    if (debut > dernier) morceaux.push(texte.slice(dernier, debut));
-    morceaux.push(
-      <LienHote key={`${debut}-${m[0]}`} vers={`/issues/${m[0]}`} className="">
-        {m[0]}
-      </LienHote>,
-    );
-    dernier = debut + m[0].length;
-  }
-  if (dernier < texte.length) morceaux.push(texte.slice(dernier));
-  return (
-    <>
-      {morceaux.map((x, i) => (
-        <Fragment key={i}>{x}</Fragment>
-      ))}
-    </>
-  );
-}
 
 /** Fusionne sans doublon (identifiant) et trie du plus ancien au plus récent. */
 function fusionner(
@@ -250,6 +226,18 @@ export function VueDiscussion() {
   /** Actions et cartes déjà traitées (clé → message de confirmation), pour les retirer sans attendre l'interrogation. */
   const [faits, setFaits] = useState<Record<string, string>>({});
   const [versionElements, setVersionElements] = useState(0);
+  /** Le bilan d'une approbation groupée est affiché : la ligne des points en attente reste montée jusqu'à « Fermer ». */
+  const [bilanGroupe, setBilanGroupe] = useState(false);
+  /** Discussion demandée par un clic ou créée à l'instant ; `null` : la plus récemment active (le serveur choisit). */
+  const [cible, setCible] = useState<string | null>(null);
+  const [historiqueOuvert, setHistoriqueOuvert] = useState(false);
+  const [rafraichirHistorique, setRafraichirHistorique] = useState(0);
+  const [creation, setCreation] = useState(false);
+  /** Discussion dont les messages sont à l'écran : lue par l'interrogation périodique et par l'envoi. */
+  const ouverteRef = useRef<string | null>(null);
+  /** Discussion déjà reçue en réponse (création, `/clear`) : l'ouverture ne la relit pas. */
+  const prechargee = useRef<string | null>(null);
+  const historique = useHistoriqueDiscussions(companyId, rafraichirHistorique);
   const {
     elements,
     origines,
@@ -268,14 +256,26 @@ export function VueDiscussion() {
   const svc = useCartesServices(general ? companyId : null);
   // Frises d'avancement des missions : même lecture, même rythme (15 s) que les cartes, aucune lecture en plus.
   const missionsLues = useMissionsServices(general ? companyId : null);
+  // Le fil d'une discussion ne montre que ce qui en est né : cartes et missions d'une autre discussion, ou sans
+  // discussion d'origine, restent dans la ligne « points en attente » (voir plus bas).
+  const issueOuverte = etat.ouverture?.issueId ?? null;
+  const cartesDeLaDiscussion = useMemo(
+    () => svc.cartes.filter((c) => issueOuverte !== null && c.discussionId === issueOuverte),
+    [svc.cartes, issueOuverte],
+  );
   const frises = useMemo(
-    () => avancements(missionsLues, new Set(svc.cartes.map((c) => c.tache))),
-    [missionsLues, svc.cartes],
+    () =>
+      avancements(
+        missionsLues.filter((m) => issueOuverte !== null && m.discussionId === issueOuverte),
+        new Set(cartesDeLaDiscussion.map((c) => c.tache)),
+      ),
+    [missionsLues, issueOuverte, cartesDeLaDiscussion],
   );
   /** Cartes des services déjà vues : une carte traitée garde sa place (message de confirmation) après avoir quitté la liste. */
   const cartesVues = useRef(new Map<string, CarteService>());
   for (const c of svc.cartes) cartesVues.current.set(c.element.id, c);
-  const idsServices = new Set(svc.cartes.map((c) => c.element.id));
+  const idsServices = new Set(cartesDeLaDiscussion.map((c) => c.element.id));
+  const cartesHorsDiscussion = svc.cartes.filter((c) => c.discussionId !== issueOuverte);
   const traite = (cle: string, message: string) => {
     setFaits((f) => ({ ...f, [cle]: message }));
     setVersionElements((v) => v + 1);
@@ -307,13 +307,20 @@ export function VueDiscussion() {
   useEffect(() => {
     if (!companyId) return;
     let annule = false;
+    if (cible !== null && prechargee.current === cible) {
+      prechargee.current = null;
+      return;
+    }
+    // Une relecture (« Réessayer ») garde la discussion affichée, jamais « la plus récente » du serveur.
+    const visee = cible ?? ouverteRef.current;
     setEtat((e) => ({ ...e, chargement: true, erreur: null }));
     appelRoute<Ouverture>(
       "GET",
-      `/discussion?companyId=${encodeURIComponent(companyId)}`,
+      `/discussion?companyId=${encodeURIComponent(companyId)}${visee ? `&issueId=${encodeURIComponent(visee)}` : ""}`,
     )
       .then((o) => {
         if (annule) return;
+        ouverteRef.current = o.issueId;
         setEtat({ ouverture: o, erreur: null, chargement: false });
         setCartes(o.cartes ?? []);
         setCartesIndisponibles(o.cartesIndisponibles === true);
@@ -326,11 +333,12 @@ export function VueDiscussion() {
     return () => {
       annule = true;
     };
-  }, [companyId, version]);
+  }, [companyId, version, cible]);
 
   const interroger = useCallback(async () => {
     if (!companyId || enVol.current) return;
     enVol.current = true;
+    const issueId = ouverteRef.current;
     try {
       const derniere = messagesRef.current.at(-1)?.date;
       const r = await appelRoute<{
@@ -339,9 +347,12 @@ export function VueDiscussion() {
         cartesIndisponibles?: boolean;
       }>(
         "GET",
-        `/discussion/messages?companyId=${encodeURIComponent(companyId)}${derniere ? `&depuis=${encodeURIComponent(derniere)}` : ""}`,
+        `/discussion/messages?companyId=${encodeURIComponent(companyId)}${derniere ? `&depuis=${encodeURIComponent(derniere)}` : ""}${issueId ? `&issueId=${encodeURIComponent(issueId)}` : ""}`,
       );
-      if (r.cartes) setCartes(r.cartes);
+      // L'humain a changé de discussion pendant la lecture : cette réponse n'est plus la sienne.
+      if (ouverteRef.current !== issueId) return;
+      // Même contenu : on garde l'état (aucun nouveau rendu du fil à chaque interrogation).
+      if (r.cartes) setCartes((actuelles) => (JSON.stringify(actuelles) === JSON.stringify(r.cartes) ? actuelles : r.cartes!));
       setCartesIndisponibles(r.cartesIndisponibles === true);
       if (r.messages.length > 0) {
         setMessages((actuels) => fusionner(actuels, r.messages));
@@ -395,8 +406,7 @@ export function VueDiscussion() {
   }, [
     messages.length,
     cartes.length,
-    autres.length,
-    svc.cartes.length,
+    cartesDeLaDiscussion.length,
     attenteDepuis,
   ]);
 
@@ -408,6 +418,65 @@ export function VueDiscussion() {
     if (el.scrollHeight > 0) el.style.height = `${el.scrollHeight}px`;
   }, [texte]);
 
+  /** Affiche une discussion déjà lue (création, `/clear`) sans la relire. */
+  const adopter = useCallback((o: Ouverture) => {
+    ouverteRef.current = o.issueId;
+    prechargee.current = o.issueId;
+    setMessages(fusionner([], o.messages));
+    setCartes(o.cartes ?? []);
+    setCartesIndisponibles(o.cartesIndisponibles === true);
+    setAttenteDepuis(null);
+    setEtat({ ouverture: o, erreur: null, chargement: false });
+    setCible(o.issueId);
+    setHistoriqueOuvert(false);
+    setRafraichirHistorique((n) => n + 1);
+  }, []);
+
+  const choisir = (issueId: string) => {
+    setHistoriqueOuvert(false);
+    if (issueId === ouverteRef.current) return;
+    ouverteRef.current = null;
+    prechargee.current = null;
+    setMessages([]);
+    setCartes([]);
+    setCartesIndisponibles(false);
+    setAttenteDepuis(null);
+    setErreurEnvoi(null);
+    setEtat({ ouverture: null, erreur: null, chargement: true });
+    setCible(issueId);
+  };
+
+  const nouvelle = async () => {
+    if (!companyId || creation) return;
+    setCreation(true);
+    setErreurEnvoi(null);
+    try {
+      adopter(await appelRoute<Ouverture>("POST", "/discussion/nouvelle", { companyId }));
+      setTexte("");
+    } catch (e) {
+      setErreurEnvoi(classerErreur(e).message);
+    } finally {
+      setCreation(false);
+    }
+  };
+
+  /** Supprime une discussion ; si c'est l'ouverte, ouvre la plus récente restante, sinon une nouvelle. */
+  const supprimer = async (issueId: string) => {
+    if (!companyId) return;
+    setErreurEnvoi(null);
+    try {
+      await appelRoute("POST", "/discussion/supprimer", { companyId, issueId });
+    } catch (e) {
+      setErreurEnvoi(classerErreur(e).message);
+      return;
+    }
+    setRafraichirHistorique((n) => n + 1);
+    if (issueId !== ouverteRef.current) return;
+    const suivante = historique.discussions.find((d) => d.issueId !== issueId);
+    if (suivante) choisir(suivante.issueId);
+    else await nouvelle();
+  };
+
   const envoyer = useCallback(
     async (brut: string) => {
       const propre = brut.trim();
@@ -415,11 +484,18 @@ export function VueDiscussion() {
       setEnvoi(true);
       setErreurEnvoi(null);
       try {
-        const m = await appelRoute<MessageFil & { reveilDemande?: boolean }>(
+        const issueId = ouverteRef.current;
+        const m = await appelRoute<MessageFil & { reveilDemande?: boolean; nouvelle?: Ouverture }>(
           "POST",
           "/discussion/message",
-          { companyId, texte: propre },
+          { companyId, texte: propre, ...(issueId ? { issueId } : {}) },
         );
+        // `/clear` ou `/nouveau` : le serveur a ouvert une nouvelle discussion au lieu d'envoyer le texte.
+        if (m.nouvelle) {
+          adopter(m.nouvelle);
+          setTexte("");
+          return;
+        }
         setMessages((actuels) =>
           fusionner(actuels, [
             {
@@ -433,13 +509,16 @@ export function VueDiscussion() {
         );
         setAttenteDepuis(Date.now());
         setTexte("");
+        setRafraichirHistorique((n) => n + 1);
+        // Premier message d'une entreprise sans discussion : le serveur vient de la créer, on la rouvre pour connaître son identifiant.
+        if (!issueId) setVersion((v) => v + 1);
       } catch (e) {
         setErreurEnvoi(classerErreur(e).message);
       } finally {
         setEnvoi(false);
       }
     },
-    [companyId, envoi],
+    [companyId, envoi, adopter],
   );
 
   /** Une pastille remplit la saisie sans l'envoyer : l'humain complète les <…> puis envoie. */
@@ -489,13 +568,49 @@ export function VueDiscussion() {
         contexte="la discussion"
       />
     );
+  const colonne = (
+    <HistoriqueDiscussions
+      discussions={historique.discussions}
+      courante={etat.ouverture?.issueId ?? null}
+      ouvert={historiqueOuvert}
+      occupe={creation}
+      indisponible={historique.indisponible}
+      onChoisir={choisir}
+      onNouvelle={() => void nouvelle()}
+      onReessayer={historique.reessayer}
+      onSupprimer={supprimer}
+    />
+  );
   if (etat.chargement && !etat.ouverture)
-    return <Chargement libelle="Ouverture de la discussion" lignes={3} />;
+    return (
+      <div className="atl-disc-cadre">
+        <style>{STYLES_DISCUSSION}{STYLES_HISTORIQUE}</style>
+        {colonne}
+        <section className="atl-disc" aria-label="Discussion avec le Coordinateur">
+          <Chargement libelle="Ouverture de la discussion" lignes={3} />
+        </section>
+      </div>
+    );
 
   // Fil chronologique : messages et cartes des services mêlés, par date de création.
   const cartesServices = [...cartesVues.current.values()].filter(
-    (c) => idsServices.has(c.element.id) || faits[`carte:${c.element.id}`],
+    (c) =>
+      issueOuverte !== null &&
+      c.discussionId === issueOuverte &&
+      (idsServices.has(c.element.id) || faits[`carte:${c.element.id}`]),
   );
+  // Cartes des autres discussions ou sans discussion d'origine, et rappels « À faire » du client : repliés, jamais dans le fil.
+  const cartesAilleurs = [...cartesVues.current.values()].filter(
+    (c) =>
+      c.discussionId !== issueOuverte &&
+      (cartesHorsDiscussion.some((h) => h.element.id === c.element.id) || faits[`carte:${c.element.id}`]),
+  );
+  const autresDuClient = autres.filter(({ element }) => !cartesVues.current.has(element.id));
+  const pointsEnAttente =
+    elementsAFaire.length +
+    svc.cartes.length +
+    autresDuClient.filter(({ element }) => !faits[`carte:${element.id}`]).length +
+    (connexionsManquantes.length > 0 ? 1 : 0);
   const filChrono: Array<{
     date: string;
     message?: MessageFil;
@@ -507,15 +622,44 @@ export function VueDiscussion() {
   const vide =
     messages.length === 0 &&
     cartes.length === 0 &&
-    autres.length === 0 &&
     cartesServices.length === 0;
   const raison =
     tentativeVide && texte.trim() === ""
       ? "Écrivez d'abord votre message."
       : null;
+  /** Carte d'un autre service : en carte, ou en message de confirmation une fois traitée. */
+  const rendreCarteService = (carte: CarteService, date: string) =>
+    faits[`carte:${carte.element.id}`] ? (
+      <MessageFait
+        key={`svc-${carte.element.id}`}
+        className="atl-disc-attente"
+        texte={faits[`carte:${carte.element.id}`]!}
+      />
+    ) : (
+      <CarteFil
+        key={`svc-${carte.element.id}`}
+        element={carte.element}
+        origine={{
+          companyId: carte.companyId,
+          nom: carte.nom,
+          slug: carte.slug,
+          estDirection: false,
+        }}
+        date={date}
+        libelleService
+        onFait={(message) => traite(`carte:${carte.element.id}`, message)}
+      />
+    );
+  const phrasePoints =
+    pointsEnAttente > 1
+      ? `${pointsEnAttente} points vous attendent`
+      : "1 point vous attend";
   const nomCoordinateur = general ? "Coordinateur général" : "Coordinateur";
 
   return (
+    <div className="atl-disc-cadre">
+    <style>{STYLES_HISTORIQUE}</style>
+    {colonne}
     <section className="atl-disc" aria-label="Discussion avec le Coordinateur">
       <style>{STYLES_DISCUSSION}{STYLES_FRISE}{STYLES_BANDE}</style>
       <div className="atl-disc-entete">
@@ -535,6 +679,7 @@ export function VueDiscussion() {
         </div>
         {/* Actions de l'en-tête, sur la même ligne : gestion des agents, réglages (avec l'identifiant du fil). */}
         <div className="atl-disc-entete-actions">
+          <BasculeHistorique ouvert={historiqueOuvert} onBasculer={() => setHistoriqueOuvert((o) => !o)} />
           <GererLesAgents companyId={courante} />
           <ReglagesDuChat
             reglages={reglages}
@@ -546,22 +691,45 @@ export function VueDiscussion() {
       {/* Bande d'avancement épinglée : hors du fil (elle ne défile pas) et hors de la zone role="log". */}
       {general ? <BandeauMissions enCours={frises.enCours} terminees={frises.terminees} /> : null}
       <div ref={fil} className="atl-disc-fil">
+        {/* Une seule ligne discrète : ce qui attend la personne hors de CETTE discussion (rappels « À faire », connexions, cartes des autres discussions). Repliée, hors du journal : rien ne s'insère dans le fil. */}
+        {pointsEnAttente > 0 || afaire.confirmation || bilanGroupe ? (
+          <details className="atl-disc-attentes" data-testid="points-en-attente">
+            <summary>{pointsEnAttente > 0 ? phrasePoints : "Dernière action"}</summary>
+            <MessageSituation
+              nom={nomCoordinateur}
+              connexions={connexionsManquantes}
+              elements={elementsAFaire}
+              onFait={afaire.surTraite}
+              confirmation={afaire.confirmation}
+              onFaitGroupe={afaire.surTraiteGroupe}
+              decisionsServices={svc.cartes}
+              onBilanActif={setBilanGroupe}
+            />
+            {cartesAilleurs.map((carte) => rendreCarteService(carte, carte.date))}
+            {autresDuClient.map(({ element, origine }) =>
+              faits[`carte:${element.id}`] ? (
+                <MessageFait
+                  key={element.id}
+                  className="atl-disc-attente"
+                  texte={faits[`carte:${element.id}`]!}
+                />
+              ) : (
+                <CarteFil
+                  key={element.id}
+                  element={element}
+                  origine={origine}
+                  onFait={(message) => traite(`carte:${element.id}`, message)}
+                />
+              ),
+            )}
+          </details>
+        ) : null}
         <div
           className="atl-disc-messages"
           role="log"
           aria-live="polite"
           aria-label="Messages de la discussion"
         >
-          {/* Message du Coordinateur en tête du fil (connexions manquantes, points en attente) : calculé ici, absent si rien à dire. */}
-          <MessageSituation
-            nom={nomCoordinateur}
-            connexions={connexionsManquantes}
-            elements={elementsAFaire}
-            onFait={afaire.surTraite}
-            confirmation={afaire.confirmation}
-            onFaitGroupe={afaire.surTraiteGroupe}
-            decisionsServices={svc.cartes}
-          />
           {vide ? (
             <div className="atl-disc-vide">
               <span
@@ -578,29 +746,7 @@ export function VueDiscussion() {
           ) : (
             filChrono.map(({ message: m, carte, date }) =>
               carte ? (
-                faits[`carte:${carte.element.id}`] ? (
-                  <MessageFait
-                    key={`svc-${carte.element.id}`}
-                    className="atl-disc-attente"
-                    texte={faits[`carte:${carte.element.id}`]!}
-                  />
-                ) : (
-                  <CarteFil
-                    key={`svc-${carte.element.id}`}
-                    element={carte.element}
-                    origine={{
-                      companyId: carte.companyId,
-                      nom: carte.nom,
-                      slug: carte.slug,
-                      estDirection: false,
-                    }}
-                    date={date}
-                    libelleService
-                    onFait={(message) =>
-                      traite(`carte:${carte.element.id}`, message)
-                    }
-                  />
-                )
+                rendreCarteService(carte, date)
               ) : m ? (
                 <div
                   key={m.id}
@@ -623,11 +769,16 @@ export function VueDiscussion() {
                     )}
                     <time dateTime={m.date}>{dateHeure(m.date)}</time>
                   </span>
-                  {m.texte.trim() !== "" ? (
+                  {m.texte.trim() === "" ? null : m.auteur === "agent" ? (
+                    // Réponse du Coordinateur : Markdown de l'hôte (HTML brut ignoré, identifiants de tâche en liens).
+                    <div className="atl-disc-texte atl-disc-md">
+                      <MarkdownBlock content={abaisserTitres(m.texte)} />
+                    </div>
+                  ) : (
                     <p className="atl-disc-texte">
                       <TexteSur texte={m.texte} />
                     </p>
-                  ) : null}
+                  )}
                   {m.auteur === "agent" && m.actions && m.actions.length > 0 ? (
                     <ActionsMessage
                       idMessage={m.id}
@@ -661,35 +812,6 @@ export function VueDiscussion() {
                 key={c.id}
                 element={c}
                 onFait={(message) => traite(`carte:${c.id}`, message)}
-              />
-            ))}
-          {autres
-            .filter(
-              ({ element }) =>
-                !idsServices.has(element.id) &&
-                !cartesVues.current.has(element.id),
-            )
-            .filter(({ element }) => faits[`carte:${element.id}`])
-            .map(({ element }) => (
-              <MessageFait
-                key={element.id}
-                className="atl-disc-attente"
-                texte={faits[`carte:${element.id}`]!}
-              />
-            ))}
-          {autres
-            .filter(
-              ({ element }) =>
-                !idsServices.has(element.id) &&
-                !cartesVues.current.has(element.id),
-            )
-            .filter(({ element }) => !faits[`carte:${element.id}`])
-            .map(({ element, origine }) => (
-              <CarteFil
-                key={element.id}
-                element={element}
-                origine={origine}
-                onFait={(message) => traite(`carte:${element.id}`, message)}
               />
             ))}
           {erreurElements || cartesIndisponibles || svc.indisponible ? (
@@ -792,5 +914,6 @@ export function VueDiscussion() {
         </form>
       </div>
     </section>
+    </div>
   );
 }

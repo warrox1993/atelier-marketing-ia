@@ -1,0 +1,135 @@
+From 4ed0a3cbc8581dc9fcc36037e08d840ce6e05aab Mon Sep 17 00:00:00 2001
+From: Jean-Baptiste Dhondt <114347858+warrox1993@users.noreply.github.com>
+Date: Fri, 30 Oct 2026 15:13:08 +0100
+Subject: [PATCH 127/131] =?UTF-8?q?fix(logger):=20lectures=20HTTP=20r?=
+ =?UTF-8?q?=C3=A9ussies=20au=20niveau=20debug,=20=C3=A9critures=20et=20?=
+ =?UTF-8?q?=C3=A9checs=20inchang=C3=A9s=20(Atelier=20EXP-C9)?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01EThpSSDGc5NRYwbgjNqoTJ
+---
+ server/src/__tests__/http-log-policy.test.ts  | 21 +++++++++++++++++++
+ .../src/__tests__/http-log-redaction.test.ts  |  5 +++--
+ server/src/middleware/http-log-policy.ts      | 14 +++++++++++++
+ server/src/middleware/logger.ts               | 11 +++-------
+ 4 files changed, 41 insertions(+), 10 deletions(-)
+
+diff --git a/server/src/__tests__/http-log-policy.test.ts b/server/src/__tests__/http-log-policy.test.ts
+index f6a9212528..acf7f9586a 100644
+--- a/server/src/__tests__/http-log-policy.test.ts
++++ b/server/src/__tests__/http-log-policy.test.ts
+@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
+ import {
+   isPrivateWebhookHttpRequest,
+   isSecretSensitiveHttpRequest,
++  httpLogLevel,
+   shouldSilenceHttpSuccessLog,
+ } from "../middleware/http-log-policy.js";
+ 
+@@ -188,3 +189,23 @@ describe("shouldSilenceHttpSuccessLog", () => {
+     ).toBe(false);
+   });
+ });
++
++// Atelier EXP-C9 : les lectures réussies remplissaient le journal système (91 602 INFO sur 94 076 lignes le 29/10).
++describe("httpLogLevel", () => {
++  it("passe les lectures réussies au niveau debug", () => {
++    expect(httpLogLevel("GET", "/api/agents/a1", 200)).toBe("debug");
++    expect(httpLogLevel("HEAD", "/api/agents/a1", 204)).toBe("debug");
++  });
++
++  it("garde les écritures réussies au niveau info", () => {
++    expect(httpLogLevel("POST", "/api/issues/PAP-1/comments", 201)).toBe("info");
++    expect(httpLogLevel("PATCH", "/api/issues/PAP-1", 200)).toBe("info");
++  });
++
++  it("garde les échecs visibles et le silence des sondages", () => {
++    expect(httpLogLevel("GET", "/api/agents/a1", 404)).toBe("warn");
++    expect(httpLogLevel("GET", "/api/agents/a1", 500)).toBe("error");
++    expect(httpLogLevel("GET", "/api/agents/a1", 200, new Error("x"))).toBe("error");
++    expect(httpLogLevel("GET", "/api/health", 200)).toBe("silent");
++  });
++});
+diff --git a/server/src/__tests__/http-log-redaction.test.ts b/server/src/__tests__/http-log-redaction.test.ts
+index b5bd476eaa..5add963749 100644
+--- a/server/src/__tests__/http-log-redaction.test.ts
++++ b/server/src/__tests__/http-log-redaction.test.ts
+@@ -528,7 +528,8 @@ describe("HTTP logger redaction", () => {
+       },
+     });
+     const app = express();
+-    app.use(createHttpLogger(pino({ redact: [...HTTP_LOG_REDACT_PATHS] }, stream)));
++    // Atelier EXP-C9 : un GET réussi sort au niveau debug ; le logger le capte pour vérifier la rédaction.
++    app.use(createHttpLogger(pino({ level: "debug", redact: [...HTTP_LOG_REDACT_PATHS] }, stream)));
+     app.get("/api/companies", (_req, res, next) => {
+       if (status === 403) {
+         next(new HttpError(403, "Cloud tenant authentication required"));
+@@ -558,7 +559,7 @@ describe("HTTP logger redaction", () => {
+     expect(log.req.method).toBe("GET");
+     expect(log.req.url).toBe("/api/companies");
+     expect(log.res.statusCode).toBe(status);
+-    expect(log.level).toBe(status === 500 ? 50 : status === 403 ? 40 : 30);
++    expect(log.level).toBe(status === 500 ? 50 : status === 403 ? 40 : 20);
+     if (status === 500) {
+       expect(log.errorContext.message).toBe("Synthetic cloud request failure");
+       expect(log.err.message).toBe("Synthetic cloud request failure");
+diff --git a/server/src/middleware/http-log-policy.ts b/server/src/middleware/http-log-policy.ts
+index 5c5731659d..5f204b1ab2 100644
+--- a/server/src/middleware/http-log-policy.ts
++++ b/server/src/middleware/http-log-policy.ts
+@@ -100,6 +100,20 @@ export function isSecretSensitiveHttpRequest(
+   return SECRET_SENSITIVE_HTTP_PATHS.some((pattern) => pattern.test(pathname));
+ }
+ 
++/** Atelier EXP-C9 : une lecture réussie est du bruit au niveau info ; écritures et échecs restent visibles. */
++export function httpLogLevel(
++  method: string | undefined,
++  url: string | undefined,
++  statusCode: number,
++  err?: unknown,
++): "silent" | "debug" | "info" | "warn" | "error" {
++  if (shouldSilenceHttpSuccessLog(method, url, statusCode)) return "silent";
++  if (err || statusCode >= 500) return "error";
++  if (statusCode >= 400) return "warn";
++  if (method && SILENCED_SUCCESS_METHODS.has(method.toUpperCase())) return "debug";
++  return "info";
++}
++
+ export function shouldSilenceHttpSuccessLog(
+   method: string | undefined,
+   url: string | undefined,
+diff --git a/server/src/middleware/logger.ts b/server/src/middleware/logger.ts
+index be4712f447..c10bb37507 100644
+--- a/server/src/middleware/logger.ts
++++ b/server/src/middleware/logger.ts
+@@ -6,7 +6,7 @@ import {
+   isPrivateWebhookHttpRequest,
+   isSecretSensitiveHttpRequest,
+   isPrivateAgentCommentaryHttpRequest,
+-  shouldSilenceHttpSuccessLog,
++  httpLogLevel,
+ } from "./http-log-policy.js";
+ import {
+   redactSensitive,
+@@ -128,13 +128,8 @@ export function createHttpLogger(baseLogger: Logger) {
+           : res;
+       },
+     },
+-    customLogLevel(_req, res, err) {
+-      if (shouldSilenceHttpSuccessLog(_req.method, _req.url, res.statusCode)) {
+-        return "silent";
+-      }
+-      if (err || res.statusCode >= 500) return "error";
+-      if (res.statusCode >= 400) return "warn";
+-      return "info";
++    customLogLevel(req, res, err) {
++      return httpLogLevel(req.method, req.url, res.statusCode, err);
+     },
+     customSuccessMessage(req, res) {
+       return `${req.method} ${requestLogUrl(req)} ${res.statusCode}`;
+-- 
+2.53.0
+

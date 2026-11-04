@@ -1,0 +1,198 @@
+From aa198fad6f2d8228da89d5587f78ba38eb67d70b Mon Sep 17 00:00:00 2001
+From: Jean-Baptiste Dhondt <114347858+warrox1993@users.noreply.github.com>
+Date: Fri, 30 Oct 2026 19:00:59 +0100
+Subject: [PATCH] =?UTF-8?q?fix(gardes):=20M2=20=C3=A0=20la=20cr=C3=A9ation?=
+ =?UTF-8?q?,=20un=20agent=20autre=20que=20le=20Coordinateur=20ne=20cr?=
+ =?UTF-8?q?=C3=A9e=20pas=20de=20t=C3=A2che=20=C3=A0=20=C3=A9tapes=20de=20r?=
+ =?UTF-8?q?electure?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Revue de sécurité finale, constat M2, suite du patch 0155 (chemin de la création).
+
+Sans ce correctif, un producteur créait sa tâche avec une politique faible ; la vraie porte n'était
+ensuite plus posable (conflit) : la conformité restait bloquée au lieu d'être contournée, même défaut.
+- appliquerGardeCreationAtelier (gardes-atelier.ts), appelée en tête de issueService.create(), où
+  convergent POST /companies/:id/issues, POST /issues/:id/children, les décompositions de plan acceptées
+  (par createChild) et l'hôte des plugins : un agent créateur (createdByAgentId) dont le rôle n'est pas ceo
+  dans l'entreprise reçoit 403 atelier_politique_reservee s'il fournit des étapes ; refus tracé
+  (atelier.politique_verrouillee, garde P1) ;
+- même règle que P1 sur une tâche sans politique (verifierPolitiqueNonAffaiblie, politique actuelle
+  nulle) ; lecture du rôle partagée (roleAgent) ;
+- inchangés : humain, création sans agent créateur, politique sans étape (moniteur ou confinement seuls,
+  par exemple create_task du runner natif et l'appel vocal), Coordinateur.
+Chemins du socle relus : aucune création interne ne copie d'étapes avec un agent créateur (pas d'héritage
+de politique du parent dans createChild ; routines et gabarits ne posent pas de politique).
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01EThpSSDGc5NRYwbgjNqoTJ
+---
+ server/src/__tests__/atelier-gardes.test.ts   | 30 ++++++++++++
+ .../plugin-orchestration-apis.test.ts         |  6 +++
+ server/src/atelier/gardes-atelier.ts          | 48 +++++++++++++++++--
+ server/src/services/issues.ts                 |  9 +++-
+ 4 files changed, 87 insertions(+), 6 deletions(-)
+
+diff --git a/server/src/__tests__/atelier-gardes.test.ts b/server/src/__tests__/atelier-gardes.test.ts
+index fe102d0b00..9b28067a2a 100644
+--- a/server/src/__tests__/atelier-gardes.test.ts
++++ b/server/src/__tests__/atelier-gardes.test.ts
+@@ -322,6 +322,36 @@ decrireAvecBase("atelier : gardes et régulateur contre PostgreSQL", () => {
+     expect(normalizeIssueExecutionPolicy(parHumain?.executionPolicy ?? null)?.stages).toHaveLength(1);
+   });
+ 
++  it("M2 (création) : un producteur ne crée pas de tâche ni de sous-tâche à étapes de relecture ; le ceo et l'humain le peuvent", async () => {
++    const { companyId, producteur, relecteur } = await creerEntreprise();
++    const coordinateur = randomUUID();
++    await db.insert(agents).values({ id: coordinateur, companyId, name: "Coordinateur", role: "ceo", status: "active", adapterType: "process", adapterConfig: {}, runtimeConfig: {}, permissions: {} });
++    const ailleurs = await creerEntreprise();
++    const ceoAilleurs = randomUUID();
++    await db.insert(agents).values({ id: ceoAilleurs, companyId: ailleurs.companyId, name: "Coordinateur ailleurs", role: "ceo", status: "active", adapterType: "process", adapterConfig: {}, runtimeConfig: {}, permissions: {} });
++    const faible = normalizeIssueExecutionPolicy({ stages: [{ type: "review", participants: [{ type: "agent", agentId: relecteur }] }] });
++    const svc = issueService(db);
++    const parent = await creerTache(companyId, relecteur, { status: "todo", executionPolicy: null });
++
++    for (const acteur of [producteur, ceoAilleurs]) {
++      await expect(svc.create(companyId, { title: "Livrable faible", executionPolicy: faible, createdByAgentId: acteur }))
++        .rejects.toMatchObject({ status: 403, details: { code: "atelier_politique_reservee" } });
++    }
++    await expect(svc.createChild(parent, { title: "Sous-tâche faible", executionPolicy: faible, createdByAgentId: producteur }))
++      .rejects.toMatchObject({ status: 403, details: { code: "atelier_politique_reservee" } });
++    const creees = await db.select().from(issues).where(sql`${issues.title} in ('Livrable faible', 'Sous-tâche faible')`);
++    expect(creees).toHaveLength(0);
++    const trace = await attendreActivite("atelier.politique_verrouillee");
++    expect(trace?.details).toMatchObject({ garde: "P1" });
++
++    // Sans étape, l'agent crée toujours ; le Coordinateur et l'humain posent des étapes.
++    expect((await svc.create(companyId, { title: "Note", createdByAgentId: producteur }))?.executionPolicy ?? null).toBeNull();
++    const parCoordinateur = await svc.create(companyId, { title: "Livrable du Coordinateur", executionPolicy: faible, createdByAgentId: coordinateur });
++    expect(normalizeIssueExecutionPolicy(parCoordinateur.executionPolicy ?? null)?.stages).toHaveLength(1);
++    const parHumain = await svc.create(companyId, { title: "Livrable du board", executionPolicy: faible, createdByUserId: "local-board" });
++    expect(normalizeIssueExecutionPolicy(parHumain.executionPolicy ?? null)?.stages).toHaveLength(1);
++  });
++
+   it("P2 : sans évaluation PASS, done est refusé même au board, et le refus est tracé", async () => {
+     await installerEspaceAtelier();
+     const { companyId, relecteur } = await creerEntreprise();
+diff --git a/server/src/__tests__/plugin-orchestration-apis.test.ts b/server/src/__tests__/plugin-orchestration-apis.test.ts
+index 356613c9a4..fd60218609 100644
+--- a/server/src/__tests__/plugin-orchestration-apis.test.ts
++++ b/server/src/__tests__/plugin-orchestration-apis.test.ts
+@@ -445,6 +445,12 @@ describeEmbeddedPostgres("plugin orchestration APIs", () => {
+     // Chemin de tache.mettre-sous-porte : le plugin passe le Coordinateur comme acteur.
+     const posee = await services.issues.update({ issueId: tache.id, companyId, patch: { executionPolicy: politique, actorAgentId: coordinateur } });
+     expect((posee.executionPolicy as { stages: unknown[] }).stages).toHaveLength(1);
++
++    // Patch local 0156 : même règle à la création par un plugin qui annonce un agent acteur.
++    await expect(services.issues.create({ companyId, title: "Créée faible", executionPolicy: politique, actorAgentId: agentId }))
++      .rejects.toMatchObject({ status: 403, details: { code: "atelier_politique_reservee" } });
++    const creee = await services.issues.create({ companyId, title: "Créée par le Coordinateur", executionPolicy: politique, actorAgentId: coordinateur });
++    expect((creee.executionPolicy as { stages: unknown[] }).stages).toHaveLength(1);
+   });
+ 
+   it("creates plugin operation issues with the generic operation origin", async () => {
+diff --git a/server/src/atelier/gardes-atelier.ts b/server/src/atelier/gardes-atelier.ts
+index 3014dd2c6b..cb5c34f932 100644
+--- a/server/src/atelier/gardes-atelier.ts
++++ b/server/src/atelier/gardes-atelier.ts
+@@ -10,7 +10,8 @@
+  *      gardent ce droit. Corrige le contournement prouvé en phase 1
+  *      (`PATCH executionPolicy: null` puis `done`). M2 (revue de sécurité
+  *      finale, patch 0155) : sur une tâche sans étape, seul le Coordinateur
+- *      (agent de rôle ceo de l'entreprise) ou un humain en pose.
++ *      (agent de rôle ceo de l'entreprise) ou un humain en pose, à la mise
++ *      à jour comme à la création (patch 0156).
+  *
+  * P2 — porte déterministe : une tâche placée sous la porte de l'atelier ne
+  *      peut entrer dans une étape d'approbation humaine ni passer à `done`
+@@ -306,6 +307,45 @@ export interface ContexteGardes {
+ 
+ export type SignalerRefus = (refus: { companyId: string; issueId: string; garde: "P1" | "P2"; motifs: string[]; actorAgentId: string | null; actorUserId: string | null }) => void;
+ 
++/** Rôle d'un agent dans une entreprise (null : introuvable). `id::text` : un identifiant malformé annoncé par un plugin donne null, pas une erreur SQL. */
++async function roleAgent(executeur: ExecuteurSql, agentId: string, companyId: string): Promise<string | null> {
++  return lignes<{ role: string }>(await executeur.execute(
++    sql`select role from agents where id::text = ${agentId} and company_id = ${companyId} limit 1`,
++  ))[0]?.role ?? null;
++}
++
++/**
++ * M2 (création, patch 0156) : appelé par `issueService.create()`, où convergent la route, les sous-tâches,
++ * les décompositions de plan et l'hôte des plugins. Un agent autre que le Coordinateur ne fournit pas
++ * d'étapes de relecture à la création (même règle que P1 sur une tâche sans politique).
++ */
++export async function appliquerGardeCreationAtelier(
++  executeur: ExecuteurSql,
++  contexte: { companyId: string; issueId?: string | null; actorAgentId?: string | null; politiqueDemandee: unknown },
++  signaler?: SignalerRefus,
++): Promise<void> {
++  if (!contexte.actorAgentId) return;
++  if (signaturePolitiqueRelecture(normalizeIssueExecutionPolicy(contexte.politiqueDemandee ?? null)) === null) return;
++  try {
++    verifierPolitiqueNonAffaiblie({
++      actorAgentId: contexte.actorAgentId,
++      actorAgentRole: await roleAgent(executeur, contexte.actorAgentId, contexte.companyId),
++      politiqueActuelle: null,
++      politiqueDemandee: contexte.politiqueDemandee,
++    });
++  } catch (err) {
++    signaler?.({
++      companyId: contexte.companyId,
++      issueId: contexte.issueId ?? "creation",
++      garde: "P1",
++      motifs: ["pose d'une politique de relecture par un agent autre que le Coordinateur, à la création"],
++      actorAgentId: contexte.actorAgentId,
++      actorUserId: null,
++    });
++    throw err;
++  }
++}
++
+ /**
+  * Point d'entrée appelé par `issueService.update()` sous verrou de ligne.
+  * `signaler` est appelé SANS attente (journal d'activité écrit hors de la
+@@ -320,11 +360,9 @@ export async function appliquerGardesAtelier(executeur: ExecuteurSql, contexte:
+     actorUserId: contexte.actorUserId ?? null,
+   };
+ 
+-  // M2 : rôle lu sous le verrou, dans l'entreprise de la tâche ; `id::text` : un identifiant malformé annoncé par un plugin donne null, pas une erreur SQL.
++  // M2 : rôle lu sous le verrou, dans l'entreprise de la tâche.
+   const actorAgentRole = contexte.actorAgentId && patch.executionPolicy !== undefined
+-    ? lignes<{ role: string }>(await executeur.execute(
+-        sql`select role from agents where id::text = ${contexte.actorAgentId} and company_id = ${existant.companyId} limit 1`,
+-      ))[0]?.role ?? null
++    ? await roleAgent(executeur, contexte.actorAgentId, existant.companyId)
+     : null;
+   try {
+     verifierPolitiqueNonAffaiblie({
+diff --git a/server/src/services/issues.ts b/server/src/services/issues.ts
+index 87f4249c1a..88201cc9e9 100644
+--- a/server/src/services/issues.ts
++++ b/server/src/services/issues.ts
+@@ -202,7 +202,7 @@ import {
+ } from "./activity-log.js";
+ import { buildIssueChanges } from "./issue-change-receipt.js";
+ import { ensurePersonalPrivateProject } from "./projects.js";
+-import { appliquerGardesAtelier, type SignalerRefus } from "../atelier/gardes-atelier.js";
++import { appliquerGardeCreationAtelier, appliquerGardesAtelier, type SignalerRefus } from "../atelier/gardes-atelier.js";
+ import { projectSafeChatPublication } from "./chat-publication-projection.js";
+ import { issueThreadInteractionAttentionAgentAllowed } from "./issue-thread-interaction-resolution.js";
+ 
+@@ -9965,6 +9965,13 @@ export function issueService(db: Db) {
+         delete issueData.executionWorkspacePreference;
+         delete issueData.executionWorkspaceSettings;
+       }
++      // Atelier Marketing IA (patch local 0156) : M2, un agent autre que le Coordinateur ne crée pas de tâche à étapes de relecture.
++      await appliquerGardeCreationAtelier(dbOrTx, {
++        companyId,
++        issueId: issueData.id ?? null,
++        actorAgentId: issueData.createdByAgentId,
++        politiqueDemandee: issueData.executionPolicy,
++      }, signalerRefusAtelier);
+       if (data.assigneeAgentId && data.assigneeUserId) {
+         throw unprocessable("Issue can only have one assignee");
+       }
+-- 
+2.53.0
+

@@ -73,7 +73,7 @@ function reponse(o: { mode?: "demonstration" | "reel"; signataire?: typeof SIGNA
 /* Banc : base en mémoire complétée des tables de prospection          */
 /* ------------------------------------------------------------------ */
 
-function banc(o: { modeEntreprise?: "demonstration" | "reel"; sansCles?: boolean; config?: Record<string, unknown>; poids?: Record<string, number>; clients?: Record<string, string>; marque?: Ligne; baseClients?: number; stockLeads?: StockReglagesLeads } = {}) {
+function banc(o: { modeEntreprise?: "demonstration" | "reel"; sansCles?: boolean; config?: Record<string, unknown>; poids?: Record<string, number>; clients?: Record<string, string>; marque?: Ligne; baseClients?: number; stockLeads?: StockReglagesLeads; fetchLocal?: (url: string, init: RequestInit) => Promise<Response> } = {}) {
   const b = creerBanc({ modeEntreprise: o.modeEntreprise ?? "demonstration", config: { passerelleClesPubliques: [CLES.publiqueBase64], ...(o.sansCles ? {} : REFS_CLES), ...o.config } });
   avecClesDonnees(b.ctx);
   const t = { prospects: [] as Ligne[], empreintes: [] as Ligne[], oppositions: [] as Ligne[], scores: [] as Ligne[], bases: new Map<string, Ligne[]>() };
@@ -137,7 +137,7 @@ function banc(o: { modeEntreprise?: "demonstration" | "reel"; sansCles?: boolean
     },
   };
   const base = new Proxy(b.base as unknown as Ligne, { get: (cible, cle) => (cle in ext ? ext[cle as string] : cible[cle as string]) }) as unknown as BaseAtelier;
-  const aiguillage = creerAiguillage(b.ctx, creerServices(b.ctx, { base, ...(o.stockLeads ? { stockReglagesLeads: o.stockLeads } : {}) }));
+  const aiguillage = creerAiguillage(b.ctx, creerServices(b.ctx, { base, ...(o.stockLeads ? { stockReglagesLeads: o.stockLeads } : {}), ...(o.fetchLocal ? { fetchBoucleLocale: o.fetchLocal } : {}) }));
   async function appeler(routeKey: string, o2: { params?: Record<string, string>; query?: Record<string, string | string[]>; body?: unknown; companyId?: string; agent?: boolean }) {
     return aiguillage.traiterRequeteApi({
       routeKey, method: "POST", path: "/x", params: o2.params ?? {}, query: o2.query ?? {}, body: o2.body,
@@ -163,6 +163,46 @@ const CABINET = { id: "n43", nom: "Centre de Santé Intégrée", adresse: { code
 /* ------------------------------------------------------------------ */
 
 describe("tache.prospects.deposer", () => {
+  it("dépôt par référence de la passerelle : même résultat que la recopie ; référence inconnue ou deux champs : 400", async () => {
+    const REF = "AbCdEfGhIjKlMnOpQrStUv";
+    const JETON = "jeton-reponses-de-test-0123456789abcdef";
+    const REF_JETON = { type: "secret_ref", secretId: "j", version: "latest" };
+    const avecJeton = <T extends { ctx: unknown }>(banc: T): T => {
+      const a = (banc.ctx as Ligne).secrets?.resolve as ((r: unknown, o: unknown) => Promise<string>) | undefined;
+      (banc.ctx as Ligne).secrets = { resolve: async (ref: unknown, o: { configPath?: string }) => (o?.configPath === "reponsesJetonRef" ? JETON : a ? a(ref, o) : Promise.reject(new Error("secret introuvable"))) };
+      return banc;
+    };
+    const autorisations: Array<string | null> = [];
+    const prise = (statut: number) => async (_url: string, init: RequestInit) => {
+      autorisations.push(new Headers(init.headers).get("authorization"));
+      const r = reponse();
+      return new Response(JSON.stringify(statut === 200 ? { reponse: { content: [{ type: "text", text: r.texte }], structuredContent: r.structuredContent } } : { error: "reference_inconnue" }), { status: statut });
+    };
+    const recopie = await banc().deposer(depotBce());
+    const f = avecJeton(banc({ config: { passerelleUrl: "http://localhost:3190", reponsesJetonRef: REF_JETON }, fetchLocal: prise(200) }));
+    const { reponse: _r, ...sansReponse } = depotBce();
+    const r = await f.deposer({ ...sansReponse, reference: REF });
+    expect(r.status).toBe(201);
+    expect(r.body).toMatchObject({ mode: "demonstration", crees: recopie.body.crees, personnesPhysiquesEcartees: 1 });
+    expect(autorisations).toEqual([`Bearer ${JETON}`]);
+    const inconnue = await avecJeton(banc({ config: { passerelleUrl: "http://localhost:3190", reponsesJetonRef: REF_JETON }, fetchLocal: prise(404) })).deposer({ ...sansReponse, reference: REF });
+    expect(inconnue.status).toBe(400);
+    expect(String(inconnue.body.erreur)).toMatch(/inconnue ou déjà utilisée/u);
+    const deux = await f.deposer({ ...depotBce(), reference: REF });
+    expect(deux.status).toBe(400);
+    expect(String(deux.body.erreur)).toMatch(/exactement un/u);
+  });
+
+  it("F2 : outil d'écriture déclaré avec une référence : refus AVANT la prise, la passerelle n'est pas appelée", async () => {
+    const autorisations: unknown[] = [];
+    const f = banc({ config: { passerelleUrl: "http://localhost:3190" }, fetchLocal: async (url: string) => { autorisations.push(url); return new Response("{}", { status: 200 }); } });
+    const { reponse: _r, ...sansReponse } = depotBce();
+    const r = await f.deposer({ ...sansReponse, outil: "bce_creer_quelque_chose", reference: "AbCdEfGhIjKlMnOpQrStUv" });
+    expect(r.status).toBe(400);
+    expect(String(r.body.erreur)).toMatch(/outil d'écriture/u);
+    expect(autorisations).toEqual([]);
+  });
+
   it("lieu OSM : la catégorie (clé, valeur) est stockée sur la source ; un re-dépôt complète un lieu déjà connu sans catégorie", async () => {
     const f = banc();
     const premier = await f.deposer(depotOsm(CABINET));
@@ -1318,5 +1358,94 @@ describe("prospects.lister : résumé par défaut", () => {
     expect(autre.body).toMatchObject({ total: 0, prospects: [] });
     expect((await f.appeler("prospects.lister", { query: { companyId: SOC2, partie: "detail", prospectId: id }, companyId: SOC2 })).status).toBe(404);
     expect((await f.appeler("prospects.lister", { query: { companyId: SOC2, vue: "complete" }, companyId: SOC2 })).body).toMatchObject({ total: 0, prospects: [] });
+  });
+});
+
+describe("DROIT-1.7 : dncmPour avec une liste chargée", () => {
+  const VERSION = "2026-10-01T00:00:00.000Z";
+  function db(o: { inscrits: string[]; liste: boolean }) {
+    return {
+      namespace: ESPACE_BASE,
+      async query(sql: string, params: unknown[] = []) {
+        controlerSql(sql, params, true);
+        if (/dncm_empreintes/u.test(sql)) return o.inscrits.filter((e) => (JSON.parse(String(params[1])) as string[]).includes(e)).map((empreinte) => ({ empreinte, version_du: VERSION }));
+        if (/listes_dncm/u.test(sql)) return o.liste ? [{ version_du: VERSION }] : [];
+        return [];
+      },
+      async execute() { return { rowCount: 0 }; },
+    };
+  }
+  const NON_INSCRIT = "b".repeat(64);
+
+  it("aucun numéro demandé n'est inscrit : la liste reste consultée (vide), pas « non consultée »", async () => {
+    const base = creerBase(db({ inscrits: ["a".repeat(64)], liste: true }) as unknown as PluginContext["db"]);
+    expect(await base.dncmPour(SOC, [NON_INSCRIT])).toEqual({ empreintes: [], verifieeLe: VERSION });
+  });
+
+  it("numéro inscrit : rendu avec la version de la liste ; aucune liste chargée : null", async () => {
+    const inscrit = "a".repeat(64);
+    expect(await creerBase(db({ inscrits: [inscrit], liste: true }) as unknown as PluginContext["db"]).dncmPour(SOC, [inscrit, NON_INSCRIT]))
+      .toEqual({ empreintes: [{ type: "telephone", valeur: inscrit }], verifieeLe: VERSION });
+    expect(await creerBase(db({ inscrits: [], liste: false }) as unknown as PluginContext["db"]).dncmPour(SOC, [NON_INSCRIT])).toBeNull();
+  });
+});
+
+describe("DROIT-1.3 : tache.prospects.telephone, numéro chiffré dans la fiche du prospect", () => {
+  const SOURCE = "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
+  async function bancNumero(nom = "Enrichissement coordonnées") {
+    const f = banc();
+    (f.ctx as unknown as { agents: { get: unknown } }).agents.get = async (agentId: string, companyId: string) => ({ id: agentId, companyId, name: nom, role: "researcher", status: "idle" });
+    // B8 : le numéro déposé figure dans l'extrait conservé de la source citée.
+    f.t.sources.push({ id: SOURCE, companyId: SOC, issueId: BRIEF, url: "https://exemple.be/contact", dateCollecte: f.horloge(), extrait: "Contact du cabinet : +32 4 000 22 33 (accueil)." });
+    const d = await f.deposer(depotBce());
+    const id = (d.body.prospects as Prospect[]).find((p) => p.numeroBce === "0123.456.749")!.id;
+    const poser = (corps: Ligne, issueId = BRIEF) => f.appeler("tache.prospects.telephone", { params: { issueId, prospectId: id }, body: corps });
+    return { f, id, poser };
+  }
+
+  it("le numéro est chiffré dans la fiche, jamais renvoyé ni journalisé en clair ; le même numéro deux fois ne s'ajoute pas", async () => {
+    const { f, id, poser } = await bancNumero();
+    const r = await poser({ telephone: "+32 4 000 22 33", sourceId: SOURCE });
+    expect(r.status).toBe(201);
+    expect(r.body).toMatchObject({ prospectId: id, ajoute: true, telephones: 2 });
+    const tels = (f.tp.prospects.find((p) => p.id === id)!.coordonnees as Array<{ canal: string; valeur: string }>).filter((c) => c.canal === "telephone");
+    expect(tels.map((c) => dechiffrer(c.valeur, CLES_TEST.chiffrement))).toContain("+32 4 000 22 33");
+    expect(JSON.stringify([r.body, f.t.journal, f.tp.prospects])).not.toMatch(/000 ?22 ?33/u);
+    expect(f.t.journal.map((j) => j.type)).toContain("prospect.telephone");
+    expect(f.tp.prospects.find((p) => p.id === id)!.sources.some((s: Ligne) => s.sourceId === SOURCE && s.type === "lecture_url")).toBe(true);
+    expect((await poser({ telephone: "+3240002233", sourceId: SOURCE })).body).toMatchObject({ ajoute: false, telephones: 2 });
+  });
+
+  it("un numéro opposé par le client exclut aussitôt le prospect (opposition_client)", async () => {
+    const { f, id, poser } = await bancNumero();
+    expect((await f.opposer({ type: "telephone", valeur: "+32 4 000 22 33", origine: "telephone" })).status).toBe(201);
+    expect((await poser({ telephone: "+32 4 000 22 33", sourceId: SOURCE })).body).toMatchObject({ statut: "exclu" });
+    expect(f.tp.prospects.find((p) => p.id === id)!.motifsExclusion.map((m: Ligne) => m.motif)).toContain("opposition_client");
+  });
+
+  it("refus : source étrangère à la tâche, numéro non belge, numéro réel en démonstration, autre agent que Prospection ou Enrichissement", async () => {
+    const { poser } = await bancNumero();
+    expect((await poser({ telephone: "+32 4 000 22 33", sourceId: "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee" })).status).toBe(400);
+    expect((await poser({ telephone: "12", sourceId: SOURCE })).status).toBe(400);
+    expect((await poser({ telephone: "+32 470 12 34 56", sourceId: SOURCE })).status).toBe(400);
+    expect((await (await bancNumero("Contenus")).poser({ telephone: "+32 4 000 22 33", sourceId: SOURCE })).status).toBe(403);
+  });
+
+  it("B8 (revue de sécurité finale) : un numéro absent de l'extrait de la source citée est refusé, rien n'est ajouté", async () => {
+    const { f, id, poser } = await bancNumero();
+    const avant = JSON.stringify(f.tp.prospects.find((p) => p.id === id)!.coordonnees);
+    const r = await poser({ telephone: "+32 4 000 99 88", sourceId: SOURCE });
+    expect(r.status).toBe(400);
+    expect(JSON.stringify(r.body)).toMatch(/extrait/u);
+    expect(JSON.stringify(f.tp.prospects.find((p) => p.id === id)!.coordonnees)).toBe(avant);
+    // Même numéro écrit autrement dans la source : accepté (comparaison en E.164).
+    expect((await poser({ telephone: "+3240002233", sourceId: SOURCE })).status).toBe(201);
+  });
+
+  it("SR2-M-1 : B8 reconnaît le numéro d'une page de contact écrit « (04) 000 22 33 » ou avec tirets typographiques", async () => {
+    const { f, poser } = await bancNumero();
+    const AUTRE = "ffffffff-ffff-4fff-8fff-ffffffffffff";
+    f.t.sources.push({ id: AUTRE, companyId: SOC, issueId: BRIEF, url: "https://exemple.be/contact-2", dateCollecte: f.horloge(), extrait: "Accueil : (04) 000 22 33 ou 04–000–22–33." });
+    expect((await poser({ telephone: "+32 4 000 22 33", sourceId: AUTRE })).status).toBe(201);
   });
 });

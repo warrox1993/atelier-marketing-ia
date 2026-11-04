@@ -92,10 +92,10 @@ graphiques retirés parce qu'ils n'apportaient rien.
 
 ## Exemple
 
-Cas nominal : la note de direction montre le chiffre d'affaires par bureau. Message : « Namur porte la hausse du
-trimestre ». Barres horizontales triées, Namur en bleu, les autres en gris, valeurs posées au bout des barres, axe à
+Cas nominal (chiffres fictifs) : la note de direction montre le chiffre d'affaires par bureau. Message : « Le bureau A
+porte la hausse du trimestre ». Barres horizontales triées, bureau A en bleu, les autres en gris, valeurs posées au bout des barres, axe à
 partir de zéro, sous-titre « Chiffre d'affaires par bureau, T1, en milliers d'euros », source et date dessous, texte
-de remplacement : « Namur 410, Liège 380, Huy 150 ; Namur en tête ».
+de remplacement : « bureau A 410, bureau B 380, bureau C 150 ; bureau A en tête ».
 
 Cas d'échec évité : un brouillon montre deux courbes sur deux axes (budget et demandes) qui semblent se suivre.
 L'agent le remplace par deux petits graphiques à la même période et retire le titre « Le budget fait les

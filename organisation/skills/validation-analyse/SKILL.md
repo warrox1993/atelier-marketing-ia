@@ -98,7 +98,7 @@ une méthode statistique avancée est relue par une personne compétente en stat
 
 ## Exemple
 
-Analyse du taux de résiliation de septembre : 42 résiliations divisées par 42 résiliations « du segment » donnent
+Cas illustratif, chiffres inventés. Analyse du taux de résiliation de septembre : 42 résiliations divisées par 42 résiliations « du segment » donnent
 100 % pour un segment. Le dénominateur attendu est le portefeuille moyen du segment sur la période, 1 400 contrats :
 taux corrigé 3,0 %. Verdict : à réviser ; erreur de dénominateur nommée, correction chiffrée, deuxième vérification
 demandée sur les autres segments.

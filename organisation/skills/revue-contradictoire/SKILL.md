@@ -68,7 +68,7 @@ réécriture, aucune contre-recommandation.
 
 ## Exemple
 
-Cas nominal : synthèse sur le télétravail trois jours par semaine. Constats : (1) « aucun impact sur la productivité »
+Cas illustratif, faits inventés. Cas nominal : synthèse sur le télétravail trois jours par semaine. Constats : (1) « aucun impact sur la productivité »
 repris par les ressources humaines et l'informatique, sans chiffre, bloquant ; (2) les représentants du personnel
 n'apparaissent nulle part alors qu'un changement d'organisation du travail les concerne, bloquant ; (3) la réserve de la
 HSE sur l'ergonomie du poste à domicile a disparu de la synthèse, non bloquant ; (4) le coût des équipements n'est pas

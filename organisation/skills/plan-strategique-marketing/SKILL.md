@@ -46,7 +46,7 @@ Produire et tenir à jour le document de stratégie du client : une à deux page
 3. Rassembler dans « Hypothèses et inconnus » tout ce qui n'est pas prouvé, avec l'action qui le lèverait (entretien, export, test).
 4. Appliquer les règles de retour arrière quand un signal arrive : un test de canal échoue, retour à l'étape 4 (pas à la création) ; les messages ne prennent sur aucun canal, retour à 2b ; les demandes arrivent mais ne se transforment pas, retour à 3 et au parcours ; un fait nouveau, `veille` alerte et la révision reprend à l'étape 1 sur le point touché.
 5. Planifier les revues : stratégie complète une fois par an, tests de canaux chaque trimestre, point mensuel avec `mesure`.
-6. Faire relire par `relecteur`, puis soumettre au Coordinateur. Le positionnement, la cible, l'offre et la répartition du budget sont des choix métier : l'humain les valide.
+6. Soumettre au Coordinateur, en signalant la relecture à prévoir par `relecteur` (c'est lui qui l'organise). Le positionnement, la cible, l'offre et la répartition du budget sont des choix métier : l'humain les valide.
 7. Versionner : nouvelle version datée, ce qui a changé et pourquoi, sans effacer les versions précédentes.
 
 ## Livrable

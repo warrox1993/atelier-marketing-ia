@@ -66,6 +66,8 @@ export interface InteractionAccueil {
    * jamais de décision sur place, seulement le lien vers la tâche native où le détail est visible.
    */
   natifSeulement: boolean;
+  /** Révision de document que la confirmation demande de valider (`target` de type `issue_document`) : lien interne. */
+  document?: { libelle: string; lien: string };
   questions: QuestionAccueil[];
 }
 
@@ -295,6 +297,7 @@ const DemanderEntree = z
 const CONCURRENCE_HOTE = 8;
 const MAX_PORTES_QUESTIONS = 60;
 const MAX_TACHES_QUESTIONS = 40;
+const STATUTS_QUESTIONS = ["todo", "in_progress", "in_review", "blocked"] as const;
 
 /** Applique `f` à chaque élément avec au plus `n` appels en cours ; l'ordre des résultats suit celui des éléments. */
 async function enParallele<T, R>(elements: readonly T[], n: number, f: (e: T) => Promise<R>): Promise<R[]> {
@@ -366,7 +369,7 @@ export function routesAccueil(d: DependancesAccueil): Partial<Record<CleRouteApi
   /**
    * Questions de l'équipe (16/10/2026) : cartes natives `ask_user_questions` ou `request_confirmation`
    * en attente sur les tâches de coordination (brief des campagnes, tâches parentes des livrables sous
-   * porte). Le Coordinateur y demande une information introuvable ou une décision : en tête de « À faire ».
+   * porte), puis sur les autres tâches ouvertes les plus récentes, dans la limite du plafond. Le Coordinateur y demande une information introuvable ou une décision : en tête de « À faire ».
    */
   async function elementsQuestions(companyId: string): Promise<ElementAccueil[]> {
     const [campagnes, portes] = await Promise.all([
@@ -378,9 +381,17 @@ export function routesAccueil(d: DependancesAccueil): Partial<Record<CleRouteApi
     if (actives.length > MAX_PORTES_QUESTIONS) ctx.logger.warn("Accueil : questions de l'équipe, livrables sous porte tronqués", { total: actives.length, lus: MAX_PORTES_QUESTIONS });
     const parents = await enParallele(actives.slice(0, MAX_PORTES_QUESTIONS), CONCURRENCE_HOTE, async (p) => (await sansEchec("tâche", () => ctx.issues.get(p.issueId, companyId), null))?.parentId ?? null);
     for (const parentId of parents) if (parentId) candidates.add(parentId);
+    // Toute autre tâche ouverte peut porter une carte (tâche née d'une liaison, tâche du coordinateur) : les plus
+    // récentes complètent la liste, après les briefs et les parentes de livrables (HUM-C6).
+    const connues = new Map<string, Issue>();
+    const ouvertes = (await Promise.all(STATUTS_QUESTIONS.map((status) => sansEchec("tâches ouvertes", () => ctx.issues.list({ companyId, status, limit: MAX_TACHES_QUESTIONS }), [] as Issue[])))).flat();
+    for (const i of ouvertes.sort((x, y) => iso(y.updatedAt).localeCompare(iso(x.updatedAt)))) {
+      connues.set(i.id, i);
+      candidates.add(i.id);
+    }
     if (candidates.size > MAX_TACHES_QUESTIONS) ctx.logger.warn("Accueil : questions de l'équipe, tâches de coordination tronquées", { total: candidates.size, lues: MAX_TACHES_QUESTIONS });
     const lots = await enParallele([...candidates].slice(0, MAX_TACHES_QUESTIONS), CONCURRENCE_HOTE, async (issueId) => {
-      const issue = await sansEchec("tâche", () => ctx.issues.get(issueId, companyId), null);
+      const issue = connues.get(issueId) ?? (await sansEchec("tâche", () => ctx.issues.get(issueId, companyId), null));
       if (!issue || issue.companyId !== companyId || issue.status === "done" || issue.status === "cancelled") return [];
       const cartes = await sansEchec("cartes", () => ctx.issues.listInteractions(issue.id, companyId), [] as Awaited<ReturnType<PluginContext["issues"]["listInteractions"]>>);
       const trouves: ElementAccueil[] = [];
@@ -433,6 +444,19 @@ export function routesAccueil(d: DependancesAccueil): Partial<Record<CleRouteApi
         };
       }),
     );
+  }
+
+  /** EXP-C8 : tâche que le veilleur a cessé de réveiller ; seul un humain peut la débloquer. */
+  async function elementsAbandons(companyId: string): Promise<ElementAccueil[]> {
+    const abandons = await base.abandonsVeilleur(companyId);
+    const issues = await enParallele(abandons, CONCURRENCE_HOTE, (a) => sansEchec("tâche abandonnée", () => ctx.issues.get(a.issueId, companyId), null));
+    return issues
+      .filter((i): i is Issue => i !== null && i.status !== "done" && i.status !== "cancelled")
+      .map((issue) => ({
+        id: `abandon:${issue.id}`, type: "tache_bloquee", urgence: "haute", titre: `${issue.identifier ?? "tâche"} · ${issue.title}`,
+        raison: "L'agent n'a plus avancé malgré trois relances du veilleur, qui a cessé de le réveiller. Reprenez la tâche, réassignez-la ou fermez-la.",
+        lien: lienTache(issue), action: "Ouvrir la tâche", issueId: issue.id,
+      }));
   }
 
   async function elementsConnaissances(companyId: string): Promise<ElementAccueil[]> {
@@ -488,7 +512,7 @@ export function routesAccueil(d: DependancesAccueil): Partial<Record<CleRouteApi
   routes["accueil.lister"] = async (r) => {
     exigerHumain(r.acteur, "L'accueil");
     const c = r.companyId;
-    const [taches, approbations, liaisons, connaissances, manquants, demandes, questions] = await Promise.all([
+    const [taches, approbations, liaisons, connaissances, manquants, demandes, questions, abandons] = await Promise.all([
       sansEchec("tâches", () => elementsTaches(c), [] as ElementAccueil[]),
       sansEchec("approbations", () => elementsApprobations(c), [] as ElementAccueil[]),
       sansEchec("liaisons", () => elementsLiaisons(c), [] as ElementAccueil[]),
@@ -496,6 +520,7 @@ export function routesAccueil(d: DependancesAccueil): Partial<Record<CleRouteApi
       elementsManquants(c),
       sansEchec("missions", () => ctx.issues.list({ companyId: c, originKind: ORIGINE_DEMANDE as never, includePluginOperations: true, limit: 50 }), [] as Issue[]),
       sansEchec("questions", () => elementsQuestions(c), [] as ElementAccueil[]),
+      sansEchec("abandons du veilleur", () => elementsAbandons(c), [] as ElementAccueil[]),
     ]);
     const projets = new Map<string, { id: string; nom: string } | null>();
     const projetDe = async (issue: Issue) => {
@@ -521,7 +546,12 @@ export function routesAccueil(d: DependancesAccueil): Partial<Record<CleRouteApi
           };
         }),
     );
-    return { corps: { companyId: c, elements: trierElements([...questions, ...taches, ...approbations, ...liaisons, ...connaissances, ...manquants]), missions } };
+    // Une tâche dont la carte est affichée n'apparaît pas en plus comme « tâche bloquée » : la carte porte la décision (HUM-C7).
+    const avecCarte = new Set(questions.map((q) => q.issueId));
+    const tachesSansCarte = taches.filter((t) => t.type !== "tache_bloquee" || !avecCarte.has(t.issueId));
+    const dejaVues = new Set([...avecCarte, ...tachesSansCarte.map((t) => t.issueId)]);
+    const abandonsSeuls = abandons.filter((a) => !dejaVues.has(a.issueId));
+    return { corps: { companyId: c, elements: trierElements([...questions, ...tachesSansCarte, ...abandonsSeuls, ...approbations, ...liaisons, ...connaissances, ...manquants]), missions } };
   };
 
   routes["equipe.demander"] = async (r) => {

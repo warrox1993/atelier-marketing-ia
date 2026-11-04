@@ -1,0 +1,868 @@
+From 3a48297e4c27c570d090e4cb982a702b23782b98 Mon Sep 17 00:00:00 2001
+From: Jean-Baptiste Dhondt <114347858+warrox1993@users.noreply.github.com>
+Date: Fri, 30 Oct 2026 15:06:42 +0100
+Subject: [PATCH 126/126] =?UTF-8?q?fix(i18n):=20libell=C3=A9s=20de=20/atte?=
+ =?UTF-8?q?ntion=20et=20avis=20de=20reprise=20montr=C3=A9s=20=C3=A0=20l'hu?=
+ =?UTF-8?q?main=20en=20fran=C3=A7ais=20(Atelier=20HUM-C12)?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Verbes de décision (Débloquer, Relancer, Confirmer, Refuser, Répondre...), whyNow et titres
+de /attention ; avis de reprise automatique (stranded-notice, service de reprise, suite
+introuvable) traduits. Les id des verbes sont inchangés. Le texte de l'avis « disposition
+requise » reste identique : run-lifecycle le reconnaît à l'égalité dans les commentaires
+existants. Tests mis à jour sur les libellés français, assertions négatives gardées aussi
+précises qu'avant.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01EThpSSDGc5NRYwbgjNqoTJ
+---
+ .../src/__tests__/attention-service.test.ts   |   8 +-
+ .../heartbeat-process-recovery.test.ts        |  26 ++--
+ .../__tests__/issue-recovery-actions.test.ts  |   2 +-
+ server/src/services/attention.ts              | 120 +++++++++---------
+ server/src/services/recovery/service.ts       |  42 +++---
+ .../services/recovery/stranded-notice.test.ts |  56 ++++----
+ .../src/services/recovery/stranded-notice.ts  |  72 +++++------
+ .../recovery/successful-run-handoff.ts        |   2 +-
+ 8 files changed, 170 insertions(+), 158 deletions(-)
+
+diff --git a/server/src/__tests__/attention-service.test.ts b/server/src/__tests__/attention-service.test.ts
+index 26934470fb..267ba0a6ca 100644
+--- a/server/src/__tests__/attention-service.test.ts
++++ b/server/src/__tests__/attention-service.test.ts
+@@ -688,7 +688,7 @@ describeEmbeddedPostgres("attention service", () => {
+     expect(feed.items.find((item) =>
+       item.sourceKind === "review" && item.subject.title === "Stalled review blocker"
+     )).toMatchObject({
+-      whyNow: expect.stringContaining("without a maintained"),
++      whyNow: expect.stringContaining("sans relecteur"),
+       // A stalled review resolves in-row on the /decisions card (PAP-16080 §4.4).
+       inlineResolvable: true,
+       subject: expect.objectContaining({
+@@ -698,7 +698,7 @@ describeEmbeddedPostgres("attention service", () => {
+         }),
+       }),
+       decisionVerbs: expect.arrayContaining([
+-        expect.objectContaining({ id: "choose_review_path", label: "Choose review path" }),
++        expect.objectContaining({ id: "choose_review_path", label: "Choisir la suite de la revue" }),
+       ]),
+     });
+     expect(feed.items.find((item) => item.sourceKind === "failed_run")?.detail).toMatchObject({
+@@ -1184,7 +1184,7 @@ describeEmbeddedPostgres("attention service", () => {
+     const detailsByKind = new Map(interactionItems.map((item) => [item.detail?.kind, item]));
+ 
+     const planItem = detailsByKind.get("plan_approval");
+-    expect(planItem?.subject.title).toBe("Plan approval - Approve launch plan");
++    expect(planItem?.subject.title).toBe("Validation du plan : Approve launch plan");
+     expect(planItem?.subject.metadata).toMatchObject({ isPlanTarget: true, targetDocumentKey: "plan" });
+     expect(planItem?.decisionVerbs).toEqual([
+       expect.objectContaining({ id: "accept", label: "Approve plan" }),
+@@ -1481,7 +1481,7 @@ describeEmbeddedPostgres("attention service", () => {
+     expect(rows[0]).toMatchObject({
+       subject: { id: terminalId, identifier: "ATC-1", title: "Choose migration owner" },
+       relatedIssue: { id: blockedId },
+-      whyNow: "Blocks 3 tasks and needs human attention.",
++      whyNow: "Bloque 3 tâches et demande l'attention d'un humain.",
+       detail: { kind: "blocker", blockingIssue: null, blockedTaskCount: 3 },
+     });
+     expect(rows[0]?.subject.id).not.toBe(blockedId);
+diff --git a/server/src/__tests__/heartbeat-process-recovery.test.ts b/server/src/__tests__/heartbeat-process-recovery.test.ts
+index e602956100..a93fc979d2 100644
+--- a/server/src/__tests__/heartbeat-process-recovery.test.ts
++++ b/server/src/__tests__/heartbeat-process-recovery.test.ts
+@@ -5349,7 +5349,7 @@ describeEmbeddedPostgres("heartbeat orphaned process recovery", () => {
+       );
+     });
+     expect(notice?.body).toContain("is in status `error`");
+-    expect(notice?.body).not.toContain("secret/env bindings");
++    expect(notice?.body).not.toContain("secrets ou variables d'environnement");
+   });
+ 
+   it("escalates (does not retry) an accepted-interaction-continuation setup failure whose message matches neither retryable pattern", async () => {
+@@ -5927,7 +5927,7 @@ describeEmbeddedPostgres("heartbeat orphaned process recovery", () => {
+         .where(eq(issueComments.issueId, issueId));
+       return (
+         rows.find((comment) =>
+-          comment.body.includes("workspace failed validation"),
++          comment.body.includes("n'a pas passé la validation"),
+         ) ?? null
+       );
+     });
+@@ -5975,7 +5975,7 @@ describeEmbeddedPostgres("heartbeat orphaned process recovery", () => {
+       expect(action).toMatchObject({ status: "active", kind: "workspace_validation", ownerType: "board" });
+       expect(action.nextAction).toContain("workspace");
+       const comments = await db.select().from(issueComments).where(eq(issueComments.issueId, issueId));
+-      expect(comments.some((comment) => comment.body.includes("workspace failed validation"))).toBe(true);
++      expect(comments.some((comment) => comment.body.includes("n'a pas passé la validation"))).toBe(true);
+       expect(mockCaptureRunFailure.mock.calls.filter(([event]) => event.runId === runId)).toEqual([]);
+     } finally {
+       await heartbeat.waitForRunExecutionDrain(runId);
+@@ -6067,7 +6067,7 @@ describeEmbeddedPostgres("heartbeat orphaned process recovery", () => {
+       expect(action).toMatchObject({ status: "active", kind: "workspace_validation", ownerType: "board" });
+       expect(action.nextAction).toContain("workspace");
+       const comments = await db.select().from(issueComments).where(eq(issueComments.issueId, issueId));
+-      expect(comments.some((comment) => comment.body.includes("workspace failed validation"))).toBe(true);
++      expect(comments.some((comment) => comment.body.includes("n'a pas passé la validation"))).toBe(true);
+       expect(mockCaptureRunFailure.mock.calls.filter(([event]) => event.runId === runId)).toHaveLength(report ? 1 : 0);
+       const calls = (await fs.readFile(callsPath, "utf8")).trim().split("\n").map((line) => JSON.parse(line) as string[]);
+       expect(calls).toHaveLength(failures.length);
+@@ -6308,7 +6308,7 @@ describeEmbeddedPostgres("heartbeat orphaned process recovery", () => {
+         .where(eq(issueComments.issueId, issueId));
+       return (
+         rows.find((comment) =>
+-          comment.body.includes("secret/env bindings are missing"),
++          comment.body.includes("des secrets ou variables d'environnement requis manquent"),
+         ) ?? null
+       );
+     });
+@@ -6946,8 +6946,8 @@ describeEmbeddedPostgres("heartbeat orphaned process recovery", () => {
+       .from(issueComments)
+       .where(eq(issueComments.issueId, issueId));
+     expect(comments).toHaveLength(1);
+-    expect(comments[0]?.body).toContain("bounded retry budget");
+-    expect(comments[0]?.body).toContain("no live execution path");
++    expect(comments[0]?.body).toContain("nombre de relances est épuisé");
++    expect(comments[0]?.body).toContain("aucune exécution en cours");
+     expect(comments[0]?.authorType).toBe("system");
+     expect(comments[0]?.presentation).toMatchObject({
+       kind: "system_notice",
+@@ -7044,7 +7044,7 @@ describeEmbeddedPostgres("heartbeat orphaned process recovery", () => {
+       .select()
+       .from(issueComments)
+       .where(eq(issueComments.issueId, issueId));
+-    expect(comments[0]?.body).toContain("bounded retry budget");
++    expect(comments[0]?.body).toContain("nombre de relances est épuisé");
+   });
+ 
+   it("escalates an exhausted successful handoff run that still leaves no disposition", async () => {
+@@ -10629,7 +10629,7 @@ describeEmbeddedPostgres("heartbeat orphaned process recovery", () => {
+         comments.find(
+           (comment) =>
+             comment.body.includes(
+-              "pending execution-review participant once",
++              "a relancé une fois le relecteur attendu",
+             ) &&
+             noticeMetadataReferencesRecoveryAction(
+               comment.metadata,
+@@ -11723,7 +11723,7 @@ describeEmbeddedPostgres("heartbeat orphaned process recovery", () => {
+       .from(issueComments)
+       .where(eq(issueComments.issueId, issueId));
+     expect(comments).toHaveLength(1);
+-    expect(comments[0]?.body).toContain("retried dispatch");
++    expect(comments[0]?.body).toContain("relancé automatiquement la distribution");
+     expect(comments[0]?.body).not.toContain("sk-test-recovery-secret");
+     expect(JSON.stringify(comments[0]?.metadata)).not.toContain(
+       "sk-test-recovery-secret",
+@@ -12309,7 +12309,7 @@ describeEmbeddedPostgres("heartbeat orphaned process recovery", () => {
+       .from(issueComments)
+       .where(eq(issueComments.issueId, issueId));
+     expect(comments).toHaveLength(1);
+-    expect(comments[0]?.body).toContain("retried continuation");
++    expect(comments[0]?.body).toContain("relancé automatiquement la suite");
+     expect(comments[0]?.presentation).toMatchObject({
+       kind: "system_notice",
+       tone: "danger",
+@@ -12480,8 +12480,8 @@ describeEmbeddedPostgres("heartbeat orphaned process recovery", () => {
+       .from(issueComments)
+       .where(eq(issueComments.issueId, issueId));
+     expect(comments).toHaveLength(1);
+-    expect(comments[0]?.body).toContain("retried continuation");
+-    expect(comments[0]?.body).toContain("3× attempts");
++    expect(comments[0]?.body).toContain("relancé automatiquement la suite");
++    expect(comments[0]?.body).toContain("3 tentatives");
+     expect(commentMetadataRows(comments[0])).toContainEqual({
+       type: "key_value",
+       label: "Failure code",
+diff --git a/server/src/__tests__/issue-recovery-actions.test.ts b/server/src/__tests__/issue-recovery-actions.test.ts
+index dd814866b5..b55ebd8457 100644
+--- a/server/src/__tests__/issue-recovery-actions.test.ts
++++ b/server/src/__tests__/issue-recovery-actions.test.ts
+@@ -1603,7 +1603,7 @@ describeEmbeddedPostgres("issue recovery actions", () => {
+     expect(escalationComments[0]?.presentation).toMatchObject({
+       kind: "system_notice",
+       tone: "danger",
+-      title: "Workspace validation failed",
++      title: "Validation de l'espace de travail en échec",
+     });
+     expect(enqueueWakeup).not.toHaveBeenCalled();
+   });
+diff --git a/server/src/services/attention.ts b/server/src/services/attention.ts
+index 84d4175674..18b783122e 100644
+--- a/server/src/services/attention.ts
++++ b/server/src/services/attention.ts
+@@ -663,17 +663,17 @@ function approvalTitle(type: string, payload: Record<string, unknown>) {
+ function interactionLabel(kind: string) {
+   switch (kind) {
+     case "request_confirmation":
+-      return "Confirmation requested";
++      return "Confirmation demandée";
+     case "request_checkbox_confirmation":
+-      return "Selection confirmation requested";
++      return "Sélection à confirmer";
+     case "ask_user_questions":
+-      return "Questions need answers";
++      return "Questions en attente de réponse";
+     case "suggest_tasks":
+-      return "Suggested tasks need a decision";
++      return "Tâches proposées à trancher";
+     case "request_item_verdicts":
+-      return "Item verdicts need a decision";
++      return "Verdicts à rendre";
+     default:
+-      return "Interaction needs a decision";
++      return "Interaction à trancher";
+   }
+ }
+ 
+@@ -681,40 +681,40 @@ function interactionVerbs(kind: string, payload: Record<string, unknown>) {
+   if (kind === "ask_user_questions") {
+     return decisionVerbs({
+       id: "respond",
+-      label: "Respond",
+-      description: "Submit answers to the pending questions.",
++      label: "Répondre",
++      description: "Envoyer les réponses aux questions en attente.",
+     });
+   }
+   if (kind === "request_confirmation") {
+     const acceptLabel = typeof payload.acceptLabel === "string" && payload.acceptLabel.trim()
+       ? payload.acceptLabel.trim()
+-      : "Confirm";
++      : "Confirmer";
+     const rejectLabel = typeof payload.rejectLabel === "string" && payload.rejectLabel.trim()
+       ? payload.rejectLabel.trim()
+-      : "Decline";
++      : "Refuser";
+     return decisionVerbs(
+       {
+         id: "accept",
+         label: acceptLabel,
+-        description: "Accept the pending confirmation.",
++        description: "Accepter la confirmation en attente.",
+       },
+       {
+         id: "reject",
+         label: rejectLabel,
+-        description: "Decline the pending confirmation.",
++        description: "Refuser la confirmation en attente.",
+       },
+     );
+   }
+   return decisionVerbs(
+     {
+       id: "accept",
+-      label: "Accept",
+-      description: "Accept the pending interaction.",
++      label: "Accepter",
++      description: "Accepter l'interaction en attente.",
+     },
+     {
+       id: "reject",
+-      label: "Reject",
+-      description: "Reject the pending interaction and provide a reason when required.",
++      label: "Rejeter",
++      description: "Rejeter l'interaction en attente, avec un motif si demandé.",
+     },
+   );
+ }
+@@ -1186,11 +1186,11 @@ export function attentionService(db: Db, serviceOptions: AttentionServiceOptions
+               issueId: approvalIssueMap.get(approval.id) ?? null,
+             },
+           },
+-          whyNow: "Approval is pending a board decision.",
++          whyNow: "Une approbation attend votre décision.",
+           decisionVerbs: decisionVerbs(
+-            { id: "approve", label: "Approve", description: "Approve the request." },
+-            { id: "reject", label: "Reject", description: "Reject the request." },
+-            { id: "request_revision", label: "Request revision", description: "Send the request back for changes." },
++            { id: "approve", label: "Approuver", description: "Approuver la demande." },
++            { id: "reject", label: "Rejeter", description: "Rejeter la demande." },
++            { id: "request_revision", label: "Demander une révision", description: "Renvoyer la demande pour modification." },
+           ),
+           inlineResolvable: approval.type !== "request_board_approval",
+           entryRule: "approvals.status = 'pending'",
+@@ -1282,7 +1282,7 @@ export function attentionService(db: Db, serviceOptions: AttentionServiceOptions
+             kind: "interaction",
+             id: interaction.id,
+             companyId,
+-            title: isPlanTarget && issue ? `Plan approval - ${issue.title}` : interaction.title ?? interaction.summary ?? interactionLabel(interaction.kind),
++            title: isPlanTarget && issue ? `Validation du plan : ${issue.title}` : interaction.title ?? interaction.summary ?? interactionLabel(interaction.kind),
+             identifier: null,
+             status: interaction.status,
+             href: issue ? `${issueHref(prefix, issue)}#interaction-${interaction.id}` : null,
+@@ -1294,7 +1294,7 @@ export function attentionService(db: Db, serviceOptions: AttentionServiceOptions
+               targetDocumentKey: isPlanTarget ? "plan" : null,
+             },
+           },
+-          whyNow: `${interactionLabel(interaction.kind)} on an issue thread.`,
++          whyNow: `${interactionLabel(interaction.kind)} sur le fil d'une tâche.`,
+           decisionVerbs: interactionVerbs(interaction.kind, payload),
+           inlineResolvable: true,
+           entryRule: "issue_thread_interactions.status = 'pending'",
+@@ -1353,8 +1353,8 @@ export function attentionService(db: Db, serviceOptions: AttentionServiceOptions
+             href: `/${prefix}/decisions?decisionId=${decision.id}`,
+             metadata: { originIssueId: decision.originIssueId, originAgentId: decision.originAgentId, bundleId: decision.bundleId,
+               bundleTitle: decision.bundleId ? bundleTitleMap.get(decision.bundleId) ?? null : null } },
+-          whyNow: "An agent decision is waiting for a board response.",
+-          decisionVerbs: decisionVerbs({ id: "decide", label: "Review", description: "Review and choose an option." }),
++          whyNow: "Une décision d'agent attend votre réponse.",
++          decisionVerbs: decisionVerbs({ id: "decide", label: "Examiner", description: "Examiner et choisir une option." }),
+           inlineResolvable: true,
+           entryRule: "decisions.status = 'open'",
+           exitRule: "Decision is decided, expired, or cancelled.",
+@@ -1414,10 +1414,10 @@ export function attentionService(db: Db, serviceOptions: AttentionServiceOptions
+               adapterType: join.adapterType,
+             },
+           },
+-          whyNow: "Join request is pending approval.",
++          whyNow: "Une demande d'accès attend votre approbation.",
+           decisionVerbs: decisionVerbs(
+-            { id: "approve", label: "Approve", description: "Approve this join request." },
+-            { id: "reject", label: "Reject", description: "Reject this join request." },
++            { id: "approve", label: "Approuver", description: "Approuver cette demande d'accès." },
++            { id: "reject", label: "Rejeter", description: "Rejeter cette demande d'accès." },
+           ),
+           inlineResolvable: true,
+           entryRule: "join_requests.status = 'pending_approval'",
+@@ -1477,12 +1477,12 @@ export function attentionService(db: Db, serviceOptions: AttentionServiceOptions
+             },
+           },
+           whyNow: recovery.status === "escalated"
+-            ? "Recovery action escalated to a human owner."
+-            : "Recovery action is assigned to a human owner.",
++            ? "Action de reprise remontée à un humain."
++            : "Action de reprise confiée à un humain.",
+           decisionVerbs: decisionVerbs(
+-            { id: "resolve", label: "Resolve", description: "Record the recovery outcome." },
+-            { id: "reassign", label: "Reassign", description: "Move the recovery to another owner." },
+-            { id: "cancel", label: "Cancel", description: "Cancel the recovery action." },
++            { id: "resolve", label: "Résoudre", description: "Noter l'issue de la reprise." },
++            { id: "reassign", label: "Réassigner", description: "Confier la reprise à quelqu'un d'autre." },
++            { id: "cancel", label: "Annuler", description: "Annuler l'action de reprise." },
+           ),
+           inlineResolvable: false,
+           entryRule: "issue_recovery_actions.status in ('active','escalated') and owner_type in ('user','board')",
+@@ -1544,8 +1544,8 @@ export function attentionService(db: Db, serviceOptions: AttentionServiceOptions
+             subject: issueSubject(prefix, issueSummary ?? issue),
+             whyNow: descriptor.action,
+             decisionVerbs: decisionVerbs(
+-              { id: "unblock", label: "Unblock", description: descriptor.action },
+-              { id: "reassign", label: "Reassign", description: "Route this blocked issue to another owner." },
++              { id: "unblock", label: "Débloquer", description: descriptor.action },
++              { id: "reassign", label: "Réassigner", description: "Confier cette tâche bloquée à quelqu'un d'autre." },
+             ),
+             inlineResolvable: false,
+             entryRule: "blocked issue has a human-owned unblockDescriptor",
+@@ -1586,19 +1586,19 @@ export function attentionService(db: Db, serviceOptions: AttentionServiceOptions
+       const blockedWorkCounts = await blockedWorkCountMap(db, companyId, [...terminalCandidates.keys()]);
+       for (const [terminalIssueId, candidate] of terminalCandidates) {
+         const blockedTaskCount = blockedWorkCounts.get(terminalIssueId) ?? 0;
+-        const taskLabel = blockedTaskCount === 1 ? "task" : "tasks";
++        const taskLabel = blockedTaskCount === 1 ? "tâche" : "tâches";
+         const dedupKey = `blocker:${terminalIssueId}`;
+         add(createItem({
+           companyId,
+           sourceKind: "blocker_attention",
+           subject: issueSubject(prefix, candidate.terminalSummary),
+           whyNow: candidate.state === "needs_attention"
+-            ? `Blocks ${blockedTaskCount} ${taskLabel} and needs human attention.`
+-            : `Blocks ${blockedTaskCount} ${taskLabel}; choose the next owner or action.`,
++            ? `Bloque ${blockedTaskCount} ${taskLabel} et demande l'attention d'un humain.`
++            : `Bloque ${blockedTaskCount} ${taskLabel} : choisissez la suite ou le responsable.`,
+           decisionVerbs: decisionVerbs(
+-            { id: "unblock", label: "Unblock", description: "Repair or replace the stalled blocker path." },
+-            { id: "reassign", label: "Reassign", description: "Assign the stalled blocker to a live owner." },
+-            { id: "nudge", label: "Nudge", description: "Wake or prompt the current owner." },
++            { id: "unblock", label: "Débloquer", description: "Réparer ou remplacer le blocage à l'arrêt." },
++            { id: "reassign", label: "Réassigner", description: "Confier le blocage à l'arrêt à un responsable actif." },
++            { id: "nudge", label: "Relancer", description: "Réveiller ou relancer le responsable actuel." },
+           ),
+           inlineResolvable: false,
+           entryRule: `terminal blocker has a non-live blockerAttention.state = '${candidate.state}'`,
+@@ -1684,20 +1684,20 @@ export function attentionService(db: Db, serviceOptions: AttentionServiceOptions
+             ? { ...reviewSubject, metadata: { ...reviewSubject.metadata, reviewAttentionState: "stalled" } }
+             : reviewSubject,
+           whyNow: stalled
+-            ? "Issue is in review without a maintained reviewer, interaction, approval, monitor, run, wake, or recovery path."
++            ? "Tâche en revue sans relecteur, interaction, approbation, surveillance, run, réveil ni reprise en cours."
+             : pendingApprovalId
+-            ? "Issue is in review with a linked pending approval."
++            ? "Tâche en revue avec une approbation liée en attente."
+             : hasHumanParticipant
+-              ? "Issue is in review and the current execution participant is a user."
+-              : "Issue is in review and assigned to a user.",
++              ? "Tâche en revue : l'étape en cours revient à un humain."
++              : "Tâche en revue, assignée à un humain.",
+           decisionVerbs: stalled
+             ? decisionVerbs(
+-                { id: "choose_review_path", label: "Choose review path", description: "Add a reviewer or waiting path, return the issue to work, or accept it." },
+-                { id: "request_changes", label: "Request changes", description: "Return the issue to the assignee with changes requested." },
++                { id: "choose_review_path", label: "Choisir la suite de la revue", description: "Ajouter un relecteur ou une attente, renvoyer la tâche au travail, ou l'accepter." },
++                { id: "request_changes", label: "Demander des modifications", description: "Renvoyer la tâche à l'assigné avec les modifications demandées." },
+               )
+             : decisionVerbs(
+-                { id: "approve", label: "Approve", description: "Approve the review and advance the issue." },
+-                { id: "request_changes", label: "Request changes", description: "Return the issue to the assignee with changes requested." },
++                { id: "approve", label: "Approuver", description: "Approuver la revue et faire avancer la tâche." },
++                { id: "request_changes", label: "Demander des modifications", description: "Renvoyer la tâche à l'assigné avec les modifications demandées." },
+               ),
+           inlineResolvable: stalled,
+           entryRule: stalled
+@@ -1786,11 +1786,11 @@ export function attentionService(db: Db, serviceOptions: AttentionServiceOptions
+               retryExhaustedReason: run.exhaustionMessage,
+             },
+           },
+-          whyNow: "Run failed after automatic retries were exhausted.",
++          whyNow: "Le run a échoué après épuisement des relances automatiques.",
+           decisionVerbs: decisionVerbs(
+-            { id: "retry", label: "Retry", description: "Retry the failed run or issue." },
+-            { id: "reassign", label: "Reassign", description: "Move the work to another owner." },
+-            { id: "dismiss", label: "Dismiss", description: "Dismiss this failed-run attention row." },
++            { id: "retry", label: "Réessayer", description: "Relancer le run ou la tâche en échec." },
++            { id: "reassign", label: "Réassigner", description: "Confier le travail à quelqu'un d'autre." },
++            { id: "dismiss", label: "Écarter", description: "Écarter cette alerte de run en échec." },
+           ),
+           inlineResolvable: true,
+           entryRule: "latest failed/timed_out run has a Bounded retry exhausted lifecycle event.",
+@@ -1823,7 +1823,7 @@ export function attentionService(db: Db, serviceOptions: AttentionServiceOptions
+             kind: "budget_incident",
+             id: incident.id,
+             companyId,
+-            title: `${incident.scopeName} budget ${incident.thresholdType === "hard" ? "hard stop" : "warning"}`,
++            title: `Budget ${incident.scopeName} : ${incident.thresholdType === "hard" ? "arrêt ferme" : "alerte"}`,
+             identifier: null,
+             status: incident.status,
+             href: `/${prefix}/costs`,
+@@ -1840,11 +1840,11 @@ export function attentionService(db: Db, serviceOptions: AttentionServiceOptions
+             },
+           },
+           whyNow: incident.thresholdType === "hard"
+-            ? "Budget hard stop was reached."
+-            : "Budget crossed the 85% warning threshold.",
++            ? "Le plafond ferme du budget est atteint."
++            : "Le budget a dépassé le seuil d'alerte de 85 %.",
+           decisionVerbs: decisionVerbs(
+-            { id: "raise_budget_and_resume", label: "Raise budget", description: "Raise the budget and resume paused work." },
+-            { id: "keep_paused", label: "Keep paused", description: "Dismiss or keep the budget stop in place." },
++            { id: "raise_budget_and_resume", label: "Relever le budget", description: "Relever le budget et reprendre le travail en pause." },
++            { id: "keep_paused", label: "Laisser en pause", description: "Écarter l'alerte ou garder l'arrêt du budget." },
+           ),
+           inlineResolvable: true,
+           entryRule: "open budget incident is hard, or soft with observed spend >= 85% of limit.",
+@@ -1895,10 +1895,10 @@ export function attentionService(db: Db, serviceOptions: AttentionServiceOptions
+             href: `/${prefix}/agents/${agent.id}`,
+             metadata: { role: agent.role, errorReason: agent.errorReason },
+           },
+-          whyNow: "Agent is in error status and needs operator action or dismissal.",
++          whyNow: "L'agent est en erreur : intervenez ou écartez l'alerte.",
+           decisionVerbs: decisionVerbs(
+-            { id: "inspect", label: "Inspect", description: "Inspect the agent error." },
+-            { id: "dismiss", label: "Dismiss", description: "Dismiss this alert." },
++            { id: "inspect", label: "Examiner", description: "Examiner l'erreur de l'agent." },
++            { id: "dismiss", label: "Écarter", description: "Écarter cette alerte." },
+           ),
+           inlineResolvable: true,
+           entryRule: "agents.status = 'error'",
+diff --git a/server/src/services/recovery/service.ts b/server/src/services/recovery/service.ts
+index 85823277f4..ea1bd1f6ab 100644
+--- a/server/src/services/recovery/service.ts
++++ b/server/src/services/recovery/service.ts
+@@ -4557,8 +4557,8 @@ export function recoveryService(
+             previousStatus: issue.status as StrandedPreviousStatus,
+             latestRun,
+             comment:
+-              "Paperclip cannot safely continue automatic recovery because the original assignee is not invokable. " +
+-              "The source assignment is unchanged and the board must choose the next action.",
++              "Paperclip ne peut pas poursuivre la reprise automatique sans risque : l'assigné d'origine ne peut pas être réveillé. " +
++              "L'assignation est inchangée ; à vous de choisir la suite.",
+           });
+           if (updated) {
+             result.escalated += 1;
+@@ -5204,10 +5204,10 @@ export function recoveryService(
+             latestRun,
+             notice: {
+               body:
+-                "Paperclip automatically retried dispatch for this assigned `todo` issue after a lost wake/run, " +
+-                "but it still has no live execution path. " +
+-                "Moving it to `blocked` so it is visible for intervention.",
+-              title: "No live execution path",
++                "Paperclip a relancé automatiquement la distribution de cette tâche `todo` assignée après un réveil ou un run perdu, " +
++                "mais elle n'a toujours aucune exécution en cours. " +
++                "Elle passe en `blocked` pour qu'un humain intervienne.",
++              title: "Aucune exécution en cours",
+               tone: "danger",
+             },
+           });
+@@ -5253,10 +5253,10 @@ export function recoveryService(
+             latestRun,
+             notice: {
+               body:
+-                "Paperclip automatically retried dispatch for this assigned `todo` issue after a lost wake/run, " +
+-                "but the bounded retry budget is spent and it still has no live execution path. " +
+-                "Moving it to `blocked` so it is visible for intervention.",
+-              title: "No live execution path",
++                "Paperclip a relancé automatiquement la distribution de cette tâche `todo` assignée après un réveil ou un run perdu, " +
++                "mais le nombre de relances est épuisé et elle n'a toujours aucune exécution en cours. " +
++                "Elle passe en `blocked` pour qu'un humain intervienne.",
++              title: "Aucune exécution en cours",
+               tone: "danger",
+             },
+           });
+@@ -5386,8 +5386,8 @@ export function recoveryService(
+               previousStatus: "in_progress",
+               latestRun: successfulRun,
+               comment:
+-                "Paperclip automatically retried continuation for this assigned `in_progress` issue and the retry " +
+-                "made progress, but it still has no live execution path. Moving it to `blocked` so it is visible for intervention.",
++                "Paperclip a relancé automatiquement la suite de cette tâche `in_progress` assignée et la relance " +
++                "a avancé, mais elle n'a toujours aucune exécution en cours. Elle passe en `blocked` pour qu'un humain intervienne.",
+             });
+             if (updated) {
+               result.escalated += 1;
+@@ -5481,17 +5481,17 @@ export function recoveryService(
+             );
+           if (consecutive >= classification.maxAttempts) {
+             const attemptCopy =
+-              consecutive <= 1 ? "" : ` (${consecutive}× attempts)`;
++              consecutive <= 1 ? "" : ` (${consecutive} tentatives)`;
+             const updated = await escalateStrandedAssignedIssue({
+               issue,
+               previousStatus: "in_progress",
+               latestRun,
+               notice: {
+                 body:
+-                  "Paperclip automatically retried continuation for this assigned `in_progress` issue after its live " +
+-                  `execution disappeared, but it still has no live execution path${attemptCopy}. ` +
+-                  "Moving it to `blocked` so it is visible for intervention.",
+-                title: "No live execution path",
++                  "Paperclip a relancé automatiquement la suite de cette tâche `in_progress` assignée après la perte de son " +
++                  `exécution, mais elle n'a toujours aucune exécution en cours${attemptCopy}. ` +
++                  "Elle passe en `blocked` pour qu'un humain intervienne.",
++                title: "Aucune exécution en cours",
+                 tone: "danger",
+               },
+             });
+@@ -5551,10 +5551,10 @@ export function recoveryService(
+           latestRun,
+           notice: {
+             body:
+-              "Paperclip retried this issue's run after it ended without finishing, but the bounded retry budget " +
+-              "is spent and it still has no live execution path. " +
+-              "Moving it to `blocked` so it is visible for intervention.",
+-            title: "No live execution path",
++              "Paperclip a relancé le run de cette tâche, terminé sans aboutir, mais le nombre de relances " +
++              "est épuisé et elle n'a toujours aucune exécution en cours. " +
++              "Elle passe en `blocked` pour qu'un humain intervienne.",
++            title: "Aucune exécution en cours",
+             tone: "danger",
+           },
+         });
+diff --git a/server/src/services/recovery/stranded-notice.test.ts b/server/src/services/recovery/stranded-notice.test.ts
+index 49b50021d2..447be3bd6c 100644
+--- a/server/src/services/recovery/stranded-notice.test.ts
++++ b/server/src/services/recovery/stranded-notice.test.ts
+@@ -16,12 +16,12 @@ function allRows(metadata: { sections: Array<{ rows: unknown[] }> }) {
+ 
+ describe("stranded recovery notice seeds", () => {
+   it.each([
+-    ["todo dispatch", buildImmediateExecutionPathRecoveryNoticeSeed({ status: "todo" }), "No live execution path"],
+-    ["in_progress continuation", buildImmediateExecutionPathRecoveryNoticeSeed({ status: "in_progress" }), "No live execution path"],
+-    ["workspace validation", buildWorkspaceValidationRecoveryNoticeSeed(), "Workspace validation failed"],
+-    ["configuration incomplete", buildConfigurationIncompleteRecoveryNoticeSeed(), "Configuration incomplete"],
+-    ["review participant recovery", buildExecutionReviewParticipantRecoveryNoticeSeed(), "Review recovery stalled"],
+-    ["review participant unavailable", buildExecutionReviewParticipantUnavailableNoticeSeed(), "Review recovery stalled"],
++    ["todo dispatch", buildImmediateExecutionPathRecoveryNoticeSeed({ status: "todo" }), "Aucune exécution en cours"],
++    ["in_progress continuation", buildImmediateExecutionPathRecoveryNoticeSeed({ status: "in_progress" }), "Aucune exécution en cours"],
++    ["workspace validation", buildWorkspaceValidationRecoveryNoticeSeed(), "Validation de l'espace de travail en échec"],
++    ["configuration incomplete", buildConfigurationIncompleteRecoveryNoticeSeed(), "Configuration incomplète"],
++    ["review participant recovery", buildExecutionReviewParticipantRecoveryNoticeSeed(), "Reprise de la revue à l'arrêt"],
++    ["review participant unavailable", buildExecutionReviewParticipantUnavailableNoticeSeed(), "Reprise de la revue à l'arrêt"],
+   ])("%s seed has a short body plus title and tone", (_label, seed, expectedTitle) => {
+     expect(seed.title).toBe(expectedTitle);
+     expect(seed.tone).toBe("danger");
+@@ -37,12 +37,12 @@ describe("stranded recovery notice seeds", () => {
+       pluginKey: "paperclip.kubernetes-sandbox-provider",
+       pluginStatus: "error",
+     });
+-    expect(seed.title).toBe("Configuration incomplete");
++    expect(seed.title).toBe("Configuration incomplète");
+     expect(seed.tone).toBe("danger");
+     expect(seed.body).toContain("`paperclip.kubernetes-sandbox-provider`");
+     expect(seed.body).toContain("`error`");
+     expect(seed.body).toContain("enable the plugin");
+-    expect(seed.body).not.toContain("secret/env bindings");
++    expect(seed.body).not.toContain("secrets ou variables d'environnement");
+   });
+ 
+   it("asks for a capability review before enabling an upgrade_pending plugin, and names an operator disable", () => {
+@@ -62,9 +62,9 @@ describe("stranded recovery notice seeds", () => {
+ 
+   it("keeps the secret-binding copy for other configuration gaps", () => {
+     expect(buildConfigurationIncompleteRecoveryNoticeSeed({ reason: "secret_binding_missing" }).body).toContain(
+-      "secret/env bindings",
++      "secrets ou variables d'environnement requis manquent",
+     );
+-    expect(buildConfigurationIncompleteRecoveryNoticeSeed(null).body).toContain("secret/env bindings");
++    expect(buildConfigurationIncompleteRecoveryNoticeSeed(null).body).toContain("secrets ou variables d'environnement requis manquent");
+   });
+ 
+   it("explains an unresolved workspace base ref and carries its remedy into the recovery card", () => {
+@@ -84,7 +84,7 @@ describe("stranded recovery notice seeds", () => {
+     expect(notice.presentation.title).toBe("Workspace base ref unavailable");
+     expect(notice.body).toContain("before the agent started");
+     expect(notice.body).toContain("base ref");
+-    expect(notice.body).not.toContain("secret/env bindings");
++    expect(notice.body).not.toContain("secrets ou variables d'environnement");
+     expect(allRows(notice.metadata)).toContainEqual({
+       type: "key_value",
+       label: "Next action",
+@@ -93,9 +93,9 @@ describe("stranded recovery notice seeds", () => {
+   });
+ 
+   it("distinguishes todo dispatch from in_progress continuation copy", () => {
+-    expect(buildImmediateExecutionPathRecoveryNoticeSeed({ status: "todo" }).body).toContain("retried dispatch");
++    expect(buildImmediateExecutionPathRecoveryNoticeSeed({ status: "todo" }).body).toContain("relancé automatiquement la distribution");
+     expect(buildImmediateExecutionPathRecoveryNoticeSeed({ status: "in_progress" }).body).toContain(
+-      "retried continuation",
++      "relancé automatiquement la suite",
+     );
+   });
+ });
+@@ -108,10 +108,10 @@ describe("buildStrandedRecoveryEscalationNotice", () => {
+       recoveryOwner: null,
+       sourceRun: { id: "failed-run", status: "failed", errorCode: "workspace_git_scan_timeout" },
+     });
+-    expect(notice.presentation.title).toBe("Workspace scan timed out");
+-    expect(notice.body).toContain("before the agent started");
+-    expect(notice.body).not.toContain("retried continuation");
+-    expect(JSON.stringify(notice.metadata)).toContain("repository access and server load");
++    expect(notice.presentation.title).toBe("Analyse de l'espace de travail trop longue");
++    expect(notice.body).toContain("avant le démarrage de l'agent");
++    expect(notice.body).not.toContain("relancé automatiquement la suite");
++    expect(JSON.stringify(notice.metadata)).toContain("l'accès au dépôt et la charge du serveur");
+   });
+   const actionId = "6a2f8e64-6f5e-4b58-b7fd-111111111111";
+   const owner = { id: "9b1c2d3e-4f50-4a61-8b72-222222222222", name: "CTO" };
+@@ -136,7 +136,7 @@ describe("buildStrandedRecoveryEscalationNotice", () => {
+     expect(notice.presentation).toMatchObject({
+       kind: "system_notice",
+       tone: "danger",
+-      title: "Workspace validation failed",
++      title: "Validation de l'espace de travail en échec",
+     });
+     expect(notice.metadata.version).toBe(1);
+     expect(notice.metadata.sourceRunId).toBe(sourceRun.id);
+@@ -187,7 +187,7 @@ describe("buildStrandedRecoveryEscalationNotice", () => {
+     });
+ 
+     expect(notice.body).toBe("Legacy plain comment body.");
+-    expect(notice.presentation.title).toBe("Configuration incomplete");
++    expect(notice.presentation.title).toBe("Configuration incomplète");
+     expect(notice.metadata.sourceRunId).toBeNull();
+     expect(notice.metadata.sections).toHaveLength(1);
+   });
+@@ -200,7 +200,7 @@ describe("buildStrandedRecoveryEscalationNotice", () => {
+     });
+ 
+     expect(notice.body).toBe(DEFAULT_STRANDED_RECOVERY_NOTICE_BODY);
+-    expect(notice.presentation.title).toBe("Automatic recovery blocked");
++    expect(notice.presentation.title).toBe("Reprise automatique bloquée");
+   });
+ 
+   it("omits the failure code row when the source run has no error code", () => {
+@@ -241,7 +241,7 @@ describe("buildStrandedRecoveryEscalationNotice", () => {
+       },
+     });
+ 
+-    expect(notice.presentation.title).toBe("Error: usage limit reached");
++    expect(notice.presentation.title).toBe("Erreur : limite d'usage atteinte");
+     expect(allRows(notice.metadata)).toContainEqual({
+       type: "key_value",
+       label: "Failure code",
+@@ -257,7 +257,7 @@ describe("buildStrandedRecoveryEscalationNotice", () => {
+         recoveryOwner: null,
+         sourceRun: { ...sourceRun, errorCode: "claude_auth_required" },
+       }).presentation.title,
+-    ).toBe("Error: not logged in to Claude");
++    ).toBe("Erreur : Claude n'est pas connecté");
+   });
+ 
+   it("is matched by the metadata-based escalation dedupe matcher", () => {
+@@ -302,3 +302,15 @@ it("names the missing mandatory atelier skill instead of suggesting secret bindi
+   expect(sansListe.body).toContain("compétence obligatoire absente : non précisée.");
+   expect(sansListe.body).not.toContain("secret/env");
+ });
++
++describe("avis de reprise en français (Atelier HUM-C12)", () => {
++  it("le commentaire de reprise montré à l'humain est en français", () => {
++    expect(DEFAULT_STRANDED_RECOVERY_NOTICE_BODY).toBe(
++      "Paperclip n'a pas pu rétablir automatiquement l'exécution de cette tâche. Elle passe en `blocked` pour qu'un humain intervienne.",
++    );
++    const seed = buildImmediateExecutionPathRecoveryNoticeSeed({ status: "in_progress" });
++    expect(seed.title).toBe("Aucune exécution en cours");
++    expect(seed.body).toContain("mais elle n'a toujours aucune exécution en cours");
++    expect(seed.body).not.toMatch(/Moving it to|live execution path/);
++  });
++});
+diff --git a/server/src/services/recovery/stranded-notice.ts b/server/src/services/recovery/stranded-notice.ts
+index ed94f08312..34f2de5698 100644
+--- a/server/src/services/recovery/stranded-notice.ts
++++ b/server/src/services/recovery/stranded-notice.ts
+@@ -25,15 +25,15 @@ export type StrandedRecoveryEscalationNotice = {
+ };
+ 
+ export const DEFAULT_STRANDED_RECOVERY_NOTICE_BODY =
+-  "Paperclip could not restore a live execution path for this issue automatically. " +
+-  "Moving it to `blocked` so it is visible for intervention.";
++  "Paperclip n'a pas pu rétablir automatiquement l'exécution de cette tâche. " +
++  "Elle passe en `blocked` pour qu'un humain intervienne.";
+ 
+-const DEFAULT_STRANDED_RECOVERY_NOTICE_TITLE = "Automatic recovery blocked";
++const DEFAULT_STRANDED_RECOVERY_NOTICE_TITLE = "Reprise automatique bloquée";
+ 
+ const STRANDED_RECOVERY_NOTICE_TITLES_BY_CAUSE: Record<string, string> = {
+-  workspace_validation_failed: "Workspace validation failed",
+-  configuration_incomplete: "Configuration incomplete",
+-  execution_review_participant_recovery: "Review recovery stalled",
++  workspace_validation_failed: "Validation de l'espace de travail en échec",
++  configuration_incomplete: "Configuration incomplète",
++  execution_review_participant_recovery: "Reprise de la revue à l'arrêt",
+ };
+ 
+ // Titles keyed by the source run's classified error code. The raw failure text
+@@ -42,30 +42,30 @@ const STRANDED_RECOVERY_NOTICE_TITLES_BY_CAUSE: Record<string, string> = {
+ // notice row can lead with. A mapped code outranks the seed titles because the
+ // seeds describe the recovery family ("No live execution path"), not the cause.
+ const STRANDED_RECOVERY_NOTICE_TITLES_BY_RUN_ERROR_CODE: Record<string, string> = {
+-  provider_quota: "Error: usage limit reached",
+-  claude_auth_required: "Error: not logged in to Claude",
+-  acpx_auth_required: "Error: agent login required",
++  provider_quota: "Erreur : limite d'usage atteinte",
++  claude_auth_required: "Erreur : Claude n'est pas connecté",
++  acpx_auth_required: "Erreur : connexion de l'agent requise",
+ };
+ 
+ const WORKSPACE_SCAN_NOTICES: Record<string, { title: string; nextAction: string }> = {
+-  workspace_git_scan_timeout: { title: "Workspace scan timed out", nextAction: "Check repository access and server load, then retry the task." },
+-  workspace_git_scan_saturated: { title: "Workspace scan queue is full", nextAction: "Check server load and the workspace scan queue, then retry the task." },
+-  workspace_git_scan_output_limit: { title: "Workspace scan exceeded its limit", nextAction: "Check the repository size and workspace scan output limit before retrying the task." },
+-  workspace_git_scan_failed: { title: "Workspace scan failed", nextAction: "Inspect the failed run and check repository access and integrity before retrying the task." },
+-  workspace_git_scan_cancelled: { title: "Workspace scan was cancelled", nextAction: "Inspect why workspace preparation was cancelled before retrying the task." },
++  workspace_git_scan_timeout: { title: "Analyse de l'espace de travail trop longue", nextAction: "Vérifiez l'accès au dépôt et la charge du serveur, puis relancez la tâche." },
++  workspace_git_scan_saturated: { title: "File d'analyse de l'espace de travail pleine", nextAction: "Vérifiez la charge du serveur et la file d'analyse, puis relancez la tâche." },
++  workspace_git_scan_output_limit: { title: "Analyse de l'espace de travail au-delà de sa limite", nextAction: "Vérifiez la taille du dépôt et la limite de sortie de l'analyse avant de relancer la tâche." },
++  workspace_git_scan_failed: { title: "Analyse de l'espace de travail en échec", nextAction: "Examinez le run en échec et vérifiez l'accès et l'intégrité du dépôt avant de relancer la tâche." },
++  workspace_git_scan_cancelled: { title: "Analyse de l'espace de travail annulée", nextAction: "Cherchez pourquoi la préparation a été annulée avant de relancer la tâche." },
+ };
+ 
+ export function buildImmediateExecutionPathRecoveryNoticeSeed(input: {
+   status: "todo" | "in_progress";
+ }): StrandedRecoveryNoticeSeed {
+   const retryDescription = input.status === "todo"
+-    ? "Paperclip automatically retried dispatch for this assigned `todo` issue during terminal run recovery"
+-    : "Paperclip automatically retried continuation for this assigned `in_progress` issue during terminal run recovery";
++    ? "Paperclip a relancé automatiquement la distribution de cette tâche `todo` assignée pendant la reprise de fin de run"
++    : "Paperclip a relancé automatiquement la suite de cette tâche `in_progress` assignée pendant la reprise de fin de run";
+   return {
+     body:
+-      `${retryDescription}, but it still has no live execution path. ` +
+-      "Moving it to `blocked` so it is visible for intervention.",
+-    title: "No live execution path",
++      `${retryDescription}, mais elle n'a toujours aucune exécution en cours. ` +
++      "Elle passe en `blocked` pour qu'un humain intervienne.",
++    title: "Aucune exécution en cours",
+     tone: "danger",
+   };
+ }
+@@ -73,9 +73,9 @@ export function buildImmediateExecutionPathRecoveryNoticeSeed(input: {
+ export function buildWorkspaceValidationRecoveryNoticeSeed(): StrandedRecoveryNoticeSeed {
+   return {
+     body:
+-      "Paperclip stopped before launching the local adapter because the issue workspace failed validation. " +
+-      "Moving it to `blocked` so the workspace link, cwd, or git checkout can be repaired before resuming.",
+-    title: "Workspace validation failed",
++      "Paperclip s'est arrêté avant de lancer l'adaptateur local : l'espace de travail de la tâche n'a pas passé la validation. " +
++      "Elle passe en `blocked` pour réparer le lien, le dossier de travail ou la copie git avant de reprendre.",
++    title: "Validation de l'espace de travail en échec",
+     tone: "danger",
+   };
+ }
+@@ -153,15 +153,15 @@ export function buildConfigurationIncompleteRecoveryNoticeSeed(
+         `is in status \`${pluginStatus}\` and cannot lease a sandbox. Runs will keep failing the same way until the ` +
+         `plugin is \`ready\` again. Moving it to \`blocked\` so an operator can ${sandboxProviderPluginRemedy(pluginStatus)} ` +
+         "before resuming.",
+-      title: "Configuration incomplete",
++      title: "Configuration incomplète",
+       tone: "danger",
+     };
+   }
+   return {
+     body:
+-      "Paperclip stopped before dispatching the adapter because required secret/env bindings are missing. " +
+-      "Moving it to `blocked` so an operator can bind the missing secret(s) before resuming.",
+-    title: "Configuration incomplete",
++      "Paperclip s'est arrêté avant de lancer l'adaptateur : des secrets ou variables d'environnement requis manquent. " +
++      "Elle passe en `blocked` pour qu'un humain rattache les secrets manquants avant de reprendre.",
++    title: "Configuration incomplète",
+     tone: "danger",
+   };
+ }
+@@ -169,10 +169,10 @@ export function buildConfigurationIncompleteRecoveryNoticeSeed(
+ export function buildExecutionReviewParticipantRecoveryNoticeSeed(): StrandedRecoveryNoticeSeed {
+   return {
+     body:
+-      "Paperclip retried the pending execution-review participant once, but the review stage still has no " +
+-      "completed decision or live reviewer run. Moving it to `blocked` so the board can inspect the evidence, repair the " +
+-      "reviewer runtime, restore the review stage, or record an intentional manual resolution.",
+-    title: "Review recovery stalled",
++      "Paperclip a relancé une fois le relecteur attendu, mais l'étape de revue n'a toujours ni décision rendue " +
++      "ni run de relecture en cours. Elle passe en `blocked` pour que vous examiniez les preuves, répariez le " +
++      "relecteur, rétablissiez l'étape de revue ou notiez une résolution manuelle.",
++    title: "Reprise de la revue à l'arrêt",
+     tone: "danger",
+   };
+ }
+@@ -180,11 +180,11 @@ export function buildExecutionReviewParticipantRecoveryNoticeSeed(): StrandedRec
+ export function buildExecutionReviewParticipantUnavailableNoticeSeed(): StrandedRecoveryNoticeSeed {
+   return {
+     body:
+-      "Paperclip cannot continue the pending execution-review participant because the participant is not " +
+-      "invokable and the review stage has no completed decision or live reviewer run. Moving it to `blocked` " +
+-      "so the board can inspect the evidence, repair the reviewer runtime, restore the review stage, or record an " +
+-      "intentional manual resolution.",
+-    title: "Review recovery stalled",
++      "Paperclip ne peut pas poursuivre avec le relecteur attendu : il ne peut pas être réveillé et l'étape de revue " +
++      "n'a ni décision rendue ni run de relecture en cours. Elle passe en `blocked` " +
++      "pour que vous examiniez les preuves, répariez le relecteur, rétablissiez l'étape de revue ou notiez une " +
++      "résolution manuelle.",
++    title: "Reprise de la revue à l'arrêt",
+     tone: "danger",
+   };
+ }
+@@ -209,7 +209,7 @@ export function buildStrandedRecoveryEscalationNotice(input: {
+   const workspaceScan = WORKSPACE_SCAN_NOTICES[input.sourceRun?.errorCode ?? ""];
+   const seed = workspaceScan ? {
+     ...workspaceScan,
+-    body: `Paperclip could not prepare the workspace before the agent started. Automatic recovery could not continue. ${workspaceScan.nextAction}`,
++    body: `Paperclip n'a pas pu préparer l'espace de travail avant le démarrage de l'agent. La reprise automatique s'arrête. ${workspaceScan.nextAction}`,
+     tone: "danger" as const,
+   } : input.seed;
+   const fallbackBody = input.fallbackBody?.trim();
+diff --git a/server/src/services/recovery/successful-run-handoff.ts b/server/src/services/recovery/successful-run-handoff.ts
+index cf33b61cf5..77f27811fd 100644
+--- a/server/src/services/recovery/successful-run-handoff.ts
++++ b/server/src/services/recovery/successful-run-handoff.ts
+@@ -22,7 +22,7 @@ export const DEFAULT_MAX_SUCCESSFUL_RUN_HANDOFF_ATTEMPTS = 1;
+ export const SUCCESSFUL_RUN_HANDOFF_REQUIRED_NOTICE_BODY =
+   "Paperclip needs a disposition before this issue can continue.";
+ export const SUCCESSFUL_RUN_HANDOFF_EXHAUSTED_NOTICE_BODY =
+-  "Paperclip could not resolve this issue's missing disposition automatically. The source assignment is unchanged and a board decision is required.";
++  "Paperclip n'a pas pu fixer automatiquement la suite de cette tâche. L'assignation est inchangée : une décision humaine est requise.";
+ export const LEGACY_SUCCESSFUL_RUN_HANDOFF_NOTICE_PREFIXES = [
+   "## This issue still needs a next step",
+   "## Successful run missing issue disposition",
+-- 
+2.53.0
+

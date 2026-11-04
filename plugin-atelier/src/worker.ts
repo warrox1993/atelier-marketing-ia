@@ -10,9 +10,11 @@ import { definePlugin, runWorker } from "@paperclipai/plugin-sdk";
 import { creerAtelier } from "./serveur/atelier.js";
 import { creerBase } from "./serveur/base.js";
 import { creerVeilleur } from "./serveur/veilleur.js";
+import { creerRechercheDossierSujet, liensDossierSujet } from "./serveur/dossier-sujet.js";
 import { creerOutilsFabrique, dossierFile } from "./serveur/fabrique-outils.js";
+import { calculerModeEffectif } from "./serveur/regles-donnees.js";
 import { creerSignalement, SUIVI } from "./serveur/fabrique-remise.js";
-import { DECLARATION_ETAT_FABRICATION, DECLARATION_FABRIQUER_DOCUMENT, DECLARATION_FABRIQUER_VIDEO } from "./contrats/fabrique-outils-schemas.js";
+import { DECLARATION_ETAT_FABRICATION, DECLARATION_FABRIQUER_DOCUMENT, DECLARATION_FABRIQUER_IMAGE, DECLARATION_FABRIQUER_VIDEO, DECLARATION_VOIR_RENDU } from "./contrats/fabrique-outils-schemas.js";
 import { creerFacteur, stockLiaisonsParesseux } from "./serveur/liaisons/index.js";
 
 let atelier: ReturnType<typeof creerAtelier> | null = null;
@@ -39,13 +41,31 @@ const plugin = definePlugin({
     facteur = creerFacteur({ ctx, base: creerBase(ctx.db), stock: stockLiaisonsParesseux(ctx) });
     facteur.demarrer();
     // Fabrique (lot 2) : trois outils d'agent qui déposent un travail dans la file de fichiers (aucun programme lancé).
+    const base = creerBase(ctx.db);
+    // Dossier du sujet (option B) : garde fermée d'image et de vidéo. Mode effectif lu comme `modeDeTache` des services.
+    const dossierSujet = creerRechercheDossierSujet({
+      ...liensDossierSujet(ctx.issues, base),
+      sources: async (companyId, issueId) => (await base.listerSources(companyId, { issueId })).map((x) => ({ url: x.url, statutAcces: x.statutAcces, mode: x.mode, extrait: x.extrait })),
+      mode: async (companyId, issueId) => {
+        const issue = await ctx.issues.get(issueId, companyId);
+        const porte = await base.lirePorte(companyId, issueId);
+        const campagne = porte
+          ? await base.lireCampagne(companyId, porte.campagneId)
+          : issue?.projectId
+            ? ((await base.listerCampagnes(companyId)).find((c) => c.projectId === issue.projectId) ?? null)
+            : null;
+        return calculerModeEffectif(campagne, await base.lireReglages(companyId)).mode;
+      },
+    });
     const fabrique = creerOutilsFabrique({
       agentConnu: async (agentId, companyId) => (await ctx.agents.get(agentId, companyId)) !== null,
       avertir: (message) => ctx.logger.warn(message),
       config: async (companyId) => (await ctx.config.get(companyId)) as Record<string, unknown> | null,
       etatLire: (cle, companyId) => ctx.state.get({ scopeKind: "company", scopeId: companyId, stateKey: cle }),
       etatEcrire: (cle, companyId, valeur) => ctx.state.set({ scopeKind: "company", scopeId: companyId, stateKey: cle }, valeur),
-      tacheDuRun: (runId, companyId) => creerBase(ctx.db).tacheDuRun(companyId, runId),
+      tacheDuRun: (runId, companyId) => base.tacheDuRun(companyId, runId),
+      relecteursDeTache: async (tacheId, companyId) => (await base.lirePorte(companyId, tacheId))?.revuesRequises.map((x) => x.agentId) ?? [],
+      dossierSujet,
       suiviLire: () => ctx.state.get({ scopeKind: "instance", stateKey: SUIVI.cle }),
       suiviEcrire: (valeur) => ctx.state.set({ scopeKind: "instance", stateKey: SUIVI.cle }, valeur),
     });
@@ -62,10 +82,14 @@ const plugin = definePlugin({
     signalement.demarrer();
     const { name: _n1, ...metaDocument } = DECLARATION_FABRIQUER_DOCUMENT;
     const { name: _n3, ...metaVideo } = DECLARATION_FABRIQUER_VIDEO;
+    const { name: _n4, ...metaImage } = DECLARATION_FABRIQUER_IMAGE;
     const { name: _n2, ...metaEtat } = DECLARATION_ETAT_FABRICATION;
+    const { name: _n5, ...metaVoir } = DECLARATION_VOIR_RENDU;
     ctx.tools.register(DECLARATION_FABRIQUER_DOCUMENT.name, metaDocument, (p, run) => fabrique.fabriquerDocument(p, run));
     ctx.tools.register(DECLARATION_FABRIQUER_VIDEO.name, metaVideo, (p, run) => fabrique.fabriquerVideo(p, run));
+    ctx.tools.register(DECLARATION_FABRIQUER_IMAGE.name, metaImage, (p, run) => fabrique.fabriquerImage(p, run));
     ctx.tools.register(DECLARATION_ETAT_FABRICATION.name, metaEtat, (p, run) => fabrique.etatFabrication(p, run));
+    ctx.tools.register(DECLARATION_VOIR_RENDU.name, metaVoir, (p, run) => fabrique.voirRendu(p, run));
     ctx.logger.info("Atelier Marketing IA prêt", { espaceBase: ctx.db.namespace });
   },
 

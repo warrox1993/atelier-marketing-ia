@@ -1,7 +1,7 @@
 {
   "schema": "atelier/registre-agents/v1",
-  "version": "1.9.0",
-  "dateVersion": "2026-10-21",
+  "version": "1.14.0",
+  "dateVersion": "2026-11-01",
   "description": "Registre canonique des quinze agents marketing de l'Atelier et de l'agent déterministe « Porte de contrôle » (deterministe: true, adaptateur process, aucun modèle). Source unique : le fichier .paperclip.yaml et l'en-tête des AGENTS.md en sont générés par « python3 -I scripts/bootstrap-organisation.py generer ». Les noms courts (champ nom) portent leurs accents : l'identifiant (slug) d'un agent en est dérivé en retirant les accents (NFKD) avant la normalisation, comme le fait le bootstrap ; le titre porte le libellé français complet.",
   "adaptateur": {
     "type": "claude_local",
@@ -11,9 +11,14 @@
     "timeoutSec": 1800,
     "graceSec": 30,
     "maxConcurrentRuns": 1,
+    "maxRunsParJour": 30,
     "envPortable": {
       "DISABLE_TELEMETRY": "1",
-      "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1"
+      "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1",
+      "CLAUDE_CODE_PROMPT_CACHE_TTL": "5m",
+      "CLAUDE_CODE_DISABLE_GIT_INSTRUCTIONS": "1",
+      "CLAUDE_CODE_RETRY_WATCHDOG": "1",
+      "ENABLE_TOOL_SEARCH": "auto"
     },
     "envSecrets": {
       "CLAUDE_CODE_OAUTH_TOKEN": "Jeton longue durée produit par « claude setup-token » (abonnement Claude de l'opérateur, usage personnel). Stocké comme secret Paperclip, jamais dans un fichier."
@@ -22,6 +27,36 @@
       "CLAUDE_CONFIG_DIR": "Dossier de configuration Claude dédié à l'agent, créé par le bootstrap sous instance/claude-config/<id entreprise>/<slug> (un dossier par entreprise et par rôle). Jamais le ~/.claude de l'opérateur."
     },
     "reglagesConfigClaude": {
+      "skillOverrides": {
+        "update-config": "off",
+        "verify": "off",
+        "debug": "off",
+        "code-review": "off",
+        "simplify": "off",
+        "batch": "off",
+        "fewer-permission-prompts": "off",
+        "doctor": "off",
+        "claude-api": "off",
+        "workflow-authoring": "off",
+        "run": "off",
+        "run-skill-generator": "off",
+        "plugin-authoring": "off",
+        "keybindings-help": "off",
+        "init": "off",
+        "security-review": "off",
+        "complain": "off",
+        "suggestion-box": "off",
+        "speckit-analyze": "off",
+        "speckit-checklist": "off",
+        "speckit-clarify": "off",
+        "speckit-constitution": "off",
+        "speckit-converge": "off",
+        "speckit-implement": "off",
+        "speckit-plan": "off",
+        "speckit-specify": "off",
+        "speckit-tasks": "off",
+        "speckit-taskstoissues": "off"
+      },
       "claudeMdExcludes": [
         "**/CLAUDE.md",
         "**/CLAUDE.local.md",
@@ -38,6 +73,7 @@
           "Read(**/.env)",
           "Read(**/*.env)",
           "Read(**/*.key)",
+          "Read(//proc/**)",
           "Edit(~/.ssh/**)",
           "Edit(~/.config/**)",
           "Edit(~/.claude/**)",
@@ -64,6 +100,7 @@
       "facebook": "atelier-facebook",
       "instagram": "atelier-instagram",
       "linkedin": "atelier-linkedin",
+      "linkedinprofil": "atelier-linkedin-profil",
       "crm": "atelier-hubspot",
       "pipedrive": "atelier-pipedrive",
       "odoo": "atelier-odoo",
@@ -97,7 +134,7 @@
       "description": "Après chaque appel d'outil dont la réponse sert, l'agent dépose la réponse BRUTE avec les « arguments » exacts de l'appel (contrats v1.5). Une réponse de mode réel n'est retenue que si la passerelle l'a signée et qu'elle est liée au service, à l'outil, aux arguments et à une date de moins de 7 jours. La passerelle signe les arguments après application des valeurs par défaut de l'outil : l'agent les donne explicitement. Toujours avec « arguments » et « compte » ; jamais la réponse d'un outil d'écriture (refusée : son issue passe par tache.diffusions.issue)."
     },
     "diffusionReelle": {
-      "description": "Parcours d'une écriture réelle (publier, envoyer, modifier le CRM), décrit dans la section « Diffusion réelle : parcours complet » des consignes des rôles en « ecriture_sur_accord ». Aujourd'hui : crm-conversion (HubSpot, Pipedrive, Odoo, Teamleader) et contenus (facebook_publier, instagram_publier, linkedin_publier ; messages privés Facebook exclus) ; les autres rôles restent en lecture et ne diffusent jamais.",
+      "description": "Parcours d'une écriture réelle (publier, envoyer, modifier le CRM), décrit dans la section « Diffusion réelle : parcours complet » des consignes des rôles en « ecriture_sur_accord ». Aujourd'hui : crm-conversion (HubSpot, Pipedrive, Odoo, Teamleader) et contenus (facebook_publier, instagram_publier, linkedin_publier, linkedin_profil_publier ; messages privés Facebook exclus) ; les autres rôles restent en lecture et ne diffusent jamais.",
       "etapes": [
         "tache.appels.proposer : proposer l'appel exact (service, outil, compte, arguments) sur la révision courante ; l'humain approuve l'empreinte de CET appel, avec une durée",
         "attendre l'approbation humaine de l'empreinte ; sans approbation, rien n'est demandé ni appelé",
@@ -117,6 +154,9 @@
   "agents": [
     {
       "slug": "coordinateur",
+      "envPortable": {
+        "CLAUDE_CODE_PROMPT_CACHE_TTL": "1h"
+      },
       "nom": "Coordinateur",
       "titre": "Coordinateur marketing",
       "role": "ceo",
@@ -142,7 +182,8 @@
         "recherche-connaissances",
         "protocole-inter-coordinateurs",
         "plan-campagne",
-        "documents-bureautiques"
+        "registre-decisions",
+        "dossier-sujet"
       ],
       "competencesObligatoires": [
         "cadrage-exigences",
@@ -152,13 +193,13 @@
         "recherche": [
           "Read",
           "Grep",
-          "Glob",
-          "WebFetch"
+          "Glob"
         ],
         "mutation": [
           "Bash(curl *)"
         ],
         "interdits": [
+          "WebFetch",
           "WebSearch",
           "Write",
           "Edit",
@@ -167,7 +208,9 @@
           "Task",
           "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_document",
           "mcp__paperclip-assigned__atelier_marketing-ia_etat_fabrication",
-          "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_video"
+          "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_video",
+          "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_image",
+          "mcp__paperclip-assigned__atelier_marketing-ia_voir_rendu"
         ]
       },
       "connexions": {},
@@ -207,7 +250,7 @@
         "recherche-sourcee",
         "analyse-concurrentielle",
         "points-entree-categorie",
-        "documents-bureautiques"
+        "dossier-sujet"
       ],
       "competencesObligatoires": [
         "recherche-sourcee"
@@ -218,7 +261,6 @@
           "Grep",
           "Glob",
           "WebSearch",
-          "WebFetch",
           "mcp__paperclip-assigned",
           "mcp__Paperclip_connections__connections_search",
           "mcp__Paperclip_connections__connection_request"
@@ -228,13 +270,16 @@
           "Write"
         ],
         "interdits": [
+          "WebFetch",
           "Edit",
           "NotebookEdit",
           "Agent",
           "Task",
           "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_document",
           "mcp__paperclip-assigned__atelier_marketing-ia_etat_fabrication",
-          "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_video"
+          "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_video",
+          "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_image",
+          "mcp__paperclip-assigned__atelier_marketing-ia_voir_rendu"
         ]
       },
       "connexions": {
@@ -297,7 +342,6 @@
           "Grep",
           "Glob",
           "WebSearch",
-          "WebFetch",
           "mcp__paperclip-assigned",
           "mcp__Paperclip_connections__connections_search",
           "mcp__Paperclip_connections__connection_request"
@@ -309,11 +353,14 @@
           "mcp__paperclip-assigned__atelier_marketing-ia_etat_fabrication"
         ],
         "interdits": [
+          "WebFetch",
           "Edit",
           "NotebookEdit",
           "Agent",
           "Task",
-          "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_video"
+          "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_video",
+          "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_image",
+          "mcp__paperclip-assigned__atelier_marketing-ia_voir_rendu"
         ]
       },
       "connexions": {
@@ -322,7 +369,7 @@
       },
       "modele": {
         "id": "claude-opus-5-5",
-        "effort": "medium"
+        "effort": "high"
       },
       "budgetMensuelCentimes": 2500,
       "maxToursParExecution": 60,
@@ -369,7 +416,6 @@
           "Grep",
           "Glob",
           "WebSearch",
-          "WebFetch",
           "mcp__paperclip-assigned",
           "mcp__Paperclip_connections__connections_search",
           "mcp__Paperclip_connections__connection_request"
@@ -381,11 +427,14 @@
           "mcp__paperclip-assigned__atelier_marketing-ia_etat_fabrication"
         ],
         "interdits": [
+          "WebFetch",
           "Edit",
           "NotebookEdit",
           "Agent",
           "Task",
-          "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_video"
+          "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_video",
+          "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_image",
+          "mcp__paperclip-assigned__atelier_marketing-ia_voir_rendu"
         ]
       },
       "connexions": {
@@ -448,7 +497,6 @@
           "Grep",
           "Glob",
           "WebSearch",
-          "WebFetch",
           "mcp__paperclip-assigned",
           "mcp__Paperclip_connections__connections_search",
           "mcp__Paperclip_connections__connection_request"
@@ -458,13 +506,16 @@
           "Write"
         ],
         "interdits": [
+          "WebFetch",
           "Edit",
           "NotebookEdit",
           "Agent",
           "Task",
           "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_document",
           "mcp__paperclip-assigned__atelier_marketing-ia_etat_fabrication",
-          "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_video"
+          "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_video",
+          "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_image",
+          "mcp__paperclip-assigned__atelier_marketing-ia_voir_rendu"
         ]
       },
       "connexions": {
@@ -522,7 +573,6 @@
           "Grep",
           "Glob",
           "WebSearch",
-          "WebFetch",
           "mcp__paperclip-assigned",
           "mcp__Paperclip_connections__connections_search",
           "mcp__Paperclip_connections__connection_request"
@@ -532,13 +582,16 @@
           "Write"
         ],
         "interdits": [
+          "WebFetch",
           "Edit",
           "NotebookEdit",
           "Agent",
           "Task",
           "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_document",
           "mcp__paperclip-assigned__atelier_marketing-ia_etat_fabrication",
-          "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_video"
+          "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_video",
+          "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_image",
+          "mcp__paperclip-assigned__atelier_marketing-ia_voir_rendu"
         ]
       },
       "connexions": {
@@ -587,7 +640,8 @@
         "niveau-conscience-message",
         "redaction-titre-preuve",
         "suivi-conversions",
-        "humanisation-texte-fr"
+        "humanisation-texte-fr",
+        "adaptation-fr-nl-en"
       ],
       "competencesObligatoires": [
         "preparation-campagnes-sea"
@@ -597,7 +651,6 @@
           "Read",
           "Grep",
           "Glob",
-          "WebFetch",
           "mcp__paperclip-assigned",
           "mcp__Paperclip_connections__connections_search",
           "mcp__Paperclip_connections__connection_request"
@@ -607,6 +660,7 @@
           "Write"
         ],
         "interdits": [
+          "WebFetch",
           "WebSearch",
           "Edit",
           "NotebookEdit",
@@ -614,7 +668,9 @@
           "Task",
           "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_document",
           "mcp__paperclip-assigned__atelier_marketing-ia_etat_fabrication",
-          "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_video"
+          "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_video",
+          "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_image",
+          "mcp__paperclip-assigned__atelier_marketing-ia_voir_rendu"
         ]
       },
       "connexions": {
@@ -665,7 +721,12 @@
         "liens-entrants-seo",
         "aimant-a-prospects",
         "humanisation-texte-fr",
-        "design-visuel-sobre"
+        "design-visuel-sobre",
+        "documents-bureautiques",
+        "adaptation-fr-nl-en",
+        "campagne-courriel",
+        "conformite-publicite-ia",
+        "dossier-sujet"
       ],
       "competencesObligatoires": [
         "charte-marque"
@@ -675,9 +736,9 @@
           "Read",
           "Grep",
           "Glob",
-          "WebFetch",
           "mcp__Paperclip_connections__connections_search",
-          "mcp__Paperclip_connections__connection_request"
+          "mcp__Paperclip_connections__connection_request",
+          "WebSearch"
         ],
         "mutation": [
           "Bash(curl *)",
@@ -685,20 +746,23 @@
           "Edit",
           "mcp__paperclip-assigned",
           "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_document",
-          "mcp__paperclip-assigned__atelier_marketing-ia_etat_fabrication"
+          "mcp__paperclip-assigned__atelier_marketing-ia_etat_fabrication",
+          "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_image",
+          "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_video",
+          "mcp__paperclip-assigned__atelier_marketing-ia_voir_rendu"
         ],
         "interdits": [
-          "WebSearch",
+          "WebFetch",
           "NotebookEdit",
           "Agent",
-          "Task",
-          "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_video"
+          "Task"
         ]
       },
       "connexions": {
         "facebook": "ecriture_sur_accord",
         "instagram": "ecriture_sur_accord",
         "linkedin": "ecriture_sur_accord",
+        "linkedinprofil": "ecriture_sur_accord",
         "emailing": "ecriture_sur_accord",
         "captation": "ecriture_sur_accord"
       },
@@ -747,7 +811,9 @@
         "humanisation-texte-fr",
         "textes-interface",
         "fiche-transmission-developpeurs",
-        "mise-a-jour-crm"
+        "mise-a-jour-crm",
+        "adaptation-fr-nl-en",
+        "campagne-courriel"
       ],
       "competencesObligatoires": [
         "conversion-crm"
@@ -774,7 +840,9 @@
           "NotebookEdit",
           "Agent",
           "Task",
-          "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_video"
+          "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_video",
+          "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_image",
+          "mcp__paperclip-assigned__atelier_marketing-ia_voir_rendu"
         ]
       },
       "connexions": {
@@ -804,6 +872,9 @@
       "titre": "Pôle Intelligence · Mesure et optimisation",
       "role": "researcher",
       "rapporteA": "coordinateur",
+      "transmetA": [
+        "stratege"
+      ],
       "mission": "Vérifie données, conversions et doublons ; présente coûts, périodes, attribution et incertitudes ; propose des expériences avec hypothèse, métrique et condition d'arrêt ; répond « non mesurable » si les données manquent.",
       "entrees": [
         "exports de données importés avec période et provenance",
@@ -818,7 +889,9 @@
         "mesure-experiences",
         "suivi-conversions",
         "documents-bureautiques",
-        "visualisation-donnees"
+        "visualisation-donnees",
+        "actifs-distinctifs",
+        "points-entree-categorie"
       ],
       "competencesObligatoires": [
         "mesure-experiences"
@@ -845,7 +918,9 @@
           "NotebookEdit",
           "Agent",
           "Task",
-          "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_video"
+          "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_video",
+          "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_image",
+          "mcp__paperclip-assigned__atelier_marketing-ia_voir_rendu"
         ]
       },
       "connexions": {
@@ -896,7 +971,9 @@
         "design-visuel-sobre",
         "script-video-publicitaire",
         "conformite-publicite-ia",
-        "declinaison-regies-video"
+        "declinaison-regies-video",
+        "adaptation-fr-nl-en",
+        "dossier-sujet"
       ],
       "competencesObligatoires": [
         "calendrier-reseaux-sociaux",
@@ -907,13 +984,18 @@
           "Read",
           "Grep",
           "Glob",
-          "WebSearch"
+          "WebSearch",
+          "mcp__paperclip-assigned",
+          "mcp__Paperclip_connections__connections_search",
+          "mcp__Paperclip_connections__connection_request"
         ],
         "mutation": [
           "Bash(curl *)",
           "Write",
           "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_video",
-          "mcp__paperclip-assigned__atelier_marketing-ia_etat_fabrication"
+          "mcp__paperclip-assigned__atelier_marketing-ia_etat_fabrication",
+          "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_image",
+          "mcp__paperclip-assigned__atelier_marketing-ia_voir_rendu"
         ],
         "interdits": [
           "WebFetch",
@@ -924,7 +1006,10 @@
           "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_document"
         ]
       },
-      "connexions": {},
+      "connexions": {
+        "liens": "lecture",
+        "extraction": "lecture"
+      },
       "modele": {
         "id": "claude-sonnet-5-5",
         "effort": "medium"
@@ -944,7 +1029,7 @@
       "nom": "Conformité publicitaire",
       "titre": "Pôle Contrôle préalable · Communications commerciales réglementées",
       "role": "general",
-      "rapporteA": "coordinateur",
+      "rapporteA": "relecteur",
       "mission": "Contrôle, avant la relecture indépendante, les communications commerciales en secteur réglementé (FSMA, Code de droit économique) : affirmations à prouver, mentions obligatoires, formulations interdites, verdict ; ne réécrit pas et ne publie rien.",
       "entrees": [
         "contenu à contrôler, canal et public",
@@ -959,7 +1044,9 @@
         "controle-communications-reglementees",
         "charte-marque",
         "leviers-influence-ethiques",
-        "aimant-a-prospects"
+        "aimant-a-prospects",
+        "conformite-publicite-ia",
+        "dossier-sujet"
       ],
       "competencesObligatoires": [
         "controle-communications-reglementees"
@@ -983,18 +1070,29 @@
           "Task",
           "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_document",
           "mcp__paperclip-assigned__atelier_marketing-ia_etat_fabrication",
-          "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_video"
+          "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_video",
+          "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_image",
+          "mcp__paperclip-assigned__atelier_marketing-ia_voir_rendu"
         ]
       },
       "connexions": {},
       "modele": {
-        "id": "claude-sonnet-5-5",
-        "effort": "medium"
+        "id": "claude-opus-5-5",
+        "effort": "high"
       },
       "budgetMensuelCentimes": 1000,
       "maxToursParExecution": 40,
-      "relit": [],
-      "roleRevue": null,
+      "relit": [
+        "stratege",
+        "prospection",
+        "enrichissement-coordonnees",
+        "seo-local-geo",
+        "sea",
+        "contenus",
+        "crm-conversion",
+        "reseaux-sociaux"
+      ],
+      "roleRevue": "conformite",
       "criteresReussite": [
         "chaque affirmation chiffrée ou superlative est relevée avec sa preuve ou l'absence de preuve",
         "aucune mention légale inventée",
@@ -1007,6 +1105,9 @@
       "titre": "Contrôleur des exigences",
       "role": "qa",
       "rapporteA": "relecteur",
+      "transmetA": [
+        "stratege"
+      ],
       "mission": "Compare chaque livrable au brief original et à chaque exigence ; exige une preuve localisable pour tout point annoncé couvert ; signale établissements, canaux ou sections oubliés.",
       "entrees": [
         "brief original",
@@ -1046,7 +1147,9 @@
           "Task",
           "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_document",
           "mcp__paperclip-assigned__atelier_marketing-ia_etat_fabrication",
-          "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_video"
+          "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_video",
+          "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_image",
+          "mcp__paperclip-assigned__atelier_marketing-ia_voir_rendu"
         ]
       },
       "connexions": {},
@@ -1067,8 +1170,7 @@
         "contenus",
         "crm-conversion",
         "mesure",
-        "reseaux-sociaux",
-        "conformite-publicitaire"
+        "reseaux-sociaux"
       ],
       "roleRevue": "exigences",
       "criteresReussite": [
@@ -1099,7 +1201,11 @@
         "relecture-independante",
         "recherche-sourcee",
         "charte-marque",
-        "actifs-distinctifs"
+        "actifs-distinctifs",
+        "conformite-publicite-ia",
+        "niveau-conscience-message",
+        "redaction-titre-preuve",
+        "qualite-visuels"
       ],
       "competencesObligatoires": [
         "relecture-independante"
@@ -1109,13 +1215,14 @@
           "Read",
           "Grep",
           "Glob",
-          "WebSearch",
-          "WebFetch"
+          "WebSearch"
         ],
         "mutation": [
-          "Bash(curl *)"
+          "Bash(curl *)",
+          "mcp__paperclip-assigned__atelier_marketing-ia_voir_rendu"
         ],
         "interdits": [
+          "WebFetch",
           "Write",
           "Edit",
           "NotebookEdit",
@@ -1123,7 +1230,8 @@
           "Task",
           "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_document",
           "mcp__paperclip-assigned__atelier_marketing-ia_etat_fabrication",
-          "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_video"
+          "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_video",
+          "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_image"
         ]
       },
       "connexions": {},
@@ -1144,8 +1252,7 @@
         "contenus",
         "crm-conversion",
         "mesure",
-        "reseaux-sociaux",
-        "conformite-publicitaire"
+        "reseaux-sociaux"
       ],
       "roleRevue": "metier",
       "criteresReussite": [
@@ -1183,7 +1290,6 @@
           "Read",
           "Grep",
           "Glob",
-          "WebFetch",
           "mcp__paperclip-assigned",
           "mcp__Paperclip_connections__connections_search",
           "mcp__Paperclip_connections__connection_request"
@@ -1193,6 +1299,7 @@
           "Write"
         ],
         "interdits": [
+          "WebFetch",
           "WebSearch",
           "Edit",
           "NotebookEdit",
@@ -1200,7 +1307,9 @@
           "Task",
           "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_document",
           "mcp__paperclip-assigned__atelier_marketing-ia_etat_fabrication",
-          "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_video"
+          "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_video",
+          "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_image",
+          "mcp__paperclip-assigned__atelier_marketing-ia_voir_rendu"
         ]
       },
       "connexions": {
@@ -1249,7 +1358,9 @@
         "interdits": [
           "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_document",
           "mcp__paperclip-assigned__atelier_marketing-ia_etat_fabrication",
-          "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_video"
+          "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_video",
+          "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_image",
+          "mcp__paperclip-assigned__atelier_marketing-ia_voir_rendu"
         ]
       },
       "connexions": {},

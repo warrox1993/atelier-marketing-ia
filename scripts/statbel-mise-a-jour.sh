@@ -4,8 +4,7 @@
 # Usage : scripts/statbel-mise-a-jour.sh
 # Journal daté : instance/donnees/statbel/maj.log ; téléchargements conservés dans instance/donnees/statbel/archives/.
 # Aucun compte ni clé. Licence des données Statbel : CC BY 4.0 (citer Statbel).
-# Variables : STATBEL_HORS_VPN=1 lance les téléchargements avec `mullvad-exclude` (le site de Statbel refuse certains relais VPN :
-#   les données sont publiques, seul le trafic de ce script sort du tunnel) ; STATBEL_ANNEE_MAX pour borner l'année de recherche.
+# Variable : STATBEL_ANNEE_MAX pour borner l'année de recherche.
 # Codes de sortie : 0 succès, 1 échec du téléchargement ou de l'import, 2 réglage invalide (STATBEL_ANNEE_MAX), 4 installation incomplète (node, curl, unzip ou passerelle non compilée).
 set -uo pipefail
 
@@ -29,16 +28,11 @@ for outil in node curl unzip; do
 done
 [ -f "$CLI" ] || { journal "ERREUR : passerelle non compilée ($CLI absent). Lancer « npm run build » dans passerelle/."; exit 4; }
 
-SORTIE=()
-if [ "${STATBEL_HORS_VPN:-0}" = "1" ]; then
-  command -v mullvad-exclude >/dev/null 2>&1 || { journal "ERREUR : STATBEL_HORS_VPN=1 mais mullvad-exclude est introuvable."; exit 4; }
-  SORTIE=(mullvad-exclude)
-fi
 # HTTPS seulement, y compris après redirection.
-telecharger() { "${SORTIE[@]}" curl -sSL --proto '=https' --proto-redir '=https' --fail --max-time 600 -A 'Mozilla/5.0' "$@"; }
+telecharger() { curl -sSL --proto '=https' --proto-redir '=https' --fail --max-time 600 -A 'Mozilla/5.0' "$@"; }
 existe() { # l'URL répond-elle par un fichier zip ? (Statbel renvoie 404 pour une année non publiée)
   local type
-  type="$("${SORTIE[@]}" curl -sIL --proto '=https' --proto-redir '=https' --max-time 60 -A 'Mozilla/5.0' -o /dev/null -w '%{http_code} %{content_type}' "$1" 2>/dev/null)" || return 1
+  type="$(curl -sIL --proto '=https' --proto-redir '=https' --max-time 60 -A 'Mozilla/5.0' -o /dev/null -w '%{http_code} %{content_type}' "$1" 2>/dev/null)" || return 1
   [[ "$type" == 200\ application/zip* ]]
 }
 
@@ -72,8 +66,8 @@ recuperer() {
 }
 
 journal "Début de la mise à jour Statbel."
-an_pop="$(derniere_annee "$URL_POPULATION" 2024)" || { journal "ERREUR : aucun fichier de population trouvé chez Statbel (site injoignable ? essayer STATBEL_HORS_VPN=1)."; exit 1; }
-an_tva="$(derniere_annee "$URL_TVA" 2022)" || { journal "ERREUR : aucun fichier TVA trouvé chez Statbel (site injoignable ? essayer STATBEL_HORS_VPN=1)."; exit 1; }
+an_pop="$(derniere_annee "$URL_POPULATION" 2024)" || { journal "ERREUR : aucun fichier de population trouvé chez Statbel (site injoignable ?)."; exit 1; }
+an_tva="$(derniere_annee "$URL_TVA" 2022)" || { journal "ERREUR : aucun fichier TVA trouvé chez Statbel (site injoignable ?)."; exit 1; }
 journal "Années retenues : population $an_pop (1er janvier), TVA $an_tva."
 
 recuperer "${URL_POPULATION//@AN@/$an_pop}" "population-$an_pop.zip" || exit 1

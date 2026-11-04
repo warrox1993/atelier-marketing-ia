@@ -110,8 +110,10 @@ describe("discussion : affichage", () => {
     expect(bulles[1]!.textContent).toContain("Coordinateur");
     expect(bulles[1]!.querySelector("time")).toBeTruthy();
     expect(c.querySelector("img")).toBeNull();
-    expect(bulles[1]!.textContent).toContain("<img src=x onerror=alert(1)>");
-    const lien = bulles[1]!.querySelector("a")!;
+    // Réponse du Coordinateur : texte transmis tel quel au Markdown de l'hôte (react-markdown sans HTML brut, qui fait
+    // aussi les liens d'identifiants, vérifié en navigateur sur 3100) ; le message de l'humain garde ses liens maison.
+    expect(bulles[1]!.querySelector('[data-natif="MarkdownBlock"]')!.textContent).toBe("Voir ATL-12 <img src=x onerror=alert(1)>");
+    const lien = bulles[0]!.querySelector("a")!;
     expect(lien.textContent).toBe("ATL-12");
     expect(lien.getAttribute("href")).toBe("/RNO/issues/ATL-12");
     expect(c.querySelector(".atl-disc-vide")).toBeNull();

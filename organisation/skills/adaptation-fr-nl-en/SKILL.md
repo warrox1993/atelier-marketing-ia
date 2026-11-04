@@ -54,6 +54,16 @@ et une liste de choix qui permet à un relecteur natif de valider vite.
    pour vérification et ne choisit pas la langue à la place de l'entreprise.
 8. **Documenter** les choix qui pourraient surprendre un relecteur et lister les passages à faire relire.
 
+### Dans l'Observatoire (version anglaise d'un article)
+
+La version anglaise part de la révision française courante (sa base) et la porte la compare à elle (OBS-09) :
+
+1. Blocs de code et code en ligne recopiés octet pour octet, commandes, drapeaux et commentaires internes compris :
+   l'étape 3 (dates, nombres, unités) ne s'applique jamais à l'intérieur du code.
+2. Noms de produit inchangés, avec la casse du français ; le titre d'un article, lui, se traduit.
+3. Citations `[aff:<id>]` gardées telles quelles et à la même place ; chiffres et versions identiques (étape 4).
+4. Le néerlandais n'est pas produit par l'Observatoire ; hors code, l'anglais suit les étapes 2, 3, 5 et 6.
+
 ## Livrable
 
 Une section par langue cible avec le texte adapté ; le tableau de cohérence entre versions ; le tableau des choix

@@ -450,6 +450,7 @@ seule est refusée :
 | `facebook_publier`, `facebook_envoyer_message` | `POST /{page-id}/feed`, `POST /{page-id}/messages` | oui |
 | `instagram_publier` | `POST /{ig-user-id}/media` puis `media_publish` | oui |
 | `linkedin_publier` | `POST /rest/posts` | oui |
+| `linkedin_profil_publier` (service `linkedinprofil`, profil personnel, portée `w_member_social`) | `POST /rest/posts`, auteur `urn:li:person:<sub>` lu dans `/v2/userinfo` | oui |
 | `crm_modifier_contact` | `PATCH /crm/v3/objects/contacts/{id}` | non |
 | `pipedrive_modifier_personne` | `PUT /v1/persons/{id}` | non |
 | `odoo_ecrire_lead` | `execute_kw(... 'crm.lead', 'write' ...)` | non |
@@ -1186,7 +1187,8 @@ seulement. Activation : `PASSERELLE_SERVICES_REELS=osm,liens,extraction,audit` d
   le conteneur applique en plus sa propre garde d'adresses internes.
 - Revue de sécurité du 21/10/2026 :
   - **Mémoire (M2)** : la réponse du conteneur est lue en flux avec un plafond ferme de 16 Mio (« réponse trop volumineuse » au-delà) ; au plus
-    **2 extractions simultanées**, 4 en file d'attente au plus, 60 s d'attente au plus, sinon « Extraction occupée, réessayer ». La requête
+    **2 extractions simultanées**, 4 en file d'attente au plus, 10 s d'attente au plus, sinon « Extraction occupée, réessayer » ; extraction bornée à 45 s
+    (8 s par page), pour tenir sous le délai de 60 s d'un appel par le socle (audit du 29/10/2026, T1). La requête
     allège la réponse (`exclude_all_images`, `excluded_tags` style/iframe/svg, liens de réseaux sociaux exclus) ; l'API `/crawl` 0.9.5 n'a pas
     de filtre de champs de sortie (le HTML brut est toujours rendu), d'où le plafond.
   - **Bac à sable de Chromium (M3)** : l'unité passe `-e CRAWL4AI_CHROMIUM_SANDBOX=true` (variable lue par `server.py` et `browser_manager`) ;
@@ -1207,7 +1209,9 @@ seulement. Activation : `PASSERELLE_SERVICES_REELS=osm,liens,extraction,audit` d
 ### `audit` : outil `auditer_page` (Lighthouse 13.5.0, Apache-2.0, paquet npm épinglé dans `passerelle/`)
 
 - Chrome du poste (`/usr/bin/google-chrome`, ou `CHROME_PATH`) en `--headless=new`, lancé par `chrome-launcher` 1.2.1, profil temporaire supprimé.
-- Entrée : `url` (publique), `passes` (1 à 3, 1 par défaut ; plusieurs passes = médiane des scores), `delai_ms` (10 000 à 120 000, 90 000 par défaut).
+- Entrée : `url` (publique), `passes` (1 à 3, 1 par défaut ; plusieurs passes = médiane des scores), `delai_ms` (10 000 à 50 000, 45 000 par défaut). Toute la demande, file d'attente et passes comprises, tient en 55 s
+  (`BUDGET_AUDIT_MS`), sous le délai de 60 s d'un appel par le socle : une passe reçoit au plus le reste du budget, les passes qui
+  n'ont plus 10 s sont abandonnées (moins de passes rendues), et sans aucune passe possible l'appel répond « Budget de l'audit épuisé ».
 - Sortie : scores sur 100 (performance, accessibilité, bonnes pratiques, SEO) et 10 problèmes au plus (catégorie, audit, titre, score, valeur).
 - Une seule exécution de navigateur à la fois (file interne) ; même filtre d'URL, revérifié sur l'adresse finale.
 
@@ -1231,14 +1235,14 @@ Service LOCAL (aucun compte ni clé) pour les agents Veille et Stratège : segme
 **Mise à jour** : `scripts/statbel-mise-a-jour.sh` (journal `instance/donnees/statbel/maj.log`, index `instance/donnees/statbel/statbel.sqlite`,
 hors dépôt). Il cherche seul la dernière année publiée de la population et de la TVA, télécharge, importe (Node, `better-sqlite3`),
 remplace l'index d'un seul geste (fichier temporaire puis renommage). Statbel publie une fois par an : une exécution par an suffit.
-Codes de sortie : 0 succès, 1 échec, 4 installation incomplète. **Piège** : `statbel.fgov.be` ne répond pas depuis certains relais du
-VPN Mullvad (délai dépassé) : `STATBEL_HORS_VPN=1 scripts/statbel-mise-a-jour.sh` lance les téléchargements avec `mullvad-exclude`
-(données publiques, le kill switch reste actif pour le reste). Prérequis : `npm run build` dans `passerelle/`.
+Codes de sortie : 0 succès, 1 échec, 4 installation incomplète. Mullvad a été retiré le 25/10/2026 : l'option `STATBEL_HORS_VPN=1`
+(téléchargements par `mullvad-exclude`, faite pour les relais du VPN que `statbel.fgov.be` refusait) n'a plus d'objet :
+option retirée le 30/10/2026 (plus de VPN sur le poste). Prérequis : `npm run build` dans `passerelle/`.
 
 **Outils** (lecture seule, réponses signées) : `profil_commune` (population, sexe, nationalité, 7 tranches d'âge, revenus moyens par
 déclaration et par habitant, assujettis TVA et principales sections) et `comparer_communes` (2 à 10 communes). La commune se donne par nom
 (français ou néerlandais), code postal ou code INS ; une référence ambiguë (par exemple 1000) renvoie la liste des candidates, jamais une
-commune devinée. Chaque chiffre est `{ valeur, unite, annee, source }` ; une valeur absente ou masquée (secret statistique, commune
+commune devinée. Chaque chiffre est `{ valeur, unite, annee, source }` ; `source` est une clé (`population`, `revenus`, `tva`) de la table `sources` de la réponse, qui porte la citation complète ; une valeur absente ou masquée (secret statistique, commune
 fusionnée depuis) vaut `null` avec une `note`.
 
 **Limites connues** : pas de revenu médian ni de nombre de ménages dans les données ouvertes par commune (`declarations_fiscales` en est un

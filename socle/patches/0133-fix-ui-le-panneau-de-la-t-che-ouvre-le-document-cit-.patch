@@ -1,0 +1,288 @@
+From 16c83004041e86c132bd4db47f1a174b0e814557 Mon Sep 17 00:00:00 2001
+From: Jean-Baptiste Dhondt <114347858+warrox1993@users.noreply.github.com>
+Date: Fri, 30 Oct 2026 15:44:09 +0100
+Subject: [PATCH 133/139] =?UTF-8?q?fix(ui):=20le=20panneau=20de=20la=20t?=
+ =?UTF-8?q?=C3=A2che=20ouvre=20le=20document=20cit=C3=A9=20par=20la=20cart?=
+ =?UTF-8?q?e=20en=20attente,=20pas=20le=20plan=20d=C3=A9j=C3=A0=20approuv?=
+ =?UTF-8?q?=C3=A9=20(Atelier=20UI-17)?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+En mode discussion, le panneau de droite basculait d'office sur l'onglet Plan dès
+qu'un document existait : une carte qui demande de valider la liste ouvrait la
+révision du plan approuvée la veille. Quand une carte en attente (confirmation,
+cases, verdicts, questions) cite un document autre que le plan, par sa cible
+issue_document ou un lien #document-<clé>, le panneau ouvre l'onglet Artefacts
+sur ce document déplié. Sans carte en attente, le plan reste en tête.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01EThpSSDGc5NRYwbgjNqoTJ
+---
+ ui/src/components/IssueProperties.test.tsx    | 123 ++++++++++++++++++
+ .../issue-properties/IssueProperties.tsx      |  26 +++-
+ ui/src/lib/pending-card-document.test.ts      |  30 +++++
+ ui/src/lib/pending-card-document.ts           |  19 +++
+ 4 files changed, 196 insertions(+), 2 deletions(-)
+ create mode 100644 ui/src/lib/pending-card-document.test.ts
+ create mode 100644 ui/src/lib/pending-card-document.ts
+
+diff --git a/ui/src/components/IssueProperties.test.tsx b/ui/src/components/IssueProperties.test.tsx
+index f2dae46a5b..e542f473d8 100644
+--- a/ui/src/components/IssueProperties.test.tsx
++++ b/ui/src/components/IssueProperties.test.tsx
+@@ -972,6 +972,129 @@ describe("IssueProperties", () => {
+     act(() => root.unmount());
+   });
+ 
++  it("ouvre le document cité par une carte en attente plutôt que le plan déjà approuvé (Atelier UI-17)", async () => {
++    const planDocument = {
++      id: "document-plan",
++      companyId: "company-1",
++      issueId: "issue-1",
++      key: "plan",
++      title: "Plan",
++      format: "markdown",
++      body: "Plan body",
++      latestRevisionId: "revision-plan",
++      latestRevisionNumber: 2,
++      createdByAgentId: null,
++      createdByUserId: null,
++      updatedByAgentId: null,
++      updatedByUserId: null,
++      lockedAt: null,
++      lockedByAgentId: null,
++      lockedByUserId: null,
++      createdAt: new Date("2026-08-01T00:00:00.000Z"),
++      updatedAt: new Date("2026-08-01T00:00:00.000Z"),
++    } satisfies IssueDocument;
++    const listDocument = {
++      ...planDocument,
++      id: "document-liste",
++      key: "liste",
++      title: "Liste à valider",
++      body: "Liste body",
++      latestRevisionId: "revision-liste",
++      latestRevisionNumber: 1,
++    } satisfies IssueDocument;
++    mockInstanceSettingsApi.getExperimental.mockResolvedValue({ enableClassicTaskInterface: false });
++    mockIssuesApi.getOptionalDocument.mockResolvedValue(planDocument);
++    mockIssuesApi.listDocuments.mockResolvedValue([planDocument, listDocument]);
++    mockIssuesApi.listInteractions.mockResolvedValue([
++      {
++        id: "interaction-1",
++        companyId: "company-1",
++        issueId: "issue-1",
++        kind: "request_confirmation",
++        status: "pending",
++        payload: { version: 1, prompt: "Validez-vous la liste ? Voir [la liste](#document-liste)." },
++        createdAt: new Date("2026-08-02T00:00:00.000Z"),
++        updatedAt: new Date("2026-08-02T00:00:00.000Z"),
++      },
++    ]);
++    Element.prototype.scrollIntoView = vi.fn();
++
++    const { root } = renderPropertiesWithQueryClient(container, {
++      issue: createIssue(),
++      childIssues: [],
++      onUpdate: vi.fn(),
++      inline: true,
++    });
++
++    await waitForAssertion(() => {
++      const artifactsTab = Array.from(container.querySelectorAll("button"))
++        .find((button) => button.textContent === "Artefacts");
++      expect(artifactsTab?.getAttribute("data-state")).toBe("active");
++      const planTab = Array.from(container.querySelectorAll("button"))
++        .find((button) => button.textContent === "Plan");
++      expect(planTab?.getAttribute("data-state")).toBe("inactive");
++      const expanded = container.querySelectorAll('button[aria-expanded="true"]');
++      expect(expanded.length).toBe(1);
++      expect(expanded[0].closest("li")?.textContent).toContain("Liste à valider");
++    });
++    act(() => root.unmount());
++  });
++
++  it("sans carte en attente, le panneau garde le plan en tête comme avant (Atelier UI-17)", async () => {
++    const planDocument = {
++      id: "document-plan",
++      companyId: "company-1",
++      issueId: "issue-1",
++      key: "plan",
++      title: "Plan",
++      format: "markdown",
++      body: "Plan body",
++      latestRevisionId: "revision-plan",
++      latestRevisionNumber: 2,
++      createdByAgentId: null,
++      createdByUserId: null,
++      updatedByAgentId: null,
++      updatedByUserId: null,
++      lockedAt: null,
++      lockedByAgentId: null,
++      lockedByUserId: null,
++      createdAt: new Date("2026-08-01T00:00:00.000Z"),
++      updatedAt: new Date("2026-08-01T00:00:00.000Z"),
++    } satisfies IssueDocument;
++    mockInstanceSettingsApi.getExperimental.mockResolvedValue({ enableClassicTaskInterface: false });
++    mockIssuesApi.getOptionalDocument.mockResolvedValue(planDocument);
++    mockIssuesApi.listDocuments.mockResolvedValue([planDocument, { ...planDocument, id: "document-liste", key: "liste", title: "Liste à valider" }]);
++    mockIssuesApi.listInteractions.mockResolvedValue([
++      {
++        id: "interaction-1",
++        companyId: "company-1",
++        issueId: "issue-1",
++        kind: "request_confirmation",
++        status: "accepted",
++        payload: { version: 1, prompt: "Voir [la liste](#document-liste)." },
++        createdAt: new Date("2026-08-02T00:00:00.000Z"),
++        updatedAt: new Date("2026-08-02T00:00:00.000Z"),
++      },
++    ]);
++
++    const { root } = renderPropertiesWithQueryClient(container, {
++      issue: createIssue(),
++      childIssues: [],
++      onUpdate: vi.fn(),
++      inline: true,
++    });
++
++    await waitForAssertion(() => {
++      const planTab = Array.from(container.querySelectorAll("button"))
++        .find((button) => button.textContent === "Plan");
++      expect(planTab?.getAttribute("data-state")).toBe("active");
++      const artifactsTab = Array.from(container.querySelectorAll("button"))
++        .find((button) => button.textContent === "Artefacts");
++      expect(artifactsTab?.getAttribute("data-state")).toBe("inactive");
++    });
++    act(() => root.unmount());
++  });
++
+   it("hides the Priority property row while priority UI is off (PAP-411)", async () => {
+     const root = renderProperties(container, {
+       issue: createIssue({ priority: "high" }),
+diff --git a/ui/src/components/issue-properties/IssueProperties.tsx b/ui/src/components/issue-properties/IssueProperties.tsx
+index 5f340da912..e3da0c901e 100644
+--- a/ui/src/components/issue-properties/IssueProperties.tsx
++++ b/ui/src/components/issue-properties/IssueProperties.tsx
+@@ -86,6 +86,7 @@ import {
+   DropdownMenuItem,
+   DropdownMenuTrigger,
+ } from "@/components/ui/dropdown-menu";
++import { pendingCardDocumentKey } from "../../lib/pending-card-document";
+ import { IssuePropertiesPlansTab } from "./IssuePropertiesPlansTab";
+ import { IssuePropertiesArtifactsTab } from "./IssuePropertiesArtifactsTab";
+ import { User, ArrowUpRight, Plus, X, GitBranch, FolderOpen, HardDrive, Check, Clock, RotateCcw, Loader2, CheckCircle2, ArchiveRestore, ChevronLeft } from "lucide-react";
+@@ -330,6 +331,19 @@ export function IssueProperties({
+     (paneTabWorkProducts?.length ?? 0) > 0
+     || paneTabStandaloneDocuments.length > 0
+     || selectAgentArtifactAttachments(paneTabAttachments, paneTabWorkProducts).length > 0;
++  const { data: paneTabInteractions } = useQuery({
++    queryKey: queryKeys.issues.interactions(issue.id),
++    queryFn: () => issuesApi.listInteractions(issue.id),
++    enabled: taskChatShellEnabled,
++  });
++  // Le document soumis par une carte en attente (hors plan) passe avant le plan : sinon le panneau ouvre
++  // un plan déjà approuvé pendant que la carte demande de valider un autre document.
++  const pendingCardKey = pendingCardDocumentKey(paneTabInteractions);
++  const pendingCardDocument =
++    pendingCardKey && pendingCardKey !== "plan"
++      ? paneTabStandaloneDocuments.find((doc) => doc.key === pendingCardKey) ?? null
++      : null;
++  const [pendingCardDeepLink, setPendingCardDeepLink] = useState<IssuePropertiesDocumentDeepLink | null>(null);
+   const [paneTab, setPaneTab] = useState<IssuePaneTab>("properties");
+   const [closedPaneTabs, setClosedPaneTabs] = useState<Set<IssuePaneTab>>(() => new Set());
+   // Once a plan document exists, surface it: switch the pane to the Plan tab so
+@@ -345,10 +359,18 @@ export function IssueProperties({
+     setClosedPaneTabs(new Set());
+   }, [issue.id]);
+   useEffect(() => {
++    if (pendingCardDocument && !paneTabUserChosenRef.current) {
++      setPaneTab("artifacts");
++      setPendingCardDeepLink((current) =>
++        current?.documentKey === pendingCardDocument.key
++          ? current
++          : { requestId: (current?.requestId ?? 0) + 1, tab: "artifacts", documentKey: pendingCardDocument.key });
++      return;
++    }
+     if (hasPlanTab && !paneTabUserChosenRef.current) {
+       setPaneTab("plans");
+     }
+-  }, [hasPlanTab]);
++  }, [hasPlanTab, pendingCardDocument]);
+   useEffect(() => {
+     if (!documentDeepLink) return;
+     const targetTab = documentDeepLink.tab;
+@@ -3275,7 +3297,7 @@ export function IssueProperties({
+         <TabsContent value="artifacts">
+           <IssuePropertiesArtifactsTab
+             issue={issue}
+-            documentDeepLink={documentDeepLink?.tab === "artifacts" ? documentDeepLink : null}
++            documentDeepLink={documentDeepLink?.tab === "artifacts" ? documentDeepLink : pendingCardDeepLink}
+           />
+         </TabsContent>
+       ) : null}
+diff --git a/ui/src/lib/pending-card-document.test.ts b/ui/src/lib/pending-card-document.test.ts
+new file mode 100644
+index 0000000000..4dfaa1476a
+--- /dev/null
++++ b/ui/src/lib/pending-card-document.test.ts
+@@ -0,0 +1,30 @@
++import type { IssueThreadInteraction } from "@paperclipai/shared";
++import { describe, expect, it } from "vitest";
++import { pendingCardDocumentKey } from "./pending-card-document";
++
++function interaction(overrides: Record<string, unknown>): IssueThreadInteraction {
++  return { id: "i-1", kind: "request_confirmation", status: "pending", payload: { version: 1, prompt: "" }, ...overrides } as unknown as IssueThreadInteraction;
++}
++
++describe("pendingCardDocumentKey", () => {
++  it("prend la cible issue_document de la carte en attente", () => {
++    expect(pendingCardDocumentKey([
++      interaction({ payload: { version: 1, prompt: "Valider ?", target: { type: "issue_document", key: "liste", revisionId: "r-1" } } }),
++    ])).toBe("liste");
++  });
++
++  it("à défaut, le premier lien #document-<clé> du texte, questions comprises", () => {
++    expect(pendingCardDocumentKey([
++      interaction({ kind: "ask_user_questions", payload: { version: 1, questions: [{ id: "q", prompt: "Voir [la liste](#document-liste-finale)", selectionMode: "single", options: [] }] } }),
++    ])).toBe("liste-finale");
++  });
++
++  it("ignore les cartes résolues, les suggestions de tâches et les cartes sans document", () => {
++    expect(pendingCardDocumentKey([
++      interaction({ status: "accepted", payload: { version: 1, prompt: "#document-liste" } }),
++      interaction({ kind: "suggest_tasks", payload: { version: 1, tasks: [{ title: "#document-autre" }] } }),
++      interaction({ payload: { version: 1, prompt: "Sans document" } }),
++    ])).toBeNull();
++    expect(pendingCardDocumentKey(undefined)).toBeNull();
++  });
++});
+diff --git a/ui/src/lib/pending-card-document.ts b/ui/src/lib/pending-card-document.ts
+new file mode 100644
+index 0000000000..6b3fcbe6a4
+--- /dev/null
++++ b/ui/src/lib/pending-card-document.ts
+@@ -0,0 +1,19 @@
++import type { IssueThreadInteraction } from "@paperclipai/shared";
++
++const DOCUMENT_ANCHOR = /#document-([a-z0-9][a-z0-9_-]*)/;
++
++/**
++ * Clé du document qu'une carte en attente (confirmation, cases, verdicts, questions) soumet à l'humain :
++ * sa cible `issue_document`, sinon le premier lien `#document-<clé>` de son texte. Le panneau ouvre ce
++ * document au lieu du plan, souvent déjà approuvé.
++ */
++export function pendingCardDocumentKey(interactions: IssueThreadInteraction[] | undefined): string | null {
++  for (const interaction of interactions ?? []) {
++    if (interaction.status !== "pending" || interaction.kind === "suggest_tasks" || interaction.kind === "connection_intent") continue;
++    const target = "target" in interaction.payload ? interaction.payload.target : null;
++    if (target?.type === "issue_document" && target.key) return target.key;
++    const anchor = DOCUMENT_ANCHOR.exec(JSON.stringify(interaction.payload));
++    if (anchor) return anchor[1];
++  }
++  return null;
++}
+-- 
+2.53.0
+

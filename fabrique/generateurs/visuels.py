@@ -42,6 +42,9 @@ GSAP_LOCAL = f"{RACINE_HYPERFRAMES}/node_modules/gsap/dist/gsap.min.js"
 POLICES = (f"{RACINE_FABRIQUE}/polices/DejaVuSans.ttf", f"{RACINE_FABRIQUE}/polices/DejaVuSans-Bold.ttf")
 
 IMAGES_PAR_SECONDE = 30
+FICHIER_FOND = "fond.png"  # illustration IA facultative d'une scène, posée en plein cadre sous un voile sombre
+FOND_HTML = '<img id="fond" src="' + FICHIER_FOND + '" alt="" data-sens="{}"><i id="voile"></i>'
+FOND_JS_HTML = '<script src="fond.js"></script>'
 FICHIER_SCENE = "scene"  # dossier de la scène dans /entree
 FICHIER_VIDEO = "scene.mp4"
 FICHIER_JOURNAL = "rendu.log"
@@ -159,16 +162,22 @@ def valider_format_duree(format: str, duree_s: float) -> tuple[int, int, str]:
 
 
 def remplir_gabarit(modele: str, valeurs: Mapping[str, str], format: str, duree_s: float,
-                    csp: str | None = None) -> str:
+                    csp: str | None = None, sens_fond: int | None = None) -> str:
     """Fonction PURE : remplit les marques `{{nom}}` d'un gabarit HTML.
 
     Chaque valeur de `valeurs` est du TEXTE : `html.escape` (guillemets compris) en fait du texte HTML
     inoffensif ; aucune balise n'est jamais acceptée. Les marques sont remplacées en une seule passe :
     un champ qui contient `{{titre}}` reste du texte. Une marque sans valeur est une erreur.
+
+    `sens_fond` (1 ou -1) pose l'illustration de fond, son voile et le script de mouvement : 1 zoome en avant, -1 en arrière.
     """
     largeur, hauteur, duree = valider_format_duree(format, duree_s)
+    if sens_fond not in (None, 1, -1):
+        raise ValueError("sens du fond : 1 ou -1 attendu")
     internes = {"format": format, "largeur": str(largeur), "hauteur": str(hauteur), "duree": duree,
-                "csp": politique_csp(lire_empreintes()) if csp is None else csp}
+                "csp": politique_csp(lire_empreintes()) if csp is None else csp,
+                "fond": "" if sens_fond is None else FOND_HTML.format(sens_fond),
+                "fond_js": "" if sens_fond is None else FOND_JS_HTML}
     if "\"" in internes["csp"] or "<" in internes["csp"] or ">" in internes["csp"]:
         raise ValueError("csp : caractère interdit dans un attribut HTML")
 
@@ -184,14 +193,17 @@ def remplir_gabarit(modele: str, valeurs: Mapping[str, str], format: str, duree_
 
 
 def construire_scene(dossier_scene: str | Path, gabarit: str, champs: Mapping[str, object],
-                     format: str, duree_s: float) -> Path:
+                     format: str, duree_s: float, fond: Path | None = None, sens_fond: int = 1) -> Path:
     """Écrit la scène (index.html, feuilles de style, script, GSAP, polices) dans `dossier_scene`.
 
     Le dossier doit être absent. `gabarit` est cherché dans la liste fixe, jamais utilisé comme chemin.
+    `fond` est le PNG d'une illustration (déjà contrôlé par l'appelant) : copié dans la scène, il remplit tout le
+    cadre et zoome lentement dans le sens `sens_fond`.
     """
     valeurs = valider_champs(gabarit, champs)  # lève d'abord pour gabarit/champs invalides
     source = _DOSSIER_HYPERFRAMES / "gabarits" / gabarit
-    page = remplir_gabarit((source / "index.html").read_text(encoding="utf-8"), valeurs, format, duree_s)
+    page = remplir_gabarit((source / "index.html").read_text(encoding="utf-8"), valeurs, format, duree_s,
+                           sens_fond=None if fond is None else sens_fond)
     cible = Path(dossier_scene)
     cible.mkdir(parents=True, exist_ok=False)
     (cible / "index.html").write_text(page, encoding="utf-8")
@@ -199,6 +211,9 @@ def construire_scene(dossier_scene: str | Path, gabarit: str, champs: Mapping[st
     shutil.copyfile(source / "scene.css", cible / "scene.css")
     shutil.copyfile(source / "scene.js", cible / "scene.js")
     shutil.copyfile(GSAP_LOCAL, cible / "gsap.min.js")
+    if fond is not None:
+        shutil.copyfile(fond, cible / FICHIER_FOND)
+        shutil.copyfile(_DOSSIER_HYPERFRAMES / "gabarits" / "_commun" / "fond.js", cible / "fond.js")
     (cible / "polices").mkdir()
     for police in POLICES:
         shutil.copyfile(police, cible / "polices" / Path(police).name)
@@ -268,7 +283,7 @@ class Resultat:
 
 
 def rendre_scene(dossier_travail, gabarit: str, champs: Mapping[str, object], format: str,
-                 duree_s: float) -> Resultat:
+                 duree_s: float, fond: Path | None = None, sens_fond: int = 1) -> Resultat:
     """Rend un clip MP4 (30 i/s) d'un gabarit rempli, dans une cage sans réseau.
 
     Crée `scene-XXXX/{entree,sortie}` dans `dossier_travail` ; la vidéo est `scene-XXXX/scene.mp4`.
@@ -282,7 +297,7 @@ def rendre_scene(dossier_travail, gabarit: str, champs: Mapping[str, object], fo
     entree, sortie = dossier / "entree", dossier / "sortie"
     sortie.mkdir()
     entree.mkdir()
-    construire_scene(entree / FICHIER_SCENE, gabarit, champs, format, duree_s)
+    construire_scene(entree / FICHIER_SCENE, gabarit, champs, format, duree_s, fond, sens_fond)
 
     etape = Etape(
         type="cpu", programme="/usr/bin/python3",

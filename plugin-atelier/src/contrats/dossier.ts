@@ -223,7 +223,7 @@ export type Diffusion = z.infer<typeof Diffusion>;
 export const ProposerAppelEntree = z
   .object({
     revisionId: IdNatif,
-    service: z.enum(["facebook", "instagram", "linkedin", "crm", "pipedrive", "odoo", "teamleader"]),
+    service: z.enum(["facebook", "instagram", "linkedin", "linkedinprofil", "crm", "pipedrive", "odoo", "teamleader"]),
     outil: z.string().regex(/^[a-z][a-z0-9_]{0,63}$/u),
     compte: z.string().min(1).max(200),
     arguments: z.record(z.string(), z.unknown()),
@@ -275,7 +275,7 @@ export const RevoquerPreuveEntree = z.object({ motif: z.string().trim().min(3).m
 export type RevoquerPreuveEntree = z.infer<typeof RevoquerPreuveEntree>;
 
 /** Services de la passerelle qui ont des outils d'écriture (revue de sécurité §6). */
-export const ServicePublication = z.enum(["facebook", "instagram", "linkedin", "crm", "pipedrive", "odoo", "teamleader"]);
+export const ServicePublication = z.enum(["facebook", "instagram", "linkedin", "linkedinprofil", "crm", "pipedrive", "odoo", "teamleader"]);
 export type ServicePublication = z.infer<typeof ServicePublication>;
 
 export const DemanderDiffusionEntree = z.object({

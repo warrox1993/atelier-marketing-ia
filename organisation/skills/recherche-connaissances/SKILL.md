@@ -1,6 +1,6 @@
 ---
 name: "recherche-connaissances"
-description: "Interroge les connaissances du client (conditions générales, fiches produit, tarifs, FAQ, notes) avant d'écrire un chiffre d'offre, et cite l'adresse connaissance:// rendue ; sans source, signale l'information manquante. À utiliser dès qu'un livrable mentionne une prime, une franchise, un plafond, une remise ou une condition d'offre du client."
+description: "Interroge les connaissances de l'entreprise de la tâche (documents importés : conditions générales, fiches produit, tarifs, procédures, FAQ, notes) avant d'écrire un fait propre à cette entreprise, et cite l'adresse connaissance:// rendue ; sans source, signale l'information manquante. À utiliser dès qu'un livrable de n'importe quel service affirme un fait que ces documents doivent prouver : chiffre ou condition d'offre (prime, franchise, plafond, remise), procédure ou règle interne."
 metadata:
   version: "1.0.0"
   langue: "fr"
@@ -14,6 +14,7 @@ metadata:
 - Un texte, une annonce, une page ou un argumentaire va citer un chiffre d'offre : prime,
   franchise, plafond, remise, durée, condition.
 - Un livrable décrit un produit, une garantie ou une procédure propre au client.
+- Tout service : un livrable cite une règle interne, une procédure ou un fait documenté de l'entreprise.
 - Un relecteur doit vérifier qu'une citation `connaissance://` existe et reste valide.
 
 ## Objectif

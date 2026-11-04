@@ -1,0 +1,106 @@
+From 70263a97873295e897073dd046fdf4d72c94eb87 Mon Sep 17 00:00:00 2001
+From: Jean-Baptiste Dhondt <114347858+warrox1993@users.noreply.github.com>
+Date: Fri, 30 Oct 2026 12:38:14 +0100
+Subject: [PATCH] =?UTF-8?q?fix(heartbeat):=20avis=20en=20fran=C3=A7ais=20s?=
+ =?UTF-8?q?ur=20la=20t=C3=A2che=20quand=20le=20plafond=20quotidien=20annul?=
+ =?UTF-8?q?e=20un=20run=20(Atelier=20HUM-C11)?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+L'annulation heartbeat.daily_run_limit était silencieuse : rien ne disait à
+l'humain pourquoi la tâche n'avançait plus. Un commentaire sans auteur (donc sans
+réveil) est posé sur la tâche, une seule fois par jour UTC ; un échec de l'avis
+est journalisé sans gêner l'annulation.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01EThpSSDGc5NRYwbgjNqoTJ
+---
+ server/src/services/heartbeat/queue.test.ts | 17 ++++++++++-
+ server/src/services/heartbeat/queue.ts      | 32 +++++++++++++++++++++
+ 2 files changed, 48 insertions(+), 1 deletion(-)
+
+diff --git a/server/src/services/heartbeat/queue.test.ts b/server/src/services/heartbeat/queue.test.ts
+index a79e626bc2..dc73ce09e4 100644
+--- a/server/src/services/heartbeat/queue.test.ts
++++ b/server/src/services/heartbeat/queue.test.ts
+@@ -1,5 +1,5 @@
+ import type { Db } from "@paperclipai/db";
+-import { agents, agentWakeupRequests, companies, createDb, EMBEDDED_POSTGRES_TEST_TIMEOUT_MS, heartbeatRuns, issues } from "@paperclipai/db";
++import { agents, agentWakeupRequests, companies, createDb, EMBEDDED_POSTGRES_TEST_TIMEOUT_MS, heartbeatRuns, issueComments, issues } from "@paperclipai/db";
+ import { eq, sql } from "drizzle-orm";
+ import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+ import { getEmbeddedPostgresTestSupport, startEmbeddedPostgresTestDatabase } from "../../__tests__/helpers/embedded-postgres.js";
+@@ -184,4 +184,19 @@ describe.skipIf(!support.supported)("heartbeat queue database wiring", () => {
+     expect(deps.treeControlSvc.getActivePauseHoldGate).not.toHaveBeenCalled();
+     expect(deps.executeRun).not.toHaveBeenCalled();
+   });
++
++  it("prévient sur la tâche, une fois par jour, quand le plafond quotidien annule un run (Atelier HUM-C11)", async () => {
++    const { run, agent, issue, company } = await fixture("queued");
++    const cappedAgent = { ...agent, runtimeConfig: { heartbeat: { maxDailyRuns: 0 } } };
++    const deps = callbacks(db);
++    deps.getAgent.mockResolvedValue(cappedAgent);
++    const queue = createHeartbeatQueue(db, deps);
++    expect(await queue.claimQueuedRun(run)).toBeNull();
++    const [second] = await db.insert(heartbeatRuns).values({ companyId: company.id, agentId: agent.id, status: "queued", invocationSource: "assignment", contextSnapshot: { issueId: issue.id } }).returning();
++    expect(await queue.claimQueuedRun(second)).toBeNull();
++    const avis = await db.select().from(issueComments).where(eq(issueComments.issueId, issue.id));
++    expect(avis).toHaveLength(1);
++    expect(avis[0]!.body).toContain("Plafond de 0 exécutions par jour atteint");
++    expect(avis[0]!.body).toContain("00:00 UTC");
++  });
+ });
+diff --git a/server/src/services/heartbeat/queue.ts b/server/src/services/heartbeat/queue.ts
+index d38617bfb2..0360205e5d 100644
+--- a/server/src/services/heartbeat/queue.ts
++++ b/server/src/services/heartbeat/queue.ts
+@@ -522,6 +522,37 @@ export function createHeartbeatQueue(db: Db, dependencies: HeartbeatQueueDepende
+     return null;
+   }
+ 
++  // Atelier HUM-C11 : l'annulation par le plafond quotidien était silencieuse.
++  // Un avis par tâche et par jour UTC, inséré sans auteur : il ne réveille personne.
++  async function noticeDailyCapOnIssue(
++    run: typeof heartbeatRuns.$inferSelect,
++    dailyCapBlock: NonNullable<Awaited<ReturnType<typeof getHeartbeatDailyCapBlock>>>,
++    now: Date,
++  ) {
++    const issueId = readNonEmptyString(parseObject(run.contextSnapshot).issueId);
++    if (!issueId || !isUuidLike(issueId)) return;
++    const prefix = "Plafond de ";
++    const dayStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
++    try {
++      const [already] = await db.select({ id: issueComments.id }).from(issueComments).where(and(
++        eq(issueComments.companyId, run.companyId), eq(issueComments.issueId, issueId),
++        sql`${issueComments.authorAgentId} is null and ${issueComments.authorUserId} is null`,
++        sql`${issueComments.body} like ${`${prefix}%`}`, sql`${issueComments.createdAt} >= ${dayStart.toISOString()}::timestamptz`,
++      )).limit(1);
++      if (already) return;
++      await db.insert(issueComments).values({
++        companyId: run.companyId,
++        issueId,
++        body: `${prefix}${String(dailyCapBlock.limit)} exécutions par jour atteint pour l'agent assigné : aucun nouveau run avant 00:00 UTC. ` +
++          "Si la tâche ne repart pas d'elle-même après minuit UTC, relancez l'agent.",
++        createdAt: now,
++        updatedAt: now,
++      });
++    } catch (err) {
++      logger.warn({ err, runId: run.id, issueId }, "daily cap notice failed");
++    }
++  }
++
+   async function cancelQueuedRunForHeartbeatDailyCap(
+     run: typeof heartbeatRuns.$inferSelect,
+     dailyCapBlock: NonNullable<
+@@ -564,6 +595,7 @@ export function createHeartbeatQueue(db: Db, dependencies: HeartbeatQueueDepende
+         limit: dailyCapBlock.limit,
+       },
+     });
++    await noticeDailyCapOnIssue(cancelled, dailyCapBlock, now);
+ 
+     await releaseIssueExecutionAndPromote(cancelled, {
+       suppressImmediateRecovery: true,
+-- 
+2.53.0
+

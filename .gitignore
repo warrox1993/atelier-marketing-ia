@@ -20,3 +20,10 @@ node_modules/
 __pycache__/
 *.pyc
 .ruff_cache/
+
+# Dossier de déchiffrement temporaire de restaurer-instance.sh (B-4), au cas où un arrêt brutal le laisse à la racine
+/.restaurer-dechiffre-*/
+
+# Copies de travail des skills Tagout (implement-issue, merge-pr) : jamais suivies par git.
+.claude/worktrees/
+.worktrees/

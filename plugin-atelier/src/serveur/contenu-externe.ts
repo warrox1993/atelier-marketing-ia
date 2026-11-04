@@ -19,9 +19,27 @@ const MOTIFS_PAGE_ERREUR: ReadonlyArray<[RegExp, string]> = [
   [/(?:maintenance en cours|site en maintenance|under maintenance)/iu, "maintenance"],
 ];
 
-/** Texte visible approximatif d'un HTML (balises retirées, scripts et styles exclus). */
+// V2-2 : largeur nulle et espaces invisibles (U+00AD, U+034F, U+180E, U+200B-U+200F, U+2060-U+2064, U+FEFF), contrôles
+// bidirectionnels (U+061C, U+202A-U+202E, U+2066-U+2069), balises (U+E0000-U+E007F) : ils cachent une consigne à l'œil humain
+// ou coupent un motif d'injection. Même liste que passerelle/src/reel/extraction/contenu-tiers.ts (parité testée).
+const INVISIBLES = /[\u00AD\u034F\u061C\u180E\u200B-\u200F\u202A-\u202E\u2060-\u2064\u2066-\u2069\uFEFF\u{E0000}-\u{E007F}]/gu;
+
+/** Texte sans caractères invisibles, et nombre de caractères retirés. */
+export function retirerInvisibles(texte: string): { texte: string; retires: number } {
+  let retires = 0;
+  const propre = texte.replace(INVISIBLES, () => { retires++; return ""; });
+  return { texte: propre, retires };
+}
+
+/** Signalement à joindre aux injections quand des caractères invisibles ont été retirés d'un contenu externe. */
+export const signalementInvisibles = (brut: string): string[] => {
+  const { retires } = retirerInvisibles(brut);
+  return retires ? [`caractères invisibles retirés : ${retires}`] : [];
+};
+
+/** Texte visible approximatif d'un HTML (balises retirées, scripts et styles exclus, caractères invisibles retirés). */
 export function texteVisible(html: string): string {
-  return html
+  return retirerInvisibles(html).texte
     .replace(/<script[\s\S]*?<\/script>/giu, " ")
     .replace(/<style[\s\S]*?<\/style>/giu, " ")
     .replace(/<!--[\s\S]*?-->/gu, " ")
@@ -76,8 +94,9 @@ export const MOTIFS_INJECTION: ReadonlyArray<[RegExp, string]> = motifsInjection
 /** Instructions suspectes repérées dans un contenu externe (signalées, jamais suivies). */
 export function injectionsSignalees(texte: string): string[] {
   const trouvees: string[] = [];
+  const propre = retirerInvisibles(texte).texte; // un invisible au milieu d'un motif ne le cache plus
   for (const [motif, libelle] of MOTIFS_INJECTION) {
-    const m = texte.match(motif);
+    const m = propre.match(motif);
     if (m) trouvees.push(`${libelle} : « ${m[0].slice(0, 120)} »`);
   }
   return trouvees;

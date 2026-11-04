@@ -9,11 +9,13 @@ export interface EtatFaux {
   smtp: Array<{ enabled: boolean; host: string }>;
   appels: Array<{ methode: string; chemin: string; corps?: unknown; autorisation: string | null }>;
   droits: Set<string>;
+  /** E2 : adresses que la recherche plein texte ne rend pas (nombre de recherches encore manquées ; Infinity : toujours). */
+  masques: Map<string, number>;
 }
 
 export function creerFauxListmonk(droits: string[] = ["gestion"]): { fetch: typeof fetch; etat: EtatFaux } {
   const etat: EtatFaux = {
-    listes: [], abonnes: [], campagnes: [], smtp: [{ enabled: true, host: "atelier-mailpit" }], appels: [], droits: new Set(droits),
+    listes: [], abonnes: [], campagnes: [], smtp: [{ enabled: true, host: "atelier-mailpit" }], appels: [], droits: new Set(droits), masques: new Map(),
   };
   let prochain = 1;
   const json = (statut: number, data: unknown): Response => new Response(JSON.stringify(statut >= 400 ? { message: String(data) } : { data }), { status: statut, headers: { "content-type": "application/json" } });
@@ -38,7 +40,11 @@ export function creerFauxListmonk(droits: string[] = ["gestion"]): { fetch: type
         const inscrits = etat.abonnes.filter((a) => a.lists?.some((l) => l.id === Number(liste) && l.subscription_status === (url.searchParams.get("subscription_status") ?? l.subscription_status)));
         return json(200, { results: url.searchParams.get("per_page") === "all" ? inscrits : inscrits.slice(0, 1), total: inscrits.length });
       }
-      return json(200, { results: etat.abonnes.filter((a) => a.email.includes(q)) });
+      const trouves = etat.abonnes.filter((a) => a.email.includes(q) && !((etat.masques.get(a.email) ?? 0) > 0));
+      for (const [email, n] of etat.masques) if (email.includes(q)) etat.masques.set(email, n - 1);
+      // Pagination de listmonk : 20 par défaut, `per_page=all` pour tout.
+      const parPage = url.searchParams.get("per_page") ?? "20";
+      return json(200, { results: parPage === "all" ? trouves : trouves.slice(0, Number(parPage)), total: trouves.length });
     }
     if (p === "/api/subscribers" && methode === "POST") {
       const email = String(corps?.["email"]);
@@ -58,6 +64,14 @@ export function creerFauxListmonk(droits: string[] = ["gestion"]): { fetch: type
         }
       }
       return json(200, true);
+    }
+    const ma = /^\/api\/subscribers\/(\d+)$/.exec(p);
+    if (ma && methode === "PATCH") {
+      // v6.2.0 (PatchSubscriber) : seuls les champs envoyés changent ; attribs fusionnés au premier niveau ; listes intactes sans `lists`.
+      const a = etat.abonnes.find((x) => x.id === Number(ma[1]));
+      if (!a) return json(400, "subscriber not found");
+      if (corps?.["attribs"]) a.attribs = { ...(a.attribs ?? {}), ...(corps["attribs"] as Record<string, unknown>) };
+      return json(200, a);
     }
     if (p === "/api/templates") return json(200, [{ id: 7, name: "atelier-corps" }]);
     if (p === "/api/campaigns" && methode === "POST") {

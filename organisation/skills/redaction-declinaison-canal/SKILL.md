@@ -23,8 +23,9 @@ aucune information inventée.
 
 - Brief, exigences, charte de marque (compétence `charte-marque`), sources validées.
 - Chiffres d'une connexion de la passerelle marketing (Search Console, Analytics, Ads, fiche,
-  réseaux sociaux, CRM) : `atelier_identite` d'abord, chaque réponse d'outil déposée telle quelle avec
-  les arguments exacts de l'appel (`POST …/taches/<issueId>/donnees-connexion`, champ `arguments`),
+  réseaux sociaux, CRM) : `atelier_identite` d'abord, chaque réponse d'outil déposée par sa référence
+  `_atelier.reference` (recopie par fichier seulement pour une réponse sans référence) avec les arguments exacts de
+  l'appel (`POST …/taches/<issueId>/donnees-connexion`, champ `arguments`),
   mention « démonstration » sur chaque chiffre de démonstration, aucun chiffre absent d'une réponse
   déposée (section « Connexions de la passerelle marketing » des consignes de l'agent).
 
@@ -73,9 +74,9 @@ briefs de visuels ; liste des points à confirmer.
 
 ## Exemple
 
-Message clé : « Bien assurer son logement, c'est d'abord faire le point sur sa situation, puis
+Message clé (client fictif) : « Bien assurer son logement, c'est d'abord faire le point sur sa situation, puis
 comparer les conditions générales. » Publication réseau social (≈ 300 caractères) : « Votre assurance habitation
-correspond-elle encore à votre logement ? Nos bureaux de Liège et de Namur font le point
+correspond-elle encore à votre logement ? Nos bureaux de [ville A] et de [ville B] font le point
 avec vous avant tout devis. Prenez rendez-vous sur notre site. » Point à confirmer : aucune promesse
 « meilleur prix » ni « gratuit » tant que l'offre n'est pas validée ; renvoi aux conditions
 générales, aucun conseil personnalisé.

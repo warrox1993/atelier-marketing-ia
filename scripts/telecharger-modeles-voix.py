@@ -2,10 +2,13 @@
 """Télécharge UNE fois les poids des modèles de voix, à une révision figée, et contrôle leurs empreintes.
 
 Usage (dans le venv voix, en root, par scripts/installer-fabrique-voix.sh) :
-    python -I telecharger-modeles-voix.py <modeles.json> <dossier_modeles> <groupe>
+    python -I telecharger-modeles-voix.py <modeles.json> <dossier_modeles> <groupe> [nom ...]
     python -I telecharger-modeles-voix.py --noter <modeles.json>   # relève les empreintes manquantes
 
 Chaque modèle va dans <dossier_modeles>/<nom>@<revision>/, root:<groupe>, lecture seule (0750/0640).
+Avec des noms en fin de ligne, seuls ces modèles sont traités. Si la variable FABRIQUE_POIDS_<NOM> existe (nom en
+majuscules, tirets remplacés par des soulignés, par exemple FABRIQUE_POIDS_FLUX_3_IMAGE_KLEIN), les fichiers du modèle sont
+COPIÉS depuis ce dossier au lieu d'être téléchargés ; les empreintes de modeles.json sont contrôlées dans les deux cas.
 Idempotent : un dossier déjà présent dont toutes les empreintes sont bonnes n'est pas retouché.
 Les poids au format pickle (.pt, .bin, .ckpt) sont déclarés dans le fichier de modèles par
 « pickle_weights_only » : le code de voix les charge uniquement avec weights_only=True.
@@ -31,7 +34,19 @@ def sha256_fichier(chemin: Path) -> str:
     return empreinte.hexdigest()
 
 
+def copier_depuis(source: Path, modele: dict, cible: Path) -> None:
+    """Copie les fichiers du modèle depuis un dossier local (poids déjà téléchargés), sans réseau."""
+    for nom in modele["fichiers"]:
+        destination = cible / nom
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(source / nom, destination)
+
+
 def telecharger(modele: dict, cible: Path) -> None:
+    local = os.environ.get("FABRIQUE_POIDS_" + modele["nom"].upper().replace("-", "_"))
+    if local:
+        copier_depuis(Path(local), modele, cible)
+        return
     from huggingface_hub import hf_hub_download
 
     for nom in modele["fichiers"]:
@@ -79,9 +94,15 @@ def noter(chemin_json: Path) -> int:
     return 0
 
 
-def installer(chemin_json: Path, dossier_modeles: Path, groupe: str) -> int:
+def installer(chemin_json: Path, dossier_modeles: Path, groupe: str, noms: tuple[str, ...] = ()) -> int:
     donnees = json.loads(chemin_json.read_text(encoding="utf-8"))
+    inconnus = set(noms) - {m["nom"] for m in donnees["modeles"]}
+    if inconnus:
+        print(f"erreur : modèles inconnus {sorted(inconnus)}", file=sys.stderr)
+        return 1
     for modele in donnees["modeles"]:
+        if noms and modele["nom"] not in noms:
+            continue
         if any(not info.get("sha256") for info in modele["fichiers"].values()):
             print(f"erreur : empreintes manquantes pour {modele['nom']} (lancer avec --noter)", file=sys.stderr)
             return 1
@@ -111,8 +132,8 @@ def installer(chemin_json: Path, dossier_modeles: Path, groupe: str) -> int:
 def main(argv: list[str]) -> int:
     if len(argv) == 3 and argv[1] == "--noter":
         return noter(Path(argv[2]))
-    if len(argv) == 4:
-        return installer(Path(argv[1]), Path(argv[2]), argv[3])
+    if len(argv) >= 4:
+        return installer(Path(argv[1]), Path(argv[2]), argv[3], tuple(argv[4:]))
     print(__doc__, file=sys.stderr)
     return 2
 

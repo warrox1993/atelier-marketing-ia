@@ -24,3 +24,19 @@ export function definitionsLinkedin(date: z.ZodString) {
     linkedin_publier: defMutation("linkedin_publier", { commentary: z.string().min(1).max(3000).describe("Texte de la publication (champ `commentary` de l'API Posts).") }, true),
   };
 }
+
+/**
+ * Outil du profil personnel (service linkedinprofil, seconde application LinkedIn « Share on LinkedIn ») : publication
+ * seulement, aucune lecture (la lecture des publications d'un membre exige r_member_social, portée réservée). Le titre
+ * d'un article est obligatoire chez LinkedIn et doit faire moins de 400 caractères (Article Post API) ; 3000 caractères
+ * de texte au plus, même borne que linkedin_publier.
+ */
+export function definitionsLinkedinProfil() {
+  return {
+    linkedin_profil_publier: defMutation("linkedin_profil_publier", {
+      commentary: z.string().min(1).max(3000).describe("Texte de la publication (champ `commentary` de l'API Posts)."),
+      lien: z.string().url().max(2048).regex(/^https:\/\//, "lien en https:// attendu").optional().describe("Adresse publiée comme article (content.article.source) ; exige `titre_lien`."),
+      titre_lien: z.string().min(1).max(399).optional().describe("Titre de l'article lié (content.article.title, moins de 400 caractères) ; obligatoire avec `lien`."),
+    }, true),
+  };
+}

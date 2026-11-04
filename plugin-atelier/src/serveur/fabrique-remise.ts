@@ -245,6 +245,16 @@ export interface TravailListe {
   fin: string | null;
   message: string | null;
   fichiers: FichierListe[];
+  /** Tâche du run qui a demandé le travail (champ `tache` d'etat.json), null si absente ou mal formée. */
+  tache: string | null;
+}
+
+/** UI-11 : tâche d'origine d'un livrable, lue dans l'entreprise de la requête. */
+export interface OrigineLivrable {
+  issueId: string;
+  identifiant: string | null;
+  titre: string;
+  lien: string;
 }
 
 const chaineOuNull = (v: unknown, max = 200): string | null => (typeof v === "string" ? v.replace(/[\r\n]+/gu, " ").slice(0, max) : null);
@@ -281,6 +291,7 @@ export async function listerTravaux(racine: string, companyId: string): Promise<
       fin: chaineOuNull(etat.fin, 40),
       message: etat.etat === "echec" ? chaineOuNull(etat.message) : null,
       fichiers,
+      tache: typeof etat.tache === "string" && UUID.test(etat.tache) ? etat.tache.toLowerCase() : null,
     });
   }
   return travaux.sort((a, b) => heureDe(b) - heureDe(a)).slice(0, NOMBRE_TRAVAUX_LISTE);
@@ -289,6 +300,8 @@ export async function listerTravaux(racine: string, companyId: string): Promise<
 export interface DependancesRoutesLivrables {
   /** Dossier racine de la file (configuration d'instance de l'entreprise). */
   racine: (companyId: string) => Promise<string>;
+  /** Identifiant et titre d'une tâche de l'entreprise, null si elle n'existe pas (UI-11). Absent : origine non donnée. */
+  origine?: (issueId: string, companyId: string) => Promise<{ identifiant: string | null; titre: string } | null>;
 }
 
 /** Numéro de morceau de la requête : absent = 0 ; sinon un entier décimal (la validation fine est dans `lireMorceau`). */
@@ -325,7 +338,17 @@ export function routesLivrables(d: DependancesRoutesLivrables): Partial<Record<C
     },
     "livrables.lister": async (r) => {
       if (r.acteur.type !== "humain") erreur("acces_refuse", "Liste réservée aux membres de l'entreprise.");
-      return { corps: { travaux: await listerTravaux(await d.racine(r.companyId), r.companyId) } };
+      const travaux = await listerTravaux(await d.racine(r.companyId), r.companyId);
+      const lues = new Map<string, Promise<OrigineLivrable | null>>();
+      const origineDe = (issueId: string) => {
+        if (!lues.has(issueId)) {
+          lues.set(issueId, (d.origine ? d.origine(issueId, r.companyId).catch(() => null) : Promise.resolve(null)).then((o) =>
+            o ? { issueId, identifiant: o.identifiant, titre: o.titre, lien: `/issues/${o.identifiant ?? issueId}` } : null));
+        }
+        return lues.get(issueId)!;
+      };
+      const avecOrigine = await Promise.all(travaux.map(async (t) => ({ ...t, origine: t.tache ? await origineDe(t.tache) : null })));
+      return { corps: { travaux: avecOrigine } };
     },
   };
 }

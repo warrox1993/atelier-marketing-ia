@@ -59,12 +59,12 @@ export const FICHES_AGENTS_MARKETING: readonly FicheAgentMarketing[] = [
       {
         "cle": "cadrage-exigences",
         "nom": "Cadrage et extraction des exigences",
-        "sert": "Transforme une demande marketing en brief structuré et en exigences numérotées REQ-001, REQ-002..."
+        "sert": "Transforme une demande adressée à un service (campagne marketing, dossier, mission d'un département) en brief structuré et en exigences numérotées REQ-001, REQ-002..."
       },
       {
         "cle": "planification-livrables",
         "nom": "Planification des dépendances et des livrables",
-        "sert": "Construit le plan d'une campagne sous forme de tâches Paperclip : un livrable par tâche, un responsable, des dépendances sans cycle, les relectures requises et les exigences couvertes."
+        "sert": "Construit le plan de travail d'une demande (campagne, dossier, mission d'un service) sous forme de tâches Paperclip : un livrable par tâche, un responsable, des dépendances sans cycle, les relectures requises et les exigences couvertes."
       },
       {
         "cle": "dossier-validation-humaine",
@@ -74,7 +74,7 @@ export const FICHES_AGENTS_MARKETING: readonly FicheAgentMarketing[] = [
       {
         "cle": "recherche-connaissances",
         "nom": "Recherche dans les connaissances du client",
-        "sert": "Interroge les connaissances du client (conditions générales, fiches produit, tarifs, FAQ, notes) avant d'écrire un chiffre d'offre, et cite l'adresse connaissance:// rendue ; sans source, signale l'information manquante."
+        "sert": "Interroge les connaissances de l'entreprise de la tâche (documents importés : conditions générales, fiches produit, tarifs, procédures, FAQ, notes) avant d'écrire un fait propre à cette entreprise, et cite l'adresse connaissance:// rendue ; sans source, signale l'information manquante."
       },
       {
         "cle": "protocole-inter-coordinateurs",
@@ -87,18 +87,29 @@ export const FICHES_AGENTS_MARKETING: readonly FicheAgentMarketing[] = [
         "sert": "Rédige le brief d'une campagne marketing en dix rubriques (vue d'ensemble et objectif mesurable, public, messages clés avec preuves, canaux, calendrier par semaine avec dépendances, pièces à produire, indicateurs, budget si fourni, risques, prochaines étapes), adapté à une PME belge (langues FR, NL ou EN, mentions réglementées, consentements)."
       },
       {
-        "cle": "documents-bureautiques",
-        "nom": "Documents bureautiques (Word, Excel, PowerPoint, PDF)",
-        "sert": "Produit et relit de vrais fichiers Word, Excel, PowerPoint et PDF avec des outils libres (python-docx, openpyxl, python-pptx, LibreOffice sans affichage, pypdf) : gabarit et styles nommés, contenu séparé de la mise en forme, contrôle du rendu par conversion en PDF, accessibilité (titres, textes de remplacement, contraste, langue) et relecture d'un fichier reçu."
+        "cle": "registre-decisions",
+        "nom": "Registre des décisions",
+        "sert": "Tient le registre des décisions de la direction et des actions qui en découlent : format d'entrée fixe (décision, responsable, échéance, date de revue, raison, dérogation humaine, propositions rejetées à ne pas reproposer, actions, remplace et remplacée par) et détection de trois conflits (proposition déjà rejetée, décisions actives contradictoires, action attribuée deux fois)."
+      },
+      {
+        "cle": "dossier-sujet",
+        "nom": "Dossier du sujet avant une image ou une vidéo",
+        "sert": "Produit, lit ou relit le dossier du sujet, le document qui doit exister avant toute image ou vidéo fabriquée par l'atelier : six rubriques fixes (Sujet, Faits vérifiés, Vocabulaire et références du public, Ton, À ne pas dire, Droits), un tableau de faits dont chaque source a été lue, et les droits d'un produit ou d'une marque tiers."
+      },
+      {
+        "cle": "memoire-para",
+        "nom": "Mémoire en fichiers (méthode PARA)",
+        "sert": "Tient la mémoire persistante de l'agent en fichiers, selon la méthode PARA (graphe de connaissances, notes du jour, savoir tacite), dans son dossier de mémoire (chemin donné par la section « Ta mémoire » de ses consignes), avec la source et la date de chaque fait."
       }
     ],
     "interdits": [
       "Tu ne contournes jamais un contrôle bloquant et tu ne modifies pas la politique de revue d'une tâche. Un verdict CHANGES_REQUESTED ou BLOCKED_INFORMATION se traite, il ne s'efface pas.",
-      "Tu ne transformes jamais une hypothèse en fait. Une information manquante devient une question précise à l'humain, une tâche de recherche, ou un blocage explicite.",
+      "Tu ne transformes jamais une hypothèse en fait. Une information manquante devient une tâche de recherche confiée à l'agent qui peut la trouver (« Qui trouve quoi »), sinon une liaison, et seulement en dernier une question précise à l'humain ou un blocage explicite.",
       "Tu ne marques pas une exigence obligatoire « non applicable » pour finir plus vite : seule une décision humaine enregistrée peut l'exclure.",
       "Aucune publication, aucun envoi, aucune dépense : ces actions passent par une approbation humaine qui vise une version précise."
     ],
     "outilsRetires": [
+      "lire des pages web",
       "chercher sur le web",
       "créer des fichiers",
       "modifier des fichiers",
@@ -131,33 +142,34 @@ export const FICHES_AGENTS_MARKETING: readonly FicheAgentMarketing[] = [
       {
         "cle": "analyse-concurrentielle",
         "nom": "Analyse concurrentielle",
-        "sert": "Compare des concurrents sur des critères identiques (offres, zones, preuves, canaux, messages) à partir de sources datées, et en tire des opportunités et risques étiquetés comme recommandations."
+        "sert": "Compare des concurrents ou des solutions concurrentes (offres, outils, modèles) sur des critères identiques (offres, zones, preuves, canaux, messages ; pour des outils : fonctions, prix, licence, limites) à partir de sources datées, et en tire des opportunités et risques étiquetés comme recommandations."
       },
       {
         "cle": "points-entree-categorie",
         "nom": "Points d'entrée de la catégorie",
-        "sert": "Relève les catégories d'entrée (situations, besoins, signaux qui font penser à l'achat d'une assurance, méthode des 7W de Jenni Romaniuk), les rédige en langage client, les classe par fréquence et importance avec preuve, puis les affecte aux agents de canal ; propose des métriques de disponibilité mentale si un sondage est possible."
+        "sert": "Relève les catégories d'entrée (situations, besoins, signaux qui font penser à acheter dans la catégorie du client, méthode des 7W de Jenni Romaniuk), les rédige en langage client, les classe par fréquence et importance avec preuve, puis les affecte aux agents de canal ; propose des métriques de disponibilité mentale si un sondage est possible."
       },
       {
-        "cle": "documents-bureautiques",
-        "nom": "Documents bureautiques (Word, Excel, PowerPoint, PDF)",
-        "sert": "Produit et relit de vrais fichiers Word, Excel, PowerPoint et PDF avec des outils libres (python-docx, openpyxl, python-pptx, LibreOffice sans affichage, pypdf) : gabarit et styles nommés, contenu séparé de la mise en forme, contrôle du rendu par conversion en PDF, accessibilité (titres, textes de remplacement, contraste, langue) et relecture d'un fichier reçu."
+        "cle": "dossier-sujet",
+        "nom": "Dossier du sujet avant une image ou une vidéo",
+        "sert": "Produit, lit ou relit le dossier du sujet, le document qui doit exister avant toute image ou vidéo fabriquée par l'atelier : six rubriques fixes (Sujet, Faits vérifiés, Vocabulaire et références du public, Ton, À ne pas dire, Droits), un tableau de faits dont chaque source a été lue, et les droits d'un produit ou d'une marque tiers."
       },
       {
         "cle": "memoire-para",
         "nom": "Mémoire en fichiers (méthode PARA)",
-        "sert": "Tient la mémoire persistante de l'agent en fichiers, selon la méthode PARA (graphe de connaissances, notes du jour, savoir tacite), dans le dossier ./memoire/ de son répertoire de travail, avec la source et la date de chaque fait."
+        "sert": "Tient la mémoire persistante de l'agent en fichiers, selon la méthode PARA (graphe de connaissances, notes du jour, savoir tacite), dans son dossier de mémoire (chemin donné par la section « Ta mémoire » de ses consignes), avec la source et la date de chaque fait."
       },
       {
         "cle": "recherche-connaissances",
         "nom": "Recherche dans les connaissances du client",
-        "sert": "Interroge les connaissances du client (conditions générales, fiches produit, tarifs, FAQ, notes) avant d'écrire un chiffre d'offre, et cite l'adresse connaissance:// rendue ; sans source, signale l'information manquante."
+        "sert": "Interroge les connaissances de l'entreprise de la tâche (documents importés : conditions générales, fiches produit, tarifs, procédures, FAQ, notes) avant d'écrire un fait propre à cette entreprise, et cite l'adresse connaissance:// rendue ; sans source, signale l'information manquante."
       }
     ],
     "interdits": [
       "Tu ne prétends jamais avoir lu une page inaccessible et tu ne généralises pas un échantillon incomplet sans le dire."
     ],
     "outilsRetires": [
+      "lire des pages web",
       "modifier des fichiers",
       "lancer d'autres agents"
     ],
@@ -228,7 +240,7 @@ export const FICHES_AGENTS_MARKETING: readonly FicheAgentMarketing[] = [
       {
         "cle": "points-entree-categorie",
         "nom": "Points d'entrée de la catégorie",
-        "sert": "Relève les catégories d'entrée (situations, besoins, signaux qui font penser à l'achat d'une assurance, méthode des 7W de Jenni Romaniuk), les rédige en langage client, les classe par fréquence et importance avec preuve, puis les affecte aux agents de canal ; propose des métriques de disponibilité mentale si un sondage est possible."
+        "sert": "Relève les catégories d'entrée (situations, besoins, signaux qui font penser à acheter dans la catégorie du client, méthode des 7W de Jenni Romaniuk), les rédige en langage client, les classe par fréquence et importance avec preuve, puis les affecte aux agents de canal ; propose des métriques de disponibilité mentale si un sondage est possible."
       },
       {
         "cle": "recherche-sourcee",
@@ -238,7 +250,7 @@ export const FICHES_AGENTS_MARKETING: readonly FicheAgentMarketing[] = [
       {
         "cle": "recherche-connaissances",
         "nom": "Recherche dans les connaissances du client",
-        "sert": "Interroge les connaissances du client (conditions générales, fiches produit, tarifs, FAQ, notes) avant d'écrire un chiffre d'offre, et cite l'adresse connaissance:// rendue ; sans source, signale l'information manquante."
+        "sert": "Interroge les connaissances de l'entreprise de la tâche (documents importés : conditions générales, fiches produit, tarifs, procédures, FAQ, notes) avant d'écrire un fait propre à cette entreprise, et cite l'adresse connaissance:// rendue ; sans source, signale l'information manquante."
       },
       {
         "cle": "documents-bureautiques",
@@ -248,7 +260,7 @@ export const FICHES_AGENTS_MARKETING: readonly FicheAgentMarketing[] = [
       {
         "cle": "memoire-para",
         "nom": "Mémoire en fichiers (méthode PARA)",
-        "sert": "Tient la mémoire persistante de l'agent en fichiers, selon la méthode PARA (graphe de connaissances, notes du jour, savoir tacite), dans le dossier ./memoire/ de son répertoire de travail, avec la source et la date de chaque fait."
+        "sert": "Tient la mémoire persistante de l'agent en fichiers, selon la méthode PARA (graphe de connaissances, notes du jour, savoir tacite), dans son dossier de mémoire (chemin donné par la section « Ta mémoire » de ses consignes), avec la source et la date de chaque fait."
       }
     ],
     "interdits": [
@@ -257,6 +269,7 @@ export const FICHES_AGENTS_MARKETING: readonly FicheAgentMarketing[] = [
       "Tu ne contactes personne et tu ne publies rien."
     ],
     "outilsRetires": [
+      "lire des pages web",
       "modifier des fichiers",
       "lancer d'autres agents"
     ],
@@ -307,18 +320,19 @@ export const FICHES_AGENTS_MARKETING: readonly FicheAgentMarketing[] = [
       {
         "cle": "memoire-para",
         "nom": "Mémoire en fichiers (méthode PARA)",
-        "sert": "Tient la mémoire persistante de l'agent en fichiers, selon la méthode PARA (graphe de connaissances, notes du jour, savoir tacite), dans le dossier ./memoire/ de son répertoire de travail, avec la source et la date de chaque fait."
+        "sert": "Tient la mémoire persistante de l'agent en fichiers, selon la méthode PARA (graphe de connaissances, notes du jour, savoir tacite), dans son dossier de mémoire (chemin donné par la section « Ta mémoire » de ses consignes), avec la source et la date de chaque fait."
       },
       {
         "cle": "recherche-connaissances",
         "nom": "Recherche dans les connaissances du client",
-        "sert": "Interroge les connaissances du client (conditions générales, fiches produit, tarifs, FAQ, notes) avant d'écrire un chiffre d'offre, et cite l'adresse connaissance:// rendue ; sans source, signale l'information manquante."
+        "sert": "Interroge les connaissances de l'entreprise de la tâche (documents importés : conditions générales, fiches produit, tarifs, procédures, FAQ, notes) avant d'écrire un fait propre à cette entreprise, et cite l'adresse connaissance:// rendue ; sans source, signale l'information manquante."
       }
     ],
     "interdits": [
       "Tu ne contactes personne : ni courriel, ni message, ni appel, ni formulaire. Tu n'écris jamais au CRM ; l'export est une diffusion que seul un humain approuve."
     ],
     "outilsRetires": [
+      "lire des pages web",
       "modifier des fichiers",
       "lancer d'autres agents"
     ],
@@ -345,7 +359,7 @@ export const FICHES_AGENTS_MARKETING: readonly FicheAgentMarketing[] = [
       {
         "cle": "coordonnees-recherche",
         "nom": "Recherche des coordonnées professionnelles",
-        "sert": "Cherche, pour chaque fiche d'une liste de prospects, les numéros de téléphone professionnels publiés par des sources licites : site entier (contact, équipe, mentions légales), PDF publiés, annuaires professionnels, fiche Google Business, BCE/KBO et coordonnées que la personne publie elle-même sur LinkedIn."
+        "sert": "Cherche, pour chaque fiche d'une liste de prospects, les numéros de téléphone professionnels publiés par des sources licites : site entier (contact, équipe, mentions légales), PDF publiés, annuaires professionnels, fiche Google Business, BCE/KBO et page LinkedIn de l'entreprise lue par l'humain."
       },
       {
         "cle": "coordonnees-recoupement",
@@ -360,7 +374,7 @@ export const FICHES_AGENTS_MARKETING: readonly FicheAgentMarketing[] = [
       {
         "cle": "recherche-connaissances",
         "nom": "Recherche dans les connaissances du client",
-        "sert": "Interroge les connaissances du client (conditions générales, fiches produit, tarifs, FAQ, notes) avant d'écrire un chiffre d'offre, et cite l'adresse connaissance:// rendue ; sans source, signale l'information manquante."
+        "sert": "Interroge les connaissances de l'entreprise de la tâche (documents importés : conditions générales, fiches produit, tarifs, procédures, FAQ, notes) avant d'écrire un fait propre à cette entreprise, et cite l'adresse connaissance:// rendue ; sans source, signale l'information manquante."
       },
       {
         "cle": "coordonnees-signatures-email",
@@ -375,12 +389,12 @@ export const FICHES_AGENTS_MARKETING: readonly FicheAgentMarketing[] = [
       {
         "cle": "achat-coordonnees-fournisseur",
         "nom": "Achat de coordonnées auprès d'un fournisseur sous licence",
-        "sert": "À utiliser avant toute dépense chez un fournisseur : prépare une carte de DÉCISION de dépense avant toute requête à un fournisseur B2B de coordonnées sous licence (Lusha, Kaspr ou équivalent) : fiches prioritaires dont les sources gratuites ont échoué, liste exacte, coût estimé par contact et total, base légale du fournisseur, conservation de la preuve d'achat."
+        "sert": "Prépare une carte de DÉCISION de dépense avant toute requête à un fournisseur B2B de coordonnées sous licence : fiches prioritaires dont les sources gratuites ont échoué, liste exacte, coût estimé par contact et total, base légale du fournisseur, conservation de la preuve d'achat."
       },
       {
         "cle": "memoire-para",
         "nom": "Mémoire en fichiers (méthode PARA)",
-        "sert": "Tient la mémoire persistante de l'agent en fichiers, selon la méthode PARA (graphe de connaissances, notes du jour, savoir tacite), dans le dossier ./memoire/ de son répertoire de travail, avec la source et la date de chaque fait."
+        "sert": "Tient la mémoire persistante de l'agent en fichiers, selon la méthode PARA (graphe de connaissances, notes du jour, savoir tacite), dans son dossier de mémoire (chemin donné par la section « Ta mémoire » de ses consignes), avec la source et la date de chaque fait."
       }
     ],
     "interdits": [
@@ -388,6 +402,7 @@ export const FICHES_AGENTS_MARKETING: readonly FicheAgentMarketing[] = [
       "Aucune aspiration massive d'un site, d'un annuaire ou d'un réseau social ; aucun contournement d'une connexion, d'une vérification anti-robot ou d'une limite d'accès. Sur LinkedIn, seulement ce qui est visible publiquement sans connexion."
     ],
     "outilsRetires": [
+      "lire des pages web",
       "modifier des fichiers",
       "lancer d'autres agents"
     ],
@@ -434,12 +449,12 @@ export const FICHES_AGENTS_MARKETING: readonly FicheAgentMarketing[] = [
       {
         "cle": "recherche-connaissances",
         "nom": "Recherche dans les connaissances du client",
-        "sert": "Interroge les connaissances du client (conditions générales, fiches produit, tarifs, FAQ, notes) avant d'écrire un chiffre d'offre, et cite l'adresse connaissance:// rendue ; sans source, signale l'information manquante."
+        "sert": "Interroge les connaissances de l'entreprise de la tâche (documents importés : conditions générales, fiches produit, tarifs, procédures, FAQ, notes) avant d'écrire un fait propre à cette entreprise, et cite l'adresse connaissance:// rendue ; sans source, signale l'information manquante."
       },
       {
         "cle": "points-entree-categorie",
         "nom": "Points d'entrée de la catégorie",
-        "sert": "Relève les catégories d'entrée (situations, besoins, signaux qui font penser à l'achat d'une assurance, méthode des 7W de Jenni Romaniuk), les rédige en langage client, les classe par fréquence et importance avec preuve, puis les affecte aux agents de canal ; propose des métriques de disponibilité mentale si un sondage est possible."
+        "sert": "Relève les catégories d'entrée (situations, besoins, signaux qui font penser à acheter dans la catégorie du client, méthode des 7W de Jenni Romaniuk), les rédige en langage client, les classe par fréquence et importance avec preuve, puis les affecte aux agents de canal ; propose des métriques de disponibilité mentale si un sondage est possible."
       },
       {
         "cle": "liens-entrants-seo",
@@ -449,13 +464,14 @@ export const FICHES_AGENTS_MARKETING: readonly FicheAgentMarketing[] = [
       {
         "cle": "memoire-para",
         "nom": "Mémoire en fichiers (méthode PARA)",
-        "sert": "Tient la mémoire persistante de l'agent en fichiers, selon la méthode PARA (graphe de connaissances, notes du jour, savoir tacite), dans le dossier ./memoire/ de son répertoire de travail, avec la source et la date de chaque fait."
+        "sert": "Tient la mémoire persistante de l'agent en fichiers, selon la méthode PARA (graphe de connaissances, notes du jour, savoir tacite), dans son dossier de mémoire (chemin donné par la section « Ta mémoire » de ses consignes), avec la source et la date de chaque fait."
       }
     ],
     "interdits": [
       "Aucune promesse de position, de classement ou de citation par un moteur d'IA."
     ],
     "outilsRetires": [
+      "lire des pages web",
       "modifier des fichiers",
       "lancer d'autres agents"
     ],
@@ -493,7 +509,7 @@ export const FICHES_AGENTS_MARKETING: readonly FicheAgentMarketing[] = [
       {
         "cle": "recherche-connaissances",
         "nom": "Recherche dans les connaissances du client",
-        "sert": "Interroge les connaissances du client (conditions générales, fiches produit, tarifs, FAQ, notes) avant d'écrire un chiffre d'offre, et cite l'adresse connaissance:// rendue ; sans source, signale l'information manquante."
+        "sert": "Interroge les connaissances de l'entreprise de la tâche (documents importés : conditions générales, fiches produit, tarifs, procédures, FAQ, notes) avant d'écrire un fait propre à cette entreprise, et cite l'adresse connaissance:// rendue ; sans source, signale l'information manquante."
       },
       {
         "cle": "niveau-conscience-message",
@@ -516,15 +532,21 @@ export const FICHES_AGENTS_MARKETING: readonly FicheAgentMarketing[] = [
         "sert": "Retire d'un texte français les tics d'écriture des modèles d'IA (vocabulaire gonflé, anglicismes, ouvertures et conclusions toutes faites, participes en -ant en cascade, règle de trois systématique, gras et listes mécaniques, typographie incohérente, uniformité des phrases) sans changer le sens, le registre ni aucun fait."
       },
       {
+        "cle": "adaptation-fr-nl-en",
+        "nom": "Adaptation en français, néerlandais et anglais",
+        "sert": "Adapte un texte d'entreprise entre le français, le néerlandais et l'anglais pour un public belge ou international (communiqué, page du site, courriel client, annonce interne, offre d'emploi) en adaptant le registre, les conventions locales et la terminologie plutôt qu'en traduisant mot à mot, avec le contrôle de cohérence entre versions, la liste des choix faits et les passages à faire relire par un locuteur natif."
+      },
+      {
         "cle": "memoire-para",
         "nom": "Mémoire en fichiers (méthode PARA)",
-        "sert": "Tient la mémoire persistante de l'agent en fichiers, selon la méthode PARA (graphe de connaissances, notes du jour, savoir tacite), dans le dossier ./memoire/ de son répertoire de travail, avec la source et la date de chaque fait."
+        "sert": "Tient la mémoire persistante de l'agent en fichiers, selon la méthode PARA (graphe de connaissances, notes du jour, savoir tacite), dans son dossier de mémoire (chemin donné par la section « Ta mémoire » de ses consignes), avec la source et la date de chaque fait."
       }
     ],
     "interdits": [
       "Aucune activation de campagne, aucune hausse de budget, même présentée comme une simple suggestion d'automatisation."
     ],
     "outilsRetires": [
+      "lire des pages web",
       "chercher sur le web",
       "modifier des fichiers",
       "lancer d'autres agents"
@@ -567,7 +589,7 @@ export const FICHES_AGENTS_MARKETING: readonly FicheAgentMarketing[] = [
       {
         "cle": "recherche-connaissances",
         "nom": "Recherche dans les connaissances du client",
-        "sert": "Interroge les connaissances du client (conditions générales, fiches produit, tarifs, FAQ, notes) avant d'écrire un chiffre d'offre, et cite l'adresse connaissance:// rendue ; sans source, signale l'information manquante."
+        "sert": "Interroge les connaissances de l'entreprise de la tâche (documents importés : conditions générales, fiches produit, tarifs, procédures, FAQ, notes) avant d'écrire un fait propre à cette entreprise, et cite l'adresse connaissance:// rendue ; sans source, signale l'information manquante."
       },
       {
         "cle": "niveau-conscience-message",
@@ -602,7 +624,7 @@ export const FICHES_AGENTS_MARKETING: readonly FicheAgentMarketing[] = [
       {
         "cle": "aimant-a-prospects",
         "nom": "Aimant à prospects : un guide gratuit contre des coordonnées",
-        "sert": "Conçoit un guide gratuit (aimant à prospects) remis en échange de coordonnées sur la page de captation : sujet utile à la cible, sommaire, promesse sans garantie de rendement (cadre de l'assurance belge, mentions FSMA si produit d'assurance), champ téléphone facultatif et justifié."
+        "sert": "Conçoit un guide gratuit (aimant à prospects) remis en échange de coordonnées sur la page de captation : sujet utile à la cible, sommaire, promesse sans garantie de rendement (cadre de l'assurance belge, mentions FSMA si produit d'assurance), formulaire de rappel de l'outil (téléphone obligatoire, e-mail facultatif), guide remis par l'humain."
       },
       {
         "cle": "humanisation-texte-fr",
@@ -615,16 +637,41 @@ export const FICHES_AGENTS_MARKETING: readonly FicheAgentMarketing[] = [
         "sert": "Critique puis finit un visuel, une page ou un document mis en forme : verdict de spécificité (fait pour ce client ou interchangeable), problèmes classés de P0 à P3, hiérarchie, typographie, espacement, contraste, états, et refus des habitudes qui donnent l'allure d'une production d'IA (cartes identiques, gros chiffre décoratif, surtitre, texte en dégradé, émojis en guise d'icônes, tiret cadratin) ; audite aussi un système de design (jetons, valeurs codées en dur, composants et leurs états) et documente ou conçoit un composant."
       },
       {
+        "cle": "documents-bureautiques",
+        "nom": "Documents bureautiques (Word, Excel, PowerPoint, PDF)",
+        "sert": "Produit et relit de vrais fichiers Word, Excel, PowerPoint et PDF avec des outils libres (python-docx, openpyxl, python-pptx, LibreOffice sans affichage, pypdf) : gabarit et styles nommés, contenu séparé de la mise en forme, contrôle du rendu par conversion en PDF, accessibilité (titres, textes de remplacement, contraste, langue) et relecture d'un fichier reçu."
+      },
+      {
+        "cle": "adaptation-fr-nl-en",
+        "nom": "Adaptation en français, néerlandais et anglais",
+        "sert": "Adapte un texte d'entreprise entre le français, le néerlandais et l'anglais pour un public belge ou international (communiqué, page du site, courriel client, annonce interne, offre d'emploi) en adaptant le registre, les conventions locales et la terminologie plutôt qu'en traduisant mot à mot, avec le contrôle de cohérence entre versions, la liste des choix faits et les passages à faire relire par un locuteur natif."
+      },
+      {
+        "cle": "campagne-courriel",
+        "nom": "Campagne de courriel : prospection et lettre d'information",
+        "sert": "Prépare une campagne de courriel (prospection d'entreprises ou lettre d'information) par la connexion `emailing` : base légale de chaque adresse selon le droit belge (Code de droit économique, art."
+      },
+      {
+        "cle": "conformite-publicite-ia",
+        "nom": "Conformité d'une publicité faite avec l'IA",
+        "sert": "Liste de contrôle à cocher avant et après la fabrication d'une publicité vidéo, audio ou image (visuel de post composé par la fabrique) faite avec une voix ou des images de synthèse : signalement de l'IA dès la première seconde (règlement européen sur l'IA, article 50 ; article 9 du Code belge de la publicité), voix et visages de vraies personnes, célébrités, étiquettes de TikTok et de Meta, registre de la musique, publicité trompeuse et comparaison déloyale (Code de droit économique), produits d'assurance."
+      },
+      {
+        "cle": "dossier-sujet",
+        "nom": "Dossier du sujet avant une image ou une vidéo",
+        "sert": "Produit, lit ou relit le dossier du sujet, le document qui doit exister avant toute image ou vidéo fabriquée par l'atelier : six rubriques fixes (Sujet, Faits vérifiés, Vocabulaire et références du public, Ton, À ne pas dire, Droits), un tableau de faits dont chaque source a été lue, et les droits d'un produit ou d'une marque tiers."
+      },
+      {
         "cle": "memoire-para",
         "nom": "Mémoire en fichiers (méthode PARA)",
-        "sert": "Tient la mémoire persistante de l'agent en fichiers, selon la méthode PARA (graphe de connaissances, notes du jour, savoir tacite), dans le dossier ./memoire/ de son répertoire de travail, avec la source et la date de chaque fait."
+        "sert": "Tient la mémoire persistante de l'agent en fichiers, selon la méthode PARA (graphe de connaissances, notes du jour, savoir tacite), dans son dossier de mémoire (chemin donné par la section « Ta mémoire » de ses consignes), avec la source et la date de chaque fait."
       }
     ],
     "interdits": [
       "Tu n'inventes ni témoignage, ni avis client, ni certification, ni prix, ni résultat, ni subvention, ni engagement commercial. Ce qui n'est pas sourcé est marqué « à confirmer »."
     ],
     "outilsRetires": [
-      "chercher sur le web",
+      "lire des pages web",
       "lancer d'autres agents"
     ],
     "pourquoi": "Les textes et les briefs de visuels sont produits selon la charte de la marque, avec leurs sources et droits signalés, pour que la relecture porte sur un contenu déjà cadré."
@@ -659,7 +706,7 @@ export const FICHES_AGENTS_MARKETING: readonly FicheAgentMarketing[] = [
       {
         "cle": "recherche-connaissances",
         "nom": "Recherche dans les connaissances du client",
-        "sert": "Interroge les connaissances du client (conditions générales, fiches produit, tarifs, FAQ, notes) avant d'écrire un chiffre d'offre, et cite l'adresse connaissance:// rendue ; sans source, signale l'information manquante."
+        "sert": "Interroge les connaissances de l'entreprise de la tâche (documents importés : conditions générales, fiches produit, tarifs, procédures, FAQ, notes) avant d'écrire un fait propre à cette entreprise, et cite l'adresse connaissance:// rendue ; sans source, signale l'information manquante."
       },
       {
         "cle": "leviers-influence-ethiques",
@@ -687,9 +734,19 @@ export const FICHES_AGENTS_MARKETING: readonly FicheAgentMarketing[] = [
         "sert": "Prépare puis, après accord humain, fait passer par la passerelle CRM de l'usine une mise à jour du CRM : activité à consigner (appel, rendez-vous, courriel déjà faits) ou changement d'une affaire, d'un lead ou d'un contact (étape, date de signature, prochaine étape, montant, champ de contact)."
       },
       {
+        "cle": "adaptation-fr-nl-en",
+        "nom": "Adaptation en français, néerlandais et anglais",
+        "sert": "Adapte un texte d'entreprise entre le français, le néerlandais et l'anglais pour un public belge ou international (communiqué, page du site, courriel client, annonce interne, offre d'emploi) en adaptant le registre, les conventions locales et la terminologie plutôt qu'en traduisant mot à mot, avec le contrôle de cohérence entre versions, la liste des choix faits et les passages à faire relire par un locuteur natif."
+      },
+      {
+        "cle": "campagne-courriel",
+        "nom": "Campagne de courriel : prospection et lettre d'information",
+        "sert": "Prépare une campagne de courriel (prospection d'entreprises ou lettre d'information) par la connexion `emailing` : base légale de chaque adresse selon le droit belge (Code de droit économique, art."
+      },
+      {
         "cle": "memoire-para",
         "nom": "Mémoire en fichiers (méthode PARA)",
-        "sert": "Tient la mémoire persistante de l'agent en fichiers, selon la méthode PARA (graphe de connaissances, notes du jour, savoir tacite), dans le dossier ./memoire/ de son répertoire de travail, avec la source et la date de chaque fait."
+        "sert": "Tient la mémoire persistante de l'agent en fichiers, selon la méthode PARA (graphe de connaissances, notes du jour, savoir tacite), dans son dossier de mémoire (chemin donné par la section « Ta mémoire » de ses consignes), avec la source et la date de chaque fait."
       }
     ],
     "interdits": [
@@ -740,14 +797,24 @@ export const FICHES_AGENTS_MARKETING: readonly FicheAgentMarketing[] = [
         "sert": "Conçoit les graphiques d'un rapport ou d'un tableau de bord : un message par graphique, type choisi selon la question (évolution, comparaison, part, répartition, relation), titre qui énonce la conclusion, axes et unités honnêtes, couleurs lisibles par les personnes daltoniennes, source et date sous chaque graphique, texte de remplacement."
       },
       {
+        "cle": "actifs-distinctifs",
+        "nom": "Actifs distinctifs de marque",
+        "sert": "Inventorie les actifs distinctifs d'une marque (logo, couleur, formule, personnage, ton, visage du courtier), mesure si possible leur notoriété et leur unicité par sondage, les classe en à utiliser, à investir, à éviter et fournit des règles d'usage à reporter dans la charte de marque."
+      },
+      {
+        "cle": "points-entree-categorie",
+        "nom": "Points d'entrée de la catégorie",
+        "sert": "Relève les catégories d'entrée (situations, besoins, signaux qui font penser à acheter dans la catégorie du client, méthode des 7W de Jenni Romaniuk), les rédige en langage client, les classe par fréquence et importance avec preuve, puis les affecte aux agents de canal ; propose des métriques de disponibilité mentale si un sondage est possible."
+      },
+      {
         "cle": "memoire-para",
         "nom": "Mémoire en fichiers (méthode PARA)",
-        "sert": "Tient la mémoire persistante de l'agent en fichiers, selon la méthode PARA (graphe de connaissances, notes du jour, savoir tacite), dans le dossier ./memoire/ de son répertoire de travail, avec la source et la date de chaque fait."
+        "sert": "Tient la mémoire persistante de l'agent en fichiers, selon la méthode PARA (graphe de connaissances, notes du jour, savoir tacite), dans son dossier de mémoire (chemin donné par la section « Ta mémoire » de ses consignes), avec la source et la date de chaque fait."
       },
       {
         "cle": "recherche-connaissances",
         "nom": "Recherche dans les connaissances du client",
-        "sert": "Interroge les connaissances du client (conditions générales, fiches produit, tarifs, FAQ, notes) avant d'écrire un chiffre d'offre, et cite l'adresse connaissance:// rendue ; sans source, signale l'information manquante."
+        "sert": "Interroge les connaissances de l'entreprise de la tâche (documents importés : conditions générales, fiches produit, tarifs, procédures, FAQ, notes) avant d'écrire un fait propre à cette entreprise, et cite l'adresse connaissance:// rendue ; sans source, signale l'information manquante."
       }
     ],
     "interdits": [],
@@ -794,7 +861,7 @@ export const FICHES_AGENTS_MARKETING: readonly FicheAgentMarketing[] = [
       {
         "cle": "points-entree-categorie",
         "nom": "Points d'entrée de la catégorie",
-        "sert": "Relève les catégories d'entrée (situations, besoins, signaux qui font penser à l'achat d'une assurance, méthode des 7W de Jenni Romaniuk), les rédige en langage client, les classe par fréquence et importance avec preuve, puis les affecte aux agents de canal ; propose des métriques de disponibilité mentale si un sondage est possible."
+        "sert": "Relève les catégories d'entrée (situations, besoins, signaux qui font penser à acheter dans la catégorie du client, méthode des 7W de Jenni Romaniuk), les rédige en langage client, les classe par fréquence et importance avec preuve, puis les affecte aux agents de canal ; propose des métriques de disponibilité mentale si un sondage est possible."
       },
       {
         "cle": "niveau-conscience-message",
@@ -819,7 +886,7 @@ export const FICHES_AGENTS_MARKETING: readonly FicheAgentMarketing[] = [
       {
         "cle": "conformite-publicite-ia",
         "nom": "Conformité d'une publicité faite avec l'IA",
-        "sert": "Liste de contrôle à cocher avant et après la fabrication d'une publicité vidéo ou audio faite avec une voix ou des images de synthèse : signalement de l'IA dès la première seconde (règlement européen sur l'IA, article 50 ; article 9 du Code belge de la publicité), voix et visages de vraies personnes, célébrités, étiquettes de TikTok et de Meta, registre de la musique, publicité trompeuse et comparaison déloyale (Code de droit économique), produits d'assurance."
+        "sert": "Liste de contrôle à cocher avant et après la fabrication d'une publicité vidéo, audio ou image (visuel de post composé par la fabrique) faite avec une voix ou des images de synthèse : signalement de l'IA dès la première seconde (règlement européen sur l'IA, article 50 ; article 9 du Code belge de la publicité), voix et visages de vraies personnes, célébrités, étiquettes de TikTok et de Meta, registre de la musique, publicité trompeuse et comparaison déloyale (Code de droit économique), produits d'assurance."
       },
       {
         "cle": "declinaison-regies-video",
@@ -827,14 +894,24 @@ export const FICHES_AGENTS_MARKETING: readonly FicheAgentMarketing[] = [
         "sert": "Décline une publicité vidéo faite avec l'outil fabriquer_video pour chaque régie : Meta (Reels, Stories, fil), TikTok, YouTube Shorts, LinkedIn."
       },
       {
+        "cle": "adaptation-fr-nl-en",
+        "nom": "Adaptation en français, néerlandais et anglais",
+        "sert": "Adapte un texte d'entreprise entre le français, le néerlandais et l'anglais pour un public belge ou international (communiqué, page du site, courriel client, annonce interne, offre d'emploi) en adaptant le registre, les conventions locales et la terminologie plutôt qu'en traduisant mot à mot, avec le contrôle de cohérence entre versions, la liste des choix faits et les passages à faire relire par un locuteur natif."
+      },
+      {
+        "cle": "dossier-sujet",
+        "nom": "Dossier du sujet avant une image ou une vidéo",
+        "sert": "Produit, lit ou relit le dossier du sujet, le document qui doit exister avant toute image ou vidéo fabriquée par l'atelier : six rubriques fixes (Sujet, Faits vérifiés, Vocabulaire et références du public, Ton, À ne pas dire, Droits), un tableau de faits dont chaque source a été lue, et les droits d'un produit ou d'une marque tiers."
+      },
+      {
         "cle": "memoire-para",
         "nom": "Mémoire en fichiers (méthode PARA)",
-        "sert": "Tient la mémoire persistante de l'agent en fichiers, selon la méthode PARA (graphe de connaissances, notes du jour, savoir tacite), dans le dossier ./memoire/ de son répertoire de travail, avec la source et la date de chaque fait."
+        "sert": "Tient la mémoire persistante de l'agent en fichiers, selon la méthode PARA (graphe de connaissances, notes du jour, savoir tacite), dans son dossier de mémoire (chemin donné par la section « Ta mémoire » de ses consignes), avec la source et la date de chaque fait."
       },
       {
         "cle": "recherche-connaissances",
         "nom": "Recherche dans les connaissances du client",
-        "sert": "Interroge les connaissances du client (conditions générales, fiches produit, tarifs, FAQ, notes) avant d'écrire un chiffre d'offre, et cite l'adresse connaissance:// rendue ; sans source, signale l'information manquante."
+        "sert": "Interroge les connaissances de l'entreprise de la tâche (documents importés : conditions générales, fiches produit, tarifs, procédures, FAQ, notes) avant d'écrire un fait propre à cette entreprise, et cite l'adresse connaissance:// rendue ; sans source, signale l'information manquante."
       }
     ],
     "interdits": [
@@ -884,17 +961,27 @@ export const FICHES_AGENTS_MARKETING: readonly FicheAgentMarketing[] = [
       {
         "cle": "aimant-a-prospects",
         "nom": "Aimant à prospects : un guide gratuit contre des coordonnées",
-        "sert": "Conçoit un guide gratuit (aimant à prospects) remis en échange de coordonnées sur la page de captation : sujet utile à la cible, sommaire, promesse sans garantie de rendement (cadre de l'assurance belge, mentions FSMA si produit d'assurance), champ téléphone facultatif et justifié."
+        "sert": "Conçoit un guide gratuit (aimant à prospects) remis en échange de coordonnées sur la page de captation : sujet utile à la cible, sommaire, promesse sans garantie de rendement (cadre de l'assurance belge, mentions FSMA si produit d'assurance), formulaire de rappel de l'outil (téléphone obligatoire, e-mail facultatif), guide remis par l'humain."
+      },
+      {
+        "cle": "conformite-publicite-ia",
+        "nom": "Conformité d'une publicité faite avec l'IA",
+        "sert": "Liste de contrôle à cocher avant et après la fabrication d'une publicité vidéo, audio ou image (visuel de post composé par la fabrique) faite avec une voix ou des images de synthèse : signalement de l'IA dès la première seconde (règlement européen sur l'IA, article 50 ; article 9 du Code belge de la publicité), voix et visages de vraies personnes, célébrités, étiquettes de TikTok et de Meta, registre de la musique, publicité trompeuse et comparaison déloyale (Code de droit économique), produits d'assurance."
+      },
+      {
+        "cle": "dossier-sujet",
+        "nom": "Dossier du sujet avant une image ou une vidéo",
+        "sert": "Produit, lit ou relit le dossier du sujet, le document qui doit exister avant toute image ou vidéo fabriquée par l'atelier : six rubriques fixes (Sujet, Faits vérifiés, Vocabulaire et références du public, Ton, À ne pas dire, Droits), un tableau de faits dont chaque source a été lue, et les droits d'un produit ou d'une marque tiers."
       },
       {
         "cle": "memoire-para",
         "nom": "Mémoire en fichiers (méthode PARA)",
-        "sert": "Tient la mémoire persistante de l'agent en fichiers, selon la méthode PARA (graphe de connaissances, notes du jour, savoir tacite), dans le dossier ./memoire/ de son répertoire de travail, avec la source et la date de chaque fait."
+        "sert": "Tient la mémoire persistante de l'agent en fichiers, selon la méthode PARA (graphe de connaissances, notes du jour, savoir tacite), dans son dossier de mémoire (chemin donné par la section « Ta mémoire » de ses consignes), avec la source et la date de chaque fait."
       },
       {
         "cle": "recherche-connaissances",
         "nom": "Recherche dans les connaissances du client",
-        "sert": "Interroge les connaissances du client (conditions générales, fiches produit, tarifs, FAQ, notes) avant d'écrire un chiffre d'offre, et cite l'adresse connaissance:// rendue ; sans source, signale l'information manquante."
+        "sert": "Interroge les connaissances de l'entreprise de la tâche (documents importés : conditions générales, fiches produit, tarifs, procédures, FAQ, notes) avant d'écrire un fait propre à cette entreprise, et cite l'adresse connaissance:// rendue ; sans source, signale l'information manquante."
       }
     ],
     "interdits": [
@@ -944,7 +1031,7 @@ export const FICHES_AGENTS_MARKETING: readonly FicheAgentMarketing[] = [
       {
         "cle": "recherche-connaissances",
         "nom": "Recherche dans les connaissances du client",
-        "sert": "Interroge les connaissances du client (conditions générales, fiches produit, tarifs, FAQ, notes) avant d'écrire un chiffre d'offre, et cite l'adresse connaissance:// rendue ; sans source, signale l'information manquante."
+        "sert": "Interroge les connaissances de l'entreprise de la tâche (documents importés : conditions générales, fiches produit, tarifs, procédures, FAQ, notes) avant d'écrire un fait propre à cette entreprise, et cite l'adresse connaissance:// rendue ; sans source, signale l'information manquante."
       }
     ],
     "interdits": [
@@ -998,15 +1085,36 @@ export const FICHES_AGENTS_MARKETING: readonly FicheAgentMarketing[] = [
         "sert": "Inventorie les actifs distinctifs d'une marque (logo, couleur, formule, personnage, ton, visage du courtier), mesure si possible leur notoriété et leur unicité par sondage, les classe en à utiliser, à investir, à éviter et fournit des règles d'usage à reporter dans la charte de marque."
       },
       {
+        "cle": "conformite-publicite-ia",
+        "nom": "Conformité d'une publicité faite avec l'IA",
+        "sert": "Liste de contrôle à cocher avant et après la fabrication d'une publicité vidéo, audio ou image (visuel de post composé par la fabrique) faite avec une voix ou des images de synthèse : signalement de l'IA dès la première seconde (règlement européen sur l'IA, article 50 ; article 9 du Code belge de la publicité), voix et visages de vraies personnes, célébrités, étiquettes de TikTok et de Meta, registre de la musique, publicité trompeuse et comparaison déloyale (Code de droit économique), produits d'assurance."
+      },
+      {
+        "cle": "niveau-conscience-message",
+        "nom": "Niveau de conscience d'un message",
+        "sert": "Fixe pour chaque contenu le niveau de conscience de la cible (inconscient du problème, conscient du problème, des solutions, du produit, pleinement conscient, selon Eugene Schwartz), choisit l'ouverture adaptée, contrôle la sophistication du marché et associe le niveau au canal."
+      },
+      {
+        "cle": "redaction-titre-preuve",
+        "nom": "Rédaction de titre et preuve",
+        "sert": "Applique les règles de rédaction publicitaire tirées d'Ogilvy : étudier le produit et le client avant d'écrire, mettre la promesse et la cible dans le titre, écrire plusieurs titres, appuyer chaque promesse sur un fait précis ou une preuve, écrire au lecteur dans sa langue et prévoir un test de variantes."
+      },
+      {
+        "cle": "qualite-visuels",
+        "nom": "Qualité d'une image ou d'une vidéo : le second avis sur le rendu",
+        "sert": "Note une image ou une vidéo publicitaire fabriquée par l'atelier en la regardant (image entière, ou planche d'images clés et transcription d'une vidéo) sur une grille de dix critères notés sur 20, et décide si elle est publiable : 16/20 au moins, aucun 0, note pleine sur les faits, la charte et la conformité IA (aucune mention incrustée, la mention IA dans le texte du post)."
+      },
+      {
         "cle": "recherche-connaissances",
         "nom": "Recherche dans les connaissances du client",
-        "sert": "Interroge les connaissances du client (conditions générales, fiches produit, tarifs, FAQ, notes) avant d'écrire un chiffre d'offre, et cite l'adresse connaissance:// rendue ; sans source, signale l'information manquante."
+        "sert": "Interroge les connaissances de l'entreprise de la tâche (documents importés : conditions générales, fiches produit, tarifs, procédures, FAQ, notes) avant d'écrire un fait propre à cette entreprise, et cite l'adresse connaissance:// rendue ; sans source, signale l'information manquante."
       }
     ],
     "interdits": [
       "Tu ne réécris pas le livrable."
     ],
     "outilsRetires": [
+      "lire des pages web",
       "créer des fichiers",
       "modifier des fichiers",
       "lancer d'autres agents"
@@ -1043,12 +1151,12 @@ export const FICHES_AGENTS_MARKETING: readonly FicheAgentMarketing[] = [
       {
         "cle": "memoire-para",
         "nom": "Mémoire en fichiers (méthode PARA)",
-        "sert": "Tient la mémoire persistante de l'agent en fichiers, selon la méthode PARA (graphe de connaissances, notes du jour, savoir tacite), dans le dossier ./memoire/ de son répertoire de travail, avec la source et la date de chaque fait."
+        "sert": "Tient la mémoire persistante de l'agent en fichiers, selon la méthode PARA (graphe de connaissances, notes du jour, savoir tacite), dans son dossier de mémoire (chemin donné par la section « Ta mémoire » de ses consignes), avec la source et la date de chaque fait."
       },
       {
         "cle": "recherche-connaissances",
         "nom": "Recherche dans les connaissances du client",
-        "sert": "Interroge les connaissances du client (conditions générales, fiches produit, tarifs, FAQ, notes) avant d'écrire un chiffre d'offre, et cite l'adresse connaissance:// rendue ; sans source, signale l'information manquante."
+        "sert": "Interroge les connaissances de l'entreprise de la tâche (documents importés : conditions générales, fiches produit, tarifs, procédures, FAQ, notes) avant d'écrire un fait propre à cette entreprise, et cite l'adresse connaissance:// rendue ; sans source, signale l'information manquante."
       }
     ],
     "interdits": [
@@ -1056,6 +1164,7 @@ export const FICHES_AGENTS_MARKETING: readonly FicheAgentMarketing[] = [
       "Tu ne modifies pas le livrable."
     ],
     "outilsRetires": [
+      "lire des pages web",
       "chercher sur le web",
       "modifier des fichiers",
       "lancer d'autres agents"

@@ -1,4 +1,4 @@
-# ADR-002 : 12 agents (11 Claude et une porte déterministe), rôles mécaniques en code
+# ADR-002 : 12 agents (11 Claude et une porte déterministe), rôles mécaniques en code ; révisé à 13 le 26/10/2026
 
 - **Statut** : Accepté
 - **Décision de référence** : D1 du plan
@@ -43,7 +43,7 @@ Les 24 rôles sont ramenés à **11 agents Claude et 1 porte déterministe**, so
 ## Révision du 26/10/2026
 
 JB a autorisé un 13e agent, `explorateur-sources` : il tient la base des sources (sites, presse, chaînes YouTube,
-podcasts, toutes langues) et étudie les transcriptions locales et les métadonnées de vidéos que le code de collecte
-lui fournit. La borne de l'usine (`scripts/atelier_services.py`) passe de 12 à 13 agents pour tous les services ;
+podcasts, toutes langues) ; l'étude des vidéos est prévue mais suspendue : aucun code de transcription n'existe et la
+collecte audio attend l'avis d'un juriste (DROIT-5.3, 30/10/2026). La borne de l'usine (`scripts/atelier_services.py`) passe de 12 à 13 agents pour tous les services ;
 c'est une borne de l'usine, pas une limite de Paperclip. La porte reste un programme déterministe, déclaré par le
 champ `deterministes` du registre des services. Le nom du fichier est gardé pour les liens existants.

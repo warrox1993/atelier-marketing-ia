@@ -22,7 +22,7 @@ const INFO = {
   correctionAttendue: "Interroger les codes postaux 4030, 4031 et 4040 dans l'OSM et la BCE.",
 };
 const REDACTION = { categorie: "marque", gravite: "mineure", emplacement: "Annonce 2", description: "Libellé FSMA approximatif.", preuve: "« agréé FSMA »", correctionAttendue: "Remplacer par le libellé exact de la fiche." };
-const DECISION = { categorie: "offre_non_confirmee", gravite: "majeure", emplacement: "Offre", description: "Remise de 15 % non confirmée.", preuve: "absente de la fiche", correctionAttendue: "Faire confirmer la remise par le client." };
+const DECISION = { categorie: "juridique_a_verifier", gravite: "majeure", emplacement: "Offre", description: "Remise de 15 % absente de la fiche.", preuve: "absente de la fiche", correctionAttendue: "Décision du client sur la remise de 15 %." };
 
 const verdict = (revisionId: string, v: Record<string, unknown>) => ({ revisionId, role: "exigences", exigencesExaminees: [], preuvesVerifiees: [], constats: [], constatsResolus: [], ...v });
 
@@ -56,6 +56,9 @@ describe("classification des remarques", () => {
     expect(classerConstat({ role: "exigences", ...INFO } as never)).toBe("information_a_obtenir");
     expect(classerConstat({ role: "metier", ...REDACTION } as never)).toBe("correction_redaction");
     expect(classerConstat({ role: "metier", ...DECISION } as never)).toBe("decision_humaine");
+    // Décision de l'opérateur du 30/10/2026 : une offre non confirmée se cite avec la mention « (non confirmé par le client) » ;
+    // le constat se corrige par l'agent, il ne remonte pas à l'humain.
+    expect(classerConstat({ role: "metier", categorie: "offre_non_confirmee", gravite: "majeure", description: "Offre citée sans mention.", correctionAttendue: "Ajouter la mention « (non confirmé par le client) »." } as never)).toBe("correction_redaction");
     expect(classerConstat({ role: "metier", categorie: "affirmation_non_sourcee", gravite: "majeure", description: "Chiffre sans source", correctionAttendue: "Retirer le chiffre." } as never)).toBe("information_a_obtenir");
   });
 
@@ -122,8 +125,8 @@ describe("livrable bloqué : renvoi au Coordinateur", () => {
     await s.route("tache.porte.evaluer", humain, {});
     expect(s.reveils).toHaveLength(0);
     s.nouvelleRevision(REV2, 2);
-    // Le relecteur maintient la remarque bloquante ouverte (aucune nouvelle remarque).
-    expect((await s.route("tache.verdict", relecteur, verdict(REV2, { verdict: "CHANGES_REQUESTED" }))).statut).toBe(201);
+    // Le relecteur maintient la remarque bloquante ouverte (aucune nouvelle remarque, maintien justifié : LIV-OB-6).
+    expect((await s.route("tache.verdict", relecteur, verdict(REV2, { verdict: "CHANGES_REQUESTED", justification: "La remarque bloquante reste ouverte." }))).statut).toBe(201);
     await s.route("tache.porte.evaluer", humain, {});
     expect(s.reveils).toEqual([{ issueId: BRIEF, cle: `atelier-redispatch-${ISSUE}-${REV2}` }]);
     expect(s.demandes()[0]!.donnees).toMatchObject({ motifs: ["information_repetee"] });
@@ -311,6 +314,33 @@ describe("accueil : une question de l'équipe remonte en tête de « À faire »
     expect(elements[0]).toMatchObject({ id: "question:q1", type: "information_manquante", titre: "Codes postaux introuvables", action: "Répondre", lien: "/issues/ATL-1" });
     expect(elements.filter((e) => e.id.startsWith("question:"))).toHaveLength(1);
     expect(elements.length).toBeGreaterThan(1);
+  });
+});
+
+describe("accueil : carte d'une tâche ouverte hors brief et hors porte (HUM-C6, HUM-C7)", () => {
+  it("une carte sur une tâche née d'une liaison remonte, sans doublon « tâche bloquée » pour la même tâche", async () => {
+    const recue = { id: "recue-1", companyId: SOC, identifier: "MKT-9", title: "Liste finale", status: "blocked", parentId: null, createdAt: new Date(0), updatedAt: new Date(0) };
+    const ctx = {
+      logger: { info() {}, warn() {}, error() {}, debug() {} },
+      agents: { list: async () => [], get: async () => null },
+      approvals: { list: async () => [] },
+      issues: {
+        get: async (id: string) => (id === recue.id ? recue : null),
+        list: async (q: { status?: string }) => (q.status === "blocked" ? [recue] : []),
+        listInteractions: async (id: string) => (id === recue.id ? [{ id: "q9", kind: "request_confirmation", status: "pending", title: "Valider la liste finale", payload: { prompt: "Valider les 12 prospects ?" } }] : []),
+      },
+    } as unknown as PluginContext;
+    const base = {
+      listerPortes: async () => [],
+      listerCampagnes: async () => [],
+      etatBaseClients: async () => ({ dernierImport: null, clients: 1, actifs: 1 }),
+      marques: async () => [{ informationsManquantes: [] }],
+    } as unknown as BaseAtelier;
+    const routes = routesAccueil({ ctx, base, statutTache: async () => ({ statut: "blocked_information", motif: "" }), passerelleConnectee: async () => true, documentsARevoir: async () => [] });
+    const r = await routes["accueil.lister"]!({ cle: "accueil.lister" as never, params: {}, query: {}, corps: null, acteur: humain, companyId: SOC });
+    const elements = (r.corps as { elements: Array<{ id: string; issueId?: string; interaction?: { invite: string | null } }> }).elements;
+    expect(elements[0]).toMatchObject({ id: "question:q9", issueId: "recue-1", interaction: { invite: "Valider les 12 prospects ?" } });
+    expect(elements.filter((e) => e.issueId === "recue-1")).toHaveLength(1);
   });
 });
 

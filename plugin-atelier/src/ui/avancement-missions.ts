@@ -65,6 +65,8 @@ export interface MissionLue {
   slug: string;
   /** Nom du service qui a reçu la mission. */
   nom: string;
+  /** Discussion d'origine de la mission ; `null` sans discussion d'origine. */
+  discussionId?: string | null;
   racine: TacheMission;
   filles: TacheMission[];
   agents: AgentMission[];

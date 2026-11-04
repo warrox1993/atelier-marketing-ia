@@ -3,7 +3,8 @@
 //   lister_listes, etat_campagne                          lecture
 //   creer_liste, ajouter_abonnes, creer_campagne_brouillon   écriture sans envoi
 //
-// Règles : un abonné n'entre qu'avec la preuve de son consentement (date, source, texte accepté) ; un abonné sur liste de suppression
+// Règles : un abonné n'entre sur une liste qu'avec la preuve de son consentement à CETTE liste (date, source, texte accepté,
+// gardée dans attribs.consentements[<liste_id>]) ; un abonné sur liste de suppression
 // (blocklisté) ou désinscrit de la liste n'est jamais réinscrit ; une campagne n'est jamais créée autrement qu'en brouillon ; le lien
 // de désinscription figure dans chaque campagne ; toute adresse privée ou locale citée (source du consentement, liens) est refusée.
 // Le jeton utilisé ici n'a PAS le droit d'envoi (rôle listmonk « atelier-gestion »).
@@ -16,6 +17,7 @@ import { exigerUrlPublique, type OptionsVerification } from "../liens/verifier-u
 import { retirerInvisibles } from "../extraction/contenu-tiers.js";
 import { ClientListmonk, ErreurListmonk, MESSAGE_ENVOI_TEST, lireJetonListmonk, modeEnvoi, type CampagneListmonk } from "./listmonk.js";
 import { controlerContenu, ErreurContenu } from "./contenu-courriel.js";
+import { ajouterMention, ajouterMentionHtml, lireMentionIa, MENTION_IA_PAR_DEFAUT, type MentionIa } from "../../mention-ia.js";
 export { FICHE_EMAILING };
 
 export const GABARIT_CAMPAGNE = "atelier-corps";
@@ -28,6 +30,8 @@ const RE_CONTROLE = /[\u0000-\u001f\u007f]/;
 export interface OptionsEmailing extends Pick<OptionsVerification, "adresseAutorisee" | "resoudre"> {
   /** Client listmonk à droits de gestion (sans envoi). */
   client: ClientListmonk;
+  /** Mention d'information IA en pied des campagnes (E4, choix de transparence) ; absente : mention française par défaut. */
+  mentionIa?: MentionIa;
   maintenant?: () => Date;
   journal?: (message: string) => void;
 }
@@ -37,7 +41,7 @@ export function optionsEmailingDepuisEnv(env: NodeJS.ProcessEnv): OptionsEmailin
   const fichier = env["PASSERELLE_LISTMONK_JETON_FICHIER"]?.trim();
   if (!fichier) throw new Error("PASSERELLE_LISTMONK_JETON_FICHIER absent : le jeton d'API de listmonk est obligatoire.");
   const url = env["PASSERELLE_LISTMONK_URL"]?.trim();
-  return { client: new ClientListmonk({ ...(url ? { url } : {}), jeton: lireJetonListmonk(fichier, "PASSERELLE_LISTMONK_JETON_FICHIER") }) };
+  return { client: new ClientListmonk({ ...(url ? { url } : {}), jeton: lireJetonListmonk(fichier, "PASSERELLE_LISTMONK_JETON_FICHIER") }), mentionIa: lireMentionIa(env) };
 }
 
 /** Texte tiers : caractères invisibles retirés, espaces normalisés, sans caractère de contrôle (anti-injection d'en-têtes). */
@@ -136,6 +140,8 @@ export function outilsEmailing(options: OptionsEmailing): OutilPasserelle[] {
       description:
         `ÉCRITURE (sans envoi). Inscrit des abonnés à une liste, ${ABONNES_MAX_PAR_APPEL} au plus par appel. Chaque abonné DOIT porter la preuve de son consentement ` +
         "(date, source, texte accepté) ; un abonné sans preuve fait refuser tout l'appel. Un abonné sur la liste de suppression (blocklisté) ou désinscrit de cette liste n'est jamais réinscrit. " +
+        "Cette preuve est déclarative : à la demande d'envoi, le plugin refuse la campagne si une adresse figure dans les oppositions de l'atelier " +
+        "ou n'y a pas de base légale « courriel » enregistrée (consentement ou client existant, produits analogues). " +
         `Une source qui est une adresse web doit être publique. ${consigne}`,
       schemaEntree: schemaAjouterAbonnes,
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
@@ -165,26 +171,35 @@ export function outilsEmailing(options: OptionsEmailing): OutilPasserelle[] {
         if (!liste) throw new Error(`Liste ${a.liste_id} introuvable (lister_listes).`);
         // 2. Inscription une à une, en respectant la suppression.
         const resultats: ResultatAbonne[] = [];
+        const cle = String(a.liste_id);
         for (const p of prets) {
-          const existant = await client.chercherAbonne(p.email);
-          if (existant) {
-            if (existant.status === "blocklisted") { resultats.push({ email: p.email, resultat: "supprime", motif: "adresse sur la liste de suppression : jamais réinscrite" }); continue; }
+          // E1 : une preuve par liste (consentements[<liste_id>]), écrite avant toute inscription.
+          const preuve = { ...p.consentement, enregistre_le: maint.toISOString(), enregistre_par: "passerelle-emailing" };
+          const inscrireExistant = async (existant: NonNullable<Awaited<ReturnType<typeof client.chercherAbonne>>>): Promise<ResultatAbonne> => {
+            if (existant.status === "blocklisted") return { email: p.email, resultat: "supprime", motif: "adresse sur la liste de suppression : jamais réinscrite" };
             const abonnement = existant.lists?.find((l) => l.id === a.liste_id);
-            if (abonnement?.subscription_status === "unsubscribed") { resultats.push({ email: p.email, resultat: "desinscrit", motif: "la personne s'est désinscrite de cette liste : jamais réinscrite" }); continue; }
-            if (abonnement) { resultats.push({ email: p.email, resultat: "deja_present" }); continue; }
+            if (abonnement?.subscription_status === "unsubscribed") return { email: p.email, resultat: "desinscrit", motif: "la personne s'est désinscrite de cette liste : jamais réinscrite" };
+            if (abonnement) return { email: p.email, resultat: "deja_present" };
+            const deja = existant.attribs?.["consentements"];
+            const historique = deja && typeof deja === "object" && !Array.isArray(deja) ? deja : {};
+            await client.fusionnerAttributs(existant.id, { consentements: { ...historique, [cle]: preuve } });
             await client.ajouterALaListe(existant.id, a.liste_id);
-            resultats.push({ email: p.email, resultat: "ajoute" });
-            continue;
-          }
+            return { email: p.email, resultat: "ajoute" };
+          };
+          const existant = await client.chercherAbonne(p.email);
+          if (existant) { resultats.push(await inscrireExistant(existant)); continue; }
           try {
             await client.creerAbonne({
               email: p.email, nom: p.nom, listeId: a.liste_id,
-              attribs: { consentement: { ...p.consentement, enregistre_le: maint.toISOString(), enregistre_par: "passerelle-emailing" } },
+              attribs: { consentement: preuve, consentements: { [cle]: preuve } },
             });
             resultats.push({ email: p.email, resultat: "ajoute" });
           } catch (e) {
-            if (e instanceof ErreurListmonk && e.statut === 409) resultats.push({ email: p.email, resultat: "deja_present" });
-            else throw e;
+            if (!(e instanceof ErreurListmonk && e.statut === 409)) throw e;
+            // E2 : l'adresse existe (créée entre-temps ou manquée par la recherche) : on la relit, jamais « déjà présent » à l'aveugle.
+            const relu = await client.chercherAbonne(p.email);
+            resultats.push(relu ? await inscrireExistant(relu)
+              : { email: p.email, resultat: "refuse", motif: "listmonk dit l'adresse déjà connue mais ne la rend pas : elle n'est pas inscrite à cette liste ; vérifier dans listmonk" });
           }
         }
         journal(`ajouter_abonnes ok, liste ${a.liste_id}, ${resultats.filter((r) => r.resultat === "ajoute").length} ajouté(s) sur ${resultats.length}`);
@@ -195,7 +210,7 @@ export function outilsEmailing(options: OptionsEmailing): OutilPasserelle[] {
       nom: "creer_campagne_brouillon",
       description:
         "ÉCRITURE (sans envoi). Crée une campagne en BROUILLON (sujet, contenu HTML et texte, listes). Elle ne s'envoie jamais toute seule : l'envoi est une décision humaine dans l'atelier. " +
-        "Le lien de désinscription est ajouté en pied de page s'il manque. Refusés : script, formulaire, balise de gabarit hors liste blanche, lien vers une adresse locale ou privée, lien relatif. " +
+        "Le lien de désinscription et la mention d'information IA sont ajoutés en pied de page s'ils manquent. Refusés : script, formulaire, balise de gabarit hors liste blanche, lien vers une adresse locale ou privée, lien relatif. " +
         "La réponse donne l'empreinte du contenu : à citer telle quelle dans la demande de confirmation d'envoi (marqueur [envoi-emailing:<id>:<empreinte>]).",
       schemaEntree: schemaCreerCampagneBrouillon,
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
@@ -210,7 +225,9 @@ export function outilsEmailing(options: OptionsEmailing): OutilPasserelle[] {
         if (inconnues.length > 0) throw new Error(`Liste(s) introuvable(s) : ${inconnues.join(", ")}.`);
         let controle;
         try {
-          controle = await controlerContenu(retirerInvisibles(a.contenu_html).texte, retirerInvisibles(a.contenu_texte).texte, verif);
+          // Mention ajoutée avant le contrôle : elle précède le pied de désinscription et figure dans ce que l'humain approuve.
+          const mention = options.mentionIa ?? MENTION_IA_PAR_DEFAUT;
+          controle = await controlerContenu(ajouterMentionHtml(retirerInvisibles(a.contenu_html).texte, mention), ajouterMention(retirerInvisibles(a.contenu_texte).texte, mention), verif);
         } catch (e) {
           if (e instanceof ErreurContenu) throw e;
           throw new Error(`Contenu refusé : ${e instanceof Error ? e.message : String(e)}`);

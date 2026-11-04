@@ -49,7 +49,7 @@ Donner au dirigeant un arbitrage préparé : les demandes classées sur des crit
 6. **Rédiger la décision tracée** selon le gabarit ci-dessous, avec les options écartées et la raison.
 7. **Planifier la revue** : point de contrôle à mi-trimestre (cible atteinte à plus ou moins 30 %, objectif maintenu, ajusté ou abandonné) et clôture avec une note de 0 à 1 par résultat clé.
 
-### Gabarit du registre de décision
+### Fiche de préparation d'une décision
 
 | Champ | Contenu |
 | --- | --- |
@@ -62,13 +62,14 @@ Donner au dirigeant un arbitrage préparé : les demandes classées sur des crit
 | Décision | vide tant que l'humain n'a pas tranché ; ensuite : option choisie, décideur, date |
 | Revue prévue | date et indicateur regardé |
 
-Chaque décision proposée est transmise au registre des décisions de la direction (compétence `registre-decisions`) avec
+Cette fiche prépare la décision ; elle n'est pas une entrée du registre. Chaque décision proposée est transmise au
+registre des décisions de la direction (compétence `registre-decisions`, seul format de l'entrée du registre) avec
 l'état « proposée » ; elle n'y passe à « prise » que sur la preuve d'une approbation humaine. Avant de proposer, vérifier
 dans ce registre qu'une option identique n'a pas été rejetée avec la mention « ne pas reproposer ».
 
 ## Livrable
 
-Un document court : tableau de priorisation (demandes, notes, score, justification), objectifs du trimestre en OKR, ce qui est reporté et son coût, et un registre de décision par décision à prendre. Les décisions sont marquées « proposée », jamais « prise ».
+Un document court : tableau de priorisation (demandes, notes, score, justification), objectifs du trimestre en OKR, ce qui est reporté et son coût, et une fiche de préparation par décision à prendre. Les décisions sont marquées « proposée », jamais « prise ».
 
 ## Critères de réussite
 

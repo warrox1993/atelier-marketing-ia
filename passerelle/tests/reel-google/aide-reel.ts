@@ -4,12 +4,12 @@
 // PKCE avec `resource` → échange du code), la fenêtre du navigateur étant remplacée par le suivi des redirections.
 
 import { createHash, randomBytes } from "node:crypto";
-import { mkdtempSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { rmSync } from "node:fs";
 import { join } from "node:path";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { RegistreFournisseurs } from "../../src/fournisseurs.js";
+import { dossierTemporaire } from "../dossier-temporaire.js";
 import { creerServeur, type ServeurPasserelle } from "../../src/serveur.js";
 import { adressesFaussesGoogle, type ConfigGoogleReel } from "../../src/reel/google/config.js";
 import { construireGoogleReel, type GoogleReel } from "../../src/reel/google/enregistrer.js";
@@ -33,7 +33,7 @@ export interface Montage {
 export async function monter(optionsFaux: OptionsFauxGoogle = {}, dossierExistant?: string): Promise<Montage> {
   const faux = new FauxGoogle(optionsFaux);
   const urlFaux = await faux.demarrer();
-  const dossier = dossierExistant ?? mkdtempSync(join(tmpdir(), "passerelle-l4-"));
+  const dossier = dossierExistant ?? dossierTemporaire("passerelle-l4-");
   const journal: string[] = [];
   const attentes: number[] = [];
   const config: ConfigGoogleReel = {

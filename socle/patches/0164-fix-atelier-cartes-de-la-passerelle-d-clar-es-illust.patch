@@ -1,0 +1,399 @@
+From 69d05b3d277bfff0e8467f1ed1a4c1798db2ada2 Mon Sep 17 00:00:00 2001
+From: Jean-Baptiste Dhondt <114347858+warrox1993@users.noreply.github.com>
+Date: Wed, 4 Nov 2026 21:57:38 +0100
+Subject: [PATCH 164/164] =?UTF-8?q?fix(atelier):=20cartes=20de=20la=20pass?=
+ =?UTF-8?q?erelle=20d=C3=A9clar=C3=A9es=20(illustrations,=20revues=20de=20?=
+ =?UTF-8?q?m=C3=A9thodes)=20et=20tests=20serveur=20fiables?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+- Défaut de nos patches : 7 cartes atelier (audit, captation, emailing, extraction, liens,
+  linkedin-profil, statbel) ajoutées sans leur entrée dans ui/public/brands/apps/manifest.json
+  ni la revue de leurs 10 méthodes dans doc/connections/tool-method-permission-reviews.json
+  (convention du commit 51469101fc). Illustrations reprises des SVG atelier existants ; revues
+  « provider-default » comme les autres services sans compte externe, « explicit » pour
+  LinkedIn profil (openid, profile, w_member_social).
+- Tests obsolètes : 23 cartes depuis le patch 0159 ; la passerelle factice sert aussi
+  « linkedinprofil » comme la vraie.
+- Tests amont dépendants du poste, rendus indépendants sans changer leurs assertions :
+  LC_ALL=C pour les messages de git (claude-local-*), GIT_DISCOVERY_ACROSS_FILESYSTEM pour
+  /tmp en tmpfs, variables d'hôte neutralisées pour le masquage du rapport d'échec.
+8 fichiers de test : 939 réussis.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01EThpSQivkg5UcW9gyGppeG
+---
+ .../tool-method-permission-reviews.json       | 156 ++++++++++++++++++
+ .../__tests__/atelier-marketing-apps.test.ts  |   4 +-
+ .../claude-local-adapter-environment.test.ts  |  10 +-
+ .../__tests__/claude-local-execute.test.ts    |  10 +-
+ .../heartbeat-process-recovery.test.ts        |  12 ++
+ .../src/__tests__/tool-access-service.test.ts |   5 +-
+ ui/public/brands/apps/manifest.json           |  49 ++++++
+ 7 files changed, 240 insertions(+), 6 deletions(-)
+
+diff --git a/doc/connections/tool-method-permission-reviews.json b/doc/connections/tool-method-permission-reviews.json
+index df077c780b..7d6a3db26e 100644
+--- a/doc/connections/tool-method-permission-reviews.json
++++ b/doc/connections/tool-method-permission-reviews.json
+@@ -3014,6 +3014,162 @@
+       "reviewedAt": "2026-10-15",
+       "liveProof": "not-run",
+       "providerDefaultReason": "The marketing gateway serves this prospecting service read only and its OAuth scope model is the gateway's own (a single read scope, not a third-party provider scope); no scope is requested and the gateway's authorization server grants only its read scope."
++    },
++    {
++      "app": "atelier-extraction",
++      "method": "lecture",
++      "auth": "oauth",
++      "policy": "provider-default",
++      "requestedScopes": [],
++      "capability": "read",
++      "supportedActions": "Read several pages of a public website as truncated markdown (extraire_site, local Crawl4AI container), with capped depth and page count; private and local addresses are refused. Read only.",
++      "evidence": [
++        "https://docs.crawl4ai.com"
++      ],
++      "reviewedAt": "2026-11-04",
++      "liveProof": "not-run",
++      "providerDefaultReason": "The marketing gateway's local OAuth server (passerelle/src/oauth-local.ts) knows one scope, \"local\", and grants it to every gateway service; the extraction:lecture scopes listed by the gateway are informative only, not a provider scope model. No scope is requested. The service exposes a single tool, extraire_site, annotated readOnlyHint: true, so the token cannot do more than read."
++    },
++    {
++      "app": "atelier-audit",
++      "method": "lecture",
++      "auth": "oauth",
++      "policy": "provider-default",
++      "requestedScopes": [],
++      "capability": "read",
++      "supportedActions": "Run Lighthouse on a public page (auditer_page) and read its four scores (performance, accessibility, best practices, SEO) and its first ten issues; private and local addresses are refused. Read only.",
++      "evidence": [
++        "https://developer.chrome.com/docs/lighthouse"
++      ],
++      "reviewedAt": "2026-11-04",
++      "liveProof": "not-run",
++      "providerDefaultReason": "The marketing gateway's local OAuth server (passerelle/src/oauth-local.ts) knows one scope, \"local\", and grants it to every gateway service; the audit:lecture scopes listed by the gateway are informative only, not a provider scope model. No scope is requested. The service exposes a single tool, auditer_page, annotated readOnlyHint: true, so the token cannot do more than read."
++    },
++    {
++      "app": "atelier-liens",
++      "method": "lecture",
++      "auth": "oauth",
++      "policy": "provider-default",
++      "requestedScopes": [],
++      "capability": "read",
++      "supportedActions": "Check a public URL (verifier_url): HTTP status, redirect chain and landing page; private and local addresses are refused. Read only.",
++      "evidence": [
++        "https://developer.mozilla.org/fr/docs/Web/HTTP/Status"
++      ],
++      "reviewedAt": "2026-11-04",
++      "liveProof": "not-run",
++      "providerDefaultReason": "The marketing gateway's local OAuth server (passerelle/src/oauth-local.ts) knows one scope, \"local\", and grants it to every gateway service; the liens:lecture scopes listed by the gateway are informative only, not a provider scope model. No scope is requested. The service exposes a single tool, verifier_url, annotated readOnlyHint: true, so the token cannot do more than read."
++    },
++    {
++      "app": "atelier-statbel",
++      "method": "lecture",
++      "auth": "oauth",
++      "policy": "provider-default",
++      "requestedScopes": [],
++      "capability": "read",
++      "supportedActions": "Read Statbel open statistics per Belgian municipality from the gateway's local index (profil_commune, comparer_communes): population by age band, taxable income, VAT-registered companies. No Statbel account. Read only.",
++      "evidence": [
++        "https://statbel.fgov.be/fr/open-data"
++      ],
++      "reviewedAt": "2026-11-04",
++      "liveProof": "not-run",
++      "providerDefaultReason": "The marketing gateway's local OAuth server (passerelle/src/oauth-local.ts) knows one scope, \"local\", and grants it to every gateway service; the statbel:lecture scopes listed by the gateway are informative only, not a provider scope model. No scope is requested. Both tools only read the local open data index (CC BY 4.0) and write nothing."
++    },
++    {
++      "app": "atelier-emailing",
++      "method": "lecture",
++      "auth": "oauth",
++      "policy": "provider-default",
++      "requestedScopes": [],
++      "capability": "read",
++      "supportedActions": "Read the mailing lists and campaign state of the local listmonk instance (lister_listes, etat_campagne), without creating anything. This profile is the recommended choice.",
++      "evidence": [
++        "https://listmonk.app/docs/"
++      ],
++      "reviewedAt": "2026-11-04",
++      "liveProof": "not-run",
++      "providerDefaultReason": "The marketing gateway's local OAuth server (passerelle/src/oauth-local.ts) knows one scope, \"local\", and grants it to every gateway service; the emailing:lecture and emailing:ecriture scopes listed by the gateway are informative only, not a provider scope model. No scope is requested. The token does not itself separate read from write; the read profile relies on the agents using only the read tools. Write tools (creer_liste, ajouter_abonnes, creer_campagne_brouillon) carry readOnlyHint: false and their French mutation verbs are classified as writes by Paperclip (local patch 0005), so they stay behind Ask first; sending a campaign is not a tool at all (human route in passerelle/src/reel/emailing/envoi.ts) and the listmonk token has no send right."
++    },
++    {
++      "app": "atelier-emailing",
++      "method": "publication",
++      "auth": "oauth",
++      "policy": "provider-default",
++      "requestedScopes": [],
++      "capability": "write",
++      "supportedActions": "Read lists and campaigns, and create lists, add subscribers only with proof of consent to that list, and create campaign drafts (always drafts, with an unsubscribe link), after human validation in the workshop. Never sends: sending is a human decision outside the tools.",
++      "evidence": [
++        "https://listmonk.app/docs/"
++      ],
++      "reviewedAt": "2026-11-04",
++      "liveProof": "not-run",
++      "providerDefaultReason": "The marketing gateway's local OAuth server (passerelle/src/oauth-local.ts) knows one scope, \"local\", and grants it to every gateway service; the emailing:lecture and emailing:ecriture scopes listed by the gateway are informative only, not a provider scope model. No scope is requested. Write tools (creer_liste, ajouter_abonnes, creer_campagne_brouillon) carry readOnlyHint: false and their French mutation verbs are classified as writes by Paperclip (local patch 0005), so they stay behind Ask first; sending a campaign is not a tool at all (human route in passerelle/src/reel/emailing/envoi.ts) and the listmonk token has no send right."
++    },
++    {
++      "app": "atelier-captation",
++      "method": "lecture",
++      "auth": "oauth",
++      "policy": "provider-default",
++      "requestedScopes": [],
++      "capability": "read",
++      "supportedActions": "Read the local landing pages, their visits (local Umami) and the number of form submissions (lister_pages, statistiques_page), without creating anything. This profile is the recommended choice.",
++      "evidence": [
++        "https://umami.is/docs"
++      ],
++      "reviewedAt": "2026-11-04",
++      "liveProof": "not-run",
++      "providerDefaultReason": "The marketing gateway's local OAuth server (passerelle/src/oauth-local.ts) knows one scope, \"local\", and grants it to every gateway service; the captation:lecture and captation:ecriture scopes listed by the gateway are informative only, not a provider scope model. No scope is requested. The token does not itself separate read from write; the read profile relies on the agents using only the read tools. The write tool creer_page_destination carries readOnlyHint: false and its verb is classified as a write by Paperclip (local patch 0005), so it stays behind Ask first; no tool puts a page online, pages are served locally only."
++    },
++    {
++      "app": "atelier-captation",
++      "method": "publication",
++      "auth": "oauth",
++      "policy": "provider-default",
++      "requestedScopes": [],
++      "capability": "write",
++      "supportedActions": "Read pages and statistics, and create landing pages with a callback form from plain text fields only (creer_page_destination), after human validation in the workshop. Pages are served locally; putting one online is a human decision. Visitor submissions never pass through the gateway.",
++      "evidence": [
++        "https://umami.is/docs"
++      ],
++      "reviewedAt": "2026-11-04",
++      "liveProof": "not-run",
++      "providerDefaultReason": "The marketing gateway's local OAuth server (passerelle/src/oauth-local.ts) knows one scope, \"local\", and grants it to every gateway service; the captation:lecture and captation:ecriture scopes listed by the gateway are informative only, not a provider scope model. No scope is requested. The write tool creer_page_destination carries readOnlyHint: false and its verb is classified as a write by Paperclip (local patch 0005), so it stays behind Ask first; no tool puts a page online, pages are served locally only."
++    },
++    {
++      "app": "atelier-linkedin-profil",
++      "method": "lecture",
++      "auth": "oauth",
++      "policy": "explicit",
++      "requestedScopes": [
++        "openid",
++        "profile"
++      ],
++      "capability": "read",
++      "supportedActions": "Link the member's personal LinkedIn profile and read its identity only (Sign In with LinkedIn using OpenID Connect, GET /v2/userinfo); the agents publish nothing.",
++      "evidence": [
++        "https://learn.microsoft.com/en-us/linkedin/consumer/integrations/self-serve/sign-in-with-linkedin-v2"
++      ],
++      "reviewedAt": "2026-11-04",
++      "liveProof": "not-run"
++    },
++    {
++      "app": "atelier-linkedin-profil",
++      "method": "publication",
++      "auth": "oauth",
++      "policy": "explicit",
++      "requestedScopes": [
++        "openid",
++        "profile",
++        "w_member_social"
++      ],
++      "capability": "write",
++      "supportedActions": "Read the member identity and publish a text post, optionally with an article link, as the member on the personal profile (linkedin_profil_publier, POST /rest/posts, w_member_social), only with a signed human approval proof from the workshop bound to that profile. Without r_member_social the gateway cannot read the member's posts back.",
++      "evidence": [
++        "https://learn.microsoft.com/en-us/linkedin/consumer/integrations/self-serve/sign-in-with-linkedin-v2",
++        "https://learn.microsoft.com/en-us/linkedin/consumer/integrations/self-serve/share-on-linkedin"
++      ],
++      "reviewedAt": "2026-11-04",
++      "liveProof": "not-run"
+     }
+   ]
+ }
+diff --git a/server/src/__tests__/atelier-marketing-apps.test.ts b/server/src/__tests__/atelier-marketing-apps.test.ts
+index 371bb419bf..d260db4add 100644
+--- a/server/src/__tests__/atelier-marketing-apps.test.ts
++++ b/server/src/__tests__/atelier-marketing-apps.test.ts
+@@ -26,7 +26,7 @@ const actor = { actorType: "user" as const, actorId: "atelier-reviewer" };
+ const redirectUri = "http://localhost:3100/api/tools/oauth/callback";
+ const ACCESS_TOKEN = "atelier-fixture-access-token";
+ 
+-function fixtureGateway(mode: "demonstration" | "reel", services = ["gsc", "ga4", "ads", "gbp", "facebook", "instagram", "linkedin", "crm", "pipedrive", "odoo", "teamleader", "bce", "bnb", "fsma", "osm", "b2c", "liens", "extraction", "audit", "emailing", "captation", "statbel"], servicesReels?: string[]) {
++function fixtureGateway(mode: "demonstration" | "reel", services = ["gsc", "ga4", "ads", "gbp", "facebook", "instagram", "linkedin", "crm", "pipedrive", "odoo", "teamleader", "bce", "bnb", "fsma", "osm", "b2c", "liens", "extraction", "audit", "emailing", "captation", "statbel", "linkedinprofil"], servicesReels?: string[]) {
+   return vi.fn(async (url: string, init: RequestInit = {}) => {
+     const u = new URL(url);
+     if (u.origin !== BASE) return new Response("", { status: 404 });
+@@ -195,7 +195,7 @@ describe("atelier gateway address", () => {
+     const response = await request(routeApp(fixtureGateway("demonstration"))).get(`/api/companies/${c.id}/tools/gallery`).expect(200);
+     const atelier = (response.body.apps as Array<{ slug: string; name: string; description: string; availability?: { available: boolean }; methods: Array<{ defaults?: { serverUrl?: string } }> }>)
+       .filter((app) => app.slug.startsWith("atelier-"));
+-    expect(atelier).toHaveLength(22);
++    expect(atelier).toHaveLength(23); // 22 cards + the LinkedIn personal profile card (local patch 0159)
+     for (const app of atelier) {
+       expect(app.name, app.slug).toMatch(/ \(démonstration\)$/);
+       expect(app.description).toMatch(/^Démonstration : données fictives/);
+diff --git a/server/src/__tests__/claude-local-adapter-environment.test.ts b/server/src/__tests__/claude-local-adapter-environment.test.ts
+index a9445f99e4..86beea4155 100644
+--- a/server/src/__tests__/claude-local-adapter-environment.test.ts
++++ b/server/src/__tests__/claude-local-adapter-environment.test.ts
+@@ -1,4 +1,4 @@
+-import { afterEach, describe, expect, it } from "vitest";
++import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+ import fs from "node:fs/promises";
+ import os from "node:os";
+ import path from "node:path";
+@@ -12,7 +12,15 @@ const ORIGINAL_CLAUDE_CONFIG_DIR = process.env.CLAUDE_CONFIG_DIR;
+ const ORIGINAL_PAPERCLIP_HOME = process.env.PAPERCLIP_HOME;
+ const ORIGINAL_PAPERCLIP_INSTANCE_ID = process.env.PAPERCLIP_INSTANCE_ID;
+ 
++// Atelier : les sondes de bac à sable reconnaissent un dossier hors dépôt au message anglais de git
++// (« not a git repository »). Sur un poste en français, git répond en français et les sondes échouent :
++// on fixe la locale C pour que le test ne dépende pas de la langue de la machine.
++beforeEach(() => {
++  vi.stubEnv("LC_ALL", "C");
++});
++
+ afterEach(() => {
++  vi.unstubAllEnvs();
+   resetClaudeCliCapabilitiesCacheForTests();
+   if (ORIGINAL_ANTHROPIC === undefined) {
+     delete process.env.ANTHROPIC_API_KEY;
+diff --git a/server/src/__tests__/claude-local-execute.test.ts b/server/src/__tests__/claude-local-execute.test.ts
+index 65c478a40f..25b80a9ed0 100644
+--- a/server/src/__tests__/claude-local-execute.test.ts
++++ b/server/src/__tests__/claude-local-execute.test.ts
+@@ -1,4 +1,4 @@
+-import { afterEach, describe, expect, it, vi } from "vitest";
++import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+ import fs from "node:fs/promises";
+ import os from "node:os";
+ import path from "node:path";
+@@ -179,7 +179,15 @@ type CapturePayload = {
+   appendedSystemPromptFileContents?: string | null;
+ };
+ 
++// Atelier : les sondes de bac à sable reconnaissent un dossier hors dépôt au message anglais de git
++// (« not a git repository »). Sur un poste en français, git répond en français et les sondes échouent :
++// on fixe la locale C pour que le test ne dépende pas de la langue de la machine.
++beforeEach(() => {
++  vi.stubEnv("LC_ALL", "C");
++});
++
+ afterEach(() => {
++  vi.unstubAllEnvs();
+   resetClaudeCliCapabilitiesCacheForTests();
+ });
+ 
+diff --git a/server/src/__tests__/heartbeat-process-recovery.test.ts b/server/src/__tests__/heartbeat-process-recovery.test.ts
+index cd8c7d58e6..9b398864c2 100644
+--- a/server/src/__tests__/heartbeat-process-recovery.test.ts
++++ b/server/src/__tests__/heartbeat-process-recovery.test.ts
+@@ -1942,6 +1942,12 @@ describeEmbeddedPostgres("heartbeat orphaned process recovery", () => {
+     "continuation_user_authorization_missing",
+     "continuation_task_ownership_changed",
+   ])("retains untyped continuation setup failures: %s", async (message) => {
++    // Atelier : le rapport masque toute valeur héritée de l'environnement qui n'est pas publique ; sur un
++    // bureau Linux, XDG_SESSION_CLASS=user masque « user » dans le message attendu. On neutralise les valeurs
++    // de l'hôte contenues dans ce que le test compare, pour qu'il ne dépende pas de la machine.
++    for (const [key, value] of Object.entries(process.env)) {
++      if (value && (message.includes(value) || "heartbeat-process-recovery.test.ts".includes(value))) vi.stubEnv(key, "");
++    }
+     const { runId, wakeupRequestId } = await seedQueuedIssueRunFixture();
+     const error = new Error(message, { cause: Object.assign(new Error("upstream setup failed"), { code: "ECONNRESET" }) });
+     const build = vi.spyOn(executionContinuation, "buildExecutionContinuation")
+@@ -1968,6 +1974,7 @@ describeEmbeddedPostgres("heartbeat orphaned process recovery", () => {
+       )).toBe(false);
+     } finally {
+       build.mockRestore();
++      vi.unstubAllEnvs();
+     }
+   });
+ 
+@@ -5939,6 +5946,10 @@ describeEmbeddedPostgres("heartbeat orphaned process recovery", () => {
+   it("keeps an explicit local-path/worktree conflict blocked with a board action and no Sentry event", async () => {
+     const { companyId, agentId, runId, issueId } = await seedQueuedIssueRunFixture();
+     const cwd = await fs.mkdtemp(path.join(os.tmpdir(), "paperclip-local-workspace-policy-"));
++    // Atelier : quand le dossier temporaire est sur un autre système de fichiers (tmpfs), git ajoute
++    // « Stopping at filesystem boundary » à son message et le service n'y reconnaît plus un simple dossier
++    // hors dépôt. Git remonte alors jusqu'à / et rend le message ordinaire, quel que soit le poste.
++    vi.stubEnv("GIT_DISCOVERY_ACROSS_FILESYSTEM", "1");
+     const projectId = randomUUID();
+     const workspaceId = randomUUID();
+     const heartbeat = heartbeatService(db);
+@@ -5981,6 +5992,7 @@ describeEmbeddedPostgres("heartbeat orphaned process recovery", () => {
+       expect(mockCaptureRunFailure.mock.calls.filter(([event]) => event.runId === runId)).toEqual([]);
+     } finally {
+       await heartbeat.waitForRunExecutionDrain(runId);
++      vi.unstubAllEnvs();
+       await instanceSettingsService(db).updateExperimental({ enableIsolatedWorkspaces: previousSettings.enableIsolatedWorkspaces });
+       await fs.rm(cwd, { recursive: true, force: true });
+     }
+diff --git a/server/src/__tests__/tool-access-service.test.ts b/server/src/__tests__/tool-access-service.test.ts
+index de87fd25df..4bd1b84b2a 100644
+--- a/server/src/__tests__/tool-access-service.test.ts
++++ b/server/src/__tests__/tool-access-service.test.ts
+@@ -5243,8 +5243,9 @@ describeEmbeddedPostgres("tool access service", () => {
+     }
+     // Atelier Marketing IA (local patch 0004 adds 11 marketing gateway cards;
+     // patch 0011 adds 5 prospecting cards,
+-    // patch 0018 adds the link-check card, patches 0089 to 0092 add five more; count checked in patch 0005).
+-    expect(res.body.apps.filter((app: { slug: string }) => app.slug.startsWith("atelier-"))).toHaveLength(22);
++    // patch 0018 adds the link-check card, patches 0089 to 0092 add five more,
++    // patch 0159 adds the LinkedIn personal profile card; count checked in patch 0005).
++    expect(res.body.apps.filter((app: { slug: string }) => app.slug.startsWith("atelier-"))).toHaveLength(23);
+     expect(
+       res.body.apps.find((app: { slug: string }) => app.slug === "gmail")
+         .ownershipAvailability,
+diff --git a/ui/public/brands/apps/manifest.json b/ui/public/brands/apps/manifest.json
+index 45e4517927..a87d1a870e 100644
+--- a/ui/public/brands/apps/manifest.json
++++ b/ui/public/brands/apps/manifest.json
+@@ -771,6 +771,55 @@
+       "catalogVisible": true,
+       "localAsset": "/brands/apps/atelier-particuliers.svg",
+       "darkAsset": "/brands/apps/atelier-particuliers-dark.svg"
++    },
++    {
++      "slug": "atelier-extraction",
++      "provider": "Extraction de sites",
++      "catalogVisible": true,
++      "localAsset": "/brands/apps/atelier-page.svg",
++      "darkAsset": "/brands/apps/atelier-page-dark.svg"
++    },
++    {
++      "slug": "atelier-audit",
++      "provider": "Audit de pages",
++      "catalogVisible": true,
++      "localAsset": "/brands/apps/atelier-page.svg",
++      "darkAsset": "/brands/apps/atelier-page-dark.svg"
++    },
++    {
++      "slug": "atelier-liens",
++      "provider": "Vérification de liens",
++      "catalogVisible": true,
++      "localAsset": "/brands/apps/atelier-page.svg",
++      "darkAsset": "/brands/apps/atelier-page-dark.svg"
++    },
++    {
++      "slug": "atelier-statbel",
++      "provider": "Statbel (statistiques des communes belges)",
++      "catalogVisible": true,
++      "localAsset": "/brands/apps/atelier-page.svg",
++      "darkAsset": "/brands/apps/atelier-page-dark.svg"
++    },
++    {
++      "slug": "atelier-emailing",
++      "provider": "E-mailing (listmonk local)",
++      "catalogVisible": true,
++      "localAsset": "/brands/apps/atelier-audience.svg",
++      "darkAsset": "/brands/apps/atelier-audience-dark.svg"
++    },
++    {
++      "slug": "atelier-captation",
++      "provider": "Captation de prospects (pages de destination)",
++      "catalogVisible": true,
++      "localAsset": "/brands/apps/atelier-audience.svg",
++      "darkAsset": "/brands/apps/atelier-audience-dark.svg"
++    },
++    {
++      "slug": "atelier-linkedin-profil",
++      "provider": "LinkedIn (profil personnel)",
++      "catalogVisible": true,
++      "localAsset": "/brands/apps/atelier-reseau-pro.svg",
++      "darkAsset": "/brands/apps/atelier-reseau-pro-dark.svg"
+     }
+   ]
+ }
+-- 
+2.53.0
+

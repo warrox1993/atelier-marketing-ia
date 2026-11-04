@@ -1,5 +1,6 @@
 [Unit]
 Description=Mise à jour mensuelle de l'index BCE (Atelier marketing IA)
+OnFailure=atelier-alerte@%n.service
 After=network-online.target
 Wants=network-online.target
 

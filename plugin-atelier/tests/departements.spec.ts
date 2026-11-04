@@ -41,7 +41,7 @@ const SERVICES: ServiceEntreprise[] = [
   { companyId: AUTRE_DIR, clientMarqueur: "autre-sprl", serviceSlug: "direction", estDirection: true },
 ];
 
-function monde(o: { pannes?: string[]; pause?: string | null; aFaire?: Record<string, Array<{ type: string; urgence: string }>> } = {}) {
+function monde(o: { pannes?: string[]; pause?: string | null; enRevue?: boolean; aFaire?: Record<string, Array<{ type: string; urgence: string }>> } = {}) {
   const portee = new AsyncLocalStorage<{ companyId: string }>();
   const appels: Array<{ methode: string; companyId: string; portee: string | null }> = [];
   const exigerPortee = (methode: string, companyId: string) => {
@@ -66,6 +66,7 @@ function monde(o: { pannes?: string[]; pause?: string | null; aFaire?: Record<st
     { id: id(102), companyId: MKT, status: "blocked", updatedAt: t(5) },
     { id: id(103), companyId: MKT, status: "done", updatedAt: t(21) },
     { id: id(110), companyId: AUTRE_MKT, status: "blocked", updatedAt: t(20) },
+    ...(o.enRevue ? [{ id: id(104), companyId: MKT, status: "in_review", updatedAt: t(11) }] : []),
   ];
   const aFaire = o.aFaire ?? {
     [MKT]: [{ type: "contenu_a_valider", urgence: "haute" }, { type: "contenu_a_valider", urgence: "moyenne" }, { type: "approbation", urgence: "haute" }, { type: "information_manquante", urgence: "basse" }],
@@ -181,6 +182,14 @@ describe("departement.etat", () => {
       { niveau: "moyenne", texte: "1 tâche bloquée." },
     ]);
     expect(m.appels.length).toBeGreaterThan(0);
+    expect(m.appels.every((a) => a.companyId === MKT && a.portee === MKT)).toBe(true);
+  });
+
+  it("compte une tâche en revue avec les tâches en cours : elle n'est plus invisible (UI-6)", async () => {
+    const m = monde({ enRevue: true });
+    const e = (await m.appeler("departement.etat", MKT)).corps as EtatDepartement;
+    expect(e.taches).toEqual({ enCours: 3, bloquees: 1 });
+    expect(e.derniereActivite).toBe("2026-10-17T11:00:00.000Z");
     expect(m.appels.every((a) => a.companyId === MKT && a.portee === MKT)).toBe(true);
   });
 

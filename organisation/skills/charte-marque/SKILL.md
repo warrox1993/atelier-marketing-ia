@@ -21,8 +21,9 @@ affirmations autorisées.
 
 ## Prérequis
 
-- Charte de marque versionnée (en démonstration : `demo/marque.md`) et liste des
-  affirmations autorisées.
+- Charte de marque du client : sa fiche (`GET …/api/marque` : ton, marques, établissements, offres ;
+  section « Faits du client » quand tes consignes l'ont) et ses connaissances (charte versionnée, liste des affirmations autorisées).
+  `demo/marque.md` ne sert qu'à une démonstration, jamais pour un client réel.
 
 ## Entrées
 
@@ -31,11 +32,11 @@ affirmations autorisées.
 ## Étapes
 
 1. Vérifier le ton (grille dans `references/grille-charte.md`).
-2. Remplacer le vocabulaire proscrit par le vocabulaire de la marque.
+2. Remplacer le vocabulaire proscrit par le vocabulaire de la marque lu dans la fiche et la charte du client.
 3. Contrôler les mentions obligatoires (nom exact, zone, appel à l'action autorisé).
 4. Confronter chaque affirmation à la liste des affirmations autorisées ; une affirmation
    absente de la liste est marquée « à confirmer », jamais ajoutée à la liste.
-5. Vérifier noms et coordonnées des établissements contre le référentiel.
+5. Vérifier noms et coordonnées des établissements contre ceux de la fiche du client.
 6. Noter la version de la charte appliquée.
 
 ## Livrable
@@ -54,7 +55,7 @@ correction proposée ; version de la charte utilisée.
 
 ## Exemple
 
-Texte : « Leader de l'assurance habitation à Liège, satisfaction garantie à 100 %. »
+Texte (client fictif) : « Leader de l'assurance habitation à [ville A], satisfaction garantie à 100 %. »
 Écarts : « leader » non autorisé (aucune source) ; « satisfaction garantie à 100 % »
 interdit par la charte (promesse absolue). Proposition : « Une équipe locale, deux
-bureaux, à Liège et à Namur, un entretien pour faire le point avant chaque devis. » Charte appliquée : version 1.0.
+bureaux, à [ville A] et à [ville B], un entretien pour faire le point avant chaque devis. » Charte appliquée : version 1.0.

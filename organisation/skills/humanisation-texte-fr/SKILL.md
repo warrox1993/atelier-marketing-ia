@@ -107,10 +107,10 @@ La version réécrite ; la liste courte des familles de tics retirées ; le cont
 ## Exemple
 
 Avant : « Dans le paysage actuel de l'assurance, il est crucial de noter que notre bureau constitue un véritable
-pilier pour les familles liégeoises, offrant un accompagnement robuste et personnalisé, favorisant ainsi leur
+pilier pour les familles de la région, offrant un accompagnement robuste et personnalisé, favorisant ainsi leur
 sérénité. »
 
-Après : « Depuis 1998, notre bureau de Liège fait le point avec chaque famille avant de proposer un contrat. »
+Après (client fictif) : « Depuis [année], notre bureau de [ville A] fait le point avec chaque famille avant de proposer un contrat. »
 (La date et le lieu viennent de la fiche du client ; « sérénité » est retiré faute de preuve.)
 
 Cas d'échec évité : pour « donner de la voix », un brouillon ajoutait « Marie, cliente depuis dix ans, en

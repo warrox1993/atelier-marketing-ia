@@ -67,6 +67,14 @@ describe("signature X-Hub-Signature-256", () => {
     expect(b.meta.envois[0]!.chemin).toBe(`/v26.0/${ID_NUMERO}/messages`);
   });
 
+  it("/clear depuis WhatsApp : nouvelle discussion annoncée, rien n'est transmis au coordinateur", async () => {
+    b = await banc();
+    expect((await b.envoyer("/clear")).status).toBe(200);
+    expect(discussionPostee(b)).toHaveLength(1);
+    expect(b.atelier.discussion).toHaveLength(0);
+    expect(b.dernierTexte()).toBe("Nouvelle discussion ouverte avec le coordinateur général. Votre prochain message y sera écrit.");
+  });
+
   it("signature invalide, absente ou d'un autre secret : 401 et rien n'est traité", async () => {
     b = await banc();
     expect((await b.envoyer("pirate", { signature: "sha256=" + "0".repeat(64) })).status).toBe(401);

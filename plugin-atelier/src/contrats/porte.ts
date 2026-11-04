@@ -41,10 +41,35 @@ export const CodeMotifPorte = z.enum([
   "chiffre_offre_sans_source",
   /** Garde-fous de vérité : numéro FSMA ou BCE cité qui n'est pas, dans la fiche du client, un identifiant de ce type (`services-faits.ts`). */
   "identifiant_legal_incoherent",
+  /** DROIT-1.3 : numéro de téléphone belge en clair dans le livrable, absent de la fiche du client (`regles-telephone.ts`). */
+  "numero_telephone_en_clair",
   /** Couverture de prospection (`serveur/couverture-prospection.ts`) : code postal à moins du rayon d'un bureau jamais interrogé. */
   "couverture_zone_manquante",
   /** Couverture de prospection : somme fausse, total différent du total recompté sur les dépôts, nombre de codes postaux annoncé faux. */
   "total_incoherent",
+  /** Observatoire, OBS-01 à OBS-18 (docs/observatoire/regles-porte.md) : règles de la porte des Revisions. */
+  "obs_affirmation_sans_preuve",
+  "obs_extrait_absent_instantane",
+  "obs_source_non_enregistree",
+  "obs_verifie_sans_essai",
+  "obs_version_inconnue",
+  "obs_performance_sans_essai_ni_source_primaire",
+  "obs_chapitre_complet_sans_affirmation",
+  "obs_traduction_base_perimee",
+  "obs_code_modifie_traduction",
+  "obs_citation_affirmation_remplacee",
+  "obs_contredit_sans_preuve_contraire",
+  "obs_infere_sans_raisonnement",
+  "obs_confiance_sans_motif",
+  "obs_doc_officielle_non_primaire",
+  "obs_source_collecte_refusee",
+  "obs_affirmation_inconnue",
+  /** OBS-17 et OBS-18 (audit du 29/10/2026, LIV-OB-3 et LIV-OB-4) : nombre cité absent de l'affirmation, version absente des extraits. */
+  "obs_nombre_absent_affirmation",
+  "obs_version_hors_extrait",
+  /** LANG-L3 (audit du 29/10/2026) : consigne « Langue et style » vérifiée sur le livrable (`serveur/regles-redaction.ts`). */
+  "redaction_tiret_cadratin",
+  "redaction_guillemets_droits",
 ]);
 export type CodeMotifPorte = z.infer<typeof CodeMotifPorte>;
 
@@ -76,7 +101,7 @@ export const TacheSousPorte = z.object({
   campagneId: IdNatif,
   cleLivrable: z.string().min(1).max(64),
   exigencesCiblees: z.array(CodeExigence).min(1).max(200),
-  revuesRequises: z.array(RevueRequise).min(1).max(3),
+  revuesRequises: z.array(RevueRequise).min(1).max(4),
   maxCycles: z.number().int().min(LIMITES.maxCyclesCorrectionMin).max(LIMITES.maxCyclesCorrectionMax),
   /** Refus de porte déjà prononcés (cycles de correction consommés). */
   cyclesConsommes: z.number().int().nonnegative(),
@@ -96,7 +121,7 @@ export const MettreSousPorteEntree = z.object({
   campagneId: IdNatif,
   cleLivrable: z.string().min(1).max(64).default(CLE_LIVRABLE_DEFAUT),
   exigencesCiblees: z.array(CodeExigence).min(1).max(200),
-  revuesRequises: z.array(RevueRequise).min(1).max(3),
+  revuesRequises: z.array(RevueRequise).min(1).max(4),
   maxCycles: z
     .number()
     .int()
@@ -105,6 +130,38 @@ export const MettreSousPorteEntree = z.object({
     .default(LIMITES.maxCyclesCorrectionParDefaut),
 });
 export type MettreSousPorteEntree = z.infer<typeof MettreSousPorteEntree>;
+
+/**
+ * MK-01 (audit du 29/10/2026) : gabarit « livrable public » recopié de organisation/politiques/livrable-public.json
+ * (le test mettre-sous-porte.spec.ts vérifie l'égalité). `{{agent:<slug>}}` et `{{humain:responsable}}` sont
+ * résolus par la route `tache.mettre-sous-porte`.
+ */
+export const GABARIT_LIVRABLE_PUBLIC = {
+  revuesRequises: [
+    { role: "exigences", agentId: "{{agent:exigences}}" },
+    { role: "metier", agentId: "{{agent:relecteur}}" },
+    { role: "technique", agentId: "{{agent:tests-techniques}}" },
+  ],
+  executionPolicy: {
+    mode: "normal",
+    commentRequired: true,
+    maxReviewRounds: 3,
+    stages: [
+      { type: "review", participants: [{ type: "agent", agentId: "{{agent:porte}}" }] },
+      { type: "approval", participants: [{ type: "user", userId: "{{humain:responsable}}" }] },
+    ],
+  },
+};
+
+/** Corps de `tache.mettre-sous-porte` : `conformite` ajoute la revue de la Conformité publicitaire (MK-09). */
+export const MettreTacheSousPorteEntree = z
+  .object({
+    campagneId: IdNatif,
+    exigencesCiblees: z.array(CodeExigence).min(1).max(200),
+    conformite: z.boolean().default(false),
+  })
+  .strict();
+export type MettreTacheSousPorteEntree = z.infer<typeof MettreTacheSousPorteEntree>;
 
 /** Résultat d'une évaluation déterministe. */
 export const EvaluationPorte = z.object({

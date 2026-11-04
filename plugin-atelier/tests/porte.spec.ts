@@ -146,4 +146,53 @@ describe("porte déterministe", () => {
   it("normalisation des éléments (accents, casse, tirets)", () => {
     expect(normaliserElement("Liège-Guillemins")).toBe(normaliserElement("liege guillemins"));
   });
+  it("entreprise marketing : motifs identiques avant/après (sans `observatoire`, ni motif OBS ni empreinte modifiée)", () => {
+    const avant = evaluerPorte(base());
+    const apres = evaluerPorte({ ...base(), observatoire: undefined });
+    expect(apres).toEqual(avant);
+    expect(apres.decision).toBe("PASS");
+    expect(apres.motifs).toEqual([]);
+    // Empreinte figée avant le branchement : toute dérive pour une entreprise marketing la ferait échouer.
+    expect(apres.empreinte).toBe("bb2f6a89b451c5ec41d26de5417b942ccdb1cc21f6bf6554d858f6264f0a4966");
+  });
+});
+
+describe("SPEC-E2 : empreinte de la porte de l'Observatoire", () => {
+  type Obs = NonNullable<EntreesPorte["observatoire"]>;
+  const obs = (): Obs => ({
+    revision: { id: "rev-en", langue: "en", empreinte: "e-en", baseRevisionFr: { id: "rev-fr", empreinteActuelle: "e-fr", empreinteTraduite: "e-fr", glossaireProtege: ["Outil-Demo"] }, texte: "" },
+    affirmations: [{ id: "a1", projetId: "p1", chapitre: "ch01", texte: "Outil-Demo 2.1 est sous licence Apache 2.0.", statut: "confirme_doc_officielle", confiance: { niveau: 3, motif: "LICENSE" }, versionConcernee: "2.1", remplaceePar: null, preuves: [] }],
+    preuves: [],
+    instantanes: new Map(),
+    sources: new Set(["s1"]),
+    versionsConnues: new Set(["2.1"]),
+    essais: new Map(),
+    sourcesRefusees: new Set(),
+    sourcesPrimaires: new Set(["s1"]),
+    longueurMaxExtrait: 500,
+    limitesSources: new Map([["s1", { extraitMax: 300, cumulMax: 1000 }]]),
+  });
+  const empreinte = (o: Obs) => evaluerPorte({ ...base(), observatoire: o }).empreinte;
+  const aff = (o: Obs, x: Partial<Obs["affirmations"][number]>): Obs => ({ ...o, affirmations: [{ ...o.affirmations[0]!, ...x }] });
+
+  it("deux décisions sur des entrées différentes n'ont jamais la même empreinte", () => {
+    const o = obs();
+    expect(empreinte(obs())).toBe(empreinte(o));
+    const variantes: Array<[string, Obs]> = [
+      ["baseRevisionFr", { ...o, revision: { ...o.revision, baseRevisionFr: { ...o.revision.baseRevisionFr!, empreinteActuelle: "e-fr-2" } } }],
+      ["glossaire protégé", { ...o, revision: { ...o.revision, baseRevisionFr: { ...o.revision.baseRevisionFr!, glossaireProtege: [] } } }],
+      ["sourcesPrimaires", { ...o, sourcesPrimaires: new Set() }],
+      ["sourcesPrimairesParProjet", { ...o, sourcesPrimairesParProjet: new Map([["p1", new Set(["s1"])]]) }],
+      ["texte", aff(o, { texte: "Outil-Demo 2.1 est sous licence MIT." })],
+      ["confiance", aff(o, { confiance: { niveau: 2, motif: "LICENSE" } })],
+      ["chapitre", aff(o, { chapitre: "ch02" })],
+      ["versionConcernee", aff(o, { versionConcernee: "2.0" })],
+      ["projetId", aff(o, { projetId: "p2" })],
+      ["essais", { ...o, essais: new Map([["e1", { executeParService: true, termine: true, succes: true, version: "2.1" }]]) }],
+      ["longueurMaxExtrait", { ...o, longueurMaxExtrait: 200 }],
+      ["limitesSources", { ...o, limitesSources: new Map([["s1", { extraitMax: 100, cumulMax: 1000 }]]) }],
+      ["sourcesSansAuteur", { ...o, sourcesSansAuteur: new Set(["s1"]) }],
+    ];
+    for (const [nom, v] of variantes) expect(empreinte(v), nom).not.toBe(empreinte(o));
+  });
 });

@@ -67,8 +67,8 @@ Client fictif : courtier, zone urbaine, trois langues.
 
 | Segment | Taille (source) | Attractivité | Capacité | Accessibilité | Décision |
 | --- | --- | --- | --- | --- | --- |
-| Professions libérales de santé | 4 200 (BCE, 2026-10-12) | 4/5 | 4/5 | 5/5 (ordre et annuaires) | retenu |
+| Professions libérales de santé | 4 200 (fictif) | 4/5 | 4/5 | 5/5 (ordre et annuaires) | retenu |
 | Commerces de détail | inconnue | 3/5 | 3/5 | 3/5 | écarté pour l'instant |
-| Particuliers propriétaires | 38 000 (Statbel, 2025) | 3/5 | 4/5 | 2/5 | écarté, hors cible B2B |
+| Particuliers propriétaires | 38 000 (fictif) | 3/5 | 4/5 | 2/5 | écarté, hors cible B2B |
 
 Niche tête de pont retenue : cabinets de kinésithérapie (hypothèse de départ). Produit total : responsabilité professionnelle, assurance incapacité, accompagnement sinistre, bilan de couverture.

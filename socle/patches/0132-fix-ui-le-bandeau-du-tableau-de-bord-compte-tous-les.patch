@@ -1,0 +1,318 @@
+From 24bf2f677f347e7e5bcf432f29e00d8b1bfd0e13 Mon Sep 17 00:00:00 2001
+From: Jean-Baptiste Dhondt <114347858+warrox1993@users.noreply.github.com>
+Date: Fri, 30 Oct 2026 15:40:26 +0100
+Subject: [PATCH 132/139] =?UTF-8?q?fix(ui):=20le=20bandeau=20du=20tableau?=
+ =?UTF-8?q?=20de=20bord=20compte=20tous=20les=20agents=20en=20pause=20avec?=
+ =?UTF-8?q?=20leur=20motif=20;=20la=20reprise=20des=20agents=20import?=
+ =?UTF-8?q?=C3=A9s=20demande=20une=20confirmation=20(Atelier=20UI-8)?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Le titre disait « 3 agents importés en pause » pour 17 agents en pause : il compte
+maintenant tous les agents en pause et donne la répartition par motif (import,
+manuel, budget...). Le bouton « Tout reprendre », qui ne reprenait en fait que les
+agents importés, devient « Reprendre les N agents importés » et ouvre une
+confirmation qui dit le nombre d'agents relancés et qu'ils peuvent démarrer des
+runs aussitôt. Aucune mutation sans le second clic.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01EThpSSDGc5NRYwbgjNqoTJ
+---
+ ui/src/pages/Dashboard.banner.test.tsx |  69 ++++++++++++++
+ ui/src/pages/Dashboard.test.ts         |  28 +++++-
+ ui/src/pages/Dashboard.tsx             | 122 ++++++++++++++++++++-----
+ 3 files changed, 196 insertions(+), 23 deletions(-)
+ create mode 100644 ui/src/pages/Dashboard.banner.test.tsx
+
+diff --git a/ui/src/pages/Dashboard.banner.test.tsx b/ui/src/pages/Dashboard.banner.test.tsx
+new file mode 100644
+index 0000000000..a35fd23b13
+--- /dev/null
++++ b/ui/src/pages/Dashboard.banner.test.tsx
+@@ -0,0 +1,69 @@
++// @vitest-environment jsdom
++
++import { act } from "react";
++import { createRoot, type Root } from "react-dom/client";
++import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
++import { ImportedPausedAgentsBanner } from "./Dashboard";
++
++// eslint-disable-next-line @typescript-eslint/no-explicit-any
++(globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
++
++const banner = {
++  kind: "imported" as const,
++  pausedImportedAgentIds: ["imp-0", "imp-1", "imp-2"],
++  pausedCount: 17,
++  pausedByReason: { import: 3, manual: 12, budget: 2 },
++};
++
++describe("ImportedPausedAgentsBanner", () => {
++  let container: HTMLDivElement;
++  let root: Root;
++
++  beforeEach(() => {
++    container = document.createElement("div");
++    document.body.appendChild(container);
++    root = createRoot(container);
++  });
++
++  afterEach(() => {
++    act(() => root.unmount());
++    container.remove();
++    document.body.innerHTML = "";
++  });
++
++  it("titre : tous les agents en pause avec leur motif, et pas seulement les importés", () => {
++    act(() => root.render(<ImportedPausedAgentsBanner banner={banner} resuming={false} onResume={() => {}} />));
++    expect(container.textContent).toContain(
++      "17 agents en pause (3 à l'import, 12 manuellement, 2 par le budget) : ils ne s'exécuteront pas.",
++    );
++    expect(container.textContent).not.toContain("3 agents importés sont en pause");
++    expect(container.textContent).not.toContain("Tout reprendre");
++  });
++
++  it("le bouton ouvre une confirmation : aucune reprise sans le second clic", () => {
++    const onResume = vi.fn();
++    act(() => root.render(<ImportedPausedAgentsBanner banner={banner} resuming={false} onResume={onResume} />));
++    const button = container.querySelector<HTMLButtonElement>('[data-testid="dashboard-resume-imported-agents"]');
++    expect(button?.textContent).toBe("Reprendre les 3 agents importés");
++    act(() => button!.click());
++    expect(onResume).not.toHaveBeenCalled();
++    expect(document.body.textContent).toContain("Reprendre les 3 agents importés ?");
++    expect(document.body.textContent).toContain(
++      "3 agents vont reprendre et peuvent démarrer des runs aussitôt, avec leur coût. Les agents en pause pour un autre motif restent en pause.",
++    );
++    const confirm = document.body.querySelector<HTMLButtonElement>('[data-testid="dashboard-resume-imported-agents-confirm"]');
++    expect(confirm?.textContent).toBe("Reprendre 3 agents");
++    act(() => confirm!.click());
++    expect(onResume).toHaveBeenCalledTimes(1);
++  });
++
++  it("Annuler ferme la confirmation sans rien reprendre", () => {
++    const onResume = vi.fn();
++    act(() => root.render(<ImportedPausedAgentsBanner banner={banner} resuming={false} onResume={onResume} />));
++    act(() => container.querySelector<HTMLButtonElement>('[data-testid="dashboard-resume-imported-agents"]')!.click());
++    const cancel = Array.from(document.body.querySelectorAll("button")).find((b) => b.textContent === "Annuler");
++    act(() => cancel!.click());
++    expect(onResume).not.toHaveBeenCalled();
++    expect(document.body.textContent).not.toContain("Reprendre les 3 agents importés ?");
++  });
++});
+diff --git a/ui/src/pages/Dashboard.test.ts b/ui/src/pages/Dashboard.test.ts
+index bc053d2e7b..4f7cb23061 100644
+--- a/ui/src/pages/Dashboard.test.ts
++++ b/ui/src/pages/Dashboard.test.ts
+@@ -1,6 +1,6 @@
+ import type { Agent } from "@paperclipai/shared";
+ import { describe, expect, it } from "vitest";
+-import { derivePausedAgentBanner } from "./Dashboard";
++import { derivePausedAgentBanner, describePauseBreakdown } from "./Dashboard";
+ 
+ function agent(overrides: Partial<Agent>): Agent {
+   return {
+@@ -24,7 +24,31 @@ describe("derivePausedAgentBanner", () => {
+       agent({ id: "b", status: "paused", pauseReason: "manual" }),
+       agent({ id: "c", status: "idle" }),
+     ]);
+-    expect(banner).toEqual({ kind: "imported", pausedImportedAgentIds: ["a"] });
++    expect(banner).toEqual({
++      kind: "imported",
++      pausedImportedAgentIds: ["a"],
++      pausedCount: 2,
++      pausedByReason: { import: 1, manual: 1 },
++    });
++  });
++
++  it("counts every paused agent with its reason when imported agents wait (17 paused, 3 imported)", () => {
++    const agents = [
++      ...Array.from({ length: 3 }, (_, i) => agent({ id: `imp-${i}`, status: "paused", pauseReason: "import" })),
++      ...Array.from({ length: 12 }, (_, i) => agent({ id: `man-${i}`, status: "paused", pauseReason: "manual" })),
++      ...Array.from({ length: 2 }, (_, i) => agent({ id: `bud-${i}`, status: "paused", pauseReason: "budget" })),
++      agent({ id: "run", status: "idle" }),
++    ];
++    const banner = derivePausedAgentBanner(agents);
++    expect(banner).toEqual({
++      kind: "imported",
++      pausedImportedAgentIds: ["imp-0", "imp-1", "imp-2"],
++      pausedCount: 17,
++      pausedByReason: { import: 3, manual: 12, budget: 2 },
++    });
++    expect(describePauseBreakdown({ import: 3, manual: 12, budget: 2 })).toBe(
++      "3 à l'import, 12 manuellement, 2 par le budget",
++    );
+   });
+ 
+   it("falls back to the all-paused banner when no import pauses exist", () => {
+diff --git a/ui/src/pages/Dashboard.tsx b/ui/src/pages/Dashboard.tsx
+index 87e5c89aad..ece0c0c6ec 100644
+--- a/ui/src/pages/Dashboard.tsx
++++ b/ui/src/pages/Dashboard.tsx
+@@ -36,6 +36,16 @@ import { PageSkeleton } from "../components/PageSkeleton";
+ import { Card } from "@/components/ui/card";
+ import { Button } from "@/components/ui/button";
+ import { InlineBanner } from "../components/InlineBanner";
++import {
++  AlertDialog,
++  AlertDialogAction,
++  AlertDialogCancel,
++  AlertDialogContent,
++  AlertDialogDescription,
++  AlertDialogFooter,
++  AlertDialogHeader,
++  AlertDialogTitle,
++} from "@/components/ui/alert-dialog";
+ import type { Agent, Issue } from "@paperclipai/shared";
+ import { PluginSlotOutlet } from "@/plugins/slots";
+ import { SmokeLabDashboardCard } from "../components/SmokeLabDashboardCard";
+@@ -50,10 +60,26 @@ function getRecentIssues(issues: Issue[]): Issue[] {
+ }
+ 
+ export type PausedAgentBanner =
+-  | { kind: "imported"; pausedImportedAgentIds: string[] }
++  | { kind: "imported"; pausedImportedAgentIds: string[]; pausedCount: number; pausedByReason: Record<string, number> }
+   | { kind: "all-paused" }
+   | null;
+ 
++const PAUSE_REASON_LABELS: Record<string, string> = {
++  import: "à l'import",
++  manual: "manuellement",
++  budget: "par le budget",
++  system: "par le système",
++  company_archived: "par l'archivage de l'organisation",
++  none: "sans motif",
++};
++
++/** « 3 à l'import, 12 manuellement, 2 par le budget » : la répartition affichée dans le bandeau. */
++export function describePauseBreakdown(pausedByReason: Record<string, number>): string {
++  return Object.entries(pausedByReason)
++    .map(([reason, count]) => `${count} ${PAUSE_REASON_LABELS[reason] ?? reason}`)
++    .join(", ");
++}
++
+ /**
+  * Which paused-agents banner the dashboard should show. Import-paused agents
+  * get the specific banner with a bulk resume (they were parked by the import
+@@ -67,12 +93,80 @@ export function derivePausedAgentBanner(agents: Agent[] | undefined): PausedAgen
+     (agent) => agent.status === "paused" && agent.pauseReason === "import",
+   );
+   if (importedPaused.length > 0) {
+-    return { kind: "imported", pausedImportedAgentIds: importedPaused.map((agent) => agent.id) };
++    const pausedByReason: Record<string, number> = {};
++    for (const agent of agents) {
++      if (agent.status !== "paused") continue;
++      const reason = agent.pauseReason ?? "none";
++      pausedByReason[reason] = (pausedByReason[reason] ?? 0) + 1;
++    }
++    return {
++      kind: "imported",
++      pausedImportedAgentIds: importedPaused.map((agent) => agent.id),
++      pausedCount: Object.values(pausedByReason).reduce((sum, count) => sum + count, 0),
++      pausedByReason,
++    };
+   }
+   if (agents.every((agent) => agent.status === "paused")) return { kind: "all-paused" };
+   return null;
+ }
+ 
++/**
++ * Bandeau des agents en pause quand des agents importés attendent : le titre compte TOUS les agents en pause
++ * avec leur motif, et la reprise des agents importés passe par une confirmation (elle peut lancer des runs).
++ */
++export function ImportedPausedAgentsBanner({
++  banner,
++  resuming,
++  onResume,
++}: {
++  banner: Extract<PausedAgentBanner, { kind: "imported" }>;
++  resuming: boolean;
++  onResume: () => void;
++}) {
++  const [confirmOpen, setConfirmOpen] = useState(false);
++  const importedCount = banner.pausedImportedAgentIds.length;
++  const importedLabel = importedCount === 1 ? "l'agent importé" : `les ${importedCount} agents importés`;
++  return (
++    <>
++      <InlineBanner
++        tone="warning"
++        icon={PauseCircle}
++        title={`${banner.pausedCount} ${banner.pausedCount === 1 ? "agent en pause" : "agents en pause"} (${describePauseBreakdown(banner.pausedByReason)}) : ${banner.pausedCount === 1 ? "il ne s'exécutera pas" : "ils ne s'exécuteront pas"}.`}
++        actions={
++          <Button
++            size="sm"
++            onClick={() => setConfirmOpen(true)}
++            disabled={resuming}
++            data-testid="dashboard-resume-imported-agents"
++          >
++            {resuming ? "Reprise en cours…" : `Reprendre ${importedLabel}`}
++          </Button>
++        }
++      >
++        Les agents issus d'un import d'organisation arrivent en pause par sécurité. Reprenez-les pour que les tâches assignées puissent démarrer.
++      </InlineBanner>
++      <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
++        <AlertDialogContent>
++          <AlertDialogHeader>
++            <AlertDialogTitle>{`Reprendre ${importedLabel} ?`}</AlertDialogTitle>
++            <AlertDialogDescription>
++              {importedCount === 1
++                ? "1 agent va reprendre et peut démarrer des runs aussitôt, avec leur coût. Les agents en pause pour un autre motif restent en pause."
++                : `${importedCount} agents vont reprendre et peuvent démarrer des runs aussitôt, avec leur coût. Les agents en pause pour un autre motif restent en pause.`}
++            </AlertDialogDescription>
++          </AlertDialogHeader>
++          <AlertDialogFooter>
++            <AlertDialogCancel>Annuler</AlertDialogCancel>
++            <AlertDialogAction onClick={onResume} data-testid="dashboard-resume-imported-agents-confirm">
++              {`Reprendre ${importedCount === 1 ? "1 agent" : `${importedCount} agents`}`}
++            </AlertDialogAction>
++          </AlertDialogFooter>
++        </AlertDialogContent>
++      </AlertDialog>
++    </>
++  );
++}
++
+ export function Dashboard() {
+   const { selectedCompanyId, companies } = useCompany();
+   const { openOnboarding } = useDialogActions();
+@@ -321,31 +415,17 @@ export function Dashboard() {
+   // opens the same agent step the offer does.
+   const hasNoAgents = agents !== undefined && !agentsRefreshing && agents.length === 0;
+   const pausedBanner = derivePausedAgentBanner(agents);
+-  const pausedImportedCount =
+-    pausedBanner?.kind === "imported" ? pausedBanner.pausedImportedAgentIds.length : 0;
+ 
+   return (
+     <div className="space-y-6">
+       {error && <p className="text-sm text-destructive">{error.message}</p>}
+ 
+       {pausedBanner?.kind === "imported" ? (
+-        <InlineBanner
+-          tone="warning"
+-          icon={PauseCircle}
+-          title={`${pausedImportedCount} ${pausedImportedCount === 1 ? "agent importé est en pause et ne s'exécutera pas" : "agents importés sont en pause et ne s'exécuteront pas"}.`}
+-          actions={
+-            <Button
+-              size="sm"
+-              onClick={() => resumeImportedAgents.mutate()}
+-              disabled={resumeImportedAgents.isPending}
+-              data-testid="dashboard-resume-imported-agents"
+-            >
+-              {resumeImportedAgents.isPending ? "Reprise en cours…" : "Tout reprendre"}
+-            </Button>
+-          }
+-        >
+-          Les agents issus d'un import d'organisation arrivent en pause par sécurité. Reprenez-les pour que les tâches assignées puissent démarrer.
+-        </InlineBanner>
++        <ImportedPausedAgentsBanner
++          banner={pausedBanner}
++          resuming={resumeImportedAgents.isPending}
++          onResume={() => resumeImportedAgents.mutate()}
++        />
+       ) : pausedBanner?.kind === "all-paused" ? (
+         <InlineBanner
+           tone="warning"
+-- 
+2.53.0
+

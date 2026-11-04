@@ -233,5 +233,11 @@ export const ACTIONS_UI = {
     humainSeulement: true,
   },
   "atelier.donnees.reinitialiser": { params: z.object({ confirmation: z.literal("REINITIALISER") }), resultat: z.object({ supprimes: z.record(z.string(), z.number()), conserves: z.record(z.string(), z.number()) }), humainSeulement: true },
+  /** DROIT-1.4 : purge des prospects sans contact depuis 3 ans (décision de l'opérateur), à blanc tant que `confirmer` n'est pas vrai. */
+  "atelier.prospects.purger": {
+    params: z.object({ confirmer: z.boolean().default(false) }),
+    resultat: z.object({ avant: Horodatage, aBlanc: z.boolean(), candidats: z.number().int().min(0), supprimes: z.number().int().min(0) }),
+    humainSeulement: true,
+  },
 } as const;
 export type CleActionUi = keyof typeof ACTIONS_UI;

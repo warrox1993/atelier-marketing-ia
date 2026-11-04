@@ -100,7 +100,8 @@ export interface EvenementJournal {
 }
 
 export interface ClientAtelier {
-  envoyerDiscussion(texte: string): Promise<{ id: string; date: string }>;
+  /** `/clear` ou `/nouveau` seuls : le serveur ouvre une discussion neuve et rend `nouvelle` au lieu d'un message. */
+  envoyerDiscussion(texte: string): Promise<{ id?: string; date?: string; nouvelle?: unknown }>;
   messagesDiscussion(depuis: string | null): Promise<MessageDiscussion[]>;
   departements(): Promise<Departement[]>;
   accueil(companyId: string): Promise<ElementAccueil[]>;

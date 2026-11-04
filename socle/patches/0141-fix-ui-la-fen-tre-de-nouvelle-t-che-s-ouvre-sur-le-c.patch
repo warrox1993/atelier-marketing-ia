@@ -1,0 +1,112 @@
+From 0d6593872db504e4255197e06af48fcafd336489 Mon Sep 17 00:00:00 2001
+From: Jean-Baptiste Dhondt <114347858+warrox1993@users.noreply.github.com>
+Date: Fri, 30 Oct 2026 16:21:43 +0100
+Subject: [PATCH 141/141] =?UTF-8?q?fix(ui):=20la=20fen=C3=AAtre=20de=20nou?=
+ =?UTF-8?q?velle=20t=C3=A2che=20s'ouvre=20sur=20le=20coordinateur,=20pas?=
+ =?UTF-8?q?=20sur=20le=20dernier=20assign=C3=A9=20(Atelier=20COORD-P3-16)?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Une demande créée depuis l'interface allait au dernier agent assigné (par exemple
+la Prospection) et court-circuitait le coordinateur. L'assigné par défaut est
+maintenant l'agent principal, sinon le rôle ceo ; le dernier assigné ne sert que
+s'il n'y a pas de coordinateur. Un assigné explicite (newIssueDefaults) ou un
+brouillon restent prioritaires.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01EThpSSDGc5NRYwbgjNqoTJ
+---
+ ui/src/components/NewIssueDialog.test.tsx | 33 ++++++++++++++++++++---
+ ui/src/components/NewIssueDialog.tsx      |  9 ++++---
+ 2 files changed, 35 insertions(+), 7 deletions(-)
+
+diff --git a/ui/src/components/NewIssueDialog.test.tsx b/ui/src/components/NewIssueDialog.test.tsx
+index 55b0b42da8..e1d0db272a 100644
+--- a/ui/src/components/NewIssueDialog.test.tsx
++++ b/ui/src/components/NewIssueDialog.test.tsx
+@@ -424,6 +424,10 @@ describe("NewIssueDialog", () => {
+     { id: "worker", name: "Worker", role: "engineer", status: "idle", adapterType: "codex_local", adapterConfig: {}, runtimeConfig: {}, permissions: {} },
+     { id: "ceo", name: "CEO", role: "ceo", status: "idle", adapterType: "claude_local", adapterConfig: {}, runtimeConfig: {}, permissions: {} },
+   ];
++  const agentsWithoutCoordinator = [
++    { id: "writer", name: "Writer", role: "engineer", status: "idle", adapterType: "codex_local", adapterConfig: {}, runtimeConfig: {}, permissions: {} },
++    defaultAgents[0],
++  ];
+ 
+   it.each([
+     { remembered: "project-1", expected: "project-1" },
+@@ -498,8 +502,8 @@ describe("NewIssueDialog", () => {
+ 
+   it.each([
+     { recent: "", expected: "CEO" },
+-    { recent: "agent:worker", expected: "Worker" },
+-    { recent: "user:user-1", expected: "Me" },
++    { recent: "agent:worker", expected: "CEO" },
++    { recent: "user:user-1", expected: "CEO" },
+     { recent: "agent:deleted", expected: "CEO" },
+   ])("defaults to $expected for recent selection $recent without inserting a mention", async ({ recent, expected }) => {
+     mockAgentsApi.list.mockResolvedValue(defaultAgents);
+@@ -514,7 +518,7 @@ describe("NewIssueDialog", () => {
+ 
+   it.each([
+     { recent: null, explicit: null, draft: null, primary: "worker", expected: "Worker" },
+-    { recent: "ceo", explicit: null, draft: null, primary: "worker", expected: "CEO" },
++    { recent: "ceo", explicit: null, draft: null, primary: "worker", expected: "Worker" },
+     { recent: "worker", explicit: "ceo", draft: null, primary: "worker", expected: "CEO" },
+     { recent: "worker", explicit: null, draft: "ceo", primary: "worker", expected: "CEO" },
+     { recent: null, explicit: null, draft: null, primary: "missing", expected: "CEO" },
+@@ -542,8 +546,29 @@ describe("NewIssueDialog", () => {
+     act(() => next.root.unmount());
+   });
+ 
+-  it("uses older agent history only when the agent belongs to the current company", async () => {
++  it("ouvre sur le ceo même si un autre agent est le dernier assigné (Atelier COORD-P3-16)", async () => {
+     mockAgentsApi.list.mockResolvedValue(defaultAgents);
++    trackRecentAssignee("worker", "company-1");
++    const { root } = renderDialog(container);
++    await waitForAssertion(() => expect(container.querySelector('[data-testid="task-chat-composer-assignee-label"]')?.textContent).toBe("CEO"));
++    act(() => root.unmount());
++  });
++
++  it.each([
++    { recent: "agent:worker", expected: "Worker" },
++    { recent: "user:user-1", expected: "Me" },
++    { recent: "", expected: "Writer" },
++  ])("sans coordinateur, reprend le dernier assigné $recent (Atelier COORD-P3-16)", async ({ recent, expected }) => {
++    mockAgentsApi.list.mockResolvedValue(agentsWithoutCoordinator);
++    if (recent.startsWith("agent:")) trackRecentAssignee(recent.slice(6), "company-1");
++    if (recent.startsWith("user:")) trackRecentAssigneeUser(recent.slice(5), "company-1");
++    const { root } = renderDialog(container);
++    await waitForAssertion(() => expect(container.querySelector('[data-testid="task-chat-composer-assignee-label"]')?.textContent).toBe(expected));
++    act(() => root.unmount());
++  });
++
++  it("uses older agent history only when the agent belongs to the current company", async () => {
++    mockAgentsApi.list.mockResolvedValue(agentsWithoutCoordinator);
+     trackRecentAssignee("worker");
+     trackRecentAssignee("another-company-agent");
+     const { root } = renderDialog(container);
+diff --git a/ui/src/components/NewIssueDialog.tsx b/ui/src/components/NewIssueDialog.tsx
+index 5a893e5780..e78fdaf167 100644
+--- a/ui/src/components/NewIssueDialog.tsx
++++ b/ui/src/components/NewIssueDialog.tsx
+@@ -991,9 +991,12 @@ export function NewIssueDialog() {
+       : getRecentAssigneeSelectionIds().filter((value) => value.startsWith("agent:"));
+     const recent = recents.find((value) => available.has(value));
+     const targets = agents.filter(isAgentTaskTarget);
+-    const fallback = targets.find((agent) => agent.id === primaryAgent?.primaryAgentId)
+-      ?? targets.find((agent) => agent.role === "ceo") ?? targets[0];
+-    setAssigneeValue(recent ?? (fallback ? assigneeValueFromSelection({ assigneeAgentId: fallback.id }) : ""));
++    // Atelier COORD-P3-16 : une demande va d'abord au coordinateur, même si un autre agent a été le dernier assigné.
++    const coordinator = targets.find((agent) => agent.id === primaryAgent?.primaryAgentId)
++      ?? targets.find((agent) => agent.role === "ceo");
++    const fallback = targets[0];
++    setAssigneeValue(coordinator ? assigneeValueFromSelection({ assigneeAgentId: coordinator.id })
++      : recent ?? (fallback ? assigneeValueFromSelection({ assigneeAgentId: fallback.id }) : ""));
+   }, [newIssueOpen, effectiveCompanyId, agents, assigneeOptions, sessionFetched, membersFetched, primaryAgent?.loading, primaryAgent?.primaryAgentId]);
+   useEffect(() => {
+     if (!newIssueOpen || !effectiveCompanyId || !defaultProjectPendingRef.current || !projects) return;
+-- 
+2.53.0
+

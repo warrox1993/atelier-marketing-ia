@@ -42,6 +42,8 @@ DeviceAllow=/dev/nvidia-uvm-tools rw
 # Ressources : un seul travail à la fois, pas d'échange sur disque.
 MemoryMax=14G
 MemorySwapMax=0
+# un dépassement tue le travail fautif, pas tout le service (travaux en file conservés)
+OOMPolicy=continue
 TasksMax=512
 CPUQuota=600%
 

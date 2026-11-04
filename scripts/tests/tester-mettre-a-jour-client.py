@@ -11,6 +11,7 @@ import io
 import os
 import tempfile
 import unittest
+from unittest import mock
 from pathlib import Path
 
 DONNEES = tempfile.mkdtemp(prefix="atelier-test-maj-client-")
@@ -246,6 +247,70 @@ class MiseAJourClient(unittest.TestCase):
         self.assertEqual(presents["cellule-crise"]["id"], "a-cc")
         self.assertEqual(presents["tableau-de-bord"]["id"], "a-tb")
 
+    def test_agents_par_slug_prefere_le_slug_enregistre(self):
+        # Gardien (audit du 29/10/2026) : l'identité vient de metadata.atelier.slug, posé à l'import, pas du nom affiché.
+        renomme = agent("Veille du marché", "idle", "a-v")
+        renomme["metadata"] = {"atelier": {"slug": "veille"}}
+        usurpe = agent("Coordinateur", "idle", "a-u")
+        usurpe["metadata"] = {"atelier": {"slug": "redacteur"}}
+        self.api.agents[ID_DIR] = [renomme, usurpe, agent("Coordinateur", "idle", "a-c")]
+        presents = bo.agents_par_slug(self.api, ID_DIR)
+        self.assertEqual(presents["veille"]["id"], "a-v")
+        self.assertEqual(presents["redacteur"]["id"], "a-u")
+        # Un agent sans métadonnée (pas encore réimporté) garde le repli par le nom.
+        self.assertEqual(presents["coordinateur"]["id"], "a-c")
+
+    def test_slug_enregistre_a_l_import(self):
+        reg_agents, _ = bo.registres()
+        a = reg_agents["agents"][0]
+        self.assertEqual(bo.metadata_atelier(a, reg_agents)["atelier"]["slug"], a["slug"])
+
+    def _gardien(self, presents_slugs):
+        reg_agents, _ = bo.registres()
+        self.api.agents[ID_MKT] = []
+        for s in presents_slugs:
+            a = agent(f"Agent {s}", "idle", f"a-{s}")
+            a["metadata"] = {"atelier": {"slug": s}}
+            self.api.agents[ID_MKT].append(a)
+        recus = {}
+
+        def connexions(api, cid, reg, agents):
+            recus["connexions"] = set(agents)
+            return 0, []
+
+        def fabrique(api, cid, reg, agents):
+            recus["fabrique"] = set(agents)
+            return 0
+        err = io.StringIO()
+        with mock.patch.object(bo, "Api", lambda url: self.api), \
+                mock.patch.object(bo, "url_api", lambda: "http://faux"), \
+                mock.patch.object(bo, "entreprise_du_gardien", lambda api, reg: {"id": ID_MKT}), \
+                mock.patch.object(bo, "assurer_connexions", connexions), \
+                mock.patch.object(bo, "assurer_fabrique", fabrique), \
+                contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(err):
+            code = bo._assurer_connexions(argparse.Namespace(detail=False))
+        return code, err.getvalue(), recus, [a["slug"] for a in reg_agents["agents"]]
+
+    def test_gardien_continue_sans_un_agent_absent(self):
+        reg_agents, _ = bo.registres()
+        slugs = [a["slug"] for a in reg_agents["agents"]]
+        code, err, recus, _ = self._gardien(slugs[1:])
+        self.assertEqual(code, 0)
+        self.assertIn("agents absents", err)
+        self.assertIn(slugs[0], err)
+        # Fermé par défaut : l'absent ne reçoit rien, les présents sont transmis.
+        self.assertEqual(recus["connexions"], set(slugs[1:]))
+        self.assertEqual(recus["fabrique"], set(slugs[1:]))
+
+    def test_gardien_toutes_les_quinze_minutes(self):
+        # AFB-10 (audit du 29/10/2026) : 4 801 passages sur 5 055 sans aucune écriture, 2 écritures réelles en 10 jours.
+        self.assertEqual(bo.corps_gardien(self.api)["runtimeConfig"]["heartbeat"]["intervalSec"], 900)
+
+    def test_gardien_echoue_si_aucun_agent_present(self):
+        code, err, recus, _ = self._gardien([])
+        self.assertNotEqual(code, 0)
+        self.assertEqual(recus, {})
+
     def test_agent_existant_renomme_a_blanc_puis_en_ecriture(self):
         self.api.agents[ID_DIR] = [agent("Coordinateur general", "idle", "a-cg")]
         code, sortie = self.lancer(a_blanc=True)
@@ -266,6 +331,94 @@ class MiseAJourClient(unittest.TestCase):
             self.lancer()
         self.assertEqual(self.appliques, [])
         self.assertEqual(self.api.journal, [])
+
+    def test_registre_personnel_sans_marketing_accepte(self):
+        # Client « personnel » : pas de BCE, pas de marketing ; le nom commercial est le 3e segment de « préfixe · service · nom ».
+        id_perso = "44444444-4444-4444-8444-444444444444"
+        marqueur = "atelier-client:jb-perso:direction"
+        bo.ecrire_registre_client("jb-perso", None, {"direction": {"entrepriseId": id_perso, "nom": "DIR · Direction · JB personnel", "marqueur": marqueur}})
+        registre = bo.lire_registre_client("jb-perso")
+        self.assertTrue(registre["personnel"])
+        self.assertIsNone(registre["numeroBce"])
+        fiche = bo.fiche_depuis_registre_client("jb-perso", registre)
+        self.assertEqual(fiche["nomCommercial"], "JB personnel")
+        self.assertTrue(fiche["personnel"])
+        self.api.entreprises.append({"id": id_perso, "name": "DIR · Direction · JB personnel", "description": f"Service. {marqueur}"})
+        self.api.agents[id_perso] = []
+        code, sortie = self.lancer(client="jb-perso", a_blanc=True)
+        self.assertEqual(code, 0, sortie)
+        self.assertIn("JB personnel", sortie)
+        # Un client personnel ne reçoit jamais les autres services de l'usine par la mise à jour, même sans --sans-nouveaux-services.
+        code, sortie = self.lancer(client="jb-perso", a_blanc=True, sans_nouveaux_services=False)
+        self.assertEqual(code, 0, sortie)
+        self.assertNotIn("service à AJOUTER", sortie)
+        self.assertIn("1 service(s)", sortie)
+
+    def test_registre_a_bce_sans_marketing_toujours_refuse(self):
+        bo.ecrire_registre_client("client-bce", BCE, {"direction": {"entrepriseId": ID_DIR, "nom": "DIR · Direction · Client BCE",
+                                                                    "marqueur": "atelier-client:client-bce:direction"}})
+        with self.assertRaises(bo.ErreurAtelier) as ctx:
+            self.lancer(client="client-bce", a_blanc=True)
+        self.assertIn("marketing", str(ctx.exception))
+
+
+class ObjectifsCibles(unittest.TestCase):
+    """APP-7 (audit du 29/10/2026) : cible, échéance et point de départ en tête de la description de l'objectif natif
+    (l'objet de Paperclip n'a pas ces champs), valeurs optionnelles, rejeu sans écriture."""
+
+    class Buts:
+        def __init__(self):
+            self.buts, self.ecritures = [], []
+
+        def get(self, chemin):
+            return [dict(g) for g in self.buts]
+
+        def appel(self, methode, chemin, corps=None):
+            self.ecritures.append((methode, chemin, corps))
+            if methode == "POST":
+                self.buts.append({**corps, "id": f"g-{len(self.buts)}"})
+                return self.buts[-1]
+            g = next(g for g in self.buts if chemin == f"/goals/{g['id']}")
+            g.update(corps)
+            return g
+
+    def test_description_en_tete_et_rejeu_sans_ecriture(self):
+        reg = bo.lire_json(bo.REGISTRE_ORGA)
+        for o in reg["objectifs"]:
+            self.assertEqual({o["cible"], o["echeance"], o["pointDeDepart"]}, {"donnée manquante"}, o["cle"])
+        api = self.Buts()
+        _, ecr = bo.assurer_objectifs(api, ID_MKT, reg, {})
+        self.assertEqual(ecr, len(reg["objectifs"]))
+        obj1 = next(g for g in api.buts if g["title"].startswith("OBJ-1 "))
+        self.assertTrue(obj1["description"].startswith(
+            "Cible : donnée manquante · Échéance : donnée manquante · Point de départ : donnée manquante · Mesure : Mesuré uniquement"))
+        api.ecritures.clear()
+        self.assertEqual(bo.assurer_objectifs(api, ID_MKT, reg, {})[1], 0)
+        self.assertEqual(api.ecritures, [])
+
+    def test_valeurs_de_l_instance_reprises_sans_doubler_l_en_tete(self):
+        reg = bo.lire_json(bo.REGISTRE_ORGA)
+        api = self.Buts()
+        bo.assurer_objectifs(api, ID_MKT, reg, {})
+        obj1 = next(g for g in api.buts if g["title"].startswith("OBJ-1 "))
+        obj1["description"] = "Cible : 40 devis · Échéance : 2027-06-30 · Point de départ : 12 devis · Mesure : formulaires importés"
+        plan = {"existante": {"id": ID_MKT}, "reg_s": reg, "svc": {"slug": "marketing"}}
+        bo.reprendre_etat_existant(api, plan)
+        o1 = next(o for o in reg["objectifs"] if o["cle"] == "OBJ-1")
+        self.assertEqual((o1["cible"], o1["echeance"], o1["pointDeDepart"], o1["description"]),
+                         ("40 devis", "2027-06-30", "12 devis", "formulaires importés"))
+        api.ecritures.clear()
+        self.assertEqual(bo.assurer_objectifs(api, ID_MKT, reg, {})[1], 0)
+
+    def test_client_neuf_sans_cible_heritee(self):
+        # Les titres OBJ-1 et OBJ-2 sont recalculés pour le client : une cible de l'organisation modèle ne le suit pas.
+        reg = bo.lire_json(bo.REGISTRE_ORGA)
+        for o in reg["objectifs"]:
+            o["cible"] = "valeur de la démonstration"
+        fiche = {"slug": "client-test", "nomCommercial": "Client Test", "mode": "demo", "offres": [{"nom": "Offre"}], "bureaux": [{}]}
+        for o in bo.organisation_client(reg, fiche)["objectifs"]:
+            attendu = "donnée manquante" if o["cle"] in ("OBJ-1", "OBJ-2") else "valeur de la démonstration"
+            self.assertEqual(o["cible"], attendu, o["cle"])
 
 
 if __name__ == "__main__":

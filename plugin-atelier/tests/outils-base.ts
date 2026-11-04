@@ -200,7 +200,10 @@ export function creerBanc(o: { mode?: "demonstration" | "reel"; modeEntreprise?:
     coutsEntreprise: async () => ({ totalCents: 0, evenements: 0 }),
     runsDeTaches: async () => [],
     bloqueursNonResolus: async () => [],
+    tachesBloquantes: async () => [],
+    tachesSoeurs: async () => [],
     supprimerDonneesEntreprise: async () => ({ supprimes: {}, conserves: { journal: t.journal.length } }),
+    purgerProspectsSansContact: async () => ({ candidats: 0, supprimes: 0 }),
   };
   function vueDiffusion(d: Ligne) {
     return {
@@ -237,6 +240,8 @@ export function creerBanc(o: { mode?: "demonstration" | "reel"; modeEntreprise?:
   const evenements = new Map<string, (e: unknown) => Promise<void>>();
   const listes: Ligne[] = [];
   const interactions = new Map<string, Ligne[]>();
+  // Nom de l'agent par identifiant (défaut : l'identifiant), pour les gardes qui repèrent un rôle par son nom.
+  const noms = new Map<string, string>();
   const ctx = {
     logger: {
       info: (...a: unknown[]) => journauxLogger.push(JSON.stringify(a)), warn: (...a: unknown[]) => journauxLogger.push(JSON.stringify(a)),
@@ -279,7 +284,7 @@ export function creerBanc(o: { mode?: "demonstration" | "reel"; modeEntreprise?:
     },
     agents: {
       list: async () => [COORD, RELECTEUR, PRODUCTEUR, PORTE_AGENT].map((id) => ({ id, companyId: SOC, name: id, adapterType: "process", adapterConfig: {} })),
-      get: async (id: string) => ({ id, companyId: SOC, name: id, role: id === COORD ? "ceo" : "general", adapterType: "process", adapterConfig: {}, status: "active" }),
+      get: async (id: string) => ({ id, companyId: SOC, name: noms.get(id) ?? id, role: id === COORD ? "ceo" : "general", adapterType: "process", adapterConfig: {}, status: "active" }),
     },
     projects: { get: async (id: string, companyId: string) => (companyId === SOC ? { id, companyId: SOC, name: "Projet" } : null) },
     companies: { get: async () => ({ id: SOC, budgetMonthlyCents: 0 }) },
@@ -309,5 +314,5 @@ export function creerBanc(o: { mode?: "demonstration" | "reel"; modeEntreprise?:
     return id;
   }
 
-  return { base, ctx, t, issues, interactions, documents, mises, commentaires, activite, journauxLogger, reveils, evenements, listes, tacheSousPorte, passe, decision, horloge };
+  return { base, ctx, t, issues, interactions, documents, mises, commentaires, activite, journauxLogger, reveils, evenements, listes, noms, tacheSousPorte, passe, decision, horloge };
 }

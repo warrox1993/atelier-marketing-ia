@@ -87,6 +87,26 @@ describe("ajouter_abonnes : preuve du consentement obligatoire", () => {
     expect(a.email).toBe("marie@exemple.test");
     expect(a.attribs?.["consentement"]).toMatchObject({ date: "2026-09-12", source: CONSENTEMENT.source, texte: CONSENTEMENT.texte, enregistre_par: "passerelle-emailing" });
   });
+  // E1 (audit du 29/10/2026) : un abonné existant inscrit à une NOUVELLE liste garde la trace de ce consentement-là.
+  it("abonné existant et nouvelle liste : le consentement est enregistré par liste AVANT l'inscription, l'historique est gardé", async () => {
+    const { appeler, faux } = montage();
+    await appeler("creer_liste", { nom: "Salon" });
+    await appeler("creer_liste", { nom: "Autre" });
+    await appeler("ajouter_abonnes", { liste_id: 1, abonnes: [{ email: "marie@exemple.test", consentement: CONSENTEMENT }] });
+    const nouveau = { date: "2026-10-01", source: "Formulaire du site, page devis", texte: "J'accepte de recevoir les offres de la liste Autre." };
+    const r = await appeler("ajouter_abonnes", { liste_id: 2, abonnes: [{ email: "marie@exemple.test", consentement: nouveau }] });
+    expect((r.s["resultats"] as Array<{ resultat: string }>)[0]?.resultat).toBe("ajoute");
+    const a = faux.etat.abonnes[0]!;
+    const historique = a.attribs?.["consentements"] as Record<string, Record<string, string>>;
+    expect(historique["1"]).toMatchObject({ date: "2026-09-12", texte: CONSENTEMENT.texte });
+    expect(historique["2"]).toMatchObject({ date: "2026-10-01", source: nouveau.source, texte: nouveau.texte, enregistre_par: "passerelle-emailing", enregistre_le: "2026-10-21T10:00:00.000Z" });
+    expect(a.attribs?.["consentement"]).toMatchObject({ date: "2026-09-12" });
+    const iPatch = faux.etat.appels.findIndex((x) => x.methode === "PATCH" && x.chemin === `/api/subscribers/${a.id}`);
+    const iListe = faux.etat.appels.findIndex((x) => x.methode === "PUT" && x.chemin === "/api/subscribers/lists");
+    expect(iPatch).toBeGreaterThan(-1);
+    expect(iPatch).toBeLessThan(iListe);
+    expect(faux.etat.appels[iPatch]!.corps).not.toHaveProperty("lists");
+  });
   it("refuse une source de consentement qui est une adresse privée (SSRF) et une adresse e-mail à retour de ligne", async () => {
     const { appeler, faux } = montage();
     await appeler("creer_liste", { nom: "Salon" });
@@ -120,8 +140,71 @@ describe("ajouter_abonnes : preuve du consentement obligatoire", () => {
   });
 });
 
+describe("ajouter_abonnes : abonné existant que la recherche peut manquer (E2)", () => {
+  it("le retrouve parmi plus de 20 adresses voisines", async () => {
+    const { appeler, faux } = montage();
+    await appeler("creer_liste", { nom: "Salon" });
+    for (let i = 0; i < 25; i++) faux.etat.abonnes.push({ id: 100 + i, email: `a${i}.jean@exemple.test`, name: "V", status: "enabled", lists: [] });
+    faux.etat.abonnes.push({ id: 200, email: "jean@exemple.test", name: "J", status: "enabled", lists: [{ id: 1, subscription_status: "confirmed" }] });
+    const r = await appeler("ajouter_abonnes", { liste_id: 1, abonnes: [{ email: "jean@exemple.test", consentement: CONSENTEMENT }] });
+    expect((r.s["resultats"] as Array<{ resultat: string }>)[0]!.resultat).toBe("deja_present");
+    expect(faux.etat.appels.some((a) => a.methode === "POST" && a.chemin === "/api/subscribers")).toBe(false);
+  });
+  it("409 : relit l'abonné et l'inscrit à la liste au lieu de le dire déjà présent", async () => {
+    const { appeler, faux } = montage();
+    await appeler("creer_liste", { nom: "Salon" });
+    faux.etat.abonnes.push({ id: 300, email: "marie@exemple.test", name: "M", status: "enabled", lists: [] });
+    faux.etat.masques.set("marie@exemple.test", 1);
+    const r = await appeler("ajouter_abonnes", { liste_id: 1, abonnes: [{ email: "marie@exemple.test", consentement: CONSENTEMENT }] });
+    expect((r.s["resultats"] as Array<{ resultat: string }>)[0]!.resultat).toBe("ajoute");
+    expect(faux.etat.abonnes.find((a) => a.id === 300)!.lists).toEqual([{ id: 1, subscription_status: "confirmed" }]);
+    expect((faux.etat.abonnes.find((a) => a.id === 300)!.attribs?.["consentements"] as Record<string, unknown>)["1"]).toMatchObject({ date: CONSENTEMENT.date });
+  });
+  it("409 sans abonné relisible : refusé, jamais « déjà présent »", async () => {
+    const { appeler, faux } = montage();
+    await appeler("creer_liste", { nom: "Salon" });
+    faux.etat.abonnes.push({ id: 301, email: "paul@exemple.test", name: "P", status: "enabled", lists: [] });
+    faux.etat.masques.set("paul@exemple.test", Infinity);
+    const r = await appeler("ajouter_abonnes", { liste_id: 1, abonnes: [{ email: "paul@exemple.test", consentement: CONSENTEMENT }] });
+    const res = (r.s["resultats"] as Array<{ resultat: string; motif?: string }>)[0]!;
+    expect(res.resultat).toBe("refuse");
+    expect(res.motif).toMatch(/pas inscrite/);
+    expect(faux.etat.abonnes.find((a) => a.id === 301)!.lists).toEqual([]);
+  });
+});
+
 describe("creer_campagne_brouillon", () => {
   const base = { nom: "Lettre d'octobre", sujet: "Nos nouveautés", liste_ids: [1], contenu_html: "<p>Bonjour {{ .Subscriber.FirstName }}, voici nos nouveautés.</p>", contenu_texte: "Bonjour, voici nos nouveautés." };
+
+  // E4 (audit du 29/10/2026) : mention d'information IA en pied des campagnes, choix de transparence (art. 50 non imposé ici).
+  it("ajoute la mention d'information IA aux deux versions, une seule fois, avant le pied de désinscription", async () => {
+    const { appeler, faux } = montage();
+    await appeler("creer_liste", { nom: "Salon" });
+    const r = await appeler("creer_campagne_brouillon", base);
+    expect(r.erreur).toBe(false);
+    const c = faux.etat.campagnes[0]!;
+    const mention = "Message rédigé avec l'aide d'un assistant IA.";
+    expect(c.body).toContain("Message rédigé avec l&#39;aide d&#39;un assistant IA.");
+    expect(c.altbody).toContain(mention);
+    expect(c.body.indexOf("aide d&#39;un assistant IA")).toBeLessThan(c.body.indexOf("{{ UnsubscribeURL }}"));
+    const deja = await appeler("creer_campagne_brouillon", { ...base, contenu_texte: `${base.contenu_texte}\n\n${mention}` });
+    expect(deja.erreur).toBe(false);
+    expect(faux.etat.campagnes[1]!.altbody!.split(mention)).toHaveLength(2);
+  });
+
+  it("mention désactivée par décision écrite : absente ; texte personnalisé : échappé dans le HTML", async () => {
+    const faux = creerFauxListmonk();
+    const client = new ClientListmonk({ url: "http://127.0.0.1:19000", jeton: "atelier-gestion:jeton-de-test-0123456789", fetch: faux.fetch });
+    const sans = fournisseurEmailingReel({ client, adresseAutorisee: PUBLIC, resoudre: RESOUDRE, mentionIa: { texte: null, motif: "décision écrite" } });
+    const perso = fournisseurEmailingReel({ client, adresseAutorisee: PUBLIC, resoudre: RESOUDRE, mentionIa: { texte: "Rédigé avec <IA> & relu", motif: null } });
+    const ctx = { service: "emailing", mode: "reel" as const, identite: { compte: "Poste local", propriete: { id: "listmonk/local", libelle: "listmonk" } }, jetonPorteur: null };
+    await appelerOutil(construireCatalogue(FICHE_EMAILING, "reel", sans), "creer_liste", { nom: "Salon" }, ctx);
+    await appelerOutil(construireCatalogue(FICHE_EMAILING, "reel", sans), "creer_campagne_brouillon", base, ctx);
+    await appelerOutil(construireCatalogue(FICHE_EMAILING, "reel", perso), "creer_campagne_brouillon", base, ctx);
+    expect(faux.etat.campagnes[0]!.altbody).not.toMatch(/assistant IA/);
+    expect(faux.etat.campagnes[1]!.body).toContain("Rédigé avec &lt;IA&gt; &amp; relu");
+    expect(faux.etat.campagnes[1]!.altbody).toContain("Rédigé avec <IA> & relu");
+  });
 
   it("crée un BROUILLON, ne démarre jamais la campagne et ajoute la désinscription aux deux versions", async () => {
     const { appeler, faux } = montage();

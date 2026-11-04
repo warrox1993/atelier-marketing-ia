@@ -19,7 +19,8 @@
  *   Direction, celle du coordinateur général, pour qu'il puisse interroger tous les coordinateurs (revue M3) ;
  * - teinte (revue M1) : une tâche qui a reçu la réponse d'une liaison approuvée, ou qui descend d'une tâche reçue par
  *   une liaison approuvée, est teintée : toute liaison ouverte depuis elle (ou ses descendantes) attend l'approbation
- *   humaine, même entre deux services non sensibles ;
+ *   humaine, même entre deux services non sensibles ; de même si une page du web (lecture d'URL, extraction de site) a été
+ *   déposée sur la tâche d'origine ou un ancêtre, ou lue dans le run qui demande (AFD-M2, INJ-8) ;
  * - prudence (revue de f525e9b, contournement par TÂCHE RACINE) : un coordinateur peut recopier une demande reçue, ou
  *   une réponse teintée, dans une tâche racine qui n'en descend pas. Donc, quelle que soit la tâche d'origine :
  *   tant qu'une liaison reçue par l'entreprise est `ouverte`, la nouvelle liaison hérite de la chaîne et de la
@@ -52,6 +53,9 @@ const refus = (garde: "a" | "b" | "c" | "d" | "e" | "service", message: string, 
 
 /** Tâche de la lignée : seuls les champs lus ici (le créateur vient de l'hôte, jamais du corps de la requête). */
 type IssueLignee = { id: string; parentId?: string | null; originKind?: string | null; createdByUserId?: string | null; createdByAgentId?: string | null };
+
+/** Source venue du web : page lue par le plugin, ou extraction de site par la passerelle (Crawl4AI). */
+const contenuWeb = (s: { provenance: string; url: string }) => s.provenance === "lecture_url" || (s.provenance === "connexion" && s.url.startsWith("connexion://extraction/"));
 
 export const enPublic = (l: LiaisonStockee): LiaisonEnregistree => ({
   id: l.id, entrepriseSource: l.entrepriseSource, entrepriseCible: l.entrepriseCible, tacheOrigine: l.tacheOrigine, tacheCible: l.tacheCible, statut: l.statut,
@@ -155,16 +159,23 @@ export function routeDemander(d: DependancesLiaisons): Partial<Record<CleRouteAp
       }
       refus("c", `Au plus ${LIMITES_LIAISON.relaisMax} relais par chaîne : une demande reçue (chaîne partie de ${recues()}) est encore ouverte dans ce service et compte déjà ${herite} relais ; par prudence, toute nouvelle liaison est comptée comme son relais. Terminez d'abord la demande reçue, supposez (et écrivez l'hypothèse) ou remontez à l'humain.`, { motif: "relais", prudence: true });
     }
+    // COORD-P2-8 : le cycle reste refusé (un retour vers le demandeur ferait grossir sa chaîne et bloquerait ses propres liaisons),
+    // mais le refus dit le chemin prévu pour lui répondre ou lui remonter une escalade.
+    const parLaReponse = ` Pour répondre ou remonter une escalade au service « ${demande.serviceCible} », écrivez un compte rendu d'étape sur la tâche reçue et passez-la en in_review : le bureau le relaie.`;
     if (parLignee.some((e) => e.chaine.includes(demande.serviceCible))) {
-      refus("c", `Demande circulaire : le service « ${demande.serviceCible} » est déjà dans la chaîne de cette tâche.`, { motif: "cycle" });
+      refus("c", `Demande circulaire : le service « ${demande.serviceCible} » est déjà dans la chaîne de cette tâche.${parLaReponse}`, { motif: "cycle" });
     }
     if (ambiantes.some((e) => e.chaine.includes(demande.serviceCible))) {
-      refus("c", `Demande circulaire par prudence : une demande reçue où figure le service « ${demande.serviceCible} » est encore ouverte dans ce service ; toute nouvelle liaison est comptée comme son relais. Terminez d'abord la demande reçue ou remontez à l'humain.`, { motif: "cycle", prudence: true });
+      refus("c", `Demande circulaire par prudence : une demande reçue où figure le service « ${demande.serviceCible} » est encore ouverte dans ce service ; toute nouvelle liaison est comptée comme son relais. Terminez d'abord la demande reçue ou remontez à l'humain.${parLaReponse}`, { motif: "cycle", prudence: true });
     }
     const plusLongue = [...entrantes].sort((a, b) => b.profondeur - a.profondeur)[0]?.chaine ?? null;
     // Teinte : par la lignée (tâche reçue approuvée, réponse teintée sur la tâche ou un ancêtre), puis par prudence pour
     // l'entreprise entière (liaison reçue approuvée encore ouverte, réponse teintée récente ou sur une tâche encore ouverte).
-    const teintee = entrantes.some((e) => e.approbationRequise) || (await stock.retourTeinte(r.companyId, lignee.ids)) || (!lignee.racineHumaine && (await teinteParPrudence(r.companyId)));
+    // AFD-M2 et INJ-8 : un contenu du web (page lue, extraction de site) déposé sur la lignée, ou une page lue dans ce run,
+    // teinte aussi la liaison : elle attend l'approbation humaine, jamais un refus.
+    const teintee = entrantes.some((e) => e.approbationRequise) || (await stock.retourTeinte(r.companyId, lignee.ids)) || (!lignee.racineHumaine && (await teinteParPrudence(r.companyId)))
+      || (r.acteur.runId !== null && (await base.lectureWebDansRun(r.companyId, r.acteur.runId)))
+      || (await Promise.all(lignee.ids.map((id) => base.listerSources(r.companyId, { issueId: id })))).flat().some(contenuWeb);
 
     const source = await stock.serviceDeEntreprise(r.companyId);
     if (!source) refus("service", "Cette entreprise n'est pas déclarée comme un service d'un client (services.declarer).");

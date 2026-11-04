@@ -1137,3 +1137,41 @@ describe("registre des consentements", () => {
     expect(c.querySelector("table")).toBeNull();
   });
 });
+
+describe("purge des prospects sans contact depuis 3 ans", () => {
+  const section = (c: ParentNode) => Array.from(c.querySelectorAll("section")).find((s) => s.querySelector("h2")?.textContent?.includes("Purger les prospects sans contact"))!;
+
+  it("compte d'abord à blanc, puis ne supprime qu'après la confirmation explicite, et relit la liste", async () => {
+    pont.actions["atelier.prospects.purger"] = async (p) =>
+      p?.confirmer ? { avant: "2023-10-30T00:00:00.000Z", aBlanc: false, candidats: 4, supprimes: 4 } : { avant: "2023-10-30T00:00:00.000Z", aBlanc: true, candidats: 4, supprimes: 0 };
+    const c = await ouvrir();
+    const s = section(c);
+    expect(s).toBeTruthy();
+    // Aucun bouton de suppression avant le comptage.
+    expect(Array.from(s.querySelectorAll("button")).some((b) => /Supprimer/u.test(b.textContent ?? ""))).toBe(false);
+    await cliquer(parTexte(s, "button", "Compter les prospects à purger"));
+    expect(pont.appelsActions.filter((a) => a.cle === "atelier.prospects.purger").map((a) => a.params)).toEqual([{ confirmer: false }]);
+    expect(s.textContent).toContain("4 prospects sans contact depuis le");
+    const listesAvant = requetesListe().length;
+    await cliquer(parTexte(s, "button", "Supprimer définitivement les 4 prospects"));
+    expect(pont.appelsActions.filter((a) => a.cle === "atelier.prospects.purger").map((a) => a.params)).toEqual([{ confirmer: false }, { confirmer: true }]);
+    expect(s.querySelector('[role="status"]')!.textContent).toContain("4 prospects supprimés");
+    expect(requetesListe().length).toBeGreaterThan(listesAvant);
+    expect(c.textContent).not.toContain("—");
+  });
+
+  it("aucun candidat : rien à confirmer ; « Annuler » referme la confirmation sans rien supprimer", async () => {
+    let candidats = 0;
+    pont.actions["atelier.prospects.purger"] = async () => ({ avant: "2023-10-30T00:00:00.000Z", aBlanc: true, candidats, supprimes: 0 });
+    const c = await ouvrir();
+    const s = section(c);
+    await cliquer(parTexte(s, "button", "Compter les prospects à purger"));
+    expect(s.textContent).toContain("Aucun prospect sans contact depuis le");
+    expect(Array.from(s.querySelectorAll("button")).some((b) => /Supprimer/u.test(b.textContent ?? ""))).toBe(false);
+    candidats = 1;
+    await cliquer(parTexte(s, "button", "Compter les prospects à purger"));
+    await cliquer(parTexte(s, "button", "Annuler"));
+    expect(Array.from(s.querySelectorAll("button")).some((b) => /Supprimer/u.test(b.textContent ?? ""))).toBe(false);
+    expect(pont.appelsActions.filter((a) => a.cle === "atelier.prospects.purger").every((a) => a.params?.confirmer === false)).toBe(true);
+  });
+});

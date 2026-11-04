@@ -1,0 +1,187 @@
+From f114468f493919a5c9f36ae4b4491da8471da22f Mon Sep 17 00:00:00 2001
+From: Jean-Baptiste Dhondt <114347858+warrox1993@users.noreply.github.com>
+Date: Fri, 30 Oct 2026 15:46:00 +0100
+Subject: [PATCH 134/139] =?UTF-8?q?fix(ui):=20les=20onglets=20de=20t=C3=A2?=
+ =?UTF-8?q?che=20des=20plugins=20(detailTab)=20apparaissent=20dans=20le=20?=
+ =?UTF-8?q?panneau=20du=20mode=20discussion=20(Atelier=20UI-4)?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+En mode discussion, la barre d'onglets du centre est masquée : l'onglet de tâche
+déclaré par un plugin (detailTab, entité issue) n'était jamais visible. Le panneau
+de droite (Propriétés, Plan, Artefacts...) ajoute maintenant ces onglets, avec la
+même valeur plugin:<clé>:<id> et le même libellé que la page de la tâche, et monte
+leur contenu par PluginSlotMount avec la tâche pour entité.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01EThpSSDGc5NRYwbgjNqoTJ
+---
+ ui/src/components/IssueProperties.test.tsx    | 56 +++++++++++++++++++
+ .../issue-properties/IssueProperties.tsx      | 34 ++++++++++-
+ 2 files changed, 88 insertions(+), 2 deletions(-)
+
+diff --git a/ui/src/components/IssueProperties.test.tsx b/ui/src/components/IssueProperties.test.tsx
+index e542f473d8..42270ddee8 100644
+--- a/ui/src/components/IssueProperties.test.tsx
++++ b/ui/src/components/IssueProperties.test.tsx
+@@ -90,6 +90,20 @@ vi.mock("../api/issues", () => ({
+   issuesApi: mockIssuesApi,
+ }));
+ 
++const mockPluginSlots = vi.hoisted(() => ({ detailTabs: [] as Array<Record<string, unknown>> }));
++
++vi.mock("@/plugins/slots", async (importOriginal) => ({
++  ...(await importOriginal<typeof import("@/plugins/slots")>()),
++  usePluginSlots: ({ slotTypes, entityType }: { slotTypes: string[]; entityType?: string }) => ({
++    slots: slotTypes.includes("detailTab") && entityType === "issue" ? mockPluginSlots.detailTabs : [],
++    isLoading: false,
++    errorMessage: null,
++  }),
++  PluginSlotMount: ({ slot, context }: { slot: { id: string }; context: { entityId?: string | null; entityType?: string | null } }) => (
++    <div data-testid="plugin-slot-mount">{`${slot.id}:${context.entityType}:${context.entityId}`}</div>
++  ),
++}));
++
+ vi.mock("../api/auth", () => ({
+   authApi: mockAuthApi,
+ }));
+@@ -1095,6 +1109,48 @@ describe("IssueProperties", () => {
+     act(() => root.unmount());
+   });
+ 
++  it("montre l'onglet de tâche d'un plugin dans le panneau du mode discussion et y monte son contenu (Atelier UI-4)", async () => {
++    mockInstanceSettingsApi.getExperimental.mockResolvedValue({ enableClassicTaskInterface: false });
++    mockPluginSlots.detailTabs = [
++      {
++        type: "detailTab",
++        id: "onglet-tache",
++        displayName: "Atelier",
++        exportName: "ContenuOngletTache",
++        entityTypes: ["issue"],
++        pluginId: "plugin-1",
++        pluginKey: "atelier",
++        pluginDisplayName: "Atelier",
++        pluginVersion: "1.0.0",
++      },
++    ];
++    try {
++      const { root } = renderPropertiesWithQueryClient(container, {
++        issue: createIssue(),
++        childIssues: [],
++        onUpdate: vi.fn(),
++        inline: true,
++      });
++      let atelierTab: HTMLButtonElement | undefined;
++      await waitForAssertion(() => {
++        atelierTab = Array.from(container.querySelectorAll<HTMLButtonElement>('[role="tab"]'))
++          .find((button) => button.textContent === "Atelier");
++        expect(atelierTab).toBeDefined();
++      });
++      expect(container.querySelector('[data-testid="plugin-slot-mount"]')).toBeNull();
++      await act(async () => {
++        atelierTab!.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, button: 0 }));
++        atelierTab!.click();
++      });
++      await waitForAssertion(() => {
++        expect(container.querySelector('[data-testid="plugin-slot-mount"]')?.textContent).toBe("onglet-tache:issue:issue-1");
++      });
++      act(() => root.unmount());
++    } finally {
++      mockPluginSlots.detailTabs = [];
++    }
++  });
++
+   it("hides the Priority property row while priority UI is off (PAP-411)", async () => {
+     const root = renderProperties(container, {
+       issue: createIssue({ priority: "high" }),
+diff --git a/ui/src/components/issue-properties/IssueProperties.tsx b/ui/src/components/issue-properties/IssueProperties.tsx
+index e3da0c901e..f8d366dd37 100644
+--- a/ui/src/components/issue-properties/IssueProperties.tsx
++++ b/ui/src/components/issue-properties/IssueProperties.tsx
+@@ -87,6 +87,7 @@ import {
+   DropdownMenuTrigger,
+ } from "@/components/ui/dropdown-menu";
+ import { pendingCardDocumentKey } from "../../lib/pending-card-document";
++import { PluginSlotMount, usePluginSlots } from "@/plugins/slots";
+ import { IssuePropertiesPlansTab } from "./IssuePropertiesPlansTab";
+ import { IssuePropertiesArtifactsTab } from "./IssuePropertiesArtifactsTab";
+ import { User, ArrowUpRight, Plus, X, GitBranch, FolderOpen, HardDrive, Check, Clock, RotateCcw, Loader2, CheckCircle2, ArchiveRestore, ChevronLeft } from "lucide-react";
+@@ -225,7 +226,7 @@ const ISSUE_PROPERTY_RELATION_PREVIEW_COUNT = 5;
+ const STREAMLINED_PANE_TAB_CLASS =
+   "task-detail-pane-tab h-7 rounded-md text-sm font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
+ 
+-type IssuePaneTab = "properties" | "subtasks" | "references" | "plans" | "artifacts";
++type IssuePaneTab = "properties" | "subtasks" | "references" | "plans" | "artifacts" | `plugin:${string}`;
+ 
+ interface IssuePaneTabDescriptor {
+   value: IssuePaneTab;
+@@ -343,6 +344,19 @@ export function IssueProperties({
+     pendingCardKey && pendingCardKey !== "plan"
+       ? paneTabStandaloneDocuments.find((doc) => doc.key === pendingCardKey) ?? null
+       : null;
++  // Onglets de tâche des plugins (detailTab) : la barre d'onglets du centre est masquée en mode discussion,
++  // ils vivent donc ici, avec la même valeur et le même libellé que sur la page de la tâche.
++  const { slots: pluginDetailSlots } = usePluginSlots({
++    slotTypes: ["detailTab"],
++    entityType: "issue",
++    companyId,
++    enabled: taskChatShellEnabled && !!companyId,
++  });
++  const pluginPaneTabs = pluginDetailSlots.map((slot) => ({
++    value: `plugin:${slot.pluginKey}:${slot.id}` as const,
++    label: slot.displayName,
++    slot,
++  }));
+   const [pendingCardDeepLink, setPendingCardDeepLink] = useState<IssuePropertiesDocumentDeepLink | null>(null);
+   const [paneTab, setPaneTab] = useState<IssuePaneTab>("properties");
+   const [closedPaneTabs, setClosedPaneTabs] = useState<Set<IssuePaneTab>>(() => new Set());
+@@ -3068,6 +3082,7 @@ export function IssueProperties({
+     ...(hasArtifactsTab
+       ? [{ value: "artifacts" as const, label: "Artefacts", closable: true }]
+       : []),
++    ...pluginPaneTabs.map((tab) => ({ value: tab.value, label: tab.label, closable: true })),
+   ];
+   const visiblePaneTabs = availablePaneTabs.filter(
+     (tab) => tab.value === "properties" || !closedPaneTabs.has(tab.value),
+@@ -3076,7 +3091,7 @@ export function IssueProperties({
+ 
+   // Chat-style with nothing to switch between: render one selected tab button
+   // so the header uses the same filled-tab treatment as the multi-tab state.
+-  if (!hasSubtasksTab && !hasReferencesTab && !hasPlanTab && !hasArtifactsTab) {
++  if (!hasSubtasksTab && !hasReferencesTab && !hasPlanTab && !hasArtifactsTab && pluginPaneTabs.length === 0) {
+     return (
+       <>
+         {paneHeaderSlot
+@@ -3113,6 +3128,7 @@ export function IssueProperties({
+     || (paneTab === "artifacts" && !hasArtifactsTab)
+     || (paneTab === "subtasks" && !hasSubtasksTab)
+     || (paneTab === "references" && !hasReferencesTab)
++    || (paneTab.startsWith("plugin:") && !pluginPaneTabs.some((tab) => tab.value === paneTab))
+     || closedPaneTabs.has(paneTab)
+       ? "properties"
+       : paneTab;
+@@ -3301,6 +3317,20 @@ export function IssueProperties({
+           />
+         </TabsContent>
+       ) : null}
++      {pluginPaneTabs.map((tab) => (
++        <TabsContent key={tab.value} value={tab.value}>
++          <PluginSlotMount
++            slot={tab.slot}
++            context={{
++              companyId: issue.companyId,
++              projectId: issue.projectId ?? null,
++              entityId: issue.id,
++              entityType: "issue",
++            }}
++            missingBehavior="placeholder"
++          />
++        </TabsContent>
++      ))}
+     </Tabs>
+   );
+ }
+-- 
+2.53.0
+

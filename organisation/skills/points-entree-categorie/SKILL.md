@@ -1,6 +1,6 @@
 ---
 name: "points-entree-categorie"
-description: "Relève les catégories d'entrée (situations, besoins, signaux qui font penser à l'achat d'une assurance, méthode des 7W de Jenni Romaniuk), les rédige en langage client, les classe par fréquence et importance avec preuve, puis les affecte aux agents de canal ; propose des métriques de disponibilité mentale si un sondage est possible. À utiliser pour décider quoi dire, où et quand : pages locales, annonces, contenus. Ne confond pas une catégorie d'entrée avec un mot-clé."
+description: "Relève les catégories d'entrée (situations, besoins, signaux qui font penser à acheter dans la catégorie du client, méthode des 7W de Jenni Romaniuk), les rédige en langage client, les classe par fréquence et importance avec preuve, puis les affecte aux agents de canal ; propose des métriques de disponibilité mentale si un sondage est possible. À utiliser pour décider quoi dire, où et quand : pages locales, annonces, contenus. Ne confond pas une catégorie d'entrée avec un mot-clé."
 metadata:
   version: "1.1.0"
   langue: "fr"
@@ -37,7 +37,7 @@ traite. Niveau de preuve : méthode [vérifié, secondaire] ; les chiffres de so
 2. Rédiger 10 à 20 CEP en langage client (« je lance mon activité d'indépendant », « mon assureur refuse un sinistre »,
    « j'engage mon premier salarié »), jamais en jargon d'assureur.
 3. Classer par fréquence et importance, chaque classement avec sa preuve (nombre d'occurrences, source).
-4. Si un sondage est possible : pénétration mentale (part des acheteurs qui associent la marque à au moins une CEP), taille
+4. Si un sondage est fourni (mené par le client ou un institut ; l'agent `mesure` n'a aucun outil d'enquête) : pénétration mentale (part des acheteurs qui associent la marque à au moins une CEP), taille
    du réseau (nombre de CEP associées), part de marché mentale. Sinon écrire « non mesuré ».
 5. Affecter les CEP prioritaires : pages et fiche d'établissement (`seo-local-geo`), annonces (`sea`), contenus (`contenus`,
    `reseaux-sociaux`).
@@ -50,14 +50,14 @@ ou la mention « non mesuré ».
 
 ## Critères de réussite
 
-- Chaque CEP est une situation vécue, pas une garantie d'assurance ni un mot-clé.
+- Chaque CEP est une situation vécue, pas un produit du client ni un mot-clé.
 - Chaque classement cite sa source ; aucune fréquence inventée.
 - Chaque CEP prioritaire a un agent et un canal.
 
 ## Limites
 
 - Sans entretiens ni données de recherche, la liste est une hypothèse à valider, signalée comme telle.
-- Les métriques de disponibilité mentale exigent un sondage mené auprès d'un échantillon réel (agent `mesure`).
+- Les métriques de disponibilité mentale exigent un sondage mené auprès d'un échantillon réel par le client ou un institut (l'agent `mesure` n'en mène pas).
 - Les requêtes de recherche montrent des mots, pas toujours la situation qui les a provoqués.
 
 ### Règles de vérité
@@ -65,7 +65,7 @@ ou la mention « non mesuré ».
 - La fréquence, l'importance et toute métrique de sondage (pénétration mentale, taille du réseau, part de marché mentale) qui ne figurent pas dans les pièces s'écrivent « non mesuré ». Aucun pourcentage, aucun comptage, aucun mot d'intensité (« très fréquent », « majeur ») n'est inventé.
 - La preuve d'une ligne est un élément réellement présent dans l'entrée (entretien, demande de devis, avis, requête), cité avec sa source. Sans preuve, la ligne est une « hypothèse ». Une situation citée par une seule source est « isolée ».
 - Chaque situation de l'entrée est reprise, en langage client à la première personne ou en situation vécue, sans terme d'assureur, de garantie ni mot-clé. Ne pas compléter la liste par des situations inventées pour atteindre un nombre : si les sources en donnent moins de dix, le dire (« liste incomplète, à enrichir par entretiens et données de recherche »).
-- Aucune ligne sans agent et canal affectés. Tant qu'aucune métrique de sondage n'existe, la prochaine étape écrite est un sondage de disponibilité mentale mené par `mesure` auprès d'un échantillon réel.
+- Aucune ligne sans agent et canal affectés. Tant qu'aucune métrique de sondage n'existe, la prochaine étape écrite est un sondage de disponibilité mentale mené par le client ou un institut auprès d'un échantillon réel.
 
 ### Modèle de livrable
 
@@ -77,7 +77,7 @@ ou la mention « non mesuré ».
 
 **Métriques de sondage** : pénétration mentale : non mesuré ; taille du réseau : non mesuré ; part de marché mentale : non mesuré (ou valeur du sondage fourni, avec sa source).
 
-**Prochaine étape** : sondage de disponibilité mentale (agent `mesure`, échantillon réel, date prévue).
+**Prochaine étape** : sondage de disponibilité mentale (mené par le client ou un institut, échantillon réel, date prévue).
 
 ## Exemple
 

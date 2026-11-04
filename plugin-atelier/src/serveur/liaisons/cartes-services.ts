@@ -17,7 +17,7 @@ import { nomService } from "../../contrats/liaisons-lecture.js";
 import type { CleRouteApi } from "../../contrats/index.js";
 import type { GestionnaireRoute } from "../atelier.js";
 import { erreur } from "../erreurs.js";
-import { ORIGINE_DISCUSSION } from "../services-discussion.js";
+import { ORIGINE_DISCUSSION, estDiscussionDe } from "../services-discussion.js";
 import { ORIGINE_DEMANDE } from "../services-accueil.js";
 import type { TacheASuivre } from "../../contrats/carte-decision.js";
 import type { StockLiaisons } from "./base-liaisons.js";
@@ -29,6 +29,8 @@ export type { TacheASuivre };
 export interface ReponseCartesServices {
   /** Tâches reçues à suivre (une par liaison retenue, sans doublon), dans l'ordre du registre. */
   taches: TacheASuivre[];
+  /** Services confirmés du client hors Direction : l'interface lit aussi leurs tâches ouvertes sans parent (HUM-C7). */
+  services?: Array<Omit<TacheASuivre, "tacheId">>;
   /** Une lecture de la Direction a échoué : l'interface propose de réessayer. */
   indisponible: boolean;
 }
@@ -42,7 +44,6 @@ const PROFONDEUR_MAX = 8;
 export const TTL_CARTES_SERVICES_MS = 10_000;
 
 type Issue = NonNullable<Awaited<ReturnType<PluginContext["issues"]["get"]>>>;
-const iso = (d: Date | string | null | undefined) => (d instanceof Date ? d.toISOString() : typeof d === "string" ? d : new Date(0).toISOString());
 
 export function routeCartesServices(d: { ctx: PluginContext; stock: Pick<StockLiaisons, "serviceDeEntreprise" | "servicesDuClient">; lecture: Pick<LectureLiaisons, "registre"> }): Partial<Record<CleRouteApi, GestionnaireRoute>> {
   const { ctx, stock, lecture } = d;
@@ -50,27 +51,27 @@ export function routeCartesServices(d: { ctx: PluginContext; stock: Pick<StockLi
 
   async function lire(companyId: string, clientMarqueur: string): Promise<ReponseCartesServices> {
     let indisponible = false;
-    const trouvees = await ctx.issues.list({ companyId, originKind: ORIGINE_DISCUSSION as never, originId: `discussion:${companyId}`, includePluginOperations: true, limit: 10 });
-    const discussion = trouvees
-      .filter((i) => memeId(i.companyId, companyId) && i.status !== "cancelled" && i.originId === `discussion:${companyId}`)
-      .sort((a, b) => iso(a.createdAt).localeCompare(iso(b.createdAt)))[0];
-    if (!discussion) return { taches: [], indisponible: false };
-
     const services = new Map((await stock.servicesDuClient(clientMarqueur)).filter((s) => !s.estDirection).map((s) => [s.companyId.toLowerCase(), s]));
+    const tous = [...services.values()].map((s) => ({ companyId: s.companyId, slug: s.serviceSlug, nom: nomService(s.serviceSlug) }));
+    const trouvees = await ctx.issues.list({ companyId, originKind: ORIGINE_DISCUSSION as never, includePluginOperations: true, limit: 100 });
+    const discussions = new Map(trouvees.filter((i) => estDiscussionDe(companyId, i)).map((i) => [i.id.toLowerCase(), i.id]));
+    if (discussions.size === 0) return { taches: [], services: tous, indisponible: false };
+
     const { lignes } = await lecture.registre(clientMarqueur, {}, MAX_LIAISONS, 0);
     const retenues = lignes.filter((l) => memeId(l.entrepriseSource, companyId) && l.entrepriseCible !== null && l.tacheCible !== null && services.has(l.entrepriseCible.toLowerCase()));
 
-    // La tâche d'origine descend-elle de la discussion ? (mémorisé par tâche pour toute l'interrogation)
-    const descend = new Map<string, boolean>();
-    async function descendDeLaDiscussion(tacheId: string): Promise<boolean> {
+    // Discussion racine dont descend la tâche d'origine : `undefined` si aucune (tâche écartée), `null` pour une demande à
+    // l'équipe sans discussion parente (retenue, mais d'aucun fil). Mémorisé par tâche pour toute l'interrogation.
+    const descend = new Map<string, string | null | undefined>();
+    async function discussionDe(tacheId: string): Promise<string | null | undefined> {
       const cle = tacheId.toLowerCase();
-      const connu = descend.get(cle);
-      if (connu !== undefined) return connu;
+      if (descend.has(cle)) return descend.get(cle);
       let courant: string | null = tacheId;
-      let ok = false;
+      let demande = false;
+      let racine: string | undefined;
       for (let n = 0; courant && n < PROFONDEUR_MAX; n += 1) {
-        if (memeId(courant, discussion!.id)) {
-          ok = true;
+        if (discussions.has(courant.toLowerCase())) {
+          racine = courant;
           break;
         }
         const issue: Issue | null = await ctx.issues.get(courant, companyId).catch(() => {
@@ -78,14 +79,12 @@ export function routeCartesServices(d: { ctx: PluginContext; stock: Pick<StockLi
           return null;
         });
         if (!issue) break;
-        if (issue.originKind === ORIGINE_DEMANDE) {
-          ok = true;
-          break;
-        }
+        if (issue.originKind === ORIGINE_DEMANDE) demande = true;
         courant = issue.parentId ?? null;
       }
-      descend.set(cle, ok);
-      return ok;
+      const resultat = racine !== undefined ? discussions.get(racine.toLowerCase()) : demande ? null : undefined;
+      descend.set(cle, resultat);
+      return resultat;
     }
 
     const taches: TacheASuivre[] = [];
@@ -97,15 +96,16 @@ export function routeCartesServices(d: { ctx: PluginContext; stock: Pick<StockLi
         if (origines >= MAX_ORIGINES) continue;
         origines += 1;
       }
-      if (!(await descendDeLaDiscussion(l.tacheOrigine))) continue;
+      const discussionId = await discussionDe(l.tacheOrigine);
+      if (discussionId === undefined) continue;
       const cible = l.entrepriseCible!;
       const cle = l.tacheCible!.toLowerCase();
       if (vues.has(cle)) continue;
       vues.add(cle);
       const service = services.get(cible.toLowerCase())!;
-      taches.push({ companyId: cible, tacheId: l.tacheCible!, slug: service.serviceSlug, nom: nomService(service.serviceSlug) });
+      taches.push({ companyId: cible, tacheId: l.tacheCible!, slug: service.serviceSlug, nom: nomService(service.serviceSlug), discussionId });
     }
-    return { taches, indisponible };
+    return { taches, services: tous, indisponible };
   }
 
   const routes: Partial<Record<CleRouteApi, GestionnaireRoute>> = {};

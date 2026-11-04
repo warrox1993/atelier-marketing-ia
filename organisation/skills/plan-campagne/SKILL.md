@@ -58,8 +58,11 @@ saura si ça a marché, et qui sert de base aux exigences REQ-xxx et aux sous-t�
 
 ## Livrable
 
-Le brief en dix rubriques, suivi de la liste des exigences REQ-xxx qui en découlent et des validations humaines
-attendues ; le plan est marqué « proposé » jusqu'à l'accord écrit de l'humain.
+Un seul document `brief` au gabarit de `cadrage-exigences` (son gabarit du brief) : les
+dix rubriques ci-dessus remplissent sa partie « Contexte et objectif » (rubriques 1 à 3) et une partie « Plan de
+campagne » ajoutée après le périmètre (rubriques 4 à 10) ; les exigences REQ-xxx et les informations manquantes suivent
+les tableaux de ce gabarit, jamais un second format. Les validations humaines attendues y sont listées ; le plan est
+marqué « proposé » jusqu'à l'accord écrit de l'humain.
 
 ## Critères de réussite
 

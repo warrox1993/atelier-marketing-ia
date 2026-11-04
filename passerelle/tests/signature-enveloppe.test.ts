@@ -42,6 +42,24 @@ describe("chaque réponse d'outil porte une enveloppe signée", () => {
     expect(verifierEnveloppe(JSON.parse(texte.slice(texte.indexOf("{"))), PUBLIQUE).ok).toBe(true);
   });
 
+  it("atelier_identite : compteSigne égale le compte de l'enveloppe signée (propriété si présente), compte conservé", async () => {
+    const r = await rpc(p.url, "gsc", "tools/call", { name: "atelier_identite", arguments: {} }, jeton);
+    const s = r.corps.result.structuredContent as Record<string, any>;
+    const v = verifierEnveloppe(s, PUBLIQUE);
+    expect(v.ok).toBe(true);
+    if (!v.ok) return;
+    expect(s.compteSigne).toBe(v.charge.compte);
+    expect(s.compte).toBe("Poste local de la passerelle");
+  });
+
+  it("texte compact : plus d'indentation, et la réponse emballée reste vérifiée par verifierEnveloppe", async () => {
+    const r = await rpc(p.url, "gsc", "tools/call", { name: "gsc_ping", arguments: { texte: "bonjour" } }, jeton);
+    const texte = r.corps.result.content[0].text as string;
+    const json = texte.slice(texte.indexOf("{"));
+    expect(json).not.toContain("\n");
+    expect(verifierEnveloppe(JSON.parse(json), PUBLIQUE).ok).toBe(true);
+  });
+
   it("erreur d'outil, outil inconnu, arguments invalides : signés aussi, erreur = vrai", async () => {
     for (const [nom, args] of [["gsc_echec", {}], ["inconnu", {}], ["gsc_ping", { texte: "" }]] as const) {
       const r = await rpc(p.url, "gsc", "tools/call", { name: nom, arguments: args }, jeton);

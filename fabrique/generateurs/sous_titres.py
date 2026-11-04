@@ -12,7 +12,8 @@ Deux rôles dans un seul fichier, comme pdf.py :
 
 Le texte de sortie est neutralisé pour ffmpeg et libass : `{`, `}`, `\\`, `<` et `>` sont remplacés
 par des signes de pleine chasse qui leur ressemblent. Aucune balise de surcharge (`{\\an8}`,
-`{\\pos()}`), aucun `\\N` et aucune expression `%{...}` ne peut donc être interprété.
+`{\\pos()}`), aucun `\\N` venu du texte et aucune expression `%{...}` ne peut donc être interprété.
+Le seul `\\N` de l'ASS est la coupure de ligne (42 caractères, 2 lignes) posée par `ecrire_ass`.
 """
 
 from __future__ import annotations
@@ -41,6 +42,15 @@ FICHIER_ASS = "sous-titres.ass"
 FILS_WHISPER = 8
 DELAI_WHISPER_S = 540
 LONGUEUR_MAX_LIGNE = 60  # caractères par segment demandés à whisper
+FORMATS_ASS = ("1920x1080", "1080x1920", "1080x1080")
+FORMAT_ASS_DEFAUT = "1920x1080"
+# Norme de lisibilité (Netflix, étude 2026-10-30 §2.1) et zones sûres de Meta pour le 9:16.
+CARS_PAR_LIGNE_MAX = 42
+LIGNES_MAX = 2
+COUPURE = "\\N"  # coupure de ligne ASS, posée par nous seulement
+CARS_PAR_SECONDE_MAX = 17
+ZONE_BASSE_9_16 = 0.35
+LARGEUR_RELATIVE_CAR = 0.58  # largeur moyenne d'un caractère de DejaVu Sans en corps (mesuré 0,50 à 0,55 : marge)
 TAILLE_MAX_WAV = 200 * 1024**2
 TAILLE_MAX_REFERENCE = 100 * 1024
 MEMOIRE_CAGE_OCTETS = 12 * 1024**3  # l'espace d'adressage de whisper dépasse sa mémoire réelle
@@ -113,28 +123,103 @@ def ecrire_srt(segments: list[Segment]) -> str:
     return "\n".join(blocs)
 
 
-ENTETE_ASS = """[Script Info]
-ScriptType: v4.00+
-PlayResX: 1920
-PlayResY: 1080
-WrapStyle: 0
-ScaledBorderAndShadow: yes
+def _entete_ass(format_sortie: str) -> tuple[str, int]:
+    """En-tête ASS à la taille réelle du format (PlayRes = pixels). Rend (texte, caractères par ligne).
 
-[V4+ Styles]
-Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: Default,DejaVu Sans,56,&H00FFFFFF,&H00FFFFFF,&H00000000,&H64000000,0,0,0,0,100,100,0,0,1,3,1,2,120,120,70,1
+    16:9 : réglages historiques (corps 56, marges 120 et 70). 1:1 et 9:16 : 6 % de marge de chaque
+    côté ; en 9:16 le bas du texte reste au-dessus des 35 % du bas que Meta réserve à son interface
+    (marge basse de 36 %), donc aussi hors des 14 % du haut. Le nombre de caractères par ligne
+    est celui de la norme (42) quand la ligne tient dans la largeur utile, sinon il est réduit.
+    """
+    if format_sortie not in FORMATS_ASS:
+        raise ValueError(f"format de sous-titres non autorisé : {format_sortie!r}")
+    largeur, hauteur = (int(n) for n in format_sortie.split("x"))
+    cote = -(-largeur * 6 // 100)
+    if largeur > hauteur:
+        corps, cote, bas = 56, 120, 70
+    elif largeur == hauteur:
+        corps, bas = 48, 70
+    else:
+        corps, bas = 52, round(hauteur * (ZONE_BASSE_9_16 + 0.01))
+    par_ligne = min(CARS_PAR_LIGNE_MAX, int((largeur - 2 * cote) / (corps * LARGEUR_RELATIVE_CAR)))
+    entete = (
+        "[Script Info]\nScriptType: v4.00+\n"
+        f"PlayResX: {largeur}\nPlayResY: {hauteur}\nWrapStyle: 0\nScaledBorderAndShadow: yes\n\n"
+        "[V4+ Styles]\n"
+        "Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, "
+        "Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, "
+        "Alignment, MarginL, MarginR, MarginV, Encoding\n"
+        f"Style: Default,DejaVu Sans,{corps},&H00FFFFFF,&H00FFFFFF,&H00000000,&H64000000,0,0,0,0,100,100,0,0,"
+        f"1,3,1,2,{cote},{cote},{bas},1\n\n"
+        "[Events]\n"
+        "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n"
+    )
+    return entete, par_ligne
 
-[Events]
-Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
-"""
+
+def _lignes(texte: str, par_ligne: int) -> list[str]:
+    """Texte coupé en lignes de `par_ligne` caractères au plus, aux espaces ; un mot trop long est coupé."""
+    lignes: list[str] = []
+    courante = ""
+    for mot in texte.split():
+        while len(mot) > par_ligne:
+            if courante:
+                lignes.append(courante)
+                courante = ""
+            lignes.append(mot[:par_ligne])
+            mot = mot[par_ligne:]
+        if courante and len(courante) + 1 + len(mot) > par_ligne:
+            lignes.append(courante)
+            courante = ""
+        courante = f"{courante} {mot}" if courante else mot
+    return lignes + [courante] if courante else lignes
 
 
-def ecrire_ass(segments: list[Segment]) -> str:
+def decouper_segment(segment: Segment, par_ligne: int) -> list[tuple[int, int, list[str]]]:
+    """Évènements (début, fin, lignes) d'un segment : 2 lignes au plus chacun, durée au prorata des caractères."""
+    lignes = _lignes(neutraliser(segment.texte), par_ligne)
+    groupes = [lignes[i:i + LIGNES_MAX] for i in range(0, len(lignes), LIGNES_MAX)]
+    poids = [sum(len(l) for l in g) for g in groupes]
+    evenements, cumul, debut = [], 0, segment.debut_ms
+    for g, w in zip(groupes, poids):
+        cumul += w
+        fin = segment.fin_ms if cumul == sum(poids) else segment.debut_ms + round(
+            (segment.fin_ms - segment.debut_ms) * cumul / sum(poids))
+        evenements.append((debut, fin, g))
+        debut = fin
+    return evenements
+
+
+def ecrire_ass(segments: list[Segment], format_sortie: str = FORMAT_ASS_DEFAUT) -> str:
+    """ASS des segments, à la taille du format, coupé à 42 caractères par ligne et 2 lignes par évènement.
+
+    Les `\\N` du résultat sont les seules coupures de ligne, posées ici après la neutralisation du texte
+    (un `\\N` venu du texte est déjà remplacé par un signe de pleine chasse).
+    """
+    entete, par_ligne = _entete_ass(format_sortie)
     lignes = [
-        f"Dialogue: 0,{_horaire_ass(s.debut_ms, False)},{_horaire_ass(s.fin_ms, True)},Default,,0,0,0,,{neutraliser(s.texte)}"
-        for s in segments
+        f"Dialogue: 0,{_horaire_ass(debut, False)},{_horaire_ass(fin, True)},Default,,0,0,0,,{COUPURE.join(texte)}"
+        for segment in segments for debut, fin, texte in decouper_segment(segment, par_ligne)
     ]
-    return ENTETE_ASS + "\n".join(lignes) + "\n"
+    return entete + "\n".join(lignes) + "\n"
+
+
+def alertes_debit(ass: str) -> list[str]:
+    """Alerte (non bloquante) si des sous-titres dépassent 17 caractères par seconde. Lit un ASS d'`ecrire_ass`."""
+    pires: list[tuple[float, float]] = []
+    for ligne in ass.splitlines():
+        if not ligne.startswith("Dialogue:"):
+            continue
+        _, debut, fin, *_reste, texte = ligne.split(",", 9)
+        duree = (_en_ms(fin) - _en_ms(debut)) / 1000
+        rapport = len(texte.replace(COUPURE, "")) / duree if duree > 0 else float("inf")
+        if rapport > CARS_PAR_SECONDE_MAX:
+            pires.append((rapport, _en_ms(debut) / 1000))
+    if not pires:
+        return []
+    pire, instant = max(pires)
+    return [f"{len(pires)} sous-titre(s) au-delà de {CARS_PAR_SECONDE_MAX} caractères par seconde "
+            f"(pire : {pire:.0f} à {instant:.1f} s)"]
 
 
 # --------------------------------------------------------------------------------------------
@@ -209,10 +294,12 @@ def transcrire(wav: str, prefixe: str) -> str:
 
 
 def main(argv: list[str]) -> int:
-    if len(argv) != 2:
-        print("usage : sous_titres.py <dossier_entree> <dossier_sortie>", file=sys.stderr)
+    if len(argv) not in (2, 3) or (len(argv) == 3 and argv[2] not in FORMATS_ASS):
+        print("usage : sous_titres.py <dossier_entree> <dossier_sortie> [1920x1080|1080x1920|1080x1080]",
+              file=sys.stderr)
         return 2
     entree, sortie = Path(argv[0]), Path(argv[1])
+    format_sortie = argv[2] if len(argv) == 3 else FORMAT_ASS_DEFAUT
     wav = entree / FICHIER_WAV
     if not wav.is_file():
         print(f"{FICHIER_WAV} absent", file=sys.stderr)
@@ -237,7 +324,7 @@ def main(argv: list[str]) -> int:
         textes = aligner_sur_reference([s.texte for s in segments], reference)
         segments = [Segment(s.debut_ms, s.fin_ms, t) for s, t in zip(segments, textes)]
     (sortie / FICHIER_SRT).write_text(ecrire_srt(segments), encoding="utf-8")
-    (sortie / FICHIER_ASS).write_text(ecrire_ass(segments), encoding="utf-8")
+    (sortie / FICHIER_ASS).write_text(ecrire_ass(segments, format_sortie), encoding="utf-8")
     memoire_ko = resource.getrusage(resource.RUSAGE_CHILDREN).ru_maxrss
     print(json.dumps({"segments": len(segments), "aligne": aligne, "memoire_max_ko": memoire_ko}))
     return 0
@@ -262,10 +349,12 @@ def dossier_modele() -> str:
     return f"{RACINE_MODELES}/{MODELE_NOM}@{MODELE_REVISION}"
 
 
-def sous_titrer(dossier_travail, wav, texte_reference: str | None = None, *, gpu: bool = False) -> Resultat:
+def sous_titrer(dossier_travail, wav, texte_reference: str | None = None, *, gpu: bool = False,
+                format_sortie: str = FORMAT_ASS_DEFAUT) -> Resultat:
     """Transcrit `wav` en sous-titres français dans `dossier_travail/sous-titres/` (SRT et ASS échappé).
 
     `texte_reference` : texte lu par la voix ; s'il est fourni, les segments sont alignés dessus.
+    `format_sortie` : format de la vidéo (taille de l'ASS et zones sûres, voir `ecrire_ass`).
     Crée `st-entree` et `st-sortie` (qui doivent être absents) puis `sous-titres` dans le dossier de
     travail. `gpu=True` si whisper-cli a été compilé avec CUDA. Aucun shell. Un échec rend ok=False
     avec le motif, jamais d'exception pour une entrée audio piégée.
@@ -283,6 +372,8 @@ def sous_titrer(dossier_travail, wav, texte_reference: str | None = None, *, gpu
             raise ValueError("texte de référence invalide")
         if len(texte_reference.encode("utf-8")) > TAILLE_MAX_REFERENCE:
             raise ValueError("texte de référence trop long")
+    if format_sortie not in FORMATS_ASS:
+        raise ValueError(f"format de sous-titres non autorisé : {format_sortie!r}")
     entree, sortie, final = (travail / nom for nom in ("st-entree", "st-sortie", "sous-titres"))
     for dossier in (entree, sortie, final):
         dossier.mkdir(exist_ok=False)
@@ -292,7 +383,7 @@ def sous_titrer(dossier_travail, wav, texte_reference: str | None = None, *, gpu
 
     etape = Etape(
         type="gpu" if gpu else "cpu", programme="/usr/bin/python3",
-        arguments=("-I", "/code/sous_titres.py", "/entree", "/sortie"),
+        arguments=("-I", "/code/sous_titres.py", "/entree", "/sortie", format_sortie),
         dossier_entree=str(entree), dossier_sortie=str(sortie),
         montages_modeles=((str(Path(__file__).resolve().parent), "/code"),
                           (dossier_modele(), "/modeles/whisper")),

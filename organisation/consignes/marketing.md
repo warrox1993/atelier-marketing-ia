@@ -19,9 +19,15 @@ et la liste des documents disponibles : `…/api/plugins/atelier.marketing-ia/ap
   écart à signaler, pas une source.
 - Une marque ou une entité de la fiche existe, même si une page ne la cite pas.
 - Recherche dans les connaissances : questions courtes par mots-clés, au moins trois reformulations avant
-  d'écrire qu'une information manque ; chaque chiffre ou condition d'offre porte son `connaissance://…`.
+  d'écrire qu'une information manque, sauf quand la liste des titres (`…/connaissances/titres`) rend `total: 0` : la
+  base est vide, une seule recherche suffit, puis tu avances sans elle : l'information s'écrit « non fournie (optionnel) »
+  dans ce qui n'a pas pu être vérifié, sans la demander à l'humain ni au client ; chaque chiffre ou condition d'offre porte son `connaissance://…`.
 - Tout livrable contient une courte **table des faits** (fait, source). La porte refuse un identifiant
   légal incohérent avec la fiche.
+- **Stratégie du client** : la version validée est la connaissance « Stratégie marketing, version N » (le plus
+  grand N de la liste des titres) ; à défaut, le document `strategie` de la tâche « Stratégie » du `stratege` que cite
+  ta tâche (`GET …/api/issues/<issueId>/documents/strategie`). Lis-la avant de produire : elle fixe le positionnement,
+  les cibles et les priorités, et tu ne la contredis pas ; si elle manque, dis-le dans ta réponse.
 - Pour signaler un identifiant faux vu sur une page, écris dans la MÊME phrase le bon identifiant de
   la fiche : « La page affiche 0123.456.789 comme numéro FSMA, alors que le FSMA de la fiche est
   012345. » Sans le bon numéro, la porte refuse la phrase.
@@ -37,7 +43,14 @@ liste des prospects (`…/prospects`) suivent
 <!-- bloc : depot-connexion -->
 Déposer une réponse signée d'un outil (corps décrit dans tes consignes : `service`, `outil`,
 `arguments`, `reponse`), route `/prospects` pour la prospection, `/donnees-connexion` pour les
-autres rôles ; la réponse brute est longue, donc passe par un fichier :
+autres rôles. Toute lecture réussie porte `_atelier.reference` (22 caractères, usage unique, valable
+1 h) : dépose alors `{"service":"…","outil":"…","arguments":{…},"reference":"<_atelier.reference>"}`
+en une ligne, SANS `reponse` (exactement un des deux) ; le plugin prend la réponse chez la passerelle
+et vérifie la signature comme pour une recopie. « Référence inconnue ou déjà utilisée » (400 ; une
+référence est aussi perdue si la passerelle redémarre) : relis l'outil et dépose la nouvelle référence. La recopie complète n'est que pour une réponse sans
+référence ; elle passe toujours par un fichier, jamais en ligne (une réponse signée se recopie telle quelle, apostrophes
+droites comprises : la règle de l'apostrophe typographique ne s'y applique pas). Sans l'outil Write, ne la recopie pas :
+signale-le au coordinateur dans ton commentaire de clôture. Par fichier :
 
 ```
 curl -sS -w '\nHTTP %{http_code}\n' -X POST --variable %PAPERCLIP_API_URL --variable %PAPERCLIP_API_KEY --variable %PAPERCLIP_RUN_ID --expand-header 'Authorization: Bearer {{PAPERCLIP_API_KEY}}' --expand-header 'X-Paperclip-Run-Id: {{PAPERCLIP_RUN_ID}}' -H 'Content-Type: application/json' --expand-url '{{PAPERCLIP_API_URL}}/api/plugins/atelier.marketing-ia/api/taches/<issueId>/donnees-connexion' --data-binary @<chemin absolu du fichier JSON>

@@ -23,8 +23,12 @@ export { FICHE_AUDIT };
 export const CATEGORIES = ["performance", "accessibility", "best-practices", "seo"] as const;
 export type Categorie = (typeof CATEGORIES)[number];
 export const MAX_PROBLEMES = 10;
-export const DELAI_PLAFOND_MS = 120_000;
-export const DELAI_DEFAUT_MS = 90_000;
+/** T1 : toute la demande (file d'attente et passes) tient sous le délai de 60 s d'un appel par le socle. */
+export const BUDGET_AUDIT_MS = 55_000;
+export const DELAI_PLAFOND_MS = 50_000;
+export const DELAI_DEFAUT_MS = 45_000;
+/** En dessous, une passe Lighthouse n'a pas le temps d'aboutir : on ne la lance pas. */
+const PASSE_MIN_MS = 10_000;
 export const MAX_PASSES = 3;
 export const MAX_TEXTE = 300;
 
@@ -170,7 +174,12 @@ export async function auditerPage(urlDemandee: string, passes = 1, delaiMs = DEL
     const tour = fileAudit.then(async () => {
       const rapports: RapportLh[] = [];
       for (let i = 0; i < nbPasses; i++) {
-        const rapport = await lanceur(url.href, delai, { adresseAutorisee: options.adresseAutorisee, resoudre: options.resoudre });
+        const reste = debut + BUDGET_AUDIT_MS - Date.now();
+        if (reste < PASSE_MIN_MS) {
+          if (rapports.length > 0) break;
+          throw new Error("Budget de l'audit épuisé par la file d'attente : réessayer dans une minute.");
+        }
+        const rapport = await lanceur(url.href, Math.min(delai, reste), { adresseAutorisee: options.adresseAutorisee, resoudre: options.resoudre });
         const finale = rapport.finalDisplayedUrl ?? rapport.finalUrl;
         if (finale) await exigerUrlPublique(finale, options).catch((e: unknown) => { throw new Error(`Adresse finale refusée (${finale}) : ${e instanceof Error ? e.message : String(e)}`); });
         rapports.push(rapport);

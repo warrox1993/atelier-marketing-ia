@@ -1,9 +1,9 @@
 // Jeu d'essai FICTIF au format des fichiers Statbel (communes inventées, chiffres inventés) pour tester l'importation et les outils.
 
-import { mkdtempSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { importerStatbel } from "../../src/reel/statbel/importer.js";
+import { dossierTemporaire } from "../dossier-temporaire.js";
 
 export const COMMUNES = [
   { ins: "90001", fr: "Exempleville", nl: "Voorbeeldstad", arr: "Arrondissement d'Exemple", prov: "Province d'Exemple", rgn: "Région wallonne" },
@@ -61,7 +61,7 @@ function lignesCodesPostaux(): string {
 export interface IndexDeTest { dossier: string; index: string }
 
 export async function construireIndexDeTest(): Promise<IndexDeTest> {
-  const dossier = mkdtempSync(join(tmpdir(), "statbel-test-"));
+  const dossier = dossierTemporaire("statbel-test-");
   const f = (nom: string, contenu: string | Buffer): string => { const c = join(dossier, nom); writeFileSync(c, contenu); return c; };
   const index = join(dossier, "statbel.sqlite");
   // L'importateur refuse une population de moins de 500 communes : on complète avec des communes fictives sans intérêt.

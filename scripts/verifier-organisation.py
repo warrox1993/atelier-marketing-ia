@@ -33,6 +33,7 @@ import argparse
 import importlib.util
 import json
 import re
+import subprocess
 import sys
 from pathlib import Path
 
@@ -48,7 +49,7 @@ COMPETENCES_ATTENDUES = [
     "redaction-declinaison-canal", "charte-marque", "conversion-crm", "mesure-experiences",
     "controle-couverture", "relecture-independante", "controles-techniques-liens",
     "recherche-prospects", "qualification-prospects", "recherche-connaissances",
-    "dossier-validation-humaine", "protocole-inter-coordinateurs",
+    "dossier-validation-humaine", "protocole-inter-coordinateurs", "registre-decisions",
     "plan-campagne", "calendrier-reseaux-sociaux", "controle-communications-reglementees",
     "coordonnees-recherche", "coordonnees-recoupement", "liens-entrants-seo", "suivi-conversions",
     "diagnostic-marketing", "segmentation-ciblage", "positionnement-concurrentiel",
@@ -62,6 +63,7 @@ COMPETENCES_ATTENDUES = [
     "documents-bureautiques", "humanisation-texte-fr", "visualisation-donnees", "design-visuel-sobre",
     "textes-interface", "fiche-transmission-developpeurs", "mise-a-jour-crm", "accessibilite-wcag",
     "script-video-publicitaire", "conformite-publicite-ia", "declinaison-regies-video",
+    "adaptation-fr-nl-en", "campagne-courriel", "dossier-sujet", "qualite-visuels",
 ]
 RUBRIQUES = [
     "Quand l'utiliser", "Objectif", "Prérequis", "Entrées", "Étapes", "Livrable",
@@ -90,10 +92,14 @@ OUTILS_RECHERCHE = {"Read", "Grep", "Glob", "WebSearch", "WebFetch", OUTIL_SERVE
 PREFIXE_OUTILS_FABRIQUE = "mcp__paperclip-assigned__atelier_marketing-ia_"
 OUTIL_FABRIQUE_DOCUMENT = PREFIXE_OUTILS_FABRIQUE + "fabriquer_document"
 OUTIL_FABRIQUE_VIDEO = PREFIXE_OUTILS_FABRIQUE + "fabriquer_video"
+OUTIL_FABRIQUE_IMAGE = PREFIXE_OUTILS_FABRIQUE + "fabriquer_image"
 OUTIL_FABRIQUE_ETAT = PREFIXE_OUTILS_FABRIQUE + "etat_fabrication"
-OUTILS_FABRIQUE = {OUTIL_FABRIQUE_DOCUMENT, OUTIL_FABRIQUE_VIDEO, OUTIL_FABRIQUE_ETAT}
+OUTIL_FABRIQUE_VOIR = PREFIXE_OUTILS_FABRIQUE + "voir_rendu"  # lot 3 qualité des visuels : le relecteur voit le rendu
+OUTILS_FABRIQUE = {OUTIL_FABRIQUE_DOCUMENT, OUTIL_FABRIQUE_VIDEO, OUTIL_FABRIQUE_IMAGE, OUTIL_FABRIQUE_ETAT, OUTIL_FABRIQUE_VOIR}
 ROLES_FABRIQUE_DOCUMENT = {"contenus", "stratege", "prospection", "crm-conversion", "mesure"}
-ROLES_FABRIQUE_VIDEO = {"reseaux-sociaux"}
+ROLES_FABRIQUE_VIDEO = {"reseaux-sociaux", "contenus"}
+ROLES_FABRIQUE_IMAGE = {"contenus", "reseaux-sociaux"}
+ROLES_FABRIQUE_VOIR = {"relecteur", "contenus", "reseaux-sociaux"}
 OUTILS_MUTATION = {"Write", "Edit", "Bash(curl *)", OUTIL_SERVEUR_CONNEXIONS} | OUTILS_FABRIQUE
 # Outils de sous-agents de Claude Code (« Agent », ancien nom « Task ») : interdits à tous les
 # agents de l'atelier. La délégation passe par les tâches Paperclip, visibles et soumises à la porte.
@@ -104,7 +110,7 @@ CHAMPS_AGENT = [
     "competencesObligatoires", "outils", "modele", "budgetMensuelCentimes", "maxToursParExecution",
     "relit", "roleRevue", "criteresReussite",
 ]
-ROLES_REVUE = {"exigences", "metier", "technique"}  # RoleRevue, plugin-atelier/src/contrats/communs.ts
+ROLES_REVUE = {"exigences", "metier", "technique", "conformite"}  # RoleRevue, plugin-atelier/src/contrats/communs.ts
 ROLES_PAPERCLIP = {"ceo", "cto", "cmo", "cfo", "security", "engineer", "designer", "pm", "qa", "devops", "researcher", "general"}
 
 erreurs: list[str] = []
@@ -406,6 +412,10 @@ def controler_registre(bootstrap):
             attendus |= {OUTIL_FABRIQUE_DOCUMENT, OUTIL_FABRIQUE_ETAT}
         if s in ROLES_FABRIQUE_VIDEO:
             attendus |= {OUTIL_FABRIQUE_VIDEO, OUTIL_FABRIQUE_ETAT}
+        if s in ROLES_FABRIQUE_IMAGE:
+            attendus |= {OUTIL_FABRIQUE_IMAGE, OUTIL_FABRIQUE_ETAT}
+        if s in ROLES_FABRIQUE_VOIR:
+            attendus |= {OUTIL_FABRIQUE_VOIR}
         if (autorises & OUTILS_FABRIQUE) != attendus:
             erreur(f"agent {s} : outils de la fabrique autorisés {sorted(autorises & OUTILS_FABRIQUE)}, attendus {sorted(attendus)}")
         if (OUTILS_FABRIQUE - attendus) - set(o["interdits"]):
@@ -455,6 +465,16 @@ def controler_registre(bootstrap):
         relecteurs = [a["slug"] for a in agents if slug in a["relit"]]
         if not {"exigences", "relecteur"} <= set(relecteurs):
             erreur(f"{slug} : doit être relu par le contrôleur des exigences et le relecteur")
+    # EXP-C12 : le PC de l'atelier n'est allumé que vers 09:44 ; une échéance plus tôt part en retard au démarrage.
+    for r in json.loads((ORGA / "registre/organisation.json").read_text(encoding="utf-8"))["routines"]:
+        minute, heure = r["cron"].split()[:2]
+        if not (minute.isdigit() and heure.isdigit() and int(heure) >= 10):
+            erreur(f"routine {r['slug']} : heure fixe à partir de 10 h attendue (PC allumé vers 09:44), trouvé « {r['cron']} »")
+    # Même règle pour les exemples des consignes : un agent recopie l'heure de l'exemple (reste du paquet L4).
+    for f in sorted((ORGA / "agents").glob("*/AGENTS.md")):
+        for minute, heure in re.findall(r'"cronExpression":"(\S+) (\S+) ', f.read_text(encoding="utf-8")):
+            if not (minute.isdigit() and heure.isdigit() and int(heure) >= 10):
+                erreur(f"{f.relative_to(ORGA)} : exemple de cronExpression à partir de 10 h attendu, trouvé « {minute} {heure} »")
     infos.append(f"registre : {len(agents)} agents marketing + {len(deterministes)} déterministe, modèles validés contre {len(modeles)} identifiants de claude_local")
 
 
@@ -483,9 +503,9 @@ def controler_extension():
         # Faille C1 (revue du 16/10/2026) : agent confiné (fichiers + réseau) ; l'API locale et la
         # passerelle sont ajoutées d'office par l'adaptateur, seule l'API Anthropic est listée.
         if (cfg.get("engine") != "cli" or cfg.get("filesystemScope") != "workspace"
-                or cfg.get("networkScope") != "allowlist" or cfg.get("networkAllowlist") != ["api.anthropic.com"]):
+                or cfg.get("networkScope") != "allowlist" or cfg.get("networkAllowlist") != ["api.anthropic.com:443"]):
             erreur(f"{slug} : confinement attendu : engine cli, filesystemScope workspace, "
-                   "networkScope allowlist, networkAllowlist [api.anthropic.com]")
+                   "networkScope allowlist, networkAllowlist [api.anthropic.com:443]")
         for cle, val in (cfg.get("env") or {}).items():
             if cle in ("CLAUDE_CONFIG_DIR", "CLAUDE_CODE_OAUTH_TOKEN", "ANTHROPIC_API_KEY"):
                 erreur(f"{slug} : {cle} ne doit pas avoir de valeur dans le paquet")
@@ -565,7 +585,7 @@ def controler_export(dossier: Path, bootstrap):
 SERVICES_PASSERELLE = {
     "gsc": "atelier-google-search-console", "ga4": "atelier-google-analytics", "ads": "atelier-google-ads",
     "gbp": "atelier-google-business-profile", "facebook": "atelier-facebook", "instagram": "atelier-instagram",
-    "linkedin": "atelier-linkedin", "crm": "atelier-hubspot", "pipedrive": "atelier-pipedrive",
+    "linkedin": "atelier-linkedin", "linkedinprofil": "atelier-linkedin-profil", "crm": "atelier-hubspot", "pipedrive": "atelier-pipedrive",
     "odoo": "atelier-odoo", "teamleader": "atelier-teamleader",
     "bce": "atelier-bce", "bnb": "atelier-bnb", "fsma": "atelier-fsma", "osm": "atelier-osm", "b2c": "atelier-b2c",
     "liens": "atelier-liens",  # vérification de liens (verifier_url), service réel sans compte
@@ -621,6 +641,104 @@ ORDRE_DIFFUSION = [
     ("revocations_approbation", "appel de l'outil avec la liste"),
     ("/diffusions/<diffusionId>/issue", "issue rapportée"),
 ]
+
+
+def ecarts_competences(propres, recues, corps, connues, marqueur):
+    """Compétences propres au rôle jamais citées dans son AGENTS.md, et compétences citées par le texte du rôle sans être
+    reçues (en-tête « skills: »). Les lignes de tableau (phases du coordinateur : compétences des producteurs) ne comptent
+    pas ; le bloc des consignes communes vaut citation."""
+    role, _, communes = corps.partition(marqueur)
+    role = "\n".join(l for l in role.splitlines() if not l.lstrip().startswith("|"))
+
+    def cite(nom, texte):
+        return re.search(rf"(?<![\w-]){re.escape(nom)}(?![\w-])", texte)
+
+    non_citees = [c for c in propres if not (cite(c, role) or cite(c, communes))]
+    return non_citees, [c for c in sorted(set(connues) - set(recues)) if cite(c, role)]
+
+
+def routes_plugin() -> list[tuple[str, str]]:
+    """(méthode, chemin) de la table figée des routes du plugin (plugin-atelier/src/contrats/routes.ts)."""
+    table = (RACINE / "plugin-atelier/src/contrats/routes.ts").read_text(encoding="utf-8")
+    return re.findall(r'methode: "([A-Z]+)", chemin: "([^"]+)"', table)
+
+
+def routes_citees_absentes(texte: str, routes: list[tuple[str, str]]) -> list[str]:
+    """APP-8 : routes du plugin citées avec leur méthode (« `POST …/api/plugins/atelier.marketing-ia/api/x` », ou curl : `-X`,
+    sinon POST avec un corps et GET sans) qui n'existent pas dans `routes` avec cette méthode. Méthode illisible : ignorée."""
+    motifs = [(m, re.compile("^" + re.sub(r":[A-Za-z]+", "[^/]+", c) + "$")) for m, c in routes]
+    absentes = []
+    for ligne in texte.splitlines():
+        for u in re.finditer(r"atelier\.marketing-ia/api(/[^\s`'\"?)\]]*)", ligne):
+            avant, cite = ligne[: u.start()], u.group(1).rstrip(".,;:")
+            if "curl " in avant:
+                x = re.search(r"-X\s*([A-Z]+)", avant)
+                methode = x.group(1) if x else ("POST" if re.search(r"--data|--expand-data|-d ", ligne) else "GET")
+            else:
+                x = re.search(r"\b(GET|POST|PATCH|PUT|DELETE)\s+(?:…|\{\{PAPERCLIP_API_URL\}\})?/?[^\s`]*$", avant)
+                if not x:
+                    continue
+                methode = x.group(1)
+            chemin = re.sub(r"<[^>]+>|\{\{[^}]+\}\}", "x", cite)
+            if not any(m == methode and p.match(chemin) for m, p in motifs):
+                absentes.append(f"{methode} {cite}")
+    return absentes
+
+
+def controler_routes_citees():
+    """APP-8 (audit du 29/10/2026), banc jugé par code : une route du plugin citée par une consigne ou une compétence
+    existe avec la méthode citée. Repris à chaque vérification, donc à chaque changement d'un SKILL.md."""
+    routes = routes_plugin()
+    fichiers = sorted([*ORGA.glob("agents/*/AGENTS.md"), *ORGA.glob("services/*/agents/*/AGENTS.md"),
+                       *ORGA.glob("skills/*/SKILL.md"), *ORGA.glob("consignes/*.md")])
+    for f in fichiers:
+        # Sous le marqueur : consignes communes recopiées, contrôlées à leur source (organisation/consignes/).
+        texte = f.read_text(encoding="utf-8").split("<!-- Consignes communes : générées")[0]
+        for r in routes_citees_absentes(texte, routes):
+            erreur(f"{f.relative_to(RACINE)} : route du plugin absente de routes.ts : {r}")
+    infos.append(f"routes du plugin citées : présentes dans routes.ts avec leur méthode ({len(fichiers)} fichiers)")
+
+
+def controler_competences_citees(bootstrap):
+    """MK-17 (audit du 29/10/2026) : une compétence chargée sans être citée coûte du contexte à chaque run sans servir ; une
+    compétence citée sans être chargée manque au run."""
+    reg = json.loads((ORGA / "registre/agents.json").read_text(encoding="utf-8"))
+    connues = {p.name for p in (ORGA / "skills").iterdir() if p.is_dir()}
+    for a in reg["agents"]:
+        if a.get("deterministe"):
+            continue
+        entete, corps = bootstrap.separer_frontmatter((ORGA / "agents" / a["slug"] / "AGENTS.md").read_text(encoding="utf-8"))
+        recues = (yaml.safe_load(entete or "") or {}).get("skills") or []
+        non_citees, non_chargees = ecarts_competences(a["competences"], recues, corps, connues, bootstrap.MARQUEUR_CONSIGNES_COMMUNES)
+        for c in non_citees:
+            erreur(f"agent {a['slug']} : compétence {c} chargée mais jamais citée dans son AGENTS.md")
+        for c in non_chargees:
+            erreur(f"agent {a['slug']} : compétence {c} citée dans son AGENTS.md mais non chargée")
+    infos.append("compétences du marketing : chaque compétence chargée est citée, chaque compétence citée est chargée")
+
+def controler_outils_plugin(bootstrap):
+    """DOC-A1 : la règle nue mcp__paperclip-assigned pré-approuve tout outil du serveur, ceux du plugin compris (le patch
+    socle 0153 ne réserve que les outils de connexion). Chaque outil enregistré par le plugin doit donc être classé
+    (autorisation explicite ou interdit) pour chaque rôle qui a cette règle : un futur outil ne passe plus en silence."""
+    vus = bootstrap.outils_plugin(RACINE / "plugin-atelier")
+    declares = bootstrap.outils_manifeste(RACINE / "plugin-atelier")
+    if sorted(vus) != sorted(declares):
+        # Revue 2, B-6 : un appel indirect échappe à l'extraction ; le manifeste fait foi, l'écart est une erreur.
+        erreur(f"outils du plugin : écart entre le code ({sorted(vus)}) et le manifeste ({sorted(declares)})")
+    outils = [bootstrap.nom_client_outil_plugin(n) for n in sorted(set(vus) | set(declares))]
+    reg = json.loads((ORGA / "registre/agents.json").read_text(encoding="utf-8"))
+    nus = 0
+    for a in reg["agents"]:
+        o = a.get("outils") or {}
+        autorises = set(o.get("recherche") or []) | set(o.get("mutation") or [])
+        if OUTIL_SERVEUR_CONNEXIONS not in autorises:
+            continue
+        nus += 1
+        non_classes = [t for t in outils if t not in autorises | set(o.get("interdits") or [])]
+        if non_classes:
+            erreur(f"agent {a['slug']} : outil(s) du plugin pré-approuvé(s) par la règle nue {OUTIL_SERVEUR_CONNEXIONS} "
+                   f"sans classement : {non_classes} (à autoriser explicitement ou à interdire)")
+    infos.append(f"outils du plugin : {len(outils)} outil(s) classé(s) pour les {nus} rôles à règle nue {OUTIL_SERVEUR_CONNEXIONS}")
 
 
 def controler_connexions():
@@ -715,6 +833,26 @@ def controler_services():
                      f"{len(module.flux_coordinateurs(registre))} flux générés entre coordinateurs")
 
 
+def date_version_perimee(fichier: Path) -> str | None:
+    """DOC-A15 : message si la dateVersion du registre est antérieure à la date du dernier commit du fichier ; None sinon,
+    ou hors dépôt git (copie de test, archive)."""
+    r = subprocess.run(["git", "-C", str(fichier.parent), "log", "-1", "--format=%cs", "--", fichier.name],
+                       capture_output=True, text=True, check=False)
+    commit = r.stdout.strip() if r.returncode == 0 else ""
+    date = json.loads(fichier.read_text(encoding="utf-8")).get("dateVersion", "")
+    if commit and date < commit:
+        return f"{fichier.name} : dateVersion {date} antérieure au dernier commit ({commit}) : incrémente version et dateVersion"
+    return None
+
+
+def controler_dates_registres():
+    for nom in ("agents.json", "services.json"):
+        message = date_version_perimee(ORGA / "registre" / nom)
+        if message:
+            erreur(message)
+    infos.append("dates de version des registres au moins égales à leur dernier commit")
+
+
 def etape(fonction, *args):
     """Exécute un contrôle ; son message de réussite n'est gardé que s'il n'a ajouté aucune erreur."""
     avant_e, avant_i = len(erreurs), len(infos)
@@ -753,8 +891,12 @@ def main():
     etape(controler_generation, bootstrap)
     etape(controler_competences, bootstrap)
     etape(controler_registre, bootstrap)
+    etape(controler_competences_citees, bootstrap)
+    etape(controler_routes_citees)
     etape(controler_connexions)
+    etape(controler_outils_plugin, bootstrap)
     etape(controler_services)
+    etape(controler_dates_registres)
     etape(controler_extension)
     etape(controler_entetes)
     etape(controler_politiques)

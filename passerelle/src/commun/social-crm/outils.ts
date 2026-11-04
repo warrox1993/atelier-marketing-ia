@@ -5,7 +5,8 @@
 import * as z from "zod";
 import type { AnnotationsOutil } from "../../fournisseurs.js";
 
-export const ANNOTATIONS_LECTURE: AnnotationsOutil = { readOnlyHint: true, idempotentHint: true, openWorldHint: false };
+// Monde ouvert : la réponse porte du texte de tiers et garde la mention « données de tiers » (S2).
+export const ANNOTATIONS_LECTURE: AnnotationsOutil = { readOnlyHint: true, idempotentHint: true, openWorldHint: true };
 
 /** Écriture : l'agent la présente à l'approbation humaine du plugin avant tout effet réel. */
 export function annotationsMutation(destructive: boolean): AnnotationsOutil {

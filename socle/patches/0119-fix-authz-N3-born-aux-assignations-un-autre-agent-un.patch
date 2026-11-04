@@ -1,0 +1,72 @@
+From 57b5a690d09d6ed235b83ec653ce367926b52218 Mon Sep 17 00:00:00 2001
+From: Jean-Baptiste Dhondt <114347858+warrox1993@users.noreply.github.com>
+Date: Fri, 30 Oct 2026 13:50:02 +0100
+Subject: [PATCH] =?UTF-8?q?fix(authz):=20N3=20born=C3=A9=20aux=20assignati?=
+ =?UTF-8?q?ons=20=C3=A0=20un=20autre=20agent=20;=20un=20agent=20s'assigne?=
+ =?UTF-8?q?=20toujours=20lui-m=C3=AAme?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Atelier, lot S (N3), suite du patch local 0108, trouvé par la suite complète server/src. La
+création d'une tâche par un agent passe toujours par tasks:assign, même sans assigné : la garde
+N3 refusait donc à tout agent non coordinateur de créer une tâche non assignée, et à un agent
+sans grant tasks:assign_scope (ancien, ou à confiance réduite sans grants par défaut) de
+s'assigner sa propre tâche. Désormais :
+- assignation à un autre agent par un non-ceo : portée tasks:assign_scope seule (inchangé) ;
+- assignation à soi : permise (soi fait partie de son sous-arbre, décision N3 option 2) ;
+- aucune agent cible (tâche non assignée, humain) : règle amont, rien n'est réveillé.
+
+Suite : 27 échecs N3 nouveaux -> 2 (assignation à un pair hors portée, voulue). Mutations :
+auto-assignation retirée 10 échecs, N3 sans agent cible 6, N3 neutralisé 4 (base 1).
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01EThpSSDGc5NRYwbgjNqoTJ
+---
+ server/src/__tests__/atelier-assignation.test.ts |  5 +++--
+ server/src/services/authorization.ts             | 12 +++++++++---
+ 2 files changed, 12 insertions(+), 5 deletions(-)
+
+diff --git a/server/src/__tests__/atelier-assignation.test.ts b/server/src/__tests__/atelier-assignation.test.ts
+index 3278cd2c08..41f00f9c61 100644
+--- a/server/src/__tests__/atelier-assignation.test.ts
++++ b/server/src/__tests__/atelier-assignation.test.ts
+@@ -87,9 +87,10 @@ decrireAvecBase("atelier : assignation bornée (N3)", () => {
+     await expect(assigner("analyste", "relecteur")).resolves.toMatchObject(refuse);
+   });
+ 
+-  it("sans grant à portée, un agent non ceo n'assigne à personne, même avec le grant large", async () => {
++  it("sans grant à portée, un agent non ceo ne s'assigne qu'à lui-même, même avec le grant large", async () => {
+     await accessService(db).setPrincipalPermission(companyId, "agent", ids.redacteur!, "tasks:assign_scope", false, null);
+-    await expect(assigner("redacteur", "redacteur")).resolves.toMatchObject(refuse);
++    await expect(assigner("redacteur", "redacteur")).resolves.toMatchObject({ allowed: true, reason: "allow_self" });
+     await expect(assigner("redacteur", "analyste")).resolves.toMatchObject(refuse);
++    await expect(assigner("redacteur", "coordinateur")).resolves.toMatchObject(refuse);
+   });
+ });
+diff --git a/server/src/services/authorization.ts b/server/src/services/authorization.ts
+index 9df3cad8db..f283881db3 100644
+--- a/server/src/services/authorization.ts
++++ b/server/src/services/authorization.ts
+@@ -2395,9 +2395,15 @@ export function authorizationService(db: Db | DbTransaction) {
+       const policyEffect = await assignmentPolicyEffect(input.resource);
+       const policyDeny = await denyForAssignmentPolicyIfNeeded(policyEffect);
+       if (policyDeny) return policyDeny;
+-      // Atelier (N3) : seul le coordinateur (ceo) assigne partout ; tout autre agent seulement dans la portée de son
+-      // grant tasks:assign_scope (son sous-arbre par défaut, plus les destinataires déclarés posés par le board).
+-      if (actorAgent.role !== "ceo") {
++      // Atelier (N3) : seul le coordinateur (ceo) assigne à tout agent ; tout autre agent seulement dans la portée de son
++      // grant tasks:assign_scope (son sous-arbre par défaut, plus les destinataires déclarés posés par le board). Une
++      // tâche sans agent assigné (création, humain) suit la règle amont plus bas : elle ne réveille aucun agent.
++      const agentCible = input.resource.type === "issue" ? input.resource.assigneeAgentId : null;
++      if (actorAgent.role !== "ceo" && agentCible) {
++        // Soi fait partie de son sous-arbre : vrai aussi pour un agent sans grant à portée (ancien ou à confiance réduite).
++        if (agentCible === actorAgentId) {
++          return allow({ action: input.action, reason: "allow_self", explanation: "Atelier : un agent s'assigne lui-même." });
++        }
+         const scopedDecision = await decidePrincipalGrant({
+           companyId,
+           principalType: "agent",
+-- 
+2.53.0
+

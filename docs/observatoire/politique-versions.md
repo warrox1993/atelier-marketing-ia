@@ -9,6 +9,7 @@ Règles de révision, de publication et de correction du contenu de l'Observatoi
 - Une révision EN garde `base_revision_fr`, la révision FR dont elle est la traduction.
 - Statuts éditoriaux (calculés depuis les états natifs de Paperclip et le statut de la révision) : Découvert, À qualifier, Accepté, En analyse, À vérifier, À corriger, Validé, Programmé, Publié, À actualiser, Archivé.
 - Passage à « Validé » : PASS frais de la porte déterministe et du relecteur. Passage à « Publié » : approbation humaine (première publication, conclusion sensible, modification majeure). Après 3 cycles de correction, retour à l'humain, jamais d'acceptation forcée.
+- **Conclusion sensible** (DROIT-5.4) : toute affirmation négative sur une entreprise ou une personne nommée (faille, faute, retard, promesse non tenue, contradiction de ses annonces). Elle exige une preuve primaire (`confirme_doc_officielle` ou `verifie_experimentalement`), une formulation factuelle (le fait daté et sa source, sans qualificatif) et l'approbation humaine à chaque révision qui l'ajoute ou la change. Droit de réponse et de retrait : `droits-collecte.md`, section 3.
 
 ## 2. Publication versionnée
 

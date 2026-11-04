@@ -137,7 +137,8 @@ export type FamilleOffre = "rc_pro" | "revenu_garanti" | "pension" | "responsabi
 
 /**
  * Comment reconnaître une famille dans la fiche du client : le code de l'offre (préfixe, minuscules) ou un mot
- * de son nom, sans accents. Une offre non confirmée par le client n'est pas « active ».
+ * de son nom, sans accents. Une offre non confirmée par le client reste « active » (décision de l'opérateur du 30/10/2026) : les
+ * offres confirmées passent avant.
  */
 export const RECONNAISSANCE_FAMILLES: Readonly<Record<FamilleOffre, { readonly codes: readonly string[]; readonly nom: RegExp }>> = {
   rc_pro: { codes: ["rc-pro", "rc_pro"], nom: /responsabilite civile prof|\brc pro\b/u },
@@ -187,11 +188,10 @@ interface OffreLue {
 
 const normaliser = (s: string) => s.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase().trim();
 
-/** Offres actives (confirmées par le client) de la fiche qui répondent au besoin. */
+/** Offres actives de la fiche qui répondent au besoin, les confirmées par le client en premier. */
 export function offresActivesPourBesoin<T extends OffreLue>(besoin: BesoinCourtier, offres: readonly T[]): T[] {
   const familles = OFFRES_PAR_BESOIN[besoin];
-  return offres.filter((o) => {
-    if (!o.confirmee) return false;
+  return [...offres].sort((a, b) => Number(b.confirmee) - Number(a.confirmee)).filter((o) => {
     const code = normaliser(o.code ?? "");
     const nom = normaliser(o.nom);
     return familles.some((f) => {

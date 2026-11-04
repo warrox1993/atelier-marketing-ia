@@ -1,0 +1,83 @@
+{
+  "numero": 9,
+  "slug": "apple-decouverte-outils-agents",
+  "projet": {
+    "companyId": "<OBS>",
+    "slug": "article-9-apple-decouverte-outils-agents",
+    "nom": "Planifier ou chercher d'abord ? Apple compare deux façons pour un agent de trouver ses outils",
+    "alias": [
+      {
+        "type": "site",
+        "valeur": "https://machinelearning.apple.com/research/plan-retrieve-tool-discovery"
+      },
+      {
+        "type": "site",
+        "valeur": "https://arxiv.org/abs/2610.19068"
+      }
+    ]
+  },
+  "motifSansProjet": null,
+  "aliasRefuses": [],
+  "brief": {
+    "tache": "Rédiger l'article n° 9 du magazine : Planifier ou chercher d'abord ? Apple compare deux façons pour un agent de trouver ses outils",
+    "categorie": "recherche",
+    "publie_le": "2026-10-15",
+    "angle": "Avec des registres de milliers d'outils (MCP compris), la façon dont un agent choisit ses outils pèse sur la justesse et sur le coût : l'étude donne une règle simple selon la complexité de la demande. Texte à écrire pour deux lecteurs : le développeur (ce qu'il peut faire ou doit vérifier) et le décideur (ce que cela change pour un choix d'outil, de coût ou de conformité), sans rien ajouter qui ne figure pas dans les faits ci-dessous.",
+    "plan": [
+      "Ce qui est annoncé ou publié : les faits datés, tels que la source les énonce",
+      "Ce que cela change pour un développeur : usage concret, uniquement à partir des faits listés",
+      "Ce que cela change pour un décideur : choix, coûts, risques, uniquement à partir des faits listés",
+      "Ce qui n'est pas établi : points ouverts, chiffres d'éditeur non mesurés de façon indépendante",
+      "Sources et méthode de vérification : liste des URL lues le 27/10/2026"
+    ],
+    "faits": [
+      {
+        "texte": "La page d'Apple rattache l'article à la conférence EMNLP et le date d'octobre 2026.",
+        "source_url": "https://machinelearning.apple.com/research/plan-retrieve-tool-discovery",
+        "extrait_exact": "conference EMNLP content type paper published October 2026",
+        "statut_propose": "rapporte_editeur"
+      },
+      {
+        "texte": "L'article est déposé sur arXiv le 13 octobre 2026.",
+        "source_url": "https://arxiv.org/abs/2610.19068",
+        "extrait_exact": "Submitted on 13 Oct 2026]",
+        "statut_propose": "confirme_doc_officielle"
+      },
+      {
+        "texte": "L'approche alternative étudiée fait d'abord écrire au modèle des signatures d'outils hypothétiques, qui servent ensuite de requêtes.",
+        "source_url": "https://machinelearning.apple.com/research/plan-retrieve-tool-discovery",
+        "extrait_exact": "in which the LLM first generates Abstract Tool Stubs (hypothesized function signatures describing needed capabilities) which then serve as retrieval queries against the registry",
+        "statut_propose": "rapporte_editeur"
+      },
+      {
+        "texte": "Le banc utilisé est ToolBench : 46 984 points d'accès d'API répartis en 50 catégories.",
+        "source_url": "https://machinelearning.apple.com/research/plan-retrieve-tool-discovery",
+        "extrait_exact": "ToolBench (46,984 unique API endpoints, 50 categories)",
+        "statut_propose": "rapporte_editeur"
+      },
+      {
+        "texte": "Résultat principal : chercher d'abord gagne sur les demandes à un outil, planifier d'abord gagne sur les demandes à plusieurs outils.",
+        "source_url": "https://machinelearning.apple.com/research/plan-retrieve-tool-discovery",
+        "extrait_exact": "RtP outperforms PtR on single-tool queries while PtR outperforms RtP on multi-tool queries",
+        "statut_propose": "rapporte_editeur"
+      },
+      {
+        "texte": "L'appel de découverte supplémentaire double à peu près le coût d'inférence.",
+        "source_url": "https://machinelearning.apple.com/research/plan-retrieve-tool-discovery",
+        "extrait_exact": "PtR’s extra discovery call roughly doubles inference cost",
+        "statut_propose": "rapporte_editeur"
+      },
+      {
+        "texte": "Mode d'échec relevé : le modèle invente des noms d'API plausibles mais inexistants.",
+        "source_url": "https://machinelearning.apple.com/research/plan-retrieve-tool-discovery",
+        "extrait_exact": "the LLM invents plausible but non-existent API names",
+        "statut_propose": "rapporte_editeur"
+      }
+    ],
+    "points_ouverts": [
+      "Modèles testés : Gemini 2.5 Flash et gpt-oss-120b seulement ; rien sur les modèles actuels.",
+      "Pas de lien direct avec MCP dans le résumé : le rapprochement est une lecture éditoriale à signaler comme telle."
+    ],
+    "regles": "Aucun fait, date ou chiffre hors des faits listés. Chaque affirmation renvoie à un fait et à son extrait exact. Pas de tiret cadratin."
+  }
+}

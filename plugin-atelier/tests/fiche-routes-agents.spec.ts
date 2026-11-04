@@ -38,4 +38,17 @@ describe("fiche des routes d'agents", () => {
     for (const r of routesAgents()) expect(fiche).toContain(`## ${r.methode} ${r.chemin}\n`);
     expect(fiche).not.toMatch(/—|\/home\//u);
   });
+
+  it("les bornes d'un tableau affichent le motif de ses éléments (exigencesExaminees)", () => {
+    const ligne = genererFiche().split("\n").find((l) => l.includes("exigencesExaminees"));
+    expect(ligne, "ligne exigencesExaminees").toBeDefined();
+    expect(ligne).toContain("^REQ-");
+  });
+
+  it("pas de motif pour des éléments déjà nommés par leur format (filtres.documentIds, uuid)", () => {
+    const ligne = genererFiche().split("\n").find((l) => l.includes("`filtres.documentIds`"));
+    expect(ligne, "ligne filtres.documentIds").toBeDefined();
+    expect(ligne).toContain("tableau de uuid");
+    expect(ligne).not.toContain("motif");
+  });
 });

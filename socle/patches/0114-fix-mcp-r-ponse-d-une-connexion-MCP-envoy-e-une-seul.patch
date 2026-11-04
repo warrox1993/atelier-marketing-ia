@@ -1,0 +1,73 @@
+From 9d784403abbf4724f9cd6c85a6e900b8afdf5a7f Mon Sep 17 00:00:00 2001
+From: Jean-Baptiste Dhondt <114347858+warrox1993@users.noreply.github.com>
+Date: Fri, 30 Oct 2026 12:26:25 +0100
+Subject: [PATCH] =?UTF-8?q?fix(mcp):=20r=C3=A9ponse=20d'une=20connexion=20?=
+ =?UTF-8?q?MCP=20envoy=C3=A9e=20une=20seule=20fois=20au=20mod=C3=A8le=20(A?=
+ =?UTF-8?q?telier=20T2)?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+La route tools/call renvoyait en structuredContent l'enveloppe interne d'une
+connexion ({content, structuredContent, transport…}) ; Claude Code montre ce
+structuredContent au modèle, qui recevait donc le texte du fournisseur ET ses
+données, environ deux fois la taille utile. Pour une connexion (data.transport),
+seul le texte du fournisseur part ; les outils de plugin et natifs gardent
+structuredContent. Le test qui figeait l'ancien doublon décrit le nouveau contrat.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01EThpSSDGc5NRYwbgjNqoTJ
+---
+ .../tool-gateway-structured-content.test.ts      | 16 ++++++++++++----
+ server/src/routes/tool-gateway.ts                |  6 +++++-
+ 2 files changed, 17 insertions(+), 5 deletions(-)
+
+diff --git a/server/src/__tests__/tool-gateway-structured-content.test.ts b/server/src/__tests__/tool-gateway-structured-content.test.ts
+index 418c967ec1..aadf2a8a58 100644
+--- a/server/src/__tests__/tool-gateway-structured-content.test.ts
++++ b/server/src/__tests__/tool-gateway-structured-content.test.ts
+@@ -30,10 +30,18 @@ describe("résultat MCP d'un outil de plugin", () => {
+     expect("structuredContent" in resultat).toBe(false);
+   });
+ 
+-  it("garde le comportement des outils d'application MCP (data objet conservé)", () => {
+-    const data = { content: [], structuredContent: null, isError: false, transport: "mcp_http" };
+-    const resultat = buildMcpToolCallResult({ content: "texte", data });
+-    expect(resultat.structuredContent).toEqual(data);
++  it("ne double pas la réponse d'une connexion MCP : texte du fournisseur seul (Atelier T2)", () => {
++    const structure = { code: 200, _atelier: { mode: "reel" } };
++    const data = { content: [{ type: "text", text: JSON.stringify(structure) }], structuredContent: structure, isError: false, transport: "mcp_http" };
++    const resultat = buildMcpToolCallResult({ content: JSON.stringify(structure), data });
++    expect("structuredContent" in resultat).toBe(false);
++    expect(resultat.content).toEqual([{ type: "text", text: JSON.stringify(structure) }]);
++    expect(JSON.stringify(resultat).split("code").length - 1).toBe(1);
++  });
++
++  it("garde data en structuredContent pour un outil natif sans transport", () => {
++    const resultat = buildMcpToolCallResult({ content: "texte", data: { issueId: "i1" } });
++    expect(resultat.structuredContent).toEqual({ issueId: "i1" });
+   });
+ 
+   it("de bout en bout par la route tools/call : pas de structuredContent null", async () => {
+diff --git a/server/src/routes/tool-gateway.ts b/server/src/routes/tool-gateway.ts
+index 0f328ab125..99810a2173 100644
+--- a/server/src/routes/tool-gateway.ts
++++ b/server/src/routes/tool-gateway.ts
+@@ -96,9 +96,13 @@ export function buildMcpToolCallResult(raw: unknown) {
+   const contentText = typeof record?.content === "string"
+     ? record.content
+     : JSON.stringify(record?.data ?? raw ?? null);
++  // Atelier T2 : le résultat d'une connexion MCP enveloppe déjà le texte du
++  // fournisseur (data.content, data.structuredContent) ; le renvoyer en
++  // structuredContent doublait chaque réponse vue par le modèle.
++  const connectionResult = !pluginEnvelope && isPlainRecord(record?.data) && typeof record.data.transport === "string";
+   return {
+     content: [{ type: "text", text: contentText }],
+-    ...structuredContentField(record?.data),
++    ...(connectionResult ? {} : structuredContentField(record?.data)),
+     isError: pluginEnvelope && typeof record?.error === "string",
+   };
+ }
+-- 
+2.53.0
+

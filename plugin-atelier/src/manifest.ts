@@ -1,7 +1,7 @@
-import type { PaperclipPluginManifestV1 } from "@paperclipai/plugin-sdk";
+import type { PaperclipPluginManifestV1, PluginDatabaseCoreReadTable } from "@paperclipai/plugin-sdk";
 import { PLUGIN_ID, SLUG_ESPACE_BASE } from "./contrats/identifiants.js";
 import { ROUTES_API } from "./contrats/routes.js";
-import { DECLARATION_ETAT_FABRICATION, DECLARATION_FABRIQUER_DOCUMENT, DECLARATION_FABRIQUER_VIDEO } from "./contrats/fabrique-outils-schemas.js";
+import { DECLARATION_ETAT_FABRICATION, DECLARATION_FABRIQUER_DOCUMENT, DECLARATION_FABRIQUER_IMAGE, DECLARATION_FABRIQUER_VIDEO, DECLARATION_VOIR_RENDU } from "./contrats/fabrique-outils-schemas.js";
 import { EXPORTS_UI, ROUTE_ATELIER } from "./contrats/ui-constantes.js";
 
 /**
@@ -74,6 +74,13 @@ const manifest: PaperclipPluginManifestV1 = {
         title: "Clé privée d'approbation (Ed25519)",
         description:
           "Secret natif de Paperclip contenant la clé privée Ed25519 (PEM PKCS#8) qui signe les preuves d'approbation des diffusions réelles. La clé publique correspondante va dans PASSERELLE_APPROBATION_CLE_PUBLIQUE_FICHIER de la passerelle.",
+      },
+      reponsesJetonRef: {
+        type: "object",
+        format: "secret-ref",
+        title: "Jeton de lecture des références de la passerelle",
+        description:
+          "Secret natif de Paperclip contenant le jeton partagé (32 caractères au moins, par exemple `openssl rand -base64 32`) que le plugin présente à la passerelle pour reprendre la réponse d'un outil par sa référence. Le même texte va dans le fichier (0600) désigné par PASSERELLE_REPONSES_JETON_FICHIER. Sans lui, l'agent recopie la réponse complète.",
       },
       // Lot P9a (prospection, §4.3) : deux secrets natifs DISTINCTS. Sans eux, en mode réel, aucune donnée
       // personnelle n'est enregistrée ; en démonstration seulement, une clé dérivée sert à défaut.
@@ -181,11 +188,26 @@ const manifest: PaperclipPluginManifestV1 = {
         maxItems: 30,
         items: { type: "string", minLength: 1, maxLength: 64 },
       },
+      fabriqueAgentsImage: {
+        type: "array",
+        title: "Fabrique : agents autorisés à fabriquer des images",
+        description:
+          "Identifiants (UUID) des agents autorisés à utiliser l'outil fabriquer_image. Le champ « role » de Paperclip est trop grossier et n'est pas utilisé. Vide par défaut : tout est refusé.",
+        maxItems: 30,
+        items: { type: "string", minLength: 1, maxLength: 64 },
+      },
       fabriqueDossierFile: {
         type: "string",
         title: "Fabrique : dossier de la file",
         description: "Dossier de la file de la fabrique (sous-dossiers entrant/ et livrables/). Défaut /var/lib/atelier-fabrique.",
         maxLength: 300,
+      },
+      fabriqueDossiersRendus: {
+        type: "object",
+        title: "Fabrique : dossier de rendus de chaque relecteur",
+        description:
+          "Pour chaque agent autorisé à utiliser voir_rendu (identifiant UUID), le chemin absolu de son dossier « rendus », dans sa propre configuration Claude. Posé par le bootstrap de l'organisation. Vide par défaut : tout est refusé.",
+        additionalProperties: { type: "string", minLength: 1, maxLength: 400 },
       },
       connaissancesVoyageCle: {
         type: "object",
@@ -195,7 +217,7 @@ const manifest: PaperclipPluginManifestV1 = {
       },
     },
   },
-  tools: [DECLARATION_FABRIQUER_DOCUMENT, DECLARATION_FABRIQUER_VIDEO, DECLARATION_ETAT_FABRICATION],
+  tools: [DECLARATION_FABRIQUER_DOCUMENT, DECLARATION_FABRIQUER_VIDEO, DECLARATION_FABRIQUER_IMAGE, DECLARATION_ETAT_FABRICATION, DECLARATION_VOIR_RENDU],
   entrypoints: {
     worker: "./dist/worker.js",
     ui: "./dist/ui",
@@ -211,6 +233,10 @@ const manifest: PaperclipPluginManifestV1 = {
       "issue_documents",
       "issue_relations",
       "issue_comments",
+      // HUM-C4 : cartes en attente d'un humain, lues par direction.synthese (colonnes kind, status, destinataire, date).
+      // shortcut: table ouverte par le patch 0124 du socle, absente des types de @paperclipai/shared 2026.1023.0 (npm) ;
+      // retirer le cast quand le paquet lu par le plugin la contient.
+      "issue_thread_interactions" as PluginDatabaseCoreReadTable,
       "heartbeat_runs",
       "cost_events",
       "approvals",

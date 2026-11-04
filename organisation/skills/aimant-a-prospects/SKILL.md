@@ -1,6 +1,6 @@
 ---
 name: "aimant-a-prospects"
-description: "Conçoit un guide gratuit (aimant à prospects) remis en échange de coordonnées sur la page de captation : sujet utile à la cible, sommaire, promesse sans garantie de rendement (cadre de l'assurance belge, mentions FSMA si produit d'assurance), champ téléphone facultatif et justifié. À utiliser pour obtenir des coordonnées fournies par la personne elle-même via la connexion `captation` ; jamais de case pré-cochée ni de promesse de résultat."
+description: "Conçoit un guide gratuit (aimant à prospects) remis en échange de coordonnées sur la page de captation : sujet utile à la cible, sommaire, promesse sans garantie de rendement (cadre de l'assurance belge, mentions FSMA si produit d'assurance), formulaire de rappel de l'outil (téléphone obligatoire, e-mail facultatif), guide remis par l'humain. À utiliser pour obtenir des coordonnées fournies par la personne elle-même via la connexion `captation` ; jamais de case pré-cochée ni de promesse de résultat."
 metadata:
   version: "1.0.0"
   langue: "fr"
@@ -11,7 +11,7 @@ metadata:
 
 ## Quand l'utiliser
 
-- Une campagne a besoin de coordonnées (surtout e-mail, parfois téléphone) fournies librement par des personnes de la cible.
+- Une campagne a besoin de coordonnées (téléphone et, si la personne le veut, e-mail) fournies librement par des personnes de la cible.
 - Le client dispose d'un savoir-faire dont un guide court peut aider la cible, indépendamment de toute vente.
 - La connexion `captation` existe : page de destination à textes simples, consentement construit par le serveur, jamais pré-coché.
 
@@ -36,19 +36,19 @@ Concevoir un guide gratuit assez utile pour que la cible l'échange volontaireme
 1. **Choisir le sujet.** Un problème précis de la cible, résolu en 8 à 12 pages (liste de contrôle, comparatif de critères, calendrier d'échéances, erreurs courantes). Test : la personne l'utiliserait même si elle n'achète jamais.
 2. **Écrire la promesse.** Ce que le lecteur saura ou pourra faire après lecture, en termes vérifiables. Jamais de garantie de résultat, de rendement, d'économie chiffrée sans source, ni d'urgence artificielle. Produit d'assurance : indiquer le caractère informatif du guide, ne pas présenter un conseil personnalisé, faire figurer le nom, le numéro FSMA et les mentions obligatoires du courtier ou de l'entreprise (à confirmer avec le client et la conformité).
 3. **Établir le sommaire** : titre, promesse, introduction, 4 à 7 chapitres avec ce que chacun apporte, conclusion, prochaines étapes sans pression, mentions légales et sources.
-4. **Concevoir la page de captation** en textes simples : titre, trois lignes de bénéfices vrais, formulaire. Champs : prénom, e-mail (obligatoire) ; téléphone FACULTATIF, avec la phrase qui le justifie (« pour vous proposer un échange sur ce sujet, si vous le souhaitez ») et la mention qu'il peut rester vide. Consentement : texte clair construit par le serveur, case jamais pré-cochée, lien vers la politique de confidentialité, identité du responsable du traitement, finalité exacte, durée de conservation, droit de retrait.
-5. **Préparer la remise.** Le guide est livré après la saisie ; la personne reçoit un message de confirmation sans relance automatique non annoncée. Le téléphone saisi n'est utilisé que pour la finalité annoncée, après contrôle de la liste « Ne m'appelez plus ».
+4. **Concevoir la page de captation** en textes simples, avec l'outil `creer_page_destination` et l'`offre_type` `guide_gratuit` : titre, accroche, trois lignes de bénéfices vrais dans la description de l'offre, responsable du traitement et contact pour les droits. Le formulaire est celui de l'outil, sans autre choix : nom, téléphone obligatoire, e-mail facultatif, créneau préféré. L'accroche annonce donc que le guide est remis lors d'un rappel (« on vous rappelle pour vous remettre le guide ») ; jamais de promesse d'envoi automatique par e-mail. Le texte de la case de consentement est construit par le serveur (jamais pré-cochée) et ne vise que ce recontact pour remettre le guide : toute autre prospection (lettre d'information, offre) demande un accord distinct, jamais une condition du guide (RGPD, art. 7, § 4).
+5. **Préparer la remise.** Chaque envoi du formulaire crée une tâche « rappeler sous 24 h » pour la Prospection : le guide est remis par l'humain au rappel, par e-mail si la personne en a donné un, sinon par le moyen qu'elle choisit pendant l'appel. Aucune relance automatique ; le numéro saisi ne sert qu'à ce rappel, après contrôle de la liste « Ne m'appelez plus ».
 6. **Passer en conformité.** La page, le guide et le message de remise sont relus par la Conformité publicitaire (`controle-communications-reglementees`), puis une carte de décision humaine précède toute mise en ligne.
-7. **Prévoir la mesure** : nombre de visites, de saisies, de téléphones donnés, lecture du guide ; sans suivi intrusif. Le résultat sert la compétence `mesure-experiences`.
+7. **Prévoir la mesure** : nombre de visites, de saisies, d'e-mails donnés, lecture du guide ; sans suivi intrusif. Le résultat sert la compétence `mesure-experiences`.
 
 ## Livrable
 
-Fiche de l'aimant (sujet, cible, promesse, sommaire par chapitre avec sources à fournir), textes de la page de captation, message de remise, justification du champ téléphone, liste des mentions légales à confirmer, plan de mesure.
+Fiche de l'aimant (sujet, cible, promesse, sommaire par chapitre avec sources à fournir), textes de la page de captation, message de remise, phrase de l'accroche qui annonce le rappel, liste des mentions légales à confirmer, plan de mesure.
 
 ## Critères de réussite
 
 - Sujet utile en soi, promesse vérifiable, aucune garantie de résultat.
-- Téléphone facultatif, justifié, sans case pré-cochée ; consentement construit par le serveur.
+- Page alignée sur l'outil : téléphone obligatoire, e-mail facultatif, remise du guide annoncée au rappel ; case jamais pré-cochée, consentement construit par le serveur et limité à ce recontact.
 - Cadre assurance belge respecté : pas de promesse de rendement, mentions FSMA si produit d'assurance, à confirmer par la conformité.
 - Aucune mise en ligne sans carte de décision acceptée.
 
@@ -65,4 +65,4 @@ Fiche de l'aimant (sujet, cible, promesse, sommaire par chapitre avec sources à
 
 ## Exemple
 
-Sujet (fictif) : « Les douze échéances d'assurance et de paie d'un indépendant, mois par mois ». Promesse : « Un calendrier pour ne pas oublier une échéance ; ce guide informe et ne remplace pas un conseil personnalisé. » Champs : prénom, e-mail ; téléphone facultatif (« si vous voulez qu'on vous appelle pour en parler »).
+Sujet (fictif) : « Les douze échéances d'assurance et de paie d'un indépendant, mois par mois ». Promesse : « Un calendrier pour ne pas oublier une échéance ; ce guide informe et ne remplace pas un conseil personnalisé. » Accroche : « Laissez votre numéro, on vous rappelle pour vous remettre le calendrier. » Formulaire de l'outil : nom, téléphone, e-mail facultatif, créneau.

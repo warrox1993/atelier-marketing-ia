@@ -1,0 +1,183 @@
+/* Base commune des gabarits d'images (lot I1). Aucune ressource externe : les polices et le logo sont des fichiers
+   locaux, servis par la même origine que la page (font-src et img-src 'self'). Les couleurs et les polices viennent
+   de charte.css, écrit par la fabrique d'après la charte du registre : « Titre » (titres, chiffres), « Texte » (le
+   reste) et « Repli » (DejaVu Sans, pour tout glyphe absent).
+
+   Composition d'affiche : la tête (titre, chiffre) part du haut, le corps (détails, appel à l'action) se pose en bas,
+   les mentions ferment la page sous un filet fin. En bannière 1200x628, la tête et le corps passent sur deux colonnes.
+
+   Toutes les mesures sont des multiples de --u, un centième de la largeur de l'image : un gabarit garde ses
+   proportions dans les cinq formats. Les tailles de texte dépendent du format ET du palier de longueur
+   (data-titre, data-chiffre, data-sous, data-points : g, m ou p), posé par la fabrique ; la page n'a aucun script.
+   Sur un téléphone, 1080 pixels font environ 390 points : 3 --u donnent un texte d'environ 12 points, le plancher
+   choisi pour le texte courant.
+
+   Le texte ne doit jamais déborder au plafond de caractères (tests/test_images.py le rend en « W » dans chaque
+   gabarit, chaque format et chaque police) : en changeant une taille ici, relancer ce test. */
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+html[data-format="1080x1080"] { --l: 1080px; --h: 1080px; --u: 10.8px; }
+html[data-format="1080x1350"] { --l: 1080px; --h: 1350px; --u: 10.8px; }
+html[data-format="1440x1800"] { --l: 1440px; --h: 1800px; --u: 14.4px; }
+html[data-format="1080x1920"] { --l: 1080px; --h: 1920px; --u: 10.8px; }
+html[data-format="1200x628"]  { --l: 1200px; --h: 628px;  --u: 12px; }
+
+/* Carré. */
+html[data-format="1080x1080"] {
+  --cote: 7.4; --haut: 6.6; --bas: 5.8; --ecart: 2.2;
+  --titre-g: 12; --titre-m: 8.2; --titre-p: 5.6; --sous-g: 3.5; --sous-p: 3; --appel: 3.5;
+  --point-g: 3.7; --point-p: 2.85; --mentions: 1.85;
+  --chiffre-g: 20; --chiffre-m: 10.5; --chiffre-p: 8.5; --logo: 5.6;
+}
+/* Portrait 4:5 : plus de hauteur, mêmes largeurs. */
+html[data-format="1080x1350"], html[data-format="1440x1800"] {
+  --cote: 8; --haut: 8.4; --bas: 7.4; --ecart: 3;
+  --titre-g: 13; --titre-m: 9.2; --titre-p: 6.6; --sous-g: 3.8; --sous-p: 3.2; --appel: 3.8;
+  --point-g: 4; --point-p: 3.3; --mentions: 2;
+  --chiffre-g: 21; --chiffre-m: 14; --chiffre-p: 9.5; --logo: 6.5;
+}
+/* Story : le haut (environ 250 pixels) et le bas (environ 340) sont recouverts par l'interface de l'application ;
+   le contenu tient dans la zone sûre, qui a presque la forme d'un 4:5. */
+html[data-format="1080x1920"] {
+  --cote: 8; --haut: 23.5; --bas: 31.5; --ecart: 3.2;
+  --titre-g: 13.6; --titre-m: 10.4; --titre-p: 6.9; --sous-g: 4; --sous-p: 3.3; --appel: 4;
+  --point-g: 4.2; --point-p: 3.4; --mentions: 2.1;
+  --chiffre-g: 21; --chiffre-m: 15; --chiffre-p: 10.4; --logo: 7.5;
+}
+/* Bannière 1,91:1 : peu de hauteur, deux colonnes. */
+html[data-format="1200x628"] {
+  --cote: 5; --haut: 4.4; --bas: 3.8; --ecart: 1.5;
+  --titre-g: 7; --titre-m: 5.4; --titre-p: 3.8; --sous-g: 2.1; --sous-p: 1.65; --appel: 2.1;
+  --point-g: 2.2; --point-p: 1.7; --mentions: 1.05; --logo: 3.4;
+  --chiffre-g: 11; --chiffre-m: 8.5; --chiffre-p: 5;
+}
+
+html[data-titre="g"] { --t-titre: var(--titre-g); }
+html[data-titre="m"] { --t-titre: var(--titre-m); }
+html[data-titre="p"] { --t-titre: var(--titre-p); }
+html[data-chiffre="g"] { --t-chiffre: var(--chiffre-g); }
+html[data-chiffre="m"] { --t-chiffre: var(--chiffre-m); }
+html[data-chiffre="p"] { --t-chiffre: var(--chiffre-p); }
+html[data-sous="g"] { --t-sous: var(--sous-g); }
+html[data-sous="p"] { --t-sous: var(--sous-p); }
+html[data-points="g"] { --t-point: var(--point-g); }
+html[data-points="p"] { --t-point: var(--point-p); }
+/* Densité de la page (palier de charge, calculé par la fabrique) : plus la page porte de texte, plus elle se resserre
+   (--k pour le texte secondaire, --kt pour titres et chiffres, --km pour les mentions). */
+html { --k: 1; --kt: 1; --km: 1; }
+html[data-charge="m"] { --k: 0.9; --kt: 0.9; }
+html[data-charge="p"] { --k: 0.74; --kt: 0.7; --km: 0.82; }
+
+/* Réglages par police : la grotesque se resserre (chasse étroite, graisse forte), le titrage à empattements reste
+   à sa chasse et prend une graisse plus mesurée ; DejaVu, très large, reste en gras simple. */
+html { --titre-graisse: 700; --titre-chasse: 100%; --titre-interlettre: -0.02em; --titre-interligne: 1.04;
+       --chiffre-graisse: 700; --texte-chasse: 100%; --appel-graisse: 700; }
+html[data-police="archivo"] { --titre-graisse: 780; --titre-chasse: 84%; --titre-interlettre: -0.015em;
+                              --titre-interligne: 0.98; --chiffre-graisse: 820; --appel-graisse: 640; }
+html[data-police="source-serif"] { --titre-graisse: 640; --titre-interlettre: -0.012em; --titre-interligne: 1.02;
+                                   --chiffre-graisse: 620; --appel-graisse: 640; }
+
+html, body {
+  width: var(--l);
+  height: var(--h);
+  overflow: hidden;
+  background: var(--fond);
+  color: var(--texte);
+  font-family: "Texte", "Repli";
+  font-stretch: var(--texte-chasse);
+  font-kerning: normal;
+  font-variant-numeric: lining-nums;
+  text-rendering: geometricPrecision;
+  hyphens: manual;
+}
+
+#page {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  padding: calc(var(--u) * var(--haut)) calc(var(--u) * var(--cote)) calc(var(--u) * var(--bas));
+  overflow-wrap: anywhere;
+}
+
+#entete { flex: none; padding-bottom: calc(var(--u) * var(--ecart)); }
+#entete:empty { display: none; }
+#logo { display: block; height: calc(var(--u) * var(--logo)); max-width: calc(var(--u) * 30); width: auto; object-fit: contain; object-position: left center; }
+
+/* Le contenu occupe la hauteur restante : la tête en haut, le corps poussé en bas par sa marge automatique. S'il
+   n'y a pas la place, le contenu déborde par le bas (clip) et le témoin de fin de contenu disparaît. */
+#contenu { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
+.tete, .corps { flex: none; display: flex; flex-direction: column; }
+.corps { margin-top: auto; padding-top: calc(var(--u) * var(--ecart) * 1.4); }
+/* Sans corps (accroche réduite à son titre), la tête descend et s'appuie sur les mentions. */
+#contenu:not(:has(.corps > :not(:empty))) .tete { margin-top: auto; }
+#temoin { display: block; flex: none; width: 100%; height: 3px; background: var(--temoin); }
+
+/* Bannière : la tête à gauche, le corps à droite, tous deux posés sur la même ligne de pied. */
+html[data-format="1200x628"] #contenu {
+  display: grid;
+  grid-template-columns: minmax(0, 1.45fr) minmax(0, 1fr);
+  grid-template-rows: 1fr auto;
+  column-gap: calc(var(--u) * 4.5);
+  align-items: end;
+}
+html[data-format="1200x628"] .corps { margin-top: 0; padding-top: 0; }
+html[data-format="1200x628"] #temoin { grid-column: 1 / -1; }
+
+#pied { flex: none; display: flex; flex-direction: column; gap: calc(var(--u) * 0.7); }
+#pied:has(> :not(:empty)) {
+  margin-top: calc(var(--u) * var(--ecart));
+  padding-top: calc(var(--u) * var(--ecart) * 0.7);
+  border-top: 1px solid color-mix(in srgb, var(--texte) 24%, var(--fond));
+}
+#mentions { font-size: calc(var(--u) * var(--mentions) * var(--km)); line-height: 1.35; color: color-mix(in srgb, var(--texte) 74%, var(--fond)); text-wrap: pretty; }
+#mention-ia { font-size: calc(var(--u) * var(--mentions) * var(--km)); line-height: 1.35; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--texte); }
+#mentions:empty { display: none; }
+
+.filet { display: block; flex: none; width: calc(var(--u) * 7); height: calc(var(--u) * 0.7); background: var(--accent); margin-bottom: calc(var(--u) * var(--ecart)); }
+
+#titre, #chiffre { font-family: "Titre", "Repli"; }
+#titre {
+  font-size: calc(var(--u) * var(--t-titre) * var(--kt));
+  font-weight: var(--titre-graisse);
+  font-stretch: var(--titre-chasse);
+  line-height: var(--titre-interligne);
+  letter-spacing: var(--titre-interlettre);
+  text-wrap: balance;
+}
+#chiffre {
+  font-size: calc(var(--u) * var(--t-chiffre) * var(--kt));
+  font-weight: var(--chiffre-graisse);
+  font-stretch: var(--titre-chasse);
+  font-variant-numeric: lining-nums tabular-nums;
+  line-height: 0.9;
+  letter-spacing: -0.03em;
+  color: var(--accent);
+}
+#chiffre:empty { display: none; }
+#sous-titre {
+  font-size: calc(var(--u) * var(--t-sous) * var(--k));
+  line-height: 1.32;
+  color: color-mix(in srgb, var(--texte) 84%, var(--fond));
+  text-wrap: pretty;
+  max-width: 34em;
+}
+#appel {
+  font-size: calc(var(--u) * var(--appel) * var(--k));
+  font-weight: var(--appel-graisse);
+  line-height: 1.2;
+  color: var(--accent);
+  text-wrap: balance;
+}
+#sous-titre:empty, #appel:empty { display: none; }
+
+/* Illustration IA en fond plein cadre (facultative : sans <img id="fond">, rien ci-dessous ne s'applique). Le voile
+   sombre (--voile, charte.css) passe sous la tête et sous le corps et s'éclaircit au milieu, où l'illustration se voit ;
+   la bannière, où tout le texte est près du bas, est voilée d'un seul tenant. Le texte passe au blanc (le mélange des
+   textes secondaires se fait avec --fond, mis au blanc ici pour qu'ils restent blancs) et l'accent à --accent-fond.
+   Le contraste de 4,5:1 est tenu sur le pire fond, une illustration toute blanche (images.pire_fond, testé). */
+#fond { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+#voile { position: absolute; inset: 0; background: linear-gradient(to bottom, var(--voile) 0, var(--voile) 38%, transparent 56%, transparent 58%, var(--voile) 74%, var(--voile) 100%); }
+html[data-format="1200x628"] #voile { background: var(--voile); }
+body:has(#fond) { --texte: #ffffff; --fond: #ffffff; --accent: var(--accent-fond); }

@@ -1,0 +1,514 @@
+From d313ce7ad2e7931f5cd97cc554a437b0c6b387aa Mon Sep 17 00:00:00 2001
+From: Jean-Baptiste Dhondt <114347858+warrox1993@users.noreply.github.com>
+Date: Fri, 30 Oct 2026 16:36:21 +0100
+Subject: [PATCH 144/148] =?UTF-8?q?test(consignes):=20r=C3=A9visions=20et?=
+ =?UTF-8?q?=20outils=20de=20consignes=20align=C3=A9s=20sur=20AFD-C1=20et?=
+ =?UTF-8?q?=20AFA-SEC-2?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Constats AFD-C1 (un agent ne modifie aucune consigne, les siennes comprises) et AFA-SEC-2
+(un agent ne lit pas les consignes d'un pair), patchs 0108 et 0110.
+- agent-instruction-revisions : la mécanique (jetons de contenu, CAS, remplacement atomique,
+  liens symboliques, entrée héritée) passe par le board ; l'agent reçoit les refus exacts
+  (message et raison) en lecture et en écriture, même avec un grant ciblé ; les contrôles
+  d'identité responsable et de clé révoquée gardent leur message et leur code ; l'approbation
+  acceptée n'est jamais consommée ; le board hors portée reçoit deny_scope ; CAS du board : 409.
+- agent-instruction-tools (runner) : lecture d'un pair et écriture refusées dans la réservation,
+  sans trace de tentative, sans reçu, sans écriture de fichier ni révision, reprises comprises.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01EThpSSDGc5NRYwbgjNqoTJ
+---
+ .../agent-instruction-revisions.test.ts       |  91 +++++----
+ ...gent-instruction-tools.integration.test.ts | 193 ++++++++----------
+ 2 files changed, 135 insertions(+), 149 deletions(-)
+
+diff --git a/server/src/__tests__/agent-instruction-revisions.test.ts b/server/src/__tests__/agent-instruction-revisions.test.ts
+index 6d2a516cb2..be40687ce7 100644
+--- a/server/src/__tests__/agent-instruction-revisions.test.ts
++++ b/server/src/__tests__/agent-instruction-revisions.test.ts
+@@ -22,6 +22,11 @@ describe("canonical instruction revisions", () => {
+   let home: string;
+   let companyId: string, agentId: string, userId: string, actorId: string, runId: string, root: string;
+   let actor: AuthorizationActor;
++  // Atelier (AFD-C1 et AFA-SEC-2, patchs 0108 et 0110) : un agent ne modifie aucune consigne, les siennes comprises,
++  // et ne lit pas celles d'un pair ; le board lit et enregistre. Les tests de mécanique passent donc par le board.
++  let board: AuthorizationActor;
++  const refusEcriture = { status: 403, message: "Atelier : seul un humain modifie la configuration, les consignes ou les skills d'un agent.", details: { reason: "deny_policy_restricted" } };
++  const refusLecturePair = { status: 403, message: "Atelier : un agent ne lit que sa propre configuration.", details: { reason: "deny_policy_restricted" } };
+   const entryFile = "policy/INSTRUCTIONS.txt";
+   const initial = "\uFEFF# Original\r\n☃\0\n";
+   beforeAll(async () => {
+@@ -56,13 +61,14 @@ describe("canonical instruction revisions", () => {
+     ]);
+     await db.insert(heartbeatRuns).values({ id: runId, companyId, agentId: actorId, invocationSource: "on_demand", responsibleUserId: userId });
+     actor = { type: "agent", companyId, agentId: actorId, runId, source: "agent_jwt" };
++    board = { type: "board", userId, source: "session" };
+     await fs.mkdir(path.dirname(path.join(root, entryFile)), { recursive: true });
+     await fs.writeFile(path.join(root, entryFile), initial);
+   });
+   const target = () => ({ companyId, agentId });
+-  async function base() { return (await service.readCurrent(target(), actor))!; }
+-  async function save(content: string, baseRevisionId: string | null) {
+-    return service.commit({ ...target(), entryFile, content, baseRevisionId, source: "cleanup" }, actor);
++  async function base() { return (await service.readCurrent(target(), board))!; }
++  async function save(content: string, baseRevisionId: string | null, who: AuthorizationActor = board) {
++    return service.commit({ ...target(), entryFile, content, baseRevisionId, source: "cleanup" }, who);
+   }
+   it.each(["current", "history", "revision", "diff", "candidates"])("denies peer %s reads without a configuration grant or responsible-user target access", async (operation) => {
+     const first = await base();
+@@ -74,30 +80,32 @@ describe("canonical instruction revisions", () => {
+       if (operation === "diff") return service.diff({ ...target(), entryFile, fromRevisionId: first.revision.id, toRevisionId: first.revision.id }, actor);
+       return agentInstructionWorkingCopyService(db).list(companyId, agentId, actor);
+     };
+-    await expect(read()).rejects.toMatchObject({ status: 403 });
++    await expect(read()).rejects.toMatchObject(refusLecturePair);
+     await db.insert(principalPermissionGrants).values({ companyId, principalType: "user", principalId: userId, permissionKey: "agents:configure", scope: { agentIds: [actorId] } });
+-    await expect(read()).rejects.toMatchObject({ status: 403 });
++    await expect(read()).rejects.toMatchObject(refusLecturePair);
+   });
+-  it.each(["current", "history", "revision", "diff", "candidates", "write"])("requires the caller's own target-scoped grant for peer %s access", async (operation) => {
++  it.each(["current", "history", "revision", "diff", "candidates", "write"])("refuses peer %s access to the agent even with its own target-scoped grant, and lets the board through", async (operation) => {
+     const first = await base();
+     await db.delete(principalPermissionGrants).where(eq(principalPermissionGrants.principalId, actorId));
+-    const access = () => {
+-      if (operation === "current") return service.readCurrent(target(), actor);
+-      if (operation === "history") return service.history({ ...target(), entryFile }, actor);
+-      if (operation === "revision") return service.readRevision({ ...target(), entryFile, revisionId: first.revision.id }, actor);
+-      if (operation === "diff") return service.diff({ ...target(), entryFile, fromRevisionId: first.revision.id, toRevisionId: first.revision.id }, actor);
+-      if (operation === "write") return save("authorized peer edit", first.revision.id);
+-      return agentInstructionWorkingCopyService(db).list(companyId, agentId, actor);
++    const access = (who: AuthorizationActor) => {
++      if (operation === "current") return service.readCurrent(target(), who);
++      if (operation === "history") return service.history({ ...target(), entryFile }, who);
++      if (operation === "revision") return service.readRevision({ ...target(), entryFile, revisionId: first.revision.id }, who);
++      if (operation === "diff") return service.diff({ ...target(), entryFile, fromRevisionId: first.revision.id, toRevisionId: first.revision.id }, who);
++      if (operation === "write") return save("authorized peer edit", first.revision.id, who);
++      return agentInstructionWorkingCopyService(db).list(companyId, agentId, who);
+     };
++    const refus = operation === "write" ? refusEcriture : refusLecturePair;
+     // The responsible user retains permission on the target throughout.
+-    await expect(access()).rejects.toMatchObject({ status: 403 });
++    await expect(access(actor)).rejects.toMatchObject(refus);
+     await db.insert(principalPermissionGrants).values({ companyId, principalType: "agent", principalId: actorId, permissionKey: "agents:configure", scope: { agentIds: [actorId] } });
+-    await expect(access()).rejects.toMatchObject({ status: 403 });
++    await expect(access(actor)).rejects.toMatchObject(refus);
+     await db.update(principalPermissionGrants).set({ scope: { agentIds: [agentId] } }).where(eq(principalPermissionGrants.principalId, actorId));
++    await expect(access(actor)).rejects.toMatchObject(refus);
+     // New saves have no historical revision row; authorized history lookups
+     // reach the normal not-found response rather than an authorization denial.
+-    if (operation === "revision" || operation === "diff") await expect(access()).rejects.toMatchObject({ status: 404 });
+-    else await expect(access()).resolves.toBeDefined();
++    if (operation === "revision" || operation === "diff") await expect(access(board)).rejects.toMatchObject({ status: 404 });
++    else await expect(access(board)).resolves.toBeDefined();
+   });
+   it("allows self and board reads without requiring instruction edit permission", async () => {
+     await db.delete(principalPermissionGrants).where(eq(principalPermissionGrants.principalId, userId));
+@@ -114,7 +122,7 @@ describe("canonical instruction revisions", () => {
+     expect(saved).toMatchObject({ changed: true, materialization: "current" });
+     expect(await fs.readFile(path.join(root, entryFile), "utf8")).toBe(saved.content);
+     expect((await save(saved.content, first.revision.id)).changed).toBe(false);
+-    expect((await service.history({ ...target(), entryFile }, actor)).revisions).toHaveLength(0);
++    expect((await service.history({ ...target(), entryFile }, board)).revisions).toHaveLength(0);
+     expect(await db.select().from(agentInstructionRevisions).where(eq(agentInstructionRevisions.agentId, agentId))).toHaveLength(0);
+   });
+   it("requires a matching initial content token and serializes competing saves", async () => {
+@@ -135,37 +143,41 @@ describe("canonical instruction revisions", () => {
+     expect((await base()).content).toBe(initial);
+     expect((await save("new content", first.revision.id)).content).toBe("new content");
+   });
+-  it("allows authorized peer edits but rejects missing, forged and revoked responsible identity", async () => {
++  it("refuses peer edits by the agent and still rejects missing, forged and revoked responsible identity first", async () => {
+     const first = await base();
+-    await save("peer save", first.revision.id);
+-    await expect(service.commit({ ...target(), entryFile, content: "forged", baseRevisionId: first.revision.id, source: "tool" }, { ...actor, onBehalfOfUserId: "forged" })).rejects.toMatchObject({ status: 403 });
++    await expect(save("peer save", first.revision.id, actor)).rejects.toMatchObject(refusEcriture);
++    await expect(service.commit({ ...target(), entryFile, content: "forged", baseRevisionId: first.revision.id, source: "tool" }, { ...actor, onBehalfOfUserId: "forged" })).rejects.toMatchObject({ status: 403, message: "A current server-bound responsible user is required", details: { code: "INSTRUCTION_IDENTITY_INVALID" } });
+     await db.update(heartbeatRuns).set({ responsibleUserId: null }).where(eq(heartbeatRuns.id, runId));
+-    await expect(save("missing", first.revision.id)).rejects.toMatchObject({ status: 403 });
++    await expect(save("missing", first.revision.id, actor)).rejects.toMatchObject({ status: 403, message: "A current server-bound responsible user is required", details: { code: "INSTRUCTION_IDENTITY_INVALID" } });
+     await db.update(heartbeatRuns).set({ responsibleUserId: userId }).where(eq(heartbeatRuns.id, runId));
+     await db.update(companyMemberships).set({ status: "suspended" }).where(and(eq(companyMemberships.principalId, userId), eq(companyMemberships.companyId, companyId)));
+-    await expect(save("revoked", first.revision.id)).rejects.toMatchObject({ status: 403 });
++    await expect(save("revoked", first.revision.id, actor)).rejects.toMatchObject({ status: 403, message: "The responsible user is unavailable in this company", details: { code: "RESPONSIBLE_USER_UNAVAILABLE" } });
++    expect(await fs.readFile(path.join(root, entryFile), "utf8")).toBe(initial);
+   });
+   it("rechecks user target scope and agent containment, even with shadow authorization enabled", async () => {
+     const first = await base();
+     const previousShadow = process.env.PAPERCLIP_RESPONSIBLE_USER_AUTHZ_SHADOW;
+     process.env.PAPERCLIP_RESPONSIBLE_USER_AUTHZ_SHADOW = "true";
+     await db.update(principalPermissionGrants).set({ scope: { agentIds: [actorId] } }).where(eq(principalPermissionGrants.principalId, userId));
+-    await expect(save("denied", first.revision.id)).rejects.toMatchObject({ status: 403 });
++    await expect(save("denied", first.revision.id, actor)).rejects.toMatchObject(refusEcriture);
++    await expect(save("denied", first.revision.id, board)).rejects.toMatchObject({ status: 403, message: "Permission agents:configure does not cover the requested scope.", details: { reason: "deny_scope" } });
+     await db.update(principalPermissionGrants).set({ scope: null }).where(eq(principalPermissionGrants.principalId, userId));
+     await db.update(agents).set({ permissions: { trustPreset: "low_trust_review" } }).where(eq(agents.id, actorId));
+-    await expect(save("restricted", first.revision.id)).rejects.toMatchObject({ status: 403 });
++    await expect(save("restricted", first.revision.id, actor)).rejects.toMatchObject(refusEcriture);
++    expect(await fs.readFile(path.join(root, entryFile), "utf8")).toBe(initial);
+     if (previousShadow === undefined) delete process.env.PAPERCLIP_RESPONSIBLE_USER_AUTHZ_SHADOW; else process.env.PAPERCLIP_RESPONSIBLE_USER_AUTHZ_SHADOW = previousShadow;
+   });
+   it("keeps suggest-only protected-change consent and explicit configure scope restrictions", async () => {
+     const first = await base();
+     await db.delete(principalPermissionGrants).where(eq(principalPermissionGrants.principalId, actorId));
+     await db.insert(principalPermissionGrants).values({ companyId, principalType: "agent", principalId: actorId, permissionKey: "agents:suggest-changes" });
+-    await expect(save("needs approval", first.revision.id)).rejects.toMatchObject({ status: 403 });
++    await expect(save("needs approval", first.revision.id, actor)).rejects.toMatchObject(refusEcriture);
+     await db.delete(principalPermissionGrants).where(eq(principalPermissionGrants.principalId, actorId));
+     await db.insert(principalPermissionGrants).values({ companyId, principalType: "agent", principalId: actorId, permissionKey: "agents:configure", scope: { agentIds: [actorId] } });
+-    await expect(save("out of scope", first.revision.id)).rejects.toMatchObject({ status: 403 });
++    await expect(save("out of scope", first.revision.id, actor)).rejects.toMatchObject(refusEcriture);
++    expect(await fs.readFile(path.join(root, entryFile), "utf8")).toBe(initial);
+   });
+-  it("consumes accepted protected-change approval only with a successful CAS commit", async () => {
++  it("never consumes an accepted protected-change approval, because the agent commit is refused", async () => {
+     const first = await base();
+     const sourceRunId = randomUUID(), issueId = randomUUID(), interactionId = randomUUID();
+     await db.insert(heartbeatRuns).values({ id: sourceRunId, companyId, agentId: actorId, status: "succeeded" });
+@@ -176,21 +188,22 @@ describe("canonical instruction revisions", () => {
+       payload: { version: 1, prompt: "Apply the instruction change?", detailsMarkdown: "```diff\n+approved\n```", target: { type: "custom", key: `agent:${agentId}:instructions`, revisionId: "proposal" } },
+       result: { version: 1, outcome: "accepted" }, resolvedByUserId: userId, resolvedAt: new Date(),
+     });
+-    expect((await service.readCurrent(target(), actor))?.revision.id).toBe(first.revision.id);
++    expect((await service.readCurrent(target(), board))?.revision.id).toBe(first.revision.id);
++    await expect(service.readCurrent(target(), actor)).rejects.toMatchObject(refusLecturePair);
+     expect((await db.select().from(issueThreadInteractions).where(eq(issueThreadInteractions.id, interactionId)))[0].result).not.toHaveProperty("consumedAt");
+-    await expect(save("approved", randomUUID())).rejects.toMatchObject({ status: 409 });
++    await expect(save("approved", randomUUID(), actor)).rejects.toMatchObject(refusEcriture);
+     expect((await db.select().from(issueThreadInteractions).where(eq(issueThreadInteractions.id, interactionId)))[0].result).not.toHaveProperty("consumedAt");
+-    const receipt = await save("approved", first.revision.id);
+-    expect(receipt.changed).toBe(true);
+-    expect((await db.select().from(issueThreadInteractions).where(eq(issueThreadInteractions.id, interactionId)))[0].result).toMatchObject({ consumedByRunId: runId });
+-    await expect(save("another unapproved change", receipt.revision.id)).rejects.toMatchObject({ status: 403 });
++    await expect(save("approved", first.revision.id, actor)).rejects.toMatchObject(refusEcriture);
++    expect((await db.select().from(issueThreadInteractions).where(eq(issueThreadInteractions.id, interactionId)))[0].result).not.toHaveProperty("consumedAt");
++    expect((await db.select().from(issueThreadInteractions).where(eq(issueThreadInteractions.id, interactionId)))[0].result).not.toHaveProperty("consumedByRunId");
++    expect(await fs.readFile(path.join(root, entryFile), "utf8")).toBe(initial);
+   });
+   it("shares head/CAS and attribution between board and agent writers", async () => {
+     const first = await base();
+-    const board = { type: "board", userId, source: "session" } as const;
+     const saved = await service.commit({ ...target(), entryFile, content: "board edit", baseRevisionId: first.revision.id, source: "board" }, board);
+     expect(saved.revision).toMatchObject({ actorUserId: userId, responsibleUserId: userId, actorAgentId: null, sourceRunId: null, source: "api" });
+-    await expect(save("stale agent edit", first.revision.id)).rejects.toMatchObject({ status: 409 });
++    await expect(save("stale agent edit", first.revision.id, actor)).rejects.toMatchObject(refusEcriture);
++    await expect(save("stale board edit", first.revision.id, board)).rejects.toMatchObject({ status: 409 });
+   });
+   it("seeds a nested legacy managed entry and never imports a different AGENTS.md", async () => {
+     await fs.writeFile(path.join(root, "AGENTS.md"), "unrelated");
+@@ -199,16 +212,16 @@ describe("canonical instruction revisions", () => {
+     expect(first.content).toBe(initial);
+     expect(first.revision.entryFile).toBe(entryFile);
+     await db.update(agents).set({ adapterConfig: { instructionsBundleMode: "managed", instructionsRootPath: root, instructionsEntryFile: "missing.md" } }).where(eq(agents.id, agentId));
+-    expect(await service.readCurrent(target(), actor)).toBeNull();
++    expect(await service.readCurrent(target(), board)).toBeNull();
+     await expect(save("wrong entry", first.revision.id)).rejects.toMatchObject({ status: 409, details: { code: "INSTRUCTION_ENTRY_CHANGED" } });
+   });
+   it("rejects cross-company targets, foreign revisions, and revoked API keys", async () => {
+     const first = await base();
+-    await expect(service.readRevision({ ...target(), entryFile, revisionId: randomUUID() }, actor)).rejects.toMatchObject({ status: 404 });
++    await expect(service.readRevision({ ...target(), entryFile, revisionId: randomUUID() }, board)).rejects.toMatchObject({ status: 404 });
+     await expect(service.readCurrent({ companyId: randomUUID(), agentId }, actor)).rejects.toMatchObject({ status: 404 });
+     const keyId = randomUUID();
+     await db.insert(agentApiKeys).values({ id: keyId, companyId, agentId: actorId, name: "test", keyHash: randomUUID(), responsibleUserId: userId, revokedAt: new Date() });
+-    await expect(service.commit({ ...target(), entryFile, content: "key", baseRevisionId: first.revision.id, source: "api" }, { ...actor, keyId })).rejects.toMatchObject({ status: 403 });
++    await expect(service.commit({ ...target(), entryFile, content: "key", baseRevisionId: first.revision.id, source: "api" }, { ...actor, keyId })).rejects.toMatchObject({ status: 403, message: "Instruction API key is missing or revoked", details: { code: "INSTRUCTION_IDENTITY_INVALID" } });
+     await expect(db.insert(agentInstructionHeads).values({ companyId: randomUUID(), agentId, entryFile, revisionId: first.revision.id })).rejects.toThrow();
+   });
+   it("rejects invalid content, symlinks, traversal and external bundles without changing canonical bytes", async () => {
+diff --git a/server/src/services/native-runtime/agent-instruction-tools.integration.test.ts b/server/src/services/native-runtime/agent-instruction-tools.integration.test.ts
+index 8bcebc91d3..77ee7f2fd6 100644
+--- a/server/src/services/native-runtime/agent-instruction-tools.integration.test.ts
++++ b/server/src/services/native-runtime/agent-instruction-tools.integration.test.ts
+@@ -1,12 +1,13 @@
+ import fs from "node:fs/promises";
+ import os from "node:os";
+ import path from "node:path";
+-import { createHash, randomUUID } from "node:crypto";
++import { randomUUID } from "node:crypto";
+ import { eq, sql } from "drizzle-orm";
+ import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+ import { activityLog, agents, authUsers, companies, companyMemberships, principalPermissionGrants, heartbeatRuns, issues, agentInstructionRevisions, createDb } from "@paperclipai/db";
+ import { startEmbeddedPostgresTestDatabase } from "../../__tests__/helpers/embedded-postgres.js";
+ import { resolveManagedInstructionsRoot } from "../agent-instructions.js";
++import { agentInstructionRevisionService } from "../agent-instruction-revisions.js";
+ import { PaperclipRunnerToolAuthority } from "./paperclip-runner-tool-authority.js";
+ 
+ describe("canonical instruction tools through native authority", () => {
+@@ -54,72 +55,72 @@ describe("canonical instruction tools through native authority", () => {
+     await fs.writeFile(path.join(root, entryFile), original);
+   });
+   const call = (tool: string, args: Record<string, unknown> = {}) => authority.execute({ tool, callId: randomUUID(), arguments: { targetAgentId, ...args } }) as Promise<any>;
+-  it("bridges old native instruction tools to current files without writing history", async () => {
+-    const first = await call("read_agent_instructions");
+-    expect(first).toMatchObject({ entryFile, content: original });
+-    const changed = await call("update_agent_instructions", { entryFile, content: "changed\r\n", baseRevisionId: first.revision.id });
+-    expect(changed.revision).toMatchObject({ responsibleUserId: userId, actorAgentId: agentId, sourceRunId: runId });
+-    expect((await call("get_agent_instruction_history", { entryFile })).revisions).toHaveLength(0);
+-    expect(await fs.readFile(path.join(root, entryFile), "utf8")).toBe("changed\r\n");
+-    await expect(call("update_agent_instructions", { entryFile, content: "stale", baseRevisionId: first.revision.id })).rejects.toMatchObject({ status: 409 });
+-    expect((await call("read_agent_instructions")).content).toBe("changed\r\n");
++  // Atelier (AFD-C1 et AFA-SEC-2, patchs 0108 et 0110) : un agent ne lit pas les consignes d'un pair et n'écrit
++  // aucune consigne. Le refus tombe dans la réservation, avant toute trace de tentative, tout reçu et tout fichier :
++  // les mécaniques de reçu et de reprise ne s'appliquent donc plus à un agent. Le board lit et écrit par le service.
++  const refusEcriture = { status: 403, message: "Atelier : seul un humain modifie la configuration, les consignes ou les skills d'un agent.", details: { reason: "deny_policy_restricted" } };
++  const refusLecturePair = { status: 403, message: "Atelier : un agent ne lit que sa propre configuration.", details: { reason: "deny_policy_restricted" } };
++  const lireCommeBoard = async () => (await agentInstructionRevisionService(db).readCurrent(
++    { companyId, agentId: targetAgentId }, { type: "board", userId, source: "session" }))!;
++  async function sansTentativeNiEcriture() {
++    const [run] = await db.select().from(heartbeatRuns).where(eq(heartbeatRuns.id, runId));
++    expect((run!.resultJson as any)?.instructionToolAttempts).toBeUndefined();
++    expect((run!.resultJson as any)?.semanticToolReceipts).toBeUndefined();
++    const audit = await db.select().from(activityLog).where(eq(activityLog.runId, runId));
++    expect(audit.filter((event) => event.action === "agent.instruction_write_attempted" || event.action === "agent.files_updated")).toEqual([]);
++    expect(await fs.readFile(path.join(root, entryFile), "utf8")).toBe(original);
++    expect(await db.select().from(agentInstructionRevisions).where(eq(agentInstructionRevisions.agentId, targetAgentId))).toHaveLength(0);
++  }
++  function compterEcritures() {
++    const originalRename = fs.rename.bind(fs);
++    const compteur = { writes: 0 };
++    const spy = vi.spyOn(fs, "rename").mockImplementation(async (source, destination) => {
++      if (destination === path.join(root, entryFile)) compteur.writes++;
++      return originalRename(source, destination);
++    });
++    return { compteur, spy };
++  }
++  it("refuses the old native instruction tools on a peer: no read, no write, no history", async () => {
++    await expect(call("read_agent_instructions")).rejects.toMatchObject(refusLecturePair);
++    const first = await lireCommeBoard();
++    expect(first).toMatchObject({ revision: { entryFile }, content: original });
++    await expect(call("update_agent_instructions", { entryFile, content: "changed\r\n", baseRevisionId: first.revision.id })).rejects.toMatchObject(refusEcriture);
++    await expect(call("get_agent_instruction_history", { entryFile })).rejects.toMatchObject(refusLecturePair);
++    await expect(call("update_agent_instructions", { entryFile, content: "stale", baseRevisionId: first.revision.id })).rejects.toMatchObject(refusEcriture);
++    expect((await lireCommeBoard()).content).toBe(original);
++    await sansTentativeNiEcriture();
+   });
+-  it("serializes duplicate writes at the filesystem commit and replays the exact receipt after restart", async () => {
+-    const first = await call("read_agent_instructions");
++  it("refuses duplicate and replayed writes before the filesystem commit, after restart too", async () => {
++    const first = await lireCommeBoard();
+     const content = "\uFEFF# Instructions — 日本語 🦀\r\n".repeat(600) + "\nFINAL TAIL\n";
+     const request = { tool: "update_agent_instructions", callId: randomUUID(), arguments: {
+       targetAgentId, entryFile, content, baseRevisionId: first.revision.id,
+     } };
+-    const originalRename = fs.rename.bind(fs);
+-    let reached!: () => void, release!: () => void;
+-    const atCommit = new Promise<void>((resolve) => { reached = resolve; });
+-    const barrier = new Promise<void>((resolve) => { release = resolve; });
+-    let writes = 0;
+-    const spy = vi.spyOn(fs, "rename").mockImplementation(async (source, destination) => {
+-      if (destination === path.join(root, entryFile)) {
+-        writes++;
+-        reached();
+-        await barrier;
+-      }
+-      return originalRename(source, destination);
+-    });
++    const { compteur, spy } = compterEcritures();
+     try {
+-      const pending = authority.execute(request);
+-      await atCommit;
+-      const duplicate = new PaperclipRunnerToolAuthority(db, { companyId, agentId, issueId, runId }).execute(request);
+-      expect(await fs.readFile(path.join(root, entryFile), "utf8")).toBe(original);
+-      release();
+-      const receipt = await pending as any;
+-      expect(await duplicate).toEqual(receipt);
++      const results = await Promise.allSettled([authority.execute(request),
++        new PaperclipRunnerToolAuthority(db, { companyId, agentId, issueId, runId }).execute(request)]);
++      expect(results).toMatchObject([{ status: "rejected", reason: refusEcriture }, { status: "rejected", reason: refusEcriture }]);
+       authority = new PaperclipRunnerToolAuthority(db, { companyId, agentId, issueId, runId });
+-      expect(await authority.execute(request)).toEqual(receipt);
+-      const bytes = await fs.readFile(path.join(root, entryFile));
+-      expect(bytes).toEqual(Buffer.from(content));
+-      expect(receipt.revision.byteLength).toBe(bytes.length);
+-      expect(receipt.revision.contentHash).toBe(createHash("sha256").update(bytes).digest("hex"));
+-      expect(writes).toBe(1);
+-      expect((await db.select().from(activityLog).where(eq(activityLog.runId, runId))).filter((event) => event.action === "agent.files_updated")).toHaveLength(1);
+-      await expect(authority.execute({ ...request, arguments: { ...request.arguments, content: "conflicting replay" } })).rejects.toThrow("idempotency_conflict");
+-      expect(await fs.readFile(path.join(root, entryFile))).toEqual(bytes);
+-      await expect(call("update_agent_instructions", { entryFile, baseRevisionId: receipt.revision.id, content: "🦀".repeat(300_000) })).rejects.toMatchObject({ status: 422 });
+-      expect(writes).toBe(1);
++      await expect(authority.execute(request)).rejects.toMatchObject(refusEcriture);
++      await expect(authority.execute({ ...request, arguments: { ...request.arguments, content: "conflicting replay" } })).rejects.toMatchObject(refusEcriture);
++      await expect(call("update_agent_instructions", { entryFile, baseRevisionId: first.revision.id, content: "🦀".repeat(300_000) })).rejects.toMatchObject(refusEcriture);
+       await db.delete(principalPermissionGrants).where(eq(principalPermissionGrants.principalId, userId));
+-      await expect(authority.execute(request)).rejects.toMatchObject({ status: 403 });
++      await expect(authority.execute(request)).rejects.toMatchObject(refusEcriture);
++      expect(compteur.writes).toBe(0);
++      await sansTentativeNiEcriture();
+     } finally {
+-      release();
+       spy.mockRestore();
+     }
+   });
+ 
+-  it.each(["after_file_rename", "receipt_persistence"])("retains durable attempt evidence and refuses replay after rollback at %s", async (fault) => {
+-    const first = await call("read_agent_instructions");
++  it.each(["after_file_rename", "receipt_persistence"])("refuses before any attempt evidence, with a fault armed at %s", async (fault) => {
++    const first = await lireCommeBoard();
+     const request = { tool: "update_agent_instructions", callId: randomUUID(), arguments: {
+       targetAgentId, entryFile, content: "written before database rollback\r\n", baseRevisionId: first.revision.id,
+     } };
+     const key = `instruction:${request.callId}`;
+     if (fault === "receipt_persistence") {
+-      // This is an actual PostgreSQL transaction rollback, after the real
+-      // filesystem rename and attempted audit insert, before receipt commit.
+       await db.execute(sql.raw(`CREATE FUNCTION reject_instruction_test_receipt() RETURNS trigger LANGUAGE plpgsql AS $$
+         BEGIN
+           IF NEW.id = '${runId}' AND NEW.result_json->'semanticToolReceipts' ? '${key}' THEN
+@@ -140,23 +141,15 @@ describe("canonical instruction tools through native authority", () => {
+       }
+     });
+     try {
+-      await expect(authority.execute(request)).rejects.toMatchObject({ code: "semantic_tool_outcome_unknown" });
+-      expect(await fs.readFile(path.join(root, entryFile), "utf8")).toBe(request.arguments.content);
+-      const [run] = await db.select().from(heartbeatRuns).where(eq(heartbeatRuns.id, runId));
+-      expect((run!.resultJson as any).instructionToolAttempts[key]).toMatchObject({
+-        operationId: request.tool, targetAgentId, inputDigest: expect.stringMatching(/^[a-f0-9]{64}$/),
+-      });
+-      expect((run!.resultJson as any).semanticToolReceipts?.[key]).toBeUndefined();
+-      const audit = await db.select().from(activityLog).where(eq(activityLog.runId, runId));
+-      expect(audit.filter((event) => event.action === "agent.instruction_write_attempted")).toHaveLength(1);
+-      expect(audit.filter((event) => event.action === "agent.files_updated")).toHaveLength(0);
++      await expect(authority.execute(request)).rejects.toMatchObject(refusEcriture);
+       authority = new PaperclipRunnerToolAuthority(db, { companyId, agentId, issueId, runId });
+-      await expect(authority.execute(request)).rejects.toMatchObject({ code: "semantic_tool_outcome_unknown" });
++      await expect(authority.execute(request)).rejects.toMatchObject(refusEcriture);
+       await expect(authority.execute({ ...request, arguments: { ...request.arguments, content: "different" } }))
+-        .rejects.toThrow("idempotency_conflict");
+-      expect(writes).toBe(1);
++        .rejects.toMatchObject(refusEcriture);
+       await db.delete(principalPermissionGrants).where(eq(principalPermissionGrants.principalId, userId));
+-      await expect(authority.execute(request)).rejects.toMatchObject({ status: 403 });
++      await expect(authority.execute(request)).rejects.toMatchObject(refusEcriture);
++      expect(writes).toBe(0);
++      await sansTentativeNiEcriture();
+     } finally {
+       spy.mockRestore();
+       if (fault === "receipt_persistence") {
+@@ -166,8 +159,8 @@ describe("canonical instruction tools through native authority", () => {
+     }
+   });
+ 
+-  it("replays a committed receipt after its database commit acknowledgement is lost", async () => {
+-    const first = await call("read_agent_instructions");
++  it("refuses inside the reservation transaction, so no receipt exists to replay after a lost acknowledgement", async () => {
++    const first = await lireCommeBoard();
+     const request = { tool: "update_agent_instructions", callId: randomUUID(), arguments: {
+       targetAgentId, entryFile, content: "committed but acknowledgement lost\n", baseRevisionId: first.revision.id,
+     } };
+@@ -179,55 +172,36 @@ describe("canonical instruction tools through native authority", () => {
+       return result;
+     });
+     try {
+-      await expect(authority.execute(request)).rejects.toThrow("injected lost commit acknowledgement");
+-      const [run] = await db.select().from(heartbeatRuns).where(eq(heartbeatRuns.id, runId));
+-      const receipt = (run!.resultJson as any).semanticToolReceipts[`instruction:${request.callId}`].result;
+-      expect(receipt).toMatchObject({ changed: true, content: request.arguments.content });
++      await expect(authority.execute(request)).rejects.toMatchObject(refusEcriture);
++      expect(commits).toBe(0);
+       authority = new PaperclipRunnerToolAuthority(db, { companyId, agentId, issueId, runId });
+-      expect(await authority.execute(request)).toEqual(receipt);
+-      const audit = await db.select().from(activityLog).where(eq(activityLog.runId, runId));
+-      expect(audit.filter((event) => event.action === "agent.instruction_write_attempted")).toHaveLength(1);
+-      expect(audit.filter((event) => event.action === "agent.files_updated")).toHaveLength(1);
+-      expect(await fs.readFile(path.join(root, entryFile), "utf8")).toBe(request.arguments.content);
++      await expect(authority.execute(request)).rejects.toMatchObject(refusEcriture);
++      await sansTentativeNiEcriture();
+     } finally { spy.mockRestore(); }
+   });
+ 
+-  it.each(["validation", "stale_base", "oversized"])("replays a definite %s failure after restart without executing again", async (fault) => {
+-    const first = await call("read_agent_instructions");
++  it.each(["validation", "stale_base", "oversized"])("refuses a %s request before validation, without storing a failure to replay", async (fault) => {
++    const first = await lireCommeBoard();
+     const request = { tool: "update_agent_instructions", callId: randomUUID(), arguments: {
+       targetAgentId, entryFile, content: fault === "oversized" ? "🦀".repeat(300_000) : "requested update",
+       baseRevisionId: first.revision.id, ...(fault === "validation" ? { unexpected: true } : {}),
+     } };
+     if (fault === "stale_base") await fs.writeFile(path.join(root, entryFile), "newer canonical bytes");
+-    const originalRename = fs.rename.bind(fs);
+-    let writes = 0;
+-    const spy = vi.spyOn(fs, "rename").mockImplementation(async (source, destination) => {
+-      if (destination === path.join(root, entryFile)) writes++;
+-      return originalRename(source, destination);
+-    });
++    const { compteur, spy } = compterEcritures();
+     try {
+-      const failure = await authority.execute(request).then(() => null, (error: unknown) => error) as any;
+-      expect(failure).toMatchObject({ status: fault === "validation" ? 400 : fault === "stale_base" ? 409 : 422 });
+-      const [run] = await db.select().from(heartbeatRuns).where(eq(heartbeatRuns.id, runId));
+-      const saved = (run!.resultJson as any).instructionToolAttempts[`instruction:${request.callId}`].failure;
+-      expect(saved).toMatchObject({ status: failure.status, message: failure.message });
+-      // The stale request would now pass CAS if it were executed again.
++      await expect(authority.execute(request)).rejects.toMatchObject(refusEcriture);
+       await fs.writeFile(path.join(root, entryFile), original);
+       authority = new PaperclipRunnerToolAuthority(db, { companyId, agentId, issueId, runId });
+-      await expect(authority.execute(request)).rejects.toMatchObject(saved);
+-      await expect(authority.execute(request)).rejects.toMatchObject(saved);
++      await expect(authority.execute(request)).rejects.toMatchObject(refusEcriture);
+       await expect(authority.execute({ ...request, arguments: { ...request.arguments, content: "different" } }))
+-        .rejects.toThrow("idempotency_conflict");
+-      expect(writes).toBe(0);
+-      expect(await fs.readFile(path.join(root, entryFile), "utf8")).toBe(original);
+-      const audit = await db.select().from(activityLog).where(eq(activityLog.runId, runId));
+-      expect(audit.filter((event) => event.action === "agent.instruction_write_attempted")).toHaveLength(1);
+-      expect(audit.filter((event) => event.action === "agent.files_updated")).toHaveLength(0);
++        .rejects.toMatchObject(refusEcriture);
++      expect(compteur.writes).toBe(0);
++      await sansTentativeNiEcriture();
+     } finally { spy.mockRestore(); }
+   });
+ 
+-  it("does not claim a final failure when its failure receipt cannot be persisted", async () => {
+-    const first = await call("read_agent_instructions");
++  it("refuses before any failure receipt is attempted", async () => {
++    const first = await lireCommeBoard();
+     const request = { tool: "update_agent_instructions", callId: randomUUID(), arguments: {
+       targetAgentId, entryFile, content: "invalid input", baseRevisionId: first.revision.id, unexpected: true,
+     } };
+@@ -238,28 +212,27 @@ describe("canonical instruction tools through native authority", () => {
+       return transaction(...args);
+     });
+     try {
+-      await expect(authority.execute(request)).rejects.toMatchObject({ code: "semantic_tool_outcome_unknown" });
+-      const [run] = await db.select().from(heartbeatRuns).where(eq(heartbeatRuns.id, runId));
+-      expect((run!.resultJson as any).instructionToolAttempts[`instruction:${request.callId}`].failure).toBeUndefined();
++      await expect(authority.execute(request)).rejects.toMatchObject(refusEcriture);
+       authority = new PaperclipRunnerToolAuthority(db, { companyId, agentId, issueId, runId });
+-      await expect(authority.execute(request)).rejects.toMatchObject({ code: "semantic_tool_outcome_unknown" });
+-      expect(await fs.readFile(path.join(root, entryFile), "utf8")).toBe(original);
++      await expect(authority.execute(request)).rejects.toMatchObject(refusEcriture);
++      expect(attempts).toBe(2);
++      await sansTentativeNiEcriture();
+     } finally { spy.mockRestore(); }
+   });
+ 
+-  it("rejects supplied identity and missing CAS bases before changing content", async () => {
+-    const first = await call("read_agent_instructions");
++  it("refuses supplied identity and missing CAS bases before changing content", async () => {
++    const first = await lireCommeBoard();
+     for (const identity of ["companyId", "agentId", "runId", "responsibleUserId", "onBehalfOfUserId", "actor"]) {
+-      await expect(call("update_agent_instructions", { entryFile, content: "forged", baseRevisionId: first.revision.id, [identity]: randomUUID() })).rejects.toMatchObject({ status: 400 });
++      await expect(call("update_agent_instructions", { entryFile, content: "forged", baseRevisionId: first.revision.id, [identity]: randomUUID() })).rejects.toMatchObject(refusEcriture);
+     }
+-    await expect(call("update_agent_instructions", { entryFile, content: "missing base" })).rejects.toMatchObject({ status: 400 });
+-    expect((await call("read_agent_instructions")).content).toBe(original);
++    await expect(call("update_agent_instructions", { entryFile, content: "missing base" })).rejects.toMatchObject(refusEcriture);
++    expect((await lireCommeBoard()).content).toBe(original);
+     expect(await db.select().from(agentInstructionRevisions).where(eq(agentInstructionRevisions.agentId, targetAgentId))).toHaveLength(0);
+   });
+   it("rechecks responsible-user access and rejects a cross-company target", async () => {
+-    const first = await call("read_agent_instructions");
++    const first = await lireCommeBoard();
+     await db.delete(principalPermissionGrants).where(eq(principalPermissionGrants.principalId, userId));
+-    await expect(call("update_agent_instructions", { entryFile, content: "revoked", baseRevisionId: first.revision.id })).rejects.toMatchObject({ status: 403 });
++    await expect(call("update_agent_instructions", { entryFile, content: "revoked", baseRevisionId: first.revision.id })).rejects.toMatchObject(refusEcriture);
+     const foreignCompanyId = randomUUID(), foreignAgentId = randomUUID();
+     await db.insert(companies).values({ id: foreignCompanyId, name: "Foreign", issuePrefix: randomUUID().slice(0, 8) });
+     await db.insert(agents).values({ id: foreignAgentId, companyId: foreignCompanyId, name: "Foreign" });
+-- 
+2.53.0
+

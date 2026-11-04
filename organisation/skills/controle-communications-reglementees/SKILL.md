@@ -2,7 +2,7 @@
 name: "controle-communications-reglementees"
 description: "Relit une communication commerciale (publicité, page web, courriel, post, brochure, script) d'une entreprise belge, surtout dans un secteur régulé, au regard des pratiques commerciales déloyales envers les consommateurs (livre VI du Code de droit économique : pratiques trompeuses, omissions, pratiques agressives, publicité comparative) et, pour les produits financiers et d'assurance, des règles de publicité (arrêté royal du 25 avril 2014 et circulaire FSMA_2015_16). Rend une liste de contrôle complétée, les passages à risque avec le motif, et soit une validation conditionnelle, soit un refus motivé avec propositions de reformulation. À utiliser avant publication d'un contenu qui promeut un produit ou un service régulé ; jamais pour inventer un fait ou une performance, publier, valider à la place du responsable de la conformité, ni donner un avis juridique."
 metadata:
-  version: "1.1.0"
+  version: "1.2.0"
   langue: "fr"
   domaine: "conformite"
 ---
@@ -37,7 +37,7 @@ metadata:
 
 ## Étapes
 
-1. **Qualifier la cible et le support** : une communication adressée à des consommateurs relève du livre VI, chapitre sur les pratiques déloyales (article VI.92 : pratiques des entreprises vis-à-vis des consommateurs avant, pendant et après l'offre et la vente). Entre entreprises, les articles VI.104 et suivants sur les pratiques du marché s'appliquent (pratiques contraires aux usages honnêtes, trompeuses à l'égard d'entreprises) ; noter que les PME sont des « clients de détail » au sens de l'arrêté royal du 25 avril 2014 pour les produits financiers, d'après la circulaire FSMA_2015_16.
+1. **Qualifier la cible et le support** : une communication adressée à des consommateurs relève du livre VI, chapitre sur les pratiques déloyales (article VI.92 : pratiques des entreprises vis-à-vis des consommateurs avant, pendant et après l'offre et la vente). Entre entreprises (par exemple des praticiens démarchés), le livre VI, titre 4, chapitre 2 s'applique : pratiques déloyales (art. VI.104 et VI.104/1), trompeuses (art. VI.105, VI.105/1 et VI.106 à VI.109) et agressives (art. VI.109/1 à VI.109/3), d'après la table des matières lue sur Justel le 30/10/2026 (mise à jour au 04/08/2026) ; seuls VI.104 et VI.105 ont été lus en détail ; noter que les PME sont des « clients de détail » au sens de l'arrêté royal du 25 avril 2014 pour les produits financiers, d'après la circulaire FSMA_2015_16.
 2. **Relever chaque affirmation vérifiable** (prix, avantage, rendement, couverture, délai, « gratuit », « garanti », « n°1 », « le meilleur », label, témoignage) et la relier à une preuve datée. Une affirmation sans preuve est rayée ou reformulée : la compétence n'invente et ne complète aucun chiffre.
 3. **Contrôler le caractère trompeur** (articles VI.97 à VI.100) : information fausse, présentation d'ensemble qui induit en erreur même si les chiffres sont exacts, éléments sur lesquels porte l'erreur (nature, caractéristiques, prix, conditions, identité de l'entreprise, droits du consommateur). Examiner l'**omission trompeuse** (article VI.99) : information substantielle cachée, peu claire ou donnée à contretemps ; tenir compte des limites d'espace du support (article VI.99, § 3) mais vérifier les renvois mis en place. Parcourir la liste des pratiques interdites en toutes circonstances (article VI.100) : fausse signature d'un code de conduite, label affiché sans autorisation, fausse approbation, etc.
 4. **Contrôler le caractère agressif** (articles VI.101 à VI.103) : pression, harcèlement, exploitation d'une situation de détresse, impression de ne pas pouvoir partir, ignorer la demande de ne plus être contacté ; liste des pratiques agressives interdites en toutes circonstances (article VI.103). Pour la prospection par appel automatisé ou télécopie, le consentement préalable est exigé (article VI.110) ; pour les courriels et les SMS, voir aussi les règles de consentement du service email de l'atelier.
@@ -86,21 +86,26 @@ d'assurances (IDD) : toute communication est un acte réglementé. Cette liste c
 confirmer par un juriste avant usage client, et les articles marqués « à revérifier par un juriste » ne se citent jamais sans
 ouverture du texte officiel.
 
-1. Communication « correcte, claire et non trompeuse » et reconnaissable comme publicitaire : directive (UE) 2016/97, article
-   17, paragraphe 2 [mémoire de l'article], transposée par la loi du 4 avril 2014 relative aux assurances [articles exacts : à
-   revérifier par un juriste].
-2. Exigences et besoins : avant tout conseil, ils doivent être collectés ; la FSMA a constaté en novembre 2025 que la majorité
-   des conseillers inspectés ne collectaient pas toutes les informations obligatoires [vérifié]. Distinguer information
-   générale et conseil personnalisé : un contenu marketing ne se présente jamais comme un conseil personnalisé.
-3. Document d'information normalisé (IPID) pour les produits non-vie : IDD, article 20 [mémoire ; article à revérifier par un
-   juriste].
-4. Guide pratique FSMA sur les règles de conduite IDD (janvier 2022, mis à jour) : explicatif, seuls les textes légaux lient
-   [vérifié].
+1. Communication « correcte, claire et non trompeuse » et « clairement identifiable » comme publicitaire : directive (UE)
+   2016/97, art. 17, § 2, transposée par la loi du 4 avril 2014 relative aux assurances, art. 279, § 2, sans préjudice du
+   livre VI du Code de droit économique [lus le 30/10/2026 : https://publications.europa.eu/resource/celex/32016L0097 et https://www.ejustice.just.fgov.be/eli/loi/2014/04/04/2014011239/justel, mise à jour au 04/08/2026].
+2. Exigences et besoins : avant la conclusion du contrat, le distributeur les précise sur la base des informations obtenues
+   auprès du client (directive (UE) 2016/97, art. 20, § 1 ; loi du 4 avril 2014, art. 284, § 1er) [lus le 30/10/2026].
+   Rapport sectoriel FSMA de novembre 2024 sur le devoir de diligence des courtiers (assurances d'épargne et
+   d'investissement, branches 21, 23 et 26) : la plupart des courtiers recueillent ces informations avant de conseiller,
+   mais la collecte est parfois très lacunaire, parfois faite après la conclusion du contrat, et les connaissances du
+   client sont rarement objectivées [lu le 30/10/2026 : https://www.fsma.be/sites/default/files/media/files/2024-11/rapportsectoriel-devoirdediligence-courtiersassurances.pdf]. Distinguer information générale et conseil personnalisé : un
+   contenu marketing ne se présente jamais comme un conseil personnalisé.
+3. Document d'information normalisé sur le produit d'assurance (IPID) pour les produits non-vie : directive (UE) 2016/97,
+   art. 20, § 5 ; loi du 4 avril 2014, art. 284, § 5 [lus le 30/10/2026].
+4. Guide pratique FSMA sur les règles de conduite IDD, FSMA_2022_06 du 25/01/2022 (mise à jour du 24/09/2024) : il fournit
+   des précisions, mais seules la législation et la réglementation prise pour son exécution sont juridiquement
+   contraignantes [lu le 30/10/2026 : https://www.fsma.be/sites/default/files/media/files/2024-10/fsma_2022_06_fr.pdf].
 5. Pratiques du commerce : livre VI du Code de droit économique (pratiques trompeuses, agressives, comparatives).
-6. Courriel publicitaire : consentement préalable (loi du 11 mars 2003, article 14, aujourd'hui intégrée au livre XII du Code
-   de droit économique [mémoire ; articles à revérifier par un juriste]). Une exception est rapportée pour les personnes
-   morales jointes à une adresse impersonnelle, selon une interprétation du SPF Économie datant d'environ 2005 [à revérifier,
-   source ancienne] : ne pas s'y fier sans avis.
+6. Courriel publicitaire : consentement préalable (Code de droit économique, art. XII.13, § 1er), avec deux exceptions
+   fixées par l'arrêté royal du 4 avril 2003, art. 1er : client existant pour des produits analogues (adresse obtenue lors
+   d'une vente, opposition offerte dès la collecte) et adresse impersonnelle d'une personne morale [vérifié sur Justel le
+   30/10/2026, citations dans `references/rgpd-prospection.md`].
 7. Téléphone vers des consommateurs : respecter la liste « Ne m'appelez plus » [mémoire].
 8. RGPD : base légale par traitement, information, droit d'opposition, durées de conservation (registre via
    `registre-traitements-rgpd`).
@@ -129,13 +134,19 @@ Consultées le 16/10/2026 :
 - Communication FSMA_2022_29 du 12/12/2022 (update 08/09/2026), « Questions-réponses concernant les communications publicitaires relatives à des OPC », https://www.fsma.be/sites/default/files/media/files/2022-12/fsma_2022_29_fr.pdf : en-tête lu (champ d'application : parts d'OPCVM et d'OPCA commercialisées en Belgique). Référence pour les seuls organismes de placement collectif.
 
 
+Consulté le 30/10/2026 : règlement (UE) 2016/679 (RGPD), articles 6, 7, 13, 14 et 21, texte du Journal officiel
+(https://publications.europa.eu/resource/celex/32016R0679) ; extraits recopiés et règles de l'atelier dans
+`references/rgpd-prospection.md`, à lire pour toute liste de prospection, tout formulaire de captation et tout aimant à
+prospects ; modèle d'information des personnes en collecte indirecte et mécanisme (rien n'est envoyé par l'atelier) dans
+`references/information-art14.md`.
+
 Source secondaire (non officielle) : un résultat de recherche mentionne que, pour l'assurance, les dispositions du livre VI du Code de droit économique (publicité comparative, pratiques déloyales, contrats à distance) peuvent s'ajouter aux règles de conduite sectorielles ; ce point est à confirmer sur les textes officiels.
 
-Non consultés ou inaccessibles : le site de la CTIF (indisponible), et les textes sectoriels sur la publicité des produits d'assurance dans la loi du 4 avril 2014 relative aux assurances, non lus ici. Ne pas citer d'article de cette loi sans l'avoir ouvert.
+Non consultés ou inaccessibles : le site de la CTIF (indisponible), et, dans la loi du 4 avril 2014 relative aux assurances, tout autre article que les art. 279 et 284 (lus le 30/10/2026). Ne pas citer d'autre article de cette loi sans l'avoir ouvert.
 
 ## À vérifier par un professionnel
 
-Les articles de la directive (UE) 2016/97, de la loi du 4 avril 2014 et du livre XII du Code de droit économique cités dans la liste propre au courtage sont à revérifier par un juriste avant tout usage client. Cette compétence prépare un contrôle ; elle ne remplace ni le responsable de la conformité ni un avocat. Avant publication d'une communication sur un produit régulé, la décision doit être validée par le responsable de la conformité de l'entreprise, et au besoin par un avocat. Pour un produit soumis à approbation préalable de l'autorité (par exemple un prospectus), la communication ne peut, selon un résultat de recherche secondaire, être diffusée avant l'accord de cette autorité : à confirmer auprès de la FSMA. Les circulaires sont mises à jour : relire la version en vigueur à la date de publication. Les règles en matière de données personnelles, de consentement à la prospection électronique et de droit d'auteur sont hors du champ de cette liste.
+Les articles de la directive (UE) 2016/97, de la loi du 4 avril 2014 et du livre XII du Code de droit économique cités dans la liste propre au courtage ont été lus à la source le 30/10/2026 ; leur application à un cas reste à confirmer par un juriste avant tout usage client. Cette compétence prépare un contrôle ; elle ne remplace ni le responsable de la conformité ni un avocat. Avant publication d'une communication sur un produit régulé, la décision doit être validée par le responsable de la conformité de l'entreprise, et au besoin par un avocat. Pour un produit soumis à approbation préalable de l'autorité (par exemple un prospectus), la communication ne peut, selon un résultat de recherche secondaire, être diffusée avant l'accord de cette autorité : à confirmer auprès de la FSMA. Les circulaires sont mises à jour : relire la version en vigueur à la date de publication. Les données personnelles et le consentement à la prospection électronique (livre XII, AR du 4 avril 2003) relèvent de `references/rgpd-prospection.md` ; le droit d'auteur reste hors du champ de cette liste.
 
 ## Limites
 

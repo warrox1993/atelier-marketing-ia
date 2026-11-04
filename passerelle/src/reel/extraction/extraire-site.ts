@@ -22,14 +22,15 @@ export const PAGES_MAX = 20;
 export const PAGES_DEFAUT = 5;
 export const MARKDOWN_MAX_PAGE = 6000;
 export const MARKDOWN_MAX_TOTAL = 40_000;
-export const DELAI_MS = 150_000;
-/** Délai par page côté conteneur : 5 pages par défaut x 20 s = 100 s, sous le délai total de 150 s. */
-export const DELAI_PAGE_MS = 20_000;
+/** T1 : file d'attente (10 s) et extraction (45 s) tiennent sous le délai de 60 s d'un appel par le socle. */
+export const DELAI_MS = 45_000;
+/** Délai par page côté conteneur : 5 pages par défaut x 8 s = 40 s, sous le délai total de 45 s. */
+export const DELAI_PAGE_MS = 8_000;
 /** Plafond ferme de la réponse du conteneur (revue M2). */
 export const REPONSE_MAX_OCTETS = 16 * 1024 * 1024;
 export const EXTRACTIONS_SIMULTANEES = 2;
 export const FILE_ATTENTE_MAX = 4;
-export const ATTENTE_FILE_MAX_MS = 60_000;
+export const ATTENTE_FILE_MAX_MS = 10_000;
 /** Pages servies par un même navigateur avant son recyclage (revue F6) : borne ce qu'une page peut laisser dans le contexte partagé. */
 export const RECYCLAGE_PAGES = 20;
 

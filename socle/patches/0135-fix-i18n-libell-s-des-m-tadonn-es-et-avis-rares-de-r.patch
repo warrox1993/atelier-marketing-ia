@@ -1,0 +1,515 @@
+From 7cd19c0ab70e58c29684208e63116dc791e05ab4 Mon Sep 17 00:00:00 2001
+From: Jean-Baptiste Dhondt <114347858+warrox1993@users.noreply.github.com>
+Date: Fri, 30 Oct 2026 15:52:52 +0100
+Subject: [PATCH 135/139] =?UTF-8?q?fix(i18n):=20libell=C3=A9s=20des=20m?=
+ =?UTF-8?q?=C3=A9tadonn=C3=A9es=20et=20avis=20rares=20de=20reprise=20en=20?=
+ =?UTF-8?q?fran=C3=A7ais=20;=20la=20d=C3=A9duplication=20et=20l'interface?=
+ =?UTF-8?q?=20relisent=20aussi=20l'anglais=20d'origine=20(Atelier=20HUM-C1?=
+ =?UTF-8?q?2)?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Avis d'escalade (buildStrandedRecoveryEscalationNotice) : Action de reprise,
+Responsable de la reprise, Décision humaine requise, Prochaine action, Run
+d'origine, Code d'échec, Résumé de l'échec, sections Reprise et Preuves du run.
+Avis rares : référence de base de l'espace de travail introuvable, connexion IA
+indisponible, plugin fournisseur de sandbox pas prêt (corps, remède et prochaine
+action de l'action de reprise).
+
+Textes relus par le code : la déduplication des avis (noticeMetadataReferences
+RecoveryAction) reconnaît « Action de reprise » et « Recovery action » des avis
+déjà en base ; isRedundantAiRecoveryNotice de l'interface reconnaît les titres
+français, dont « Configuration incomplète » que 0126 avait traduit sans
+l'interface. Avis de passation après un run réussi laissés en anglais
+(SUCCESSFUL_RUN_HANDOFF_REQUIRED_NOTICE_BODY relu à l'égalité).
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01EThpSSDGc5NRYwbgjNqoTJ
+---
+ .../heartbeat-process-recovery.test.ts        | 26 ++++----
+ server/src/services/recovery/notice-format.ts |  5 ++
+ server/src/services/recovery/service.ts       |  8 +--
+ .../services/recovery/stranded-notice.test.ts | 66 ++++++++++++-------
+ .../src/services/recovery/stranded-notice.ts  | 58 ++++++++--------
+ .../recovery/successful-run-handoff.ts        |  3 +-
+ ui/src/lib/issue-chat-messages.test.ts        |  8 +++
+ ui/src/lib/issue-chat-messages.ts             |  4 +-
+ 8 files changed, 110 insertions(+), 68 deletions(-)
+
+diff --git a/server/src/__tests__/heartbeat-process-recovery.test.ts b/server/src/__tests__/heartbeat-process-recovery.test.ts
+index e69767438e..b42f10ff35 100644
+--- a/server/src/__tests__/heartbeat-process-recovery.test.ts
++++ b/server/src/__tests__/heartbeat-process-recovery.test.ts
+@@ -5334,8 +5334,9 @@ describeEmbeddedPostgres("heartbeat orphaned process recovery", () => {
+       status: "active",
+       ownerType: "board",
+     });
+-    expect(recoveryAction?.nextAction).toContain("sandbox provider plugin");
+-    expect(recoveryAction?.nextAction).toContain("enable the plugin");
++    expect(recoveryAction?.nextAction).toContain("plugin fournisseur de sandbox");
++    expect(recoveryAction?.nextAction).toContain("activer le plugin");
++    expect(recoveryAction?.nextAction).not.toContain("enable the plugin");
+ 
+     const notice = await waitForValue(async () => {
+       const rows = await db
+@@ -5348,7 +5349,8 @@ describeEmbeddedPostgres("heartbeat orphaned process recovery", () => {
+         ) ?? null
+       );
+     });
+-    expect(notice?.body).toContain("is in status `error`");
++    expect(notice?.body).toContain("est au statut `error`");
++    expect(notice?.body).not.toContain("is in status `error`");
+     expect(notice?.body).not.toContain("secrets ou variables d'environnement");
+   });
+ 
+@@ -5630,7 +5632,7 @@ describeEmbeddedPostgres("heartbeat orphaned process recovery", () => {
+     });
+     expect(
+       commentMetadataRows(comments[0]).some(
+-        (row) => row.label === "Recovery action",
++        (row) => row.label === "Action de reprise",
+       ),
+     ).toBe(true);
+ 
+@@ -11729,11 +11731,11 @@ describeEmbeddedPostgres("heartbeat orphaned process recovery", () => {
+       "sk-test-recovery-secret",
+     );
+     const failureSummary = commentMetadataRows(comments[0]).find(
+-      (row) => row.type === "key_value" && row.label === "Failure summary",
++      (row) => row.type === "key_value" && row.label === "Résumé de l'échec",
+     );
+     expect(failureSummary).toMatchObject({
+       type: "key_value",
+-      label: "Failure summary",
++      label: "Résumé de l'échec",
+     });
+     expect(
+       failureSummary?.type === "key_value" ? failureSummary.value : "",
+@@ -11752,8 +11754,8 @@ describeEmbeddedPostgres("heartbeat orphaned process recovery", () => {
+       commentMetadataRows(comments[0]).some(
+         (row) =>
+           row.type === "key_value" &&
+-          row.label === "Recovery owner" &&
+-          row.value === "Board decision required",
++          row.label === "Responsable de la reprise" &&
++          row.value === "Décision humaine requise",
+       ),
+     ).toBe(true);
+   });
+@@ -12324,8 +12326,8 @@ describeEmbeddedPostgres("heartbeat orphaned process recovery", () => {
+       commentMetadataRows(comments[0]).some(
+         (row) =>
+           row.type === "key_value" &&
+-          row.label === "Recovery owner" &&
+-          row.value === "Board decision required",
++          row.label === "Responsable de la reprise" &&
++          row.value === "Décision humaine requise",
+       ),
+     ).toBe(true);
+   });
+@@ -12370,7 +12372,7 @@ describeEmbeddedPostgres("heartbeat orphaned process recovery", () => {
+     expect(comments[0]?.body).not.toContain("- Failure: none recorded");
+     expect(commentMetadataRows(comments[0])).toContainEqual({
+       type: "key_value",
+-      label: "Failure code",
++      label: "Code d'échec",
+       value: "adapter_exit_code",
+     });
+   });
+@@ -12484,7 +12486,7 @@ describeEmbeddedPostgres("heartbeat orphaned process recovery", () => {
+     expect(comments[0]?.body).toContain("3 tentatives");
+     expect(commentMetadataRows(comments[0])).toContainEqual({
+       type: "key_value",
+-      label: "Failure code",
++      label: "Code d'échec",
+       value: "adapter_failed",
+     });
+   });
+diff --git a/server/src/services/recovery/notice-format.ts b/server/src/services/recovery/notice-format.ts
+index 520be52ec9..9f35f2d019 100644
+--- a/server/src/services/recovery/notice-format.ts
++++ b/server/src/services/recovery/notice-format.ts
+@@ -3,6 +3,11 @@ import type { IssueCommentMetadata, IssueCommentPresentation } from "@paperclipa
+ export type NoticeMetadataRow = IssueCommentMetadata["sections"][number]["rows"][number];
+ export type NoticeMetadataSection = IssueCommentMetadata["sections"][number];
+ 
++/** Libellé de la ligne qui porte l'identifiant de l'action de reprise ; la déduplication des avis la relit. */
++export const RECOVERY_ACTION_ROW_LABEL = "Action de reprise";
++/** Libellés reconnus à la relecture : l'anglais d'origine reste valable pour les avis déjà en base. */
++export const RECOVERY_ACTION_ROW_LABELS: ReadonlySet<string> = new Set([RECOVERY_ACTION_ROW_LABEL, "Recovery action"]);
++
+ export function metadataText(value: unknown, fallback = "unknown") {
+   const text = typeof value === "string" ? value.trim() : value == null ? "" : String(value).trim();
+   const resolved = text.length > 0 ? text : fallback;
+diff --git a/server/src/services/recovery/service.ts b/server/src/services/recovery/service.ts
+index 64dbd1da3f..2326f2f4d8 100644
+--- a/server/src/services/recovery/service.ts
++++ b/server/src/services/recovery/service.ts
+@@ -2562,17 +2562,17 @@ export function recoveryService(
+                       : "Board operator: repair the source task workspace link, project workspace cwd, or git checkout, then explicitly retry or reassign."
+                   : recoveryCause === "configuration_incomplete"
+                     ? readConfigurationIncompletePayload(input.latestRun)?.reason === "workspace_base_ref_unresolved"
+-                      ? "Check the starting branch and repository access, then repair the task’s branch and retry the original assignee."
++                      ? "Vérifiez la branche de départ et l'accès au dépôt, puis réparez la branche de la tâche et relancez l'assigné d'origine."
+                       : readConfigurationIncompletePayload(input.latestRun)?.reason === "ai_connection_unavailable"
+-                      ? "Reconnect the selected AI account or choose an available connection, then continue the task."
++                      ? "Reconnectez le compte IA choisi ou choisissez une connexion disponible, puis reprenez la tâche."
+                       : readConfigurationIncompletePayload(input.latestRun)
+                         ?.reason === SANDBOX_PROVIDER_PLUGIN_NOT_READY_REASON
+-                      ? `Board operator: the sandbox provider plugin named in the run failure is not ready; ${sandboxProviderPluginRemedy(
++                      ? `Opérateur : le plugin fournisseur de sandbox cité dans l'échec du run n'est pas prêt ; il faut ${sandboxProviderPluginRemedy(
+                           readNonEmptyString(
+                             readConfigurationIncompletePayload(input.latestRun)
+                               ?.pluginStatus,
+                           ) ?? "error",
+-                        )}, then explicitly retry the original owner or reassign.`
++                        )}, puis relancer explicitement l'assigné d'origine ou réassigner.`
+                       : "Board operator: bind the missing secret(s) named in the run failure, then explicitly retry the original owner or reassign."
+                     : recoveryCause === "execution_review_participant_recovery"
+                       ? "Board operator: repair the failed review participant path, restore a live reviewer, explicitly reassign, or record an intentional resolution."
+diff --git a/server/src/services/recovery/stranded-notice.test.ts b/server/src/services/recovery/stranded-notice.test.ts
+index 447be3bd6c..8c5a0e638a 100644
+--- a/server/src/services/recovery/stranded-notice.test.ts
++++ b/server/src/services/recovery/stranded-notice.test.ts
+@@ -41,7 +41,8 @@ describe("stranded recovery notice seeds", () => {
+     expect(seed.tone).toBe("danger");
+     expect(seed.body).toContain("`paperclip.kubernetes-sandbox-provider`");
+     expect(seed.body).toContain("`error`");
+-    expect(seed.body).toContain("enable the plugin");
++    expect(seed.body).toContain("activer le plugin (Plugins → Enable)");
++    expect(seed.body).not.toContain("enable the plugin");
+     expect(seed.body).not.toContain("secrets ou variables d'environnement");
+   });
+ 
+@@ -51,13 +52,14 @@ describe("stranded recovery notice seeds", () => {
+       pluginKey: "paperclip.daytona-sandbox-provider",
+       pluginStatus: "upgrade_pending",
+     });
+-    expect(upgrade.body).toContain("review and approve the upgraded plugin's capabilities");
++    expect(upgrade.body).toContain("examiner et approuver les nouvelles capacités du plugin mis à jour");
+     const disabled = buildConfigurationIncompleteRecoveryNoticeSeed({
+       reason: "sandbox_provider_plugin_not_ready",
+       pluginKey: "paperclip.daytona-sandbox-provider",
+       pluginStatus: "disabled",
+     });
+-    expect(disabled.body).toContain("an operator disabled it");
++    expect(disabled.body).toContain("un opérateur doit réactiver le plugin (Plugins → Enable), désactivé à la main.");
++    expect(disabled.body).not.toContain("an operator disabled it");
+   });
+ 
+   it("keeps the secret-binding copy for other configuration gaps", () => {
+@@ -81,14 +83,15 @@ describe("stranded recovery notice seeds", () => {
+       recoveryOwner: null,
+       sourceRun: { id: "failed-run", status: "failed", errorCode: "configuration_incomplete" },
+     });
+-    expect(notice.presentation.title).toBe("Workspace base ref unavailable");
+-    expect(notice.body).toContain("before the agent started");
+-    expect(notice.body).toContain("base ref");
++    expect(notice.presentation.title).toBe("Référence de base de l'espace de travail introuvable");
++    expect(notice.body).toContain("avant le démarrage de l'agent");
++    expect(notice.body).toContain("référence de base");
++    expect(notice.body).not.toContain("base ref");
+     expect(notice.body).not.toContain("secrets ou variables d'environnement");
+     expect(allRows(notice.metadata)).toContainEqual({
+       type: "key_value",
+-      label: "Next action",
+-      value: "Check that the configured base ref exists and the repository is accessible. Correct the task or project workspace settings, then retry the task.",
++      label: "Prochaine action",
++      value: "Vérifiez que la référence de base configurée existe et que le dépôt est accessible. Corrigez les réglages d'espace de travail de la tâche ou du projet, puis relancez la tâche.",
+     });
+   });
+ 
+@@ -142,26 +145,32 @@ describe("buildStrandedRecoveryEscalationNotice", () => {
+     expect(notice.metadata.sourceRunId).toBe(sourceRun.id);
+ 
+     const rows = allRows(notice.metadata);
+-    expect(rows).toContainEqual({ type: "key_value", label: "Recovery action", value: actionId });
+-    expect(rows).toContainEqual({ type: "agent_link", label: "Recovery owner", agentId: owner.id, name: owner.name });
++    expect(rows).toContainEqual({ type: "key_value", label: "Action de reprise", value: actionId });
++    expect(rows).toContainEqual({ type: "agent_link", label: "Responsable de la reprise", agentId: owner.id, name: owner.name });
+     expect(rows).toContainEqual({
+       type: "run_link",
+-      label: "Source run",
++      label: "Run d'origine",
+       runId: sourceRun.id,
+       agentId: sourceRun.agentId,
+       title: "failed",
+     });
+     expect(rows).toContainEqual({
+       type: "key_value",
+-      label: "Failure code",
++      label: "Code d'échec",
+       value: "workspace_validation_failed",
+     });
+     expect(rows).toContainEqual({
+       type: "key_value",
+-      label: "Failure summary",
++      label: "Résumé de l'échec",
+       value: sourceRun.errorSummary,
+     });
+-    expect(rows.some((row) => row.label === "Next action")).toBe(true);
++    expect(rows).toContainEqual({
++      type: "key_value",
++      label: "Prochaine action",
++      value: "Le responsable de la reprise doit rétablir une exécution active ou noter la résolution manuelle sur la tâche d'origine",
++    });
++    expect(notice.metadata.sections.map((section) => section.title)).toEqual(["Reprise", "Preuves du run"]);
++    expect(rows.some((row) => ["Recovery action", "Recovery owner", "Source run", "Failure code", "Failure summary", "Next action"].includes(String(row.label)))).toBe(false);
+   });
+ 
+   it("records board escalation when there is no invokable recovery owner", () => {
+@@ -172,9 +181,14 @@ describe("buildStrandedRecoveryEscalationNotice", () => {
+       sourceRun,
+     });
+ 
+-    const ownerRow = allRows(notice.metadata).find((row) => row.label === "Recovery owner");
++    const ownerRow = allRows(notice.metadata).find((row) => row.label === "Responsable de la reprise");
+     expect(ownerRow?.type).toBe("key_value");
+-    expect(ownerRow?.value).toBe("Board decision required");
++    expect(ownerRow?.value).toBe("Décision humaine requise");
++    expect(allRows(notice.metadata)).toContainEqual({
++      type: "key_value",
++      label: "Prochaine action",
++      value: "Examinez les preuves, puis relancez l'assigné d'origine, réassignez explicitement, réparez le chemin d'exécution ou notez une résolution voulue",
++    });
+   });
+ 
+   it("derives title from the recovery cause and body from the plain-comment fallback", () => {
+@@ -220,13 +234,13 @@ describe("buildStrandedRecoveryEscalationNotice", () => {
+     const rows = allRows(notice.metadata);
+     expect(rows).toContainEqual({
+       type: "run_link",
+-      label: "Source run",
++      label: "Run d'origine",
+       runId: sourceRun.id,
+       agentId: sourceRun.agentId,
+       title: "cancelled",
+     });
+-    expect(rows.some((row) => row.label === "Failure code")).toBe(false);
+-    expect(rows.some((row) => row.label === "Failure summary")).toBe(false);
++    expect(rows.some((row) => row.label === "Code d'échec")).toBe(false);
++    expect(rows.some((row) => row.label === "Résumé de l'échec")).toBe(false);
+   });
+ 
+   it("leads with the classified run failure code over the generic seed title", () => {
+@@ -244,7 +258,7 @@ describe("buildStrandedRecoveryEscalationNotice", () => {
+     expect(notice.presentation.title).toBe("Erreur : limite d'usage atteinte");
+     expect(allRows(notice.metadata)).toContainEqual({
+       type: "key_value",
+-      label: "Failure code",
++      label: "Code d'échec",
+       value: "provider_quota",
+     });
+   });
+@@ -276,15 +290,21 @@ describe("buildStrandedRecoveryEscalationNotice", () => {
+     expect(
+       noticeMetadataReferencesRecoveryAction(notice.metadata, "1f2e3d4c-5b6a-4798-8899-444444444444"),
+     ).toBe(false);
++    // Les avis déjà en base portent le libellé anglais d'origine : la déduplication les reconnaît encore.
++    const legacy = { version: 1 as const, sourceRunId: null, sections: [{ title: "Recovery", rows: [{ type: "key_value" as const, label: "Recovery action", value: actionId }] }] };
++    expect(noticeMetadataReferencesRecoveryAction(legacy, actionId)).toBe(true);
++    const otherLabel = { ...legacy, sections: [{ title: "Reprise", rows: [{ type: "key_value" as const, label: "Responsable de la reprise", value: actionId }] }] };
++    expect(noticeMetadataReferencesRecoveryAction(otherLabel, actionId)).toBe(false);
+   });
+ });
+ 
+ 
+ it("names the unavailable AI account instead of suggesting secret bindings", () => {
+   const notice = buildConfigurationIncompleteRecoveryNoticeSeed({ reason: "ai_connection_unavailable", provider: "openai" });
+-  expect(notice.nextAction).toContain("Reconnect the selected AI account");
+-  expect(notice.title).toBe("AI connection needs attention");
+-  expect(notice.body).toContain("Reconnect the account");
++  expect(notice.nextAction).toBe("Reconnectez le compte IA choisi ou choisissez une connexion disponible, puis reprenez la tâche.");
++  expect(notice.title).toBe("La connexion IA demande votre attention");
++  expect(notice.body).toContain("Reconnectez le compte");
++  expect(notice.body).not.toContain("Reconnect the account");
+   expect(notice.body).not.toContain("secret/env");
+ });
+ 
+diff --git a/server/src/services/recovery/stranded-notice.ts b/server/src/services/recovery/stranded-notice.ts
+index 34f2de5698..783d87eae0 100644
+--- a/server/src/services/recovery/stranded-notice.ts
++++ b/server/src/services/recovery/stranded-notice.ts
+@@ -2,6 +2,7 @@ import type { IssueCommentMetadata, IssueCommentPresentation } from "@paperclipa
+ import {
+   agentLinkRow,
+   keyValueRow,
++  RECOVERY_ACTION_ROW_LABEL,
+   runLinkRow,
+   systemNoticePresentation,
+   type NoticeMetadataRow,
+@@ -80,6 +81,9 @@ export function buildWorkspaceValidationRecoveryNoticeSeed(): StrandedRecoveryNo
+   };
+ }
+ 
++/** Titre de l'avis « connexion IA indisponible » ; l'interface le relit (isRedundantAiRecoveryNotice). */
++export const AI_CONNECTION_NOTICE_TITLE = "La connexion IA demande votre attention";
++
+ export const SANDBOX_PROVIDER_PLUGIN_NOT_READY_REASON = "sandbox_provider_plugin_not_ready";
+ 
+ function readNonEmptyStringField(payload: Record<string, unknown> | null | undefined, key: string): string | null {
+@@ -96,11 +100,11 @@ function readNonEmptyStringField(payload: Record<string, unknown> | null | undef
+ export function sandboxProviderPluginRemedy(pluginStatus: string): string {
+   switch (pluginStatus) {
+     case "upgrade_pending":
+-      return "review and approve the upgraded plugin's capabilities, then enable it (Plugins → Enable)";
++      return "examiner et approuver les nouvelles capacités du plugin mis à jour, puis l'activer (Plugins → Enable)";
+     case "disabled":
+-      return "enable the plugin again (Plugins → Enable); an operator disabled it";
++      return "réactiver le plugin (Plugins → Enable), désactivé à la main";
+     default:
+-      return "enable the plugin (Plugins → Enable); a server restart also re-activates a bundled plugin";
++      return "activer le plugin (Plugins → Enable), ou redémarrer le serveur, ce qui réactive aussi un plugin fourni avec Paperclip";
+   }
+ }
+ 
+@@ -115,17 +119,17 @@ export function buildConfigurationIncompleteRecoveryNoticeSeed(
+ ): StrandedRecoveryNoticeSeed {
+   if (readNonEmptyStringField(configurationIncomplete, "reason") === "workspace_base_ref_unresolved") {
+     return {
+-      title: "Workspace base ref unavailable",
+-      body: "Paperclip stopped before the agent started because the configured workspace base ref could not be resolved to a Git commit. The task is blocked until its workspace configuration or repository access is repaired.",
+-      nextAction: "Check that the configured base ref exists and the repository is accessible. Correct the task or project workspace settings, then retry the task.",
++      title: "Référence de base de l'espace de travail introuvable",
++      body: "Paperclip s'est arrêté avant le démarrage de l'agent : la référence de base configurée pour l'espace de travail ne correspond à aucun commit Git. La tâche reste bloquée jusqu'à la réparation de la configuration de l'espace de travail ou de l'accès au dépôt.",
++      nextAction: "Vérifiez que la référence de base configurée existe et que le dépôt est accessible. Corrigez les réglages d'espace de travail de la tâche ou du projet, puis relancez la tâche.",
+       tone: "danger",
+     };
+   }
+   if (readNonEmptyStringField(configurationIncomplete, "reason") === "ai_connection_unavailable") {
+     return {
+-      title: "AI connection needs attention",
+-      body: "This task paused because its selected AI account is unavailable. Reconnect the account or choose an available connection to continue.",
+-      nextAction: "Reconnect the selected AI account or choose an available connection, then continue the task.",
++      title: AI_CONNECTION_NOTICE_TITLE,
++      body: "Cette tâche est en pause : le compte IA choisi n'est pas disponible. Reconnectez le compte ou choisissez une connexion disponible pour continuer.",
++      nextAction: "Reconnectez le compte IA choisi ou choisissez une connexion disponible, puis reprenez la tâche.",
+       tone: "danger",
+     };
+   }
+@@ -145,14 +149,14 @@ export function buildConfigurationIncompleteRecoveryNoticeSeed(
+     };
+   }
+   if (readNonEmptyStringField(configurationIncomplete, "reason") === SANDBOX_PROVIDER_PLUGIN_NOT_READY_REASON) {
+-    const pluginKey = readNonEmptyStringField(configurationIncomplete, "pluginKey") ?? "the sandbox provider plugin";
+-    const pluginStatus = readNonEmptyStringField(configurationIncomplete, "pluginStatus") ?? "not ready";
++    const pluginKey = readNonEmptyStringField(configurationIncomplete, "pluginKey") ?? "inconnu";
++    const pluginStatus = readNonEmptyStringField(configurationIncomplete, "pluginStatus") ?? "inconnu";
+     return {
+       body:
+-        `Paperclip stopped before dispatching the adapter because the sandbox provider plugin \`${pluginKey}\` ` +
+-        `is in status \`${pluginStatus}\` and cannot lease a sandbox. Runs will keep failing the same way until the ` +
+-        `plugin is \`ready\` again. Moving it to \`blocked\` so an operator can ${sandboxProviderPluginRemedy(pluginStatus)} ` +
+-        "before resuming.",
++        `Paperclip s'est arrêté avant de lancer l'adaptateur : le plugin fournisseur de sandbox \`${pluginKey}\` ` +
++        `est au statut \`${pluginStatus}\` et ne peut pas fournir de sandbox. Les runs échoueront de la même façon tant que le ` +
++        `plugin ne sera pas de nouveau \`ready\`. La tâche passe en \`blocked\` : avant de reprendre, un opérateur doit ` +
++        `${sandboxProviderPluginRemedy(pluginStatus)}.`,
+       title: "Configuration incomplète",
+       tone: "danger",
+     };
+@@ -221,33 +225,33 @@ export function buildStrandedRecoveryEscalationNotice(input: {
+     DEFAULT_STRANDED_RECOVERY_NOTICE_TITLE;
+ 
+   const recoveryRows: NoticeMetadataRow[] = [
+-    keyValueRow("Recovery action", input.recoveryActionId),
++    keyValueRow(RECOVERY_ACTION_ROW_LABEL, input.recoveryActionId),
+     input.recoveryOwner
+-      ? agentLinkRow("Recovery owner", input.recoveryOwner)
++      ? agentLinkRow("Responsable de la reprise", input.recoveryOwner)
+       : keyValueRow(
+-          "Recovery owner",
+-          "Board decision required",
++          "Responsable de la reprise",
++          "Décision humaine requise",
+         ),
+     keyValueRow(
+-      "Next action",
++      "Prochaine action",
+       seed?.nextAction ?? (input.recoveryOwner
+-        ? "The recovery owner should either restore a live execution path or record the manual resolution on the source issue"
+-        : "Inspect the evidence, then retry the original owner, explicitly reassign, repair the execution path, or record an intentional resolution"),
++        ? "Le responsable de la reprise doit rétablir une exécution active ou noter la résolution manuelle sur la tâche d'origine"
++        : "Examinez les preuves, puis relancez l'assigné d'origine, réassignez explicitement, réparez le chemin d'exécution ou notez une résolution voulue"),
+     ),
+   ];
+ 
+   const runRows: NoticeMetadataRow[] = [];
+   if (input.sourceRun) {
+-    runRows.push(runLinkRow("Source run", input.sourceRun));
++    runRows.push(runLinkRow("Run d'origine", input.sourceRun));
+     const failureCode = input.sourceRun.errorCode?.trim();
+-    if (failureCode) runRows.push(keyValueRow("Failure code", failureCode));
++    if (failureCode) runRows.push(keyValueRow("Code d'échec", failureCode));
+     const failureSummary = input.sourceRun.errorSummary?.trim();
+-    if (failureSummary) runRows.push(keyValueRow("Failure summary", failureSummary));
++    if (failureSummary) runRows.push(keyValueRow("Résumé de l'échec", failureSummary));
+   }
+ 
+   const sections: NoticeMetadataSection[] = [
+-    { title: "Recovery", rows: recoveryRows },
+-    ...(runRows.length > 0 ? [{ title: "Run evidence", rows: runRows }] : []),
++    { title: "Reprise", rows: recoveryRows },
++    ...(runRows.length > 0 ? [{ title: "Preuves du run", rows: runRows }] : []),
+   ];
+ 
+   return {
+diff --git a/server/src/services/recovery/successful-run-handoff.ts b/server/src/services/recovery/successful-run-handoff.ts
+index 77f27811fd..ec637eb4ab 100644
+--- a/server/src/services/recovery/successful-run-handoff.ts
++++ b/server/src/services/recovery/successful-run-handoff.ts
+@@ -12,6 +12,7 @@ import {
+   agentLinkRow,
+   issueLinkRow,
+   keyValueRow,
++  RECOVERY_ACTION_ROW_LABELS,
+   runLinkRow,
+   systemNoticePresentation,
+ } from "./notice-format.js";
+@@ -106,7 +107,7 @@ export function noticeMetadataReferencesRecoveryAction(
+   return (metadata?.sections ?? []).some((section) =>
+     section.rows.some((row) =>
+       row.type === "key_value" &&
+-      row.label === "Recovery action" &&
++      RECOVERY_ACTION_ROW_LABELS.has(row.label) &&
+       row.value === recoveryActionId,
+     ),
+   );
+diff --git a/ui/src/lib/issue-chat-messages.test.ts b/ui/src/lib/issue-chat-messages.test.ts
+index 2448fd6b0f..fe96223b02 100644
+--- a/ui/src/lib/issue-chat-messages.test.ts
++++ b/ui/src/lib/issue-chat-messages.test.ts
+@@ -1796,6 +1796,14 @@ describe("stabilizeThreadMessages", () => {
+ 
+ 
+ describe("AI recovery presentation", () => {
++  it.each(["La connexion IA demande votre attention", "Configuration incomplète", "AI connection needs attention", "Configuration incomplete"])("reconnaît le titre « %s » des avis français et des avis déjà en base", (title) => {
++    const interaction: ConnectionIntentInteraction = { ...pendingConnectionIntentInteraction, sourceRunId: "failed-run", payload: { ...pendingConnectionIntentInteraction.payload, purpose: "ai" } };
++    const notice = createComment({ authorType: "system", presentation: { kind: "system_notice", title, tone: "danger", detailsDefaultOpen: false }, metadata: { version: 1, sourceRunId: "failed-run", sections: [] } });
++    expect(isRedundantAiRecoveryNotice(notice, [interaction])).toBe(true);
++    const other = createComment({ authorType: "system", presentation: { kind: "system_notice", title: "Reprise automatique bloquée", tone: "danger", detailsDefaultOpen: false }, metadata: { version: 1, sourceRunId: "failed-run", sections: [] } });
++    expect(isRedundantAiRecoveryNotice(other, [interaction])).toBe(false);
++  });
++
+   it.each(["pending", "accepted", "rejected", "expired"] as const)("replaces diagnostic notices with the same-run %s connection card", (status) => {
+     const interaction: ConnectionIntentInteraction = { ...pendingConnectionIntentInteraction, status, sourceRunId: "failed-run", payload: { ...pendingConnectionIntentInteraction.payload, purpose: "ai" } };
+     const notice = createComment({ authorType: "system", presentation: { kind: "system_notice", title: "AI connection needs attention", tone: "danger", detailsDefaultOpen: false }, metadata: { version: 1, sourceRunId: "failed-run", sections: [] } });
+diff --git a/ui/src/lib/issue-chat-messages.ts b/ui/src/lib/issue-chat-messages.ts
+index b4d3c81969..d0a9b9ba5a 100644
+--- a/ui/src/lib/issue-chat-messages.ts
++++ b/ui/src/lib/issue-chat-messages.ts
+@@ -1152,7 +1152,9 @@ export function isRedundantAiRecoveryNotice(
+   interactions: readonly IssueThreadInteraction[] = [],
+ ): boolean {
+   return comment.presentation?.kind === "system_notice"
+-    && ["AI connection needs attention", "Configuration incomplete"].includes(comment.presentation.title ?? "")
++    // Titres français du socle et titres anglais d'origine (avis déjà en base).
++    && ["AI connection needs attention", "Configuration incomplete", "La connexion IA demande votre attention", "Configuration incomplète"]
++      .includes(comment.presentation.title ?? "")
+     && Boolean(comment.metadata?.sourceRunId)
+     && interactions.some((interaction) => interaction.kind === "connection_intent"
+       && interaction.payload.purpose === "ai"
+-- 
+2.53.0
+

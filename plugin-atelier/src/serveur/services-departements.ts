@@ -90,10 +90,12 @@ export function routesDepartements(d: DependancesDepartements): Partial<Record<C
         return repli;
       }
     };
-    const [societe, agents, enCours, bloquees, elements] = await Promise.all([
+    const [societe, agents, enCours, enRevue, bloquees, elements] = await Promise.all([
       lire("entreprise", () => ctx.companies.get(c), null),
       lire("agents", () => ctx.agents.list({ companyId: c, limit: 200 }), [] as Agent[]),
       lire("tâches en cours", () => ctx.issues.list({ companyId: c, status: "in_progress", limit: BORNE_TACHES_DEPARTEMENT }), [] as Issue[]),
+      // Une tâche en revue est encore du travail en cours : sans elle, un service qui attend une relecture affiche 0.
+      lire("tâches en revue", () => ctx.issues.list({ companyId: c, status: "in_review", limit: BORNE_TACHES_DEPARTEMENT }), [] as Issue[]),
       lire("tâches bloquées", () => ctx.issues.list({ companyId: c, status: "blocked", limit: BORNE_TACHES_DEPARTEMENT }), [] as Issue[]),
       lire("validations", () => d.aFaire(r), [] as ReadonlyArray<{ type: string; urgence: string }>),
     ]);
@@ -101,7 +103,7 @@ export function routesDepartements(d: DependancesDepartements): Partial<Record<C
     // Défense en profondeur : rien d'une autre entreprise, même si l'hôte en renvoyait.
     const memeEntreprise = <T extends { companyId?: string | null }>(x: T) => x.companyId == null || x.companyId === c;
     const vivants = agents.filter(memeEntreprise).filter((a) => a.status !== "terminated");
-    const tachesEnCours = enCours.filter(memeEntreprise).filter((i) => i.status === "in_progress");
+    const tachesEnCours = [...enCours, ...enRevue].filter(memeEntreprise).filter((i) => i.status === "in_progress" || i.status === "in_review");
     const tachesBloquees = bloquees.filter(memeEntreprise).filter((i) => i.status === "blocked");
     const agentsCompte = {
       actifs: vivants.filter((a) => a.status === "active" || a.status === "idle" || a.status === "running").length,
@@ -125,7 +127,7 @@ export function routesDepartements(d: DependancesDepartements): Partial<Record<C
 
     const enPause = societe?.status === "paused";
     const motifPause = enPause ? (societe?.pauseReason ? MOTIFS_PAUSE[societe.pauseReason] ?? societe.pauseReason : "motif non précisé") : null;
-    const tachesTronquees = enCours.length >= BORNE_TACHES_DEPARTEMENT || bloquees.length >= BORNE_TACHES_DEPARTEMENT;
+    const tachesTronquees = [enCours, enRevue, bloquees].some((l) => l.length >= BORNE_TACHES_DEPARTEMENT);
 
     const alertes: AlerteDepartement[] = [];
     if (enPause) alertes.push({ niveau: "haute", texte: `Service en pause : ${motifPause}.` });

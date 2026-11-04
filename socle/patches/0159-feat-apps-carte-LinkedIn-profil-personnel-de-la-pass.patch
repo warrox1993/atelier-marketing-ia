@@ -1,0 +1,183 @@
+From e5840e285e7cb2eb3b153d27209ac96c71ebb519 Mon Sep 17 00:00:00 2001
+From: Jean-Baptiste Dhondt <114347858+warrox1993@users.noreply.github.com>
+Date: Fri, 30 Oct 2026 21:40:28 +0100
+Subject: [PATCH] =?UTF-8?q?feat(apps):=20carte=20LinkedIn=20(profil=20pers?=
+ =?UTF-8?q?onnel)=20de=20la=20passerelle,=20lecture=20d'identit=C3=A9=20et?=
+ =?UTF-8?q?=20publication=20sur=20accord?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01EThpSSDGc5NRYwbgjNqoTJ
+---
+ .../shared/src/app-definitions.generated.ts   |  3 +-
+ packages/shared/src/app-definitions.test.ts   |  2 +-
+ packages/shared/src/app-definitions.ts        |  1 +
+ .../atelier-linkedin-profil.json              | 83 +++++++++++++++++++
+ .../src/atelier-app-definitions.test.ts       |  7 +-
+ 5 files changed, 91 insertions(+), 5 deletions(-)
+ create mode 100644 packages/shared/src/app-definitions/atelier-linkedin-profil.json
+
+diff --git a/packages/shared/src/app-definitions.generated.ts b/packages/shared/src/app-definitions.generated.ts
+index e9398c3da9..95e9811446 100644
+--- a/packages/shared/src/app-definitions.generated.ts
++++ b/packages/shared/src/app-definitions.generated.ts
+@@ -122,5 +122,6 @@ import a120 from "./app-definitions/atelier-audit.json" with { type: "json" };
+ import a121 from "./app-definitions/atelier-emailing.json" with { type: "json" };
+ import a122 from "./app-definitions/atelier-captation.json" with { type: "json" };
+ import a123 from "./app-definitions/atelier-statbel.json" with { type: "json" };
++import a124 from "./app-definitions/atelier-linkedin-profil.json" with { type: "json" };
+ import type { AppDefinition } from "./types/app-definition.js";
+-export const APP_DEFINITIONS=[a0,a1,a2,a3,a4,a5,a6,a7,a8,a9,a10,a11,a12,a13,a14,a15,a16,a17,a18,a19,a20,a21,a22,a23,a24,a25,a26,a27,a28,a29,a30,a31,a32,a33,a34,a35,a36,a37,a38,a39,a40,a41,a42,a43,a44,a45,a46,a47,a48,a49,a50,a51,a52,a53,a54,a55,a56,a57,a58,a59,a60,a61,a62,a63,a64,a65,a66,a67,a68,a69,a70,a71,a72,a73,a74,a75,a76,a77,a78,a79,a80,a81,a82,a83,a84,a85,a86,a87,a88,a89,a90,a91,a92,a93,a94,a95,a96,a97,a98,a99,a100,a101,a102,a103,a104,a105,a106,a107,a108,a109,a110,a111,a112,a113,a114,a115,a116,a117,a118,a119,a120,a121,a122,a123] as AppDefinition[];
++export const APP_DEFINITIONS=[a0,a1,a2,a3,a4,a5,a6,a7,a8,a9,a10,a11,a12,a13,a14,a15,a16,a17,a18,a19,a20,a21,a22,a23,a24,a25,a26,a27,a28,a29,a30,a31,a32,a33,a34,a35,a36,a37,a38,a39,a40,a41,a42,a43,a44,a45,a46,a47,a48,a49,a50,a51,a52,a53,a54,a55,a56,a57,a58,a59,a60,a61,a62,a63,a64,a65,a66,a67,a68,a69,a70,a71,a72,a73,a74,a75,a76,a77,a78,a79,a80,a81,a82,a83,a84,a85,a86,a87,a88,a89,a90,a91,a92,a93,a94,a95,a96,a97,a98,a99,a100,a101,a102,a103,a104,a105,a106,a107,a108,a109,a110,a111,a112,a113,a114,a115,a116,a117,a118,a119,a120,a121,a122,a123,a124] as AppDefinition[];
+diff --git a/packages/shared/src/app-definitions.test.ts b/packages/shared/src/app-definitions.test.ts
+index 6897a46d95..acc90d0222 100644
+--- a/packages/shared/src/app-definitions.test.ts
++++ b/packages/shared/src/app-definitions.test.ts
+@@ -880,7 +880,7 @@ describe("AppDefinition catalog", () => {
+       "ticktick",
+       "xero",
+     ]);
+-    expect(APP_STORE_DEFINITIONS).toHaveLength(101); // 79 upstream + 22 atelier cards (local patches)
++    expect(APP_STORE_DEFINITIONS).toHaveLength(102); // 79 upstream + 23 atelier cards (local patches)
+     const connectableSlugs = new Set(
+       CONNECTABLE_APP_DEFINITIONS.map((entry) => entry.slug),
+     );
+diff --git a/packages/shared/src/app-definitions.ts b/packages/shared/src/app-definitions.ts
+index 547d77f36a..d29163521d 100644
+--- a/packages/shared/src/app-definitions.ts
++++ b/packages/shared/src/app-definitions.ts
+@@ -47,6 +47,7 @@ export const CONNECTABLE_APP_SLUGS = new Set([
+   "atelier-facebook",
+   "atelier-instagram",
+   "atelier-linkedin",
++  "atelier-linkedin-profil",
+   "atelier-hubspot",
+   "atelier-pipedrive",
+   "atelier-odoo",
+diff --git a/packages/shared/src/app-definitions/atelier-linkedin-profil.json b/packages/shared/src/app-definitions/atelier-linkedin-profil.json
+new file mode 100644
+index 0000000000..8178fd5119
+--- /dev/null
++++ b/packages/shared/src/app-definitions/atelier-linkedin-profil.json
+@@ -0,0 +1,83 @@
++{
++  "schemaVersion": 1,
++  "slug": "atelier-linkedin-profil",
++  "name": "LinkedIn (profil personnel)",
++  "description": "Publication de posts sur le profil LinkedIn personnel de l'humain, après son accord.",
++  "categories": [
++    "marketing",
++    "communication"
++  ],
++  "featured": false,
++  "branding": {
++    "logoUrl": "/brands/apps/atelier-reseau-pro.svg",
++    "darkLogoUrl": "/brands/apps/atelier-reseau-pro-dark.svg"
++  },
++  "urlPatterns": [
++    "http://127.0.0.1:3190/mcp/linkedinprofil"
++  ],
++  "docsUrl": "https://learn.microsoft.com/en-us/linkedin/consumer/integrations/self-serve/share-on-linkedin",
++  "agentInstructions": {
++    "id": "atelier.linkedinprofil",
++    "version": 1,
++    "text": "Use the LinkedIn (personal profile) tool of the marketing gateway only to publish an approved post on the human's own profile. Call atelier_identite first. The gateway cannot read profile posts or statistics: never invent a figure. Publishing requires the human approval of the atelier."
++  },
++  "methods": [
++    {
++      "key": "lecture",
++      "label": "Lecture seule",
++      "transport": "mcp_remote",
++      "auth": "oauth",
++      "ownershipModes": [
++        "dcr",
++        "customer"
++      ],
++      "capabilityProfile": {
++        "key": "lecture",
++        "label": "Lecture seule",
++        "description": "Relie le profil (identité seulement) ; les agents ne publient rien."
++      },
++      "whenToUse": "Relier le profil sans permettre de publier.",
++      "defaults": {
++        "serverUrl": "http://127.0.0.1:3190/mcp/linkedinprofil",
++        "scopesHint": [
++          "openid",
++          "profile"
++        ]
++      },
++      "guidanceMd": "Connexion par la passerelle marketing de l'atelier, avec l'application LinkedIn du profil (produits Share on LinkedIn et Sign In with LinkedIn). Le jeton dure 60 jours : reconnectez ensuite.",
++      "consoleLinks": {
++        "docs": "https://learn.microsoft.com/en-us/linkedin/consumer/integrations/self-serve/share-on-linkedin"
++      },
++      "riskTier": "S2"
++    },
++    {
++      "key": "publication",
++      "label": "Publication",
++      "transport": "mcp_remote",
++      "auth": "oauth",
++      "ownershipModes": [
++        "dcr",
++        "customer"
++      ],
++      "capabilityProfile": {
++        "key": "publication",
++        "label": "Publication",
++        "description": "Les agents peuvent publier sur le profil, après validation humaine dans l'atelier."
++      },
++      "whenToUse": "Publier des posts sur le profil, à valider dans l'atelier.",
++      "defaults": {
++        "serverUrl": "http://127.0.0.1:3190/mcp/linkedinprofil",
++        "scopesHint": [
++          "openid",
++          "profile",
++          "w_member_social"
++        ]
++      },
++      "guidanceMd": "Connexion par la passerelle marketing de l'atelier, avec l'application LinkedIn du profil (produits Share on LinkedIn et Sign In with LinkedIn). Le jeton dure 60 jours : reconnectez ensuite.",
++      "consoleLinks": {
++        "docs": "https://learn.microsoft.com/en-us/linkedin/consumer/integrations/self-serve/share-on-linkedin"
++      },
++      "riskTier": "S3"
++    }
++  ]
++}
+diff --git a/packages/shared/src/atelier-app-definitions.test.ts b/packages/shared/src/atelier-app-definitions.test.ts
+index a1715f7960..d1b60313ae 100644
+--- a/packages/shared/src/atelier-app-definitions.test.ts
++++ b/packages/shared/src/atelier-app-definitions.test.ts
+@@ -22,6 +22,7 @@ const EXPECTED: Record<string, { service: string; name: string; read: string[];
+   "atelier-facebook": { service: "facebook", name: "Facebook (pages)", read: ["pages_show_list", "pages_read_engagement", "pages_read_user_engagement", "read_insights"], write: ["pages_show_list", "pages_read_engagement", "pages_read_user_engagement", "read_insights", "pages_manage_posts", "pages_manage_engagement", "pages_messaging"] },
+   "atelier-instagram": { service: "instagram", name: "Instagram professionnel", read: ["instagram_business_basic", "instagram_business_manage_insights"], write: ["instagram_business_basic", "instagram_business_manage_insights", "instagram_business_content_publish"] },
+   "atelier-linkedin": { service: "linkedin", name: "LinkedIn (pages)", read: ["r_organization_social", "rw_organization_admin"], write: ["r_organization_social", "rw_organization_admin", "w_organization_social"] },
++  "atelier-linkedin-profil": { service: "linkedinprofil", name: "LinkedIn (profil personnel)", read: ["openid", "profile"], write: ["openid", "profile", "w_member_social"] },
+   "atelier-hubspot": { service: "crm", name: "HubSpot", read: ["crm.objects.contacts.read", "crm.objects.deals.read"], write: ["crm.objects.contacts.read", "crm.objects.deals.read", "crm.objects.contacts.write", "crm.objects.deals.write"] },
+   "atelier-pipedrive": { service: "pipedrive", name: "Pipedrive", read: ["contacts:read", "deals:read"], write: ["contacts:full", "deals:full"] },
+   "atelier-odoo": { service: "odoo", name: "Odoo CRM", read: [], write: [] },
+@@ -42,7 +43,7 @@ const EXPECTED: Record<string, { service: string; name: string; read: string[];
+ const atelier = APP_DEFINITIONS.filter((app) => app.slug.startsWith("atelier-"));
+ 
+ describe("atelier marketing gateway cards", () => {
+-  it("ships exactly the twenty-two gateway services, all visible in the store", () => {
++  it("ships exactly the twenty-three gateway services, all visible in the store", () => {
+     expect(atelier.map((app) => app.slug).sort()).toEqual(Object.keys(EXPECTED).sort());
+     const store = new Set(APP_STORE_DEFINITIONS.map((app) => app.slug));
+     for (const app of atelier) expect(store.has(app.slug), app.slug).toBe(true);
+@@ -83,9 +84,9 @@ describe("atelier marketing gateway cards", () => {
+   });
+ 
+   it("keeps every write-only scope out of the read method of the social cards", () => {
+-    for (const slug of ["atelier-facebook", "atelier-instagram", "atelier-linkedin"]) {
++    for (const slug of ["atelier-facebook", "atelier-instagram", "atelier-linkedin", "atelier-linkedin-profil"]) {
+       const read = atelier.find((app) => app.slug === slug)!.methods[0]!.defaults?.scopesHint ?? [];
+-      for (const scope of read) expect(scope, slug).not.toMatch(/manage_posts|manage_engagement|messaging|content_publish|w_organization_social/);
++      for (const scope of read) expect(scope, slug).not.toMatch(/manage_posts|manage_engagement|messaging|content_publish|w_organization_social|w_member_social/);
+     }
+   });
+ 
+-- 
+2.53.0
+

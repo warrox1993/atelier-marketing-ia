@@ -26,6 +26,8 @@ export const LIMITES_LIAISON = {
    * n'exempte d'aucune approbation humaine.
    */
   ouvertesCoordinateurGeneralMax: 30,
+  /** COORD-P1-5 : une liaison ouverte sans activité de sa tâche cible (ou jamais transmise) depuis ce délai est close. */
+  echeanceHeures: 72,
   /** Relais au plus par chaîne de liaisons (protocole inter-coordinateurs : « au plus deux relais »). */
   relaisMax: 2,
   /** Ancêtres d'une tâche d'origine parcourus au plus pour retrouver sa chaîne ; au-delà, la demande est refusée. */

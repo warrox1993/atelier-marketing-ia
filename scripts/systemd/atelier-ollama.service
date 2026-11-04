@@ -1,5 +1,9 @@
 [Unit]
 Description=Ollama local du banc d'essais de l'Atelier marketing IA (écoute sur 127.0.0.1 seulement)
+OnFailure=atelier-alerte@%n.service
+# 10 démarrages ratés en 10 min : l'unité passe en « failed » et alerte au lieu de boucler (EXP-C5).
+StartLimitIntervalSec=600
+StartLimitBurst=10
 Documentation=https://docs.ollama.com/linux
 
 # Installation (une fois), méthode « Manual install » de la documentation officielle, dans l'espace utilisateur :

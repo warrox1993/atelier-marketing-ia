@@ -54,3 +54,29 @@ ou à la procédure. Rien ici n'est fait automatiquement.
 - Base embarquée mono-machine ; une seule personne (`local_trusted`).
 - Un livrable non conforme n'est jamais accepté : au-delà des cycles, seule la relance humaine
   (au moins un levier) le remet en production.
+
+## Scénario réel de la chaîne de contenu (avant toute relance d'un client)
+
+Audit du 29/10/2026, MK-10 : la chaîne de contenu n'a jamais tourné en réel (une seule publication de
+démonstration, sans relecture ni porte). À jouer une fois, sur l'entreprise de test, après le déploiement
+de MK-01 (mise sous porte par le coordinateur), MK-05 (cadrage), MK-06 (stratégie lisible) et MK-09
+(verdict de conformité bloquant).
+
+1. Demande humaine de petite taille : « un post LinkedIn et un article court sur <fait réel de la fiche du
+   client> ».
+2. Attendu, dans l'ordre :
+   - [ ] le coordinateur dépose le document `plan` (grille recopiée, contrôle `plan/controle` à `"ok": true`)
+     et pose la carte « Valider le plan » ; aucune sous-tâche avant l'accord ;
+   - [ ] après l'accord : sous-tâches Contenus et Réseaux sociaux, Conformité publicitaire avant la relecture,
+     au plus 4 ouvertes à la fois, aucune étape Coordonnées (pas de liste de fiches) ;
+   - [ ] chaque livrable est sous porte (`POST /portes`), avec les revues `exigences` et `metier`, plus
+     `technique` si un lien est publié ; la politique native se termine par une approbation humaine ;
+   - [ ] un verdict de conformité autre que « publiable » renvoie le livrable au producteur (nouvelle révision),
+     jamais à la relecture ni à l'humain ;
+   - [ ] les revues portent sur la révision courante et `porte/evaluer` rend `ok` ;
+   - [ ] le dossier de validation humaine arrive sur la tâche parente ; aucune publication sans approbation de
+     l'empreinte de l'appel exact.
+3. Preuves à relever : identifiants des tâches et des révisions, verdicts (`/contexte?partie=verdicts`),
+   évaluation de la porte, nombre de tours et coût de chaque run.
+4. Échec : un livrable qui arrive à l'humain sans ses revues sur la révision courante, ou un verdict de
+   conformité non « publiable » passé outre.

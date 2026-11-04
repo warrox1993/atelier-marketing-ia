@@ -11,6 +11,7 @@ import type { ActeurHote } from "../src/serveur/atelier.js";
 import type { ErreurAtelier } from "../src/serveur/erreurs.js";
 import { routeCartesServices, TTL_CARTES_SERVICES_MS } from "../src/serveur/liaisons/cartes-services.js";
 import type { LiaisonLue } from "../src/serveur/liaisons/lecture-liaisons.js";
+import { ORIGINE_DEMANDE } from "../src/serveur/services-accueil.js";
 import { ORIGINE_DISCUSSION } from "../src/serveur/services-discussion.js";
 
 type Ligne = Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
@@ -82,6 +83,8 @@ function faux(o: { liaisons?: LiaisonLue[]; issues?: Ligne[]; panneListe?: boole
 }
 
 type Reponse = { taches: Ligne[]; indisponible: boolean };
+/** Services confirmés du client hors Direction, rendus pour la lecture de leurs tâches ouvertes (HUM-C7). */
+const SERVICES = [{ companyId: MARKETING, slug: "marketing", nom: "Marketing" }, { companyId: JURIDIQUE, slug: "juridique", nom: "Juridique" }];
 
 describe("discussion.cartes-services : route déclarée", () => {
   it("GET réservée à l'humain (auth board)", () => {
@@ -105,7 +108,7 @@ describe("discussion.cartes-services", () => {
     const f = faux();
     const { corps } = await f.appeler();
     const r = corps as Reponse;
-    expect(r).toEqual({ taches: [{ companyId: MARKETING, tacheId: id(20), slug: "marketing", nom: "Marketing" }], indisponible: false });
+    expect(r).toEqual({ taches: [{ companyId: MARKETING, tacheId: id(20), slug: "marketing", nom: "Marketing", discussionId: DISCUSSION }], services: SERVICES, indisponible: false });
     expect(f.appels.length).toBeGreaterThan(0);
     // Aucun appel hors portée : ni tâche, ni liste, ni carte d'une autre entreprise que la Direction.
     expect(f.appels.filter((a) => a.companyId !== DIRECTION)).toEqual([]);
@@ -121,6 +124,40 @@ describe("discussion.cartes-services", () => {
     const r = (await f.appeler()).corps as Reponse;
     expect(r.taches.map((t) => t.tacheId)).toEqual([id(20)]);
     expect(f.appels.filter((a) => a.companyId !== DIRECTION)).toEqual([]);
+  });
+
+  it("couvre toutes les discussions de l'entreprise (nouvelles comprises), pas un faux marqueur ni la discussion d'une autre entreprise", async () => {
+    const f = faux({
+      issues: [
+        { id: id(13), companyId: DIRECTION, identifier: "DIR-5", title: "Nouvelle", status: "in_progress", originKind: ORIGINE_DISCUSSION, originId: `discussion:${DIRECTION}:2f1c0e0a-0000-4000-8000-000000000001`, createdAt: new Date("2026-10-27T08:00:00Z") },
+        { id: id(14), companyId: DIRECTION, identifier: "DIR-6", title: "Fausse", status: "in_progress", originKind: ORIGINE_DISCUSSION, originId: `discussion:${ETRANGER}:abc`, createdAt: new Date("2026-10-27T08:01:00Z") },
+        { id: id(24), companyId: MARKETING, identifier: "MKT-4", title: "Depuis la nouvelle", status: "todo", parentId: null },
+        { id: id(25), companyId: MARKETING, identifier: "MKT-5", title: "Depuis la fausse", status: "todo", parentId: null },
+      ],
+      liaisons: [liaison({ id: "l-nouvelle", tacheOrigine: id(13), tacheCible: id(24) }), liaison({ id: "l-fausse", tacheOrigine: id(14), tacheCible: id(25) })],
+    });
+    const r = (await f.appeler()).corps as Reponse;
+    expect(r.taches.map((t) => t.tacheId)).toEqual([id(24)]);
+    expect(r.taches[0]!.discussionId).toBe(id(13));
+  });
+
+  it("chaque tâche porte la discussion racine dont sa liaison est issue (un descendant ramène à sa discussion), null pour une demande à l'équipe sans discussion parente", async () => {
+    const f = faux({
+      issues: [
+        { id: id(13), companyId: DIRECTION, identifier: "DIR-5", title: "Nouvelle", status: "in_progress", originKind: ORIGINE_DISCUSSION, originId: `discussion:${DIRECTION}:2f1c0e0a-0000-4000-8000-000000000001`, createdAt: new Date("2026-10-27T08:00:00Z") },
+        { id: id(12), companyId: DIRECTION, identifier: "DIR-4", title: "Sous-demande", status: "todo", parentId: id(13) },
+        { id: id(15), companyId: DIRECTION, identifier: "DIR-7", title: "Demande", status: "todo", parentId: null, originKind: ORIGINE_DEMANDE },
+        { id: id(24), companyId: MARKETING, identifier: "MKT-4", title: "Depuis la fille", status: "todo", parentId: null },
+        { id: id(25), companyId: JURIDIQUE, identifier: "JUR-1", title: "Depuis la demande", status: "todo", parentId: null },
+      ],
+      liaisons: [
+        liaison({ id: "l-directe", tacheOrigine: DISCUSSION, tacheCible: id(20) }),
+        liaison({ id: "l-fille", tacheOrigine: id(12), tacheCible: id(24) }),
+        liaison({ id: "l-demande", tacheOrigine: id(15), entrepriseCible: JURIDIQUE, serviceCible: "juridique", tacheCible: id(25) }),
+      ],
+    });
+    const r = (await f.appeler()).corps as Reponse;
+    expect(r.taches.map((t) => [t.tacheId, t.discussionId])).toEqual([[id(20), DISCUSSION], [id(24), id(13)], [id(25), null]]);
   });
 
   it("une même tâche reçue par plusieurs liaisons n'est rendue qu'une fois", async () => {
@@ -175,12 +212,13 @@ describe("discussion.cartes-services", () => {
       panneGet: true,
     });
     const r = (await f.appeler()).corps as Reponse;
-    expect(r).toEqual({ taches: [], indisponible: true });
+    expect(r).toEqual({ taches: [], services: SERVICES, indisponible: true });
   });
 
   it("sans discussion ouverte : aucune tâche", async () => {
     const f = faux();
     f.issues.splice(0, 1);
-    expect((await f.appeler()).corps).toEqual({ taches: [], indisponible: false });
+    // HUM-C7 : sans discussion, les services confirmés restent rendus (leurs cartes attendent aussi l'humain).
+    expect((await f.appeler()).corps).toEqual({ taches: [], services: SERVICES, indisponible: false });
   });
 });

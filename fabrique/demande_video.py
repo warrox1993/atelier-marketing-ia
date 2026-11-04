@@ -11,7 +11,9 @@ travail vient du service, jamais de la demande.
                     "voix": "<id du registre des voix>",
                     "visuel": { "gabarit": "titre_plein_ecran" | "chiffre_cle" | "liste_3_points",
                                 "champs": { "titre"?, "sous_titre"?, "chiffre"?, "points"? } },
-                    "duree_max": 1..60 (facultatif, secondes) }, ... ]   # 1 à 30 scènes }
+                    "duree_max": 1..60 (facultatif, secondes),
+                    "illustration": "20 à 2500 caractères" (facultatif : fond plein cadre généré par l'IA) }, ... ] }
+                                                                           # 1 à 30 scènes
 """
 
 from __future__ import annotations
@@ -21,6 +23,7 @@ from dataclasses import dataclass
 from typing import Mapping
 
 from fabrique.bibliotheque_musique import MOTIF_IDENTIFIANT as MOTIF_MUSIQUE
+from fabrique.generateurs.illustration import DemandeInvalide, valider_illustration
 from fabrique.generateurs.montage import FORMATS_SORTIE, MAX_SCENES
 from fabrique.generateurs.visuels import GABARITS, valider_champs
 from fabrique.registre_voix import MOTIF_ID as MOTIF_VOIX
@@ -30,7 +33,7 @@ DUREE_MAX_SCENE_MIN_S = 1.0
 DUREE_MAX_SCENE_MAX_S = 60.0
 CHAMPS_DEMANDE = {"format_sortie", "musique", "sous_titres", "scenes"}
 CHAMPS_OBLIGATOIRES = {"format_sortie", "sous_titres", "scenes"}
-CHAMPS_SCENE = {"texte_voix", "voix", "visuel", "duree_max"}
+CHAMPS_SCENE = {"texte_voix", "voix", "visuel", "duree_max", "illustration"}
 CHAMPS_SCENE_OBLIGATOIRES = {"texte_voix", "voix", "visuel"}
 CHAMPS_VISUEL = {"gabarit", "champs"}
 
@@ -46,6 +49,7 @@ class SceneDemandee:
     gabarit: str
     champs: Mapping[str, object]
     duree_max_s: float | None
+    illustration: str | None = None
 
 
 @dataclass(frozen=True)
@@ -100,7 +104,13 @@ def _scene(valeur: object, rang: int) -> SceneDemandee:
             raise DemandeVideoInvalide(
                 f"{nom}.duree_max : nombre entre {DUREE_MAX_SCENE_MIN_S:g} et {DUREE_MAX_SCENE_MAX_S:g}")
         duree = float(duree)
-    return SceneDemandee(texte, voix, gabarit, dict(visuel["champs"]), duree)
+    fond = None
+    if "illustration" in scene:
+        try:
+            fond = valider_illustration(scene["illustration"])
+        except DemandeInvalide as erreur:
+            raise DemandeVideoInvalide(f"{nom}.{erreur}") from erreur
+    return SceneDemandee(texte, voix, gabarit, dict(visuel["champs"]), duree, fond)
 
 
 def valider_demande_video(demande: object) -> DemandeVideo:

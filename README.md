@@ -8,8 +8,11 @@ Ce que fait l'atelier : une campagne (brief) devient des exigences numérotées,
 confiées à des agents, des livrables révisés, relus par trois contrôleurs indépendants puis par
 une porte déterministe côté serveur ; seul un livrable qui a passé tous les contrôles arrive à
 l'humain, qui approuve, demande une correction ou rejette. Rien n'est diffusé sans approbation
-humaine, et aucun connecteur de diffusion n'existe encore : la diffusion reste
-« préparée », jamais envoyée.
+humaine. Connecteurs présents au 30/10/2026 : l'e-mailing (listmonk, dont l'envoi passe par Mailpit, serveur SMTP
+de test : rien ne sort de la machine), la captation de prospects (pages de destination) et les cartes Facebook,
+Instagram et LinkedIn de la galerie, qui restent « non connecté » tant qu'aucun compte n'y est branché
+(`GET http://127.0.0.1:3190/sante`, `docs/integrations.md`, `docs/captation.md`). Aucune diffusion ne sort donc
+de la machine aujourd'hui : elle reste « préparée ».
 
 ## 1. Installation propre (Ubuntu, Node.js 24, pnpm 9 par corepack)
 
@@ -17,7 +20,7 @@ humaine, et aucun connecteur de diffusion n'existe encore : la diffusion reste
 cd ~/Projets/atelier-marketing-ia
 cp config/atelier.env.example config/atelier.env   # adapter PAPERCLIP_HOME si le dépôt est ailleurs
 scripts/verifier-config.sh                         # validation : boucle locale, télémétrie coupée, aucun secret
-scripts/preparer-socle.sh     # clone Paperclip v2026.1012.0, vérifie le SHA, applique socle/patches/, installe, construit
+scripts/preparer-socle.sh     # clone Paperclip v2026.1023.0 (socle/VERSION), vérifie le SHA, applique socle/patches/, installe, construit
 scripts/preparer-plugin.sh    # SDK empaqueté, installation figée, typecheck, tests, build du plugin
 ```
 
@@ -42,7 +45,7 @@ python3 -I scripts/scenarios/atelier_scenarios.py B http://127.0.0.1:3100/api   
 ```
 
 Le scénario A (parcours complet avec connexions créées par les cartes de galerie) exige une passerelle
-marketing en démonstration et une instance d'essai qui la connaît :
+d'essai sur un autre port que 3190 et une instance d'essai qui la connaît :
 
 ```bash
 (cd passerelle && PASSERELLE_PORT=3391 PASSERELLE_SERVICES_REELS=osm,liens PASSERELLE_ETAT=/tmp/oauth-local.json node dist/src/demarrer.js) &
@@ -57,9 +60,14 @@ Rubrique Paramètres de l'atelier, tableau « Services marketing » : « Connect
 dans la galerie native de Paperclip (Search Console, Analytics, Ads, fiche d'établissement, Facebook,
 Instagram, LinkedIn, HubSpot, Pipedrive, Odoo, Teamleader). Les actions qui publient ou modifient y
 arrivent en « Ask first » (accord humain natif), en plus de l'approbation de l'atelier. Ensuite, relancer
-`python3 -I scripts/bootstrap-organisation.py appliquer` : il réserve la connexion aux seuls rôles qui
-en ont besoin (`organisation/registre/agents.json`, champ `connexions`) et bloque les écritures d'un rôle
-en lecture ; `bootstrap-organisation.py etat` signale une connexion encore ouverte à tous.
+`python3 -I scripts/bootstrap-organisation.py appliquer` : il écrit les installations et le profil
+d'accès de la connexion pour les seuls rôles qui en ont besoin (`organisation/registre/agents.json`, champ
+`connexions`) et bloque les écritures d'un rôle en lecture ; `bootstrap-organisation.py etat` signale une
+connexion dont ces réglages sont encore ouverts à tous. Limite connue (audit du 29/10/2026, DOC-A1) : ces
+contrôles portent sur les réglages écrits, pas sur les outils que le socle livre à chaque run ; les journaux
+de runs du 25/10 montrent des rôles hors registre qui recevaient les outils des connexions `atelier-*`.
+Tant que le correctif du socle n'est pas livré, vérifier la liste des outils d'un run avant d'ouvrir une
+connexion qui écrit.
 
 ## 3. Activer le mode réel (à faire par l'opérateur)
 
@@ -93,10 +101,20 @@ Les agents restent en pause : les réveiller est une décision humaine. Avant un
 
 ## 4. Arrêt et reprise
 
+L'instance 3100 et sa passerelle 3190 tournent sous systemd (unités utilisateur `atelier-instance@atelier` et
+`atelier-passerelle@3190`, `Restart=on-failure`, `docs/exploitation.md` §16) : on les arrête et on les relance par
+systemd, jamais par `scripts/lancer-instance.sh` à la main (le port serait déjà pris, et une instance lancée hors
+systemd entre en course avec lui ; règle de l'opérateur du 27/10/2026). Les données sont conservées.
+
 ```bash
-scripts/arreter-instance.sh               # SIGTERM au bon PID, jamais pkill -f
-scripts/lancer-instance.sh                # relance au premier plan ; les données sont conservées
+systemctl --user restart atelier-instance@atelier     # relance
+systemctl --user stop atelier-instance@atelier        # arrêt (start pour repartir)
+systemctl --user status atelier-instance@atelier      # état
 ```
+
+Avant tout redémarrage, vérifier qu'aucun run d'agent n'est en cours (`scripts/deployer.sh` le contrôle seul,
+`docs/exploitation.md` §15). `scripts/lancer-instance.sh` est le programme que lance l'unité ;
+`scripts/arreter-instance.sh` (SIGTERM au bon PID, jamais `pkill -f`) sert aux instances lancées hors systemd.
 
 Après un arrêt pendant un run, Paperclip marque le run `interrupted` et bloque la tâche sans
 rejeu automatique : la réconciliation se fait par l'humain (fiche native de la tâche) ; le

@@ -9,6 +9,8 @@
 //   facebook   : PASSERELLE_META_CLIENT_ID + PASSERELLE_META_CLIENT_SECRET
 //   instagram  : PASSERELLE_INSTAGRAM_CLIENT_ID + PASSERELLE_INSTAGRAM_CLIENT_SECRET (identifiant d'app Instagram)
 //   linkedin   : PASSERELLE_LINKEDIN_CLIENT_ID + PASSERELLE_LINKEDIN_CLIENT_SECRET
+//   linkedinprofil : PASSERELLE_LINKEDIN_PROFIL_CLIENT_ID + PASSERELLE_LINKEDIN_PROFIL_CLIENT_SECRET (seconde application,
+//                produits « Share on LinkedIn » et « Sign In with LinkedIn using OpenID Connect »)
 //   crm        : PASSERELLE_HUBSPOT_CLIENT_ID + PASSERELLE_HUBSPOT_CLIENT_SECRET
 //   teamleader : PASSERELLE_TEAMLEADER_CLIENT_ID + PASSERELLE_TEAMLEADER_CLIENT_SECRET
 //   pipedrive  : toujours (jeton d'API personnel du client) ; OAuth en plus si PASSERELLE_PIPEDRIVE_CLIENT_ID/SECRET
@@ -20,7 +22,7 @@ import { createPublicKey, type KeyObject } from "node:crypto";
 import { readFileSync, statSync } from "node:fs";
 import { lireRedirectionsPermises } from "../../garde-oauth.js";
 
-export const SERVICES_SOCIAL_CRM_REELS = ["facebook", "instagram", "linkedin", "crm", "pipedrive", "odoo", "teamleader"] as const;
+export const SERVICES_SOCIAL_CRM_REELS = ["facebook", "instagram", "linkedin", "linkedinprofil", "crm", "pipedrive", "odoo", "teamleader"] as const;
 export type ServiceSocialCrm = (typeof SERVICES_SOCIAL_CRM_REELS)[number];
 
 /** Versions d'API retenues (documentation consultée le 15/10/2026, voir docs/passerelle.md). */
@@ -117,7 +119,7 @@ export interface ConfigSocialCrmReel {
   adresses: AdressesSocialCrm;
   /** Vrai quand les adresses pointent vers un faux serveur local (journalisé en avertissement). */
   essai: boolean;
-  applications: Partial<Record<"facebook" | "instagram" | "linkedin" | "crm" | "pipedrive" | "teamleader", IdentifiantsApplication>>;
+  applications: Partial<Record<"facebook" | "instagram" | "linkedin" | "linkedinprofil" | "crm" | "pipedrive" | "teamleader", IdentifiantsApplication>>;
   /** Clé publique Ed25519 (PEM SPKI) du plugin de l'atelier ; sans elle, aucune mutation n'est jamais exécutée. */
   clePubliqueApprobation: string | null;
   /** Attente maximale acceptée sur une limite de débit avant un unique nouvel essai (lectures seulement), en ms. */
@@ -134,7 +136,7 @@ export interface ConfigSocialCrmReel {
    * de la boucle locale. Vide ou absent : boucle locale seulement (Paperclip local).
    */
   redirectionsPermises?: readonly string[];
-  /** Mention d'information IA des messages directs (article 50) ; absente : mention française par défaut. */
+  /** Mention d'information IA des messages directs (choix de transparence, voir mention-ia.ts) ; absente : mention française par défaut. */
   mentionIa?: MentionIa;
 }
 
@@ -155,6 +157,7 @@ const PREFIXES_APPLICATIONS = {
   facebook: "PASSERELLE_META",
   instagram: "PASSERELLE_INSTAGRAM",
   linkedin: "PASSERELLE_LINKEDIN",
+  linkedinprofil: "PASSERELLE_LINKEDIN_PROFIL",
   crm: "PASSERELLE_HUBSPOT",
   pipedrive: "PASSERELLE_PIPEDRIVE",
   teamleader: "PASSERELLE_TEAMLEADER",

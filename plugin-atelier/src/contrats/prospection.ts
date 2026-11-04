@@ -890,10 +890,11 @@ export type BaseLegale = z.infer<typeof BaseLegale>;
 const CANAUX_ELECTRONIQUES: ReadonlySet<CanalContact> = new Set(["courriel", "sms"]);
 
 /**
- * Matrice des bases légales permises, par cible et par canal (§3.2 de la conception, arrêté royal du
- * 4 avril 2003, art. 1er) :
+ * Matrice des bases légales permises, par cible et par canal (§3.2 de la conception ; CDE, art. XII.13 et
+ * arrêté royal du 4 avril 2003, art. 1er, relus sur Justel le 30/10/2026) :
  * - courriel et SMS : consentement préalable, sauf client existant (produits analogues du même
- *   prestataire) et, pour une PERSONNE MORALE seulement, adresse impersonnelle ; jamais l'intérêt
+ *   prestataire, coordonnées obtenues directement lors d'une vente, opposition offerte dès la collecte) et,
+ *   pour une PERSONNE MORALE seulement, adresse impersonnelle ; jamais l'intérêt
  *   légitime ; pour un PARTICULIER : consentement ou client existant, rien d'autre ;
  * - téléphone : intérêt légitime documenté ou consentement, toujours après vérification de la liste
  *   « Ne m'appelez plus » (et de la liste d'opposition du client) ;
@@ -1504,6 +1505,18 @@ export const ExclureProspectEntree = z
   })
   .strict();
 export type ExclureProspectEntree = z.infer<typeof ExclureProspectEntree>;
+
+/**
+ * DROIT-1.3 : corps de `tache.prospects.telephone`. Un numéro publié, lu sur une source de la tâche (lecture protégée
+ * ou réponse de connexion déposée), se dépose chiffré dans la fiche du prospect ; il n'est jamais écrit dans un document.
+ */
+export const DeposerTelephoneEntree = z
+  .object({
+    telephone: z.string().trim().min(6).max(40),
+    sourceId: IdNatif,
+  })
+  .strict();
+export type DeposerTelephoneEntree = z.infer<typeof DeposerTelephoneEntree>;
 
 /**
  * Entrée de `prospects.fusionner-doublons` (humain seulement) : rattrapage des fiches qui désignent la même

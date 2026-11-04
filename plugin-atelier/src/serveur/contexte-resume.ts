@@ -78,9 +78,8 @@ export function resumer(c: ContexteComplet): Dict {
 
   return {
     vue: "resume",
-    pourAllerPlus:
-      "Résumé. Livrable par pages : ?partie=livrable&debut=<ligne>&lignes=<n> (lignes du sommaire) ; " +
-      "?partie=verdicts, ?partie=couvertures ou ?partie=donneesConnexion en entier ; ?vue=complete pour le corps complet.",
+    // Court : le mode d'emploi (pages du livrable, parties) est dans les consignes communes.
+    pourAllerPlus: "?partie=livrable|verdicts|couvertures|donneesConnexion ; ?vue=complete",
     tache: sansIdentifiants(tache, ["companyId"]),
     campagne: campagne ? sansIdentifiants(campagne, ["companyId"]) : null,
     brief: brief ? sansIdentifiants(brief, ["companyId", "campagneId", "issueId"]) : null,

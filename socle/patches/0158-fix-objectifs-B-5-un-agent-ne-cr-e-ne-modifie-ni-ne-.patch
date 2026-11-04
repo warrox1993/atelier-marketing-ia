@@ -1,0 +1,176 @@
+From 4c11e5964dd14ffd674bb738fc53b69df2c9c2a6 Mon Sep 17 00:00:00 2001
+From: Jean-Baptiste Dhondt <114347858+warrox1993@users.noreply.github.com>
+Date: Fri, 30 Oct 2026 21:21:04 +0100
+Subject: [PATCH] =?UTF-8?q?fix(objectifs):=20B-5,=20un=20agent=20ne=20cr?=
+ =?UTF-8?q?=C3=A9e,=20ne=20modifie=20ni=20ne=20supprime=20un=20objectif?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Revue de sécurité 2, constat B-5.
+
+Le Coordinateur et Mesure lisent cible et échéance d'un objectif comme des décisions de
+l'humain ; or POST /companies/:id/goals et PATCH /goals/:id ne vérifiaient que l'accès à
+l'entreprise : un agent injecté pouvait fixer une fausse cible.
+- routes/goals.ts : refuserObjectifParAgent, 403 pour un acteur agent sur la création, la
+  modification et la suppression (DELETE /goals/:id, même détour) ; la lecture reste ouverte
+  et le board garde tous ses droits. Le bootstrap écrit les objectifs avec la clé du board.
+Tests : atelier-objectifs-routes.test.ts (agent refusé sur les trois routes sans appel au
+service, lecture d'un agent acceptée, board accepté sur les trois routes).
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01EThpSSDGc5NRYwbgjNqoTJ
+---
+ .../atelier-objectifs-routes.test.ts          | 88 +++++++++++++++++++
+ server/src/routes/goals.ts                    | 14 ++-
+ 2 files changed, 101 insertions(+), 1 deletion(-)
+ create mode 100644 server/src/__tests__/atelier-objectifs-routes.test.ts
+
+diff --git a/server/src/__tests__/atelier-objectifs-routes.test.ts b/server/src/__tests__/atelier-objectifs-routes.test.ts
+new file mode 100644
+index 0000000000..456a6ad52c
+--- /dev/null
++++ b/server/src/__tests__/atelier-objectifs-routes.test.ts
+@@ -0,0 +1,88 @@
++/**
++ * Atelier Marketing IA (patch local 0158, revue de sécurité 2, B-5) : les objectifs sont
++ * fixés par un humain ; un acteur agent ne les crée, ne les modifie ni ne les supprime.
++ */
++import express from "express";
++import request from "supertest";
++import { beforeEach, describe, expect, it, vi } from "vitest";
++
++const mockGoalService = vi.hoisted(() => ({
++  list: vi.fn(),
++  getById: vi.fn(),
++  create: vi.fn(),
++  update: vi.fn(),
++  remove: vi.fn(),
++}));
++const mockLogActivity = vi.hoisted(() => vi.fn());
++
++vi.mock("../telemetry.js", () => ({ getTelemetryClient: () => null }));
++vi.mock("../services/index.js", () => ({
++  goalService: () => mockGoalService,
++  logActivity: mockLogActivity,
++}));
++
++const companyId = "company-1";
++const goal = { id: "goal-1", companyId, title: "Objectif", description: null, level: "company", status: "active" };
++const agentActor = { type: "agent", agentId: "agent-1", companyId, source: "agent_key", runId: "run-1" };
++const boardActor = { type: "board", userId: "board-user", companyIds: [companyId], source: "local_implicit", isInstanceAdmin: false };
++
++async function createApp(actor: Record<string, unknown>) {
++  const [{ errorHandler }, { goalRoutes }] = await Promise.all([
++    import("../middleware/index.js"),
++    import("../routes/goals.js"),
++  ]);
++  const app = express();
++  app.use(express.json());
++  app.use((req, _res, next) => {
++    (req as any).actor = actor;
++    next();
++  });
++  app.use("/api", goalRoutes({} as any));
++  app.use(errorHandler);
++  return app;
++}
++
++describe("atelier : objectifs réservés aux humains (B-5)", () => {
++  beforeEach(() => {
++    vi.clearAllMocks();
++    mockGoalService.getById.mockResolvedValue(goal);
++    mockGoalService.create.mockResolvedValue(goal);
++    mockGoalService.update.mockResolvedValue(goal);
++    mockGoalService.remove.mockResolvedValue(goal);
++    mockLogActivity.mockResolvedValue(undefined);
++  });
++
++  it("refuse (403) qu'un agent crée, modifie ou supprime un objectif", async () => {
++    const app = await createApp(agentActor);
++    const creation = await request(app).post(`/api/companies/${companyId}/goals`).send({ title: "Cible inventée" });
++    const modification = await request(app).patch("/api/goals/goal-1").send({ description: "Cible : 1000 prospects" });
++    const suppression = await request(app).delete("/api/goals/goal-1");
++
++    for (const res of [creation, modification, suppression]) {
++      expect(res.status, JSON.stringify(res.body)).toBe(403);
++      expect(res.body.error).toContain("un humain le fait depuis le board");
++    }
++    expect(mockGoalService.create).not.toHaveBeenCalled();
++    expect(mockGoalService.update).not.toHaveBeenCalled();
++    expect(mockGoalService.remove).not.toHaveBeenCalled();
++  });
++
++  it("laisse un agent lire les objectifs", async () => {
++    mockGoalService.list.mockResolvedValue([goal]);
++    const app = await createApp(agentActor);
++    const res = await request(app).get(`/api/companies/${companyId}/goals`);
++
++    expect(res.status, JSON.stringify(res.body)).toBe(200);
++  });
++
++  it("laisse le board créer, modifier et supprimer un objectif", async () => {
++    const app = await createApp(boardActor);
++    const creation = await request(app).post(`/api/companies/${companyId}/goals`).send({ title: "Objectif" });
++    const modification = await request(app).patch("/api/goals/goal-1").send({ description: "Cible : 30 prospects" });
++    const suppression = await request(app).delete("/api/goals/goal-1");
++
++    expect(creation.status, JSON.stringify(creation.body)).toBe(201);
++    expect(modification.status, JSON.stringify(modification.body)).toBe(200);
++    expect(suppression.status, JSON.stringify(suppression.body)).toBe(200);
++  });
++});
+diff --git a/server/src/routes/goals.ts b/server/src/routes/goals.ts
+index 9d6e53632e..4ced5dc67b 100644
+--- a/server/src/routes/goals.ts
++++ b/server/src/routes/goals.ts
+@@ -1,12 +1,21 @@
+-import { Router } from "express";
++import { Router, type Request } from "express";
+ import type { Db } from "@paperclipai/db";
+ import { createGoalSchema, updateGoalSchema } from "@paperclipai/shared";
+ import { trackGoalCreated } from "@paperclipai/shared/telemetry";
++import { forbidden } from "../errors.js";
+ import { validate } from "../middleware/validate.js";
+ import { goalService, logActivity } from "../services/index.js";
+ import { assertCompanyAccess, getAccessibleResource, getActorInfo } from "./authz.js";
+ import { getTelemetryClient } from "../telemetry.js";
+ 
++// Atelier (patch local 0158, B-5) : le Coordinateur et Mesure lisent cible et échéance comme des
++// décisions de l'humain ; un agent ne crée, ne modifie ni ne supprime donc un objectif.
++function refuserObjectifParAgent(req: Request) {
++  if (req.actor.type === "agent") {
++    throw forbidden("Atelier : un agent ne crée, ne modifie ni ne supprime un objectif ; un humain le fait depuis le board.");
++  }
++}
++
+ export function goalRoutes(db: Db) {
+   const router = Router();
+   const svc = goalService(db);
+@@ -28,6 +37,7 @@ export function goalRoutes(db: Db) {
+   router.post("/companies/:companyId/goals", validate(createGoalSchema), async (req, res) => {
+     const companyId = req.params.companyId as string;
+     assertCompanyAccess(req, companyId);
++    refuserObjectifParAgent(req);
+     const goal = await svc.create(companyId, req.body);
+     const actor = getActorInfo(req);
+     await logActivity(db, {
+@@ -51,6 +61,7 @@ export function goalRoutes(db: Db) {
+     const id = req.params.id as string;
+     const existing = await getAccessibleResource(req, res, svc.getById(id), "Goal not found");
+     if (!existing) return;
++    refuserObjectifParAgent(req);
+     const goal = await svc.update(id, req.body);
+     if (!goal) {
+       res.status(404).json({ error: "Goal not found" });
+@@ -76,6 +87,7 @@ export function goalRoutes(db: Db) {
+     const id = req.params.id as string;
+     const existing = await getAccessibleResource(req, res, svc.getById(id), "Goal not found");
+     if (!existing) return;
++    refuserObjectifParAgent(req);
+     const goal = await svc.remove(id);
+     if (!goal) {
+       res.status(404).json({ error: "Goal not found" });
+-- 
+2.53.0
+

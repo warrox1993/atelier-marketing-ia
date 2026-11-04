@@ -7,7 +7,7 @@
 import { ANCRE_PASSAGE_AU_REEL } from "./realite.js";
 import { chemin, type CleVue } from "./route.js";
 
-export type CleRubriqueNav = "departements" | "accueil" | "discussion" | "prospects" | "marketing" | "reglages" | "direction" | "organigramme" | "livrables";
+export type CleRubriqueNav = "departements" | "accueil" | "discussion" | "prospects" | "marketing" | "reglages" | "direction" | "organigramme" | "agents" | "livrables";
 
 export interface OngletRubrique {
   cle: string;
@@ -107,6 +107,12 @@ export const RUBRIQUE_ORGANIGRAMME: RubriqueNav = {
   onglets: [{ cle: "organigramme", libelle: "Organigramme", vue: "organigramme" }],
 };
 
+export const RUBRIQUE_AGENTS: RubriqueNav = {
+  cle: "agents",
+  libelle: "Agents",
+  onglets: [{ cle: "agents", libelle: "Agents", vue: "agents" }],
+};
+
 /** Livrables de la fabrique : page sans menu secondaire, ouverte depuis le menu principal ou le commentaire de fin de travail. */
 export const RUBRIQUE_LIVRABLES: RubriqueNav = {
   cle: "livrables",
@@ -114,9 +120,9 @@ export const RUBRIQUE_LIVRABLES: RubriqueNav = {
   onglets: [{ cle: "livrables", libelle: "Livrables", vue: "livrables" }],
 };
 
-/** Vraie pour les deux vues d'ensemble du client, sans deuxième colonne ni onglets de rubrique. */
+/** Vraie pour les vues d'ensemble du client (départements, organigramme, tous les agents), sans deuxième colonne ni onglets de rubrique. */
 export function estVueEnsemble(vue: CleVue): boolean {
-  return vue === "departements" || vue === "organigramme";
+  return vue === "departements" || vue === "organigramme" || vue === "agents";
 }
 
 /** Vraie pour les vues qui s'affichent sans menu secondaire : vues d'ensemble, chat et Réglages. */
@@ -147,7 +153,7 @@ export function cheminOnglet(o: OngletRubrique): string {
 /** Rubrique et onglet d'une vue ; `hash` (sans « # ») départage Connexions et Paramètres. */
 export function rubriqueDe(vue: CleVue, hash = ""): { rubrique: RubriqueNav; onglet: OngletRubrique } {
   const ancre = hash.replace(/^#/u, "");
-  const candidats = [RUBRIQUE_ACCUEIL, RUBRIQUE_DISCUSSION, ...RUBRIQUES_NAV, RUBRIQUE_REGLAGES, RUBRIQUE_DIRECTION, RUBRIQUE_DEPARTEMENTS, RUBRIQUE_ORGANIGRAMME, RUBRIQUE_LIVRABLES].flatMap((r) => r.onglets.filter((o) => o.vue === vue).map((onglet) => ({ rubrique: r, onglet })));
+  const candidats = [RUBRIQUE_ACCUEIL, RUBRIQUE_DISCUSSION, ...RUBRIQUES_NAV, RUBRIQUE_REGLAGES, RUBRIQUE_DIRECTION, RUBRIQUE_DEPARTEMENTS, RUBRIQUE_ORGANIGRAMME, RUBRIQUE_AGENTS, RUBRIQUE_LIVRABLES].flatMap((r) => r.onglets.filter((o) => o.vue === vue).map((onglet) => ({ rubrique: r, onglet })));
   const exact = candidats.find((c) => c.onglet.ancre !== undefined && c.onglet.ancre === ancre);
   const resultat = exact ?? candidats.find((c) => c.onglet.ancre === undefined) ?? candidats[0];
   return resultat ?? { rubrique: RUBRIQUE_DISCUSSION, onglet: RUBRIQUE_DISCUSSION.onglets[0]! };

@@ -1,0 +1,344 @@
+From 9a886142491fff834c5a50b2ad1300af2a595e3e Mon Sep 17 00:00:00 2001
+From: Jean-Baptiste Dhondt <114347858+warrox1993@users.noreply.github.com>
+Date: Wed, 4 Nov 2026 21:43:31 +0100
+Subject: [PATCH 163/164] =?UTF-8?q?test(interface):=2037=20tests=20d'origi?=
+ =?UTF-8?q?ne=20align=C3=A9s=20sur=20l'interface=20traduite=20et=20le=20ve?=
+ =?UTF-8?q?rrou=20de=20l'assign=C3=A9?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Patches 0019, 0032, 0040 à 0043 et 0079 : libellés traduits volontairement (« Mettre en pause »,
+« Relecteurs », « Vue en liste », « Vous »…) ; attendus mis à la valeur exacte, même nombre
+d'assertions. Patch 0014 : la discussion verrouille l'agent assigné ; le test du sélecteur
+vérifie le verrou (bouton désactivé, aucune liste) et garde ses assertions sur le modèle et
+l'effort (2 assertions de plus). 13 fichiers, 825 tests réussis.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01EThpSQivkg5UcW9gyGppeG
+---
+ ui/src/components/AgentActionButtons.test.tsx    | 12 ++++++------
+ .../components/AgentConfigForm.render.test.tsx   |  6 +++---
+ .../ExecutionParticipantPicker.test.tsx          |  2 +-
+ ui/src/components/FileViewerSheet.test.tsx       |  2 +-
+ ui/src/components/IssueMonitorBanner.test.tsx    |  4 ++--
+ ui/src/components/IssueProperties.test.tsx       | 16 ++++++++--------
+ .../IssueThreadInteractionCard.test.tsx          |  2 +-
+ ui/src/components/TaskChatThread.test.tsx        |  2 +-
+ .../task-chat/ComposerRunSettingsPicker.test.tsx | 13 ++++++++++++-
+ .../task-chat/task-chat-adapter.test.ts          |  6 +++---
+ ui/src/context/LiveUpdatesProvider.test.ts       |  6 +++---
+ ui/src/pages/Agents.test.tsx                     |  4 ++--
+ ui/src/pages/IssueDetail.test.tsx                |  4 ++--
+ 13 files changed, 45 insertions(+), 34 deletions(-)
+
+diff --git a/ui/src/components/AgentActionButtons.test.tsx b/ui/src/components/AgentActionButtons.test.tsx
+index 6c353167b0..51174ea0e9 100644
+--- a/ui/src/components/AgentActionButtons.test.tsx
++++ b/ui/src/components/AgentActionButtons.test.tsx
+@@ -138,8 +138,8 @@ describe("AgentActionButtons", () => {
+     render(makeAgent({ status: "paused", lifecycleState }));
+     await flushReact();
+     const buttons = Array.from(container.querySelectorAll("button"));
+-    expect(buttons.some(button => button.textContent === "Resume")).toBe(false);
+-    const pause = buttons.find(button => button.textContent === "Pause")!;
++    expect(buttons.some(button => button.textContent === "Reprendre")).toBe(false);
++    const pause = buttons.find(button => button.textContent === "Mettre en pause")!;
+     expect(pause.disabled).toBe(false);
+     await act(async () => pause.click());
+     await flushReact();
+@@ -150,10 +150,10 @@ describe("AgentActionButtons", () => {
+     render(makeAgent({ status: lifecycleState === "pausing" ? "paused" : "terminated", lifecycleState }));
+     await flushReact();
+     const buttons = Array.from(container.querySelectorAll("button"));
+-    expect(buttons.find(button => button.textContent === "Pause")!.disabled).toBe(true);
++    expect(buttons.find(button => button.textContent === "Mettre en pause")!.disabled).toBe(true);
+     if (lifecycleState !== "pausing") {
+       expect(buttons.find(button => button.textContent === "Run Heartbeat")!.disabled).toBe(true);
+-      expect(buttons.find(button => button.textContent === "Assign Task")!.disabled).toBe(true);
++      expect(buttons.find(button => button.textContent === "Assigner une tâche")!.disabled).toBe(true);
+     }
+   });
+ 
+@@ -225,9 +225,9 @@ describe("AgentActionButtons", () => {
+     const onTerminateSuccess = vi.fn();
+     render(makeAgent(), { onTerminateSuccess });
+     await flushReact();
+-    await act(async () => { container.querySelector<HTMLButtonElement>('[aria-label="Open actions for Alpha Agent"]')!.click(); });
++    await act(async () => { container.querySelector<HTMLButtonElement>('[aria-label="Ouvrir les actions de Alpha Agent"]')!.click(); });
+     await flushReact();
+-    await act(async () => { Array.from(document.body.querySelectorAll("button")).find(button => button.textContent?.includes("Terminate"))!.click(); });
++    await act(async () => { Array.from(document.body.querySelectorAll("button")).find(button => button.textContent?.includes("Terminer"))!.click(); });
+     await flushReact();
+     expect(mockAgentsApi.terminate).toHaveBeenCalledWith("agent-1", "company-1");
+     expect(onTerminateSuccess).not.toHaveBeenCalled();
+diff --git a/ui/src/components/AgentConfigForm.render.test.tsx b/ui/src/components/AgentConfigForm.render.test.tsx
+index 004ab2db3f..b044a08fb7 100644
+--- a/ui/src/components/AgentConfigForm.render.test.tsx
++++ b/ui/src/components/AgentConfigForm.render.test.tsx
+@@ -819,7 +819,7 @@ describe("AgentConfigForm environment selector", () => {
+         option.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+       });
+       await flushReact();
+-      await clickByText(result.container, "Save");
++      await clickByText(result.container, "Enregistrer");
+       expect(result.onSave).toHaveBeenCalledWith(expect.objectContaining({
+         adapterConfig: expect.objectContaining({ provider, model, ...(acpxAgent ? { acpxAgent } : {}) }),
+       }));
+@@ -2132,7 +2132,7 @@ describe("AgentConfigForm environment selector", () => {
+     }
+     await act(async () => root.render(<QueryClientProvider client={queryClient}><ToastProvider><TooltipProvider><Harness /></TooltipProvider></ToastProvider></QueryClientProvider>));
+     await flushReact();
+-    const nameInput = container.querySelector<HTMLInputElement>('input[placeholder="Agent name"]')!;
++    const nameInput = container.querySelector<HTMLInputElement>('input[placeholder="Nom de l\'agent"]')!;
+     setInputValue(nameInput, "Unsaved name");
+     await flushReact();
+     let finishPoll!: (agent: Agent) => void;
+@@ -2150,7 +2150,7 @@ describe("AgentConfigForm environment selector", () => {
+     expect(mockAgentsApi.get).toHaveBeenCalledWith(saved.id, saved.companyId);
+     expect(container.textContent).toContain("Verifying agent");
+     expect(nameInput.value).toBe("Edited during poll");
+-    await act(async () => findButton(container, "Save")!.click());
++    await act(async () => findButton(container, "Enregistrer")!.click());
+     expect(onSave).toHaveBeenCalledWith(expect.objectContaining({ name: "Edited during poll" }));
+     mockAgentsApi.get.mockRejectedValueOnce(new Error("Status unavailable"));
+     await act(async () => { await queryClient.refetchQueries({ queryKey: [...queryKeys.agents.detail(saved.id), "lifecycle"] }); });
+diff --git a/ui/src/components/ExecutionParticipantPicker.test.tsx b/ui/src/components/ExecutionParticipantPicker.test.tsx
+index 98fa99a5aa..d2c2eea2fd 100644
+--- a/ui/src/components/ExecutionParticipantPicker.test.tsx
++++ b/ui/src/components/ExecutionParticipantPicker.test.tsx
+@@ -49,7 +49,7 @@ describe("ExecutionParticipantPicker", () => {
+     };
+     const { container, onUpdate, cleanup } = renderPicker(policy);
+     expect(container.querySelector("button")?.textContent).toBe("You");
+-    const remove = Array.from(container.querySelectorAll("button")).find((button) => button.textContent === "No reviewers");
++    const remove = Array.from(container.querySelectorAll("button")).find((button) => button.textContent === "No relecteurs");
+     expect(remove).toBeTruthy();
+     act(() => remove!.click());
+     expect(onUpdate).toHaveBeenCalledWith({ executionPolicy: {
+diff --git a/ui/src/components/FileViewerSheet.test.tsx b/ui/src/components/FileViewerSheet.test.tsx
+index 589b2edd6d..54fe7ffdb2 100644
+--- a/ui/src/components/FileViewerSheet.test.tsx
++++ b/ui/src/components/FileViewerSheet.test.tsx
+@@ -181,7 +181,7 @@ describe("workspace CSV content", () => {
+     expect(rendered).toContain("Lee, Sam");
+     expect(rendered).not.toContain("CSV preview mode");
+     const raw = renderToStaticMarkup(<FileContentViewer content={csv} highlightedLine={null} previewMode="raw" />);
+-    expect(raw).toContain("export.csv source");
++    expect(raw).toContain("Source de export.csv");
+     expect(raw).not.toContain("<table");
+   });
+ });
+diff --git a/ui/src/components/IssueMonitorBanner.test.tsx b/ui/src/components/IssueMonitorBanner.test.tsx
+index 3509e8565b..9fd04d335f 100644
+--- a/ui/src/components/IssueMonitorBanner.test.tsx
++++ b/ui/src/components/IssueMonitorBanner.test.tsx
+@@ -190,12 +190,12 @@ describe("IssueMonitorBanner / IssueMonitorComposerStrip rendering", () => {
+     ));
+     render([product]);
+     expect(container.textContent).toContain("Pull request review requested");
+-    expect(container.textContent).toContain("Next check in 6h");
++    expect(container.textContent).toContain("Next check dans 6h");
+     expect(container.textContent).not.toContain("Resumes in");
+     expect(container.querySelector("a")?.href).toBe("https://github.com/example/private-repo/pull/42");
+     expect(container.querySelector("a")?.textContent).toBe("example/private-repo#42");
+     const button = container.querySelector("button")!;
+-    expect(button.textContent).toBe("Check status");
++    expect(button.textContent).toBe("Vérifier l'état");
+     flushSync(() => button.click());
+     expect(onCheckNow).toHaveBeenCalledTimes(1);
+     render([product], "GitHub status check could not start");
+diff --git a/ui/src/components/IssueProperties.test.tsx b/ui/src/components/IssueProperties.test.tsx
+index 08c98a50cd..66bddc5fe0 100644
+--- a/ui/src/components/IssueProperties.test.tsx
++++ b/ui/src/components/IssueProperties.test.tsx
+@@ -2974,8 +2974,8 @@ describe("IssueProperties", () => {
+     });
+     await flush();
+ 
+-    expect(findRowTrigger(container, "Reviewers")?.textContent).toContain("None");
+-    expect(findRowTrigger(container, "Approvers")?.textContent).toContain("None");
++    expect(findRowTrigger(container, "Relecteurs")?.textContent).toContain("Aucun");
++    expect(findRowTrigger(container, "Approbateurs")?.textContent).toContain("Aucun");
+     expect(container.querySelector('[data-testid="monitor-row-trigger"]')).not.toBeNull();
+ 
+     act(() => root.unmount());
+@@ -3190,12 +3190,12 @@ describe("IssueProperties", () => {
+     });
+     await flush();
+ 
+-    expect(container.textContent).toContain("Reviewers");
++    expect(container.textContent).toContain("Relecteurs");
+     expect(container.textContent).not.toContain("Execution policy unavailable");
+     const monitorTrigger = container.querySelector('[data-testid="monitor-row-trigger"]')?.closest("button");
+     expect(monitorTrigger).toBeTruthy();
+     await act(async () => { monitorTrigger!.dispatchEvent(new MouseEvent("click", { bubbles: true })); });
+-    const clearButton = Array.from(container.querySelectorAll("button")).find((button) => button.textContent === "Clear");
++    const clearButton = Array.from(container.querySelectorAll("button")).find((button) => button.textContent === "Effacer");
+     expect(clearButton).toBeTruthy();
+     await act(async () => { clearButton!.dispatchEvent(new MouseEvent("click", { bubbles: true })); });
+ 
+@@ -3221,10 +3221,10 @@ describe("IssueProperties", () => {
+     await flush();
+ 
+     expect(container.textContent).toContain("Execution policy unavailable. Refresh to try again.");
+-    expect(container.textContent).toContain("Assignee");
+-    expect(container.textContent).not.toContain("No reviewers");
+-    expect(container.textContent).not.toContain("No approvers");
+-    expect(container.textContent).not.toContain("Run review now");
++    expect(container.textContent).toContain("Assigné à");
++    expect(container.textContent).not.toContain("Relecteurs");
++    expect(container.textContent).not.toContain("Approbateurs");
++    expect(container.textContent).not.toContain("Lancer la revue maintenant");
+     expect(container.querySelector('[data-testid="monitor-row-trigger"]')).toBeNull();
+     expect(container.querySelector('input[type="datetime-local"]')).toBeNull();
+     expect(onUpdate).not.toHaveBeenCalled();
+diff --git a/ui/src/components/IssueThreadInteractionCard.test.tsx b/ui/src/components/IssueThreadInteractionCard.test.tsx
+index c8b6edd87a..d997589aa2 100644
+--- a/ui/src/components/IssueThreadInteractionCard.test.tsx
++++ b/ui/src/components/IssueThreadInteractionCard.test.tsx
+@@ -919,7 +919,7 @@ describe("IssueThreadInteractionCard", () => {
+ 
+     it("shows no chips or chevron for an unlabeled stale-target change", () => {
+       const host = renderCard({ interaction: staleTargetChange(unlabeled(15), unlabeled(16)) });
+-      expect(host.textContent).toContain("Expired by target change");
++      expect(host.textContent).toContain("Expirée suite à un changement de cible");
+       expect(host.textContent).not.toContain("github:paperclipai");
+       expect(host.querySelector(".lucide-chevron-right")).toBeNull();
+     });
+diff --git a/ui/src/components/TaskChatThread.test.tsx b/ui/src/components/TaskChatThread.test.tsx
+index 6ba0aa712d..b2dec065f9 100644
+--- a/ui/src/components/TaskChatThread.test.tsx
++++ b/ui/src/components/TaskChatThread.test.tsx
+@@ -1054,7 +1054,7 @@ describe("TaskChatThread runtime transcript selection", () => {
+         createdAt: "2026-08-25T18:00:00.000Z", startedAt: null, finishedAt: "2026-08-25T18:00:02.000Z",
+       }]} />);
+     expect(container.textContent).toContain("AI connection needed");
+-    expect(container.textContent).toContain("Use the connection card below to continue.");
++    expect(container.textContent).toContain("Utilisez la carte de connexion ci-dessous pour continuer.");
+     expect(container.textContent).not.toContain("The selected AI account is unavailable");
+     expect(container.querySelector('[data-testid="task-chat-run-failed-try-again"]')).toBeNull();
+   });
+diff --git a/ui/src/components/task-chat/ComposerRunSettingsPicker.test.tsx b/ui/src/components/task-chat/ComposerRunSettingsPicker.test.tsx
+index 01c2fd92e4..d2ab7a90d6 100644
+--- a/ui/src/components/task-chat/ComposerRunSettingsPicker.test.tsx
++++ b/ui/src/components/task-chat/ComposerRunSettingsPicker.test.tsx
+@@ -83,9 +83,20 @@ describe("composer assignee picker", () => {
+     expect(range.getAttribute("aria-valuetext")).toBe("Low");
+     expect(label()).toBe("Select model");
+     expect(container!.querySelector('[aria-label="Select model and effort"]')!.textContent).not.toContain("Low");
++    // Patch local 0014 : l'agent assigné est verrouillé, on ne change pas d'agent depuis la discussion.
++    const chooseAssignee = document.querySelector<HTMLButtonElement>('button[aria-label="Choose assignee"]')!;
++    expect(chooseAssignee.disabled).toBe(true);
+     await click("Choose assignee");
+     expect(label()).toBe("Select model");
+-    await click("Clippy");
++    expect(document.querySelector('[role="listbox"][aria-label="Assignees"]')).toBeNull();
++    // Le sélecteur se ferme alors comme avant (le choix d'assigné le refermait) : l'étiquette revient au modèle.
++    if (mobile) await click("Close picker");
++    else {
++      await act(async () => {
++        document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
++        await new Promise((resolve) => setTimeout(resolve, 0));
++      });
++    }
+     expect(label()).toBe("GPT-6 Sol");
+     expect(container!.querySelector('[aria-label="Select model and effort"]')!.textContent).toContain("Low");
+     await click("Select model and effort");
+diff --git a/ui/src/components/task-chat/task-chat-adapter.test.ts b/ui/src/components/task-chat/task-chat-adapter.test.ts
+index 08d23677de..56410ecba2 100644
+--- a/ui/src/components/task-chat/task-chat-adapter.test.ts
++++ b/ui/src/components/task-chat/task-chat-adapter.test.ts
+@@ -24,8 +24,8 @@ describe("commentsToTaskChatItems", () => {
+       { authorUserId: "sam", isCurrentUser: true },
+     ]);
+     expect(commentsToTaskChatItems(comments, { currentUserId: "alex" })).toMatchObject([
+-      { authorName: "You", isCurrentUser: true, authorAvatarUrl: null },
+-      { authorName: "User", isCurrentUser: false, authorAvatarUrl: null },
++      { authorName: "Vous", isCurrentUser: true, authorAvatarUrl: null },
++      { authorName: "Utilisateur", isCurrentUser: false, authorAvatarUrl: null },
+     ]);
+     // Directory hydration changes presentation without changing canonical message IDs.
+     expect(commentsToTaskChatItems(comments, { currentUserId: "alex", userProfileMap })[1]).toMatchObject({
+@@ -38,7 +38,7 @@ describe("commentsToTaskChatItems", () => {
+     expect(commentsToTaskChatItems([comment], {
+       currentUserId: "me", userLabelMap: new Map([["me", "Alex"], ["other", "Alex"]]),
+     })[0]).toMatchObject({ authorName: "Alex", isCurrentUser: false });
+-    expect(commentsToTaskChatItems([comment])[0]).toMatchObject({ authorName: "User", isCurrentUser: false });
++    expect(commentsToTaskChatItems([comment])[0]).toMatchObject({ authorName: "Utilisateur", isCurrentUser: false });
+   });
+   it("carries inbound channel attribution into the human bubble", () => {
+     expect(commentsToTaskChatItems([{
+diff --git a/ui/src/context/LiveUpdatesProvider.test.ts b/ui/src/context/LiveUpdatesProvider.test.ts
+index 7660437f9f..32eb5ba848 100644
+--- a/ui/src/context/LiveUpdatesProvider.test.ts
++++ b/ui/src/context/LiveUpdatesProvider.test.ts
+@@ -1656,18 +1656,18 @@ describe("activity toast attribution", () => {
+   });
+   it("uses the real name and photo with an empty directory cache", () => {
+     const toast = build(new QueryClient(), "company", payload, { userId: "other-user", agentId: null });
+-    expect(toast?.title).toBe("Alex Example created Task task-1");
++    expect(toast?.title).toBe("Alex Example a créé Task task-1");
+     expect(toast?.actor).toMatchObject({ type: "user", name: "Alex Example", image: "/alex.png" });
+   });
+   it("uses the agent's custom avatar with an empty agent cache", () => {
+     const appearance = { schemaVersion: 1, characterVersion: "cap-v1", paletteId: "bubblegum-sky", customAvatarAssetId: "11111111-1111-4111-8111-111111111111" };
+     const toast = build(new QueryClient(), "company", { ...payload, actorType: "agent", actorId: "agent-1", actorName: "Coder", actorAppearance: appearance }, { userId: "user-1", agentId: null });
+-    expect(toast?.title).toBe("Coder created Task task-1");
++    expect(toast?.title).toBe("Coder a créé Task task-1");
+     expect(toast?.actor?.appearance).toEqual(appearance);
+   });
+   it("keeps system activity distinct from people", () => {
+     const toast = build(new QueryClient(), "company", { ...payload, actorType: "system", actorName: undefined }, { userId: "user-1", agentId: null });
+-    expect(toast?.title).toBe("System created Task task-1");
++    expect(toast?.title).toBe("Système a créé Task task-1");
+     expect(toast?.actor).toBeUndefined();
+   });
+ });
+diff --git a/ui/src/pages/Agents.test.tsx b/ui/src/pages/Agents.test.tsx
+index 328cd61613..2b1ce9a78b 100644
+--- a/ui/src/pages/Agents.test.tsx
++++ b/ui/src/pages/Agents.test.tsx
+@@ -1023,7 +1023,7 @@ describe("Agents", () => {
+     await flushReact();
+ 
+     // Explicitly select the list view and assert the row renders there.
+-    const listToggle = container.querySelector<HTMLButtonElement>('button[aria-label="List view"]');
++    const listToggle = container.querySelector<HTMLButtonElement>('button[aria-label="Vue en liste"]');
+     expect(listToggle).not.toBeNull();
+     await act(async () => {
+       listToggle!.click();
+@@ -1036,7 +1036,7 @@ describe("Agents", () => {
+     expect(container.querySelector('[aria-label="Star Alpha"]')).toBeNull();
+ 
+     // Explicitly select the org view and assert no membership actions there.
+-    const orgToggle = container.querySelector<HTMLButtonElement>('button[aria-label="Org chart view"]');
++    const orgToggle = container.querySelector<HTMLButtonElement>('button[aria-label="Vue organigramme"]');
+     expect(orgToggle).not.toBeNull();
+     await act(async () => {
+       orgToggle!.click();
+diff --git a/ui/src/pages/IssueDetail.test.tsx b/ui/src/pages/IssueDetail.test.tsx
+index 99d0ffbe83..b73740b57c 100644
+--- a/ui/src/pages/IssueDetail.test.tsx
++++ b/ui/src/pages/IssueDetail.test.tsx
+@@ -1452,7 +1452,7 @@ describe("IssueDetail", () => {
+     await act(async () => root.render(<QueryClientProvider client={queryClient}><IssueDetail /></QueryClientProvider>));
+     let button: HTMLButtonElement | undefined;
+     await waitForAssertion(() => {
+-      button = Array.from(container.querySelectorAll("button")).find((entry) => entry.textContent === "Check now");
++      button = Array.from(container.querySelectorAll("button")).find((entry) => entry.textContent === "Vérifier maintenant");
+       expect(button).toBeTruthy();
+     });
+     await act(async () => button!.click());
+@@ -1471,7 +1471,7 @@ describe("IssueDetail", () => {
+     await waitForAssertion(() => {
+       expect(container.textContent).toContain("Second monitored task");
+       expect(container.textContent).not.toContain("First task monitor failed");
+-      expect(Array.from(container.querySelectorAll("button")).find((entry) => entry.textContent === "Check now")?.disabled).toBe(false);
++      expect(Array.from(container.querySelectorAll("button")).find((entry) => entry.textContent === "Vérifier maintenant")?.disabled).toBe(false);
+     });
+   });
+ 
+-- 
+2.53.0
+

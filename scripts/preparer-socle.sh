@@ -19,10 +19,10 @@ DEPOT="$(lire DEPOT)"; TAG="$(lire TAG)"; SHA="$(lire SHA)"; BRANCHE="$(lire BRA
 
 echo "Socle attendu : ${TAG} (${SHA})"
 if [[ ! -d "${SOCLE}/.git" ]]; then
-  git clone --quiet "${DEPOT}" "${SOCLE}" || { echo "Échec du clone." >&2; exit 1; }
+  GIT_TERMINAL_PROMPT=0 git -c credential.helper= clone --quiet "${DEPOT}" "${SOCLE}" || { echo "Échec du clone." >&2; exit 1; }
 fi
 cd "${SOCLE}" || exit 1
-git fetch --quiet --tags origin || echo "Avertissement : fetch impossible, utilisation des tags locaux." >&2
+GIT_TERMINAL_PROMPT=0 git -c credential.helper= fetch --quiet --tags origin || echo "Avertissement : fetch impossible, utilisation des tags locaux." >&2
 
 REEL="$(git rev-list -n1 "${TAG}" 2>/dev/null || true)"
 if [[ "${REEL}" != "${SHA}" ]]; then

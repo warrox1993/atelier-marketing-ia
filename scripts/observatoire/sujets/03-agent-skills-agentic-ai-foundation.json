@@ -1,0 +1,122 @@
+{
+  "numero": 3,
+  "slug": "agent-skills-agentic-ai-foundation",
+  "projet": {
+    "companyId": "<OBS>",
+    "slug": "article-3-agent-skills-agentic-ai-foundation",
+    "nom": "Anthropic confie le standard Agent Skills à l'Agentic AI Foundation",
+    "alias": [
+      {
+        "type": "site",
+        "valeur": "https://www.anthropic.com/news/donating-agent-skills-to-the-agentic-ai-foundation"
+      },
+      {
+        "type": "site",
+        "valeur": "https://www.linuxfoundation.org/press/agentic-ai-foundation-announces-four-new-projects-agent-skills-open-responses-openenv-and-opensandbox"
+      },
+      {
+        "type": "site",
+        "valeur": "https://aaif.io/projects/"
+      }
+    ]
+  },
+  "motifSansProjet": null,
+  "aliasRefuses": [],
+  "brief": {
+    "tache": "Rédiger l'article n° 3 du magazine : Anthropic confie le standard Agent Skills à l'Agentic AI Foundation",
+    "categorie": "open-source-standards",
+    "publie_le": "2026-10-22",
+    "angle": "Les skills deviennent un standard neutre géré sous la Linux Foundation, comme MCP : un décideur peut miser dessus sans dépendre d'un seul éditeur. Texte à écrire pour deux lecteurs : le développeur (ce qu'il peut faire ou doit vérifier) et le décideur (ce que cela change pour un choix d'outil, de coût ou de conformité), sans rien ajouter qui ne figure pas dans les faits ci-dessous.",
+    "plan": [
+      "Ce qui est annoncé ou publié : les faits datés, tels que la source les énonce",
+      "Ce que cela change pour un développeur : usage concret, uniquement à partir des faits listés",
+      "Ce que cela change pour un décideur : choix, coûts, risques, uniquement à partir des faits listés",
+      "Ce qui n'est pas établi : points ouverts, chiffres d'éditeur non mesurés de façon indépendante",
+      "Sources et méthode de vérification : liste des URL lues le 27/10/2026"
+    ],
+    "faits": [
+      {
+        "texte": "Anthropic donne le standard Agent Skills à l'Agentic AI Foundation (AAIF), placée sous la Linux Foundation.",
+        "source_url": "https://www.anthropic.com/news/donating-agent-skills-to-the-agentic-ai-foundation",
+        "extrait_exact": "Today, we are donating the standard to the Agentic AI Foundation (AAIF) under the Linux Foundation, which we co-founded with Block and OpenAI last year, and to which we donated the Model Context Protocol (MCP).",
+        "statut_propose": "rapporte_editeur"
+      },
+      {
+        "texte": "Selon Anthropic, plus de 70 plateformes d'agents ont intégré Agent Skills depuis décembre 2025.",
+        "source_url": "https://www.anthropic.com/news/donating-agent-skills-to-the-agentic-ai-foundation",
+        "extrait_exact": "More than 70 agent platforms, including ChatGPT, Cursor, GitHub Copilot, and VS Code, have integrated Agent Skills since we published the standard in December 2025.",
+        "statut_propose": "rapporte_editeur"
+      },
+      {
+        "texte": "Anthropic annonce 1 million de skills publiés et près de 280 millions d'installations.",
+        "source_url": "https://www.anthropic.com/news/donating-agent-skills-to-the-agentic-ai-foundation",
+        "extrait_exact": "So far, 1 million skills have been published and nearly 280 million installed.",
+        "statut_propose": "rapporte_editeur"
+      },
+      {
+        "texte": "Le don comprend le nom, le logo, l'organisation GitHub et le domaine agentskills.io.",
+        "source_url": "https://www.anthropic.com/news/donating-agent-skills-to-the-agentic-ai-foundation",
+        "extrait_exact": "We are donating the Agent Skills name and logo, the GitHub organization, and the agentskills.io domain.",
+        "statut_propose": "rapporte_editeur"
+      },
+      {
+        "texte": "Deux mainteneurs principaux sont nommés.",
+        "source_url": "https://www.anthropic.com/news/donating-agent-skills-to-the-agentic-ai-foundation",
+        "extrait_exact": "with David Soria Parra and Mahesh Murag as Lead Maintainers",
+        "statut_propose": "rapporte_editeur"
+      },
+      {
+        "texte": "La feuille de route proposée couvre des versions numérotées, un processus formel de propositions et des consignes de sécurité.",
+        "source_url": "https://www.anthropic.com/news/donating-agent-skills-to-the-agentic-ai-foundation",
+        "extrait_exact": "We’ve proposed starting with a roadmap covering versioned releases, a formal proposal process, and security guidance for people who write and install skills.",
+        "statut_propose": "rapporte_editeur"
+      },
+      {
+        "texte": "Un skill est un dossier contenant un fichier SKILL.md.",
+        "source_url": "https://www.anthropic.com/news/donating-agent-skills-to-the-agentic-ai-foundation",
+        "extrait_exact": "A skill is a folder containing a SKILL.md file that teaches an agent a specific task or domain",
+        "statut_propose": "rapporte_editeur"
+      },
+      {
+        "texte": "Simon Willison relaie l'annonce le 22 octobre 2026.",
+        "source_url": "https://simonwillison.net/2026/Oct/22/donating-agent-skills/",
+        "extrait_exact": "Posted 22nd October 2026 at 6:09 pm",
+        "statut_propose": "rapporte_tiers"
+      },
+      {
+        "texte": "Le communiqué de la Linux Foundation daté du 22 octobre 2026 annonce quatre nouveaux projets de l'AAIF, dont Agent Skills apporté par Anthropic.",
+        "source_url": "https://www.linuxfoundation.org/press/agentic-ai-foundation-announces-four-new-projects-agent-skills-open-responses-openenv-and-opensandbox",
+        "extrait_exact": "AAIF announced four new projects: Agent Skills, contributed by Anthropic; Open Responses, contributed by OpenAI; OpenEnv, contributed by Hugging Face; and OpenSandbox, contributed by Alibaba.",
+        "statut_propose": "confirme_doc_officielle"
+      },
+      {
+        "texte": "Avec ces ajouts, l'AAIF héberge 10 projets au bout de sa première année, contre trois au lancement en décembre 2025.",
+        "source_url": "https://www.linuxfoundation.org/press/agentic-ai-foundation-announces-four-new-projects-agent-skills-open-responses-openenv-and-opensandbox",
+        "extrait_exact": "The additions bring AAIF to 10 hosted projects in its first year, up from its three launch projects in December 2025.",
+        "statut_propose": "confirme_doc_officielle"
+      },
+      {
+        "texte": "Le communiqué décrit Agent Skills comme un format ouvert pour donner de nouvelles capacités et une expertise de domaine aux agents.",
+        "source_url": "https://www.linuxfoundation.org/press/agentic-ai-foundation-announces-four-new-projects-agent-skills-open-responses-openenv-and-opensandbox",
+        "extrait_exact": "is an open format for giving agents new capabilities and domain expertise.",
+        "statut_propose": "confirme_doc_officielle"
+      },
+      {
+        "texte": "La page des projets de l'AAIF liste Agent Skills, décrit comme un format ouvert d'expertise réutilisable pour les agents.",
+        "source_url": "https://aaif.io/projects/",
+        "extrait_exact": "An open format for reusable agent expertise.",
+        "statut_propose": "confirme_doc_officielle"
+      },
+      {
+        "texte": "La page aaif.io/projects décrit Agent Skills comme « An open format for reusable agent expertise ». (lu le 27/10/2026 à 04:51 UTC)",
+        "source_url": "https://aaif.io/projects/",
+        "extrait_exact": "Agent Skills An open format for reusable agent expertise.",
+        "statut_propose": "confirme_doc_officielle"
+      }
+    ],
+    "points_ouverts": [
+      "Les chiffres (70 plateformes, 1 million de skills, 280 millions d'installations) ne sont donnés que par Anthropic : aucune mesure indépendante trouvée, et le communiqué de la Linux Foundation ne les reprend pas (recherche de « 70 », « million », « platforms » dans le texte : rien). (relu le 27/10 à 04:51 UTC, toujours inconnu : le communiqué de la Linux Foundation ne contient aucune occurrence de « million » et aucune mesure indépendante n'a été lue)"
+    ],
+    "regles": "Aucun fait, date ou chiffre hors des faits listés. Chaque affirmation renvoie à un fait et à son extrait exact. Pas de tiret cadratin."
+  }
+}

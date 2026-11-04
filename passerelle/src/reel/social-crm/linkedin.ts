@@ -23,7 +23,7 @@ import type { DependancesOutils } from "./meta.js";
 
 const ENTETES = { "Linkedin-Version": VERSION_LINKEDIN, "X-Restli-Protocol-Version": "2.0.0" };
 
-async function appelLinkedin(dep: DependancesOutils, acces: AccesPlateforme, methode: "GET" | "POST", cheminEtRequete: string, cible: string, corps?: unknown, methodeRestli?: string) {
+export async function appelLinkedin(dep: DependancesOutils, acces: AccesPlateforme, methode: "GET" | "POST", cheminEtRequete: string, cible: string, corps?: unknown, methodeRestli?: string) {
   const jeton = acces.secrets.acces;
   if (!jeton) throw new ErreurFournisseur("jeton_expire", "Aucun jeton pour cette connexion : reconnectez le service dans Paperclip (Apps).");
   const reponse = await envoyer(

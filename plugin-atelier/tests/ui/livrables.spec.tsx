@@ -79,6 +79,16 @@ describe("page Livrables", () => {
     expect(lireRoute(`/RNO/atelier/livrables/${T1}`)).toEqual({ vue: "livrables", id: T1 });
   });
 
+  it("UI-11 : chaque livrable montre d'où il vient (lien vers la tâche d'origine), ou le dit quand on ne le sait pas", async () => {
+    travaux = [travail({ origine: { issueId: "77777777-7777-4777-8777-777777777777", identifiant: "MKT-12", titre: "Offre de rentrée", lien: "/issues/MKT-12" } }), travail({ travail: T2, origine: null })];
+    const c = await ouvrir();
+    const lignes = c.querySelectorAll("tbody tr");
+    const lien = lignes[0]!.querySelector("a");
+    expect(lien?.textContent).toBe("MKT-12 · Offre de rentrée");
+    expect(lien?.getAttribute("href")).toContain("/issues/MKT-12");
+    expect(lignes[1]!.textContent).toContain("Tâche d'origine inconnue");
+  });
+
   it("liste les travaux de l'entreprise avec état, type et fichiers, sans tiret cadratin", async () => {
     const c = await ouvrir();
     expect(urls[0]).toContain("/livrables?companyId=11111111-1111-4111-8111-111111111111");

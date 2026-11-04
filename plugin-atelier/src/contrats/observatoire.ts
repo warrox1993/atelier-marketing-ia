@@ -62,7 +62,7 @@ export const PreuveObservatoire = z
 export type PreuveObservatoire = z.infer<typeof PreuveObservatoire>;
 
 /** Chapitre cible d'une affirmation : `ch01` à `ch24` ou `fiche.<champ>`. */
-const CibleAffirmation = z.string().regex(/^(ch(0[1-9]|1\d|2[0-4])|fiche\.[a-zA-Z]+)$/u, "Chapitre ou champ de fiche attendu");
+export const CibleAffirmation = z.string().regex(/^(ch(0[1-9]|1\d|2[0-4])|fiche\.[a-zA-Z]+)$/u, "Chapitre ou champ de fiche attendu");
 
 export const Affirmation = z
   .object({
@@ -106,12 +106,16 @@ export type ChampFiche<T> = { valeur: T | null; statut: StatutVerification; affi
 const Texte = z.string().trim().min(1);
 const ListeTextes = z.array(Texte);
 
+/** Catégories (tiroirs) de l'encyclopédie, liste fermée. Source de vérité côté site : `categories` de src/data/encyclopedie.ts ; copie en Python dans scripts/exporter-observatoire.py. */
+export const CATEGORIES_OBS = ["modeles", "agents", "outils-de-code", "mcp-et-plugins", "retro-ingenierie", "image-et-video", "voix", "reglementation"] as const;
+export type CategorieObs = (typeof CATEGORIES_OBS)[number];
+
 /** Les 25 champs de la fiche, dans l'ordre du cahier. */
 const formeFiche = {
   nom: ChampFiche(Texte),
   logo: ChampFiche(Texte),
   descriptionCourte: ChampFiche(Texte),
-  categorie: ChampFiche(Texte),
+  categorie: ChampFiche(z.enum(CATEGORIES_OBS)),
   objectifPrincipal: ChampFiche(Texte),
   problemeResolu: ChampFiche(Texte),
   editeur: ChampFiche(Texte),
@@ -119,6 +123,7 @@ const formeFiche = {
   depotSource: ChampFiche(z.url()),
   licence: ChampFiche(Texte),
   derniereVersion: ChampFiche(Texte),
+  dateDerniereVersion: ChampFiche(DateJour),
   dateVerification: ChampFiche(DateJour),
   plateformes: ChampFiche(ListeTextes),
   compatibiliteClaudeMcp: ChampFiche(Texte),

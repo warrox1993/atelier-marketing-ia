@@ -41,8 +41,8 @@ du progrès, pour alimenter `points-entree-categorie`, `qualification-prospects`
    deux verbatims ou faits sources.
 5. Isoler les déclencheurs (l'événement qui fait basculer) et les anxiétés (par exemple la peur de rester mal couvert pendant
    le transfert).
-6. Transmettre : jobs et déclencheurs vers `points-entree-categorie` et `qualification-prospects` ; anxiétés vers l'offre et
-   les messages.
+6. Signaler au Coordinateur, qui organise la suite : jobs et déclencheurs pour `points-entree-categorie` et
+   `qualification-prospects` ; anxiétés pour l'offre et les messages.
 
 ## Livrable
 

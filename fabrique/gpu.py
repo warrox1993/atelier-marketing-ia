@@ -19,6 +19,9 @@ PROCESSUS_JEU = ("gamescope", "gamescope-wl", "gamescopereaper", "reaper")
 PROCESSUS_BUREAU = (
     "gnome-shell", "xwayland", "xorg", "firefox", "chrome", "chromium", "ptyxis", "steam",
     "steamwebhelper", "explorer.exe", "claude-desktop", "code", "kwin_wayland", "plasmashell",
+    "loupe",  # visionneuse d'images GNOME : son service reste actif après l'ouverture d'une image
+    "xdg-desktop-portal-gnome",  # portail de bureau GNOME : contexte permanent de quelques Mio
+    "discord",  # client de discussion : processus GPU de rendu, comme un navigateur
 )
 
 

@@ -23,6 +23,8 @@ Donner à l'humain un script court, honnête et respectueux du temps du secréta
 - Le numéro du standard avec sa source, sa date et son contrôle de la liste « Ne m'appelez plus » (compétence `coordonnees-recoupement`). Contrôle non fait : « aucun appel conseillé tant que le contrôle n'est pas fait ».
 - La fiche (entreprise, secteur, personne ou fonction visée si connue) et l'objet réel du contact, tel que validé par l'humain.
 - Les horaires d'ouverture publiés de l'entreprise, s'ils sont connus.
+- La base légale enregistrée du prospect, avec son texte d'information de l'art. 14 (`information.texteArt14`) et son
+  moyen d'opposition (`information.moyenOpposition`). Absente : pas de script, le dire.
 
 ## Entrées
 
@@ -34,15 +36,22 @@ Donner à l'humain un script court, honnête et respectueux du temps du secréta
 
 1. **Vérifier avant tout.** Numéro non inscrit sur la liste (ou contrôle fait), horaires respectés, aucune opposition déjà exprimée. Sinon, ne pas rédiger de script d'appel et le dire.
 2. **Ouverture honnête** (15 secondes) : bonjour, son nom et sa société, l'objet en une phrase vraie, la demande précise. Exemple de forme : « Bonjour, [prénom nom] de [société]. Je cherche à joindre la personne qui s'occupe de [sujet] chez vous, pour lui proposer un échange sur [objet]. Qui est la bonne personne, s'il vous plaît ? »
+   **Dès que la personne visée elle-même répond** (praticien en nom propre au standard, ou mise en relation), avant de
+   parler de l'offre : l'information de l'art. 14 en deux phrases, tirée du texte enregistré (modèle
+   `controle-communications-reglementees/references/information-art14.md`) : qui appelle et pour quel responsable,
+   d'où viennent ses coordonnées, pourquoi ; puis, en une phrase séparée du reste, le moyen de s'opposer, par exemple
+   « Vous pouvez refuser tout contact de notre part : il suffit de me le dire maintenant, ou de <moyen d'opposition>. »
+   (RGPD, art. 14, § 3, b, et art. 21, § 4 : au plus tard à la première communication, présenté séparément).
 3. **Obtenir, dans l'ordre :** le nom et la fonction de la bonne personne, puis la possibilité d'être mis en relation, puis seulement, si on le propose spontanément, une ligne directe ou une adresse e-mail professionnelle.
 4. **Répondre aux objections**, sans insister ni détourner :
    - « C'est à quel sujet ? » : redire l'objet vrai en une phrase.
    - « Envoyez un e-mail » : demander l'adresse générique ou le nom du destinataire, remercier.
    - « Elle n'est pas disponible » : demander le meilleur moment pour rappeler, sans demander de numéro privé.
    - « On ne donne pas de numéros directs » : accepter, demander d'être passé ou de laisser un message.
-   - « Nous ne souhaitons pas être démarchés » : s'excuser, remercier, ne pas rappeler ; l'opposition est notée et la fiche exclue.
+   - « Nous ne souhaitons pas être démarchés » : s'excuser, remercier, ne pas rappeler ; l'humain inscrit l'opposition le jour même dans les oppositions (interface de
+     l'atelier, section « Oppositions » de la base clients : empreinte seule) et la fiche est exclue.
 5. **Clore poliment** : remercier, répéter ce qui a été convenu, ne rien promettre qu'on ne fera pas.
-6. **Noter immédiatement**, sur la feuille de notes : date et heure, numéro appelé, nom de la personne au standard si donné, nom et fonction de l'interlocuteur visé, ligne directe ou e-mail si donné spontanément (base : « fourni par la personne du secrétariat à la demande de l'appelant »), opposition éventuelle, prochaine action convenue.
+6. **Noter immédiatement**, sur la feuille de notes : date et heure, numéro appelé, nom de la personne au standard si donné, nom et fonction de l'interlocuteur visé, ligne directe ou e-mail si donné spontanément (base : « fourni par la personne du secrétariat à la demande de l'appelant »), information de l'art. 14 et moyen d'opposition donnés (à qui, à quelle heure), opposition éventuelle, prochaine action convenue.
 
 ### Ce qu'on ne demande jamais
 
@@ -58,6 +67,7 @@ Le script (ouverture, questions, réponses aux objections, clôture) en une page
 ## Critères de réussite
 
 - Le script se présente, dit l'objet vrai et ne contient aucune astuce de contournement.
+- Le script donne l'information de l'art. 14 et, séparé du reste, le moyen d'opposition dès que la personne visée répond.
 - Chaque information obtenue sera notée avec sa source (l'appel), sa date et sa base.
 - Le script ne s'applique qu'à un numéro contrôlé sur la liste « Ne m'appelez plus ».
 

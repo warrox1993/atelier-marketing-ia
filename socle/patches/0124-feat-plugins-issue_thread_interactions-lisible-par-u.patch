@@ -1,0 +1,63 @@
+From 416f50db47e5e2dfbb1741df99ec5340f33c8358 Mon Sep 17 00:00:00 2001
+From: Jean-Baptiste Dhondt <114347858+warrox1993@users.noreply.github.com>
+Date: Fri, 30 Oct 2026 14:40:56 +0100
+Subject: [PATCH 124/126] =?UTF-8?q?feat(plugins):=20issue=5Fthread=5Finter?=
+ =?UTF-8?q?actions=20lisible=20par=20un=20plugin=20qui=20la=20d=C3=A9clare?=
+ =?UTF-8?q?=20(Atelier=20HUM-C4)?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+La synthèse de la Direction doit lister les cartes réellement en attente des services, pour
+que le coordinateur ne cite jamais une carte fermée. Lecture seule (SELECT), seulement si le
+manifeste la déclare dans coreReadTables, comme issue_comments.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01EThpSSDGc5NRYwbgjNqoTJ
+---
+ packages/shared/src/constants.ts             | 2 ++
+ server/src/__tests__/plugin-database.test.ts | 8 ++++++++
+ 2 files changed, 10 insertions(+)
+
+diff --git a/packages/shared/src/constants.ts b/packages/shared/src/constants.ts
+index 70840a8fd6..1800480ac3 100644
+--- a/packages/shared/src/constants.ts
++++ b/packages/shared/src/constants.ts
+@@ -1452,6 +1452,8 @@ export const PLUGIN_DATABASE_CORE_READ_TABLES = [
+   "approvals",
+   "issue_approvals",
+   "budget_incidents",
++  // Atelier Marketing IA (HUM-C4) : la synthèse de la Direction liste les cartes en attente des services.
++  "issue_thread_interactions",
+ ] as const;
+ export type PluginDatabaseCoreReadTable = (typeof PLUGIN_DATABASE_CORE_READ_TABLES)[number];
+ 
+diff --git a/server/src/__tests__/plugin-database.test.ts b/server/src/__tests__/plugin-database.test.ts
+index 6d0417aba5..f5e8122add 100644
+--- a/server/src/__tests__/plugin-database.test.ts
++++ b/server/src/__tests__/plugin-database.test.ts
+@@ -14,6 +14,7 @@ import {
+   plugins,
+ } from "@paperclipai/db";
+ import type { PaperclipPluginManifestV1 } from "@paperclipai/shared";
++import { pluginDatabaseDeclarationSchema } from "@paperclipai/shared";
+ import {
+   getEmbeddedPostgresTestSupport,
+   startEmbeddedPostgresTestDatabase,
+@@ -129,6 +130,13 @@ describe("plugin database SQL validation", () => {
+     ).toThrow(/namespace/i);
+   });
+ 
++  it("lets a plugin declare and read issue_thread_interactions (Atelier HUM-C4)", () => {
++    expect(pluginDatabaseDeclarationSchema.safeParse({ migrationsDir: "migrations", coreReadTables: ["issue_thread_interactions"] }).success).toBe(true);
++    const query = "SELECT t.id FROM public.issue_thread_interactions t WHERE t.status = 'pending'";
++    expect(() => validatePluginRuntimeQuery(query, "plugin_test", ["issue_thread_interactions"])).not.toThrow();
++    expect(() => validatePluginRuntimeQuery(query, "plugin_test", ["issues"])).toThrow();
++  });
++
+   it("targets anonymous DO blocks without rejecting do-prefixed aliases", () => {
+     expect(() =>
+       validatePluginRuntimeQuery(
+-- 
+2.53.0
+

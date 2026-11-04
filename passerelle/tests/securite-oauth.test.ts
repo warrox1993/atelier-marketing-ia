@@ -29,6 +29,7 @@ import { Coffre, type EntreeMutation } from "../src/reel/social-crm/coffre.js";
 import type { ConfigSocialCrmReel, ServiceSocialCrm } from "../src/reel/social-crm/config.js";
 import type { Connecteur } from "../src/reel/social-crm/connecteurs.js";
 import { calculerChallengeS256 } from "../src/commun/pkce.js";
+import { dossierTemporaire } from "./dossier-temporaire.js";
 import { connecter, monter, nettoyer, REDIRECTION_PAPERCLIP, type Montage } from "./reel-google/aide-reel.js";
 import { FauxGoogle } from "./reel-google/faux-google.js";
 import { demarrer, fournisseurFactice, rpc } from "./aide.js";
@@ -86,7 +87,7 @@ describe("gardes communes (garde-oauth.ts)", () => {
 async function monterAvecLimites(limites: { maxClients?: number; enregistrementsParMinute?: number }): Promise<Montage> {
   const faux = new FauxGoogle();
   const urlFaux = await faux.demarrer();
-  const dossier = mkdtempSync(join(tmpdir(), "passerelle-revue-"));
+  const dossier = dossierTemporaire("passerelle-revue-");
   const config: ConfigGoogleReel = {
     clientId: faux.options.clientId,
     clientSecret: faux.options.clientSecret,
@@ -222,7 +223,7 @@ describe("serveur d'autorisation réseaux sociaux et CRM : origine, redirections
   const URL_PASSERELLE = "http://127.0.0.1:65000";
 
   beforeAll(async () => {
-    dossier = mkdtempSync(join(tmpdir(), "passerelle-revue-social-"));
+    dossier = dossierTemporaire("passerelle-revue-social-");
     const config = {
       cle: Buffer.alloc(32, 5),
       fichierEtat: join(dossier, "etat.json"),

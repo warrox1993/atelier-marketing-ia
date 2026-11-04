@@ -1,8 +1,14 @@
 # Observatoire : modèle de données (indicatif)
 
-Source : plan « Avenue de l'Observatoire », F.2. Ce document est **indicatif** : la migration réelle
-(numérotée 023 ou plus, après la 022) sera écrite en **phase 3**, testée sur l'instance d'essai
-(`scripts/instance-essai.sh`) avant toute instance Observatoire. Aucune table n'est créée par ce lot.
+Source : plan « Avenue de l'Observatoire », F.2. Ce document est **indicatif** : il décrit la cible.
+
+**État réel au 30/10/2026 (SPEC-E15).** Les migrations `plugin-atelier/migrations/023_obs_documentaire.sql` à
+`029_obs_sources_importees_candidates.sql` créent `obs_projets`, `obs_alias`, `obs_sources`, `obs_instantanes`,
+`obs_versions`, `obs_affirmations`, `obs_preuves`, `obs_revisions`, `obs_publications` et
+`obs_confirmations_publication`. Ne sont pas créées : `obs_editeurs`, `obs_categories`, `obs_projets_categories`,
+`obs_essais`, `obs_chapitres`, `obs_comparaisons`, `obs_editions`, `obs_entrees_edition`. Le dossier de 24 chapitres,
+les Éditions hebdomadaires et les Essais relèvent d'une phase ultérieure : aujourd'hui, seules les clés de livrable
+`fiche-…` et `article-…` sont reconnues (`plugin-atelier/src/serveur/observatoire/cles.ts`).
 
 Les entités natives de Paperclip ne sont pas dupliquées : agents, skills, tâches, workflows,
 approbations, budgets et coûts, journal d'activité, utilisateurs et rôles. Les tables ci-dessous s'y

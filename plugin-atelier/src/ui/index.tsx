@@ -46,6 +46,7 @@ import { VueResultatsAtelier } from "./vues/resultats.js";
 import { VueRapport } from "./vues/rapport.js";
 import { VueTableau } from "./vues/tableau.js";
 import { OngletEchanges, useAccesDirection, useLiaisonsTache, VueRegistre } from "./vues/echanges.js";
+import { VueTousLesAgents } from "./vues/agents.js";
 import { VueEnsembleClient } from "./vues/ensemble.js";
 import { aPlusieursDepartements, slugDuService, useDepartements } from "./departements-sonde.js";
 import { useRedirectionBureau } from "./redirections.js";
@@ -105,6 +106,8 @@ function Vue({ vue, id }: { vue: CleVue; id: string | null }) {
     case "departements":
     case "organigramme":
       return <VueEnsembleClient vueAdresse={vue} />;
+    case "agents":
+      return <VueTousLesAgents />;
   }
 }
 
@@ -245,6 +248,8 @@ export function EntreeAtelier({ context }: PluginSidebarProps) {
   const surEnsemble = vueCourante === "departements" || vueCourante === "organigramme";
   const ancre = useAncre();
   const surReglages = actif && rubriqueDe(vueCourante, ancre).rubrique.cle === "reglages";
+  // Le registre n'a pas de menu secondaire dans les vues du menu principal : il a donc sa propre entrée, Direction seulement.
+  const direction = useAccesDirection(context.companyId);
   return (
     <Racine>
       {/* Veille des décisions en attente : alimente la pastille « Coordinateur général » du menu, où que soit la personne. */}
@@ -260,6 +265,16 @@ export function EntreeAtelier({ context }: PluginSidebarProps) {
             <rect x="9" y="9" width="5.25" height="5.25" rx="0.75" stroke="currentColor" strokeWidth="1.4" />
           </svg>
           Départements
+        </LienHote>
+      ) : null}
+      {/* Pas d'entrée « Agents » ici : l'unique entrée est celle du socle, qui mène à la page « agents » de ce plugin. */}
+      {direction ? (
+        <LienHote vers={chemin("echanges")} className="atl-entree" courant={actif && vueCourante === "echanges"}>
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+            {/* Registre des échanges : deux flèches opposées (même trait que les autres icônes de l'atelier). */}
+            <path d="M2 5h11M10.5 2.5 13 5l-2.5 2.5M14 11H3M5.5 8.5 3 11l2.5 2.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+          Registre des échanges
         </LienHote>
       ) : null}
       <LienHote vers={chemin("livrables")} className="atl-entree" courant={actif && vueCourante === "livrables"}>
@@ -336,6 +351,9 @@ function ContenuWidget() {
   const contenus = useDonnees<VueContenusAValider>("atelier.contenus-a-valider");
   const equipe = useDonnees<VueEquipe>("atelier.equipe");
   const contexte = useHostContext();
+  const directionId = useDirectionId(contexte.companyId);
+  // Cartes en attente : toutes pour la Direction (comme son chat), celles du service ailleurs.
+  const decisions = useCartesServices(directionId).cartes.filter((c) => directionId === contexte.companyId || c.companyId === contexte.companyId).length;
   if (contenus.error) return <EtatErreur erreur={contenus.error} onReessayer={contenus.refresh} contexte="atelier" />;
   if (!contenus.data) return <Chargement libelle="Atelier" lignes={2} />;
   return (
@@ -347,6 +365,11 @@ function ContenuWidget() {
         <span>
           <strong>{contenus.data.bloques.length}</strong> bloqué{contenus.data.bloques.length > 1 ? "s" : ""}
         </span>
+        {decisions > 0 ? (
+          <span>
+            <strong>{decisions}</strong> décision{decisions > 1 ? "s" : ""} en attente
+          </span>
+        ) : null}
         {equipe.data ? (
           <span>
             <strong>{equipe.data.runsActifs}</strong> passage{equipe.data.runsActifs > 1 ? "s" : ""} actif{equipe.data.runsActifs > 1 ? "s" : ""} sur {equipe.data.plafondRunsActifs}

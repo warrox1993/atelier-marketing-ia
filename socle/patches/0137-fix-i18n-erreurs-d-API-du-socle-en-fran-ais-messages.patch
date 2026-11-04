@@ -1,0 +1,375 @@
+From c7c62a3c30eb4c5dcebc79921b8c6aba8fc50456 Mon Sep 17 00:00:00 2001
+From: Jean-Baptiste Dhondt <114347858+warrox1993@users.noreply.github.com>
+Date: Fri, 30 Oct 2026 16:03:38 +0100
+Subject: [PATCH 137/139] =?UTF-8?q?fix(i18n):=20erreurs=20d'API=20du=20soc?=
+ =?UTF-8?q?le=20en=20fran=C3=A7ais,=20messages=20de=20Zod=20compris=20(Ate?=
+ =?UTF-8?q?lier=20LANG-L7)?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Réponses 4xx vues par les agents : « Route d'API du plugin introuvable » avec la
+forme attendue, « Route d'API introuvable », « Erreur de validation », passage
+en blocked sans chemin, passage en in_review sans chemin de revue (le code
+invalid_issue_disposition reste en tête du message et dans details.code). Les
+messages de Zod passent en français par z.config(z.locales.fr()) au chargement
+du gestionnaire d'erreurs (zod 4.4.3). Aucun de ces textes n'est relu par le
+code ; les tests qui attendaient « Validation error » passent au français.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01EThpSSDGc5NRYwbgjNqoTJ
+---
+ .../__tests__/company-branding-route.test.ts  |  6 +--
+ server/src/__tests__/error-handler.test.ts    | 20 ++++++++--
+ .../issue-execution-policy-routes.test.ts     | 37 ++++++++++++++++++-
+ ...-existing-branch-validation-status.test.ts |  4 +-
+ .../plugin-scoped-api-routes.test.ts          | 36 ++++++++++++++++++
+ server/src/app.ts                             |  5 +--
+ server/src/middleware/error-handler.ts        | 12 +++++-
+ server/src/middleware/validate.ts             |  4 +-
+ server/src/routes/issues.ts                   | 12 +++---
+ server/src/routes/plugins.ts                  |  4 +-
+ 10 files changed, 117 insertions(+), 23 deletions(-)
+
+diff --git a/server/src/__tests__/company-branding-route.test.ts b/server/src/__tests__/company-branding-route.test.ts
+index 291a93ad50..a4ed9c05ce 100644
+--- a/server/src/__tests__/company-branding-route.test.ts
++++ b/server/src/__tests__/company-branding-route.test.ts
+@@ -226,7 +226,7 @@ describe("PATCH /api/companies/:companyId/branding", () => {
+       });
+ 
+     expect(res.status).toBe(400);
+-    expect(res.body.error).toBe("Validation error");
++    expect(res.body.error).toBe("Erreur de validation");
+     expect(mockCompanyService.update).not.toHaveBeenCalled();
+   });
+ 
+@@ -245,7 +245,7 @@ describe("PATCH /api/companies/:companyId/branding", () => {
+       });
+ 
+     expect(res.status).toBe(400);
+-    expect(res.body.error).toBe("Validation error");
++    expect(res.body.error).toBe("Erreur de validation");
+     expect(mockCompanyService.update).not.toHaveBeenCalled();
+   });
+ });
+@@ -342,7 +342,7 @@ describe("PATCH /api/companies/:companyId", () => {
+       });
+ 
+     expect(res.status).toBe(400);
+-    expect(res.body.error).toBe("Validation error");
++    expect(res.body.error).toBe("Erreur de validation");
+     expect(mockCompanyService.update).not.toHaveBeenCalled();
+     expect(mockLogActivity).not.toHaveBeenCalled();
+   });
+diff --git a/server/src/__tests__/error-handler.test.ts b/server/src/__tests__/error-handler.test.ts
+index 934cf7aa7c..f4e4776a20 100644
+--- a/server/src/__tests__/error-handler.test.ts
++++ b/server/src/__tests__/error-handler.test.ts
+@@ -1,7 +1,8 @@
+ import type { NextFunction, Request, Response } from "express";
+ import { beforeEach, describe, expect, it, vi } from "vitest";
+ import { HttpError } from "../errors.js";
+-import { errorHandler } from "../middleware/error-handler.js";
++import { z } from "zod";
++import { apiRouteNotFoundHandler, errorHandler } from "../middleware/error-handler.js";
+ import { mcpDiscoveryHttpFailure, retainMcpConnectionFailure } from "../services/mcp-connection-failure.js";
+ 
+ const recordResponsibleUserDenialOnActiveRunMock = vi.hoisted(() => vi.fn());
+@@ -243,13 +244,26 @@ describe("errorHandler", () => {
+ 
+     expect(res.status).toHaveBeenCalledWith(400);
+     expect(res.json).toHaveBeenCalledWith({
+-      error: "Validation error",
++      error: "Erreur de validation",
+       details: [issue],
+     });
+     expect(res.err).toBeUndefined();
+     expect(res.__errorContext).toBeUndefined();
+   });
+ 
++  it("donne les messages de Zod en français une fois le gestionnaire chargé (Atelier LANG-L7)", () => {
++    const result = z.object({ provider: z.string() }).safeParse({});
++    expect(result.success).toBe(false);
++    expect(result.error?.issues[0]?.message).toBe("Entrée invalide : chaîne attendu, indéfini reçu");
++  });
++
++  it("répond « Route d'API introuvable » pour une route d'API inconnue (Atelier LANG-L7)", () => {
++    const res = makeRes() as any;
++    apiRouteNotFoundHandler(makeReq(), res);
++    expect(res.status).toHaveBeenCalledWith(404);
++    expect(res.json).toHaveBeenCalledWith({ error: "Route d'API introuvable" });
++  });
++
+   it("removes submitted credentials from setup Zod issue prose", () => {
+     const req = {
+       ...makeReq(),
+@@ -274,7 +288,7 @@ describe("errorHandler", () => {
+ 
+     expect(res.status).toHaveBeenCalledWith(400);
+     expect(res.json).toHaveBeenCalledWith({
+-      error: "Validation error",
++      error: "Erreur de validation",
+       details: [
+         {
+           code: "custom",
+diff --git a/server/src/__tests__/issue-execution-policy-routes.test.ts b/server/src/__tests__/issue-execution-policy-routes.test.ts
+index 4ead3acee6..892b0dd1b5 100644
+--- a/server/src/__tests__/issue-execution-policy-routes.test.ts
++++ b/server/src/__tests__/issue-execution-policy-routes.test.ts
+@@ -366,8 +366,9 @@ describe("issue execution policy routes", () => {
+       .send({ status: "in_review" });
+ 
+     expect(res.status).toBe(422);
+-    expect(res.body.error).toContain("invalid_issue_disposition");
+-    expect(res.body.error).toContain("request_confirmation");
++    expect(res.body.error).toMatch(/^invalid_issue_disposition: une mise à jour d'agent qui passe une tâche en in_review doit avoir un vrai chemin de revue\. /);
++    expect(res.body.error).toContain("créez une interaction request_confirmation ou ask_user_questions");
++    expect(res.body.error).not.toContain("must include a real review path");
+     expect(res.body.details).toMatchObject({
+       code: "invalid_issue_disposition",
+       missing: "review_path",
+@@ -375,6 +376,38 @@ describe("issue execution policy routes", () => {
+     expect(mockIssueService.update).not.toHaveBeenCalled();
+   });
+ 
++  it("refuse en français un passage en blocked sans bloqueur, carte, approbation ni unblockDescriptor (Atelier LANG-L7)", async () => {
++    mockIssueService.getById.mockResolvedValue({
++      id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
++      companyId: "company-1",
++      status: "todo",
++      assigneeAgentId: null,
++      assigneeUserId: "local-board",
++      createdByUserId: "local-board",
++      identifier: "PAP-1004",
++      title: "Blocked without path",
++      executionPolicy: null,
++      executionState: null,
++    });
++    (mockIssueService as any).getDependencyReadiness = vi.fn(async () => ({ unresolvedBlockerCount: 0 }));
++    const emptyRows = () => ({
++      limit: () => Promise.resolve([]),
++      then: (onFulfilled: (rows: unknown[]) => unknown, onRejected?: (reason: unknown) => unknown) =>
++        Promise.resolve([]).then(onFulfilled, onRejected),
++    });
++    mockDbSelectFrom.mockImplementation(() => ({ where: emptyRows, innerJoin: () => ({ where: emptyRows }) }) as any);
++
++    const res = await request(await createApp())
++      .patch("/api/issues/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa")
++      .send({ status: "blocked" });
++
++    expect(res.status, JSON.stringify(res.body)).toBe(422);
++    expect(res.body.error).toBe(
++      "Passer en blocked exige un bloqueur non résolu, une carte ou une approbation en attente, ou un unblockDescriptor",
++    );
++    expect(mockIssueService.update).not.toHaveBeenCalled();
++  });
++
+   it("allows an agent-authored in_review transition with a pending confirmation interaction", async () => {
+     const issue = {
+       id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+diff --git a/server/src/__tests__/issue-existing-branch-validation-status.test.ts b/server/src/__tests__/issue-existing-branch-validation-status.test.ts
+index 8c7a3184bb..994f940f76 100644
+--- a/server/src/__tests__/issue-existing-branch-validation-status.test.ts
++++ b/server/src/__tests__/issue-existing-branch-validation-status.test.ts
+@@ -42,7 +42,7 @@ describe("existingBranch issue create/update validation status", () => {
+       workspaceStrategy: { type: "git_worktree", existingBranch: "bad..branch" },
+     }));
+     expect(res.status).toBe(422);
+-    expect(res.body.error).toBe("Validation error");
++    expect(res.body.error).toBe("Erreur de validation");
+     expect(res.body.details).toHaveLength(1);
+     expect(res.body.details[0].path).toEqual(EXISTING_BRANCH_PATH);
+     expect(res.body.details[0].message).toBe("existingBranch must be a valid git branch name");
+@@ -132,7 +132,7 @@ describe("existingBranch issue create/update validation status", () => {
+     const { app, handler } = buildApp(createIssueSchema);
+     const res = await request(app).post("/target").send({ title: 42, status: "todo" });
+     expect(res.status).toBe(400);
+-    expect(res.body.error).toBe("Validation error");
++    expect(res.body.error).toBe("Erreur de validation");
+     expect(res.body.details.length).toBeGreaterThan(0);
+     expect(handler).not.toHaveBeenCalled();
+   });
+diff --git a/server/src/__tests__/plugin-scoped-api-routes.test.ts b/server/src/__tests__/plugin-scoped-api-routes.test.ts
+index 36e8444197..26f6315bd3 100644
+--- a/server/src/__tests__/plugin-scoped-api-routes.test.ts
++++ b/server/src/__tests__/plugin-scoped-api-routes.test.ts
+@@ -388,6 +388,42 @@ describe("plugin scoped API routes", () => {
+     expect(workerManager.call).not.toHaveBeenCalled();
+   });
+ 
++  it("répond en français avec la forme attendue quand aucune route déclarée ne correspond (Atelier LANG-L7)", async () => {
++    const apiRoutes = manifest([
++      {
++        routeKey: "summary.get",
++        method: "GET",
++        path: "/summary",
++        auth: "board",
++        capability: "api.routes.register",
++        companyResolution: { from: "query", key: "companyId" },
++      },
++    ]);
++    const { app, workerManager } = await createApp({
++      actor: {
++        type: "board",
++        userId: "user-1",
++        source: "local_implicit",
++        isInstanceAdmin: true,
++      },
++      plugin: {
++        id: pluginId,
++        pluginKey: apiRoutes.id,
++        status: "ready",
++        manifestJson: apiRoutes,
++      },
++    });
++
++    const res = await request(app)
++      .get(`/api/plugins/${pluginId}/api/route-inconnue?companyId=${companyId}`);
++
++    expect(res.status).toBe(404);
++    expect(res.body.error).toBe(
++      "Route d'API du plugin introuvable (forme attendue : /api/plugins/<plugin>/api/<route déclarée dans le manifeste>)",
++    );
++    expect(workerManager.call).not.toHaveBeenCalled();
++  });
++
+   it("returns a clear error for disabled plugins without worker dispatch", async () => {
+     const apiRoutes = manifest([
+       {
+diff --git a/server/src/app.ts b/server/src/app.ts
+index ad35e05e9a..751dfb5454 100644
+--- a/server/src/app.ts
++++ b/server/src/app.ts
+@@ -51,6 +51,7 @@ import {
+ import type { InspectDatabaseBackupHealthOptions } from "./services/database-backup-health.js";
+ import type { StorageService } from "./storage/types.js";
+ import { httpLogger, errorHandler } from "./middleware/index.js";
++import { apiRouteNotFoundHandler } from "./middleware/error-handler.js";
+ import { actorMiddleware } from "./middleware/auth.js";
+ import { boardMutationGuard } from "./middleware/board-mutation-guard.js";
+ import {
+@@ -1070,9 +1071,7 @@ export async function createApp(
+   }
+ 
+   app.use("/api", api);
+-  app.use("/api", (_req, res) => {
+-    res.status(404).json({ error: "API route not found" });
+-  });
++  app.use("/api", apiRouteNotFoundHandler);
+   app.use(
+     pluginUiStaticRoutes(db, {
+       localPluginDir: opts.localPluginDir ?? DEFAULT_LOCAL_PLUGIN_DIR,
+diff --git a/server/src/middleware/error-handler.ts b/server/src/middleware/error-handler.ts
+index f138c06e4d..f6a713ea65 100644
+--- a/server/src/middleware/error-handler.ts
++++ b/server/src/middleware/error-handler.ts
+@@ -1,13 +1,14 @@
+ import { AgentLifecycleConflict } from "../modules/agent-lifecycle/index.js";
+ import type { Request, Response, NextFunction } from "express";
+ import type { Db } from "@paperclipai/db";
+-import { ZodError } from "zod";
++import { z, ZodError } from "zod";
+ import { HttpError } from "../errors.js";
+ import { trackErrorHandlerCrash } from "@paperclipai/shared/telemetry";
+ import { getTelemetryClient } from "../telemetry.js";
+ import { captureException } from "../sentry.js";
+ import { COMPANY_IMPORT_API_PATH } from "../routes/company-import-paths.js";
+ import { logger } from "./logger.js";
++import { VALIDATION_ERROR_MESSAGE } from "./validate.js";
+ import { isSecretSensitiveHttpRequest } from "./http-log-policy.js";
+ import {
+   collectSensitiveStringValues,
+@@ -16,6 +17,13 @@ import {
+ import { recordResponsibleUserDenialOnActiveRun } from "../services/responsible-user-denial-run-outcomes.js";
+ import { isExpectedMcpConnectionFailure } from "../services/mcp-connection-failure.js";
+ 
++// Messages de Zod en français dans les `details` des erreurs 400 et 422 rendues aux agents et à l'interface.
++z.config(z.locales.fr());
++
++export function apiRouteNotFoundHandler(_req: Request, res: Response) {
++  res.status(404).json({ error: "Route d'API introuvable" });
++}
++
+ export interface ErrorContext {
+   error: {
+     message: string;
+@@ -233,7 +241,7 @@ export function errorHandler(
+   const zodIssues = readZodIssues(err);
+   if (zodIssues) {
+     res.status(400).json({
+-      error: "Validation error",
++      error: VALIDATION_ERROR_MESSAGE,
+       details: sanitizeSecretSensitiveResponse(req, zodIssues),
+     });
+     return;
+diff --git a/server/src/middleware/validate.ts b/server/src/middleware/validate.ts
+index 8b141fcb19..94add69811 100644
+--- a/server/src/middleware/validate.ts
++++ b/server/src/middleware/validate.ts
+@@ -2,6 +2,8 @@ import type { Request, Response, NextFunction } from "express";
+ import { ZodError, type ZodIssue, type ZodSchema } from "zod";
+ import { unprocessable } from "../errors.js";
+ 
++export const VALIDATION_ERROR_MESSAGE = "Erreur de validation";
++
+ export function validate(schema: ZodSchema) {
+   return (req: Request, _res: Response, next: NextFunction) => {
+     req.body = schema.parse(req.body);
+@@ -42,7 +44,7 @@ export function validateIssueMutationBody(schema: ZodSchema) {
+       ) {
+         // Same body shape as the generic Zod 400 response, so the
+         // field-specific details are preserved verbatim.
+-        throw unprocessable("Validation error", err.issues);
++        throw unprocessable(VALIDATION_ERROR_MESSAGE, err.issues);
+       }
+       throw err;
+     }
+diff --git a/server/src/routes/issues.ts b/server/src/routes/issues.ts
+index c7b8c6955d..1545887fb2 100644
+--- a/server/src/routes/issues.ts
++++ b/server/src/routes/issues.ts
+@@ -2052,11 +2052,11 @@ const ACTIVE_REVIEW_APPROVAL_STATUSES = new Set([
+ ]);
+ 
+ const INVALID_AGENT_IN_REVIEW_DISPOSITION_MESSAGE =
+-  "invalid_issue_disposition: Agent-authored updates that move an issue to in_review must include a real review path. " +
+-  "This request would leave the issue in_review without anyone or anything owning the next action. " +
+-  "Keep working instead of moving to review, create a request_confirmation or ask_user_questions interaction, " +
+-  "link or request a pending approval, assign a human reviewer with assigneeUserId, set a typed executionState.currentParticipant through an execution policy, " +
+-  "or schedule an issue monitor for an external review/check. After creating one of those review paths, retry the status update.";
++  "invalid_issue_disposition: une mise à jour d'agent qui passe une tâche en in_review doit avoir un vrai chemin de revue. " +
++  "Cette requête laisserait la tâche en in_review sans personne ni rien pour porter la prochaine action. " +
++  "Continuez le travail au lieu de passer en revue, créez une interaction request_confirmation ou ask_user_questions, " +
++  "liez ou demandez une approbation en attente, assignez un relecteur humain avec assigneeUserId, posez un executionState.currentParticipant typé par une politique d'exécution, " +
++  "ou planifiez un moniteur de tâche pour une revue ou un contrôle externe. Une fois l'un de ces chemins de revue créé, relancez la mise à jour du statut.";
+ 
+ function executionPrincipalsEqual(
+   left: ParsedExecutionState["currentParticipant"] | null,
+@@ -14241,7 +14241,7 @@ export function issueRoutes(
+         ) {
+           res.status(422).json({
+             error:
+-              "Entering blocked requires unresolved blockers, a pending interaction/approval, or unblockDescriptor",
++              "Passer en blocked exige un bloqueur non résolu, une carte ou une approbation en attente, ou un unblockDescriptor",
+           });
+           return;
+         }
+diff --git a/server/src/routes/plugins.ts b/server/src/routes/plugins.ts
+index 971283dd0e..413ec2a1e2 100644
+--- a/server/src/routes/plugins.ts
++++ b/server/src/routes/plugins.ts
+@@ -1864,7 +1864,9 @@ export function pluginRoutes(
+       .map((route) => ({ route, params: matchScopedApiRoute(route, req.method, requestPath) }))
+       .find((candidate) => candidate.params !== null);
+     if (!match || !match.params) {
+-      res.status(404).json({ error: "Plugin API route not found" });
++      res.status(404).json({
++        error: "Route d'API du plugin introuvable (forme attendue : /api/plugins/<plugin>/api/<route déclarée dans le manifeste>)",
++      });
+       return;
+     }
+ 
+-- 
+2.53.0
+

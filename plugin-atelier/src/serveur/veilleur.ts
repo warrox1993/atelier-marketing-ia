@@ -11,7 +11,7 @@
  * - candidates seulement si rien n'a bougé depuis `seuil` minutes (`base.tachesOrphelines`) ;
  * - au plus UN réveil par tâche et par période (journal `veilleur.reveil`, persistant) ;
  * - au plus `maxReveils` (3) réveils AU TOTAL par tâche depuis la dernière action humaine (décision de
- *   l'atelier ou `cycles.remise_humaine`), puis un seul abandon journalisé (l'humain voit) ;
+ *   l'atelier ou `cycles.remise_humaine`), puis un seul abandon journalisé et commenté sur la tâche (l'humain voit, EXP-C8) ;
  * - au plus `maxReveilsParPasse` (10) réveils par passe, toutes entreprises confondues ;
  * - sont écartées par la sélection : issue de discussion, passage arrêté pour tours épuisés, budget, quota ou authentification ;
  * - une tâche qui attend une réponse humaine (interaction en attente) n'est jamais réveillée ;
@@ -41,7 +41,7 @@ export const VEILLEUR = {
 
 export interface DependancesVeilleur {
   base: Pick<BaseAtelier, "entreprisesSuivies" | "tachesOrphelines" | "datesJournal" | "journaliser" | "listerDecisions">;
-  issues: Pick<PluginContext["issues"], "listInteractions" | "requestWakeup">;
+  issues: Pick<PluginContext["issues"], "listInteractions" | "requestWakeup" | "createComment">;
   logger: Pick<PluginContext["logger"], "info" | "warn">;
   /** Configuration de l'entreprise (instanceConfigSchema) ; `veilleurSeuilMinutes` facultatif. */
   config: (companyId: string) => Promise<Record<string, unknown> | null | undefined>;
@@ -97,6 +97,13 @@ export function creerVeilleur(d: DependancesVeilleur) {
             donnees: { identifiant: t.identifier, agentId: t.agentId, reveils: VEILLEUR.maxReveils, dernierRun: t.dernierRun },
           });
           d.logger.warn("Veilleur : tâche toujours orpheline après le plafond de réveils, intervention humaine nécessaire", { issueId: t.issueId, identifiant: t.identifier });
+          // Commentaire du plugin (sans actorUserId) : visible dans la tâche, il ne réveille personne.
+          await d.issues.createComment(
+            t.issueId,
+            `**Tâche abandonnée par le veilleur** : toujours sans passage après ${VEILLEUR.maxReveils} réveils de l'agent depuis la dernière action humaine. ` +
+              "Il faut une décision humaine : reprendre la tâche (la renvoyer au travail), la réassigner ou la clore. Le veilleur ne la réveillera plus d'ici là.",
+            companyId,
+          ).catch((err) => d.logger.warn("Veilleur : commentaire d'abandon refusé", { issueId: t.issueId, erreur: err instanceof Error ? err.message : String(err) }));
         }
         continue;
       }

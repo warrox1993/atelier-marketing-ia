@@ -453,7 +453,8 @@ export function creerPilote(d: DependancesPilote) {
     // Conversation : même chemin que l'onglet Discussion (route `discussion.envoyer`).
     if (texte.length > MAX_TEXTE_DISCUSSION) return `Message trop long pour le coordinateur (${MAX_TEXTE_DISCUSSION} caractères au plus).`;
     try {
-      await d.atelier.envoyerDiscussion(texte);
+      const envoi = await d.atelier.envoyerDiscussion(texte);
+      if (envoi?.nouvelle) return "Nouvelle discussion ouverte avec le coordinateur général. Votre prochain message y sera écrit.";
       return "Transmis au coordinateur général.";
     } catch (err) {
       return `Message non transmis au coordinateur : ${err instanceof Error ? err.message : String(err)}`;

@@ -39,7 +39,8 @@ et phrase de présentation [mémoire], à relire dans l'ouvrage avant toute cita
 2. En tirer une phrase de présentation courte : problème, solution, résultat.
 3. En déduire la structure de la page d'accueil : promesse en tête, problème, guide, plan, appel à l'action, enjeux, réussite.
 4. Vérifier qu'il n'y a qu'un seul appel à l'action principal par page.
-5. Faire passer le texte par `relecteur` (preuves) et `conformite-publicitaire` (enjeux, promesses).
+5. Signaler au Coordinateur, qui organise les relectures, le contrôle à prévoir : `relecteur` (preuves) et
+   `conformite-publicitaire` (enjeux, promesses).
 
 ## Livrable
 

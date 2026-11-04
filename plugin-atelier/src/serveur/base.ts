@@ -9,7 +9,7 @@
  */
 import { randomUUID } from "node:crypto";
 import type { PluginContext } from "@paperclipai/plugin-sdk";
-import { ESPACE_BASE, LIMITES } from "../contrats/index.js";
+import { ESPACE_BASE, LIMITES, type RoleRevue } from "../contrats/index.js";
 import { erreur } from "./erreurs.js";
 
 type Db = PluginContext["db"];
@@ -118,9 +118,29 @@ export function creerBase(db: Db) {
     return (await q(`select cree_le from ${ns}.journal where company_id = $1 and issue_id = $2 and type = $3 order by cree_le desc limit 200`, [companyId, issueId, type])).map((r) => iso(r.cree_le));
   }
 
+  /**
+   * EXP-C8 : tâches abandonnées par le veilleur et toujours en attente d'un humain (aucun réveil, remise au travail ni
+   * décision depuis le dernier abandon), les plus récentes d'abord.
+   */
+  async function abandonsVeilleur(companyId: string) {
+    const rangs = await q(
+      `select a.issue_id, max(a.cree_le) as le from ${ns}.journal a where a.company_id = $1 and a.type = 'veilleur.abandon' and a.issue_id is not null group by a.issue_id
+       having not exists (select 1 from ${ns}.journal r where r.company_id = $1 and r.issue_id = a.issue_id and r.type in ('veilleur.reveil', 'cycles.remise_humaine') and r.cree_le > max(a.cree_le))
+       and not exists (select 1 from ${ns}.decisions_humaines h where h.company_id = $1 and h.issue_id = a.issue_id and h.cree_le > max(a.cree_le))
+       order by le desc limit 20`,
+      [companyId],
+    );
+    return rangs.map((r) => ({ issueId: String(r.issue_id), le: iso(r.le) }));
+  }
+
   /** Vrai si une entrée de journal de ce type existe déjà pour cette entité (dédoublonnage des relais automatiques). */
   async function journalExiste(companyId: string, type: string, entiteId: string) {
     return (await q(`select 1 as un from ${ns}.journal where company_id = $1 and type = $2 and entite_id = $3 limit 1`, [companyId, type, entiteId])).length > 0;
+  }
+
+  /** INJ-8 : vrai si ce run a lu une page du web par le plugin (tache.sources.lire journalise « source.collectee »). */
+  async function lectureWebDansRun(companyId: string, runId: string) {
+    return (await q(`select 1 as un from ${ns}.journal where company_id = $1 and run_id = $2 and type = 'source.collectee' limit 1`, [companyId, runId])).length > 0;
   }
 
   /** Parmi ces entités, celles qui ont déjà une entrée de journal de ce type (une seule requête ; liste passée en JSON, l'hôte aplatit les tableaux). */
@@ -177,7 +197,10 @@ export function creerBase(db: Db) {
    * dans le titre et dont l'assigné est un autre agent (le relecteur). `blocked` n'est prise que si le dernier passage a échoué
    * ou été interrompu : un blocage posé volontairement (question) n'est jamais relancé.
    */
-  async function tachesOrphelines(companyId: string, seuilMinutes: number) {
+  async function tachesOrphelines(companyId: string, seuilMinutes: number, dormanteHeures = 24) {
+    // COORD-P1-6 : sous-tâche ouverte sans mise à jour ni passage depuis `dormanteHeures` : elle n'écarte plus sa parente,
+    // qui devient candidate (sauf parente bloquée) pour que le coordinateur relance ou redistribue.
+    const dormante = "c.updated_at < now() - make_interval(hours => $3::int) and not exists (select 1 from public.heartbeat_runs y where y.company_id = $1 and y.context_snapshot->>'issueId' = c.id::text and y.created_at > now() - make_interval(hours => $3::int))";
     const rangs = await q(
       `with dernier as (
          select distinct on (r.context_snapshot->>'issueId') r.context_snapshot->>'issueId' as issue_id, r.id, r.status, r.error_code, coalesce(r.finished_at, r.scheduled_retry_at, r.created_at) as le
@@ -201,10 +224,10 @@ export function creerBase(db: Db) {
          and coalesce(d.error_code, '') not like '%auth%'
          and a.status not in ('paused', 'terminated', 'pending_approval')
          and i.updated_at < now() - make_interval(mins => $2::int)
-         and (case
+         and ((case
                when i.status = 'blocked' then d.status in ('interrupted', 'failed', 'timed_out', 'scheduled_retry')
                else (d.id is null or i.status = 'in_review' or d.status in ('interrupted', 'failed', 'timed_out', 'scheduled_retry'))
-             end)
+             end) or (i.status <> 'blocked' and exists (select 1 from public.issues c where c.parent_id = i.id and c.status not in ('done', 'cancelled') and c.hidden_at is null and ${dormante})))
          and (i.status in ('todo', 'in_progress') or (
                not exists (select 1 from ${ns}.liaisons li where li.company_id = i.company_id and li.tache_origine_id = i.id and li.statut = 'en_attente_approbation')
            and not exists (select 1 from public.approvals ap where ap.company_id = i.company_id and ap.status = 'pending' and ap.payload::text like '%' || i.id::text || '%')
@@ -214,10 +237,10 @@ export function creerBase(db: Db) {
          and coalesce(d.le, i.updated_at) < now() - make_interval(mins => $2::int)
          and not exists (select 1 from public.heartbeat_runs x where x.company_id = $1 and x.context_snapshot->>'issueId' = i.id::text and x.status in ('queued', 'running'))
          and not exists (select 1 from public.issue_relations rel join public.issues b on b.id = rel.issue_id where rel.related_issue_id = i.id and rel.type = 'blocks' and b.status <> 'done')
-         and not exists (select 1 from public.issues c where c.parent_id = i.id and c.status not in ('done', 'cancelled'))
+         and not exists (select 1 from public.issues c where c.parent_id = i.id and c.status not in ('done', 'cancelled') and not (${dormante}))
        order by i.updated_at asc
        limit 50`,
-      [companyId, Math.max(1, Math.floor(seuilMinutes))],
+      [companyId, Math.max(1, Math.floor(seuilMinutes)), dormanteHeures],
     );
     return rangs.map((r) => ({
       issueId: String(r.id),
@@ -450,7 +473,7 @@ export function creerBase(db: Db) {
       campagneId: String(r.campagne_id),
       cleLivrable: String(r.cle_livrable),
       exigencesCiblees: tableau<string>(r.exigences_ciblees),
-      revuesRequises: tableau<{ role: "exigences" | "metier" | "technique"; agentId: string }>(r.revues_requises),
+      revuesRequises: tableau<{ role: RoleRevue; agentId: string }>(r.revues_requises),
       maxCycles: Number(r.max_cycles),
       cyclesConsommes: Number(r.cycles_consommes),
       actif: Boolean(r.actif),
@@ -526,7 +549,7 @@ export function creerBase(db: Db) {
       companyId,
       issueId,
       revisionId: String(r.revision_id),
-      role: r.role as "exigences" | "metier" | "technique",
+      role: r.role as RoleRevue,
       relecteur: { type: (r.relecteur_type === "agent" ? "agent" : "humain") as "agent" | "humain", id: String(r.relecteur_id), runId: (r.run_id as string | null) ?? null },
       verdict: r.verdict as "PASS" | "CHANGES_REQUESTED" | "BLOCKED_INFORMATION" | "NOT_APPLICABLE_JUSTIFIED",
       exigencesExaminees: tableau<string>(r.exigences_examinees),
@@ -566,7 +589,7 @@ export function creerBase(db: Db) {
       companyId,
       issueId,
       reviewer: { type: (r.relecteur_type === "agent" ? "agent" : "humain") as "agent" | "humain", id: String(r.relecteur_id), runId: null },
-      role: r.role as "exigences" | "metier" | "technique",
+      role: r.role as RoleRevue,
       artifactVersion: String(r.revision_id),
       requirementIds: tableau<string>(r.requirement_ids),
       categorie: String(r.categorie) as never,
@@ -1157,6 +1180,24 @@ export function creerBase(db: Db) {
     );
   }
 
+  /** Tâches qui bloquent `issueId` (relations `blocks`), même résolues ; la relation et les deux tâches doivent appartenir à l'entreprise. */
+  async function tachesBloquantes(companyId: string, issueId: string): Promise<string[]> {
+    const rangs = await q<{ bloqueur: string }>(
+      `select r.issue_id as bloqueur from public.issue_relations r join public.issues b on b.id = r.issue_id and b.company_id = r.company_id join public.issues t on t.id = r.related_issue_id and t.company_id = r.company_id
+       where r.company_id = $1 and r.type = 'blocks' and r.related_issue_id = $2 order by r.created_at asc, r.issue_id asc limit 20`,
+      [companyId, issueId],
+    );
+    return rangs.map((r) => String(r.bloqueur));
+  }
+
+  async function tachesSoeurs(companyId: string, parentId: string, sauf: string): Promise<string[]> {
+    const rangs = await q<{ id: string }>(
+      `select id from public.issues where company_id = $1 and parent_id = $2 and id <> $3 and status <> 'cancelled' order by created_at asc, id asc limit 20`,
+      [companyId, parentId, sauf],
+    );
+    return rangs.map((r) => String(r.id));
+  }
+
   async function runsDeTaches(companyId: string) {
     return q(
       `select id, agent_id, status, context_snapshot->>'issueId' as issue_id, created_at from public.heartbeat_runs where company_id = $1 and created_at > now() - interval '7 days' order by created_at desc limit 500`,
@@ -1303,16 +1344,17 @@ export function creerBase(db: Db) {
     )).map((r) => ({ type: String(r.type), valeur: String(r.empreinte) }));
   }
 
-  /** Numéros (empreintes) inscrits à la liste « Ne m'appelez plus » chargée, parmi les valeurs données ; null si aucun. */
+  /** Numéros (empreintes) inscrits à la liste « Ne m'appelez plus » chargée, parmi les valeurs données ; null si aucune liste n'est chargée. */
   async function dncmPour(companyId: string, valeurs: readonly string[]) {
-    if (valeurs.length === 0) return null;
-    const lignes = await q(
+    const lignes = valeurs.length === 0 ? [] : await q(
       `select e.empreinte, l.version_du from ${ns}.dncm_empreintes e join ${ns}.listes_dncm l on l.id = e.liste_id and l.company_id = e.company_id
        where e.company_id = $1 and e.empreinte in (select jsonb_array_elements_text($2::jsonb)) order by l.version_du desc`,
       [companyId, json(valeurs)],
     );
-    if (lignes.length === 0) return null;
-    return { empreintes: lignes.map((r) => ({ type: "telephone" as const, valeur: String(r.empreinte) })), verifieeLe: iso(lignes[0]!.version_du) };
+    if (lignes.length > 0) return { empreintes: lignes.map((r) => ({ type: "telephone" as const, valeur: String(r.empreinte) })), verifieeLe: iso(lignes[0]!.version_du) };
+    // DROIT-1.7 : aucun numéro inscrit n'est pas « liste non consultée » ; la liste chargée la plus récente fait foi.
+    const [liste] = await q(`select version_du from ${ns}.listes_dncm where company_id = $1 order by version_du desc limit 1`, [companyId]);
+    return liste ? { empreintes: [], verifieeLe: iso(liste.version_du) } : null;
   }
 
   async function clientExiste(companyId: string, clientId: string) {
@@ -1660,6 +1702,21 @@ export function creerBase(db: Db) {
     );
   }
 
+  /* ---------------- purge des prospects au terme de conservation (DROIT-1.4) ---------------- */
+  // Mêmes gardes que la remise à zéro (M1) : un prospect qui porte une base légale est gardé (sa preuve avec lui) ;
+  // oppositions et liste « Ne m'appelez plus » ne sont pas touchées. Contact = mise à jour, export CRM ou issue commerciale.
+  const sansContactDepuis = `p.company_id = $1 and p.modifie_le < $2::timestamptz
+       and not exists (select 1 from ${ns}.bases_legales b where b.prospect_id = p.id)
+       and not exists (select 1 from ${ns}.exports_crm e where e.company_id = p.company_id and e.prospect_ids @> jsonb_build_array(p.id::text) and e.cree_le >= $2::timestamptz)
+       and not exists (select 1 from ${ns}.issues_commerciales i where i.prospect_id = p.id and i.date_issue >= $2::timestamptz)`;
+  async function purgerProspectsSansContact(companyId: string, avant: string, confirmer: boolean) {
+    const [r] = await q(`select count(*) as n from ${ns}.prospects p where ${sansContactDepuis}`, [companyId, avant]);
+    const candidats = Number(r?.n ?? 0);
+    if (!confirmer) return { candidats, supprimes: 0 };
+    const { rowCount } = await x(`delete from ${ns}.prospects p where ${sansContactDepuis}`, [companyId, avant]);
+    return { candidats, supprimes: rowCount ?? 0 };
+  }
+
   /* ---------------- remise à zéro des données de l'atelier ---------------- */
   // Faille M1 : oppositions RGPD, listes « Ne m'appelez plus » (DNCM), bases légales et journal d'audit
   // sont des obligations légales. La remise à zéro ne les efface JAMAIS, quel que soit l'appelant :
@@ -1688,7 +1745,7 @@ export function creerBase(db: Db) {
 
   return {
     ns,
-    journaliser, lireJournal, datesJournal, journalExiste, journalExistants, derniereDateJournal, entreprisesSuivies, tachesOrphelines,
+    journaliser, lireJournal, datesJournal, abandonsVeilleur, journalExiste, journalExistants, lectureWebDansRun, derniereDateJournal, entreprisesSuivies, tachesOrphelines,
     lireReglages, enregistrerReglages, enregistrerPlafondEntreprise, enregistrerPlafondCampagne, donneesEngagement,
     creerCampagne, listerCampagnes, lireCampagne, creerBrief, dernierBrief,
     enregistrerExigence, creerExigenceSiAbsente, listerExigences, lireExigence, changerExclusion,
@@ -1701,8 +1758,8 @@ export function creerBase(db: Db) {
     rapporterIssueDiffusion, lireDiffusionInterne, figerPreuve, revoquerPreuves, listerRevocations,
     insererAppel, listerAppels, lireAppel, lireAppelParEmpreinte, comptesConnexion,
     insererMarque, marques, planifier, listerPlanifications, listerMesures,
-    tachesDeProjet, bloqueursNonResolus, runsDeTaches, tacheDuRun, coutsEntreprise, coutsEntrepriseMois, competencesDernierRun,
-    supprimerDonneesEntreprise,
+    tachesDeProjet, bloqueursNonResolus, tachesBloquantes, tachesSoeurs, runsDeTaches, tacheDuRun, coutsEntreprise, coutsEntrepriseMois, competencesDernierRun,
+    supprimerDonneesEntreprise, purgerProspectsSansContact,
     prospectsParIdentifiants, lireProspect, empreintesProspectsEnBase, oppositionsPour, compterAReimporter, clientsActuelsPour, dncmPour, clientExiste, clientParEmpreinte, poidsScoreCourant,
     referentielProspection, insererProspect, majProspect, remplacerProspectAReimporter, exclureProspect, ajouterEmpreintesProspect, prospectsAvecEmpreinte, insererScoreProspect,
     detailsProspects, listerProspects, insererOpposition, lireOpposition,

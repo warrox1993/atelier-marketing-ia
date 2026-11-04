@@ -35,7 +35,9 @@ a été vérifié de ce qui reste à tester à la main.
 
 ## Étapes
 
-1. **Commencer par le contraste et le clavier**, qui révèlent les défauts les plus fréquents et les plus gênants.
+1. **Commencer par le contraste et le clavier**, qui révèlent les défauts les plus fréquents et les plus gênants. Si ta
+   connexion `audit` est branchée, lance d'abord `auditer_page` sur l'adresse publique : son score et ses défauts
+   d'accessibilité donnent la partie automatique, le reste de la méthode reste à faire à la main (étape 9).
 2. **Perceptible** : texte de remplacement des images utiles et image décorative ignorée (1.1.1) ; structure portée par
    le balisage (titres, listes, tableaux, 1.3.1) ; contraste du texte d'au moins 4,5:1, 3:1 pour le grand texte
    (1.4.3) ; contraste de 3:1 pour les composants et graphiques utiles (1.4.11) ; contenu lisible à 200 % (1.4.4) et sans

@@ -16,7 +16,8 @@ import * as z from "zod";
 import { VerificateurPreuves } from "../social-crm/approbation.js";
 import { ClientListmonk, ErreurListmonk, MESSAGE_ENVOI_TEST, modeEnvoi, type CampagneListmonk } from "./listmonk.js";
 import { empreinteCampagne } from "./outils.js";
-import { contientDesinscription } from "./contenu-courriel.js";
+import { contientDesinscription, liensDuContenu } from "./contenu-courriel.js";
+import { analyserContenu } from "../liens/verifier-url.js";
 
 export const SERVICE_ENVOI = "emailing";
 export const OUTIL_ENVOI = "envoyer_campagne";
@@ -26,6 +27,7 @@ export const DESTINATAIRES_MAX = 500;
 
 export const CHEMIN_LECTURE = "/interne/emailing/lire-campagne";
 const LONGUEUR_EXTRAIT = 400;
+const DOMAINES_MAX = 100;
 
 export const schemaDemandeLecture = z.object({ campagne_id: z.number().int().min(1) }).strict();
 
@@ -62,11 +64,11 @@ export function empreinteAbonnes(ids: readonly number[]): string {
   return createHash("sha256").update(tries.join(","), "utf8").digest("hex");
 }
 
-/** Abonnés confirmés ciblés par la campagne (union des listes, sans doublon) : nombre et empreinte, lus chez listmonk à l'instant. */
-export async function abonnesCibles(client: ClientListmonk, campagne: Pick<CampagneListmonk, "lists">): Promise<{ destinataires: number; empreinte: string }> {
-  const ids = new Set<number>();
-  for (const l of campagne.lists) for (const id of await client.idsConfirmes(l.id)) ids.add(id);
-  return { destinataires: ids.size, empreinte: empreinteAbonnes([...ids]) };
+/** Abonnés confirmés ciblés par la campagne (union des listes, sans doublon) : nombre, empreinte et adresses, lus chez listmonk à l'instant. */
+export async function abonnesCibles(client: ClientListmonk, campagne: Pick<CampagneListmonk, "lists">): Promise<{ destinataires: number; empreinte: string; courriels: string[] }> {
+  const abonnes = new Map<number, string>();
+  for (const l of campagne.lists) for (const a of await client.confirmes(l.id)) abonnes.set(a.id, a.email.trim().toLowerCase());
+  return { destinataires: abonnes.size, empreinte: empreinteAbonnes([...abonnes.keys()]), courriels: [...new Set(abonnes.values())].sort() };
 }
 
 /**
@@ -80,12 +82,16 @@ export function creerLecteurCampagne(options: { client: ClientListmonk; journal?
     try {
       const c = await options.client.campagne(analyse.data.campagne_id);
       const cibles = await abonnesCibles(options.client, c);
-      const texte = (c.altbody ?? "").replace(/\s+/g, " ").trim();
+      // V2-4 : la carte montre ce que lisent les destinataires (texte visible du HTML) et les domaines de ses liens et images.
+      const texte = analyserContenu(c.body, "text/html").extrait ?? "";
+      const domaines = [...new Set(liensDuContenu(c.body, c.altbody ?? "").urls.flatMap((u) => { try { return [new URL(u).hostname.toLowerCase()]; } catch { return []; } }))].sort().slice(0, DOMAINES_MAX);
       return {
         statut: 200,
         corps: {
           campagne_id: c.id, sujet: c.subject, statut: c.status, listes: c.lists.map((l) => ({ id: l.id, nom: l.name })),
-          destinataires: cibles.destinataires, empreinte: empreinteCampagne(c), empreinte_abonnes: cibles.empreinte, extrait: texte.slice(0, LONGUEUR_EXTRAIT),
+          destinataires: cibles.destinataires, empreinte: empreinteCampagne(c), empreinte_abonnes: cibles.empreinte, extrait: texte.slice(0, LONGUEUR_EXTRAIT), domaines,
+          // DROIT-2.1 et 2.2 : le plugin, seul à détenir la clé des empreintes, contrôle oppositions et consentement de chaque adresse.
+          courriels: cibles.courriels,
         },
       };
     } catch (e) {

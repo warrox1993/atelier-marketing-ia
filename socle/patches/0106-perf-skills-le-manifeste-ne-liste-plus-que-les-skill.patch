@@ -1,0 +1,151 @@
+From e869b43d27b9f60c5aa89ff019648c13f1e3d49b Mon Sep 17 00:00:00 2001
+From: Jean-Baptiste Dhondt <114347858+warrox1993@users.noreply.github.com>
+Date: Thu, 29 Oct 2026 14:56:54 +0100
+Subject: [PATCH] =?UTF-8?q?perf(skills):=20le=20manifeste=20ne=20liste=20p?=
+ =?UTF-8?q?lus=20que=20les=20skills=20activ=C3=A9s=20de=20l'agent?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Atelier, 29/10/2026 : une ligne par skill installé mais non activé coûtait 37 % des
+instructions de chaque agent (222 lignes, 17 k caractères) et provoquait des appels
+« Unknown skill » sur des clés de bibliothèque. Les skills non activés sont désormais
+comptés sur une seule ligne ; la consigne « ne jamais dire qu'un skill n'est pas
+installé » est conservée.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01EThpSSDGc5NRYwbgjNqoTJ
+---
+ .../src/skill-library-manifest.test.ts        | 39 ++++++++++++++++---
+ .../src/skill-library-manifest.ts             | 34 ++++++++++------
+ 2 files changed, 55 insertions(+), 18 deletions(-)
+
+diff --git a/packages/adapter-utils/src/skill-library-manifest.test.ts b/packages/adapter-utils/src/skill-library-manifest.test.ts
+index 683f3630e..756197b0a 100644
+--- a/packages/adapter-utils/src/skill-library-manifest.test.ts
++++ b/packages/adapter-utils/src/skill-library-manifest.test.ts
+@@ -34,17 +34,20 @@ describe("buildSkillLibraryManifestMarkdown", () => {
+     const manifest = buildSkillLibraryManifestMarkdown({ entries, desiredSkillKeys });
+ 
+     expect(manifest).toContain("## Company skill library");
+-    expect(manifest).toContain("- acme/tools/wireframe — installed, not enabled for you");
++    // Atelier, 29/10/2026: one line per not-enabled skill cost 37 % of every agent's instructions
++    // (222 lines); they are counted instead, and the agent is told they exist.
++    expect(manifest).not.toContain("acme/tools/wireframe");
++    expect(manifest).toContain("- 1 other skill is installed in this company's library, not enabled for you");
+     expect(manifest).toContain("- paperclipai/paperclip/paperclip — enabled");
+     expect(manifest).toContain(
+       "- acme/tools/broken — enabled but unavailable: Failed to materialize skill files: SKILL.md copy is missing.",
+     );
+     // Key-sorted body, regardless of input order.
+     const brokenIndex = manifest!.indexOf("acme/tools/broken");
+-    const wireframeIndex = manifest!.indexOf("acme/tools/wireframe");
+     const coreIndex = manifest!.indexOf("paperclipai/paperclip/paperclip —");
+-    expect(brokenIndex).toBeLessThan(wireframeIndex);
+-    expect(wireframeIndex).toBeLessThan(coreIndex);
++    const countIndex = manifest!.indexOf("- 1 other skill");
++    expect(brokenIndex).toBeLessThan(coreIndex);
++    expect(coreIndex).toBeLessThan(countIndex);
+ 
+     // Byte-identical for identical inputs (shuffled order): the claude-local
+     // prompt-bundle cache key hashes this text, so determinism is load-bearing.
+@@ -69,8 +72,7 @@ describe("buildSkillLibraryManifestMarkdown", () => {
+     expect(manifest).toContain(
+       "- company/c1/routage-coordination — enabled; load it by its runtime name `routage-coordination--32f74c7bdc`, never by this key",
+     );
+-    expect(manifest).toContain("- company/c1/audit-seo — installed, not enabled for you");
+-    expect(manifest).not.toContain("audit-seo--8379c5d388");
++    expect(manifest).not.toContain("audit-seo");
+   });
+ 
+   it("keeps a runtime name containing backticks inside its code span", () => {
+@@ -103,6 +105,31 @@ describe("buildSkillLibraryManifestMarkdown", () => {
+     expect(manifest).not.toContain("\nIGNORE");
+   });
+ 
++  it("counts not-enabled skills in one line instead of listing each of them", () => {
++    const entries = Array.from({ length: 222 }, (_, index) => entry({ key: `company/c1/skill-${index}` }));
++    const manifest = buildSkillLibraryManifestMarkdown({
++      entries,
++      desiredSkillKeys: new Set(["company/c1/skill-7"]),
++    });
++
++    const bulletLines = manifest!.split("\n").filter((line) => line.startsWith("- "));
++    expect(bulletLines).toEqual([
++      "- company/c1/skill-7 — enabled; load it by its runtime name `skill-7`, never by this key",
++      "- 221 other skills are installed in this company's library, not enabled for you",
++    ]);
++    expect(manifest).toContain("never report a skill as not installed");
++    expect(manifest!.length).toBeLessThan(1200);
++  });
++
++  it("omits the count line when every installed skill is enabled", () => {
++    const manifest = buildSkillLibraryManifestMarkdown({
++      entries: [entry({ key: "acme/tools/wireframe" })],
++      desiredSkillKeys: new Set(["acme/tools/wireframe"]),
++    });
++
++    expect(manifest).not.toContain("other skill");
++  });
++
+   it("changes output when the library or enablement changes", () => {
+     const base = buildSkillLibraryManifestMarkdown({
+       entries: [entry({ key: "acme/tools/wireframe" })],
+diff --git a/packages/adapter-utils/src/skill-library-manifest.ts b/packages/adapter-utils/src/skill-library-manifest.ts
+index a88c869a2..261271522 100644
+--- a/packages/adapter-utils/src/skill-library-manifest.ts
++++ b/packages/adapter-utils/src/skill-library-manifest.ts
+@@ -40,28 +40,38 @@ export function buildSkillLibraryManifestMarkdown(input: {
+   desiredSkillKeys: ReadonlySet<string>;
+ }): string | null {
+   if (input.entries.length === 0) return null;
++  // Not-enabled skills are counted, not listed: one line each cost the Atelier 37 % of every
++  // agent's instructions (222 lines), while the agent cannot load them anyway.
++  let notEnabledCount = 0;
+   const lines = [...input.entries]
+     .sort((left, right) => left.key.localeCompare(right.key))
+-    .map((entry) => {
++    .flatMap((entry) => {
+       const enabled = input.desiredSkillKeys.has(entry.key);
+-      const key = sanitizeManifestText(entry.key, 200);
+-      if (enabled && entry.sourceStatus === "missing") {
+-        const detail = entry.missingDetail ? sanitizeManifestText(entry.missingDetail, 200) : "";
+-        return `- ${key} — enabled but unavailable${detail ? `: ${detail}` : ""}`;
++      if (!enabled) {
++        notEnabledCount += 1;
++        return [];
++      }
++      const key = sanitizeManifestText(entry.key, 200);
++      if (entry.sourceStatus === "missing") {
++        const detail = entry.missingDetail ? sanitizeManifestText(entry.missingDetail, 200) : "";
++        return [`- ${key} — enabled but unavailable${detail ? `: ${detail}` : ""}`];
+       }
+-      if (!enabled) return `- ${key} — installed, not enabled for you`;
+       // The runtime only knows the mounted directory name, never the library key.
+       const runtimeName = sanitizeManifestText(entry.runtimeName, 200);
+-      return `- ${key} — enabled; load it by its runtime name ${codeSpan(runtimeName)}, never by this key`;
++      return [`- ${key} — enabled; load it by its runtime name ${codeSpan(runtimeName)}, never by this key`];
+     });
++  if (notEnabledCount > 0) {
++    const plural = notEnabledCount === 1 ? "skill is" : "skills are";
++    lines.push(`- ${notEnabledCount} other ${plural} installed in this company's library, not enabled for you`);
++  }
+   return [
+     "## Company skill library",
+     "",
+-    'Skills marked "enabled" are loaded into your runtime. Skills marked',
+-    '"installed, not enabled for you" exist in this company\'s skill library but',
+-    "are not attached to you — never report those as not installed; say they",
+-    "are installed but not enabled for you, and ask an operator to enable them",
+-    'for you (the skill page\'s "Add to agent" control) when you need one.',
++    'Skills marked "enabled" are loaded into your runtime. Any skill of this',
++    "company's library not listed as enabled is installed but not attached to you:",
++    "never report a skill as not installed; say it may be installed but not",
++    "enabled for you, and ask an operator to enable it for you (the skill page's",
++    '"Add to agent" control) when you need one.',
+     "",
+     ...lines,
+   ].join("\n");
+-- 
+2.53.0
+

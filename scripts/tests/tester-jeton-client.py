@@ -134,6 +134,18 @@ class JetonClient(unittest.TestCase):
         self.assertEqual([j[1] for j in self.api.journal if j[0] == "POST"], [f"/secrets/secret-{ID_B[:4]}/rotate", f"/secrets/secret-{ID_A[:4]}/rotate"])  # ordre des services : direction, marketing
         self.assertFalse([j for j in self.api.journal if j[0] == "PATCH"])
 
+    def test_reference_enrichie_par_le_serveur_compte_comme_deja_liee(self):
+        # Le vrai serveur Paperclip ajoute projectionClass et projectionAllowlistKey à la référence rangée : la comparaison
+        # ne doit porter que sur type, secretId et version, sinon chaque passage réécrit tous les agents.
+        self.api.secrets[ID_A].append({"id": f"secret-{ID_A[:4]}", "key": bo.CLE_SECRET_JETON})
+        enrichie = {"type": "secret_ref", "secretId": f"secret-{ID_A[:4]}", "version": "latest",
+                    "projectionClass": "unclassified", "projectionAllowlistKey": None}
+        self.api.agents[ID_A][0]["adapterConfig"]["env"][bo.VARIABLE_JETON] = enrichie
+        code, sortie = self.lancer(bo.cmd_jeton, service="marketing")
+        self.assertEqual(code, 0)
+        self.assertIn("lié à 1 agent(s)", sortie)  # seul a2 (non lié) ; a1, déjà lié, est laissé
+        self.assertEqual([j[1] for j in self.api.journal if j[0] == "PATCH"], ["/agents/a2"])
+
     def test_la_valeur_du_jeton_ne_va_que_dans_le_secret(self):
         self.lancer(bo.cmd_jeton)
         vues = [j for j in self.api.journal if JETON in repr(j)]
@@ -143,6 +155,26 @@ class JetonClient(unittest.TestCase):
         with self.assertRaises(bo.ErreurAtelier) as c:
             bo.cmd_jeton(argparse.Namespace(confirmer=True, client="inconnu"))
         self.assertIn("aucun registre local pour le client inconnu", str(c.exception))
+        self.assertEqual(self.api.ecritures, 0)
+
+    def test_service_limite_a_une_seule_entreprise(self):
+        code, sortie = self.lancer(bo.cmd_jeton, service="direction")
+        self.assertEqual(code, 0)
+        self.assertIn("Secret rangé dans 1 entreprise(s), lié à 1 agent(s).", sortie)
+        self.assertNotIn(JETON, sortie)
+        self.assertTrue(self.api.journal)
+        self.assertTrue(all(ID_A not in j[1] and "a1" not in j[1] and "a2" not in j[1] for j in self.api.journal))
+        self.assertEqual(self.api.secrets[ID_A], [])
+        self.assertNotIn(bo.VARIABLE_JETON, self.api.agents[ID_A][0]["adapterConfig"]["env"])
+        self.assertIn(bo.VARIABLE_JETON, self.api.agents[ID_B][0]["adapterConfig"]["env"])
+
+    def test_service_inconnu_erreur_claire_sans_ecriture(self):
+        bo.lire_jeton = lambda: self.fail("le jeton ne doit pas être lu pour un service inconnu")
+        with self.assertRaises(bo.ErreurAtelier) as c:
+            bo.cmd_jeton(argparse.Namespace(confirmer=True, client="client-trois", service="absent"))
+        self.assertIn("absent", str(c.exception))
+        self.assertIn("direction", str(c.exception))
+        self.assertIn("marketing", str(c.exception))
         self.assertEqual(self.api.ecritures, 0)
 
     def test_sans_confirmer_refuse(self):

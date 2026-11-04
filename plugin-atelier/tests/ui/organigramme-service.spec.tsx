@@ -203,7 +203,7 @@ describe("disposerSatellites", () => {
   });
 
   it("chaque satellite a la hauteur de son contenu : nom complet sur autant de lignes qu'il en faut, puis le détail", () => {
-    const liaisonsLongues = liaisonsDe("a", [flux("a", "court", "x"), flux("a", "long", "x", { approbationHumaine: true }), flux("a", "treslong", "x")]);
+    const liaisonsLongues = liaisonsDe("a", [flux("a", "court", "x"), flux("a", "long", "x", { approbationHumaine: true }), flux("a", "treslong", "x", { approbationHumaine: true })]);
     const noms: Record<string, string> = { court: "Achats", long: "Comptabilité et finance du groupe", treslong: "Hygiène, sécurité, environnement et bien-être au travail" };
     const sats = disposerSatellites(liaisonsLongues, (s) => noms[s] ?? s).droite;
     const h = (slug: string) => sats.find((s) => s.slug === slug)!.hauteur;
@@ -312,7 +312,9 @@ describe("VueServiceOrganigramme", () => {
     expect(c.textContent).not.toContain("Réseau des coordinateurs");
     const jur = Array.from(c.querySelectorAll<HTMLElement>(".atl-orgs-satellite")).find((e) => e.textContent!.includes("Juridique"))!;
     expect(jur.textContent).toContain("approbation");
-    expect(jur.textContent).toContain("3 échanges");
+    // UI-12 : un flux déclaré est une demande possible, pas un échange réel.
+    expect(jur.textContent).toContain("3 demandes possibles");
+    expect(jur.textContent).not.toContain("échange");
     await cliquer(jur);
     expect(ouvrirService).toHaveBeenCalledWith("juridique");
     // La largeur de gouttière sert aux deux côtés.
@@ -619,14 +621,14 @@ describe("toile : zoom, ajustement et gestes", () => {
 });
 
 describe("vue d'un service : satellites, titres et cibles", () => {
-  it("satellite sur deux lignes (nom complet, puis « N échanges · approbation »), jamais rogné, sans nombre sur les flèches", async () => {
+  it("satellite sur deux lignes (nom complet, puis « N demandes possibles · approbation »), jamais rogné, sans nombre sur les flèches", async () => {
     const { c } = await monter({
       services: [...SERVICES, { slug: "compta", nom: "Comptabilité et finance du groupe" }],
       flux: [...FLUX, flux("marketing", "compta", "Facture", { approbationHumaine: true })],
     });
     const compta = Array.from(c.querySelectorAll<HTMLElement>(".atl-orgs-satellite")).find((e) => e.textContent!.includes("Comptabilité"))!;
     expect(compta.querySelector(".atl-orgs-satellite-nom")!.textContent).toBe("Comptabilité et finance du groupe");
-    expect(compta.querySelector(".atl-orgs-satellite-detail")!.textContent).toBe("1 échange · approbation");
+    expect(compta.querySelector(".atl-orgs-satellite-detail")!.textContent).toBe("1 demande possible · approbation");
     expect(compta.children).toHaveLength(2);
     // Hauteur donnée = minimum, jamais plafond : le contenu peut grandir sans être coupé.
     expect(parseFloat(compta.style.minHeight)).toBeGreaterThanOrEqual(SATELLITE.hauteur + SATELLITE.ligne);

@@ -1,10 +1,14 @@
 [Unit]
-Description=Alerte bureau : échec de %i
+Description=Alerte bureau et courriel : échec de %i
 
-# Unité modèle appelée par « OnFailure=atelier-alerte@%n.service » (sauvegarde, export Phoenix).
+# Unité modèle appelée par « OnFailure=atelier-alerte@%n.service » (toutes les unités atelier-*).
 # Installation : install -m 644 scripts/systemd/atelier-alerte@.service ~/.config/systemd/user/
-# Même mécanisme que scripts/sante-atelier.sh : notify-send en urgence critique.
+# Même mécanisme que scripts/sante-atelier.sh : notify-send en urgence critique, puis courriel
+# (scripts/alerte-courriel.sh, réglages dans ~/.config/atelier/alerte-courriel.env, EXP-C3).
 
 [Service]
 Type=oneshot
-ExecStart=/usr/bin/notify-send --urgency=critical --icon=dialog-error "Atelier marketing IA : échec de %i" "Détails : journalctl --user -u %i -n 50"
+# « - » : sans session graphique, la notification échoue mais le courriel part quand même.
+ExecStart=-/usr/bin/notify-send --urgency=critical --icon=dialog-error "Atelier marketing IA : échec de %i" "Détails : journalctl --user -u %i -n 50"
+# --journal : le courriel porte seulement l'horodatage, l'unité et la ligne « Failed with result » (aucun texte du journal, revue 2 B-2).
+ExecStart=%h/Projets/atelier-marketing-ia/scripts/alerte-courriel.sh --journal %i "Atelier marketing IA : échec de %i" "L'unité %i est en échec sur %H.\nDétails : journalctl --user -u %i -n 50"

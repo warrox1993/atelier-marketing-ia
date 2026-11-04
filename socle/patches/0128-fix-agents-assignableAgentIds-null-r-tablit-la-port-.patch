@@ -1,0 +1,89 @@
+From 7d6eb5cfc84b62b275cd67f4ace592aa07a4a280 Mon Sep 17 00:00:00 2001
+From: Jean-Baptiste Dhondt <114347858+warrox1993@users.noreply.github.com>
+Date: Fri, 30 Oct 2026 15:14:35 +0100
+Subject: [PATCH 128/131] =?UTF-8?q?fix(agents):=20assignableAgentIds=20nul?=
+ =?UTF-8?q?l=20r=C3=A9tablit=20la=20port=C3=A9e=20d'assignation=20par=20d?=
+ =?UTF-8?q?=C3=A9faut,=20le=20sous-arbre=20dynamique=20de=20l'agent=20(Ate?=
+ =?UTF-8?q?lier=20P-PORTEE)?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01EThpSSDGc5NRYwbgjNqoTJ
+---
+ packages/shared/src/validators/agent.ts         |  3 ++-
+ .../__tests__/agent-permissions-routes.test.ts  | 17 +++++++++++++++++
+ server/src/routes/agents.ts                     |  6 ++++--
+ 3 files changed, 23 insertions(+), 3 deletions(-)
+
+diff --git a/packages/shared/src/validators/agent.ts b/packages/shared/src/validators/agent.ts
+index 5f33f56258..f5a402f545 100644
+--- a/packages/shared/src/validators/agent.ts
++++ b/packages/shared/src/validators/agent.ts
+@@ -294,7 +294,8 @@ export const updateAgentPermissionsSchema = z.object({
+   trustPreset: trustPresetSchema.optional(),
+   authorizationPolicy: trustAuthorizationPolicySchema.optional(),
+   // Atelier (N3) : jamais vide (une portée vide ne contraindrait rien, voir scopeAllows).
+-  assignableAgentIds: z.array(z.string().guid()).min(1).max(500).optional(),
++  // Atelier (P-PORTEE) : null rétablit la portée par défaut du socle, le sous-arbre de l'agent.
++  assignableAgentIds: z.array(z.string().guid()).min(1).max(500).nullable().optional(),
+ });
+ 
+ export type UpdateAgentPermissions = z.infer<typeof updateAgentPermissionsSchema>;
+diff --git a/server/src/__tests__/agent-permissions-routes.test.ts b/server/src/__tests__/agent-permissions-routes.test.ts
+index 62d86c2c6b..82176d5454 100644
+--- a/server/src/__tests__/agent-permissions-routes.test.ts
++++ b/server/src/__tests__/agent-permissions-routes.test.ts
+@@ -2139,6 +2139,23 @@ describe("agent permission routes", () => {
+     expect(vide.status).toBe(400);
+   });
+ 
++  it("Atelier P-PORTEE : assignableAgentIds null rétablit la portée par défaut du socle (sous-arbre dynamique de l'agent)", async () => {
++    const app = await createApp({ type: "board", userId: "board-user", source: "local_implicit", isInstanceAdmin: true, companyIds: [companyId] });
++    const res = await requestApp(app, (baseUrl) => request(baseUrl).patch(`/api/agents/${agentId}/permissions`)
++      .send({ canCreateAgents: false, canAssignTasks: false, assignableAgentIds: null }));
++    expect(res.status).toBe(200);
++    expect(mockAgentService.updatePermissions).toHaveBeenCalledWith(agentId, { canCreateAgents: false, canAssignTasks: false });
++    expect(mockAccessService.setPrincipalPermission).toHaveBeenCalledWith(
++      companyId, "agent", agentId, "tasks:assign_scope", true, "board-user", { subtreeRootAgentId: agentId });
++    // Un agent ne peut pas davantage rétablir sa portée lui-même (N4).
++    mockAccessService.setPrincipalPermission.mockClear();
++    const agentApp = await createApp({ type: "agent", agentId: "ceo-agent", companyId, runId: "run-1", source: "agent_key" });
++    const refus = await requestApp(agentApp, (baseUrl) => request(baseUrl).patch(`/api/agents/${agentId}/permissions`)
++      .send({ canCreateAgents: false, canAssignTasks: false, assignableAgentIds: null }));
++    expect(refus.status).toBe(403);
++    expect(mockAccessService.setPrincipalPermission).not.toHaveBeenCalled();
++  });
++
+   it("rejects CEO permission updates outside the caller company scope", async () => {
+     const app = await createApp({
+       type: "agent",
+diff --git a/server/src/routes/agents.ts b/server/src/routes/agents.ts
+index 27bd828e66..7ebedd8de7 100644
+--- a/server/src/routes/agents.ts
++++ b/server/src/routes/agents.ts
+@@ -264,6 +264,7 @@ import { assertEnvironmentSelectionForCompany } from "./environment-selection.js
+ import { recoveryService } from "../services/recovery/service.js";
+ import { resolveCoreTrustPreset } from "../services/trust-preset-resolver.js";
+ import { readObject } from "../lib/objects.js";
++import { newStandardAgentGrantScope } from "../lib/agent-permissions.js";
+ import { listInvalidOrgChainDescendantIds } from "../services/agent-invokability.js";
+ import { logger } from "../middleware/logger.js";
+ import { replayInteractionWakesAfterResume } from "./issues.js";
+@@ -4723,9 +4724,10 @@ export function agentRoutes(
+       effectiveCanAssignTasks,
+       req.actor.type === "board" ? (req.actor.userId ?? null) : null,
+     );
+-    if (assignableAgentIds) {
++    if (assignableAgentIds !== undefined) {
+       await access.setPrincipalPermission(agent.companyId, "agent", agent.id, "tasks:assign_scope", true,
+-        req.actor.userId ?? null, { assigneeAgentIds: assignableAgentIds });
++        req.actor.userId ?? null,
++        assignableAgentIds === null ? newStandardAgentGrantScope("tasks:assign_scope", agent.id) : { assigneeAgentIds: assignableAgentIds });
+     }
+ 
+     const actor = getActorInfo(req);
+-- 
+2.53.0
+

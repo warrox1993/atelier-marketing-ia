@@ -1,0 +1,102 @@
+From e7d4487072792ee88f4d91182560e0bbe60de55f Mon Sep 17 00:00:00 2001
+From: Jean-Baptiste Dhondt <114347858+warrox1993@users.noreply.github.com>
+Date: Fri, 30 Oct 2026 12:34:33 +0100
+Subject: [PATCH] =?UTF-8?q?fix(interactions):=20une=20confirmation=20pos?=
+ =?UTF-8?q?=C3=A9e=20par=20un=20agent=20sans=20politique=20r=C3=A9veille?=
+ =?UTF-8?q?=20son=20assign=C3=A9=20=C3=A0=20la=20r=C3=A9ponse=20(Atelier?=
+ =?UTF-8?q?=20HUM-C1)?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+request_confirmation garde le défaut « none » du schéma, mais pour une carte
+créée par un agent sans continuationPolicy, la route pose wake_assignee : la
+réponse de l'humain relance enfin la tâche (7 cartes sur 18 restaient sans
+suite, dont la carte de l'article de l'Observatoire). Une politique explicite,
+même « none », et les cartes d'un humain ne changent pas.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01EThpSSDGc5NRYwbgjNqoTJ
+---
+ .../issue-thread-interaction-routes.test.ts   | 22 +++++++++++++++++++
+ server/src/routes/issues.ts                   | 13 +++++++++++
+ 2 files changed, 35 insertions(+)
+
+diff --git a/server/src/__tests__/issue-thread-interaction-routes.test.ts b/server/src/__tests__/issue-thread-interaction-routes.test.ts
+index e2db55feec..12f57b2aa9 100644
+--- a/server/src/__tests__/issue-thread-interaction-routes.test.ts
++++ b/server/src/__tests__/issue-thread-interaction-routes.test.ts
+@@ -25,6 +25,7 @@ const mockIssueService = vi.hoisted(() => ({
+   getById: vi.fn(),
+   listReviewAttention: vi.fn(),
+   addComment: vi.fn(),
++  assertCheckoutOwner: vi.fn(async () => ({ adoptedFromRunId: null })),
+ }));
+ 
+ const mockInteractionService = vi.hoisted(() => ({
+@@ -741,6 +742,27 @@ describe("issue thread interaction routes", () => {
+     expect(mockHeartbeatService.wakeup).not.toHaveBeenCalled();
+   });
+ 
++  it.each([
++    ["agent sans politique", { type: "agent", agentId: ASSIGNEE_AGENT_ID, companyId: "company-1", runId: RUN_2 }, undefined, "wake_assignee"],
++    ["agent avec none explicite", { type: "agent", agentId: ASSIGNEE_AGENT_ID, companyId: "company-1", runId: RUN_2 }, "none", "none"],
++    ["humain sans politique", undefined, undefined, "none"],
++  ] as const)("confirmation posée par %s (Atelier HUM-C1)", async (_cas, actor, demandee, attendue) => {
++    const app = await createApp(actor as Record<string, unknown> | undefined);
++    const res = await request(app)
++      .post("/api/issues/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/interactions")
++      .send({
++        kind: "request_confirmation",
++        ...(demandee ? { continuationPolicy: demandee } : {}),
++        payload: { version: 1, prompt: "Valider la liste ?" },
++      });
++    expect(res.status, JSON.stringify(res.body)).toBe(201);
++    expect(mockInteractionService.create).toHaveBeenCalledWith(
++      expect.anything(),
++      expect.objectContaining({ continuationPolicy: attendue }),
++      expect.anything(),
++    );
++  });
++
+   it("returns 400 for agent-addressed tool-action confirmations", async () => {
+     const app = await createApp();
+     const res = await request(app)
+diff --git a/server/src/routes/issues.ts b/server/src/routes/issues.ts
+index 28272c4f69..ff19817cb3 100644
+--- a/server/src/routes/issues.ts
++++ b/server/src/routes/issues.ts
+@@ -16707,6 +16707,11 @@ export function issueRoutes(
+ 
+   router.post(
+     "/issues/:id/interactions",
++    // Atelier HUM-C1 : relevé avant que le schéma ne pose son défaut « none ».
++    (req, res, next) => {
++      res.locals.continuationPolicyOmitted = req.body?.continuationPolicy === undefined;
++      next();
++    },
+     validate(createIssueThreadInteractionSchema),
+     async (req, res) => {
+       const id = req.params.id as string;
+@@ -16773,10 +16778,18 @@ export function issueRoutes(
+       // transaction (see assertRequestConfirmationTargetIsCurrent). We deliberately
+       // do not pre-check the revision here: a separate route-level read would be
+       // non-atomic with the insert and only duplicate the service gate.
++      // Atelier HUM-C1 : une confirmation posée par un agent sans politique
++      // réveille son assigné à la réponse ; avec « none », la réponse de
++      // l'humain ne relançait personne et la tâche restait bloquée.
++      const agentConfirmationWakes =
++        req.actor.type === "agent" &&
++        req.body.kind === "request_confirmation" &&
++        res.locals.continuationPolicyOmitted === true;
+       const interaction = await issueThreadInteractionService(db).create(
+         issue,
+         {
+           ...req.body,
++          ...(agentConfirmationWakes ? { continuationPolicy: "wake_assignee" } : {}),
+           sourceRunId:
+             req.actor.type === "agent"
+               ? agentSourceRunId
+-- 
+2.53.0
+

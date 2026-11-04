@@ -61,7 +61,8 @@ Objectifs chiffrés et datés, tableau de répartition marque et activation (ave
 - La règle des « 20 % des acheteurs pèsent 80 % des ventes » varie selon les sources (environ 50 à 60 % selon les synthèses) [vérifié pour l'idée, chiffres variables].
 - Relancer en boucle des prospects hors marché provoque des rejets et un risque RGPD en cas d'opposition.
 - Sans données, un indicateur est « non mesurable », pas estimé.
-- Conclure sur 10 demandes est interdit : voir les seuils de `mesure-experiences`.
+- Conclure sur 10 demandes est interdit : la règle d'arrêt (durée ou volume par variante, par exemple 4 semaines ou
+  400 visites) se fixe avant le test, avec l'agent `mesure`.
 
 ### Règles de vérité
 

@@ -18,7 +18,7 @@ export const MODELES_DEMANDE: ReadonlyArray<{ libelle: string; texte: string }> 
   {
     libelle: "Veille concurrentielle hebdomadaire",
     texte:
-      "Mets en place une routine de veille concurrentielle chaque lundi à 8 h : nouvelles offres, publicités et pages des principaux concurrents, avec sources datées. Range-la dans le projet Veille (crée-le s'il n'existe pas).",
+      "Mets en place une routine de veille concurrentielle chaque lundi à 10 h 30 : nouvelles offres, publicités et pages des principaux concurrents, avec sources datées. Range-la dans le projet Veille (crée-le s'il n'existe pas).",
   },
   {
     libelle: "Campagne Google Ads",

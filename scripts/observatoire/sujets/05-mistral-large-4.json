@@ -1,0 +1,105 @@
+{
+  "numero": 5,
+  "slug": "mistral-large-4",
+  "projet": {
+    "companyId": "<OBS>",
+    "slug": "article-5-mistral-large-4",
+    "nom": "Mistral Large 4 : un modèle européen à mille milliards de paramètres, en préversion",
+    "alias": [
+      {
+        "type": "site",
+        "valeur": "https://mistral.ai/news/mistral-large-4/"
+      },
+      {
+        "type": "site",
+        "valeur": "https://docs.mistral.ai/getting-started/models/"
+      },
+      {
+        "type": "site",
+        "valeur": "https://docs.mistral.ai/models/mistral-large-4-0"
+      }
+    ]
+  },
+  "motifSansProjet": null,
+  "aliasRefuses": [],
+  "brief": {
+    "tache": "Rédiger l'article n° 5 du magazine : Mistral Large 4 : un modèle européen à mille milliards de paramètres, en préversion",
+    "categorie": "sortie-modele",
+    "publie_le": "2026-10-06",
+    "angle": "Un modèle à poids ouverts entraîné et servi en Europe intéresse directement les décideurs soumis aux exigences de souveraineté et de droit européen. Texte à écrire pour deux lecteurs : le développeur (ce qu'il peut faire ou doit vérifier) et le décideur (ce que cela change pour un choix d'outil, de coût ou de conformité), sans rien ajouter qui ne figure pas dans les faits ci-dessous.",
+    "plan": [
+      "Ce qui est annoncé ou publié : les faits datés, tels que la source les énonce",
+      "Ce que cela change pour un développeur : usage concret, uniquement à partir des faits listés",
+      "Ce que cela change pour un décideur : choix, coûts, risques, uniquement à partir des faits listés",
+      "Ce qui n'est pas établi : points ouverts, chiffres d'éditeur non mesurés de façon indépendante",
+      "Sources et méthode de vérification : liste des URL lues le 27/10/2026"
+    ],
+    "faits": [
+      {
+        "texte": "Mistral lance une préversion publique de Mistral Large 4.",
+        "source_url": "https://mistral.ai/news/mistral-large-4/",
+        "extrait_exact": "Today, we’re launching a public preview of Mistral Large 4.",
+        "statut_propose": "rapporte_editeur"
+      },
+      {
+        "texte": "Le modèle compte 1 000 milliards de paramètres, dont 52 milliards actifs, et est nativement multimodal.",
+        "source_url": "https://mistral.ai/news/mistral-large-4/",
+        "extrait_exact": "ML4 is a 1 trillion-parameter natively multimodal model with 52 billion active parameters.",
+        "statut_propose": "rapporte_editeur"
+      },
+      {
+        "texte": "Il a été entraîné sur 3 800 GPU NVIDIA Grace Blackwell dans les centres de données européens de Mistral.",
+        "source_url": "https://mistral.ai/news/mistral-large-4/",
+        "extrait_exact": "ML4 was trained from scratch on 3,800 NVIDIA Grace Blackwell GPUs in Mistral’s own datacenters in Europe.",
+        "statut_propose": "rapporte_editeur"
+      },
+      {
+        "texte": "Les poids sont promis pour la fin du mois de l'annonce.",
+        "source_url": "https://mistral.ai/news/mistral-large-4/",
+        "extrait_exact": "We will release the weights by the end of the month.",
+        "statut_propose": "rapporte_editeur"
+      },
+      {
+        "texte": "Les données d'entraînement couvrent plus de 160 langues, dont toutes les langues officielles de l'UE.",
+        "source_url": "https://mistral.ai/news/mistral-large-4/",
+        "extrait_exact": "spanning more than 160 languages, including every official language of the European Union",
+        "statut_propose": "rapporte_editeur"
+      },
+      {
+        "texte": "Un déploiement européen sera opéré par Mistral sous droit européen.",
+        "source_url": "https://mistral.ai/news/mistral-large-4/",
+        "extrait_exact": "including a European deployment that Mistral operates end-to-end, independently of other digital service providers and under European law",
+        "statut_propose": "rapporte_editeur"
+      },
+      {
+        "texte": "La documentation liste Mistral Large 4 en version 26.10, avec la licence « Open ».",
+        "source_url": "https://docs.mistral.ai/getting-started/models/",
+        "extrait_exact": "Mistral Large 4 Open A state-of-the-art, open-weight, general-purpose multimodal model. v 26.10",
+        "statut_propose": "confirme_doc_officielle"
+      },
+      {
+        "texte": "La page de documentation du modèle décrit Mistral Large 4 comme un modèle multimodal généraliste à poids ouverts, en mélange d'experts, avec 52 milliards de paramètres actifs, 1,05 billion au total et un encodeur de vision de 1,6 milliard.",
+        "source_url": "https://docs.mistral.ai/models/mistral-large-4-0",
+        "extrait_exact": "Mistral Large 4 is a state-of-the-art, open-weight, general-purpose multimodal model with a granular Mixture-of-Experts architecture. It features 52B active parameters and 1.05T total parameters, and a 1.6B vision encoder.",
+        "statut_propose": "confirme_doc_officielle"
+      },
+      {
+        "texte": "La page du modèle affiche la date « October 6, 2026 » à côté de la mention « Public Preview » (sens exact de cette date non précisé).",
+        "source_url": "https://docs.mistral.ai/models/mistral-large-4-0",
+        "extrait_exact": "October 6, 2026",
+        "statut_propose": "confirme_doc_officielle"
+      },
+      {
+        "texte": "Selon Mistral, Large 4 obtient 61,7 % sur DeepSWE v1.1, 59,4 % sur SWE-Atlas-QnA et 28,3 % sur Terminal-Bench 4, et un score combiné Coding Agent Index de 49,8 %, devant DeepSeek V4 Pro 0813 et Qwen3.8 Max. Chiffres de l'éditeur, sans mesure indépendante. (lu le 27/10/2026 à 04:50 UTC)",
+        "source_url": "https://mistral.ai/news/mistral-large-4/",
+        "extrait_exact": "scoring 61.7% on DeepSWE v1.1, 59.4% on SWE-Atlas-QnA, and 28.3% on Terminal-Bench 4. Its combined Coding Agent Index score of 49.8% places it ahead of DeepSeek V4 Pro 0813 and Qwen3.8 Max.",
+        "statut_propose": "rapporte_editeur"
+      }
+    ],
+    "points_ouverts": [
+      "Les poids de Large 4 n'existent pas sur Hugging Face au 27/10 : la requête API https://huggingface.co/api/models?author=mistralai&search=Large renvoie 8 modèles, tous Mistral Large 2 (2024) ou Large 3 (2025) et Pixtral-Large ; les 10 derniers modèles créés par mistralai (le plus récent : Timestral-123M, 14/10/2026) n'en contiennent aucun ; search=Large-4 et search=ML4 ne renvoient aucun dépôt Large 4. La promesse « fin du mois » est-elle tenue au 31/10 ? (relu le 27/10 à 04:50 UTC, toujours inconnu : aucun dépôt Large 4 au 27/10 ; la question porte sur le 31/10, à relire après cette date)",
+      "La licence exacte derrière « Open » reste inconnue au 27/10 : la page du modèle (docs.mistral.ai/models/mistral-large-4-0) n'affiche que le mot « Open », son onglet WEIGHTS est vide dans le HTML, l'annonce ne mentionne aucune licence, le dépôt mistralai/Mistral-Large-4 sur Hugging Face répond 401 (dépôt introuvable ou protégé, non distingué) et la recherche API « Large-4 » ne renvoie que Mistral-Large-3 (Apache 2.0). Mistral Large 3 est marqué Apache 2.0, Large 4 non. (relu le 27/10 à 04:50 UTC, toujours inconnu : la fiche du modèle porte le type « Open » avec une liste de licences vide)"
+    ],
+    "regles": "Aucun fait, date ou chiffre hors des faits listés. Chaque affirmation renvoie à un fait et à son extrait exact. Pas de tiret cadratin."
+  }
+}

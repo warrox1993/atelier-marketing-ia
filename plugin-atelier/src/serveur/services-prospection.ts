@@ -21,6 +21,8 @@ import {
   CodeNace,
   CodeReferentiel,
   DeposerProspectsEntree,
+  DeposerTelephoneEntree,
+  DEMONSTRATION_COORDONNEES,
   EnregistrerParticulierEntree,
   ExclureProspectEntree,
   FusionnerDoublonsEntree,
@@ -57,13 +59,15 @@ import { normaliserPourEmpreinte } from "./base-clients.js";
 import { chiffrer, empreinte, memeCle, TAILLE_CLE_CHIFFREMENT, TAILLE_CLE_HMAC_MIN } from "./chiffrement-donnees.js";
 import { erreur, erreurValidation } from "./erreurs.js";
 import { estOutilEcriture } from "./preuve-approbation.js";
+import { resoudreReponse, type PrendreReponse } from "./reference-reponse.js";
 import { AGE_MAX_REPONSE_S, deduireModeReponse, reponseEcriture, type ModeEffectif } from "./regles-donnees.js";
 import { construireCompteRendu, nomDuProspect, type FicheClientCompteRendu } from "./compte-rendu-prospect.js";
 import { ORIGINE_DEMANDE, titreDepuisTexte } from "./services-accueil.js";
 import { calculerConfiance, criteresManquants, type ContexteQualification } from "./qualification-prospects.js";
 import { fusionnerProspects, trouverPairesDoublons } from "./rapprochement-prospects.js";
-import { dedoublonner, empreintesDuProspect, exclusionsProspect, natureAdresse, type ContexteProspection, type ZoneChoisie } from "./regles-prospection.js";
+import { dedoublonner, empreintesDuProspect, exclusionsProspect, natureAdresse, telephoneBelgeE164, type ContexteProspection, type ZoneChoisie } from "./regles-prospection.js";
 import { calculerScore, type CritereEvalue } from "./score-prospects.js";
+import { numerosTelephone } from "./regles-telephone.js";
 import { routesBaseClients } from "./services-base-clients.js";
 import { DERIVE_HORLOGE_S, chargeEcriture, empreinteArgumentsAppel, verifierEnveloppe } from "./signatures.js";
 
@@ -87,6 +91,8 @@ export interface DependancesProspection {
   campagneDeTache(companyId: string, issue: Issue): Promise<Campagne | null>;
   modeEffectif(companyId: string, campagne: { mode: "demonstration" | "reel" } | null): Promise<ModeEffectif>;
   clesPasserelle(companyId: string): Promise<KeyObject[]>;
+  /** Prise d'une réponse gardée par la passerelle (dépôt par `reference`). */
+  prendreReponse: PrendreReponse;
   configEntreprise(companyId: string): Promise<Record<string, unknown>>;
   exclusif<T>(companyId: string, travail: () => Promise<T>): Promise<T>;
   /** Une nouvelle source rattachée à une tâche sous porte périme ses évaluations (comme `tache.donnees.deposer`). */
@@ -142,6 +148,26 @@ export function valeurPourEmpreinte(type: TypeEmpreinte, brut: string): string |
     case "identifiant_client":
       return v;
   }
+}
+
+/** Bases « courriel » qui autorisent l'envoi d'une campagne (matrice §3.2, AR du 4/4/2003, art. 1er), toujours vérifiées par un humain. */
+const BASES_ENVOI_COURRIEL = new Set(["consentement", "client_existant_produits_analogues", "personne_morale_adresse_impersonnelle"]);
+
+/**
+ * DROIT-2.1 et 2.2 : adresses d'une campagne rapprochées des oppositions (courriel ou tous canaux) et des bases légales enregistrées.
+ * `sansBase` compte les adresses non opposées sans prospect porteur d'une base « courriel » permise (adresse illisible comprise).
+ */
+export async function controlerDestinatairesCourriel(base: Pick<BaseAtelier, "oppositionsPour" | "empreintesProspectsEnBase" | "detailsProspects">, cles: ClesDonnees, companyId: string, courriels: readonly string[]): Promise<{ opposes: number; sansBase: number }> {
+  const valeurs = courriels.map((c) => valeurPourEmpreinte("courriel", c));
+  const hs = [...new Set(valeurs.filter((v): v is string => v !== null).map((v) => empreinte("courriel", v, cles.hmac)))];
+  const opposees = new Set((await base.oppositionsPour(companyId, hs)).filter((o) => o.type === "courriel" && (o.canal === "courriel" || o.canal === "tous")).map((o) => o.valeur));
+  const porteurs = (await base.empreintesProspectsEnBase(companyId, hs)).filter((e) => e.type === "courriel");
+  const { bases } = await base.detailsProspects(companyId, [...new Set(porteurs.map((p) => p.prospectId))]);
+  const autorisees = new Set(porteurs.filter((p) => (bases.get(p.prospectId) ?? []).some((b) => b.canal === "courriel" && BASES_ENVOI_COURRIEL.has(String(b.base)))).map((p) => p.valeur));
+  return {
+    opposes: hs.filter((x) => opposees.has(x)).length,
+    sansBase: valeurs.filter((v) => v === null).length + hs.filter((x) => !opposees.has(x) && !autorisees.has(x)).length,
+  };
 }
 
 /** Région belge d'après le code postal (découpage de bpost : 1000-1299 Bruxelles, 1300-1499 et 4000-7999 Wallonie, sinon Flandre). */
@@ -952,20 +978,22 @@ export function routesProspection(d: DependancesProspection): Partial<Record<Cle
 
   routes["tache.prospects.deposer"] = async (r) =>
     d.exclusif(r.companyId, async () => {
-      const entree = analyser(DeposerProspectsEntree, r.corps, "Dépôt de prospects");
-      const taille = Buffer.byteLength(JSON.stringify(entree.reponse), "utf8");
-      if (taille > LIMITES.depotConnexionMaxOctets) erreur("entree_invalide", `Réponse trop volumineuse (${taille} octets, maximum ${LIMITES.depotConnexionMaxOctets}).`);
+      const { reference, ...depot } = analyser(DeposerProspectsEntree, r.corps, "Dépôt de prospects");
+      // F2 : tout ce qui ne dépend pas de la réponse est contrôlé AVANT de prendre la référence (usage unique).
       const issue = await d.tache(r.companyId, r.params.issueId ?? "");
       const refuser = async (raison: string): Promise<never> => {
         await base.journaliser({
           companyId: r.companyId, type: "prospects.refuses", entite: "tache", entiteId: issue.id, issueId: issue.id, runId: r.acteur.runId, acteur: r.acteur.id,
-          donnees: { service: entree.service, outil: entree.outil, raison },
+          donnees: { service: depot.service, outil: depot.outil, raison },
         });
         return erreur("entree_invalide", raison);
       };
-      if (estOutilEcriture(entree.outil)) await refuser(`Réponse d'un outil d'écriture (${entree.outil}) : elle ne fournit pas de prospects.`);
+      if (estOutilEcriture(depot.outil)) await refuser(`Réponse d'un outil d'écriture (${depot.outil}) : elle ne fournit pas de prospects.`);
       const cles = await d.clesPasserelle(r.companyId);
       if (cles.length === 0) await refuser("Aucune clé publique de la passerelle configurée dans le plugin : un dépôt de prospects doit être signé par la passerelle, il est refusé sans vérification possible.");
+      const entree = { ...depot, reponse: await resoudreReponse({ reponse: depot.reponse, reference }, r.companyId, d.prendreReponse, depot) };
+      const taille = Buffer.byteLength(JSON.stringify(entree.reponse), "utf8");
+      if (taille > LIMITES.depotConnexionMaxOctets) erreur("entree_invalide", `Réponse trop volumineuse (${taille} octets, maximum ${LIMITES.depotConnexionMaxOctets}).`);
       const instant = maintenant();
       const deduction = deduireModeReponse(entree.reponse, {
         clesPubliques: cles, service: entree.service, outil: entree.outil, arguments: entree.arguments,
@@ -1328,6 +1356,72 @@ export function routesProspection(d: DependancesProspection): Partial<Record<Cle
         donnees: { motif: entree.motif, detail: entree.detail, acteurType: r.acteur.type, deja },
       });
       return { corps: await relire(r.companyId, l.id) };
+    });
+
+  /* ---------------- numéro de téléphone (DROIT-1.3) ---------------- */
+
+  /**
+   * Un numéro publié, lu sur une source de la tâche, entre chiffré dans la fiche du prospect (empreinte HMAC) : la
+   * matrice des bases légales, les oppositions, la liste « Ne m'appelez plus » et la purge s'y appliquent, ce qui
+   * n'était pas le cas des listes recopiées dans les documents. La valeur en clair n'est ni renvoyée ni journalisée.
+   */
+  routes["tache.prospects.telephone"] = async (r) =>
+    d.exclusif(r.companyId, async () => {
+      const entree = analyser(DeposerTelephoneEntree, r.corps, "Dépôt d'un numéro de téléphone");
+      const issue = await d.tache(r.companyId, r.params.issueId ?? "");
+      if (r.acteur.type === "agent") {
+        // Même repérage par le nom que prospects.critere.evaluer : seuls Prospection et Enrichissement des coordonnées déposent.
+        const agent = r.acteur.agentId ? await ctx.agents.get(r.acteur.agentId, r.companyId).catch(() => null) : null;
+        if (!agent || agent.companyId !== r.companyId || agent.status === "terminated" || !["Prospection", "Enrichissement"].some((n) => agent.name.startsWith(n))) {
+          erreur("elevation_refusee", "Le dépôt d'un numéro est réservé aux agents Prospection et Enrichissement des coordonnées.");
+        }
+      }
+      const l = await base.lireProspect(r.companyId, r.params.prospectId ?? "");
+      if (!l) erreur("introuvable", "Prospect introuvable dans cette entreprise.");
+      const source = (await base.listerSources(r.companyId, { issueId: issue.id })).find((s) => s.id === entree.sourceId);
+      if (!source) erreur("entree_invalide", "Source inconnue sur cette tâche : lis la page par la lecture protégée (…/sources) ou dépose la réponse de l'outil, puis cite son identifiant.");
+      if (telephoneBelgeE164(entree.telephone) === null) erreur("entree_invalide", "Numéro non convertible en E.164 belge (+32…).");
+      if (l.mode === "demonstration" && !entree.telephone.replace(/\s+/gu, "").startsWith(DEMONSTRATION_COORDONNEES.prefixeTelephone)) {
+        erreur("entree_invalide", `En démonstration, seuls les numéros fictifs (${DEMONSTRATION_COORDONNEES.prefixeTelephone}…) sont admis.`);
+      }
+      // B8 (revue de sécurité finale) : exactitude (RGPD art. 5.1.d), le numéro figure dans l'extrait conservé de la source citée.
+      const e164 = telephoneBelgeE164(entree.telephone);
+      if (!numerosTelephone(source.extrait ?? "").some((n) => telephoneBelgeE164(n) === e164)) {
+        erreur("entree_invalide", `Numéro absent de l'extrait conservé de la source citée (ses ${LIMITES.extraitSourceMaxCaracteres} premiers caractères) : cite la source où il figure, par exemple la page de contact lue par la lecture protégée.`);
+      }
+      const cles = await clesDonnees(r.companyId);
+      const h = hacher(cles, "telephone", entree.telephone)!;
+      const actuel = await relire(r.companyId, l.id);
+      const deja = actuel.coordonnees.some((c) => c.canal === "telephone" && c.empreinte === h);
+      let final = actuel;
+      if (!deja) {
+        if (actuel.coordonnees.length >= 20) erreur("entree_invalide", "20 coordonnées au plus par prospect.");
+        const date = maintenant().toISOString();
+        const src = SourceProspect.parse({ type: "lecture_url", sourceId: source.id, service: null, outil: null, url: source.url ?? null, collecteLe: source.dateCollecte });
+        const coordonnees: Prospect["coordonnees"] = [...actuel.coordonnees, { canal: "telephone", valeur: chiffrer(entree.telephone, cles.chiffrement), empreinte: h, nature: "inconnue" }];
+        const p: Prospect = {
+          ...actuel,
+          coordonnees,
+          empreintes: empreintesDuProspect({ empreintes: actuel.empreintes, coordonnees }).slice(0, 20),
+          sources: actuel.sources.some((s) => s.sourceId === source.id) ? actuel.sources : [...actuel.sources, src].slice(-50),
+        };
+        const campagne = await d.campagneDeTache(r.companyId, issue);
+        const { contexte, enBase } = await contexteExclusions(r.companyId, campagne, (await d.modeEffectif(r.companyId, campagne)).mode, [p], date);
+        // Comme pour un prospect déjà connu : il ne devient pas le doublon d'un autre par ce seul numéro.
+        const nouveaux = exclusionsProspect(p, { ...contexte, empreintesExistantes: autresEmpreintes(enBase, l.id), coordonneesEnClair: null }).filter((m) => m.motif !== "doublon");
+        const motifs = fusionnerMotifs(actuel.motifsExclusion, nouveaux);
+        final = Prospect.parse({ ...p, motifsExclusion: motifs, statut: motifs.length > 0 ? "exclu" : actuel.statut });
+        await base.majProspect(r.companyId, l.id, { nace: final.nace, zone: final.zone, coordonnees: final.coordonnees, sources: final.sources, statut: final.statut, motifsExclusion: final.motifsExclusion, particulier: final.particulier });
+        await base.ajouterEmpreintesProspect(r.companyId, l.id, [{ type: "telephone", valeur: h }]);
+      }
+      await base.journaliser({
+        companyId: r.companyId, type: "prospect.telephone", entite: "prospect", entiteId: l.id, issueId: issue.id, runId: r.acteur.runId, acteur: r.acteur.id,
+        donnees: { sourceId: source.id, ajoute: !deja, statut: final.statut },
+      });
+      return {
+        statut: deja ? 200 : 201,
+        corps: { prospectId: l.id, ajoute: !deja, telephones: final.coordonnees.filter((c) => c.canal === "telephone").length, statut: final.statut, motifsExclusion: final.motifsExclusion.map((m) => m.motif) },
+      };
     });
 
   /* ---------------- rattrapage des doublons ---------------- */

@@ -1,0 +1,448 @@
+From b3f49231306af087882954ded9c04ee2c8ff8bd9 Mon Sep 17 00:00:00 2001
+From: Jean-Baptiste Dhondt <114347858+warrox1993@users.noreply.github.com>
+Date: Tue, 27 Oct 2026 22:48:07 +0100
+Subject: [PATCH] =?UTF-8?q?fix(couts):=20co=C3=BBt=20et=20jetons=20par=20r?=
+ =?UTF-8?q?un=20quand=20claude-local=20reprend=20une=20session=20(--resume?=
+ =?UTF-8?q?)?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Sur une reprise, Claude Code rapporte modelUsage et total_cost_usd cumulés
+depuis le début de la session, alors que l'adaptateur les marquait per_run :
+chaque run était donc compté avec tout l'historique de la session.
+
+L'adaptateur mémorise les totaux bruts (sessionTotals) dans les paramètres de
+session ; au run suivant, si le session_id du résultat est celui de la session
+reprise, il soustrait champ par champ et modèle par modèle (usage, coût, reçus
+par modèle, y compris la comptabilité en direct). Une valeur négative (session
+réinitialisée) ou un session_id différent gardent le brut. Le codec de session
+valide sessionTotals (nombres finis >= 0, 20 modèles au plus, clés <= 200).
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_012hDEUaJZ3u1rGj4CzNXrhC
+---
+ .../claude-local/src/server/execute.ts        |  26 +++--
+ .../adapters/claude-local/src/server/index.ts |   5 +
+ .../claude-local/src/server/parse.test.ts     | 108 ++++++++++++++++++
+ .../adapters/claude-local/src/server/parse.ts | 101 ++++++++++++++--
+ 4 files changed, 225 insertions(+), 15 deletions(-)
+
+diff --git a/packages/adapters/claude-local/src/server/execute.ts b/packages/adapters/claude-local/src/server/execute.ts
+index a0971ef56..588f3b180 100644
+--- a/packages/adapters/claude-local/src/server/execute.ts
++++ b/packages/adapters/claude-local/src/server/execute.ts
+@@ -65,7 +65,7 @@ import {
+ import {
+   claudeModelUsageTotals,
+   claudeModelReceipts,
+-  parseClaudeStreamJson, createClaudeStreamParser,
++  parseClaudeStreamJson, createClaudeStreamParser, readClaudeSessionTotals,
+   describeClaudeFailure,
+   detectClaudeLoginRequired,
+   extractClaudeRetryNotBefore,
+@@ -814,6 +814,9 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
+     hasMatchingSessionCwd &&
+     hasMatchingExecutionTarget;
+   const sessionId = canResumeSession ? runtimeSessionId : null;
++  // Cumulative totals of the resumed session: the CLI reports modelUsage and cost
++  // since the session began, so each resumed run is accounted as the difference.
++  const runtimeSessionTotals = readClaudeSessionTotals(runtimeSessionParams.sessionTotals);
+   if (runtimeSessionId && !isValidUuid) {
+     await onLog(
+       "stdout",
+@@ -986,7 +989,11 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
+       });
+     }
+ 
+-    const consumeAccounting = createClaudeStreamParser();
++    const accountingBaseline =
++      resumeSessionId && resumeSessionId === runtimeSessionId && runtimeSessionTotals
++        ? { sessionId: resumeSessionId, totals: runtimeSessionTotals }
++        : null;
++    const consumeAccounting = createClaudeStreamParser(accountingBaseline);
+     // Un essai à clé qui échoue sur la clé ne rapporte parfois aucun coût : le reçu vaut alors 0, jamais « non tarifé »
+     // (sinon la politique `block` de l'Observatoire mettrait l'entreprise en pause).
+     let stdoutVu = "";
+@@ -1008,7 +1015,7 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
+       return { usage: parsed.usage ?? undefined, usageBasis: "per_run", costUsd: parsed.costUsd,
+         provider: "anthropic", biller: isBedrockAuth(effectiveEnv) ? "aws_bedrock" : "anthropic",
+         billingType, model: Object.keys(parseObject(parsed.resultJson?.modelUsage)).length > 1 ? "mixed" : parsed.model || model,
+-          usageByModel: claudeModelReceipts(parsed.resultJson?.modelUsage), complete: parsed.resultJson !== null };
++          usageByModel: claudeModelReceipts(parsed.modelUsage), complete: parsed.resultJson !== null };
+     });
+     const proc = await runAdapterExecutionTargetProcess(runId, runtimeExecutionTarget, command, args, {
+       onProcessStopped: providerStop.beginInvocation(),
+@@ -1033,7 +1040,7 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
+     });
+     await accountingLog.flush();
+ 
+-    const parsedStream = parseClaudeStreamJson(proc.stdout);
++    const parsedStream = parseClaudeStreamJson(proc.stdout, accountingBaseline);
+     const parsed = parsedStream.resultJson ?? parseJson(proc.stdout);
+     return { proc, parsedStream, parsed, billingType };
+   };
+@@ -1071,7 +1078,7 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
+         provider: "anthropic",
+         biller: isBedrockAuth(effectiveEnv) ? "aws_bedrock" : "anthropic",
+         model: Object.keys(parseObject(parsedStream.resultJson?.modelUsage)).length > 1 ? "mixed" : parsedStream.model || model,
+-        usageByModel: claudeModelReceipts(parsedStream.resultJson?.modelUsage),
++        usageByModel: claudeModelReceipts(parsedStream.modelUsage),
+         billingType,
+         costUsd: parsedStream.costUsd,
+         errorMessage: `Timed out after ${timeoutSec}s`,
+@@ -1141,7 +1148,7 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
+         provider: "anthropic",
+         biller: isBedrockAuth(effectiveEnv) ? "aws_bedrock" : "anthropic",
+         model: Object.keys(parseObject(parsedStream.resultJson?.modelUsage)).length > 1 ? "mixed" : parsedStream.model || model,
+-        usageByModel: claudeModelReceipts(parsedStream.resultJson?.modelUsage),
++        usageByModel: claudeModelReceipts(parsedStream.modelUsage),
+         billingType,
+         costUsd: parsedStream.costUsd,
+         errorMessage: fallbackErrorMessage,
+@@ -1208,6 +1215,10 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
+     // calls clearTaskSessions on the next heartbeat. See RED-978 / RED-976.
+     const shouldDropSessionForPoison = poisonedPreviousMessageId;
+     const resolvedSessionId = shouldDropSessionForPoison ? null : rawResolvedSessionId;
++    // Raw cumulative totals for the next resume; a failed run without a result keeps
++    // the previous reference when it is still the same session.
++    const nextSessionTotals =
++      parsedStream.sessionTotals ?? (resolvedSessionId === runtimeSessionId ? runtimeSessionTotals : null);
+     const resolvedSessionParams = resolvedSessionId
+       ? ({
+         sessionId: resolvedSessionId,
+@@ -1222,6 +1233,7 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
+         ...(workspaceId ? { workspaceId } : {}),
+         ...(workspaceRepoUrl ? { repoUrl: workspaceRepoUrl } : {}),
+         ...(workspaceRepoRef ? { repoRef: workspaceRepoRef } : {}),
++        ...(nextSessionTotals ? { sessionTotals: nextSessionTotals } : {}),
+       } as Record<string, unknown>)
+       : null;
+     const errorMessage = failed
+@@ -1313,7 +1325,7 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
+       retryNotBefore: transientRetryNotBefore ? transientRetryNotBefore.toISOString() : null,
+       errorMeta,
+       usage,
+-      usageByModel: claudeModelReceipts(parsed.modelUsage),
++      usageByModel: claudeModelReceipts(parsedStream.modelUsage ?? parsed.modelUsage),
+       ...(usageBasis ? { usageBasis } : {}),
+       sessionId: resolvedSessionId,
+       sessionParams: resolvedSessionParams,
+diff --git a/packages/adapters/claude-local/src/server/index.ts b/packages/adapters/claude-local/src/server/index.ts
+index 071d1d6c4..aece51ef1 100644
+--- a/packages/adapters/claude-local/src/server/index.ts
++++ b/packages/adapters/claude-local/src/server/index.ts
+@@ -73,6 +73,7 @@ export type {
+   SetupTokenLoginResult,
+   RunSetupTokenLoginOptions,
+ } from "./setup-token-runner.js";
++import { readClaudeSessionTotals } from "./parse.js";
+ import type { AdapterSessionCodec } from "@paperclipai/adapter-utils";
+ import { sessionCodec as acpxSessionCodec } from "@paperclipai/adapter-utils/acpx-engine/session-codec";
+ 
+@@ -97,6 +98,7 @@ export const sessionCodec: AdapterSessionCodec = {
+     const workspaceId = readNonEmptyString(record.workspaceId) ?? readNonEmptyString(record.workspace_id);
+     const repoUrl = readNonEmptyString(record.repoUrl) ?? readNonEmptyString(record.repo_url);
+     const repoRef = readNonEmptyString(record.repoRef) ?? readNonEmptyString(record.repo_ref);
++    const sessionTotals = readClaudeSessionTotals(record.sessionTotals);
+     return {
+       sessionId,
+       ...(cwd ? { cwd } : {}),
+@@ -105,6 +107,7 @@ export const sessionCodec: AdapterSessionCodec = {
+       ...(workspaceId ? { workspaceId } : {}),
+       ...(repoUrl ? { repoUrl } : {}),
+       ...(repoRef ? { repoRef } : {}),
++      ...(sessionTotals ? { sessionTotals } : {}),
+     };
+   },
+   serialize(params: Record<string, unknown> | null) {
+@@ -122,6 +125,7 @@ export const sessionCodec: AdapterSessionCodec = {
+     const workspaceId = readNonEmptyString(params.workspaceId) ?? readNonEmptyString(params.workspace_id);
+     const repoUrl = readNonEmptyString(params.repoUrl) ?? readNonEmptyString(params.repo_url);
+     const repoRef = readNonEmptyString(params.repoRef) ?? readNonEmptyString(params.repo_ref);
++    const sessionTotals = readClaudeSessionTotals(params.sessionTotals);
+     return {
+       sessionId,
+       ...(cwd ? { cwd } : {}),
+@@ -130,6 +134,7 @@ export const sessionCodec: AdapterSessionCodec = {
+       ...(workspaceId ? { workspaceId } : {}),
+       ...(repoUrl ? { repoUrl } : {}),
+       ...(repoRef ? { repoRef } : {}),
++      ...(sessionTotals ? { sessionTotals } : {}),
+     };
+   },
+   getDisplayId(params: Record<string, unknown> | null) {
+diff --git a/packages/adapters/claude-local/src/server/parse.test.ts b/packages/adapters/claude-local/src/server/parse.test.ts
+index 53ee244df..824bd08ef 100644
+--- a/packages/adapters/claude-local/src/server/parse.test.ts
++++ b/packages/adapters/claude-local/src/server/parse.test.ts
+@@ -2,6 +2,9 @@ import { describe, expect, it } from "vitest";
+ import {
+   claudeModelUsageTotals,
+   parseClaudeStreamJson,
++  claudeModelReceipts,
++  createClaudeStreamParser,
++  readClaudeSessionTotals,
+   detectClaudeLoginRequired,
+   extractClaudeRetryNotBefore,
+   isClaudeProviderQuotaError,
+@@ -12,6 +15,7 @@ import {
+   isClaudeImageProcessingError,
+   isClaudeModelNotFoundError,
+ } from "./parse.js";
++import { sessionCodec } from "./index.js";
+ 
+ describe("detectClaudeLoginRequired", () => {
+   it("classifies Claude's invalid API key login prompt as auth required", () => {
+@@ -600,3 +604,107 @@ describe("interrupted Claude accounting", () => {
+     expect(parsed.costUsd).toBeNull();
+   });
+ });
++
++describe("resumed Claude session accounting (per-run delta)", () => {
++  const SESSION = "11111111-1111-4111-8111-111111111111";
++  const model = "claude-haiku-5-5";
++  // Measured with Claude Code 2.1.308: modelUsage and total_cost_usd are cumulative across --resume.
++  const run1 = {
++    modelUsage: { [model]: { inputTokens: 2, outputTokens: 135, cacheReadInputTokens: 14776, cacheCreationInputTokens: 90988, costUSD: 0.0920653 } },
++    total_cost_usd: 0.0920653,
++  };
++  const run2 = {
++    modelUsage: { [model]: { inputTokens: 4, outputTokens: 139, cacheReadInputTokens: 120540, cacheCreationInputTokens: 107951, costUSD: 0.1143275 } },
++    total_cost_usd: 0.1143275,
++  };
++  const result = (sessionId: string, extra: Record<string, unknown>) =>
++    `${JSON.stringify({ type: "result", subtype: "success", session_id: sessionId, result: "ok", ...extra })}\n`;
++  const baseline = { sessionId: SESSION, totals: { modelUsage: run1.modelUsage, costUsd: run1.total_cost_usd } };
++
++  it("exposes the raw cumulative totals of the session for the next run", () => {
++    const parsed = parseClaudeStreamJson(result(SESSION, run1));
++    expect(parsed.sessionTotals).toEqual({ modelUsage: run1.modelUsage, costUsd: run1.total_cost_usd });
++    expect(parsed.costUsd).toBeCloseTo(0.0920653, 9);
++  });
++
++  it("subtracts the reference totals when the resumed session answers", () => {
++    const parsed = parseClaudeStreamJson(result(SESSION, run2), baseline);
++    expect(parsed.usage).toEqual({ inputTokens: 2 + 16963, outputTokens: 4, cachedInputTokens: 105764 });
++    expect(parsed.costUsd).toBeCloseTo(0.0222622, 9);
++    expect(parsed.usageBasis).toBe("per_run");
++    const receipts = claudeModelReceipts(parsed.modelUsage);
++    expect(receipts?.[0].usage).toEqual({ inputTokens: 2 + 16963, outputTokens: 4, cachedInputTokens: 105764 });
++    expect(receipts?.[0].costUsd).toBeCloseTo(0.0222622, 9);
++    // the stored totals stay raw so the following run can subtract again
++    expect(parsed.sessionTotals?.costUsd).toBeCloseTo(0.1143275, 9);
++    expect(parsed.resultJson?.total_cost_usd).toBe(0.1143275);
++  });
++
++  it("keeps a model absent from the reference untouched", () => {
++    const other = { inputTokens: 5, outputTokens: 6, cacheReadInputTokens: 7, cacheCreationInputTokens: 8, costUSD: 0.5 };
++    const parsed = parseClaudeStreamJson(
++      result(SESSION, { modelUsage: { ...run2.modelUsage, "claude-opus-5-5": other }, total_cost_usd: 0.6143275 }),
++      baseline,
++    );
++    const receipts = claudeModelReceipts(parsed.modelUsage);
++    expect(receipts?.find((r) => r.model === "claude-opus-5-5")?.usage).toEqual({ inputTokens: 13, outputTokens: 6, cachedInputTokens: 7 });
++    expect(parsed.costUsd).toBeCloseTo(0.5222622, 9);
++  });
++
++  it("keeps raw values when the answering session differs from the resumed one", () => {
++    const parsed = parseClaudeStreamJson(result("22222222-2222-4222-8222-222222222222", run2), baseline);
++    expect(parsed.usage?.outputTokens).toBe(139);
++    expect(parsed.costUsd).toBeCloseTo(0.1143275, 9);
++  });
++
++  it("keeps raw values when a subtraction would go negative (session reset)", () => {
++    const parsed = parseClaudeStreamJson(result(SESSION, run1), { sessionId: SESSION, totals: { modelUsage: run2.modelUsage, costUsd: run2.total_cost_usd } });
++    expect(parsed.usage?.outputTokens).toBe(135);
++    expect(parsed.costUsd).toBeCloseTo(0.0920653, 9);
++  });
++
++  it("applies the delta to the live accounting parser too, and reports no cost before the result", () => {
++    const consume = createClaudeStreamParser(baseline);
++    const early = consume(`${JSON.stringify({ type: "system", subtype: "init", session_id: SESSION, model })}\n`);
++    expect(early.costUsd).toBeNull();
++    expect(early.sessionTotals).toBeNull();
++    const done = consume(result(SESSION, run2));
++    expect(done.costUsd).toBeCloseTo(0.0222622, 9);
++    expect(done.usage?.outputTokens).toBe(4);
++  });
++});
++
++describe("readClaudeSessionTotals and sessionCodec", () => {
++  const SESSION = "11111111-1111-4111-8111-111111111111";
++  const totals = {
++    modelUsage: { m: { inputTokens: 1, outputTokens: 2, cacheReadInputTokens: 3, cacheCreationInputTokens: 4, costUSD: 0.5 } },
++    costUsd: 0.5,
++  };
++
++  it("round-trips sessionTotals through serialize and deserialize", () => {
++    const stored = sessionCodec.serialize({ sessionId: SESSION, sessionTotals: totals });
++    expect(stored?.sessionTotals).toEqual(totals);
++    expect(sessionCodec.deserialize(stored)?.sessionTotals).toEqual(totals);
++  });
++
++  it("rejects negative, non-finite or malformed values", () => {
++    const bad = (mutate: (t: any) => void) => {
++      const copy = JSON.parse(JSON.stringify(totals));
++      mutate(copy);
++      return copy;
++    };
++    expect(readClaudeSessionTotals(bad((t) => { t.costUsd = -1; }))).toBeNull();
++    expect(readClaudeSessionTotals(bad((t) => { t.modelUsage.m.outputTokens = -2; }))).toBeNull();
++    expect(readClaudeSessionTotals(bad((t) => { t.modelUsage.m.inputTokens = "3"; }))).toBeNull();
++    expect(readClaudeSessionTotals({ modelUsage: totals.modelUsage, costUsd: Number.POSITIVE_INFINITY })).toBeNull();
++    expect(readClaudeSessionTotals(null)).toBeNull();
++    expect(sessionCodec.serialize({ sessionId: SESSION, sessionTotals: { ...totals, costUsd: -1 } })).toEqual({ sessionId: SESSION });
++  });
++
++  it("rejects more than 20 models and over-long model keys", () => {
++    const entry = totals.modelUsage.m;
++    const many = Object.fromEntries(Array.from({ length: 21 }, (_, i) => [`m${i}`, entry]));
++    expect(readClaudeSessionTotals({ modelUsage: many, costUsd: 0 })).toBeNull();
++    expect(readClaudeSessionTotals({ modelUsage: { ["x".repeat(201)]: entry }, costUsd: 0 })).toBeNull();
++  });
++});
+diff --git a/packages/adapters/claude-local/src/server/parse.ts b/packages/adapters/claude-local/src/server/parse.ts
+index a8f7cd214..07cb502f2 100644
+--- a/packages/adapters/claude-local/src/server/parse.ts
++++ b/packages/adapters/claude-local/src/server/parse.ts
+@@ -66,12 +66,83 @@ export function claudeModelReceipts(modelUsage: unknown) {
+   return receipts.every((part) => part !== null) ? receipts : undefined;
+ }
+ 
+-export function parseClaudeStreamJson(stdout: string) {
+-  return createClaudeStreamParser()(stdout);
++const USAGE_FIELDS = ["inputTokens", "outputTokens", "cacheReadInputTokens", "cacheCreationInputTokens", "costUSD"] as const;
++const MAX_SESSION_TOTALS_MODELS = 20;
++const MAX_MODEL_KEY_LENGTH = 200;
++
++/** Raw cumulative totals of a Claude Code session, as reported by the last result event. */
++export interface ClaudeSessionTotals {
++  modelUsage: Record<string, Record<(typeof USAGE_FIELDS)[number], number>>;
++  costUsd: number;
++}
++
++/** The totals of the session a run resumes; only valid for a result of that same session. */
++export interface ClaudeSessionBaseline {
++  sessionId: string;
++  totals: ClaudeSessionTotals;
++}
++
++const isNonNegativeFinite = (value: unknown): value is number =>
++  typeof value === "number" && Number.isFinite(value) && value >= 0;
++
++/** Validate untrusted session params; null when anything is missing, negative or oversized. */
++export function readClaudeSessionTotals(raw: unknown): ClaudeSessionTotals | null {
++  const record = parseObject(raw);
++  if (!isNonNegativeFinite(record.costUsd)) return null;
++  const models = Object.entries(parseObject(record.modelUsage));
++  if (models.length === 0 || models.length > MAX_SESSION_TOTALS_MODELS) return null;
++  const modelUsage: ClaudeSessionTotals["modelUsage"] = {};
++  for (const [model, value] of models) {
++    if (model.length > MAX_MODEL_KEY_LENGTH) return null;
++    const entry = parseObject(value);
++    const copy = {} as ClaudeSessionTotals["modelUsage"][string];
++    for (const field of USAGE_FIELDS) {
++      if (!isNonNegativeFinite(entry[field])) return null;
++      copy[field] = entry[field];
++    }
++    modelUsage[model] = copy;
++  }
++  return { modelUsage, costUsd: record.costUsd };
++}
++
++/**
++ * Per-run view of a cumulative result: subtract the reference totals field by
++ * field and model by model (a model absent from the reference keeps its values).
++ * A negative difference means the session was reset: keep the raw values.
++ */
++function subtractSessionTotals(
++  modelUsage: Record<string, unknown>,
++  costUsd: number | null,
++  reference: ClaudeSessionTotals,
++): { modelUsage: Record<string, unknown>; costUsd: number | null } | null {
++  const delta: Record<string, unknown> = {};
++  for (const [model, raw] of Object.entries(modelUsage)) {
++    const entry = parseObject(raw);
++    const before = reference.modelUsage[model];
++    if (!before) {
++      delta[model] = entry;
++      continue;
++    }
++    const next: Record<string, unknown> = { ...entry };
++    for (const field of USAGE_FIELDS) {
++      if (typeof entry[field] !== "number") continue;
++      const diff = entry[field] - before[field];
++      if (diff < 0) return null;
++      next[field] = diff;
++    }
++    delta[model] = next;
++  }
++  if (costUsd === null) return { modelUsage: delta, costUsd };
++  const costDiff = costUsd - reference.costUsd;
++  return costDiff < 0 ? null : { modelUsage: delta, costUsd: costDiff };
++}
++
++export function parseClaudeStreamJson(stdout: string, baseline?: ClaudeSessionBaseline | null) {
++  return createClaudeStreamParser(baseline)(stdout);
+ }
+ 
+ /** Consume complete JSONL records once, retaining protocol accounting state. */
+-export function createClaudeStreamParser() {
++export function createClaudeStreamParser(baseline?: ClaudeSessionBaseline | null) {
+   let sessionId: string | null = null;
+   let model = "";
+   let finalResult: Record<string, unknown> | null = null;
+@@ -138,18 +209,30 @@ export function createClaudeStreamParser() {
+         usageBasis: "per_run" as const,
+         summary: assistantTexts.join("\n\n").trim(),
+         resultJson: null as Record<string, unknown> | null,
++        modelUsage: undefined as Record<string, unknown> | undefined,
++        sessionTotals: null as ClaudeSessionTotals | null,
+       };
+     }
+ 
+-    const modelUsageTotals = claudeModelUsageTotals(finalResult.modelUsage);
++    const costRaw = finalResult.total_cost_usd;
++    const rawCostUsd = typeof costRaw === "number" && Number.isFinite(costRaw) ? costRaw : null;
++    // On --resume the CLI reports session-cumulative modelUsage and cost: keep the
++    // raw totals for the next run and expose the difference as this run's accounting.
++    const rawModelUsage = parseObject(finalResult.modelUsage);
++    const sessionTotals = readClaudeSessionTotals({ modelUsage: rawModelUsage, costUsd: rawCostUsd });
++    const perRun =
++      baseline && sessionId === baseline.sessionId && Object.keys(rawModelUsage).length > 0
++        ? subtractSessionTotals(rawModelUsage, rawCostUsd, baseline.totals)
++        : null;
++    const modelUsage = perRun?.modelUsage ?? (Object.keys(rawModelUsage).length > 0 ? rawModelUsage : undefined);
++    const costUsd = perRun ? perRun.costUsd : rawCostUsd;
++    const modelUsageTotals = claudeModelUsageTotals(modelUsage);
+     const usageObj = parseObject(finalResult.usage);
+     const usage: UsageSummary = modelUsageTotals ?? {
+       inputTokens: asNumber(usageObj.input_tokens, 0) + asNumber(usageObj.cache_creation_input_tokens, 0),
+       cachedInputTokens: asNumber(usageObj.cache_read_input_tokens, 0),
+       outputTokens: asNumber(usageObj.output_tokens, 0),
+     };
+-    const costRaw = finalResult.total_cost_usd;
+-    const costUsd = typeof costRaw === "number" && Number.isFinite(costRaw) ? costRaw : null;
+     const summary = asString(finalResult.result, assistantTexts.join("\n\n")).trim();
+ 
+     return {
+@@ -157,11 +240,13 @@ export function createClaudeStreamParser() {
+       model,
+       costUsd,
+       usage,
+-      // modelUsage covers exactly this CLI invocation, so mark it per-run to
+-      // keep the server from applying its session-cumulative delta heuristic.
++      // modelUsage and costUsd are per-run: a resumed session's cumulative totals
++      // were reduced by the reference above, so the server must not delta them again.
+       usageBasis: "per_run" as const,
+       summary,
+       resultJson: finalResult,
++      modelUsage,
++      sessionTotals,
+     };
+   };
+ }
+-- 
+2.53.0
+

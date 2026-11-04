@@ -95,7 +95,7 @@ export const BRANCHEMENTS_INTERFACE: ReadonlyArray<{
     cle: "diffusion",
     nom: "Diffusion réelle (réseaux, e-mail, CRM)",
     acteur: "client",
-    services: ["facebook", "instagram", "linkedin", "crm", "pipedrive", "odoo", "teamleader"],
+    services: ["facebook", "instagram", "linkedin", "linkedinprofil", "crm", "pipedrive", "odoo", "teamleader"],
     fonctions: ["Publication sur les réseaux, envoi d'e-mails et export vers le CRM, toujours après approbation humaine"],
   },
 ];

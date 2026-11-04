@@ -1,0 +1,104 @@
+From 71296f40c0c76d8177bd3751ac52d816a0d670f8 Mon Sep 17 00:00:00 2001
+From: Jean-Baptiste Dhondt <114347858+warrox1993@users.noreply.github.com>
+Date: Fri, 30 Oct 2026 14:36:43 +0100
+Subject: [PATCH 122/126] =?UTF-8?q?fix(claude-local):=20le=20r=C3=A9veil?=
+ =?UTF-8?q?=20ne=20cite=20que=20les=20fichiers=20fr=C3=A8res=20des=20instr?=
+ =?UTF-8?q?uctions=20pr=C3=A9sents=20(Atelier=20PARC-12)?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+./HEARTBEAT.md, ./SOUL.md et ./TOOLS.md étaient annoncés même absents : environ 10 lectures
+refusées dans la cage, 1 à 2 tours par session neuve. Chaque fichier est vérifié dans le
+dossier des instructions ; aucun présent, aucune mention.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01EThpSSDGc5NRYwbgjNqoTJ
+---
+ .../claude-local/src/server/execute.ts        | 11 ++++-
+ .../__tests__/claude-local-execute.test.ts    | 40 +++++++++++++++++++
+ 2 files changed, 49 insertions(+), 2 deletions(-)
+
+diff --git a/packages/adapters/claude-local/src/server/execute.ts b/packages/adapters/claude-local/src/server/execute.ts
+index 3c03771f35..0d107ac972 100644
+--- a/packages/adapters/claude-local/src/server/execute.ts
++++ b/packages/adapters/claude-local/src/server/execute.ts
+@@ -527,11 +527,18 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
+   if (instructionsFilePath) {
+     try {
+       const instructionsContent = await fs.readFile(instructionsFilePath, "utf-8");
++      // Atelier Marketing IA (PARC-12) : ne citer que les fichiers frères présents (sinon ~10 lectures refusées par session).
++      const siblingFiles: string[] = [];
++      for (const name of ["HEARTBEAT.md", "SOUL.md", "TOOLS.md"]) {
++        if (await fs.access(path.join(instructionsFileDir, name)).then(() => true, () => false)) siblingFiles.push(`./${name}`);
++      }
+       instructionsPathDirective =
+         `Agent instructions for this run were loaded from ${instructionsFilePath}. ` +
+         `Resolve any relative file references from ${instructionsFileDir}. ` +
+-        `This base directory is authoritative for sibling instruction files such as ` +
+-        `./HEARTBEAT.md, ./SOUL.md, and ./TOOLS.md; do not resolve those from the parent agent directory. ` +
++        (siblingFiles.length > 0
++          ? `This base directory is authoritative for sibling instruction files such as ` +
++            `${new Intl.ListFormat("en", { type: "conjunction" }).format(siblingFiles)}; do not resolve those from the parent agent directory. `
++          : "") +
+         `This location replaces any instruction file location from earlier turns.`;
+       combinedInstructionsContents = instructionsContent +
+         "\nUse the agent instruction file location supplied in the current run prompt to resolve relative file references.";
+diff --git a/server/src/__tests__/claude-local-execute.test.ts b/server/src/__tests__/claude-local-execute.test.ts
+index 0959222a77..65c478a40f 100644
+--- a/server/src/__tests__/claude-local-execute.test.ts
++++ b/server/src/__tests__/claude-local-execute.test.ts
+@@ -638,6 +638,7 @@ describe("claude execute", () => {
+     });
+     const instructionsFile = path.join(root, "instructions.md");
+     await fs.writeFile(instructionsFile, "# Agent instructions", "utf-8");
++    for (const sibling of ["HEARTBEAT.md", "SOUL.md", "TOOLS.md"]) await fs.writeFile(path.join(root, sibling), "# frère", "utf-8");
+     const metaEvents: Array<{ commandArgs: string[]; commandNotes: string[] }> = [];
+     const getFreshSessionHandoff = vi.fn(async () => "FRESH_HANDOFF: original goal and prior decisions");
+     const prompts: string[] = [];
+@@ -1989,3 +1990,42 @@ describe("claude execute : historique du réveil avec passation (Atelier PARC-9)
+     expect(prompt).not.toContain("earlier messages are omitted");
+   });
+ });
++
++describe("claude execute : fichiers frères des instructions (Atelier PARC-12)", () => {
++  async function directive(freres: string[]): Promise<string> {
++    const root = await fs.mkdtemp(path.join(os.tmpdir(), "paperclip-claude-parc12-"));
++    const { workspace, commandPath, capturePath, restore } = await setupExecuteEnv(root);
++    const dossier = path.join(root, "agent");
++    await fs.mkdir(dossier, { recursive: true });
++    const instructionsFile = path.join(dossier, "AGENTS.md");
++    await fs.writeFile(instructionsFile, "# Consignes", "utf-8");
++    for (const frere of freres) await fs.writeFile(path.join(dossier, frere), "# frère", "utf-8");
++    try {
++      await execute({
++        runId: "run-parc12",
++        agent: { id: "agent-1", companyId: "company-1", name: "Claude", adapterType: "claude_local", adapterConfig: {} },
++        runtime: { sessionId: null, sessionParams: null, sessionDisplayId: null, taskKey: null },
++        config: { engine: "cli", command: commandPath, cwd: workspace, env: { PAPERCLIP_TEST_CAPTURE_PATH: capturePath }, promptTemplate: "Do work.", instructionsFilePath: instructionsFile },
++        context: {},
++        onLog: async () => {},
++      });
++      return (JSON.parse(await fs.readFile(capturePath, "utf8")) as CapturePayload).prompt;
++    } finally {
++      restore();
++      await fs.rm(root, { recursive: true, force: true });
++    }
++  }
++
++  it("aucun fichier frère présent : aucune mention", async () => {
++    const prompt = await directive([]);
++    expect(prompt).toContain("Agent instructions for this run were loaded from");
++    expect(prompt).not.toContain("sibling instruction files");
++    expect(prompt).not.toMatch(/HEARTBEAT\.md|SOUL\.md|TOOLS\.md/);
++  });
++
++  it("seuls les fichiers frères présents sont cités", async () => {
++    const prompt = await directive(["TOOLS.md"]);
++    expect(prompt).toContain("sibling instruction files such as ./TOOLS.md; do not resolve those from the parent agent directory.");
++    expect(prompt).not.toMatch(/HEARTBEAT\.md|SOUL\.md/);
++  });
++});
+-- 
+2.53.0
+

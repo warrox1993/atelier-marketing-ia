@@ -295,3 +295,15 @@ describe("E2-A : écho des arguments signés (aucun chiffre n'est retenu s'il vi
     expect(extraireChiffres([{ costMicros: "5000000" }], 2000, [{ budget: 5 }]).map((c) => c.valeur)).toEqual([5000000]);
   });
 });
+
+describe("SPEC-E11 : plafond de motifs par règle", () => {
+  it("25 sources simulées rattachées et citées : 20 motifs au plus par règle", async () => {
+    const { MOTIFS_MAX_PAR_REGLE } = await import("../src/serveur/regles-donnees.js");
+    const sources = Array.from({ length: 25 }, (_, i) => sourceDe("demonstration", { id: `s${i}`, url: `https://exemple.test/${i}` }));
+    const corps = `# Bilan\n\n${sources.map((s) => `Source ${s.url} citée.`).join("\n\n")}\n`;
+    const m = verifierDonneesDemo(entrees(corps, { modeEffectif: "reel", raisonMode: "entreprise réelle", sources }));
+    expect(MOTIFS_MAX_PAR_REGLE).toBe(20);
+    expect(m.filter((x) => x.emplacement === "sources de la tâche")).toHaveLength(MOTIFS_MAX_PAR_REGLE);
+    expect(m.filter((x) => x.emplacement !== "sources de la tâche")).toHaveLength(MOTIFS_MAX_PAR_REGLE);
+  });
+});

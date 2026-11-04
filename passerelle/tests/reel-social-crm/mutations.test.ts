@@ -143,7 +143,7 @@ describe("résultat ambigu : réconciliation avant tout nouvel essai", () => {
 
   it("message privé ambigu : jamais renvoyé automatiquement (non relisible)", async () => {
     const args = { destinataire: "6942000000000001", texte: "Bonjour, voici votre devis." };
-    // L'humain approuve le texte AVEC la mention d'information IA (article 50), ajoutée à la préparation.
+    // L'humain approuve le texte AVEC la mention d'information IA (choix de transparence), ajoutée à la préparation.
     const p = preuve(m, "facebook", "facebook_envoyer_message", { ...args, texte: ajouterMention(args.texte, MENTION_IA_PAR_DEFAUT) });
     m.faux.injecter("POST /meta-graph/v26.0/100000000000001/messages", "coupure_apres_effet");
     expect((await appeler(fb(), "facebook_envoyer_message", { ...args, preuve_approbation: p, revocations_approbation: listeRevocations(m) })).donnees.etat).toBe("ambigue_a_reconcilier");

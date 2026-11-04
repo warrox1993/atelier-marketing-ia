@@ -1,0 +1,78 @@
+From 5cb785eb1c44923b4df9f5b93f21b8bcdb54272e Mon Sep 17 00:00:00 2001
+From: Jean-Baptiste Dhondt <114347858+warrox1993@users.noreply.github.com>
+Date: Fri, 30 Oct 2026 14:46:39 +0100
+Subject: [PATCH 125/126] =?UTF-8?q?fix(recovery):=20une=20t=C3=A2che=20don?=
+ =?UTF-8?q?t=20le=20run=20a=20=C3=A9t=C3=A9=20annul=C3=A9=20par=20la=20pau?=
+ =?UTF-8?q?se=20de=20l'agent=20reste=20en=20place=20et=20reprend=20au=20ra?=
+ =?UTF-8?q?llumage=20(Atelier=20HUM-C5)?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+La reprise automatique bloquait la tâche avec un commentaire anglais dès que l'assigné était
+en pause (runs agent_paused), et il fallait la relancer à la main. Le saut existant des
+attentes passives couvre désormais aussi le dernier run annulé par la pause : la tâche garde
+son statut, et la reprise normale la relance quand l'agent est rallumé.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01EThpSSDGc5NRYwbgjNqoTJ
+---
+ .../heartbeat-process-recovery.test.ts        | 23 +++++++++++++++++++
+ server/src/services/recovery/service.ts       |  4 +++-
+ 2 files changed, 26 insertions(+), 1 deletion(-)
+
+diff --git a/server/src/__tests__/heartbeat-process-recovery.test.ts b/server/src/__tests__/heartbeat-process-recovery.test.ts
+index a0979025f2..e602956100 100644
+--- a/server/src/__tests__/heartbeat-process-recovery.test.ts
++++ b/server/src/__tests__/heartbeat-process-recovery.test.ts
+@@ -9920,6 +9920,29 @@ describeEmbeddedPostgres("heartbeat orphaned process recovery", () => {
+     }
+   });
+ 
++  it("leaves work paused mid-run in place and resumes it once the agent is resumed (Atelier HUM-C5)", async () => {
++    const { agentId, issueId } = await seedStrandedIssueFixture({
++      status: "in_progress",
++      runStatus: "cancelled",
++      runErrorCode: "agent_paused",
++    });
++    await db.update(agents).set({ status: "paused" }).where(eq(agents.id, agentId));
++    const heartbeat = heartbeatService(db);
++
++    const paused = await heartbeat.reconcileStrandedAssignedIssues();
++    expect(paused.escalated).toBe(0);
++    expect(paused.issueIds).not.toContain(issueId);
++    const [pendant] = await db.select().from(issues).where(eq(issues.id, issueId));
++    expect(pendant).toMatchObject({ status: "in_progress", assigneeAgentId: agentId });
++    expect(await db.select().from(issueComments).where(eq(issueComments.issueId, issueId))).toHaveLength(0);
++
++    await db.update(agents).set({ status: "idle" }).where(eq(agents.id, agentId));
++    const resumed = await heartbeat.reconcileStrandedAssignedIssues();
++    expect(resumed.escalated).toBe(0);
++    expect(resumed.continuationRequeued + resumed.dispatchRequeued).toBe(1);
++    expect(resumed.issueIds).toEqual([issueId]);
++  });
++
+   it("routes paused assigned work to the board without waking available executives", async () => {
+     const { companyId, agentId, issueId } = await seedAssignedTodoNoRunFixture({
+       agentStatus: "paused",
+diff --git a/server/src/services/recovery/service.ts b/server/src/services/recovery/service.ts
+index 0a45ab1619..85823277f4 100644
+--- a/server/src/services/recovery/service.ts
++++ b/server/src/services/recovery/service.ts
+@@ -4528,10 +4528,12 @@ export function recoveryService(
+         agent && agent.companyId === issue.companyId
+           ? await isAgentInvokable(agent)
+           : false;
++      // Atelier Marketing IA (HUM-C5) : un run annulé par la pause de l'agent laisse la tâche en
++      // place ; la reprise normale la relance quand l'agent est rallumé (ni blocage ni commentaire).
+       if (
+         agent?.status === "paused" &&
+         agent.companyId === issue.companyId &&
+-        (await hasCurrentNativePassiveWait(issue, latestRun))
++        (latestRun?.errorCode === "agent_paused" || (await hasCurrentNativePassiveWait(issue, latestRun)))
+       ) {
+         result.skipped += 1;
+         continue;
+-- 
+2.53.0
+

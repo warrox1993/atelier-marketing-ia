@@ -1,8 +1,10 @@
 # Mise à jour du socle Paperclip et retour arrière
 
 Document du lot B, rédigé le 15/10/2026, mis à jour le 25/10/2026. Socle actuel : tag stable `v2026.1023.0`
-(SHA `1b4c803816e82b0265c8422e1a804327a7ed8c54`), branche locale `atelier-marketing-v2026.1023.0` = ce tag + 95 patches
-(`socle/patches/0001` à `0095`, régénérés le 25/10/2026 ; voir « Mise à jour vers v2026.1023.0 » en section 3).
+(SHA `1b4c803816e82b0265c8422e1a804327a7ed8c54`), branche locale `atelier-marketing-v2026.1023.0` = ce tag + les patches de `socle/patches/`
+(nombre : `ls socle/patches/*.patch | wc -l`, 139 au 30/10/2026, `0001` à `0139` ; `0001` à `0095` régénérés le 25/10/2026, voir
+« Mise à jour vers v2026.1023.0 » en section 3 ; les suivants ajoutés ensuite, dont `0099` du 27/10/2026 : un run coupé par la pause
+et payé par l'abonnement solde sa comptabilité après 5 min).
 Branche précédente conservée : `atelier-marketing` (v2026.1012.0 + 95 patches), copie de retour
 `atelier-marketing-AVANT-20261025`. Les chemins `paperclip/...` ci-dessous sont ceux du socle ; chaque affirmation
 cite le fichier et la ligne, ou une mesure faite ce jour.

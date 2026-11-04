@@ -55,7 +55,7 @@ class Recepteur:
     """Faux Phoenix : accepte POST /v1/traces, garde les corps reçus ; code de réponse réglable."""
 
     def __init__(self):
-        self.corps, self.code = [], 200
+        self.corps, self.code, self.autorisations = [], 200, []
         parent = self
 
         class H(BaseHTTPRequestHandler):
@@ -63,6 +63,7 @@ class Recepteur:
                 n = int(self.headers.get("Content-Length", 0))
                 corps = self.rfile.read(n)
                 if self.path == "/v1/traces" and self.headers.get("Content-Type") == "application/x-protobuf":
+                    parent.autorisations.append(self.headers.get("Authorization"))
                     if parent.code == 200:
                         parent.corps.append(corps)
                     self.send_response(parent.code)
@@ -125,7 +126,8 @@ class Base(unittest.TestCase):
         self.sql = os.path.join(d, "sql.txt")
         self.etat = os.path.join(d, "etat", "exporteur.json")
         self.env = {"ATELIER_PSQL": f"{shlex.quote(sys.executable)} -I {shlex.quote(self.faux)}",
-                    "FAUX_PSQL_DONNEES": self.donnees, "FAUX_PSQL_SQL": self.sql}
+                    "FAUX_PSQL_DONNEES": self.donnees, "FAUX_PSQL_SQL": self.sql,
+                    "PHOENIX_API_KEY": "cle-systeme-de-test"}
         self.ancien = {k: os.environ.get(k) for k in self.env}
         os.environ.update(self.env)
         self.recepteur = Recepteur()
@@ -220,6 +222,25 @@ class TestsExport(Base):
         self.assertIn("porte.franchie", sortie)
         self.assertIn("à blanc", sortie)
 
+    def test_jeton_porteur_envoye_a_phoenix(self):
+        # F2 (JB, 30/10/2026) : auth de Phoenix activée, l'exportateur présente la clé système en Bearer.
+        self.ecrire([ligne(1, "porte.franchie", donnees={"decision": "PASS"})])
+        code, _, _ = self.lancer()
+        self.assertEqual(code, 0)
+        self.assertEqual(self.recepteur.autorisations, ["Bearer cle-systeme-de-test"])
+
+    def test_sans_cle_api_refuse_sans_rien_envoyer(self):
+        # Sans clé, ne rien envoyer (les traces seraient refusées) : échec clair, état inchangé.
+        os.environ.pop("PHOENIX_API_KEY", None)
+        self.ecrire([ligne(1, "porte.franchie", donnees={"decision": "PASS"})])
+        code, _, erreur = self.lancer()
+        self.assertEqual(code, 1)
+        self.assertIn("PHOENIX_API_KEY", erreur)
+        self.assertEqual(self.recepteur.corps, [])
+        self.assertFalse(os.path.exists(self.etat))
+        # --a-blanc n'a pas besoin de clé (rien n'est envoyé).
+        self.assertEqual(self.lancer("--a-blanc")[0], 0)
+
     def test_lots_successifs(self):
         self.ecrire([ligne(i, "livrable.revise", tache=None) for i in range(1, 6)])
         code, _, _ = self.lancer("--lot", "2")
@@ -298,6 +319,20 @@ class TestsExport(Base):
         for colonne in ("commentaire", "title", "description", "name", "email", "consigne", "justification"):
             self.assertNotIn(colonne, journal.lower(), f"la requête ne doit pas lire « {colonne} »")
         self.assertNotIn("'acteur', j.acteur", journal)
+
+
+    # APP-9 : chaque span d'un run porte l'empreinte du paquet de consignes (comparaison avant/après un changement de consigne).
+    def test_empreinte_du_paquet_de_consignes(self):
+        run = "c" * 8 + "-cccc-4ccc-8ccc-" + "c" * 12
+        self.ecrire([ligne(1, "porte.franchie", run_id=run, prompt_bundle="f" * 64),
+                     ligne(2, "porte.franchie", run_id=run, prompt_bundle="pas une empreinte")])
+        self.assertEqual(self.lancer()[0], 0)
+        par_seq = {attrs(s).get("atelier.seq"): attrs(s) for _, s in self.recepteur.spans()}
+        self.assertEqual(par_seq[1]["atelier.prompt_bundle"], "f" * 64)
+        self.assertNotIn("atelier.prompt_bundle", par_seq[2])
+        with open(self.sql, encoding="utf-8") as f:
+            journal = [r for r in f.read().split("\n-----\n") if r.strip()][1]
+        self.assertIn("event_type = 'adapter.invoke'", journal)
 
 
 class TestDonneesPersonnelles(Base):

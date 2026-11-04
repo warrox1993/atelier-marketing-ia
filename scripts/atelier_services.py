@@ -5,12 +5,14 @@
 Chaque service est une entreprise Paperclip distincte ; la matrice « flux » liste les seuls
 échanges autorisés entre services (pas de flux déclaré, pas d'échange).
 
-Réseau des coordinateurs (lot 2 de l'usine v2) : chaque coordinateur peut adresser une demande à tout autre
-coordinateur du même client, et le coordinateur général (Direction, champ « coordinateurGeneral ») à chacun d'eux.
-Ces flux ne sont JAMAIS écrits à la main dans le registre : `flux_coordinateurs` les génère pour toutes les paires
-ordonnées de services que la matrice métier ne couvre pas encore, et `flux_complets` rend la matrice déclarée au
-plugin (métier puis générés). Règle sensible inchangée : un flux qui touche un service « sensible » exige
-l'approbation humaine. Le cloisonnement par client est tenu par la déclaration (un client à la fois) et par le plugin.
+Réseau des coordinateurs (lot 2 de l'usine v2, réduit le 30/10/2026, COORD-P2-7) : le coordinateur général (Direction,
+champ « coordinateurGeneral ») et chaque coordinateur se joignent dans les deux sens ; deux départements se parlent
+par un flux métier ou par le coordinateur général, jamais par un flux généré (le maillage de toutes les paires rendait
+la garde des flux sans effet). Ces flux ne sont JAMAIS écrits à la main dans le registre : `flux_coordinateurs` les
+génère pour les paires avec la Direction que la matrice métier ne couvre pas encore, et `flux_complets` rend la matrice
+déclarée au plugin (métier puis générés). Un flux qui touche un service « sensible » ou « public » (qui publie hors de
+l'usine, V2-6) exige l'approbation humaine. Le cloisonnement par client est tenu par la déclaration (un client à la
+fois) et par le plugin.
 
 Usage : python3 -I scripts/atelier_services.py verifier [--fichier CHEMIN]
 Code de sortie : 0 si le registre est valide, 1 sinon. Bibliothèque standard seule, aucune écriture.
@@ -36,10 +38,17 @@ RE_PREFIXE = re.compile(r"^[A-Z]{3,4}$")
 CHAMPS_TEXTE = ("slug", "nom", "prefixe", "description", "coordinateur")
 CHAMPS_LISTES = ("agents", "humainSeul", "obligations", "donnees")
 CHAMPS_FLUX = ("source", "cible", "objet")
+# Projets et routines d'un service (P1-5, audit du 29/10/2026), facultatifs : mêmes valeurs que le marketing et que le socle
+# (PROJECT_STATUSES, ROUTINE_CONCURRENCY_POLICIES, ROUTINE_CATCH_UP_POLICIES de packages/shared/src/constants.ts).
+STATUTS_PROJET = ("backlog", "planned", "in_progress", "completed", "cancelled")
+CONCURRENCES = ("coalesce_if_active", "always_enqueue", "skip_if_active")
+RATTRAPAGES = ("skip_missed", "enqueue_missed_with_cap")
+RE_COULEUR = re.compile(r"^#[0-9a-f]{6}$")
 
 # Service qui porte le coordinateur général (entreprise Direction du client).
 SERVICE_DIRECTION = "direction"
 COMPETENCE_PROTOCOLE = "protocole-inter-coordinateurs"
+# Objet des anciens flux générés entre départements (réseau réduit le 30/10) : le plugin le reconnaît encore en base.
 OBJET_ENTRE_COORDINATEURS = ("Liaison entre coordinateurs (compétence protocole-inter-coordinateurs) : "
                              "question bornée, réponse tracée, au plus deux relais")
 OBJET_COORDINATEUR_GENERAL = ("Coordinateur général et coordinateurs de département (compétence "
@@ -79,6 +88,60 @@ def _erreurs_outils(pre: str, champ: str, valeur) -> list[str]:
     return [f"{pre}{champ} doit être une liste de noms d'outils"]
 
 
+# AFB-8 : variables que le registre peut surcharger par agent (jamais une variable nouvelle, ex. LD_PRELOAD).
+ENV_SURCHARGEABLES = frozenset({"CLAUDE_CODE_PROMPT_CACHE_TTL"})
+
+
+def _erreurs_cadence(pre: str, s: dict, agents: list) -> list[str]:
+    """Projets et routines facultatifs d'un service (importés en pause par le bootstrap, TASK.md sous
+    organisation/services/<service>/projects/)."""
+    erreurs: list[str] = []
+    projets, routines = s.get("projets", []), s.get("routines", [])
+    if not isinstance(projets, list) or not all(isinstance(p, dict) for p in projets):
+        erreurs.append(f"{pre}projets doit être une liste d'objets")
+        projets = []
+    if not isinstance(routines, list) or not all(isinstance(r, dict) for r in routines):
+        erreurs.append(f"{pre}routines doit être une liste d'objets")
+        routines = []
+    vus = set()
+    for p in projets:
+        slug = p.get("slug")
+        if not (_texte_ok(slug) and RE_SLUG.match(slug)):
+            erreurs.append(f"{pre}slug de projet invalide : {slug!r}")
+        elif slug in vus:
+            erreurs.append(f"{pre}projet en double : {slug}")
+        vus.add(slug)
+        if p.get("responsable") not in agents:
+            erreurs.append(f"{pre}projet {slug} : responsable « {p.get('responsable')} » absent de la liste des agents")
+        if p.get("statut") not in STATUTS_PROJET:
+            erreurs.append(f"{pre}projet {slug} : statut de projet invalide (parmi {STATUTS_PROJET})")
+        if not (isinstance(p.get("couleur"), str) and RE_COULEUR.match(p["couleur"])):
+            erreurs.append(f"{pre}projet {slug} : couleur invalide (#rrggbb)")
+        if p.get("objectifs") != []:  # aucun service n'a d'objectifs (organisation_service les laisse vides)
+            erreurs.append(f"{pre}projet {slug} : objectifs doit être une liste vide")
+    vus = set()
+    for r in routines:
+        slug = r.get("slug")
+        if not (_texte_ok(slug) and RE_SLUG.match(slug)):
+            erreurs.append(f"{pre}slug de routine invalide : {slug!r}")
+        elif slug in vus:
+            erreurs.append(f"{pre}routine en double : {slug}")
+        vus.add(slug)
+        champs = r.get("cron").split() if isinstance(r.get("cron"), str) else []
+        if len(champs) != 5:
+            erreurs.append(f"{pre}routine {slug} : cron invalide (5 champs attendus) : {r.get('cron')!r}")
+        # EXP-C12 : le PC de l'usine n'est allumé que vers 09:44 ; avec skip_missed, une échéance plus tôt ne part jamais.
+        elif not (champs[0].isdigit() and champs[1].isdigit() and int(champs[1]) >= 10):
+            erreurs.append(f"{pre}routine {slug} : heure fixe à partir de 10 h attendue, trouvé « {r['cron']} »")
+        if not _texte_ok(r.get("fuseau")):
+            erreurs.append(f"{pre}routine {slug} : fuseau manquant")
+        if r.get("concurrence") not in CONCURRENCES:
+            erreurs.append(f"{pre}routine {slug} : concurrence invalide (parmi {CONCURRENCES})")
+        if r.get("rattrapage") not in RATTRAPAGES:
+            erreurs.append(f"{pre}routine {slug} : rattrapage invalide (parmi {RATTRAPAGES})")
+    return erreurs
+
+
 def valider(registre) -> list[str]:
     """Renvoie la liste des erreurs (vide si le registre est valide)."""
     erreurs: list[str] = []
@@ -114,8 +177,9 @@ def valider(registre) -> list[str]:
                 erreurs.append(f"{pre}la liste « {champ} » est vide")
             elif not all(_texte_ok(v) for v in valeur):
                 erreurs.append(f"{pre}« {champ} » ne doit contenir que des textes non vides")
-        if "sensible" in s and not isinstance(s["sensible"], bool):
-            erreurs.append(f"{pre}« sensible » doit être un booléen")
+        for attribut in ("sensible", "public", "interne"):  # interne (DOC-A2) : hors de « tous », installé seulement nommé
+            if attribut in s and not isinstance(s[attribut], bool):
+                erreurs.append(f"{pre}« {attribut} » doit être un booléen")
         if "coordinateurGeneral" in s:
             general = s["coordinateurGeneral"]
             if s.get("slug") != SERVICE_DIRECTION:
@@ -184,6 +248,15 @@ def valider(registre) -> list[str]:
                                           and m.get("effort") in EFFORTS):
                     erreurs.append(f"{pre}« {slug} » : modèle invalide (id claude-…, effort parmi {EFFORTS})")
                 erreurs += _erreurs_outils(f"{pre}« {slug} » : ", "outilsInterdits", r.get("outilsInterdits", []))
+                env = r.get("envPortable")
+                if env is not None and not (isinstance(env, dict) and all(
+                        k in ENV_SURCHARGEABLES and isinstance(v, str) for k, v in env.items())):
+                    erreurs.append(f"{pre}« {slug} » : envPortable doit surcharger, en texte, une variable parmi {sorted(ENV_SURCHARGEABLES)}")
+                n = r.get("sessionsParRotation")
+                if n is not None and not (type(n) is int and 1 <= n <= 50):
+                    erreurs.append(f"{pre}« {slug} » : sessionsParRotation doit être un entier de 1 à 50")
+
+            erreurs += _erreurs_cadence(pre, s, agents)
 
     if not any(isinstance(s, dict) and _texte_ok(s.get("coordinateurGeneral")) for s in services):
         erreurs.append(f"aucun coordinateur général : le service {SERVICE_DIRECTION} doit porter « coordinateurGeneral »")
@@ -207,8 +280,9 @@ def valider(registre) -> list[str]:
             erreurs.append(f"{pre}un service ne peut pas échanger avec lui-même")
         if x.get("approbationHumaine") is False:
             for valeur in (source, cible):
-                if valeur in slugs and slugs[valeur].get("sensible") is True:
-                    erreurs.append(f"{pre}le service sensible « {valeur} » impose l'approbation humaine")
+                for attribut in ("sensible", "public"):
+                    if valeur in slugs and slugs[valeur].get(attribut) is True:
+                        erreurs.append(f"{pre}le service {attribut} « {valeur} » impose l'approbation humaine")
         # Une seule déclaration par paire source → cible, comme l'exige la route services.declarer du plugin
         # (plusieurs objets se regroupent dans le champ « objet », séparés par « ; »).
         cle = (source, cible)
@@ -219,25 +293,22 @@ def valider(registre) -> list[str]:
 
 
 def flux_coordinateurs(registre: dict) -> list[dict]:
-    """Flux du réseau des coordinateurs, générés (jamais listés à la main) : une entrée par paire ordonnée de services
-    distincts que la matrice métier ne couvre pas. Les paires qui touchent la Direction portent l'objet du coordinateur
-    général (seul interlocuteur de l'humain, rôle ceo de l'entreprise Direction : c'est lui qui reçoit les demandes
-    adressées à la Direction). Approbation humaine dès qu'un des deux services est sensible. Ordre stable."""
+    """Flux du réseau des coordinateurs, générés (jamais listés à la main) : une entrée par paire ordonnée entre la
+    Direction (coordinateur général, seul interlocuteur de l'humain, rôle ceo de l'entreprise Direction : c'est lui qui
+    reçoit les demandes adressées à la Direction) et un autre service, que la matrice métier ne couvre pas. Approbation
+    humaine dès qu'un des deux services est sensible ou public. Ordre stable."""
     services = [s for s in registre["services"]]
-    sensibles = {s["slug"] for s in services if s.get("sensible") is True}
+    approbation = {s["slug"] for s in services if s.get("sensible") is True or s.get("public") is True}
     metier = {(f["source"], f["cible"]) for f in registre["flux"]}
     generes = []
     for a in services:
         for b in services:
             source, cible = a["slug"], b["slug"]
-            if source == cible or (source, cible) in metier:
+            if source == cible or SERVICE_DIRECTION not in (source, cible) or (source, cible) in metier:
                 continue
-            general = SERVICE_DIRECTION in (source, cible)
             generes.append({
-                "source": source, "cible": cible,
-                "objet": OBJET_COORDINATEUR_GENERAL if general else OBJET_ENTRE_COORDINATEURS,
-                "approbationHumaine": source in sensibles or cible in sensibles,
-                "origine": "coordinateur-general" if general else "coordinateurs",
+                "source": source, "cible": cible, "objet": OBJET_COORDINATEUR_GENERAL,
+                "approbationHumaine": source in approbation or cible in approbation, "origine": "coordinateur-general",
             })
     return generes
 

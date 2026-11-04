@@ -509,9 +509,11 @@ describe("critères courtier : besoin d'assurance prouvé et concurrence", () =>
       expect(critere(p, "besoin_offre_active", { ...CTX_COMPLET, offres })).toMatchObject({ statut: "verifie" });
     });
 
-    it("offre non confirmée, ou aucune offre : non vérifié (besoin détecté, rien à proposer) ; sans besoin : sans objet", () => {
+    it("offre non confirmée : vérifié, marquée « (non confirmé par le client) » (décision de l'opérateur du 30/10/2026) ; aucune offre : non vérifié ; sans besoin : sans objet", () => {
       const nonConfirmee = [{ nom: "Responsabilité civile professionnelle", confirmee: false, code: "rc-pro" }];
-      expect(critere(entreprise(), "besoin_offre_active", { ...CTX_COMPLET, offres: nonConfirmee })?.statut).toBe("non_verifie");
+      const r = critere(entreprise(), "besoin_offre_active", { ...CTX_COMPLET, offres: nonConfirmee });
+      expect(r?.statut).toBe("verifie");
+      expect(r?.detail).toContain("Responsabilité civile professionnelle (non confirmé par le client)");
       expect(critere(entreprise(), "besoin_offre_active", { ...CTX_COMPLET, offres: [] })?.statut).toBe("non_verifie");
       expect(critere(entreprise({ nace: ["47.110"] }), "besoin_offre_active")).toBeUndefined();
     });

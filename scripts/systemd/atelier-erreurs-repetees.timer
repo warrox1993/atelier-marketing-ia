@@ -1,0 +1,10 @@
+[Unit]
+Description=Détecteur des erreurs répétées des agents, chaque matin
+
+[Timer]
+OnCalendar=*-*-* 07:30
+Persistent=true
+Unit=atelier-erreurs-repetees.service
+
+[Install]
+WantedBy=timers.target

@@ -1,7 +1,9 @@
 /**
- * Message de situation du Coordinateur, en tête du fil du chat : il remplace le bandeau « Il manque N connexions »,
+ * Message de situation, en tête du fil du chat : il remplace le bandeau « Il manque N connexions »,
  * la carte « À faire (N) » épinglée et la pastille d'en-tête. Calculé à l'ouverture (jamais enregistré dans la tâche
- * Paperclip, jamais envoyé au serveur) et rendu comme une bulle du Coordinateur, dans la zone annoncée (`role="log"`).
+ * Paperclip, jamais envoyé au serveur) et rendu dans la zone annoncée (`role="log"`) en deux bulles : les connexions
+ * manquantes, constat signé « Atelier » (le Coordinateur ne sait pas si une mission travaille en démonstration), puis
+ * les points en attente, signés du Coordinateur.
  * Il n'existe que s'il y a quelque chose à dire : connexions manquantes, points qui attendent une décision, ou le
  * récapitulatif / bilan d'une approbation groupée ou une confirmation à lire. Rien pendant la lecture, rien si elle
  * échoue, rien quand tout est en ordre (le chat ne dit jamais « tout est en ordre »).
@@ -19,18 +21,31 @@ const NOMS_AFFICHES = 3;
 /** Points montrés d'emblée ; les autres se déplient. */
 export const POINTS_AFFICHES = 3;
 
-/** « Avant de commencer : il me manque N connexions pour travailler sur vos vraies données (A, B, C et K autres). … » */
+/** « N connexions ne sont pas branchées (A, B, C et K autres) ; les missions qui en ont besoin travaillent sans elles. » */
 export function phraseConnexionsManquantes(noms: readonly string[]): string {
   const n = noms.length;
   const liste = noms.slice(0, NOMS_AFFICHES).join(", ");
   const reste = n - NOMS_AFFICHES;
   const detail = reste > 0 ? `${liste} et ${reste} autre${reste > 1 ? "s" : ""}` : noms.length > 1 ? liste.replace(/, ([^,]*)$/u, " et $1") : liste;
-  return `Avant de commencer : il me manque ${n} connexion${n > 1 ? "s" : ""} pour travailler sur vos vraies données (${detail}). Tant qu'${n > 1 ? "elles ne sont" : "elle n'est"} pas faite${n > 1 ? "s" : ""}, je travaille en démonstration.`;
+  return n > 1
+    ? `${n} connexions ne sont pas branchées (${detail}) ; les missions qui en ont besoin travaillent sans elles.`
+    : `1 connexion n'est pas branchée (${detail}) ; les missions qui en ont besoin travaillent sans elle.`;
 }
 
-/** « J'ai aussi 2 points qui attendent votre décision : » (sans « aussi » quand les connexions n'ont rien à dire). */
-export function phrasePointsEnAttente(n: number, aussi: boolean): string {
-  return `J'ai${aussi ? " aussi" : ""} ${n} point${n > 1 ? "s" : ""} qui attend${n > 1 ? "ent" : ""} votre décision :`;
+/** « J'ai 2 points qui attendent votre décision : » */
+export function phrasePointsEnAttente(n: number): string {
+  return `J'ai ${n} point${n > 1 ? "s" : ""} qui attend${n > 1 ? "ent" : ""} votre décision :`;
+}
+
+function Signature({ initiale, nom }: { initiale: string; nom: string }) {
+  return (
+    <span className="atl-disc-meta">
+      <span className="atl-disc-avatar" aria-hidden="true">
+        {initiale}
+      </span>
+      <span className="atl-disc-nom">{nom}</span>
+    </span>
+  );
 }
 
 /**
@@ -51,6 +66,7 @@ export function MessageSituation({
   confirmation,
   onFaitGroupe,
   decisionsServices = [],
+  onBilanActif,
 }: {
   nom: string;
   connexions: readonly string[];
@@ -58,8 +74,10 @@ export function MessageSituation({
   onFait(element: ElementAccueil, message: string): void;
   confirmation?: string | null;
   onFaitGroupe?(issueIds: string[]): void;
-  /** Décisions qui attendent dans les autres services (cartes du fil) : comptées parmi les points en attente. */
+  /** Décisions qui attendent dans les autres services : comptées parmi les points en attente. */
   decisionsServices?: readonly CarteService[];
+  /** Signale l'ouverture ou la fermeture du bilan d'une approbation groupée (le conteneur reste monté tant qu'il est affiché). */
+  onBilanActif?(actif: boolean): void;
 }) {
   const [toutVoir, setToutVoir] = useState(false);
   const [groupeActif, setGroupeActif] = useState(false);
@@ -70,43 +88,51 @@ export function MessageSituation({
   const visibles = toutVoir ? tries : tries.slice(0, POINTS_AFFICHES);
   const autres = tries.length - POINTS_AFFICHES;
   const contenus = elements.filter((e) => e.type === "contenu_a_valider" && e.issueId).map((e) => ({ issueId: e.issueId as string, titre: e.titre }));
+  const coordinateur = total > 0 || groupeActif || Boolean(confirmation);
   return (
-    <div className="atl-disc-bulle" data-auteur="agent" data-situation="oui" data-testid="chat-situation">
-      <span className="atl-disc-meta">
-        <span className="atl-disc-avatar" aria-hidden="true">
-          C
-        </span>
-        <span className="atl-disc-nom">{nom}</span>
-      </span>
-      <div className="atl-disc-texte atl-disc-situation">
-        {connexions.length > 0 ? (
-          <div className="atl-disc-situation-bloc" data-testid="situation-connexions">
-            <p>{phraseConnexionsManquantes(connexions)}</p>
-            <div className="atl-disc-situation-actions">
-              <LienHote vers={LIEN_PASSAGE_AU_REEL} className="atl-bouton">
-                Ouvrir les connexions
-              </LienHote>
+    <div className="atl-disc-situation-groupe" data-testid="chat-situation">
+      {connexions.length > 0 ? (
+        <div className="atl-disc-bulle" data-auteur="agent" data-situation="oui">
+          <Signature initiale="A" nom="Atelier" />
+          <div className="atl-disc-texte atl-disc-situation">
+            <div className="atl-disc-situation-bloc" data-testid="situation-connexions">
+              <p>{phraseConnexionsManquantes(connexions)}</p>
+              <div className="atl-disc-situation-actions">
+                <LienHote vers={LIEN_PASSAGE_AU_REEL} className="atl-bouton">
+                  Ouvrir les connexions
+                </LienHote>
+              </div>
             </div>
           </div>
-        ) : null}
-        {confirmation ? <MessageFait className="atl-succes atl-afaire-confirmation" texte={confirmation} /> : null}
-        {total > 0 ? (
-          <div className="atl-disc-situation-bloc" data-testid="situation-points">
-            <p>{phrasePointsEnAttente(total, connexions.length > 0)}</p>
-            {decisionsServices.length > 0 ? <p data-testid="situation-services">{phraseDecisions(decisionsServices)} Les cartes sont dans le fil ci-dessous.</p> : null}
-            {elements.length > 0 ? <AFaire elements={visibles} onFait={onFait} /> : null}
-            {autres > 0 ? (
-              <div className="atl-disc-situation-actions">
-                <button type="button" className="atl-bouton" aria-expanded={toutVoir} onClick={() => setToutVoir((v) => !v)}>
-                  {toutVoir ? "Voir moins" : autres > 1 ? `Voir les ${autres} autres` : "Voir l'autre point"}
-                </button>
+        </div>
+      ) : null}
+      {coordinateur ? (
+        <div className="atl-disc-bulle" data-auteur="agent" data-situation="oui">
+          <Signature initiale="C" nom={nom} />
+          <div className="atl-disc-texte atl-disc-situation">
+            {confirmation ? <MessageFait className="atl-succes atl-afaire-confirmation" texte={confirmation} /> : null}
+            {total > 0 ? (
+              <div className="atl-disc-situation-bloc" data-testid="situation-points">
+                <p>{phrasePointsEnAttente(total)}</p>
+                {decisionsServices.length > 0 ? <p data-testid="situation-services">{phraseDecisions(decisionsServices)}</p> : null}
+                {elements.length > 0 ? <AFaire elements={visibles} onFait={onFait} /> : null}
+                {autres > 0 ? (
+                  <div className="atl-disc-situation-actions">
+                    <button type="button" className="atl-bouton" aria-expanded={toutVoir} onClick={() => setToutVoir((v) => !v)}>
+                      {toutVoir ? "Voir moins" : autres > 1 ? `Voir les ${autres} autres` : "Voir l'autre point"}
+                    </button>
+                  </div>
+                ) : null}
               </div>
             ) : null}
+            {/* Monté tant que la bulle existe, et `groupeActif` la garde : le bilan de l'approbation groupée reste affiché jusqu'à « Fermer ». */}
+            {onFaitGroupe ? <ApprobationGroupee elements={contenus} onFait={onFaitGroupe} onActif={(actif) => {
+              setGroupeActif(actif);
+              onBilanActif?.(actif);
+            }} /> : null}
           </div>
-        ) : null}
-        {/* Toujours monté tant que le message existe : le bilan de l'approbation groupée reste affiché jusqu'à « Fermer ». */}
-        {onFaitGroupe ? <ApprobationGroupee elements={contenus} onFait={onFaitGroupe} onActif={setGroupeActif} /> : null}
-      </div>
+        </div>
+      ) : null}
     </div>
   );
 }

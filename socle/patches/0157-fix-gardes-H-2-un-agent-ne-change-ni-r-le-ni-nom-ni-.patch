@@ -1,0 +1,219 @@
+From 265806e9bc9dba5f659939475b61e0cf9754a933 Mon Sep 17 00:00:00 2001
+From: Jean-Baptiste Dhondt <114347858+warrox1993@users.noreply.github.com>
+Date: Fri, 30 Oct 2026 21:17:39 +0100
+Subject: [PATCH] =?UTF-8?q?fix(gardes):=20H-2,=20un=20agent=20ne=20change?=
+ =?UTF-8?q?=20ni=20r=C3=B4le,=20ni=20nom,=20ni=20m=C3=A9tadonn=C3=A9es,=20?=
+ =?UTF-8?q?ni=20rattachement,=20ni=20budget=20d'un=20agent?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Revue de sécurité 2, constat H-2 (élévation de privilèges, M2 rouvert).
+
+Sans ce correctif, un agent se donnait le rôle ceo (pouvoirs du Coordinateur) par
+PATCH /api/agents/<lui> mêlant role à un champ ordinaire (icon) : le consentement ne
+s'appliquait qu'à un PATCH de profil pur, sinon assertCanUpdateAgent accordait allow_self.
+- routes/agents.ts (PATCH) : un champ de profil touché passe toujours par
+  assertCanApplyAgentProfileChange, et assertCanUpdateAgent s'ajoute dès qu'un autre champ
+  est touché (logique amont corrigée) ;
+- garde-modele-agent.ts : refuserIdentiteParAgent, 403 pour un acteur agent qui change
+  effectivement role, name, metadata, reportsTo ou budgetMonthlyCents (valeur renvoyée à
+  l'identique acceptée) ; le board garde tous ses droits ;
+- même garde dans POST /agents/:id/config-revisions/:revisionId/rollback, reportsTo et
+  metadata absents de l'instantané comptés à null comme à la restauration.
+Tests : agent-permissions-routes.test.ts (10 cas : 5 champs refusés, icône seule et rôle
+inchangé acceptés, board accepté, consentement d'un profil mêlé, restauration refusée à un
+agent et acceptée au board).
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01EThpSSDGc5NRYwbgjNqoTJ
+---
+ .../agent-permissions-routes.test.ts          | 93 +++++++++++++++++++
+ server/src/atelier/garde-modele-agent.ts      | 21 +++++
+ server/src/routes/agents.ts                   | 19 ++--
+ 3 files changed, 127 insertions(+), 6 deletions(-)
+
+diff --git a/server/src/__tests__/agent-permissions-routes.test.ts b/server/src/__tests__/agent-permissions-routes.test.ts
+index 82176d5454..c98d61ce6c 100644
+--- a/server/src/__tests__/agent-permissions-routes.test.ts
++++ b/server/src/__tests__/agent-permissions-routes.test.ts
+@@ -1085,6 +1085,99 @@ describe("agent permission routes", () => {
+     });
+   });
+ 
++  describe("atelier (patch local 0157, H-2) : identité, rôle, rattachement et budget réservés aux humains", () => {
++    const selfActor = { type: "agent", agentId, companyId, source: "agent_key", runId: "run-1" };
++    const boardActor = { type: "board", userId: "board-user", source: "local_implicit", isInstanceAdmin: true, companyIds: [companyId] };
++    const claudeAgent = { ...baseAgent, adapterType: "claude_local", adapterConfig: { model: "claude-sonnet-5-5", effort: "medium" } };
++    const revisionId = "33333333-3333-4333-8333-333333333333";
++
++    it.each([
++      ["role", { role: "ceo", icon: "crown" }],
++      ["name", { name: "Coordinateur", icon: "crown" }],
++      ["metadata", { metadata: { atelier: { slug: "coordinateur" } } }],
++      ["budgetMonthlyCents", { budgetMonthlyCents: 100000 }],
++      ["reportsTo", { reportsTo: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa" }],
++    ])("refuse (403) qu'un agent change son « %s », même mêlé à un champ ordinaire", async (champ, body) => {
++      mockAgentService.getById.mockResolvedValue(claudeAgent);
++      const app = await createApp(selfActor);
++      const res = await requestApp(app, (baseUrl) => request(baseUrl).patch(`/api/agents/${agentId}`).send(body));
++
++      expect(res.status, JSON.stringify(res.body)).toBe(403);
++      expect(res.body.error).toContain(`« ${champ} »`);
++      expect(mockAgentService.update).not.toHaveBeenCalled();
++    });
++
++    it("laisse un agent changer son icône seule, ou renvoyer son rôle inchangé", async () => {
++      mockAgentService.getById.mockResolvedValue(claudeAgent);
++      mockAgentService.update.mockResolvedValue(claudeAgent);
++      const app = await createApp(selfActor);
++      const icone = await requestApp(app, (baseUrl) => request(baseUrl).patch(`/api/agents/${agentId}`).send({ icon: "rocket" }));
++      const inchange = await requestApp(app, (baseUrl) => request(baseUrl)
++        .patch(`/api/agents/${agentId}`).send({ role: "engineer", reportsTo: null, icon: "rocket" }));
++
++      expect(icone.status, JSON.stringify(icone.body)).toBe(200);
++      expect(inchange.status, JSON.stringify(inchange.body)).toBe(200);
++      expect(mockAgentService.update).toHaveBeenCalledTimes(2);
++    });
++
++    it("laisse le board changer le rôle (200)", async () => {
++      mockAgentService.getById.mockResolvedValue(claudeAgent);
++      mockAgentService.update.mockResolvedValue({ ...claudeAgent, role: "ceo" });
++      const app = await createApp(boardActor);
++      const res = await requestApp(app, (baseUrl) => request(baseUrl)
++        .patch(`/api/agents/${agentId}`).send({ role: "ceo", icon: "crown", budgetMonthlyCents: 5000 }));
++
++      expect(res.status, JSON.stringify(res.body)).toBe(200);
++      expect(mockAgentService.update).toHaveBeenCalledOnce();
++    });
++
++    it("soumet au consentement un champ de profil mêlé à un champ ordinaire", async () => {
++      mockAgentService.getById.mockResolvedValue(claudeAgent);
++      mockAccessService.decide.mockImplementation(async (input: { scope?: { requiresChangeGrant?: boolean } }) => (
++        input.scope?.requiresChangeGrant
++          ? { allowed: false, reason: "deny_missing_grant", explanation: "Profile change needs a change grant" }
++          : { allowed: true, reason: "allow_self", explanation: "Allowed self" }
++      ));
++      const app = await createApp(selfActor);
++      const res = await requestApp(app, (baseUrl) => request(baseUrl)
++        .patch(`/api/agents/${agentId}`).send({ title: "Directeur", icon: "crown" }));
++
++      expect(res.status, JSON.stringify(res.body)).toBe(403);
++      expect(res.body.error).toContain("change grant");
++      expect(mockAgentService.update).not.toHaveBeenCalled();
++    });
++
++    it("refuse (403) qu'un agent restaure une révision qui rétablirait un autre rôle", async () => {
++      mockAgentService.getById.mockResolvedValue(claudeAgent);
++      mockAgentService.getConfigRevision.mockResolvedValue({
++        id: revisionId,
++        afterConfig: { name: "Builder", role: "ceo", budgetMonthlyCents: 0, reportsTo: null, metadata: null, adapterType: "claude_local", adapterConfig: claudeAgent.adapterConfig, runtimeConfig: {} },
++      });
++      const app = await createApp(selfActor);
++      const res = await requestApp(app, (baseUrl) => request(baseUrl)
++        .post(`/api/agents/${agentId}/config-revisions/${revisionId}/rollback`));
++
++      expect(res.status, JSON.stringify(res.body)).toBe(403);
++      expect(res.body.error).toContain("« role »");
++      expect(mockAgentService.rollbackConfigRevision).not.toHaveBeenCalled();
++    });
++
++    it("laisse le board restaurer cette révision (200)", async () => {
++      mockAgentService.getById.mockResolvedValue(claudeAgent);
++      mockAgentService.getConfigRevision.mockResolvedValue({
++        id: revisionId,
++        afterConfig: { name: "Builder", role: "ceo", budgetMonthlyCents: 0, reportsTo: null, metadata: null, adapterType: "claude_local", adapterConfig: claudeAgent.adapterConfig, runtimeConfig: {} },
++      });
++      mockAgentService.rollbackConfigRevision.mockResolvedValue({ ...claudeAgent, role: "ceo" });
++      const app = await createApp(boardActor);
++      const res = await requestApp(app, (baseUrl) => request(baseUrl)
++        .post(`/api/agents/${agentId}/config-revisions/${revisionId}/rollback`));
++
++      expect(res.status, JSON.stringify(res.body)).toBe(200);
++      expect(mockAgentService.rollbackConfigRevision).toHaveBeenCalledOnce();
++    });
++  });
++
+   it("allows a provider credential reference without allowing arbitrary environment variables", async () => {
+     mockAgentService.getById.mockResolvedValue({ ...baseAgent, adapterType: "claude_local" });
+     const app = await createApp({ type: "agent", agentId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", companyId, source: "agent_key", runId: "run-1" });
+diff --git a/server/src/atelier/garde-modele-agent.ts b/server/src/atelier/garde-modele-agent.ts
+index a4fa349f36..62160ec6b2 100644
+--- a/server/src/atelier/garde-modele-agent.ts
++++ b/server/src/atelier/garde-modele-agent.ts
+@@ -60,3 +60,24 @@ export function refuserModeleEffortParAgent(req: { actor: { type: string } }, ch
+     `Un agent ne peut pas changer de modèle ni d'effort (${chemins.join(", ")}) : décision humaine (atelier).`,
+   );
+ }
++
++/**
++ * Atelier (patch local 0157, revue de sécurité 2, H-2) : l'identité, le rôle, le rattachement, les
++ * métadonnées et le budget d'un agent restent un geste humain. Sans cette garde, un agent se
++ * donnait le rôle ceo (donc les pouvoirs du Coordinateur, dont M2) par un PATCH de lui-même
++ * mêlant `role` à un champ ordinaire, accordé par « allow_self ».
++ */
++export const CHAMPS_IDENTITE_AGENT = ["role", "name", "metadata", "reportsTo", "budgetMonthlyCents"] as const;
++
++/** 403 si un acteur agent change effectivement un champ d'identité ; un champ renvoyé à l'identique passe. */
++export function refuserIdentiteParAgent(
++  req: { actor: { type: string } },
++  existant: object,
++  apres: Record<string, unknown>,
++): void {
++  if (req.actor.type !== "agent") return;
++  const avant = existant as Record<string, unknown>;
++  const change = CHAMPS_IDENTITE_AGENT.find((cle) => Object.prototype.hasOwnProperty.call(apres, cle)
++    && JSON.stringify(apres[cle] ?? null) !== JSON.stringify(avant[cle] ?? null));
++  if (change) throw forbidden(`Atelier : un agent ne change pas « ${change} » d'un agent ; un humain le fait depuis le board.`);
++}
+diff --git a/server/src/routes/agents.ts b/server/src/routes/agents.ts
+index 7ebedd8de7..51a161ca14 100644
+--- a/server/src/routes/agents.ts
++++ b/server/src/routes/agents.ts
+@@ -112,7 +112,7 @@ import {
+   workspaceOperationService,
+ } from "../services/index.js";
+ import { badRequest, conflict, forbidden, HttpError, notFound, unprocessable } from "../errors.js";
+-import { clesModeleEffortModifiees, refuserModeleEffortParAgent } from "../atelier/garde-modele-agent.js";
++import { clesModeleEffortModifiees, refuserIdentiteParAgent, refuserModeleEffortParAgent } from "../atelier/garde-modele-agent.js";
+ import { ONBOARDING_FIRST_TASK_SKILL_KEY, PAPERCLIP_CORE_SKILL_KEYS } from "../services/company-skills.js";
+ import { createRunSecretRedactionRegistry } from "../services/run-secret-redaction.js";
+ import { assertAuthenticated, assertBoard, assertCompanyAccess, assertInstanceAdmin, buildActorSecretContext, getAccessibleResource, getActorInfo, hasCompanyAccess } from "./authz.js";
+@@ -4083,6 +4083,13 @@ export function agentRoutes(
+       req,
+       clesModeleEffortModifiees(existing.adapterConfig, rollbackAdapterConfig).map((cle) => `adapterConfig.${cle}`),
+     );
++    // Atelier (patch local 0157, H-2) : une restauration ne rétablit pas une autre identité ; reportsTo et
++    // metadata absents de l'instantané valent null à la restauration (configPatchFromSnapshot).
++    refuserIdentiteParAgent(req, existing, {
++      ...rollbackConfig,
++      reportsTo: typeof rollbackConfig.reportsTo === "string" ? rollbackConfig.reportsTo : null,
++      metadata: asRecord(rollbackConfig.metadata),
++    });
+     assertNoAgentLocalAdapterHostCommandMutation(req, rollbackAdapterType, rollbackAdapterConfig);
+     assertNoAgentProcessAdapterMutation(
+       req,
+@@ -5346,15 +5353,15 @@ export function agentRoutes(
+         },
+       );
+     }
++    // Atelier (patch local 0157, H-2) : identité, rôle, rattachement et budget restent un geste humain.
++    refuserIdentiteParAgent(req, existing, patchData);
+     const touchesProfileFields = touchesAgentProfileChangeConsentFields(patchData);
+     const profileOnlyChange = touchesProfileFields && Object.keys(patchData).every((key) =>
+       (AGENT_PROFILE_CHANGE_CONSENT_FIELDS as readonly string[]).includes(key),
+     );
+-    if (profileOnlyChange) {
+-      await assertCanApplyAgentProfileChange(req, existing);
+-    } else {
+-      await assertCanUpdateAgent(req, existing);
+-    }
++    // Atelier (patch local 0157, H-2) : un champ de profil mêlé à un champ ordinaire reste soumis au consentement.
++    if (touchesProfileFields) await assertCanApplyAgentProfileChange(req, existing);
++    if (!profileOnlyChange) await assertCanUpdateAgent(req, existing);
+ 
+     const actor = getActorInfo(req);
+     const updateOptions = {
+-- 
+2.53.0
+

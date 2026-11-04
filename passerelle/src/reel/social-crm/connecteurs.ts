@@ -11,6 +11,8 @@
 //   Instagram Business Login       https://developers.facebook.com/docs/instagram-platform/instagram-api-with-instagram-login/business-login
 //   LinkedIn OAuth 3 étapes        https://learn.microsoft.com/en-us/linkedin/shared/authentication/authorization-code-flow
 //   LinkedIn rafraîchissement      https://learn.microsoft.com/en-us/linkedin/shared/authentication/programmatic-refresh-tokens
+//   LinkedIn profil (30/10/2026)   https://learn.microsoft.com/en-us/linkedin/consumer/integrations/self-serve/share-on-linkedin
+//                                  https://learn.microsoft.com/en-us/linkedin/consumer/integrations/self-serve/sign-in-with-linkedin-v2
 //   HubSpot OAuth v3               https://developers.hubspot.com/docs/api-reference/auth-oauth-v3/guide
 //   Pipedrive OAuth                https://pipedrive.readme.io/docs/marketplace-oauth-authorization (api_domain)
 //   Pipedrive OpenAPI v1/v2        https://developers.pipedrive.com/docs/api/v1/openapi.yaml, …/openapi-v2.yaml
@@ -285,6 +287,46 @@ function connecteurLinkedin(config: ConfigSocialCrmReel, app: IdentifiantsApplic
   };
 }
 
+// --- LinkedIn (profil personnel) ----------------------------------------------------------------
+
+function connecteurLinkedinProfil(config: ConfigSocialCrmReel, app: IdentifiantsApplication): Connecteur {
+  // Produits en libre-service « Share on LinkedIn » (w_member_social) et « Sign In with LinkedIn using OpenID Connect »
+  // (openid, profile : /v2/userinfo donne `sub`, l'identifiant de la personne). Aucune portée de page n'est permise.
+  const portees = ["openid", "profile", "w_member_social"];
+  return {
+    service: "linkedinprofil",
+    plateforme: "linkedin",
+    libelle: "LinkedIn (profil personnel)",
+    oauth: true,
+    formulaire: null,
+    porteesParDefaut: portees,
+    porteesPermises: portees,
+    urlAutorisation: ({ etat, retour, portees: demandees }) => {
+      const u = new URL(config.adresses.linkedinAutorisation);
+      u.searchParams.set("response_type", "code");
+      u.searchParams.set("client_id", app.clientId);
+      u.searchParams.set("redirect_uri", retour);
+      u.searchParams.set("state", etat);
+      u.searchParams.set("scope", demandees.join(" "));
+      return u.toString();
+    },
+    async echangerCode({ code, retour }) {
+      const r = await echangeJeton(config, "linkedin", config.adresses.linkedinJeton, new URLSearchParams({ grant_type: "authorization_code", code, client_id: app.clientId, client_secret: app.clientSecret, redirect_uri: retour }));
+      const acces = texte(r["access_token"]);
+      if (!acces) throw new ErreurFournisseur("requete_invalide", "LinkedIn n'a renvoyé aucun jeton.");
+      // Jeton de 60 jours ; le jeton de rafraîchissement est réservé aux partenaires approuvés : sans lui, reconnexion.
+      const secrets: Secrets = { acces, expireAcces: Date.now() + Number(r["expires_in"] ?? 5_184_000) * 1000 };
+      if (texte(r["refresh_token"])) secrets.rafraichissement = texte(r["refresh_token"]);
+      const moi = await lireJson(config, "linkedin", `${config.adresses.linkedinApi}/v2/userinfo`, { type: "bearer", jeton: acces }, "le profil connecté (userinfo)");
+      const sub = texte(moi["sub"]);
+      if (!/^[A-Za-z0-9_-]{1,64}$/.test(sub)) throw new ErreurFournisseur("requete_invalide", "LinkedIn n'a pas renvoyé l'identifiant de la personne (userinfo.sub).");
+      return { secrets, details: {}, comptes: [{ id: `urn:li:person:${sub}`, libelle: texte(moi["name"]) || `Profil LinkedIn ${sub}` }] };
+    },
+    doitRafraichir: presqueExpire,
+    rafraichir: (s) => rafraichirStandard(config, "linkedin", config.adresses.linkedinJeton, app, s),
+  };
+}
+
 // --- HubSpot -------------------------------------------------------------------------------------
 
 function connecteurHubspot(config: ConfigSocialCrmReel, app: IdentifiantsApplication): Connecteur {
@@ -525,6 +567,7 @@ export function construireConnecteurs(config: ConfigSocialCrmReel): Map<ServiceS
   if (a.facebook) c.set("facebook", connecteurFacebook(config, a.facebook));
   if (a.instagram) c.set("instagram", connecteurInstagram(config, a.instagram));
   if (a.linkedin) c.set("linkedin", connecteurLinkedin(config, a.linkedin));
+  if (a.linkedinprofil) c.set("linkedinprofil", connecteurLinkedinProfil(config, a.linkedinprofil));
   if (a.crm) c.set("crm", connecteurHubspot(config, a.crm));
   c.set("pipedrive", connecteurPipedrive(config, a.pipedrive));
   c.set("odoo", connecteurOdoo(config));

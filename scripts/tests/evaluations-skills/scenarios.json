@@ -1,0 +1,144 @@
+{
+ "_mode_emploi": "P3-3 (audit du 29/10/2026) : scénarios de comportement des skills, à rejouer sur Sonnet 5.5 et Opus 5.5 (effort par défaut) avec le seul SKILL.md chargé et l'entrée en message. Un scénario passe si chaque attendu est observé et aucun interdit. Jamais rejoués au 30/10/2026 (runs interdits pendant l'audit) : résultats à consigner modèle par modèle.",
+ "modeles": [
+  "claude-sonnet-5-5",
+  "claude-opus-5-5"
+ ],
+ "skills": {
+  "cadrage-exigences": [
+   {
+    "nom": "demande à trois attentes",
+    "entree": "Le client veut une campagne pour sa nouvelle offre jeunes conducteurs, sur Facebook et en agence, avant le 15 décembre.",
+    "attendus": [
+     "une exigence par attente (offre, canaux Facebook et agence, échéance)",
+     "chaque exigence obligatoire a un critère vérifiable et une preuve attendue"
+    ],
+    "interdits": [
+     "une attente sans exigence",
+     "une exigence obligatoire sans critère"
+    ]
+   },
+   {
+    "nom": "hypothèse non confirmée",
+    "entree": "Le client dit « comme l'an dernier » sans préciser le budget.",
+    "attendus": [
+     "le budget est une question ouverte ou une hypothèse marquée comme telle"
+    ],
+    "interdits": [
+     "un montant de budget présenté comme un fait"
+    ]
+   },
+   {
+    "nom": "nouvelle version du brief",
+    "entree": "Brief v1 avec REQ-001 à REQ-003, puis le client ajoute un établissement.",
+    "attendus": [
+     "REQ-001 à REQ-003 gardent leurs identifiants",
+     "l'ajout reçoit un identifiant nouveau"
+    ],
+    "interdits": [
+     "renumérotation des exigences existantes"
+    ]
+   }
+  ],
+  "relecture-independante": [
+   {
+    "nom": "constat sans preuve",
+    "entree": "Livrable avec un chiffre non sourcé au paragraphe 2.",
+    "attendus": [
+     "le constat cite l'emplacement (paragraphe 2) et la preuve (extrait)"
+    ],
+    "interdits": [
+     "un constat sans emplacement ni preuve"
+    ]
+   },
+   {
+    "nom": "défaut majeur ouvert",
+    "entree": "Livrable dont la date d'offre contredit le brief.",
+    "attendus": [
+     "constat majeur ouvert",
+     "verdict autre que PASS"
+    ],
+    "interdits": [
+     "PASS avec un constat critique ou majeur ouvert"
+    ]
+   },
+   {
+    "nom": "panne d'outil",
+    "entree": "Le contrôle des liens répond ECONNREFUSED.",
+    "attendus": [
+     "verdict BLOCKED_INFORMATION",
+     "la cause dans controlesNonExecutes"
+    ],
+    "interdits": [
+     "CHANGES_REQUESTED pour une panne d'outil ou de réseau"
+    ]
+   }
+  ],
+  "affirmations-preuves": [
+   {
+    "nom": "fait sans preuve",
+    "entree": "« L'outil gère 40 langues » lu dans un tweet, sans page officielle.",
+    "attendus": [
+     "statut non_verifie ou rapporte_tiers avec sa preuve"
+    ],
+    "interdits": [
+     "une affirmation confirmée sans preuve"
+    ]
+   },
+   {
+    "nom": "performance sans essai",
+    "entree": "Un billet annonce un gain de vitesse de 30 %.",
+    "attendus": [
+     "statut rapporte_tiers ou rapporte_editeur"
+    ],
+    "interdits": [
+     "verifie_experimentalement sans essai lié"
+    ]
+   },
+   {
+    "nom": "confiance motivée",
+    "entree": "Licence MIT lue dans le fichier LICENSE du dépôt officiel.",
+    "attendus": [
+     "une confiance avec un motif écrit"
+    ],
+    "interdits": [
+     "une confiance sans motif"
+    ]
+   }
+  ],
+  "controle-couverture": [
+   {
+    "nom": "exigence non couverte",
+    "entree": "Brief REQ-001 à REQ-003 ; le livrable ne traite pas REQ-002.",
+    "attendus": [
+     "REQ-002 a un constat",
+     "REQ-001 et REQ-003 ont un état et une preuve"
+    ],
+    "interdits": [
+     "une exigence obligatoire sans état ni constat"
+    ]
+   },
+   {
+    "nom": "révision citée",
+    "entree": "Revue de la révision 3 d'un livrable.",
+    "attendus": [
+     "le verdict cite la révision 3"
+    ],
+    "interdits": [
+     "un verdict sans révision examinée"
+    ]
+   },
+   {
+    "nom": "révision corrigée",
+    "entree": "Révision 4 déposée après correction de REQ-002.",
+    "attendus": [
+     "le contrôle porte sur la révision 4",
+     "REQ-002 a désormais un état et une preuve"
+    ],
+    "interdits": [
+     "un verdict qui cite la révision 3"
+    ]
+   }
+  ]
+ }
+}

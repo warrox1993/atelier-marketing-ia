@@ -16,6 +16,13 @@ relecteur et de la porte, décisions humaines et cycles de correction, regroupé
   127.0.0.1 et refuse de démarrer s'il ne le peut pas. Contrôle : `ss -ltnp | grep -E ':(6006|4317)\b'`.
 - Ni télémétrie ni ressource Internet (`PHOENIX_TELEMETRY_ENABLED=false`, `PHOENIX_ALLOW_EXTERNAL_RESOURCES=false`).
 - Données (SQLite) : `~/.local/share/atelier-phoenix/donnees`.
+- Authentification (F2) : `PHOENIX_ENABLE_AUTH=true` ; les secrets sont hors dépôt dans
+  `~/.config/atelier/phoenix-auth.env` (0600), lu par `EnvironmentFile` : `PHOENIX_SECRET` (signe les JWT),
+  `PHOENIX_ADMIN_SECRET` (jeton porteur du compte système, ≥ 32 caractères, différent du secret) et
+  `PHOENIX_DEFAULT_ADMIN_INITIAL_PASSWORD` (mot de passe de la première connexion `admin@localhost` à
+  http://127.0.0.1:6006, à changer à la première connexion). Fonctionnalité stable en 20.23.0
+  (doc officielle « self-hosting/features/authentication » ; sous-fonctions citées à 12.x/19). Sans clé API
+  présentée, l'ingestion OTLP est refusée (401) : voir l'exporteur.
 
 ## Exporteur
 
@@ -24,6 +31,11 @@ PGPASSWORD=<mot de passe de l'instance> ~/.local/share/atelier-phoenix/venv/bin/
   scripts/phoenix-exporter.py --pg-port 54329 [--a-blanc] [--entreprise UUID]
 ```
 
+- Authentification : présente la clé système dans l'en-tête `Authorization: Bearer`, lue dans
+  `PHOENIX_API_KEY`. Sans cette variable (hors `--a-blanc`), l'exporteur s'arrête (code 1) sans rien envoyer.
+  Au déploiement, renseigner `PHOENIX_API_KEY` dans `~/.config/atelier/phoenix-export.env` : soit la valeur de
+  `PHOENIX_ADMIN_SECRET` (jeton porteur du compte système, sans étape dans l'interface), soit une clé système
+  créée dans Phoenix après activation. `--a-blanc` n'envoie rien et n'exige pas de clé.
 - Lit la table `journal` du plugin en lecture seule (`BEGIN READ ONLY`), comme `bootstrap-organisation.py`.
 - Une trace par tâche (span racine `tache`, puis un span par évènement). Attributs `atelier.*` : entreprise,
   service, tâche, agent assigné et son rôle, compétences déclarées de l'agent, verdict et sa source

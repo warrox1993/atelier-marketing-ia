@@ -190,6 +190,18 @@ def test_rendu_des_autres_gabarits_et_formats(tmp_path, gabarit, format):
     assert (flux["width"], flux["height"], flux["r_frame_rate"], flux["nb_read_frames"]) == (*vis.FORMATS[format], "30/1", "60")
 
 
+def boite_sombre_9_16(video: Path, instant_s: float) -> tuple[int, int, int, int]:
+    """Boîte (gauche, haut, droite, bas) des pixels sombres d'une image 1080x1920, en pixels."""
+    pixels = subprocess.run(
+        [FFMPEG, "-v", "error", "-ss", str(instant_s), "-i", str(video), "-frames:v", "1", "-vf", "format=gray",
+         "-f", "rawvideo", "-"], capture_output=True, check=True, timeout=60).stdout
+    assert len(pixels) == 1080 * 1920
+    lignes = [y for y in range(1920) if min(pixels[y * 1080:(y + 1) * 1080]) < 110]
+    colonnes = [x for x in range(1080) if min(pixels[x::1080]) < 110]
+    assert lignes and colonnes, "aucun texte sombre dans l'image"
+    return colonnes[0], lignes[0], colonnes[-1] + 1, lignes[-1] + 1
+
+
 def image_en_gris(video: Path, instant_s: float) -> bytes:
     return subprocess.run(
         [FFMPEG, "-v", "error", "-ss", str(instant_s), "-i", str(video), "-frames:v", "1", "-vf", "scale=270:480,format=gray",
@@ -259,3 +271,23 @@ def test_mesure_chrome_exige_no_sandbox_sous_bwrap(tmp_path):
     assert avec_bac.code != 0 and b"No usable sandbox" in avec_bac.erreur
     sans_bac = lancer("--no-sandbox", "--disable-gpu")
     assert sans_bac.code == 0 and b"<html>" in sans_bac.sortie
+
+
+@pret_rendu
+@pytest.mark.parametrize("gabarit", ["titre_plein_ecran", "liste_3_points", "chiffre_cle"])
+def test_gabarits_9_16_texte_dans_les_zones_sures(tmp_path, gabarit):
+    """Meta réserve les 14 % du haut, les 35 % du bas et 6 % de chaque côté : le texte des scènes reste dedans."""
+    r = vis.rendre_scene(tmp_path, gabarit, CHAMPS_VALIDES[gabarit], "1080x1920", 4)
+    assert r.ok, (r.motif, r.journal[-800:])
+    gauche, haut, droite, bas = boite_sombre_9_16(r.video, 3.5)
+    print(f"\nMESURE {gabarit} 9:16 : texte de {haut / 19.2:.1f} % à {bas / 19.2:.1f} % depuis le haut, "
+          f"de {gauche / 10.8:.1f} % à {droite / 10.8:.1f} % en largeur")
+    assert haut >= 0.14 * 1920 and bas <= 0.65 * 1920 and gauche >= 0.06 * 1080 and droite <= 0.94 * 1080, \
+        (gauche, haut, droite, bas)
+
+
+def test_base_css_9_16_marges_des_zones_sures():
+    css = (GABARITS_DE_BASE / "_commun" / "base.css").read_text(encoding="utf-8")
+    bloc = re.search(r'html\[data-format="1080x1920"\]\s*\{([^}]*)\}', css).group(1)
+    assert "--marge-haut: 270px" in bloc and "--marge-bas: 672px" in bloc and "--marge-cotes: 65px" in bloc
+    assert 270 >= 0.14 * 1920 and 672 >= 0.35 * 1920 and 65 >= 0.06 * 1080

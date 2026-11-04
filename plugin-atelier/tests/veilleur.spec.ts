@@ -14,7 +14,8 @@ const AGENT = "99999999-9999-4999-8999-999999999999";
 
 type Candidat = { issueId: string; identifier: string | null; statut: string; agentId: string; dernierRun: { id: string; statut: string; le: string } | null };
 
-function banc(o: { candidats?: Candidat[]; interactions?: Array<{ status: string }>; reveilEchoue?: boolean } = {}) {
+function banc(o: { candidats?: Candidat[]; interactions?: Array<{ status: string }>; reveilEchoue?: boolean; commentaireEchoue?: boolean } = {}) {
+  const commentaires: Array<{ issueId: string; corps: string; options: unknown }> = [];
   const decisions: Array<{ creeLe: string }> = [];
   let maintenant = new Date(Date.UTC(2026, 9, 16, 12, 0, 0));
   const journal: Array<{ type: string; issueId: string; creeLe: string; donnees: unknown }> = [];
@@ -39,6 +40,11 @@ function banc(o: { candidats?: Candidat[]; interactions?: Array<{ status: string
         reveils.push({ issueId, cle: opts?.idempotencyKey });
         return { queued: true, runId: "run-2" };
       },
+      createComment: async (issueId: string, corps: string, _c: string, options?: unknown) => {
+        if (o.commentaireEchoue) throw new Error("hôte indisponible");
+        commentaires.push({ issueId, corps, options });
+        return { id: "c-1" };
+      },
     } as never,
     logger: { info() {}, warn() {} },
     config: async () => ({}),
@@ -46,7 +52,7 @@ function banc(o: { candidats?: Candidat[]; interactions?: Array<{ status: string
   });
   const avancer = (minutes: number) => (maintenant = new Date(maintenant.getTime() + minutes * 60_000));
   const maintenantIso = () => maintenant.toISOString();
-  return { veilleur, journal, reveils, seuils, avancer, candidats, decisions, maintenantIso };
+  return { veilleur, journal, reveils, seuils, avancer, candidats, decisions, maintenantIso, commentaires };
 }
 
 describe("veilleur des tâches orphelines", () => {
@@ -81,6 +87,29 @@ describe("veilleur des tâches orphelines", () => {
       b.avancer(20);
     }
     expect(b.reveils).toHaveLength(VEILLEUR.maxReveils);
+    expect(b.journal.filter((j) => j.type === "veilleur.abandon")).toHaveLength(1);
+  });
+
+  it("abandon : un seul commentaire en français sur la tâche, attribué au plugin (EXP-C8)", async () => {
+    const b = banc();
+    for (let i = 0; i < 6; i++) {
+      await b.veilleur.passe();
+      b.avancer(20);
+    }
+    expect(b.commentaires).toHaveLength(1);
+    expect(b.commentaires[0]!.issueId).toBe(ORPHELINE);
+    expect(b.commentaires[0]!.corps).toContain("Tâche abandonnée par le veilleur");
+    expect(b.commentaires[0]!.corps).toContain(`${VEILLEUR.maxReveils} réveils`);
+    // Sans actorUserId : un commentaire du plugin ne réveille personne (aucune boucle).
+    expect(b.commentaires[0]!.options).toBeUndefined();
+  });
+
+  it("abandon : un commentaire refusé par l'hôte n'empêche pas l'abandon journalisé", async () => {
+    const b = banc({ commentaireEchoue: true });
+    for (let i = 0; i < 5; i++) {
+      await b.veilleur.passe();
+      b.avancer(20);
+    }
     expect(b.journal.filter((j) => j.type === "veilleur.abandon")).toHaveLength(1);
   });
 
@@ -182,6 +211,18 @@ describe("sélection SQL des tâches orphelines : exclusions", () => {
     return vues[0]!;
   }
 
+  it("EXP-C8 : abandons encore en cours = derniers abandons sans réveil, remise ni décision humaine après", async () => {
+    const vues: Array<{ sql: string; params: unknown[] }> = [];
+    const base = creerBase({ namespace: "plugin_atelier_f0322cc62c", query: async (sql: string, params: unknown[]) => (vues.push({ sql, params }), [{ issue_id: ORPHELINE, le: new Date("2026-10-21T16:00:00Z") }]), execute: async () => ({ rowCount: 0 }) } as never);
+    expect(await base.abandonsVeilleur(SOC)).toEqual([{ issueId: ORPHELINE, le: "2026-10-21T16:00:00.000Z" }]);
+    const { sql, params } = vues[0]!;
+    expect(params).toEqual([SOC]);
+    expect(sql).toContain("a.type = 'veilleur.abandon'");
+    expect(sql).toContain("r.type in ('veilleur.reveil', 'cycles.remise_humaine') and r.cree_le > max(a.cree_le)");
+    expect(sql).toContain("from plugin_atelier_f0322cc62c.decisions_humaines h where h.company_id = $1 and h.issue_id = a.issue_id and h.cree_le > max(a.cree_le)");
+    expect(sql).toMatch(/limit 20$/u);
+  });
+
   it("M4 : in_review et blocked écartées si une liaison en attente d'approbation, une approbation Paperclip ou une revue ouverte les gère", async () => {
     const sql = await requete();
     expect(sql).toContain("li.tache_origine_id = i.id and li.statut = 'en_attente_approbation'");
@@ -208,6 +249,18 @@ describe("sélection SQL des tâches orphelines : exclusions", () => {
     expect(sql).toContain("not like '%budget%'");
     expect(sql).toContain("not like '%quota%'");
     expect(sql).toContain("not like '%auth%'");
+  });
+
+  it("COORD-P1-6 : une sous-tâche ouverte sans activité ni passage depuis 24 h réveille le coordinateur de la tâche parente", async () => {
+    const vues: Array<{ sql: string; params: unknown[] }> = [];
+    const base = creerBase({ namespace: "plugin_atelier_f0322cc62c", query: async (sql: string, params: unknown[]) => (vues.push({ sql, params }), []), execute: async () => ({ rowCount: 0 }) } as never);
+    await base.tachesOrphelines(SOC, 15);
+    const { sql, params } = vues[0]!;
+    expect(params[2]).toBe(24);
+    const dormante = "c.updated_at < now() - make_interval(hours => $3::int) and not exists (select 1 from public.heartbeat_runs y where y.company_id = $1 and y.context_snapshot->>'issueId' = c.id::text and y.created_at > now() - make_interval(hours => $3::int))";
+    // Une sous-tâche vivante écarte toujours la parente ; une sous-tâche dormante ne l'écarte plus et la rend candidate (jamais si elle est bloquée).
+    expect(sql).toContain(`and not exists (select 1 from public.issues c where c.parent_id = i.id and c.status not in ('done', 'cancelled') and not (${dormante}))`);
+    expect(sql).toContain(`or (i.status <> 'blocked' and exists (select 1 from public.issues c where c.parent_id = i.id and c.status not in ('done', 'cancelled') and c.hidden_at is null and ${dormante}))`);
   });
 
   it("écarte l'issue de discussion (origin_kind plugin:*:discussion et origin_id discussion:*)", async () => {

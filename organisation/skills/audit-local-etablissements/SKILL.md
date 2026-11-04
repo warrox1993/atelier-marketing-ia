@@ -23,10 +23,12 @@ informations sont exactes et identiques partout.
 
 - Périmètre des établissements **confirmé par l'humain**. Sans confirmation, l'audit
   commence par la question de périmètre.
-- Référentiel interne des établissements (en démonstration : `demo/etablissements.md`).
+- Référentiel des établissements : ceux de la fiche du client (`GET …/api/marque`, section « Faits du client » de tes
+  consignes) ; `demo/etablissements.md` ne sert qu'à une démonstration, jamais pour un client réel.
 - Chiffres d'une connexion de la passerelle marketing (Search Console, Analytics, Ads, fiche,
-  réseaux sociaux, CRM) : `atelier_identite` d'abord, chaque réponse d'outil déposée telle quelle avec
-  les arguments exacts de l'appel (`POST …/taches/<issueId>/donnees-connexion`, champ `arguments`),
+  réseaux sociaux, CRM) : `atelier_identite` d'abord, chaque réponse d'outil déposée par sa référence
+  `_atelier.reference` (recopie par fichier seulement pour une réponse sans référence) avec les arguments exacts de
+  l'appel (`POST …/taches/<issueId>/donnees-connexion`, champ `arguments`),
   mention « démonstration » sur chaque chiffre de démonstration, aucun chiffre absent d'une réponse
   déposée (section « Connexions de la passerelle marketing » des consignes de l'agent).
 

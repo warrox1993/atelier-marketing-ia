@@ -4,7 +4,8 @@
 //   profil_commune     population (sexe, âge, nationalité), revenus fiscaux et entreprises assujetties à la TVA d'une commune ;
 //   comparer_communes  mêmes indicateurs pour 2 à 10 communes, côte à côte.
 //
-// Chaque chiffre porte son année et sa source (`{ valeur, annee, source }`). Un chiffre qui n'existe pas dans les données
+// Chaque chiffre porte son année et sa source (`{ valeur, annee, source }`, `source` étant une clé de la table `sources` de la
+// réponse, où la citation complète n'est écrite qu'une fois : S1, 21 628 caractères pour une commune avant). Un chiffre qui n'existe pas dans les données
 // publiques vaut `null` avec une `note` : jamais de valeur inventée ni estimée en silence.
 // Les réponses sont signées par la passerelle (enveloppe `_atelier`), comme celles des autres services.
 
@@ -43,13 +44,8 @@ export interface Chiffre {
 
 export type AccesIndexStatbel = () => IndexStatbel;
 
-function sources(m: Meta): { population: string; revenus: string; tva: string } {
-  return {
-    population: `Statbel, population par commune, sexe, âge et nationalité, situation au 1er janvier ${m.annee_population} (open data, ${LICENCE})`,
-    revenus: `Statbel, statistiques fiscales des revenus par commune, revenus de l'année ${m.annee_revenus} (open data, ${LICENCE})`,
-    tva: `Statbel, entreprises assujetties à la TVA par commune et section d'activité, année ${m.annee_tva} (open data, ${LICENCE})`,
-  };
-}
+/** Clés de la table `sources` portées par chaque chiffre. */
+const SRC = { population: "population", revenus: "revenus", tva: "tva" } as const;
 
 const arrondir = (v: number, decimales = 1): number => Math.round(v * 10 ** decimales) / 10 ** decimales;
 const pourcent = (partie: number, total: number): number | null => (total > 0 ? arrondir((partie / total) * 100) : null);
@@ -57,7 +53,7 @@ const pourcent = (partie: number, total: number): number | null => (total > 0 ? 
 interface Indicateurs {
   commune: Commune;
   meta: Meta;
-  src: ReturnType<typeof sources>;
+  src: typeof SRC;
   total: number;
   hommes: number;
   femmes: number;
@@ -76,7 +72,7 @@ function indicateurs(index: IndexStatbel, commune: Commune): Indicateurs {
     for (const [age5, n] of p.age5) if (age5 >= t.de && age5 <= t.jusqua) effectif += n;
     return { nom: t.nom, effectif };
   });
-  return { commune, meta, src: sources(meta), total: p.hommes + p.femmes, hommes: p.hommes, femmes: p.femmes, belges: p.belges, etrangers: p.etrangers, tranches, revenus: index.revenus(commune.refnis), tva: index.tva(commune.refnis) };
+  return { commune, meta, src: SRC, total: p.hommes + p.femmes, hommes: p.hommes, femmes: p.femmes, belges: p.belges, etrangers: p.etrangers, tranches, revenus: index.revenus(commune.refnis), tva: index.tva(commune.refnis) };
 }
 
 const ch = (valeur: number | null, unite: string, annee: number, source: string, note?: string): Chiffre => ({ valeur, unite, annee, source, ...(note ? { note } : {}) });
@@ -114,13 +110,13 @@ function identite(c: Commune): Record<string, string> {
   return { code_ins: c.refnis, nom_fr: c.nom_fr, nom_nl: c.nom_nl, arrondissement: c.arrondissement, province: c.province, region: c.region };
 }
 
-function listeSources(m: Meta): Record<string, unknown>[] {
-  return [
-    { jeu: "Population par lieu de résidence, nationalité, état civil, âge et sexe", annee: m.annee_population, reference: "1er janvier", editeur: "Statbel", licence: LICENCE, url: URL_POPULATION },
-    { jeu: "Statistiques fiscales des revenus par commune", annee: m.annee_revenus, reference: "année de revenus", editeur: "Statbel", licence: LICENCE, url: URL_REVENUS },
-    { jeu: "Entreprises assujetties à la TVA par commune et section d'activité", annee: m.annee_tva, reference: "année", editeur: "Statbel", licence: LICENCE, url: URL_TVA },
-    { jeu: "Correspondance code postal / commune (aide à la recherche, aucune statistique)", annee: 2021, editeur: "bpost, via Opendatasoft", licence: "licence propre à bpost", url: "https://www.bpost.be/fr/codes-postaux" },
-  ];
+function listeSources(m: Meta): Record<string, Record<string, unknown>> {
+  return {
+    [SRC.population]: { citation: `Statbel, population par commune, sexe, âge et nationalité, situation au 1er janvier ${m.annee_population} (open data, ${LICENCE})`, jeu: "Population par lieu de résidence, nationalité, état civil, âge et sexe", annee: m.annee_population, reference: "1er janvier", editeur: "Statbel", licence: LICENCE, url: URL_POPULATION },
+    [SRC.revenus]: { citation: `Statbel, statistiques fiscales des revenus par commune, revenus de l'année ${m.annee_revenus} (open data, ${LICENCE})`, jeu: "Statistiques fiscales des revenus par commune", annee: m.annee_revenus, reference: "année de revenus", editeur: "Statbel", licence: LICENCE, url: URL_REVENUS },
+    [SRC.tva]: { citation: `Statbel, entreprises assujetties à la TVA par commune et section d'activité, année ${m.annee_tva} (open data, ${LICENCE})`, jeu: "Entreprises assujetties à la TVA par commune et section d'activité", annee: m.annee_tva, reference: "année", editeur: "Statbel", licence: LICENCE, url: URL_TVA },
+    codes_postaux: { jeu: "Correspondance code postal / commune (aide à la recherche, aucune statistique)", annee: 2021, editeur: "bpost, via Opendatasoft", licence: "licence propre à bpost", url: "https://www.bpost.be/fr/codes-postaux" },
+  };
 }
 
 const LIMITES = [
@@ -161,7 +157,7 @@ export function outilsStatbel(acces: AccesIndexStatbel): OutilPasserelle[] {
       nom: "profil_commune",
       description:
         "Profil statistique d'une commune belge d'après les données ouvertes de Statbel : population (sexe, nationalité, 7 tranches d'âge), revenus fiscaux (moyennes par déclaration et par habitant) et entreprises assujetties à la TVA (total, pour 1 000 habitants, principales sections d'activité). " +
-        "Chaque chiffre porte son année et sa source. Si le nom ou le code postal couvre plusieurs communes, la réponse liste les candidates (statut « ambigue ») : relancer avec le code INS. À utiliser pour segmenter un marché local ou en estimer la taille ; ne dit rien d'un quartier.",
+        "Chaque chiffre porte son année et sa source (clé de la table `sources`, qui donne la citation). Si le nom ou le code postal couvre plusieurs communes, la réponse liste les candidates (statut « ambigue ») : relancer avec le code INS. À utiliser pour segmenter un marché local ou en estimer la taille ; ne dit rien d'un quartier.",
       schemaEntree: { commune: schemaRef },
     },
     (args) => {
@@ -197,7 +193,7 @@ export function outilsStatbel(acces: AccesIndexStatbel): OutilPasserelle[] {
       nom: "comparer_communes",
       description:
         `Compare de 2 à ${MAX_COMMUNES_COMPARAISON} communes belges sur les mêmes indicateurs : population, parts d'âge (moins de 15 ans, 25-39 ans, 65 ans et plus), part d'étrangers, revenu moyen par déclaration et par habitant, assujettis à la TVA pour 1 000 habitants. ` +
-        "Chaque chiffre porte son année et sa source. Une référence ambiguë ou inconnue est listée dans `non_resolues` sans empêcher la comparaison des autres.",
+        "Chaque chiffre porte son année et sa source (clé de la table `sources`, qui donne la citation). Une référence ambiguë ou inconnue est listée dans `non_resolues` sans empêcher la comparaison des autres.",
       schemaEntree: { communes: z.array(schemaRef).min(2).max(MAX_COMMUNES_COMPARAISON).describe(`Entre 2 et ${MAX_COMMUNES_COMPARAISON} communes (nom, code postal ou code INS).`) },
     },
     (args) => {

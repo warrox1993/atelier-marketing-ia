@@ -86,7 +86,7 @@ describe("compte rendu d'un lead", () => {
     expect(construireCompteRendu(inconnue, f, MAINTENANT).offreRecommandee).toBeNull();
   });
 
-  it("offre recommandée : par segment ou NACE, confirmée seulement ; sinon null avec la raison", () => {
+  it("offre recommandée : par segment ou NACE, confirmée d'abord, sinon marquée non confirmée ; sinon null avec la raison", () => {
     const med = construireCompteRendu(b2b(), fiche, MAINTENANT);
     expect(med.offreRecommandee).toMatchObject({ code: "rc-pro" });
     expect(med.offreRecommandee!.raison).toContain("Médecins");
@@ -102,11 +102,14 @@ describe("compte rendu d'un lead", () => {
     const rien = construireCompteRendu(b2b({ nace: ["01.110"], referentiel: { ...PROSPECT_B2B.referentiel, segments: [] } as never }), fiche, MAINTENANT);
     expect(rien.offreRecommandee).toBeNull();
     expect(rien.raisonSansOffre).toContain("segment");
-    // Offre non confirmée : jamais recommandée.
+    // Décision de l'opérateur du 30/10/2026 : la confirmation des offres est optionnelle. Une offre non confirmée se recommande,
+    // marquée « (non confirmé par le client) » ; une offre confirmée qui correspond passe avant.
     const nonConfirmees = { ...fiche, offres: REFERENTIEL_COURTIER.offres.map((o) => ({ ...o, confirmee: false })) } as never;
     const nc = construireCompteRendu(b2b(), nonConfirmees, MAINTENANT);
-    expect(nc.offreRecommandee).toBeNull();
-    expect(nc.raisonSansOffre).toContain("non confirmées");
+    expect(nc.offreRecommandee).not.toBeNull();
+    expect(nc.offreRecommandee!.raison).toContain("(non confirmé par le client)");
+    expect(nc.raisonSansOffre).toBeNull();
+    expect(construireCompteRendu(b2b(), fiche, MAINTENANT).offreRecommandee!.raison).not.toContain("non confirmé");
     expect(construireCompteRendu(b2b(), { ...fiche, offres: [] } as never, MAINTENANT).raisonSansOffre).toContain("Aucune offre");
   });
 
@@ -125,8 +128,11 @@ describe("compte rendu d'un lead", () => {
     expect(d).toMatchObject({ code: "pres", raison: "distance" });
     expect(d.distanceKm).toBeGreaterThan(0.5);
     expect(d.distanceKm).toBeLessThan(2);
-    // Un établissement non confirmé n'est jamais proposé.
-    expect(construireCompteRendu(b2b(), { ...fiche, etablissements: REFERENTIEL_COURTIER.etablissements.map((e) => ({ ...e, confirme: false })) } as never, MAINTENANT).etablissementProche).toBeNull();
+    // Décision de l'opérateur du 30/10/2026 : un établissement non confirmé se propose, marqué « (non confirmé par le client) ».
+    const nonConfirme = construireCompteRendu(b2b(), { ...fiche, etablissements: REFERENTIEL_COURTIER.etablissements.map((e) => ({ ...e, confirme: false })) } as never, MAINTENANT).etablissementProche;
+    expect(nonConfirme).toMatchObject({ code: "bureau-liege", raison: "meme_code_postal" });
+    expect(nonConfirme!.nom).toContain("(non confirmé par le client)");
+    expect(construireCompteRendu(b2b(), fiche, MAINTENANT).etablissementProche!.nom).not.toContain("non confirmé");
     expect(Math.round(distanceKm({ latitude: 50.6326, longitude: 5.5797 }, { latitude: 50.8503, longitude: 4.3517 }))).toBe(90);
     expect(distanceKm({ latitude: 1, longitude: 1 }, { latitude: 1, longitude: 1 })).toBe(0);
   });

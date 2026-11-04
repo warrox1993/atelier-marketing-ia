@@ -23,7 +23,7 @@ export interface CarteFictive {
 export interface ScenarioHote {
   taches: TacheFictive[];
   /** Tâches reçues à suivre rendues par la route du plugin. */
-  aSuivre: Array<{ companyId: string; tacheId: string; slug: string; nom: string }>;
+  aSuivre: Array<{ companyId: string; tacheId: string; slug: string; nom: string; discussionId?: string | null }>;
   /** Cartes natives par identifiant de tâche. */
   cartes: Record<string, CarteFictive[]>;
   /** Identifiants de tâches dont la lecture échoue (HTTP 500). */

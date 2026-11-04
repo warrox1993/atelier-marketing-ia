@@ -31,6 +31,8 @@ export const OUTILS_ECRITURE: Readonly<Record<string, OutilEcriture>> = {
   facebook_publier: { service: "facebook", action: "publier", requises: ["message"], facultatives: ["link"], cibles: [], textes: ["message", "link"] },
   instagram_publier: { service: "instagram", action: "publier", requises: ["caption", "image_url"], facultatives: [], cibles: [], textes: ["caption", "image_url"] },
   linkedin_publier: { service: "linkedin", action: "publier", requises: ["commentary"], facultatives: [], cibles: [], textes: ["commentary"] },
+  // Profil personnel LinkedIn (seconde application « Share on LinkedIn ») : lien facultatif publié en article avec son titre.
+  linkedin_profil_publier: { service: "linkedinprofil", action: "publier", requises: ["commentary"], facultatives: ["lien", "titre_lien"], cibles: [], textes: ["commentary", "lien", "titre_lien"] },
   facebook_envoyer_message: { service: "facebook", action: "envoyer", requises: ["destinataire", "texte"], facultatives: [], cibles: ["destinataire"], textes: ["texte"] },
   crm_modifier_contact: { service: "crm", action: "modifier_crm", requises: ["contact_id", "properties"], facultatives: [], cibles: ["contact_id"], textes: [], valeurs: "properties" },
   pipedrive_modifier_personne: { service: "pipedrive", action: "modifier_crm", requises: ["id", "champs"], facultatives: [], cibles: ["id"], textes: [], valeurs: "champs" },
@@ -49,6 +51,7 @@ export const SERVICE_DU_CANAL: Readonly<Record<string, string>> = {
   facebook: "facebook",
   instagram: "instagram",
   linkedin: "linkedin",
+  linkedinprofil: "linkedinprofil",
   crm: "crm",
   hubspot: "crm",
   pipedrive: "pipedrive",
@@ -56,7 +59,7 @@ export const SERVICE_DU_CANAL: Readonly<Record<string, string>> = {
   teamleader: "teamleader",
 };
 
-const SERVICES_RESEAUX = new Set(["facebook", "instagram", "linkedin"]);
+const SERVICES_RESEAUX = new Set(["facebook", "instagram", "linkedin", "linkedinprofil"]);
 
 /** Comparaison « tel quel » : seules la forme Unicode et les fins de ligne sont normalisées. */
 function normaliser(t: string): string {
@@ -65,7 +68,7 @@ function normaliser(t: string): string {
 
 /** Libellés montrés à l'humain pour les champs d'un appel. */
 const LIBELLES: Readonly<Record<string, string>> = {
-  message: "Texte publié", link: "Lien publié", caption: "Légende publiée", image_url: "Image publiée", commentary: "Texte publié",
+  message: "Texte publié", link: "Lien publié", caption: "Légende publiée", image_url: "Image publiée", commentary: "Texte publié", lien: "Lien publié", titre_lien: "Titre du lien publié",
   texte: "Message envoyé", destinataire: "Destinataire", contact_id: "Contact modifié", id: "Fiche modifiée", ids: "Fiches modifiées", contacts: "Contacts créés",
 };
 

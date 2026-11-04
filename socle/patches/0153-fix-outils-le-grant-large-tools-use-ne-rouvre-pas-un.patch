@@ -1,0 +1,245 @@
+From ddc26acb066d2b2a3677fcddd25e7c71dea429a2 Mon Sep 17 00:00:00 2001
+From: Jean-Baptiste Dhondt <114347858+warrox1993@users.noreply.github.com>
+Date: Fri, 30 Oct 2026 18:25:30 +0100
+Subject: [PATCH] =?UTF-8?q?fix(outils):=20le=20grant=20large=20tools:use?=
+ =?UTF-8?q?=20ne=20rouvre=20pas=20une=20connexion=20r=C3=A9serv=C3=A9e=20?=
+ =?UTF-8?q?=C3=A0=20d'autres=20r=C3=B4les?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Atelier, paquet SECU-SOCLE (DOC-A1, doublon AFA-SEC-3, DOC-B1) :
+
+- Constat démontré : chaque agent standard reçoit tools:use sans portée
+  (agent-permissions.ts, agent-hiring) et decide() accorde ce grant AVANT le
+  profil. Un agent qui a une seule installation reçoit la passerelle de run
+  paperclip-assigned, qui liste puis exécute les outils de TOUTES les
+  connexions de l'entreprise ; la même chose passe par une session
+  /tool-gateway/sessions sans passerelle. Pire, la règle « Ask first »
+  (app_gallery_finish) est sautée pour un agent hors profil, si bien qu'une
+  écriture d'une connexion non réservée s'exécutait sans accord humain.
+- Correctif : pour un acteur agent et un outil de connexion qu'aucun profil
+  effectif ne permet, un grant tools:use sans portée (null ou {}) n'autorise
+  plus. Inchangés : outils sans connexion (plugins dont la fabrique,
+  outils Paperclip), grant qui nomme l'outil ou la connexion, acteurs humains,
+  politiques block, require_approval et allow.
+- Tests : atelier-reservation-connexions.test.ts (passerelle de run et
+  session, Ask first, connexion réservée, outil de plugin, grant nommé) ;
+  tool-grant-scope.test.ts aligné (portée sans restriction refusée hors profil,
+  et vérification ajoutée que la passerelle en refus ne liste rien).
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01EThpSSDGc5NRYwbgjNqoTJ
+---
+ .../atelier-reservation-connexions.test.ts    | 121 ++++++++++++++++++
+ server/src/__tests__/tool-grant-scope.test.ts |  15 ++-
+ server/src/services/tool-access-policy.ts     |  10 +-
+ 3 files changed, 138 insertions(+), 8 deletions(-)
+ create mode 100644 server/src/__tests__/atelier-reservation-connexions.test.ts
+
+diff --git a/server/src/__tests__/atelier-reservation-connexions.test.ts b/server/src/__tests__/atelier-reservation-connexions.test.ts
+new file mode 100644
+index 0000000000..2187f9e0b1
+--- /dev/null
++++ b/server/src/__tests__/atelier-reservation-connexions.test.ts
+@@ -0,0 +1,121 @@
++/**
++ * Atelier Marketing IA (patch local 0153, DOC-A1 et AFA-SEC-3) : la réservation d'une connexion aux rôles qui la
++ * déclarent (profil `app:<connexion>` lié aux agents, installations) doit tenir à l'exécution. Le grant large
++ * tools:use, posé sans portée sur chaque agent standard (agent-hiring), ne rouvre pas un outil de connexion
++ * qu'aucun profil effectif ne permet, ni par la passerelle du run (`paperclip-assigned`) ni par une session.
++ * Les outils sans connexion (plugins, Paperclip) gardent le grant ; un grant qui nomme la connexion aussi.
++ */
++import { randomUUID } from "node:crypto";
++import { and, eq } from "drizzle-orm";
++import { afterAll, beforeAll, describe, expect, it } from "vitest";
++import {
++  agents, companies, createDb, heartbeatRuns, principalPermissionGrants, toolApplications, toolCatalogEntries,
++  toolConnectionInstalls, toolConnections, toolMcpGateways, toolPolicies, toolProfileBindings, toolProfileEntries,
++  toolProfiles,
++} from "@paperclipai/db";
++import { getEmbeddedPostgresTestSupport, startEmbeddedPostgresTestDatabase } from "./helpers/embedded-postgres.js";
++import { buildPaperclipRuntimeMcpServers } from "../services/heartbeat.js";
++import { toolAccessPolicyService } from "../services/tool-access-policy.js";
++
++const support = await getEmbeddedPostgresTestSupport();
++const decrireAvecBase = support.supported ? describe : describe.skip;
++
++decrireAvecBase("atelier : réservation des connexions par rôle à l'exécution", () => {
++  let db!: ReturnType<typeof createDb>;
++  let cleanup: (() => Promise<void>) | undefined;
++  const apiAvant = process.env.PAPERCLIP_API_URL;
++  const companyId = randomUUID();
++  let lecteur!: typeof agents.$inferSelect, redacteur!: typeof agents.$inferSelect;
++  let runLecteur!: string, passerelleLecteur!: string;
++  let xLire!: typeof toolCatalogEntries.$inferSelect, yLire!: typeof toolCatalogEntries.$inferSelect;
++  let yEcrire!: typeof toolCatalogEntries.$inferSelect;
++
++  beforeAll(async () => {
++    process.env.PAPERCLIP_API_URL = "https://paperclip.example.test";
++    const started = await startEmbeddedPostgresTestDatabase("atelier-reservation-connexions");
++    db = createDb(started.connectionString);
++    cleanup = started.cleanup;
++    await db.insert(companies).values({ id: companyId, name: "Atelier connexions", issuePrefix: `AC${companyId.slice(0, 6).toUpperCase()}` });
++    [lecteur, redacteur] = await db.insert(agents).values([
++      { companyId, name: "Veille", role: "researcher", adapterType: "claude_local", adapterConfig: {} },
++      { companyId, name: "Contenus", role: "general", adapterType: "claude_local", adapterConfig: {} },
++    ]).returning() as [typeof agents.$inferSelect, typeof agents.$inferSelect];
++    // Comme agent-hiring (NEW_STANDARD_AGENT_DEFAULT_GRANT_KEYS) : tools:use sans portée.
++    await db.insert(principalPermissionGrants).values([lecteur, redacteur].map(agent => ({
++      companyId, principalType: "agent" as const, principalId: agent.id, permissionKey: "tools:use", scope: null,
++    })));
++    const [application] = await db.insert(toolApplications).values({
++      companyId, applicationKey: "atelier-passerelle", name: "Passerelle", type: "mcp_http", status: "active",
++    }).returning();
++    const [x, y] = await db.insert(toolConnections).values(["x", "y"].map(nom => ({
++      companyId, applicationId: application!.id, name: `atelier-${nom}`, uid: `test/${randomUUID()}`,
++      transport: "mcp_remote" as const, status: "active" as const, enabled: true, config: { url: `https://${nom}.example.test/mcp` },
++    }))).returning();
++    const entree = (connexion: typeof x, nom: string) => ({
++      companyId, applicationId: application!.id, connectionId: connexion!.id, name: nom, toolName: nom, versionHash: "fixture", status: "active" as const,
++    });
++    [xLire, yLire, yEcrire] = await db.insert(toolCatalogEntries).values([entree(x, "x_lire"), entree(y, "y_lire"), entree(y, "y_ecrire")]).returning() as
++      [typeof toolCatalogEntries.$inferSelect, typeof toolCatalogEntries.$inferSelect, typeof toolCatalogEntries.$inferSelect];
++    // Réservation posée par bootstrap-organisation.py assurer_connexions : profil app:<connexion> lié aux seuls
++    // agents des rôles déclarés, installations identiques. Ici : X au lecteur, Y au rédacteur.
++    for (const [connexion, agent] of [[x, lecteur], [y, redacteur]] as const) {
++      const [profil] = await db.insert(toolProfiles).values({
++        companyId, profileKey: `app:${connexion!.id}`, name: connexion!.name, defaultAction: "deny",
++        metadata: { source: "app_gallery_finish", connectionId: connexion!.id },
++      }).returning();
++      await db.insert(toolProfileEntries).values({
++        companyId, profileId: profil!.id, selectorType: "connection", effect: "include", applicationId: application!.id, connectionId: connexion!.id,
++      });
++      await db.insert(toolProfileBindings).values({ companyId, profileId: profil!.id, targetType: "agent", targetId: agent.id });
++      await db.insert(toolConnectionInstalls).values({ companyId, connectionId: connexion!.id, targetType: "agent", targetId: agent.id });
++    }
++    // « Ask first » d'une écriture de Y, comme le finish de la galerie (sans condition d'acteur).
++    await db.insert(toolPolicies).values({
++      companyId, name: "Ask first y_ecrire", policyType: "require_approval", selectors: { catalogEntryId: yEcrire.id },
++      config: { source: "app_gallery_finish" },
++    });
++    const [run] = await db.insert(heartbeatRuns).values({ companyId, agentId: lecteur.id, invocationSource: "assignment", status: "running", contextSnapshot: {} }).returning();
++    runLecteur = run!.id;
++    expect(await buildPaperclipRuntimeMcpServers({ db, agent: lecteur, runId: runLecteur })).toHaveLength(1);
++    const [passerelle] = await db.select().from(toolMcpGateways).where(eq(toolMcpGateways.agentId, lecteur.id));
++    passerelleLecteur = passerelle!.id;
++  }, 60_000);
++
++  afterAll(async () => {
++    if (apiAvant === undefined) delete process.env.PAPERCLIP_API_URL; else process.env.PAPERCLIP_API_URL = apiAvant;
++    await cleanup?.();
++  });
++
++  const decider = (agent: typeof agents.$inferSelect, outil: { connectionId: string | null; id?: string; toolName: string },
++    contexte: { runId?: string; passerelle?: string } = {}, providerType?: string) =>
++    toolAccessPolicyService(db).decide({
++      companyId,
++      actor: { actorType: "agent", actorId: agent.id, agentId: agent.id },
++      runContext: { heartbeatRunId: contexte.runId ?? null, gatewayId: contexte.passerelle ?? null },
++      request: { connectionId: outil.connectionId, catalogEntryId: outil.id ?? null, toolName: outil.toolName, providerType: providerType ?? null, arguments: {} },
++    });
++  const parPasserelle = () => ({ runId: runLecteur, passerelle: passerelleLecteur });
++
++  it("refuse au rôle non réservé l'outil d'une autre connexion, par sa passerelle de run comme par une session", async () => {
++    await expect(decider(lecteur, yLire, parPasserelle())).resolves.toMatchObject({ allowed: false, decision: "deny" });
++    await expect(decider(lecteur, yLire, { runId: runLecteur })).resolves.toMatchObject({ allowed: false, decision: "deny" });
++  });
++
++  it("refuse aussi l'écriture « Ask first » d'une connexion non réservée au lieu de l'exécuter sans accord", async () => {
++    await expect(decider(lecteur, yEcrire, parPasserelle())).resolves.toMatchObject({ allowed: false, decision: "deny" });
++    await expect(decider(redacteur, yEcrire)).resolves.toMatchObject({ allowed: false, decision: "require_approval" });
++  });
++
++  it("laisse passer la connexion réservée et les outils sans connexion (plugins, Paperclip)", async () => {
++    await expect(decider(lecteur, xLire, parPasserelle())).resolves.toMatchObject({ allowed: true });
++    await expect(decider(redacteur, yLire)).resolves.toMatchObject({ allowed: true });
++    await expect(decider(lecteur, { connectionId: null, toolName: "atelier_marketing-ia:fabriquer_document" }, parPasserelle(), "paperclip_plugin"))
++      .resolves.toMatchObject({ allowed: true, reasonCode: "allow_explicit_grant" });
++  });
++
++  it("un grant qui nomme la connexion reste une décision humaine explicite et l'ouvre", async () => {
++    await db.update(principalPermissionGrants).set({ scope: { connectionId: yLire.connectionId } })
++      .where(and(eq(principalPermissionGrants.principalId, lecteur.id), eq(principalPermissionGrants.permissionKey, "tools:use")));
++    await expect(decider(lecteur, yLire, { runId: runLecteur })).resolves.toMatchObject({ allowed: true, reasonCode: "allow_explicit_grant" });
++  });
++});
+diff --git a/server/src/__tests__/tool-grant-scope.test.ts b/server/src/__tests__/tool-grant-scope.test.ts
+index 9e244c24a8..dbc7ec4de3 100644
+--- a/server/src/__tests__/tool-grant-scope.test.ts
++++ b/server/src/__tests__/tool-grant-scope.test.ts
+@@ -30,8 +30,10 @@ suite("tool grant restrictions", () => {
+     { name: "other selector", scope: { toolName: "tool_0005" }, allowed: false },
+     { name: "combined mismatch", scope: { allow: ["tool:tool_0004"], toolName: "tool_0005" }, allowed: false },
+     { name: "unknown combined selector", scope: { allow: ["tool:tool_0004"], unsupported: true }, allowed: false },
+-    { name: "unrestricted empty scope", scope: {}, allowed: true },
+-    { name: "unrestricted null scope", scope: null, allowed: true },
++    // Atelier (patch local 0153, DOC-A1) : une portée sans restriction n'ouvre plus un outil de connexion qu'aucun profil
++    // effectif ne permet (ici le profil large, sans entrée) ; seul un grant qui nomme l'outil ou la connexion l'ouvre.
++    { name: "unrestricted empty scope", scope: {}, allowed: false },
++    { name: "unrestricted null scope", scope: null, allowed: false },
+     { name: "invalid scope array", scope: [] as unknown as Record<string, unknown>, allowed: false },
+     { name: "invalid scope number", scope: 42 as unknown as Record<string, unknown>, allowed: false },
+     { name: "invalid scope boolean", scope: false as unknown as Record<string, unknown>, allowed: false },
+@@ -49,10 +51,7 @@ suite("tool grant restrictions", () => {
+ 
+   it("lists and calls only granted tools through the HTTP gateway, then observes revocation", async () => {
+     const fixture = await createListingFixture(db, 6);
+-    await db.update(toolProfiles).set({ defaultAction: "deny" }).where(eq(toolProfiles.id, fixture.namedGateway.profileId));
+     await db.delete(toolPolicies).where(eq(toolPolicies.companyId, fixture.company.id));
+-    await db.update(principalPermissionGrants).set({ scope: {} })
+-      .where(eq(principalPermissionGrants.principalId, fixture.agent.id));
+     await db.insert(connectionGrants).values({ companyId: fixture.company.id, connectionId: fixture.connection.id,
+       kind: "organization", status: "active", isDefault: true });
+     const calls: string[] = [];
+@@ -69,6 +68,12 @@ suite("tool grant restrictions", () => {
+     const allTools = await service.listToolsForNamedGateway({ gatewayId: fixture.namedGateway.id, bearerToken: fixture.token.token });
+     const ungrantedTool = allTools.find((entry) => entry.catalogEntryId === fixture.entries[5]!.id)!;
+     expect(ungrantedTool).toBeDefined();
++    // Atelier (patch local 0153, DOC-A1) : profil de la passerelle en refus, le grant sans portée n'ouvre aucune connexion.
++    await db.update(toolProfiles).set({ defaultAction: "deny" }).where(eq(toolProfiles.id, fixture.namedGateway.profileId));
++    await db.update(principalPermissionGrants).set({ scope: {} })
++      .where(eq(principalPermissionGrants.principalId, fixture.agent.id));
++    const sansPortee = await service.listToolsForNamedGateway({ gatewayId: fixture.namedGateway.id, bearerToken: fixture.token.token });
++    expect(sansPortee.filter((entry) => entry.connectionId === fixture.connection.id)).toEqual([]);
+     await db.update(principalPermissionGrants).set({ scope: { allow: ["tool:tool_0004"] } })
+       .where(eq(principalPermissionGrants.principalId, fixture.agent.id));
+     const names = await service.listToolsForNamedGateway({ gatewayId: fixture.namedGateway.id, bearerToken: fixture.token.token });
+diff --git a/server/src/services/tool-access-policy.ts b/server/src/services/tool-access-policy.ts
+index 60db597245..eb783553ec 100644
+--- a/server/src/services/tool-access-policy.ts
++++ b/server/src/services/tool-access-policy.ts
+@@ -1198,7 +1198,7 @@ export function toolAccessPolicyService(db: Db) {
+     return { profiles: activeProfiles, entries };
+   }
+ 
+-  async function explicitGrant(ctx: ToolAccessContext, cache?: ToolAccessDecisionCache): Promise<boolean> {
++  async function explicitGrant(ctx: ToolAccessContext, cache?: ToolAccessDecisionCache, connectionReserved = false): Promise<boolean> {
+     const principalType = ctx.actorType === "agent" ? "agent" : ctx.actorType === "user" ? "user" : null;
+     const principalId = ctx.actorType === "agent" ? ctx.agentId : ctx.actorId;
+     if (!principalType || !principalId) return false;
+@@ -1212,7 +1212,9 @@ export function toolAccessPolicyService(db: Db) {
+           eq(principalPermissionGrants.principalId, principalId),
+           eq(principalPermissionGrants.permissionKey, "tools:use"),
+         )));
+-    return grants.some((grant) => scopeAllowsTool(grant.scope, ctx));
++    // Atelier (DOC-A1, patch local 0153) : un grant sans portée n'ouvre pas une connexion réservée à d'autres rôles.
++    return grants.some((grant) => scopeAllowsTool(grant.scope, ctx) &&
++      !(connectionReserved && (!isRecord(grant.scope) || Object.keys(grant.scope).length === 0)));
+   }
+ 
+   async function enforceRateLimit(policy: typeof toolPolicies.$inferSelect, ctx: ToolAccessContext, consume: boolean) {
+@@ -1463,7 +1465,9 @@ export function toolAccessPolicyService(db: Db) {
+         return decision("allow", "allow_policy", "Tool access allowed by policy.", effectiveProfileIds, [policy.id], { redactionPlan: redaction.redactionPlan, policyExplanation });
+       }
+     }
+-    if (await explicitGrant(ctx, cache)) {
++    // Atelier (DOC-A1, AFA-SEC-3) : le grant large tools:use de chaque agent standard ne remplace pas la réservation
++    // d'une connexion (profil app:<connexion>, profil de la passerelle du run) ; il garde les outils sans connexion.
++    if (await explicitGrant(ctx, cache, ctx.actorType === "agent" && Boolean(ctx.connectionId) && !permittedByProfile)) {
+       return decision("allow", "allow_explicit_grant", "Tool access allowed by explicit grant.", effectiveProfileIds, [], { redactionPlan: redaction.redactionPlan });
+     }
+ 
+-- 
+2.53.0
+

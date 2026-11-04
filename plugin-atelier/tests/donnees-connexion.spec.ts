@@ -20,7 +20,7 @@ const AGENT = "44444444-4444-4444-8444-444444444444";
 
 type Ligne = Record<string, unknown>;
 
-function fausseBase(o: { modeEntreprise?: "demonstration" | "reel"; sousPorte?: boolean; clesPasserelle?: string[] }) {
+function fausseBase(o: { modeEntreprise?: "demonstration" | "reel"; sousPorte?: boolean; clesPasserelle?: string[]; passerelleUrl?: string; sansJeton?: boolean }) {
   const tables: Record<string, Ligne[]> = { sources: [], journal: [], portes: [], evaluations_porte: [], reglages_entreprise: [] };
   if (o.modeEntreprise) tables.reglages_entreprise!.push({ company_id: SOC, max_runs_actifs: 3, max_cycles_correction: 3, mode_par_defaut: o.modeEntreprise, retention_jours: 365, modifie_le: "2026-10-15 10:00:00+00" });
   if (o.sousPorte) tables.portes!.push({ issue_id: ISSUE, company_id: SOC, campagne_id: "c", cle_livrable: "livrable", exigences_ciblees: "[]", revues_requises: "[]", max_cycles: 3, cycles_consommes: 0, actif: true, cree_le: "2026-10-15 10:00:00+00", modifie_le: "2026-10-15 10:00:00+00" });
@@ -63,7 +63,8 @@ function fausseBase(o: { modeEntreprise?: "demonstration" | "reel"; sousPorte?: 
     issues: { get: async (id: string, companyId: string) => (id === ISSUE && companyId === SOC ? { id: ISSUE, companyId: SOC, projectId: null, status: "in_progress", title: "Bilan" } : null) },
     activity: { log: async (e: { message: string }) => void activite.push(e.message) },
     // §6 bis : clé publique de la passerelle fixée par l'humain dans la configuration du plugin.
-    config: { get: async () => ({ passerelleClesPubliques: o.clesPasserelle ?? [CLES.publiqueBase64] }) },
+    config: { get: async () => ({ passerelleClesPubliques: o.clesPasserelle ?? [CLES.publiqueBase64], ...(o.passerelleUrl ? { passerelleUrl: o.passerelleUrl } : {}), ...(o.sansJeton ? {} : { reponsesJetonRef: { type: "secret_ref", secretId: "s", version: "latest" } }) }) },
+    secrets: { resolve: async (_ref: unknown, c: { configPath?: string }) => { if (c.configPath !== "reponsesJetonRef") throw new Error("secret inattendu"); return `${JETON}\n`; } },
     events: { on() {} },
     data: { register() {} },
     actions: { register() {} },
@@ -72,6 +73,7 @@ function fausseBase(o: { modeEntreprise?: "demonstration" | "reel"; sousPorte?: 
   return { ctx, tables, executions, activite };
 }
 
+const JETON = "jeton-reponses-de-test-0123456789abcdef";
 const ARGS = { debut: "2026-09-01", fin: "2026-09-30" };
 
 /** Réponse emballée comme par la passerelle ; signée par sa clé en mode réel (§6 bis). */
@@ -84,8 +86,8 @@ function reponse(mode: "demonstration" | "reel", signer = mode === "reel") {
   return emballer(signer ? SIGNATAIRE : null, mode, donnees, { service: "gsc", outil: "gsc_requete_performances", compte: donnees.siteUrl, args: ARGS }) as { texte: string; structuredContent: Record<string, unknown> };
 }
 
-async function deposer(f: ReturnType<typeof fausseBase>, corps: unknown) {
-  const aiguillage = creerAiguillage(f.ctx, creerServices(f.ctx));
+async function deposer(f: ReturnType<typeof fausseBase>, corps: unknown, fetchBoucleLocale?: (url: string, init: RequestInit) => Promise<Response>) {
+  const aiguillage = creerAiguillage(f.ctx, creerServices(f.ctx, fetchBoucleLocale ? { fetchBoucleLocale } : {}));
   return aiguillage.traiterRequeteApi({
     routeKey: "tache.donnees.deposer", method: "POST", path: `/taches/${ISSUE}/donnees-connexion`, params: { issueId: ISSUE }, query: {}, body: corps,
     actor: { actorType: "agent", actorId: AGENT, agentId: AGENT, runId: "run-1" }, companyId: SOC, headers: {},
@@ -194,5 +196,101 @@ describe("route tache.donnees.deposer (service complet, fausse base)", () => {
       body: { service: "gsc", outil: "gsc_requete_performances", reponse: reponse("demonstration") }, actor: { actorType: "agent", actorId: AGENT, agentId: AGENT, runId: null }, companyId: SOC, headers: {},
     } as never);
     expect(r.status).toBe(404);
+  });
+});
+
+describe("route tache.donnees.deposer : dépôt par référence de la passerelle", () => {
+  const REF = "AbCdEfGhIjKlMnOpQrStUv";
+  const URL_PASSERELLE = "http://localhost:3190";
+  const corpsRef = { service: "gsc", outil: "gsc_requete_performances", reference: REF, arguments: ARGS };
+  /** Fausse passerelle : rend `reponse` (CallToolResult) pour la référence, ou le statut donné. */
+  const passerelleQui = (statut: number, corps: unknown) => {
+    const appels: Array<{ url: string; corps: unknown; autorisation: string | null }> = [];
+    const fetchLocal = async (url: string, init: RequestInit) => {
+      appels.push({ url, corps: JSON.parse(String(init.body)), autorisation: new Headers(init.headers).get("authorization") });
+      return new Response(JSON.stringify(corps), { status: statut, headers: { "content-type": "application/json" } });
+    };
+    return { appels, fetchLocal };
+  };
+  const callToolResult = (r: { texte: string; structuredContent: Record<string, unknown> }) => ({ reponse: { content: [{ type: "text", text: r.texte }], structuredContent: r.structuredContent } });
+
+  it("référence valide : la réponse prise sur la passerelle donne le même résultat que la recopie", async () => {
+    const recopie = await deposer(fausseBase({ modeEntreprise: "reel" }), { service: "gsc", outil: "gsc_requete_performances", reponse: reponse("reel"), arguments: ARGS });
+    const f = fausseBase({ modeEntreprise: "reel", passerelleUrl: URL_PASSERELLE });
+    const p = passerelleQui(200, callToolResult(reponse("reel")));
+    const r = await deposer(f, corpsRef, p.fetchLocal);
+    expect(r.status).toBe(201);
+    expect(r.body).toMatchObject({ mode: "reel", interdite: false, chiffresRetenus: (recopie.body as { chiffresRetenus: number }).chiffresRetenus });
+    expect(p.appels).toEqual([{ url: `${URL_PASSERELLE}/interne/reponses/prendre`, corps: { reference: REF, service: "gsc", outil: "gsc_requete_performances" }, autorisation: `Bearer ${JETON}` }]);
+    expect(f.tables.sources).toHaveLength(1);
+  });
+
+  it("les deux champs, ou aucun : 400 explicite, la passerelle n'est pas appelée", async () => {
+    for (const [nom, corps] of [["les deux", { ...corpsRef, reponse: reponse("reel") }], ["aucun", { service: "gsc", outil: "gsc_requete_performances" }]] as const) {
+      const f = fausseBase({ modeEntreprise: "reel", passerelleUrl: URL_PASSERELLE });
+      const p = passerelleQui(200, callToolResult(reponse("reel")));
+      const r = await deposer(f, corps, p.fetchLocal);
+      expect(r.status, nom).toBe(400);
+      expect(String((r.body as { erreur: string }).erreur), nom).toMatch(/exactement un/u);
+      expect(p.appels, nom).toEqual([]);
+      expect(f.tables.sources, nom).toEqual([]);
+    }
+  });
+
+  it("référence inconnue ou déjà utilisée (404 de la passerelle) : 400 qui dit de relire l'outil", async () => {
+    const f = fausseBase({ modeEntreprise: "reel", passerelleUrl: URL_PASSERELLE });
+    const r = await deposer(f, corpsRef, passerelleQui(404, { error: "reference_inconnue" }).fetchLocal);
+    expect(r.status).toBe(400);
+    expect(String((r.body as { erreur: string }).erreur)).toMatch(/inconnue ou déjà utilisée : relis l'outil et dépose la nouvelle référence/u);
+    expect(f.tables.sources).toEqual([]);
+  });
+
+  it("signature invalide dans la réponse prise : même refus que la recopie, rien n'est enregistré", async () => {
+    const f = fausseBase({ modeEntreprise: "reel", passerelleUrl: URL_PASSERELLE });
+    const r = await deposer(f, corpsRef, passerelleQui(200, callToolResult(reponse("reel", false))).fetchLocal);
+    expect(r.status).toBe(400);
+    expect(String((r.body as { erreur: string }).erreur)).toMatch(/non signée par la passerelle/u);
+    expect(f.tables.sources).toEqual([]);
+    expect(f.tables.journal!.map((j) => j.type)).toEqual(["donnees.refusees"]);
+  });
+
+  it("passerelle injoignable ou adresse absente : erreur claire, aucun dépôt", async () => {
+    const f = fausseBase({ modeEntreprise: "reel", passerelleUrl: URL_PASSERELLE });
+    const r = await deposer(f, corpsRef, async () => { throw new Error("ECONNREFUSED"); });
+    expect(r.status).toBe(503);
+    expect(String((r.body as { erreur: string }).erreur)).toMatch(/passerelle ne répond pas/u);
+    expect(f.tables.sources).toEqual([]);
+    const sansAdresse = fausseBase({ modeEntreprise: "reel" });
+    const r2 = await deposer(sansAdresse, corpsRef, passerelleQui(200, callToolResult(reponse("reel"))).fetchLocal);
+    expect(r2.status).toBe(503);
+    expect(sansAdresse.tables.sources).toEqual([]);
+  });
+  it("F2 : tâche inconnue ou outil d'écriture déclaré : refus AVANT la prise, la référence n'est jamais demandée à la passerelle", async () => {
+    const p = passerelleQui(200, callToolResult(reponse("reel")));
+    const f = fausseBase({ modeEntreprise: "reel", passerelleUrl: URL_PASSERELLE });
+    const aiguillage = creerAiguillage(f.ctx, creerServices(f.ctx, { fetchBoucleLocale: p.fetchLocal }));
+    const inconnue = await aiguillage.traiterRequeteApi({
+      routeKey: "tache.donnees.deposer", method: "POST", path: "/x", params: { issueId: "55555555-5555-4555-8555-555555555555" }, query: {},
+      body: corpsRef, actor: { actorType: "agent", actorId: AGENT, agentId: AGENT, runId: null }, companyId: SOC, headers: {},
+    } as never);
+    expect(inconnue.status).toBe(404);
+    const ecriture = await deposer(f, { ...corpsRef, outil: "gsc_ecrire_quelque_chose" }, p.fetchLocal);
+    expect(ecriture.status).toBe(400);
+    expect(p.appels).toEqual([]);
+  });
+
+  it("F4 : sans jeton configuré, aucun appel à la passerelle ; passerelle qui refuse le jeton (401) ou la liaison service/outil (409) : messages distincts", async () => {
+    const sans = fausseBase({ modeEntreprise: "reel", passerelleUrl: URL_PASSERELLE, sansJeton: true });
+    const p = passerelleQui(200, callToolResult(reponse("reel")));
+    const r = await deposer(sans, corpsRef, p.fetchLocal);
+    expect(r.status).toBe(503);
+    expect(String((r.body as { erreur: string }).erreur)).toMatch(/Jeton de lecture des références absent/u);
+    expect(p.appels).toEqual([]);
+    const refuse = await deposer(fausseBase({ modeEntreprise: "reel", passerelleUrl: URL_PASSERELLE }), corpsRef, passerelleQui(401, { error: "jeton_invalide" }).fetchLocal);
+    expect(refuse.status).toBe(503);
+    expect(String((refuse.body as { erreur: string }).erreur)).toMatch(/passerelle a refusé le jeton de lecture/u);
+    const autre = await deposer(fausseBase({ modeEntreprise: "reel", passerelleUrl: URL_PASSERELLE }), corpsRef, passerelleQui(409, { error: "reference_autre_outil" }).fetchLocal);
+    expect(autre.status).toBe(400);
+    expect(String((autre.body as { erreur: string }).erreur)).toMatch(/autre lecture/u);
   });
 });

@@ -189,6 +189,22 @@ describe("BandeauMissions : interactions et place", () => {
     expect(r.conteneur.querySelector("[data-testid=frises-missions]")).toBeNull();
   });
 
+  it("UI-13 : jamais les tâches d'une phase et le panneau complet ouverts ensemble (la carte de décision reste en vue)", async () => {
+    simulerWebgl(false);
+    const r = await rendre(createElement(BandeauMissions, { enCours: [enCours()], terminees: [terminee()] }));
+    const station = r.conteneur.querySelector<HTMLButtonElement>("[data-phase=revue] button")!;
+    const voir = r.conteneur.querySelector<HTMLButtonElement>(".atl-bande-voir")!;
+    await cliquer(station);
+    await cliquer(voir);
+    expect(r.conteneur.querySelector("[data-testid=frises-missions]")).not.toBeNull();
+    expect(r.conteneur.querySelector(".atl-bande-taches")).toBeNull();
+    expect(station.getAttribute("aria-expanded")).toBe("false");
+    await cliquer(station);
+    expect(r.conteneur.querySelector(".atl-bande-taches")).not.toBeNull();
+    expect(r.conteneur.querySelector("[data-testid=frises-missions]")).toBeNull();
+    expect(voir.getAttribute("aria-expanded")).toBe("false");
+  });
+
   it("une seule mission : « Voir le détail » ; aucune mission : rien", async () => {
     simulerWebgl(false);
     const r = await rendre(createElement(BandeauMissions, { enCours: [enCours()], terminees: [] }));

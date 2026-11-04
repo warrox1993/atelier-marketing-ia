@@ -1,6 +1,6 @@
 ---
 name: "coordonnees-recherche"
-description: "Cherche, pour chaque fiche d'une liste de prospects, les numéros de téléphone professionnels publiés par des sources licites : site entier (contact, équipe, mentions légales), PDF publiés, annuaires professionnels, fiche Google Business, BCE/KBO et coordonnées que la personne publie elle-même sur LinkedIn. À utiliser pour toute campagne dont la liste de la Prospection doit recevoir des numéros ; jamais pour deviner un numéro, ni pour lire une fuite de données, ni pour un particulier non publié."
+description: "Cherche, pour chaque fiche d'une liste de prospects, les numéros de téléphone professionnels publiés par des sources licites : site entier (contact, équipe, mentions légales), PDF publiés, annuaires professionnels, fiche Google Business, BCE/KBO et page LinkedIn de l'entreprise lue par l'humain. À utiliser pour toute campagne dont la liste de la Prospection doit recevoir des numéros ; jamais pour deviner un numéro, ni pour lire une fuite de données, ni pour un particulier non publié."
 metadata:
   version: "1.0.0"
   langue: "fr"
@@ -28,7 +28,7 @@ son adresse source, sa date de relevé et le texte exact trouvé, sans jamais en
 - Facultatif : la connexion `gbp` (fiche d'établissement Google). Sans elle, l'étape 4 est notée « non faite : connexion
   absente » et le reste continue.
 - Facultatif : la connexion `extraction` (outil `extraire_site`) pour lire un site entier avant d'en extraire des coordonnées
-  publiées : réponse déposée telle quelle sur `/donnees-connexion` (`service` `extraction`, `profondeur` et `pages_max` donnés
+  publiées : réponse déposée par sa référence `_atelier.reference` sur `/donnees-connexion` (`service` `extraction`, `profondeur` et `pages_max` donnés
   explicitement). Sans elle, lire les pages une à une par `/sources`.
 
 ## Entrées
@@ -38,8 +38,10 @@ son adresse source, sa date de relevé et le texte exact trouvé, sans jamais en
 
 ## Étapes
 
-Pour chaque fiche, dans cet ordre. Chaque numéro relevé est noté avec : le numéro tel que publié, l'URL exacte, la date du
-relevé, l'extrait qui le contient et l'endroit où il figure.
+Pour chaque fiche, dans cet ordre. Chaque numéro relevé est déposé dans la fiche du prospect, chiffré (route
+`…/taches/<issueId>/prospects/<prospectId>/telephones`, avec l'identifiant de la source lue), puis noté avec : « déposé dans la
+fiche », l'URL exacte, la date du relevé, l'extrait qui le contient (chiffres du numéro remplacés par « [numéro] ») et
+l'endroit où il figure. Le numéro lui-même n'est jamais écrit dans un document ni un commentaire.
 
 1. **Lire tout le site de l'entreprise.** Partir de la page d'accueil, suivre le plan du site ou les liens internes et lire
    les pages contact, équipe, à propos, mentions légales, conditions générales, pied de page et page de chaque établissement.
@@ -57,18 +59,19 @@ relevé, l'extrait qui le contient et l'endroit où il figure.
    et demander la connexion par `connection_request`, sans bloquer le reste.
 5. **Consulter la BCE/KBO.** Page publique de l'entreprise (numéro BCE) : numéros de téléphone déclarés dans « Coordonnées
    de contact ». Ne rien relever pour une personne physique : seules les entreprises (personnes morales) sont concernées.
-6. **Relever ce que la personne publie elle-même sur LinkedIn.** Page publique de l'entreprise ou profil public ouvert
-   sans connexion : le numéro n'est retenu que s'il est écrit par la personne ou par l'entreprise dans sa propre
-   présentation (coordonnées, à propos). Ne jamais ouvrir de profil derrière une connexion, ne jamais utiliser un outil
-   d'extraction de masse, ne jamais retenir un numéro vu dans la publication d'un tiers.
+6. **LinkedIn : page entreprise seulement, lue par l'humain.** Les conditions de LinkedIn interdisent l'accès automatisé :
+   l'agent ne lit aucune page LinkedIn, ni par `/sources`, ni par `extraction`. Il demande à l'humain de relever le
+   numéro écrit par l'entreprise dans la section « À propos » de sa page et de le lui transmettre avec l'URL et la date ;
+   sans réponse : « étape 6 : non faite, relevé humain attendu ». Jamais de profil personnel, jamais d'outil d'extraction
+   de masse, jamais un numéro vu dans la publication d'un tiers.
 
 Pour chaque étape, noter aussi les pages lues sans résultat (« pages lues, aucun numéro ») : une absence est une information.
 
 ## Livrable
 
-Un relevé par fiche : tableau « numéro publié, étape (1 à 6), URL, date du relevé, extrait ». Une ligne « étapes non faites
+Un relevé par fiche : tableau « numéro (déposé dans la fiche ou aucun), étape (1 à 6), URL, date du relevé, extrait sans les chiffres ». Une ligne « étapes non faites
 ou limitées » (connexion absente, site inaccessible, plafond de pages atteint) en tête. Ce relevé est l'entrée de la compétence
-`coordonnees-recoupement`.
+`coordonnees-recoupement`. Chaque personne physique de la liste porte la mention « information art. 14 : à faire au plus tard au premier contact, et dans le mois qui suit la collecte » (RGPD, art. 14, § 3) ; le modèle de mention que l'humain relit et envoie lui-même est `controle-communications-reglementees/references/information-art14.md`. L'atelier n'envoie rien.
 
 ## Critères de réussite
 
@@ -89,8 +92,8 @@ ou limitées » (connexion absente, site inaccessible, plafond de pages atteint)
 
 ## Exemple
 
-| numéro publié | étape | URL | relevé le | extrait |
+| numéro | étape | URL | relevé le | extrait |
 | --- | --- | --- | --- | --- |
-| +32 4 000 00 00 (fictif) | 1 | https://exemple.invalide/contact | 2026-10-21 | « Cabinet Exemple, tél. +32 4 000 00 00 » |
-| +32 4 000 00 00 (fictif) | 3 | https://annuaire.exemple.invalide/fiche/123 | 2026-10-21 | « Exemple SRL, Liège, tél. 04 000 00 00 » |
-| aucun | 6 | https://www.linkedin.com/company/exemple | 2026-10-21 | page lue, aucun numéro publié |
+| déposé dans la fiche (standard) | 1 | https://exemple.invalide/contact | 2026-10-21 | « Cabinet Exemple, tél. [numéro] » |
+| déposé dans la fiche (même numéro) | 3 | https://annuaire.exemple.invalide/fiche/123 | 2026-10-21 | « Exemple SRL, Liège, tél. [numéro] » |
+| aucun | 6 | https://www.linkedin.com/company/exemple | 2026-10-21 | page lue par l'humain, aucun numéro publié |

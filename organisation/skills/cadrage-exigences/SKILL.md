@@ -1,6 +1,6 @@
 ---
 name: "cadrage-exigences"
-description: "Transforme une demande marketing en brief structuré et en exigences numérotées REQ-001, REQ-002... avec texte d'origine, interprétation, caractère obligatoire, critères et informations manquantes. À utiliser au début de toute campagne ou dès qu'une demande arrive sans brief, et chaque fois que la demande change."
+description: "Transforme une demande adressée à un service (campagne marketing, dossier, mission d'un département) en brief structuré et en exigences numérotées REQ-001, REQ-002... avec texte d'origine, interprétation, caractère obligatoire, critères et informations manquantes. À utiliser au début de toute campagne ou mission, ou dès qu'une demande arrive sans brief, et chaque fois que la demande change."
 metadata:
   version: "1.0.0"
   langue: "fr"
@@ -23,7 +23,8 @@ demandeur devient une exigence identifiée, suivie jusqu'au dossier final.
 ## Prérequis
 
 - La demande d'origine complète, recopiée sans reformulation.
-- Le corpus de marque disponible (offres validées, établissements, zones).
+- Le corpus disponible : documents de marque pour le marketing (offres validées, établissements, zones), documents et
+  données de l'entreprise pour un autre service.
 
 ## Entrées
 
@@ -82,8 +83,8 @@ pub 1 500 € maximum. »
 | --- | --- | --- | --- | --- |
 | REQ-001 | « plus de demandes de devis » | objectif de conversion mesuré par formulaire | oui | indicateur défini, source de mesure nommée ou « non mesurable » déclaré |
 | REQ-002 | « assurance habitation » | thème unique de la campagne | oui | toutes les pièces traitent ce thème |
-| REQ-003 | « nos deux bureaux » : Liège | couverture de l'établissement | oui | mentionné avec adresse et zone vérifiées |
-| REQ-004 | « nos deux bureaux » : Namur | idem | oui | idem |
+| REQ-003 | « nos deux bureaux » : [ville A] | couverture de l'établissement | oui | mentionné avec adresse et zone vérifiées |
+| REQ-004 | « nos deux bureaux » : [ville B] | idem | oui | idem |
 | REQ-005 | « un article de blog » | un article publié sur le site | oui | article relu, sources citées |
 | REQ-006 | « une campagne Google » | campagne de liens sponsorisés en brouillon | oui | aucune activation sans approbation |
 | REQ-007 | « budget pub 1 500 € maximum » | plafond total de dépense publicitaire | oui | total proposé ≤ 1 500 € |

@@ -1,0 +1,300 @@
+From 86190ff1b43e9cb884878d53d73c8355b7d2dfc9 Mon Sep 17 00:00:00 2001
+From: Jean-Baptiste Dhondt <114347858+warrox1993@users.noreply.github.com>
+Date: Fri, 30 Oct 2026 16:30:37 +0100
+Subject: [PATCH 143/148] =?UTF-8?q?test(skills):=20tests=20amont=20de=20cr?=
+ =?UTF-8?q?eate=5Fskill,=20update=5Fskill=20et=20import=20align=C3=A9s=20s?=
+ =?UTF-8?q?ur=20M3?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Constat M3 (patchs 0108 et 0110) : seul un humain crée, importe ou modifie un skill ;
+skill_config:update est refusé à tout agent avant la politique d'entreprise.
+- create-skill et update-skill (runner) : chaque appel de l'agent (premier appel, reprise,
+  run de remplacement, appels concurrents, politique changée, autre entreprise) est refusé
+  avec le message exact, sans skill, sans nouvelle version, sans activité.
+- company-skills-import-authz-routes : l'agent coordinateur avec skills:create reçoit 403
+  (code skill_actor_restricted, raison platform_invariant) sans import ; nouveau test du cas
+  légitime : le board importe le skill, activité attribuée à l'utilisateur.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01EThpSSDGc5NRYwbgjNqoTJ
+---
+ ...company-skills-import-authz-routes.test.ts | 38 +++++++++--
+ .../create-skill.integration.test.ts          | 64 +++++++++----------
+ .../update-skill.integration.test.ts          | 55 ++++++++--------
+ 3 files changed, 94 insertions(+), 63 deletions(-)
+
+diff --git a/server/src/__tests__/company-skills-import-authz-routes.test.ts b/server/src/__tests__/company-skills-import-authz-routes.test.ts
+index a889767582..a3ba1e6703 100644
+--- a/server/src/__tests__/company-skills-import-authz-routes.test.ts
++++ b/server/src/__tests__/company-skills-import-authz-routes.test.ts
+@@ -177,7 +177,9 @@ describeEmbeddedPostgres("company skill import authorization routes", () => {
+     return { companyId, agent: agent!, responsibleUserId, runId };
+   }
+ 
+-  it("lets a standard responsible-user agent JWT with skills:create import a company skill", async () => {
++  // Atelier (M3, patchs 0108 et 0110) : seul un humain ajoute un skill à l'entreprise. Un agent, même coordinateur
++  // avec skills:create et un utilisateur responsable, est refusé par l'invariant de plateforme ; le board importe.
++  it("refuses a standard responsible-user agent JWT with skills:create, before any import", async () => {
+     const { companyId, agent, responsibleUserId, runId } = await seedGrantedAgentWithResponsibleUser();
+     const skillDir = await writeSkillFixture(companyId);
+     const token = createLocalAgentJwt(agent.id, companyId, agent.adapterType, runId, responsibleUserId);
+@@ -189,6 +191,32 @@ describeEmbeddedPostgres("company skill import authorization routes", () => {
+       .set("X-Paperclip-Run-Id", runId)
+       .send({ source: skillDir });
+ 
++    expect(res.status, JSON.stringify(res.body)).toBe(403);
++    expect(res.body).toEqual({
++      error: "Atelier : seul un humain modifie la configuration, les consignes ou les skills d'un agent.",
++      code: "skill_actor_restricted",
++      details: { code: "skill_actor_restricted", reason: "platform_invariant" },
++    });
++    expect(await db.select().from(companySkills)).toEqual([]);
++    expect(await db.select().from(activityLog)).toEqual([]);
++  });
++
++  it("lets the board import a company skill", async () => {
++    const { companyId, responsibleUserId } = await seedGrantedAgentWithResponsibleUser();
++    const skillDir = await writeSkillFixture(companyId);
++    const boardApp = express();
++    boardApp.use(express.json());
++    boardApp.use((req, _res, next) => {
++      req.actor = { type: "board", userId: responsibleUserId, source: "local_implicit", isInstanceAdmin: true } as Express.Request["actor"];
++      next();
++    });
++    boardApp.use("/api", companySkillRoutes(db));
++    boardApp.use(errorHandler);
++
++    const res = await request(boardApp)
++      .post(`/api/companies/${companyId}/skills/import`)
++      .send({ source: skillDir });
++
+     expect(res.status, JSON.stringify(res.body)).toBe(201);
+     expect(res.body.imported).toHaveLength(1);
+     expect(res.body.imported[0]).toMatchObject({
+@@ -200,10 +228,10 @@ describeEmbeddedPostgres("company skill import authorization routes", () => {
+     const [importActivity] = await db.select().from(activityLog);
+     expect(importActivity).toMatchObject({
+       companyId,
+-      actorType: "agent",
+-      actorId: agent.id,
+-      agentId: agent.id,
+-      runId,
++      actorType: "user",
++      actorId: responsibleUserId,
++      agentId: null,
++      runId: null,
+       action: "company.skills_imported",
+       entityType: "company",
+       entityId: companyId,
+diff --git a/server/src/services/native-runtime/create-skill.integration.test.ts b/server/src/services/native-runtime/create-skill.integration.test.ts
+index 6bb11d8f0c..8fa4577539 100644
+--- a/server/src/services/native-runtime/create-skill.integration.test.ts
++++ b/server/src/services/native-runtime/create-skill.integration.test.ts
+@@ -42,39 +42,39 @@ describe("runner create_skill through the real skill API", () => {
+     markdown: "---\nname: release-review\ndescription: Review release notes.\n---\n\n# Review\nCheck each release note against the change.\n",
+   };
+ 
+-  it("creates one skill and one task-feed event across response retries", async () => {
++  // Atelier (M3, patchs 0108 et 0110) : seul un humain crée ou modifie un skill ; le runner refuse create_skill à
++  // l'agent avant toute politique d'entreprise, sans skill ni événement. Le board crée les skills par l'API.
++  const refus = new Error("Atelier : seul un humain modifie la configuration, les consignes ou les skills d'un agent.");
++  async function sansSkillNiEvenement(companyId: string, issueId?: string) {
++    expect(await server.db.select().from(companySkills).where(eq(companySkills.companyId, companyId))).toHaveLength(0);
++    expect(await server.db.select().from(activityLog).where(and(eq(activityLog.companyId, companyId), eq(activityLog.action, "company.skill_created")))).toHaveLength(0);
++    if (issueId) expect((await activityService(server.db).forIssue(issueId)).filter(e => e.action === "company.skill_created")).toHaveLength(0);
++  }
++
++  it("refuses create_skill to the agent across response retries, without a skill or task-feed event", async () => {
+     const testFixture = await fixture();
+     expect(testFixture.authority.definitions().some(tool => tool.name === "create_skill")).toBe(true);
+     const call = (callId: string) => testFixture.authority.execute({ tool: "create_skill", callId, arguments: args });
+-    const first = await call("first");
+-    expect(await call("lost-response-retry")).toEqual(first);
+-    const skills = await server.db.select().from(companySkills).where(eq(companySkills.companyId, testFixture.companyId));
+-    expect(skills).toHaveLength(1);
+-    expect(skills[0]).toMatchObject({ name: args.name, markdown: args.markdown });
+-    const service = companySkillService(server.db);
+-    expect((await service.readFile(testFixture.companyId, skills[0]!.id, "SKILL.md"))?.content).toBe(args.markdown);
+-    expect(await service.listVersions(testFixture.companyId, skills[0]!.id)).toHaveLength(1);
+-    const events = (await activityService(server.db).forIssue(testFixture.issueId)).filter(e => e.action === "company.skill_created");
+-    expect(events).toHaveLength(1);
+-    expect(events[0]).toMatchObject({ entityId: skills[0]!.id, details: { sourceIssueId: testFixture.issueId, versionId: skills[0]!.currentVersionId } });
+-    await expect(testFixture.authority.execute({ tool: "create_skill", callId: "conflict", arguments: { ...args, markdown: args.markdown + "Different instructions." } })).rejects.toThrow(/different inputs/);
+-    expect((await service.readFile(testFixture.companyId, skills[0]!.id, "SKILL.md"))?.content).toBe(args.markdown);
++    await expect(call("first")).rejects.toThrow(refus);
++    await expect(call("lost-response-retry")).rejects.toThrow(refus);
++    await expect(testFixture.authority.execute({ tool: "create_skill", callId: "conflict", arguments: { ...args, markdown: args.markdown + "Different instructions." } })).rejects.toThrow(refus);
++    await sansSkillNiEvenement(testFixture.companyId, testFixture.issueId);
+   });
+ 
+-  it("enforces explicit company policy before a write", async () => {
++  it("refuses the agent before the explicit company policy is consulted", async () => {
+     const testFixture = await fixture();
+     await companySkillPolicyService(server.db).replace({ companyId: testFixture.companyId, expectedRevision: 0,
+       policy: { schemaVersion: 1, defaultEffect: "deny", rules: [] },
+       activity: { actorType: "user", actorId: "test-board" } });
+-    await expect(testFixture.authority.execute({ tool: "create_skill", callId: "policy-denied", arguments: args })).rejects.toThrow(/company policy/);
+-    expect(await server.db.select().from(companySkills).where(eq(companySkills.companyId, testFixture.companyId))).toHaveLength(0);
++    await expect(testFixture.authority.execute({ tool: "create_skill", callId: "policy-denied", arguments: args })).rejects.toThrow(refus);
++    await sansSkillNiEvenement(testFixture.companyId, testFixture.issueId);
+   });
+ 
+-  it("recovers a concurrent or replacement-run retry without creating another skill", async () => {
++  it("refuses concurrent and replacement-run retries without creating a skill", async () => {
+     const testFixture = await fixture();
+-    const [first, duplicate] = await Promise.all(["first", "concurrent"].map(callId =>
++    const results = await Promise.allSettled(["first", "concurrent"].map(callId =>
+       testFixture.authority.execute({ tool: "create_skill", callId, arguments: args })));
+-    expect(duplicate).toEqual(first);
++    expect(results).toEqual([{ status: "rejected", reason: refus }, { status: "rejected", reason: refus }]);
+ 
+     const replacementRunId = randomUUID();
+     await server.db.update(heartbeatRuns).set({ status: "failed" }).where(eq(heartbeatRuns.id, testFixture.runId));
+@@ -85,20 +85,19 @@ describe("runner create_skill through the real skill API", () => {
+     });
+     await server.db.update(issues).set({ executionRunId: replacementRunId }).where(eq(issues.id, testFixture.issueId));
+     const replacement = new PaperclipRunnerToolAuthority(server.db, { ...testFixture, runId: replacementRunId });
+-    expect(await replacement.execute({ tool: "create_skill", callId: "recovered", arguments: args })).toEqual(first);
++    await expect(replacement.execute({ tool: "create_skill", callId: "recovered", arguments: args })).rejects.toThrow(refus);
+     await expect(testFixture.authority.execute({ tool: "create_skill", callId: "stale", arguments: args })).rejects.toThrow();
+-    expect(await server.db.select().from(companySkills).where(eq(companySkills.companyId, testFixture.companyId))).toHaveLength(1);
+-    expect((await activityService(server.db).forIssue(testFixture.issueId)).filter(e => e.action === "company.skill_created")).toHaveLength(1);
++    await sansSkillNiEvenement(testFixture.companyId, testFixture.issueId);
+   });
+ 
+-  it("rechecks company policy when a completed call is retried", async () => {
++  it("keeps refusing a retried call after the company policy changes", async () => {
+     const testFixture = await fixture();
+-    await testFixture.authority.execute({ tool: "create_skill", callId: "allowed", arguments: args });
++    await expect(testFixture.authority.execute({ tool: "create_skill", callId: "allowed", arguments: args })).rejects.toThrow(refus);
+     await companySkillPolicyService(server.db).replace({ companyId: testFixture.companyId, expectedRevision: 0,
+       policy: { schemaVersion: 1, defaultEffect: "deny", rules: [] },
+       activity: { actorType: "user", actorId: "test-board" } });
+-    await expect(testFixture.authority.execute({ tool: "create_skill", callId: "revoked-retry", arguments: args })).rejects.toThrow(/company policy/);
+-    expect(await server.db.select().from(companySkills).where(eq(companySkills.companyId, testFixture.companyId))).toHaveLength(1);
++    await expect(testFixture.authority.execute({ tool: "create_skill", callId: "revoked-retry", arguments: args })).rejects.toThrow(refus);
++    await sansSkillNiEvenement(testFixture.companyId, testFixture.issueId);
+   });
+ 
+   it("does not create skills in planning mode", async () => {
+@@ -108,12 +107,11 @@ describe("runner create_skill through the real skill API", () => {
+     expect(await server.db.select().from(companySkills).where(eq(companySkills.companyId, testFixture.companyId))).toHaveLength(0);
+   });
+ 
+-  it("isolates company names and creation history", async () => {
++  it("refuses create_skill in every company, without creation history", async () => {
+     const a = await fixture(), b = await fixture();
+-    const first = await a.authority.execute({ tool: "create_skill", callId: "a", arguments: args }) as { id: string };
+-    const second = await b.authority.execute({ tool: "create_skill", callId: "b", arguments: args }) as { id: string };
+-    expect(first.id).not.toBe(second.id);
+-    expect(await companySkillService(server.db).getById(b.companyId, first.id)).toBeNull();
+-    expect(await server.db.select().from(activityLog).where(and(eq(activityLog.companyId, a.companyId), eq(activityLog.action, "company.skill_created")))).toHaveLength(1);
++    await expect(a.authority.execute({ tool: "create_skill", callId: "a", arguments: args })).rejects.toThrow(refus);
++    await expect(b.authority.execute({ tool: "create_skill", callId: "b", arguments: args })).rejects.toThrow(refus);
++    await sansSkillNiEvenement(a.companyId, a.issueId);
++    await sansSkillNiEvenement(b.companyId, b.issueId);
+   });
+ });
+diff --git a/server/src/services/native-runtime/update-skill.integration.test.ts b/server/src/services/native-runtime/update-skill.integration.test.ts
+index 78dc5966ec..5c5847c27a 100644
+--- a/server/src/services/native-runtime/update-skill.integration.test.ts
++++ b/server/src/services/native-runtime/update-skill.integration.test.ts
+@@ -42,27 +42,33 @@ describe("runner update_skill through the real skill API", () => {
+     return { ...result, skill, args };
+   }
+ 
+-  it("persists exactly one version and attributed activity across retries and a replacement run", async () => {
++  // Atelier (M3, patchs 0108 et 0110) : seul un humain modifie un skill ; le runner refuse update_skill à l'agent
++  // avant toute politique d'entreprise, sans nouvelle version ni activité. Le board modifie les skills par l'API.
++  const refus = new Error("Atelier : seul un humain modifie la configuration, les consignes ou les skills d'un agent.");
++  async function skillInchange(testFixture: Awaited<ReturnType<typeof fixture>>) {
++    const service = companySkillService(server.db);
++    expect(await service.listVersions(testFixture.companyId, testFixture.skill.id)).toHaveLength(1);
++    expect((await service.readFile(testFixture.companyId, testFixture.skill.id, "SKILL.md"))?.content).toBe(testFixture.skill.markdown);
++    expect((await server.db.select().from(activityLog).where(eq(activityLog.action, "company.skill_file_updated")))
++      .filter(event => event.entityId === testFixture.skill.id)).toEqual([]);
++  }
++
++  it("refuses update_skill to the agent across retries and a replacement run, without a version or activity", async () => {
+     const testFixture = await fixture();
+-    const { authority, args, companyId, skill, issueId } = testFixture;
++    const { authority, args, companyId, issueId } = testFixture;
+     expect(authority.definitions().some(tool => tool.name === "update_skill")).toBe(true);
+-    const first = await authority.execute({ tool: "update_skill", callId: "first", arguments: args });
+-    const second = await authority.execute({ tool: "update_skill", callId: "retry", arguments: args });
+-    expect(second).toEqual(first);
+-    expect(first).toMatchObject({ skillId: skill.id, path: "SKILL.md", versionId: expect.any(String) });
++    await expect(authority.execute({ tool: "update_skill", callId: "first", arguments: args })).rejects.toThrow(refus);
++    await expect(authority.execute({ tool: "update_skill", callId: "retry", arguments: args })).rejects.toThrow(refus);
+     const replacementRunId = randomUUID();
+     await server.db.update(heartbeatRuns).set({ status: "failed" }).where(eq(heartbeatRuns.id, testFixture.runId));
+     await server.db.insert(heartbeatRuns).values({ id: replacementRunId, companyId, agentId: testFixture.agentId,
+       status: "running", runtimeMode: "native", nativeIssueId: issueId, invocationSource: "assignment", triggerDetail: "system", contextSnapshot: { issueId } });
+     await server.db.update(issues).set({ executionRunId: replacementRunId }).where(eq(issues.id, issueId));
+     const replacement = new PaperclipRunnerToolAuthority(server.db, { ...testFixture, runId: replacementRunId });
+-    expect(await replacement.execute({ tool: "update_skill", callId: "replacement", arguments: args })).toEqual(first);
+-    expect(await companySkillService(server.db).listVersions(companyId, skill.id)).toHaveLength(2);
+-    expect((await server.db.select().from(activityLog).where(eq(activityLog.action, "company.skill_file_updated")))
+-      .filter(event => event.entityId === skill.id))
+-      .toEqual([expect.objectContaining({ entityId: skill.id, details: expect.objectContaining({ sourceIssueId: issueId, versionId: (first as { versionId: string }).versionId }) })]);
+-    await expect(replacement.execute({ tool: "update_skill", callId: "changed-key", arguments: { ...args, markdown: args.markdown + "More." } })).rejects.toThrow(/different inputs/);
+-    await expect(replacement.execute({ tool: "update_skill", callId: "stale", arguments: { ...args, idempotencyKey: randomUUID() } })).rejects.toThrow(/version changed/);
++    await expect(replacement.execute({ tool: "update_skill", callId: "replacement", arguments: args })).rejects.toThrow(refus);
++    await expect(replacement.execute({ tool: "update_skill", callId: "changed-key", arguments: { ...args, markdown: args.markdown + "More." } })).rejects.toThrow(refus);
++    await expect(replacement.execute({ tool: "update_skill", callId: "stale", arguments: { ...args, idempotencyKey: randomUUID() } })).rejects.toThrow(refus);
++    await skillInchange(testFixture);
+   });
+ 
+   it("denies policy changes and cross-company skill IDs", async () => {
+@@ -71,20 +77,20 @@ describe("runner update_skill through the real skill API", () => {
+     await expect(second.authority.execute({ tool: "update_skill", callId: "foreign", arguments: { ...first.args, idempotencyKey: randomUUID() } })).rejects.toThrow();
+     await companySkillPolicyService(server.db).replace({ companyId: first.companyId, expectedRevision: 0,
+       policy: { schemaVersion: 1, defaultEffect: "deny", rules: [] }, activity: { actorType: "user", actorId: "test-board" } });
+-    await expect(first.authority.execute({ tool: "update_skill", callId: "denied", arguments: first.args })).rejects.toThrow(/company policy/);
+-    expect(await companySkillService(server.db).listVersions(first.companyId, first.skill.id)).toHaveLength(1);
++    await expect(first.authority.execute({ tool: "update_skill", callId: "denied", arguments: first.args })).rejects.toThrow(refus);
++    await skillInchange(first);
+   });
+ 
+-  it("serializes simultaneous retries and checks policy again after a successful edit", async () => {
++  it("refuses simultaneous retries and keeps refusing after a policy change", async () => {
+     const testFixture = await fixture();
+-    const calls = await Promise.all(["parallel-a", "parallel-b"].map(callId =>
++    const calls = await Promise.allSettled(["parallel-a", "parallel-b"].map(callId =>
+       testFixture.authority.execute({ tool: "update_skill", callId, arguments: testFixture.args })));
+-    expect(calls[0]).toEqual(calls[1]);
+-    expect(await companySkillService(server.db).listVersions(testFixture.companyId, testFixture.skill.id)).toHaveLength(2);
++    expect(calls).toEqual([{ status: "rejected", reason: refus }, { status: "rejected", reason: refus }]);
++    await skillInchange(testFixture);
+     await companySkillPolicyService(server.db).replace({ companyId: testFixture.companyId, expectedRevision: 0,
+       policy: { schemaVersion: 1, defaultEffect: "deny", rules: [] }, activity: { actorType: "user", actorId: "test-board" } });
+-    await expect(testFixture.authority.execute({ tool: "update_skill", callId: "revoked-retry", arguments: testFixture.args })).rejects.toThrow(/company policy/);
+-    expect(await companySkillService(server.db).listVersions(testFixture.companyId, testFixture.skill.id)).toHaveLength(2);
++    await expect(testFixture.authority.execute({ tool: "update_skill", callId: "revoked-retry", arguments: testFixture.args })).rejects.toThrow(refus);
++    await skillInchange(testFixture);
+   });
+ 
+   it("restores the file when the required audit callback fails", async () => {
+@@ -98,14 +104,13 @@ describe("runner update_skill through the real skill API", () => {
+     expect(await service.listVersions(testFixture.companyId, testFixture.skill.id)).toHaveLength(1);
+   });
+ 
+-  it("rejects a competing edit with a different key and the same expected version", async () => {
++  it("refuses both competing edits with a different key and the same expected version", async () => {
+     const testFixture = await fixture();
+     const attempts = await Promise.allSettled([testFixture.args, { ...testFixture.args,
+       idempotencyKey: randomUUID(), markdown: testFixture.args.markdown + "Another edit." }].map((argumentsValue, index) =>
+       testFixture.authority.execute({ tool: "update_skill", callId: `race-${index}`, arguments: argumentsValue })));
+-    expect(attempts.filter(attempt => attempt.status === "fulfilled")).toHaveLength(1);
+-    expect(attempts.filter(attempt => attempt.status === "rejected")).toHaveLength(1);
+-    expect(await companySkillService(server.db).listVersions(testFixture.companyId, testFixture.skill.id)).toHaveLength(2);
++    expect(attempts).toEqual([{ status: "rejected", reason: refus }, { status: "rejected", reason: refus }]);
++    await skillInchange(testFixture);
+   });
+ 
+   it("hides the tool and rejects invocation in planning mode", async () => {
+-- 
+2.53.0
+

@@ -72,6 +72,13 @@ programme le 26/10/2026. Une source par ligne JSON ; champs déclarés par l'éc
 
 - `fiabilite` A (282) : adresse joignable et flux valide publié depuis moins de 6 mois ; B (378) : adresse ou flux
   joignable, activité non mesurée par flux ; C (49) : injoignable ou bloquée aux robots (403, 429, délai), à retester.
+- Malgré son nom, `fiabilite` mesure la **joignabilité** de l'adresse, pas la confiance qu'on peut accorder à la source
+  (une chaîne YouTube joignable est notée A comme une documentation officielle) : le plugin la reçoit et la rend sous le
+  nom `joignabilite`. La confiance se juge fait par fait (statut et confiance de chaque Affirmation, politique de
+  vérification) et par le type de la source (primaire, secondaire, communautaire).
+- L'import (`importer_base.py`, route `obs.base.importer`) crée chaque source nouvelle à l'état `candidate` : listée,
+  jamais citable, elle devient active à sa première lecture réussie par une collecte. Une source C se reteste ainsi à
+  son premier usage.
 - C'est un **annuaire de candidates**, jamais une preuve : la qualification (K5) et les droits de collecte (K4,
   `droits-collecte.md`) s'appliquent à chaque source avant toute collecte. Les médias généralistes se filtrent sur l'IA.
 - Les sources des sections 1 à 6 restent la référence primaire (versions GitHub, registres, arXiv, textes de l'UE) ;

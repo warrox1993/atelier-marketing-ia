@@ -24,8 +24,9 @@ sur une page qui la confirme, dans un budget borné, sans aucune action sur une 
 - Offres validées, pages de destination, budget maximal autorisé par l'humain.
 - Charte de marque.
 - Chiffres d'une connexion de la passerelle marketing (Search Console, Analytics, Ads, fiche,
-  réseaux sociaux, CRM) : `atelier_identite` d'abord, chaque réponse d'outil déposée telle quelle avec
-  les arguments exacts de l'appel (`POST …/taches/<issueId>/donnees-connexion`, champ `arguments`),
+  réseaux sociaux, CRM) : `atelier_identite` d'abord, chaque réponse d'outil déposée par sa référence
+  `_atelier.reference` (recopie par fichier seulement pour une réponse sans référence) avec les arguments exacts de
+  l'appel (`POST …/taches/<issueId>/donnees-connexion`, champ `arguments`),
   mention « démonstration » sur chaque chiffre de démonstration, aucun chiffre absent d'une réponse
   déposée (section « Connexions de la passerelle marketing » des consignes de l'agent).
 
@@ -68,8 +69,8 @@ offre/page, budget borné, approbations requises, limites.
 
 ## Exemple
 
-(Courtier fictif.) Groupe « Assurance habitation Namur » → page `/assurance-habitation`.
-Annonce A : titre « Assurance habitation à Namur » · « Conseil d'un courtier local » ·
+(Courtier fictif.) Groupe « Assurance habitation [ville B] » → page `/assurance-habitation`.
+Annonce A : titre « Assurance habitation à [ville B] » · « Conseil d'un courtier local » ·
 description « Comparez les garanties avec un courtier. Fiche produit à lire avant de souscrire. »
 Offre : « Assurance habitation » (marque de l'atelier). Budget : 15 € par jour pendant 30 jours,
 total 450 € sur un plafond de 500 €. État : brouillon, non activé.

@@ -20,6 +20,7 @@ import type { BaseAtelier } from "../src/serveur/base.js";
 import type { ErreurAtelier } from "../src/serveur/erreurs.js";
 import { FACTEUR, ORIGINE_LIAISON, borner, cleLiaison, creerFacteur, creerRetour, routesLiaisons } from "../src/serveur/liaisons/index.js";
 import { attenteFacteur } from "../src/serveur/liaisons/facteur.js";
+import { DELAI_CLOTURE_MS } from "../src/serveur/liaisons/retour.js";
 import { creerTransmission } from "../src/serveur/liaisons/transmission.js";
 import { routesAccueil } from "../src/serveur/services-accueil.js";
 import manifest from "../src/manifest.js";
@@ -134,6 +135,7 @@ function stockMemoire(): StockLiaisons & { liaisons: LiaisonMemoire[]; services:
     listerATransmettre: async (n, max) => liaisons.filter((l) => l.statut === "ouverte" && !l.tacheCible && due(l, max)).slice(0, n).map((l) => ({ ...l })),
     listerCibleSupprimee: async (n, max) => liaisons.filter((l) => (l.statut === "ouverte" || l.statut === "en_attente_approbation") && l.entrepriseCible === null && due(l, max)).slice(0, n).map((l) => ({ ...l })),
     listerOuvertesTransmises: async (n) => liaisons.filter((l) => l.statut === "ouverte" && l.tacheCible && l.entrepriseCible !== null).slice(0, n).map((l) => ({ ...l })),
+    listerEchues: async (n, heures) => liaisons.filter((l) => l.statut === "ouverte" && Date.parse(l.creeLe) < Date.now() - heures * 3_600_000).slice(0, n).map((l) => ({ ...l })),
     listerANotifier: async (n, max) => liaisons.filter((l) => (l.statut === "repondue" || l.statut === "annulee") && !l.sourceNotifieeLe && due(l, max)).slice(0, n).map((l) => ({ ...l })),
     reserverEssai: async (c, i, attente, max) => {
       const l = trouver(c, i);
@@ -218,10 +220,21 @@ function monde(o: { reveilEchoue?: boolean; commentaireEchoue?: boolean; creatio
         commentaires.push(c);
         return c;
       },
+      update: async (issueId: string, patch: Ligne, companyId: string) => {
+        exigerPortee("issues.update", companyId);
+        const i = issues.find((x) => x.id === issueId && x.companyId === companyId);
+        if (!i) throw new Error("tâche introuvable");
+        return Object.assign(i, patch);
+      },
       listComments: async (issueId: string, companyId: string) => (exigerPortee("issues.listComments", companyId), commentaires.filter((c) => c.issueId === issueId && c.companyId === companyId)),
     },
   } as unknown as PluginContext;
-  const base = { journaliser: async (e: Ligne) => void journal.push(e), journalExiste: async (c: string, t: string, ent: string) => journal.some((j) => j.companyId === c && j.type === t && j.entiteId === ent) } as unknown as BaseAtelier;
+  const sources: Ligne[] = [];
+  const base = {
+    journaliser: async (e: Ligne) => void journal.push(e), journalExiste: async (c: string, t: string, ent: string) => journal.some((j) => j.companyId === c && j.type === t && j.entiteId === ent),
+    listerSources: async (c: string, f: { issueId?: string } = {}) => sources.filter((x) => x.companyId === c && (!f.issueId || x.issueId === f.issueId)),
+    lectureWebDansRun: async (c: string, runId: string) => journal.some((j) => j.companyId === c && j.runId === runId && j.type === "source.collectee"),
+  } as unknown as BaseAtelier;
   const stock = stockMemoire();
   const routesBrutes = routesLiaisons({ ctx, base, stock });
   /** Chaque route s'exécute dans une invocation portée par l'entreprise résolue par l'hôte. */
@@ -247,7 +260,7 @@ function monde(o: { reveilEchoue?: boolean; commentaireEchoue?: boolean; creatio
       acteur: o2.acteur ?? agent(MKT_COORD), companyId: o2.companyId ?? MKT,
     } satisfies RequeteRoute);
   const refus = async (p: Promise<unknown>) => (await p.then(() => null, (e: unknown) => e)) as ErreurAtelier | null;
-  return { ctx, issues, reveils, commentaires, journal, stock, routes, retour, declarer, demander, refus, poster, avancer, portee, appels, configurees, agentsParEntreprise };
+  return { ctx, issues, reveils, commentaires, journal, sources, stock, routes, retour, declarer, demander, refus, poster, avancer, portee, appels, configurees, agentsParEntreprise };
 }
 
 const demande = (o: Ligne = {}) => ({ tacheOrigineId: TACHE_MKT, serviceCible: "direction", objet: "Rapport mensuel", question: "Pouvez-vous valider le budget ?", extraits: [{ titre: "Budget", texte: "12 000 euros" }], ...o });
@@ -518,13 +531,13 @@ describe("liaison.demander : isolation et entrée", () => {
 });
 
 describe("services.declarer : registre complet", () => {
-  it("accepte les 29 services et les 122 flux du registre réel (une paire source-cible déclarée une seule fois)", () => {
+  it("accepte les 30 services et les 126 flux du registre réel (une paire source-cible déclarée une seule fois)", () => {
     const reg = JSON.parse(readFileSync(new URL("../../organisation/registre/services.json", import.meta.url), "utf8")) as {
       services: Array<{ slug: string }>;
       flux: Array<{ source: string; cible: string; objet: string; approbationHumaine: boolean }>;
     };
-    expect(reg.services.length).toBe(29);
-    expect(reg.flux.length).toBe(122);
+    expect(reg.services.length).toBe(30);
+    expect(reg.flux.length).toBe(126);
     // La déclaration refuse deux flux sur la même paire : le registre ne doit pas en contenir.
     expect(new Set(reg.flux.map((f) => `${f.source}>${f.cible}`)).size).toBe(reg.flux.length);
     const r = DeclarerServicesEntree.safeParse({
@@ -536,18 +549,19 @@ describe("services.declarer : registre complet", () => {
     expect(r.success, JSON.stringify(r.success ? "" : r.error.issues.slice(0, 3))).toBe(true);
   });
 
-  it("accepte la matrice complète avec le réseau des coordinateurs : 29 x 28 = 812 paires (122 métier + 690 générées)", () => {
+  it("accepte la matrice complète avec le réseau des coordinateurs : 30 x 29 = 870 paires (126 métier + 744 générées)", () => {
     const reg = JSON.parse(readFileSync(new URL("../../organisation/registre/services.json", import.meta.url), "utf8")) as {
       services: Array<{ slug: string; sensible?: boolean }>;
       flux: Array<{ source: string; cible: string; objet: string; approbationHumaine: boolean }>;
     };
-    // Même règle que scripts/atelier_services.py (flux_coordinateurs) : toute paire ordonnée que le métier ne couvre pas.
+    // Capacité : la matrice maximale (toute paire ordonnée que le métier ne couvre pas, l'ancien réseau des coordinateurs)
+    // reste acceptée ; le réseau réel, réduit au coordinateur général (COORD-P2-7), en est un sous-ensemble.
     const metier = new Set(reg.flux.map((f) => `${f.source}>${f.cible}`));
     const sensibles = new Set(reg.services.filter((x) => x.sensible).map((x) => x.slug));
     const generes = reg.services.flatMap((a) => reg.services
       .filter((b) => b.slug !== a.slug && !metier.has(`${a.slug}>${b.slug}`))
       .map((b) => ({ source: a.slug, cible: b.slug, objet: "Liaison entre coordinateurs", approbationHumaine: sensibles.has(a.slug) || sensibles.has(b.slug) })));
-    expect(generes.length).toBe(690);
+    expect(generes.length).toBe(744);
     const entreprises = reg.services.map((x, i) => ({ companyId: `22222222-2222-4222-8222-${String(i).padStart(12, "0")}`, serviceSlug: x.slug, estDirection: x.slug === "direction" }));
     const r = DeclarerServicesEntree.safeParse({ companyId: entreprises[0]!.companyId, clientMarqueur: "client-test", entreprises, flux: [...reg.flux, ...generes] });
     expect(r.success, JSON.stringify(r.success ? "" : r.error.issues.slice(0, 3))).toBe(true);
@@ -980,6 +994,31 @@ describe("retour de la réponse", () => {
     expect(m.journal.filter((j) => j.type === "liaison.repondue").map((j) => j.companyId).sort()).toEqual([DIR, MKT].sort());
   });
 
+  it("COORD-P1-2 : le commentaire de clôture posé après l'événement done est la réponse relayée, une fois le délai de clôture écoulé", async () => {
+    const m = monde();
+    const { liaisonId, cible } = await ouverte(m);
+    commentaireCible(m, cible.id, DIR_COORD, "Point intermédiaire de la veille.", 1);
+    cible.status = "done";
+    cible.completedAt = new Date(Date.now());
+    await m.retour(evenement(DIR, cible.id));
+    expect(m.stock.liaisons[0]!.reponse).toBe("Point intermédiaire de la veille.");
+    m.commentaires.push({ id: id(5050), issueId: cible.id, companyId: DIR, body: "Réponse finale : budget validé.", authorType: "agent", authorAgentId: DIR_COORD, createdAt: new Date(Date.now() + 2000), deletedAt: null });
+    // Clôture trop récente : le facteur attend, sans consommer d'essai.
+    expect((await m.poster()).notifiees).toEqual([]);
+    expect(m.stock.liaisons[0]!.facteurEssais).toBe(0);
+    // Commentaire postérieur à la fenêtre de clôture : jamais pris pour la réponse.
+    m.commentaires.push({ id: id(5051), issueId: cible.id, companyId: DIR, body: "Remarque bien plus tardive.", authorType: "agent", authorAgentId: DIR_COORD, createdAt: new Date(Date.now() + DELAI_CLOTURE_MS + 60_000), deletedAt: null });
+    cible.completedAt = new Date(Date.now() - DELAI_CLOTURE_MS - 1000);
+    m.commentaires.find((c) => c.id === id(5050))!.createdAt = new Date(Date.now() - DELAI_CLOTURE_MS + 1000);
+    m.commentaires.find((c) => c.id === id(5051))!.createdAt = new Date(Date.now() + 60_000);
+    expect((await m.poster()).notifiees).toEqual([liaisonId]);
+    expect(m.stock.liaisons[0]!.reponse).toBe("Réponse finale : budget validé.");
+    const corps = surOrigine(m)[0]!.body as string;
+    expect(corps).toContain("Réponse finale : budget validé.");
+    expect(corps).not.toContain("intermédiaire");
+    expect(corps).not.toContain("bien plus tardive");
+  });
+
   it("cancelled : passe à annulee, commente l'annulation sans recopier aucune réponse, réveille la source", async () => {
     const m = monde();
     const { cible } = await ouverte(m);
@@ -1369,6 +1408,64 @@ async function repondre(m: ReturnType<typeof monde>, liaisonId: string, texte = 
 
 const idLiaison = (r: { corps: unknown }) => (r.corps as Ligne).liaison.id as string;
 
+describe("COORD-P1-5 : liaison jamais ouverte pour toujours", () => {
+  const heures = (h: number) => new Date(Date.now() - h * 3_600_000).toISOString();
+
+  it("échéance : une liaison ouverte sans réponse depuis 72 h est close, sa tâche cible annulée, la source notifiée une fois", async () => {
+    const m = monde();
+    await m.declarer();
+    await m.demander(demande());
+    await m.poster();
+    const cible = m.issues.find((i) => i.originKind === ORIGINE_LIAISON)!;
+    m.stock.liaisons[0]!.creeLe = heures(LIMITES_LIAISON.echeanceHeures + 1);
+    const r = await m.poster();
+    expect(r.expirees).toEqual([m.stock.liaisons[0]!.id]);
+    expect(m.stock.liaisons[0]!.statut).toBe("annulee");
+    expect(cible.status).toBe("cancelled");
+    expect(m.journal.filter((j) => j.type === "liaison.expiree")).toHaveLength(1);
+    const surOrigine = m.commentaires.filter((c) => c.issueId === TACHE_MKT);
+    expect(surOrigine).toHaveLength(1);
+    expect(surOrigine[0]!.body).toContain(`aucune réponse en ${LIMITES_LIAISON.echeanceHeures} h`);
+    expect(surOrigine[0]!.body).not.toContain("a annulé la tâche");
+    m.avancer();
+    await m.poster();
+    expect(m.commentaires.filter((c) => c.issueId === TACHE_MKT)).toHaveLength(1);
+  });
+
+  it("échéance : une liaison récente ou en attente d'approbation n'expire pas", async () => {
+    const m = monde();
+    await m.declarer();
+    await m.demander(demande());
+    await m.poster();
+    m.stock.liaisons[0]!.creeLe = heures(LIMITES_LIAISON.echeanceHeures - 1);
+    expect((await m.poster()).expirees).toEqual([]);
+    m.stock.liaisons[0]!.statut = "en_attente_approbation";
+    m.stock.liaisons[0]!.creeLe = heures(LIMITES_LIAISON.echeanceHeures + 10);
+    expect((await m.poster()).expirees).toEqual([]);
+  });
+
+  it("coordinateur cible en pause : rien n'est transmis, la source est prévenue une seule fois, sans réveil", async () => {
+    const m = monde();
+    await m.declarer();
+    m.agentsParEntreprise[DIR]![0]!.status = "paused";
+    await m.demander(demande());
+    const r = await m.poster();
+    expect(r.transmises).toEqual([]);
+    expect(m.issues.filter((i) => i.originKind === ORIGINE_LIAISON)).toHaveLength(0);
+    const avis = m.commentaires.filter((c) => c.issueId === TACHE_MKT);
+    expect(avis).toHaveLength(1);
+    expect(avis[0]!.body).toContain("en pause");
+    expect(m.reveils.filter((x) => x.issueId === TACHE_MKT)).toHaveLength(0);
+    m.avancer();
+    await m.poster();
+    expect(m.commentaires.filter((c) => c.issueId === TACHE_MKT)).toHaveLength(1);
+    // Le coordinateur reprend : la demande part au passage suivant.
+    m.agentsParEntreprise[DIR]![0]!.status = "idle";
+    m.avancer();
+    expect((await m.poster()).transmises).toHaveLength(1);
+  });
+});
+
 describe("revue H2 : chaîne des liaisons dérivée de la tâche d'origine et de ses ancêtres", () => {
   it("contournement par sous-tâche refusé : A vers B, puis B relance A depuis une sous-tâche (et une sous-sous-tâche) de la tâche reçue", async () => {
     const m = monde();
@@ -1379,6 +1476,8 @@ describe("revue H2 : chaîne des liaisons dérivée de la tâche d'origine et de
     const st = sousTache(m, DIR, recue);
     const e = await m.refus(depuis(m, DIR, st, "marketing"));
     expect(e).toMatchObject({ code: "liaison_refusee", details: { garde: "c", motif: "cycle" } });
+    // COORD-P2-8 : le refus dit comment remonter quand même au demandeur (compte rendu d'étape relayé par le bureau).
+    expect((e as Error).message).toContain("compte rendu d'étape sur la tâche reçue");
     const sst = sousTache(m, DIR, st);
     const e2 = await m.refus(depuis(m, DIR, sst, "marketing"));
     expect(e2).toMatchObject({ code: "liaison_refusee", details: { garde: "c", motif: "cycle" } });
@@ -1595,7 +1694,9 @@ describe("revue de f525e9b : relais par prudence (tâche racine)", () => {
     const l1 = idLiaison(await depuis(m, MKT, TACHE_MKT, "direction"));
     await m.poster();
     const r = racine(m, DIR);
-    expect(await m.refus(depuis(m, DIR, r, "marketing"))).toMatchObject({ code: "liaison_refusee", details: { garde: "c", motif: "cycle", prudence: true } });
+    const e = await m.refus(depuis(m, DIR, r, "marketing"));
+    expect(e).toMatchObject({ code: "liaison_refusee", details: { garde: "c", motif: "cycle", prudence: true } });
+    expect((e as Error).message).toContain("compte rendu d'étape sur la tâche reçue");
     expect(m.stock.liaisons).toHaveLength(1);
     // T terminée (réponse rendue) : plus de relais supposé, la racine ouvre librement.
     await repondre(m, l1);
@@ -1807,5 +1908,33 @@ describe("exemption de la prudence : vraie racine humaine (demande de l'opérate
     await m.poster();
     const recue = tacheRecue(m, l1);
     expect(await m.refus(depuis(m, DIR, humaine(m, DIR, recue), "marketing"))).toMatchObject({ details: { garde: "c", motif: "cycle" } });
+  });
+});
+
+describe("AFD-M2 et INJ-8 : un contenu lu sur le web teinte la liaison (approbation humaine, jamais un refus)", () => {
+  it("sans lecture web, la liaison vers un service non sensible part ouverte (témoin)", async () => {
+    const m = monde();
+    await m.declarer();
+    m.sources.push({ companyId: MKT, issueId: TACHE_MKT, provenance: "import", url: "import://fichier.csv" });
+    m.journal.push({ companyId: MKT, type: "source.collectee", runId: "run-autre", entiteId: "s0" });
+    expect((await m.demander(demande())).corps).toMatchObject({ approbationRequise: false, liaison: { statut: "ouverte" } });
+  });
+  it("une page lue sur la tâche d'origine (lecture_url) : la liaison attend l'approbation", async () => {
+    const m = monde();
+    await m.declarer();
+    m.sources.push({ companyId: MKT, issueId: TACHE_MKT, provenance: "lecture_url", url: "https://tiers.example/" });
+    expect((await m.demander(demande())).corps).toMatchObject({ approbationRequise: true, teinte: true, liaison: { statut: "en_attente_approbation", tacheCible: null } });
+  });
+  it("une extraction de site déposée sur la tâche (connexion extraction) : la liaison attend l'approbation", async () => {
+    const m = monde();
+    await m.declarer();
+    m.sources.push({ companyId: MKT, issueId: TACHE_MKT, provenance: "connexion", url: "connexion://extraction/extraire_site" });
+    expect((await m.demander(demande())).corps).toMatchObject({ approbationRequise: true, liaison: { statut: "en_attente_approbation" } });
+  });
+  it("une page lue dans le même run, sur une autre tâche : la liaison attend l'approbation", async () => {
+    const m = monde();
+    await m.declarer();
+    m.journal.push({ companyId: MKT, type: "source.collectee", runId: "run-1", entiteId: "s1" });
+    expect((await m.demander(demande())).corps).toMatchObject({ approbationRequise: true, liaison: { statut: "en_attente_approbation" } });
   });
 });

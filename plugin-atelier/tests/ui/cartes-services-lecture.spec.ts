@@ -178,10 +178,22 @@ describe("lireCartesDesServices", () => {
     const r = await lireCartesDesServices([aSuivre(MKT, "t1", "marketing", "Marketing"), aSuivre(MKT, "t1", "marketing", "Marketing")], lecteur(h, journal));
     expect(r.cartes.map((c) => c.element.id).sort()).toEqual(["question:a", "question:b", "question:c"]);
     expect(r.cartes.find((c) => c.element.id === "question:c")!.tache).toBe("MKT-8");
+    // La racine (tâche reçue) n'est portée que par sa descendance : le registre des échanges s'en sert (UI-5).
+    expect(Object.fromEntries(r.cartes.map((c) => [c.element.id, c.racine ?? null]))).toEqual({ "question:a": "t1", "question:b": "t1", "question:c": null });
     // Chaque tâche n'est lue qu'une fois (pas de doublon) et l'autre entreprise n'est jamais interrogée.
     expect(journal.filter((c) => c.endsWith("/interactions")).sort()).toEqual(["/issues/o1/interactions", "/issues/t1/interactions", "/issues/t2/interactions"]);
     expect(journal.filter((c) => c.includes("status=")).length).toBe(1);
     expect(journal.some((c) => c.includes(ETR) || c.includes("e1"))).toBe(false);
+  });
+
+  it("HUM-C7 : un service confirmé sans tâche reçue (ex. l'Observatoire) a ses cartes lues sur ses tâches ouvertes sans parent", async () => {
+    const OBS = "44444444-4444-4444-8444-444444444444";
+    const h: Hote = { taches: [tache("ob1", OBS, "OBS-1", { status: "blocked" })], cartes: { ob1: [carte("o", "2026-10-27T10:00:00Z")] } };
+    const journal: string[] = [];
+    const r = await lireCartesDesServices([], lecteur(h, journal), [{ companyId: OBS, slug: "observatoire", nom: "Observatoire" }]);
+    expect(r.cartes.map((c) => [c.element.id, c.slug, c.tache])).toEqual([["question:o", "observatoire", "OBS-1"]]);
+    expect(r.missions).toEqual([]);
+    expect(journal.filter((c) => c.includes("descendantOf"))).toEqual([]);
   });
 
   it("plafond : au plus 40 tâches ouvertes lues en plus par entreprise, les plus récentes d'abord", async () => {

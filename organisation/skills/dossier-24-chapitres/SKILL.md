@@ -2,7 +2,7 @@
 name: "dossier-24-chapitres"
 description: "Donne le plan et le contenu attendu des 24 chapitres d'un dossier d'outil de l'Observatoire (ch01 à ch24), l'état de chaque chapitre (complet, incomplet, non applicable) et les types de sous-chapitres. À utiliser pour construire, relire ou mettre à jour un dossier, ou pour décider si un chapitre est complet."
 metadata:
-  version: "1.0.2"
+  version: "1.0.3"
   langue: "fr"
   domaine: "observatoire"
 ---
@@ -72,6 +72,9 @@ Le dossier : 24 chapitres, états, motifs, sous-chapitres, annexes, affirmations
 
 - Ce guide donne la structure, pas la méthode de recherche (`recherche-sourcee`), ni la mise en
   forme technique (`documentation-technique`), ni la version anglaise (`adaptation-fr-nl-en`).
+- Le dossier de 24 chapitres est une phase ultérieure : au 30/10/2026, aucune table de Chapitres ni d'Éditions n'existe en
+  base et seules les clés de livrable `fiche-…` et `article-…` sont reconnues par le plugin. Une tâche qui demande un
+  dossier complet se rend en « information manquante » ; le plan sert à structurer une Fiche ou un article.
 
 ## Exemple
 

@@ -18,6 +18,9 @@ passant par une cage (fabrique.cage) :
 4. Échec (ok=False) si le XMP relu n'a pas la valeur ou si le filigrane n'est pas détecté ;
    dans ce cas rien n'est remplacé ni écrit.
 
+Une image (PNG) suit la même règle par `poser_provenance_image` : XMP écrit puis relu dans une cage neuve,
+`provenance.json` à côté, mais pas de filigrane PerTh (il ne vaut que pour l'audio d'une vidéo).
+
 Le détecteur PerTh tourne dans une cage `cpu` à l'espace d'adressage relevé (64 Gio : la limite
 par défaut de 4 Gio ne convient pas à PyTorch) ; il ne lit qu'un wav que nous venons de produire.
 """
@@ -58,6 +61,11 @@ MOTIF_ID = re.compile(r"^[a-z0-9][a-z0-9-]{0,63}$")
 MOTIF_ENTREPRISE = re.compile(r"^[a-z0-9][a-z0-9_-]{0,63}$")
 MOTIF_OUTIL = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._ +-]{0,63}$")
 MOTIF_VERSION = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._+~:-]{0,63}$")
+MOTIF_GABARIT = re.compile(r"^[a-z0-9][a-z0-9_]{0,63}$")
+MOTIF_FORMAT = re.compile(r"^[0-9]{3,4}x[0-9]{3,4}$")
+SIGNATURE_PNG = b"\x89PNG\r\n\x1a\n"
+# Fichiers qui reçoivent un XMP : extension -> nom dans la cage (liste fixe, jamais un nom venu d'ailleurs).
+NOMS_CAGE_XMP = {".mp4": "video.mp4", ".png": "image.png", ".jpg": "image.jpg"}
 
 
 @dataclass(frozen=True)
@@ -70,6 +78,21 @@ class InfosProvenance:
     outils: Mapping[str, str] = field(default_factory=dict)  # moteur -> version (chatterbox, kokoro...)
     musique: Mapping[str, str] | None = None  # {"id": ..., "licence": ...} ou None
     type: str = "video"
+
+
+@dataclass(frozen=True)
+class InfosProvenanceImage:
+    """Ce que seule la fabrique sait d'une image : jamais fourni par un agent."""
+
+    travail: str  # UUID du travail
+    entreprise: str
+    gabarit: str
+    format: str
+    charte: str  # identifiant de la charte du registre
+    outils: Mapping[str, str] = field(default_factory=dict)  # chrome-headless-shell -> version
+    mention_visible: bool = False  # bandeau « Contenu généré avec l'IA » posé dans l'image
+    fond_ia: bool = False  # un fond généré par un modèle (lot I2), déclaré en métadonnées
+    type: str = "image"
 
 
 @dataclass(frozen=True)
@@ -96,6 +119,23 @@ def _valider_infos(infos: InfosProvenance) -> None:
         if set(infos.musique) != {"id", "licence"} or not all(
                 isinstance(v, str) and 0 < len(v) <= 200 for v in infos.musique.values()):
             raise ValueError("musique : {id, licence} attendus")
+
+
+def _valider_infos_image(infos: InfosProvenanceImage) -> None:
+    if infos.type != "image":
+        raise ValueError("type : image attendue")
+    if not MOTIF_UUID.fullmatch(infos.travail):
+        raise ValueError("travail : UUID attendu")
+    if not MOTIF_ENTREPRISE.fullmatch(infos.entreprise):
+        raise ValueError("entreprise : identifiant invalide")
+    if not MOTIF_GABARIT.fullmatch(infos.gabarit) or not MOTIF_FORMAT.fullmatch(infos.format) \
+            or not MOTIF_ID.fullmatch(infos.charte):
+        raise ValueError("gabarit, format ou charte : identifiant invalide")
+    for nom, version in infos.outils.items():
+        if not MOTIF_OUTIL.fullmatch(nom) or not MOTIF_VERSION.fullmatch(str(version)):
+            raise ValueError(f"outils : entrée invalide {nom!r}")
+    if not isinstance(infos.fond_ia, bool) or not isinstance(infos.mention_visible, bool):
+        raise ValueError("fond_ia et mention_visible : booléens attendus")
 
 
 def _fichier_regulier(chemin: Path) -> bool:
@@ -134,34 +174,44 @@ def _derniere_ligne(octets: bytes) -> str:
     return lignes[-1][:200] if lignes else ""
 
 
-def ecrire_xmp(video: Path, travail: Path) -> tuple[bool, str, Path | None]:
-    """Réécrit `video` avec le XMP dans `travail/sortie/video.mp4` (cage). (ok, motif, chemin)."""
+def _nom_cage(fichier: Path) -> str:
+    """Nom du fichier dans la cage d'après son extension (mp4, png, jpg) ; ValueError sinon."""
+    nom = NOMS_CAGE_XMP.get(fichier.suffix.lower())
+    if nom is None:
+        raise ValueError(f"extension non prise en charge pour le XMP : {fichier.suffix!r} ({sorted(NOMS_CAGE_XMP)})")
+    return nom
+
+
+def ecrire_xmp(fichier: Path, travail: Path) -> tuple[bool, str, Path | None]:
+    """Réécrit `fichier` (mp4, png ou jpg) avec le XMP dans `travail/sortie/<nom>` (cage). (ok, motif, chemin)."""
+    nom = _nom_cage(fichier)
     entree, sortie = travail / "entree", travail / "sortie"
     entree.mkdir()
     sortie.mkdir()
-    shutil.copyfile(video, entree / "video.mp4")
+    shutil.copyfile(fichier, entree / nom)
     arguments = [
-        "-o", "/sortie/video.mp4",
+        "-o", f"/sortie/{nom}",
         f"-XMP-iptcExt:DigitalSourceType={DIGITAL_SOURCE_TYPE}",
         f"-XMP-dc:Description={MENTION_IA}",
         f"-XMP-xmp:CreatorTool={OUTIL_CREATEUR}",
-        "/entree/video.mp4",
+        f"/entree/{nom}",
     ]
     r = _cage(EXIFTOOL, arguments, entree, sortie, DELAI_DOCUMENT_S)
-    nouveau = sortie / "video.mp4"
+    nouveau = sortie / nom
     if r.delai_depasse or r.code != 0 or not _fichier_regulier(nouveau):
         return False, f"écriture du XMP en échec : {_derniere_ligne(r.erreur) or _derniere_ligne(r.sortie)}", None
     return True, "", nouveau
 
 
 def lire_xmp(fichier: Path, travail: Path) -> dict:
-    """Relit le XMP d'un MP4 dans une cage neuve : {DigitalSourceType, Description, CreatorTool}."""
+    """Relit le XMP d'un mp4, png ou jpg dans une cage neuve : {DigitalSourceType, Description, CreatorTool}."""
+    nom = _nom_cage(fichier)
     entree, sortie = travail / "relecture-entree", travail / "relecture-sortie"
     entree.mkdir()
     sortie.mkdir()
-    shutil.copyfile(fichier, entree / "video.mp4")
+    shutil.copyfile(fichier, entree / nom)
     arguments = ["-j", "-n", "-XMP-iptcExt:DigitalSourceType", "-XMP-dc:Description",
-                 "-XMP-xmp:CreatorTool", "/entree/video.mp4"]
+                 "-XMP-xmp:CreatorTool", f"/entree/{nom}"]
     r = _cage(EXIFTOOL, arguments, entree, sortie, DELAI_DOCUMENT_S)
     if r.code != 0:
         return {}
@@ -276,8 +326,60 @@ def poser_provenance(video: str | os.PathLike, plan: PlanMontage, infos: InfosPr
         "voix": list(infos.voix),
         "musique": dict(infos.musique) if infos.musique is not None else None,
         "digital_source_type": DIGITAL_SOURCE_TYPE,
-        "mention_visible": True,  # bandeau permanent incrusté par `monter`, sur toute la durée
+        "mention_visible": False,  # choix de l'opérateur du 01/11 : mention dans le texte du post, pas dans la vidéo
         "filigrane_perth": {"detecte": detecte, "taux": round(taux, 4)},
+        "sha256": empreinte_sha256(chemin),
+    }
+    destination = chemin.with_name(NOM_PROVENANCE)
+    _ecrire_json_atomique(destination, provenance)
+    return ResultatProvenance(True, "", provenance, destination)
+
+
+def poser_provenance_image(image: str | os.PathLike, infos: InfosProvenanceImage) -> ResultatProvenance:
+    """Pose le XMP IPTC dans le PNG, le relit dans une cage neuve, écrit `provenance.json` à côté.
+
+    `image` : le `image.png` rendu par `generateurs.images`. Une entrée invalide lève ValueError ; une
+    vérification qui échoue rend ok=False et laisse l'image d'origine inchangée, sans provenance.json.
+    Pas de filigrane PerTh : il ne vaut que pour l'audio d'une vidéo.
+    """
+    chemin = Path(os.path.abspath(image))  # pas resolve() : un lien symbolique doit rester visible pour le refuser
+    _valider_infos_image(infos)
+    if not _fichier_regulier(chemin) or chemin.suffix != ".png":
+        raise ValueError("image : fichier .png régulier attendu")
+    entete = chemin.read_bytes()[:33]
+    if entete[:8] != SIGNATURE_PNG:
+        raise ValueError("image : ce n'est pas un PNG")
+
+    with tempfile.TemporaryDirectory(prefix="provenance-") as nom_travail:
+        travail = Path(nom_travail)
+        ok, motif, nouveau = ecrire_xmp(chemin, travail)
+        if not ok or nouveau is None:
+            return ResultatProvenance(False, motif)
+        if nouveau.read_bytes()[:33] != entete:
+            return ResultatProvenance(False, "le PNG réécrit n'a plus la même signature ni les mêmes dimensions")
+        relu = lire_xmp(nouveau, travail)
+        if relu.get("DigitalSourceType") != DIGITAL_SOURCE_TYPE:
+            return ResultatProvenance(False, "XMP relu sans la valeur DigitalSourceType attendue")
+        # Tout est vérifié : seulement maintenant, l'image est remplacée (atomique, même dossier).
+        remplacement = chemin.with_name(".image-xmp.tmp")
+        shutil.copyfile(nouveau, remplacement)
+        os.replace(remplacement, chemin)
+
+    outils = {**{k: str(v) for k, v in infos.outils.items()}, "exiftool": _version_outil([EXIFTOOL, "-ver"])}
+    provenance = {
+        "travail": infos.travail,
+        "entreprise": infos.entreprise,
+        "type": infos.type,
+        "fichier": chemin.name,
+        "gabarit": infos.gabarit,
+        "format": infos.format,
+        "charte": infos.charte,
+        "outils": outils,
+        "voix": [],
+        "musique": None,
+        "digital_source_type": DIGITAL_SOURCE_TYPE,
+        "mention_visible": infos.mention_visible,
+        "fond_ia": infos.fond_ia,
         "sha256": empreinte_sha256(chemin),
     }
     destination = chemin.with_name(NOM_PROVENANCE)

@@ -2,7 +2,7 @@
 name: "design-visuel-sobre"
 description: "Critique puis finit un visuel, une page ou un document mis en forme : verdict de spécificité (fait pour ce client ou interchangeable), problèmes classés de P0 à P3, hiérarchie, typographie, espacement, contraste, états, et refus des habitudes qui donnent l'allure d'une production d'IA (cartes identiques, gros chiffre décoratif, surtitre, texte en dégradé, émojis en guise d'icônes, tiret cadratin) ; audite aussi un système de design (jetons, valeurs codées en dur, composants et leurs états) et documente ou conçoit un composant. À utiliser avant de livrer un brief de visuel, une maquette, une page ou une présentation, et pour relire ceux d'un tiers ; jamais pour changer un fait, une offre ou une mention."
 metadata:
-  version: "1.1.0"
+  version: "1.4.0"
   langue: "fr"
   domaine: "creation"
 ---
@@ -74,6 +74,12 @@ classe les problèmes et dit comment corriger chacun, sans toucher au contenu va
    colorée épaisse sur un seul côté des encadrés ; ombres dures décalées ; émojis ou symboles à la place d'un vrai
    jeu d'icônes ; police monospace pour faire « technique » ; tiret cadratin dans les textes (virgule,
    deux-points ou parenthèses).
+   Une image de post se fait avec l'outil `fabriquer_image` (gabarits `accroche`, `chiffre_cle`, `liste_3_points`,
+   `offre`) : tu critiques d'abord le texte de chaque champ (court, lisible, sans tiret cadratin ni majuscules criées),
+   la mise en page et les couleurs viennent de la charte enregistrée, pas de toi.
+   Exception : une scène vidéo de l'outil `fabriquer_video` au gabarit `chiffre_cle` (un chiffre vérifié et sourcé, un
+   libellé) est permise, c'est le gabarit imposé par l'outil ; ce qui reste refusé, c'est le gros chiffre décoratif ou
+   sans source et la pile de statistiques sous un chiffre.
 5. **Classer les problèmes** : P0 bloquant (le lecteur ne peut pas comprendre ou agir, texte illisible, mention
    obligatoire absente) ; P1 majeur (gêne nette, contraste insuffisant, appel à l'action noyé) ; P2 mineur ; P3
    finition. Pour chacun : ce qui ne va pas, pourquoi cela gêne le lecteur, la correction concrète.
@@ -92,6 +98,21 @@ classe les problèmes et dit comment corriger chacun, sans toucher au contenu va
    - *nouveau composant* : le besoin, les composants existants proches et pourquoi ils ne suffisent pas, propriétés,
      variantes, états, jetons utilisés, accessibilité, questions ouvertes à trancher. Principes : la cohérence avant
      l'invention, un composant non documenté n'existe pas, tout changement qui casse l'existant prévoit sa migration.
+
+### Illustration d'une image ou d'une vidéo fabriquée (obligatoire)
+
+Une image ou une vidéo publicitaire sans visuel (aplat de couleur et texte seuls) est refusée par l'opérateur : c'est un défaut P0.
+Les outils `fabriquer_image` et `fabriquer_video` acceptent pour cela le champ `illustration` (20 à 2500 caractères, par scène
+pour la vidéo). Quand tu critiques une demande, vérifie qu'elle le contient et que la description est bonne :
+
+- Écrire pour FLUX 3, qui peint l'illustration en local : une seule description en anglais de 100 à 350 mots, en prose continue,
+  sans liste ni JSON. Support et style d'abord, puis décor, lumière et cadrage, puis les sujets (chaque personnage net avec son
+  âge approximatif, son teint, ses cheveux, ses vêtements, son expression et sa position dans le cadre), l'arrière-plan en dernier.
+  Elle décrit ce qui est présent plutôt que des négations, et garde les noms d'univers que la tâche demande. Forme complète,
+  règles et exemple : `references/description-flux3.md`. Ni texte, ni lettres, ni logo, ni marque, ni personne réelle ou célèbre ;
+  rien qui contredise le dossier du sujet. La zone calme réservée au texte se décrit par sa position (par exemple « bas de l'image dégagé »).
+- Le texte reste dans les champs du gabarit, composé par la fabrique ; l'illustration n'a jamais à le porter.
+- Choisir un cadrage qui expose peu les mains (une main sur un bâton, les mains dans les manches, un plan plus serré) : l'IA se trompe sur les doigts, et le rendu est refusé à la moindre anomalie (voir `qualite-visuels`).
 
 ## Livrable
 

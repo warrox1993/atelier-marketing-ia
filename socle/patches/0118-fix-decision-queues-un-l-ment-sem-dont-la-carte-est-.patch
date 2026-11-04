@@ -1,0 +1,98 @@
+From 779d1ba1f47a0a89ca6a3422bc941da4f38c267f Mon Sep 17 00:00:00 2001
+From: Jean-Baptiste Dhondt <114347858+warrox1993@users.noreply.github.com>
+Date: Fri, 30 Oct 2026 12:49:25 +0100
+Subject: [PATCH] =?UTF-8?q?fix(decision-queues):=20un=20=C3=A9l=C3=A9ment?=
+ =?UTF-8?q?=20sem=C3=A9=20dont=20la=20carte=20est=20r=C3=A9solue=20sort=20?=
+ =?UTF-8?q?de=20la=20file=20(Atelier=20HUM-C13)?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Les files semées par le système (plans, questions) gardaient à jamais les cartes
+déjà répondues : 8 éléments en file, tous résolus. La lecture et le compte
+écartent un élément semé dont l'interaction n'est plus pending ; un élément
+ajouté à la main par un humain ou un agent reste tel quel.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01EThpSSDGc5NRYwbgjNqoTJ
+---
+ .../__tests__/decision-queues-routes.test.ts  | 28 +++++++++++++++++++
+ server/src/services/decision-queues.ts        | 17 ++++++++++-
+ 2 files changed, 44 insertions(+), 1 deletion(-)
+
+diff --git a/server/src/__tests__/decision-queues-routes.test.ts b/server/src/__tests__/decision-queues-routes.test.ts
+index b1897d0646..f26ed58743 100644
+--- a/server/src/__tests__/decision-queues-routes.test.ts
++++ b/server/src/__tests__/decision-queues-routes.test.ts
+@@ -379,6 +379,34 @@ describeEmbeddedPostgres("decision queue routes", () => {
+       .toHaveLength(1);
+   });
+ 
++  it("retire de la lecture un élément semé dont la carte est résolue (Atelier HUM-C13)", async () => {
++    const { companyId, issueId, interactionId } = await seed();
++    const repondue = randomUUID();
++    await db.insert(issueThreadInteractions).values({
++      id: repondue, companyId, issueId, kind: "ask_user_questions", status: "answered",
++      payload: { version: 1, questions: [] } as never, resolvedAt: new Date(),
++    });
++    const item = (sourceId: string): AttentionItem => ({
++      id: `issue_thread_interaction:${sourceId}`, companyId, sourceKind: "issue_thread_interaction",
++      subject: { kind: "interaction", id: sourceId, companyId, title: "Q", identifier: null, status: "pending", href: null,
++        metadata: { kind: "ask_user_questions", issueId } },
++      whyNow: "test", decisionVerbs: [], inlineResolvable: true, entryRule: "test", exitRule: "test",
++      dedupKey: sourceId, dismissalKey: sourceId, dismissal: null, severity: "medium", rank: 1,
++      activityAt: new Date().toISOString(), createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
++      relatedIssue: null, project: null, workspace: null, detail: null, trainingExampleId: null,
++    }) as AttentionItem;
++    await decisionQueueService(db).materializeSeededQueues(companyId, [item(interactionId), item(repondue)]);
++
++    const res = await request(app(boardActor(companyId)))
++      .get(`/api/companies/${companyId}/decision-queues/questions/items`)
++      .expect(200);
++    const ids = (res.body.items ?? res.body).map((i: { sourceId: string }) => i.sourceId);
++    expect(ids).toEqual([interactionId]);
++    const liste = await request(app(boardActor(companyId))).get(`/api/companies/${companyId}/decision-queues`).expect(200);
++    const file = (liste.body.queues ?? liste.body).find((q: { key: string }) => q.key === "questions");
++    expect(file.itemCount).toBe(1);
++  });
++
+   it("records agent decide-by, preserves override history, and exposes the board override attribution", async () => {
+     const { companyId, agentId, issueId } = await seed();
+     const agent = agentActor(companyId, agentId);
+diff --git a/server/src/services/decision-queues.ts b/server/src/services/decision-queues.ts
+index d529e1d0a8..6f66bf4f5a 100644
+--- a/server/src/services/decision-queues.ts
++++ b/server/src/services/decision-queues.ts
+@@ -1,4 +1,4 @@
+-import { and, desc, eq, inArray, isNull, sql } from "drizzle-orm";
++import { and, desc, eq, inArray, isNull, ne, sql } from "drizzle-orm";
+ import type { Db } from "@paperclipai/db";
+ import {
+   agents,
+@@ -371,8 +371,23 @@ export function decisionQueueService(db: Db) {
+     const rows = await db.select().from(decisionQueueItems)
+       .where(and(eq(decisionQueueItems.companyId, companyId), eq(decisionQueueItems.queueId, queueId)))
+       .orderBy(desc(decisionQueueItems.createdAt), desc(decisionQueueItems.id));
++    // Atelier HUM-C13 : un élément semé par le système dont la carte est résolue
++    // n'est plus une décision à prendre ; la file le gardait à jamais.
++    const seededInteractionIds = rows
++      .filter((row) => row.addedByType === "system" && row.sourceKind === "issue_thread_interaction")
++      .map((row) => row.sourceId);
++    const resolved = new Set(seededInteractionIds.length === 0 ? [] : await db
++      .select({ id: issueThreadInteractions.id })
++      .from(issueThreadInteractions)
++      .where(and(
++        eq(issueThreadInteractions.companyId, companyId),
++        inArray(issueThreadInteractions.id, seededInteractionIds),
++        ne(issueThreadInteractions.status, "pending"),
++      ))
++      .then((found) => found.map((row) => row.id)));
+     const visible: DecisionQueueItem[] = [];
+     for (const row of rows) {
++      if (row.addedByType === "system" && resolved.has(row.sourceId)) continue;
+       if (await canReadDecisionSource(db, authActor, companyId, row.sourceKind as AttentionSourceKind, row.sourceId)) {
+         visible.push(toQueueItem(row));
+       }
+-- 
+2.53.0
+

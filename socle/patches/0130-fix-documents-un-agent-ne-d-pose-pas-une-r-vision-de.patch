@@ -1,0 +1,88 @@
+From 9ad4e18a41bf99f80f77e4b7da32e1799ff8482c Mon Sep 17 00:00:00 2001
+From: Jean-Baptiste Dhondt <114347858+warrox1993@users.noreply.github.com>
+Date: Fri, 30 Oct 2026 15:20:29 +0100
+Subject: [PATCH 130/131] =?UTF-8?q?fix(documents):=20un=20agent=20ne=20d?=
+ =?UTF-8?q?=C3=A9pose=20pas=20une=20r=C3=A9vision=20de=20verdict=20de=20mo?=
+ =?UTF-8?q?ins=20de=20300=20caract=C3=A8res=20;=20le=20board=20garde=20la?=
+ =?UTF-8?q?=20main=20(Atelier=20LIV-MK-5)?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01EThpSSDGc5NRYwbgjNqoTJ
+---
+ ...ue-agent-mutation-ownership-routes.test.ts | 25 +++++++++++++++++++
+ server/src/routes/issues.ts                   | 13 ++++++++++
+ 2 files changed, 38 insertions(+)
+
+diff --git a/server/src/__tests__/issue-agent-mutation-ownership-routes.test.ts b/server/src/__tests__/issue-agent-mutation-ownership-routes.test.ts
+index 664f4b1c79..16740a4168 100644
+--- a/server/src/__tests__/issue-agent-mutation-ownership-routes.test.ts
++++ b/server/src/__tests__/issue-agent-mutation-ownership-routes.test.ts
+@@ -1648,6 +1648,31 @@ describe("agent issue mutation checkout ownership", () => {
+     expect(mockWorkProductService.update).toHaveBeenCalledWith("product-1", { title: "Updated product" });
+   });
+ 
++  it("Atelier LIV-MK-5 : un agent ne dépose pas une révision de verdict de moins de 300 caractères (dépôt d'essai)", async () => {
++    const app = await createApp(ownerActor());
++    const essai = await request(app)
++      .put(`/api/issues/${issueId}/documents/verdict`)
++      .send({ format: "markdown", body: "Verdict : APPROVED\n\ntest d'encodage é + %" });
++    expect(essai.status).toBe(422);
++    expect(essai.body.error).toContain("300 caractères");
++    expect(mockDocumentService.upsertIssueDocument).not.toHaveBeenCalled();
++
++    // Un verdict entier passe, comme tout document court d'une autre clé.
++    await request(app)
++      .put(`/api/issues/${issueId}/documents/verdict`)
++      .send({ format: "markdown", body: `Verdict : APPROVED\n\n${"Constat vérifié contre la fiche. ".repeat(10)}` })
++      .expect(200);
++    await request(app).put(`/api/issues/${issueId}/documents/plan`).send({ format: "markdown", body: "# court" }).expect(200);
++    expect(mockDocumentService.upsertIssueDocument).toHaveBeenCalledTimes(2);
++  });
++
++  it("Atelier LIV-MK-5 : le board garde la main sur un verdict court", async () => {
++    await request(await createApp(boardActor()))
++      .put(`/api/issues/${issueId}/documents/verdict`)
++      .send({ format: "markdown", body: "Verdict : APPROVED" })
++      .expect(200);
++  });
++
+   it("preserves board mutations on active checkouts", async () => {
+     const app = await createApp(boardActor());
+ 
+diff --git a/server/src/routes/issues.ts b/server/src/routes/issues.ts
+index 90f0884c87..d312532b19 100644
+--- a/server/src/routes/issues.ts
++++ b/server/src/routes/issues.ts
+@@ -1068,6 +1068,8 @@ function hasExecutionParticipant(value: unknown) {
+   return false;
+ }
+ 
++const ATELIER_VERDICT_MIN_CHARS = 300;
++
+ function hasScheduledMonitor(input: {
+   existingMonitorNextCheckAt?: Date | null;
+   patchMonitorNextCheckAt?: unknown;
+@@ -10728,6 +10730,17 @@ export function issueRoutes(
+         });
+         return;
+       }
++      // Atelier LIV-MK-5 : chaque révision de verdict réveille l'auteur ; un agent la dépose entière, jamais un essai.
++      if (
++        req.actor.type === "agent" &&
++        keyParsed.data === "verdict" &&
++        String(req.body.body ?? "").trim().length < ATELIER_VERDICT_MIN_CHARS
++      ) {
++        res.status(422).json({
++          error: `Atelier : un verdict se dépose une fois, entier (au moins ${ATELIER_VERDICT_MIN_CHARS} caractères) ; aucun dépôt d'essai ni test d'encodage.`,
++        });
++        return;
++      }
+ 
+       const actor = getActorInfo(req);
+       const sourceTrust = await sourceTrustForActorWrite(issue, actor);
+-- 
+2.53.0
+

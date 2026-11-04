@@ -2,7 +2,7 @@
 name: "coordonnees-recoupement"
 description: "Recoupe chaque numéro de téléphone relevé sur deux sources indépendantes (fiable ou à vérifier), le classe (standard, ligne directe, portable professionnel publié), contrôle la liste belge « Ne m'appelez plus » et rend, par fiche, un format de sortie fixe avec source, date et base légale. À utiliser après la recherche des coordonnées et avant la relecture ; jamais pour conseiller un appel quand le contrôle de la liste n'est pas fait."
 metadata:
-  version: "1.0.0"
+  version: "1.1.1"
   langue: "fr"
   domaine: "prospection"
 ---
@@ -33,36 +33,45 @@ Relecture et l'humain voient d'un coup ce qui est utilisable, ce qui reste à v�
 
 ## Étapes
 
-7. **Recouper.** Normaliser chaque numéro au format international (+32…) sans changer un chiffre, puis compter les sources
+1. **Recouper.** Normaliser chaque numéro au format international (+32…) sans changer un chiffre, puis compter les sources
    indépendantes qui le portent : deux pages du même site comptent pour UNE source ; un annuaire qui recopie le site ne
    compte pas comme indépendant s'il cite le site. Deux sources indépendantes ou plus : statut « fiable ». Une seule source,
    ou sources contradictoires : « à vérifier », avec la raison (une source, contradiction, source ancienne de plus de 12 mois).
-8. **Classer.** Chaque numéro reçoit un type : « standard » (accueil, secrétariat, numéro général), « ligne directe » (numéro
+2. **Classer.** Chaque numéro reçoit un type : « standard » (accueil, secrétariat, numéro général), « ligne directe » (numéro
    attribué à une personne ou un service, publié comme tel) ou « portable professionnel publié » (mobile publié par la
    personne ou son employeur dans un contexte professionnel). Un doute entre deux types se note « type à confirmer » ; un mobile
-   dont rien ne dit qu'il est professionnel n'est pas retenu.
-9. **Contrôler la liste « Ne m'appelez plus ».** Comparer chaque numéro retenu au résultat fourni. Inscrit : « exclu, inscrit
+   dont rien ne dit qu'il est professionnel n'est pas retenu. Minimisation : le standard ou la ligne du cabinet d'abord ; un
+   portable seulement s'il est le seul numéro professionnel publié ; jamais le motif d'une absence (congé, maladie, maternité)
+   ni un autre détail de la vie privée lu à côté du numéro.
+3. **Contrôler la liste « Ne m'appelez plus ».** Comparer chaque numéro retenu au résultat fourni. Inscrit : « exclu, inscrit
    sur la liste le <date> », aucun appel conseillé. Non inscrit : « non inscrit au <date de consultation> ». Sans résultat :
    « non vérifié » et la mention « aucun appel conseillé tant que le contrôle n'est pas fait ». Une opposition déjà exprimée
    à la prospection exclut aussi le numéro.
 
-Pour chaque numéro, écrire aussi la base légale : « intérêt légitime B2B (numéro professionnel publié par l'entreprise) » ou
-« numéro publié par la personne elle-même », jamais « consentement » sans preuve fournie.
+Pour chaque numéro, écrire aussi la base légale : l'intérêt légitime (RGPD, art. 6, § 1, f) avec la référence de la mise en
+balance validée par un humain (preuve `mise_en_balance` de la base légale du prospect) si elle existe, sinon « mise en
+balance : non fournie (optionnel) » : le numéro est relevé et déposé quand même, sans rien demander (décision de l'opérateur du
+30/10/2026) ; jamais « consentement » sans preuve fournie. Qu'un numéro soit publié par la personne ou l'entreprise est une
+source, pas une base légale de l'art. 6.
 
 ## Livrable
 
-Pour chaque fiche, le format de sortie suivant (une ligne de numéro par entrée, recopié tel quel dans le livrable) :
+Pour chaque fiche, le format de sortie suivant (une entrée par numéro, recopiée telle quelle dans le livrable). Le numéro est
+déjà déposé chiffré dans la fiche du prospect : le livrable n'en écrit jamais les chiffres, la porte le refuserait.
 
 ```
 Fiche : <nom de l'entreprise> (BCE <numéro ou « inconnu »>)
-Numéro : <+32…>
+Numéro : déposé dans la fiche (prospect <identifiant>)
 Type : standard | ligne directe | portable professionnel publié | type à confirmer
 Fiabilité : fiable (2 sources ou plus) | à vérifier (<raison>)
 Sources : <URL 1> (<date>) ; <URL 2> (<date>)
-Base légale : intérêt légitime B2B | numéro publié par la personne
+Base légale : intérêt légitime (art. 6, § 1, f), mise en balance <référence> | intérêt légitime (art. 6, § 1, f), mise en balance : non fournie (optionnel)
+Information art. 14 : à faire au plus tard au premier contact | faite le <date> par l'humain
 Liste « Ne m'appelez plus » : non inscrit au <date> | inscrit (exclu) | non vérifié
 Appel conseillé : oui | non (<raison>)
 ```
+
+Chaque personne physique de la liste porte la mention « information art. 14 : à faire au plus tard au premier contact, et dans le mois qui suit la collecte » (RGPD, art. 14, § 3) ; le modèle de mention que l'humain relit et envoie lui-même est `controle-communications-reglementees/references/information-art14.md`. L'atelier n'envoie rien.
 
 Une fiche sans numéro porte « Numéro : aucun trouvé » et la liste des étapes faites. En tête du livrable : nombre de numéros
 fiables, à vérifier, exclus, non vérifiés, et les étapes qui n'ont pas pu être faites.
@@ -89,18 +98,19 @@ fiables, à vérifier, exclus, non vérifiés, et les étapes qui n'ont pas pu �
 
 ## À vérifier par un professionnel
 
-- La base légale « intérêt légitime B2B » de chaque fichier d'appel et les modalités d'accès à la liste « Ne m'appelez plus » :
-  à faire confirmer par le DPO ou le juriste du client.
+- La mise en balance de l'intérêt légitime (art. 6, § 1, f) et les modalités d'accès à la liste « Ne m'appelez plus » : si le
+  client les fournit, son DPO ou son juriste les confirme ; sinon « non fournie (optionnel) », sans bloquer ni rien demander
+  (décision de l'opérateur du 30/10/2026). L'avis de juriste est optionnel.
 
 ## Exemple
 
 ```
 Fiche : Cabinet Exemple SRL (BCE 0000.000.000, fictive)
-Numéro : +32 4 000 00 00
+Numéro : déposé dans la fiche (prospect 123e4567-e89b-42d3-a456-426614174000, fictif)
 Type : standard
 Fiabilité : fiable (2 sources ou plus)
 Sources : https://exemple.invalide/contact (2026-10-21) ; https://annuaire.exemple.invalide/fiche/123 (2026-10-21)
-Base légale : intérêt légitime B2B
+Base légale : intérêt légitime (art. 6, § 1, f), mise en balance : non fournie (optionnel)
 Liste « Ne m'appelez plus » : non vérifié
 Appel conseillé : non (contrôle de la liste non fait)
 ```

@@ -1,0 +1,87 @@
+{
+  "numero": 6,
+  "slug": "gemini-4-argon",
+  "projet": {
+    "companyId": "<OBS>",
+    "slug": "article-6-gemini-4-argon",
+    "nom": "Gemini 4 Argon : le nouveau modèle phare de Google, à prix d'introduction jusqu'au 30 novembre",
+    "alias": [
+      {
+        "type": "site",
+        "valeur": "https://blog.google/innovation-and-ai/models-and-research/gemini-models/introducing-gemini-4-argon/"
+      },
+      {
+        "type": "site",
+        "valeur": "https://ai.google.dev/gemini-api/docs/pricing"
+      },
+      {
+        "type": "site",
+        "valeur": "https://ai.google.dev/gemini-api/docs/models"
+      }
+    ]
+  },
+  "motifSansProjet": null,
+  "aliasRefuses": [],
+  "brief": {
+    "tache": "Rédiger l'article n° 6 du magazine : Gemini 4 Argon : le nouveau modèle phare de Google, à prix d'introduction jusqu'au 30 novembre",
+    "categorie": "sortie-modele",
+    "publie_le": "2026-10-13",
+    "angle": "Le prix d'Argon double au 1er décembre 2026 : un décideur qui budgète l'API doit le savoir avant de s'engager. Texte à écrire pour deux lecteurs : le développeur (ce qu'il peut faire ou doit vérifier) et le décideur (ce que cela change pour un choix d'outil, de coût ou de conformité), sans rien ajouter qui ne figure pas dans les faits ci-dessous.",
+    "plan": [
+      "Ce qui est annoncé ou publié : les faits datés, tels que la source les énonce",
+      "Ce que cela change pour un développeur : usage concret, uniquement à partir des faits listés",
+      "Ce que cela change pour un décideur : choix, coûts, risques, uniquement à partir des faits listés",
+      "Ce qui n'est pas établi : points ouverts, chiffres d'éditeur non mesurés de façon indépendante",
+      "Sources et méthode de vérification : liste des URL lues le 27/10/2026"
+    ],
+    "faits": [
+      {
+        "texte": "Gemini 4 Argon est disponible dans le monde entier pour les développeurs et les entreprises via l'API.",
+        "source_url": "https://blog.google/innovation-and-ai/models-and-research/gemini-models/introducing-gemini-4-argon/",
+        "extrait_exact": "Gemini 4 Argon is now globally available today for developers and enterprises via the API in AI Studio and Gemini platform",
+        "statut_propose": "rapporte_editeur"
+      },
+      {
+        "texte": "Google annonce la première place au Vals Index.",
+        "source_url": "https://blog.google/innovation-and-ai/models-and-research/gemini-models/introducing-gemini-4-argon/",
+        "extrait_exact": "ranking #1 on the Vals Index",
+        "statut_propose": "rapporte_editeur"
+      },
+      {
+        "texte": "Prix d'introduction : 2 dollars par million de jetons en entrée et 10 en sortie.",
+        "source_url": "https://blog.google/innovation-and-ai/models-and-research/gemini-models/introducing-gemini-4-argon/",
+        "extrait_exact": "The model launches today at an introductory price 1 of $2 per million input tokens and $10 per million output tokens",
+        "statut_propose": "rapporte_editeur"
+      },
+      {
+        "texte": "La grille officielle fixe le doublement du prix d'entrée au 1er décembre 2026.",
+        "source_url": "https://ai.google.dev/gemini-api/docs/pricing",
+        "extrait_exact": "$2.00 through November 30, 2026. $4.00 starting December 1, 2026.",
+        "statut_propose": "confirme_doc_officielle"
+      },
+      {
+        "texte": "Argon n'est pas disponible dans l'offre gratuite.",
+        "source_url": "https://ai.google.dev/gemini-api/docs/pricing",
+        "extrait_exact": "Note: Gemini 4 Argon is not available on the Free tier.",
+        "statut_propose": "confirme_doc_officielle"
+      },
+      {
+        "texte": "Fenêtre de contexte unifiée d'un million de jetons et sorties longues jusqu'à un million de jetons.",
+        "source_url": "https://ai.google.dev/gemini-api/docs/models",
+        "extrait_exact": "Our flagship reasoning model with a unified 1M context window and long decodes up to 1M tokens.",
+        "statut_propose": "confirme_doc_officielle"
+      },
+      {
+        "texte": "Selon Google, Argon a aidé à séparer un dossier hérité d'environ 6 millions de lignes dans Chromium.",
+        "source_url": "https://blog.google/innovation-and-ai/models-and-research/gemini-models/introducing-gemini-4-argon/",
+        "extrait_exact": "Argon helped the Chrome team separate core webpage handling from a ~6 million line legacy folder of browser features",
+        "statut_propose": "rapporte_editeur"
+      }
+    ],
+    "points_ouverts": [
+      "Les comparaisons avec les autres modèles de pointe sont celles de Google ; aucun banc indépendant n'a été vérifié ici.",
+      "Les gains annoncés en interne (+35 % de soumissions de code agentique) ne sont pas vérifiables de l'extérieur."
+    ],
+    "regles": "Aucun fait, date ou chiffre hors des faits listés. Chaque affirmation renvoie à un fait et à son extrait exact. Pas de tiret cadratin."
+  }
+}

@@ -1,0 +1,206 @@
+From 15c60555c32b0810cfe437f2200cc2e7b474cc01 Mon Sep 17 00:00:00 2001
+From: Jean-Baptiste Dhondt <114347858+warrox1993@users.noreply.github.com>
+Date: Fri, 30 Oct 2026 18:51:28 +0100
+Subject: [PATCH] =?UTF-8?q?fix(gardes):=20M2,=20seul=20le=20Coordinateur?=
+ =?UTF-8?q?=20pose=20une=20politique=20de=20relecture=20sur=20une=20t?=
+ =?UTF-8?q?=C3=A2che=20qui=20n'en=20a=20pas?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Revue de sécurité finale, constat M2 (part socle ; la part plugin est le commit 82b1226 du dépôt parent).
+
+La garde P1 laissait n'importe quel agent poser une executionPolicy à étapes sur une tâche qui n'en avait
+pas : un producteur injecté pouvait figer une relecture faible avant le Coordinateur, que P1 interdisait
+ensuite de remplacer.
+- verifierPolitiqueNonAffaiblie : sur une tâche sans étape, un agent dont le rôle n'est pas ceo (ou
+  introuvable dans l'entreprise) reçoit 403 atelier_politique_reservee ; une politique sans étape
+  (moniteur seul) reste permise ;
+- appliquerGardesAtelier lit le rôle sous le verrou de ligne (agents de l'entreprise de la tâche), seulement
+  quand la requête touche à la politique ; le refus est tracé (atelier.politique_verrouillee, garde P1) ;
+- humains et appels internes sans acteur : inchangés. Le plugin (patch 0154) passe le Coordinateur comme
+  acteur pour tache.mettre-sous-porte : accepté ; tout autre agent annoncé : refusé.
+Chemins du socle relus : la création (sous-tâches, gabarits, routines) ne passe pas par update() ; la
+reprise sur quota (recovery) et le canal de discussion n'ont pas d'agent acteur ou écrivent hors update().
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01EThpSSDGc5NRYwbgjNqoTJ
+---
+ server/src/__tests__/atelier-gardes.test.ts   | 44 ++++++++++++++++++-
+ .../plugin-orchestration-apis.test.ts         | 20 +++++++++
+ server/src/atelier/gardes-atelier.ts          | 31 +++++++++++--
+ 3 files changed, 89 insertions(+), 6 deletions(-)
+
+diff --git a/server/src/__tests__/atelier-gardes.test.ts b/server/src/__tests__/atelier-gardes.test.ts
+index 1ef4c3eb29..fe102d0b00 100644
+--- a/server/src/__tests__/atelier-gardes.test.ts
++++ b/server/src/__tests__/atelier-gardes.test.ts
+@@ -56,13 +56,26 @@ describe("atelier : fonctions pures des gardes", () => {
+     ).toThrow(/P1/);
+   });
+ 
+-  it("P1 : un humain peut modifier ; un agent peut renvoyer la même politique ou en ajouter une", () => {
++  it("P1 : un humain peut modifier ; un agent peut renvoyer la même politique", () => {
+     expect(() => verifierPolitiqueNonAffaiblie({ actorAgentId: null, politiqueActuelle: politique(relecteur), politiqueDemandee: null })).not.toThrow();
+     expect(() => verifierPolitiqueNonAffaiblie({ actorAgentId: autre, politiqueActuelle: politique(relecteur), politiqueDemandee: politique(relecteur) })).not.toThrow();
+-    expect(() => verifierPolitiqueNonAffaiblie({ actorAgentId: autre, politiqueActuelle: null, politiqueDemandee: politique(relecteur) })).not.toThrow();
++    expect(() => verifierPolitiqueNonAffaiblie({ actorAgentId: autre, actorAgentRole: "general", politiqueActuelle: null, politiqueDemandee: politique(relecteur) })).toThrow(/P1/);
+     expect(() => verifierPolitiqueNonAffaiblie({ actorAgentId: autre, politiqueActuelle: politique(relecteur), politiqueDemandee: undefined })).not.toThrow();
+   });
+ 
++  it("M2 : sur une tâche sans politique, seul le Coordinateur (ceo) ou un humain pose des étapes de relecture", () => {
++    const poser = (actorAgentId: string | null, actorAgentRole?: string | null, politiqueDemandee: unknown = politique(relecteur)) =>
++      () => verifierPolitiqueNonAffaiblie({ actorAgentId, actorAgentRole, politiqueActuelle: null, politiqueDemandee });
++    expect(poser(autre, "general")).toThrow(expect.objectContaining({ status: 403, details: { code: "atelier_politique_reservee" } }));
++    // Agent inconnu de l'entreprise (rôle introuvable) : refusé aussi.
++    expect(poser(autre, null)).toThrow(/P1/);
++    expect(poser(autre)).toThrow(/P1/);
++    // Une politique sans étape (moniteur seul) n'est pas une relecture : un agent la pose toujours.
++    expect(poser(autre, "general", { stages: [], monitor: { nextCheckAt: new Date(Date.now() + 3_600_000).toISOString() } })).not.toThrow();
++    expect(poser(autre, "ceo")).not.toThrow();
++    expect(poser(null)).not.toThrow();
++  });
++
+   it("P1 : la signature ignore les identifiants régénérés", () => {
+     const a = normalizeIssueExecutionPolicy(politique(relecteur));
+     const b = normalizeIssueExecutionPolicy(politique(relecteur));
+@@ -282,6 +295,33 @@ decrireAvecBase("atelier : gardes et régulateur contre PostgreSQL", () => {
+     expect(maj?.executionPolicy ?? null).toBeNull();
+   });
+ 
++  it("M2 : sur une tâche sans politique, un producteur ne pose pas de relecture avant le Coordinateur ; le ceo et l'humain le peuvent", async () => {
++    const { companyId, producteur, relecteur } = await creerEntreprise();
++    const coordinateur = randomUUID();
++    await db.insert(agents).values({ id: coordinateur, companyId, name: "Coordinateur", role: "ceo", status: "active", adapterType: "process", adapterConfig: {}, runtimeConfig: {}, permissions: {} });
++    // Le ceo d'une autre entreprise n'est pas le Coordinateur de celle-ci.
++    const ailleurs = await creerEntreprise();
++    const ceoAilleurs = randomUUID();
++    await db.insert(agents).values({ id: ceoAilleurs, companyId: ailleurs.companyId, name: "Coordinateur ailleurs", role: "ceo", status: "active", adapterType: "process", adapterConfig: {}, runtimeConfig: {}, permissions: {} });
++    const faible = { stages: [{ type: "review", participants: [{ type: "agent", agentId: relecteur }] }] };
++    const sansPolitique = () => creerTache(companyId, relecteur, { status: "in_progress", assigneeAgentId: producteur, executionPolicy: null });
++
++    const cible = await sansPolitique();
++    for (const acteur of [producteur, ceoAilleurs]) {
++      await expect(issueService(db).update(cible, { executionPolicy: faible, actorAgentId: acteur }))
++        .rejects.toMatchObject({ status: 403, details: { code: "atelier_politique_reservee" } });
++    }
++    const apres = await db.select().from(issues).where(sql`${issues.id} = ${cible}`);
++    expect(apres[0]?.executionPolicy ?? null).toBeNull();
++    const trace = await attendreActivite("atelier.politique_verrouillee");
++    expect(trace?.details).toMatchObject({ garde: "P1" });
++
++    const parCoordinateur = await issueService(db).update(await sansPolitique(), { executionPolicy: faible, actorAgentId: coordinateur });
++    expect(normalizeIssueExecutionPolicy(parCoordinateur?.executionPolicy ?? null)?.stages).toHaveLength(1);
++    const parHumain = await issueService(db).update(await sansPolitique(), { executionPolicy: faible, actorUserId: "local-board" });
++    expect(normalizeIssueExecutionPolicy(parHumain?.executionPolicy ?? null)?.stages).toHaveLength(1);
++  });
++
+   it("P2 : sans évaluation PASS, done est refusé même au board, et le refus est tracé", async () => {
+     await installerEspaceAtelier();
+     const { companyId, relecteur } = await creerEntreprise();
+diff --git a/server/src/__tests__/plugin-orchestration-apis.test.ts b/server/src/__tests__/plugin-orchestration-apis.test.ts
+index 0caa97a5fb..356613c9a4 100644
+--- a/server/src/__tests__/plugin-orchestration-apis.test.ts
++++ b/server/src/__tests__/plugin-orchestration-apis.test.ts
+@@ -427,6 +427,26 @@ describeEmbeddedPostgres("plugin orchestration APIs", () => {
+     ]);
+   });
+ 
++  it("Atelier M2 (patch local 0155) : un plugin qui annonce un agent acteur ne pose une relecture sur une tâche qui n'en a pas qu'au nom du Coordinateur", async () => {
++    const { companyId, agentId } = await seedCompanyAndAgent();
++    const coordinateur = randomUUID();
++    await db.insert(agents).values({
++      id: coordinateur, companyId, name: "Coordinateur", role: "ceo", status: "idle",
++      adapterType: "process", adapterConfig: { command: "true" }, runtimeConfig: {}, permissions: {},
++    });
++    const services = buildHostServices(db, "plugin-record-id", "paperclip.missions", createEventBusStub());
++    const politique = { stages: [{ type: "review", participants: [{ type: "agent", agentId }] }] };
++
++    const tache = await services.issues.create({ companyId, title: "Livrable" });
++    await expect(services.issues.update({ issueId: tache.id, companyId, patch: { executionPolicy: politique, actorAgentId: agentId } }))
++      .rejects.toMatchObject({ status: 403, details: { code: "atelier_politique_reservee" } });
++    expect((await services.issues.get({ issueId: tache.id, companyId }))?.executionPolicy ?? null).toBeNull();
++
++    // Chemin de tache.mettre-sous-porte : le plugin passe le Coordinateur comme acteur.
++    const posee = await services.issues.update({ issueId: tache.id, companyId, patch: { executionPolicy: politique, actorAgentId: coordinateur } });
++    expect((posee.executionPolicy as { stages: unknown[] }).stages).toHaveLength(1);
++  });
++
+   it("creates plugin operation issues with the generic operation origin", async () => {
+     const { companyId } = await seedCompanyAndAgent();
+     const services = buildHostServices(db, "plugin-record-id", "paperclip.missions", createEventBusStub());
+diff --git a/server/src/atelier/gardes-atelier.ts b/server/src/atelier/gardes-atelier.ts
+index d396241012..3014dd2c6b 100644
+--- a/server/src/atelier/gardes-atelier.ts
++++ b/server/src/atelier/gardes-atelier.ts
+@@ -8,7 +8,9 @@
+  *      participants, mode, préréglage, autorisation, limite de tours) d'une
+  *      `executionPolicy` qui comporte au moins une étape. Les humains (board)
+  *      gardent ce droit. Corrige le contournement prouvé en phase 1
+- *      (`PATCH executionPolicy: null` puis `done`).
++ *      (`PATCH executionPolicy: null` puis `done`). M2 (revue de sécurité
++ *      finale, patch 0155) : sur une tâche sans étape, seul le Coordinateur
++ *      (agent de rôle ceo de l'entreprise) ou un humain en pose.
+  *
+  * P2 — porte déterministe : une tâche placée sous la porte de l'atelier ne
+  *      peut entrer dans une étape d'approbation humaine ni passer à `done`
+@@ -57,17 +59,30 @@ export function signaturePolitiqueRelecture(politique: IssueExecutionPolicy | nu
+ 
+ export interface EntreeP1 {
+   actorAgentId: string | null | undefined;
++  /** Rôle de l'agent acteur dans l'entreprise de la tâche (null : agent introuvable). */
++  actorAgentRole?: string | null;
+   politiqueActuelle: unknown;
+   /** undefined = la requête ne touche pas à la politique. */
+   politiqueDemandee: unknown;
+ }
+ 
+-/** Lève 403 si un agent retire ou modifie une politique de relecture à étapes. Fonction pure. */
++/**
++ * Lève 403 si un agent retire ou modifie une politique de relecture à étapes, ou si un agent
++ * autre que le Coordinateur (rôle ceo) en pose une sur une tâche qui n'en a pas. Fonction pure.
++ */
+ export function verifierPolitiqueNonAffaiblie(entree: EntreeP1): void {
+   if (!entree.actorAgentId) return;
+   if (entree.politiqueDemandee === undefined) return;
+   const actuelle = signaturePolitiqueRelecture(normalizeIssueExecutionPolicy(entree.politiqueActuelle ?? null));
+-  if (actuelle === null) return;
++  if (actuelle === null) {
++    // M2 (revue de sécurité finale) : un producteur ne fige pas une relecture faible avant le Coordinateur.
++    if (entree.actorAgentRole === "ceo") return;
++    if (signaturePolitiqueRelecture(normalizeIssueExecutionPolicy(entree.politiqueDemandee ?? null)) === null) return;
++    throw forbidden(
++      "Atelier (P1) : seul le Coordinateur ou un humain pose une politique de relecture sur une tâche qui n'en a pas.",
++      { code: "atelier_politique_reservee" },
++    );
++  }
+   const demandee = signaturePolitiqueRelecture(normalizeIssueExecutionPolicy(entree.politiqueDemandee ?? null));
+   if (demandee !== actuelle) {
+     throw forbidden(
+@@ -305,14 +320,22 @@ export async function appliquerGardesAtelier(executeur: ExecuteurSql, contexte:
+     actorUserId: contexte.actorUserId ?? null,
+   };
+ 
++  // M2 : rôle lu sous le verrou, dans l'entreprise de la tâche ; `id::text` : un identifiant malformé annoncé par un plugin donne null, pas une erreur SQL.
++  const actorAgentRole = contexte.actorAgentId && patch.executionPolicy !== undefined
++    ? lignes<{ role: string }>(await executeur.execute(
++        sql`select role from agents where id::text = ${contexte.actorAgentId} and company_id = ${existant.companyId} limit 1`,
++      ))[0]?.role ?? null
++    : null;
+   try {
+     verifierPolitiqueNonAffaiblie({
+       actorAgentId: contexte.actorAgentId,
++      actorAgentRole,
+       politiqueActuelle: existant.executionPolicy ?? null,
+       politiqueDemandee: patch.executionPolicy,
+     });
+   } catch (err) {
+-    signaler?.({ ...base, garde: "P1", motifs: ["modification de la politique de relecture par un agent"] });
++    const pose = (err as { details?: { code?: string } }).details?.code === "atelier_politique_reservee";
++    signaler?.({ ...base, garde: "P1", motifs: [pose ? "pose d'une politique de relecture par un agent autre que le Coordinateur" : "modification de la politique de relecture par un agent"] });
+     throw err;
+   }
+ 
+-- 
+2.53.0
+

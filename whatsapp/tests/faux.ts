@@ -157,6 +157,8 @@ export async function fauxAtelier(): Promise<FauxAtelier> {
     if (p === `${P}/discussion/message` && req.method === "POST") {
       if (acteur.type !== "humain") return json(403, { error: "La discussion avec le Coordinateur est réservée à un humain." });
       if (String(b["companyId"]) !== DIRECTION) return json(403, { error: "hors entreprise" });
+      // `/clear` et `/nouveau` seuls : le serveur ouvre une discussion neuve, rien n'est posté.
+      if (/^\/(clear|nouveau)$/i.test(String(b["texte"]).trim())) return json(201, { nouvelle: { issueId: "nouvelle", messages: [] } });
       const m = { id: `c${f.discussion.length + 1}`, auteur: "humain" as const, nom: "Vous", texte: String(b["texte"]), date: new Date().toISOString() };
       f.discussion.push(m);
       return json(201, { ...m, reveilDemande: true });

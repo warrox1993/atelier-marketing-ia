@@ -217,13 +217,13 @@ describe("Paramètres : rendu mobile", () => {
   });
 });
 
-describe("Chat : message du Coordinateur sur les connexions manquantes", () => {
+describe("Chat : message de l'atelier sur les connexions manquantes", () => {
   const message = (c: HTMLElement) => c.querySelector<HTMLElement>('[data-testid="situation-connexions"]');
 
   it("annonce le nombre de branchements qui manquent et nomme les premiers", async () => {
     const c = await ouvrirChat();
     expect(message(c)!.querySelector("p")!.textContent).toBe(
-      "Avant de commencer : il me manque 10 connexions pour travailler sur vos vraies données (Registre BCE, Banque nationale et OpenStreetMap et 7 autres). Tant qu'elles ne sont pas faites, je travaille en démonstration.".replace("Banque nationale et OpenStreetMap", "Banque nationale, OpenStreetMap"),
+      "10 connexions ne sont pas branchées (Registre BCE, Banque nationale, OpenStreetMap et 7 autres) ; les missions qui en ont besoin travaillent sans elles.",
     );
   });
 
@@ -239,7 +239,7 @@ describe("Chat : message du Coordinateur sur les connexions manquantes", () => {
   it("tout en réel : seules restent les deux lignes lues par l'interface (google, diffusion), comptées elles aussi", async () => {
     stubReseau({ realite: { corps: { ...REALITE, branchements: REALITE.branchements.map((b) => ({ ...b, etat: "reel" })) } }, connexions: { corps: { connections: [] } } });
     const c = await ouvrirChat();
-    expect(message(c)!.querySelector("p")!.textContent).toMatch(/^Avant de commencer : il me manque 2 connexions pour travailler sur vos vraies données \(/u);
+    expect(message(c)!.querySelector("p")!.textContent).toMatch(/^2 connexions ne sont pas branchées \(/u);
   });
 
   it("route illisible : pas de message (la section Paramètres porte l'erreur), le chat reste utilisable", async () => {

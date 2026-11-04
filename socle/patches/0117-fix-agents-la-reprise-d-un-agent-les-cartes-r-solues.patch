@@ -1,0 +1,194 @@
+From 47b63dbc20384958ba0f67eef63512669d33d9b1 Mon Sep 17 00:00:00 2001
+From: Jean-Baptiste Dhondt <114347858+warrox1993@users.noreply.github.com>
+Date: Fri, 30 Oct 2026 12:43:58 +0100
+Subject: [PATCH] =?UTF-8?q?fix(agents):=20=C3=A0=20la=20reprise=20d'un=20a?=
+ =?UTF-8?q?gent,=20les=20cartes=20r=C3=A9solues=20pendant=20sa=20pause=20r?=
+ =?UTF-8?q?elancent=20leur=20r=C3=A9veil=20(Atelier=20HUM-C2)?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Pendant une pause, le réveil d'une carte résolue par l'humain est refusé (409)
+et seulement journalisé : la réponse était perdue sans message. La reprise, par
+la route /agents/:id/resume comme par l'hôte de plugin, rejoue le réveil de
+continuation des cartes résolues depuis pausedAt sur les tâches ouvertes de
+l'agent (20 au plus, même clé d'idempotence que le réveil d'origine).
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01EThpSSDGc5NRYwbgjNqoTJ
+---
+ .../resume-interaction-replay.test.ts         | 63 +++++++++++++++++++
+ server/src/routes/agents.ts                   |  3 +
+ server/src/routes/issues.ts                   | 39 ++++++++++++
+ server/src/services/plugin-host-services.ts   |  7 ++-
+ 4 files changed, 111 insertions(+), 1 deletion(-)
+ create mode 100644 server/src/__tests__/resume-interaction-replay.test.ts
+
+diff --git a/server/src/__tests__/resume-interaction-replay.test.ts b/server/src/__tests__/resume-interaction-replay.test.ts
+new file mode 100644
+index 0000000000..c61789a546
+--- /dev/null
++++ b/server/src/__tests__/resume-interaction-replay.test.ts
+@@ -0,0 +1,63 @@
++// Atelier HUM-C2 : une réponse donnée pendant la pause d'un agent était perdue (réveil refusé en 409, avalé).
++// À la reprise, les cartes résolues pendant la pause relancent leur réveil de continuation.
++import type { Db } from "@paperclipai/db";
++import { agents, companies, createDb, EMBEDDED_POSTGRES_TEST_TIMEOUT_MS, issues, issueThreadInteractions } from "@paperclipai/db";
++import { sql } from "drizzle-orm";
++import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
++import { getEmbeddedPostgresTestSupport, startEmbeddedPostgresTestDatabase } from "./helpers/embedded-postgres.js";
++import { replayInteractionWakesAfterResume } from "../routes/issues.js";
++
++const support = await getEmbeddedPostgresTestSupport();
++describe.skipIf(!support.supported)("reprise d'un agent : réveils des cartes résolues pendant la pause", () => {
++  let database: Awaited<ReturnType<typeof startEmbeddedPostgresTestDatabase>>;
++  let db: Db;
++  beforeAll(async () => {
++    database = await startEmbeddedPostgresTestDatabase("paperclip-resume-interaction-replay");
++    db = createDb(database.connectionString);
++  }, EMBEDDED_POSTGRES_TEST_TIMEOUT_MS);
++  afterAll(async () => {
++    await db?.$client.end();
++    await database?.cleanup();
++  });
++  beforeEach(async () => {
++    await db.execute(sql`truncate table companies restart identity cascade`);
++  });
++
++  async function carte(companyId: string, issueId: string, champs: Partial<typeof issueThreadInteractions.$inferInsert>) {
++    const [ligne] = await db.insert(issueThreadInteractions).values({
++      companyId, issueId, kind: "request_confirmation", status: "accepted", continuationPolicy: "wake_assignee",
++      payload: { version: 1, prompt: "Valider ?" } as never, result: { version: 1, outcome: "accepted" } as never,
++      resolvedByUserId: "local-board", ...champs,
++    }).returning();
++    return ligne!;
++  }
++
++  it("relance la carte résolue pendant la pause, pas celles d'avant ni les cartes ouvertes", async () => {
++    const [company] = await db.insert(companies).values({ name: "Reprise", issuePrefix: "RP" }).returning();
++    const pausedAt = new Date(Date.now() - 60 * 60 * 1000);
++    const [agent] = await db.insert(agents).values({ companyId: company!.id, name: "Coordinateur", role: "general", status: "idle", adapterType: "process", adapterConfig: {}, pausedAt }).returning();
++    const [issue] = await db.insert(issues).values({ companyId: company!.id, title: "Liste finale", status: "blocked", assigneeAgentId: agent!.id }).returning();
++    const [close] = await db.insert(issues).values({ companyId: company!.id, title: "Close", status: "done", assigneeAgentId: agent!.id }).returning();
++    const pendant = await carte(company!.id, issue!.id, { resolvedAt: new Date() });
++    await carte(company!.id, issue!.id, { resolvedAt: new Date(pausedAt.getTime() - 60_000) });
++    await carte(company!.id, issue!.id, { status: "pending", resolvedAt: null, result: null });
++    await carte(company!.id, close!.id, { resolvedAt: new Date() });
++    const heartbeat = { wakeup: vi.fn(async () => null) };
++
++    const n = await replayInteractionWakesAfterResume({ db, heartbeat: heartbeat as never, agentId: agent!.id, companyId: company!.id, pausedAt });
++
++    expect(n).toBe(1);
++    expect(heartbeat.wakeup).toHaveBeenCalledTimes(1);
++    expect(heartbeat.wakeup).toHaveBeenCalledWith(agent!.id, expect.objectContaining({
++      reason: "issue_commented",
++      payload: expect.objectContaining({ issueId: issue!.id, interactionId: pendant.id }),
++      idempotencyKey: `interaction:${pendant.id}:accepted`,
++    }));
++  });
++
++  it("sans date de pause, ne relance rien", async () => {
++    const heartbeat = { wakeup: vi.fn(async () => null) };
++    expect(await replayInteractionWakesAfterResume({ db, heartbeat: heartbeat as never, agentId: "00000000-0000-4000-8000-000000000000", companyId: "00000000-0000-4000-8000-000000000001", pausedAt: null })).toBe(0);
++    expect(heartbeat.wakeup).not.toHaveBeenCalled();
++  });
++});
+diff --git a/server/src/routes/agents.ts b/server/src/routes/agents.ts
+index 09f780bef9..27bd828e66 100644
+--- a/server/src/routes/agents.ts
++++ b/server/src/routes/agents.ts
+@@ -266,6 +266,7 @@ import { resolveCoreTrustPreset } from "../services/trust-preset-resolver.js";
+ import { readObject } from "../lib/objects.js";
+ import { listInvalidOrgChainDescendantIds } from "../services/agent-invokability.js";
+ import { logger } from "../middleware/logger.js";
++import { replayInteractionWakesAfterResume } from "./issues.js";
+ import {
+   AGENT_PROFILE_CHANGE_CONSENT_FIELDS,
+   agentInstructionsChangeTargetKey,
+@@ -5465,6 +5466,8 @@ export function agentRoutes(
+       entityType: "agent",
+       entityId: agent.id,
+     });
++    await replayInteractionWakesAfterResume({ db, heartbeat, agentId: agent.id, companyId: agent.companyId, pausedAt: existing.pausedAt ?? null })
++      .catch((err) => logger.warn({ err, agentId: agent.id }, "failed to replay interaction wakes after resume"));
+ 
+     res.json(redactAgentRowForResponse(agent));
+   });
+diff --git a/server/src/routes/issues.ts b/server/src/routes/issues.ts
+index ff19817cb3..90f0884c87 100644
+--- a/server/src/routes/issues.ts
++++ b/server/src/routes/issues.ts
+@@ -2702,6 +2702,45 @@ async function queueResolvedInteractionContinuationWakeup(input: {
+     );
+ }
+ 
++/**
++ * Atelier HUM-C2 : pendant la pause d'un agent, le réveil d'une carte résolue
++ * est refusé (409) et seulement journalisé. À la reprise, on rejoue le réveil
++ * de continuation des cartes résolues depuis la pause, sur ses tâches ouvertes.
++ */
++export async function replayInteractionWakesAfterResume(input: {
++  db: Db;
++  heartbeat: ReturnType<typeof heartbeatService>;
++  agentId: string;
++  companyId: string;
++  pausedAt: Date | null;
++}): Promise<number> {
++  if (!input.pausedAt) return 0;
++  const rows = await input.db
++    .select({ interaction: issueThreadInteractions, issue: issueRows })
++    .from(issueThreadInteractions)
++    .innerJoin(issueRows, and(eq(issueRows.id, issueThreadInteractions.issueId), eq(issueRows.companyId, issueThreadInteractions.companyId)))
++    .where(and(
++      eq(issueThreadInteractions.companyId, input.companyId),
++      eq(issueRows.assigneeAgentId, input.agentId),
++      notInArray(issueRows.status, ["done", "cancelled"]),
++      notInArray(issueThreadInteractions.status, ["pending"]),
++      sql`${issueThreadInteractions.resolvedAt} >= ${input.pausedAt.toISOString()}::timestamptz`,
++    ))
++    .orderBy(asc(issueThreadInteractions.resolvedAt))
++    .limit(20);
++  for (const { interaction, issue } of rows) {
++    await queueResolvedInteractionContinuationWakeup({
++      db: input.db,
++      heartbeat: input.heartbeat,
++      issue,
++      interaction,
++      actor: { actorType: "user", actorId: interaction.resolvedByUserId ?? "board" },
++      source: "agent.resumed",
++    });
++  }
++  return rows.length;
++}
++
+ function readCheckboxSelectionForWake(input: {
+   kind: string;
+   payload?: unknown;
+diff --git a/server/src/services/plugin-host-services.ts b/server/src/services/plugin-host-services.ts
+index 1c592fb4cb..c7f97a2726 100644
+--- a/server/src/services/plugin-host-services.ts
++++ b/server/src/services/plugin-host-services.ts
+@@ -76,6 +76,7 @@ import { request as httpRequest } from "node:http";
+ import { request as httpsRequest } from "node:https";
+ import { isIP } from "node:net";
+ import { logger } from "../middleware/logger.js";
++import { replayInteractionWakesAfterResume } from "../routes/issues.js";
+ import { getTelemetryClient } from "../telemetry.js";
+ import { accessService } from "./access.js";
+ import {
+@@ -3022,7 +3023,11 @@ export function buildHostServices(
+         await ensurePluginAvailableForCompany(companyId);
+         const agent = await agents.getById(params.agentId);
+         requireInCompany("Agent", agent, companyId);
+-        return (await agentsLifecycle.resumeAgent(params.agentId)) as Agent;
++        const resumed = (await agentsLifecycle.resumeAgent(params.agentId)) as Agent;
++        // Atelier HUM-C2 : même reprise des réponses données pendant la pause que la route /agents/:id/resume.
++        await replayInteractionWakesAfterResume({ db, heartbeat, agentId: params.agentId, companyId, pausedAt: agent!.pausedAt ?? null })
++          .catch((err) => logger.warn({ err, agentId: params.agentId }, "failed to replay interaction wakes after resume"));
++        return resumed;
+       },
+       async invoke(params) {
+         const companyId = ensureCompanyId(params.companyId);
+-- 
+2.53.0
+

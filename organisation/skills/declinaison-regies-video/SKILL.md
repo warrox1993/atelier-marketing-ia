@@ -68,7 +68,8 @@ et lien de son centre d'aide. Une demande `fabriquer_video` par format retenu, c
 ## Limites
 
 - Les formats et durées des régies changent souvent : la compétence ne les fige pas.
-- L'outil fabrique trois formats ; pas de format 4:5 ni 9:16 recadré à la demande.
+- L'outil fabrique trois formats (le vertical `1080x1920` est déjà du 9:16) ; pas de format 4:5, ni de recadrage d'une
+  vidéo déjà fabriquée vers un autre format : il faut une nouvelle fabrication.
 - Elle prépare le texte et le format ; elle ne publie rien, ne programme rien, ne règle aucun budget publicitaire.
 - Les liens des centres d'aide sont donnés comme points de départ : vérifier qu'ils s'ouvrent encore.
 

@@ -76,7 +76,9 @@ describe("service statbel sur un jeu d'essai fictif", () => {
     expect((p["entreprises_tva"].principales_sections as Obj[]).map((x) => [x["section"], x["libelle"], x["assujettis"].valeur])).toEqual([
       ["F", "Construction", 100], ["G", "Commerce de gros et de détail", 50], ["A", "Agriculture, sylviculture et pêche", 10],
     ]);
-    // Chaque chiffre du profil porte une année et une source.
+    // Chaque chiffre du profil porte une année et une source : clé courte de la table `sources` (S1), dont la citation
+    // nomme Statbel et la même année.
+    const sources = p["sources"] as Obj;
     let nb = 0;
     const parcourir = (v: unknown): void => {
       if (Array.isArray(v)) return v.forEach(parcourir);
@@ -85,15 +87,20 @@ describe("service statbel sur un jeu d'essai fictif", () => {
       if ("valeur" in o) {
         nb++;
         expect(typeof o["annee"], JSON.stringify(o)).toBe("number");
-        expect(String(o["source"]), JSON.stringify(o)).toContain("Statbel");
-        expect(String(o["source"])).toContain(String(o["annee"]));
+        const src = sources[String(o["source"])] as Obj | undefined;
+        expect(src, JSON.stringify(o)).toBeDefined();
+        expect(String(src!["citation"])).toContain("Statbel");
+        expect(String(src!["citation"])).toContain(String(o["annee"]));
+        expect(src!["annee"]).toBe(o["annee"]);
         return;
       }
       for (const [k, x] of Object.entries(o)) if (k !== "sources") parcourir(x);
     };
     parcourir(p);
     expect(nb).toBe(28); // 6 population + 14 tranches + 3 revenus + 2 TVA + 3 sections
-    expect(p["sources"]).toHaveLength(4);
+    expect(Object.keys(sources).sort()).toEqual(["codes_postaux", "population", "revenus", "tva"]);
+    // S1 : la citation n'est plus répétée à chaque chiffre (21 628 caractères pour une commune avant).
+    expect(JSON.stringify(p).split("Statbel, population par commune").length - 1).toBe(1);
     expect(JSON.stringify(p["limites"])).toContain("médian");
   });
 
@@ -160,7 +167,10 @@ describe("service statbel sur un jeu d'essai fictif", () => {
     expect(lignes[1]!["revenu_moyen_par_declaration_eur"].valeur).toBe(25000);
     expect(lignes[1]!["part_65_ans_et_plus_pct"].valeur).toBe(16.7); // 40 personnes de 90 ans sur 240 habitants
     expect((c["non_resolues"] as Obj[]).map((n) => n["statut"])).toEqual(["doublon", "ambigue", "introuvable"]);
-    for (const l of lignes) for (const [k, v] of Object.entries(l)) if (k !== "commune") expect(v, k).toMatchObject({ annee: expect.any(Number), source: expect.stringContaining("Statbel") });
+    for (const l of lignes) for (const [k, v] of Object.entries(l)) if (k !== "commune") {
+      expect(v, k).toMatchObject({ annee: expect.any(Number) });
+      expect(String((c["sources"] as Obj)[(v as Obj)["source"]]?.["citation"]), k).toContain("Statbel");
+    }
   });
 
   it("E2-A : une référence non résolue n'est jamais renvoyée (pas d'écho de la saisie, numérique ou non)", async () => {

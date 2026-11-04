@@ -25,11 +25,11 @@ import type { Campagne } from "../../contrats/campagnes.js";
 import { CLES_FILTRE_PROSPECTS, filtreDepuisAdresse, parametresDepuisFiltre, type FiltreProspects } from "../../contrats/filtre-prospects.js";
 import { naceDeduitOsm } from "../../serveur/categories-osm-nace.js";
 import { expliquerConfiance } from "./explication-confiance.js";
-import { useDonnees } from "../donnees.js";
+import { useAction, useDonnees } from "../donnees.js";
 import { BaseClients, ChoixFichier, lireBase64 } from "../base-clients.js";
 import { DemanderCoordinateur } from "../composants/demander-coordinateur.js";
 import { Bouton, Champ, Chargement, ecranEtroit, EnTete, EtatErreur, Horodatage, LienHote, Pastille, Section, Vide } from "../composants.js";
-import { idCourt, nombre, type Ton } from "../format.js";
+import { dateSeule, idCourt, nombre, type Ton } from "../format.js";
 import { chemin } from "../route.js";
 import { appelRoute, telechargerBase64 } from "../routes-prospection.js";
 import { RegistreConsentements } from "../registre-consentements.js";
@@ -1236,6 +1236,75 @@ function EtalonnerScore({ companyId, onTermine }: { companyId: string; onTermine
   );
 }
 
+interface ResultatPurge {
+  avant: string;
+  aBlanc: boolean;
+  candidats: number;
+  supprimes: number;
+}
+
+/** Purge des prospects sans contact depuis 3 ans (action `atelier.prospects.purger`) : comptage à blanc, puis confirmation. */
+function PurgeProspects({ onTermine }: { onTermine(): void }) {
+  const purger = useAction<ResultatPurge>("atelier.prospects.purger");
+  const [compte, setCompte] = useState<ResultatPurge | null>(null);
+  const [fait, setFait] = useState<ResultatPurge | null>(null);
+  const [enCours, setEnCours] = useState(false);
+  const [erreur, setErreur] = useState<unknown>(null);
+  const lancer = async (confirmer: boolean) => {
+    setEnCours(true);
+    setErreur(null);
+    setFait(null);
+    try {
+      const r = await purger({ confirmer });
+      setCompte(confirmer ? null : r);
+      if (confirmer) {
+        setFait(r);
+        onTermine();
+      }
+    } catch (e) {
+      setErreur(e);
+    } finally {
+      setEnCours(false);
+    }
+  };
+  const prospects = (n: number) => `${nombre(n)} prospect${n > 1 ? "s" : ""}`;
+  return (
+    <Section titre="Purger les prospects sans contact depuis 3 ans" ancre="prospects-purge" repliable aide="Supprime les prospects qui n'ont eu aucun contact (mise à jour, export, tâche commerciale) depuis 3 ans. Un prospect qui porte une base légale est gardé ; les oppositions et la liste « Ne m'appelez plus » ne sont jamais touchées.">
+      <div className="atl-actions">
+        <Bouton enCours={enCours && !compte} onClick={() => void lancer(false)}>
+          Compter les prospects à purger
+        </Bouton>
+      </div>
+      {compte ? (
+        compte.candidats === 0 ? (
+          <p className="atl-sous" role="status">
+            Aucun prospect sans contact depuis le {dateSeule(compte.avant)}.
+          </p>
+        ) : (
+          <div className="atl-encart" data-ton="attention">
+            <p className="atl-encart-titre">
+              {prospects(compte.candidats)} sans contact depuis le {dateSeule(compte.avant)}.
+            </p>
+            <p>La suppression est définitive.</p>
+            <div className="atl-actions">
+              <Bouton variante="danger" enCours={enCours} onClick={() => void lancer(true)}>
+                Supprimer définitivement les {prospects(compte.candidats)}
+              </Bouton>
+              <Bouton onClick={() => setCompte(null)}>Annuler</Bouton>
+            </div>
+          </div>
+        )
+      ) : null}
+      {erreur ? <EtatErreur erreur={erreur} contexte="purge des prospects refusée" /> : null}
+      {fait ? (
+        <p className="atl-succes" role="status">
+          Purge faite : {fait.supprimes > 1 ? `${prospects(fait.supprimes)} supprimés` : `${prospects(fait.supprimes)} supprimé`}.
+        </p>
+      ) : null}
+    </Section>
+  );
+}
+
 /* ------------------------------------------------------------------ */
 /* Liste                                                               */
 /* ------------------------------------------------------------------ */
@@ -1435,6 +1504,7 @@ function ListeProspects() {
         </>
       ) : null}
       {companyId ? <EtalonnerScore companyId={companyId} onTermine={() => setVersionCharge((v) => v + 1)} /> : null}
+      {companyId ? <PurgeProspects onTermine={() => setVersionCharge((v) => v + 1)} /> : null}
       {fiche && companyId ? (
         <Fiche
           key={fiche.id}

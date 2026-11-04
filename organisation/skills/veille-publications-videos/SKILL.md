@@ -35,14 +35,21 @@ Tirer de ces sources ce qu'elles permettent d'établir, rien de plus, dans le ca
 1. arXiv : lire le titre, les auteurs, la date, la version et le résumé. Les métadonnées sont libres
    de droits ; le texte de l'article garde sa licence propre : liens et courtes citations seulement.
 2. Distinguer l'article de l'auteur de l'outil (source primaire) d'une étude tierce (secondaire).
-3. YouTube : métadonnées seulement (titre, chaîne, date, description, durée). Aucune transcription
-   ni sous-titre de vidéo de tiers, aucun téléchargement.
+3. YouTube : métadonnées de l'API officielle (titre, chaîne, date, description, durée). La transcription locale de
+   l'audio prévue par la décision de l'opérateur du 26/10/2026 (ADR-009) est suspendue depuis le 30/10/2026 jusqu'à l'avis
+   écrit d'un juriste (`docs/observatoire/droits-collecte.md`, section 2) : aucune transcription n'est demandée ni
+   utilisée. Une fois permise, elle sera faite par le code de collecte, jamais par un agent, pour l'étude interne
+   seulement, et son texte ne sera jamais publié ni recopié. Aucun sous-titre de tiers, aucun téléchargement par
+   l'agent.
 4. Rattacher l'entrée à une Fiche et rédiger une affirmation au statut `rapporte_tiers` (voir
    `affirmations-preuves`) : « la vidéo annonce X », pas « X est vrai ».
 5. Un texte réglementaire officiel (règlement UE) reste cité avec sa référence exacte et fonde
    `confirme_doc_officielle`.
 6. Si l'entrée annonce un outil inconnu, signaler « nouvelle Fiche possible » à la veille technique.
 7. Si le quota YouTube ou la cadence arXiv est atteint, reporter la tâche au lieu de la forcer.
+8. Sans instantané de la collecte pour l'entrée, il n'y a pas de Preuve : rendre « information manquante ». Au
+   30/10/2026, aucun collecteur arXiv ni YouTube n'existe encore (droits de collecte vidéo à vérifier avant,
+   `docs/observatoire/droits-collecte.md`).
 
 ## Livrable
 
@@ -52,7 +59,7 @@ description, position), signal éventuel de nouvelle Fiche, limites en une phras
 ## Critères de réussite
 
 - Aucune affirmation ne dépasse ce que dit le résumé ou la description.
-- Aucune transcription n'est utilisée ni stockée.
+- Aucune transcription n'est demandée, faite par l'agent, publiée ni recopiée ; seuls des extraits courts sont cités.
 - Chaque citation porte sa source, son extrait exact et sa position.
 
 ## Limites

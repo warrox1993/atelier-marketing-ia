@@ -1,0 +1,1097 @@
+From 006b0fdbd5af34e091ae9b150f0f6c5963c65c2c Mon Sep 17 00:00:00 2001
+From: Jean-Baptiste Dhondt <114347858+warrox1993@users.noreply.github.com>
+Date: Fri, 30 Oct 2026 02:03:38 +0100
+Subject: [PATCH] =?UTF-8?q?fix(authz):=20seul=20un=20humain=20configure=20?=
+ =?UTF-8?q?les=20agents=20;=20assignation=20born=C3=A9e=20hors=20coordinat?=
+ =?UTF-8?q?eur?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Atelier, lot S (AFD-C1, N1, CV-1, CV-2, M3, AFA-SEC-2, N4, N3, MK-14d, DOC-A20) :
+
+- décideur : agent_config:update, agent_instructions:update et skill_config:update
+  refusés à tout agent (sur soi comme sur un pair, avant allow_self, les grants par
+  défaut agents:configure et skills:create, le consentement et les clés de portée) ;
+  agent_config:read limité à sa propre configuration ;
+- tasks:assign : le coordinateur (ceo) assigne partout ; tout autre agent seulement dans
+  la portée de son grant tasks:assign_scope (sous-arbre par défaut, plus les
+  destinataires déclarés que le board pose avec assignableAgentIds, jamais vide) ;
+- PATCH /agents/:id/permissions et liaison d'approbations aux tâches : gestes humains
+  seulement, même pour le coordinateur ;
+- outils de démonstration (*_fixture) de la passerelle d'outils listés en test seulement ;
+- dangerouslySkipPermissions par défaut à false (exécution, ACP, sonde d'environnement).
+
+Effets : la modification de ses consignes par un agent à la demande du propriétaire dans
+le chat est refusée (le board modifie les consignes dans l'interface). En local_trusted,
+le board implicite garde tous ces gestes. Tests amont alignés et marqués « Atelier ».
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01EThpSSDGc5NRYwbgjNqoTJ
+---
+ packages/adapters/claude-local/src/index.ts   |   2 +-
+ .../adapters/claude-local/src/server/acp.ts   |   4 +-
+ .../src/server/execute.remote.test.ts         |   2 +
+ .../claude-local/src/server/execute.ts        |   2 +-
+ .../adapters/claude-local/src/server/test.ts  |   2 +-
+ packages/shared/src/validators/agent.ts       |   2 +
+ .../agent-default-configure-grants.test.ts    |   3 +-
+ .../agent-permissions-routes.test.ts          |  37 +++++
+ .../src/__tests__/atelier-assignation.test.ts |  95 +++++++++++++
+ .../__tests__/atelier-config-agents.test.ts   | 108 ++++++++++++++
+ .../__tests__/authorization-service.test.ts   | 132 +++++++-----------
+ .../claude-local-adapter-environment.test.ts  |   2 +
+ .../__tests__/claude-local-execute.test.ts    |   2 +
+ ...ue-agent-mutation-ownership-routes.test.ts |  16 +++
+ .../owner-chat-instruction-authority.test.ts  |  59 ++++----
+ server/src/__tests__/tool-gateway.test.ts     |  23 +++
+ server/src/routes/agents.ts                   |  22 ++-
+ server/src/routes/issues.ts                   |   8 +-
+ server/src/services/authorization.ts          |  38 +++++
+ server/src/services/tool-gateway.ts           |   3 +-
+ 20 files changed, 434 insertions(+), 128 deletions(-)
+ create mode 100644 server/src/__tests__/atelier-assignation.test.ts
+ create mode 100644 server/src/__tests__/atelier-config-agents.test.ts
+
+diff --git a/packages/adapters/claude-local/src/index.ts b/packages/adapters/claude-local/src/index.ts
+index 9268c47f95..78ce805745 100644
+--- a/packages/adapters/claude-local/src/index.ts
++++ b/packages/adapters/claude-local/src/index.ts
+@@ -68,7 +68,7 @@ Core fields:
+ - chrome (boolean, optional): pass --chrome when running Claude
+ - promptTemplate (string, optional): run prompt template
+ - maxTurnsPerRun (number, optional): max turns for one run
+-- dangerouslySkipPermissions (boolean, optional, default true): allow non-interactive Claude runs to proceed without approval prompts. Local and remote targets receive --dangerously-skip-permissions for all built-in and connected tools. Managed sandbox targets also identify themselves to Claude so root container launches support bypass. Non-sandbox root processes must run Claude as a non-root user; Paperclip does not silently downgrade the requested mode.
++- dangerouslySkipPermissions (boolean, optional, default false; Atelier : opt-in explicite): allow non-interactive Claude runs to proceed without approval prompts. Local and remote targets receive --dangerously-skip-permissions for all built-in and connected tools. Managed sandbox targets also identify themselves to Claude so root container launches support bypass. Non-sandbox root processes must run Claude as a non-root user; Paperclip does not silently downgrade the requested mode.
+ - command (string, optional): defaults to "claude"
+ - extraArgs (string[], optional): additional CLI args
+ - env (object, optional): KEY=VALUE environment variables
+diff --git a/packages/adapters/claude-local/src/server/acp.ts b/packages/adapters/claude-local/src/server/acp.ts
+index 957c481050..aa3654ad67 100644
+--- a/packages/adapters/claude-local/src/server/acp.ts
++++ b/packages/adapters/claude-local/src/server/acp.ts
+@@ -670,13 +670,13 @@ export async function probeClaudeAcpSandboxLogin(input: {
+   }
+ 
+   Object.assign(env, claudeSandboxPermissionEnv({
+-    dangerouslySkipPermissions: asBoolean(config.dangerouslySkipPermissions, true), targetIsSandbox,
++    dangerouslySkipPermissions: asBoolean(config.dangerouslySkipPermissions, false), targetIsSandbox,
+   }));
+   const args = ["--print", "-", "--output-format", "stream-json", "--verbose"];
+   if (config.managedAiConnection) args.push("--setting-sources", "user");
+   args.push(
+     ...buildClaudeProbePermissionArgs({
+-      dangerouslySkipPermissions: asBoolean(config.dangerouslySkipPermissions, true),
++      dangerouslySkipPermissions: asBoolean(config.dangerouslySkipPermissions, false),
+       targetIsRemote,
+       localProcessUid: process.getuid?.() ?? null,
+     }),
+diff --git a/packages/adapters/claude-local/src/server/execute.remote.test.ts b/packages/adapters/claude-local/src/server/execute.remote.test.ts
+index cbb6ed5501..e6ac3e330c 100644
+--- a/packages/adapters/claude-local/src/server/execute.remote.test.ts
++++ b/packages/adapters/claude-local/src/server/execute.remote.test.ts
+@@ -127,6 +127,8 @@ describe("claude remote execution", () => {
+         engine: "cli",
+         command: "claude",
+         instructionsFilePath: instructionsPath,
++        // Atelier (patch local 0108, DOC-A20) : contournement des permissions en opt-in explicite, plus par défaut.
++        dangerouslySkipPermissions: true,
+         env: {
+           QA_PROJECT_WORKSPACE_CWD: workspaceDir,
+           RANDOM_WORKSPACE_CWD: workspaceDir,
+diff --git a/packages/adapters/claude-local/src/server/execute.ts b/packages/adapters/claude-local/src/server/execute.ts
+index 584c022366..ffe9863097 100644
+--- a/packages/adapters/claude-local/src/server/execute.ts
++++ b/packages/adapters/claude-local/src/server/execute.ts
+@@ -455,7 +455,7 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
+   const effort = asString(config.effort, "");
+   const chrome = asBoolean(config.chrome, false);
+   const maxTurns = asNumber(config.maxTurnsPerRun, 0);
+-  const dangerouslySkipPermissions = asBoolean(config.dangerouslySkipPermissions, true);
++  const dangerouslySkipPermissions = asBoolean(config.dangerouslySkipPermissions, false);
+   const configEnv = parseObject(config.env);
+   const workspaceContext = parseObject(context.paperclipWorkspace);
+   const workspaceCwd = asString(workspaceContext.cwd, "");
+diff --git a/packages/adapters/claude-local/src/server/test.ts b/packages/adapters/claude-local/src/server/test.ts
+index 2aefa947fc..a13ba9ec1d 100644
+--- a/packages/adapters/claude-local/src/server/test.ts
++++ b/packages/adapters/claude-local/src/server/test.ts
+@@ -323,7 +323,7 @@ export async function testEnvironment(
+       const effort = asString(config.effort, "").trim();
+       const chrome = asBoolean(config.chrome, false);
+       const maxTurns = asNumber(config.maxTurnsPerRun, 0);
+-      const dangerouslySkipPermissions = asBoolean(config.dangerouslySkipPermissions, true);
++      const dangerouslySkipPermissions = asBoolean(config.dangerouslySkipPermissions, false); // Atelier : opt-in, comme execute.ts
+       Object.assign(env, claudeSandboxPermissionEnv({ dangerouslySkipPermissions, targetIsSandbox }));
+       const extraArgs = (() => {
+         const fromExtraArgs = asStringArray(config.extraArgs);
+diff --git a/packages/shared/src/validators/agent.ts b/packages/shared/src/validators/agent.ts
+index 415bce05c1..5f33f56258 100644
+--- a/packages/shared/src/validators/agent.ts
++++ b/packages/shared/src/validators/agent.ts
+@@ -293,6 +293,8 @@ export const updateAgentPermissionsSchema = z.object({
+   canAssignTasks: z.boolean(),
+   trustPreset: trustPresetSchema.optional(),
+   authorizationPolicy: trustAuthorizationPolicySchema.optional(),
++  // Atelier (N3) : jamais vide (une portée vide ne contraindrait rien, voir scopeAllows).
++  assignableAgentIds: z.array(z.string().guid()).min(1).max(500).optional(),
+ });
+ 
+ export type UpdateAgentPermissions = z.infer<typeof updateAgentPermissionsSchema>;
+diff --git a/server/src/__tests__/agent-default-configure-grants.test.ts b/server/src/__tests__/agent-default-configure-grants.test.ts
+index b1bfa96d51..3acb173233 100644
+--- a/server/src/__tests__/agent-default-configure-grants.test.ts
++++ b/server/src/__tests__/agent-default-configure-grants.test.ts
+@@ -123,7 +123,8 @@ describeDatabase("new agent configuration defaults", () => {
+       resource: { type: "agent", agentId: peer.id, companyId },
+       scope: { requiresChangeGrant: true },
+     });
+-    expect(decision).toMatchObject({ allowed: true, reason: "allow_direct_change" });
++    // Atelier (patch local 0108, AFD-C1) : les grants par défaut restent posés, mais aucun agent ne configure un pair.
++    expect(decision).toMatchObject({ allowed: false, reason: "deny_policy_restricted" });
+ 
+     // A later ordinary self-update must not recreate a grant removed by an operator.
+     await db.delete(principalPermissionGrants).where(eq(principalPermissionGrants.principalId, standard.id));
+diff --git a/server/src/__tests__/agent-permissions-routes.test.ts b/server/src/__tests__/agent-permissions-routes.test.ts
+index 4a0a602cc0..62d86c2c6b 100644
+--- a/server/src/__tests__/agent-permissions-routes.test.ts
++++ b/server/src/__tests__/agent-permissions-routes.test.ts
+@@ -2102,6 +2102,43 @@ describe("agent permission routes", () => {
+     expect(res.body.permissions.canCreateSkills).toBe(false);
+   });
+ 
++  it("Atelier N4 : un agent, même coordinateur (ceo), ne gère pas les permissions ni la politique de confiance", async () => {
++    mockAgentService.getById.mockImplementation(async (id: string) =>
++      id === "ceo-agent" ? { ...baseAgent, id: "ceo-agent", role: "ceo" } : baseAgent);
++    const app = await createApp({ type: "agent", agentId: "ceo-agent", companyId, runId: "run-1", source: "agent_key" });
++    for (const corps of [
++      { canCreateAgents: true, canAssignTasks: true },
++      { canCreateAgents: false, canAssignTasks: false, authorizationPolicy: { assignmentPolicy: { mode: "company_default" } } },
++      { canCreateAgents: false, canAssignTasks: false, assignableAgentIds: [agentId] },
++    ]) {
++      const res = await requestApp(app, (baseUrl) => request(baseUrl).patch(`/api/agents/${agentId}/permissions`).send(corps));
++      expect(res.status).toBe(403);
++      expect(res.body.error).toBe("Atelier : seul un humain gère les permissions et la politique de confiance des agents.");
++    }
++    expect(mockAgentService.updatePermissions).not.toHaveBeenCalled();
++    expect(mockAccessService.setPrincipalPermission).not.toHaveBeenCalled();
++  });
++
++  it("Atelier N3 : le board pose les destinataires déclarés en grant tasks:assign_scope, hors des permissions de l'agent", async () => {
++    const pair = "33333333-3333-4333-8333-333333333333";
++    const app = await createApp({ type: "board", userId: "board-user", source: "local_implicit", isInstanceAdmin: true, companyIds: [companyId] });
++    const res = await requestApp(app, (baseUrl) => request(baseUrl).patch(`/api/agents/${agentId}/permissions`)
++      .send({ canCreateAgents: false, canAssignTasks: false, assignableAgentIds: [agentId, pair] }));
++    expect(res.status).toBe(200);
++    expect(mockAgentService.updatePermissions).toHaveBeenCalledWith(agentId, { canCreateAgents: false, canAssignTasks: false });
++    expect(mockAccessService.setPrincipalPermission).toHaveBeenCalledWith(
++      companyId, "agent", agentId, "tasks:assign_scope", true, "board-user", { assigneeAgentIds: [agentId, pair] });
++    // Sans liste, le grant à portée existant n'est pas touché ; une liste vide est refusée (portée vide = sans contrainte).
++    mockAccessService.setPrincipalPermission.mockClear();
++    await requestApp(app, (baseUrl) => request(baseUrl).patch(`/api/agents/${agentId}/permissions`)
++      .send({ canCreateAgents: false, canAssignTasks: false }));
++    expect(mockAccessService.setPrincipalPermission).not.toHaveBeenCalledWith(
++      companyId, "agent", agentId, "tasks:assign_scope", expect.anything(), expect.anything(), expect.anything());
++    const vide = await requestApp(app, (baseUrl) => request(baseUrl).patch(`/api/agents/${agentId}/permissions`)
++      .send({ canCreateAgents: false, canAssignTasks: false, assignableAgentIds: [] }));
++    expect(vide.status).toBe(400);
++  });
++
+   it("rejects CEO permission updates outside the caller company scope", async () => {
+     const app = await createApp({
+       type: "agent",
+diff --git a/server/src/__tests__/atelier-assignation.test.ts b/server/src/__tests__/atelier-assignation.test.ts
+new file mode 100644
+index 0000000000..3278cd2c08
+--- /dev/null
++++ b/server/src/__tests__/atelier-assignation.test.ts
+@@ -0,0 +1,95 @@
++/**
++ * Atelier Marketing IA (patch local 0108, N3) : le coordinateur (ceo) assigne à tout agent ; tout autre agent
++ * seulement à son sous-arbre (grant par défaut tasks:assign_scope) et aux destinataires déclarés que le board pose
++ * dans ce même grant. Le grant large tasks:assign, posé sur chaque agent importé, ne suffit plus hors ceo.
++ */
++import { randomUUID } from "node:crypto";
++import { eq } from "drizzle-orm";
++import { afterAll, beforeAll, describe, expect, it } from "vitest";
++import { activityLog, agents, companies, companyMemberships, createDb, principalPermissionGrants } from "@paperclipai/db";
++import { getEmbeddedPostgresTestSupport, startEmbeddedPostgresTestDatabase } from "./helpers/embedded-postgres.js";
++import { createAgentLifecycle } from "../services/agent-lifecycle.js";
++import { accessService } from "../services/access.js";
++import { authorizationService } from "../services/authorization.js";
++
++const support = await getEmbeddedPostgresTestSupport();
++const decrireAvecBase = support.supported ? describe : describe.skip;
++
++decrireAvecBase("atelier : assignation bornée (N3)", () => {
++  let db!: ReturnType<typeof createDb>;
++  let cleanup: (() => Promise<void>) | undefined;
++  const companyId = randomUUID();
++  const ids: Record<string, string> = {};
++
++  beforeAll(async () => {
++    const started = await startEmbeddedPostgresTestDatabase("atelier-assignation");
++    db = createDb(started.connectionString);
++    cleanup = started.cleanup;
++    await db.insert(companies).values({ id: companyId, name: "Atelier assignation", issuePrefix: `AA${companyId.slice(0, 6).toUpperCase()}` });
++    const embaucher = async (cle: string, role: string, chef?: string) => {
++      const agent = await createAgentLifecycle(db).requestHire(companyId, {
++        name: cle, role, reportsTo: chef ? ids[chef] : null, adapterType: "process", adapterConfig: {}, runtimeConfig: {},
++      });
++      const acces = accessService(db);
++      await acces.ensureMembership(companyId, "agent", agent.id, "member", "active");
++      // Comme l'import de l'atelier (company-portability) : grant large tasks:assign sur chaque agent.
++      await acces.setPrincipalPermission(companyId, "agent", agent.id, "tasks:assign", true, null);
++      ids[cle] = agent.id;
++    };
++    await embaucher("coordinateur", "ceo");
++    await embaucher("analyste", "general", "coordinateur");
++    await embaucher("redacteur", "general", "coordinateur");
++    await embaucher("relecteur", "qa", "coordinateur");
++    await embaucher("exigences", "qa", "relecteur");
++  }, 30_000);
++
++  afterAll(async () => {
++    await db.delete(principalPermissionGrants).where(eq(principalPermissionGrants.companyId, companyId));
++    await db.delete(companyMemberships).where(eq(companyMemberships.companyId, companyId));
++    await db.delete(agents).where(eq(agents.companyId, companyId));
++    await db.delete(activityLog).where(eq(activityLog.companyId, companyId));
++    await db.delete(companies).where(eq(companies.id, companyId));
++    await cleanup?.();
++  });
++
++  const assigner = (acteur: string, cible: string) => authorizationService(db).decide({
++    actor: { type: "agent", agentId: ids[acteur]!, companyId, source: "agent_key" },
++    action: "tasks:assign",
++    resource: { type: "issue", companyId, issueId: null, projectId: null, parentIssueId: null, assigneeAgentId: ids[cible]!, assigneeUserId: null },
++    scope: { assigneeAgentId: ids[cible]! },
++  });
++  const refuse = { allowed: false, reason: "deny_policy_restricted" };
++
++  it("le coordinateur (ceo) assigne à tout agent", async () => {
++    for (const cible of ["analyste", "redacteur", "relecteur", "exigences", "coordinateur"]) {
++      await expect(assigner("coordinateur", cible)).resolves.toMatchObject({ allowed: true });
++    }
++  });
++
++  it("un spécialiste avec les grants par défaut n'assigne qu'à lui-même : ni au coordinateur ni à un pair", async () => {
++    await expect(assigner("analyste", "analyste")).resolves.toMatchObject({ allowed: true });
++    await expect(assigner("analyste", "coordinateur")).resolves.toMatchObject(refuse);
++    await expect(assigner("analyste", "redacteur")).resolves.toMatchObject(refuse);
++  });
++
++  it("un agent qui a des subordonnés (rôle non ceo) assigne dans son sous-arbre seulement", async () => {
++    await expect(assigner("relecteur", "exigences")).resolves.toMatchObject({ allowed: true });
++    await expect(assigner("relecteur", "analyste")).resolves.toMatchObject(refuse);
++    await expect(assigner("exigences", "relecteur")).resolves.toMatchObject(refuse);
++  });
++
++  it("les destinataires déclarés posés par le board ouvrent ces transferts-là et pas d'autres", async () => {
++    await accessService(db).setPrincipalPermission(companyId, "agent", ids.analyste!, "tasks:assign_scope", true, null,
++      { assigneeAgentIds: [ids.analyste!, ids.redacteur!] });
++    await expect(assigner("analyste", "redacteur")).resolves.toMatchObject({ allowed: true });
++    await expect(assigner("analyste", "analyste")).resolves.toMatchObject({ allowed: true });
++    await expect(assigner("analyste", "coordinateur")).resolves.toMatchObject(refuse);
++    await expect(assigner("analyste", "relecteur")).resolves.toMatchObject(refuse);
++  });
++
++  it("sans grant à portée, un agent non ceo n'assigne à personne, même avec le grant large", async () => {
++    await accessService(db).setPrincipalPermission(companyId, "agent", ids.redacteur!, "tasks:assign_scope", false, null);
++    await expect(assigner("redacteur", "redacteur")).resolves.toMatchObject(refuse);
++    await expect(assigner("redacteur", "analyste")).resolves.toMatchObject(refuse);
++  });
++});
+diff --git a/server/src/__tests__/atelier-config-agents.test.ts b/server/src/__tests__/atelier-config-agents.test.ts
+new file mode 100644
+index 0000000000..3b1b14a78c
+--- /dev/null
++++ b/server/src/__tests__/atelier-config-agents.test.ts
+@@ -0,0 +1,108 @@
++/**
++ * Atelier Marketing IA (patch local 0108) : aucun agent ne modifie une configuration, des consignes ou des skills
++ * (AFD-C1, N1, CV-1, CV-2, M3), ni ne lit la configuration d'un pair (AFA-SEC-2) ; le board garde ces gestes.
++ * Agents créés par le vrai cycle de vie, donc avec les grants par défaut (agents:configure, skills:create compris).
++ */
++import { randomUUID } from "node:crypto";
++import { eq } from "drizzle-orm";
++import { afterAll, beforeAll, describe, expect, it } from "vitest";
++import { activityLog, agents, companies, companyMemberships, createDb, principalPermissionGrants } from "@paperclipai/db";
++import { getEmbeddedPostgresTestSupport, startEmbeddedPostgresTestDatabase } from "./helpers/embedded-postgres.js";
++import { createAgentLifecycle } from "../services/agent-lifecycle.js";
++import { accessService } from "../services/access.js";
++import { authorizationService } from "../services/authorization.js";
++
++const support = await getEmbeddedPostgresTestSupport();
++const decrireAvecBase = support.supported ? describe : describe.skip;
++
++decrireAvecBase("atelier : configuration des agents réservée aux humains", () => {
++  let db!: ReturnType<typeof createDb>;
++  let cleanup: (() => Promise<void>) | undefined;
++  const companyId = randomUUID();
++  let soi = "";
++  let pair = "";
++  let ceo = "";
++
++  beforeAll(async () => {
++    const started = await startEmbeddedPostgresTestDatabase("atelier-config-agents");
++    db = createDb(started.connectionString);
++    cleanup = started.cleanup;
++    await db.insert(companies).values({ id: companyId, name: "Atelier config", issuePrefix: `AC${companyId.slice(0, 6).toUpperCase()}` });
++    const embaucher = async (name: string, role: string) => {
++      const agent = await createAgentLifecycle(db).requestHire(companyId, {
++        name, role, adapterType: "process", adapterConfig: {}, runtimeConfig: {},
++      });
++      await accessService(db).ensureMembership(companyId, "agent", agent.id, "member", "active");
++      return agent.id;
++    };
++    soi = await embaucher("Spécialiste", "general");
++    pair = await embaucher("Pair", "general");
++    ceo = await embaucher("Coordinateur", "ceo");
++  }, 30_000);
++
++  afterAll(async () => {
++    await db.delete(principalPermissionGrants).where(eq(principalPermissionGrants.companyId, companyId));
++    await db.delete(companyMemberships).where(eq(companyMemberships.companyId, companyId));
++    await db.delete(agents).where(eq(agents.companyId, companyId));
++    await db.delete(activityLog).where(eq(activityLog.companyId, companyId));
++    await db.delete(companies).where(eq(companies.id, companyId));
++    await cleanup?.();
++  });
++
++  const parAgent = (agentId: string) => ({ type: "agent" as const, agentId, companyId, source: "agent_key" as const });
++  const surAgent = (agentId: string) => ({ type: "agent" as const, companyId, agentId });
++
++  it("les grants par défaut sont bien là (sinon le test ne prouverait rien)", async () => {
++    const cles = (await db.select().from(principalPermissionGrants).where(eq(principalPermissionGrants.principalId, soi)))
++      .map((g) => g.permissionKey);
++    expect(cles).toEqual(expect.arrayContaining(["agents:configure", "skills:create", "agents:suggest-changes"]));
++  });
++
++  it("refuse à tout agent la modification de sa configuration, de celle d'un pair, des consignes et des skills", async () => {
++    const authz = authorizationService(db);
++    const cas = [
++      { acteur: soi, action: "agent_config:update" as const, resource: surAgent(soi), scope: undefined },
++      { acteur: soi, action: "agent_config:update" as const, resource: surAgent(pair), scope: { requiresChangeGrant: true } },
++      { acteur: soi, action: "agent_config:update" as const, resource: surAgent(pair), scope: { requiresChangeGrant: true, consentedChange: true } },
++      { acteur: ceo, action: "agent_config:update" as const, resource: surAgent(pair), scope: { requiresChangeGrant: true } },
++      { acteur: soi, action: "agent_instructions:update" as const, resource: surAgent(soi), scope: undefined },
++      { acteur: ceo, action: "agent_instructions:update" as const, resource: surAgent(pair), scope: undefined },
++      { acteur: soi, action: "skill_config:update" as const, resource: surAgent(soi), scope: undefined },
++      { acteur: soi, action: "skill_config:update" as const, resource: { type: "company" as const, companyId }, scope: undefined },
++    ];
++    for (const c of cas) {
++      await expect(authz.decide({ actor: parAgent(c.acteur), action: c.action, resource: c.resource, scope: c.scope }))
++        .resolves.toMatchObject({ allowed: false, reason: "deny_policy_restricted" });
++    }
++  });
++
++  it("même une clé de portée (test de skill) ne passe pas", async () => {
++    await expect(authorizationService(db).decide({
++      actor: { ...parAgent(soi), keyScope: { kind: "skill_test", skillTestRunId: randomUUID() } } as never,
++      action: "skill_config:update",
++      resource: { type: "company", companyId },
++    })).resolves.toMatchObject({ allowed: false, reason: "deny_policy_restricted" });
++  });
++
++  it("un agent lit sa propre configuration, pas celle d'un pair (AFA-SEC-2)", async () => {
++    const authz = authorizationService(db);
++    await expect(authz.decide({ actor: parAgent(soi), action: "agent_config:read", resource: surAgent(soi) }))
++      .resolves.toMatchObject({ allowed: true, reason: "allow_self" });
++    for (const acteur of [soi, ceo]) {
++      await expect(authz.decide({ actor: parAgent(acteur), action: "agent_config:read", resource: surAgent(pair) }))
++        .resolves.toMatchObject({ allowed: false, reason: "deny_policy_restricted" });
++    }
++    await expect(authz.decide({ actor: parAgent(soi), action: "agent_config:read", resource: { type: "company", companyId } }))
++      .resolves.toMatchObject({ allowed: false, reason: "deny_policy_restricted" });
++  });
++
++  it("le board local garde la configuration, les consignes et les skills", async () => {
++    const authz = authorizationService(db);
++    const board = { type: "board" as const, userId: "local-board", source: "local_implicit" as const, isInstanceAdmin: true, companyIds: [companyId] };
++    for (const action of ["agent_config:update", "agent_instructions:update", "agent_config:read"] as const) {
++      await expect(authz.decide({ actor: board, action, resource: surAgent(soi) })).resolves.toMatchObject({ allowed: true });
++    }
++    await expect(authz.decide({ actor: board, action: "skill_config:update", resource: { type: "company", companyId } }))
++      .resolves.toMatchObject({ allowed: true });
++  });
++});
+diff --git a/server/src/__tests__/authorization-service.test.ts b/server/src/__tests__/authorization-service.test.ts
+index 4e1f3f63c2..da533306c6 100644
+--- a/server/src/__tests__/authorization-service.test.ts
++++ b/server/src/__tests__/authorization-service.test.ts
+@@ -269,7 +269,8 @@ describeEmbeddedPostgres("authorization service", () => {
+     expect(decision.explanation).toContain("Allowed by explicit grant tasks:assign");
+   });
+ 
+-  it("allows suggest grants to read peer agent configuration", async () => {
++  // Atelier (patch local 0108, AFA-SEC-2) : l'amont laissait un grant de suggestion lire la configuration d'un pair.
++  it("Atelier : refuses peer agent configuration reads even with a suggest grant", async () => {
+     const company = await createCompany(db, "AgentReadGrant");
+     const actorAgent = await createAgent(db, company.id);
+     const targetAgent = await createAgent(db, company.id);
+@@ -281,15 +282,8 @@ describeEmbeddedPostgres("authorization service", () => {
+       resource: { type: "agent", companyId: company.id, agentId: targetAgent.id },
+     });
+ 
+-    expect(decision).toMatchObject({
+-      allowed: true,
+-      reason: "allow_explicit_grant",
+-      grant: {
+-        principalType: "agent",
+-        principalId: actorAgent.id,
+-        permissionKey: "agents:suggest-changes",
+-      },
+-    });
++    expect(decision).toMatchObject({ allowed: false, reason: "deny_policy_restricted" });
++    expect(decision.explanation).toBe("Atelier : un agent ne lit que sa propre configuration.");
+   });
+ 
+   it("falls back to the direct config-read grant decision when a suggest read grant is scoped away", async () => {
+@@ -306,14 +300,12 @@ describeEmbeddedPostgres("authorization service", () => {
+       resource: { type: "agent", companyId: company.id, agentId: targetAgent.id },
+     });
+ 
+-    expect(decision).toMatchObject({
+-      allowed: false,
+-      reason: "deny_missing_grant",
+-      explanation: "Missing permission: agents:configure.",
+-    });
++    // Atelier (patch local 0108, AFA-SEC-2) : refus avant tout grant de lecture.
++    expect(decision).toMatchObject({ ...{ allowed: false, reason: "deny_policy_restricted" }, explanation: "Atelier : un agent ne lit que sa propre configuration." });
+   });
+ 
+-  it("enforces direct or consented suggest grants for agent configuration changes", async () => {
++  // Atelier (patch local 0108, AFD-C1, M3) : aucun grant (direct, suggestion, consentement) ne laisse un agent écrire.
++  it("Atelier : refuses direct or consented suggest grants for agent configuration changes by agents", async () => {
+     const company = await createCompany(db, "AgentChangeGrant");
+     const directAgent = await createAgent(db, company.id);
+     const suggestAgent = await createAgent(db, company.id);
+@@ -335,46 +327,32 @@ describeEmbeddedPostgres("authorization service", () => {
+       action: "agent_config:update",
+       resource: { type: "agent", companyId: company.id, agentId: targetAgent.id },
+       scope: { requiresChangeGrant: true },
+-    })).resolves.toMatchObject({
+-      allowed: true,
+-      reason: "allow_direct_change",
+-      grant: { permissionKey: "agents:configure" },
+-    });
++    })).resolves.toMatchObject({ allowed: false, reason: "deny_policy_restricted" });
+ 
+     await expect(authz.decide({
+       actor: { type: "agent", agentId: suggestAgent.id, companyId: company.id, source: "agent_key" },
+       action: "agent_config:update",
+       resource: { type: "agent", companyId: company.id, agentId: targetAgent.id },
+       scope: { requiresChangeGrant: true },
+-    })).resolves.toMatchObject({
+-      allowed: false,
+-      reason: "deny_missing_consent",
+-      grant: { permissionKey: "agents:suggest-changes" },
+-    });
++    })).resolves.toMatchObject({ allowed: false, reason: "deny_policy_restricted" });
+ 
+     await expect(authz.decide({
+       actor: { type: "agent", agentId: suggestAgent.id, companyId: company.id, source: "agent_key" },
+       action: "agent_config:update",
+       resource: { type: "agent", companyId: company.id, agentId: targetAgent.id },
+       scope: { requiresChangeGrant: true, consentedChange: true },
+-    })).resolves.toMatchObject({
+-      allowed: true,
+-      reason: "allow_consented_change",
+-      grant: { permissionKey: "agents:suggest-changes" },
+-    });
++    })).resolves.toMatchObject({ allowed: false, reason: "deny_policy_restricted" });
+ 
+     await expect(authz.decide({
+       actor: { type: "agent", agentId: noGrantAgent.id, companyId: company.id, source: "agent_key" },
+       action: "agent_config:update",
+       resource: { type: "agent", companyId: company.id, agentId: targetAgent.id },
+       scope: { requiresChangeGrant: true },
+-    })).resolves.toMatchObject({
+-      allowed: false,
+-      reason: "deny_no_grant",
+-    });
++    })).resolves.toMatchObject({ allowed: false, reason: "deny_policy_restricted" });
+   });
+ 
+-  it("enforces direct or consented suggest grants for skill configuration changes", async () => {
++  // Atelier (patch local 0108, AFD-C1, M3) : aucun grant (direct, suggestion, consentement) ne laisse un agent écrire.
++  it("Atelier : refuses direct or consented suggest grants for skill configuration changes by agents", async () => {
+     const company = await createCompany(db, "SkillChangeGrant");
+     const directAgent = await createAgent(db, company.id);
+     const suggestAgent = await createAgent(db, company.id);
+@@ -394,41 +372,26 @@ describeEmbeddedPostgres("authorization service", () => {
+       actor: { type: "agent", agentId: directAgent.id, companyId: company.id, source: "agent_key" },
+       action: "skill_config:update",
+       resource: { type: "company", companyId: company.id },
+-    })).resolves.toMatchObject({
+-      allowed: true,
+-      reason: "allow_direct_change",
+-      grant: { permissionKey: "skills:create" },
+-    });
++    })).resolves.toMatchObject({ allowed: false, reason: "deny_policy_restricted" });
+ 
+     await expect(authz.decide({
+       actor: { type: "agent", agentId: suggestAgent.id, companyId: company.id, source: "agent_key" },
+       action: "skill_config:update",
+       resource: { type: "company", companyId: company.id },
+-    })).resolves.toMatchObject({
+-      allowed: false,
+-      reason: "deny_missing_consent",
+-      grant: { permissionKey: "skills:suggest-changes" },
+-    });
++    })).resolves.toMatchObject({ allowed: false, reason: "deny_policy_restricted" });
+ 
+     await expect(authz.decide({
+       actor: { type: "agent", agentId: suggestAgent.id, companyId: company.id, source: "agent_key" },
+       action: "skill_config:update",
+       resource: { type: "company", companyId: company.id },
+       scope: { consentedChange: true },
+-    })).resolves.toMatchObject({
+-      allowed: true,
+-      reason: "allow_consented_change",
+-      grant: { permissionKey: "skills:suggest-changes" },
+-    });
++    })).resolves.toMatchObject({ allowed: false, reason: "deny_policy_restricted" });
+ 
+     await expect(authz.decide({
+       actor: { type: "agent", agentId: noGrantAgent.id, companyId: company.id, source: "agent_key" },
+       action: "skill_config:update",
+       resource: { type: "company", companyId: company.id },
+-    })).resolves.toMatchObject({
+-      allowed: false,
+-      reason: "deny_no_grant",
+-    });
++    })).resolves.toMatchObject({ allowed: false, reason: "deny_policy_restricted" });
+   });
+ 
+   it("allows board users with direct skills:create grants to mutate company skills", async () => {
+@@ -458,7 +421,8 @@ describeEmbeddedPostgres("authorization service", () => {
+     });
+   });
+ 
+-  it("allows responsible-user JWT agents with direct skills:create grants to mutate company skills", async () => {
++  // Atelier (patch local 0108, M3) : même mandaté par un humain, l'agent ne modifie pas les skills de l'entreprise.
++  it("Atelier : refuses responsible-user JWT agents with direct skills:create grants to mutate company skills", async () => {
+     const company = await createCompany(db, "ResponsibleUserSkillGrant");
+     const actorAgent = await createAgent(db, company.id);
+     const responsibleUserId = await createUser(db);
+@@ -483,15 +447,7 @@ describeEmbeddedPostgres("authorization service", () => {
+       resource: { type: "company", companyId: company.id },
+     });
+ 
+-    expect(decision).toMatchObject({
+-      allowed: true,
+-      reason: "allow_direct_change",
+-      grant: {
+-        principalType: "agent",
+-        principalId: actorAgent.id,
+-        permissionKey: "skills:create",
+-      },
+-    });
++    expect(decision).toMatchObject({ allowed: false, reason: "deny_policy_restricted" });
+   });
+ 
+   it("keeps responsible-user skill mutations denied for viewer memberships", async () => {
+@@ -519,11 +475,8 @@ describeEmbeddedPostgres("authorization service", () => {
+       resource: { type: "company", companyId: company.id },
+     });
+ 
+-    expect(decision).toMatchObject({
+-      allowed: false,
+-      code: "RESPONSIBLE_USER_UNAUTHORIZED",
+-    });
+-    expect(decision.explanation).toContain(`Responsible user ${responsibleUserId} is not authorized`);
++    // Atelier (patch local 0108, M3) : refusé avant l'intersection avec l'utilisateur responsable.
++    expect(decision).toMatchObject({ allowed: false, reason: "deny_policy_restricted" });
+   });
+ 
+   it("denies cross-company agent decisions before grant evaluation", async () => {
+@@ -572,9 +525,11 @@ describeEmbeddedPostgres("authorization service", () => {
+     }
+   });
+ 
+-  it("allows simple-mode task assignment between same-company agents without explicit grants", async () => {
++  // Atelier (patch local 0108, N3) : seul le coordinateur (ceo) garde l'assignation simple ; un autre agent est refusé.
++  it("Atelier : keeps simple-mode task assignment for the ceo only", async () => {
+     const company = await createCompany(db, "AssignmentDefault");
+-    const actorAgent = await createAgent(db, company.id, { role: "engineer" });
++    const actorAgent = await createAgent(db, company.id, { role: "ceo" });
++    const engineerAgent = await createAgent(db, company.id, { role: "engineer" });
+     const targetAgent = await createAgent(db, company.id, { role: "engineer" });
+     await db.insert(companyMemberships).values({
+       companyId: company.id,
+@@ -596,6 +551,20 @@ describeEmbeddedPostgres("authorization service", () => {
+       reason: "allow_visible_issue_write",
+     });
+     expect(decision.explanation).toContain("shared default-open");
++
++    await db.insert(companyMemberships).values({
++      companyId: company.id,
++      principalType: "agent",
++      principalId: engineerAgent.id,
++      status: "active",
++      membershipRole: "member",
++    });
++    await expect(authorizationService(db).decide({
++      actor: { type: "agent", agentId: engineerAgent.id, companyId: company.id, source: "agent_key" },
++      action: "tasks:assign",
++      resource: { type: "issue", companyId: company.id, assigneeAgentId: targetAgent.id },
++      scope: { assigneeAgentId: targetAgent.id },
++    })).resolves.toMatchObject({ allowed: false, reason: "deny_policy_restricted" });
+   });
+ 
+   it("allows standard-trust agents to comment on and update visible peer-owned issues", async () => {
+@@ -742,9 +711,10 @@ describeEmbeddedPostgres("authorization service", () => {
+     });
+   });
+ 
++  // Atelier (patch local 0108, N3) : seul le ceo assigne librement ; l'intersection se vérifie sur lui.
+   it("denies delegated protected assignment when the responsible user lacks matching authority", async () => {
+     const company = await createCompany(db, "ResponsibleUserDenied");
+-    const actorAgent = await createAgent(db, company.id, { role: "engineer" });
++    const actorAgent = await createAgent(db, company.id, { role: "ceo" });
+     const ceoAgent = await createAgent(db, company.id, {
+       role: "ceo",
+       permissions: {
+@@ -917,9 +887,10 @@ describeEmbeddedPostgres("authorization service", () => {
+     });
+   });
+ 
++  // Atelier (patch local 0108, N3) : seul le ceo assigne librement ; l'intersection se vérifie sur lui.
+   it("fails closed when the responsible user is unavailable", async () => {
+     const company = await createCompany(db, "ResponsibleUserUnavailable");
+-    const actorAgent = await createAgent(db, company.id, { role: "engineer" });
++    const actorAgent = await createAgent(db, company.id, { role: "ceo" });
+     const targetAgent = await createAgent(db, company.id, { role: "engineer" });
+ 
+     const decision = await authorizationService(db).decide({
+@@ -941,9 +912,10 @@ describeEmbeddedPostgres("authorization service", () => {
+     });
+   });
+ 
++  // Atelier (patch local 0108, N3) : seul le ceo assigne librement ; l'intersection se vérifie sur lui.
+   it("allows delegated protected assignment when both agent and responsible user are authorized", async () => {
+     const company = await createCompany(db, "ResponsibleUserAllowed");
+-    const actorAgent = await createAgent(db, company.id, { role: "engineer" });
++    const actorAgent = await createAgent(db, company.id, { role: "ceo" });
+     const ceoAgent = await createAgent(db, company.id, {
+       role: "ceo",
+       permissions: {
+@@ -1107,7 +1079,8 @@ describeEmbeddedPostgres("authorization service", () => {
+         assigneeAgentId: collaborator.id,
+       },
+       scope: { projectId: project.id, assigneeAgentId: collaborator.id },
+-    })).resolves.toMatchObject({ allowed: true, reason: "allow_simple_company_member" });
++      // Atelier (patch local 0108, N3) : dans sa frontière mais hors de son grant à portée, un agent non ceo est refusé.
++    })).resolves.toMatchObject({ allowed: false, reason: "deny_policy_restricted" });
+     await expect(authorization.decide({
+       actor,
+       action: "tasks:assign",
+@@ -1161,7 +1134,8 @@ describeEmbeddedPostgres("authorization service", () => {
+       actor,
+       action: "agent_config:read",
+       resource: { type: "agent", companyId: company.id, agentId: targetAgent.id },
+-    })).resolves.toMatchObject({ allowed: false, reason: "deny_low_trust_boundary" });
++      // Atelier (patch local 0108) : le refus de l'atelier passe avant la frontière de confiance (même issue : refusé).
++    })).resolves.toMatchObject({ allowed: false, reason: "deny_policy_restricted" });
+ 
+     await expect(authz.decide({
+       actor,
+@@ -1174,14 +1148,14 @@ describeEmbeddedPostgres("authorization service", () => {
+       action: "agent_config:update",
+       resource: { type: "agent", companyId: company.id, agentId: targetAgent.id },
+       scope: { requiresChangeGrant: true, consentedChange: true },
+-    })).resolves.toMatchObject({ allowed: false, reason: "deny_low_trust_boundary" });
++    })).resolves.toMatchObject({ allowed: false, reason: "deny_policy_restricted" });
+ 
+     await expect(authz.decide({
+       actor,
+       action: "skill_config:update",
+       resource: { type: "company", companyId: company.id },
+       scope: { consentedChange: true },
+-    })).resolves.toMatchObject({ allowed: false, reason: "deny_low_trust_boundary" });
++    })).resolves.toMatchObject({ allowed: false, reason: "deny_policy_restricted" });
+   });
+ 
+   it("hard-blocks assignment when the target agent blocks protected assignment", async () => {
+diff --git a/server/src/__tests__/claude-local-adapter-environment.test.ts b/server/src/__tests__/claude-local-adapter-environment.test.ts
+index 055e66d9ea..bfd975aa6f 100644
+--- a/server/src/__tests__/claude-local-adapter-environment.test.ts
++++ b/server/src/__tests__/claude-local-adapter-environment.test.ts
+@@ -307,6 +307,8 @@ describe("claude_local environment diagnostics", () => {
+       config: {
+         engine: "cli",
+         command: "claude",
++        // Atelier (patch local 0108, DOC-A20) : contournement des permissions en opt-in explicite, plus par défaut.
++        dangerouslySkipPermissions: true,
+       },
+       executionTarget: {
+         kind: "remote",
+diff --git a/server/src/__tests__/claude-local-execute.test.ts b/server/src/__tests__/claude-local-execute.test.ts
+index adea792ca6..41dd764e14 100644
+--- a/server/src/__tests__/claude-local-execute.test.ts
++++ b/server/src/__tests__/claude-local-execute.test.ts
+@@ -935,6 +935,8 @@ describe("claude execute", () => {
+           engine: "cli",
+           command: commandPath,
+           cwd: localWorkspace,
++          // Atelier (patch local 0108, DOC-A20) : contournement des permissions en opt-in explicite, plus par défaut.
++          dangerouslySkipPermissions: true,
+           env: {
+             PAPERCLIP_TEST_CAPTURE_PATH: capturePath1,
+           },
+diff --git a/server/src/__tests__/issue-agent-mutation-ownership-routes.test.ts b/server/src/__tests__/issue-agent-mutation-ownership-routes.test.ts
+index 2c33c67f1f..664f4b1c79 100644
+--- a/server/src/__tests__/issue-agent-mutation-ownership-routes.test.ts
++++ b/server/src/__tests__/issue-agent-mutation-ownership-routes.test.ts
+@@ -1344,6 +1344,22 @@ describe("agent issue mutation checkout ownership", () => {
+     expect(mockIssueApprovalService.unlink).not.toHaveBeenCalled();
+   });
+ 
++  it("Atelier N4 : un agent, même coordinateur (ceo) avec création d'agents, ne lie ni ne délie une approbation", async () => {
++    mockAgentService.getById.mockImplementation(async (id: string) =>
++      id === ownerAgentId ? makeAgent(ownerAgentId, { role: "ceo", permissions: { canCreateAgents: true } }) : null);
++    const app = await createApp(ownerActor());
++    for (const envoi of [
++      () => request(app).post(`/api/issues/${issueId}/approvals`).send({ approvalId: "88888888-8888-4888-8888-888888888888" }),
++      () => request(app).delete(`/api/issues/${issueId}/approvals/88888888-8888-4888-8888-888888888888`),
++    ]) {
++      const res = await envoi();
++      expect(res.status, JSON.stringify(res.body)).toBe(403);
++      expect(res.body.error).toBe("Atelier : seul un humain lie des approbations.");
++    }
++    expect(mockIssueApprovalService.link).not.toHaveBeenCalled();
++    expect(mockIssueApprovalService.unlink).not.toHaveBeenCalled();
++  });
++
+   it("defaults agent-created root follow-up issues to inherit the current run workspace", async () => {
+     mockProjectService.getById.mockResolvedValue({
+       id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb", companyId, visibility: "open",
+diff --git a/server/src/__tests__/owner-chat-instruction-authority.test.ts b/server/src/__tests__/owner-chat-instruction-authority.test.ts
+index 092e58d5e6..bc1afce534 100644
+--- a/server/src/__tests__/owner-chat-instruction-authority.test.ts
++++ b/server/src/__tests__/owner-chat-instruction-authority.test.ts
+@@ -83,20 +83,25 @@ describe("owner-chat instruction authority", () => {
+   }
+   type Fixture = Awaited<ReturnType<typeof seed>>;
+   const authorize = (f: Fixture) => authorizeInstructionCommit(db, f.actor, f.target);
++  // Atelier (patch local 0108, AFD-C1) : un agent ne modifie jamais ses consignes, même à la demande du propriétaire
++  // dans le chat ; le refus de l'atelier passe avant l'exception du chat propriétaire. Les cas de refus amont restent.
++  const expectAtelierDenied = async (f: Fixture, actor = f.actor) => {
++    await expect(authorizeInstructionCommit(db, actor, f.target)).rejects.toMatchObject({ status: 403, details: { reason: "deny_policy_restricted" } });
++    expect(await fs.readFile(path.join(f.root, "AGENTS.md"), "utf8")).toBe(initial);
++  };
+   const expectDenied = async (f: Fixture) => {
+     await expect(authorize(f)).rejects.toMatchObject({ status: 403 });
+     expect(await fs.readFile(path.join(f.root, "AGENTS.md"), "utf8")).toBe(initial);
+   };
+ 
+-  it("persists the requested self-edit without relaxing the agent's trust or configuration permissions", async () => {
++  it("Atelier : refuses the requested self-edit and keeps the agent's trust and configuration permissions", async () => {
+     const f = await seed();
+     const service = agentInstructionRevisionService(db);
+     const target = { companyId: f.companyId, agentId: f.agentId };
+     const before = (await service.readCurrent(target, f.actor))!;
+-    const saved = await service.commit({ ...target, entryFile: "AGENTS.md", baseRevisionId: before.revision.id,
+-      content: "# Ralph\nFollow the owner's project conventions.\n", source: "api" }, f.actor);
+-    expect(saved.changed).toBe(true);
+-    expect(await fs.readFile(path.join(f.root, "AGENTS.md"), "utf8")).toBe(saved.content);
++    await expect(service.commit({ ...target, entryFile: "AGENTS.md", baseRevisionId: before.revision.id,
++      content: "# Ralph\nFollow the owner's project conventions.\n", source: "api" }, f.actor)).rejects.toMatchObject({ status: 403, details: { reason: "deny_policy_restricted" } });
++    expect(await fs.readFile(path.join(f.root, "AGENTS.md"), "utf8")).toBe(initial);
+     const [agent] = await db.select().from(agents).where(eq(agents.id, f.agentId));
+     expect(agent.permissions).toEqual(f.permissions);
+     const actor = await resolveInstructionActor(db, f.actor);
+@@ -106,23 +111,26 @@ describe("owner-chat instruction authority", () => {
+     }
+   });
+ 
+-  it.each(["running", "succeeded", "failed", "timed_out"])("collects authorized private edits from a %s owner-chat run", async (status) => {
++  it.each(["running", "succeeded", "failed", "timed_out"])("Atelier : keeps private edits from a %s owner-chat run as a candidate, unsaved", async (status) => {
+     const f = await seed();
+     const copies = agentInstructionWorkingCopyService(db);
+     const copy = (await copies.prepare({ companyId: f.companyId, agentId: f.agentId, runId: f.run.id, cwd: home, legacy: true }))!;
+     await fs.writeFile(path.join(copy.localRoot, copy.entryFile), "The owner's requested edit");
+     await db.update(heartbeatRuns).set({ status }).where(eq(heartbeatRuns.id, f.run.id));
+-    expect((await copies.collectStopped({ companyId: f.companyId, runId: f.run.id }))?.state).toBe("saved");
+-    expect(await fs.readFile(path.join(f.root, "AGENTS.md"), "utf8")).toBe("The owner's requested edit");
++    expect(await copies.collectStopped({ companyId: f.companyId, runId: f.run.id })).toMatchObject({
++      state: "conflict", errorMessage: expect.stringContaining("Atelier : seul un humain"), candidateBase64: expect.any(String) });
++    expect(await fs.readFile(path.join(f.root, "AGENTS.md"), "utf8")).toBe(initial);
+   });
+ 
+-  it.each([false, true])("saves the current agent directory in owner chat (warm: %s)", async (warm) => {
++  it.each([false, true])("Atelier : does not save the current agent directory in owner chat (warm: %s)", async (warm) => {
+     const f = await seed();
+     const copies = agentInstructionWorkingCopyService(db);
+     const copy = (await copies.prepare({ companyId: f.companyId, agentId: f.agentId, runId: f.run.id, cwd: home, warm }))!;
+     await fs.writeFile(path.join(copy.localRoot, copy.entryFile), "Requested through owner chat");
+-    expect((await copies.collectStopped({ companyId: f.companyId, runId: f.run.id }))?.state).toBe("saved");
+-    expect(await fs.readFile(path.join(f.root, "AGENTS.md"), "utf8")).toBe("Requested through owner chat");
++    const result = await copies.collectStopped({ companyId: f.companyId, runId: f.run.id });
++    expect(result?.state).not.toBe("saved");
++    expect(result?.errorMessage).toContain("Atelier : seul un humain");
++    expect(await fs.readFile(path.join(f.root, "AGENTS.md"), "utf8")).toBe(initial);
+   });
+ 
+   it.each([false, true])("surfaces the actual rejection when directory collection loses chat authority (warm: %s)", async (warm) => {
+@@ -132,12 +140,13 @@ describe("owner-chat instruction authority", () => {
+     await fs.writeFile(path.join(copy.localRoot, copy.entryFile), "Must not be saved");
+     await db.update(agentWakeupRequests).set({ requestedByActorType: "agent", requestedByActorId: f.agentId }).where(eq(agentWakeupRequests.id, f.wake.id));
+     if (warm) {
++      // Atelier (patch local 0108) : le refus de l'atelier est remonté à la place du motif amont.
+       expect((await copies.checkpointWarm({ companyId: f.companyId, runId: f.run.id }))?.errorMessage)
+-        .toContain("Self-edits require a direct message");
++        .toContain("Atelier : seul un humain");
+     }
+-    expect(await copies.collectStopped({ companyId: f.companyId, runId: f.run.id })).toMatchObject({
+-      state: "unavailable", errorMessage: expect.stringContaining("Self-edits require a direct message"),
+-    });
++    const result = await copies.collectStopped({ companyId: f.companyId, runId: f.run.id });
++    expect(result?.state).not.toBe("saved");
++    expect(result?.errorMessage).toContain("Atelier : seul un humain");
+     expect(await fs.readFile(path.join(f.root, "AGENTS.md"), "utf8")).toBe(initial);
+   });
+ 
+@@ -180,14 +189,14 @@ describe("owner-chat instruction authority", () => {
+     await expectDenied(f);
+   });
+ 
+-  it("accepts a coalesced owner message only when it is the active instruction", async () => {
++  it("Atelier : refuses a coalesced owner message even when it is the active instruction", async () => {
+     const f = await seed();
+     await db.update(agentWakeupRequests).set({ status: "coalesced", payload: { issueId: f.chat.id,
+       _paperclipWakeContext: { source: "issue.comment", wakeCommentIds: [f.message.id] } } }).where(eq(agentWakeupRequests.id, f.wake.id));
+-    await expect(authorize(f)).resolves.toMatchObject({ agentId: f.agentId });
++    await expectAtelierDenied(f);
+   });
+ 
+-  it("allows a fresh request after /new while rejecting messages before the reset boundary", async () => {
++  it("Atelier : refuses a fresh request after /new and messages before the reset boundary", async () => {
+     const f = await seed();
+     const [boundary] = await db.insert(issueComments).values({ companyId: f.companyId, issueId: f.chat.id,
+       authorUserId: f.userId, body: "/new", conversationSessionGeneration: 1,
+@@ -196,7 +205,7 @@ describe("owner-chat instruction authority", () => {
+       .where(eq(issues.id, f.chat.id));
+     await db.update(heartbeatRuns).set({ contextSnapshot: { ...f.run.contextSnapshot, conversationSessionGeneration: 1 } })
+       .where(eq(heartbeatRuns.id, f.run.id));
+-    await expect(authorize(f)).resolves.toMatchObject({ agentId: f.agentId });
++    await expectAtelierDenied(f);
+     await db.update(issueComments).set({ createdAt: new Date(boundary.createdAt.getTime() - 1_000) })
+       .where(eq(issueComments.id, f.message.id));
+     await expectDenied(f);
+@@ -233,7 +242,7 @@ describe("owner-chat instruction authority", () => {
+     await expect(authorizeInstructionCommit(db, f.actor, { companyId: f.companyId, id: peer.id })).rejects.toMatchObject({ status: 403 });
+   });
+ 
+-  it("continues the same request on a server-linked retry but cannot revive a cancelled request", async () => {
++  it("Atelier : refuses the same request on a server-linked retry and on a cancelled request", async () => {
+     const f = await seed();
+     await db.update(heartbeatRuns).set({ status: "failed" }).where(eq(heartbeatRuns.id, f.run.id));
+     const [retry] = await db.insert(heartbeatRuns).values({ companyId: f.companyId, agentId: f.agentId,
+@@ -242,7 +251,7 @@ describe("owner-chat instruction authority", () => {
+     await initializeRunIdentity(db, { companyId: f.companyId, runId: retry.id, issueId: f.chat.id,
+       responsibleUserId: f.userId, parentRunId: f.run.id, cause: "retry" });
+     const actor = { ...f.actor, runId: retry.id };
+-    await expect(authorizeInstructionCommit(db, actor, f.target)).resolves.toMatchObject({ runId: retry.id });
++    await expectAtelierDenied(f, actor);
+     await db.update(heartbeatRuns).set({ status: "cancelled" }).where(eq(heartbeatRuns.id, f.run.id));
+     await expect(authorizeInstructionCommit(db, actor, f.target)).rejects.toMatchObject({ status: 403 });
+   });
+@@ -253,8 +262,9 @@ describe("owner-chat instruction authority", () => {
+       invocationSource: "automation", status: "running", contextSnapshot: f.run.contextSnapshot }).returning();
+     await initializeRunIdentity(db, { companyId: f.companyId, runId: continuation.id, issueId: f.chat.id,
+       responsibleUserId: f.userId, parentRunId: f.run.id, cause: "continuation" });
++    // Atelier (patch local 0108) : refusé par l'atelier avant la frontière de confiance.
+     await expect(authorizeInstructionCommit(db, { ...f.actor, runId: continuation.id }, f.target))
+-      .rejects.toMatchObject({ status: 403, details: { reason: "deny_low_trust_boundary" } });
++      .rejects.toMatchObject({ status: 403, details: { reason: "deny_policy_restricted" } });
+ 
+     const [external] = await db.insert(issueComments).values({ companyId: f.companyId, issueId: f.chat.id,
+       authorUserId: f.userId, body: "Outside message" }).returning();
+@@ -266,14 +276,15 @@ describe("owner-chat instruction authority", () => {
+     await initializeRunIdentity(db, { companyId: f.companyId, runId: retry.id, issueId: f.chat.id,
+       responsibleUserId: f.userId, parentRunId: f.run.id, cause: "retry" });
+     await expect(authorizeInstructionCommit(db, { ...f.actor, runId: retry.id }, f.target))
+-      .rejects.toMatchObject({ status: 403, details: { reason: "deny_low_trust_boundary" } });
++      .rejects.toMatchObject({ status: 403, details: { reason: "deny_policy_restricted" } });
+   });
+ 
+   it("still enforces explicit protected-change restrictions inside owner chat", async () => {
+     const f = await seed();
+     await db.insert(principalPermissionGrants).values({ companyId: f.companyId, principalType: "agent",
+       principalId: f.agentId, permissionKey: "agents:suggest-changes" });
+-    await expect(authorize(f)).rejects.toMatchObject({ status: 403, details: { code: "reflection_coach_mutation_gate_required" } });
++    // Atelier (patch local 0108) : refusé par l'atelier avant la porte de consentement.
++    await expect(authorize(f)).rejects.toMatchObject({ status: 403, details: { reason: "deny_policy_restricted" } });
+     await db.delete(principalPermissionGrants).where(eq(principalPermissionGrants.principalId, f.agentId));
+     await db.insert(principalPermissionGrants).values({ companyId: f.companyId, principalType: "agent",
+       principalId: f.agentId, permissionKey: "agents:configure", scope: { agentIds: [randomUUID()] } });
+diff --git a/server/src/__tests__/tool-gateway.test.ts b/server/src/__tests__/tool-gateway.test.ts
+index 473c3f4d1a..ae6300bc14 100644
+--- a/server/src/__tests__/tool-gateway.test.ts
++++ b/server/src/__tests__/tool-gateway.test.ts
+@@ -1446,6 +1446,29 @@ describeEmbeddedPostgres("tool gateway acceptance", () => {
+     });
+   });
+ 
++  it("Atelier MK-14d : hors tests, les outils de démonstration n'existent ni dans la liste ni à l'invocation", async () => {
++    const company = await createCompany(db);
++    const agent = await createAgent(db, company.id);
++    const { run } = await createIssueAndRun(db, company.id, agent.id);
++    await allowToolsForAgent(db, company.id, agent.id, [
++      "mcp-remote-fixture:add",
++      "mcp-remote-fixture:echo",
++      "mcp-stdio-fixture:increment_counter",
++    ]);
++    vi.stubEnv("NODE_ENV", "production");
++    try {
++      const gateway = createTestToolGatewayService(db, { runtimeSupervisor: { idleTtlMs: 25 } });
++      const session = await gateway.createSession({ companyId: company.id, agentId: agent.id, runId: run.id });
++      const toolNames = (await gateway.listToolsForSession(session.token)).map((tool) => tool.name);
++      expect(toolNames.filter((name) => name.startsWith("mcp-remote-fixture:") || name.startsWith("mcp-stdio-fixture:"))).toEqual([]);
++      const issue = await gateway.executeTool({ sessionToken: session.token, tool: "mcp-remote-fixture:add", parameters: { a: 4, b: 7 } })
++        .then((result) => result.status, () => "refusé");
++      expect(issue).not.toBe("completed");
++    } finally {
++      vi.unstubAllEnvs();
++    }
++  });
++
+   it("lists connected remote MCP catalog tools only for the scoped company and agent policy", async () => {
+     const company = await createCompany(db);
+     const agent = await createAgent(db, company.id);
+diff --git a/server/src/routes/agents.ts b/server/src/routes/agents.ts
+index f15e4628c6..09f780bef9 100644
+--- a/server/src/routes/agents.ts
++++ b/server/src/routes/agents.ts
+@@ -4698,20 +4698,14 @@ export function agentRoutes(
+     if (!existing) return;
+ 
+     if (req.actor.type === "agent") {
+-      const actorAgent = req.actor.agentId ? await svc.getById(req.actor.agentId) : null;
+-      if (!actorAgent || actorAgent.companyId !== existing.companyId) {
+-        res.status(403).json({ error: "Forbidden" });
+-        return;
+-      }
+-      if (actorAgent.role !== "ceo") {
+-        res.status(403).json({ error: "Only CEO can manage permissions" });
+-        return;
+-      }
+-    } else {
+-      await assertBoardCanManageAgentsForCompany(req, existing.companyId);
++      // Atelier (N4) : permissions et politique de confiance d'un agent = geste humain, même pour le coordinateur.
++      throw forbidden("Atelier : seul un humain gère les permissions et la politique de confiance des agents.");
+     }
++    await assertBoardCanManageAgentsForCompany(req, existing.companyId);
+ 
+-    const agent = await svc.updatePermissions(id, req.body);
++    // Atelier (N3) : destinataires déclarés de l'agent (avec lui-même et son sous-arbre), posés par le bootstrap.
++    const { assignableAgentIds, ...permissions } = req.body;
++    const agent = await svc.updatePermissions(id, permissions);
+     if (!agent) {
+       res.status(404).json({ error: "Agent not found" });
+       return;
+@@ -4728,6 +4722,10 @@ export function agentRoutes(
+       effectiveCanAssignTasks,
+       req.actor.type === "board" ? (req.actor.userId ?? null) : null,
+     );
++    if (assignableAgentIds) {
++      await access.setPrincipalPermission(agent.companyId, "agent", agent.id, "tasks:assign_scope", true,
++        req.actor.userId ?? null, { assigneeAgentIds: assignableAgentIds });
++    }
+ 
+     const actor = getActorInfo(req);
+     await logActivity(db, {
+diff --git a/server/src/routes/issues.ts b/server/src/routes/issues.ts
+index 6c5a593b23..28272c4f69 100644
+--- a/server/src/routes/issues.ts
++++ b/server/src/routes/issues.ts
+@@ -4846,12 +4846,8 @@ export function issueRoutes(
+       res.status(403).json({ error: "Forbidden" });
+       return false;
+     }
+-    if (
+-      actorAgent.role === "ceo" ||
+-      Boolean(actorAgent.permissions?.canCreateAgents)
+-    )
+-      return true;
+-    res.status(403).json({ error: "Missing permission to link approvals" });
++    // Atelier (N4) : lier une approbation à une tâche reste un geste humain, même pour le coordinateur.
++    res.status(403).json({ error: "Atelier : seul un humain lie des approbations." });
+     return false;
+   }
+ 
+diff --git a/server/src/services/authorization.ts b/server/src/services/authorization.ts
+index 533cf186f5..9d36f03f42 100644
+--- a/server/src/services/authorization.ts
++++ b/server/src/services/authorization.ts
+@@ -2082,6 +2082,24 @@ export function authorizationService(db: Db | DbTransaction) {
+       });
+     }
+ 
++    // Atelier (AFD-C1, N1, CV-1, CV-2, M3) : aucun agent ne modifie une configuration, des consignes ou des skills, les
++    // siens compris (sinon il retire sa propre cage) ; avant allow_self, les grants par défaut et toute clé de portée.
++    if (input.action === "agent_config:update" || input.action === "agent_instructions:update" || input.action === "skill_config:update") {
++      return deny({
++        action: input.action,
++        reason: "deny_policy_restricted",
++        explanation: "Atelier : seul un humain modifie la configuration, les consignes ou les skills d'un agent.",
++      });
++    }
++    // Atelier (AFA-SEC-2) : la configuration d'un autre agent (chemins, modèle, cage) ne se lit pas entre agents.
++    if (input.action === "agent_config:read" && !(input.resource.type === "agent" && input.resource.agentId === actorAgentId)) {
++      return deny({
++        action: input.action,
++        reason: "deny_policy_restricted",
++        explanation: "Atelier : un agent ne lit que sa propre configuration.",
++      });
++    }
++
+     if (input.actor.keyScope?.kind === "skill_test") {
+       const skillTestDecision = decideSkillTestAccess({
+         action: input.action,
+@@ -2371,6 +2389,26 @@ export function authorizationService(db: Db | DbTransaction) {
+       const policyEffect = await assignmentPolicyEffect(input.resource);
+       const policyDeny = await denyForAssignmentPolicyIfNeeded(policyEffect);
+       if (policyDeny) return policyDeny;
++      // Atelier (N3) : seul le coordinateur (ceo) assigne partout ; tout autre agent seulement dans la portée de son
++      // grant tasks:assign_scope (son sous-arbre par défaut, plus les destinataires déclarés posés par le board).
++      if (actorAgent.role !== "ceo") {
++        const scopedDecision = await decidePrincipalGrant({
++          companyId,
++          principalType: "agent",
++          principalId: actorAgentId,
++          action: input.action,
++          permissionKey: "tasks:assign_scope",
++          scope: input.scope,
++        });
++        if (scopedDecision.allowed) return scopedDecision;
++        if (policyEffect.kind === "restricted") return denyRestrictedAssignmentPolicy(policyEffect);
++        return deny({
++          action: input.action,
++          reason: "deny_policy_restricted",
++          explanation: "Atelier : seul le coordinateur assigne à tout agent ; un autre agent assigne à son sous-arbre et à ses destinataires déclarés.",
++          grant: scopedDecision.grant,
++        });
++      }
+       if (policyEffect.kind === "restricted") {
+         const grantDecision = await decideWithTaskAssignmentGrants("agent", actorAgentId);
+         if (grantDecision.allowed) return grantDecision;
+diff --git a/server/src/services/tool-gateway.ts b/server/src/services/tool-gateway.ts
+index 550ec59a30..b95364c8c3 100644
+--- a/server/src/services/tool-gateway.ts
++++ b/server/src/services/tool-gateway.ts
+@@ -1278,7 +1278,8 @@ export function createToolGatewayService(
+   }
+ 
+   function allTools(): ToolGatewayDescriptor[] {
+-    return [...BUILTIN_TOOLS, ...pluginTools()];
++    // Atelier (MK-14d) : les outils de démonstration (fournisseurs *_fixture) n'existent que pendant les tests.
++    return [...BUILTIN_TOOLS.filter((tool) => process.env.NODE_ENV === "test" || !tool.providerType.endsWith("_fixture")), ...pluginTools()];
+   }
+ 
+   function connectedMcpConnectionFilter(companyId: string) {
+-- 
+2.53.0
+

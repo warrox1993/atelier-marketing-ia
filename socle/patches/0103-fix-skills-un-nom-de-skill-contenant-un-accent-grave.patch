@@ -1,0 +1,73 @@
+From 505b39d231ec4ea155c71abfe75f007440d74ce5 Mon Sep 17 00:00:00 2001
+From: Jean-Baptiste Dhondt <114347858+warrox1993@users.noreply.github.com>
+Date: Tue, 27 Oct 2026 23:01:20 +0100
+Subject: [PATCH] fix(skills): un nom de skill contenant un accent grave reste
+ dans sa zone de code
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Le manifeste plaçait le nom d'exécution entre deux accents graves sans tenir
+compte de ceux qu'il peut contenir : le nom sortait de la zone de code (sur une
+seule ligne, le retour à la ligne restant neutralisé). La clôture est désormais
+plus longue que la plus longue suite d'accents graves du nom (règle CommonMark),
+ce qui garde le nom exact, donc chargeable.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_012hDEUaJZ3u1rGj4CzNXrhC
+---
+ .../adapter-utils/src/skill-library-manifest.test.ts   |  9 +++++++++
+ packages/adapter-utils/src/skill-library-manifest.ts   | 10 +++++++++-
+ 2 files changed, 18 insertions(+), 1 deletion(-)
+
+diff --git a/packages/adapter-utils/src/skill-library-manifest.test.ts b/packages/adapter-utils/src/skill-library-manifest.test.ts
+index 3935a034a..683f3630e 100644
+--- a/packages/adapter-utils/src/skill-library-manifest.test.ts
++++ b/packages/adapter-utils/src/skill-library-manifest.test.ts
+@@ -73,6 +73,15 @@ describe("buildSkillLibraryManifestMarkdown", () => {
+     expect(manifest).not.toContain("audit-seo--8379c5d388");
+   });
+ 
++  it("keeps a runtime name containing backticks inside its code span", () => {
++    const manifest = buildSkillLibraryManifestMarkdown({
++      entries: [entry({ key: "company/c1/piege", runtimeName: "piege`` hors du code" })],
++      desiredSkillKeys: new Set(["company/c1/piege"]),
++    });
++
++    expect(manifest).toContain("load it by its runtime name ``` piege`` hors du code ```, never by this key");
++  });
++
+   it("flattens skill-authored text so it cannot inject instruction lines", () => {
+     const manifest = buildSkillLibraryManifestMarkdown({
+       entries: [
+diff --git a/packages/adapter-utils/src/skill-library-manifest.ts b/packages/adapter-utils/src/skill-library-manifest.ts
+index 7b5bca09e..a88c869a2 100644
+--- a/packages/adapter-utils/src/skill-library-manifest.ts
++++ b/packages/adapter-utils/src/skill-library-manifest.ts
+@@ -27,6 +27,14 @@ function sanitizeManifestText(value: string, maxLength: number): string {
+   return value.replace(/\s+/g, " ").trim().slice(0, maxLength);
+ }
+ 
++/** CommonMark code span whose fence outlasts any backtick run in the name, so the exact name stays loadable. */
++function codeSpan(value: string): string {
++  const longestRun = Math.max(0, ...(value.match(/`+/g) ?? []).map((run) => run.length));
++  if (longestRun === 0) return `\`${value}\``;
++  const fence = "`".repeat(longestRun + 1);
++  return `${fence} ${value} ${fence}`;
++}
++
+ export function buildSkillLibraryManifestMarkdown(input: {
+   entries: readonly PaperclipSkillEntry[];
+   desiredSkillKeys: ReadonlySet<string>;
+@@ -44,7 +52,7 @@ export function buildSkillLibraryManifestMarkdown(input: {
+       if (!enabled) return `- ${key} — installed, not enabled for you`;
+       // The runtime only knows the mounted directory name, never the library key.
+       const runtimeName = sanitizeManifestText(entry.runtimeName, 200);
+-      return `- ${key} — enabled; load it by its runtime name \`${runtimeName}\`, never by this key`;
++      return `- ${key} — enabled; load it by its runtime name ${codeSpan(runtimeName)}, never by this key`;
+     });
+   return [
+     "## Company skill library",
+-- 
+2.53.0
+

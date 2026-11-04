@@ -35,7 +35,9 @@ rendre la décision liée à une version et à un périmètre précis.
    obligatoire n'est manquante, toutes les revues requises sont `PASS` sur la révision
    courante et aucun constat critique ou majeur n'est ouvert ; sinon « décision humaine
    requise » avec les questions.
-2. Remplir le gabarit `references/gabarit-dossier.md`.
+2. Remplir le gabarit `references/gabarit-dossier.md` à partir du dossier calculé par le serveur
+   (`GET /api/plugins/atelier.marketing-ia/api/taches/<issueId>/dossier`, résumé puis `?partie=`) : matrice, revues,
+   sources et décisions se recopient de sa réponse, jamais d'un second relevé fait à la main.
 3. Formuler l'approbation demandée : contenu et version, canal, compte, audience, montant,
    durée, action. Une approbation d'article n'autorise pas une campagne payante.
 4. Lister les limites et contrôles non exécutés en tête, pas en annexe.
@@ -44,8 +46,8 @@ rendre la décision liée à une version et à un périmètre précis.
 
 ## Livrable
 
-Document de tâche `dossier-humain` au format du gabarit, et demande d'approbation native
-liée à la révision.
+Document de la tâche du dossier sous la clé `livrable` (celle que lit la porte de la politique `dossier-humain`),
+au format du gabarit, et demande d'approbation native liée à la révision.
 
 ## Critères de réussite
 

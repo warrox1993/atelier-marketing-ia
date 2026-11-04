@@ -7,7 +7,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { RegistreFournisseurs } from "../../src/fournisseurs.js";
-import { adresseAutorisee, fournisseurLiensReel, verifierUrl, USER_AGENT } from "../../src/reel/liens/verifier-url.js";
+import { adresseAutorisee, BUDGET_TOTAL_MS, fournisseurLiensReel, verifierUrl, USER_AGENT } from "../../src/reel/liens/verifier-url.js";
 import { demarrer, obtenirJetons, type PasserelleDeTest } from "../aide.js";
 
 let serveur: http.Server;
@@ -26,12 +26,16 @@ beforeAll(async () => {
     } else if (chemin === "/long") {
       res.writeHead(200, { "content-type": "text/plain" });
       res.end("a".repeat(5000));
+    } else if (chemin === "/annuaire") {
+      res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
+      res.end(`<html><head><title>Annuaire</title></head><body><p>${"Présentation. ".repeat(80)}</p><p>Appelez le 04/222.33.44 du lundi au vendredi.</p></body></html>`);
     } else if (chemin === "/a") { res.writeHead(301, { location: "/b" }); res.end();
     } else if (chemin === "/b") { res.writeHead(302, { location: `${base}/ok` }); res.end();
     } else if (chemin.startsWith("/boucle")) { res.writeHead(302, { location: "/boucle" + (Number(chemin.slice(7) || "0") + 1) }); res.end();
     } else if (chemin === "/vers-interne") { res.writeHead(302, { location: "http://169.254.169.254/latest/meta-data/" }); res.end();
     } else if (chemin === "/vers-localhost") { res.writeHead(302, { location: "http://localhost:1/" }); res.end();
     } else if (chemin === "/vers-ftp") { res.writeHead(302, { location: "ftp://exemple.test/x" }); res.end();
+    } else if (chemin.startsWith("/attente")) { setTimeout(() => { res.writeHead(302, { location: "/attente" + (Number(chemin.slice(8) || "0") + 1) }); res.end(); }, 150);
     } else if (chemin === "/lent") { /* ne répond jamais */
     } else if (chemin === "/404") { res.writeHead(404, { "content-type": "text/html" }); res.end("<title>Page introuvable</title>");
     } else { res.writeHead(500); res.end(); }
@@ -64,6 +68,17 @@ describe("verifier_url : lecture", () => {
     const r = await verifierUrl(`${base}/long`, "GET", essai);
     expect(r.extrait).toHaveLength(500);
     expect(r.titre).toBeNull();
+  });
+
+  it("LIV-MK-8 : chercher un numéro ou un nom dans le texte complet, au-delà de l'extrait, sans tenir compte des séparateurs", async () => {
+    const r = await verifierUrl(`${base}/annuaire`, "GET", { ...essai, chercher: ["04 222 33 44", "Toitures Dupont", "lundi au vendredi"] });
+    expect(r.extrait).not.toContain("04/222");
+    expect(r.trouves).toEqual([
+      { terme: "04 222 33 44", trouve: true },
+      { terme: "Toitures Dupont", trouve: false },
+      { terme: "lundi au vendredi", trouve: true },
+    ]);
+    expect((await verifierUrl(`${base}/annuaire`, "GET", essai)).trouves).toBeUndefined();
   });
 
   it("HEAD : code seul, pas de contenu lu", async () => {
@@ -100,6 +115,14 @@ describe("verifier_url : lecture", () => {
     expect(r.erreur).toMatch(/Délai dépassé/);
     expect(r.code).toBeNull();
     expect(r.dureeMs).toBeLessThan(5000);
+  });
+
+  it("budget global pour toute la chaîne de redirections, sous le délai de 10 s du socle (T1)", async () => {
+    expect(BUDGET_TOTAL_MS).toBeLessThanOrEqual(8_000);
+    const r = await verifierUrl(`${base}/attente`, "GET", { ...essai, budgetMs: 400 });
+    expect(r.erreur).toMatch(/Budget de 400 ms dépassé/);
+    expect(r.dureeMs).toBeLessThan(1_000);
+    expect(r.chaine.length).toBeLessThan(5);
   });
 
   it("n'envoie ni cookie ni authentification, et s'identifie par son User-Agent", async () => {

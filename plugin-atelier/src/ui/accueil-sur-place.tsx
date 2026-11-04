@@ -21,14 +21,14 @@
  * personne : `POST /api/issues/:id/interactions/:id/respond` (réponses), `/accept`, `/reject`, et
  * `POST /api/approvals/:id/approve` ou `/reject`. L'hôte contrôle les droits (réservé au board).
  */
-import { Fragment, useState, type ReactNode } from "react";
+import { Fragment, useEffect, useState, type ReactNode } from "react";
 import { MarkdownBlock, useHostContext } from "@paperclipai/plugin-sdk/ui";
 import type { DossierHumain } from "../contrats/dossier.js";
 import type { DetailApprobation, ElementAccueil, InteractionAccueil, LiaisonAApprouver, QuestionAccueil } from "../serveur/services-accueil.js";
-import { Bouton, Champ, EtatErreur, Lecture, LienHote } from "./composants.js";
+import { Bouton, Champ, EtatErreur, Lecture, LienHote, TexteSur } from "./composants.js";
 import { DecisionPanneau } from "./decision-livrable.js";
 import { useDonnees } from "./donnees.js";
-import { appelHote } from "./hote.js";
+import { appelHote, lireTacheRecente } from "./hote.js";
 import { appelRoute } from "./routes-prospection.js";
 import { abaisserTitres } from "./vues/contenus.js";
 
@@ -181,6 +181,28 @@ export function raisonQuestions(questions: readonly QuestionAccueil[], saisies: 
   return null;
 }
 
+/**
+ * Avis quand l'agent assigné à la tâche est en pause (HUM-C2) : sa réponse attend la reprise, où le socle la rejoue
+ * (`replayInteractionWakesAfterResume`). Tâche lue une seule fois (celle de la lecture des cartes si elle est récente),
+ * puis l'agent ; en cas d'échec, aucun avis.
+ */
+function AvisDestinataireEnPause({ issueId }: { issueId: string }) {
+  const [enPause, setEnPause] = useState(false);
+  useEffect(() => {
+    let annule = false;
+    lireTacheRecente<{ assigneeAgentId?: unknown }>(issueId)
+      .then((t) => (typeof t?.assigneeAgentId === "string" ? appelHote<{ status?: unknown }>("GET", `/agents/${encodeURIComponent(t.assigneeAgentId)}`) : null))
+      .then((a) => {
+        if (!annule) setEnPause(a?.status === "paused");
+      })
+      .catch(() => undefined);
+    return () => {
+      annule = true;
+    };
+  }, [issueId]);
+  return enPause ? <p role="status" className="atl-attenue">Le destinataire est en pause, votre réponse sera traitée à sa reprise.</p> : null;
+}
+
 function Questions({ element, interaction, issueId, onFait }: { element: ElementAccueil; interaction: InteractionAccueil; issueId: string; onFait(message: string): void }) {
   const [saisies, setSaisies] = useState<Record<string, Saisie>>({});
   const { enCours, erreur, lancer } = useActionNative();
@@ -195,6 +217,7 @@ function Questions({ element, interaction, issueId, onFait }: { element: Element
 
   return (
     <Encadre etiquette="Questions de l'équipe">
+      <AvisDestinataireEnPause issueId={issueId} />
       <form
         className="atl-formulaire"
         noValidate
@@ -266,8 +289,18 @@ function Confirmation({ interaction, issueId, onFait }: { interaction: Interacti
   const obligatoire = interaction.refusRaisonObligatoire;
   return (
     <Encadre etiquette="Confirmation demandée">
-      {interaction.invite ? <p>{interaction.invite}</p> : null}
+      <AvisDestinataireEnPause issueId={issueId} />
+      {interaction.invite ? (
+        <p>
+          <TexteSur texte={interaction.invite} />
+        </p>
+      ) : null}
       {interaction.details ? <MarkdownBlock content={abaisserTitres(interaction.details)} /> : null}
+      {interaction.document ? (
+        <p>
+          <LienHote vers={interaction.document.lien}>Ouvrir « {interaction.document.libelle} »</LienHote>
+        </p>
+      ) : null}
       <Champ libelle={obligatoire ? "Raison (obligatoire pour refuser)" : "Raison (facultative, utile si vous refusez)"}>
         <textarea value={raison} onChange={(e) => setRaison(e.target.value)} rows={2} maxLength={4000} />
       </Champ>

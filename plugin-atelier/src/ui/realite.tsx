@@ -3,7 +3,7 @@
  *
  * - `SectionPassageAuReel` : en tête de la vue Paramètres, un tableau (liste de cartes sur téléphone) :
  *   état, ce que le branchement débloque, qui doit agir, leads concernés, puis la synthèse par critère.
- * Le message du Coordinateur en tête du chat (`composants/chat-situation.tsx`) lit les mêmes états (`useRealite`) pour dire
+ * Le message de l'atelier en tête du chat (`composants/chat-situation.tsx`) lit les mêmes états (`useRealite`) pour dire
  * ce qui manque.
  *
  * Les états viennent de la route `realite.etat` (diagnostic des sources, import de la base clients, fiche du client,

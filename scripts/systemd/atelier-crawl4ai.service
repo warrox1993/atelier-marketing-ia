@@ -1,5 +1,9 @@
 [Unit]
 Description=Crawl4AI 0.9.5 de l'Atelier marketing IA (Podman rootless, écoute sur 127.0.0.1:11235 seulement)
+OnFailure=atelier-alerte@%n.service
+# 10 démarrages ratés en 10 min : l'unité passe en « failed » et alerte au lieu de boucler (EXP-C5).
+StartLimitIntervalSec=600
+StartLimitBurst=10
 Documentation=https://github.com/unclecode/crawl4ai
 After=network-online.target
 Wants=network-online.target

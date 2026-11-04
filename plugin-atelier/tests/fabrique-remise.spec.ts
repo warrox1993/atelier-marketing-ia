@@ -402,6 +402,25 @@ describe("route livrables.lister", () => {
     expect(JSON.stringify(a)).not.toContain("autre.docx");
   });
 
+  it("UI-11 : chaque travail donne sa tâche d'origine (identifiant, titre, lien) ; tâche inconnue ou absente = null", async () => {
+    const TACHE = "77777777-7777-4777-8777-777777777777";
+    livrer(A, T(1), { etat: "termine", type: "docx", fin: "2026-10-24T10:01:00Z", tache: TACHE });
+    livrer(A, T(2), { etat: "termine", type: "pdf", fin: "2026-10-24T10:02:00Z", tache: "88888888-8888-4888-8888-888888888888" });
+    livrer(A, T(3), { etat: "termine", type: "pdf", fin: "2026-10-24T10:03:00Z", tache: "pas une tâche" });
+    const vues: string[] = [];
+    const avecOrigine = routesLivrables({
+      racine: async () => racine,
+      origine: async (issueId, companyId) => (vues.push(`${issueId}@${companyId}`), issueId === TACHE ? { identifiant: "MKT-12", titre: "Offre de rentrée" } : null),
+    });
+    const t = ((await avecOrigine["livrables.lister"]!({ ...requete({ companyId: A }), cle: "livrables.lister", params: {} })).corps as Liste).travaux as Array<Record<string, unknown>>;
+    expect(t.find((x) => x.travail === T(1))!.origine).toEqual({ issueId: TACHE, identifiant: "MKT-12", titre: "Offre de rentrée", lien: "/issues/MKT-12" });
+    expect(t.find((x) => x.travail === T(2))!.origine).toBeNull();
+    expect(t.find((x) => x.travail === T(3))!.origine).toBeNull();
+    // La tâche est toujours lue dans l'entreprise de la requête ; un identifiant mal formé n'est jamais demandé à l'hôte.
+    expect(vues.every((v) => v.endsWith(`@${A}`))).toBe(true);
+    expect(vues).toHaveLength(2);
+  });
+
   it("se limite aux 50 derniers travaux, du plus récent au plus ancien", async () => {
     for (let n = 1; n <= 55; n += 1) {
       const minute = String(n).padStart(2, "0");

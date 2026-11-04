@@ -39,7 +39,7 @@ flowchart LR
     WRK["Worker du plugin<br/>collecteurs en code, porte déterministe, export"]
     DB[("Schéma obs_*<br/>sources, instantanés, projets, versions,<br/>affirmations, preuves, révisions, éditions")]
     RAG["RAG<br/>plein texte + bge-m3 + RRF"]
-    AG["Agents Claude<br/>12 agents + porte"]
+    AG["13 agents<br/>12 agents Claude + porte"]
   end
   subgraph Isolement["Essais isolés"]
     VM["VM d'essai jetable<br/>libvirt, réseau filtré"]

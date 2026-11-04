@@ -17,6 +17,7 @@ export const CANAUX_DU_SERVICE: Readonly<Record<string, readonly string[]>> = {
   facebook: ["facebook"],
   instagram: ["instagram"],
   linkedin: ["linkedin"],
+  linkedinprofil: ["linkedinprofil"],
   crm: ["crm", "hubspot"],
   pipedrive: ["pipedrive"],
   odoo: ["odoo"],

@@ -11,7 +11,7 @@
     },
     "accessibilite-wcag": {
       "version": "1.0.0",
-      "sha256": "fbe58f1118deb46df824d87bd16f419d3a9daeb7219d92e4f31165aec2d9362e",
+      "sha256": "3aae7e47e4fd05bbc8fe9c7093873ede39427d220671e2c2614d390164b019d3",
       "fichiers": [
         "SKILL.md"
       ]
@@ -39,28 +39,28 @@
     },
     "achat-coordonnees-fournisseur": {
       "version": "1.0.0",
-      "sha256": "83c3703c71ea296bd44f11353ae9be1ca500587857106851692e56fcae691a8b",
+      "sha256": "847f8ccc41811ac13f4016d3904c3a585a6f8dd08cd2c9c4f827c4ce6b379f49",
       "fichiers": [
         "SKILL.md"
       ]
     },
     "actifs-distinctifs": {
       "version": "1.0.0",
-      "sha256": "9ed9013d0aa35936bf01718270075bf98302838e3201335356369308916c9644",
+      "sha256": "8da36860c2262ca8d9e2f3db4247b69d3591834bdb9aca049cf7c590f8dcf395",
       "fichiers": [
         "SKILL.md"
       ]
     },
     "adaptation-fr-nl-en": {
       "version": "1.0.0",
-      "sha256": "6f2c40b92d63d059781a3f378ab10d46083ec9e47e72a272e5cbae5ae722b6dd",
+      "sha256": "ffa37d24625b66bf08a2840356d917c13ac2686611af8834228d15dc1a831a7a",
       "fichiers": [
         "SKILL.md"
       ]
     },
     "affirmations-preuves": {
       "version": "1.0.2",
-      "sha256": "b20f1251d7c23aa079023c439bbea5e6fc24dcfd27cafdaf2b121eae06cb9225",
+      "sha256": "842fff0525cbfdca6eb15bb8c21b182ce74265e2b0f98bd55beb8c76ca20c66f",
       "fichiers": [
         "SKILL.md"
       ]
@@ -74,7 +74,7 @@
     },
     "aimant-a-prospects": {
       "version": "1.0.0",
-      "sha256": "f4749c8481c0406d46e627497f6ba57c44a440ffe370ff00b61236aff434ef66",
+      "sha256": "5412b19104dde93dcddcc200f216ed227bfd00b06b8bc5afd641adaef2f91ac8",
       "fichiers": [
         "SKILL.md"
       ]
@@ -88,7 +88,7 @@
     },
     "analyse-concurrentielle": {
       "version": "1.0.0",
-      "sha256": "e1364b7828d7cf05f1323d2b70630cc626f9c5d90213f7a55217a7290d2fd9d9",
+      "sha256": "cd3d6a8c8fd6bd40866346dd757792716a84a89281f0a0ba8559e9dfecbb0a43",
       "fichiers": [
         "SKILL.md"
       ]
@@ -116,7 +116,7 @@
     },
     "analyse-jobs-a-faire": {
       "version": "1.0.0",
-      "sha256": "250d5692fc15598f0f286d4a09ef302684ab0a9d5a3ecda78c6f966e069c8306",
+      "sha256": "dc50f785b8593fb88487aba1a5a10ae7d01245d612437d843f92fb290ff55d12",
       "fichiers": [
         "SKILL.md"
       ]
@@ -158,14 +158,14 @@
     },
     "audit-local-etablissements": {
       "version": "1.2.0",
-      "sha256": "98b13787959fba8eddcd80f227fc979a7c13c5a3f4a3995d0bd105bb2c760107",
+      "sha256": "947a55479e255c9ea43b3995eb47fa7b8651c8e9cf202dc31f06fbccec70066f",
       "fichiers": [
         "SKILL.md"
       ]
     },
     "audit-seo": {
       "version": "1.2.0",
-      "sha256": "4e119855a4fcfcc5bc50372a2c235be1897bf0aa4da1009d75c4bb61a3ff7a57",
+      "sha256": "e165e4ab655c24f5d2eba6f1ac208b42a830da0c068dd7bba8bf0be83d12e32a",
       "fichiers": [
         "SKILL.md",
         "references/liste-controles-seo.md"
@@ -222,7 +222,7 @@
     },
     "cadrage-exigences": {
       "version": "1.0.0",
-      "sha256": "38c60510f9730a29816f3a98c2a39fe1c957564159aa0d6e417de9a889547d8e",
+      "sha256": "2edce1a062f1ea459a0700766dc7b8efc9d490f518037eee395380b5e7fdf6d6",
       "fichiers": [
         "SKILL.md",
         "references/gabarit-brief.md"
@@ -244,7 +244,14 @@
     },
     "calendrier-reseaux-sociaux": {
       "version": "1.0.0",
-      "sha256": "6241511721f7e54ae7a3c412997424ed839deab24011ffa8092f0de081dbd9c2",
+      "sha256": "a0d841f8ede5d1c4b3f39555f408298cccdde10ea28b7fc666b2c69fff92279e",
+      "fichiers": [
+        "SKILL.md"
+      ]
+    },
+    "campagne-courriel": {
+      "version": "1.0.0",
+      "sha256": "a260c1cb055c83712250645aadc96e3a42c29baa725e8dbb30607e9d7e914923",
       "fichiers": [
         "SKILL.md"
       ]
@@ -265,7 +272,7 @@
     },
     "charte-marque": {
       "version": "1.0.0",
-      "sha256": "887b6dfcea944df4ea234f978b77fb143675681e556d9006bc80dbe23fdc56c2",
+      "sha256": "fed9f9215608d8aecc3637bfd670dfce0f082aad1e277d867f1cb96b19d8c2dd",
       "fichiers": [
         "SKILL.md",
         "references/grille-charte.md"
@@ -391,8 +398,8 @@
       ]
     },
     "conformite-publicite-ia": {
-      "version": "1.0.0",
-      "sha256": "4130d6b144846e107304befe4f8c6c27040104866b892beca467adda534c8331",
+      "version": "1.4.0",
+      "sha256": "ebd0ec01ba5d6f51519cab6407dd81ca1ef836bcb8cb98eb6f6488d9eeb51e51",
       "fichiers": [
         "SKILL.md"
       ]
@@ -419,15 +426,17 @@
       ]
     },
     "controle-communications-reglementees": {
-      "version": "1.1.0",
-      "sha256": "fbeb1ec8bf0a52e7507933ed8f51d5470f5d6b8afbc1d81e45405d18c35af7e1",
+      "version": "1.2.0",
+      "sha256": "9d5f74511f0227436db2e282d3e777afee32bf5e311c64d4b668021767199da9",
       "fichiers": [
-        "SKILL.md"
+        "SKILL.md",
+        "references/information-art14.md",
+        "references/rgpd-prospection.md"
       ]
     },
     "controle-couverture": {
       "version": "1.0.0",
-      "sha256": "d500a158a28911d7ace62bccc100fff12a8aa898369d46517192bc7344808713",
+      "sha256": "de81e19208ca375060670df2d3e8e023cf18768beea00c563d260cc366228f12",
       "fichiers": [
         "SKILL.md",
         "references/schema-verdict.md"
@@ -449,7 +458,7 @@
     },
     "conversion-crm": {
       "version": "1.3.0",
-      "sha256": "66f00833d572e6f42fc26d11e2545e167fe364cb36abaccb147caad056e5fe08",
+      "sha256": "1930d050538bd61e73430a16380f7c459bedc37666c736f8624ae2853caae1cd",
       "fichiers": [
         "SKILL.md"
       ]
@@ -463,14 +472,14 @@
     },
     "coordonnees-recherche": {
       "version": "1.0.0",
-      "sha256": "770fd4743f5c9aa4515777f10b41c7ef75b7dc54a13b9ac1746a44acded5b56a",
+      "sha256": "57f4a31ca64af3d22e25a9aaaeee7601b4fc9e1991d139719b3690149275a915",
       "fichiers": [
         "SKILL.md"
       ]
     },
     "coordonnees-recoupement": {
-      "version": "1.0.0",
-      "sha256": "f174124f7f6afaca57f84eb761e47a65b3aeac9b8bb569ef5e04d4f0d25a4211",
+      "version": "1.1.1",
+      "sha256": "4b0d347967d2aa7547173a87ba56eef38b755787c78c17e9967b7970b79d9d45",
       "fichiers": [
         "SKILL.md"
       ]
@@ -505,7 +514,7 @@
     },
     "declinaison-regies-video": {
       "version": "1.0.0",
-      "sha256": "72f46003bfd4ebfba686f04661b8b66fc8c033c3cd191b0fb1decd5fa98cb900",
+      "sha256": "f0044dbb52ce06ddde6185e3129c1fa6180a9f72fa9e937573bf6d0245f453b9",
       "fichiers": [
         "SKILL.md"
       ]
@@ -539,10 +548,11 @@
       ]
     },
     "design-visuel-sobre": {
-      "version": "1.1.0",
-      "sha256": "d0c4d20a5f8164065bb5584730f895de64e43d30d8baa36328b8afcd2fb00ea3",
+      "version": "1.4.0",
+      "sha256": "e90180b938cf0fcf1b970bf8911e91992fc12554898febf9962fa19508e41b06",
       "fichiers": [
-        "SKILL.md"
+        "SKILL.md",
+        "references/description-flux3.md"
       ]
     },
     "diagnostic-marketing": {
@@ -561,21 +571,21 @@
     },
     "documentation-technique": {
       "version": "1.1.0",
-      "sha256": "57d5be743a8c361cd2c07c42547329596817386028db5a2211a831b4ff3268f5",
+      "sha256": "01c266caff5e4712b4010299fea3c0a037f47ba7a325ba88246975d158dfc9f8",
       "fichiers": [
         "SKILL.md"
       ]
     },
     "documents-bureautiques": {
       "version": "1.0.0",
-      "sha256": "e4d18c2efa7e007f71c82b8ccb2f9b94adacae255c915ab52c9010b936a148cc",
+      "sha256": "740b81ee8c80e19ac3efc74d460649b42c6bc8edac28b2208b1789e2d5524fdc",
       "fichiers": [
         "SKILL.md"
       ]
     },
     "dossier-24-chapitres": {
-      "version": "1.0.2",
-      "sha256": "324373bf80155bb24547ca43cde390600468ce3879b3404421e1bd5dd7dc7070",
+      "version": "1.0.3",
+      "sha256": "c47e2a4a018cb41b129198cc461232af4b33622cf96b6c2cea22502a9734e9ed",
       "fichiers": [
         "SKILL.md"
       ]
@@ -608,9 +618,16 @@
         "SKILL.md"
       ]
     },
+    "dossier-sujet": {
+      "version": "1.0.0",
+      "sha256": "7cdf5361a84c203aff7b5fa271c8de87a6c648c90d6edd0aa532ee071e905fe0",
+      "fichiers": [
+        "SKILL.md"
+      ]
+    },
     "dossier-validation-humaine": {
       "version": "1.0.0",
-      "sha256": "b87d22ea611ffc5b261dcd77ce1c7fa99e2765a5ab0d2eb59eeaa4937d5244b1",
+      "sha256": "c8e2c88559a715949a650253abaca3ac5383c2774ae6c18bb70e5b482a1fe6e4",
       "fichiers": [
         "SKILL.md",
         "references/gabarit-dossier.md"
@@ -618,7 +635,7 @@
     },
     "entretien-client-sans-biais": {
       "version": "1.1.0",
-      "sha256": "88851799d9f1b35b1c8554d375460d4f9ff425dbd5c6f0e92ee2ba1e0a01513e",
+      "sha256": "cce4574a5db5e0d2549d67eff0ea13f47dc00525d5bcbfcd67936c587728055b",
       "fichiers": [
         "SKILL.md"
       ]
@@ -756,6 +773,13 @@
         "SKILL.md"
       ]
     },
+    "grille-criteres-complements": {
+      "version": "1.0.0",
+      "sha256": "37020662e85e74862e90cc1a1931de5ec2c1ff209b4592d5510ab248a347dac2",
+      "fichiers": [
+        "SKILL.md"
+      ]
+    },
     "grille-entretien-structure": {
       "version": "1.0.0",
       "sha256": "a4c1cadcc543d89fb012fe5ece7162ae536f45a77df513c9a0775ab0ef0cbf44",
@@ -765,7 +789,7 @@
     },
     "humanisation-texte-fr": {
       "version": "1.0.0",
-      "sha256": "8f53cbe5eadf01cf1b5a7629e3961043f038a5619e2242e605ca4f864025aa7a",
+      "sha256": "6ecd98e78173551fe316552ebdeb1f91d6d1d5d5acc652c976a7d412c16c59de",
       "fichiers": [
         "SKILL.md"
       ]
@@ -826,6 +850,13 @@
         "SKILL.md"
       ]
     },
+    "lecture-etiquette-allergenes": {
+      "version": "1.0.0",
+      "sha256": "e652bd175ab284a2443d76cd7d2735cc8150fa72cf373ff98408f8890c2a8f5b",
+      "fichiers": [
+        "SKILL.md"
+      ]
+    },
     "leviers-influence-ethiques": {
       "version": "1.0.0",
       "sha256": "93fed7e3b8fc5ab4c78d628cc78a6e44522d83e13a544e4b2bcbfdc0b8e998c7",
@@ -835,7 +866,7 @@
     },
     "liens-entrants-seo": {
       "version": "1.0.0",
-      "sha256": "6992ba8b8265220f218be3149e881636901357f2103a1fada55bec05facadd0a",
+      "sha256": "3122ef52ecd957c7ae9d27161d13faa13a79f5b7b4a977cc4499f6ba3bb193a6",
       "fichiers": [
         "SKILL.md"
       ]
@@ -863,7 +894,7 @@
     },
     "memoire-para": {
       "version": "1.0.0",
-      "sha256": "11515944e7233bfb7d459d66545c98ed284ee1dfd1ebe08889c99e893a2fe44b",
+      "sha256": "56729ebce1c08830cf392f0b189b37b62add387e332fab88d99ead5b960a067b",
       "fichiers": [
         "SKILL.md",
         "references/origine-paperclip.md",
@@ -879,7 +910,7 @@
     },
     "mesure-experiences": {
       "version": "1.3.0",
-      "sha256": "a7313dda03afce2608f899f3944e086f568e58db89f7fba0549375bed26b7f7f",
+      "sha256": "7c5e8ab188fe14d28ee0e62af0cfa8c290d4dc23b47d1878629c969315b191ab",
       "fichiers": [
         "SKILL.md"
       ]
@@ -900,14 +931,14 @@
     },
     "mise-a-jour-crm": {
       "version": "1.0.0",
-      "sha256": "25dc23b98e8775531210bed0c6365f46536441bf2673b26a7a778f5c5dda34d2",
+      "sha256": "b903c264efbf03d72337599095dc1c78f60df2bd5126f8157eaeef7d37540de8",
       "fichiers": [
         "SKILL.md"
       ]
     },
     "niveau-conscience-message": {
       "version": "1.1.0",
-      "sha256": "8a17fa4762f063f6658e9068f19590786546d5b833c0c92b5882036ff8b6f3b5",
+      "sha256": "a150b072f6c1ed62a475f3157381183e973dc45fcd1debe12552e6c207d32ccd",
       "fichiers": [
         "SKILL.md"
       ]
@@ -919,9 +950,16 @@
         "SKILL.md"
       ]
     },
+    "notation-classement": {
+      "version": "1.0.0",
+      "sha256": "d1a28a54666878ab75d0be78f04c9f759c053e6f9ebc0a6e3bef03cf09738374",
+      "fichiers": [
+        "SKILL.md"
+      ]
+    },
     "objectifs-marque-activation": {
       "version": "1.1.0",
-      "sha256": "a4e561b868d932556b751b403bc97e01c0f887c7a20369eff9059bc051bec50b",
+      "sha256": "116faf4a8bbdba71f805829d3fe407b331b48938edf6521fd1bc64822d387567",
       "fichiers": [
         "SKILL.md"
       ]
@@ -956,14 +994,14 @@
     },
     "pilotage-strategique": {
       "version": "1.1.0",
-      "sha256": "1ca0bbee8e0d7ffe46c4ff02b1ece059537d3bc109febbff469a2d55a5b6032e",
+      "sha256": "75cae95b38f0d3d127a9538a7b98dc0093e8774934890cb1867ba019c0a74376",
       "fichiers": [
         "SKILL.md"
       ]
     },
     "plan-campagne": {
       "version": "1.1.0",
-      "sha256": "55c5bbe6dfae37e677017da581a98877bbeb6a1e47e6597000038fbebc0b0ff4",
+      "sha256": "7d4d187283b78635422e4274e1e8ac43caab8bbcbe9fd922bea6b8b80a2a7806",
       "fichiers": [
         "SKILL.md"
       ]
@@ -1012,7 +1050,7 @@
     },
     "plan-strategique-marketing": {
       "version": "1.0.0",
-      "sha256": "244bbf4bb5b71c8a6f9b029360830f1f7454af5eef75346564a88cb699b9035d",
+      "sha256": "f682cf69cd6310983b9ecf7925e53160de08b22a8009ec3edd5897d1d1f8479f",
       "fichiers": [
         "SKILL.md"
       ]
@@ -1040,7 +1078,7 @@
     },
     "planification-livrables": {
       "version": "1.0.0",
-      "sha256": "e76894b8bf977f847da8189a5ade2f05f9a465ae1fa1900e82470f1e405d3dff",
+      "sha256": "fd0d5dbe87d9d1228867474874f5c0aacb41062f672a8f63d3e71196dea454de",
       "fichiers": [
         "SKILL.md"
       ]
@@ -1068,7 +1106,7 @@
     },
     "points-entree-categorie": {
       "version": "1.1.0",
-      "sha256": "98d463ffe045e942113015b0df90cc184d8e30706e687d1e32c60826d3fc4ee7",
+      "sha256": "3a63ad99f468a47d16087b5f644992d8fa3ac84ed64483afb795198af3b546d9",
       "fichiers": [
         "SKILL.md"
       ]
@@ -1096,7 +1134,7 @@
     },
     "preparation-campagnes-sea": {
       "version": "1.2.0",
-      "sha256": "0a7b7c4e48b73975cf2e2feed569942a1f1ea008a7c50b0ebf26cf1df90b5449",
+      "sha256": "c5dbf0c65533a6eb0c675c839a5064719fa54b27255ae58d79f6ec73c46ed81e",
       "fichiers": [
         "SKILL.md",
         "references/structure-campagne.md"
@@ -1119,6 +1157,13 @@
     "preparation-tva": {
       "version": "1.1.0",
       "sha256": "9b3bb529160a3b65fc4e1bac7bcce0406c547532d429f7ca09468848cc19ae16",
+      "fichiers": [
+        "SKILL.md"
+      ]
+    },
+    "preuves-cliniques": {
+      "version": "1.0.0",
+      "sha256": "ff6c84505ec6e12a8ddefa0ce19e206a9334fef833b091fddf7b3c665148eec5",
       "fichiers": [
         "SKILL.md"
       ]
@@ -1188,7 +1233,7 @@
     },
     "protocole-inter-coordinateurs": {
       "version": "1.0.0",
-      "sha256": "2fe84bc043843eef893184d7211dbc79ac2ecdc527c6dbb4481edf5cddec48cd",
+      "sha256": "af64a1d8c9090d9ff3d5e56efded3572e9b5c3df35b7e6caf840c0cf093a958d",
       "fichiers": [
         "SKILL.md"
       ]
@@ -1209,7 +1254,7 @@
     },
     "qualification-prospects": {
       "version": "1.2.0",
-      "sha256": "1b436c7ff8aab9bda8657269d557a9e935575c313078ab3e4225fdd78c3e7768",
+      "sha256": "e9fe16d8de9e93f114f11b837f3113571d5e0321fedce42fcfe9e1b6e2bfd307",
       "fichiers": [
         "SKILL.md",
         "references/fiche-qualification.md"
@@ -1218,6 +1263,13 @@
     "qualite-donnees": {
       "version": "1.1.0",
       "sha256": "db7160eb2d15c7e13a04bf1a4ff9e559863b6bd9cfc05205014cad436a5b9c1d",
+      "fichiers": [
+        "SKILL.md"
+      ]
+    },
+    "qualite-visuels": {
+      "version": "1.5.0",
+      "sha256": "5fc3fdda35cbae93c89e89acda5911e6f0881965e0598eb430457d32dc6d36f6",
       "fichiers": [
         "SKILL.md"
       ]
@@ -1231,7 +1283,7 @@
     },
     "recherche-connaissances": {
       "version": "1.0.0",
-      "sha256": "982a038cc1cb15ff6c78233e0e6f784776b61b82c048472768077ea3c5a2107e",
+      "sha256": "eca69b67e44b8cddc97042ddaf8db766b9e0a8c4f660b6643e783b81c76b25bd",
       "fichiers": [
         "SKILL.md",
         "references/citation.md"
@@ -1239,7 +1291,7 @@
     },
     "recherche-prospects": {
       "version": "1.3.0",
-      "sha256": "86d6e16213afeeb7a0274888ebdd28e11fa9c6a86f00b790b3a43c1161ee7f7b",
+      "sha256": "95338d602e1e95bd74828ac1473d9f98b9b4f3eea7b7f7906148ac4e25918a82",
       "fichiers": [
         "SKILL.md",
         "references/journal-recherche.md"
@@ -1247,15 +1299,22 @@
     },
     "recherche-sourcee": {
       "version": "1.0.0",
-      "sha256": "f1d0c45f05616b24fff998ca91cd09fba6a6cb3f4c35cb483948fa4e09e678a9",
+      "sha256": "3e63b2244cdc131ca20bff4a4ccda20e7ac137db391151c6d0a2ee75d21778c0",
       "fichiers": [
         "SKILL.md",
         "references/fiche-source.md"
       ]
     },
+    "recherche-vendeurs-europe": {
+      "version": "1.0.0",
+      "sha256": "2d334667ca288309d8e3a4fd0270cb0c8e0f906f4aa89da518d5455dada9f442",
+      "fichiers": [
+        "SKILL.md"
+      ]
+    },
     "recit-de-marque-guide": {
       "version": "1.0.0",
-      "sha256": "b93c22bfd822bdecc40eb9e44dbe8d2fcc55cb7081da2f4230327e3190034aa6",
+      "sha256": "39c13beb8e55c3dc31550fb64d0a138627b49c8797709bc2b0e70b61a402a03a",
       "fichiers": [
         "SKILL.md"
       ]
@@ -1269,7 +1328,7 @@
     },
     "redaction-declinaison-canal": {
       "version": "1.4.0",
-      "sha256": "11100ff1ea2061c710b078ef305d526b6c90ab4f73a93dfc0f09474cd048ebff",
+      "sha256": "7189230bb280f5b80eabe2fcffa86ddb5938dd10a8d48ca412954be8ae8532f8",
       "fichiers": [
         "SKILL.md"
       ]
@@ -1283,7 +1342,7 @@
     },
     "redaction-titre-preuve": {
       "version": "1.0.0",
-      "sha256": "623ba69efe70fe815f045109bb5687021bd840663decb8894a1b0dcf3aec1f97",
+      "sha256": "afa34725a5dda88f763494acc4e8c3c85ec66896a31f817b684fced119df8d53",
       "fichiers": [
         "SKILL.md"
       ]
@@ -1353,7 +1412,7 @@
     },
     "relecture-independante": {
       "version": "1.0.0",
-      "sha256": "e68493e84481259dfeb3486fa37a60544c4d66912186b8a4c1a5ab9128b3eb85",
+      "sha256": "b55912c84195217922690c73057f06e59d1ae5f97db83f161151d09c32245b2d",
       "fichiers": [
         "SKILL.md",
         "references/grille-gravite.md"
@@ -1417,7 +1476,7 @@
     },
     "revue-contradictoire": {
       "version": "1.0.0",
-      "sha256": "4f39e1e17bb070840e9d76c27d780eaf572708542996f186979ad887625c1204",
+      "sha256": "a93de99a87633d3f90768705d585ba8b9c45ac25923140e092d04fd4cdfa9c69",
       "fichiers": [
         "SKILL.md"
       ]
@@ -1473,21 +1532,21 @@
     },
     "script-appel-secretariat": {
       "version": "1.0.0",
-      "sha256": "98210c292e0dec05b80baaba7cd29ae7662c35341dd29cbb3065155ce110c644",
+      "sha256": "fbd70349ee1b8e4870cff3ad6af45b50c1a889198604fd4b3bfb8e5fb2a50b8d",
       "fichiers": [
         "SKILL.md"
       ]
     },
     "script-video-publicitaire": {
-      "version": "1.0.0",
-      "sha256": "55befe6eb4e4c63edcc620d48512902e0cc9bcc34ba0a8b4e7f3ba4fffb7aaec",
+      "version": "1.5.0",
+      "sha256": "0c0cf29febaea3b8db5fea65078f9617c313b4575bb1d4131a72a051990d0a41",
       "fichiers": [
         "SKILL.md"
       ]
     },
     "segmentation-ciblage": {
       "version": "1.0.0",
-      "sha256": "511cd012dee39ff3be17aa78eba8d0e1d37d1aec87c4d75191dde260e9be4f47",
+      "sha256": "8f03ea8d1385017cc2270e9183540a97336f1c38cb758d3f6df8ac98ef26e684",
       "fichiers": [
         "SKILL.md"
       ]
@@ -1557,7 +1616,7 @@
     },
     "suivi-conversions": {
       "version": "1.0.0",
-      "sha256": "b305d03ab35c40ca74785ed3ea356bb48052de1ebf796890c7f68d58a90def80",
+      "sha256": "d887f67fb319f7865dcd5a0f9df1e73999d40f6ac2ff389c5d43d39406a73fef",
       "fichiers": [
         "SKILL.md"
       ]
@@ -1648,7 +1707,7 @@
     },
     "validation-analyse": {
       "version": "1.0.0",
-      "sha256": "4704df2fb0bda538274b38547638c3dc8bc1ca1afdbeb81cba63abc8d0e882df",
+      "sha256": "4fa66e1c8ef76261d051ed2ee2c7ee1ab3de2c260c4d8a0b873f9d78bdbd8f0c",
       "fichiers": [
         "SKILL.md"
       ]
@@ -1662,21 +1721,21 @@
     },
     "veille-medias": {
       "version": "1.0.0",
-      "sha256": "25f1492c8f3d7bbabd2c387eb1f5a8bdd72f751f267b88a1f726db1fce2f68ac",
+      "sha256": "58462552603619dc87dec7cbbbc061e69f5cec0141b9a3ea5a003cc69403d610",
       "fichiers": [
         "SKILL.md"
       ]
     },
     "veille-publications-videos": {
       "version": "1.0.2",
-      "sha256": "fb9a3045ace6adea2ea64547042c92aa5fb89176f423b65118dbf8789dc01f12",
+      "sha256": "1e170f6da84fd136672b6f420e715be68e8dc5366e6fa946af1368f04a8ba5bb",
       "fichiers": [
         "SKILL.md"
       ]
     },
     "veille-reglementaire": {
       "version": "1.1.0",
-      "sha256": "9029ef0973f1ae70fc20fe7c612c71e24951390946557c16ac40d8896f895fc8",
+      "sha256": "9cc6c1aa133029b3312faf19da9ac4acd2ad3c9f537788f92bc8149fa9f51067",
       "fichiers": [
         "SKILL.md"
       ]
@@ -1718,7 +1777,7 @@
     },
     "visualisation-donnees": {
       "version": "1.0.0",
-      "sha256": "25dd16ef7e472cabfbb6848e256b2278680f79bfd52886f0d048d3b6bf0fb46e",
+      "sha256": "95d7270395c2965ae80a73cd3889b5ba43a2ba557ef7b6dc1aadb8047cf6e492",
       "fichiers": [
         "SKILL.md"
       ]

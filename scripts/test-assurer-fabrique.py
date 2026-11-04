@@ -8,16 +8,25 @@ import copy
 import json
 import pathlib
 import sys
+import tempfile
 import unittest
+from unittest import mock
 
 RACINE = pathlib.Path(__file__).resolve().parent.parent
 spec = importlib.util.spec_from_file_location("bootstrap_organisation", RACINE / "scripts" / "bootstrap-organisation.py")
 bo = importlib.util.module_from_spec(spec)
 sys.modules["bootstrap_organisation"] = bo
 spec.loader.exec_module(bo)
+spec_vo = importlib.util.spec_from_file_location("verifier_organisation", RACINE / "scripts" / "verifier-organisation.py")
+vo = importlib.util.module_from_spec(spec_vo)
+spec_vo.loader.exec_module(vo)
+OUTILS_REELS = ["fabriquer_document", "fabriquer_video", "fabriquer_image", "etat_fabrication", "voir_rendu"]
 
 DOCUMENTS = {"contenus", "stratege", "prospection", "crm-conversion", "mesure"}
 VIDEO = {"reseaux-sociaux"}
+IMAGE = {"contenus", "reseaux-sociaux"}
+VOIR = {"relecteur"}
+CID = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"  # UUID : les dossiers de rendus sont propres à l'entreprise
 
 
 class FauxApi:
@@ -60,56 +69,190 @@ class TestAssurerFabrique(unittest.TestCase):
 
     def test_ecrit_les_identifiants_des_agents_retenus(self):
         api = FauxApi({"fabriqueRolesDocuments": ["designer"], "fabriqueRolesVideo": ["designer"], "autre": 1})
-        bo.assurer_fabrique(api, "cid", self.reg, self.agents)
+        bo.assurer_fabrique(api, CID, self.reg, self.agents)
         self.assertEqual(set(api.config["fabriqueAgentsDocuments"]), {f"id-{s}" for s in DOCUMENTS})
         self.assertEqual(api.config["fabriqueAgentsVideo"], [f"id-{s}" for s in VIDEO])
         self.assertNotIn("id-veille", api.config["fabriqueAgentsDocuments"])
         self.assertNotIn("id-seo-local-geo", api.config["fabriqueAgentsDocuments"])
         self.assertNotIn("id-contenus", api.config["fabriqueAgentsVideo"])
+        self.assertEqual(sorted(api.config["fabriqueAgentsImage"]), sorted(f"id-{s}" for s in IMAGE))
+        self.assertNotIn("id-stratege", api.config["fabriqueAgentsImage"])
         self.assertNotIn("fabriqueRolesDocuments", api.config)
         self.assertNotIn("fabriqueRolesVideo", api.config)
         self.assertEqual(api.config["autre"], 1)
 
+    def test_voir_rendu_seulement_au_relecteur_avec_son_dossier_de_rendus(self):
+        # Lot 3 qualité des visuels : le relecteur reçoit voir_rendu (et son dossier dans sa configuration Claude),
+        # aucun producteur n'a ni l'outil ni de dossier ; le relecteur n'a ni fabriquer_image ni fabriquer_video.
+        api = FauxApi({})
+        bo.assurer_fabrique(api, CID, self.reg, self.agents)
+        self.assertEqual(api.config["fabriqueDossiersRendus"],
+                         {"id-relecteur": str(bo.dossiers_agent(CID, "relecteur")[1] / "rendus")})
+        noms = [p["name"] for p in api.politiques]
+        self.assertNotIn("atelier-fabrique-interdit:relecteur:voir_rendu", noms)
+        self.assertIn("atelier-fabrique-interdit:relecteur:fabriquer_image", noms)
+        self.assertIn("atelier-fabrique-interdit:relecteur:fabriquer_video", noms)
+        for slug in VIDEO | IMAGE | DOCUMENTS:
+            self.assertIn(f"atelier-fabrique-interdit:{slug}:voir_rendu", noms)
+        relecteur = next(a for a in self.reg["agents"] if a["slug"] == "relecteur")
+        reglages = bo.reglages_agent(self.reg, pathlib.Path("/c/cfg"), relecteur, pathlib.Path("/c/esp"))
+        self.assertIn("Read(//c/cfg/rendus/**)", reglages["permissions"]["allow"])
+        contenus = next(a for a in self.reg["agents"] if a["slug"] == "contenus")
+        reglages = bo.reglages_agent(self.reg, pathlib.Path("/c/cfg"), contenus, pathlib.Path("/c/esp"))
+        self.assertNotIn("Read(//c/cfg/rendus/**)", reglages["permissions"]["allow"])
+
     def test_idempotent(self):
         api = FauxApi({})
-        bo.assurer_fabrique(api, "cid", self.reg, self.agents)
+        bo.assurer_fabrique(api, CID, self.reg, self.agents)
         ecritures = api.ecritures_config
         nb_politiques = len(api.politiques)
-        self.assertEqual(bo.assurer_fabrique(api, "cid", self.reg, self.agents), 0)
+        self.assertEqual(bo.assurer_fabrique(api, CID, self.reg, self.agents), 0)
         self.assertEqual(api.ecritures_config, ecritures)
         self.assertEqual(len(api.politiques), nb_politiques)
 
     def test_agent_retenu_plus_tard_perd_sa_politique_block(self):
         # « veille » n'est pas retenu : politiques block créées. JB le retient ensuite : elles doivent disparaître.
         api = FauxApi({})
-        bo.assurer_fabrique(api, "cid", self.reg, self.agents)
+        bo.assurer_fabrique(api, CID, self.reg, self.agents)
         self.assertTrue([p for p in api.politiques if ":veille:" in p["name"]])
         autre = [p["name"] for p in api.politiques if ":veille:" not in p["name"]]
         reg2 = copy.deepcopy(self.reg)
         veille = next(a for a in reg2["agents"] if a["slug"] == "veille")
         veille["outils"]["mutation"].append(bo.OUTILS_CLIENT_FABRIQUE["document"])
-        bo.assurer_fabrique(api, "cid", reg2, self.agents)
+        bo.assurer_fabrique(api, CID, reg2, self.agents)
         self.assertIn("id-veille", api.config["fabriqueAgentsDocuments"])
         restantes = [p["name"] for p in api.politiques if ":veille:" in p["name"]]
-        # Documents et état de fabrication ouverts ; la vidéo reste interdite.
-        self.assertEqual(restantes, ["atelier-fabrique-interdit:veille:fabriquer_video"])
+        # Documents et état de fabrication ouverts ; la vidéo, l'image et voir_rendu restent interdits.
+        self.assertEqual(sorted(restantes), ["atelier-fabrique-interdit:veille:fabriquer_image",
+                                             "atelier-fabrique-interdit:veille:fabriquer_video",
+                                             "atelier-fabrique-interdit:veille:voir_rendu"])
         self.assertEqual([p["name"] for p in api.politiques if ":veille:" not in p["name"]], autre)
         # Rejeu : plus rien à faire.
-        self.assertEqual(bo.assurer_fabrique(api, "cid", reg2, self.agents), 0)
+        self.assertEqual(bo.assurer_fabrique(api, CID, reg2, self.agents), 0)
 
     def test_politique_du_meme_nom_retouchee_a_la_main_conservee(self):
         # Revue du 25/10 : on ne supprime que la forme exacte créée par le script, jamais une politique élargie à la main.
         api = FauxApi({})
-        bo.assurer_fabrique(api, "cid", self.reg, self.agents)
+        bo.assurer_fabrique(api, CID, self.reg, self.agents)
         nom = "atelier-fabrique-interdit:veille:fabriquer_document"
         retouchee = next(p for p in api.politiques if p["name"] == nom)
         retouchee["selectors"] = {"toolName": retouchee["selectors"]["toolName"], "serverName": "autre"}
         reg2 = copy.deepcopy(self.reg)
         veille = next(a for a in reg2["agents"] if a["slug"] == "veille")
         veille["outils"]["mutation"].append(bo.OUTILS_CLIENT_FABRIQUE["document"])
-        bo.assurer_fabrique(api, "cid", reg2, self.agents)
+        bo.assurer_fabrique(api, CID, reg2, self.agents)
         self.assertIn(nom, [p["name"] for p in api.politiques])
         self.assertNotIn("atelier-fabrique-interdit:veille:etat_fabrication", [p["name"] for p in api.politiques])
+
+    def test_tout_outil_du_plugin_non_autorise_est_bloque(self):
+        # DOC-A1 : un futur outil du plugin reçoit une politique block pour chaque agent qui ne l'a pas en autorisation
+        # explicite (ici tous sauf veille) ; les politiques des trois outils de la fabrique ne changent pas.
+        reg2 = copy.deepcopy(self.reg)
+        veille = next(a for a in reg2["agents"] if a["slug"] == "veille")
+        veille["outils"]["recherche"].append(bo.nom_client_outil_plugin("outil_futur"))
+        temoin = FauxApi({})
+        bo.assurer_fabrique(temoin, CID, reg2, self.agents)
+        api = FauxApi({})
+        with mock.patch.object(bo, "outils_plugin", return_value=OUTILS_REELS + ["outil_futur"]):
+            bo.assurer_fabrique(api, CID, reg2, self.agents)
+            self.assertEqual(bo.assurer_fabrique(api, CID, reg2, self.agents), 0, "rejeu : rien à écrire")
+        futur = {p["name"]: p for p in api.politiques if p["name"].endswith(":outil_futur")}
+        self.assertEqual(set(futur), {f"atelier-fabrique-interdit:{s}:outil_futur" for s in self.agents if s != "veille"})
+        p = futur["atelier-fabrique-interdit:contenus:outil_futur"]
+        self.assertEqual((p["policyType"], p["selectors"], p["conditions"]),
+                         ("block", {"toolName": f"{bo.PLUGIN_CLE}:outil_futur"}, {"actor": {"agentId": "id-contenus"}}))
+        self.assertEqual(sorted(n for n in (q["name"] for q in api.politiques) if n not in futur),
+                         sorted(q["name"] for q in temoin.politiques))
+
+
+class TestOutilsPlugin(unittest.TestCase):
+    """DOC-A1 : liste des outils enregistrés par le plugin, lue dans ses sources (lecture seule)."""
+
+    @staticmethod
+    def plugin(dossier, worker, contrats=""):
+        src = pathlib.Path(dossier) / "src"
+        src.mkdir()
+        (src / "worker.ts").write_text(worker, encoding="utf-8")
+        (src / "contrats.ts").write_text(contrats, encoding="utf-8")
+        return pathlib.Path(dossier)
+
+    def test_outils_du_worker_reel(self):
+        self.assertEqual(sorted(bo.outils_plugin()), sorted(OUTILS_REELS))
+
+    def test_manifeste_reel(self):
+        # Revue de sécurité 2, B-6 : le manifeste déclare la liste qui fait foi.
+        self.assertEqual(sorted(bo.outils_manifeste()), sorted(OUTILS_REELS))
+
+    def test_enregistrement_dans_un_tsx_vu(self):
+        with tempfile.TemporaryDirectory() as d:
+            p = self.plugin(d, "")
+            (p / "src" / "vue.tsx").write_text('ctx.tools.register("outil_tsx", m, f);\n', encoding="utf-8")
+            self.assertEqual(bo.outils_plugin(p), ["outil_tsx"])
+
+    def test_manifeste_absent_ou_illisible_refuse(self):
+        for manifeste in (None, "export default { name: 'x' };\n", "export default { tools: [inconnu] };\n"):
+            with self.subTest(manifeste=manifeste), tempfile.TemporaryDirectory() as d:
+                p = self.plugin(d, "")
+                if manifeste is not None:
+                    (p / "src" / "manifest.ts").write_text(manifeste, encoding="utf-8")
+                with self.assertRaises(ValueError):
+                    bo.outils_manifeste(p)
+
+    def test_litteral_et_constante_resolus(self):
+        with tempfile.TemporaryDirectory() as d:
+            p = self.plugin(d, 'ctx.tools.register("outil_futur", m, f);\nctx.tools.register(DECL.name, m, f);\n',
+                            'export const NOM = "par_constante" as const;\n'
+                            'export const DECL: PluginToolDeclaration = {\n  name: NOM,\n};\n')
+            self.assertEqual(bo.outils_plugin(p), ["outil_futur", "par_constante"])
+
+    def test_enregistrement_non_resolu_refuse(self):
+        # Un nom qu'on ne sait pas lire ne doit jamais passer en silence : erreur, pas liste incomplète.
+        for worker in ("for (const d of liste) ctx.tools.register(d.name, m, f);\n",
+                       "ctx.tools.register(inconnu, m, f);\n",
+                       "ctx.tools.register(`gabarit`, m, f);\n",
+                       "ctx.tools.register(nomSeul);\n"):
+            with self.subTest(worker=worker), tempfile.TemporaryDirectory() as d:
+                with self.assertRaises(ValueError):
+                    bo.outils_plugin(self.plugin(d, worker))
+        with tempfile.TemporaryDirectory() as d, self.assertRaises(ValueError):
+            bo.outils_plugin(pathlib.Path(d))  # plugin absent : jamais une liste vide qui laisserait tout passer
+
+
+class TestControleOutilsPlugin(unittest.TestCase):
+    """DOC-A1 : verifier-organisation refuse un outil du plugin non classé pour un rôle à règle nue."""
+
+    def setUp(self):
+        vo.erreurs.clear()
+        vo.infos.clear()
+        reg = json.loads((RACINE / "organisation" / "registre" / "agents.json").read_text(encoding="utf-8"))
+        self.nus = sorted(a["slug"] for a in reg["agents"]
+                          if vo.OUTIL_SERVEUR_CONNEXIONS in set(a["outils"]["recherche"]) | set(a["outils"]["mutation"]))
+
+    def test_registre_reel_tout_classe(self):
+        self.assertTrue(self.nus, "au moins un rôle a la règle nue")
+        vo.controler_outils_plugin(bo)
+        self.assertEqual(vo.erreurs, [])
+
+    def test_outil_futur_non_classe_refuse(self):
+        with tempfile.TemporaryDirectory() as d:
+            (pathlib.Path(d) / "plugin-atelier").mkdir()
+            p = TestOutilsPlugin.plugin(pathlib.Path(d) / "plugin-atelier", 'ctx.tools.register("outil_futur", m, f);\n')
+            (p / "src" / "manifest.ts").write_text('export default { tools: [{ name: "outil_futur" }] };\n', encoding="utf-8")
+            with mock.patch.object(vo, "RACINE", pathlib.Path(d)):
+                vo.controler_outils_plugin(bo)
+        self.assertEqual(sorted(e.split(" ")[1] for e in vo.erreurs), self.nus)
+        self.assertTrue(all(bo.nom_client_outil_plugin("outil_futur") in e for e in vo.erreurs), vo.erreurs)
+
+    def test_ecart_entre_code_et_manifeste_refuse(self):
+        # B-6 : un outil déclaré au manifeste mais jamais vu dans le code (appel indirect) est une erreur, pas un oubli.
+        with tempfile.TemporaryDirectory() as d:
+            (pathlib.Path(d) / "plugin-atelier").mkdir()
+            p = TestOutilsPlugin.plugin(pathlib.Path(d) / "plugin-atelier", 'ctx.tools.register("vu", m, f);\n')
+            (p / "src" / "manifest.ts").write_text('export default { tools: [{ name: "vu" }, { name: "cache" }] };\n',
+                                                   encoding="utf-8")
+            with mock.patch.object(vo, "RACINE", pathlib.Path(d)):
+                vo.controler_outils_plugin(bo)
+        self.assertTrue(any("manifeste" in e and "cache" in e for e in vo.erreurs), vo.erreurs)
 
 
 if __name__ == "__main__":

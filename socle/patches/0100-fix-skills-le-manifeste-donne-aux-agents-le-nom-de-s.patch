@@ -1,0 +1,78 @@
+From bfe8b2f5754989eea953c002be0be6e1bbac5f91 Mon Sep 17 00:00:00 2001
+From: Jean-Baptiste Dhondt <114347858+warrox1993@users.noreply.github.com>
+Date: Tue, 27 Oct 2026 22:33:01 +0100
+Subject: [PATCH] =?UTF-8?q?fix(skills):=20le=20manifeste=20donne=20aux=20a?=
+ =?UTF-8?q?gents=20le=20nom=20de=20skill=20que=20Claude=20Code=20conna?=
+ =?UTF-8?q?=C3=AEt?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Cause : la liste « Company skill library » ne montrait que la clé de
+bibliothèque (company/<id>/routage-coordination). Les agents appelaient
+Skill avec cette clé et Claude Code répondait « Unknown skill » : 12 appels
+sur 12 en échec dans l'usine (mesure du 27/10/2026), donc aucun skill
+d'entreprise jamais chargé. Claude Code 2.1.308 ne connaît que le nom du
+dossier monté (routage-coordination--32f74c7bdc), prouvé par trois appels
+forcés (nom de dossier : chargé ; clé : Unknown skill).
+
+Correctif : pour un skill activé, la ligne donne son runtimeName et dit de
+ne jamais charger par la clé. Les skills non activés n'exposent pas leur
+nom d'exécution. Échecs de la suite adapter-utils identiques avant et après
+(175, bac à sable, git, ACP), sauf le nouveau test.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_012hDEUaJZ3u1rGj4CzNXrhC
+---
+ .../src/skill-library-manifest.test.ts         | 18 ++++++++++++++++++
+ .../src/skill-library-manifest.ts              |  5 ++++-
+ 2 files changed, 22 insertions(+), 1 deletion(-)
+
+diff --git a/packages/adapter-utils/src/skill-library-manifest.test.ts b/packages/adapter-utils/src/skill-library-manifest.test.ts
+index 34a86591a..3935a034a 100644
+--- a/packages/adapter-utils/src/skill-library-manifest.test.ts
++++ b/packages/adapter-utils/src/skill-library-manifest.test.ts
+@@ -55,6 +55,24 @@ describe("buildSkillLibraryManifestMarkdown", () => {
+     expect(shuffled).toBe(manifest);
+   });
+ 
++  it("names the runtime skill to load for enabled skills, since the runtime does not know the library key", () => {
++    // Atelier, 27/10/2026: agents called Skill with the library key ("company/<id>/routage-coordination")
++    // and Claude Code answered "Unknown skill" 12 times out of 12; the mounted name works.
++    const manifest = buildSkillLibraryManifestMarkdown({
++      entries: [
++        entry({ key: "company/c1/routage-coordination", runtimeName: "routage-coordination--32f74c7bdc" }),
++        entry({ key: "company/c1/audit-seo", runtimeName: "audit-seo--8379c5d388" }),
++      ],
++      desiredSkillKeys: new Set(["company/c1/routage-coordination"]),
++    });
++
++    expect(manifest).toContain(
++      "- company/c1/routage-coordination — enabled; load it by its runtime name `routage-coordination--32f74c7bdc`, never by this key",
++    );
++    expect(manifest).toContain("- company/c1/audit-seo — installed, not enabled for you");
++    expect(manifest).not.toContain("audit-seo--8379c5d388");
++  });
++
+   it("flattens skill-authored text so it cannot inject instruction lines", () => {
+     const manifest = buildSkillLibraryManifestMarkdown({
+       entries: [
+diff --git a/packages/adapter-utils/src/skill-library-manifest.ts b/packages/adapter-utils/src/skill-library-manifest.ts
+index 7350a5098..7b5bca09e 100644
+--- a/packages/adapter-utils/src/skill-library-manifest.ts
++++ b/packages/adapter-utils/src/skill-library-manifest.ts
+@@ -41,7 +41,10 @@ export function buildSkillLibraryManifestMarkdown(input: {
+         const detail = entry.missingDetail ? sanitizeManifestText(entry.missingDetail, 200) : "";
+         return `- ${key} — enabled but unavailable${detail ? `: ${detail}` : ""}`;
+       }
+-      return `- ${key} — ${enabled ? "enabled" : "installed, not enabled for you"}`;
++      if (!enabled) return `- ${key} — installed, not enabled for you`;
++      // The runtime only knows the mounted directory name, never the library key.
++      const runtimeName = sanitizeManifestText(entry.runtimeName, 200);
++      return `- ${key} — enabled; load it by its runtime name \`${runtimeName}\`, never by this key`;
+     });
+   return [
+     "## Company skill library",
+-- 
+2.53.0
+

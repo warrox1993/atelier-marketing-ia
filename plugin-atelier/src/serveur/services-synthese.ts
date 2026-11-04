@@ -12,10 +12,11 @@
  *     l'appelant, et chaque requête filtre `company_id = any($1::uuid[])` sur cette liste.
  *
  * Contenu : agrégats uniquement. Au plus 5 identifiants de tâches bloquées par service, jamais un titre, aucun
- * identifiant pour les services sensibles (`SERVICES_SENSIBLES`).
+ * identifiant pour les services sensibles (`SERVICES_SENSIBLES`). Cartes en attente d'un humain (HUM-C4) : au plus 10
+ * par service, tâche, sorte et âge seulement (ni titre, ni contenu), sans tâche pour un service sensible.
  */
 import type { PluginContext } from "@paperclipai/plugin-sdk";
-import { BORNE_BLOQUEES_SYNTHESE, SERVICES_SENSIBLES, type CleRouteApi, type LigneSyntheseService, type SyntheseClient } from "../contrats/index.js";
+import { BORNE_BLOQUEES_SYNTHESE, BORNE_CARTES_SYNTHESE, SERVICES_SENSIBLES, type CleRouteApi, type LigneSyntheseService, type SyntheseClient } from "../contrats/index.js";
 import { nomService } from "../contrats/liaisons-lecture.js";
 import type { GestionnaireRoute } from "./atelier.js";
 import { iso } from "./base.js";
@@ -50,7 +51,7 @@ export function routesSynthese(d: DependancesSynthese): Partial<Record<CleRouteA
     // Toutes les requêtes reçoivent la liste du client en $1 et filtrent dessus. L'hôte aplatit les paramètres tableau :
     // la liste passe en littéral Postgres `{a,b}`, converti par `$1::uuid[]`.
     const liste = `{${ids.join(",")}}`;
-    const [agents, taches, bloquees, couts, activite, prospects, liaisons] = await Promise.all([
+    const [agents, taches, bloquees, couts, activite, prospects, liaisons, cartes] = await Promise.all([
       q(`select company_id, status, count(*)::int as n from public.agents where company_id = any($1::uuid[]) and status <> 'terminated' group by company_id, status`, [liste]),
       q(`select company_id, status, count(*)::int as n from public.issues where company_id = any($1::uuid[]) and hidden_at is null and status in ('todo', 'in_progress', 'blocked', 'in_review') group by company_id, status`, [liste]),
       q(
@@ -70,6 +71,15 @@ export function routesSynthese(d: DependancesSynthese): Partial<Record<CleRouteA
       ),
       q(`select company_id, count(*)::int as total, count(*) filter (where statut = 'qualifie')::int as qualifies from ${ns}.prospects where company_id = any($1::uuid[]) and corbeille_le is null group by company_id`, [liste]),
       q(`select company_id, count(*)::int as n from ${ns}.liaisons where company_id = any($1::uuid[]) and statut in ('ouverte', 'en_attente_approbation') group by company_id`, [liste]),
+      q(
+        `select company_id, identifier, kind, created_at from (
+           select t.company_id, i.identifier, t.kind, t.created_at, row_number() over (partition by t.company_id order by t.created_at asc) as rang
+           from public.issue_thread_interactions t join public.issues i on i.id = t.issue_id and i.company_id = t.company_id
+           where t.company_id = any($1::uuid[]) and t.status = 'pending' and t.kind in ('ask_user_questions', 'request_confirmation')
+             and t.addressee_agent_id is null and i.hidden_at is null
+         ) x where rang <= ${BORNE_CARTES_SYNTHESE}`,
+        [liste],
+      ),
     ]);
 
     // Défense en profondeur : une ligne hors liste est ignorée même si la base en renvoyait.
@@ -95,6 +105,11 @@ export function routesSynthese(d: DependancesSynthese): Partial<Record<CleRouteA
         derniereActivite: derniereIso !== "" && !Number.isNaN(Date.parse(derniereIso)) ? derniereIso : null,
         prospects: { total: nb(p?.["total"]), qualifies: nb(p?.["qualifies"]) },
         liaisonsOuvertes: nb(garde(liaisons).find((l) => cle(l) === c)?.["n"]),
+        cartesEnAttente: garde(cartes).filter((l) => cle(l) === c).slice(0, BORNE_CARTES_SYNTHESE).map((l) => ({
+          tache: sensible || l["identifier"] == null ? null : String(l["identifier"]),
+          sorte: l["kind"] === "ask_user_questions" ? "question" as const : "confirmation" as const,
+          depuisHeures: Math.max(0, Math.floor((maint.getTime() - Date.parse(iso(l["created_at"] as Date | string))) / 3_600_000)),
+        })),
       };
     });
     lignes.sort((a, b) => (a.estDirection !== b.estDirection ? (a.estDirection ? -1 : 1) : a.nom.localeCompare(b.nom, "fr")));

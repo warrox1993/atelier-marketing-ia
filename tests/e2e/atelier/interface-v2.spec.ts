@@ -174,11 +174,11 @@ for (const f of FORMATS) {
       });
     }
 
-    test("« Coordinateur général » du menu du socle ouvre la Discussion de l'atelier", async ({ page }) => {
+    test("« Chat » du menu du socle ouvre la Discussion de l'atelier", async ({ page }) => {
       const erreurs = surveillerConsole(page);
       await page.goto(`/${prefixe}/dashboard`);
       if (f.mobile) await page.getByRole("navigation", { name: "Navigation mobile" }).getByRole("button", { name: /^Discuter$/u }).tap();
-      else await page.getByRole("button", { name: /^Discuter avec le Coordinateur général/u }).first().click();
+      else await page.getByRole("button", { name: /^Chat avec le Coordinateur général/u }).first().click();
       await expect(page).toHaveURL(new RegExp(`/${prefixe}/atelier/discussion`, "u"), { timeout: 30_000 });
       await expect(page.getByRole("heading", { name: /^Coordinateur/u, level: 1 })).toBeVisible({ timeout: 30_000 });
       expect(erreurs, erreurs.join("\n")).toEqual([]);
@@ -200,7 +200,7 @@ for (const f of FORMATS) {
 
       const parcours: Array<[string, string, string[]]> = [
         ["Prospects", "Prospects : sections", ["Liste", "Carte"]],
-        ["Marketing", "Marketing : sections", ["Campagnes", "Contenus", "Calendrier", "Résultats", "Équipe", "Rapport du mois"]],
+        ["Marketing", "Marketing : sections", ["Campagnes", "Contenus", "Calendrier", "Résultats", "Équipe", "Tableau de direction", "Rapport du mois"]],
         ["Réglages", "Réglages : sections", ["Mise en place", "Marque et sources", "Connaissances", "Connexions", "Paramètres", "Corbeille"]],
       ];
       for (const [rubrique, etiquette, onglets] of parcours) {
@@ -276,8 +276,13 @@ for (const f of FORMATS) {
       const TITRE_CARTE = await poserCarte(request);
       const erreurs = surveillerConsole(page);
       await ouvrir(page, "");
-      // Les points en attente sont dans le message du Coordinateur en tête du fil (trois d'abord, puis « Voir les N autres »).
-      const message = page.locator('[data-testid="chat-situation"]');
+      // Les points en attente sont dans le message du Coordinateur (trois d'abord, puis « Voir les N autres »), rangé depuis
+      // le 30/10 (fil calme, 62fd6f0) dans la ligne repliée « N points vous attendent » : on l'ouvre par son résumé.
+      const attentes = page.locator('[data-testid="points-en-attente"]');
+      await expect(attentes.locator("summary")).toHaveText(/^\d+ points? vous attend/u, { timeout: 30_000 });
+      await attentes.locator("summary").click();
+      await expect(attentes).toHaveAttribute("open", "");
+      const message = attentes.locator('[data-testid="chat-situation"]');
       await expect(message.locator("ul.atl-afaire li").first()).toBeVisible({ timeout: 30_000 });
       const voirPlus = message.getByRole("button", { name: /^Voir (les \d+ autres|l'autre point)$/u });
       if (await voirPlus.count()) await voirPlus.click();

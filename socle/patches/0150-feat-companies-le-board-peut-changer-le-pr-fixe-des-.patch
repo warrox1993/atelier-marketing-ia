@@ -1,0 +1,297 @@
+From e4767dae8ed0718a7378b1c2f28bbe55c2b96822 Mon Sep 17 00:00:00 2001
+From: Jean-Baptiste Dhondt <114347858+warrox1993@users.noreply.github.com>
+Date: Fri, 30 Oct 2026 17:05:40 +0100
+Subject: [PATCH 150/150] =?UTF-8?q?feat(companies):=20le=20board=20peut=20?=
+ =?UTF-8?q?changer=20le=20pr=C3=A9fixe=20des=20t=C3=A2ches=20d'une=20entre?=
+ =?UTF-8?q?prise=20(UI-14)?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+PATCH /api/companies/:id accepte issuePrefix (2 à 5 capitales, sans tiret pour rester reconnu
+par les liens automatiques du plugin). Le service verrouille la ligne, re-clé les identifiants
+des tâches et des cas dans la même transaction (XXX-12 devient DIR-12), journalise
+company.updated (reason issue_prefix_set) et rend 409 si le préfixe est pris. Un agent, même
+CEO, est refusé en 403. Le test amont qui mêlait issuePrefix aux champs de cycle de vie garde
+son 400 sur ces champs ; le refus du préfixe a désormais son propre test (403).
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01EThpSSDGc5NRYwbgjNqoTJ
+---
+ packages/shared/src/validators/company.ts     |  2 +
+ .../src/__tests__/companies-service.test.ts   | 49 ++++++++++++++
+ .../__tests__/company-branding-route.test.ts  | 58 ++++++++++++++++-
+ server/src/routes/companies.ts                |  2 +
+ server/src/services/companies.ts              | 64 ++++++++++++++-----
+ 5 files changed, 157 insertions(+), 18 deletions(-)
+
+diff --git a/packages/shared/src/validators/company.ts b/packages/shared/src/validators/company.ts
+index 35e2e2feb6..a89099e9dd 100644
+--- a/packages/shared/src/validators/company.ts
++++ b/packages/shared/src/validators/company.ts
+@@ -43,6 +43,8 @@ export const updateCompanySchema = objectWithoutDefaults(
+       feedbackDataSharingConsentByUserId: z.string().min(1).nullable().optional(),
+       feedbackDataSharingTermsVersion: feedbackDataSharingTermsVersionSchema,
+       logoAssetId: logoAssetIdSchema,
++      // Atelier (UI-14) : préfixe des tâches fixé par le board ; sans tiret, sinon les liens MOTIF_TACHE du plugin ne le reconnaissent plus.
++      issuePrefix: z.string().regex(/^[A-Z]{2,5}$/, "Le préfixe compte 2 à 5 lettres capitales").optional(),
+     }),
+ );
+ 
+diff --git a/server/src/__tests__/companies-service.test.ts b/server/src/__tests__/companies-service.test.ts
+index 1b7e6fe8b0..a2d1815dcb 100644
+--- a/server/src/__tests__/companies-service.test.ts
++++ b/server/src/__tests__/companies-service.test.ts
+@@ -1160,6 +1160,55 @@ describeEmbeddedPostgres("companyService", () => {
+         cases: ["ACM-C3"],
+       });
+     });
++
++    // Atelier (UI-14) : le board fixe lui-même le préfixe, y compris sur une instance locale.
++    it("sets an explicit prefix and re-keys both identifier tables on a self-hosted instance", async () => {
++      delete process.env.PAPERCLIP_CLOUD_TENANT_SERVER_TOKEN;
++      const companyId = await seedCompanyWithWork("Acme Robotics", "XXX");
++
++      const updated = await companyService(db).update(companyId, { issuePrefix: "DIR" }, TEST_ACTOR);
++
++      expect(updated).toMatchObject({ name: "Acme Robotics", issuePrefix: "DIR" });
++      await expect(readIdentifiers(companyId)).resolves.toEqual({
++        issues: ["DIR-1", "DIR-12", null],
++        cases: ["DIR-C3"],
++      });
++      const logged = await db
++        .select({ details: activityLog.details })
++        .from(activityLog)
++        .where(and(eq(activityLog.companyId, companyId), eq(activityLog.action, "company.updated")));
++      expect(logged).toHaveLength(1);
++      expect(logged[0]).toMatchObject({
++        details: {
++          source: "company_update",
++          reason: "issue_prefix_set",
++          previousIssuePrefix: "XXX",
++          issuePrefix: "DIR",
++          issuesRekeyed: 2,
++          casesRekeyed: 1,
++        },
++      });
++    });
++
++    it("refuses an explicit prefix held by another company with a 409 and changes nothing", async () => {
++      delete process.env.PAPERCLIP_CLOUD_TENANT_SERVER_TOKEN;
++      await db.insert(companies).values({ name: "Directory", issuePrefix: "DIR" });
++      const companyId = await seedCompanyWithWork("Acme Robotics", "XXX");
++
++      await expect(
++        companyService(db).update(companyId, { issuePrefix: "DIR" }, TEST_ACTOR),
++      ).rejects.toMatchObject({ status: 409 });
++
++      const [company] = await db
++        .select({ issuePrefix: companies.issuePrefix })
++        .from(companies)
++        .where(eq(companies.id, companyId));
++      expect(company?.issuePrefix).toBe("XXX");
++      await expect(readIdentifiers(companyId)).resolves.toEqual({
++        issues: ["XXX-1", "XXX-12", null],
++        cases: ["XXX-C3"],
++      });
++    });
+   });
+ 
+ });
+diff --git a/server/src/__tests__/company-branding-route.test.ts b/server/src/__tests__/company-branding-route.test.ts
+index a4ed9c05ce..ead77da597 100644
+--- a/server/src/__tests__/company-branding-route.test.ts
++++ b/server/src/__tests__/company-branding-route.test.ts
+@@ -338,7 +338,6 @@ describe("PATCH /api/companies/:companyId", () => {
+         spentMonthlyCents: 500,
+         requireBoardApprovalForNewAgents: true,
+         feedbackDataSharingEnabled: true,
+-        issuePrefix: "BAD",
+       });
+ 
+     expect(res.status).toBe(400);
+@@ -370,4 +369,61 @@ describe("PATCH /api/companies/:companyId", () => {
+       actorId: "user-1",
+     }));
+   });
++
++  // Atelier (UI-14) : le préfixe des tâches se change par le board seul, au format 2 à 5 capitales.
++  it("passes a board issue prefix change to the service", async () => {
++    const company = createCompany();
++    mockCompanyService.getById.mockResolvedValue(company);
++    mockCompanyService.update.mockResolvedValue({ ...company, issuePrefix: "DIR" });
++    const app = await createApp({ type: "board", userId: "user-1", source: "local_implicit" });
++
++    const res = await request(app).patch("/api/companies/company-1").send({ issuePrefix: "DIR" });
++
++    expect(res.status).toBe(200);
++    expect(res.body.issuePrefix).toBe("DIR");
++    expect(mockCompanyService.update).toHaveBeenCalledWith("company-1", { issuePrefix: "DIR" }, expect.objectContaining({
++      actorType: "user",
++    }));
++  });
++
++  it.each(["dir", "D", "DIRECT", "RG-DIR", "D1R"])("rejects the malformed issue prefix %s with a 400", async (issuePrefix) => {
++    mockCompanyService.getById.mockResolvedValue(createCompany());
++    const app = await createApp({ type: "board", userId: "user-1", source: "local_implicit" });
++
++    const res = await request(app).patch("/api/companies/company-1").send({ issuePrefix });
++
++    expect(res.status).toBe(400);
++    expect(mockCompanyService.update).not.toHaveBeenCalled();
++  });
++
++  it("returns the service's 409 when the issue prefix is taken", async () => {
++    const { conflict } = await import("../errors.js");
++    mockCompanyService.getById.mockResolvedValue(createCompany());
++    mockCompanyService.update.mockRejectedValue(conflict("Issue prefix already in use"));
++    const app = await createApp({ type: "board", userId: "user-1", source: "local_implicit" });
++
++    const res = await request(app).patch("/api/companies/company-1").send({ issuePrefix: "DIR" });
++
++    expect(res.status).toBe(409);
++    expect(mockLogActivity).not.toHaveBeenCalled();
++  });
++
++  it("refuses a CEO agent that asks for an issue prefix change with a 403", async () => {
++    mockAgentService.getById.mockResolvedValue({ id: "agent-1", companyId: "company-1", role: "ceo" });
++    mockCompanyService.getById.mockResolvedValue(createCompany());
++    const app = await createApp({
++      type: "agent",
++      agentId: "agent-1",
++      companyId: "company-1",
++      source: "agent_key",
++      runId: "run-1",
++    });
++
++    const res = await request(app).patch("/api/companies/company-1").send({ issuePrefix: "DIR" });
++
++    expect(res.status).toBe(403);
++    expect(res.body.error).toContain("issue prefix");
++    expect(mockCompanyService.update).not.toHaveBeenCalled();
++    expect(mockLogActivity).not.toHaveBeenCalled();
++  });
+ });
+diff --git a/server/src/routes/companies.ts b/server/src/routes/companies.ts
+index 8de78282c2..5964cacd79 100644
+--- a/server/src/routes/companies.ts
++++ b/server/src/routes/companies.ts
+@@ -1250,6 +1250,8 @@ export function companyRoutes(db: Db, storage?: StorageService, options?: Compan
+     let body: Record<string, unknown>;
+ 
+     if (req.actor.type === "agent") {
++      // Atelier (UI-14) : changer le préfixe re-clé toutes les tâches, réservé au board.
++      if (req.body?.issuePrefix !== undefined) throw forbidden("Only the board can change the issue prefix");
+       body = updateCompanyBrandingSchema.parse(req.body);
+     } else {
+       body = updateCompanySchema.parse(req.body);
+diff --git a/server/src/services/companies.ts b/server/src/services/companies.ts
+index 149b30b4fe..7e3525d484 100644
+--- a/server/src/services/companies.ts
++++ b/server/src/services/companies.ts
+@@ -14,7 +14,7 @@ import {
+   heartbeatRuns,
+   costEvents,
+ } from "@paperclipai/db";
+-import { notFound, unprocessable } from "../errors.js";
++import { conflict, notFound, unprocessable } from "../errors.js";
+ import { isCloudManagedInstance } from "./cloud-instance.js";
+ import { notifyCloudOfPrimaryCompanyLifecycleChange } from "./cloud-lifecycle-sync.js";
+ import {
+@@ -243,6 +243,28 @@ export function companyService(db: Db, budgetHooks: BudgetServiceHooks = {}) {
+     return { fromPrefix: locked.issuePrefix, toPrefix: candidate };
+   }
+ 
++  /**
++   * Atelier (UI-14) : un préfixe explicite (board) re-clé les identifiants de l'entreprise. La ligne est
++   * verrouillée avant de lire le préfixe de départ, pour que deux changements simultanés re-clés depuis
++   * ce que le premier a réellement validé (même raison que resolveRenamedIssuePrefix).
++   */
++  async function resolveExplicitIssuePrefix(
++    tx: CompanyTx,
++    companyId: string,
++    companyPatch: Partial<typeof companies.$inferInsert>,
++  ): Promise<{ fromPrefix: string; toPrefix: string } | null> {
++    const toPrefix = companyPatch.issuePrefix;
++    if (toPrefix === undefined) return null;
++    const locked = await tx
++      .select({ issuePrefix: companies.issuePrefix })
++      .from(companies)
++      .where(eq(companies.id, companyId))
++      .for("update")
++      .then((rows) => rows[0] ?? null);
++    if (!locked || locked.issuePrefix === toPrefix) return null;
++    return { fromPrefix: locked.issuePrefix, toPrefix };
++  }
++
+   async function createCompanyWithUniquePrefix(data: typeof companies.$inferInsert) {
+     const base = deriveIssuePrefixBase(data.name);
+     let suffix = 1;
+@@ -326,21 +348,30 @@ export function companyService(db: Db, budgetHooks: BudgetServiceHooks = {}) {
+           }
+         }
+ 
+-        const renamedPrefix = await resolveRenamedIssuePrefix(tx, id, companyPatch);
++        const explicitPrefix = await resolveExplicitIssuePrefix(tx, id, companyPatch);
++        const renamedPrefix = explicitPrefix ?? await resolveRenamedIssuePrefix(tx, id, companyPatch);
+ 
+-        const updated = await tx
+-          .update(companies)
+-          .set({
+-            ...companyPatch,
+-            ...(renamedPrefix ? { issuePrefix: renamedPrefix.toPrefix } : {}),
+-            updatedAt: new Date(),
+-          })
+-          .where(eq(companies.id, id))
+-          .returning()
+-          .then((rows) => rows[0] ?? null);
++        let updated: typeof companies.$inferSelect | null;
++        try {
++          updated = await tx
++            .update(companies)
++            .set({
++              ...companyPatch,
++              ...(renamedPrefix ? { issuePrefix: renamedPrefix.toPrefix } : {}),
++              updatedAt: new Date(),
++            })
++            .where(eq(companies.id, id))
++            .returning()
++            .then((rows) => rows[0] ?? null);
++        } catch (error) {
++          if (isIssuePrefixConflict(error)) throw conflict("Issue prefix already in use by another company");
++          throw error;
++        }
+         if (!updated) return null;
+ 
+         let issuePrefixRederived: {
++          source: "company_rename" | "company_update";
++          reason: "issue_prefix_rederived" | "issue_prefix_set";
+           previousIssuePrefix: string;
+           issuePrefix: string;
+           issuesRekeyed: number;
+@@ -353,6 +384,9 @@ export function companyService(db: Db, budgetHooks: BudgetServiceHooks = {}) {
+             toPrefix: renamedPrefix.toPrefix,
+           });
+           issuePrefixRederived = {
++            ...(explicitPrefix
++              ? { source: "company_update" as const, reason: "issue_prefix_set" as const }
++              : { source: "company_rename" as const, reason: "issue_prefix_rederived" as const }),
+             previousIssuePrefix: renamedPrefix.fromPrefix,
+             issuePrefix: renamedPrefix.toPrefix,
+             issuesRekeyed: rekeyed.issues,
+@@ -436,11 +470,7 @@ export function companyService(db: Db, budgetHooks: BudgetServiceHooks = {}) {
+           action: "company.updated",
+           entityType: "company",
+           entityId: id,
+-          details: {
+-            source: "company_rename",
+-            reason: "issue_prefix_rederived",
+-            ...result.issuePrefixRederived,
+-          },
++          details: result.issuePrefixRederived,
+         });
+       }
+       if (result.reactivated) {
+-- 
+2.53.0
+

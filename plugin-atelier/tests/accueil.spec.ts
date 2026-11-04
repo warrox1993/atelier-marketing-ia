@@ -50,6 +50,8 @@ interface Options {
   avecPlan?: string[];
   /** Fait échouer `requestWakeup` avec ce message. */
   echecReveil?: string;
+  /** Tâches abandonnées par le veilleur, sans action depuis (`base.abandonsVeilleur`). */
+  abandons?: Array<{ issueId: string; le: string }>;
 }
 
 function faux(o: Options = {}) {
@@ -90,6 +92,7 @@ function faux(o: Options = {}) {
     etatBaseClients: async () => ({ dernierImport: null, clients: o.clients ?? 12, actifs: o.clients ?? 12 }),
     marques: async () => o.marques ?? [{ informationsManquantes: [] }],
     journaliser: async (e: Ligne) => void journal.push(e),
+    abandonsVeilleur: async () => o.abandons ?? [],
   } as unknown as BaseAtelier;
   const deps: DependancesAccueil = {
     ctx,
@@ -179,6 +182,18 @@ describe("accueil.lister", () => {
     const f = faux();
     const { corps } = await f.appeler("accueil.lister");
     expect(corps).toMatchObject({ elements: [], missions: [] });
+  });
+
+  it("EXP-C8 : une tâche abandonnée par le veilleur apparaît à l'accueil, pas une tâche close", async () => {
+    const f = faux({
+      issues: [tache(7, { status: "in_progress", title: "Rédiger la page" }), tache(8, { status: "done" })],
+      abandons: [{ issueId: id(7), le: "2026-10-21T16:00:00.000Z" }, { issueId: id(8), le: "2026-10-21T16:00:00.000Z" }],
+    });
+    const { corps } = await f.appeler("accueil.lister");
+    const elements = (corps as { elements: ElementAccueil[] }).elements;
+    expect(elements.map((e) => e.id)).toEqual([`abandon:${id(7)}`]);
+    expect(elements[0]).toMatchObject({ type: "tache_bloquee", urgence: "haute", titre: "DEM-7 · Rédiger la page", issueId: id(7) });
+    expect(elements[0]!.raison).toContain("veilleur");
   });
 
   it("une source en panne ne fait pas échouer l'accueil", async () => {
@@ -390,6 +405,20 @@ describe("accueil : approbations et cartes, décision sur place ou page native s
     expect(interactionAccueil({ ...base, payload: { prompt: "Envoyer ?", toolAction: { toolName: "gmail_send", previewMarkdown: "Bonjour" } } }).natifSeulement).toBe(true);
     expect(interactionAccueil({ ...base, payload: { prompt: "Secret ?", secretProposal: { name: "CLE" } } }).natifSeulement).toBe(true);
     expect(interactionAccueil({ ...base, payload: { prompt: "Lancer ?" } }).natifSeulement).toBe(false);
+  });
+
+  it("une confirmation qui cite une révision de document mène à ce document, lien interne seulement (UI-3)", () => {
+    const carte = (target: unknown) => ({ id: "i", kind: "request_confirmation", payload: { prompt: "Valider ?", target } });
+    const doc = { type: "issue_document", issueId: "t9", key: "liste finale", revisionId: "r1", revisionNumber: 3, label: "Liste des fiches" };
+    expect(interactionAccueil(carte(doc), "t1").document).toEqual({ libelle: "Liste des fiches", lien: "/issues/t9#document-liste%20finale" });
+    expect(interactionAccueil(carte({ ...doc, issueId: null, label: null }), "t1").document).toEqual({ libelle: "le document liste finale (révision 3)", lien: "/issues/t1#document-liste%20finale" });
+    expect(interactionAccueil(carte({ ...doc, href: "/MKT/issues/MKT-3#document-liste" }), "t1").document?.lien).toBe("/MKT/issues/MKT-3#document-liste");
+    // Jamais de lien externe ni de schéma inconnu : retour au document de la tâche.
+    for (const href of ["https://exemple.test/x", "//exemple.test/x", "javascript:alert(1)"]) expect(interactionAccueil(carte({ ...doc, href }), "t1").document?.lien).toBe("/issues/t9#document-liste%20finale");
+    expect(interactionAccueil(carte({ type: "custom", key: "k", label: "Autre" }), "t1").document).toBeUndefined();
+    expect(interactionAccueil(carte(undefined), "t1").document).toBeUndefined();
+    const e = elementDepuisCarte({ id: "t", identifier: "DEM-1", title: "T" }, { id: "i", kind: "request_confirmation", status: "pending", title: "Q", payload: { prompt: "?", target: { ...doc, issueId: undefined } } } as never);
+    expect(e?.interaction?.document?.lien).toBe("/issues/t#document-liste%20finale");
   });
 
   it("le refus motivé obligatoire est transmis à l'interface", () => {

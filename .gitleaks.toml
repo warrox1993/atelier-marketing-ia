@@ -23,3 +23,9 @@ targetRules = ["generic-api-key"]
 paths = ['''plugin-atelier/src/connaissances/vectoriseur-local\.ts''']
 regexTarget = "line"
 regexes = ['''^\s*"[A-Za-z_./]+": "[0-9a-f]{64}",$''']
+
+[[allowlists]]
+description = "Nom interne du service « LinkedIn, profil personnel » (linkedinprofil) dans les listes de services : la règle linkedin-client-id prend ce mot de 14 lettres pour un identifiant client. Seule cette valeur exacte est exclue."
+targetRules = ["linkedin-client-id"]
+regexTarget = "secret"
+regexes = ['''^linkedinprofil$''']

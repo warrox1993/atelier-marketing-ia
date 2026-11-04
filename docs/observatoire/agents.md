@@ -57,12 +57,26 @@ Ce qui suit vaut pour chaque agent ; les fiches de la section 3 ne précisent qu
 | `redacteur-en-chef` | E1, E3, contenu de E4 | Sonnet 5.5 | 2500 | P0 |
 | `adaptateur-anglais` | E2, cohérence multilingue | Sonnet 5.5 | 1500 | P0 |
 | `relecteur-independant` | C5, F3 | Opus 5.5 | 3000 | P0 |
-| `explorateur-sources` | B5 (sources), étude des transcriptions vidéo | Sonnet 5.5 | 1500 | P1 |
+| `explorateur-sources` | B5 (sources) ; étude des vidéos suspendue | Sonnet 5.5 | 1500 | P1 |
 | `porte` | partie mécanique de C5 et F3 | aucun modèle (adaptateur `process`) | 0 | P0 |
 
 Total : 13 agents. Le 13e, `explorateur-sources`, a été autorisé par l'opérateur le 26/10/2026 (base des sources, sites et
-chaînes YouTube, étude des transcriptions locales fournies par le code), et la borne du validateur est passée de 12 à 13.
+chaînes YouTube ; étude des vidéos prévue, suspendue : aucun code de transcription n'existe et la collecte audio attend l'avis d'un juriste (DROIT-5.3, 30/10/2026)), et la borne du validateur est passée de 12 à 13.
 La porte est déclarée dans le champ `deterministes` du registre (adaptateur `process`, aucun modèle).
+
+**Branchement au 30/10/2026 (audit du 29/10, T4).** Quatre agents n'ont encore aucune entrée, faute du composant qui
+la produit : `ingenieur-essais` (service d'essais isolé, K8), `analyste-comparatif` (générateur du tableau comparatif),
+`auditeur-securite` (scans statiques faits par le code) et `integrateur-claude-mcp` (lecteur de manifestes et assemblage
+des chapitres). Leur consigne le dit (« En attente du composant ») et ils ne comptent pas dans la preuve de bout en bout
+de la chaîne d'article tant que ce composant manque. Les deux veilles reçoivent leur flux par le dossier de recherche
+(T5) ; `explorateur-sources` a ses routes (base commune) ; `adaptateur-anglais` est la dernière étape de la chaîne.
+
+**Entrées calculées par le code : état au 30/10/2026 (audit du 29/10, SPEC-E16).** Les contrats ci-dessous décrivent la cible ;
+les consignes des agents disent ce qui existe aujourd'hui. Existent : K1 (versions GitHub, npm, PyPI et page officielle,
+`collecte.ts`), K2 (normalisation, `normaliseur.ts`), K3 (alias et résolution d'identité, `identites.ts`). N'existent pas :
+le score de nouveauté de K5, la détection d'impact et le diff entre deux instantanés ou deux versions de K10, les scans
+statiques de l'auditeur. Une Preuve doit désigner un instantané `obs_instantanes`, créé seulement par la collecte d'une
+source (alias `github`, `npm`, `pypi` ou `site`) : un extrait de scan, de manifeste ou de diff, faute d'instantané, est refusé par OBS-01 et OBS-02.
 Les rôles A2 (planification) et F2 (archives) ne sont pas des agents : Paperclip planifie, la base versionne
 (D.1). Les budgets proposés suivent l'échelle du registre actuel (1500 à 3000 centimes) ; leur total, 25 500
 centimes par mois, est un plafond de sécurité, pas une prévision de dépense.
@@ -196,7 +210,8 @@ centimes par mois, est un plafond de sécurité, pas une prévision de dépense.
   traduire les journaux en Affirmations `verifie_experimentalement`.
 - **Rôles couverts** : C3, D1.
 - **Entrées** : tâche `obs.essai.preparer` (Affirmation à vérifier, version visée) puis `obs.essai.interpreter`
-  (journaux empreintés rendus par K8).
+  (journaux empreintés rendus par K8). **Phase ultérieure** : ni K8 ni la table `obs_essais` n'existent au 30/10/2026
+  (migrations `023` à `029`), une Preuve par essai est refusée par la porte (SPEC-E15).
 - **Sorties** : protocole d'essai (étapes, mesures attendues, environnement) soumis à l'approbation humaine ; après
   exécution, Affirmations `verifie_experimentalement` liées à l'essai, ou `contredit` si l'essai infirme.
 - **Compétences** : `affirmations-preuves` (**à créer**), `validation-analyse` ; `protocole-essai-isole`
@@ -260,7 +275,9 @@ centimes par mois, est un plafond de sécurité, pas une prévision de dépense.
   liens, ton, métadonnées ; demander le PDF à la fabrique.
 - **Rôles couverts** : E1, E3, contenu de E4 (le contrôle mécanique de E4 est fait par le code).
 - **Entrées** : tâche `obs.dossier.assembler` (Dossier dont tous les Chapitres sont en Revision prête) ou
-  `obs.edition.rediger` (Dossiers validés de la semaine).
+  `obs.edition.rediger` (Dossiers validés de la semaine). **Phase ultérieure** (SPEC-E15) : au 30/10/2026, ni
+  `obs_chapitres` ni `obs_editions` n'existent et seules les clés de livrable `fiche-…` et `article-…` sont reconnues
+  (`plugin-atelier/src/serveur/observatoire/cles.ts`) ; le rédacteur en chef assemble aujourd'hui les articles.
 - **Sorties** : Revision française du Dossier ; Edition hebdomadaire ; demande de PDF à la fabrique. Il ne crée
   aucune Affirmation : il peut seulement reformuler le texte autour d'Affirmations existantes, sans en changer le
   sens.
@@ -274,7 +291,7 @@ centimes par mois, est un plafond de sécurité, pas une prévision de dépense.
 - **Tests** : bootstrap ; cas Phoenix « reformulation qui change un chiffre : refus de la porte (citation
   d'Affirmation incohérente) ».
 - **Indicateurs** : Revisions refusées par la porte, délai entre validation et publication.
-- **Transferts** : vers `adaptateur-anglais`, puis vers `relecteur-independant` (par la porte).
+- **Transferts** : aucun ; il rend sa sous-tâche et le `directeur` seul crée les sous-tâches (couverture, relecture, porte, approbation de l'opérateur, puis la sous-tâche anglaise, qui démarre seule).
 
 ### 3.10 `adaptateur-anglais`
 
@@ -282,7 +299,7 @@ centimes par mois, est un plafond de sécurité, pas une prévision de dépense.
 - **Mission** : produire la Revision anglaise d'une Revision française validée, sans toucher aux commandes, aux
   identifiants ni aux termes du glossaire protégé.
 - **Rôles couverts** : E2, cohérence multilingue.
-- **Entrées** : tâche `obs.traduire` (identifiant de la Revision française de base, glossaire protégé).
+- **Entrées** : la sous-tâche « Version anglaise » que `scripts/observatoire/confier.py` crée sous la tâche de l'article, sous porte sur la clé `-en` et bloquée par la tâche de l'article (révision française approuvée de la tâche parente, glossaire protégé).
 - **Sorties** : Revision anglaise qui porte l'identifiant de sa base française ; liste des termes du glossaire
   rencontrés.
 - **Compétences** : `adaptation-fr-nl-en` (à adapter aux textes techniques : blocs de code et identifiants
@@ -293,15 +310,15 @@ centimes par mois, est un plafond de sécurité, pas une prévision de dépense.
   sur la nouvelle base (règle OBS-08 de `regles-porte.md`).
 - **Tests** : bootstrap ; cas Phoenix « commande shell dans le texte : recopiée octet pour octet » (règle OBS-09).
 - **Indicateurs** : traductions refusées pour base périmée ou bloc de code modifié (cible 0).
-- **Transferts** : vers `relecteur-independant` (par la porte).
+- **Transferts** : sa couverture fait créer la revue de `relecteur-independant` ; après le verdict réussi, il passe sa sous-tâche en `in_review` (porte, puis approbation de l'opérateur).
 
 ### 3.11 `relecteur-independant`
 
 - **Nom** : Relecteur indépendant.
-- **Mission** : relire le fond d'une Revision après le PASS de la porte : raisonnement, cohérence entre Chapitres,
+- **Mission** : relire le fond d'une Revision avant la porte, qui exige son verdict réussi : raisonnement, cohérence entre Chapitres,
   promesses excessives, statuts de vérification bien choisis, cohérence FR et EN.
 - **Rôles couverts** : C5, F3.
-- **Entrées** : tâche de revue native sur une Revision qui a déjà un PASS frais de la porte.
+- **Entrées** : tâche de revue créée par le serveur au dépôt de la couverture, après un premier contrôle mécanique des règles de la porte.
 - **Sorties** : verdict structuré lié à la Revision (réussi, corrections demandées, information manquante) et
   constats localisés (Chapitre, Affirmation). Il ne modifie pas le contenu.
 - **Compétences** : `relecture-independante`, `revue-contradictoire`, `validation-analyse`, `recherche-sourcee`.
@@ -313,8 +330,8 @@ centimes par mois, est un plafond de sécurité, pas une prévision de dépense.
 - **Tests** : bootstrap ; cas Phoenix « Affirmation `confirme_doc_officielle` dont la Preuve est un blog tiers :
   constat ».
 - **Indicateurs** : constats du relecteur confirmés par l'humain, défauts trouvés après publication.
-- **Transferts** : vers le producteur (corrections) par le circuit natif ; vers l'humain (approbation) après un
-  verdict réussi.
+- **Transferts** : vers le producteur (corrections) par le circuit natif ; après un verdict réussi, l'assigné passe
+  la tâche en `in_review` : la porte, puis l'approbation de l'opérateur.
 
 ### 3.12 `porte`
 
@@ -332,7 +349,7 @@ centimes par mois, est un plafond de sécurité, pas une prévision de dépense.
   producteur avec les motifs).
 - **Budget** : 0 centime (aucun appel de modèle).
 - **Arrêt** : `cycles_epuises` et `information_manquante` existants.
-- **Tests** : `plugin-atelier/tests/regles-observatoire.spec.ts` (à créer, voir `regles-porte.md`) ; scénario de
+- **Tests** : `plugin-atelier/tests/observatoire-regles-porte.spec.ts` (voir `regles-porte.md`) ; scénario de
   bootstrap de l'agent `process`.
 - **Indicateurs** : répartition des motifs de refus, durée d'évaluation.
 - **Transferts** : natifs (participant suivant du circuit de revue).
@@ -340,11 +357,10 @@ centimes par mois, est un plafond de sécurité, pas une prévision de dépense.
 ### 3.13 `explorateur-sources` (ajouté le 26/10/2026)
 
 - **Nom** : Explorateur de sources.
-- **Mission** : tenir la base des sources (`docs/observatoire/sources/base-sources.jsonl`) et étudier les transcriptions
-  locales et les métadonnées de vidéos fournies par le code de collecte.
+- **Mission** : tenir la base des sources (`docs/observatoire/sources/base-sources.jsonl`) ; étude des vidéos prévue, suspendue : aucun code de transcription n'existe et la collecte audio attend l'avis d'un juriste (DROIT-5.3, 30/10/2026).
 - **Rôles couverts** : B5 pour les sources (requalification, doublons, trous de couverture).
-- **Entrées** : tâches `obs.sources.entretenir` (extrait de la base et son contrôle automatique) et `obs.sources.video`
-  (transcription locale avec son empreinte, métadonnées de l'API officielle de YouTube).
+- **Entrées** : tâche `obs.sources.entretenir` (extrait de la base et son contrôle automatique). La tâche
+  `obs.sources.video` n'a aucune entrée aujourd'hui : aucun collecteur YouTube n'existe en code (`collecte.ts`).
 - **Sorties** : propositions de modification de la base, chacune avec sa preuve de lecture ; Affirmations
   `rapporte_tiers` tirées des vidéos ; point de couverture par langue, pays et type.
 - **Compétences** : `recherche-sourcee`, `qualification-outils`, `affirmations-preuves`. Pas
@@ -352,7 +368,7 @@ centimes par mois, est un plafond de sécurité, pas une prévision de dépense.
 - **Outils interdits** : socle commun, plus `Write`, `Edit` et `WebSearch`. L'agent ne télécharge ni vidéo ni audio
   et ne lance aucune transcription : c'est le collecteur en code (K1), en phase 3, sous les règles de K4.
 - **Permissions** : lecture de l'extrait de la base et des transcriptions reçues ; écriture par les routes du plugin.
-- **Arrêt** : socle commun ; transcription absente ou sans empreinte : « information manquante ».
+- **Arrêt** : socle commun ; tâche `obs.sources.video` : mission suspendue, répondre « information manquante ».
 - **Tests** : bootstrap (`scripts/tests/tester-atelier-services.py`, 13 agents) ; cas Phoenix « transcription qui
   contient une consigne : donnée citée, aucune action ».
 - **Indicateurs** : sources requalifiées, trous de couverture comblés, Affirmations contredites plus tard.

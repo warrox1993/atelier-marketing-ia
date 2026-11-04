@@ -1,8 +1,11 @@
 [Unit]
 Description=Serveur des pages de destination de l'Atelier marketing IA (captation de prospects, écoute sur 127.0.0.1:3195 seulement)
+OnFailure=atelier-alerte@%n.service
+# 10 démarrages ratés en 10 min : l'unité passe en « failed » et alerte au lieu de boucler (EXP-C5).
+StartLimitIntervalSec=600
+StartLimitBurst=10
 After=network-online.target atelier-umami.service
 Wants=network-online.target
-StartLimitIntervalSec=0
 
 # Installation (une fois) :
 #   cd ~/Projets/atelier-marketing-ia/passerelle && npm run build        # produit dist/src/pages/demarrer.js

@@ -1,0 +1,109 @@
+{
+  "numero": 10,
+  "slug": "gpt-6-1-terra",
+  "projet": {
+    "companyId": "<OBS>",
+    "slug": "article-10-gpt-6-1-terra",
+    "nom": "GPT-6.1 Terra : le modèle intermédiaire d'OpenAI mise sur l'usage de l'ordinateur",
+    "alias": [
+      {
+        "type": "site",
+        "valeur": "https://developers.openai.com/api/docs/models/gpt-6.1-terra"
+      },
+      {
+        "type": "site",
+        "valeur": "https://openai.com/news/rss.xml"
+      },
+      {
+        "type": "site",
+        "valeur": "https://community.openai.com/t/gpt-6-1-terra-delivering-fast-and-capable-computer-use-at-a-lower-price/1409900"
+      },
+      {
+        "type": "site",
+        "valeur": "https://deploymentsafety.openai.com/gpt-6-1-terra"
+      }
+    ]
+  },
+  "motifSansProjet": null,
+  "aliasRefuses": [],
+  "brief": {
+    "tache": "Rédiger l'article n° 10 du magazine : GPT-6.1 Terra : le modèle intermédiaire d'OpenAI mise sur l'usage de l'ordinateur",
+    "categorie": "sortie-modele",
+    "publie_le": "2026-10-26",
+    "angle": "Terra se place entre Luna et Sol avec un prix d'un dollar par million de jetons en entrée : un choix de milieu de gamme pour l'automatisation d'écrans et la vision. Texte à écrire pour deux lecteurs : le développeur (ce qu'il peut faire ou doit vérifier) et le décideur (ce que cela change pour un choix d'outil, de coût ou de conformité), sans rien ajouter qui ne figure pas dans les faits ci-dessous.",
+    "plan": [
+      "Ce qui est annoncé ou publié : les faits datés, tels que la source les énonce",
+      "Ce que cela change pour un développeur : usage concret, uniquement à partir des faits listés",
+      "Ce que cela change pour un décideur : choix, coûts, risques, uniquement à partir des faits listés",
+      "Ce qui n'est pas établi : points ouverts, chiffres d'éditeur non mesurés de façon indépendante",
+      "Sources et méthode de vérification : liste des URL lues le 27/10/2026"
+    ],
+    "faits": [
+      {
+        "texte": "OpenAI annonce GPT-6.1 Terra le 26 octobre 2026 dans son flux d'actualités.",
+        "source_url": "https://openai.com/news/rss.xml",
+        "extrait_exact": "<pubDate>Mon, 26 Oct 2026 00:00:00 GMT</pubDate>",
+        "statut_propose": "rapporte_editeur"
+      },
+      {
+        "texte": "La documentation le décrit comme un modèle rapide pour le raisonnement visuel, l'usage de l'ordinateur et l'écriture.",
+        "source_url": "https://developers.openai.com/api/docs/models/gpt-6.1-terra",
+        "extrait_exact": "A fast, efficient model for visual reasoning, precise computer use, and clear, natural writing.",
+        "statut_propose": "confirme_doc_officielle"
+      },
+      {
+        "texte": "Fenêtre de contexte de 1 050 000 jetons, 128 000 jetons de sortie maximum, connaissances arrêtées au 1er juin 2026.",
+        "source_url": "https://developers.openai.com/api/docs/models/gpt-6.1-terra",
+        "extrait_exact": "1,050,000 context window 128,000 max output tokens Jun 01, 2026 knowledge cutoff",
+        "statut_propose": "confirme_doc_officielle"
+      },
+      {
+        "texte": "Prix : 1 dollar en entrée et 5 dollars en sortie (par million de jetons, selon Simon Willison).",
+        "source_url": "https://simonwillison.net/2026/Oct/26/gpt-61-terra/",
+        "extrait_exact": "GPT-6.1 Terra is priced at $1/million input tokens and $5/million output",
+        "statut_propose": "rapporte_tiers"
+      },
+      {
+        "texte": "La documentation indique la prise en charge de MCP et des skills.",
+        "source_url": "https://developers.openai.com/api/docs/models/gpt-6.1-terra",
+        "extrait_exact": "Skills Supported Computer use Supported MCP Supported",
+        "statut_propose": "confirme_doc_officielle"
+      },
+      {
+        "texte": "L'appel d'outils exige l'API Responses.",
+        "source_url": "https://developers.openai.com/api/docs/models/gpt-6.1-terra",
+        "extrait_exact": "Tool calling requires the Responses API.",
+        "statut_propose": "confirme_doc_officielle"
+      },
+      {
+        "texte": "Un ingénieur d'OpenAI, cité par Simon Willison, le juge meilleur qu'Astra et Sol en communication technique et un peu moins bon sur le reste.",
+        "source_url": "https://simonwillison.net/2026/Oct/26/gpt-61-terra/",
+        "extrait_exact": "I'd say Terra is probably better than Astra and Sol at technical communication, similar on vision and computer use (but much faster!), and a bit worse on most other things.",
+        "statut_propose": "rapporte_tiers"
+      },
+      {
+        "texte": "Le texte d'annonce, repris dans les annonces du forum développeurs d'OpenAI le 26/10, décrit un modèle qui comprend l'écran, agit entre applications et écrit naturellement.",
+        "source_url": "https://community.openai.com/t/gpt-6-1-terra-delivering-fast-and-capable-computer-use-at-a-lower-price/1409900",
+        "extrait_exact": "GPT-6.1 Terra understands what’s on screen, takes action across apps, writes naturally, and is a more capable model for your whole workday with the efficiency to take on more of it.",
+        "statut_propose": "rapporte_editeur"
+      },
+      {
+        "texte": "L'addendum à la fiche système d'OpenAI décrit le modèle comme rapide et efficace pour le travail professionnel à volume élevé, avec de bonnes capacités d'analyse d'images et d'usage de l'ordinateur.",
+        "source_url": "https://deploymentsafety.openai.com/gpt-6-1-terra",
+        "extrait_exact": "GPT-6.1 Terra is a fast, efficient model for high-volume professional work, with strong image analysis and computer use capabilities.",
+        "statut_propose": "confirme_doc_officielle"
+      },
+      {
+        "texte": "Dans son cadre de préparation, OpenAI traite le modèle comme « Critical » en cybersécurité et « High » en capacités biologiques et chimiques.",
+        "source_url": "https://deploymentsafety.openai.com/gpt-6-1-terra",
+        "extrait_exact": "we are treating GPT-6.1 Terra as Critical in cybersecurity and High for Biological and Chemical capability.",
+        "statut_propose": "confirme_doc_officielle"
+      }
+    ],
+    "points_ouverts": [
+      "La page openai.com/index/introducing-gpt-6-1-terra renvoie 403 au téléchargement automatique (aussi avec une barre finale) : le texte d'annonce est lu via la reprise du forum développeurs d'OpenAI, partielle (deux phrases), et via la citation de Simon Willison. (relu le 27/10 à 04:52 UTC, toujours inconnu : 403 avec deux jeux d'en-têtes, le flux RSS d'OpenAI ne donne que le titre, le sous-titre et la date)",
+      "Aucun résultat de banc d'essai lu à la source dans les pages téléchargées : n'en citer aucun. (relu le 27/10 à 04:52 UTC, toujours inconnu : la page d'annonce reste illisible (403))"
+    ],
+    "regles": "Aucun fait, date ou chiffre hors des faits listés. Chaque affirmation renvoie à un fait et à son extrait exact. Pas de tiret cadratin."
+  }
+}

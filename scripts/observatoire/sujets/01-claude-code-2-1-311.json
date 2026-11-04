@@ -1,0 +1,125 @@
+{
+  "numero": 1,
+  "slug": "claude-code-2-1-311",
+  "projet": {
+    "companyId": "<OBS>",
+    "slug": "article-1-claude-code-2-1-311",
+    "nom": "Claude Code 2.1.311 : compactage au lieu d'un arrêt au-delà de 200 000 jetons",
+    "alias": [
+      {
+        "type": "github",
+        "valeur": "anthropics/claude-code"
+      },
+      {
+        "type": "npm",
+        "valeur": "@anthropic-ai/claude-code"
+      },
+      {
+        "type": "site",
+        "valeur": "https://github.com/anthropics/claude-code/releases/tag/v2.1.311"
+      },
+      {
+        "type": "site",
+        "valeur": "https://api.github.com/repos/anthropics/claude-code/git/commits/08c6a4f5121ae140d3c1b5c96e3e5ae53587b54b"
+      },
+      {
+        "type": "site",
+        "valeur": "https://api.github.com/repos/anthropics/claude-code/git/refs/tags/v2.1.311"
+      }
+    ]
+  },
+  "motifSansProjet": null,
+  "aliasRefuses": [],
+  "brief": {
+    "tache": "Rédiger l'article n° 1 du magazine : Claude Code 2.1.311 : compactage au lieu d'un arrêt au-delà de 200 000 jetons",
+    "categorie": "outils-developpement",
+    "publie_le": "2026-10-26",
+    "angle": "Les sessions longues et les sous-agents MCP sont le quotidien d'un développeur qui travaille avec Claude Code : cette version corrige plusieurs blocages qui touchent directement ces usages. Texte à écrire pour deux lecteurs : le développeur (ce qu'il peut faire ou doit vérifier) et le décideur (ce que cela change pour un choix d'outil, de coût ou de conformité), sans rien ajouter qui ne figure pas dans les faits ci-dessous.",
+    "plan": [
+      "Ce qui est annoncé ou publié : les faits datés, tels que la source les énonce",
+      "Ce que cela change pour un développeur : usage concret, uniquement à partir des faits listés",
+      "Ce que cela change pour un décideur : choix, coûts, risques, uniquement à partir des faits listés",
+      "Ce qui n'est pas établi : points ouverts, chiffres d'éditeur non mesurés de façon indépendante",
+      "Sources et méthode de vérification : liste des URL lues le 27/10/2026"
+    ],
+    "faits": [
+      {
+        "texte": "La version 2.1.311 est publiée sur npm le 26 octobre 2026 et y est la version « latest ».",
+        "source_url": "https://registry.npmjs.org/@anthropic-ai/claude-code",
+        "extrait_exact": "\"2.1.311\":\"2026-10-26T19:47:57.395Z\"",
+        "statut_propose": "confirme_doc_officielle"
+      },
+      {
+        "texte": "Une session en contexte standard qui dépassait 200 000 jetons s'arrêtait en réclamant des crédits ; Claude Code compacte désormais la conversation et continue.",
+        "source_url": "https://github.com/anthropics/claude-code/releases/tag/v2.1.311",
+        "extrait_exact": "Fixed standard-context sessions stopping with \"Usage credits required for 1M context\" when a request ran over 200K tokens; Claude Code now compacts the conversation and continues",
+        "statut_propose": "confirme_doc_officielle"
+      },
+      {
+        "texte": "Les sous-agents peuvent désormais utiliser les outils des serveurs MCP qui finissent de se connecter après leur démarrage.",
+        "source_url": "https://github.com/anthropics/claude-code/releases/tag/v2.1.311",
+        "extrait_exact": "Fixed subagents being unable to use MCP tools from servers that finish connecting after the subagent starts",
+        "statut_propose": "confirme_doc_officielle"
+      },
+      {
+        "texte": "Après un compactage automatique, Claude pouvait voir un MEMORY.md ou un CLAUDE.md périmé ; c'est corrigé.",
+        "source_url": "https://github.com/anthropics/claude-code/releases/tag/v2.1.311",
+        "extrait_exact": "Fixed Claude seeing stale MEMORY.md and CLAUDE.md content right after automatic compaction when those files were edited earlier in the session",
+        "statut_propose": "confirme_doc_officielle"
+      },
+      {
+        "texte": "Les hooks SubagentStop se déclenchaient environ deux fois par minute pour chaque sous-agent au lieu d'une fois à la fin.",
+        "source_url": "https://github.com/anthropics/claude-code/releases/tag/v2.1.311",
+        "extrait_exact": "Fixed SubagentStop hooks running about twice a minute for each running subagent instead of once when it finishes",
+        "statut_propose": "confirme_doc_officielle"
+      },
+      {
+        "texte": "Le lanceur auto-hébergé reçoit deux options pour garder une session inactive.",
+        "source_url": "https://github.com/anthropics/claude-code/releases/tag/v2.1.311",
+        "extrait_exact": "Added --hold-idle-file and --max-hold-min to self-hosted-runner",
+        "statut_propose": "confirme_doc_officielle"
+      },
+      {
+        "texte": "La version est marquée comme immuable sur GitHub : seuls le titre et les notes peuvent changer.",
+        "source_url": "https://github.com/anthropics/claude-code/releases/tag/v2.1.311",
+        "extrait_exact": "Immutable release. Only release title and notes can be modified.",
+        "statut_propose": "confirme_doc_officielle"
+      },
+      {
+        "texte": "La page GitHub de la version 2.1.311 indique qu'elle a été publiée le 26 octobre 2026 à 21:51 UTC (21:51:23).",
+        "source_url": "https://github.com/anthropics/claude-code/releases/tag/v2.1.311",
+        "extrait_exact": "released this <relative-time class=\"no-wrap\" prefix=\"\" datetime=\"2026-10-26T21:51:23Z\">",
+        "statut_propose": "confirme_doc_officielle"
+      },
+      {
+        "texte": "Le registre npm date la publication de la version 2.1.311 du 26 octobre 2026 à 19:47:57 UTC. (lu le 27/10/2026 à 04:50 UTC)",
+        "source_url": "https://registry.npmjs.org/@anthropic-ai/claude-code",
+        "extrait_exact": "2026-10-26T19:47:57.395Z",
+        "statut_propose": "confirme_doc_officielle"
+      },
+      {
+        "texte": "Le commit 08c6a4f, visé par la release GitHub de la version 2.1.311, a pour message « chore: Update CHANGELOG.md and feed.xml ». (lu le 27/10/2026 à 04:51 UTC)",
+        "source_url": "https://api.github.com/repos/anthropics/claude-code/git/commits/08c6a4f5121ae140d3c1b5c96e3e5ae53587b54b",
+        "extrait_exact": "\"message\":\"chore: Update CHANGELOG.md and feed.xml",
+        "statut_propose": "confirme_doc_officielle"
+      },
+      {
+        "texte": "Ce commit est daté du 26 octobre 2026 à 21:51:04 UTC, soit environ 2 h 03 après la publication sur npm : ce sont deux événements distincts. La raison du délai n'est écrite dans aucune source lue. (lu le 27/10/2026 à 04:51 UTC)",
+        "source_url": "https://api.github.com/repos/anthropics/claude-code/git/commits/08c6a4f5121ae140d3c1b5c96e3e5ae53587b54b",
+        "extrait_exact": "\"date\":\"2026-10-26T21:51:04Z\"},\"tree\"",
+        "statut_propose": "confirme_doc_officielle"
+      },
+      {
+        "texte": "Le tag v2.1.311 pointe sur ce même commit 08c6a4f. (lu le 27/10/2026 à 04:50 UTC)",
+        "source_url": "https://api.github.com/repos/anthropics/claude-code/git/refs/tags/v2.1.311",
+        "extrait_exact": "\"object\":{\"sha\":\"08c6a4f5121ae140d3c1b5c96e3e5ae53587b54b\",\"type\":\"commit\"",
+        "statut_propose": "confirme_doc_officielle"
+      }
+    ],
+    "points_ouverts": [
+      "Le flux Atom liste 10 versions (2.1.302 à 2.1.311) entre le 16 et le 26 octobre : faut-il un article de synthèse du mois plutôt qu'une seule version ?",
+      "Les deux heures sont désormais sourcées (npm 19:47:57 UTC, GitHub 21:51:23 UTC le 26/10, soit environ deux heures d'écart) ; aucune source lue n'explique l'écart : l'article donne les deux heures sans l'interpréter. (relu le 27/10 à 04:51 UTC, toujours inconnu : le commit visé par la release GitHub date de 21:51:04 UTC, deux événements distincts, mais la raison du délai n'est écrite dans aucune source lue)"
+    ],
+    "regles": "Aucun fait, date ou chiffre hors des faits listés. Chaque affirmation renvoie à un fait et à son extrait exact. Pas de tiret cadratin."
+  }
+}

@@ -45,11 +45,13 @@ describe("migration 018 : origine des flux", () => {
     const regexes = motifs.map(likeVersRegex);
     const classe = (objet: string) => regexes.some((r) => r.test(objet));
     const brut = execFileSync("python3", ["-I", "-c",
-      "import json,sys; sys.path.insert(0, sys.argv[1]); import atelier_services as a; r=a.charger_services(); print(json.dumps({'generes':[f['objet'] for f in a.flux_coordinateurs(r)],'metier':[f['objet'] for f in r['flux']]}))",
+      "import json,sys; sys.path.insert(0, sys.argv[1]); import atelier_services as a; r=a.charger_services(); print(json.dumps({'generes':[f['objet'] for f in a.flux_coordinateurs(r)]+[a.OBJET_ENTRE_COORDINATEURS],'metier':[f['objet'] for f in r['flux']]}))",
       join(RACINE, "scripts")], { encoding: "utf8" });
     const { generes, metier } = JSON.parse(brut) as { generes: string[]; metier: string[] };
-    expect(generes).toHaveLength(690);
-    expect(metier).toHaveLength(122);
+    // COORD-P2-7 (30/10) : 26 flux générés (+ Compléments, 02/11) avec le coordinateur général ; l'objet des anciens flux entre départements, encore
+    // en base jusqu'à la prochaine déclaration, reste classé en coordinateurs.
+    expect(generes).toHaveLength(27);
+    expect(metier).toHaveLength(126);
     expect(generes.filter((o) => !classe(o))).toEqual([]);
     expect(metier.filter(classe)).toEqual([]);
     // Le repli côté code applique la même règle que la migration.

@@ -17,6 +17,7 @@ import { Chargement, EtatErreur, LienHote, Vide } from "../composants.js";
 import { aPlusieursDepartements, lireDepartements, nomClient } from "../departements-sonde.js";
 import { enDate, ilYA, nombre } from "../format.js";
 import { appelHote } from "../hote.js";
+import { chemin } from "../route.js";
 import { appelRoute } from "../routes-prospection.js";
 import { STYLES_DEPARTEMENTS } from "../styles-departements.js";
 
@@ -200,14 +201,14 @@ function CaseDepartement({ d, c, relire }: { d: DepartementVisible; c: Case; rel
             <Chiffre valeur={c.donnees.taches.enCours} libelle="En cours" tronque={c.donnees.tachesTronquees} />
             <Chiffre valeur={c.donnees.taches.bloquees} libelle="Bloquées" ton="danger" tronque={c.donnees.tachesTronquees} />
           </dl>
-          <EquipeEtActivite e={c.donnees} />
+          <EquipeEtActivite e={c.donnees} d={d} />
         </>
       )}
     </li>
   );
 }
 
-function EquipeEtActivite({ e }: { e: EtatDepartement }) {
+function EquipeEtActivite({ e, d }: { e: EtatDepartement; d: DepartementVisible }) {
   const agents = [
     pluriel(e.agents.actifs, "agent actif", "agents actifs"),
     ...(e.agents.enPause ? [`${nombre(e.agents.enPause)} en pause`] : []),
@@ -216,7 +217,12 @@ function EquipeEtActivite({ e }: { e: EtatDepartement }) {
   const derniere = enDate(e.derniereActivite);
   return (
     <div className="atl-dep-meta">
-      <p className="atl-dep-agents">{agents}</p>
+      <p className="atl-dep-agents">
+        {/* Mène à la page « Agents », filtrée sur ce service. */}
+        <LienHote vers={`/${d.prefixe}/atelier/agents#service=${encodeURIComponent(d.slug)}`} className="atl-dep-agents-lien">
+          {agents}
+        </LienHote>
+      </p>
       <p className="atl-dep-activite">{derniere ? `Actif ${ilYA(derniere)}` : "Aucune activité récente"}</p>
     </div>
   );
@@ -287,9 +293,14 @@ export function VueDepartements() {
         Départements de {liste.client}
       </h1>
       <p className="atl-entete-description">{`${liste.client} : ${pluriel(liste.departements.length, "service", "services")}. Choisissez-en un pour l'ouvrir.`}</p>
-      <p className="atl-dep-resume" data-testid="resume-departements">
-        {texteResume(resumer(liste.departements, cases))}
-      </p>
+      <div className="atl-dep-ligne-resume">
+        <p className="atl-dep-resume" data-testid="resume-departements">
+          {texteResume(resumer(liste.departements, cases))}
+        </p>
+        <LienHote vers={chemin("agents")} className="atl-dep-tous-agents">
+          Agents
+        </LienHote>
+      </div>
       <ul className="atl-dep-grille">
         {trierParUrgence(liste.departements, cases).map((d) => (
           <CaseDepartement key={d.companyId} d={d} c={cases[d.companyId] ?? { etat: "chargement" }} relire={() => void lireCase(d, { annule: false })} />

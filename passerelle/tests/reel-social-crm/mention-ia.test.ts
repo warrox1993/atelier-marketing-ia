@@ -1,4 +1,4 @@
-// Mention d'information IA (article 50 du règlement européen sur l'IA) sur les messages envoyés directement à une personne.
+// Mention d'information IA (choix de transparence, voir src/mention-ia.ts) sur les messages envoyés directement à une personne.
 
 import type { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -86,6 +86,8 @@ describe("texte personnalisé et variantes de langue", () => {
 describe("désactivation", () => {
   it("sans motif écrit : refus (lecture des réglages et configuration réelle)", () => {
     expect(() => lireMentionIa({ PASSERELLE_MENTION_IA_DESACTIVEE: "oui" })).toThrow(/PASSERELLE_MENTION_IA_MOTIF/);
+    // DROIT-3.2 : la mention est un choix de transparence, le refus ne la présente pas comme une obligation de l'article 50.
+    expect(() => lireMentionIa({ PASSERELLE_MENTION_IA_DESACTIVEE: "oui" })).not.toThrow(/article 50/);
     expect(() => lireMentionIa({ PASSERELLE_MENTION_IA_DESACTIVEE: "oui", PASSERELLE_MENTION_IA_MOTIF: "   " })).toThrow(/motif/);
     const cle = Buffer.alloc(32, 3).toString("base64");
     const lu = lireConfigSocialCrm({ PASSERELLE_SOCIAL_CLE: cle, PASSERELLE_MENTION_IA_DESACTIVEE: "oui" }, "x");

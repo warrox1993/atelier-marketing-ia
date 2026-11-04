@@ -1,0 +1,212 @@
+From 1a6696a2d63f75295bdf5b31003e1d8ffdd3ac04 Mon Sep 17 00:00:00 2001
+From: Jean-Baptiste Dhondt <114347858+warrox1993@users.noreply.github.com>
+Date: Fri, 30 Oct 2026 16:40:30 +0100
+Subject: [PATCH 146/148] =?UTF-8?q?test(consignes):=20copies=20de=20consig?=
+ =?UTF-8?q?nes=20des=20runs=20align=C3=A9es=20sur=20AFD-C1=20(reprise=20pa?=
+ =?UTF-8?q?r=20le=20board)?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Constat AFD-C1 (patchs 0108 et 0110) : un agent n'enregistre plus de consignes, les siennes
+comprises. Dans agent-instruction-working-copies, chaque collecte d'une copie modifiée est
+vérifiée refusée (conflit INSTRUCTION_SAVE_FAILED, message exact, candidat gardé octet pour
+octet, canonique inchangé) ; le board reprend ensuite le candidat (resolve) et la suite du test
+vérifie la même mécanique qu'avant (octets du run suivant, rafraîchissement avant reprise,
+reçu terminé gardé si la mise en place échoue, liens symboliques, fichier vide, reprise après
+redémarrage, preuve d'arrêt durable). Ajouts : reprise sur une base périmée refusée (409),
+collectes concurrentes dédoublonnées (une tentative). Le refus Atelier précède le refus
+« low trust », vérifié avec son message exact.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01EThpSSDGc5NRYwbgjNqoTJ
+---
+ .../agent-instruction-working-copies.test.ts  | 71 +++++++++++++------
+ 1 file changed, 51 insertions(+), 20 deletions(-)
+
+diff --git a/server/src/__tests__/agent-instruction-working-copies.test.ts b/server/src/__tests__/agent-instruction-working-copies.test.ts
+index bd29eb5bc9..71a1220a16 100644
+--- a/server/src/__tests__/agent-instruction-working-copies.test.ts
++++ b/server/src/__tests__/agent-instruction-working-copies.test.ts
+@@ -30,6 +30,20 @@ describe("registered run instruction copies", () => {
+   const initial = "\uFEFF# Original\r\n☃\n";
+   const target = () => ({ companyId, agentId });
+   const board = () => ({ type: "board" as const, userId, source: "session" as const });
++  // Atelier (AFD-C1, patchs 0108 et 0110) : un agent n'enregistre plus de consignes, les siennes comprises. La collecte
++  // d'une copie modifiée est refusée (conflit, message exact), canonique inchangé, candidat gardé ; le board le reprend
++  // explicitement (resolve) et la suite de chaque test vérifie la même mécanique qu'avant à partir de ce geste humain.
++  const refusCollecte = { state: "conflict", errorCode: "INSTRUCTION_SAVE_FAILED",
++    errorMessage: "Atelier : seul un humain modifie la configuration, les consignes ou les skills d'un agent. The candidate was preserved." };
++  async function refusee(collected: { candidateBase64?: string | null } | null | undefined, candidat: string, canonique = initial) {
++    expect(collected).toMatchObject(refusCollecte);
++    expect(Buffer.from(collected!.candidateBase64!, "base64").toString("utf8")).toBe(candidat);
++    expect(await fs.readFile(path.join(root, entryFile), "utf8")).toBe(canonique);
++  }
++  async function repriseParLeBoard(runId: string, content: string) {
++    const current = (await revisions.readCurrent(target(), board()))!;
++    return copies.resolve({ ...target(), runId, baseRevisionId: current.revision.id, content }, board());
++  }
+   async function run() {
+     const runId = randomUUID();
+     await db.insert(heartbeatRuns).values({ id: runId, companyId, agentId, invocationSource: "on_demand", responsibleUserId: userId });
+@@ -70,7 +84,7 @@ describe("registered run instruction copies", () => {
+     await fs.writeFile(path.join(root, entryFile), initial);
+   });
+ 
+-  it("persists an atomic editor replacement, ignores repository instructions, and gives the next run exact bytes", async () => {
++  it("refuses to persist an atomic editor replacement, keeps it for the board, ignores repository instructions, and gives the next run exact bytes", async () => {
+     const copy = await run();
+     await fs.writeFile(path.join(home, "AGENTS.md"), "Repository text must not become agent instructions");
+     const edited = "\uFEFF# Updated\r\nKeep this persistent. ☃\n";
+@@ -79,20 +93,23 @@ describe("registered run instruction copies", () => {
+     await fs.rename(replacement, path.join(copy.localRoot, entryFile));
+     expect(await fs.readFile(path.join(root, entryFile), "utf8")).toBe(initial);
+     const saved = await copies.collectStopped({ companyId, runId: copy.runId });
+-    expect(saved).toMatchObject({ state: "saved", candidateHash: expect.any(String), processStoppedAt: expect.any(Date) });
+-    expect(await fs.readFile(path.join(root, entryFile), "utf8")).toBe(edited);
++    expect(saved).toMatchObject({ ...refusCollecte, candidateHash: expect.any(String), processStoppedAt: expect.any(Date) });
++    await refusee(saved, edited);
+     copies = agentInstructionWorkingCopyService(db);
+-    expect((await copies.collectStopped({ companyId, runId: copy.runId }))?.receipt).toEqual(saved?.receipt);
++    expect(await copies.collectStopped({ companyId, runId: copy.runId })).toMatchObject({ ...refusCollecte, candidateHash: saved!.candidateHash, receipt: saved?.receipt });
++    await repriseParLeBoard(copy.runId, edited);
++    expect(await fs.readFile(path.join(root, entryFile), "utf8")).toBe(edited);
+     expect((await revisions.history({ ...target(), entryFile }, board())).revisions).toHaveLength(0);
+     const next = await run();
+     expect(await fs.readFile(path.join(next.localRoot, entryFile), "utf8")).toBe(edited);
+   });
+ 
+-  it.each(["failed", "cancelled", "timed_out"])("retains edits from stopped %s runs without restarting execution", async (status) => {
++  it.each(["failed", "cancelled", "timed_out"])("retains edits from stopped %s runs for the board without restarting execution", async (status) => {
+     const copy = await run();
+     await fs.writeFile(path.join(copy.localRoot, entryFile), status);
+     await db.update(heartbeatRuns).set({ status, finishedAt: new Date() }).where(eq(heartbeatRuns.id, copy.runId));
+-    expect((await copies.collectStopped({ companyId, runId: copy.runId }))?.state).toBe("saved");
++    await refusee(await copies.collectStopped({ companyId, runId: copy.runId }), status);
++    await repriseParLeBoard(copy.runId, status);
+     expect((await revisions.readCurrent(target(), board()))?.content).toBe(status);
+     const [unchangedRun] = await db.select().from(heartbeatRuns).where(eq(heartbeatRuns.id, copy.runId));
+     expect(unchangedRun.status).toBe(status);
+@@ -100,15 +117,18 @@ describe("registered run instruction copies", () => {
+ 
+   it.each(["saved", "unchanged"])("refreshes a stopped %s copy from the current canonical revision before retry", async (state) => {
+     const copy = await run();
+-    if (state === "saved") await fs.writeFile(path.join(copy.localRoot, entryFile), "previous saved turn");
+-    expect((await copies.collectStopped({ companyId, runId: copy.runId }))?.state).toBe(state);
++    if (state === "saved") {
++      await fs.writeFile(path.join(copy.localRoot, entryFile), "previous saved turn");
++      await refusee(await copies.collectStopped({ companyId, runId: copy.runId }), "previous saved turn");
++      expect((await repriseParLeBoard(copy.runId, "previous saved turn"))).toBeDefined();
++    } else expect((await copies.collectStopped({ companyId, runId: copy.runId }))?.state).toBe(state);
+     const before = (await revisions.readCurrent(target(), board()))!;
+     const current = await revisions.commit({ ...target(), entryFile, baseRevisionId: before.revision.id, content: "new board instructions", source: "api" }, board());
+     const retried = (await copies.prepare({ legacy: true, ...target(), runId: copy.runId, cwd: home }))!;
+     expect(retried).toMatchObject({ state: "prepared", baseRevisionId: current.revision.id, baseHash: current.revision.contentHash, processStoppedAt: null });
+     expect(await fs.readFile(path.join(retried.localRoot, entryFile), "utf8")).toBe("new board instructions");
+     await fs.writeFile(path.join(retried.localRoot, entryFile), "retry adds a change");
+-    expect((await copies.collectStopped({ companyId, runId: copy.runId }))?.state).toBe("saved");
++    await refusee(await copies.collectStopped({ companyId, runId: copy.runId }), "retry adds a change", "new board instructions");
+   });
+ 
+   it("never rebases uncollected private bytes or a live warm copy onto a newer head", async () => {
+@@ -132,8 +152,10 @@ describe("registered run instruction copies", () => {
+   it.each(["before replacement", "after replacement"])("preserves the completed receipt when retry staging fails %s", async (point) => {
+     const copy = await run();
+     await fs.writeFile(path.join(copy.localRoot, entryFile), "completed turn");
+-    const saved = (await copies.collectStopped({ companyId, runId: copy.runId }))!;
+-    expect(saved.state).toBe("saved");
++    await refusee(await copies.collectStopped({ companyId, runId: copy.runId }), "completed turn");
++    await repriseParLeBoard(copy.runId, "completed turn");
++    const saved = (await copies.get(companyId, copy.runId))!;
++    expect(saved).toMatchObject({ state: "resolved", receipt: { changed: true, content: "completed turn" } });
+     const prior = (await revisions.readCurrent(target(), board()))!;
+     const current = await revisions.commit({ ...target(), entryFile, baseRevisionId: prior.revision.id, content: "new board instructions", source: "api" }, board());
+     const originalMkdir = fs.mkdir.bind(fs);
+@@ -194,13 +216,15 @@ describe("registered run instruction copies", () => {
+     const second = await run();
+     await fs.writeFile(path.join(first.localRoot, entryFile), "first run");
+     await fs.writeFile(path.join(second.localRoot, entryFile), "second run");
+-    await copies.collectStopped({ companyId, runId: first.runId });
++    await refusee(await copies.collectStopped({ companyId, runId: first.runId }), "first run");
++    await repriseParLeBoard(first.runId, "first run");
+     const conflict = await copies.collectStopped({ companyId, runId: second.runId });
+-    expect(conflict).toMatchObject({ state: "conflict", errorCode: "INSTRUCTION_REVISION_CONFLICT" });
+-    expect(Buffer.from(conflict!.candidateBase64!, "base64").toString("utf8")).toBe("second run");
++    await refusee(conflict, "second run", "first run");
+     expect((await revisions.readCurrent(target(), board()))?.content).toBe("first run");
+     copies = agentInstructionWorkingCopyService(db);
+     expect(await copies.list(companyId, agentId, board())).toHaveLength(1);
++    await expect(copies.resolve({ ...target(), runId: second.runId, baseRevisionId: second.baseRevisionId, content: "stale combination" }, board()))
++      .rejects.toMatchObject({ status: 409 });
+     const current = (await revisions.readCurrent(target(), board()))!;
+     await copies.resolve({ ...target(), runId: second.runId, baseRevisionId: current.revision.id, content: "explicitly combined" }, board());
+     expect((await revisions.readCurrent(target(), board()))?.content).toBe("explicitly combined");
+@@ -221,7 +245,7 @@ describe("registered run instruction copies", () => {
+     expect(await fs.readFile(path.join(root, entryFile), "utf8")).toBe(initial);
+   });
+ 
+-  it("preserves the specific low-trust denial in the instruction-save receipt", async () => {
++  it("preserves the Atelier denial, which precedes the low-trust denial, in the instruction-save receipt", async () => {
+     const copy = await run();
+     await fs.writeFile(path.join(copy.localRoot, entryFile), "Unauthorized persistent edit");
+     await db.update(agents).set({ permissions: {
+@@ -230,9 +254,9 @@ describe("registered run instruction copies", () => {
+     } }).where(eq(agents.id, agentId));
+     const denied = await copies.collectStopped({ companyId, runId: copy.runId });
+     expect(denied?.state).toBe("conflict");
+-    expect(denied?.errorMessage).toContain("This low-trust run cannot change persistent agent instructions, including AGENTS.md");
++    expect(denied?.errorMessage).toBe(refusCollecte.errorMessage);
+     expect(denied?.candidateBase64).not.toBeNull();
+-    expect(await fs.readFile(path.join(root, entryFile), "utf8")).toBe(initial);
++    await refusee(denied, "Unauthorized persistent edit");
+   });
+ 
+   it("does not import a symlink or confuse a removed entry with an empty file", async () => {
+@@ -245,7 +269,8 @@ describe("registered run instruction copies", () => {
+     expect((await copies.collectStopped({ companyId, runId: missing.runId }))?.state).toBe("unavailable");
+     const empty = await run();
+     await fs.writeFile(path.join(empty.localRoot, entryFile), "");
+-    expect((await copies.collectStopped({ companyId, runId: empty.runId }))?.state).toBe("saved");
++    await refusee(await copies.collectStopped({ companyId, runId: empty.runId }), "");
++    await repriseParLeBoard(empty.runId, "");
+     expect((await revisions.readCurrent(target(), board()))?.content).toBe("");
+   });
+ 
+@@ -266,7 +291,8 @@ describe("registered run instruction copies", () => {
+     const first = await revisions.commit({ ...target(), entryFile, baseRevisionId: copy.baseRevisionId, content: "explicit self-save", source: "tool" }, board());
+     await copies.acknowledgeExplicitSave({ ...target(), runId: copy.runId, entryFile, revisionId: first.revision.id, contentHash: first.revision.contentHash });
+     await fs.writeFile(local, "local edit after explicit save");
+-    expect((await copies.collectStopped({ companyId, runId: copy.runId }))?.state).toBe("saved");
++    await refusee(await copies.collectStopped({ companyId, runId: copy.runId }), "local edit after explicit save", "explicit self-save");
++    await repriseParLeBoard(copy.runId, "local edit after explicit save");
+     expect((await revisions.readCurrent(target(), board()))?.content).toBe("local edit after explicit save");
+ 
+     const competing = await run();
+@@ -284,11 +310,14 @@ describe("registered run instruction copies", () => {
+       .where(eq(agentInstructionWorkingCopies.runId, copy.runId));
+     copies = agentInstructionWorkingCopyService(db);
+     await copies.recoverCaptured();
++    await refusee(await copies.get(companyId, copy.runId), "captured before restart");
++    await repriseParLeBoard(copy.runId, "captured before restart");
+     expect((await revisions.readCurrent(target(), board()))?.content).toBe("captured before restart");
+     const duplicate = await run();
+     await fs.writeFile(path.join(duplicate.localRoot, entryFile), "one final edit");
+     await Promise.all([copies.collectStopped({ companyId, runId: duplicate.runId }), copies.collectStopped({ companyId, runId: duplicate.runId })]);
+-    expect((await copies.get(companyId, duplicate.runId))?.state).toBe("saved");
++    await refusee(await copies.get(companyId, duplicate.runId), "one final edit", "captured before restart");
++    expect((await copies.get(companyId, duplicate.runId))?.attempts).toBe(1);
+     expect((await revisions.history({ ...target(), entryFile }, board())).revisions).toHaveLength(0);
+   });
+   it("requires durable stop evidence before recovering an uncaptured copy", async () => {
+@@ -305,6 +334,8 @@ describe("registered run instruction copies", () => {
+     await db.update(agentInstructionWorkingCopies).set({ nextAttemptAt: new Date(0) })
+       .where(eq(agentInstructionWorkingCopies.runId, copy.runId));
+     await copies.recoverStopped();
++    await refusee(await copies.get(companyId, copy.runId), "edit before controller restart");
++    await repriseParLeBoard(copy.runId, "edit before controller restart");
+     expect((await revisions.readCurrent(target(), board()))?.content).toBe("edit before controller restart");
+   });
+ 
+-- 
+2.53.0
+

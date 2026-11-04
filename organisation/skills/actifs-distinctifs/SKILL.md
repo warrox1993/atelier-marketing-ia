@@ -34,7 +34,7 @@ retenus dans `charte-marque`. Niveau de preuve : [mémoire] ; à contrôler dans
 ## Étapes
 
 1. Inventorier les actifs actuels : logo, couleur, formule, personnage ou visage du courtier, forme, ton.
-2. Si un sondage est possible (agent `mesure`) : mesurer la notoriété (part qui relie l'actif à la marque) et l'unicité (part
+2. Si un sondage est fourni (mené par le client ou un institut ; l'agent `mesure` n'a aucun outil d'enquête) : mesurer la notoriété (part qui relie l'actif à la marque) et l'unicité (part
    qui ne le relie pas à un concurrent). Sinon écrire « non mesuré ».
 3. Classer chaque actif : à utiliser, à investir, à éviter ; écarter les éléments partagés avec une grande compagnie.
 4. Rédiger les règles d'usage retenues et les reporter dans `charte-marque` ; chaque création les applique (agent `contenus`)

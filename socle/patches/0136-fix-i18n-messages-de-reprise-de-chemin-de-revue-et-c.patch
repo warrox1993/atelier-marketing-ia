@@ -1,0 +1,323 @@
+From f9a5ee96120e7c4e9e40dff7d69fc82c58020da9 Mon Sep 17 00:00:00 2001
+From: Jean-Baptiste Dhondt <114347858+warrox1993@users.noreply.github.com>
+Date: Fri, 30 Oct 2026 15:56:20 +0100
+Subject: [PATCH 136/139] =?UTF-8?q?fix(i18n):=20messages=20de=20reprise,?=
+ =?UTF-8?q?=20de=20chemin=20de=20revue=20et=20carte=20de=20connexion=20en?=
+ =?UTF-8?q?=20fran=C3=A7ais=20(Atelier=20LANG-L6,=20HUM-C12)?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Reprise : cible d'origine hors budget, tâche de reprise arrêtée (corps et titre
+compact), configuration_incomplete classée (assigné et relecteur), relances de
+suite annulées, échec sans relance possible (« Échec de la suite »). Chemin de
+revue : « Aucun suivi prévu », son corps et sa prochaine action. Carte
+d'autorisation de connexion : « Connectez votre compte X pour continuer »,
+« Connecter X », « Plus tard », détails et résumé.
+
+Aucun de ces textes n'est relu par le code (recherche faite dans le serveur,
+l'interface et le plugin). Le test du chemin de revue attendait encore le verbe
+« Resolve » traduit par 0126 : aligné sur « Résoudre ».
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01EThpSSDGc5NRYwbgjNqoTJ
+---
+ ...eartbeat-issue-liveness-escalation.test.ts |  5 +-
+ .../heartbeat-process-recovery.test.ts        | 29 +++++++----
+ .../src/__tests__/tool-access-service.test.ts |  9 +++-
+ .../review-path-recovery-escalation.ts        |  6 +--
+ server/src/services/recovery/service.ts       | 50 +++++++++----------
+ server/src/services/tool-access.ts            | 14 +++---
+ 6 files changed, 64 insertions(+), 49 deletions(-)
+
+diff --git a/server/src/__tests__/heartbeat-issue-liveness-escalation.test.ts b/server/src/__tests__/heartbeat-issue-liveness-escalation.test.ts
+index ad30fa4034..540101d89d 100644
+--- a/server/src/__tests__/heartbeat-issue-liveness-escalation.test.ts
++++ b/server/src/__tests__/heartbeat-issue-liveness-escalation.test.ts
+@@ -449,7 +449,8 @@ describeEmbeddedPostgres("heartbeat resolved dependency wake reconciliation", ()
+     });
+     const notices = await db.select().from(issueComments).where(eq(issueComments.issueId, issueId));
+     expect(notices).toHaveLength(1);
+-    expect(notices[0]).toMatchObject({ authorType: "system", presentation: expect.objectContaining({ title: "No follow-up scheduled" }) });
++    expect(notices[0]).toMatchObject({ authorType: "system", presentation: expect.objectContaining({ title: "Aucun suivi prévu" }) });
++    expect(notices[0]?.body).toBe("La réparation automatique du chemin de revue s'est terminée sans enregistrer de contrôle planifié, de relecteur, d'approbation ni d'autre chemin suivi. Paperclip a bloqué cette tâche pour une décision humaine ; aucun autre suivi automatique n'est prévu.");
+ 
+     const recoveryRun = await db.select().from(heartbeatRuns).where(eq(heartbeatRuns.id, recoveryWakes[0].runId!)).then((rows) => rows[0]);
+     // Replayed finalization must not duplicate the notice, action, or wake.
+@@ -463,7 +464,7 @@ describeEmbeddedPostgres("heartbeat resolved dependency wake reconciliation", ()
+       sourceKind: "recovery_action",
+       relatedIssue: expect.objectContaining({ id: issueId }),
+       decisionVerbs: expect.arrayContaining([
+-        expect.objectContaining({ id: "resolve", label: "Resolve" }),
++        expect.objectContaining({ id: "resolve", label: "Résoudre" }),
+       ]),
+     });
+   });
+diff --git a/server/src/__tests__/heartbeat-process-recovery.test.ts b/server/src/__tests__/heartbeat-process-recovery.test.ts
+index b42f10ff35..cd8c7d58e6 100644
+--- a/server/src/__tests__/heartbeat-process-recovery.test.ts
++++ b/server/src/__tests__/heartbeat-process-recovery.test.ts
+@@ -9896,6 +9896,11 @@ describeEmbeddedPostgres("heartbeat orphaned process recovery", () => {
+         routingPolicy: "board_escalation_no_takeover_v1",
+       }),
+     });
++    const blockedNotices = await db.select().from(issueComments).where(eq(issueComments.issueId, blocked.issueId));
++    expect(blockedNotices.map((comment) => comment.body)).toContain(
++      "Paperclip ne peut pas poursuivre la reprise automatique sans risque : la cible de reprise d'origine a dépassé son budget. " +
++        "L'assignation est inchangée ; à vous de choisir la suite.",
++    );
+ 
+     const unblockedWakeups = await db
+       .select()
+@@ -11840,19 +11845,21 @@ describeEmbeddedPostgres("heartbeat orphaned process recovery", () => {
+       .where(eq(issueComments.issueId, issueId));
+     expect(comments).toHaveLength(1);
+     expect(comments[0]?.body).toContain(
+-      "stopped automatic stranded-work recovery",
++      "Paperclip a arrêté la reprise automatique du travail bloqué pour cette tâche de reprise.",
++    );
++    expect(comments[0]?.body).not.toContain("stopped automatic stranded-work recovery");
++    expect(comments[0]?.body).toContain(
++      "une tâche de reprise ne crée pas de tâche `stranded_issue_recovery` imbriquée",
+     );
+     expect(comments[0]?.body).toContain(
+-      "recovery issues do not create nested `stranded_issue_recovery` issues",
++      `Tâche de reprise : [${recoveryIssues[0]?.identifier}]`,
+     );
+-    expect(comments[0]?.body).toContain(
+-      `Recovery issue: [${recoveryIssues[0]?.identifier}]`,
+-    );
+-    expect(comments[0]?.body).toContain("Next action:");
++    expect(comments[0]?.body).toContain("Prochaine action :");
++    expect(comments[0]?.body).not.toContain("Next action:");
+     expect(comments[0]?.presentation).toMatchObject({
+       kind: "system_notice",
+       tone: "warning",
+-      title: "Recovery: recovery attempt failed — remains blocked",
++      title: "Reprise : la tentative a échoué, la tâche reste bloquée",
+       density: "compact",
+     });
+     expect(comments[0]?.metadata).toMatchObject({ version: 1 });
+@@ -12560,7 +12567,8 @@ describeEmbeddedPostgres("heartbeat orphaned process recovery", () => {
+       .from(issueComments)
+       .where(eq(issueComments.issueId, issueId));
+     expect(comments).toHaveLength(1);
+-    expect(comments[0]?.body).toContain("non-retryable failure");
++    expect(comments[0]?.body).toContain("échec sans relance possible");
++    expect(comments[0]?.body).not.toContain("non-retryable failure");
+     expect(comments[0]?.body).toContain("`budget_blocked`");
+ 
+     const followupRuns = await db
+@@ -14522,13 +14530,14 @@ describeEmbeddedPostgres("heartbeat orphaned process recovery", () => {
+       .where(eq(issueComments.issueId, issueId));
+     expect(comments).toHaveLength(1);
+     expect(comments[0]?.body).toContain(
+-      "stopped automatic stranded-work recovery",
++      "Paperclip a arrêté la reprise automatique du travail bloqué pour cette tâche de reprise.",
+     );
++    expect(comments[0]?.body).not.toContain("stopped automatic stranded-work recovery");
+     expect(comments[0]?.body).toContain(
+       "Latest retry failure details were withheld from the issue thread",
+     );
+     expect(comments[0]?.body).toContain(
+-      "recovery issues do not create nested `stranded_issue_recovery` issues",
++      "une tâche de reprise ne crée pas de tâche `stranded_issue_recovery` imbriquée",
+     );
+     await expect(
+       sourceBlockerIssueIds(companyId, sourceIssueId),
+diff --git a/server/src/__tests__/tool-access-service.test.ts b/server/src/__tests__/tool-access-service.test.ts
+index 3b364ce9e4..de87fd25df 100644
+--- a/server/src/__tests__/tool-access-service.test.ts
++++ b/server/src/__tests__/tool-access-service.test.ts
+@@ -9692,10 +9692,15 @@ describeEmbeddedPostgres("tool access service", () => {
+       issueId: issue.id,
+       kind: "request_confirmation",
+       status: "pending",
+-      title: "Connect your Slack to continue",
++      title: "Connectez votre compte Slack pour continuer",
++      summary: expect.stringContaining("a besoin de votre identité Slack pour un travail exécuté en votre nom."),
+     });
+     expect(interaction.payload).toMatchObject({
+-      target: { href: started.authorizationUrl },
++      prompt: "Connectez votre compte Slack pour continuer",
++      acceptLabel: "Connecter Slack",
++      rejectLabel: "Plus tard",
++      detailsMarkdown: "Votre autorisation est nécessaire avant que cet agent puisse agir en votre nom.",
++      target: { href: started.authorizationUrl, label: "Connecter Slack" },
+     });
+ 
+     await service.completeOAuthCallback({
+diff --git a/server/src/services/recovery/review-path-recovery-escalation.ts b/server/src/services/recovery/review-path-recovery-escalation.ts
+index dff88494cf..a33df7b08d 100644
+--- a/server/src/services/recovery/review-path-recovery-escalation.ts
++++ b/server/src/services/recovery/review-path-recovery-escalation.ts
+@@ -74,7 +74,7 @@ export async function escalateExhaustedIssueReviewPathRecovery(
+     const consumedPathRef = reviewPathConsumedRefFromRun({
+       runId: run.id, issueId, contextSnapshot: run.contextSnapshot,
+     });
+-    const nextAction = "Inspect the run, then restore a scheduled check or review path, retry the original assignee, or record an intentional resolution.";
++    const nextAction = "Examinez le run, puis rétablissez un contrôle planifié ou un chemin de revue, relancez l'assigné d'origine ou notez une résolution voulue.";
+     const recoveryAction = await issueRecoveryActionService(tx as unknown as Db).upsertSourceScoped({
+       companyId: run.companyId,
+       sourceIssueId: issueId,
+@@ -102,9 +102,9 @@ export async function escalateExhaustedIssueReviewPathRecovery(
+     }, tx, publications, postCommitActions);
+     const notice = buildStrandedRecoveryEscalationNotice({
+       seed: {
+-        title: "No follow-up scheduled",
++        title: "Aucun suivi prévu",
+         tone: "danger",
+-        body: "The automatic review-path repair finished without saving a scheduled check, reviewer, approval, or other maintained path. Paperclip has blocked this task for a board decision; no further automatic follow-up is scheduled.",
++        body: "La réparation automatique du chemin de revue s'est terminée sans enregistrer de contrôle planifié, de relecteur, d'approbation ni d'autre chemin suivi. Paperclip a bloqué cette tâche pour une décision humaine ; aucun autre suivi automatique n'est prévu.",
+         nextAction,
+       },
+       recoveryCause: ISSUE_REVIEW_PATH_LOST_WAKE_REASON,
+diff --git a/server/src/services/recovery/service.ts b/server/src/services/recovery/service.ts
+index 2326f2f4d8..bdefeb268f 100644
+--- a/server/src/services/recovery/service.ts
++++ b/server/src/services/recovery/service.ts
+@@ -2737,19 +2737,19 @@ export function recoveryService(
+     const failureSummary = summarizeRunFailureForIssueComment(input.latestRun);
+ 
+     return [
+-      "Paperclip stopped automatic stranded-work recovery for this recovery issue.",
++      "Paperclip a arrêté la reprise automatique du travail bloqué pour cette tâche de reprise.",
+       "",
+-      `- Recovery issue: ${issueUiLink({ identifier: input.issue.identifier, id: input.issue.id }, input.prefix)}`,
+-      `- Previous status: \`${input.previousStatus}\``,
+-      `- Latest run: ${runLink}`,
+-      `- Latest run status: \`${input.latestRun?.status ?? "unknown"}\``,
+-      `- Retry reason: \`${retryReason}\``,
++      `- Tâche de reprise : ${issueUiLink({ identifier: input.issue.identifier, id: input.issue.id }, input.prefix)}`,
++      `- Statut précédent : \`${input.previousStatus}\``,
++      `- Dernier run : ${runLink}`,
++      `- Statut du dernier run : \`${input.latestRun?.status ?? "unknown"}\``,
++      `- Motif de relance : \`${retryReason}\``,
+       failureSummary
+-        ? `- Failure: ${failureSummary.trim()}`
+-        : "- Failure: none recorded",
+-      "- Guard: recovery issues do not create nested `stranded_issue_recovery` issues.",
++        ? `- Échec : ${failureSummary.trim()}`
++        : "- Échec : aucun enregistré",
++      "- Garde-fou : une tâche de reprise ne crée pas de tâche `stranded_issue_recovery` imbriquée.",
+       "",
+-      "Next action: the current recovery owner should inspect the failed run evidence, restore a live execution path or record the manual resolution, then move this recovery issue out of `blocked`.",
++      "Prochaine action : le responsable actuel de la reprise examine les preuves du run en échec, rétablit une exécution active ou note la résolution manuelle, puis sort cette tâche de reprise de `blocked`.",
+     ].join("\n");
+   }
+ 
+@@ -2776,7 +2776,7 @@ export function recoveryService(
+       {
+         authorType: "system",
+         presentation: compactRecoveryPresentation(
+-          "Recovery: recovery attempt failed — remains blocked",
++          "Reprise : la tentative a échoué, la tâche reste bloquée",
+         ),
+         metadata: {
+           version: 1,
+@@ -4709,8 +4709,8 @@ export function recoveryService(
+                 ? EXECUTION_REVIEW_PARTICIPANT_RECOVERY_REASON
+                 : undefined,
+             comment:
+-              "Paperclip cannot safely continue automatic recovery because the original recovery target is over budget. " +
+-              "The source assignment is unchanged and the board must choose the next action.",
++              "Paperclip ne peut pas poursuivre la reprise automatique sans risque : la cible de reprise d'origine a dépassé son budget. " +
++              "L'assignation est inchangée ; à vous de choisir la suite.",
+           });
+           if (updated) {
+             result.escalated += 1;
+@@ -4821,8 +4821,8 @@ export function recoveryService(
+             latestRun,
+             recoveryCause: "configuration_incomplete",
+             comment:
+-              "Paperclip classified the latest adapter failure as `configuration_incomplete`. " +
+-              "Moving the issue to `blocked` with the configuration fix recorded instead of creating a recovery takeover.",
++              "Paperclip a classé le dernier échec de l'adaptateur en `configuration_incomplete`. " +
++              "La tâche passe en `blocked` avec la correction de configuration notée, sans créer de reprise par un autre agent.",
+           });
+           if (updated) {
+             latestRun = await persistAdapterFailureRecoveryClassification(
+@@ -4936,9 +4936,9 @@ export function recoveryService(
+               previousStatus: issue.status as StrandedPreviousStatus,
+               latestRun: latestPostResolutionRun,
+               comment:
+-                `Paperclip stopped requeueing accepted interaction \`${acceptedContinuationInteraction.id}\` after ` +
+-                `${consecutive} consecutive continuation wakes were cancelled while waiting on review. ` +
+-                "Moving the issue to `blocked` so the missing execution path is visible for intervention.",
++                `Paperclip a cessé de relancer la suite de la carte acceptée \`${acceptedContinuationInteraction.id}\` : ` +
++                `${consecutive} réveils de suite consécutifs ont été annulés pendant l'attente de la revue. ` +
++                "La tâche passe en `blocked` pour que le chemin d'exécution manquant soit visible et qu'un humain intervienne.",
+             });
+             if (updated) {
+               result.escalated += 1;
+@@ -5049,9 +5049,9 @@ export function recoveryService(
+             latestRun: participantLatestRun,
+             recoveryCause: "configuration_incomplete",
+             comment:
+-              "Paperclip classified the active review participant's latest adapter failure as " +
+-              "`configuration_incomplete`. Moving the issue to `blocked` with the configuration fix " +
+-              "recorded instead of repeatedly requeueing the reviewer.",
++              "Paperclip a classé le dernier échec de l'adaptateur du relecteur en cours en " +
++              "`configuration_incomplete`. La tâche passe en `blocked` avec la correction de configuration " +
++              "notée, au lieu de relancer le relecteur encore et encore.",
+           });
+           if (updated) {
+             latestRun = await persistAdapterFailureRecoveryClassification(
+@@ -5472,10 +5472,10 @@ export function recoveryService(
+             latestRun,
+             notice: {
+               body:
+-                "Paperclip detected a non-retryable failure on this issue's continuation run " +
+-                `(\`${classification.errorCode}\`). Skipping automatic retries and moving it to \`blocked\` ` +
+-                "so it is visible for intervention.",
+-              title: "Continuation failed",
++                "Paperclip a détecté un échec sans relance possible sur le run de suite de cette tâche " +
++                `(\`${classification.errorCode}\`). Les relances automatiques s'arrêtent et la tâche passe en \`blocked\` ` +
++                "pour qu'un humain intervienne.",
++              title: "Échec de la suite",
+               tone: "danger",
+             },
+           });
+diff --git a/server/src/services/tool-access.ts b/server/src/services/tool-access.ts
+index 841f60f219..4076ae04d4 100644
+--- a/server/src/services/tool-access.ts
++++ b/server/src/services/tool-access.ts
+@@ -15065,11 +15065,11 @@ export function toolAccessService(
+         : [undefined];
+       const payload = {
+         version: 1 as const,
+-        prompt: `Connect your ${providerName} to continue`,
+-        acceptLabel: `Connect ${providerName}`,
+-        rejectLabel: "Not now",
++        prompt: `Connectez votre compte ${providerName} pour continuer`,
++        acceptLabel: `Connecter ${providerName}`,
++        rejectLabel: "Plus tard",
+         detailsMarkdown:
+-          "Authorization is required before this agent can act on your behalf.",
++          "Votre autorisation est nécessaire avant que cet agent puisse agir en votre nom.",
+         // Presentation metadata so the card can compose its own copy instead of
+         // parsing the title string (PAP-17835 seam #6). The interaction kind and
+         // the server-addressed audience are unchanged.
+@@ -15084,7 +15084,7 @@ export function toolAccessService(
+           type: "custom" as const,
+           key: `connection:${connection.uid}:user:${authorizationSubjectUserId}`,
+           revisionId: state,
+-          label: `Connect ${providerName}`,
++          label: `Connecter ${providerName}`,
+           href: authorizationUrl.toString(),
+         },
+       };
+@@ -15134,8 +15134,8 @@ export function toolAccessService(
+                 binding.actorType === "agent"
+                   ? (input.actor.sessionId ?? null)
+                   : null,
+-              title: `Connect your ${providerName} to continue`,
+-              summary: `${requestingAgent?.name ?? "An agent"} needs your ${providerName} identity for work running as you.`,
++              title: `Connectez votre compte ${providerName} pour continuer`,
++              summary: `${requestingAgent?.name ?? "Un agent"} a besoin de votre identité ${providerName} pour un travail exécuté en votre nom.`,
+               createdByAgentId:
+                 binding.actorType === "agent" ? binding.actorId : null,
+               payload,
+-- 
+2.53.0
+

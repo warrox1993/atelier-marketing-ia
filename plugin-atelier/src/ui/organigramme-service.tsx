@@ -17,6 +17,7 @@
  */
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type FocusEvent, type KeyboardEvent as ToucheClavier, type PointerEvent as EvenementPointeur, type RefObject } from "react";
 import { LienHote } from "./composants.js";
+import { ATraiterService } from "./organigramme-a-traiter.js";
 import { nombre } from "./format.js";
 import { compterStatuts, familleStatut, libelleStatutAgent, type AgentHote } from "./organigramme-arbre.js";
 import { fluxMetier, liaisonsDe, objetsDuFlux, volumeDuFlux, type FluxBrut, type LiaisonPartenaire, type ServiceCarte } from "./organigramme-flux.js";
@@ -320,7 +321,8 @@ export function elementsVisibles(dispo: DispositionArbre, fenetre: Fenetre, marg
 // ---------------------------------------------------------------------------------------------------------------
 
 const pluriel = (n: number, un: string, plusieurs: string) => `${nombre(n)} ${n > 1 ? plusieurs : un}`;
-const echanges = (n: number) => pluriel(n, "échange", "échanges");
+// UI-12 : un flux du registre est une demande POSSIBLE entre services, pas un échange qui a eu lieu.
+const echanges = (n: number) => pluriel(n, "demande possible", "demandes possibles");
 
 // ---------------------------------------------------------------------------------------------------------------
 // Disposition des satellites (pure)
@@ -341,7 +343,7 @@ const BORDURE_SATELLITE = 22;
 /** Nombre de lignes qu'occupe `texte` dans `largeurUtile` px, à `px` par caractère (au moins une). */
 const lignesDe = (texte: string, largeurUtile: number, px: number): number => Math.max(1, Math.ceil((texte.length * px) / largeurUtile));
 
-/** Seconde ligne d'un satellite : nombre d'échanges, puis l'approbation éventuelle. */
+/** Seconde ligne d'un satellite : nombre de types de demande possibles, puis l'approbation éventuelle. */
 export const detailSatellite = (total: number, approbation: boolean): string => `${echanges(total)}${approbation ? " · approbation" : ""}`;
 
 export interface Satellite {
@@ -997,6 +999,9 @@ export function VueServiceOrganigramme(props: PropsVueServiceOrganigramme) {
         </p>
       </header>
 
+      {/* Décisions et tâches bloquées du service : la pastille « À traiter » du tableau des départements mène ici. */}
+      <ATraiterService companyId={service.companyId} prefixe={service.prefixe} />
+
       {agents.length === 0 ? <p className="atl-orgs-vide">Ce service n'a aucun agent.</p> : null}
 
       {telephone ? (
@@ -1012,9 +1017,9 @@ export function VueServiceOrganigramme(props: PropsVueServiceOrganigramme) {
                   <button type="button" className="atl-orgs-satellite-ligne" onClick={() => ouvrirService(s.slug)}>
                     <span className="atl-orgs-satellite-nom">{s.nom}</span>
                     <span className="atl-orgs-satellite-detail">
-                      {s.sortants > 0 ? `${echanges(s.sortants)} sortants` : ""}
+                      {s.sortants > 0 ? `${echanges(s.sortants)} vers lui` : ""}
                       {s.sortants > 0 && s.entrants > 0 ? ", " : ""}
-                      {s.entrants > 0 ? `${echanges(s.entrants)} entrants` : ""}
+                      {s.entrants > 0 ? `${echanges(s.entrants)} depuis lui` : ""}
                       {s.liaison.approbation ? ", approbation" : ""}
                     </span>
                   </button>

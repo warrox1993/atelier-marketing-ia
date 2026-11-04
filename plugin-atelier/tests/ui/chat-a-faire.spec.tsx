@@ -96,6 +96,38 @@ describe("chat : points en attente dans le message du Coordinateur", () => {
   });
 });
 
+describe("chat : plafond de runs du jour atteint (HUM-C11)", () => {
+  const AUJOURD_HUI = new Date().toISOString();
+  const HIER = new Date(Date.now() - 2 * 86_400_000).toISOString();
+  const run = (agentId: string, errorCode: string | null, createdAt: string) => ({ id: `r-${agentId}-${createdAt}`, agentId, status: "cancelled", errorCode, createdAt, contextSnapshot: { issueId: "iss-1" } });
+
+  it("un élément par agent qui a atteint son plafond aujourd'hui, avec la consigne de relance après minuit", async () => {
+    const base = serveur;
+    serveur = (m, u, b) => {
+      if (m === "GET" && u.includes("/heartbeat-runs?")) {
+        return { statut: 200, corps: [run("ag-1", "heartbeat.daily_run_limit", AUJOURD_HUI), run("ag-1", "heartbeat.daily_run_limit", AUJOURD_HUI), run("ag-2", "heartbeat.daily_run_limit", HIER), run("ag-3", "timeout", AUJOURD_HUI)] };
+      }
+      if (m === "GET" && /\/api\/companies\/[^/]+\/agents$/u.test(u)) return { statut: 200, corps: [{ id: "ag-1", name: "Veille" }, { id: "ag-2", name: "Mesure" }] };
+      return base(m, u, b);
+    };
+    const c = await ouvrir();
+    const lignes = Array.from(c.querySelectorAll(".atl-afaire > li")).filter((l) => l.textContent?.includes("Plafond de runs du jour atteint"));
+    expect(lignes).toHaveLength(1);
+    expect(lignes[0]!.textContent).toContain("Veille");
+    expect(lignes[0]!.textContent).toContain("relancez l'agent");
+    expect(lignes[0]!.textContent).toContain("minuit");
+    expect(c.textContent).not.toContain("Mesure");
+  });
+
+  it("aucun run plafonné ou lecture des runs en échec : aucun élément de plafond, le reste de la liste est intact", async () => {
+    const base = serveur;
+    serveur = (m, u, b) => (m === "GET" && u.includes("/heartbeat-runs?") ? { statut: 500, corps: { error: "panne" } } : base(m, u, b));
+    const c = await ouvrir();
+    expect(c.textContent).not.toContain("Plafond de runs du jour atteint");
+    expect(c.querySelectorAll(".atl-afaire > li")).toHaveLength(2);
+  });
+});
+
 /* ------------------------------------------------------------------ */
 /* Traitement sur place (lot A)                                          */
 /* ------------------------------------------------------------------ */
@@ -331,6 +363,18 @@ describe("chat : traitement sur place", () => {
     expect(l.querySelector("button")).toBeNull();
     expect(l.querySelector("a")?.getAttribute("href")).toContain("/issues/DEM-7");
     expect(natifs()).toHaveLength(0);
+  });
+
+  it("confirmation : les identifiants de tâche cités deviennent des liens, et « Ouvrir » mène au document cité (UI-3)", async () => {
+    elements = [{ ...E_CONFIRMATION, interaction: { ...E_CONFIRMATION.interaction, invite: "Valider la liste (voir DEM-30 et DEM-35) ?", document: { libelle: "Liste des fiches", lien: "/issues/t9#document-liste" } } }];
+    const c = await ouvrir();
+    const l = ligne(c, "L'équipe attend votre confirmation");
+    await cliquer(parTexte(l, "button", "Traiter ici"));
+    const liens = Array.from(l.querySelectorAll(".atl-surplace a")).map((a) => [a.textContent, a.getAttribute("href")]);
+    expect(liens).toContainEqual(["DEM-30", "/RNO/issues/DEM-30"]);
+    expect(liens).toContainEqual(["DEM-35", "/RNO/issues/DEM-35"]);
+    expect(liens).toContainEqual(["Ouvrir « Liste des fiches »", "/RNO/issues/t9#document-liste"]);
+    expect(l.textContent).toContain("Valider la liste (voir DEM-30 et DEM-35) ?");
   });
 
   it("confirmation avec refus motivé obligatoire : le refus reste bloqué tant que la raison est vide", async () => {

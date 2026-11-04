@@ -81,6 +81,17 @@ export const Source = z.object({
 });
 export type Source = z.infer<typeof Source>;
 
+/** Réponse brute d'un outil de la passerelle, telle que déposée par l'agent ou prise par référence. */
+export const ReponseDeposee = z
+  .object({
+    /** Texte de la réponse tel que reçu (`content[0].text`). */
+    texte: z.string().min(1).optional(),
+    /** Données structurées telles que reçues (`structuredContent`). */
+    structuredContent: z.record(z.string(), z.unknown()).optional(),
+  })
+  .strict()
+  .refine((r) => r.texte !== undefined || r.structuredContent !== undefined, "Fournir le texte ou les données structurées de la réponse");
+
 /**
  * Dépôt d'une réponse d'outil de connexion (route `tache.donnees.deposer`, v1.4).
  *
@@ -94,15 +105,10 @@ export const DeposerDonneesConnexionEntree = z
     service: z.string().regex(/^[a-z0-9][a-z0-9_-]{0,39}$/u, "Identifiant de service attendu (ex. gsc)"),
     /** Nom de l'outil appelé (`gsc_requete_performances`…). */
     outil: z.string().regex(/^[a-z0-9][a-z0-9_]{0,79}$/u, "Nom d'outil attendu (ex. gsc_requete_performances)"),
-    reponse: z
-      .object({
-        /** Texte de la réponse tel que reçu (`content[0].text`). */
-        texte: z.string().min(1).optional(),
-        /** Données structurées telles que reçues (`structuredContent`). */
-        structuredContent: z.record(z.string(), z.unknown()).optional(),
-      })
-      .strict()
-      .refine((r) => r.texte !== undefined || r.structuredContent !== undefined, "Fournir le texte ou les données structurées de la réponse"),
+    /** Recopie de la réponse brute. Exactement un de `reponse` et `reference` (contrôlé par `resoudreReponse`). */
+    reponse: ReponseDeposee.optional(),
+    /** Référence `_atelier.reference` (22 caractères base64url, usage unique) : le plugin prend la réponse chez la passerelle. */
+    reference: z.string().regex(/^[A-Za-z0-9_-]{22}$/u, "Référence de 22 caractères base64url attendue (_atelier.reference)").optional(),
     /**
      * v1.5 (revue de sécurité §6 bis) : arguments EXACTS de l'appel d'outil (période, propriété…).
      * Facultatifs ; fournis, leur empreinte doit égaler celle que la passerelle a signée (contre le
@@ -119,8 +125,20 @@ export const DeposerDonneesConnexionEntree = z
   .strict();
 export type DeposerDonneesConnexionEntree = z.infer<typeof DeposerDonneesConnexionEntree>;
 
+/** N2 : chaîne de requête (sans le « ? ») au-delà de laquelle une URL lue pour un agent est refusée (canal d'exfiltration) : 15 fois la plus longue légitime relevée (13). */
+export const REQUETE_MAX_CARACTERES = 200;
+const requeteCourte = (url: string): boolean => {
+  try {
+    return new URL(url).search.length <= REQUETE_MAX_CARACTERES + 1;
+  } catch {
+    return true; // URL invalide : refusée plus loin par la lecture protégée.
+  }
+};
+/** URL lue par le serveur pour un agent : 2 048 caractères au plus, chaîne de requête courte. */
+export const UrlLue = z.string().min(1).max(2048).refine(requeteCourte, `chaîne de requête de plus de ${REQUETE_MAX_CARACTERES} caractères refusée`);
+
 export const LireUrlEntree = z.object({
-  url: z.string().min(1).max(2048),
+  url: UrlLue,
   campagneId: IdNatif.nullable().default(null),
 });
 export type LireUrlEntree = z.infer<typeof LireUrlEntree>;
@@ -160,7 +178,7 @@ export const ResultatVerificationLien = z.object({
 export type ResultatVerificationLien = z.infer<typeof ResultatVerificationLien>;
 
 export const VerifierLiensEntree = z.object({
-  urls: z.array(z.string().min(1).max(2048)).min(1).max(50),
+  urls: z.array(UrlLue).min(1).max(50),
 });
 export type VerifierLiensEntree = z.infer<typeof VerifierLiensEntree>;
 

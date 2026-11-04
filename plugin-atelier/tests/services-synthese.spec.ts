@@ -8,7 +8,8 @@
  */
 import { describe, expect, it } from "vitest";
 import type { PluginContext } from "@paperclipai/plugin-sdk";
-import { ESPACE_BASE, ROUTES_API, SERVICES_SENSIBLES, type SyntheseClient } from "../src/contrats/index.js";
+import { BORNE_CARTES_SYNTHESE, ESPACE_BASE, ROUTES_API, SERVICES_SENSIBLES, type SyntheseClient } from "../src/contrats/index.js";
+import manifest from "../src/manifest.js";
 import type { ActeurHote, RequeteRoute } from "../src/serveur/atelier.js";
 import type { ErreurAtelier } from "../src/serveur/erreurs.js";
 import type { ServiceEntreprise } from "../src/serveur/liaisons/base-liaisons.js";
@@ -55,6 +56,17 @@ function monde(o: { servicesDuClientRetourne?: ServiceEntreprise[] } = {}) {
     { company_id: AUTRE_MKT, status: "todo", identifier: "ETR-2", titre: "Autre client" },
   ];
   for (let i = 0; i < 8; i++) issues.push({ company_id: DIR, status: "blocked", identifier: `DIR-${i}`, titre: "t" });
+  // HUM-C4 : cartes des services (issue_thread_interactions) ; seules les cartes en attente d'un humain comptent.
+  const cartes: Ligne[] = [
+    { company_id: MKT, identifier: "COM-4", kind: "request_confirmation", status: "pending", addressee_agent_id: null, hidden: false, created_at: t(17), title: "Valider la liste finale" },
+    { company_id: MKT, identifier: "COM-1", kind: "ask_user_questions", status: "pending", addressee_agent_id: null, hidden: false, created_at: t(19), title: "Question" },
+    { company_id: MKT, identifier: "COM-2", kind: "request_confirmation", status: "accepted", addressee_agent_id: null, hidden: false, created_at: t(10), title: "Déjà tranchée" },
+    { company_id: MKT, identifier: "COM-3", kind: "request_confirmation", status: "pending", addressee_agent_id: AGENT_SIMPLE, hidden: false, created_at: t(10), title: "Pour un agent" },
+    { company_id: MKT, identifier: "COM-9", kind: "request_confirmation", status: "pending", addressee_agent_id: null, hidden: true, created_at: t(10), title: "Tâche masquée" },
+    { company_id: JUR, identifier: "JUR-9", kind: "request_confirmation", status: "pending", addressee_agent_id: null, hidden: false, created_at: t(18), title: "Litige client" },
+    { company_id: AUTRE_MKT, identifier: "ETR-1", kind: "request_confirmation", status: "pending", addressee_agent_id: null, hidden: false, created_at: t(18), title: "Autre client" },
+  ];
+  for (let i = 0; i < 12; i++) cartes.push({ company_id: DIR, identifier: `DIR-${i % 8}`, kind: "ask_user_questions", status: "pending", addressee_agent_id: null, hidden: false, created_at: new Date(t(1).getTime() + i * 3_600_000), title: "t" });
   const filtre = (lignes: Ligne[], sql: string, params: unknown[], col = "company_id") => {
     if (!/any\(\$1::uuid\[\]\)/u.test(sql)) return lignes; // requête sans filtre : l'hôte ne cloisonne rien
     const liste = String(params[0]).replace(/[{}]/gu, "").split(",");
@@ -77,6 +89,18 @@ function monde(o: { servicesDuClientRetourne?: ServiceEntreprise[] } = {}) {
       if (!/^\s*(select|with)\s/iu.test(sql)) throw new Error("ctx.db.query only allows SELECT statements");
       if (params.some((p) => Array.isArray(p))) throw new Error("l'hôte aplatit les paramètres tableau");
       if (sql.includes("from public.agents where")) return regrouper(filtre(agents, sql, params).filter((a) => a["status"] !== "terminated"));
+      if (sql.includes("from public.issue_thread_interactions")) {
+        // Le faux hôte n'applique que les filtres que la requête écrit elle-même.
+        expect(sql).toMatch(/status = 'pending'/u);
+        expect(sql).toMatch(/kind in \('ask_user_questions', 'request_confirmation'\)/u);
+        expect(sql).toMatch(/addressee_agent_id is null/u);
+        expect(sql).toMatch(/hidden_at is null/u);
+        const retenues = filtre(cartes, sql, params).filter((c) => c["status"] === "pending" && c["addressee_agent_id"] === null && !c["hidden"])
+          .sort((a, b) => (a["created_at"] as Date).getTime() - (b["created_at"] as Date).getTime());
+        const vu = new Map<string, number>();
+        return retenues.filter((c) => { const n = (vu.get(String(c["company_id"])) ?? 0) + 1; vu.set(String(c["company_id"]), n); return n <= 10; })
+          .map((c) => ({ company_id: c["company_id"], identifier: c["identifier"], kind: c["kind"], created_at: c["created_at"] }));
+      }
       if (sql.includes("row_number()")) {
         const bloquees = filtre(issues, sql, params).filter((i) => i["status"] === "blocked");
         const vu = new Map<string, number>();
@@ -172,7 +196,7 @@ describe("direction.synthese : cloisonnement par client (garde 3)", () => {
   it("toutes les requêtes SQL filtrent sur la liste du client, passée en paramètre, jamais sur autre chose", async () => {
     const m = monde();
     await m.appeler(DIR, agentCeo);
-    expect(m.requetes).toHaveLength(7);
+    expect(m.requetes).toHaveLength(8);
     const liste = `{${[DIR, MKT, JUR].join(",")}}`;
     for (const r of m.requetes) {
       expect(r.sql).toMatch(/(company_id|c\.id) = any\(\$1::uuid\[\]\)/u);
@@ -239,20 +263,51 @@ describe("direction.synthese : contenu", () => {
   });
 });
 
+describe("direction.synthese : cartes en attente d'un humain (HUM-C4)", () => {
+  it("par service : tâche, sorte et âge des cartes en attente, les plus anciennes d'abord, au plus 10, jamais un titre", async () => {
+    const corps = (await monde().appeler(DIR, agentCeo)).corps as SyntheseClient;
+    const marketing = corps.services.find((s) => s.slug === "marketing")!;
+    // Tranchée, adressée à un agent ou sur une tâche masquée : absente.
+    expect(marketing.cartesEnAttente).toEqual([
+      { tache: "COM-4", sorte: "confirmation", depuisHeures: 50 },
+      { tache: "COM-1", sorte: "question", depuisHeures: 2 },
+    ]);
+    const direction = corps.services.find((s) => s.slug === "direction")!;
+    expect(direction.cartesEnAttente).toHaveLength(BORNE_CARTES_SYNTHESE);
+    expect(BORNE_CARTES_SYNTHESE).toBe(10);
+    const texte = JSON.stringify(corps);
+    for (const titre of ["Valider la liste finale", "Déjà tranchée", "Pour un agent", "Autre client", "ETR-1"]) expect(texte).not.toContain(titre);
+  });
+
+  it("service sensible : la sorte et l'âge restent, jamais l'identifiant de la tâche", async () => {
+    const corps = (await monde().appeler(DIR, agentCeo)).corps as SyntheseClient;
+    expect(corps.services.find((s) => s.slug === "juridique")!.cartesEnAttente).toEqual([{ tache: null, sorte: "confirmation", depuisHeures: 26 }]);
+    expect(JSON.stringify(corps)).not.toContain("JUR-9");
+  });
+
+  it("la table des cartes est déclarée en lecture au manifeste, et la requête ne lit que les colonnes utiles", async () => {
+    expect(manifest.database?.coreReadTables).toContain("issue_thread_interactions");
+    const m = monde();
+    await m.appeler(DIR, agentCeo);
+    const sql = m.requetes.find((r) => r.sql.includes("issue_thread_interactions"))!.sql;
+    expect(sql).not.toMatch(/\b(payload|result|summary|title)\b|\*/u);
+  });
+});
+
 describe("direction.synthese : cache de 30 s par client", () => {
   it("réutilise la synthèse pendant 30 s puis la recalcule ; les gardes s'appliquent même en cache", async () => {
     const m = monde();
     await m.appeler(DIR, agentCeo);
-    expect(m.requetes).toHaveLength(7);
+    expect(m.requetes).toHaveLength(8);
     await m.appeler(DIR, agentCeo);
     m.avancer(DUREE_CACHE_SYNTHESE_MS - 1);
     expect((await code(m.appeler(DIR, HUMAIN)))?.statut).toBe(403);
-    expect(m.requetes).toHaveLength(7);
+    expect(m.requetes).toHaveLength(8);
     expect((await code(m.appeler(DIR, agentSimple)))?.statut).toBe(403);
     expect((await code(m.appeler(MKT, HUMAIN)))?.statut).toBe(403);
     m.avancer(1);
     await m.appeler(DIR, agentCeo);
-    expect(m.requetes).toHaveLength(14);
+    expect(m.requetes).toHaveLength(16);
   });
 
   it("le cache est par client : la Direction d'un autre client ne reçoit pas la synthèse mise en cache", async () => {
@@ -261,6 +316,6 @@ describe("direction.synthese : cache de 30 s par client", () => {
     const autre = (await m.appeler(AUTRE_DIR, agentCeo)).corps as SyntheseClient;
     expect(autre.client).toBe("autre-sprl");
     expect(autre.services.map((s) => s.slug).sort()).toEqual(["direction", "marketing"]);
-    expect(m.requetes).toHaveLength(14);
+    expect(m.requetes).toHaveLength(16);
   });
 });

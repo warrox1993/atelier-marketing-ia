@@ -69,7 +69,7 @@ Sous-commandes :
                          JSON horodaté à côté de l'export. Les sauvegardes existantes ne sont PAS modifiées.
   purger-memoires --client SLUG --motif TEXTE [--confirmer]
                          droit à l'effacement d'une personne dans la mémoire des agents (memoire-para) : cherche le
-                         motif, sans casse, dans instance/agents-atelier/<UUID de chaque entreprise du client>/*/memoire/
+                         motif, sans casse, dans instance/claude-config/<UUID de chaque entreprise du client>/*/memoire/
                          et efface les lignes qui le contiennent (un fichier dont le nom le contient est supprimé).
                          À blanc par défaut (comptes seulement) ; --confirmer efface. Journal sans le motif ni les
                          lignes (empreinte SHA-256) : instance/atelier-client/<slug>/journal-purges-memoires.jsonl.
@@ -141,6 +141,10 @@ REGISTRE_ORGA = ORGA / "registre" / "organisation.json"
 # les AGENTS.md du marketing.
 CONSIGNES_COMMUNES = ORGA / "consignes" / "communes.md"
 CONSIGNES_MARKETING = ORGA / "consignes" / "marketing.md"
+CONSIGNES_OBSERVATOIRE = ORGA / "consignes" / "observatoire.md"  # T12 : règles communes du seul service Observatoire
+# APP-4 : pièges validés par l'humain à partir des rapports de scripts/detecter-erreurs-repetees.py, recopiés en
+# section « Pièges constatés » des consignes communes (aucune section si la liste est vide).
+PIEGES_VALIDES = ORGA / "consignes" / "pieges-valides.json"
 MARQUEUR_CONSIGNES_COMMUNES = (
     "<!-- Consignes communes : générées depuis organisation/registre/consignes-communes.md "
     "par scripts/bootstrap-organisation.py generer ; ne pas modifier sous cette ligne. -->"
@@ -174,7 +178,8 @@ MODES = ("reel",)
 # connexion créée par une carte après le bootstrap est réservée aux rôles prévus sans intervention.
 GARDIEN_NOM = "Gardien des connexions"
 GARDIEN_SLUG = "gardien-des-connexions"
-GARDIEN_INTERVALLE_SEC = 60
+# AFB-10 (audit du 29/10/2026) : 4 801 passages sur 5 055 sans écriture à 60 s ; 15 min suffisent.
+GARDIEN_INTERVALLE_SEC = 900
 
 # Fichiers du paquet AgentCompanies envoyés à Paperclip. Tout le reste
 # d'organisation/ (registre, politiques, README) reste
@@ -184,6 +189,10 @@ RACINES_PAQUET = ("COMPANY.md", ".paperclip.yaml", "agents", "skills", "projects
 SCHEMA_VERSION_PAQUET = 7
 CLE_SECRET_JETON = "claude-code-oauth-token"
 VARIABLE_JETON = "CLAUDE_CODE_OAUTH_TOKEN"
+CLE_SECRET_CLE_API = "anthropic-cle-api-credits"
+VARIABLE_CLE_API = "ANTHROPIC_API_KEY"
+VARIABLE_MODE_CLE = "PAPERCLIP_CLAUDE_CLE_API"
+VALEUR_MODE_CLE = "credits_inclus"
 
 
 class ErreurAtelier(Exception):
@@ -194,35 +203,36 @@ class ErreurAtelier(Exception):
 # générateur à la liste déclarée de chaque agent (registre du marketing et en-tête « skills: » des
 # AGENTS.md des services), sans doublon et après les compétences propres au rôle. Aucune n'est ajoutée
 # à un agent déterministe (adaptateur process, aucun modèle).
-# - memoire-para : mémoire persistante en fichiers dans ./memoire/ du cwd de l'agent. Ce n'est PAS
+# - memoire-para : mémoire persistante en fichiers dans <CLAUDE_CONFIG_DIR de l'agent>/memoire (dossier_memoire). Ce n'est PAS
 #   la compétence « para-memory-files » du socle sous son nom : le socle l'importe déjà dans chaque
 #   entreprise (paperclip/server/src/services/company-skills.ts, PAPERCLIP_CORE_SKILL_KEYS) et deux
 #   compétences de même slug rendent la référence ambiguë (resolveSkillReference, même fichier).
 #   Elle n'écrit pas dans $AGENT_HOME : pour un bundle géré, AGENT_HOME est
 #   companies/<id>/agents/<id>/file-sync/runs/<run>/live (heartbeat.ts, agent-directory-working-copies.ts),
-#   hors du cwd et non monté par le confinement Bubblewrap de claude_local (managedPaths de
-#   packages/adapters/claude-local/src/server/execute.ts) ; ./memoire/ est couvert par « Edit(./**) ».
+#   hors du cwd et non monté par le confinement Bubblewrap de claude_local. Pas non plus ./memoire/ du cwd : pour une
+#   tâche de projet, le cwd est l'espace PARTAGÉ du projet, et un filesystemExtraPaths « rw » hors de ce cwd est refusé
+#   par le socle (local-process-sandbox.ts, « has no outbound restore mapping », vérifié le 29/10/2026). Le
+#   CLAUDE_CONFIG_DIR propre à l'agent, lui, est toujours monté en écriture (managedPaths, execute.ts) : la mémoire y
+#   vit, autorisée par chemin absolu dans les réglages locaux (reglages_agent) et annoncée par <config>/rules/memoire.md.
 # - recherche-connaissances : chercher dans les connaissances (base du service et base commune du
 #   groupe) avant d'affirmer.
 COMPETENCES_COMMUNES = ("memoire-para", "recherche-connaissances")
-# Compétence commune qui exige d'écrire des fichiers (./memoire/) : un agent sans règle d'écriture effective
-# (« Edit(./**) », voir arguments_outils) ne la reçoit pas (revue du 18/10/2026, M2 : coordinateur, exigences,
-# relecteur, tests-techniques ont Write et Edit interdits) ; il garde recherche-connaissances.
+# Depuis le 29/10/2026, tous les agents claude_local la reçoivent, y compris ceux qui n'écrivent aucun fichier
+# (coordinateur, exigences, relecteur) : leur seule écriture autorisée est leur dossier de mémoire.
 COMPETENCE_MEMOIRE = "memoire-para"
+# Rôles dont l'INDÉPENDANCE est la raison d'être : aucune mémoire en écriture (revue securite du 29/10/2026, M1). Une injection
+# dans un livrable pourrait y laisser une « leçon » relue à chaque revue et fausser leurs verdicts. Ils gardent
+# recherche-connaissances (lecture), et Write/Edit restent refusés. Marketing : relecteur, exigences ; services : contradicteur
+# (direction), relecteur-independant (observatoire). Le coordinateur, lui, garde sa mémoire.
+ROLES_SANS_MEMOIRE = frozenset({"relecteur", "exigences", "contradicteur", "relecteur-independant", "controleur-complements"})
 
 
-def ecrit_des_fichiers(outils: dict) -> bool:
-    """Vrai si arguments_outils donne à l'agent la règle d'écriture « Edit(./**) » (Write ou Edit autorisé)."""
-    return any(o in ("Write", "Edit") for o in outils.get("recherche", []) + outils.get("mutation", []))
-
-
-def avec_competences_communes(competences: list[str], ecrit: bool = True) -> list[str]:
+def avec_competences_communes(competences: list[str], slug: str | None = None) -> list[str]:
     """Compétences d'un agent claude_local : les siennes (ordre gardé, doublons retirés), puis les
-    compétences communes qu'il ne déclare pas déjà. Sans écriture (ecrit=False), memoire-para n'est ni
-    ajoutée ni gardée."""
+    compétences communes qu'il ne déclare pas déjà (sauf la mémoire pour un rôle de ROLES_SANS_MEMOIRE)."""
     resultat: list[str] = []
     for nom in [*competences, *COMPETENCES_COMMUNES]:
-        if nom == COMPETENCE_MEMOIRE and not ecrit:
+        if nom == COMPETENCE_MEMOIRE and slug in ROLES_SANS_MEMOIRE:
             continue
         if nom not in resultat:
             resultat.append(nom)
@@ -243,7 +253,7 @@ def registres():
     reg_agents = lire_json(REGISTRE_AGENTS)
     for agent in reg_agents["agents"]:
         if not agent.get("deterministe"):
-            agent["competences"] = avec_competences_communes(agent["competences"], ecrit_des_fichiers(agent["outils"]))
+            agent["competences"] = avec_competences_communes(agent["competences"], agent["slug"])
     return reg_agents, lire_json(REGISTRE_ORGA)
 
 
@@ -322,6 +332,18 @@ def avec_frontmatter(entete: dict, corps: str) -> str:
 # Outils de lecture sans chemin : inutiles dans --allowedTools (lecture du cwd déjà permise) et
 # dangereux (tous les chemins autorisés).
 OUTILS_LECTURE_NUS = ("Read", "Grep", "Glob")
+# Outils d'orchestration de Claude Code sans usage pour un agent de l'usine (0 appel en 26 runs,
+# mesure du 27/10/2026) : leurs schémas faisaient 61 % de ceux relus à chaque tour.
+# Audit du 29/10/2026 : *Worktree et SendMessage jamais appelés. Cron* et RemoteTrigger restent (outils des skills
+# loop et schedule, gardés par l'opérateur).
+OUTILS_SANS_USAGE = ("Workflow", "ScheduleWakeup", "ReportFindings", "ListAgents", "EnterWorktree", "ExitWorktree",
+                     "SendMessage")
+# Outils du serveur MCP « Paperclip projects » (socle 1023), limités par le socle à l'entreprise de l'agent (route
+# /api/mcp/project-tools) : une demande à un autre service passe toujours par le bureau de liaison. Décision de l'opérateur du
+# 30/10/2026 (N3) : créer une tâche ou un projet est réservé au coordinateur (rôle ceo). Noms exacts plutôt qu'une règle de
+# serveur, pour ne pas ouvrir un futur outil sans le savoir.
+OUTILS_PROJETS_PAPERCLIP = tuple(f"mcp__Paperclip_projects__{o}" for o in (
+    "list_projects", "list_project_repositories", "create_project", "create_task", "set_task_title"))
 
 
 def arguments_outils(agent: dict, adaptateur: dict) -> list[str]:
@@ -339,14 +361,21 @@ def arguments_outils(agent: dict, adaptateur: dict) -> list[str]:
         regle = "Edit(./**)" if outil in ("Write", "Edit") else outil
         if regle not in autorises:
             autorises.append(regle)
+    autorises += [o for o in OUTILS_PROJETS_PAPERCLIP if o not in autorises
+                  and (agent.get("role") == "ceo" or not o.endswith(("__create_task", "__create_project")))]
     # Une valeur par argument (forme de la documentation Claude Code :
     # --allowedTools "Bash(git log *)" "Read"). Le prompt arrive par l'entrée
     # standard (execute.ts : stdin), donc les options variadiques ne l'absorbent pas.
     return (
-        ["--permission-mode", adaptateur["permissionMode"], "--allowedTools"]
+        # Sections propres à la machine (cwd, plateforme) déplacées dans le premier message : le prompt système
+        # devient identique d'un agent à l'autre et se partage en cache (option stable de la CLI, audit du 29/10/2026).
+        ["--exclude-dynamic-system-prompt-sections", "--permission-mode", adaptateur["permissionMode"], "--allowedTools"]
         + autorises
         + ["--disallowedTools"]
-        + outils["interdits"]
+        # Un agent à mémoire garde l'outil Write même s'il n'écrit aucun fichier de travail : sans « Edit(./**) », le
+        # mode dontAsk ne l'autorise que sur son dossier de mémoire (règles absolues des réglages locaux).
+        + [o for o in outils["interdits"] if not (o == "Write" and COMPETENCE_MEMOIRE in agent.get("competences", []))]
+        + [o for o in OUTILS_SANS_USAGE if o not in outils["interdits"]]
     )
 
 
@@ -362,15 +391,25 @@ def arguments_outils(agent: dict, adaptateur: dict) -> list[str]:
 #   marketing servie par l'API (/mcp/gateways/…), sont ajoutés d'office par l'adaptateur avec
 #   le port exact de l'instance : ils ne figurent donc pas ici (un port codé en dur ouvrirait
 #   l'API d'une instance aux agents d'une autre).
-# Hôtes : api.anthropic.com seul (code.claude.com/docs/en/network-config, relevé le 16/10/2026 :
+# Hôtes : api.anthropic.com:443 seul (code.claude.com/docs/en/network-config, relevé le 16/10/2026 :
 # requêtes du modèle, WebSearch exécuté côté Anthropic, contrôle de domaine de WebFetch). Le
 # jeton longue durée CLAUDE_CODE_OAUTH_TOKEN ne demande ni claude.ai ni platform.claude.com
-# (connexion et rafraîchissement OAuth) ; télémétrie coupée par l'environnement.
-HOTES_RESEAU_CLAUDE = ("api.anthropic.com",)
+# (connexion et rafraîchissement OAuth) ; télémétrie coupée par l'environnement. Le port fixe (É2,
+# 29/10/2026) borne le CONNECT à HTTPS : isNetworkTargetAllowed n'accepte 443 que si la règle le porte
+# (local-process-sandbox.ts:197). Pas de purge CLAUDE_CODE_SUBPROCESS_ENV_SCRUB : elle retirerait aussi
+# PAPERCLIP_API_KEY et casserait Bash dans la cage (démontré 30/10) ; le jeton OAuth est déjà hors de
+# l'environnement des sous-processus en 2.1.308, et Read(//proc/**) ferme la lecture de /proc.
+HOTES_RESEAU_CLAUDE = ("api.anthropic.com:443",)
+
+
+def env_portable(agent: dict, adaptateur: dict) -> dict:
+    # AFB-8 : surcharge par agent (cache d'une heure des coordinateurs), limitée aux variables déjà communes.
+    return {cle: {"type": "plain", "value": val}
+            for cle, val in {**adaptateur["envPortable"], **(agent.get("envPortable") or {})}.items()}
 
 
 def config_adaptateur(agent: dict, adaptateur: dict) -> dict:
-    env = {cle: {"type": "plain", "value": val} for cle, val in adaptateur["envPortable"].items()}
+    env = env_portable(agent, adaptateur)
     if adaptateur["engine"] != "cli":
         raise ErreurAtelier("le confinement filesystemScope/networkScope exige engine « cli » (ACP refusé par le socle)")
     return {
@@ -394,6 +433,8 @@ def metadata_atelier(agent: dict, reg_agents: dict) -> dict:
         "atelier": {
             "registre": reg_agents["schema"],
             "versionRegistre": reg_agents["version"],
+            # Identité stable lue par agents_par_slug : le nom affiché peut changer, pas ce slug (Gardien, audit du 29/10/2026).
+            "slug": agent["slug"],
             "titre": agent["titre"],
             "entrees": agent["entrees"],
             "sorties": agent["sorties"],
@@ -445,7 +486,9 @@ def construire_extension(reg_agents: dict, reg_orga: dict) -> dict:
             "role": agent["role"],
             "capabilities": agent["mission"],
             "adapter": {"type": adaptateur["type"], "config": config_adaptateur(agent, adaptateur)},
-            "runtime": {"heartbeat": {"maxConcurrentRuns": adaptateur["maxConcurrentRuns"]}},
+            # Plafond par jour (heartbeat.maxDailyRuns du socle) : seul garde-fou qui agit avec l'abonnement, les budgets y valant 0.
+            "runtime": {"heartbeat": {"maxConcurrentRuns": adaptateur["maxConcurrentRuns"],
+                                      "maxDailyRuns": adaptateur["maxRunsParJour"], **rotation_session(agent)}},
             "budgetMonthlyCents": agent["budgetMensuelCentimes"],
             "metadata": metadata_atelier(agent, reg_agents),
             "inputs": {"env": inputs},
@@ -508,16 +551,44 @@ def construire_verrou() -> dict:
     }
 
 
-def consignes_communes(marketing: bool) -> str:
+def section_pieges_valides() -> str:
+    """Section « Pièges constatés » (APP-4), vide si aucun piège n'est validé. Texte injecté dans TOUTES les consignes :
+    format fermé, champs obligatoires, une ligne bornée par piège ; une entrée invalide arrête la génération."""
+    pieges = lire_json(PIEGES_VALIDES) if PIEGES_VALIDES.exists() else []
+    if not isinstance(pieges, list) or len(pieges) > 30:
+        raise ErreurAtelier(f"{PIEGES_VALIDES.name} : liste de 30 pièges au plus attendue")
+    lignes = []
+    for i, p in enumerate(pieges):
+        valide = (isinstance(p, dict) and set(p) == {"signature", "regle", "valide_le"}
+                  and all(isinstance(v, str) and v.strip() and "\n" not in v for v in p.values())
+                  and len(p["signature"]) <= 200 and "`" not in p["signature"] and len(p["regle"]) <= 400
+                  and re.fullmatch(r"\d{4}-\d{2}-\d{2}", p["valide_le"]))
+        if not valide:
+            raise ErreurAtelier(f"{PIEGES_VALIDES.name} : piège {i + 1} invalide (signature de 200 caractères au plus sans "
+                                "accent grave, regle de 400 au plus, valide_le AAAA-MM-JJ, une ligne chacun, aucun autre champ)")
+        lignes.append(f"- {p['regle']} (erreur répétée `{p['signature']}`, validée le {p['valide_le']})")
+    if not lignes:
+        return ""
+    return ("\n## Pièges constatés\n\nErreurs répétées relevées dans les runs de l'usine, avec la règle validée par l'humain "
+            "qui les évite :\n\n" + "\n".join(lignes) + "\n")
+
+
+def consignes_communes(marketing: bool, depot_signe: bool = True, memoire: bool = True) -> str:
     """Consignes communes d'un agent : le tronc commun, plus le complément marketing si l'agent est du marketing.
     Pour un autre service, les emplacements « [[marketing:nom]] » disparaissent (ou prennent leur texte de repli
-    « [[marketing:nom|repli]] ») ; pour le marketing, la section « hors-marketing » (échanges entre services) disparaît."""
+    « [[marketing:nom|repli]] ») ; pour le marketing, la section « hors-marketing » (échanges entre services) disparaît.
+    Un rôle sans mémoire (ROLES_SANS_MEMOIRE) reçoit le bloc « sans-memoire » au lieu du bloc « memoire » (AFA-P3-11)."""
     texte = CONSIGNES_COMMUNES.read_text(encoding="utf-8")
+    garde, retire = ("memoire", "sans-memoire") if memoire else ("sans-memoire", "memoire")
+    texte = re.sub(rf"(?s)<!-- {retire}:début -->\n.*?<!-- {retire}:fin -->\n", "", texte)
+    texte = re.sub(rf"<!-- {garde}:(?:début|fin) -->\n", "", texte)
     blocs: dict[str, str] = {}
     if marketing:
         morceaux = re.split(r"(?m)^<!-- bloc : ([a-z-]+) -->\n", CONSIGNES_MARKETING.read_text(encoding="utf-8"))
         blocs = {morceaux[i]: morceaux[i + 1].rstrip("\n") for i in range(1, len(morceaux) - 1, 2)}
         texte = re.sub(r"(?s)<!-- hors-marketing:début -->\n.*?<!-- hors-marketing:fin -->\n\n?", "", texte)
+        if not depot_signe:  # MK-20e : un rôle sans connexion n'a aucune réponse signée à déposer
+            blocs["depot-connexion"] = ""
     else:
         texte = re.sub(r"<!-- hors-marketing:(?:début|fin) -->\n", "", texte)
     emplacements = set(re.findall(r"\[\[marketing:([a-z-]+)", texte))
@@ -525,11 +596,11 @@ def consignes_communes(marketing: bool) -> str:
         raise ErreurAtelier(f"consignes marketing : blocs {sorted(blocs)} différents des emplacements du tronc {sorted(emplacements)}")
     # Emplacement seul sur sa ligne (suivi d'une ligne vide) : bloc entier, ligne vide comprise.
     texte = re.sub(r"(?m)^\[\[marketing:([a-z-]+)\]\]\n\n",
-                   lambda m: blocs[m.group(1)] + "\n\n" if marketing else "", texte)
+                   lambda m: blocs[m.group(1)] + "\n\n" if marketing and blocs[m.group(1)] else "", texte)
     # Emplacement dans une phrase : bloc, ou texte de repli.
     texte = re.sub(r"\[\[marketing:([a-z-]+)(?:\|([^\]]*))?\]\]",
                    lambda m: blocs[m.group(1)] if marketing else (m.group(2) or ""), texte)
-    return texte.strip("\n") + "\n"
+    return texte.strip("\n") + "\n" + section_pieges_valides()
 
 
 def fichiers_generes(reg_agents: dict, reg_orga: dict) -> dict[Path, str]:
@@ -552,7 +623,6 @@ def fichiers_generes(reg_agents: dict, reg_orga: dict) -> dict[Path, str]:
         corps,
     )
 
-    communes_marketing = consignes_communes(True)
     for agent in reg_agents["agents"]:
         chemin = ORGA / "agents" / agent["slug"] / "AGENTS.md"
         if not chemin.exists():
@@ -561,7 +631,7 @@ def fichiers_generes(reg_agents: dict, reg_orga: dict) -> dict[Path, str]:
         corps = corps.split(MARQUEUR_CONSIGNES_COMMUNES)[0].rstrip("\n") + "\n"
         if not agent.get("deterministe"):
             corps_role = corps
-            corps += "\n" + MARQUEUR_CONSIGNES_COMMUNES + "\n\n" + communes_marketing
+            corps += "\n" + MARQUEUR_CONSIGNES_COMMUNES + "\n\n" + consignes_communes(True, bool(agent.get("connexions")), agent["slug"] not in ROLES_SANS_MEMOIRE)
             fiche = fiche_routes_agent(agent, corps_role)
             if fiche:
                 corps += "\n" + fiche
@@ -605,9 +675,9 @@ def sections_fiche_routes() -> list[tuple[str, str]]:
 
 
 def route_citee(chemin: str, texte: str) -> bool:
-    """Vrai si `texte` cite la route (`:param` du chemin écrit `<param>`, `<id>`… dans les consignes)."""
+    """Vrai si `texte` cite la route (`:param` du chemin écrit `<param>`, `<id>`, `:issueId`… dans les consignes)."""
     morceaux = re.split(r":[A-Za-z]+", chemin)
-    motif = "<[^>/\\s]+>".join(re.escape(m) for m in morceaux)
+    motif = "(?:<[^>/\\s]+>|:[A-Za-z]+)".join(re.escape(m) for m in morceaux)
     return re.search(motif + r"(?![\w/<-])", texte) is not None
 
 
@@ -983,12 +1053,22 @@ REFUS_CURL_ECRITURE = (
     "Bash(curl -K*)", "Bash(curl * -K*)", "Bash(curl *--config*)",
     "Bash(curl *--trace*)", "Bash(curl *--stderr*)", "Bash(curl *--libcurl*)", "Bash(curl *--etag-save*)",
     "Bash(curl *--hsts*)", "Bash(curl *--alt-svc*)", "Bash(curl *--create-dirs*)",
-    "Bash(curl *file:*)", "Bash(curl *FILE:*)",
+    # MK-20b (30/10/2026) : une URL file:/ en argument, jamais un corps qui contient « profile: ». Pas de « :* » final, que
+    # Claude Code lit comme un préfixe littéral (« curl *file:* » ne refusait rien). La casse mixte (FiLe:) n'a pas de règle :
+    # le hook la refuse (aucune URL hors de --expand-url {{PAPERCLIP_API_URL}}/).
+    "Bash(curl file:/*)", "Bash(curl * file:/*)", "Bash(curl *=file:/*)", "Bash(curl *'file:/*)", 'Bash(curl *"file:/*)',
+    "Bash(curl FILE:/*)", "Bash(curl * FILE:/*)", "Bash(curl *=FILE:/*)", "Bash(curl *'FILE:/*)", 'Bash(curl *"FILE:/*)',
+    "Bash(curl *%output*)",  # É1 (29/10/2026) : filet si le hook ne répond pas (-w %output{fichier} écrit un fichier)
 )
 # Hook de la mémoire (M4) : script et motifs recopiés dans <configuration de l'agent>/hooks/, hors du cwd de l'agent.
 # Le confinement Bubblewrap monte cette configuration en écriture (paperclip/packages/adapters/claude-local/src/server/
 # execute.ts, managedPaths : sharedClaudeConfigDir « rw ») : des refus Edit sur ces chemins absolus (et sur la
 # quarantaine) s'ajoutent donc ; l'agent n'a ni Bash hors curl ni écriture hors de son cwd (mode dontAsk).
+# H1 (revue finale du 30/10/2026) : la cage monte en lecture seule les entrées de CLAUDE_CONFIG_READ_ONLY_ENTRIES
+# (paperclip/packages/adapters/claude-local/src/server/claude-config.ts), mais son montage SAUTE un chemin absent
+# (local-process-sandbox.ts). settings.json, hooks et rules sont déjà créés plus bas ; les autres sont créées vides
+# ici pour qu'aucune ne reste inscriptible par l'agent (sinon il y planterait un hook, un agent ou un skill).
+ENTREES_CONFIG_LECTURE_SEULE = ("skills", "agents", "commands", "CLAUDE.md")
 SOURCE_HOOK_MEMOIRE = RACINE / "scripts" / "hooks" / "garde-memoire.mjs"
 SOURCE_MOTIFS_INJECTION = PLUGIN / "src" / "serveur" / "motifs-injection.json"
 NOEUD_HOOK = "/usr/bin/node"  # sous /usr, monté en lecture dans le confinement (local-process-sandbox.ts)
@@ -999,11 +1079,17 @@ def chemins_hook(config: Path) -> tuple[Path, Path]:
     return config / "hooks" / "garde-memoire.mjs", config / "hooks" / "motifs-injection.json"
 
 
-def hooks_agent(config: Path, espace: Path, memoire: bool) -> dict:
-    """Section « hooks » du settings.json : contrôle de curl pour tout agent, contrôle de ./memoire/ après chaque
+def dossier_memoire(company_id: str, slug: str) -> Path:
+    """Mémoire (memoire-para) d'un agent : dans SON CLAUDE_CONFIG_DIR, que le socle monte toujours en écriture."""
+    return dossiers_agent(company_id, slug)[1] / "memoire"
+
+
+def hooks_agent(config: Path, memoire: bool) -> dict:
+    """Section « hooks » du settings.json : contrôle de curl pour tout agent, contrôle de <config>/memoire après chaque
     écriture pour un agent qui porte memoire-para."""
     script, motifs = chemins_hook(config)
-    commande = " ".join(shlex.quote(str(x)) for x in (NOEUD_HOOK, script, espace / "memoire", motifs))
+    # Revue 2, B-3 : la garde ne rend que 0 ou 2 ; un échec de lancement (script absent, node introuvable) refuse aussi.
+    commande = " ".join(shlex.quote(str(x)) for x in (NOEUD_HOOK, script, config / "memoire", motifs)) + " || exit 2"
     hooks = {"PreToolUse": [{"matcher": "Bash", "hooks": [{"type": "command", "command": commande, "timeout": 10}]}]}
     if memoire:
         hooks["PostToolUse"] = [{"matcher": OUTILS_HOOK_MEMOIRE, "hooks": [{"type": "command", "command": commande, "timeout": 20}]}]
@@ -1036,13 +1122,19 @@ def reglages_agent(reg_agents: dict, config: Path, agent: dict | None = None, es
     # M4 : hook et réglages de chaque agent, et quarantaine de la mémoire, jamais modifiables par un agent (mêmes
     # règles pour toutes les entreprises : motifs sur les racines des configurations et des espaces).
     refus.extend([
-        f"Edit(/{CONFIGS_CLAUDE}/**/hooks/**)", f"Edit(/{CONFIGS_CLAUDE}/**/settings.json)",
-        f"Read(/{ESPACES}/**/memoire/{QUARANTAINE_MEMOIRE}/**)", f"Edit(/{ESPACES}/**/memoire/{QUARANTAINE_MEMOIRE}/**)",
+        f"Edit(/{CONFIGS_CLAUDE}/**/hooks/**)", f"Edit(/{CONFIGS_CLAUDE}/**/settings.json)", f"Edit(/{CONFIGS_CLAUDE}/**/rules/**)",
+        f"Read(/{CONFIGS_CLAUDE}/**/memoire/{QUARANTAINE_MEMOIRE}/**)", f"Edit(/{CONFIGS_CLAUDE}/**/memoire/{QUARANTAINE_MEMOIRE}/**)",
     ])
     permissions["deny"] = refus
     permissions["allow"] = [f"Read(/{config}/projects/**)"]
     if agent is not None and espace is not None:
-        reglages["hooks"] = hooks_agent(config, espace, COMPETENCE_MEMOIRE in agent.get("competences", []))
+        memoire = COMPETENCE_MEMOIRE in agent.get("competences", [])
+        if memoire:
+            permissions["allow"] += [f"Read(/{config}/memoire/**)", f"Edit(/{config}/memoire/**)"]
+        outils = set(agent.get("outils", {}).get("recherche", [])) | set(agent.get("outils", {}).get("mutation", []))
+        if OUTILS_CLIENT_FABRIQUE["voir"] in outils:
+            permissions["allow"].append(f"Read(/{config}/{DOSSIER_RENDUS}/**)")
+        reglages["hooks"] = hooks_agent(config, memoire)
     return reglages
 
 
@@ -1068,6 +1160,53 @@ def installer_hook(config: Path) -> int:
     return ecrits
 
 
+def creer_entrees_lecture_seule(config: Path) -> int:
+    """H1 : crée vides les entrées de configuration que la cage monte en lecture seule, pour qu'aucune ne reste
+    inscriptible par l'agent (un chemin absent n'est pas monté). Un lien ou un type inattendu est remplacé. Rend le
+    nombre d'éléments créés."""
+    crees = 0
+    for nom in ENTREES_CONFIG_LECTURE_SEULE:
+        cible = config / nom
+        dossier = not nom.endswith(".md")
+        if cible.is_symlink() or (cible.exists() and cible.is_dir() != dossier):
+            cible.unlink() if cible.is_symlink() or not cible.is_dir() else shutil.rmtree(cible)
+        if dossier:
+            if not cible.exists():
+                cible.mkdir(parents=True)
+                crees += 1
+            os.chmod(cible, 0o500)
+        else:
+            if not cible.exists():
+                cible.write_text("", encoding="utf-8")
+                crees += 1
+            os.chmod(cible, 0o400)
+    return crees
+
+
+def preparer_memoire(config: Path) -> int:
+    """Crée <config>/memoire et annonce son chemin absolu à l'agent par <config>/rules/memoire.md : Claude Code charge
+    les règles du CLAUDE_CONFIG_DIR comme consignes de l'utilisateur, malgré claudeMdExcludes (vérifié le 29/10/2026 par
+    capture locale de la requête, Claude Code 2.1.308 ; un <config>/CLAUDE.md, lui, est exclu). Fichier propre à la
+    machine, jamais dans le dépôt. Rend le nombre de fichiers écrits."""
+    memoire, regles = config / "memoire", config / "rules"
+    for d in (memoire, regles):
+        if d.is_symlink():
+            d.unlink()
+        d.mkdir(exist_ok=True)
+        os.chmod(d, 0o700)
+    texte = (f"# Ta mémoire\n\nTa mémoire persistante (compétence `memoire-para`) est le dossier `{memoire}` : il "
+             "n'appartient qu'à toi et reste le même quel que soit ton répertoire de travail. Au début de chaque exécution, "
+             f"relis `{memoire}/MEMORY.md` s'il existe ; en fin d'exécution, notes-y les faits durables. Tous les chemins de "
+             "la compétence `memoire-para` partent de ce dossier.\n")
+    cible = regles / "memoire.md"
+    if cible.is_symlink():
+        cible.unlink()
+    if ecrire_si_change(cible, texte):
+        os.chmod(cible, 0o600)
+        return 1
+    return 0
+
+
 def preparer_dossiers_locaux(company_id: str, reg_agents: dict) -> int:
     """Crée l'espace et la configuration Claude dédiée de chaque agent de l'entreprise « company_id ».
 
@@ -1088,22 +1227,35 @@ def preparer_dossiers_locaux(company_id: str, reg_agents: dict) -> int:
             print(f"  Attention migration : {avertissement}")
         reglages = json.dumps(reglages_agent(reg_agents, config, agent, espace), ensure_ascii=False, indent=2) + "\n"
         ecrits += installer_hook(config)
+        regles = config / "rules"  # présent pour tout agent : le socle monte hooks/ et rules/ en lecture seule
+        if regles.is_symlink():
+            regles.unlink()
+        regles.mkdir(exist_ok=True)
+        os.chmod(regles, 0o700)
+        ecrits += creer_entrees_lecture_seule(config)
+        if COMPETENCE_MEMOIRE in agent["competences"]:
+            ecrits += preparer_memoire(config)
         if ecrire_si_change(config / "settings.json", reglages):
             os.chmod(config / "settings.json", 0o600)
             ecrits += 1
     return ecrits
 
 
-def env_voulu(company_id: str, reg_agents: dict, slug: str, jeton_id: str | None) -> dict:
+def env_voulu(company_id: str, reg_agents: dict, slug: str, jeton_id: str | None, cle_id: str | None = None) -> dict:
     _, config = dossiers_agent(company_id, slug)
-    env = {cle: {"type": "plain", "value": val} for cle, val in reg_agents["adaptateur"]["envPortable"].items()}
+    agent = next((a for a in reg_agents["agents"] if a["slug"] == slug), {})
+    env = env_portable(agent, reg_agents["adaptateur"])
     env["CLAUDE_CONFIG_DIR"] = {"type": "plain", "value": str(config)}
     if jeton_id:
         env[VARIABLE_JETON] = {"type": "secret_ref", "secretId": jeton_id, "version": "latest"}
+    if cle_id:
+        env[VARIABLE_CLE_API] = {"type": "secret_ref", "secretId": cle_id, "version": "latest"}
+        env[VARIABLE_MODE_CLE] = {"type": "plain", "value": VALEUR_MODE_CLE}
     return env
 
 
-def liaison_voulue(company_id: str, reg_agents: dict, slug: str, jeton_id: str | None, mode: str) -> dict:
+def liaison_voulue(company_id: str, reg_agents: dict, slug: str, jeton_id: str | None, mode: str,
+                   cle_id: str | None = None) -> dict:
     """Configuration propre à la machine, jamais écrite dans le paquet.
 
     Adaptateur claude_local du paquet + cwd et CLAUDE_CONFIG_DIR dédiés (+ jeton) ; agents déterministes :
@@ -1117,13 +1269,13 @@ def liaison_voulue(company_id: str, reg_agents: dict, slug: str, jeton_id: str |
     return {
         "adapterType": reg_agents["adaptateur"]["type"],
         "cwd": str(espace),
-        "config": {"cwd": str(espace), "env": env_voulu(company_id, reg_agents, slug, jeton_id)},
+        "config": {"cwd": str(espace), "env": env_voulu(company_id, reg_agents, slug, jeton_id, cle_id)},
     }
 
 
-def secret_jeton(api: Api, company_id: str):
+def secret_jeton(api: Api, company_id: str, cle: str = CLE_SECRET_JETON):
     for s in api.get(f"/companies/{company_id}/secrets"):
-        if s.get("key") == CLE_SECRET_JETON:
+        if s.get("key") == cle:
             return s
     return None
 
@@ -1203,13 +1355,18 @@ def slug_canonique(slug: str) -> str:
 
 
 def agents_par_slug(api: Api, company_id: str) -> dict[str, dict]:
-    """Agents non résiliés indexés par le slug du dépôt qui correspond à leur nom (voir slug_canonique)."""
-    sortie = {}
+    """Agents non résiliés indexés par leur slug : celui enregistré à l'import (metadata.atelier.slug), sinon celui qui
+    correspond à leur nom (voir slug_canonique) tant que l'agent n'a pas été réimporté. Le slug enregistré l'emporte."""
+    par_nom, enregistres = {}, {}
     for a in api.get(f"/companies/{company_id}/agents"):
         if a.get("status") == "terminated":
             continue
-        sortie[slug_canonique(slug_depuis_nom(a["name"]))] = a
-    return sortie
+        slug = ((a.get("metadata") or {}).get("atelier") or {}).get("slug")
+        if slug:
+            enregistres[slug] = a
+        else:
+            par_nom[slug_canonique(slug_depuis_nom(a["name"]))] = a
+    return {**par_nom, **enregistres}
 
 
 def renommages_agents(api: Api, company_id: str, reg_agents: dict) -> list[tuple[str, str, str, str]]:
@@ -1238,6 +1395,44 @@ def detail_agent(api: Api, agent_id: str) -> dict:
     return api.get(f"/agents/{agent_id}")
 
 
+def corps_permissions(detail: dict, **changements) -> dict:
+    """Corps de PATCH /agents/<id>/permissions : updateAgentPermissionsSchema exige canCreateAgents et canAssignTasks, et
+    la route repose le grant tasks:assign d'après canAssignTasks ; les deux gardent donc leur valeur actuelle, sauf
+    changement demandé. Le serveur fusionne le reste avec les permissions stockées (services/agents.ts updatePermissions)."""
+    grants = (detail.get("access") or {}).get("grants") or []
+    return {"canCreateAgents": bool((detail.get("permissions") or {}).get("canCreateAgents")),
+            "canAssignTasks": any(g.get("permissionKey") == "tasks:assign" for g in grants), **changements}
+
+
+def permissions_agent_a_corriger(detail: dict) -> dict | None:
+    """M3 (JB, 30/10/2026) : aucun agent ne crée de skill (une skill s'exécute hors de la cage des outils, défaut
+    canCreateSkills=true côté socle, agent-permissions.ts:74). Rend le corps du PATCH /agents/<id>/permissions si
+    canCreateSkills n'est pas déjà False, sinon None."""
+    if (detail.get("permissions") or {}).get("canCreateSkills") is False:
+        return None
+    return corps_permissions(detail, canCreateSkills=False)
+
+
+def assurer_permissions_agents(api: Api, agents: dict) -> int:
+    """Pose canCreateSkills=false sur chaque agent importé qui ne l'a pas déjà (le Gardien le porte à sa création)."""
+    modifies = 0
+    for a in agents.values():
+        corps = permissions_agent_a_corriger(detail_agent(api, a["id"]))
+        if corps is None:
+            continue
+        api.appel("PATCH", f"/agents/{a['id']}/permissions", corps)
+        modifies += 1
+    return modifies
+
+
+def rotation_session(agent: dict) -> dict:
+    """T3 (audit du 29/10/2026) : claude_local ne fait jamais tourner sa session par défaut (maxSessionRuns 0) ; un agent
+    dont le registre pose sessionsParRotation repart d'une session neuve tous les n runs (override documenté du socle,
+    adapter-utils session-compaction.ts, runtimeConfig.heartbeat.sessionCompaction)."""
+    n = agent.get("sessionsParRotation")
+    return {"sessionCompaction": {"enabled": True, "maxSessionRuns": n}} if n else {}
+
+
 def derives_configuration(company_id: str, d: dict, agent: dict, reg_agents: dict, agents: dict, mode: str) -> list[str]:
     """Champs lisibles (non masqués) de l'agent qui s'écartent du registre.
 
@@ -1261,6 +1456,10 @@ def derives_configuration(company_id: str, d: dict, agent: dict, reg_agents: dic
     heartbeat = ((d.get("runtimeConfig") or {}).get("heartbeat") or {})
     if heartbeat.get("maxConcurrentRuns") != reg_agents["adaptateur"]["maxConcurrentRuns"]:
         ecarts.append("runtimeConfig.heartbeat.maxConcurrentRuns")
+    if not agent.get("deterministe") and heartbeat.get("maxDailyRuns") != reg_agents["adaptateur"]["maxRunsParJour"]:
+        ecarts.append("runtimeConfig.heartbeat.maxDailyRuns")
+    if rotation_session(agent) and heartbeat.get("sessionCompaction") != rotation_session(agent)["sessionCompaction"]:
+        ecarts.append("runtimeConfig.heartbeat.sessionCompaction")
     cfg = d.get("adapterConfig") or {}
     voulues = {c.rsplit("/", 1)[-1] for c in (cfg.get("paperclipSkillSync") or {}).get("desiredSkills") or []}
     if voulues != set(agent["competences"]):
@@ -1269,7 +1468,8 @@ def derives_configuration(company_id: str, d: dict, agent: dict, reg_agents: dic
         attendu = attendu_ext["adapter"]["config"]
         for cle in ("engine", "model", "effort", "dangerouslySkipPermissions", "maxTurnsPerRun",
                     "timeoutSec", "graceSec", "extraArgs",
-                    "filesystemScope", "networkScope", "networkAllowlist"):
+                    "filesystemScope", "networkScope", "networkAllowlist",
+                    "filesystemExtraPaths", "filesystemSandboxCommand"):
             if cfg.get(cle) != attendu.get(cle):
                 ecarts.append(f"adapterConfig.{cle}")
     else:
@@ -1280,7 +1480,8 @@ def derives_configuration(company_id: str, d: dict, agent: dict, reg_agents: dic
     return ecarts
 
 
-def etat_a_jour(api: Api, company_id: str, reg_agents: dict, empreinte: str, jeton_id: str | None, mode: str) -> list[str]:
+def etat_a_jour(api: Api, company_id: str, reg_agents: dict, empreinte: str, jeton_id: str | None, mode: str,
+                cle_id: str | None = None) -> list[str]:
     """Liste des raisons pour lesquelles l'état n'est pas à jour (vide = à jour)."""
     raisons = []
     agents = agents_par_slug(api, company_id)
@@ -1296,7 +1497,7 @@ def etat_a_jour(api: Api, company_id: str, reg_agents: dict, empreinte: str, jet
         meta = ((d.get("metadata") or {}).get("atelier") or {}).get("bootstrap") or {}
         if meta.get("empreinte") != empreinte:
             raisons.append(f"empreinte différente : {agent['slug']}")
-        if not liaison_conforme(d, liaison_voulue(company_id, reg_agents, agent["slug"], jeton_id, mode)):
+        if not liaison_conforme(d, liaison_voulue(company_id, reg_agents, agent["slug"], jeton_id, mode, cle_id)):
             raisons.append(f"liaison locale à refaire : {agent['slug']}")
         if (d.get("adapterConfig") or {}).get("instructionsBundleMode") != "managed":
             raisons.append(f"bundle d'instructions géré non rattaché : {agent['slug']}")
@@ -1402,20 +1603,25 @@ def selection_sans_routines_existantes(api: Api, company_id: str, fichiers: dict
     return [c for c in fichiers if c not in exclus]
 
 
-def assurer_routines(api: Api, company_id: str, reg_orga: dict, agents: dict, projets: dict) -> int:
+def assurer_routines(api: Api, company_id: str, reg_orga: dict, agents: dict, projets: dict,
+                     fichiers: dict[str, str] | None = None) -> int:
     """Réconcilie les routines existantes avec le dépôt (l'import natif ne les met jamais à jour).
 
     Champs alignés : description, responsable, projet, politiques de concurrence et de
     rattrapage, déclencheur planifié (cron, fuseau). Le statut (en pause ou actif) n'est
-    jamais touché : c'est une décision humaine.
+    jamais touché : c'est une décision humaine. Les TASK.md viennent du paquet s'il est donné
+    (entreprise d'un service), sinon de organisation/projects (marketing).
     """
+    if fichiers is None:
+        taches = {p.parent.name: p.read_text(encoding="utf-8") for p in (ORGA / "projects").rglob("TASK.md")}
+    else:
+        taches = {Path(c).parent.name: texte for c, texte in fichiers.items() if c.endswith("/TASK.md")}
     par_titre = {r.get("title"): r for r in routines_existantes(api, company_id)}
     ecritures = 0
     for routine in reg_orga["routines"]:
-        tache = next((p for p in (ORGA / "projects").rglob("TASK.md") if p.parent.name == routine["slug"]), None)
-        if tache is None:
+        if routine["slug"] not in taches:
             raise ErreurAtelier(f"TASK.md introuvable pour la routine {routine['slug']}")
-        entete, corps = entete_simple(tache.read_text(encoding="utf-8"))
+        entete, corps = entete_simple(taches[routine["slug"]])
         r = par_titre.get(entete.get("name"))
         if r is None:
             raise ErreurAtelier(f"routine absente après import : {entete.get('name')}")
@@ -1595,7 +1801,7 @@ CLES_CONSERVEES =("paperclipSkillSync", "instructionsFilePath", "instructionsRoo
                    "instructionsEntryFile", "instructionsBundleMode")
 
 
-def lier_agents(api, company_id, reg_agents, empreinte, jeton_id, mode="reel") -> int:
+def lier_agents(api, company_id, reg_agents, empreinte, jeton_id, mode="reel", cle_id=None) -> int:
     agents = agents_par_slug(api, company_id)
     horodatage = dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     modifies = 0
@@ -1604,7 +1810,7 @@ def lier_agents(api, company_id, reg_agents, empreinte, jeton_id, mode="reel") -
         if a is None:
             raise ErreurAtelier(f"agent absent après import : {agent['slug']}")
         d = detail_agent(api, a["id"])
-        liaison = liaison_voulue(company_id, reg_agents, agent["slug"], jeton_id, mode)
+        liaison = liaison_voulue(company_id, reg_agents, agent["slug"], jeton_id, mode, cle_id)
         meta = d.get("metadata") or {}
         atelier = dict(meta.get("atelier") or {})
         deja = (atelier.get("bootstrap") or {}).get("empreinte") == empreinte
@@ -1633,6 +1839,16 @@ def lier_agents(api, company_id, reg_agents, empreinte, jeton_id, mode="reel") -
     return modifies
 
 
+DONNEE_MANQUANTE = "donnée manquante"
+# APP-7 : l'objectif natif n'a ni cible, ni échéance, ni point de départ (validators/goal.ts) : ils vont en tête de sa description.
+RE_TETE_OBJECTIF = re.compile(r"^Cible : (.*?) · Échéance : (.*?) · Point de départ : (.*?) · Mesure : (.*)$", re.S)
+
+
+def description_objectif(obj: dict) -> str:
+    champs = [obj.get(k) or DONNEE_MANQUANTE for k in ("cible", "echeance", "pointDeDepart")]
+    return "Cible : {} · Échéance : {} · Point de départ : {} · Mesure : ".format(*champs) + obj["description"]
+
+
 def assurer_objectifs(api, company_id, reg_orga, agents) -> tuple[dict[str, str], int]:
     existants = api.get(f"/companies/{company_id}/goals")
     ids, ecritures = {}, 0
@@ -1640,7 +1856,7 @@ def assurer_objectifs(api, company_id, reg_orga, agents) -> tuple[dict[str, str]
         titre = f"{obj['cle']} · {obj['titre']}"
         voulu = {
             "title": titre,
-            "description": obj["description"],
+            "description": description_objectif(obj),
             "level": obj["niveau"],
             "status": obj["statut"],
             "ownerAgentId": (agents.get(obj["responsable"]) or {}).get("id"),
@@ -1944,7 +2160,7 @@ def assurer_gardien(api: Api, company_id: str) -> tuple[int, str]:
         })
         ecritures += 1
         if any(e.startswith("permissions") for e in ecarts):
-            api.appel("PATCH", f"/agents/{existant['id']}/permissions", voulu["permissions"])
+            api.appel("PATCH", f"/agents/{existant['id']}/permissions", corps_permissions(d, **voulu["permissions"]))
             ecritures += 1
     etat = d.get("status") or "inconnu"
     if etat == "paused":
@@ -1993,8 +2209,13 @@ def _assurer_connexions(args) -> int:
         return 0
     agents = agents_par_slug(api, entreprise["id"])
     manquants = [a["slug"] for a in reg_agents["agents"] if a["slug"] not in agents]
+    if len(manquants) == len(reg_agents["agents"]):
+        print("assurer-connexions : aucun agent du registre présent (lancer « appliquer » d'abord).", file=sys.stderr)
+        return 1
     if manquants:
-        raise ErreurAtelier("agents du registre absents (lancer « appliquer » d'abord) : " + ", ".join(manquants))
+        # Un absent ne bloque plus tout le passage : il ne reçoit rien (refus par défaut), les présents sont servis.
+        print("assurer-connexions : agents absents, connexions réservées aux seuls agents présents : "
+              + ", ".join(manquants), file=sys.stderr)
     ecritures, resume = assurer_connexions(api, entreprise["id"], reg_agents, agents)
     try:
         ecr_fabrique = assurer_fabrique(api, entreprise["id"], reg_agents, agents)
@@ -2079,11 +2300,13 @@ def appliquer_organisation(api: Api, reg_agents: dict, reg_orga: dict, fichiers:
     reglages_ecrits = preparer_dossiers_locaux(company_id, reg_agents)
     secret = secret_jeton(api, company_id)
     jeton_id = secret["id"] if secret else None
+    cle_secret = secret_jeton(api, company_id, CLE_SECRET_CLE_API)
+    cle_id = cle_secret["id"] if cle_secret else None
 
     instructions_sync = 0
     if import_fait is None:
         instructions_sync = synchroniser_instructions(api, company_id, reg_agents)
-        raisons = etat_a_jour(api, company_id, reg_agents, empreinte, jeton_id, mode)
+        raisons = etat_a_jour(api, company_id, reg_agents, empreinte, jeton_id, mode, cle_id)
         if raisons:
             print("Mise à jour en place (import natif, stratégie replace) :")
             for r in raisons:
@@ -2101,8 +2324,11 @@ def appliquer_organisation(api: Api, reg_agents: dict, reg_orga: dict, fichiers:
         if echecs:
             raise ErreurAtelier("l'import a laissé des échecs : " + " | ".join(echecs))
 
-    liaisons = lier_agents(api, company_id, reg_agents, empreinte, jeton_id, mode)
+    liaisons = lier_agents(api, company_id, reg_agents, empreinte, jeton_id, mode, cle_id)
     agents = agents_par_slug(api, company_id)
+    ecr_permissions = assurer_permissions_agents(api, agents)
+    if ecr_permissions:
+        print(f"Permissions : canCreateSkills=false posé sur {ecr_permissions} agent(s) (M3).")
     try:
         if assurer_roles_agents(api, company_id, agents):
             print("Rôles des agents Mesure et Stratège inscrits dans la configuration du plugin (rolesAgents).")
@@ -2115,6 +2341,7 @@ def appliquer_organisation(api: Api, reg_agents: dict, reg_orga: dict, fichiers:
             print(f"Fabrique : {ecr_fabrique} écriture(s) (agents autorisés du plugin, politiques « block » des agents non retenus).")
     except ErreurAtelier as e:
         print(f"  avertissement : fabrique non configurée ({e}) ; relancer après mise à jour du plugin.")
+    assurer_gouvernance(api, company_id, reg_agents, agents)
     objectifs, ecr_obj = assurer_objectifs(api, company_id, reg_orga, agents)
     projets, ecr_proj = assurer_liens_projets(api, company_id, reg_orga, objectifs)
     ecr_routines = assurer_routines(api, company_id, reg_orga, agents, projets)
@@ -2508,7 +2735,7 @@ def cmd_exporter(args) -> int:
     # Données du plugin (seulement avec --entreprise : l'export de l'organisation modèle n'en a pas besoin).
     donnees_plugin = exporter_donnees_plugin(api, e["id"]) if args.entreprise else {}
     donnees_socle, comptes_socle = exporter_donnees_socle(args.pg_port, e["id"]) if args.entreprise else ({}, {})
-    # Mémoire des agents (memoire-para, ./memoire/ de chaque espace) : portabilité du client (M3).
+    # Mémoire des agents (memoire-para, <CLAUDE_CONFIG_DIR de chaque agent>/memoire) : portabilité du client (M3).
     memoires = memoires_pour_export(e["id"]) if args.entreprise else {}
     sortie.mkdir(parents=True, exist_ok=True)
     ecrits: dict[str, bytes] = {}
@@ -2601,25 +2828,27 @@ def _reinitialiser(args) -> int:
     return 0
 
 
-def lire_jeton() -> str:
+def lire_jeton(invite: str = "Jeton (non affiché) : ") -> str:
     """Lit le jeton UNE fois (entrée standard non interactive, sinon saisie masquée) : jamais affiché ni écrit."""
-    valeur = sys.stdin.readline().strip() if not sys.stdin.isatty() else getpass.getpass("Jeton (non affiché) : ").strip()
+    valeur = sys.stdin.readline().strip() if not sys.stdin.isatty() else getpass.getpass(invite).strip()
     if not valeur:
         raise ErreurAtelier("jeton vide")
     return valeur
 
 
-def ranger_secret_jeton(api: Api, cid: str, valeur: str) -> tuple[str, bool]:
-    """Crée le secret du jeton dans l'entreprise, ou le renouvelle s'il existe. Rend (identifiant, renouvelé)."""
-    existant = secret_jeton(api, cid)
+def ranger_secret_jeton(api: Api, cid: str, valeur: str, cle: str = CLE_SECRET_JETON,
+                        nom: str = "Jeton Claude Code (claude setup-token)",
+                        description: str = "Jeton OAuth longue durée de l'abonnement de l'opérateur. Usage personnel uniquement.") -> tuple[str, bool]:
+    """Crée le secret (jeton par défaut, ou clé d'API) dans l'entreprise, ou le renouvelle s'il existe. Rend (identifiant, renouvelé)."""
+    existant = secret_jeton(api, cid, cle)
     if existant:
         api.appel("POST", f"/secrets/{existant['id']}/rotate", {"value": valeur})
         return existant["id"], True
     s = api.appel("POST", f"/companies/{cid}/secrets", {
-        "name": "Jeton Claude Code (claude setup-token)",
-        "key": CLE_SECRET_JETON,
+        "name": nom,
+        "key": cle,
         "value": valeur,
-        "description": "Jeton OAuth longue durée de l'abonnement de l'opérateur. Usage personnel uniquement.",
+        "description": description,
     })
     return s["id"], False
 
@@ -2638,9 +2867,43 @@ def lier_jeton_agents_locaux(api: Api, cid: str, secret_id: str) -> int:
         config = dict(d.get("adapterConfig") or {})
         env = dict(config.get("env") or {})
         ref = {"type": "secret_ref", "secretId": secret_id, "version": "latest"}
-        if env.get(VARIABLE_JETON) == ref:
+        actuel = env.get(VARIABLE_JETON)
+        # Le serveur enrichit la référence (projectionClass...) : on ne compare que type, secretId et version.
+        if isinstance(actuel, dict) and all(actuel.get(k) == v for k, v in ref.items()):
             continue
         env[VARIABLE_JETON] = ref
+        config["env"] = env
+        api.appel("PATCH", f"/agents/{a['id']}", {"adapterConfig": config})
+        modifies += 1
+    return modifies
+
+
+def lier_cle_api_agents_locaux(api: Api, cid: str, secret_id: str | None) -> int:
+    """Pose (ou, avec secret_id None, retire) les deux variables de la clé d'API sur les agents claude_local non résiliés, sans
+    toucher au reste de leur adapterConfig ni à leur état (ni pause ni reprise). Rend le nombre d'agents modifiés."""
+    modifies = 0
+    for a in api.get(f"/companies/{cid}/agents"):
+        if a.get("status") == "terminated":
+            continue
+        d = detail_agent(api, a["id"])
+        if d.get("adapterType") != "claude_local":
+            continue
+        config = dict(d.get("adapterConfig") or {})
+        env = dict(config.get("env") or {})
+        if secret_id is None:
+            if VARIABLE_CLE_API not in env and VARIABLE_MODE_CLE not in env:
+                continue
+            env.pop(VARIABLE_CLE_API, None)
+            env.pop(VARIABLE_MODE_CLE, None)
+        else:
+            ref = {"type": "secret_ref", "secretId": secret_id, "version": "latest"}
+            actuel, mode = env.get(VARIABLE_CLE_API), env.get(VARIABLE_MODE_CLE)
+            # Le serveur enrichit la référence et masque les valeurs « plain » : on ne compare que type, secretId et version.
+            if (isinstance(actuel, dict) and all(actuel.get(k) == v for k, v in ref.items())
+                    and isinstance(mode, dict) and mode.get("type") == "plain"):
+                continue
+            env[VARIABLE_CLE_API] = ref
+            env[VARIABLE_MODE_CLE] = {"type": "plain", "value": VALEUR_MODE_CLE}
         config["env"] = env
         api.appel("PATCH", f"/agents/{a['id']}", {"adapterConfig": config})
         modifies += 1
@@ -2651,10 +2914,15 @@ def cmd_jeton_client(args) -> int:
     registre = lire_registre_client(args.client)
     if registre is None:
         raise ErreurAtelier(f"aucun registre local pour le client {args.client} ({dossier_client(args.client) / FICHIER_REGISTRE_CLIENT}).")
+    service_voulu = getattr(args, "service", None)
+    if service_voulu and service_voulu not in registre["entreprises"]:
+        raise ErreurAtelier(f"service « {service_voulu} » absent du registre du client {args.client} ; services connus : {', '.join(sorted(registre['entreprises']))}.")
     api = Api(url_api())
     valeur = lire_jeton()
     entreprises, agents = 0, 0
     for service, e in sorted(registre["entreprises"].items()):
+        if service_voulu and service != service_voulu:
+            continue
         secret_id, renouvele = ranger_secret_jeton(api, e["entrepriseId"], valeur)
         entreprises += 1
         n = lier_jeton_agents_locaux(api, e["entrepriseId"], secret_id)
@@ -2670,6 +2938,8 @@ def cmd_jeton(args) -> int:
         raise ErreurAtelier("ajoutez --confirmer : le jeton sera rangé comme secret et lié aux agents")
     if getattr(args, "client", None):
         return cmd_jeton_client(args)
+    if getattr(args, "service", None):
+        raise ErreurAtelier("--service s'utilise seulement avec --client")
     reg_agents, reg_orga = registres()
     api = Api(url_api())
     e = trouver_entreprise(api, reg_orga)
@@ -2683,8 +2953,59 @@ def cmd_jeton(args) -> int:
     etat = lire_json(ETAT_LOCAL / "etat-bootstrap.json") if (ETAT_LOCAL / "etat-bootstrap.json").exists() else {}
     mode = "reel"
     empreinte = etat.get("empreintePaquet") or ""
-    n = lier_agents(api, cid, reg_agents, empreinte, secret_id, mode)
+    cle_secret = secret_jeton(api, cid, CLE_SECRET_CLE_API)
+    n = lier_agents(api, cid, reg_agents, empreinte, secret_id, mode, cle_secret["id"] if cle_secret else None)
     print(f"Secret lié à {n} agent(s) par référence (secret_ref). Les agents restent en pause.")
+    return 0
+
+
+def cmd_cle_api(args) -> int:
+    """Range la clé d'API (crédits inclus de l'abonnement) comme secret et la lie aux agents claude_local, ou la retire.
+    La clé est lue sur l'entrée standard, jamais affichée ni écrite : seul le corps du POST /secrets la porte."""
+    if not args.confirmer:
+        raise ErreurAtelier("ajoutez --confirmer : la clé sera rangée comme secret et liée aux agents (ou retirée avec --retirer)")
+    client, service_voulu = getattr(args, "client", None), getattr(args, "service", None)
+    retirer = getattr(args, "retirer", False)
+    if service_voulu and not client:
+        raise ErreurAtelier("--service s'utilise seulement avec --client")
+    if getattr(args, "supprimer_secret", False) and not retirer:
+        raise ErreurAtelier("--supprimer-secret s'utilise seulement avec --retirer")
+    if client:
+        registre = lire_registre_client(client)
+        if registre is None:
+            raise ErreurAtelier(f"aucun registre local pour le client {client} ({dossier_client(client) / FICHIER_REGISTRE_CLIENT}).")
+        if service_voulu and service_voulu not in registre["entreprises"]:
+            raise ErreurAtelier(f"service « {service_voulu} » absent du registre du client {client} ; services connus : {', '.join(sorted(registre['entreprises']))}.")
+        cibles = [(sv, e["entrepriseId"]) for sv, e in sorted(registre["entreprises"].items()) if not service_voulu or sv == service_voulu]
+        api = Api(url_api())
+    else:
+        _, reg_orga = registres()
+        api = Api(url_api())
+        e = trouver_entreprise(api, reg_orga)
+        if not e:
+            raise ErreurAtelier("lancez d'abord « appliquer »")
+        cibles = [("organisation", e["id"])]
+    valeur = None if retirer else lire_jeton("Clé d'API (non affichée) : ")
+    agents = 0
+    for service, cid in cibles:
+        if retirer:
+            n = lier_cle_api_agents_locaux(api, cid, None)
+            suite = ""
+            if getattr(args, "supprimer_secret", False):
+                secret = secret_jeton(api, cid, CLE_SECRET_CLE_API)
+                if secret:
+                    api.appel("DELETE", f"/secrets/{secret['id']}", attendu=(200, 204))
+                    suite = " Secret supprimé."
+            print(f"  [{service}] clé retirée de {n} agent(s).{suite}")
+        else:
+            secret_id, renouvele = ranger_secret_jeton(
+                api, cid, valeur, cle=CLE_SECRET_CLE_API, nom="Clé d'API Claude (crédits inclus de l'abonnement)",
+                description="Clé de l'organisation Console liée à l'abonnement de l'opérateur ; crédits API mensuels inclus.")
+            n = lier_cle_api_agents_locaux(api, cid, secret_id)
+            print(f"  [{service}] secret {'renouvelé' if renouvele else 'créé'}, lié à {n} agent(s).")
+        agents += n
+    del valeur
+    print(f"Clé {'retirée' if retirer else 'rangée'} dans {len(cibles)} entreprise(s), {agents} agent(s) modifié(s). Les agents restent dans leur état.")
     return 0
 
 
@@ -2973,19 +3294,89 @@ def roles_agents_voulus(agents: dict[str, dict]) -> dict[str, str]:
 OUTILS_FABRIQUE_PASSERELLE = {
     "document": f"{PLUGIN_CLE}:fabriquer_document",
     "video": f"{PLUGIN_CLE}:fabriquer_video",
+    "image": f"{PLUGIN_CLE}:fabriquer_image",
     "etat": f"{PLUGIN_CLE}:etat_fabrication",
+    "voir": f"{PLUGIN_CLE}:voir_rendu",
 }
 PREFIXE_CLIENT_FABRIQUE = "mcp__paperclip-assigned__atelier_marketing-ia_"
 OUTILS_CLIENT_FABRIQUE = {
     "document": PREFIXE_CLIENT_FABRIQUE + "fabriquer_document",
     "video": PREFIXE_CLIENT_FABRIQUE + "fabriquer_video",
+    "image": PREFIXE_CLIENT_FABRIQUE + "fabriquer_image",
     "etat": PREFIXE_CLIENT_FABRIQUE + "etat_fabrication",
+    "voir": PREFIXE_CLIENT_FABRIQUE + "voir_rendu",
 }
+# voir_rendu (lot 3 qualité des visuels, 30/10/2026) : le relecteur désigné voit le rendu d'une image ou d'une vidéo.
+# Le plugin y copie le PNG de revue dans <CLAUDE_CONFIG_DIR de l'agent>/rendus, que le socle monte toujours en écriture
+# (managedPaths, execute.ts) : aucun montage de plus, la cage ne s'élargit pas. L'agent l'ouvre avec Read (allow ci-dessous).
+DOSSIER_RENDUS = "rendus"
+
+
+def nom_client_outil_plugin(outil: str) -> str:
+    """Nom d'un outil du plugin côté client Claude (caractère hors [A-Za-z0-9_-] remplacé par « _ »)."""
+    return PREFIXE_CLIENT_FABRIQUE + re.sub(r"[^A-Za-z0-9_-]", "_", outil)
+
+
+def _symboles_plugin(racine_plugin: Path) -> tuple[dict[str, str | None], dict[str, str], list[str]]:
+    """Constantes, déclarations d'outil et noms passés à `tools.register(` dans les sources du plugin (.ts et .tsx)."""
+    constantes: dict[str, str | None] = {}
+    declarations: dict[str, str] = {}
+    appels: list[str] = []
+    for fichier in sorted(f for motif in ("*.ts", "*.tsx") for f in (racine_plugin / "src").rglob(motif)):
+        texte = fichier.read_text(encoding="utf-8")
+        for nom, valeur in re.findall(r'export const (\w+)\s*=\s*"([^"]*)"', texte):
+            constantes[nom] = valeur if constantes.get(nom, valeur) == valeur else None  # même nom, deux valeurs : ambigu
+        declarations.update(re.findall(r'export const (\w+)\s*(?::\s*[\w.]+\s*)?=\s*\{\s*name:\s*("[^"]*"|\w+)', texte))
+        trouves = re.findall(r"\btools\.register\(\s*([^,)]+?)\s*,", texte)
+        if len(trouves) != len(re.findall(r"\btools\.register\(", texte)):
+            raise ValueError(f"{fichier.name} : enregistrement d'outil illisible (tools.register sans nom suivi d'une virgule)")
+        appels += trouves
+    return constantes, declarations, appels
+
+
+def _nom_outil(expr: str, constantes: dict[str, str | None], declarations: dict[str, str], contexte: str) -> str:
+    """Résout un nom d'outil jusqu'au littéral (`"nom"`, `DECL.name` ou `DECL` -> `name: NOM` -> `NOM = "…"`, `NOM`)."""
+    m = re.fullmatch(r'"([^"]+)"|(\w+)\.name|(\w+)', expr.strip())
+    ref = (m[2] or m[3]) if m else None
+    valeur = m[1] if m and m[1] else None
+    if ref and ref in declarations:
+        d = declarations[ref]
+        valeur = d.strip('"') if d.startswith('"') else constantes.get(d)
+    elif m and m[3]:
+        valeur = constantes.get(m[3])
+    if not valeur:
+        raise ValueError(f"nom d'outil du plugin non résolu : {contexte}({expr.strip()}…)")
+    return valeur
+
+
+def outils_plugin(racine_plugin: Path = PLUGIN) -> list[str]:
+    """DOC-A1 : noms des outils d'agent que le plugin enregistre (`tools.register(...)` dans ses sources, le worker
+    aujourd'hui), lus en lecture seule et résolus jusqu'au littéral (`DECL.name` -> `name: NOM` -> `NOM = "…"`).
+    Lève ValueError sur tout enregistrement non résolu : un outil inconnu ne doit jamais passer en silence."""
+    if not (racine_plugin / "src" / "worker.ts").is_file():
+        raise ValueError(f"worker du plugin introuvable : {racine_plugin / 'src' / 'worker.ts'}")
+    constantes, declarations, appels = _symboles_plugin(racine_plugin)
+    return [_nom_outil(e, constantes, declarations, "tools.register") for e in appels]
+
+
+def outils_manifeste(racine_plugin: Path = PLUGIN) -> list[str]:
+    """Revue de sécurité 2, B-6 : noms des outils déclarés par `tools: [...]` dans src/manifest.ts, la liste qui fait foi
+    pour l'hôte. Lève ValueError si le manifeste ou la liste est introuvable, ou si un élément n'est pas résolu."""
+    manifeste = racine_plugin / "src" / "manifest.ts"
+    if not manifeste.is_file():
+        raise ValueError(f"manifeste du plugin introuvable : {manifeste}")
+    liste = re.search(r"\btools:\s*\[([^\]]*)\]", manifeste.read_text(encoding="utf-8"))
+    if not liste:
+        raise ValueError(f"{manifeste.name} : liste « tools: [...] » introuvable")
+    constantes, declarations, _ = _symboles_plugin(racine_plugin)
+    elements = re.findall(r'\{\s*name:\s*("[^"]*"|\w+)[^}]*\}|(\w+)', liste[1])
+    return [_nom_outil(n or ident, constantes, declarations, "tools: [") for n, ident in elements]
 
 
 def agents_fabrique(reg_agents: dict) -> dict[str, set[str]]:
-    """Genre de travail (`document`, `video`) -> slugs des rôles qui ont l'outil en autorisation explicite (registre)."""
-    resultat: dict[str, set[str]] = {"document": set(), "video": set()}
+    """Genre de travail (`document`, `video`, `image`) ou `voir` (voir_rendu) -> slugs des rôles qui ont l'outil en
+    autorisation explicite (registre)."""
+    resultat: dict[str, set[str]] = {"document": set(), "video": set(), "image": set(), "voir": set()}
     for agent in reg_agents["agents"]:
         autorises = set(agent["outils"]["recherche"]) | set(agent["outils"]["mutation"])
         for genre in resultat:
@@ -2997,21 +3388,30 @@ def agents_fabrique(reg_agents: dict) -> dict[str, set[str]]:
 def assurer_fabrique(api: Api, cid: str, reg_agents: dict, agents: dict[str, dict]) -> int:
     """Ouvre la fabrique aux seuls rôles retenus ; retourne le nombre d'écritures faites.
 
-    1. Configuration du plugin : `fabriqueAgentsDocuments` et `fabriqueAgentsVideo` = identifiants (UUID) des agents
+    1. Configuration du plugin : `fabriqueAgentsDocuments`, `fabriqueAgentsVideo` et `fabriqueAgentsImage` = identifiants (UUID) des agents
        retenus. Le champ `role` de Paperclip est trop grossier (plusieurs agents partagent « researcher », « general »
        ou « designer ») ; l'UUID est attribué par Paperclip, l'agent ne peut pas le modifier. Les anciennes clés
        `fabriqueRoles*` sont retirées (le plugin les ignore de toute façon).
     2. Politique native « block » par agent et par outil, pour chaque agent NON retenu (le filtre de la passerelle
        cache l'outil à l'agent et refuse son appel) : même mécanisme que les outils bloqués des connexions. Créée si
        absente, jamais modifiée ni réactivée ensuite ; supprimée si l'agent est retenu plus tard. Le registre ajoute en plus l'outil dans --disallowedTools.
+    3. DOC-A1 : même politique pour tout AUTRE outil enregistré par le plugin (outils_plugin), sauf pour un agent qui
+       l'a en autorisation explicite dans le registre : un futur outil sans contrôle propre n'est jamais pré-approuvé.
     """
     retenus = agents_fabrique(reg_agents)
+    genres = {outil.split(":", 1)[1]: genre for genre, outil in OUTILS_FABRIQUE_PASSERELLE.items()}
+    noms_outils = list(dict.fromkeys([*genres, *outils_plugin(), *outils_manifeste()]))
+    par_slug = {a["slug"]: a for a in reg_agents["agents"]}
     identifiants = {genre: sorted({agents[s]["id"] for s in slugs if s in agents and agents[s].get("id")}) for genre, slugs in retenus.items()}
     ecritures = 0
     actuelle = config_plugin(api, cid)
     voulue = dict(actuelle)
     voulue["fabriqueAgentsDocuments"] = identifiants["document"]
     voulue["fabriqueAgentsVideo"] = identifiants["video"]
+    voulue["fabriqueAgentsImage"] = identifiants["image"]
+    # voir_rendu : dossier de rendus de chaque relecteur retenu, dans SA configuration Claude (jamais fourni par l'agent).
+    voulue["fabriqueDossiersRendus"] = {agents[s]["id"]: str(dossiers_agent(cid, s)[1] / DOSSIER_RENDUS)
+                                        for s in sorted(retenus["voir"]) if s in agents and agents[s].get("id")}
     voulue.pop("fabriqueRolesDocuments", None)
     voulue.pop("fabriqueRolesVideo", None)
     if voulue != actuelle:
@@ -3019,14 +3419,20 @@ def assurer_fabrique(api: Api, cid: str, reg_agents: dict, agents: dict[str, dic
         ecritures += 1
     existantes = {p.get("name"): p for p in politiques_outils(api, cid)}
     for slug, agent in sorted(agents.items()):
-        if slug not in {a["slug"] for a in reg_agents["agents"]}:
+        if slug not in par_slug:
             continue  # agent natif hors registre (Gardien des connexions) : pas d'outil de fabrique de toute façon
-        for genre, outil in OUTILS_FABRIQUE_PASSERELLE.items():
+        outils_agent = par_slug[slug]["outils"]
+        autorises = set(outils_agent["recherche"]) | set(outils_agent["mutation"])
+        for nom_outil in noms_outils:
+            genre = genres.get(nom_outil)
             if genre == "etat":
-                autorise = slug in (retenus["document"] | retenus["video"])
-            else:
+                autorise = slug in (retenus["document"] | retenus["video"] | retenus["image"])
+            elif genre:
                 autorise = slug in retenus[genre]
-            nom = f"atelier-fabrique-interdit:{slug}:{outil.split(':', 1)[1]}"
+            else:
+                autorise = nom_client_outil_plugin(nom_outil) in autorises
+            outil = f"{PLUGIN_CLE}:{nom_outil}"
+            nom = f"atelier-fabrique-interdit:{slug}:{nom_outil}"
             if autorise:
                 # Agent retenu après coup : la politique block créée quand il ne l'était pas le bloquerait encore.
                 ancienne = existantes.get(nom)
@@ -3043,7 +3449,8 @@ def assurer_fabrique(api: Api, cid: str, reg_agents: dict, agents: dict[str, dic
                 continue
             api.appel("POST", f"/companies/{cid}/tools/policies", {
                 "name": nom,
-                "description": f"Atelier : le rôle « {slug} » n'est pas retenu pour l'outil de fabrique {outil} (décision de l'opérateur du 24/10/2026).",
+                "description": (f"Atelier : le rôle « {slug} » n'est pas retenu pour l'outil de fabrique {outil} (décision de l'opérateur du 24/10/2026)."
+                                if genre else f"Atelier : le rôle « {slug} » n'a pas l'outil du plugin {outil} en autorisation explicite (DOC-A1)."),
                 "policyType": "block",
                 "priority": 10,
                 "selectors": {"toolName": outil},
@@ -3060,6 +3467,118 @@ def assurer_roles_agents(api: Api, cid: str, agents: dict[str, dict]) -> bool:
     if not roles:
         return False
     return fusionner_config(api, cid, roles=roles)
+
+
+# Atelier (lot S, 30/10/2026). Les gestes de gouvernance que le socle réserve au board depuis le patch 0108 :
+# - N3 : un agent qui n'est pas ceo n'assigne que dans la portée de son grant tasks:assign_scope ; le bootstrap y pose
+#   lui-même, son sous-arbre et ses destinataires déclarés (champ « transmetA » du registre, « transferts » d'un service) ;
+# - M3 : politique de skills d'entreprise en refus par défaut, aucun agent ne crée, n'importe ni ne modifie une skill ;
+# - V2-5 : les cartes qui demandent une réponse ou une confirmation ne se résolvent que par un humain.
+ACTIONS_SKILLS = ["skills.create", "skills.import", "skills.install", "skills.edit", "skills.update", "skills.test",
+                  "skills.reset", "skills.remove"]  # SKILL_POLICY_ACTIONS, paperclip/packages/shared/src/validators/skill-policy.ts
+POLITIQUE_SKILLS = {
+    "schemaVersion": 1,
+    "defaultEffect": "deny",
+    "rules": [
+        {"id": "atelier-agents-refus", "priority": 0, "effect": "deny", "subject": {"type": "all_agents"},
+         "actions": ACTIONS_SKILLS},
+        {"id": "atelier-board", "priority": 10, "effect": "allow", "subject": {"type": "roles", "roles": ["board"]},
+         "actions": ACTIONS_SKILLS},
+    ],
+}
+CARTES_HUMAINES = ("ask_user_questions", "request_confirmation", "request_checkbox_confirmation")
+
+
+def sous_arbre(reg_agents: dict, slug: str) -> set[str]:
+    """L'agent et tous ceux qui lui rendent compte, directement ou non (champ « rapporteA »)."""
+    enfants: dict[str | None, list[str]] = {}
+    for a in reg_agents["agents"]:
+        enfants.setdefault(a.get("rapporteA"), []).append(a["slug"])
+    slugs, file = {slug}, [slug]
+    while file:
+        for enfant in enfants.get(file.pop(), []):
+            if enfant not in slugs:
+                slugs.add(enfant)
+                file.append(enfant)
+    return slugs
+
+
+def portees_assignation(reg_agents: dict, agents: dict[str, dict]) -> dict[str, list[str]]:
+    """N3 : slug -> identifiants que l'agent peut assigner (lui-même, son sous-arbre, ses destinataires déclarés), pour
+    chaque agent ni ceo ni déterministe qui déclare des destinataires. Les autres gardent la portée par défaut du socle
+    (leur sous-arbre)."""
+    portees = {}
+    for a in reg_agents["agents"]:
+        if a["role"] == "ceo" or a.get("deterministe") or not a.get("transmetA") or a["slug"] not in agents:
+            continue
+        slugs = sous_arbre(reg_agents, a["slug"])
+        manquants = sorted(set(a["transmetA"]) - set(agents))
+        if manquants:
+            raise ErreurAtelier(f"destinataires déclarés de {a['slug']} absents de l'entreprise : {', '.join(manquants)}")
+        portees[a["slug"]] = sorted(agents[s]["id"] for s in slugs | set(a["transmetA"]) if s in agents)
+    return portees
+
+
+def portees_perimees(reg_agents: dict, agents: dict[str, dict], portees: dict[str, list[str]]) -> dict[str, None]:
+    """OA2 / P-PORTEE : agents ni ceo ni déterministe sans destinataire déclaré, ramenés à la portée par défaut du socle
+    (lui-même et son sous-arbre, dynamique) si un passage précédent leur a laissé une liste (seuls ceux-là sont réécrits).
+    assignableAgentIds: null rétablit {subtreeRootAgentId} (patch 0128 du socle, routes/agents.ts)."""
+    return {a["slug"]: None for a in reg_agents["agents"]
+            if a["role"] != "ceo" and not a.get("deterministe") and a["slug"] in agents and a["slug"] not in portees}
+
+
+def assurer_portees_assignation(api: Api, reg_agents: dict, agents: dict[str, dict]) -> int:
+    """Pose la portée d'assignation (N3) par PATCH /agents/<id>/permissions, en gardant canCreateAgents et le grant
+    tasks:assign tels quels ; rend le nombre d'agents modifiés. Un agent qui ne déclare plus de destinataire et garde une
+    liste d'un passage précédent est ramené à la portée par défaut du socle, son sous-arbre (OA2 / P-PORTEE)."""
+    ecritures = 0
+    portees = portees_assignation(reg_agents, agents)
+    perimees = portees_perimees(reg_agents, agents, portees)
+    for slug, ids in {**portees, **perimees}.items():
+        detail = detail_agent(api, agents[slug]["id"])
+        grants = (detail.get("access") or {}).get("grants") or []
+        portee = next((g.get("scope") or {} for g in grants if g.get("permissionKey") == "tasks:assign_scope"), {})
+        if slug in perimees and "assigneeAgentIds" not in portee:
+            continue  # portée par défaut du socle ou aucun grant : rien à resserrer
+        if ids is not None and sorted(portee.get("assigneeAgentIds") or []) == ids:
+            continue
+        api.appel("PATCH", f"/agents/{agents[slug]['id']}/permissions", corps_permissions(detail, assignableAgentIds=ids))
+        ecritures += 1
+    return ecritures
+
+
+def assurer_politique_skills(api: Api, cid: str) -> str:
+    """M3 : pose la politique de skills de l'atelier si l'entreprise n'en a pas ; une politique modifiée à la main est
+    gardée (avertissement). Rend « posée », « déjà en place » ou « gardée »."""
+    actuelle = api.get(f"/companies/{cid}/skill-policy")
+    if {cle: actuelle.get(cle) for cle in POLITIQUE_SKILLS} == POLITIQUE_SKILLS:
+        return "déjà en place"
+    if actuelle.get("materialized"):
+        print(f"AVERTISSEMENT : politique de skills de l'entreprise {cid} modifiée à la main : non remplacée, à revoir "
+              "(refus attendu pour tous les agents, M3).", file=sys.stderr)
+        return "gardée"
+    api.appel("PUT", f"/companies/{cid}/skill-policy", {**POLITIQUE_SKILLS, "expectedRevision": actuelle.get("revision", 0)})
+    return "posée"
+
+
+def assurer_gouvernance_cartes(api: Api, cid: str) -> bool:
+    """V2-5 : plafond human_only sur les cartes de question et de confirmation, sans toucher aux autres réglages de
+    l'entreprise ; True si l'entreprise a été modifiée."""
+    actuelle = api.get(f"/companies/{cid}").get("interactionResolverGovernance") or {}
+    voulue = {**actuelle, **{genre: {**(actuelle.get(genre) or {}), "cap": "human_only"} for genre in CARTES_HUMAINES}}
+    if voulue == actuelle:
+        return False
+    api.appel("PATCH", f"/companies/{cid}", {"interactionResolverGovernance": voulue})
+    return True
+
+
+def assurer_gouvernance(api: Api, cid: str, reg_agents: dict, agents: dict[str, dict]) -> None:
+    """Les trois gestes ci-dessus, communs à l'organisation marketing et aux services."""
+    portees = assurer_portees_assignation(api, reg_agents, agents)
+    politique = assurer_politique_skills(api, cid)
+    cartes = assurer_gouvernance_cartes(api, cid)
+    print(f"Gouvernance : portées d'assignation posées sur {portees} agent(s) (N3) ; politique de skills {politique} (M3) ; "
+          f"cartes de question et de confirmation réservées aux humains : {'posé' if cartes else 'déjà en place'} (V2-5).")
 
 
 def fusionner_config(api: Api, cid: str, *, secret_id: str | None = None, publiques: list[str] | None = None,
@@ -3383,7 +3902,8 @@ def valider_services_fiche(fiche: dict, erreurs: list[str]) -> tuple[list[str], 
     if brut is None:
         choisis = ["marketing"]
     elif brut == "tous" or brut == ["tous"]:
-        choisis = list(actifs)
+        # DOC-A2 : un service « interne » (l'Observatoire, projet de l'opérateur) ne s'installe que nommé explicitement.
+        choisis = [s["slug"] for s in registre_services()["services"] if s.get("actif") and not s.get("interne")]
     elif (isinstance(brut, list) and brut and all(isinstance(x, str) for x in brut) and len(set(brut)) == len(brut)
           and "tous" not in brut):
         inconnus = [x for x in brut if x not in actifs]
@@ -3429,8 +3949,18 @@ def valider_fiche(fiche: dict, reel: bool = True) -> dict:
     mode = fiche.get("mode") or "reel"
     if mode not in MODES:
         erreurs.append(f"mode : « reel » attendu ou champ absent (reçu : {mode!r}) ; il n'existe plus de mode démonstration")
+    personnel = fiche.get("personnel", False)
+    if not isinstance(personnel, bool):
+        erreurs.append("personnel : true ou false attendu")
+        personnel = False
     bce = fiche.get("numeroBce")
-    if not isinstance(bce, str) or not bce_valide(bce):
+    if personnel:  # client personnel : aucune identité d'entreprise, donc ni BCE, ni statut de courtier
+        if bce is not None:
+            erreurs.append("numeroBce : un client personnel n'a pas de numéro BCE (retirez-le ou retirez « personnel »)")
+        if fiche.get("courtier") not in (None, False) or fiche.get("numeroFsma") is not None:
+            erreurs.append("courtier / numeroFsma : sans objet pour un client personnel")
+        bce = None
+    elif not isinstance(bce, str) or not bce_valide(bce):
         erreurs.append(f"numeroBce : numéro BCE invalide (10 chiffres, contrôle modulo 97) : {bce!r}")
     courtier = fiche.get("courtier", False)
     if not isinstance(courtier, bool):
@@ -3458,9 +3988,11 @@ def valider_fiche(fiche: dict, reel: bool = True) -> dict:
     bureaux = _liste_codes(fiche, "bureaux", erreurs)
     segments = _liste_codes(fiche, "segmentsCibles", erreurs)
     offres = _liste_codes(fiche, "offres", erreurs)
-    if not bureaux:
+    # Bureaux et offres nourrissent le référentiel du marketing ; un client personnel sans marketing n'en a pas besoin.
+    marketing_demande = not personnel or "marketing" in (fiche.get("services") or ["marketing"]) or fiche.get("services") in ("tous", ["tous"])
+    if not bureaux and marketing_demande:
         erreurs.append("bureaux : au moins un bureau (nom, adresse) attendu")
-    if not offres:
+    if not offres and marketing_demande:
         erreurs.append("offres : au moins une offre attendue")
     codes_segments, codes_bureaux, codes_offres = set(), set(), set()
     for i, sg in enumerate(segments):
@@ -3512,7 +4044,8 @@ def valider_fiche(fiche: dict, reel: bool = True) -> dict:
     if erreurs:
         raise ErreurAtelier("fiche refusée, rien n'est écrit :\n  - " + "\n  - ".join(erreurs))
     return {**fiche, "services": services, "budgets": budgets, "nomCommercial": nom, "slug": slug, "mode": mode, "courtier": courtier,
-            "numeroFsma": fsma, "langues": langues, "budgetIaMensuelCentimes": budget}
+            "numeroFsma": fsma, "langues": langues, "budgetIaMensuelCentimes": budget, "personnel": personnel,
+            "numeroBce": None if personnel else bce}
 
 
 def organisation_client(reg_orga: dict, fiche: dict, nom: str | None = None, marqueur: str | None = None) -> dict:
@@ -3539,6 +4072,7 @@ def organisation_client(reg_orga: dict, fiche: dict, nom: str | None = None, mar
     for o in copie["objectifs"]:
         if o["cle"] in objectifs:
             o["titre"], o["description"] = objectifs[o["cle"]]
+            o.update(cible=DONNEE_MANQUANTE, echeance=DONNEE_MANQUANTE, pointDeDepart=DONNEE_MANQUANTE)
     return copie
 
 
@@ -3565,8 +4099,11 @@ def referentiel_client(fiche: dict) -> dict:
     nom du client : offres et bureaux restent « non confirmés » jusqu'à sa validation."""
     nom, slug = fiche["nomCommercial"], fiche["slug"]
     code_entite = slug[:40]
-    identifiants = [{"type": "bce", "libelle": None, "valeur": fiche["numeroBce"]}]
-    mentions = f"{nom}, BCE {fiche['numeroBce']}"
+    if fiche.get("personnel"):  # client personnel : pas d'entreprise, les mentions portent le seul nom
+        identifiants, mentions = [], nom
+    else:
+        identifiants = [{"type": "bce", "libelle": None, "valeur": fiche["numeroBce"]}]
+        mentions = f"{nom}, BCE {fiche['numeroBce']}"
     if fiche.get("numeroFsma"):
         identifiants.append({"type": "fsma", "libelle": None, "valeur": fiche["numeroFsma"]})
         mentions += f", FSMA {fiche['numeroFsma']}"
@@ -3667,8 +4204,15 @@ def lire_registre_client(slug: str) -> dict | None:
         if chemin.is_symlink() or not chemin.is_file():
             raise ValueError("pas un fichier ordinaire")
         r = json.loads(chemin.read_text(encoding="utf-8"))
-        if (not isinstance(r, dict) or not isinstance(r.get("entrepriseId"), str) or not RE_UUID.fullmatch(r["entrepriseId"])
-                or not isinstance(r.get("numeroBce"), str) or not r["numeroBce"]):
+        if (not isinstance(r, dict) or not isinstance(r.get("entrepriseId"), str) or not RE_UUID.fullmatch(r["entrepriseId"])):
+            raise ValueError("contenu inattendu")
+        r["personnel"] = r.get("personnel", False)
+        if r["personnel"] is not True and r["personnel"] is not False:
+            raise ValueError("« personnel » doit valoir true ou false")
+        if r["personnel"]:  # client personnel : pas de BCE
+            if r.get("numeroBce") is not None:
+                raise ValueError("un client personnel n'a pas de numéro BCE")
+        elif not isinstance(r.get("numeroBce"), str) or not r["numeroBce"]:
             raise ValueError("contenu inattendu")
         if "entreprises" not in r:
             r["entreprises"] = {"marketing": {"entrepriseId": r["entrepriseId"], "nom": None, "marqueur": f"{PREFIXE_MARQUEUR_CLIENT}{slug}"}}
@@ -3709,7 +4253,7 @@ def slug_client_par_entreprise(company_id: str) -> str | None:
     return trouves[0] if trouves else None
 
 
-def ecrire_registre_client(slug: str, numero_bce: str, entreprises: dict[str, dict], cree_le: str | None = None) -> Path:
+def ecrire_registre_client(slug: str, numero_bce: str | None, entreprises: dict[str, dict], cree_le: str | None = None) -> Path:
     """Écrit (atomiquement) le registre au format courant : dossier 0700, fichier 0600. « entreprises » : service ->
     {entrepriseId, nom, marqueur}."""
     d = dossier_client(slug)
@@ -3717,7 +4261,8 @@ def ecrire_registre_client(slug: str, numero_bce: str, entreprises: dict[str, di
     d.mkdir(exist_ok=True)
     os.chmod(d, 0o700)
     principale = entreprises.get("marketing") or next(iter(entreprises.values()))
-    contenu = {"version": 2, "entrepriseId": principale["entrepriseId"], "numeroBce": normaliser_bce(numero_bce), "slug": slug,
+    identite = {"personnel": True, "numeroBce": None} if numero_bce is None else {"numeroBce": normaliser_bce(numero_bce)}
+    contenu = {"version": 2, "entrepriseId": principale["entrepriseId"], **identite, "slug": slug,
                "creeLe": cree_le or dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
                "entreprises": {s: {"entrepriseId": e["entrepriseId"], "nom": e.get("nom"), "marqueur": e["marqueur"]}
                                for s, e in entreprises.items()}}
@@ -3730,7 +4275,7 @@ def ecrire_registre_client(slug: str, numero_bce: str, entreprises: dict[str, di
     return chemin
 
 
-def noter_entreprise_registre(slug: str, numero_bce: str, registre: dict | None, service: str, entree: dict) -> dict:
+def noter_entreprise_registre(slug: str, numero_bce: str | None, registre: dict | None, service: str, entree: dict) -> dict:
     """Inscrit (ou confirme) l'entreprise d'un service dans le registre ; ne réécrit que si le contenu change ou si
     l'ancien format doit être migré. Rend le registre à jour."""
     entreprises = dict(registre["entreprises"]) if registre else {}
@@ -3741,13 +4286,17 @@ def noter_entreprise_registre(slug: str, numero_bce: str, registre: dict | None,
     return lire_registre_client(slug)
 
 
-def verifier_identite_client(slug: str, numero_bce: str, registre: dict | None, existante: dict | None,
+def verifier_identite_client(slug: str, numero_bce: str | None, registre: dict | None, existante: dict | None,
                              service: str = "marketing", marqueur: str | None = None) -> None:
     """Refus (rien n'est écrit) si l'entreprise retrouvée par marqueur n'est pas celle du registre pour ce service, si le
     registre manque alors qu'une entreprise porte le marqueur, ou si le BCE de la fiche diffère de celui du registre."""
     marqueur = marqueur or f"{PREFIXE_MARQUEUR_CLIENT}{slug}"
     entree = ((registre or {}).get("entreprises") or {}).get(service)
-    if registre is not None and normaliser_bce(registre["numeroBce"]) != normaliser_bce(numero_bce):
+    if registre is not None and bool(registre.get("personnel")) != (numero_bce is None):
+        raise ErreurAtelier(
+            f"la fiche et le registre local du client {slug} ne sont pas du même type (client personnel sans BCE, ou client à BCE) : "
+            "deux clients différents ne peuvent pas partager un nom. Refusé, rien n'est écrit.")
+    if registre is not None and numero_bce is not None and normaliser_bce(registre["numeroBce"]) != normaliser_bce(numero_bce):
         raise ErreurAtelier(
             f"le BCE de la fiche ({numero_bce}) diffère de celui du registre local du client {slug} ({registre['numeroBce']}) : "
             "deux clients différents ne peuvent pas partager un nom. Refusé, rien n'est écrit.")
@@ -3803,6 +4352,8 @@ def enregistrer_existante(args, fiche: dict) -> int:
     """Migration : crée le registre local d'une entreprise cliente créée avant son introduction. Aucune écriture dans
     l'API : le registre n'est créé qu'après contrôle (entreprise existante, hors organisation modèle, nom et marqueur de la
     fiche, BCE du référentiel de marque enregistré dans le plugin égal à celui de la fiche)."""
+    if fiche.get("personnel"):
+        raise ErreurAtelier("enregistrement refusé : un client personnel (sans BCE) ne se migre pas. Rien n'est écrit.")
     cid = (args.entreprise or "").strip().lower()
     if not RE_UUID.fullmatch(cid):
         raise ErreurAtelier("--entreprise doit être l'UUID de l'entreprise à enregistrer")
@@ -3926,6 +4477,7 @@ def agents_service(reg_agents: dict, svc: dict) -> tuple[list[dict], dict[str, s
         deterministe = slug in svc.get("deterministes", [])
         gabarit = GABARIT_DETERMINISTE if deterministe else GABARIT_COORDINATEUR if coordinateur else GABARIT_SPECIALISTE
         a = json.loads(json.dumps(gabarits[gabarit]))
+        a.pop("envPortable", None)  # surcharge propre à l'agent marketing copié : seul le réglage du service la pose
         nom, titre = libelle_agent(slug), f"{svc['nom']} · {libelle_agent(slug)}"
         fichier = ORGA / "services" / svc["slug"] / "agents" / slug / "AGENTS.md"
         corps = None
@@ -3949,8 +4501,9 @@ def agents_service(reg_agents: dict, svc: dict) -> tuple[list[dict], dict[str, s
                         "et prépare le dossier de validation humaine." if coordinateur
                         else f"{titre} : traite les tâches que le coordinateur du service {svc['nom']} lui affecte."),
             "entrees": list(ENTREES_SERVICE), "sorties": list(SORTIES_SERVICE), "criteresReussite": list(CRITERES_SERVICE),
-            "competences": avec_competences_communes(competences, ecrit_des_fichiers(a["outils"])), "competencesObligatoires": [], "connexions": {},
+            "competences": avec_competences_communes(competences, slug), "competencesObligatoires": [], "connexions": {},
             "relit": [], "roleRevue": None,
+            "transmetA": list(svc.get("transferts", {}).get(slug, [])),
         })
         if deterministe:
             # Programme sans modèle : rôle et outils du gabarit porte, aucune compétence (l'adaptateur process n'en lit pas).
@@ -3967,7 +4520,11 @@ def agents_service(reg_agents: dict, svc: dict) -> tuple[list[dict], dict[str, s
                     a["outils"]["interdits"].append(outil)
             if "modele" in reglage:
                 a["modele"] = dict(reglage["modele"])
-            a["competences"] = avec_competences_communes(competences, ecrit_des_fichiers(a["outils"]))
+            if "sessionsParRotation" in reglage:
+                a["sessionsParRotation"] = reglage["sessionsParRotation"]
+            if "envPortable" in reglage:
+                a["envPortable"] = dict(reglage["envPortable"])
+            a["competences"] = avec_competences_communes(competences, slug)
         if not corps:
             avertissements.append(
                 f"AVERTISSEMENT : consigne à rédiger pour l'agent {slug} du service {svc['slug']} "
@@ -4010,7 +4567,7 @@ def identite_service(fiche: dict, svc: dict, registre: dict | None) -> tuple[str
 
 def organisation_service(reg_orga: dict, fiche: dict, svc: dict, nom: str, marqueur: str) -> dict:
     """Organisation (au format organisation.json) de l'entreprise d'un service : celle du marketing reste l'organisation
-    actuelle ; les autres n'ont ni objectifs, ni projets, ni routines (rien n'est inventé pour eux)."""
+    actuelle ; les autres reprennent les projets et routines déclarés au registre des services (P1-5), sans objectifs."""
     if svc["slug"] == "marketing":
         return organisation_client(reg_orga, fiche, nom=nom, marqueur=marqueur)
     return {
@@ -4020,14 +4577,39 @@ def organisation_service(reg_orga: dict, fiche: dict, svc: dict, nom: str, marqu
             "description": (f"Service {svc['nom']} de l'entreprise cliente de l'Atelier Marketing IA ({fiche['mode']}). "
                             f"Préfixe de service : {svc['prefixe']}. Marqueur de périmètre : {marqueur}."),
         },
-        "objectifs": [], "projets": [], "routines": [],
+        "objectifs": [], "projets": svc.get("projets", []), "routines": svc.get("routines", []),
     }
+
+
+def avec_outils_session(corps: str, agent: dict, adaptateur: dict) -> str:
+    """Ajoute en tête de la section « ## Outils » du rôle (créée au besoin) les outils réellement passés à Claude Code pour
+    cet agent (AFA-P3-12 : la section recopiée chez les spécialistes ne disait ni Write, ni les outils MCP, ni ce qui est fermé)."""
+    args = arguments_outils(agent, adaptateur)
+    i = args.index("--disallowedTools")
+    ouverts = args[args.index("--allowedTools") + 1: i]
+    fermes = [o for o in args[i + 1:] if o in agent["outils"]["interdits"]]
+    # « Edit(./**) » ouvre Write et Edit dans le cwd ; « Edit » seul dans --disallowedTools ferme encore l'outil Edit.
+    ecriture = "`Write`" + ("" if "Edit" in fermes else " et `Edit`") + " dans ton répertoire de travail"
+    ligne = ("Outils de ta session (générés du registre) : "
+             + ", ".join(ecriture if o == "Edit(./**)" else f"`{o}`" for o in ouverts)
+             + " ; lecture des fichiers de ton répertoire de travail. Fermés : " + ", ".join(f"`{o}`" for o in fermes)
+             + " : un appel est refusé, ne le tente pas.")
+    if "\n## Outils\n" in corps:
+        avant, apres = corps.split("\n## Outils\n", 1)
+        return f"{avant}\n## Outils\n\n{ligne}\n{apres}"
+    return corps.rstrip("\n") + f"\n\n## Outils\n\n{ligne}\n"
 
 
 def fichiers_service(reg_agents_s: dict, reg_s: dict, svc: dict, corps_par_slug: dict[str, str]) -> dict[str, str]:
     """Paquet natif d'un service : COMPANY.md, .paperclip.yaml et un AGENTS.md par agent (consigne du dépôt ou de repli,
-    puis consignes communes et fiche des routes, comme « generer » le fait pour le marketing)."""
+    puis consignes communes et fiche des routes, comme « generer » le fait pour le marketing), plus ses projets et routines
+    (organisation/services/<service>/projects/, rangés sous projects/ comme ceux du marketing)."""
     e = reg_s["entreprise"]
+    extension = construire_extension(reg_agents_s, reg_s)
+    # L'import crée une routine « active » si pauseAutomations est faux, ce qui est le cas d'une mise à jour en place
+    # (company-portability.ts, routines.create) : le statut porté par l'extension la crée en pause dans tous les cas.
+    for routine in extension["routines"].values():
+        routine["status"] = "paused"
     fichiers = {
         "COMPANY.md": avec_frontmatter(
             {"schema": "agentcompanies/v1", "kind": "company", "slug": e["slug"], "name": e["nom"],
@@ -4035,9 +4617,11 @@ def fichiers_service(reg_agents_s: dict, reg_s: dict, svc: dict, corps_par_slug:
             f"\n# {e['nom']}\n\nService {svc['nom']} d'une entreprise cliente de l'Atelier Marketing IA, créé par "
             "`scripts/bootstrap-organisation.py nouveau-client`. Les agents et leurs consignes viennent du dépôt "
             f"(`organisation/services/{svc['slug']}/`).\n"),
-        ".paperclip.yaml": yaml_texte(construire_extension(reg_agents_s, reg_s)),
+        ".paperclip.yaml": yaml_texte(extension),
     }
-    communes = consignes_communes(svc["slug"] == "marketing")
+    projets = ORGA / "services" / svc["slug"] / "projects"
+    for f in sorted(p for p in projets.rglob("*") if p.is_file()):
+        fichiers[f"projects/{f.relative_to(projets).as_posix()}"] = f.read_text(encoding="utf-8")
     # Compétences déclarées par les agents du service : leurs dossiers entrent dans le paquet (comme pour le marketing).
     for nom in sorted({c for a in reg_agents_s["agents"] for c in a["competences"]}):
         dossier = ORGA / "skills" / nom
@@ -4046,7 +4630,11 @@ def fichiers_service(reg_agents_s: dict, reg_s: dict, svc: dict, corps_par_slug:
     for a in reg_agents_s["agents"]:
         corps = corps_par_slug[a["slug"]]
         if not a.get("deterministe"):  # comme le marketing : un programme ne lit pas les consignes communes
+            corps = avec_outils_session(corps, a, reg_agents_s["adaptateur"])
+            if svc["slug"] == "observatoire":
+                corps += "\n" + CONSIGNES_OBSERVATOIRE.read_text(encoding="utf-8")
             fiche = fiche_routes_agent(a, corps)
+            communes = consignes_communes(svc["slug"] == "marketing", memoire=a["slug"] not in ROLES_SANS_MEMOIRE)
             corps += "\n" + MARQUEUR_CONSIGNES_COMMUNES + "\n\n" + communes + ("\n" + fiche if fiche else "")
         fichiers[f"agents/{a['slug']}/AGENTS.md"] = avec_frontmatter(
             {"kind": "agent", "slug": a["slug"], "name": a["nom"], "title": a["titre"], "reportsTo": a["rapporteA"], "skills": a["competences"]}, corps)
@@ -4054,7 +4642,7 @@ def fichiers_service(reg_agents_s: dict, reg_s: dict, svc: dict, corps_par_slug:
 
 
 def etat_service_a_jour(api: Api, company_id: str, reg_agents: dict, fichiers: dict[str, str], empreinte: str,
-                        jeton_id: str | None, mode: str) -> list[str]:
+                        jeton_id: str | None, mode: str, cle_id: str | None = None) -> list[str]:
     """Raisons pour lesquelles l'entreprise d'un service n'est pas à jour (vide = à jour) : comme etat_a_jour, avec
     les compétences déclarées par ses agents (champ « skills » de leur AGENTS.md) ; les instructions sont comparées au paquet du service."""
     raisons = []
@@ -4071,7 +4659,7 @@ def etat_service_a_jour(api: Api, company_id: str, reg_agents: dict, fichiers: d
         meta = ((d.get("metadata") or {}).get("atelier") or {}).get("bootstrap") or {}
         if meta.get("empreinte") != empreinte:
             raisons.append(f"empreinte différente : {agent['slug']}")
-        if not liaison_conforme(d, liaison_voulue(company_id, reg_agents, agent["slug"], jeton_id, mode)):
+        if not liaison_conforme(d, liaison_voulue(company_id, reg_agents, agent["slug"], jeton_id, mode, cle_id)):
             raisons.append(f"liaison locale à refaire : {agent['slug']}")
         if (d.get("adapterConfig") or {}).get("instructionsBundleMode") != "managed":
             raisons.append(f"bundle d'instructions géré non rattaché : {agent['slug']}")
@@ -4115,24 +4703,33 @@ def appliquer_service(api: Api, reg_agents: dict, reg_orga: dict, fichiers: dict
     reglages_ecrits = preparer_dossiers_locaux(company_id, reg_agents)
     secret = secret_jeton(api, company_id)
     jeton_id = secret["id"] if secret else None
+    cle_secret = secret_jeton(api, company_id, CLE_SECRET_CLE_API)
+    cle_id = cle_secret["id"] if cle_secret else None
     instructions_sync = 0
     if import_fait is None:
         instructions_sync = synchroniser_instructions_service(api, company_id, reg_agents, fichiers)
-        raisons = etat_service_a_jour(api, company_id, reg_agents, fichiers, empreinte, jeton_id, mode)
+        raisons = etat_service_a_jour(api, company_id, reg_agents, fichiers, empreinte, jeton_id, mode, cle_id)
         if raisons:
             print("Mise à jour en place (import natif, stratégie replace) :")
             for r in raisons:
                 print(f"  - {r}")
             creation = any(r.startswith("agent absent") for r in raisons)
-            import_fait = importer_en_place(api, fichiers, company_id, reg_agents, None, pause=creation)
+            selection = selection_sans_routines_existantes(api, company_id, fichiers)  # l'import recrée toute routine
+            import_fait = importer_en_place(api, fichiers, company_id, reg_agents, selection, pause=creation)
     if import_fait is not None:
         for w in import_fait.get("warnings") or []:
             print(f"  avertissement Paperclip : {w}")
         echecs = [w for w in import_fait.get("warnings") or [] if w.startswith("Failed to")]
         if echecs:
             raise ErreurAtelier("l'import a laissé des échecs : " + " | ".join(echecs))
-    liaisons = lier_agents(api, company_id, reg_agents, empreinte, jeton_id, mode)
+    liaisons = lier_agents(api, company_id, reg_agents, empreinte, jeton_id, mode, cle_id)
     agents = agents_par_slug(api, company_id)
+    ecr_permissions = assurer_permissions_agents(api, agents)
+    if ecr_permissions:
+        print(f"Permissions : canCreateSkills=false posé sur {ecr_permissions} agent(s) (M3).")
+    assurer_gouvernance(api, company_id, reg_agents, agents)
+    projets, ecr_proj = assurer_liens_projets(api, company_id, reg_orga, {})
+    ecr_routines = assurer_routines(api, company_id, reg_orga, agents, projets, fichiers)
     etat = {"schema": "atelier/etat-bootstrap-service/v1", "api": api.base, "companyId": company_id,
             "entreprise": reg_orga["entreprise"]["nom"], "empreintePaquet": empreinte, "mode": mode, "jetonSecretId": jeton_id,
             "agents": {s: {"id": agents[s]["id"], "nom": agents[s]["name"]} for s in slugs}}
@@ -4141,6 +4738,7 @@ def appliquer_service(api: Api, reg_agents: dict, reg_orga: dict, fichiers: dict
     print(f"Import natif : {'oui' if import_fait is not None else 'non (déjà à jour)'}")
     print(f"Instructions mises à jour par révision : {instructions_sync}")
     print(f"Agents reliés localement : {liaisons} modifié(s) sur {len(slugs)}")
+    print(f"Projets : {len(projets)} ({ecr_proj} écriture(s)) ; routines réalignées : {ecr_routines} écriture(s) (statut jamais touché)")
     print(f"Réglages Claude dédiés écrits : {reglages_ecrits} fichier(s) ; état local réécrit : {int(ecrits)}")
     for ecart in sorted(set(agents_par_slug(api, company_id)) - set(slugs)):
         print(f"  écart non géré (rien n'est supprimé automatiquement) : agent hors registre : {ecart}")
@@ -4179,6 +4777,10 @@ def ecritures_service(plan: dict, fiche: dict, referentiel: dict | None, actuel_
         lignes.append(f"organisation du service {svc['nom']} ({len(plan['agents'])} agents : {noms} ; import natif si besoin, liaisons) : "
                       + ("création complète" if existante is None else "réconciliation idempotente, aucune écriture si déjà à jour"))
         lignes.append(f"espace et configuration Claude de chaque agent sous {ESPACES}/<id entreprise>/<rôle> (et {CONFIGS_CLAUDE}/<id entreprise>/<rôle>)")
+        projets, routines = plan["reg_s"]["projets"], plan["reg_s"]["routines"]
+        if projets or routines:
+            lignes.append(f"projets et routines du service : {len(projets)} projet(s) ({', '.join(p['slug'] for p in projets)}), "
+                          f"{len(routines)} routine(s) créée(s) en pause, statut jamais touché ensuite")
         lignes.extend(plan["avertissements"])
     if (existante or {}).get("budgetMonthlyCents") == budget:
         lignes.append(f"budget IA mensuel de l'entreprise : déjà {budget} centimes, aucune écriture")
@@ -4314,6 +4916,8 @@ def cmd_nouveau_client(args) -> int:
     if args.reel:
         print("Avertissement : l'option --reel n'a plus d'effet (tout est réel) ; vous pouvez la retirer.", file=sys.stderr)
     fiche = valider_fiche(lire_fiche(Path(args.fiche)))
+    if fiche["personnel"] and args.ajouter_services:
+        raise ErreurAtelier("--ajouter-services refusé : un client personnel (sans BCE) ne se migre pas. Rien n'est écrit.")
     if args.slug:
         if not CODE_REFERENTIEL.fullmatch(args.slug):
             raise ErreurAtelier(f"--slug invalide (lettres minuscules, chiffres et tirets, 2 à 40 caractères) : {args.slug!r}")
@@ -4325,7 +4929,7 @@ def cmd_nouveau_client(args) -> int:
     services = [par_slug[s] for s in fiche["services"]]
     avec_marketing = any(s["slug"] == "marketing" for s in services)
     multiple = fiche["services"] != ["marketing"]
-    referentiel = referentiel_client(fiche)
+    referentiel = referentiel_client(fiche) if avec_marketing else None
     api = Api(url_api())
     if avec_marketing:
         try:
@@ -4462,10 +5066,12 @@ def fiche_depuis_registre_client(slug: str, registre: dict) -> dict:
     for service, e in registre["entreprises"].items():
         nom = unicodedata.normalize("NFC", e.get("nom") or "")
         if nom and (service == "marketing" or nom_commercial is None):
-            nom_commercial = nom[: -len(SUFFIXE_MARKETING_NOM)] if nom.endswith(SUFFIXE_MARKETING_NOM) else nom.split(" · ")[0]
+            segments = nom.split(" · ")  # « préfixe · service · nom commercial » (client sans marketing seul)
+            nom_commercial = nom[: -len(SUFFIXE_MARKETING_NOM)] if nom.endswith(SUFFIXE_MARKETING_NOM) else segments[2] if len(segments) >= 3 else segments[0]
     if not nom_commercial:
         raise ErreurAtelier(f"registre local du client {slug} : aucun nom d'entreprise, impossible de nommer les services à ajouter.")
-    return {"slug": slug, "nomCommercial": nom_commercial, "numeroBce": registre["numeroBce"], "mode": "reel",
+    return {"slug": slug, "nomCommercial": nom_commercial, "numeroBce": registre["numeroBce"],
+            "personnel": registre["personnel"], "mode": "reel",
             "services": list(registre["entreprises"]), "budgets": {}, "budgetIaMensuelCentimes": 0, "offres": [], "bureaux": []}
 
 
@@ -4489,6 +5095,9 @@ def reprendre_etat_existant(api: Api, plan: dict) -> None:
         titre = g.get("title") or ""
         o["titre"] = titre[len(prefixe):] if titre.startswith(prefixe) else titre
         o["description"] = g.get("description") or o["description"]
+        tete = RE_TETE_OBJECTIF.match(o["description"])
+        if tete:  # valeurs fixées par l'humain dans l'instance : reprises, en-tête jamais doublé
+            o["cible"], o["echeance"], o["pointDeDepart"], o["description"] = tete.groups()
         o["niveau"], o["statut"] = g.get("level") or o["niveau"], g.get("status") or o["statut"]
 
 
@@ -4514,12 +5123,14 @@ def diagnostic_mise_a_jour(api: Api, plan: dict, mode: str) -> dict:
     diag["hors_registre"] = sorted((s, a["id"], a.get("status")) for s, a in presents.items() if s not in slugs and s != GARDIEN_SLUG)
     secret = secret_jeton(api, cid)
     jeton_id = secret["id"] if secret else None
+    cle_secret = secret_jeton(api, cid, CLE_SECRET_CLE_API)
+    cle_id = cle_secret["id"] if cle_secret else None
     fichiers = plan["fichiers"]
     empreinte = hashlib.sha256((empreinte_paquet(fichiers) + ":" + mode).encode()).hexdigest()
     if plan["svc"]["slug"] == "marketing":
-        raisons = etat_a_jour(api, cid, plan["reg_agents"], empreinte, jeton_id, mode)
+        raisons = etat_a_jour(api, cid, plan["reg_agents"], empreinte, jeton_id, mode, cle_id)
     else:
-        raisons = etat_service_a_jour(api, cid, plan["reg_agents"], fichiers, empreinte, jeton_id, mode)
+        raisons = etat_service_a_jour(api, cid, plan["reg_agents"], fichiers, empreinte, jeton_id, mode, cle_id)
     diag["raisons"] = [r for r in raisons if not r.startswith("agent absent")]
     diag["renommages"] = renommages_agents(api, cid, plan["reg_agents"])
     try:
@@ -4560,14 +5171,16 @@ def cmd_mettre_a_jour_client(args) -> int:
     if registre is None:
         raise ErreurAtelier(f"aucun registre local pour le client {slug} ({dossier_client(slug) / FICHIER_REGISTRE_CLIENT}) : "
                             "créez-le avec nouveau-client (--enregistrer-existante ou --ajouter-services).")
-    if "marketing" not in registre["entreprises"]:
+    if "marketing" not in registre["entreprises"] and not registre["personnel"]:
         raise ErreurAtelier(f"le client {slug} n'a pas d'entreprise marketing dans son registre : utilisez nouveau-client.")
     if registre.get("_ancienFormat"):
         raise ErreurAtelier(f"le registre du client {slug} est à l'ancien format : migrez-le d'abord (nouveau-client --ajouter-services).")
     reg_agents, reg_orga = registres()
     fiche = fiche_depuis_registre_client(slug, registre)
     actifs = [s for s in registre_services()["services"] if s.get("actif")]
-    absents = [] if args.sans_nouveaux_services else [s["slug"] for s in actifs if s["slug"] not in registre["entreprises"]]
+    # Un client personnel ne reçoit que les services choisis à sa création (pas les 27 autres services de l'usine).
+    absents = [] if args.sans_nouveaux_services or registre["personnel"] else [s["slug"] for s in actifs
+                                                      if s["slug"] not in registre["entreprises"] and not s.get("interne")]
     services = [s for s in actifs if s["slug"] in registre["entreprises"] or s["slug"] in absents]
     inconnus = sorted(set(registre["entreprises"]) - {s["slug"] for s in actifs})
     api = Api(url_api())
@@ -4941,10 +5554,10 @@ def _cle_motif(texte: str) -> str:
 
 
 def fichiers_memoire(company_id: str):
-    """(rôle, chemin relatif au dossier memoire/, chemin) de chaque fichier ordinaire sous ESPACES/<id>/<rôle>/memoire/,
-    quarantaine comprise. Aucun lien symbolique n'est suivi (l'agent écrit dans ce dossier : un lien pourrait viser un
-    fichier hors de son espace)."""
-    racine = ESPACES / company_id
+    """(rôle, chemin relatif au dossier memoire/, chemin) de chaque fichier ordinaire sous CONFIGS_CLAUDE/<id>/<rôle>/memoire/
+    (dossier_memoire), quarantaine comprise. Aucun lien symbolique n'est suivi (l'agent écrit dans ce dossier : un lien
+    pourrait viser un fichier hors de sa mémoire)."""
+    racine = CONFIGS_CLAUDE / company_id
     if not racine.is_dir() or racine.is_symlink():
         return
     for role in sorted(racine.iterdir()):
@@ -5226,6 +5839,13 @@ def main(argv=None) -> int:
     j = sp.add_parser("jeton")
     j.add_argument("--confirmer", action="store_true")
     j.add_argument("--client", default=None, help="range et lie le jeton dans CHAQUE entreprise de ce client (slug sous instance/atelier-client/)")
+    j.add_argument("--service", default=None, help="avec --client : limite l'opération à ce seul service du client")
+    ca = sp.add_parser("cle-api", help="range la clé d'API des crédits inclus (lue sur l'entrée standard) et la lie aux agents claude_local")
+    ca.add_argument("--confirmer", action="store_true")
+    ca.add_argument("--retirer", action="store_true", help="retire la clé des agents (ne lit aucune clé)")
+    ca.add_argument("--supprimer-secret", action="store_true", dest="supprimer_secret", help="avec --retirer : supprime aussi le secret")
+    ca.add_argument("--client", default=None, help="range et lie la clé dans CHAQUE entreprise de ce client (slug sous instance/atelier-client/)")
+    ca.add_argument("--service", default=None, help="avec --client : limite l'opération à ce seul service du client")
     tr = sp.add_parser("test-reel")
     tr.add_argument("--agent", default=None, help="agent à vérifier (défaut : tests-techniques ; avec --client : slug ou nom, obligatoire)")
     tr.add_argument("--client", default=None, help="vérifie un agent d'un client (slug sous instance/atelier-client/)")
@@ -5252,6 +5872,7 @@ def main(argv=None) -> int:
         "purger-memoires": cmd_purger_memoires,
         "reinitialiser": cmd_reinitialiser,
         "jeton": cmd_jeton,
+        "cle-api": cmd_cle_api,
         "test-reel": cmd_test_reel,
         "cles": cmd_cles,
     }

@@ -1,0 +1,376 @@
+From 27afac42ef824ff01cbf8640ef6b2bcf767d06dd Mon Sep 17 00:00:00 2001
+From: Jean-Baptiste Dhondt <114347858+warrox1993@users.noreply.github.com>
+Date: Fri, 30 Oct 2026 14:31:23 +0100
+Subject: [PATCH 120/126] =?UTF-8?q?fix(effort-run):=20l'escalier=20rel?=
+ =?UTF-8?q?=C3=A8ve=20l'auteur=20de=20la=20r=C3=A9vision=20refus=C3=A9e,?=
+ =?UTF-8?q?=20plafond=20xhigh,=20aucun=20rel=C3=A8vement=20si=20une=20cart?=
+ =?UTF-8?q?e=20attend=20un=20humain=20(Atelier=20COORD-P2-17,=20PARC-4)?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Le producteur n'est plus l'assigné de la tâche (un coordinateur qui ne rédige pas) mais
+l'auteur de la révision refusée (document_revisions.created_by_agent_id). L'escalier ne
+monte plus jusqu'à max : plafond au dernier niveau avant max, une base max configurée reste
+max. Une interaction pending adressée à un humain sur la tâche ou sa parente suspend le
+relèvement. Aucun effort de base n'est baissé.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01EThpSSDGc5NRYwbgjNqoTJ
+---
+ .../src/__tests__/atelier-effort-run.test.ts  | 89 +++++++++++++++----
+ server/src/atelier/effort-run.ts              | 78 +++++++++++-----
+ server/src/services/heartbeat.ts              |  8 +-
+ 3 files changed, 133 insertions(+), 42 deletions(-)
+
+diff --git a/server/src/__tests__/atelier-effort-run.test.ts b/server/src/__tests__/atelier-effort-run.test.ts
+index 087be40b08..937e0fc05f 100644
+--- a/server/src/__tests__/atelier-effort-run.test.ts
++++ b/server/src/__tests__/atelier-effort-run.test.ts
+@@ -6,13 +6,14 @@
+ import { randomUUID } from "node:crypto";
+ import { sql } from "drizzle-orm";
+ import { afterAll, beforeAll, describe, expect, it } from "vitest";
+-import { createDb, pluginDatabaseNamespaces, plugins } from "@paperclipai/db";
++import { agents, companies, createDb, documentRevisions, documents, issues, issueThreadInteractions, pluginDatabaseNamespaces, plugins } from "@paperclipai/db";
+ import { getEmbeddedPostgresTestSupport, startEmbeddedPostgresTestDatabase } from "./helpers/embedded-postgres.js";
+ import {
+   appliquerEffortRun,
+-  compterRefusDepuisAcceptation,
++  auteursRevisionsRefusees,
+   compterRevisionsRefusees,
+   decideEffortRun,
++  lireRefusDepuisAcceptation,
+   messageEffortReleve,
+   type EntreeDecisionEffort,
+ } from "../atelier/effort-run.js";
+@@ -24,6 +25,7 @@ function entree(champs: Partial<EntreeDecisionEffort> & { config?: Record<string
+     adapterConfig: config ?? { model: "claude-sonnet-5-5", effort: "medium" },
+     refus: 1,
+     estProducteur: true,
++    attenteHumaine: false,
+     ...reste,
+   };
+ }
+@@ -33,19 +35,21 @@ function effortApres(e: EntreeDecisionEffort): unknown {
+ }
+ 
+ describe("escalier d'effort : décision", () => {
+-  it("monte d'un cran par refus et plafonne à max", () => {
+-    const attendu = ["medium", "high", "xhigh", "max", "max", "max"];
++  it("monte d'un cran par refus et plafonne à xhigh, jamais max sans accord humain (COORD-P2-17)", () => {
++    const attendu = ["medium", "high", "xhigh", "xhigh", "xhigh", "xhigh"];
+     for (let refus = 0; refus < attendu.length; refus++) {
+       expect(effortApres(entree({ refus })), `refus=${refus}`).toBe(attendu[refus]);
+     }
+   });
+ 
+-  it("part d'une base high : high → xhigh → max", () => {
++  it("part d'une base high : high → xhigh, plafond xhigh (pas max)", () => {
+     const config = { model: "claude-opus-5-5", effort: "high" };
+     expect(effortApres(entree({ config, refus: 0 }))).toBe("high");
+     expect(effortApres(entree({ config, refus: 1 }))).toBe("xhigh");
+-    expect(effortApres(entree({ config, refus: 2 }))).toBe("max");
+-    expect(effortApres(entree({ config, refus: 7 }))).toBe("max");
++    expect(effortApres(entree({ config, refus: 2 }))).toBe("xhigh");
++    expect(effortApres(entree({ config, refus: 3 }))).toBe("xhigh");
++    expect(effortApres(entree({ config, refus: 7 }))).toBe("xhigh");
++    expect(decideEffortRun(entree({ config, refus: 3 }))).toMatchObject({ applique: true, effort: "xhigh", plafond: "xhigh", releve: true });
+     const auPlafond = decideEffortRun(entree({ config: { model: "claude-opus-5-5", effort: "max" }, refus: 3 }));
+     expect(auPlafond).toMatchObject({ applique: true, effort: "max", releve: false });
+   });
+@@ -76,9 +80,9 @@ describe("escalier d'effort : décision", () => {
+     }
+   });
+ 
+-  it("respecte l'échelle propre au modèle (pas de xhigh sur un modèle qui ne l'a pas)", () => {
++  it("respecte l'échelle propre au modèle (pas de xhigh sur un modèle qui ne l'a pas, ni de max)", () => {
+     const config = { model: "claude-opus-4-6", effort: "high" };
+-    expect(effortApres(entree({ config, refus: 1 }))).toBe("max");
++    expect(effortApres(entree({ config, refus: 1 }))).toBe("high");
+     expect(effortApres(entree({ config: { model: "claude-sonnet-4-5", effort: "medium" }, refus: 5 }))).toBe("high");
+   });
+ 
+@@ -91,6 +95,20 @@ describe("escalier d'effort : décision", () => {
+     expect(decideEffortRun(entree({ config: { model: "claude-sonnet-5-5", effort: "turbo" }, refus: 3 })).applique).toBe(false);
+   });
+ 
++  it("ne relève pas un refus qui attend une décision humaine (PARC-4)", () => {
++    expect(decideEffortRun(entree({ refus: 2, attenteHumaine: true }))).toEqual({ applique: false, raison: "refus en attente d'une décision humaine" });
++    expect(decideEffortRun(entree({ refus: 2, attenteHumaine: false }))).toMatchObject({ applique: true, effort: "xhigh" });
++  });
++
++  it("rend les auteurs des seules révisions refusées comptées", () => {
++    const [r1, r2] = [randomUUID(), randomUUID()];
++    expect(auteursRevisionsRefusees([
++      { origine: "verdict", revisionId: r1, motifs: null, auteurAgentId: "redacteur" },
++      { origine: "porte", revisionId: r2, motifs: [{ code: "revue_requise_absente" }], auteurAgentId: "autre" },
++      { origine: "porte", revisionId: r2, motifs: [{ code: "preuve_absente" }], auteurAgentId: null },
++    ])).toEqual(["redacteur"]);
++  });
++
+   it("compte les révisions distinctes refusées, comme les cycles du plugin", () => {
+     const r1 = randomUUID();
+     const r2 = randomUUID();
+@@ -127,7 +145,7 @@ const NS = "plugin_atelier_effort_test";
+ 
+   it("renvoie null sans plugin, puis compte les refus depuis le dernier PASS", async () => {
+     const issueId = randomUUID();
+-    expect(await compterRefusDepuisAcceptation(db, issueId)).toBeNull();
++    expect(await lireRefusDepuisAcceptation(db, issueId)).toBeNull();
+ 
+     const pluginId = randomUUID();
+     await db.insert(plugins).values({ id: pluginId, pluginKey: "atelier.marketing-ia", packageName: "@atelier/plugin-atelier", version: "0.1.0", manifestJson: {} as never, status: "ready" });
+@@ -140,9 +158,9 @@ const NS = "plugin_atelier_effort_test";
+     ]) await db.execute(sql.raw(ddl));
+ 
+     // Tâche hors porte : aucun escalier.
+-    expect(await compterRefusDepuisAcceptation(db, issueId)).toBeNull();
++    expect(await lireRefusDepuisAcceptation(db, issueId)).toBeNull();
+     await db.execute(sql.raw(`insert into ${NS}.portes (issue_id) values ('${issueId}')`));
+-    expect(await compterRefusDepuisAcceptation(db, issueId)).toBe(0);
++    expect((await lireRefusDepuisAcceptation(db, issueId))?.refus).toBe(0);
+ 
+     const [v1, v2, v3, v4] = [randomUUID(), randomUUID(), randomUUID(), randomUUID()];
+     const refusPorte = (rev: string, code: string) =>
+@@ -154,18 +172,55 @@ const NS = "plugin_atelier_effort_test";
+     await refusPorte(v1, "exigence_non_couverte"); // même révision : un seul cran
+     await refusPorte(v2, "revue_requise_absente"); // motif sans cycle : ne compte pas
+     await verdict(v2, "PASS");
+-    expect(await compterRefusDepuisAcceptation(db, issueId)).toBe(1);
++    expect((await lireRefusDepuisAcceptation(db, issueId))?.refus).toBe(1);
+     await refusPorte(v2, "preuve_absente");
+-    expect(await compterRefusDepuisAcceptation(db, issueId)).toBe(2);
++    expect((await lireRefusDepuisAcceptation(db, issueId))?.refus).toBe(2);
+ 
+     // Acceptation : retour à la base.
+     await db.execute(sql.raw(`insert into ${NS}.evaluations_porte (id, issue_id, revision_id, decision) values ('${randomUUID()}', '${issueId}', '${v3}', 'PASS')`));
+-    expect(await compterRefusDepuisAcceptation(db, issueId)).toBe(0);
++    expect((await lireRefusDepuisAcceptation(db, issueId))?.refus).toBe(0);
+     await verdict(v4, "CHANGES_REQUESTED");
+-    expect(await compterRefusDepuisAcceptation(db, issueId)).toBe(1);
++    expect((await lireRefusDepuisAcceptation(db, issueId))?.refus).toBe(1);
+ 
+     // Porte désactivée : plus d'escalier.
+     await db.execute(sql.raw(`update ${NS}.portes set actif = false where issue_id = '${issueId}'`));
+-    expect(await compterRefusDepuisAcceptation(db, issueId)).toBeNull();
++    expect(await lireRefusDepuisAcceptation(db, issueId)).toBeNull();
++  }, 30_000);
++
++  it("cible l'auteur de la révision refusée, pas l'assigné, et repère une carte humaine en attente (COORD-P2-17, PARC-4)", async () => {
++    const companyId = randomUUID();
++    const [directeur, redacteur] = [randomUUID(), randomUUID()];
++    const [parentId, issueId, documentId, revisionId] = [randomUUID(), randomUUID(), randomUUID(), randomUUID()];
++    await db.insert(companies).values({ id: companyId, name: "Escalier", issuePrefix: `E${companyId.replace(/-/g, "").slice(0, 6).toUpperCase()}` });
++    await db.insert(agents).values([
++      { id: directeur, companyId, name: "Directeur", role: "ceo", status: "idle", adapterType: "claude_local", adapterConfig: {}, runtimeConfig: {} },
++      { id: redacteur, companyId, name: "Redacteur", role: "engineer", status: "idle", adapterType: "claude_local", adapterConfig: {}, runtimeConfig: {} },
++    ]);
++    await db.insert(issues).values({ id: parentId, companyId, title: "Projet", status: "in_progress", priority: "medium", assigneeAgentId: directeur });
++    await db.insert(issues).values({ id: issueId, companyId, parentId, title: "Article", status: "in_review", priority: "medium", assigneeAgentId: directeur });
++    await db.insert(documents).values({ id: documentId, companyId, title: "Article", format: "markdown", latestBody: "v1", latestRevisionId: revisionId, latestRevisionNumber: 1, createdByAgentId: redacteur, updatedByAgentId: redacteur });
++    await db.insert(documentRevisions).values({ id: revisionId, companyId, documentId, revisionNumber: 1, title: "Article", format: "markdown", body: "v1", createdByAgentId: redacteur });
++    await db.execute(sql.raw(`insert into ${NS}.portes (issue_id) values ('${issueId}')`));
++    await db.execute(sql.raw(`insert into ${NS}.verdicts (id, issue_id, revision_id, verdict) values ('${randomUUID()}', '${issueId}', '${revisionId}', 'CHANGES_REQUESTED')`));
++
++    const lu = await lireRefusDepuisAcceptation(db, issueId);
++    expect(lu).toEqual({ refus: 1, auteurs: [redacteur], attenteHumaine: false });
++    const decision = (agentId: string) => decideEffortRun(entree({
++      config: { model: "claude-opus-5-5", effort: "high" },
++      refus: lu!.refus,
++      estProducteur: lu!.auteurs.includes(agentId),
++      attenteHumaine: lu!.attenteHumaine,
++    }));
++    expect(decision(directeur).applique).toBe(false);
++    expect(decision(redacteur)).toMatchObject({ applique: true, effort: "xhigh" });
++
++    // Carte en attente de l'opérateur sur la parente : refus non imputable au rédacteur.
++    const [carte] = await db.insert(issueThreadInteractions).values({
++      companyId, issueId: parentId, kind: "request_confirmation", status: "pending", payload: { version: 1, prompt: "Valider ?" },
++    }).returning();
++    expect((await lireRefusDepuisAcceptation(db, issueId))?.attenteHumaine).toBe(true);
++    // Une interaction adressée à un agent n'est pas une décision humaine.
++    await db.update(issueThreadInteractions).set({ addresseeAgentId: directeur }).where(sql`id = ${carte!.id}`);
++    expect((await lireRefusDepuisAcceptation(db, issueId))?.attenteHumaine).toBe(false);
+   }, 30_000);
+ });
+diff --git a/server/src/atelier/effort-run.ts b/server/src/atelier/effort-run.ts
+index 6d0a001d2b..a03c4c301e 100644
+--- a/server/src/atelier/effort-run.ts
++++ b/server/src/atelier/effort-run.ts
+@@ -4,12 +4,15 @@
+  * Quand le livrable d'une tâche sous porte est refusé (revue CHANGES_REQUESTED ou refus
+  * de porte sur le fond), le run suivant du producteur travaille un cran plus fort :
+  *   effort effectif = effort de base de l'agent + 1 cran par révision refusée
+- *   depuis la dernière évaluation PASS de la tâche, plafonné au dernier niveau du modèle.
++ *   depuis la dernière évaluation PASS de la tâche, plafonné au dernier niveau du modèle
++ *   avant « max » (max seulement s'il est l'effort configuré : jamais sans accord humain).
+  * Base absente = `medium`. Après un PASS, le compteur repart de zéro : retour à la base.
+  *
+  * Règles fixes :
+  *  - seul l'effort change, JAMAIS le modèle (aucune clé `model` n'est produite) ;
+- *  - seulement l'adaptateur `claude_local`, seulement l'agent assigné à la tâche ;
++ *  - seulement l'adaptateur `claude_local`, seulement l'auteur d'une révision refusée
++ *    (pas l'assigné : un coordinateur assigné ne rédige pas, audit COORD-P2-17, PARC-4) ;
++ *  - aucun relèvement tant qu'une carte attend une décision humaine sur la tâche ou sa parente ;
+  *  - Haiku (pas de niveau d'effort) et l'adaptateur `process` sont ignorés ;
+  *  - l'effort relevé vit dans la configuration du run, jamais dans `agents.adapter_config`.
+  *
+@@ -34,6 +37,8 @@ export interface RefusLu {
+   revisionId: string | null;
+   /** Motifs de l'évaluation de porte (null pour un verdict de revue). */
+   motifs: unknown;
++  /** Agent auteur de la révision (document_revisions.created_by_agent_id). */
++  auteurAgentId?: string | null;
+ }
+ 
+ /** Un refus de porte consomme-t-il un cycle ? Même règle que `refusDeFond` du plugin. */
+@@ -45,22 +50,35 @@ export function refusDeFond(motifs: unknown): boolean {
+   });
+ }
+ 
++function refusCompte(r: RefusLu): boolean {
++  return Boolean(r.revisionId) && (r.origine === "verdict" || refusDeFond(r.motifs));
++}
++
+ /** Nombre de révisions distinctes refusées parmi les refus lus. Fonction pure. */
+ export function compterRevisionsRefusees(refus: readonly RefusLu[]): number {
+-  const revisions = new Set<string>();
+-  for (const r of refus) {
+-    if (!r.revisionId) continue;
+-    if (r.origine === "verdict" || refusDeFond(r.motifs)) revisions.add(r.revisionId);
+-  }
+-  return revisions.size;
++  return new Set(refus.filter(refusCompte).map((r) => r.revisionId)).size;
++}
++
++/** Agents auteurs des révisions refusées comptées. Fonction pure. */
++export function auteursRevisionsRefusees(refus: readonly RefusLu[]): string[] {
++  return [...new Set(refus.filter(refusCompte).flatMap((r) => (r.auteurAgentId ? [r.auteurAgentId] : [])))];
++}
++
++export interface RefusDepuisAcceptation {
++  refus: number;
++  /** Auteurs des révisions refusées : seuls producteurs relevés. */
++  auteurs: string[];
++  /** Une carte (interaction pending adressée à un humain) attend sur la tâche ou sa parente. */
++  attenteHumaine: boolean;
+ }
+ 
+ /**
+- * Révisions refusées depuis la dernière évaluation PASS de la tâche.
++ * Révisions refusées depuis la dernière évaluation PASS de la tâche, leurs auteurs et
++ * l'attente d'une décision humaine.
+  * null : plugin absent, tâche hors porte ou porte inactive (aucun escalier).
+  * La comparaison des dates est faite par PostgreSQL (précision microseconde).
+  */
+-export async function compterRefusDepuisAcceptation(executeur: ExecuteurSql, issueId: string): Promise<number | null> {
++export async function lireRefusDepuisAcceptation(executeur: ExecuteurSql, issueId: string): Promise<RefusDepuisAcceptation | null> {
+   const schema = await schemaAtelier(executeur);
+   if (!schema) return null;
+   const portes = tableAtelier(schema, "portes");
+@@ -70,19 +88,30 @@ export async function compterRefusDepuisAcceptation(executeur: ExecuteurSql, iss
+   if (!porte?.actif) return null;
+   const evaluations = tableAtelier(schema, "evaluations_porte");
+   const verdicts = tableAtelier(schema, "verdicts");
+-  const rangs = lignes<{ origine: "verdict" | "porte"; revision_id: string | null; motifs: unknown }>(
++  const rangs = lignes<{ origine: "verdict" | "porte"; revision_id: string | null; motifs: unknown; auteur: string | null }>(
+     await executeur.execute(sql`with dernier_pass as (
+         select max(cree_le) as le from ${evaluations} where issue_id = ${issueId} and decision = 'PASS'
++      ), refus as (
++        select 'verdict' as origine, v.revision_id, null::jsonb as motifs
++          from ${verdicts} v, dernier_pass p
++          where v.issue_id = ${issueId} and v.verdict = 'CHANGES_REQUESTED' and (p.le is null or v.cree_le > p.le)
++        union all
++        select 'porte' as origine, e.revision_id, e.motifs
++          from ${evaluations} e, dernier_pass p
++          where e.issue_id = ${issueId} and e.decision = 'REFUS' and e.revision_id is not null and (p.le is null or e.cree_le > p.le)
+       )
+-      select 'verdict' as origine, v.revision_id::text as revision_id, null::jsonb as motifs
+-        from ${verdicts} v, dernier_pass p
+-        where v.issue_id = ${issueId} and v.verdict = 'CHANGES_REQUESTED' and (p.le is null or v.cree_le > p.le)
+-      union all
+-      select 'porte' as origine, e.revision_id::text as revision_id, e.motifs
+-        from ${evaluations} e, dernier_pass p
+-        where e.issue_id = ${issueId} and e.decision = 'REFUS' and e.revision_id is not null and (p.le is null or e.cree_le > p.le)`),
++      select r.origine, r.revision_id::text as revision_id, r.motifs, dr.created_by_agent_id::text as auteur
++        from refus r left join document_revisions dr on dr.id = r.revision_id`),
+   );
+-  return compterRevisionsRefusees(rangs.map((r) => ({ origine: r.origine, revisionId: r.revision_id, motifs: r.motifs })));
++  const lus = rangs.map((r) => ({ origine: r.origine, revisionId: r.revision_id, motifs: r.motifs, auteurAgentId: r.auteur }));
++  const refus = compterRevisionsRefusees(lus);
++  const attente = refus > 0 && lignes(
++    await executeur.execute(sql`select 1 from issue_thread_interactions t
++      where t.status = 'pending' and t.addressee_agent_id is null
++        and t.issue_id in (select id from issues where id = ${issueId} union select parent_id from issues where id = ${issueId} and parent_id is not null)
++      limit 1`),
++  ).length > 0;
++  return { refus, auteurs: auteursRevisionsRefusees(lus), attenteHumaine: attente };
+ }
+ 
+ export interface EntreeDecisionEffort {
+@@ -91,8 +120,10 @@ export interface EntreeDecisionEffort {
+   adapterConfig: Record<string, unknown>;
+   /** Révisions refusées depuis la dernière acceptation ; null = tâche hors porte. */
+   refus: number | null;
+-  /** L'agent du run est-il l'assigné (le producteur) de la tâche ? */
++  /** L'agent du run est-il l'auteur d'une révision refusée (le producteur) ? */
+   estProducteur: boolean;
++  /** Une carte attend une décision humaine : le refus n'est pas imputable au producteur. */
++  attenteHumaine: boolean;
+ }
+ 
+ export type DecisionEffort =
+@@ -119,6 +150,7 @@ export function decideEffortRun(entree: EntreeDecisionEffort): DecisionEffort {
+   if (entree.adapterType !== "claude_local") return { applique: false, raison: `adaptateur ${entree.adapterType} non concerné` };
+   if (!entree.estProducteur) return { applique: false, raison: "l'agent n'est pas le producteur de la tâche" };
+   if (entree.refus === null) return { applique: false, raison: "tâche hors porte" };
++  if (entree.attenteHumaine) return { applique: false, raison: "refus en attente d'une décision humaine" };
+   if (!Number.isInteger(entree.refus) || entree.refus <= 0) return { applique: false, raison: "aucun refus depuis la dernière acceptation" };
+   const modele = typeof entree.adapterConfig.model === "string" ? entree.adapterConfig.model.trim() : "";
+   if (/haiku/i.test(modele)) return { applique: false, raison: "modèle Haiku : pas de niveau d'effort" };
+@@ -128,8 +160,10 @@ export function decideEffortRun(entree: EntreeDecisionEffort): DecisionEffort {
+   const base = (brut || EFFORT_BASE_PAR_DEFAUT) as NiveauEffort;
+   const indexBase = niveaux.indexOf(base);
+   if (indexBase < 0) return { applique: false, raison: `effort de base « ${brut} » hors de l'échelle du modèle` };
+-  const plafond = niveaux[niveaux.length - 1]!;
+-  const effort = niveaux[Math.min(indexBase + entree.refus, niveaux.length - 1)]!;
++  // max n'est jamais atteint par l'escalier ; une base max configurée reste max.
++  const indexPlafond = Math.max(indexBase, niveaux.filter((n) => n !== "max").length - 1);
++  const plafond = niveaux[indexPlafond]!;
++  const effort = niveaux[Math.min(indexBase + entree.refus, indexPlafond)]!;
+   return { applique: true, effort, base, baseExplicite: brut !== "", refus: entree.refus, plafond, releve: effort !== brut };
+ }
+ 
+diff --git a/server/src/services/heartbeat.ts b/server/src/services/heartbeat.ts
+index f864f8809b..887231eca8 100644
+--- a/server/src/services/heartbeat.ts
++++ b/server/src/services/heartbeat.ts
+@@ -359,7 +359,7 @@ import { HttpError, notFound } from "../errors.js";
+ import { logger } from "../middleware/logger.js";
+ import { creerRegulateurRuns } from "../atelier/regulateur-runs.js";
+ import { inventaireCompetencesRun } from "../atelier/competences-run.js";
+-import { appliquerEffortRun, compterRefusDepuisAcceptation, decideEffortRun, messageEffortReleve } from "../atelier/effort-run.js";
++import { appliquerEffortRun, decideEffortRun, lireRefusDepuisAcceptation, messageEffortReleve } from "../atelier/effort-run.js";
+ import {
+   resolveManagedGitHubIdentitySelection,
+   scrubGitCredentialText,
+@@ -3398,11 +3398,13 @@ export function heartbeatService(
+       // persisté dans la configuration de l'agent. Un échec de lecture laisse l'effort de base.
+       if (issueRef && agent.adapterType === "claude_local") {
+         try {
++          const lectureRefus = await lireRefusDepuisAcceptation(db, issueRef.id);
+           const decisionEffort = decideEffortRun({
+             adapterType: agent.adapterType,
+             adapterConfig: runtimeConfig,
+-            refus: await compterRefusDepuisAcceptation(db, issueRef.id),
+-            estProducteur: issueContext?.assigneeAgentId === agent.id,
++            refus: lectureRefus?.refus ?? null,
++            estProducteur: lectureRefus?.auteurs.includes(agent.id) ?? false,
++            attenteHumaine: lectureRefus?.attenteHumaine ?? false,
+           });
+           if (decisionEffort.applique) {
+             runtimeConfig = appliquerEffortRun(runtimeConfig, decisionEffort);
+-- 
+2.53.0
+

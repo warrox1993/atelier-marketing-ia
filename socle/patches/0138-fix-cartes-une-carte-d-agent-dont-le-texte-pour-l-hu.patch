@@ -1,0 +1,113 @@
+From 7d36f9b673964c0c5656e0ca5648b756ff713096 Mon Sep 17 00:00:00 2001
+From: Jean-Baptiste Dhondt <114347858+warrox1993@users.noreply.github.com>
+Date: Fri, 30 Oct 2026 16:06:03 +0100
+Subject: [PATCH 138/139] =?UTF-8?q?fix(cartes):=20une=20carte=20d'agent=20?=
+ =?UTF-8?q?dont=20le=20texte=20pour=20l'humain=20cite=20un=20UUID=20brut?=
+ =?UTF-8?q?=20est=20refus=C3=A9e=20(Atelier=20LANG-L8)?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+POST /api/issues/:id/interactions, acteur agent : payload.prompt et les prompt
+des questions de ask_user_questions ne peuvent pas contenir un identifiant de 36
+caractères. Réponse 422 en français qui demande de citer la révision par son
+numéro ou le document par son titre ; l'identifiant reste permis dans target.
+Les cartes posées par un humain ne sont pas concernées.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01EThpSSDGc5NRYwbgjNqoTJ
+---
+ .../issue-thread-interaction-routes.test.ts   | 41 +++++++++++++++++++
+ server/src/routes/issues.ts                   | 17 ++++++++
+ 2 files changed, 58 insertions(+)
+
+diff --git a/server/src/__tests__/issue-thread-interaction-routes.test.ts b/server/src/__tests__/issue-thread-interaction-routes.test.ts
+index 12f57b2aa9..66dedf012d 100644
+--- a/server/src/__tests__/issue-thread-interaction-routes.test.ts
++++ b/server/src/__tests__/issue-thread-interaction-routes.test.ts
+@@ -763,6 +763,47 @@ describe("issue thread interaction routes", () => {
+     );
+   });
+ 
++  it.each([
++    ["request_confirmation", { kind: "request_confirmation", payload: { version: 1, prompt: "Valider la révision 6f0c2a4e-1b2d-4c3e-8f9a-0123456789ab ?" } }],
++    ["ask_user_questions", {
++      kind: "ask_user_questions",
++      payload: {
++        version: 1,
++        questions: [{ id: "q1", prompt: "Garder la version 6F0C2A4E-1B2D-4C3E-8F9A-0123456789AB ?", selectionMode: "single", options: [{ id: "oui", label: "Oui" }, { id: "non", label: "Non" }] }],
++      },
++    }],
++  ] as const)("refuse une carte %s d'agent dont le texte pour l'humain cite un UUID brut (Atelier LANG-L8)", async (_kind, body) => {
++    const app = await createApp({ type: "agent", agentId: ASSIGNEE_AGENT_ID, companyId: "company-1", runId: RUN_2 });
++    const res = await request(app)
++      .post("/api/issues/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/interactions")
++      .send(body);
++    expect(res.status, JSON.stringify(res.body)).toBe(422);
++    expect(res.body.error).toBe(
++      "Le texte de la carte pour l'humain cite un identifiant brut de 36 caractères (UUID) qu'il ne peut pas lire. " +
++        "Citez la révision par son numéro (revisionNumber) ou le document par son titre ; l'identifiant reste dans target.",
++    );
++    expect(mockInteractionService.create).not.toHaveBeenCalled();
++  });
++
++  it("accepte l'UUID dans target et une carte humaine qui en cite un (Atelier LANG-L8)", async () => {
++    const agentApp = await createApp({ type: "agent", agentId: ASSIGNEE_AGENT_ID, companyId: "company-1", runId: RUN_2 });
++    const agentRes = await request(agentApp)
++      .post("/api/issues/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/interactions")
++      .send({
++        kind: "request_confirmation",
++        payload: {
++          version: 1,
++          prompt: "Valider la révision 3 de la liste ?",
++          target: { type: "custom", key: "liste", revisionId: "6f0c2a4e-1b2d-4c3e-8f9a-0123456789ab", revisionNumber: 3 },
++        },
++      });
++    expect(agentRes.status, JSON.stringify(agentRes.body)).toBe(201);
++    const boardRes = await request(await createApp())
++      .post("/api/issues/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/interactions")
++      .send({ kind: "request_confirmation", payload: { version: 1, prompt: "Valider 6f0c2a4e-1b2d-4c3e-8f9a-0123456789ab ?" } });
++    expect(boardRes.status, JSON.stringify(boardRes.body)).toBe(201);
++  });
++
+   it("returns 400 for agent-addressed tool-action confirmations", async () => {
+     const app = await createApp();
+     const res = await request(app)
+diff --git a/server/src/routes/issues.ts b/server/src/routes/issues.ts
+index 1545887fb2..babd1e7c2d 100644
+--- a/server/src/routes/issues.ts
++++ b/server/src/routes/issues.ts
+@@ -2051,6 +2051,8 @@ const ACTIVE_REVIEW_APPROVAL_STATUSES = new Set([
+   "revision_requested",
+ ]);
+ 
++const RAW_UUID_IN_TEXT = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i;
++
+ const INVALID_AGENT_IN_REVIEW_DISPOSITION_MESSAGE =
+   "invalid_issue_disposition: une mise à jour d'agent qui passe une tâche en in_review doit avoir un vrai chemin de revue. " +
+   "Cette requête laisserait la tâche en in_review sans personne ni rien pour porter la prochaine action. " +
+@@ -16825,6 +16827,21 @@ export function issueRoutes(
+           "payload.secretProposal is server-owned metadata and cannot be supplied when creating an interaction",
+         );
+       }
++      // Atelier LANG-L8 : l'humain ne lit pas un UUID ; l'identifiant reste dans target.
++      if (req.actor.type === "agent") {
++        const humanPrompts = [
++          req.body.payload?.prompt,
++          ...(Array.isArray(req.body.payload?.questions)
++            ? req.body.payload.questions.map((question: { prompt?: unknown }) => question?.prompt)
++            : []),
++        ];
++        if (humanPrompts.some((prompt) => typeof prompt === "string" && RAW_UUID_IN_TEXT.test(prompt))) {
++          throw unprocessable(
++            "Le texte de la carte pour l'humain cite un identifiant brut de 36 caractères (UUID) qu'il ne peut pas lire. " +
++              "Citez la révision par son numéro (revisionNumber) ou le document par son titre ; l'identifiant reste dans target.",
++          );
++        }
++      }
+ 
+       // Plan-document confirmation targets are validated authoritatively inside
+       // issueThreadInteractionService.create, which re-reads the plan document's
+-- 
+2.53.0
+

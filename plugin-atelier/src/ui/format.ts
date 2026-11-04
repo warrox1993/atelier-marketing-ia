@@ -186,6 +186,7 @@ export const ROLES_REVUE: Record<RoleRevue, string> = {
   exigences: "Contrôleur des exigences",
   metier: "Relecteur métier et factuel",
   technique: "Vérificateur technique",
+  conformite: "Contrôleur de conformité publicitaire",
 };
 
 export const VERDICTS: Record<string, { libelle: string; ton: Ton }> = {

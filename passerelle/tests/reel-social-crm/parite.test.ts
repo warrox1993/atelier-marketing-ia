@@ -9,7 +9,7 @@ import { adressesFaussesSocialCrm, type ConfigSocialCrmReel } from "../../src/re
 import { construireSocialCrmReel } from "../../src/reel/social-crm/enregistrer.js";
 import { IDENTIFIANTS } from "./faux-plateformes.js";
 
-const SERVICES = ["facebook", "instagram", "linkedin", "crm", "pipedrive", "odoo", "teamleader"];
+const SERVICES = ["facebook", "instagram", "linkedin", "linkedinprofil", "crm", "pipedrive", "odoo", "teamleader"];
 const dossier = mkdtempSync(join(tmpdir(), "passerelle-parite-"));
 afterAll(() => rmSync(dossier, { recursive: true, force: true }));
 
@@ -21,13 +21,13 @@ function config(applications: ConfigSocialCrmReel["applications"]): ConfigSocial
   };
 }
 
-const TOUTES = { facebook: IDENTIFIANTS.meta, instagram: IDENTIFIANTS.instagram, linkedin: IDENTIFIANTS.linkedin, crm: IDENTIFIANTS.hubspot, pipedrive: IDENTIFIANTS.pipedrive, teamleader: IDENTIFIANTS.teamleader };
+const TOUTES = { facebook: IDENTIFIANTS.meta, instagram: IDENTIFIANTS.instagram, linkedin: IDENTIFIANTS.linkedin, linkedinprofil: IDENTIFIANTS.linkedinProfil, crm: IDENTIFIANTS.hubspot, pipedrive: IDENTIFIANTS.pipedrive, teamleader: IDENTIFIANTS.teamleader };
 
 describe("services servis selon la configuration", () => {
   const reel = new RegistreFournisseurs();
   const social = construireSocialCrmReel(reel, {}, { hote: "127.0.0.1", urlPasserelle: () => "http://127.0.0.1:3190", config: config(TOUTES) })!;
 
-  it("les sept services sont servis quand toutes les applications sont configurées", () => {
+  it("les huit services sont servis quand toutes les applications sont configurées", () => {
     expect([...social.services].sort()).toEqual([...SERVICES].sort());
   });
 

@@ -2,8 +2,8 @@
 // d'adresses de production est contrôlé séparément (adresses privées refusées, y compris après résolution DNS).
 
 import { readFileSync, statSync } from "node:fs";
-import { describe, expect, it } from "vitest";
-import { argumentsChrome, auditerPage, cheminScriptChrome, extraireProblemes, outilsAudit, MAX_PROBLEMES, type LanceurLighthouse, type RapportLh } from "../../src/reel/audit/auditer-page.js";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { argumentsChrome, auditerPage, BUDGET_AUDIT_MS, DELAI_PLAFOND_MS, cheminScriptChrome, extraireProblemes, outilsAudit, MAX_PROBLEMES, type LanceurLighthouse, type RapportLh } from "../../src/reel/audit/auditer-page.js";
 
 const publique = { resoudre: async () => ["93.184.216.34"] };
 
@@ -48,6 +48,37 @@ describe("auditer_page", () => {
     const r = await auditerPage("https://exemple.be/", 3, 30_000, { ...publique, lanceur: async () => rapport(valeurs[i++] as number) });
     expect(r.passes).toBe(3);
     expect(r.scores.performance).toBe(50);
+  });
+
+  describe("budget sous le délai de 60 s du socle (T1)", () => {
+    afterEach(() => { vi.useRealTimers(); });
+
+    it("toute la demande, file d'attente comprise, tient dans le budget", () => {
+      expect(BUDGET_AUDIT_MS).toBeLessThanOrEqual(55_000);
+      expect(DELAI_PLAFOND_MS).toBeLessThanOrEqual(BUDGET_AUDIT_MS);
+    });
+
+    it("chaque passe reçoit au plus le reste du budget ; passes restantes abandonnées sans erreur", async () => {
+      vi.useFakeTimers({ toFake: ["Date"] });
+      const delais: number[] = [];
+      const lanceur: LanceurLighthouse = async (_u, delaiMs) => { delais.push(delaiMs); vi.setSystemTime(Date.now() + 30_000); return rapport(0.5); };
+      const r = await auditerPage("https://exemple.be/", 3, 45_000, { ...publique, lanceur });
+      expect(r.erreur).toBeUndefined();
+      expect(delais).toEqual([45_000, BUDGET_AUDIT_MS - 30_000]);
+      expect(r.passes).toBe(2);
+    });
+
+    it("budget consommé par la file avant la première passe : erreur claire, aucun lancement", async () => {
+      vi.useFakeTimers({ toFake: ["Date"] });
+      let appels = 0;
+      const lent: LanceurLighthouse = async () => { appels++; vi.setSystemTime(Date.now() + BUDGET_AUDIT_MS); return rapport(0.5); };
+      const [, second] = await Promise.all([
+        auditerPage("https://exemple.be/", 1, 45_000, { ...publique, lanceur: lent }),
+        auditerPage("https://exemple.be/b", 1, 45_000, { ...publique, lanceur: lent }),
+      ]);
+      expect(appels).toBe(1);
+      expect(second.erreur).toMatch(/Budget de l'audit épuisé/);
+    });
   });
 
   it("le nombre de passes est plafonné à 3", async () => {

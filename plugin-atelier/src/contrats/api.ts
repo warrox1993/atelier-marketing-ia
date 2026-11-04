@@ -118,6 +118,7 @@ export const CODES_ERREUR = [
   "producteur_ne_peut_pas_relire",
   "revision_perimee",
   "porte_absente",
+  "obs_projet_sans_source",
   "elevation_refusee",
   "diffusion_refusee",
   "liaison_refusee",

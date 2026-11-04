@@ -36,7 +36,7 @@ const TACHES: TacheFictive[] = [
 ];
 const hote = (cartes: Record<string, CarteFictive[]>): ScenarioHote => ({
   taches: TACHES,
-  aSuivre: [{ companyId: MARKETING, tacheId: "iss-mkt-2", slug: "marketing", nom: "Marketing" }],
+  aSuivre: [{ companyId: MARKETING, tacheId: "iss-mkt-2", slug: "marketing", nom: "Marketing", discussionId: "i1" }],
   cartes,
 });
 const TOUTES = { "iss-mkt-2": [CONFIRMATION], "iss-mkt-3": [QUESTION] };

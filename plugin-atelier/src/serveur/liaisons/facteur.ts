@@ -28,7 +28,8 @@ import type { LiaisonStockee, StockLiaisons } from "./base-liaisons.js";
 import { cloturerCibleSupprimee } from "./cible-supprimee.js";
 import { toujoursAutorisee } from "./autorisation.js";
 import { creerRelaisEtapes } from "./etapes.js";
-import { corpsReponse, estTronquee, notifierSource } from "./retour.js";
+import { LIMITES_LIAISON } from "../../contrats/index.js";
+import { DELAI_CLOTURE_MS, MOTIF_ECHEANCE, borner, corpsReponse, creerReponseCoordinateur, estTronquee, notifierSource } from "./retour.js";
 import { creerTransmission, type DependancesLiaisons } from "./transmission.js";
 
 export const FACTEUR = {
@@ -40,6 +41,9 @@ export const FACTEUR = {
   acteur: "atelier:facteur",
 } as const;
 
+/** COORD-P1-5 : statuts d'agent que l'hôte refuse de réveiller (`agent-invokability.ts` du socle). */
+const NON_INVOCABLES = new Set(["paused", "terminated", "pending_approval"]);
+
 /** Attente avant l'essai suivant : 15 s, 30 s, 1 min, 2 min… plafonnée à 30 min. */
 export const attenteFacteur = (essaisFaits: number): number => Math.min(FACTEUR.attenteMaxMs, FACTEUR.attenteBaseMs * 2 ** Math.max(0, essaisFaits));
 
@@ -49,6 +53,8 @@ export interface ResultatFacteur {
   /** Liaisons ouvertes dont un compte rendu d'étape a été relayé à la source. */
   etapesRelayees: string[];
   refusees: string[];
+  /** COORD-P1-5 : liaisons closes à l'échéance. */
+  expirees: string[];
   echecs: Array<{ liaisonId: string; etape: "transmission" | "notification"; erreur: string }>;
 }
 
@@ -57,7 +63,9 @@ const message = (e: unknown) => (e instanceof Error ? e.message : String(e));
 export function creerFacteur(d: DependancesLiaisons & { maintenant?: () => number }) {
   const { ctx, base, stock } = d;
   const relaisEtapes = creerRelaisEtapes(d);
-  const { transmettre } = creerTransmission(d);
+  const { transmettre, agents, coordinateurDe } = creerTransmission(d);
+  const reponseDuCoordinateur = creerReponseCoordinateur(d);
+  const maintenant = d.maintenant ?? (() => Date.now());
   let enCours = false;
   let minuterie: ReturnType<typeof setInterval> | null = null;
 
@@ -94,10 +102,43 @@ export function creerFacteur(d: DependancesLiaisons & { maintenant?: () => numbe
         });
         return;
       }
+      // COORD-P1-5 : coordinateur cible non invocable : rien ne part (essai compté), la source est prévenue une fois.
+      const coord = l.tacheCible ? null : coordinateurDe(await agents(l.entrepriseCible));
+      if (coord && NON_INVOCABLES.has(coord.status)) {
+        await prevenirCibleEnPause(l);
+        await echec(l, "transmission", `Coordinateur du service « ${l.serviceCible} » non invocable (${coord.status}).`, r);
+        return;
+      }
       await transmettre(l, l.demandePar, null);
       r.transmises.push(l.id);
     } catch (e) {
       await echec(l, "transmission", message(e), r);
+    }
+  }
+
+  async function prevenirCibleEnPause(l: LiaisonStockee) {
+    if (await base.journalExiste(l.entrepriseSource, "liaison.cible_en_pause", l.id)) return;
+    const corps = `**Demande au service « ${l.serviceCible} » en attente** : « ${l.objet.replace(/\s+/gu, " ")} ». Son coordinateur est en pause : la demande n'est pas transmise. Elle partira s'il reprend dans l'heure ; sinon elle sera close à l'échéance de ${LIMITES_LIAISON.echeanceHeures} h. Si elle vous bloque, avancez sans elle en écrivant votre hypothèse.`;
+    await ctx.issues.createComment(l.tacheOrigine, corps, l.entrepriseSource);
+    await base.journaliser({
+      companyId: l.entrepriseSource, type: "liaison.cible_en_pause", entite: "liaison", entiteId: l.id, issueId: l.tacheOrigine, acteur: FACTEUR.acteur, runId: null,
+      donnees: { liaisonId: l.id, serviceCible: l.serviceCible },
+    });
+  }
+
+  /** COORD-P1-5 : liaison ouverte sans activité depuis l'échéance : close (la notification suit), tâche cible annulée. */
+  async function echeanceUne(l: LiaisonStockee, r: ResultatFacteur) {
+    if (!(await stock.transiter(l.entrepriseSource, l.id, ["ouverte"], { statut: "annulee", reponse: MOTIF_ECHEANCE, repondu: true }))) return;
+    r.expirees.push(l.id);
+    await base.journaliser({
+      companyId: l.entrepriseSource, type: "liaison.expiree", entite: "liaison", entiteId: l.id, issueId: l.tacheOrigine, acteur: FACTEUR.acteur, runId: null,
+      donnees: { liaisonId: l.id, serviceCible: l.serviceCible, echeanceHeures: LIMITES_LIAISON.echeanceHeures, transmise: l.tacheCible !== null },
+    });
+    if (!l.tacheCible || l.entrepriseCible === null) return;
+    try {
+      await ctx.issues.update(l.tacheCible, { status: "cancelled" }, l.entrepriseCible);
+    } catch (e) {
+      ctx.logger.warn("Liaison : annulation de la tâche cible échue impossible", { liaisonId: l.id, erreur: message(e) });
     }
   }
 
@@ -111,7 +152,25 @@ export function creerFacteur(d: DependancesLiaisons & { maintenant?: () => numbe
     }
   }
 
+  /** COORD-P1-2 : relit la réponse après la clôture ; vrai s'il faut encore attendre le commentaire de clôture. Ne lève jamais. */
+  async function reponseApresCloture(l: LiaisonStockee): Promise<boolean> {
+    if (l.statut !== "repondue" || l.entrepriseCible === null || !l.tacheCible) return false;
+    try {
+      const tache = await ctx.issues.get(l.tacheCible, l.entrepriseCible);
+      const fin = tache?.completedAt ? new Date(tache.completedAt).getTime() : Number.NaN;
+      if (!tache || Number.isNaN(fin)) return false;
+      if (maintenant() < fin + DELAI_CLOTURE_MS) return true;
+      const texte = await reponseDuCoordinateur(l, l.entrepriseCible, tache.assigneeAgentId ?? null, fin + DELAI_CLOTURE_MS);
+      const reponse = texte === null ? null : borner(texte);
+      if (reponse !== null && reponse !== l.reponse && (await stock.transiter(l.entrepriseSource, l.id, ["repondue"], { statut: "repondue", reponse }))) l.reponse = reponse;
+    } catch (e) {
+      ctx.logger.warn("Liaison : relecture de la réponse après clôture impossible, réponse gardée à l'événement", { liaisonId: l.id, erreur: message(e) });
+    }
+    return false;
+  }
+
   async function notificationUne(l: LiaisonStockee, r: ResultatFacteur) {
+    if (await reponseApresCloture(l)) return;
     if (!(await stock.reserverEssai(l.entrepriseSource, l.id, attenteFacteur(l.facteurEssais ?? 0), FACTEUR.essaisMax))) return;
     const { erreurCommentaire, erreurReveil } = await notifierSource(ctx, l, corpsReponse(l), "atelier_liaison_reponse");
     if (erreurCommentaire) {
@@ -133,13 +192,14 @@ export function creerFacteur(d: DependancesLiaisons & { maintenant?: () => numbe
 
   /** Un passage : transmissions puis notifications dues. Un seul passage à la fois ; ne lève jamais. */
   async function passe(): Promise<ResultatFacteur> {
-    const r: ResultatFacteur = { transmises: [], notifiees: [], etapesRelayees: [], refusees: [], echecs: [] };
+    const r: ResultatFacteur = { transmises: [], notifiees: [], etapesRelayees: [], refusees: [], expirees: [], echecs: [] };
     if (enCours) return r;
     enCours = true;
     try {
       const etapes: Array<[() => Promise<LiaisonStockee[]>, (l: LiaisonStockee, r: ResultatFacteur) => Promise<void>, "transmission" | "notification"]> = [
         [() => stock.listerCibleSupprimee(FACTEUR.lot, FACTEUR.essaisMax), cibleSupprimeeUne, "transmission"],
         [() => stock.listerATransmettre(FACTEUR.lot, FACTEUR.essaisMax), transmissionUne, "transmission"],
+        [() => stock.listerEchues(FACTEUR.lot, LIMITES_LIAISON.echeanceHeures), echeanceUne, "transmission"],
         [() => stock.listerANotifier(FACTEUR.lot, FACTEUR.essaisMax), notificationUne, "notification"],
       ];
       for (const [lister, traiter, etape] of etapes) {

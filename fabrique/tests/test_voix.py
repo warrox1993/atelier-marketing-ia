@@ -391,6 +391,25 @@ def test_gpu_libre_avec_seulement_le_bureau():
     assert libre is True and "9500" in raison
 
 
+def test_la_visionneuse_d_images_loupe_n_est_pas_un_jeu():
+    pmon = PMON_BUREAU + "    0  833548  C+G  -  -  -  -  -  -  loupe\n"
+    calcul = BUREAU_CALCUL + "833548, /usr/bin/loupe, 38\n"
+    assert gpu.gpu_disponible(gpu.SortiesGpu(MEMOIRE_LIBRE, calcul, pmon, PS_CALME))[0] is True
+
+
+def test_discord_n_est_pas_un_jeu():
+    # vu le 01/11 : son processus GPU (flatpak) tient ~180 Mio comme un navigateur
+    calcul = BUREAU_CALCUL + "1535662, /app/discord/Discord --type=gpu-process, 180\n"
+    assert gpu.gpu_disponible(gpu.SortiesGpu(MEMOIRE_LIBRE, calcul, PMON_BUREAU, PS_CALME))[0] is True
+
+
+def test_le_portail_de_bureau_gnome_n_est_pas_un_jeu():
+    # vu le 01/11 : 6 Mio tenus en permanence ; la fabrique attendait sans fin après la fermeture du jeu
+    pmon = PMON_BUREAU + "    0    9233  C+G  -  -  -  -  -  -  xdg-desktop-po\n"
+    calcul = BUREAU_CALCUL + "9233, /usr/libexec/xdg-desktop-portal-gnome, 6\n"
+    assert gpu.gpu_disponible(gpu.SortiesGpu(MEMOIRE_LIBRE, calcul, pmon, PS_CALME))[0] is True
+
+
 @pytest.mark.parametrize("processus", ["gamescope\n", "bash\nreaper\n", "gamescope-wl\n"])
 def test_gpu_occupe_si_gamescope_ou_reaper_de_steam(processus):
     libre, raison = gpu.gpu_disponible(gpu.SortiesGpu(MEMOIRE_LIBRE, RIEN, RIEN, processus))

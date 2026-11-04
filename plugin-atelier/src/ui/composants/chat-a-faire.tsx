@@ -10,6 +10,7 @@ import { SurPlace, traitableSurPlace } from "../accueil-sur-place.js";
 import { compterAFaire, publierNombreAFaire } from "../compteur-afaire.js";
 import { LienHote, Pastille, Vide } from "../composants.js";
 import type { Ton } from "../format.js";
+import { appelHote } from "../hote.js";
 import { appelRoute } from "../routes-prospection.js";
 
 export const URGENCES: Readonly<Record<UrgenceAccueil, { libelle: string; ton: Ton }>> = {
@@ -23,6 +24,55 @@ const RANG_URGENCE: Readonly<Record<UrgenceAccueil, number>> = { haute: 0, moyen
 /** Du plus urgent au moins urgent ; à urgence égale, l'ordre du serveur est conservé (tri stable). */
 export function trierParUrgence(elements: readonly ElementAccueil[]): ElementAccueil[] {
   return elements.map((e, i) => ({ e, i })).sort((a, b) => RANG_URGENCE[a.e.urgence] - RANG_URGENCE[b.e.urgence] || a.i - b.i).map(({ e }) => e);
+}
+
+/** Code d'annulation d'un run par le plafond d'exécutions du jour (socle, `heartbeat/queue.ts`). */
+const CODE_PLAFOND_JOUR = "heartbeat.daily_run_limit";
+
+interface RunLu {
+  agentId?: unknown;
+  errorCode?: unknown;
+  createdAt?: unknown;
+}
+
+/**
+ * HUM-C11 : un élément par agent dont un run a été annulé aujourd'hui (jour UTC du socle) par le plafond d'exécutions.
+ * Le socle ne relance rien de lui-même tant que le jour n'a pas changé ; l'élément disparaît au jour suivant.
+ */
+export function elementsPlafondAtteint(runs: unknown, agents: unknown, maintenant: Date): ElementAccueil[] {
+  if (!Array.isArray(runs)) return [];
+  const jour = maintenant.toISOString().slice(0, 10);
+  const plafonnes = new Set<string>();
+  for (const r of runs as RunLu[]) {
+    if (r?.errorCode === CODE_PLAFOND_JOUR && typeof r.agentId === "string" && typeof r.createdAt === "string" && r.createdAt.slice(0, 10) === jour) plafonnes.add(r.agentId);
+  }
+  const noms = new Map<string, string>();
+  for (const a of Array.isArray(agents) ? (agents as Array<{ id?: unknown; name?: unknown }>) : []) {
+    if (typeof a?.id === "string" && typeof a.name === "string") noms.set(a.id, a.name);
+  }
+  return [...plafonnes].map((agentId) => ({
+    id: `plafond:${agentId}`,
+    type: "information_manquante",
+    urgence: "moyenne",
+    titre: `Plafond de runs du jour atteint : ${noms.get(agentId) ?? "un agent"}`,
+    raison: "Cet agent ne lance plus aucun run avant 00:00 UTC (1 h ou 2 h à Bruxelles). Si sa tâche ne repart pas d'elle-même après minuit, relancez l'agent.",
+    lien: `/agents/${encodeURIComponent(agentId)}`,
+    action: "Voir l'agent",
+  }));
+}
+
+/** Lecture native des derniers runs (et des noms d'agents seulement s'il y a un plafond) ; en cas d'échec, aucun élément. */
+async function lirePlafondsAtteints(companyId: string): Promise<ElementAccueil[]> {
+  const c = encodeURIComponent(companyId);
+  try {
+    // shortcut: 200 derniers runs de l'entreprise, assez pour le jour en cours ; lire par agent si une journée en dépasse 200.
+    const runs = await appelHote<unknown>("GET", `/companies/${c}/heartbeat-runs?summary=true&limit=200`);
+    if (elementsPlafondAtteint(runs, [], new Date()).length === 0) return [];
+    const agents = await appelHote<unknown>("GET", `/companies/${c}/agents`).catch(() => []);
+    return elementsPlafondAtteint(runs, agents, new Date());
+  } catch {
+    return [];
+  }
 }
 
 export interface DonneesAccueil {
@@ -45,8 +95,9 @@ export function useAFaireAccueil(companyId: string | null | undefined, intervall
     if (!companyId) return;
     let annule = false;
     setEtat((e) => ({ ...e, chargement: true, erreur: null }));
-    appelRoute<DonneesAccueil>("GET", `/accueil?companyId=${encodeURIComponent(companyId)}`)
-      .then((data) => {
+    Promise.all([appelRoute<DonneesAccueil>("GET", `/accueil?companyId=${encodeURIComponent(companyId)}`), lirePlafondsAtteints(companyId)])
+      .then(([accueil, plafonds]) => {
+        const data = { ...accueil, elements: [...accueil.elements, ...plafonds] };
         if (annule) return;
         setEtat({ data, erreur: null, chargement: false });
         // Ce que le serveur renvoie fait foi : un élément encore présent redevient visible.

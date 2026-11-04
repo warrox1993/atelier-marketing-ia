@@ -6,8 +6,9 @@
  */
 import { createElement } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { NavigationAtelier, OngletAtelierTache, PageAtelier } from "../../src/ui/index.js";
-import { OngletEchanges, oublierAccesDirection } from "../../src/ui/vues/echanges.js";
+import { EntreeAtelier, NavigationAtelier, OngletAtelierTache, PageAtelier } from "../../src/ui/index.js";
+import { OngletEchanges, oublierAccesDirection, statutRegistre } from "../../src/ui/vues/echanges.js";
+import type { CarteService } from "../../src/contrats/carte-decision.js";
 import { champParLibelle, cliquer, ENTREPRISE, installerPont, parTexte, rendre, saisir, type Rendu } from "./pont.js";
 import type { VueLiaison } from "../../src/contrats/liaisons-lecture.js";
 import { libelleStatutLiaison } from "../../src/contrats/liaisons-lecture.js";
@@ -25,7 +26,7 @@ const liaison = (o: Partial<VueLiaison> = {}): VueLiaison => ({
 });
 const ligneRegistre = (n: number) => ({
   id: `r${n}`, serviceSource: "marketing", serviceCible: "juridique", nomServiceSource: "Marketing", nomServiceCible: "Juridique", objet: `Objet ${n}`, statut: "ouverte",
-  libelleStatut: "Transmise", nombreExtraits: 1, creeLe: "2026-10-10T08:00:00.000Z", reponduLe: null,
+  libelleStatut: "Transmise", nombreExtraits: 1, creeLe: "2026-10-10T08:00:00.000Z", reponduLe: null, tacheOrigine: `o${n}`, tacheCible: n === 1 ? T : null,
 });
 
 beforeEach(() => {
@@ -171,6 +172,39 @@ describe("rubrique « Direction » et registre", () => {
     expect(urlCsv).toHaveBeenCalled();
     clic.mockRestore();
     expect(c.textContent).toContain("30 échanges exportés");
+  });
+
+  it("l'objet mène à la tâche sollicitée, sinon à la tâche d'origine (UI-5)", async () => {
+    serveur = () => ({ statut: 200, corps: page(1, 2) });
+    const c = await registre();
+    const liens = Array.from(c.querySelectorAll("tbody th a")).map((a) => [a.textContent, a.getAttribute("href")]);
+    expect(liens).toEqual([["Objet 1", `/RNO/issues/${T}`], ["Objet 2", "/RNO/issues/o2"]]);
+  });
+
+  it("le menu principal propose « Registre des échanges » dans la seule Direction (UI-5)", async () => {
+    const entree = async () => {
+      installerPont("/RNO/atelier/discussion");
+      rendu = await rendre(createElement(EntreeAtelier, { context: contexte }));
+      await cliquer(document.body);
+      return Array.from(rendu.conteneur.querySelectorAll("a")).map((a) => [a.textContent?.trim(), a.getAttribute("href")]);
+    };
+    serveur = (url) => (url.includes("/liaisons/acces") ? { statut: 200, corps: { acces: true } } : { statut: 404, corps: {} });
+    expect(await entree()).toContainEqual(["Registre des échanges", "/RNO/atelier/echanges"]);
+    rendu?.demonter();
+    oublierAccesDirection();
+    serveur = (url) => (url.includes("/liaisons/acces") ? { statut: 200, corps: { acces: false } } : { statut: 404, corps: {} });
+    expect((await entree()).map((l) => l[0])).not.toContain("Registre des échanges");
+  });
+
+  it("une demande transmise dont la tâche sollicitée porte une carte en attente : « Attend votre décision » (UI-5)", () => {
+    const carte = (o: Partial<CarteService>) => ({ element: { id: "question:c", issueId: "autre" }, date: "", companyId: "", slug: "marketing", nom: "Marketing", tache: "MKT-3", ...o }) as CarteService;
+    const l = { ...ligneRegistre(1), statut: "ouverte" as const };
+    expect(statutRegistre(l, [])).toEqual({ libelle: "Transmise", ton: "info" });
+    expect(statutRegistre(l, [carte({ racine: T })])).toEqual({ libelle: "Attend votre décision", ton: "attention" });
+    expect(statutRegistre(l, [carte({ element: { id: "q", issueId: T } as CarteService["element"] })])).toEqual({ libelle: "Attend votre décision", ton: "attention" });
+    // Une demande déjà répondue garde son statut, même si une carte attend ailleurs.
+    expect(statutRegistre({ ...l, statut: "repondue", libelleStatut: "Répondue" }, [carte({ racine: T })])).toEqual({ libelle: "Répondue", ton: "succes" });
+    expect(statutRegistre({ ...ligneRegistre(2), statut: "ouverte" as const }, [carte({ racine: T })])).toEqual({ libelle: "Transmise", ton: "info" });
   });
 
   it("explique un registre refusé et signale une période inversée", async () => {

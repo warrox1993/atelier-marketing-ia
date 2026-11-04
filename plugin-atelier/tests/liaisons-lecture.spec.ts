@@ -85,9 +85,9 @@ describe("contrats de lecture", () => {
     expect((manifest.apiRoutes ?? []).map((r) => r.routeKey)).toEqual(expect.arrayContaining(["liaison.lire", "liaison.registre"]));
   });
 
-  it("connaît le nom exact de chacun des services du registre (29), sans repli sur le slug", () => {
+  it("connaît le nom exact de chacun des services du registre (30), sans repli sur le slug", () => {
     const registre = JSON.parse(readFileSync(new URL("../../organisation/registre/services.json", import.meta.url), "utf8")) as { services: Array<{ slug: string; nom: string }>; flux: unknown[] };
-    expect(registre.services.length).toBe(29);
+    expect(registre.services.length).toBe(30);
     for (const x of registre.services) expect(nomService(x.slug), x.slug).toBe(x.nom);
   });
 
@@ -250,6 +250,12 @@ describe("liaison.registre : accès", () => {
     expect(r.lignes.map((l: Ligne) => l.id)).toEqual([id(900)]);
     expect(m.appelsRegistre[0]!.client).toBe("courtier");
     expect(((await m.registre(ETRANGER)).corps as Ligne).lignes.map((l: Ligne) => l.id)).toEqual([id(901)]);
+  });
+
+  it("porte les identifiants des tâches pour les liens, sans tâche d'un service supprimé (UI-5)", async () => {
+    const m = monde([liaison({ id: id(900) }), liaison({ id: id(902), entrepriseCible: null, statut: "cible_supprimee", tacheCible: T_DIR })]);
+    const r = (await m.registre(DIR)).corps as Ligne;
+    expect(r.lignes.map((l: Ligne) => [l.id, l.tacheOrigine, l.tacheCible])).toEqual(expect.arrayContaining([[id(900), T_MKT, T_DIR], [id(902), T_MKT, null]]));
   });
 
   it("ne recopie ni question, ni extraits, ni réponse", async () => {

@@ -1,0 +1,198 @@
+From a9a73321be65a5581e8220a5e3d61187c35057b9 Mon Sep 17 00:00:00 2001
+From: Jean-Baptiste Dhondt <114347858+warrox1993@users.noreply.github.com>
+Date: Fri, 30 Oct 2026 15:18:10 +0100
+Subject: [PATCH 129/131] =?UTF-8?q?feat(plugins):=20un=20plugin=20pose=20l?=
+ =?UTF-8?q?es=20=C3=A9tapes=20de=20revue=20et=20d'approbation=20d'une=20t?=
+ =?UTF-8?q?=C3=A2che,=20valid=C3=A9es=20comme=20=C3=A0=20la=20route=20;=20?=
+ =?UTF-8?q?surveillance=20et=20confinement=20de=20confiance=20refus=C3=A9s?=
+ =?UTF-8?q?=20et=20gard=C3=A9s=20(Atelier=20MK-01)?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Avant : issues.update transmettait executionPolicy tel quel (patch as any), sans validation.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01EThpSSDGc5NRYwbgjNqoTJ
+---
+ packages/plugins/sdk/src/protocol.ts          |  1 +
+ packages/plugins/sdk/src/testing.ts           |  1 +
+ packages/plugins/sdk/src/types.ts             |  3 ++
+ packages/plugins/sdk/src/worker-rpc-host.ts   |  1 +
+ .../plugin-orchestration-apis.test.ts         | 46 +++++++++++++++++++
+ server/src/services/plugin-host-services.ts   | 24 ++++++++++
+ 6 files changed, 76 insertions(+)
+
+diff --git a/packages/plugins/sdk/src/protocol.ts b/packages/plugins/sdk/src/protocol.ts
+index a851294d7a..25c3aa1b9b 100644
+--- a/packages/plugins/sdk/src/protocol.ts
++++ b/packages/plugins/sdk/src/protocol.ts
+@@ -1894,6 +1894,7 @@ export interface WorkerToHostMethods {
+       executionWorkspaceId?: string | null;
+       executionWorkspacePreference?: string | null;
+       executionWorkspaceSettings?: Record<string, unknown> | null;
++      executionPolicy?: unknown;
+       actorAgentId?: string | null;
+       actorUserId?: string | null;
+       actorRunId?: string | null;
+diff --git a/packages/plugins/sdk/src/testing.ts b/packages/plugins/sdk/src/testing.ts
+index 9159c346ce..8054e647eb 100644
+--- a/packages/plugins/sdk/src/testing.ts
++++ b/packages/plugins/sdk/src/testing.ts
+@@ -1662,6 +1662,7 @@ export function createTestHarness(options: TestHarnessOptions): TestHarness {
+           executionWorkspaceId: input.executionWorkspaceId ?? null,
+           executionWorkspacePreference: input.executionWorkspacePreference ?? null,
+           executionWorkspaceSettings: input.executionWorkspaceSettings ?? null,
++          executionPolicy: input.executionPolicy ?? null,
+           startedAt: null,
+           completedAt: null,
+           cancelledAt: null,
+diff --git a/packages/plugins/sdk/src/types.ts b/packages/plugins/sdk/src/types.ts
+index 3378d248c4..f7161f45fc 100644
+--- a/packages/plugins/sdk/src/types.ts
++++ b/packages/plugins/sdk/src/types.ts
+@@ -1476,6 +1476,8 @@ export interface PluginIssuesClient {
+     labelIds?: string[];
+     executionWorkspaceId?: string | null;
+     executionWorkspacePreference?: string | null;
++    /** Étapes de revue et d'approbation (Atelier MK-01) ; surveillance et confinement de confiance refusés. */
++    executionPolicy?: Issue["executionPolicy"];
+     executionWorkspaceSettings?: Record<string, unknown> | null;
+     actor?: PluginIssueMutationActor;
+   }): Promise<Issue>;
+@@ -1496,6 +1498,7 @@ export interface PluginIssuesClient {
+       | "requestDepth"
+       | "executionWorkspaceId"
+       | "executionWorkspacePreference"
++      | "executionPolicy"
+     >> & {
+       blockedByIssueIds?: string[];
+       labelIds?: string[];
+diff --git a/packages/plugins/sdk/src/worker-rpc-host.ts b/packages/plugins/sdk/src/worker-rpc-host.ts
+index 5b1492106b..977a6fbaf5 100644
+--- a/packages/plugins/sdk/src/worker-rpc-host.ts
++++ b/packages/plugins/sdk/src/worker-rpc-host.ts
+@@ -861,6 +861,7 @@ export function startWorkerRpcHost(options: WorkerRpcHostOptions): WorkerRpcHost
+             executionWorkspaceId: input.executionWorkspaceId,
+             executionWorkspacePreference: input.executionWorkspacePreference,
+             executionWorkspaceSettings: input.executionWorkspaceSettings,
++            executionPolicy: input.executionPolicy,
+             actorAgentId: input.actor?.actorAgentId,
+             actorUserId: input.actor?.actorUserId,
+             actorRunId: input.actor?.actorRunId,
+diff --git a/server/src/__tests__/plugin-orchestration-apis.test.ts b/server/src/__tests__/plugin-orchestration-apis.test.ts
+index 2554586da9..684d65080d 100644
+--- a/server/src/__tests__/plugin-orchestration-apis.test.ts
++++ b/server/src/__tests__/plugin-orchestration-apis.test.ts
+@@ -314,6 +314,52 @@ describeEmbeddedPostgres("plugin orchestration APIs", () => {
+     ).rejects.toThrow("Plugin may only use originKind values under plugin:paperclip.missions");
+   });
+ 
++  it("Atelier MK-01 : un plugin pose et relit une politique de revue puis d'approbation, validée comme à la route", async () => {
++    const { companyId, agentId } = await seedCompanyAndAgent();
++    const services = buildHostServices(db, "plugin-record-id", "paperclip.missions", createEventBusStub());
++    const politique = {
++      stages: [
++        { type: "review", participants: [{ type: "agent", agentId }] },
++        { type: "approval", participants: [{ type: "user", userId: "board-user" }] },
++      ],
++    };
++
++    const creee = await services.issues.create({ companyId, title: "Livrable public", executionPolicy: politique });
++    const relue = await services.issues.get({ issueId: creee.id, companyId });
++    expect((relue?.executionPolicy as { stages: Array<{ type: string; participants: unknown[] }> }).stages.map((e) => [e.type, e.participants])).toEqual([
++      ["review", [expect.objectContaining({ type: "agent", agentId })]],
++      ["approval", [expect.objectContaining({ type: "user", userId: "board-user" })]],
++    ]);
++
++    const tache = await services.issues.create({ companyId, title: "Sans porte" });
++    const posee = await services.issues.update({ issueId: tache.id, companyId, patch: { executionPolicy: politique } });
++    expect((posee.executionPolicy as { stages: unknown[] }).stages).toHaveLength(2);
++
++    // Politique malformée : refusée, la tâche garde la sienne.
++    await expect(services.issues.update({
++      issueId: tache.id, companyId, patch: { executionPolicy: { stages: [{ type: "porte", participants: [] }] } },
++    })).rejects.toThrow("Invalid execution policy");
++    await expect(services.issues.create({
++      companyId, title: "Malformée", executionPolicy: { stages: "review" },
++    })).rejects.toThrow("Invalid execution policy");
++
++    // Le confinement de confiance et la surveillance ne se posent pas par un plugin, et ceux de la tâche restent.
++    const confinement = { assignmentPolicy: { mode: "company_default" } };
++    await expect(services.issues.update({
++      issueId: tache.id, companyId, patch: { executionPolicy: { ...politique, authorizationPolicy: confinement } },
++    })).rejects.toThrow("Plugin may only set the review and approval stages of an execution policy");
++    await expect(services.issues.create({
++      companyId, title: "Surveillée", executionPolicy: { stages: [], monitor: { nextCheckAt: new Date(Date.now() + 3_600_000).toISOString() } },
++    })).rejects.toThrow("Plugin may only set the review and approval stages of an execution policy");
++    await db.update(issues).set({ executionPolicy: { mode: "normal", commentRequired: true, stages: [], authorizationPolicy: confinement } })
++      .where(eq(issues.id, tache.id));
++    const gardee = await services.issues.update({ issueId: tache.id, companyId, patch: { executionPolicy: politique } });
++    expect((gardee.executionPolicy as { authorizationPolicy?: unknown }).authorizationPolicy).toEqual(confinement);
++    expect((gardee.executionPolicy as { stages: unknown[] }).stages).toHaveLength(2);
++    const retiree = await services.issues.update({ issueId: tache.id, companyId, patch: { executionPolicy: null } });
++    expect(retiree.executionPolicy).toEqual(expect.objectContaining({ stages: [], authorizationPolicy: confinement }));
++  });
++
+   it("creates plugin operation issues with the generic operation origin", async () => {
+     const { companyId } = await seedCompanyAndAgent();
+     const services = buildHostServices(db, "plugin-record-id", "paperclip.missions", createEventBusStub());
+diff --git a/server/src/services/plugin-host-services.ts b/server/src/services/plugin-host-services.ts
+index c7f97a2726..159c6c3356 100644
+--- a/server/src/services/plugin-host-services.ts
++++ b/server/src/services/plugin-host-services.ts
+@@ -79,6 +79,7 @@ import { logger } from "../middleware/logger.js";
+ import { replayInteractionWakesAfterResume } from "../routes/issues.js";
+ import { getTelemetryClient } from "../telemetry.js";
+ import { accessService } from "./access.js";
++import { normalizeIssueExecutionPolicy } from "./issue-execution-policy.js";
+ import {
+   authorizationService,
+   canActorReadIssuePrivacy,
+@@ -1186,6 +1187,23 @@ export function buildHostServices(
+     throw new Error(`Plugin may only use originKind values under ${defaultPluginOriginKind}`);
+   };
+ 
++  // Atelier MK-01 : un plugin pose les étapes de revue et d'approbation, validées comme à la route.
++  // Surveillance et confinement de confiance ne passent jamais par un plugin : ceux de la tâche sont gardés.
++  const normalizePluginExecutionPolicy = (requested: unknown, existing: unknown) => {
++    const policy = normalizeIssueExecutionPolicy(requested);
++    if (policy?.monitor || policy?.reviewPreset || policy?.authorizationPolicy) {
++      throw new Error("Plugin may only set the review and approval stages of an execution policy");
++    }
++    const previous = normalizeIssueExecutionPolicy(existing ?? null);
++    const kept = {
++      ...(previous?.monitor ? { monitor: previous.monitor } : {}),
++      ...(previous?.reviewPreset ? { reviewPreset: previous.reviewPreset } : {}),
++      ...(previous?.authorizationPolicy ? { authorizationPolicy: previous.authorizationPolicy } : {}),
++    };
++    if (!policy && Object.keys(kept).length === 0) return null;
++    return { ...(policy ?? { mode: "normal" as const, commentRequired: true as const, stages: [] }), ...kept };
++  };
++
+   const assertReadableOriginFilter = (originKind: unknown) => {
+     if (typeof originKind !== "string" || !originKind.startsWith("plugin:")) return;
+     normalizePluginOriginKind(originKind);
+@@ -2089,6 +2107,9 @@ export function buildHostServices(
+         }
+         const issue = (await issues.create(companyId, {
+           ...(issueInput as any),
++          ...("executionPolicy" in issueInput
++            ? { executionPolicy: normalizePluginExecutionPolicy(issueInput.executionPolicy, null) }
++            : {}),
+           originKind: normalizedOriginKind,
+           originId: params.originId ?? null,
+           originRunId: params.originRunId ?? actorRunId ?? null,
+@@ -2129,6 +2150,9 @@ export function buildHostServices(
+         if (patch.originKind !== undefined) {
+           patch.originKind = normalizePluginOriginKind(patch.originKind);
+         }
++        if (patch.executionPolicy !== undefined) {
++          patch.executionPolicy = normalizePluginExecutionPolicy(patch.executionPolicy, existing.executionPolicy);
++        }
+         const updated = (await issues.update(params.issueId, {
+           ...(patch as any),
+           actorAgentId,
+-- 
+2.53.0
+

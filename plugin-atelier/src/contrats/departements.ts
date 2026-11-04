@@ -63,6 +63,7 @@ export interface EtatDepartement {
   enPause: boolean;
   motifPause: string | null;
   agents: { actifs: number; enPause: number; enErreur: number };
+  /** `enCours` compte aussi les tâches en revue (`in_review`). */
   taches: { enCours: number; bloquees: number };
   /** Vrai si une liste a atteint la borne de lecture : les nombres de tâches sont des minimums. */
   tachesTronquees: boolean;

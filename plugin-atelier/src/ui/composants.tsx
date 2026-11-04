@@ -3,7 +3,7 @@
  * états vide / chargement / erreur / accès absent / interrompu / périmé,
  * boutons dont la désactivation porte toujours une raison visible.
  */
-import { cloneElement, useEffect, useId, useRef, useState, type ReactElement, type ReactNode } from "react";
+import { cloneElement, Fragment, useEffect, useId, useRef, useState, type ReactElement, type ReactNode } from "react";
 import { useHostContext, useHostLocation, useHostNavigation, type PluginBridgeError } from "@paperclipai/plugin-sdk/ui";
 import type { EtatConnexion } from "../contrats/communs.js";
 import type { StatutFonctionnel } from "../contrats/statuts.js";
@@ -175,6 +175,32 @@ export function LienHote({ vers, children, className, courant }: { vers: string;
   );
 }
 
+const MOTIF_TACHE = /\b[A-Z]{2,5}-\d+\b/gu;
+
+/** Texte sûr : retours à la ligne conservés par le style, identifiants de tâche en liens. */
+export function TexteSur({ texte }: { texte: string }) {
+  const morceaux: ReactNode[] = [];
+  let dernier = 0;
+  for (const m of texte.matchAll(MOTIF_TACHE)) {
+    const debut = m.index ?? 0;
+    if (debut > dernier) morceaux.push(texte.slice(dernier, debut));
+    morceaux.push(
+      <LienHote key={`${debut}-${m[0]}`} vers={`/issues/${m[0]}`} className="">
+        {m[0]}
+      </LienHote>,
+    );
+    dernier = debut + m[0].length;
+  }
+  if (dernier < texte.length) morceaux.push(texte.slice(dernier));
+  return (
+    <>
+      {morceaux.map((x, i) => (
+        <Fragment key={i}>{x}</Fragment>
+      ))}
+    </>
+  );
+}
+
 /** Vrai sur un écran étroit (téléphone) ; faux sans `matchMedia` (tests, rendu serveur). */
 export function ecranEtroit(): boolean {
   try {
@@ -336,7 +362,7 @@ export function BandeauEntreprise() {
   if (departements && courant && aPlusieursDepartements(departements)) {
     const vue = lireRoute(pathname).vue;
     // Vues d'ensemble du client : le fil nomme la vue, pas le service courant.
-    const surTableau = vue === "departements" || vue === "organigramme";
+    const surTableau = vue === "departements" || vue === "organigramme" || vue === "agents";
     return (
       <nav className="atl-bandeau-entreprise atl-fil" aria-label="Fil d'Ariane">
         <style href="atelier-departements" precedence="default">
@@ -346,7 +372,7 @@ export function BandeauEntreprise() {
           <li className="atl-fil-client">{nomClient(nom ? [nom] : [], departements.client)}</li>
           <li>
             <strong className="atl-bandeau-nom" title={affiche} aria-current={surTableau ? undefined : "page"}>
-              {surTableau ? (vue === "organigramme" ? "Organigramme" : "Départements") : courant.nom}
+              {surTableau ? (vue === "organigramme" ? "Organigramme" : vue === "agents" ? "Agents" : "Départements") : courant.nom}
             </strong>
           </li>
         </ol>

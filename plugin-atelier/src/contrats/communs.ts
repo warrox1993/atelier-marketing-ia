@@ -44,8 +44,8 @@ export type Acteur = z.infer<typeof Acteur>;
 export const CodeExigence = z.string().regex(/^REQ-\d{3,}$/u, "Code d'exigence attendu : REQ-001");
 export type CodeExigence = z.infer<typeof CodeExigence>;
 
-/** Rôles des trois contrôleurs (cahier §4). */
-export const RoleRevue = z.enum(["exigences", "metier", "technique"]);
+/** Rôles des contrôleurs (cahier §4) ; « conformite » : Conformité publicitaire (MK-09, audit du 29/10/2026). */
+export const RoleRevue = z.enum(["exigences", "metier", "technique", "conformite"]);
 export type RoleRevue = z.infer<typeof RoleRevue>;
 
 /** Erreur renvoyée par toutes les routes et actions du plugin. */

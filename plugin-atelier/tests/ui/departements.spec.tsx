@@ -122,9 +122,9 @@ describe("navigation et vues d'ensemble", () => {
     expect(rubriquesVisibles({ estDirection: false, slugService: "juridique" })).toEqual([]);
   });
 
-  it("sur Départements et Organigramme, la deuxième colonne ne rend rien", async () => {
+  it("sur Départements, Organigramme et Agents, la deuxième colonne ne rend rien", async () => {
     serveur = servir(TROIS);
-    for (const vue of ["departements", "organigramme"]) {
+    for (const vue of ["departements", "organigramme", "agents"]) {
       const c = await navigation(`/RNO/atelier/${vue}`);
       expect(c.querySelector("nav.atl-nav")).toBeNull();
       expect(c.textContent).toBe("");
@@ -195,6 +195,17 @@ describe("vue « Départements »", () => {
     expect(cases[0]!.querySelector(".atl-dep-traiter")?.textContent).toBe("À traiter");
     expect(c.querySelectorAll(".atl-dep-traiter")).toHaveLength(1);
     expect(cases[2]!.querySelector(".atl-dep-chiffre[data-zero] dd")?.textContent).toBe("0");
+  });
+
+  it("un lien « Agents » près du résumé, et le nombre d'agents de chaque case mène à la page des agents filtrée sur ce département", async () => {
+    serveur = servir(TROIS, { [DIR]: etat(DIR), [JUR]: etat(JUR, { agents: { actifs: 2, enPause: 1, enErreur: 0 } }), [ENTREPRISE]: etat(ENTREPRISE) });
+    const { c, pont } = await ouvrir();
+    await cliquer(parTexte(c, "a.atl-dep-tous-agents", "Agents"));
+    expect(pont.navigations).toEqual(["/atelier/agents"]);
+    pont.navigations.length = 0;
+    const lien = parTexte(parTexte(c, ".atl-dep-case", "Juridique"), "a.atl-dep-agents-lien", "2 agents actifs, 1 en pause");
+    await cliquer(lien);
+    expect(pont.navigations).toEqual(["/RNOAC/atelier/agents#service=juridique"]);
   });
 
   it("n'affiche pas un service déclaré auquel l'utilisateur n'a pas accès, et ne le lit pas", async () => {

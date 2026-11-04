@@ -43,7 +43,8 @@ relire dans l'ouvrage avant toute citation.
    un mécanisme (comment le comparatif est fait), sans promesse chiffrée sans source.
 4. Associer le niveau au canal : annonces de recherche = conscients de la solution ou du produit ; réseaux sociaux = souvent
    inconscients ou conscients du problème.
-5. Inscrire le niveau en tête de chaque brief de pièce et le faire contrôler par `relecteur`.
+5. Inscrire le niveau en tête de chaque brief de pièce et signaler au Coordinateur qu'il est à contrôler par `relecteur`
+   (c'est lui qui organise les relectures).
 
 ## Livrable
 

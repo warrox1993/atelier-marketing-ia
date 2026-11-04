@@ -41,6 +41,27 @@ export async function appelHote<T>(methode: "GET" | "POST" | "PATCH" | "PUT" | "
   return json as T;
 }
 
+/** Tâches natives lues récemment (`/issues/<id>`), pour qu'un second emplacement ne relise pas la même tâche. */
+const TACHES_LUES = new Map<string, { quand: number; valeur: unknown }>();
+const TACHE_SEULE = /^\/issues\/[^/?]+$/u;
+const AGE_MAX_TACHE_MS = 15_000;
+
+/** Garde la tâche que l'on vient de lire (sans effet pour un autre chemin) et la rend. */
+export function memoriserTache<T>(chemin: string, valeur: T): T {
+  if (!TACHE_SEULE.test(chemin)) return valeur;
+  if (TACHES_LUES.size > 200) TACHES_LUES.clear();
+  TACHES_LUES.set(chemin, { quand: Date.now(), valeur });
+  return valeur;
+}
+
+/** Lecture d'une tâche native, servie par la lecture la plus récente si elle a moins de 15 s (le cycle des cartes). */
+export async function lireTacheRecente<T>(issueId: string): Promise<T> {
+  const chemin = `/issues/${encodeURIComponent(issueId)}`;
+  const recente = TACHES_LUES.get(chemin);
+  if (recente && Date.now() - recente.quand < AGE_MAX_TACHE_MS) return recente.valeur as T;
+  return memoriserTache(chemin, await appelHote<T>("GET", chemin));
+}
+
 export interface ProjetNatif {
   id: string;
   name: string;

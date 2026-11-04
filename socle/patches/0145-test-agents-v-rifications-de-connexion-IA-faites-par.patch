@@ -1,0 +1,126 @@
+From ab46f64e1ad14a5d534635567510d360b15707d4 Mon Sep 17 00:00:00 2001
+From: Jean-Baptiste Dhondt <114347858+warrox1993@users.noreply.github.com>
+Date: Fri, 30 Oct 2026 16:37:48 +0100
+Subject: [PATCH 145/148] =?UTF-8?q?test(agents):=20v=C3=A9rifications=20de?=
+ =?UTF-8?q?=20connexion=20IA=20faites=20par=20le=20board=20(AFD-C1)?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Constat AFD-C1 (patchs 0108 et 0110) : un agent ne modifie plus la configuration d'un agent,
+la sienne comprise, ni ne lance le test d'environnement avec elle. Dans
+agent-hire-ai-connections, les 17 tests qui vérifient la connexion IA au PATCH de l'agent ou au
+test d'environnement envoient d'abord la requête comme agent (403, message et raison exacts,
+rien ne change), puis la même requête comme board : assertions d'origine inchangées. Les
+embauches par un agent ne sont pas touchées (elles passent toujours).
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01EThpSSDGc5NRYwbgjNqoTJ
+---
+ .../agent-hire-ai-connections.test.ts         | 43 ++++++++++++++-----
+ 1 file changed, 32 insertions(+), 11 deletions(-)
+
+diff --git a/server/src/__tests__/agent-hire-ai-connections.test.ts b/server/src/__tests__/agent-hire-ai-connections.test.ts
+index 3f1f227e3e..1b1d446e89 100644
+--- a/server/src/__tests__/agent-hire-ai-connections.test.ts
++++ b/server/src/__tests__/agent-hire-ai-connections.test.ts
+@@ -75,12 +75,33 @@ async function fixture(provider: "anthropic" | "openai", method: "api_key" | "su
+   });
+   app.use("/api", agentRoutes(db));
+   app.use(errorHandler);
++  const boardApp = express();
++  boardApp.use(express.json());
++  boardApp.use((req, _res, next) => {
++    req.actor = { type: "board", userId, companyIds: [companyId], memberships: [{ companyId, membershipRole: "owner", status: "active" }], source: "session", isInstanceAdmin: false } as Express.Request["actor"];
++    next();
++  });
++  boardApp.use("/api", agentRoutes(db));
++  boardApp.use(errorHandler);
+   const credential = method === "api_key" ? "fixture-api-key" : provider === "anthropic" ? "fixture-subscription-token" : JSON.stringify({ tokens: { access_token: "fixture-access", refresh_token: "fixture-refresh", id_token: "fixture-id", account_id: "fixture-account" } });
+   const account = await aiConnectionService(db).save(companyId, userId, {
+     provider, method, name: "Manager's connection", ownership: "personal", agentIds: [agentId], allAgents: false,
+     ...(method === "api_key" ? { apiKey: credential } : { loginSessionId: "fixture" }),
+   }, credential);
+-  return { app, companyId, agentId, userId, binding, adapterType, account, runId: run!.id };
++  return { app, boardApp, companyId, agentId, userId, binding, adapterType, account, runId: run!.id };
++}
++
++// Atelier (AFD-C1, patchs 0108 et 0110) : un agent ne modifie plus la configuration d'un agent, la sienne comprise,
++// ni ne teste un environnement d'exécution avec elle. Le même geste, fait par le board, garde la même vérification
++// de connexion IA : chaque requête est d'abord refusée à l'agent (message exact, rien ne change), puis faite par le board.
++async function refuseeAlAgentPuisParLeBoard(f: Awaited<ReturnType<typeof fixture>>, envoyer: (app: express.Express) => request.Test) {
++  const refused = await envoyer(f.app);
++  expect(refused.status, JSON.stringify(refused.body)).toBe(403);
++  expect(refused.body).toEqual({
++    error: "Atelier : seul un humain modifie la configuration, les consignes ou les skills d'un agent.",
++    details: { reason: "deny_policy_restricted" },
++  });
++  return envoyer(f.boardApp);
+ }
+ 
+ function hired(response: request.Response) {
+@@ -188,7 +209,7 @@ describe("agent-created hires use managed AI connections", () => {
+     const p = await poolFixture(f);
+     await db.insert(principalPermissionGrants).values({ companyId: f.companyId, principalType: "user", principalId: f.userId, permissionKey: "agents:configure" });
+     await db.delete(toolConnectionInstalls).where(eq(toolConnectionInstalls.connectionId, f.account.connectionId));
+-    const response = await request(f.app).patch(`/api/agents/${f.agentId}`).send({ runtimeConfig: { aiConnection: p.binding } });
++    const response = await refuseeAlAgentPuisParLeBoard(f, (app) => request(app).patch(`/api/agents/${f.agentId}`).send({ runtimeConfig: { aiConnection: p.binding } }));
+     expect(response.status, JSON.stringify(response.body)).toBe(422);
+     expect(response.body.details).toMatchObject({ code: "ai_connection_pool_no_eligible_member" });
+     const [saved] = await db.select().from(agents).where(eq(agents.id, f.agentId));
+@@ -223,7 +244,7 @@ describe("agent-created hires use managed AI connections", () => {
+     // Atelier (patch local 0014) : un agent ne change pas de modèle. Le modèle est posé d'avance
+     // (décision humaine) pour que la requête de l'agent ne change que le harnais, cas vérifié ici.
+     await db.update(agents).set({ adapterConfig: { model: "claude-sonnet-5" }, runtimeConfig: { aiConnection: p.binding } }).where(eq(agents.id, f.agentId));
+-    const response = await request(f.app).patch(`/api/agents/${f.agentId}`).send({ adapterType: "claude_local", adapterConfig: { model: "claude-sonnet-5" } });
++    const response = await refuseeAlAgentPuisParLeBoard(f, (app) => request(app).patch(`/api/agents/${f.agentId}`).send({ adapterType: "claude_local", adapterConfig: { model: "claude-sonnet-5" } }));
+     expect(response.status, JSON.stringify(response.body)).toBe(compatible ? 200 : 422);
+     const [saved] = await db.select().from(agents).where(eq(agents.id, f.agentId));
+     expect(saved.adapterType).toBe(compatible ? "claude_local" : "codex_local");
+@@ -243,9 +264,9 @@ describe("agent-created hires use managed AI connections", () => {
+       if (status === null) network.mockRejectedValue(new Error("Network unavailable"));
+       else network.mockResolvedValue(new Response(null, { status }));
+       try {
+-        const response = operation === "test"
+-          ? await request(f.app).post(`/api/companies/${f.companyId}/adapters/${f.adapterType}/test-environment`).send({ agentId: f.agentId, aiConnection: f.binding, adapterConfig: {} })
+-          : await request(f.app).patch(`/api/agents/${f.agentId}`).send({ adapterConfig: { maxTurnsPerRun: 40 } });
++        const response = await refuseeAlAgentPuisParLeBoard(f, (app) => operation === "test"
++          ? request(app).post(`/api/companies/${f.companyId}/adapters/${f.adapterType}/test-environment`).send({ agentId: f.agentId, aiConnection: f.binding, adapterConfig: {} })
++          : request(app).patch(`/api/agents/${f.agentId}`).send({ adapterConfig: { maxTurnsPerRun: 40 } }));
+         expect(response.status, JSON.stringify(response.body)).toBe(operation === "test" ? 200 : 422);
+         const rejected = status === 401 || status === 403;
+         expect(await aiConnectionService(db).list(f.companyId, f.userId)).toEqual([expect.objectContaining({ status: rejected ? "needs_attention" : "connected" })]);
+@@ -262,9 +283,9 @@ describe("agent-created hires use managed AI connections", () => {
+       checks: [{ code: "claude_hello_probe_auth_required", level: "error", message: "The account needs sign-in." }],
+     }) });
+     try {
+-      const response = operation === "test"
+-        ? await request(f.app).post(`/api/companies/${f.companyId}/adapters/${f.adapterType}/test-environment`).send({ agentId: f.agentId, aiConnection: f.binding, adapterConfig: {} })
+-        : await request(f.app).patch(`/api/agents/${f.agentId}`).send({ adapterConfig: { maxTurnsPerRun: 40 } });
++      const response = await refuseeAlAgentPuisParLeBoard(f, (app) => operation === "test"
++        ? request(app).post(`/api/companies/${f.companyId}/adapters/${f.adapterType}/test-environment`).send({ agentId: f.agentId, aiConnection: f.binding, adapterConfig: {} })
++        : request(app).patch(`/api/agents/${f.agentId}`).send({ adapterConfig: { maxTurnsPerRun: 40 } }));
+       expect(response.status, JSON.stringify(response.body)).toBe(operation === "test" ? 200 : 422);
+       if (operation === "test") expect(response.body.status).toBe("fail");
+       const service = aiConnectionService(db);
+@@ -282,7 +303,7 @@ describe("agent-created hires use managed AI connections", () => {
+         adapterType: f.adapterType, status: "pass", testedAt: new Date().toISOString(),
+         checks: [{ code: "claude_hello_probe_passed", level: "info", message: "hello" }],
+       }) });
+-      const saved = await request(f.app).patch(`/api/agents/${f.agentId}`).send({ adapterConfig: { maxTurnsPerRun: 40 } });
++      const saved = await refuseeAlAgentPuisParLeBoard(f, (app) => request(app).patch(`/api/agents/${f.agentId}`).send({ adapterConfig: { maxTurnsPerRun: 40 } }));
+       expect(saved.status, JSON.stringify(saved.body)).toBe(200);
+       const runtime = await prepareManagedAiRuntime(db, { companyId: f.companyId, agentId: f.agentId, responsibleUserId: f.userId, adapterType: f.adapterType, binding: f.binding, config: saved.body.adapterConfig });
+       try {
+@@ -307,7 +328,7 @@ describe("agent-created hires use managed AI connections", () => {
+       };
+     } });
+     try {
+-      const response = await request(f.app).post(`/api/companies/${f.companyId}/adapters/${f.adapterType}/test-environment`).send({ agentId: f.agentId, aiConnection: f.binding, adapterConfig: {} });
++      const response = await refuseeAlAgentPuisParLeBoard(f, (app) => request(app).post(`/api/companies/${f.companyId}/adapters/${f.adapterType}/test-environment`).send({ agentId: f.agentId, aiConnection: f.binding, adapterConfig: {} }));
+       expect(response.status, JSON.stringify(response.body)).toBe(200);
+       expect(response.body.status).toBe("fail");
+       expect(await aiConnectionService(db).list(f.companyId, f.userId)).toEqual([expect.objectContaining({ status: "connected" })]);
+-- 
+2.53.0
+

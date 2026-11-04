@@ -8,7 +8,7 @@
 // base64url. Champs de la charge (tous obligatoires, `compte` peut valoir null) :
 //   v          1
 //   cle        clé d'idempotence de la diffusion approuvée (8 à 200 caractères) : UNE clé = UN effet au plus
-//   service    identifiant du service de la passerelle (facebook, instagram, linkedin, crm, pipedrive, odoo, teamleader)
+//   service    identifiant du service de la passerelle (facebook, instagram, linkedin, linkedinprofil, crm, pipedrive, odoo, teamleader)
 //   outil      nom exact de l'outil de mutation
 //   empreinte  SHA-256 hexadécimal de la forme canonique des arguments de l'outil, SANS `preuve_approbation`
 //   compte     compte visé (page, organisation, portail...) tel que la connexion le désigne, ou null (tout compte)
@@ -37,7 +37,7 @@ const DERIVE_HORLOGE_S = 120;
 /** Fraîcheur maximale de la liste de révocation (5 minutes, décision proposée par la revue S-7). */
 export const FRAICHEUR_REVOCATIONS_S = 5 * 60;
 /** Services pour lesquels une preuve sans compte (`compte: null`, « tout compte ») est refusée. */
-const SERVICES_RESEAUX_SOCIAUX: ReadonlySet<string> = new Set(["facebook", "instagram", "linkedin"]);
+const SERVICES_RESEAUX_SOCIAUX: ReadonlySet<string> = new Set(["facebook", "instagram", "linkedin", "linkedinprofil"]);
 /** Arguments de transport : ils accompagnent l'appel mais n'en font pas partie, donc jamais dans l'empreinte. */
 export const ARGUMENTS_DE_TRANSPORT = ["preuve_approbation", "revocations_approbation"] as const;
 

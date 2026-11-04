@@ -67,6 +67,15 @@ Registre : compte (identifiant, pas le secret), personne ou service, système, n
 - **Secrets** : dans un gestionnaire de mots de passe, jamais dans un tableur ni un courriel.
 - Voir la compétence `cybersecurite-pme` pour les règles de mots de passe.
 
+### Dans l'Observatoire (prérequis et tutoriel d'un outil suivi)
+
+Seule la forme de procédure de l'étape 3 sert (prérequis, étapes numérotées avec la commande exacte et le résultat
+attendu, vérification, dépannage), pour `fiche.prerequis`, `fiche.tutorielDemarrage` ou un chapitre d'installation.
+L'inventaire, la criticité, la sauvegarde 3-2-1, le test de restauration et le registre des comptes ne s'appliquent
+pas à un outil suivi. Chaque commande, version et prérequis repose sur une Affirmation prouvée par un instantané
+(`affirmations-preuves`), commande en bloc de code recopiée telle que la source l'écrit ; sans essai de notre
+service, une commande est « documentée par l'éditeur », jamais « testée ».
+
 ## Livrable
 
 Un dossier Markdown : `inventaire`, `procedures`, `plan-sauvegarde`, `registre-acces`, `trous-a-combler`. Chaque fichier a version, date, propriétaire, prochaine revue. Un en-tête de commentaires est proposé pour chaque script documenté, à insérer par l'humain.

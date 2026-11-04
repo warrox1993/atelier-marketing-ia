@@ -1,0 +1,100 @@
+From cea7eb6428c7364dd2100a205eed9d4b9f072e45 Mon Sep 17 00:00:00 2001
+From: Jean-Baptiste Dhondt <114347858+warrox1993@users.noreply.github.com>
+Date: Fri, 30 Oct 2026 02:32:50 +0100
+Subject: [PATCH 110/111] =?UTF-8?q?fix(authz):=20garde=20Atelier=20des=20a?=
+ =?UTF-8?q?ctions=20r=C3=A9serv=C3=A9es=20aux=20humains=20par=20un=20Set?=
+ =?UTF-8?q?=20(tsc=20sans=20erreur)?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Atelier, lot S, suite du patch local 0108. La garde écrite en === rétrécissait le type de
+input.action : les branches amont de agent_config:update, agent_instructions:update et
+skill_config:update, plus bas, devenaient des comparaisons impossibles et tsc --noEmit du
+serveur sortait 4 erreurs TS2367 (le build de preparer-socle.sh aurait échoué). Même refus,
+écrit avec un Set : tsc revient à 0 erreur, les branches amont restent en place (fusions
+amont plus simples) mais inatteignables pour un agent.
+
+Corrige aussi l'étiquette de trois commentaires de tests : le contournement des permissions
+en opt-in relève de CV-1, pas de DOC-A20.
+
+Mutations : garde neutralisée 21 rouges, skill_config:update retiré 6, agent_instructions:update
+retiré 15 (sur 109 tests de autorisation, configuration des agents et chat propriétaire).
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01EThpSSDGc5NRYwbgjNqoTJ
+---
+ .../claude-local/src/server/execute.remote.test.ts        | 2 +-
+ .../__tests__/claude-local-adapter-environment.test.ts    | 2 +-
+ server/src/__tests__/claude-local-execute.test.ts         | 2 +-
+ server/src/services/authorization.ts                      | 8 +++++++-
+ 4 files changed, 10 insertions(+), 4 deletions(-)
+
+diff --git a/packages/adapters/claude-local/src/server/execute.remote.test.ts b/packages/adapters/claude-local/src/server/execute.remote.test.ts
+index e6ac3e330c..cedc393f9e 100644
+--- a/packages/adapters/claude-local/src/server/execute.remote.test.ts
++++ b/packages/adapters/claude-local/src/server/execute.remote.test.ts
+@@ -127,7 +127,7 @@ describe("claude remote execution", () => {
+         engine: "cli",
+         command: "claude",
+         instructionsFilePath: instructionsPath,
+-        // Atelier (patch local 0108, DOC-A20) : contournement des permissions en opt-in explicite, plus par défaut.
++        // Atelier (patch local 0108, CV-1) : contournement des permissions en opt-in explicite, plus par défaut.
+         dangerouslySkipPermissions: true,
+         env: {
+           QA_PROJECT_WORKSPACE_CWD: workspaceDir,
+diff --git a/server/src/__tests__/claude-local-adapter-environment.test.ts b/server/src/__tests__/claude-local-adapter-environment.test.ts
+index bfd975aa6f..a9445f99e4 100644
+--- a/server/src/__tests__/claude-local-adapter-environment.test.ts
++++ b/server/src/__tests__/claude-local-adapter-environment.test.ts
+@@ -307,7 +307,7 @@ describe("claude_local environment diagnostics", () => {
+       config: {
+         engine: "cli",
+         command: "claude",
+-        // Atelier (patch local 0108, DOC-A20) : contournement des permissions en opt-in explicite, plus par défaut.
++        // Atelier (patch local 0108, CV-1) : contournement des permissions en opt-in explicite, plus par défaut.
+         dangerouslySkipPermissions: true,
+       },
+       executionTarget: {
+diff --git a/server/src/__tests__/claude-local-execute.test.ts b/server/src/__tests__/claude-local-execute.test.ts
+index 41dd764e14..5c53e3647f 100644
+--- a/server/src/__tests__/claude-local-execute.test.ts
++++ b/server/src/__tests__/claude-local-execute.test.ts
+@@ -935,7 +935,7 @@ describe("claude execute", () => {
+           engine: "cli",
+           command: commandPath,
+           cwd: localWorkspace,
+-          // Atelier (patch local 0108, DOC-A20) : contournement des permissions en opt-in explicite, plus par défaut.
++          // Atelier (patch local 0108, CV-1) : contournement des permissions en opt-in explicite, plus par défaut.
+           dangerouslySkipPermissions: true,
+           env: {
+             PAPERCLIP_TEST_CAPTURE_PATH: capturePath1,
+diff --git a/server/src/services/authorization.ts b/server/src/services/authorization.ts
+index 9d36f03f42..9df3cad8db 100644
+--- a/server/src/services/authorization.ts
++++ b/server/src/services/authorization.ts
+@@ -512,6 +512,11 @@ type ResponsibleUserActorWithMemo = AuthorizationActor & {
+   __responsibleUserSnapshotMemo?: Map<string, Promise<ResponsibleUserSnapshot>>;
+ };
+ 
++// Atelier (patch local 0108) : actions refusées à tout agent, réservées aux humains.
++const ACTIONS_RESERVEES_AUX_HUMAINS: ReadonlySet<AuthorizationAction> = new Set<AuthorizationAction>([
++  "agent_config:update", "agent_instructions:update", "skill_config:update",
++]);
++
+ const responsibleUserSnapshotCache = new Map<
+   string,
+   { expiresAt: number; promise: Promise<ResponsibleUserSnapshot> }
+@@ -2084,7 +2089,8 @@ export function authorizationService(db: Db | DbTransaction) {
+ 
+     // Atelier (AFD-C1, N1, CV-1, CV-2, M3) : aucun agent ne modifie une configuration, des consignes ou des skills, les
+     // siens compris (sinon il retire sa propre cage) ; avant allow_self, les grants par défaut et toute clé de portée.
+-    if (input.action === "agent_config:update" || input.action === "agent_instructions:update" || input.action === "skill_config:update") {
++    // Un Set et non des === : les branches amont de ces actions, plus bas, restent compilables (tsc) mais inatteignables.
++    if (ACTIONS_RESERVEES_AUX_HUMAINS.has(input.action)) {
+       return deny({
+         action: input.action,
+         reason: "deny_policy_restricted",
+-- 
+2.53.0
+

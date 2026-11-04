@@ -13,6 +13,8 @@ import type { FournisseurService, OutilPasserelle } from "../../fournisseurs.js"
 
 export const MAX_REDIRECTIONS = 10;
 export const DELAI_REQUETE_MS = 10_000;
+/** T1 : budget de toute la chaîne (résolutions et sauts), sous le délai de 10 s d'un appel par le socle. */
+export const BUDGET_TOTAL_MS = 8_000;
 export const MAX_OCTETS_CORPS = 512 * 1024;
 export const MAX_EXTRAIT = 500;
 export const USER_AGENT = "AtelierMarketingIA-VerificationLiens/1.0 (contrôle de liens en lecture seule)";
@@ -135,7 +137,11 @@ export interface OptionsVerification {
   adresseAutorisee?: (ip: string) => boolean;
   resoudre?: Resolveur;
   delaiMs?: number;
+  /** Budget de toute la vérification, redirections comprises (BUDGET_TOTAL_MS par défaut). */
+  budgetMs?: number;
   maxRedirections?: number;
+  /** LIV-MK-8 : termes cherchés dans le texte complet de la page (pas seulement l'extrait). */
+  chercher?: readonly string[];
 }
 
 // --- Types de sortie -----------------------------------------------------------------------------------------------------
@@ -150,6 +156,8 @@ export interface ResultatVerification {
   typeContenu: string | null;
   titre: string | null;
   extrait: string | null;
+  /** Présence de chaque terme demandé dans le texte complet (GET seulement). */
+  trouves?: Array<{ terme: string; trouve: boolean }>;
   dureeMs: number;
   erreur?: string;
 }
@@ -250,12 +258,28 @@ const dentites = (t: string): string => t.replace(/&(#x?[0-9a-f]+|[a-z]+);/gi, (
 });
 const compacter = (t: string): string => dentites(t).replace(/\s+/g, " ").trim();
 
+/** Texte lisible complet d'une réponse (balises, scripts et styles retirés). */
+function texteLisible(texte: string, typeContenu: string | null): string {
+  const estHtml = typeContenu === null || /html|xml/i.test(typeContenu) || /^\s*</.test(texte);
+  if (!estHtml) return compacter(texte);
+  return compacter(texte.replace(/<(script|style|noscript|template|head)\b[\s\S]*?<\/\1>/gi, " ").replace(/<!--[\s\S]*?-->/g, " ").replace(/<[^>]*>/g, " "));
+}
+
+/** Un terme d'au moins 6 chiffres (numéro de téléphone, TVA) se compare chiffres seuls ; sinon sans casse ni espaces multiples. */
+export function chercherDans(texte: string, termes: readonly string[]): Array<{ terme: string; trouve: boolean }> {
+  const bas = texte.toLowerCase();
+  const chiffres = texte.replace(/\D/g, "");
+  return termes.map((terme) => {
+    const n = terme.replace(/\D/g, "");
+    return { terme, trouve: n.length >= 6 ? chiffres.includes(n) : bas.includes(compacter(terme).toLowerCase()) };
+  });
+}
+
 export function analyserContenu(texte: string, typeContenu: string | null): { titre: string | null; extrait: string | null } {
   const estHtml = typeContenu === null || /html|xml/i.test(typeContenu) || /^\s*</.test(texte);
   if (!estHtml) { const e = compacter(texte).slice(0, MAX_EXTRAIT); return { titre: null, extrait: e === "" ? null : e }; }
   const titre = /<title[^>]*>([\s\S]*?)<\/title>/i.exec(texte)?.[1];
-  const corps = texte.replace(/<(script|style|noscript|template|head)\b[\s\S]*?<\/\1>/gi, " ").replace(/<!--[\s\S]*?-->/g, " ").replace(/<[^>]*>/g, " ");
-  const extrait = compacter(corps).slice(0, MAX_EXTRAIT);
+  const extrait = texteLisible(texte, typeContenu).slice(0, MAX_EXTRAIT);
   const t = titre === undefined ? "" : compacter(titre);
   return { titre: t === "" ? null : t, extrait: extrait === "" ? null : extrait };
 }
@@ -268,6 +292,7 @@ export async function verifierUrl(urlDemandee: string, methode: "HEAD" | "GET" =
     resoudre: options.resoudre ?? resolveurSysteme,
   };
   const delaiMs = options.delaiMs ?? DELAI_REQUETE_MS;
+  const budgetMs = options.budgetMs ?? BUDGET_TOTAL_MS;
   const maxRedirections = options.maxRedirections ?? MAX_REDIRECTIONS;
   const chaine: SautChaine[] = [];
   const r: ResultatVerification = { urlDemandee, code: null, chaine, destination: null, typeContenu: null, titre: null, extrait: null, dureeMs: 0 };
@@ -284,12 +309,15 @@ export async function verifierUrl(urlDemandee: string, methode: "HEAD" | "GET" =
       if (courante.protocol !== "http:" && courante.protocol !== "https:") throw new ErreurVerification(`Schéma refusé : « ${courante.protocol.replace(":", "")} » (http et https seulement).`);
       if (courante.username !== "" || courante.password !== "") throw new ErreurVerification("URL refusée : identifiants dans l'adresse (aucune authentification n'est transmise).");
       const ip = await adresseVerifiee(courante, opts);
+      const reste = budgetMs - (Date.now() - debut);
+      if (reste <= 0) throw new ErreurVerification(`Budget de ${budgetMs} ms dépassé après ${chaine.length} saut(s).`);
       let rep: Reponse;
       try {
-        rep = await requete(courante, ip, methode, delaiMs);
+        rep = await requete(courante, ip, methode, Math.min(delaiMs, reste));
       } catch (e) {
         chaine.push({ url: courante.href, code: null });
         r.destination = courante.href;
+        if (Date.now() - debut >= budgetMs) throw new ErreurVerification(`Budget de ${budgetMs} ms dépassé après ${chaine.length} saut(s).`);
         throw e instanceof ErreurVerification ? e : new ErreurVerification(`Échec de la requête : ${e instanceof Error ? e.message : String(e)}`);
       }
       chaine.push({ url: courante.href, code: rep.code });
@@ -301,7 +329,11 @@ export async function verifierUrl(urlDemandee: string, methode: "HEAD" | "GET" =
         try { courante = new URL(rep.location, courante); } catch { throw new ErreurVerification(`Redirection vers une adresse invalide : « ${rep.location.slice(0, 200)} ».`); }
         continue;
       }
-      if (methode === "GET") Object.assign(r, analyserContenu(decoder(rep.corps, rep.typeContenu), rep.typeContenu));
+      if (methode === "GET") {
+        const brut = decoder(rep.corps, rep.typeContenu);
+        Object.assign(r, analyserContenu(brut, rep.typeContenu));
+        if (options.chercher?.length) r.trouves = chercherDans(texteLisible(brut, rep.typeContenu), options.chercher);
+      }
       break;
     }
   } catch (e) {
@@ -316,6 +348,8 @@ export async function verifierUrl(urlDemandee: string, methode: "HEAD" | "GET" =
 export const schemaVerifierUrl = {
   url: z.string().min(1).max(2048).describe("Adresse à contrôler (http ou https, adresse publique)."),
   methode: z.enum(["HEAD", "GET"]).optional().describe("HEAD (code et redirections seulement) ou GET (par défaut : lit aussi le contenu, 512 Ko au plus)."),
+  chercher: z.array(z.string().min(1).max(100)).max(5).optional()
+    .describe("GET : jusqu'à 5 termes cherchés dans le texte COMPLET de la page (numéro comparé chiffres seuls, sinon sans casse) ; réponse dans « trouves »."),
 };
 
 export function outilsLiens(options: OptionsVerification = {}): OutilPasserelle[] {
@@ -323,13 +357,13 @@ export function outilsLiens(options: OptionsVerification = {}): OutilPasserelle[
     nom: "verifier_url",
     description:
       "LECTURE. Contrôle une URL publique : code HTTP, chaîne de redirections suivies une à une (10 au plus), destination finale, type de contenu, " +
-      "titre et extrait (500 caractères au plus) pour GET. Refuse les adresses locales, privées ou réservées, y compris atteintes par redirection. " +
+      "titre et extrait (500 caractères au plus) pour GET, et la présence des termes de « chercher » dans le texte complet. Refuse les adresses locales, privées ou réservées, y compris atteintes par redirection. " +
       "Aucun cookie ni authentification n'est transmis. Un code 200 sur une page d'erreur reste à juger d'après le titre et l'extrait.",
     schemaEntree: schemaVerifierUrl,
     annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
     executer: (args) => {
-      const a = args as { url: string; methode?: "HEAD" | "GET" };
-      return verifierUrl(a.url, a.methode ?? "GET", options);
+      const a = args as { url: string; methode?: "HEAD" | "GET"; chercher?: string[] };
+      return verifierUrl(a.url, a.methode ?? "GET", a.chercher ? { ...options, chercher: a.chercher } : options);
     },
   }];
 }

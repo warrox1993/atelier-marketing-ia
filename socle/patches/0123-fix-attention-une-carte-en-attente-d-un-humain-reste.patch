@@ -1,0 +1,140 @@
+From c9dc545640ca102e562f42e2e11ca51411a04fa6 Mon Sep 17 00:00:00 2001
+From: Jean-Baptiste Dhondt <114347858+warrox1993@users.noreply.github.com>
+Date: Fri, 30 Oct 2026 14:39:31 +0100
+Subject: [PATCH 123/126] =?UTF-8?q?fix(attention):=20une=20carte=20en=20at?=
+ =?UTF-8?q?tente=20d'un=20humain=20reste=20dans=20le=20badge=20du=20bureau?=
+ =?UTF-8?q?=20et=20la=20bo=C3=AEte=20de=20r=C3=A9ception=20(Atelier=20HUM-?=
+ =?UTF-8?q?C3)?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+deskBadgeCount ne comptait que les éléments du jour : une carte posée la veille disparaissait
+du badge. Le total inbox des badges ne comptait jamais les cartes : il compte désormais les
+interactions pending adressées à un humain (ou à personne) de l'entreprise.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01EThpSSDGc5NRYwbgjNqoTJ
+---
+ .../__tests__/atelier-badges-cartes.test.ts   | 52 +++++++++++++++++++
+ server/src/services/attention.ts              |  4 +-
+ server/src/services/sidebar-badges.ts         | 23 ++++++--
+ 3 files changed, 75 insertions(+), 4 deletions(-)
+ create mode 100644 server/src/__tests__/atelier-badges-cartes.test.ts
+
+diff --git a/server/src/__tests__/atelier-badges-cartes.test.ts b/server/src/__tests__/atelier-badges-cartes.test.ts
+new file mode 100644
+index 0000000000..fbe273742f
+--- /dev/null
++++ b/server/src/__tests__/atelier-badges-cartes.test.ts
+@@ -0,0 +1,52 @@
++/**
++ * Atelier Marketing IA (HUM-C3) : une carte en attente d'un humain reste dans les badges
++ * après le jour de sa pose (badge du bureau /attention et total de la boîte de réception).
++ */
++import { randomUUID } from "node:crypto";
++import { afterAll, beforeAll, describe, expect, it } from "vitest";
++import { agents, companies, createDb, issues, issueThreadInteractions } from "@paperclipai/db";
++import { getEmbeddedPostgresTestSupport, startEmbeddedPostgresTestDatabase } from "./helpers/embedded-postgres.js";
++import { attentionService } from "../services/attention.js";
++import { sidebarBadgeService } from "../services/sidebar-badges.js";
++
++const support = await getEmbeddedPostgresTestSupport();
++
++(support.supported ? describe : describe.skip)("badges : cartes en attente (Atelier HUM-C3)", () => {
++  let base: Awaited<ReturnType<typeof startEmbeddedPostgresTestDatabase>>;
++  let db: ReturnType<typeof createDb>;
++
++  beforeAll(async () => {
++    base = await startEmbeddedPostgresTestDatabase("paperclip-atelier-badges-");
++    db = createDb(base.connectionString);
++  }, 30_000);
++
++  afterAll(async () => {
++    await base?.cleanup();
++  });
++
++  it("compte une carte posée la veille dans deskBadgeCount et dans la boîte", async () => {
++    const companyId = randomUUID();
++    const agentId = randomUUID();
++    const issueId = randomUUID();
++    const hier = new Date(Date.now() - 36 * 60 * 60_000);
++    await db.insert(companies).values({ id: companyId, name: "Badges", issuePrefix: `B${companyId.replace(/-/g, "").slice(0, 6).toUpperCase()}` });
++    await db.insert(agents).values({ id: agentId, companyId, name: "Redacteur", role: "engineer", status: "idle", adapterType: "claude_local", adapterConfig: {}, runtimeConfig: {} });
++    await db.insert(issues).values({ id: issueId, companyId, title: "Liste finale", status: "in_review", priority: "medium", assigneeAgentId: agentId, createdAt: hier, updatedAt: hier });
++    await db.insert(issueThreadInteractions).values([
++      { companyId, issueId, kind: "request_confirmation", status: "pending", title: "Valider la liste", payload: { version: 1, prompt: "Valider ?" }, createdAt: hier, updatedAt: hier },
++      // Adressée à un agent actif ou déjà tranchée : jamais comptée.
++      { companyId, issueId, kind: "ask_user_questions", status: "pending", addresseeAgentId: agentId, title: "Question à l'agent", payload: { version: 1, questions: [] }, createdAt: hier, updatedAt: hier },
++      { companyId, issueId, kind: "request_confirmation", status: "accepted", title: "Déjà tranchée", payload: { version: 1, prompt: "Ok ?" }, createdAt: hier, updatedAt: hier },
++    ]);
++
++    const feed = await attentionService(db).list(companyId, { userId: "board-user", sort: "decide", limit: 20 });
++    const cartes = feed.items.filter((item) => item.sourceKind === "issue_thread_interaction");
++    expect(cartes).toHaveLength(1);
++    expect(feed.deskBadgeCount).toBeGreaterThanOrEqual(1);
++    expect(feed.deskBadgeCount).toBe(feed.items.filter((item) => item.sourceKind === "issue_thread_interaction" || Date.parse(item.createdAt) >= new Date().setUTCHours(0, 0, 0, 0)).length);
++
++    const badges = await sidebarBadgeService(db).get(companyId, { currentUserId: "board-user" });
++    expect(badges.inbox).toBe(1);
++    expect(badges.approvals).toBe(0);
++  }, 30_000);
++});
+diff --git a/server/src/services/attention.ts b/server/src/services/attention.ts
+index dd46de7d91..84d4175674 100644
+--- a/server/src/services/attention.ts
++++ b/server/src/services/attention.ts
+@@ -2026,7 +2026,9 @@ export function attentionService(db: Db, serviceOptions: AttentionServiceOptions
+         // today OR carry an explicit decide-by deadline due today/past. Counted
+         // over the full ranked set (pre-pagination) so the sidebar badge stays
+         // company-wide accurate even on a small first page.
+-        deskBadgeCount: rankedItems.filter((item) => isNewToday(item, now) || isDecideNow(item, now)).length,
++        // Atelier Marketing IA (HUM-C3) : une carte en attente compte tant qu'elle attend, pas seulement le jour de sa pose.
++        deskBadgeCount: rankedItems.filter((item) =>
++          isNewToday(item, now) || isDecideNow(item, now) || item.sourceKind === "issue_thread_interaction").length,
+         nextCursor,
+         countsBySourceKind,
+         items,
+diff --git a/server/src/services/sidebar-badges.ts b/server/src/services/sidebar-badges.ts
+index a53bb36d3e..daf11f1083 100644
+--- a/server/src/services/sidebar-badges.ts
++++ b/server/src/services/sidebar-badges.ts
+@@ -1,6 +1,6 @@
+-import { and, desc, eq, inArray, not } from "drizzle-orm";
++import { and, desc, eq, inArray, isNull, not, or } from "drizzle-orm";
+ import type { Db } from "@paperclipai/db";
+-import { agents, approvals, heartbeatRuns } from "@paperclipai/db";
++import { agents, approvals, heartbeatRuns, issueThreadInteractions } from "@paperclipai/db";
+ import { isHeartbeatRunVisibleInMine, type SidebarBadges } from "@paperclipai/shared";
+ 
+ const ACTIONABLE_APPROVAL_STATUSES = ["pending", "revision_requested"];
+@@ -78,8 +78,25 @@ export function sidebarBadgeService(db: Db) {
+         )
+       ).length;
+       const unreadTouchedIssues = extra?.unreadTouchedIssues ?? 0;
++      // Atelier Marketing IA (HUM-C3) : les cartes en attente d'un humain comptent dans la boîte, quel que soit leur âge.
++      // shortcut: une carte adressée à un agent en pause n'est pas comptée ici (elle l'est dans /attention), à aligner si besoin.
++      const currentUserId = extra?.currentUserId ?? null;
++      const pendingHumanCards = await db
++        .select({ id: issueThreadInteractions.id })
++        .from(issueThreadInteractions)
++        .where(
++          and(
++            eq(issueThreadInteractions.companyId, companyId),
++            eq(issueThreadInteractions.status, "pending"),
++            isNull(issueThreadInteractions.addresseeAgentId),
++            currentUserId
++              ? or(isNull(issueThreadInteractions.addresseeUserId), eq(issueThreadInteractions.addresseeUserId, currentUserId))
++              : isNull(issueThreadInteractions.addresseeUserId),
++          ),
++        )
++        .then((rows) => rows.length);
+       return {
+-        inbox: actionableApprovals + failedRuns + joinRequests + unreadTouchedIssues,
++        inbox: actionableApprovals + failedRuns + joinRequests + unreadTouchedIssues + pendingHumanCards,
+         approvals: actionableApprovals,
+         failedRuns,
+         joinRequests,
+-- 
+2.53.0
+

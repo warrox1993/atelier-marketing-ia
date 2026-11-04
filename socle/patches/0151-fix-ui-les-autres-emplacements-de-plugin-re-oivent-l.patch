@@ -1,0 +1,219 @@
+From d051a5215c5280104660f0f3a8336b1ae8acd15e Mon Sep 17 00:00:00 2001
+From: Jean-Baptiste Dhondt <114347858+warrox1993@users.noreply.github.com>
+Date: Fri, 30 Oct 2026 17:13:58 +0100
+Subject: [PATCH 151/151] =?UTF-8?q?fix(ui):=20les=20autres=20emplacements?=
+ =?UTF-8?q?=20de=20plugin=20re=C3=A7oivent=20le=20pr=C3=A9fixe=20de=20l'en?=
+ =?UTF-8?q?treprise=20de=20l'objet=20(UI-15)?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Suite de 0149. Le détail de la tâche (barre d'outils, lanceurs, vue taskDetailView, onglet
+plugin), l'onglet plugin du panneau de la tâche et les emplacements de commentaire passaient un
+contexte sans companyPrefix : les liens des plugins y sortaient sans préfixe. Le préfixe vient
+de l'entreprise de l'objet affiché (issue.companyId, companyId du commentaire), pas de
+l'entreprise sélectionnée. Projet, espace de travail de projet, réglages de plugin et page de
+réglages d'entreprise le passaient déjà ; le contexte de CrossIssueCollaborationUxLab n'est pas
+un contexte de plugin.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01EThpSSDGc5NRYwbgjNqoTJ
+---
+ ui/src/components/CommentThread.tsx           |  5 ++
+ ui/src/components/IssueProperties.test.tsx    | 53 ++++++++++++++++++-
+ .../issue-properties/IssueProperties.tsx      |  4 +-
+ ui/src/pages/IssueDetail.tsx                  |  6 +++
+ 4 files changed, 65 insertions(+), 3 deletions(-)
+
+diff --git a/ui/src/components/CommentThread.tsx b/ui/src/components/CommentThread.tsx
+index 328bf906ca..bcde242b58 100644
+--- a/ui/src/components/CommentThread.tsx
++++ b/ui/src/components/CommentThread.tsx
+@@ -27,6 +27,7 @@ import { cn, formatDateTime } from "../lib/utils";
+ import { restoreSubmittedCommentDraft } from "../lib/comment-submit-draft";
+ import { copyTextToClipboard } from "../lib/clipboard";
+ import { PluginSlotOutlet } from "@/plugins/slots";
++import { useOptionalCompany } from "../context/CompanyContext";
+ 
+ interface CommentWithRunMeta extends IssueComment {
+   runId?: string | null;
+@@ -325,6 +326,8 @@ function CommentCard({
+   externalReferences?: MarkdownExternalReferenceMap;
+ }) {
+   const isHighlighted = highlightCommentId === comment.id;
++  // Atelier (UI-15) : préfixe de l'entreprise du commentaire, pour les liens des plugins.
++  const companyPrefix = useOptionalCompany()?.companies.find((company) => company.id === companyId)?.issuePrefix ?? null;
+   const isPending = comment.clientStatus === "pending";
+   const isQueued = queued || comment.queueState === "queued" || comment.clientStatus === "queued";
+   const isDeleted = Boolean(comment.deletedAt);
+@@ -370,6 +373,7 @@ function CommentCard({
+               entityType="comment"
+               context={{
+                 companyId,
++                companyPrefix,
+                 projectId: projectId ?? null,
+                 entityId: comment.id,
+                 entityType: "comment",
+@@ -405,6 +409,7 @@ function CommentCard({
+             entityType="comment"
+             context={{
+               companyId,
++              companyPrefix,
+               projectId: projectId ?? null,
+               entityId: comment.id,
+               entityType: "comment",
+diff --git a/ui/src/components/IssueProperties.test.tsx b/ui/src/components/IssueProperties.test.tsx
+index 42270ddee8..08c98a50cd 100644
+--- a/ui/src/components/IssueProperties.test.tsx
++++ b/ui/src/components/IssueProperties.test.tsx
+@@ -16,6 +16,7 @@ import type { Issue, IssueDocument } from "@paperclipai/shared";
+ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+ import { getLastProjectId } from "../lib/recent-projects";
+ import { IssueProperties } from "./IssueProperties";
++import { resolveHostNavigationHref } from "@/plugins/bridge";
+ import { queryKeys } from "../lib/queryKeys";
+ 
+ const mockAgentsApi = vi.hoisted(() => ({
+@@ -67,6 +68,10 @@ const mockSidebarState = vi.hoisted(() => ({
+ vi.mock("../context/CompanyContext", () => ({
+   useCompany: () => ({
+     selectedCompanyId: "company-1",
++    companies: [
++      { id: "company-1", issuePrefix: "PAP", name: "Paperclip" },
++      { id: "company-2", issuePrefix: "ACH", name: "Achats" },
++    ],
+   }),
+ }));
+ 
+@@ -99,8 +104,11 @@ vi.mock("@/plugins/slots", async (importOriginal) => ({
+     isLoading: false,
+     errorMessage: null,
+   }),
+-  PluginSlotMount: ({ slot, context }: { slot: { id: string }; context: { entityId?: string | null; entityType?: string | null } }) => (
+-    <div data-testid="plugin-slot-mount">{`${slot.id}:${context.entityType}:${context.entityId}`}</div>
++  // Le lien rendu reprend la résolution de useHostNavigation sur le contexte reçu (Atelier UI-15).
++  PluginSlotMount: ({ slot, context }: { slot: { id: string }; context: { entityId?: string | null; entityType?: string | null; companyPrefix?: string | null } }) => (
++    <div data-testid="plugin-slot-mount" data-href={resolveHostNavigationHref("/atelier/contenus", context.companyPrefix)}>
++      {`${slot.id}:${context.entityType}:${context.entityId}`}
++    </div>
+   ),
+ }));
+ 
+@@ -1151,6 +1159,47 @@ describe("IssueProperties", () => {
+     }
+   });
+ 
++  it("l'onglet de plugin du panneau reçoit le préfixe de l'entreprise de la tâche, pas celui de l'entreprise sélectionnée (Atelier UI-15)", async () => {
++    mockInstanceSettingsApi.getExperimental.mockResolvedValue({ enableClassicTaskInterface: false });
++    mockPluginSlots.detailTabs = [
++      {
++        type: "detailTab",
++        id: "onglet-tache",
++        displayName: "Atelier",
++        exportName: "ContenuOngletTache",
++        entityTypes: ["issue"],
++        pluginId: "plugin-1",
++        pluginKey: "atelier",
++        pluginDisplayName: "Atelier",
++        pluginVersion: "1.0.0",
++      },
++    ];
++    try {
++      const { root } = renderPropertiesWithQueryClient(container, {
++        issue: createIssue({ companyId: "company-2" }),
++        childIssues: [],
++        onUpdate: vi.fn(),
++        inline: true,
++      });
++      let atelierTab: HTMLButtonElement | undefined;
++      await waitForAssertion(() => {
++        atelierTab = Array.from(container.querySelectorAll<HTMLButtonElement>('[role="tab"]'))
++          .find((button) => button.textContent === "Atelier");
++        expect(atelierTab).toBeDefined();
++      });
++      await act(async () => {
++        atelierTab!.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, button: 0 }));
++        atelierTab!.click();
++      });
++      await waitForAssertion(() => {
++        expect(container.querySelector('[data-testid="plugin-slot-mount"]')?.getAttribute("data-href")).toBe("/ACH/atelier/contenus");
++      });
++      act(() => root.unmount());
++    } finally {
++      mockPluginSlots.detailTabs = [];
++    }
++  });
++
+   it("hides the Priority property row while priority UI is off (PAP-411)", async () => {
+     const root = renderProperties(container, {
+       issue: createIssue({ priority: "high" }),
+diff --git a/ui/src/components/issue-properties/IssueProperties.tsx b/ui/src/components/issue-properties/IssueProperties.tsx
+index f8d366dd37..7a0d8f0464 100644
+--- a/ui/src/components/issue-properties/IssueProperties.tsx
++++ b/ui/src/components/issue-properties/IssueProperties.tsx
+@@ -255,7 +255,7 @@ export function IssueProperties({
+   const policyResult = useExecutionPolicy(issue.executionPolicy);
+   const policyAvailable = policyResult.success;
+   const executionPolicy = policyResult.success ? policyResult.data : null;
+-  const { selectedCompanyId } = useCompany();
++  const { selectedCompanyId, companies } = useCompany();
+   const { isMobile } = useSidebar();
+   const queryClient = useQueryClient();
+   const companyId = issue.companyId ?? selectedCompanyId;
+@@ -3323,6 +3323,8 @@ export function IssueProperties({
+             slot={tab.slot}
+             context={{
+               companyId: issue.companyId,
++              // Atelier (UI-15) : préfixe de l'entreprise de la tâche, pour les liens du plugin.
++              companyPrefix: companies.find((company) => company.id === issue.companyId)?.issuePrefix ?? null,
+               projectId: issue.projectId ?? null,
+               entityId: issue.id,
+               entityType: "issue",
+diff --git a/ui/src/pages/IssueDetail.tsx b/ui/src/pages/IssueDetail.tsx
+index 2c98166dc6..9653c85c4b 100644
+--- a/ui/src/pages/IssueDetail.tsx
++++ b/ui/src/pages/IssueDetail.tsx
+@@ -6934,6 +6934,8 @@ export function TaskDetailSurface({ conversation, tasksTab }: { tasksTab?: TaskS
+       />
+     );
+ 
++  // Atelier (UI-15) : les liens des plugins visent l'entreprise de la tâche affichée.
++  const issueCompanyPrefix = companies.find((company) => company.id === issue.companyId)?.issuePrefix ?? null;
+   // Ancestors are returned oldest-first from the server (root at end, immediate parent at start)
+   const ancestors = issue.ancestors ?? [];
+   const legacyRecoverySourceIssue = (() => {
+@@ -7596,6 +7598,7 @@ export function TaskDetailSurface({ conversation, tasksTab }: { tasksTab?: TaskS
+         entityType="issue"
+         context={{
+           companyId: issue.companyId,
++          companyPrefix: issueCompanyPrefix,
+           projectId: issue.projectId ?? null,
+           entityId: issue.id,
+           entityType: "issue",
+@@ -7610,6 +7613,7 @@ export function TaskDetailSurface({ conversation, tasksTab }: { tasksTab?: TaskS
+         entityType="issue"
+         context={{
+           companyId: issue.companyId,
++          companyPrefix: issueCompanyPrefix,
+           projectId: issue.projectId ?? null,
+           entityId: issue.id,
+           entityType: "issue",
+@@ -7623,6 +7627,7 @@ export function TaskDetailSurface({ conversation, tasksTab }: { tasksTab?: TaskS
+         entityType="issue"
+         context={{
+           companyId: issue.companyId,
++          companyPrefix: issueCompanyPrefix,
+           projectId: issue.projectId ?? null,
+           entityId: issue.id,
+           entityType: "issue",
+@@ -8332,6 +8337,7 @@ export function TaskDetailSurface({ conversation, tasksTab }: { tasksTab?: TaskS
+                   slot={activePluginTab.slot}
+                   context={{
+                     companyId: issue.companyId,
++                    companyPrefix: issueCompanyPrefix,
+                     projectId: issue.projectId ?? null,
+                     entityId: issue.id,
+                     entityType: "issue",
+-- 
+2.53.0
+

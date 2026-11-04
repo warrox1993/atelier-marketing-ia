@@ -52,6 +52,19 @@ puisse refaire le chemin et qu'un humain sache ce qui est sûr et ce qui ne l'es
 7. Pour un sujet réglementé (primes, aides publiques, obligations légales), renvoyer à la
    source officielle et indiquer qu'une vérification humaine est nécessaire.
 
+### Dans l'Observatoire
+
+La lecture protégée de l'étape 2 date une lecture mais ne fait pas une Preuve : elle n'ajoute la page ni aux
+sources du projet ni aux instantanés, et la porte refuse toute URL ou Preuve hors de ces sources (OBS-03).
+
+1. Une Preuve est un extrait exact (20 caractères au moins, 500 au plus, ou moins si la source a un plafond) d'un instantané rendu par la collecte de la tâche
+   (route de collecte nommée dans tes consignes, sources du projet ou URL exacte de la base commune), avec sa position.
+2. Une page utile absente des sources se demande au `directeur` (URL, projet, motif) : elle n'est citable qu'une fois
+   collectée.
+3. Le statut d'une Affirmation est l'un des huit de `affirmations-preuves`, jamais l'une des quatre classes
+   ci-dessus : fait vérifié devient `confirme_doc_officielle`, `rapporte_editeur` ou `rapporte_tiers` selon la source,
+   inférence `infere`, hypothèse `non_verifie` ; une recommandation n'est pas une Affirmation.
+
 ## Livrable
 
 Une note de recherche : réponse courte, tableau des affirmations (affirmation, classe,

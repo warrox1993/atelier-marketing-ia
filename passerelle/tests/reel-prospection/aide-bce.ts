@@ -3,12 +3,13 @@
 // entreprises ENTIÈREMENT FICTIVES. Tous les numéros ont un chiffre de contrôle volontairement faux (modulo 97), comme au
 // lot P2 : aucun ne peut désigner une vraie entreprise.
 
-import { mkdtempSync, writeFileSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { crc32, deflateRawSync } from "node:zlib";
 import Database from "better-sqlite3";
 import * as z from "zod";
+import { afterAll } from "vitest";
 import type { ContexteAppel, OutilPasserelle } from "../../src/fournisseurs.js";
 import { controleValide } from "../../src/commun/prospection/numeros.js";
 
@@ -259,8 +260,14 @@ export function miseAJour135(): Record<string, string> {
 
 // --- Fichiers ---------------------------------------------------------------------------------------------------------
 
+// /tmp est en mémoire vive : chaque fichier de test qui importe cette aide supprime ses dossiers à la fin, même en échec.
+const dossiersCrees: string[] = [];
+afterAll(() => { for (const d of dossiersCrees.splice(0)) rmSync(d, { recursive: true, force: true }); });
+
 export function dossierTemporaire(prefixe = "passerelle-p3-"): string {
-  return mkdtempSync(join(tmpdir(), prefixe));
+  const dossier = mkdtempSync(join(tmpdir(), prefixe));
+  dossiersCrees.push(dossier);
+  return dossier;
 }
 
 export function ecrireZip(dossier: string, nom: string, entrees: Record<string, string>): string {

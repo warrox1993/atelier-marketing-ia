@@ -1,0 +1,197 @@
+From 525b9974e0d294769391c395caf858c395f38012 Mon Sep 17 00:00:00 2001
+From: Jean-Baptiste Dhondt <114347858+warrox1993@users.noreply.github.com>
+Date: Tue, 27 Oct 2026 23:27:51 +0100
+Subject: [PATCH] =?UTF-8?q?fix(claude-local):=20la=20r=C3=A9f=C3=A9rence?=
+ =?UTF-8?q?=20de=20co=C3=BBt=20se=20lit=20seulement=20dans=20la=20transcri?=
+ =?UTF-8?q?ption=20que=20Claude=20Code=20reprend?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Le dossier de configuration partagé est accessible en écriture aux agents : chercher
+<sessionId>.jsonl dans tous les dossiers de projets permettait à un agent de déposer un faux
+fichier, plus récent, qui devenait la référence de coût (sous-déclaration, y compris pour
+la session d un agent d une autre entreprise). On ne lit plus que
+projects/<cwd encodé>/<sessionId>.jsonl, ouvert avec O_NOFOLLOW.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_012hDEUaJZ3u1rGj4CzNXrhC
+---
+ .../server/execute.resume-accounting.test.ts  |  2 +-
+ .../claude-local/src/server/execute.ts        |  4 +-
+ .../src/server/session-cost.test.ts           | 37 +++++++++++++------
+ .../claude-local/src/server/session-cost.ts   | 34 ++++++++---------
+ 4 files changed, 46 insertions(+), 31 deletions(-)
+
+diff --git a/packages/adapters/claude-local/src/server/execute.resume-accounting.test.ts b/packages/adapters/claude-local/src/server/execute.resume-accounting.test.ts
+index ba8314459..77db9e5c6 100644
+--- a/packages/adapters/claude-local/src/server/execute.resume-accounting.test.ts
++++ b/packages/adapters/claude-local/src/server/execute.resume-accounting.test.ts
+@@ -128,7 +128,7 @@ describe("claude_local resumed session accounting (execute wiring)", () => {
+   beforeEach(async () => {
+     root = await mkdtemp(path.join(os.tmpdir(), "claude-resume-accounting-"));
+     configDir = path.join(root, "config");
+-    const projectDir = path.join(configDir, "projects", "-some-encoded-cwd");
++    const projectDir = path.join(configDir, "projects", root.replace(/[^a-zA-Z0-9-]/g, "-"));
+     await mkdir(projectDir, { recursive: true });
+     transcript = path.join(projectDir, `${SESSION}.jsonl`);
+     await writeFile(transcript, [JSON.stringify({ type: "user" }), costState(R1)].map((l) => `${l}\n`).join(""), "utf8");
+diff --git a/packages/adapters/claude-local/src/server/execute.ts b/packages/adapters/claude-local/src/server/execute.ts
+index 890fe86ac..584c02236 100644
+--- a/packages/adapters/claude-local/src/server/execute.ts
++++ b/packages/adapters/claude-local/src/server/execute.ts
+@@ -1000,7 +1000,7 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
+     // transcript (local runs). Stored totals are only the fallback, which also covers remote runs.
+     const transcriptTotals =
+       resumeSessionId && !executionTargetIsRemote
+-        ? await readTranscriptCostState(sharedClaudeConfigDir, resumeSessionId)
++        ? await readTranscriptCostState(sharedClaudeConfigDir, resumeSessionId, effectiveExecutionCwd)
+         : null;
+     const referenceTotals =
+       transcriptTotals ?? (resumeSessionId && knownTotals?.sessionId === resumeSessionId ? knownTotals.totals : null);
+@@ -1058,7 +1058,7 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
+     // so the run is what was added since the reference.
+     const endedSessionId = parsedStream.sessionId ?? resumeSessionId;
+     if (parsedStream.resultJson === null && endedSessionId && !executionTargetIsRemote) {
+-      const after = await readTranscriptCostState(sharedClaudeConfigDir, endedSessionId);
++      const after = await readTranscriptCostState(sharedClaudeConfigDir, endedSessionId, effectiveExecutionCwd);
+       const before = endedSessionId === resumeSessionId ? referenceTotals : EMPTY_SESSION_TOTALS;
+       const delta = after && before ? runAccountingFromTotals(after, before) : null;
+       if (after && delta) {
+diff --git a/packages/adapters/claude-local/src/server/session-cost.test.ts b/packages/adapters/claude-local/src/server/session-cost.test.ts
+index 664967b1a..63d77a094 100644
+--- a/packages/adapters/claude-local/src/server/session-cost.test.ts
++++ b/packages/adapters/claude-local/src/server/session-cost.test.ts
+@@ -1,10 +1,11 @@
+-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
++import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
+ import os from "node:os";
+ import path from "node:path";
+ import { afterEach, beforeEach, describe, expect, it } from "vitest";
+ import { readTranscriptCostState } from "./session-cost.js";
+ 
+ const SESSION = "11111111-1111-4111-8111-111111111111";
++const CWD = "/home/agent/b";
+ const costState = (costUSD: number) =>
+   JSON.stringify({
+     type: "cost-state",
+@@ -20,32 +21,46 @@ describe("readTranscriptCostState", () => {
+   beforeEach(async () => {
+     configDir = await mkdtemp(path.join(os.tmpdir(), "claude-session-cost-"));
+     await mkdir(path.join(configDir, "projects", "-a"), { recursive: true });
+-    await mkdir(path.join(configDir, "projects", "-b"), { recursive: true });
+-    file = path.join(configDir, "projects", "-b", `${SESSION}.jsonl`);
++    await mkdir(path.join(configDir, "projects", "-home-agent-b"), { recursive: true });
++    file = path.join(configDir, "projects", "-home-agent-b", `${SESSION}.jsonl`);
+   });
+ 
+   afterEach(async () => {
+     await rm(configDir, { recursive: true, force: true });
+   });
+ 
+-  it("finds the transcript by session id under any project directory and reads the last cost-state", async () => {
++  it("reads only the transcript Claude Code resumes from, never a same-named file in another project dir", async () => {
++    // A forged, newer file elsewhere under the shared config dir must not become the cost reference.
++    await writeFile(file, `${costState(0.1)}\n`);
++    await writeFile(path.join(configDir, "projects", "-a", `${SESSION}.jsonl`), `${costState(5)}\n`);
++    expect((await readTranscriptCostState(configDir, SESSION, CWD))?.costUsd).toBe(0.1);
++  });
++
++  it("refuses a transcript that is a symbolic link", async () => {
++    const elsewhere = path.join(configDir, "projects", "-a", "ailleurs.jsonl");
++    await writeFile(elsewhere, `${costState(5)}\n`);
++    await symlink(elsewhere, file);
++    expect(await readTranscriptCostState(configDir, SESSION, CWD)).toBeNull();
++  });
++
++  it("finds the transcript under the encoded cwd and reads the last cost-state", async () => {
+     await writeFile(file, `${costState(0.1)}\n{"type":"user"}\n${costState(0.2)}\n{"type":"assistant"}\n`);
+-    expect((await readTranscriptCostState(configDir, SESSION))?.costUsd).toBe(0.2);
++    expect((await readTranscriptCostState(configDir, SESSION, CWD))?.costUsd).toBe(0.2);
+   });
+ 
+   it("reads a cost-state far from the end of a large file by growing the tail window", async () => {
+     const filler = `${JSON.stringify({ type: "user", text: "x".repeat(1000) })}\n`.repeat(600);
+     await writeFile(file, `${costState(0.3)}\n${filler}`);
+-    expect((await readTranscriptCostState(configDir, SESSION))?.costUsd).toBe(0.3);
++    expect((await readTranscriptCostState(configDir, SESSION, CWD))?.costUsd).toBe(0.3);
+   });
+ 
+   it("returns null for a missing file, a non-UUID id, no cost-state or a file over the size cap", async () => {
+-    expect(await readTranscriptCostState(configDir, SESSION)).toBeNull();
++    expect(await readTranscriptCostState(configDir, SESSION, CWD)).toBeNull();
+     await writeFile(file, `${costState(0.1)}\n`);
+-    expect(await readTranscriptCostState(configDir, "../etc/passwd")).toBeNull();
+-    expect(await readTranscriptCostState(configDir, SESSION, 10)).toBeNull();
++    expect(await readTranscriptCostState(configDir, "../etc/passwd", CWD)).toBeNull();
++    expect(await readTranscriptCostState(configDir, SESSION, CWD, 10)).toBeNull();
+     await writeFile(file, '{"type":"user"}\n');
+-    expect(await readTranscriptCostState(configDir, SESSION)).toBeNull();
+-    expect(await readTranscriptCostState(path.join(configDir, "absent"), SESSION)).toBeNull();
++    expect(await readTranscriptCostState(configDir, SESSION, CWD)).toBeNull();
++    expect(await readTranscriptCostState(path.join(configDir, "absent"), SESSION, CWD)).toBeNull();
+   });
+ });
+diff --git a/packages/adapters/claude-local/src/server/session-cost.ts b/packages/adapters/claude-local/src/server/session-cost.ts
+index 813324c13..627c30805 100644
+--- a/packages/adapters/claude-local/src/server/session-cost.ts
++++ b/packages/adapters/claude-local/src/server/session-cost.ts
+@@ -1,4 +1,5 @@
+-import { open, readdir, stat } from "node:fs/promises";
++import { constants } from "node:fs";
++import { open } from "node:fs/promises";
+ import path from "node:path";
+ import { lastCostStateTotals, type ClaudeSessionTotals } from "./parse.js";
+ 
+@@ -6,16 +7,14 @@ const MAX_TRANSCRIPT_BYTES = 64 * 1024 * 1024;
+ const FIRST_CHUNK_BYTES = 256 * 1024;
+ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+ 
+-/** Find `<configDir>/projects/<encoded cwd>/<sessionId>.jsonl`; the newest one when several exist. */
+-async function findTranscript(configDir: string, sessionId: string): Promise<string | null> {
+-  const projectsDir = path.join(configDir, "projects");
+-  let best: { file: string; mtimeMs: number } | null = null;
+-  for (const entry of await readdir(projectsDir)) {
+-    const file = path.join(projectsDir, entry, `${sessionId}.jsonl`);
+-    const info = await stat(file).catch(() => null);
+-    if (info?.isFile() && (!best || info.mtimeMs > best.mtimeMs)) best = { file, mtimeMs: info.mtimeMs };
+-  }
+-  return best?.file ?? null;
++/**
++ * The one file Claude Code resumes from: `<configDir>/projects/<encoded cwd>/<sessionId>.jsonl`.
++ * Never search other project dirs: the shared config dir is writable by agents, so a forged
++ * same-named file elsewhere would become the cost reference.
++ */
++function transcriptPath(configDir: string, sessionId: string, cwd: string): string {
++  // Mirrors Claude Code's project-dir encoding: non-alphanumeric chars become "-"; existing hyphens pass through.
++  return path.join(configDir, "projects", cwd.replace(/[^a-zA-Z0-9-]/g, "-"), `${sessionId}.jsonl`);
+ }
+ 
+ /**
+@@ -26,16 +25,17 @@ async function findTranscript(configDir: string, sessionId: string): Promise<str
+ export async function readTranscriptCostState(
+   configDir: string,
+   sessionId: string,
++  cwd: string,
+   maxBytes = MAX_TRANSCRIPT_BYTES,
+ ): Promise<ClaudeSessionTotals | null> {
+-  if (!configDir || !UUID_RE.test(sessionId)) return null;
++  if (!configDir || !cwd || !UUID_RE.test(sessionId)) return null;
+   try {
+-    const file = await findTranscript(configDir, sessionId);
+-    if (!file) return null;
+-    const handle = await open(file, "r");
++    // O_NOFOLLOW: a symlink planted at the exact path is refused, not followed.
++    const handle = await open(transcriptPath(configDir, sessionId, cwd), constants.O_RDONLY | constants.O_NOFOLLOW);
+     try {
+-      const { size } = await handle.stat();
+-      if (size > maxBytes) return null;
++      const info = await handle.stat();
++      if (!info.isFile() || info.size > maxBytes) return null;
++      const { size } = info;
+       for (let chunk = FIRST_CHUNK_BYTES; ; chunk *= 4) {
+         const length = Math.min(chunk, size);
+         const buffer = Buffer.alloc(length);
+-- 
+2.53.0
+

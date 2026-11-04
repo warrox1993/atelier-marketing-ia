@@ -134,8 +134,36 @@ describe("relais des comptes rendus d'étape (R2)", () => {
     b.commenter("y".repeat(6000));
     await b.relais.passe();
     expect(b.posés).toHaveLength(1);
+    expect(b.posés[0]!.body.length).toBeLessThan(9000);
+  });
+
+  it("M5 : un commentaire seul plus long que la borne est tronqué", async () => {
+    const b = banc();
+    b.commenter("z".repeat(12000));
+    await b.relais.passe();
     expect(b.posés[0]!.body).toContain("réponse tronquée");
     expect(b.posés[0]!.body.length).toBeLessThan(9000);
+  });
+
+  it("COORD-P1-1 : 16 commentaires de 2 300 car. : les plus récents passent d'abord, seuls les inclus sont journalisés, les plus anciens suivent", async () => {
+    const b = banc();
+    for (let i = 1; i <= 16; i++) b.commenter(`[E${String(i).padStart(2, "0")}]` + "a".repeat(2295));
+    await b.relais.passe();
+    const premier = b.posés[0]!.body;
+    expect(premier).toContain("[E16]");
+    expect(premier).toContain("[E14]");
+    expect(premier).not.toContain("[E13]");
+    expect(premier).not.toContain("réponse tronquée");
+    expect(premier).toContain("13 compte(s) rendu(s) plus ancien(s)");
+    expect(premier.indexOf("[E14]")).toBeLessThan(premier.indexOf("[E16]"));
+    expect(b.journal.filter((j) => j.type === ETAPES.typeRelais)).toHaveLength(3);
+    for (let n = 0; n < 10; n++) {
+      b.t.ms += ETAPES.intervalleMs + 1;
+      await b.relais.passe();
+    }
+    const tout = b.posés.map((p) => p.body).join("\n");
+    for (let i = 1; i <= 16; i++) expect(tout).toContain(`[E${String(i).padStart(2, "0")}]`);
+    expect(b.journal.filter((j) => j.type === ETAPES.typeRelais)).toHaveLength(16);
   });
 
   it("M1 : seuls les commentaires du coordinateur cible sont relayés (ni autre agent, ni humain, ni supprimé)", async () => {

@@ -77,6 +77,16 @@ describe("file de sortie du facteur : règles SQL de l'hôte", () => {
     expect(lectures[0]).toMatch(/statut = 'ouverte' and tache_cible_id is null and facteur_essais < \$2/u);
     expect(lectures[1]).toMatch(/statut in \('repondue', 'annulee'\) and source_notifiee_le is null/u);
   });
+
+  it("COORD-P1-5 : les liaisons échues se lisent par query : ouvertes, sans activité de la tâche cible depuis l'échéance, tâche cible non close", async () => {
+    const { db, lectures, parametres } = fauxHote(0);
+    expect(await creerStockLiaisons(db).listerEchues(20, 72)).toEqual([]);
+    expect(lectures[0]).toMatch(/left join public\.issues t on t\.id = l\.tache_cible_id and t\.company_id = l\.entreprise_cible_id/u);
+    expect(lectures[0]).toMatch(/l\.statut = 'ouverte'/u);
+    expect(lectures[0]).toMatch(/coalesce\(t\.updated_at, l\.cree_le\) < now\(\) - make_interval\(hours => \$2::int\)/u);
+    expect(lectures[0]).toMatch(/t\.status is null or t\.status not in \('done', 'cancelled'\)/u);
+    expect(parametres).toEqual([]);
+  });
 });
 
 describe("chaîne et teinte (migration 017) : règles SQL de l'hôte", () => {

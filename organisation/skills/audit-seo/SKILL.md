@@ -27,8 +27,9 @@ effort.
 - Requêtes cibles ou thèmes du brief.
 - Accès éventuels (Search Console, analytics) ; sans accès, l'audit reste public.
 - Chiffres d'une connexion de la passerelle marketing (Search Console, Analytics, Ads, fiche,
-  réseaux sociaux, CRM) : `atelier_identite` d'abord, chaque réponse d'outil déposée telle quelle avec
-  les arguments exacts de l'appel (`POST …/taches/<issueId>/donnees-connexion`, champ `arguments`),
+  réseaux sociaux, CRM) : `atelier_identite` d'abord, chaque réponse d'outil déposée par sa référence
+  `_atelier.reference` (recopie par fichier seulement pour une réponse sans référence) avec les arguments exacts de
+  l'appel (`POST …/taches/<issueId>/donnees-connexion`, champ `arguments`),
   mention « démonstration » sur chaque chiffre de démonstration, aucun chiffre absent d'une réponse
   déposée (section « Connexions de la passerelle marketing » des consignes de l'agent).
 - Facultatif : la connexion `audit` (outil `auditer_page`) pour un audit de performance, d'accessibilité et de SEO d'une page
@@ -75,8 +76,8 @@ pages non explorées).
 | page | contrôle | observation | méthode | priorité |
 | --- | --- | --- | --- | --- |
 | /assurance-habitation | title | « Accueil » identique à la page d'accueil | lecture du HTML, 02/10/2026 | forte, REQ-005 |
-| /bureaux/namur | h1 | absent | lecture du HTML, 02/10/2026 | moyenne, REQ-004 |
+| /bureaux/[ville-b] | h1 | absent | lecture du HTML, 02/10/2026 | moyenne, REQ-004 |
 | /blog | indexation | balise `noindex` présente | lecture du HTML, 02/10/2026 | forte, REQ-005 |
 
-Recommandation : titre « Assurance habitation à Liège et Namur : faire le point avec un courtier »
+Recommandation : titre « Assurance habitation à [ville A] et [ville B] : faire le point avec un courtier »
 (à valider par la charte), puis contrôle de la balise après mise en ligne.

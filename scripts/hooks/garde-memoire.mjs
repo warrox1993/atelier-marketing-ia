@@ -17,7 +17,7 @@
  *   (memoire/.quarantaine/), et l'agent reçoit un message (code 2, sur la sortie d'erreur).
  * Aucune dépendance ; aucun lien symbolique n'est suivi ; le contenu des fichiers n'est jamais recopié dans le message.
  */
-import { closeSync, lstatSync, mkdirSync, openSync, readdirSync, readFileSync, readSync, renameSync, rmSync, unlinkSync } from "node:fs";
+import { closeSync, lstatSync, mkdirSync, openSync, readdirSync, readFileSync, readSync, realpathSync, renameSync, rmSync, unlinkSync } from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 
@@ -26,11 +26,54 @@ export const PLAFOND_MEMORY = 20 * 1024;
 export const PLAFOND_QUARANTAINE = 1024 * 1024;
 export const QUARANTAINE = ".quarantaine";
 
-const ECRITURE_LONGUE = /^--(?:output|output-dir|remote-name|remote-name-all|remote-header-name|dump-header|cookie-jar|trace|trace-ascii|trace-config|stderr|config|libcurl|etag-save|hsts|alt-svc|create-dirs)(?:=|$)/u;
-const ECRITURE_COURTE = new Set(["o", "O", "D", "c", "K", "J"]);
-// Options courtes de curl qui prennent une valeur : la suite du groupe est cette valeur, pas d'autres options.
-const AVEC_VALEUR = new Set([..."AbCdeEFHmQrTuUwxXyYztP"]);
-const SEPARATEURS = new Set([";", "&&", "||", "|", "&", "|&"]);
+// É1 (revue de sécurité du 29/10/2026) : liste blanche de curl. Un agent n'a que l'autorisation `Bash(curl *)` ;
+// un curl ne peut donc qu'appeler l'API Paperclip. Tout ce qui n'est pas explicitement admis est refusé : aucune
+// autre commande (un seul `curl`, aucun métacaractère shell hors apostrophes), aucune URL positionnelle (seulement
+// `--expand-url {{PAPERCLIP_API_URL}}/…`), aucune écriture de fichier, aucune lecture de fichier hors du cwd de
+// l'agent, aucune variable d'environnement autre que %PAPERCLIP_*. Forme autorisée : organisation/consignes/communes.md.
+const DRAPEAUX_COURTS = new Set([..."sSfGI"]); // -s -S -f -G -I : sans valeur
+const COURT_VERS_LONG = { X: "--request", H: "--header", w: "--write-out", d: "--data", m: "--max-time", r: "--range" };
+const DRAPEAUX_LONGS = new Set(["--silent", "--show-error", "--fail", "--fail-with-body", "--get", "--head"]);
+const OPTIONS_A_VALEUR = new Set([
+  "--request", "--header", "--expand-header", "--write-out", "--variable", "--expand-url",
+  "--data", "--data-raw", "--data-binary", "--data-urlencode", "--expand-data",
+  "--max-time", "--connect-timeout", "--max-filesize", "--range",
+]);
+// M1 (revue finale) : seules variables qu'un agent peut faire entrer par --variable. API_KEY et RUN_ID sont sensibles ;
+// COMPANY_ID, AGENT_ID et API_URL sont des identifiants. Toute autre (clé privée d'agent, jeton d'outils, jeton OAuth,
+// variable arbitraire) est refusée : elle ne peut pas être recopiée dans une réponse par {{…}}.
+const VARIABLES_PERMISES = new Set(["%PAPERCLIP_API_URL", "%PAPERCLIP_API_KEY", "%PAPERCLIP_RUN_ID", "%PAPERCLIP_COMPANY_ID", "%PAPERCLIP_AGENT_ID"]);
+// Variables non secrètes : seules admises dans un {{…}} interpolé par curl (--expand-url, --expand-data, en-tête autre
+// que Authorization/X-Paperclip-Run-Id). Les secrets (API_KEY, RUN_ID) ne sortent que par leur en-tête dédié (M1).
+const VARS_INTERPOLABLES = new Set(["PAPERCLIP_API_URL", "PAPERCLIP_COMPANY_ID", "PAPERCLIP_AGENT_ID"]);
+// Métacaractères shell refusés hors apostrophes (multi-commande, redirection, expansion, glob). $ et ` le sont aussi
+// entre guillemets doubles (expansion). Entre apostrophes simples, tout est littéral (curl reçoit le texte tel quel).
+const DANGER_HORS_QUOTE = new Set([..."$`<>(){}*?[;&|\n"]);
+// H1 (revue finale) : blancs non ASCII et caractères de contrôle (hors espace, tabulation et saut de ligne). Bash ne les
+// traite pas en séparateurs ; la garde, si : un mot « valeur » pour elle devient une option pour curl. Refusés partout,
+// même entre apostrophes. L'apostrophe typographique ’ (U+2019), admise dans les corps, n'en fait pas partie.
+function estInvisible(c) {
+  const n = c.codePointAt(0);
+  return (n <= 0x08) || (n >= 0x0b && n <= 0x1f) || (n >= 0x7f && n <= 0x9f) // contrôle (hors \t=09, \n=0a)
+    || n === 0xa0 || n === 0x1680 || (n >= 0x2000 && n <= 0x200b) || n === 0x2028 || n === 0x2029
+    || n === 0x202f || n === 0x205f || n === 0x2060 || n === 0x3000 || n === 0xfeff; // blancs non ASCII
+}
+/** Variables citées dans un {{…}} (avec un éventuel « :fonction ») de `valeur` ; null si un « {{ » n'est pas un jeton valide. */
+function variablesInterpolees(valeur) {
+  const noms = [];
+  const re = /\{\{([A-Za-z0-9_]+)(?::[a-zA-Z]+)?\}\}/gu;
+  let reste = valeur, m;
+  while ((m = re.exec(valeur)) !== null) noms.push(m[1]);
+  reste = valeur.replace(re, "");
+  return reste.includes("{{") ? null : noms;
+}
+/** Motif de refus si une valeur interpolée contient un {{…}} hors de la liste non secrète (ou un {{ mal formé) ; sinon null. */
+function interpolationRefusee(nom, valeur) {
+  const noms = variablesInterpolees(valeur);
+  if (noms === null) return `${nom} : « {{ » mal formé`;
+  const interdite = noms.find((v) => !VARS_INTERPOLABLES.has(v));
+  return interdite ? `${nom} interpole « ${interdite} » (secret ou variable interdite hors de son en-tête)` : null;
+}
 
 /** Découpe une commande en mots (guillemets simples et doubles, séparateurs isolés) ; approximation volontairement stricte. */
 export function mots(commande) {
@@ -48,7 +91,9 @@ export function mots(commande) {
     }
     if (c === "'" || c === '"') { guillemet = c; enCours = true; continue; }
     if (c === "\\" && i + 1 < commande.length) { courant += commande[++i]; enCours = true; continue; }
-    if (/\s/u.test(c)) { if (enCours) sortie.push(courant); courant = ""; enCours = false; continue; }
+    // H1 : bash ne sépare les mots que sur l'espace, la tabulation et le saut de ligne ; pas sur \v \f \r ni un blanc
+    // non ASCII (ceux-là sont refusés par dangerShell en amont). Découper comme bash, pour voir les mêmes mots que curl.
+    if (c === " " || c === "\t" || c === "\n") { if (enCours) sortie.push(courant); courant = ""; enCours = false; continue; }
     if (c === ";" || c === "&" || c === "|") {
       if (enCours) sortie.push(courant);
       const double = commande[i + 1] === c || (c === "|" && commande[i + 1] === "&");
@@ -62,26 +107,129 @@ export function mots(commande) {
   return sortie;
 }
 
-/** Motif de refus d'un curl de la commande (null : rien à redire). */
-export function refusCurl(commande) {
+/** Métacaractère shell hors apostrophes (motif de refus, ou null). Garde `mots()` fiable : plus de chaînage, de
+ * redirection, d'expansion ni de glob possible après ce contrôle. */
+export function dangerShell(commande) {
+  // Revue 2, H-1 : bash retire « \ » + saut de ligne avant de découper ; la garde le garderait dans le mot (un @ ne serait plus en tête).
+  if (commande.includes("\\\n")) return "continuation de ligne (\\ suivi d'un saut de ligne)";
+  let quote = null; // "'" (littéral), '"' (expansion de $ et `) ou null
+  let debutMot = true;
+  for (let i = 0; i < commande.length; i++) {
+    const c = commande[i];
+    // H1 : un caractère invisible ou de contrôle est refusé partout, même entre apostrophes (il tromperait le découpage).
+    if (estInvisible(c)) return "caractère invisible ou de contrôle";
+    if (quote === "'") { if (c === "'") quote = null; continue; }
+    if (quote === '"') {
+      if (c === '"') quote = null;
+      else if (c === "$" || c === "`") return `caractère shell « ${c} » (expansion entre guillemets)`;
+      else if (c === "\\") i++;
+      continue;
+    }
+    if (c === "'" || c === '"') { quote = c; debutMot = false; continue; }
+    if (c === "\\") { i++; debutMot = false; continue; }
+    if (c === " " || c === "\t" || c === "\n") { debutMot = true; continue; }
+    if (c === "~" && debutMot) return "« ~ » en tête de mot (dossier personnel)";
+    if (DANGER_HORS_QUOTE.has(c)) return `caractère shell « ${c === "\n" ? "\\n" : c} »`;
+    debutMot = false;
+  }
+  if (quote) return "apostrophe ou guillemet non fermé";
+  return null;
+}
+
+/** Vrai si `valeur` (un chemin, le @ déjà retiré) désigne un fichier existant dont le realpath est sous le cwd. */
+function fichierSousCwd(valeur, cwd) {
+  if (!cwd || !path.isAbsolute(cwd) || valeur === "" || valeur === "-") return false;
+  let base, cible;
+  try {
+    base = realpathSync(cwd);
+    cible = realpathSync(path.resolve(cwd, valeur));
+  } catch {
+    return false; // fichier absent, lien cassé, /proc… : on ne peut pas garantir, donc refus
+  }
+  return cible === base || cible.startsWith(base + path.sep);
+}
+
+/** Valeur d'une option de la liste blanche : motif de refus, ou null. `cwd` = répertoire de travail de l'agent. */
+function valeurRefusee(nom, valeur, cwd) {
+  switch (nom) {
+    case "--request":
+      return /^(GET|POST|PUT|PATCH|DELETE)$/u.test(valeur) ? null : `méthode « ${valeur.slice(0, 20)} »`;
+    case "--header": // -H : littéral, curl n'y interpole aucun {{…}} (un {{PAPERCLIP_API_KEY}} y resterait du texte).
+      return valeur.startsWith("@") ? "en-tête lu dans un fichier (@)" : null;
+    case "--expand-header":
+      // M1 : la clé et le jeton de run ne sortent que par leur en-tête dédié ; ailleurs, seuls les {{…}} non secrets.
+      if (valeur.startsWith("@")) return "en-tête lu dans un fichier (@)";
+      if (valeur === "Authorization: Bearer {{PAPERCLIP_API_KEY}}" || valeur === "X-Paperclip-Run-Id: {{PAPERCLIP_RUN_ID}}") return null;
+      return interpolationRefusee("--expand-header", valeur);
+    case "--write-out":
+      return valeur.startsWith("@") || /%output/iu.test(valeur) ? "écriture de fichier par -w" : null;
+    case "--variable":
+      // M1 : liste blanche exacte (bloque la clé privée d'agent, le jeton d'outils, le jeton OAuth, toute variable arbitraire).
+      return VARIABLES_PERMISES.has(valeur) ? null : `--variable « ${valeur.slice(0, 40)} »`;
+    case "--expand-url":
+      if (!valeur.startsWith("{{PAPERCLIP_API_URL}}/")) return `URL « ${valeur.slice(0, 40)} »`;
+      return interpolationRefusee("--expand-url", valeur); // M1 : après le préfixe, aucun {{secret}}
+    case "--data":
+    case "--data-raw":
+    case "--data-binary":
+      return valeur.startsWith("@") && !fichierSousCwd(valeur.slice(1), cwd) ? `fichier hors de ton espace (${valeur.slice(0, 40)})` : null;
+    case "--expand-data": // M1 : corps interpolé par curl : jamais de {{secret}} (seulement les identifiants non secrets).
+      if (valeur.startsWith("@") && !fichierSousCwd(valeur.slice(1), cwd)) return `fichier hors de ton espace (${valeur.slice(0, 40)})`;
+      return interpolationRefusee("--expand-data", valeur);
+    case "--data-urlencode": {
+      const a = valeur.indexOf("@");
+      return a >= 0 && !fichierSousCwd(valeur.slice(a + 1), cwd) ? `fichier hors de ton espace (${valeur.slice(0, 40)})` : null;
+    }
+    case "--max-time":
+    case "--connect-timeout":
+    case "--max-filesize":
+      return /^\d+(?:\.\d+)?$/u.test(valeur) ? null : `${nom} « ${valeur.slice(0, 20)} »`;
+    case "--range": // plage d'octets pour une lecture en morceaux (ex. 43000-) : lecture seule, sans danger
+      return /^[0-9]+-[0-9]*$|^-[0-9]+$|^[0-9]+$/u.test(valeur) ? null : `--range « ${valeur.slice(0, 20)} »`;
+    default:
+      return `option ${nom}`;
+  }
+}
+
+/** Motif de refus d'une commande curl (null : conforme). `cwd` : répertoire de travail fourni par le hook.
+ * Une commande sans « curl » rend null (laissée aux règles de permission, inchangée). */
+export function refusCurl(commande, cwd) {
   if (typeof commande !== "string" || !/curl/iu.test(commande)) return null;
+  const danger = dangerShell(commande);
+  if (danger) return danger;
   const m = mots(commande);
-  for (let i = 0; i < m.length; i++) {
-    if (!/(?:^|\/)curl$/u.test(m[i])) continue;
-    for (let j = i + 1; j < m.length && !SEPARATEURS.has(m[j]); j++) {
-      const a = m[j];
-      if (/file:/iu.test(a)) return `URL ou option « file: » (${a.slice(0, 60)})`;
-      if (a.startsWith("--")) {
-        if (ECRITURE_LONGUE.test(a)) return `option ${a.split("=")[0]}`;
+  if (m.length === 0 || !/(?:^|\/)curl$/u.test(m[0])) return "« curl » doit être la seule commande (un seul appel, sans préfixe)";
+  for (let j = 1; j < m.length; j++) {
+    const a = m[j];
+    if (a.startsWith("--")) {
+      const eq = a.indexOf("=");
+      const nom = eq >= 0 ? a.slice(0, eq) : a;
+      if (DRAPEAUX_LONGS.has(nom)) { if (eq >= 0) return `option ${nom} avec valeur`; continue; }
+      if (OPTIONS_A_VALEUR.has(nom)) {
+        const valeur = eq >= 0 ? a.slice(eq + 1) : m[++j];
+        if (valeur === undefined) return `option ${nom} sans valeur`;
+        const r = valeurRefusee(nom, valeur, cwd);
+        if (r) return r;
         continue;
       }
-      if (/^-[A-Za-z0-9#:]/u.test(a)) {
-        for (const c of a.slice(1)) {
-          if (ECRITURE_COURTE.has(c)) return `option -${c}`;
-          if (AVEC_VALEUR.has(c)) break;
-        }
-      }
+      return `option ${nom}`;
     }
+    if (a.startsWith("-") && a.length > 1) {
+      for (let k = 1; k < a.length; k++) {
+        const c = a[k];
+        if (DRAPEAUX_COURTS.has(c)) continue;
+        const nom = COURT_VERS_LONG[c];
+        if (!nom) return `option -${c}`;
+        const reste = a.slice(k + 1);
+        const valeur = reste !== "" ? reste : m[++j];
+        if (valeur === undefined) return `option -${c} sans valeur`;
+        const r = valeurRefusee(nom, valeur, cwd);
+        if (r) return r;
+        break; // le reste de la grappe est la valeur de cette option
+      }
+      continue;
+    }
+    return `argument hors option (${a.slice(0, 40)})`; // URL positionnelle, fichier… : interdit
   }
   return null;
 }
@@ -203,10 +351,16 @@ function principal() {
   }
   if (entree.hook_event_name === "PreToolUse") {
     if (entree.tool_name !== "Bash") return 0;
-    const refus = refusCurl(entree.tool_input?.command);
+    let refus;
+    try {
+      refus = refusCurl(entree.tool_input?.command, entree.cwd);
+    } catch {
+      refus = "erreur interne de la garde"; // toute exception ferme la garde (code 2)
+    }
     if (!refus) return 0;
-    process.stderr.write(`Commande refusée par la garde de l'atelier : curl ne doit écrire aucun fichier ni lire file: (${refus}). `
-      + "Lis la réponse sur la sortie standard ; pour garder un résultat, écris-le avec l'outil Write dans ton répertoire de travail.\n");
+    process.stderr.write(`Commande refusée par la garde de l'atelier (curl hors de la forme autorisée : ${refus}). `
+      + "Un seul curl vers l'API Paperclip : options de lecture seules, URL par --expand-url {{PAPERCLIP_API_URL}}/…, "
+      + "corps par --data-raw ou --data-binary @<fichier de ton espace>. Vois la section curl de tes consignes.\n");
     return 2;
   }
   if (!memoire || !path.isAbsolute(memoire) || !cheminMotifs) {
@@ -228,4 +382,15 @@ function principal() {
   return 2;
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) process.exit(principal());
+/** B6 (revue finale) : Claude Code ne bloque que sur le code 2. Toute panne de la garde (exception, hors des try internes)
+ * doit refuser la commande, jamais la laisser passer (un plantage renverrait sinon 1, que Claude Code ignore). */
+function garde() {
+  try {
+    return principal();
+  } catch {
+    process.stderr.write("Garde de l'atelier en panne : commande refusée par sécurité. Signale-le à ton coordinateur.\n");
+    return 2;
+  }
+}
+
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) process.exit(garde());

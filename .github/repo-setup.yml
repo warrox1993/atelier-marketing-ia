@@ -1,0 +1,75 @@
+# repo-setup.yml de l'usine (Atelier Marketing IA), lu par `/tagout:init` (repo-setup.sh plan|apply).
+# Copie du manifeste par défaut du kit Tagout 4.1.0, avec les zones (area:) de ce dépôt.
+# Règles d'apply : additif (rien n'est supprimé sans --prune), formulaires existants jamais écrasés.
+# Les NOMS d'étiquettes restent ceux du kit (les skills les appliquent mot pour mot) ; descriptions en français.
+
+labels:
+  # Type de travail (create-issue en tire le type Conventional Commits : bug -> fix, enhancement -> feat).
+  - name: "bug"
+    color: "d73a4a"
+    description: "Something isn't working"
+  - name: "enhancement"
+    color: "a2eeef"
+    description: "New feature or request"
+  - name: "documentation"
+    color: "0075ca"
+    description: "Improvements or additions to documentation"
+
+  # Priorité : une seule par issue.
+  - name: "priority: high"
+    color: "b60205"
+    description: "À prendre avant les autres niveaux"
+  - name: "priority: medium"
+    color: "d93f0b"
+    description: "Niveau par défaut : utile, pas urgent"
+  - name: "priority: low"
+    color: "fbca04"
+    description: "Quand la file est vide"
+
+  # Effort : du plus petit au plus grand (auto-dev trie sur l'ordre de déclaration).
+  - name: "effort: small"
+    color: "c2e0c6"
+    description: "Une tâche, un cycle de test"
+  - name: "effort: medium"
+    color: "bfd4f2"
+    description: "Quelques tâches dans une même couche"
+  - name: "effort: large"
+    color: "5319e7"
+    description: "Plusieurs couches ou par phases"
+
+  # Zones : une par issue ; auto-dev donne à chaque agent une zone qui ne chevauche pas les autres.
+  - name: "area: plugin"
+    color: "c5def5"
+    description: "plugin-atelier/ : interface, serveur et contrats du plugin, e2e de l'atelier"
+  - name: "area: passerelle"
+    color: "c5def5"
+    description: "passerelle/ : services réels et de démonstration, connexions, OAuth local"
+  - name: "area: socle"
+    color: "c5def5"
+    description: "Socle Paperclip : commits dans paperclip/ exportés en socle/patches/"
+  - name: "area: fabrique"
+    color: "c5def5"
+    description: "fabrique/ : documents, images et vidéos IA, file GPU"
+  - name: "area: whatsapp"
+    color: "c5def5"
+    description: "whatsapp/ : canal WhatsApp"
+  - name: "area: organisation"
+    color: "c5def5"
+    description: "organisation/ : services, agents, compétences, registre des clients"
+  - name: "area: outillage"
+    color: "c5def5"
+    description: "scripts/, config/, CI locale, déploiement, publication, documentation d'exploitation"
+
+pruneKeep:
+  - "autorelease: *"
+  - "dependencies"
+
+issueTemplates:
+  - feature_request.yml
+  - bug_report.yml
+
+settings:
+  delete_branch_on_merge: true
+  allow_squash_merge: true
+  allow_merge_commit: false
+  allow_rebase_merge: false

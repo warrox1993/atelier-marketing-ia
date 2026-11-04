@@ -2,7 +2,11 @@
  * Erreurs métier de l'atelier, converties en réponses HTTP par le routeur.
  * Les messages sont exploitables sans exposer de secret (cahier §12).
  */
+import { z } from "zod";
 import type { CodeErreur } from "../contrats/index.js";
+
+// LANG-L7 : messages de Zod en français pour tout le serveur du plugin (les agents les lisent dans `details`).
+z.config(z.locales.fr());
 
 const STATUT_PAR_CODE: Record<CodeErreur, number> = {
   entree_invalide: 400,
@@ -14,6 +18,7 @@ const STATUT_PAR_CODE: Record<CodeErreur, number> = {
   producteur_ne_peut_pas_relire: 403,
   revision_perimee: 409,
   porte_absente: 409,
+  obs_projet_sans_source: 409,
   elevation_refusee: 403,
   diffusion_refusee: 403,
   liaison_refusee: 403,

@@ -17,14 +17,19 @@ agents:
         timeoutSec: 1800
         graceSec: 30
         extraArgs:
+          - "--exclude-dynamic-system-prompt-sections"
           - "--permission-mode"
           - "dontAsk"
           - "--allowedTools"
-          - "WebFetch"
           - "Bash(curl *)"
+          - "mcp__Paperclip_projects__list_projects"
+          - "mcp__Paperclip_projects__list_project_repositories"
+          - "mcp__Paperclip_projects__create_project"
+          - "mcp__Paperclip_projects__create_task"
+          - "mcp__Paperclip_projects__set_task_title"
           - "--disallowedTools"
+          - "WebFetch"
           - "WebSearch"
-          - "Write"
           - "Edit"
           - "NotebookEdit"
           - "Agent"
@@ -32,6 +37,15 @@ agents:
           - "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_document"
           - "mcp__paperclip-assigned__atelier_marketing-ia_etat_fabrication"
           - "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_video"
+          - "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_image"
+          - "mcp__paperclip-assigned__atelier_marketing-ia_voir_rendu"
+          - "Workflow"
+          - "ScheduleWakeup"
+          - "ReportFindings"
+          - "ListAgents"
+          - "EnterWorktree"
+          - "ExitWorktree"
+          - "SendMessage"
         env:
           DISABLE_TELEMETRY:
             type: "plain"
@@ -39,18 +53,32 @@ agents:
           CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC:
             type: "plain"
             value: "1"
+          CLAUDE_CODE_PROMPT_CACHE_TTL:
+            type: "plain"
+            value: "1h"
+          CLAUDE_CODE_DISABLE_GIT_INSTRUCTIONS:
+            type: "plain"
+            value: "1"
+          CLAUDE_CODE_RETRY_WATCHDOG:
+            type: "plain"
+            value: "1"
+          ENABLE_TOOL_SEARCH:
+            type: "plain"
+            value: "auto"
         filesystemScope: "workspace"
         networkScope: "allowlist"
         networkAllowlist:
-          - "api.anthropic.com"
+          - "api.anthropic.com:443"
     runtime:
       heartbeat:
         maxConcurrentRuns: 1
+        maxDailyRuns: 30
     budgetMonthlyCents: 3000
     metadata:
       atelier:
         registre: "atelier/registre-agents/v1"
-        versionRegistre: "1.9.0"
+        versionRegistre: "1.14.0"
+        slug: "coordinateur"
         titre: "Coordinateur marketing"
         entrees:
           - "demande du client ou de l'opérateur"
@@ -70,10 +98,10 @@ agents:
           - "Read"
           - "Grep"
           - "Glob"
-          - "WebFetch"
         outilsMutation:
           - "Bash(curl *)"
         outilsInterdits:
+          - "WebFetch"
           - "WebSearch"
           - "Write"
           - "Edit"
@@ -83,6 +111,8 @@ agents:
           - "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_document"
           - "mcp__paperclip-assigned__atelier_marketing-ia_etat_fabrication"
           - "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_video"
+          - "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_image"
+          - "mcp__paperclip-assigned__atelier_marketing-ia_voir_rendu"
         relit: []
         roleRevue: null
         connexions: {}
@@ -116,17 +146,21 @@ agents:
         timeoutSec: 1800
         graceSec: 30
         extraArgs:
+          - "--exclude-dynamic-system-prompt-sections"
           - "--permission-mode"
           - "dontAsk"
           - "--allowedTools"
           - "WebSearch"
-          - "WebFetch"
           - "mcp__paperclip-assigned"
           - "mcp__Paperclip_connections__connections_search"
           - "mcp__Paperclip_connections__connection_request"
           - "Bash(curl *)"
           - "Edit(./**)"
+          - "mcp__Paperclip_projects__list_projects"
+          - "mcp__Paperclip_projects__list_project_repositories"
+          - "mcp__Paperclip_projects__set_task_title"
           - "--disallowedTools"
+          - "WebFetch"
           - "Edit"
           - "NotebookEdit"
           - "Agent"
@@ -134,6 +168,15 @@ agents:
           - "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_document"
           - "mcp__paperclip-assigned__atelier_marketing-ia_etat_fabrication"
           - "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_video"
+          - "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_image"
+          - "mcp__paperclip-assigned__atelier_marketing-ia_voir_rendu"
+          - "Workflow"
+          - "ScheduleWakeup"
+          - "ReportFindings"
+          - "ListAgents"
+          - "EnterWorktree"
+          - "ExitWorktree"
+          - "SendMessage"
         env:
           DISABLE_TELEMETRY:
             type: "plain"
@@ -141,18 +184,32 @@ agents:
           CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC:
             type: "plain"
             value: "1"
+          CLAUDE_CODE_PROMPT_CACHE_TTL:
+            type: "plain"
+            value: "5m"
+          CLAUDE_CODE_DISABLE_GIT_INSTRUCTIONS:
+            type: "plain"
+            value: "1"
+          CLAUDE_CODE_RETRY_WATCHDOG:
+            type: "plain"
+            value: "1"
+          ENABLE_TOOL_SEARCH:
+            type: "plain"
+            value: "auto"
         filesystemScope: "workspace"
         networkScope: "allowlist"
         networkAllowlist:
-          - "api.anthropic.com"
+          - "api.anthropic.com:443"
     runtime:
       heartbeat:
         maxConcurrentRuns: 1
+        maxDailyRuns: 30
     budgetMonthlyCents: 1500
     metadata:
       atelier:
         registre: "atelier/registre-agents/v1"
-        versionRegistre: "1.9.0"
+        versionRegistre: "1.14.0"
+        slug: "veille"
         titre: "Pôle Intelligence · Marché et veille concurrentielle"
         entrees:
           - "brief et exigences"
@@ -169,7 +226,6 @@ agents:
           - "Grep"
           - "Glob"
           - "WebSearch"
-          - "WebFetch"
           - "mcp__paperclip-assigned"
           - "mcp__Paperclip_connections__connections_search"
           - "mcp__Paperclip_connections__connection_request"
@@ -177,6 +233,7 @@ agents:
           - "Bash(curl *)"
           - "Write"
         outilsInterdits:
+          - "WebFetch"
           - "Edit"
           - "NotebookEdit"
           - "Agent"
@@ -184,6 +241,8 @@ agents:
           - "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_document"
           - "mcp__paperclip-assigned__atelier_marketing-ia_etat_fabrication"
           - "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_video"
+          - "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_image"
+          - "mcp__paperclip-assigned__atelier_marketing-ia_voir_rendu"
         relit: []
         roleRevue: null
         connexions:
@@ -212,17 +271,17 @@ agents:
       config:
         engine: "cli"
         model: "claude-opus-5-5"
-        effort: "medium"
+        effort: "high"
         dangerouslySkipPermissions: false
         maxTurnsPerRun: 60
         timeoutSec: 1800
         graceSec: 30
         extraArgs:
+          - "--exclude-dynamic-system-prompt-sections"
           - "--permission-mode"
           - "dontAsk"
           - "--allowedTools"
           - "WebSearch"
-          - "WebFetch"
           - "mcp__paperclip-assigned"
           - "mcp__Paperclip_connections__connections_search"
           - "mcp__Paperclip_connections__connection_request"
@@ -230,12 +289,25 @@ agents:
           - "Edit(./**)"
           - "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_document"
           - "mcp__paperclip-assigned__atelier_marketing-ia_etat_fabrication"
+          - "mcp__Paperclip_projects__list_projects"
+          - "mcp__Paperclip_projects__list_project_repositories"
+          - "mcp__Paperclip_projects__set_task_title"
           - "--disallowedTools"
+          - "WebFetch"
           - "Edit"
           - "NotebookEdit"
           - "Agent"
           - "Task"
           - "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_video"
+          - "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_image"
+          - "mcp__paperclip-assigned__atelier_marketing-ia_voir_rendu"
+          - "Workflow"
+          - "ScheduleWakeup"
+          - "ReportFindings"
+          - "ListAgents"
+          - "EnterWorktree"
+          - "ExitWorktree"
+          - "SendMessage"
         env:
           DISABLE_TELEMETRY:
             type: "plain"
@@ -243,18 +315,32 @@ agents:
           CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC:
             type: "plain"
             value: "1"
+          CLAUDE_CODE_PROMPT_CACHE_TTL:
+            type: "plain"
+            value: "5m"
+          CLAUDE_CODE_DISABLE_GIT_INSTRUCTIONS:
+            type: "plain"
+            value: "1"
+          CLAUDE_CODE_RETRY_WATCHDOG:
+            type: "plain"
+            value: "1"
+          ENABLE_TOOL_SEARCH:
+            type: "plain"
+            value: "auto"
         filesystemScope: "workspace"
         networkScope: "allowlist"
         networkAllowlist:
-          - "api.anthropic.com"
+          - "api.anthropic.com:443"
     runtime:
       heartbeat:
         maxConcurrentRuns: 1
+        maxDailyRuns: 30
     budgetMonthlyCents: 2500
     metadata:
       atelier:
         registre: "atelier/registre-agents/v1"
-        versionRegistre: "1.9.0"
+        versionRegistre: "1.14.0"
+        slug: "stratege"
         titre: "Pôle Intelligence · Stratégie marketing"
         entrees:
           - "brief, exigences et fiche de cadrage"
@@ -272,7 +358,6 @@ agents:
           - "Grep"
           - "Glob"
           - "WebSearch"
-          - "WebFetch"
           - "mcp__paperclip-assigned"
           - "mcp__Paperclip_connections__connections_search"
           - "mcp__Paperclip_connections__connection_request"
@@ -282,11 +367,14 @@ agents:
           - "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_document"
           - "mcp__paperclip-assigned__atelier_marketing-ia_etat_fabrication"
         outilsInterdits:
+          - "WebFetch"
           - "Edit"
           - "NotebookEdit"
           - "Agent"
           - "Task"
           - "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_video"
+          - "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_image"
+          - "mcp__paperclip-assigned__atelier_marketing-ia_voir_rendu"
         relit: []
         roleRevue: null
         connexions:
@@ -322,11 +410,11 @@ agents:
         timeoutSec: 1800
         graceSec: 30
         extraArgs:
+          - "--exclude-dynamic-system-prompt-sections"
           - "--permission-mode"
           - "dontAsk"
           - "--allowedTools"
           - "WebSearch"
-          - "WebFetch"
           - "mcp__paperclip-assigned"
           - "mcp__Paperclip_connections__connections_search"
           - "mcp__Paperclip_connections__connection_request"
@@ -334,12 +422,25 @@ agents:
           - "Edit(./**)"
           - "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_document"
           - "mcp__paperclip-assigned__atelier_marketing-ia_etat_fabrication"
+          - "mcp__Paperclip_projects__list_projects"
+          - "mcp__Paperclip_projects__list_project_repositories"
+          - "mcp__Paperclip_projects__set_task_title"
           - "--disallowedTools"
+          - "WebFetch"
           - "Edit"
           - "NotebookEdit"
           - "Agent"
           - "Task"
           - "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_video"
+          - "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_image"
+          - "mcp__paperclip-assigned__atelier_marketing-ia_voir_rendu"
+          - "Workflow"
+          - "ScheduleWakeup"
+          - "ReportFindings"
+          - "ListAgents"
+          - "EnterWorktree"
+          - "ExitWorktree"
+          - "SendMessage"
         env:
           DISABLE_TELEMETRY:
             type: "plain"
@@ -347,18 +448,32 @@ agents:
           CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC:
             type: "plain"
             value: "1"
+          CLAUDE_CODE_PROMPT_CACHE_TTL:
+            type: "plain"
+            value: "5m"
+          CLAUDE_CODE_DISABLE_GIT_INSTRUCTIONS:
+            type: "plain"
+            value: "1"
+          CLAUDE_CODE_RETRY_WATCHDOG:
+            type: "plain"
+            value: "1"
+          ENABLE_TOOL_SEARCH:
+            type: "plain"
+            value: "auto"
         filesystemScope: "workspace"
         networkScope: "allowlist"
         networkAllowlist:
-          - "api.anthropic.com"
+          - "api.anthropic.com:443"
     runtime:
       heartbeat:
         maxConcurrentRuns: 1
+        maxDailyRuns: 30
     budgetMonthlyCents: 1500
     metadata:
       atelier:
         registre: "atelier/registre-agents/v1"
-        versionRegistre: "1.9.0"
+        versionRegistre: "1.14.0"
+        slug: "prospection"
         titre: "Pôle Intelligence · Recherche et qualification de prospects"
         entrees:
           - "brief et exigences"
@@ -376,7 +491,6 @@ agents:
           - "Grep"
           - "Glob"
           - "WebSearch"
-          - "WebFetch"
           - "mcp__paperclip-assigned"
           - "mcp__Paperclip_connections__connections_search"
           - "mcp__Paperclip_connections__connection_request"
@@ -386,11 +500,14 @@ agents:
           - "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_document"
           - "mcp__paperclip-assigned__atelier_marketing-ia_etat_fabrication"
         outilsInterdits:
+          - "WebFetch"
           - "Edit"
           - "NotebookEdit"
           - "Agent"
           - "Task"
           - "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_video"
+          - "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_image"
+          - "mcp__paperclip-assigned__atelier_marketing-ia_voir_rendu"
         relit: []
         roleRevue: null
         connexions:
@@ -430,17 +547,21 @@ agents:
         timeoutSec: 1800
         graceSec: 30
         extraArgs:
+          - "--exclude-dynamic-system-prompt-sections"
           - "--permission-mode"
           - "dontAsk"
           - "--allowedTools"
           - "WebSearch"
-          - "WebFetch"
           - "mcp__paperclip-assigned"
           - "mcp__Paperclip_connections__connections_search"
           - "mcp__Paperclip_connections__connection_request"
           - "Bash(curl *)"
           - "Edit(./**)"
+          - "mcp__Paperclip_projects__list_projects"
+          - "mcp__Paperclip_projects__list_project_repositories"
+          - "mcp__Paperclip_projects__set_task_title"
           - "--disallowedTools"
+          - "WebFetch"
           - "Edit"
           - "NotebookEdit"
           - "Agent"
@@ -448,6 +569,15 @@ agents:
           - "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_document"
           - "mcp__paperclip-assigned__atelier_marketing-ia_etat_fabrication"
           - "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_video"
+          - "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_image"
+          - "mcp__paperclip-assigned__atelier_marketing-ia_voir_rendu"
+          - "Workflow"
+          - "ScheduleWakeup"
+          - "ReportFindings"
+          - "ListAgents"
+          - "EnterWorktree"
+          - "ExitWorktree"
+          - "SendMessage"
         env:
           DISABLE_TELEMETRY:
             type: "plain"
@@ -455,18 +585,32 @@ agents:
           CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC:
             type: "plain"
             value: "1"
+          CLAUDE_CODE_PROMPT_CACHE_TTL:
+            type: "plain"
+            value: "5m"
+          CLAUDE_CODE_DISABLE_GIT_INSTRUCTIONS:
+            type: "plain"
+            value: "1"
+          CLAUDE_CODE_RETRY_WATCHDOG:
+            type: "plain"
+            value: "1"
+          ENABLE_TOOL_SEARCH:
+            type: "plain"
+            value: "auto"
         filesystemScope: "workspace"
         networkScope: "allowlist"
         networkAllowlist:
-          - "api.anthropic.com"
+          - "api.anthropic.com:443"
     runtime:
       heartbeat:
         maxConcurrentRuns: 1
+        maxDailyRuns: 30
     budgetMonthlyCents: 1500
     metadata:
       atelier:
         registre: "atelier/registre-agents/v1"
-        versionRegistre: "1.9.0"
+        versionRegistre: "1.14.0"
+        slug: "enrichissement-coordonnees"
         titre: "Pôle Intelligence · Enrichissement des coordonnées professionnelles"
         entrees:
           - "liste de fiches livrée par la Prospection"
@@ -485,7 +629,6 @@ agents:
           - "Grep"
           - "Glob"
           - "WebSearch"
-          - "WebFetch"
           - "mcp__paperclip-assigned"
           - "mcp__Paperclip_connections__connections_search"
           - "mcp__Paperclip_connections__connection_request"
@@ -493,6 +636,7 @@ agents:
           - "Bash(curl *)"
           - "Write"
         outilsInterdits:
+          - "WebFetch"
           - "Edit"
           - "NotebookEdit"
           - "Agent"
@@ -500,6 +644,8 @@ agents:
           - "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_document"
           - "mcp__paperclip-assigned__atelier_marketing-ia_etat_fabrication"
           - "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_video"
+          - "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_image"
+          - "mcp__paperclip-assigned__atelier_marketing-ia_voir_rendu"
         relit: []
         roleRevue: null
         connexions:
@@ -535,17 +681,21 @@ agents:
         timeoutSec: 1800
         graceSec: 30
         extraArgs:
+          - "--exclude-dynamic-system-prompt-sections"
           - "--permission-mode"
           - "dontAsk"
           - "--allowedTools"
           - "WebSearch"
-          - "WebFetch"
           - "mcp__paperclip-assigned"
           - "mcp__Paperclip_connections__connections_search"
           - "mcp__Paperclip_connections__connection_request"
           - "Bash(curl *)"
           - "Edit(./**)"
+          - "mcp__Paperclip_projects__list_projects"
+          - "mcp__Paperclip_projects__list_project_repositories"
+          - "mcp__Paperclip_projects__set_task_title"
           - "--disallowedTools"
+          - "WebFetch"
           - "Edit"
           - "NotebookEdit"
           - "Agent"
@@ -553,6 +703,15 @@ agents:
           - "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_document"
           - "mcp__paperclip-assigned__atelier_marketing-ia_etat_fabrication"
           - "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_video"
+          - "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_image"
+          - "mcp__paperclip-assigned__atelier_marketing-ia_voir_rendu"
+          - "Workflow"
+          - "ScheduleWakeup"
+          - "ReportFindings"
+          - "ListAgents"
+          - "EnterWorktree"
+          - "ExitWorktree"
+          - "SendMessage"
         env:
           DISABLE_TELEMETRY:
             type: "plain"
@@ -560,18 +719,32 @@ agents:
           CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC:
             type: "plain"
             value: "1"
+          CLAUDE_CODE_PROMPT_CACHE_TTL:
+            type: "plain"
+            value: "5m"
+          CLAUDE_CODE_DISABLE_GIT_INSTRUCTIONS:
+            type: "plain"
+            value: "1"
+          CLAUDE_CODE_RETRY_WATCHDOG:
+            type: "plain"
+            value: "1"
+          ENABLE_TOOL_SEARCH:
+            type: "plain"
+            value: "auto"
         filesystemScope: "workspace"
         networkScope: "allowlist"
         networkAllowlist:
-          - "api.anthropic.com"
+          - "api.anthropic.com:443"
     runtime:
       heartbeat:
         maxConcurrentRuns: 1
+        maxDailyRuns: 30
     budgetMonthlyCents: 1500
     metadata:
       atelier:
         registre: "atelier/registre-agents/v1"
-        versionRegistre: "1.9.0"
+        versionRegistre: "1.14.0"
+        slug: "seo-local-geo"
         titre: "Pôle Production · Référencement naturel, local et GEO"
         entrees:
           - "brief et exigences"
@@ -589,7 +762,6 @@ agents:
           - "Grep"
           - "Glob"
           - "WebSearch"
-          - "WebFetch"
           - "mcp__paperclip-assigned"
           - "mcp__Paperclip_connections__connections_search"
           - "mcp__Paperclip_connections__connection_request"
@@ -597,6 +769,7 @@ agents:
           - "Bash(curl *)"
           - "Write"
         outilsInterdits:
+          - "WebFetch"
           - "Edit"
           - "NotebookEdit"
           - "Agent"
@@ -604,6 +777,8 @@ agents:
           - "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_document"
           - "mcp__paperclip-assigned__atelier_marketing-ia_etat_fabrication"
           - "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_video"
+          - "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_image"
+          - "mcp__paperclip-assigned__atelier_marketing-ia_voir_rendu"
         relit: []
         roleRevue: null
         connexions:
@@ -640,16 +815,20 @@ agents:
         timeoutSec: 1800
         graceSec: 30
         extraArgs:
+          - "--exclude-dynamic-system-prompt-sections"
           - "--permission-mode"
           - "dontAsk"
           - "--allowedTools"
-          - "WebFetch"
           - "mcp__paperclip-assigned"
           - "mcp__Paperclip_connections__connections_search"
           - "mcp__Paperclip_connections__connection_request"
           - "Bash(curl *)"
           - "Edit(./**)"
+          - "mcp__Paperclip_projects__list_projects"
+          - "mcp__Paperclip_projects__list_project_repositories"
+          - "mcp__Paperclip_projects__set_task_title"
           - "--disallowedTools"
+          - "WebFetch"
           - "WebSearch"
           - "Edit"
           - "NotebookEdit"
@@ -658,6 +837,15 @@ agents:
           - "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_document"
           - "mcp__paperclip-assigned__atelier_marketing-ia_etat_fabrication"
           - "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_video"
+          - "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_image"
+          - "mcp__paperclip-assigned__atelier_marketing-ia_voir_rendu"
+          - "Workflow"
+          - "ScheduleWakeup"
+          - "ReportFindings"
+          - "ListAgents"
+          - "EnterWorktree"
+          - "ExitWorktree"
+          - "SendMessage"
         env:
           DISABLE_TELEMETRY:
             type: "plain"
@@ -665,18 +853,32 @@ agents:
           CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC:
             type: "plain"
             value: "1"
+          CLAUDE_CODE_PROMPT_CACHE_TTL:
+            type: "plain"
+            value: "5m"
+          CLAUDE_CODE_DISABLE_GIT_INSTRUCTIONS:
+            type: "plain"
+            value: "1"
+          CLAUDE_CODE_RETRY_WATCHDOG:
+            type: "plain"
+            value: "1"
+          ENABLE_TOOL_SEARCH:
+            type: "plain"
+            value: "auto"
         filesystemScope: "workspace"
         networkScope: "allowlist"
         networkAllowlist:
-          - "api.anthropic.com"
+          - "api.anthropic.com:443"
     runtime:
       heartbeat:
         maxConcurrentRuns: 1
+        maxDailyRuns: 30
     budgetMonthlyCents: 1500
     metadata:
       atelier:
         registre: "atelier/registre-agents/v1"
-        versionRegistre: "1.9.0"
+        versionRegistre: "1.14.0"
+        slug: "sea"
         titre: "Pôle Production · Publicité et SEA"
         entrees:
           - "brief et exigences"
@@ -694,7 +896,6 @@ agents:
           - "Read"
           - "Grep"
           - "Glob"
-          - "WebFetch"
           - "mcp__paperclip-assigned"
           - "mcp__Paperclip_connections__connections_search"
           - "mcp__Paperclip_connections__connection_request"
@@ -702,6 +903,7 @@ agents:
           - "Bash(curl *)"
           - "Write"
         outilsInterdits:
+          - "WebFetch"
           - "WebSearch"
           - "Edit"
           - "NotebookEdit"
@@ -710,6 +912,8 @@ agents:
           - "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_document"
           - "mcp__paperclip-assigned__atelier_marketing-ia_etat_fabrication"
           - "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_video"
+          - "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_image"
+          - "mcp__paperclip-assigned__atelier_marketing-ia_voir_rendu"
         relit: []
         roleRevue: null
         connexions:
@@ -743,23 +947,36 @@ agents:
         timeoutSec: 1800
         graceSec: 30
         extraArgs:
+          - "--exclude-dynamic-system-prompt-sections"
           - "--permission-mode"
           - "dontAsk"
           - "--allowedTools"
-          - "WebFetch"
           - "mcp__Paperclip_connections__connections_search"
           - "mcp__Paperclip_connections__connection_request"
+          - "WebSearch"
           - "Bash(curl *)"
           - "Edit(./**)"
           - "mcp__paperclip-assigned"
           - "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_document"
           - "mcp__paperclip-assigned__atelier_marketing-ia_etat_fabrication"
+          - "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_image"
+          - "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_video"
+          - "mcp__paperclip-assigned__atelier_marketing-ia_voir_rendu"
+          - "mcp__Paperclip_projects__list_projects"
+          - "mcp__Paperclip_projects__list_project_repositories"
+          - "mcp__Paperclip_projects__set_task_title"
           - "--disallowedTools"
-          - "WebSearch"
+          - "WebFetch"
           - "NotebookEdit"
           - "Agent"
           - "Task"
-          - "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_video"
+          - "Workflow"
+          - "ScheduleWakeup"
+          - "ReportFindings"
+          - "ListAgents"
+          - "EnterWorktree"
+          - "ExitWorktree"
+          - "SendMessage"
         env:
           DISABLE_TELEMETRY:
             type: "plain"
@@ -767,18 +984,32 @@ agents:
           CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC:
             type: "plain"
             value: "1"
+          CLAUDE_CODE_PROMPT_CACHE_TTL:
+            type: "plain"
+            value: "5m"
+          CLAUDE_CODE_DISABLE_GIT_INSTRUCTIONS:
+            type: "plain"
+            value: "1"
+          CLAUDE_CODE_RETRY_WATCHDOG:
+            type: "plain"
+            value: "1"
+          ENABLE_TOOL_SEARCH:
+            type: "plain"
+            value: "auto"
         filesystemScope: "workspace"
         networkScope: "allowlist"
         networkAllowlist:
-          - "api.anthropic.com"
+          - "api.anthropic.com:443"
     runtime:
       heartbeat:
         maxConcurrentRuns: 1
+        maxDailyRuns: 30
     budgetMonthlyCents: 1500
     metadata:
       atelier:
         registre: "atelier/registre-agents/v1"
-        versionRegistre: "1.9.0"
+        versionRegistre: "1.14.0"
+        slug: "contenus"
         titre: "Pôle Production · Contenus et création"
         entrees:
           - "brief et exigences"
@@ -795,9 +1026,9 @@ agents:
           - "Read"
           - "Grep"
           - "Glob"
-          - "WebFetch"
           - "mcp__Paperclip_connections__connections_search"
           - "mcp__Paperclip_connections__connection_request"
+          - "WebSearch"
         outilsMutation:
           - "Bash(curl *)"
           - "Write"
@@ -805,18 +1036,21 @@ agents:
           - "mcp__paperclip-assigned"
           - "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_document"
           - "mcp__paperclip-assigned__atelier_marketing-ia_etat_fabrication"
+          - "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_image"
+          - "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_video"
+          - "mcp__paperclip-assigned__atelier_marketing-ia_voir_rendu"
         outilsInterdits:
-          - "WebSearch"
+          - "WebFetch"
           - "NotebookEdit"
           - "Agent"
           - "Task"
-          - "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_video"
         relit: []
         roleRevue: null
         connexions:
           facebook: "ecriture_sur_accord"
           instagram: "ecriture_sur_accord"
           linkedin: "ecriture_sur_accord"
+          linkedinprofil: "ecriture_sur_accord"
           emailing: "ecriture_sur_accord"
           captation: "ecriture_sur_accord"
         outilsBloques:
@@ -852,6 +1086,7 @@ agents:
         timeoutSec: 1800
         graceSec: 30
         extraArgs:
+          - "--exclude-dynamic-system-prompt-sections"
           - "--permission-mode"
           - "dontAsk"
           - "--allowedTools"
@@ -862,6 +1097,9 @@ agents:
           - "mcp__paperclip-assigned"
           - "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_document"
           - "mcp__paperclip-assigned__atelier_marketing-ia_etat_fabrication"
+          - "mcp__Paperclip_projects__list_projects"
+          - "mcp__Paperclip_projects__list_project_repositories"
+          - "mcp__Paperclip_projects__set_task_title"
           - "--disallowedTools"
           - "WebSearch"
           - "WebFetch"
@@ -869,6 +1107,15 @@ agents:
           - "Agent"
           - "Task"
           - "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_video"
+          - "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_image"
+          - "mcp__paperclip-assigned__atelier_marketing-ia_voir_rendu"
+          - "Workflow"
+          - "ScheduleWakeup"
+          - "ReportFindings"
+          - "ListAgents"
+          - "EnterWorktree"
+          - "ExitWorktree"
+          - "SendMessage"
         env:
           DISABLE_TELEMETRY:
             type: "plain"
@@ -876,18 +1123,32 @@ agents:
           CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC:
             type: "plain"
             value: "1"
+          CLAUDE_CODE_PROMPT_CACHE_TTL:
+            type: "plain"
+            value: "5m"
+          CLAUDE_CODE_DISABLE_GIT_INSTRUCTIONS:
+            type: "plain"
+            value: "1"
+          CLAUDE_CODE_RETRY_WATCHDOG:
+            type: "plain"
+            value: "1"
+          ENABLE_TOOL_SEARCH:
+            type: "plain"
+            value: "auto"
         filesystemScope: "workspace"
         networkScope: "allowlist"
         networkAllowlist:
-          - "api.anthropic.com"
+          - "api.anthropic.com:443"
     runtime:
       heartbeat:
         maxConcurrentRuns: 1
+        maxDailyRuns: 30
     budgetMonthlyCents: 1500
     metadata:
       atelier:
         registre: "atelier/registre-agents/v1"
-        versionRegistre: "1.9.0"
+        versionRegistre: "1.14.0"
+        slug: "crm-conversion"
         titre: "Pôle Production · CRM et conversion"
         entrees:
           - "brief et exigences"
@@ -919,6 +1180,8 @@ agents:
           - "Agent"
           - "Task"
           - "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_video"
+          - "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_image"
+          - "mcp__paperclip-assigned__atelier_marketing-ia_voir_rendu"
         relit: []
         roleRevue: null
         connexions:
@@ -956,6 +1219,7 @@ agents:
         timeoutSec: 1800
         graceSec: 30
         extraArgs:
+          - "--exclude-dynamic-system-prompt-sections"
           - "--permission-mode"
           - "dontAsk"
           - "--allowedTools"
@@ -966,6 +1230,9 @@ agents:
           - "Edit(./**)"
           - "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_document"
           - "mcp__paperclip-assigned__atelier_marketing-ia_etat_fabrication"
+          - "mcp__Paperclip_projects__list_projects"
+          - "mcp__Paperclip_projects__list_project_repositories"
+          - "mcp__Paperclip_projects__set_task_title"
           - "--disallowedTools"
           - "WebSearch"
           - "WebFetch"
@@ -974,6 +1241,15 @@ agents:
           - "Agent"
           - "Task"
           - "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_video"
+          - "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_image"
+          - "mcp__paperclip-assigned__atelier_marketing-ia_voir_rendu"
+          - "Workflow"
+          - "ScheduleWakeup"
+          - "ReportFindings"
+          - "ListAgents"
+          - "EnterWorktree"
+          - "ExitWorktree"
+          - "SendMessage"
         env:
           DISABLE_TELEMETRY:
             type: "plain"
@@ -981,18 +1257,32 @@ agents:
           CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC:
             type: "plain"
             value: "1"
+          CLAUDE_CODE_PROMPT_CACHE_TTL:
+            type: "plain"
+            value: "5m"
+          CLAUDE_CODE_DISABLE_GIT_INSTRUCTIONS:
+            type: "plain"
+            value: "1"
+          CLAUDE_CODE_RETRY_WATCHDOG:
+            type: "plain"
+            value: "1"
+          ENABLE_TOOL_SEARCH:
+            type: "plain"
+            value: "auto"
         filesystemScope: "workspace"
         networkScope: "allowlist"
         networkAllowlist:
-          - "api.anthropic.com"
+          - "api.anthropic.com:443"
     runtime:
       heartbeat:
         maxConcurrentRuns: 1
+        maxDailyRuns: 30
     budgetMonthlyCents: 1000
     metadata:
       atelier:
         registre: "atelier/registre-agents/v1"
-        versionRegistre: "1.9.0"
+        versionRegistre: "1.14.0"
+        slug: "mesure"
         titre: "Pôle Intelligence · Mesure et optimisation"
         entrees:
           - "exports de données importés avec période et provenance"
@@ -1023,6 +1313,8 @@ agents:
           - "Agent"
           - "Task"
           - "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_video"
+          - "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_image"
+          - "mcp__paperclip-assigned__atelier_marketing-ia_voir_rendu"
         relit: []
         roleRevue: null
         connexions:
@@ -1060,14 +1352,23 @@ agents:
         timeoutSec: 1800
         graceSec: 30
         extraArgs:
+          - "--exclude-dynamic-system-prompt-sections"
           - "--permission-mode"
           - "dontAsk"
           - "--allowedTools"
           - "WebSearch"
+          - "mcp__paperclip-assigned"
+          - "mcp__Paperclip_connections__connections_search"
+          - "mcp__Paperclip_connections__connection_request"
           - "Bash(curl *)"
           - "Edit(./**)"
           - "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_video"
           - "mcp__paperclip-assigned__atelier_marketing-ia_etat_fabrication"
+          - "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_image"
+          - "mcp__paperclip-assigned__atelier_marketing-ia_voir_rendu"
+          - "mcp__Paperclip_projects__list_projects"
+          - "mcp__Paperclip_projects__list_project_repositories"
+          - "mcp__Paperclip_projects__set_task_title"
           - "--disallowedTools"
           - "WebFetch"
           - "Edit"
@@ -1075,6 +1376,13 @@ agents:
           - "Agent"
           - "Task"
           - "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_document"
+          - "Workflow"
+          - "ScheduleWakeup"
+          - "ReportFindings"
+          - "ListAgents"
+          - "EnterWorktree"
+          - "ExitWorktree"
+          - "SendMessage"
         env:
           DISABLE_TELEMETRY:
             type: "plain"
@@ -1082,18 +1390,32 @@ agents:
           CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC:
             type: "plain"
             value: "1"
+          CLAUDE_CODE_PROMPT_CACHE_TTL:
+            type: "plain"
+            value: "5m"
+          CLAUDE_CODE_DISABLE_GIT_INSTRUCTIONS:
+            type: "plain"
+            value: "1"
+          CLAUDE_CODE_RETRY_WATCHDOG:
+            type: "plain"
+            value: "1"
+          ENABLE_TOOL_SEARCH:
+            type: "plain"
+            value: "auto"
         filesystemScope: "workspace"
         networkScope: "allowlist"
         networkAllowlist:
-          - "api.anthropic.com"
+          - "api.anthropic.com:443"
     runtime:
       heartbeat:
         maxConcurrentRuns: 1
+        maxDailyRuns: 30
     budgetMonthlyCents: 1500
     metadata:
       atelier:
         registre: "atelier/registre-agents/v1"
-        versionRegistre: "1.9.0"
+        versionRegistre: "1.14.0"
+        slug: "reseaux-sociaux"
         titre: "Pôle Contenus · Calendrier social, posts et réponses publiques"
         entrees:
           - "brief et exigences"
@@ -1111,11 +1433,16 @@ agents:
           - "Grep"
           - "Glob"
           - "WebSearch"
+          - "mcp__paperclip-assigned"
+          - "mcp__Paperclip_connections__connections_search"
+          - "mcp__Paperclip_connections__connection_request"
         outilsMutation:
           - "Bash(curl *)"
           - "Write"
           - "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_video"
           - "mcp__paperclip-assigned__atelier_marketing-ia_etat_fabrication"
+          - "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_image"
+          - "mcp__paperclip-assigned__atelier_marketing-ia_voir_rendu"
         outilsInterdits:
           - "WebFetch"
           - "Edit"
@@ -1125,7 +1452,9 @@ agents:
           - "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_document"
         relit: []
         roleRevue: null
-        connexions: {}
+        connexions:
+          liens: "lecture"
+          extraction: "lecture"
         criteresReussite:
           - "chaque post du calendrier est rattaché à un pilier et à une exigence"
           - "aucune publication, aucune programmation, aucun message privé"
@@ -1148,19 +1477,23 @@ agents:
       type: "claude_local"
       config:
         engine: "cli"
-        model: "claude-sonnet-5-5"
-        effort: "medium"
+        model: "claude-opus-5-5"
+        effort: "high"
         dangerouslySkipPermissions: false
         maxTurnsPerRun: 40
         timeoutSec: 1800
         graceSec: 30
         extraArgs:
+          - "--exclude-dynamic-system-prompt-sections"
           - "--permission-mode"
           - "dontAsk"
           - "--allowedTools"
           - "WebSearch"
           - "Bash(curl *)"
           - "Edit(./**)"
+          - "mcp__Paperclip_projects__list_projects"
+          - "mcp__Paperclip_projects__list_project_repositories"
+          - "mcp__Paperclip_projects__set_task_title"
           - "--disallowedTools"
           - "WebFetch"
           - "Edit"
@@ -1170,6 +1503,15 @@ agents:
           - "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_document"
           - "mcp__paperclip-assigned__atelier_marketing-ia_etat_fabrication"
           - "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_video"
+          - "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_image"
+          - "mcp__paperclip-assigned__atelier_marketing-ia_voir_rendu"
+          - "Workflow"
+          - "ScheduleWakeup"
+          - "ReportFindings"
+          - "ListAgents"
+          - "EnterWorktree"
+          - "ExitWorktree"
+          - "SendMessage"
         env:
           DISABLE_TELEMETRY:
             type: "plain"
@@ -1177,18 +1519,32 @@ agents:
           CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC:
             type: "plain"
             value: "1"
+          CLAUDE_CODE_PROMPT_CACHE_TTL:
+            type: "plain"
+            value: "5m"
+          CLAUDE_CODE_DISABLE_GIT_INSTRUCTIONS:
+            type: "plain"
+            value: "1"
+          CLAUDE_CODE_RETRY_WATCHDOG:
+            type: "plain"
+            value: "1"
+          ENABLE_TOOL_SEARCH:
+            type: "plain"
+            value: "auto"
         filesystemScope: "workspace"
         networkScope: "allowlist"
         networkAllowlist:
-          - "api.anthropic.com"
+          - "api.anthropic.com:443"
     runtime:
       heartbeat:
         maxConcurrentRuns: 1
+        maxDailyRuns: 30
     budgetMonthlyCents: 1000
     metadata:
       atelier:
         registre: "atelier/registre-agents/v1"
-        versionRegistre: "1.9.0"
+        versionRegistre: "1.14.0"
+        slug: "conformite-publicitaire"
         titre: "Pôle Contrôle préalable · Communications commerciales réglementées"
         entrees:
           - "contenu à contrôler, canal et public"
@@ -1216,8 +1572,18 @@ agents:
           - "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_document"
           - "mcp__paperclip-assigned__atelier_marketing-ia_etat_fabrication"
           - "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_video"
-        relit: []
-        roleRevue: null
+          - "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_image"
+          - "mcp__paperclip-assigned__atelier_marketing-ia_voir_rendu"
+        relit:
+          - "stratege"
+          - "prospection"
+          - "enrichissement-coordonnees"
+          - "seo-local-geo"
+          - "sea"
+          - "contenus"
+          - "crm-conversion"
+          - "reseaux-sociaux"
+        roleRevue: "conformite"
         connexions: {}
         criteresReussite:
           - "chaque affirmation chiffrée ou superlative est relevée avec sa preuve ou l'absence de preuve"
@@ -1248,10 +1614,14 @@ agents:
         timeoutSec: 1800
         graceSec: 30
         extraArgs:
+          - "--exclude-dynamic-system-prompt-sections"
           - "--permission-mode"
           - "dontAsk"
           - "--allowedTools"
           - "Bash(curl *)"
+          - "mcp__Paperclip_projects__list_projects"
+          - "mcp__Paperclip_projects__list_project_repositories"
+          - "mcp__Paperclip_projects__set_task_title"
           - "--disallowedTools"
           - "WebSearch"
           - "WebFetch"
@@ -1263,6 +1633,15 @@ agents:
           - "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_document"
           - "mcp__paperclip-assigned__atelier_marketing-ia_etat_fabrication"
           - "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_video"
+          - "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_image"
+          - "mcp__paperclip-assigned__atelier_marketing-ia_voir_rendu"
+          - "Workflow"
+          - "ScheduleWakeup"
+          - "ReportFindings"
+          - "ListAgents"
+          - "EnterWorktree"
+          - "ExitWorktree"
+          - "SendMessage"
         env:
           DISABLE_TELEMETRY:
             type: "plain"
@@ -1270,18 +1649,32 @@ agents:
           CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC:
             type: "plain"
             value: "1"
+          CLAUDE_CODE_PROMPT_CACHE_TTL:
+            type: "plain"
+            value: "5m"
+          CLAUDE_CODE_DISABLE_GIT_INSTRUCTIONS:
+            type: "plain"
+            value: "1"
+          CLAUDE_CODE_RETRY_WATCHDOG:
+            type: "plain"
+            value: "1"
+          ENABLE_TOOL_SEARCH:
+            type: "plain"
+            value: "auto"
         filesystemScope: "workspace"
         networkScope: "allowlist"
         networkAllowlist:
-          - "api.anthropic.com"
+          - "api.anthropic.com:443"
     runtime:
       heartbeat:
         maxConcurrentRuns: 1
+        maxDailyRuns: 30
     budgetMonthlyCents: 2000
     metadata:
       atelier:
         registre: "atelier/registre-agents/v1"
-        versionRegistre: "1.9.0"
+        versionRegistre: "1.14.0"
+        slug: "exigences"
         titre: "Contrôleur des exigences"
         entrees:
           - "brief original"
@@ -1311,6 +1704,8 @@ agents:
           - "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_document"
           - "mcp__paperclip-assigned__atelier_marketing-ia_etat_fabrication"
           - "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_video"
+          - "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_image"
+          - "mcp__paperclip-assigned__atelier_marketing-ia_voir_rendu"
         relit:
           - "coordinateur"
           - "veille"
@@ -1323,7 +1718,6 @@ agents:
           - "crm-conversion"
           - "mesure"
           - "reseaux-sociaux"
-          - "conformite-publicitaire"
         roleRevue: "exigences"
         connexions: {}
         criteresReussite:
@@ -1355,13 +1749,18 @@ agents:
         timeoutSec: 1800
         graceSec: 30
         extraArgs:
+          - "--exclude-dynamic-system-prompt-sections"
           - "--permission-mode"
           - "dontAsk"
           - "--allowedTools"
           - "WebSearch"
-          - "WebFetch"
           - "Bash(curl *)"
+          - "mcp__paperclip-assigned__atelier_marketing-ia_voir_rendu"
+          - "mcp__Paperclip_projects__list_projects"
+          - "mcp__Paperclip_projects__list_project_repositories"
+          - "mcp__Paperclip_projects__set_task_title"
           - "--disallowedTools"
+          - "WebFetch"
           - "Write"
           - "Edit"
           - "NotebookEdit"
@@ -1370,6 +1769,14 @@ agents:
           - "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_document"
           - "mcp__paperclip-assigned__atelier_marketing-ia_etat_fabrication"
           - "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_video"
+          - "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_image"
+          - "Workflow"
+          - "ScheduleWakeup"
+          - "ReportFindings"
+          - "ListAgents"
+          - "EnterWorktree"
+          - "ExitWorktree"
+          - "SendMessage"
         env:
           DISABLE_TELEMETRY:
             type: "plain"
@@ -1377,18 +1784,32 @@ agents:
           CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC:
             type: "plain"
             value: "1"
+          CLAUDE_CODE_PROMPT_CACHE_TTL:
+            type: "plain"
+            value: "5m"
+          CLAUDE_CODE_DISABLE_GIT_INSTRUCTIONS:
+            type: "plain"
+            value: "1"
+          CLAUDE_CODE_RETRY_WATCHDOG:
+            type: "plain"
+            value: "1"
+          ENABLE_TOOL_SEARCH:
+            type: "plain"
+            value: "auto"
         filesystemScope: "workspace"
         networkScope: "allowlist"
         networkAllowlist:
-          - "api.anthropic.com"
+          - "api.anthropic.com:443"
     runtime:
       heartbeat:
         maxConcurrentRuns: 1
+        maxDailyRuns: 30
     budgetMonthlyCents: 2000
     metadata:
       atelier:
         registre: "atelier/registre-agents/v1"
-        versionRegistre: "1.9.0"
+        versionRegistre: "1.14.0"
+        slug: "relecteur"
         titre: "Responsable qualité"
         entrees:
           - "brief original"
@@ -1406,10 +1827,11 @@ agents:
           - "Grep"
           - "Glob"
           - "WebSearch"
-          - "WebFetch"
         outilsMutation:
           - "Bash(curl *)"
+          - "mcp__paperclip-assigned__atelier_marketing-ia_voir_rendu"
         outilsInterdits:
+          - "WebFetch"
           - "Write"
           - "Edit"
           - "NotebookEdit"
@@ -1418,6 +1840,7 @@ agents:
           - "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_document"
           - "mcp__paperclip-assigned__atelier_marketing-ia_etat_fabrication"
           - "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_video"
+          - "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_image"
         relit:
           - "coordinateur"
           - "veille"
@@ -1430,7 +1853,6 @@ agents:
           - "crm-conversion"
           - "mesure"
           - "reseaux-sociaux"
-          - "conformite-publicitaire"
         roleRevue: "metier"
         connexions: {}
         criteresReussite:
@@ -1462,16 +1884,20 @@ agents:
         timeoutSec: 1800
         graceSec: 30
         extraArgs:
+          - "--exclude-dynamic-system-prompt-sections"
           - "--permission-mode"
           - "dontAsk"
           - "--allowedTools"
-          - "WebFetch"
           - "mcp__paperclip-assigned"
           - "mcp__Paperclip_connections__connections_search"
           - "mcp__Paperclip_connections__connection_request"
           - "Bash(curl *)"
           - "Edit(./**)"
+          - "mcp__Paperclip_projects__list_projects"
+          - "mcp__Paperclip_projects__list_project_repositories"
+          - "mcp__Paperclip_projects__set_task_title"
           - "--disallowedTools"
+          - "WebFetch"
           - "WebSearch"
           - "Edit"
           - "NotebookEdit"
@@ -1480,6 +1906,15 @@ agents:
           - "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_document"
           - "mcp__paperclip-assigned__atelier_marketing-ia_etat_fabrication"
           - "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_video"
+          - "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_image"
+          - "mcp__paperclip-assigned__atelier_marketing-ia_voir_rendu"
+          - "Workflow"
+          - "ScheduleWakeup"
+          - "ReportFindings"
+          - "ListAgents"
+          - "EnterWorktree"
+          - "ExitWorktree"
+          - "SendMessage"
         env:
           DISABLE_TELEMETRY:
             type: "plain"
@@ -1487,18 +1922,32 @@ agents:
           CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC:
             type: "plain"
             value: "1"
+          CLAUDE_CODE_PROMPT_CACHE_TTL:
+            type: "plain"
+            value: "5m"
+          CLAUDE_CODE_DISABLE_GIT_INSTRUCTIONS:
+            type: "plain"
+            value: "1"
+          CLAUDE_CODE_RETRY_WATCHDOG:
+            type: "plain"
+            value: "1"
+          ENABLE_TOOL_SEARCH:
+            type: "plain"
+            value: "auto"
         filesystemScope: "workspace"
         networkScope: "allowlist"
         networkAllowlist:
-          - "api.anthropic.com"
+          - "api.anthropic.com:443"
     runtime:
       heartbeat:
         maxConcurrentRuns: 1
+        maxDailyRuns: 30
     budgetMonthlyCents: 1000
     metadata:
       atelier:
         registre: "atelier/registre-agents/v1"
-        versionRegistre: "1.9.0"
+        versionRegistre: "1.14.0"
+        slug: "tests-techniques"
         titre: "Vérificateur technique"
         entrees:
           - "version précise du livrable"
@@ -1514,7 +1963,6 @@ agents:
           - "Read"
           - "Grep"
           - "Glob"
-          - "WebFetch"
           - "mcp__paperclip-assigned"
           - "mcp__Paperclip_connections__connections_search"
           - "mcp__Paperclip_connections__connection_request"
@@ -1522,6 +1970,7 @@ agents:
           - "Bash(curl *)"
           - "Write"
         outilsInterdits:
+          - "WebFetch"
           - "WebSearch"
           - "Edit"
           - "NotebookEdit"
@@ -1530,6 +1979,8 @@ agents:
           - "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_document"
           - "mcp__paperclip-assigned__atelier_marketing-ia_etat_fabrication"
           - "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_video"
+          - "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_image"
+          - "mcp__paperclip-assigned__atelier_marketing-ia_voir_rendu"
         relit:
           - "seo-local-geo"
           - "sea"
@@ -1571,7 +2022,8 @@ agents:
     metadata:
       atelier:
         registre: "atelier/registre-agents/v1"
-        versionRegistre: "1.9.0"
+        versionRegistre: "1.14.0"
+        slug: "porte"
         titre: "Porte de contrôle"
         entrees:
           - "tâche sous porte en étape de revue"
@@ -1585,6 +2037,8 @@ agents:
           - "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_document"
           - "mcp__paperclip-assigned__atelier_marketing-ia_etat_fabrication"
           - "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_video"
+          - "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_image"
+          - "mcp__paperclip-assigned__atelier_marketing-ia_voir_rendu"
         relit: []
         roleRevue: null
         connexions: {}
@@ -1620,7 +2074,7 @@ routines:
     triggers:
       -
         kind: "schedule"
-        cronExpression: "0 8 * * 1"
+        cronExpression: "30 10 * * 1"
         timezone: "Europe/Brussels"
   controle-liens-mensuel:
     concurrencyPolicy: "skip_if_active"
@@ -1628,7 +2082,15 @@ routines:
     triggers:
       -
         kind: "schedule"
-        cronExpression: "0 7 1 * *"
+        cronExpression: "30 10 1 * *"
+        timezone: "Europe/Brussels"
+  mesure-mensuelle:
+    concurrencyPolicy: "skip_if_active"
+    catchUpPolicy: "skip_missed"
+    triggers:
+      -
+        kind: "schedule"
+        cronExpression: "30 10 1 * *"
         timezone: "Europe/Brussels"
   point-coordination-hebdomadaire:
     concurrencyPolicy: "coalesce_if_active"
@@ -1636,5 +2098,5 @@ routines:
     triggers:
       -
         kind: "schedule"
-        cronExpression: "0 9 * * 5"
+        cronExpression: "30 10 * * 5"
         timezone: "Europe/Brussels"

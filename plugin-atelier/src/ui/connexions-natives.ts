@@ -36,6 +36,8 @@ export const SERVICES_PASSERELLE = [
   { cle: "facebook", slug: "atelier-facebook", nom: "Facebook", capacites: "lecture, préparation d'action" },
   { cle: "instagram", slug: "atelier-instagram", nom: "Instagram", capacites: "lecture, préparation d'action" },
   { cle: "linkedin", slug: "atelier-linkedin", nom: "LinkedIn", capacites: "lecture, préparation d'action" },
+  // Carte native à ajouter au socle (app-definition atelier-linkedin-profil) ; d'ici là, connexion générique /mcp/linkedinprofil.
+  { cle: "linkedinprofil", slug: "atelier-linkedin-profil", nom: "LinkedIn (profil personnel)", capacites: "préparation d'action" },
   { cle: "crm", slug: "atelier-hubspot", nom: "CRM (HubSpot)", capacites: "lecture, préparation d'action" },
   { cle: "pipedrive", slug: "atelier-pipedrive", nom: "Pipedrive", capacites: "lecture, préparation d'action" },
   { cle: "odoo", slug: "atelier-odoo", nom: "Odoo", capacites: "lecture, préparation d'action" },

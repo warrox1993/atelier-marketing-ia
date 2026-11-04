@@ -6,6 +6,7 @@ import {
   Dossier,
   Edition,
   Fiche,
+  CATEGORIES_OBS,
   CHAMPS_FICHE,
   PreuveObservatoire,
   Revision,
@@ -97,8 +98,8 @@ describe("affirmation", () => {
 });
 
 describe("fiche", () => {
-  it("compte 25 champs et accepte une fiche entièrement à null", () => {
-    expect(CHAMPS_FICHE).toHaveLength(25);
+  it("compte 26 champs et accepte une fiche entièrement à null", () => {
+    expect(CHAMPS_FICHE).toHaveLength(26);
     expect(Fiche.safeParse(fiche()).success).toBe(true);
   });
   it("accepte une valeur inventée remplacée par null, avec son statut", () => {
@@ -125,6 +126,20 @@ describe("fiche", () => {
   });
   it("refuse un champ supplémentaire", () => {
     expect(Fiche.safeParse({ ...fiche(), bonus: champ() }).success).toBe(false);
+  });
+  const avecCategorie = (valeur: string | null) => ({
+    ...fiche(),
+    categorie: { valeur, statut: "confirme_doc_officielle", affirmationId: valeur === null ? null : A },
+  });
+  it("liste fermée de 8 catégories, dans l'ordre du site", () => {
+    expect(CATEGORIES_OBS).toEqual(["modeles", "agents", "outils-de-code", "mcp-et-plugins", "retro-ingenierie", "image-et-video", "voix", "reglementation"]);
+  });
+  it("refuse une catégorie hors liste (texte libre, casse ou accent différents)", () => {
+    for (const v of ["Outil", "Agents", "modèles", "inconnue"]) expect(Fiche.safeParse(avecCategorie(v)).success, v).toBe(false);
+  });
+  it("accepte une catégorie à null (à classer) et chacun des 8 slugs", () => {
+    expect(Fiche.safeParse(avecCategorie(null)).success).toBe(true);
+    for (const v of CATEGORIES_OBS) expect(Fiche.safeParse(avecCategorie(v)).success, v).toBe(true);
   });
 });
 

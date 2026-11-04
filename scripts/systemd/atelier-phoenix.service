@@ -1,10 +1,19 @@
 [Unit]
 Description=Arize Phoenix local de l'Atelier marketing IA (traces, écoute sur 127.0.0.1 seulement)
+OnFailure=atelier-alerte@%n.service
+# 10 démarrages ratés en 10 min : l'unité passe en « failed » et alerte au lieu de boucler (EXP-C5).
+StartLimitIntervalSec=600
+StartLimitBurst=10
 Documentation=https://arize.com/docs/phoenix/self-hosting/configuration
 
 # Installation (une fois) :
 #   python3 -m venv ~/.local/share/atelier-phoenix/venv
 #   ~/.local/share/atelier-phoenix/venv/bin/pip install "arize-phoenix==20.23.0"   (version stable vérifiée le 17/10/2026)
+#   # secrets d'auth (une fois, 0600, hors dépôt) — à régénérer avec « python3 -c 'import secrets; ...' » si perdus :
+#   install -d -m 700 ~/.config/atelier
+#   umask 177; { echo "PHOENIX_SECRET=$(python3 -c 'import secrets;print(secrets.token_hex(32))')";
+#     echo "PHOENIX_ADMIN_SECRET=$(python3 -c 'import secrets;print(secrets.token_hex(32))')";
+#     echo "PHOENIX_DEFAULT_ADMIN_INITIAL_PASSWORD=$(python3 -c 'import secrets;print(secrets.token_hex(16))')"; } > ~/.config/atelier/phoenix-auth.env
 #   install -m 644 scripts/systemd/atelier-phoenix.service ~/.config/systemd/user/
 #   systemctl --user daemon-reload && systemctl --user enable --now atelier-phoenix
 # Interface : http://127.0.0.1:6006  ; journal : « journalctl --user -u atelier-phoenix ».
@@ -20,6 +29,10 @@ Environment=PHOENIX_WORKING_DIR=%h/.local/share/atelier-phoenix/donnees
 Environment=PHOENIX_TELEMETRY_ENABLED=false
 Environment=PHOENIX_ALLOW_EXTERNAL_RESOURCES=false
 Environment=PHOENIX_ENABLE_PROMETHEUS=false
+# Authentification (F2) : secrets hors dépôt, 0600 (PHOENIX_SECRET, PHOENIX_ADMIN_SECRET,
+# PHOENIX_DEFAULT_ADMIN_INITIAL_PASSWORD) ; sans clé API présentée, l'ingestion est refusée.
+Environment=PHOENIX_ENABLE_AUTH=true
+EnvironmentFile=%h/.config/atelier/phoenix-auth.env
 # Le lanceur force aussi le collecteur gRPC sur 127.0.0.1 (Phoenix l'ouvre sinon sur toutes les interfaces).
 ExecStartPre=/usr/bin/mkdir -p %h/.local/share/atelier-phoenix/donnees
 ExecStart=%h/.local/share/atelier-phoenix/venv/bin/python -I %h/Projets/atelier-marketing-ia/scripts/phoenix-lancer.py

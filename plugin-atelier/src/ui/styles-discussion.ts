@@ -77,6 +77,13 @@ ${STYLES_CASE_TACTILE}
 .atl-disc-bulle[data-auteur="agent"] { max-width: 100%; }
 .atl-disc-bulle[data-auteur="agent"] .atl-disc-texte { padding: 0.125rem 0.25rem; border-radius: 0; background: transparent; max-width: 44rem; }
 .atl-disc-bulle[data-auteur="agent"] .atl-disc-texte.atl-disc-carte { padding: 0.75rem 1rem; border-radius: 1rem; background: var(--atl-surface-2); }
+.atl-disc-texte.atl-disc-md { white-space: normal; }
+.atl-disc-md :is(p, ul, ol, pre, blockquote, h3, h4) { margin: 0.625rem 0; }
+.atl-disc-md ul { list-style: disc; padding-left: 1.25rem; }
+.atl-disc-md ol { list-style: decimal; padding-left: 1.5rem; }
+.atl-disc-md li + li { margin-top: 0.25rem; }
+.atl-disc-md > :first-child > :first-child { margin-top: 0; }
+.atl-disc-md > :first-child > :last-child { margin-bottom: 0; }
 .atl-disc-texte a { color: inherit; text-decoration: underline; text-underline-offset: 2px; }
 .atl-disc-bulle[data-actions="oui"], .atl-disc-bulle[data-carte="oui"], .atl-disc-bulle[data-situation="oui"] { max-width: min(100%, 44rem); width: 100%; }
 .atl-disc-actions { display: flex; flex-direction: column; gap: 0.5rem; max-width: 100%; min-width: 0; }
@@ -108,6 +115,7 @@ ${STYLES_CASE_TACTILE}
 .atl-disc-situation .atl-afaire-confirmation { margin: 0 0 0.75rem; }
 .atl-disc-bulle[data-situation="oui"] .atl-disc-situation { display: flex; flex-direction: column; gap: 0.875rem; width: 100%; white-space: normal; }
 .atl-disc-situation-bloc { display: flex; flex-direction: column; gap: 0.5rem; min-width: 0; }
+.atl-disc-situation-groupe { display: contents; }
 .atl-disc-situation-bloc > p { margin: 0; max-width: 65ch; font-size: 0.9375rem; line-height: 1.55; }
 .atl-disc-situation-actions { display: flex; flex-wrap: wrap; gap: 0.5rem; }
 .atl-disc-situation-actions .atl-bouton, .atl-disc-situation .atl-afaire .atl-bouton { min-height: 2.75rem; display: inline-flex; align-items: center; text-decoration: none; }
@@ -283,4 +291,10 @@ button.atl-bande-bouton:hover, button.atl-bande-bouton[aria-expanded="true"] { b
 .atl-bande-taches { max-height: min(40vh, 16rem); overflow: auto; }
 .atl-bande-panneau { margin-top: 0.5rem; max-height: min(50vh, 28rem); overflow: auto; }
 @media (prefers-reduced-motion: reduce) { .atl-bande-voir, button.atl-bande-bouton { transition: none; } }
+.atl-disc-attentes { flex: none; position: sticky; top: 0; z-index: 2; margin-top: -0.5rem; padding: 0.25rem 0; background: var(--atl-fond); border-bottom: 1px solid var(--atl-trait); font-size: 0.875rem; }
+.atl-disc-attentes > summary { display: flex; align-items: center; min-height: 2.5rem; cursor: pointer; color: var(--atl-attenue-fort); }
+.atl-disc-attentes > summary:hover { color: var(--atl-texte); }
+.atl-disc-attentes > summary:focus-visible { outline: 2px solid var(--atl-anneau); outline-offset: 2px; }
+.atl-disc-attentes[open] { max-height: min(50vh, 28rem); overflow-y: auto; }
+.atl-disc-attentes[open] > :not(summary) { margin-top: 0.75rem; }
 `;

@@ -46,12 +46,13 @@ Qu'aucun fait ne parte sans statut, sans preuve et sans confiance motivée, conf
    - `non_verifie` : aucune preuve exploitable (0) ;
    - `contredit` : une preuve contraire est liée (0) ;
    - `obsolete` : vraie pour une version dépassée (0 à 1).
-4. Citer la preuve : source, instantané, extrait exact copié tel quel, position. Une citation sans
-   position ou paraphrasée n'est pas une preuve.
+4. Citer la preuve : source, instantané, extrait exact copié tel quel (20 caractères au moins, 500 au plus),
+   position (rang de caractère dans le texte entier de l'instantané). Une citation sans position, paraphrasée,
+   ou réduite à un titre n'est pas une preuve.
 5. Poser la confiance de 0 à 3 et écrire son motif en une phrase (« deux sources indépendantes »,
    « source unique de l'éditeur »). Elle baisse si les sources dérivent d'une même origine.
-6. Pour une affirmation contredite, lier la preuve contraire et la remplacer (`remplacee_par`) sans
-   jamais l'effacer.
+6. Pour une affirmation contredite ou inexacte, déposer l'affirmation exacte avec `"remplace": "<id de l'ancienne>"`
+   (même projet) : l'ancienne reste consultable, marquée remplacée, jamais effacée, et la porte refuse qu'on la cite.
 
 ## Livrable
 
@@ -71,10 +72,12 @@ Une liste d'affirmations : énoncé, version, statut, confiance et motif, preuve
 
 ## Exemple
 
+Cas illustratif : « Outil-Demo » est un outil fictif, ses textes sont inventés.
+
 | énoncé | statut | confiance | preuve |
 | --- | --- | --- | --- |
-| « Phoenix 2.1 est publié sous licence MIT. » | `confirme_doc_officielle` | 3, fichier LICENSE de la release | extrait « MIT License », ligne 1 |
-| « Phoenix 2.1 divise le temps de démarrage par deux. » | `rapporte_editeur` | 1, annonce de l'éditeur seul | page produit, titre de la section |
+| « Outil-Demo 2.1 est publié sous licence Apache 2.0. » | `confirme_doc_officielle` | 3, fichier LICENSE de la version 2.1, source primaire | extrait « Licensed under the Apache License, Version 2.0 », position 0 |
+| « L'éditeur annonce qu'Outil-Demo 2.1 démarre deux fois plus vite que la 2.0. » | `rapporte_editeur` | 1, annonce de l'éditeur seul, affichée comme telle | extrait « starts twice as fast as version 2.0 », position 1840 de la page de version |
 
 ## Pièges
 

@@ -13,6 +13,9 @@ import { verifierDonneesDemo, type EntreesDonneesDemo } from "./regles-donnees.j
 import { controlerIdentifiantsLegaux, type FaitsFiche } from "./services-faits.js";
 import { controlerCitationsConnaissances, type VersionPourValidite } from "./regles-connaissances.js";
 import { controlerLivrableProspection, type ResultatCouverture } from "./couverture-prospection.js";
+import { reglesObservatoire, type EntreesPorteObs } from "./observatoire/regles-porte-obs.js";
+import { CONSIGNE_REDACTION, controlerRedaction } from "./regles-redaction.js";
+import { telephonesEnClair } from "./regles-telephone.js";
 
 export interface PreuveEntree {
   revisionId: string;
@@ -86,13 +89,15 @@ export interface EntreesPorte {
    * versions des documents cités, date de la porte. Absente : la règle ne s'applique pas.
    */
   /** Garde-fous de vérité : identifiants de la fiche du client et texte du livrable (`services-faits.ts`). Absent : pas de contrôle. */
-  faits?: { livrable: string; fiche: FaitsFiche };
+  faits?: { livrable: string; fiche: FaitsFiche; /** DROIT-1.3 : numéros de la fiche du client (forme nationale), seuls permis en clair. */ telephonesFiche?: string[] };
   connaissances?: { livrable: string; passagesRendus: string[]; versions: VersionPourValidite[]; date: string; urlsSourcesTache?: string[] };
   /**
    * Couverture de prospection (tâche de prospection seulement) : zones calculées par la machine et dépôts de la
    * campagne. `couverture` null : aucun bureau positionné, couverture incalculable. Absente : pas de contrôle.
    */
   prospection?: { livrable: string; couverture: ResultatCouverture | null };
+  /** Règles OBS-01 à OBS-16 : fournies seulement pour une tâche du service Observatoire (FR-030). Absentes : rien ne change. */
+  observatoire?: EntreesPorteObs;
 }
 
 export interface ResultatPorte {
@@ -122,7 +127,7 @@ const BLOQUANTS: ReadonlySet<CodeMotifPorte> = new Set(["information_manquante",
  * faite sur cette révision, cycles épuisés). Un refus composé de ces seuls motifs ne consomme
  * pas de cycle de correction : une évaluation prématurée ne pénalise pas le producteur.
  */
-export const MOTIFS_SANS_CYCLE: ReadonlySet<CodeMotifPorte> = new Set(["revue_requise_absente", "revue_sur_ancienne_version", "cycles_epuises"]);
+export const MOTIFS_SANS_CYCLE: ReadonlySet<CodeMotifPorte> = new Set(["revue_requise_absente", "revue_sur_ancienne_version", "cycles_epuises", "obs_traduction_base_perimee"]);
 
 /** Un refus de porte consomme-t-il un cycle ? Seulement s'il porte au moins un motif de fond. */
 export function refusDeFond(motifs: ReadonlyArray<{ code: string }>): boolean {
@@ -277,9 +282,17 @@ export function evaluerPorte(e: EntreesPorte): ResultatPorte {
     }
   }
 
+  if (e.observatoire) motifs.push(...reglesObservatoire(e.observatoire));
+
   if (e.faits) {
     for (const f of controlerIdentifiantsLegaux(e.faits.livrable, e.faits.fiche)) {
       motifs.push(motif("identifiant_legal_incoherent", `${f.explication} (« ${f.extrait} »)`, { element: f.extrait }));
+    }
+    for (const t of telephonesEnClair(e.faits.livrable, e.faits.telephonesFiche ?? [])) {
+      motifs.push(motif("numero_telephone_en_clair", `Numéro de téléphone en clair ligne ${t.ligne} : il se dépose chiffré dans la fiche du prospect (route tache.prospects.telephone), jamais dans un document.`, { emplacement: `ligne ${t.ligne}` }));
+    }
+    for (const r of controlerRedaction(e.faits.livrable)) {
+      motifs.push(motif(r.code, `${CONSIGNE_REDACTION[r.code]} (${r.occurrences} fois, d'abord ligne ${r.ligne} : « ${r.extrait} »).`, { emplacement: `ligne ${r.ligne}`, element: r.extrait }));
     }
   }
 
@@ -336,6 +349,29 @@ export function evaluerPorte(e: EntreesPorte): ResultatPorte {
               date: e.connaissances.date,
               passagesRendus: [...e.connaissances.passagesRendus].map((a) => a.toLowerCase()).sort(),
               versions: e.connaissances.versions.map((v) => ({ d: v.documentId, v: v.version, s: v.statut, du: v.valideDu, au: v.valideAu })).sort((a, b) => `${a.d}/${a.v}`.localeCompare(`${b.d}/${b.v}`)),
+            }
+          : undefined,
+        // Observatoire : clé ajoutée seulement pour une tâche du service (FR-031 : PASS frais = entrées actuelles de la révision).
+        observatoire: e.observatoire
+          ? {
+              // SPEC-E2 : toute entrée lue par une règle OBS entre dans l'empreinte (texte de la base française : par son empreinte).
+              revision: {
+                id: e.observatoire.revision.id,
+                empreinte: e.observatoire.revision.empreinte,
+                baseRevisionFr: e.observatoire.revision.baseRevisionFr && { ...e.observatoire.revision.baseRevisionFr, texte: undefined },
+              },
+              affirmations: [...e.observatoire.affirmations].sort((a, b) => a.id.localeCompare(b.id)),
+              preuves: e.observatoire.preuves,
+              instantanes: [...e.observatoire.instantanes].map(([id, i]) => ({ id, sourceId: i.sourceId, texteNormalise: i.texteNormalise })).sort((a, b) => a.id.localeCompare(b.id)),
+              sources: [...e.observatoire.sources].sort(),
+              primaires: [...(e.observatoire.sourcesPrimaires ?? [])].sort(),
+              primairesParProjet: [...(e.observatoire.sourcesPrimairesParProjet ?? [])].map(([p, s]) => [p, [...s].sort()] as const).sort(([a], [b]) => a.localeCompare(b)),
+              versions: [...e.observatoire.versionsConnues].sort(),
+              essais: [...e.observatoire.essais].sort(([a], [b]) => a.localeCompare(b)),
+              refusees: [...e.observatoire.sourcesRefusees].sort(),
+              longueurMaxExtrait: e.observatoire.longueurMaxExtrait,
+              limites: [...(e.observatoire.limitesSources ?? [])].sort(([a], [b]) => a.localeCompare(b)),
+              sansAuteur: [...(e.observatoire.sourcesSansAuteur ?? [])].sort(),
             }
           : undefined,
         // Couverture de prospection : clé ajoutée seulement quand la règle s'applique.

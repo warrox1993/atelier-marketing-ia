@@ -140,6 +140,8 @@ function signauxDuProspect(p: Prospect, maintenant: Date): CompteRenduProspect["
   return [...signaux, ...signauxBce(p, maintenant)];
 }
 
+const NON_CONFIRME = "(non confirmé par le client)";
+
 function offreRecommandee(p: Prospect, fiche: FicheClientCompteRendu): Pick<CompteRenduProspect, "offreRecommandee" | "raisonSansOffre"> {
   if (fiche.offres.length === 0) return { offreRecommandee: null, raisonSansOffre: "Aucune offre n'est enregistrée dans la fiche du client." };
   // Segments du prospect : ceux que son renvoi désigne, plus ceux dont un code NACE couvre son activité.
@@ -161,23 +163,28 @@ function offreRecommandee(p: Prospect, fiche: FicheClientCompteRendu): Pick<Comp
   if (candidates.length === 0) {
     return { offreRecommandee: null, raisonSansOffre: codes.size === 0 && demandees.size === 0 ? "Le segment du prospect n'est pas établi : aucune offre ne peut lui être rattachée." : "Aucune offre de la fiche ne vise le segment de ce prospect." };
   }
+  // Décision de l'opérateur du 30/10/2026 : la confirmation est optionnelle ; une offre confirmée passe avant, sinon l'offre
+  // non confirmée est recommandée avec la mention « (non confirmé par le client) ».
   const confirmees = candidates.filter((o) => o.confirmee);
-  if (confirmees.length === 0) return { offreRecommandee: null, raisonSansOffre: `Seules des offres non confirmées par le client correspondent (${candidates.map((o) => o.nom).join(", ")}) : elles ne sont pas recommandées.` };
+  const retenues = confirmees.length > 0 ? confirmees : candidates;
   // Une offre explicitement demandée passe avant une offre trouvée par le segment.
-  const choisie = confirmees.find((o) => o.code !== undefined && demandees.has(o.code)) ?? confirmees[0]!;
+  const choisie = retenues.find((o) => o.code !== undefined && demandees.has(o.code)) ?? retenues[0]!;
   const segment = (choisie.segments ?? []).find((c) => codes.has(c));
   const libSegment = segment ? (fiche.segments.find((s) => s.code === segment)?.libelle ?? segment) : null;
-  const raison =
+  const raisonBase =
     choisie.code !== undefined && demandees.has(choisie.code)
       ? "Offre demandée par le prospect."
-      : `Offre confirmée par le client pour le segment « ${libSegment} »${segment && parNace.has(segment) ? ` (${parNace.get(segment)})` : ""}.`;
+      : `Offre ${choisie.confirmee ? "confirmée par le client " : ""}pour le segment « ${libSegment} »${segment && parNace.has(segment) ? ` (${parNace.get(segment)})` : ""}.`;
+  const raison = choisie.confirmee ? raisonBase : `${raisonBase} ${NON_CONFIRME}`;
   return { offreRecommandee: { code: choisie.code ?? null, nom: choisie.nom, description: choisie.description, raison }, raisonSansOffre: null };
 }
 
 function etablissementProche(p: Prospect, fiche: FicheClientCompteRendu): CompteRenduProspect["etablissementProche"] {
-  const etabs = fiche.etablissements.filter((e) => e.confirme);
+  // Décision de l'opérateur du 30/10/2026 : les établissements confirmés d'abord, sinon les autres, marqués « (non confirmé par le client) ».
+  const confirmes = fiche.etablissements.filter((e) => e.confirme);
+  const etabs = confirmes.length > 0 ? confirmes : fiche.etablissements;
   if (etabs.length === 0) return null;
-  const sortie = (e: EtablissementReferentiel, raison: "distance" | "meme_code_postal" | "meme_commune", d: number | null, precisionPosition: PositionProspect["precision"] | null = null) => ({ code: e.code ?? null, nom: e.nom, adresse: e.adresse, distanceKm: d, raison, precisionPosition });
+  const sortie = (e: EtablissementReferentiel, raison: "distance" | "meme_code_postal" | "meme_commune", d: number | null, precisionPosition: PositionProspect["precision"] | null = null) => ({ code: e.code ?? null, nom: e.confirme ? e.nom : `${e.nom} ${NON_CONFIRME}`, adresse: e.adresse, distanceKm: d, raison, precisionPosition });
   // 1. Positions des deux côtés : l'établissement le plus proche à vol d'oiseau, avec la précision de la position du prospect.
   //    Sans position d'un côté ou de l'autre, on retombe sur le code postal puis la commune.
   const cp = coordonnees(p.zone);

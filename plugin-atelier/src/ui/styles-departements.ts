@@ -35,6 +35,12 @@ export const STYLES_DEPARTEMENTS = `
 .atl-dep-traiter { padding: 0 0.4rem; border: 1px solid var(--atl-attenue-fort); border-radius: 999px; font-size: 0.6875rem; font-weight: 600; line-height: 1.5; color: var(--atl-texte); }
 .atl-dep-case[data-a-traiter] { border-color: var(--atl-attenue-fort); }
 .atl-dep-resume { margin: 0; font-size: 0.875rem; color: var(--atl-attenue-fort); font-variant-numeric: tabular-nums; }
+.atl-dep-ligne-resume { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.25rem 1rem; }
+.atl-dep-tous-agents { color: var(--atl-texte); font-size: 0.875rem; font-weight: 500; text-underline-offset: 3px; }
+.atl-dep-tous-agents:focus-visible, .atl-dep-agents-lien:focus-visible { outline: 2px solid var(--atl-anneau); outline-offset: 2px; }
+/* Au-dessus du lien étendu de la case : le nombre d'agents mène à la page des agents de ce service. */
+.atl-dep-agents-lien { position: relative; z-index: 1; color: inherit; text-decoration: none; }
+.atl-dep-agents-lien:hover { text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: 3px; }
 .atl-dep-meta { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 0.75rem; min-width: 0; margin-top: auto; font-size: 0.8125rem; }
 .atl-dep-agents { margin: 0; color: var(--atl-texte); }
 .atl-dep-activite { margin: 0; color: var(--atl-attenue); font-size: 0.75rem; }

@@ -1,0 +1,81 @@
+From 73c578ad839fe9c20aa832dcf06544a043a80029 Mon Sep 17 00:00:00 2001
+From: Jean-Baptiste Dhondt <114347858+warrox1993@users.noreply.github.com>
+Date: Fri, 30 Oct 2026 23:48:39 +0100
+Subject: [PATCH] =?UTF-8?q?feat(menu):=20l'entr=C3=A9e=20de=20discussion?=
+ =?UTF-8?q?=20de=20l'atelier=20s'appelle=20=C2=AB=20Chat=20=C2=BB?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01EThpSSDGc5NRYwbgjNqoTJ
+---
+ ui/src/components/Sidebar.test.tsx | 6 +++---
+ ui/src/components/Sidebar.tsx      | 8 ++++----
+ 2 files changed, 7 insertions(+), 7 deletions(-)
+
+diff --git a/ui/src/components/Sidebar.test.tsx b/ui/src/components/Sidebar.test.tsx
+index 100c3dc8f2..db4f6f7776 100644
+--- a/ui/src/components/Sidebar.test.tsx
++++ b/ui/src/components/Sidebar.test.tsx
+@@ -197,9 +197,9 @@ describe("Sidebar", () => {
+     return [...container.querySelectorAll("button")].find((b) => b.textContent?.trim() === "Nouvelle tâche") as HTMLButtonElement;
+   }
+ 
+-  /** Atelier prêt : la même entrée devient « Coordinateur général ». */
++  /** Atelier prêt : la même entrée devient « Chat ». */
+   function boutonCoordinateur() {
+-    return [...container.querySelectorAll("button")].find((b) => b.textContent?.trim() === "Coordinateur général") as HTMLButtonElement;
++    return [...container.querySelectorAll("button")].find((b) => b.textContent?.trim() === "Chat") as HTMLButtonElement;
+   }
+ 
+   describe("atelier actif : le menu complet reste toujours affiché", () => {
+@@ -259,7 +259,7 @@ describe("Sidebar", () => {
+     const root = await renderSidebar();
+ 
+     const bouton = boutonCoordinateur();
+-    expect(bouton.getAttribute("aria-label")).toBe("Discuter avec le Coordinateur général (nouvelle demande, question, action)");
++    expect(bouton.getAttribute("aria-label")).toBe("Chat avec le Coordinateur général (nouvelle demande, question, action)");
+     flushSync(() => {
+       bouton.click();
+     });
+diff --git a/ui/src/components/Sidebar.tsx b/ui/src/components/Sidebar.tsx
+index 4f60bfb471..88ca2c75a0 100644
+--- a/ui/src/components/Sidebar.tsx
++++ b/ui/src/components/Sidebar.tsx
+@@ -184,12 +184,12 @@ export function Sidebar({ children }: { children?: ReactNode }) {
+                 data-slot="icon-button"
+                 aria-label={
+                   atelierPret
+-                    ? `Discuter avec le Coordinateur général (nouvelle demande, question, action)${suffixeDecisions}`
++                    ? `Chat avec le Coordinateur général (nouvelle demande, question, action)${suffixeDecisions}`
+                     : rail
+                       ? "Nouvelle tâche"
+                       : undefined
+                 }
+-                title={atelierPret ? `Discuter avec le Coordinateur général (nouvelle demande, question, action)${suffixeDecisions}` : undefined}
++                title={atelierPret ? `Chat avec le Coordinateur général (nouvelle demande, question, action)${suffixeDecisions}` : undefined}
+                 className={cn(
+                   "flex items-center gap-2.5 mx-2 rounded-lg px-2 py-1.5 pointer-coarse:min-h-11 pointer-coarse:py-1 text-(length:--text-compact) font-medium text-foreground/80 transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
+                 )}
+@@ -202,7 +202,7 @@ export function Sidebar({ children }: { children?: ReactNode }) {
+                   ) : null}
+                 </span>
+                 <span className={rail ? SIDEBAR_RAIL_HIDDEN_LABEL : "truncate"}>
+-                  {atelierPret ? "Coordinateur général" : "Nouvelle tâche"}
++                  {atelierPret ? "Chat" : "Nouvelle tâche"}
+                 </span>
+                 {decisionsAffichees > 0 ? (
+                   !rail ? (
+@@ -217,7 +217,7 @@ export function Sidebar({ children }: { children?: ReactNode }) {
+               <Tooltip>
+                 <TooltipTrigger asChild>{newTaskButton}</TooltipTrigger>
+                 <TooltipContent side="right">
+-                  {atelierPret ? `Discuter avec le Coordinateur général (nouvelle demande, question, action)${suffixeDecisions}` : "Nouvelle tâche"}
++                  {atelierPret ? `Chat avec le Coordinateur général (nouvelle demande, question, action)${suffixeDecisions}` : "Nouvelle tâche"}
+                 </TooltipContent>
+               </Tooltip>
+             ) : (
+-- 
+2.53.0
+

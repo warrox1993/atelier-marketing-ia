@@ -9,6 +9,7 @@ import { useHostContext } from "@paperclipai/plugin-sdk/ui";
 import { RapportMensuel, type ChiffreRapport } from "../../contrats/rapport.js";
 import { Chargement, EnTete, EtatErreur, Section } from "../composants.js";
 import { dateSeule, euros, nombre } from "../format.js";
+import { appelHote } from "../hote.js";
 import { appelRoute } from "../routes-prospection.js";
 import { STYLES_RAPPORT } from "../styles-rapport.js";
 import { STYLES_TABLEAU } from "../styles-tableau.js";
@@ -23,14 +24,38 @@ export function libelleMois(mois: string): string {
   return new Date(Date.UTC(a, m - 1, 1)).toLocaleDateString("fr-BE", { month: "long", year: "numeric", timeZone: "UTC" });
 }
 
-/** Les derniers mois, du plus récent au plus ancien, en partant de `maintenant` (UTC). */
-export function moisProposes(maintenant: Date = new Date(), n = NB_MOIS_PROPOSES): string[] {
+/**
+ * Les derniers mois, du plus récent au plus ancien, en partant de `maintenant` (UTC), sans remonter avant `depuis`
+ * (« AAAA-MM », premier mois d'activité de l'entreprise) ; le mois courant est toujours proposé.
+ */
+export function moisProposes(maintenant: Date = new Date(), n = NB_MOIS_PROPOSES, depuis: string | null = null): string[] {
   const sortie: string[] = [];
   for (let i = 0; i < n; i++) {
     const d = new Date(Date.UTC(maintenant.getUTCFullYear(), maintenant.getUTCMonth() - i, 1));
-    sortie.push(`${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`);
+    const m = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
+    if (i > 0 && depuis && m < depuis) break;
+    sortie.push(m);
   }
   return sortie;
+}
+
+/** Mois proposés pour l'entreprise courante, bornés à son mois de création (`createdAt`) ; liste entière tant qu'il est inconnu. */
+export function useMoisProposes(companyId: string | null | undefined): string[] {
+  const [depuis, setDepuis] = useState<string | null>(null);
+  useEffect(() => {
+    if (!companyId) return;
+    let annule = false;
+    appelHote<{ createdAt?: unknown }>("GET", `/companies/${encodeURIComponent(companyId)}`)
+      .then((c) => {
+        const m = typeof c?.createdAt === "string" && /^\d{4}-\d{2}/u.test(c.createdAt) ? c.createdAt.slice(0, 7) : null;
+        if (!annule) setDepuis(m);
+      })
+      .catch(() => undefined);
+    return () => {
+      annule = true;
+    };
+  }, [companyId]);
+  return useMemo(() => moisProposes(new Date(), NB_MOIS_PROPOSES, depuis), [depuis]);
 }
 
 function TableauChiffres({ chiffres }: { chiffres: readonly ChiffreRapport[] }) {
@@ -66,7 +91,7 @@ type Lecture = { etat: "chargement" } | { etat: "erreur"; erreur: unknown } | { 
 
 export function VueRapport() {
   const { companyId } = useHostContext();
-  const mois = useMemo(() => moisProposes(), []);
+  const mois = useMoisProposes(companyId);
   const [choisi, setChoisi] = useState(mois[0]!);
   const [lecture, setLecture] = useState<Lecture>({ etat: "chargement" });
 

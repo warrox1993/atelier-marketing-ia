@@ -1,0 +1,167 @@
+{
+  "numero": 2,
+  "slug": "serveurs-mcp-reference-2-0",
+  "projet": {
+    "companyId": "<OBS>",
+    "slug": "article-2-serveurs-mcp-reference-2-0",
+    "nom": "Serveurs MCP de référence : passage aux versions sémantiques, à l'ère « moderne » et huit failles corrigées",
+    "alias": [
+      {
+        "type": "github",
+        "valeur": "modelcontextprotocol/servers"
+      },
+      {
+        "type": "npm",
+        "valeur": "@modelcontextprotocol/server-filesystem"
+      },
+      {
+        "type": "site",
+        "valeur": "https://modelcontextprotocol.io/docs/2026-07-28/tools/inspector/protocol-eras.md"
+      },
+      {
+        "type": "site",
+        "valeur": "https://modelcontextprotocol.io/specification/2026-07-28/changelog.md"
+      },
+      {
+        "type": "site",
+        "valeur": "https://modelcontextprotocol.io/specification/versioning"
+      }
+    ]
+  },
+  "motifSansProjet": null,
+  "aliasRefuses": [],
+  "brief": {
+    "tache": "Rédiger l'article n° 2 du magazine : Serveurs MCP de référence : passage aux versions sémantiques, à l'ère « moderne » et huit failles corrigées",
+    "categorie": "mcp-agents",
+    "publie_le": "2026-10-19",
+    "angle": "Quiconque installe les serveurs MCP officiels (filesystem, fetch, git) doit savoir que la numérotation a changé et qu'une mise à jour automatique ne lui proposera pas la version corrigée. Texte à écrire pour deux lecteurs : le développeur (ce qu'il peut faire ou doit vérifier) et le décideur (ce que cela change pour un choix d'outil, de coût ou de conformité), sans rien ajouter qui ne figure pas dans les faits ci-dessous.",
+    "plan": [
+      "Ce qui est annoncé ou publié : les faits datés, tels que la source les énonce",
+      "Ce que cela change pour un développeur : usage concret, uniquement à partir des faits listés",
+      "Ce que cela change pour un décideur : choix, coûts, risques, uniquement à partir des faits listés",
+      "Ce qui n'est pas établi : points ouverts, chiffres d'éditeur non mesurés de façon indépendante",
+      "Sources et méthode de vérification : liste des URL lues le 27/10/2026"
+    ],
+    "faits": [
+      {
+        "texte": "La 1.0.0 (11 octobre) est présentée comme la dernière version des serveurs de l'ère « legacy ».",
+        "source_url": "https://github.com/modelcontextprotocol/servers/releases/tag/v1.0.0",
+        "extrait_exact": "This release contains many bug and security fixes, and represents the final release of the legacy era servers.",
+        "statut_propose": "confirme_doc_officielle"
+      },
+      {
+        "texte": "La 2.0.0 (19 octobre) refond tous les serveurs pour la spécification de l'ère « moderne » tout en répondant encore aux anciens clients.",
+        "source_url": "https://github.com/modelcontextprotocol/servers/releases/tag/v2.0.0",
+        "extrait_exact": "This release refactors all the servers to support the modern era spec, while still answering legacy era clients as expected.",
+        "statut_propose": "confirme_doc_officielle"
+      },
+      {
+        "texte": "Les serveurs TypeScript exigent désormais Node 24 au minimum.",
+        "source_url": "https://github.com/modelcontextprotocol/servers/releases/tag/v2.0.0",
+        "extrait_exact": "fix: raise the TypeScript servers' Node floor to 24",
+        "statut_propose": "confirme_doc_officielle"
+      },
+      {
+        "texte": "Le registre npm confirme l'exigence de Node 24 pour le serveur filesystem.",
+        "source_url": "https://registry.npmjs.org/@modelcontextprotocol/server-filesystem",
+        "extrait_exact": "\"engines\":{\"node\":\">=24\"}",
+        "statut_propose": "confirme_doc_officielle"
+      },
+      {
+        "texte": "La 2.1.0 (25 octobre) corrige huit vulnérabilités dans trois serveurs.",
+        "source_url": "https://github.com/modelcontextprotocol/servers/releases/tag/v2.1.0",
+        "extrait_exact": "v2.1.0 fixes eight vulnerabilities in three servers.",
+        "statut_propose": "confirme_doc_officielle"
+      },
+      {
+        "texte": "Les transports HTTP et SSE du serveur everything refusent désormais les requêtes venant d'autres origines web.",
+        "source_url": "https://github.com/modelcontextprotocol/servers/releases/tag/v2.1.0",
+        "extrait_exact": "The HTTP and SSE transports refuse requests from other web origins.",
+        "statut_propose": "confirme_doc_officielle"
+      },
+      {
+        "texte": "Piège de mise à jour : les gestionnaires de paquets classent 2.0.1 sous les anciennes versions datées et ne la proposent donc pas.",
+        "source_url": "https://github.com/modelcontextprotocol/servers/releases/tag/v2.1.0",
+        "extrait_exact": "Package managers rank 2.0.1 below every 2025.x and 2026.x version, so they won't offer it as an upgrade.",
+        "statut_propose": "confirme_doc_officielle"
+      },
+      {
+        "texte": "Sur npm, 2.0.1 est la version « latest » du serveur filesystem, publiée le 25 octobre.",
+        "source_url": "https://registry.npmjs.org/@modelcontextprotocol/server-filesystem",
+        "extrait_exact": "\"2.0.1\":\"2026-10-25T00:05:17.843Z\"",
+        "statut_propose": "confirme_doc_officielle"
+      },
+      {
+        "texte": "La documentation de l'Inspector MCP définit les deux ères par rapport à la révision 2026-07-28 de la spécification : « legacy » veut dire avant cette révision, « modern » à partir d'elle. Cette définition vient de la documentation de l'Inspector, pas des notes de version des serveurs.",
+        "source_url": "https://modelcontextprotocol.io/docs/2026-07-28/tools/inspector/protocol-eras.md",
+        "extrait_exact": "(legacy or modern, meaning before or as of that revision)",
+        "statut_propose": "confirme_doc_officielle"
+      },
+      {
+        "texte": "Le journal des changements de la révision 2026-07-28 rend MCP sans état : la poignée de main initialize/notifications/initialized est supprimée.",
+        "source_url": "https://modelcontextprotocol.io/specification/2026-07-28/changelog.md",
+        "extrait_exact": "Make MCP stateless: remove the `initialize`/`notifications/initialized` handshake.",
+        "statut_propose": "confirme_doc_officielle"
+      },
+      {
+        "texte": "La même révision supprime les sessions au niveau du protocole et l'en-tête Mcp-Session-Id du transport HTTP en flux continu.",
+        "source_url": "https://modelcontextprotocol.io/specification/2026-07-28/changelog.md",
+        "extrait_exact": "Remove protocol-level sessions and the `Mcp-Session-Id` header from the Streamable HTTP transport.",
+        "statut_propose": "confirme_doc_officielle"
+      },
+      {
+        "texte": "L'avis GHSA-53mr-w429-c597 décrit une faille de repli sur le répertoire parent (TOCTOU) dans le serveur filesystem, qui permet d'écrire un fichier hors des répertoires autorisés.",
+        "source_url": "https://github.com/modelcontextprotocol/servers/security/advisories/GHSA-53mr-w429-c597",
+        "extrait_exact": "Parent-Directory Fallback TOCTOU in @modelcontextprotocol/server-filesystem Permits Arbitrary File Write Outside allowedDirectories",
+        "statut_propose": "confirme_doc_officielle"
+      },
+      {
+        "texte": "Sous Windows, le correctif de la 2.0.1 n'est que partiel, selon l'avis.",
+        "source_url": "https://github.com/modelcontextprotocol/servers/security/advisories/GHSA-53mr-w429-c597",
+        "extrait_exact": "On Windows this is only partly fixed.",
+        "statut_propose": "confirme_doc_officielle"
+      },
+      {
+        "texte": "Raison du caractère partiel sous Windows : un répertoire du chemin remplacé par une jonction entre la vérification et l'écriture peut encore rediriger des écritures hors des répertoires autorisés, et créer une jonction ne demande aucun privilège particulier.",
+        "source_url": "https://github.com/modelcontextprotocol/servers/security/advisories/GHSA-53mr-w429-c597",
+        "extrait_exact": "A directory on the path that is swapped for a junction between the check and the write (creating a junction needs no special privilege) can still redirect write_file",
+        "statut_propose": "confirme_doc_officielle"
+      },
+      {
+        "texte": "Un correctif complet sous Windows demande du code natif et est suivi dans le ticket n° 5260.",
+        "source_url": "https://github.com/modelcontextprotocol/servers/security/advisories/GHSA-53mr-w429-c597",
+        "extrait_exact": "A complete Windows fix needs native code and is tracked in #5260",
+        "statut_propose": "confirme_doc_officielle"
+      },
+      {
+        "texte": "Consigne de l'avis pour Windows en attendant : ne pas configurer de répertoire autorisé dans lequel un autre utilisateur ou un processus local non fiable peut écrire.",
+        "source_url": "https://github.com/modelcontextprotocol/servers/security/advisories/GHSA-53mr-w429-c597",
+        "extrait_exact": "Until that is fixed, on Windows do not configure an allowed directory that another user or an untrusted local process can write to.",
+        "statut_propose": "confirme_doc_officielle"
+      },
+      {
+        "texte": "La note de version 2.0.0 des serveurs MCP écrit : « feat(fetch,git,time): serve the 2026-07-28 era beside 2025-11-25 ». Le mot « era » est celui du dépôt des serveurs. (lu le 27/10/2026 à 04:51 UTC)",
+        "source_url": "https://api.github.com/repos/modelcontextprotocol/servers/releases/tags/v2.0.0",
+        "extrait_exact": "feat(fetch,git,time): serve the 2026-07-28 era beside 2025-11-25",
+        "statut_propose": "confirme_doc_officielle"
+      },
+      {
+        "texte": "La page de versions de la spécification MCP indique que la version courante du protocole est la révision 2026-07-28 : c'est ce que la note des serveurs appelle l'ère « moderne ». (lu le 27/10/2026 à 04:51 UTC)",
+        "source_url": "https://modelcontextprotocol.io/specification/versioning",
+        "extrait_exact": "The current protocol version is 2026-07-28",
+        "statut_propose": "confirme_doc_officielle"
+      },
+      {
+        "texte": "La même page nomme « handshake-based protocol revisions » les révisions à poignée de main, 2025-11-25 et antérieures : c'est ce que la note des serveurs appelle l'ère « legacy ». Aucune occurrence du mot « era » dans le texte lu de cette page. (lu le 27/10/2026 à 04:51 UTC)",
+        "source_url": "https://modelcontextprotocol.io/specification/versioning",
+        "extrait_exact": "the handshake-based protocol revisions ( 2025-11-25 and earlier)",
+        "statut_propose": "confirme_doc_officielle"
+      }
+    ],
+    "points_ouverts": [
+      "Le détail du correctif Windows est lu dans l'avis (voir faits) ; le ticket n° 5260 (correctif complet, code natif) n'a pas été lu. L'API api.github.com/advisories/GHSA-53mr-w429-c597 répond 404 ; la page de l'avis sur github.com répond 200.",
+      "Sujet à relier à la sécurité : tout approfondissement des failles relève de l'agent securite."
+    ],
+    "regles": "Aucun fait, date ou chiffre hors des faits listés. Chaque affirmation renvoie à un fait et à son extrait exact. Pas de tiret cadratin."
+  }
+}

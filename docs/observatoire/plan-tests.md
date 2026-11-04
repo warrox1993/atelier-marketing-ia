@@ -87,7 +87,7 @@ Méthode reprise de Paperclip (`doc/SEARCH.md`).
 
 ## 5. Pilote REA
 
-Critères de la phase 3 : fiche à 25 champs, chaque valeur sourcée ou « inconnu » ; porte qui refuse le corpus piégé ; quota de la tranche mesuré. Phase 3 bis : dossier de 24 chapitres, 0 affirmation sans preuve, quota par chapitre. Phase 6 : changement réel 6.7.0 vers 6.8.0, seuls les chapitres touchés sont révisés.
+Critères de la phase 3 : fiche à 26 champs, chaque valeur sourcée ou « inconnu » ; porte qui refuse le corpus piégé ; quota de la tranche mesuré. Phase 3 bis : dossier de 24 chapitres, 0 affirmation sans preuve, quota par chapitre. Phase 6 : changement réel 6.7.0 vers 6.8.0, seuls les chapitres touchés sont révisés.
 
 ## 6. Ordre d'exécution
 

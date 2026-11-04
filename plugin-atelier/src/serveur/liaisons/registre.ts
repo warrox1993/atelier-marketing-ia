@@ -36,6 +36,9 @@ const enLigne = (l: LiaisonLue): LigneRegistre => ({
   nombreExtraits: l.extraits.length,
   creeLe: l.creeLe,
   reponduLe: l.reponduLe,
+  tacheOrigine: l.tacheOrigine,
+  // Service supprimé : sa tâche n'existe plus, le lien mène alors à la tâche d'origine.
+  tacheCible: l.entrepriseCible === null ? null : l.tacheCible,
 });
 
 const formatBruxelles = (isoStr: string | null): string => {
