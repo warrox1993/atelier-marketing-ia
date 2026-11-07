@@ -1,7 +1,7 @@
 # Atelier Marketing IA : interdits de l'usine
 
 - Ne jamais modifier `paperclip/` (socle tiers) ni `socle/patches/` (correctifs figés).
-- Aucun appel à l'instance de production (port 3100) ; les e2e tournent sur une instance neuve (3590/54790).
+- Les e2e tournent sur une instance neuve (3590/54790). Après chaque fusion dans main : déploiement sur 3100 (`scripts/deployer.sh` puis `bootstrap-organisation.py mettre-a-jour-client`, procédure `docs/observatoire/deploiement-phase-3.md`) et republication du dépôt public (`scripts/publier.sh`).
 - Le Gardien exécute la copie principale contre 3100 : elle ne se synchronise qu'après fusion, par `guarded-merge.sh`.
 - Aucun run d'agent de l'usine depuis Claude Code.
 - Jamais le nom du client dans le dépôt, ni aucun secret.

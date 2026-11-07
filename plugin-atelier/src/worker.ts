@@ -34,6 +34,7 @@ const plugin = definePlugin({
       issues: ctx.issues,
       logger: ctx.logger,
       config: async (companyId) => (await ctx.config.get(companyId)) as Record<string, unknown> | null,
+      bilan: { ctx, base: creerBase(ctx.db) },
     });
     veilleur.demarrer();
     // Facteur du bureau de liaison (essai L9, 16/10/2026) : transmissions et réponses entre deux entreprises, que l'hôte

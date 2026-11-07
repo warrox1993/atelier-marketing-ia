@@ -27,6 +27,11 @@ export function raisonDecision(d: DossierHumain, choix: Choix, commentaire: stri
   return null;
 }
 
+/** Phrase de la carte de décision d'une révision de stratégie : l'approbation publie le document (null pour tout autre document). */
+export function textePublicationStrategie(d: DossierHumain): string | null {
+  return d.cleLivrable === "strategie" ? "Cette révision est la stratégie du client : l'approbation la publie en connaissance du client." : null;
+}
+
 export function DecisionPanneau({ dossier: d, onFait, integre = false }: { dossier: DossierHumain; onFait(message?: string): void; integre?: boolean }) {
   const decider = useAction<DecisionHumaine>("atelier.decision");
   const [choix, setChoix] = useState<Choix>("approuver");
@@ -132,6 +137,7 @@ export function DecisionPanneau({ dossier: d, onFait, integre = false }: { dossi
             Vise la révision {d.livrable.revisionNumber} ({idCourt(d.livrable.revisionId)}). Toute nouvelle révision invalidera cette décision.
           </p>
         ) : null}
+        {textePublicationStrategie(d) ? <p className="atl-sous">{textePublicationStrategie(d)}</p> : null}
         <fieldset className="atl-champ atl-choix">
           <legend>Votre décision</legend>
           {(["approuver", "demander_correction", "rejeter"] as const).map((c) => (

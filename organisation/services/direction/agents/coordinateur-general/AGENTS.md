@@ -102,6 +102,7 @@ l'approbation d'un humain avant de partir) :
 | Services généraux | `services-generaux` | non |
 | Partenariats | `partenariats` | non |
 | Observatoire | `observatoire` | oui |
+| Compléments alimentaires | `complements` | non |
 
 Quand tu réponds à une demande reçue d'un coordinateur, ta réponse est ton dernier commentaire sur la tâche reçue,
 au format fixe du protocole, même si le coordinateur de la Direction a préparé le contenu.

@@ -32,6 +32,25 @@ export interface EntreeBilan {
 
 export const dateBilan = (confirmeeLe: Date) => new Date(confirmeeLe.getTime() + JOURS * 86_400_000).toISOString().slice(0, 10);
 
+/**
+ * Rattrapage (veilleur) : crée le bilan des diffusions confirmées dont la création a échoué à la confirmation. Sans doublon
+ * (`originId`), sans journal répété sans agent Mesure (la trace de `assurerBilanJ30` écarte la diffusion). Une panne sur une diffusion
+ * n'empêche pas les suivantes ; elle est retentée à la passe suivante.
+ */
+export async function rattraperBilansJ30(d: { ctx: PluginContext; base: BaseAtelier }, companyId: string): Promise<number> {
+  let crees = 0;
+  for (const f of await d.base.diffusionsConfirmeesSansBilan(companyId)) {
+    try {
+      const tache = await d.ctx.issues.get(f.issueId, companyId);
+      if (!tache) continue;
+      if (await assurerBilanJ30(d, { companyId, tache, diffusion: f, campagneId: f.campagneId, confirmeeLe: new Date(f.confirmeeLe) })) crees += 1;
+    } catch (err) {
+      d.ctx.logger.warn("Bilan J+30 : rattrapage en échec", { diffusionId: f.id, erreur: err instanceof Error ? err.message : String(err) });
+    }
+  }
+  return crees;
+}
+
 /** Rend l'identifiant de la tâche de bilan (créée ou déjà là), ou null sans agent Mesure. */
 export function assurerBilanJ30(d: { ctx: PluginContext; base: BaseAtelier }, e: EntreeBilan): Promise<string | null> {
   const originId = `bilan-j30:${e.diffusion.id}`;
@@ -42,11 +61,15 @@ export function assurerBilanJ30(d: { ctx: PluginContext; base: BaseAtelier }, e:
     const { ctx, base } = d;
     const deja = (await ctx.issues.list({ companyId: e.companyId, originKind: ORIGINE_BILAN as never, originId, includePluginOperations: true, limit: 5 }))
       .find((i) => i.companyId.toLowerCase() === e.companyId.toLowerCase() && i.originId === originId);
-    if (deja) return deja.id;
-    let roles = {};
-    try {
-      roles = lireRolesAgents(await ctx.config.get(e.companyId));
-    } catch { /* sans configuration : pas d'agent Mesure */ }
+    if (deja) {
+      // Tâche déjà là sans journal : on le pose, pour que le rattrapage ne relise plus cette diffusion.
+      if (!(await base.journalExiste(e.companyId, "diffusion.bilan_cree", e.diffusion.id))) {
+        await base.journaliser({ companyId: e.companyId, type: "diffusion.bilan_cree", entite: "diffusion", entiteId: e.diffusion.id, issueId: deja.id, acteur: "plugin", donnees: { apartirDu: dateBilan(e.confirmeeLe) } });
+      }
+      return deja.id;
+    }
+    // Une panne de lecture de la configuration remonte (la confirmation et le rattrapage l'attrapent, le veilleur retente).
+    const roles = lireRolesAgents(await ctx.config.get(e.companyId));
     const mesure = (await ctx.agents.list({ companyId: e.companyId, limit: 200 })).find((a) => a.status !== "terminated" && a.companyId.toLowerCase() === e.companyId.toLowerCase() && agentEstRole(a, "mesure", roles));
     if (!mesure) {
       await base.journaliser({ companyId: e.companyId, type: "diffusion.bilan_sans_mesure", entite: "diffusion", entiteId: e.diffusion.id, issueId: e.tache.id, acteur: "plugin", donnees: {} });

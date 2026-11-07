@@ -1,6 +1,7 @@
 // Lots P3 et P3b : service complet par une vraie passerelle lue par le client MCP du SDK, avec accès par jeton porteur
 // statique (PASSERELLE_PROSPECTION_JETON) : réponses SIGNÉES (aev1, ecriture: false), erreurs d'outil signées.
 
+import { fileURLToPath } from "node:url";
 import { generateKeyPairSync } from "node:crypto";
 import { chmodSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -17,7 +18,7 @@ import { PREFIXE_ENVELOPPE, SignataireEnveloppe, verifierEnveloppe } from "../..
 import { demarrer, type PasserelleDeTest } from "../aide.js";
 import { dossierTemporaire, ecrireZip, fichierComplet, miseAJour134, N } from "./aide-bce.js";
 
-const FIXTURE_OSM = new URL("./fixtures/extrait-osm.geojsonseq", import.meta.url).pathname;
+const FIXTURE_OSM = fileURLToPath(new URL("./fixtures/extrait-osm.geojsonseq", import.meta.url));
 const JETON = "jeton-de-prospection-de-test-0123456789abcdef";
 
 describe("service par une vraie passerelle (client MCP du SDK)", () => {

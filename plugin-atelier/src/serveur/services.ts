@@ -2642,6 +2642,7 @@ export function creerServices(ctx: PluginContext, options: { transportReel?: Tra
       brief: brief?.texteOriginal ?? null,
       perimetre: { etablissements: campagne?.perimetre.etablissements ?? [], zones: campagne?.perimetre.zones ?? [], canaux: campagne?.canaux ?? [] },
       livrable: liv ? { revisionId: liv.revisionId, revisionNumber: liv.revisionNumber, titre: liv.titre, corps: liv.corps } : null,
+      cleLivrable: porte?.cleLivrable ?? null,
       matrice,
       sources,
       revues: verdicts.map((v) => ({ ...nettoyer(v), constats: constats.filter((c) => c.verdictId === v.id).map(({ verdictId: _v, ...c }) => c) })),

@@ -1,7 +1,7 @@
 {
   "schema": "atelier/registre-services/v1",
-  "version": "1.2.0",
-  "dateVersion": "2026-11-02",
+  "version": "1.3.0",
+  "dateVersion": "2026-11-07",
   "description": "Registre des services de l'Atelier. Chaque service est une entreprise Paperclip distincte dans l'instance du client ; la Direction voit tout. Les services échangent uniquement par des demandes tracées entre coordinateurs (bureau de liaison du plugin, plugin-atelier/src/serveur/liaisons/ : une demande adressée à un service va à son coordinateur ; pour la Direction, à son coordinateur général (champ « coordinateurGeneral », rôle ceo), seul agent de la Direction qui ouvre une liaison vers un autre service), selon la matrice « flux » (flux métier) complétée à la déclaration par le réseau des coordinateurs, généré par scripts/atelier_services.py (toute paire de services du même client, jamais listée ici) : pas de flux déclaré, pas d'échange. Le service marketing renvoie à organisation/registre/agents.json (champ agentsRef) sans dupliquer ses agents. Un service « sensible » impose l'approbation humaine sur tous ses flux.",
   "services": [
     {
@@ -995,6 +995,9 @@
       "interne": true,
       "description": "Étude de la qualité des compléments alimentaires vendus en Belgique et dans l'Union européenne.\nInventorie les vendeurs, lit les étiquettes, évalue les preuves, note et classe ; un contrôleur indépendant revérifie les éliminatoires. Achat, commande et contact d'un fabricant restent humains ; aucun avis médical.",
       "coordinateur": "analyste-complements",
+      "reglages": {
+        "controleur-complements": {"outilsInterdits": ["Write"]}
+      },
       "agents": [
         "analyste-complements",
         "controleur-complements"

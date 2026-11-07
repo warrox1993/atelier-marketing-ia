@@ -16,7 +16,9 @@
  * - une comparaison n'est significative que si la p-valeur ajustée est sous alpha ET si l'intervalle exclut zéro ;
  * - verdict : `superieur_aux_autres` (la variante « gagne ») si la meilleure variante fait significativement mieux que
  *   CHACUNE des autres : la référence par ses comparaisons déclarées ; une autre variante, choisie au vu des données, par
- *   une comparaison à chaque autre variante corrigée sur toutes les paires (m = k(k - 1) / 2) ; des variantes font mieux
+ *   une comparaison à chaque autre variante corrigée sur toutes les paires (m = k(k - 1) / 2), RÉFÉRENCE COMPRISE : la
+ *   référence est donc recomparée à la candidate avec cette correction, plus stricte que sa comparaison déclarée (m = k - 1), et
+ *   une candidate significative contre la référence au seuil déclaré peut ne plus l'être ici (alors `superieur_reference`) ; des variantes font mieux
  *   que la référence sans que l'une batte toutes les autres : `superieur_reference`, la meilleure n'étant que le
  *   « meilleur taux observé » ; aucune significative : « aucune différence détectable » ; référence meilleure que
  *   certaines seulement : non concluant.

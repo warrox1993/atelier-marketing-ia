@@ -203,7 +203,7 @@ class ConfinementMemoire(unittest.TestCase):
     def test_roles_de_revue_independante_sans_memoire(self):
         # Revue securite du 29/10/2026, M1 : une injection dans un livrable ne doit pas pouvoir laisser une « leçon » relue à chaque
         # revue ; relecteur, exigences (marketing), contradicteur et relecteur indépendant (services) n'ont aucune mémoire.
-        self.assertEqual(set(bo.ROLES_SANS_MEMOIRE), {"relecteur", "exigences", "contradicteur", "relecteur-independant"})
+        self.assertEqual(set(bo.ROLES_SANS_MEMOIRE), {"relecteur", "exigences", "contradicteur", "relecteur-independant", "controleur-complements"})
         agents = {("marketing", a["slug"]): a for a in self.reg_agents["agents"]}
         agents.update({(svc, a["slug"]): a for svc, a in agents_de_tous_les_services(self.reg_agents)})
         vus = set()
@@ -1651,7 +1651,7 @@ class RestesDH1(unittest.TestCase):
         agents = json.loads((RACINE / "organisation/registre/agents.json").read_text(encoding="utf-8"))
         services = json.loads((RACINE / "organisation/registre/services.json").read_text(encoding="utf-8"))
         self.assertEqual((agents["version"], agents["dateVersion"]), ("1.16.0", "2026-11-07"))
-        self.assertEqual((services["version"], services["dateVersion"]), ("1.2.0", "2026-11-02"))
+        self.assertEqual((services["version"], services["dateVersion"]), ("1.3.0", "2026-11-07"))
 
     def test_rotation_de_session_du_coordinateur(self):
         # T03 (lot 2) : le coordinateur repart d'une session neuve tous les 5 runs.

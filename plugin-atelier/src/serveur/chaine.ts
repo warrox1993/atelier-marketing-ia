@@ -177,7 +177,10 @@ export function creerChaine(d: DependancesChaine) {
   /**
    * Verdicts d'une même tâche revue traités l'un après l'autre (comme le verrou de `bilan-j30.ts`) : le tour est lu puis
    * journalisé sans entrelacement, sinon deux approbations simultanées se croient chacune seules et le réveil est perdu.
-   * shortcut: verrou en mémoire d'un seul processus, à porter en base si le plugin tourne un jour en plusieurs instances.
+   * Preuve : un seul processus par plugin installé (« One worker process per installed plugin »,
+   * paperclip/server/src/services/plugin-worker-manager.ts:11), donc un verrou en mémoire suffit.
+   * Limite : le journal ne distingue pas « correction puis approbation sur la même révision » ; ce cas n'est pas traité à part.
+   * À porter en base si le plugin tourne un jour en plusieurs instances.
    */
   const files = new Map<string, Promise<void>>();
   async function prendre(cle: string): Promise<() => void> {

@@ -5,7 +5,7 @@
  * implémentée lève une erreur explicite : un test ne peut pas passer par un chemin non simulé.
  */
 import type { PluginContext } from "@paperclipai/plugin-sdk";
-import { depotDepuisJournal, type BaseAtelier } from "../src/serveur/base.js";
+import { DEBUT_RATTRAPAGE_J30, depotDepuisJournal, type BaseAtelier } from "../src/serveur/base.js";
 
 type Ligne = Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
 
@@ -50,6 +50,7 @@ export function creerBanc(o: { mode?: "demonstration" | "reel"; modeEntreprise?:
     // Base de clients vide par défaut (la confiance de qualification la lit pour « pas déjà client »).
     etatBaseClients: async () => ({ dernierImport: null, clients: 0, actifs: 0, aReimporter: 0 }),
     journaliser: async (e) => void t.journal.push({ ...e, seq: t.journal.length + 1, creeLe: horloge() }),
+    journalExiste: async (companyId, type, entiteId) => t.journal.some((j) => j.companyId === companyId && j.type === type && j.entiteId === entiteId),
     datesJournal: async (_c, issueId, type) => t.journal.filter((j) => j.issueId === issueId && j.type === type).map((j) => j.creeLe as string).sort().reverse(),
     depotsProspectionCampagne: async (companyId, campagneId) =>
       t.journal.filter((j) => j.companyId === companyId && j.type === "prospects.deposes" && j.donnees?.campagneId === campagneId).map((j) => depotDepuisJournal(j.issueId ?? null, j.donnees ?? {}, j.creeLe)),
@@ -145,6 +146,15 @@ export function creerBanc(o: { mode?: "demonstration" | "reel"; modeEntreprise?:
       const d = t.diffusions.find((x) => x.companyId === companyId && x.cleIdempotence === cle);
       return d ? (vueDiffusion(d) as never) : null;
     },
+    diffusionsConfirmeesSansBilan: async (companyId) =>
+      t.diffusions
+        .filter((d) => d.companyId === companyId && d.etat === "confirmee")
+        .filter((d) => !t.journal.some((j) => j.entiteId === d.id && (j.type === "diffusion.bilan_cree" || j.type === "diffusion.bilan_sans_mesure")))
+        .flatMap((d) => {
+          const confirmee = t.journal.find((j) => j.entiteId === d.id && j.type === "diffusion.confirmee");
+          const porte = t.portes.find((p) => p.issueId === d.issueId);
+          return confirmee && porte && (confirmee.creeLe as string) >= DEBUT_RATTRAPAGE_J30 ? [{ id: d.id, issueId: d.issueId, action: d.action, canal: d.canal, campagneId: porte.campagneId, confirmeeLe: confirmee.creeLe }] : [];
+        }) as never,
     listerDiffusions: async (_c, issueId) => t.diffusions.filter((d) => d.issueId === issueId).map(vueDiffusion) as never,
     lireDiffusionInterne: async (_c, id) => {
       const d = t.diffusions.find((x) => x.id === id);

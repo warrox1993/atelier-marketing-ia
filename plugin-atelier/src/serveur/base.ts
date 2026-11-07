@@ -78,6 +78,8 @@ export function depotDepuisJournal(issueId: string | null, donnees: Record<strin
 }
 
 /** Tables légales que la remise à zéro conserve toujours (faille M1). */
+/** Avant le lot 2, l'agent créait lui-même son bilan sous un autre originId : rattraper les confirmations plus anciennes ferait un doublon. */
+export const DEBUT_RATTRAPAGE_J30 = "2026-11-07T00:00:00.000Z";
 export const TABLES_CONSERVEES = ["oppositions", "listes_dncm", "dncm_empreintes", "bases_legales", "journal"] as const;
 
 /** Tables vidées par la remise à zéro, dans l'ordre (enfants avant parents). `prospects` ne perd que ceux sans base légale. */
@@ -1133,6 +1135,26 @@ export function creerBase(db: Db) {
     return r ? diffusionDepuisLigne(r) : null;
   }
 
+  /**
+   * Diffusions confirmées dont le bilan J+30 n'a ni été créé ni écarté faute d'agent Mesure (journal), avec leur date de confirmation :
+   * le rattrapage du veilleur quand la création a échoué à la confirmation. Les plus anciennes d'abord, 50 au plus.
+   */
+  async function diffusionsConfirmeesSansBilan(companyId: string) {
+    const rangs = await q(
+      `select f.id, f.issue_id, f.action, f.canal, p.campagne_id,
+              (select min(j.cree_le) from ${ns}.journal j where j.company_id = f.company_id and j.type = 'diffusion.confirmee' and j.entite_id = f.id::text) as confirmee_le
+         from ${ns}.diffusions f join ${ns}.portes p on p.issue_id = f.issue_id
+        where f.company_id = $1 and f.etat = 'confirmee'
+          and not exists (select 1 from ${ns}.journal j where j.company_id = f.company_id and j.entite_id = f.id::text and j.type in ('diffusion.bilan_cree', 'diffusion.bilan_sans_mesure'))
+          and (select min(j.cree_le) from ${ns}.journal j where j.company_id = f.company_id and j.type = 'diffusion.confirmee' and j.entite_id = f.id::text) >= $2::timestamptz
+        order by confirmee_le limit 50`,
+      [companyId, DEBUT_RATTRAPAGE_J30],
+    );
+    return rangs
+      .filter((r) => r.confirmee_le)
+      .map((r) => ({ id: String(r.id), issueId: String(r.issue_id), action: String(r.action), canal: String(r.canal), campagneId: String(r.campagne_id), confirmeeLe: iso(r.confirmee_le) }));
+  }
+
   async function listerDiffusions(companyId: string, issueId: string) {
     return (await q(`select * from ${ns}.diffusions where company_id = $1 and issue_id = $2 order by cree_le desc`, [companyId, issueId])).map(diffusionDepuisLigne);
   }
@@ -1779,7 +1801,7 @@ export function creerBase(db: Db) {
 
   return {
     ns,
-    journaliser, lireJournal, datesJournal, abandonsVeilleur, journalExiste, journalExistants, lectureWebDansRun, derniereDateJournal, entreprisesSuivies, tachesOrphelines, tachesFigeesSousPorte,
+    journaliser, lireJournal, datesJournal, diffusionsConfirmeesSansBilan, abandonsVeilleur, journalExiste, journalExistants, lectureWebDansRun, derniereDateJournal, entreprisesSuivies, tachesOrphelines, tachesFigeesSousPorte,
     lireReglages, enregistrerReglages, enregistrerPlafondEntreprise, enregistrerPlafondCampagne, donneesEngagement,
     creerCampagne, listerCampagnes, lireCampagne, creerBrief, dernierBrief,
     enregistrerExigence, creerExigenceSiAbsente, listerExigences, lireExigence, changerExclusion,

@@ -1,6 +1,7 @@
 // Lot P3 : téléchargement BCE (identifiants dans un fichier 0600, portail, plan de téléchargement) et commandes d'exploitation,
 // contre un FAUX portail local. Le vrai portail n'est JAMAIS contacté : il exige l'inscription de l'opérateur.
 
+import { fileURLToPath } from "node:url";
 import { chmodSync, existsSync, readdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -187,7 +188,7 @@ describe("commandes d'exploitation (cli)", () => {
 
   it("osm-importer : importe l'extrait fictif", async () => {
     const d = dossierTemporaire();
-    const r = (await executer(["osm-importer", new URL("./fixtures/extrait-osm.geojsonseq", import.meta.url).pathname, "--date", "2026-10-14"], { PASSERELLE_OSM_INDEX: join(d, "o.sqlite") })) as { compteurs: { retenues: number } };
+    const r = (await executer(["osm-importer", fileURLToPath(new URL("./fixtures/extrait-osm.geojsonseq", import.meta.url)), "--date", "2026-10-14"], { PASSERELLE_OSM_INDEX: join(d, "o.sqlite") })) as { compteurs: { retenues: number } };
     expect(r.compteurs.retenues).toBe(15);
   });
 });

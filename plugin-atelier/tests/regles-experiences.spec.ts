@@ -85,6 +85,15 @@ describe("Bonferroni (plus de deux variantes)", () => {
     expect(r.texte).toMatch(/^B, C font significativement mieux que la référence A ; meilleur taux observé : C \(20 %\), sans supériorité démontrée sur chacune des autres variantes$/u);
   });
 
+  it("la référence est recomparée à la candidate sur toutes les paires, plus strictement que sa comparaison déclarée", () => {
+    // C contre A : p brute 0,0214 ; déclarée (m = 2) 0,0428 : significative ; sur les 3 paires 0,0642 : plus significative, donc pas de gagnant.
+    const r = verdict([v("A", 1000, 100), v("B", 1000, 100), v("C", 1000, 133)]);
+    expect(r.comparaisons[1]!.significatif).toBe(true);
+    expect(r.comparaisons[1]!.pValeurAjustee).toBeCloseTo(0.0428, 3);
+    expect(r.statut).toBe("superieur_reference");
+    expect(r.gagnant).toBeNull();
+  });
+
   it("référence meilleure que l'une des variantes seulement : non concluant", () => {
     const r = verdict([v("A", 1000, 200), v("B", 1000, 120), v("C", 1000, 195)]);
     expect(r.statut).toBe("non_concluant");

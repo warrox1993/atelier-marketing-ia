@@ -340,6 +340,8 @@ export const DossierHumain = z.object({
       corps: z.string(),
     })
     .nullable(),
+  /** Clé du document livrable de la porte (`strategie` : son approbation la publie en connaissance du client). */
+  cleLivrable: z.string().nullable().default(null),
   matrice: z.array(LigneMatrice),
   sources: z.array(Source),
   revues: z.array(VerdictRevue),

@@ -1,6 +1,7 @@
 // Services locaux (PASSERELLE_SERVICES_REELS) : `osm`, `bce` et `bnb` servis par leur fournisseur RÉEL, accès par
 // l'autorisation locale de la passerelle. Un service non branché répond « non_connecte », jamais des données simulées.
 
+import { fileURLToPath } from "node:url";
 import { generateKeyPairSync } from "node:crypto";
 import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -16,7 +17,7 @@ import { PREFIXE_ENVELOPPE, SignataireEnveloppe, verifierEnveloppe } from "../..
 import { demarrer, obtenirJetons, rpc, type PasserelleDeTest } from "../aide.js";
 import { dossierTemporaire } from "./aide-bce.js";
 
-const FIXTURE_OSM = new URL("./fixtures/extrait-osm.geojsonseq", import.meta.url).pathname;
+const FIXTURE_OSM = fileURLToPath(new URL("./fixtures/extrait-osm.geojsonseq", import.meta.url));
 
 describe("PASSERELLE_SERVICES_REELS : lecture du réglage", () => {
   it("vide ou absent : aucun service local", () => {

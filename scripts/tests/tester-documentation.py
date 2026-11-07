@@ -6,6 +6,7 @@ socle Paperclip). Aucune instance, aucun appel réseau. Audit du 29/10/2026, con
 À lancer : python3 -I scripts/tests/tester-documentation.py
 Régénérer les blocs chiffrés de docs/usine-services.md (entre « <!-- genere:… --> » et « <!-- /genere:… --> ») :
 python3 -I scripts/tests/tester-documentation.py --ecrire
+(« bootstrap-organisation.py generer » le fait aussi ; « generer --verifier » appelle --verifier ici.)
 """
 import atexit
 import importlib.util
@@ -413,5 +414,14 @@ if __name__ == "__main__":
     if sys.argv[1:] == ["--ecrire"]:
         ecrire_usine()
         print(f"Blocs régénérés dans {USINE.relative_to(RACINE)}")
+    elif sys.argv[1:] == ["--verifier"]:
+        # Appelé par « bootstrap-organisation.py generer --verifier » : n'écrit rien, échoue si un bloc est périmé.
+        texte = USINE.read_text(encoding="utf-8")
+        perimes = [nom for nom, attendu in blocs_usine().items()
+                   if not (m := motif_bloc(nom).search(texte)) or m.group(2) != attendu]
+        if perimes:
+            print(f"ÉCART : blocs périmés dans {USINE.relative_to(RACINE)} : {', '.join(perimes)}", file=sys.stderr)
+            sys.exit(1)
+        print(f"Blocs de {USINE.relative_to(RACINE)} à jour.")
     else:
         unittest.main(verbosity=1)

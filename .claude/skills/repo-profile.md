@@ -20,6 +20,7 @@ Dépôt à plusieurs modules, sans fichier de construction à la racine :
 - **Full test (CI locale, une suite lourde à la fois) :**
   `npm run typecheck && npm test` dans `plugin-atelier/`, `passerelle/`, `whatsapp/` ;
   `python3 -m pytest -q fabrique/tests` ;
+  organisation et outillage : chaque `scripts/tests/tester-*.py` lancé par `python3 -I` (tous à 0 échec ; `tester-phoenix-exporter.py` exige le paquet Python `opentelemetry`), puis `python3 -I scripts/verifier-organisation.py` et `python3 -I scripts/bootstrap-organisation.py generer --verifier` (la copie de travail a besoin de `paperclip/` : lien symbolique vers celui du dépôt principal) ;
   socle : `npx tsc -b && npx vitest run` dans `paperclip/ui/`, puis `npx vitest run <tests touchés par socle/patches>` dans `paperclip/` ;
   e2e : `tests/e2e/atelier/preparer.sh atelier-e2e 3590 54790` sur une instance NEUVE, puis
   `node tests/e2e/atelier/node_modules/@playwright/test/cli.js test --config tests/e2e/atelier/playwright.config.ts`,

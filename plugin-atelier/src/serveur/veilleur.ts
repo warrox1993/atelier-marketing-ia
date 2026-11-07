@@ -26,6 +26,7 @@
  */
 import type { PluginContext } from "@paperclipai/plugin-sdk";
 import type { BaseAtelier } from "./base.js";
+import { rattraperBilansJ30 } from "./bilan-j30.js";
 
 export const VEILLEUR = {
   seuilMinutesDefaut: 15,
@@ -46,6 +47,8 @@ export interface DependancesVeilleur {
   /** Configuration de l'entreprise (instanceConfigSchema) ; `veilleurSeuilMinutes` facultatif. */
   config: (companyId: string) => Promise<Record<string, unknown> | null | undefined>;
   maintenant?: () => Date;
+  /** Rattrapage des bilans J+30 non créés à la confirmation (aucun réveil d'agent : il ne fait que créer la tâche de bilan). */
+  bilan?: { ctx: PluginContext; base: BaseAtelier };
 }
 
 export function seuilMinutes(config: Record<string, unknown> | null | undefined): number {
@@ -153,6 +156,7 @@ export function creerVeilleur(d: DependancesVeilleur) {
       for (const companyId of await d.base.entreprisesSuivies()) {
         try {
           await passeEntreprise(companyId, r, tentatives);
+          if (d.bilan) await rattraperBilansJ30(d.bilan, companyId);
         } catch (err) {
           d.logger.warn("Veilleur : passe interrompue pour une entreprise", { companyId, erreur: err instanceof Error ? err.message : String(err) });
         }

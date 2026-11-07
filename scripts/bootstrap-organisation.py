@@ -719,14 +719,25 @@ def cmd_generer(args) -> int:
             ecarts.append(chemin)
             if not args.verifier:
                 chemin.write_text(contenu, encoding="utf-8")
+    # Blocs chiffrés de docs/usine-services.md : leur générateur vit dans le test de documentation.
+    # Copie partielle (bootstrap-tests.sh) : ni le test ni la documentation n'y sont copiés.
+    script_doc = RACINE / "scripts" / "tests" / "tester-documentation.py"
+    doc = (subprocess.run([sys.executable, "-I", str(script_doc), "--verifier" if args.verifier else "--ecrire"],
+                          capture_output=True, text=True) if script_doc.exists()
+           else subprocess.CompletedProcess([], 0, "", ""))
     if args.verifier:
-        if ecarts:
+        if ecarts or doc.returncode != 0:
             for chemin in ecarts:
                 print(f"ÉCART : {chemin.relative_to(RACINE)} ne correspond pas au registre", file=sys.stderr)
+            if doc.returncode != 0:
+                print(doc.stderr.strip() or doc.stdout.strip(), file=sys.stderr)
             print("Lancez : python3 -I scripts/bootstrap-organisation.py generer", file=sys.stderr)
             return 1
-        print(f"Fichiers générés à jour ({len(attendus)} vérifiés).")
+        print(f"Fichiers générés à jour ({len(attendus)} vérifiés, blocs de la documentation compris).")
         return 0
+    if doc.returncode != 0:
+        print(doc.stderr.strip() or doc.stdout.strip(), file=sys.stderr)
+        return 1
     print(f"{len(ecarts)} fichier(s) réécrit(s) sur {len(attendus)}.")
     for chemin in ecarts:
         print(f"  {chemin.relative_to(RACINE)}")
