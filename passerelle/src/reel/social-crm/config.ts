@@ -136,7 +136,7 @@ export interface ConfigSocialCrmReel {
    * de la boucle locale. Vide ou absent : boucle locale seulement (Paperclip local).
    */
   redirectionsPermises?: readonly string[];
-  /** Mention d'information IA des messages directs (choix de transparence, voir mention-ia.ts) ; absente : mention française par défaut. */
+  /** Mention d'information IA des messages directs (voir mention-ia.ts) ; absente ou nulle : aucune mention. */
   mentionIa?: MentionIa;
 }
 

@@ -1413,6 +1413,36 @@ def permissions_agent_a_corriger(detail: dict) -> dict | None:
     return corps_permissions(detail, canCreateSkills=False)
 
 
+def assurer_usage_non_tarife_porte(api: Api, company_id: str, agents: dict) -> int:
+    """Passe la Porte en usage non tarifé autorisé : en `block`, son premier passage la met en pause
+    (mesuré sur celle de l'Observatoire ; décision du 30/10, méthode : docs/observatoire/deploiement-phase-3.md §6 bis)."""
+    porte = agents.get("porte")
+    if not porte:
+        return 0
+
+    def politiques() -> list[dict]:
+        rep = api.get(f"/companies/{company_id}/budgets/overview")
+        return [p for p in rep.get("policies", []) if p.get("scopeType") == "agent" and p.get("scopeId") == porte["id"]]
+
+    lues = politiques()
+    if not lues:
+        print("  avertissement : aucune politique de budget pour la Porte ; usage non tarifé à poser quand elle existera.")
+        return 0
+    a_passer = [p for p in lues if p.get("unpricedUsagePolicy") != "allow"]
+    for p in a_passer:
+        # Sans `amount`, l'upsert du socle garde le plafond, l'arrêt dur et l'état actif.
+        api.appel("POST", f"/companies/{company_id}/budgets/policies", {
+            "scopeType": "agent",
+            "scopeId": porte["id"],
+            "metric": p["metric"],
+            "windowKind": p["windowKind"],
+            "unpricedUsagePolicy": "allow",
+        })
+    if a_passer and any(p.get("unpricedUsagePolicy") != "allow" for p in politiques()):
+        raise ErreurAtelier("la Porte reste en usage non tarifé bloqué après l'écriture")
+    return len(a_passer)
+
+
 def assurer_permissions_agents(api: Api, agents: dict) -> int:
     """Pose canCreateSkills=false sur chaque agent importé qui ne l'a pas déjà (le Gardien le porte à sa création)."""
     modifies = 0
@@ -1976,6 +2006,27 @@ def besoins_connexions(reg_agents: dict) -> dict[str, list[tuple[str, str]]]:
     return besoins
 
 
+# Le socle borne tout délai d'outil à 60 s (tool-gateway.ts) : une valeur plus haute serait sans effet.
+# Les outils de ces services durent au plus 55 s (passerelle : auditer-page.ts, extraire-site.ts).
+DELAI_OUTILS_MS = {"extraction": 60000, "audit": 60000}
+
+
+def assurer_delai_outils(api: Api, cle: str, cx: dict) -> int:
+    """Pose `config.toolTimeoutMs` d'une connexion à outils lents, en renvoyant toute la configuration : le socle la remplace."""
+    delai = DELAI_OUTILS_MS.get(cle)
+    if delai is None or (cx.get("config") or {}).get("toolTimeoutMs") == delai:
+        return 0
+    try:
+        # Relue juste avant d'écrire : la boucle des accès ou un rafraîchissement OAuth ont pu la changer depuis la liste.
+        config = api.get(f"/tool-connections/{cx['id']}").get("config") or {}
+        api.appel("PATCH", f"/tool-connections/{cx['id']}", {"config": {**config, "toolTimeoutMs": delai}})
+    except ErreurAtelier as e:
+        # Réglage secondaire : la fabrique, le Gardien et l'état écrit passent après cette fonction.
+        print(f"  avertissement : délai d'outils non posé sur « {cle} » ({e}) ; nouvel essai au prochain passage.")
+        return 0
+    return 1
+
+
 def assurer_connexions(api: Api, company_id: str, reg_agents: dict, agents: dict) -> tuple[int, list[str]]:
     """Réserve chaque connexion de la passerelle EXISTANTE aux rôles qui la déclarent.
 
@@ -2004,7 +2055,8 @@ def assurer_connexions(api: Api, company_id: str, reg_agents: dict, agents: dict
     profils = {p.get("profileKey"): p for p in (rep_profils.get("profiles", []) if isinstance(rep_profils, dict) else rep_profils)}
     interdits = {a["slug"]: a.get("outilsBloques") or {} for a in reg_agents["agents"]}
     ecritures, resume = 0, []
-    for cle, cx in connexions_passerelle(api, company_id, services):
+    connexions = connexions_passerelle(api, company_id, services)
+    for cle, cx in connexions:
         roles = [(s, acces) for s, acces in besoins[cle] if s in agents]
         ids_roles = sorted(agents[s]["id"] for s, _ in roles)
         profil = profils.get(f"app:{cx['id']}")
@@ -2059,6 +2111,8 @@ def assurer_connexions(api: Api, company_id: str, reg_agents: dict, agents: dict
             ecritures += 1
         detail = (", ".join(f"{s} ({a})" for s, a in roles) or "aucun rôle") + ("" if profil else " ; connexion non terminée : accès appliqué à sa finalisation")
         resume.append(f"{cle} « {cx.get('name')} » : {detail}")
+    # Après la boucle : un refus sur le délai ne doit pas empêcher de resserrer les accès.
+    ecritures += sum(assurer_delai_outils(api, cle, cx) for cle, cx in connexions)
     return ecritures, resume
 
 
@@ -2329,6 +2383,13 @@ def appliquer_organisation(api: Api, reg_agents: dict, reg_orga: dict, fichiers:
     ecr_permissions = assurer_permissions_agents(api, agents)
     if ecr_permissions:
         print(f"Permissions : canCreateSkills=false posé sur {ecr_permissions} agent(s) (M3).")
+    try:
+        ecr_budget = assurer_usage_non_tarife_porte(api, company_id, agents)
+        if ecr_budget:
+            print(f"Budget : Porte passée en usage non tarifé autorisé ({ecr_budget} politique(s)).")
+    except ErreurAtelier as e:
+        # Réglage secondaire : la gouvernance et le resserrement des connexions passent après cette étape.
+        print(f"  avertissement : usage non tarifé de la Porte non posé ({e}) ; relancer « appliquer ».")
     try:
         if assurer_roles_agents(api, company_id, agents):
             print("Rôles des agents Mesure et Stratège inscrits dans la configuration du plugin (rolesAgents).")

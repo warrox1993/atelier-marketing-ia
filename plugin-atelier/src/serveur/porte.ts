@@ -15,6 +15,7 @@ import { controlerCitationsConnaissances, type VersionPourValidite } from "./reg
 import { controlerLivrableProspection, type ResultatCouverture } from "./couverture-prospection.js";
 import { reglesObservatoire, type EntreesPorteObs } from "./observatoire/regles-porte-obs.js";
 import { CONSIGNE_REDACTION, controlerRedaction } from "./regles-redaction.js";
+import { controlerPromesses } from "./regles-promesses.js";
 import { telephonesEnClair } from "./regles-telephone.js";
 
 export interface PreuveEntree {
@@ -80,6 +81,11 @@ export interface EntreesPorte {
    */
   revisionsDejaRefusees: string[];
   /**
+   * M2 (#22) : révisions distinctes déjà bloquées pour la seule source manquante depuis la dernière action humaine
+   * (`revisionsBloqueesSansSource`). À partir de `BLOCAGES_SOURCE_TOLERES`, la suivante est un refus de fond. Absente : aucune limite.
+   */
+  revisionsBloqueesSansSource?: string[];
+  /**
    * Garde des données simulées (lot L9) : sources de la tâche, mode effectif, corps du
    * livrable courant. Absente : la règle ne s'applique pas (compatibilité des appels existants).
    */
@@ -120,14 +126,47 @@ export function normaliserElement(valeur: string): string {
     .trim();
 }
 
-const BLOQUANTS: ReadonlySet<CodeMotifPorte> = new Set(["information_manquante", "revue_bloquee_information"]);
+/** Contrôle impossible (donnée absente, revue bloquée) : la décision est `BLOQUE_INFORMATION`, quels que soient les autres motifs. */
+export const BLOQUANTS: ReadonlySet<CodeMotifPorte> = new Set(["information_manquante", "revue_bloquee_information"]);
+
+/**
+ * Lot 2 (#22) : source à fournir. Seule (ou avec des `BLOQUANTS`), elle donne `BLOQUE_INFORMATION` ;
+ * mêlée à un défaut de fond (citation inventée…), elle ne le masque pas : `REFUS`. Jamais de cycle
+ * consommé pour elle (`MOTIFS_SANS_CYCLE`), donc pas de hausse d'effort. `BLOQUANTS` et cet ensemble
+ * forment `MOTIFS_ATTENTE_INFORMATION` (agents/decision-porte.mjs).
+ */
+export const SOURCES_A_FOURNIR: ReadonlySet<CodeMotifPorte> = new Set(["chiffre_offre_sans_source"]);
+
+/** M2 (#22) : révisions distinctes bloquées pour la seule source manquante, tolérées avant un refus de fond. */
+export const BLOCAGES_SOURCE_TOLERES = 2;
+
+/** Blocage dû à la seule source à fournir : la porte ne le compte pas comme un cycle. */
+function sourceSeule(motifs: ReadonlyArray<{ code: string }>): boolean {
+  return motifs.length > 0 && motifs.every((m) => SOURCES_A_FOURNIR.has(m.code as CodeMotifPorte));
+}
+
+/**
+ * M2 (#22) : révisions distinctes (hors révision courante) bloquées pour la seule source manquante, depuis la
+ * dernière action humaine (relance, demande de correction, remise à zéro). Lu dans l'historique des évaluations.
+ */
+export function revisionsBloqueesSansSource(
+  historique: ReadonlyArray<{ revisionId: string | null; decision: string; motifs: ReadonlyArray<{ code: string }>; creeLe: string }>,
+  derniereActionHumaine: string | null | undefined,
+  revisionCourante: string | null,
+): string[] {
+  const revisions = historique
+    .filter((h) => h.decision === "BLOQUE_INFORMATION" && sourceSeule(h.motifs) && h.revisionId && h.revisionId !== revisionCourante)
+    .filter((h) => !derniereActionHumaine || h.creeLe > derniereActionHumaine)
+    .map((h) => h.revisionId as string);
+  return [...new Set(revisions)];
+}
 
 /**
  * M5 (revue indépendante) : motifs qui ne disent rien du FOND du livrable (revue pas encore
  * faite sur cette révision, cycles épuisés). Un refus composé de ces seuls motifs ne consomme
  * pas de cycle de correction : une évaluation prématurée ne pénalise pas le producteur.
  */
-export const MOTIFS_SANS_CYCLE: ReadonlySet<CodeMotifPorte> = new Set(["revue_requise_absente", "revue_sur_ancienne_version", "cycles_epuises", "obs_traduction_base_perimee"]);
+export const MOTIFS_SANS_CYCLE: ReadonlySet<CodeMotifPorte> = new Set(["revue_requise_absente", "revue_sur_ancienne_version", "cycles_epuises", "obs_traduction_base_perimee", ...SOURCES_A_FOURNIR]);
 
 /** Un refus de porte consomme-t-il un cycle ? Seulement s'il porte au moins un motif de fond. */
 export function refusDeFond(motifs: ReadonlyArray<{ code: string }>): boolean {
@@ -291,6 +330,9 @@ export function evaluerPorte(e: EntreesPorte): ResultatPorte {
     for (const t of telephonesEnClair(e.faits.livrable, e.faits.telephonesFiche ?? [])) {
       motifs.push(motif("numero_telephone_en_clair", `Numéro de téléphone en clair ligne ${t.ligne} : il se dépose chiffré dans la fiche du prospect (route tache.prospects.telephone), jamais dans un document.`, { emplacement: `ligne ${t.ligne}` }));
     }
+    for (const p of controlerPromesses(e.faits.livrable)) {
+      motifs.push(motif(p.code, `Promesse interdite ligne ${p.ligne} (« ${p.extrait} ») : la retirer ou la nier explicitement.`, { emplacement: `ligne ${p.ligne}`, element: p.libelle }));
+    }
     for (const r of controlerRedaction(e.faits.livrable)) {
       motifs.push(motif(r.code, `${CONSIGNE_REDACTION[r.code]} (${r.occurrences} fois, d'abord ligne ${r.ligne} : « ${r.extrait} »).`, { emplacement: `ligne ${r.ligne}`, element: r.extrait }));
     }
@@ -313,7 +355,15 @@ export function evaluerPorte(e: EntreesPorte): ResultatPorte {
     );
   }
 
-  const bloque = dejaEpuises || motifs.some((m) => BLOQUANTS.has(m.code));
+  // M2 : un agent qui renvoie sans fin des révisions sans source finit par consommer ses cycles.
+  const blocagesSource = new Set((e.revisionsBloqueesSansSource ?? []).filter((r) => r !== revision));
+  if (revision && !dejaEpuises && sourceSeule(motifs) && blocagesSource.size >= BLOCAGES_SOURCE_TOLERES) {
+    motifs.push(
+      motif("source_manquante_repetee", `${blocagesSource.size} révision(s) déjà bloquées pour une source manquante depuis la dernière action humaine : celle-ci est refusée sur le fond et consomme un cycle.`),
+    );
+  }
+
+  const bloque = dejaEpuises || motifs.some((m) => BLOQUANTS.has(m.code)) || sourceSeule(motifs);
   let decision: DecisionPorte = bloque ? "BLOQUE_INFORMATION" : motifs.length > 0 ? "REFUS" : "PASS";
 
   const refusees = new Set(e.revisionsDejaRefusees);

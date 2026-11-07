@@ -4,6 +4,7 @@
  * par l'hôte (isolation entre entreprises) ; l'identité vient de l'hôte.
  */
 import { createHash, randomUUID, type KeyObject } from "node:crypto";
+import { CLE_DOCUMENT_MANDAT, horsMandat, lireMandat } from "../contrats/mandat.js";
 import type { PluginContext } from "@paperclipai/plugin-sdk";
 import {
   ACTIONS_UI,
@@ -64,7 +65,7 @@ import { ErreurAtelier, erreur, erreurValidation } from "./erreurs.js";
 import { exigerLecteurWeb } from "./lecture-web.js";
 import { analyserImport } from "./imports.js";
 import { lireUrl, transportReseau, type TransportHttp } from "./lecture-url.js";
-import { canonique, evaluerPorte, normaliserElement, refusDeFond } from "./porte.js";
+import { canonique, evaluerPorte, normaliserElement, refusDeFond, revisionsBloqueesSansSource } from "./porte.js";
 import { OUTILS_ECRITURE, SERVICE_DU_CANAL, apercuAppel, controlerAppel, estOutilEcriture, preparerPreuve } from "./preuve-approbation.js";
 import { verifierDiffusion } from "./regles-diffusion.js";
 import { chargeEcriture, cleIdempotenceSignee, empreinteArguments, empreinteCle, lireClePrivee, lireClePublique, signerRevocations, verifierEnveloppe, type ChargePreuve } from "./signatures.js";
@@ -107,6 +108,7 @@ import { routesRealite } from "./services-realite.js";
 import { lecturesRapportSql, routesRapport } from "./services-rapport.js";
 import { lecturesTableauSql, routesTableau } from "./services-tableau.js";
 import { lecturesConsentementsSql, routesConsentements } from "./services-consentements.js";
+import { assurerBilanJ30 } from "./bilan-j30.js";
 import { creerStockExperiences, routesExperiences } from "./services-experiences.js";
 import { routesDictee } from "./services-dictee.js";
 import { routesVoix } from "./services-voix.js";
@@ -116,7 +118,7 @@ import { routesImportUrl } from "./services-import-url.js";
 import { faitsDeLaFiche, routesFaits } from "./services-faits.js";
 import { MOTS_VIDES_FRANCAIS } from "./connaissances/recherche.js";
 import { controlerDestinatairesCourriel, routesProspection, type ServicesProspection } from "./services-prospection.js";
-import { creerConnaissances, type DependancesConnaissances } from "./services-connaissances.js";
+import { CLE_DOCUMENT_STRATEGIE, creerConnaissances, type DependancesConnaissances } from "./services-connaissances.js";
 import { liensDossierSujet, rubriquesDuDossier, trouverDossierSujet } from "./dossier-sujet.js";
 
 type Issue = NonNullable<Awaited<ReturnType<PluginContext["issues"]["get"]>>>;
@@ -535,7 +537,10 @@ export function creerServices(ctx: PluginContext, options: { transportReel?: Tra
         ...verdicts.filter((v) => v.verdict === "CHANGES_REQUESTED" && v.revisionId !== liv?.revisionId).map((v) => v.revisionId),
       ]),
     ];
-    const { maximum } = await maximumCycles(companyId, issueId, porte);
+    const { maximum, relances } = await maximumCycles(companyId, issueId, porte);
+    // M2 : la tolérance aux sources manquantes repart de la dernière action humaine (relance, correction, remise).
+    const [decisionsHumaines, remisesHumaines] = await Promise.all([base.listerDecisions(companyId, issueId), base.datesJournal(companyId, issueId, REMISE_HUMAINE)]);
+    const derniereActionHumaine = [...relances.map((r) => r.creeLe), ...decisionsHumaines.filter((d) => d.action === "demander_correction").map((d) => d.creeLe), ...remisesHumaines].sort().at(-1) ?? null;
     const donneesDemo = await entreesDonneesDemo(companyId, issueId, await base.lireCampagne(companyId, porte.campagneId), liv, couvertures);
     const resultat = evaluerPorte({
       porte: { exigencesCiblees: porte.exigencesCiblees, revuesRequises: porte.revuesRequises, maxCycles: maximum },
@@ -548,6 +553,7 @@ export function creerServices(ctx: PluginContext, options: { transportReel?: Tra
       })),
       constats: constats.map((c) => ({ findingId: c.findingId, gravite: c.gravite, statutResolution: c.statutResolution, role: c.role })),
       revisionsDejaRefusees,
+      revisionsBloqueesSansSource: revisionsBloqueesSansSource(historique, derniereActionHumaine, liv?.revisionId ?? null),
       donneesDemo,
       faits: liv ? await (async () => {
         const marque = (await base.marques(companyId))[0] ?? null;
@@ -1542,6 +1548,15 @@ export function creerServices(ctx: PluginContext, options: { transportReel?: Tra
       companyId: r.companyId, message: `Atelier : issue de la diffusion ${diffusion.action} sur ${diffusion.canal} rapportée par la passerelle : ${nouvelEtat}.`,
       entityType: "issue", entityId: issue.id, metadata: { acteur: `${r.acteur.type}:${r.acteur.id}`, diffusionId: id },
     }).catch(() => undefined);
+    if (nouvelEtat === "confirmee") {
+      // La confirmation est déjà enregistrée : un échec du bilan ne la défait pas (il est journalisé dans les traces du plugin).
+      try {
+        const porte = await base.lirePorte(r.companyId, issue.id);
+        if (porte) await assurerBilanJ30({ ctx, base }, { companyId: r.companyId, tache: issue, diffusion, campagneId: porte.campagneId, confirmeeLe: new Date() });
+      } catch (err) {
+        ctx.logger.warn("Bilan J+30 non créé", { diffusionId: id, erreur: err instanceof Error ? err.message : String(err) });
+      }
+    }
     return { corps: (await base.listerDiffusions(r.companyId, issue.id)).find((d) => d.id === id) };
   };
 
@@ -1828,6 +1843,11 @@ export function creerServices(ctx: PluginContext, options: { transportReel?: Tra
       companyId, type: `decision.${entree.action}`, entite: "tache", entiteId: issue.id, issueId: issue.id, acteur: acteur.userId,
       donnees: { revisionId: liv.revisionId, portee: entree.portee, mode: modeDecision },
     });
+    // Stratégie : l'approbation humaine du document `strategie` la publie en connaissance (la décision est déjà humaine, d'où l'appel
+    // interne et non la route d'import). Une panne remonte à l'humain ; rejouer la décision est sans doublon (même empreinte).
+    if (entree.action === "approuver" && porte.cleLivrable === CLE_DOCUMENT_STRATEGIE) {
+      await connaissances.publierStrategie(companyId, acteur, liv.corps ?? "");
+    }
     // S-7 : la dernière décision prime ; les preuves remises sous une décision antérieure sont révoquées.
     await revoquer(companyId, issue.id, { saufDecision: entree.action === "approuver" ? id : null }, `décision « ${entree.action} » du ${new Date().toISOString().slice(0, 10)} par ${acteur.userId}`, acteur.userId);
     // 16/10/2026 : une correction demandée par l'humain va au Coordinateur (tâche parente), qui répartit ;
@@ -2125,9 +2145,31 @@ export function creerServices(ctx: PluginContext, options: { transportReel?: Tra
       erreur("elevation_refusee", "Création de campagne refusée : la tâche issueId n'est pas assignée à l'agent appelant.");
     }
     const interactions = await ctx.issues.listInteractions(tache.id, companyId);
-    const planAccepte = interactions.some((i) => i.kind === "request_confirmation" && i.status === "accepted" && Boolean(i.resolvedByUserId) && !i.resolvedByAgentId);
-    if (!planAccepte) {
+    const acceptee = (i: (typeof interactions)[number]) => i.kind === "request_confirmation" && i.status === "accepted" && Boolean(i.resolvedByUserId) && !i.resolvedByAgentId;
+    // Une approbation d'outil, de secret ou de connexion n'est jamais un accord sur un plan.
+    const accordDePlan = (i: (typeof interactions)[number]) => {
+      const p = (i.payload ?? {}) as { toolAction?: unknown; secretProposal?: unknown; connectionAuthorization?: unknown };
+      return acceptee(i) && !p.toolAction && !p.secretProposal && !p.connectionAuthorization;
+    };
+    const doc = await ctx.issues.documents.get(tache.id, CLE_DOCUMENT_MANDAT, companyId);
+    const aMandat = Boolean(doc?.latestRevisionId);
+    if (!aMandat && !interactions.some(accordDePlan)) {
       erreur("elevation_refusee", "Création de campagne refusée : aucune demande de confirmation (request_confirmation) de la tâche issueId n'a été acceptée par un humain. Publier le plan, attendre l'acceptation, puis réessayer.");
+    }
+    // Mandat (une seule confirmation) : s'il existe, la campagne doit rester dans ce que l'humain a accepté sur sa carte.
+    if (doc?.latestRevisionId) {
+      const mandat = lireMandat(doc.body);
+      const nouvelAccord = "Demander un nouvel accord à l'humain (carte request_confirmation), puis réécrire le mandat.";
+      if (!mandat) erreur("elevation_refusee", `Création de campagne refusée : le document « mandat » de la tâche est illisible. ${nouvelAccord}`);
+      const visee = (i: (typeof interactions)[number]) => {
+        const t = (i.payload as { target?: { type?: unknown; key?: unknown; revisionId?: unknown } } | undefined)?.target;
+        return accordDePlan(i) && t?.type === "issue_document" && t.key === CLE_DOCUMENT_MANDAT && t.revisionId === doc.latestRevisionId;
+      };
+      if (!interactions.some(visee)) {
+        erreur("elevation_refusee", `Création de campagne refusée : aucune carte acceptée par un humain ne vise la révision courante du mandat (payload.target = issue_document, key « mandat », revisionId de la révision courante). ${nouvelAccord}`);
+      }
+      const hors = horsMandat(mandat, entree);
+      if (hors.length > 0) erreur("elevation_refusee", `Création de campagne refusée : hors du mandat accepté (${hors.join(" ; ")}). ${nouvelAccord}`);
     }
     return tache.id;
   }

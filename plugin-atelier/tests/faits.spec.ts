@@ -95,6 +95,16 @@ function banc() {
 }
 
 describe("identifiants légaux (fonction pure)", () => {
+  it("un même numéro déclaré en bce et en fsma est accepté sous les deux mots-clés, un numéro absent de la fiche est refusé", () => {
+    // Le numéro d'entreprise est aussi le numéro d'inscription FSMA : seule la fiche fait foi, jamais le format du numéro.
+    const fiche = faitsDeLaFiche({ entites: [{ nom: "Courtage Exemple", type: "entite_juridique", identifiants: [{ type: "bce", valeur: BCE }, { type: "fsma", valeur: BCE }] }] });
+    expect(controlerIdentifiantsLegaux(`Numéro BCE ${BCE}, numéro FSMA ${BCE}.`, fiche)).toEqual([]);
+    expect(controlerIdentifiantsLegaux("Numéro FSMA 0999.888.777.", fiche)).toHaveLength(1);
+    expect(controlerIdentifiantsLegaux("Numéro BCE 0999.888.777.", fiche)).toHaveLength(1);
+    // L'exemple de signalement des consignes : le numéro faux et le bon, dans la même phrase.
+    expect(controlerIdentifiantsLegaux(`La page affiche 0999.888.777 comme numéro FSMA, alors que le FSMA de la fiche est ${BCE}.`, fiche)).toEqual([]);
+  });
+
   it("inversion FSMA/BCE : le BCE cité comme FSMA est signalé", () => {
     const e = controlerIdentifiantsLegaux(`Numéro FSMA ${BCE} pour le courtier.`, FICHE);
     expect(e).toHaveLength(1);

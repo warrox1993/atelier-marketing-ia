@@ -1,0 +1,304 @@
+From 4c3a8b510c46dfa70a6e60df7ec52b22b4803d5a Mon Sep 17 00:00:00 2001
+From: Jean-Baptiste Dhondt <114347858+warrox1993@users.noreply.github.com>
+Date: Thu, 5 Nov 2026 00:07:10 +0100
+Subject: [PATCH 173/174] =?UTF-8?q?fix(socle):=20=C3=A9crans=20D=C3=A9cisi?=
+ =?UTF-8?q?ons=20et=20historique=20en=20fran=C3=A7ais?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01EThpSQivkg5UcW9gyGppeG
+---
+ .../KeyboardShortcutsCheatsheet.test.tsx      | 19 +++++
+ .../KeyboardShortcutsCheatsheet.tsx           |  6 +-
+ ui/src/components/Sidebar.test.tsx            |  3 +-
+ ui/src/components/Sidebar.tsx                 |  2 +-
+ .../decision-models/DecisionHistory.test.tsx  | 41 +++++++++--
+ .../decision-models/DecisionHistory.tsx       |  6 +-
+ ui/src/pages/Costs.test.tsx                   |  2 +-
+ ui/src/pages/DecisionQueuePage.tsx            |  2 +-
+ ui/src/pages/DecisionsLibelles.test.tsx       | 70 +++++++++++++++++++
+ ui/src/pages/WhatNeedsMe.tsx                  |  4 +-
+ 10 files changed, 139 insertions(+), 16 deletions(-)
+ create mode 100644 ui/src/pages/DecisionsLibelles.test.tsx
+
+diff --git a/ui/src/components/KeyboardShortcutsCheatsheet.test.tsx b/ui/src/components/KeyboardShortcutsCheatsheet.test.tsx
+index 92622d8e14..49868eae37 100644
+--- a/ui/src/components/KeyboardShortcutsCheatsheet.test.tsx
++++ b/ui/src/components/KeyboardShortcutsCheatsheet.test.tsx
+@@ -33,4 +33,23 @@ describe("KeyboardShortcutsCheatsheet", () => {
+       root.unmount();
+     });
+   });
++
++  it("écrit en français le groupe Décisions et ses raccourcis", () => {
++    const root = createRoot(container);
++    flushSync(() => {
++      root.render(<KeyboardShortcutsCheatsheetContent />);
++    });
++
++    const text = container.textContent ?? "";
++    expect(text).toContain("Décisions");
++    expect(text).toContain("Ouvrir ou fermer la décision sélectionnée");
++    expect(text).toContain("Écarter la décision sélectionnée");
++    expect(text).not.toContain("Open or close selected decision");
++    expect(text).not.toContain("Dismiss selected decision");
++    expect(text).not.toMatch(/\bDecisions\b/);
++
++    flushSync(() => {
++      root.unmount();
++    });
++  });
+ });
+diff --git a/ui/src/components/KeyboardShortcutsCheatsheet.tsx b/ui/src/components/KeyboardShortcutsCheatsheet.tsx
+index 210c9f302f..58de6e11b9 100644
+--- a/ui/src/components/KeyboardShortcutsCheatsheet.tsx
++++ b/ui/src/components/KeyboardShortcutsCheatsheet.tsx
+@@ -39,14 +39,14 @@ const sections: ShortcutSection[] = [
+     ],
+   },
+   {
+-    title: "Decisions",
++    title: "Décisions",
+     shortcuts: [
+       { keys: ["j"], label: "Move down" },
+       { keys: ["↓"], label: "Move down" },
+       { keys: ["k"], label: "Move up" },
+       { keys: ["↑"], label: "Move up" },
+-      { keys: ["Enter"], label: "Open or close selected decision" },
+-      { keys: ["x"], label: "Dismiss selected decision" },
++      { keys: ["Enter"], label: "Ouvrir ou fermer la décision sélectionnée" },
++      { keys: ["x"], label: "Écarter la décision sélectionnée" },
+     ],
+   },
+   {
+diff --git a/ui/src/components/Sidebar.test.tsx b/ui/src/components/Sidebar.test.tsx
+index db4f6f7776..e68a0b74b3 100644
+--- a/ui/src/components/Sidebar.test.tsx
++++ b/ui/src/components/Sidebar.test.tsx
+@@ -638,8 +638,9 @@ describe("Sidebar", () => {
+ 
+     const primaryNavLinks = [...container.querySelectorAll("nav > div:first-child a")];
+     const decisionsLink = primaryNavLinks.find(
+-      (anchor) => anchor.textContent?.trim() === "Decisions",
++      (anchor) => anchor.textContent?.trim() === "Décisions",
+     );
++    expect(decisionsLink?.getAttribute("href")).toBe("/decisions");
+     const statusLink = primaryNavLinks.find((anchor) => anchor.getAttribute("href") === "/status");
+ 
+     expect(statusLink?.textContent).toContain("Status");
+diff --git a/ui/src/components/Sidebar.tsx b/ui/src/components/Sidebar.tsx
+index 88ca2c75a0..95a17aa132 100644
+--- a/ui/src/components/Sidebar.tsx
++++ b/ui/src/components/Sidebar.tsx
+@@ -245,7 +245,7 @@ export function Sidebar({ children }: { children?: ReactNode }) {
+             {showDecisions ? (
+               <SidebarNavItem
+                 to="/decisions"
+-                label="Decisions"
++                label="Décisions"
+                 icon={ListChecks}
+                 badge={attentionCount}
+                 badgeLabel="decisions"
+diff --git a/ui/src/components/decision-models/DecisionHistory.test.tsx b/ui/src/components/decision-models/DecisionHistory.test.tsx
+index 46f5130d56..060307351a 100644
+--- a/ui/src/components/decision-models/DecisionHistory.test.tsx
++++ b/ui/src/components/decision-models/DecisionHistory.test.tsx
+@@ -12,10 +12,10 @@ vi.mock("@/context/CompanyContext", () => ({
+ 
+ describe("model history setup links", () => {
+   it.each([
+-    [false, true, "/ACM/company/settings/connections", "Configure a decision model"],
+-    [false, false, "/ACM/company/settings", "Configure a decision model"],
+-    [true, true, "/ACM/company/settings/connections", "Configure fast response"],
+-    [true, false, "/ACM/company/settings/instance/experimental", "Enable experimental fast responses"],
++    [false, true, "/ACM/company/settings/connections", "Configurer un modèle de décision"],
++    [false, false, "/ACM/company/settings", "Configurer un modèle de décision"],
++    [true, true, "/ACM/company/settings/connections", "Configurer la réponse rapide"],
++    [true, false, "/ACM/company/settings/instance/experimental", "Activer les réponses rapides (expérimental)"],
+   ] as const)("routes setup with fast response %s and experiment %s", (fastResponse, connectionsEnabled, href, label) => {
+     const container = document.createElement("div");
+     const root = createRoot(container);
+@@ -32,3 +32,36 @@ describe("model history setup links", () => {
+     }
+   });
+ });
++
++describe("libellés français de l'historique", () => {
++  function render(entries: Parameters<typeof DecisionHistoryTable>[0]["entries"], fastResponse: boolean) {
++    const container = document.createElement("div");
++    const root = createRoot(container);
++    flushSync(() => root.render(
++      <MemoryRouter>
++        <DecisionHistoryTable entries={entries} fastResponse={fastResponse} />
++      </MemoryRouter>,
++    ));
++    return { container, cleanup: () => flushSync(() => root.unmount()) };
++  }
++
++  it.each([
++    [false, "Aucune demande de décision sur cette période.", "Configurer un modèle de décision"],
++    [true, "Aucune réponse rapide sur cette période.", "Configurer la réponse rapide"],
++  ] as const)("état vide avec réponse rapide %s", (fastResponse, vide, lien) => {
++    const { container, cleanup } = render([], fastResponse);
++    expect(container.textContent).toBe(`${vide} ${lien} pour lancer un essai.`);
++    cleanup();
++  });
++
++  it.each([
++    [false, "Demandes de décision"],
++    [true, "Réponses rapides"],
++  ] as const)("tableau avec réponse rapide %s : intitulé et aria-label", (fastResponse, ariaLabel) => {
++    const entry = { id: "e1", startedAt: "2026-11-01T10:00:00Z", feature: "x", actorType: "system", status: "succeeded", model: "m", durationMs: 1000, inputTokens: 1, outputTokens: 1, costCents: 1, costStatus: "unpriced" };
++    const { container, cleanup } = render([entry as never], fastResponse);
++    expect(container.querySelector("table")?.getAttribute("aria-label")).toBe(ariaLabel);
++    expect(container.querySelector("p")?.textContent).toBe("Demandes récentes. Les entrées ne sont pas conservées.");
++    cleanup();
++  });
++});
+diff --git a/ui/src/components/decision-models/DecisionHistory.tsx b/ui/src/components/decision-models/DecisionHistory.tsx
+index 99f095587e..22825f63db 100644
+--- a/ui/src/components/decision-models/DecisionHistory.tsx
++++ b/ui/src/components/decision-models/DecisionHistory.tsx
+@@ -7,10 +7,10 @@ import { Button } from "@/components/ui/button";
+ import { useFastResponsesEnabled } from "@/hooks/useFastResponsesEnabled";
+ 
+ export function DecisionHistoryTable({ entries, fastResponse = false, connectionsEnabled = true }: { entries: (DecisionHistoryEntry & { publicationStatus?: string; connectionName?: string | null })[]; fastResponse?: boolean; connectionsEnabled?: boolean }) {
+-  if (!entries.length) return <p className="text-sm text-muted-foreground">{fastResponse ? "No fast responses in this period." : "No decision requests in this period."} <Link to={connectionsEnabled ? "/company/settings/connections" : fastResponse ? "/company/settings/instance/experimental" : "/company/settings"} className="underline underline-offset-4">{fastResponse ? connectionsEnabled ? "Configure fast response" : "Enable experimental fast responses" : "Configure a decision model"}</Link> to run a test.</p>;
++  if (!entries.length) return <p className="text-sm text-muted-foreground">{fastResponse ? "Aucune réponse rapide sur cette période." : "Aucune demande de décision sur cette période."} <Link to={connectionsEnabled ? "/company/settings/connections" : fastResponse ? "/company/settings/instance/experimental" : "/company/settings"} className="underline underline-offset-4">{fastResponse ? connectionsEnabled ? "Configurer la réponse rapide" : "Activer les réponses rapides (expérimental)" : "Configurer un modèle de décision"}</Link> pour lancer un essai.</p>;
+   return <div className="space-y-3">
+-    <p className="text-xs text-muted-foreground">Recent requests. Inputs are not retained.</p>
+-    <div className="overflow-x-auto"><table className="w-full text-sm" aria-label={fastResponse ? "Fast responses" : "Decision requests"}>
++    <p className="text-xs text-muted-foreground">Demandes récentes. Les entrées ne sont pas conservées.</p>
++    <div className="overflow-x-auto"><table className="w-full text-sm" aria-label={fastResponse ? "Réponses rapides" : "Demandes de décision"}>
+       <thead><tr className="border-b border-border text-muted-foreground">{["When / feature", "Responsible", "Task", ...(fastResponse ? ["Connection"] : []), "Model", "Status", "Duration", "Tokens in / out", "Cost"].map(label => <th key={label} className="px-3 py-2 text-left font-medium">{label}</th>)}</tr></thead>
+       <tbody>{entries.map(row => <tr key={row.id} className="border-b border-border last:border-0">
+         <td className="px-3 py-3"><div className="whitespace-nowrap">{formatDateTime(row.startedAt)}</div><div className="text-xs text-muted-foreground">{row.feature === "settings.test" ? "Setup test" : row.feature}</div></td>
+diff --git a/ui/src/pages/Costs.test.tsx b/ui/src/pages/Costs.test.tsx
+index 96d46a7ff7..f3c68662af 100644
+--- a/ui/src/pages/Costs.test.tsx
++++ b/ui/src/pages/Costs.test.tsx
+@@ -181,7 +181,7 @@ describe("Shared Costs surfaces", () => {
+     const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+     root = createRoot(container);
+     await act(async () => root.render(<MemoryRouter initialEntries={["/?tab=decisions"]}><QueryClientProvider client={queryClient}><Costs /></QueryClientProvider></MemoryRouter>));
+-    await act(async () => { await vi.waitFor(() => expect(container.textContent).toContain("No decision requests in this period")); });
++    await act(async () => { await vi.waitFor(() => expect(container.textContent).toContain("Aucune demande de décision sur cette période.")); });
+     expect(container.querySelector('[role="tab"][data-state="active"]')?.textContent).toBe("Décisions");
+     const [companyId, from, to] = decisionHistoryMock.mock.lastCall!;
+     expect(companyId).toBe("company-1");
+diff --git a/ui/src/pages/DecisionQueuePage.tsx b/ui/src/pages/DecisionQueuePage.tsx
+index 500930689c..05f21bb5c9 100644
+--- a/ui/src/pages/DecisionQueuePage.tsx
++++ b/ui/src/pages/DecisionQueuePage.tsx
+@@ -126,7 +126,7 @@ export function DecisionQueuePage() {
+   }, [agents]);
+ 
+   useEffect(() => {
+-    setBreadcrumbs([{ label: "Decisions", href: "/decisions" }, { label: queue?.title ?? queueKey }]);
++    setBreadcrumbs([{ label: "Décisions", href: "/decisions" }, { label: queue?.title ?? queueKey }]);
+   }, [setBreadcrumbs, queue?.title, queueKey]);
+ 
+   // Re-hydrate per-company preferences when the company changes.
+diff --git a/ui/src/pages/DecisionsLibelles.test.tsx b/ui/src/pages/DecisionsLibelles.test.tsx
+new file mode 100644
+index 0000000000..b624f0bf06
+--- /dev/null
++++ b/ui/src/pages/DecisionsLibelles.test.tsx
+@@ -0,0 +1,70 @@
++// @vitest-environment jsdom
++
++import { act } from "react";
++import { createRoot, type Root } from "react-dom/client";
++import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
++import { MemoryRouter, Route, Routes } from "react-router-dom";
++import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
++import { DecisionQueuePage } from "./DecisionQueuePage";
++import { WhatNeedsMe } from "./WhatNeedsMe";
++
++const setBreadcrumbsMock = vi.hoisted(() => vi.fn());
++const attentionListMock = vi.hoisted(() => vi.fn());
++vi.mock("../api/attention", () => ({ attentionApi: { list: attentionListMock } }));
++vi.mock("../api/agents", () => ({ agentsApi: { list: vi.fn().mockResolvedValue([]) } }));
++vi.mock("../api/auth", () => ({ authApi: { getSession: vi.fn().mockResolvedValue(null) } }));
++vi.mock("../api/decisions", () => ({ decisionsApi: { list: vi.fn().mockResolvedValue([]) } }));
++vi.mock("../api/decisionQueues", () => ({
++  decisionQueuesApi: { list: vi.fn().mockResolvedValue([{ key: "file-1", title: "File des urgences", seedRules: [], seedRulesEnabled: false }]) },
++}));
++vi.mock("../context/CompanyContext", () => ({ useCompany: () => ({ selectedCompanyId: "company-1" }) }));
++vi.mock("../context/BreadcrumbContext", () => ({ useBreadcrumbs: () => ({ setBreadcrumbs: setBreadcrumbsMock }) }));
++vi.mock("../context/ToastContext", () => ({ useToastActions: () => ({ pushToast: vi.fn() }) }));
++vi.mock("../hooks/useInboxBadge", () => ({
++  useInboxDismissals: () => ({ dismiss: vi.fn(), snooze: vi.fn(), restore: vi.fn() }),
++}));
++
++// eslint-disable-next-line @typescript-eslint/no-explicit-any
++(globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
++
++describe("écrans Décisions en français", () => {
++  let container: HTMLDivElement;
++  let root: Root;
++  let client: QueryClient;
++
++  beforeEach(() => {
++    container = document.createElement("div");
++    document.body.appendChild(container);
++    root = createRoot(container);
++    client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
++    attentionListMock.mockResolvedValue({ items: [], counts: {}, total: 0 });
++    setBreadcrumbsMock.mockClear();
++  });
++
++  afterEach(() => {
++    act(() => root.unmount());
++    container.remove();
++    client.clear();
++  });
++
++  it("le bureau des décisions a pour titre et fil d'Ariane « Décisions »", async () => {
++    await act(async () => root.render(
++      <MemoryRouter><QueryClientProvider client={client}><WhatNeedsMe /></QueryClientProvider></MemoryRouter>,
++    ));
++    await act(async () => { await vi.waitFor(() => expect(container.querySelector("h1")?.textContent).toBe("Décisions")); });
++    expect(setBreadcrumbsMock).toHaveBeenCalledWith([{ label: "Décisions" }]);
++  });
++
++  it("une file de décisions a pour fil d'Ariane « Décisions » puis le titre de la file", async () => {
++    await act(async () => root.render(
++      <MemoryRouter initialEntries={["/file/file-1"]}>
++        <QueryClientProvider client={client}>
++          <Routes><Route path="/file/:key" element={<DecisionQueuePage />} /></Routes>
++        </QueryClientProvider>
++      </MemoryRouter>,
++    ));
++    await act(async () => { await vi.waitFor(() => expect(setBreadcrumbsMock).toHaveBeenLastCalledWith([
++      { label: "Décisions", href: "/decisions" }, { label: "File des urgences" },
++    ])); });
++  });
++});
+diff --git a/ui/src/pages/WhatNeedsMe.tsx b/ui/src/pages/WhatNeedsMe.tsx
+index d1201010f3..6e7f68c2ac 100644
+--- a/ui/src/pages/WhatNeedsMe.tsx
++++ b/ui/src/pages/WhatNeedsMe.tsx
+@@ -135,7 +135,7 @@ export function WhatNeedsMe() {
+   );
+ 
+   useEffect(() => {
+-    setBreadcrumbs([{ label: "Decisions" }]);
++    setBreadcrumbs([{ label: "Décisions" }]);
+   }, [setBreadcrumbs]);
+ 
+   // Re-hydrate per-company preferences when the company changes.
+@@ -519,7 +519,7 @@ export function WhatNeedsMe() {
+   return (
+     <div ref={rootRef} className="max-w-3xl space-y-4">
+       <div className="flex items-center justify-between gap-2">
+-        <h1 className="text-xl font-bold">Decisions</h1>
++        <h1 className="text-xl font-bold">Décisions</h1>
+         <DecisionsToolbar
+           visibleCount={visibleCount}
+           filterOptions={filterOptions}
+-- 
+2.53.0
+

@@ -1,0 +1,10 @@
+{
+  "note": "Formules de promesse interdites dans un livrable (lot 2, issue #22). Lues par regles-promesses.ts. Chaque motif s'applique au texte ramené en minuscules, sans accents, en forme NFKC, sans caractère invisible, homoglyphes cyrilliques et grecs ramenés au latin : l'écrire sans accent ni majuscule. Une négation l'excuse dans les deux mots qui la précèdent ou dans la formule elle-même. negationDansLaFormule : la formule contient elle-même un mot de négation (« aucun ») ; seuls les deux mots qui la précèdent sont alors examinés.",
+  "formules": [
+    { "libelle": "rendement garanti", "source": "\\brendements?\\s+(?:[^\\s,;:.!?]+\\s+){0,3}?garanti(?:e|s|es)?\\b" },
+    { "libelle": "sans aucun risque", "source": "\\bsans\\s+aucun\\s+risques?\\b", "negationDansLaFormule": true },
+    { "libelle": "le meilleur courtier", "source": "\\b(?:le|la)\\s+meilleure?\\s+courti(?:er|ere)\\b" },
+    { "libelle": "garanti à vie", "source": "\\bgaranti(?:e|s|es)?\\s+a\\s+vie\\b" },
+    { "libelle": "pension doublée", "source": "\\bpensions?\\s+(?:[^\\s,;:.!?]+\\s+){0,2}?double(?:e|s|es)?\\b|\\bdoubl(?:er|e|ez|ons|era|erons)\\s+(?:[^\\s,;:.!?]+\\s+){0,2}?pensions?\\b" }
+  ]
+}

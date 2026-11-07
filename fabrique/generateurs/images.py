@@ -42,7 +42,6 @@ from fabrique.registre_charte import CONTRASTE_TEXTE_MIN, POLICES_AUTORISEES, Ch
 
 # Politique de contenu : aucun script, rien qui sorte de la scène (fichiers du même dossier seulement).
 CSP_IMAGE = "default-src 'none'; script-src 'none'; style-src 'self'; img-src 'self'; font-src 'self'"
-MENTION_IA = "Contenu généré avec l'IA"  # la même que fabrique/provenance.py (testé)
 
 FICHIER_IMAGE = "image.png"
 FICHIER_JOURNAL = "rendu.log"
@@ -103,7 +102,6 @@ LOGO_HTML = '<img id="logo" src="logo.png" alt="">'
 FICHIER_FOND = "fond.png"
 FOND_HTML = f'<img id="fond" src="{FICHIER_FOND}" alt=""><i id="voile"></i>'
 VOILE_OPACITE = 0.66
-BANDEAU_IA_HTML = '<p id="mention-ia">{}</p>'.format(html.escape(MENTION_IA, quote=True))
 COULEUR_TEMOIN = "#ff00ff"  # témoin de débordement des tests : invisible (transparent) en production
 
 
@@ -188,7 +186,7 @@ def accent_sur_fond(accent: str) -> str:
 
 
 def remplir_gabarit(modele: str, valeurs: Mapping[str, str], format: str, paliers: Mapping[str, str],
-                    csp: str | None = None, *, logo: bool = False, mention: bool = False, police: str = "dejavu-sans",
+                    csp: str | None = None, *, logo: bool = False, police: str = "dejavu-sans",
                     fond: bool = False) -> str:
     """Fonction PURE : remplit les marques `{{nom}}` d'un gabarit HTML.
 
@@ -200,7 +198,7 @@ def remplir_gabarit(modele: str, valeurs: Mapping[str, str], format: str, palier
     if police not in POLICES_AUTORISEES:
         raise ValueError(f"police inconnue : {police!r}")
     internes = {"format": format, "police": police, "largeur": str(largeur), "hauteur": str(hauteur), "csp": CSP_IMAGE if csp is None else csp,
-                "logo": LOGO_HTML if logo else "", "bandeau_ia": BANDEAU_IA_HTML if mention else "",
+                "logo": LOGO_HTML if logo else "",
                 "fond": FOND_HTML if fond else ""}
     for nom, taille in paliers.items():
         if taille not in ("g", "m", "p"):
@@ -238,7 +236,7 @@ def feuille_charte(charte: Charte, *, temoin: bool = False, fond: bool = False) 
 
 
 def construire_scene(dossier_scene: str | Path, gabarit: str, champs: Mapping[str, object], format: str,
-                     charte: Charte, *, mention: bool = False, temoin: bool = False, fond: Path | None = None) -> Path:
+                     charte: Charte, *, temoin: bool = False, fond: Path | None = None) -> Path:
     """Écrit la scène (index.html, feuilles de style, polices, logo) dans `dossier_scene`, qui doit être absent.
 
     `gabarit` est cherché dans la liste fixe, jamais utilisé comme chemin. `temoin` rend visible, en magenta, le
@@ -249,7 +247,7 @@ def construire_scene(dossier_scene: str | Path, gabarit: str, champs: Mapping[st
     valider_format(format)
     source = _DOSSIER_GABARITS / gabarit
     page = remplir_gabarit((source / "index.html").read_text(encoding="utf-8"), valeurs, format, paliers_de(valeurs),
-                           logo=charte.logo is not None, mention=mention, police=charte.police,
+                           logo=charte.logo is not None, police=charte.police,
                            fond=fond is not None)
     cible = Path(dossier_scene)
     cible.mkdir(parents=True, exist_ok=False)
@@ -339,7 +337,7 @@ def controler_png(chemin: Path, largeur: int, hauteur: int) -> tuple[int, str]:
 
 
 def rendre_image(dossier_travail, gabarit: str, champs: Mapping[str, object], format: str, charte: Charte, *,
-                 mention: bool = False, temoin: bool = False, fond: Path | None = None) -> Resultat:
+                 temoin: bool = False, fond: Path | None = None) -> Resultat:
     """Rend un PNG (`image-XXXX/image.png`) d'un gabarit rempli, dans une cage sans réseau.
 
     Aucun shell. Une entrée invalide lève ValueError ; un échec de rendu ou un PNG refusé rend ok=False avec le motif.
@@ -352,7 +350,7 @@ def rendre_image(dossier_travail, gabarit: str, champs: Mapping[str, object], fo
     entree, sortie = dossier / "entree", dossier / "sortie"
     sortie.mkdir()
     entree.mkdir()
-    construire_scene(entree / "scene", gabarit, champs, format, charte, mention=mention, temoin=temoin, fond=fond)
+    construire_scene(entree / "scene", gabarit, champs, format, charte, temoin=temoin, fond=fond)
 
     etape = Etape(
         type="cpu", programme="/usr/bin/python3",

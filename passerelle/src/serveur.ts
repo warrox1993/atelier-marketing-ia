@@ -194,7 +194,7 @@ export function creerServeur(options: OptionsServeur): ServeurPasserelle {
           envoyerJson(res, 401, { error: "invalid_token", message }, { "www-authenticate": enteteChallenge(service, true) });
           return;
         }
-        identite = { compte: trouve.compte, propriete: trouve.propriete };
+        identite = { compte: trouve.compte, propriete: trouve.propriete, ecriture: trouve.ecriture };
       } else {
         // Le fournisseur du service vérifie le jeton (validité, expiration, audience par service).
         // Sans fonction de vérification, refus : jamais de jeton accepté par défaut (revue S1).

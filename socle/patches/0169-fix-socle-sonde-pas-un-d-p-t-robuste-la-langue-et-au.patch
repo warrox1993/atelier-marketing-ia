@@ -1,0 +1,130 @@
+From 1e95b9a994e0a983e128c7a7e7cdbf5d3724bec6 Mon Sep 17 00:00:00 2001
+From: Jean-Baptiste Dhondt <114347858+warrox1993@users.noreply.github.com>
+Date: Wed, 4 Nov 2026 23:39:43 +0100
+Subject: [PATCH 169/170] =?UTF-8?q?fix(socle):=20sonde=20=C2=AB=20pas=20un?=
+ =?UTF-8?q?=20d=C3=A9p=C3=B4t=20=C2=BB=20robuste=20=C3=A0=20la=20langue=20?=
+ =?UTF-8?q?et=20aux=20points=20de=20montage?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01EThpSQivkg5UcW9gyGppeG
+---
+ .../src/__tests__/heartbeat-git-probe.test.ts | 66 +++++++++++++++++++
+ server/src/services/heartbeat/workspaces.ts   | 16 ++++-
+ 2 files changed, 79 insertions(+), 3 deletions(-)
+ create mode 100644 server/src/__tests__/heartbeat-git-probe.test.ts
+
+diff --git a/server/src/__tests__/heartbeat-git-probe.test.ts b/server/src/__tests__/heartbeat-git-probe.test.ts
+new file mode 100644
+index 0000000000..3ab4731abb
+--- /dev/null
++++ b/server/src/__tests__/heartbeat-git-probe.test.ts
+@@ -0,0 +1,66 @@
++import { execFile as execFileCallback } from "node:child_process";
++import fs from "node:fs/promises";
++import os from "node:os";
++import path from "node:path";
++import { promisify } from "node:util";
++import { afterEach, describe, expect, it, vi } from "vitest";
++import { probeGitWorktreeBase } from "../services/heartbeat/workspaces.js";
++
++const execFile = promisify(execFileCallback);
++
++describe("probeGitWorktreeBase : décision « pas un dépôt »", () => {
++  const dirs: string[] = [];
++  afterEach(async () => {
++    vi.unstubAllEnvs();
++    while (dirs.length) await fs.rm(dirs.pop()!, { recursive: true, force: true });
++  });
++
++  async function tempDir() {
++    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "paperclip-git-probe-"));
++    dirs.push(dir);
++    return dir;
++  }
++  // Le patch 0164 rend les autres tests indépendants du poste ; ici le processus testé reste tel quel.
++  function frenchHostAcrossMounts() {
++    vi.stubEnv("LC_ALL", "fr_BE.UTF-8");
++    vi.stubEnv("LANG", "fr_BE.UTF-8");
++    vi.stubEnv("LANGUAGE", "fr");
++    delete process.env.GIT_DISCOVERY_ACROSS_FILESYSTEM; // vi.unstubAllEnvs restaure l'ancienne valeur
++  }
++
++  it("AC1 : dossier sans git, git en français (langue seule, sans limite de système de fichiers)", async () => {
++    const dir = await tempDir();
++    frenchHostAcrossMounts();
++    vi.stubEnv("GIT_DISCOVERY_ACROSS_FILESYSTEM", "1");
++    expect(await probeGitWorktreeBase(dir)).toEqual({ isCheckout: false, notRepository: true });
++  });
++
++  it("AC2 : dossier sans git sous un autre point de montage (limite de système de fichiers)", async () => {
++    const dir = await tempDir();
++    frenchHostAcrossMounts();
++    vi.stubEnv("LC_ALL", "C");
++    vi.stubEnv("LANGUAGE", "");
++    expect(await probeGitWorktreeBase(dir)).toEqual({ isCheckout: false, notRepository: true });
++  });
++
++  it("AC1 et AC2 : dossier sans git, git en français ET limite de système de fichiers (poste de l'opérateur)", async () => {
++    const dir = await tempDir();
++    frenchHostAcrossMounts();
++    expect(await probeGitWorktreeBase(dir)).toEqual({ isCheckout: false, notRepository: true });
++  });
++
++  it("AC3 : un .git présent mais vide reste une panne", async () => {
++    const dir = await tempDir();
++    await fs.mkdir(path.join(dir, ".git"));
++    frenchHostAcrossMounts();
++    expect(await probeGitWorktreeBase(dir)).toEqual({ isCheckout: false, notRepository: false });
++  });
++
++  it("AC3 : une configuration git corrompue reste une panne", async () => {
++    const dir = await tempDir();
++    await execFile("git", ["init", "-q"], { cwd: dir });
++    await fs.writeFile(path.join(dir, ".git", "config"), "[core\n garbage\n");
++    frenchHostAcrossMounts();
++    expect(await probeGitWorktreeBase(dir)).toEqual({ isCheckout: false, notRepository: false });
++  });
++});
+diff --git a/server/src/services/heartbeat/workspaces.ts b/server/src/services/heartbeat/workspaces.ts
+index 69b879f3c2..96819468e9 100644
+--- a/server/src/services/heartbeat/workspaces.ts
++++ b/server/src/services/heartbeat/workspaces.ts
+@@ -944,11 +944,21 @@ async function isGitCheckout(cwd: string | null | undefined) {
+     .catch(() => false);
+ }
+ 
+-async function probeGitWorktreeBase(cwd: string) {
++// Git's stable English message, in its two forms: the ordinary one, and the one printed when discovery
++// stops at a filesystem boundary (a project on another mount point than `/`).
++const GIT_NOT_A_REPOSITORY_STDERR = new RegExp(
++  "^fatal: not a git repository (?:" +
++    "\\(or any of the parent directories\\): \\.git" +
++    "|\\(or any parent up to mount point [^\\r\\n]+\\)\\r?\\nStopping at filesystem boundary " +
++    "\\(GIT_DISCOVERY_ACROSS_FILESYSTEM not set\\)\\." +
++  ")\\r?\\n?$",
++);
++
++export async function probeGitWorktreeBase(cwd: string) {
+   try {
+     const result = await execFile("git", ["rev-parse", "--show-toplevel"], {
+       cwd,
+-      env: { ...process.env, LC_ALL: "C" },
++      env: { ...process.env, LC_ALL: "C", LANGUAGE: "" },
+     });
+     return { isCheckout: Boolean(readNonEmptyString(result.stdout)), notRepository: false };
+   } catch (error) {
+@@ -958,7 +968,7 @@ async function probeGitWorktreeBase(cwd: string) {
+     // corruption and I/O failures must remain reportable in Sentry.
+     const notRepository = failure.code === 128 && failure.signal == null &&
+       typeof failure.stderr === "string" &&
+-      /^fatal: not a git repository \(or any of the parent directories\): \.git\r?\n?$/.test(failure.stderr) &&
++      GIT_NOT_A_REPOSITORY_STDERR.test(failure.stderr) &&
+       !process.env.GIT_DIR && !process.env.GIT_WORK_TREE && !process.env.GIT_COMMON_DIR &&
+       await hasNoGitMetadataInWorkspaceAncestors(cwd);
+     return { isCheckout: false, notRepository };
+-- 
+2.53.0
+

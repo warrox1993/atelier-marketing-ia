@@ -1,10 +1,13 @@
 // Outils du service « emailing » : consentement exigé, brouillon jamais envoyé, désinscription présente, adresses privées refusées,
 // suppression respectée, envoi absent du catalogue. Faux listmonk en mémoire, aucun conteneur.
 
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { construireCatalogue, appelerOutil } from "../../src/outils.js";
 import { FICHE_EMAILING } from "../../src/services.js";
-import { fournisseurEmailingReel } from "../../src/reel/emailing/outils.js";
+import { fournisseurEmailingReel, optionsEmailingDepuisEnv } from "../../src/reel/emailing/outils.js";
 import { ClientListmonk } from "../../src/reel/emailing/listmonk.js";
 import { creerFauxListmonk } from "./faux-listmonk.js";
 
@@ -176,34 +179,57 @@ describe("ajouter_abonnes : abonné existant que la recherche peut manquer (E2)"
 describe("creer_campagne_brouillon", () => {
   const base = { nom: "Lettre d'octobre", sujet: "Nos nouveautés", liste_ids: [1], contenu_html: "<p>Bonjour {{ .Subscriber.FirstName }}, voici nos nouveautés.</p>", contenu_texte: "Bonjour, voici nos nouveautés." };
 
-  // E4 (audit du 29/10/2026) : mention d'information IA en pied des campagnes, choix de transparence (art. 50 non imposé ici).
-  it("ajoute la mention d'information IA aux deux versions, une seule fois, avant le pied de désinscription", async () => {
+  it("par défaut, aucune mention d'information IA dans le pied des campagnes", async () => {
     const { appeler, faux } = montage();
     await appeler("creer_liste", { nom: "Salon" });
     const r = await appeler("creer_campagne_brouillon", base);
     expect(r.erreur).toBe(false);
     const c = faux.etat.campagnes[0]!;
-    const mention = "Message rédigé avec l'aide d'un assistant IA.";
-    expect(c.body).toContain("Message rédigé avec l&#39;aide d&#39;un assistant IA.");
-    expect(c.altbody).toContain(mention);
-    expect(c.body.indexOf("aide d&#39;un assistant IA")).toBeLessThan(c.body.indexOf("{{ UnsubscribeURL }}"));
-    const deja = await appeler("creer_campagne_brouillon", { ...base, contenu_texte: `${base.contenu_texte}\n\n${mention}` });
-    expect(deja.erreur).toBe(false);
-    expect(faux.etat.campagnes[1]!.altbody!.split(mention)).toHaveLength(2);
+    expect(c.body).not.toMatch(/assistant IA/);
+    expect(c.altbody).not.toMatch(/assistant IA/);
+    expect(c.body).toContain("{{ UnsubscribeURL }}");
   });
 
-  it("mention désactivée par décision écrite : absente ; texte personnalisé : échappé dans le HTML", async () => {
+  it("mention réactivée : présente une seule fois, avant le pied de désinscription, échappée dans le HTML", async () => {
     const faux = creerFauxListmonk();
     const client = new ClientListmonk({ url: "http://127.0.0.1:19000", jeton: "atelier-gestion:jeton-de-test-0123456789", fetch: faux.fetch });
-    const sans = fournisseurEmailingReel({ client, adresseAutorisee: PUBLIC, resoudre: RESOUDRE, mentionIa: { texte: null, motif: "décision écrite" } });
-    const perso = fournisseurEmailingReel({ client, adresseAutorisee: PUBLIC, resoudre: RESOUDRE, mentionIa: { texte: "Rédigé avec <IA> & relu", motif: null } });
+    const sans = fournisseurEmailingReel({ client, adresseAutorisee: PUBLIC, resoudre: RESOUDRE, mentionIa: null });
+    const perso = fournisseurEmailingReel({ client, adresseAutorisee: PUBLIC, resoudre: RESOUDRE, mentionIa: "Rédigé avec <IA> & relu" });
     const ctx = { service: "emailing", mode: "reel" as const, identite: { compte: "Poste local", propriete: { id: "listmonk/local", libelle: "listmonk" } }, jetonPorteur: null };
     await appelerOutil(construireCatalogue(FICHE_EMAILING, "reel", sans), "creer_liste", { nom: "Salon" }, ctx);
     await appelerOutil(construireCatalogue(FICHE_EMAILING, "reel", sans), "creer_campagne_brouillon", base, ctx);
     await appelerOutil(construireCatalogue(FICHE_EMAILING, "reel", perso), "creer_campagne_brouillon", base, ctx);
-    expect(faux.etat.campagnes[0]!.altbody).not.toMatch(/assistant IA/);
-    expect(faux.etat.campagnes[1]!.body).toContain("Rédigé avec &lt;IA&gt; &amp; relu");
-    expect(faux.etat.campagnes[1]!.altbody).toContain("Rédigé avec <IA> & relu");
+    await appelerOutil(construireCatalogue(FICHE_EMAILING, "reel", perso), "creer_campagne_brouillon", { ...base, contenu_texte: `${base.contenu_texte}\n\nRédigé avec <IA> & relu` }, ctx);
+    expect(faux.etat.campagnes[0]!.altbody).not.toMatch(/IA/);
+    const avec = faux.etat.campagnes[1]!;
+    expect(avec.body).toContain("Rédigé avec &lt;IA&gt; &amp; relu");
+    expect(avec.altbody).toContain("Rédigé avec <IA> & relu");
+    expect(avec.body.indexOf("Rédigé avec")).toBeLessThan(avec.body.indexOf("{{ UnsubscribeURL }}"));
+    expect(faux.etat.campagnes[2]!.altbody!.split("Rédigé avec <IA> & relu")).toHaveLength(2);
+  });
+
+  it("la variable PASSERELLE_MENTION_IA suffit à remettre la mention au pied des campagnes ; sans elle, aucune", async () => {
+    const dossier = mkdtempSync(join(tmpdir(), "emailing-jeton-"));
+    try {
+      const fichier = join(dossier, "jeton");
+      writeFileSync(fichier, "atelier-gestion:jeton-de-test-0123456789", { mode: 0o600 });
+      const env = { PASSERELLE_LISTMONK_JETON_FICHIER: fichier };
+      const faux = creerFauxListmonk();
+      const client = new ClientListmonk({ url: "http://127.0.0.1:19000", jeton: "atelier-gestion:jeton-de-test-0123456789", fetch: faux.fetch });
+      const ctx = { service: "emailing", mode: "reel" as const, identite: { compte: "Poste local", propriete: { id: "listmonk/local", libelle: "listmonk" } }, jetonPorteur: null };
+      const catalogue = (variables: NodeJS.ProcessEnv) =>
+        construireCatalogue(FICHE_EMAILING, "reel", fournisseurEmailingReel({ ...optionsEmailingDepuisEnv(variables), client, adresseAutorisee: PUBLIC, resoudre: RESOUDRE }));
+      await appelerOutil(catalogue(env), "creer_liste", { nom: "Salon" }, ctx);
+      await appelerOutil(catalogue(env), "creer_campagne_brouillon", base, ctx);
+      await appelerOutil(catalogue({ ...env, PASSERELLE_MENTION_IA: "Rédigé avec une IA." }), "creer_campagne_brouillon", base, ctx);
+      const [sans, avec] = faux.etat.campagnes;
+      expect(sans!.body).not.toContain("Rédigé avec une IA.");
+      expect(sans!.altbody).not.toContain("Rédigé avec une IA.");
+      expect(avec!.body).toContain("Rédigé avec une IA.");
+      expect(avec!.altbody).toContain("Rédigé avec une IA.");
+    } finally {
+      rmSync(dossier, { recursive: true, force: true });
+    }
   });
 
   it("crée un BROUILLON, ne démarre jamais la campagne et ajoute la désinscription aux deux versions", async () => {

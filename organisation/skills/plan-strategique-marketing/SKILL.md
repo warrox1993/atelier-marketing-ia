@@ -1,6 +1,6 @@
 ---
 name: "plan-strategique-marketing"
-description: "Assemble le document de stratégie d'un client en une à deux pages à partir du diagnostic, de la cible, du positionnement, des objectifs, de l'offre et du plan de canaux, avec les portes de passage entre étapes et les règles de retour arrière. À utiliser quand toutes les étapes stratégiques sont livrées, ou pour tenir à jour la stratégie après un fait nouveau ; distinct de pilotage-strategique (arbitrage interne et OKR) et de plan-campagne (une campagne)."
+description: "Assemble le document de stratégie d'un client, synthèse courte reliée à des annexes, à partir du diagnostic, de la cible, du positionnement, des objectifs, de l'offre et du plan de canaux, avec les portes de passage entre étapes et les règles de retour arrière. À utiliser quand toutes les étapes stratégiques sont livrées, ou pour tenir à jour la stratégie après un fait nouveau ; distinct de pilotage-strategique (arbitrage interne et OKR) et de plan-campagne (une campagne)."
 metadata:
   version: "1.0.0"
   langue: "fr"
@@ -18,7 +18,7 @@ metadata:
 
 ## Objectif
 
-Produire et tenir à jour le document de stratégie du client : une à deux pages, chaque décision rattachée à sa preuve ou marquée hypothèse, chaque étape franchie par sa porte de passage. Une étape ne démarre que si la précédente a livré sa sortie, validée.
+Produire et tenir à jour le document de stratégie du client, au niveau du groupe, d'un métier ou d'une campagne (chaque niveau renvoie à celui du dessus) : une synthèse courte reliée à des annexes, chaque décision rattachée à sa preuve ou marquée hypothèse, chaque étape franchie par sa porte de passage. Une étape ne démarre que si la précédente a livré sa sortie, validée.
 
 ## Prérequis
 
@@ -51,13 +51,13 @@ Produire et tenir à jour le document de stratégie du client : une à deux page
 
 ## Livrable
 
-Le document de stratégie du client, une à deux pages, avec le statut de chaque porte (franchie, bloquée, hypothèse), la liste des hypothèses et inconnus, l'historique des versions et le calendrier des revues.
+Le document de stratégie du client, synthèse courte avec annexes, avec le statut de chaque porte (franchie, bloquée, hypothèse), la liste des hypothèses et inconnus, l'historique des versions et le calendrier des revues.
 
 ## Critères de réussite
 
 - Les sept portes ont un statut explicite ; aucune étape n'est marquée terminée sans sa sortie validée.
 - Chaque décision a sa preuve ou la mention « hypothèse » ; aucune hypothèse n'apparaît comme un fait.
-- Le document tient en deux pages ; le détail est renvoyé aux livrables des étapes.
+- La synthèse reste courte ; le détail est renvoyé en annexe aux livrables des étapes.
 - La version précédente est conservée et la différence est expliquée.
 
 ## Limites

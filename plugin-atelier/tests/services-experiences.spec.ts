@@ -214,7 +214,7 @@ describe("experiences.cloturer : verdict calculé et boucle d'apprentissage", ()
     const id = await ouvrir(m);
     await m.appel("experiences.resultats", { experienceId: id, resultats: RESULTATS_SIGNES }, agent(A_TENANT));
     const r = (await m.appel("experiences.cloturer", { experienceId: id }, agent(A_MESURE))).corps as Ligne;
-    expect(r.experience).toMatchObject({ statut: "conclue", verdict: { statut: "gagnant", gagnant: "Court" } });
+    expect(r.experience).toMatchObject({ statut: "conclue", verdict: { statut: "superieur_aux_autres", gagnant: "Court" } });
     expect(r.experience.verdict.comparaisons[0].pValeur).toBeCloseTo(0.016827, 5);
     expect(m.creees).toHaveLength(1);
     expect(m.creees[0]).toMatchObject({ assigneeAgentId: A_STRATEGE, companyId: SOC, title: "Apprentissage : Un objet plus court augmente le taux de réponse", status: "todo" });

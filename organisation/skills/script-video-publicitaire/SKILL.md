@@ -1,8 +1,8 @@
 ---
 name: "script-video-publicitaire"
-description: "Écrit le script d'une publicité vidéo courte et le transforme en demande valide pour l'outil fabriquer_video : choix de la structure (accroche des trois premières secondes, problème-solution, AIDA, PAS, preuve, appel à l'action), découpage en scènes adapté aux trois gabarits visuels (titre plein écran, chiffre clé, liste de trois points), durée par format, écriture pensée pour une voix de synthèse. À utiliser pour une publicité vidéo, un Reel, un TikTok, un Short ou une vidéo de présentation d'offre ; jamais pour promettre une voix ou un visage humain réel, inventer un chiffre ou publier la vidéo."
+description: "Écrit le script d'une publicité vidéo courte et le transforme en demande valide pour l'outil fabriquer_video : choix de la structure (accroche des trois premières secondes, problème-solution, AIDA, PAS, preuve, appel à l'action), découpage en scènes adapté aux trois gabarits visuels (titre plein écran, chiffre clé, liste de trois points), durée par format, écriture pensée pour une voix de synthèse. À utiliser pour une publicité vidéo, un Reel, un TikTok, un Short ou une vidéo de présentation d'offre ; jamais pour inventer un chiffre ou publier la vidéo."
 metadata:
-  version: "1.5.0"
+  version: "1.6.0"
   langue: "fr"
   domaine: "creation"
 ---
@@ -25,7 +25,7 @@ source du client, et une demande `fabriquer_video` valide du premier coup.
 - Le brief validé : offre, public, objectif unique (faire découvrir, faire cliquer, faire écrire), régie visée.
 - La charte de marque (compétence `charte-marque`) et les faits du client : chiffres, preuves, mentions.
 - Les voix permises : seules celles du registre de la fabrique existent (`synthese-chatterbox-fr`, `synthese-kokoro-fr`).
-  Aucune voix humaine réelle, aucun échantillon, aucun visage.
+  Aucun échantillon de voix. Visages, personnages et scènes inventés sont permis, y compris en réalisme photographique (limites : `conformite-publicite-ia`).
 - Le quota : 10 vidéos par jour et par entreprise. Une demande bien préparée vaut mieux que trois essais.
 
 ## Entrées
@@ -58,7 +58,7 @@ source du client, et une demande `fabriquer_video` valide du premier coup.
    - environ 2 à 3 mots par seconde en français parlé : 6 secondes de scène portent 12 à 18 mots ; en cas de doute, durée prudente ;
    - écrire en lettres ce que la synthèse risque de mal lire (sigles, montants, dates, unités, « 24/7 »), et vérifier le résultat à l'écoute si possible ;
    - le texte de la voix peut être plus riche que le visuel, mais ne le contredit jamais ;
-   - ne pas écrire la mention « contenu généré par IA » dans le script : l'outil n'incruste aucune mention ; écris-la dans le texte du post.
+   - ne pas écrire de mention « contenu généré par IA » dans le script : aucune mention n'est ajoutée.
 6. **Vérifier chaque fait** : un chiffre, un prix, un délai, un nom ou un détail du sujet n'est repris que s'il figure dans le dossier du sujet de la tâche (compétence `dossier-sujet`) ou dans la fiche du client ; rien de la rubrique `À ne pas dire`. Sinon, le retirer ou le marquer « à confirmer » dans le commentaire de la tâche, jamais dans la vidéo.
 7. **Passer la liste de contrôle** de la compétence `conformite-publicite-ia` avant de déposer la demande.
 8. **Déposer la demande** avec `fabriquer_video`, noter l'identifiant de travail, suivre avec `etat_fabrication` (voir « Limites »).
@@ -93,7 +93,7 @@ un aplat. Chaque scène de la demande `fabriquer_video` porte le champ `illustra
 - Écrire pour FLUX 3, qui peint la scène : une seule description en anglais de 100 à 350 mots, en prose continue, d'abord le support
   et le style, puis le décor, la lumière et le cadrage, puis les sujets avec leur profil observable et leur position dans le cadre,
   et où se trouve la zone calme réservée au texte. Forme complète et exemple : `design-visuel-sobre/references/description-flux3.md`.
-  Ni texte, ni lettres, ni logo, ni marque, ni personne réelle ou célèbre ; rien qui contredise le dossier du sujet.
+  Ni texte, ni lettres, ni logo, ni marque ; rien qui contredise le dossier du sujet.
 - Une illustration par scène, qui suit l'histoire : le décor et les personnages restent reconnaissables d'une scène à l'autre
   (même personnage, même palette), mais le plan change au moins toutes les deux scènes.
 - Un fait du script (chiffre, prix, délai) s'écrit dans les champs du gabarit, jamais dans l'illustration.
@@ -112,13 +112,13 @@ d'accompagnement du post (voir `declinaison-regies-video`).
 - Un seul appel à l'action, en dernière scène (carte finale d'au moins 2 s).
 - La chronologie du « Standard haut de gamme » est tenue : accroche avant 2 s, chute à l'avant-dernière scène, scènes de 2 à 5 s.
 - Aucun chiffre, avis ou promesse absent des documents du client.
-- Aucune voix hors registre, aucune promesse de voix humaine, aucun visage ou nom de personne réelle utilisé comme voix.
+- Aucune voix hors registre ; les limites de `conformite-publicite-ia` (personne réelle, faux témoignage) sont tenues.
 
 ## Limites
 
 - La fabrication est asynchrone : la réponse immédiate donne un identifiant et l'état « en_file ». L'état « en_attente_gpu » signifie que la vidéo attend la carte graphique ; ce n'est pas un échec, ne pas redéposer la demande.
 - Seules les voix du registre existent ; la qualité de l'accent et du rythme n'est pas garantie : prévoir une écoute humaine avant diffusion.
-- Trois gabarits seulement : pas de vidéo filmée, pas de photo de personne réelle, pas d'animation libre ; le visuel de chaque scène est une illustration peinte par l'IA (champ `illustration`).
+- Trois gabarits seulement : pas de vidéo filmée, pas d'animation libre ; le visuel de chaque scène est une illustration peinte par l'IA (champ `illustration`), réalisme photographique compris.
 - La compétence écrit et prépare ; elle ne publie rien. La diffusion est approuvée par un humain et faite par le rôle Contenus.
 
 ## Exemple

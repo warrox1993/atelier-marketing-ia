@@ -39,6 +39,12 @@ export const CodeMotifPorte = z.enum([
   "citation_connaissance_inconnue",
   "citation_connaissance_perimee",
   "chiffre_offre_sans_source",
+  /** Lot 2 (#22, M2) : 3e révision distincte bloquée pour la seule source manquante depuis la dernière action humaine : refus de fond. */
+  "source_manquante_repetee",
+  /** Lot 2 (#22) : livrable au-delà de la taille contrôlée, citations et chiffres non vérifiables (refus, distinct d'une source manquante). */
+  "livrable_trop_volumineux",
+  /** Lot 2 (#22) : formule de promesse interdite (« rendement garanti », « sans aucun risque »…), liste dans `serveur/promesses-interdites.json`. */
+  "promesse_interdite",
   /** Garde-fous de vérité : numéro FSMA ou BCE cité qui n'est pas, dans la fiche du client, un identifiant de ce type (`services-faits.ts`). */
   "identifiant_legal_incoherent",
   /** DROIT-1.3 : numéro de téléphone belge en clair dans le livrable, absent de la fiche du client (`regles-telephone.ts`). */

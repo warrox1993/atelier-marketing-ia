@@ -448,15 +448,29 @@ export function routesAccueil(d: DependancesAccueil): Partial<Record<CleRouteApi
 
   /** EXP-C8 : tâche que le veilleur a cessé de réveiller ; seul un humain peut la débloquer. */
   async function elementsAbandons(companyId: string): Promise<ElementAccueil[]> {
-    const abandons = await base.abandonsVeilleur(companyId);
+    const [abandons, figees] = await Promise.all([base.abandonsVeilleur(companyId), sansEchec("tâches figées sous porte", () => base.tachesFigeesSousPorte(companyId), [])]);
     const issues = await enParallele(abandons, CONCURRENCE_HOTE, (a) => sansEchec("tâche abandonnée", () => ctx.issues.get(a.issueId, companyId), null));
-    return issues
+    const dejaVues = new Set(abandons.map((a) => a.issueId));
+    const elements = issues
       .filter((i): i is Issue => i !== null && i.status !== "done" && i.status !== "cancelled")
-      .map((issue) => ({
+      .map((issue): ElementAccueil => ({
         id: `abandon:${issue.id}`, type: "tache_bloquee", urgence: "haute", titre: `${issue.identifier ?? "tâche"} · ${issue.title}`,
         raison: "L'agent n'a plus avancé malgré trois relances du veilleur, qui a cessé de le réveiller. Reprenez la tâche, réassignez-la ou fermez-la.",
         lien: lienTache(issue), action: "Ouvrir la tâche", issueId: issue.id,
       }));
+    // T7 : tâche in_review sous porte figée (le veilleur ne la réveille pas) : cause, propriétaire et prochaine action, lecture seule.
+    const sousPorte = await enParallele(figees.filter((f) => !dejaVues.has(f.issueId)), CONCURRENCE_HOTE, async (f): Promise<ElementAccueil | null> => {
+      const issue = await sansEchec("tâche figée sous porte", () => ctx.issues.get(f.issueId, companyId), null);
+      if (!issue || issue.status !== "in_review") return null;
+      const cause = f.revueOuverte ? "une revue attend un verdict depuis plus de 24 h" : "aucune revue ouverte et aucune activité depuis plus de 24 h";
+      return {
+        id: `figee:${issue.id}`, type: "tache_bloquee", urgence: "haute", titre: `${issue.identifier ?? "tâche"} · ${issue.title}`,
+        raison: `Cette tâche est sous porte de contrôle et ne bouge plus. Cause : ${cause}. Propriétaire : ${f.agentNom ?? "agent assigné"}.`,
+        lien: lienTache(issue), issueId: issue.id,
+        action: f.revueOuverte ? "Relancer les relecteurs désignés ou les remplacer" : "Demander au Coordinateur de relancer la porte ou de clore la tâche",
+      };
+    });
+    return [...elements, ...sousPorte.filter((e): e is ElementAccueil => e !== null)];
   }
 
   async function elementsConnaissances(companyId: string): Promise<ElementAccueil[]> {

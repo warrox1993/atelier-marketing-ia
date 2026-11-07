@@ -44,7 +44,7 @@ function livrer(travail: string, avecProvenance = true) {
   if (avecProvenance) {
     writeFileSync(join(dossier, "provenance.json"), JSON.stringify({
       travail, entreprise: SOC, type: "video", fichier: "video.mp4", outils: { ffmpeg: "7" }, voix: ["synthese-chatterbox-fr"], musique: null,
-      digital_source_type: DIGITAL_SOURCE_TYPE_IA, mention_visible: true, filigrane_perth: { detecte: true, taux: 1 }, sha256: sha,
+      digital_source_type: DIGITAL_SOURCE_TYPE_IA, filigrane_perth: { detecte: true, taux: 1 }, sha256: sha,
     }));
   }
 }

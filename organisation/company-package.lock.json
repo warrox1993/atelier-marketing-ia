@@ -398,8 +398,8 @@
       ]
     },
     "conformite-publicite-ia": {
-      "version": "1.4.0",
-      "sha256": "ebd0ec01ba5d6f51519cab6407dd81ca1ef836bcb8cb98eb6f6488d9eeb51e51",
+      "version": "1.6.0",
+      "sha256": "a48dbc634237cb5bed53d5f88201705f32b0fa9c7b938f07778f4b61586ee644",
       "fichiers": [
         "SKILL.md"
       ]
@@ -472,7 +472,7 @@
     },
     "coordonnees-recherche": {
       "version": "1.0.0",
-      "sha256": "57f4a31ca64af3d22e25a9aaaeee7601b4fc9e1991d139719b3690149275a915",
+      "sha256": "08b53728e9ef1f181f167a1762a09cbfd9550ad6e6bdabe022415f4d93049886",
       "fichiers": [
         "SKILL.md"
       ]
@@ -513,8 +513,8 @@
       ]
     },
     "declinaison-regies-video": {
-      "version": "1.0.0",
-      "sha256": "f0044dbb52ce06ddde6185e3129c1fa6180a9f72fa9e937573bf6d0245f453b9",
+      "version": "1.1.0",
+      "sha256": "26f5e4e69559d460ed95c1ce8f37179ecb51a1c6b030e89e4ee68c78e2f479a2",
       "fichiers": [
         "SKILL.md"
       ]
@@ -549,7 +549,7 @@
     },
     "design-visuel-sobre": {
       "version": "1.4.0",
-      "sha256": "e90180b938cf0fcf1b970bf8911e91992fc12554898febf9962fa19508e41b06",
+      "sha256": "581b4e1e9784dfdde16f0f8b265d8af28b14b70fa00ec96157a6a09e0601072b",
       "fichiers": [
         "SKILL.md",
         "references/description-flux3.md"
@@ -620,7 +620,7 @@
     },
     "dossier-sujet": {
       "version": "1.0.0",
-      "sha256": "7cdf5361a84c203aff7b5fa271c8de87a6c648c90d6edd0aa532ee071e905fe0",
+      "sha256": "c195ae222be749c7e08be3794e39a4c5fc8879bc439d4f1469f775efd486d4f6",
       "fichiers": [
         "SKILL.md"
       ]
@@ -1050,7 +1050,7 @@
     },
     "plan-strategique-marketing": {
       "version": "1.0.0",
-      "sha256": "f682cf69cd6310983b9ecf7925e53160de08b22a8009ec3edd5897d1d1f8479f",
+      "sha256": "d1b5d73bcc5ac49594ff447d01d2477725ba95e12375c7abfd744529b7837395",
       "fichiers": [
         "SKILL.md"
       ]
@@ -1268,8 +1268,8 @@
       ]
     },
     "qualite-visuels": {
-      "version": "1.5.0",
-      "sha256": "5fc3fdda35cbae93c89e89acda5911e6f0881965e0598eb430457d32dc6d36f6",
+      "version": "1.6.0",
+      "sha256": "982da6ef23415a7ea1722080d595ee4c99a17885c8ee12b787f697daa1242a07",
       "fichiers": [
         "SKILL.md"
       ]
@@ -1538,15 +1538,15 @@
       ]
     },
     "script-video-publicitaire": {
-      "version": "1.5.0",
-      "sha256": "0c0cf29febaea3b8db5fea65078f9617c313b4575bb1d4131a72a051990d0a41",
+      "version": "1.6.0",
+      "sha256": "b99b283909f3cce8f672d23e193c7f778f001598ba7476a9d0707f7de9d7f935",
       "fichiers": [
         "SKILL.md"
       ]
     },
     "segmentation-ciblage": {
       "version": "1.0.0",
-      "sha256": "8f03ea8d1385017cc2270e9183540a97336f1c38cb758d3f6df8ac98ef26e684",
+      "sha256": "59eaf857f55a0770a826a1f716247440f6f8558131f17310e3782c39d49896f0",
       "fichiers": [
         "SKILL.md"
       ]

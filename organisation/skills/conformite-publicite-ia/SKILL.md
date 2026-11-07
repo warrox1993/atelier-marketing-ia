@@ -1,8 +1,8 @@
 ---
 name: "conformite-publicite-ia"
-description: "Liste de contrôle à cocher avant et après la fabrication d'une publicité vidéo, audio ou image (visuel de post composé par la fabrique) faite avec une voix ou des images de synthèse : signalement de l'IA dès la première seconde (règlement européen sur l'IA, article 50 ; article 9 du Code belge de la publicité), voix et visages de vraies personnes, célébrités, étiquettes de TikTok et de Meta, registre de la musique, publicité trompeuse et comparaison déloyale (Code de droit économique), produits d'assurance. À utiliser avant de déposer une demande fabriquer_video ou fabriquer_image et à la livraison du fichier, dans le commentaire de la tâche ; jamais pour valider juridiquement une publicité ni pour publier."
+description: "Liste de contrôle à cocher avant et après la fabrication d'une publicité vidéo, audio ou image (visuel de post composé par la fabrique) faite avec une voix ou des images de synthèse : voix et visages de vraies personnes, célébrités, faux témoignages, règles d'étiquetage de TikTok et de Meta, registre de la musique, publicité trompeuse et comparaison déloyale (Code de droit économique), produits d'assurance. À utiliser avant de déposer une demande fabriquer_video ou fabriquer_image et à la livraison du fichier, dans le commentaire de la tâche ; jamais pour valider juridiquement une publicité ni pour publier."
 metadata:
-  version: "1.4.0"
+  version: "1.6.0"
   langue: "fr"
   domaine: "conformite"
 ---
@@ -35,21 +35,19 @@ approuve la publication sache ce qui a été contrôlé et ce qui reste ouvert.
 ## Étapes
 
 1. **Liste AVANT fabrication** (recopier et cocher dans le commentaire de la tâche) :
-   - [ ] Signalement de l'IA : la vidéo sera signalée comme générée par IA dès la première seconde quand la voix ou une scène peut passer pour réelle. L'outil n'incruste aucune mention ni filigrane visible ; le filigrane audio inaudible (PerTh) des voix reste posé, c'est une preuve de provenance (décision de l'opérateur du 01/11/2026) : le texte d'accompagnement du post le dit, et la provenance IA reste dans les métadonnées du fichier.
-   - [ ] Aucune voix, aucun visage ni aucun nom d'une vraie personne sans contrat écrit préalable avec elle ; jamais une célébrité, ni un sosie. Seules les voix du registre de la fabrique sont utilisées.
-   - [ ] Aucune promesse d'une « vraie » voix humaine, d'un témoignage ou d'un employé qui parle : la voix est une synthèse.
+   - [ ] Provenance : aucune mention IA n'est ajoutée, ni à la vidéo ni au texte du post (décision de l'opérateur du 06/11/2026). Le filigrane audio inaudible (PerTh) des voix et la provenance IA dans les métadonnées du fichier sont posés par la fabrique.
+   - [ ] **Personne réelle** : pas de personne réelle identifiable (voix, visage, nom, célébrité, sosie) sans son accord écrit. Un visage, une voix, un bureau ou une scène inventés sont permis, y compris en réalisme photographique. Seules les voix du registre de la fabrique sont utilisées.
+   - [ ] **Témoignage** : pas de faux témoignage ni de faux avis de client présenté comme vrai.
    - [ ] Musique : identifiant du registre, ou source, licence et preuve consignées dans le commentaire. Pas de titre commercial sans licence écrite.
    - [ ] Aucune publicité trompeuse : chaque chiffre, prix, délai, garantie et avis a sa source dans les documents du client (Code de droit économique, livre VI : envers des consommateurs, articles VI.97 et suivants sur les pratiques trompeuses ; envers des entreprises, articles VI.104 et suivants sur les pratiques du marché).
    - [ ] Aucune comparaison déloyale : le concurrent n'est pas nommé sans preuve ni dénigré (Code de droit économique, article VI.17).
    - [ ] Produit d'assurance ou autre secteur réglementé : passage préalable par le rôle Conformité publicitaire (règle existante), sans exception.
-   - [ ] Aucune donnée personnelle d'un client, aucun faux avis, aucune fausse urgence.
+   - [ ] Aucune donnée personnelle d'un client, aucune fausse urgence.
 2. **Liste APRÈS fabrication** :
    - [ ] L'état de la fabrication est « terminé » (« en_attente_gpu » n'est pas un échec : attendre, ne pas redéposer).
-   - [ ] La vidéo ne porte aucune mention incrustée ni filigrane visible (à constater sur la vidéo, pas à supposer) ; la mention IA est dans le texte du post.
+   - [ ] La vidéo ne porte aucune mention incrustée ni filigrane visible (à constater sur la vidéo, pas à supposer).
    - [ ] Les sous-titres correspondent au texte de voix, sans faute ni chiffre mal lu ; une écoute humaine est demandée pour l'accent et la prononciation.
-   - [ ] Le texte du post annonce que la vidéo est faite avec l'IA.
-   - [ ] **TikTok** : l'étiquette « contenu généré par IA » doit être activée au moment de la publication, sinon la vidéo peut être refusée.
-   - [ ] **Meta** : la plateforme pose elle-même une étiquette sur les contenus qu'elle détecte comme faits avec l'IA. Il n'existe pas, à notre connaissance, de page officielle décrivant une déclaration manuelle en dehors de sa politique publicitaire : à vérifier dans le centre d'aide de Meta au moment de publier.
+   - [ ] **Règles des régies** : TikTok peut refuser une vidéo sans son étiquette « contenu généré par IA », et Meta pose sa propre étiquette sur ce qu'elle détecte. Ce sont des règles de plateforme, pas de l'atelier : à vérifier dans leur centre d'aide au moment de publier, par la personne qui publie.
    - [ ] Le client sait que la publication reste soumise à une approbation humaine.
    ### Liste image (outil `fabriquer_image`)
 
@@ -57,13 +55,13 @@ approuve la publication sache ce qui a été contrôlé et ce qui reste ouvert.
    liste AVANT (publicité trompeuse, comparaison déloyale, secteur réglementé, données personnelles) restent à cocher.
    - [ ] AVANT : chaque chiffre, prix, remise et affirmation des `champs` a sa source dans les documents du client ; rien n'est arrondi ni inventé.
    - [ ] AVANT : les mentions obligatoires du client et du secteur tiennent dans `mentions_legales` (200 caractères au plus) ; sinon elles figurent dans le texte du post et le commentaire le dit.
-   - [ ] AVANT : la demande ne contient que `format`, `gabarit`, `champs` et `charte` ; aucun `fond_ia` (refusé tant que les fonds générés par l'IA sont coupés), aucune couleur, police, logo, fichier ni URL.
+   - [ ] AVANT : la demande ne contient que `format`, `gabarit`, `champs`, `charte` et, pour un fond peint par l'IA, `illustration` ; aucun `fond_ia` (champ posé par la fabrique), aucune couleur, police, logo, fichier ni URL.
    - [ ] AVANT : la `charte` est l'identifiant donné par la tâche ou la fiche du client, jamais deviné ; un message « charte refusée » n'est pas redéposé, il est signalé.
-   - [ ] AVANT : aucun visage, nom ou voix d'une vraie personne, aucun faux avis, aucune fausse urgence.
+   - [ ] AVANT : les limites « Personne réelle » et « Témoignage » de la liste AVANT sont tenues, aucune fausse urgence.
    - [ ] AVANT : marque tierce : rubrique Droits du dossier du sujet sourcée (compétence `dossier-sujet`) ; « à confirmer » ou source absente : verdict « publiable après corrections » au plus, liaison vers `juridique` demandée au coordinateur, diffusion en attente de sa revue. Chaque fait de l'image figure dans les `Faits vérifiés` du dossier.
    - [ ] APRÈS : l'état est « terminé » et le résultat donne `image.png` avec son poids et son empreinte ; le fichier `provenance.json` est posé par la fabrique (la porte le contrôle avant diffusion), il ne se refait pas à la main.
    - [ ] APRÈS : le texte lu dans l'aperçu et dans l'image est exactement celui de la demande (chiffre, orthographe, coupure de ligne), le contraste et la lisibilité sont constatés sur le fichier, pas supposés.
-   - [ ] APRÈS : une image sans fond généré porte la provenance IA dans ses métadonnées ; l'image ne porte aucune mention incrustée (décision de l'opérateur du 01/11/2026, « pas pro ») et la mention « Image réalisée avec l'IA » (ou équivalent) figure dans le texte du post, légende ou commentaire. Étiquettes des régies (Meta, LinkedIn, TikTok) : à vérifier dans leur centre d'aide au moment de publier.
+   - [ ] APRÈS : l'image porte la provenance IA dans ses métadonnées et aucune mention incrustée ; aucune mention n'est ajoutée au texte du post (décision de l'opérateur du 06/11/2026). Étiquettes des régies (Meta, LinkedIn, TikTok) : à vérifier dans leur centre d'aide au moment de publier.
 3. **Conclure** par un verdict : conforme sur les points vérifiés, conforme après corrections listées, ou bloqué (raison). Une case non cochée est écrite, jamais passée sous silence.
 
 ## Livrable
@@ -89,6 +87,8 @@ Le bloc « Conformité » dans le commentaire de la tâche : les deux listes ave
   8 juillet 2026, JO L du 24/07/2026). Les §§ 1, 4 et 5 s'appliquent depuis le 02/08/2026.
 - Le rôle de « fournisseur » au sens du règlement sur l'IA (qui est tenu de quoi quand l'atelier fabrique la vidéo pour un client) est
   un point incertain : à confirmer par un juriste avant de vendre le service.
+- Aucune mention n'est ajoutée au public, par décision de l'opérateur du 06/11/2026 : le risque lié à l'article 50, § 4, pour un contenu qui peut
+  passer pour réel est assumé, et reste à confirmer par un juriste avant de vendre le service.
 - Les règles des régies (TikTok, Meta, YouTube, LinkedIn) changent : relire leur centre d'aide au moment de publier.
 
 ## Sources officielles
@@ -108,10 +108,10 @@ Le bloc « Conformité » dans le commentaire de la tâche : les deux listes ave
 
 Cas nominal : vidéo de 20 secondes, voix de synthèse du registre, musique du registre. Liste AVANT : toutes cases cochées sauf
 « produit d'assurance » (non applicable : cabinet de rénovation). Liste APRÈS : absence de mention incrustée et de filigrane visible constatée sur la vidéo,
-texte du post « vidéo réalisée avec l'IA », étiquette TikTok à activer par la personne qui publie. Verdict : conforme sur les
+règle d'étiquette de TikTok à vérifier par la personne qui publie. Verdict : conforme sur les
 points vérifiés, écoute humaine encore demandée.
 
-Cas d'échec évité : un brief demandait « la voix de l'animateur de la radio locale ». Sans contrat écrit avec cette personne, la
+Cas d'échec évité : un brief demandait « la voix de l'animateur de la radio locale ». Sans accord écrit de cette personne, la
 demande est bloquée et remplacée par une voix du registre.
 
 ## Origine de la méthode

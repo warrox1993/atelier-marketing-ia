@@ -214,7 +214,7 @@ def test_le_voile_du_fond_est_celui_des_images_et_le_contraste_de_4_5_est_tenu_s
 
 
 def test_le_montage_n_incruste_aucune_mention_ia():
-    """Choix de l'opérateur du 01/11 : pas de mention IA dans la vidéo, illustrée ou non (elle va dans le texte du post)."""
+    """Décision de l'opérateur du 06/11 : aucune mention IA, ni dans la vidéo, illustrée ou non, ni dans le texte du post."""
     import inspect
     from fabrique.generateurs import montage
     source = inspect.getsource(montage)

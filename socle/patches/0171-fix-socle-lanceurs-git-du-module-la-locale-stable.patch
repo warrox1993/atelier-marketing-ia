@@ -1,0 +1,114 @@
+From b478474ae91f5087f5ef78acfb2c2ce008154bba Mon Sep 17 00:00:00 2001
+From: Jean-Baptiste Dhondt <114347858+warrox1993@users.noreply.github.com>
+Date: Wed, 4 Nov 2026 23:46:09 +0100
+Subject: [PATCH] =?UTF-8?q?fix(socle):=20lanceurs=20git=20du=20module=20?=
+ =?UTF-8?q?=C3=A0=20la=20locale=20stable?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01EThpSQivkg5UcW9gyGppeG
+---
+ .../src/git-workspace-sync.test.ts            | 45 +++++++++++++++++++
+ .../adapter-utils/src/git-workspace-sync.ts   |  8 ++--
+ 2 files changed, 50 insertions(+), 3 deletions(-)
+
+diff --git a/packages/adapter-utils/src/git-workspace-sync.test.ts b/packages/adapter-utils/src/git-workspace-sync.test.ts
+index e9ecf223ae..294a7073c3 100644
+--- a/packages/adapter-utils/src/git-workspace-sync.test.ts
++++ b/packages/adapter-utils/src/git-workspace-sync.test.ts
+@@ -866,6 +866,51 @@ exit 0
+     expect(body).toContain("shares no ancestor");
+   });
+ 
++  it("classe les erreurs git sous une locale française (lanceurs à la locale stable)", async () => {
++    const saved = { LC_ALL: process.env.LC_ALL, LANGUAGE: process.env.LANGUAGE };
++    process.env.LC_ALL = "fr_FR.UTF-8";
++    process.env.LANGUAGE = "fr";
++    try {
++      const rootDir = await mkdtemp(path.join(os.tmpdir(), "paperclip-git-locale-fr-"));
++      cleanupDirs.push(rootDir);
++      const setupIdentity = ["-c", "user.name=Setup", "-c", "user.email=setup@example.invalid"];
++      const source = path.join(rootDir, "source");
++      await mkdir(source, { recursive: true });
++      await git(source, ["init"]);
++      await git(source, ["checkout", "-b", "main"]);
++      for (const name of ["un", "deux"]) {
++        await writeFile(path.join(source, `${name}.txt`), `${name}\n`, "utf8");
++        await git(source, ["add", "-A"]);
++        await git(source, [...setupIdentity, "commit", "-m", name]);
++      }
++      const first = await git(source, ["rev-parse", "HEAD~1"]);
++      const host = path.join(rootDir, "host");
++      await mkdir(host, { recursive: true });
++      await git(host, ["init"]);
++
++      // Bundle delta dont le prérequis manque à l'hôte : reconnu malgré la langue.
++      const deltaBundle = path.join(rootDir, "delta.bundle");
++      await git(source, ["bundle", "create", deltaBundle, `${first}..HEAD`, "HEAD"]);
++      const deltaError = await fetchGitBundleIntoLocalRef({
++        localDir: host, bundlePath: deltaBundle, exportRef: "HEAD", importedRef: "refs/paperclip/test-delta", baseSha: first,
++      }).catch((error: unknown) => error);
++      expect(deltaError).toBeInstanceOf(Error);
++      expect(isMissingGitPrerequisiteError(deltaError)).toBe(true);
++
++      // merge-tree sur un objet invalide : classé invalid_object malgré la langue.
++      const missingHead = "0123456789abcdef0123456789abcdef01234567";
++      const currentHead = await git(source, ["rev-parse", "HEAD"]);
++      const error = await withWorkspaceRestoreDiagnostics("workspace", () => withWorkspaceRestoreStep("git_integration", () =>
++        integrateImportedGitHead({ localDir: source, importedHead: missingHead }))).catch((cause: unknown) => cause);
++      expect(getWorkspaceRestoreDiagnostic(error)).toMatchObject({ gitCommand: "merge_tree", gitFailureKind: "invalid_object" });
++      expect(await git(source, ["rev-parse", "HEAD"])).toBe(currentHead);
++    } finally {
++      for (const [key, value] of Object.entries(saved)) {
++        if (value === undefined) delete process.env[key]; else process.env[key] = value;
++      }
++    }
++  });
++
+   it.each([false, true])("does not graft on a merge-base error other than missing ancestry (baseline supplied: %s)", async (withBaseline) => {
+     const rootDir = await mkdtemp(path.join(os.tmpdir(), "paperclip-git-no-graft-"));
+     cleanupDirs.push(rootDir);
+diff --git a/packages/adapter-utils/src/git-workspace-sync.ts b/packages/adapter-utils/src/git-workspace-sync.ts
+index ca28fa0548..7cde79c7ac 100644
+--- a/packages/adapter-utils/src/git-workspace-sync.ts
++++ b/packages/adapter-utils/src/git-workspace-sync.ts
+@@ -118,7 +118,7 @@ export async function runLocalGit(
+       {
+         timeout: options.timeout ?? 15_000,
+         maxBuffer: options.maxBuffer ?? 1024 * 128,
+-        env: options.env ?? process.env,
++        env: withStableGitLocale(options.env ?? process.env),
+       },
+       (error, stdout, stderr) => {
+         if (error) {
+@@ -140,6 +140,8 @@ async function runExpensiveWorkspaceGit(
+   operation: string,
+   options: { timeout: number; maxBuffer: number; env?: NodeJS.ProcessEnv; onStdout?: ExpensiveWorkspaceGitInput["onStdout"]; signal?: AbortSignal },
+ ): Promise<GitCommandResult> {
++  // Un seul point pour l'exécuteur injecté et le processus en flux : messages git stables.
++  const env = withStableGitLocale(options.env ?? process.env);
+   if (expensiveWorkspaceGitExecutor) {
+     return await expensiveWorkspaceGitExecutor({
+       localDir,
+@@ -147,14 +149,14 @@ async function runExpensiveWorkspaceGit(
+       operation,
+       timeout: options.timeout,
+       maxBuffer: options.maxBuffer,
+-      env: options.env,
++      env,
+       onStdout: options.onStdout,
+       signal: options.signal,
+     });
+   }
+   if (options.onStdout) return runWorkspaceGitProcess({
+     cwd: localDir, args, timeoutMs: options.timeout, maxStdoutBytes: options.maxBuffer,
+-    maxStderrBytes: options.maxBuffer, onStdout: options.onStdout, signal: options.signal, env: options.env,
++    maxStderrBytes: options.maxBuffer, onStdout: options.onStdout, signal: options.signal, env,
+   });
+   return await runLocalGit(localDir, args, options);
+ }
+-- 
+2.53.0
+

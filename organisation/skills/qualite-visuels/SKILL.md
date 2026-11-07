@@ -1,8 +1,8 @@
 ---
 name: "qualite-visuels"
-description: "Note une image ou une vidéo publicitaire fabriquée par l'atelier en la regardant (image entière, ou planche d'images clés et transcription d'une vidéo) sur une grille de dix critères notés sur 20, et décide si elle est publiable : 16/20 au moins, aucun 0, note pleine sur les faits, la charte et la conformité IA (aucune mention incrustée, la mention IA dans le texte du post). À utiliser par le relecteur pour toute revue d'un livrable qui contient une image ou une vidéo fabriquée, avant le verdict ; jamais pour juger un texte seul, ni pour remplacer l'approbation humaine du goût."
+description: "Note une image ou une vidéo publicitaire fabriquée par l'atelier en la regardant (image entière, ou planche d'images clés et transcription d'une vidéo) sur une grille de dix critères notés sur 20, et décide si elle est publiable : 16/20 au moins, aucun 0, note pleine sur les faits, la charte et la conformité (aucune mention incrustée). À utiliser par le relecteur pour toute revue d'un livrable qui contient une image ou une vidéo fabriquée, avant le verdict ; jamais pour juger un texte seul, ni pour remplacer l'approbation humaine du goût."
 metadata:
-  version: "1.5.0"
+  version: "1.6.0"
   langue: "fr"
   domaine: "contenu"
 ---
@@ -54,7 +54,7 @@ relève du jugement : l'accroche, la clarté, le rythme, le ton, la fidélité a
    | 7 | Appel à l'action | Un seul appel, clair, réalisable, conforme à l'offre confirmée |
    | 8 | Dossier du sujet | Chaque fait, chiffre et nom vient du dossier ou de la fiche ; rien de la rubrique `À ne pas dire` ; **éliminatoire** |
    | 9 | Charte | Couleurs, police et logo de la charte, rien en plus ; **éliminatoire** |
-   | 10 | Mention IA et conformité | Ni l'image ni la vidéo ne portent de mention incrustée (une mention « généré avec l'IA » ou un filigrane visible dans l'image ou la vidéo est un défaut : 0 ; le filigrane audio inaudible des voix n'en est pas un) ; la mention va dans le texte du post qui l'accompagne, légende ou commentaire (« Image réalisée avec l'IA », « vidéo réalisée avec l'IA » ou équivalent) ; sans elle dans le texte du post : 0. Liste APRÈS remplie ; **éliminatoire** |
+   | 10 | Conformité | Ni l'image ni la vidéo ne portent de mention ni de filigrane visible (c'est un défaut : 0 ; le filigrane audio inaudible des voix n'en est pas un). Liste APRÈS remplie ; **éliminatoire** |
 
 4. Décide : **publiable** si le total est d'au moins 16/20, sans aucun 0, et avec 2/2 aux critères 8, 9 et 10.
 5. Écris le verdict selon ta consigne : `PASS` si publiable ; sinon `CHANGES_REQUESTED` avec un constat `majeure` par
@@ -67,7 +67,7 @@ relève du jugement : l'accroche, la clarté, le rythme, le ton, la fidélité a
 Regarde d'abord si le rendu contient un vrai visuel peint (personnage, décor, ambiance) derrière le texte. Un aplat de
 couleur avec du texte seul, ou une scène de vidéo sans illustration, est une publicité sans visuel : note globale 1/20,
 verdict `CHANGES_REQUESTED` avec un constat `majeure` de catégorie `marque` et la correction « ajouter le champ `illustration`
-(20 à 2500 caractères) à la demande, sans texte, logo ni personne réelle dans la description ». Ne détaille alors pas les
+(20 à 2500 caractères) à la demande, sans texte ni logo dans la description ». Ne détaille alors pas les
 dix critères au-delà de ce constat. Côté producteur, c'est la première chose à vérifier avant de déposer la demande.
 
 ### Contrôle anatomique

@@ -1309,9 +1309,9 @@ class RestesOA4(unittest.TestCase):
         self.assertIn("non mesurable", corps)
         self.assertIn("continuer, ajuster ou revenir à une étape", corps)
         c = self.texte("organisation/agents/coordinateur/AGENTS.md")
-        # Tâche racine en backlog : aucun réveil avant la routine, aucune place prise parmi les 4 sous-tâches ouvertes.
-        self.assertIn("crée pour `mesure` une tâche « Bilan J+30 de", c)
-        self.assertIn('"status":"backlog"', c)
+        # Lot 2 T11 : le plugin crée la tâche en backlog (tests/bilan-j30.spec.ts) ; le coordinateur ne la crée plus.
+        self.assertIn("créé par le plugin à sa confirmation réelle", c)
+        self.assertIn("tu ne le crées jamais toi-même", c)
         self.assertIn("tes tâches « Bilan J+30 » en `backlog`", corps)
 
     def test_pieges_valides_vides_au_depart(self):
@@ -1650,8 +1650,14 @@ class RestesDH1(unittest.TestCase):
         # DOC-A15 : registres modifiés sans changement de version ni de date (agents.json 1.14.0 le 01/11 : mention IA hors du rendu).
         agents = json.loads((RACINE / "organisation/registre/agents.json").read_text(encoding="utf-8"))
         services = json.loads((RACINE / "organisation/registre/services.json").read_text(encoding="utf-8"))
-        self.assertEqual((agents["version"], agents["dateVersion"]), ("1.14.0", "2026-11-01"))
-        self.assertEqual((services["version"], services["dateVersion"]), ("1.1.0", "2026-10-30"))
+        self.assertEqual((agents["version"], agents["dateVersion"]), ("1.16.0", "2026-11-07"))
+        self.assertEqual((services["version"], services["dateVersion"]), ("1.2.0", "2026-11-02"))
+
+    def test_rotation_de_session_du_coordinateur(self):
+        # T03 (lot 2) : le coordinateur repart d'une session neuve tous les 5 runs.
+        agents = json.loads((RACINE / "organisation/registre/agents.json").read_text(encoding="utf-8"))
+        coord = next(a for a in agents["agents"] if a["slug"] == "coordinateur")
+        self.assertEqual(bo.rotation_session(coord), {"sessionCompaction": {"enabled": True, "maxSessionRuns": 5}})
 
     def test_garde_fou_date_de_version_du_registre(self):
         # DOC-A15 : une dateVersion antérieure au dernier commit du fichier est refusée ; hors dépôt git, rien n'est dit.
@@ -1894,7 +1900,7 @@ class DecisionsUsine(unittest.TestCase):
 
     def test_mk13_posts_sociaux_publies_par_contenus(self):
         # Option A (JB, 15/10) : Réseaux sociaux n'a aucune connexion, Contenus recopie le post approuvé dans sa révision.
-        self.assertIn("puis diffusées par le rôle Contenus, qui recopie mot pour mot le post approuvé dans son livrable ; "
+        self.assertIn("puis diffusée par le rôle Contenus, qui recopie mot pour mot le post approuvé dans son livrable ; "
                       "cette révision repasse par la porte.", self.consigne("reseaux-sociaux"))
         self.assertIn("Post de Réseaux sociaux : recopie mot pour mot la version approuvée (cite la tâche et le numéro de "
                       "révision source), sans aucune retouche ; la porte et les revues s'appliquent à ta révision",
@@ -1959,7 +1965,35 @@ class IllustrationEtControleAnatomique(unittest.TestCase):
             t = self.texte(f"organisation/agents/{slug}/AGENTS.md")
             self.assertIn("**Illustration (obligatoire)**", t, slug)
             self.assertIn("`illustration` (20 à 2500 caractères)", t, slug)
-            self.assertIn("Jamais de texte, de lettres, de logo, de marque ni de personne réelle", t, slug)
+            self.assertIn("Jamais de texte, de lettres, de logo ni de marque", t, slug)
+
+    def test_contenus_inventes_permis_deux_limites_ecrites_une_fois(self):
+        # Décision de l'opérateur (06/11/2026) : visage, voix, bureau et scène inventés sont permis, réalisme photographique compris.
+        # Les deux limites ne sont écrites qu'une fois, dans conformite-publicite-ia ; les autres textes y renvoient.
+        t = " ".join(self.texte("organisation/skills/conformite-publicite-ia/SKILL.md").split())
+        self.assertEqual(t.count("**Personne réelle**"), 1)
+        self.assertEqual(t.count("**Témoignage**"), 1)
+        self.assertIn("sans son accord écrit", t)
+        self.assertIn("pas de faux témoignage ni de faux avis de client présenté comme vrai", t)
+        self.assertIn("y compris en réalisme photographique", t)
+        self.assertNotIn("Aucune voix, aucun visage", t)
+        for chemin in ("organisation/agents/contenus/AGENTS.md", "organisation/agents/reseaux-sociaux/AGENTS.md",
+                       "organisation/skills/script-video-publicitaire/SKILL.md", "organisation/skills/design-visuel-sobre/SKILL.md",
+                       "organisation/skills/design-visuel-sobre/references/description-flux3.md",
+                       "organisation/skills/qualite-visuels/SKILL.md", "plugin-atelier/src/contrats/fabrique-outils-schemas.ts"):
+            t = " ".join(self.texte(chemin).split())
+            for interdit in ("personne réelle ou célèbre", "aucun visage", "voix humaine", "personnages de fiction",
+                             "le visage ou le nom d'une vraie personne"):
+                self.assertNotIn(interdit, t, chemin)
+        # Aucun contrôle serveur ne filtre l'illustration : l'outil renvoie aux limites au moment de l'appel (vidéo et image).
+        t = " ".join(self.texte("plugin-atelier/src/contrats/fabrique-outils-schemas.ts").split())
+        self.assertEqual(t.count("visages et scènes inventés permis, sauf personne réelle et faux témoignage (limites : conformite-publicite-ia)"), 2)
+        t = " ".join(self.texte("organisation/skills/design-visuel-sobre/references/description-flux3.md").split())
+        self.assertIn("**Une personne réelle ou un faux témoignage** : limites dans la compétence `conformite-publicite-ia`", t)
+        # La contrainte technique de la description FLUX et le registre des voix restent.
+        t = " ".join(self.texte("organisation/skills/script-video-publicitaire/SKILL.md").split())
+        self.assertIn("Aucune voix hors registre", t)
+        self.assertIn("Ni texte, ni lettres, ni logo, ni marque", t)
 
     def test_producteurs_renvoient_a_la_description_flux3(self):
         for slug in ("contenus", "reseaux-sociaux"):
@@ -1998,31 +2032,35 @@ class IllustrationEtControleAnatomique(unittest.TestCase):
             t = self.texte(f"organisation/skills/{skill}/SKILL.md")
             self.assertIn("expose peu les mains", t, skill)
 
-    def test_mention_ia_hors_du_rendu_dans_le_texte_du_post(self):
-        # Décisions de l'opérateur (01/11/2026) : ni l'image ni la vidéo ne portent de mention incrustée ; la mention va dans le
-        # texte du post, la provenance reste dans les métadonnées.
+    def test_aucune_mention_ia_ni_dans_le_rendu_ni_dans_le_texte_du_post(self):
+        # Décision de l'opérateur (06/11/2026) : aucune mention IA pour le public ; la provenance reste dans les métadonnées.
         for chemin in ("organisation/skills/qualite-visuels/SKILL.md", "organisation/agents/relecteur/AGENTS.md"):
             t = " ".join(self.texte(chemin).split())
-            self.assertRegex(t, r"ne porte(nt)? (pas )?de mention incrustée", chemin)
-            self.assertIn("la mention va dans le texte du post", t, chemin)
+            self.assertRegex(t, r"ne porte(nt)? (pas )?de mention", chemin)
+            self.assertNotIn("la mention va dans le texte du post", t, chemin)
+            self.assertNotIn("sans elle, 0 éliminatoire", t, chemin)
+            self.assertNotIn("sans elle dans le texte du post", t, chemin)
             self.assertNotIn("Mention visible dès le début", t, chemin)
             self.assertNotIn("mention IA visible dès le début", t, chemin)
         t = " ".join(self.texte("organisation/skills/conformite-publicite-ia/SKILL.md").split())
-        self.assertIn("l'image ne porte aucune mention incrustée", t)
+        self.assertIn("aucune mention IA n'est ajoutée, ni à la vidéo ni au texte du post", t)
         self.assertIn("La vidéo ne porte aucune mention incrustée ni filigrane visible", t)
-        self.assertNotIn("doit être visible dans l'image", t)
-        self.assertNotIn("La mention IA est visible dès le début", t)
-        self.assertNotIn("L'outil pose d'office la mention", t)
+        self.assertIn("l'image porte la provenance IA dans ses métadonnées", t)
+        for ancien in ("Le texte du post annonce", "Image réalisée avec l'IA", "vidéo réalisée avec l'IA", "Signalement de l'IA", "signalement de l'IA"):
+            self.assertNotIn(ancien, t)
         t = " ".join(self.texte("organisation/skills/script-video-publicitaire/SKILL.md").split())
-        self.assertIn("l'outil n'incruste aucune mention ; écris-la dans le texte du post", t)
+        self.assertIn("aucune mention n'est ajoutée", t)
+        self.assertNotIn("écris-la dans le texte du post", t)
         self.assertNotIn("l'outil les pose d'office", t)
         for slug in ("contenus", "reseaux-sociaux"):
             t = " ".join(self.texte(f"organisation/agents/{slug}/AGENTS.md").split())
-            self.assertIn("l'image ne porte aucune mention incrustée", t, slug)
-            self.assertIn("le texte du post qui l'accompagne", t, slug)
-        # Les déclinaisons gardent la mention dans le texte du post et le rappel d'étiquette de la régie.
-        t = self.texte("organisation/skills/declinaison-regies-video/SKILL.md")
-        self.assertIn("rappel d'activer l'étiquette « contenu généré par IA »", t)
+            self.assertNotIn("Mention IA d'une image", t, slug)
+            self.assertNotIn("Image réalisée avec l'IA", t, slug)
+            self.assertNotIn("taire que la vidéo est faite avec l'IA", t, slug)
+        t = " ".join(self.texte("organisation/skills/declinaison-regies-video/SKILL.md").split())
+        self.assertNotIn("mention IA", t)
+        self.assertNotIn("vidéo réalisée avec l'IA", t)
+        self.assertNotIn("signale que la vidéo est faite avec l'IA", t)
 
 if __name__ == "__main__":
     unittest.main(verbosity=1)

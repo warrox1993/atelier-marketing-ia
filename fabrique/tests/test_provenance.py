@@ -92,7 +92,7 @@ def test_poser_provenance_complet(tmp_path, voix_filigranee):
     assert resultat.ok, resultat.motif
     contenu = json.loads((video.parent / "provenance.json").read_text(encoding="utf-8"))
     assert contenu["digital_source_type"] == provenance.DIGITAL_SOURCE_TYPE
-    assert contenu["mention_visible"] is False and contenu["filigrane_perth"]["detecte"] is True
+    assert "mention_visible" not in contenu and contenu["filigrane_perth"]["detecte"] is True
     assert contenu["sha256"] == provenance.empreinte_sha256(video)
     assert contenu["voix"] == ["synthese-chatterbox-fr"] and contenu["musique"]["licence"] == "CC0"
     assert contenu["outils"]["chatterbox"] == "0.1.7" and "ffmpeg" in contenu["outils"]

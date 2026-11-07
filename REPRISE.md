@@ -11,7 +11,7 @@ Prime sur la section du 25/10 pour les deux points ci-dessous (mesures de l'audi
   (Observatoire), 219 d'agent en `block`, dont la Porte du Marketing (adaptateur `process`). Le piège mesuré sur la Porte de
   l'Observatoire le 27/10 (premier passage = mise en pause) la menace probablement aussi (non mesuré). Décision du 30/10
   (option recommandée) : passer la Porte du Marketing en `allow` comme celle de l'Observatoire, par la route et la méthode de
-  `docs/observatoire/deploiement-phase-3.md` §6 bis (`GET` avant et après, seul `unpricedUsagePolicy` change). Pas encore fait.
+  `docs/observatoire/deploiement-phase-3.md` §6 bis (`GET` avant et après, seul `unpricedUsagePolicy` change). `appliquer` le pose désormais (`assurer_usage_non_tarife_porte`) ; pas encore appliqué sur 3100, cela se fera au prochain déploiement, par l'opérateur.
 - **Gardien du Marketing** : en pause (audit du 29/10) ; à reprendre après le lot S (`docs/exploitation.md` §10).
 
 ## État au 25/10/2026
@@ -102,12 +102,11 @@ de l'après-midi et du soir : `git log --oneline 51be4b1..HEAD` (tête `7bc4dd2`
 2. Passer l'instance 3100 en réel (non fait) .
    (Les cartes COUA-3, COUA-4 et COUA-5 de l'ancienne instance 3580 disparaissent avec elle.)
 3. Fixer la durée de validité de la liste « Ne m'appelez plus » (30 jours proposés).
-4. Relire la mention d'information IA en NL et en EN.
-5. Sécurité ouverte : m1 (données additionnelles authentifiées du chiffrement) et m8 (HTML caché). CodeQL non activé sur GitHub :
+4. Sécurité ouverte : m1 (données additionnelles authentifiées du chiffrement) et m8 (HTML caché). CodeQL non activé sur GitHub :
    accord de l'opérateur attendu.
-6. Essai réel de `nouveau-client` sur une instance d'essai (il n'a été prouvé qu'avec une fausse API).
-7. Confirmer la licence ODbL des données OpenStreetMap.
-8. Accès mobile par Tailscale (9 étapes ci-dessous), clé OpenAI pour la voix (`docs/voix-en-direct.md`), réindexation bge-m3 (script `scripts/reindexer-connaissances.py` retiré le 16/10/2026) : encore à faire d'après ce document, à confirmer avant de les lancer.
+5. Essai réel de `nouveau-client` sur une instance d'essai (il n'a été prouvé qu'avec une fausse API).
+6. Confirmer la licence ODbL des données OpenStreetMap.
+7. Accès mobile par Tailscale (9 étapes ci-dessous), clé OpenAI pour la voix (`docs/voix-en-direct.md`), réindexation bge-m3 (script `scripts/reindexer-connaissances.py` retiré le 16/10/2026) : encore à faire d'après ce document, à confirmer avant de les lancer.
 
 Étapes de l'accès mobile (aucun document de `docs/` ne les détaille ; `docs/evolution-deploiement.md` décrit les modes de déploiement) :
 

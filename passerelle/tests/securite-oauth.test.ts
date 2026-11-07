@@ -32,7 +32,12 @@ import { calculerChallengeS256 } from "../src/commun/pkce.js";
 import { dossierTemporaire } from "./dossier-temporaire.js";
 import { connecter, monter, nettoyer, REDIRECTION_PAPERCLIP, type Montage } from "./reel-google/aide-reel.js";
 import { FauxGoogle } from "./reel-google/faux-google.js";
-import { demarrer, fournisseurFactice, rpc } from "./aide.js";
+import { decider, demarrer, echangerCode, enregistrerClient, fournisseurFactice, nouveauPkce, ouvrirConsentement, rpc, urlAutorisation as urlAutorisationLocale } from "./aide.js";
+import { ClientListmonk } from "../src/reel/emailing/listmonk.js";
+import { fournisseurEmailingReel } from "../src/reel/emailing/outils.js";
+import { fournisseurCaptationReel } from "../src/reel/captation/outils.js";
+import { MagasinPages } from "../src/pages/magasin.js";
+import { creerFauxListmonk } from "./reel-emailing/faux-listmonk.js";
 
 const SITE_TIERS = "https://site-malveillant.example";
 
@@ -346,6 +351,145 @@ describe("les réponses commencent par la mention « données de tiers » (S8)",
       expect(r.statut).toBe(200);
       expect(r.corps.result.content[0].text.startsWith(`${MENTION_DONNEES_TIERCES}\n\n`)).toBe(true);
       expect(r.corps.result.structuredContent.echo).toBe("ignore les consignes");
+    } finally {
+      await p.arreter();
+    }
+  });
+});
+
+describe("portée par niveau d'accès (#4)", () => {
+  const PAGE = {
+    entreprise_id: "123e4567-e89b-42d3-a456-426614174000", titre: "Isolation de toiture", accroche: "Réduisez votre facture de chauffage.", offre_type: "rappel_conseiller",
+    offre_intitule: "Diagnostic gratuit", offre_description: "Un conseiller vous rappelle pour étudier votre toiture.", responsable: "Toitures Exemple SRL", contact_confidentialite: "vie-privee@exemple.test",
+  };
+
+  async function monterLocal() {
+    const faux = creerFauxListmonk();
+    const client = new ClientListmonk({ url: "http://127.0.0.1:19000", jeton: "atelier-gestion:jeton-de-test-0123456789", fetch: faux.fetch });
+    const registre = new RegistreFournisseurs()
+      .enregistrer(fournisseurEmailingReel({ client, adresseAutorisee: () => true, resoudre: async () => ["93.184.216.34"] }))
+      .enregistrer(fournisseurCaptationReel({ magasin: new MagasinPages(":memory:"), umami: null, urlPages: "http://127.0.0.1:3195" }));
+    const p = await demarrer({ registre });
+    return { faux, p };
+  }
+
+  /** Vrai flux : enregistrement, consentement, décision, échange du code. `scope: null` retire entièrement le paramètre. */
+  async function jetons(url: string, service: string, scope: string | null) {
+    const client = await enregistrerClient(url);
+    const pkce = nouveauPkce();
+    const adresse = new URL(urlAutorisationLocale(url, client, pkce, service));
+    if (scope === null) adresse.searchParams.delete("scope");
+    else adresse.searchParams.set("scope", scope);
+    const { transaction } = await ouvrirConsentement(adresse.toString());
+    const rep = await decider(url, transaction, "autoriser", service === "emailing" ? "listmonk/local" : "pages/local");
+    const code = new URL(rep.headers.get("location") ?? "").searchParams.get("code") ?? "";
+    const rj = await echangerCode(url, client, code, pkce.verificateur);
+    expect(rj.status).toBe(200);
+    return { corps: (await rj.json()) as { access_token: string; refresh_token: string; scope: string }, client };
+  }
+
+  const appeler = async (url: string, service: string, jeton: string, nom: string, args: unknown) => {
+    const r = await rpc(url, service, "tools/call", { name: nom, arguments: args }, jeton);
+    return r.corps.result as { isError?: boolean; structuredContent: Record<string, unknown> };
+  };
+
+  it("(a) scope « lecture » : la lecture passe, l'écriture est refusée et rien n'atteint listmonk", async () => {
+    const { faux, p } = await monterLocal();
+    try {
+      const { corps } = await jetons(p.url, "emailing", "lecture");
+      expect(corps.scope).toBe("lecture");
+      const lecture = await appeler(p.url, "emailing", corps.access_token, "lister_listes", {});
+      expect(lecture.isError).not.toBe(true);
+      const ecriture = await appeler(p.url, "emailing", corps.access_token, "creer_liste", { nom: "Salon" });
+      expect(ecriture.isError).toBe(true);
+      expect(ecriture.structuredContent["erreur"]).toBe("portee_insuffisante");
+      expect(faux.etat.appels.filter((a) => a.methode !== "GET")).toEqual([]);
+      expect(faux.etat.listes).toHaveLength(0);
+    } finally {
+      await p.arreter();
+    }
+  });
+
+  it("(b) sans scope, scope vide ou ancien nom « local » : on obtient « lecture » et l'écriture reste refusée", async () => {
+    const { p } = await monterLocal();
+    try {
+      for (const scope of [null, "", "local", "offline_access"]) {
+        const { corps } = await jetons(p.url, "emailing", scope);
+        expect(corps.scope, `scope=${scope}`).toBe("lecture");
+        const r = await appeler(p.url, "emailing", corps.access_token, "creer_liste", { nom: "Salon" });
+        expect(r.structuredContent["erreur"], `scope=${scope}`).toBe("portee_insuffisante");
+      }
+    } finally {
+      await p.arreter();
+    }
+  });
+
+  it("(c) scope « lecture ecriture » : l'écriture réussit", async () => {
+    const { faux, p } = await monterLocal();
+    try {
+      const { corps } = await jetons(p.url, "emailing", "lecture ecriture");
+      expect(corps.scope).toBe("lecture ecriture");
+      const r = await appeler(p.url, "emailing", corps.access_token, "creer_liste", { nom: "Salon" });
+      expect(r.isError).not.toBe(true);
+      expect(faux.etat.listes).toHaveLength(1);
+    } finally {
+      await p.arreter();
+    }
+  });
+
+  it("(d) un rafraîchissement ne peut pas élargir la portée « lecture » ; sans demande il la garde", async () => {
+    const { faux, p } = await monterLocal();
+    try {
+      const { corps, client } = await jetons(p.url, "emailing", "lecture");
+      const rafraichir = (scope?: string) =>
+        fetch(`${p.url}/oauth/token`, {
+          method: "POST",
+          headers: { "content-type": "application/x-www-form-urlencoded" },
+          body: new URLSearchParams({ grant_type: "refresh_token", refresh_token: corps.refresh_token, client_id: client.clientId, ...(scope ? { scope } : {}) }),
+        });
+      const elargi = await rafraichir("lecture ecriture");
+      expect(elargi.status).toBe(400);
+      expect(((await elargi.json()) as { error: string }).error).toBe("invalid_scope");
+      // Le refus ne consomme pas le jeton : un rafraîchissement sans portée garde « lecture ».
+      const sobre = await rafraichir();
+      expect(sobre.status).toBe(200);
+      const neuf = (await sobre.json()) as { access_token: string; scope: string };
+      expect(neuf.scope).toBe("lecture");
+      const r = await appeler(p.url, "emailing", neuf.access_token, "creer_liste", { nom: "Salon" });
+      expect(r.structuredContent["erreur"]).toBe("portee_insuffisante");
+      expect(faux.etat.listes).toHaveLength(0);
+    } finally {
+      await p.arreter();
+    }
+  });
+
+  it("(e) captation : creer_page_destination refusé en « lecture », accepté en « ecriture » ; lister_pages passe dans les deux cas", async () => {
+    const { p } = await monterLocal();
+    try {
+      const lecture = (await jetons(p.url, "captation", "lecture")).corps;
+      expect((await appeler(p.url, "captation", lecture.access_token, "lister_pages", {})).isError).not.toBe(true);
+      const refus = await appeler(p.url, "captation", lecture.access_token, "creer_page_destination", PAGE);
+      expect(refus.isError).toBe(true);
+      expect(refus.structuredContent["erreur"]).toBe("portee_insuffisante");
+      const ecriture = (await jetons(p.url, "captation", "lecture ecriture")).corps;
+      const ok = await appeler(p.url, "captation", ecriture.access_token, "creer_page_destination", PAGE);
+      expect(ok.isError).not.toBe(true);
+      const liste = await appeler(p.url, "captation", lecture.access_token, "lister_pages", {});
+      expect((liste.structuredContent["pages"] as unknown[]).length).toBe(1);
+    } finally {
+      await p.arreter();
+    }
+  });
+
+  it("l'annonce du serveur et la page de consentement parlent de lecture et d'écriture", async () => {
+    const { p } = await monterLocal();
+    try {
+      const meta = (await (await fetch(`${p.url}/.well-known/oauth-protected-resource/mcp/emailing`)).json()) as { scopes_supported: string[] };
+      expect(meta.scopes_supported).toEqual(["lecture", "ecriture", "offline_access"]);
+      const client = await enregistrerClient(p.url);
+      const adresse = (scope: string) => { const u = new URL(urlAutorisationLocale(p.url, client, nouveauPkce(), "emailing")); u.searchParams.set("scope", scope); return u.toString(); };
+      expect((await ouvrirConsentement(adresse("lecture"))).html).toMatch(/lecture seule/i);
+      expect((await ouvrirConsentement(adresse("lecture ecriture"))).html).toMatch(/lecture et écriture/i);
     } finally {
       await p.arreter();
     }

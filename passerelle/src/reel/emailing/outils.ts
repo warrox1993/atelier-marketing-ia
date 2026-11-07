@@ -17,7 +17,7 @@ import { exigerUrlPublique, type OptionsVerification } from "../liens/verifier-u
 import { retirerInvisibles } from "../extraction/contenu-tiers.js";
 import { ClientListmonk, ErreurListmonk, MESSAGE_ENVOI_TEST, lireJetonListmonk, modeEnvoi, type CampagneListmonk } from "./listmonk.js";
 import { controlerContenu, ErreurContenu } from "./contenu-courriel.js";
-import { ajouterMention, ajouterMentionHtml, lireMentionIa, MENTION_IA_PAR_DEFAUT, type MentionIa } from "../../mention-ia.js";
+import { ajouterMention, ajouterMentionHtml, lireMentionIa, type MentionIa } from "../../mention-ia.js";
 export { FICHE_EMAILING };
 
 export const GABARIT_CAMPAGNE = "atelier-corps";
@@ -30,7 +30,7 @@ const RE_CONTROLE = /[\u0000-\u001f\u007f]/;
 export interface OptionsEmailing extends Pick<OptionsVerification, "adresseAutorisee" | "resoudre"> {
   /** Client listmonk à droits de gestion (sans envoi). */
   client: ClientListmonk;
-  /** Mention d'information IA en pied des campagnes (E4, choix de transparence) ; absente : mention française par défaut. */
+  /** Mention d'information IA en pied des campagnes (voir mention-ia.ts) ; absente ou nulle : aucune mention. */
   mentionIa?: MentionIa;
   maintenant?: () => Date;
   journal?: (message: string) => void;
@@ -210,7 +210,7 @@ export function outilsEmailing(options: OptionsEmailing): OutilPasserelle[] {
       nom: "creer_campagne_brouillon",
       description:
         "ÉCRITURE (sans envoi). Crée une campagne en BROUILLON (sujet, contenu HTML et texte, listes). Elle ne s'envoie jamais toute seule : l'envoi est une décision humaine dans l'atelier. " +
-        "Le lien de désinscription et la mention d'information IA sont ajoutés en pied de page s'ils manquent. Refusés : script, formulaire, balise de gabarit hors liste blanche, lien vers une adresse locale ou privée, lien relatif. " +
+        "Le lien de désinscription est ajouté en pied de page s'il manque. Refusés : script, formulaire, balise de gabarit hors liste blanche, lien vers une adresse locale ou privée, lien relatif. " +
         "La réponse donne l'empreinte du contenu : à citer telle quelle dans la demande de confirmation d'envoi (marqueur [envoi-emailing:<id>:<empreinte>]).",
       schemaEntree: schemaCreerCampagneBrouillon,
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
@@ -225,9 +225,8 @@ export function outilsEmailing(options: OptionsEmailing): OutilPasserelle[] {
         if (inconnues.length > 0) throw new Error(`Liste(s) introuvable(s) : ${inconnues.join(", ")}.`);
         let controle;
         try {
-          // Mention ajoutée avant le contrôle : elle précède le pied de désinscription et figure dans ce que l'humain approuve.
-          const mention = options.mentionIa ?? MENTION_IA_PAR_DEFAUT;
-          controle = await controlerContenu(ajouterMentionHtml(retirerInvisibles(a.contenu_html).texte, mention), ajouterMention(retirerInvisibles(a.contenu_texte).texte, mention), verif);
+          // Mention éventuelle ajoutée avant le contrôle : elle précède le pied de désinscription et figure dans ce que l'humain approuve.
+          controle = await controlerContenu(ajouterMentionHtml(retirerInvisibles(a.contenu_html).texte, options.mentionIa), ajouterMention(retirerInvisibles(a.contenu_texte).texte, options.mentionIa), verif);
         } catch (e) {
           if (e instanceof ErreurContenu) throw e;
           throw new Error(`Contenu refusé : ${e instanceof Error ? e.message : String(e)}`);

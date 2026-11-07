@@ -80,7 +80,7 @@ Corps : aucun (rien à envoyer).
 
 Clé : `tache.messages.envoyer`. Envoi d'un message typé rattaché à la tâche.
 
-Aucun champ en plus de ceux listés (les champs inconnus sont refusés).
+Les champs inconnus sont refusés.
 
 | Champ | Type | Obligatoire | Bornes |
 | --- | --- | --- | --- |
@@ -165,7 +165,7 @@ Exemple minimal valide :
 
 Clé : `tache.donnees.deposer`. Dépôt de la réponse brute d'un outil de connexion (passerelle marketing) : le serveur en déduit le mode (démonstration ou réel) et retient ses chiffres pour ...
 
-Aucun champ en plus de ceux listés (les champs inconnus sont refusés).
+Les champs inconnus sont refusés.
 
 Règle croisée : `reponse` doit contenir `texte` ou `structuredContent` (au moins l'un des deux). `arguments` devient obligatoire en mode réel.
 
@@ -228,7 +228,7 @@ Exemple minimal valide :
 
 Clé : `tache.diffusions.issue`. Issue d'une diffusion réelle : réponse brute de l'outil de la passerelle, signature vérifiée, état confirmé ou à réconcilier (v1.5).
 
-Aucun champ en plus de ceux listés (les champs inconnus sont refusés).
+Les champs inconnus sont refusés.
 
 Règle croisée : `reponse` doit contenir `texte` ou `structuredContent` (au moins l'un des deux).
 
@@ -248,7 +248,7 @@ Exemple minimal valide :
 
 Clé : `tache.appels.proposer`. L'agent propose l'appel d'outil EXACT (service, outil, compte, arguments) d'une diffusion réelle ;
 
-Aucun champ en plus de ceux listés (les champs inconnus sont refusés).
+Les champs inconnus sont refusés.
 
 | Champ | Type | Obligatoire | Bornes |
 | --- | --- | --- | --- |
@@ -283,7 +283,7 @@ Exemple minimal valide :
 
 Clé : `tache.mettre-sous-porte`. MK-01 : le Coordinateur (seul) met une tâche à livrable public sous la porte : politique native du gabarit livrable-public (revue par la Porte de contrôle, p...
 
-Aucun champ en plus de ceux listés (les champs inconnus sont refusés).
+Les champs inconnus sont refusés.
 
 | Champ | Type | Obligatoire | Bornes |
 | --- | --- | --- | --- |
@@ -410,7 +410,7 @@ Exemple minimal valide :
 
 Clé : `tache.prospects.deposer`. Dépôt de la réponse brute et signée d'un outil bce, bnb, fsma, osm ou b2c ;
 
-Aucun champ en plus de ceux listés (les champs inconnus sont refusés).
+Les champs inconnus sont refusés.
 
 Règle croisée : `reponse` doit contenir `texte` ou `structuredContent` (au moins l'un des deux).
 
@@ -435,7 +435,7 @@ Exemple minimal valide :
 
 Clé : `tache.prospects.telephone`. DROIT-1.3 : un numéro publié, lu sur une source de la tâche (sourceId), est chiffré dans la fiche du prospect (empreinte, oppositions et liste « Ne m'appelez...
 
-Aucun champ en plus de ceux listés (les champs inconnus sont refusés).
+Les champs inconnus sont refusés.
 
 | Champ | Type | Obligatoire | Bornes |
 | --- | --- | --- | --- |
@@ -452,7 +452,7 @@ Exemple minimal valide :
 
 Clé : `prospects.exclure`. Exclusion d'un prospect avec un motif connu, journalisée.
 
-Aucun champ en plus de ceux listés (les champs inconnus sont refusés).
+Les champs inconnus sont refusés.
 
 | Champ | Type | Obligatoire | Bornes |
 | --- | --- | --- | --- |
@@ -471,7 +471,7 @@ Exemple minimal valide :
 
 Clé : `tache.prospects.exporter`. Demande d'export de prospects vers le CRM du client pour un canal : base légale vérifiée par prospect, puis diffusion réelle sous preuve d'approbation.
 
-Aucun champ en plus de ceux listés (les champs inconnus sont refusés).
+Les champs inconnus sont refusés.
 
 | Champ | Type | Obligatoire | Bornes |
 | --- | --- | --- | --- |
@@ -491,7 +491,7 @@ Exemple minimal valide :
 
 Clé : `tache.connaissances.rechercher`. Recherche hybride (plein texte et sens) dans les documents de l'entreprise de la tâche ;
 
-Aucun champ en plus de ceux listés (les champs inconnus sont refusés).
+Les champs inconnus sont refusés.
 
 | Champ | Type | Obligatoire | Bornes |
 | --- | --- | --- | --- |
@@ -521,7 +521,7 @@ Corps : aucun (rien à envoyer).
 
 Clé : `prospects.critere.evaluer`. Évaluation d'un critère personnalisé d'un lead par l'agent Prospection (verifie, contraire ou non_verifie), avec justification et sources ;
 
-Aucun champ en plus de ceux listés (les champs inconnus sont refusés).
+Les champs inconnus sont refusés.
 
 Règle croisée : Un statut `verifie` ou `contraire` exige au moins une source ; `non_verifie` accepte une liste vide.
 
@@ -542,7 +542,7 @@ Exemple minimal valide :
 
 Clé : `experiences.creer`. Ouvre une expérience A/B (hypothèse, métrique de type taux, 2 à 4 variantes dont la première est la référence, essais minimaux par variante, durée maximale, ...
 
-Aucun champ en plus de ceux listés (les champs inconnus sont refusés).
+Les champs inconnus sont refusés.
 
 Règle croisée : `variantes` : 2 à 4, la première est la référence ; `alpha` vaut 0,05 par défaut. Tu dois être l'assigné de la tâche `issueId`.
 
@@ -571,7 +571,7 @@ Exemple minimal valide :
 
 Clé : `experiences.resultats`. Dépose les résultats (essais et succès) d'une ou plusieurs variantes d'une expérience en cours.
 
-Aucun champ en plus de ceux listés (les champs inconnus sont refusés).
+Les champs inconnus sont refusés.
 
 Règle croisée : Un agent cite des chiffres d'une réponse signée déjà déposée (`sourceId` et `chemin` tels que listés dans les chiffres retenus de la source) et ne saisit JAMAIS de nombres ; seul un humain saisit `{variante, essais, succes}`. Ne pas mélanger les deux formes pour une variante.
 
@@ -604,7 +604,7 @@ Exemple minimal valide :
 
 Clé : `experiences.cloturer`. Clôt l'expérience : le serveur calcule et fige le verdict (test z de deux proportions, Bonferroni au-delà de deux variantes, intervalle de confiance à 95 % d...
 
-Aucun champ en plus de ceux listés (les champs inconnus sont refusés).
+Les champs inconnus sont refusés.
 
 | Champ | Type | Obligatoire | Bornes |
 | --- | --- | --- | --- |
@@ -621,7 +621,7 @@ Exemple minimal valide :
 
 Clé : `emailing.demander_envoi`. Demande l'envoi d'une campagne e-mail : le PLUGIN crée lui-même, sur la tâche issueId, la carte request_confirmation (texte construit côté serveur, jamais ré...
 
-Aucun champ en plus de ceux listés (les champs inconnus sont refusés).
+Les champs inconnus sont refusés.
 
 | Champ | Type | Obligatoire | Bornes |
 | --- | --- | --- | --- |
@@ -640,7 +640,7 @@ Exemple minimal valide :
 
 Clé : `emailing.envoyer`. Envoie une campagne e-mail (brouillon créé par l'outil creer_campagne_brouillon de la passerelle) SEULEMENT si la carte créée par le plugin via emailing.dema...
 
-Aucun champ en plus de ceux listés (les champs inconnus sont refusés).
+Les champs inconnus sont refusés.
 
 | Champ | Type | Obligatoire | Bornes |
 | --- | --- | --- | --- |
@@ -659,7 +659,7 @@ Exemple minimal valide :
 
 Clé : `liaison.demander`. Demande d'un service à un autre par le bureau de liaison : tâche d'origine = celle du chemin (corps {tacheOrigineId, serviceCible, objet, question, extraits}).
 
-Aucun champ en plus de ceux listés (les champs inconnus sont refusés).
+Les champs inconnus sont refusés.
 
 | Champ | Type | Obligatoire | Bornes |
 | --- | --- | --- | --- |
@@ -681,7 +681,7 @@ Exemple minimal valide :
 
 Clé : `tache.obs.sources.proposer`. Observatoire : ajoute des sources NOUVELLES à la base commune, jamais ne modifie ni ne retire une source existante (URL déjà présente : ignorée et signalée).
 
-Aucun champ en plus de ceux listés (les champs inconnus sont refusés).
+Les champs inconnus sont refusés.
 
 | Champ | Type | Obligatoire | Bornes |
 | --- | --- | --- | --- |
@@ -703,7 +703,7 @@ Exemple minimal valide :
 
 Clé : `tache.obs.collecter`. Observatoire : collecte les sources du projet {slug} et, si demandé, celles de la base commune {communes[]} (20 URL au plus, absente ou suspecte : introuvabl...
 
-Aucun champ en plus de ceux listés (les champs inconnus sont refusés).
+Les champs inconnus sont refusés.
 
 | Champ | Type | Obligatoire | Bornes |
 | --- | --- | --- | --- |
@@ -720,7 +720,7 @@ Exemple minimal valide :
 
 Clé : `tache.obs.affirmer`. Observatoire : valide puis enregistre une affirmation {affirmation, preuves[], remplace?} ;
 
-Aucun champ en plus de ceux listés (les champs inconnus sont refusés).
+Les champs inconnus sont refusés.
 
 Règle croisée : Chaque preuve vise exactement un lien ; les preuves par essai sont refusées tant que le service d'essais n'est pas branché : `instantaneId` renseigné, `essaiId` à null (donc jamais le statut `verifie_experimentalement`). `extraitExact` compte au moins 20 caractères une fois normalisé et se trouve à l'indice `position` du texte normalisé de l'instantané (`GET …/obs/instantanes/<id>`). `remplace` vise une affirmation du même projet pas encore remplacée.
 
@@ -752,7 +752,7 @@ Exemple minimal valide :
 
 Clé : `tache.obs.fiche`. Observatoire : assemble la fiche (25 champs) du projet {slug, langue} depuis ses affirmations et la renvoie.
 
-Aucun champ en plus de ceux listés (les champs inconnus sont refusés).
+Les champs inconnus sont refusés.
 
 | Champ | Type | Obligatoire | Bornes |
 | --- | --- | --- | --- |

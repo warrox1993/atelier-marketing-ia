@@ -1,0 +1,75 @@
+From 0357143053855b6ec3351b6c7a190e40c3f346b6 Mon Sep 17 00:00:00 2001
+From: Jean-Baptiste Dhondt <114347858+warrox1993@users.noreply.github.com>
+Date: Wed, 4 Nov 2026 23:40:51 +0100
+Subject: [PATCH 170/170] fix(socle): XDG_SESSION_CLASS visible dans les
+ diagnostics
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01EThpSQivkg5UcW9gyGppeG
+---
+ .../src/acpx-engine/terminal-session-failure.test.ts         | 4 ++++
+ .../src/acpx-engine/terminal-session-failure.ts              | 2 +-
+ .../src/services/__tests__/run-failure-diagnostics.test.ts   | 5 +++++
+ server/src/services/run-failure-diagnostics.ts               | 2 +-
+ 4 files changed, 11 insertions(+), 2 deletions(-)
+
+diff --git a/packages/adapter-utils/src/acpx-engine/terminal-session-failure.test.ts b/packages/adapter-utils/src/acpx-engine/terminal-session-failure.test.ts
+index e1fdad45b7..9daba94225 100644
+--- a/packages/adapter-utils/src/acpx-engine/terminal-session-failure.test.ts
++++ b/packages/adapter-utils/src/acpx-engine/terminal-session-failure.test.ts
+@@ -14,6 +14,10 @@ describe("terminal session failure diagnostics", () => {
+     // Classification precedes arbitrary short-secret redaction.
+     expect(sanitizeTerminalSessionFailure(failure, { SECRET: "128" }).details).not.toContain("128");
+   });
++  it("AC4 : XDG_SESSION_CLASS=user reste visible dans le diagnostic", () => {
++    const details = "environnement : XDG_SESSION_CLASS=user";
++    expect(sanitizeTerminalSessionFailure({ category: "service", details }, { XDG_SESSION_CLASS: "user" }).details).toBe(details);
++  });
+   it.each([
+     "HTTP 503 service unavailable",
+     "tool call arguments are invalid: name must be a string",
+diff --git a/packages/adapter-utils/src/acpx-engine/terminal-session-failure.ts b/packages/adapter-utils/src/acpx-engine/terminal-session-failure.ts
+index c83e23e31c..b5161323f2 100644
+--- a/packages/adapter-utils/src/acpx-engine/terminal-session-failure.ts
++++ b/packages/adapter-utils/src/acpx-engine/terminal-session-failure.ts
+@@ -39,7 +39,7 @@ const PUBLIC_ENV_KEYS = new Set([
+   "PATH", "PATHEXT", "SYSTEMROOT", "WINDIR", "COMSPEC", "HOME", "USERPROFILE",
+   "HOMEDRIVE", "HOMEPATH", "USER", "USERNAME", "LOGNAME", "SHELL", "LANG",
+   "LANGUAGE", "LC_ALL", "LC_CTYPE", "TZ", "TMPDIR", "TEMP", "TMP", "NODE_ENV",
+-  "XDG_CONFIG_HOME", "XDG_CACHE_HOME", "XDG_DATA_HOME",
++  "XDG_CONFIG_HOME", "XDG_CACHE_HOME", "XDG_DATA_HOME", "XDG_SESSION_CLASS",
+   "PAPERCLIP_AGENT_ID", "PAPERCLIP_COMPANY_ID", "PAPERCLIP_RUN_ID", "PAPERCLIP_TASK_ID",
+ ]);
+ const PUBLIC_BOOLEAN_ENV_KEYS = new Set([
+diff --git a/server/src/services/__tests__/run-failure-diagnostics.test.ts b/server/src/services/__tests__/run-failure-diagnostics.test.ts
+index 731c569e0e..af3855d37e 100644
+--- a/server/src/services/__tests__/run-failure-diagnostics.test.ts
++++ b/server/src/services/__tests__/run-failure-diagnostics.test.ts
+@@ -338,6 +338,11 @@ describe("run failure diagnostics", () => {
+       CUSTOM_BINDING: "bound-opaque-value", ACCESS_TOKEN: "plain-opaque-value", REGION: "us-east-1", EMPTY_KEY: "",
+     }, ["CUSTOM_BINDING"])).toEqual(["bound-opaque-value", "plain-opaque-value", "us-east-1"]);
+     expect(collectRunFailureSecretValues({ PATH: "/usr/bin", CUSTOM_BINDING: "opaque" }, [], true)).toEqual(["opaque"]);
++    // AC4 : la classe de session (valeur banale « user ») n'est pas un secret et reste lisible.
++    const text = "XDG_SESSION_CLASS=user";
++    const secrets = collectRunFailureSecretValues({ XDG_SESSION_CLASS: "user" }, [], true);
++    expect(secrets).toEqual([]);
++    expect(redactRunFailureSecretValues(text, secrets)).toBe(text);
+     expect(collectRunFailureSecretValues({ PATH: "secret-override" }, ["PATH"], true)).toEqual(["secret-override"]);
+   });
+ 
+diff --git a/server/src/services/run-failure-diagnostics.ts b/server/src/services/run-failure-diagnostics.ts
+index 7a14c7e3d8..1906fe6585 100644
+--- a/server/src/services/run-failure-diagnostics.ts
++++ b/server/src/services/run-failure-diagnostics.ts
+@@ -68,7 +68,7 @@ const PUBLIC_ENV_KEYS = new Set([
+   "PATH", "PATHEXT", "SYSTEMROOT", "WINDIR", "COMSPEC", "HOME", "USERPROFILE",
+   "HOMEDRIVE", "HOMEPATH", "USER", "USERNAME", "LOGNAME", "SHELL", "LANG",
+   "LANGUAGE", "LC_ALL", "LC_CTYPE", "TZ", "TMPDIR", "TEMP", "TMP", "NODE_ENV",
+-  "XDG_CONFIG_HOME", "XDG_CACHE_HOME", "XDG_DATA_HOME",
++  "XDG_CONFIG_HOME", "XDG_CACHE_HOME", "XDG_DATA_HOME", "XDG_SESSION_CLASS",
+   "PWD", "OLDPWD", "INIT_CWD", "SHLVL", "_", "TERM", "TERM_PROGRAM", "TERM_PROGRAM_VERSION", "COLORTERM",
+   "NPM_LIFECYCLE_EVENT", "NPM_COMMAND", "NPM_EXEC_PATH", "NPM_EXECPATH", "NPM_NODE_EXECPATH",
+   "NPM_PACKAGE_NAME", "NPM_PACKAGE_VERSION", "NPM_PACKAGE_JSON", "NPM_CONFIG_USER_AGENT",
+-- 
+2.53.0
+

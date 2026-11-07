@@ -398,15 +398,27 @@ describe("porte : controlerCitationsConnaissances branché sur l'évaluation", (
     expect(r2.body.passages.every((p: any) => p.citation.version === 2)).toBe(true); // eslint-disable-line @typescript-eslint/no-explicit-any
   });
 
-  it("chiffre d'offre sans source dans son bloc : REFUS chiffre_offre_sans_source (localisé)", async () => {
+  it("chiffre d'offre sans source dans son bloc : BLOQUE_INFORMATION chiffre_offre_sans_source (localisé, lot 2 #22)", async () => {
     const f = banc();
     f.tacheSousPorte();
     await f.importer({ texte: TARIF });
     f.livrable("# Offre auto\n\nProfitez d'une prime de 648 € par an et d'une remise de 8 %.");
     const ev = await f.evaluer();
-    expect(ev.decision).toBe("REFUS");
+    expect(ev.decision).toBe("BLOQUE_INFORMATION");
     const m = ev.motifs.find((x) => x.code === "chiffre_offre_sans_source");
     expect(m?.emplacement).toBeTruthy();
+  });
+
+  it("chiffre d'offre citant seulement la stratégie publiée : chiffre_offre_sans_source (F1, lot 2 #22)", async () => {
+    const f = banc();
+    f.tacheSousPorte();
+    await f.importer({ texte: TARIF.replace("Tarif assurance auto 2026", "Stratégie marketing"), titre: "Stratégie marketing", type: "strategie" });
+    const r = await f.rechercher("prime responsabilité civile");
+    const adresse = r.body.passages[0].citation.adresse;
+    f.livrable(`# Offre auto\n\nPrime RC seule : 648 € par an (${adresse}).`);
+    const ev = await f.evaluer();
+    expect(ev.motifs.map((m) => m.code)).toEqual(["chiffre_offre_sans_source"]);
+    expect(ev.decision).toBe("BLOQUE_INFORMATION");
   });
 
   it("chiffre d'offre appuyé sur une source web ENREGISTRÉE pour la tâche : accepté ; URL non enregistrée : REFUS", async () => {
@@ -428,6 +440,42 @@ describe("porte : controlerCitationsConnaissances branché sur l'évaluation", (
     f.livrable("# Offre\n\nUne remise de 8 % sur la pose.");
     const ev = await f.evaluer();
     expect(ev.motifs.map((m) => m.code)).not.toContain("chiffre_offre_sans_source");
+  });
+
+  describe("M2 (#22) : limite des sources manquantes branchée sur l'évaluation du service", () => {
+    const sansSource = async (f: ReturnType<typeof banc>, n: number) => {
+      f.documents.set(`${ISSUE}:livrable`, { latestRevisionId: `88888888-8888-4888-8888-00000000000${n}`, latestRevisionNumber: n, title: "Page", body: `# Offre auto\n\nProfitez d'une prime de 64${n} € par an.`, updatedByAgentId: "p", createdByAgentId: "p" });
+      return f.evaluer();
+    };
+    const preparer = async () => {
+      const f = banc();
+      f.tacheSousPorte();
+      await f.importer({ texte: TARIF });
+      expect((await sansSource(f, 1)).decision).toBe("BLOQUE_INFORMATION");
+      expect((await sansSource(f, 2)).decision).toBe("BLOQUE_INFORMATION");
+      return f;
+    };
+
+    it("trois révisions successives sans source : bloquée, bloquée, puis refus source_manquante_repetee", async () => {
+      const ev = await sansSource(await preparer(), 3);
+      expect(ev.decision).toBe("REFUS");
+      expect(ev.motifs.map((m) => m.code)).toContain("source_manquante_repetee");
+    });
+
+    const remises: Array<[string, (f: ReturnType<typeof banc>) => Promise<unknown> | void]> = [
+      ["une relance", (f) => void (f.base.listerRelances = (async () => [{ creeLe: f.horloge(), maximumApres: 3 }]) as never)],
+      ["une décision demander_correction", (f) => void f.decision({ action: "demander_correction" })],
+      ["une remise humaine du socle (cycles.remise_humaine)", (f) => f.base.journaliser({ companyId: SOC, type: "cycles.remise_humaine", entite: "tache", entiteId: ISSUE, issueId: ISSUE, acteur: "humain", donnees: {} })],
+    ];
+    for (const [nom, remettre] of remises) {
+      it(`${nom} remet le compte à zéro : la troisième révision reste bloquée`, async () => {
+        const f = await preparer();
+        await remettre(f);
+        const ev = await sansSource(f, 3);
+        expect(ev.decision).toBe("BLOQUE_INFORMATION");
+        expect(ev.motifs.map((m) => m.code)).not.toContain("source_manquante_repetee");
+      });
+    }
   });
 });
 

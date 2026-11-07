@@ -1,0 +1,192 @@
+From e1475350324598f8726b92314af6d0278c0fe45e Mon Sep 17 00:00:00 2001
+From: Jean-Baptiste Dhondt <114347858+warrox1993@users.noreply.github.com>
+Date: Wed, 4 Nov 2026 23:58:05 +0100
+Subject: [PATCH] =?UTF-8?q?fix(socle):=20cartes=20e-mailing=20et=20captati?=
+ =?UTF-8?q?on=20:=20port=C3=A9es=20lecture=20et=20ecriture=20demand=C3=A9e?=
+ =?UTF-8?q?s?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+La passerelle délivre un jeton « lecture » par défaut et refuse les outils
+d'écriture avec lui : les cartes demandent donc « lecture » (méthode lecture)
+ou « lecture ecriture » (méthode publication) via defaults.scopesHint, et les
+revues passent en policy explicit avec ces requestedScopes.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01EThpSQivkg5UcW9gyGppeG
+---
+ .../tool-method-permission-reviews.json       | 46 +++++++++++--------
+ .../app-definitions/atelier-captation.json    | 11 ++++-
+ .../src/app-definitions/atelier-emailing.json | 11 ++++-
+ .../src/atelier-app-definitions.test.ts       |  4 +-
+ 4 files changed, 46 insertions(+), 26 deletions(-)
+
+diff --git a/doc/connections/tool-method-permission-reviews.json b/doc/connections/tool-method-permission-reviews.json
+index 7d6a3db26e..0d4305ddc8 100644
+--- a/doc/connections/tool-method-permission-reviews.json
++++ b/doc/connections/tool-method-permission-reviews.json
+@@ -3079,61 +3079,67 @@
+       "app": "atelier-emailing",
+       "method": "lecture",
+       "auth": "oauth",
+-      "policy": "provider-default",
+-      "requestedScopes": [],
++      "policy": "explicit",
++      "requestedScopes": [
++        "lecture"
++      ],
+       "capability": "read",
+-      "supportedActions": "Read the mailing lists and campaign state of the local listmonk instance (lister_listes, etat_campagne), without creating anything. This profile is the recommended choice.",
++      "supportedActions": "Read the mailing lists and campaign state of the local listmonk instance (lister_listes, etat_campagne), without creating anything. This profile is the recommended choice. The token carries only the \"lecture\" scope: the gateway refuses the write tools with it (portee_insuffisante).",
+       "evidence": [
+         "https://listmonk.app/docs/"
+       ],
+       "reviewedAt": "2026-11-04",
+-      "liveProof": "not-run",
+-      "providerDefaultReason": "The marketing gateway's local OAuth server (passerelle/src/oauth-local.ts) knows one scope, \"local\", and grants it to every gateway service; the emailing:lecture and emailing:ecriture scopes listed by the gateway are informative only, not a provider scope model. No scope is requested. The token does not itself separate read from write; the read profile relies on the agents using only the read tools. Write tools (creer_liste, ajouter_abonnes, creer_campagne_brouillon) carry readOnlyHint: false and their French mutation verbs are classified as writes by Paperclip (local patch 0005), so they stay behind Ask first; sending a campaign is not a tool at all (human route in passerelle/src/reel/emailing/envoi.ts) and the listmonk token has no send right."
++      "liveProof": "not-run"
+     },
+     {
+       "app": "atelier-emailing",
+       "method": "publication",
+       "auth": "oauth",
+-      "policy": "provider-default",
+-      "requestedScopes": [],
++      "policy": "explicit",
++      "requestedScopes": [
++        "lecture",
++        "ecriture"
++      ],
+       "capability": "write",
+-      "supportedActions": "Read lists and campaigns, and create lists, add subscribers only with proof of consent to that list, and create campaign drafts (always drafts, with an unsubscribe link), after human validation in the workshop. Never sends: sending is a human decision outside the tools.",
++      "supportedActions": "Read lists and campaigns, and create lists, add subscribers only with proof of consent to that list, and create campaign drafts (always drafts, with an unsubscribe link), after human validation in the workshop. Never sends: sending is a human decision outside the tools. The token carries the \"lecture\" and \"ecriture\" scopes, so the gateway lets the write tools run.",
+       "evidence": [
+         "https://listmonk.app/docs/"
+       ],
+       "reviewedAt": "2026-11-04",
+-      "liveProof": "not-run",
+-      "providerDefaultReason": "The marketing gateway's local OAuth server (passerelle/src/oauth-local.ts) knows one scope, \"local\", and grants it to every gateway service; the emailing:lecture and emailing:ecriture scopes listed by the gateway are informative only, not a provider scope model. No scope is requested. Write tools (creer_liste, ajouter_abonnes, creer_campagne_brouillon) carry readOnlyHint: false and their French mutation verbs are classified as writes by Paperclip (local patch 0005), so they stay behind Ask first; sending a campaign is not a tool at all (human route in passerelle/src/reel/emailing/envoi.ts) and the listmonk token has no send right."
++      "liveProof": "not-run"
+     },
+     {
+       "app": "atelier-captation",
+       "method": "lecture",
+       "auth": "oauth",
+-      "policy": "provider-default",
+-      "requestedScopes": [],
++      "policy": "explicit",
++      "requestedScopes": [
++        "lecture"
++      ],
+       "capability": "read",
+-      "supportedActions": "Read the local landing pages, their visits (local Umami) and the number of form submissions (lister_pages, statistiques_page), without creating anything. This profile is the recommended choice.",
++      "supportedActions": "Read the local landing pages, their visits (local Umami) and the number of form submissions (lister_pages, statistiques_page), without creating anything. This profile is the recommended choice. The token carries only the \"lecture\" scope: the gateway refuses the write tools with it (portee_insuffisante).",
+       "evidence": [
+         "https://umami.is/docs"
+       ],
+       "reviewedAt": "2026-11-04",
+-      "liveProof": "not-run",
+-      "providerDefaultReason": "The marketing gateway's local OAuth server (passerelle/src/oauth-local.ts) knows one scope, \"local\", and grants it to every gateway service; the captation:lecture and captation:ecriture scopes listed by the gateway are informative only, not a provider scope model. No scope is requested. The token does not itself separate read from write; the read profile relies on the agents using only the read tools. The write tool creer_page_destination carries readOnlyHint: false and its verb is classified as a write by Paperclip (local patch 0005), so it stays behind Ask first; no tool puts a page online, pages are served locally only."
++      "liveProof": "not-run"
+     },
+     {
+       "app": "atelier-captation",
+       "method": "publication",
+       "auth": "oauth",
+-      "policy": "provider-default",
+-      "requestedScopes": [],
++      "policy": "explicit",
++      "requestedScopes": [
++        "lecture",
++        "ecriture"
++      ],
+       "capability": "write",
+-      "supportedActions": "Read pages and statistics, and create landing pages with a callback form from plain text fields only (creer_page_destination), after human validation in the workshop. Pages are served locally; putting one online is a human decision. Visitor submissions never pass through the gateway.",
++      "supportedActions": "Read pages and statistics, and create landing pages with a callback form from plain text fields only (creer_page_destination), after human validation in the workshop. Pages are served locally; putting one online is a human decision. Visitor submissions never pass through the gateway. The token carries the \"lecture\" and \"ecriture\" scopes, so the gateway lets the write tools run.",
+       "evidence": [
+         "https://umami.is/docs"
+       ],
+       "reviewedAt": "2026-11-04",
+-      "liveProof": "not-run",
+-      "providerDefaultReason": "The marketing gateway's local OAuth server (passerelle/src/oauth-local.ts) knows one scope, \"local\", and grants it to every gateway service; the captation:lecture and captation:ecriture scopes listed by the gateway are informative only, not a provider scope model. No scope is requested. The write tool creer_page_destination carries readOnlyHint: false and its verb is classified as a write by Paperclip (local patch 0005), so it stays behind Ask first; no tool puts a page online, pages are served locally only."
++      "liveProof": "not-run"
+     },
+     {
+       "app": "atelier-linkedin-profil",
+diff --git a/packages/shared/src/app-definitions/atelier-captation.json b/packages/shared/src/app-definitions/atelier-captation.json
+index 9fb59c65cc..d887a08311 100644
+--- a/packages/shared/src/app-definitions/atelier-captation.json
++++ b/packages/shared/src/app-definitions/atelier-captation.json
+@@ -38,7 +38,10 @@
+       },
+       "whenToUse": "Lire les pages, les visites et les envois du formulaire ; choix conseillé.",
+       "defaults": {
+-        "serverUrl": "http://127.0.0.1:3190/mcp/captation"
++        "serverUrl": "http://127.0.0.1:3190/mcp/captation",
++        "scopesHint": [
++          "lecture"
++        ]
+       },
+       "guidanceMd": "Connexion par la passerelle marketing de l'atelier, vers le serveur de pages local et Umami local. Aucune page n'est publiée sur Internet par un outil.",
+       "consoleLinks": {
+@@ -62,7 +65,11 @@
+       },
+       "whenToUse": "Créer des pages de destination pour une campagne, à valider dans l'atelier ; la publication reste une décision humaine.",
+       "defaults": {
+-        "serverUrl": "http://127.0.0.1:3190/mcp/captation"
++        "serverUrl": "http://127.0.0.1:3190/mcp/captation",
++        "scopesHint": [
++          "lecture",
++          "ecriture"
++        ]
+       },
+       "guidanceMd": "Connexion par la passerelle marketing de l'atelier, vers le serveur de pages local. Une page est servie en local seulement : la mettre en ligne est une décision humaine.",
+       "consoleLinks": {
+diff --git a/packages/shared/src/app-definitions/atelier-emailing.json b/packages/shared/src/app-definitions/atelier-emailing.json
+index 5c1702d783..c9a0155a75 100644
+--- a/packages/shared/src/app-definitions/atelier-emailing.json
++++ b/packages/shared/src/app-definitions/atelier-emailing.json
+@@ -38,7 +38,10 @@
+       },
+       "whenToUse": "Lire les listes et l'état des campagnes ; choix conseillé.",
+       "defaults": {
+-        "serverUrl": "http://127.0.0.1:3190/mcp/emailing"
++        "serverUrl": "http://127.0.0.1:3190/mcp/emailing",
++        "scopesHint": [
++          "lecture"
++        ]
+       },
+       "guidanceMd": "Connexion par la passerelle marketing de l'atelier, vers le listmonk local. Rien ne sort de la machine tant que le SMTP réel n'est pas configuré.",
+       "consoleLinks": {
+@@ -62,7 +65,11 @@
+       },
+       "whenToUse": "Préparer des listes et des brouillons de campagne, à valider dans l'atelier ; l'envoi reste une décision humaine.",
+       "defaults": {
+-        "serverUrl": "http://127.0.0.1:3190/mcp/emailing"
++        "serverUrl": "http://127.0.0.1:3190/mcp/emailing",
++        "scopesHint": [
++          "lecture",
++          "ecriture"
++        ]
+       },
+       "guidanceMd": "Connexion par la passerelle marketing de l'atelier, vers le listmonk local. L'envoi d'une campagne n'est jamais un outil : il demande la confirmation d'un humain dans l'atelier.",
+       "consoleLinks": {
+diff --git a/packages/shared/src/atelier-app-definitions.test.ts b/packages/shared/src/atelier-app-definitions.test.ts
+index d1b60313ae..82b345b1e3 100644
+--- a/packages/shared/src/atelier-app-definitions.test.ts
++++ b/packages/shared/src/atelier-app-definitions.test.ts
+@@ -35,8 +35,8 @@ const EXPECTED: Record<string, { service: string; name: string; read: string[];
+   "atelier-liens": { service: "liens", name: "Vérification de liens", read: [], write: null },
+   "atelier-extraction": { service: "extraction", name: "Extraction de sites", read: [], write: null },
+   "atelier-audit": { service: "audit", name: "Audit de pages", read: [], write: null },
+-  "atelier-emailing": { service: "emailing", name: "E-mailing (listmonk local)", read: [], write: [] },
+-  "atelier-captation": { service: "captation", name: "Captation de prospects (pages de destination)", read: [], write: [] },
++  "atelier-emailing": { service: "emailing", name: "E-mailing (listmonk local)", read: ["lecture"], write: ["lecture", "ecriture"] },
++  "atelier-captation": { service: "captation", name: "Captation de prospects (pages de destination)", read: ["lecture"], write: ["lecture", "ecriture"] },
+   "atelier-statbel": { service: "statbel", name: "Statbel (statistiques des communes belges)", read: [], write: null },
+ };
+ 
+-- 
+2.53.0
+

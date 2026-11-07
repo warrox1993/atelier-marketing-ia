@@ -145,8 +145,9 @@ curl -sS --variable %PAPERCLIP_API_URL --variable %PAPERCLIP_API_KEY --variable 
 et la liste des documents disponibles : `…/api/plugins/atelier.marketing-ia/api/connaissances/titres?companyId={{PAPERCLIP_COMPANY_ID}}`.
 
 - Identifiants légaux (BCE, FSMA, TVA, catégorie) : recopiés **uniquement** depuis les entités de la
-  fiche ; un numéro BCE n'est jamais un numéro FSMA. Une page du client qui affiche autre chose est un
-  écart à signaler, pas une source.
+  fiche, sans supposer qu'ils diffèrent. Un numéro absent de la fiche, vu sur une page, est un écart, pas une
+  source : signale-le dans une phrase qui donne aussi le bon numéro (« La page affiche 0999.888.777 comme
+  numéro FSMA, alors que le FSMA de la fiche est 0123.456.789. ») ; sans lui, la porte refuse la phrase.
 - Une marque ou une entité de la fiche existe, même si une page ne la cite pas.
 - Recherche dans les connaissances : questions courtes par mots-clés, au moins trois reformulations avant
   d'écrire qu'une information manque, sauf quand la liste des titres (`…/connaissances/titres`) rend `total: 0` : la
@@ -154,13 +155,10 @@ et la liste des documents disponibles : `…/api/plugins/atelier.marketing-ia/ap
   dans ce qui n'a pas pu être vérifié, sans la demander à l'humain ni au client ; chaque chiffre ou condition d'offre porte son `connaissance://…`.
 - Tout livrable contient une courte **table des faits** (fait, source). La porte refuse un identifiant
   légal incohérent avec la fiche.
-- **Stratégie du client** : la version validée est la connaissance « Stratégie marketing, version N » (le plus
-  grand N de la liste des titres) ; à défaut, le document `strategie` de la tâche « Stratégie » du `stratege` que cite
+- **Stratégie du client** : la version validée est la connaissance « Stratégie marketing » (sa version en
+  vigueur) ; à défaut, le document `strategie` de la tâche « Stratégie » du `stratege` que cite
   ta tâche (`GET …/api/issues/<issueId>/documents/strategie`). Lis-la avant de produire : elle fixe le positionnement,
   les cibles et les priorités, et tu ne la contredis pas ; si elle manque, dis-le dans ta réponse.
-- Pour signaler un identifiant faux vu sur une page, écris dans la MÊME phrase le bon identifiant de
-  la fiche : « La page affiche 0123.456.789 comme numéro FSMA, alors que le FSMA de la fiche est
-  012345. » Sans le bon numéro, la porte refuse la phrase.
 
 ## Livrable en relecture : attendre tous les verdicts
 
@@ -443,7 +441,7 @@ Exemple minimal valide :
 
 Clé : `tache.messages.envoyer`. Envoi d'un message typé rattaché à la tâche.
 
-Aucun champ en plus de ceux listés (les champs inconnus sont refusés).
+Les champs inconnus sont refusés.
 
 | Champ | Type | Obligatoire | Bornes |
 | --- | --- | --- | --- |
@@ -514,7 +512,7 @@ Exemple minimal valide :
 
 Clé : `tache.donnees.deposer`. Dépôt de la réponse brute d'un outil de connexion (passerelle marketing) : le serveur en déduit le mode (démonstration ou réel) et retient ses chiffres pour ...
 
-Aucun champ en plus de ceux listés (les champs inconnus sont refusés).
+Les champs inconnus sont refusés.
 
 Règle croisée : `reponse` doit contenir `texte` ou `structuredContent` (au moins l'un des deux). `arguments` devient obligatoire en mode réel.
 
@@ -539,7 +537,7 @@ Exemple minimal valide :
 
 Clé : `tache.connaissances.rechercher`. Recherche hybride (plein texte et sens) dans les documents de l'entreprise de la tâche ;
 
-Aucun champ en plus de ceux listés (les champs inconnus sont refusés).
+Les champs inconnus sont refusés.
 
 | Champ | Type | Obligatoire | Bornes |
 | --- | --- | --- | --- |

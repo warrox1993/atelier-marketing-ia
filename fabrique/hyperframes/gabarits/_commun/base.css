@@ -6,7 +6,7 @@
 * { margin: 0; padding: 0; box-sizing: border-box; }
 
 /* 9:16 : zones sûres de Meta (rien d'important dans les 14 % du haut, les 35 % du bas et les 6 % de
-   chaque côté) ; les sous-titres et la mention IA y sont placés de la même façon (montage.py). */
+   chaque côté) ; les sous-titres y sont placés de la même façon (montage.py). */
 html[data-format="1080x1920"] {
   --l: 1080px; --h: 1920px; --base: 64px; --marge: 96px;
   --marge-haut: 270px; --marge-bas: 672px; --marge-cotes: 65px;

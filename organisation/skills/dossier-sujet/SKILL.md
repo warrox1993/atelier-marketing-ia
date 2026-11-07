@@ -119,7 +119,7 @@ Sujet fictif : une lampe de bureau « Brindille 2 » de l'éditeur « Lumignon �
     « La lampe la plus économe du marché » (aucune comparaison prouvée) ; toute promesse sur la santé des yeux.
 
     ## Droits
-    Nom « Brindille 2 » et logo de Lumignon : politique de l'éditeur introuvable, à confirmer. Mention : « Image faite avec l'IA ».
+    Nom « Brindille 2 » et logo de Lumignon : politique de l'éditeur introuvable, à confirmer.
 
 Cas d'échec évité : un producteur voulait écrire « 12 W » de mémoire ; la fabrique a refusé, faute de dossier. La veille a lu la
 fiche, le chiffre exact (9 W) est entré dans le tableau avec son extrait.

@@ -90,7 +90,6 @@ class InfosProvenanceImage:
     format: str
     charte: str  # identifiant de la charte du registre
     outils: Mapping[str, str] = field(default_factory=dict)  # chrome-headless-shell -> version
-    mention_visible: bool = False  # bandeau « Contenu généré avec l'IA » posé dans l'image
     fond_ia: bool = False  # un fond généré par un modèle (lot I2), déclaré en métadonnées
     type: str = "image"
 
@@ -134,8 +133,8 @@ def _valider_infos_image(infos: InfosProvenanceImage) -> None:
     for nom, version in infos.outils.items():
         if not MOTIF_OUTIL.fullmatch(nom) or not MOTIF_VERSION.fullmatch(str(version)):
             raise ValueError(f"outils : entrée invalide {nom!r}")
-    if not isinstance(infos.fond_ia, bool) or not isinstance(infos.mention_visible, bool):
-        raise ValueError("fond_ia et mention_visible : booléens attendus")
+    if not isinstance(infos.fond_ia, bool):
+        raise ValueError("fond_ia : booléen attendu")
 
 
 def _fichier_regulier(chemin: Path) -> bool:
@@ -326,7 +325,6 @@ def poser_provenance(video: str | os.PathLike, plan: PlanMontage, infos: InfosPr
         "voix": list(infos.voix),
         "musique": dict(infos.musique) if infos.musique is not None else None,
         "digital_source_type": DIGITAL_SOURCE_TYPE,
-        "mention_visible": False,  # choix de l'opérateur du 01/11 : mention dans le texte du post, pas dans la vidéo
         "filigrane_perth": {"detecte": detecte, "taux": round(taux, 4)},
         "sha256": empreinte_sha256(chemin),
     }
@@ -378,7 +376,6 @@ def poser_provenance_image(image: str | os.PathLike, infos: InfosProvenanceImage
         "voix": [],
         "musique": None,
         "digital_source_type": DIGITAL_SOURCE_TYPE,
-        "mention_visible": infos.mention_visible,
         "fond_ia": infos.fond_ia,
         "sha256": empreinte_sha256(chemin),
     }

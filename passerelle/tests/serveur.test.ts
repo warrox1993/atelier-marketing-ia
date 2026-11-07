@@ -132,8 +132,10 @@ describe("passerelle : service à autorisation locale (parcours OAuth local)", (
       ["gsc_ping", {}, false], // argument manquant
       ["outil_qui_n_existe_pas", {}, false],
     ];
+    // Les outils d'écriture factices exigent un jeton « ecriture » (#4) ; ce test porte sur la mention, pas sur la portée.
+    const jetonEcriture = (await obtenirJetons(p.url, "gsc", "sc-domain:essai.example", "lecture ecriture")).access_token;
     for (const [nom, args, mention] of appels) {
-      const r = await rpc(p.url, "gsc", "tools/call", { name: nom, arguments: args }, jeton);
+      const r = await rpc(p.url, "gsc", "tools/call", { name: nom, arguments: args }, jetonEcriture);
       expect(r.statut, nom).toBe(200);
       const res = r.corps.result;
       const json = JSON.stringify(res.structuredContent);
@@ -143,7 +145,7 @@ describe("passerelle : service à autorisation locale (parcours OAuth local)", (
     const invalide = await rpc(p.url, "gsc", "tools/call", { name: "gsc_ping", arguments: { texte: "" } }, jeton);
     expect(invalide.corps.result.isError).toBe(true);
     expect(invalide.corps.result.structuredContent.erreur).toBe("arguments_invalides");
-    const echec = await rpc(p.url, "gsc", "tools/call", { name: "gsc_echec", arguments: {} }, jeton);
+    const echec = await rpc(p.url, "gsc", "tools/call", { name: "gsc_echec", arguments: {} }, jetonEcriture);
     expect(echec.corps.result.isError).toBe(true);
     expect(echec.corps.result.structuredContent.message).toBe("échec volontaire");
     const inconnu = await rpc(p.url, "gsc", "tools/call", { name: "outil_qui_n_existe_pas", arguments: {} }, jeton);

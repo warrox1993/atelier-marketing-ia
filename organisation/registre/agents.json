@@ -1,7 +1,7 @@
 {
   "schema": "atelier/registre-agents/v1",
-  "version": "1.14.0",
-  "dateVersion": "2026-11-01",
+  "version": "1.16.0",
+  "dateVersion": "2026-11-07",
   "description": "Registre canonique des quinze agents marketing de l'Atelier et de l'agent déterministe « Porte de contrôle » (deterministe: true, adaptateur process, aucun modèle). Source unique : le fichier .paperclip.yaml et l'en-tête des AGENTS.md en sont générés par « python3 -I scripts/bootstrap-organisation.py generer ». Les noms courts (champ nom) portent leurs accents : l'identifiant (slug) d'un agent en est dérivé en retirant les accents (NFKD) avant la normalisation, comme le fait le bootstrap ; le titre porte le libellé français complet.",
   "adaptateur": {
     "type": "claude_local",
@@ -154,6 +154,7 @@
   "agents": [
     {
       "slug": "coordinateur",
+      "sessionsParRotation": 5,
       "envPortable": {
         "CLAUDE_CODE_PROMPT_CACHE_TTL": "1h"
       },
@@ -466,7 +467,7 @@
       "titre": "Pôle Intelligence · Enrichissement des coordonnées professionnelles",
       "role": "researcher",
       "rapporteA": "coordinateur",
-      "mission": "Reçoit la liste de fiches de la Prospection et relève, de sources licites seulement (site entier, PDF publiés, annuaires professionnels, fiche Google Business, BCE/KBO, coordonnées publiées par la personne sur LinkedIn), les numéros de téléphone professionnels ; recoupe chaque numéro sur deux sources, le classe, contrôle la liste « Ne m'appelez plus » et indique source, date et base légale ; ne contacte jamais personne.",
+      "mission": "Reçoit la liste de fiches de la Prospection et relève, de sources licites seulement (site entier, PDF publiés, annuaires professionnels, BCE/KBO, coordonnées publiées par la personne sur LinkedIn), les numéros de téléphone professionnels ; recoupe chaque numéro sur deux sources, le classe, contrôle la liste « Ne m'appelez plus » et indique source, date et base légale ; ne contacte jamais personne.",
       "entrees": [
         "liste de fiches livrée par la Prospection",
         "brief et exigences",
@@ -519,7 +520,6 @@
         ]
       },
       "connexions": {
-        "gbp": "lecture",
         "extraction": "lecture"
       },
       "modele": {
@@ -947,7 +947,7 @@
     {
       "slug": "reseaux-sociaux",
       "nom": "Réseaux sociaux",
-      "titre": "Pôle Contenus · Calendrier social, posts et réponses publiques",
+      "titre": "Pôle Contenus · Calendrier social, posts et brouillons de réponses",
       "role": "designer",
       "rapporteA": "coordinateur",
       "mission": "Prépare le social organique : piliers éditoriaux, calendrier par réseau, brouillons de posts courts et de réponses aux commentaires publics non litigieux ; ne publie rien et ne répond à personne lui-même.",

@@ -35,6 +35,11 @@ export interface ContexteAppel {
 export interface IdentiteAppel {
   compte: string;
   propriete: { id: string; libelle: string } | null;
+  /**
+   * Services locaux : `false` = jeton accordé en lecture seule (#4), les outils d'écriture sont refusés.
+   * Absent = aucun contrôle de niveau (services tiers, qui ont leur propre autorisation, ou accès sans jeton).
+   */
+  ecriture?: boolean;
 }
 
 export interface OutilPasserelle {

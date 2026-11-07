@@ -9,7 +9,7 @@ import { ROUTES_API } from "../src/contrats/index.js";
 import type { ActeurHote, RequeteRoute } from "../src/serveur/atelier.js";
 import type { BaseAtelier } from "../src/serveur/base.js";
 import type { ErreurAtelier } from "../src/serveur/erreurs.js";
-import { ORIGINE_DISCUSSION, PREFIXE_HUMAIN, TTL_CARTES_MS, routesDiscussion } from "../src/serveur/services-discussion.js";
+import { ORIGINE_DISCUSSION, TTL_CARTES_MS, prefixeMessage, routesDiscussion } from "../src/serveur/services-discussion.js";
 import { SOC } from "./outils-base.js";
 
 type Ligne = Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
@@ -171,7 +171,7 @@ describe("discussion.envoyer", () => {
     const { corps, statut } = await f.appeler("discussion.envoyer", envoyer("  Où en sont les missions ?  "));
     expect(statut).toBe(201);
     expect(corps).toMatchObject({ auteur: "humain", nom: "Vous", texte: "Où en sont les missions ?", reveilDemande: true });
-    expect(f.commentaires[0]!.body).toBe(`${PREFIXE_HUMAIN}Où en sont les missions ?`);
+    expect(f.commentaires[0]!.body).toBe(`${prefixeMessage(`discussion:${SOC}`)}Où en sont les missions ?`);
     expect(f.reveils).toHaveLength(1);
     expect(f.reveils[0]).toMatchObject({ issueId: f.issues[0]!.id, reason: "atelier_discussion_message", idempotencyKey: `atelier-discussion-${(corps as Ligne).id}` });
     expect(f.journal.map((j) => j.type)).toEqual(["discussion.ouverte", "discussion.message"]);
@@ -749,3 +749,52 @@ describe("discussion.supprimer", () => {
     expect(f.miseAJour).toEqual([]);
   });
 });
+
+describe("discussion.envoyer : le préfixe porte le type de travail et l'origine du fil", () => {
+  const premiereLigne = (corps: string) => corps.split("\n")[0];
+  it("fil historique : origine `discussion:<companyId>`", async () => {
+    const f = faux();
+    await f.appeler("discussion.envoyer", envoyer("Bonjour"));
+    expect(premiereLigne(f.commentaires[0]!.body)).toBe(`**Message de l'humain (atelier)** · travail : discussion · origine : discussion:${SOC}`);
+  });
+  it("nouveau fil : origine `discussion:<companyId>:<uuid>`, relue sans préfixe", async () => {
+    const f = faux();
+    const n = await f.nouvelle();
+    const { corps } = await f.appeler("discussion.envoyer", { corps: { companyId: SOC, issueId: n.issueId, texte: "Salut" } });
+    const origine = f.issues.find((i) => i.id === n.issueId)!.originId as string;
+    expect(origine).toMatch(new RegExp(`^discussion:${SOC}:[0-9a-f-]{36}$`));
+    expect(premiereLigne(f.commentaires[0]!.body)).toContain(`origine : ${origine}`);
+    expect((corps as Ligne).texte).toBe("Salut");
+    const lus = ((await f.appeler("discussion.messages", { query: { issueId: n.issueId } })).corps as Ligne).messages as Ligne[];
+    expect(lus.map((m) => m.texte)).toEqual(["Salut"]);
+  });
+  it("fil renommé : l'origine reste celle de la tâche, le titre n'y figure pas", async () => {
+    const f = faux();
+    const n = await f.nouvelle();
+    await f.appeler("discussion.envoyer", { corps: { companyId: SOC, issueId: n.issueId, texte: "Une question sur le planning des travaux" } });
+    const issue = f.issues.find((i) => i.id === n.issueId)!;
+    expect(issue.title).toBe("Une question sur le planning des travaux");
+    const ligne = premiereLigne(f.commentaires[0]!.body);
+    expect(ligne).toContain(`origine : ${issue.originId}`);
+    expect(ligne).not.toContain("planning");
+  });
+  it("deux fils ouverts : chaque message porte l'origine de son propre fil", async () => {
+    const f = faux();
+    const a = await f.nouvelle();
+    const b = await f.nouvelle();
+    await f.appeler("discussion.envoyer", { corps: { companyId: SOC, issueId: a.issueId, texte: "A" } });
+    await f.appeler("discussion.envoyer", { corps: { companyId: SOC, issueId: b.issueId, texte: "B" } });
+    const origineDe = (issueId: string) => f.issues.find((i) => i.id === issueId)!.originId as string;
+    expect(origineDe(a.issueId)).not.toBe(origineDe(b.issueId));
+    expect(premiereLigne(f.commentaires.find((c) => c.issueId === a.issueId)!.body)).toContain(origineDe(a.issueId));
+    expect(premiereLigne(f.commentaires.find((c) => c.issueId === b.issueId)!.body)).toContain(origineDe(b.issueId));
+  });
+  it("ancien message (préfixe sans origine) : toujours reconnu comme venant de l'humain", async () => {
+    const f = faux();
+    const fil = await f.creerFil();
+    f.commentaires.push({ id: id(950), issueId: fil.id, companyId: SOC, body: `${PREFIXE_ANCIEN}Ancien`, authorType: "system", authorAgentId: null, createdAt: new Date() });
+    const lus = ((await f.appeler("discussion.messages", { query: { issueId: fil.id } })).corps as Ligne).messages as Ligne[];
+    expect(lus[0]).toMatchObject({ auteur: "humain", texte: "Ancien" });
+  });
+});
+const PREFIXE_ANCIEN = "**Message de l'humain (atelier)**\n\n";

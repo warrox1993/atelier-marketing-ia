@@ -25,7 +25,8 @@ export function json(valeur: unknown): string {
 export function iso(valeur: unknown): string {
   if (valeur instanceof Date) return valeur.toISOString();
   if (typeof valeur === "string") {
-    const normalise = valeur.trim().replace(" ", "T").replace(/([+-]\d{2})$/u, "$1:00");
+    // Le fuseau court (« +01 ») suit une heure : dans une date seule, « -05 » est le jour.
+    const normalise = valeur.trim().replace(" ", "T").replace(/(T.*[+-]\d{2})$/u, "$1:00");
     const d = new Date(normalise);
     if (!Number.isNaN(d.getTime())) return d.toISOString();
   }
@@ -248,6 +249,39 @@ export function creerBase(db: Db) {
       statut: String(r.status),
       agentId: String(r.assignee_agent_id),
       dernierRun: r.run_id == null ? null : { id: String(r.run_id), statut: String(r.run_statut), le: iso(r.run_le) },
+    }));
+  }
+
+  /**
+   * T7 (lot 2) : tâches `in_review` sous porte active restées sans rien depuis `heures` h. `tachesOrphelines` les exclut (le
+   * veilleur ne les réveille jamais : la porte et ses relecteurs les gèrent) ; elles sont rendues ici pour que l'accueil les
+   * signale, sans aucun réveil. Écartées : passage récent ou en cours, approbation ou liaison en attente, revue ouverte et récente.
+   */
+  async function tachesFigeesSousPorte(companyId: string, heures = 24) {
+    const rangs = await q(
+      `select i.id, i.identifier, i.title, i.assignee_agent_id, a.name as agent_nom, i.updated_at as le,
+         exists (select 1 from public.issues c where c.parent_id = i.id and c.status not in ('done', 'cancelled') and c.hidden_at is null) as revue_ouverte
+       from public.issues i
+       left join public.agents a on a.id = i.assignee_agent_id and a.company_id = i.company_id
+       where i.company_id = $1 and i.status = 'in_review' and i.hidden_at is null
+         and exists (select 1 from ${ns}.portes p where p.issue_id = i.id and p.actif)
+         and i.updated_at < now() - make_interval(hours => $2::int)
+         and not exists (select 1 from public.heartbeat_runs y where y.company_id = $1 and y.context_snapshot->>'issueId' = i.id::text and (y.status in ('queued', 'running') or y.created_at > now() - make_interval(hours => $2::int)))
+         and not exists (select 1 from public.approvals ap where ap.company_id = i.company_id and ap.status = 'pending' and ap.payload::text like '%' || i.id::text || '%')
+         and not exists (select 1 from ${ns}.liaisons li where li.company_id = i.company_id and li.tache_origine_id = i.id and li.statut = 'en_attente_approbation')
+         and not exists (select 1 from public.issues c where c.parent_id = i.id and c.status not in ('done', 'cancelled') and c.updated_at >= now() - make_interval(hours => $2::int))
+       order by i.updated_at asc
+       limit 20`,
+      [companyId, Math.max(1, Math.floor(heures))],
+    );
+    return rangs.map((r) => ({
+      issueId: String(r.id),
+      identifier: r.identifier == null ? null : String(r.identifier),
+      titre: String(r.title ?? ""),
+      agentId: String(r.assignee_agent_id),
+      agentNom: r.agent_nom == null ? null : String(r.agent_nom),
+      revueOuverte: r.revue_ouverte === true,
+      le: iso(r.le),
     }));
   }
 
@@ -1745,7 +1779,7 @@ export function creerBase(db: Db) {
 
   return {
     ns,
-    journaliser, lireJournal, datesJournal, abandonsVeilleur, journalExiste, journalExistants, lectureWebDansRun, derniereDateJournal, entreprisesSuivies, tachesOrphelines,
+    journaliser, lireJournal, datesJournal, abandonsVeilleur, journalExiste, journalExistants, lectureWebDansRun, derniereDateJournal, entreprisesSuivies, tachesOrphelines, tachesFigeesSousPorte,
     lireReglages, enregistrerReglages, enregistrerPlafondEntreprise, enregistrerPlafondCampagne, donneesEngagement,
     creerCampagne, listerCampagnes, lireCampagne, creerBrief, dernierBrief,
     enregistrerExigence, creerExigenceSiAbsente, listerExigences, lireExigence, changerExclusion,

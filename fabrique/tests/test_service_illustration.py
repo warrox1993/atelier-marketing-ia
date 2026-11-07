@@ -1,4 +1,4 @@
-"""Tests de l'illustration IA d'une image côté service : étape GPU en cage, mention et provenance, attente du GPU, refus.
+"""Tests de l'illustration IA d'une image côté service : étape GPU en cage, provenance, attente du GPU, refus.
 
 Le modèle et Chrome sont remplacés : seul l'enchaînement du service est testé. La génération réelle est prouvée par
 une demande d'image passée par le service installé (voir le rapport du lot).
@@ -45,8 +45,8 @@ class BancIllustration:
             ecrire_png(Path(etape.dossier_sortie) / "illustration.png", self.taille)
         return service.cage.Resultat(code=self.code, duree_s=1.0, sortie=b"{}", erreur=b"MemoryError: secret /home/x", delai_depasse=self.delai)
 
-    def rendre(self, dossier_travail, gabarit, champs, format_sortie, charte, *, mention=False, temoin=False, fond=None):
-        self.rendus.append((mention, fond, fond.read_bytes()[:8] if fond else None))
+    def rendre(self, dossier_travail, gabarit, champs, format_sortie, charte, *, temoin=False, fond=None):
+        self.rendus.append((fond, fond.read_bytes()[:8] if fond else None))
         dossier = Path(dossier_travail) / "image-xxxx"
         dossier.mkdir()
         (dossier / "image.png").write_bytes(b"png")
@@ -79,13 +79,13 @@ def test_image_illustree_etape_gpu_en_cage_hors_ligne_avec_poids_montes_et_plafo
 def test_image_illustree_pose_le_fond_sans_mention_incrustee_et_la_provenance_fond_ia(racine, monkeypatch):
     banc = BancIllustration(racine, monkeypatch)
     ident, livrable, etat = lancer_image(racine, demande=avec_illustration())
-    mention, fond, signature = banc.rendus[0]
-    # choix de l'opérateur du 01/11 : la mention IA va dans le texte du post, pas sur l'image ; la provenance la porte en métadonnées
-    assert mention is False and signature == b"\x89PNG\r\n\x1a\n" and fond.name == "illustration.png"
+    fond, signature = banc.rendus[0]
+    # aucune mention sur l'image : la provenance déclare le fond IA en métadonnées
+    assert signature == b"\x89PNG\r\n\x1a\n" and fond.name == "illustration.png"
     infos = banc.infos[0]
-    assert infos.fond_ia is True and infos.mention_visible is False
+    assert infos.fond_ia is True and not hasattr(infos, "mention_visible")
     assert infos.outils["flux-3-image-klein"] == REVISION[:12] and "chrome-headless-shell" in infos.outils
-    assert "fond IA : oui, mention visible : non" in (livrable / "apercu.txt").read_text()
+    assert "fond IA : oui" in (livrable / "apercu.txt").read_text()
     assert not (racine / "travaux" / ident).exists()
 
 
@@ -93,7 +93,7 @@ def test_image_sans_illustration_ne_lance_aucune_etape_gpu(racine, monkeypatch):
     banc = BancIllustration(racine, monkeypatch)
     _, livrable, etat = lancer_image(racine)
     assert etat["etat"] == "termine" and banc.etapes == []
-    assert banc.rendus[0][:2] == (service.MENTION_VISIBLE_IMAGE, None) and banc.infos[0].fond_ia is False
+    assert banc.rendus[0][0] is None and banc.infos[0].fond_ia is False
     assert "fond IA : non" in (livrable / "apercu.txt").read_text()
 
 

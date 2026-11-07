@@ -1,0 +1,51 @@
+From 2391e711a211dc20d04b166e02aa6377873b68e5 Mon Sep 17 00:00:00 2001
+From: Jean-Baptiste Dhondt <114347858+warrox1993@users.noreply.github.com>
+Date: Wed, 4 Nov 2026 23:23:15 +0100
+Subject: [PATCH 166/166] =?UTF-8?q?fix(socle):=20s=C3=A9lecteur=20de=20rel?=
+ =?UTF-8?q?ecteurs=20vide=20en=20fran=C3=A7ais?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+---
+ ui/src/components/ExecutionParticipantPicker.test.tsx | 2 +-
+ ui/src/components/ExecutionParticipantPicker.tsx      | 3 ++-
+ 2 files changed, 3 insertions(+), 2 deletions(-)
+
+diff --git a/ui/src/components/ExecutionParticipantPicker.test.tsx b/ui/src/components/ExecutionParticipantPicker.test.tsx
+index d2c2eea2fd..4b71750183 100644
+--- a/ui/src/components/ExecutionParticipantPicker.test.tsx
++++ b/ui/src/components/ExecutionParticipantPicker.test.tsx
+@@ -49,7 +49,7 @@ describe("ExecutionParticipantPicker", () => {
+     };
+     const { container, onUpdate, cleanup } = renderPicker(policy);
+     expect(container.querySelector("button")?.textContent).toBe("You");
+-    const remove = Array.from(container.querySelectorAll("button")).find((button) => button.textContent === "No relecteurs");
++    const remove = Array.from(container.querySelectorAll("button")).find((button) => button.textContent === "Aucun relecteur");
+     expect(remove).toBeTruthy();
+     act(() => remove!.click());
+     expect(onUpdate).toHaveBeenCalledWith({ executionPolicy: {
+diff --git a/ui/src/components/ExecutionParticipantPicker.tsx b/ui/src/components/ExecutionParticipantPicker.tsx
+index 14a4bdceaf..68b145f710 100644
+--- a/ui/src/components/ExecutionParticipantPicker.tsx
++++ b/ui/src/components/ExecutionParticipantPicker.tsx
+@@ -93,6 +93,7 @@ export function ExecutionParticipantPicker({
+   };
+ 
+   const label = stageType === "review" ? "Relecteurs" : "Approbateurs";
++  const emptyLabel = stageType === "review" ? "Aucun relecteur" : "Aucun approbateur";
+   const Icon = stageType === "review" ? Eye : ShieldCheck;
+ 
+   if (!policyAvailable) {
+@@ -136,7 +137,7 @@ export function ExecutionParticipantPicker({
+             )}
+             onClick={() => updatePolicy([])}
+           >
+-            No {label.toLowerCase()}
++            {emptyLabel}
+           </button>
+           {currentUserId && (
+             <button
+-- 
+2.53.0
+

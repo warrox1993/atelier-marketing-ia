@@ -45,7 +45,10 @@ const sansAccents = (t: string) => t.normalize("NFD").replace(/[\u0300-\u036f]/g
 /* ------------------------------------------------------------------ */
 
 /** Champs d'une version utiles aux règles de validité. */
-export type VersionPourValidite = Pick<VersionConnaissance, "documentId" | "version" | "statut" | "valideDu" | "valideAu">;
+export type VersionPourValidite = Pick<VersionConnaissance, "documentId" | "version" | "statut" | "valideDu" | "valideAu"> & {
+  /** Type du document : `strategie` (publiée sans revue de validité) ne sert jamais de source à un chiffre d'offre. */
+  type?: string;
+};
 
 /**
  * Statut effectif d'une version à une date. `retire` et `perime` sont définitifs (décision humaine
@@ -215,15 +218,16 @@ function normaliserUrl(url: string): string {
 
 /**
  * Vrai si le segment cite une source admise pour un chiffre d'offre :
- * - une adresse `connaissance://` RENDUE à la tâche, dans le bloc ou dans un titre de sa section ;
+ * - une adresse `connaissance://` RENDUE à la tâche, dans le bloc ou dans un titre de sa section, hors
+ *   document `strategie` (publiée automatiquement, sans fin de validité : elle blanchirait un tarif périmé) ;
  * - une URL figurant parmi les sources enregistrées de la tâche, dans le bloc lui-même seulement
  *   (une URL dans un titre ne couvre plus toute la section).
  */
-function citeUneSource(segment: Segment, rendues: ReadonlySet<string>, urlsSources: ReadonlySet<string>): boolean {
+function citeUneSource(segment: Segment, rendues: ReadonlySet<string>, urlsSources: ReadonlySet<string>, strategies: ReadonlySet<string>): boolean {
   const citeRendue = (t: string) => {
     for (const m of t.matchAll(MOTIF_CITATION)) {
       const lue = lireAdresseConnaissance(nettoyerAdresse(m[0]));
-      if (lue && rendues.has(adresseConnaissance(lue.documentId, lue.version, lue.passageId))) return true;
+      if (lue && !strategies.has(lue.documentId.toLowerCase()) && rendues.has(adresseConnaissance(lue.documentId, lue.version, lue.passageId))) return true;
     }
     return false;
   };
@@ -259,7 +263,7 @@ export function controlerCitationsConnaissances(
   const corpsBrut = typeof livrable === "string" ? livrable : livrable.corps;
   if (corpsBrut.length > TAILLE_MAX_LIVRABLE_CONTROLE) {
     return [{
-      code: "chiffre_offre_sans_source",
+      code: "livrable_trop_volumineux",
       decision: "refus",
       message: `Livrable trop volumineux pour être contrôlé (${corpsBrut.length} caractères, maximum ${TAILLE_MAX_LIVRABLE_CONTROLE}) : citations et chiffres d'offre non vérifiables, refus par prudence.`,
       emplacement: "livrable entier",
@@ -275,6 +279,7 @@ export function controlerCitationsConnaissances(
   for (const p of passagesRendusALaTache) rendues.add((typeof p === "string" ? p : p.adresse).toLowerCase());
   const parVersion = new Map<string, VersionPourValidite>();
   for (const v of versions) parVersion.set(cleVersion(v.documentId, v.version), v);
+  const strategies = new Set(versions.filter((v) => v.type === "strategie").map((v) => v.documentId.toLowerCase()));
 
   const constats: ConstatConnaissance[] = [];
   const dejaVus = new Set<string>();
@@ -319,7 +324,7 @@ export function controlerCitationsConnaissances(
       }
     }
 
-    if (citeUneSource(segment, rendues, urlsSources)) continue;
+    if (citeUneSource(segment, rendues, urlsSources, strategies)) continue;
     for (const [motif, libelle] of MOTIFS_CHIFFRE_OFFRE) {
       const m = motif.exec(segment.texte);
       if (!m) continue;

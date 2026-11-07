@@ -17,7 +17,7 @@ metadata:
 
 ## Objectif
 
-Choisir qui servir d'abord : une grille de segments notée, 1 à 3 segments retenus et justifiés, puis une seule niche tête de pont décrite avec son produit total. Sources des méthodes : Kotler, Keller et Chernev, *Marketing Management*, 16e édition, parties segmentation, ciblage, positionnement [mémoire pour l'édition et les co-auteurs] ; Geoffrey A. Moore, *Crossing the Chasm* (1991, 3e édition 2014) pour la tête de pont [mémoire].
+Choisir qui servir d'abord : une grille de segments notée, 1 à 3 segments retenus et justifiés, puis une seule niche tête de pont décrite avec son produit total. Trois niveaux : le groupe et chaque métier retiennent leurs segments prioritaires, la niche unique se choisit pour une campagne. Sources des méthodes : Kotler, Keller et Chernev, *Marketing Management*, 16e édition, parties segmentation, ciblage, positionnement [mémoire pour l'édition et les co-auteurs] ; Geoffrey A. Moore, *Crossing the Chasm* (1991, 3e édition 2014) pour la tête de pont [mémoire].
 
 ## Prérequis
 
@@ -57,7 +57,7 @@ Une grille de segments notée, les segments retenus avec leur justification, la 
 ## Limites
 
 - Segmenter par démographie seule est le piège classique en assurance ; les événements déclencheurs priment.
-- Moore vise surtout des technologies nouvelles ; le courtage est un marché mûr. On garde la discipline de concentration, pas la théorie du gouffre [mémoire]. Choisir trois niches à la fois annule la méthode.
+- Moore vise surtout des technologies nouvelles ; le courtage est un marché mûr. On garde la discipline de concentration, pas la théorie du gouffre [mémoire]. Choisir trois niches à la fois pour une même campagne annule la méthode.
 - Les notes de la grille sont des jugements : les marquer « hypothèse » tant qu'aucune donnée ni aucun entretien ne les confirme.
 - Le choix de la cible est un choix métier : il est proposé, et l'humain le valide.
 

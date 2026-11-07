@@ -109,7 +109,7 @@ pour la vidéo). Quand tu critiques une demande, vérifie qu'elle le contient et
   sans liste ni JSON. Support et style d'abord, puis décor, lumière et cadrage, puis les sujets (chaque personnage net avec son
   âge approximatif, son teint, ses cheveux, ses vêtements, son expression et sa position dans le cadre), l'arrière-plan en dernier.
   Elle décrit ce qui est présent plutôt que des négations, et garde les noms d'univers que la tâche demande. Forme complète,
-  règles et exemple : `references/description-flux3.md`. Ni texte, ni lettres, ni logo, ni marque, ni personne réelle ou célèbre ;
+  règles et exemple : `references/description-flux3.md`. Ni texte, ni lettres, ni logo, ni marque ;
   rien qui contredise le dossier du sujet. La zone calme réservée au texte se décrit par sa position (par exemple « bas de l'image dégagé »).
 - Le texte reste dans les champs du gabarit, composé par la fabrique ; l'illustration n'a jamais à le porter.
 - Choisir un cadrage qui expose peu les mains (une main sur un bâton, les mains dans les manches, un plan plus serré) : l'IA se trompe sur les doigts, et le rendu est refusé à la moindre anomalie (voir `qualite-visuels`).

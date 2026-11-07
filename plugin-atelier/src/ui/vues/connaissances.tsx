@@ -35,6 +35,7 @@ const LIBELLES_TYPES: Readonly<Record<TypeDocumentConnaissance, string>> = {
   retour_partenaire: "Retour de partenaire",
   reclamation: "Réclamation",
   campagne: "Campagne",
+  strategie: "Stratégie marketing",
   autre: "Autre",
 };
 

@@ -77,8 +77,6 @@ TAILLE_MAX_FILE_GPU = 20  # vidéos en attente du GPU ; au-delà : refus à l'en
 RETENTION_REFUSES_S = 7 * 86400  # refuses/ purgé au-delà de 7 jours
 RETENTION_LIVRABLES_S = 30 * 86400  # livrables/ supprimés au-delà de 30 jours (après quoi l'agent ne peut plus les télécharger)
 INTERVALLE_PURGE_S = 3600.0  # entre deux purges
-MENTION_VISIBLE_DOCUMENT = False  # configuration : pas de mention incrustée dans un document (métadonnées seulement)
-MENTION_VISIBLE_IMAGE = False  # idem pour les images, fond IA compris (choix de l'opérateur du 01/11 : mention dans le texte du post ; provenance en métadonnées)
 DOSSIER_CHARTES = "chartes-autorisees"  # registre humain des chartes graphiques : <entreprise>/<id>.json
 PYTHON_VENV = "/opt/atelier-fabrique/venv/bin/python"
 PYTHON_VOIX = "/opt/atelier-fabrique/venv-voix/bin/python"
@@ -645,7 +643,6 @@ def _provenance_document(donnees: dict, format_: str, copie: dict) -> dict:
         "voix": [],
         "musique": None,
         "digital_source_type": provenance.DIGITAL_SOURCE_TYPE,
-        "mention_visible": MENTION_VISIBLE_DOCUMENT,
         "sha256": copie["sha256"],
     }
 
@@ -995,8 +992,7 @@ def _rendre_image(gabarit: str, champs: dict, format_sortie: str, charte: regist
     options = {} if fond is None else {"fond": fond}
     try:
         with _Plafonner(images, DELAI_IMAGE_S=budget.pour(images.DELAI_IMAGE_S)):
-            resultat = images.rendre_image(dossier_travail, gabarit, champs, format_sortie, charte,
-                                           mention=MENTION_VISIBLE_IMAGE, **options)
+            resultat = images.rendre_image(dossier_travail, gabarit, champs, format_sortie, charte, **options)
     except ValueError as erreur:
         raise Echec(f"image invalide : {erreur}") from erreur
     if not resultat.ok or resultat.image is None:
@@ -1021,7 +1017,7 @@ def _apercu_image(gabarit: str, format_sortie: str, charte: str, copie: dict, fo
     """Aperçu pour l'agent : ce qui permet de reconnaître l'image sans l'ouvrir."""
     return (f"Image {format_sortie}, gabarit {gabarit}, charte {charte}\n"
             f"Poids : {copie['taille']} octets, sha256 : {copie['sha256']}\n"
-            f"fond IA : {'oui' if fond_ia else 'non'}, mention visible : {'oui' if MENTION_VISIBLE_IMAGE else 'non'}\n")
+            f"fond IA : {'oui' if fond_ia else 'non'}\n")
 
 
 def traiter_image(donnees: dict, dossier_travail: Path, dossier_livrable: Path) -> dict:
@@ -1063,7 +1059,7 @@ def traiter_image(donnees: dict, dossier_travail: Path, dossier_livrable: Path) 
     infos = provenance.InfosProvenanceImage(
         travail=donnees["travail"], entreprise=donnees["entreprise"], gabarit=demande["gabarit"],
         format=demande["format"], charte=charte.id, outils=outils,
-        mention_visible=MENTION_VISIBLE_IMAGE, fond_ia=avec_illustration)
+        fond_ia=avec_illustration)
     budget.pour(1)  # la provenance a ses propres délais : on ne la lance pas si le budget est épuisé
     chemin_provenance = _poser_provenance_image(resultat.image, infos)
     copie = copier_vers_livrable(resultat.image, dossier_livrable)  # après la provenance : c'est l'image portant le XMP

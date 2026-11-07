@@ -28,11 +28,18 @@ const MAX_CLIENTS = 200;
 const MAX_TRANSACTIONS = 200;
 const MAX_CORPS_OCTETS = 16 * 1024;
 
-export const PORTEE_LOCALE = "local";
+/** Niveaux d'accès (#4) : « lecture » par défaut ; « ecriture » seulement sur demande explicite. */
+export const PORTEE_LECTURE = "lecture";
+export const PORTEE_ECRITURE = "ecriture";
+/** Ancien nom de la portée unique : vaut « lecture » (fermé par défaut ; une connexion qui écrit doit être refaite avec « ecriture »). */
+const PORTEE_ANCIENNE = "local";
+/** Valeur rendue dans `scope` pour un jeton qui peut écrire (il peut aussi lire). */
+const PORTEE_LECTURE_ECRITURE = `${PORTEE_LECTURE} ${PORTEE_ECRITURE}`;
+const peutEcrire = (portee: string | undefined): boolean => (portee ?? "").split(" ").includes(PORTEE_ECRITURE);
 /** Portée retirée avec le mode démonstration : plus délivrée, et les jetons qui la portent sont refusés (reconnexion obligatoire). */
 const PORTEE_RETIREE = "demonstration";
 export const MESSAGE_PORTEE_RETIREE =
-  "Jeton émis avant le retrait du mode démonstration : reconnecter le service (nouvelle autorisation avec la portée « local »).";
+  "Jeton émis avant le retrait du mode démonstration : reconnecter le service (nouvelle autorisation avec la portée « lecture » ou « ecriture »).";
 
 // ---------------------------------------------------------------------------
 // PKCE (RFC 7636)
@@ -66,7 +73,12 @@ export interface IdentiteJeton {
   service: Service;
   compte: string;
   propriete: Propriete;
+  /** Vrai si le jeton a été accordé avec la portée « ecriture » ; sinon les outils d'écriture sont refusés. */
+  ecriture: boolean;
 }
+
+/** Identité telle que stockée : le niveau d'accès vit dans `portee`, jamais dans l'identité. */
+type IdentiteLiee = Omit<IdentiteJeton, "ecriture">;
 
 interface Transaction {
   clientId: string;
@@ -75,6 +87,8 @@ interface Transaction {
   challenge: string;
   resource: string;
   service: Service;
+  /** Portée accordée si l'utilisateur autorise : « lecture » ou « lecture ecriture ». */
+  portee: string;
   expire: number;
 }
 
@@ -83,7 +97,8 @@ interface CodeAutorisation {
   redirectUri: string;
   challenge: string;
   resource: string;
-  identite: IdentiteJeton;
+  identite: IdentiteLiee;
+  portee: string;
   expire: number;
   /** Identifiant d'octroi : sert à révoquer les jetons si le code est rejoué. */
   octroi: string;
@@ -92,7 +107,7 @@ interface CodeAutorisation {
 interface JetonEmis {
   clientId: string;
   resource: string;
-  identite: IdentiteJeton;
+  identite: IdentiteLiee;
   expire: number;
   octroi: string;
   /** Portée accordée ; absente dans les états écrits avant ce champ (déduite au chargement). */
@@ -121,12 +136,13 @@ const empreinte = (jeton: string): string => createHash("sha256").update(jeton).
 
 /**
  * États écrits avant le champ `portee` : un jeton issu du mode démonstration (client « demo-… » ou compte
- * « (démonstration) ») est marqué à la portée retirée ; les autres sont des jetons « local ».
+ * « (démonstration) ») est marqué à la portée retirée ; les autres sont des jetons « local », qui valent « lecture ».
  */
 function marquerPortee(jeton: JetonEmis): JetonEmis {
+  if (jeton.portee === PORTEE_ANCIENNE) return { ...jeton, portee: PORTEE_LECTURE };
   if (jeton.portee !== undefined) return jeton;
   const demo = jeton.clientId.startsWith("demo-") || /d[ée]monstration/i.test(jeton.identite?.compte ?? "");
-  return { ...jeton, portee: demo ? PORTEE_RETIREE : PORTEE_LOCALE };
+  return { ...jeton, portee: demo ? PORTEE_RETIREE : PORTEE_LECTURE };
 }
 
 function sansBarreFinale(valeur: string): string {
@@ -244,7 +260,7 @@ export class ServeurAutorisationLocal {
       grant_types_supported: ["authorization_code", "refresh_token"],
       code_challenge_methods_supported: ["S256"],
       token_endpoint_auth_methods_supported: ["none"],
-      scopes_supported: [PORTEE_LOCALE],
+      scopes_supported: [PORTEE_LECTURE, PORTEE_ECRITURE, "offline_access"],
       authorization_response_iss_parameter_supported: true,
     };
   }
@@ -255,7 +271,7 @@ export class ServeurAutorisationLocal {
       resource: this.urlRessource(service),
       authorization_servers: [this.urlBase()],
       bearer_methods_supported: ["header"],
-      scopes_supported: [PORTEE_LOCALE],
+      scopes_supported: [PORTEE_LECTURE, PORTEE_ECRITURE, "offline_access"],
       resource_name: `Passerelle marketing : ${fiche.libelle}`,
     };
   }
@@ -272,7 +288,7 @@ export class ServeurAutorisationLocal {
       return null;
     }
     if (sansBarreFinale(trouve.resource) !== this.urlRessource(service)) return null;
-    return trouve.identite;
+    return { ...trouve.identite, ecriture: peutEcrire(trouve.portee) };
   }
 
   /** Vrai si le jeton existe mais porte la portée « demonstration » retirée (le client doit se reconnecter). */
@@ -433,7 +449,7 @@ export class ServeurAutorisationLocal {
     const service = ressource ? this.serviceDeRessource(ressource) : null;
     if (!service) return erreurRedirigee("invalid_target", "Indicateur de ressource inconnu ou absent (RFC 8707)");
     const portee = (q.get("scope") ?? "").split(/\s+/).filter(Boolean);
-    const inconnues = portee.filter((p) => p !== PORTEE_LOCALE && p !== "offline_access");
+    const inconnues = portee.filter((p) => ![PORTEE_LECTURE, PORTEE_ECRITURE, PORTEE_ANCIENNE, "offline_access"].includes(p));
     if (portee.includes(PORTEE_RETIREE)) return erreurRedirigee("invalid_scope", MESSAGE_PORTEE_RETIREE);
     if (inconnues.length > 0) return erreurRedirigee("invalid_scope", `Portée inconnue : ${inconnues.join(" ")}`);
 
@@ -449,9 +465,10 @@ export class ServeurAutorisationLocal {
       challenge,
       resource: this.urlRessource(service),
       service,
+      portee: portee.includes(PORTEE_ECRITURE) ? PORTEE_LECTURE_ECRITURE : PORTEE_LECTURE,
       expire: this.maintenant() + DUREE_TRANSACTION_MS,
     });
-    this.page(res, 200, this.htmlConsentement(identifiant, service, client, redirectUri), redirectUri);
+    this.page(res, 200, this.htmlConsentement(identifiant, service, client, redirectUri, peutEcrire(portee.join(" "))), redirectUri);
   }
 
   private htmlConsentement(
@@ -459,6 +476,7 @@ export class ServeurAutorisationLocal {
     service: Service,
     client: ClientEnregistre,
     redirectUri: string,
+    ecriture: boolean,
   ): string {
     const fiche = this.fiche(service);
     const options = (fiche.proprietes ?? [])
@@ -489,7 +507,7 @@ export class ServeurAutorisationLocal {
 <main>
   <h1>${echapperHtml(fiche.libelle)} : connexion locale</h1>
   <p class="bandeau">Source locale de l'atelier : ${echapperHtml(COMPTE_LOCAL)}. Les données viennent de cette machine, aucun compte de tiers n'est utilisé.</p>
-  <p><strong>${echapperHtml(demandeur)}</strong> demande l'accès à ce service local de la passerelle.</p>
+  <p><strong>${echapperHtml(demandeur)}</strong> demande l'accès à ce service local de la passerelle : <strong>${ecriture ? "lecture et écriture" : "lecture seule"}</strong>.</p>
   <form method="post" action="/oauth/authorize">
     <input type="hidden" name="transaction" value="${echapperHtml(transaction)}">
     <fieldset>
@@ -541,6 +559,7 @@ ${options}
       challenge: transaction.challenge,
       resource: transaction.resource,
       identite: { service: transaction.service, compte: COMPTE_LOCAL, propriete },
+      portee: transaction.portee,
       expire: this.maintenant() + DUREE_CODE_MS,
       octroi: aleatoire(12),
     });
@@ -577,7 +596,7 @@ ${options}
       if (ressourceDemandee && sansBarreFinale(ressourceDemandee) !== sansBarreFinale(enregistre.resource)) {
         throw new ErreurHttp(400, "invalid_target", "La ressource demandée diffère de celle autorisée");
       }
-      this.repondreAvecJetons(res, client.clientId, enregistre.resource, enregistre.identite, enregistre.octroi);
+      this.repondreAvecJetons(res, client.clientId, enregistre.resource, enregistre.identite, enregistre.octroi, enregistre.portee);
       return;
     }
 
@@ -596,8 +615,12 @@ ${options}
       if (ressourceDemandee && sansBarreFinale(ressourceDemandee) !== sansBarreFinale(ancien.resource)) {
         throw new ErreurHttp(400, "invalid_target", "La ressource demandée diffère de celle autorisée");
       }
+      // Pas d'élargissement : demander « ecriture » à partir d'un jeton « lecture » est refusé (le jeton n'est pas consommé).
+      if ((f.get("scope") ?? "").split(/\s+/).includes(PORTEE_ECRITURE) && !peutEcrire(ancien.portee)) {
+        throw new ErreurHttp(400, "invalid_scope", "La portée « ecriture » ne peut pas être ajoutée par un rafraîchissement : refaire l'autorisation.");
+      }
       this.rafraichissements.delete(cle); // rotation : usage unique
-      this.repondreAvecJetons(res, client.clientId, ancien.resource, ancien.identite, ancien.octroi);
+      this.repondreAvecJetons(res, client.clientId, ancien.resource, ancien.identite, ancien.octroi, ancien.portee ?? PORTEE_LECTURE);
       return;
     }
 
@@ -608,19 +631,20 @@ ${options}
     res: ServerResponse,
     clientId: string,
     resource: string,
-    identite: IdentiteJeton,
+    identite: IdentiteLiee,
     octroi: string,
+    portee: string,
   ): void {
     const acces = aleatoire(32);
     const rafraichissement = aleatoire(32);
     const t = this.maintenant();
-    this.jetons.set(empreinte(acces), { clientId, resource, identite, octroi, portee: PORTEE_LOCALE, expire: t + DUREE_JETON_S * 1000 });
+    this.jetons.set(empreinte(acces), { clientId, resource, identite, octroi, portee, expire: t + DUREE_JETON_S * 1000 });
     this.rafraichissements.set(empreinte(rafraichissement), {
       clientId,
       resource,
       identite,
       octroi,
-      portee: PORTEE_LOCALE,
+      portee,
       expire: t + DUREE_RAFRAICHISSEMENT_MS,
     });
     this.sauvegarder();
@@ -629,7 +653,7 @@ ${options}
       token_type: "Bearer",
       expires_in: DUREE_JETON_S,
       refresh_token: rafraichissement,
-      scope: PORTEE_LOCALE,
+      scope: portee,
     });
   }
 

@@ -1,0 +1,164 @@
+From 2137738f26a5a6d3544b68b8ca2362ecdce3691c Mon Sep 17 00:00:00 2001
+From: Jean-Baptiste Dhondt <114347858+warrox1993@users.noreply.github.com>
+Date: Wed, 4 Nov 2026 23:23:15 +0100
+Subject: [PATCH 165/166] =?UTF-8?q?fix(socle):=20page=20Co=C3=BBts=20en=20?=
+ =?UTF-8?q?fran=C3=A7ais=20(onglets,=20p=C3=A9riode,=20/mois)?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+---
+ ui/src/components/SubscriptionCostCard.test.tsx |  6 +++---
+ ui/src/components/SubscriptionCostCard.tsx      |  4 ++--
+ ui/src/hooks/useDateRange.ts                    |  2 +-
+ ui/src/pages/Costs.test.tsx                     | 16 +++++++++-------
+ ui/src/pages/Costs.tsx                          |  4 ++--
+ 5 files changed, 17 insertions(+), 15 deletions(-)
+
+diff --git a/ui/src/components/SubscriptionCostCard.test.tsx b/ui/src/components/SubscriptionCostCard.test.tsx
+index c71f8cc954..7c0af05400 100644
+--- a/ui/src/components/SubscriptionCostCard.test.tsx
++++ b/ui/src/components/SubscriptionCostCard.test.tsx
+@@ -41,7 +41,7 @@ describe("subscription costs", () => {
+   }
+   it("labels the monthly estimate and counts cached input exactly once", async () => {
+     await render(fixture());
+-    expect(container.textContent).toContain("100,00\u00a0$/month");
++    expect(container.textContent).toContain("100,00\u00a0$/mois");
+     expect(container.textContent).toContain("Estimated");
+     expect(container.textContent).toContain("150 in · 10 out");
+     expect(container.textContent).toContain("50 input cached");
+@@ -57,7 +57,7 @@ describe("subscription costs", () => {
+     expect(container.textContent).not.toMatch(/(?<![\d,.])0,00\u00a0\$/);
+     expect(container.textContent).not.toContain("private raw error");
+     await render(fixture(), new Error("private raw error"));
+-    expect(container.textContent).toContain("100,00\u00a0$/month");
++    expect(container.textContent).toContain("100,00\u00a0$/mois");
+     expect(container.textContent).toContain("last loaded");
+   });
+   it("does not describe legacy subscription usage with no identified account as free", async () => {
+@@ -74,7 +74,7 @@ describe("subscription costs", () => {
+     report.accounts[0].identityVerified = false; report.accounts[0].price.source = "user";
+     report.monthlyTotals[0].estimatedCount = 0;
+     await render(report);
+-    expect(container.textContent).toContain("100,00\u00a0$/month");
++    expect(container.textContent).toContain("100,00\u00a0$/mois");
+     expect(container.textContent).toContain("1 unconfirmed account identity");
+   });
+   it("saves an annual price with the expected revision and selected currency", async () => {
+diff --git a/ui/src/components/SubscriptionCostCard.tsx b/ui/src/components/SubscriptionCostCard.tsx
+index c472cdb29c..c9d4ac9b92 100644
+--- a/ui/src/components/SubscriptionCostCard.tsx
++++ b/ui/src/components/SubscriptionCostCard.tsx
+@@ -75,7 +75,7 @@ export function SubscriptionCostCard({ companyId, report, error, onChanged }: {
+     <Card className="block p-4">
+       <div className="text-(length:--text-micro) uppercase tracking-(--tracking-eyebrow) text-muted-foreground">Subscriptions</div>
+       <div className="mt-2 font-mono text-2xl font-semibold tabular-nums">
+-        {known ? report!.monthlyTotals.map(total => <div key={total.currency}>{subscriptionMoney(total.amountCents, total.currency)}<span className="text-sm font-normal">/month</span></div>) : report && report.activeCount === 0 && report.accounts.length > 0 ? "$0.00/month" : "—"}
++        {known ? report!.monthlyTotals.map(total => <div key={total.currency}>{subscriptionMoney(total.amountCents, total.currency)}<span className="text-sm font-normal">/mois</span></div>) : report && report.activeCount === 0 && report.accounts.length > 0 ? "$0.00/mois" : "—"}
+       </div>
+       <div className="mt-1 space-y-1 text-xs text-muted-foreground">
+         {report ? <>
+@@ -98,7 +98,7 @@ export function SubscriptionCostCard({ companyId, report, error, onChanged }: {
+           {report?.accounts.map(account => <div key={account.id} className="space-y-2 border-b border-border pb-4 last:border-0">
+             <div className="flex flex-wrap items-start justify-between gap-3">
+               <div><div className="font-medium">{account.name}</div><div className="text-xs text-muted-foreground">{account.shared ? "Shared" : account.ownerName ?? (account.ownerUserId ? "Account owner" : "Personal accounts")} · {providerDisplayName(account.provider)} · {account.price.plan}</div></div>
+-              <div className="text-right"><div className="font-mono">{account.price.status !== "active" ? account.price.status === "ended" ? "Ended" : "Excluded" : account.price.monthlyCents == null ? "Price unknown" : `${subscriptionMoney(account.price.monthlyCents, account.price.currency)}/month`}</div><div className="text-xs text-muted-foreground">{account.price.source === "catalog" ? "Estimated · before tax" : account.price.source === "user" ? "User supplied" : ""}{account.price.cadence === "year" ? " · annual payment ÷ 12" : ""}</div></div>
++              <div className="text-right"><div className="font-mono">{account.price.status !== "active" ? account.price.status === "ended" ? "Ended" : "Excluded" : account.price.monthlyCents == null ? "Price unknown" : `${subscriptionMoney(account.price.monthlyCents, account.price.currency)}/mois`}</div><div className="text-xs text-muted-foreground">{account.price.source === "catalog" ? "Estimated · before tax" : account.price.source === "user" ? "User supplied" : ""}{account.price.cadence === "year" ? " · annual payment ÷ 12" : ""}</div></div>
+             </div>
+             <SubscriptionTokenUsage usage={account.usage} />
+             {Number(account.usage.costCents) > 0 && <div className="text-xs text-muted-foreground">{formatCents(Number(account.usage.costCents))} recorded usage charges in selected period, separate from the subscription fee.</div>}
+diff --git a/ui/src/hooks/useDateRange.ts b/ui/src/hooks/useDateRange.ts
+index 5fe2740b61..87c3cdd6e3 100644
+--- a/ui/src/hooks/useDateRange.ts
++++ b/ui/src/hooks/useDateRange.ts
+@@ -3,7 +3,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
+ export type DatePreset = "mtd" | "7d" | "30d" | "ytd" | "all" | "custom";
+ 
+ export const PRESET_LABELS: Record<DatePreset, string> = {
+-  mtd: "Month to Date",
++  mtd: "Mois en cours",
+   "7d": "7 Days",
+   "30d": "30 Days",
+   ytd: "Year to Date",
+diff --git a/ui/src/pages/Costs.test.tsx b/ui/src/pages/Costs.test.tsx
+index 1ddb908d53..96d46a7ff7 100644
+--- a/ui/src/pages/Costs.test.tsx
++++ b/ui/src/pages/Costs.test.tsx
+@@ -182,7 +182,7 @@ describe("Shared Costs surfaces", () => {
+     root = createRoot(container);
+     await act(async () => root.render(<MemoryRouter initialEntries={["/?tab=decisions"]}><QueryClientProvider client={queryClient}><Costs /></QueryClientProvider></MemoryRouter>));
+     await act(async () => { await vi.waitFor(() => expect(container.textContent).toContain("No decision requests in this period")); });
+-    expect(container.querySelector('[role="tab"][data-state="active"]')?.textContent).toBe("Decisions");
++    expect(container.querySelector('[role="tab"][data-state="active"]')?.textContent).toBe("Décisions");
+     const [companyId, from, to] = decisionHistoryMock.mock.lastCall!;
+     expect(companyId).toBe("company-1");
+     expect(Number.isFinite(Date.parse(from))).toBe(true);
+@@ -282,13 +282,13 @@ describe("Shared Costs surfaces", () => {
+     await act(async () => root.render(<MemoryRouter><QueryClientProvider client={queryClient}><Costs /></QueryClientProvider></MemoryRouter>));
+     const retry = () => [...container.querySelectorAll("button")].find(button => button.textContent === "Retry account check");
+     await act(async () => { await vi.waitFor(() => expect(retry()).toBeDefined()); });
+-    expect(container.textContent).toContain("20,00\u00a0$/month");
++    expect(container.textContent).toContain("20,00\u00a0$/mois");
+     expect(container.textContent).not.toContain("private connection error");
+     await act(async () => retry()!.click());
+     await act(async () => { await vi.waitFor(() => expect(retry()).toBeUndefined()); });
+     expect(subscriptionsMocks.refresh).toHaveBeenCalledTimes(2);
+     expect(subscriptionsMocks.refresh).toHaveBeenLastCalledWith("company-1");
+-    expect(container.textContent).toContain("20,00\u00a0$/month");
++    expect(container.textContent).toContain("20,00\u00a0$/mois");
+     queryClient.clear();
+   });
+ 
+@@ -303,18 +303,18 @@ describe("Shared Costs surfaces", () => {
+     root = createRoot(container);
+     await act(async () => root.render(<MemoryRouter><QueryClientProvider client={queryClient}><Costs /></QueryClientProvider></MemoryRouter>));
+     const card = (label: string) => [...container.querySelectorAll("div")].find(node => node.textContent === label)?.closest('[data-slot="card"]');
+-    await act(async () => { await vi.waitFor(() => expect(card("Subscriptions")?.textContent).toContain("20,00\u00a0$/month")); });
++    await act(async () => { await vi.waitFor(() => expect(card("Subscriptions")?.textContent).toContain("20,00\u00a0$/mois")); });
+     expect(card("Dépenses d'API")?.textContent).toContain("2,00\u00a0$");
+     subscriptionsMocks.report.mockResolvedValue({ ...report, activeCount: 1, monthlyTotals: [{ currency: "USD", amountCents: "2000", estimatedCount: 1 }], api: { ...report.api, costCents: "300" } });
+     await act(async () => [...container.querySelectorAll("button")].find(button => button.textContent === "All Time")!.click());
+     await act(async () => { await vi.waitFor(() => expect(card("Dépenses d'API")?.textContent).toContain("3,00\u00a0$")); });
+-    expect(card("Subscriptions")?.textContent).toContain("20,00\u00a0$/month");
++    expect(card("Subscriptions")?.textContent).toContain("20,00\u00a0$/mois");
+     expect(subscriptionsMocks.report).toHaveBeenLastCalledWith("company-1", undefined, undefined);
+     subscriptionsMocks.report.mockRejectedValue(new Error("private provider failure"));
+     await act(async () => { await queryClient.invalidateQueries({ queryKey: ["cost-subscriptions"] }); });
+     await act(async () => { await vi.waitFor(() => expect(container.textContent).toContain("Showing the last loaded API and subscription usage")); });
+     expect(card("Dépenses d'API")?.textContent).toContain("3,00\u00a0$");
+-    expect(card("Subscriptions")?.textContent).toContain("20,00\u00a0$/month");
++    expect(card("Subscriptions")?.textContent).toContain("20,00\u00a0$/mois");
+     expect(container.textContent).not.toContain("private provider failure");
+     queryClient.clear();
+   });
+@@ -477,8 +477,10 @@ describe("Shared Costs surfaces", () => {
+       expect(setBreadcrumbsMock).toHaveBeenCalledWith([{ label: "Coûts" }]);
+     }
+     expect([...container.querySelectorAll('[role="tab"]')].map((tab) => tab.textContent)).toEqual(
+-      streamlined ? ["Vue d'ensemble", "Fournisseurs", "Facturiers", "Finance", "Decisions", "Fast responses"] : ["Vue d'ensemble", "Budgets", "Fournisseurs", "Facturiers", "Finance", "Decisions", "Fast responses"],
++      streamlined ? ["Vue d'ensemble", "Fournisseurs", "Facturiers", "Finance", "Décisions", "Réponses rapides"] : ["Vue d'ensemble", "Budgets", "Fournisseurs", "Facturiers", "Finance", "Décisions", "Réponses rapides"],
+     );
++    expect([...container.querySelectorAll("button")].map((button) => button.textContent)).toContain("Mois en cours");
++    expect(container.textContent).not.toContain("Month to Date");
+   });
+ 
+ });
+diff --git a/ui/src/pages/Costs.tsx b/ui/src/pages/Costs.tsx
+index 655f6f633f..d3ab796c6c 100644
+--- a/ui/src/pages/Costs.tsx
++++ b/ui/src/pages/Costs.tsx
+@@ -734,8 +734,8 @@ export function Costs({
+               <TabsTrigger value="providers">Fournisseurs</TabsTrigger>
+               <TabsTrigger value="billers">Facturiers</TabsTrigger>
+               <TabsTrigger value="finance">Finance</TabsTrigger>
+-              <TabsTrigger value="decisions">Decisions</TabsTrigger>
+-              <TabsTrigger value="fast-responses">Fast responses</TabsTrigger>
++              <TabsTrigger value="decisions">Décisions</TabsTrigger>
++              <TabsTrigger value="fast-responses">Réponses rapides</TabsTrigger>
+             </TabsList>
+           </div>
+         ) : null}
+-- 
+2.53.0
+

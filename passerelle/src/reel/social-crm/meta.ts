@@ -19,7 +19,7 @@
 //                            POST /{ig-user-id}/media_publish (creation_id) → { id }
 //                            https://developers.facebook.com/docs/instagram-platform/content-publishing
 
-import { ajouterMention, MENTION_IA_PAR_DEFAUT } from "../../mention-ia.js";
+import { ajouterMention } from "../../mention-ia.js";
 import type { FournisseurService, OutilPasserelle } from "../../fournisseurs.js";
 import { definitionsMeta } from "../../commun/social-crm/meta.js";
 import type { AccesPlateforme } from "./autorisation.js";
@@ -168,11 +168,11 @@ export function fournisseurFacebookReel(dep: DependancesOutils): FournisseurServ
     outil: { ...gabarit(DEFS.facebook_envoyer_message, "Envoie un message privé depuis la Page (POST /{page-id}/messages, type RESPONSE : réponse dans la fenêtre de messagerie standard)."), executer: () => undefined },
     requeteReelle: "POST /{page-id}/messages",
     resume: (a) => `message privé de ${a.texte.length} caractères.`,
-    // Mention IA (choix de transparence, voir mention-ia.ts) : elle est ajoutée à la préparation, donc visible dans ce que l'humain approuve
-    // et incluse dans l'empreinte signée.
-    preparer: (a) => ({ ...a, texte: ajouterMention(a.texte, dep.config.mentionIa ?? MENTION_IA_PAR_DEFAUT) }),
+    // Mention IA (absente par défaut, voir mention-ia.ts) : si elle est réactivée, elle est ajoutée à la préparation, donc visible dans ce
+    // que l'humain approuve et incluse dans l'empreinte signée.
+    preparer: (a) => ({ ...a, texte: ajouterMention(a.texte, dep.config.mentionIa) }),
     verifier: (a) => {
-      if (a.texte.length > LONGUEUR_MAX_MESSAGE) throw new ErreurFournisseur("requete_invalide", `Le message, mention d'information IA comprise, dépasse ${LONGUEUR_MAX_MESSAGE} caractères : le raccourcir.`);
+      if (a.texte.length > LONGUEUR_MAX_MESSAGE) throw new ErreurFournisseur("requete_invalide", `Le message, avec son éventuelle mention d'information IA, dépasse ${LONGUEUR_MAX_MESSAGE} caractères : le raccourcir.`);
     },
     executer: async (acces, a) => {
       const r = await graph(dep, "meta", acces, "POST", `${acces.compte.id}/messages`, {}, "la conversation", { recipient: { id: a.destinataire }, messaging_type: "RESPONSE", message: { text: a.texte } });

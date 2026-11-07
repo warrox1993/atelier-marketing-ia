@@ -47,7 +47,15 @@ const LECTURE_DISCUSSIONS = 100;
 export const MAX_TITRE = 60;
 const COMMANDE_NOUVELLE = /^\/(clear|nouveau)$/i;
 /** Début de tout message de l'humain : permet de le distinguer d'une réponse d'agent dans le fil natif. */
-export const PREFIXE_HUMAIN = "**Message de l'humain (atelier)**\n\n";
+export const PREFIXE_HUMAIN = "**Message de l'humain (atelier)**";
+/**
+ * Première ligne du commentaire posé par `discussion.envoyer` : le type de travail et l'origine du fil (`originId` de la tâche,
+ * jamais son titre, que le plugin renomme) y sont portés pour que le Coordinateur reconnaisse son chat sans dépendre du titre.
+ * Forme : `**Message de l'humain (atelier)** · travail : discussion · origine : <originId>`, puis une ligne vide et le texte.
+ */
+export const prefixeMessage = (originId: string | null | undefined) => `${PREFIXE_HUMAIN} · travail : discussion · origine : ${originId ?? ""}\n\n`;
+/** Reconnaît le préfixe d'un message de l'humain, avec ou sans le type et l'origine (fils antérieurs). */
+const PREFIXE_RECONNU = /^\*\*Message de l'humain \(atelier\)\*\*[^\n]*\n\n/;
 export const MAX_MESSAGES = 100;
 export const MAX_TEXTE = 4000;
 /** Durée pendant laquelle les cartes en attente sont réutilisées entre deux interrogations du fil. */
@@ -198,8 +206,8 @@ export function routesDiscussion(d: DependancesDiscussion): Partial<Record<CleRo
   async function versMessage(companyId: string, issueId: string, c: Commentaire, coordinateurId: string | null, ceoId: string | null = null): Promise<MessageDiscussion | null> {
     if (c.deletedAt || c.body.trim() === "") return null;
     const deAgent = c.authorAgentId != null || c.authorType === "agent";
-    if (!deAgent && (c.authorType === "user" || c.body.startsWith(PREFIXE_HUMAIN))) {
-      return { id: c.id, auteur: "humain", nom: "Vous", texte: c.body.startsWith(PREFIXE_HUMAIN) ? c.body.slice(PREFIXE_HUMAIN.length) : c.body, date: iso(c.createdAt), actions: [] };
+    if (!deAgent && (c.authorType === "user" || PREFIXE_RECONNU.test(c.body))) {
+      return { id: c.id, auteur: "humain", nom: "Vous", texte: c.body.replace(PREFIXE_RECONNU, ""), date: iso(c.createdAt), actions: [] };
     }
     const extrait = extraireActions(c.body);
     const { texte, ignorees } = extrait;
@@ -349,7 +357,7 @@ export function routesDiscussion(d: DependancesDiscussion): Partial<Record<CleRo
       return { statut: 201, corps: { nouvelle: await forme(r.companyId, await creerNouvelle(r.companyId, r.acteur), null, true) } };
     }
     const issue = choisie ? await suivreCoordinateur(r.companyId, choisie, r.acteur) : await retrouverOuCreer(r.companyId, r.acteur);
-    const c = await ctx.issues.createComment(issue.id, `${PREFIXE_HUMAIN}${p.data.texte}`, r.companyId);
+    const c = await ctx.issues.createComment(issue.id, `${prefixeMessage(issue.originId)}${p.data.texte}`, r.companyId);
     const auteur = r.acteur.userId ? { actorUserId: r.acteur.userId } : undefined;
     if (issue.status === "done" || issue.status === "in_review" || issue.status === "backlog") {
       await ctx.issues.update(issue.id, { status: "todo" }, r.companyId, auteur);

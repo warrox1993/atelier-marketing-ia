@@ -176,10 +176,10 @@ export interface JetonsObtenus {
 }
 
 /** Parcours complet : enregistrement, consentement, code, jeton. */
-export async function obtenirJetons(url: string, service: string, propriete?: string): Promise<JetonsObtenus> {
+export async function obtenirJetons(url: string, service: string, propriete?: string, scope?: string): Promise<JetonsObtenus> {
   const client = await enregistrerClient(url);
   const pkce = nouveauPkce();
-  const { transaction } = await ouvrirConsentement(urlAutorisation(url, client, pkce, service));
+  const { transaction } = await ouvrirConsentement(urlAutorisation(url, client, pkce, service, scope ? { scope } : {}));
   const rep = await decider(url, transaction, "autoriser", propriete);
   const lieu = rep.headers.get("location");
   if (rep.status !== 302 || !lieu) throw new Error(`pas de redirection : ${rep.status}`);

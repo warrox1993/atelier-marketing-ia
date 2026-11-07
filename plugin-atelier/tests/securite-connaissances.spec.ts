@@ -159,7 +159,7 @@ describe("M2 : porte des chiffres d'offre", () => {
   it("au-delà de la taille contrôlée : constat explicite, sans analyse", () => {
     const c = controlerCitationsConnaissances(`Texte. ${"a".repeat(600_000)}`, [], [], "2026-10-15");
     expect(c).toHaveLength(1);
-    expect(c[0]).toMatchObject({ code: "chiffre_offre_sans_source", decision: "refus", adresse: null });
+    expect(c[0]).toMatchObject({ code: "livrable_trop_volumineux", decision: "refus", adresse: null });
     expect(c[0]!.message).toMatch(/trop volumineux/u);
   });
 });

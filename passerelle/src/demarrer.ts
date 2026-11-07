@@ -10,7 +10,6 @@ import { reponsesGardeesDepuisEnv } from "./reponses-gardees.js";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { lireReglages, lireServicesLocaux } from "./config.js";
-import { lireMentionIa } from "./mention-ia.js";
 import { RegistreFournisseurs } from "./fournisseurs.js";
 import { creerServeur, type RouteInterne } from "./serveur.js";
 import { signataireDepuisEnv, type SignataireEnveloppe } from "./signature-enveloppe.js";
@@ -41,7 +40,6 @@ function principal(): void {
     reglages = lireReglages(process.env);
     servicesLocaux = lireServicesLocaux(process.env);
     signataire = signataireDepuisEnv(process.env);
-    lireMentionIa(process.env); // mention IA (choix de transparence) : désactivation sans motif écrit = refus de démarrer
   } catch (erreur) {
     console.error(erreur instanceof Error ? erreur.message : String(erreur));
     process.exit(2);

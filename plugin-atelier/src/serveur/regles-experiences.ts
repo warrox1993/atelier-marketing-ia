@@ -6,13 +6,20 @@
  * - tant qu'une variante n'a pas atteint le minimum d'essais : « non concluant : échantillon insuffisant » ;
  * - test z bilatéral de deux proportions avec proportion commune : z = (p2 - p1) / sqrt(p(1 - p)(1/n1 + 1/n2)),
  *   p = (x1 + x2) / (n1 + n2) ; p-valeur = erfc(|z| / sqrt 2) ;
+ * - lot 2 (#22) : si une case du tableau 2 x 2 (conversions ou non-conversions d'une variante) est sous
+ *   `CONVERSIONS_MIN_TEST_Z`, la p-valeur est celle du test exact de Fisher bilatéral (loi hypergéométrique, marges fixées,
+ *   somme des tables aussi ou moins probables que l'observée) : le test z y est trop optimiste ;
  * - s'il y a plus de 2 variantes, correction de Bonferroni : p-valeur ajustée = min(1, p x m), m = nombre de comparaisons ;
  *   la comparaison est significative quand la p-valeur ajustée est inférieure à alpha ;
  * - intervalle de confiance à 95 % de l'écart (p2 - p1) : méthode de Newcombe (hybride, issue des intervalles de Wilson),
  *   qui reste valable à 0 % et à 100 % (la méthode de Wald y donnerait un intervalle réduit à un point, trompeur) ;
- * - verdict : une variante « gagne » si elle fait significativement mieux que la référence (la meilleure parmi celles-là) ;
- *   la référence gagne si elle bat significativement TOUTES les autres ; aucune significative : « aucune différence
- *   détectable » ; référence meilleure que certaines seulement : non concluant.
+ * - une comparaison n'est significative que si la p-valeur ajustée est sous alpha ET si l'intervalle exclut zéro ;
+ * - verdict : `superieur_aux_autres` (la variante « gagne ») si la meilleure variante fait significativement mieux que
+ *   CHACUNE des autres : la référence par ses comparaisons déclarées ; une autre variante, choisie au vu des données, par
+ *   une comparaison à chaque autre variante corrigée sur toutes les paires (m = k(k - 1) / 2) ; des variantes font mieux
+ *   que la référence sans que l'une batte toutes les autres : `superieur_reference`, la meilleure n'étant que le
+ *   « meilleur taux observé » ; aucune significative : « aucune différence détectable » ; référence meilleure que
+ *   certaines seulement : non concluant.
  * Aucun arrondi n'est fait ici : les nombres sont rendus tels que calculés.
  */
 import { ALPHA_PAR_DEFAUT, type ComparaisonVariante, type VerdictExperience } from "../contrats/experiences.js";
@@ -22,6 +29,12 @@ export interface ResultatBrut {
   essais: number;
   succes: number;
 }
+
+/**
+ * Sous ce nombre de conversions (ou de non-conversions) dans une variante, le test z n'est plus fiable :
+ * test exact de Fisher. Repère usuel : effectifs d'au moins 5 à 10 par case pour l'approximation normale.
+ */
+export const CONVERSIONS_MIN_TEST_Z = 10;
 
 /** Quantile 0,975 de la loi normale centrée réduite. */
 export const Z_95 = 1.959963984540054;
@@ -52,6 +65,30 @@ export function intervalleWilson(x: number, n: number): [number, number] {
   return [Math.max(0, centre - demi), Math.min(1, centre + demi)];
 }
 
+/**
+ * p-valeur du test exact de Fisher bilatéral pour x1/n1 contre x2/n2 : somme des probabilités hypergéométriques
+ * (marges fixées) des tables aussi ou moins probables que l'observée. Probabilités calculées par récurrence depuis le
+ * mode (valeur 1, jamais de dépassement de capacité), puis normalisées.
+ */
+export function fisherBilateral(x1: number, n1: number, x2: number, n2: number): number {
+  const total = n1 + n2;
+  const succes = x1 + x2;
+  const bas = Math.max(0, n1 - (total - succes));
+  const haut = Math.min(succes, n1);
+  const mode = Math.min(haut, Math.max(bas, Math.floor(((n1 + 1) * (succes + 1)) / (total + 2))));
+  const rel = new Map<number, number>([[mode, 1]]);
+  for (let k = mode; k < haut; k++) rel.set(k + 1, (rel.get(k)! * (succes - k) * (n1 - k)) / ((k + 1) * (total - succes - n1 + k + 1)));
+  for (let k = mode; k > bas; k--) rel.set(k - 1, (rel.get(k)! * k * (total - succes - n1 + k)) / ((succes - k + 1) * (n1 - k + 1)));
+  const observee = rel.get(x1)! * (1 + 1e-7);
+  let somme = 0;
+  let queue = 0;
+  for (const p of rel.values()) {
+    somme += p;
+    if (p <= observee) queue += p;
+  }
+  return Math.min(1, queue / somme);
+}
+
 /** Comparaison de la variante 2 à la référence 1 (n1 et n2 >= 1). `m` : nombre de comparaisons pour Bonferroni. */
 export function comparer(ref: ResultatBrut, autre: ResultatBrut, m: number, alpha: number): ComparaisonVariante {
   const p1 = ref.succes / ref.essais;
@@ -60,7 +97,8 @@ export function comparer(ref: ResultatBrut, autre: ResultatBrut, m: number, alph
   const variance = commune * (1 - commune) * (1 / ref.essais + 1 / autre.essais);
   // Variance nulle seulement si la proportion commune vaut 0 ou 1, donc si les deux taux sont égaux : z = 0.
   const z = variance === 0 ? 0 : (p2 - p1) / Math.sqrt(variance);
-  const pValeur = Math.min(1, erfc(Math.abs(z) / Math.SQRT2));
+  const exact = Math.min(ref.succes, ref.essais - ref.succes, autre.succes, autre.essais - autre.succes) < CONVERSIONS_MIN_TEST_Z;
+  const pValeur = exact ? fisherBilateral(ref.succes, ref.essais, autre.succes, autre.essais) : Math.min(1, erfc(Math.abs(z) / Math.SQRT2));
   const pValeurAjustee = Math.min(1, pValeur * m);
   const [l1, u1] = intervalleWilson(ref.succes, ref.essais);
   const [l2, u2] = intervalleWilson(autre.succes, autre.essais);
@@ -69,7 +107,7 @@ export function comparer(ref: ResultatBrut, autre: ResultatBrut, m: number, alph
   const haut = ecart + Math.sqrt((u2 - p2) ** 2 + (p1 - l1) ** 2);
   return {
     variante: autre.nom, tauxReference: p1, tauxVariante: p2, ecartAbsolu: ecart, intervalle95: [bas, haut],
-    z, pValeur, pValeurAjustee, significatif: pValeurAjustee < alpha,
+    z, pValeur, pValeurAjustee, significatif: pValeurAjustee < alpha && (bas > 0 || haut < 0), methode: exact ? "fisher_exact" : "z",
   };
 }
 
@@ -93,11 +131,16 @@ const nomCite = (t: string) => `« ${t.replace(CONTROLES, " ").replace(/\s+/gu, 
 export function ligneVerdict(v: VerdictExperience): string {
   const ref = nomCite(v.reference);
   if (v.statut === "aucune_difference") return "aucune différence détectable";
-  if (v.statut === "gagnant" && v.gagnant !== null) {
+  if (v.statut === "superieur_reference") return texteSuperieurReference(ref, v.comparaisons, nomCite);
+  if ((v.statut === "superieur_aux_autres" || v.statut === "gagnant") && v.gagnant !== null) {
     if (v.gagnant === v.reference) {
       return `${ref} gagne : la référence fait significativement mieux que chacune des autres variantes (${v.comparaisons.map((c) => `${nomCite(c.variante)} ${pct(c.tauxVariante)}`).join(", ")}${v.comparaisons[0] ? ` contre ${pct(v.comparaisons[0].tauxReference)}` : ""})`;
     }
     const c = v.comparaisons.find((x) => x.variante === v.gagnant);
+    // Ancien statut « gagnant » (figé avant le lot 2) : seule la supériorité sur la référence était démontrée.
+    if (c && v.statut === "gagnant") {
+      return `${nomCite(c.variante)} fait significativement mieux que la référence ${ref} : ${pct(c.tauxVariante)} contre ${pct(c.tauxReference)} (écart ${pct(c.ecartAbsolu)}, IC 95 % [${pct(c.intervalle95[0])} ; ${pct(c.intervalle95[1])}], p ${c.pValeurAjustee < 0.0001 ? "" : "= "}${formaterP(c.pValeurAjustee)})`;
+    }
     if (c) {
       return `${nomCite(c.variante)} gagne : ${pct(c.tauxVariante)} contre ${pct(c.tauxReference)} pour la référence ${ref} (écart ${pct(c.ecartAbsolu)}, IC 95 % [${pct(c.intervalle95[0])} ; ${pct(c.intervalle95[1])}], p ${c.pValeurAjustee < 0.0001 ? "" : "= "}${formaterP(c.pValeurAjustee)})`;
     }
@@ -109,6 +152,15 @@ export function ligneVerdict(v: VerdictExperience): string {
   }
   const pires = v.comparaisons.filter((c) => c.significatif && c.ecartAbsolu < 0);
   return `non concluant : la référence ${ref} ne bat significativement qu'une partie des variantes (${pires.map((c) => nomCite(c.variante)).join(", ")})`;
+}
+
+/** Variantes meilleures que la référence sans supériorité démontrée entre elles : jamais « gagne », seulement « meilleur taux observé ». */
+function texteSuperieurReference(ref: string, comparaisons: readonly ComparaisonVariante[], nom: (t: string) => string): string {
+  const meilleures = comparaisons.filter((c) => c.significatif && c.ecartAbsolu > 0);
+  // La référence est sous chacune des meilleures : le maximum des comparaisons est le meilleur taux de toutes les variantes.
+  const meilleure = comparaisons.reduce((a, b) => (b.tauxVariante > a.tauxVariante ? b : a));
+  const verbe = meilleures.length > 1 ? "font" : "fait";
+  return `${meilleures.map((c) => nom(c.variante)).join(", ")} ${verbe} significativement mieux que la référence ${ref} ; meilleur taux observé : ${nom(meilleure.variante)} (${pct(meilleure.tauxVariante)}), sans supériorité démontrée sur chacune des autres variantes`;
 }
 
 export interface EntreeVerdict {
@@ -146,15 +198,26 @@ export function calculerVerdict(entree: EntreeVerdict): VerdictExperience {
   const meilleures = comparaisons.filter((c) => c.significatif && c.ecartAbsolu > 0);
   if (meilleures.length > 0) {
     const gagnante = meilleures.reduce((a, b) => (b.tauxVariante > a.tauxVariante ? b : a));
+    // Variante choisie au vu des données : elle doit battre CHACUNE des autres, correction sur toutes les paires.
+    const paires = (entree.variantes.length * (entree.variantes.length - 1)) / 2;
+    const candidate = entree.variantes.find((x) => x.nom === gagnante.variante)!;
+    const batToutes = entree.variantes.every((x) => {
+      if (x === candidate) return true;
+      const c = comparer(x, candidate, paires, alpha);
+      return c.significatif && c.ecartAbsolu > 0;
+    });
+    if (!batToutes) {
+      return { ...base, statut: "superieur_reference", gagnant: null, comparaisons, texte: texteSuperieurReference(ref.nom, comparaisons, (t) => t) };
+    }
     return {
-      ...base, statut: "gagnant", gagnant: gagnante.variante, comparaisons,
+      ...base, statut: "superieur_aux_autres", gagnant: gagnante.variante, comparaisons,
       texte: `${gagnante.variante} gagne : ${pct(gagnante.tauxVariante)} contre ${pct(gagnante.tauxReference)} pour la référence ${ref.nom} (écart ${pct(gagnante.ecartAbsolu)}, IC 95 % [${pct(gagnante.intervalle95[0])} ; ${pct(gagnante.intervalle95[1])}], p ${gagnante.pValeurAjustee < 0.0001 ? "" : "= "}${formaterP(gagnante.pValeurAjustee)})`,
     };
   }
   const pires = comparaisons.filter((c) => c.significatif && c.ecartAbsolu < 0);
   if (pires.length === comparaisons.length) {
     return {
-      ...base, statut: "gagnant", gagnant: ref.nom, comparaisons,
+      ...base, statut: "superieur_aux_autres", gagnant: ref.nom, comparaisons,
       texte: `${ref.nom} gagne : la référence fait significativement mieux que chacune des autres variantes (${comparaisons.map((c) => `${c.variante} ${pct(c.tauxVariante)}`).join(", ")} contre ${pct(comparaisons[0]!.tauxReference)})`,
     };
   }

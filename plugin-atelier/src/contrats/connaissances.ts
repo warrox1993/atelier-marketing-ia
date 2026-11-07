@@ -56,6 +56,7 @@ export const MOTIFS_PORTE_CONNAISSANCES = [
   "citation_connaissance_inconnue",
   "citation_connaissance_perimee",
   "chiffre_offre_sans_source",
+  "livrable_trop_volumineux",
 ] as const;
 
 export const LIMITES_CONNAISSANCES = {
@@ -89,6 +90,8 @@ export const TypeDocumentConnaissance = z.enum([
   "retour_partenaire",
   "reclamation",
   "campagne",
+  /** Lot 2 (T12) : stratégie marketing approuvée, publiée en code à la décision humaine. */
+  "strategie",
   "autre",
 ]);
 export type TypeDocumentConnaissance = z.infer<typeof TypeDocumentConnaissance>;

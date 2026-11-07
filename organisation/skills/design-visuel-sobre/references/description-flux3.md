@@ -14,7 +14,8 @@ n'apparaît pas, ce qui est flou sort flou. La description est donc longue, pré
 ## Ordre des informations
 
 1. **Le support et le style d'abord**, en une phrase d'ouverture : par exemple « Painterly digital key art in the style of
-   World of Warcraft cinematic illustrations », avec les couleurs et la lumière générales.
+   World of Warcraft cinematic illustrations », ou une photographie réaliste d'un bureau et de personnes inventées (« Photorealistic
+   photograph of... »), avec les couleurs et la lumière générales.
 2. **Le décor, la lumière et le cadrage** ensuite : le lieu, ses éléments architecturaux, l'éclairage, la hauteur et l'angle de
    la caméra (vue basse, grand angle, plan serré).
 3. **Les sujets** enfin, du plus important au moins important : le personnage central, puis le premier plan, puis les objets.
@@ -49,8 +50,9 @@ La zone calme réservée au texte du gabarit se décrit aussi par sa position, e
 
 - **Les négations** (« no text », « without hands ») : on décrit ce qui est présent. Le plugin et la fabrique ajoutent eux-mêmes les interdits techniques.
 - **Les jugements de qualité** (« beautiful », « masterpiece », « 8k », « highly detailed ») et la phrase finale d'ambiance (« the scene feels epic »).
-- **Le texte à l'image** : lettres, inscriptions, logo, filigrane, et toute personne réelle ou célèbre (règles de l'illustration, inchangées).
+- **Le texte à l'image** : lettres, inscriptions, logo, filigrane (règles de l'illustration, inchangées).
 - **Les faits du message** (chiffre, prix, délai) : ils vont dans les champs du gabarit, jamais dans l'illustration.
+- **Une personne réelle ou un faux témoignage** : limites dans la compétence `conformite-publicite-ia`.
 
 ## Exemple complet (taverne, 324 mots)
 

@@ -52,6 +52,8 @@ interface Options {
   echecReveil?: string;
   /** Tâches abandonnées par le veilleur, sans action depuis (`base.abandonsVeilleur`). */
   abandons?: Array<{ issueId: string; le: string }>;
+  /** Tâches in_review sous porte figées (`base.tachesFigeesSousPorte`). */
+  figees?: Array<{ issueId: string; identifier: string | null; titre: string; agentId: string; agentNom: string | null; revueOuverte: boolean; le: string }>;
 }
 
 function faux(o: Options = {}) {
@@ -93,6 +95,7 @@ function faux(o: Options = {}) {
     marques: async () => o.marques ?? [{ informationsManquantes: [] }],
     journaliser: async (e: Ligne) => void journal.push(e),
     abandonsVeilleur: async () => o.abandons ?? [],
+    tachesFigeesSousPorte: async () => o.figees ?? [],
   } as unknown as BaseAtelier;
   const deps: DependancesAccueil = {
     ctx,
@@ -194,6 +197,37 @@ describe("accueil.lister", () => {
     expect(elements.map((e) => e.id)).toEqual([`abandon:${id(7)}`]);
     expect(elements[0]).toMatchObject({ type: "tache_bloquee", urgence: "haute", titre: "DEM-7 · Rédiger la page", issueId: id(7) });
     expect(elements[0]!.raison).toContain("veilleur");
+  });
+
+  it("T7 : une tâche in_review figée sous porte apparaît avec sa cause, son propriétaire et la prochaine action", async () => {
+    const f = faux({
+      issues: [tache(9, { status: "in_review", title: "Page tarifs" }), tache(10, { status: "in_review", title: "Autre page" })],
+      figees: [
+        { issueId: id(9), identifier: "DEM-9", titre: "Page tarifs", agentId: id(1), agentNom: "Rédacteur", revueOuverte: true, le: "2026-11-05T08:00:00.000Z" },
+        { issueId: id(10), identifier: "DEM-10", titre: "Autre page", agentId: id(1), agentNom: null, revueOuverte: false, le: "2026-11-05T08:00:00.000Z" },
+      ],
+    });
+    const { corps } = await f.appeler("accueil.lister");
+    const elements = (corps as { elements: ElementAccueil[] }).elements;
+    const [revue, sansRevue] = [`figee:${id(9)}`, `figee:${id(10)}`].map((cle) => elements.find((e) => e.id === cle)!);
+    expect(revue).toMatchObject({ type: "tache_bloquee", urgence: "haute", titre: "DEM-9 · Page tarifs", issueId: id(9) });
+    expect(revue!.raison).toContain("Cause : une revue attend un verdict");
+    expect(revue!.raison).toContain("Propriétaire : Rédacteur");
+    expect(revue!.action).toContain("relecteurs");
+    expect(sansRevue!.raison).toContain("Cause : aucune revue ouverte");
+    expect(sansRevue!.raison).toContain("Propriétaire : agent assigné");
+    expect(sansRevue!.action).toContain("Coordinateur");
+    // Aucun réveil de plus : l'accueil ne fait que lire.
+    expect(f.reveils ?? []).toHaveLength(0);
+  });
+
+  it("T7 : une tâche in_review non figée (absente de la liste) ou déjà close ne produit rien", async () => {
+    const f = faux({
+      issues: [tache(9, { status: "in_review", title: "Page tarifs" }), tache(11, { status: "done" })],
+      figees: [{ issueId: id(11), identifier: "DEM-11", titre: "Close", agentId: id(1), agentNom: "R", revueOuverte: false, le: "2026-11-05T08:00:00.000Z" }],
+    });
+    const { corps } = await f.appeler("accueil.lister");
+    expect((corps as { elements: ElementAccueil[] }).elements.filter((e) => e.id.startsWith("figee:"))).toEqual([]);
   });
 
   it("une source en panne ne fait pas échouer l'accueil", async () => {

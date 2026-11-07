@@ -90,14 +90,14 @@ export const FICHE_AUDIT: FicheService = {
 export const FICHE_EMAILING: FicheService = {
   id: "emailing",
   libelle: "E-mailing (listmonk local, envoi de test vers Mailpit)",
-  portees: ["emailing:lecture", "emailing:ecriture"],
+  portees: ["lecture", "ecriture"],
   proprietes: [{ id: "listmonk/local", libelle: "listmonk local (listes, abonnés avec consentement, brouillons ; envoi de test seulement)" }],
 };
 
 export const FICHE_CAPTATION: FicheService = {
   id: "captation",
   libelle: "Captation de prospects (pages de destination avec formulaire, Umami local)",
-  portees: ["captation:lecture", "captation:ecriture"],
+  portees: ["lecture", "ecriture"],
   proprietes: [{ id: "pages/local", libelle: "Pages de destination locales (contacts donnés par la personne avec son consentement ; aucune mise en ligne par un outil)" }],
 };
 

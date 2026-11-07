@@ -22,7 +22,7 @@ Choix de conception
   que la voix parle et remonte dans les silences. Le volume fixe seul laisserait la musique
   trop forte dans les silences ou couvrant la voix ; la compression adaptative est dans le
   filtre standard de ffmpeg et ne demande aucun réglage venant de l'agent.
-- Mention IA : aucune incrustée (choix de l'opérateur du 01/11 : elle va dans le texte du post) ; la provenance
+- Mention IA : aucune incrustée (décision de l'opérateur du 06/11 : ni dans la vidéo, ni dans le texte du post) ; la provenance
   IA est portée par les métadonnées (provenance.py).
 - Standard de qualité (docs/superpowers/etudes/2026-10-30-qualite-visuels.md §2.1) : encodage x264
   `medium` CRF 20, sonie du mélange normalisée à −16 LUFS (crête vraie −1,5 dBTP) ; la sortie est

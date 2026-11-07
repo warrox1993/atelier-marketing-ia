@@ -132,7 +132,6 @@ html[data-format="1200x628"] #temoin { grid-column: 1 / -1; }
   border-top: 1px solid color-mix(in srgb, var(--texte) 24%, var(--fond));
 }
 #mentions { font-size: calc(var(--u) * var(--mentions) * var(--km)); line-height: 1.35; color: color-mix(in srgb, var(--texte) 74%, var(--fond)); text-wrap: pretty; }
-#mention-ia { font-size: calc(var(--u) * var(--mentions) * var(--km)); line-height: 1.35; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--texte); }
 #mentions:empty { display: none; }
 
 .filet { display: block; flex: none; width: calc(var(--u) * 7); height: calc(var(--u) * 0.7); background: var(--accent); margin-bottom: calc(var(--u) * var(--ecart)); }

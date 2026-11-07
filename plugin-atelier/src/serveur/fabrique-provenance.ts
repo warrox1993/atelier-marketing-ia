@@ -5,7 +5,6 @@
  * diffusion, la porte le relit et refuse si :
  * - il est absent ou illisible, ou ne vise pas le fichier ;
  * - `digital_source_type` n'est pas la valeur IPTC « trainedAlgorithmicMedia » ;
- * - `mention_visible` n'est pas vrai pour une vidéo, ni pour une image dont `fond_ia` est vrai ;
  * - une voix est employée et `filigrane_perth.detecte` n'est pas vrai ;
  * - une voix n'est plus au registre des voix autorisées (lu en lecture seule au moment de la
  *   publication ; registre illisible = refus), est expirée ou n'est plus permise à l'entreprise ;
@@ -62,11 +61,7 @@ export function verifierProvenance(e: {
   const type = p.type;
   if (type !== "video" && type !== "document" && type !== "image") return refus(`Provenance IA de « ${nom} » : type inconnu.`);
   if (p.digital_source_type !== DIGITAL_SOURCE_TYPE_IA) return refus(`Provenance IA de « ${nom} » : digital_source_type manquant ou différent de trainedAlgorithmicMedia.`);
-  if (type === "video" && p.mention_visible !== true) return refus(`Provenance IA de « ${nom} » : la mention « Contenu généré avec l'IA » n'est pas affichée.`);
-  if (type === "image") {
-    if (typeof p.fond_ia !== "boolean") return refus(`Provenance IA de « ${nom} » : champ fond_ia (booléen) manquant.`);
-    if (p.fond_ia && p.mention_visible !== true) return refus(`Provenance IA de « ${nom} » : un fond généré par l'IA exige la mention « Contenu généré avec l'IA » visible dans l'image.`);
-  }
+  if (type === "image" && typeof p.fond_ia !== "boolean") return refus(`Provenance IA de « ${nom} » : champ fond_ia (booléen) manquant.`);
   const voix = Array.isArray(p.voix) ? p.voix : null;
   if (!voix || !voix.every((v) => typeof v === "string" && MOTIF_VOIX.test(v))) return refus(`Provenance IA de « ${nom} » : liste de voix invalide.`);
   if (type === "video" && voix.length === 0) return refus(`Provenance IA de « ${nom} » : une vidéo de la fabrique a toujours une voix déclarée.`);

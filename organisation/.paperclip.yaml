@@ -73,11 +73,14 @@ agents:
       heartbeat:
         maxConcurrentRuns: 1
         maxDailyRuns: 30
+        sessionCompaction:
+          enabled: true
+          maxSessionRuns: 5
     budgetMonthlyCents: 3000
     metadata:
       atelier:
         registre: "atelier/registre-agents/v1"
-        versionRegistre: "1.14.0"
+        versionRegistre: "1.16.0"
         slug: "coordinateur"
         titre: "Coordinateur marketing"
         entrees:
@@ -208,7 +211,7 @@ agents:
     metadata:
       atelier:
         registre: "atelier/registre-agents/v1"
-        versionRegistre: "1.14.0"
+        versionRegistre: "1.16.0"
         slug: "veille"
         titre: "Pôle Intelligence · Marché et veille concurrentielle"
         entrees:
@@ -339,7 +342,7 @@ agents:
     metadata:
       atelier:
         registre: "atelier/registre-agents/v1"
-        versionRegistre: "1.14.0"
+        versionRegistre: "1.16.0"
         slug: "stratege"
         titre: "Pôle Intelligence · Stratégie marketing"
         entrees:
@@ -472,7 +475,7 @@ agents:
     metadata:
       atelier:
         registre: "atelier/registre-agents/v1"
-        versionRegistre: "1.14.0"
+        versionRegistre: "1.16.0"
         slug: "prospection"
         titre: "Pôle Intelligence · Recherche et qualification de prospects"
         entrees:
@@ -535,7 +538,7 @@ agents:
           description: "Dossier de configuration Claude dédié à l'agent, créé par le bootstrap sous instance/claude-config/<id entreprise>/<slug> (un dossier par entreprise et par rôle). Jamais le ~/.claude de l'opérateur."
   enrichissement-coordonnees:
     role: "researcher"
-    capabilities: "Reçoit la liste de fiches de la Prospection et relève, de sources licites seulement (site entier, PDF publiés, annuaires professionnels, fiche Google Business, BCE/KBO, coordonnées publiées par la personne sur LinkedIn), les numéros de téléphone professionnels ; recoupe chaque numéro sur deux sources, le classe, contrôle la liste « Ne m'appelez plus » et indique source, date et base légale ; ne contacte jamais personne."
+    capabilities: "Reçoit la liste de fiches de la Prospection et relève, de sources licites seulement (site entier, PDF publiés, annuaires professionnels, BCE/KBO, coordonnées publiées par la personne sur LinkedIn), les numéros de téléphone professionnels ; recoupe chaque numéro sur deux sources, le classe, contrôle la liste « Ne m'appelez plus » et indique source, date et base légale ; ne contacte jamais personne."
     adapter:
       type: "claude_local"
       config:
@@ -609,7 +612,7 @@ agents:
     metadata:
       atelier:
         registre: "atelier/registre-agents/v1"
-        versionRegistre: "1.14.0"
+        versionRegistre: "1.16.0"
         slug: "enrichissement-coordonnees"
         titre: "Pôle Intelligence · Enrichissement des coordonnées professionnelles"
         entrees:
@@ -649,7 +652,6 @@ agents:
         relit: []
         roleRevue: null
         connexions:
-          gbp: "lecture"
           extraction: "lecture"
         criteresReussite:
           - "chaque numéro porte une URL source réelle, une date de relevé et sa base légale, jamais une saisie de mémoire"
@@ -743,7 +745,7 @@ agents:
     metadata:
       atelier:
         registre: "atelier/registre-agents/v1"
-        versionRegistre: "1.14.0"
+        versionRegistre: "1.16.0"
         slug: "seo-local-geo"
         titre: "Pôle Production · Référencement naturel, local et GEO"
         entrees:
@@ -877,7 +879,7 @@ agents:
     metadata:
       atelier:
         registre: "atelier/registre-agents/v1"
-        versionRegistre: "1.14.0"
+        versionRegistre: "1.16.0"
         slug: "sea"
         titre: "Pôle Production · Publicité et SEA"
         entrees:
@@ -1008,7 +1010,7 @@ agents:
     metadata:
       atelier:
         registre: "atelier/registre-agents/v1"
-        versionRegistre: "1.14.0"
+        versionRegistre: "1.16.0"
         slug: "contenus"
         titre: "Pôle Production · Contenus et création"
         entrees:
@@ -1147,7 +1149,7 @@ agents:
     metadata:
       atelier:
         registre: "atelier/registre-agents/v1"
-        versionRegistre: "1.14.0"
+        versionRegistre: "1.16.0"
         slug: "crm-conversion"
         titre: "Pôle Production · CRM et conversion"
         entrees:
@@ -1281,7 +1283,7 @@ agents:
     metadata:
       atelier:
         registre: "atelier/registre-agents/v1"
-        versionRegistre: "1.14.0"
+        versionRegistre: "1.16.0"
         slug: "mesure"
         titre: "Pôle Intelligence · Mesure et optimisation"
         entrees:
@@ -1414,9 +1416,9 @@ agents:
     metadata:
       atelier:
         registre: "atelier/registre-agents/v1"
-        versionRegistre: "1.14.0"
+        versionRegistre: "1.16.0"
         slug: "reseaux-sociaux"
-        titre: "Pôle Contenus · Calendrier social, posts et réponses publiques"
+        titre: "Pôle Contenus · Calendrier social, posts et brouillons de réponses"
         entrees:
           - "brief et exigences"
           - "charte de marque et publications passées"
@@ -1543,7 +1545,7 @@ agents:
     metadata:
       atelier:
         registre: "atelier/registre-agents/v1"
-        versionRegistre: "1.14.0"
+        versionRegistre: "1.16.0"
         slug: "conformite-publicitaire"
         titre: "Pôle Contrôle préalable · Communications commerciales réglementées"
         entrees:
@@ -1673,7 +1675,7 @@ agents:
     metadata:
       atelier:
         registre: "atelier/registre-agents/v1"
-        versionRegistre: "1.14.0"
+        versionRegistre: "1.16.0"
         slug: "exigences"
         titre: "Contrôleur des exigences"
         entrees:
@@ -1808,7 +1810,7 @@ agents:
     metadata:
       atelier:
         registre: "atelier/registre-agents/v1"
-        versionRegistre: "1.14.0"
+        versionRegistre: "1.16.0"
         slug: "relecteur"
         titre: "Responsable qualité"
         entrees:
@@ -1946,7 +1948,7 @@ agents:
     metadata:
       atelier:
         registre: "atelier/registre-agents/v1"
-        versionRegistre: "1.14.0"
+        versionRegistre: "1.16.0"
         slug: "tests-techniques"
         titre: "Vérificateur technique"
         entrees:
@@ -2022,7 +2024,7 @@ agents:
     metadata:
       atelier:
         registre: "atelier/registre-agents/v1"
-        versionRegistre: "1.14.0"
+        versionRegistre: "1.16.0"
         slug: "porte"
         titre: "Porte de contrôle"
         entrees:

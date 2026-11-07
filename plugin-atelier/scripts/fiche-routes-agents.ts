@@ -279,7 +279,7 @@ function sectionRoute(r: RouteApi): string {
     return sortie.join("\n");
   }
   const json = schemaJson(r.cle);
-  if (json.additionalProperties === false) sortie.push("Aucun champ en plus de ceux listés (les champs inconnus sont refusés).", "");
+  if (json.additionalProperties === false) sortie.push("Les champs inconnus sont refusés.", "");
   const note = NOTES_CROISEES[r.cle];
   if (note) sortie.push(`Règle croisée : ${note}`, "");
   const lignes: Ligne[] = [];

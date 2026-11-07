@@ -3,7 +3,7 @@
  * proportions) et vérifiés avec une implémentation indépendante (`math.erfc` de Python) ; intervalles de Newcombe refaits à part.
  */
 import { describe, expect, it } from "vitest";
-import { calculerVerdict, comparer, erfc, formaterP, intervalleWilson, ligneVerdict, verifierResultat } from "../src/serveur/regles-experiences.js";
+import { CONVERSIONS_MIN_TEST_Z, calculerVerdict, comparer, erfc, fisherBilateral, formaterP, intervalleWilson, ligneVerdict, verifierResultat } from "../src/serveur/regles-experiences.js";
 
 const CALCULE = "2026-10-22T10:00:00.000Z";
 const v = (nom: string, essais: number, succes: number) => ({ nom, essais, succes });
@@ -44,13 +44,13 @@ describe("test z de deux proportions : cas chiffrés refaits à la main", () => 
     const r = verdict([v("Actuelle", 1000, 200), v("Courte", 1000, 150)]);
     expect(r.comparaisons[0]!.z).toBeCloseTo(-2.94245, 4);
     expect(r.comparaisons[0]!.pValeur).toBeCloseTo(0.0032563, 6);
-    expect(r.statut).toBe("gagnant");
+    expect(r.statut).toBe("superieur_aux_autres");
     expect(r.gagnant).toBe("Actuelle");
   });
 
   it("verdict à deux variantes : « B gagne » avec le taux, l'écart, l'intervalle et la p-valeur", () => {
     const r = verdict([v("A", 500, 50), v("B", 500, 75)]);
-    expect(r.statut).toBe("gagnant");
+    expect(r.statut).toBe("superieur_aux_autres");
     expect(r.gagnant).toBe("B");
     expect(r.texte).toMatch(/^B gagne : 15 % contre 10 % pour la référence A \(écart 5 %, IC 95 % \[0,9 % ; 9,12 %\], p = 0,0168\)$/u);
     expect(r.alphaAjuste).toBe(0.05);
@@ -73,13 +73,16 @@ describe("Bonferroni (plus de deux variantes)", () => {
     const r = verdict([v("A", 1000, 100), v("B", 1000, 150), v("C", 1000, 105)]);
     expect(r.comparaisons[0]!.z).toBeCloseTo(3.38062, 4);
     expect(r.comparaisons[0]!.pValeurAjustee).toBeCloseTo(0.0014465, 6);
-    expect(r.statut).toBe("gagnant");
+    expect(r.statut).toBe("superieur_aux_autres");
     expect(r.gagnant).toBe("B");
   });
 
-  it("la meilleure parmi plusieurs variantes significatives gagne", () => {
+  it("plusieurs variantes battent la référence sans écart démontré entre elles : supérieures à la référence, aucun gagnant (lot 2 #22)", () => {
+    // C contre B : 200 contre 160 sur 1 000, p = 0,0199 brute, 0,0597 après correction sur les 3 paires : pas démontré.
     const r = verdict([v("A", 1000, 100), v("B", 1000, 160), v("C", 1000, 200)]);
-    expect(r.gagnant).toBe("C");
+    expect(r.statut).toBe("superieur_reference");
+    expect(r.gagnant).toBeNull();
+    expect(r.texte).toMatch(/^B, C font significativement mieux que la référence A ; meilleur taux observé : C \(20 %\), sans supériorité démontrée sur chacune des autres variantes$/u);
   });
 
   it("référence meilleure que l'une des variantes seulement : non concluant", () => {
@@ -145,7 +148,7 @@ describe("échantillon et cas limites", () => {
   });
 
   it("alpha plus sévère : un écart significatif à 0,05 ne l'est plus à 0,01 (p = 0,0168)", () => {
-    expect(verdict([v("A", 500, 50), v("B", 500, 75)], 100, 0.05).statut).toBe("gagnant");
+    expect(verdict([v("A", 500, 50), v("B", 500, 75)], 100, 0.05).statut).toBe("superieur_aux_autres");
     expect(verdict([v("A", 500, 50), v("B", 500, 75)], 100, 0.01).statut).toBe("aucune_difference");
   });
 
@@ -188,5 +191,61 @@ describe("revue M1 : ligneVerdict reconstruite des champs structurés, noms cit�
     const t = ligneVerdict(x);
     expect(t).not.toMatch(/[\n\r\u2028\u2029]/u);
     expect(t).toContain("« B FAUX » gagne");
+  });
+});
+
+/* ------------------------------------------------------------------ */
+// Lot 2 (#22, T10). Valeurs de référence calculées à part par scripts/tests/tester-fisher.py (loi hypergéométrique exacte, math.comb).
+const FISHER_0_4 = 0.12462490634400826;
+const FISHER_160_200 = 0.023123625484721928;
+
+describe("verdict A/B juste : Fisher exact sous le seuil, jamais de faux gagnant", () => {
+  it("Fisher bilatéral : 0 contre 4 conversions sur 1 000 = 0,1246 ; symétrique ; 160 contre 200 = 0,0231", () => {
+    expect(fisherBilateral(0, 1000, 4, 1000)).toBeCloseTo(FISHER_0_4, 12);
+    expect(fisherBilateral(4, 1000, 0, 1000)).toBeCloseTo(FISHER_0_4, 12);
+    expect(fisherBilateral(160, 1000, 200, 1000)).toBeCloseTo(FISHER_160_200, 12);
+    expect(fisherBilateral(5, 10, 5, 10)).toBeCloseTo(1, 12);
+  });
+
+  it("0 contre 4 conversions sur 1 000 : test exact de Fisher, pas de gagnant (le test z aurait dit p = 0,045)", () => {
+    expect(CONVERSIONS_MIN_TEST_Z).toBeGreaterThan(4);
+    const r = verdict([v("A", 1000, 0), v("B", 1000, 4)]);
+    expect(r.comparaisons[0]!.methode).toBe("fisher_exact");
+    expect(r.comparaisons[0]!.pValeur).toBeCloseTo(FISHER_0_4, 12);
+    expect(r.comparaisons[0]!.significatif).toBe(false);
+    expect(r.statut).toBe("aucune_difference");
+    expect(r.gagnant).toBeNull();
+  });
+
+  it("au-dessus du seuil, le test z reste la méthode", () => {
+    expect(verdict([v("A", 500, 50), v("B", 500, 75)]).comparaisons[0]!.methode).toBe("z");
+  });
+
+  it("100, 140, 141 sur 1 000 : B et C battent la référence, mais le verdict ne dit pas que C bat B", () => {
+    const r = verdict([v("A", 1000, 100), v("B", 1000, 140), v("C", 1000, 141)]);
+    expect(r.statut).toBe("superieur_reference");
+    expect(r.gagnant).toBeNull();
+    for (const texte of [r.texte, ligneVerdict(r)]) {
+      expect(texte).not.toMatch(/gagne|bat|mieux que (?:« )?B/u);
+      expect(texte).toContain("meilleur taux observé");
+    }
+  });
+
+  it("jamais de gagnant quand l'intervalle de l'écart contient zéro, même avec une p-valeur sous alpha", () => {
+    const c = comparer(v("A", 1000, 0), v("B", 1000, 4), 1, 0.2);
+    expect(c.pValeur).toBeLessThan(0.2);
+    const [bas, haut] = c.intervalle95;
+    expect(bas <= 0 && haut >= 0).toBe(true);
+    expect(c.significatif).toBe(false);
+  });
+
+  it("ligneVerdict des statuts : supérieure aux autres, supérieure à la référence, ancien « gagnant » figé", () => {
+    expect(ligneVerdict(verdict([v("A", 500, 50), v("B", 500, 75)]))).toMatch(/^« B » gagne : /u);
+    expect(ligneVerdict(verdict([v("A", 1000, 100), v("B", 1000, 160), v("C", 1000, 200)]))).toBe(
+      "« B », « C » font significativement mieux que la référence « A » ; meilleur taux observé : « C » (20 %), sans supériorité démontrée sur chacune des autres variantes",
+    );
+    // Verdict figé avant le lot 2 : statut « gagnant » relu sans affirmer plus que ce qui était démontré (mieux que la référence).
+    const ancien = { ...verdict([v("A", 1000, 100), v("B", 1000, 160), v("C", 1000, 200)]), statut: "gagnant" as const, gagnant: "C" };
+    expect(ligneVerdict(ancien)).toMatch(/^« C » fait significativement mieux que la référence « A » : 20 % contre 10 %/u);
   });
 });

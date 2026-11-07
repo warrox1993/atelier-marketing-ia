@@ -175,6 +175,16 @@ export async function appelerOutil(
   // Arguments signés : ceux validés par le schéma, sans les arguments de transport (preuve d'approbation, secret à usage
   // unique, et liste de révocation) : le plugin compare cette empreinte à celle de la diffusion approuvée.
   const { preuve_approbation: _preuve, revocations_approbation: _revocations, ...argsValides } = analyse.data as Record<string, unknown>;
+  // #4 : un jeton local accordé en lecture seule ne déclenche aucun outil d'écriture, avant tout appel au fournisseur.
+  if (ecriture && contexte.identite.ecriture === false) {
+    return emballer(
+      contexte.mode,
+      { erreur: "portee_insuffisante", message: "Cette connexion est en lecture seule : l'outil demandé écrit. Reconnecter le service dans Paperclip (Apps) avec la portée « ecriture »." },
+      true,
+      signer(args),
+      false,
+    );
+  }
   try {
     const donnees = await outil.executer(analyse.data as Record<string, unknown>, contexte);
     return emballer(contexte.mode, donnees, false, signer(argsValides), tiers);

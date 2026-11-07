@@ -5,6 +5,7 @@ Lecture des consignes seulement : aucune instance, aucun appel de modèle.
 
 À lancer : python3 -I scripts/tests/tester-consignes-portes.py
 """
+import json
 import re
 import sys
 import unittest
@@ -27,6 +28,32 @@ RELECTEUR_OBS = "services/observatoire/agents/relecteur-independant/AGENTS.md"
 
 
 class TestConsignesPortes(unittest.TestCase):
+    def test_bce_et_fsma_sans_supposer_qu_ils_different(self):
+        # Le numéro d'entreprise est aussi le numéro d'inscription FSMA : aucune copie ne doit dire le contraire.
+        for chemin in [ORGA / "consignes/marketing.md", *sorted((ORGA / "agents").glob("*/AGENTS.md"))]:
+            t = plat(chemin.read_text(encoding="utf-8"))
+            self.assertNotIn("jamais un numéro FSMA", t, chemin.parent.name)
+            self.assertNotIn("Une page du client qui affiche autre chose", t, chemin.parent.name)
+        t = plat(lire("consignes/marketing.md"))
+        self.assertIn("sans supposer qu'ils diffèrent", t)
+        self.assertIn("0999.888.777 comme numéro FSMA", t)
+
+    def test_coordinateur_n_evalue_pas_la_porte(self):
+        # exigerEvaluateur refuse cet agent : la Porte déterministe reste seule à évaluer.
+        self.assertNotIn("porte/evaluer", lire("agents/coordinateur/AGENTS.md"))
+        self.assertIn("porte/evaluer", lire("agents/porte/AGENTS.md"))
+        self.assertIn("/porte/evaluer", (RACINE / "plugin-atelier/agents/porte.mjs").read_text(encoding="utf-8"))
+
+    def test_tout_producteur_relu_connait_la_route_de_couverture(self):
+        # Sans couverture déclarée, une exigence obligatoire est refusée d'office par la porte : tout agent relu doit savoir la déclarer.
+        registre = json.loads(lire("registre/agents.json"))
+        producteurs = {slug for agent in registre["agents"] for slug in agent.get("relit", [])}
+        self.assertIn("stratege", producteurs)
+        for slug in sorted(producteurs):
+            texte = lire(f"agents/{slug}/AGENTS.md")
+            self.assertIn("taches/<issueId>/couverture", texte, slug)
+            self.assertIn("### POST /taches/:issueId/couverture", texte, slug)
+
     def test_liv_ob1_relecteur_obs_part_de_l_evaluation_de_la_porte(self):
         texte = plat(lire(RELECTEUR_OBS))
         # Plus d'exigence d'un PASS de la porte avant la revue : il est impossible, la porte attend ce verdict.
@@ -77,7 +104,7 @@ class TestConsignesPortes(unittest.TestCase):
     def test_mk06_strategie_rangee_et_lue_au_meme_endroit(self):
         stratege = plat(lire("agents/stratege/AGENTS.md"))
         self.assertIn("le document `strategie` de ta tâche « Stratégie »", stratege)
-        self.assertIn("« Stratégie marketing, version N »", stratege)
+        self.assertIn("le plugin la publie en connaissance du client « Stratégie marketing »", stratege)
         for slug in ("contenus", "relecteur", "sea", "veille", "mesure"):
             texte = plat(lire(f"agents/{slug}/AGENTS.md"))
             # Une seule phrase, venue du complément marketing, au lieu de copies sans emplacement.
@@ -87,6 +114,30 @@ class TestConsignesPortes(unittest.TestCase):
     def test_liv_mk5_aucun_depot_d_essai(self):
         texte = plat(lire("agents/relecteur/AGENTS.md"))
         self.assertIn("jamais de dépôt d'essai, de test d'encodage ni de « dépôt en cours »", texte)
+
+    def test_promesses_fausses_retirees(self):
+        # gbp_avis et gbp_metriques (passerelle/src/reel/google/outils.ts) ne lisent que l'établissement du client,
+        # jamais la fiche d'un tiers ; et aucun outil de la passerelle ne répond à un commentaire.
+        recherche = lire("skills/coordonnees-recherche/SKILL.md")
+        agent = lire("agents/enrichissement-coordonnees/AGENTS.md")
+        for texte in (recherche, agent):
+            self.assertNotIn("Google Business", texte)
+            self.assertNotIn("gbp", texte)
+        self.assertEqual(re.findall(r"^(\d+)\. \*\*", recherche, re.M), list("12345"))
+        self.assertIn("Les cinq étapes", recherche)
+        methode = agent.split("## Méthode")[1].split("Pour chaque numéro")[0]
+        self.assertEqual(re.findall(r"^(\d+)\. ", methode, re.M), list("12345678"))
+
+        registre = {a["slug"]: a for a in json.loads(lire("registre/agents.json"))["agents"]}
+        self.assertEqual(registre["enrichissement-coordonnees"]["connexions"], {"extraction": "lecture"})
+        self.assertNotIn("Google", registre["enrichissement-coordonnees"]["mission"])
+        self.assertEqual(registre["seo-local-geo"]["connexions"]["gbp"], "lecture")  # sa propre fiche, légitime
+
+        sociaux = plat(lire("agents/reseaux-sociaux/AGENTS.md"))
+        self.assertNotIn("toute réponse publique", sociaux)
+        self.assertNotIn("réponses publiques", sociaux)
+        self.assertIn("ton brouillon de réponse est préparé pour l'humain, qui la poste lui-même", sociaux)
+        self.assertNotIn("réponses publiques", registre["reseaux-sociaux"]["titre"])
 
 
 if __name__ == "__main__":

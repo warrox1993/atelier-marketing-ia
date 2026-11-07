@@ -1,6 +1,6 @@
 ---
 name: "coordonnees-recherche"
-description: "Cherche, pour chaque fiche d'une liste de prospects, les numéros de téléphone professionnels publiés par des sources licites : site entier (contact, équipe, mentions légales), PDF publiés, annuaires professionnels, fiche Google Business, BCE/KBO et page LinkedIn de l'entreprise lue par l'humain. À utiliser pour toute campagne dont la liste de la Prospection doit recevoir des numéros ; jamais pour deviner un numéro, ni pour lire une fuite de données, ni pour un particulier non publié."
+description: "Cherche, pour chaque fiche d'une liste de prospects, les numéros de téléphone professionnels publiés par des sources licites : site entier (contact, équipe, mentions légales), PDF publiés, annuaires professionnels, BCE/KBO et page LinkedIn de l'entreprise lue par l'humain. À utiliser pour toute campagne dont la liste de la Prospection doit recevoir des numéros ; jamais pour deviner un numéro, ni pour lire une fuite de données, ni pour un particulier non publié."
 metadata:
   version: "1.0.0"
   langue: "fr"
@@ -25,8 +25,6 @@ son adresse source, sa date de relevé et le texte exact trouvé, sans jamais en
 - La liste de fiches de la Prospection (entreprise, numéro BCE si connu, site, commune, personne de contact éventuelle).
 - La lecture protégée d'une URL de l'atelier (`/sources`) : elle enregistre la source datée. `WebFetch` et `curl` vers
   l'extérieur ne fonctionnent pas.
-- Facultatif : la connexion `gbp` (fiche d'établissement Google). Sans elle, l'étape 4 est notée « non faite : connexion
-  absente » et le reste continue.
 - Facultatif : la connexion `extraction` (outil `extraire_site`) pour lire un site entier avant d'en extraire des coordonnées
   publiées : réponse déposée par sa référence `_atelier.reference` sur `/donnees-connexion` (`service` `extraction`, `profondeur` et `pages_max` donnés
   explicitement). Sans elle, lire les pages une à une par `/sources`.
@@ -53,30 +51,26 @@ l'endroit où il figure. Le numéro lui-même n'est jamais écrit dans un docume
    métier (ordre des médecins, des architectes, des experts-comptables, fédération sectorielle, etc.). Ne retenir une fiche
    d'annuaire que si le nom, l'adresse et le numéro BCE ou le numéro d'agrément correspondent à la fiche : un simple nom proche
    ne suffit pas (risque d'homonyme).
-4. **Lire la fiche Google Business.** Par la connexion `gbp` en lecture seule si elle existe (appeler d'abord
-   `atelier_identite`, puis déposer chaque réponse brute sur `/donnees-connexion` avec les arguments exacts), ou par l'API
-   Places si une connexion la fournit. Sans connexion : écrire « fiche Google Business : non consultée, connexion absente »
-   et demander la connexion par `connection_request`, sans bloquer le reste.
-5. **Consulter la BCE/KBO.** Page publique de l'entreprise (numéro BCE) : numéros de téléphone déclarés dans « Coordonnées
+4. **Consulter la BCE/KBO.** Page publique de l'entreprise (numéro BCE) : numéros de téléphone déclarés dans « Coordonnées
    de contact ». Ne rien relever pour une personne physique : seules les entreprises (personnes morales) sont concernées.
-6. **LinkedIn : page entreprise seulement, lue par l'humain.** Les conditions de LinkedIn interdisent l'accès automatisé :
+5. **LinkedIn : page entreprise seulement, lue par l'humain.** Les conditions de LinkedIn interdisent l'accès automatisé :
    l'agent ne lit aucune page LinkedIn, ni par `/sources`, ni par `extraction`. Il demande à l'humain de relever le
    numéro écrit par l'entreprise dans la section « À propos » de sa page et de le lui transmettre avec l'URL et la date ;
-   sans réponse : « étape 6 : non faite, relevé humain attendu ». Jamais de profil personnel, jamais d'outil d'extraction
+   sans réponse : « étape 5 : non faite, relevé humain attendu ». Jamais de profil personnel, jamais d'outil d'extraction
    de masse, jamais un numéro vu dans la publication d'un tiers.
 
 Pour chaque étape, noter aussi les pages lues sans résultat (« pages lues, aucun numéro ») : une absence est une information.
 
 ## Livrable
 
-Un relevé par fiche : tableau « numéro (déposé dans la fiche ou aucun), étape (1 à 6), URL, date du relevé, extrait sans les chiffres ». Une ligne « étapes non faites
+Un relevé par fiche : tableau « numéro (déposé dans la fiche ou aucun), étape (1 à 5), URL, date du relevé, extrait sans les chiffres ». Une ligne « étapes non faites
 ou limitées » (connexion absente, site inaccessible, plafond de pages atteint) en tête. Ce relevé est l'entrée de la compétence
 `coordonnees-recoupement`. Chaque personne physique de la liste porte la mention « information art. 14 : à faire au plus tard au premier contact, et dans le mois qui suit la collecte » (RGPD, art. 14, § 3) ; le modèle de mention que l'humain relit et envoie lui-même est `controle-communications-reglementees/references/information-art14.md`. L'atelier n'envoie rien.
 
 ## Critères de réussite
 
 - Chaque numéro relevé a une URL, une date et un extrait réel ; aucun n'est saisi de mémoire.
-- Les six étapes sont traitées ou marquées « non faite » avec la raison, pour chaque fiche.
+- Les cinq étapes sont traitées ou marquées « non faite » avec la raison, pour chaque fiche.
 - Aucune source interdite n'a été utilisée (voir Limites).
 
 ## Limites
@@ -96,4 +90,4 @@ ou limitées » (connexion absente, site inaccessible, plafond de pages atteint)
 | --- | --- | --- | --- | --- |
 | déposé dans la fiche (standard) | 1 | https://exemple.invalide/contact | 2026-10-21 | « Cabinet Exemple, tél. [numéro] » |
 | déposé dans la fiche (même numéro) | 3 | https://annuaire.exemple.invalide/fiche/123 | 2026-10-21 | « Exemple SRL, Liège, tél. [numéro] » |
-| aucun | 6 | https://www.linkedin.com/company/exemple | 2026-10-21 | page lue par l'humain, aucun numéro publié |
+| aucun | 5 | https://www.linkedin.com/company/exemple | 2026-10-21 | page lue par l'humain, aucun numéro publié |

@@ -225,7 +225,7 @@ export const FICHES_AGENTS_MARKETING: readonly FicheAgentMarketing[] = [
       {
         "cle": "plan-strategique-marketing",
         "nom": "Plan stratégique de marketing",
-        "sert": "Assemble le document de stratégie d'un client en une à deux pages à partir du diagnostic, de la cible, du positionnement, des objectifs, de l'offre et du plan de canaux, avec les portes de passage entre étapes et les règles de retour arrière."
+        "sert": "Assemble le document de stratégie d'un client, synthèse courte reliée à des annexes, à partir du diagnostic, de la cible, du positionnement, des objectifs, de l'offre et du plan de canaux, avec les portes de passage entre étapes et les règles de retour arrière."
       },
       {
         "cle": "entretien-client-sans-biais",
@@ -343,7 +343,7 @@ export const FICHES_AGENTS_MARKETING: readonly FicheAgentMarketing[] = [
     "nom": "Enrichissement coordonnées",
     "pole": "Intelligence",
     "role": "Enrichissement des coordonnées professionnelles",
-    "mission": "Reçoit la liste de fiches de la Prospection et relève, de sources licites seulement (site entier, PDF publiés, annuaires professionnels, fiche Google Business, BCE/KBO, coordonnées publiées par la personne sur LinkedIn), les numéros de téléphone professionnels ; recoupe chaque numéro sur deux sources, le classe, contrôle la liste « Ne m'appelez plus » et indique source, date et base légale ; ne contacte jamais personne.",
+    "mission": "Reçoit la liste de fiches de la Prospection et relève, de sources licites seulement (site entier, PDF publiés, annuaires professionnels, BCE/KBO, coordonnées publiées par la personne sur LinkedIn), les numéros de téléphone professionnels ; recoupe chaque numéro sur deux sources, le classe, contrôle la liste « Ne m'appelez plus » et indique source, date et base légale ; ne contacte jamais personne.",
     "recoit": [
       "liste de fiches livrée par la Prospection",
       "brief et exigences",
@@ -359,7 +359,7 @@ export const FICHES_AGENTS_MARKETING: readonly FicheAgentMarketing[] = [
       {
         "cle": "coordonnees-recherche",
         "nom": "Recherche des coordonnées professionnelles",
-        "sert": "Cherche, pour chaque fiche d'une liste de prospects, les numéros de téléphone professionnels publiés par des sources licites : site entier (contact, équipe, mentions légales), PDF publiés, annuaires professionnels, fiche Google Business, BCE/KBO et page LinkedIn de l'entreprise lue par l'humain."
+        "sert": "Cherche, pour chaque fiche d'une liste de prospects, les numéros de téléphone professionnels publiés par des sources licites : site entier (contact, équipe, mentions légales), PDF publiés, annuaires professionnels, BCE/KBO et page LinkedIn de l'entreprise lue par l'humain."
       },
       {
         "cle": "coordonnees-recoupement",
@@ -654,7 +654,7 @@ export const FICHES_AGENTS_MARKETING: readonly FicheAgentMarketing[] = [
       {
         "cle": "conformite-publicite-ia",
         "nom": "Conformité d'une publicité faite avec l'IA",
-        "sert": "Liste de contrôle à cocher avant et après la fabrication d'une publicité vidéo, audio ou image (visuel de post composé par la fabrique) faite avec une voix ou des images de synthèse : signalement de l'IA dès la première seconde (règlement européen sur l'IA, article 50 ; article 9 du Code belge de la publicité), voix et visages de vraies personnes, célébrités, étiquettes de TikTok et de Meta, registre de la musique, publicité trompeuse et comparaison déloyale (Code de droit économique), produits d'assurance."
+        "sert": "Liste de contrôle à cocher avant et après la fabrication d'une publicité vidéo, audio ou image (visuel de post composé par la fabrique) faite avec une voix ou des images de synthèse : voix et visages de vraies personnes, célébrités, faux témoignages, règles d'étiquetage de TikTok et de Meta, registre de la musique, publicité trompeuse et comparaison déloyale (Code de droit économique), produits d'assurance."
       },
       {
         "cle": "dossier-sujet",
@@ -830,7 +830,7 @@ export const FICHES_AGENTS_MARKETING: readonly FicheAgentMarketing[] = [
     "slug": "reseaux-sociaux",
     "nom": "Réseaux sociaux",
     "pole": "Contenus",
-    "role": "Calendrier social, posts et réponses publiques",
+    "role": "Calendrier social, posts et brouillons de réponses",
     "mission": "Prépare le social organique : piliers éditoriaux, calendrier par réseau, brouillons de posts courts et de réponses aux commentaires publics non litigieux ; ne publie rien et ne répond à personne lui-même.",
     "recoit": [
       "brief et exigences",
@@ -886,7 +886,7 @@ export const FICHES_AGENTS_MARKETING: readonly FicheAgentMarketing[] = [
       {
         "cle": "conformite-publicite-ia",
         "nom": "Conformité d'une publicité faite avec l'IA",
-        "sert": "Liste de contrôle à cocher avant et après la fabrication d'une publicité vidéo, audio ou image (visuel de post composé par la fabrique) faite avec une voix ou des images de synthèse : signalement de l'IA dès la première seconde (règlement européen sur l'IA, article 50 ; article 9 du Code belge de la publicité), voix et visages de vraies personnes, célébrités, étiquettes de TikTok et de Meta, registre de la musique, publicité trompeuse et comparaison déloyale (Code de droit économique), produits d'assurance."
+        "sert": "Liste de contrôle à cocher avant et après la fabrication d'une publicité vidéo, audio ou image (visuel de post composé par la fabrique) faite avec une voix ou des images de synthèse : voix et visages de vraies personnes, célébrités, faux témoignages, règles d'étiquetage de TikTok et de Meta, registre de la musique, publicité trompeuse et comparaison déloyale (Code de droit économique), produits d'assurance."
       },
       {
         "cle": "declinaison-regies-video",
@@ -966,7 +966,7 @@ export const FICHES_AGENTS_MARKETING: readonly FicheAgentMarketing[] = [
       {
         "cle": "conformite-publicite-ia",
         "nom": "Conformité d'une publicité faite avec l'IA",
-        "sert": "Liste de contrôle à cocher avant et après la fabrication d'une publicité vidéo, audio ou image (visuel de post composé par la fabrique) faite avec une voix ou des images de synthèse : signalement de l'IA dès la première seconde (règlement européen sur l'IA, article 50 ; article 9 du Code belge de la publicité), voix et visages de vraies personnes, célébrités, étiquettes de TikTok et de Meta, registre de la musique, publicité trompeuse et comparaison déloyale (Code de droit économique), produits d'assurance."
+        "sert": "Liste de contrôle à cocher avant et après la fabrication d'une publicité vidéo, audio ou image (visuel de post composé par la fabrique) faite avec une voix ou des images de synthèse : voix et visages de vraies personnes, célébrités, faux témoignages, règles d'étiquetage de TikTok et de Meta, registre de la musique, publicité trompeuse et comparaison déloyale (Code de droit économique), produits d'assurance."
       },
       {
         "cle": "dossier-sujet",
@@ -1087,7 +1087,7 @@ export const FICHES_AGENTS_MARKETING: readonly FicheAgentMarketing[] = [
       {
         "cle": "conformite-publicite-ia",
         "nom": "Conformité d'une publicité faite avec l'IA",
-        "sert": "Liste de contrôle à cocher avant et après la fabrication d'une publicité vidéo, audio ou image (visuel de post composé par la fabrique) faite avec une voix ou des images de synthèse : signalement de l'IA dès la première seconde (règlement européen sur l'IA, article 50 ; article 9 du Code belge de la publicité), voix et visages de vraies personnes, célébrités, étiquettes de TikTok et de Meta, registre de la musique, publicité trompeuse et comparaison déloyale (Code de droit économique), produits d'assurance."
+        "sert": "Liste de contrôle à cocher avant et après la fabrication d'une publicité vidéo, audio ou image (visuel de post composé par la fabrique) faite avec une voix ou des images de synthèse : voix et visages de vraies personnes, célébrités, faux témoignages, règles d'étiquetage de TikTok et de Meta, registre de la musique, publicité trompeuse et comparaison déloyale (Code de droit économique), produits d'assurance."
       },
       {
         "cle": "niveau-conscience-message",
@@ -1102,7 +1102,7 @@ export const FICHES_AGENTS_MARKETING: readonly FicheAgentMarketing[] = [
       {
         "cle": "qualite-visuels",
         "nom": "Qualité d'une image ou d'une vidéo : le second avis sur le rendu",
-        "sert": "Note une image ou une vidéo publicitaire fabriquée par l'atelier en la regardant (image entière, ou planche d'images clés et transcription d'une vidéo) sur une grille de dix critères notés sur 20, et décide si elle est publiable : 16/20 au moins, aucun 0, note pleine sur les faits, la charte et la conformité IA (aucune mention incrustée, la mention IA dans le texte du post)."
+        "sert": "Note une image ou une vidéo publicitaire fabriquée par l'atelier en la regardant (image entière, ou planche d'images clés et transcription d'une vidéo) sur une grille de dix critères notés sur 20, et décide si elle est publiable : 16/20 au moins, aucun 0, note pleine sur les faits, la charte et la conformité (aucune mention incrustée)."
       },
       {
         "cle": "recherche-connaissances",

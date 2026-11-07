@@ -49,6 +49,9 @@ import { aRevoir, dateRevue, marquerPassages, pseudonymiser, refusDonneesSante, 
 
 type Issue = NonNullable<Awaited<ReturnType<PluginContext["issues"]["get"]>>>;
 
+/** Clé du document natif `strategie` déposé par le Stratège. */
+export const CLE_DOCUMENT_STRATEGIE = "strategie" as const;
+
 export interface DependancesConnaissances {
   ctx: PluginContext;
   base: BaseAtelier;
@@ -87,6 +90,11 @@ export interface ServicesConnaissances {
   entreesPorte(companyId: string, issueId: string, livrable: { corps: string } | null): Promise<EntreesConnaissancesPorte | undefined>;
   /** Garde-fous de vérité : titres (sans doublon) des documents dont un passage répond à la question, sans aucune trace. */
   rechercherTitres(companyId: string, mode: "demonstration" | "reel", question: string): Promise<string[]>;
+  /**
+   * Stratégie approuvée par un humain : publiée comme nouvelle version du document `strategie` de l'entreprise (un seul document
+   * stable, l'ancienne version devient `perime`). Sans effet si cette version exacte (même empreinte) est déjà publiée.
+   */
+  publierStrategie(companyId: string, acteur: ActeurHote, corps: string): Promise<{ publiee: boolean; version: number }>;
   /** Garde-fous de vérité : documents en vigueur, sans contenu (base du service, puis base commune du groupe). */
   titresEnVigueur(companyId: string): Promise<Array<{ documentId: string; titre: string; type: string; produit: string | null; statut: string; valideAu: string | null; portee?: "service" | "commune" }>>;
 }
@@ -434,6 +442,23 @@ export function creerConnaissances(d: DependancesConnaissances): ServicesConnais
     };
   }
 
+  async function publierStrategie(companyId: string, acteur: ActeurHote, corps: string): Promise<{ publiee: boolean; version: number }> {
+    const octets = new TextEncoder().encode(corps);
+    const empreinte = createHash("sha256").update(octets).digest("hex");
+    const doc = (await stock.listerDocuments(companyId)).find((x) => x.type === "strategie") ?? null;
+    const versions = doc ? await stock.listerVersions(companyId, [doc.id]) : [];
+    // Seule la version en vigueur compte : revenir à un contenu périmé ou retiré publie une nouvelle version.
+    const identique = versions.find((v) => v.empreinte === empreinte && statutEffectif(v, aujourdhui()) === "en_vigueur");
+    if (identique) return { publiee: false, version: identique.version };
+    const numero = versions.reduce((m, v) => Math.max(m, v.version), 0) + 1;
+    const jour = aujourdhui();
+    await importer(companyId, acteur, {
+      nomFichier: `strategie-marketing-version-${numero}.md`, format: "markdown", titre: "Stratégie marketing", type: "strategie", produit: null, langue: "fr",
+      dateDocument: jour, valideDu: jour, valideAu: null, ...(doc ? { documentId: doc.id } : {}), pseudonymiser: false,
+    }, octets);
+    return { publiee: true, version: numero };
+  }
+
   /* ---------------- porte ---------------- */
 
   /**
@@ -473,7 +498,9 @@ export function creerConnaissances(d: DependancesConnaissances): ServicesConnais
     const manquants = ids.filter((id) => !lues.some((v) => v.documentId === id));
     const commune = manquants.length > 0 ? await communeDe(companyId) : null;
     if (commune) lues.push(...(await stock.listerVersions(commune, manquants)));
-    const versions = lues.map((v) => ({ documentId: v.documentId, version: v.version, statut: v.statut, valideDu: v.valideDu, valideAu: v.valideAu }));
+    // F1 (#22) : la stratégie (document de l'entreprise, jamais de la base commune) ne source pas un chiffre d'offre.
+    const strategies = new Set((await stock.listerDocuments(companyId)).filter((d) => d.type === "strategie").map((d) => d.id));
+    const versions = lues.map((v) => ({ documentId: v.documentId, version: v.version, statut: v.statut, valideDu: v.valideDu, valideAu: v.valideAu, ...(strategies.has(v.documentId) ? { type: "strategie" } : {}) }));
     return { livrable: livrable.corps, passagesRendus: adresses, versions, date: aujourdhui() };
   }
 
@@ -669,5 +696,5 @@ export function creerConnaissances(d: DependancesConnaissances): ServicesConnais
     return [...propres.map((t) => ({ ...t, portee: "service" as const })), ...communs.map((t) => ({ ...t, portee: "commune" as const }))];
   }
 
-  return { routes, entreesPorte, rechercherTitres, titresEnVigueur };
+  return { routes, entreesPorte, rechercherTitres, titresEnVigueur, publierStrategie };
 }

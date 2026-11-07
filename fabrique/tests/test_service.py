@@ -357,7 +357,7 @@ def test_provenance_document_au_format_de_la_porte():
     p = service._provenance_document({"travail": nouveau_id(), "entreprise": "acme"}, "docx", copie)
     assert p["type"] == "document" and p["fichier"] == "document.docx" and p["sha256"] == copie["sha256"]
     assert p["digital_source_type"] == "http://cv.iptc.org/newscodes/digitalsourcetype/trainedAlgorithmicMedia"
-    assert p["mention_visible"] is False and p["voix"] == [] and p["format"] == "docx"
+    assert "mention_visible" not in p and p["voix"] == [] and p["format"] == "docx"
     assert "python-docx" in p["outils"]
 
 
@@ -1007,9 +1007,9 @@ class BancImage:
         self.resultat = None
         poser_charte(racine)
 
-    def rendre(self, dossier_travail, gabarit, champs, format_sortie, charte, *, mention=False, temoin=False):
+    def rendre(self, dossier_travail, gabarit, champs, format_sortie, charte, *, temoin=False):
         self.journal.append(f"rendu:{gabarit}:{format_sortie}:{charte.id}")
-        self.budgets.append((service.images.DELAI_IMAGE_S, mention, temoin))
+        self.budgets.append((service.images.DELAI_IMAGE_S, temoin))
         if self.resultat is not None:
             return self.resultat
         dossier = Path(dossier_travail) / "image-xxxx"
@@ -1047,7 +1047,7 @@ def test_image_provenance_recoit_les_infos_de_la_fabrique_seule(racine, monkeypa
     infos = banc.infos[0]
     assert (infos.travail, infos.entreprise, infos.gabarit, infos.format, infos.charte) == (
         ident, "acme", "accroche", "1080x1080", "ma-charte")
-    assert infos.fond_ia is False and infos.mention_visible is service.MENTION_VISIBLE_IMAGE
+    assert infos.fond_ia is False
     assert infos.outils == {"chrome-headless-shell": service.images.VERSION_CHROME}
 
 
@@ -1055,8 +1055,8 @@ def test_image_budget_de_5_minutes(racine, monkeypatch):
     banc = BancImage(racine, monkeypatch)
     lancer_image(racine)
     assert service.DELAI_TOTAL_IMAGE_S == 300
-    # le délai de la cage est plafonné par ce qu'il reste du budget, la mention suit la configuration, jamais le témoin
-    assert banc.budgets[0] == (service.images.DELAI_IMAGE_S, service.MENTION_VISIBLE_IMAGE, False)
+    # le délai de la cage est plafonné par ce qu'il reste du budget, jamais de témoin en production
+    assert banc.budgets[0] == (service.images.DELAI_IMAGE_S, False)
     assert service.images.DELAI_IMAGE_S == 120  # remis à sa valeur après le travail
 
 

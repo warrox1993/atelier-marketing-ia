@@ -1,0 +1,116 @@
+From 8349f3ec1a1ae9e22a089ce40aa3f3621400fbf4 Mon Sep 17 00:00:00 2001
+From: Jean-Baptiste Dhondt <114347858+warrox1993@users.noreply.github.com>
+Date: Wed, 4 Nov 2026 23:38:54 +0100
+Subject: [PATCH 168/170] =?UTF-8?q?fix(socle):=20scan=20git=20ind=C3=A9pen?=
+ =?UTF-8?q?dant=20de=20la=20langue=20de=20l'h=C3=B4te?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01EThpSQivkg5UcW9gyGppeG
+---
+ .../src/git-workspace-sync.test.ts            | 43 ++++++++++++++++++-
+ .../adapter-utils/src/git-workspace-sync.ts   | 11 ++++-
+ 2 files changed, 52 insertions(+), 2 deletions(-)
+
+diff --git a/packages/adapter-utils/src/git-workspace-sync.test.ts b/packages/adapter-utils/src/git-workspace-sync.test.ts
+index c1029239a1..e9ecf223ae 100644
+--- a/packages/adapter-utils/src/git-workspace-sync.test.ts
++++ b/packages/adapter-utils/src/git-workspace-sync.test.ts
+@@ -5,7 +5,7 @@ import path from "node:path";
+ import { promisify } from "node:util";
+ import { workspacePaths } from "./workspace-manifest.js";
+ import { runWorkspaceGitProcess } from "./workspace-git-stream.js";
+-import { afterEach, describe, expect, it } from "vitest";
++import { afterEach, describe, expect, it, vi } from "vitest";
+ import { getWorkspaceRestoreDiagnostic, withWorkspaceRestoreDiagnostics, withWorkspaceRestoreStep, withWorkspaceRestoreGitCommand } from "./workspace-restore-diagnostics.js";
+ 
+ import {
+@@ -996,6 +996,47 @@ exit 0
+     expect(getWorkspaceRestoreDiagnostic(error)).toEqual({ phase: "workspace", step: "index_reset", errorCode: "unknown", exitCode: 128 });
+   });
+ 
++  describe("sondes « pas un dépôt » indépendantes de la langue de l'hôte", () => {
++    async function plainDirectory() {
++      const rootDir = await mkdtemp(path.join(os.tmpdir(), "paperclip-git-locale-"));
++      cleanupDirs.push(rootDir);
++      const plainDir = path.join(rootDir, "plain");
++      await mkdir(plainDir, { recursive: true });
++      return plainDir;
++    }
++    // Annule l'indépendance de l'hôte posée ailleurs : le processus testé tourne en français.
++    function frenchHost() {
++      vi.stubEnv("LC_ALL", "fr_BE.UTF-8");
++      vi.stubEnv("LANG", "fr_BE.UTF-8");
++      vi.stubEnv("LANGUAGE", "fr");
++    }
++    afterEach(() => { vi.unstubAllEnvs(); });
++
++    it("AC1 : le scan d'un dossier sans git conclut « pas un dépôt » même avec git en français", async () => {
++      const plainDir = await plainDirectory();
++      frenchHost();
++      await expect(readRawSnapshot(plainDir, false)).resolves.toBeNull();
++    });
++
++    it("AC1 : la lecture des chemins ignorés d'un dossier sans git conclut « pas un dépôt » même avec git en français", async () => {
++      const plainDir = await plainDirectory();
++      frenchHost();
++      await expect(readReferencedSourceGitIgnoredPaths(plainDir)).resolves.toBeNull();
++    });
++
++    it("AC3 : une configuration git corrompue reste une panne dans les deux sondes", async () => {
++      const rootDir = await mkdtemp(path.join(os.tmpdir(), "paperclip-git-corrupt-"));
++      cleanupDirs.push(rootDir);
++      const repo = path.join(rootDir, "repo");
++      await mkdir(repo, { recursive: true });
++      await git(repo, ["init"]);
++      await writeFile(path.join(repo, ".git", "config"), "[core\n garbage\n", "utf8");
++      frenchHost();
++      await expect(readRawSnapshot(repo, false)).rejects.toBeDefined();
++      await expect(readReferencedSourceGitIgnoredPaths(repo)).rejects.toBeDefined();
++    });
++  });
++
+   describe("readReferencedSourceGitIgnoredPaths", () => {
+     it("returns null for a directory that is not a Git work tree", async () => {
+       const rootDir = await mkdtemp(path.join(os.tmpdir(), "paperclip-referenced-nogit-"));
+diff --git a/packages/adapter-utils/src/git-workspace-sync.ts b/packages/adapter-utils/src/git-workspace-sync.ts
+index fcd6bd763d..ca28fa0548 100644
+--- a/packages/adapter-utils/src/git-workspace-sync.ts
++++ b/packages/adapter-utils/src/git-workspace-sync.ts
+@@ -94,6 +94,14 @@ function shellQuote(value: string) {
+   return `'${value.replace(/'/g, `'\"'\"'`)}'`;
+ }
+ 
++/**
++ * Environment for Git calls whose stderr decides "not a repository" versus a
++ * real failure: Git's messages are translated, so force the stable English ones.
++ */
++function withStableGitLocale(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
++  return { ...env, LC_ALL: "C", LANGUAGE: "" };
++}
++
+ export async function runLocalGit(
+   localDir: string,
+   args: string[],
+@@ -177,6 +185,7 @@ export async function readGitWorkspaceSnapshot(localDir: string, includeReposito
+     insideWorkTree = await runLocalGit(localDir, ["rev-parse", "--is-inside-work-tree"], {
+       timeout: 10_000,
+       maxBuffer: 16 * 1024,
++      env: withStableGitLocale(process.env),
+     });
+   } catch (error) {
+     if (repositories.length === 0 && isNotAGitRepositoryError(error)) return null;
+@@ -314,7 +323,7 @@ function buildHardenedGitEnv(): NodeJS.ProcessEnv {
+   }
+   env.GIT_CONFIG_NOSYSTEM = "1";
+   env.GIT_CONFIG_GLOBAL = "/dev/null";
+-  return env;
++  return withStableGitLocale(env);
+ }
+ 
+ /**
+-- 
+2.53.0
+

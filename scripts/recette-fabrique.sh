@@ -279,9 +279,8 @@ verifier_video() {
     || { echo "ffprobe : piste audio aac absente"; return 1; }
   xmp="$(exiftool -s3 -XMP-iptcExt:DigitalSourceType "$dossier/$fichier" 2>&1)"
   [[ "$xmp" == *"trainedAlgorithmicMedia" ]] || { echo "XMP DigitalSourceType : « $xmp »"; return 1; }
-  [[ "$(jq -r '.mention_visible' "$dossier/provenance.json")" == "true" \
-     && "$(jq -r '.filigrane_perth.detecte' "$dossier/provenance.json")" == "true" ]] \
-    || { echo "provenance.json : mention visible ou filigrane PerTh non confirmés"; return 1; }
+  [[ "$(jq -r '.filigrane_perth.detecte' "$dossier/provenance.json")" == "true" ]] \
+    || { echo "provenance.json : filigrane PerTh non confirmé"; return 1; }
   return 0
 }
 

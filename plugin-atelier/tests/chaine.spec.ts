@@ -13,15 +13,20 @@ const COORD_TACHE = "44444444-4444-4444-8444-444444444444";
 const AGENT = "55555555-5555-4555-8555-555555555555";
 const DISC = "66666666-6666-4666-8666-666666666666";
 const AUTRE = "77777777-7777-4777-8777-777777777777";
+const REVUE_B = "88888888-8888-4888-8888-888888888888";
+const REVUE_C = "99999999-9999-4999-8999-999999999999";
 
 type Tache = { id: string; identifier: string; status: string; parentId: string | null; assigneeAgentId: string | null; originKind?: string; originId?: string | null; title?: string };
 type Lien = "titre" | "verdict" | "blocks" | "aucun" | "ambigu";
 
-function banc(o: { verdict?: string | null; revision?: string; interactions?: Array<{ status: string }>; lien?: Lien; relecteur?: boolean; approbations?: Array<{ issueId: string; status: string }>; titre?: string } = {}) {
+function banc(o: { verdict?: string | null; revision?: string; interactions?: Array<{ status: string }>; lien?: Lien; relecteur?: boolean; approbations?: Array<{ issueId: string; status: string }>; titre?: string; requises?: number } = {}) {
   const lien = o.lien ?? "titre";
   const taches: Record<string, Tache> = {
     // Cas réel : la revue a pour parent la mission du Coordinateur ; l'auteur n'est cité que par une référence explicite.
     [REVUE]: { id: REVUE, identifier: "ABC-10", status: "done", parentId: COORD_TACHE, assigneeAgentId: AGENT, title: o.titre ?? (lien === "titre" ? "Revue de ABC-8" : lien === "ambigu" ? "Revue de ABC-8 et ABC-9" : "Revue") },
+    // Revues sœurs (même tâche revue, ABC-8) : servent aux tours à plusieurs relecteurs.
+    [REVUE_B]: { id: REVUE_B, identifier: "ABC-11", status: "done", parentId: COORD_TACHE, assigneeAgentId: AGENT, title: "Revue de ABC-8" },
+    [REVUE_C]: { id: REVUE_C, identifier: "ABC-12", status: "done", parentId: COORD_TACHE, assigneeAgentId: AGENT, title: "Revue de ABC-8" },
     [AUTEUR]: { id: AUTEUR, identifier: "ABC-8", status: "in_review", parentId: null, assigneeAgentId: AGENT },
     [AUTRE]: { id: AUTRE, identifier: "ABC-9", status: "in_review", parentId: null, assigneeAgentId: AGENT },
     [COORD_TACHE]: { id: COORD_TACHE, identifier: "ABC-1", status: "in_progress", parentId: null, assigneeAgentId: "coord" },
@@ -29,6 +34,7 @@ function banc(o: { verdict?: string | null; revision?: string; interactions?: Ar
   };
   const parIdentifiant = (id: string) => taches[id] ?? Object.values(taches).find((t) => t.identifier === id) ?? null;
   const doc = { verdict: o.verdict === undefined ? (lien === "verdict" ? "# Verdict de revue : ABC-8\n\n**Verdict : CHANGES_REQUESTED.**" : "{\"verdict\":\"CHANGES_REQUESTED\"}") : o.verdict, revision: o.revision ?? "rev-1" };
+  const verdicts: Record<string, string> = {};
   const commentaires: Array<{ issueId: string; body: string }> = [];
   const reveils: Array<{ issueId: string; raison?: string; cle?: string | null }> = [];
   const maj: Array<{ issueId: string; patch: unknown }> = [];
@@ -43,7 +49,7 @@ function banc(o: { verdict?: string | null; revision?: string; interactions?: Ar
     agents: { get: async () => ({ urlKey: o.relecteur === false ? "redacteur-marketing" : "relecteur-marketing", role: "general", name: o.relecteur === false ? "Rédacteur" : "Relecteur" }) },
     issues: {
       get: async (id: string) => parIdentifiant(id),
-      documents: { get: async (_i: string, cle: string) => (cle === "verdict" && doc.verdict !== null ? { body: doc.verdict, latestRevisionId: doc.revision, updatedAt: new Date(horloge) } : null) },
+      documents: { get: async (i: string, cle: string) => (cle === "verdict" && (verdicts[i] ?? doc.verdict) !== null ? { body: verdicts[i] ?? doc.verdict!, latestRevisionId: doc.revision, updatedAt: new Date(horloge) } : null) },
       relations: { get: async () => ({ blockedBy: [], blocks: lien === "blocks" ? [{ id: AUTEUR }] : [] }) },
       summaries: { getOrchestration: async () => ({ approvals: approbations }) },
       listInteractions: async (id: string) => interactions.filter((i) => (i as { issueId?: string }).issueId === undefined || (i as { issueId?: string }).issueId === id),
@@ -57,12 +63,13 @@ function banc(o: { verdict?: string | null; revision?: string; interactions?: Ar
     datesJournal: async (_c: string, issueId: string, type: string) => journal.filter((j) => j.issueId === issueId && j.type === type).map((j) => j.creeLe).sort().reverse(),
     journalExiste: async (_c: string, type: string, ent: string) => journal.some((j) => j.type === type && j.entiteId === ent),
     listerDecisions: async () => decisions,
+    lirePorte: async () => (o.requises ? { revuesRequises: Array.from({ length: o.requises }, () => ({})) } : null),
   };
   const surEvt = creerChaine({ ctx: ctx as never, base: base as never });
   const evt = (entityId: string, to: string) => surEvt({ companyId: SOC, entityId, entityType: "issue", payload: { changes: { status: { to } } } });
   /** Tous les réveils, sans filtre : (tâche, motif). */
   const tous = () => reveils.map((r) => [r.issueId, r.raison] as const);
-  return { tous, evt, taches, doc, commentaires, reveils, maj, journal, decisions, avertissements, setInteractions: (i: Array<{ status: string }>) => (interactions = i), setApprobations: (a: Array<{ issueId: string; status: string }>) => (approbations = a) };
+  return { tous, evt, verdicts, taches, doc, commentaires, reveils, maj, journal, decisions, avertissements, setInteractions: (i: Array<{ status: string }>) => (interactions = i), setApprobations: (a: Array<{ issueId: string; status: string }>) => (approbations = a) };
 }
 
 const AUCUN_REVEIL: ReadonlyArray<readonly [string, string | undefined]> = [];
@@ -103,7 +110,7 @@ describe("R1 : verdict d'une tâche de revue", () => {
   it("CHANGES_REQUESTED : l'agent de la tâche revue est réveillé, le verdict est dans le motif et dans un commentaire (donnée) ; le Coordinateur est informé", async () => {
     const b = banc();
     await b.evt(REVUE, "done");
-    expect(b.tous()).toEqual([CR_AUTEUR, INFO_COORD]);
+    expect(b.tous()).toEqual([CR_AUTEUR]);
     expect(b.commentaires[0]!.issueId).toBe(AUTEUR);
     expect(b.commentaires[0]!.body).toContain("DONNÉE");
     expect(b.journal.filter((j) => j.type === CHAINE.typeReveilVerdict)).toHaveLength(1);
@@ -131,11 +138,11 @@ describe("R1 : verdict d'une tâche de revue", () => {
     const b = banc();
     await b.evt(REVUE, "done");
     await b.evt(REVUE, "done");
-    expect(b.tous()).toEqual([CR_AUTEUR, INFO_COORD]);
+    expect(b.tous()).toEqual([CR_AUTEUR]);
     b.doc.revision = "rev-2";
     await b.evt(REVUE, "done");
-    expect(b.tous()).toEqual([CR_AUTEUR, INFO_COORD, CR_AUTEUR, INFO_COORD]);
-    expect(new Set(b.reveils.map((r) => r.cle)).size).toBe(4);
+    expect(b.tous()).toEqual([CR_AUTEUR, CR_AUTEUR]);
+    expect(new Set(b.reveils.map((r) => r.cle)).size).toBe(2);
   });
 
   it("aucun réveil quand une carte attend l'humain sur la tâche revue", async () => {
@@ -167,13 +174,13 @@ describe("R1 : verdict d'une tâche de revue", () => {
   it.each(["titre", "verdict", "blocks"] as const)("référence explicite « %s » : la tâche revue est trouvée par son identifiant", async (lien) => {
     const b = banc({ lien });
     await b.evt(REVUE, "done");
-    expect(b.tous()).toEqual([CR_AUTEUR, INFO_COORD]);
+    expect(b.tous()).toEqual([CR_AUTEUR]);
   });
 
   it("la première ligne du document verdict est une référence valable, même sans titre markdown", async () => {
     const b = banc({ lien: "aucun", verdict: "Revue de ABC-8\n\nVerdict : CHANGES_REQUESTED" });
     await b.evt(REVUE, "done");
-    expect(b.tous()).toEqual([CR_AUTEUR, INFO_COORD]);
+    expect(b.tous()).toEqual([CR_AUTEUR]);
   });
 
   it("une mention d'identifiant en milieu de document n'est PAS une référence", async () => {
@@ -216,16 +223,16 @@ describe("R1 : verdict d'une tâche de revue", () => {
   it("M2 : assigné non relecteur mais la revue bloque la tâche revue : acceptée", async () => {
     const b = banc({ relecteur: false, lien: "blocks" });
     await b.evt(REVUE, "done");
-    expect(b.tous()).toEqual([CR_AUTEUR, INFO_COORD]);
+    expect(b.tous()).toEqual([CR_AUTEUR]);
   });
 
   it("cas réel du 20/10 : parent = mission du Coordinateur, auteur trouvé par la référence ; le Coordinateur est informé sans être pris pour cible, pas de boucle au rejeu", async () => {
     const b = banc({ lien: "verdict" });
     await b.evt(REVUE, "done");
-    expect(b.tous()).toEqual([CR_AUTEUR, INFO_COORD]);
+    expect(b.tous()).toEqual([CR_AUTEUR]);
     expect(b.commentaires.find((c) => c.issueId === COORD_TACHE)!.body).toContain("Information");
     await b.evt(REVUE, "done");
-    expect(b.reveils).toHaveLength(2);
+    expect(b.reveils).toHaveLength(1);
   });
 
   it("plafond de 3 réveils : le 4e verdict ne réveille pas l'auteur, un seul commentaire au Coordinateur SANS réveil, puis plus rien", async () => {
@@ -234,7 +241,7 @@ describe("R1 : verdict d'une tâche de revue", () => {
       b.doc.revision = r;
       await b.evt(REVUE, "done");
     }
-    expect(b.tous()).toEqual([CR_AUTEUR, INFO_COORD, CR_AUTEUR, INFO_COORD, CR_AUTEUR, INFO_COORD]);
+    expect(b.tous()).toEqual([CR_AUTEUR, CR_AUTEUR, CR_AUTEUR]);
     const avant = b.reveils.length;
     for (const r of ["d", "e"]) {
       b.doc.revision = r;
@@ -259,7 +266,7 @@ describe("R1 : verdict d'une tâche de revue", () => {
     b.doc.revision = "d";
     await b.evt(REVUE, "done");
     expect(b.commentaires).toHaveLength(avant);
-    expect(b.reveils).toHaveLength(6);
+    expect(b.reveils).toHaveLength(3);
   });
 
   it("M2 : le plafond vaut aussi pour APPROVED (3 réveils de l'auteur au plus depuis la dernière action humaine)", async () => {
@@ -282,8 +289,8 @@ describe("R1 : verdict d'une tâche de revue", () => {
     b.decisions.push({ creeLe: new Date(Date.UTC(2026, 9, 21, 13, 0, 0)).toISOString() });
     b.doc.revision = "d";
     await b.evt(REVUE, "done");
-    expect(b.reveils).toHaveLength(8);
-    expect(b.reveils[6]).toMatchObject({ issueId: AUTEUR, raison: CR_AUTEUR[1] });
+    expect(b.reveils).toHaveLength(4);
+    expect(b.reveils[3]).toMatchObject({ issueId: AUTEUR, raison: CR_AUTEUR[1] });
   });
 
   it("F1 : un APPROVED remet à zéro le compte des CHANGES_REQUESTED (le plafond total reste à 3 réveils)", async () => {
@@ -300,6 +307,129 @@ describe("R1 : verdict d'une tâche de revue", () => {
     expect(b.journal.filter((j) => j.type === CHAINE.typeChanges)).toHaveLength(2);
     expect(b.journal.filter((j) => j.type === CHAINE.typeApprouve)).toHaveLength(1);
     expect(b.reveils.filter((r) => r.issueId === AUTEUR)).toHaveLength(3);
+  });
+});
+
+describe("T6 : un seul réveil du Coordinateur par tour de revues", () => {
+  const A = '{"verdict":"APPROVED"}';
+  const C = '{"verdict":"CHANGES_REQUESTED"}';
+  const I = '{"verdict":"BLOCKED_INFORMATION"}';
+  const revuesCoord = (b: ReturnType<typeof banc>) => b.reveils.filter((r) => r.issueId === COORD_TACHE);
+  const ordres: Array<Array<string>> = [[REVUE, REVUE_B, REVUE_C], [REVUE_C, REVUE, REVUE_B], [REVUE_B, REVUE_C, REVUE]];
+
+  for (const [n, ordre] of ordres.entries()) {
+    it(`trois verdicts rendus (ordre ${n + 1}) : un seul réveil du Coordinateur, au dernier`, async () => {
+      const b = banc({ requises: 3 });
+      for (const [i, id] of ordre.entries()) {
+        b.verdicts[id] = A;
+        await b.evt(id, "done");
+        expect(revuesCoord(b)).toHaveLength(i < 2 ? 0 : 1);
+      }
+      expect(b.reveils.filter((r) => r.issueId === AUTEUR)).toHaveLength(3);
+      expect(b.commentaires.filter((c) => c.issueId === COORD_TACHE)).toHaveLength(3);
+    });
+  }
+
+  it("un verdict manquant : aucun réveil du Coordinateur (l'attente reste surveillée par le veilleur), même rejoué", async () => {
+    const b = banc({ requises: 3 });
+    for (const id of [REVUE, REVUE_B]) {
+      b.verdicts[id] = A;
+      await b.evt(id, "done");
+      await b.evt(id, "done");
+    }
+    expect(revuesCoord(b)).toHaveLength(0);
+  });
+
+  it("conflit entre deux verdicts : réveil immédiat du Coordinateur, une seule fois pour le tour", async () => {
+    const b = banc({ requises: 3 });
+    b.verdicts[REVUE] = A;
+    b.verdicts[REVUE_B] = C;
+    b.verdicts[REVUE_C] = A;
+    await b.evt(REVUE, "done");
+    expect(revuesCoord(b)).toHaveLength(0);
+    await b.evt(REVUE_B, "done");
+    expect(revuesCoord(b)).toHaveLength(1);
+    await b.evt(REVUE_C, "done");
+    expect(revuesCoord(b)).toHaveLength(1);
+  });
+
+  it("blocage (information manquante) : réveil immédiat, sans attendre les autres verdicts", async () => {
+    const b = banc({ requises: 3 });
+    b.verdicts[REVUE] = I;
+    await b.evt(REVUE, "done");
+    expect(revuesCoord(b)).toHaveLength(1);
+  });
+
+  it("simple renvoi à l'auteur (corrections demandées, aucun conflit) : aucun réveil du Coordinateur, information en commentaire", async () => {
+    for (const requises of [undefined, 3]) {
+      const b = banc({ requises });
+      for (const id of requises ? [REVUE, REVUE_B, REVUE_C] : [REVUE]) {
+        b.verdicts[id] = C;
+        await b.evt(id, "done");
+      }
+      expect(revuesCoord(b)).toHaveLength(0);
+      expect(b.reveils.some((r) => r.issueId === AUTEUR)).toBe(true);
+      expect(b.commentaires.some((c) => c.issueId === COORD_TACHE && c.body.includes("Information"))).toBe(true);
+    }
+  });
+
+  it("deux tours : le renvoi n'a pas réveillé le Coordinateur, l'approbation du tour suivant le réveille une fois", async () => {
+    const b = banc({ requises: 1 });
+    b.verdicts[REVUE] = C;
+    await b.evt(REVUE, "done");
+    expect(revuesCoord(b)).toHaveLength(0);
+    b.doc.revision = "rev-2";
+    b.verdicts[REVUE] = A;
+    await b.evt(REVUE, "done");
+    expect(revuesCoord(b)).toHaveLength(1);
+  });
+
+  it("deux revues requises : corrections sur la révision 1, puis deux approbations sur la révision 2 : un seul réveil, au second", async () => {
+    const b = banc({ requises: 2 });
+    b.verdicts[REVUE] = C;
+    await b.evt(REVUE, "done");
+    expect(revuesCoord(b)).toHaveLength(0);
+    b.doc.revision = "rev-2";
+    b.verdicts[REVUE] = A;
+    await b.evt(REVUE, "done");
+    expect(revuesCoord(b)).toHaveLength(0);
+    b.verdicts[REVUE_B] = A;
+    await b.evt(REVUE_B, "done");
+    expect(revuesCoord(b)).toHaveLength(1);
+  });
+
+  it("deux verdicts simultanés sur la même tâche revue (deux revues requises) : exactement un réveil", async () => {
+    const b = banc({ requises: 2 });
+    b.verdicts[REVUE] = A;
+    b.verdicts[REVUE_B] = A;
+    await Promise.all([b.evt(REVUE, "done"), b.evt(REVUE_B, "done")]);
+    expect(revuesCoord(b)).toHaveLength(1);
+    expect(b.reveils.filter((r) => r.issueId === AUTEUR)).toHaveLength(2);
+  });
+
+  it("journal d'avant les tours (marques sans tour_clos) : ni faux conflit, ni réveil prématuré", async () => {
+    const ancienne = (b: ReturnType<typeof banc>, type: string) => b.journal.push({ type, entiteId: `ancienne:${type}:${b.journal.length}`, issueId: AUTEUR, creeLe: new Date(Date.UTC(2026, 9, 20, 9, 0, b.journal.length)).toISOString(), donnees: {} });
+    // Ancien renvoi à l'auteur, sans action humaine depuis : la première approbation n'est pas un conflit.
+    const c = banc({ requises: 2 });
+    ancienne(c, CHAINE.typeReveilAuteur);
+    ancienne(c, CHAINE.typeChanges);
+    c.verdicts[REVUE] = A;
+    await c.evt(REVUE, "done");
+    expect(revuesCoord(c)).toHaveLength(0);
+    c.verdicts[REVUE_B] = A;
+    await c.evt(REVUE_B, "done");
+    expect(revuesCoord(c)).toHaveLength(1);
+    // Anciennes approbations suivies d'une décision humaine : le tour repart de la décision.
+    const a = banc({ requises: 2 });
+    ancienne(a, CHAINE.typeApprouve);
+    ancienne(a, CHAINE.typeApprouve);
+    a.decisions.push({ creeLe: new Date(Date.UTC(2026, 9, 20, 10, 0, 0)).toISOString() });
+    a.verdicts[REVUE] = A;
+    await a.evt(REVUE, "done");
+    expect(revuesCoord(a)).toHaveLength(0);
+    a.verdicts[REVUE_B] = A;
+    await a.evt(REVUE_B, "done");
+    expect(revuesCoord(a)).toHaveLength(1);
   });
 });
 

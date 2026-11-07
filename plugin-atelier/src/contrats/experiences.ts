@@ -145,12 +145,21 @@ export const ComparaisonVariante = z
     pValeur: z.number(),
     /** p-valeur multipliée par le nombre de comparaisons (Bonferroni), plafonnée à 1. */
     pValeurAjustee: z.number(),
+    /** Vrai si la p-valeur ajustée est sous alpha ET si l'intervalle de l'écart exclut zéro. */
     significatif: z.boolean(),
+    /** Lot 2 (#22) : test exact de Fisher sous `CONVERSIONS_MIN_TEST_Z`, test z au-delà. Absent des verdicts figés avant. */
+    methode: z.enum(["z", "fisher_exact"]).optional(),
   })
   .strict();
 export type ComparaisonVariante = z.infer<typeof ComparaisonVariante>;
 
-export const StatutVerdict = z.enum(["gagnant", "aucune_difference", "non_concluant"]);
+/**
+ * Lot 2 (#22) : `superieur_aux_autres` (une variante fait significativement mieux que CHACUNE des autres, seul statut
+ * avec un `gagnant`), `superieur_reference` (une ou plusieurs variantes font mieux que la référence, sans supériorité
+ * démontrée entre elles : la meilleure n'est que le « meilleur taux observé »). `gagnant` : verdicts figés avant le
+ * lot 2 seulement (la variante faisait significativement mieux que la référence, rien de plus), jamais produit.
+ */
+export const StatutVerdict = z.enum(["superieur_aux_autres", "superieur_reference", "aucune_difference", "non_concluant", "gagnant"]);
 export type StatutVerdict = z.infer<typeof StatutVerdict>;
 
 export const VerdictExperience = z

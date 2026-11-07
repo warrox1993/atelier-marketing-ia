@@ -1,0 +1,71 @@
+From 086ba24c3ded1954768182890c359db7f7b455ab Mon Sep 17 00:00:00 2001
+From: Jean-Baptiste Dhondt <114347858+warrox1993@users.noreply.github.com>
+Date: Wed, 4 Nov 2026 23:28:52 +0100
+Subject: [PATCH] =?UTF-8?q?test(socle):=20couvrir=20le=20/mois=20par=20com?=
+ =?UTF-8?q?pte,=20le=20total=20nul=20et=20=C2=AB=20Aucun=20approbateur=20?=
+ =?UTF-8?q?=C2=BB?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+---
+ ui/src/components/ExecutionParticipantPicker.test.tsx | 10 ++++++++--
+ ui/src/components/SubscriptionCostCard.test.tsx       |  8 ++++++++
+ 2 files changed, 16 insertions(+), 2 deletions(-)
+
+diff --git a/ui/src/components/ExecutionParticipantPicker.test.tsx b/ui/src/components/ExecutionParticipantPicker.test.tsx
+index 4b71750183..3b73e9cafb 100644
+--- a/ui/src/components/ExecutionParticipantPicker.test.tsx
++++ b/ui/src/components/ExecutionParticipantPicker.test.tsx
+@@ -14,14 +14,14 @@ vi.mock("@/components/ui/popover", () => ({
+   PopoverContent: ({ children }: { children: ReactNode }) => <div>{children}</div>,
+ }));
+ 
+-function renderPicker(policy: unknown) {
++function renderPicker(policy: unknown, stageType: "review" | "approval" = "review") {
+   const container = document.createElement("div");
+   const root = createRoot(container);
+   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+   const onUpdate = vi.fn();
+   const issue = { companyId: "company-fixture", executionPolicy: policy } as Issue;
+   act(() => root.render(<QueryClientProvider client={client}>
+-    <ExecutionParticipantPicker issue={issue} stageType="review" agents={[]} currentUserId="board-reviewer" onUpdate={onUpdate} />
++    <ExecutionParticipantPicker issue={issue} stageType={stageType} agents={[]} currentUserId="board-reviewer" onUpdate={onUpdate} />
+   </QueryClientProvider>));
+   return { container, onUpdate, cleanup: () => { act(() => root.unmount()); client.clear(); } };
+ }
+@@ -42,6 +42,12 @@ describe("ExecutionParticipantPicker", () => {
+     cleanup();
+   });
+ 
++  it("labels the empty approver option in French", () => {
++    const { container, cleanup } = renderPicker({ stages: [{ type: "approval", participants: [{ type: "user", userId: "board-reviewer" }] }] }, "approval");
++    expect(Array.from(container.querySelectorAll("button")).some((button) => button.textContent === "Aucun approbateur")).toBe(true);
++    cleanup();
++  });
++
+   it("shows an existing reviewer and preserves other policy settings when that reviewer is removed", () => {
+     const policy = {
+       authorizationPolicy: { trustPreset: "standard" }, maxReviewRounds: 4,
+diff --git a/ui/src/components/SubscriptionCostCard.test.tsx b/ui/src/components/SubscriptionCostCard.test.tsx
+index 7c0af05400..fc5231b7f7 100644
+--- a/ui/src/components/SubscriptionCostCard.test.tsx
++++ b/ui/src/components/SubscriptionCostCard.test.tsx
+@@ -48,6 +48,14 @@ describe("subscription costs", () => {
+     await click("View details");
+     expect(document.body.textContent).toContain("Used by Leela");
+     expect(document.body.textContent).toContain("before tax");
++    expect(document.querySelector('[role="dialog"]')?.textContent).toContain("100,00\u00a0$/mois");
++    expect(document.body.textContent).not.toContain("/month");
++  });
++  it("shows a zero monthly total in French when no subscription is active", async () => {
++    const report = fixture(); report.monthlyTotals = []; report.activeCount = 0;
++    await render(report);
++    expect(container.textContent).toContain("$0.00/mois");
++    expect(container.textContent).not.toContain("/month");
+   });
+   it("retains loaded totals during reload failure and never calls an unknown price zero", async () => {
+     const report = fixture();
+-- 
+2.53.0
+

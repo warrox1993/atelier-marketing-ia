@@ -547,10 +547,10 @@ def test_les_variantes_couvrent_chaque_palier_de_charge():
 @pytest.mark.parametrize("format", FORMATS)
 @pytest.mark.parametrize("gabarit", list(CHAMPS_VALIDES))
 def test_aucun_debordement_au_plafond_de_caracteres(tmp_path, gabarit, format, police):
-    """En « W », avec logo et bandeau IA, au plafond puis au pire cas de chaque palier de charge : le repère de fin reste
+    """En « W », avec logo, au plafond puis au pire cas de chaque palier de charge : le repère de fin reste
     visible, pour chaque police autorisée."""
     for champs in variantes_au_plafond(gabarit):
-        r = images.rendre_image(tmp_path, gabarit, champs, format, charte_de_rendu(police=police), mention=True, temoin=True)
+        r = images.rendre_image(tmp_path, gabarit, champs, format, charte_de_rendu(police=police), temoin=True)
         assert r.ok, (r.motif, r.journal[-800:])
         resume = {nom: len(valeur) if isinstance(valeur, str) else [len(v) for v in valeur] for nom, valeur in champs.items()}
         assert temoin_visible(r.image), f"{gabarit} {format} {police} {resume} : le contenu déborde"
@@ -630,18 +630,13 @@ def test_png_aux_mauvaises_dimensions_ou_hors_taille_est_refuse(tmp_path, monkey
     assert not r.ok and "PNG refusé" in r.motif and r.image is None
 
 
-def test_la_mention_ia_est_celle_de_la_provenance():
-    from fabrique import provenance
-    assert images.MENTION_IA == provenance.MENTION_IA
-
-
-def test_la_page_porte_le_bandeau_ia_seulement_si_demande(tmp_path):
+def test_la_page_porte_le_logo_si_demande_et_jamais_de_bandeau_ia(tmp_path):
     modele = (GABARITS_IMAGES / "accroche" / "index.html").read_text(encoding="utf-8")
     valeurs = images.valider_champs("accroche", {"titre": "x"})
     sans = images.remplir_gabarit(modele, valeurs, "1080x1080", PALIERS_M)
-    avec = images.remplir_gabarit(modele, valeurs, "1080x1080", PALIERS_M, mention=True, logo=True)
-    assert "mention-ia" not in sans and "logo" not in sans
-    assert 'id="mention-ia">Contenu généré avec l&#x27;IA<' in avec and '<img id="logo" src="logo.png"' in avec
+    avec = images.remplir_gabarit(modele, valeurs, "1080x1080", PALIERS_M, logo=True)
+    assert "logo" not in sans and '<img id="logo" src="logo.png"' in avec
+    assert "mention-ia" not in avec and "Contenu généré" not in avec
 
 
 # ---------- provenance IA d'une image (XMP IPTC dans le PNG + provenance.json) ----------
@@ -703,7 +698,7 @@ def test_poser_provenance_image_complete(tmp_path):
     assert resultat.chemin_json == image.parent / "provenance.json" and resultat.provenance == contenu
     assert (contenu["type"], contenu["fichier"], contenu["voix"], contenu["musique"]) == ("image", "image.png", [], None)
     assert contenu["digital_source_type"] == provenance.DIGITAL_SOURCE_TYPE
-    assert contenu["mention_visible"] is False and contenu["fond_ia"] is False  # image purement typographique
+    assert "mention_visible" not in contenu and contenu["fond_ia"] is False  # image purement typographique
     assert (contenu["gabarit"], contenu["format"], contenu["charte"]) == ("accroche", "1080x1080", "ma-charte")
     assert contenu["sha256"] == provenance.empreinte_sha256(image)  # l'empreinte est celle du fichier final, XMP compris
     assert contenu["outils"]["chrome-headless-shell"] == images.VERSION_CHROME and "exiftool" in contenu["outils"]
@@ -720,7 +715,7 @@ def test_provenance_image_avec_fond_ia_sans_mention_incrustee(tmp_path):
     image = image_rendue(tmp_path)
     assert provenance.poser_provenance_image(image, infos_image(fond_ia=True)).ok
     contenu = json.loads((image.parent / "provenance.json").read_text(encoding="utf-8"))
-    assert contenu["fond_ia"] is True and contenu["mention_visible"] is False
+    assert contenu["fond_ia"] is True and "mention_visible" not in contenu
 
 
 @pytest.mark.parametrize("modif", [

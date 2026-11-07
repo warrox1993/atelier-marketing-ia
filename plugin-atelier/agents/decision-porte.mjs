@@ -3,10 +3,10 @@
 
 /**
  * Motifs qui signalent une information manquante (contrôle impossible : panne d'outil, donnée
- * absente) et non un défaut de qualité du livrable. Même ensemble que `BLOQUANTS` de
- * `src/serveur/porte.ts`.
+ * absente, source à fournir) et non un défaut de qualité du livrable. Même ensemble que
+ * `BLOQUANTS` et `SOURCES_A_FOURNIR` de `src/serveur/porte.ts`.
  */
-const MOTIFS_ATTENTE_INFORMATION = new Set(["information_manquante", "revue_bloquee_information"]);
+const MOTIFS_ATTENTE_INFORMATION = new Set(["information_manquante", "revue_bloquee_information", "chiffre_offre_sans_source"]);
 
 /**
  * Un renvoi est « en attente d'information » quand la décision est `BLOQUE_INFORMATION` et que

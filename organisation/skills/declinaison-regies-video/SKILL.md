@@ -2,7 +2,7 @@
 name: "declinaison-regies-video"
 description: "Décline une publicité vidéo faite avec l'outil fabriquer_video pour chaque régie : Meta (Reels, Stories, fil), TikTok, YouTube Shorts, LinkedIn. Choisit parmi les trois formats de l'outil (vertical 1080x1920, carré 1080x1080, horizontal 1920x1080), propose une durée prudente, rédige le texte d'accompagnement et renvoie aux centres d'aide pour toute limite chiffrée non vérifiée. À utiliser quand une même vidéo doit servir plusieurs réseaux ou qu'il faut choisir le format avant de déposer la demande ; jamais pour afficher une limite de régie non sourcée ni pour publier."
 metadata:
-  version: "1.0.0"
+  version: "1.1.0"
   langue: "fr"
   domaine: "creation"
 ---
@@ -44,25 +44,23 @@ ce qui reste à vérifier dans le centre d'aide de la régie.
    et ratios acceptés par chaque régie ne sont pas donnés ici : **à vérifier dans le centre d'aide de la régie** (Meta : facebook.com/business/help ;
    TikTok : ads.tiktok.com/help ; YouTube : support.google.com/youtube ; LinkedIn : linkedin.com/help/lms).
 3. **Rédiger le texte d'accompagnement** par régie, à partir du message validé :
-   - Meta : une phrase d'accroche, une phrase de bénéfice, l'appel à l'action ; mention « vidéo réalisée avec l'IA » ;
-   - TikTok : ton direct, première ligne qui répète l'accroche de la vidéo, mention IA, rappel d'activer l'étiquette « contenu généré par IA » ;
+   - Meta : une phrase d'accroche, une phrase de bénéfice, l'appel à l'action ;
+   - TikTok : ton direct, première ligne qui répète l'accroche de la vidéo ;
    - YouTube Shorts : titre clair et descriptif, une ligne de description avec l'appel à l'action ;
    - LinkedIn : ton professionnel, le problème du client en une phrase, la preuve, l'appel à l'action ; pas de mot d'ordre creux.
    - Pas d'émoji en guise de ponctuation, pas de tiret cadratin, pas de lot de mots-clics : en rester à quelques mots-clics pertinents.
-4. **Prévoir les étiquettes IA** de chaque régie avec `conformite-publicite-ia` : TikTok demande d'activer l'étiquette, Meta étiquette
-   lui-même mais sa règle de déclaration manuelle est à vérifier dans son centre d'aide.
+4. **Noter les règles d'étiquetage** de chaque régie avec `conformite-publicite-ia` : à vérifier dans son centre d'aide au moment de publier.
 5. **Écrire le tableau de déclinaison** (une ligne par régie et emplacement) et les points « à vérifier » avec le lien du centre d'aide.
 
 ## Livrable
 
-Un tableau : régie, emplacement, `format_sortie`, durée cible, texte d'accompagnement, étiquette IA à activer, point à vérifier
+Un tableau : régie, emplacement, `format_sortie`, durée cible, texte d'accompagnement, point à vérifier
 et lien de son centre d'aide. Une demande `fabriquer_video` par format retenu, chacune dans le commentaire de la tâche.
 
 ## Critères de réussite
 
 - Chaque emplacement a un format parmi les trois de l'outil.
 - Aucune limite chiffrée de régie n'est affirmée sans source ; sinon la ligne dit « à vérifier dans le centre d'aide de la régie ».
-- Le texte d'accompagnement signale que la vidéo est faite avec l'IA.
 - Le nombre de vidéos demandées tient dans le plafond de 10 par jour.
 
 ## Limites
@@ -76,8 +74,8 @@ et lien de son centre d'aide. Une demande `fabriquer_video` par format retenu, c
 ## Exemple
 
 Un client veut une même vidéo sur Instagram (Reels) et sur LinkedIn. Deux fabrications : une verticale `1080x1920` de 20 secondes pour
-les Reels, une carrée `1080x1080` de 30 secondes pour le fil LinkedIn. Pour les Reels, texte court et mention IA ; pour LinkedIn, le
-problème, la preuve et l'appel à l'action, avec la mention IA. Dans le tableau, la durée maximale de chaque emplacement est
+les Reels, une carrée `1080x1080` de 30 secondes pour le fil LinkedIn. Pour les Reels, texte court ; pour LinkedIn, le
+problème, la preuve et l'appel à l'action. Dans le tableau, la durée maximale de chaque emplacement est
 « à vérifier dans le centre d'aide de la régie ».
 
 Cas d'échec évité : un brouillon affirmait « Reels : 90 secondes maximum » sans source ; la phrase est remplacée par le renvoi

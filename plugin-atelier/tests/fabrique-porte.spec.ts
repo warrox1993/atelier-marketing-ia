@@ -34,7 +34,7 @@ const sha = (o: Buffer) => createHash("sha256").update(o).digest("hex");
 const ecrireRegistre = (voix: unknown[]) => writeFileSync(cheminRegistre, JSON.stringify({ voix }));
 const provenanceComplete = () => ({
   travail: TRAVAIL, entreprise: ENTREPRISE, type: "video", fichier: "video.mp4", outils: { ffmpeg: "7" },
-  voix: ["synthese-chatterbox-fr"], musique: null, digital_source_type: DIGITAL_SOURCE_TYPE_IA, mention_visible: true,
+  voix: ["synthese-chatterbox-fr"], musique: null, digital_source_type: DIGITAL_SOURCE_TYPE_IA,
   filigrane_perth: { detecte: true, taux: 1 }, sha256: sha(OCTETS),
 });
 
@@ -66,9 +66,12 @@ describe("porte de diffusion : provenance IA de la fabrique", () => {
     expect(await motifDuRefus()).toMatch(/digital_source_type/u);
   });
 
-  it("refuse une mention visible fausse pour une vidéo", async () => {
+  it("accepte une vidéo sans aucune mention, ancienne provenance comprise", async () => {
+    livrer(provenanceComplete());
+    expect(await controler()).toEqual({ ok: true });
+    // Provenance écrite avant le retrait du champ : il est ignoré, elle reste valide.
     livrer({ ...provenanceComplete(), mention_visible: false });
-    expect(await motifDuRefus()).toMatch(/mention/u);
+    expect(await controler()).toEqual({ ok: true });
   });
 
   it("refuse un filigrane non détecté pour un contenu avec voix", async () => {
@@ -108,7 +111,7 @@ describe("porte de diffusion : provenance IA de la fabrique", () => {
     expect(await motifDuRefus()).toMatch(/introuvable ou non terminé/u);
   });
 
-  it("contrôle aussi les documents, sans exiger voix ni mention visible", async () => {
+  it("contrôle aussi les documents, sans exiger de voix", async () => {
     const doc = Buffer.from("pdf de test");
     writeFileSync(join(dossier, "offre.pdf"), doc);
     writeFileSync(join(dossier, "resultat.json"), JSON.stringify({ fichiers: [{ fichier: "offre.pdf", taille: doc.length, sha256: sha(doc) }] }));
@@ -129,7 +132,7 @@ describe("porte de diffusion : provenance IA de la fabrique", () => {
       if (provenance) writeFileSync(join(dossier, "provenance.json"), JSON.stringify(provenance));
     };
     const provenanceImage = (nom: string, plus: Record<string, unknown> = {}) => ({
-      travail: TRAVAIL, entreprise: ENTREPRISE, type: "image", fichier: nom, voix: [], fond_ia: false, mention_visible: false,
+      travail: TRAVAIL, entreprise: ENTREPRISE, type: "image", fichier: nom, voix: [], fond_ia: false,
       digital_source_type: DIGITAL_SOURCE_TYPE_IA, sha256: sha(IMAGE), ...plus,
     });
 
@@ -138,15 +141,16 @@ describe("porte de diffusion : provenance IA de la fabrique", () => {
       expect(await motifDuRefus()).toMatch(/Provenance IA absente/u);
     });
 
-    it("accepte une image typographique complète, sans voix ni mention visible", async () => {
+    it("accepte une image typographique complète, sans voix", async () => {
       livrerImage("image.png", provenanceImage("image.png"));
       expect(await controler()).toEqual({ ok: true });
     });
 
-    it("exige la mention visible dès que la provenance indique un fond IA", async () => {
+    it("accepte une image à fond IA sans aucune mention, ancienne provenance comprise", async () => {
       livrerImage("image.png", provenanceImage("image.png", { fond_ia: true }));
-      expect(await motifDuRefus()).toMatch(/mention/u);
-      livrerImage("image.png", provenanceImage("image.png", { fond_ia: true, mention_visible: true }));
+      expect(await controler()).toEqual({ ok: true });
+      // Provenance écrite avant le retrait du champ : il est ignoré, elle reste valide.
+      livrerImage("image.png", provenanceImage("image.png", { fond_ia: true, mention_visible: false }));
       expect(await controler()).toEqual({ ok: true });
     });
 

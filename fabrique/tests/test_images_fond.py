@@ -74,7 +74,7 @@ def test_pire_fond_vient_de_l_opacite_du_voile():
 def test_rendu_avec_fond_aux_dimensions_exactes_voile_pose_et_texte_clair(tmp_path, format):
     largeur, hauteur = map(int, format.split("x"))
     fond = fond_png(tmp_path, (255, 255, 255), (largeur, hauteur))
-    r = images.rendre_image(tmp_path, "accroche", CHAMPS_VALIDES["accroche"], format, charte_de_rendu(), mention=True,
+    r = images.rendre_image(tmp_path, "accroche", CHAMPS_VALIDES["accroche"], format, charte_de_rendu(),
                             temoin=True, fond=fond)
     assert r.ok, (r.motif, r.journal[-800:])
     image = ouvrir(r.image)

@@ -67,7 +67,7 @@ export interface DefinitionMutation<A extends Record<string, unknown>> {
   verifier?: (args: A) => void;
   /**
    * Complète les arguments AVANT l'empreinte, la préparation et la vérification de la preuve (idempotent) : ce que
-   * l'humain approuve est donc exactement ce qui part (mention d'information IA des messages directs).
+   * l'humain approuve est donc exactement ce qui part (mention d'information IA des messages directs, si elle est réactivée).
    */
   preparer?: (args: A) => A;
   /** Effectue l'action ; renvoie les identifiants produits. Lève ErreurFournisseur. */
