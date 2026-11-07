@@ -35,6 +35,7 @@ ExecStart=/usr/bin/podman run --rm --name atelier-listmonk --network atelier-ema
   docker.io/listmonk/listmonk:v6.2.0
 ExecStop=/usr/bin/podman stop -t 15 atelier-listmonk
 ExecStopPost=-/bin/rm -f %t/atelier-listmonk.env
+SuccessExitStatus=2
 Restart=on-failure
 RestartSec=15
 TimeoutStartSec=300

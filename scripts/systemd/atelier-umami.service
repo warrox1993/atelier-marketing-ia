@@ -31,6 +31,7 @@ ExecStart=/usr/bin/podman run --rm --name atelier-umami --network atelier-umami 
   -e DISABLE_TELEMETRY=1 -e TRACKER_SCRIPT_NAME=script.js \
   ghcr.io/umami-software/umami:3.4.0
 ExecStop=/usr/bin/podman stop -t 10 atelier-umami
+SuccessExitStatus=143
 Restart=on-failure
 RestartSec=15
 TimeoutStartSec=240

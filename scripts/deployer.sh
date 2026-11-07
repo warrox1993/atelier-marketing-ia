@@ -16,6 +16,11 @@ source "${RACINE}/scripts/lib-cle-board.sh"
 VERROU="${HOME}/.cache/verification-hooks/suite.lock"
 DELAI_ATTENTE="${ATELIER_DEPLOI_DELAI:-240}"   # 4 minutes maximum (réglable pour les tests)
 AVANT_GARDER=3                                 # copies « avant » gardées dans instance/deploiements/
+# Services locaux des tests d'intégration de la passerelle (réels : Umami, Mailpit, Listmonk), éteints en temps normal.
+# <unité systemd --user>[:port à attendre], dans l'ordre de démarrage (les bases avant leurs applications).
+UNITES_TESTS_PASSERELLE=("atelier-umami-db" "atelier-umami:3196" "atelier-emailing-db" "atelier-mailpit:18025" "atelier-listmonk:19000")
+DELAI_SERVICES_TESTS="${ATELIER_DEPLOI_DELAI_SERVICES:-60}"   # secondes, par unité (réglable pour les tests)
+UNITES_DEMARREES=()                            # seulement celles que CE script a démarrées : seules à être arrêtées
 
 ESSAI=0; SANS_TESTS=0; CIBLE="3100"; APERCU=""; JOURNAUX=""; PASSERELLE="3190"
 
@@ -88,6 +93,62 @@ refuser_si_runs() {
   echo "Aucun run en cours."
 }
 
+# Arrête les unités démarrées par ce script (jamais celles qui tournaient déjà), puis efface leur état « failed ».
+# Appelée après les tests et par le trap EXIT : succès, échec ou interruption, rien ne reste allumé.
+arreter_services_tests() {
+  local i arretees=()
+  [[ "${#UNITES_DEMARREES[@]}" -gt 0 ]] || return 0
+  for ((i = ${#UNITES_DEMARREES[@]} - 1; i >= 0; i--)); do arretees+=("${UNITES_DEMARREES[i]}"); done   # ordre inverse
+  UNITES_DEMARREES=()
+  echo "Arrêt des services de test : ${arretees[*]}"
+  systemctl --user stop "${arretees[@]}" || echo "AVERTISSEMENT : arrêt incomplet de ${arretees[*]}" >&2
+  # Efface l'état « failed » d'un arrêt qui a mal tourné ; l'arrêt volontaire d'Umami (143) et de listmonk (2) n'en laisse pas
+  # (SuccessExitStatus dans leurs unités), donc aucune fausse alerte OnFailure avant ce nettoyage.
+  systemctl --user reset-failed "${arretees[@]}" 2>/dev/null || true
+}
+
+# Attend (délai nommé) qu'une unité soit active puis que son port réponde ; échec nommant l'unité sinon.
+attendre_service_test() {
+  local unite="$1" port="$2" debut="${SECONDS}"
+  until systemctl --user is-active --quiet "${unite}"; do
+    (( SECONDS - debut < DELAI_SERVICES_TESTS )) || echec "${unite} pas active après ${DELAI_SERVICES_TESTS} s (journal : journalctl --user -u ${unite} -n 50)"
+    sleep 1
+  done
+  [[ -n "${port}" ]] || return 0
+  until curl -s -o /dev/null --max-time 2 "http://127.0.0.1:${port}/"; do
+    (( SECONDS - debut < DELAI_SERVICES_TESTS )) || echec "${unite} active mais le port ${port} ne répond pas après ${DELAI_SERVICES_TESTS} s (journal : journalctl --user -u ${unite} -n 50)"
+    sleep 1
+  done
+}
+
+# Démarre les services des tests d'intégration de la passerelle qui sont éteints, et attend qu'ils répondent.
+demarrer_services_tests() {
+  local entree unite port etat
+  if [[ "${ESSAI}" -eq 1 ]]; then
+    for entree in "${UNITES_TESTS_PASSERELLE[@]}"; do echo "+ si inactive : systemctl --user start ${entree%%:*}"; done
+    echo "+ attendre (max ${DELAI_SERVICES_TESTS} s par unité) que les unités soient actives et que les ports 3196, 18025 et 19000 répondent"
+    local noms=() i
+    for ((i = ${#UNITES_TESTS_PASSERELLE[@]} - 1; i >= 0; i--)); do noms+=("${UNITES_TESTS_PASSERELLE[i]%%:*}"); done
+    echo "+ à la sortie (succès ou échec), pour les seules unités démarrées par le script : systemctl --user stop ${noms[*]}, puis systemctl --user reset-failed ${noms[*]}"
+    return 0
+  fi
+  trap arreter_services_tests EXIT
+  trap 'exit 130' INT TERM   # l'interruption passe par exit : le trap EXIT arrête alors les unités
+  for entree in "${UNITES_TESTS_PASSERELLE[@]}"; do
+    unite="${entree%%:*}"
+    etat="$(systemctl --user is-active "${unite}" 2>/dev/null)"
+    # Seules « inactive » et « failed » sont éteintes : « activating » (auto-restart) ou « active » n'est pas à nous.
+    [[ "${etat}" == "inactive" || "${etat}" == "failed" ]] || continue
+    UNITES_DEMARREES+=("${unite}")   # noté avant le start : un démarrage à moitié réussi est arrêté aussi
+    echo "Démarrage de ${unite}."
+    systemctl --user start "${unite}" || echec "démarrage de ${unite} en échec (journal : journalctl --user -u ${unite} -n 50)"
+  done
+  for entree in "${UNITES_TESTS_PASSERELLE[@]}"; do
+    unite="${entree%%:*}"; port=""; [[ "${entree}" == *:* ]] && port="${entree#*:}"
+    attendre_service_test "${unite}" "${port}"
+  done
+}
+
 cd "${RACINE}" || exit 1
 [[ "${ESSAI}" -eq 1 ]] && echo "MODE ESSAI : aucune commande n'est exécutée."
 [[ "${ESSAI}" -eq 0 ]] && { mkdir -p "${JOURNAUX}" || echec "dossier de journaux inutilisable : ${JOURNAUX}"; }
@@ -108,7 +169,9 @@ if [[ "${SANS_TESTS}" -eq 1 ]]; then
 else
   mkdir -p "$(dirname "${VERROU}")"
   tester plugin plugin-atelier "npx tsc --noEmit && npx vitest run"
+  demarrer_services_tests
   tester passerelle passerelle "pnpm typecheck && pnpm exec vitest run"
+  arreter_services_tests
   if [[ "${ESSAI}" -eq 0 ]]; then
     NB_TESTS="plugin : $(grep -E '^[[:space:]]*Tests[[:space:]]' "${JOURNAUX}/plugin.log" | tail -1 | sed 's/^[[:space:]]*//') ; passerelle : $(grep -E '^[[:space:]]*Tests[[:space:]]' "${JOURNAUX}/passerelle.log" | tail -1 | sed 's/^[[:space:]]*//')"
   fi

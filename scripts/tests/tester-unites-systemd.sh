@@ -43,6 +43,17 @@ else
   echec "atelier-sante@.service : SuccessExitStatus=1 attendu (sinon chaque anomalie alerte deux fois)"
 fi
 
+# Arrêt volontaire (deployer.sh : systemctl stop) : Umami sort en 143 (SIGTERM) et listmonk en 2 (journal : 10 et 11 arrêts,
+# toujours ce code, jamais d'autre sortie). Sans SuccessExitStatus, systemd marque l'unité « failed » et OnFailure alerte à tort.
+for couple in "atelier-umami.service:143" "atelier-listmonk.service:2"; do
+  TOTAL=$((TOTAL + 1))
+  if [[ "$(valeur "${DOSSIER}/${couple%%:*}" Service SuccessExitStatus)" == "${couple#*:}" ]]; then
+    echo "OK     ${couple%%:*} : SuccessExitStatus=${couple#*:} (arrêt volontaire sans fausse alerte)"
+  else
+    echec "${couple%%:*} : SuccessExitStatus=${couple#*:} attendu (sinon chaque arrêt volontaire alerte à tort)"
+  fi
+done
+
 # L'alerte envoie aussi un courriel (EXP-C3) et une notification bureau ratée ne l'empêche pas.
 TOTAL=$((TOTAL + 1))
 alerte="${DOSSIER}/atelier-alerte@.service"

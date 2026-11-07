@@ -33,13 +33,33 @@ appele() { grep -qF -- "$1" "${APPELS}"; }
 
 # Doublures : chaque appel est noté ; curl répond « ready » sauf si ${TMP}/pas-pret existe.
 mkdir -p "${TMP}/bin" "${TMP}/home"
-for outil in systemctl pnpm npx; do
+for outil in pnpm npx; do
   printf '#!/usr/bin/env bash\necho "%s $*" >> "%s"\n' "${outil}" "${APPELS}" > "${TMP}/bin/${outil}"
 done
+# systemctl à états : ${TMP}/etat/<unité> existe = unité active ; start l'active, stop la désactive.
+# ${TMP}/ne-demarre-pas-<unité> : start réussit mais l'unité ne devient jamais active.
+mkdir -p "${TMP}/etat"; touch "${TMP}/etat/atelier-instance@atelier" "${TMP}/etat/atelier-passerelle@3190"
+cat > "${TMP}/bin/systemctl" <<EOF
+#!/usr/bin/env bash
+echo "systemctl \$*" >> "${APPELS}"
+verbe="\$2"; shift 2
+case "\${verbe}" in
+  is-active) unite="\${!#}"; [[ -e "${TMP}/etat/\${unite}" ]] && { echo active; exit 0; }
+    # \${TMP}/activating-<unité> : auto-restart en cours, « activating » au premier contrôle puis active (comme systemd).
+    [[ -e "${TMP}/activating-\${unite}" ]] && { rm -f "${TMP}/activating-\${unite}"; touch "${TMP}/etat/\${unite}"; echo activating; exit 3; }
+    [[ -e "${TMP}/echoue-\${unite}" ]] && { echo failed; exit 3; }
+    echo inactive; exit 3 ;;
+  start) for u in "\$@"; do [[ -e "${TMP}/ne-demarre-pas-\${u}" ]] || touch "${TMP}/etat/\${u}"; done ;;
+  stop) for u in "\$@"; do rm -f "${TMP}/etat/\${u}"; done ;;
+esac
+exit 0
+EOF
 # « pnpm build » de la passerelle et de l'interface écrit une nouvelle version, comme le vrai.
+printf 'ETAT="%s"\n' "${TMP}/etat" >> "${TMP}/bin/pnpm"
 cat >> "${TMP}/bin/pnpm" <<'EOF'
 case "$*" in
   build) mkdir -p dist && echo "passerelle neuve" > dist/p.js ;;
+  "exec vitest run") ls "${ETAT}" > "${ETAT}.pendant-tests"; if [[ -e "${ETAT}.tests-longs" ]]; then echo "$$" > "${ETAT}.tests-demarres"; sleep 60; fi; if [[ -e "${ETAT}.tests-en-echec" ]]; then exit 1; fi ;;
   *"@paperclipai/ui build"*) mkdir -p ui/dist && echo "interface neuve" > ui/dist/i.js ;;
 esac
 EOF
@@ -56,11 +76,14 @@ case "\$*" in
     cat "${TMP}/runs" 2>/dev/null || echo '[]'; exit 0 ;;
   */api/companies*) [[ -e "${TMP}/injoignable" ]] && exit 7; echo '[{"id":"c1","name":"Essai","status":"active"}]'; exit 0 ;;
 esac
+for port in 3196 18025 19000; do
+  case "\$*" in *":\${port}"*) [[ -e "${TMP}/muet-\${port}" ]] && exit 7; echo ok; exit 0 ;; esac
+done
 [[ -e "${TMP}/pas-pret" ]] && { echo '{"status":"starting"}'; exit 0; }
 echo '[{"status":"ready"}]'
 EOF
 chmod +x "${TMP}/bin/"*
-export PATH="${TMP}/bin:${PATH}" HOME="${TMP}/home" ATELIER_DEPLOI_DELAI=2
+export PATH="${TMP}/bin:${PATH}" HOME="${TMP}/home" ATELIER_DEPLOI_DELAI=2 ATELIER_DEPLOI_DELAI_SERVICES=2
 
 # Dépôt factice : le vrai deployer.sh et sa bibliothèque, des vérifications et une construction factices.
 mkdir -p "${D}/scripts" "${D}/plugin-atelier" "${D}/passerelle" "${D}/paperclip/ui" "${D}/instance/plugin-jb/dist"
@@ -106,6 +129,73 @@ echo modifie >> "${D}/scripts/verifier-config.sh"
 attendre "modification suivie refusée"                       non0 "non propre"        --journaux "${TMP}/j2"
 verifie  "refus : aucun redémarrage"                          bash -c '! grep -q systemctl "$1"' _ "${APPELS}"
 git -C "${D}" checkout -q -- scripts/verifier-config.sh
+
+# Services des tests d'intégration de la passerelle (#29) : démarrés avant ses tests, arrêtés après, seulement s'ils étaient éteints.
+UNITES_TESTS="atelier-umami-db atelier-umami atelier-emailing-db atelier-mailpit atelier-listmonk"
+actives_tests() { local u r=""; for u in ${UNITES_TESTS}; do [[ -e "${TMP}/etat/${u}" ]] && r+="${u} "; done; echo "${r}"; }
+remettre_services() { local u; for u in ${UNITES_TESTS}; do rm -f "${TMP}/etat/${u}"; done; rm -f "${TMP}"/muet-* "${TMP}"/ne-demarre-pas-* "${TMP}"/activating-* "${TMP}"/echoue-* "${TMP}/etat.tests-longs" "${TMP}/etat.tests-demarres" "${TMP}/etat.tests-en-echec" "${TMP}/etat.pendant-tests"; }
+tout_actif() { local u; for u in "$@"; do grep -qx "${u}" "${TMP}/etat.pendant-tests" || return 1; done; }
+
+attendre "essai : démarrage des services affiché"            0    "systemctl --user start atelier-umami" --essai
+verifie  "essai : arrêt des services affiché"                 bash -c '[[ "$1" == *"systemctl --user stop"*"atelier-umami"* && "$1" == *"reset-failed"* ]]' _ "${SORTIE}"
+verifie  "essai : ports attendus affichés"                    bash -c '[[ "$1" == *3196* && "$1" == *18025* && "$1" == *19000* ]]' _ "${SORTIE}"
+
+remettre_services
+attendre "services éteints : étape 1 passée"                 0    "Instance 3100 prête" --journaux "${TMP}/j10"
+verifie  "services éteints : les 5 unités démarrées"          bash -c 'for u in $1; do grep -qx "systemctl --user start $u" "$2" || exit 1; done' _ "${UNITES_TESTS}" "${APPELS}"
+verifie  "services éteints : actifs pendant les tests"        tout_actif ${UNITES_TESTS}
+verifie  "services éteints : inactifs à la fin"               test -z "$(actives_tests)"
+verifie  "services éteints : reset-failed appelé"             grep -q "reset-failed" "${APPELS}"
+verifie  "services éteints : instance et passerelle intactes" test -e "${TMP}/etat/atelier-instance@atelier" -a -e "${TMP}/etat/atelier-passerelle@3190"
+
+remettre_services; touch "${TMP}/etat.tests-en-echec"
+attendre "tests passerelle en échec : refus"                 non0 "tests passerelle en échec" --journaux "${TMP}/j11"
+verifie  "tests en échec : unités démarrées quand même arrêtées" test -z "$(actives_tests)"
+verifie  "tests en échec : reset-failed appelé"               grep -q "reset-failed" "${APPELS}"
+
+remettre_services; touch "${TMP}/etat/atelier-emailing-db"
+attendre "une unité déjà active : étape 1 passée"            0    "Instance 3100 prête" --journaux "${TMP}/j12"
+verifie  "unité déjà active : pas redémarrée"                 bash -c '! grep -q "start atelier-emailing-db" "$1"' _ "${APPELS}"
+verifie  "unité déjà active : pas arrêtée"                    bash -c '! grep -q "stop .*atelier-emailing-db" "$1"' _ "${APPELS}"
+verifie  "unité déjà active : toujours active après"          test "$(actives_tests)" = "atelier-emailing-db "
+verifie  "unité déjà active : les autres sont arrêtées"       bash -c '! grep -q "stop .*atelier-emailing-db" "$1" && grep -q "stop .*atelier-listmonk" "$1"' _ "${APPELS}"
+
+# Unité en « activating » (auto-restart de Restart=on-failure) : pas éteinte, donc ni démarrée ni arrêtée par le script ;
+# « failed » est éteinte : démarrée, puis arrêtée.
+remettre_services; touch "${TMP}/activating-atelier-listmonk" "${TMP}/echoue-atelier-mailpit"
+attendre "unité en activating : étape 1 passée"              0    "Instance 3100 prête" --journaux "${TMP}/j16"
+verifie  "activating : pas démarrée par le script"            bash -c '! grep -q "start atelier-listmonk" "$1"' _ "${APPELS}"
+verifie  "activating : pas arrêtée par le script"             bash -c '! grep -q "stop .*atelier-listmonk" "$1"' _ "${APPELS}"
+verifie  "activating : toujours active après (le script n'y a pas touché)" test "$(actives_tests)" = "atelier-listmonk "
+verifie  "failed : démarrée comme une éteinte"                grep -qx "systemctl --user start atelier-mailpit" "${APPELS}"
+verifie  "failed : arrêtée à la fin"                          grep -q "stop .*atelier-mailpit" "${APPELS}"
+
+# Interruption (TERM, comme Ctrl+C sur tout le groupe) pendant les tests de la passerelle : les unités démarrées sont arrêtées.
+remettre_services; touch "${TMP}/etat.tests-longs"; : > "${APPELS}"
+( cd "${TMP}" && exec setsid "${D}/scripts/deployer.sh" --journaux "${TMP}/j17" ) > "${TMP}/sortie-interrompu" 2>&1 &
+PID_DEPLOI=$!
+for _ in $(seq 1 100); do [[ -e "${TMP}/etat.tests-demarres" ]] && break; sleep 0.2; done
+verifie  "interruption : tests de la passerelle en cours"     test -e "${TMP}/etat.tests-demarres"
+verifie  "interruption : les 5 unités actives pendant"        test "$(actives_tests)" = "${UNITES_TESTS} "
+kill -TERM -- "-${PID_DEPLOI}" 2>/dev/null
+wait "${PID_DEPLOI}"; CODE_INTERROMPU=$?
+verifie  "interruption : sortie en 130"                       test "${CODE_INTERROMPU}" -eq 130
+verifie  "interruption : unités démarrées arrêtées"           test -z "$(actives_tests)"
+verifie  "interruption : reset-failed appelé"                 grep -q "reset-failed" "${APPELS}"
+verifie  "interruption : aucun redémarrage de l'instance"     bash -c '! grep -q "restart" "$1"' _ "${APPELS}"
+
+remettre_services; touch "${TMP}/muet-19000"
+attendre "port muet : échec qui nomme l'unité"               non0 "atelier-listmonk" --journaux "${TMP}/j13"
+verifie  "port muet : unités démarrées arrêtées"              test -z "$(actives_tests)"
+verifie  "port muet : tests de la passerelle jamais lancés"   bash -c '! grep -q "exec vitest run" "$1"' _ "${APPELS}"
+
+remettre_services; touch "${TMP}/ne-demarre-pas-atelier-mailpit"
+attendre "unité jamais active : échec qui nomme l'unité"     non0 "atelier-mailpit" --journaux "${TMP}/j14"
+verifie  "unité jamais active : unités démarrées arrêtées"    test -z "$(actives_tests)"
+
+remettre_services
+attendre "--sans-tests : aucun service touché"               0    "AVERTISSEMENT" --journaux "${TMP}/j15" --sans-tests
+verifie  "--sans-tests : aucun start des services de test"    bash -c '! grep -q "start atelier-umami" "$1"' _ "${APPELS}"
 
 # Instance pas prête : retour arrière automatique vers la version d'avant, puis code 1.
 sleep 1
