@@ -176,7 +176,9 @@ export async function appelerOutil(
   // unique, et liste de révocation) : le plugin compare cette empreinte à celle de la diffusion approuvée.
   const { preuve_approbation: _preuve, revocations_approbation: _revocations, ...argsValides } = analyse.data as Record<string, unknown>;
   // #4 : un jeton local accordé en lecture seule ne déclenche aucun outil d'écriture, avant tout appel au fournisseur.
-  if (ecriture && contexte.identite.ecriture === false) {
+  // #10 : sur un service local, seul `ecriture: true` ouvre l'écriture (un champ oublié ne l'ouvre pas).
+  const ecritureFermee = contexte.autorisationLocale === true ? contexte.identite.ecriture !== true : contexte.identite.ecriture === false;
+  if (ecriture && ecritureFermee) {
     return emballer(
       contexte.mode,
       { erreur: "portee_insuffisante", message: "Cette connexion est en lecture seule : l'outil demandé écrit. Reconnecter le service dans Paperclip (Apps) avec la portée « ecriture »." },

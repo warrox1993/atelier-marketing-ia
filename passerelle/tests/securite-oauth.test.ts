@@ -20,7 +20,8 @@ import {
 } from "../src/garde-oauth.js";
 import { RegistreFournisseurs } from "../src/fournisseurs.js";
 import { creerServeur, type ServeurPasserelle } from "../src/serveur.js";
-import { MENTION_DONNEES_TIERCES } from "../src/outils.js";
+import { appelerOutil, construireCatalogue, MENTION_DONNEES_TIERCES } from "../src/outils.js";
+import { FICHE_EMAILING } from "../src/services.js";
 import { adressesFaussesGoogle, type ConfigGoogleReel } from "../src/reel/google/config.js";
 import { construireGoogleReel } from "../src/reel/google/enregistrer.js";
 import { requeteAvis, requeteMetriques } from "../src/reel/google/outils.js";
@@ -463,6 +464,99 @@ describe("portée par niveau d'accès (#4)", () => {
     }
   });
 
+  it("(d bis) un rafraîchissement peut réduire la portée (RFC 6749 §6) : scope=lecture sur « lecture ecriture » n'écrit plus", async () => {
+    const { faux, p } = await monterLocal();
+    try {
+      const { corps, client } = await jetons(p.url, "emailing", "lecture ecriture");
+      const rafraichir = (refresh: string, scope?: string) =>
+        fetch(`${p.url}/oauth/token`, {
+          method: "POST",
+          headers: { "content-type": "application/x-www-form-urlencoded" },
+          body: new URLSearchParams({ grant_type: "refresh_token", refresh_token: refresh, client_id: client.clientId, ...(scope ? { scope } : {}) }),
+        });
+      const reduit = await rafraichir(corps.refresh_token, "lecture");
+      expect(reduit.status).toBe(200);
+      const neuf = (await reduit.json()) as { access_token: string; refresh_token: string; scope: string };
+      expect(neuf.scope).toBe("lecture");
+      const refuse = await appeler(p.url, "emailing", neuf.access_token, "creer_liste", { nom: "Salon" });
+      expect(refuse.structuredContent["erreur"]).toBe("portee_insuffisante");
+      expect(faux.etat.listes).toHaveLength(0);
+      // La réduction est définitive : le rafraîchissement suivant ne peut pas élargir.
+      const elargi = await rafraichir(neuf.refresh_token, "lecture ecriture");
+      expect(elargi.status).toBe(400);
+      expect(((await elargi.json()) as { error: string }).error).toBe("invalid_scope");
+    } finally {
+      await p.arreter();
+    }
+  });
+
+  it("(d ter) sans scope, ou avec « ecriture » redemandée, le rafraîchissement garde « lecture ecriture »", async () => {
+    const { p } = await monterLocal();
+    try {
+      const { corps, client } = await jetons(p.url, "emailing", "lecture ecriture");
+      const rafraichir = (refresh: string, scope?: string) =>
+        fetch(`${p.url}/oauth/token`, {
+          method: "POST",
+          headers: { "content-type": "application/x-www-form-urlencoded" },
+          body: new URLSearchParams({ grant_type: "refresh_token", refresh_token: refresh, client_id: client.clientId, ...(scope ? { scope } : {}) }),
+        });
+      const sans = (await (await rafraichir(corps.refresh_token)).json()) as { refresh_token: string; scope: string };
+      expect(sans.scope).toBe("lecture ecriture");
+      const avec = (await (await rafraichir(sans.refresh_token, "lecture ecriture")).json()) as { scope: string };
+      expect(avec.scope).toBe("lecture ecriture");
+    } finally {
+      await p.arreter();
+    }
+  });
+
+  it("(d quater) la réduction de portée révoque les jetons d'accès encore valides du même octroi", async () => {
+    const { faux, p } = await monterLocal();
+    try {
+      const { corps, client } = await jetons(p.url, "emailing", "lecture ecriture");
+      const reduit = await fetch(`${p.url}/oauth/token`, {
+        method: "POST",
+        headers: { "content-type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({ grant_type: "refresh_token", refresh_token: corps.refresh_token, client_id: client.clientId, scope: "lecture" }),
+      });
+      expect(reduit.status).toBe(200);
+      const neuf = (await reduit.json()) as { access_token: string };
+      // L'ancien jeton « lecture ecriture » est refusé net (401) ; le nouveau lit mais n'écrit pas.
+      const ancien = await rpc(p.url, "emailing", "tools/list", {}, corps.access_token);
+      expect(ancien.statut).toBe(401);
+      const lecture = await appeler(p.url, "emailing", neuf.access_token, "lister_listes", {});
+      expect(lecture.isError).not.toBe(true);
+      const ecriture = await appeler(p.url, "emailing", neuf.access_token, "creer_liste", { nom: "Salon" });
+      expect(ecriture.structuredContent["erreur"]).toBe("portee_insuffisante");
+      expect(faux.etat.listes).toHaveLength(0);
+    } finally {
+      await p.arreter();
+    }
+  });
+
+  it("(d quinquies) au rafraîchissement, une portée inconnue est refusée (invalid_scope) ; « offline_access » seul donne « lecture »", async () => {
+    const { p } = await monterLocal();
+    try {
+      const { corps, client } = await jetons(p.url, "emailing", "lecture ecriture");
+      const rafraichir = (refresh: string, scope: string) =>
+        fetch(`${p.url}/oauth/token`, {
+          method: "POST",
+          headers: { "content-type": "application/x-www-form-urlencoded" },
+          body: new URLSearchParams({ grant_type: "refresh_token", refresh_token: refresh, client_id: client.clientId, scope }),
+        });
+      for (const inconnue of ["admin", "lecture admin"]) {
+        const refus = await rafraichir(corps.refresh_token, inconnue);
+        expect(refus.status, inconnue).toBe(400);
+        expect(((await refus.json()) as { error: string }).error, inconnue).toBe("invalid_scope");
+      }
+      // Les refus ne consomment pas le jeton : « offline_access » seul réduit à « lecture » (comportement voulu).
+      const seul = await rafraichir(corps.refresh_token, "offline_access");
+      expect(seul.status).toBe(200);
+      expect(((await seul.json()) as { scope: string }).scope).toBe("lecture");
+    } finally {
+      await p.arreter();
+    }
+  });
+
   it("(e) captation : creer_page_destination refusé en « lecture », accepté en « ecriture » ; lister_pages passe dans les deux cas", async () => {
     const { p } = await monterLocal();
     try {
@@ -490,6 +584,205 @@ describe("portée par niveau d'accès (#4)", () => {
       const adresse = (scope: string) => { const u = new URL(urlAutorisationLocale(p.url, client, nouveauPkce(), "emailing")); u.searchParams.set("scope", scope); return u.toString(); };
       expect((await ouvrirConsentement(adresse("lecture"))).html).toMatch(/lecture seule/i);
       expect((await ouvrirConsentement(adresse("lecture ecriture"))).html).toMatch(/lecture et écriture/i);
+    } finally {
+      await p.arreter();
+    }
+  });
+});
+
+// #10 : le consentement n'est valable que dans le navigateur qui a affiché la page (cookie + champ caché + en-têtes).
+describe("consentement local lié au navigateur (#10)", () => {
+  const PROPRIETE = "https://www.essai.example/";
+
+  /** Ouvre la page par le vrai flux HTTP et en tire ce qu'un navigateur retiendrait : cookie et champ caché. */
+  async function ouvrir(url: string) {
+    const client = await enregistrerClient(url);
+    const pkce = nouveauPkce();
+    const rep = await fetch(urlAutorisationLocale(url, client, pkce, "gsc", { scope: "lecture ecriture" }), { redirect: "manual" });
+    const html = await rep.text();
+    const cookie = (rep.headers.get("set-cookie") ?? "").split(";")[0]!;
+    return {
+      client, pkce, html, cookie, setCookie: rep.headers.get("set-cookie") ?? "",
+      transaction: /name="transaction" value="([^"]+)"/.exec(html)?.[1] ?? "",
+      champ: /name="navigateur" value="([^"]+)"/.exec(html)?.[1] ?? "",
+    };
+  }
+
+  const poster = (url: string, corps: Record<string, string>, entetes: Record<string, string>) =>
+    fetch(`${url}/oauth/authorize`, { method: "POST", headers: { "content-type": "application/x-www-form-urlencoded", ...entetes }, body: new URLSearchParams(corps), redirect: "manual" });
+
+  it("la page pose un cookie HttpOnly, SameSite=Strict, Path=/oauth et un champ caché distinct de la valeur du cookie", async () => {
+    const p = await demarrer();
+    try {
+      const o = await ouvrir(p.url);
+      expect(o.setCookie).toMatch(/HttpOnly/i);
+      expect(o.setCookie).toMatch(/SameSite=Strict/i);
+      expect(o.setCookie).toMatch(/Path=\/oauth/i);
+      expect(o.champ.length).toBe(43); // HMAC-SHA256 en base64url
+      expect(o.cookie.split("=")[1]!.length).toBeGreaterThanOrEqual(43);
+      expect(o.champ).not.toBe(o.cookie.split("=")[1]);
+    } finally {
+      await p.arreter();
+    }
+  });
+
+  it("POST sans cookie : refusé, et la transaction reste utilisable avec le bon cookie", async () => {
+    const p = await demarrer();
+    try {
+      const o = await ouvrir(p.url);
+      const corps = { transaction: o.transaction, decision: "autoriser", propriete: PROPRIETE, navigateur: o.champ };
+      const refus = await poster(p.url, corps, { "sec-fetch-site": "same-origin" });
+      expect(refus.status).toBe(403);
+      expect(refus.headers.get("location")).toBeNull();
+      const ok = await poster(p.url, corps, { "sec-fetch-site": "same-origin", cookie: o.cookie });
+      expect(ok.status).toBe(302);
+      expect(new URL(ok.headers.get("location") ?? "").searchParams.get("code")).toBeTruthy();
+    } finally {
+      await p.arreter();
+    }
+  });
+
+  it("cookie faux ou champ faux : refusé, la transaction reste utilisable avec les bons", async () => {
+    const p = await demarrer();
+    try {
+      const o = await ouvrir(p.url);
+      const bon = { transaction: o.transaction, decision: "autoriser", propriete: PROPRIETE, navigateur: o.champ };
+      const entetes = { "sec-fetch-site": "same-origin", cookie: o.cookie };
+      const cookieFaux = await poster(p.url, bon, { ...entetes, cookie: `${o.cookie.split("=")[0]}=${"x".repeat(43)}` });
+      const champFaux = await poster(p.url, { ...bon, navigateur: "x".repeat(43) }, entetes);
+      const champAbsent = await poster(p.url, { transaction: o.transaction, decision: "autoriser", propriete: PROPRIETE }, entetes);
+      expect([cookieFaux.status, champFaux.status, champAbsent.status]).toEqual([403, 403, 403]);
+      expect((await poster(p.url, bon, entetes)).status).toBe(302);
+    } finally {
+      await p.arreter();
+    }
+  });
+
+  it("un POST qui renvoie la valeur du cookie dans le champ caché est refusé (403) ; le vrai champ passe", async () => {
+    const p = await demarrer();
+    try {
+      const o = await ouvrir(p.url);
+      const entetes = { "sec-fetch-site": "same-origin", cookie: o.cookie };
+      const rejoue = await poster(p.url, { transaction: o.transaction, decision: "autoriser", propriete: PROPRIETE, navigateur: o.cookie.split("=")[1]! }, entetes);
+      expect(rejoue.status).toBe(403);
+      const ok = await poster(p.url, { transaction: o.transaction, decision: "autoriser", propriete: PROPRIETE, navigateur: o.champ }, entetes);
+      expect(ok.status).toBe(302);
+    } finally {
+      await p.arreter();
+    }
+  });
+
+  it("deux pages ouvertes : la 1re passe avec les deux cookies, la 2e est refusée avec le seul cookie de la 1re", async () => {
+    const p = await demarrer();
+    try {
+      const a = await ouvrir(p.url);
+      const b = await ouvrir(p.url);
+      const corps = (o: typeof a) => ({ transaction: o.transaction, decision: "autoriser", propriete: PROPRIETE, navigateur: o.champ });
+      const sec = { "sec-fetch-site": "same-origin" };
+      const ok = await poster(p.url, corps(a), { ...sec, cookie: `${a.cookie}; ${b.cookie}` });
+      expect(ok.status).toBe(302);
+      const refus = await poster(p.url, corps(b), { ...sec, cookie: a.cookie });
+      expect(refus.status).toBe(403);
+      // Le refus ne consomme pas la transaction : le bon cookie passe encore.
+      expect((await poster(p.url, corps(b), { ...sec, cookie: `${a.cookie}; ${b.cookie}` })).status).toBe(302);
+    } finally {
+      await p.arreter();
+    }
+  });
+
+  it("POST sans Origin ni Sec-Fetch-Site : refusé ; cross-site et same-site aussi, même avec cookie et champ justes", async () => {
+    const p = await demarrer();
+    try {
+      const o = await ouvrir(p.url);
+      const bon = { transaction: o.transaction, decision: "autoriser", propriete: PROPRIETE, navigateur: o.champ };
+      const statuts = [
+        (await poster(p.url, bon, { cookie: o.cookie })).status,
+        (await poster(p.url, bon, { cookie: o.cookie, "sec-fetch-site": "cross-site" })).status,
+        (await poster(p.url, bon, { cookie: o.cookie, "sec-fetch-site": "same-site" })).status,
+        (await poster(p.url, bon, { cookie: o.cookie, "sec-fetch-site": "cross-site", origin: p.url })).status,
+      ];
+      expect(statuts).toEqual([403, 403, 403, 403]);
+      // La transaction n'a pas été consommée par ces refus.
+      expect((await poster(p.url, bon, { cookie: o.cookie, "sec-fetch-site": "same-origin" })).status).toBe(302);
+    } finally {
+      await p.arreter();
+    }
+  });
+
+  it("une Origin de la passerelle suffit sans Sec-Fetch-Site ; une Origin tierce reste refusée", async () => {
+    const p = await demarrer();
+    try {
+      const o = await ouvrir(p.url);
+      const bon = { transaction: o.transaction, decision: "autoriser", propriete: PROPRIETE, navigateur: o.champ };
+      expect((await poster(p.url, bon, { cookie: o.cookie, origin: SITE_TIERS })).status).toBe(403);
+      expect((await poster(p.url, bon, { cookie: o.cookie, origin: p.url })).status).toBe(302);
+    } finally {
+      await p.arreter();
+    }
+  });
+
+  it("le bon flux réussit : code, puis jeton « lecture ecriture »", async () => {
+    const p = await demarrer();
+    try {
+      const o = await ouvrir(p.url);
+      const rep = await poster(p.url, { transaction: o.transaction, decision: "autoriser", propriete: PROPRIETE, navigateur: o.champ }, { cookie: o.cookie, "sec-fetch-site": "same-origin" });
+      const code = new URL(rep.headers.get("location") ?? "").searchParams.get("code") ?? "";
+      const jeton = await echangerCode(p.url, o.client, code, o.pkce.verificateur);
+      expect(jeton.status).toBe(200);
+      expect(((await jeton.json()) as { scope: string }).scope).toBe("lecture ecriture");
+    } finally {
+      await p.arreter();
+    }
+  });
+});
+
+// #10 : l'écriture d'un service local se ferme par défaut (un champ oublié ne l'ouvre pas).
+describe("écriture fermée par défaut sur un service local (#10)", () => {
+  /** Catalogue minimal : un outil d'écriture (sans annotation) qui compte ses appels, et une lecture. */
+  function catalogueEssai() {
+    const appels: string[] = [];
+    const fournisseur = {
+      service: "emailing" as const,
+      mode: "reel" as const,
+      outils: [
+        { nom: "ecrire_essai", description: "écrit", schemaEntree: {}, executer: () => { appels.push("ecrire_essai"); return { ok: true }; } },
+        { nom: "lire_essai", description: "lit", schemaEntree: {}, annotations: { readOnlyHint: true }, executer: () => ({ ok: true }) },
+      ],
+    };
+    return { appels, catalogue: construireCatalogue(FICHE_EMAILING, "reel", fournisseur) };
+  }
+  const identiteSans = { compte: "Poste local", propriete: { id: "listmonk/local", libelle: "listmonk" } };
+  const contexte = (identite: typeof identiteSans & { ecriture?: boolean }, autorisationLocale?: boolean) =>
+    ({ service: "emailing" as const, mode: "reel" as const, identite, jetonPorteur: null, ...(autorisationLocale === undefined ? {} : { autorisationLocale }) });
+
+  it("service local et identité sans champ « ecriture » : outil d'écriture refusé, rien exécuté", async () => {
+    const { appels, catalogue } = catalogueEssai();
+    const r = await appelerOutil(catalogue, "ecrire_essai", {}, contexte(identiteSans, true));
+    expect(r.isError).toBe(true);
+    expect(r.structuredContent?.["erreur"]).toBe("portee_insuffisante");
+    expect(appels).toEqual([]);
+  });
+
+  it("service local : la lecture passe sans champ, l'écriture passe avec « ecriture: true »", async () => {
+    const { appels, catalogue } = catalogueEssai();
+    expect((await appelerOutil(catalogue, "lire_essai", {}, contexte(identiteSans, true))).isError).not.toBe(true);
+    expect((await appelerOutil(catalogue, "ecrire_essai", {}, contexte({ ...identiteSans, ecriture: true }, true))).isError).not.toBe(true);
+    expect(appels).toEqual(["ecrire_essai"]);
+  });
+
+  it("service tiers (sans autorisationLocale) : le comportement ne change pas, l'écriture passe sans champ", async () => {
+    const { appels, catalogue } = catalogueEssai();
+    expect((await appelerOutil(catalogue, "ecrire_essai", {}, contexte(identiteSans))).isError).not.toBe(true);
+    expect(appels).toEqual(["ecrire_essai"]);
+  });
+
+  it("mode sans authentification (tests) : l'identité par défaut d'un service local écrit explicitement", async () => {
+    const p = await demarrer({ sansAuthentification: true });
+    try {
+      const r = await rpc(p.url, "gsc", "tools/call", { name: "gsc_publier_factice", arguments: {} });
+      expect(r.statut).toBe(200);
+      expect(r.corps.result.structuredContent.erreur).toBeUndefined();
+      expect(r.corps.result.structuredContent.etat).toBe("simulee");
     } finally {
       await p.arreter();
     }

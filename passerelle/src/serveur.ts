@@ -177,6 +177,7 @@ export function creerServeur(options: OptionsServeur): ServeurPasserelle {
     let identite: IdentiteAppel = {
       compte: COMPTE_LOCAL,
       propriete: registre.fiche(service)?.proprietes?.[0] ?? null,
+      ecriture: true, // identité par défaut : mode sansAuthentification (tests) seulement, sinon remplacée par le jeton
     };
     let jetonPorteur: string | null = null;
     if (exigerJeton) {
@@ -215,7 +216,7 @@ export function creerServeur(options: OptionsServeur): ServeurPasserelle {
     }
 
     const catalogue = construireCatalogue(registre.fiche(service)!, mode, fournisseurDe(service));
-    const contexte: ContexteAppel = { service, mode, identite, jetonPorteur };
+    const contexte: ContexteAppel = { service, mode, identite, jetonPorteur, autorisationLocale: estLocal(service) };
 
     // Serveur MCP sans état : un par requête (modèle sans session du SDK).
     const serveurMcp = new ServeurMcp(

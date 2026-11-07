@@ -12,7 +12,7 @@
 // `fichierEtat`, les clients enregistrés et les EMPREINTES SHA-256 des jetons
 // (jamais les jetons eux-mêmes) survivent au redémarrage ; le fichier est en 0600.
 
-import { createHash, randomBytes } from "node:crypto";
+import { createHash, createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { chmodSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import type { IncomingMessage, ServerResponse } from "node:http";
@@ -33,6 +33,8 @@ export const PORTEE_LECTURE = "lecture";
 export const PORTEE_ECRITURE = "ecriture";
 /** Ancien nom de la portée unique : vaut « lecture » (fermé par défaut ; une connexion qui écrit doit être refaite avec « ecriture »). */
 const PORTEE_ANCIENNE = "local";
+/** Portées acceptées à l'autorisation comme au rafraîchissement ; toute autre est refusée (invalid_scope). */
+const PORTEES_CONNUES = [PORTEE_LECTURE, PORTEE_ECRITURE, PORTEE_ANCIENNE, "offline_access"];
 /** Valeur rendue dans `scope` pour un jeton qui peut écrire (il peut aussi lire). */
 const PORTEE_LECTURE_ECRITURE = `${PORTEE_LECTURE} ${PORTEE_ECRITURE}`;
 const peutEcrire = (portee: string | undefined): boolean => (portee ?? "").split(" ").includes(PORTEE_ECRITURE);
@@ -89,6 +91,8 @@ interface Transaction {
   service: Service;
   /** Portée accordée si l'utilisateur autorise : « lecture » ou « lecture ecriture ». */
   portee: string;
+  /** Secret du navigateur qui a affiché la page : cookie et champ caché doivent le reprendre (#10). */
+  navigateur: string;
   expire: number;
 }
 
@@ -143,6 +147,33 @@ function marquerPortee(jeton: JetonEmis): JetonEmis {
   if (jeton.portee !== undefined) return jeton;
   const demo = jeton.clientId.startsWith("demo-") || /d[ée]monstration/i.test(jeton.identite?.compte ?? "");
   return { ...jeton, portee: demo ? PORTEE_RETIREE : PORTEE_LECTURE };
+}
+
+const PREFIXE_COOKIE = "consentement-";
+
+/** Valeur d'un cookie de l'en-tête `Cookie`, ou undefined. */
+function lireCookie(entete: string | undefined, nom: string): string | undefined {
+  for (const paire of (entete ?? "").split(";")) {
+    const i = paire.indexOf("=");
+    if (i > 0 && paire.slice(0, i).trim() === nom) return paire.slice(i + 1).trim();
+  }
+  return undefined;
+}
+
+/** Clé tirée au démarrage du module : ne sort jamais du processus ; les transactions n'y survivent pas non plus. */
+const CLE_CHAMP_NAVIGATEUR = randomBytes(32);
+
+/** Valeur du champ caché : HMAC-SHA256 du secret du cookie, distincte de lui (un cookie copié dans le champ ne passe pas). */
+function champNavigateur(secretCookie: string): string {
+  return createHmac("sha256", CLE_CHAMP_NAVIGATEUR).update(secretCookie).digest("base64url");
+}
+
+/** Égalité à temps constant ; faux si la valeur manque ou n'a pas la longueur attendue. */
+function memeSecret(recu: string | null | undefined, attendu: string): boolean {
+  if (recu === undefined || recu === null) return false;
+  const a = Buffer.from(recu);
+  const b = Buffer.from(attendu);
+  return a.length === b.length && timingSafeEqual(a, b);
 }
 
 function sansBarreFinale(valeur: string): string {
@@ -449,7 +480,7 @@ export class ServeurAutorisationLocal {
     const service = ressource ? this.serviceDeRessource(ressource) : null;
     if (!service) return erreurRedirigee("invalid_target", "Indicateur de ressource inconnu ou absent (RFC 8707)");
     const portee = (q.get("scope") ?? "").split(/\s+/).filter(Boolean);
-    const inconnues = portee.filter((p) => ![PORTEE_LECTURE, PORTEE_ECRITURE, PORTEE_ANCIENNE, "offline_access"].includes(p));
+    const inconnues = portee.filter((p) => !PORTEES_CONNUES.includes(p));
     if (portee.includes(PORTEE_RETIREE)) return erreurRedirigee("invalid_scope", MESSAGE_PORTEE_RETIREE);
     if (inconnues.length > 0) return erreurRedirigee("invalid_scope", `Portée inconnue : ${inconnues.join(" ")}`);
 
@@ -458,6 +489,7 @@ export class ServeurAutorisationLocal {
       if (plusAncienne !== undefined) this.transactions.delete(plusAncienne);
     }
     const identifiant = aleatoire(24);
+    const navigateur = aleatoire(32);
     this.transactions.set(identifiant, {
       clientId: client.clientId,
       redirectUri,
@@ -466,13 +498,17 @@ export class ServeurAutorisationLocal {
       resource: this.urlRessource(service),
       service,
       portee: portee.includes(PORTEE_ECRITURE) ? PORTEE_LECTURE_ECRITURE : PORTEE_LECTURE,
+      navigateur,
       expire: this.maintenant() + DUREE_TRANSACTION_MS,
     });
-    this.page(res, 200, this.htmlConsentement(identifiant, service, client, redirectUri, peutEcrire(portee.join(" "))), redirectUri);
+    // Cookie propre à la transaction (deux onglets ne s'écrasent pas), invisible du JavaScript, jamais envoyé hors du site.
+    const cookie = `${PREFIXE_COOKIE}${identifiant}=${navigateur}; HttpOnly; SameSite=Strict; Path=/oauth; Max-Age=${DUREE_TRANSACTION_MS / 1000}`;
+    this.page(res, 200, this.htmlConsentement(identifiant, champNavigateur(navigateur), service, client, redirectUri, peutEcrire(portee.join(" "))), redirectUri, cookie);
   }
 
   private htmlConsentement(
     transaction: string,
+    navigateur: string,
     service: Service,
     client: ClientEnregistre,
     redirectUri: string,
@@ -510,6 +546,7 @@ export class ServeurAutorisationLocal {
   <p><strong>${echapperHtml(demandeur)}</strong> demande l'accès à ce service local de la passerelle : <strong>${ecriture ? "lecture et écriture" : "lecture seule"}</strong>.</p>
   <form method="post" action="/oauth/authorize">
     <input type="hidden" name="transaction" value="${echapperHtml(transaction)}">
+    <input type="hidden" name="navigateur" value="${echapperHtml(navigateur)}">
     <fieldset>
       <legend>Propriété à connecter</legend>
 ${options}
@@ -529,16 +566,16 @@ ${options}
   // --- Autorisation : décision de l'utilisateur ----------------------------
 
   private async decider(req: IncomingMessage, res: ServerResponse): Promise<void> {
-    // Défense contre une soumission venue d'un autre site : si le navigateur envoie
-    // une origine, elle doit être celle de la passerelle.
-    const origine = req.headers.origin;
-    if (typeof origine === "string" && origine !== "null" && sansBarreFinale(origine) !== this.urlBase()) {
-      throw new ErreurHttp(403, "access_denied", "Origine refusée.");
-    }
+    this.exigerSoumissionDuNavigateur(req);
     const formulaire = await this.lireFormulaire(req);
     const identifiant = formulaire.get("transaction") ?? "";
     const transaction = this.transactions.get(identifiant);
     if (!transaction) throw new ErreurHttp(400, "invalid_request", "Demande expirée ou déjà traitée : refaire la connexion depuis Paperclip.");
+    // Refus sans consommer la transaction : le vrai navigateur peut encore valider.
+    const cookie = lireCookie(req.headers.cookie, `${PREFIXE_COOKIE}${identifiant}`);
+    if (!memeSecret(cookie, transaction.navigateur) || !memeSecret(formulaire.get("navigateur"), champNavigateur(cookie ?? ""))) {
+      throw new ErreurHttp(403, "access_denied", "Ce navigateur n'a pas affiché la page de consentement : refaire la connexion depuis Paperclip.");
+    }
     this.transactions.delete(identifiant); // usage unique
 
     if (formulaire.get("decision") !== "autoriser") {
@@ -564,6 +601,24 @@ ${options}
       octroi: aleatoire(12),
     });
     this.rediriger(res, transaction.redirectUri, { code, state: transaction.etat });
+  }
+
+  /**
+   * La décision doit venir d'une page de la passerelle affichée dans un navigateur :
+   * `Sec-Fetch-Site` (posé par le navigateur, non modifiable par une page) vaut same-origin ; à défaut,
+   * une `Origin` égale à celle de la passerelle. Une `Origin` présente mais étrangère est toujours refusée.
+   */
+  private exigerSoumissionDuNavigateur(req: IncomingMessage): void {
+    const origine = req.headers.origin;
+    const origineEtrangere = typeof origine === "string" && sansBarreFinale(origine) !== this.urlBase();
+    const site = req.headers["sec-fetch-site"];
+    const refus = new ErreurHttp(403, "access_denied", "Origine refusée.");
+    if (origineEtrangere && origine !== "null") throw refus;
+    if (site !== undefined) {
+      if (site !== "same-origin") throw refus;
+      return;
+    }
+    if (typeof origine !== "string" || origineEtrangere) throw refus;
   }
 
   // --- Jeton (RFC 6749 §4.1.3 et §6) ---------------------------------------
@@ -616,11 +671,20 @@ ${options}
         throw new ErreurHttp(400, "invalid_target", "La ressource demandée diffère de celle autorisée");
       }
       // Pas d'élargissement : demander « ecriture » à partir d'un jeton « lecture » est refusé (le jeton n'est pas consommé).
-      if ((f.get("scope") ?? "").split(/\s+/).includes(PORTEE_ECRITURE) && !peutEcrire(ancien.portee)) {
+      const demandee = (f.get("scope") ?? "").split(/\s+/).filter(Boolean);
+      const inconnues = demandee.filter((p) => !PORTEES_CONNUES.includes(p));
+      if (inconnues.length > 0) throw new ErreurHttp(400, "invalid_scope", `Portée inconnue : ${inconnues.join(" ")}`);
+      if (demandee.includes(PORTEE_ECRITURE) && !peutEcrire(ancien.portee)) {
         throw new ErreurHttp(400, "invalid_scope", "La portée « ecriture » ne peut pas être ajoutée par un rafraîchissement : refaire l'autorisation.");
       }
+      // Réduction (RFC 6749 §6) : une portée demandée sans « ecriture » émet un jeton en lecture seule.
+      const portee = demandee.length > 0 && !demandee.includes(PORTEE_ECRITURE) ? PORTEE_LECTURE : (ancien.portee ?? PORTEE_LECTURE);
       this.rafraichissements.delete(cle); // rotation : usage unique
-      this.repondreAvecJetons(res, client.clientId, ancien.resource, ancien.identite, ancien.octroi, ancien.portee ?? PORTEE_LECTURE);
+      // Réduction effective : les jetons d'accès encore valides du même octroi gardent l'ancienne portée, on les révoque.
+      if (portee !== ancien.portee) {
+        for (const [c, v] of this.jetons) if (v.octroi === ancien.octroi) this.jetons.delete(c);
+      }
+      this.repondreAvecJetons(res, client.clientId, ancien.resource, ancien.identite, ancien.octroi, portee);
       return;
     }
 
@@ -684,7 +748,7 @@ ${options}
     res.end(JSON.stringify(corps));
   }
 
-  private page(res: ServerResponse, statut: number, html: string, redirectUri?: string): void {
+  private page(res: ServerResponse, statut: number, html: string, redirectUri?: string, cookie?: string): void {
     // `form-action` doit nommer l'origine de retour : certains navigateurs
     // l'appliquent aussi à la redirection qui suit l'envoi du formulaire.
     const retour = redirectUri ? ` ${new URL(redirectUri).origin}` : "";
@@ -693,6 +757,7 @@ ${options}
       "cache-control": "no-store",
       "x-content-type-options": "nosniff",
       "referrer-policy": "no-referrer",
+      ...(cookie ? { "set-cookie": cookie } : {}),
       "content-security-policy": `default-src 'none'; style-src 'unsafe-inline'; form-action 'self'${retour}; frame-ancestors 'none'; base-uri 'none'`,
     });
     res.end(html);

@@ -217,7 +217,7 @@ describe("passerelle : service à autorisation locale (parcours OAuth local)", (
   });
 
   it("garde Origin : « null » passe seulement pour le POST d'un formulaire de consentement", async () => {
-    const formulaire = await fetch(`${p.url}/oauth/authorize`, { method: "POST", headers: { origin: "null" } });
+    const formulaire = await fetch(`${p.url}/oauth/authorize`, { method: "POST", headers: { origin: "null", "sec-fetch-site": "same-origin" } });
     expect(formulaire.status).not.toBe(403);
     expect(await formulaire.text()).not.toContain("origine_refusee");
     const autreRoute = await fetch(`${p.url}/sante`, { headers: { origin: "null" } });
@@ -463,5 +463,38 @@ describe("S2 : tout outil qui rend du texte de tiers est annoncé à monde ouver
     ];
     expect(outils.length).toBe(38);
     for (const o of outils) expect(o.annotations?.openWorldHint, o.nom).toBe(true);
+  });
+});
+
+// #10 : le serveur câble `autorisationLocale` dans le contexte des outils (estLocal(service)) ; c'est lui qui ferme l'écriture par défaut.
+describe("câblage de autorisationLocale dans le contexte des outils (#10)", () => {
+  const outilContexte = {
+    nom: "gsc_contexte",
+    description: "Outil factice : rend ce que le serveur a câblé dans le contexte (test).",
+    schemaEntree: {},
+    annotations: { readOnlyHint: true },
+    executer: (_args: Record<string, unknown>, contexte: { autorisationLocale?: boolean }) => ({ autorisationLocale: contexte.autorisationLocale ?? null }),
+  };
+  const avecOutil = (f: ReturnType<typeof fournisseurFactice>) => ({ ...f, outils: [...f.outils, outilContexte] });
+
+  it("service local : le contexte porte autorisationLocale = true", async () => {
+    const p = await demarrer({ registre: new RegistreFournisseurs().enregistrer(avecOutil(fournisseurFactice("local"))) });
+    try {
+      const { access_token } = await obtenirJetons(p.url, "gsc", "sc-domain:essai.example");
+      const r = await rpc(p.url, "gsc", "tools/call", { name: "gsc_contexte", arguments: {} }, access_token);
+      expect(r.corps.result.structuredContent.autorisationLocale).toBe(true);
+    } finally {
+      await p.arreter();
+    }
+  });
+
+  it("service à autorisation de tiers : le contexte porte autorisationLocale = false", async () => {
+    const p = await demarrer({ registre: new RegistreFournisseurs().enregistrer(avecOutil(fournisseurFactice("tiers"))) });
+    try {
+      const r = await rpc(p.url, "gsc", "tools/call", { name: "gsc_contexte", arguments: {} }, "jeton-google-factice");
+      expect(r.corps.result.structuredContent.autorisationLocale).toBe(false);
+    } finally {
+      await p.arreter();
+    }
   });
 });

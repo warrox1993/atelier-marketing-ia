@@ -23,11 +23,12 @@ _OUVREUR = urllib.request.build_opener(_SansRedirection)
 
 
 class _Formulaire(html.parser.HTMLParser):
-    """Lit le champ caché « transaction » et la première propriété cochée."""
+    """Lit les champs cachés « transaction » et « navigateur » et la première propriété cochée."""
 
     def __init__(self):
         super().__init__()
         self.transaction = None
+        self.navigateur = None
         self.propriete = None
 
     def handle_starttag(self, tag, attrs):
@@ -36,6 +37,8 @@ class _Formulaire(html.parser.HTMLParser):
             return
         if a.get("name") == "transaction":
             self.transaction = a.get("value")
+        if a.get("name") == "navigateur":
+            self.navigateur = a.get("value")
         if a.get("name") == "propriete" and self.propriete is None and "checked" in a:
             self.propriete = a.get("value")
 
@@ -61,17 +64,25 @@ def connecter_carte(api, company_id, slug, methode="lecture", finaliser=True):
     url_autorisation = debut["authorizationUrl"]
     portee_demandee = urllib.parse.parse_qs(urllib.parse.urlparse(url_autorisation).query).get("scope")
 
-    code, _, page = _http("GET", url_autorisation)
+    code, entetes_page, page = _http("GET", url_autorisation)
     if code != 200:
         raise RuntimeError(f"consentement {slug} : HTTP {code} {page[:200]}")
     f = _Formulaire()
     f.feed(page)
-    if not f.transaction or not f.propriete:
+    if not f.transaction or not f.propriete or not f.navigateur:
         raise RuntimeError(f"consentement {slug} : formulaire illisible")
+    # Comme un navigateur : le cookie propre à la transaction (nom=valeur du Set-Cookie) revient en
+    # en-tête Cookie, avec le champ caché « navigateur » et Sec-Fetch-Site (la passerelle exige les trois).
+    pose = next((v for k, v in entetes_page.items() if k.lower() == "set-cookie"), "")
+    cookie = pose.split(";")[0].strip()
+    if "=" not in cookie:
+        raise RuntimeError(f"consentement {slug} : cookie de consentement absent")
     origine = "{0.scheme}://{0.netloc}".format(urllib.parse.urlparse(url_autorisation))
-    corps = urllib.parse.urlencode({"transaction": f.transaction, "propriete": f.propriete, "decision": "autoriser"}).encode()
+    corps = urllib.parse.urlencode({"transaction": f.transaction, "propriete": f.propriete,
+                                    "navigateur": f.navigateur, "decision": "autoriser"}).encode()
     code, entetes, _ = _http("POST", f"{origine}/oauth/authorize", corps,
-                             {"Content-Type": "application/x-www-form-urlencoded"})
+                             {"Content-Type": "application/x-www-form-urlencoded",
+                              "Sec-Fetch-Site": "same-origin", "Cookie": cookie})
     retour = entetes.get("Location") or entetes.get("location")
     if code not in (302, 303) or not retour:
         raise RuntimeError(f"consentement {slug} : pas de redirection (HTTP {code})")

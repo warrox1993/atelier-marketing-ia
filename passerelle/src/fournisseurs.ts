@@ -25,6 +25,8 @@ export interface ContexteAppel {
   mode: ModePasserelle;
   /** Identité du compte autorisé (services locaux : la source choisie sur la page d'autorisation locale). */
   identite: IdentiteAppel;
+  /** Vrai pour un service à autorisation locale : l'écriture y est fermée tant que `identite.ecriture` n'est pas `true`. */
+  autorisationLocale?: boolean;
   /**
    * Jeton porteur reçu de Paperclip : à relayer tel quel vers l'API du service, sans le stocker
    * (la passerelle reste sans état). Jamais journalisé.
@@ -37,7 +39,8 @@ export interface IdentiteAppel {
   propriete: { id: string; libelle: string } | null;
   /**
    * Services locaux : `false` = jeton accordé en lecture seule (#4), les outils d'écriture sont refusés.
-   * Absent = aucun contrôle de niveau (services tiers, qui ont leur propre autorisation, ou accès sans jeton).
+   * Absent = aucun contrôle de niveau pour un service tiers (qui a sa propre autorisation) ; pour un service local
+   * (`ContexteAppel.autorisationLocale`), seul `true` ouvre l'écriture (#10).
    */
   ecriture?: boolean;
 }

@@ -120,16 +120,24 @@ export function urlAutorisation(
   return `${url}/oauth/authorize?${q.toString()}`;
 }
 
-/** Ouvre la page de consentement et renvoie l'identifiant de transaction caché dans le formulaire. */
+/** Ce qu'un navigateur retient de la page de consentement (cookie et champ caché), par transaction. */
+const navigateurs = new Map<string, { cookie: string; champ: string }>();
+
+/** Ouvre la page de consentement comme un navigateur : renvoie la transaction et retient le cookie et le champ caché. */
 export async function ouvrirConsentement(adresse: string): Promise<{ transaction: string; html: string }> {
   const rep = await fetch(adresse, { redirect: "manual" });
   const html = await rep.text();
   if (rep.status !== 200) throw new Error(`consentement indisponible : ${rep.status}`);
   const trouve = /name="transaction" value="([^"]+)"/.exec(html);
   if (!trouve) throw new Error("transaction absente de la page");
+  const champ = /name="navigateur" value="([^"]+)"/.exec(html)?.[1];
+  const cookie = (rep.headers.get("set-cookie") ?? "").split(";")[0];
+  if (!champ || !cookie) throw new Error("cookie ou champ navigateur absent de la page");
+  navigateurs.set(trouve[1]!, { cookie, champ });
   return { transaction: trouve[1]!, html };
 }
 
+/** Valide ou refuse la décision comme le ferait le navigateur qui a ouvert la page (cookie, champ caché, Sec-Fetch-Site). */
 export async function decider(
   url: string,
   transaction: string,
@@ -138,9 +146,15 @@ export async function decider(
 ): Promise<Response> {
   const corps = new URLSearchParams({ transaction, decision });
   if (propriete) corps.set("propriete", propriete);
+  const navigateur = navigateurs.get(transaction);
+  if (navigateur) corps.set("navigateur", navigateur.champ);
   return fetch(`${url}/oauth/authorize`, {
     method: "POST",
-    headers: { "content-type": "application/x-www-form-urlencoded" },
+    headers: {
+      "content-type": "application/x-www-form-urlencoded",
+      "sec-fetch-site": "same-origin",
+      ...(navigateur ? { cookie: navigateur.cookie } : {}),
+    },
     body: corps,
     redirect: "manual",
   });
