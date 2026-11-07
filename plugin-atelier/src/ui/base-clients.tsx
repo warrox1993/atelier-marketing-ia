@@ -19,6 +19,8 @@ import { nombre } from "./format.js";
 import { appelRoute } from "./routes-prospection.js";
 
 const CONFIRMATION_SUPPRESSION = "SUPPRIMER LA BASE CLIENTS";
+/** Taille maximale annoncée en Ko, arrondie vers le bas : l'écran ne promet jamais plus que ce que le socle laisse passer. */
+const TAILLE_MAX_KO = Math.floor(LIMITES_PROSPECTION.baseClientsTailleMaxOctets / 1024);
 
 export const LIBELLES_COLONNES: Readonly<Record<ColonneCible, string>> = {
   identifiant_client: "Identifiant client",
@@ -199,7 +201,7 @@ function ImportGuide({ etatBase, onChange }: { etatBase: EtatBase | null; onChan
     if (/\.xls[mb]$/iu.test(nom)) return setErreurFichier("Les fichiers à macros ou binaires (.xlsm, .xlsb) sont refusés. Enregistrez le fichier en .xlsx ou en .csv.");
     const format: Format | null = /\.csv$/iu.test(nom) ? "csv" : /\.xlsx$/iu.test(nom) ? "xlsx" : null;
     if (!format) return setErreurFichier("Format non pris en charge : choisissez un fichier .csv ou .xlsx.");
-    if (f.size > LIMITES_PROSPECTION.baseClientsTailleMaxOctets) return setErreurFichier(`Fichier trop volumineux : ${nombre(Math.round(f.size / 1024 / 1024))} Mo, le maximum est ${LIMITES_PROSPECTION.baseClientsTailleMaxOctets / 1024 / 1024} Mo.`);
+    if (f.size > LIMITES_PROSPECTION.baseClientsTailleMaxOctets) return setErreurFichier(`Fichier trop volumineux : ${nombre(Math.ceil(f.size / 1024))} Ko, le maximum est ${TAILLE_MAX_KO} Ko.`);
     try {
       const base64 = await lireBase64(f);
       let separateur: Fichier["separateur"];
@@ -288,7 +290,7 @@ function ImportGuide({ etatBase, onChange }: { etatBase: EtatBase | null; onChan
       <Etapes courante={etape} />
       {etape === 0 ? (
         <div className="atl-formulaire">
-          <Champ libelle="Fichier de la base clients (.csv ou .xlsx)" aide={`${LIMITES_PROSPECTION.baseClientsTailleMaxOctets / 1024 / 1024} Mo au maximum. Première feuille seulement pour un .xlsx.`}>
+          <Champ libelle="Fichier de la base clients (.csv ou .xlsx)" aide={`${TAILLE_MAX_KO} Ko au maximum. Première feuille seulement pour un .xlsx.`}>
             <ChoixFichier accept=".csv,.xlsx" nom={fichier?.nom ?? null} onChoisir={(f) => void choisir(f)} />
           </Champ>
           {erreurFichier ? (

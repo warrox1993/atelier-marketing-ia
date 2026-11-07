@@ -8,7 +8,7 @@ import { createElement } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { PROSPECT_B2B, PROSPECT_B2C } from "../../src/contrats/exemples/prospection.js";
 import { PageAtelier } from "../../src/ui/index.js";
-import { CompteRenduProspect, ConfianceQualification } from "../../src/contrats/prospection.js";
+import { CompteRenduProspect, ConfianceQualification, LIMITES_PROSPECTION } from "../../src/contrats/prospection.js";
 import { adresseDepuisFiltres, EXPLICATION_STATUT_LEAD, familleMetier, filtresDepuisAdresse, FILTRES_VIDES, filtresExport, filtresMemorises, libelleScore, statutLead } from "../../src/ui/vues/prospects.js";
 import { act } from "react";
 import { champParLibelle, cliquer, ENTREPRISE, installerPont, parTexte, rendre, saisir, type Pont, type Rendu } from "./pont.js";
@@ -579,6 +579,14 @@ describe("base clients", () => {
     expect(c.textContent).toContain("1 lignes rejetées");
     expect(c.textContent).toContain("Ligne 3 : Courriel invalide");
     expect(c.textContent).toContain("Colonnes sensibles refusées");
+  });
+
+  it("annonce la limite d'import réellement acceptée par le socle et refuse un fichier au-delà", async () => {
+    const maxKo = Math.floor(LIMITES_PROSPECTION.baseClientsTailleMaxOctets / 1024);
+    const c = await ouvrirBase();
+    expect(c.textContent).toContain(`${maxKo} Ko au maximum`);
+    await choisirFichier(c, "gros.csv", "x".repeat(LIMITES_PROSPECTION.baseClientsTailleMaxOctets + 1));
+    expect(c.querySelector('[role="alert"]')!.textContent).toContain(`le maximum est ${maxKo} Ko`);
   });
 
   it("refuse un fichier à macros avec la raison", async () => {

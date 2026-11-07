@@ -50,12 +50,35 @@ export const SEUILS_ETALONNAGE = {
 /** Durée de validité de la vérification « Ne m'appelez plus » pour le téléphone (proposée, §6.5 ; à fixer par l'opérateur). */
 export const DNCM_VALIDITE_JOURS = 30 as const;
 
+/**
+ * Taille maximale du corps JSON d'une route de plugin, fixée par le socle et non modifiable par le plugin :
+ * `PLUGIN_API_BODY_LIMIT_BYTES` dans `paperclip/server/src/routes/plugins.ts` (lignes 173 et 1888, refus 413 au-delà).
+ */
+export const LIMITE_CORPS_SOCLE_OCTETS = 1_000_000;
+
+const COLONNES_MAX = 100;
+/** Pire octet par caractère après JSON.stringify : un caractère de contrôle (permis par le schéma) devient « \\u0001 », 6 octets. */
+const OCTETS_JSON_PAR_CARACTERE = 6;
+/**
+ * Marge réservée aux champs JSON qui entourent le contenu base64 dans `ImporterBaseClientsEntree`, au pire cas du schéma :
+ * - correspondance : 100 colonnes × (nom de 200 caractères × 6 octets + 48 octets de syntaxe et de cible) = 124 800 ;
+ * - nom du fichier : 200 caractères × 6 = 1 200 ;
+ * - finalité : 500 caractères × 6 = 3 000 ;
+ * - autres champs (identifiant, format, séparateur, durée, clés, accolades) : 512 réservés.
+ * Total 129 512 octets. Le test « pire cas » de `tests/contrats.spec.ts` sérialise cette entrée maximale.
+ */
+export const ENVELOPPE_JSON_OCTETS =
+  COLONNES_MAX * (200 * OCTETS_JSON_PAR_CARACTERE + 48) + (200 + 500) * OCTETS_JSON_PAR_CARACTERE + 512;
+
 /** Limites propres à la prospection et à la base de clients. */
 export const LIMITES_PROSPECTION = {
-  /** Fichier de base clients avant encodage base64 ; ≈ 8 Mo en base64, sous la limite JSON de 10 Mo de l'hôte. */
-  baseClientsTailleMaxOctets: 6 * 1024 * 1024,
+  /**
+   * Fichier de base clients avant encodage base64 (≈ 653 Ko). Le base64 grossit de 4/3 : le plus grand multiple de 3 octets
+   * dont le base64 plus l'enveloppe JSON tient sous la limite de corps du socle, sinon le socle refuse l'envoi (413).
+   */
+  baseClientsTailleMaxOctets: Math.floor((LIMITE_CORPS_SOCLE_OCTETS - ENVELOPPE_JSON_OCTETS) / 4) * 3,
   baseClientsLignesMax: 50_000,
-  baseClientsColonnesMax: 100,
+  baseClientsColonnesMax: COLONNES_MAX,
   /** Rejets détaillés gardés par import (le compte total reste exact). */
   rejetsDetaillesMax: 200,
   /** Prospects par page de liste, et par demande d'export. */

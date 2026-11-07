@@ -6,9 +6,14 @@ import {
   ACTIONS_UI,
   DONNEES_UI,
   DeposerVerdictEntree,
+  ApercuBaseClientsEntree,
   ESPACE_BASE,
   EXPORTS_UI,
   EnvoyerMessageEntree,
+  LIMITES_PROSPECTION,
+  ENVELOPPE_JSON_OCTETS,
+  ImporterBaseClientsEntree,
+  LIMITE_CORPS_SOCLE_OCTETS,
   PLUGIN_ID,
   ROUTES_API,
   SLUG_ESPACE_BASE,
@@ -139,4 +144,48 @@ describe("SourceReelle : services de la passerelle lus en mode réel", () => {
     it(`accepte ${cle}`, () => expect(SourceReelle.safeParse({ ...base, cle }).success).toBe(true));
   }
   it("refuse un service inconnu", () => expect(SourceReelle.safeParse({ ...base, cle: "inconnu" }).success).toBe(false));
+});
+
+describe("limite d'import de la base clients et limite de corps du socle", () => {
+  const taille = LIMITES_PROSPECTION.baseClientsTailleMaxOctets;
+  const corps = (octets: number) => ({
+    companyId: "55555555-5555-4555-8555-555555555551",
+    nomFichier: "clients.csv",
+    format: "csv",
+    contenuBase64: Buffer.alloc(octets, 0x41).toString("base64"),
+  });
+
+  it("le base64 de la taille annoncée et l'enveloppe JSON tiennent sous la limite de corps du socle", () => {
+    expect(Math.ceil(taille / 3) * 4 + ENVELOPPE_JSON_OCTETS).toBeLessThanOrEqual(LIMITE_CORPS_SOCLE_OCTETS);
+  });
+  it("un fichier à la taille annoncée est accepté et son corps JSON passe sous la limite du socle", () => {
+    const entree = corps(taille);
+    expect(ApercuBaseClientsEntree.safeParse(entree).success).toBe(true);
+    expect(Buffer.byteLength(JSON.stringify(entree))).toBeLessThanOrEqual(LIMITE_CORPS_SOCLE_OCTETS);
+  });
+  it("pire cas de l'import : correspondance, finalité et nom de fichier maximaux (caractères de contrôle, 6 octets en JSON) tiennent sous la limite du socle", () => {
+    const sixOctets = "\u0001"; // échappé en \u0001 par JSON.stringify : le plus coûteux des caractères permis par le schéma
+    const colonnes = Array.from({ length: LIMITES_PROSPECTION.baseClientsColonnesMax }, (_, i) => ({
+      colonne: `${sixOctets.repeat(197)}${String(i).padStart(3, "0")}`,
+      cible: i === 0 ? "identifiant_client" : "ignorer",
+    }));
+    const entree = {
+      ...corps(taille),
+      nomFichier: `${sixOctets.repeat(196)}.csv`,
+      correspondance: colonnes,
+      finalite: `${sixOctets.repeat(499)}x`,
+    };
+    const verif = ImporterBaseClientsEntree.safeParse(entree);
+    expect(verif.success).toBe(true);
+    expect(Buffer.byteLength(JSON.stringify(entree))).toBeLessThanOrEqual(LIMITE_CORPS_SOCLE_OCTETS);
+  });
+  it("la constante du socle recopiée ici est celle de paperclip/server/src/routes/plugins.ts", () => {
+    const source = readFileSync(new URL("../../paperclip/server/src/routes/plugins.ts", import.meta.url), "utf8");
+    const trouve = /const PLUGIN_API_BODY_LIMIT_BYTES = ([\d_]+);/u.exec(source);
+    expect(trouve).not.toBeNull();
+    expect(Number((trouve?.[1] ?? "").replaceAll("_", ""))).toBe(LIMITE_CORPS_SOCLE_OCTETS);
+  });
+  it("un octet de plus que la taille annoncée est refusé par le contrat", () => {
+    expect(ApercuBaseClientsEntree.safeParse(corps(taille + 1)).success).toBe(false);
+  });
 });

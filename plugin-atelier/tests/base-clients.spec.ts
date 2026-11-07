@@ -5,7 +5,7 @@
 import { randomBytes } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import * as XLSX from "xlsx";
-import { ClientBase, ImportBaseClients, type CorrespondanceColonnes, type RegleVenteCroisee } from "../src/contrats/index.js";
+import { ClientBase, ImportBaseClients, LIMITES_PROSPECTION, type CorrespondanceColonnes, type RegleVenteCroisee } from "../src/contrats/index.js";
 import { chiffrer, dechiffrer, empreinte, ErreurChiffrement, identifiantCle } from "../src/serveur/chiffrement-donnees.js";
 import {
   aPurger,
@@ -190,7 +190,9 @@ describe("lecture du fichier", () => {
     expect(lireFichierBaseClients({ ...base, nomFichier: "a.xlsx", contenu: macros })).toMatchObject({ ok: false, motif: expect.stringContaining("macros") });
     expect(lireFichierBaseClients({ ...base, nomFichier: "a.xlsx", contenu: Buffer.from("pas un zip") })).toMatchObject({ ok: false });
     expect(lireFichierBaseClients({ nomFichier: "a.csv", format: "csv", contenu: new Uint8Array() })).toMatchObject({ ok: false, motif: "Fichier vide." });
-    expect(lireFichierBaseClients({ nomFichier: "a.csv", format: "csv", contenu: new Uint8Array(6 * 1024 * 1024 + 1) })).toMatchObject({ ok: false });
+    expect(lireFichierBaseClients({ nomFichier: "a.csv", format: "csv", contenu: new Uint8Array(LIMITES_PROSPECTION.baseClientsTailleMaxOctets + 1).fill(0x41) })).toMatchObject({ ok: false, motif: expect.stringContaining("volumineux") });
+    const pile = lireFichierBaseClients({ nomFichier: "a.csv", format: "csv", contenu: new Uint8Array(LIMITES_PROSPECTION.baseClientsTailleMaxOctets).fill(0x41) });
+    expect("motif" in pile ? pile.motif : "").not.toContain("volumineux");
     expect(lireFichierBaseClients({ nomFichier: "a.csv", format: "csv", contenu: Buffer.from([0x41, 0xff, 0xfe, 0x0a]) })).toMatchObject({ ok: false });
     expect(lireFichierBaseClients({ nomFichier: "a.csv", format: "csv", contenu: csv(COLONNES, LIGNES), separateur: "," })).toMatchObject({ ok: false });
     expect(lireFichierBaseClients({ nomFichier: "a.txt", format: "csv", contenu: csv(COLONNES, LIGNES) })).toMatchObject({ ok: false });
