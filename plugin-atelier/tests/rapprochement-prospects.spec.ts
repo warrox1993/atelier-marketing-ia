@@ -129,7 +129,6 @@ describe("prospects.fusionner-doublons", () => {
       clientsActuelsPour: async () => [],
       marques: async () => [],
       etatBaseClients: async () => ({ dernierImport: null, clients: 0, actifs: 0 }),
-      dncmPour: async () => null,
       clientExiste: async () => false,
       clientParEmpreinte: async () => null,
       poidsScoreCourant: async () => null,

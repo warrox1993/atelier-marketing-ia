@@ -5,7 +5,6 @@
 import { describe, expect, it } from "vitest";
 import {
   BaseLegaleContact as BaseLegaleContactSchema,
-  DNCM_VALIDITE_JOURS,
   MotifExclusion,
   Prospect as ProspectSchema,
   type BaseLegale,
@@ -22,7 +21,6 @@ import {
   exclusionsProspect,
   natureAdresse,
   telephoneBelgeE164,
-  verificationDncmFraiche,
   type ContexteContact,
 } from "../src/serveur/regles-prospection.js";
 
@@ -132,7 +130,6 @@ function contexte(modifs: Partial<ContexteContact> = {}): ContexteContact {
     canaux: ["courriel", "sms", "telephone", "courrier"],
     zone: null,
     oppositions: [],
-    dncm: { empreintes: [], verifieeLe: HIER },
     clientsActuels: [],
     ...modifs,
   };
@@ -261,15 +258,15 @@ const PERMIS: CasMatrice[] = [
 const REFUS: CasMatrice[] = [
   { situation: "entreprise_impersonnelle", canal: "courriel", cas: simple("entreprise_impersonnelle", "courriel", "interet_legitime"), refus: "non permise" },
   { situation: "entreprise_impersonnelle", canal: "sms", cas: simple("entreprise_impersonnelle", "sms", "client_existant_produits_analogues", {}, { produitsAnalogues: true }), refus: "Pas client existant" },
-  { situation: "entreprise_impersonnelle", canal: "telephone", cas: simple("entreprise_impersonnelle", "telephone", "interet_legitime", { preuveType: "mise_en_balance" }, { dncm: null }), refus: "non consultée" },
+  { situation: "entreprise_impersonnelle", canal: "telephone", cas: simple("entreprise_impersonnelle", "telephone", "interet_legitime", { preuveType: "source" }), refus: "Téléphone : intérêt légitime à documenter par une mise en balance" },
   { situation: "entreprise_impersonnelle", canal: "courrier", cas: () => ({ p: prospect("entreprise_impersonnelle"), b: null, ctx: contexte() }), refus: "Aucune base légale" },
   { situation: "salarie_nomme", canal: "courriel", cas: simple("salarie_nomme", "courriel", "personne_morale_adresse_impersonnelle"), refus: "consentement préalable obligatoire" },
   { situation: "salarie_nomme", canal: "sms", cas: simple("salarie_nomme", "sms", "personne_morale_adresse_impersonnelle", { natureAdresse: "impersonnelle" }), refus: "consentement préalable obligatoire" },
   {
     situation: "salarie_nomme",
     canal: "telephone",
-    cas: simple("salarie_nomme", "telephone", "interet_legitime", { preuveType: "mise_en_balance" }, { dncm: { empreintes: [{ type: "telephone", valeur: E.tel }], verifieeLe: HIER } }),
-    refus: "liste_dncm",
+    cas: simple("salarie_nomme", "telephone", "interet_legitime", { preuveType: "mise_en_balance" }, { oppositions: [{ type: "telephone", valeur: E.tel }] }),
+    refus: "opposition_client",
   },
   { situation: "salarie_nomme", canal: "courrier", cas: simple("salarie_nomme", "courrier", "interet_legitime", {}, { oppositions: [{ type: "nom_code_postal", valeur: E.nomCp }] }), refus: "opposition_client" },
   { situation: "partenaire_personne_physique", canal: "courriel", cas: simple("partenaire_personne_physique", "courriel", "personne_morale_adresse_impersonnelle", { natureAdresse: "impersonnelle" }), refus: "personne morale seulement" },
@@ -300,7 +297,14 @@ const REFUS: CasMatrice[] = [
     }),
     refus: "couvrant le canal sms",
   },
-  { situation: "particulier_prospect", canal: "telephone", cas: simple("particulier_prospect", "telephone", "consentement", { dncmVerifieLe: "2026-09-10T10:00:00+02:00" }), refus: "périmée" },
+  {
+    situation: "particulier_prospect",
+    canal: "telephone",
+    cas: simple("particulier_prospect", "telephone", "consentement", {}, {}, {
+      particulier: { origine: "formulaire_entrant", consentements: [consentement(["courriel"])], offresDemandees: [], clientId: null, pseudonyme: "[client-0b1c]" },
+    }),
+    refus: "couvrant le canal telephone",
+  },
   { situation: "particulier_prospect", canal: "courrier", cas: simple("particulier_prospect", "courrier", "interet_legitime", { preuveType: "mise_en_balance" }), refus: "source licite" },
   { situation: "client_existant", canal: "courriel", cas: simple("client_existant", "courriel", "client_existant_produits_analogues", {}, { produitsAnalogues: false }), refus: "non analogues" },
   { situation: "client_existant", canal: "sms", cas: simple("client_existant", "sms", "interet_legitime"), refus: "non permise" },
@@ -347,27 +351,26 @@ describe("contactPermis : matrice canal × cible (§3.2)", () => {
     expect(d.motif).toContain("client_actuel");
   });
 
-  it("téléphone : liste DNCM consultée il y a DNCM_VALIDITE_JOURS jours ou plus = refus", () => {
+  it("téléphone : prospect B2B avec intérêt légitime, mise en balance et numéro publié = permis, sans aucune liste dans le contexte", () => {
     const p = prospect("entreprise_impersonnelle");
     const b = baseLegale(p, "telephone", "interet_legitime", { preuveType: "mise_en_balance" });
-    const d = contactPermis(p, "telephone", b, contexte({ dncm: { empreintes: [], verifieeLe: "2026-09-15T10:00:00+02:00" } }));
-    expect(d.permis).toBe(false);
-    expect(d.motif).toContain("Version de la liste");
+    const d = contactPermis(p, "telephone", b, contexte());
+    expect(d.permis).toBe(true);
+    expect(d.motif).toContain("Permis : base « interet_legitime » pour la cible");
   });
-});
 
-/* ------------------------------------------------------------------ */
-/* Fraîcheur DNCM                                                      */
-/* ------------------------------------------------------------------ */
+  it("téléphone : le même prospect sans mise en balance reste refusé", () => {
+    const p = prospect("entreprise_impersonnelle");
+    const d = contactPermis(p, "telephone", baseLegale(p, "telephone", "interet_legitime", { preuveType: "source" }), contexte());
+    expect(d).toEqual({ permis: false, motif: "Téléphone : intérêt légitime à documenter par une mise en balance" });
+  });
 
-describe("verificationDncmFraiche", () => {
-  it(`vaut moins de ${DNCM_VALIDITE_JOURS} jours : J-29 frais, J-30 périmé, futur et absent refusés`, () => {
-    expect(verificationDncmFraiche("2026-10-15T08:00:00+02:00", MAINTENANT)).toBe(true);
-    expect(verificationDncmFraiche("2026-09-16T10:00:00+02:00", MAINTENANT)).toBe(true);
-    expect(verificationDncmFraiche("2026-09-15T10:00:00+02:00", MAINTENANT)).toBe(false);
-    expect(verificationDncmFraiche("2026-10-20T10:00:00+02:00", MAINTENANT)).toBe(false);
-    expect(verificationDncmFraiche(null, MAINTENANT)).toBe(false);
-    expect(verificationDncmFraiche("pas une date", MAINTENANT)).toBe(false);
+  it("téléphone : une opposition enregistrée exclut toujours le prospect", () => {
+    const p = prospect("entreprise_impersonnelle");
+    const b = baseLegale(p, "telephone", "interet_legitime", { preuveType: "mise_en_balance" });
+    const d = contactPermis(p, "telephone", b, contexte({ oppositions: [{ type: "telephone", valeur: E.tel }] }));
+    expect(d.permis).toBe(false);
+    expect(d.motif).toContain("opposition_client");
   });
 });
 
@@ -463,12 +466,6 @@ describe("exclusionsProspect : un cas par motif", () => {
     expect(motifs(prospect("entreprise_impersonnelle"), { oppositions: [{ type: "courriel", valeur: E.courriel }] })).toEqual(["opposition_client"]);
   });
 
-  it("liste_dncm : téléphone inscrit, seulement pour une campagne qui appelle", () => {
-    const dncm = { empreintes: [{ type: "telephone", valeur: E.tel } as Empreinte], verifieeLe: HIER };
-    expect(motifs(prospect("entreprise_impersonnelle"), { dncm })).toEqual(["liste_dncm"]);
-    expect(motifs(prospect("entreprise_impersonnelle"), { dncm, canaux: ["courrier"] })).toEqual([]);
-  });
-
   it("client_actuel : déjà client (hors vente croisée d'un client existant)", () => {
     const clientsActuels: Empreinte[] = [{ type: "identifiant_client", valeur: E.client }];
     const p = prospect("entreprise_impersonnelle", { empreintes: [{ type: "identifiant_client", valeur: E.client }] });
@@ -489,7 +486,7 @@ describe("exclusionsProspect : un cas par motif", () => {
   });
 
   it("chaque motif du contrat est couvert par un test ci-dessus", () => {
-    expect(MotifExclusion.options).toHaveLength(12);
+    expect(MotifExclusion.options).toHaveLength(11);
   });
 
   it("horodate chaque constat avec l'instant fourni", () => {

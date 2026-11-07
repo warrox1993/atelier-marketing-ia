@@ -56,7 +56,6 @@ export const LIBELLES_MOTIFS: Readonly<Record<MotifExclusion, string>> = {
   courriel_nominatif_sans_consentement: "Courriel nominatif sans consentement",
   telephone_invalide: "Téléphone invalide",
   opposition_client: "Opposition enregistrée",
-  liste_dncm: "Inscrit sur la liste « Ne m'appelez plus »",
   client_actuel: "Déjà client",
   donnee_demonstration_campagne_reelle: "Donnée non réelle dans une campagne",
 };

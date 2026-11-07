@@ -2,7 +2,7 @@
  * Lot P5 : règles pures de la prospection (docs/prospection-conception.md, §3.2 et §5.4).
  *
  * Aucune entrée-sortie, aucune date système implicite : l'instant de référence (« maintenant ») est
- * toujours passé en paramètre. Les listes (oppositions, « Ne m'appelez plus », clients actuels) sont
+ * toujours passé en paramètre. Les listes (oppositions, clients actuels) sont
  * des listes d'EMPREINTES HMAC : les règles comparent des empreintes, jamais des valeurs en clair.
  * Les coordonnées en clair ne servent qu'aux contrôles de syntaxe, quand l'appelant les a déchiffrées.
  *
@@ -10,11 +10,10 @@
  * - contrôles de forme : `bceValide`, `telephoneBelgeE164`, `courrielValide`, `natureAdresse` ;
  * - faux leads : `dedoublonner`, `exclusionsProspect` (motifs du contrat `MotifExclusion`) ;
  * - matrice canal × cible : `contactPermis` (bases légales du §3.2, consentements des particuliers,
- *   fraîcheur de la vérification « Ne m'appelez plus »).
+ *   mise en balance au téléphone).
  */
 import {
   basePermise,
-  DNCM_VALIDITE_JOURS,
   EMPREINTES_PROSPECTION_DEMONSTRATION,
   DEMONSTRATION_COORDONNEES,
   type BaseLegaleContact,
@@ -118,20 +117,6 @@ export function natureAdresse(courriel: string): NatureAdresse {
 /* Outils internes                                                     */
 /* ------------------------------------------------------------------ */
 
-const MS_JOUR = 86_400_000;
-
-/** Nombre de jours calendaires (UTC) écoulés entre deux instants ISO ; négatif si `depuis` est dans le futur. */
-function joursEcoules(depuis: string, maintenant: string): number {
-  return Math.floor(Date.parse(maintenant) / MS_JOUR) - Math.floor(Date.parse(depuis) / MS_JOUR);
-}
-
-/** Vrai si une vérification datée reste valable : ni dans le futur, ni âgée de DNCM_VALIDITE_JOURS jours ou plus. */
-export function verificationDncmFraiche(verifieeLe: string | null, maintenant: string): boolean {
-  if (verifieeLe === null || Number.isNaN(Date.parse(verifieeLe))) return false;
-  const age = joursEcoules(verifieeLe, maintenant);
-  return age >= 0 && age < DNCM_VALIDITE_JOURS;
-}
-
 function cleEmpreinte(e: Empreinte): string {
   return `${e.type}:${e.valeur}`;
 }
@@ -220,14 +205,12 @@ export interface ContexteProspection {
   maintenant: string;
   /** Mode de la campagne (une donnée de démonstration n'entre jamais dans une campagne réelle). */
   modeCampagne: ModeExecution;
-  /** Canaux visés par la campagne : le contrôle nominatif ne vaut que pour le courriel, la liste DNCM que pour le téléphone. */
+  /** Canaux visés par la campagne : le contrôle nominatif ne vaut que pour le courriel. */
   canaux: readonly CanalContact[];
   /** Zone choisie ; null = aucune restriction géographique. */
   zone: ZoneChoisie | null;
   /** Liste d'opposition propre au client (empreintes). */
   oppositions: readonly Empreinte[];
-  /** Liste « Ne m'appelez plus » consultée (empreintes de téléphones) et date de la version consultée ; null = non consultée. */
-  dncm: { empreintes: readonly Empreinte[]; verifieeLe: string } | null;
   /** Clients actuels du client (empreintes, ex. `identifiant_client`, courriel, téléphone). */
   clientsActuels: readonly Empreinte[];
   /** Numéros BCE du fichier actif (normalisés en 10 chiffres) ; absent = fichier non chargé, pas de constat. */
@@ -338,10 +321,6 @@ export function exclusionsProspect(p: Prospect, ctx: ContexteProspection): Exclu
     motifs.push(exclusion("opposition_client", "Inscrit à la liste d'opposition du client", t));
   }
 
-  if (ctx.canaux.includes("telephone") && ctx.dncm !== null && contient(ctx.dncm.empreintes, empreintes.filter((e) => e.type === "telephone"))) {
-    motifs.push(exclusion("liste_dncm", "Téléphone inscrit à la liste « Ne m'appelez plus »", t));
-  }
-
   if (contient(ctx.clientsActuels, empreintes) && !venteCroisee(p)) {
     motifs.push(exclusion("client_actuel", "Déjà client : relève de la vente croisée, pas de la prospection", t));
   }
@@ -386,9 +365,7 @@ function refus(motif: string): DecisionContact {
  *    pour les personnes nommées et les particuliers, que la forme seule ne distingue pas) ; source
  *    licite de l'adresse pour un courrier à un particulier ;
  * 5. aucune exclusion (§5.4) n'est constatée sur le prospect pour ce canal, la base examinée comptant
- *    comme enregistrée ;
- * 6. téléphone : liste « Ne m'appelez plus » consultée, et vérification de la base datant de moins de
- *    DNCM_VALIDITE_JOURS jours.
+ *    comme enregistrée.
  */
 export function contactPermis(p: Prospect, canal: CanalContact, base: BaseLegaleContact | null, ctx: ContexteContact): DecisionContact {
   if (base === null) return refus(`Aucune base légale enregistrée pour le canal ${canal}`);
@@ -437,16 +414,6 @@ export function contactPermis(p: Prospect, canal: CanalContact, base: BaseLegale
   const avecBase: Prospect = { ...p, basesLegales: [...p.basesLegales.filter((b) => b.canal !== canal), base] };
   const motifs = exclusionsProspect(avecBase, { ...ctx, canaux: [canal] });
   if (motifs.length > 0) return refus(`Prospect exclu : ${motifs.map((m) => m.motif).join(", ")}`);
-
-  if (canal === "telephone") {
-    if (ctx.dncm === null) return refus("Liste « Ne m'appelez plus » non consultée");
-    if (!verificationDncmFraiche(ctx.dncm.verifieeLe, ctx.maintenant)) {
-      return refus(`Version de la liste « Ne m'appelez plus » périmée (${DNCM_VALIDITE_JOURS} jours au plus)`);
-    }
-    if (!verificationDncmFraiche(base.dncmVerifieLe, ctx.maintenant)) {
-      return refus(`Vérification « Ne m'appelez plus » absente ou périmée (${DNCM_VALIDITE_JOURS} jours au plus)`);
-    }
-  }
 
   return { permis: true, motif: `Permis : base « ${base.base} » pour la cible ${p.cible} par ${canal}, opposition offerte à chaque message` };
 }

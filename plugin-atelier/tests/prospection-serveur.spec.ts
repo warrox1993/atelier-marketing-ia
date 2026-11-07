@@ -90,7 +90,6 @@ function banc(o: { modeEntreprise?: "demonstration" | "reel"; sansCles?: boolean
     clientsActuelsPour: async () => [],
     marques: async () => (o.marque ? [copie(o.marque)] : []),
     etatBaseClients: async () => ({ dernierImport: null, clients: o.baseClients ?? 0, actifs: o.baseClients ?? 0 }),
-    dncmPour: async () => null,
     clientExiste: async () => false,
     clientParEmpreinte: async (_c: string, type: string, v: string) => (type === "identifiant_client" ? (o.clients?.[v] ?? null) : null),
     poidsScoreCourant: async () => (o.poids ? { version: 1, poids: o.poids } : null),
@@ -957,7 +956,6 @@ describe("SQL de prospection (base.ts réelle, règles de l'hôte)", () => {
     await base.empreintesProspectsEnBase(SOC, ["a".repeat(64)]);
     await base.oppositionsPour(SOC, ["a".repeat(64)]);
     await base.clientsActuelsPour(SOC, ["a".repeat(64)]);
-    await base.dncmPour(SOC, ["a".repeat(64)]);
     await base.clientExiste(SOC, id);
     await base.poidsScoreCourant(SOC);
     await base.referentielProspection(SOC, CAMP);
@@ -1358,35 +1356,6 @@ describe("prospects.lister : résumé par défaut", () => {
     expect(autre.body).toMatchObject({ total: 0, prospects: [] });
     expect((await f.appeler("prospects.lister", { query: { companyId: SOC2, partie: "detail", prospectId: id }, companyId: SOC2 })).status).toBe(404);
     expect((await f.appeler("prospects.lister", { query: { companyId: SOC2, vue: "complete" }, companyId: SOC2 })).body).toMatchObject({ total: 0, prospects: [] });
-  });
-});
-
-describe("DROIT-1.7 : dncmPour avec une liste chargée", () => {
-  const VERSION = "2026-10-01T00:00:00.000Z";
-  function db(o: { inscrits: string[]; liste: boolean }) {
-    return {
-      namespace: ESPACE_BASE,
-      async query(sql: string, params: unknown[] = []) {
-        controlerSql(sql, params, true);
-        if (/dncm_empreintes/u.test(sql)) return o.inscrits.filter((e) => (JSON.parse(String(params[1])) as string[]).includes(e)).map((empreinte) => ({ empreinte, version_du: VERSION }));
-        if (/listes_dncm/u.test(sql)) return o.liste ? [{ version_du: VERSION }] : [];
-        return [];
-      },
-      async execute() { return { rowCount: 0 }; },
-    };
-  }
-  const NON_INSCRIT = "b".repeat(64);
-
-  it("aucun numéro demandé n'est inscrit : la liste reste consultée (vide), pas « non consultée »", async () => {
-    const base = creerBase(db({ inscrits: ["a".repeat(64)], liste: true }) as unknown as PluginContext["db"]);
-    expect(await base.dncmPour(SOC, [NON_INSCRIT])).toEqual({ empreintes: [], verifieeLe: VERSION });
-  });
-
-  it("numéro inscrit : rendu avec la version de la liste ; aucune liste chargée : null", async () => {
-    const inscrit = "a".repeat(64);
-    expect(await creerBase(db({ inscrits: [inscrit], liste: true }) as unknown as PluginContext["db"]).dncmPour(SOC, [inscrit, NON_INSCRIT]))
-      .toEqual({ empreintes: [{ type: "telephone", valeur: inscrit }], verifieeLe: VERSION });
-    expect(await creerBase(db({ inscrits: [], liste: false }) as unknown as PluginContext["db"]).dncmPour(SOC, [NON_INSCRIT])).toBeNull();
   });
 });
 

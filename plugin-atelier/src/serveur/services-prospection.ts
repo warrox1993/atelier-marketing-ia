@@ -786,11 +786,10 @@ export function routesProspection(d: DependancesProspection): Partial<Record<Cle
   /** Contexte des règles d'exclusion pour un lot de prospects (listes d'empreintes de l'entreprise). */
   async function contexteExclusions(companyId: string, campagne: Campagne | null, modeCampagne: ModeExecution, prospects: readonly Prospect[], date: string): Promise<{ contexte: ContexteProspection; enBase: Array<{ prospectId: string; type: string; valeur: string }> }> {
     const valeurs = [...new Set(prospects.flatMap((p) => empreintesDuProspect(p).map((e) => e.valeur)))];
-    const [enBase, oppositions, clients, dncm] = await Promise.all([
+    const [enBase, oppositions, clients] = await Promise.all([
       base.empreintesProspectsEnBase(companyId, valeurs),
       base.oppositionsPour(companyId, valeurs),
       base.clientsActuelsPour(companyId, valeurs),
-      base.dncmPour(companyId, valeurs),
     ]);
     return {
       contexte: {
@@ -799,7 +798,6 @@ export function routesProspection(d: DependancesProspection): Partial<Record<Cle
         canaux: canauxDeCampagne(campagne?.canaux ?? []),
         zone: zoneDeCampagne(campagne?.perimetre.zones ?? []),
         oppositions: oppositions.map((o) => ({ type: o.type as TypeEmpreinte, valeur: o.valeur })),
-        dncm,
         clientsActuels: clients.map((c) => ({ type: c.type as TypeEmpreinte, valeur: c.valeur })),
       },
       enBase,

@@ -200,7 +200,7 @@ programmation réelle (`publicationProgrammee` reste `null` sans connecteur).
 
 - **Prospect** : `nouveau` → `qualifie` → `exporte` ; `exclu` (par une règle, au moins un motif : doublon, numéro BCE
   invalide, entreprise inactive, personne physique BCE, hors zone, courriel invalide ou nominatif sans consentement,
-  téléphone invalide, opposition, liste « Ne m'appelez plus », client actuel, donnée de démonstration en campagne réelle) ;
+  téléphone invalide, opposition, client actuel, donnée de démonstration en campagne réelle) ;
   `refuse` (écarté par un humain).
 - **Score** : `estimation` (aucune probabilité affichée) ou `probabilite_mesuree` (étalonnage d'au moins 300 prospects et
   30 conversions, marge de Wilson à 95 %). Jamais « certitude ».

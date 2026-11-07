@@ -458,7 +458,7 @@ Les champs inconnus sont refusés.
 | --- | --- | --- | --- |
 | `companyId` | uuid | oui |  |
 | `prospectId` | uuid | oui |  |
-| `motif` | énumération | oui | "doublon" \| "numero_bce_invalide" \| "entreprise_inactive" \| "personne_physique_bce" \| "hors_zone" \| "courriel_invalide" \| "courriel_nominatif_sans_consentement" \| "telephone_invalide" \| "opposition_client" \| "liste_dncm" \| "client_actuel" \| "donnee_demonstration_campagne_reelle" |
+| `motif` | énumération | oui | "doublon" \| "numero_bce_invalide" \| "entreprise_inactive" \| "personne_physique_bce" \| "hors_zone" \| "courriel_invalide" \| "courriel_nominatif_sans_consentement" \| "telephone_invalide" \| "opposition_client" \| "client_actuel" \| "donnee_demonstration_campagne_reelle" |
 | `detail` | texte | oui | 3 à 500 caractères |
 
 Exemple minimal valide :

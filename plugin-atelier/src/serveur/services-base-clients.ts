@@ -351,12 +351,12 @@ export function routesBaseClients(d: DependancesProspection, o: OutilsProspectio
     const opportunites = opportunitesVenteCroisee(clients as unknown as ClientBase[], regles, maintenant().toISOString());
     const date = maintenant().toISOString();
     const empreintes = [...new Set(opportunites.flatMap((o) => (parId.get(o.clientId)?.empreintes ?? []).map((e) => e.valeur)))];
-    const [oppositions, dncm] = await Promise.all([base.oppositionsPour(r.companyId, empreintes), base.dncmPour(r.companyId, empreintes)]);
+    const oppositions = await base.oppositionsPour(r.companyId, empreintes);
     const lignes = opportunites.map((o) => {
       const c = parId.get(o.clientId)!;
       const ctx: ContexteContact = {
         maintenant: date, modeCampagne: mode, canaux: [], zone: null,
-        oppositions: oppositions.map((x) => ({ type: x.type as never, valeur: x.valeur })), dncm,
+        oppositions: oppositions.map((x) => ({ type: x.type as never, valeur: x.valeur })),
         clientsActuels: c.statut === "actif" ? c.empreintes : [],
       };
       const canaux = canauxClient(c, ctx);

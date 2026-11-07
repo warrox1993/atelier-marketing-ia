@@ -98,7 +98,6 @@ function banc(o: { modeEntreprise?: "demonstration" | "reel"; config?: Record<st
       return p ? 1 : 0;
     },
     clientsActuelsPour: async () => [],
-    dncmPour: async () => null,
     clientExiste: async () => false,
     clientParEmpreinte: async () => null,
     poidsScoreCourant: async () => null,
@@ -299,7 +298,7 @@ describe("ventes-croisees.lister", () => {
     expect((await lister(f, true)).status).toBe(403);
   });
 
-  it("canal permis par la matrice : consentement déclaré ou exception client existant pour le courriel ; téléphone jamais sans liste « Ne m'appelez plus »", async () => {
+  it("canal permis par la matrice : consentement déclaré ou exception client existant pour le courriel ; téléphone seulement avec un consentement déclaré", async () => {
     const f = banc();
     await f.appeler("base-clients.importer", { body: corpsImport() });
     const ops = (await lister(f)).body.opportunites as Ligne[];
@@ -307,9 +306,16 @@ describe("ventes-croisees.lister", () => {
     expect(part.some((o) => o.canauxPermis.includes("courriel"))).toBe(true);
     for (const o of ops) {
       const tel = o.canaux.find((c: Ligne) => c.canal === "telephone");
-      expect(tel.permis).toBe(false);
+      // Téléphone : permis seulement pour un particulier qui a déclaré OUI au téléphone (et dont le numéro est connu) ; sinon refus lisible.
+      const consentiTel = o.typeClient === "particulier" && f.tp.clients.some((c) => c.pseudonyme === o.pseudonyme && c.consentements.telephone === true);
+      // Dans les deux sens : un consentant n'est refusé que faute de numéro connu ; un non-consentant n'est jamais permis.
+      const sansNumero = !tel.permis && /Aucune coordonnée/u.test(tel.motif);
+      expect(tel.permis, `${o.typeClient} ${o.pseudonyme} ${tel.motif}`).toBe(consentiTel && !sansNumero);
+      if (!tel.permis) expect(tel.motif).toMatch(o.typeClient === "entreprise" ? /Entreprise cliente|refusé/u : /Aucune base légale|Aucune coordonnée|refusé/u);
       expect(o.canauxPermis).toEqual(o.canaux.filter((c: Ligne) => c.permis).map((c: Ligne) => c.canal));
     }
+    // Sans liste « Ne m'appelez plus », un particulier qui a déclaré OUI au téléphone est joignable par téléphone.
+    expect(part.some((o) => o.canauxPermis.includes("telephone"))).toBe(true);
     // Un client qui a déclaré NON au courriel n'est jamais contacté par courriel.
     const refusants = new Set(f.tp.clients.filter((c) => c.consentements.courriel === false).map((c) => c.pseudonyme as string));
     const visees = ops.filter((o) => refusants.has(o.pseudonyme));

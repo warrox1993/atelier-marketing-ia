@@ -98,7 +98,7 @@ Le serveur trouve le schéma par `plugin_database_namespaces.plugin_key = 'ateli
 | `campagnes.ts` | `Campagne` (= projet natif), `TacheCampagne`, `ReglagesEntreprise`, `Connecteur`, `EvenementJournal`, `PageJournal`, `Diagnostic` |
 | `routes.ts`, `api.ts` | table des routes et corps des requêtes |
 | `referentiel.ts` (v1.7) | `ReferentielClient` = `Marque` étendue (offres et établissements enrichis, `entites`, `segments`, `ciblesProspection`, `modulesConformite`), `RenvoiReferentiel`, `CATALOGUE_MODULES_CONFORMITE` (`intermediaire_assurance`), `renvoiValide`, `moduleActif` |
-| `prospection.ts` (v1.7) | `Prospect` (B2B, B2C, partenaire), `VoletParticulier`, `PreuveConsentement`, `ScoreProspect`, `Etalonnage`, `BaseLegaleContact`, `MATRICE_BASES_LEGALES`, `Opposition`, `VersionListeDncm`, base de clients (`ImporterBaseClientsEntree`, `ImportBaseClients`, `ClientBase`, `ContratDetenu`, `RegleVenteCroisee`), `ExportCrm`, `ROUTES_PROSPECTION_PREVUES` |
+| `prospection.ts` (v1.7) | `Prospect` (B2B, B2C, partenaire), `VoletParticulier`, `PreuveConsentement`, `ScoreProspect`, `Etalonnage`, `BaseLegaleContact`, `MATRICE_BASES_LEGALES`, `Opposition`, base de clients (`ImporterBaseClientsEntree`, `ImportBaseClients`, `ClientBase`, `ContratDetenu`, `RegleVenteCroisee`), `ExportCrm`, `ROUTES_PROSPECTION_PREVUES` |
 | `connaissances.ts` (v1.7) | `IndexConnaissances`, `DocumentConnaissance`, `VersionConnaissance`, `PassageConnaissance`, `VecteurBase64`, adresse `connaissance://`, `RechercherConnaissancesEntree`, `ResultatRechercheConnaissances`, `PassageRendu` (`nonFiable`), import, suppression, `ROUTES_CONNAISSANCES_PREVUES` |
 | `ui-constantes.ts`, `ui.ts` | emplacements UI, rubriques, clés de données et d'actions |
 | `exemples/index.ts` | une réponse d'exemple par clé de données, validée par test |
@@ -625,7 +625,7 @@ ne vient jamais de la BCE. Particulier : `VoletParticulier` (origine légale : f
 devis, devis abandonné, prise de rendez-vous, point de vente, client existant, partenaire, parrainage, événement, lead
 acheté avec consentement prouvé, courrier adressé ; preuves de consentement avec texte accepté, source, canaux, retrait ;
 offres demandées ; pseudonyme `[client-xxxx]`). `MATRICE_BASES_LEGALES` (cible × canal) : particulier par courriel ou SMS
-= consentement ou client existant seulement ; téléphone = vérification « Ne m'appelez plus » obligatoire ; un consentement
+= consentement ou client existant seulement ; téléphone = intérêt légitime documenté par une mise en balance, ou consentement ; un consentement
 invoqué doit être prouvé, non retiré et couvrir le canal. Score = somme bornée des points des critères ; `estimation` sans
 étalonnage ; `probabilite_mesuree` seulement à partir de 300 prospects et 30 conversions (seuils proposés, à fixer par l'opérateur),
 avec une marge de Wilson à 95 % ; « certitude » n'existe pas. Isotonique à partir de 1 000 exemples. Aucun schéma d'entrée

@@ -266,7 +266,6 @@ function critereTaille(p: Prospect): Resultat {
 function critereJoignable(p: Prospect): Resultat {
   const pose = "base légale du contact";
   if (aMotif(p, "opposition_client")) return resultat("contraire", null, "Opposition enregistrée", pose);
-  if (aMotif(p, "liste_dncm")) return resultat("contraire", null, "Inscrit sur la liste « Ne m'appelez plus »", pose);
   if (p.basesLegales.length > 0) return resultat("verifie", null, `Base légale : ${[...new Set(p.basesLegales.map((b) => b.canal))].join(", ")} ; aucune opposition`, pose);
   return resultat("non_verifie", null, "Aucune base légale enregistrée pour un canal", pose);
 }
@@ -481,39 +480,34 @@ function critereBureauSpecialise(p: Prospect, ctx: ContexteQualification): Resul
 
 /**
  * C12 : contact professionnel PUBLIÉ et permis. Entreprise : site lu ou adresse impersonnelle (info@, contact@) déjà présents
- * dans les sources du prospect, ou téléphone SI la liste « Ne m'appelez plus » a été consultée à une date connue (`dncmVerifieLe` de la
- * base légale du canal téléphone ; sans cette date, le numéro seul ne vaut rien) ; opposition ou liste « Ne m'appelez plus » : contraire. Particulier : seulement
- * avec un consentement documenté. Aucune coordonnée n'est lue ni recopiée : on ne regarde que le canal et la nature.
+ * dans les sources du prospect, ou téléphone SI le prospect porte une base légale du canal téléphone (sans elle, le numéro seul ne
+ * vaut rien) ; opposition : contraire. Particulier : seulement avec un consentement documenté. Aucune coordonnée n'est lue ni recopiée : on ne regarde que le canal et la nature.
  */
 function critereContactPublicPermis(p: Prospect): Resultat {
   const pose = "coordonnées publiées et base légale";
   const opposition = aMotif(p, "opposition_client");
-  const dncm = aMotif(p, "liste_dncm");
   if (p.cible === "particulier") {
-    if (opposition || dncm) return resultat("non_verifie", null, `${opposition ? "Opposition enregistrée" : "Inscrit sur la liste « Ne m'appelez plus »"} : aucun consentement ne vaut`, pose);
+    if (opposition) return resultat("non_verifie", null, "Opposition enregistrée : aucun consentement ne vaut", pose);
     const consenti = p.particulier?.consentements.filter((c) => c.retireLe === null) ?? [];
     if (consenti.length > 0) return resultat("verifie", null, `Consentement documenté, non retiré : ${[...new Set(consenti.flatMap((c) => c.canauxAutorises))].join(", ")}`, pose);
     return resultat("non_verifie", null, "Aucun consentement documenté pour ce particulier", pose);
   }
   if (opposition) return resultat("contraire", null, "Opposition enregistrée", pose);
-  if (dncm) return resultat("contraire", null, "Inscrit sur la liste « Ne m'appelez plus »", pose);
-  // Téléphone : la liste nationale « Ne m'appelez plus » doit avoir été consultée à une date connue (`dncmVerifieLe` d'une base
-  // légale du canal téléphone). Un numéro dans les sources ne prouve rien là-dessus. L'écrit (site lu, adresse impersonnelle) n'en dépend pas.
+  // Téléphone : le prospect doit porter une base légale du canal téléphone. Un numéro dans les sources ne prouve rien là-dessus.
+  // L'écrit (site lu, adresse impersonnelle) n'en dépend pas.
   const aTelephone = p.coordonnees.some((c) => c.canal === "telephone");
-  const verifDncm = p.basesLegales.filter((b) => b.canal === "telephone" && b.dncmVerifieLe !== null).map((b) => b.dncmVerifieLe as string).sort().at(-1) ?? null;
-  const telephoneRetenu = aTelephone && verifDncm !== null;
+  const telephoneRetenu = aTelephone && p.basesLegales.some((b) => b.canal === "telephone");
   const publies = [
     ...(telephoneRetenu ? ["téléphone"] : []),
     ...(p.coordonnees.some((c) => c.canal === "courriel" && c.nature === "impersonnelle") ? ["adresse électronique impersonnelle"] : []),
     ...(p.sources.some((x) => x.type === "lecture_url" && x.service === null && x.url !== null) ? ["site web"] : []),
   ];
   const s = p.sources.find((x) => x.sourceId !== null) ?? p.sources[0] ?? null;
-  const reserveTel = aTelephone && !telephoneRetenu ? " ; téléphone non retenu : la liste « Ne m'appelez plus » n'a pas été consultée" : "";
+  const reserveTel = aTelephone && !telephoneRetenu ? " ; téléphone non retenu : aucune base légale du canal téléphone" : "";
   if (publies.length > 0) {
-    const liste = telephoneRetenu && verifDncm !== null ? ` ; liste « Ne m'appelez plus » consultée le ${dateCourte(verifDncm)}` : "";
-    return resultat("verifie", s, `Contact professionnel publié dans les sources : ${publies.join(", ")} ; aucune opposition enregistrée${liste}${reserveTel}`, pose);
+    return resultat("verifie", s, `Contact professionnel publié dans les sources : ${publies.join(", ")} ; aucune opposition enregistrée${reserveTel}`, pose);
   }
-  if (aTelephone) return resultat("non_verifie", s, "Téléphone publié, mais la liste « Ne m'appelez plus » n'a pas été consultée (aucune vérification datée) : contact par téléphone non établi", pose);
+  if (aTelephone) return resultat("non_verifie", s, "Téléphone publié, mais aucune base légale du canal téléphone : contact par téléphone non établi", pose);
   return resultat("non_verifie", s, "Aucun contact professionnel publié (téléphone, site ou adresse impersonnelle) dans les sources du prospect", pose);
 }
 

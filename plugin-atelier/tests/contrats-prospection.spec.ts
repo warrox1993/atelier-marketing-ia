@@ -13,6 +13,7 @@ import {
   FichePersonneDechiffree,
   ImporterBaseClientsEntree,
   MATRICE_BASES_LEGALES,
+  MotifExclusion,
   Prospect,
   ROUTES_API,
   ROUTES_CONNAISSANCES_PREVUES,
@@ -146,6 +147,10 @@ describe("matrice canal × cible", () => {
     expect(ok(BaseLegaleContact, tel)).toBe(true);
     expect(ko(BaseLegaleContact, { ...tel, dncmVerifieLe: null })).toBe(true);
     expect(ko(BaseLegaleContact, { ...PROSPECT_B2B.basesLegales[0]!, canal: "telephone", base: "interet_legitime", natureAdresse: "inconnue", dncmVerifieLe: null })).toBe(true);
+  });
+  it("les motifs d'exclusion ne contiennent plus de motif de liste « Ne m'appelez plus »", () => {
+    expect(MotifExclusion.safeParse("liste_dncm").success).toBe(false);
+    expect(MotifExclusion.safeParse("opposition_client").success).toBe(true);
   });
   it("B2B : adresse impersonnelle d'une personne morale seulement ; nominative = consentement", () => {
     const b2b = PROSPECT_B2B.basesLegales[0]!;

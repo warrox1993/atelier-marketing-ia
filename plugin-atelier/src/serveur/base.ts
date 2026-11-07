@@ -1400,19 +1400,6 @@ export function creerBase(db: Db) {
     )).map((r) => ({ type: String(r.type), valeur: String(r.empreinte) }));
   }
 
-  /** Numéros (empreintes) inscrits à la liste « Ne m'appelez plus » chargée, parmi les valeurs données ; null si aucune liste n'est chargée. */
-  async function dncmPour(companyId: string, valeurs: readonly string[]) {
-    const lignes = valeurs.length === 0 ? [] : await q(
-      `select e.empreinte, l.version_du from ${ns}.dncm_empreintes e join ${ns}.listes_dncm l on l.id = e.liste_id and l.company_id = e.company_id
-       where e.company_id = $1 and e.empreinte in (select jsonb_array_elements_text($2::jsonb)) order by l.version_du desc`,
-      [companyId, json(valeurs)],
-    );
-    if (lignes.length > 0) return { empreintes: lignes.map((r) => ({ type: "telephone" as const, valeur: String(r.empreinte) })), verifieeLe: iso(lignes[0]!.version_du) };
-    // DROIT-1.7 : aucun numéro inscrit n'est pas « liste non consultée » ; la liste chargée la plus récente fait foi.
-    const [liste] = await q(`select version_du from ${ns}.listes_dncm where company_id = $1 order by version_du desc limit 1`, [companyId]);
-    return liste ? { empreintes: [], verifieeLe: iso(liste.version_du) } : null;
-  }
-
   async function clientExiste(companyId: string, clientId: string) {
     return (await q(`select id from ${ns}.clients where company_id = $1 and id = $2 and not cle_a_reimporter`, [companyId, clientId])).length > 0;
   }
@@ -1816,7 +1803,7 @@ export function creerBase(db: Db) {
     insererMarque, marques, planifier, listerPlanifications, listerMesures,
     tachesDeProjet, bloqueursNonResolus, tachesBloquantes, tachesSoeurs, runsDeTaches, tacheDuRun, coutsEntreprise, coutsEntrepriseMois, competencesDernierRun,
     supprimerDonneesEntreprise, purgerProspectsSansContact,
-    prospectsParIdentifiants, lireProspect, empreintesProspectsEnBase, oppositionsPour, compterAReimporter, clientsActuelsPour, dncmPour, clientExiste, clientParEmpreinte, poidsScoreCourant,
+    prospectsParIdentifiants, lireProspect, empreintesProspectsEnBase, oppositionsPour, compterAReimporter, clientsActuelsPour, clientExiste, clientParEmpreinte, poidsScoreCourant,
     referentielProspection, insererProspect, majProspect, remplacerProspectAReimporter, exclureProspect, ajouterEmpreintesProspect, prospectsAvecEmpreinte, insererScoreProspect,
     detailsProspects, listerProspects, insererOpposition, lireOpposition,
     insererImportBaseClients, insererClients, etatBaseClients, supprimerBaseClients, reglesVentesCroisees, clientsPourVentesCroisees, insererEtalonnage, issuesPourEtalonnage, scoresCourantsCible, insererScoreMesure,

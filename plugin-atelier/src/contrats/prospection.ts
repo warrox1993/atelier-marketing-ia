@@ -47,9 +47,6 @@ export const SEUILS_ETALONNAGE = {
   horizonJoursParDefaut: 90,
 } as const;
 
-/** Durée de validité de la vérification « Ne m'appelez plus » pour le téléphone (proposée, §6.5 ; à fixer par l'opérateur). */
-export const DNCM_VALIDITE_JOURS = 30 as const;
-
 /**
  * Taille maximale du corps JSON d'une route de plugin, fixée par le socle et non modifiable par le plugin :
  * `PLUGIN_API_BODY_LIMIT_BYTES` dans `paperclip/server/src/routes/plugins.ts` (lignes 173 et 1888, refus 413 au-delà).
@@ -222,7 +219,6 @@ export const MotifExclusion = z.enum([
   "courriel_nominatif_sans_consentement",
   "telephone_invalide",
   "opposition_client",
-  "liste_dncm",
   "client_actuel",
   "donnee_demonstration_campagne_reelle",
 ]);
@@ -920,10 +916,10 @@ const CANAUX_ELECTRONIQUES: ReadonlySet<CanalContact> = new Set(["courriel", "sm
  *   pour une PERSONNE MORALE seulement, adresse impersonnelle ; jamais l'intérêt
  *   légitime ; pour un PARTICULIER : consentement ou client existant, rien d'autre ;
  * - téléphone : intérêt légitime documenté ou consentement, toujours après vérification de la liste
- *   « Ne m'appelez plus » (et de la liste d'opposition du client) ;
+ *   d'opposition du client ;
  * - courrier postal : intérêt légitime (source licite de l'adresse) ou consentement.
  * Un partenaire ou un professionnel peut être une personne physique : adresse impersonnelle seulement pour une personne morale.
- * Les conditions qui dépendent du temps (fraîcheur DNCM, retrait) sont des règles du lot P5.
+ * Les conditions qui dépendent du temps (retrait) sont des règles du lot P5.
  */
 export const MATRICE_BASES_LEGALES: Readonly<Record<CibleProspect, Readonly<Record<CanalContact, readonly BaseLegale[]>>>> = {
   entreprise: {
@@ -1117,7 +1113,7 @@ export const Prospect = z
 export type Prospect = z.infer<typeof Prospect>;
 
 /* ------------------------------------------------------------------ */
-/* Oppositions et liste « Ne m'appelez plus »                          */
+/* Oppositions                                                         */
 /* ------------------------------------------------------------------ */
 
 export const OrigineOpposition = z.enum(["desinscription_message", "demande_ecrite", "telephone", "formulaire", "import", "humain"]);
@@ -1153,20 +1149,6 @@ export const AjouterOppositionEntree = z
   })
   .strict();
 export type AjouterOppositionEntree = z.infer<typeof AjouterOppositionEntree>;
-
-/** Version chargée de la liste « Ne m'appelez plus » (licence du client ; numéros gardés en empreintes). */
-export const VersionListeDncm = z
-  .object({
-    id: IdNatif,
-    companyId: IdNatif,
-    versionDu: DateJour,
-    chargeeLe: Horodatage,
-    numeros: z.number().int().nonnegative(),
-    empreinteFichier: EmpreinteSha256,
-    chargeePar: z.string().min(1),
-  })
-  .strict();
-export type VersionListeDncm = z.infer<typeof VersionListeDncm>;
 
 /* ------------------------------------------------------------------ */
 /* Base de clients (§4)                                                */
@@ -1614,7 +1596,7 @@ export const VerificationExport = z
   .object({
     prospectId: IdNatif,
     ok: z.boolean(),
-    /** Motif de refus : sans base légale pour le canal, opposition, client actuel, exclu, DNCM périmée… */
+    /** Motif de refus : sans base légale pour le canal, opposition, client actuel, exclu… */
     motif: z.string().max(300).nullable(),
   })
   .strict()

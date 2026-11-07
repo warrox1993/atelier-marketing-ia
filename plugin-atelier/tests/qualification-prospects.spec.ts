@@ -813,7 +813,7 @@ describe("critères courtier du lot 3 : bureau spécialisé proche et contact pu
       const imper = critere(entreprise(), "contact_public_permis")!;
       expect(imper.statut).toBe("verifie");
       expect(imper.detail).toContain("adresse électronique impersonnelle");
-      // Téléphone : il ne compte que si la liste « Ne m'appelez plus » a été consultée à une date connue (voir le test dédié plus bas).
+      // Téléphone : il ne compte que si le prospect porte une base légale du canal téléphone (voir les tests dédiés plus bas).
       const tel = { ...structuredClone(PROSPECT_B2B.basesLegales[0]), canal: "telephone", base: "interet_legitime", natureAdresse: "inconnue", dncmVerifieLe: H };
       expect(critere(entreprise({ coordonnees: [coord("telephone", "inconnue")], basesLegales: [tel] }), "contact_public_permis")!.detail).toContain("téléphone");
       const site = entreprise({ coordonnees: [], sources: [...PROSPECT_B2B.sources, { type: "lecture_url", sourceId: null, service: null, outil: null, url: "https://cabinet.example/contact", collecteLe: H }] });
@@ -821,25 +821,24 @@ describe("critères courtier du lot 3 : bureau spécialisé proche et contact pu
       expect(imper.detail).not.toMatch(/@|https?:/u);
     });
 
-    it("entreprise : un téléphone seul n'est PAS vérifié tant que la liste « Ne m'appelez plus » n'a pas été consultée (date de vérification absente)", () => {
+    it("entreprise : un téléphone seul n'est PAS vérifié sans base légale du canal téléphone", () => {
       const p = entreprise({ coordonnees: [coord("telephone", "inconnue")], basesLegales: [] });
       const c = critere(p, "contact_public_permis")!;
       expect(c.statut).toBe("non_verifie");
-      expect(c.detail).toContain("liste « Ne m'appelez plus » n'a pas été consultée");
-      expect(c.detail).not.toContain("aucune opposition ni inscription");
+      expect(c.detail).toBe("Téléphone publié, mais aucune base légale du canal téléphone : contact par téléphone non établi");
     });
 
-    it("entreprise : téléphone avec vérification datée de la liste (dncmVerifieLe) : vérifié, et le détail cite la date", () => {
+    it("entreprise : téléphone avec une base légale du canal téléphone : vérifié, et le détail le cite", () => {
       const tel = { ...structuredClone(PROSPECT_B2B.basesLegales[0]), canal: "telephone", base: "interet_legitime", natureAdresse: "inconnue", dncmVerifieLe: "2026-10-10T09:00:00.000Z" };
       const c = critere(entreprise({ coordonnees: [coord("telephone", "inconnue")], basesLegales: [tel] }), "contact_public_permis")!;
       expect(c.statut).toBe("verifie");
-      expect(c.detail).toContain("liste « Ne m'appelez plus » consultée le 10/10/2026");
+      expect(c.detail).toBe("Contact professionnel publié dans les sources : téléphone ; aucune opposition enregistrée");
     });
 
-    it("entreprise : site lu ou adresse impersonnelle restent acceptés pour l'écrit, même avec un téléphone dont la liste n'a pas été consultée ; le détail ne prétend rien sur la liste", () => {
+    it("entreprise : site lu ou adresse impersonnelle restent acceptés pour l'écrit, même avec un téléphone sans base légale ; le détail dit que le téléphone n'est pas retenu", () => {
       const c = critere(entreprise({ coordonnees: [coord("telephone", "inconnue"), coord("courriel", "impersonnelle")], basesLegales: [] }), "contact_public_permis")!;
       expect(c.statut).toBe("verifie");
-      expect(c.detail).toBe("Contact professionnel publié dans les sources : adresse électronique impersonnelle ; aucune opposition enregistrée ; téléphone non retenu : la liste « Ne m'appelez plus » n'a pas été consultée");
+      expect(c.detail).toBe("Contact professionnel publié dans les sources : adresse électronique impersonnelle ; aucune opposition enregistrée ; téléphone non retenu : aucune base légale du canal téléphone");
     });
 
     it("entreprise : adresse nominative seule (prénom.nom@) : pas un contact publié, non vérifié", () => {
@@ -847,14 +846,12 @@ describe("critères courtier du lot 3 : bureau spécialisé proche et contact pu
       expect(c.statut).toBe("non_verifie");
     });
 
-    it("entreprise contraire : opposition ou liste « Ne m'appelez plus », même avec un contact publié ; plafonne à 50 %", () => {
-      for (const [m, texte] of [["opposition_client", "Opposition enregistrée"], ["liste_dncm", "Ne m'appelez plus"]] as const) {
-        const p = entreprise({ statut: "exclu", motifsExclusion: motif(m) });
-        const c = critere(p, "contact_public_permis")!;
-        expect(c.statut).toBe("contraire");
-        expect(c.detail).toContain(texte);
-        expect(calculerConfiance(p, CTX_TOUS)).toMatchObject({ plafonnee: true, qualifie: false });
-      }
+    it("entreprise contraire : opposition, même avec un contact publié ; plafonne à 50 %", () => {
+      const p = entreprise({ statut: "exclu", motifsExclusion: motif("opposition_client") });
+      const c = critere(p, "contact_public_permis")!;
+      expect(c.statut).toBe("contraire");
+      expect(c.detail).toBe("Opposition enregistrée");
+      expect(calculerConfiance(p, CTX_TOUS)).toMatchObject({ plafonnee: true, qualifie: false });
     });
 
     it("entreprise sans donnée : aucune coordonnée ni site : non vérifié", () => {
@@ -874,9 +871,9 @@ describe("critères courtier du lot 3 : bureau spécialisé proche et contact pu
       expect(critere(part({ basesLegales: [] }, { origine: "courrier_adresse", consentements: [] }), "contact_public_permis")?.statut).toBe("non_verifie");
     });
 
-    it("particulier avec opposition ou « Ne m'appelez plus » : jamais vérifié, même avec un consentement", () => {
+    it("particulier avec opposition : jamais vérifié, même avec un consentement", () => {
       const p = Prospect.parse({ ...structuredClone(PROSPECT_B2C), statut: "exclu", score: null, motifsExclusion: motif("opposition_client") });
-      expect(critere(p, "contact_public_permis")).toMatchObject({ statut: "non_verifie" });
+      expect(critere(p, "contact_public_permis")).toMatchObject({ statut: "non_verifie", detail: "Opposition enregistrée : aucun consentement ne vaut" });
     });
 
     it("comment vérifier : entreprise vers osm et bce, particulier vers l'action de documenter le consentement", () => {
