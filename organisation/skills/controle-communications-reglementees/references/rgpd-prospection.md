@@ -56,7 +56,6 @@ champs et conséquences d'un refus ; décision automatisée éventuelle.
 ## Décisions de l'opérateur (30/10/2026)
 
 - Praticiens en nom propre admis avec une base légale écrite (mise en balance) et l'information de l'art. 14.
-- Numéros collectés, aucun appel tant que la liste « Ne m'appelez plus » n'est pas fournie et contrôlée.
 - Conservation : 3 ans sans contact, puis purge des listes et des journaux qui en contiennent.
 
 ## Courriel publicitaire : Code de droit économique, art. XII.13

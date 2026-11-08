@@ -295,12 +295,12 @@ export const FICHES_AGENTS_MARKETING: readonly FicheAgentMarketing[] = [
       {
         "cle": "recherche-prospects",
         "nom": "Recherche de prospects",
-        "sert": "Cherche des prospects B2B par secteur NACE et zone, des particuliers B2C aux seules origines légales et des partenaires, par les outils de prospection en lecture (bce, bnb, fsma, osm, b2c), dépose chaque réponse brute signée sur la tâche, applique les garde-fous de collecte et le contrôle de la liste « Ne m'appelez plus » avant tout fichier d'appel."
+        "sert": "Cherche des prospects B2B par secteur NACE et zone, des particuliers B2C aux seules origines légales et des partenaires, par les outils de prospection en lecture (bce, bnb, fsma, osm, b2c), dépose chaque réponse brute signée sur la tâche, applique les garde-fous de collecte avant tout fichier d'appel."
       },
       {
         "cle": "qualification-prospects",
         "nom": "Qualification des prospects",
-        "sert": "Qualifie les prospects déposés : lecture protégée de leur site, justification sourcée de chaque critère, points du score expliqués et présentés comme une estimation, barème adéquation et intention commun avec le commercial, contrôle de l'opposition et de la liste « Ne m'appelez plus », sans chiffre inventé ni conseil d'assurance."
+        "sert": "Qualifie les prospects déposés : lecture protégée de leur site, justification sourcée de chaque critère, points du score expliqués et présentés comme une estimation, barème adéquation et intention commun avec le commercial, contrôle de l'opposition, sans chiffre inventé ni conseil d'assurance."
       },
       {
         "cle": "recherche-sourcee",
@@ -343,16 +343,15 @@ export const FICHES_AGENTS_MARKETING: readonly FicheAgentMarketing[] = [
     "nom": "Enrichissement coordonnées",
     "pole": "Intelligence",
     "role": "Enrichissement des coordonnées professionnelles",
-    "mission": "Reçoit la liste de fiches de la Prospection et relève, de sources licites seulement (site entier, PDF publiés, annuaires professionnels, BCE/KBO, coordonnées publiées par la personne sur LinkedIn), les numéros de téléphone professionnels ; recoupe chaque numéro sur deux sources, le classe, contrôle la liste « Ne m'appelez plus » et indique source, date et base légale ; ne contacte jamais personne.",
+    "mission": "Reçoit la liste de fiches de la Prospection et relève, de sources licites seulement (site entier, PDF publiés, annuaires professionnels, BCE/KBO, coordonnées publiées par la personne sur LinkedIn), les numéros de téléphone professionnels ; recoupe chaque numéro sur deux sources, le classe et indique source, date et base légale ; ne contacte jamais personne.",
     "recoit": [
       "liste de fiches livrée par la Prospection",
-      "brief et exigences",
-      "résultat de la comparaison avec la liste « Ne m'appelez plus » s'il est fourni"
+      "brief et exigences"
     ],
     "livre": [
       "relevé des numéros par fiche avec URL, date et extrait",
       "numéros recoupés : fiable ou à vérifier, type, base légale",
-      "contrôle « Ne m'appelez plus » (non inscrit, inscrit, non vérifié) et appel conseillé ou non",
+      "appel conseillé ou non",
       "liste des étapes non faites et des limites"
     ],
     "competences": [
@@ -364,7 +363,7 @@ export const FICHES_AGENTS_MARKETING: readonly FicheAgentMarketing[] = [
       {
         "cle": "coordonnees-recoupement",
         "nom": "Recoupement et classement des numéros",
-        "sert": "Recoupe chaque numéro de téléphone relevé sur deux sources indépendantes (fiable ou à vérifier), le classe (standard, ligne directe, portable professionnel publié), contrôle la liste belge « Ne m'appelez plus » et rend, par fiche, un format de sortie fixe avec source, date et base légale."
+        "sert": "Recoupe chaque numéro de téléphone relevé sur deux sources indépendantes (fiable ou à vérifier), le classe (standard, ligne directe, portable professionnel publié) et rend, par fiche, un format de sortie fixe avec source, date et base légale."
       },
       {
         "cle": "recherche-sourcee",
@@ -406,7 +405,7 @@ export const FICHES_AGENTS_MARKETING: readonly FicheAgentMarketing[] = [
       "modifier des fichiers",
       "lancer d'autres agents"
     ],
-    "pourquoi": "Les numéros de téléphone viennent uniquement de sources publiées par les professionnels eux-mêmes, recoupés sur deux sources et notés avec leur origine ; jamais de fuite de données ni de numéro deviné, et la liste « Ne m'appelez plus » est contrôlée avant tout appel."
+    "pourquoi": "Les numéros de téléphone viennent uniquement de sources publiées par les professionnels eux-mêmes, recoupés sur deux sources et notés avec leur origine ; jamais de fuite de données ni de numéro deviné."
   },
   {
     "slug": "seo-local-geo",

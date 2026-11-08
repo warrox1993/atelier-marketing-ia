@@ -61,8 +61,8 @@ class TestConsignesRgpd(unittest.TestCase):
     def test_liv_mk7_liste_de_demarchage_controlee_avec_textes_lus(self):
         conformite = plat(lire("agents/conformite-publicitaire/AGENTS.md"))
         self.assertIn("## Contrôle d'une liste destinée à un démarchage", lire("agents/conformite-publicitaire/AGENTS.md"))
-        for attendu in ("liste « Ne m'appelez plus » : tant que l'humain ne l'a pas fournie, aucun appel", "3 ans sans contact"):
-            self.assertIn(attendu, conformite)
+        self.assertIn("3 ans sans contact", conformite)
+        self.assertNotIn("Ne m'appelez plus", conformite)
         coordinateur = plat(lire("agents/coordinateur/AGENTS.md"))
         self.assertIn("toute liste de prospects destinée à un démarchage (appel, courriel, courrier) : revue `conformite` de la Conformité publicitaire", coordinateur)
         reference = lire("skills/controle-communications-reglementees/references/rgpd-prospection.md")
@@ -217,6 +217,21 @@ class TestConsignesRgpd(unittest.TestCase):
                     "skills/achat-coordonnees-fournisseur/SKILL.md", "skills/suivi-conversions/SKILL.md",
                     "skills/conformite-publicite-ia/SKILL.md", "skills/controle-communications-reglementees/SKILL.md"):
             self.assertNotIn("—", lire(rel), rel)
+
+    def test_aucune_consigne_ne_reclame_la_liste_ne_m_appelez_plus(self):
+        # Décision de l'opérateur du 07/11/2026 : la liste est retirée en entier ; les oppositions restent (facultatives).
+        sources = (list(ORGA.glob("agents/*/AGENTS.md")) + list(ORGA.glob("services/*/agents/*/AGENTS.md"))
+                   + list(ORGA.glob("skills/**/*.md")) + [ORGA / "registre/agents.json", ORGA / "registre/routes-agents.md"])
+        self.assertGreater(len(sources), 100)
+        for source in sources:
+            texte = source.read_text(encoding="utf-8")
+            for motif in ("Ne m'appelez plus", "Ne m’appelez plus", "DNCM"):
+                self.assertNotIn(motif, texte, str(source.relative_to(ORGA)))
+            # Tolère le retour à la ligne et l'apostrophe typographique entre les mots.
+            self.assertIsNone(re.search(r"m.appelez\s+plus", texte, re.I), str(source.relative_to(ORGA)))
+        conformite = plat(lire("agents/conformite-publicitaire/AGENTS.md"))
+        self.assertIn("la liste des oppositions appliquée", conformite)
+        self.assertIn("3 ans sans contact", conformite)
 
 
 if __name__ == "__main__":

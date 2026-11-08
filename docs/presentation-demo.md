@@ -108,7 +108,7 @@ Clics :
 4. Montrer l'exemple des 20 commerces OpenStreetMap reconnus comme des entreprises déjà trouvées dans la BCE (même nom, même code postal, même téléphone) : ils sont fusionnés au lieu d'être comptés deux fois.
 5. Ouvrir la fiche choisie la veille :
    - le score expliqué critère par critère ;
-   - les canaux permis ou refusés, avec la raison légale (RGPD, liste « Ne m'appelez plus ») ;
+   - les canaux permis ou refusés, avec la raison légale (RGPD) ;
    - le libellé du score : « estimation ». Il ne deviendra « probabilité mesurée », avec une marge, qu'au-delà de 300 prospects et 30 ventes. Jamais « certitude ».
 6. Montrer l'export CSV ou Excel, et l'export vers le CRM, qui ne part qu'après approbation.
 7. Mentionner l'import guidé de la base clients (CSV ou Excel) : données personnelles chiffrées, colonnes sensibles refusées (santé, sinistre, banque).
@@ -161,7 +161,7 @@ Clics :
 Aujourd'hui, l'atelier tourne sur mon abonnement Claude. En production, il tournera avec une clé API au nom du client, donc facturée au client selon son usage. Les plafonds de dépense IA sont réglables par le client. Je n'ai pas encore de chiffre mensuel mesuré sur un vrai usage : je préfère le mesurer sur le premier mois plutôt que d'avancer un montant.
 
 **Et le RGPD ?**
-Chaque canal de contact est vérifié avec sa base légale, la liste « Ne m'appelez plus » est prise en compte, les oppositions excluent le prospect. À l'import de la base clients, les données personnelles sont chiffrées et les colonnes sensibles (santé, sinistre, banque) sont refusées. Le cadre juridique final (registre des traitements, contrat de sous-traitance avec le client) reste à valider avec le courtier.
+Chaque canal de contact est vérifié avec sa base légale, les oppositions sont signalées. À l'import de la base clients, les données personnelles sont chiffrées et les colonnes sensibles (santé, sinistre, banque) sont refusées. Le cadre juridique final (registre des traitements, contrat de sous-traitance avec le client) reste à valider avec le courtier.
 
 **Qu'est-ce qui est réel et qu'est-ce qui est de la démonstration ?**
 Réel : l'application, les agents, les contrôles, les approbations, et la source OpenStreetMap (147 190 établissements). Démonstration : les données des autres connecteurs et les documents du courtier fictif. Chaque donnée de démonstration est marquée comme telle, et l'atelier refuse de l'utiliser dans une campagne réelle.

@@ -20,7 +20,7 @@ Donner à l'humain un script court, honnête et respectueux du temps du secréta
 
 ## Prérequis
 
-- Le numéro du standard avec sa source, sa date et son contrôle de la liste « Ne m'appelez plus » (compétence `coordonnees-recoupement`). Contrôle non fait : « aucun appel conseillé tant que le contrôle n'est pas fait ».
+- Le numéro du standard avec sa source et sa date (compétence `coordonnees-recoupement`).
 - La fiche (entreprise, secteur, personne ou fonction visée si connue) et l'objet réel du contact, tel que validé par l'humain.
 - Les horaires d'ouverture publiés de l'entreprise, s'ils sont connus.
 - La base légale enregistrée du prospect, avec son texte d'information de l'art. 14 (`information.texteArt14`) et son
@@ -34,7 +34,7 @@ Donner à l'humain un script court, honnête et respectueux du temps du secréta
 
 ## Étapes
 
-1. **Vérifier avant tout.** Numéro non inscrit sur la liste (ou contrôle fait), horaires respectés, aucune opposition déjà exprimée. Sinon, ne pas rédiger de script d'appel et le dire.
+1. **Vérifier avant tout.** Horaires respectés. Une opposition déjà exprimée est signalée en tête du script, sans refuser de l'écrire.
 2. **Ouverture honnête** (15 secondes) : bonjour, son nom et sa société, l'objet en une phrase vraie, la demande précise. Exemple de forme : « Bonjour, [prénom nom] de [société]. Je cherche à joindre la personne qui s'occupe de [sujet] chez vous, pour lui proposer un échange sur [objet]. Qui est la bonne personne, s'il vous plaît ? »
    **Dès que la personne visée elle-même répond** (praticien en nom propre au standard, ou mise en relation), avant de
    parler de l'offre : l'information de l'art. 14 en deux phrases, tirée du texte enregistré (modèle
@@ -69,7 +69,6 @@ Le script (ouverture, questions, réponses aux objections, clôture) en une page
 - Le script se présente, dit l'objet vrai et ne contient aucune astuce de contournement.
 - Le script donne l'information de l'art. 14 et, séparé du reste, le moyen d'opposition dès que la personne visée répond.
 - Chaque information obtenue sera notée avec sa source (l'appel), sa date et sa base.
-- Le script ne s'applique qu'à un numéro contrôlé sur la liste « Ne m'appelez plus ».
 
 ## Limites
 

@@ -58,7 +58,7 @@ Une fiche d'une page : objectif et date ; identité et chiffres publics (avec la
 - Les registres publics ne disent rien de l'intérêt de l'entreprise pour l'offre : ils donnent un profil, pas un besoin.
 - Les comptes annuels ont souvent plus d'un an et peuvent manquer (dépôt tardif, entreprise récente, personne physique) : le dire.
 - Une personne physique ou un indépendant n'a pas de comptes annuels publics ; ne rien chercher d'autre sur sa vie privée (minimisation des données, RGPD).
-- La fiche ne prépare pas un appel de prospection : avant un premier appel téléphonique à un prospect, le contrôle de la liste « Ne m'appelez plus » (compétence `qualification-leads-entrants`) doit être fait.
+- La fiche ne prépare pas un appel de prospection.
 - Dans un secteur réglementé (assurance, crédit, placement, professions libérales), la fiche prépare des questions ; l'analyse des besoins et toute recommandation personnalisée relèvent d'un professionnel habilité (par exemple un intermédiaire inscrit auprès de l'autorité de contrôle). À faire vérifier par ce professionnel avant usage.
 
 ## Sources officielles

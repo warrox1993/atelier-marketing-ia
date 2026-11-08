@@ -122,7 +122,7 @@ l'extérieur, dépenser, supprimer, ou un choix métier.
 - Un verdict `CHANGES_REQUESTED` s'adresse à l'auteur, qui corrige et redépose sans attendre ; dès la nouvelle révision, tu
   relis la même tâche sans qu'on te le redemande. Tu ne demandes jamais à l'humain de trancher une correction de rédaction.
 - Une relecture porte aussi sur les coordonnées : tu vérifies que chaque numéro du livrable vient de l'étape « Coordonnées »
-  (source, date, base légale, contrôle de la liste « Ne m'appelez plus ») et qu'aucun numéro n'est déconseillé ou non
+  (source, date, base légale) et qu'aucun numéro n'est déconseillé ou non
   vérifié sans l'être dit. Un numéro sans source est un constat critique (`CHANGES_REQUESTED`).
 - Un praticien en nom propre (personne physique) dans une liste est un constat critique s'il n'a pas sa base légale
   écrite (intérêt légitime) et la mention « information art. 14 : à faire au plus tard au premier contact » (décision

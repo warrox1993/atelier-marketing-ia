@@ -1650,7 +1650,7 @@ class RestesDH1(unittest.TestCase):
         # DOC-A15 : registres modifiés sans changement de version ni de date (agents.json 1.14.0 le 01/11 : mention IA hors du rendu).
         agents = json.loads((RACINE / "organisation/registre/agents.json").read_text(encoding="utf-8"))
         services = json.loads((RACINE / "organisation/registre/services.json").read_text(encoding="utf-8"))
-        self.assertEqual((agents["version"], agents["dateVersion"]), ("1.16.0", "2026-11-07"))
+        self.assertEqual((agents["version"], agents["dateVersion"]), ("1.17.0", "2026-11-08"))  # consignes sans la liste (#17), fusion du 08/11
         self.assertEqual((services["version"], services["dateVersion"]), ("1.3.0", "2026-11-07"))
 
     def test_rotation_de_session_du_coordinateur(self):

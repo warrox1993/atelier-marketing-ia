@@ -79,8 +79,7 @@ Consulté le 17/10/2026 :
 - Code de droit économique, livre VI, texte consolidé sur Justel,
   https://www.ejustice.just.fgov.be/cgi_loi/change_lg.pl?language=fr&la=F&cn=2013022819&table_name=loi : art. VI.110
   (communications non souhaitées : appels automatisés et télécopie soumis au consentement, identité de l'annonceur
-  jamais dissimulée) et VI.112 (liste « Ne m'appelez plus ! ») ; un canal téléphonique dans le plan exige ce contrôle
-  (compétence `recherche-prospects`).
+  jamais dissimulée).
 
 ## À vérifier par un professionnel
 

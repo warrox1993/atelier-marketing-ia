@@ -1,6 +1,6 @@
 ---
 name: "qualification-prospects"
-description: "Qualifie les prospects déposés : lecture protégée de leur site, justification sourcée de chaque critère, points du score expliqués et présentés comme une estimation, barème adéquation et intention commun avec le commercial, contrôle de l'opposition et de la liste « Ne m'appelez plus », sans chiffre inventé ni conseil d'assurance. À utiliser après recherche-prospects, avant de proposer une liste à l'humain ou au rôle CRM conversion."
+description: "Qualifie les prospects déposés : lecture protégée de leur site, justification sourcée de chaque critère, points du score expliqués et présentés comme une estimation, barème adéquation et intention commun avec le commercial, contrôle de l'opposition, sans chiffre inventé ni conseil d'assurance. À utiliser après recherche-prospects, avant de proposer une liste à l'humain ou au rôle CRM conversion."
 metadata:
   version: "1.2.0"
   langue: "fr"
@@ -59,10 +59,8 @@ fait ni le client en conseiller d'assurance.
    P1 si adéquation forte et intention moyenne ou adéquation partielle et intention forte, P2 si adéquation partielle et
    intention faible ou adéquation encore inconnue, hors cible si un motif d'exclusion est atteint. Un prospect n'est « prioritaire » qu'avec un signal d'intention sourcé ; une confiance
    « élevée » exige deux sources indépendantes.
-8. **Contrôler l'opposition et la liste « Ne m'appelez plus »** pour tout prospect destiné à un appel : opposition au
-   marketing direct, exclusion ; numéro inscrit sur la liste « Ne m'appelez plus ! », exclusion sauf accord exprès et
-   daté ; comparaison non fournie, « contrôle Ne m'appelez plus : à faire » et aucun appel proposé. Le motif
-   d'exclusion est gardé.
+8. **Signaler l'opposition** pour tout prospect destiné à un appel : une opposition au marketing direct déjà exprimée
+   est signalée sur la ligne du prospect, avec son motif, sans bloquer la qualification.
 9. Classer : retenu, à revoir par l'humain, écarté (avec le motif).
 10. **Déclencheurs, part en marché, groupe d'achat** (lecture seule du document de stratégie du client tenu par l'agent
     `stratege`) : noter les déclencheurs publics sourcés (création, changement d'adresse, embauche, croissance ; voir
@@ -103,16 +101,14 @@ non exportée ».
 - Chaque critère renseigné renvoie à un dépôt ou à une source enregistrée.
 - Aucun score présenté comme une certitude ; aucun conseil d'assurance.
 - Les prospects écartés gardent leur motif.
-- Chaque prospect proposé pour un appel a son contrôle « Ne m'appelez plus » fait ou marqué « à faire ».
 - Le barème est le même que celui du service commercial.
 
 ## Sources officielles
 
-- Code de droit économique, art. VI.110 § 2, VI.112, VI.113 et VI.114, texte consolidé sur Justel,
+- Code de droit économique, art. VI.110 § 2 et VI.113, texte consolidé sur Justel,
   https://www.ejustice.just.fgov.be/cgi_loi/change_lg.pl?language=fr&la=F&cn=2013022819&table_name=loi, lu le 17/10/2026
-  (détail dans la compétence `recherche-prospects`) : appel de marketing direct interdit vers un numéro inscrit sur la
-  liste « Ne m'appelez plus ! » sauf accord exprès, vérification préalable par l'appelant, charge de la preuve sur
-  l'entreprise.
+  (détail dans la compétence `recherche-prospects`) : appel de marketing direct permis si la personne ne s'y est pas
+  manifestement opposée ; charge de la preuve sur la personne qui fait du marketing direct ou pour le compte de qui il est fait.
 
 ## À vérifier par un professionnel
 

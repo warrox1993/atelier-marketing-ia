@@ -101,12 +101,11 @@ de l'après-midi et du soir : `git log --oneline 51be4b1..HEAD` (tête `7bc4dd2`
    par identifiant d'entreprise).
 2. Passer l'instance 3100 en réel (non fait) .
    (Les cartes COUA-3, COUA-4 et COUA-5 de l'ancienne instance 3580 disparaissent avec elle.)
-3. Fixer la durée de validité de la liste « Ne m'appelez plus » (30 jours proposés).
-4. Sécurité ouverte : m1 (données additionnelles authentifiées du chiffrement) et m8 (HTML caché). CodeQL non activé sur GitHub :
+3. Sécurité ouverte : m1 (données additionnelles authentifiées du chiffrement) et m8 (HTML caché). CodeQL non activé sur GitHub :
    accord de l'opérateur attendu.
-5. Essai réel de `nouveau-client` sur une instance d'essai (il n'a été prouvé qu'avec une fausse API).
-6. Confirmer la licence ODbL des données OpenStreetMap.
-7. Accès mobile par Tailscale (9 étapes ci-dessous), clé OpenAI pour la voix (`docs/voix-en-direct.md`), réindexation bge-m3 (script `scripts/reindexer-connaissances.py` retiré le 16/10/2026) : encore à faire d'après ce document, à confirmer avant de les lancer.
+4. Essai réel de `nouveau-client` sur une instance d'essai (il n'a été prouvé qu'avec une fausse API).
+5. Confirmer la licence ODbL des données OpenStreetMap.
+6. Accès mobile par Tailscale (9 étapes ci-dessous), clé OpenAI pour la voix (`docs/voix-en-direct.md`), réindexation bge-m3 (script `scripts/reindexer-connaissances.py` retiré le 16/10/2026) : encore à faire d'après ce document, à confirmer avant de les lancer.
 
 Étapes de l'accès mobile (aucun document de `docs/` ne les détaille ; `docs/evolution-deploiement.md` décrit les modes de déploiement) :
 

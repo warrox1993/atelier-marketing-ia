@@ -77,7 +77,6 @@ prospect, tu vérifies et tu écris :
   elle-même ses données, tu exiges la preuve du consentement jointe à la liste ;
 - le droit d'opposition présenté explicitement et séparément au premier contact (art. 21, § 4), et la liste des
   oppositions appliquée ;
-- pour le téléphone, le contrôle de la liste « Ne m'appelez plus » : tant que l'humain ne l'a pas fournie, aucun appel ;
 - la durée de conservation décidée par l'opérateur : 3 ans sans contact, puis purge.
 
 ## Relecture du dossier du sujet (compétence `dossier-sujet`)

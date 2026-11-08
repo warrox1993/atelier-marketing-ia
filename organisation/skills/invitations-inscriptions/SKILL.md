@@ -102,7 +102,7 @@ Consultées le 17/10/2026 :
 
 - Elle ne gère pas la billetterie payante ni la facturation des inscriptions.
 - Elle ne tranche pas la base légale d'un contact douteux : elle le met à part.
-- Une invitation par courrier postal ou par téléphone suit d'autres règles (liste « Ne m'appelez plus ») qui ne sont pas
+- Une invitation par courrier postal ou par téléphone suit d'autres règles qui ne sont pas
   détaillées ici.
 
 ## Exemple

@@ -126,7 +126,7 @@ class TestConsignesPortes(unittest.TestCase):
         self.assertEqual(re.findall(r"^(\d+)\. \*\*", recherche, re.M), list("12345"))
         self.assertIn("Les cinq étapes", recherche)
         methode = agent.split("## Méthode")[1].split("Pour chaque numéro")[0]
-        self.assertEqual(re.findall(r"^(\d+)\. ", methode, re.M), list("12345678"))
+        self.assertEqual(re.findall(r"^(\d+)\. ", methode, re.M), list("1234567"))  # étape 8 (liste « Ne m.appelez plus ») retirée par #17
 
         registre = {a["slug"]: a for a in json.loads(lire("registre/agents.json"))["agents"]}
         self.assertEqual(registre["enrichissement-coordonnees"]["connexions"], {"extraction": "lecture"})

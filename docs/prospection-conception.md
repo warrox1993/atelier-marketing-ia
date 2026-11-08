@@ -20,9 +20,8 @@ conformité du client avant tout usage réel.
    prospectée sans consentement que sur une adresse **impersonnelle** (`info@`, `contact@`) ; l'adresse nominative d'un
    salarié (`prenom.nom@`) exige un consentement préalable (arrêté royal du 4 avril 2003, art. 1er, 2°, §3.2). Les
    outils d'enrichissement qui vendent des adresses nominatives ne rendent donc pas l'envoi d'un courriel légal. Le
-   téléphone reste possible sous réserve de la liste « Ne m'appelez plus » ; le courrier postal et la visite aussi.
-3. **B2C sortant « à froid » : presque fermé.** Courriel et SMS exigent le consentement préalable ; le téléphone exige
-   le respect de la liste « Ne m'appelez plus », dont la suppression au profit d'un opt-in est en discussion. Il n'existe
+   téléphone reste possible ; le courrier postal et la visite aussi.
+3. **B2C sortant « à froid » : presque fermé.** Courriel et SMS exigent le consentement préalable. Il n'existe
    aucune source légale de particuliers « à cibler » par l'usine. Les canaux réalistes sont entrants ou consentis :
    formulaires et publicité géolocalisée, partenaires avec consentement nominatif, parrainage par lien, événements, et la
    **base de clients existante** du client (ventes croisées).
@@ -96,14 +95,8 @@ et le premier contact passe par le canal professionnel impersonnel ou par la fé
   consentement préalable, sauf (1°) clients existants pour des produits analogues du même prestataire, opposition offerte
   à la collecte et à chaque message, coordonnées non transmises à un tiers (une société sœur est un tiers), et
   (2°) **personnes morales sur des coordonnées impersonnelles** ; art. 2 : liste d'opposition propre au prestataire.
-- **APD, recommandation 01/2020** (marketing direct) : acheteurs et loueurs de listes (§61 à 67), intégrer et mettre à
-  jour la liste « Ne m'appelez plus » (§127), exemple d'un assureur sanctionné pour profils achetés sans connaître leur
+- **APD, recommandation 01/2020** (marketing direct) : acheteurs et loueurs de listes (§61 à 67), exemple d'un assureur sanctionné pour profils achetés sans connaître leur
   origine (§100 et suivants).
-- **Liste « Ne m'appelez plus »** : gérée par l'ASBL DNCM depuis le 28/06/2015 ; dédoublonnage **obligatoire** des
-  fichiers d'appels, consommateurs **et entreprises** inscrits ; licence payante (prix non publié sur la page lue).
-  Réforme vers un opt-in téléphonique : proposition de loi déposée (Chambre, doc 56 0559), avis de l'APD, mais au
-  19/03/2026 « le dispositif concret n'est donc pas encore décidé » ; **statut au 15/10/2026 : non adopté selon les
-  sources trouvées, à revérifier avant tout lancement téléphonique**.
 - **Directive (UE) 2016/97 (IDD), art. 2, §2, c) et d)** : ne sont pas de la distribution d'assurance « la simple
   fourniture de données et d'informations sur des preneurs potentiels » à un assureur ou intermédiaire, ni la simple
   information sur des produits, **si le fournisseur ne prend aucune mesure supplémentaire pour aider à conclure** un
@@ -117,12 +110,12 @@ et le premier contact passe par le canal professionnel impersonnel ou par la fé
 | Canal | Entreprise (adresse impersonnelle) | Salarié ou dirigeant nommé | Courtier personne physique | Particulier prospect | Client existant |
 | --- | --- | --- | --- | --- | --- |
 | Courriel, SMS | permis sans consentement (AR 2003, 1er, 2°) + opposition à chaque message | **consentement préalable** | consentement préalable | **consentement préalable** | permis pour produits analogues du même assureur si les conditions du 1° sont réunies, sinon consentement |
-| Téléphone | permis hors « Ne m'appelez plus » | permis hors liste, intérêt légitime documenté | idem | permis hors liste, intérêt légitime documenté (et réforme à surveiller) | idem |
+| Téléphone | permis | permis, intérêt légitime documenté | idem | permis, intérêt légitime documenté (et réforme à surveiller) | idem |
 | Courrier postal | intérêt légitime, opposition | intérêt légitime, opposition | idem | intérêt légitime, source licite de l'adresse exigée | intérêt légitime |
 | Publicité ciblée par zone ou intérêt | campagne, pas de fichier nominatif | | | idem (règles de la plateforme publicitaire à vérifier pour les produits financiers : **inconnu**) | audiences de clients : consentement ou base à faire valider (juriste) |
 
 Toute ligne exige : base légale enregistrée **par prospect et par canal**, source de la donnée, information art. 14
-dans le premier message, et vérification de la liste d'opposition (propre au client + DNCM pour le téléphone).
+dans le premier message, et signalement de la liste d'opposition propre au client.
 
 ### 3.3 B2C : canaux réellement faisables, par ordre d'intérêt
 
@@ -233,8 +226,7 @@ une éligibilité ou une condition (RGPD art. 22 et exemple de l'APD sur l'assur
 
 Doublon (empreintes §4.2) ; numéro BCE invalide (contrôle modulo 97) ou absent du fichier actif (radiée, cessée) ;
 entité personne physique (interdite par les conditions BCE) ; hors zone choisie ; courriel de syntaxe invalide ou nominatif
-sans consentement pour le canal courriel ; téléphone non E.164 belge ; inscrit à la liste d'opposition du client ou, pour le
-téléphone, à la liste DNCM ; client actuel ; adresse de démonstration dans une campagne réelle (garde existante, §13).
+sans consentement pour le canal courriel ; téléphone non E.164 belge ; inscrit à la liste d'opposition du client ; client actuel ; adresse de démonstration dans une campagne réelle (garde existante, §13).
 
 ## 6. Intégration dans l'usine (sans réinventer Paperclip)
 
@@ -272,7 +264,7 @@ clients (§4.1).
 - `BaseLegaleContact` : par prospect **et par canal** : `canal`, `base` (`consentement | interet_legitime |
   client_existant_produits_analogues | personne_morale_adresse_impersonnelle`), `preuve` (référence du consentement, de la
   source ou de la mise en balance), `information` (texte art. 14 prévu), `verifieLe`.
-- `Opposition` : empreinte, canal, date, origine ; `ListeDncm` : date de la version chargée.
+- `Opposition` : empreinte, canal, date, origine.
 - `BaseClients` : import (empreinte, lignes, correspondance, finalité, durée), clients (chiffrés), produits détenus,
   issues (gagné, perdu, date).
 - Routes : `prospects.deposer` (réponse brute signée, comme `tache.donnees.deposer`), `prospects.lister` (filtres
@@ -294,7 +286,7 @@ CRM » qui crée une demande de diffusion `exporter_crm`. Passage Impeccable obl
   `pipedrive_creer_personne`, `teamleader_creer_contact`, `odoo_ecrire_lead` existe déjà) ajoutés à la table
   action ↔ outil du plugin.
 - `verifierDiffusion` refuse l'export d'un prospect sans `BaseLegaleContact` pour le canal prévu, inscrit à une
-  opposition, client actuel, exclu, ou vérifié DNCM depuis plus de 30 jours pour un canal téléphone (durée à fixer par l'opérateur).
+  opposition, client actuel ou exclu.
 - La porte refuse un message de prise de contact qui contient un conseil ou une comparaison de garanties (liste de
   mots par exigence) ou qui omet l'information art. 14 et le moyen d'opposition.
 
@@ -318,7 +310,6 @@ Aucune vraie entreprise, aucune vraie personne. Le registre FSMA et les comptes 
 | Inscription BCE Open Data, acceptation des conditions | opérateur | gratuit |
 | Souscription BNB « Authentic Data Query » (formulaire) | opérateur | gratuit |
 | Demande à la FSMA : export du registre et conditions de réutilisation | opérateur | gratuit (réponse inconnue) |
-| Licence DNCM (avant tout appel) | client | payant, prix non publié |
 | Table « risques assurables par secteur », poids du score, produits analogues | client | interne |
 | Mise en balance de l'intérêt légitime, information art. 14, registre des traitements, DPO consulté | client | interne |
 | Vue SQL et compte en lecture seule (si option SQL) | DBA du client | interne |
@@ -385,8 +376,7 @@ P18 vérification ponctuelle Google Places (clé payante), P19 enrichissement pa
 3. Bibliothèque XLSX : SheetJS CE depuis son CDN officiel (versions corrigées, hors npm) ou `exceljs` (inactif depuis
    10/2023), ou CSV seul au début.
 4. Option SQL en lecture seule : oui ou non (recommandation : CSV planifié d'abord).
-5. Seuils d'affichage d'une probabilité (300 prospects et 30 conversions proposés) et durée de validité de la
-   vérification DNCM (30 jours proposés).
+5. Seuils d'affichage d'une probabilité (300 prospects et 30 conversions proposés).
 6. Démonstration : garder « Rénovation Liège (démonstration) » comme client fictif (choix de ce document, conforme à la
    consigne) ou ajouter une seconde entreprise fictive de type assureur pour des ventes croisées d'assurance.
 7. Téléphone : attendre l'issue de la réforme opt-in avant de préparer des listes d'appel.
@@ -408,7 +398,6 @@ En ligne :
 - https://www.ejustice.just.fgov.be/cgi/article_body.pl?language=fr&caller=summary&pub_date=2003-05-28&numac=2003011238 (arrêté royal du 4 avril 2003)
 - https://www.autoriteprotectiondonnees.be/publications/recommandation-n-01-2020.pdf
 - https://www.autoriteprotectiondonnees.be/publications/avis-n0-02-2026.pdf (extrait de recherche)
-- https://www.dncm.be/fr
 - https://www.lachambre.be/FLWB/PDF/56/0559/56K0559001.pdf (proposition de loi opt-in, extrait de recherche)
 - https://www.customercontact.be/fr/actualites/media-detail/2026/03/19/vers-la-fin-de-l-opt-out-en-telemarketing-des-2026
 - https://www.legislation.gov.uk/eudr/2016/97/article/2/data.htm?view=plain (texte de l'art. 2 de la directive 2016/97 ; version officielle : https://eur-lex.europa.eu/eli/dir/2016/97/oj/fra)

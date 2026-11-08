@@ -106,8 +106,7 @@ ouverture du texte officiel.
    fixées par l'arrêté royal du 4 avril 2003, art. 1er : client existant pour des produits analogues (adresse obtenue lors
    d'une vente, opposition offerte dès la collecte) et adresse impersonnelle d'une personne morale [vérifié sur Justel le
    30/10/2026, citations dans `references/rgpd-prospection.md`].
-7. Téléphone vers des consommateurs : respecter la liste « Ne m'appelez plus » [mémoire].
-8. RGPD : base légale par traitement, information, droit d'opposition, durées de conservation (registre via
+7. RGPD : base légale par traitement, information, droit d'opposition, durées de conservation (registre via
    `registre-traitements-rgpd`).
 
 La sortie liste les points vérifiés, les points incertains et la demande de validation humaine

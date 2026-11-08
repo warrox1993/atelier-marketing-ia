@@ -1,7 +1,7 @@
 {
   "schema": "atelier/registre-agents/v1",
-  "version": "1.16.0",
-  "dateVersion": "2026-11-07",
+  "version": "1.17.0",
+  "dateVersion": "2026-11-08",
   "description": "Registre canonique des quinze agents marketing de l'Atelier et de l'agent déterministe « Porte de contrôle » (deterministe: true, adaptateur process, aucun modèle). Source unique : le fichier .paperclip.yaml et l'en-tête des AGENTS.md en sont générés par « python3 -I scripts/bootstrap-organisation.py generer ». Les noms courts (champ nom) portent leurs accents : l'identifiant (slug) d'un agent en est dérivé en retirant les accents (NFKD) avant la normalisation, comme le fait le bootstrap ; le titre porte le libellé français complet.",
   "adaptateur": {
     "type": "claude_local",
@@ -467,16 +467,15 @@
       "titre": "Pôle Intelligence · Enrichissement des coordonnées professionnelles",
       "role": "researcher",
       "rapporteA": "coordinateur",
-      "mission": "Reçoit la liste de fiches de la Prospection et relève, de sources licites seulement (site entier, PDF publiés, annuaires professionnels, BCE/KBO, coordonnées publiées par la personne sur LinkedIn), les numéros de téléphone professionnels ; recoupe chaque numéro sur deux sources, le classe, contrôle la liste « Ne m'appelez plus » et indique source, date et base légale ; ne contacte jamais personne.",
+      "mission": "Reçoit la liste de fiches de la Prospection et relève, de sources licites seulement (site entier, PDF publiés, annuaires professionnels, BCE/KBO, coordonnées publiées par la personne sur LinkedIn), les numéros de téléphone professionnels ; recoupe chaque numéro sur deux sources, le classe et indique source, date et base légale ; ne contacte jamais personne.",
       "entrees": [
         "liste de fiches livrée par la Prospection",
-        "brief et exigences",
-        "résultat de la comparaison avec la liste « Ne m'appelez plus » s'il est fourni"
+        "brief et exigences"
       ],
       "sorties": [
         "relevé des numéros par fiche avec URL, date et extrait",
         "numéros recoupés : fiable ou à vérifier, type, base légale",
-        "contrôle « Ne m'appelez plus » (non inscrit, inscrit, non vérifié) et appel conseillé ou non",
+        "appel conseillé ou non",
         "liste des étapes non faites et des limites"
       ],
       "competences": [
@@ -533,8 +532,7 @@
       "criteresReussite": [
         "chaque numéro porte une URL source réelle, une date de relevé et sa base légale, jamais une saisie de mémoire",
         "un numéro n'est « fiable » qu'avec deux sources indépendantes ; sinon « à vérifier »",
-        "aucune fuite de données, aucun darkweb, aucun numéro volé ou deviné, aucun numéro de particulier non publié",
-        "aucun appel conseillé sans contrôle de la liste « Ne m'appelez plus » fait ; sans résultat fourni : « non vérifié »"
+        "aucune fuite de données, aucun darkweb, aucun numéro volé ou deviné, aucun numéro de particulier non publié"
       ]
     },
     {

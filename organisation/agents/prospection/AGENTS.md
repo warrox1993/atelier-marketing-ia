@@ -42,8 +42,8 @@ une diffusion approuvée par un humain, préparée par le rôle CRM conversion.
 - **Aucun numéro de téléphone dans un document, un commentaire, un message ni ta mémoire** : chaque numéro retenu se
   dépose chiffré dans la fiche du prospect, `POST /api/plugins/atelier.marketing-ia/api/taches/<issueId>/prospects/<prospectId>/telephones`
   avec `{"telephone":"+32…","sourceId":"<identifiant de la source>"}`, où la source est la page lue par la lecture protégée
-  ou la réponse d'outil déposée sur ta tâche ; la réponse ne renvoie jamais le numéro, et les oppositions et la liste
-  « Ne m'appelez plus » s'y appliquent. Ton livrable écrit « déposé dans la fiche » avec le type, la fiabilité, les sources
+  ou la réponse d'outil déposée sur ta tâche ; la réponse ne renvoie jamais le numéro, et les oppositions
+  s'y appliquent. Ton livrable écrit « déposé dans la fiche » avec le type, la fiabilité, les sources
   et la base légale, jamais les chiffres. Un numéro lu dans une pièce jointe (signature, carte de visite) reste dans la
   pièce : le livrable cite la pièce et le champ. La porte refuse un livrable qui contient un numéro belge en clair. Les
   numéros sont collectés pour l'humain : personne n'appelle, ni toi ni un autre agent.
@@ -75,7 +75,7 @@ une diffusion approuvée par un humain, préparée par le rôle CRM conversion.
 
 ## Obtenir une ligne directe (compétences `script-appel-secretariat` et `demande-numero-linkedin`)
 
-- Quand une fiche n'a que le standard : tu prépares le script d'appel au secrétariat (`script-appel-secretariat`) ; l'appel est passé par un humain, jamais par toi, et seulement si le numéro est contrôlé sur la liste « Ne m'appelez plus ».
+- Quand une fiche n'a que le standard : tu prépares le script d'appel au secrétariat (`script-appel-secretariat`) ; l'appel est passé par un humain, jamais par toi.
 - Quand l'interlocuteur est déjà en relation avec l'humain sur LinkedIn : tu rédiges un brouillon de message (`demande-numero-linkedin`) ; l'envoi se fait à la main par l'humain, après carte de décision acceptée. Le numéro n'est retenu qu'après la réponse écrite de la personne.
 
 ## Méthodes de référence

@@ -1,6 +1,6 @@
 ---
 name: "coordonnees-recoupement"
-description: "Recoupe chaque numéro de téléphone relevé sur deux sources indépendantes (fiable ou à vérifier), le classe (standard, ligne directe, portable professionnel publié), contrôle la liste belge « Ne m'appelez plus » et rend, par fiche, un format de sortie fixe avec source, date et base légale. À utiliser après la recherche des coordonnées et avant la relecture ; jamais pour conseiller un appel quand le contrôle de la liste n'est pas fait."
+description: "Recoupe chaque numéro de téléphone relevé sur deux sources indépendantes (fiable ou à vérifier), le classe (standard, ligne directe, portable professionnel publié) et rend, par fiche, un format de sortie fixe avec source, date et base légale. À utiliser après la recherche des coordonnées et avant la relecture."
 metadata:
   version: "1.1.1"
   langue: "fr"
@@ -12,7 +12,7 @@ metadata:
 ## Quand l'utiliser
 
 - Le relevé de la compétence `coordonnees-recherche` est prêt pour une ou plusieurs fiches.
-- Une fiche a déjà des numéros dont il faut confirmer la fiabilité ou rafraîchir le contrôle de la liste.
+- Une fiche a déjà des numéros dont il faut confirmer la fiabilité.
 
 ## Objectif
 
@@ -22,14 +22,10 @@ Relecture et l'humain voient d'un coup ce qui est utilisable, ce qui reste à v�
 ## Prérequis
 
 - Le relevé complet de `coordonnees-recherche` pour la fiche.
-- Facultatif : un accès à la liste belge « Ne m'appelez plus » (licence de l'entreprise auprès de l'association agréée, fournie
-  par l'humain). Sans accès fourni, le contrôle est « non vérifié ».
 
 ## Entrées
 
 - `releve` : tableau numéro, étape, URL, date, extrait, par fiche.
-- `resultatListe` : résultat de la comparaison avec la liste « Ne m'appelez plus » s'il existe (numéro, inscrit ou non, date de
-  consultation).
 
 ## Étapes
 
@@ -43,10 +39,8 @@ Relecture et l'humain voient d'un coup ce qui est utilisable, ce qui reste à v�
    dont rien ne dit qu'il est professionnel n'est pas retenu. Minimisation : le standard ou la ligne du cabinet d'abord ; un
    portable seulement s'il est le seul numéro professionnel publié ; jamais le motif d'une absence (congé, maladie, maternité)
    ni un autre détail de la vie privée lu à côté du numéro.
-3. **Contrôler la liste « Ne m'appelez plus ».** Comparer chaque numéro retenu au résultat fourni. Inscrit : « exclu, inscrit
-   sur la liste le <date> », aucun appel conseillé. Non inscrit : « non inscrit au <date de consultation> ». Sans résultat :
-   « non vérifié » et la mention « aucun appel conseillé tant que le contrôle n'est pas fait ». Une opposition déjà exprimée
-   à la prospection exclut aussi le numéro.
+3. **Signaler l'opposition.** Une opposition déjà exprimée à la prospection est signalée sur la fiche du numéro, sans
+   bloquer le recoupement.
 
 Pour chaque numéro, écrire aussi la base légale : l'intérêt légitime (RGPD, art. 6, § 1, f) avec la référence de la mise en
 balance validée par un humain (preuve `mise_en_balance` de la base légale du prospect) si elle existe, sinon « mise en
@@ -67,21 +61,19 @@ Fiabilité : fiable (2 sources ou plus) | à vérifier (<raison>)
 Sources : <URL 1> (<date>) ; <URL 2> (<date>)
 Base légale : intérêt légitime (art. 6, § 1, f), mise en balance <référence> | intérêt légitime (art. 6, § 1, f), mise en balance : non fournie (optionnel)
 Information art. 14 : à faire au plus tard au premier contact | faite le <date> par l'humain
-Liste « Ne m'appelez plus » : non inscrit au <date> | inscrit (exclu) | non vérifié
 Appel conseillé : oui | non (<raison>)
 ```
 
 Chaque personne physique de la liste porte la mention « information art. 14 : à faire au plus tard au premier contact, et dans le mois qui suit la collecte » (RGPD, art. 14, § 3) ; le modèle de mention que l'humain relit et envoie lui-même est `controle-communications-reglementees/references/information-art14.md`. L'atelier n'envoie rien.
 
 Une fiche sans numéro porte « Numéro : aucun trouvé » et la liste des étapes faites. En tête du livrable : nombre de numéros
-fiables, à vérifier, exclus, non vérifiés, et les étapes qui n'ont pas pu être faites.
+fiables, à vérifier, et les étapes qui n'ont pas pu être faites.
 
 ## Critères de réussite
 
 - Aucun numéro « fiable » avec moins de deux sources indépendantes.
 - Tout numéro porte type, sources avec date et base légale.
-- « Appel conseillé : oui » seulement si le numéro est fiable, non inscrit et contrôlé ; sinon « non » avec la raison.
-- Le contrôle de la liste est « non vérifié » chaque fois qu'aucun résultat n'a été fourni, sans exception.
+- « Appel conseillé : oui » seulement si le numéro est fiable ET la mise en balance fournie (la règle du plugin refuse le téléphone sans elle) ; sinon « non » avec la raison.
 
 ## Limites
 
@@ -92,14 +84,14 @@ fiables, à vérifier, exclus, non vérifiés, et les étapes qui n'ont pas pu �
 
 ## Sources officielles
 
-- Code de droit économique, livre VI, art. VI.110 à VI.114 (communications non souhaitées, liste « Ne m'appelez plus »), texte
+- Code de droit économique, livre VI, art. VI.110 à VI.114 (communications non souhaitées), texte
   consolidé sur Justel : https://www.ejustice.just.fgov.be/cgi_loi/change_lg.pl?language=fr&la=F&cn=2013022819&table_name=loi
 - Règlement (UE) 2016/679 (RGPD), art. 6, § 1, f (intérêt légitime) et art. 21 (droit d'opposition).
 
 ## À vérifier par un professionnel
 
-- La mise en balance de l'intérêt légitime (art. 6, § 1, f) et les modalités d'accès à la liste « Ne m'appelez plus » : si le
-  client les fournit, son DPO ou son juriste les confirme ; sinon « non fournie (optionnel) », sans bloquer ni rien demander
+- La mise en balance de l'intérêt légitime (art. 6, § 1, f) : si le
+  client la fournit, son DPO ou son juriste la confirme ; sinon « non fournie (optionnel) », sans bloquer ni rien demander
   (décision de l'opérateur du 30/10/2026). L'avis de juriste est optionnel.
 
 ## Exemple
@@ -111,6 +103,5 @@ Type : standard
 Fiabilité : fiable (2 sources ou plus)
 Sources : https://exemple.invalide/contact (2026-10-21) ; https://annuaire.exemple.invalide/fiche/123 (2026-10-21)
 Base légale : intérêt légitime (art. 6, § 1, f), mise en balance : non fournie (optionnel)
-Liste « Ne m'appelez plus » : non vérifié
-Appel conseillé : non (contrôle de la liste non fait)
+Appel conseillé : non (téléphone : la mise en balance doit être documentée avant tout appel ; le numéro est déposé quand même)
 ```
