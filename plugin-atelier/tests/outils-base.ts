@@ -137,7 +137,8 @@ export function creerBanc(o: { mode?: "demonstration" | "reel"; modeEntreprise?:
       return { decision: ev.decision, perimee: Boolean(ev.perimee), revisionId: ev.revisionId, plusRecentes: dernier !== null && dernier > ev.entreesJusquA };
     },
     listerEvaluations: async (_c, issueId) => structuredClone([...t.evaluations].filter((e) => e.issueId === issueId).sort((a, b) => (a.creeLe < b.creeLe ? 1 : -1))) as never,
-    insererDecision: async (d) => void t.decisions.push({ ...d, invalidee: false, creeLe: horloge() }),
+    // Heure réelle, pas l'horloge du banc : une approbation expire (portée en jours) par rapport à l'heure réelle du serveur.
+    insererDecision: async (d) => void t.decisions.push({ ...d, invalidee: false, creeLe: new Date(Date.now() + ++tic).toISOString() }),
     invaliderDecisions: async (_c, issueId, rev) => {
       t.decisions.filter((d) => d.issueId === issueId && d.revisionId !== rev).forEach((d) => (d.invalidee = true));
       return { rowCount: 0 };
@@ -326,7 +327,7 @@ export function creerBanc(o: { mode?: "demonstration" | "reel"; modeEntreprise?:
 
   function decision(o3: { revision?: string; action?: string; portee?: Ligne | null; mode?: "demonstration" | "reel" } = {}) {
     const id = `dec-${t.decisions.length + 1}`.padEnd(8, "0");
-    t.decisions.push({ id, companyId: SOC, issueId: ISSUE, revisionId: o3.revision ?? REV1, action: o3.action ?? "approuver", commentaire: "ok", userId: "local-board", portee: o3.portee ?? null, mode: o3.mode ?? "demonstration", invalidee: false, creeLe: horloge() });
+    t.decisions.push({ id, companyId: SOC, issueId: ISSUE, revisionId: o3.revision ?? REV1, action: o3.action ?? "approuver", commentaire: "ok", userId: "local-board", portee: o3.portee ?? null, mode: o3.mode ?? "demonstration", invalidee: false, creeLe: new Date(Date.now() + ++tic).toISOString() });
     return id;
   }
 

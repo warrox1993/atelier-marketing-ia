@@ -8,6 +8,7 @@
  * parenthèses « (04) » ; chiffres pleine chasse ramenés par NFKC ; caractères invisibles retirés.
  * Un numéro écrit 0123.456.789 n'est un BCE (donc pas un téléphone) que si son contrôle modulo 97 le confirme.
  */
+import { ADRESSES_CONNAISSANCE_DANS_TEXTE } from "../contrats/connaissances.js";
 import { retirerInvisibles } from "./contenu-externe.js";
 import { bceValide } from "./regles-prospection.js";
 
@@ -38,7 +39,8 @@ export function telephonesEnClair(livrable: string, autorises: readonly string[]
   const permis = new Set(autorises);
   const trouves: Array<{ ligne: number }> = [];
   livrable.split("\n").forEach((texte, i) => {
-    for (const n of numerosTelephone(texte)) if (!permis.has(n)) trouves.push({ ligne: i + 1 });
+    // Les uuid d'une adresse de citation peuvent se lire comme un numéro : l'adresse n'est pas examinée (issue #42).
+    for (const n of numerosTelephone(texte.replace(ADRESSES_CONNAISSANCE_DANS_TEXTE, ""))) if (!permis.has(n)) trouves.push({ ligne: i + 1 });
   });
   return trouves;
 }

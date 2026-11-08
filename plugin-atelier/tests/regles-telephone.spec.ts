@@ -62,6 +62,21 @@ describe("DROIT-1.3 : numéros de téléphone belges", () => {
     expect(telephonesEnClair("# Contact\nAppelez-nous au 04 222 33 44\nDr X : 0470 12 34 56", ["042223344"])).toEqual([{ ligne: 3 }]);
   });
 
+  // Issue #42 : l'uuid d'une citation (ici « 0123-4567-8abc ») se lisait « 0123 4567 8 », soit un faux numéro fixe.
+  const CITATION = "connaissance://aaaaaaaa-0123-4567-8abc-aaaaaaaaaaaa/v1#aaaaaaaa-0123-4567-8abc-aaaaaaaaaaaa";
+
+  it("une adresse de citation connaissance:// n'est jamais lue comme un numéro", () => {
+    expect(telephonesEnClair(CITATION, [])).toEqual([]);
+  });
+
+  it("un vrai numéro écrit sur la même ligne qu'une citation reste relevé", () => {
+    expect(telephonesEnClair(`Prime (${CITATION}) puis appelez le 0470 12 34 56`, [])).toEqual([{ ligne: 1 }]);
+  });
+
+  it("un numéro déguisé en adresse de citation reste relevé", () => {
+    expect(telephonesEnClair("connaissance://0470123456", [])).toEqual([{ ligne: 1 }]);
+  });
+
   it("la porte refuse le livrable et le motif ne recopie pas le numéro", () => {
     const e: EntreesPorte = {
       porte: { exigencesCiblees: ["REQ-001"], revuesRequises: [{ role: "metier", agentId: "m" }], maxCycles: 3 },

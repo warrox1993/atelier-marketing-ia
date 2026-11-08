@@ -421,7 +421,8 @@ describe("témoin de la clé des empreintes", () => {
   /** Secrets du coffre : la clé de chiffrement ne bouge pas, la clé des empreintes vaut `hmac` octets répétés. */
   const coffre = (hmac: number) => ({ resolve: async (_r: unknown, o: { configPath: string }) => Buffer.alloc(32, o.configPath === "donneesCleChiffrement" ? 1 : hmac).toString("base64") });
   const MINUTE = 61_000;
-  const DEBUT = Date.UTC(2026, 10, 8, 10, 0, 0);
+  // Heure réelle, pas une date en dur : la signature de la passerelle est émise à l'heure réelle (écart toléré : 120 s).
+  const DEBUT = Date.now();
   afterEach(() => vi.useRealTimers());
 
   it("sans liste aucun effet : même clé, aucun avertissement, une seule adoption du témoin", async () => {

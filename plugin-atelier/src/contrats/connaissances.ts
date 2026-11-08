@@ -141,6 +141,8 @@ export type VecteurBase64 = z.infer<typeof VecteurBase64>;
 
 const UUID = "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}";
 const MOTIF_ADRESSE = new RegExp(`^connaissance://(${UUID})/v([1-9]\\d{0,5})#(${UUID})$`, "u");
+/** Toutes les adresses de citation au format exact dans un texte libre. */
+export const ADRESSES_CONNAISSANCE_DANS_TEXTE = new RegExp(`connaissance://${UUID}/v[1-9]\\d{0,5}#${UUID}`, "gu");
 
 /** Adresse `connaissance://<document>/v<version>#<passage>` (identifiants en minuscules). */
 export const AdresseConnaissance = z.string().max(120).regex(MOTIF_ADRESSE, "Adresse connaissance://<document>/v<version>#<passage> attendue");
