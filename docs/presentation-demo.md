@@ -104,7 +104,7 @@ Clics :
 
 1. Page **Atelier marketing**, rubrique **Prospects**. Montrer la liste : 97 prospects, entreprises, particuliers et partenaires au même rang.
 2. Expliquer le circuit en une phrase : la réponse du connecteur est signée (on sait d'où elle vient), puis contrôlée, puis filtrée par les exclusions, puis notée.
-3. Montrer les 24 exclus et leur motif lisible : opposition, doublon, hors zone, déjà client.
+3. Montrer les 24 exclus et leur motif lisible : doublon, hors zone, déjà client.
 4. Montrer l'exemple des 20 commerces OpenStreetMap reconnus comme des entreprises déjà trouvées dans la BCE (même nom, même code postal, même téléphone) : ils sont fusionnés au lieu d'être comptés deux fois.
 5. Ouvrir la fiche choisie la veille :
    - le score expliqué critère par critère ;

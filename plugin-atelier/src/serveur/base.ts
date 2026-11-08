@@ -329,6 +329,32 @@ export function creerBase(db: Db) {
     };
   }
 
+  /** Témoin de la clé des empreintes de l'entreprise (migration 033) ; null tant qu'aucune clé n'a été chargée. */
+  async function lireTemoinCleEmpreintes(companyId: string): Promise<string | null> {
+    const [r] = await q(`select temoin_cle_empreintes from ${ns}.reglages_entreprise where company_id = $1`, [companyId]);
+    return typeof r?.temoin_cle_empreintes === "string" ? r.temoin_cle_empreintes : null;
+  }
+
+  /** Adopte le témoin d'une entreprise qui n'en a pas ; ne remplace jamais un témoin existant. Vrai si l'adoption a eu lieu. */
+  async function adopterTemoinCleEmpreintes(companyId: string, temoin: string): Promise<boolean> {
+    const { rowCount } = await x(
+      `insert into ${ns}.reglages_entreprise as r (company_id, temoin_cle_empreintes, modifie_le) values ($1, $2, now())
+       on conflict (company_id) do update set temoin_cle_empreintes = excluded.temoin_cle_empreintes where r.temoin_cle_empreintes is null`,
+      [companyId, temoin],
+    );
+    return rowCount === 1;
+  }
+
+  /** Vrai si l'entreprise a au moins une opposition (sa clé d'empreintes compte alors). */
+  async function entrepriseAOppositions(companyId: string): Promise<boolean> {
+    return (await q(`select 1 as un from ${ns}.oppositions where company_id = $1 limit 1`, [companyId])).length > 0;
+  }
+
+  /** Remplace le témoin de clé d'une entreprise (rotation voulue, sans opposition à protéger). */
+  async function remplacerTemoinCleEmpreintes(companyId: string, temoin: string): Promise<void> {
+    await x(`update ${ns}.reglages_entreprise set temoin_cle_empreintes = $2, modifie_le = now() where company_id = $1`, [companyId, temoin]);
+  }
+
   /** Enregistre les réglages ; le plafond publicitaire n'est touché que par `enregistrerPlafondEntreprise`. */
   async function enregistrerReglages(r: { companyId: string; maxRunsActifs: number; maxCyclesCorrection: number; modeParDefaut: string; retentionJours: number }) {
     await x(
@@ -1482,10 +1508,6 @@ export function creerBase(db: Db) {
     );
   }
 
-  async function prospectsAvecEmpreinte(companyId: string, type: string, valeur: string) {
-    return (await q(`select distinct prospect_id from ${ns}.prospects_empreintes where company_id = $1 and type = $2 and empreinte = $3`, [companyId, type, valeur])).map((r) => String(r.prospect_id));
-  }
-
   async function insererScoreProspect(s: { id: string; companyId: string; prospectId: string; valeur: number; criteres: unknown; versionPoids: number; calculeLe: string }) {
     await x(
       `insert into ${ns}.prospects_scores (id, company_id, prospect_id, valeur, criteres, version_poids, nature, calcule_le) values ($1, $2, $3, $4, $5::jsonb, $6, 'estimation', $7::timestamptz)`,
@@ -1767,6 +1789,8 @@ export function creerBase(db: Db) {
   // légale sont gardés (la clé étrangère `bases_legales.prospect_id` est en ON DELETE CASCADE).
   async function supprimerDonneesEntreprise(companyId: string) {
     const supprimes: Record<string, number> = {};
+    // Les oppositions sont conservées : le témoin de la clé qui les a empreintées l'est aussi (relu avant, réinséré après).
+    const temoinCle = await lireTemoinCleEmpreintes(companyId);
     // P9b : tables de prospection et de base clients d'abord (exports avant diffusions ; enfants avant parents).
     for (const table of TABLES_REMISE_A_ZERO) {
       const { rowCount } = table === "prospects"
@@ -1777,6 +1801,7 @@ export function creerBase(db: Db) {
         : await x(`delete from ${ns}.${table} where company_id = $1`, [companyId]);
       supprimes[table] = rowCount;
     }
+    if (temoinCle !== null) await adopterTemoinCleEmpreintes(companyId, temoinCle);
     const [r] = await q<Record<string, number | string>>(
       `select ${TABLES_CONSERVEES.map((t) => `(select count(*) from ${ns}.${t} where company_id = $1) as ${t}`).join(", ")}, (select count(*) from ${ns}.prospects where company_id = $1) as prospects_avec_base_legale`,
       [companyId],
@@ -1789,7 +1814,7 @@ export function creerBase(db: Db) {
   return {
     ns,
     journaliser, lireJournal, datesJournal, diffusionsConfirmeesSansBilan, abandonsVeilleur, journalExiste, journalExistants, lectureWebDansRun, derniereDateJournal, entreprisesSuivies, tachesOrphelines, tachesFigeesSousPorte,
-    lireReglages, enregistrerReglages, enregistrerPlafondEntreprise, enregistrerPlafondCampagne, donneesEngagement,
+    lireReglages, enregistrerReglages, lireTemoinCleEmpreintes, adopterTemoinCleEmpreintes, entrepriseAOppositions, remplacerTemoinCleEmpreintes, enregistrerPlafondEntreprise, enregistrerPlafondCampagne, donneesEngagement,
     creerCampagne, listerCampagnes, lireCampagne, creerBrief, dernierBrief,
     enregistrerExigence, creerExigenceSiAbsente, listerExigences, lireExigence, changerExclusion,
     creerPorte, lirePorte, listerPortes, majCycles, toucherPortesEntreprise, perimerEvaluationsEntreprise, traceReelle,
@@ -1804,7 +1829,7 @@ export function creerBase(db: Db) {
     tachesDeProjet, bloqueursNonResolus, tachesBloquantes, tachesSoeurs, runsDeTaches, tacheDuRun, coutsEntreprise, coutsEntrepriseMois, competencesDernierRun,
     supprimerDonneesEntreprise, purgerProspectsSansContact,
     prospectsParIdentifiants, lireProspect, empreintesProspectsEnBase, oppositionsPour, compterAReimporter, clientsActuelsPour, clientExiste, clientParEmpreinte, poidsScoreCourant,
-    referentielProspection, insererProspect, majProspect, remplacerProspectAReimporter, exclureProspect, ajouterEmpreintesProspect, prospectsAvecEmpreinte, insererScoreProspect,
+    referentielProspection, insererProspect, majProspect, remplacerProspectAReimporter, exclureProspect, ajouterEmpreintesProspect, insererScoreProspect,
     detailsProspects, listerProspects, insererOpposition, lireOpposition,
     insererImportBaseClients, insererClients, etatBaseClients, supprimerBaseClients, reglesVentesCroisees, clientsPourVentesCroisees, insererEtalonnage, issuesPourEtalonnage, scoresCourantsCible, insererScoreMesure,
     lireExportCrmParCle, insererExportCrm,

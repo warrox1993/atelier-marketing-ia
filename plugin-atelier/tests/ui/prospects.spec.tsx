@@ -98,6 +98,21 @@ describe("liste des prospects", () => {
     expect(c.querySelector("tbody")!.textContent).toContain("Exclu par une règle");
   });
 
+  it("un prospect de la liste d'opposition porte la marque et n'est pas présenté comme exclu", async () => {
+    const marque = { ...structuredClone(B2B), statut: "nouveau", motifsExclusion: [], figureDansOppositions: true };
+    serveur = () => ({ statut: 200, corps: page(marque) });
+    const c = await ouvrir();
+    expect(c.querySelector("tbody")!.textContent).toContain("Figure dans la liste d'opposition");
+    expect(c.querySelector("tbody")!.textContent).not.toContain("Exclu par une règle");
+  });
+
+  it("changement de clé des empreintes : l'avertissement s'affiche, la liste reste visible", async () => {
+    serveur = () => ({ statut: 200, corps: { ...page(structuredClone(B2B)), avertissement: "La clé des empreintes a changé : les oppositions enregistrées avec l'ancienne clé ne sont plus retrouvées." } });
+    const c = await ouvrir();
+    expect(c.textContent).toContain("La clé des empreintes a changé");
+    expect(c.querySelector("tbody")).not.toBeNull();
+  });
+
   it("filtre secteur × zone : la requête change", async () => {
     const c = await ouvrir();
     await cliquer(parTexte(c, "button", "Entreprises"));

@@ -43,8 +43,8 @@ humaine d'envoi.
    - origine inconnue, carte de visite sans consentement, liste reçue d'un partenaire sans accord sur le partage : **mis
      à part**, jamais invité, avec la question à poser.
    Compter chaque groupe ; le total doit égaler la taille de l'export.
-2. **Retirer** les doublons et les personnes qui se sont opposées au marketing direct (liste d'opposition de
-   l'entreprise).
+2. **Retirer** les doublons et **signaler** à l'équipe commerciale les personnes qui figurent dans la liste d'opposition
+   de l'entreprise.
 3. **Rédiger l'invitation** : quoi, pour qui, ce que la personne y gagne, date, lieu, accès, inscription, contact. Ajouter
    un lien ou une adresse de désinscription, une phrase sur le traitement des données (qui, pourquoi, combien de temps,
    droits) et, si des photos sont prévues, une phrase qui dit lesquelles et pour quel usage.

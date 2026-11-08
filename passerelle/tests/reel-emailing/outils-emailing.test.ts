@@ -41,6 +41,13 @@ describe("catalogue du service emailing", () => {
     expect([lecture("lister_listes"), lecture("etat_campagne")]).toEqual([true, true]);
     expect([lecture("creer_liste"), lecture("ajouter_abonnes"), lecture("creer_campagne_brouillon")]).toEqual([false, false, false]);
   });
+  it("C4 : la description d'ajouter_abonnes ne promet un refus que faute de base légale « courriel » ; la liste d'opposition n'est que comptée", () => {
+    const { catalogue } = montage();
+    const d = catalogue.outils.get("ajouter_abonnes")!.description;
+    expect(d).toContain("base légale « courriel »");
+    expect(d).not.toMatch(/refuse la campagne si une adresse figure dans les oppositions/u);
+    expect(d).toMatch(/comptées dans la carte de confirmation/u);
+  });
 });
 
 describe("ajouter_abonnes : preuve du consentement obligatoire", () => {

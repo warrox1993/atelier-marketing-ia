@@ -140,8 +140,8 @@ export function outilsEmailing(options: OptionsEmailing): OutilPasserelle[] {
       description:
         `ÉCRITURE (sans envoi). Inscrit des abonnés à une liste, ${ABONNES_MAX_PAR_APPEL} au plus par appel. Chaque abonné DOIT porter la preuve de son consentement ` +
         "(date, source, texte accepté) ; un abonné sans preuve fait refuser tout l'appel. Un abonné sur la liste de suppression (blocklisté) ou désinscrit de cette liste n'est jamais réinscrit. " +
-        "Cette preuve est déclarative : à la demande d'envoi, le plugin refuse la campagne si une adresse figure dans les oppositions de l'atelier " +
-        "ou n'y a pas de base légale « courriel » enregistrée (consentement ou client existant, produits analogues). " +
+        "Cette preuve est déclarative : à la demande d'envoi, le plugin refuse la campagne si une adresse n'a pas de base légale « courriel » " +
+        "enregistrée (consentement ou client existant, produits analogues) ; les adresses de la liste d'opposition de l'atelier ne bloquent rien, elles sont comptées dans la carte de confirmation. " +
         `Une source qui est une adresse web doit être publique. ${consigne}`,
       schemaEntree: schemaAjouterAbonnes,
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },

@@ -905,6 +905,13 @@ function Fiche({ p, companyId, onFermer, onExclu, onCorbeille, onRecharger }: { 
         </div>
       ) : null}
 
+      {p.figureDansOppositions ? (
+        <div className="atl-encart" data-ton="attention">
+          <p className="atl-encart-titre">Figure dans la liste d'opposition</p>
+          <p className="atl-attenue">Une coordonnée de ce prospect est dans la liste d'opposition. Rien n'est bloqué : c'est à l'équipe commerciale de décider.</p>
+        </div>
+      ) : null}
+
       <CompteRenduLead p={p} companyId={companyId} version={versionCompteRendu} />
 
       <CriteresQualification
@@ -1407,6 +1414,12 @@ function ListeProspects() {
           {filtre ? "Élargissez la zone ou baissez le score minimal, ou effacez les filtres." : "Demandez une recherche au Coordinateur : les prospects arrivent quand une campagne de prospection a collecté des données publiques ou qu'un particulier est enregistré."}
         </Vide>
       ) : null}
+      {etat.data?.avertissement ? (
+        <div className="atl-encart" data-ton="attention">
+          <p className="atl-encart-titre">Clé des empreintes changée</p>
+          <p className="atl-attenue">{etat.data.avertissement} Rien n'est bloqué.</p>
+        </div>
+      ) : null}
       {etat.data && lignes.length > 0 ? (
         <>
           <p className="atl-resume">
@@ -1461,6 +1474,7 @@ function ListeProspects() {
                     <td data-libelle="Étape">
                       <Pastille ton={TONS_STATUTS[p.statut]}>{LIBELLES_STATUTS[p.statut]}</Pastille>
                       {p.motifsExclusion.length > 0 ? <span className="atl-sous">{p.motifsExclusion.map((m) => LIBELLES_MOTIFS[m.motif]).join(" ; ")}</span> : null}
+                      {p.figureDansOppositions ? <span className="atl-sous">Figure dans la liste d'opposition</span> : null}
                     </td>
                   </tr>
                 ))}

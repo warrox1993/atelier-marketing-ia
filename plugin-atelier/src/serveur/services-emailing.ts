@@ -104,7 +104,7 @@ export function neutraliserMarkdown(texte: string, max: number): string {
 }
 
 /** Texte de la carte, construit côté serveur à partir de valeurs LUES chez la passerelle ; les textes libres sont neutralisés, l'empreinte hexadécimale validée n'est affichée qu'en code. */
-export function texteCarteEnvoi(e: { campagneId: number; empreinte: string; sujet: string; listes: Array<{ id: number; nom: string }>; destinataires: number; empreinteAbonnes: string; extrait: string; domaines?: string[] }): { prompt: string; detailsMarkdown: string } {
+export function texteCarteEnvoi(e: { campagneId: number; empreinte: string; sujet: string; listes: Array<{ id: number; nom: string }>; destinataires: number; empreinteAbonnes: string; extrait: string; domaines?: string[]; opposes?: number }): { prompt: string; detailsMarkdown: string } {
   const sujet = neutraliserMarkdown(e.sujet, LIMITE_SUJET);
   const listes = e.listes.map((l) => ({ id: l.id, nom: neutraliserMarkdown(l.nom, LIMITE_LISTE) })).filter((l) => l.nom.length > 0);
   const extrait = neutraliserMarkdown(e.extrait, LIMITE_EXTRAIT);
@@ -121,11 +121,15 @@ export function texteCarteEnvoi(e: { campagneId: number; empreinte: string; suje
       `- Domaines des liens et images : ${domaines === undefined ? "non lus, passerelle à mettre à jour" : domaines.length > 0 ? domaines.join(", ") : "aucun"}`,
       `- Empreinte du contenu : \`${e.empreinte}\``,
       `- Empreinte des abonnés : \`${e.empreinteAbonnes}\``,
+      ...(e.opposes ? [`- ${messageOppositions(e.opposes)}`] : []),
       "",
       "Accepter autorise l'envoi de cette version exacte du contenu à ces destinataires précis, une seule fois. Si le contenu ou la liste d'abonnés change, une nouvelle confirmation est nécessaire.",
     ].join("\n"),
   };
 }
+
+/** Compte rendu de la liste d'opposition : elle informe, l'équipe décide (jamais un refus). */
+const messageOppositions = (n: number): string => `${n} adresse(s) figurent dans la liste d'opposition`;
 
 function empreinteTexte(c: { prompt: string; detailsMarkdown: string }): string {
   return createHash("sha256").update(`${c.prompt}\n${c.detailsMarkdown}`).digest("hex");
@@ -137,7 +141,7 @@ export interface DependancesEmailing {
   /** Clé privée d'approbation de l'entreprise (secret natif), ou null avec le motif. */
   cleApprobation: (companyId: string) => Promise<{ cle: KeyObject | null; motif?: string }>;
   /** Adresses ciblées rapprochées des oppositions et des bases légales « courriel » de l'atelier (nombres seulement). */
-  controlerDestinataires: (companyId: string, courriels: readonly string[]) => Promise<{ opposes: number; sansBase: number }>;
+  controlerDestinataires: (companyId: string, courriels: readonly string[]) => Promise<{ opposes: number; sansBase: number; avertissement?: string }>;
   /** Liste de révocation signée (arv1) fraîche de l'entreprise. */
   revocations: (companyId: string) => Promise<string>;
   /** Adresse de la passerelle (réglage `passerelleUrl`), boucle locale seulement ; null si absente ou illisible. */
@@ -219,10 +223,12 @@ export function routesEmailing(d: DependancesEmailing): Partial<Record<CleRouteA
     // DROIT-2.1 et 2.2 : la preuve écrite par l'agent dans listmonk ne suffit pas ; chaque adresse doit être connue de l'atelier.
     if (!lue.courriels || lue.courriels.length !== lue.destinataires) erreur("emailing_indisponible", "La passerelle n'a pas rendu toutes les adresses des destinataires (passerelle à mettre à jour) : oppositions et bases légales non contrôlées, aucune carte n'est créée.");
     const controle = await d.controlerDestinataires(r.companyId, lue.courriels);
-    if (controle.opposes > 0 || controle.sansBase > 0) {
-      erreur("conflit", `Envoi refusé : ${controle.opposes} adresse(s) dans les oppositions (RGPD, art. 21, § 3) et ${controle.sansBase} sans base légale « courriel » enregistrée dans l'atelier (consentement, client existant pour des produits analogues, ou adresse impersonnelle d'une personne morale). Retirer ces abonnés de la liste ou faire enregistrer leur base légale par un humain, puis redemander.`);
+    if (controle.sansBase > 0) {
+      erreur("conflit", `Envoi refusé : ${controle.sansBase} sans base légale « courriel » enregistrée dans l'atelier (consentement, client existant pour des produits analogues, ou adresse impersonnelle d'une personne morale). Retirer ces abonnés de la liste ou faire enregistrer leur base légale par un humain, puis redemander.`);
     }
-    const texte = texteCarteEnvoi({ campagneId, empreinte, sujet: lue.sujet, listes: lue.listes, destinataires: lue.destinataires, empreinteAbonnes: lue.empreinte_abonnes, extrait: lue.extrait, domaines: lue.domaines });
+    // La liste d'opposition est facultative et jamais bloquante : elle ne fait que figurer dans la carte, le journal et la réponse.
+    const { opposes, avertissement } = controle;
+    const texte = texteCarteEnvoi({ campagneId, empreinte, sujet: lue.sujet, listes: lue.listes, destinataires: lue.destinataires, empreinteAbonnes: lue.empreinte_abonnes, extrait: lue.extrait, domaines: lue.domaines, opposes });
     const signature = empreinteTexte(texte);
 
     const resultat = await avecVerrou(tache.id, async () => {
@@ -242,10 +248,10 @@ export function routesEmailing(d: DependancesEmailing): Partial<Record<CleRouteA
     if (!resultat.reutilisee) {
       await base.journaliser({
         companyId: r.companyId, type: "emailing.envoi_demande", entite: "campagne_emailing", entiteId: String(campagneId), issueId: tache.id,
-        runId: r.acteur.runId, acteur: r.acteur.id, donnees: { empreinte, carte: resultat.carteId, destinataires: lue.destinataires, empreinteAbonnes: lue.empreinte_abonnes },
+        runId: r.acteur.runId, acteur: r.acteur.id, donnees: { empreinte, carte: resultat.carteId, destinataires: lue.destinataires, empreinteAbonnes: lue.empreinte_abonnes, ...(opposes > 0 ? { adressesDansOppositions: opposes } : {}), ...(avertissement ? { avertissementCle: avertissement } : {}) },
       });
     }
-    return { corps: { carteId: resultat.carteId, statut: "en_attente", reutilisee: resultat.reutilisee } };
+    return { corps: { carteId: resultat.carteId, statut: "en_attente", reutilisee: resultat.reutilisee, ...(opposes > 0 ? { adressesDansOppositions: opposes, message: `${messageOppositions(opposes)}.` } : {}), ...(avertissement ? { avertissement } : {}) } };
   };
 
   routes["emailing.envoyer"] = async (r) => {

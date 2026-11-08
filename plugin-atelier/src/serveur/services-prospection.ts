@@ -56,7 +56,7 @@ import type { ActeurHote, GestionnaireRoute } from "./atelier.js";
 import { resumerProspects, type PageProspectsComplete } from "./prospects-resume.js";
 import type { BaseAtelier } from "./base.js";
 import { normaliserPourEmpreinte } from "./base-clients.js";
-import { chiffrer, empreinte, memeCle, TAILLE_CLE_CHIFFREMENT, TAILLE_CLE_HMAC_MIN } from "./chiffrement-donnees.js";
+import { chiffrer, empreinte, memeCle, TAILLE_CLE_CHIFFREMENT, TAILLE_CLE_HMAC_MIN, temoinCleEmpreintes } from "./chiffrement-donnees.js";
 import { erreur, erreurValidation } from "./erreurs.js";
 import { estOutilEcriture } from "./preuve-approbation.js";
 import { resoudreReponse, type PrendreReponse } from "./reference-reponse.js";
@@ -65,7 +65,7 @@ import { construireCompteRendu, nomDuProspect, type FicheClientCompteRendu } fro
 import { ORIGINE_DEMANDE, titreDepuisTexte } from "./services-accueil.js";
 import { calculerConfiance, criteresManquants, type ContexteQualification } from "./qualification-prospects.js";
 import { fusionnerProspects, trouverPairesDoublons } from "./rapprochement-prospects.js";
-import { dedoublonner, empreintesDuProspect, exclusionsProspect, natureAdresse, telephoneBelgeE164, type ContexteProspection, type ZoneChoisie } from "./regles-prospection.js";
+import { dedoublonner, empreintesDuProspect, exclusionsProspect, figureDansOppositions, natureAdresse, telephoneBelgeE164, type ContexteProspection, type ZoneChoisie } from "./regles-prospection.js";
 import { calculerScore, type CritereEvalue } from "./score-prospects.js";
 import { numerosTelephone } from "./regles-telephone.js";
 import { routesBaseClients } from "./services-base-clients.js";
@@ -80,6 +80,8 @@ export interface ServicesProspection {
   listerQualifies?: (companyId: string, query: Record<string, string | string[]>, plafond: number) => Promise<Prospect[]>;
   /** Clés de chiffrement des données de l'entreprise (secret natif) : le registre des consentements déchiffre puis masque. */
   clesDonnees?: (companyId: string) => Promise<ClesDonnees>;
+  /** Avertissement en cours sur la clé des empreintes de l'entreprise (null si le témoin correspond) ; ne refuse jamais rien. */
+  avertissementCle?: (companyId: string) => string | null;
 }
 
 export interface DependancesProspection {
@@ -155,7 +157,7 @@ const BASES_ENVOI_COURRIEL = new Set(["consentement", "client_existant_produits_
 
 /**
  * DROIT-2.1 et 2.2 : adresses d'une campagne rapprochées des oppositions (courriel ou tous canaux) et des bases légales enregistrées.
- * `sansBase` compte les adresses non opposées sans prospect porteur d'une base « courriel » permise (adresse illisible comprise).
+ * `sansBase` compte les adresses (opposées ou non) sans prospect porteur d'une base « courriel » permise (adresse illisible comprise).
  */
 export async function controlerDestinatairesCourriel(base: Pick<BaseAtelier, "oppositionsPour" | "empreintesProspectsEnBase" | "detailsProspects">, cles: ClesDonnees, companyId: string, courriels: readonly string[]): Promise<{ opposes: number; sansBase: number }> {
   const valeurs = courriels.map((c) => valeurPourEmpreinte("courriel", c));
@@ -166,7 +168,7 @@ export async function controlerDestinatairesCourriel(base: Pick<BaseAtelier, "op
   const autorisees = new Set(porteurs.filter((p) => (bases.get(p.prospectId) ?? []).some((b) => b.canal === "courriel" && BASES_ENVOI_COURRIEL.has(String(b.base)))).map((p) => p.valeur));
   return {
     opposes: hs.filter((x) => opposees.has(x)).length,
-    sansBase: valeurs.filter((v) => v === null).length + hs.filter((x) => !opposees.has(x) && !autorisees.has(x)).length,
+    sansBase: valeurs.filter((v) => v === null).length + hs.filter((x) => !autorisees.has(x)).length,
   };
 }
 
@@ -650,7 +652,75 @@ export function routesProspection(d: DependancesProspection): Partial<Record<Cle
   // un agent qui dépose plusieurs pages d'affilée les épuise. Les clés résolues restent donc en mémoire
   // 60 s au plus, par entreprise et par couple de secrets (jamais écrites, journalisées ni renvoyées).
   const cacheCles = new Map<string, { cles: ClesDonnees; expire: number }>();
+  /** Avertissements de clé des empreintes en cours, par entreprise. */
+  const avertissementsCle = new Map<string, string>();
+  const avertissementCle = (companyId: string): string | null => avertissementsCle.get(companyId) ?? null;
+  /** Champ à ajouter à une réponse tant que la clé des empreintes diffère de son témoin : `{}` sinon. */
+  const avecAvertissementCle = (companyId: string): { avertissement?: string } => {
+    const a = avertissementCle(companyId);
+    return a === null ? {} : { avertissement: a };
+  };
+  /** Charge les clés pour que le témoin soit comparé même sur une lecture ; une clé absente ou illisible n'est pas une erreur ici. */
+  async function rafraichirAvertissementCle(companyId: string): Promise<void> {
+    try {
+      await clesDonnees(companyId);
+    } catch {
+      // Sans clés configurées, aucune empreinte n'existe : rien à comparer, et la lecture reste possible.
+    }
+  }
+  /**
+   * Compare la clé des empreintes chargée au témoin de l'entreprise (migration 033). Sans témoin : adoption, une seule fois,
+   * journalisée. Témoin différent : avertissement (réponses, journal une fois par changement), l'opération continue. Jamais un refus.
+   */
+  async function verifierTemoinCle(companyId: string, cles: ClesDonnees): Promise<void> {
+    const temoin = temoinCleEmpreintes(cles.hmac);
+    const enregistre = await base.lireTemoinCleEmpreintes(companyId);
+    if (enregistre === null) {
+      if (await base.adopterTemoinCleEmpreintes(companyId, temoin)) {
+        await base.journaliser({ companyId, type: "cle_empreintes.temoin_adopte", entite: "cle_empreintes", entiteId: companyId, acteur: "plugin", donnees: { temoin } });
+      }
+      avertissementsCle.delete(companyId);
+      return;
+    }
+    if (enregistre === temoin) {
+      avertissementsCle.delete(companyId);
+      return;
+    }
+    // Rotation voulue : sans opposition, aucune empreinte n'est perdue ; la nouvelle clé devient la référence.
+    if (!(await base.entrepriseAOppositions(companyId))) {
+      await base.remplacerTemoinCleEmpreintes(companyId, temoin);
+      await base.journaliser({ companyId, type: "cle_empreintes.temoin_adopte", entite: "cle_empreintes", entiteId: companyId, acteur: "plugin", donnees: { temoin } });
+      avertissementsCle.delete(companyId);
+      return;
+    }
+    const message = "La clé des empreintes a changé : les oppositions enregistrées avec l'ancienne clé ne sont plus retrouvées.";
+    if (avertissementsCle.get(companyId) !== message) {
+      avertissementsCle.set(companyId, message);
+      ctx.logger.warn("Clé des empreintes changée", { companyId });
+      // Une seule ligne par témoin observé (le journal fait foi, la mémoire du processus ne survit pas à un redémarrage).
+      if (!(await base.journalExiste(companyId, "cle_empreintes.changee", temoin))) {
+        await base.journaliser({ companyId, type: "cle_empreintes.changee", entite: "cle_empreintes", entiteId: temoin, acteur: "plugin", donnees: { temoinEnregistre: enregistre, temoinActuel: temoin } });
+      }
+    }
+  }
+  /** Échecs de chargement gardés 60 s et chargements en cours, par entreprise : une lecture répétée ne rappelle pas le coffre à chaque fois. */
+  const echecsCles = new Map<string, { erreur: unknown; expire: number }>();
+  const chargementsCles = new Map<string, Promise<ClesDonnees>>();
   async function clesDonnees(companyId: string): Promise<ClesDonnees> {
+    const echec = echecsCles.get(companyId);
+    if (echec && echec.expire > Date.now()) throw echec.erreur;
+    const enCours = chargementsCles.get(companyId);
+    if (enCours) return enCours;
+    const charge = chargerCles(companyId)
+      .catch((e: unknown) => {
+        echecsCles.set(companyId, { erreur: e, expire: Date.now() + 60_000 });
+        throw e;
+      })
+      .finally(() => chargementsCles.delete(companyId));
+    chargementsCles.set(companyId, charge);
+    return charge;
+  }
+  async function chargerCles(companyId: string): Promise<ClesDonnees> {
     const config = await d.configEntreprise(companyId);
     const refC = config.donneesCleChiffrement;
     const refH = config.donneesCleHmac;
@@ -672,6 +742,8 @@ export function routesProspection(d: DependancesProspection): Partial<Record<Cle
       if (hmac.byteLength < TAILLE_CLE_HMAC_MIN) erreur("acces_refuse", `Clé « donneesCleHmac » invalide : au moins ${TAILLE_CLE_HMAC_MIN} octets attendus.`);
       if (memeCle(chiffrement, hmac)) erreur("acces_refuse", "Clés « donneesCleChiffrement » et « donneesCleHmac » identiques : deux secrets distincts sont obligatoires.");
       const cles: ClesDonnees = { chiffrement, hmac, origine: "coffre" };
+      // Le témoin informe : son échec (lecture, adoption, journal) ne doit jamais empêcher de charger les clés.
+      await verifierTemoinCle(companyId, cles).catch((e: unknown) => ctx.logger.warn("Témoin de la clé des empreintes non vérifié", { companyId, erreur: e instanceof Error ? e.message : String(e) }));
       cacheCles.set(cleCache, { cles, expire: Date.now() + 60_000 });
       return cles;
     }
@@ -756,23 +828,14 @@ export function routesProspection(d: DependancesProspection): Partial<Record<Cle
   }
 
   /**
-   * Opposition (art. 21.3) : empreinte seule, jamais la valeur ; les prospects déjà connus qui portent
-   * cette empreinte sont exclus sans attendre un nouveau dépôt.
+   * Opposition : empreinte seule, jamais la valeur. Elle informe et n'écarte aucun prospect : la marque
+   * « figure dans la liste d'opposition » est calculée à la lecture (`avecConfiance`).
    */
   async function enregistrerOpposition(companyId: string, cles: ClesDonnees, o: { type: "courriel" | "telephone" | "numero_bce"; valeur: string; canal: CanalContact | "tous"; origine: Opposition["origine"]; par: string; recueillieLe: string | null }) {
     const h = hacher(cles, o.type, o.valeur);
     if (h === null) return null;
     const nouvelle = (await base.insererOpposition({ id: randomUUID(), companyId, type: o.type, empreinte: h, canal: o.canal, origine: o.origine, par: o.par, recueillieLe: o.recueillieLe })) === 1;
-    const date = maintenant().toISOString();
-    let exclus = 0;
-    for (const id of await base.prospectsAvecEmpreinte(companyId, o.type, h)) {
-      // Une opposition s'applique aussi aux prospects à la corbeille : une restauration ne doit pas les remettre contactables.
-      const l = await base.lireProspect(companyId, id, { corbeille: true });
-      if (!l || (l.motifsExclusion as ExclusionConstatee[]).some((m) => m.motif === "opposition_client")) continue;
-      await base.exclureProspect(companyId, id, fusionnerMotifs(l.motifsExclusion as ExclusionConstatee[], [{ motif: "opposition_client", detail: "Inscrit à la liste d'opposition du client", constateLe: date }]));
-      exclus++;
-    }
-    return { empreinte: h, nouvelle, exclus };
+    return { empreinte: h, nouvelle };
   }
 
   async function referentielPour(companyId: string, campagneId: string | null): Promise<RenvoiReferentiel> {
@@ -786,9 +849,8 @@ export function routesProspection(d: DependancesProspection): Partial<Record<Cle
   /** Contexte des règles d'exclusion pour un lot de prospects (listes d'empreintes de l'entreprise). */
   async function contexteExclusions(companyId: string, campagne: Campagne | null, modeCampagne: ModeExecution, prospects: readonly Prospect[], date: string): Promise<{ contexte: ContexteProspection; enBase: Array<{ prospectId: string; type: string; valeur: string }> }> {
     const valeurs = [...new Set(prospects.flatMap((p) => empreintesDuProspect(p).map((e) => e.valeur)))];
-    const [enBase, oppositions, clients] = await Promise.all([
+    const [enBase, clients] = await Promise.all([
       base.empreintesProspectsEnBase(companyId, valeurs),
-      base.oppositionsPour(companyId, valeurs),
       base.clientsActuelsPour(companyId, valeurs),
     ]);
     return {
@@ -797,7 +859,6 @@ export function routesProspection(d: DependancesProspection): Partial<Record<Cle
         modeCampagne,
         canaux: canauxDeCampagne(campagne?.canaux ?? []),
         zone: zoneDeCampagne(campagne?.perimetre.zones ?? []),
-        oppositions: oppositions.map((o) => ({ type: o.type as TypeEmpreinte, valeur: o.valeur })),
         clientsActuels: clients.map((c) => ({ type: c.type as TypeEmpreinte, valeur: c.valeur })),
       },
       enBase,
@@ -809,9 +870,12 @@ export function routesProspection(d: DependancesProspection): Partial<Record<Cle
     return enBase.filter((e) => e.prospectId !== idExistant).map((e) => ({ type: e.type as TypeEmpreinte, valeur: e.valeur }));
   }
 
+  /** Ancien motif d'écartement par opposition : l'opposition ne fait plus que marquer, la fusion ne le conserve donc jamais (migration 034 pour les fiches déjà en base). */
+  const MOTIF_OPPOSITION_ABANDONNE = "opposition_client";
   function fusionnerMotifs(anciens: readonly ExclusionConstatee[], nouveaux: readonly ExclusionConstatee[]): ExclusionConstatee[] {
-    const vus = new Set(anciens.map((m) => m.motif));
-    return [...anciens, ...nouveaux.filter((m) => !vus.has(m.motif) && (vus.add(m.motif), true))].slice(0, 20);
+    const gardes = anciens.filter((m) => m.motif !== MOTIF_OPPOSITION_ABANDONNE);
+    const vus = new Set(gardes.map((m) => m.motif));
+    return [...gardes, ...nouveaux.filter((m) => m.motif !== MOTIF_OPPOSITION_ABANDONNE && !vus.has(m.motif) && (vus.add(m.motif), true))].slice(0, 20);
   }
 
   type LigneProspect = NonNullable<Awaited<ReturnType<BaseAtelier["lireProspect"]>>>;
@@ -847,7 +911,8 @@ export function routesProspection(d: DependancesProspection): Partial<Record<Cle
     });
     const sources = [...completees, ...p.sources.filter((s) => !anciennesSources.some((a) => a.sourceId !== null && a.sourceId === s.sourceId))].slice(-50);
     const fusion = fusionnerMotifs(existant.motifsExclusion as ExclusionConstatee[], motifs);
-    const statut = fusion.length > 0 ? "exclu" : existant.statut;
+    // Une fiche écartée seulement par l'ancien motif d'opposition redevient « nouveau » (la base exige : exclu <=> au moins un motif).
+    const statut = fusion.length > 0 ? "exclu" : existant.statut === "exclu" ? "nouveau" : existant.statut;
     let particulier = existant.particulier as Prospect["particulier"];
     if (particulier && p.particulier) {
       const refs = new Set(particulier.consentements.map((c) => c.reference));
@@ -922,11 +987,19 @@ export function routesProspection(d: DependancesProspection): Partial<Record<Cle
     };
   }
 
-  /** Ajoute la confiance de qualification (recalculée à chaque lecture, donc à jour après chaque dépôt). */
+  /**
+   * Ajoute la marque « figure dans la liste d'opposition » puis la confiance de qualification (recalculées à chaque lecture,
+   * donc à jour après chaque dépôt ou chaque opposition ajoutée). La marque informe, elle n'écarte jamais.
+   */
   async function avecConfiance(companyId: string, prospects: Prospect[]): Promise<Prospect[]> {
     if (prospects.length === 0) return prospects;
     const ctx = await contexteQualification(companyId);
-    return prospects.map((p) => ({ ...p, confiance: calculerConfiance(p, ctx) }));
+    const valeurs = [...new Set(prospects.flatMap((p) => empreintesDuProspect(p).map((e) => e.valeur)))];
+    const oppositions = (await base.oppositionsPour(companyId, valeurs)).map((o) => ({ type: o.type as TypeEmpreinte, valeur: o.valeur }));
+    return prospects.map((p) => {
+      const marque = { ...p, figureDansOppositions: figureDansOppositions(p, oppositions) };
+      return { ...marque, confiance: calculerConfiance(marque, ctx) };
+    });
   }
 
   async function relire(companyId: string, id: string): Promise<Prospect> {
@@ -1112,14 +1185,12 @@ export function routesProspection(d: DependancesProspection): Partial<Record<Cle
       }
       // Oppositions (b2c_oppositions) : empreintes seules, origine « import » (liste signée du client).
       let oppositionsAjoutees = 0;
-      let exclusParOpposition = 0;
       for (const o of b2c.oppositions) {
         for (const canal of o.canaux) {
           for (const [type, valeur] of [["courriel", o.courriel], ["telephone", o.telephone]] as const) {
             if (valeur === null) continue;
             const res = await enregistrerOpposition(r.companyId, clesDonneesLot, { type, valeur, canal, origine: "import", par: `${r.acteur.type}:${r.acteur.id}`, recueillieLe: o.inscritLe });
             if (res?.nouvelle) oppositionsAjoutees++;
-            exclusParOpposition += res?.exclus ?? 0;
           }
         }
       }
@@ -1133,7 +1204,7 @@ export function routesProspection(d: DependancesProspection): Partial<Record<Cle
           service: entree.service, outil: entree.outil, mode: deduction.mode, modeCampagne: effectif.mode, cles: clesDonneesLot.origine,
           // Couverture calculée (couverture-prospection.ts) : campagne, arguments vérifiés contre la signature, pagination.
           campagneId: campagne?.id ?? null, ...(appelPourCouverture(entree.outil, entree.arguments, deduction.structures) !== undefined ? { appel: appelPourCouverture(entree.outil, entree.arguments, deduction.structures) } : {}),
-          crees: resultats.filter((x) => x.cree).length, misAJour: resultats.filter((x) => !x.cree).length, exclus, ignores: ignores + bruts.length - retenus.length, fusionnes, enrichisParChangements, enrichisParComptes, clientsHorsBase, oppositionsAjoutees, exclusParOpposition,
+          crees: resultats.filter((x) => x.cree).length, misAJour: resultats.filter((x) => !x.cree).length, exclus, ignores: ignores + bruts.length - retenus.length, fusionnes, enrichisParChangements, enrichisParComptes, clientsHorsBase, oppositionsAjoutees,
         },
       });
       return {
@@ -1152,7 +1223,6 @@ export function routesProspection(d: DependancesProspection): Partial<Record<Cle
           enrichisParComptes,
           clientsHorsBase,
           oppositionsAjoutees,
-          exclusParOpposition,
           prospects: resultats.map((x) => x.prospect),
           consigne:
             deduction.mode === "demonstration"
@@ -1195,8 +1265,11 @@ export function routesProspection(d: DependancesProspection): Partial<Record<Cle
         const det = await base.detailsProspects(companyId, lignes.map((l) => l.id));
         ctx ??= await contexteQualification(companyId);
         const c = ctx;
-        for (const l of lignes) {
-          const p = assembler(l, det);
+        const lues = lignes.map((l) => assembler(l, det));
+        const valeurs = [...new Set(lues.flatMap((p) => empreintesDuProspect(p).map((e) => e.valeur)))];
+        const oppositions = (await base.oppositionsPour(companyId, valeurs)).map((o) => ({ type: o.type as TypeEmpreinte, valeur: o.valeur }));
+        for (const lue of lues) {
+          const p = { ...lue, figureDansOppositions: figureDansOppositions(lue, oppositions) };
           const confiance = calculerConfiance(p, c);
           if (confiance.qualifie) qualifies.push({ ...p, confiance });
         }
@@ -1208,6 +1281,7 @@ export function routesProspection(d: DependancesProspection): Partial<Record<Cle
 
   if (d.services) {
     d.services.clesDonnees = clesDonnees;
+    d.services.avertissementCle = avertissementCle;
     d.services.listerQualifies = (companyId, query, plafond) => parcourirQualifies(companyId, filtresDeRequete(companyId, query), plafond);
   }
 
@@ -1238,8 +1312,9 @@ export function routesProspection(d: DependancesProspection): Partial<Record<Cle
       if (!v.prospectId) erreur("entree_invalide", "partie=detail demande prospectId.");
       return { corps: await relire(r.companyId, v.prospectId) };
     }
+    await rafraichirAvertissementCle(r.companyId);
     const page = await pageComplete(r.companyId, filtres);
-    return { corps: v.vue === "complete" ? page : resumerProspects(page) };
+    return { corps: { ...(v.vue === "complete" ? page : resumerProspects(page)), ...avecAvertissementCle(r.companyId) } };
   };
 
   /** Critères de confiance encore non vérifiés d'un prospect, avec l'outil de la passerelle qui pourrait les établir. */
@@ -1485,14 +1560,14 @@ export function routesProspection(d: DependancesProspection): Partial<Record<Cle
       // La valeur en clair ne sort pas de cette fonction : ni stockée, ni journalisée, ni renvoyée.
       const res = await enregistrerOpposition(r.companyId, cles, { type: entree.type, valeur: entree.valeur, canal: entree.canal, origine: entree.origine, par: `${r.acteur.type}:${r.acteur.id}`, recueillieLe: entree.recueillieLe ?? null });
       if (res === null) erreur("entree_invalide", "Valeur d'opposition inexploitable.");
-      const { nouvelle, exclus } = res;
+      const { nouvelle } = res;
       const opposition = await base.lireOpposition(r.companyId, entree.type, res.empreinte, entree.canal);
       if (!opposition) erreur("erreur_interne", "Opposition introuvable après son enregistrement.");
       await base.journaliser({
         companyId: r.companyId, type: "opposition.ajoutee", entite: "opposition", entiteId: opposition.id, acteur: r.acteur.id,
-        donnees: { type: entree.type, canal: entree.canal, origine: entree.origine, nouvelle, prospectsExclus: exclus, cles: cles.origine },
+        donnees: { type: entree.type, canal: entree.canal, origine: entree.origine, nouvelle, cles: cles.origine },
       });
-      return { statut: nouvelle ? 201 : 200, corps: Opposition.parse(opposition) };
+      return { statut: nouvelle ? 201 : 200, corps: { ...Opposition.parse(opposition), ...avecAvertissementCle(r.companyId) } };
     });
 
   // Lot P9b : base de clients, étalonnage, exports (services-base-clients.ts).

@@ -118,10 +118,9 @@ describe("calcul de la confiance de qualification", () => {
     expect(ConfianceQualification.safeParse(c).success).toBe(true);
   });
 
-  it("zone hors cible, opposition et client actuel sont des critères contraires", () => {
+  it("zone hors cible, client actuel et entreprise inactive sont des critères contraires", () => {
     expect(statuts(entreprise({ zone: { codePostal: "1000", commune: "Bruxelles", province: null, region: "Bruxelles-Capitale", pays: "BE" } })).zone_cible).toBe("contraire");
     const motif = (m: string) => [{ motif: m, detail: "test", constateLe: H }];
-    expect(statuts(entreprise({ statut: "exclu", motifsExclusion: motif("opposition_client") })).joignable_legalement).toBe("contraire");
     expect(statuts(entreprise({ statut: "exclu", motifsExclusion: motif("client_actuel") })).pas_deja_client).toBe("contraire");
     expect(statuts(entreprise({ statut: "exclu", motifsExclusion: motif("entreprise_inactive") })).entreprise_active).toBe("contraire");
   });
@@ -846,12 +845,16 @@ describe("critères courtier du lot 3 : bureau spécialisé proche et contact pu
       expect(c.statut).toBe("non_verifie");
     });
 
-    it("entreprise contraire : opposition, même avec un contact publié ; plafonne à 50 %", () => {
-      const p = entreprise({ statut: "exclu", motifsExclusion: motif("opposition_client") });
+    it("entreprise : la liste d'opposition ne rend plus contraire, le critère reste vérifié avec la mention ; la confiance n'est pas plafonnée", () => {
+      const p = entreprise({ figureDansOppositions: true });
       const c = critere(p, "contact_public_permis")!;
-      expect(c.statut).toBe("contraire");
-      expect(c.detail).toBe("Opposition enregistrée");
-      expect(calculerConfiance(p, CTX_TOUS)).toMatchObject({ plafonnee: true, qualifie: false });
+      expect(c.statut).toBe("verifie");
+      expect(c.detail).toContain("figure dans la liste d'opposition");
+      expect(c.detail).not.toContain("aucune opposition");
+      expect(critere(p, "joignable_legalement")).toMatchObject({ statut: "verifie", detail: expect.stringContaining("figure dans la liste d'opposition") });
+      expect(calculerConfiance(p, CTX_TOUS).plafonnee).toBe(false);
+      // Sans liste : texte et statuts inchangés.
+      expect(critere(entreprise(), "contact_public_permis")!.detail).toContain("aucune opposition enregistrée");
     });
 
     it("entreprise sans donnée : aucune coordonnée ni site : non vérifié", () => {
@@ -871,9 +874,9 @@ describe("critères courtier du lot 3 : bureau spécialisé proche et contact pu
       expect(critere(part({ basesLegales: [] }, { origine: "courrier_adresse", consentements: [] }), "contact_public_permis")?.statut).toBe("non_verifie");
     });
 
-    it("particulier avec opposition : jamais vérifié, même avec un consentement", () => {
-      const p = Prospect.parse({ ...structuredClone(PROSPECT_B2C), statut: "exclu", score: null, motifsExclusion: motif("opposition_client") });
-      expect(critere(p, "contact_public_permis")).toMatchObject({ statut: "non_verifie", detail: "Opposition enregistrée : aucun consentement ne vaut" });
+    it("particulier dans la liste d'opposition : le consentement documenté reste vérifié, avec la mention", () => {
+      const p = Prospect.parse({ ...structuredClone(PROSPECT_B2C), statut: "nouveau", score: null, figureDansOppositions: true });
+      expect(critere(p, "contact_public_permis")).toMatchObject({ statut: "verifie", detail: expect.stringContaining("figure dans la liste d'opposition") });
     });
 
     it("comment vérifier : entreprise vers osm et bce, particulier vers l'action de documenter le consentement", () => {

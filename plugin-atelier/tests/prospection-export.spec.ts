@@ -119,7 +119,6 @@ function banc(o: { modeEntreprise?: "demonstration" | "reel"; config?: Record<st
     ajouterEmpreintesProspect: async (c: string, id: string, e: Array<{ type: string; valeur: string }>) => {
       for (const x of e) if (!t.empreintes.some((y) => y.prospectId === id && y.type === x.type && y.valeur === x.valeur)) t.empreintes.push({ companyId: c, prospectId: id, ...x });
     },
-    prospectsAvecEmpreinte: async (c: string, type: string, v: string) => [...new Set(t.empreintes.filter((e) => e.companyId === c && e.type === type && e.valeur === v).map((e) => e.prospectId))],
     insererScoreProspect: async (s: Ligne) => void t.scores.push(copie(s)),
     detailsProspects: async (c: string, ids: string[]) => ({
       empreintes: new Map(ids.map((id) => [id, t.empreintes.filter((e) => e.companyId === c && e.prospectId === id).map((e) => ({ type: e.type, valeur: e.valeur }))])),
@@ -405,15 +404,15 @@ describe("tache.prospects.exporter", () => {
     expect(f.tp.exports).toHaveLength(1);
   });
 
-  it("opposition du contact : 403 (prospect exclu)", async () => {
+  it("opposition du contact : plus un refus, l'export suit son cours (la liste informe, l'équipe décide)", async () => {
     const f = banc();
     f.tacheSousPorte();
     await f.deposer();
     f.baseLegale(f.id("0123.456.749"));
     await f.appeler("oppositions.ajouter", { body: { companyId: SOC, type: "courriel", valeur: "info@toitures-meuse.exemple.invalid", canal: "tous", origine: "demande_ecrite" } });
     const r = await exporter(f, demande(f, "export-oppose"));
-    expect(r.status).toBe(403);
-    expect(r.body.verifications[0].motif).toMatch(/opposition_client/u);
+    expect(r.status).toBe(202);
+    expect(r.body.verifications).toEqual([{ prospectId: f.id("0123.456.749"), ok: true, motif: null }]);
     expect(f.t.diffusions).toEqual([]);
   });
 

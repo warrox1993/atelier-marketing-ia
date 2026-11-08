@@ -49,7 +49,7 @@ Donner à l'humain un script court, honnête et respectueux du temps du secréta
    - « Elle n'est pas disponible » : demander le meilleur moment pour rappeler, sans demander de numéro privé.
    - « On ne donne pas de numéros directs » : accepter, demander d'être passé ou de laisser un message.
    - « Nous ne souhaitons pas être démarchés » : s'excuser, remercier, ne pas rappeler ; l'humain inscrit l'opposition le jour même dans les oppositions (interface de
-     l'atelier, section « Oppositions » de la base clients : empreinte seule) et la fiche est exclue.
+     l'atelier, section « Oppositions » de la base clients : empreinte seule) et la fiche est signalée.
 5. **Clore poliment** : remercier, répéter ce qui a été convenu, ne rien promettre qu'on ne fera pas.
 6. **Noter immédiatement**, sur la feuille de notes : date et heure, numéro appelé, nom de la personne au standard si donné, nom et fonction de l'interlocuteur visé, ligne directe ou e-mail si donné spontanément (base : « fourni par la personne du secrétariat à la demande de l'appelant »), information de l'art. 14 et moyen d'opposition donnés (à qui, à quelle heure), opposition éventuelle, prochaine action convenue.
 

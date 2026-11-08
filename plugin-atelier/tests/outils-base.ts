@@ -27,6 +27,8 @@ export function creerBanc(o: { mode?: "demonstration" | "reel"; modeEntreprise?:
   const t = {
     reglages: [] as Ligne[], campagnes: [] as Ligne[], exigences: [] as Ligne[], portes: [] as Ligne[], evaluations: [] as Ligne[], decisions: [] as Ligne[],
     diffusions: [] as Ligne[], appels: [] as Ligne[], sources: [] as Ligne[], journal: [] as Ligne[], couvertures: [] as Ligne[], verdicts: [] as Ligne[], constats: [] as Ligne[], relances: [] as Ligne[], messages: [] as Ligne[],
+    /** Témoin de la clé des empreintes par entreprise (migration 033). */
+    temoinsCle: new Map<string, string>(),
   };
   if (o.modeEntreprise) t.reglages.push({ companyId: SOC, modeParDefaut: o.modeEntreprise, maxRunsActifs: 3, maxCyclesCorrection: 3, retentionJours: 365, plafondPub: null, modifieLe: horloge() });
   t.campagnes.push({ id: CAMP, companyId: SOC, projectId: PROJET, briefIssueId: BRIEF, nom: "Printemps", objectifs: [], cible: null, offre: null, canaux: [], perimetre: { etablissements: [], zones: [] }, budgetMaxCents: null, plafondPub: null, mode: o.mode ?? "demonstration", etatProjet: { statut: "in_progress", enPause: false, archive: false }, creeLe: horloge() });
@@ -49,6 +51,10 @@ export function creerBanc(o: { mode?: "demonstration" | "reel"; modeEntreprise?:
     marques: async () => [],
     // Base de clients vide par défaut (la confiance de qualification la lit pour « pas déjà client »).
     etatBaseClients: async () => ({ dernierImport: null, clients: 0, actifs: 0, aReimporter: 0 }),
+    lireTemoinCleEmpreintes: async (companyId) => t.temoinsCle.get(companyId) ?? null,
+    adopterTemoinCleEmpreintes: async (companyId, temoin) => (t.temoinsCle.has(companyId) ? false : (t.temoinsCle.set(companyId, temoin), true)),
+    entrepriseAOppositions: async () => false,
+    remplacerTemoinCleEmpreintes: async (companyId, temoin) => void t.temoinsCle.set(companyId, temoin),
     journaliser: async (e) => void t.journal.push({ ...e, seq: t.journal.length + 1, creeLe: horloge() }),
     journalExiste: async (companyId, type, entiteId) => t.journal.some((j) => j.companyId === companyId && j.type === type && j.entiteId === entiteId),
     datesJournal: async (_c, issueId, type) => t.journal.filter((j) => j.issueId === issueId && j.type === type).map((j) => j.creeLe as string).sort().reverse(),

@@ -150,6 +150,11 @@ function contient(liste: readonly Empreinte[], empreintes: readonly Empreinte[])
   return empreintes.some((e) => cles.has(cleEmpreinte(e)));
 }
 
+/** Une coordonnée du prospect figure dans la liste d'opposition du client : une marque pour l'équipe, jamais un motif d'exclusion. */
+export function figureDansOppositions(p: Prospect, oppositions: readonly Empreinte[]): boolean {
+  return contient(oppositions, empreintesDuProspect(p));
+}
+
 function sansAccents(s: string): string {
   return s.trim().toLowerCase().normalize("NFD").replace(/\p{M}/gu, "");
 }
@@ -209,8 +214,6 @@ export interface ContexteProspection {
   canaux: readonly CanalContact[];
   /** Zone choisie ; null = aucune restriction géographique. */
   zone: ZoneChoisie | null;
-  /** Liste d'opposition propre au client (empreintes). */
-  oppositions: readonly Empreinte[];
   /** Clients actuels du client (empreintes, ex. `identifiant_client`, courriel, téléphone). */
   clientsActuels: readonly Empreinte[];
   /** Numéros BCE du fichier actif (normalisés en 10 chiffres) ; absent = fichier non chargé, pas de constat. */
@@ -315,10 +318,6 @@ export function exclusionsProspect(p: Prospect, ctx: ContexteProspection): Exclu
 
   if (enClair?.telephone != null && telephoneBelgeE164(enClair.telephone) === null) {
     motifs.push(exclusion("telephone_invalide", "Téléphone non convertible en E.164 belge (+32…)", t));
-  }
-
-  if (contient(ctx.oppositions, empreintes)) {
-    motifs.push(exclusion("opposition_client", "Inscrit à la liste d'opposition du client", t));
   }
 
   if (contient(ctx.clientsActuels, empreintes) && !venteCroisee(p)) {

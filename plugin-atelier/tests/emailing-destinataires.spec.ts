@@ -47,4 +47,12 @@ describe("contrôle des destinataires d'une campagne e-mail", () => {
     ] });
     expect(await controlerDestinatairesCourriel(b, CLES, SOC, ["inconnu@exemple.test", "tel@exemple.test", "  "])).toEqual({ opposes: 0, sansBase: 3 });
   });
+
+  it("adresse opposée ET sans base « courriel » : comptée opposée et sans base (envoi refusé faute de base légale)", async () => {
+    const b = base({
+      oppositions: [{ courriel: "un@exemple.test", canal: "courriel" }],
+      prospects: [{ id: "p1", courriel: "un@exemple.test", bases: [{ canal: "telephone", base: "interet_legitime" }] }],
+    });
+    expect(await controlerDestinatairesCourriel(b, CLES, SOC, ["un@exemple.test", "Deux@Exemple.test"])).toEqual({ opposes: 1, sansBase: 2 });
+  });
 });

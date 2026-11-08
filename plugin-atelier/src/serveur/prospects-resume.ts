@@ -37,6 +37,7 @@ export function fichePourResume(p: Prospect): Dict {
     statut: p.statut,
     mode: p.mode,
     ...(p.motifsExclusion.length ? { motifsExclusion: p.motifsExclusion.map((m) => m.motif) } : {}),
+    ...(p.figureDansOppositions ? { figureDansOppositions: true } : {}),
     score: p.score ? p.score.valeur : null,
     confiance: p.confiance ? { valeur: p.confiance.valeur, qualifie: p.confiance.qualifie } : null,
   };

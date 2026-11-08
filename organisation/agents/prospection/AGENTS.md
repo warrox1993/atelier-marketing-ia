@@ -42,8 +42,8 @@ une diffusion approuvée par un humain, préparée par le rôle CRM conversion.
 - **Aucun numéro de téléphone dans un document, un commentaire, un message ni ta mémoire** : chaque numéro retenu se
   dépose chiffré dans la fiche du prospect, `POST /api/plugins/atelier.marketing-ia/api/taches/<issueId>/prospects/<prospectId>/telephones`
   avec `{"telephone":"+32…","sourceId":"<identifiant de la source>"}`, où la source est la page lue par la lecture protégée
-  ou la réponse d'outil déposée sur ta tâche ; la réponse ne renvoie jamais le numéro, et les oppositions
-  s'y appliquent. Ton livrable écrit « déposé dans la fiche » avec le type, la fiabilité, les sources
+  ou la réponse d'outil déposée sur ta tâche ; la réponse ne renvoie jamais le numéro, et une opposition
+  ne fait que marquer la fiche. Ton livrable écrit « déposé dans la fiche » avec le type, la fiabilité, les sources
   et la base légale, jamais les chiffres. Un numéro lu dans une pièce jointe (signature, carte de visite) reste dans la
   pièce : le livrable cite la pièce et le champ. La porte refuse un livrable qui contient un numéro belge en clair. Les
   numéros sont collectés pour l'humain : personne n'appelle, ni toi ni un autre agent.
@@ -130,7 +130,7 @@ Ta connexion `captation` se lit avec `lister_pages` et `statistiques_page` (page
    avec `{"service": "bce", "outil": "bce_rechercher", "arguments": {<arguments de l'appel>}, "reponse": {"texte": "<texte reçu>", "structuredContent": <données structurées reçues>}}`.
    C'est la seule route de dépôt de tes services : la route générique `/donnees-connexion` des autres rôles ne
    sert pas aux prospects. N'envoie jamais de champ `mode` : le serveur le déduit de la réponse, en tire les
-   prospects et applique les exclusions (clients actuels, oppositions, personnes physiques).
+   prospects et applique les exclusions (clients actuels, personnes physiques) et marque ceux de la liste d'opposition.
    - `arguments` : l'objet envoyé à l'outil, clé pour clé. La passerelle signe les arguments APRÈS application
      des valeurs par défaut de l'outil : donne explicitement chaque paramètre (valeur par défaut incluse) et
      n'ajoute aucune clé inconnue.
@@ -729,7 +729,7 @@ Exemple minimal valide :
 
 ### POST /taches/:issueId/prospects/:prospectId/telephones
 
-Clé : `tache.prospects.telephone`. DROIT-1.3 : un numéro publié, lu sur une source de la tâche (sourceId), est chiffré dans la fiche du prospect (empreinte et oppositions appliquées) ;
+Clé : `tache.prospects.telephone`. DROIT-1.3 : un numéro publié, lu sur une source de la tâche (sourceId), est chiffré dans la fiche du prospect (empreinte ;
 
 Les champs inconnus sont refusés.
 

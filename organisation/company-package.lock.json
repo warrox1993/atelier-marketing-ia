@@ -251,7 +251,7 @@
     },
     "campagne-courriel": {
       "version": "1.0.0",
-      "sha256": "a260c1cb055c83712250645aadc96e3a42c29baa725e8dbb30607e9d7e914923",
+      "sha256": "ecab2f1fdbe4f7c78a273ab008dfa0e8c9b712fee43ee56585efcb3d9309f899",
       "fichiers": [
         "SKILL.md"
       ]
@@ -845,7 +845,7 @@
     },
     "invitations-inscriptions": {
       "version": "1.0.0",
-      "sha256": "7d032b94ed898955bde73d7a6229a8adf3568fa41f7c9fe116cf5c3900d25dfd",
+      "sha256": "b28ffcb7c299d7c4f24a98e1500efd87ff5a3c4c2706bd1e6630d464b0ce3501",
       "fichiers": [
         "SKILL.md"
       ]
@@ -1240,7 +1240,7 @@
     },
     "qualification-leads-entrants": {
       "version": "1.0.0",
-      "sha256": "20d1bad071ea274e448db377c6485b701c1b71566e67b698a2d425ccf82db5bc",
+      "sha256": "833b5bccdecc1d8a69a49a2b3efb2b98b57d4e2b8f499df55333b6d5eb315747",
       "fichiers": [
         "SKILL.md"
       ]
@@ -1291,7 +1291,7 @@
     },
     "recherche-prospects": {
       "version": "1.3.0",
-      "sha256": "b8b0742ec06a891dea0f942399ca2f12907af45045bd451397f42fb9947a61d5",
+      "sha256": "c3d4a2c5bf0e2e59268a546b665241d141f2bbb265476ad6c05e188c3db32d50",
       "fichiers": [
         "SKILL.md",
         "references/journal-recherche.md"
@@ -1335,7 +1335,7 @@
     },
     "redaction-prospection": {
       "version": "1.0.0",
-      "sha256": "f1b31677c7a88ebd701c52b8ad6f29ca408b8ced2d1dcb39d94c339807b09535",
+      "sha256": "fd04f9e98afa29ea95668c5897f0cdf3fd469a01bcd71a91fcfaa6aee4137154",
       "fichiers": [
         "SKILL.md"
       ]
@@ -1532,7 +1532,7 @@
     },
     "script-appel-secretariat": {
       "version": "1.0.0",
-      "sha256": "d61feee6147e415a68a5475cc49633b952ff6cdad1732db06e7bd5c3f7ae7453",
+      "sha256": "2e9622444dbc4da1c7a416bf9174783313c2e4be3f66f8567471bc82c7620262",
       "fichiers": [
         "SKILL.md"
       ]

@@ -28,6 +28,7 @@ function baseEnMemoire() {
   const db = {
     namespace: ns,
     async query(sql: string, params: unknown[] = []) {
+      if (/^select temoin_cle_empreintes from \w+\.reglages_entreprise where company_id = \$1$/u.test(sql)) return lignes("reglages_entreprise").filter((l) => l.company_id === params[0]);
       const comptes = [...sql.matchAll(/\(select count\(\*\) from \w+\.(\w+) where company_id = \$1[^)]*\) as (\w+)/gu)];
       if (comptes.length === 0) return [];
       const r: Ligne = {};
@@ -39,6 +40,11 @@ function baseEnMemoire() {
     },
     async execute(sql: string, params: unknown[] = []) {
       const ins = /^insert into \w+\.(\w+)/u.exec(sql);
+      if (ins && ins[1] === "reglages_entreprise") {
+        // Adoption du témoin de clé (migration 033) : une ligne de réglages qui ne porte que le témoin.
+        lignes("reglages_entreprise").push({ company_id: params[0], temoin_cle_empreintes: params[1] });
+        return { rowCount: 1 };
+      }
       if (ins) {
         lignes(ins[1]!).push({ company_id: params[0], type: params[1] });
         return { rowCount: 1 };
@@ -117,6 +123,17 @@ describe("M1 : la remise à zéro conserve les obligations légales", () => {
 
     // Une autre entreprise n'est pas touchée.
     for (const t of ["oppositions", "prospects", "clients", "journal", "bases_legales"]) expect(compter(m, t, AUTRE)).toBe(t === "prospects" ? 3 : t === "oppositions" ? 2 : 1);
+  });
+
+  it("C5 : le témoin de la clé des empreintes survit à la remise à zéro, puisque les oppositions sont conservées", async () => {
+    const m = baseEnMemoire();
+    remplir(m, SOC);
+    m.lignes("reglages_entreprise").splice(0, 1, { company_id: SOC, temoin_cle_empreintes: "0123456789abcdef" });
+    await m.base.supprimerDonneesEntreprise(SOC);
+    await m.base.supprimerDonneesEntreprise(SOC);
+    expect(await m.base.lireTemoinCleEmpreintes(SOC)).toBe("0123456789abcdef");
+    expect(compter(m, "reglages_entreprise")).toBe(1);
+    expect(compter(m, "oppositions")).toBe(2);
   });
 
   it("remises à zéro répétées : les oppositions ne disparaissent jamais", async () => {

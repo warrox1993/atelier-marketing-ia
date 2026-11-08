@@ -19,6 +19,7 @@ import {
   courrielValide,
   dedoublonner,
   exclusionsProspect,
+  figureDansOppositions,
   natureAdresse,
   telephoneBelgeE164,
   type ContexteContact,
@@ -128,7 +129,6 @@ function contexte(modifs: Partial<ContexteContact> = {}): ContexteContact {
     modeCampagne: "reel",
     canaux: ["courriel", "sms", "telephone", "courrier"],
     zone: null,
-    oppositions: [],
     clientsActuels: [],
     ...modifs,
   };
@@ -261,13 +261,8 @@ const REFUS: CasMatrice[] = [
   { situation: "entreprise_impersonnelle", canal: "courrier", cas: () => ({ p: prospect("entreprise_impersonnelle"), b: null, ctx: contexte() }), refus: "Aucune base légale" },
   { situation: "salarie_nomme", canal: "courriel", cas: simple("salarie_nomme", "courriel", "personne_morale_adresse_impersonnelle"), refus: "consentement préalable obligatoire" },
   { situation: "salarie_nomme", canal: "sms", cas: simple("salarie_nomme", "sms", "personne_morale_adresse_impersonnelle", { natureAdresse: "impersonnelle" }), refus: "consentement préalable obligatoire" },
-  {
-    situation: "salarie_nomme",
-    canal: "telephone",
-    cas: simple("salarie_nomme", "telephone", "interet_legitime", { preuveType: "mise_en_balance" }, { oppositions: [{ type: "telephone", valeur: E.tel }] }),
-    refus: "opposition_client",
-  },
-  { situation: "salarie_nomme", canal: "courrier", cas: simple("salarie_nomme", "courrier", "interet_legitime", {}, { oppositions: [{ type: "nom_code_postal", valeur: E.nomCp }] }), refus: "opposition_client" },
+  { situation: "salarie_nomme", canal: "telephone", cas: simple("salarie_nomme", "telephone", "interet_legitime", { preuveType: "source" }), refus: "Téléphone : intérêt légitime à documenter par une mise en balance" },
+  { situation: "salarie_nomme", canal: "courrier", cas: () => ({ p: prospect("salarie_nomme"), b: null, ctx: contexte() }), refus: "Aucune base légale" },
   { situation: "partenaire_personne_physique", canal: "courriel", cas: simple("partenaire_personne_physique", "courriel", "personne_morale_adresse_impersonnelle", { natureAdresse: "impersonnelle" }), refus: "personne morale seulement" },
   { situation: "partenaire_personne_physique", canal: "sms", cas: simple("partenaire_personne_physique", "sms", "client_existant_produits_analogues", {}, { produitsAnalogues: true }), refus: "Pas client existant" },
   { situation: "partenaire_personne_physique", canal: "telephone", cas: simple("partenaire_personne_physique", "telephone", "interet_legitime", { preuveType: "source" }), refus: "mise en balance" },
@@ -364,12 +359,11 @@ describe("contactPermis : matrice canal × cible (§3.2)", () => {
     expect(d).toEqual({ permis: false, motif: "Téléphone : intérêt légitime à documenter par une mise en balance" });
   });
 
-  it("téléphone : une opposition enregistrée exclut toujours le prospect", () => {
+  it("téléphone : une opposition enregistrée ne refuse plus, elle ne fait que marquer le prospect", () => {
     const p = prospect("entreprise_impersonnelle");
     const b = baseLegale(p, "telephone", "interet_legitime", { preuveType: "mise_en_balance" });
-    const d = contactPermis(p, "telephone", b, contexte({ oppositions: [{ type: "telephone", valeur: E.tel }] }));
-    expect(d.permis).toBe(false);
-    expect(d.motif).toContain("opposition_client");
+    expect(contactPermis(p, "telephone", b, contexte()).permis).toBe(true);
+    expect(figureDansOppositions(p, [{ type: "telephone", valeur: E.tel }])).toBe(true);
   });
 });
 
@@ -461,8 +455,13 @@ describe("exclusionsProspect : un cas par motif", () => {
     expect(motifs(prospect("entreprise_impersonnelle"), { coordonneesEnClair: { ...enClair, telephone: "04 123 45 67" } })).toEqual([]);
   });
 
-  it("opposition_client : empreinte inscrite à la liste d'opposition du client", () => {
-    expect(motifs(prospect("entreprise_impersonnelle"), { oppositions: [{ type: "courriel", valeur: E.courriel }] })).toEqual(["opposition_client"]);
+  it("opposition : plus un motif d'exclusion, la marque se calcule à part", () => {
+    const p = prospect("entreprise_impersonnelle");
+    const liste: Empreinte[] = [{ type: "courriel", valeur: E.courriel }];
+    expect(motifs(p)).toEqual([]);
+    expect(figureDansOppositions(p, liste)).toBe(true);
+    expect(figureDansOppositions(p, [])).toBe(false);
+    expect(figureDansOppositions(p, [{ type: "courriel", valeur: h(9) }])).toBe(false);
   });
 
   it("client_actuel : déjà client (hors vente croisée d'un client existant)", () => {

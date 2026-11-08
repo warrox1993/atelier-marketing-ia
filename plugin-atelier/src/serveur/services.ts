@@ -3106,7 +3106,11 @@ export function creerServices(ctx: PluginContext, options: { transportReel?: Tra
   // Envoi d'une campagne e-mail après décision humaine (carte de confirmation acceptée) : signe la preuve et appelle la passerelle locale.
   Object.assign(routes, routesEmailing({
     ctx, base, cleApprobation,
-    controlerDestinataires: async (companyId, courriels) => controlerDestinatairesCourriel(base, await servicesProspection.clesDonnees!(companyId), companyId, courriels),
+    controlerDestinataires: async (companyId, courriels) => {
+      const controle = await controlerDestinatairesCourriel(base, await servicesProspection.clesDonnees!(companyId), companyId, courriels);
+      const avertissement = servicesProspection.avertissementCle?.(companyId) ?? null;
+      return avertissement === null ? controle : { ...controle, avertissement };
+    },
     revocations: async (companyId) => String(((await routes["preuves.revocations"]!({ cle: "preuves.revocations", params: {}, query: {}, corps: null, acteur: { type: "systeme", id: "systeme", agentId: null, userId: null, runId: null }, companyId })).corps as { liste: string }).liste),
     adressePasserelle,
     fetchLocal: options.fetchBoucleLocale,

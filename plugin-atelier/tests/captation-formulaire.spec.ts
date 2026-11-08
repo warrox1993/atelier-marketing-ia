@@ -61,7 +61,6 @@ function monterAtelier() {
     ajouterEmpreintesProspect: async (c: string, id: string, e: Array<{ type: string; valeur: string }>) => {
       for (const x of e) empreintes.push({ companyId: c, prospectId: id, ...x });
     },
-    prospectsAvecEmpreinte: async (c: string, type: string, v: string) => [...new Set(empreintes.filter((e) => e.companyId === c && e.type === type && e.valeur === v).map((e) => e.prospectId))],
     insererScoreProspect: async (s: Ligne) => void scores.push(copie(s)),
     detailsProspects: async (c: string, ids: string[]) => ({
       empreintes: new Map(ids.map((id) => [id, empreintes.filter((e) => e.companyId === c && e.prospectId === id).map((e) => ({ type: e.type, valeur: e.valeur }))])),

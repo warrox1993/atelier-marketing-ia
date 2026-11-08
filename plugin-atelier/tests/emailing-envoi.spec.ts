@@ -39,7 +39,7 @@ const REGISTRE = { "carte-1": { version: 2, campagneId: 5, empreinte: EMPREINTE,
 
 type Lecture = Ligne | ((campagneId: number) => Ligne) | "panne";
 
-function montage(options: { cartes?: Ligne[]; registre?: Ligne; cle?: KeyObject | null; reponse?: { statut: number; corps: unknown } | "panne" | "delai"; lecture?: Lecture; lenteur?: boolean; controle?: { opposes: number; sansBase: number } } = {}) {
+function montage(options: { cartes?: Ligne[]; registre?: Ligne; cle?: KeyObject | null; reponse?: { statut: number; corps: unknown } | "panne" | "delai"; lecture?: Lecture; lenteur?: boolean; controle?: { opposes: number; sansBase: number; avertissement?: string } } = {}) {
   const { publicKey, privateKey } = generateKeyPairSync("ed25519");
   const appels: Array<{ url: string; corps: Ligne }> = [];
   const lectures: Ligne[] = [];
@@ -352,19 +352,17 @@ describe("emailing.demander_envoi : la carte montre la VRAIE campagne (constat E
     expect(m.creees.length + m2.creees.length).toBe(0);
   });
 
-  it("DROIT-2.1 et 2.2 : adresses lues chez la passerelle contrôlées ; opposition ou base légale manquante : refus, aucune carte", async () => {
+  it("DROIT-2.1 et 2.2 : adresses lues chez la passerelle contrôlées ; base légale manquante : refus, aucune carte", async () => {
     const ok = montage({ cartes: [], registre: {} });
     await ok.demander();
-    expect(ok.controles).toEqual([["a@exemple.test", "b@exemple.test"]]);
+    expect(ok.controles).toEqual([[...LECTURE.courriels]]);
     expect(ok.creees).toHaveLength(1);
-    for (const controle of [{ opposes: 1, sansBase: 0 }, { opposes: 0, sansBase: 2 }]) {
-      const m = montage({ cartes: [], registre: {}, controle });
-      const e = await m.refus(m.demander());
-      expect(e?.code).toBe("conflit");
-      expect(e?.message).toContain(`${controle.opposes} adresse(s) dans les oppositions`);
-      expect(e?.message).not.toContain("@");
-      expect(m.creees).toHaveLength(0);
-    }
+    const m = montage({ cartes: [], registre: {}, controle: { opposes: 0, sansBase: 2 } });
+    const e = await m.refus(m.demander());
+    expect(e?.code).toBe("conflit");
+    expect(e?.message).toContain("2 sans base légale");
+    expect(e?.message).not.toContain("@");
+    expect(m.creees).toHaveLength(0);
   });
 
   it("passerelle sans adresses des destinataires (ancienne version) ou adresses incomplètes : refus, aucune carte", async () => {
@@ -446,5 +444,37 @@ describe("emailing.envoyer : issue inconnue (F2)", () => {
     expect(e?.message).toMatch(/issue inconnue/i);
     expect((m.etat.get(CLE_ETAT_CARTES_ENVOI) as Ligne)["carte-1"].utilisee).not.toBeNull();
     expect(m.journal.map((j) => j.type)).toContain("emailing.envoi_incertain");
+  });
+});
+
+describe("emailing.demander_envoi : la liste d'opposition informe, elle ne bloque jamais", () => {
+  const CINQ = { ...LECTURE, destinataires: 5, courriels: ["a1@exemple.test", "a2@exemple.test", "a3@exemple.test", "a4@exemple.test", "a5@exemple.test"] };
+
+  it("sans liste aucun effet : envoi et compte rendu identiques à avant", async () => {
+    const m = montage({ cartes: [], registre: {} });
+    const r = (await m.demander()) as { corps: Ligne };
+    expect(r.corps).toEqual({ carteId: "carte-neuve-1", statut: "en_attente", reutilisee: false });
+    expect(JSON.stringify(m.creees[0]!.payload)).not.toMatch(/opposition/i);
+    expect(m.journal[0]!.donnees).not.toHaveProperty("adressesDansOppositions");
+  });
+
+  it("envoi accepté avec le compte des adresses de la liste", async () => {
+    const m = montage({ cartes: [], registre: {}, lecture: CINQ, controle: { opposes: 2, sansBase: 0 } });
+    const r = (await m.demander()) as { corps: Ligne };
+    expect(m.creees).toHaveLength(1);
+    expect(r.corps).toMatchObject({ statut: "en_attente", adressesDansOppositions: 2 });
+    expect(r.corps.message).toBe("2 adresse(s) figurent dans la liste d'opposition.");
+    expect(m.creees[0]!.payload.detailsMarkdown).toContain("2 adresse(s) figurent dans la liste d'opposition");
+    expect(m.journal[0]!.donnees).toMatchObject({ adressesDansOppositions: 2 });
+    expect(JSON.stringify(r)).not.toContain("@");
+  });
+
+  it("changement de clé signalé : l'envoi est accepté et la réponse et le journal portent l'avertissement", async () => {
+    const avertissement = "La clé des empreintes a changé : les oppositions enregistrées avec l'ancienne clé ne sont plus retrouvées.";
+    const m = montage({ cartes: [], registre: {}, controle: { opposes: 0, sansBase: 0, avertissement } });
+    const r = (await m.demander()) as { corps: Ligne };
+    expect(m.creees).toHaveLength(1);
+    expect(r.corps).toMatchObject({ statut: "en_attente", avertissement });
+    expect(m.journal[0]!.donnees).toMatchObject({ avertissementCle: avertissement });
   });
 });

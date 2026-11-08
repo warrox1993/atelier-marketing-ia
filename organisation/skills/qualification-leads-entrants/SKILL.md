@@ -63,7 +63,7 @@ et contrôles préalables faits ou à faire, sans qu'aucun contact ni aucun cons
    produit : l'analyse des besoins et le conseil reviennent à l'intermédiaire inscrit.
 7. **Contrôler avant tout rappel.**
    - Base légale du traitement (RGPD art. 6) : demande de la personne elle-même, contrat existant ou intérêt légitime
-     documenté. Une opposition déjà exprimée arrête tout contact commercial.
+     documenté. Une opposition déjà exprimée est signalée à l'équipe commerciale, qui décide.
    - Courriel ou SMS de prospection : consentement préalable requis (CDE art. XII.13), sauf exceptions à faire vérifier.
 8. **Rédiger la fiche** et proposer les mises à jour du CRM (statut, titulaire, résumé) comme texte à valider : l'agent
    n'écrit rien lui-même.

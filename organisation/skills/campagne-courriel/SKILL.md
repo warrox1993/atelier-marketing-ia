@@ -52,8 +52,8 @@ qui ne part qu'après l'accord d'un humain sur la version exacte et la liste exa
    consentement, recopie ce que la personne a accepté. Pour un client existant ou une adresse impersonnelle, tu ne déclares jamais un consentement
    qui n'a pas été donné : la preuve décrit la base réelle (date et source d'obtention, texte « base : client existant,
    vente du <date> » ou « base : adresse impersonnelle de personne morale »), et seulement après accord du Coordinateur
-   sur cette preuve. Le plugin refuse ensuite l'envoi si une adresse n'a pas de base « courriel » enregistrée ou figure
-   dans les oppositions.
+   sur cette preuve. Le plugin refuse ensuite l'envoi si une adresse n'a pas de base « courriel » enregistrée ; les adresses de la
+   liste d'opposition sont signalées (leur nombre figure dans la carte), sans bloquer l'envoi.
 3. **Écrire le message** : objet honnête, sans fausse urgence ; annonceur identifié dans l'expéditeur et dans le pied
    (nom, adresse), jamais l'adresse ou l'identité d'un tiers ni une origine masquée (art. XII.13, § 3) ; une seule
    offre principale ; texte passé par `humanisation-texte-fr` (ou `adaptation-fr-nl-en` pour une version en

@@ -265,9 +265,10 @@ function critereTaille(p: Prospect): Resultat {
 
 function critereJoignable(p: Prospect): Resultat {
   const pose = "base légale du contact";
-  if (aMotif(p, "opposition_client")) return resultat("contraire", null, "Opposition enregistrée", pose);
-  if (p.basesLegales.length > 0) return resultat("verifie", null, `Base légale : ${[...new Set(p.basesLegales.map((b) => b.canal))].join(", ")} ; aucune opposition`, pose);
-  return resultat("non_verifie", null, "Aucune base légale enregistrée pour un canal", pose);
+  // La liste d'opposition informe : elle ne rend jamais le critère contraire.
+  const opposition = p.figureDansOppositions === true;
+  if (p.basesLegales.length > 0) return resultat("verifie", null, `Base légale : ${[...new Set(p.basesLegales.map((b) => b.canal))].join(", ")} ; ${opposition ? "figure dans la liste d'opposition" : "aucune opposition"}`, pose);
+  return resultat("non_verifie", null, `Aucune base légale enregistrée pour un canal${opposition ? " ; figure dans la liste d'opposition" : ""}`, pose);
 }
 
 function criterePasClient(p: Prospect, ctx: ContexteQualification): Resultat {
@@ -481,18 +482,16 @@ function critereBureauSpecialise(p: Prospect, ctx: ContexteQualification): Resul
 /**
  * C12 : contact professionnel PUBLIÉ et permis. Entreprise : site lu ou adresse impersonnelle (info@, contact@) déjà présents
  * dans les sources du prospect, ou téléphone SI le prospect porte une base légale du canal téléphone (sans elle, le numéro seul ne
- * vaut rien) ; opposition : contraire. Particulier : seulement avec un consentement documenté. Aucune coordonnée n'est lue ni recopiée : on ne regarde que le canal et la nature.
+ * vaut rien) ; la liste d'opposition est seulement mentionnée. Particulier : seulement avec un consentement documenté. Aucune coordonnée n'est lue ni recopiée : on ne regarde que le canal et la nature.
  */
 function critereContactPublicPermis(p: Prospect): Resultat {
   const pose = "coordonnées publiées et base légale";
-  const opposition = aMotif(p, "opposition_client");
+  const mention = p.figureDansOppositions === true ? " ; figure dans la liste d'opposition" : "";
   if (p.cible === "particulier") {
-    if (opposition) return resultat("non_verifie", null, "Opposition enregistrée : aucun consentement ne vaut", pose);
     const consenti = p.particulier?.consentements.filter((c) => c.retireLe === null) ?? [];
-    if (consenti.length > 0) return resultat("verifie", null, `Consentement documenté, non retiré : ${[...new Set(consenti.flatMap((c) => c.canauxAutorises))].join(", ")}`, pose);
-    return resultat("non_verifie", null, "Aucun consentement documenté pour ce particulier", pose);
+    if (consenti.length > 0) return resultat("verifie", null, `Consentement documenté, non retiré : ${[...new Set(consenti.flatMap((c) => c.canauxAutorises))].join(", ")}${mention}`, pose);
+    return resultat("non_verifie", null, `Aucun consentement documenté pour ce particulier${mention}`, pose);
   }
-  if (opposition) return resultat("contraire", null, "Opposition enregistrée", pose);
   // Téléphone : le prospect doit porter une base légale du canal téléphone. Un numéro dans les sources ne prouve rien là-dessus.
   // L'écrit (site lu, adresse impersonnelle) n'en dépend pas.
   const aTelephone = p.coordonnees.some((c) => c.canal === "telephone");
@@ -505,7 +504,7 @@ function critereContactPublicPermis(p: Prospect): Resultat {
   const s = p.sources.find((x) => x.sourceId !== null) ?? p.sources[0] ?? null;
   const reserveTel = aTelephone && !telephoneRetenu ? " ; téléphone non retenu : aucune base légale du canal téléphone" : "";
   if (publies.length > 0) {
-    return resultat("verifie", s, `Contact professionnel publié dans les sources : ${publies.join(", ")} ; aucune opposition enregistrée${reserveTel}`, pose);
+    return resultat("verifie", s, `Contact professionnel publié dans les sources : ${publies.join(", ")} ; ${p.figureDansOppositions === true ? "figure dans la liste d'opposition" : "aucune opposition enregistrée"}${reserveTel}`, pose);
   }
   if (aTelephone) return resultat("non_verifie", s, "Téléphone publié, mais aucune base légale du canal téléphone : contact par téléphone non établi", pose);
   return resultat("non_verifie", s, "Aucun contact professionnel publié (téléphone, site ou adresse impersonnelle) dans les sources du prospect", pose);

@@ -218,6 +218,7 @@ export const MotifExclusion = z.enum([
   "courriel_invalide",
   "courriel_nominatif_sans_consentement",
   "telephone_invalide",
+  // Ancien motif : plus posé depuis que la liste d'opposition informe sans écarter ; gardé pour relire les fiches déjà enregistrées.
   "opposition_client",
   "client_actuel",
   "donnee_demonstration_campagne_reelle",
@@ -1047,6 +1048,8 @@ export const Prospect = z
     score: ScoreProspect.nullable(),
     /** Confiance de qualification, calculée à la lecture sur les sources déposées (distincte du score). */
     confiance: ConfianceQualification.optional(),
+    /** Marque calculée à la lecture (aucune colonne) : une coordonnée du prospect figure dans la liste d'opposition. Informe, n'écarte jamais ; absent = faux. */
+    figureDansOppositions: z.boolean().optional(),
     basesLegales: z.array(BaseLegaleContact).max(4),
     /** Volet B2C : obligatoire pour un particulier, absent (null) pour une entreprise ou un partenaire. */
     particulier: VoletParticulier.nullable(),
@@ -1490,6 +1493,8 @@ export const PageProspects = z
     prospects: z.array(Prospect).max(LIMITES_PROSPECTION.pageMax),
     /** Fiches chiffrées avec l'ancienne clé (migration 016) : exclues de la page, à réimporter. Absent quand il n'y en a aucune. */
     aReimporter: z.number().int().positive().optional(),
+    /** La clé des empreintes a changé depuis le témoin de l'entreprise : les oppositions anciennes ne sont plus retrouvées. Informe, ne bloque rien. */
+    avertissement: z.string().optional(),
   })
   .strict();
 export type PageProspects = z.infer<typeof PageProspects>;
@@ -1502,7 +1507,8 @@ export const ExclureProspectEntree = z
     motif: MotifExclusion,
     detail: z.string().trim().min(3).max(500),
   })
-  .strict();
+  .strict()
+  .refine((e) => e.motif !== "opposition_client", { message: "L'opposition d'un client ne fait que marquer le prospect : ce motif d'exclusion n'est plus posé.", path: ["motif"] });
 export type ExclureProspectEntree = z.infer<typeof ExclureProspectEntree>;
 
 /**
@@ -1590,7 +1596,7 @@ export const VerificationExport = z
   .object({
     prospectId: IdNatif,
     ok: z.boolean(),
-    /** Motif de refus : sans base légale pour le canal, opposition, client actuel, exclu… */
+    /** Motif de refus : sans base légale pour le canal, client actuel, exclu… */
     motif: z.string().max(300).nullable(),
   })
   .strict()

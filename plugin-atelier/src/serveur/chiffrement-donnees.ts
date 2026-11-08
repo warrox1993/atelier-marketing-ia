@@ -80,6 +80,17 @@ export function empreinte(type: TypeEmpreinte, valeurNormalisee: string, cleHmac
   return createHmac("sha256", cleHmac).update(`${type}\0${valeurNormalisee}`, "utf8").digest("hex");
 }
 
+/** Constante dont le HMAC par la clé des empreintes donne le témoin de cette clé. */
+const CONSTANTE_TEMOIN_CLE = "temoin-cle-empreintes";
+
+/**
+ * Témoin de la clé des empreintes : 16 caractères hexadécimaux de HMAC-SHA-256(clé, constante). Ni la clé ni un hachage nu
+ * de la clé : il sert seulement à constater qu'elle a changé, jamais à la retrouver.
+ */
+export function temoinCleEmpreintes(cleHmac: Uint8Array): string {
+  return createHmac("sha256", cleHmac).update(CONSTANTE_TEMOIN_CLE, "utf8").digest("hex").slice(0, 16);
+}
+
 /** Vrai si deux clés sont identiques (comparaison à temps constant). */
 export function memeCle(a: Uint8Array, b: Uint8Array): boolean {
   return a.byteLength === b.byteLength && timingSafeEqual(a, b);

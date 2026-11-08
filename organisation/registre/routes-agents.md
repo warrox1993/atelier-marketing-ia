@@ -433,7 +433,7 @@ Exemple minimal valide :
 
 ## POST /taches/:issueId/prospects/:prospectId/telephones
 
-Clé : `tache.prospects.telephone`. DROIT-1.3 : un numéro publié, lu sur une source de la tâche (sourceId), est chiffré dans la fiche du prospect (empreinte et oppositions appliquées) ;
+Clé : `tache.prospects.telephone`. DROIT-1.3 : un numéro publié, lu sur une source de la tâche (sourceId), est chiffré dans la fiche du prospect (empreinte ;
 
 Les champs inconnus sont refusés.
 

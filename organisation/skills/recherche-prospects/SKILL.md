@@ -55,8 +55,8 @@ l'origine de chaque prospect avant tout export.
    (clé `tache.prospects.deposer`). Ne jamais envoyer de champ `mode`.
 5. Paginer jusqu'au bout ou jusqu'au plafond fixé par la tâche, et noter où la recherche
    s'est arrêtée.
-6. Lire la réponse du dépôt : prospects retenus, exclus (clients actuels, oppositions,
-   personnes physiques) et motif de chaque refus. Un dépôt refusé se corrige en refaisant
+6. Lire la réponse du dépôt : prospects retenus, exclus (clients actuels,
+   personnes physiques), prospects marqués « figure dans la liste d'opposition » et motif de chaque refus. Un dépôt refusé se corrige en refaisant
    l'appel, jamais en modifiant la réponse.
 7. Remplir le journal de recherche (voir `references/journal-recherche.md`).
 8. **Garde-fous de collecte**, à respecter à chaque appel et à chaque source :
@@ -144,7 +144,7 @@ relues ici.
 | --- | --- | --- | --- | --- |
 | `bce` | `bce_rechercher` | `{"nace": ["43.910"], "communes": ["Liège"], "formes": ["SRL"], "creees_depuis": null, "page": 1}` | 25 entreprises (démonstration) | accepté, 2 exclues (clients actuels) |
 | `bnb` | `bnb_comptes` | `{"numero": "0000.000.097"}` | comptes 2025 (démonstration) | accepté |
-| `b2c` | outil de liste exposé par la connexion (nom lu dans ses outils, jamais deviné) | arguments exacts de l'appel | 12 personnes à origine légale (démonstration) | accepté, 1 exclue (opposition) |
+| `b2c` | outil de liste exposé par la connexion (nom lu dans ses outils, jamais deviné) | arguments exacts de l'appel | 12 personnes à origine légale (démonstration) | accepté, 1 marquée (opposition) |
 
 ## Origine de la méthode
 

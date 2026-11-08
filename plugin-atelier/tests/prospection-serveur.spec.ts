@@ -6,12 +6,12 @@
  */
 import type { PluginContext } from "@paperclipai/plugin-sdk";
 import { createHash } from "node:crypto";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { ESPACE_BASE, CompteRenduProspect, CriteresManquants, Opposition, PageProspects, Prospect } from "../src/contrats/index.js";
 import { REFERENTIEL_COURTIER } from "../src/contrats/exemples/prospection.js";
 import { creerAiguillage } from "../src/serveur/atelier.js";
 import { creerBase, type BaseAtelier } from "../src/serveur/base.js";
-import { dechiffrer, empreinte } from "../src/serveur/chiffrement-donnees.js";
+import { dechiffrer, empreinte, temoinCleEmpreintes } from "../src/serveur/chiffrement-donnees.js";
 import { creerServices } from "../src/serveur/services.js";
 import { CODES_POSTAUX_BE } from "../src/serveur/codes-postaux-be.js";
 import { depotDepuisJournal } from "../src/serveur/base.js";
@@ -113,7 +113,6 @@ function banc(o: { modeEntreprise?: "demonstration" | "reel"; sansCles?: boolean
     ajouterEmpreintesProspect: async (c: string, id: string, e: Array<{ type: string; valeur: string }>) => {
       for (const x of e) if (!t.empreintes.some((y) => y.prospectId === id && y.type === x.type && y.valeur === x.valeur)) t.empreintes.push({ companyId: c, prospectId: id, ...x });
     },
-    prospectsAvecEmpreinte: async (c: string, type: string, v: string) => [...new Set(t.empreintes.filter((e) => e.companyId === c && e.type === type && e.valeur === v).map((e) => e.prospectId))],
     insererScoreProspect: async (s: Ligne) => void t.scores.push(copie(s)),
     detailsProspects: async (c: string, ids: string[]) => ({
       empreintes: new Map(ids.map((id) => [id, t.empreintes.filter((e) => e.companyId === c && e.prospectId === id).map((e) => ({ type: e.type, valeur: e.valeur }))])),
@@ -130,6 +129,7 @@ function banc(o: { modeEntreprise?: "demonstration" | "reel"; sansCles?: boolean
       t.oppositions.push({ ...copie(x), enregistreePar: x.par, recueillieLe: x.recueillieLe ?? b.horloge() });
       return 1;
     },
+    entrepriseAOppositions: async (c: string) => t.oppositions.some((x) => x.companyId === c),
     lireOpposition: async (c: string, type: string, e: string, canal: string) => {
       const x = t.oppositions.find((y) => y.companyId === c && y.type === type && y.empreinte === e && y.canal === canal);
       return x ? { id: x.id, companyId: c, type: x.type, empreinte: x.empreinte, canal: x.canal, origine: x.origine, recueillieLe: x.recueillieLe, enregistreePar: x.enregistreePar } : null;
@@ -236,7 +236,8 @@ describe("tache.prospects.deposer", () => {
     // Source de la tâche : connexion signée, sans la réponse brute.
     expect(f.t.sources).toHaveLength(1);
     expect(f.t.sources[0]).toMatchObject({ provenance: "connexion", mode: "demonstration", url: "connexion://bce/bce_rechercher" });
-    expect(f.t.journal.map((j) => j.type)).toEqual(["prospects.deposes"]);
+    // Le premier chargement des clés adopte le témoin de la clé des empreintes (une ligne de journal), avant le dépôt.
+    expect(f.t.journal.map((j) => j.type)).toEqual(["cle_empreintes.temoin_adopte", "prospects.deposes"]);
   });
 
   it("aucune coordonnée en clair dans ce qui est stocké (prospects, empreintes, source, journal) ; déchiffrables avec la clé", async () => {
@@ -291,9 +292,9 @@ describe("tache.prospects.deposer", () => {
     const [, lat, lon] = CODES_POSTAUX_BE.find((l) => l[0] === "4000")!;
     const f = banc({ marque: { entites: [], etablissements: [{ nom: "Bureau", adresse: null, confirme: true, position: { lat, lon } }] } });
     expect((await f.deposer(depotBce())).status).toBe(201);
-    expect(f.t.journal[0]!.donnees).toMatchObject({ campagneId: CAMP, outil: "bce_rechercher", appel: { arguments: { communes: ["Liège"] }, total: 4, page: null, pages: null } });
+    expect(f.t.journal.find((j) => j.type === "prospects.deposes")!.donnees).toMatchObject({ campagneId: CAMP, outil: "bce_rechercher", appel: { arguments: { communes: ["Liège"] }, total: 4, page: null, pages: null } });
     // Zone, page et filtres de secteur (nace) sont journalisés : deux requêtes de secteurs différents restent distinctes.
-    expect((f.t.journal[0]!.donnees as { appel: { arguments: Record<string, unknown> } }).appel.arguments).toHaveProperty("nace");
+    expect((f.t.journal.find((j) => j.type === "prospects.deposes")!.donnees as { appel: { arguments: Record<string, unknown> } }).appel.arguments).toHaveProperty("nace");
     const r = await f.appeler("prospection.couverture", { query: { companyId: SOC, campagneId: CAMP } });
     expect(r.status).toBe(200);
     expect(r.body.outilsRequis).toEqual(["bce_rechercher"]);
@@ -415,8 +416,141 @@ describe("tache.prospects.deposer", () => {
 /* Oppositions                                                         */
 /* ------------------------------------------------------------------ */
 
+describe("témoin de la clé des empreintes", () => {
+  const REFS = { donneesCleChiffrement: { type: "secret_ref", secretId: "a" }, donneesCleHmac: { type: "secret_ref", secretId: "b" } };
+  /** Secrets du coffre : la clé de chiffrement ne bouge pas, la clé des empreintes vaut `hmac` octets répétés. */
+  const coffre = (hmac: number) => ({ resolve: async (_r: unknown, o: { configPath: string }) => Buffer.alloc(32, o.configPath === "donneesCleChiffrement" ? 1 : hmac).toString("base64") });
+  const MINUTE = 61_000;
+  const DEBUT = Date.UTC(2026, 10, 8, 10, 0, 0);
+  afterEach(() => vi.useRealTimers());
+
+  it("sans liste aucun effet : même clé, aucun avertissement, une seule adoption du témoin", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(DEBUT);
+    const f = banc({ modeEntreprise: "reel", config: REFS });
+    (f.ctx as Ligne).secrets = coffre(2);
+    await f.deposer(depotBce());
+    vi.setSystemTime(DEBUT + MINUTE);
+    const r = await f.appeler("prospects.lister", { query: { vue: "complete", companyId: SOC } });
+    expect(r.status).toBe(200);
+    expect(r.body).not.toHaveProperty("avertissement");
+    expect(f.t.journal.filter((j) => j.type.startsWith("cle_empreintes.")).map((j) => j.type)).toEqual(["cle_empreintes.temoin_adopte"]);
+    expect(JSON.stringify(f.t.journal)).not.toContain(Buffer.alloc(32, 2).toString("base64"));
+  });
+
+  it("changement de clé signalé : réponse et journal, opération poursuivie, l'ancienne clé remise lève le signalement", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(DEBUT);
+    const f = banc({ modeEntreprise: "reel", config: REFS });
+    (f.ctx as Ligne).secrets = coffre(2);
+    expect((await f.deposer(depotBce())).status).toBe(201);
+    const lister = () => f.appeler("prospects.lister", { query: { vue: "complete", companyId: SOC } });
+    expect(await lister()).toMatchObject({ status: 200 });
+    // Une opposition existe : sa clé compte, un changement de clé est donc signalé (C8 : sans opposition, la nouvelle clé est adoptée).
+    expect((await f.opposer({ type: "numero_bce", valeur: "0999.000.001", origine: "telephone" })).status).toBe(201);
+
+    vi.setSystemTime(DEBUT + MINUTE);
+    (f.ctx as Ligne).secrets = coffre(3);
+    const changee = await lister();
+    expect(changee.status).toBe(200);
+    expect(changee.body.avertissement).toBe("La clé des empreintes a changé : les oppositions enregistrées avec l'ancienne clé ne sont plus retrouvées.");
+    expect(PageProspects.parse(changee.body).total).toBe(2);
+    expect(f.t.journal.filter((j) => j.type === "cle_empreintes.changee")).toHaveLength(1);
+    // Rien n'est refusé : une opposition s'enregistre quand même, et la réponse porte le même avertissement.
+    const o = await f.opposer({ type: "numero_bce", valeur: "0123.456.749", origine: "telephone" });
+    expect(o.status).toBe(201);
+    expect(o.body.avertissement).toContain("La clé des empreintes a changé");
+    // Le signalement n'est écrit qu'une fois dans le journal tant que la clé reste la même.
+    expect(f.t.journal.filter((j) => j.type === "cle_empreintes.changee")).toHaveLength(1);
+
+    vi.setSystemTime(DEBUT + 2 * MINUTE);
+    (f.ctx as Ligne).secrets = coffre(2);
+    expect((await lister()).body).not.toHaveProperty("avertissement");
+  });
+
+  it("C8 : sans aucune opposition, une rotation de clé voulue est adoptée (nouveau témoin, aucun avertissement permanent)", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(DEBUT);
+    const f = banc({ modeEntreprise: "reel", config: REFS });
+    (f.ctx as Ligne).secrets = coffre(2);
+    const lister = () => f.appeler("prospects.lister", { query: { vue: "complete", companyId: SOC } });
+    await lister();
+    vi.setSystemTime(DEBUT + MINUTE);
+    (f.ctx as Ligne).secrets = coffre(3);
+    const r = await lister();
+    expect(r.status).toBe(200);
+    expect(r.body).not.toHaveProperty("avertissement");
+    expect(f.t.temoinsCle.get(SOC)).toBe(temoinCleEmpreintes(Buffer.alloc(32, 3)));
+    expect(f.t.journal.filter((j) => j.type.startsWith("cle_empreintes.")).map((j) => j.type)).toEqual(["cle_empreintes.temoin_adopte", "cle_empreintes.temoin_adopte"]);
+  });
+
+  it("C8 : avec des oppositions, le changement de clé n'est journalisé qu'une fois par témoin observé, même après un redémarrage", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(DEBUT);
+    const f = banc({ modeEntreprise: "reel", config: REFS });
+    (f.ctx as Ligne).secrets = coffre(2);
+    await f.appeler("prospects.lister", { query: { vue: "complete", companyId: SOC } });
+    await f.opposer({ type: "numero_bce", valeur: "0999.000.001", origine: "telephone" });
+    // Le journal d'avant le redémarrage porte déjà ce changement : la mémoire du processus est vide, le journal fait foi.
+    f.t.journal.push({ companyId: SOC, type: "cle_empreintes.changee", entite: "cle_empreintes", entiteId: temoinCleEmpreintes(Buffer.alloc(32, 3)), seq: 99, creeLe: "2026-11-08T09:00:00.000Z" });
+    vi.setSystemTime(DEBUT + MINUTE);
+    (f.ctx as Ligne).secrets = coffre(3);
+    const r = await f.appeler("prospects.lister", { query: { vue: "complete", companyId: SOC } });
+    expect(r.body.avertissement).toContain("La clé des empreintes a changé");
+    expect(f.t.journal.filter((j) => j.type === "cle_empreintes.changee")).toHaveLength(1);
+  });
+
+  it("C6 : un échec de chargement des clés est gardé 60 s, et deux appels simultanés partagent une seule résolution", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(DEBUT);
+    const f = banc({ modeEntreprise: "reel", config: REFS });
+    let appels = 0;
+    (f.ctx as Ligne).secrets = { resolve: async () => { appels++; throw new Error("coffre indisponible"); } };
+    const lister = () => f.appeler("prospects.lister", { query: { vue: "complete", companyId: SOC } });
+    await Promise.all([lister(), lister()]);
+    expect(appels).toBe(1);
+    await lister();
+    expect(appels).toBe(1);
+    vi.setSystemTime(DEBUT + MINUTE);
+    await lister();
+    expect(appels).toBe(2);
+  });
+
+  it("C6 : une erreur de lecture ou d'adoption du témoin ne bloque jamais le chargement des clés ni le dépôt", async () => {
+    const f = banc({ modeEntreprise: "reel", config: REFS });
+    (f.ctx as Ligne).secrets = coffre(2);
+    f.t.temoinsCle = { get: () => { throw new Error("lecture du témoin impossible"); } } as never;
+    expect((await f.deposer(depotBce())).status).toBe(201);
+    expect((await f.appeler("prospects.lister", { query: { vue: "complete", companyId: SOC } })).status).toBe(200);
+  });
+});
+
 describe("oppositions.ajouter", () => {
-  it("opposition puis nouveau dépôt du même contact : prospect exclu (opposition_client) ; seule l'empreinte est stockée", async () => {
+  it("sans liste aucun effet : aucun prospect marqué ni écarté", async () => {
+    const f = banc();
+    await f.deposer(depotBce());
+    const page = PageProspects.parse((await f.appeler("prospects.lister", { query: { vue: "complete", companyId: SOC, parPage: "10" } })).body);
+    expect(page.total).toBe(2);
+    expect(page.prospects.every((p) => p.statut === "nouveau" && p.motifsExclusion.length === 0 && p.figureDansOppositions === false)).toBe(true);
+  });
+
+  it("prospect marqué et non écarté : l'opposition ajoutée avant ou après le dépôt ne fait que le marquer", async () => {
+    const f = banc();
+    await f.deposer(depotBce());
+    expect((await f.opposer({ type: "numero_bce", valeur: "0123.456.749", origine: "telephone" })).status).toBe(201);
+    const page = PageProspects.parse((await f.appeler("prospects.lister", { query: { vue: "complete", companyId: SOC, parPage: "10" } })).body);
+    const marque = page.prospects.find((p) => p.numeroBce === "0123.456.749")!;
+    const autre = page.prospects.find((p) => p.numeroBce === "0999.000.001")!;
+    expect(marque).toMatchObject({ statut: "nouveau", motifsExclusion: [], figureDansOppositions: true });
+    expect(autre).toMatchObject({ statut: "nouveau", figureDansOppositions: false });
+    // Une relecture du dépôt du même contact ne l'écarte pas non plus.
+    const r = await f.deposer(depotBce());
+    expect((r.body.prospects as Prospect[]).find((p) => p.numeroBce === "0123.456.749")).toMatchObject({ statut: "nouveau", motifsExclusion: [] });
+    const detail = await f.appeler("prospects.lister", { query: { partie: "detail", prospectId: marque.id, companyId: SOC } });
+    expect(detail.body).toMatchObject({ figureDansOppositions: true });
+  });
+
+  it("opposition puis nouveau dépôt du même contact : prospect non écarté ; seule l'empreinte est stockée", async () => {
     const f = banc();
     const o = await f.opposer({ type: "courriel", valeur: "INFO@toitures-meuse.example ", origine: "demande_ecrite" });
     expect(o.status).toBe(201);
@@ -425,18 +559,42 @@ describe("oppositions.ajouter", () => {
     expect(JSON.stringify(f.tp.oppositions) + JSON.stringify(f.t.journal)).not.toContain("toitures-meuse");
     const r = await f.deposer(depotBce());
     const valide = (r.body.prospects as Prospect[]).find((p) => p.numeroBce === "0123.456.749")!;
-    expect(valide.statut).toBe("exclu");
-    expect(valide.motifsExclusion.map((m) => m.motif)).toEqual(["opposition_client"]);
+    expect(valide.statut).toBe("nouveau");
+    expect(valide.motifsExclusion).toEqual([]);
   });
 
-  it("opposition après le dépôt : le prospect déjà connu est exclu sans attendre ; la même opposition deux fois ne crée rien", async () => {
+  it("opposition après le dépôt : le prospect déjà connu n'est pas écarté ; la même opposition deux fois ne crée rien", async () => {
     const f = banc();
     await f.deposer(depotBce());
     const o = await f.opposer({ type: "numero_bce", valeur: "0123.456.749", origine: "telephone" });
     expect(o.status).toBe(201);
-    expect(f.tp.prospects.find((p) => p.numeroBce === "0123.456.749")).toMatchObject({ statut: "exclu", motifsExclusion: [expect.objectContaining({ motif: "opposition_client" })] });
+    expect(f.tp.prospects.find((p) => p.numeroBce === "0123.456.749")).toMatchObject({ statut: "nouveau", motifsExclusion: [] });
     expect((await f.opposer({ type: "numero_bce", valeur: "0123456749", origine: "telephone" })).status).toBe(200);
     expect(f.tp.oppositions).toHaveLength(1);
+  });
+
+  it("C2 : une fiche écartée par l'ancien code (motif opposition_client) n'est plus écartée au redépôt ; un autre motif est gardé", async () => {
+    const f = banc();
+    await f.deposer(depotBce());
+    const ancien = { motif: "opposition_client", detail: "Opposition du client (ancien code).", constateLe: "2026-10-14T10:00:00.000Z" };
+    const seul = f.tp.prospects.find((p) => p.numeroBce === "0123.456.749")!;
+    const mixte = f.tp.prospects.find((p) => p.numeroBce === "0999.000.001")!;
+    Object.assign(seul, { statut: "exclu", motifsExclusion: [ancien] });
+    Object.assign(mixte, { statut: "exclu", motifsExclusion: [ancien, { motif: "hors_zone", detail: "Hors zone.", constateLe: "2026-10-14T10:00:00.000Z" }] });
+    const r = await f.deposer(depotBce());
+    const rendus = r.body.prospects as Prospect[];
+    expect(rendus.find((p) => p.numeroBce === "0123.456.749")).toMatchObject({ statut: "nouveau", motifsExclusion: [] });
+    expect(rendus.find((p) => p.numeroBce === "0999.000.001")).toMatchObject({ statut: "exclu", motifsExclusion: [{ motif: "hors_zone" }] });
+    expect(seul).toMatchObject({ statut: "nouveau", motifsExclusion: [] });
+  });
+
+  it("C2 : prospects.exclure refuse le motif opposition_client (l'opposition ne fait que marquer)", async () => {
+    const f = banc();
+    await f.deposer(depotBce());
+    const id = f.tp.prospects[0]!.id;
+    const r = await f.appeler("prospects.exclure", { params: { prospectId: id }, body: { companyId: SOC, prospectId: id, motif: "opposition_client", detail: "Opposition du client." }, agent: false });
+    expect(r.status).toBe(400);
+    expect(f.tp.prospects[0]).toMatchObject({ statut: "nouveau", motifsExclusion: [] });
   });
 
   it("réservée à un humain ; entreprise du corps différente de celle de la route : refusée", async () => {
@@ -646,14 +804,15 @@ describe("service b2c", () => {
     expect(Prospect.parse(r.body.prospects[0]).particulier).toMatchObject({ origine: "client_existant", clientId: CLIENT });
   });
 
-  it("b2c_oppositions : oppositions enregistrées (empreintes seules), le particulier déjà connu est exclu", async () => {
+  it("b2c_oppositions : oppositions enregistrées (empreintes seules), le particulier déjà connu n'est pas écarté", async () => {
     const f = banc();
     await f.deposer(depotB2c("b2c_demandes_devis", { demandes: [demandes[0]] }));
     const r = await f.deposer(depotB2c("b2c_oppositions", { oppositions: [{ id: "op1", personne: personneB2c("1"), adresse: adresseB2c, inscrit_le: "2026-09-01", canaux_opposes: ["telephone", "sms"] }] }));
     expect(r.status).toBe(201);
-    expect(r.body).toMatchObject({ crees: 0, oppositionsAjoutees: 4, exclusParOpposition: 1 });
+    expect(r.body).toMatchObject({ crees: 0, oppositionsAjoutees: 4 });
+    expect(r.body).not.toHaveProperty("exclusParOpposition");
     expect(f.tp.oppositions.map((o) => `${o.type}/${o.canal}/${o.origine}`).sort()).toEqual(["courriel/sms/import", "courriel/telephone/import", "telephone/sms/import", "telephone/telephone/import"]);
-    expect(f.tp.prospects[0]).toMatchObject({ statut: "exclu", motifsExclusion: [expect.objectContaining({ motif: "opposition_client" })] });
+    expect(f.tp.prospects[0]).toMatchObject({ statut: "nouveau", motifsExclusion: [] });
     expect(JSON.stringify(f.tp.oppositions)).not.toContain("exemple.invalid");
   });
 
@@ -969,7 +1128,6 @@ describe("SQL de prospection (base.ts réelle, règles de l'hôte)", () => {
       zonesBureau: ["4000", "Liège"], source: "reelle", avecClientsActuels: false,
     });
     await base.listerProspects(SOC, { avecClientsActuels: true, source: "demonstration", page: 1, parPage: 10 });
-    await base.prospectsAvecEmpreinte(SOC, "courriel", "a".repeat(64));
     await base.lireOpposition(SOC, "courriel", "a".repeat(64), "tous");
     await base.exclureProspect(SOC, id, []);
     await base.ajouterEmpreintesProspect(SOC, id, [{ type: "courriel", valeur: "a".repeat(64) }]);
@@ -1097,6 +1255,10 @@ describe("confiance de qualification (courtier fictif)", () => {
     expect(apres.prospects[0]).toMatchObject({ numeroBce: "0123.456.749", confiance: { valeur: 96, qualifie: true } });
     const hors = PageProspects.parse((await f.appeler("prospects.lister", { query: { vue: "complete", companyId: SOC, qualifiesSeulement: "true", page: "2" }, agent: false })).body);
     expect(hors).toMatchObject({ total: 1, page: 2, prospects: [] });
+    // C3 : la vue « qualifiés seulement » porte aussi la marque « figure dans la liste d'opposition », sans écarter le prospect.
+    expect((await f.opposer({ type: "numero_bce", valeur: "0123.456.749", origine: "telephone" })).status).toBe(201);
+    const marque = PageProspects.parse((await f.appeler("prospects.lister", { query: { vue: "complete", companyId: SOC, qualifiesSeulement: "true" }, agent: false })).body);
+    expect(marque.prospects[0]).toMatchObject({ numeroBce: "0123.456.749", statut: "nouveau", figureDansOppositions: true, confiance: { qualifie: true } });
   });
 
   it("carte avec qualifiesSeulement : un seul parcours par pages de 200, jamais la liste paginée de la carte", async () => {
@@ -1385,11 +1547,15 @@ describe("DROIT-1.3 : tache.prospects.telephone, numéro chiffré dans la fiche 
     expect((await poser({ telephone: "+3240002233", sourceId: SOURCE })).body).toMatchObject({ ajoute: false, telephones: 2 });
   });
 
-  it("un numéro opposé par le client exclut aussitôt le prospect (opposition_client)", async () => {
+  it("un numéro opposé par le client ne fait que marquer le prospect, il n'est pas écarté", async () => {
     const { f, id, poser } = await bancNumero();
     expect((await f.opposer({ type: "telephone", valeur: "+32 4 000 22 33", origine: "telephone" })).status).toBe(201);
-    expect((await poser({ telephone: "+32 4 000 22 33", sourceId: SOURCE })).body).toMatchObject({ statut: "exclu" });
-    expect(f.tp.prospects.find((p) => p.id === id)!.motifsExclusion.map((m: Ligne) => m.motif)).toContain("opposition_client");
+    const r = await poser({ telephone: "+32 4 000 22 33", sourceId: SOURCE });
+    expect(r.status).toBe(201);
+    expect(r.body).not.toMatchObject({ statut: "exclu" });
+    expect(f.tp.prospects.find((p) => p.id === id)!).toMatchObject({ statut: "nouveau", motifsExclusion: [] });
+    const detail = await f.appeler("prospects.lister", { query: { partie: "detail", prospectId: id, companyId: SOC } });
+    expect(detail.body).toMatchObject({ statut: "nouveau", motifsExclusion: [], figureDansOppositions: true });
   });
 
   it("refus : source étrangère à la tâche, numéro non belge, numéro réel en démonstration, autre agent que Prospection ou Enrichissement", async () => {
