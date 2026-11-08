@@ -1,0 +1,22 @@
+{
+  "id": "wf-c-contenu",
+  "version": 1,
+  "tache": "Produire les brouillons de contenu d'une campagne (textes par canal, briefs de visuels, sources).",
+  "roleResponsable": "contenus",
+  "entreesRequises": [
+    { "cle": "brief", "indexRegistre": 0 },
+    { "cle": "charte", "indexRegistre": 1 },
+    { "cle": "sources", "indexRegistre": 2 }
+  ],
+  "sortie": {
+    "champs": { "textes": "liste_chaines", "briefsVisuels": "liste_chaines", "sources": "liste_chaines" }
+  },
+  "controleurs": ["relecteur", "code", "code", "jb"],
+  "competences": ["charte-marque", "redaction-declinaison-canal", "conformite-publicite-ia"],
+  "plafondTours": 40,
+  "plafondJetons": 150000,
+  "effetExterne": "aucun",
+  "conduiteEchec": "blocage",
+  "mesureReussite": "Brouillons acceptés par la porte sans cycle de correction supplémentaire.",
+  "maturite": "M1"
+}

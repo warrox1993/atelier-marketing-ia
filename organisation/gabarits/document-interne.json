@@ -1,0 +1,13 @@
+{
+  "cle": "document-interne",
+  "version": 1,
+  "description": "Livrable interne léger sans URL ni formulaire (note, audit, plan) : deux revues imposées par le type (exigences, métier), jamais la conformité ; porte posée d'office, approbation humaine.",
+  "typeLivrable": "interne",
+  "etapes": [
+    { "rang": 1, "role": "contenus", "competences": ["documents-bureautiques"], "contratId": "document-interne", "contratVersion": 1 }
+  ],
+  "revues": ["exigences", "metier"],
+  "conformiteSiModuleActif": false,
+  "porte": true,
+  "approbationRequise": true
+}

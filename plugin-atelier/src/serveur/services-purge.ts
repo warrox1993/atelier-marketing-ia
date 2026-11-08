@@ -37,7 +37,7 @@ export const TABLES_PURGE: readonly string[] = [
   "bases_legales", "oppositions", "listes_dncm", "dncm_empreintes", "bases_clients_imports", "clients", "regles_ventes_croisees",
   "clients_empreintes", "issues_commerciales", "exports_crm", "connaissances_index", "connaissances_documents",
   "connaissances_versions", "connaissances_passages", "corbeille", "reglages_leads", "corrections_criteres", "evaluations_criteres",
-  "services_entreprises", "liaisons", "experiences",
+  "services_entreprises", "liaisons", "experiences", "missions", "etapes", "executions",
   "obs_preuves", "obs_affirmations", "obs_revisions", "obs_versions", "obs_instantanes", "obs_sources", "obs_alias", "obs_projets",
   "obs_publications", "obs_confirmations_publication",
 ];

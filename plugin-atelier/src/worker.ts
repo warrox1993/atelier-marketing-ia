@@ -10,6 +10,7 @@ import { definePlugin, runWorker } from "@paperclipai/plugin-sdk";
 import { creerAtelier } from "./serveur/atelier.js";
 import { creerBase } from "./serveur/base.js";
 import { creerVeilleur } from "./serveur/veilleur.js";
+import { brancherMoteur } from "./moteur/branchement.js";
 import { creerRechercheDossierSujet, liensDossierSujet } from "./serveur/dossier-sujet.js";
 import { creerOutilsFabrique, dossierFile } from "./serveur/fabrique-outils.js";
 import { calculerModeEffectif } from "./serveur/regles-donnees.js";
@@ -21,6 +22,7 @@ let atelier: ReturnType<typeof creerAtelier> | null = null;
 let veilleur: ReturnType<typeof creerVeilleur> | null = null;
 let facteur: ReturnType<typeof creerFacteur> | null = null;
 let signalement: ReturnType<typeof creerSignalement> | null = null;
+let moteur: ReturnType<typeof brancherMoteur> | null = null;
 
 const plugin = definePlugin({
   // Réglages lus par entreprise (ctx.config.get(companyId)) et aucun onConfigChanged : sans ce drapeau, le SDK refuse 27 entreprises sur 28 à chaque démarrage.
@@ -37,6 +39,9 @@ const plugin = definePlugin({
       bilan: { ctx, base: creerBase(ctx.db) },
     });
     veilleur.demarrer();
+    // Moteur de missions (#49) : reprise, minuterie et filet `issue.updated` (voir moteur/branchement.ts).
+    moteur = brancherMoteur(ctx);
+    moteur.demarrer();
     // Facteur du bureau de liaison (essai L9, 16/10/2026) : transmissions et réponses entre deux entreprises, que l'hôte
     // refuse pendant une route ou un événement. Créé ICI, dans setup() : sa minuterie n'hérite d'aucune invocation.
     facteur = creerFacteur({ ctx, base: creerBase(ctx.db), stock: stockLiaisonsParesseux(ctx) });
@@ -101,6 +106,7 @@ const plugin = definePlugin({
 
   async onShutdown() {
     veilleur?.arreter();
+    moteur?.arreter();
     facteur?.arreter();
     signalement?.arreter();
   },

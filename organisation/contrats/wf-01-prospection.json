@@ -1,0 +1,21 @@
+{
+  "id": "wf-01-prospection",
+  "version": 1,
+  "tache": "Constituer une liste de prospects sourcée et qualifiée à partir de réponses d'outils signées.",
+  "roleResponsable": "prospection",
+  "entreesRequises": [
+    { "cle": "brief", "indexRegistre": 0 },
+    { "cle": "cibles", "indexRegistre": 1 }
+  ],
+  "sortie": {
+    "champs": { "reponsesBrutesSignees": "liste_chaines", "qualification": "chaine", "personnesOpposeesMarquees": "liste_chaines", "limites": "liste_chaines" }
+  },
+  "controleurs": ["code", "code", "relecteur"],
+  "competences": ["recherche-prospects", "qualification-prospects", "recherche-sourcee"],
+  "plafondTours": 60,
+  "plafondJetons": 250000,
+  "effetExterne": "depot_plugin",
+  "conduiteEchec": "blocage",
+  "mesureReussite": "Prospects retenus tous issus d'une réponse signée, qualification relue sans rejet.",
+  "maturite": "M1"
+}

@@ -10,10 +10,22 @@
 import { randomUUID } from "node:crypto";
 import type { PluginContext } from "@paperclipai/plugin-sdk";
 import { ESPACE_BASE, LIMITES, type RoleRevue } from "../contrats/index.js";
+import type { EtatMission } from "../moteur/transitions.js";
 import { erreur } from "./erreurs.js";
 
 type Db = PluginContext["db"];
 type Ligne = Record<string, unknown>;
+
+export type TypeExecution = "evenement" | "creation_tache" | "reveil" | "effet_externe";
+export type StatutExecution = "demandee" | "appliquee" | "refusee";
+export interface Mission {
+  id: string; companyId: string; gabaritCle: string; gabaritVersion: number; contratId: string; contratVersion: number; mandat: string; etat: EtatMission;
+  etatAvantPause: EtatMission | null; rangCourant: number; enveloppeCents: number; campagneId: string | null; issueRacineId: string | null; creeLe: string; modifieLe: string;
+}
+export interface EtapeMission {
+  id: string; companyId: string; missionId: string; rang: number; role: string; tentative: number; etat: string; entree: unknown; sortie: unknown;
+  delaiLe: string | null; issueId: string | null; creeLe: string; modifieLe: string;
+}
 
 const IDENT = /^plugin_[a-z0-9_]{1,55}$/u;
 
@@ -86,7 +98,7 @@ export const TABLES_CONSERVEES = ["oppositions", "bases_legales", "journal"] as 
 export const TABLES_REMISE_A_ZERO = [
   "corrections_criteres", "evaluations_criteres", "reglages_leads", "exports_crm", "issues_commerciales", "prospects_scores", "prospects_empreintes", "prospects", "etalonnages", "poids_score",
   "clients_empreintes", "clients", "bases_clients_imports", "regles_ventes_croisees",
-  "relances_correction", "appels_proposes", "diffusions", "decisions_humaines", "constats", "verdicts", "couvertures", "evaluations_porte", "messages", "sources", "mesures", "imports", "planifications", "portes", "exigences", "briefs", "campagnes", "marques", "reglages_entreprise",
+  "executions", "etapes", "missions", "relances_correction", "appels_proposes", "diffusions", "decisions_humaines", "constats", "verdicts", "couvertures", "evaluations_porte", "messages", "sources", "mesures", "imports", "planifications", "portes", "exigences", "briefs", "campagnes", "marques", "reglages_entreprise",
 ] as const;
 
 export function creerBase(db: Db) {
@@ -1767,6 +1779,111 @@ export function creerBase(db: Db) {
     );
   }
 
+  /* ---------------- moteur de missions (#49) ---------------- */
+  const texteOuNul = (v: unknown) => (v === null || v === undefined ? null : String(v));
+  const missionDepuisLigne = (r: Ligne): Mission => ({
+    id: String(r.id), companyId: String(r.company_id), gabaritCle: String(r.gabarit_cle), gabaritVersion: Number(r.gabarit_version),
+    contratId: String(r.contrat_id), contratVersion: Number(r.contrat_version), mandat: String(r.mandat), etat: r.etat as EtatMission,
+    etatAvantPause: texteOuNul(r.etat_avant_pause) as EtatMission | null, rangCourant: Number(r.rang_courant), enveloppeCents: Number(r.enveloppe_cents),
+    campagneId: texteOuNul(r.campagne_id), issueRacineId: texteOuNul(r.issue_racine_id), creeLe: iso(r.cree_le), modifieLe: iso(r.modifie_le),
+  });
+
+  const etapeDepuisLigne = (r: Ligne): EtapeMission => ({
+    id: String(r.id), companyId: String(r.company_id), missionId: String(r.mission_id), rang: Number(r.rang), role: String(r.role), tentative: Number(r.tentative),
+    etat: String(r.etat), entree: r.entree ?? null, sortie: r.sortie ?? null, delaiLe: r.delai_le === null || r.delai_le === undefined ? null : iso(r.delai_le),
+    issueId: texteOuNul(r.issue_id), creeLe: iso(r.cree_le), modifieLe: iso(r.modifie_le),
+  });
+
+  async function creerMission(m: {
+    companyId: string; gabaritCle: string; gabaritVersion: number; contratId: string; contratVersion: number; mandat: string;
+    enveloppeCents?: number; campagneId?: string | null; issueRacineId?: string | null; etat?: EtatMission;
+  }) {
+    const id = randomUUID();
+    await x(
+      `insert into ${ns}.missions (id, company_id, gabarit_cle, gabarit_version, contrat_id, contrat_version, mandat, etat, enveloppe_cents, campagne_id, issue_racine_id)
+       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
+      [id, m.companyId, m.gabaritCle, m.gabaritVersion, m.contratId, m.contratVersion, m.mandat, m.etat ?? "prete", m.enveloppeCents ?? 0, m.campagneId ?? null, m.issueRacineId ?? null],
+    );
+    return id;
+  }
+
+  async function lireMission(companyId: string, id: string) {
+    const [r] = await q(`select * from ${ns}.missions where company_id = $1 and id = $2`, [companyId, id]);
+    return r ? missionDepuisLigne(r) : null;
+  }
+
+  /** Missions non terminales d'une entreprise, les plus anciennes d'abord. */
+  async function missionsActives(companyId: string) {
+    return (await q(`select * from ${ns}.missions where company_id = $1 and etat not in ('cloturee', 'annulee', 'echec') order by cree_le, id limit 500`, [companyId])).map(missionDepuisLigne);
+  }
+
+  /** Compare-and-set de l'état : vrai si la mission était bien dans `ancien` et a changé. */
+  async function changerEtatMission(companyId: string, id: string, ancien: EtatMission, nouveau: EtatMission) {
+    const { rowCount } = await x(`update ${ns}.missions set etat = $4, modifie_le = now() where company_id = $1 and id = $2 and etat = $3`, [companyId, id, ancien, nouveau]);
+    return rowCount === 1;
+  }
+
+  async function creerEtape(e: { companyId: string; missionId: string; rang: number; role: string; tentative?: number; etat: string; entree?: unknown; delaiLe?: string | null; issueId?: string | null }) {
+    const id = randomUUID();
+    await x(
+      `insert into ${ns}.etapes (id, company_id, mission_id, rang, role, tentative, etat, entree, delai_le, issue_id) values ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9::timestamptz, $10)`,
+      [id, e.companyId, e.missionId, e.rang, e.role, e.tentative ?? 1, e.etat, e.entree === undefined ? null : json(e.entree), e.delaiLe ?? null, e.issueId ?? null],
+    );
+    return id;
+  }
+
+  async function lireEtapes(companyId: string, missionId: string) {
+    return (await q(`select * from ${ns}.etapes where company_id = $1 and mission_id = $2 order by rang, tentative limit 500`, [companyId, missionId])).map(etapeDepuisLigne);
+  }
+
+  /** Met à jour les seuls champs fournis d'une étape. */
+  async function majEtape(companyId: string, id: string, c: { etat?: string; sortie?: unknown; delaiLe?: string | null; issueId?: string | null }) {
+    const sets: string[] = [];
+    const params: unknown[] = [companyId, id];
+    const ajouter = (colonne: string, valeur: unknown, cast = "") => void sets.push(`${colonne} = $${params.push(valeur)}${cast}`);
+    if (c.etat !== undefined) ajouter("etat", c.etat);
+    if (c.sortie !== undefined) ajouter("sortie", json(c.sortie), "::jsonb");
+    if (c.delaiLe !== undefined) ajouter("delai_le", c.delaiLe, "::timestamptz");
+    if (c.issueId !== undefined) ajouter("issue_id", c.issueId);
+    if (sets.length === 0) return false;
+    const { rowCount } = await x(`update ${ns}.etapes set ${sets.join(", ")}, modifie_le = now() where company_id = $1 and id = $2`, params);
+    return rowCount === 1;
+  }
+
+  /** Inscrit l'intention d'une écriture rejouable en `demandee` ; vrai si la clé est neuve, faux si elle existait déjà. */
+  async function enregistrerExecution(e: { companyId: string; missionId: string; rang: number; type: TypeExecution; cle: string; requete?: unknown; diffusionId?: string | null }) {
+    const { rowCount } = await x(
+      `insert into ${ns}.executions (id, company_id, mission_id, rang, type, cle_idempotence, requete, diffusion_id) values ($1, $2, $3, $4, $5, $6, $7::jsonb, $8)
+       on conflict (company_id, cle_idempotence) do nothing`,
+      [randomUUID(), e.companyId, e.missionId, e.rang, e.type, e.cle, json(e.requete ?? {}), e.diffusionId ?? null],
+    );
+    return rowCount === 1;
+  }
+
+  /** Fait passer l'exécution de clé `cle` de cette entreprise au statut donné. */
+  async function marquerExecution(companyId: string, cle: string, statut: StatutExecution) {
+    const { rowCount } = await x(`update ${ns}.executions set statut = $3, modifie_le = now() where company_id = $1 and cle_idempotence = $2`, [companyId, cle, statut]);
+    return rowCount === 1;
+  }
+
+  /** Exécution de clé `cle` de cette entreprise (statut seulement), ou null : distingue `demandee` (reprise) de `appliquee` (rejeu sans effet). */
+  async function lireExecution(companyId: string, cle: string) {
+    const [r] = await q(`select statut from ${ns}.executions where company_id = $1 and cle_idempotence = $2`, [companyId, cle]);
+    return r ? { statut: String(r.statut) as StatutExecution } : null;
+  }
+
+  /** Compare-and-set du rang courant d'une mission : vrai si la mission était bien au rang `ancien`. */
+  async function changerRangMission(companyId: string, id: string, ancien: number, nouveau: number) {
+    const { rowCount } = await x(`update ${ns}.missions set rang_courant = $4, modifie_le = now() where company_id = $1 and id = $2 and rang_courant = $3`, [companyId, id, ancien, nouveau]);
+    return rowCount === 1;
+  }
+
+  /** Étape (dernière tentative) dont la tâche Paperclip est `issueId`. */
+  async function etapeParIssue(companyId: string, issueId: string) {
+    const [r] = await q(`select * from ${ns}.etapes where company_id = $1 and issue_id = $2 order by tentative desc limit 1`, [companyId, issueId]);
+    return r ? etapeDepuisLigne(r) : null;
+  }
+
   /* ---------------- purge des prospects au terme de conservation (DROIT-1.4) ---------------- */
   // Mêmes gardes que la remise à zéro (M1) : un prospect qui porte une base légale est gardé (sa preuve avec lui) ;
   // les oppositions ne sont pas touchées. Contact = mise à jour, export CRM ou issue commerciale.
@@ -1833,6 +1950,7 @@ export function creerBase(db: Db) {
     detailsProspects, listerProspects, insererOpposition, lireOpposition,
     insererImportBaseClients, insererClients, etatBaseClients, supprimerBaseClients, reglesVentesCroisees, clientsPourVentesCroisees, insererEtalonnage, issuesPourEtalonnage, scoresCourantsCible, insererScoreMesure,
     lireExportCrmParCle, insererExportCrm,
+    creerMission, lireMission, missionsActives, changerEtatMission, creerEtape, lireEtapes, majEtape, enregistrerExecution, marquerExecution, lireExecution, changerRangMission, etapeParIssue,
   };
 }
 

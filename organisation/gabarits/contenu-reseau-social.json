@@ -1,0 +1,13 @@
+{
+  "cle": "contenu-reseau-social",
+  "version": 1,
+  "description": "Livrable public : brouillons de posts pour les réseaux sociaux. Les trois revues du gabarit public sont imposées par le type (exigences, métier, technique), plus la conformité quand le client a un module de conformité actif ; la porte est posée d'office et l'humain approuve.",
+  "typeLivrable": "public",
+  "etapes": [
+    { "rang": 1, "role": "contenus", "competences": ["redaction-declinaison-canal", "charte-marque"], "contratId": "wf-c-contenu", "contratVersion": 1 }
+  ],
+  "revues": ["exigences", "metier", "technique"],
+  "conformiteSiModuleActif": true,
+  "porte": true,
+  "approbationRequise": true
+}

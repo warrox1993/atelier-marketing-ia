@@ -148,6 +148,13 @@ const manifest: PaperclipPluginManifestV1 = {
         title: "Accord écrit du client pour Voyage AI",
         description: "À cocher seulement si le client a accepté PAR ÉCRIT l'envoi du texte de ses documents à Voyage AI. Sans cela, « voyage » retombe sur le plein texte.",
       },
+      // Moteur de missions (#49) : désactivé par défaut, activé entreprise par entreprise par l'humain.
+      moteurMissions: {
+        type: "boolean",
+        default: false,
+        title: "Moteur de missions",
+        description: "Active le moteur de missions (tâches enchaînées, contrats, reprise au démarrage) pour cette entreprise. Désactivé, le comportement reste celui d'avant.",
+      },
       // Veilleur des tâches orphelines (16/10/2026).
       veilleurSeuilMinutes: {
         type: "integer",

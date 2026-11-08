@@ -1,0 +1,20 @@
+{
+  "id": "document-interne",
+  "version": 1,
+  "tache": "Rédiger un document interne (note, audit, plan) à partir d'un brief.",
+  "roleResponsable": "contenus",
+  "entreesRequises": [
+    { "cle": "brief", "indexRegistre": 0 }
+  ],
+  "sortie": {
+    "champs": { "document": "chaine", "sources": "liste_chaines" }
+  },
+  "controleurs": ["relecteur", "relecteur", "relecteur", "jb"],
+  "competences": ["documents-bureautiques"],
+  "plafondTours": 40,
+  "plafondJetons": 150000,
+  "effetExterne": "aucun",
+  "conduiteEchec": "blocage",
+  "mesureReussite": "Document accepté par la porte sans cycle de correction supplémentaire.",
+  "maturite": "M1"
+}
