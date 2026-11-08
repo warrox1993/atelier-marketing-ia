@@ -116,7 +116,6 @@ function baseLegale(p: Prospect, canal: CanalContact, base: BaseLegale, modifs: 
     natureAdresse: electronique ? (p.coordonnees.find((c) => c.canal === canal)?.nature ?? "inconnue") : "inconnue",
     preuve: { type: preuveType ?? PREUVE_PAR_BASE[base], reference: "ref-preuve-001", date: HIER },
     information: { texteArt14: TEXTE_ART14, moyenOpposition: "lien de désinscription" },
-    dncmVerifieLe: canal === "telephone" ? HIER : null,
     verifieLe: HIER,
     verifiePar: "humain",
     ...reste,

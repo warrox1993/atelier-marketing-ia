@@ -179,7 +179,7 @@ function banc(o: { modeEntreprise?: "demonstration" | "reel"; config?: Record<st
       company_id: SOC, prospect_id: prospectId, cible: "entreprise", forme: "personne_morale", canal: "courriel", base: "personne_morale_adresse_impersonnelle", nature_adresse: "impersonnelle",
       preuve: { type: "source", reference: "BCE, adresse générique publiée", date: "2026-10-15T10:00:00.000Z" },
       information: { texteArt14: "Vos coordonnées professionnelles proviennent de la Banque-Carrefour des Entreprises.", moyenOpposition: "Lien de désinscription" },
-      dncm_verifie_le: null, verifie_le: "2026-10-15T10:00:00.000Z", verifie_par: "humain:local-board",
+      verifie_le: "2026-10-15T10:00:00.000Z", verifie_par: "humain:local-board",
     });
   }
   const id = (bce: string) => t.prospects.find((p) => p.numeroBce === bce)!.id as string;

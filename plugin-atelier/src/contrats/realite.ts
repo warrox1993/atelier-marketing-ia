@@ -28,7 +28,7 @@ export type ActeurBranchement = z.infer<typeof ActeurBranchement>;
 export const PreuveBranchement = z.enum(["mesure", "declare", "aucune"]);
 export type PreuveBranchement = z.infer<typeof PreuveBranchement>;
 
-export const CleBranchement = z.enum(["bce", "bnb", "osm", "base_clients", "consentement", "bureaux_segments", "google", "diffusion", "voix", "moniteur_belge", "ne_m_appelez_plus"]);
+export const CleBranchement = z.enum(["bce", "bnb", "osm", "base_clients", "consentement", "bureaux_segments", "google", "diffusion", "voix", "moniteur_belge"]);
 export type CleBranchement = z.infer<typeof CleBranchement>;
 
 export const Branchement = z.object({

@@ -894,7 +894,7 @@ Vente croisée : `detient: ["auto"]` et `ne_detient_pas: ["habitation"]` donne �
 **Données** : 56 demandes, 70 clients et 22 oppositions tirés de la graine `alea` (clé « b2c », donc sans effet sur les autres
 jeux), plus des cas écrits à la main. Personnes 100 % fictives : noms « Prénom Nom (démonstration) », courriels
 `@exemple.invalid`, téléphones `+32 4 000 0X YY` (X de 1 à 9, disjoints des entreprises en `+32 4 000 00 NN`), « Rue des
-Exemples ». La liste « Ne m'appelez plus » est une **simulation** : le courtier ne peut pas interroger la vraie liste.
+Exemples ».
 **Pièges** (`piegesParticuliers()`) : doublon (demandes `dv901`/`dv902`, clients `cl901`/`cl902` sur deux entités),
 consentement retiré (`dv903`, `dv904`, `cl903`), hors zone (`dv905`, `dv906`, `cl904`, Namur et Bruxelles), client déjà
 équipé (`dv907`, `dv908`), habitation résiliée comptée comme « sans habitation » (`cl905`). Coordonnées des communes

@@ -814,7 +814,7 @@ describe("critères courtier du lot 3 : bureau spécialisé proche et contact pu
       expect(imper.statut).toBe("verifie");
       expect(imper.detail).toContain("adresse électronique impersonnelle");
       // Téléphone : il ne compte que si le prospect porte une base légale du canal téléphone (voir les tests dédiés plus bas).
-      const tel = { ...structuredClone(PROSPECT_B2B.basesLegales[0]), canal: "telephone", base: "interet_legitime", natureAdresse: "inconnue", dncmVerifieLe: H };
+      const tel = { ...structuredClone(PROSPECT_B2B.basesLegales[0]), canal: "telephone", base: "interet_legitime", natureAdresse: "inconnue" };
       expect(critere(entreprise({ coordonnees: [coord("telephone", "inconnue")], basesLegales: [tel] }), "contact_public_permis")!.detail).toContain("téléphone");
       const site = entreprise({ coordonnees: [], sources: [...PROSPECT_B2B.sources, { type: "lecture_url", sourceId: null, service: null, outil: null, url: "https://cabinet.example/contact", collecteLe: H }] });
       expect(critere(site, "contact_public_permis")!.detail).toContain("site web");
@@ -829,7 +829,7 @@ describe("critères courtier du lot 3 : bureau spécialisé proche et contact pu
     });
 
     it("entreprise : téléphone avec une base légale du canal téléphone : vérifié, et le détail le cite", () => {
-      const tel = { ...structuredClone(PROSPECT_B2B.basesLegales[0]), canal: "telephone", base: "interet_legitime", natureAdresse: "inconnue", dncmVerifieLe: "2026-10-10T09:00:00.000Z" };
+      const tel = { ...structuredClone(PROSPECT_B2B.basesLegales[0]), canal: "telephone", base: "interet_legitime", natureAdresse: "inconnue" };
       const c = critere(entreprise({ coordonnees: [coord("telephone", "inconnue")], basesLegales: [tel] }), "contact_public_permis")!;
       expect(c.statut).toBe("verifie");
       expect(c.detail).toBe("Contact professionnel publié dans les sources : téléphone ; aucune opposition enregistrée");

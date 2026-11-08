@@ -1268,7 +1268,7 @@ function PurgeProspects({ onTermine }: { onTermine(): void }) {
   };
   const prospects = (n: number) => `${nombre(n)} prospect${n > 1 ? "s" : ""}`;
   return (
-    <Section titre="Purger les prospects sans contact depuis 3 ans" ancre="prospects-purge" repliable aide="Supprime les prospects qui n'ont eu aucun contact (mise à jour, export, tâche commerciale) depuis 3 ans. Un prospect qui porte une base légale est gardé ; les oppositions et la liste « Ne m'appelez plus » ne sont jamais touchées.">
+    <Section titre="Purger les prospects sans contact depuis 3 ans" ancre="prospects-purge" repliable aide="Supprime les prospects qui n'ont eu aucun contact (mise à jour, export, tâche commerciale) depuis 3 ans. Un prospect qui porte une base légale est gardé ; les oppositions ne sont jamais touchées.">
       <div className="atl-actions">
         <Bouton enCours={enCours && !compte} onClick={() => void lancer(false)}>
           Compter les prospects à purger

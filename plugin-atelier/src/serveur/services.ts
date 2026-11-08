@@ -2962,7 +2962,7 @@ export function creerServices(ctx: PluginContext, options: { transportReel?: Tra
     if (trace.decisions > 0 || trace.diffusions > 0) {
       erreur("conflit", `Cette entreprise garde une trace (${trace.decisions} décision(s), ${trace.diffusions} diffusion(s)) : remise à zéro refusée.`);
     }
-    // M1 : oppositions, DNCM, bases légales et journal sont conservés par `supprimerDonneesEntreprise` lui-même.
+    // M1 : oppositions, bases légales et journal sont conservés par `supprimerDonneesEntreprise` lui-même.
     const { supprimes, conserves } = await base.supprimerDonneesEntreprise(companyId);
     await base.journaliser({ companyId, type: "donnees.reinitialisees", entite: "entreprise", entiteId: companyId, acteur: acteur.id, donnees: { supprimes, conserves } });
     return { supprimes, conserves };

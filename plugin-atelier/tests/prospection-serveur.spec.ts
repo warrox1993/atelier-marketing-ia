@@ -1088,7 +1088,7 @@ describe("confiance de qualification (courtier fictif)", () => {
     f.tp.bases.set(ligne.id, [{
       cible: "entreprise", forme: "personne_morale", canal: "courriel", base: "personne_morale_adresse_impersonnelle", nature_adresse: "impersonnelle",
       preuve: { type: "source", reference: "BCE (démonstration)", date: ligne.creeLe }, information: { texteArt14: "Adresse trouvée à la BCE (démonstration).", moyenOpposition: "Lien de désinscription" },
-      dncm_verifie_le: null, verifie_le: ligne.creeLe, verifie_par: "systeme",
+      verifie_le: ligne.creeLe, verifie_par: "systeme",
     }]);
     const apres = PageProspects.parse((await f.appeler("prospects.lister", { query: { vue: "complete", companyId: SOC, qualifiesSeulement: "true" }, agent: false })).body);
     expect(apres.total).toBe(1);
@@ -1109,7 +1109,7 @@ describe("confiance de qualification (courtier fictif)", () => {
     f.tp.bases.set(ligne.id, [{
       cible: "entreprise", forme: "personne_morale", canal: "courriel", base: "personne_morale_adresse_impersonnelle", nature_adresse: "impersonnelle",
       preuve: { type: "source", reference: "BCE (démonstration)", date: ligne.creeLe }, information: { texteArt14: "Adresse trouvée à la BCE (démonstration).", moyenOpposition: "Lien de désinscription" },
-      dncm_verifie_le: null, verifie_le: ligne.creeLe, verifie_par: "systeme",
+      verifie_le: ligne.creeLe, verifie_par: "systeme",
     }]);
     f.appelsListe.length = 0;
     const r = await f.appeler("prospects.carte", { query: { companyId: SOC, qualifiesSeulement: "true" }, agent: false });

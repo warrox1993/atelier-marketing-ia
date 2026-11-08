@@ -80,7 +80,7 @@ export function depotDepuisJournal(issueId: string | null, donnees: Record<strin
 /** Tables légales que la remise à zéro conserve toujours (faille M1). */
 /** Avant le lot 2, l'agent créait lui-même son bilan sous un autre originId : rattraper les confirmations plus anciennes ferait un doublon. */
 export const DEBUT_RATTRAPAGE_J30 = "2026-11-07T00:00:00.000Z";
-export const TABLES_CONSERVEES = ["oppositions", "listes_dncm", "dncm_empreintes", "bases_legales", "journal"] as const;
+export const TABLES_CONSERVEES = ["oppositions", "bases_legales", "journal"] as const;
 
 /** Tables vidées par la remise à zéro, dans l'ordre (enfants avant parents). `prospects` ne perd que ceux sans base légale. */
 export const TABLES_REMISE_A_ZERO = [
@@ -1747,7 +1747,7 @@ export function creerBase(db: Db) {
 
   /* ---------------- purge des prospects au terme de conservation (DROIT-1.4) ---------------- */
   // Mêmes gardes que la remise à zéro (M1) : un prospect qui porte une base légale est gardé (sa preuve avec lui) ;
-  // oppositions et liste « Ne m'appelez plus » ne sont pas touchées. Contact = mise à jour, export CRM ou issue commerciale.
+  // les oppositions ne sont pas touchées. Contact = mise à jour, export CRM ou issue commerciale.
   const sansContactDepuis = `p.company_id = $1 and p.modifie_le < $2::timestamptz
        and not exists (select 1 from ${ns}.bases_legales b where b.prospect_id = p.id)
        and not exists (select 1 from ${ns}.exports_crm e where e.company_id = p.company_id and e.prospect_ids @> jsonb_build_array(p.id::text) and e.cree_le >= $2::timestamptz)
@@ -1761,7 +1761,7 @@ export function creerBase(db: Db) {
   }
 
   /* ---------------- remise à zéro des données de l'atelier ---------------- */
-  // Faille M1 : oppositions RGPD, listes « Ne m'appelez plus » (DNCM), bases légales et journal d'audit
+  // Faille M1 : oppositions RGPD, bases légales et journal d'audit
   // sont des obligations légales. La remise à zéro ne les efface JAMAIS, quel que soit l'appelant :
   // ces tables ne figurent pas dans la liste des suppressions, et les prospects qui portent une base
   // légale sont gardés (la clé étrangère `bases_legales.prospect_id` est en ON DELETE CASCADE).

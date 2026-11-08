@@ -949,7 +949,7 @@ export function basePermise(cible: CibleProspect, canal: CanalContact, base: Bas
 
 /**
  * Base légale enregistrée pour UN prospect et UN canal, vérifiée contre la matrice cible × canal et
- * des cohérences structurelles (adresse nominative = consentement ; téléphone = DNCM vérifiée).
+ * des cohérences structurelles (adresse nominative = consentement).
  */
 export const BaseLegaleContact = z
   .object({
@@ -976,8 +976,6 @@ export const BaseLegaleContact = z
         moyenOpposition: z.string().min(5).max(500),
       })
       .strict(),
-    /** Date de vérification contre la liste « Ne m'appelez plus » (obligatoire pour le téléphone). */
-    dncmVerifieLe: Horodatage.nullable(),
     verifieLe: Horodatage,
     verifiePar: z.string().min(1),
   })
@@ -1013,10 +1011,6 @@ export const BaseLegaleContact = z
   .refine((b) => b.base !== "consentement" || b.preuve.type === "consentement", {
     message: "Le consentement se prouve par une référence de consentement",
     path: ["preuve", "type"],
-  })
-  .refine((b) => b.canal !== "telephone" || b.dncmVerifieLe !== null, {
-    message: "Téléphone : vérification « Ne m'appelez plus » obligatoire",
-    path: ["dncmVerifieLe"],
   });
 export type BaseLegaleContact = z.infer<typeof BaseLegaleContact>;
 

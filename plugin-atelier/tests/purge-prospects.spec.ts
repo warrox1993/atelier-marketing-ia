@@ -1,7 +1,7 @@
 /**
  * DROIT-1.4 (reste de R2) : purge des prospects sans contact depuis 3 ans, décision de l'opérateur.
  * Action humaine, à blanc par défaut ; mêmes gardes que la remise à zéro (M1) : un prospect qui porte une base
- * légale est gardé, les oppositions et la liste « Ne m'appelez plus » ne sont jamais touchées.
+ * légale est gardé, les oppositions ne sont jamais touchées.
  */
 import type { PluginContext } from "@paperclipai/plugin-sdk";
 import { describe, expect, it } from "vitest";
@@ -51,7 +51,7 @@ describe("DROIT-1.4 : purge des prospects sans contact depuis 3 ans", () => {
     expect(b.lectures.find((l) => /prospects p/u.test(l.sql))!.params).toEqual([SOC, r.avant]);
   });
 
-  it("confirmée : supprime avec les gardes légales et journalise ; jamais les oppositions ni la liste DNCM", async () => {
+  it("confirmée : supprime avec les gardes légales et journalise ; jamais les oppositions", async () => {
     const b = banc(2);
     const r = await b.purger({ confirmer: true });
     expect(r).toMatchObject({ aBlanc: false, candidats: 2, supprimes: 2 });

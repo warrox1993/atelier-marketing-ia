@@ -3,8 +3,7 @@
  * sur la réalité.
  *
  * Route `realite.etat` : pour chaque branchement que le serveur sait lire (registre BCE, Banque nationale,
- * OpenStreetMap, base clients, bases légales, bureaux et segments, clé de la voix, moniteur belge, liste
- * « Ne m'appelez plus »), l'état, ce qu'il débloque, qui doit agir et le nombre de leads concernés ; plus la
+ * OpenStreetMap, base clients, bases légales, bureaux et segments, clé de la voix, moniteur belge), l'état, ce qu'il débloque, qui doit agir et le nombre de leads concernés ; plus la
  * synthèse par critère de qualification. Rien n'est codé en dur à « réel » : l'état vient du diagnostic des
  * sources réelles (mode lu sur la passerelle), de l'import de la base clients, de la fiche du client et de la
  * configuration. Les connecteurs Google et de diffusion sont lus par l'interface (connexions natives).
@@ -70,7 +69,7 @@ const BRANCHEMENT_DU_CRITERE: Readonly<Record<CodeCritereQualification, CleBranc
   proprietaire_locaux: "bnb",
   sante_financiere: "bnb",
   bureau_specialise_proche: "bureaux_segments",
-  contact_public_permis: "ne_m_appelez_plus",
+  contact_public_permis: "consentement",
 };
 
 /** Ce que le lead attend, pour la phrase de synthèse (« N leads attendent … pour … »). */
@@ -107,7 +106,6 @@ const ATTENDU: Readonly<Record<CleBranchement, string>> = {
   diffusion: "la diffusion réelle",
   voix: "la clé OpenAI de la voix",
   moniteur_belge: "le Moniteur belge",
-  ne_m_appelez_plus: "la liste « Ne m'appelez plus »",
 };
 
 const NOMS: Readonly<Record<CleBranchement, string>> = {
@@ -121,7 +119,6 @@ const NOMS: Readonly<Record<CleBranchement, string>> = {
   diffusion: "Diffusion réelle",
   voix: "Clé OpenAI pour la voix",
   moniteur_belge: "Moniteur belge",
-  ne_m_appelez_plus: "Liste « Ne m'appelez plus »",
 };
 
 /** Fonctions débloquées (hors critères de leads). */
@@ -134,13 +131,11 @@ const FONCTIONS: Readonly<Partial<Record<CleBranchement, readonly string[]>>> = 
   bureaux_segments: ["Répartition des leads par bureau selon les segments qu'il suit", "Carte et distance au bureau le plus proche"],
   voix: ["Conversation vocale en direct avec le Coordinateur"],
   moniteur_belge: ["Actes de sociétés publiés : constitutions, changements de siège, événements récents"],
-  ne_m_appelez_plus: ["Exclusion des numéros inscrits sur la liste d'opposition nationale avant tout appel"],
 };
 
-/** Critères que le branchement établit EN PLUS de ceux de la table principale (sources encore à brancher ; le contact publié dépend de la liste d'opposition pour le téléphone). */
+/** Critères que le branchement établit EN PLUS de ceux de la table principale (sources encore à brancher). */
 const CRITERES_SUPPLEMENTAIRES: Readonly<Partial<Record<CleBranchement, readonly CodeCritereQualification[]>>> = {
   moniteur_belge: ["evenement_recent", "installation_recente"],
-  ne_m_appelez_plus: ["joignable_legalement"],
 };
 
 /** Branchements dont le nombre de leads concernés se calcule (les autres ne se rattachent à aucun critère de lead mesuré). */
@@ -157,7 +152,6 @@ const ACTEURS: Readonly<Record<CleBranchement, ActeurBranchement>> = {
   diffusion: "client",
   voix: "nous",
   moniteur_belge: "nous",
-  ne_m_appelez_plus: "acces_officiel",
 };
 
 /** Vrai pour un critère codé (et non un critère personnalisé du client, dont le code est libre). */
@@ -183,7 +177,7 @@ export function assemblerProspect(l: Awaited<ReturnType<BaseAtelier["listerProsp
   const basesLegales = (det.bases.get(l.id) ?? []).map((b) => ({
     prospectId: l.id, cible: b.cible, forme: b.forme, canal: b.canal, base: b.base, natureAdresse: b.nature_adresse,
     preuve: typeof b.preuve === "string" ? JSON.parse(b.preuve) : b.preuve, information: typeof b.information === "string" ? JSON.parse(b.information) : b.information,
-    dncmVerifieLe: b.dncm_verifie_le == null ? null : new Date(String(b.dncm_verifie_le)).toISOString(), verifieLe: new Date(String(b.verifie_le)).toISOString(), verifiePar: b.verifie_par,
+    verifieLe: new Date(String(b.verifie_le)).toISOString(), verifiePar: b.verifie_par,
   }));
   const parsees = basesLegales.map((b) => BaseLegaleContact.safeParse(b));
   if (parsees.some((x) => !x.success)) return null;
@@ -339,7 +333,6 @@ export function routesRealite(d: DependancesRealite): Partial<Record<CleRouteApi
       brBureaux,
       brVoix,
       fabrique("moniteur_belge", "non_branche", "aucune", "Source à brancher : aucun connecteur du Moniteur belge n'existe encore."),
-      fabrique("ne_m_appelez_plus", "non_branche", "aucune", "Source à brancher : la liste d'opposition nationale n'est pas encore consultée (accès officiel à obtenir)."),
     ];
     const etatDe = new Map(branchements.map((b) => [b.cle, b.etat]));
 

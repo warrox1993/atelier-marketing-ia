@@ -76,7 +76,10 @@ describe("purge : route déclarée", () => {
 });
 
 describe("purge : couverture des tables", () => {
-  it("TABLES_PURGE contient exactement les tables des migrations qui portent company_id", () => {
+  // Tables de l'ancienne liste « Ne m'appelez plus » : laissées en base par la migration 032 (additive), ni lues ni écrites.
+  const LAISSEES_EN_BASE = ["listes_dncm", "dncm_empreintes"];
+
+  it("TABLES_PURGE contient exactement les tables des migrations qui portent company_id, hors les deux tables laissées en base", () => {
     const dossier = join(dirname(fileURLToPath(import.meta.url)), "..", "migrations");
     const attendues = new Set<string>();
     for (const f of readdirSync(dossier).filter((n) => n.endsWith(".sql"))) {
@@ -86,6 +89,10 @@ describe("purge : couverture des tables", () => {
       }
     }
     expect(attendues.size).toBeGreaterThan(40);
+    for (const t of LAISSEES_EN_BASE) {
+      expect(attendues.has(t), t).toBe(true);
+      attendues.delete(t);
+    }
     expect([...TABLES_PURGE].sort()).toEqual([...attendues].sort());
     expect(new Set(TABLES_PURGE).size).toBe(TABLES_PURGE.length);
   });

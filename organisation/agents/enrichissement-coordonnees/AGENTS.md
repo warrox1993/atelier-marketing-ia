@@ -586,7 +586,7 @@ Exemple minimal valide :
 
 ### POST /taches/:issueId/prospects/:prospectId/telephones
 
-Clé : `tache.prospects.telephone`. DROIT-1.3 : un numéro publié, lu sur une source de la tâche (sourceId), est chiffré dans la fiche du prospect (empreinte, oppositions et liste « Ne m'appelez...
+Clé : `tache.prospects.telephone`. DROIT-1.3 : un numéro publié, lu sur une source de la tâche (sourceId), est chiffré dans la fiche du prospect (empreinte et oppositions appliquées) ;
 
 Les champs inconnus sont refusés.
 

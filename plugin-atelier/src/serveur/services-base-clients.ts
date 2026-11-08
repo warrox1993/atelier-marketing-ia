@@ -203,7 +203,7 @@ export function prospectDuClient(c: ClientBase): Prospect {
 /**
  * Base légale examinée pour un client existant et un canal : consentement déclaré dans la base s'il existe ;
  * sinon exception « client existant, produits analogues » (courriel, SMS), intérêt légitime sur la base
- * clients comme source (courrier), et rien pour le téléphone (mise en balance et liste « Ne m'appelez plus »
+ * clients comme source (courrier), et rien pour le téléphone (mise en balance
  * à documenter par l'humain). Un consentement déclaré NON vaut refus, sans autre examen.
  */
 export function baseLegaleClient(c: ClientBase, canal: CanalContact, date: string): BaseLegaleContact | null | "refuse" {
@@ -213,7 +213,7 @@ export function baseLegaleClient(c: ClientBase, canal: CanalContact, date: strin
     prospectId: c.id, cible: c.typeClient === "particulier" ? "particulier" : "entreprise", forme: c.typeClient === "particulier" ? "personne_physique" : "personne_morale", canal,
     natureAdresse: "inconnue",
     information: { texteArt14: "Vous recevez ce message en tant que client : vos données viennent de votre dossier chez nous.", moyenOpposition: "Lien ou mention d'opposition dans chaque message" },
-    dncmVerifieLe: null, verifieLe: date, verifiePar: "atelier:ventes-croisees",
+    verifieLe: date, verifiePar: "atelier:ventes-croisees",
   } as const;
   const reference = `base-clients:${c.importId ?? c.id}`;
   if (declare === true) return { ...commun, base: "consentement", preuve: { type: "consentement", reference, date: c.creeLe } } as BaseLegaleContact;

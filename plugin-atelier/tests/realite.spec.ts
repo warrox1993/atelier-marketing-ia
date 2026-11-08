@@ -36,7 +36,7 @@ const ligne = (n: number, companyId: string, o: Ligne = {}): Ligne => {
 /** Base légale « joignable » d'un lead, sous la forme d'une ligne de la table `bases_legales`. */
 const baseLegale = (prospectId: string): Ligne => {
   const b = structuredClone(PROSPECT_B2B.basesLegales[0]) as Ligne;
-  return { prospect_id: prospectId, cible: b.cible, forme: b.forme, canal: b.canal, base: b.base, nature_adresse: b.natureAdresse, preuve: b.preuve, information: b.information, dncm_verifie_le: null, verifie_le: H, verifie_par: "systeme" };
+  return { prospect_id: prospectId, cible: b.cible, forme: b.forme, canal: b.canal, base: b.base, nature_adresse: b.natureAdresse, preuve: b.preuve, information: b.information, verifie_le: H, verifie_par: "systeme" };
 };
 
 interface Options {
@@ -110,9 +110,9 @@ describe("realite.etat : déclaration et droits", () => {
 });
 
 describe("realite.etat : état de chaque branchement", () => {
-  it("renvoie les neuf branchements du serveur dans l'ordre, au contrat", async () => {
+  it("renvoie les huit branchements du serveur dans l'ordre, au contrat", async () => {
     const e = await faux().lire();
-    expect(e.branchements.map((b) => b.cle)).toEqual(["bce", "bnb", "osm", "base_clients", "consentement", "bureaux_segments", "voix", "moniteur_belge", "ne_m_appelez_plus"]);
+    expect(e.branchements.map((b) => b.cle)).toEqual(["bce", "bnb", "osm", "base_clients", "consentement", "bureaux_segments", "voix", "moniteur_belge"]);
     expect(e.companyId).toBe(SOC);
     expect(e.verifieLe).toBe(T0.toISOString());
   });
@@ -192,11 +192,9 @@ describe("realite.etat : état de chaque branchement", () => {
     expect(branchement(await faux({ config: "erreur" }).lire(), "voix")).toMatchObject({ etat: "non_branche", preuve: "aucune" });
   });
 
-  it("Moniteur belge et liste « Ne m'appelez plus » : non branchés, sources qui restent à brancher", async () => {
+  it("Moniteur belge : non branché, source qui reste à brancher", async () => {
     const e = await faux({ config: { openaiSecretRef: { type: "secret_ref", secretId: "s1" } }, sources: SOURCES({ reelles: ["bce", "bnb", "osm"] }) }).lire();
     expect(branchement(e, "moniteur_belge")).toMatchObject({ etat: "non_branche", preuve: "aucune", acteur: "nous", leadsConcernes: null });
-    expect(branchement(e, "ne_m_appelez_plus")).toMatchObject({ etat: "non_branche", preuve: "aucune", acteur: "acces_officiel", leadsConcernes: null });
-    expect(branchement(e, "ne_m_appelez_plus").debloque.criteres.map((c) => c.code)).toEqual(["contact_public_permis", "joignable_legalement"]);
   });
 
   it("chaque branchement dit ce qu'il débloque : critères et fonctions", async () => {
@@ -228,13 +226,14 @@ describe("realite.etat : synthèse par critère", () => {
     const parCode = Object.fromEntries(e.synthese.map((s) => [s.code, s]));
     expect(parCode.bureau_specialise_proche).toMatchObject({ branchement: "bureaux_segments", leadsNonVerifies: 2 });
     expect(parCode.bureau_specialise_proche!.phrase).toBe("2 leads attendent les segments suivis par bureau pour trouver un bureau spécialisé à proximité.");
-    // Le contact publié n'est « non vérifié » que pour un lead dont seul le téléphone est publié : la phrase doit citer la liste d'opposition.
+    // Le contact publié n'est « non vérifié » que pour un lead dont seul le téléphone est publié : il se rattache aux bases légales de contact.
     const tel = [{ ...structuredClone(PROSPECT_B2B.coordonnees[0]!), canal: "telephone", nature: "inconnue" }];
     const f = await faux({ prospects: [ligne(1, SOC, { coordonnees: tel })] }).lire();
     const contact = f.synthese.find((s) => s.code === "contact_public_permis")!;
-    expect(contact).toMatchObject({ branchement: "ne_m_appelez_plus", etatBranchement: "non_branche" });
-    expect(contact.phrase).toBe("1 lead attend la liste « Ne m'appelez plus » pour établir qu'un contact professionnel publié est permis.");
-    expect(branchement(f, "ne_m_appelez_plus").debloque.criteres.map((c) => c.code)).toEqual(["contact_public_permis", "joignable_legalement"]);
+    expect(contact).toMatchObject({ branchement: "consentement", etatBranchement: "demonstration" });
+    expect(contact.phrase).toBe("1 lead attend les bases légales de contact pour établir qu'un contact professionnel publié est permis.");
+    expect(branchement(f, "consentement").debloque.criteres.map((c) => c.code)).toEqual(["joignable_legalement", "contact_public_permis"]);
+    expect(f.branchements.map((b) => b.cle)).not.toContain("ne_m_appelez_plus");
     expect(branchement(e, "bureaux_segments").debloque.criteres.map((c) => c.code)).toEqual(["bureau_specialise_proche"]);
   });
 

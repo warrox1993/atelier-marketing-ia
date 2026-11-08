@@ -328,7 +328,7 @@ function RemiseAZero() {
     }
   };
   return (
-    <Section titre="Remise à zéro des données de l'atelier" ancre="param-remise" repliable aide="Supprime les données de l'atelier de cette entreprise (campagnes, revues, prospects…). Les oppositions, les listes « Ne m'appelez plus », les bases légales et le journal sont toujours conservés (obligations légales). Refusée par le serveur si une campagne existe ou si l'entreprise garde une décision ou une diffusion. Les tâches et agents Paperclip ne sont pas supprimés.">
+    <Section titre="Remise à zéro des données de l'atelier" ancre="param-remise" repliable aide="Supprime les données de l'atelier de cette entreprise (campagnes, revues, prospects…). Les oppositions, les bases légales et le journal sont toujours conservés (obligations légales). Refusée par le serveur si une campagne existe ou si l'entreprise garde une décision ou une diffusion. Les tâches et agents Paperclip ne sont pas supprimés.">
       <Champ libelle="Tapez REINITIALISER pour confirmer" className="atl-champ-etroit">
         <input value={saisie} onChange={(e) => setSaisie(e.target.value)} autoComplete="off" />
       </Champ>

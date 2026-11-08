@@ -34,7 +34,6 @@ const REALITE: RealiteEtat = {
     br("bureaux_segments", { nom: "Bureaux et segments", etat: "reel", acteur: "client" }),
     br("voix", { nom: "Clé OpenAI pour la voix", etat: "configure_non_verifie", preuve: "declare" }),
     br("moniteur_belge", { nom: "Moniteur belge", preuve: "aucune" }),
-    br("ne_m_appelez_plus", { nom: "Ne m'appelez plus", preuve: "aucune", acteur: "acces_officiel" }),
   ],
   synthese: [
     { code: "entreprise_active", libelle: "Entreprise active", leadsNonVerifies: 219, branchement: "bce", etatBranchement: "en_attente_acces", phrase: "219 leads attendent le registre BCE réel pour confirmer qu'ils sont actifs." },
@@ -105,10 +104,10 @@ describe("Paramètres : section « Connexions »", () => {
     expect(pont.violations).toEqual([]);
   });
 
-  it("affiche onze branchements : neuf du serveur et les deux lignes lues dans les connexions natives", async () => {
+  it("affiche dix branchements : huit du serveur et les deux lignes lues dans les connexions natives", async () => {
     const c = await ouvrir("/RNO/atelier/parametres");
     const lignes = Array.from(c.querySelectorAll<HTMLElement>("tr[data-branchement]"));
-    expect(lignes.map((l) => l.dataset.branchement)).toEqual(["bce", "bnb", "osm", "base_clients", "consentement", "bureaux_segments", "google", "diffusion", "voix", "moniteur_belge", "ne_m_appelez_plus"]);
+    expect(lignes.map((l) => l.dataset.branchement)).toEqual(["bce", "bnb", "osm", "base_clients", "consentement", "bureaux_segments", "google", "diffusion", "voix", "moniteur_belge"]);
   });
 
   it("dit l'état de chacun, ce qu'il débloque, qui agit et le nombre de leads", async () => {
@@ -150,8 +149,8 @@ describe("Paramètres : section « Connexions »", () => {
 
   it("annonce le nombre de branchements qui manquent et la synthèse des leads", async () => {
     const c = await ouvrir("/RNO/atelier/parametres");
-    // 11 branchements, un seul en réel (la voix n'est que configurée, non vérifiée) : 10 manquent.
-    expect(c.querySelector("section#param-reel [role=status]")?.textContent).toBe("Connexions à établir : 10 sur 11.");
+    // 10 branchements, un seul en réel (la voix n'est que configurée, non vérifiée) : 9 manquent.
+    expect(c.querySelector("section#param-reel [role=status]")?.textContent).toBe("Connexions à établir : 9 sur 10.");
     const phrases = Array.from(c.querySelectorAll("section#param-reel ul.atl-liste li")).map((l) => l.textContent);
     expect(phrases).toEqual(REALITE.synthese.map((s) => s.phrase));
     expect(phrases[0]).toBe("219 leads attendent le registre BCE réel pour confirmer qu'ils sont actifs.");
@@ -223,7 +222,7 @@ describe("Chat : message de l'atelier sur les connexions manquantes", () => {
   it("annonce le nombre de branchements qui manquent et nomme les premiers", async () => {
     const c = await ouvrirChat();
     expect(message(c)!.querySelector("p")!.textContent).toBe(
-      "10 connexions ne sont pas branchées (Registre BCE, Banque nationale, OpenStreetMap et 7 autres) ; les missions qui en ont besoin travaillent sans elles.",
+      "9 connexions ne sont pas branchées (Registre BCE, Banque nationale, OpenStreetMap et 6 autres) ; les missions qui en ont besoin travaillent sans elles.",
     );
   });
 
@@ -258,7 +257,7 @@ describe("fusion des branchements (fonctions pures)", () => {
 
   it("garde l'ordre des clés et ajoute exactement google et diffusion", () => {
     const f = fusionnerBranchements(serveur, lignesServices([]), null, H);
-    expect(f.map((b) => b.cle)).toEqual(["bce", "bnb", "osm", "base_clients", "consentement", "bureaux_segments", "google", "diffusion", "voix", "moniteur_belge", "ne_m_appelez_plus"]);
+    expect(f.map((b) => b.cle)).toEqual(["bce", "bnb", "osm", "base_clients", "consentement", "bureaux_segments", "google", "diffusion", "voix", "moniteur_belge"]);
   });
 
   it("un service réel prouvé par un appel d'outil est « réel » mesuré ; sans appel il n'est que « déclaré »", () => {
@@ -282,6 +281,6 @@ describe("fusion des branchements (fonctions pures)", () => {
     const f = fusionnerBranchements(serveur, lignesServices([]), null, H);
     expect(branchementsManquants(f).map((b) => b.cle)).not.toContain("bureaux_segments");
     expect(branchementsManquants(f).map((b) => b.cle)).toContain("voix");
-    expect(branchementsManquants(f)).toHaveLength(10);
+    expect(branchementsManquants(f)).toHaveLength(9);
   });
 });

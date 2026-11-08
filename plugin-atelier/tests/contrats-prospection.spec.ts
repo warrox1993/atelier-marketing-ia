@@ -142,11 +142,10 @@ describe("matrice canal × cible", () => {
       expect(ko(BaseLegaleContact, { ...base, canal: "sms", base: b, preuve: { ...base.preuve, type: "source" } })).toBe(true);
     }
   });
-  it("téléphone : vérification « Ne m'appelez plus » obligatoire, pour toutes les cibles", () => {
+  it("téléphone : aucune date de liste exigée, pour toutes les cibles", () => {
     const tel = PROSPECT_B2C.basesLegales[1]!;
     expect(ok(BaseLegaleContact, tel)).toBe(true);
-    expect(ko(BaseLegaleContact, { ...tel, dncmVerifieLe: null })).toBe(true);
-    expect(ko(BaseLegaleContact, { ...PROSPECT_B2B.basesLegales[0]!, canal: "telephone", base: "interet_legitime", natureAdresse: "inconnue", dncmVerifieLe: null })).toBe(true);
+    expect(ok(BaseLegaleContact, { ...PROSPECT_B2B.basesLegales[0]!, canal: "telephone", base: "interet_legitime", natureAdresse: "inconnue" })).toBe(true);
   });
   it("les motifs d'exclusion ne contiennent plus de motif de liste « Ne m'appelez plus »", () => {
     expect(MotifExclusion.safeParse("liste_dncm").success).toBe(false);

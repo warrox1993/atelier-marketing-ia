@@ -1,6 +1,6 @@
 /**
  * Faille M1 : la remise à zéro des données (`atelier.donnees.reinitialiser`) ne doit JAMAIS effacer les
- * oppositions RGPD, les listes « Ne m'appelez plus » (DNCM), les bases légales ni le journal d'audit.
+ * oppositions RGPD, les bases légales ni le journal d'audit.
  *
  * La base réelle (`creerBase`) tourne sur une petite base en mémoire qui interprète le SQL émis par la
  * remise à zéro, y compris la cascade de la clé étrangère `bases_legales.prospect_id` (ON DELETE CASCADE),
@@ -80,11 +80,15 @@ function remplir(m: ReturnType<typeof baseEnMemoire>, soc: string) {
 const compter = (m: ReturnType<typeof baseEnMemoire>, t: string, soc = SOC) => m.lignes(t).filter((l) => l.company_id === soc).length;
 
 describe("M1 : la remise à zéro conserve les obligations légales", () => {
+  it("les obligations légales conservées sont exactement les oppositions, les bases légales et le journal", () => {
+    expect([...TABLES_CONSERVEES]).toEqual(["oppositions", "bases_legales", "journal"]);
+  });
+
   it("aucune table légale n'est dans la liste des suppressions", () => {
     for (const t of TABLES_CONSERVEES) expect(TABLES_REMISE_A_ZERO as readonly string[]).not.toContain(t);
   });
 
-  it("oppositions, DNCM, bases légales et journal intacts ; le reste est effacé ; le rapport dit ce qui est conservé", async () => {
+  it("oppositions, bases légales et journal intacts ; le reste est effacé ; le rapport dit ce qui est conservé", async () => {
     const m = baseEnMemoire();
     remplir(m, SOC);
     remplir(m, AUTRE);
@@ -95,9 +99,10 @@ describe("M1 : la remise à zéro conserve les obligations légales", () => {
 
     // Obligations légales : intactes.
     expect(compter(m, "oppositions")).toBe(2);
+    expect(compter(m, "bases_legales")).toBe(1);
+    // Les deux tables de l'ancienne liste restent en base sans plus être lues ni écrites : la remise à zéro n'y touche pas.
     expect(compter(m, "listes_dncm")).toBe(1);
     expect(compter(m, "dncm_empreintes")).toBe(3);
-    expect(compter(m, "bases_legales")).toBe(1);
     expect(m.lignes("prospects").filter((p) => p.company_id === SOC).map((p) => p.id)).toEqual([`${SOC}-p1`]);
     // Le journal garde l'entrée d'avant et reçoit la trace de la remise à zéro.
     expect(m.lignes("journal").filter((l) => l.company_id === SOC).map((l) => l.type)).toEqual(["prospects.deposes", "donnees.reinitialisees"]);
@@ -108,7 +113,7 @@ describe("M1 : la remise à zéro conserve les obligations légales", () => {
     for (const t of TABLES_CONSERVEES) expect(r.supprimes).not.toHaveProperty(t);
 
     // Le rapport dit ce qui a été conservé (compté après les suppressions, avant la trace de la remise à zéro).
-    expect(r.conserves).toEqual({ oppositions: 2, listes_dncm: 1, dncm_empreintes: 3, bases_legales: 1, journal: 1, prospects_avec_base_legale: 1 });
+    expect(r.conserves).toEqual({ oppositions: 2, bases_legales: 1, journal: 1, prospects_avec_base_legale: 1 });
 
     // Une autre entreprise n'est pas touchée.
     for (const t of ["oppositions", "prospects", "clients", "journal", "bases_legales"]) expect(compter(m, t, AUTRE)).toBe(t === "prospects" ? 3 : t === "oppositions" ? 2 : 1);

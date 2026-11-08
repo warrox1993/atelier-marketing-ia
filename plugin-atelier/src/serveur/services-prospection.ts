@@ -894,7 +894,7 @@ export function routesProspection(d: DependancesProspection): Partial<Record<Cle
     const basesLegales = (det.bases.get(l.id) ?? []).map((b) => ({
       prospectId: l.id, cible: b.cible, forme: b.forme, canal: b.canal, base: b.base, natureAdresse: b.nature_adresse,
       preuve: typeof b.preuve === "string" ? JSON.parse(b.preuve) : b.preuve, information: typeof b.information === "string" ? JSON.parse(b.information) : b.information,
-      dncmVerifieLe: b.dncm_verifie_le == null ? null : new Date(String(b.dncm_verifie_le)).toISOString(), verifieLe: new Date(String(b.verifie_le)).toISOString(), verifiePar: b.verifie_par,
+      verifieLe: new Date(String(b.verifie_le)).toISOString(), verifiePar: b.verifie_par,
     }));
     // `cleAReimporter` (marque de stockage) n'appartient pas au contrat strict `Prospect` : retirée avant validation.
     const { cleAReimporter: _marque, ...ligne } = l;
@@ -1360,7 +1360,7 @@ export function routesProspection(d: DependancesProspection): Partial<Record<Cle
 
   /**
    * Un numéro publié, lu sur une source de la tâche, entre chiffré dans la fiche du prospect (empreinte HMAC) : la
-   * matrice des bases légales, les oppositions, la liste « Ne m'appelez plus » et la purge s'y appliquent, ce qui
+   * matrice des bases légales, les oppositions et la purge s'y appliquent, ce qui
    * n'était pas le cas des listes recopiées dans les documents. La valeur en clair n'est ni renvoyée ni journalisée.
    */
   routes["tache.prospects.telephone"] = async (r) =>
