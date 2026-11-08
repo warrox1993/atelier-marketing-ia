@@ -7,7 +7,7 @@
  * tâche : l'unicité vient de la lecture par origine avant chaque création.
  */
 import type { PluginContext } from "@paperclipai/plugin-sdk";
-import { IdNatif, PLUGIN_ID } from "../contrats/index.js";
+import { CanalContact, IdNatif, PLUGIN_ID } from "../contrats/index.js";
 import type { BaseAtelier, EtapeMission, Mission } from "../serveur/base.js";
 import { chargerContrat, verifierEntrees, verifierSortie } from "./contrats.js";
 import { chargerGabarit as chargerGabaritReel, poserPorteMission, PorteRefusee, rangPorte, type DepsPorteMission, type Gabarit } from "./gabarits.js";
@@ -21,7 +21,7 @@ const ROLE_COORDINATEUR = "coordinateur";
 const ESSAIS_EXPORT_MAX = 3;
 
 export interface HoteMoteur {
-  issues: Pick<PluginContext["issues"], "create" | "list" | "get" | "update" | "requestWakeup" | "listInteractions">;
+  issues: Pick<PluginContext["issues"], "create" | "list" | "get" | "update" | "requestWakeup" | "listInteractions" | "createComment" | "listComments">;
   /** Agent de l'entreprise qui tient le rôle (slug du registre) ; null s'il n'y en a pas. */
   resoudreAgent(companyId: string, role: string): Promise<string | null>;
 }
@@ -123,6 +123,17 @@ export function creerExecuteur(deps: DepsExecuteur) {
     const change = await base.changerEtatMission(companyId, missionId, m.etat, suivant);
     await base.marquerExecution(companyId, cle, "appliquee");
     return { applique: change || !neuve, etat: change ? suivant : m.etat };
+  }
+
+  /** Commente la tâche racine une fois par clé ; le repère « Mission : » du texte évite le doublon d'un arrêt entre le commentaire et sa marque. */
+  async function commenterUneFois(m: Mission, rang: number, type: string, texte: string) {
+    if (!m.issueRacineId) return;
+    const cle = cleEvenement(m.id, rang, 1, type);
+    const neuve = await base.enregistrerExecution({ companyId: m.companyId, missionId: m.id, rang, type: "evenement", cle, requete: { type } });
+    if (!neuve && (await base.lireExecution(m.companyId, cle))?.statut === "appliquee") return;
+    const corps = `${texte}\n\nMission : ${m.id}`;
+    if (!(await hote.issues.listComments(m.issueRacineId, m.companyId)).some((c) => c.body === corps)) await hote.issues.createComment(m.issueRacineId, corps, m.companyId);
+    await base.marquerExecution(m.companyId, cle, "appliquee");
   }
 
   /** Réveil direct, une fois par clé : `appliquee` ne repart pas, `demandee` est rejouée. */
@@ -572,6 +583,17 @@ export function creerExecuteur(deps: DepsExecuteur) {
         // La marque informe, elle n'écarte jamais ; identifiants seuls, aucune coordonnée, et avant l'export : un arrêt après l'écriture ne la perd pas.
         const marques = lot.filter((l) => l.marqueOpposition).map((l) => l.prospectId);
         if (marques.length > 0) await journalUneFois(m, g.rang, "export_marque_opposition", { ids: marques });
+        // Sans CRM : le choix se lit sur l'entrée du rang 1 (jamais sur `ctx.entrees`, qui fusionne des sorties d'agent) ; le lot est rendu en fichier, rien n'est écrit.
+        const entreeRang1 = objet(courantes.find((e) => e.rang === 1)?.entree);
+        if (Object.keys(objet(entreeRang1.exportCrm)).length === 0) {
+          const canal = objet(entreeRang1.exportFichier).canal;
+          if (!CanalContact.safeParse(canal).success) return effetAmbigu(m, g.rang, { raison: "canal_fichier_absent" });
+          const prospectIds = [...new Set(lot.map((l) => l.prospectId))];
+          await journalUneFois(m, g.rang, "fichier_pret", { canal, prospects: prospectIds.length });
+          await commenterUneFois(m, g.rang, "fichier_commentaire", "Le fichier du lot est prêt dans la vue Prospects, section « Fichiers de mission ».");
+          await termine({ reussis: [], echecs: [], essais: 0, fichier: { canal, prospectIds } });
+          continue;
+        }
         const precedents = typeof objet(etape.sortie).essais === "number" ? (objet(etape.sortie).essais as number) : 0;
         const { reussis, echecs, attente } = await exporterLot(ec.deps, m, g.rang, lot);
         if (attente) {

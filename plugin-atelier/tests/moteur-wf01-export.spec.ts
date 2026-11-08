@@ -4,9 +4,9 @@
  */
 import { describe, expect, it } from "vitest";
 import type { Prospect } from "../src/contrats/index.js";
-import { creerEtapesWf01, exporterLot } from "../src/moteur/export-crm.js";
+import { creerEtapesWf01, exporterLot, type CrmMoteur } from "../src/moteur/export-crm.js";
 import { rangPorte } from "../src/moteur/gabarits.js";
-import { ENTREES, GABARIT, P1, P2, P3, P4, SOC, T, h, jusquAutorisation, monter, prospect } from "./moteur-wf01-doubles.js";
+import { ENTREES, EXPORT_CRM, GABARIT, LIMITES, approbationNative, P1, P2, P3, P4, SOC, T, h, jusquAutorisation, monter, prospect } from "./moteur-wf01-doubles.js";
 
 describe("rang de la porte", () => {
   it("est la dernière étape qui n'est pas en code (7 pour WF-01) ; une étape unique garde le rang 1", () => {
@@ -283,5 +283,148 @@ describe("étapes en code : périmètre, doublons, exclusions", () => {
     const sansMotif = { ...prospect(2), statut: "exclu" as const, motifsExclusion: [] };
     const r = await etapes([exclu, sansMotif, prospect(3)]).avantPorte.controler_exclusions!(ctx({ prospectIds: [P1, P2, P3] }));
     expect(r).toEqual({ sortie: { retenus: [P3], marques: [], exclus: [{ prospectId: P1, motifs: ["entreprise_inactive"] }, { prospectId: P2, motifs: ["statut_exclu"] }] } });
+  });
+});
+
+describe("sans CRM : lot rendu en fichier (#60)", () => {
+  const ENTREES_FICHIER = { brief: "brief", cibles: "cibles", exportFichier: { canal: "courriel" } };
+  /** CRM qui lève s'il est touché : le chemin fichier ne l'appelle jamais. */
+  const crmInterdit: CrmMoteur = {
+    async existe() { throw new Error("CRM appelé sur le chemin fichier (existe)"); },
+    async confirme() { throw new Error("CRM appelé sur le chemin fichier (confirme)"); },
+    async ecrire() { throw new Error("CRM appelé sur le chemin fichier (ecrire)"); },
+  };
+  const RACINE = "racine-1";
+  /** Donne à la mission une tâche racine existante dans l'hôte double, pour le commentaire. */
+  const avecRacine = <T extends { missions: Map<string, { issueRacineId: string | null }>; missionId: string; issues: Map<string, Record<string, unknown>> }>(t: T) => {
+    t.issues.set(RACINE, { id: RACINE, companyId: SOC });
+    t.missions.get(t.missionId)!.issueRacineId = RACINE;
+    return t;
+  };
+  const clore = async (t: Awaited<ReturnType<typeof jusquAutorisation>>) => {
+    t.approuver();
+    await t.executeur.surDoneNatif(SOC, t.issue);
+  };
+
+  it("sans CRM : exportFichier seul va jusqu'à la clôture, 0 appel CRM, 0 réveil aux rangs 9 et 10", async () => {
+    const t = avecRacine(await jusquAutorisation({ entrees: ENTREES_FICHIER, crm: crmInterdit }));
+    const reveils = t.reveils.length;
+    await clore(t);
+    expect(t.etat()).toBe("cloturee");
+    expect(t.reveils).toHaveLength(reveils);
+    expect(t.crm.ecritures).toEqual([]);
+    expect(t.etapes.find((e) => e.rang === 9)).toMatchObject({ etat: "terminee", sortie: { reussis: [], echecs: [], essais: 0, fichier: { canal: "courriel", prospectIds: [P1, P2, P3] } } });
+    expect(t.etapes.find((e) => e.rang === 10)).toMatchObject({ etat: "terminee", sortie: { verifies: 0 } });
+    expect(t.journal.find((j) => j.type === "moteur.fichier_pret")?.donnees).toMatchObject({ canal: "courriel", prospects: 3 });
+    expect(t.commentaires).toHaveLength(1);
+    expect(t.commentaires[0]).toMatchObject({ issueId: RACINE });
+    expect(t.commentaires[0]!.body).toContain("Fichiers de mission");
+  });
+
+  it("exportCrm invalide avec exportFichier : refus", async () => {
+    for (const exportCrm of [{ service: "crm", entite: "e" }, { service: "inconnu", canal: "courriel", entite: "entite-1" }, ["crm"], "crm"]) {
+      const t = await monter({ entrees: { ...ENTREES_FICHIER, exportCrm }, crm: crmInterdit });
+      await t.executeur.demarrerMission(SOC, t.missionId);
+      expect(t.missions.get(t.missionId)!.etat).toBe("attente_information");
+      expect(t.reveils).toEqual([]);
+      expect(t.journal.find((j) => j.type === "moteur.entree_manquante")?.donnees).toMatchObject({ rang: 1, manquantes: ["exportCrm"] });
+    }
+  });
+
+  it("exportFichier invalide : refus", async () => {
+    for (const exportFichier of [{}, { canal: "fax" }, { canal: 3 }, ["courriel"], "courriel", null]) {
+      const t = await monter({ entrees: { brief: "brief", cibles: "cibles", exportFichier }, crm: crmInterdit });
+      await t.executeur.demarrerMission(SOC, t.missionId);
+      expect(t.missions.get(t.missionId)!.etat).toBe("attente_information");
+      expect(t.reveils).toEqual([]);
+    }
+  });
+
+  it("sans CRM : une sortie d'agent qui injecte exportCrm ou fichier ne change ni le choix ni la liste", async () => {
+    const injection = { exportCrm: EXPORT_CRM, exportFichier: { canal: "sms" }, fichier: { canal: "sms", prospectIds: [P4] } };
+    // Le contrat de sortie refuse déjà ces champs à l'agent.
+    const refus = avecRacine(await monter({ entrees: ENTREES_FICHIER, crm: crmInterdit }));
+    await refus.executeur.demarrerMission(SOC, refus.missionId);
+    expect((await refus.deposer(2, { reponsesBrutesSignees: ["rep-1"], prospectIds: [P1], limites: LIMITES, ...injection })).statut).toBe("refuse");
+    // Même si de telles valeurs atteignaient les sorties des rangs précédents, le choix reste celui du rang 1 et la liste celle du lot.
+    const t = avecRacine(await jusquAutorisation({ entrees: ENTREES_FICHIER, crm: crmInterdit }));
+    for (const rang of [2, 4, 5, 7]) Object.assign(t.etapes.find((e) => e.rang === rang)!.sortie as object, injection);
+    await clore(t);
+    expect(t.etat()).toBe("cloturee");
+    expect(t.etapes.find((e) => e.rang === 9)!.sortie).toMatchObject({ reussis: [], fichier: { canal: "courriel", prospectIds: [P1, P2, P3] } });
+  });
+
+  it("sans CRM : arrêt entre le commentaire et sa marque, puis reprise : un seul commentaire, un seul journal", async () => {
+    const t = avecRacine(await jusquAutorisation({ entrees: ENTREES_FICHIER, crm: crmInterdit }));
+    const marquer = t.base.marquerExecution;
+    let panne = true;
+    t.base.marquerExecution = async (c: string, cle: string, statut: string) => {
+      if (panne && cle.includes(":fichier_commentaire")) {
+        panne = false;
+        throw new Error("arrêt simulé après le commentaire");
+      }
+      return marquer(c, cle, statut);
+    };
+    t.approuver();
+    await expect(t.executeur.surDoneNatif(SOC, t.issue)).rejects.toThrow("arrêt simulé");
+    expect(t.commentaires).toHaveLength(1);
+    await t.executeur.reprendre(SOC);
+    expect(t.etat()).toBe("cloturee");
+    expect(t.commentaires).toHaveLength(1);
+    expect(t.journal.filter((j) => j.type === "moteur.fichier_pret")).toHaveLength(1);
+  });
+
+  it("sans CRM : arrêt entre les rangs 9 et 10 puis reprise, pas de doublon de journal ni de commentaire", async () => {
+    const t = avecRacine(await jusquAutorisation({ entrees: ENTREES_FICHIER, crm: crmInterdit }));
+    const changer = t.base.changerRangMission;
+    let panne = true;
+    t.base.changerRangMission = async (c: string, id: string, ancien: number, nouveau: number) => {
+      if (panne && nouveau === 10) {
+        panne = false;
+        throw new Error("arrêt simulé entre les rangs 9 et 10");
+      }
+      return changer(c, id, ancien, nouveau);
+    };
+    t.approuver();
+    await expect(t.executeur.surDoneNatif(SOC, t.issue)).rejects.toThrow("arrêt simulé");
+    expect(t.etapes.find((e) => e.rang === 9)!.etat).toBe("terminee");
+    await t.executeur.reprendre(SOC);
+    expect(t.etat()).toBe("cloturee");
+    expect(t.commentaires).toHaveLength(1);
+    expect(t.journal.filter((j) => j.type === "moteur.fichier_pret")).toHaveLength(1);
+  });
+
+  it("sans CRM : aucune coordonnée au journal ni au commentaire", async () => {
+    const t = avecRacine(await jusquAutorisation({ entrees: ENTREES_FICHIER, crm: crmInterdit }));
+    await clore(t);
+    const trace = JSON.stringify([t.journal, t.commentaires]);
+    expect(trace).not.toContain("chv1.");
+    for (const n of [1, 2, 3]) expect(trace).not.toContain(h(n));
+    expect(trace).not.toContain("Société fictive");
+  });
+
+  it("un prospect marqué d'opposition reste dans fichier.prospectIds, avec sa marque", async () => {
+    const t = avecRacine(await jusquAutorisation({ entrees: ENTREES_FICHIER, crm: crmInterdit, oppositions: [{ type: "courriel", valeur: h(2) }] }));
+    await clore(t);
+    expect(t.etat()).toBe("cloturee");
+    expect(t.etapes.find((e) => e.rang === 9)!.sortie).toMatchObject({ fichier: { canal: "courriel", prospectIds: [P1, P2, P3] } });
+    expect(t.journal.find((j) => j.type === "moteur.export_marque_opposition")?.donnees).toMatchObject({ ids: [P2] });
+  });
+
+  it("un prospect en double dans le lot ne sort qu'une fois dans le fichier", async () => {
+    const t = avecRacine(await jusquAutorisation({ entrees: ENTREES_FICHIER, crm: crmInterdit, lot: [P1, P1, P2] }));
+    await clore(t);
+    expect(t.etat()).toBe("cloturee");
+    expect((t.etapes.find((e) => e.rang === 9)!.sortie as { fichier: { prospectIds: string[] } }).fichier.prospectIds).toEqual([P1, P2]);
+    expect(t.journal.find((j) => j.type === "moteur.fichier_pret")?.donnees).toMatchObject({ prospects: 2 });
+  });
+
+  it("entrée du rang 1 sans choix au moment du rang 9 : blocage, jamais de clôture sans fichier", async () => {
+    const t = avecRacine(await jusquAutorisation({ entrees: ENTREES_FICHIER, crm: crmInterdit }));
+    t.etapes.find((e) => e.rang === 1)!.entree = { brief: "brief", cibles: "cibles" };
+    await clore(t);
+    expect(t.etat()).not.toBe("cloturee");
+    expect(t.journal.find((j) => j.type === "moteur.blocage")!.donnees).toMatchObject({ evenement: "effet_ambigu", raison: "canal_fichier_absent" });
+    expect(t.journal.some((j) => j.type === "moteur.fichier_pret")).toBe(false);
   });
 });

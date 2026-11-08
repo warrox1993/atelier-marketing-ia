@@ -485,7 +485,7 @@ describe("prospects.exporter-fichier", () => {
     expect(r.body.nomFichier).toMatch(/^prospects-courriel-\d{4}-\d{2}-\d{2} \(démonstration\)\.csv$/u);
     const texte = Buffer.from(r.body.contenuBase64, "base64").toString("utf8");
     const lignes = texte.replace(/^﻿/u, "").trim().split("\r\n");
-    expect(lignes[0]).toBe("identifiant;cible;nom_ou_entreprise;numero_bce;courriel;telephone;code_postal;commune;score;libelle_score;base_legale;source;date_source");
+    expect(lignes[0]).toBe("identifiant;cible;nom_ou_entreprise;numero_bce;courriel;telephone;code_postal;commune;score;libelle_score;base_legale;source;date_source;marque_opposition");
     expect(lignes).toHaveLength(3);
     expect(texte).toContain("info@toitures-meuse.exemple.invalid");
     expect(texte).toContain("'=SOMME(A1) Couvreurs");
@@ -510,6 +510,61 @@ describe("prospects.exporter-fichier", () => {
     expect(lignes.map((l) => l[2])).toContain("'=SOMME(A1) Couvreurs");
     expect(lignes.map((l) => l[4])).toContain("info@toitures-meuse.exemple.invalid");
     expect(r.body.rapport).toMatchObject({ demandes: 2, inclus: 2, refuses: [] });
+  });
+
+  async function xlsxRelu(f: Awaited<ReturnType<typeof prepare>>) {
+    const r = await f.appeler("prospects.exporter-fichier", { body: { companyId: SOC, canal: "courriel", format: "xlsx", prospectIds: [f.id("0123.456.749"), f.id("0200.000.043")] } });
+    expect(r.status).toBe(201);
+    const classeur = XLSX.read(Buffer.from(r.body.contenuBase64, "base64"), { type: "buffer" });
+    return { r, lignes: XLSX.utils.sheet_to_json<string[]>(classeur.Sheets[classeur.SheetNames[0]!]!, { header: 1 }) };
+  }
+
+  it(".xlsx relu : bonnes lignes et colonne marque_opposition", async () => {
+    const f = await prepare();
+    const { lignes } = await xlsxRelu(f);
+    const colonne = lignes[0]!.length - 1;
+    expect(lignes[0]![colonne]).toBe("marque_opposition");
+    expect(lignes).toHaveLength(3);
+    expect(lignes.slice(1).map((l) => l[colonne])).toEqual(["non", "non"]);
+    expect(lignes.slice(1).map((l) => l[0]).sort()).toEqual([f.id("0123.456.749"), f.id("0200.000.043")].sort());
+  });
+
+  it("prospect marqué présent avec marque_opposition à oui", async () => {
+    const f = await prepare();
+    const marque = f.tp.prospects.find((p) => p.id === f.id("0200.000.043"))!;
+    f.tp.oppositions.push({ companyId: SOC, type: "courriel", empreinte: marque.coordonnees.find((c: { canal: string }) => c.canal === "courriel")!.empreinte, canal: "tous", origine: "demande_ecrite", cleAReimporter: false });
+    const { r, lignes } = await xlsxRelu(f);
+    const colonne = lignes[0]!.length - 1;
+    expect(r.body.rapport).toMatchObject({ demandes: 2, inclus: 2, refuses: [] });
+    expect(lignes.find((l) => l[0] === marque.id)![colonne]).toBe("oui");
+    expect(lignes.find((l) => l[0] === f.id("0123.456.749"))![colonne]).toBe("non");
+    const csv = await f.appeler("prospects.exporter-fichier", { body: { companyId: SOC, canal: "courriel", format: "csv" } });
+    const csvLignes = Buffer.from(csv.body.contenuBase64, "base64").toString("utf8").replace(/^﻿/u, "").trim().split("\r\n");
+    expect(csvLignes).toHaveLength(3);
+    expect(csvLignes.filter((l) => l.endsWith(";oui"))).toHaveLength(1);
+  });
+
+  it("téléchargement refusé à un agent", async () => {
+    const f = await prepare();
+    const r = await f.appeler("prospects.exporter-fichier", { body: { companyId: SOC, canal: "courriel", format: "xlsx" }, agent: true });
+    expect(r.status).toBe(403);
+    expect(r.body.contenuBase64).toBeUndefined();
+  });
+
+  it("téléchargement refusé à une autre entreprise : le lot exact ne rend aucune donnée", async () => {
+    const f = await prepare();
+    const id = f.id("0123.456.749");
+    const autre = "99999999-1111-4111-8111-999999999999";
+    const horsEntreprise = await f.appeler("prospects.exporter-fichier", { body: { companyId: autre, canal: "courriel", format: "csv", prospectIds: [id] } });
+    expect(horsEntreprise.status).toBeGreaterThanOrEqual(400);
+    expect(horsEntreprise.body.contenuBase64).toBeUndefined();
+    // Le prospect passe à une autre entreprise : le même lot, demandé par l'entreprise d'origine, ne le rend plus.
+    f.tp.prospects.find((p) => p.id === id)!.companyId = autre;
+    const r = await f.appeler("prospects.exporter-fichier", { body: { companyId: SOC, canal: "courriel", format: "csv", prospectIds: [id] } });
+    expect(r.body.rapport).toMatchObject({ demandes: 1, inclus: 0, refuses: [{ prospectId: id, denomination: null, motif: "Prospect introuvable dans cette entreprise" }] });
+    const lignes = Buffer.from(r.body.contenuBase64, "base64").toString("utf8").replace(/^﻿/u, "").trim().split("\r\n");
+    expect(lignes).toHaveLength(1);
+    expect(lignes[0]).toMatch(/^identifiant;/u);
   });
 
   it("neutralisation : = + - @ tabulation", () => {

@@ -34,6 +34,7 @@ import {
   type Prospect,
   type RegleVenteCroisee,
   type RenvoiReferentiel,
+  type TypeEmpreinte,
   type VerificationExport,
 } from "../contrats/index.js";
 import type { ActeurHote, GestionnaireRoute } from "./atelier.js";
@@ -43,8 +44,11 @@ import { dechiffrer } from "./chiffrement-donnees.js";
 import { erreur, erreurValidation } from "./erreurs.js";
 import { appliquerEtalonnage, etalonner, type ObservationEtalonnage } from "./etalonnage.js";
 import { controlerAppel } from "./preuve-approbation.js";
-import { contactPermis, type ContexteContact, type ContexteProspection } from "./regles-prospection.js";
+import { contactPermis, empreintesDuProspect, figureDansOppositions, type ContexteContact, type ContexteProspection } from "./regles-prospection.js";
 import type { ClesDonnees, DependancesProspection } from "./services-prospection.js";
+
+/** Nombre de fichiers de mission rendus par `missions.fichiers-prospects`. */
+const LIMITE_FICHIERS_MISSION = 20;
 
 type Campagne = { id: string; mode: "demonstration" | "reel"; canaux: string[]; perimetre: { zones: string[] } };
 
@@ -572,6 +576,9 @@ export function routesBaseClients(d: DependancesProspection, o: OutilsProspectio
       if (motif === null) retenus.push(p);
       else refuses.push({ prospectId: p.id, denomination: p.denomination, motif });
     }
+    // Les oppositions marquent, elles n'écartent jamais : colonne d'information seulement.
+    const valeursRetenues = [...new Set(retenus.flatMap((p) => empreintesDuProspect(p).map((e) => e.valeur)))];
+    const oppositions = (await base.oppositionsPour(r.companyId, valeursRetenues)).map((x) => ({ type: x.type as TypeEmpreinte, valeur: x.valeur }));
     const cles = await o.clesDonnees(r.companyId);
     const clair = (v: string | null | undefined) => {
       if (!v) return "";
@@ -581,7 +588,7 @@ export function routesBaseClients(d: DependancesProspection, o: OutilsProspectio
         return "[indéchiffrable]";
       }
     };
-    const enTete = ["identifiant", "cible", "nom_ou_entreprise", "numero_bce", "courriel", "telephone", "code_postal", "commune", "score", "libelle_score", "base_legale", "source", "date_source"];
+    const enTete = ["identifiant", "cible", "nom_ou_entreprise", "numero_bce", "courriel", "telephone", "code_postal", "commune", "score", "libelle_score", "base_legale", "source", "date_source", "marque_opposition"];
     const lignes = retenus.map((p) => {
       const s = p.score;
       const libelle = !s
@@ -594,6 +601,7 @@ export function routesBaseClients(d: DependancesProspection, o: OutilsProspectio
         p.id, p.cible, p.denomination ?? clair(p.nomChiffre), p.numeroBce ?? "", clair(p.coordonnees.find((c) => c.canal === "courriel")?.valeur), clair(p.coordonnees.find((c) => c.canal === "telephone")?.valeur),
         p.zone.codePostal ?? "", p.zone.commune ?? "", s ? String(s.valeur) : "", libelle, p.basesLegales.find((b) => b.canal === entree.canal)?.base ?? "",
         source ? [source.type, source.service, source.outil].filter(Boolean).join(" · ") : "", source?.collecteLe ?? "",
+        figureDansOppositions(p, oppositions) ? "oui" : "non",
       ];
     });
     let contenu: Buffer;
@@ -620,6 +628,14 @@ export function routesBaseClients(d: DependancesProspection, o: OutilsProspectio
         rapport: { demandes, inclus: retenus.length, refuses },
       },
     };
+  };
+
+  /* ---------------- fichiers de mission ---------------- */
+
+  routes["missions.fichiers-prospects"] = async (r) => {
+    exigerHumain(r.acteur, "La liste des fichiers de mission");
+    const lignes = await base.missionsAvecFichier(r.companyId, LIMITE_FICHIERS_MISSION);
+    return { corps: { fichiers: lignes.map((l) => ({ ...l, nombre: l.prospectIds.length })) } };
   };
 
   return routes;

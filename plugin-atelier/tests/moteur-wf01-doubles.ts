@@ -106,8 +106,20 @@ export function hoteDouble() {
   const issues = new Map<string, Record<string, unknown>>();
   const creations: Array<Record<string, unknown>> = [];
   const reveils: string[] = [];
+  const commentaires: Array<{ issueId: string; body: string }> = [];
   const hote = {
     issues: {
+      // Comme l'hôte : la tâche doit exister dans l'entreprise.
+      async createComment(issueId: string, body: string, companyId: string) {
+        if (issues.get(issueId)?.companyId !== companyId) throw new Error("Issue not found");
+        commentaires.push({ issueId, body });
+        return {};
+      },
+      // Comme l'hôte : une tâche hors de l'entreprise rend une liste vide, sans erreur.
+      async listComments(issueId: string, companyId: string) {
+        if (issues.get(issueId)?.companyId !== companyId) return [];
+        return commentaires.filter((c) => c.issueId === issueId).map((c) => ({ body: c.body }));
+      },
       async create(i: Record<string, unknown>) {
         const id = `issue-${issues.size + 1}`;
         creations.push(i);
@@ -138,7 +150,7 @@ export function hoteDouble() {
       return `agent-${role}`;
     },
   };
-  return { hote, issues, creations, reveils };
+  return { hote, issues, creations, reveils, commentaires };
 }
 
 export const porte = {

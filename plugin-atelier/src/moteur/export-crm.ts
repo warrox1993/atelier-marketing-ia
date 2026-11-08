@@ -107,10 +107,15 @@ export function creerEtapesWf01(d: DepsEtapesWf01): EtapesCode {
     deps: d.deps,
     avantPorte: {
       async valider_perimetre(c) {
-        const e = c.entrees.exportCrm;
-        const o = typeof e === "object" && e !== null && !Array.isArray(e) ? (e as Record<string, unknown>) : null;
-        const valide = o !== null && ServiceExportCrm.safeParse(o.service).success && CanalContact.safeParse(o.canal).success && CodeReferentiel.safeParse(o.entite).success;
-        return valide ? { sortie: { perimetreValide: true } } : { manquantes: ["exportCrm"] };
+        const objet = (v: unknown) => (typeof v === "object" && v !== null && !Array.isArray(v) ? (v as Record<string, unknown>) : null);
+        const crm = objet(c.entrees.exportCrm);
+        // Un exportCrm fourni se juge seul : invalide, il n'est jamais remplacé par le fichier.
+        if (c.entrees.exportCrm !== undefined) {
+          const valide = crm !== null && ServiceExportCrm.safeParse(crm.service).success && CanalContact.safeParse(crm.canal).success && CodeReferentiel.safeParse(crm.entite).success;
+          return valide ? { sortie: { perimetreValide: true } } : { manquantes: ["exportCrm"] };
+        }
+        const fichier = objet(c.entrees.exportFichier);
+        return fichier !== null && CanalContact.safeParse(fichier.canal).success ? { sortie: { perimetreValide: true } } : { manquantes: ["exportCrm"] };
       },
       async dedupliquer(c) {
         const { gardes, exclus } = dedoublonner(await d.lireProspects(c.companyId, ids(c.entrees.prospectIds)), new Date().toISOString());

@@ -1854,6 +1854,22 @@ export function creerBase(db: Db) {
     return (await q(`select * from ${ns}.etapes where company_id = $1 and mission_id = $2 order by rang, tentative limit 500`, [companyId, missionId])).map(etapeDepuisLigne);
   }
 
+  /** Fichiers de prospects préparés par des missions sans CRM (sortie `fichier` d'une étape) : identifiants seulement, les plus récents d'abord. */
+  async function missionsAvecFichier(companyId: string, limite: number) {
+    const lignes = await q(
+      `select m.id as mission_id, m.issue_racine_id, m.etat, e.modifie_le as date, e.sortie -> 'fichier' as fichier
+       from ${ns}.etapes e join ${ns}.missions m on m.id = e.mission_id
+       where e.company_id = $1 and m.company_id = $1 and jsonb_typeof(e.sortie -> 'fichier') = 'object'
+       order by e.modifie_le desc, e.id limit $2`,
+      [companyId, limite],
+    );
+    return lignes.flatMap((r) => {
+      const f = r.fichier as { canal?: unknown; prospectIds?: unknown } | null;
+      if (!f || typeof f.canal !== "string" || !Array.isArray(f.prospectIds) || !f.prospectIds.every((i) => typeof i === "string")) return [];
+      return [{ missionId: String(r.mission_id), issueRacineId: texteOuNul(r.issue_racine_id), etat: String(r.etat), date: iso(r.date), canal: f.canal, prospectIds: f.prospectIds as string[] }];
+    });
+  }
+
   /** Met à jour les seuls champs fournis d'une étape. */
   async function majEtape(companyId: string, id: string, c: { etat?: string; entree?: unknown; sortie?: unknown; delaiLe?: string | null; issueId?: string | null; revisionLivrable?: string | null }) {
     const sets: string[] = [];
@@ -1970,7 +1986,7 @@ export function creerBase(db: Db) {
     detailsProspects, listerProspects, insererOpposition, lireOpposition,
     insererImportBaseClients, insererClients, etatBaseClients, supprimerBaseClients, reglesVentesCroisees, clientsPourVentesCroisees, insererEtalonnage, issuesPourEtalonnage, scoresCourantsCible, insererScoreMesure,
     lireExportCrmParCle, prospectDansExportNonRefuse, prospectExportConfirme, insererExportCrm,
-    creerMission, lireMission, missionsActives, rattacherCampagneMission, changerEtatMission, creerEtape, lireEtapes, majEtape, enregistrerExecution, marquerExecution, lireExecution, changerRangMission, etapeParIssue,
+    creerMission, lireMission, missionsActives, rattacherCampagneMission, changerEtatMission, creerEtape, lireEtapes, missionsAvecFichier, majEtape, enregistrerExecution, marquerExecution, lireExecution, changerRangMission, etapeParIssue,
   };
 }
 

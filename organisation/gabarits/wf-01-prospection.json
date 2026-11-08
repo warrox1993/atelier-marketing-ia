@@ -1,7 +1,7 @@
 {
   "cle": "wf-01-prospection",
   "version": 1,
-  "description": "Chaîne de prospection en dix étapes : valider le périmètre, collecter, dédupliquer, qualifier, enrichir, contrôler les exclusions, produire le lot, carte groupée, export CRM, vérification. Les étapes de nature « code » (périmètre, déduplication, exclusions, carte, export, vérification) ne réveillent aucun agent ; les oppositions marquent les prospects sans jamais les écarter. Chaque étape d'agent a son contrat (collecte, qualification, enrichissement par le rôle enrichissement-coordonnees, lot). Livrable interne : porte et approbation humaine, aucun contact de prospect.",
+  "description": "Chaîne de prospection en dix étapes : valider le périmètre, collecter, dédupliquer, qualifier, enrichir, contrôler les exclusions, produire le lot, carte groupée, export CRM, vérification. Les étapes de nature « code » (périmètre, déduplication, exclusions, carte, export, vérification) ne réveillent aucun agent ; les oppositions marquent les prospects sans jamais les écarter. Chaque étape d'agent a son contrat (collecte, qualification, enrichissement par le rôle enrichissement-coordonnees, lot). Sans CRM (entrée exportFichier), le lot est rendu en fichier Excel, téléchargé par un humain, sans écriture externe. Livrable interne : porte et approbation humaine, aucun contact de prospect.",
   "typeLivrable": "interne",
   "etapes": [
     { "rang": 1, "action": "valider_perimetre", "nature": "code", "role": "prospection", "competences": [], "contratId": "wf-01-prospection", "contratVersion": 1 },

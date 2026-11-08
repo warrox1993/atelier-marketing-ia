@@ -1141,6 +1141,101 @@ function ExportProspects({ companyId, filtres }: { companyId: string; filtres: F
 }
 
 /* ------------------------------------------------------------------ */
+/* Fichiers de mission                                                 */
+/* ------------------------------------------------------------------ */
+
+interface FichierMission {
+  missionId: string;
+  etat: string;
+  date: string;
+  canal: CanalContact;
+  nombre: number;
+  prospectIds: string[];
+}
+
+/** Fichiers de prospects que des missions sans CRM ont préparés : le lot est relu et vérifié par le serveur à chaque téléchargement. */
+function FichiersMission({ companyId }: { companyId: string }) {
+  const [fichiers, setFichiers] = useState<FichierMission[]>([]);
+  const [enCours, setEnCours] = useState<string | null>(null);
+  const [erreur, setErreur] = useState<unknown>(null);
+  const [resultat, setResultat] = useState<RapportExport | null>(null);
+  const [erreurListe, setErreurListe] = useState<unknown>(null);
+  const [essai, setEssai] = useState(0);
+
+  useEffect(() => {
+    let annule = false;
+    appelRoute<{ fichiers?: FichierMission[] }>("GET", `/missions/fichiers-prospects?companyId=${encodeURIComponent(companyId)}`)
+      .then((d) => !annule && setFichiers((d.fichiers ?? []).filter((f) => f.prospectIds.length > 0)))
+      .catch((e) => !annule && setErreurListe(e));
+    return () => {
+      annule = true;
+    };
+  }, [companyId, essai]);
+
+  async function telecharger(f: FichierMission) {
+    setEnCours(f.missionId);
+    setErreur(null);
+    setResultat(null);
+    try {
+      const r = await appelRoute<RapportExport>("POST", "/prospects/exports-fichier", { companyId, canal: f.canal, format: "xlsx", prospectIds: f.prospectIds });
+      telechargerBase64(r.nomFichier, r.typeMime, r.contenuBase64);
+      setResultat(r);
+    } catch (e) {
+      setErreur(e);
+    } finally {
+      setEnCours(null);
+    }
+  }
+
+  if (erreurListe) {
+    const reessayer = () => {
+      setErreurListe(null);
+      setEssai((n) => n + 1);
+    };
+    return <EtatErreur erreur={erreurListe} contexte="fichiers de mission" onReessayer={reessayer} />;
+  }
+  if (fichiers.length === 0) return null;
+  return (
+    <section className="atl-formulaire" aria-label="Fichiers de mission">
+      <h3 className="atl-h3">Fichiers de mission</h3>
+      <ul className="atl-liste">
+        {fichiers.map((f) => (
+          <li key={f.missionId}>
+            {dateSeule(f.date)} : {LIBELLES_CANAUX[f.canal] ?? f.canal}, {nombre(f.nombre)} prospect{f.nombre > 1 ? "s" : ""}{" "}
+            <Bouton variante="secondaire" enCours={enCours === f.missionId} onClick={() => void telecharger(f)}>
+              Télécharger le fichier Excel
+            </Bouton>
+          </li>
+        ))}
+      </ul>
+      {erreur ? <EtatErreur erreur={erreur} contexte="téléchargement du fichier de mission" /> : null}
+      {resultat ? (
+        <div role="status" className="atl-formulaire">
+          <p className="atl-resume">
+            <span>
+              <strong>{nombre(resultat.rapport.inclus)}</strong> inclus
+            </span>
+            <span>
+              <strong>{nombre(resultat.rapport.refuses.length)}</strong> écartés
+            </span>
+          </p>
+          <p className="atl-sous">Fichier téléchargé : {resultat.nomFichier}.</p>
+          {resultat.rapport.refuses.length > 0 ? (
+            <ul className="atl-liste" aria-label="Prospects écartés du fichier">
+              {resultat.rapport.refuses.map((x) => (
+                <li key={x.prospectId}>
+                  {x.denomination || `[prospect-${idCourt(x.prospectId)}]`} : {LIBELLES_MOTIFS[x.motif as MotifExclusion] ?? x.motif}
+                </li>
+              ))}
+            </ul>
+          ) : null}
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
+/* ------------------------------------------------------------------ */
 /* Étalonnage du score                                                 */
 /* ------------------------------------------------------------------ */
 
@@ -1404,6 +1499,7 @@ function ListeProspects() {
     <>
       <BarreFiltres valeur={filtres} options={options} onAppliquer={appliquer} />
       {companyId ? <ExportProspects companyId={companyId} filtres={filtres} /> : null}
+      {companyId ? <FichiersMission companyId={companyId} /> : null}
       {etat.erreur ? <EtatErreur erreur={etat.erreur} onReessayer={() => setVersionCharge((v) => v + 1)} contexte="prospects" /> : null}
       {etat.chargement && !etat.data ? <Chargement libelle="Chargement des prospects" /> : null}
       {etat.data && lignes.length === 0 ? (

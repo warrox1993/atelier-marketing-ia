@@ -63,6 +63,14 @@ L'écriture de production (`creerCrmProduction`, `P/moteur/branchement.ts`) appe
 
 Les lectures des étapes en code sont celles des services (`lecturesMoteur`) : un prospect d'une autre entreprise, inconnu ou mal formé est ignoré, et un contexte d'exclusions est refusé tant que des oppositions sont à réimporter, comme pour la route d'export.
 
+## Sans CRM : fichier de mission (WF-01, #60)
+
+Le CRM est optionnel. L'entrée de la mission porte soit `exportCrm` (service, canal, entité), soit `exportFichier` (canal). Un `exportCrm` fourni se juge seul : invalide, il est refusé et ne bascule jamais vers le fichier. Rien de fourni : la mission reste en `attente_information`.
+
+Sans `exportCrm` sur l'entrée de l'étape 1, l'étape `export_crm` n'appelle aucun CRM. Elle se termine avec `{ reussis: [], echecs: [], essais: 0, fichier: { canal, prospectIds } }`, journalise `moteur.fichier_pret` (canal et nombre, aucune coordonnée) et commente une fois la tâche racine ; la vérification n'a alors rien à confirmer et la mission se clôt. Le choix se lit sur l'entrée de l'étape 1, jamais sur une sortie d'agent. Un commentaire sans acteur humain ne réveille pas l'assigné (`plugin-host-services.ts`, `createComment`).
+
+Le moteur ne stocke aucun fichier. La route `missions.fichiers-prospects` liste les lots (identifiants et nombre), et la vue Prospects, section « Fichiers de mission », appelle au clic la route humaine `prospects.exporter-fichier` : le `.xlsx` se fabrique à ce moment, avec les contrôles et le journal de cette route. Un prospect refusé par ces contrôles est listé dans le rapport du téléchargement ; un prospect marqué d'opposition reste présent, avec `marque_opposition` à « oui ».
+
 ## Écarts avec le plan de #49
 
 1. **Tâche 5, critères 7 et 9** : « 1 appel » vaut pour le modèle (`demarrerMission`) ; l'hôte reçoit N `issues.create` et un réveil, le double compte les deux.

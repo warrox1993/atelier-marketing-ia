@@ -21,6 +21,11 @@ const CHAINE = [
 describe("gabarit wf-01-prospection", () => {
   const g = chargerGabarit("wf-01-prospection");
 
+  it("le chemin sans CRM ne change ni la version ni les étapes", () => {
+    expect(g.version).toBe(1);
+    expect(g.etapes).toHaveLength(CHAINE.length);
+  });
+
   it("se charge avec ses dix étapes, dans l'ordre", () => {
     expect(g.etapes.map((e) => e.rang)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
     expect(g.etapes.map((e) => [e.action, e.nature ?? "agent"])).toEqual(CHAINE);
