@@ -194,7 +194,9 @@
         "recherche": [
           "Read",
           "Grep",
-          "Glob"
+          "Glob",
+          "mcp__paperclip-assigned__atelier_marketing-ia_mission_etat",
+          "mcp__paperclip-assigned__atelier_marketing-ia_sources_lister"
         ],
         "mutation": [
           "Bash(curl *)"
@@ -280,7 +282,12 @@
           "mcp__paperclip-assigned__atelier_marketing-ia_etat_fabrication",
           "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_video",
           "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_image",
-          "mcp__paperclip-assigned__atelier_marketing-ia_voir_rendu"
+          "mcp__paperclip-assigned__atelier_marketing-ia_voir_rendu",
+          "mcp__paperclip-assigned__atelier_marketing-ia_mission_etat",
+          "mcp__paperclip-assigned__atelier_marketing-ia_livrable_deposer",
+          "mcp__paperclip-assigned__atelier_marketing-ia_verdict_deposer",
+          "mcp__paperclip-assigned__atelier_marketing-ia_decision_demander",
+          "mcp__paperclip-assigned__atelier_marketing-ia_sources_lister"
         ]
       },
       "connexions": {
@@ -361,7 +368,12 @@
           "Task",
           "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_video",
           "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_image",
-          "mcp__paperclip-assigned__atelier_marketing-ia_voir_rendu"
+          "mcp__paperclip-assigned__atelier_marketing-ia_voir_rendu",
+          "mcp__paperclip-assigned__atelier_marketing-ia_mission_etat",
+          "mcp__paperclip-assigned__atelier_marketing-ia_livrable_deposer",
+          "mcp__paperclip-assigned__atelier_marketing-ia_verdict_deposer",
+          "mcp__paperclip-assigned__atelier_marketing-ia_decision_demander",
+          "mcp__paperclip-assigned__atelier_marketing-ia_sources_lister"
         ]
       },
       "connexions": {
@@ -435,7 +447,12 @@
           "Task",
           "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_video",
           "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_image",
-          "mcp__paperclip-assigned__atelier_marketing-ia_voir_rendu"
+          "mcp__paperclip-assigned__atelier_marketing-ia_voir_rendu",
+          "mcp__paperclip-assigned__atelier_marketing-ia_mission_etat",
+          "mcp__paperclip-assigned__atelier_marketing-ia_livrable_deposer",
+          "mcp__paperclip-assigned__atelier_marketing-ia_verdict_deposer",
+          "mcp__paperclip-assigned__atelier_marketing-ia_decision_demander",
+          "mcp__paperclip-assigned__atelier_marketing-ia_sources_lister"
         ]
       },
       "connexions": {
@@ -515,7 +532,12 @@
           "mcp__paperclip-assigned__atelier_marketing-ia_etat_fabrication",
           "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_video",
           "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_image",
-          "mcp__paperclip-assigned__atelier_marketing-ia_voir_rendu"
+          "mcp__paperclip-assigned__atelier_marketing-ia_voir_rendu",
+          "mcp__paperclip-assigned__atelier_marketing-ia_mission_etat",
+          "mcp__paperclip-assigned__atelier_marketing-ia_livrable_deposer",
+          "mcp__paperclip-assigned__atelier_marketing-ia_verdict_deposer",
+          "mcp__paperclip-assigned__atelier_marketing-ia_decision_demander",
+          "mcp__paperclip-assigned__atelier_marketing-ia_sources_lister"
         ]
       },
       "connexions": {
@@ -589,7 +611,12 @@
           "mcp__paperclip-assigned__atelier_marketing-ia_etat_fabrication",
           "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_video",
           "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_image",
-          "mcp__paperclip-assigned__atelier_marketing-ia_voir_rendu"
+          "mcp__paperclip-assigned__atelier_marketing-ia_voir_rendu",
+          "mcp__paperclip-assigned__atelier_marketing-ia_mission_etat",
+          "mcp__paperclip-assigned__atelier_marketing-ia_livrable_deposer",
+          "mcp__paperclip-assigned__atelier_marketing-ia_verdict_deposer",
+          "mcp__paperclip-assigned__atelier_marketing-ia_decision_demander",
+          "mcp__paperclip-assigned__atelier_marketing-ia_sources_lister"
         ]
       },
       "connexions": {
@@ -668,7 +695,12 @@
           "mcp__paperclip-assigned__atelier_marketing-ia_etat_fabrication",
           "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_video",
           "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_image",
-          "mcp__paperclip-assigned__atelier_marketing-ia_voir_rendu"
+          "mcp__paperclip-assigned__atelier_marketing-ia_voir_rendu",
+          "mcp__paperclip-assigned__atelier_marketing-ia_mission_etat",
+          "mcp__paperclip-assigned__atelier_marketing-ia_livrable_deposer",
+          "mcp__paperclip-assigned__atelier_marketing-ia_verdict_deposer",
+          "mcp__paperclip-assigned__atelier_marketing-ia_decision_demander",
+          "mcp__paperclip-assigned__atelier_marketing-ia_sources_lister"
         ]
       },
       "connexions": {
@@ -736,7 +768,9 @@
           "Glob",
           "mcp__Paperclip_connections__connections_search",
           "mcp__Paperclip_connections__connection_request",
-          "WebSearch"
+          "WebSearch",
+          "mcp__paperclip-assigned__atelier_marketing-ia_mission_etat",
+          "mcp__paperclip-assigned__atelier_marketing-ia_sources_lister"
         ],
         "mutation": [
           "Bash(curl *)",
@@ -747,13 +781,16 @@
           "mcp__paperclip-assigned__atelier_marketing-ia_etat_fabrication",
           "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_image",
           "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_video",
-          "mcp__paperclip-assigned__atelier_marketing-ia_voir_rendu"
+          "mcp__paperclip-assigned__atelier_marketing-ia_voir_rendu",
+          "mcp__paperclip-assigned__atelier_marketing-ia_livrable_deposer",
+          "mcp__paperclip-assigned__atelier_marketing-ia_decision_demander"
         ],
         "interdits": [
           "WebFetch",
           "NotebookEdit",
           "Agent",
-          "Task"
+          "Task",
+          "mcp__paperclip-assigned__atelier_marketing-ia_verdict_deposer"
         ]
       },
       "connexions": {
@@ -840,7 +877,12 @@
           "Task",
           "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_video",
           "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_image",
-          "mcp__paperclip-assigned__atelier_marketing-ia_voir_rendu"
+          "mcp__paperclip-assigned__atelier_marketing-ia_voir_rendu",
+          "mcp__paperclip-assigned__atelier_marketing-ia_mission_etat",
+          "mcp__paperclip-assigned__atelier_marketing-ia_livrable_deposer",
+          "mcp__paperclip-assigned__atelier_marketing-ia_verdict_deposer",
+          "mcp__paperclip-assigned__atelier_marketing-ia_decision_demander",
+          "mcp__paperclip-assigned__atelier_marketing-ia_sources_lister"
         ]
       },
       "connexions": {
@@ -918,7 +960,12 @@
           "Task",
           "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_video",
           "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_image",
-          "mcp__paperclip-assigned__atelier_marketing-ia_voir_rendu"
+          "mcp__paperclip-assigned__atelier_marketing-ia_voir_rendu",
+          "mcp__paperclip-assigned__atelier_marketing-ia_mission_etat",
+          "mcp__paperclip-assigned__atelier_marketing-ia_livrable_deposer",
+          "mcp__paperclip-assigned__atelier_marketing-ia_verdict_deposer",
+          "mcp__paperclip-assigned__atelier_marketing-ia_decision_demander",
+          "mcp__paperclip-assigned__atelier_marketing-ia_sources_lister"
         ]
       },
       "connexions": {
@@ -1001,7 +1048,12 @@
           "NotebookEdit",
           "Agent",
           "Task",
-          "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_document"
+          "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_document",
+          "mcp__paperclip-assigned__atelier_marketing-ia_mission_etat",
+          "mcp__paperclip-assigned__atelier_marketing-ia_livrable_deposer",
+          "mcp__paperclip-assigned__atelier_marketing-ia_verdict_deposer",
+          "mcp__paperclip-assigned__atelier_marketing-ia_decision_demander",
+          "mcp__paperclip-assigned__atelier_marketing-ia_sources_lister"
         ]
       },
       "connexions": {
@@ -1054,11 +1106,14 @@
           "Read",
           "Grep",
           "Glob",
-          "WebSearch"
+          "WebSearch",
+          "mcp__paperclip-assigned__atelier_marketing-ia_mission_etat",
+          "mcp__paperclip-assigned__atelier_marketing-ia_sources_lister"
         ],
         "mutation": [
           "Bash(curl *)",
-          "Write"
+          "Write",
+          "mcp__paperclip-assigned__atelier_marketing-ia_verdict_deposer"
         ],
         "interdits": [
           "WebFetch",
@@ -1130,10 +1185,13 @@
         "recherche": [
           "Read",
           "Grep",
-          "Glob"
+          "Glob",
+          "mcp__paperclip-assigned__atelier_marketing-ia_mission_etat",
+          "mcp__paperclip-assigned__atelier_marketing-ia_sources_lister"
         ],
         "mutation": [
-          "Bash(curl *)"
+          "Bash(curl *)",
+          "mcp__paperclip-assigned__atelier_marketing-ia_verdict_deposer"
         ],
         "interdits": [
           "WebSearch",
@@ -1213,11 +1271,14 @@
           "Read",
           "Grep",
           "Glob",
-          "WebSearch"
+          "WebSearch",
+          "mcp__paperclip-assigned__atelier_marketing-ia_mission_etat",
+          "mcp__paperclip-assigned__atelier_marketing-ia_sources_lister"
         ],
         "mutation": [
           "Bash(curl *)",
-          "mcp__paperclip-assigned__atelier_marketing-ia_voir_rendu"
+          "mcp__paperclip-assigned__atelier_marketing-ia_voir_rendu",
+          "mcp__paperclip-assigned__atelier_marketing-ia_verdict_deposer"
         ],
         "interdits": [
           "WebFetch",
@@ -1290,11 +1351,14 @@
           "Glob",
           "mcp__paperclip-assigned",
           "mcp__Paperclip_connections__connections_search",
-          "mcp__Paperclip_connections__connection_request"
+          "mcp__Paperclip_connections__connection_request",
+          "mcp__paperclip-assigned__atelier_marketing-ia_mission_etat",
+          "mcp__paperclip-assigned__atelier_marketing-ia_sources_lister"
         ],
         "mutation": [
           "Bash(curl *)",
-          "Write"
+          "Write",
+          "mcp__paperclip-assigned__atelier_marketing-ia_verdict_deposer"
         ],
         "interdits": [
           "WebFetch",
@@ -1307,7 +1371,9 @@
           "mcp__paperclip-assigned__atelier_marketing-ia_etat_fabrication",
           "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_video",
           "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_image",
-          "mcp__paperclip-assigned__atelier_marketing-ia_voir_rendu"
+          "mcp__paperclip-assigned__atelier_marketing-ia_voir_rendu",
+          "mcp__paperclip-assigned__atelier_marketing-ia_livrable_deposer",
+          "mcp__paperclip-assigned__atelier_marketing-ia_decision_demander"
         ]
       },
       "connexions": {

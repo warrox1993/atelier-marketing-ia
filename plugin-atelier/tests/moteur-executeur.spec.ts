@@ -6,7 +6,7 @@
 import { describe, expect, it, vi } from "vitest";
 import manifest from "../src/manifest.js";
 import { agentParSlug, creerExecuteur, creerResolveur, moteurActif, ORIGINE_ETAPE, reprendreSiActif, type DepsExecuteur } from "../src/moteur/executeur.js";
-import { chargerGabarit, type Gabarit } from "../src/moteur/gabarits.js";
+import { chargerGabarit, PorteRefusee, type Gabarit } from "../src/moteur/gabarits.js";
 import type { EtapeMission, Mission } from "../src/serveur/base.js";
 
 const SOC = "11111111-1111-4111-8111-111111111111";
@@ -54,7 +54,7 @@ function baseMemoire() {
       return true;
     },
     async creerEtape(e: { companyId: string; missionId: string; rang: number; role: string; tentative?: number; etat: string; entree?: unknown; issueId?: string | null }) {
-      etapes.push({ id: `etape-${etapes.length + 1}`, companyId: e.companyId, missionId: e.missionId, rang: e.rang, role: e.role, tentative: e.tentative ?? 1, etat: e.etat, entree: e.entree ?? null, sortie: null, delaiLe: null, issueId: e.issueId ?? null, creeLe: "", modifieLe: "" });
+      etapes.push({ id: `etape-${etapes.length + 1}`, companyId: e.companyId, missionId: e.missionId, rang: e.rang, role: e.role, tentative: e.tentative ?? 1, etat: e.etat, entree: e.entree ?? null, sortie: null, delaiLe: null, issueId: e.issueId ?? null, revisionLivrable: null, creeLe: "", modifieLe: "" });
       return `etape-${etapes.length}`;
     },
     async lireEtapes(companyId: string, missionId: string) {
@@ -111,8 +111,14 @@ function hoteDouble() {
         issues.set(id, { id, ...i });
         return { id };
       },
+      /** Comme `issues.list` du vrai hôte : `executionPolicy` et `executionState` rendus à null. */
       async list(f: { originId?: string }) {
-        return [...issues.values()].filter((i) => i.originId === f.originId);
+        return [...issues.values()].filter((i) => i.originId === f.originId).map((i) => ({ ...i, executionPolicy: null, executionState: null }));
+      },
+      /** Comme `issues.get` : l'objet complet (politique et état natifs compris), null hors entreprise. */
+      async get(id: string, companyId: string) {
+        const i = issues.get(id);
+        return i && i.companyId === companyId ? { executionPolicy: null, executionState: null, ...i } : null;
       },
       async update(id: string, patch: Record<string, unknown>) {
         if (panne.majSi?.(id, patch)) {
@@ -179,10 +185,12 @@ async function monter(opts: { contratVersion?: number; entrees?: boolean; gabari
   const h = hoteDouble();
   const p = porteDouble();
   const gabarit = opts.gabarit ?? GABARIT_4;
-  const executeur = creerExecuteur({ hote: h.hote as never, base: m.base as unknown as DepsExecuteur["base"], porte: p.porte as never, horloge: () => INSTANT, chargerGabarit: () => gabarit });
+  /** Révision courante du document livrable, par tâche. */
+  const docs = new Map<string, string>();
+  const executeur = creerExecuteur({ hote: h.hote as never, base: m.base as unknown as DepsExecuteur["base"], porte: p.porte as never, horloge: () => INSTANT, revisionLivrable: async (_c, issueId) => docs.get(issueId) ?? null, chargerGabarit: () => gabarit });
   const missionId = await m.base.creerMission({ companyId: SOC, contratVersion: opts.contratVersion ?? 1, campagneId: opts.campagneId ?? null });
   if (opts.entrees !== false) for (const rang of [1, 2, 3, 4]) await m.base.creerEtape({ companyId: SOC, missionId, rang, role: "contenus", etat: "en_attente", entree: ENTREES });
-  return { ...m, ...h, ...p, executeur, missionId };
+  return { ...m, ...h, ...p, executeur, missionId, docs };
 }
 
 /** Fait échouer une seule fois l'appel `nom` de la base quand `quand` est vrai (panne simulée entre deux écritures). */
@@ -548,6 +556,141 @@ describe("exécuteur de missions", () => {
   });
 });
 
+/** Une seule étape sous porte, menée jusqu'à `attente_autorisation` (sortie déposée sur la révision `rev-1`, porte franchie par un relecteur). */
+const GABARIT_PORTE_1: Gabarit = { ...GABARIT_4, porte: true, etapes: [GABARIT_4.etapes[0]!] };
+async function jusquAutorisation() {
+  const t = await monter({ gabarit: GABARIT_PORTE_1, campagneId: "campagne-1" });
+  await t.executeur.demarrerMission(SOC, t.missionId);
+  const issue = [...t.issues.keys()][0]!;
+  t.docs.set(issue, "rev-1");
+  await t.executeur.recevoirResultat(SOC, { ...resultat(t.missionId, 1), revisionLivrable: "rev-1" });
+  await t.executeur.deposerVerdict(SOC, { missionId: t.missionId, rang: 1, tentative: 1, accepte: true, runId: "run-r1" });
+  expect(t.missions.get(t.missionId)!.etat).toBe("attente_autorisation");
+  /** État natif de l'hôte après une décision humaine (visible par `issues.get`, jamais par `issues.list`). */
+  const natif = (patch: Record<string, unknown>) => void Object.assign(t.issues.get(issue)!, patch);
+  const approuver = () => natif({ status: "done", executionPolicy: { stages: [{ id: "etape-approbation", type: "approval" }] }, executionState: { completedStageIds: ["etape-approbation"] } });
+  return { ...t, issue, natif, approuver };
+}
+
+describe("approbation, changements demandés et refus de porte", () => {
+  it("1 : l'approbation se lit par issues.get (list rend l'état natif à null) : la tâche done approuvée clôt la mission sans réveil", async () => {
+    const t = await jusquAutorisation();
+    t.approuver();
+    expect(((await t.hote.issues.list({ originId: `mission:${t.missionId}:1` })) as Array<{ executionState: unknown }>)[0]!.executionState).toBeNull();
+    const reveils = t.reveils.length;
+    await t.executeur.surDoneNatif(SOC, t.issue);
+    expect(t.missions.get(t.missionId)!.etat).toBe("cloturee");
+    expect(t.issues.get(t.issue)!.status).toBe("done");
+    expect(t.reveils).toHaveLength(reveils);
+  });
+
+  it("1 : un done sans approbation ne clôt pas, la tâche retrouve in_review et le journal le dit ; la reprise clôt une approbation survenue pendant l'arrêt", async () => {
+    const t = await jusquAutorisation();
+    t.natif({ status: "done", executionPolicy: { stages: [{ id: "etape-approbation", type: "approval" }] }, executionState: { completedStageIds: [] } });
+    await t.executeur.surDoneNatif(SOC, t.issue);
+    expect(t.missions.get(t.missionId)!.etat).toBe("attente_autorisation");
+    expect(t.issues.get(t.issue)!.status).toBe("in_review");
+    expect(t.journal.some((j) => j.type === "moteur.done_sans_sortie")).toBe(true);
+    t.approuver();
+    await t.executeur.reprendre(SOC);
+    expect(t.missions.get(t.missionId)!.etat).toBe("cloturee");
+  });
+
+  it("4 : approuvée sur une autre révision que celle relue, la mission n'est pas close : tâche rouverte et journal moteur.revision_changee", async () => {
+    const t = await jusquAutorisation();
+    expect(t.etapes[0]!.revisionLivrable).toBe("rev-1");
+    t.docs.set(t.issue, "rev-2");
+    t.approuver();
+    await t.executeur.surDoneNatif(SOC, t.issue);
+    expect(t.missions.get(t.missionId)!.etat).toBe("attente_autorisation");
+    expect(t.issues.get(t.issue)!.status).toBe("in_review");
+    expect(t.journal.filter((j) => j.type === "moteur.revision_changee")).toHaveLength(1);
+    expect(await t.base.lireExecution(SOC, `${t.missionId}:1:1:approuvee_sans_effet`)).toBeNull();
+  });
+
+  it("5 : porte refusée au lancement : journal, erreur remontée, mission toujours en attente, clé de blocage non consommée ; la relance corrigée réveille le rédacteur une seule fois", async () => {
+    const t = await monter({ gabarit: GABARIT_PORTE_1, campagneId: "campagne-1" });
+    t.missions.get(t.missionId)!.etat = "attente_information";
+    let refus = true;
+    t.porte.resolveur = (async () => {
+      if (refus) throw new PorteRefusee("Humain responsable inconnu : renseignez humainDestinataire.");
+      return <T>(v: T) => v;
+    }) as never;
+    await expect(t.executeur.lancerMission(SOC, t.missionId, ENTREES)).rejects.toBeInstanceOf(PorteRefusee);
+    expect(t.missions.get(t.missionId)!.etat).toBe("attente_information");
+    expect(t.journal.find((j) => j.type === "moteur.porte_refusee")?.donnees).toMatchObject({ motif: expect.stringContaining("humainDestinataire") });
+    expect(await t.base.lireExecution(SOC, `${t.missionId}:1:1:contrat_invalide`)).toBeNull();
+    expect(t.reveils).toHaveLength(0);
+    refus = false;
+    expect(await t.executeur.lancerMission(SOC, t.missionId, ENTREES)).toBe(true);
+    expect(t.missions.get(t.missionId)).toMatchObject({ etat: "en_cours", rangCourant: 1 });
+    expect(t.reveils.map((r) => t.issues.get(r.issueId)!.assigneeAgentId)).toEqual(["agent-contenus"]);
+    expect(await t.executeur.lancerMission(SOC, t.missionId, ENTREES)).toBe(false);
+    expect(t.reveils).toHaveLength(1);
+    expect(t.creations).toHaveLength(1);
+  });
+
+  it("6 : changements demandés par un relecteur : la tâche repasse en cours et le rédacteur est réveillé une fois ; le redépôt est accepté", async () => {
+    const t = await monter({ gabarit: GABARIT_PORTE_1, campagneId: "campagne-1" });
+    await t.executeur.demarrerMission(SOC, t.missionId);
+    const issue = [...t.issues.keys()][0]!;
+    await t.executeur.recevoirResultat(SOC, resultat(t.missionId, 1));
+    expect(t.missions.get(t.missionId)!.etat).toBe("en_revue");
+    const reveils = t.reveils.length;
+    const verdict = { missionId: t.missionId, rang: 1, tentative: 1, accepte: false, runId: "run-r1" };
+    expect((await t.executeur.deposerVerdict(SOC, verdict)).statut).toBe("applique");
+    expect(t.missions.get(t.missionId)!.etat).toBe("en_cours");
+    expect(t.issues.get(issue)!.status).toBe("in_progress");
+    expect(t.reveils).toHaveLength(reveils + 1);
+    expect(t.reveils.at(-1)).toMatchObject({ issueId: issue, options: { reason: "moteur_correction", idempotencyKey: `${t.missionId}:1:1:reveil:correction:run-r1` } });
+    expect((await t.executeur.deposerVerdict(SOC, verdict)).statut).toBe("rejeu");
+    expect(t.reveils).toHaveLength(reveils + 1);
+    expect((await t.executeur.recevoirResultat(SOC, { ...resultat(t.missionId, 1), cleEvenement: "run-b" })).statut).toBe("accepte");
+    expect(t.missions.get(t.missionId)!.etat).toBe("en_revue");
+    expect((await t.executeur.deposerVerdict(SOC, { ...verdict, accepte: true, runId: "run-r2" })).statut).toBe("applique");
+    expect(t.missions.get(t.missionId)!.etat).toBe("attente_autorisation");
+  });
+
+  it("7 : refus humain à l'approbation : la mission repart en cours, sans réveil (l'hôte rend la tâche à son assigné) ; un nouveau dépôt passe, le rejeu et l'ancien refus relu n'ont aucun effet", async () => {
+    const t = await jusquAutorisation();
+    t.natif({ status: "in_progress", executionState: { status: "changes_requested", lastDecisionOutcome: "changes_requested", lastDecisionId: "decision-1", completedStageIds: [] } });
+    const reveils = t.reveils.length;
+    await t.executeur.surChangementsNatifs(SOC, t.issue);
+    expect(t.missions.get(t.missionId)!.etat).toBe("en_cours");
+    expect(t.etapes[0]!.etat).toBe("en_cours");
+    expect(t.journal.filter((j) => j.type === "moteur.changements_humains")).toHaveLength(1);
+    expect(t.reveils).toHaveLength(reveils);
+    const apres = { transitions: t.compteurs.transitions, journal: t.journal.length };
+    await t.executeur.surChangementsNatifs(SOC, t.issue);
+    expect({ transitions: t.compteurs.transitions, journal: t.journal.length }).toEqual(apres);
+    // nouveau dépôt, relecture, porte franchie : l'état natif garde la trace du refus déjà traité
+    expect((await t.executeur.recevoirResultat(SOC, { ...resultat(t.missionId, 1), cleEvenement: "run-b", revisionLivrable: "rev-1" })).statut).toBe("accepte");
+    await t.executeur.deposerVerdict(SOC, { missionId: t.missionId, rang: 1, tentative: 1, accepte: true, runId: "run-r2" });
+    expect(t.missions.get(t.missionId)!.etat).toBe("attente_autorisation");
+    await t.executeur.surChangementsNatifs(SOC, t.issue);
+    expect(t.missions.get(t.missionId)!.etat).toBe("attente_autorisation");
+  });
+
+  it("7 : un état natif encore en attente d'approbation, même avec une ancienne décision de changements, ne fait rien ; mission ailleurs qu'en autorisation : rien", async () => {
+    const t = await jusquAutorisation();
+    t.natif({ executionState: { status: "pending", lastDecisionOutcome: "changes_requested", lastDecisionId: "decision-0", completedStageIds: [] } });
+    await t.executeur.surChangementsNatifs(SOC, t.issue);
+    expect(t.missions.get(t.missionId)!.etat).toBe("attente_autorisation");
+    t.natif({ executionState: { status: "changes_requested", lastDecisionOutcome: "changes_requested", lastDecisionId: "decision-1", completedStageIds: [] } });
+    t.missions.get(t.missionId)!.etat = "en_revue";
+    await t.executeur.surChangementsNatifs(SOC, t.issue);
+    expect(t.missions.get(t.missionId)!.etat).toBe("en_revue");
+  });
+
+  it("7 : un refus humain survenu pendant l'arrêt est rattrapé à la reprise", async () => {
+    const t = await jusquAutorisation();
+    t.natif({ status: "in_progress", executionState: { status: "changes_requested", lastDecisionOutcome: "changes_requested", lastDecisionId: "decision-1", completedStageIds: [] } });
+    await t.executeur.reprendre(SOC);
+    expect(t.missions.get(t.missionId)!.etat).toBe("en_cours");
+    expect(t.etapes[0]!.etat).toBe("en_cours");
+  });
+});
+
 describe("réglage moteurMissions", () => {
   const schema = (manifest.instanceConfigSchema as { properties: Record<string, { type?: string; default?: unknown }> }).properties.moteurMissions;
 
@@ -561,7 +704,7 @@ describe("réglage moteurMissions", () => {
 
   it("désactivé : la reprise n'exécute rien et ne touche aucune table du moteur", async () => {
     const interdit = new Proxy({}, { get: (_cible, nom: string) => () => { throw new Error(`table du moteur touchée : ${nom}`); } }) as never;
-    const executeur = creerExecuteur({ base: interdit, hote: interdit, porte: interdit, horloge: () => INSTANT });
+    const executeur = creerExecuteur({ base: interdit, hote: interdit, porte: interdit, horloge: () => INSTANT, revisionLivrable: interdit });
     const entreprises = async () => [SOC];
     const logger = { info: vi.fn(), warn: vi.fn() };
     await reprendreSiActif({ entreprises, config: async () => ({ moteurMissions: false }), executeur, logger });
@@ -587,5 +730,29 @@ describe("reprise de toutes les entreprises", () => {
     await expect(reprendreSiActif({ entreprises: async () => { throw new Error("liste indisponible"); }, config: async () => ({ moteurMissions: true }), executeur: { reprendre }, logger })).resolves.toBeUndefined();
     expect(logger.warn).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({ erreur: "liste indisponible" }));
     expect(reprendre).not.toHaveBeenCalled();
+  });
+});
+
+describe("brouillon du chat dont la carte est refusée", () => {
+  async function brouillon(statuts: string[], mission = "") {
+    const t = await monter({ entrees: false });
+    Object.assign(t.missions.get(t.missionId)!, { etat: "attente_information", issueRacineId: "discussion-1" });
+    const detail = `Brouillon.\n\nMission : ${mission || t.missionId}\nDemande : un post`;
+    (t.hote.issues as Record<string, unknown>).listInteractions = async () => statuts.map((status) => ({ kind: "request_confirmation", status, payload: { detailsMarkdown: detail } }));
+    await t.executeur.reprendre(SOC);
+    return { etat: t.missions.get(t.missionId)!.etat, journal: t.journal.filter((j) => j.type === "moteur.brouillon_refuse").length };
+  }
+
+  it("toutes ses cartes refusées : annulé une fois, journalisé", async () => {
+    expect(await brouillon(["rejected"])).toEqual({ etat: "annulee", journal: 1 });
+  });
+
+  it("une carte encore en attente ou acceptée le garde (demande refaite après un refus, lancement à venir)", async () => {
+    expect(await brouillon(["rejected", "pending"])).toEqual({ etat: "attente_information", journal: 0 });
+    expect(await brouillon(["accepted"])).toEqual({ etat: "attente_information", journal: 0 });
+  });
+
+  it("la carte refusée d'une autre mission ne l'annule pas", async () => {
+    expect(await brouillon(["rejected"], "autre-mission")).toEqual({ etat: "attente_information", journal: 0 });
   });
 });

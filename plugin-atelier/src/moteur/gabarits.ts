@@ -7,6 +7,7 @@ import { z } from "zod";
 import { CLE_LIVRABLE_DEFAUT, GABARIT_LIVRABLE_PUBLIC, LIMITES } from "../contrats/index.js";
 import contenuReseauSocial from "../../../organisation/gabarits/contenu-reseau-social.json" with { type: "json" };
 import documentInterne from "../../../organisation/gabarits/document-interne.json" with { type: "json" };
+import wfCContenu from "../../../organisation/gabarits/wf-c-contenu.json" with { type: "json" };
 import { chargerContrat } from "./contrats.js";
 import { agentDuRegistre } from "./registre.js";
 
@@ -47,7 +48,7 @@ export const Gabarit = z.object({
 }).strict();
 export type Gabarit = z.infer<typeof Gabarit>;
 
-const GABARITS: Gabarit[] = [contenuReseauSocial, documentInterne].map((brut) => Gabarit.parse(brut));
+const GABARITS: Gabarit[] = [contenuReseauSocial, documentInterne, wfCContenu].map((brut) => Gabarit.parse(brut));
 
 /** Gabarit `cle` ; sans `version`, la plus récente. */
 export function chargerGabarit(cle: string, version?: number): Gabarit {

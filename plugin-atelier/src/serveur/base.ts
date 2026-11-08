@@ -24,7 +24,7 @@ export interface Mission {
 }
 export interface EtapeMission {
   id: string; companyId: string; missionId: string; rang: number; role: string; tentative: number; etat: string; entree: unknown; sortie: unknown;
-  delaiLe: string | null; issueId: string | null; creeLe: string; modifieLe: string;
+  delaiLe: string | null; issueId: string | null; revisionLivrable: string | null; creeLe: string; modifieLe: string;
 }
 
 const IDENT = /^plugin_[a-z0-9_]{1,55}$/u;
@@ -1791,7 +1791,7 @@ export function creerBase(db: Db) {
   const etapeDepuisLigne = (r: Ligne): EtapeMission => ({
     id: String(r.id), companyId: String(r.company_id), missionId: String(r.mission_id), rang: Number(r.rang), role: String(r.role), tentative: Number(r.tentative),
     etat: String(r.etat), entree: r.entree ?? null, sortie: r.sortie ?? null, delaiLe: r.delai_le === null || r.delai_le === undefined ? null : iso(r.delai_le),
-    issueId: texteOuNul(r.issue_id), creeLe: iso(r.cree_le), modifieLe: iso(r.modifie_le),
+    issueId: texteOuNul(r.issue_id), revisionLivrable: texteOuNul(r.revision_livrable), creeLe: iso(r.cree_le), modifieLe: iso(r.modifie_le),
   });
 
   async function creerMission(m: {
@@ -1818,6 +1818,12 @@ export function creerBase(db: Db) {
   }
 
   /** Compare-and-set de l'état : vrai si la mission était bien dans `ancien` et a changé. */
+  /** Rattache la campagne d'une mission encore en attente d'information ; faux si elle est ailleurs, en a déjà une autre ou n'existe pas. */
+  async function rattacherCampagneMission(companyId: string, id: string, campagneId: string) {
+    const { rowCount } = await x(`update ${ns}.missions set campagne_id = $3, modifie_le = now() where company_id = $1 and id = $2 and etat = 'attente_information' and (campagne_id is null or campagne_id = $3)`, [companyId, id, campagneId]);
+    return rowCount === 1;
+  }
+
   async function changerEtatMission(companyId: string, id: string, ancien: EtatMission, nouveau: EtatMission) {
     const { rowCount } = await x(`update ${ns}.missions set etat = $4, modifie_le = now() where company_id = $1 and id = $2 and etat = $3`, [companyId, id, ancien, nouveau]);
     return rowCount === 1;
@@ -1837,14 +1843,16 @@ export function creerBase(db: Db) {
   }
 
   /** Met à jour les seuls champs fournis d'une étape. */
-  async function majEtape(companyId: string, id: string, c: { etat?: string; sortie?: unknown; delaiLe?: string | null; issueId?: string | null }) {
+  async function majEtape(companyId: string, id: string, c: { etat?: string; entree?: unknown; sortie?: unknown; delaiLe?: string | null; issueId?: string | null; revisionLivrable?: string | null }) {
     const sets: string[] = [];
     const params: unknown[] = [companyId, id];
     const ajouter = (colonne: string, valeur: unknown, cast = "") => void sets.push(`${colonne} = $${params.push(valeur)}${cast}`);
     if (c.etat !== undefined) ajouter("etat", c.etat);
+    if (c.entree !== undefined) ajouter("entree", json(c.entree), "::jsonb");
     if (c.sortie !== undefined) ajouter("sortie", json(c.sortie), "::jsonb");
     if (c.delaiLe !== undefined) ajouter("delai_le", c.delaiLe, "::timestamptz");
     if (c.issueId !== undefined) ajouter("issue_id", c.issueId);
+    if (c.revisionLivrable !== undefined) ajouter("revision_livrable", c.revisionLivrable);
     if (sets.length === 0) return false;
     const { rowCount } = await x(`update ${ns}.etapes set ${sets.join(", ")}, modifie_le = now() where company_id = $1 and id = $2`, params);
     return rowCount === 1;
@@ -1950,7 +1958,7 @@ export function creerBase(db: Db) {
     detailsProspects, listerProspects, insererOpposition, lireOpposition,
     insererImportBaseClients, insererClients, etatBaseClients, supprimerBaseClients, reglesVentesCroisees, clientsPourVentesCroisees, insererEtalonnage, issuesPourEtalonnage, scoresCourantsCible, insererScoreMesure,
     lireExportCrmParCle, insererExportCrm,
-    creerMission, lireMission, missionsActives, changerEtatMission, creerEtape, lireEtapes, majEtape, enregistrerExecution, marquerExecution, lireExecution, changerRangMission, etapeParIssue,
+    creerMission, lireMission, missionsActives, rattacherCampagneMission, changerEtatMission, creerEtape, lireEtapes, majEtape, enregistrerExecution, marquerExecution, lireExecution, changerRangMission, etapeParIssue,
   };
 }
 

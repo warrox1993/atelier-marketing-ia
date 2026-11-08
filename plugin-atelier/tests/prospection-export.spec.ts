@@ -224,7 +224,8 @@ describe("base de clients", () => {
     expect(imp.mode).toBe("demonstration");
     expect(f.tp.clients).toHaveLength(imp.lignesRetenues);
     const premiere = lireDemo("base-clients.csv").toString("utf8").split("\n")[1]!.split(";");
-    const stocke = JSON.stringify({ clients: f.tp.clients, imports: f.tp.imports, journal: f.t.journal });
+    // Les chiffrés sont retirés : leur base64 aléatoire contient parfois un prénom court (« …vEmmab… ») sans rien révéler.
+    const stocke = JSON.stringify({ clients: f.tp.clients, imports: f.tp.imports, journal: f.t.journal }).replace(/chv1\.[0-9a-f]{16}\.[\w-]+\.[\w-]*\.[\w-]+/gu, "chv1");
     for (const clair of [premiere[2], premiere[3], premiere[6], premiere[7]]) expect(stocke).not.toContain(clair);
     expect(Object.values(f.tp.clients[0]!.donneesChiffrees as Record<string, string>).every((v) => v.startsWith("chv1."))).toBe(true);
     expect(f.t.journal.map((j) => j.type)).toContain("base_clients.importee");

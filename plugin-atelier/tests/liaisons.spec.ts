@@ -807,15 +807,16 @@ describe("manifeste : création de cartes réservée à l'envoi e-mailing", () =
   // Décision du 22/10/2026 (revue de sécurité, constat élevé n° 1) : le plugin crée lui-même la carte de
   // confirmation d'un envoi e-mailing, pour que son texte ne soit jamais écrit par un agent. Ajouter cette
   // capacité met le plugin en « upgrade_pending » une fois : l'opérateur l'approuve à la mise à jour.
-  it("issue.interactions.create présente, et seule la route emailing.demander_envoi crée une carte", async () => {
+  // #50 : le chat pose la carte d'un brouillon (texte du plugin) ; decision_demander pose celle d'une étape (question de l'agent, jamais une autorisation d'envoi : services-emailing vérifie sa propre signature).
+  it("issue.interactions.create présente, et seuls l'e-mailing, le brouillon de mission du chat et decision_demander créent une carte", async () => {
     expect(manifest.capabilities).toContain("issue.interactions.create");
     const fs = await import("node:fs");
     const path = await import("node:path");
-    const dossier = path.resolve(__dirname, "../src/serveur");
+    const dossier = path.resolve(__dirname, "../src");
     const appelants = fs.readdirSync(dossier, { recursive: true })
       .map(String)
       .filter((f) => f.endsWith(".ts") && fs.readFileSync(path.join(dossier, f), "utf8").includes("requestConfirmation("));
-    expect(appelants).toEqual(["services-emailing.ts"]);
+    expect(appelants.sort()).toEqual(["moteur/outils.ts", "serveur/services-discussion.ts", "serveur/services-emailing.ts"]);
   });
 });
 

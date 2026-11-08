@@ -5,6 +5,7 @@
  */
 import { z } from "zod";
 import wfC from "../../../organisation/contrats/wf-c-contenu.json" with { type: "json" };
+import wfCParametre from "../../../organisation/contrats/wf-c-contenu-parametre.json" with { type: "json" };
 import wf01 from "../../../organisation/contrats/wf-01-prospection.json" with { type: "json" };
 import documentInterne from "../../../organisation/contrats/document-interne.json" with { type: "json" };
 import { agentDuRegistre } from "./registre.js";
@@ -55,7 +56,7 @@ export const Contrat = ContratBrut.transform((c) => {
 });
 export type Contrat = z.output<typeof Contrat>;
 
-const CONTRATS: Contrat[] = [wfC, wf01, documentInterne].map((brut) => Contrat.parse(brut));
+const CONTRATS: Contrat[] = [wfC, wfCParametre, wf01, documentInterne].map((brut) => Contrat.parse(brut));
 
 /** Contrat `id` à la `version` de la mission : une autre version est refusée (reprise d'une mission commencée sous un autre contrat). */
 export function chargerContrat(id: string, version: number): Contrat {

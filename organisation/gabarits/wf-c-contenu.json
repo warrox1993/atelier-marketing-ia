@@ -1,0 +1,13 @@
+{
+  "cle": "wf-c-contenu",
+  "version": 1,
+  "description": "Contenu rédigé pour un canal, une cible et un objectif (post, article ou newsletter : seul le paramètre typeLivrable change). Une seule étape d'agent, la rédaction par contenus, dont les entrées (canal, cible, objectif, sources, typeLivrable) sont vérifiées en code avant tout réveil. La relecture, la carte de décision et l'approbation sont la porte : revues imposées par le type, conformité si le client a le module, approbation humaine. Aucune publication.",
+  "typeLivrable": "public",
+  "etapes": [
+    { "rang": 1, "role": "contenus", "competences": ["redaction-declinaison-canal", "charte-marque"], "contratId": "wf-c-contenu-parametre", "contratVersion": 1 }
+  ],
+  "revues": ["exigences", "metier", "technique"],
+  "conformiteSiModuleActif": true,
+  "porte": true,
+  "approbationRequise": true
+}

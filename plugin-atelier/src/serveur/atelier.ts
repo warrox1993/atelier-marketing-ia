@@ -33,6 +33,8 @@ export interface Services {
   routes: Partial<Record<CleRouteApi, GestionnaireRoute>>;
   donnees: Partial<Record<keyof typeof DONNEES_UI, GestionnaireDonnees>>;
   actions: Partial<Record<keyof typeof ACTIONS_UI, GestionnaireAction>>;
+  /** Évaluation de la porte sans le contrôle de rôle de la route : réservée au moteur de missions (qui contrôle lui-même le relecteur). */
+  evaluerPorte?: (companyId: string, issueId: string, par: string) => Promise<{ decision: string; motifs: unknown[] }>;
 }
 
 export function acteurDepuisRequete(actor: PluginApiRequestInput["actor"]): ActeurHote {

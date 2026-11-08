@@ -26,6 +26,7 @@ function fauxCtx(options: { config?: Record<string, Record<string, unknown> | nu
     agents: { list: vi.fn(async () => []) },
     issues: { create: vi.fn(), list: vi.fn(async () => []), update: vi.fn(async () => ({})), requestWakeup: vi.fn() },
     events: { on: vi.fn((_nom: string, fn: Gestionnaire) => void gestionnaires.push(fn)) },
+    tools: { register: vi.fn() },
     logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },
   };
   return { ctx, gestionnaires, pc: ctx as unknown as PluginContext };
@@ -70,6 +71,107 @@ describe("abonné issue.updated", () => {
     await gestionnaires[0]!({ entityId: ISSUE, entityType: "issue", companyId: SOC, payload: { changes: {} } });
     await gestionnaires[0]!({ entityId: ISSUE, entityType: "issue", companyId: SOC, payload: null });
     expect(ctx.issues.update).not.toHaveBeenCalled();
+  });
+});
+
+describe("abonné issue.updated : refus humain à l'approbation", () => {
+  const natif = { updatedAt: new Date(0), executionState: { status: "changes_requested", lastDecisionOutcome: "changes_requested", lastDecisionId: "decision-1", completedStageIds: [] } };
+  /** Mission en attente d'autorisation : base réduite à ce que lit et écrit `changementsNatifs`. */
+  function baseAutorisation() {
+    const m = { id: MISSION, companyId: SOC, etat: "attente_autorisation", rangCourant: 1 };
+    const cles = new Map<string, string>();
+    return {
+      m, cles,
+      base: {
+        etapeParIssue: vi.fn(async () => ({ id: "etape-1", missionId: MISSION, rang: 1, tentative: 1, etat: "terminee", sortie: {} })),
+        lireMission: vi.fn(async () => ({ ...m })),
+        changerEtatMission: vi.fn(async (_c: string, _i: string, _a: string, nouveau: string) => { m.etat = nouveau; return true; }),
+        majEtape: vi.fn(async () => true),
+        enregistrerExecution: vi.fn(async (e: { cle: string }) => (cles.has(e.cle) ? false : (cles.set(e.cle, "demandee"), true))),
+        marquerExecution: vi.fn(async (_c: string, cle: string, statut: string) => void cles.set(cle, statut)),
+        lireExecution: vi.fn(async (_c: string, cle: string) => (cles.has(cle) ? { statut: cles.get(cle) } : null)),
+        journaliser: vi.fn(async () => undefined),
+      } as never,
+    };
+  }
+
+  it("une mise à jour sans passage à done est lue dans l'état natif : la mission repart en cours, le rejeu ne fait rien", async () => {
+    const { ctx, gestionnaires, pc } = fauxCtx({ config: { [SOC]: { moteurMissions: true } } });
+    (ctx.issues as Record<string, unknown>).get = vi.fn(async () => natif);
+    const { m, base } = baseAutorisation();
+    brancherMoteur(pc, base).demarrer();
+    await gestionnaires[0]!({ entityId: ISSUE, entityType: "issue", companyId: SOC, payload: { changes: { status: { to: "in_progress" } } } });
+    expect(m.etat).toBe("en_cours");
+    await gestionnaires[0]!({ entityId: ISSUE, entityType: "issue", companyId: SOC, payload: { changes: { status: { to: "in_progress" } } } });
+    expect((base as unknown as { changerEtatMission: { mock: { calls: unknown[] } } }).changerEtatMission.mock.calls).toHaveLength(1);
+    expect(ctx.issues.requestWakeup).not.toHaveBeenCalled();
+  });
+
+  it("réglage désactivé : aucune lecture de l'état natif", async () => {
+    const { ctx, gestionnaires, pc } = fauxCtx({ config: { [SOC]: { moteurMissions: false } } });
+    (ctx.issues as Record<string, unknown>).get = vi.fn(async () => natif);
+    const { m, base } = baseAutorisation();
+    brancherMoteur(pc, base).demarrer();
+    await gestionnaires[0]!({ entityId: ISSUE, entityType: "issue", companyId: SOC, payload: { changes: { status: { to: "in_progress" } } } });
+    expect(m.etat).toBe("attente_autorisation");
+    expect((ctx.issues as unknown as { get: { mock: { calls: unknown[] } } }).get.mock.calls).toHaveLength(0);
+  });
+});
+
+describe("outils du moteur", () => {
+  const NOMS = ["decision_demander", "livrable_deposer", "mission_etat", "sources_lister", "verdict_deposer"];
+  const run = { agentId: "agent-1", runId: "run-1", companyId: SOC, projectId: "projet" };
+
+  it.each([["absent", {}], ["faux", { [SOC]: { moteurMissions: false } }]])("enregistrés à la construction, moteur %s : chaque appel refuse sans execute ni issues.update", async (_nom, config) => {
+    const { ctx, pc } = fauxCtx({ config });
+    brancherMoteur(pc);
+    const enregistres = ctx.tools.register.mock.calls as unknown as Array<[string, unknown, (p: unknown, r: typeof run) => Promise<{ data?: { code?: string } }>]>;
+    expect(enregistres.map((c) => c[0]).sort()).toEqual(NOMS);
+    for (const [, , appel] of enregistres) expect((await appel({}, run)).data?.code).toBe("moteur_desactive");
+    expect(ctx.db.execute).not.toHaveBeenCalled();
+    expect(ctx.issues.update).not.toHaveBeenCalled();
+  });
+});
+
+describe("route mission.lancer sur le vrai branchement", () => {
+  const MISSION_ID = "33333333-3333-4333-8333-333333333333";
+  const mission = { id: MISSION_ID, companyId: SOC, gabaritCle: "wf-c-contenu", gabaritVersion: 1, etat: "attente_information", issueRacineId: ISSUE };
+  const corps = { companyId: SOC, missionId: MISSION_ID, campagneId: "campagne-1", entrees: { canal: "linkedin", cible: "PME", objectif: "Notoriété", sources: ["https://exemple.fr"], typeLivrable: "post" } };
+  const requete = { cle: "mission.lancer", params: {}, query: {}, corps, acteur: { type: "humain", id: "jb", agentId: null, userId: "jb", runId: null }, companyId: SOC } as never;
+  const carte = (status: string) => ({ kind: "request_confirmation", status, resolvedByUserId: "jb", payload: { detailsMarkdown: `Brouillon\n\nMission : ${MISSION_ID}\nDemande : un post` } });
+  const monter = (status: string, base: Record<string, unknown> = {}) => {
+    const f = fauxCtx({ config: { [SOC]: { moteurMissions: true } } });
+    (f.ctx.issues as Record<string, unknown>).listInteractions = vi.fn(async () => [carte(status)]);
+    const routes: Record<string, (r: never) => Promise<unknown>> = {};
+    const fausseBase = { lireMission: vi.fn(async () => mission), lireCampagne: vi.fn(async () => ({ id: "campagne-1" })), rattacherCampagneMission: vi.fn(async () => true), ...base };
+    brancherMoteur(f.pc, fausseBase as never, routes as never);
+    return { ...f, routes, fausseBase };
+  };
+
+  it("enregistre la route sur les routes du plugin fournies au branchement", () => {
+    const { routes } = monter("accepted");
+    expect(Object.keys(routes)).toEqual(["mission.lancer"]);
+  });
+
+  it("carte en attente : refus elevation_refusee, la campagne n'est pas rattachée", async () => {
+    const { routes, fausseBase } = monter("pending");
+    await expect(routes["mission.lancer"]!(requete)).rejects.toMatchObject({ code: "elevation_refusee" });
+    expect(fausseBase.rattacherCampagneMission).not.toHaveBeenCalled();
+  });
+
+  it("carte acceptée : la campagne est rattachée puis l'exécuteur du branchement prend la main", async () => {
+    const { routes, fausseBase } = monter("accepted", { enregistrerExecution: vi.fn(async () => { throw new Error("EXECUTEUR_ATTEINT"); }) });
+    await expect(routes["mission.lancer"]!(requete)).rejects.toThrow("EXECUTEUR_ATTEINT");
+    expect(fausseBase.rattacherCampagneMission).toHaveBeenCalledWith(SOC, MISSION_ID, "campagne-1");
+  });
+
+  it("moteur désactivé : refus acces_refuse avant toute lecture de mission", async () => {
+    const f = fauxCtx({ config: { [SOC]: { moteurMissions: false } } });
+    const routes: Record<string, (r: never) => Promise<unknown>> = {};
+    const lireMission = vi.fn();
+    brancherMoteur(f.pc, { lireMission } as never, routes as never);
+    await expect(routes["mission.lancer"]!(requete)).rejects.toMatchObject({ code: "acces_refuse" });
+    expect(lireMission).not.toHaveBeenCalled();
   });
 });
 

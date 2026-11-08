@@ -16,6 +16,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { z } from "zod";
 import * as C from "../src/contrats/index.js";
 import { ROUTES_API, type RouteApi } from "../src/contrats/routes.js";
+import { LancerEntree } from "../src/serveur/services-discussion.js";
 import { Affirmer, Collecter, DemanderFiche, ProposerSources } from "../src/serveur/observatoire/routes-observatoire.js";
 
 export const FICHE_ROUTES_AGENTS = resolve(dirname(fileURLToPath(import.meta.url)), "../../organisation/registre/routes-agents.md");
@@ -53,6 +54,7 @@ export const SCHEMAS_CORPS: Record<string, SchemaZod> = {
   "experiences.creer": C.CreerExperienceEntree,
   "experiences.resultats": C.DeposerResultatsExperienceEntree,
   "experiences.cloturer": C.CloturerExperienceEntree,
+  "mission.lancer": LancerEntree,
   "tache.obs.collecter": Collecter,
   "tache.obs.affirmer": Affirmer,
   "tache.obs.fiche": DemanderFiche,

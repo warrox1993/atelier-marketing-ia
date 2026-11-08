@@ -1,6 +1,7 @@
 import type { PaperclipPluginManifestV1, PluginDatabaseCoreReadTable } from "@paperclipai/plugin-sdk";
 import { PLUGIN_ID, SLUG_ESPACE_BASE } from "./contrats/identifiants.js";
 import { ROUTES_API } from "./contrats/routes.js";
+import { DECLARATION_MISSION_ETAT, DECLARATION_LIVRABLE_DEPOSER, DECLARATION_VERDICT_DEPOSER, DECLARATION_DECISION_DEMANDER, DECLARATION_SOURCES_LISTER } from "./moteur/outils.js";
 import { DECLARATION_ETAT_FABRICATION, DECLARATION_FABRIQUER_DOCUMENT, DECLARATION_FABRIQUER_IMAGE, DECLARATION_FABRIQUER_VIDEO, DECLARATION_VOIR_RENDU } from "./contrats/fabrique-outils-schemas.js";
 import { EXPORTS_UI, ROUTE_ATELIER } from "./contrats/ui-constantes.js";
 
@@ -155,6 +156,12 @@ const manifest: PaperclipPluginManifestV1 = {
         title: "Moteur de missions",
         description: "Active le moteur de missions (tâches enchaînées, contrats, reprise au démarrage) pour cette entreprise. Désactivé, le comportement reste celui d'avant.",
       },
+      moteurChatVersModele: {
+        type: "boolean",
+        default: false,
+        title: "Chat : tout vers le modèle",
+        description: "Moteur de missions actif seulement : coché, le chat ne répond plus aux questions d'état et ne prépare plus de brouillon de mission sans modèle, tout part vers le Coordinateur (repli).",
+      },
       // Veilleur des tâches orphelines (16/10/2026).
       veilleurSeuilMinutes: {
         type: "integer",
@@ -224,7 +231,7 @@ const manifest: PaperclipPluginManifestV1 = {
       },
     },
   },
-  tools: [DECLARATION_FABRIQUER_DOCUMENT, DECLARATION_FABRIQUER_VIDEO, DECLARATION_FABRIQUER_IMAGE, DECLARATION_ETAT_FABRICATION, DECLARATION_VOIR_RENDU],
+  tools: [DECLARATION_FABRIQUER_DOCUMENT, DECLARATION_FABRIQUER_VIDEO, DECLARATION_FABRIQUER_IMAGE, DECLARATION_ETAT_FABRICATION, DECLARATION_VOIR_RENDU, DECLARATION_MISSION_ETAT, DECLARATION_LIVRABLE_DEPOSER, DECLARATION_VERDICT_DEPOSER, DECLARATION_DECISION_DEMANDER, DECLARATION_SOURCES_LISTER],
   entrypoints: {
     worker: "./dist/worker.js",
     ui: "./dist/ui",

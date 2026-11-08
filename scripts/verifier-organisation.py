@@ -96,11 +96,16 @@ OUTIL_FABRIQUE_IMAGE = PREFIXE_OUTILS_FABRIQUE + "fabriquer_image"
 OUTIL_FABRIQUE_ETAT = PREFIXE_OUTILS_FABRIQUE + "etat_fabrication"
 OUTIL_FABRIQUE_VOIR = PREFIXE_OUTILS_FABRIQUE + "voir_rendu"  # lot 3 qualité des visuels : le relecteur voit le rendu
 OUTILS_FABRIQUE = {OUTIL_FABRIQUE_DOCUMENT, OUTIL_FABRIQUE_VIDEO, OUTIL_FABRIQUE_IMAGE, OUTIL_FABRIQUE_ETAT, OUTIL_FABRIQUE_VOIR}
+# Outils du moteur de missions (#50), même serveur : lecture (mission_etat, sources_lister) et dépôts. Hors OUTILS_FABRIQUE :
+# aucun droit de fabrique ne s'y attache, le contrôle exact des rôles de la fabrique reste inchangé.
+OUTILS_MOTEUR_LECTURE = {PREFIXE_OUTILS_FABRIQUE + n for n in ("mission_etat", "sources_lister")}
+OUTILS_MOTEUR_ECRITURE = {PREFIXE_OUTILS_FABRIQUE + n for n in ("livrable_deposer", "verdict_deposer", "decision_demander")}
+OUTILS_RECHERCHE |= OUTILS_MOTEUR_LECTURE
 ROLES_FABRIQUE_DOCUMENT = {"contenus", "stratege", "prospection", "crm-conversion", "mesure"}
 ROLES_FABRIQUE_VIDEO = {"reseaux-sociaux", "contenus"}
 ROLES_FABRIQUE_IMAGE = {"contenus", "reseaux-sociaux"}
 ROLES_FABRIQUE_VOIR = {"relecteur", "contenus", "reseaux-sociaux"}
-OUTILS_MUTATION = {"Write", "Edit", "Bash(curl *)", OUTIL_SERVEUR_CONNEXIONS} | OUTILS_FABRIQUE
+OUTILS_MUTATION = {"Write", "Edit", "Bash(curl *)", OUTIL_SERVEUR_CONNEXIONS} | OUTILS_FABRIQUE | OUTILS_MOTEUR_ECRITURE
 # Outils de sous-agents de Claude Code (« Agent », ancien nom « Task ») : interdits à tous les
 # agents de l'atelier. La délégation passe par les tâches Paperclip, visibles et soumises à la porte.
 OUTILS_SOUS_AGENTS = {"Agent", "Task"}

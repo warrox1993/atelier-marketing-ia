@@ -1,0 +1,24 @@
+{
+  "id": "wf-c-contenu-parametre",
+  "version": 1,
+  "tache": "Rédiger le brouillon d'un contenu (post, article ou newsletter) pour un canal, une cible et un objectif donnés : texte, briefs de visuels éventuels, sources.",
+  "roleResponsable": "contenus",
+  "entreesRequises": [
+    { "cle": "canal", "indexRegistre": 0 },
+    { "cle": "cible", "indexRegistre": 0 },
+    { "cle": "objectif", "indexRegistre": 0 },
+    { "cle": "sources", "indexRegistre": 2 },
+    { "cle": "typeLivrable", "indexRegistre": 0 }
+  ],
+  "sortie": {
+    "champs": { "textes": "liste_chaines", "briefsVisuels": "liste_chaines", "sources": "liste_chaines" }
+  },
+  "controleurs": ["relecteur", "code", "code", "jb"],
+  "competences": ["charte-marque", "redaction-declinaison-canal", "conformite-publicite-ia"],
+  "plafondTours": 40,
+  "plafondJetons": 150000,
+  "effetExterne": "aucun",
+  "conduiteEchec": "blocage",
+  "mesureReussite": "Brouillon accepté par la porte sans cycle de correction supplémentaire.",
+  "maturite": "M1"
+}

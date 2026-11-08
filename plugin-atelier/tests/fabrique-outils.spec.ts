@@ -111,9 +111,9 @@ describe("validation de fabriquer_document", () => {
     expect(validerDemandeDocument({ ...valide(), feuilles: [] }).ok).toBe(false);
     expect(validerDemandeDocument({ format: "xlsx", modele: "sobre", titre: "t", langue: "en" }).ok).toBe(false);
   });
-  it("le manifeste déclare les cinq outils et la capacité", () => {
+  it("le manifeste déclare les cinq outils de la fabrique, les cinq du moteur et la capacité", () => {
     expect(manifest.capabilities).toContain("agent.tools.register");
-    expect((manifest.tools ?? []).map((t) => t.name).sort()).toEqual(["etat_fabrication", "fabriquer_document", "fabriquer_image", "fabriquer_video", "voir_rendu"]);
+    expect((manifest.tools ?? []).map((t) => t.name).sort()).toEqual(["decision_demander", "etat_fabrication", "fabriquer_document", "fabriquer_image", "fabriquer_video", "livrable_deposer", "mission_etat", "sources_lister", "verdict_deposer", "voir_rendu"]);
   });
 });
 
@@ -221,8 +221,8 @@ describe("validation de fabriquer_video", () => {
     const gros = Array.from({ length: 30 }, () => ({ texte_voix: "é".repeat(1500), voix: "v", visuel: { gabarit: "chiffre_cle", champs: { chiffre: "1", titre: "é".repeat(120), sous_titre: "é".repeat(200) } } }));
     expect(validerDemandeVideo({ ...video(), scenes: gros }).ok).toBe(true); // 30 x ~3,6 Kio : sous la limite
   });
-  it("le manifeste déclare cinq outils et les clés fabriqueAgentsDocuments, fabriqueAgentsVideo et fabriqueAgentsImage", () => {
-    expect((manifest.tools ?? []).map((t) => t.name).sort()).toEqual(["etat_fabrication", "fabriquer_document", "fabriquer_image", "fabriquer_video", "voir_rendu"]);
+  it("le manifeste déclare les cinq outils de la fabrique (et ceux du moteur) et les clés fabriqueAgentsDocuments, fabriqueAgentsVideo et fabriqueAgentsImage", () => {
+    expect((manifest.tools ?? []).map((t) => t.name).sort()).toEqual(["decision_demander", "etat_fabrication", "fabriquer_document", "fabriquer_image", "fabriquer_video", "livrable_deposer", "mission_etat", "sources_lister", "verdict_deposer", "voir_rendu"]);
     expect(Object.keys((manifest.instanceConfigSchema as any).properties)).toEqual(expect.arrayContaining(["fabriqueAgentsDocuments", "fabriqueAgentsVideo", "fabriqueAgentsImage"]));
   });
 });

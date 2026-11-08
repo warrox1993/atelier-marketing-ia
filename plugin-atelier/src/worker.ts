@@ -8,6 +8,7 @@
  */
 import { definePlugin, runWorker } from "@paperclipai/plugin-sdk";
 import { creerAtelier } from "./serveur/atelier.js";
+import { creerServices } from "./serveur/services.js";
 import { creerBase } from "./serveur/base.js";
 import { creerVeilleur } from "./serveur/veilleur.js";
 import { brancherMoteur } from "./moteur/branchement.js";
@@ -28,7 +29,9 @@ const plugin = definePlugin({
   // Réglages lus par entreprise (ctx.config.get(companyId)) et aucun onConfigChanged : sans ce drapeau, le SDK refuse 27 entreprises sur 28 à chaque démarrage.
   multiCompanyConfig: true,
   async setup(ctx) {
-    atelier = creerAtelier(ctx);
+    // Mêmes services pour les routes de l'atelier et pour le moteur (verdicts et porte réutilisés par ses outils).
+    const services = creerServices(ctx);
+    atelier = creerAtelier(ctx, services);
     atelier.enregistrer();
     // Veilleur des tâches orphelines (16/10/2026) : réveille un agent dont la tâche est restée sans passage.
     veilleur = creerVeilleur({
@@ -40,7 +43,7 @@ const plugin = definePlugin({
     });
     veilleur.demarrer();
     // Moteur de missions (#49) : reprise, minuterie et filet `issue.updated` (voir moteur/branchement.ts).
-    moteur = brancherMoteur(ctx);
+    moteur = brancherMoteur(ctx, undefined, services.routes, services.evaluerPorte);
     moteur.demarrer();
     // Facteur du bureau de liaison (essai L9, 16/10/2026) : transmissions et réponses entre deux entreprises, que l'hôte
     // refuse pendant une route ou un événement. Créé ICI, dans setup() : sa minuterie n'hérite d'aucune invocation.

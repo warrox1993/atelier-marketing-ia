@@ -36,6 +36,10 @@ import type { BaseAtelier } from "./base.js";
 import { extraireActions, type ActionDiscussion } from "./discussion-actions.js";
 import { erreur, erreurValidation } from "./erreurs.js";
 import { elementDepuisCarte, type ElementAccueil } from "./services-accueil.js";
+import { chargerContrat, verifierEntrees } from "../moteur/contrats.js";
+import { moteurActif, type Executeur } from "../moteur/executeur.js";
+import { chargerGabarit, PorteRefusee } from "../moteur/gabarits.js";
+import { reconnaitreDemandeContenu, reconnaitreQuestionEtat, repondreEtat } from "../moteur/questions-etat.js";
 
 export const ORIGINE_DISCUSSION = `plugin:${PLUGIN_ID}:discussion` as const;
 export const TITRE_DISCUSSION = "Discussion avec le Coordinateur";
@@ -77,6 +81,8 @@ type Commentaire = Awaited<ReturnType<PluginContext["issues"]["listComments"]>>[
 export interface DependancesDiscussion {
   ctx: PluginContext;
   base: BaseAtelier;
+  /** Réglages de l'entreprise ; par défaut `ctx.config.get`. */
+  config?: (companyId: string) => Promise<Record<string, unknown> | null | undefined>;
 }
 
 const exigerHumain = (acteur: ActeurHote) => {
@@ -99,8 +105,63 @@ export function estDiscussionDe(companyId: string, i: Pick<Issue, "originKind" |
   return origine === racine || origine.startsWith(`${racine}:`);
 }
 
+export const LancerEntree = z
+  .object({ companyId: IdNatif, missionId: z.string().min(1).max(100), campagneId: z.string().min(1).max(100), entrees: z.record(z.string(), z.unknown()) })
+  .strict();
+
+export interface DependancesLancement {
+  ctx: PluginContext;
+  base: BaseAtelier;
+  executeur: Pick<Executeur, "lancerMission">;
+  /** Réglages de l'entreprise ; par défaut `ctx.config.get`. */
+  config?: DependancesDiscussion["config"];
+}
+
+/**
+ * `mission.lancer` : démarre le brouillon d'une mission de contenu une fois la carte de confirmation acceptée par un humain.
+ * Contrôles dans l'ordre, tous AVANT la moindre écriture : moteur actif, mission de l'entreprise, état `attente_information`,
+ * campagne de l'entreprise (lue en base, filtre `company_id`), carte `request_confirmation` acceptée par un humain (non créée par un agent) dont le détail porte la
+ * mission, entrées complètes. L'exécuteur arrive de `brancherMoteur` (il a besoin des routes, d'où l'enregistrement séparé).
+ */
+export function routesLancement(d: DependancesLancement): Partial<Record<CleRouteApi, GestionnaireRoute>> {
+  const { ctx, base } = d;
+  const configDe = d.config ?? (async (companyId: string) => (await ctx.config.get(companyId)) as Record<string, unknown> | null);
+  return {
+    "mission.lancer": async (r) => {
+      const p = LancerEntree.safeParse(r.corps);
+      if (!p.success) erreurValidation("Lancement de mission", p.error.issues);
+      if (p.data.companyId.toLowerCase() !== r.companyId.toLowerCase()) erreur("hors_entreprise", "Entreprise incohérente : seule l'entreprise résolue par l'hôte est servie.");
+      if (!moteurActif(await configDe(r.companyId))) erreur("acces_refuse", "Le moteur de missions n'est pas activé pour cette entreprise.");
+      const m = await base.lireMission(r.companyId, p.data.missionId);
+      if (!m) erreur("introuvable", "Mission introuvable dans cette entreprise.");
+      if (m.etat !== "attente_information") erreur("conflit", `La mission est « ${m.etat} » : seul un brouillon en attente d'information se lance.`);
+      if (!(await base.lireCampagne(r.companyId, p.data.campagneId))) erreur("hors_entreprise", "Campagne introuvable dans cette entreprise.");
+      // L'accord humain : une carte acceptée, sur la tâche racine, qui nomme exactement cette mission (ligne « Mission : <id> »).
+      const cartes = m.issueRacineId ? await ctx.issues.listInteractions(m.issueRacineId, r.companyId) : [];
+      // Carte posée par le plugin (aucun agent auteur) et résolue par un humain : celle d'un agent ou sans résolveur humain ne vaut pas accord.
+      if (!cartes.some((c) => c.kind === "request_confirmation" && c.status === "accepted" && !c.createdByAgentId && c.resolvedByUserId && String((c.payload as { detailsMarkdown?: unknown }).detailsMarkdown ?? "").split("\n").includes(`Mission : ${m.id}`))) {
+        erreur("elevation_refusee", "Aucune carte de confirmation acceptée par un humain pour cette mission : le lancement est refusé.");
+      }
+      const gabarit = chargerGabarit(m.gabaritCle, m.gabaritVersion);
+      const etape = gabarit.etapes.find((e) => e.rang === 1)!;
+      const { manquantes } = verifierEntrees(chargerContrat(etape.contratId, etape.contratVersion), p.data.entrees);
+      if (manquantes.length > 0) erreur("entree_invalide", `Entrées manquantes : ${manquantes.join(", ")}.`, { manquantes });
+      if (!(await base.rattacherCampagneMission(r.companyId, m.id, p.data.campagneId))) erreur("conflit", "La campagne n'a pas pu être rattachée : la mission a changé entre-temps.");
+      const lancee = await d.executeur.lancerMission(r.companyId, m.id, p.data.entrees).catch((e: unknown) => {
+        // Porte refusée : la mission reste en attente d'information, la relance après correction repart de là.
+        if (e instanceof PorteRefusee) erreur("conflit", `La porte de la mission est refusée : ${e.message} Corrigez puis relancez.`);
+        throw e;
+      });
+      if (!lancee) erreur("conflit", "La mission a déjà été lancée.");
+      await base.journaliser({ companyId: r.companyId, type: "mission.lancee", entite: "mission", entiteId: m.id, issueId: m.issueRacineId, acteur: r.acteur.id, donnees: { campagneId: p.data.campagneId } });
+      return { corps: { missionId: m.id, etat: (await base.lireMission(r.companyId, m.id))?.etat ?? null } };
+    },
+  };
+}
+
 export function routesDiscussion(d: DependancesDiscussion): Partial<Record<CleRouteApi, GestionnaireRoute>> {
   const { ctx, base } = d;
+  const configDe = d.config ?? (async (companyId: string) => (await ctx.config.get(companyId)) as Record<string, unknown> | null);
   const routes: Partial<Record<CleRouteApi, GestionnaireRoute>> = {};
   /** Évite deux créations simultanées de l'issue unique dans ce processus. */
   const creations = new Map<string, Promise<Issue>>();
@@ -345,6 +406,43 @@ export function routesDiscussion(d: DependancesDiscussion): Partial<Record<CleRo
     return { corps: await forme(r.companyId, issue, depuis, false) };
   };
 
+  /** Moteur actif et repli non demandé : le chat peut répondre sans modèle. Un réglage illisible vaut « modèle » (défaut sûr). */
+  async function chatSansModele(companyId: string): Promise<boolean> {
+    try {
+      const config = await configDe(companyId);
+      return moteurActif(config) && config?.moteurChatVersModele !== true;
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * Brouillon de mission `wf-c-contenu` pour une demande de contenu reconnue, avec une seule carte de confirmation sur la
+   * discussion. Rien n'est lancé : l'état `attente_information` n'est jamais repris par le moteur. Les entrées non nommées par
+   * le texte restent absentes. Idempotent : même demande sur la même discussion = même brouillon, carte recréée seulement si perdue.
+   */
+  async function preparerBrouillon(companyId: string, issue: Issue, texte: string, demande: NonNullable<ReturnType<typeof reconnaitreDemandeContenu>>): Promise<string> {
+    const mandat = texte;
+    const gabarit = chargerGabarit("wf-c-contenu");
+    const etape = gabarit.etapes[0]!;
+    const existante = (await base.missionsActives(companyId)).find((m) => m.etat === "attente_information" && m.gabaritCle === gabarit.cle && m.issueRacineId === issue.id && m.mandat === mandat);
+    const missionId = existante?.id ?? await base.creerMission({
+      companyId, gabaritCle: gabarit.cle, gabaritVersion: gabarit.version, contratId: etape.contratId, contratVersion: etape.contratVersion, mandat,
+      etat: "attente_information", issueRacineId: issue.id, campagneId: null,
+    });
+    const manquantes = verifierEntrees(chargerContrat(etape.contratId, etape.contratVersion), demande).manquantes;
+    const resume = `Brouillon de mission « ${gabarit.cle} » (${demande.typeLivrable}${demande.canal ? `, ${demande.canal}` : ""}), non lancé.`;
+    const detail = `${resume}\n\nMission : ${missionId}\nDemande : ${mandat.replace(/[\r\n]+/g, " ")}\nÀ préciser avant tout démarrage : ${manquantes.join(", ")}.\nAucune campagne n'est rattachée : la porte du gabarit en exige une.`;
+    const cartes = await ctx.issues.listInteractions(issue.id, companyId);
+    if (!cartes.some((c) => c.kind === "request_confirmation" && c.status === "pending" && JSON.stringify(c.payload).includes(missionId))) {
+      await ctx.issues.requestConfirmation(issue.id, {
+        continuationPolicy: "wake_assignee_on_accept", resolverPolicy: "human_only",
+        payload: { version: 1, prompt: "Préparer cette mission de contenu ?", detailsMarkdown: detail, acceptLabel: "Préparer", rejectLabel: "Laisser tomber", supersedeOnUserComment: false, allowDeclineReason: true },
+      }, companyId);
+    }
+    return `${resume} À préciser : ${manquantes.join(", ")}. Aucune campagne n'est rattachée. Une carte de confirmation attend votre décision dans ce fil.`;
+  }
+
   routes["discussion.envoyer"] = async (r) => {
     exigerHumain(r.acteur);
     const p = EnvoyerEntree.safeParse(r.corps);
@@ -359,7 +457,19 @@ export function routesDiscussion(d: DependancesDiscussion): Partial<Record<CleRo
     const issue = choisie ? await suivreCoordinateur(r.companyId, choisie, r.acteur) : await retrouverOuCreer(r.companyId, r.acteur);
     const c = await ctx.issues.createComment(issue.id, `${prefixeMessage(issue.originId)}${p.data.texte}`, r.companyId);
     const auteur = r.acteur.userId ? { actorUserId: r.acteur.userId } : undefined;
-    if (issue.status === "done" || issue.status === "in_review" || issue.status === "backlog") {
+    // Sans modèle : question d'état ou demande de contenu reconnue, moteur actif, repli faux. Une panne retombe sur le modèle.
+    let local: { reponse: string; questionEtat?: string } | null = null;
+    if (await chatSansModele(r.companyId)) {
+      try {
+        const question = reconnaitreQuestionEtat(p.data.texte);
+        const demande = question ? null : reconnaitreDemandeContenu(p.data.texte);
+        if (question) local = { reponse: await repondreEtat(question, base, r.companyId), questionEtat: question };
+        else if (demande) local = { reponse: await preparerBrouillon(r.companyId, issue, p.data.texte, demande) };
+      } catch (e) {
+        ctx.logger.warn("Discussion : réponse sans modèle impossible, le message part vers le modèle", { issueId: issue.id, erreur: e instanceof Error ? e.message : String(e) });
+      }
+    }
+    if (!local && (issue.status === "done" || issue.status === "in_review" || issue.status === "backlog")) {
       await ctx.issues.update(issue.id, { status: "todo" }, r.companyId, auteur);
     }
     if (issue.title === TITRE_NOUVELLE) {
@@ -369,7 +479,10 @@ export function routesDiscussion(d: DependancesDiscussion): Partial<Record<CleRo
     }
     let reveil: { queued: boolean; runId: string | null } | null = null;
     let echec: string | null = null;
-    try {
+    if (local) {
+      const coord = await coordinateur(r.companyId);
+      await ctx.issues.createComment(issue.id, local.reponse, r.companyId, coord ? { authorAgentId: coord.id } : undefined);
+    } else try {
       reveil = await ctx.issues.requestWakeup(issue.id, r.companyId, {
         reason: "atelier_discussion_message", contextSource: "atelier.discussion", idempotencyKey: `atelier-discussion-${c.id}`,
         ...(r.acteur.userId ? { actorUserId: r.acteur.userId } : {}),
@@ -380,10 +493,10 @@ export function routesDiscussion(d: DependancesDiscussion): Partial<Record<CleRo
     }
     await base.journaliser({
       companyId: r.companyId, type: "discussion.message", entite: "tache", entiteId: issue.id, issueId: issue.id, acteur: r.acteur.id,
-      donnees: { commentaireId: c.id, longueur: p.data.texte.length, reveil, ...(echec ? { erreurReveil: echec } : {}) },
+      donnees: { commentaireId: c.id, longueur: p.data.texte.length, reveil, ...(local?.questionEtat ? { questionEtat: local.questionEtat } : {}), ...(echec ? { erreurReveil: echec } : {}) },
     });
     const message: MessageDiscussion = { id: c.id, auteur: "humain", nom: "Vous", texte: p.data.texte, date: iso(c.createdAt), actions: [] };
-    return { statut: 201, corps: { ...message, reveilDemande: echec == null } };
+    return { statut: 201, corps: { ...message, reveilDemande: local ? false : echec == null } };
   };
 
   return routes;

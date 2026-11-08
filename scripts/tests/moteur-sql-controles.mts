@@ -24,6 +24,7 @@ const AUTRE = "22222222-2222-4222-8222-222222222222";
 const ISSUE_A = "a1000000-0000-4000-8000-000000000001";
 const ISSUE_B = "a1000000-0000-4000-8000-000000000002";
 const CAMPAGNE = "c1000000-0000-4000-8000-000000000001";
+const CAMPAGNE_B = "c1000000-0000-4000-8000-000000000002";
 
 const client = new pg.Client();
 await client.connect();
@@ -62,7 +63,7 @@ await client.query(`
   CREATE TABLE ${ESPACE_BASE}.diffusions (id uuid PRIMARY KEY);
   INSERT INTO public.companies VALUES ('${SOC}'), ('${AUTRE}');
   INSERT INTO public.issues VALUES ('${ISSUE_A}'), ('${ISSUE_B}');
-  INSERT INTO ${ESPACE_BASE}.campagnes VALUES ('${CAMPAGNE}');
+  INSERT INTO ${ESPACE_BASE}.campagnes VALUES ('${CAMPAGNE}'), ('${CAMPAGNE_B}');
 `);
 
 const contenu = readFileSync(join(RACINE, "plugin-atelier", "migrations", "035_moteur_missions.sql"), "utf8");
@@ -85,6 +86,22 @@ await controle("migration 035 : index etapes_tache_idx sur (issue_id, tentative)
   const [r] = await brut(`SELECT indexdef FROM pg_indexes WHERE schemaname = $1 AND indexname = 'etapes_tache_idx'`, [ESPACE_BASE]);
   assert.ok(r, "index absent");
   assert.match(String(r.indexdef), /\(issue_id, tentative\)/u);
+});
+
+const contenu036 = readFileSync(join(RACINE, "plugin-atelier", "migrations", "036_etapes_revision_livrable.sql"), "utf8");
+const instructions036 = contenu036.split("\n").filter((l) => !l.trimStart().startsWith("--")).join("\n").split(";").map((s) => s.trim()).filter(Boolean);
+
+await controle("migration 036 : chaque instruction passe le validateur de Paperclip, s'exécute, et se rejoue sans effet", async () => {
+  assert.ok(instructions036.length >= 2, `instructions trouvées : ${instructions036.length}`);
+  for (const i of instructions036) {
+    validatePluginMigrationStatement(i, ESPACE_BASE, ["companies", "issues"] as never);
+    await client.query(i);
+  }
+  for (const i of instructions036) await client.query(i);
+  const [c] = await brut(`SELECT data_type, is_nullable FROM information_schema.columns WHERE table_schema = $1 AND table_name = 'etapes' AND column_name = 'revision_livrable'`, [ESPACE_BASE]);
+  assert.ok(c, "colonne absente");
+  assert.equal(c.data_type, "text");
+  assert.equal(c.is_nullable, "YES");
 });
 
 const base = creerBase(db);
@@ -145,6 +162,20 @@ await controle("majEtape : champs partiels, null explicite efface le délai et l
   assert.equal(await base.majEtape(SOC, id, {}), false);
 });
 
+await controle("revisionLivrable : nulle par défaut, écrite par majEtape, relue, effaçable, sans toucher aux autres champs", async () => {
+  const mission = await nouvelleMission();
+  const id = await base.creerEtape({ companyId: SOC, missionId: mission, rang: 1, role: "r", etat: "prete", issueId: ISSUE_A });
+  assert.equal((await base.lireEtapes(SOC, mission))[0]!.revisionLivrable, null);
+  assert.equal(await base.majEtape(SOC, id, { sortie: { ok: true }, etat: "terminee", revisionLivrable: "rev-1" }), true);
+  const [e] = await base.lireEtapes(SOC, mission);
+  assert.equal(e!.revisionLivrable, "rev-1");
+  assert.deepEqual(e!.sortie, { ok: true });
+  assert.equal(await base.majEtape(SOC, id, { etat: "en_cours" }), true);
+  assert.equal((await base.lireEtapes(SOC, mission))[0]!.revisionLivrable, "rev-1");
+  assert.equal(await base.majEtape(SOC, id, { revisionLivrable: null }), true);
+  assert.equal((await base.lireEtapes(SOC, mission))[0]!.revisionLivrable, null);
+});
+
 await controle("rejeu d'une clé d'exécution : enregistrerExecution vrai puis faux", async () => {
   const mission = await nouvelleMission();
   const e = { companyId: SOC, missionId: mission, rang: 1, type: "creation_tache" as const, cle: `${mission}:1:1:demarrage`, requete: { titre: "t" } };
@@ -184,6 +215,27 @@ await controle("compare-and-set de l'état : changerEtatMission vrai une fois, f
   assert.equal((await base.lireMission(SOC, id))!.etat, "en_cours");
   assert.equal(await base.changerEtatMission(AUTRE, id, "en_cours", "blocage"), false);
   assert.equal((await base.lireMission(SOC, id))!.etat, "en_cours");
+});
+
+await controle("rattacherCampagneMission : seulement en attente d'information, filtrée par entreprise, sans écraser une autre campagne", async () => {
+  const id = await nouvelleMission(SOC, { etat: "attente_information" });
+  assert.equal(await base.rattacherCampagneMission(AUTRE, id, CAMPAGNE), false);
+  assert.equal((await base.lireMission(SOC, id))!.campagneId, null);
+  assert.equal(await base.rattacherCampagneMission(SOC, id, CAMPAGNE), true);
+  assert.equal(await base.rattacherCampagneMission(SOC, id, CAMPAGNE), true, "rejeu identique accepté");
+  assert.equal(await base.rattacherCampagneMission(SOC, id, CAMPAGNE_B), false, "une autre campagne n'écrase pas");
+  assert.equal((await base.lireMission(SOC, id))!.campagneId, CAMPAGNE);
+  const enCours = await nouvelleMission(SOC, { etat: "en_cours" });
+  assert.equal(await base.rattacherCampagneMission(SOC, enCours, CAMPAGNE), false);
+  assert.equal((await base.lireMission(SOC, enCours))!.campagneId, null);
+});
+
+await controle("majEtape : l'entrée jsonb s'écrit et se relit", async () => {
+  const mission = await nouvelleMission();
+  const id = await base.creerEtape({ companyId: SOC, missionId: mission, rang: 1, role: "r", etat: "en_attente" });
+  const entree = { canal: "linkedin", sources: ["https://exemple.fr"] };
+  assert.equal(await base.majEtape(SOC, id, { entree }), true);
+  assert.deepEqual((await base.lireEtapes(SOC, mission))[0]!.entree, entree);
 });
 
 await controle("l'état hors de la liste du CHECK est refusé par la base", async () => {

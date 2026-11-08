@@ -538,6 +538,25 @@ Exemple minimal valide :
 {"companyId":"123e4567-e89b-42d3-a456-426614174000","statut":"verifie","justification":"Page officielle consultée","sources":["https://exemple.be/page"]}
 ```
 
+## POST /missions/lancer
+
+Clé : `mission.lancer`. Lance un brouillon de mission de contenu (état attente_information) APRÈS l'accord humain : corps {companyId, missionId, campagneId, entrees}.
+
+Les champs inconnus sont refusés.
+
+| Champ | Type | Obligatoire | Bornes |
+| --- | --- | --- | --- |
+| `companyId` | uuid | oui |  |
+| `missionId` | texte | oui | 1 à 100 caractères |
+| `campagneId` | texte | oui | 1 à 100 caractères |
+| `entrees` | objet libre | oui |  |
+
+Exemple minimal valide :
+
+```json
+{"companyId":"123e4567-e89b-42d3-a456-426614174000","missionId":"exemple","campagneId":"exemple","entrees":{}}
+```
+
 ## POST /experiences
 
 Clé : `experiences.creer`. Ouvre une expérience A/B (hypothèse, métrique de type taux, 2 à 4 variantes dont la première est la référence, essais minimaux par variante, durée maximale, ...

@@ -18,7 +18,7 @@ const CONTEXTE = "atelier.moteur";
 const ROLE_COORDINATEUR = "coordinateur";
 
 export interface HoteMoteur {
-  issues: Pick<PluginContext["issues"], "create" | "list" | "update" | "requestWakeup">;
+  issues: Pick<PluginContext["issues"], "create" | "list" | "get" | "update" | "requestWakeup" | "listInteractions">;
   /** Agent de l'entreprise qui tient le rôle (slug du registre) ; null s'il n'y en a pas. */
   resoudreAgent(companyId: string, role: string): Promise<string | null>;
 }
@@ -61,6 +61,8 @@ export interface DepsExecuteur {
   base: BaseMoteur;
   porte: DepsPorteMoteur;
   horloge: () => Date;
+  /** Révision courante du document livrable de la tâche (clé de sa porte) ; null s'il n'y en a pas. */
+  revisionLivrable: (companyId: string, issueId: string) => Promise<string | null>;
   /** Charge un gabarit versionné ; injectable pour les tests, le vrai par défaut. */
   chargerGabarit?: (cle: string, version?: number) => Gabarit;
 }
@@ -126,6 +128,16 @@ export function creerExecuteur(deps: DepsExecuteur) {
     await hote.issues.requestWakeup(issueId, m.companyId, { reason: `moteur_${raison}`, contextSource: CONTEXTE, idempotencyKey: cle });
     await base.marquerExecution(m.companyId, cle, "appliquee");
   }
+
+  /** L'approbation humaine se lit dans l'état natif : l'étape `approval` de la politique est terminée. Un simple `done` ne la prouve pas. */
+  const approuveeNativement = (t: { status: string; executionPolicy?: { stages: Array<{ id: string; type: string }> } | null; executionState?: { completedStageIds: string[] } | null } | null | undefined) => {
+    const approbations = t?.executionPolicy?.stages.filter((e) => e.type === "approval") ?? [];
+    return t?.status === "done" && approbations.length > 0 && approbations.every((e) => t.executionState?.completedStageIds.includes(e.id));
+  };
+
+  /** `issues.list` rend la politique et l'état d'exécution à null : l'approbation se lit par `issues.get`. */
+  const approuvee = async (companyId: string, issueId: string | null | undefined) =>
+    Boolean(issueId) && approuveeNativement((await hote.issues.get(issueId!, companyId)) as Parameters<typeof approuveeNativement>[0]);
 
   const trouverTache = async (companyId: string, originId: string) =>
     (await hote.issues.list({ companyId, originKind: ORIGINE_ETAPE as never, originId, includePluginOperations: true, limit: 5 })).find((i) => i.originId === originId);
@@ -221,7 +233,9 @@ export function creerExecuteur(deps: DepsExecuteur) {
       await poserPorteMission({ ...deps.porte, resoudre }, { companyId: m.companyId, issueId, campagneId: m.campagneId, gabarit, exigencesCiblees });
     } catch (e) {
       if (!(e instanceof PorteRefusee)) throw e; // panne passagère : la mission ne part pas en blocage, la passe suivante retente
-      await journal(m, "moteur.porte_refusee", { motif: e instanceof Error ? e.message : String(e), rang: rangDernier });
+      await journal(m, "moteur.porte_refusee", { motif: e.message, rang: rangDernier });
+      // Au lancement d'un brouillon (`attente_information`), `contrat_invalide` n'est pas permis : le refus remonte à l'appelant, sans consommer la clé de blocage.
+      if (!transitionPermise(m.etat, "contrat_invalide")) throw e;
       await bloquer(m, etapes, "contrat_invalide");
       return false;
     }
@@ -275,7 +289,25 @@ export function creerExecuteur(deps: DepsExecuteur) {
     if (p) await lancerRang(m, p.gabarit, p.etapes, 1);
   }
 
-  async function traiterResultat(companyId: string, r: { missionId: string; rang: number; tentative: number; sortie: unknown; cleEvenement?: string }): Promise<ResultatEtape> {
+  /**
+   * Lancement d'un brouillon (`attente_information`) après l'accord humain, campagne déjà rattachée : tâches et porte préparées,
+   * entrées posées sur l'étape 1 AVANT la transition (un arrêt entre les deux se rejoue, la clé `information_recue` n'étant pas encore prise), puis démarrage.
+   * Faux si la mission n'est plus en attente d'information ou a été prise entre-temps. Une porte refusée lève (la mission reste en attente).
+   */
+  async function lancer(companyId: string, missionId: string, entrees: Record<string, unknown>): Promise<boolean> {
+    const m = await base.lireMission(companyId, missionId);
+    if (!m) throw new Error(`Mission « ${missionId} » inconnue.`);
+    if (m.etat !== "attente_information") return false;
+    const p = await preparer(m);
+    const premiere = p?.etapes.find((e) => e.rang === 1 && e.tentative === 1);
+    if (!p || !premiere) return false;
+    await base.majEtape(companyId, premiere.id, { entree: entrees });
+    if (!(await appliquer(companyId, m.id, 0, 1, "information_recue")).applique) return false;
+    await lancerRang(m, p.gabarit, await base.lireEtapes(companyId, m.id), 1);
+    return true;
+  }
+
+  async function traiterResultat(companyId: string, r: { missionId: string; rang: number; tentative: number; sortie: unknown; cleEvenement?: string; revisionLivrable?: string }): Promise<ResultatEtape> {
     const m = await base.lireMission(companyId, r.missionId);
     if (!m) throw new Error(`Mission « ${r.missionId} » inconnue.`);
     if (m.etat !== "en_cours" || m.rangCourant !== r.rang) {
@@ -293,7 +325,7 @@ export function creerExecuteur(deps: DepsExecuteur) {
       await journal(m, "moteur.sortie_hors_contrat", { rang: r.rang, erreurs: verdict.erreurs }, etape.issueId);
       return { statut: "refuse", erreurs: verdict.erreurs };
     }
-    await base.majEtape(companyId, etape.id, { sortie: r.sortie, etat: "terminee" });
+    await base.majEtape(companyId, etape.id, { sortie: r.sortie, etat: "terminee", ...(r.revisionLivrable ? { revisionLivrable: r.revisionLivrable } : {}) });
     const derniere = r.rang === Math.max(...p.gabarit.etapes.map((e) => e.rang));
     const evenement: EvenementMission = !derniere ? "sortie_valide_etape" : p.gabarit.porte ? "sortie_valide_sous_porte" : "sortie_valide_finale";
     const t = await appliquer(companyId, m.id, r.rang, r.tentative, evenement, r.cleEvenement);
@@ -305,6 +337,60 @@ export function creerExecuteur(deps: DepsExecuteur) {
       await cloturer(m, etape);
     }
     return { statut: "accepte", erreurs: [] };
+  }
+
+  /** Clé déjà appliquée : le même run rejoue son dépôt, sans effet. */
+  const dejaApplique = async (companyId: string, cle: string) => (await base.lireExecution(companyId, cle))?.statut === "appliquee";
+
+  /** Refus d'un événement hors tableau, constaté avant toute écriture (évite la branche `TransitionInvalide` de `appliquer`, qui rend `applique: true` à une clé rejouée). */
+  function transitionPermise(etat: EtatMission, evenement: EvenementMission): boolean {
+    try {
+      transitionner(etat, evenement);
+      return true;
+    } catch (e) {
+      if (e instanceof TransitionInvalide) return false;
+      throw e;
+    }
+  }
+
+  /** Verdict du relecteur sur une mission en revue ; la clé porte l'identifiant du run : même run rejoué sans effet, nouveau run appliqué. */
+  async function traiterVerdict(companyId: string, v: { missionId: string; rang: number; tentative: number; accepte: boolean; runId: string; justification?: string }) {
+    const m = await base.lireMission(companyId, v.missionId);
+    if (!m) throw new Error(`Mission « ${v.missionId} » inconnue.`);
+    const evenement: EvenementMission = v.accepte ? "porte_franchie" : "changements_demandes";
+    if (await dejaApplique(companyId, cleEvenement(m.id, v.rang, v.tentative, evenement, v.runId))) return { statut: "rejeu" as const, etat: m.etat };
+    if (!transitionPermise(m.etat, evenement)) return { statut: "transition_invalide" as const, etat: m.etat };
+    // L'étape repasse en cours avant la transition : un arrêt entre les deux ne doit pas faire retraiter l'ancienne sortie par la reprise.
+    const etape = v.accepte ? undefined : (await base.lireEtapes(companyId, m.id)).find((e) => e.rang === v.rang && e.tentative === v.tentative);
+    if (etape) await base.majEtape(companyId, etape.id, { etat: "en_cours" });
+    const t = await appliquer(companyId, m.id, v.rang, v.tentative, evenement, v.runId);
+    if (t.applique) await journal(m, "moteur.verdict", { rang: v.rang, verdict: v.accepte ? "accepte" : "changements_demandes", ...(v.justification ? { justification: v.justification } : {}) });
+    if (t.applique && etape?.issueId) {
+      // Changements demandés : le rédacteur reprend sa tâche. shortcut: un arrêt entre la transition et ce réveil le laisse endormi (la clé « etape » du réveil initial est déjà appliquée, la reprise ne le rejoue pas) ; le veilleur des tâches orphelines le rattrape, à revoir si ce délai gêne.
+      await hote.issues.update(etape.issueId, { status: STATUT_PROJETE.en_cours }, companyId);
+      await reveiller(m, v.rang, v.tentative, etape.issueId, "correction", v.runId);
+    }
+    return { statut: t.applique ? ("applique" as const) : ("rejeu" as const), etat: t.etat ?? m.etat };
+  }
+
+  /**
+   * Refus humain à l'approbation : l'hôte a déjà rendu la tâche à son assigné (statut `in_progress`, `returnAssignee`, voir
+   * issue-execution-policy.ts), donc aucun réveil ici. La clé est liée à la décision : un rejeu, ou un refus ancien relu, ne fait rien.
+   */
+  async function changementsNatifs(companyId: string, issueId: string): Promise<void> {
+    const etape = await base.etapeParIssue(companyId, issueId);
+    if (!etape) return;
+    const m = await base.lireMission(companyId, etape.missionId);
+    if (!m || m.etat !== "attente_autorisation") return;
+    const tache = (await hote.issues.get(issueId, companyId)) as { updatedAt?: Date | string; executionState?: { status?: string; lastDecisionOutcome?: string | null; lastDecisionId?: string | null } | null } | null;
+    const natif = tache?.executionState;
+    // `status` distingue un refus en cours d'une décision ancienne dont la trace reste dans l'état natif.
+    if (natif?.status !== "changes_requested" || natif.lastDecisionOutcome !== "changes_requested") return;
+    const source = `humain:${natif.lastDecisionId ?? new Date(tache?.updatedAt ?? 0).toISOString()}`;
+    if (await dejaApplique(companyId, cleEvenement(m.id, etape.rang, etape.tentative, "changements_demandes", source))) return;
+    // L'étape repasse en cours avant la transition, comme pour un verdict de relecteur.
+    await base.majEtape(companyId, etape.id, { etat: "en_cours" });
+    if ((await appliquer(companyId, m.id, etape.rang, etape.tentative, "changements_demandes", source)).applique) await journal(m, "moteur.changements_humains", { rang: etape.rang }, issueId);
   }
 
   async function avancerAuRang(companyId: string, missionId: string, rang: number) {
@@ -322,14 +408,27 @@ export function creerExecuteur(deps: DepsExecuteur) {
     if (m.etat === "attente_information") {
       // Arrêt entre `entree_manquante` et la mise à jour de la tâche et de l'étape : on réapplique, sans réveiller de modèle.
       const etape = (await base.lireEtapes(m.companyId, m.id)).find((e) => e.tentative === 1 && e.etat !== "terminee");
+      if (!etape && m.issueRacineId) {
+        // Brouillon du chat (aucune étape) : refusé par l'humain sur toutes ses cartes, il est annulé, sinon il reste listé comme actif.
+        const cartes = (await hote.issues.listInteractions(m.issueRacineId, m.companyId)).filter((c) => c.kind === "request_confirmation" && String((c.payload as { detailsMarkdown?: unknown }).detailsMarkdown ?? "").split("\n").includes(`Mission : ${m.id}`));
+        if (cartes.length > 0 && cartes.every((c) => c.status === "rejected") && (await appliquer(m.companyId, m.id, 0, 1, "annulation")).applique) await journal(m, "moteur.brouillon_refuse", {});
+        return;
+      }
       return etape?.etat === "en_attente" ? mettreEnAttenteInformation(m.companyId, etape) : undefined;
     }
     if (m.etat === "resultat_confirme") {
       // Arrêt entre la dernière sortie valide et la clôture ; avec porte, la suite appartient à la porte.
-      if (charger(m.gabaritCle, m.gabaritVersion).porte) return;
       const etapes = (await base.lireEtapes(m.companyId, m.id)).filter((e) => e.tentative === 1);
       const derniere = etapes.at(-1);
+      if (charger(m.gabaritCle, m.gabaritVersion).porte && !(await approuvee(m.companyId, derniere?.issueId))) return;
       return derniere ? cloturer(m, derniere) : undefined;
+    }
+    if (m.etat === "attente_autorisation") {
+      // Approbation (ou `done` sans approbation) survenue pendant l'arrêt, sans événement.
+      const etape = (await base.lireEtapes(m.companyId, m.id)).find((e) => e.rang === Math.max(1, m.rangCourant) && e.tentative === 1);
+      const tache = etape ? await trouverTache(m.companyId, `mission:${m.id}:${etape.rang}`) : null;
+      if (!tache) return;
+      return tache.status === "done" ? surDoneNatif(m.companyId, tache.id) : changementsNatifs(m.companyId, tache.id);
     }
     if (m.etat !== "prete" && m.etat !== "en_cours") return;
     const p = await preparer(m);
@@ -397,21 +496,44 @@ export function creerExecuteur(deps: DepsExecuteur) {
   /** Filet `issue.updated` : un `done` natif sans sortie valide ne change rien à la mission, la tâche retrouve son statut projeté. */
   async function surDoneNatif(companyId: string, issueId: string): Promise<void> {
     const etape = await base.etapeParIssue(companyId, issueId);
-    if (!etape || (etape.etat === "terminee" && etape.sortie !== null)) return;
+    if (!etape) return;
     const m = await base.lireMission(companyId, etape.missionId);
     if (!m || ["cloturee", "annulee", "echec"].includes(m.etat)) return;
+    let type = "done_sans_sortie";
+    if (m.etat === "attente_autorisation") {
+      // shortcut: seule l'approbation sans effet externe clôture ici, l'exécution d'un effet approuvé arrive avec #51.
+      const sansEffet = chargerContrat(m.contratId, m.contratVersion).effetExterne === "aucun";
+      if (sansEffet && (await approuvee(companyId, etape.issueId ?? issueId))) {
+        // Approuvée sur une autre révision que celle relue : pas de clôture, la tâche est rouverte comme un done sans approbation.
+        if (etape.revisionLivrable && (await deps.revisionLivrable(companyId, issueId)) !== etape.revisionLivrable) type = "revision_changee";
+        else {
+          await appliquer(companyId, m.id, etape.rang, etape.tentative, "approuvee_sans_effet");
+          return cloturer(m, etape);
+        }
+      }
+    } else if (etape.etat === "terminee" && etape.sortie !== null) return;
     // Statut projeté : `backlog` pour une étape à venir, sinon celui de l'état de la mission.
     const rangCourant = m.etat === "blocage" ? Math.max(1, m.rangCourant) : m.rangCourant; // comme `bloquer` : un blocage avant l'étape 1 concerne l'étape 1
     const projete = etape.etat === "en_attente" && etape.rang > rangCourant ? "backlog" : STATUT_PROJETE[m.etat];
     await hote.issues.update(issueId, { status: projete }, companyId);
-    await journal(m, "moteur.done_sans_sortie", { rang: etape.rang }, issueId);
+    await journal(m, `moteur.${type}`, { rang: etape.rang }, issueId);
   }
 
   return {
     demarrerMission: (companyId: string, missionId: string) => enFile(missionId, () => demarrer(companyId, missionId)),
+    lancerMission: (companyId: string, missionId: string, entrees: Record<string, unknown>) => enFile(missionId, () => lancer(companyId, missionId, entrees)),
     recevoirResultat: (companyId: string, r: Parameters<typeof traiterResultat>[1]) => enFile(r.missionId, () => traiterResultat(companyId, r)),
+    deposerVerdict: (companyId: string, v: Parameters<typeof traiterVerdict>[1]) => enFile(v.missionId, () => traiterVerdict(companyId, v)),
     reprendre,
-    surDoneNatif,
+    surChangementsNatifs: async (companyId: string, issueId: string) => {
+      const etape = await base.etapeParIssue(companyId, issueId);
+      return etape ? enFile(etape.missionId, () => changementsNatifs(companyId, issueId)) : undefined;
+    },
+    // Dans la file de la mission, comme les autres entrées : l'approbation écrit plusieurs transitions.
+    surDoneNatif: async (companyId: string, issueId: string) => {
+      const etape = await base.etapeParIssue(companyId, issueId);
+      return etape ? enFile(etape.missionId, () => surDoneNatif(companyId, issueId)) : undefined;
+    },
   };
 }
 
