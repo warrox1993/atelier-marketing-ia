@@ -107,9 +107,7 @@
       "teamleader": "atelier-teamleader",
       "bce": "atelier-bce",
       "bnb": "atelier-bnb",
-      "fsma": "atelier-fsma",
       "osm": "atelier-osm",
-      "b2c": "atelier-b2c",
       "liens": "atelier-liens",
       "extraction": "atelier-extraction",
       "audit": "atelier-audit",
@@ -148,7 +146,7 @@
     },
     "depotProspects": {
       "route": "tache.prospects.deposer (POST /taches/:issueId/prospects)",
-      "description": "Services de prospection (bce, bnb, fsma, osm, b2c), en lecture seule pour le rôle prospection : chaque réponse brute et signée d'un outil est déposée par cette route, avec les « arguments » exacts de l'appel ; le serveur en tire les prospects, déduit le mode et applique les exclusions. Jamais de prospect recopié à la main. Chaque service a sa carte de galerie Paperclip atelier-<service> (atelier-bce, atelier-bnb, atelier-fsma, atelier-osm, atelier-b2c ; patch socle 0011, lecture seule) : le bootstrap réserve la connexion créée par la carte au seul rôle prospection ; une connexion générique vers l'adresse de boucle locale /mcp/<service> reste reconnue."
+      "description": "Services de prospection (bce, bnb, osm), en lecture seule pour le rôle prospection : chaque réponse brute et signée d'un outil est déposée par cette route, avec les « arguments » exacts de l'appel ; le serveur en tire les prospects, déduit le mode et applique les exclusions. Jamais de prospect recopié à la main. Chaque service a sa carte de galerie Paperclip atelier-<service> (atelier-bce, atelier-bnb, atelier-osm ; patch socle 0011, lecture seule) : le bootstrap réserve la connexion créée par la carte au seul rôle prospection ; une connexion générique vers l'adresse de boucle locale /mcp/<service> reste reconnue."
     }
   },
   "agents": [
@@ -431,13 +429,17 @@
           "WebSearch",
           "mcp__paperclip-assigned",
           "mcp__Paperclip_connections__connections_search",
-          "mcp__Paperclip_connections__connection_request"
+          "mcp__Paperclip_connections__connection_request",
+          "mcp__paperclip-assigned__atelier_marketing-ia_mission_etat",
+          "mcp__paperclip-assigned__atelier_marketing-ia_sources_lister"
         ],
         "mutation": [
           "Bash(curl *)",
           "Write",
           "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_document",
-          "mcp__paperclip-assigned__atelier_marketing-ia_etat_fabrication"
+          "mcp__paperclip-assigned__atelier_marketing-ia_etat_fabrication",
+          "mcp__paperclip-assigned__atelier_marketing-ia_livrable_deposer",
+          "mcp__paperclip-assigned__atelier_marketing-ia_decision_demander"
         ],
         "interdits": [
           "WebFetch",
@@ -448,19 +450,13 @@
           "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_video",
           "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_image",
           "mcp__paperclip-assigned__atelier_marketing-ia_voir_rendu",
-          "mcp__paperclip-assigned__atelier_marketing-ia_mission_etat",
-          "mcp__paperclip-assigned__atelier_marketing-ia_livrable_deposer",
-          "mcp__paperclip-assigned__atelier_marketing-ia_verdict_deposer",
-          "mcp__paperclip-assigned__atelier_marketing-ia_decision_demander",
-          "mcp__paperclip-assigned__atelier_marketing-ia_sources_lister"
+          "mcp__paperclip-assigned__atelier_marketing-ia_verdict_deposer"
         ]
       },
       "connexions": {
         "bce": "lecture",
         "bnb": "lecture",
-        "fsma": "lecture",
         "osm": "lecture",
-        "b2c": "lecture",
         "extraction": "lecture",
         "captation": "lecture"
       },
@@ -516,11 +512,15 @@
           "WebSearch",
           "mcp__paperclip-assigned",
           "mcp__Paperclip_connections__connections_search",
-          "mcp__Paperclip_connections__connection_request"
+          "mcp__Paperclip_connections__connection_request",
+          "mcp__paperclip-assigned__atelier_marketing-ia_mission_etat",
+          "mcp__paperclip-assigned__atelier_marketing-ia_sources_lister"
         ],
         "mutation": [
           "Bash(curl *)",
-          "Write"
+          "Write",
+          "mcp__paperclip-assigned__atelier_marketing-ia_livrable_deposer",
+          "mcp__paperclip-assigned__atelier_marketing-ia_decision_demander"
         ],
         "interdits": [
           "WebFetch",
@@ -533,11 +533,7 @@
           "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_video",
           "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_image",
           "mcp__paperclip-assigned__atelier_marketing-ia_voir_rendu",
-          "mcp__paperclip-assigned__atelier_marketing-ia_mission_etat",
-          "mcp__paperclip-assigned__atelier_marketing-ia_livrable_deposer",
-          "mcp__paperclip-assigned__atelier_marketing-ia_verdict_deposer",
-          "mcp__paperclip-assigned__atelier_marketing-ia_decision_demander",
-          "mcp__paperclip-assigned__atelier_marketing-ia_sources_lister"
+          "mcp__paperclip-assigned__atelier_marketing-ia_verdict_deposer"
         ]
       },
       "connexions": {

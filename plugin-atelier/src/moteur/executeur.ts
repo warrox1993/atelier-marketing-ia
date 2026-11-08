@@ -7,15 +7,18 @@
  * tâche : l'unicité vient de la lecture par origine avant chaque création.
  */
 import type { PluginContext } from "@paperclipai/plugin-sdk";
-import { PLUGIN_ID } from "../contrats/index.js";
+import { IdNatif, PLUGIN_ID } from "../contrats/index.js";
 import type { BaseAtelier, EtapeMission, Mission } from "../serveur/base.js";
 import { chargerContrat, verifierEntrees, verifierSortie } from "./contrats.js";
-import { chargerGabarit as chargerGabaritReel, poserPorteMission, PorteRefusee, type DepsPorteMission, type Gabarit } from "./gabarits.js";
+import { chargerGabarit as chargerGabaritReel, poserPorteMission, PorteRefusee, rangPorte, type DepsPorteMission, type Gabarit } from "./gabarits.js";
+import { exporterLot, type EtapesCode } from "./export-crm.js";
 import { STATUT_PROJETE, TransitionInvalide, transitionner, type EtatMission, type EvenementMission } from "./transitions.js";
 
 export const ORIGINE_ETAPE = `plugin:${PLUGIN_ID}:etape-mission` as const;
 const CONTEXTE = "atelier.moteur";
 const ROLE_COORDINATEUR = "coordinateur";
+/** Essais d'export CRM partiels avant de signaler l'effet comme ambigu. */
+const ESSAIS_EXPORT_MAX = 3;
 
 export interface HoteMoteur {
   issues: Pick<PluginContext["issues"], "create" | "list" | "get" | "update" | "requestWakeup" | "listInteractions">;
@@ -65,6 +68,8 @@ export interface DepsExecuteur {
   revisionLivrable: (companyId: string, issueId: string) => Promise<string | null>;
   /** Charge un gabarit versionné ; injectable pour les tests, le vrai par défaut. */
   chargerGabarit?: (cle: string, version?: number) => Gabarit;
+  /** Étapes en code (nature `code`) du gabarit ; absentes, une mission qui en a une part en blocage. */
+  etapesCode?: EtapesCode;
 }
 
 export interface ResultatEtape {
@@ -80,7 +85,7 @@ export function moteurActif(config: Record<string, unknown> | null | undefined):
   return config?.moteurMissions === true;
 }
 
-const cleEvenement = (missionId: string, rang: number, tentative: number, evenement: string, source?: string) =>
+export const cleEvenement = (missionId: string, rang: number, tentative: number, evenement: string, source?: string) =>
   `${missionId}:${rang}:${tentative}:${evenement}${source ? `:${source}` : ""}`;
 
 export function creerExecuteur(deps: DepsExecuteur) {
@@ -146,6 +151,11 @@ export function creerExecuteur(deps: DepsExecuteur) {
   async function creerTaches(m: Mission, gabarit: Gabarit): Promise<EtapeMission[]> {
     let precedente: string | null = null;
     for (const g of [...gabarit.etapes].sort((a, b) => a.rang - b.rang)) {
+      if (g.nature === "code") {
+        // Étape en code : aucune tâche native, ni agent, ni maillon de la chaîne de blocage.
+        if (!(await base.lireEtapes(m.companyId, m.id)).some((e) => e.rang === g.rang && e.tentative === 1)) await base.creerEtape({ companyId: m.companyId, missionId: m.id, rang: g.rang, role: g.role, etat: "en_attente", issueId: null });
+        continue;
+      }
       const originId = `mission:${m.id}:${g.rang}`;
       await base.enregistrerExecution({ companyId: m.companyId, missionId: m.id, rang: g.rang, type: "creation_tache", cle: cleEvenement(m.id, g.rang, 1, "creation_tache"), requete: { originId } });
       // shortcut: un issues.create en vol qui aboutit après cette lecture crée un doublon (le SDK ne transmet pas idempotencyKey), passer à l'idempotence native quand le SDK la transmettra.
@@ -168,7 +178,8 @@ export function creerExecuteur(deps: DepsExecuteur) {
     return base.lireEtapes(m.companyId, m.id);
   }
 
-  const issueDe = (etapes: EtapeMission[], rang: number) => etapes.find((e) => e.rang === rang && e.issueId)?.issueId ?? null;
+  /** Tâche de l'étape `rang`, ou à défaut de la dernière étape antérieure qui en a une (une étape en code n'a pas de tâche). */
+  const issueDe = (etapes: EtapeMission[], rang: number) => etapes.filter((e) => e.rang <= rang && e.issueId).sort((a, b) => b.rang - a.rang)[0]?.issueId ?? null;
 
   /** Version du gabarit et contrats de la mission et de chaque étape : tout doit exister à la version enregistrée. */
   function contratsValides(m: Mission, gabarit: Gabarit): boolean {
@@ -221,7 +232,7 @@ export function creerExecuteur(deps: DepsExecuteur) {
   /** Porte d'office sur la tâche de la dernière étape, une fois par clé ; faux si la mission est partie en blocage (porte refusée). */
   async function poserPorte(m: Mission, gabarit: Gabarit, etapes: EtapeMission[]): Promise<boolean> {
     if (!gabarit.porte) return true;
-    const rangDernier = Math.max(...gabarit.etapes.map((e) => e.rang));
+    const rangDernier = rangPorte(gabarit);
     const cle = cleEvenement(m.id, rangDernier, 1, "pose_porte");
     const neuve = await base.enregistrerExecution({ companyId: m.companyId, missionId: m.id, rang: rangDernier, type: "evenement", cle, requete: { issueId: issueDe(etapes, rangDernier) } });
     if (!neuve && (await base.lireExecution(m.companyId, cle))?.statut === "appliquee") return true;
@@ -243,16 +254,19 @@ export function creerExecuteur(deps: DepsExecuteur) {
     return true;
   }
 
-  /** Entrées de l'étape : la sortie de la précédente, complétée par ses propres entrées. */
+  const objet = (v: unknown) => (typeof v === "object" && v !== null && !Array.isArray(v) ? (v as Record<string, unknown>) : {});
+
+  /** Entrées de l'étape : l'accumulation, par rang croissant, de l'entrée puis de la sortie de chaque étape antérieure, puis de ses propres entrées (le plus récent l'emporte). */
   const entreesDe = (etapes: EtapeMission[], rang: number): Record<string, unknown> => {
-    const objet = (v: unknown) => (typeof v === "object" && v !== null && !Array.isArray(v) ? (v as Record<string, unknown>) : {});
-    return { ...objet(etapes.find((e) => e.rang === rang - 1)?.sortie), ...objet(etapes.find((e) => e.rang === rang)?.entree) };
+    const avant = etapes.filter((e) => e.tentative === 1 && e.rang < rang).sort((a, b) => a.rang - b.rang);
+    return { ...avant.reduce((acc, e) => ({ ...acc, ...objet(e.entree), ...objet(e.sortie) }), {}), ...objet(etapes.find((e) => e.rang === rang)?.entree) };
   };
 
   /** Démarre l'étape `rang` : entrées vérifiées en code (sans modèle), puis réveil direct de son agent. */
-  async function lancerRang(m: Mission, gabarit: Gabarit, etapes: EtapeMission[], rang: number) {
+  async function lancerRang(m: Mission, gabarit: Gabarit, etapes: EtapeMission[], rang: number, rejeu = false) {
     const g = gabarit.etapes.find((e) => e.rang === rang)!;
     const etape = etapes.find((e) => e.rang === rang && e.tentative === 1)!;
+    if (g.nature === "code") return lancerEtapeCode(m, gabarit, etapes, g, etape, rejeu);
     const manquantes = verifierEntrees(chargerContrat(g.contratId, g.contratVersion), entreesDe(etapes, rang)).manquantes;
     if (manquantes.length > 0) {
       if ((await appliquer(m.companyId, m.id, rang, 1, "entree_manquante")).applique) {
@@ -267,6 +281,32 @@ export function creerExecuteur(deps: DepsExecuteur) {
     await hote.issues.update(etape.issueId!, { status: STATUT_PROJETE.prete }, m.companyId);
     await base.majEtape(m.companyId, etape.id, { etat: "en_cours" });
     await reveiller(m, rang, 1, etape.issueId!, "etape");
+  }
+
+  /**
+   * Étape en code d'avant la porte : aucun contrôle de contrat ni réveil. `rejeu` : le démarrage est déjà pris (reprise), le calcul se refait,
+   * c'est une lecture. Entrées manquantes : même chemin que pour un agent, sans tâche à bloquer.
+   */
+  async function lancerEtapeCode(m: Mission, gabarit: Gabarit, etapes: EtapeMission[], g: Gabarit["etapes"][number], etape: EtapeMission, rejeu: boolean) {
+    const calcul = deps.etapesCode?.avantPorte[g.action ?? ""];
+    if (!calcul) return void (await bloquer(m, etapes, "contrat_invalide"));
+    await base.changerRangMission(m.companyId, m.id, m.rangCourant, g.rang);
+    if (!rejeu && !(await appliquer(m.companyId, m.id, g.rang, 1, "demarrage")).applique) return;
+    const r = await calcul({ companyId: m.companyId, missionId: m.id, campagneId: m.campagneId, entrees: entreesDe(etapes, g.rang) });
+    if ("manquantes" in r) {
+      if ((await appliquer(m.companyId, m.id, g.rang, 1, "entree_manquante")).applique) {
+        await mettreEnAttenteInformation(m.companyId, etape);
+        await journal(m, "moteur.entree_manquante", { rang: g.rang, manquantes: r.manquantes }, etape.issueId);
+      }
+      return;
+    }
+    await terminerEtapeCode(m, etape, r.sortie);
+  }
+
+  /** Sortie de l'étape en code, transition, puis étape suivante ; rejouable (la transition rejouée rend `applique: false` une fois prise). */
+  async function terminerEtapeCode(m: Mission, etape: EtapeMission, sortie: Record<string, unknown>) {
+    await base.majEtape(m.companyId, etape.id, { sortie, etat: "terminee" });
+    if ((await appliquer(m.companyId, m.id, etape.rang, 1, "sortie_valide_etape")).applique) await avancerAuRang(m.companyId, m.id, etape.rang + 1);
   }
 
   /** Tâche en `blocked` puis étape en `attente_information` : dans cet ordre, pour que la reprise (étape encore `en_attente`) refasse les deux. */
@@ -326,7 +366,7 @@ export function creerExecuteur(deps: DepsExecuteur) {
       return { statut: "refuse", erreurs: verdict.erreurs };
     }
     await base.majEtape(companyId, etape.id, { sortie: r.sortie, etat: "terminee", ...(r.revisionLivrable ? { revisionLivrable: r.revisionLivrable } : {}) });
-    const derniere = r.rang === Math.max(...p.gabarit.etapes.map((e) => e.rang));
+    const derniere = r.rang === rangPorte(p.gabarit);
     const evenement: EvenementMission = !derniere ? "sortie_valide_etape" : p.gabarit.porte ? "sortie_valide_sous_porte" : "sortie_valide_finale";
     const t = await appliquer(companyId, m.id, r.rang, r.tentative, evenement, r.cleEvenement);
     if (!t.applique) return { statut: "ignore", erreurs: [] };
@@ -418,9 +458,9 @@ export function creerExecuteur(deps: DepsExecuteur) {
     }
     if (m.etat === "resultat_confirme") {
       // Arrêt entre la dernière sortie valide et la clôture ; avec porte, la suite appartient à la porte.
-      const etapes = (await base.lireEtapes(m.companyId, m.id)).filter((e) => e.tentative === 1);
-      const derniere = etapes.at(-1);
-      if (charger(m.gabaritCle, m.gabaritVersion).porte && !(await approuvee(m.companyId, derniere?.issueId))) return;
+      const gabarit = charger(m.gabaritCle, m.gabaritVersion);
+      const derniere = (await base.lireEtapes(m.companyId, m.id)).find((e) => e.tentative === 1 && e.rang === rangPorte(gabarit));
+      if (gabarit.porte && !(await approuvee(m.companyId, derniere?.issueId))) return;
       return derniere ? cloturer(m, derniere) : undefined;
     }
     if (m.etat === "attente_autorisation") {
@@ -429,6 +469,10 @@ export function creerExecuteur(deps: DepsExecuteur) {
       const tache = etape ? await trouverTache(m.companyId, `mission:${m.id}:${etape.rang}`) : null;
       if (!tache) return;
       return tache.status === "done" ? surDoneNatif(m.companyId, tache.id) : changementsNatifs(m.companyId, tache.id);
+    }
+    if (m.etat === "en_execution") {
+      const gabarit = charger(m.gabaritCle, m.gabaritVersion);
+      return executerEffet(m, gabarit);
     }
     if (m.etat !== "prete" && m.etat !== "en_cours") return;
     const p = await preparer(m);
@@ -446,6 +490,10 @@ export function creerExecuteur(deps: DepsExecuteur) {
       return;
     }
     if (!courante) return;
+    if (p.gabarit.etapes.find((e) => e.rang === courante.rang)?.nature === "code") {
+      // Arrêt pendant une étape en code : le calcul est une lecture, on le rejoue ; une sortie déjà écrite reprend à la transition.
+      return courante.etat === "terminee" && courante.sortie !== null ? terminerEtapeCode(m, courante, objet(courante.sortie)) : lancerRang(m, p.gabarit, p.etapes, courante.rang, true);
+    }
     if (courante.etat === "terminee" && courante.sortie !== null) {
       await traiterResultat(m.companyId, { missionId: m.id, rang: courante.rang, tentative: courante.tentative, sortie: courante.sortie });
     } else if (courante.issueId && courante.etat === "en_attente") {
@@ -493,6 +541,70 @@ export function creerExecuteur(deps: DepsExecuteur) {
     return suite;
   }
 
+  /** Effet ambigu : la mission part en blocage et le coordinateur est signalé sur la dernière tâche existante. */
+  async function effetAmbigu(m: Mission, rang: number, donnees: Record<string, unknown>) {
+    if (!(await appliquer(m.companyId, m.id, rang, 1, "effet_ambigu")).applique) return;
+    await journal(m, "moteur.blocage", { evenement: "effet_ambigu", rang, ...donnees });
+    await signalerBlocage(m, await base.lireEtapes(m.companyId, m.id), rang);
+  }
+
+  /**
+   * Mission `en_execution` : les étapes en code d'après la porte, dans l'ordre, sans réveil de modèle ni transition entre elles.
+   * Une étape terminée est sautée ; l'export partiel s'arrête là (la reprise ne réécrit que les échecs, clés `appliquee`).
+   */
+  async function executerEffet(m: Mission, gabarit: Gabarit) {
+    const ec = deps.etapesCode;
+    for (const g of gabarit.etapes.filter((e) => e.nature === "code" && e.rang > rangPorte(gabarit)).sort((a, b) => a.rang - b.rang)) {
+      const courantes = (await base.lireEtapes(m.companyId, m.id)).filter((e) => e.tentative === 1);
+      const etape = courantes.find((e) => e.rang === g.rang);
+      if (!etape || etape.etat === "terminee") continue;
+      await base.changerRangMission(m.companyId, m.id, (await base.lireMission(m.companyId, m.id))!.rangCourant, g.rang);
+      const termine = (sortie: Record<string, unknown>) => base.majEtape(m.companyId, etape.id, { sortie, etat: "terminee" });
+      const ctx = { companyId: m.companyId, missionId: m.id, campagneId: m.campagneId, entrees: entreesDe(courantes, g.rang) };
+      if (g.action === "carte_groupee") await termine({ approuvee: true });
+      else if (g.action === "export_crm" && ec) {
+        const lot = await ec.lot(ctx);
+        if (lot.length === 0) return effetAmbigu(m, g.rang, { raison: "lot_vide" });
+        const exportes = new Set(lot.map((l) => l.prospectId));
+        const ecartes = (Array.isArray(ctx.entrees.prospectIds) ? (ctx.entrees.prospectIds as unknown[]) : []).filter((id) => !exportes.has(id as string));
+        // Valeurs d'une sortie d'agent : seuls des identifiants conformes, en nombre borné, entrent au journal.
+        if (ecartes.length > 0) await journalUneFois(m, g.rang, "export_ids_ecartes", { ids: ecartes.filter((id) => IdNatif.safeParse(id).success).slice(0, 50), total: ecartes.length });
+        // La marque informe, elle n'écarte jamais ; identifiants seuls, aucune coordonnée, et avant l'export : un arrêt après l'écriture ne la perd pas.
+        const marques = lot.filter((l) => l.marqueOpposition).map((l) => l.prospectId);
+        if (marques.length > 0) await journalUneFois(m, g.rang, "export_marque_opposition", { ids: marques });
+        const precedents = typeof objet(etape.sortie).essais === "number" ? (objet(etape.sortie).essais as number) : 0;
+        const { reussis, echecs, attente } = await exporterLot(ec.deps, m, g.rang, lot);
+        if (attente) {
+          // Attente de l'approbation humaine : ni échec ni essai, la mission reste en exécution et une passe suivante rejoue la même clé.
+          await base.majEtape(m.companyId, etape.id, { sortie: { reussis, echecs: [], essais: precedents, enAttente: true }, etat: "en_cours" });
+          await journalUneFois(m, g.rang, "export_en_attente", { appelId: attente.appelId, consigne: attente.consigne });
+          return;
+        }
+        const essais = precedents + 1;
+        if (echecs.length === 0) await termine({ reussis, echecs: [], essais });
+        else {
+          await base.majEtape(m.companyId, etape.id, { sortie: { reussis, echecs, essais }, etat: "en_cours" });
+          await journal(m, "moteur.export_partiel", { rang: g.rang, reussis, echecs, essais });
+          if (essais >= ESSAIS_EXPORT_MAX) await effetAmbigu(m, g.rang, { raison: "export_partiel", essais });
+          return;
+        }
+      } else if (g.action === "verifier" && ec) {
+        const exporte = courantes.find((e) => e.rang === g.rang - 1);
+        const reussis = (Array.isArray(objet(exporte?.sortie).reussis) ? (objet(exporte?.sortie).reussis as string[]) : []);
+        const absents: string[] = [];
+        for (const id of reussis) if (!(await ec.deps.crm.confirme(m.companyId, m.id, id))) absents.push(id);
+        if (absents.length > 0) return effetAmbigu(m, g.rang, { raison: "absents_du_crm", absents });
+        await termine({ verifies: reussis.length });
+      } else return effetAmbigu(m, g.rang, { raison: "etape_code_inconnue", action: g.action ?? null });
+    }
+    // Toutes les étapes en code sont terminées (atteint sans `return`) : confirmation puis clôture, rejouables seules si un arrêt les sépare.
+    const rangFinal = Math.max(...gabarit.etapes.map((e) => e.rang));
+    const derniere = (await base.lireEtapes(m.companyId, m.id)).find((e) => e.tentative === 1 && e.rang === rangFinal);
+    if (!derniere) return;
+    await appliquer(m.companyId, m.id, rangFinal, 1, "effet_confirme");
+    return cloturer(m, derniere);
+  }
+
   /** Filet `issue.updated` : un `done` natif sans sortie valide ne change rien à la mission, la tâche retrouve son statut projeté. */
   async function surDoneNatif(companyId: string, issueId: string): Promise<void> {
     const etape = await base.etapeParIssue(companyId, issueId);
@@ -501,12 +613,17 @@ export function creerExecuteur(deps: DepsExecuteur) {
     if (!m || ["cloturee", "annulee", "echec"].includes(m.etat)) return;
     let type = "done_sans_sortie";
     if (m.etat === "attente_autorisation") {
-      // shortcut: seule l'approbation sans effet externe clôture ici, l'exécution d'un effet approuvé arrive avec #51.
+      // shortcut: sans étape en code après la porte, seule l'approbation sans effet externe clôture ici ; un effet externe hors étape en code n'a pas d'exécuteur, à ajouter avec le gabarit qui en aura besoin.
+      const gabarit = charger(m.gabaritCle, m.gabaritVersion);
+      const avecEtapesCode = gabarit.etapes.some((e) => e.nature === "code" && e.rang > rangPorte(gabarit));
       const sansEffet = chargerContrat(m.contratId, m.contratVersion).effetExterne === "aucun";
-      if (sansEffet && (await approuvee(companyId, etape.issueId ?? issueId))) {
+      if ((sansEffet || avecEtapesCode) && (await approuvee(companyId, etape.issueId ?? issueId))) {
         // Approuvée sur une autre révision que celle relue : pas de clôture, la tâche est rouverte comme un done sans approbation.
         if (etape.revisionLivrable && (await deps.revisionLivrable(companyId, issueId)) !== etape.revisionLivrable) type = "revision_changee";
-        else {
+        else if (avecEtapesCode) {
+          await appliquer(companyId, m.id, etape.rang, etape.tentative, "approuvee_avec_effet");
+          return executerEffet(m, gabarit);
+        } else {
           await appliquer(companyId, m.id, etape.rang, etape.tentative, "approuvee_sans_effet");
           return cloturer(m, etape);
         }

@@ -1,0 +1,147 @@
+/**
+ * Moteur de missions (#51, tâche 3) : étapes « en code » de WF-01 et export CRM.
+ * Les calculs d'avant la porte sont des lectures, donc rejouables ; l'export est la seule écriture externe : un appel unique par lot
+ * (la décision humaine « modifier_crm » n'autorise qu'une diffusion), clé par contenu du lot (`demandee`, écriture, `appliquee`)
+ * et dédoublonnage avant écriture (présence constatée dans le CRM).
+ */
+import { createHash } from "node:crypto";
+import { CanalContact, CodeReferentiel, ServiceExportCrm, type Empreinte, type Prospect } from "../contrats/index.js";
+import type { BaseAtelier } from "../serveur/base.js";
+import { dedoublonner, exclusionsProspect, figureDansOppositions, type ContexteProspection } from "../serveur/regles-prospection.js";
+import { cleEvenement } from "./executeur.js";
+
+/** Réponse de l'écriture : acceptée, en attente de l'approbation humaine (rien n'est parti) ou refusée pour certains prospects. */
+export type ResultatEcriture =
+  | { etat: "acceptee" }
+  | { etat: "en_attente"; appelId: string | null; consigne: string | null }
+  | { etat: "refusee"; refuses: Array<{ prospectId: string; motif: string }>; motif: string };
+
+/** CRM vu par le moteur : lecture de présence et écriture d'un lot (jamais d'écriture réelle dans les tests). */
+export interface CrmMoteur {
+  existe(companyId: string, missionId: string, prospectId: string): Promise<boolean>;
+  /** L'écriture est effective (simulée ou confirmée) ; une diffusion seulement préparée ne l'est pas encore. */
+  confirme(companyId: string, missionId: string, prospectId: string): Promise<boolean>;
+  ecrire(companyId: string, e: { missionId: string; prospectIds: string[]; cle: string }): Promise<ResultatEcriture>;
+}
+
+export interface DepsExport {
+  crm: CrmMoteur;
+  base: Pick<BaseAtelier, "enregistrerExecution" | "marquerExecution" | "lireExecution">;
+}
+
+export interface ContexteEtapeCode { companyId: string; missionId: string; campagneId: string | null; entrees: Record<string, unknown> }
+export type SortieCode = { sortie: Record<string, unknown> } | { manquantes: string[] };
+
+export interface EtapesCode {
+  /** Étapes en code d'avant la porte, par `action` du gabarit. */
+  avantPorte: Record<string, (c: ContexteEtapeCode) => Promise<SortieCode>>;
+  /** Lot à exporter, calculé à l'approbation. */
+  lot(c: ContexteEtapeCode): Promise<Array<{ prospectId: string; marqueOpposition: boolean }>>;
+  deps: DepsExport;
+}
+
+/**
+ * Exporte le lot en un appel. Les prospects déjà présents sont réussis d'office ; un refus ne retire que les prospects refusés,
+ * le reste repart dans un nouvel appel (autre contenu, donc autre clé) ; en attente d'approbation : ni échec ni essai, la clé se rejoue.
+ */
+export async function exporterLot(
+  deps: DepsExport,
+  m: { companyId: string; id: string },
+  rang: number,
+  lot: Array<{ prospectId: string; marqueOpposition: boolean }>,
+): Promise<{ reussis: string[]; echecs: Array<{ prospectId: string; raison: string }>; attente: { appelId: string | null; consigne: string | null } | null }> {
+  const reussis: string[] = [];
+  const echecs: Array<{ prospectId: string; raison: string }> = [];
+  let attente: { appelId: string | null; consigne: string | null } | null = null;
+  const tous = [...new Set(lot.map((l) => l.prospectId))];
+  let restants = [...tous];
+  try {
+    const presents = new Set<string>();
+    for (const id of restants) if (await deps.crm.existe(m.companyId, m.id, id)) presents.add(id);
+    reussis.push(...restants.filter((id) => presents.has(id)));
+    restants = restants.filter((id) => !presents.has(id));
+    while (restants.length > 0) {
+      const empreinte = createHash("sha256").update([...restants].sort().join(",")).digest("hex").slice(0, 32);
+      const cle = `moteur:${cleEvenement(m.id, rang, 1, "export_crm", empreinte)}`;
+      if ((await deps.base.lireExecution(m.companyId, cle))?.statut === "appliquee") {
+        reussis.push(...restants);
+        break;
+      }
+      await deps.base.enregistrerExecution({ companyId: m.companyId, missionId: m.id, rang, type: "effet_externe", cle, requete: { prospectIds: restants } });
+      const r = await deps.crm.ecrire(m.companyId, { missionId: m.id, prospectIds: restants, cle });
+      if (r.etat === "acceptee") {
+        await deps.base.marquerExecution(m.companyId, cle, "appliquee");
+        reussis.push(...restants);
+        break;
+      }
+      if (r.etat === "en_attente") {
+        attente = { appelId: r.appelId, consigne: r.consigne };
+        break;
+      }
+      const refuses = new Map(r.refuses.filter((x) => restants.includes(x.prospectId)).map((x) => [x.prospectId, x.motif]));
+      if (refuses.size === 0) {
+        for (const prospectId of restants) echecs.push({ prospectId, raison: r.motif });
+        break;
+      }
+      for (const [prospectId, raison] of refuses) echecs.push({ prospectId, raison });
+      restants = restants.filter((id) => !refuses.has(id));
+    }
+  } catch (e) {
+    const raison = e instanceof Error ? e.message : String(e);
+    for (const prospectId of restants) echecs.push({ prospectId, raison });
+  }
+  return { reussis: tous.filter((id) => reussis.includes(id)), echecs, attente };
+}
+
+const ids = (v: unknown): string[] => (Array.isArray(v) ? v.filter((x): x is string => typeof x === "string") : []);
+
+export interface DepsEtapesWf01 {
+  lireProspects(companyId: string, ids: string[]): Promise<Prospect[]>;
+  contexteExclusions(companyId: string, campagneId: string | null, prospects: Prospect[]): Promise<{ contexte: ContexteProspection; oppositions: Empreinte[] }>;
+  deps: DepsExport;
+}
+
+/** Règles pures de WF-01 : périmètre, déduplication, exclusions (les oppositions marquent, ne bloquent jamais) et lot. */
+export function creerEtapesWf01(d: DepsEtapesWf01): EtapesCode {
+  return {
+    deps: d.deps,
+    avantPorte: {
+      async valider_perimetre(c) {
+        const e = c.entrees.exportCrm;
+        const o = typeof e === "object" && e !== null && !Array.isArray(e) ? (e as Record<string, unknown>) : null;
+        const valide = o !== null && ServiceExportCrm.safeParse(o.service).success && CanalContact.safeParse(o.canal).success && CodeReferentiel.safeParse(o.entite).success;
+        return valide ? { sortie: { perimetreValide: true } } : { manquantes: ["exportCrm"] };
+      },
+      async dedupliquer(c) {
+        const { gardes, exclus } = dedoublonner(await d.lireProspects(c.companyId, ids(c.entrees.prospectIds)), new Date().toISOString());
+        const prospectIds = gardes.map((p) => p.id);
+        // Le même identifiant listé deux fois n'est pas un doublon à écarter : il reste le prospect gardé.
+        return { sortie: { prospectIds, doublons: exclus.map((x) => x.prospect.id).filter((id) => !prospectIds.includes(id)) } };
+      },
+      async controler_exclusions(c) {
+        // Une sortie d'agent du rang 5 peut réintroduire un doublon écarté au rang 3.
+        const doublons = new Set(ids(c.entrees.doublons));
+        const prospects = await d.lireProspects(c.companyId, ids(c.entrees.prospectIds).filter((id) => !doublons.has(id)));
+        const { contexte, oppositions } = await d.contexteExclusions(c.companyId, c.campagneId, prospects);
+        const retenus: string[] = [];
+        const marques: string[] = [];
+        const exclus: Array<{ prospectId: string; motifs: string[] }> = [];
+        for (const p of prospects) {
+          const motifs: string[] = exclusionsProspect(p, contexte).map((x) => x.motif);
+          if (p.statut === "exclu") for (const motif of p.motifsExclusion.length > 0 ? p.motifsExclusion.map((x) => x.motif) : ["statut_exclu"]) if (!motifs.includes(motif)) motifs.push(motif);
+          if (motifs.length > 0) exclus.push({ prospectId: p.id, motifs });
+          else {
+            retenus.push(p.id);
+            if (figureDansOppositions(p, oppositions)) marques.push(p.id);
+          }
+        }
+        return { sortie: { retenus, marques, exclus } };
+      },
+    },
+    async lot(c) {
+      const retenus = new Set(ids(c.entrees.retenus));
+      const marques = new Set(ids(c.entrees.marques));
+      return ids(c.entrees.prospectIds).filter((id) => retenus.has(id)).map((prospectId) => ({ prospectId, marqueOpposition: marques.has(prospectId) }));
+    },
+  };
+}

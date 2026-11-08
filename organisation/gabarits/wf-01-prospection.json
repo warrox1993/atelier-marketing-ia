@@ -1,0 +1,22 @@
+{
+  "cle": "wf-01-prospection",
+  "version": 1,
+  "description": "Chaîne de prospection en dix étapes : valider le périmètre, collecter, dédupliquer, qualifier, enrichir, contrôler les exclusions, produire le lot, carte groupée, export CRM, vérification. Les étapes de nature « code » (périmètre, déduplication, exclusions, carte, export, vérification) ne réveillent aucun agent ; les oppositions marquent les prospects sans jamais les écarter. Chaque étape d'agent a son contrat (collecte, qualification, enrichissement par le rôle enrichissement-coordonnees, lot). Livrable interne : porte et approbation humaine, aucun contact de prospect.",
+  "typeLivrable": "interne",
+  "etapes": [
+    { "rang": 1, "action": "valider_perimetre", "nature": "code", "role": "prospection", "competences": [], "contratId": "wf-01-prospection", "contratVersion": 1 },
+    { "rang": 2, "action": "collecter", "role": "prospection", "competences": ["recherche-prospects", "recherche-sourcee"], "contratId": "wf-01-collecte", "contratVersion": 1 },
+    { "rang": 3, "action": "dedupliquer", "nature": "code", "role": "prospection", "competences": [], "contratId": "wf-01-prospection", "contratVersion": 1 },
+    { "rang": 4, "action": "qualifier", "role": "prospection", "competences": ["qualification-prospects"], "contratId": "wf-01-prospection", "contratVersion": 1 },
+    { "rang": 5, "action": "enrichir", "role": "enrichissement-coordonnees", "competences": ["coordonnees-recherche"], "contratId": "wf-01-enrichissement", "contratVersion": 1 },
+    { "rang": 6, "action": "controler_exclusions", "nature": "code", "role": "prospection", "competences": [], "contratId": "wf-01-prospection", "contratVersion": 1 },
+    { "rang": 7, "action": "produire_lot", "role": "prospection", "competences": ["qualification-prospects"], "contratId": "wf-01-lot", "contratVersion": 1 },
+    { "rang": 8, "action": "carte_groupee", "nature": "code", "role": "prospection", "competences": [], "contratId": "wf-01-prospection", "contratVersion": 1 },
+    { "rang": 9, "action": "export_crm", "nature": "code", "role": "crm-conversion", "competences": [], "contratId": "wf-01-prospection", "contratVersion": 1 },
+    { "rang": 10, "action": "verifier", "nature": "code", "role": "prospection", "competences": [], "contratId": "wf-01-prospection", "contratVersion": 1 }
+  ],
+  "revues": ["exigences", "metier"],
+  "conformiteSiModuleActif": false,
+  "porte": true,
+  "approbationRequise": true
+}

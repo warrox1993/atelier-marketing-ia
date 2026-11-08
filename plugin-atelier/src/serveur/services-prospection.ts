@@ -26,6 +26,7 @@ import {
   EnregistrerParticulierEntree,
   ExclureProspectEntree,
   FusionnerDoublonsEntree,
+  IdNatif,
   LIMITES,
   ListerProspectsEntree,
   NumeroBce,
@@ -57,7 +58,7 @@ import { resumerProspects, type PageProspectsComplete } from "./prospects-resume
 import type { BaseAtelier } from "./base.js";
 import { normaliserPourEmpreinte } from "./base-clients.js";
 import { chiffrer, empreinte, memeCle, TAILLE_CLE_CHIFFREMENT, TAILLE_CLE_HMAC_MIN, temoinCleEmpreintes } from "./chiffrement-donnees.js";
-import { erreur, erreurValidation } from "./erreurs.js";
+import { ErreurAtelier, erreur, erreurValidation } from "./erreurs.js";
 import { estOutilEcriture } from "./preuve-approbation.js";
 import { resoudreReponse, type PrendreReponse } from "./reference-reponse.js";
 import { AGE_MAX_REPONSE_S, deduireModeReponse, reponseEcriture, type ModeEffectif } from "./regles-donnees.js";
@@ -68,7 +69,7 @@ import { fusionnerProspects, trouverPairesDoublons } from "./rapprochement-prosp
 import { dedoublonner, empreintesDuProspect, exclusionsProspect, figureDansOppositions, natureAdresse, telephoneBelgeE164, type ContexteProspection, type ZoneChoisie } from "./regles-prospection.js";
 import { calculerScore, type CritereEvalue } from "./score-prospects.js";
 import { numerosTelephone } from "./regles-telephone.js";
-import { routesBaseClients } from "./services-base-clients.js";
+import { exigerOppositionsLisibles, routesBaseClients } from "./services-base-clients.js";
 import { DERIVE_HORLOGE_S, chargeEcriture, empreinteArgumentsAppel, verifierEnveloppe } from "./signatures.js";
 
 type Issue = NonNullable<Awaited<ReturnType<PluginContext["issues"]["get"]>>>;
@@ -82,6 +83,12 @@ export interface ServicesProspection {
   clesDonnees?: (companyId: string) => Promise<ClesDonnees>;
   /** Avertissement en cours sur la clé des empreintes de l'entreprise (null si le témoin correspond) ; ne refuse jamais rien. */
   avertissementCle?: (companyId: string) => string | null;
+  /** Étapes en code du moteur (WF-01) : prospects de CETTE entreprise seulement ; un identifiant inconnu ou d'une autre entreprise est ignoré. */
+  lireProspectsMoteur?: (companyId: string, ids: string[]) => Promise<Prospect[]>;
+  /** Contexte des exclusions et oppositions des prospects, comme l'export CRM ; refuse (conflit) si des oppositions sont à réimporter. */
+  contexteExclusionsMoteur?: (companyId: string, campagneId: string | null, prospects: Prospect[]) => Promise<{ contexte: ContexteProspection; oppositions: Empreinte[] }>;
+  /** Mode effectif de la campagne (celui que la route d'export applique) : l'export du moteur ne lit que les exports de ce mode. */
+  modeMoteur?: (companyId: string, campagneId: string | null) => Promise<ModeExecution>;
 }
 
 export interface DependancesProspection {
@@ -1283,6 +1290,28 @@ export function routesProspection(d: DependancesProspection): Partial<Record<Cle
     d.services.clesDonnees = clesDonnees;
     d.services.avertissementCle = avertissementCle;
     d.services.listerQualifies = (companyId, query, plafond) => parcourirQualifies(companyId, filtresDeRequete(companyId, query), plafond);
+    d.services.lireProspectsMoteur = async (companyId, ids) => {
+      const lus: Prospect[] = [];
+      for (const id of ids) {
+        if (!IdNatif.safeParse(id).success) continue;
+        try {
+          lus.push(await relire(companyId, id));
+        } catch (e) {
+          // Seul « introuvable » est ignoré : une panne de lecture ne doit pas faire disparaître un prospect du lot.
+          if (!(e instanceof ErreurAtelier && e.code === "introuvable")) throw e;
+        }
+      }
+      return lus;
+    };
+    d.services.modeMoteur = async (companyId, campagneId) => (await d.modeEffectif(companyId, campagneId ? await base.lireCampagne(companyId, campagneId) : null)).mode;
+    d.services.contexteExclusionsMoteur = async (companyId, campagneId, prospects) => {
+      await exigerOppositionsLisibles(base, companyId);
+      const campagne = campagneId ? await base.lireCampagne(companyId, campagneId) : null;
+      const mode = (await d.modeEffectif(companyId, campagne)).mode;
+      const { contexte } = await contexteExclusions(companyId, campagne, mode, prospects, maintenant().toISOString());
+      const valeurs = [...new Set(prospects.flatMap((p) => empreintesDuProspect(p).map((e) => e.valeur)))];
+      return { contexte, oppositions: (await base.oppositionsPour(companyId, valeurs)).map((o) => ({ type: o.type as TypeEmpreinte, valeur: o.valeur })) };
+    };
   }
 
   /** Page entière (forme historique) : les filtres de la requête, sans les paramètres de vue. */

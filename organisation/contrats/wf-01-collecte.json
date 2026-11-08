@@ -1,0 +1,38 @@
+{
+  "id": "wf-01-collecte",
+  "version": 1,
+  "tache": "Collecter des prospects à partir de réponses d'outils signées, sans qualification.",
+  "roleResponsable": "prospection",
+  "entreesRequises": [
+    {
+      "cle": "brief",
+      "indexRegistre": 0
+    },
+    {
+      "cle": "cibles",
+      "indexRegistre": 1
+    }
+  ],
+  "sortie": {
+    "champs": {
+      "reponsesBrutesSignees": "liste_chaines",
+      "prospectIds": "liste_chaines",
+      "limites": "liste_chaines"
+    }
+  },
+  "controleurs": [
+    "code",
+    "code",
+    "relecteur"
+  ],
+  "competences": [
+    "recherche-prospects",
+    "recherche-sourcee"
+  ],
+  "plafondTours": 40,
+  "plafondJetons": 150000,
+  "effetExterne": "depot_plugin",
+  "conduiteEchec": "blocage",
+  "mesureReussite": "Chaque prospect collecté est issu d'une réponse signée et déposée.",
+  "maturite": "M1"
+}

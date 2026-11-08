@@ -309,6 +309,54 @@ await controle("CASCADE : supprimer une mission supprime ses étapes et ses exé
   assert.equal((await base.lireEtapes(SOC, autre)).length, 1);
 });
 
+await controle("prospectDansExportNonRefuse (#51) : un export non refusé contient le prospect ; refusé, autre prospect ou autre entreprise : non", async () => {
+  // Le vrai DDL de la migration 007 (la table a pour clés étrangères companies, issues et diffusions du schéma minimal ci-dessus).
+  const ddl = /CREATE TABLE IF NOT EXISTS \S+\.exports_crm \([\s\S]*?\n\);/u.exec(readFileSync(join(RACINE, "plugin-atelier", "migrations", "007_prospection.sql"), "utf8"))?.[0];
+  assert.ok(ddl, "DDL de exports_crm introuvable dans la migration 007");
+  await client.query(ddl);
+  const [accepte, refuse, absent] = ["b1000000-0000-4000-8000-000000000001", "b1000000-0000-4000-8000-000000000002", "b1000000-0000-4000-8000-000000000003"] as const;
+  const inserer = (id: string, prospects: string[], etat: string, motif: string | null) =>
+    client.query(
+      `INSERT INTO ${ESPACE_BASE}.exports_crm (id, company_id, issue_id, entite, referentiel_version, service, canal, prospect_ids, etat, motif_refus, cle_idempotence, mode, demande_par)
+       VALUES (gen_random_uuid(), $1, $2, 'entite-1', 1, 'crm', 'courriel', $3::jsonb, $4, $5, $6, 'demonstration', 'systeme:moteur-missions')`,
+      [SOC, ISSUE_A, JSON.stringify(prospects), etat, motif, id],
+    );
+  await inserer("cle-export-simulee", [accepte], "simulee", null);
+  await inserer("cle-export-refusee", [refuse], "refusee", "base légale absente");
+  assert.equal(await base.prospectDansExportNonRefuse(SOC, accepte, "crm", "demonstration"), true);
+  assert.equal(await base.prospectDansExportNonRefuse(SOC, refuse, "crm", "demonstration"), false);
+  assert.equal(await base.prospectDansExportNonRefuse(SOC, absent, "crm", "demonstration"), false);
+  assert.equal(await base.prospectDansExportNonRefuse(AUTRE, accepte, "crm", "demonstration"), false);
+  // Un export d'un autre service ou d'un autre mode ne vaut pas présence dans ce CRM, dans ce mode.
+  assert.equal(await base.prospectDansExportNonRefuse(SOC, accepte, "pipedrive", "demonstration"), false);
+  assert.equal(await base.prospectDansExportNonRefuse(SOC, accepte, "crm", "reel"), false);
+});
+
+await controle("prospectExportConfirme (#51) : seule une diffusion simulée ou confirmée vaut écriture ; préparée, ambiguë ou autre entreprise : non", async () => {
+  await client.query(`ALTER TABLE ${ESPACE_BASE}.diffusions ADD COLUMN IF NOT EXISTS etat text`);
+  const lier = async (cle: string, prospect: string, etat: string) => {
+    const [d] = await brut(`INSERT INTO ${ESPACE_BASE}.diffusions (id, etat) VALUES (gen_random_uuid(), $1) RETURNING id`, [etat]);
+    await client.query(
+      `INSERT INTO ${ESPACE_BASE}.exports_crm (id, company_id, issue_id, diffusion_id, entite, referentiel_version, service, canal, prospect_ids, etat, cle_idempotence, mode, demande_par)
+       VALUES (gen_random_uuid(), $1, $2, $3, 'entite-1', 1, 'crm', 'courriel', $4::jsonb, 'preparee', $5, 'reel', 'systeme:moteur-missions')`,
+      [SOC, ISSUE_A, d!.id, JSON.stringify([prospect]), cle],
+    );
+  };
+  const [simule, confirme, prepare, ambigu] = ["c1000000-0000-4000-8000-000000000001", "c1000000-0000-4000-8000-000000000002", "c1000000-0000-4000-8000-000000000003", "c1000000-0000-4000-8000-000000000004"] as const;
+  await lier("cle-diffusion-simulee", simule, "simulee");
+  await lier("cle-diffusion-confirmee", confirme, "confirmee");
+  await lier("cle-diffusion-preparee", prepare, "preparee");
+  await lier("cle-diffusion-ambigue", ambigu, "ambigue_a_reconcilier");
+  assert.equal(await base.prospectExportConfirme(SOC, simule, "crm", "reel"), true);
+  assert.equal(await base.prospectExportConfirme(SOC, confirme, "crm", "reel"), true);
+  assert.equal(await base.prospectExportConfirme(SOC, prepare, "crm", "reel"), false);
+  assert.equal(await base.prospectExportConfirme(SOC, ambigu, "crm", "reel"), false);
+  assert.equal(await base.prospectExportConfirme(AUTRE, simule, "crm", "reel"), false);
+  // Autre service ou autre mode : non.
+  assert.equal(await base.prospectExportConfirme(SOC, simule, "odoo", "reel"), false);
+  assert.equal(await base.prospectExportConfirme(SOC, simule, "crm", "demonstration"), false);
+});
+
 await client.end();
 if (echecs > 0) {
   console.log(`${echecs} contrôle(s) en échec`);

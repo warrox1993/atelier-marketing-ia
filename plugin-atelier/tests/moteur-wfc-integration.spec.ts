@@ -420,6 +420,32 @@ describe("mission.lancer : refus, dans l'ordre, sans rien écrire", () => {
     expect(b.instantane()).toBe(avant);
   });
 
+  it("carte plus récente refusée : l'ancien accord ne vaut plus", async () => {
+    const { b, mission, carte } = await prete();
+    b.accepter(carte);
+    b.interactions.push({ ...carte, id: "carte-recente", status: "rejected", resolvedByUserId: null, createdAt: "2099-01-01T00:00:00.000Z" });
+    const avant = b.instantane();
+    await expect(b.lancer({ missionId: mission.id, campagneId: CAMPAGNE, entrees })).rejects.toMatchObject({ code: "elevation_refusee" });
+    expect(b.instantane()).toBe(avant);
+  });
+
+  it("agent qui n'est pas l'assigné de la tâche racine : refus, même carte acceptée", async () => {
+    const { b, mission, carte } = await prete();
+    b.accepter(carte);
+    const avant = b.instantane();
+    const intrus: ActeurHote = { type: "agent", id: "agent-relecteur", agentId: "agent-relecteur", userId: null, runId: "run-intrus" };
+    await expect(b.lancer({ missionId: mission.id, campagneId: CAMPAGNE, entrees }, SOC, intrus)).rejects.toMatchObject({ code: "elevation_refusee" });
+    expect(b.instantane()).toBe(avant);
+  });
+
+  it("le coordinateur assigné à la tâche racine lance, carte acceptée", async () => {
+    const { b, mission, carte } = await prete();
+    b.accepter(carte);
+    const coordinateur: ActeurHote = { type: "agent", id: COORD, agentId: COORD, userId: null, runId: "run-coord" };
+    await b.lancer({ missionId: mission.id, campagneId: CAMPAGNE, entrees }, SOC, coordinateur);
+    expect(b.missions.get(mission.id as string)!.etat).not.toBe("attente_information");
+  });
+
   it("carte acceptée mais pour une autre mission : refus", async () => {
     const { b, mission, carte } = await prete();
     carte.status = "accepted";

@@ -8,6 +8,7 @@ import { CLE_LIVRABLE_DEFAUT, GABARIT_LIVRABLE_PUBLIC, LIMITES } from "../contra
 import contenuReseauSocial from "../../../organisation/gabarits/contenu-reseau-social.json" with { type: "json" };
 import documentInterne from "../../../organisation/gabarits/document-interne.json" with { type: "json" };
 import wfCContenu from "../../../organisation/gabarits/wf-c-contenu.json" with { type: "json" };
+import wf01Prospection from "../../../organisation/gabarits/wf-01-prospection.json" with { type: "json" };
 import { chargerContrat } from "./contrats.js";
 import { agentDuRegistre } from "./registre.js";
 
@@ -21,9 +22,14 @@ const Etape = z.object({
   /** Contrat de l'étape : sans contrat valide, de ce rôle, l'étape est refusée. */
   contratId: z.string().min(1),
   contratVersion: z.number().int().min(1),
+  /** Étape faite en code (pas de réveil d'agent) : le rôle est le responsable, le contrat et les compétences ne sont pas contrôlés. Absent = étape d'agent. */
+  nature: z.enum(["agent", "code"]).optional(),
+  /** Nom de l'étape dans la chaîne (libellé stable, absent pour les gabarits à étape unique). */
+  action: z.string().min(1).optional(),
 }).strict().superRefine((e, ctx) => {
   const agent = agentDuRegistre(e.role);
   if (!agent) return ctx.addIssue({ code: "custom", message: `Rôle d'étape « ${e.role} » absent du registre des agents.`, path: ["role"] });
+  if (e.nature === "code") return;
   try {
     if (chargerContrat(e.contratId, e.contratVersion).roleResponsable !== e.role) ctx.addIssue({ code: "custom", message: `Le contrat « ${e.contratId} » n'est pas celui du rôle « ${e.role} ».`, path: ["contratId"] });
   } catch (err) {
@@ -48,7 +54,10 @@ export const Gabarit = z.object({
 }).strict();
 export type Gabarit = z.infer<typeof Gabarit>;
 
-const GABARITS: Gabarit[] = [contenuReseauSocial, documentInterne, wfCContenu].map((brut) => Gabarit.parse(brut));
+const GABARITS: Gabarit[] = [contenuReseauSocial, documentInterne, wfCContenu, wf01Prospection].map((brut) => Gabarit.parse(brut));
+
+/** Rang de la tâche sous porte : la dernière étape qui n'est pas faite en code (les étapes en code suivent la porte sans tâche). */
+export const rangPorte = (gabarit: Gabarit): number => Math.max(...gabarit.etapes.filter((e) => e.nature !== "code").map((e) => e.rang));
 
 /** Gabarit `cle` ; sans `version`, la plus récente. */
 export function chargerGabarit(cle: string, version?: number): Gabarit {

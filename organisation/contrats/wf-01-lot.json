@@ -1,0 +1,36 @@
+{
+  "id": "wf-01-lot",
+  "version": 1,
+  "tache": "Composer le lot final de prospects à exporter, parmi les prospects retenus.",
+  "roleResponsable": "prospection",
+  "entreesRequises": [
+    {
+      "cle": "brief",
+      "indexRegistre": 0
+    },
+    {
+      "cle": "cibles",
+      "indexRegistre": 1
+    }
+  ],
+  "sortie": {
+    "champs": {
+      "prospectIds": "liste_chaines",
+      "limites": "liste_chaines"
+    }
+  },
+  "controleurs": [
+    "code",
+    "code",
+    "relecteur"
+  ],
+  "competences": [
+    "qualification-prospects"
+  ],
+  "plafondTours": 30,
+  "plafondJetons": 100000,
+  "effetExterne": "aucun",
+  "conduiteEchec": "blocage",
+  "mesureReussite": "Le lot ne contient que des prospects issus de la chaîne, sans ajout hors liste.",
+  "maturite": "M1"
+}

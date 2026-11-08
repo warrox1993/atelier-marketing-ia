@@ -592,7 +592,7 @@ SERVICES_PASSERELLE = {
     "gbp": "atelier-google-business-profile", "facebook": "atelier-facebook", "instagram": "atelier-instagram",
     "linkedin": "atelier-linkedin", "linkedinprofil": "atelier-linkedin-profil", "crm": "atelier-hubspot", "pipedrive": "atelier-pipedrive",
     "odoo": "atelier-odoo", "teamleader": "atelier-teamleader",
-    "bce": "atelier-bce", "bnb": "atelier-bnb", "fsma": "atelier-fsma", "osm": "atelier-osm", "b2c": "atelier-b2c",
+    "bce": "atelier-bce", "bnb": "atelier-bnb", "osm": "atelier-osm",
     "liens": "atelier-liens",  # vérification de liens (verifier_url), service réel sans compte
     "extraction": "atelier-extraction",  # lecture de sites (extraire_site, Crawl4AI local), service réel sans compte
     "audit": "atelier-audit",  # audit de pages (auditer_page, Lighthouse), service réel sans compte
@@ -602,7 +602,7 @@ SERVICES_PASSERELLE = {
 }
 # Services de prospection (lot P10) : leurs réponses se déposent par tache.prospects.deposer (/prospects),
 # pas par tache.donnees.deposer (/donnees-connexion).
-SERVICES_PROSPECTION = {"bce", "bnb", "fsma", "osm", "b2c"}
+SERVICES_PROSPECTION = {"bce", "bnb", "osm"}
 ACCES_CONNEXION = {"lecture", "ecriture_sur_accord"}
 # Outils d'écriture interdits à tout rôle qui écrit sur le service, même sur accord (politique native
 # « block » par outil, champ « outilsBloques » du registre) : message privé Facebook (décision de l'opérateur du 15/10/2026).

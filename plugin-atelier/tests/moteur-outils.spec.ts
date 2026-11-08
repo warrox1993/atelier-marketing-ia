@@ -111,9 +111,9 @@ function hoteDouble() {
     async listInteractions(issueId: string, companyId: string) {
       return issues.get(issueId)?.companyId === companyId ? cartes.filter((c) => c.issueId === issueId) : [];
     },
-    async requestConfirmation(issueId: string, interaction: Record<string, unknown>, companyId: string) {
+    async requestConfirmation(issueId: string, interaction: Record<string, unknown>, companyId: string, options?: { authorAgentId?: string }) {
       if (issues.get(issueId)?.companyId !== companyId) throw new Error("Issue not found");
-      const carte = { id: `carte-${cartes.length + 1}`, issueId, kind: "request_confirmation", status: "pending", ...interaction };
+      const carte = { id: `carte-${cartes.length + 1}`, issueId, kind: "request_confirmation", status: "pending", createdByAgentId: options?.authorAgentId ?? null, ...interaction };
       cartes.push(carte);
       return carte;
     },
@@ -482,7 +482,7 @@ describe("outils du moteur de missions", () => {
     const premier = await t.outils.decision_demander(demande, t.run(REDACTEUR, "run-a"));
     expect(premier.error).toBeUndefined();
     expect(t.cartes).toHaveLength(1);
-    expect(t.cartes[0]).toMatchObject({ issueId: ISSUE, kind: "request_confirmation", status: "pending", continuationPolicy: "wake_assignee_on_accept", payload: { prompt: "Quel ton pour la marque ?" } });
+    expect(t.cartes[0]).toMatchObject({ issueId: ISSUE, kind: "request_confirmation", status: "pending", createdByAgentId: REDACTEUR, continuationPolicy: "wake_assignee_on_accept", payload: { prompt: "Quel ton pour la marque ?" } });
     expect(t.missions.get(MISSION)!.etat).toBe("en_cours");
     expect(t.etat()).toEqual({ ...avant, cartes: 1 });
     // un autre run, même question : la carte en attente est réutilisée

@@ -430,6 +430,8 @@ export function routesBaseClients(d: DependancesProspection, o: OutilsProspectio
   routes["tache.prospects.exporter"] = async (r) =>
     d.exclusif(r.companyId, async () => {
       const entree = analyser(DemanderExportCrmEntree, r.corps, "Export vers le CRM");
+      // Un agent ne doit pas pouvoir occuper d'avance la clé d'un export du moteur.
+      if (entree.cleIdempotence.startsWith("moteur:") && r.acteur.type !== "systeme") erreur("acces_refuse", "Ce préfixe de clé est réservé au moteur de missions.");
       const issue = await d.tache(r.companyId, r.params.issueId ?? "");
       const deja = await base.lireExportCrmParCle(r.companyId, entree.cleIdempotence);
       if (deja) {

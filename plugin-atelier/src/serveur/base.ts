@@ -1768,6 +1768,18 @@ export function creerBase(db: Db) {
     return r ? exportDepuisLigne(r) : null;
   }
 
+  /** Un export non refusé (simulé, préparé, confirmé, à réconcilier) de ce service et de ce mode contient déjà ce prospect : le moteur ne le réécrit pas. */
+  async function prospectDansExportNonRefuse(companyId: string, prospectId: string, service: string, mode: string) {
+    const [r] = await q(`select 1 as un from ${ns}.exports_crm where company_id = $1 and service = $3 and mode = $4 and etat <> 'refusee' and prospect_ids @> jsonb_build_array($2::text) limit 1`, [companyId, prospectId, service, mode]);
+    return r !== undefined;
+  }
+
+  /** L'état réel se lit sur la diffusion liée (`exports_crm.etat` n'est écrit qu'à l'insertion) : simulée ou confirmée ; préparée ou ambiguë, pas encore. */
+  async function prospectExportConfirme(companyId: string, prospectId: string, service: string, mode: string) {
+    const [r] = await q(`select 1 as un from ${ns}.exports_crm e join ${ns}.diffusions d on d.id = e.diffusion_id where e.company_id = $1 and e.service = $3 and e.mode = $4 and d.etat in ('simulee', 'confirmee') and e.prospect_ids @> jsonb_build_array($2::text) limit 1`, [companyId, prospectId, service, mode]);
+    return r !== undefined;
+  }
+
   async function insererExportCrm(e: {
     id: string; companyId: string; issueId: string; diffusionId: string | null; entite: string; referentielVersion: number; service: string; canal: string; prospectIds: string[];
     verifications: unknown; etat: string; motifRefus: string | null; cleIdempotence: string; mode: string; demandePar: string; creeLe: string;
@@ -1957,7 +1969,7 @@ export function creerBase(db: Db) {
     referentielProspection, insererProspect, majProspect, remplacerProspectAReimporter, exclureProspect, ajouterEmpreintesProspect, insererScoreProspect,
     detailsProspects, listerProspects, insererOpposition, lireOpposition,
     insererImportBaseClients, insererClients, etatBaseClients, supprimerBaseClients, reglesVentesCroisees, clientsPourVentesCroisees, insererEtalonnage, issuesPourEtalonnage, scoresCourantsCible, insererScoreMesure,
-    lireExportCrmParCle, insererExportCrm,
+    lireExportCrmParCle, prospectDansExportNonRefuse, prospectExportConfirme, insererExportCrm,
     creerMission, lireMission, missionsActives, rattacherCampagneMission, changerEtatMission, creerEtape, lireEtapes, majEtape, enregistrerExecution, marquerExecution, lireExecution, changerRangMission, etapeParIssue,
   };
 }

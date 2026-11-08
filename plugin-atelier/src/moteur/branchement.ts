@@ -3,19 +3,69 @@
  * Sorti de `worker.ts` pour être testable avec un faux `ctx` ; même forme que `creerVeilleur` (`demarrer` / `arreter`).
  */
 import type { PluginContext, PluginToolDeclaration } from "@paperclipai/plugin-sdk";
-import type { Services } from "../serveur/atelier.js";
+import type { ActeurHote, GestionnaireRoute, Services } from "../serveur/atelier.js";
 import { creerBase } from "../serveur/base.js";
 import { creerServices } from "../serveur/services.js";
 import { routesLancement } from "../serveur/services-discussion.js";
 import { VEILLEUR } from "../serveur/veilleur.js";
 import { agentParSlug, creerExecuteur, creerResolveur, moteurActif, reprendreSiActif, type DepsPorteMoteur } from "./executeur.js";
-import { PorteRefusee } from "./gabarits.js";
+import { creerEtapesWf01, type CrmMoteur } from "./export-crm.js";
+import { chargerGabarit, PorteRefusee, rangPorte } from "./gabarits.js";
 import { creerOutilsMoteur, type EvaluerPorte, DECLARATION_MISSION_ETAT, DECLARATION_LIVRABLE_DEPOSER, DECLARATION_VERDICT_DEPOSER, DECLARATION_DECISION_DEMANDER, DECLARATION_SOURCES_LISTER } from "./outils.js";
 
 type BaseMoteur = ReturnType<typeof creerBase>;
 
 const configDe = (ctx: PluginContext) => async (companyId: string) => (await ctx.config.get(companyId)) as Record<string, unknown> | null;
 const agentsDeCtx = (ctx: PluginContext) => async (companyId: string) => (await ctx.agents.list({ companyId, limit: 200 })).filter((a) => a.companyId === companyId);
+
+const ACTEUR_MOTEUR: ActeurHote = { type: "systeme", id: "moteur-missions", agentId: null, userId: null, runId: null };
+/** États d'une diffusion acceptée : simulée (démonstration), préparée (preuve signée) ou confirmée. */
+// shortcut: en mode réel, rien n'exécute encore la preuve signée : la mission s'arrête en blocage (absents_du_crm) à la vérification, à lever avec l'exécuteur réel de WF-01.
+const EXPORT_ACCEPTE = new Set(["simulee", "preparee", "confirmee"]);
+const objet = (v: unknown): Record<string, unknown> => (typeof v === "object" && v !== null && !Array.isArray(v) ? (v as Record<string, unknown>) : {});
+
+/**
+ * CRM de production : l'écriture passe par la route `tache.prospects.exporter`, un seul appel par lot. La route exige la décision humaine
+ * « modifier_crm » sur l'appel exact : le moteur ne la crée, ne la simule et ne la contourne jamais. Une diffusion acceptée est une écriture ;
+ * l'attente d'approbation et le refus (prospects refusés, avec leur motif) sont rendus tels quels à `exporterLot` ; tout autre état (ambigu) lève une erreur.
+ */
+export function creerCrmProduction(base: BaseMoteur, exporter: GestionnaireRoute, modeDe: (companyId: string, campagneId: string | null) => Promise<"demonstration" | "reel">): CrmMoteur {
+  /** Mission, périmètre (service, canal, entité) de l'étape 1 et tâche de la porte. */
+  const perimetre = async (companyId: string, missionId: string) => {
+    const m = await base.lireMission(companyId, missionId);
+    if (!m) throw new Error(`Mission « ${missionId} » inconnue.`);
+    const etapes = (await base.lireEtapes(companyId, m.id)).filter((x) => x.tentative === 1);
+    const { service, canal, entite } = objet(objet(etapes.find((x) => x.rang === 1)?.entree).exportCrm);
+    const issueId = etapes.find((x) => x.rang === rangPorte(chargerGabarit(m.gabaritCle, m.gabaritVersion)))?.issueId;
+    if (typeof service !== "string" || typeof canal !== "string" || typeof entite !== "string" || !issueId) throw new Error("Export CRM : périmètre (service, canal, entité) ou tâche de la porte introuvable.");
+    return { m, service, canal, entite, issueId };
+  };
+  return {
+    async existe(companyId, missionId, prospectId) {
+      const { m, service } = await perimetre(companyId, missionId);
+      return base.prospectDansExportNonRefuse(companyId, prospectId, service, await modeDe(companyId, m.campagneId));
+    },
+    async confirme(companyId, missionId, prospectId) {
+      const { m, service } = await perimetre(companyId, missionId);
+      return base.prospectExportConfirme(companyId, prospectId, service, await modeDe(companyId, m.campagneId));
+    },
+    async ecrire(companyId, e) {
+      const { service, canal, entite, issueId } = await perimetre(companyId, e.missionId);
+      const rep = await exporter({ cle: "tache.prospects.exporter", params: { issueId }, query: {}, companyId, acteur: ACTEUR_MOTEUR, corps: { prospectIds: e.prospectIds, service, canal, entite, cleIdempotence: e.cle } });
+      const corps = objet(rep.corps);
+      const etat = String(corps.etat);
+      if (EXPORT_ACCEPTE.has(etat)) return { etat: "acceptee" };
+      const consigne = typeof corps.consigne === "string" ? corps.consigne : null;
+      if (etat === "en_attente_approbation") return { etat: "en_attente", appelId: typeof objet(corps.appel).id === "string" ? (objet(corps.appel).id as string) : null, consigne };
+      const motifRefus = objet(corps.export).motifRefus;
+      if (etat === "refusee") {
+        const refuses = (Array.isArray(corps.verifications) ? corps.verifications : []).map(objet).filter((v) => v.ok === false).map((v) => ({ prospectId: String(v.prospectId), motif: String(v.motif ?? "refusé") }));
+        return { etat: "refusee", refuses, motif: typeof motifRefus === "string" ? motifRefus : "Export refusé." };
+      }
+      throw new Error(`Export CRM non accepté (état ${etat}, statut ${rep.statut ?? 200}).${consigne ? ` ${consigne}` : typeof motifRefus === "string" ? ` ${motifRefus}` : ""}`);
+    },
+  };
+}
 
 /** Dépendances de la porte des missions : fiche du client, exigences de la campagne, politique native, humain responsable. */
 export function depsPorte(ctx: PluginContext, baseMoteur: BaseMoteur): DepsPorteMoteur {
@@ -46,8 +96,8 @@ export const revisionLivrableDe = (ctx: PluginContext, baseMoteur: BaseMoteur) =
   return porte ? ((await ctx.issues.documents.get(issueId, porte.cleLivrable, companyId))?.latestRevisionId ?? null) : null;
 };
 
-/** `routes` et `evaluerPorte` : ceux des services du plugin (verdicts et porte) ; sans eux, des services neufs sur la même base sont créés au premier appel. */
-export function brancherMoteur(ctx: PluginContext, baseMoteur: BaseMoteur = creerBase(ctx.db), routes?: Services["routes"], evaluerPorte?: EvaluerPorte) {
+/** `routes`, `evaluerPorte` et `lecturesMoteur` : ceux des services du plugin (verdicts, porte, export CRM, lectures des étapes en code) ; sans eux, des services neufs sur la même base sont créés au premier appel. */
+export function brancherMoteur(ctx: PluginContext, baseMoteur: BaseMoteur = creerBase(ctx.db), routes?: Services["routes"], evaluerPorte?: EvaluerPorte, lecturesMoteur?: Services["lecturesMoteur"]) {
   const configMoteur = configDe(ctx);
   const agentsDe = agentsDeCtx(ctx);
   // `companies.list` pagine : on lit jusqu'à une page incomplète.
@@ -59,6 +109,16 @@ export function brancherMoteur(ctx: PluginContext, baseMoteur: BaseMoteur = cree
       if (page.length < 100) return ids;
     }
   };
+  let secours: Services | undefined;
+  const services = () => (secours ??= creerServices(ctx, { base: baseMoteur }));
+  const lectures = () => (lecturesMoteur ?? services().lecturesMoteur)!;
+  const exporter: GestionnaireRoute = (r) => (routes ?? services().routes)["tache.prospects.exporter"]!(r);
+  // Étapes en code de WF-01 : lectures et route résolues à l'appel, comme le verdict et la porte (les services peuvent naître après le moteur).
+  const etapesCode = creerEtapesWf01({
+    lireProspects: (c, ids) => lectures().lireProspectsMoteur!(c, ids),
+    contexteExclusions: (c, campagneId, prospects) => lectures().contexteExclusionsMoteur!(c, campagneId, prospects),
+    deps: { crm: creerCrmProduction(baseMoteur, exporter, (c, campagneId) => lectures().modeMoteur!(c, campagneId)), base: baseMoteur },
+  });
   const moteur = creerExecuteur({
     hote: {
       issues: ctx.issues,
@@ -69,11 +129,10 @@ export function brancherMoteur(ctx: PluginContext, baseMoteur: BaseMoteur = cree
     porte: depsPorte(ctx, baseMoteur),
     horloge: () => new Date(),
     revisionLivrable: revisionLivrableDe(ctx, baseMoteur),
+    etapesCode,
   });
   // La route de lancement a besoin de l'exécuteur : elle s'ajoute ici aux routes du plugin (l'hôte les relit à chaque requête).
   if (routes) Object.assign(routes, routesLancement({ ctx, base: baseMoteur, executeur: moteur }));
-  let secours: Services | undefined;
-  const services = () => (secours ??= creerServices(ctx, { base: baseMoteur }));
   const verdict: Required<Services["routes"]>["tache.verdict"] = (r) => (routes ?? services().routes)["tache.verdict"]!(r);
   const evaluer: EvaluerPorte = (companyId, issueId, par) => (evaluerPorte ?? services().evaluerPorte!)(companyId, issueId, par);
   // Enregistrés même moteur désactivé (le réglage est par entreprise) : chaque appel refuse alors en `moteur_desactive`.

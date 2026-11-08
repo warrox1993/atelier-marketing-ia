@@ -11,7 +11,7 @@ import type { Services } from "../serveur/atelier.js";
 import type { BaseAtelier, EtapeMission, Mission } from "../serveur/base.js";
 import { ErreurAtelier } from "../serveur/erreurs.js";
 import { agentParSlug, moteurActif, type AgentListe, type Executeur } from "./executeur.js";
-import { chargerGabarit as chargerGabaritReel, revuesImposees, type Gabarit } from "./gabarits.js";
+import { chargerGabarit as chargerGabaritReel, rangPorte, revuesImposees, type Gabarit } from "./gabarits.js";
 
 export type ErreurOutil = { code: string; message: string; actionRecommandee: string };
 
@@ -169,7 +169,7 @@ export function creerOutilsMoteur(deps: DepsOutilsMoteur) {
       const { m, etape, p, gabarit } = c;
       // Sous porte, la dernière sortie se rattache au document relu : sans document, rien n'est écrit.
       let revisionLivrable: string | undefined;
-      if (gabarit.porte && etape.rang === Math.max(...gabarit.etapes.map((e) => e.rang))) {
+      if (gabarit.porte && etape.rang === rangPorte(gabarit)) {
         revisionLivrable = (await deps.revisionLivrable(run.companyId, etape.issueId!)) ?? undefined;
         if (!revisionLivrable) return refus("livrable_absent", "Aucun document livrable sur la tâche : la porte n'aurait rien à relire.", "Écrire d'abord le livrable dans le document de la tâche, puis redéposer.");
       }
@@ -213,7 +213,7 @@ export function creerOutilsMoteur(deps: DepsOutilsMoteur) {
       // Même carte que l'envoi d'emailing : une carte identique encore en attente est réutilisée, quel que soit le run.
       const attente = (await deps.issues.listInteractions(issueId, run.companyId)).find((i) => i.kind === "request_confirmation" && i.status === "pending" && i.payload.prompt === p.question);
       if (attente) return succes({ statut: "deja_demandee", carteId: attente.id });
-      const carte = await deps.issues.requestConfirmation(issueId, { continuationPolicy: "wake_assignee_on_accept", resolverPolicy: "human_only", payload: { version: 1, prompt: p.question, acceptLabel: "Valider", rejectLabel: "Refuser", supersedeOnUserComment: false, allowDeclineReason: true } }, run.companyId);
+      const carte = await deps.issues.requestConfirmation(issueId, { continuationPolicy: "wake_assignee_on_accept", resolverPolicy: "human_only", payload: { version: 1, prompt: p.question, acceptLabel: "Valider", rejectLabel: "Refuser", supersedeOnUserComment: false, allowDeclineReason: true } }, run.companyId, { authorAgentId: run.agentId });
       return succes({ statut: "demandee", carteId: carte.id });
     },
 

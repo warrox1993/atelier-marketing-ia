@@ -43,7 +43,7 @@ const plugin = definePlugin({
     });
     veilleur.demarrer();
     // Moteur de missions (#49) : reprise, minuterie et filet `issue.updated` (voir moteur/branchement.ts).
-    moteur = brancherMoteur(ctx, undefined, services.routes, services.evaluerPorte);
+    moteur = brancherMoteur(ctx, undefined, services.routes, services.evaluerPorte, services.lecturesMoteur);
     moteur.demarrer();
     // Facteur du bureau de liaison (essai L9, 16/10/2026) : transmissions et réponses entre deux entreprises, que l'hôte
     // refuse pendant une route ou un événement. Créé ICI, dans setup() : sa minuterie n'hérite d'aucune invocation.

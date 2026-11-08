@@ -138,9 +138,17 @@ export function routesLancement(d: DependancesLancement): Partial<Record<CleRout
       if (!(await base.lireCampagne(r.companyId, p.data.campagneId))) erreur("hors_entreprise", "Campagne introuvable dans cette entreprise.");
       // L'accord humain : une carte acceptée, sur la tâche racine, qui nomme exactement cette mission (ligne « Mission : <id> »).
       const cartes = m.issueRacineId ? await ctx.issues.listInteractions(m.issueRacineId, r.companyId) : [];
-      // Carte posée par le plugin (aucun agent auteur) et résolue par un humain : celle d'un agent ou sans résolveur humain ne vaut pas accord.
-      if (!cartes.some((c) => c.kind === "request_confirmation" && c.status === "accepted" && !c.createdByAgentId && c.resolvedByUserId && String((c.payload as { detailsMarkdown?: unknown }).detailsMarkdown ?? "").split("\n").includes(`Mission : ${m.id}`))) {
+      // Carte posée par le plugin (aucun agent auteur) et résolue par un humain : celle d'un agent ou sans résolveur humain ne vaut pas accord. La plus récente fait foi : un refus annule l'accord d'avant.
+      const dateCarte = (c: { createdAt?: unknown }) => new Date((c.createdAt as string | Date | undefined) ?? 0).getTime();
+      const derniere = cartes
+        .filter((c) => c.kind === "request_confirmation" && !c.createdByAgentId && String((c.payload as { detailsMarkdown?: unknown }).detailsMarkdown ?? "").split("\n").includes(`Mission : ${m.id}`))
+        .reduce<(typeof cartes)[number] | null>((d, c) => (d && dateCarte(d) > dateCarte(c) ? d : c), null);
+      if (derniere?.status !== "accepted" || !derniere.resolvedByUserId) {
         erreur("elevation_refusee", "Aucune carte de confirmation acceptée par un humain pour cette mission : le lancement est refusé.");
+      }
+      // Un agent ne lance que la discussion qui lui est confiée : l'accord humain ne vaut pas pour n'importe quel agent de l'entreprise.
+      if (r.acteur.agentId && (await ctx.issues.get(m.issueRacineId!, r.companyId))?.assigneeAgentId !== r.acteur.agentId) {
+        erreur("elevation_refusee", "Seul l'agent assigné à la tâche racine lance cette mission.");
       }
       const gabarit = chargerGabarit(m.gabaritCle, m.gabaritVersion);
       const etape = gabarit.etapes.find((e) => e.rang === 1)!;

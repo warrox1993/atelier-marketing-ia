@@ -264,3 +264,49 @@ describe("depsPorte", () => {
     expect(await deps.conformiteImposee(SOC)).toBe(attendu);
   });
 });
+
+describe("étapes en code de WF-01 sur le vrai branchement", () => {
+  const PROSPECT = "00000000-0000-4000-8000-000000000001";
+  const ENTREE = { service: "crm", canal: "courriel", entite: "entite-1" };
+
+  it("à l'approbation native, l'export appelle la route tache.prospects.exporter résolue à l'appel ; sans accord humain l'attente est journalisée sans échec ni essai, rien n'est écrit", async () => {
+    const m = { id: MISSION, companyId: SOC, gabaritCle: "wf-01-prospection", gabaritVersion: 1, contratId: "wf-01-prospection", contratVersion: 1, etat: "attente_autorisation", rangCourant: 7, campagneId: null };
+    const etape = (rang: number, p: Record<string, unknown> = {}) => ({ id: `etape-${rang}`, missionId: MISSION, rang, tentative: 1, role: "prospection", etat: rang < 8 ? "terminee" : "en_attente", entree: null, sortie: null, issueId: null, revisionLivrable: null, ...p });
+    const etapes = [etape(1, { entree: { exportCrm: ENTREE } }), etape(6, { sortie: { retenus: [PROSPECT], marques: [PROSPECT], exclus: [] } }), etape(7, { issueId: ISSUE, sortie: { prospectIds: [PROSPECT] } }), etape(8), etape(9), etape(10)];
+    const cles = new Map<string, string>();
+    const journal: Array<{ type: string; donnees?: Record<string, unknown> }> = [];
+    const base = {
+      etapeParIssue: vi.fn(async () => etapes[2]),
+      lireMission: vi.fn(async () => ({ ...m })),
+      lireEtapes: vi.fn(async () => etapes.map((e) => ({ ...e }))),
+      changerEtatMission: vi.fn(async (_c: string, _i: string, _a: string, nouveau: string) => { m.etat = nouveau; return true; }),
+      changerRangMission: vi.fn(async (_c: string, _i: string, _a: number, nouveau: number) => { m.rangCourant = nouveau; return true; }),
+      majEtape: vi.fn(async (_c: string, id: string, c: Record<string, unknown>) => { Object.assign(etapes.find((e) => e.id === id)!, c); return true; }),
+      enregistrerExecution: vi.fn(async (e: { cle: string }) => (cles.has(e.cle) ? false : (cles.set(e.cle, "demandee"), true))),
+      marquerExecution: vi.fn(async (_c: string, cle: string, statut: string) => void cles.set(cle, statut)),
+      lireExecution: vi.fn(async (_c: string, cle: string) => (cles.has(cle) ? { statut: cles.get(cle) } : null)),
+      journaliser: vi.fn(async (e: { type: string; donnees?: Record<string, unknown> }) => void journal.push(e)),
+      prospectDansExportNonRefuse: vi.fn(async () => false),
+      prospectExportConfirme: vi.fn(async () => false),
+    };
+    const { ctx, gestionnaires, pc } = fauxCtx({ config: { [SOC]: { moteurMissions: true } } });
+    (ctx.issues as Record<string, unknown>).get = vi.fn(async () => ({ status: "done", executionPolicy: { stages: [{ id: "a", type: "approval" }] }, executionState: { completedStageIds: ["a"] } }));
+    const routes: Record<string, (r: never) => Promise<unknown>> = {};
+    brancherMoteur(pc, base as never, routes as never, undefined, { modeMoteur: async () => "demonstration" } as never).demarrer();
+    // La route n'existe qu'après le branchement : elle est lue à l'appel, comme le verdict et la porte.
+    const exporter = vi.fn(async () => ({ statut: 202, corps: { etat: "en_attente_approbation", consigne: "Un humain doit approuver." } }));
+    routes["tache.prospects.exporter"] = exporter as never;
+    await gestionnaires[0]!(evenementDone());
+    expect(exporter).toHaveBeenCalledTimes(1);
+    expect(exporter).toHaveBeenCalledWith(expect.objectContaining({
+      cle: "tache.prospects.exporter", companyId: SOC, params: { issueId: ISSUE },
+      acteur: expect.objectContaining({ type: "systeme", id: "moteur-missions" }),
+      corps: { prospectIds: [PROSPECT], ...ENTREE, cleIdempotence: expect.stringMatching(new RegExp(`^moteur:${MISSION}:9:1:export_crm:[0-9a-f]{32}$`, "u")) },
+    }));
+    expect(journal.find((j) => j.type === "moteur.export_en_attente")?.donnees).toMatchObject({ consigne: "Un humain doit approuver." });
+    expect(journal.some((j) => j.type === "moteur.export_partiel")).toBe(false);
+    expect(etapes.find((e) => e.rang === 9)).toMatchObject({ etat: "en_cours", sortie: { reussis: [], echecs: [], essais: 0, enAttente: true } });
+    expect(journal.find((j) => j.type === "moteur.export_marque_opposition")?.donnees).toMatchObject({ ids: [PROSPECT] });
+    expect(m.etat).toBe("en_execution");
+  });
+});

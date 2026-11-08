@@ -6,12 +6,15 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import type { ToolResult } from "@paperclipai/plugin-sdk";
 import type { ActeurHote } from "../src/serveur/atelier.js";
+import { creerCrmProduction } from "../src/moteur/branchement.js";
+import { exporterLot, type CrmMoteur } from "../src/moteur/export-crm.js";
 import { ORIGINE_ETAPE } from "../src/moteur/executeur.js";
 import { chargerGabarit } from "../src/moteur/gabarits.js";
 import { creerOutilsMoteur, type ErreurOutil } from "../src/moteur/outils.js";
 import type { EtapeMission, Mission } from "../src/serveur/base.js";
 import { creerServices } from "../src/serveur/services.js";
 import { CAMP, ISSUE, PRODUCTEUR, REV1, REV2, SOC, creerBanc } from "./outils-base.js";
+import { P1, P2, P4, SOC as SOC_WF01, h, jusquAutorisation, prospect } from "./moteur-wf01-doubles.js";
 
 const MISSION = "mission-1";
 const AG_EXIGENCES = "agent-exigences";
@@ -139,5 +142,216 @@ describe("verdict_deposer par les vraies routes du plugin", () => {
     expect(b.banc.t.verdicts.map((v) => [v.role, v.verdict])).toEqual([["metier", "CHANGES_REQUESTED"]]);
     expect(b.banc.t.constats).toHaveLength(1);
     expect(b.deposes).toEqual([expect.objectContaining({ accepte: false })]);
+  });
+});
+
+/**
+ * Câblage de production de l'export CRM de WF-01 (#51, tâche 4) : la vraie route `tache.prospects.exporter` et les vraies lectures des services
+ * (`lecturesMoteur`) sur le banc ; seules les lectures et écritures de la base sont celles du banc (copies en mémoire).
+ * Le moteur d'une entreprise sans réglage ne fait rien : `moteurActif` (config vide), moteur-executeur.spec.ts, « moteurActif ».
+ */
+describe("export CRM de production de WF-01 par la vraie route", () => {
+  const AUTRE_SOC = "99999999-9999-4999-8999-999999999999";
+  const MISSION_WF01 = "mission-wf01";
+  /** Base légale du courriel impersonnel d'une personne morale, telle que la base la rend (colonnes SQL). */
+  const BASE_LEGALE = {
+    cible: "entreprise", forme: "personne_morale", canal: "courriel", base: "personne_morale_adresse_impersonnelle", nature_adresse: "impersonnelle",
+    preuve: { type: "source", reference: "Registre public, contact déclaré info@", date: "2026-11-08T10:00:00.000Z" },
+    information: { texteArt14: "Nous avons trouvé votre adresse professionnelle dans un registre public.", moyenOpposition: "Lien de désinscription" },
+    verifie_le: "2026-11-08T10:00:00.000Z", verifie_par: "systeme",
+  };
+  const PORTEE_MODIFIER_CRM = { revisionId: REV1, action: "modifier_crm", canal: "crm", compte: null, audience: null, montantMaxCents: null, dureeJours: null };
+  const IDENTIFIANT_INCONNU = "00000000-0000-4000-8000-0000000000ff";
+
+  function monterExport(o: { oppositionsAReimporter?: number; sansBaseLegale?: string[]; oppositionSur?: number } = {}) {
+    const banc = creerBanc({ modeEntreprise: "demonstration" });
+    banc.tacheSousPorte({ status: "done", etape: null, corps: "# Prospects\n\nLot du jour." });
+    // Tâche approuvée nativement (done) et contrôle automatique réussi sur la révision : seule la décision humaine modifier_crm manque dans les essais qui la refusent.
+    banc.passe();
+    const prospects = [prospect(1), prospect(2), { ...prospect(3), companyId: AUTRE_SOC }, prospect(4)];
+    const lectures: string[] = [];
+    const exports: Array<Record<string, unknown>> = [];
+    const appels: Array<Record<string, unknown>> = [];
+    Object.assign(banc.base, {
+      lireMission: async (companyId: string, id: string) => (companyId === SOC && id === MISSION_WF01 ? { id, companyId: SOC, gabaritCle: "wf-01-prospection", gabaritVersion: 1, campagneId: null } : null),
+      lireEtapes: async () => [
+        { rang: 1, tentative: 1, role: "prospection", issueId: null, entree: { exportCrm: { service: "crm", canal: "courriel", entite: "entite-1" } } },
+        { rang: 7, tentative: 1, role: "prospection", issueId: ISSUE, entree: null },
+      ],
+      compterAReimporter: async () => ({ prospects: 0, clients: 0, imports: 0, oppositions: o.oppositionsAReimporter ?? 0 }),
+      // Lecture filtrée par entreprise, comme le SQL (`where company_id = $1 and id = $2`).
+      lireProspect: async (companyId: string, id: string) => { lectures.push(`${companyId}:${id}`); const p = prospects.find((x) => x.companyId === companyId && x.id === id); return p ? { ...p, empreintes: undefined, score: null, basesLegales: undefined } : null; },
+      detailsProspects: async (_c: string, ids: string[]) => ({ empreintes: new Map(ids.map((id) => [id, prospects.find((p) => p.id === id)!.empreintes])), scores: new Map(), bases: new Map(ids.map((id) => [id, o.sansBaseLegale?.includes(id) ? [] : [BASE_LEGALE]])) }),
+      oppositionsPour: async (_c: string, valeurs: string[]) => valeurs.filter((v) => o.oppositionSur !== undefined && v === h(o.oppositionSur)).map((valeur) => ({ type: "courriel", valeur })),
+      referentielProspection: async () => ({ renvoi: null, versionMarque: 1 }),
+      empreintesProspectsEnBase: async () => [],
+      clientsActuelsPour: async () => [],
+      lireExportCrmParCle: async (companyId: string, c: string) => exports.find((e) => e.companyId === companyId && e.cleIdempotence === c) ?? null,
+      insererExportCrm: async (e: Record<string, unknown>) => void exports.push(e),
+      // Filtrées par service et par mode, comme le SQL.
+      prospectDansExportNonRefuse: async (companyId: string, id: string, service: string, mode: string) => exports.some((e) => e.companyId === companyId && e.service === service && e.mode === mode && e.etat !== "refusee" && (e.prospectIds as string[]).includes(id)),
+      prospectExportConfirme: async (companyId: string, id: string, service: string, mode: string) => exports.some((e) => e.companyId === companyId && e.service === service && e.mode === mode && (e.prospectIds as string[]).includes(id) && ["simulee", "confirmee"].includes(String(banc.t.diffusions.find((d) => d.id === e.diffusionId)?.etat))),
+      lireAppelParEmpreinte: async (_c: string, _i: string, rev: string, empreinte: string) => appels.find((a) => a.revisionId === rev && a.empreinte === empreinte) ?? null,
+      insererAppel: async (a: Record<string, unknown>) => void appels.push({ ...a, creeLe: banc.horloge() }),
+    });
+    const services = creerServices(banc.ctx, { base: banc.base });
+    const crm = creerCrmProduction(banc.base as never, services.routes["tache.prospects.exporter"]!, (c, campagneId) => services.lecturesMoteur!.modeMoteur!(c, campagneId));
+    // Exécutions du moteur (clés d'effets externes), en mémoire.
+    const executions = new Map<string, { statut: string }>();
+    const baseExec = {
+      lireExecution: async (_c: string, k: string) => executions.get(k) ?? null,
+      enregistrerExecution: async (e: { cle: string }) => (executions.has(e.cle) ? false : (executions.set(e.cle, { statut: "demandee" }), true)),
+      marquerExecution: async (_c: string, k: string, statut: string) => { const x = executions.get(k); if (x) x.statut = statut; return Boolean(x); },
+    };
+    /** Une passe de l'export du moteur (le vrai `exporterLot`, le vrai CRM de production, la vraie route). */
+    const passe = (ids: string[]) => exporterLot({ crm, base: baseExec as never }, { companyId: SOC, id: MISSION_WF01 }, 9, ids.map((prospectId) => ({ prospectId, marqueOpposition: false })));
+    return { banc, services, crm, exports, lectures, executions, passe };
+  }
+  const nonRefuses = (m: ReturnType<typeof monterExport>) => m.exports.filter((e) => e.etat !== "refusee");
+  /** Le vrai CRM de production vu par l'exécuteur : le banc de la route ne connaît que sa mission, l'exécuteur a la sienne. */
+  const crmReelPourExecuteur = (m: ReturnType<typeof monterExport>): CrmMoteur => ({
+    existe: (c, _mission, p) => m.crm.existe(c, MISSION_WF01, p),
+    confirme: (c, _mission, p) => m.crm.confirme(c, MISSION_WF01, p),
+    ecrire: (c, e) => m.crm.ecrire(c, { ...e, missionId: MISSION_WF01 }),
+  });
+
+  it("bout en bout (exécuteur, étapes en code, vraie route) : approuvée sans décision, la mission attend sans écrire ni consommer d'essai ; avec la décision, un seul export et cloturee", async () => {
+    const m = monterExport();
+    const t = await jusquAutorisation({ crm: crmReelPourExecuteur(m), lot: [P1, P2] });
+    t.approuver();
+    await t.executeur.surDoneNatif(SOC_WF01, t.issue);
+    await t.executeur.reprendre(SOC_WF01);
+    await t.executeur.reprendre(SOC_WF01);
+    await t.executeur.reprendre(SOC_WF01);
+    expect(t.etat()).toBe("en_execution");
+    expect(m.exports).toHaveLength(0);
+    expect(m.banc.t.diffusions).toHaveLength(0);
+    expect(t.etapes.find((e) => e.rang === 9)).toMatchObject({ etat: "en_cours", sortie: { reussis: [], echecs: [], essais: 0, enAttente: true } });
+    expect(t.journal.filter((j) => j.type === "moteur.export_en_attente")).toHaveLength(1);
+
+    m.banc.decision({ portee: PORTEE_MODIFIER_CRM });
+    await t.executeur.reprendre(SOC_WF01);
+    expect(t.etat()).toBe("cloturee");
+    expect(m.exports).toHaveLength(1);
+    expect(m.exports[0]).toMatchObject({ prospectIds: [P1, P2], etat: "simulee" });
+    expect(m.banc.t.diffusions).toHaveLength(1);
+    expect(t.etapes.find((e) => e.rang === 9)).toMatchObject({ etat: "terminee", sortie: { reussis: [P1, P2], echecs: [], essais: 1 } });
+    expect(t.etapes.find((e) => e.rang === 10)).toMatchObject({ etat: "terminee", sortie: { verifies: 2 } });
+  });
+
+  it("bout en bout : un prospect sans base légale part en blocage export_partiel après trois essais, l'autre est exporté une seule fois, le motif est au journal", async () => {
+    const m = monterExport({ sansBaseLegale: [P2] });
+    m.banc.decision({ portee: PORTEE_MODIFIER_CRM });
+    const t = await jusquAutorisation({ crm: crmReelPourExecuteur(m), lot: [P1, P2] });
+    t.approuver();
+    await t.executeur.surDoneNatif(SOC_WF01, t.issue);
+    await t.executeur.reprendre(SOC_WF01);
+    await t.executeur.reprendre(SOC_WF01);
+    expect(t.etat()).toBe("blocage");
+    expect(nonRefuses(m).map((e) => e.prospectIds)).toEqual([[P1]]);
+    expect(m.banc.t.diffusions).toHaveLength(1);
+    expect(t.journal.filter((j) => j.type === "moteur.export_partiel").at(-1)?.donnees).toMatchObject({ reussis: [P1], echecs: [{ prospectId: P2, raison: expect.stringMatching(/\S/u) }], essais: 3 });
+  });
+
+  it("sans décision humaine modifier_crm : en attente, aucun export, aucun échec ; la passe suivante rejoue la même clé", async () => {
+    const m = monterExport();
+    const r = await m.passe([P1, P2]);
+    expect(r).toMatchObject({ reussis: [], echecs: [], attente: { appelId: expect.any(String), consigne: expect.stringContaining("modifier_crm") } });
+    expect(m.banc.t.diffusions).toHaveLength(0);
+    expect(m.exports).toHaveLength(0);
+    expect(await m.crm.existe(SOC, MISSION_WF01, P1)).toBe(false);
+    await m.passe([P1, P2]);
+    expect(m.executions.size).toBe(1);
+    expect(m.banc.t.journal.filter((j) => j.type === "prospects.export_en_attente")).toHaveLength(2);
+  });
+
+  it("une approbation d'une autre portée que modifier_crm sur ce CRM ne suffit pas", async () => {
+    const m = monterExport();
+    m.banc.decision({ portee: { ...PORTEE_MODIFIER_CRM, action: "publier", canal: "linkedin" } });
+    expect((await m.passe([P1])).attente).not.toBeNull();
+    expect(m.banc.t.diffusions).toHaveLength(0);
+  });
+
+  it("avec la décision humaine : UN seul export contenant les deux prospects, une diffusion, et la passe rejouée ne crée rien de plus", async () => {
+    const m = monterExport();
+    m.banc.decision({ portee: PORTEE_MODIFIER_CRM });
+    const r = await m.passe([P1, P2]);
+    expect(r).toEqual({ reussis: [P1, P2], echecs: [], attente: null });
+    expect(m.banc.t.diffusions).toHaveLength(1);
+    expect(m.banc.t.diffusions[0]).toMatchObject({ action: "modifier_crm", etat: "simulee" });
+    expect(m.exports).toHaveLength(1);
+    expect(m.exports[0]).toMatchObject({ prospectIds: [P1, P2], issueId: ISSUE, entite: "entite-1", service: "crm", canal: "courriel", etat: "simulee" });
+    expect(String(m.exports[0]!.cleIdempotence)).toMatch(/^moteur:mission-wf01:9:1:export_crm:[0-9a-f]{32}$/u);
+    expect(await m.crm.existe(SOC, MISSION_WF01, P1)).toBe(true);
+    expect(await m.crm.confirme(SOC, MISSION_WF01, P2)).toBe(true);
+    expect(await m.crm.existe(SOC, MISSION_WF01, P4)).toBe(false);
+    expect(await m.passe([P1, P2])).toEqual({ reussis: [P1, P2], echecs: [], attente: null });
+    expect(m.banc.t.diffusions).toHaveLength(1);
+    expect(m.exports).toHaveLength(1);
+  });
+
+  it("un prospect sans base légale, avec décision : 1er appel refusé, 2e sans lui accepté, le refusé listé avec son motif, une passe de plus n'écrit rien", async () => {
+    const m = monterExport({ sansBaseLegale: [P2] });
+    m.banc.decision({ portee: PORTEE_MODIFIER_CRM });
+    const r = await m.passe([P1, P2]);
+    expect(r.reussis).toEqual([P1]);
+    expect(r.attente).toBeNull();
+    expect(r.echecs).toEqual([{ prospectId: P2, raison: expect.stringMatching(/\S/u) }]);
+    expect(m.exports.map((e) => [e.etat, e.prospectIds])).toEqual([["refusee", [P1, P2]], ["simulee", [P1]]]);
+    expect(m.banc.t.diffusions).toHaveLength(1);
+    const avant = nonRefuses(m).length;
+    const encore = await m.passe([P1, P2]);
+    expect(encore.reussis).toEqual([P1]);
+    expect(encore.echecs).toHaveLength(1);
+    expect(nonRefuses(m)).toHaveLength(avant);
+    expect(m.banc.t.diffusions).toHaveLength(1);
+    await m.passe([P1, P2]);
+    expect(nonRefuses(m)).toHaveLength(avant);
+  });
+
+  it("201 prospects : refusés par la route (limite de 200), tous en échec, aucun export", async () => {
+    const m = monterExport();
+    m.banc.decision({ portee: PORTEE_MODIFIER_CRM });
+    const ids = Array.from({ length: 201 }, (_, i) => `00000000-0000-4000-8000-${String(i + 1000).padStart(12, "0")}`);
+    const r = await m.passe(ids);
+    expect(r.reussis).toEqual([]);
+    expect(r.echecs.map((e) => e.prospectId)).toEqual(ids);
+    expect(m.exports).toHaveLength(0);
+  });
+
+  it("un prospect marqué par une opposition : jamais de refus pour ce motif, il est exporté avec les autres", async () => {
+    const m = monterExport({ oppositionSur: 2 });
+    m.banc.decision({ portee: PORTEE_MODIFIER_CRM });
+    expect(await m.passe([P1, P2])).toEqual({ reussis: [P1, P2], echecs: [], attente: null });
+    expect(m.exports).toHaveLength(1);
+    expect(m.banc.t.journal.map((j) => j.type)).not.toContain("prospects.export_refusee");
+  });
+
+  it("la clé « moteur: » est réservée à l'acteur système : un agent qui la demande est refusé, rien n'est écrit", async () => {
+    const m = monterExport();
+    m.banc.decision({ portee: PORTEE_MODIFIER_CRM });
+    const corps = { prospectIds: [P1], service: "crm", canal: "courriel", entite: "entite-1", cleIdempotence: "moteur:occupee-par-un-agent" };
+    const agent = { type: "agent" as const, id: "agent-x", agentId: "agent-x", userId: null, runId: "run-x" };
+    await expect(m.services.routes["tache.prospects.exporter"]!({ cle: "tache.prospects.exporter", params: { issueId: ISSUE }, query: {}, companyId: SOC, acteur: agent, corps })).rejects.toMatchObject({ code: "acces_refuse" });
+    expect(m.exports).toHaveLength(0);
+    expect(m.banc.t.diffusions).toHaveLength(0);
+    const systeme = { type: "systeme" as const, id: "moteur-missions", agentId: null, userId: null, runId: null };
+    expect((await m.services.routes["tache.prospects.exporter"]!({ cle: "tache.prospects.exporter", params: { issueId: ISSUE }, query: {}, companyId: SOC, acteur: systeme, corps })).statut).toBe(201);
+  });
+
+  it("lecture hors entreprise : un identifiant d'une autre entreprise, inconnu ou mal formé est ignoré, jamais lu", async () => {
+    const m = monterExport();
+    const lus = await m.services.lecturesMoteur!.lireProspectsMoteur!(SOC, [P1, prospect(3).id, IDENTIFIANT_INCONNU, "pas-un-identifiant", P2]);
+    expect(lus.map((p) => p.id)).toEqual([P1, P2]);
+    // L'identifiant d'une autre entreprise n'est lu qu'au nom de l'entreprise de la mission (rien ne remonte) ; le mal formé n'atteint pas la base.
+    expect(m.lectures).toEqual([`${SOC}:${P1}`, `${SOC}:${prospect(3).id}`, `${SOC}:${IDENTIFIANT_INCONNU}`, `${SOC}:${P2}`]);
+    expect(await m.services.lecturesMoteur!.lireProspectsMoteur!(AUTRE_SOC, [P1, P2])).toEqual([]);
+  });
+
+  it("une panne de lecture n'est pas prise pour un prospect inconnu ; des oppositions à réimporter refusent le contexte d'exclusions", async () => {
+    const m = monterExport({ oppositionsAReimporter: 2 });
+    (m.banc.base as unknown as Record<string, unknown>).lireProspect = async () => { throw new Error("base indisponible"); };
+    await expect(m.services.lecturesMoteur!.lireProspectsMoteur!(SOC, [P1])).rejects.toThrow("base indisponible");
+    await expect(m.services.lecturesMoteur!.contexteExclusionsMoteur!(SOC, null, [])).rejects.toThrow(/réimporter/);
   });
 });

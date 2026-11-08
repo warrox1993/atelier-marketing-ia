@@ -1,0 +1,38 @@
+{
+  "id": "wf-01-enrichissement",
+  "version": 1,
+  "tache": "Relever les coordonnées professionnelles des prospects qualifiés, de sources licites et recoupées.",
+  "roleResponsable": "enrichissement-coordonnees",
+  "entreesRequises": [
+    {
+      "cle": "prospectIds",
+      "indexRegistre": 0
+    },
+    {
+      "cle": "brief",
+      "indexRegistre": 1
+    }
+  ],
+  "sortie": {
+    "champs": {
+      "prospectIds": "liste_chaines",
+      "limites": "liste_chaines"
+    }
+  },
+  "controleurs": [
+    "code",
+    "code",
+    "relecteur"
+  ],
+  "competences": [
+    "coordonnees-recherche",
+    "coordonnees-recoupement",
+    "recherche-sourcee"
+  ],
+  "plafondTours": 40,
+  "plafondJetons": 150000,
+  "effetExterne": "aucun",
+  "conduiteEchec": "blocage",
+  "mesureReussite": "Chaque coordonnée relevée porte une source réelle ; les étapes non faites sont listées.",
+  "maturite": "M1"
+}
