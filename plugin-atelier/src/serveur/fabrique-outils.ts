@@ -55,7 +55,7 @@ import {
 } from "../contrats/fabrique-outils-schemas.js";
 
 import type { ResultatDossierSujet } from "./dossier-sujet.js";
-import { ajouterAuSuivi, dossierTravail, lireApercu, lireJson, lireSur, sousVerrouSuivi, type TravailSuivi } from "./fabrique-remise.js";
+import { ajouterAuSuivi, dossierTravail, lireApercu, lireAvisRefus, lireJson, lireSur, sousVerrouSuivi, type TravailSuivi } from "./fabrique-remise.js";
 
 export const DOSSIER_FILE_DEFAUT = "/var/lib/atelier-fabrique";
 export const QUOTA_TRAVAUX_PAR_JOUR = 50;
@@ -745,7 +745,10 @@ export function creerOutilsFabrique(deps: DependancesFabrique) {
     };
     try {
       const etat = await lire("etat.json");
-      if (etat === null) return erreur("Travail introuvable.");
+      if (etat === null) {
+        const avis = await lireAvisRefus(racine, run.companyId, travail);
+        return avis ? succes({ travail: travail.toLowerCase(), etat: avis }) : erreur("Travail introuvable.");
+      }
       const resultat = await lire("resultat.json");
       const termine = (etat as { etat?: unknown }).etat === "termine";
       const apercu = termine ? await lireApercu(dossier) : null;

@@ -1333,3 +1333,103 @@ def test_image_reelle_dans_la_cage_avec_provenance(racine):
     relecture = racine / "relu"
     relecture.mkdir()
     assert service.provenance.lire_xmp(livrable / "image.png", relecture)["DigitalSourceType"] == service.provenance.DIGITAL_SOURCE_TYPE
+
+
+# ---------- avis de refus lisibles par le plugin (#74) ----------
+
+def lire_avis(racine, ident):
+    return json.loads((racine / "livrables" / ".refus" / f"{ident}.json").read_text())
+
+
+def avis_poses(racine):
+    dossier = racine / "livrables" / ".refus"
+    return sorted(p.name for p in dossier.iterdir()) if dossier.exists() else []
+
+
+def test_entreprise_non_autorisee_pose_un_avis_de_refus_sans_dossier_d_entreprise(racine):
+    ident, _ = deposer(racine / "entrant", type="inconnu", entreprise="intruse", tache="PAP-12")
+    traiter(racine, ident)
+    avis = lire_avis(racine, ident)
+    assert (avis["travail"], avis["entreprise"], avis["etat"], avis["tache"]) == (ident, "intruse", "echec", "PAP-12")
+    assert "inscrite" in avis["message"] and avis["message"].startswith("refusé par la fabrique : ")
+    assert avis["fin"]
+    assert not (racine / "livrables" / "intruse").exists()
+    assert not (racine / "uuid-vus.log").exists()
+
+
+def test_quota_atteint_pose_un_avis_de_refus(racine):
+    for _ in range(service.QUOTA_TRAVAUX_PAR_JOUR):
+        service.compter_travail(racine, "acme", "document")
+    ident, _ = deposer(racine / "entrant", type="inconnu")
+    traiter(racine, ident)
+    avis = lire_avis(racine, ident)
+    assert avis["etat"] == "echec" and avis["entreprise"] == "acme" and "tache" not in avis
+    assert not (racine / "livrables" / "acme" / ident).exists()
+
+
+def test_file_gpu_pleine_pose_un_avis_de_refus(racine, monkeypatch):
+    banc = Video(racine, monkeypatch)
+    banc.file = service.FileAttenteGpu()
+    for _ in range(service.TAILLE_MAX_FILE_GPU):
+        banc.file.ajouter({"travail": nouveau_id()})
+    ident, _ = deposer(racine / "entrant", type="video", demande=demande_video())
+    traiter(racine, ident, file_gpu=banc.file)
+    assert lire_avis(racine, ident)["etat"] == "echec"
+
+
+def test_uuid_deja_vu_ne_pose_aucun_avis(racine):
+    ident, _ = deposer(racine / "entrant", type="inconnu")
+    traiter(racine, ident)
+    deposer(racine / "entrant", identifiant=ident, type="inconnu")
+    traiter(racine, ident)
+    assert len(refus_du_journal(racine)) == 1
+    assert avis_poses(racine) == []
+
+
+@pytest.mark.parametrize("cas", ["nom_non_uuid", "json_invalide", "entreprise_sauvage"])
+def test_entree_illisible_ne_pose_aucun_avis(racine, cas):
+    ident = nouveau_id()
+    if cas == "nom_non_uuid":
+        ident = "pas-un-uuid"
+        (racine / "entrant" / f"{ident}.json").write_text("{}")
+    elif cas == "json_invalide":
+        (racine / "entrant" / f"{ident}.json").write_text("pas du json")
+    else:
+        deposer(racine / "entrant", identifiant=ident, type="inconnu", entreprise="../x")
+    traiter(racine, ident)
+    assert len(refus_du_journal(racine)) == 1
+    assert avis_poses(racine) == []
+
+
+def test_exces_de_file_pose_un_avis_par_entree_lisible(racine, monkeypatch):
+    monkeypatch.setattr(service, "MAX_ENTREES_EN_ATTENTE", 2)
+    monkeypatch.setattr(service, "REFUS_EXCES_PAR_PASSAGE", 3)
+    idents = []
+    for rang in range(4):
+        ident, chemin = deposer(racine / "entrant", type="inconnu")
+        os.utime(chemin, (1000 + rang, 1000 + rang))
+        idents.append(ident)
+    illisible = "pas-un-uuid.json"
+    (racine / "entrant" / illisible).write_text("x")
+    os.utime(racine / "entrant" / illisible, (2000, 2000))
+    noms = service.lister_entrees(str(racine / "entrant"), plafond=5)
+    fd = os.open(racine / "entrant", os.O_RDONLY | os.O_DIRECTORY)
+    try:
+        service.refuser_exces(racine, fd, noms, UID)
+    finally:
+        os.close(fd)
+    assert len(refus_du_journal(racine)) == 3
+    assert avis_poses(racine) == sorted(f"{i}.json" for i in idents[2:])  # l'entrée illisible n'a pas d'avis
+
+
+def test_purge_retire_les_avis_de_plus_de_7_jours(racine):
+    maintenant = time_reel()
+    dossier = racine / "livrables" / ".refus"
+    dossier.mkdir()
+    vieux, recent = dossier / f"{nouveau_id()}.json", dossier / f"{nouveau_id()}.json"
+    vieux.write_text("{}")
+    recent.write_text("{}")
+    os.utime(vieux, (maintenant - 8 * 86400,) * 2)
+    os.utime(recent, (maintenant - 6 * 86400,) * 2)
+    service.purger(racine)
+    assert not vieux.exists() and recent.exists()

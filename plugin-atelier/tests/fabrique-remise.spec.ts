@@ -235,6 +235,72 @@ describe("signalement de fin de travail", () => {
     expect(journal.reveils).toBe(1);
   });
 
+  function poserAvis(entreprise: string, travail: string, avis: Record<string, unknown>) {
+    mkdirSync(join(racine, "livrables", ".refus"), { recursive: true });
+    writeFileSync(join(racine, "livrables", ".refus", `${travail}.json`), JSON.stringify({ travail, entreprise, etat: "echec", fin: "2026-11-09T10:00:00+00:00", ...avis }));
+  }
+
+  it("un refus de la fabrique commente la tâche avec son motif puis réveille l'agent, une seule fois", async () => {
+    poserAvis(A, TRAVAIL, { message: "refusé par la fabrique : entreprise non inscrite à la fabrique" });
+    const { s, journal } = monter([entree()]);
+    await s.passe();
+    await s.passe();
+    expect(journal.commentaires).toHaveLength(1);
+    expect(journal.commentaires[0]![0]).toBe(TACHE);
+    expect(journal.commentaires[0]![1]).toContain("a échoué (refusé par la fabrique : entreprise non inscrite à la fabrique)");
+    expect(journal.reveils).toEqual([[TACHE, A, `atelier-fabrique-${TRAVAIL}`]]);
+    expect(journal.suivi).toHaveLength(0);
+  });
+
+  it("l'avis d'une autre entreprise est ignoré", async () => {
+    poserAvis(B, TRAVAIL, { message: "refusé par la fabrique : quota" });
+    const { s, journal } = monter([entree()]);
+    await s.passe();
+    expect(journal.commentaires).toHaveLength(0);
+    expect(journal.reveils).toHaveLength(0);
+    expect(journal.suivi).toHaveLength(1);
+  });
+
+  it("l'avis de la même entreprise pour un autre travail est ignoré", async () => {
+    poserAvis(A, TRAVAIL, { travail: "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee", message: "refusé par la fabrique : quota" });
+    const { s, journal } = monter([entree()]);
+    await s.passe();
+    expect(journal.commentaires).toHaveLength(0);
+    expect(journal.reveils).toHaveLength(0);
+    expect(journal.suivi).toHaveLength(1);
+  });
+
+  it("l'avis sans champ entreprise est ignoré", async () => {
+    poserAvis(A, TRAVAIL, { entreprise: undefined, message: "refusé par la fabrique : quota" });
+    const { s, journal } = monter([entree()]);
+    await s.passe();
+    expect(journal.commentaires).toHaveLength(0);
+    expect(journal.reveils).toHaveLength(0);
+    expect(journal.suivi).toHaveLength(1);
+  });
+
+  it("une entreprise dont la racine lève : les travaux des autres entreprises sont signalés et la liste est réécrite", async () => {
+    livrer(A, TRAVAIL, { etat: "termine" }, { "offre.docx": OCTETS });
+    const fautif: TravailSuivi = { ...entree(), entreprise: B, travail: "dddddddd-dddd-4ddd-8ddd-dddddddddddd" };
+    const journal = { commentaires: [] as string[][], suivi: [fautif, entree()] as TravailSuivi[], avertissements: [] as string[] };
+    const s = creerSignalement({
+      suiviLire: async () => journal.suivi,
+      suiviEcrire: async (v) => void (journal.suivi = v),
+      racine: async (c) => {
+        if (c === B) throw new Error("configuration illisible");
+        return racine;
+      },
+      commenter: async (t, texte, c) => void journal.commentaires.push([t, texte, c]),
+      reveiller: async () => undefined,
+      logger: { info: () => {}, warn: (m) => void journal.avertissements.push(m) },
+    });
+    const r = await s.passe();
+    expect(r.signales).toEqual([TRAVAIL]);
+    expect(journal.commentaires).toHaveLength(1);
+    expect(journal.suivi.map((t) => t.travail)).toEqual([fautif.travail]);
+    expect(journal.avertissements).toHaveLength(1);
+  });
+
   it("un échec du réveil ne provoque pas un second commentaire", async () => {
     livrer(A, TRAVAIL, { etat: "termine" }, { "offre.docx": OCTETS });
     const { journal } = monter([entree()]);
@@ -250,6 +316,85 @@ describe("signalement de fin de travail", () => {
     await s.passe();
     await s.passe();
     expect(commentaires).toBe(1);
+  });
+});
+
+describe("signalement : alerte de délai et abandon (#74)", () => {
+  const CREE = "2026-11-09T08:00:00.000Z";
+  const apres = (ms: number) => new Date(Date.parse(CREE) + ms);
+  const HEURE = 3600 * 1000;
+  function monter(maintenant: Date, refuserCommentaire = false) {
+    const journal = { commentaires: [] as string[][], reveils: [] as string[][], avertissements: [] as string[], suivi: [{ entreprise: A, travail: TRAVAIL, agent: AGENT, run: RUN, tache: TACHE, cree: CREE, essais: 0 }] as TravailSuivi[] };
+    const s = creerSignalement({
+      suiviLire: async () => journal.suivi,
+      suiviEcrire: async (v) => void (journal.suivi = v),
+      racine: async () => racine,
+      commenter: async (t, texte, c) => {
+        if (refuserCommentaire) throw new Error("hôte indisponible");
+        journal.commentaires.push([t, texte, c]);
+      },
+      reveiller: async (t, c, cle) => void journal.reveils.push([t, c, cle]),
+      logger: { info: () => {}, warn: (m) => void journal.avertissements.push(m) },
+      maintenant: () => maintenant,
+    });
+    return { s, journal };
+  }
+
+  it("sans état ni avis après 2 h : un seul commentaire d'alerte, sans réveil, le travail reste suivi", async () => {
+    const { s, journal } = monter(apres(2 * HEURE + 1000));
+    await s.passe();
+    await s.passe();
+    expect(journal.commentaires).toHaveLength(1);
+    expect(journal.commentaires[0]![0]).toBe(TACHE);
+    expect(journal.commentaires[0]![1]).toContain(TRAVAIL);
+    expect(journal.reveils).toHaveLength(0);
+    expect(journal.suivi).toHaveLength(1);
+    expect(journal.suivi[0]!.alerte).toBe(true);
+    expect(journal.avertissements).toHaveLength(1);
+  });
+
+  it.each(["en_attente_gpu", "en_cours"])("travail déjà pris par la fabrique (%s) après 2 h : aucune alerte de démarrage", async (etat) => {
+    livrer(A, TRAVAIL, { etat });
+    const { s, journal } = monter(apres(3 * HEURE));
+    await s.passe();
+    expect(journal.commentaires).toHaveLength(0);
+    expect(journal.reveils).toHaveLength(0);
+    expect(journal.suivi).toHaveLength(1);
+    expect(journal.suivi[0]!.alerte).toBeUndefined();
+  });
+
+  it("avant 2 h : aucune alerte", async () => {
+    const { s, journal } = monter(apres(HEURE));
+    await s.passe();
+    expect(journal.commentaires).toHaveLength(0);
+    expect(journal.suivi[0]!.alerte).toBeUndefined();
+  });
+
+  it("l'alerte est retentée si le commentaire échoue", async () => {
+    const { s, journal } = monter(apres(3 * HEURE), true);
+    await s.passe();
+    expect(journal.suivi).toHaveLength(1);
+    expect(journal.suivi[0]!.alerte).toBeUndefined();
+    expect(journal.suivi[0]!.essais).toBe(0);
+  });
+
+  it("abandon à 7 jours : commentaire sur la tâche puis retrait", async () => {
+    const { s, journal } = monter(apres(7 * 24 * HEURE));
+    const r = await s.passe();
+    expect(r.abandonnes).toEqual([TRAVAIL]);
+    expect(journal.commentaires).toHaveLength(1);
+    expect(journal.commentaires[0]![1]).toContain(TRAVAIL);
+    expect(journal.reveils).toHaveLength(0);
+    expect(journal.suivi).toHaveLength(0);
+    expect(journal.avertissements.length).toBeGreaterThan(0);
+  });
+
+  it("abandon à 7 jours : un commentaire refusé n'empêche pas le retrait", async () => {
+    const { s, journal } = monter(apres(7 * 24 * HEURE), true);
+    const r = await s.passe();
+    expect(r.abandonnes).toEqual([TRAVAIL]);
+    expect(journal.suivi).toHaveLength(0);
+    expect(journal.avertissements.length).toBeGreaterThan(0);
   });
 });
 

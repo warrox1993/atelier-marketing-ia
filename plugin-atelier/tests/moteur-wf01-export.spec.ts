@@ -49,7 +49,10 @@ describe("étapes en code avant la porte", () => {
     const t = await monter({ sansEtapesCode: true });
     await t.executeur.demarrerMission(SOC, t.missionId);
     expect(t.missions.get(t.missionId)!.etat).toBe("blocage");
-    expect(t.reveils).toEqual([]);
+    // Aucune tâche avant le rang 1 : le blocage passe par une tâche d'arbitrage, seul réveil (#56).
+    const arbitrage = [...t.issues.values()].find((i) => i.originId === `mission:${t.missionId}:1:arbitrage`)!;
+    expect(arbitrage).toMatchObject({ assigneeAgentId: "agent-coordinateur" });
+    expect(t.reveils).toEqual([arbitrage.id]);
   });
 });
 

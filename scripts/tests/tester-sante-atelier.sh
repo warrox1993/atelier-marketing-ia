@@ -96,6 +96,25 @@ attendre "inotify sous les limites"                0    "tout va bien"          
 attendre "inotify : surveillances presque épuisées" non0 "plus gros : node (480000)" --fichier-reponse "${TMP}/ok.json" --fichier-inotify "${TMP}/inotify-ko.txt"
 attendre "inotify : instances presque épuisées"    non0 "instances inotify : 4 sur 4" --fichier-reponse "${TMP}/ok.json" --fichier-inotify "${TMP}/inotify-inst.txt"
 
+# --- Fabrique (service système et écart avec le dépôt) : faux dépôt et fausse copie installée en dossier temporaire ---
+FAB="${TMP}/fab"; mkdir -p "${FAB}/scripts" "${FAB}/depot-fabrique"
+cp "${RACINE}/scripts/sante-atelier.sh" "${RACINE}/scripts/lib-cle-board.sh" "${RACINE}/scripts/ecart-fabrique.sh" "${FAB}/scripts/" 2>/dev/null
+mkdir -p "${FAB}/fabrique/generateurs"; echo 'a = 1' > "${FAB}/fabrique/service.py"; echo 'g = 1' > "${FAB}/fabrique/generateurs/voix.py"
+cp -a "${FAB}/fabrique" "${FAB}/installee"; mkdir -p "${FAB}/etat"
+ecrire fab-active.txt $'active\n'
+ecrire fab-failed.txt $'failed\n'
+SCRIPT_REEL="${SCRIPT}"; SCRIPT="${FAB}/scripts/sante-atelier.sh"
+export ATELIER_FABRIQUE_INSTALLEE="${FAB}/installee" ATELIER_FABRIQUE_ETAT="${FAB}/etat"
+attendre "fabrique active et à jour : tout va bien" 0    "tout va bien"            --fichier-reponse "${TMP}/ok.json" --fichier-fabrique "${TMP}/fab-active.txt"
+attendre "fabrique failed : alerte qui nomme le service" non0 "atelier-fabrique"    --fichier-reponse "${TMP}/ok.json" --fichier-fabrique "${TMP}/fab-failed.txt"
+echo 'a = 2' > "${FAB}/installee/service.py"
+attendre "fabrique active mais en retard : alerte d'écart"  non0 "installée en retard sur le dépôt : 1 fichier(s) (premier : service.py)" --fichier-reponse "${TMP}/ok.json" --fichier-fabrique "${TMP}/fab-active.txt"
+attendre "fabrique en retard : commande de réinstallation"  non0 "sudo bash scripts/installer-fabrique.sh" --fichier-reponse "${TMP}/ok.json" --fichier-fabrique "${TMP}/fab-active.txt"
+attendre "sans --fichier-fabrique en simulation : section non contrôlée" 0 "tout va bien" --fichier-reponse "${TMP}/ok.json"
+rm -rf -- "${FAB}/installee"
+attendre "copie installée absente : alerte"         non0 "copie installée de la fabrique absente ou illisible" --fichier-reponse "${TMP}/ok.json" --fichier-fabrique "${TMP}/fab-active.txt"
+unset ATELIER_FABRIQUE_INSTALLEE ATELIER_FABRIQUE_ETAT; SCRIPT="${SCRIPT_REEL}"
+
 # --- Notification et courriel (EXP-C3) : doublures de notify-send et de curl, aucun envoi réel ---
 mkdir -p "${TMP}/bin"
 printf '#!/usr/bin/env bash\necho notify >> "%s/notify.log"\n' "${TMP}" > "${TMP}/bin/notify-send"

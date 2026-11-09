@@ -79,69 +79,75 @@ export function creerVeilleur(d: DependancesVeilleur) {
     const now = maintenant().getTime();
     const debutPeriode = new Date(now - seuil * 60_000).toISOString();
     for (const t of await d.base.tachesOrphelines(companyId, seuil)) {
-      const reveils = await d.base.datesJournal(companyId, t.issueId, VEILLEUR.typeReveil);
-      if (reveils.some((le) => le > debutPeriode)) {
-        r.ignorees.push({ issueId: t.issueId, raison: "deja_reveillee_dans_la_periode" });
-        continue;
-      }
-      // Remise à zéro seulement par une action humaine : décision de l'atelier ou renvoi au travail dans le socle.
-      const [decisions, remises] = await Promise.all([
-        d.base.listerDecisions(companyId, t.issueId),
-        d.base.datesJournal(companyId, t.issueId, VEILLEUR.typeRemiseHumaine),
-      ]);
-      const actionsHumaines = [...decisions.map((x) => x.creeLe), ...remises].sort();
-      const derniereAction = actionsHumaines[actionsHumaines.length - 1] ?? "";
-      if (reveils.filter((le) => le > derniereAction).length >= VEILLEUR.maxReveils) {
-        r.ignorees.push({ issueId: t.issueId, raison: "plafond_total" });
-        const abandons = await d.base.datesJournal(companyId, t.issueId, VEILLEUR.typeAbandon);
-        if (!abandons.some((le) => le > derniereAction)) {
-          await d.base.journaliser({
-            companyId, type: VEILLEUR.typeAbandon, entite: "tache", entiteId: t.issueId, issueId: t.issueId, acteur: "atelier:veilleur",
-            donnees: { identifiant: t.identifier, agentId: t.agentId, reveils: VEILLEUR.maxReveils, dernierRun: t.dernierRun },
-          });
-          d.logger.warn("Veilleur : tâche toujours orpheline après le plafond de réveils, intervention humaine nécessaire", { issueId: t.issueId, identifiant: t.identifier });
-          // Commentaire du plugin (sans actorUserId) : visible dans la tâche, il ne réveille personne.
-          await d.issues.createComment(
-            t.issueId,
-            `**Tâche abandonnée par le veilleur** : toujours sans passage après ${VEILLEUR.maxReveils} réveils de l'agent depuis la dernière action humaine. ` +
-              "Il faut une décision humaine : reprendre la tâche (la renvoyer au travail), la réassigner ou la clore. Le veilleur ne la réveillera plus d'ici là.",
-            companyId,
-          ).catch((err) => d.logger.warn("Veilleur : commentaire d'abandon refusé", { issueId: t.issueId, erreur: err instanceof Error ? err.message : String(err) }));
-        }
-        continue;
-      }
-      if (VEILLEUR.maxReveilsParPasse - tentatives.n <= 0) {
-        r.ignorees.push({ issueId: t.issueId, raison: "plafond_passe" });
-        continue;
-      }
-      const interactions = await d.issues.listInteractions(t.issueId, companyId);
-      if (interactions.some((i) => i.status === "pending")) {
-        r.ignorees.push({ issueId: t.issueId, raison: "attente_humaine" });
-        continue;
-      }
-      tentatives.n += 1;
-      let resultat: { queued: boolean; runId: string | null } | null = null;
-      let erreur: string | null = null;
       try {
-        resultat = await d.issues.requestWakeup(t.issueId, companyId, {
-          reason: "atelier_veilleur_tache_orpheline",
-          contextSource: "atelier.veilleur",
-          idempotencyKey: `atelier-veilleur-${t.issueId}-${Math.floor(now / (seuil * 60_000))}`,
+        const reveils = await d.base.datesJournal(companyId, t.issueId, VEILLEUR.typeReveil);
+        if (reveils.some((le) => le > debutPeriode)) {
+          r.ignorees.push({ issueId: t.issueId, raison: "deja_reveillee_dans_la_periode" });
+          continue;
+        }
+        // Remise à zéro seulement par une action humaine : décision de l'atelier ou renvoi au travail dans le socle.
+        const [decisions, remises] = await Promise.all([
+          d.base.listerDecisions(companyId, t.issueId),
+          d.base.datesJournal(companyId, t.issueId, VEILLEUR.typeRemiseHumaine),
+        ]);
+        const actionsHumaines = [...decisions.map((x) => x.creeLe), ...remises].sort();
+        const derniereAction = actionsHumaines[actionsHumaines.length - 1] ?? "";
+        if (reveils.filter((le) => le > derniereAction).length >= VEILLEUR.maxReveils) {
+          r.ignorees.push({ issueId: t.issueId, raison: "plafond_total" });
+          const abandons = await d.base.datesJournal(companyId, t.issueId, VEILLEUR.typeAbandon);
+          if (!abandons.some((le) => le > derniereAction)) {
+            await d.base.journaliser({
+              companyId, type: VEILLEUR.typeAbandon, entite: "tache", entiteId: t.issueId, issueId: t.issueId, acteur: "atelier:veilleur",
+              donnees: { identifiant: t.identifier, agentId: t.agentId, reveils: VEILLEUR.maxReveils, dernierRun: t.dernierRun },
+            });
+            d.logger.warn("Veilleur : tâche toujours orpheline après le plafond de réveils, intervention humaine nécessaire", { issueId: t.issueId, identifiant: t.identifier });
+            // Commentaire du plugin (sans actorUserId) : visible dans la tâche, il ne réveille personne.
+            await d.issues.createComment(
+              t.issueId,
+              `**Tâche abandonnée par le veilleur** : toujours sans passage après ${VEILLEUR.maxReveils} réveils de l'agent depuis la dernière action humaine. ` +
+                "Il faut une décision humaine : reprendre la tâche (la renvoyer au travail), la réassigner ou la clore. Le veilleur ne la réveillera plus d'ici là.",
+              companyId,
+            ).catch((err) => d.logger.warn("Veilleur : commentaire d'abandon refusé", { issueId: t.issueId, erreur: err instanceof Error ? err.message : String(err) }));
+          }
+          continue;
+        }
+        if (VEILLEUR.maxReveilsParPasse - tentatives.n <= 0) {
+          r.ignorees.push({ issueId: t.issueId, raison: "plafond_passe" });
+          continue;
+        }
+        const interactions = await d.issues.listInteractions(t.issueId, companyId);
+        if (interactions.some((i) => i.status === "pending")) {
+          r.ignorees.push({ issueId: t.issueId, raison: "attente_humaine" });
+          continue;
+        }
+        tentatives.n += 1;
+        let resultat: { queued: boolean; runId: string | null } | null = null;
+        let erreur: string | null = null;
+        try {
+          resultat = await d.issues.requestWakeup(t.issueId, companyId, {
+            reason: "atelier_veilleur_tache_orpheline",
+            contextSource: "atelier.veilleur",
+            idempotencyKey: `atelier-veilleur-${t.issueId}-${Math.floor(now / (seuil * 60_000))}`,
+          });
+        } catch (err) {
+          erreur = err instanceof Error ? err.message : String(err);
+        }
+        // Journalisé même en cas d'échec : la période compte, aucune relance en boucle.
+        await d.base.journaliser({
+          companyId, type: VEILLEUR.typeReveil, entite: "tache", entiteId: t.issueId, issueId: t.issueId, acteur: "atelier:veilleur",
+          donnees: { identifiant: t.identifier, statut: t.statut, agentId: t.agentId, dernierRun: t.dernierRun, seuilMinutes: seuil, resultat, erreur },
         });
+        if (erreur) {
+          r.echecs.push({ issueId: t.issueId, erreur });
+          d.logger.warn("Veilleur : réveil refusé", { issueId: t.issueId, identifiant: t.identifier, erreur });
+        } else {
+          r.reveillees.push(t.issueId);
+          d.logger.info("Veilleur : tâche orpheline réveillée", { issueId: t.issueId, identifiant: t.identifier, runId: resultat?.runId ?? null });
+        }
       } catch (err) {
-        erreur = err instanceof Error ? err.message : String(err);
-      }
-      // Journalisé même en cas d'échec : la période compte, aucune relance en boucle.
-      await d.base.journaliser({
-        companyId, type: VEILLEUR.typeReveil, entite: "tache", entiteId: t.issueId, issueId: t.issueId, acteur: "atelier:veilleur",
-        donnees: { identifiant: t.identifier, statut: t.statut, agentId: t.agentId, dernierRun: t.dernierRun, seuilMinutes: seuil, resultat, erreur },
-      });
-      if (erreur) {
+        const erreur = err instanceof Error ? err.message : String(err);
         r.echecs.push({ issueId: t.issueId, erreur });
-        d.logger.warn("Veilleur : réveil refusé", { issueId: t.issueId, identifiant: t.identifier, erreur });
-      } else {
-        r.reveillees.push(t.issueId);
-        d.logger.info("Veilleur : tâche orpheline réveillée", { issueId: t.issueId, identifiant: t.identifier, runId: resultat?.runId ?? null });
+        d.logger.warn("Veilleur : tâche en échec, les suivantes continuent", { issueId: t.issueId, erreur });
       }
     }
   }
@@ -156,9 +162,13 @@ export function creerVeilleur(d: DependancesVeilleur) {
       for (const companyId of await d.base.entreprisesSuivies()) {
         try {
           await passeEntreprise(companyId, r, tentatives);
-          if (d.bilan) await rattraperBilansJ30(d.bilan, companyId);
         } catch (err) {
           d.logger.warn("Veilleur : passe interrompue pour une entreprise", { companyId, erreur: err instanceof Error ? err.message : String(err) });
+        }
+        try {
+          if (d.bilan) await rattraperBilansJ30(d.bilan, companyId);
+        } catch (err) {
+          d.logger.warn("Veilleur : rattrapage des bilans J+30 interrompu", { companyId, erreur: err instanceof Error ? err.message : String(err) });
         }
       }
     } finally {

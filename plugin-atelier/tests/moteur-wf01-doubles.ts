@@ -45,7 +45,7 @@ export const [P1, P2, P3, P4] = P.map((p) => p.id) as [string, string, string, s
 export function baseMemoire() {
   const missions = new Map<string, Mission>();
   const etapes: EtapeMission[] = [];
-  const executions = new Map<string, { statut: string }>();
+  const executions = new Map<string, { statut: string; type?: string; requete?: unknown; missionId?: string }>();
   const journal: Array<{ type: string; donnees?: Record<string, unknown> }> = [];
   const base = {
     async lireMission(companyId: string, id: string) {
@@ -58,6 +58,8 @@ export function baseMemoire() {
     async changerEtatMission(companyId: string, id: string, ancien: string, nouveau: string) {
       const m = missions.get(id);
       if (!m || m.companyId !== companyId || m.etat !== ancien) return false;
+      // Comme le SQL : la sortie de blocage (hors pause, annulation et échec) incrémente le compteur de cycle dans le même changement.
+      if (ancien === "blocage" && !["pause", "annulee", "echec"].includes(nouveau)) Object.assign(m, { cycleBlocage: ((m as { cycleBlocage?: number }).cycleBlocage ?? 0) + 1 });
       m.etat = nouveau as Mission["etat"];
       return true;
     },
@@ -86,11 +88,15 @@ export function baseMemoire() {
       const e = etapes.find((x) => x.companyId === companyId && x.issueId === issueId);
       return e ? { ...e } : null;
     },
-    async enregistrerExecution(e: { companyId: string; cle: string }) {
+    async enregistrerExecution(e: { companyId: string; missionId?: string; cle: string; type?: string; requete?: unknown }) {
       const k = `${e.companyId}|${e.cle}`;
       if (executions.has(k)) return false;
-      executions.set(k, { statut: "demandee" });
+      executions.set(k, { statut: "demandee", type: e.type, requete: e.requete, missionId: e.missionId });
       return true;
+    },
+    /** Comme le SQL : les exécutions encore `demandee` de la mission pour ce type, clé d'idempotence comprise. */
+    async executionsDemandees(companyId: string, missionId: string, type: string) {
+      return [...executions].filter(([k, x]) => k.startsWith(`${companyId}|`) && x.missionId === missionId && x.type === type && x.statut === "demandee").map(([k, x]) => ({ cle: k.slice(k.indexOf("|") + 1), requete: x.requete }));
     },
     async marquerExecution(companyId: string, cle: string, statut: string) {
       const x = executions.get(`${companyId}|${cle}`);
@@ -104,7 +110,9 @@ export function baseMemoire() {
       journal.push({ type: e.type, donnees: e.donnees });
     },
   };
-  return { base, missions, etapes, journal, executions };
+  /** Exécutions enregistrées et pas encore marquées : celles qu'un veilleur rejouerait. */
+  const executionsDemandees = () => [...executions].filter(([, x]) => x.statut === "demandee").map(([k, x]) => ({ cle: k.slice(k.indexOf("|") + 1), type: x.type, requete: x.requete }));
+  return { base, missions, etapes, journal, executions, executionsDemandees };
 }
 
 /** Hôte double : `list` rend la politique et l'état natifs à null, `get` les rend, le réveil refuse comme le vrai hôte (sans assigné, statut non réveillable, bloqueur non terminé). */
@@ -149,7 +157,8 @@ export function hoteDouble() {
         if (["backlog", "done", "cancelled"].includes(String(tache.status))) throw new Error("Issue is not wakeable");
         if (((tache.blockedByIssueIds as string[] | undefined) ?? []).some((b) => issues.get(b)?.status !== "done")) throw new Error("Issue is blocked by unresolved blockers");
         reveils.push(issueId);
-        return {};
+        // Comme l'hôte (plugin-host-services.ts, requestWakeup) : `queued` dit si un run a été mis en file.
+        return { queued: true, runId: null };
       },
     },
     async resoudreAgent(_companyId: string, role: string) {

@@ -29,6 +29,8 @@ export interface CrmMoteur {
   /** Un export ambigu (issue incertaine) contient ce prospect : jamais de réécriture sur un effet incertain. */
   ambigu?(companyId: string, missionId: string, prospectId: string): Promise<boolean>;
   ecrire(companyId: string, e: { missionId: string; prospectIds: string[]; cle: string }): Promise<ResultatEcriture>;
+  /** Une approbation humaine « modifier_crm » plus récente que toute diffusion existe et n'a servi à aucune : la route peut produire une nouvelle diffusion. */
+  decisionNouvelle?(companyId: string, missionId: string): Promise<boolean>;
 }
 
 export interface DepsExport {

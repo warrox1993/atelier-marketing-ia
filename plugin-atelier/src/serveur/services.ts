@@ -59,7 +59,7 @@ import {
 import type { ActeurHote, GestionnaireAction, GestionnaireDonnees, GestionnaireRoute, RequeteRoute, Services } from "./atelier.js";
 import { creerBase, type BaseAtelier } from "./base.js";
 import { numerosTelephone } from "./regles-telephone.js";
-import { partie, resumer, type ContexteComplet } from "./contexte-resume.js";
+import { DESCRIPTION_REVEIL_MAX, partie, resumer, type ContexteComplet } from "./contexte-resume.js";
 import { partieDossier, resumerDossier, type DossierComplet } from "./dossier-resume.js";
 import { injectionsSignalees, retirerInvisibles, signalementInvisibles, texteVisible } from "./contenu-externe.js";
 import { ErreurAtelier, erreur, erreurValidation } from "./erreurs.js";
@@ -625,7 +625,13 @@ export function creerServices(ctx: PluginContext, options: { transportReel?: Tra
     ]);
     const statut = await statutTache(r.companyId, issue, Boolean(porte?.actif));
     const mode = (await modeEffectif(r.companyId, campagne)).mode;
+    // L'agent assigné a déjà la description dans son message de réveil (sauf conversation ou description au-delà du plafond du socle).
+    const descriptionAuReveil =
+      r.acteur.agentId !== null && issue.assigneeAgentId === r.acteur.agentId &&
+      !(issue as { conversationAgentId?: string | null }).conversationAgentId &&
+      (issue.description ?? "").length > 0 && (issue.description ?? "").length <= DESCRIPTION_REVEIL_MAX;
     return {
+      descriptionAuReveil,
       corps: {
         tache: { id: issue.id, identifier: issue.identifier, titre: issue.title, description: issue.description, statutNatif: issue.status, ...statut },
         campagne,
@@ -671,9 +677,9 @@ export function creerServices(ctx: PluginContext, options: { transportReel?: Tra
   routes["tache.contexte"] = async (r) => {
     const q = analyser(ContexteRequete, r.query, "Contexte");
     const complet = await contexteComplet(r);
-    if (q.vue === "complete" && !q.partie) return complet;
+    if (q.vue === "complete" && !q.partie) return { corps: complet.corps };
     const c = complet.corps as unknown as ContexteComplet;
-    return { corps: q.partie ? partie(c, q) : resumer(c) };
+    return { corps: q.partie ? partie(c, q) : resumer(c, { descriptionAuReveil: complet.descriptionAuReveil }) };
   };
 
   routes["tache.couverture"] = async (r) => {

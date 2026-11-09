@@ -17,7 +17,7 @@ const TABLE: Array<[EtatMission, EvenementMission, EtatMission]> = [
   ["en_execution", "effet_confirme", "resultat_confirme"], ["en_execution", "effet_refuse", "echec"], ["en_execution", "effet_ambigu", "blocage"],
   ["resultat_confirme", "cloture", "cloturee"],
   ["attente_information", "information_recue", "prete"],
-  ["blocage", "arbitrage_repris", "prete"], ["blocage", "arbitrage_effet_confirme", "resultat_confirme"], ["blocage", "arbitrage_abandon", "echec"],
+  ["blocage", "arbitrage_repris", "prete"], ["blocage", "arbitrage_effet_confirme", "resultat_confirme"], ["blocage", "arbitrage_abandon", "echec"], ["blocage", "arbitrage_repris_effet", "en_execution"],
   ["pause", "reprise_travail", "prete"], ["pause", "reprise_revue", "en_revue"], ["pause", "reprise_autorisation", "attente_autorisation"],
   ["pause", "reprise_information", "attente_information"], ["pause", "reprise_blocage", "blocage"], ["pause", "annulation", "annulee"],
 ];
@@ -33,8 +33,8 @@ const TERMINAUX: EtatMission[] = ["cloturee", "annulee", "echec"];
 const EVENEMENTS = [...new Set(TABLE.map(([, e]) => e))];
 
 describe("moteur de missions : transitions", () => {
-  it("la table de référence compte 33 paires du tableau plus 12 développées", () => {
-    expect(TABLE).toHaveLength(33 + 12);
+  it("la table de référence compte 34 paires du tableau plus 12 développées", () => {
+    expect(TABLE).toHaveLength(34 + 12);
   });
 
   it.each(TABLE)("%s + %s -> %s", (etat, evenement, attendu) => {

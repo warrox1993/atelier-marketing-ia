@@ -23,9 +23,9 @@ describe("manifeste : schéma du socle", () => {
     const fautives = (manifest.apiRoutes ?? []).map((r) => r.routeKey).filter((k) => !/^[a-z0-9][a-z0-9._:-]*$/u.test(k));
     expect(fautives).toEqual([]);
   });
-  it("déclare la capacité agent.tools.register et les cinq outils de la fabrique et les cinq du moteur (le socle l'exige dès qu'un outil est déclaré)", () => {
+  it("déclare la capacité agent.tools.register et les cinq outils de la fabrique et les six du moteur (le socle l'exige dès qu'un outil est déclaré)", () => {
     expect(manifest.capabilities).toContain("agent.tools.register");
-    expect((manifest.tools ?? []).map((t) => t.name).sort()).toEqual(["decision_demander", "etat_fabrication", "fabriquer_document", "fabriquer_image", "fabriquer_video", "livrable_deposer", "mission_etat", "sources_lister", "verdict_deposer", "voir_rendu"]);
+    expect((manifest.tools ?? []).map((t) => t.name).sort()).toEqual(["arbitrage_deposer", "decision_demander", "etat_fabrication", "fabriquer_document", "fabriquer_image", "fabriquer_video", "livrable_deposer", "mission_etat", "sources_lister", "verdict_deposer", "voir_rendu"]);
     const sansCapacite = { ...manifest, capabilities: manifest.capabilities.filter((c) => c !== "agent.tools.register") };
     expect(pluginManifestV1Schema.safeParse(sansCapacite).success).toBe(false);
   });

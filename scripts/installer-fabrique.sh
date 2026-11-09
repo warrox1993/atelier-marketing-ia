@@ -13,8 +13,8 @@
 set -uo pipefail
 
 RACINE_DEPOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-DEST_LIB="/opt/atelier-fabrique/lib"
-ETAT="/var/lib/atelier-fabrique"
+DEST_LIB="${ATELIER_FABRIQUE_DEST_LIB:-/opt/atelier-fabrique/lib}"
+ETAT="${ATELIER_FABRIQUE_ETAT:-/var/lib/atelier-fabrique}"
 LISTE_ENTREPRISES="$ETAT/entreprises.json"
 CHARTES="$ETAT/chartes-autorisees"
 CHARTE_EXEMPLE="$RACINE_DEPOT/fabrique/chartes-exemple/sobre.json"
@@ -103,6 +103,16 @@ if ! command -v exiftool >/dev/null 2>&1; then
   command -v exiftool >/dev/null 2>&1 || echec "exiftool introuvable après installation"
 fi
 [[ -f "$RACINE_DEPOT/fabrique/service.py" ]] || echec "fabrique/service.py introuvable"
+
+# Garde : un travail en cours serait perdu au redémarrage, et les générateurs sont relus depuis /opt à chaque étape
+# (remplacés en plein travail, ils mélangeraient deux versions) : on s'arrête avant d'effacer l'ancien code.
+# En cours = un dossier travaux/<id> (accepté, même sans etat.json) ou un etat.json dont l'état n'est pas terminal (termine, echec).
+if systemctl is-active --quiet atelier-fabrique.service \
+    && { [[ -n "$(find "$ETAT/travaux" -mindepth 1 -maxdepth 1 -type d -print -quit 2>/dev/null)" ]] \
+         || [[ -n "$(find "$ETAT/livrables" -mindepth 3 -maxdepth 3 -name etat.json -type f \
+              -exec grep -LE '"etat"[[:space:]]*:[[:space:]]*"(termine|echec)"' {} + 2>/dev/null)" ]]; }; then
+  echec "travail en cours : relancer quand la file est vide (ou arrêter le service d'abord, le travail sera marqué en échec)"
+fi
 
 # Code copié hors de /home (ProtectHome le cache), sans les tests, propriété de root.
 install -d -o root -g root -m 0755 "$DEST_LIB" "$DEST_LIB/fabrique" || echec "création de $DEST_LIB impossible"

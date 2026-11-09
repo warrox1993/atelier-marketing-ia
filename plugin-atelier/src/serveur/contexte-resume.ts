@@ -13,6 +13,8 @@ import type { ContexteRequete } from "../contrats/api.js";
 export const PAGE_LIVRABLE_MAX = 15_000;
 /** Plafond de caractères du résumé (vérifié par les tests). */
 export const RESUME_MAX = 40_000;
+// shortcut: recopie de MAX_INLINE_WAKE_ISSUE_DESCRIPTION_CHARS du socle (run-preparation.ts:137), à recaler si le socle change ce plafond
+export const DESCRIPTION_REVEIL_MAX = 12_000;
 
 type Dict = Record<string, unknown>;
 type Requete = ContexteRequete;
@@ -61,8 +63,11 @@ export function sommaireDe(corps: string): Array<{ ligne: number; titre: string 
   return sommaire;
 }
 
-/** Résumé par défaut de la route. */
-export function resumer(c: ContexteComplet): Dict {
+/**
+ * Résumé par défaut de la route. `descriptionAuReveil` : le lecteur est l'agent assigné et a déjà la
+ * description dans son message de réveil ; elle est alors remplacée par sa longueur et le moyen de la relire.
+ */
+export function resumer(c: ContexteComplet, options: { descriptionAuReveil?: boolean } = {}): Dict {
   const liv = c.livrable;
   const { tache, campagne, brief, exigences, porte, livrable, couvertures, verdicts, constatsOuverts, donneesConnexion, ...reste } = c;
   void livrable;
@@ -79,8 +84,11 @@ export function resumer(c: ContexteComplet): Dict {
   return {
     vue: "resume",
     // Court : le mode d'emploi (pages du livrable, parties) est dans les consignes communes.
-    pourAllerPlus: "?partie=livrable|verdicts|couvertures|donneesConnexion ; ?vue=complete",
-    tache: sansIdentifiants(tache, ["companyId"]),
+    pourAllerPlus: "?partie=livrable|verdicts|couvertures|donneesConnexion|tache ; ?vue=complete",
+    tache: sansIdentifiants(tache, options.descriptionAuReveil ? ["companyId", "description"] : ["companyId"]),
+    ...(options.descriptionAuReveil
+      ? { descriptionOmise: { longueur: String(tache.description ?? "").length, lire: "?partie=tache" } }
+      : {}),
     campagne: campagne ? sansIdentifiants(campagne, ["companyId"]) : null,
     brief: brief ? sansIdentifiants(brief, ["companyId", "campagneId", "issueId"]) : null,
     porte: porte ? sansIdentifiants(porte, ["companyId", "issueId"]) : null,
@@ -118,6 +126,8 @@ export function partie(c: ContexteComplet, q: Requete): Dict {
       return { partie: "couvertures", couvertures: c.couvertures };
     case "donneesConnexion":
       return { partie: "donneesConnexion", donneesConnexion: c.donneesConnexion };
+    case "tache":
+      return { partie: "tache", tache: c.tache };
     case "livrable":
       return pageLivrable(c, q);
     default:

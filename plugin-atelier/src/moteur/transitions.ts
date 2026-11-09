@@ -14,7 +14,7 @@ export type EvenementMission =
   | "approuvee_avec_effet" | "approuvee_sans_effet"
   | "effet_confirme" | "effet_refuse" | "effet_ambigu"
   | "cloture" | "information_recue"
-  | "arbitrage_repris" | "arbitrage_effet_confirme" | "arbitrage_abandon"
+  | "arbitrage_repris" | "arbitrage_repris_effet" | "arbitrage_effet_confirme" | "arbitrage_abandon"
   | "pause_demandee" | "annulation"
   | "reprise_travail" | "reprise_revue" | "reprise_autorisation" | "reprise_information" | "reprise_blocage";
 
@@ -44,7 +44,7 @@ const TRANSITIONS: Readonly<Partial<Record<EtatMission, Suites>>> = {
   en_execution: { effet_confirme: "resultat_confirme", effet_refuse: "echec", effet_ambigu: "blocage" },
   resultat_confirme: { cloture: "cloturee" },
   attente_information: { information_recue: "prete", ...PAUSE_ANNULATION },
-  blocage: { arbitrage_repris: "prete", arbitrage_effet_confirme: "resultat_confirme", arbitrage_abandon: "echec", ...PAUSE_ANNULATION },
+  blocage: { arbitrage_repris: "prete", arbitrage_repris_effet: "en_execution", arbitrage_effet_confirme: "resultat_confirme", arbitrage_abandon: "echec", ...PAUSE_ANNULATION },
   pause: {
     reprise_travail: "prete", reprise_revue: "en_revue", reprise_autorisation: "attente_autorisation", reprise_information: "attente_information",
     reprise_blocage: "blocage", annulation: "annulee",

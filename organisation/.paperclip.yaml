@@ -24,6 +24,7 @@ agents:
           - "mcp__paperclip-assigned__atelier_marketing-ia_mission_etat"
           - "mcp__paperclip-assigned__atelier_marketing-ia_sources_lister"
           - "Bash(curl *)"
+          - "mcp__paperclip-assigned__atelier_marketing-ia_arbitrage_deposer"
           - "mcp__Paperclip_projects__list_projects"
           - "mcp__Paperclip_projects__list_project_repositories"
           - "mcp__Paperclip_projects__create_project"
@@ -82,7 +83,7 @@ agents:
     metadata:
       atelier:
         registre: "atelier/registre-agents/v1"
-        versionRegistre: "1.18.0"
+        versionRegistre: "1.19.1"
         slug: "coordinateur"
         titre: "Coordinateur marketing"
         entrees:
@@ -107,6 +108,7 @@ agents:
           - "mcp__paperclip-assigned__atelier_marketing-ia_sources_lister"
         outilsMutation:
           - "Bash(curl *)"
+          - "mcp__paperclip-assigned__atelier_marketing-ia_arbitrage_deposer"
         outilsInterdits:
           - "WebFetch"
           - "WebSearch"
@@ -182,6 +184,7 @@ agents:
           - "mcp__paperclip-assigned__atelier_marketing-ia_verdict_deposer"
           - "mcp__paperclip-assigned__atelier_marketing-ia_decision_demander"
           - "mcp__paperclip-assigned__atelier_marketing-ia_sources_lister"
+          - "mcp__paperclip-assigned__atelier_marketing-ia_arbitrage_deposer"
           - "Workflow"
           - "ScheduleWakeup"
           - "ReportFindings"
@@ -220,7 +223,7 @@ agents:
     metadata:
       atelier:
         registre: "atelier/registre-agents/v1"
-        versionRegistre: "1.18.0"
+        versionRegistre: "1.19.1"
         slug: "veille"
         titre: "Pôle Intelligence · Marché et veille concurrentielle"
         entrees:
@@ -260,6 +263,7 @@ agents:
           - "mcp__paperclip-assigned__atelier_marketing-ia_verdict_deposer"
           - "mcp__paperclip-assigned__atelier_marketing-ia_decision_demander"
           - "mcp__paperclip-assigned__atelier_marketing-ia_sources_lister"
+          - "mcp__paperclip-assigned__atelier_marketing-ia_arbitrage_deposer"
         relit: []
         roleRevue: null
         connexions:
@@ -323,6 +327,7 @@ agents:
           - "mcp__paperclip-assigned__atelier_marketing-ia_verdict_deposer"
           - "mcp__paperclip-assigned__atelier_marketing-ia_decision_demander"
           - "mcp__paperclip-assigned__atelier_marketing-ia_sources_lister"
+          - "mcp__paperclip-assigned__atelier_marketing-ia_arbitrage_deposer"
           - "Workflow"
           - "ScheduleWakeup"
           - "ReportFindings"
@@ -361,7 +366,7 @@ agents:
     metadata:
       atelier:
         registre: "atelier/registre-agents/v1"
-        versionRegistre: "1.18.0"
+        versionRegistre: "1.19.1"
         slug: "stratege"
         titre: "Pôle Intelligence · Stratégie marketing"
         entrees:
@@ -402,6 +407,7 @@ agents:
           - "mcp__paperclip-assigned__atelier_marketing-ia_verdict_deposer"
           - "mcp__paperclip-assigned__atelier_marketing-ia_decision_demander"
           - "mcp__paperclip-assigned__atelier_marketing-ia_sources_lister"
+          - "mcp__paperclip-assigned__atelier_marketing-ia_arbitrage_deposer"
         relit: []
         roleRevue: null
         connexions:
@@ -466,6 +472,7 @@ agents:
           - "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_image"
           - "mcp__paperclip-assigned__atelier_marketing-ia_voir_rendu"
           - "mcp__paperclip-assigned__atelier_marketing-ia_verdict_deposer"
+          - "mcp__paperclip-assigned__atelier_marketing-ia_arbitrage_deposer"
           - "Workflow"
           - "ScheduleWakeup"
           - "ReportFindings"
@@ -504,7 +511,7 @@ agents:
     metadata:
       atelier:
         registre: "atelier/registre-agents/v1"
-        versionRegistre: "1.18.0"
+        versionRegistre: "1.19.1"
         slug: "prospection"
         titre: "Pôle Intelligence · Recherche et qualification de prospects"
         entrees:
@@ -545,6 +552,7 @@ agents:
           - "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_image"
           - "mcp__paperclip-assigned__atelier_marketing-ia_voir_rendu"
           - "mcp__paperclip-assigned__atelier_marketing-ia_verdict_deposer"
+          - "mcp__paperclip-assigned__atelier_marketing-ia_arbitrage_deposer"
         relit: []
         roleRevue: null
         connexions:
@@ -611,6 +619,7 @@ agents:
           - "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_image"
           - "mcp__paperclip-assigned__atelier_marketing-ia_voir_rendu"
           - "mcp__paperclip-assigned__atelier_marketing-ia_verdict_deposer"
+          - "mcp__paperclip-assigned__atelier_marketing-ia_arbitrage_deposer"
           - "Workflow"
           - "ScheduleWakeup"
           - "ReportFindings"
@@ -649,7 +658,7 @@ agents:
     metadata:
       atelier:
         registre: "atelier/registre-agents/v1"
-        versionRegistre: "1.18.0"
+        versionRegistre: "1.19.1"
         slug: "enrichissement-coordonnees"
         titre: "Pôle Intelligence · Enrichissement des coordonnées professionnelles"
         entrees:
@@ -690,6 +699,7 @@ agents:
           - "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_image"
           - "mcp__paperclip-assigned__atelier_marketing-ia_voir_rendu"
           - "mcp__paperclip-assigned__atelier_marketing-ia_verdict_deposer"
+          - "mcp__paperclip-assigned__atelier_marketing-ia_arbitrage_deposer"
         relit: []
         roleRevue: null
         connexions:
@@ -752,6 +762,7 @@ agents:
           - "mcp__paperclip-assigned__atelier_marketing-ia_verdict_deposer"
           - "mcp__paperclip-assigned__atelier_marketing-ia_decision_demander"
           - "mcp__paperclip-assigned__atelier_marketing-ia_sources_lister"
+          - "mcp__paperclip-assigned__atelier_marketing-ia_arbitrage_deposer"
           - "Workflow"
           - "ScheduleWakeup"
           - "ReportFindings"
@@ -790,7 +801,7 @@ agents:
     metadata:
       atelier:
         registre: "atelier/registre-agents/v1"
-        versionRegistre: "1.18.0"
+        versionRegistre: "1.19.1"
         slug: "seo-local-geo"
         titre: "Pôle Production · Référencement naturel, local et GEO"
         entrees:
@@ -831,6 +842,7 @@ agents:
           - "mcp__paperclip-assigned__atelier_marketing-ia_verdict_deposer"
           - "mcp__paperclip-assigned__atelier_marketing-ia_decision_demander"
           - "mcp__paperclip-assigned__atelier_marketing-ia_sources_lister"
+          - "mcp__paperclip-assigned__atelier_marketing-ia_arbitrage_deposer"
         relit: []
         roleRevue: null
         connexions:
@@ -896,6 +908,7 @@ agents:
           - "mcp__paperclip-assigned__atelier_marketing-ia_verdict_deposer"
           - "mcp__paperclip-assigned__atelier_marketing-ia_decision_demander"
           - "mcp__paperclip-assigned__atelier_marketing-ia_sources_lister"
+          - "mcp__paperclip-assigned__atelier_marketing-ia_arbitrage_deposer"
           - "Workflow"
           - "ScheduleWakeup"
           - "ReportFindings"
@@ -934,7 +947,7 @@ agents:
     metadata:
       atelier:
         registre: "atelier/registre-agents/v1"
-        versionRegistre: "1.18.0"
+        versionRegistre: "1.19.1"
         slug: "sea"
         titre: "Pôle Production · Publicité et SEA"
         entrees:
@@ -976,6 +989,7 @@ agents:
           - "mcp__paperclip-assigned__atelier_marketing-ia_verdict_deposer"
           - "mcp__paperclip-assigned__atelier_marketing-ia_decision_demander"
           - "mcp__paperclip-assigned__atelier_marketing-ia_sources_lister"
+          - "mcp__paperclip-assigned__atelier_marketing-ia_arbitrage_deposer"
         relit: []
         roleRevue: null
         connexions:
@@ -1037,6 +1051,7 @@ agents:
           - "Agent"
           - "Task"
           - "mcp__paperclip-assigned__atelier_marketing-ia_verdict_deposer"
+          - "mcp__paperclip-assigned__atelier_marketing-ia_arbitrage_deposer"
           - "Workflow"
           - "ScheduleWakeup"
           - "ReportFindings"
@@ -1075,7 +1090,7 @@ agents:
     metadata:
       atelier:
         registre: "atelier/registre-agents/v1"
-        versionRegistre: "1.18.0"
+        versionRegistre: "1.19.1"
         slug: "contenus"
         titre: "Pôle Production · Contenus et création"
         entrees:
@@ -1116,6 +1131,7 @@ agents:
           - "Agent"
           - "Task"
           - "mcp__paperclip-assigned__atelier_marketing-ia_verdict_deposer"
+          - "mcp__paperclip-assigned__atelier_marketing-ia_arbitrage_deposer"
         relit: []
         roleRevue: null
         connexions:
@@ -1186,6 +1202,7 @@ agents:
           - "mcp__paperclip-assigned__atelier_marketing-ia_verdict_deposer"
           - "mcp__paperclip-assigned__atelier_marketing-ia_decision_demander"
           - "mcp__paperclip-assigned__atelier_marketing-ia_sources_lister"
+          - "mcp__paperclip-assigned__atelier_marketing-ia_arbitrage_deposer"
           - "Workflow"
           - "ScheduleWakeup"
           - "ReportFindings"
@@ -1224,7 +1241,7 @@ agents:
     metadata:
       atelier:
         registre: "atelier/registre-agents/v1"
-        versionRegistre: "1.18.0"
+        versionRegistre: "1.19.1"
         slug: "crm-conversion"
         titre: "Pôle Production · CRM et conversion"
         entrees:
@@ -1264,6 +1281,7 @@ agents:
           - "mcp__paperclip-assigned__atelier_marketing-ia_verdict_deposer"
           - "mcp__paperclip-assigned__atelier_marketing-ia_decision_demander"
           - "mcp__paperclip-assigned__atelier_marketing-ia_sources_lister"
+          - "mcp__paperclip-assigned__atelier_marketing-ia_arbitrage_deposer"
         relit: []
         roleRevue: null
         connexions:
@@ -1330,6 +1348,7 @@ agents:
           - "mcp__paperclip-assigned__atelier_marketing-ia_verdict_deposer"
           - "mcp__paperclip-assigned__atelier_marketing-ia_decision_demander"
           - "mcp__paperclip-assigned__atelier_marketing-ia_sources_lister"
+          - "mcp__paperclip-assigned__atelier_marketing-ia_arbitrage_deposer"
           - "Workflow"
           - "ScheduleWakeup"
           - "ReportFindings"
@@ -1368,7 +1387,7 @@ agents:
     metadata:
       atelier:
         registre: "atelier/registre-agents/v1"
-        versionRegistre: "1.18.0"
+        versionRegistre: "1.19.1"
         slug: "mesure"
         titre: "Pôle Intelligence · Mesure et optimisation"
         entrees:
@@ -1407,6 +1426,7 @@ agents:
           - "mcp__paperclip-assigned__atelier_marketing-ia_verdict_deposer"
           - "mcp__paperclip-assigned__atelier_marketing-ia_decision_demander"
           - "mcp__paperclip-assigned__atelier_marketing-ia_sources_lister"
+          - "mcp__paperclip-assigned__atelier_marketing-ia_arbitrage_deposer"
         relit: []
         roleRevue: null
         connexions:
@@ -1473,6 +1493,7 @@ agents:
           - "mcp__paperclip-assigned__atelier_marketing-ia_verdict_deposer"
           - "mcp__paperclip-assigned__atelier_marketing-ia_decision_demander"
           - "mcp__paperclip-assigned__atelier_marketing-ia_sources_lister"
+          - "mcp__paperclip-assigned__atelier_marketing-ia_arbitrage_deposer"
           - "Workflow"
           - "ScheduleWakeup"
           - "ReportFindings"
@@ -1511,7 +1532,7 @@ agents:
     metadata:
       atelier:
         registre: "atelier/registre-agents/v1"
-        versionRegistre: "1.18.0"
+        versionRegistre: "1.19.1"
         slug: "reseaux-sociaux"
         titre: "Pôle Contenus · Calendrier social, posts et brouillons de réponses"
         entrees:
@@ -1552,6 +1573,7 @@ agents:
           - "mcp__paperclip-assigned__atelier_marketing-ia_verdict_deposer"
           - "mcp__paperclip-assigned__atelier_marketing-ia_decision_demander"
           - "mcp__paperclip-assigned__atelier_marketing-ia_sources_lister"
+          - "mcp__paperclip-assigned__atelier_marketing-ia_arbitrage_deposer"
         relit: []
         roleRevue: null
         connexions:
@@ -1648,7 +1670,7 @@ agents:
     metadata:
       atelier:
         registre: "atelier/registre-agents/v1"
-        versionRegistre: "1.18.0"
+        versionRegistre: "1.19.1"
         slug: "conformite-publicitaire"
         titre: "Pôle Contrôle préalable · Communications commerciales réglementées"
         entrees:
@@ -1784,7 +1806,7 @@ agents:
     metadata:
       atelier:
         registre: "atelier/registre-agents/v1"
-        versionRegistre: "1.18.0"
+        versionRegistre: "1.19.1"
         slug: "exigences"
         titre: "Contrôleur des exigences"
         entrees:
@@ -1925,7 +1947,7 @@ agents:
     metadata:
       atelier:
         registre: "atelier/registre-agents/v1"
-        versionRegistre: "1.18.0"
+        versionRegistre: "1.19.1"
         slug: "relecteur"
         titre: "Responsable qualité"
         entrees:
@@ -2033,6 +2055,7 @@ agents:
           - "mcp__paperclip-assigned__atelier_marketing-ia_voir_rendu"
           - "mcp__paperclip-assigned__atelier_marketing-ia_livrable_deposer"
           - "mcp__paperclip-assigned__atelier_marketing-ia_decision_demander"
+          - "mcp__paperclip-assigned__atelier_marketing-ia_arbitrage_deposer"
           - "Workflow"
           - "ScheduleWakeup"
           - "ReportFindings"
@@ -2071,7 +2094,7 @@ agents:
     metadata:
       atelier:
         registre: "atelier/registre-agents/v1"
-        versionRegistre: "1.18.0"
+        versionRegistre: "1.19.1"
         slug: "tests-techniques"
         titre: "Vérificateur technique"
         entrees:
@@ -2111,6 +2134,7 @@ agents:
           - "mcp__paperclip-assigned__atelier_marketing-ia_voir_rendu"
           - "mcp__paperclip-assigned__atelier_marketing-ia_livrable_deposer"
           - "mcp__paperclip-assigned__atelier_marketing-ia_decision_demander"
+          - "mcp__paperclip-assigned__atelier_marketing-ia_arbitrage_deposer"
         relit:
           - "seo-local-geo"
           - "sea"
@@ -2152,7 +2176,7 @@ agents:
     metadata:
       atelier:
         registre: "atelier/registre-agents/v1"
-        versionRegistre: "1.18.0"
+        versionRegistre: "1.19.1"
         slug: "porte"
         titre: "Porte de contrôle"
         entrees:

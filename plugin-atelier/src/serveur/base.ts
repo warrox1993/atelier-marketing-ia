@@ -20,7 +20,7 @@ export type TypeExecution = "evenement" | "creation_tache" | "reveil" | "effet_e
 export type StatutExecution = "demandee" | "appliquee" | "refusee";
 export interface Mission {
   id: string; companyId: string; gabaritCle: string; gabaritVersion: number; contratId: string; contratVersion: number; mandat: string; etat: EtatMission;
-  etatAvantPause: EtatMission | null; rangCourant: number; enveloppeCents: number; campagneId: string | null; issueRacineId: string | null; creeLe: string; modifieLe: string;
+  etatAvantPause: EtatMission | null; rangCourant: number; enveloppeCents: number; campagneId: string | null; issueRacineId: string | null; cycleBlocage: number; creeLe: string; modifieLe: string;
 }
 export interface EtapeMission {
   id: string; companyId: string; missionId: string; rang: number; role: string; tentative: number; etat: string; entree: unknown; sortie: unknown;
@@ -1806,7 +1806,7 @@ export function creerBase(db: Db) {
     id: String(r.id), companyId: String(r.company_id), gabaritCle: String(r.gabarit_cle), gabaritVersion: Number(r.gabarit_version),
     contratId: String(r.contrat_id), contratVersion: Number(r.contrat_version), mandat: String(r.mandat), etat: r.etat as EtatMission,
     etatAvantPause: texteOuNul(r.etat_avant_pause) as EtatMission | null, rangCourant: Number(r.rang_courant), enveloppeCents: Number(r.enveloppe_cents),
-    campagneId: texteOuNul(r.campagne_id), issueRacineId: texteOuNul(r.issue_racine_id), creeLe: iso(r.cree_le), modifieLe: iso(r.modifie_le),
+    campagneId: texteOuNul(r.campagne_id), issueRacineId: texteOuNul(r.issue_racine_id), cycleBlocage: Number(r.cycle_blocage ?? 0), creeLe: iso(r.cree_le), modifieLe: iso(r.modifie_le),
   });
 
   const etapeDepuisLigne = (r: Ligne): EtapeMission => ({
@@ -1846,7 +1846,9 @@ export function creerBase(db: Db) {
   }
 
   async function changerEtatMission(companyId: string, id: string, ancien: EtatMission, nouveau: EtatMission) {
-    const { rowCount } = await x(`update ${ns}.missions set etat = $4, modifie_le = now() where company_id = $1 and id = $2 and etat = $3`, [companyId, id, ancien, nouveau]);
+    // Sortie de blocage par reprise ou levée : le compteur de cycle monte dans le même UPDATE (atomique), il entre dans les clés du moteur ; pause, annulation et échec ne reprennent rien.
+    const cycle = ancien === "blocage" && !["pause", "annulee", "echec"].includes(nouveau) ? "cycle_blocage = cycle_blocage + 1, " : "";
+    const { rowCount } = await x(`update ${ns}.missions set etat = $4, ${cycle}modifie_le = now() where company_id = $1 and id = $2 and etat = $3`, [companyId, id, ancien, nouveau]);
     return rowCount === 1;
   }
 
@@ -1915,6 +1917,12 @@ export function creerBase(db: Db) {
   async function lireExecution(companyId: string, cle: string) {
     const [r] = await q(`select statut from ${ns}.executions where company_id = $1 and cle_idempotence = $2`, [companyId, cle]);
     return r ? { statut: String(r.statut) as StatutExecution } : null;
+  }
+
+  /** Exécutions encore `demandee` de cette mission pour ce type (clé d'idempotence et requête) : ce qu'une reprise doit rejouer. */
+  async function executionsDemandees(companyId: string, missionId: string, type: TypeExecution) {
+    const lignes = await q(`select cle_idempotence, requete from ${ns}.executions where company_id = $1 and mission_id = $2 and type = $3 and statut = 'demandee' order by cree_le`, [companyId, missionId, type]);
+    return lignes.map((r) => ({ cle: String(r.cle_idempotence), requete: r.requete as unknown }));
   }
 
   /** Compare-and-set du rang courant d'une mission : vrai si la mission était bien au rang `ancien`. */
@@ -1995,7 +2003,7 @@ export function creerBase(db: Db) {
     detailsProspects, listerProspects, insererOpposition, lireOpposition,
     insererImportBaseClients, insererClients, etatBaseClients, supprimerBaseClients, reglesVentesCroisees, clientsPourVentesCroisees, insererEtalonnage, issuesPourEtalonnage, scoresCourantsCible, insererScoreMesure,
     lireExportCrmParCle, prospectDansExportNonRefuse, prospectExportConfirme, prospectExportAmbigu, insererExportCrm,
-    creerMission, lireMission, missionsActives, rattacherCampagneMission, changerEtatMission, creerEtape, lireEtapes, missionsAvecFichier, majEtape, enregistrerExecution, marquerExecution, lireExecution, changerRangMission, etapeParIssue,
+    creerMission, lireMission, missionsActives, rattacherCampagneMission, changerEtatMission, creerEtape, lireEtapes, missionsAvecFichier, majEtape, enregistrerExecution, marquerExecution, lireExecution, executionsDemandees, changerRangMission, etapeParIssue,
   };
 }
 

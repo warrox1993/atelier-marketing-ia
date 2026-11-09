@@ -14,12 +14,13 @@ const AGENT = "99999999-9999-4999-8999-999999999999";
 
 type Candidat = { issueId: string; identifier: string | null; statut: string; agentId: string; dernierRun: { id: string; statut: string; le: string } | null };
 
-function banc(o: { candidats?: Candidat[]; interactions?: Array<{ status: string }>; reveilEchoue?: boolean; commentaireEchoue?: boolean } = {}) {
+function banc(o: { candidats?: Candidat[]; interactions?: Array<{ status: string }>; reveilEchoue?: boolean; commentaireEchoue?: boolean; interactionsLeveesPour?: string; avecBilan?: boolean } = {}) {
   const commentaires: Array<{ issueId: string; corps: string; options: unknown }> = [];
   const decisions: Array<{ creeLe: string }> = [];
   let maintenant = new Date(Date.UTC(2026, 9, 16, 12, 0, 0));
   const journal: Array<{ type: string; issueId: string; creeLe: string; donnees: unknown }> = [];
   const reveils: Array<{ issueId: string; cle: string | null | undefined }> = [];
+  const rattrapages: string[] = [];
   // Tâche interrompue il y a 20 minutes (le SQL l'a déjà retenue comme orpheline au-delà du seuil).
   const candidats: Candidat[] = o.candidats ?? [
     { issueId: ORPHELINE, identifier: "ATL-35", statut: "in_progress", agentId: AGENT, dernierRun: { id: "run-1", statut: "interrupted", le: new Date(maintenant.getTime() - 20 * 60_000).toISOString() } },
@@ -34,7 +35,10 @@ function banc(o: { candidats?: Candidat[]; interactions?: Array<{ status: string
       journaliser: async (e: { type: string; issueId?: string | null; donnees?: unknown }) => void journal.push({ type: e.type, issueId: e.issueId ?? "", creeLe: maintenant.toISOString(), donnees: e.donnees }),
     } as never,
     issues: {
-      listInteractions: async () => (o.interactions ?? []) as never,
+      listInteractions: async (issueId: string) => {
+        if (issueId === o.interactionsLeveesPour) throw new Error("lecture des interactions impossible");
+        return (o.interactions ?? []) as never;
+      },
       requestWakeup: async (issueId: string, _c: string, opts?: { idempotencyKey?: string | null }) => {
         if (o.reveilEchoue) throw new Error("Issue is blocked by unresolved blockers");
         reveils.push({ issueId, cle: opts?.idempotencyKey });
@@ -49,10 +53,11 @@ function banc(o: { candidats?: Candidat[]; interactions?: Array<{ status: string
     logger: { info() {}, warn() {} },
     config: async () => ({}),
     maintenant: () => maintenant,
+    bilan: o.avecBilan ? ({ ctx: { logger: { warn() {} } }, base: { diffusionsConfirmeesSansBilan: async (c: string) => (rattrapages.push(c), []) } } as never) : undefined,
   });
   const avancer = (minutes: number) => (maintenant = new Date(maintenant.getTime() + minutes * 60_000));
   const maintenantIso = () => maintenant.toISOString();
-  return { veilleur, journal, reveils, seuils, avancer, candidats, decisions, maintenantIso, commentaires };
+  return { veilleur, journal, reveils, seuils, avancer, candidats, decisions, maintenantIso, commentaires, rattrapages };
 }
 
 describe("veilleur des tâches orphelines", () => {
@@ -173,6 +178,19 @@ describe("veilleur des tâches orphelines", () => {
     const r2 = await b.veilleur.passe();
     expect(r2.reveillees).toHaveLength(10);
     expect(b.reveils).toHaveLength(20);
+  });
+
+  it("une tâche dont listInteractions lève : les tâches suivantes sont réveillées, le rattrapage J+30 a lieu, l'erreur est dans echecs", async () => {
+    const fautive = "55555555-5555-4555-8555-000000000001";
+    const suivante = "55555555-5555-4555-8555-000000000002";
+    const candidats: Candidat[] = [fautive, suivante].map((issueId) => ({
+      issueId, identifier: null, statut: "in_progress", agentId: AGENT, dernierRun: { id: "run-1", statut: "interrupted", le: "2026-10-16T11:00:00.000Z" },
+    }));
+    const b = banc({ candidats, interactionsLeveesPour: fautive, avecBilan: true });
+    const r = await b.veilleur.passe();
+    expect(r.reveillees).toEqual([suivante]);
+    expect(r.echecs).toEqual([{ issueId: fautive, erreur: "lecture des interactions impossible" }]);
+    expect(b.rattrapages).toEqual([SOC]);
   });
 
   it("une tâche qui attend une réponse humaine n'est pas réveillée", async () => {

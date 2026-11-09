@@ -3,7 +3,8 @@
 # Vérifie : /api/health (statut ok, sauvegarde de base présente, sans échec, de moins de 2 h),
 # /api/plugins (plugin atelier.marketing-ia à « ready »), /sante de la passerelle (facultatif), les services
 # annexes, les agents des entreprises actives (statut error, 3 runs de suite en échec, connexion Claude perdue),
-# l'espace disque et les limites inotify de l'utilisateur.
+# l'espace disque, les limites inotify de l'utilisateur, le service système de la fabrique (atelier-fabrique)
+# et son écart avec le dépôt (scripts/ecart-fabrique.sh).
 # Code de sortie : 0 = tout va bien ; 1 = au moins une anomalie ; 2 = mauvais usage.
 # Chaque anomalie est écrite sur la sortie d'erreur (donc dans journald sous systemd).
 #
@@ -12,6 +13,7 @@
 #                                  [--fichier-passerelle passerelle.json] [--fichier-unites unites.txt]
 #                                  [--fichier-agents agents.json --fichier-runs runs.json]
 #                                  [--fichier-disques disques.txt] [--fichier-inotify inotify.txt]
+#                                  [--fichier-fabrique etat.txt]
 # Variables : ATELIER_PORT (défaut 3100), ATELIER_PASSERELLE_URL (vide = passerelle non contrôlée),
 #             ATELIER_SANTE_AGE_MAX_HEURES (défaut 2), ATELIER_SANTE_UNITES (unités systemd annexes),
 #             ATELIER_SANTE_DISQUES (défaut « / /mnt/donnees », dossiers absents ignorés),
@@ -22,13 +24,15 @@
 # Test avec réponse simulée : --fichier-reponse remplace l'appel à /api/health ; dans ce mode, chaque autre
 # contrôle n'a lieu que si son fichier simulé est donné aussi.
 # Un fichier simulé absent ou vide équivaut à « pas de réponse ».
+# Fabrique : en simulation, la section n'a lieu que si --fichier-fabrique (état du service, un mot) est donné ;
+# l'écart se calcule alors sur ATELIER_FABRIQUE_INSTALLEE et ATELIER_FABRIQUE_ETAT.
 set -uo pipefail
 
 PORT="${ATELIER_PORT:-3100}"
 PASSERELLE="${ATELIER_PASSERELLE_URL:-}"
 AGE_MAX="${ATELIER_SANTE_AGE_MAX_HEURES:-2}"
 NOTIFIER=0
-F_SANTE=""; F_PLUGINS=""; F_PASSERELLE=""; F_UNITES=""; F_AGENTS=""; F_RUNS=""; F_DISQUES=""; F_INOTIFY=""
+F_SANTE=""; F_PLUGINS=""; F_PASSERELLE=""; F_UNITES=""; F_AGENTS=""; F_RUNS=""; F_DISQUES=""; F_INOTIFY=""; F_FABRIQUE=""
 DISQUES="${ATELIER_SANTE_DISQUES:-/ /mnt/donnees}"
 DISQUE_MAX="${ATELIER_SANTE_DISQUE_MAX:-90}"
 ETAT="${ATELIER_SANTE_ETAT:-}"
@@ -39,7 +43,7 @@ PLUGIN_ID="atelier.marketing-ia"
 # shellcheck disable=SC1091
 source "$(dirname "${BASH_SOURCE[0]}")/lib-cle-board.sh"
 
-usage() { sed -n '2,24p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//' >&2; }
+usage() { sed -n '2,28p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//' >&2; }
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -55,6 +59,7 @@ while [[ $# -gt 0 ]]; do
     --fichier-runs) F_RUNS="${2:-}"; shift 2 || { usage; exit 2; } ;;
     --fichier-disques) F_DISQUES="${2:-}"; shift 2 || { usage; exit 2; } ;;
     --fichier-inotify) F_INOTIFY="${2:-}"; shift 2 || { usage; exit 2; } ;;
+    --fichier-fabrique) F_FABRIQUE="${2:-}"; shift 2 || { usage; exit 2; } ;;
     -h|--help) usage; exit 0 ;;
     *) echo "Argument inconnu : $1" >&2; usage; exit 2 ;;
   esac
@@ -167,6 +172,24 @@ if [[ -n "${F_UNITES}" || ( "${SIMULE}" -eq 0 && -n "${UNITES}" ) ]]; then
       [[ "${etat}" == "active" ]] || alerte "service ${unite} arrêté (état : ${etat:-inconnu})"
     done
   fi
+fi
+
+# --- 4 bis. Fabrique : service système (lisible sans root) et écart entre la copie installée et le dépôt ---
+if [[ -n "${F_FABRIQUE}" || "${SIMULE}" -eq 0 ]]; then
+  if [[ -n "${F_FABRIQUE}" ]]; then
+    etat_fabrique="$(head -n 1 "${F_FABRIQUE}" 2>/dev/null)"
+  else
+    etat_fabrique="$(systemctl is-active -- atelier-fabrique.service 2>/dev/null)"
+  fi
+  [[ "${etat_fabrique}" == "active" ]] || alerte "service atelier-fabrique arrêté (état : ${etat_fabrique:-inconnu})"
+  ecart="$("$(dirname "${BASH_SOURCE[0]}")/ecart-fabrique.sh" 2>&1)"; code_ecart=$?
+  case "${code_ecart}" in
+    0) ;;
+    1) lignes="$(grep -cE '^(modifié|absent du dépôt|non installé) : ' <<<"${ecart}")"
+       premier="$(grep -m1 -E '^(modifié|absent du dépôt|non installé) : ' <<<"${ecart}" | sed 's/^[^:]* : //')"
+       alerte "fabrique installée en retard sur le dépôt : ${lignes} fichier(s) (premier : ${premier}) ; réinstaller par sudo bash scripts/installer-fabrique.sh, file vide" ;;
+    *) alerte "copie installée de la fabrique absente ou illisible (${ecart})" ;;
+  esac
 fi
 
 # --- 5. Agents et runs des entreprises actives (EXP-C1, EXP-C4) ---

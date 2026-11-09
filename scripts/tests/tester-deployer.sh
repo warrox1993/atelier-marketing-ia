@@ -82,12 +82,16 @@ done
 [[ -e "${TMP}/pas-pret" ]] && { echo '{"status":"starting"}'; exit 0; }
 echo '[{"status":"ready"}]'
 EOF
+# sudo : doublure qui note ses appels (le déploiement ne doit jamais en lancer).
+printf '#!/usr/bin/env bash\necho "sudo $*" >> "%s"\n' "${APPELS}" > "${TMP}/bin/sudo"
 chmod +x "${TMP}/bin/"*
-export PATH="${TMP}/bin:${PATH}" HOME="${TMP}/home" ATELIER_DEPLOI_DELAI=2 ATELIER_DEPLOI_DELAI_SERVICES=2
+# Fabrique installée et état des travaux : dossiers factices (la copie est absente tant qu'un test ne la crée pas).
+export PATH="${TMP}/bin:${PATH}" HOME="${TMP}/home" ATELIER_DEPLOI_DELAI=2 ATELIER_DEPLOI_DELAI_SERVICES=2 \
+  ATELIER_FABRIQUE_INSTALLEE="${TMP}/opt/fabrique" ATELIER_FABRIQUE_ETAT="${TMP}/etat-fabrique"
 
 # Dépôt factice : le vrai deployer.sh et sa bibliothèque, des vérifications et une construction factices.
 mkdir -p "${D}/scripts" "${D}/plugin-atelier" "${D}/passerelle" "${D}/paperclip/ui" "${D}/instance/plugin-jb/dist"
-command cp -f "${RACINE}/scripts/deployer.sh" "${RACINE}/scripts/lib-cle-board.sh" "${D}/scripts/"
+command cp -f "${RACINE}/scripts/deployer.sh" "${RACINE}/scripts/lib-cle-board.sh" "${RACINE}/scripts/ecart-fabrique.sh" "${D}/scripts/"
 printf 'print("organisation ok")\n' > "${D}/scripts/verifier-organisation.py"
 printf 'import sys\nprint("generer ok")\n' > "${D}/scripts/bootstrap-organisation.py"
 printf '#!/usr/bin/env bash\necho config ok\n' > "${D}/scripts/verifier-config.sh"; chmod +x "${D}/scripts/verifier-config.sh"
@@ -120,6 +124,7 @@ verifie  "suite du plugin lancée"                             appele "npx vites
 verifie  "tests de la passerelle lancés"                      appele "pnpm typecheck"
 verifie  "suite de la passerelle lancée"                      appele "pnpm exec vitest run"
 verifie  "passerelle construite"                              appele "pnpm build"
+verifie  "VERSION écrit avec le commit dans instance/plugin-jb" bash -c '[[ "$(cat "$1/instance/plugin-jb/VERSION")" == "$(git -C "$1" rev-parse HEAD)" ]]' _ "${D}"
 verifie  "redémarrage de l'instance par systemd"              appele "systemctl --user restart atelier-instance@atelier"
 verifie  "redémarrage de la passerelle par systemd"           grep -q "systemctl --user restart .*atelier-passerelle@3190" "${APPELS}"
 verifie  "plugin neuf copié"                                  grep -qx "plugin neuf" "${D}/instance/plugin-jb/dist/m.js"
@@ -201,11 +206,13 @@ verifie  "--sans-tests : aucun start des services de test"    bash -c '! grep -q
 sleep 1
 echo "plugin ancien" > "${D}/instance/plugin-jb/dist/m.js"; echo "passerelle ancienne" > "${D}/passerelle/dist/p.js"
 echo "interface ancienne" > "${D}/paperclip/ui/dist/i.js"
+echo "version d'avant" > "${D}/instance/plugin-jb/VERSION"
 touch "${TMP}/pas-pret"
 attendre "instance pas prête : retour arrière"               non0 "RETOUR ARRIÈRE"    --journaux "${TMP}/j3" --sans-tests
 verifie  "retour arrière : plugin d'avant remis"              grep -qx "plugin ancien" "${D}/instance/plugin-jb/dist/m.js"
 verifie  "retour arrière : passerelle d'avant remise"         grep -qx "passerelle ancienne" "${D}/passerelle/dist/p.js"
 verifie  "retour arrière : interface d'avant remise"          grep -qx "interface ancienne" "${D}/paperclip/ui/dist/i.js"
+verifie  "retour arrière : VERSION d'avant remis"             grep -qx "version d'avant" "${D}/instance/plugin-jb/VERSION"
 verifie  "retour arrière : redémarrage par systemd"           bash -c '[[ $(grep -c "systemctl --user restart atelier-instance@atelier" "$1") -eq 2 ]]' _ "${APPELS}"
 rm -f "${TMP}/pas-pret"
 
@@ -237,6 +244,20 @@ rm -f "${TMP}/injoignable"
 attendre "essai : contrôle des runs affiché"                 0    "live-runs"         --essai
 attendre "--sans-tests averti"                               0    "AVERTISSEMENT"     --journaux "${TMP}/j4" --sans-tests
 verifie  "--sans-tests : aucune suite lancée"                 bash -c '! grep -q "vitest" "$1"' _ "${APPELS}"
+
+# Fabrique (#77) : lecture seule, la commande root est affichée et jamais lancée.
+mkdir -p "${D}/fabrique" "${TMP}/etat-fabrique"; echo 'a = 1' > "${D}/fabrique/service.py"
+attendre "essai : contrôle de la fabrique affiché"           0    "5 bis. Fabrique"   --essai
+verifie  "essai : aucun sudo appelé"                          bash -c '! grep -q sudo "$1"' _ "${APPELS}"
+mkdir -p "${TMP}/opt"; command cp -a "${D}/fabrique" "${TMP}/opt/fabrique"
+attendre "fabrique à jour : une ligne, code 0"               0    "fabrique installée à jour" --journaux "${TMP}/j20" --sans-tests
+verifie  "fabrique à jour : pas de réinstallation demandée"   bash -c '[[ "$1" != *"à réinstaller"* ]]' _ "${SORTIE}"
+echo 'a = 2' > "${TMP}/opt/fabrique/service.py"
+attendre "fabrique en retard : code 0, résumé « à réinstaller »" 0 "Fabrique : à réinstaller (voir étape 5 bis)" --journaux "${TMP}/j21" --sans-tests
+verifie  "fabrique en retard : fichier nommé"                 bash -c '[[ "$1" == *"modifié : service.py"* ]]' _ "${SORTIE}"
+verifie  "fabrique en retard : commande root affichée"        bash -c '[[ "$1" == *"sudo bash"*"installer-fabrique.sh"* && "$1" == *"recette-fabrique.sh --sans-video"* ]]' _ "${SORTIE}"
+verifie  "fabrique en retard : sudo jamais appelé"            bash -c '! grep -q sudo "$1"' _ "${APPELS}"
+verifie  "fabrique en retard : plugin déployé quand même"     appele "systemctl --user restart atelier-instance@atelier"
 
 echo "---"; echo "${TOTAL} tests, ${ECHECS} échec(s)"
 [[ "${ECHECS}" -eq 0 ]]

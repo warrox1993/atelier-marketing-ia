@@ -1,7 +1,7 @@
 {
   "schema": "atelier/registre-agents/v1",
-  "version": "1.18.0",
-  "dateVersion": "2026-11-09",
+  "version": "1.19.1",
+  "dateVersion": "2026-11-10",
   "description": "Registre canonique des quinze agents marketing de l'Atelier et de l'agent déterministe « Porte de contrôle » (deterministe: true, adaptateur process, aucun modèle). Source unique : le fichier .paperclip.yaml et l'en-tête des AGENTS.md en sont générés par « python3 -I scripts/bootstrap-organisation.py generer ». Les noms courts (champ nom) portent leurs accents : l'identifiant (slug) d'un agent en est dérivé en retirant les accents (NFKD) avant la normalisation, comme le fait le bootstrap ; le titre porte le libellé français complet.",
   "adaptateur": {
     "type": "claude_local",
@@ -197,7 +197,8 @@
           "mcp__paperclip-assigned__atelier_marketing-ia_sources_lister"
         ],
         "mutation": [
-          "Bash(curl *)"
+          "Bash(curl *)",
+          "mcp__paperclip-assigned__atelier_marketing-ia_arbitrage_deposer"
         ],
         "interdits": [
           "WebFetch",
@@ -285,7 +286,8 @@
           "mcp__paperclip-assigned__atelier_marketing-ia_livrable_deposer",
           "mcp__paperclip-assigned__atelier_marketing-ia_verdict_deposer",
           "mcp__paperclip-assigned__atelier_marketing-ia_decision_demander",
-          "mcp__paperclip-assigned__atelier_marketing-ia_sources_lister"
+          "mcp__paperclip-assigned__atelier_marketing-ia_sources_lister",
+          "mcp__paperclip-assigned__atelier_marketing-ia_arbitrage_deposer"
         ]
       },
       "connexions": {
@@ -371,7 +373,8 @@
           "mcp__paperclip-assigned__atelier_marketing-ia_livrable_deposer",
           "mcp__paperclip-assigned__atelier_marketing-ia_verdict_deposer",
           "mcp__paperclip-assigned__atelier_marketing-ia_decision_demander",
-          "mcp__paperclip-assigned__atelier_marketing-ia_sources_lister"
+          "mcp__paperclip-assigned__atelier_marketing-ia_sources_lister",
+          "mcp__paperclip-assigned__atelier_marketing-ia_arbitrage_deposer"
         ]
       },
       "connexions": {
@@ -451,7 +454,8 @@
           "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_video",
           "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_image",
           "mcp__paperclip-assigned__atelier_marketing-ia_voir_rendu",
-          "mcp__paperclip-assigned__atelier_marketing-ia_verdict_deposer"
+          "mcp__paperclip-assigned__atelier_marketing-ia_verdict_deposer",
+          "mcp__paperclip-assigned__atelier_marketing-ia_arbitrage_deposer"
         ]
       },
       "connexions": {
@@ -534,7 +538,8 @@
           "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_video",
           "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_image",
           "mcp__paperclip-assigned__atelier_marketing-ia_voir_rendu",
-          "mcp__paperclip-assigned__atelier_marketing-ia_verdict_deposer"
+          "mcp__paperclip-assigned__atelier_marketing-ia_verdict_deposer",
+          "mcp__paperclip-assigned__atelier_marketing-ia_arbitrage_deposer"
         ]
       },
       "connexions": {
@@ -613,7 +618,8 @@
           "mcp__paperclip-assigned__atelier_marketing-ia_livrable_deposer",
           "mcp__paperclip-assigned__atelier_marketing-ia_verdict_deposer",
           "mcp__paperclip-assigned__atelier_marketing-ia_decision_demander",
-          "mcp__paperclip-assigned__atelier_marketing-ia_sources_lister"
+          "mcp__paperclip-assigned__atelier_marketing-ia_sources_lister",
+          "mcp__paperclip-assigned__atelier_marketing-ia_arbitrage_deposer"
         ]
       },
       "connexions": {
@@ -697,7 +703,8 @@
           "mcp__paperclip-assigned__atelier_marketing-ia_livrable_deposer",
           "mcp__paperclip-assigned__atelier_marketing-ia_verdict_deposer",
           "mcp__paperclip-assigned__atelier_marketing-ia_decision_demander",
-          "mcp__paperclip-assigned__atelier_marketing-ia_sources_lister"
+          "mcp__paperclip-assigned__atelier_marketing-ia_sources_lister",
+          "mcp__paperclip-assigned__atelier_marketing-ia_arbitrage_deposer"
         ]
       },
       "connexions": {
@@ -787,7 +794,8 @@
           "NotebookEdit",
           "Agent",
           "Task",
-          "mcp__paperclip-assigned__atelier_marketing-ia_verdict_deposer"
+          "mcp__paperclip-assigned__atelier_marketing-ia_verdict_deposer",
+          "mcp__paperclip-assigned__atelier_marketing-ia_arbitrage_deposer"
         ]
       },
       "connexions": {
@@ -879,7 +887,8 @@
           "mcp__paperclip-assigned__atelier_marketing-ia_livrable_deposer",
           "mcp__paperclip-assigned__atelier_marketing-ia_verdict_deposer",
           "mcp__paperclip-assigned__atelier_marketing-ia_decision_demander",
-          "mcp__paperclip-assigned__atelier_marketing-ia_sources_lister"
+          "mcp__paperclip-assigned__atelier_marketing-ia_sources_lister",
+          "mcp__paperclip-assigned__atelier_marketing-ia_arbitrage_deposer"
         ]
       },
       "connexions": {
@@ -962,7 +971,8 @@
           "mcp__paperclip-assigned__atelier_marketing-ia_livrable_deposer",
           "mcp__paperclip-assigned__atelier_marketing-ia_verdict_deposer",
           "mcp__paperclip-assigned__atelier_marketing-ia_decision_demander",
-          "mcp__paperclip-assigned__atelier_marketing-ia_sources_lister"
+          "mcp__paperclip-assigned__atelier_marketing-ia_sources_lister",
+          "mcp__paperclip-assigned__atelier_marketing-ia_arbitrage_deposer"
         ]
       },
       "connexions": {
@@ -1050,7 +1060,8 @@
           "mcp__paperclip-assigned__atelier_marketing-ia_livrable_deposer",
           "mcp__paperclip-assigned__atelier_marketing-ia_verdict_deposer",
           "mcp__paperclip-assigned__atelier_marketing-ia_decision_demander",
-          "mcp__paperclip-assigned__atelier_marketing-ia_sources_lister"
+          "mcp__paperclip-assigned__atelier_marketing-ia_sources_lister",
+          "mcp__paperclip-assigned__atelier_marketing-ia_arbitrage_deposer"
         ]
       },
       "connexions": {
@@ -1370,7 +1381,8 @@
           "mcp__paperclip-assigned__atelier_marketing-ia_fabriquer_image",
           "mcp__paperclip-assigned__atelier_marketing-ia_voir_rendu",
           "mcp__paperclip-assigned__atelier_marketing-ia_livrable_deposer",
-          "mcp__paperclip-assigned__atelier_marketing-ia_decision_demander"
+          "mcp__paperclip-assigned__atelier_marketing-ia_decision_demander",
+          "mcp__paperclip-assigned__atelier_marketing-ia_arbitrage_deposer"
         ]
       },
       "connexions": {

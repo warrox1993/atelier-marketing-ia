@@ -11,7 +11,7 @@ import { VEILLEUR } from "../serveur/veilleur.js";
 import { agentParSlug, creerExecuteur, creerResolveur, moteurActif, reprendreSiActif, type DepsPorteMoteur } from "./executeur.js";
 import { creerEtapesWf01, type CrmMoteur } from "./export-crm.js";
 import { chargerGabarit, PorteRefusee, rangPorte } from "./gabarits.js";
-import { creerOutilsMoteur, type EvaluerPorte, DECLARATION_MISSION_ETAT, DECLARATION_LIVRABLE_DEPOSER, DECLARATION_VERDICT_DEPOSER, DECLARATION_DECISION_DEMANDER, DECLARATION_SOURCES_LISTER } from "./outils.js";
+import { creerOutilsMoteur, type EvaluerPorte, DECLARATION_MISSION_ETAT, DECLARATION_LIVRABLE_DEPOSER, DECLARATION_VERDICT_DEPOSER, DECLARATION_DECISION_DEMANDER, DECLARATION_SOURCES_LISTER, DECLARATION_ARBITRAGE_DEPOSER } from "./outils.js";
 
 type BaseMoteur = ReturnType<typeof creerBase>;
 
@@ -46,6 +46,32 @@ export function creerCrmProduction(base: BaseMoteur, exporter: GestionnaireRoute
     if (typeof service !== "string" || typeof canal !== "string" || typeof entite !== "string" || !issueId) throw new Error("Export CRM : périmètre (service, canal, entité) ou tâche de la porte introuvable.");
     return { m, service, canal, entite, issueId };
   };
+  /** Dernière décision valide de la tâche : une approbation « modifier_crm » sur ce service, qu'aucune diffusion non refusée n'a encore consommée (comme la route). */
+  const decisionNeuve = async (companyId: string, issueId: string, service: string) => {
+    const decision = (await base.listerDecisions(companyId, issueId)).filter((x) => !x.invalidee).sort((a, b) => (a.creeLe < b.creeLe ? 1 : -1))[0];
+    const portee = decision?.action === "approuver" ? (decision.portee as { action?: string; canal?: string | null } | null) : null;
+    if (!decision || portee?.action !== "modifier_crm" || portee.canal !== service) return false;
+    return !(await base.listerDiffusions(companyId, issueId)).some((x) => x.decisionId === decision.id && x.etat !== "refusee" && x.action === "modifier_crm" && x.canal === service);
+  };
+  /** Diffusion préparée dont la preuve ne servira plus : révoquée, non signée ou expirée. */
+  const diffusionMorte = async (companyId: string, diffusionId: string) => {
+    const interne = await base.lireDiffusionInterne(companyId, diffusionId);
+    return Boolean(interne) && (Boolean(interne!.revocation) || !interne!.preuveCharge || interne!.preuveCharge.expire * 1000 <= Date.now());
+  };
+  /**
+   * Clé d'export à génération, sans état stocké : `cle`, `cle:g1`, `cle:g2`... On passe à la suivante tant que la diffusion de la clé est préparée et morte et que la suivante existe
+   * déjà ou qu'une approbation neuve peut la créer. Sans nouvelle décision, on reste sur la clé morte (le blocage), jamais de nouvelle diffusion.
+   */
+  const cleEffective = async (companyId: string, issueId: string, service: string, cle: string) => {
+    let courante = cle;
+    for (let g = 1; ; g++) {
+      const diffusion = await base.lireDiffusionParCle(companyId, `export:${courante}`.slice(0, 200));
+      if (!diffusion || diffusion.etat !== "preparee" || !(await diffusionMorte(companyId, diffusion.id))) return courante;
+      const suivante = `${cle}:g${g}`;
+      if (!(await base.lireDiffusionParCle(companyId, `export:${suivante}`.slice(0, 200))) && !(await decisionNeuve(companyId, issueId, service))) return courante;
+      courante = suivante;
+    }
+  };
   return {
     async existe(companyId, missionId, prospectId) {
       const { m, service, issueId } = await perimetre(companyId, missionId);
@@ -59,9 +85,14 @@ export function creerCrmProduction(base: BaseMoteur, exporter: GestionnaireRoute
       const { m, service } = await perimetre(companyId, missionId);
       return base.prospectExportAmbigu(companyId, prospectId, service, await modeDe(companyId, m.campagneId));
     },
+    async decisionNouvelle(companyId, missionId) {
+      const { service, issueId } = await perimetre(companyId, missionId);
+      return decisionNeuve(companyId, issueId, service);
+    },
     async ecrire(companyId, e) {
       const { service, canal, entite, issueId } = await perimetre(companyId, e.missionId);
-      const rep = await exporter({ cle: "tache.prospects.exporter", params: { issueId }, query: {}, companyId, acteur: ACTEUR_MOTEUR, corps: { prospectIds: e.prospectIds, service, canal, entite, cleIdempotence: e.cle } });
+      const cle = await cleEffective(companyId, issueId, service, e.cle);
+      const rep = await exporter({ cle: "tache.prospects.exporter", params: { issueId }, query: {}, companyId, acteur: ACTEUR_MOTEUR, corps: { prospectIds: e.prospectIds, service, canal, entite, cleIdempotence: cle } });
       const corps = objet(rep.corps);
       const etat = String(corps.etat);
       const consigne = typeof corps.consigne === "string" ? corps.consigne : null;
@@ -69,7 +100,7 @@ export function creerCrmProduction(base: BaseMoteur, exporter: GestionnaireRoute
       if (etat === "preparee") {
         // Premier appel ou rejeu de la clé : jamais de lecture de `preuveApprobation`.
         const diffusionId = objet(corps.export).diffusionId;
-        const cleDiffusion = `export:${e.cle}`.slice(0, 200);
+        const cleDiffusion = `export:${cle}`.slice(0, 200);
         const interne = typeof diffusionId === "string" ? await base.lireDiffusionInterne(companyId, diffusionId) : null;
         if (!interne) throw new Error("Export CRM : diffusion préparée introuvable.");
         if (interne.revocation) return { etat: "bloquee", raison: "preuve_revoquee", motif: interne.revocation.motif };
@@ -177,6 +208,7 @@ export function brancherMoteur(ctx: PluginContext, baseMoteur: BaseMoteur = cree
   ctx.tools.register("verdict_deposer", meta(DECLARATION_VERDICT_DEPOSER), (p, run) => outils.verdict_deposer(p, run));
   ctx.tools.register("decision_demander", meta(DECLARATION_DECISION_DEMANDER), (p, run) => outils.decision_demander(p, run));
   ctx.tools.register("sources_lister", meta(DECLARATION_SOURCES_LISTER), (p, run) => outils.sources_lister(p, run));
+  ctx.tools.register("arbitrage_deposer", meta(DECLARATION_ARBITRAGE_DEPOSER), (p, run) => outils.arbitrage_deposer(p, run));
   const reprise = () => reprendreSiActif({ entreprises: entreprisesDeLInstance, config: configMoteur, executeur: moteur, logger: ctx.logger });
   // Une passe qui chevauche la précédente ne fait rien ; `enCours` retombe aussi après une erreur.
   let enCours = false;

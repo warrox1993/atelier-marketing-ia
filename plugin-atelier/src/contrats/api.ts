@@ -55,7 +55,7 @@ const PaginationLivrableChamps = {
   decalage: z.coerce.number().int().min(0).default(0),
 };
 export const ContexteRequete = z.object({
-  partie: z.enum(["livrable", "verdicts", "couvertures", "donneesConnexion"]).optional(),
+  partie: z.enum(["livrable", "verdicts", "couvertures", "donneesConnexion", "tache"]).optional(),
   vue: z.enum(["resume", "complete"]).optional(),
   ...PaginationLivrableChamps,
 });

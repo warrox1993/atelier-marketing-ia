@@ -99,7 +99,7 @@ OUTILS_FABRIQUE = {OUTIL_FABRIQUE_DOCUMENT, OUTIL_FABRIQUE_VIDEO, OUTIL_FABRIQUE
 # Outils du moteur de missions (#50), même serveur : lecture (mission_etat, sources_lister) et dépôts. Hors OUTILS_FABRIQUE :
 # aucun droit de fabrique ne s'y attache, le contrôle exact des rôles de la fabrique reste inchangé.
 OUTILS_MOTEUR_LECTURE = {PREFIXE_OUTILS_FABRIQUE + n for n in ("mission_etat", "sources_lister")}
-OUTILS_MOTEUR_ECRITURE = {PREFIXE_OUTILS_FABRIQUE + n for n in ("livrable_deposer", "verdict_deposer", "decision_demander")}
+OUTILS_MOTEUR_ECRITURE = {PREFIXE_OUTILS_FABRIQUE + n for n in ("livrable_deposer", "verdict_deposer", "decision_demander", "arbitrage_deposer")}
 OUTILS_RECHERCHE |= OUTILS_MOTEUR_LECTURE
 ROLES_FABRIQUE_DOCUMENT = {"contenus", "stratege", "prospection", "crm-conversion", "mesure"}
 ROLES_FABRIQUE_VIDEO = {"reseaux-sociaux", "contenus"}

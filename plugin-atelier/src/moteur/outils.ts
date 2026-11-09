@@ -10,7 +10,7 @@ import { DeposerVerdictEntree, PLUGIN_ID } from "../contrats/index.js";
 import type { Services } from "../serveur/atelier.js";
 import type { BaseAtelier, EtapeMission, Mission } from "../serveur/base.js";
 import { ErreurAtelier } from "../serveur/erreurs.js";
-import { agentParSlug, moteurActif, type AgentListe, type Executeur } from "./executeur.js";
+import { agentParSlug, ESSAIS_EXPORT_MAX, moteurActif, type AgentListe, type Executeur } from "./executeur.js";
 import { chargerGabarit as chargerGabaritReel, rangPorte, revuesImposees, type Gabarit } from "./gabarits.js";
 
 export type ErreurOutil = { code: string; message: string; actionRecommandee: string };
@@ -19,6 +19,8 @@ export type ErreurOutil = { code: string; message: string; actionRecommandee: st
 export const TAILLE_MAX_LIVRABLE_OCTETS = 256 * 1024;
 const LIMITE_SOURCES = 50;
 const ROLE_COORDINATEUR = "coordinateur";
+/** Sorties de blocage « reprendre » au plus : borne la boucle coordinateur, blocage, coordinateur (même valeur que les essais d'export). */
+const ARBITRAGES_MAX = ESSAIS_EXPORT_MAX;
 /** Origine des sous-tâches de revue créées par `assurerRevues` (services.ts) : `<étape>:<révision>:<rôle>`. */
 const ORIGINE_REVUE = `plugin:${PLUGIN_ID}:revue`;
 
@@ -31,6 +33,8 @@ const SCHEMAS = {
   verdict_deposer: z.object({ missionId: Id, versionContrat: Version, ...DeposerVerdictEntree.shape }).strict(),
   decision_demander: z.object({ missionId: Id, versionContrat: Version, question: z.string().min(1).max(2000) }).strict(),
   sources_lister: z.object({ missionId: Id }).strict(),
+  // Le `motif` n'est que validé : il peut citer des prospects, il n'est ni journalisé, ni commenté, ni renvoyé.
+  arbitrage_deposer: z.object({ missionId: Id, decision: z.enum(["reprendre", "abandonner"]), motif: z.string().min(1).max(2000) }).strict(),
 } as const;
 type NomOutil = keyof typeof SCHEMAS;
 
@@ -40,6 +44,7 @@ const DESCRIPTIONS: Record<NomOutil, [string, string]> = {
   verdict_deposer: ["Déposer un verdict de relecture", "Verdict structuré du relecteur sur la mission en revue (mêmes champs que la route des verdicts). La porte s'évalue ensuite : tant que toutes les revues requises ne sont pas passées, la mission reste en revue."],
   decision_demander: ["Demander une décision", "Pose une carte de décision sur votre tâche ; l'humain y répond. La mission ne change pas d'état. Une carte identique encore en attente n'est pas recréée, quel que soit le run."],
   sources_lister: ["Lister les sources", "Liste les sources de la mission (ou de sa campagne). Lecture seule."],
+  arbitrage_deposer: ["Déposer l'arbitrage d'un blocage", "Coordinateur seulement, mission en blocage : « reprendre » rejoue l'étape sous les mêmes gardes (3 reprises au plus) ; « abandonner » est définitif et exige une carte de décision acceptée par un humain sur votre tâche."],
 };
 
 /** Déclarations pour le manifeste ; le schéma JSON vient du schéma zod, une seule source. */
@@ -53,6 +58,7 @@ export const DECLARATION_LIVRABLE_DEPOSER: PluginToolDeclaration = { name: "livr
 export const DECLARATION_VERDICT_DEPOSER: PluginToolDeclaration = { name: "verdict_deposer", displayName: DESCRIPTIONS.verdict_deposer[0], description: DESCRIPTIONS.verdict_deposer[1], parametersSchema: schemaJson("verdict_deposer") } as unknown as PluginToolDeclaration;
 export const DECLARATION_DECISION_DEMANDER: PluginToolDeclaration = { name: "decision_demander", displayName: DESCRIPTIONS.decision_demander[0], description: DESCRIPTIONS.decision_demander[1], parametersSchema: schemaJson("decision_demander") } as unknown as PluginToolDeclaration;
 export const DECLARATION_SOURCES_LISTER: PluginToolDeclaration = { name: "sources_lister", displayName: DESCRIPTIONS.sources_lister[0], description: DESCRIPTIONS.sources_lister[1], parametersSchema: schemaJson("sources_lister") } as unknown as PluginToolDeclaration;
+export const DECLARATION_ARBITRAGE_DEPOSER: PluginToolDeclaration = { name: "arbitrage_deposer", displayName: DESCRIPTIONS.arbitrage_deposer[0], description: DESCRIPTIONS.arbitrage_deposer[1], parametersSchema: schemaJson("arbitrage_deposer") } as unknown as PluginToolDeclaration;
 
 type BaseOutils = Pick<BaseAtelier, "lireMission" | "lireEtapes" | "listerSources">;
 
@@ -66,7 +72,7 @@ export interface DepsOutilsMoteur {
   /** Tâche d'origine du run (`base.tacheDuRun`). */
   tacheDuRun(companyId: string, runId: string): Promise<string | null>;
   agents(companyId: string): Promise<AgentListe[]>;
-  executeur: Pick<Executeur, "recevoirResultat" | "deposerVerdict">;
+  executeur: Pick<Executeur, "recevoirResultat" | "deposerVerdict" | "sortirDeBlocage" | "abandonner">;
   /** Cartes de décision natives (`ctx.issues`). */
   issues: Pick<PluginContext["issues"], "listInteractions" | "requestConfirmation" | "get">;
   /** Route du plugin réutilisée telle quelle : enregistrement du verdict (elle contrôle le relecteur désigné). */
@@ -96,7 +102,7 @@ export function creerOutilsMoteur(deps: DepsOutilsMoteur) {
   const gabaritDe = deps.chargerGabarit ?? chargerGabaritReel;
 
   /** Contrôles communs ; rend le contexte ou le refus. `acces` : qui a le droit (assigné de l'étape, relecteur, ou les deux pour la lecture). */
-  async function controler<N extends NomOutil>(nom: N, params: unknown, run: ToolRunContext, acces: "etape" | "revue" | "lecture") {
+  async function controler<N extends NomOutil>(nom: N, params: unknown, run: ToolRunContext, acces: "etape" | "revue" | "lecture" | "coordinateur") {
     if (!moteurActif(await deps.config(run.companyId))) {
       return refus("moteur_desactive", "Le moteur de missions n'est pas activé pour cette entreprise.", "Ne pas utiliser cet outil ; la tâche se traite comme d'habitude.");
     }
@@ -124,10 +130,16 @@ export function creerOutilsMoteur(deps: DepsOutilsMoteur) {
       if (!revue || revue.companyId !== run.companyId || revue.parentId !== etape!.issueId || revue.originKind !== ORIGINE_REVUE || !origine.startsWith(`${etape!.issueId}:`) || !origine.endsWith(`:${role}`)) {
         return refus("run_hors_mission", "Ce passage d'agent n'est pas rattaché à la tâche de revue de l'étape courante de cette mission.", "Appeler l'outil depuis votre tâche de revue, pour le rôle qui vous y est assigné.");
       }
+    } else if (acces === "coordinateur") {
+      // Le coordinateur travaille sur sa tâche d'arbitrage ou sur la tâche d'étape qu'il tient : toute tâche d'origine `mission:<id>:` de son entreprise.
+      const sienne = tache ? await deps.issues.get(tache, run.companyId) : null;
+      if (!sienne || sienne.companyId !== run.companyId || !(sienne.originId ?? "").startsWith(`mission:${m.id}:`)) {
+        return refus("run_hors_mission", "Ce passage d'agent n'est pas rattaché à une tâche de cette mission.", "Appeler l'outil depuis votre tâche d'arbitrage de la mission.");
+      }
     } else if (acces !== "lecture" && (!tache || !etapes.some((e) => e.issueId === tache))) {
       return refus("run_hors_mission", "Ce passage d'agent n'est pas rattaché à une tâche de cette mission.", "Appeler l'outil depuis la tâche de la mission.");
     }
-    if (acces !== "lecture" && acces !== "revue" && (!etape || etape.issueId !== tache)) {
+    if (acces !== "lecture" && acces !== "revue" && acces !== "coordinateur" && (!etape || etape.issueId !== tache)) {
       return refus("run_hors_etape", "Votre tâche n'est pas l'étape courante de la mission.", "Appeler mission_etat pour connaître l'étape courante ; ne rien déposer pour une autre étape.");
     }
     let gabarit: Gabarit;
@@ -144,8 +156,8 @@ export function creerOutilsMoteur(deps: DepsOutilsMoteur) {
     const assigne = etape !== undefined && agentParSlug(agents, etape.role) === run.agentId;
     const relecteur = revuesImposees(gabarit, { conformite: true }).some((r) => { const s = slugDeRevue(r.agentId); return s !== undefined && agentParSlug(agents, s) === run.agentId; });
     const coordinateur = agentParSlug(agents, ROLE_COORDINATEUR) === run.agentId;
-    if (!(acces === "etape" ? assigne : acces === "revue" ? relecteur : assigne || relecteur || coordinateur)) {
-      return refus("droit_refuse", acces === "revue" ? "Seul un relecteur de la mission peut déposer un verdict." : "Vous n'êtes pas l'agent assigné à l'étape courante.", "Ne rien déposer ; signaler la difficulté sur votre tâche.");
+    if (!(acces === "etape" ? assigne : acces === "revue" ? relecteur : acces === "coordinateur" ? coordinateur : assigne || relecteur || coordinateur)) {
+      return refus("droit_refuse", acces === "revue" ? "Seul un relecteur de la mission peut déposer un verdict." : acces === "coordinateur" ? "Seul le coordinateur arbitre un blocage." : "Vous n'êtes pas l'agent assigné à l'étape courante.", "Ne rien déposer ; signaler la difficulté sur votre tâche.");
     }
     // `etape` n'est absente que pour une lecture ; les autres accès l'ont exigée plus haut.
     return { m, etape, p, g, gabarit } as { m: Mission; etape: EtapeMission; p: typeof p; g: Gabarit["etapes"][number] | undefined; gabarit: Gabarit };
@@ -215,6 +227,24 @@ export function creerOutilsMoteur(deps: DepsOutilsMoteur) {
       if (attente) return succes({ statut: "deja_demandee", carteId: attente.id });
       const carte = await deps.issues.requestConfirmation(issueId, { continuationPolicy: "wake_assignee_on_accept", resolverPolicy: "human_only", payload: { version: 1, prompt: p.question, acceptLabel: "Valider", rejectLabel: "Refuser", supersedeOnUserComment: false, allowDeclineReason: true } }, run.companyId, { authorAgentId: run.agentId });
       return succes({ statut: "demandee", carteId: carte.id });
+    },
+
+    async arbitrage_deposer(params: unknown, run: ToolRunContext): Promise<ToolResult> {
+      const c = await controler("arbitrage_deposer", params, run, "coordinateur");
+      if (refuse(c)) return c;
+      const { m, p } = c as typeof c & { p: z.infer<typeof SCHEMAS.arbitrage_deposer> };
+      if (m.etat !== "blocage") return transitionRefusee(m.etat);
+      if (p.decision === "reprendre") {
+        if (m.cycleBlocage >= ARBITRAGES_MAX) return refus("arbitrages_epuises", `La mission a déjà été reprise ${ARBITRAGES_MAX} fois après un blocage.`, "Ne pas reprendre de nouveau : poser sur votre tâche une carte request_confirmation proposant l'abandon, puis appeler l'outil avec « abandonner » une fois la carte acceptée.");
+        return (await deps.executeur.sortirDeBlocage(run.companyId, m.id)) ? succes({ statut: "reprise" }) : transitionRefusee(m.etat);
+      }
+      // Terminal : seule une carte de confirmation acceptée par un humain, qui porte le repère de CE cycle, vaut accord (repère lu comme « Mission : » dans l'exécuteur).
+      const repere = `Abandon : mission ${m.id} (cycle ${m.cycleBlocage})`;
+      const cartes = await deps.issues.listInteractions((await deps.tacheDuRun(run.companyId, run.runId))!, run.companyId);
+      if (!cartes.some((i) => i.kind === "request_confirmation" && i.status === "accepted" && i.resolvedByUserId && String((i.payload as { detailsMarkdown?: unknown }).detailsMarkdown ?? "").split("\n").includes(repere))) {
+        return refus("accord_humain_absent", "L'abandon exige une carte de confirmation acceptée par un humain sur votre tâche et portant le repère de ce cycle.", `Poser sur votre tâche une carte request_confirmation dont detailsMarkdown contient la ligne exacte « ${repere} », attendre que l'humain l'accepte, puis rappeler l'outil.`);
+      }
+      return (await deps.executeur.abandonner(run.companyId, m.id)) ? succes({ statut: "abandonnee", etat: "echec" }) : transitionRefusee(m.etat);
     },
 
     async sources_lister(params: unknown, run: ToolRunContext): Promise<ToolResult> {

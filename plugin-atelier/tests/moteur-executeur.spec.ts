@@ -23,7 +23,7 @@ const GABARIT_4: Gabarit = {
 function baseMemoire() {
   const missions = new Map<string, Mission>();
   const etapes: EtapeMission[] = [];
-  const executions = new Map<string, { statut: string }>();
+  const executions = new Map<string, { statut: string; type?: string; requete?: unknown; missionId?: string }>();
   const journal: Array<{ type: string; donnees?: Record<string, unknown> }> = [];
   const compteurs = { transitions: 0 };
   let n = 0;
@@ -43,6 +43,8 @@ function baseMemoire() {
     async changerEtatMission(companyId: string, id: string, ancien: string, nouveau: string) {
       const m = missions.get(id);
       if (!m || m.companyId !== companyId || m.etat !== ancien) return false;
+      // Comme le SQL : la sortie de blocage incrémente le compteur de cycle dans le même changement.
+      if (ancien === "blocage") Object.assign(m, { cycleBlocage: ((m as { cycleBlocage?: number }).cycleBlocage ?? 0) + 1 });
       m.etat = nouveau as Mission["etat"];
       compteurs.transitions += 1;
       return true;
@@ -70,11 +72,15 @@ function baseMemoire() {
       const e = etapes.find((x) => x.companyId === companyId && x.issueId === issueId);
       return e ? { ...e } : null;
     },
-    async enregistrerExecution(e: { companyId: string; cle: string }) {
+    async enregistrerExecution(e: { companyId: string; missionId?: string; cle: string; type?: string; requete?: unknown }) {
       const k = `${e.companyId}|${e.cle}`;
       if (executions.has(k)) return false;
-      executions.set(k, { statut: "demandee" });
+      executions.set(k, { statut: "demandee", type: e.type, requete: e.requete, missionId: e.missionId });
       return true;
+    },
+    /** Comme le SQL : les exécutions encore `demandee` de la mission pour ce type, clé d'idempotence comprise. */
+    async executionsDemandees(companyId: string, missionId: string, type: string) {
+      return [...executions].filter(([k, x]) => k.startsWith(`${companyId}|`) && x.missionId === missionId && x.type === type && x.statut === "demandee").map(([k, x]) => ({ cle: k.slice(k.indexOf("|") + 1), requete: x.requete }));
     },
     async marquerExecution(companyId: string, cle: string, statut: string) {
       const x = executions.get(`${companyId}|${cle}`);
@@ -88,7 +94,9 @@ function baseMemoire() {
       journal.push({ type: e.type, donnees: e.donnees });
     },
   };
-  return { base, missions, etapes, journal, compteurs };
+  /** Exécutions enregistrées et pas encore marquées : celles qu'un veilleur rejouerait. */
+  const executionsDemandees = () => [...executions].filter(([, x]) => x.statut === "demandee").map(([k, x]) => ({ cle: k.slice(k.indexOf("|") + 1), type: x.type, requete: x.requete }));
+  return { base, missions, etapes, journal, compteurs, executionsDemandees };
 }
 
 function hoteDouble() {
@@ -96,11 +104,19 @@ function hoteDouble() {
   const creations: Array<Record<string, unknown>> = [];
   const majs: Array<{ id: string; patch: Record<string, unknown> }> = [];
   const reveils: Array<{ issueId: string; options: Record<string, unknown> }> = [];
+  const commentaires: Array<{ issueId: string; body: string }> = [];
   const agentsResolus: string[] = [];
-  const panne = { creationNumero: null as number | null, majSi: null as null | ((id: string, patch: Record<string, unknown>) => boolean) };
+  const panne = { creationNumero: null as number | null, majSi: null as null | ((id: string, patch: Record<string, unknown>) => boolean), reveil: false };
   let horlogeIssues = 0;
   const hote = {
     issues: {
+      async createComment(issueId: string, body: string) {
+        commentaires.push({ issueId, body });
+        return {};
+      },
+      async listComments(issueId: string) {
+        return commentaires.filter((c) => c.issueId === issueId).map((c) => ({ body: c.body }));
+      },
       async create(i: Record<string, unknown>) {
         if (panne.creationNumero === creations.length + 1) {
           panne.creationNumero = null;
@@ -136,6 +152,10 @@ function hoteDouble() {
         if (["backlog", "done", "cancelled"].includes(String(tache.status))) throw new Error(`Issue is not wakeable in status: ${String(tache.status)}`);
         const bloqueurs = (tache.blockedByIssueIds as string[] | undefined) ?? [];
         if (bloqueurs.some((b) => issues.get(b)?.status !== "done")) throw new Error("Issue is blocked by unresolved blockers");
+        if (panne.reveil) {
+          panne.reveil = false;
+          throw new Error("panne simulée pendant le réveil");
+        }
         reveils.push({ issueId, options });
         return {};
       },
@@ -145,7 +165,7 @@ function hoteDouble() {
       return `agent-${role}`;
     },
   };
-  return { hote, issues, creations, majs, reveils, agentsResolus, panne };
+  return { hote, issues, creations, majs, reveils, commentaires, agentsResolus, panne };
 }
 
 /** Double de la pose de porte : une porte par tâche (le vrai `creerPorte` rend faux au rejeu). */
@@ -285,6 +305,21 @@ describe("exécuteur de missions", () => {
     expect(t.majs).toContainEqual({ id: i1, patch: { status: "blocked", assigneeAgentId: "agent-coordinateur" } });
     await t.executeur.reprendre(SOC);
     expect(t.reveils).toHaveLength(1);
+  });
+
+  it("un blocage avant la porte réécrit la tâche et y dépose la consigne une seule fois", async () => {
+    const t = await monter({ contratVersion: 99 });
+    await t.executeur.reprendre(SOC);
+    await t.executeur.reprendre(SOC);
+    await t.executeur.reprendre(SOC);
+    const [i1] = [...t.issues.keys()];
+    expect(t.majs.filter((x) => x.patch.status === "blocked")).toHaveLength(1);
+    expect(t.commentaires).toHaveLength(1);
+    expect(t.commentaires[0]!.issueId).toBe(i1);
+    expect(t.commentaires[0]!.body).toContain(t.missionId);
+    expect(t.commentaires[0]!.body).toContain("contrat_invalide");
+    expect(t.commentaires[0]!.body).toContain("mission_etat");
+    expect(t.creations.filter((c) => String(c.originId).endsWith(":arbitrage"))).toHaveLength(0);
   });
 
   it("refuse à la reprise un contrat d'une autre version : blocage, aucun réveil de l'agent de l'étape", async () => {
@@ -649,6 +684,69 @@ describe("approbation, changements demandés et refus de porte", () => {
     expect(t.missions.get(t.missionId)!.etat).toBe("en_revue");
     expect((await t.executeur.deposerVerdict(SOC, { ...verdict, accepte: true, runId: "run-r2" })).statut).toBe("applique");
     expect(t.missions.get(t.missionId)!.etat).toBe("attente_autorisation");
+  });
+
+  it("arrêt avant la mise à jour, puis arrêt avant le réveil : la reprise réveille le rédacteur une seule fois, tâche en cours", async () => {
+    const t = await monter({ gabarit: GABARIT_PORTE_1, campagneId: "campagne-1" });
+    await t.executeur.demarrerMission(SOC, t.missionId);
+    const issue = [...t.issues.keys()][0]!;
+    await t.executeur.recevoirResultat(SOC, resultat(t.missionId, 1));
+    const reveils = t.reveils.length;
+    t.panne.majSi = (_id, patch) => patch.status === "in_progress";
+    await expect(t.executeur.deposerVerdict(SOC, { missionId: t.missionId, rang: 1, tentative: 1, accepte: false, runId: "run-r1" })).rejects.toThrow("panne simulée");
+    expect(t.missions.get(t.missionId)!.etat).toBe("en_cours");
+    expect(t.issues.get(issue)!.status).not.toBe("in_progress");
+    expect(t.reveils).toHaveLength(reveils);
+    // première reprise : la tâche repasse en cours, mais le réveil tombe en panne
+    t.panne.reveil = true;
+    await t.executeur.reprendre(SOC);
+    expect(t.issues.get(issue)!.status).toBe("in_progress");
+    expect(t.reveils).toHaveLength(reveils);
+    // deuxième reprise : le réveil part, avec la clé du verdict ; la troisième ne fait plus rien
+    await t.executeur.reprendre(SOC);
+    await t.executeur.reprendre(SOC);
+    expect(t.reveils.slice(reveils)).toEqual([{ issueId: issue, options: expect.objectContaining({ reason: "moteur_correction", idempotencyKey: `${t.missionId}:1:1:reveil:correction:run-r1` }) }]);
+    expect(t.issues.get(issue)!.status).toBe("in_progress");
+    expect(t.executionsDemandees().filter((x) => x.type === "reveil")).toEqual([]);
+  });
+
+  it("deux corrections successives réveillent deux fois", async () => {
+    const t = await monter({ gabarit: GABARIT_PORTE_1, campagneId: "campagne-1" });
+    await t.executeur.demarrerMission(SOC, t.missionId);
+    const issue = [...t.issues.keys()][0]!;
+    await t.executeur.recevoirResultat(SOC, resultat(t.missionId, 1));
+    await t.executeur.deposerVerdict(SOC, { missionId: t.missionId, rang: 1, tentative: 1, accepte: false, runId: "run-r1" });
+    await t.executeur.recevoirResultat(SOC, { ...resultat(t.missionId, 1), cleEvenement: "run-b" });
+    await t.executeur.deposerVerdict(SOC, { missionId: t.missionId, rang: 1, tentative: 1, accepte: false, runId: "run-r2" });
+    await t.executeur.reprendre(SOC);
+    const corrections = t.reveils.filter((r) => r.options.reason === "moteur_correction");
+    expect(corrections.map((r) => [r.issueId, r.options.idempotencyKey])).toEqual([
+      [issue, `${t.missionId}:1:1:reveil:correction:run-r1`],
+      [issue, `${t.missionId}:1:1:reveil:correction:run-r2`],
+    ]);
+  });
+
+  it("la description d'une tâche d'étape donne la mission, les champs de sortie et livrable_deposer", async () => {
+    const t = await monter();
+    await t.executeur.demarrerMission(SOC, t.missionId);
+    for (const c of t.creations) {
+      const d = String(c.description);
+      expect(d).toContain("mandat");
+      expect(d).toContain(`Mission : ${t.missionId}`);
+      for (const champ of ["textes", "briefsVisuels", "sources"]) expect(d).toContain(champ);
+      expect(d).toContain("livrable_deposer");
+      expect(d).toContain("mission_etat");
+    }
+  });
+
+  it("la consigne d'arbitrage cite arbitrage_deposer, pas decision_demander, et jamais le motif", async () => {
+    const t = await monter({ contratVersion: 99 });
+    await t.executeur.reprendre(SOC);
+    const consigne = t.commentaires[0]!.body;
+    expect(consigne).toContain("arbitrage_deposer");
+    expect(consigne).toContain("request_confirmation");
+    expect(consigne).not.toContain("decision_demander");
+    expect(consigne).not.toContain("motif");
   });
 
   it("7 : refus humain à l'approbation : la mission repart en cours, sans réveil (l'hôte rend la tâche à son assigné) ; un nouveau dépôt passe, le rejeu et l'ancien refus relu n'ont aucun effet", async () => {

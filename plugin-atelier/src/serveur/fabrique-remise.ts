@@ -90,6 +90,14 @@ export function dossierTravail(racine: string, companyId: string, travail: strin
   return join(racine, "livrables", companyId.toLowerCase(), travail.toLowerCase());
 }
 
+/** Avis de refus posé par la fabrique (livrables/.refus/<uuid>.json), rendu seulement s'il porte l'entreprise et le travail demandés. */
+export async function lireAvisRefus(racine: string, companyId: string, travail: string): Promise<Record<string, unknown> | null> {
+  if (!dossierTravail(racine, companyId, travail)) return null;
+  const avis = (await lireJson(join(racine, "livrables", ".refus", `${travail.toLowerCase()}.json`))) as Record<string, unknown> | null;
+  const memes = (a: unknown, b: string) => typeof a === "string" && a.toLowerCase() === b.toLowerCase();
+  return avis && memes(avis.entreprise, companyId) && memes(avis.travail, travail) ? avis : null;
+}
+
 export interface ApercuProtege {
   texte: string;
   tronque: boolean;
@@ -366,9 +374,11 @@ export interface TravailSuivi {
   tache: string | null;
   cree: string;
   essais: number;
+  /** Vrai une fois l'alerte « jamais démarré » commentée sur la tâche. */
+  alerte?: boolean;
 }
 
-export const SUIVI = { cle: "fabrique-suivi", intervalleMs: 30_000, essaisMax: 5, ageMaxMs: 7 * 24 * 3600 * 1000, max: 500 } as const;
+export const SUIVI = { cle: "fabrique-suivi", intervalleMs: 30_000, essaisMax: 5, ageMaxMs: 7 * 24 * 3600 * 1000, alerteSansDemarrageMs: 2 * 3600 * 1000, max: 500 } as const;
 
 export interface DependancesSignalement {
   suiviLire(): Promise<unknown>;
@@ -436,40 +446,64 @@ export function creerSignalement(d: DependancesSignalement) {
       const retires = new Set<string>();
       const remplaces = new Map<string, TravailSuivi>();
       for (const t of suiviValide(await d.suiviLire())) {
-        const dossier = dossierTravail(await d.racine(t.entreprise), t.entreprise, t.travail);
-        const etat = dossier ? ((await lireJson(join(dossier, "etat.json"))) as Record<string, unknown> | null) : null;
-        const fini = etat !== null && (etat.etat === "termine" || etat.etat === "echec");
-        if (!fini || !dossier || !etat) {
-          if (maintenant().getTime() - Date.parse(t.cree) >= SUIVI.ageMaxMs) {
-            r.abandonnes.push(t.travail);
-            retires.add(t.travail);
-          }
-          continue;
-        }
-        if (!t.tache) {
-          d.logger.warn("Fabrique : travail fini sans tâche d'origine, non signalé", { travail: t.travail });
-          r.abandonnes.push(t.travail);
-          retires.add(t.travail);
-          continue;
-        }
         try {
-          await d.commenter(t.tache, await texteFinal(t, etat, dossier), t.entreprise);
-        } catch (e) {
-          // Le commentaire n'est pas posé : nouvel essai au prochain passage, dans la limite fixée.
-          if (t.essais + 1 < SUIVI.essaisMax) remplaces.set(t.travail, { ...t, essais: t.essais + 1 });
-          else {
+          const dossier = dossierTravail(await d.racine(t.entreprise), t.entreprise, t.travail);
+          const etat = dossier
+            ? (((await lireJson(join(dossier, "etat.json"))) as Record<string, unknown> | null) ?? (await lireAvisRefus(await d.racine(t.entreprise), t.entreprise, t.travail)))
+            : null;
+          const fini = etat !== null && (etat.etat === "termine" || etat.etat === "echec");
+          if (!fini || !dossier || !etat) {
+            const age = maintenant().getTime() - Date.parse(t.cree);
+            if (age >= SUIVI.ageMaxMs) {
+              d.logger.warn("Fabrique : travail abandonné sans résultat après 7 jours", { travail: t.travail });
+              if (t.tache) {
+                await d.commenter(t.tache, `Fabrique : le travail ${t.travail} n'a rien produit en 7 jours, il n'est plus suivi.`, t.entreprise).catch((e) =>
+                  d.logger.warn("Fabrique : commentaire d'abandon impossible", { travail: t.travail, erreur: e instanceof Error ? e.message : String(e) }),
+                );
+              }
+              r.abandonnes.push(t.travail);
+              retires.add(t.travail);
+            } else if (etat === null && age >= SUIVI.alerteSansDemarrageMs && !t.alerte) {
+              // shortcut: 2 h fixes, une file de plusieurs vidéos peut les dépasser (le texte le dit), à revoir si les alertes à tort se répètent.
+              const texte = `Fabrique : le travail ${t.travail} n'a pas démarré après 2 heures (fabrique arrêtée ou file chargée). Il reste suivi.`;
+              try {
+                if (t.tache) await d.commenter(t.tache, texte, t.entreprise);
+                remplaces.set(t.travail, { ...t, alerte: true });
+                d.logger.warn("Fabrique : travail sans état ni avis après 2 heures", { travail: t.travail });
+              } catch (e) {
+                d.logger.warn("Fabrique : commentaire d'alerte impossible, nouvel essai au prochain passage", { travail: t.travail, erreur: e instanceof Error ? e.message : String(e) });
+              }
+            }
+            continue;
+          }
+          if (!t.tache) {
+            d.logger.warn("Fabrique : travail fini sans tâche d'origine, non signalé", { travail: t.travail });
             r.abandonnes.push(t.travail);
             retires.add(t.travail);
+            continue;
           }
-          d.logger.warn("Fabrique : commentaire de fin de travail impossible", { travail: t.travail, erreur: e instanceof Error ? e.message : String(e) });
-          continue;
+          try {
+            await d.commenter(t.tache, await texteFinal(t, etat, dossier), t.entreprise);
+          } catch (e) {
+            // Le commentaire n'est pas posé : nouvel essai au prochain passage, dans la limite fixée.
+            if (t.essais + 1 < SUIVI.essaisMax) remplaces.set(t.travail, { ...t, essais: t.essais + 1 });
+            else {
+              r.abandonnes.push(t.travail);
+              retires.add(t.travail);
+            }
+            d.logger.warn("Fabrique : commentaire de fin de travail impossible", { travail: t.travail, erreur: e instanceof Error ? e.message : String(e) });
+            continue;
+          }
+          // Commentaire posé : le travail est signalé, quoi qu'il arrive au réveil (jamais de second commentaire).
+          r.signales.push(t.travail);
+          retires.add(t.travail);
+          await d.reveiller(t.tache, t.entreprise, `atelier-fabrique-${t.travail}`).catch((e) =>
+            d.logger.warn("Fabrique : réveil de l'agent impossible", { travail: t.travail, erreur: e instanceof Error ? e.message : String(e) }),
+          );
+        } catch (e) {
+          // Travail gardé dans la liste : il sera revu au prochain passage, les autres ne sont pas bloqués.
+          d.logger.warn("Fabrique : travail en échec dans la passe, les suivants continuent", { travail: t.travail, erreur: e instanceof Error ? e.message : String(e) });
         }
-        // Commentaire posé : le travail est signalé, quoi qu'il arrive au réveil (jamais de second commentaire).
-        r.signales.push(t.travail);
-        retires.add(t.travail);
-        await d.reveiller(t.tache, t.entreprise, `atelier-fabrique-${t.travail}`).catch((e) =>
-          d.logger.warn("Fabrique : réveil de l'agent impossible", { travail: t.travail, erreur: e instanceof Error ? e.message : String(e) }),
-        );
       }
       // Relecture sous le verrou commun : les travaux déposés pendant la tournée sont conservés, seuls les travaux traités changent.
       await sousVerrouSuivi(async () => {

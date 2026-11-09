@@ -8,6 +8,8 @@
 #       sudo -n puis retirée) et un bloc graphique : parties word/charts et ppt/charts, aperçu « Charte appliquée : document » ;
 #       une cellule `=SOMME(A1)` refusée ;
 #   (b) une demande invalide : refusée dans `refuses/` (enveloppe), ou en `echec` propre (contenu) ;
+#   (b bis) un travail d'une entreprise non inscrite : refusé, avec un avis `echec` lisible par l'opérateur dans
+#       livrables/.refus/<uuid>.json (motif d'inscription) et aucun dossier livrables/<entreprise> créé ;
 #   (c) une vidéo de 2 scènes : si la carte graphique est occupée (fabrique.gpu.gpu_disponible() faux, par
 #       exemple JB joue), vérifie l'état `en_attente_gpu` avec sa raison, retire le travail proprement et
 #       signale « vidéo réelle reportée » (code de sortie 3) ; sinon attend `termine` et contrôle ffprobe,
@@ -30,6 +32,7 @@ set -uo pipefail
 DEPOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 RACINE="${FABRIQUE_RACINE:-/var/lib/atelier-fabrique}"
 ENTREPRISE="recette-fabrique"
+ENTREPRISE_NON_INSCRITE="recette-non-inscrite"  # jamais ajoutée à entreprises.json
 DELAI_DOCUMENT_S="${RECETTE_DELAI_DOCUMENT_S:-300}"
 DELAI_VIDEO_S="${RECETTE_DELAI_VIDEO_S:-1800}"
 DELAI_ATTENTE_GPU_S=120
@@ -76,6 +79,16 @@ retirer_refuses() {
   return 0
 }
 
+# Retire les avis de livrables/.refus/ des identifiants créés (propriété du service) : chemin construit depuis l'identifiant.
+retirer_avis() {
+  local id
+  for id in "$@"; do
+    [[ "$id" =~ $UUID_MOTIF ]] || continue
+    sudo -n rm -f -- "$RACINE/livrables/.refus/$id.json"
+  done
+  return 0
+}
+
 LISTE_ENTREPRISES="$RACINE/entreprises.json"
 DOSSIER_CHARTE="$RACINE/chartes-autorisees/$ENTREPRISE"
 ENTREPRISE_AJOUTEE=0
@@ -110,6 +123,7 @@ nettoyer() {
   retirer_charte
   for id in "${CREES[@]:-}"; do [[ -n "$id" ]] && retirer_travail "$id"; done
   retirer_refuses "${CREES[@]:-}"
+  retirer_avis "${CREES[@]:-}"
   # Reste d'une exécution précédente interrompue : les identifiants sont tous sous l'entreprise de la recette.
   if [[ -d "$RACINE/livrables/$ENTREPRISE" ]]; then
     sudo -n rm -r --one-file-system -- "$RACINE/livrables/$ENTREPRISE" 2>/dev/null
@@ -295,6 +309,26 @@ etape_charte_graphique() {
   fi
 }
 
+# ---------- (b bis) entreprise non inscrite ----------
+
+etape_non_inscrite() {
+  echo "Étape (b bis) : travail d'une entreprise non inscrite, avis de refus"
+  local id avis debut etat message
+  deposer document "$ENTREPRISE_NON_INSCRITE" "recette-non-inscrite-$$" "$DEMANDE_DOCX" || { echec "entreprise non inscrite" "dépôt impossible"; return; }
+  id="$DERNIER_ID"
+  avis="$RACINE/livrables/.refus/$id.json"
+  debut=$SECONDS
+  while ((SECONDS - debut < 60)) && [[ ! -f "$avis" ]]; do sleep 2; done
+  [[ -f "$avis" ]] || { echec "entreprise non inscrite" "aucun avis dans livrables/.refus/ après 60 s"; return; }
+  etat="$(jq -r '.etat // empty' "$avis" 2>/dev/null)"
+  message="$(jq -r '.message // empty' "$avis" 2>/dev/null)"
+  if [[ "$etat" == "echec" && "$message" == *"non inscrite"* && ! -e "$RACINE/livrables/$ENTREPRISE_NON_INSCRITE" ]]; then
+    reussi "entreprise non inscrite refusée avec avis lisible (« ${message:0:80} »), aucun dossier d'entreprise créé"
+  else
+    echec "entreprise non inscrite" "état « $etat », message « $message », dossier d'entreprise : $([[ -e "$RACINE/livrables/$ENTREPRISE_NON_INSCRITE" ]] && echo présent || echo absent)"
+  fi
+}
+
 # ---------- (b) demande invalide ----------
 
 etape_invalide() {
@@ -399,6 +433,7 @@ prerequis
 etape_documents
 etape_charte_graphique
 etape_invalide
+etape_non_inscrite
 ((AVEC_VIDEO == 1)) && etape_video
 
 echo

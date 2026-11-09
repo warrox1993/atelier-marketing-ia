@@ -232,6 +232,9 @@ copier_vers() {
   executer rsync -a --delete "${RACINE}/plugin-atelier/dist/" "${dest}/dist/" || return 1
   executer rsync -a --delete "${RACINE}/plugin-atelier/migrations/" "${dest}/migrations/" || return 1
   executer command cp -f "${RACINE}/plugin-atelier/package.json" "${dest}/package.json" || return 1
+  # Commit déployé, à côté du plugin (le retour arrière copie le dossier entier : il remet l'ancien VERSION).
+  if [[ "${ESSAI}" -eq 1 ]]; then echo "+ git rev-parse HEAD > ${dest}/VERSION"
+  else git -C "${RACINE}" rev-parse HEAD > "${dest}/VERSION" || return 1; fi
 }
 copier_vers "${RACINE}/instance/plugin-jb" || { [[ "${ESSAI}" -eq 1 ]] || retour_arriere; echec "copie vers instance/plugin-jb en échec"; }
 if [[ -n "${APERCU}" ]]; then
@@ -254,6 +257,21 @@ else
   systemctl --user is-active --quiet "${UNITE_PASSERELLE}" || { retour_arriere; echec "${UNITE_PASSERELLE} inactive : version d'avant remise"; }
 fi
 
+# ---------- 5 bis. Fabrique ----------
+# La fabrique est un service système installé par root : ce script ne la réinstalle jamais, il mesure l'écart avec le dépôt
+# (lecture seule, aussi en essai) et affiche la commande à lancer par l'opérateur.
+etape "5 bis. Fabrique (copie installée comparée au dépôt, lecture seule)"
+ECART_FABRIQUE="$("${RACINE}/scripts/ecart-fabrique.sh" 2>&1)"; CODE_ECART=$?
+echo "${ECART_FABRIQUE}"
+case "${CODE_ECART}" in
+  0) RESUME_FABRIQUE="à jour" ;;
+  1) RESUME_FABRIQUE="à réinstaller (voir étape 5 bis)"
+     echo "À lancer par l'opérateur, file vide, jamais par ce script :"
+     echo "  sudo bash ${RACINE}/scripts/installer-fabrique.sh"
+     echo "  ${RACINE}/scripts/recette-fabrique.sh --sans-video" ;;
+  *) RESUME_FABRIQUE="non contrôlée (voir étape 5 bis)" ;;
+esac
+
 # ---------- 6. Clients réels ----------
 # Plus de mode démonstration : rien n'est réappliqué automatiquement (les objectifs sur mesure
 # des clients ne doivent pas être écrasés, et les anciens scripts recréeraient des entreprises de démo).
@@ -270,6 +288,7 @@ done
 etape "7. Résumé"
 echo "Version déployée : $(git -C "${RACINE}" rev-parse --short HEAD)"
 echo "Tests : ${NB_TESTS}"
+echo "Fabrique : ${RESUME_FABRIQUE}"
 echo "Version d'avant : ${AVANT} (retour arrière manuel : rsync -a --delete de chaque dossier vers sa place, puis systemctl --user restart ${UNITE_INSTANCE} ${UNITE_PASSERELLE})"
 if [[ "${ESSAI}" -eq 0 ]]; then
   # Rotation des copies « avant » de ce script (motif strict), les plus récentes gardées.

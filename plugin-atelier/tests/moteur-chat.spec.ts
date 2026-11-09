@@ -18,7 +18,7 @@ const COORD = id(1);
 
 const mission = (p: Partial<Mission> = {}): Mission => ({
   id: id(700), companyId: SOC, gabaritCle: "wf-c-contenu", gabaritVersion: 1, contratId: "wf-c-contenu", contratVersion: 1, mandat: "Post de lancement LinkedIn",
-  etat: "en_cours", etatAvantPause: null, rangCourant: 1, enveloppeCents: 0, campagneId: null, issueRacineId: null, creeLe: "2026-11-08T08:00:00.000Z", modifieLe: "2026-11-08T08:00:00.000Z", ...p,
+  etat: "en_cours", etatAvantPause: null, rangCourant: 1, enveloppeCents: 0, campagneId: null, issueRacineId: null, cycleBlocage: 0, creeLe: "2026-11-08T08:00:00.000Z", modifieLe: "2026-11-08T08:00:00.000Z", ...p,
 });
 
 interface Options { config?: Ligne | null; missions?: Mission[]; couts?: { totalCents: number; evenements: number }; lectureMissionsEchoue?: boolean }

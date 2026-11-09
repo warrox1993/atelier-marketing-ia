@@ -10,12 +10,13 @@ import { PAGE_LIVRABLE_MAX, RESUME_MAX, sommaireDe } from "../src/serveur/contex
 import { CAMP, COORD, ISSUE, PRODUCTEUR, REV1, REV2, RELECTEUR, SOC, creerBanc } from "./outils-base.js";
 
 const producteur: ActeurHote = { type: "agent", id: PRODUCTEUR, agentId: PRODUCTEUR, userId: null, runId: "run-1" };
+const relecteur: ActeurHote = { type: "agent", id: RELECTEUR, agentId: RELECTEUR, userId: null, runId: "run-2" };
 const AUTRE_SOC = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
 
-async function lire(banc: ReturnType<typeof creerBanc>, query: Record<string, string> = {}, companyId = SOC) {
+async function lire(banc: ReturnType<typeof creerBanc>, query: Record<string, string> = {}, companyId = SOC, acteur: ActeurHote = producteur) {
   const services = creerServices(banc.ctx, { base: banc.base });
   try {
-    return await services.routes["tache.contexte"]!({ cle: "tache.contexte", params: { issueId: ISSUE }, query, companyId, acteur: producteur, corps: null });
+    return await services.routes["tache.contexte"]!({ cle: "tache.contexte", params: { issueId: ISSUE }, query, companyId, acteur, corps: null });
   } catch (err) {
     return { statut: 0, corps: err as { code?: string; message?: string } };
   }
@@ -54,6 +55,14 @@ function remplir(banc: ReturnType<typeof creerBanc>, corps = corpsLong()) {
   const doc = banc.documents.get(`${ISSUE}:livrable`)!;
   banc.documents.set(`${ISSUE}:livrable`, { ...doc, latestRevisionId: REV2, latestRevisionNumber: 2 });
   return corps;
+}
+
+/** Description de tâche de la longueur voulue, posée sur la tâche `ISSUE` du banc. */
+function decrire(banc: ReturnType<typeof creerBanc>, longueur: number, plus: Record<string, unknown> = {}) {
+  const issue = banc.issues.get(ISSUE)!;
+  const description = "Consigne détaillée de la tâche. ".repeat(Math.ceil(longueur / 32)).slice(0, longueur);
+  banc.issues.set(ISSUE, { ...issue, description, ...plus });
+  return description;
 }
 
 const taille = (x: unknown) => JSON.stringify(x).length;
@@ -191,13 +200,76 @@ describe("contexte de tâche : résumé par défaut", () => {
     expect(v.verdicts[0].preuvesVerifiees).toHaveLength(3);
     expect(((await lire(banc, { partie: "couvertures" })).corps as any).couvertures[0].preuves).toHaveLength(2); // eslint-disable-line @typescript-eslint/no-explicit-any
     expect(((await lire(banc, { partie: "donneesConnexion" })).corps as any).donneesConnexion).toHaveLength(6); // eslint-disable-line @typescript-eslint/no-explicit-any
-    for (const q of [{} as Record<string, string>, { vue: "complete" }, { partie: "livrable" }, { partie: "verdicts" }, { partie: "couvertures" }, { partie: "donneesConnexion" }]) {
+    for (const q of [{} as Record<string, string>, { vue: "complete" }, { partie: "livrable" }, { partie: "verdicts" }, { partie: "couvertures" }, { partie: "donneesConnexion" }, { partie: "tache" }]) {
       const r = await lire(banc, q, AUTRE_SOC);
       expect(r.corps, JSON.stringify(q)).toMatchObject({ code: "introuvable" });
       expect(JSON.stringify(r.corps)).not.toContain("Constat numéro");
     }
     // Un debut hors livrable est refusé proprement.
     expect((await lire(banc, { partie: "livrable", debut: "999999" })).corps).toMatchObject({ code: "entree_invalide" });
+  });
+
+  it("6. l'agent assigné ne reçoit pas la description dans le résumé : descriptionOmise donne sa longueur et ?partie=tache", async () => {
+    const banc = creerBanc();
+    remplir(banc);
+    const description = decrire(banc, 1809);
+    const c = (await lire(banc)).corps as any; // eslint-disable-line @typescript-eslint/no-explicit-any
+    expect(c.tache).not.toHaveProperty("description");
+    expect(c.tache).toMatchObject({ id: ISSUE, identifier: "DEM-1", titre: "Page" });
+    expect(c.tache.descriptionOmise).toBeUndefined();
+    expect(c.descriptionOmise).toEqual({ longueur: 1809, lire: "?partie=tache" });
+    expect(JSON.stringify(c)).not.toContain(description.slice(0, 40));
+    expect(c.pourAllerPlus).toContain("tache");
+    expect(c.pourAllerPlus.length).toBeLessThan(110);
+  });
+
+  it("6 bis. ?partie=tache rend la tâche entière, description comprise, et reste cloisonnée par entreprise", async () => {
+    const banc = creerBanc();
+    remplir(banc);
+    const description = decrire(banc, 1809);
+    const p = (await lire(banc, { partie: "tache" })).corps as any; // eslint-disable-line @typescript-eslint/no-explicit-any
+    expect(p.partie).toBe("tache");
+    expect(p.tache).toMatchObject({ id: ISSUE, identifier: "DEM-1", titre: "Page", description });
+    const autre = await lire(banc, { partie: "tache" }, AUTRE_SOC);
+    expect(autre.corps).toMatchObject({ code: "introuvable" });
+    expect(JSON.stringify(autre.corps)).not.toContain("Consigne détaillée");
+  });
+
+  it("6 ter. un autre lecteur (relecteur) reçoit toujours la description dans le résumé", async () => {
+    const banc = creerBanc();
+    remplir(banc);
+    const description = decrire(banc, 1809);
+    const c = (await lire(banc, {}, SOC, relecteur)).corps as any; // eslint-disable-line @typescript-eslint/no-explicit-any
+    expect(c.tache.description).toBe(description);
+    expect(c).not.toHaveProperty("descriptionOmise");
+  });
+
+  it("6 quater. description de plus de 12 000 caractères ou tâche de conversation : l'assigné garde la description", async () => {
+    const banc = creerBanc();
+    remplir(banc);
+    const longue = decrire(banc, 12_001);
+    const c1 = (await lire(banc)).corps as any; // eslint-disable-line @typescript-eslint/no-explicit-any
+    expect(c1.tache.description).toBe(longue);
+    expect(c1).not.toHaveProperty("descriptionOmise");
+    // Pile au seuil : omise.
+    decrire(banc, 12_000);
+    expect(((await lire(banc)).corps as any).descriptionOmise).toEqual({ longueur: 12_000, lire: "?partie=tache" }); // eslint-disable-line @typescript-eslint/no-explicit-any
+    // Conversation : gardée même courte.
+    const courte = decrire(banc, 1809, { conversationAgentId: PRODUCTEUR });
+    const c2 = (await lire(banc)).corps as any; // eslint-disable-line @typescript-eslint/no-explicit-any
+    expect(c2.tache.description).toBe(courte);
+    expect(c2).not.toHaveProperty("descriptionOmise");
+  });
+
+  it("7. mesure : sur la fixture remplir (livrable de 60 000 caractères, 6 verdicts, 8 constats, description de 1 809), le résumé de l'assigné est plus court que celui du relecteur d'au moins 1 809 − 150 caractères et reste sous RESUME_MAX", async () => {
+    const banc = creerBanc();
+    remplir(banc);
+    decrire(banc, 1809);
+    const assigne = taille((await lire(banc)).corps);
+    const lecteur = taille((await lire(banc, {}, SOC, relecteur)).corps);
+    process.stderr.write(`taille résumé relecteur (avant) = ${lecteur} ; taille résumé assigné (après) = ${assigne} ; écart = ${lecteur - assigne}\n`);
+    expect(assigne).toBeLessThan(RESUME_MAX);
+    expect(lecteur - assigne).toBeGreaterThanOrEqual(1809 - 150);
   });
 });
 

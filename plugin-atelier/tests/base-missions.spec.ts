@@ -28,13 +28,14 @@ function fauxDb() {
       appels.push({ sql, params });
       if (/^insert into \w+\.missions/u.test(sql)) {
         const [id, company_id, gabarit_cle, gabarit_version, contrat_id, contrat_version, mandat, etat, enveloppe_cents, campagne_id, issue_racine_id] = params;
-        missions.set(String(id), { id, company_id, gabarit_cle, gabarit_version, contrat_id, contrat_version, mandat, etat, etat_avant_pause: null, rang_courant: 0, enveloppe_cents: String(enveloppe_cents), campagne_id, issue_racine_id, cree_le: "2026-10-15 14:23:59.691232+02", modifie_le: "2026-10-15 14:23:59.691232+02" });
+        missions.set(String(id), { id, company_id, gabarit_cle, gabarit_version, contrat_id, contrat_version, mandat, etat, etat_avant_pause: null, rang_courant: 0, enveloppe_cents: String(enveloppe_cents), cycle_blocage: 0, campagne_id, issue_racine_id, cree_le: "2026-10-15 14:23:59.691232+02", modifie_le: "2026-10-15 14:23:59.691232+02" });
         return { rowCount: 1 };
       }
       if (/^update \w+\.missions set etat = \$4/u.test(sql)) {
         const m = missions.get(String(params[1]));
         if (!m || m.company_id !== params[0] || m.etat !== params[2]) return { rowCount: 0 };
         m.etat = params[3];
+        if (/cycle_blocage = cycle_blocage \+ 1/u.test(sql)) m.cycle_blocage = Number(m.cycle_blocage) + 1;
         return { rowCount: 1 };
       }
       if (/^insert into \w+\.etapes/u.test(sql)) {
@@ -65,7 +66,7 @@ describe("base : moteur de missions", () => {
     const id = await base.creerMission({ companyId: SOC, gabaritCle: "lancement", gabaritVersion: 3, contratId: "contrat-x", contratVersion: 2, mandat: "Lancer la campagne", enveloppeCents: 12500, campagneId: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb", issueRacineId: null });
     expect(await base.lireMission(SOC, id)).toEqual({
       id, companyId: SOC, gabaritCle: "lancement", gabaritVersion: 3, contratId: "contrat-x", contratVersion: 2, mandat: "Lancer la campagne", etat: "prete",
-      etatAvantPause: null, rangCourant: 0, enveloppeCents: 12500, campagneId: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb", issueRacineId: null,
+      etatAvantPause: null, rangCourant: 0, enveloppeCents: 12500, cycleBlocage: 0, campagneId: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb", issueRacineId: null,
       creeLe: "2026-10-15T12:23:59.691Z", modifieLe: "2026-10-15T12:23:59.691Z",
     });
     expect(await base.lireMission(SOC, "00000000-0000-4000-8000-000000000000")).toBeNull();
@@ -108,6 +109,37 @@ describe("base : moteur de missions", () => {
     expect(await base.changerEtatMission(SOC, id, "prete", "en_cours")).toBe(false);
     const maj = appels.find((a) => /^update \w+\.missions set etat/u.test(a.sql))!;
     expect(maj.sql.replace(/\s+/gu, " ")).toContain("where company_id = $1 and id = $2 and etat = $3");
+  });
+
+  it("sortir de blocage vers pause, annulee ou echec n'incrémente pas cycle_blocage (aucune reprise consommée)", async () => {
+    for (const cible of ["pause", "annulee", "echec"] as const) {
+      const { db, appels } = fauxDb();
+      const base = creerBase(db);
+      const id = await base.creerMission({ companyId: SOC, gabaritCle: "g", gabaritVersion: 1, contratId: "c", contratVersion: 1, mandat: "m" });
+      expect(await base.changerEtatMission(SOC, id, "prete", "blocage")).toBe(true);
+      expect(await base.changerEtatMission(SOC, id, "blocage", cible)).toBe(true);
+      expect(appels.map((a) => a.sql)).not.toContainEqual(expect.stringContaining("cycle_blocage"));
+      expect((await base.lireMission(SOC, id))).toMatchObject({ etat: cible, cycleBlocage: 0 });
+    }
+  });
+
+  it("sortir de blocage incrémente cycle_blocage dans le même UPDATE, tout autre changement non", async () => {
+    const { db, appels } = fauxDb();
+    const base = creerBase(db);
+    const id = await base.creerMission({ companyId: SOC, gabaritCle: "g", gabaritVersion: 1, contratId: "c", contratVersion: 1, mandat: "m" });
+    const majs = () => appels.filter((a) => /^update \w+\.missions set etat/u.test(a.sql));
+    expect(await base.changerEtatMission(SOC, id, "prete", "en_cours")).toBe(true);
+    expect(await base.changerEtatMission(SOC, id, "en_cours", "blocage")).toBe(true);
+    expect(majs().map((a) => a.sql)).not.toContainEqual(expect.stringContaining("cycle_blocage"));
+    expect((await base.lireMission(SOC, id))!.cycleBlocage).toBe(0);
+    const avant = majs().length;
+    expect(await base.changerEtatMission(SOC, id, "blocage", "prete")).toBe(true);
+    // Un seul UPDATE : le compteur et l'état changent ensemble ou pas du tout.
+    expect(majs()).toHaveLength(avant + 1);
+    expect(majs().at(-1)!.sql.replace(/\s+/gu, " ")).toContain("cycle_blocage = cycle_blocage + 1");
+    expect((await base.lireMission(SOC, id))).toMatchObject({ etat: "prete", cycleBlocage: 1 });
+    expect(await base.changerEtatMission(SOC, id, "blocage", "prete")).toBe(false);
+    expect((await base.lireMission(SOC, id))!.cycleBlocage).toBe(1);
   });
 
   it("une étape est relue ; la même (mission, rang, tentative) est refusée, une autre tentative passe", async () => {

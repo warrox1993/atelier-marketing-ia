@@ -28,10 +28,26 @@ Terminaux : `cloturee` (`done`), `annulee` et `echec` (`cancelled`). Toute autre
 | `en_execution` (`in_progress`) | `effet_confirme` → `resultat_confirme` ; `effet_refuse` → `echec` ; `effet_ambigu` → `blocage` |
 | `resultat_confirme` (`in_progress`) | `cloture` → `cloturee` |
 | `attente_information` (`blocked`, interaction) * | `information_recue` → `prete` |
-| `blocage` (`blocked`) * | `arbitrage_repris` → `prete` ; `arbitrage_effet_confirme` → `resultat_confirme` ; `arbitrage_abandon` → `echec` |
+| `blocage` (`blocked`) * | `arbitrage_repris` → `prete` ; `arbitrage_repris_effet` → `en_execution` ; `arbitrage_effet_confirme` → `resultat_confirme` ; `arbitrage_abandon` → `echec` |
 | `pause` (`backlog`) | `reprise_travail` → `prete` ; `reprise_revue` → `en_revue` ; `reprise_autorisation` → `attente_autorisation` ; `reprise_information` → `attente_information` ; `reprise_blocage` → `blocage` ; `annulation` → `annulee` |
 
 Le coordinateur n'est réveillé qu'à l'entrée de `blocage`. Sur `changements_demandes`, `P/serveur/chaine.ts` réveille déjà l'auteur. Une interaction en attente écarte le veilleur (`P/serveur/veilleur.ts:118`) : pas de modèle en `attente_information`.
+
+## Arbitrage
+
+La raison du blocage est écrite dans `sortie.blocage` de l'étape du rang avant la transition. Qui lève le blocage dépend d'elle :
+
+| Raison | Déclencheur | Sans modèle ? | Effet |
+| --- | --- | --- | --- |
+| `export_a_reconcilier`, `absents_du_crm` | Passe de reprise (5 min) : la confirmation de chaque envoi réussi est enregistrée | Oui | Rang 10 rejoué, clôture |
+| `decision_refusee` | Passe de reprise : la dernière décision valide de la tâche est une approbation | Oui | Même clé rejouée, la route prend la nouvelle décision |
+| `preuve_revoquee`, `preuve_expiree`, `preuve_non_signee` | Passe de reprise : dernière décision approuvée autre que celle de la diffusion morte | Oui | Clé suivante, nouvelle diffusion, nouvelle tâche |
+| Tout le reste (`export_partiel`, `lot_vide`, `agent_crm_absent`, `appel_introuvable`, `contrat_invalide`, `execution_crm_sans_issue`...) | Coordinateur : `arbitrage_deposer(reprendre)`, 3 reprises au plus | Non | Même clé ; tâche d'exécution fermée rouverte une fois par cycle |
+| Toute raison | Coordinateur : `arbitrage_deposer(abandonner)`, sous une carte `request_confirmation` acceptée par un humain sur sa tâche | Non | `arbitrage_abandon`, `echec` |
+
+Un acte humain déjà enregistré n'a pas besoin d'un modèle pour reprendre ; la route reste la seule barrière de décision. La consigne du coordinateur (tâche réécrite ou tâche d'arbitrage) cite `arbitrage_deposer`, jamais le `motif`, et dit pour les raisons levées seules que l'approbation humaine fait repartir la mission.
+
+La pause et son retour (`pause_demandee`, `etat_avant_pause`) n'ont aucun appelant : aucun code ne les atteint, la reprise d'une clé `demandee` pendant une pause n'est donc pas traitée.
 
 ## Limites réelles du SDK
 

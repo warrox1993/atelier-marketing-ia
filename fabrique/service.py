@@ -302,14 +302,40 @@ def compter_travail(racine: Path, entreprise: str, type_travail: str) -> None:
     ecrire_json_atomique(racine / FICHIER_QUOTAS, quotas)
 
 
-def refuser_exces(racine: Path, fd_entrant: int, noms: list[str]) -> list[str]:
+def ecrire_avis_refus(racine: Path, donnees: dict, motif: str) -> None:
+    """Pose livrables/.refus/<uuid>.json : le plugin n'a pas d'autre moyen de savoir qu'un travail a été refusé.
+
+    Le point initial interdit toute collision avec une entreprise ; aucun dossier d'entreprise n'est créé.
+    `donnees` vient de `lire_entree` (UUID canonique, entreprise conforme)."""
+    message = ("refusé par la fabrique : entreprise non inscrite à la fabrique, l'administrateur doit l'autoriser"
+               if motif == "entreprise non autorisée" else message_court(f"refusé par la fabrique : {motif}"))
+    avis = {"travail": donnees["travail"], "entreprise": donnees["entreprise"], "etat": "echec",
+            "fin": maintenant(), "message": message}
+    tache = _tache_de(donnees)
+    if tache is not None:
+        avis["tache"] = tache
+    try:
+        dossier = racine / "livrables" / ".refus"
+        dossier.mkdir(mode=0o750, exist_ok=True)
+        ecrire_json_atomique(dossier / f"{donnees['travail']}.json", avis)
+    except OSError as erreur:
+        journal(f"avis de refus de {donnees['travail']} impossible : {erreur.strerror}")
+
+
+def refuser_exces(racine: Path, fd_entrant: int, noms: list[str], uid_deposant: int | None = None) -> list[str]:
     """Au-delà de MAX_ENTREES_EN_ATTENTE fichiers dans entrant/, refuse l'excédent (les plus récents), par lots."""
     if len(noms) <= MAX_ENTREES_EN_ATTENTE:
         return noms
     excedent = noms[MAX_ENTREES_EN_ATTENTE:MAX_ENTREES_EN_ATTENTE + REFUS_EXCES_PAR_PASSAGE]
     (racine / "refuses").mkdir(mode=0o700, exist_ok=True)
     for nom in excedent:
-        refuser(fd_entrant, nom, str(racine / "refuses"), f"file d'attente pleine (plus de {MAX_ENTREES_EN_ATTENTE} entrées)")
+        motif = f"file d'attente pleine (plus de {MAX_ENTREES_EN_ATTENTE} entrées)"
+        if uid_deposant is not None:
+            try:
+                ecrire_avis_refus(racine, lire_entree(fd_entrant, nom, uid_deposant), motif)
+            except Refus:
+                pass  # entrée non sûre : refusée sans avis
+        refuser(fd_entrant, nom, str(racine / "refuses"), motif)
     return noms[:MAX_ENTREES_EN_ATTENTE]
 
 
@@ -331,6 +357,17 @@ def purger(racine: Path) -> None:
                     if maintenant_s - _horodatage_refus(entree) > RETENTION_REFUSES_S:
                         os.unlink(entree.path)
                         journal(f"PURGE refuses/{entree.name} (plus de {RETENTION_REFUSES_S // 86400} jours)")
+                except OSError:
+                    continue
+    except OSError:
+        pass
+    try:
+        with os.scandir(racine / "livrables" / ".refus") as it:
+            for avis in it:
+                try:
+                    if maintenant_s - avis.stat(follow_symlinks=False).st_mtime > RETENTION_REFUSES_S:
+                        os.unlink(avis.path)
+                        journal(f"PURGE livrables/.refus/{avis.name} (plus de {RETENTION_REFUSES_S // 86400} jours)")
                 except OSError:
                     continue
     except OSError:
@@ -1291,6 +1328,8 @@ def traiter_une_entree(racine: Path, uid_deposant: int, nom: str,
                  or ("file d'attente du GPU pleine" if _utilise_le_gpu(donnees) and file_gpu is not None
                      and file_gpu.pleine() else None))
         if motif:
+            if not motif.startswith("travail déjà connu"):
+                ecrire_avis_refus(racine, donnees, motif)
             refuser(fd_entrant, nom, str(dossier_refuses), motif)
             return
         accepter(racine, fd_entrant, nom, donnees)
@@ -1362,7 +1401,7 @@ def boucle(racine: Path, uid_deposant: int, arret: Callable[[], bool]) -> None:
             if len(noms) > MAX_ENTREES_EN_ATTENTE:
                 fd_entrant = os.open(racine / "entrant", os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
                 try:
-                    noms = refuser_exces(racine, fd_entrant, noms)
+                    noms = refuser_exces(racine, fd_entrant, noms, uid_deposant)
                 finally:
                     os.close(fd_entrant)
         except OSError as erreur:

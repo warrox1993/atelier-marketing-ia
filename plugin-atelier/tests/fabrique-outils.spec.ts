@@ -114,9 +114,9 @@ describe("validation de fabriquer_document", () => {
     expect(validerDemandeDocument({ ...valide(), feuilles: [] }).ok).toBe(false);
     expect(validerDemandeDocument({ format: "xlsx", modele: "sobre", titre: "t", langue: "en" }).ok).toBe(false);
   });
-  it("le manifeste déclare les cinq outils de la fabrique, les cinq du moteur et la capacité", () => {
+  it("le manifeste déclare les cinq outils de la fabrique, les six du moteur et la capacité", () => {
     expect(manifest.capabilities).toContain("agent.tools.register");
-    expect((manifest.tools ?? []).map((t) => t.name).sort()).toEqual(["decision_demander", "etat_fabrication", "fabriquer_document", "fabriquer_image", "fabriquer_video", "livrable_deposer", "mission_etat", "sources_lister", "verdict_deposer", "voir_rendu"]);
+    expect((manifest.tools ?? []).map((t) => t.name).sort()).toEqual(["arbitrage_deposer", "decision_demander", "etat_fabrication", "fabriquer_document", "fabriquer_image", "fabriquer_video", "livrable_deposer", "mission_etat", "sources_lister", "verdict_deposer", "voir_rendu"]);
   });
 });
 
@@ -225,7 +225,7 @@ describe("validation de fabriquer_video", () => {
     expect(validerDemandeVideo({ ...video(), scenes: gros }).ok).toBe(true); // 30 x ~3,6 Kio : sous la limite
   });
   it("le manifeste déclare les cinq outils de la fabrique (et ceux du moteur) et les clés fabriqueAgentsDocuments, fabriqueAgentsVideo et fabriqueAgentsImage", () => {
-    expect((manifest.tools ?? []).map((t) => t.name).sort()).toEqual(["decision_demander", "etat_fabrication", "fabriquer_document", "fabriquer_image", "fabriquer_video", "livrable_deposer", "mission_etat", "sources_lister", "verdict_deposer", "voir_rendu"]);
+    expect((manifest.tools ?? []).map((t) => t.name).sort()).toEqual(["arbitrage_deposer", "decision_demander", "etat_fabrication", "fabriquer_document", "fabriquer_image", "fabriquer_video", "livrable_deposer", "mission_etat", "sources_lister", "verdict_deposer", "voir_rendu"]);
     expect(Object.keys((manifest.instanceConfigSchema as any).properties)).toEqual(expect.arrayContaining(["fabriqueAgentsDocuments", "fabriqueAgentsVideo", "fabriqueAgentsImage"]));
   });
 });
@@ -835,5 +835,40 @@ describe("outils : agent, quota, dépôt, étanchéité", () => {
         }
       });
     });
+  });
+});
+
+describe("etat_fabrication : travail refusé par la fabrique (#74)", () => {
+  let dossier: string;
+  const T = "33333333-3333-4333-8333-333333333333";
+  const outils = () =>
+    creerOutilsFabrique({
+      agentConnu: async () => true,
+      config: async () => ({ fabriqueDossierFile: dossier, fabriqueAgentsDocuments: [AGENT] }),
+      etatLire: async () => null,
+      etatEcrire: async () => undefined,
+    });
+  const poserAvis = (travail: string, avis: Record<string, unknown>) => {
+    mkdirSync(join(dossier, "livrables", ".refus"), { recursive: true });
+    writeFileSync(join(dossier, "livrables", ".refus", `${travail}.json`), JSON.stringify(avis));
+  };
+  const run = (companyId: string) => ({ agentId: AGENT, runId: RUN, companyId });
+
+  beforeEach(() => {
+    dossier = mkdtempSync(join(tmpdir(), "fabrique-refus-"));
+  });
+  afterEach(() => rmSync(dossier, { recursive: true, force: true }));
+
+  it("etat_fabrication : un travail refusé rend son état echec et son motif", async () => {
+    const avis = { travail: T, entreprise: ENTREPRISE_A, etat: "echec", fin: "2026-11-09T10:00:00+00:00", message: "refusé par la fabrique : entreprise non inscrite" };
+    poserAvis(T, avis);
+    const r = await outils().etatFabrication({ travail: T }, run(ENTREPRISE_A));
+    expect(r.error).toBeUndefined();
+    expect(r.data).toEqual({ travail: T, etat: avis });
+  });
+  it("etat_fabrication : l'avis de refus de B donne Travail introuvable. pour A", async () => {
+    poserAvis(T, { travail: T, entreprise: ENTREPRISE_B, etat: "echec", fin: "2026-11-09T10:00:00+00:00", message: "refusé par la fabrique : quota" });
+    const r = await outils().etatFabrication({ travail: T }, run(ENTREPRISE_A));
+    expect(r.error).toBe("Travail introuvable.");
   });
 });

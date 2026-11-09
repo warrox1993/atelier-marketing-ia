@@ -119,7 +119,7 @@ describe("abonné issue.updated : refus humain à l'approbation", () => {
 });
 
 describe("outils du moteur", () => {
-  const NOMS = ["decision_demander", "livrable_deposer", "mission_etat", "sources_lister", "verdict_deposer"];
+  const NOMS = ["arbitrage_deposer", "decision_demander", "livrable_deposer", "mission_etat", "sources_lister", "verdict_deposer"];
   const run = { agentId: "agent-1", runId: "run-1", companyId: SOC, projectId: "projet" };
 
   it.each([["absent", {}], ["faux", { [SOC]: { moteurMissions: false } }]])("enregistrés à la construction, moteur %s : chaque appel refuse sans execute ni issues.update", async (_nom, config) => {
@@ -318,6 +318,8 @@ describe("étapes en code de WF-01 sur le vrai branchement", () => {
       journaliser: vi.fn(async (e: { type: string; donnees?: Record<string, unknown> }) => void journal.push(e)),
       prospectDansExportNonRefuse: vi.fn(async () => false),
       prospectExportConfirme: vi.fn(async () => false),
+      // Aucune diffusion sur la clé : l'export reste sur la clé d'origine (génération 0).
+      lireDiffusionParCle: vi.fn(async () => null),
     };
     const { ctx, gestionnaires, pc } = fauxCtx({ config: { [SOC]: { moteurMissions: true } } });
     (ctx.issues as Record<string, unknown>).get = vi.fn(async () => ({ status: "done", executionPolicy: { stages: [{ id: "a", type: "approval" }] }, executionState: { completedStageIds: ["a"] } }));

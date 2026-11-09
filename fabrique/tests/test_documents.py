@@ -715,6 +715,14 @@ def test_charte_pptx_masque_en_tete_de_tableau_logo(tmp_path):
     assert tableau.cell(1, 0).fill.type == MSO_FILL.BACKGROUND
 
 
+def test_charte_pptx_zones_de_texte_libres_dans_la_police(tmp_path):
+    poser_charte(tmp_path)
+    chemin, _ = generer_ok(tmp_path, demande_graphique("pptx", blocs=[bloc_graphique(sous_titre="Sous-titre")]))
+    zones = [f for d in Presentation(str(chemin)).slides for f in d.shapes if f.has_text_frame and not f.is_placeholder]
+    assert len(zones) == 2
+    assert all(z.text_frame.paragraphs[0].runs[0].font.name == "Archivo" for z in zones)
+
+
 def test_charte_xlsx_police_et_premiere_ligne(tmp_path):
     poser_charte(tmp_path)
     chemin, _ = generer_ok(tmp_path, demande_xlsx())

@@ -20,7 +20,7 @@ const requete = { from: "query", key: "companyId" } as const;
 
 /** Table figée des routes (v1). `manifest.apiRoutes` est dérivé de cette table. */
 export const ROUTES_API = [
-  { cle: "tache.contexte", methode: "GET", chemin: "/taches/:issueId/contexte", auth: "board-or-agent", resolution: tache, description: "Résumé du contexte (brief, exigences ciblées, sommaire du livrable, revues, verdicts, constats ouverts, boîte de réception) ; ?partie=livrable|verdicts|couvertures|donneesConnexion pour le détail, ?vue=complete pour le corps complet." },
+  { cle: "tache.contexte", methode: "GET", chemin: "/taches/:issueId/contexte", auth: "board-or-agent", resolution: tache, description: "Résumé du contexte (brief, exigences ciblées, sommaire du livrable, revues, verdicts, constats ouverts, boîte de réception) ; ?partie=livrable|verdicts|couvertures|donneesConnexion|tache pour le détail, ?vue=complete pour le corps complet." },
   { cle: "tache.couverture", methode: "POST", chemin: "/taches/:issueId/couverture", auth: "board-or-agent", resolution: tache, checkout: "required-for-agent-in-progress", description: "Le producteur déclare la couverture de chaque exigence pour une révision, avec preuves localisables." },
   { cle: "tache.verdict", methode: "POST", chemin: "/taches/:issueId/verdicts", auth: "board-or-agent", resolution: tache, description: "Un relecteur désigné dépose un verdict structuré (jamais le producteur)." },
   { cle: "tache.porte.evaluer", methode: "POST", chemin: "/taches/:issueId/porte/evaluer", auth: "board-or-agent", resolution: tache, description: "Calcul déterministe de la porte P2 sur la révision courante." },

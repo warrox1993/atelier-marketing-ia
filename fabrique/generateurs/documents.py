@@ -944,6 +944,8 @@ class _Presentation:
         course.text = texte
         course.font.size = Pt(taille)
         course.font.color.rgb = _rgb_pptx("#595959")
+        if self.charte is not None:  # une zone libre hérite du thème, pas du style de corps du masque
+            course.font.name = self.charte["police_texte"]
 
     def terminer(self) -> None:
         for diapo in self.prs.slides:

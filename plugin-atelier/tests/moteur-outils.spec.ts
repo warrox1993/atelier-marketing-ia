@@ -551,3 +551,93 @@ describe("outils du moteur de missions", () => {
     expect((manifest.tools ?? []).map((x) => x.name).filter((n) => noms.includes(n)).sort()).toEqual(noms);
   });
 });
+
+/** Arbitrage du coordinateur (#56, D6) : mission en blocage, run du coordinateur sur sa tâche d'arbitrage (origine `mission:<id>:…`). */
+describe("arbitrage_deposer : l'outil du coordinateur", () => {
+  const COORDINATEUR = "agent-coordinateur";
+  const ARBITRAGE = "issue-arbitrage";
+  const MOTIF = "Le lot est à refaire.";
+  const arbitrer = (decision: "reprendre" | "abandonner", extra: Record<string, unknown> = {}) => ({ missionId: MISSION, decision, motif: MOTIF, ...extra });
+
+  async function enBlocage(opts: Parameters<typeof monter>[0] = {}) {
+    const t = await monter(opts);
+    t.missions.get(MISSION)!.etat = "blocage";
+    Object.assign(t.missions.get(MISSION)!, { cycleBlocage: 0 });
+    t.issues.set(ARBITRAGE, { id: ARBITRAGE, companyId: SOC, originId: `mission:${MISSION}:1:arbitrage`, assigneeAgentId: COORDINATEUR, status: "todo" });
+    const carte = (extra: Record<string, unknown> = {}) => void t.cartes.push({ id: `carte-${t.cartes.length + 1}`, issueId: ARBITRAGE, kind: "request_confirmation", status: "accepted", resolvedByUserId: "local-board", createdByAgentId: COORDINATEUR, payload: { detailsMarkdown: `Abandon : mission ${MISSION} (cycle ${t.missions.get(MISSION)!.cycleBlocage})` }, ...extra });
+    return { ...t, carte, coordinateur: (runId = "run-c", issueId = ARBITRAGE) => t.run(COORDINATEUR, runId, issueId) };
+  }
+
+  it("refuse tout autre rôle, un run hors mission, une mission hors blocage, moteur désactivé : rien n'est écrit", async () => {
+    const t = await enBlocage();
+    t.carte();
+    const avant = t.etat();
+    expect(erreurDe(await t.outils.arbitrage_deposer(arbitrer("abandonner"), t.run(REDACTEUR, "run-a", ARBITRAGE))).code).toBe("droit_refuse");
+    t.issues.set("issue-autre", { id: "issue-autre", companyId: SOC, originId: "mission:autre:1:arbitrage", assigneeAgentId: COORDINATEUR, status: "todo" });
+    expect(erreurDe(await t.outils.arbitrage_deposer(arbitrer("abandonner"), t.coordinateur("run-b", "issue-autre"))).code).toBe("run_hors_mission");
+    expect(erreurDe(await t.outils.arbitrage_deposer(arbitrer("abandonner"), t.coordinateur("run-c", "issue-inconnue"))).code).toBe("run_hors_mission");
+    expect(erreurDe(await t.outils.arbitrage_deposer(arbitrer("abandonner", { motif: "" }), t.coordinateur())).code).toBe("parametres_invalides");
+    expect(t.missions.get(MISSION)!.etat).toBe("blocage");
+    expect(t.etat()).toEqual(avant);
+    t.missions.get(MISSION)!.etat = "en_cours";
+    expect(erreurDe(await t.outils.arbitrage_deposer(arbitrer("reprendre"), t.coordinateur())).code).toBe("transition_invalide");
+    expect(t.missions.get(MISSION)!.etat).toBe("en_cours");
+    const inactif = await enBlocage({ actif: false });
+    inactif.carte();
+    const avantInactif = inactif.etat();
+    expect(erreurDe(await inactif.outils.arbitrage_deposer(arbitrer("abandonner"), inactif.coordinateur())).code).toBe("moteur_desactive");
+    expect(inactif.etat()).toEqual(avantInactif);
+  });
+
+  it("abandonner sans carte humaine acceptée : accord_humain_absent, rien d'écrit", async () => {
+    const repere = (cycle: number) => `Abandon : mission ${MISSION} (cycle ${cycle})`;
+    const cas = [null, { status: "pending" }, { status: "rejected" }, { resolvedByUserId: null }, { payload: {} }, { payload: { detailsMarkdown: "Valider le plan." } }, { payload: { detailsMarkdown: repere(1) } }, { payload: { detailsMarkdown: `${repere(0)} (suite)` } }];
+    for (const carte of cas) {
+      const t = await enBlocage();
+      if (carte) t.carte(carte);
+      const avant = t.etat();
+      const e = erreurDe(await t.outils.arbitrage_deposer(arbitrer("abandonner"), t.coordinateur()));
+      expect(e.code).toBe("accord_humain_absent");
+      expect(e.actionRecommandee).toContain("request_confirmation");
+      expect(e.actionRecommandee).toContain(repere(0));
+      expect(t.missions.get(MISSION)!.etat).toBe("blocage");
+      expect(t.etat()).toEqual(avant);
+    }
+  });
+
+  it("abandonner avec la carte acceptée : echec, tâches ouvertes annulées, tâche terminée et revues de la porte intactes, motif absent des écritures", async () => {
+    const t = await enBlocage();
+    t.carte();
+    t.issues.get("issue-1")!.status = "done";
+    const avant = t.etat();
+    const r = await t.outils.arbitrage_deposer(arbitrer("abandonner"), t.coordinateur());
+    expect(r.error).toBeUndefined();
+    expect(r.data).toMatchObject({ statut: "abandonnee", etat: "echec" });
+    expect(t.missions.get(MISSION)!.etat).toBe("echec");
+    // Les sous-tâches de revue appartiennent à la porte : elles gardent leur cycle de vie propre.
+    for (const [id, i] of t.issues) expect(i.status, id).toBe(id === "issue-1" ? "done" : i.originKind === ORIGINE_REVUE ? "todo" : "cancelled");
+    expect(t.majs.slice(avant.majs).some((x) => x.id === "issue-1" || t.issues.get(x.id)?.originKind === ORIGINE_REVUE)).toBe(false);
+    expect(t.appelsRoutes).toEqual([]);
+    expect(JSON.stringify([t.journal, t.majs, t.creations, r.data, r.content])).not.toContain(MOTIF);
+    expect(t.etat().transitions).toBe(avant.transitions + 1);
+    // Rejeu : la mission est déjà terminale, aucun nouvel effet.
+    const apres = t.etat();
+    expect(erreurDe(await t.outils.arbitrage_deposer(arbitrer("abandonner"), t.coordinateur())).code).toBe("transition_invalide");
+    expect(t.etat()).toEqual(apres);
+  });
+
+  it("reprendre au-delà de 3 cycles : arbitrages_epuises, rien d'écrit ; au 3e cycle la sortie de blocage a lieu", async () => {
+    const t = await enBlocage();
+    Object.assign(t.missions.get(MISSION)!, { cycleBlocage: 3 });
+    const avant = t.etat();
+    const e = erreurDe(await t.outils.arbitrage_deposer(arbitrer("reprendre"), t.coordinateur()));
+    expect(e.code).toBe("arbitrages_epuises");
+    expect(t.missions.get(MISSION)!.etat).toBe("blocage");
+    expect(t.etat()).toEqual(avant);
+    Object.assign(t.missions.get(MISSION)!, { cycleBlocage: 2 });
+    const r = await t.outils.arbitrage_deposer(arbitrer("reprendre"), t.coordinateur());
+    expect(r.error).toBeUndefined();
+    expect(r.data).toMatchObject({ statut: "reprise" });
+    expect(t.missions.get(MISSION)!.etat).not.toBe("blocage");
+  });
+});

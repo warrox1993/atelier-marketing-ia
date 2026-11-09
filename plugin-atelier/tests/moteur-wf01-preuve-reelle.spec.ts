@@ -34,10 +34,12 @@ const BASE_LEGALE = {
 
 /** Banc en mode réel : la tâche `ISSUE` joue la porte (done, contrôle réussi), le CRM a un compte connu, la clé d'approbation est lisible sauf `secret: null`. */
 function monterReel(o: { secret?: string | null } = {}) {
-  const banc = creerBanc({
-    mode: "reel", modeEntreprise: "reel", secret: o.secret === undefined ? PLUGIN.priveePem : o.secret,
+  // Objet gardé : le banc relit `secret` à chaque résolution, la clé peut revenir en cours de test.
+  const optionsBanc = {
+    mode: "reel" as const, modeEntreprise: "reel" as const, secret: o.secret === undefined ? PLUGIN.priveePem : o.secret,
     config: { approbationClePrivee: { type: "secret_ref", secretId: "11111111-2222-4333-8444-555555555555" }, passerelleClesPubliques: [GW.publiqueBase64], ...REFS_CLES },
-  });
+  };
+  const banc = creerBanc(optionsBanc);
   avecClesDonnees(banc.ctx);
   banc.tacheSousPorte({ status: "done", etape: null, corps: "# Prospects\n\nLot du jour." });
   banc.passe();
@@ -83,6 +85,7 @@ function monterReel(o: { secret?: string | null } = {}) {
     confirme: (c, _m, p) => crm.confirme(c, MISSION_WF01, p),
     ambigu: (c, _m, p) => crm.ambigu!(c, MISSION_WF01, p),
     ecrire: (c, e) => crm.ecrire(c, { ...e, missionId: MISSION_WF01 }),
+    decisionNouvelle: (c) => crm.decisionNouvelle!(c, MISSION_WF01),
   };
   const appelDe = (i = -1) => banc.t.appels.at(i)! as { id: string; service: string; outil: string; compte: string; empreinte: string; arguments: unknown };
   const route = (cle: string, acteur: ActeurHote, corps: unknown, params: Record<string, string> = { issueId: ISSUE }, query: Record<string, string> = {}) =>
@@ -115,7 +118,8 @@ function monterReel(o: { secret?: string | null } = {}) {
     );
     return route("tache.diffusions.issue", AGENT, { reponse }, { issueId: ISSUE, diffusionId });
   };
-  return { banc, services, exports, recus, crm, crmPourExecuteur, appelDe, argumentsClairs, approuver, rejouer, deposer, route };
+  const rendreLaCle = () => void (optionsBanc.secret = PLUGIN.priveePem);
+  return { banc, services, exports, recus, crm, crmPourExecuteur, appelDe, argumentsClairs, approuver, rejouer, deposer, route, rendreLaCle };
 }
 
 type Monte = ReturnType<typeof monterReel>;
@@ -130,10 +134,17 @@ async function missionReelle(m: Monte, lot = [P1, P2]) {
   await t.executeur.surDoneNatif(SOC_WF01, t.issue);
   const passes = async (n = 5) => { for (let i = 0; i < n; i++) await t.executeur.reprendre(SOC_WF01); };
   const porte = t.issueDuRang(7);
+  // Comme l'hôte : une écriture sur la tâche de porte change la vraie tâche, que la règle de diffusion du banc relit.
+  const ecrire = t.hote.issues.update;
+  t.hote.issues.update = async (id: string, patch: Record<string, unknown>) => {
+    if (id === porte) Object.assign(m.banc.issues.get(ISSUE)!, patch);
+    return ecrire(id, patch);
+  };
   const commentairesPorte = () => t.commentaires.filter((c) => c.issueId === porte).map((c) => c.body);
   const tachesExecution = () => t.creations.filter((c) => String(c.originId).includes(":diffusion:"));
   const blocage = () => t.journal.filter((j) => j.type === "moteur.blocage").at(-1)?.donnees;
-  return { ...t, passes, porte, commentairesPorte, tachesExecution, blocage };
+  const tacheDe = (c: { originId?: unknown }) => [...t.issues.values()].find((i) => i.originId === c.originId)!;
+  return { ...t, passes, porte, commentairesPorte, tachesExecution, blocage, tacheDe };
 }
 
 describe("export CRM réel de WF-01 : l'agent crm-conversion exécute la preuve signée", () => {
@@ -242,6 +253,40 @@ describe("export CRM réel de WF-01 : l'agent crm-conversion exécute la preuve 
     expect(t.tachesExecution()).toHaveLength(0);
   });
 
+  it("après un blocage de l'export, la tâche de porte reste done et une tâche d'arbitrage est réveillée pour le coordinateur", async () => {
+    const m = monterReel({ secret: null });
+    const t = await missionReelle(m);
+    await t.passes(1);
+    await m.approuver();
+    await t.passes(3);
+    expect(t.etat()).toBe("blocage");
+    expect(t.issues.get(t.porte)).toMatchObject({ status: "done" });
+    expect(m.banc.issues.get(ISSUE)).toMatchObject({ status: "done" });
+    const arbitrages = t.creations.filter((c) => String(c.originId).endsWith(":arbitrage"));
+    expect(arbitrages).toHaveLength(1);
+    expect(arbitrages[0]).toMatchObject({ status: "todo", assigneeAgentId: "agent-coordinateur" });
+    const tacheId = [...t.issues.values()].find((i) => i.originId === arbitrages[0]!.originId)!.id as string;
+    expect(t.reveils.filter((r) => r === tacheId)).toHaveLength(1);
+    const consigne = String(arbitrages[0]!.description);
+    expect(consigne).toContain("mission-1");
+    expect(consigne).toContain("preuve_non_signee");
+    expect(consigne).toContain("mission_etat");
+    expect(consigne).not.toMatch(/clé d'approbation indisponible/u);
+  });
+
+  it("deux passes en blocage ne créent qu'une tâche d'arbitrage et qu'un réveil", async () => {
+    const m = monterReel({ secret: null });
+    const t = await missionReelle(m);
+    await t.passes(1);
+    await m.approuver();
+    await t.passes(3);
+    await t.passes(5);
+    expect(t.creations.filter((c) => String(c.originId).endsWith(":arbitrage"))).toHaveLength(1);
+    const tacheId = [...t.issues.values()].find((i) => String(i.originId).endsWith(":arbitrage"))!.id as string;
+    expect(t.reveils.filter((r) => r === tacheId)).toHaveLength(1);
+    expect(t.issues.get(t.porte)).toMatchObject({ status: "done" });
+  });
+
   it("diffusion révoquée : blocage preuve_revoquee ; charge expirée : blocage preuve_expiree", async () => {
     for (const [cas, raison] of [["revoquee", "preuve_revoquee"], ["expiree", "preuve_expiree"]] as const) {
       const m = monterReel();
@@ -258,6 +303,105 @@ describe("export CRM réel de WF-01 : l'agent crm-conversion exécute la preuve 
       expect(t.blocage()).toMatchObject({ raison });
     }
   });
+
+  it("ambiguë puis confirmée : la passe suivante rejoue le rang 10 et clôt, aucun nouvel export, aucune nouvelle diffusion, aucune seconde tâche", async () => {
+    const m = monterReel();
+    const t = await missionReelle(m);
+    await t.passes(1);
+    await m.approuver();
+    await t.passes(2);
+    const diffusionId = m.banc.t.diffusions[0]!.id as string;
+    await m.deposer(diffusionId, "ambigue_a_reconcilier");
+    await t.passes(2);
+    expect(t.etat()).toBe("blocage");
+    // Sans nouvelle information, le blocage reste.
+    await t.passes(2);
+    expect(t.etat()).toBe("blocage");
+    // Réconciliation chez la plateforme : la même route confirme la diffusion ambiguë.
+    expect(((await m.deposer(diffusionId, "executee")).corps as { etat: string }).etat).toBe("confirmee");
+    await t.passes(2);
+    expect(t.etat()).toBe("cloturee");
+    expect(t.etapes.find((e) => e.rang === 10)).toMatchObject({ etat: "terminee", sortie: { verifies: 2 } });
+    expect(m.exports.filter((e) => e.etat !== "refusee")).toHaveLength(1);
+    expect(m.banc.t.diffusions).toHaveLength(1);
+    expect(t.tachesExecution()).toHaveLength(1);
+  });
+
+  it("refus humain puis approbation par la vraie route : la mission repart, une diffusion, une tâche d'exécution, la preuve est bien signée", async () => {
+    const m = monterReel();
+    const t = await missionReelle(m);
+    await t.passes(1);
+    await m.route("tache.decision", HUMAIN, { revisionId: REV1, action: "demander_correction", commentaire: "Revoir le lot.", portee: null });
+    await t.passes(3);
+    expect(t.etat()).toBe("blocage");
+    expect(t.blocage()).toMatchObject({ raison: "decision_refusee" });
+    // Sans nouvelle décision : toujours bloquée, rien n'est créé.
+    await t.passes(2);
+    expect(t.etat()).toBe("blocage");
+    expect(m.banc.t.diffusions).toHaveLength(0);
+    expect((await m.approuver()).statut).toBe(201);
+    await t.passes(3);
+    expect(t.etat()).toBe("en_execution");
+    expect(m.banc.t.diffusions).toHaveLength(1);
+    expect(t.tachesExecution()).toHaveLength(1);
+    const cle = /clé d'idempotence : (\S+)/u.exec(String(t.tachesExecution()[0]!.description))![1]!;
+    const rejeu = (await m.rejouer(cle, appelDeDescription(t.tachesExecution()[0]!))).corps as { etat: string; preuveApprobation: string };
+    expect(rejeu.etat).toBe("preparee");
+    expect(VERIFICATEUR.verifier(rejeu.preuveApprobation, { service: "crm", outil: m.appelDe().outil, args: await m.argumentsClairs(), compte: m.appelDe().compte, maintenantS: Math.floor(Date.now() / 1000) }).ok).toBe(true);
+  });
+
+  for (const [cas, raison] of [["révoquée", "preuve_revoquee"], ["expirée", "preuve_expiree"], ["non signée", "preuve_non_signee"]] as const) {
+    /** Mission bloquée sur une diffusion morte : révoquée, à charge expirée, ou préparée sans preuve (clé absente). */
+    const bloquee = async () => {
+      const m = monterReel({ secret: cas === "non signée" ? null : undefined });
+      const t = await missionReelle(m);
+      await t.passes(1);
+      await m.approuver();
+      await t.passes(2);
+      const d = m.banc.t.diffusions[0]!;
+      if (cas === "révoquée") Object.assign(d, { revoqueeLe: m.banc.horloge(), revocationMotif: "Décision remplacée" });
+      else if (cas === "expirée") (d.preuveCharge as { expire: number }).expire = 1;
+      await t.passes(3);
+      expect(t.blocage()).toMatchObject({ raison });
+      return { m, t, anciennes: t.tachesExecution().length };
+    };
+
+    it(`${cas} : sans nouvelle décision : blocage conservé, aucune nouvelle diffusion`, async () => {
+      const { m, t, anciennes } = await bloquee();
+      await t.passes(5);
+      expect(t.etat()).toBe("blocage");
+      expect(t.blocage()).toMatchObject({ raison });
+      expect(m.banc.t.diffusions).toHaveLength(1);
+      expect(m.exports.filter((e) => e.etat !== "refusee")).toHaveLength(1);
+      expect(t.tachesExecution()).toHaveLength(anciennes);
+    });
+
+    it(`${cas} : nouvelle décision : clé suivante, nouvelle diffusion avec preuve, ancienne tâche annulée, mission clôturée après dépôt signé`, async () => {
+      const { m, t, anciennes } = await bloquee();
+      if (cas === "non signée") m.rendreLaCle();
+      expect((await m.approuver()).statut).toBe(201);
+      await t.passes(3);
+      expect(t.etat()).toBe("en_execution");
+      expect(m.banc.t.diffusions).toHaveLength(2);
+      const nouvelle = m.banc.t.diffusions[1]!;
+      expect(nouvelle).toMatchObject({ etat: "preparee" });
+      expect(nouvelle.preuveCharge).toBeTruthy();
+      expect(String(nouvelle.cleIdempotence)).toMatch(/:g1$/u);
+      // Une seule nouvelle tâche d'exécution ; l'ancienne (s'il y en avait une) est annulée, jamais réveillée de nouveau.
+      expect(t.tachesExecution()).toHaveLength(anciennes + 1);
+      if (anciennes === 1) expect(t.tacheDe(t.tachesExecution()[0]!).status).toBe("cancelled");
+      const tacheNeuve = t.tachesExecution().at(-1)!;
+      expect(t.tacheDe(tacheNeuve)).toMatchObject({ status: "todo", assigneeAgentId: AGENT_CRM });
+      expect(String(tacheNeuve.description)).toContain(`Diffusion : ${nouvelle.id as string}`);
+      const cle = /clé d'idempotence : (\S+)/u.exec(String(tacheNeuve.description))![1]!;
+      expect(cle).toMatch(/:g1$/u);
+      expect(((await m.rejouer(cle, appelDeDescription(tacheNeuve))).corps as { etat: string }).etat).toBe("preparee");
+      expect(((await m.deposer(nouvelle.id as string, "executee")).corps as { etat: string }).etat).toBe("confirmee");
+      await t.passes(2);
+      expect(t.etat()).toBe("cloturee");
+      expect(m.banc.t.diffusions).toHaveLength(2);
+    });
+  }
 
   it("agent crm-conversion absent : blocage agent_crm_absent, aucune tâche", async () => {
     const m = monterReel();
@@ -363,6 +507,37 @@ describe("export CRM réel de WF-01 : l'agent crm-conversion exécute la preuve 
       expect(t.reveils.filter((r) => r === tache.id)).toHaveLength(reveilsAvant);
       expect(t.tachesExecution()).toHaveLength(1);
     }
+  });
+
+  it("tâche d'exécution fermée sans issue puis reprendre : même tâche rouverte, même clé, aucune nouvelle diffusion ; refermée dans le même cycle : nouveau blocage", async () => {
+    const m = monterReel();
+    const t = await missionReelle(m);
+    await t.passes(1);
+    await m.approuver();
+    await t.passes(2);
+    const tache = t.tacheDe(t.tachesExecution()[0]!);
+    const description = tache.description;
+    tache.status = "done";
+    await t.passes(4);
+    expect(t.etat()).toBe("blocage");
+    expect(t.blocage()).toMatchObject({ raison: "execution_crm_sans_issue", tacheId: tache.id });
+    const reveilsAvant = t.reveils.filter((r) => r === tache.id).length;
+    expect(await t.executeur.sortirDeBlocage(SOC_WF01, t.missionId)).toBe(true);
+    await t.passes(3);
+    expect(t.etat()).toBe("en_execution");
+    expect(tache.status).toBe("todo");
+    expect(tache.description).toBe(description);
+    expect(t.tachesExecution()).toHaveLength(1);
+    expect(m.banc.t.diffusions).toHaveLength(1);
+    expect(t.reveils.filter((r) => r === tache.id)).toHaveLength(reveilsAvant + 1);
+    tache.status = "done";
+    await t.passes(4);
+    expect(t.etat()).toBe("blocage");
+    expect(t.blocage()).toMatchObject({ raison: "execution_crm_sans_issue", tacheId: tache.id });
+    expect(tache.status).toBe("done");
+    expect(t.tachesExecution()).toHaveLength(1);
+    expect(m.banc.t.diffusions).toHaveLength(1);
+    expect(t.reveils.filter((r) => r === tache.id)).toHaveLength(reveilsAvant + 1);
   });
 
   it("arrêt entre l'insertion de la diffusion et celle de l'export : le rejeu de la même clé retrouve la diffusion (200), sans seconde diffusion", async () => {
