@@ -258,6 +258,18 @@ describe("correction demandée par l'humain : transmise au Coordinateur", () => 
     expect(s.b.t.decisions.filter((d) => d.action === "demander_correction")).toHaveLength(1);
   });
 
+  it("porte déjà terminée (done) : la décision est enregistrée, mais ni mise en attente du livrable, ni commentaire, ni réveil du Coordinateur", async () => {
+    const s = await aLApprobation();
+    s.b.issues.get(ISSUE)!.status = "done";
+    const r = await s.decider("L'appel est à revoir.");
+    expect((r.corps as { transmission?: unknown }).transmission).toBeUndefined();
+    expect(s.b.t.decisions.filter((d) => d.action === "demander_correction")).toHaveLength(1);
+    expect(s.b.mises).not.toContainEqual({ issueId: ISSUE, patch: expect.objectContaining({ status: "blocked" }) });
+    expect(s.commentaires).toHaveLength(0);
+    expect(s.reveils).toHaveLength(0);
+    expect(s.b.issues.get(ISSUE)!.status).toBe("done");
+  });
+
   for (const panne of ["reveil", "commentaire"] as const) {
     it(`M4 : ${panne} refusé par l'hôte : le livrable est remis dans son état d'avant et la transmission revient au producteur`, async () => {
       const s = await aLApprobation();

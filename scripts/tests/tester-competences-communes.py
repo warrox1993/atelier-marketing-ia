@@ -798,6 +798,20 @@ class ConsignesChaineContenuGP3(unittest.TestCase):
         self.assertNotIn("Étape Coordonnées de toute campagne", texte)
         self.assertIn("l'étape n'est pas au plan et ne prend aucune place", texte)
 
+    def test_tache_d_execution_du_moteur_sans_nouvelle_proposition(self):
+        # #55 : l'humain a déjà approuvé l'appel ; une nouvelle proposition changerait l'empreinte et rendrait la preuve inutilisable.
+        texte = re.sub(r"\s+", " ", self.role("crm-conversion"))
+        self.assertIn("**Tâche d'exécution du moteur**", texte)
+        self.assertRegex(texte, r"Tâche d'exécution du moteur[^.]*ne propose rien[^.]*appelsProposes[^.]*étapes 3 à 6[^.]*cette clé")
+        # Les règles raccourcies pour compenser restent dites.
+        self.assertIn("un argument différent rend la preuve inutilisable", texte)
+        self.assertIn("Sans preuve, ne jamais appeler un outil d'écriture", texte)
+        self.assertIn("seulement après cette nouvelle approbation", texte)
+        # Le moteur a déjà créé la diffusion : le rejeu de l'agent répond 200, jamais 201.
+        self.assertIn("Seule une réponse `200` ou `201` avec `etat: \"preparee\"`", texte)
+        self.assertIn("dossier?partie=appelsProposes", texte)
+        self.assertIn("Ne ferme pas ta tâche sans issue déposée", texte)
+
     def test_verdict_de_conformite_bloque_la_chaine(self):
         # MK-09 (part consigne) : un « non publiable » ne va ni à la relecture ni à l'humain.
         texte = re.sub(r"\s+", " ", self.role("coordinateur"))

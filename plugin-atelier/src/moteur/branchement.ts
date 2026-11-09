@@ -19,15 +19,15 @@ const configDe = (ctx: PluginContext) => async (companyId: string) => (await ctx
 const agentsDeCtx = (ctx: PluginContext) => async (companyId: string) => (await ctx.agents.list({ companyId, limit: 200 })).filter((a) => a.companyId === companyId);
 
 const ACTEUR_MOTEUR: ActeurHote = { type: "systeme", id: "moteur-missions", agentId: null, userId: null, runId: null };
-/** États d'une diffusion acceptée : simulée (démonstration), préparée (preuve signée) ou confirmée. */
-// shortcut: en mode réel, rien n'exécute encore la preuve signée : la mission s'arrête en blocage (absents_du_crm) à la vérification, à lever avec l'exécuteur réel de WF-01.
-const EXPORT_ACCEPTE = new Set(["simulee", "preparee", "confirmee"]);
+/** États d'une diffusion acceptée : simulée (démonstration) ou confirmée. « Préparée » (preuve signée) n'est pas une écriture : l'agent CRM l'exécute. */
+const EXPORT_ACCEPTE = new Set(["simulee", "confirmee"]);
 const objet = (v: unknown): Record<string, unknown> => (typeof v === "object" && v !== null && !Array.isArray(v) ? (v as Record<string, unknown>) : {});
 
 /**
  * CRM de production : l'écriture passe par la route `tache.prospects.exporter`, un seul appel par lot. La route exige la décision humaine
  * « modifier_crm » sur l'appel exact : le moteur ne la crée, ne la simule et ne la contourne jamais. Une diffusion acceptée est une écriture ;
- * l'attente d'approbation et le refus (prospects refusés, avec leur motif) sont rendus tels quels à `exporterLot` ; tout autre état (ambigu) lève une erreur.
+ * l'attente d'approbation et le refus (prospects refusés, avec leur motif) sont rendus tels quels à `exporterLot` ; une diffusion préparée est à exécuter par l'agent CRM
+ * (le moteur ne détient jamais la preuve signée : elle est jetée ici) ; tout autre état (ambigu) lève une erreur.
  */
 export function creerCrmProduction(base: BaseMoteur, exporter: GestionnaireRoute, modeDe: (companyId: string, campagneId: string | null) => Promise<"demonstration" | "reel">): CrmMoteur {
   /** Mission, périmètre (service, canal, entité) de l'étape 1 et tâche de la porte. */
@@ -42,21 +42,47 @@ export function creerCrmProduction(base: BaseMoteur, exporter: GestionnaireRoute
   };
   return {
     async existe(companyId, missionId, prospectId) {
-      const { m, service } = await perimetre(companyId, missionId);
-      return base.prospectDansExportNonRefuse(companyId, prospectId, service, await modeDe(companyId, m.campagneId));
+      const { m, service, issueId } = await perimetre(companyId, missionId);
+      return base.prospectDansExportNonRefuse(companyId, prospectId, service, await modeDe(companyId, m.campagneId), issueId);
     },
     async confirme(companyId, missionId, prospectId) {
       const { m, service } = await perimetre(companyId, missionId);
       return base.prospectExportConfirme(companyId, prospectId, service, await modeDe(companyId, m.campagneId));
+    },
+    async ambigu(companyId, missionId, prospectId) {
+      const { m, service } = await perimetre(companyId, missionId);
+      return base.prospectExportAmbigu(companyId, prospectId, service, await modeDe(companyId, m.campagneId));
     },
     async ecrire(companyId, e) {
       const { service, canal, entite, issueId } = await perimetre(companyId, e.missionId);
       const rep = await exporter({ cle: "tache.prospects.exporter", params: { issueId }, query: {}, companyId, acteur: ACTEUR_MOTEUR, corps: { prospectIds: e.prospectIds, service, canal, entite, cleIdempotence: e.cle } });
       const corps = objet(rep.corps);
       const etat = String(corps.etat);
-      if (EXPORT_ACCEPTE.has(etat)) return { etat: "acceptee" };
       const consigne = typeof corps.consigne === "string" ? corps.consigne : null;
-      if (etat === "en_attente_approbation") return { etat: "en_attente", appelId: typeof objet(corps.appel).id === "string" ? (objet(corps.appel).id as string) : null, consigne };
+      if (EXPORT_ACCEPTE.has(etat)) return { etat: "acceptee" };
+      if (etat === "preparee") {
+        // Premier appel ou rejeu de la clé : jamais de lecture de `preuveApprobation`.
+        const diffusionId = objet(corps.export).diffusionId;
+        const cleDiffusion = `export:${e.cle}`.slice(0, 200);
+        const interne = typeof diffusionId === "string" ? await base.lireDiffusionInterne(companyId, diffusionId) : null;
+        if (!interne) throw new Error("Export CRM : diffusion préparée introuvable.");
+        if (interne.revocation) return { etat: "bloquee", raison: "preuve_revoquee", motif: interne.revocation.motif };
+        const diffusion = await base.lireDiffusionParCle(companyId, cleDiffusion);
+        const motifPrepare = diffusion?.motifRefus ?? null;
+        if (!interne.preuveCharge) return { etat: "bloquee", raison: "preuve_non_signee", motif: motifPrepare };
+        // `expire` est en secondes (charge de la preuve, signatures.ts).
+        if (interne.preuveCharge.expire * 1000 <= Date.now()) return { etat: "bloquee", raison: "preuve_expiree", motif: motifPrepare };
+        // L'appel à relire : rendu par la route au premier appel ; au rejeu de la clé, retrouvé par la révision, le service, l'outil et l'empreinte des arguments de la diffusion.
+        const appelId = typeof objet(corps.appel).id === "string" ? (objet(corps.appel).id as string)
+          : (await base.listerAppels(companyId, issueId)).find((a) => a.revisionId === diffusion?.revisionId && a.service === interne.service && a.outil === interne.outil && a.empreinteArguments === interne.empreinteArguments)?.id;
+        if (!appelId) return { etat: "bloquee", raison: "appel_introuvable", motif: null };
+        return { etat: "a_executer", diffusionId: interne.id, cleDiffusion, appelId };
+      }
+      if (etat === "en_attente_approbation") {
+        // Refus humain de la révision courante : rien ne partira sous cette décision, la mission s'arrête au lieu d'attendre.
+        if (corps.decisionRefusee === true) return { etat: "bloquee", raison: "decision_refusee", motif: consigne };
+        return { etat: "en_attente", appelId: typeof objet(corps.appel).id === "string" ? (objet(corps.appel).id as string) : null, consigne };
+      }
       const motifRefus = objet(corps.export).motifRefus;
       if (etat === "refusee") {
         const refuses = (Array.isArray(corps.verifications) ? corps.verifications : []).map(objet).filter((v) => v.ok === false).map((v) => ({ prospectId: String(v.prospectId), motif: String(v.motif ?? "refusé") }));

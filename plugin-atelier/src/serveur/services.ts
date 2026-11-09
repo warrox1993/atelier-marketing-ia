@@ -1858,7 +1858,7 @@ export function creerServices(ctx: PluginContext, options: { transportReel?: Tra
     // 16/10/2026 : une correction demandée par l'humain va au Coordinateur (tâche parente), qui répartit ;
     // sans parente assignée à un agent, l'écran garde le retour direct au producteur.
     const transmission =
-      entree.action === "demander_correction"
+      entree.action === "demander_correction" && issue.status !== "done"
         ? await redispatch
             .transmettreCorrection(companyId, issue, { decisionId: id, commentaire: entree.commentaire, revisionId: liv.revisionId, revisionNumber: liv.revisionNumber ?? null, userId: acteur.userId, producteurId: producteurDe(issue) })
             .catch((err: unknown) => ({ transmission: "producteur" as const, raison: err instanceof Error ? err.message : String(err) }))

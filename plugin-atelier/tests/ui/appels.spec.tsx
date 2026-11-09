@@ -5,7 +5,7 @@ import { EXEMPLES_DONNEES } from "../../src/contrats/exemples/index.js";
 import { AppelPropose, DossierHumain, Diffusion } from "../../src/contrats/dossier.js";
 import { PageAtelier } from "../../src/ui/index.js";
 import { canalDePasserelle, etatDiffusionReelle, porteeDepuisAppel, raisonRevocation, revocable } from "../../src/ui/vues/appels.js";
-import { diffusionParAgent } from "../../src/ui/vues/contenus.js";
+import { diffusionParAgent, raisonDecision } from "../../src/ui/vues/contenus.js";
 import { champParLibelle, cliquer, ENTREPRISE, installerPont, parTexte, radio, rendre, saisir, type Pont, type Rendu } from "./pont.js";
 
 const contexte = { companyId: ENTREPRISE, companyPrefix: "RNO", projectId: null, entityId: null, entityType: null, userId: "local-board" };
@@ -228,6 +228,57 @@ describe("décision : l'humain approuve l'appel exact", () => {
     await cliquer(parTexte(c, "button", "Enregistrer : approuver"));
     const a = pont.appelsActions.find((x) => x.cle === "atelier.decision");
     expect((a?.params as { portee: Record<string, unknown> }).portee.appel).toBeUndefined();
+  });
+});
+
+/** Porte terminée (done) : le contrôle a réussi, le moteur a proposé l'appel après coup et attend la décision sur cet appel. */
+const porteTerminee = (statut: "approved" | "blocked_information", decisions: DossierHumain["decisions"] = []): DossierHumain => ({ ...avecAppels(A_CRM), statut: { statut, motif: "Tâche terminée." }, decisions });
+const DECISION_SUR_CRM = { ...APPROBATION_REELLE, revisionId: R2, portee: { ...APPROBATION_REELLE.portee, revisionId: R2, action: "modifier_crm" as const, canal: "crm", compte: "Portail HubSpot", appel: A_CRM.approbation } };
+
+describe("décision sur une porte terminée : l'appel proposé après coup se décide à l'écran", () => {
+  it("approved et blocked_information : approuver et demander une correction restent ouverts tant que l'appel n'a pas de décision ; rejeter est refusé", () => {
+    for (const statut of ["approved", "blocked_information"] as const) {
+      const d = porteTerminee(statut);
+      expect(raisonDecision(d, "approuver", "Appel relu.")).toBeNull();
+      expect(raisonDecision(d, "demander_correction", "À revoir.")).toBeNull();
+      expect(raisonDecision(d, "rejeter", "Non.")).toMatch(/terminée/u);
+    }
+  });
+  it("fermé sans appel proposé, avec un appel d'une ancienne révision, ou une fois l'appel décidé", () => {
+    expect(raisonDecision({ ...porteTerminee("approved"), appelsProposes: [] }, "approuver", "x")).toMatch(/prêt pour validation/u);
+    expect(raisonDecision({ ...porteTerminee("approved"), appelsProposes: [A_ANCIEN] }, "approuver", "x")).toMatch(/prêt pour validation/u);
+    expect(raisonDecision(porteTerminee("approved", [DECISION_SUR_CRM]), "approuver", "x")).toMatch(/prêt pour validation/u);
+    expect(raisonDecision({ ...porteTerminee("approved"), statut: { statut: "completed", motif: "" } }, "approuver", "x")).toMatch(/prêt pour validation/u);
+  });
+
+  describe("formulaire", () => {
+    const fetchHote = vi.fn(async () => new Response(JSON.stringify({ status: "done" }), { status: 200 }));
+    beforeEach(() => {
+      fetchHote.mockClear();
+      vi.stubGlobal("fetch", fetchHote);
+    });
+    it("ne propose pas « Rejeter », approuve l'appel exact et n'appelle jamais la transition de la tâche", async () => {
+      pont.actions["atelier.decision"] = async (p) => ({ id: "d", ...p });
+      const c = await dossier(porteTerminee("approved"));
+      expect(c.textContent).not.toContain("Rejeter");
+      expect(c.querySelector(".atl-decision-fermee")).toBeNull();
+      await saisir(champParLibelle(c, "Commentaire"), "Appel relu.");
+      await saisir(champParLibelle(c, "Action autorisée"), "modifier_crm");
+      await cliquer(radio(c, "Modifier la fiche contact 501"));
+      await cliquer(parTexte(c, "button", "Enregistrer : approuver"));
+      const a = pont.appelsActions.find((x) => x.cle === "atelier.decision");
+      expect((a?.params as { portee: unknown }).portee).toMatchObject({ action: "modifier_crm", appel: A_CRM.approbation });
+      expect(fetchHote.mock.calls.map((x) => String((x as unknown[])[0])).filter((u) => u.includes("/issues/"))).toEqual([]);
+    });
+    it("la correction demandée n'appelle pas non plus la transition de la tâche terminée", async () => {
+      pont.actions["atelier.decision"] = async (p) => ({ id: "d", ...p });
+      const c = await dossier(porteTerminee("blocked_information"));
+      await cliquer(radio(c, "Demander une correction"));
+      await saisir(champParLibelle(c, "Commentaire"), "Appel à revoir.");
+      await cliquer(parTexte(c, "button", "Enregistrer : demander une correction"));
+      expect(pont.appelsActions.some((x) => x.cle === "atelier.decision")).toBe(true);
+      expect(fetchHote.mock.calls.map((x) => String((x as unknown[])[0])).filter((u) => u.includes("/issues/"))).toEqual([]);
+    });
   });
 });
 

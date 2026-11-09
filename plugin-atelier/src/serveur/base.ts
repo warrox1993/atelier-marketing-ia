@@ -1768,15 +1768,24 @@ export function creerBase(db: Db) {
     return r ? exportDepuisLigne(r) : null;
   }
 
-  /** Un export non refusé (simulé, préparé, confirmé, à réconcilier) de ce service et de ce mode contient déjà ce prospect : le moteur ne le réécrit pas. */
-  async function prospectDansExportNonRefuse(companyId: string, prospectId: string, service: string, mode: string) {
-    const [r] = await q(`select 1 as un from ${ns}.exports_crm where company_id = $1 and service = $3 and mode = $4 and etat <> 'refusee' and prospect_ids @> jsonb_build_array($2::text) limit 1`, [companyId, prospectId, service, mode]);
+  /**
+   * Un export non refusé (simulé, confirmé, à réconcilier) de ce service et de ce mode contient déjà ce prospect : le moteur ne le réécrit pas.
+   * Une diffusion seulement préparée ne compte pas pour la tâche de la porte `issueId` (l'état réel est sur la diffusion liée) : la clé du lot se rejoue jusqu'à l'exécution par l'agent CRM ; pour une autre tâche, elle compte.
+   */
+  async function prospectDansExportNonRefuse(companyId: string, prospectId: string, service: string, mode: string, issueId: string) {
+    const [r] = await q(`select 1 as un from ${ns}.exports_crm e left join ${ns}.diffusions d on d.id = e.diffusion_id where e.company_id = $1 and e.service = $3 and e.mode = $4 and e.etat <> 'refusee' and (coalesce(d.etat, '') <> 'preparee' or e.issue_id <> $5) and e.prospect_ids @> jsonb_build_array($2::text) limit 1`, [companyId, prospectId, service, mode, issueId]);
     return r !== undefined;
   }
 
   /** L'état réel se lit sur la diffusion liée (`exports_crm.etat` n'est écrit qu'à l'insertion) : simulée ou confirmée ; préparée ou ambiguë, pas encore. */
   async function prospectExportConfirme(companyId: string, prospectId: string, service: string, mode: string) {
     const [r] = await q(`select 1 as un from ${ns}.exports_crm e join ${ns}.diffusions d on d.id = e.diffusion_id where e.company_id = $1 and e.service = $3 and e.mode = $4 and d.etat in ('simulee', 'confirmee') and e.prospect_ids @> jsonb_build_array($2::text) limit 1`, [companyId, prospectId, service, mode]);
+    return r !== undefined;
+  }
+
+  /** Un export dont la diffusion est ambiguë à réconcilier contient ce prospect : l'effet est incertain, le moteur ne réécrit rien. */
+  async function prospectExportAmbigu(companyId: string, prospectId: string, service: string, mode: string) {
+    const [r] = await q(`select 1 as un from ${ns}.exports_crm e join ${ns}.diffusions d on d.id = e.diffusion_id where e.company_id = $1 and e.service = $3 and e.mode = $4 and d.etat = 'ambigue_a_reconcilier' and e.prospect_ids @> jsonb_build_array($2::text) limit 1`, [companyId, prospectId, service, mode]);
     return r !== undefined;
   }
 
@@ -1985,7 +1994,7 @@ export function creerBase(db: Db) {
     referentielProspection, insererProspect, majProspect, remplacerProspectAReimporter, exclureProspect, ajouterEmpreintesProspect, insererScoreProspect,
     detailsProspects, listerProspects, insererOpposition, lireOpposition,
     insererImportBaseClients, insererClients, etatBaseClients, supprimerBaseClients, reglesVentesCroisees, clientsPourVentesCroisees, insererEtalonnage, issuesPourEtalonnage, scoresCourantsCible, insererScoreMesure,
-    lireExportCrmParCle, prospectDansExportNonRefuse, prospectExportConfirme, insererExportCrm,
+    lireExportCrmParCle, prospectDansExportNonRefuse, prospectExportConfirme, prospectExportAmbigu, insererExportCrm,
     creerMission, lireMission, missionsActives, rattacherCampagneMission, changerEtatMission, creerEtape, lireEtapes, missionsAvecFichier, majEtape, enregistrerExecution, marquerExecution, lireExecution, changerRangMission, etapeParIssue,
   };
 }

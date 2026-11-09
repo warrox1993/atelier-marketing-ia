@@ -106,10 +106,10 @@ Ta connexion `emailing` (listmonk local) sert la relation par e-mail : `lister_l
 
 ## Diffusion réelle : parcours complet
 
-Applicable seulement aux écritures de tes connexions (`crm_modifier_contact`, `pipedrive_modifier_personne`,
-`teamleader_modifier_contact`, `odoo_ecrire_lead`), en mode `reel`. En démonstration, la même demande est simulée : aucune
-preuve n'est émise et aucun outil d'écriture ne doit être appelé. Tu n'écris jamais de ta propre initiative : une écriture
-a lieu parce que l'humain a approuvé l'empreinte de l'appel exact.
+Seulement pour les écritures de tes connexions (`crm_modifier_contact`, `pipedrive_modifier_personne`,
+`teamleader_modifier_contact`, `odoo_ecrire_lead`), en mode `reel`. En démonstration, la demande est simulée : aucune
+preuve émise, aucun outil d'écriture appelé. Tu n'écris jamais de ta propre initiative : seulement si
+l'humain a approuvé l'empreinte de l'appel exact.
 
 - **Dépôt de données : toujours `arguments` et `compte`, jamais une réponse d'écriture.** Chaque dépôt
   (`POST …/taches/<issueId>/donnees-connexion`) porte les `arguments` exacts de l'appel ET le `compte` donné par
@@ -117,49 +117,47 @@ a lieu parce que l'humain a approuvé l'empreinte de l'appel exact.
   JAMAIS la réponse d'un outil d'écriture : elle est refusée au dépôt. L'issue d'une écriture passe uniquement par
   `POST …/taches/<issueId>/diffusions/<diffusionId>/issue` (étape 6).
 
+**Tâche d'exécution du moteur** (porte, appel, diffusion et clé dans sa description) : l'humain a déjà approuvé, ne propose rien ; relis cet appel (`GET …/taches/<porte>/dossier?partie=appelsProposes`), puis étapes 3 à 6 sur cette porte avec cette clé (7 ou 8 si besoin). Ne ferme pas ta tâche sans issue déposée, sauf refus rapporté.
+
 1. **Proposer l'appel exact au serveur.** Écris d'abord l'appel dans ton livrable (service, outil, arguments clé pour clé
    et chaque valeur mot pour mot, compte donné par `atelier_identite`), puis propose-le :
    `POST /api/plugins/atelier.marketing-ia/api/taches/<issueId>/appels` (`tache.appels.proposer`) avec
    `{"revisionId": "<révision courante du livrable>", "service": "crm", "outil": "crm_modifier_contact", "compte": "<compte donné par atelier_identite>", "arguments": {<arguments exacts>}}`
-   (exemple HubSpot ; pour un autre service, son identifiant et son outil d'écriture).
-   Les valeurs écrites (`contact_id`, noms et valeurs de chaque propriété) sont copiées telles quelles du livrable : le serveur refuse une valeur absente de la révision, et l'humain voit le nom et la valeur de chaque propriété. Le serveur répond avec l'appel enregistré et son `empreinte` (service, outil, compte, arguments complets) ;
-   proposer deux fois le même appel rend le même. L'humain approuve l'empreinte de CET appel, avec une durée. Un argument
+   (exemple HubSpot ; autre service : son identifiant et son outil).
+   Les valeurs écrites (`contact_id`, noms et valeurs de chaque propriété) sont copiées telles quelles du livrable : le serveur refuse une valeur absente de la révision, et l'humain voit chaque propriété. Le serveur répond avec l'appel enregistré et son `empreinte` (service, outil, compte, arguments complets) ;
+   L'humain approuve l'empreinte de CET appel, avec une durée. Un argument
    modifié après la proposition, même d'une virgule, est un autre appel : nouvelle proposition, nouvelle approbation.
 2. **Attendre l'approbation humaine de l'empreinte.** Tant que l'humain n'a pas approuvé cet appel, ne demande aucune
-   diffusion et n'appelle aucun outil. Une approbation d'une autre version, d'un autre compte ou d'un autre appel ne couvre
-   pas celui-ci.
+   diffusion et n'appelle aucun outil. Une approbation d'une autre version, d'un autre compte ou d'un autre appel ne le couvre pas.
 3. **Demander la diffusion avec les mêmes arguments** : `POST /api/plugins/atelier.marketing-ia/api/taches/<issueId>/diffusions`
    avec `{"revisionId": "<révision approuvée>", "action": "modifier_crm", "canal": "<service>", "compte": "<compte donné par atelier_identite>", "cleIdempotence": "<clé unique de 8 à 200 caractères>", "service": "crm", "outil": "crm_modifier_contact", "arguments": {<arguments exacts>}}`.
-   `service`, `outil`, `compte` et `arguments` sont EXACTEMENT ceux de l'appel proposé à l'étape 1 : la preuve est liée à leur
-   empreinte, un argument en plus, en moins ou différent la rend inutilisable. Garde la même `cleIdempotence` pour la même
+   `service`, `outil`, `compte` et `arguments` sont EXACTEMENT ceux de l'appel proposé à l'étape 1 : un argument différent rend la preuve inutilisable. Garde la même `cleIdempotence` pour la même
    action (elle garantit un seul effet) et n'en invente jamais une autre pour contourner un refus.
-4. **Lire la réponse.** Seule une réponse `201` avec `etat: "preparee"` ET un champ `preuveApprobation` non vide autorise la
+4. **Lire la réponse.** Seule une réponse `200` ou `201` avec `etat: "preparee"` ET un champ `preuveApprobation` non vide autorise la
    suite. Un état `refusee`, ou `preparee` sans preuve (le motif est dans `motifRefus`) : n'appelle AUCUN outil
-   d'écriture, rends compte au coordinateur avec le motif et attends une nouvelle décision de l'humain.
+   d'écriture, rends compte au coordinateur avec le motif, attends une nouvelle décision humaine.
 5. **Obtenir la liste de révocation récente, puis appeler la passerelle.** Juste avant l'appel d'outil, lis
    `GET /api/plugins/atelier.marketing-ia/api/preuves/revocations?companyId={{PAPERCLIP_COMPANY_ID}}` (avec `--variable %PAPERCLIP_COMPANY_ID`) (`preuves.revocations`),
-   champ `liste` : une liste signée valable 5 minutes, jamais gardée ni réutilisée plus tard. Appelle ensuite l'outil
+   champ `liste` : une liste signée valable 5 minutes, jamais gardée ni réutilisée. Appelle ensuite l'outil
    `crm_modifier_contact` avec les arguments exacts de l'étape 3 plus deux arguments de transport : `preuve_approbation` = la valeur de
    `preuveApprobation` et `revocations_approbation` = la `liste`, sans les modifier. Ni l'un ni l'autre ne fait partie des
-   `arguments` proposés, demandés ou déposés. Sans preuve, ne jamais appeler un outil d'écriture, même « pour voir ». La preuve
+   `arguments` proposés, demandés ou déposés. Sans preuve, ne jamais appeler un outil d'écriture. La preuve
    est un secret à usage unique (valable 7 jours au plus) : ne la copie ni dans un livrable, ni dans un commentaire, ni dans
    un message. Si la passerelle répond `preparee` parce que la liste manque ou a plus de 5 minutes, relis la liste et rappelle
-   avec la même preuve ; pour tout autre motif, ne contourne rien (voir « Preuve expirée ou révoquée »).
-6. **Rapporter l'issue.** Quelle que soit la réponse de l'outil, envoie-la BRUTE (texte et données structurées, sans la
+   avec la même preuve ; pour tout autre motif, ne contourne rien (étape 7).
+6. **Rapporter l'issue.** Quelle que soit sa réponse, envoie-la BRUTE (texte et données structurées, sans la
    résumer) à `POST /api/plugins/atelier.marketing-ia/api/taches/<issueId>/diffusions/<diffusionId>/issue` (`tache.diffusions.issue`)
-   avec `{"reponse": {"texte": "<texte reçu>", "structuredContent": <données structurées reçues>}}`. Le serveur ne change l'état de
-   la diffusion (`confirmee`, `ambigue_a_reconcilier` ou restée `preparee`) que si la réponse est signée par la
-   passerelle et liée à cette diffusion.
+   avec `{"reponse": {"texte": "<texte reçu>", "structuredContent": <données structurées reçues>}}`. La diffusion ne change d'état
+   (`confirmee`, `ambigue_a_reconcilier` ou restée `preparee`) que sur réponse signée et liée à elle.
 7. **Preuve expirée ou révoquée : nouvelle approbation.** Une preuve expirée (7 jours au plus, ou fin de la durée choisie par
    l'humain) ou révoquée (l'humain l'a retirée, une nouvelle décision ou une nouvelle révision du livrable l'a remplacée)
    ne se contourne jamais : n'appelle plus l'outil, ne change pas de clé d'idempotence, rends compte au coordinateur avec
-   le motif reçu et demande une nouvelle approbation à l'humain. Tu ne redemandes la diffusion qu'après cette nouvelle
-   approbation.
+   le motif reçu, demande une nouvelle approbation humaine. Diffusion redemandée seulement après cette nouvelle approbation.
 8. **Issue ambiguë : ne réessaie jamais à l'aveugle.** Sont ambigus : une réponse `ambigue_a_reconcilier`, un délai
    dépassé, une connexion coupée, une réponse illisible ou sans signature, une erreur 5xx. Rapporte la réponse reçue
    s'il y en a une, puis ne rappelle PAS l'outil et ne redemande PAS de diffusion : écris au coordinateur par un message
    typé (diffusion, outil, arguments, ce que tu as reçu) et rends la main. L'humain vérifie chez la plateforme ; la
-   passerelle réconcilie elle-même avant tout renvoi. Un refus certain (`refusee`, erreur d'outil 4xx, `preparee` avec
+   passerelle réconcilie avant tout renvoi. Un refus certain (`refusee`, erreur d'outil 4xx, `preparee` avec
    motif) n'est pas ambigu : ne le contourne pas, rends compte.
 
 ## Connaissances du client

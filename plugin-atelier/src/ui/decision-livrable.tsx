@@ -16,9 +16,17 @@ import { ACTIONS_AVEC_APPEL, appelsApprouvables, CANAUX_DU_SERVICE, porteeDepuis
 
 export type Choix = "approuver" | "demander_correction" | "rejeter";
 
+/** Porte terminée (approuvée ou à décider) dont un appel proposé sur la révision courante n'a pas encore de décision : seule la décision sur cet appel reste ouverte. */
+function appelSansDecisionSurPorteTerminee(d: DossierHumain): boolean {
+  if (d.statut.statut !== "approved" && d.statut.statut !== "blocked_information") return false;
+  return appelsApprouvables(d).some((a) => !d.decisions.some((x) => !x.invalidee && x.revisionId === a.revisionId && x.portee?.appel?.id === a.id));
+}
+
 export function raisonDecision(d: DossierHumain, choix: Choix, commentaire: string): string | null {
   if (!d.livrable) return "Aucun livrable : rien à décider.";
-  if (d.statut.statut !== "ready_for_human") return "Décision possible seulement quand le livrable est prêt pour validation humaine (contrôle automatique réussi, étape d'approbation).";
+  const termineAvecAppel = appelSansDecisionSurPorteTerminee(d);
+  if (termineAvecAppel && choix === "rejeter") return "Rejet impossible : la tâche est déjà terminée.";
+  if (d.statut.statut !== "ready_for_human" && !termineAvecAppel) return "Décision possible seulement quand le livrable est prêt pour validation humaine (contrôle automatique réussi, étape d'approbation).";
   if (choix === "approuver") {
     const ev = d.evaluationPorte;
     if (!ev || ev.decision !== "PASS" || ev.perimee || ev.revisionId !== d.livrable.revisionId) return "Approbation impossible : le contrôle automatique n'est pas réussi sur la révision courante.";
@@ -93,6 +101,9 @@ export function DecisionPanneau({ dossier: d, onFait, integre = false }: { dossi
       } else if (choix === "demander_correction" && enregistree?.transmission?.transmission === "coordinateur") {
         // Le serveur a mis le livrable en attente et prévenu le Coordinateur : aucune transition native ici.
         suite += " La correction est transmise au Coordinateur, qui la répartira.";
+      } else if (d.statut.statut !== "ready_for_human") {
+        // Porte déjà terminée : la décision porte sur l'appel, la tâche ne change pas d'état.
+        suite += " La tâche est déjà terminée : elle ne change pas d'état.";
       } else {
         try {
           const t = await transitionTache(
@@ -121,7 +132,7 @@ export function DecisionPanneau({ dossier: d, onFait, integre = false }: { dossi
     setPortee((p) => ({ ...p, [cle]: e.target.value }));
   };
   // Hors de l'étape humaine, le formulaire n'apparaît pas : seule la raison est donnée.
-  const fermee = raisonDecision(d, "rejeter", "-");
+  const fermee = raisonDecision(d, "demander_correction", "-");
   if (fermee && !resultat) {
     return (
       <Conteneur integre={integre}>
@@ -140,7 +151,7 @@ export function DecisionPanneau({ dossier: d, onFait, integre = false }: { dossi
         {textePublicationStrategie(d) ? <p className="atl-sous">{textePublicationStrategie(d)}</p> : null}
         <fieldset className="atl-champ atl-choix">
           <legend>Votre décision</legend>
-          {(["approuver", "demander_correction", "rejeter"] as const).map((c) => (
+          {(["approuver", "demander_correction", "rejeter"] as const).filter((c) => c !== "rejeter" || d.statut.statut === "ready_for_human").map((c) => (
             <label key={c}>
               <input type="radio" name="decision" value={c} checked={choix === c} onChange={() => setChoix(c)} /> {ACTIONS_HUMAINES[c]}
             </label>

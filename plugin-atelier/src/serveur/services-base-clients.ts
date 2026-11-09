@@ -518,7 +518,9 @@ export function routesBaseClients(d: DependancesProspection, o: OutilsProspectio
         .filter((x) => x.revisionId === liv.revisionId && !x.invalidee)
         .sort((a, b) => (a.creeLe < b.creeLe ? 1 : -1))[0];
       const portee = decision?.action === "approuver" ? (decision.portee as { action?: string; canal?: string | null } | null) : null;
-      if (!portee || portee.action !== "modifier_crm" || portee.canal !== entree.service) {
+      // Une décision ne sert qu'à une diffusion : déjà utilisée pour ce CRM, ce compte et cette action, elle vaut décision absente (sinon la diffusion refusée serait mémorisée sur la clé du lot).
+      const consommee = Boolean(decision && portee) && (await base.listerDiffusions(r.companyId, issue.id)).some((x) => x.decisionId === decision!.id && x.etat !== "refusee" && x.cleIdempotence !== `export:${entree.cleIdempotence}`.slice(0, 200) && x.action === "modifier_crm" && x.canal === entree.service && (x.compte ?? null) === compte);
+      if (!portee || portee.action !== "modifier_crm" || portee.canal !== entree.service || consommee) {
         await base.journaliser({
           companyId: r.companyId, type: "prospects.export_en_attente", entite: "tache", entiteId: issue.id, issueId: issue.id, runId: r.acteur.runId, acteur: r.acteur.id,
           donnees: { service: entree.service, canal: entree.canal, prospects: prospects.length, appelId: appel.id, empreinte: controle.empreinte },
@@ -527,7 +529,9 @@ export function routesBaseClients(d: DependancesProspection, o: OutilsProspectio
           statut: 202,
           corps: {
             etat: "en_attente_approbation", export: null, verifications, appel: vueAppel, diffusion: null,
-            consigne: `Bases légales vérifiées. Un humain doit approuver la révision courante avec la portée « modifier_crm » sur « ${entree.service} » (et l'appel ${appel.id} pour une diffusion réelle) ; puis rejouer cette demande avec la même clé d'idempotence.`,
+            // Dernière décision de la révision courante : un refus humain, que le moteur lit pour s'arrêter au lieu d'attendre.
+            ...(decision && decision.action !== "approuver" ? { decisionRefusee: true } : {}),
+            consigne: `Bases légales vérifiées. ${consommee ? "L'approbation précédente a déjà servi à une diffusion : " : ""}Un humain doit approuver la révision courante avec la portée « modifier_crm » sur « ${entree.service} » (et l'appel ${appel.id} pour une diffusion réelle) ; puis rejouer cette demande avec la même clé d'idempotence.`,
           },
         };
       }

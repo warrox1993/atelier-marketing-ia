@@ -6,7 +6,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { PluginContext } from "@paperclipai/plugin-sdk";
 import { ESPACE_BASE } from "../src/contrats/index.js";
-import { brancherMoteur, depsPorte } from "../src/moteur/branchement.js";
+import { brancherMoteur, creerCrmProduction, depsPorte } from "../src/moteur/branchement.js";
 import { PorteRefusee } from "../src/moteur/gabarits.js";
 import { STATUT_PROJETE } from "../src/moteur/transitions.js";
 import { VEILLEUR } from "../src/serveur/veilleur.js";
@@ -268,6 +268,18 @@ describe("depsPorte", () => {
 describe("étapes en code de WF-01 sur le vrai branchement", () => {
   const PROSPECT = "00000000-0000-4000-8000-000000000001";
   const ENTREE = { service: "crm", canal: "courriel", entite: "entite-1" };
+
+  it("la présence d'un prospect dans un export préparé est lue pour la tâche de la porte : une diffusion préparée d'une autre tâche compte", async () => {
+    const prospectDansExportNonRefuse = vi.fn(async () => false);
+    const base = {
+      lireMission: async () => ({ id: MISSION, companyId: SOC, gabaritCle: "wf-01-prospection", gabaritVersion: 1, campagneId: null }),
+      lireEtapes: async () => [{ rang: 1, tentative: 1, entree: { exportCrm: ENTREE } }, { rang: 7, tentative: 1, issueId: ISSUE, entree: null }],
+      prospectDansExportNonRefuse,
+    };
+    const crm = creerCrmProduction(base as never, vi.fn() as never, async () => "reel");
+    await crm.existe(SOC, MISSION, PROSPECT);
+    expect(prospectDansExportNonRefuse).toHaveBeenCalledWith(SOC, PROSPECT, "crm", "reel", ISSUE);
+  });
 
   it("à l'approbation native, l'export appelle la route tache.prospects.exporter résolue à l'appel ; sans accord humain l'attente est journalisée sans échec ni essai, rien n'est écrit", async () => {
     const m = { id: MISSION, companyId: SOC, gabaritCle: "wf-01-prospection", gabaritVersion: 1, contratId: "wf-01-prospection", contratVersion: 1, etat: "attente_autorisation", rangCourant: 7, campagneId: null };

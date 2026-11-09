@@ -10,9 +10,14 @@ import type { BaseAtelier } from "../serveur/base.js";
 import { dedoublonner, exclusionsProspect, figureDansOppositions, type ContexteProspection } from "../serveur/regles-prospection.js";
 import { cleEvenement } from "./executeur.js";
 
-/** Réponse de l'écriture : acceptée, en attente de l'approbation humaine (rien n'est parti) ou refusée pour certains prospects. */
+/**
+ * Réponse de l'écriture : acceptée, en attente de l'approbation humaine (rien n'est parti), refusée pour certains prospects,
+ * préparée (preuve signée valable : l'agent CRM l'exécute) ou bloquée (préparée sans preuve valable).
+ */
 export type ResultatEcriture =
   | { etat: "acceptee" }
+  | { etat: "a_executer"; diffusionId: string; cleDiffusion: string; appelId: string }
+  | { etat: "bloquee"; raison: string; motif: string | null }
   | { etat: "en_attente"; appelId: string | null; consigne: string | null }
   | { etat: "refusee"; refuses: Array<{ prospectId: string; motif: string }>; motif: string };
 
@@ -21,6 +26,8 @@ export interface CrmMoteur {
   existe(companyId: string, missionId: string, prospectId: string): Promise<boolean>;
   /** L'écriture est effective (simulée ou confirmée) ; une diffusion seulement préparée ne l'est pas encore. */
   confirme(companyId: string, missionId: string, prospectId: string): Promise<boolean>;
+  /** Un export ambigu (issue incertaine) contient ce prospect : jamais de réécriture sur un effet incertain. */
+  ambigu?(companyId: string, missionId: string, prospectId: string): Promise<boolean>;
   ecrire(companyId: string, e: { missionId: string; prospectIds: string[]; cle: string }): Promise<ResultatEcriture>;
 }
 
@@ -43,16 +50,22 @@ export interface EtapesCode {
 /**
  * Exporte le lot en un appel. Les prospects déjà présents sont réussis d'office ; un refus ne retire que les prospects refusés,
  * le reste repart dans un nouvel appel (autre contenu, donc autre clé) ; en attente d'approbation : ni échec ni essai, la clé se rejoue.
+ * `execution` : diffusion préparée à faire exécuter par l'agent CRM ; `blocage` : préparée sans preuve valable ; ni l'un ni l'autre ne marque l'exécution (la clé se rejoue).
  */
 export async function exporterLot(
   deps: DepsExport,
   m: { companyId: string; id: string },
   rang: number,
   lot: Array<{ prospectId: string; marqueOpposition: boolean }>,
-): Promise<{ reussis: string[]; echecs: Array<{ prospectId: string; raison: string }>; attente: { appelId: string | null; consigne: string | null } | null }> {
+): Promise<{
+  reussis: string[]; echecs: Array<{ prospectId: string; raison: string }>; attente: { appelId: string | null; consigne: string | null; prospects: number } | null;
+  execution: { diffusionId: string; cleDiffusion: string; prospectIds: string[]; appelId: string } | null; blocage: { raison: string; motif: string | null } | null;
+}> {
   const reussis: string[] = [];
   const echecs: Array<{ prospectId: string; raison: string }> = [];
-  let attente: { appelId: string | null; consigne: string | null } | null = null;
+  let attente: { appelId: string | null; consigne: string | null; prospects: number } | null = null;
+  let execution: { diffusionId: string; cleDiffusion: string; prospectIds: string[]; appelId: string } | null = null;
+  let blocage: { raison: string; motif: string | null } | null = null;
   const tous = [...new Set(lot.map((l) => l.prospectId))];
   let restants = [...tous];
   try {
@@ -75,7 +88,15 @@ export async function exporterLot(
         break;
       }
       if (r.etat === "en_attente") {
-        attente = { appelId: r.appelId, consigne: r.consigne };
+        attente = { appelId: r.appelId, consigne: r.consigne, prospects: restants.length };
+        break;
+      }
+      if (r.etat === "a_executer") {
+        execution = { diffusionId: r.diffusionId, cleDiffusion: r.cleDiffusion, prospectIds: restants, appelId: r.appelId };
+        break;
+      }
+      if (r.etat === "bloquee") {
+        blocage = { raison: r.raison, motif: r.motif };
         break;
       }
       const refuses = new Map(r.refuses.filter((x) => restants.includes(x.prospectId)).map((x) => [x.prospectId, x.motif]));
@@ -90,7 +111,7 @@ export async function exporterLot(
     const raison = e instanceof Error ? e.message : String(e);
     for (const prospectId of restants) echecs.push({ prospectId, raison });
   }
-  return { reussis: tous.filter((id) => reussis.includes(id)), echecs, attente };
+  return { reussis: tous.filter((id) => reussis.includes(id)), echecs, attente, execution, blocage };
 }
 
 const ids = (v: unknown): string[] => (Array.isArray(v) ? v.filter((x): x is string => typeof x === "string") : []);

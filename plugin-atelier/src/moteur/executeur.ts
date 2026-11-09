@@ -125,14 +125,15 @@ export function creerExecuteur(deps: DepsExecuteur) {
     return { applique: change || !neuve, etat: change ? suivant : m.etat };
   }
 
-  /** Commente la tâche racine une fois par clé ; le repère « Mission : » du texte évite le doublon d'un arrêt entre le commentaire et sa marque. */
-  async function commenterUneFois(m: Mission, rang: number, type: string, texte: string) {
-    if (!m.issueRacineId) return;
-    const cle = cleEvenement(m.id, rang, 1, type);
+  /** Commente la tâche `issueId` (défaut : la racine) une fois par clé (et par `discriminant`) ; le repère « Mission : » du texte évite le doublon d'un arrêt entre le commentaire et sa marque. */
+  async function commenterUneFois(m: Mission, rang: number, type: string, texte: string, issueId?: string | null, discriminant?: string) {
+    const cible = issueId ?? m.issueRacineId;
+    if (!cible) return;
+    const cle = cleEvenement(m.id, rang, 1, type, discriminant);
     const neuve = await base.enregistrerExecution({ companyId: m.companyId, missionId: m.id, rang, type: "evenement", cle, requete: { type } });
     if (!neuve && (await base.lireExecution(m.companyId, cle))?.statut === "appliquee") return;
     const corps = `${texte}\n\nMission : ${m.id}`;
-    if (!(await hote.issues.listComments(m.issueRacineId, m.companyId)).some((c) => c.body === corps)) await hote.issues.createComment(m.issueRacineId, corps, m.companyId);
+    if (!(await hote.issues.listComments(cible, m.companyId)).some((c) => c.body === corps)) await hote.issues.createComment(cible, corps, m.companyId);
     await base.marquerExecution(m.companyId, cle, "appliquee");
   }
 
@@ -595,11 +596,41 @@ export function creerExecuteur(deps: DepsExecuteur) {
           continue;
         }
         const precedents = typeof objet(etape.sortie).essais === "number" ? (objet(etape.sortie).essais as number) : 0;
-        const { reussis, echecs, attente } = await exporterLot(ec.deps, m, g.rang, lot);
+        const { reussis, echecs, attente, execution, blocage } = await exporterLot(ec.deps, m, g.rang, lot);
+        if (blocage) return effetAmbigu(m, g.rang, { raison: blocage.raison, motif: blocage.motif });
+        if (execution) {
+          // Diffusion préparée : le moteur n'a pas le jeton du CRM, l'agent `crm-conversion` rejoue la diffusion avec la même clé. Une seule tâche par diffusion (la garde `trouverTache` couvre une nouvelle passe).
+          const agent = await hote.resoudreAgent(m.companyId, "crm-conversion");
+          if (!agent) return effetAmbigu(m, g.rang, { raison: "agent_crm_absent" });
+          const originId = `mission:${m.id}:${g.rang}:diffusion:${execution.diffusionId}`;
+          const porteId = issueDe(courantes, rangPorte(gabarit)) ?? m.issueRacineId;
+          const existante = await trouverTache(m.companyId, originId);
+          // Tâche fermée alors que la diffusion reste préparée : l'agent a clos sans déposer d'issue, rien à réveiller.
+          if (existante && (existante.status === "done" || existante.status === "cancelled")) return effetAmbigu(m, g.rang, { raison: "execution_crm_sans_issue", tacheId: existante.id });
+          let tacheId = existante?.id;
+          if (!tacheId) {
+            tacheId = (await hote.issues.create({
+              companyId: m.companyId, title: `Exécuter l'export CRM de la mission (diffusion ${execution.diffusionId.slice(0, 8)})`, status: "todo", assigneeAgentId: agent, originKind: ORIGINE_ETAPE as never, originId,
+              description: `Tâche d'exécution du moteur : appliquer les étapes 3 à 6 de la consigne d'écriture, sans nouvelle proposition.\n\nTâche de la porte : ${porteId ?? "inconnue"}\nDiffusion : ${execution.diffusionId}\nAppel à relire : ${execution.appelId}\nclé d'idempotence : ${execution.cleDiffusion}\n\nLes arguments sont à relire dans les appels proposés de la tâche de la porte.`,
+              ...(m.issueRacineId ? { parentId: m.issueRacineId } : {}),
+            })).id;
+          }
+          await reveiller(m, g.rang, 1, tacheId, "execution_crm", execution.diffusionId);
+          await base.majEtape(m.companyId, etape.id, { sortie: { reussis, echecs, essais: precedents, tacheExecution: tacheId }, etat: "en_cours" });
+          await journalUneFois(m, g.rang, "export_a_executer", { diffusionId: execution.diffusionId, tacheId }, null, execution.diffusionId);
+          return;
+        }
         if (attente) {
           // Attente de l'approbation humaine : ni échec ni essai, la mission reste en exécution et une passe suivante rejoue la même clé.
           await base.majEtape(m.companyId, etape.id, { sortie: { reussis, echecs: [], essais: precedents, enAttente: true }, etat: "en_cours" });
           await journalUneFois(m, g.rang, "export_en_attente", { appelId: attente.appelId, consigne: attente.consigne });
+          // Présenter l'appel à l'humain sur la tâche de la porte : service, nombre de prospects, identifiant de l'appel ; aucune coordonnée ni dénomination.
+          const service = objet(entreeRang1.exportCrm).service;
+          await commenterUneFois(
+            m, g.rang, "export_appel_a_approuver",
+            `Export vers le CRM « ${typeof service === "string" ? service : "?"} » en attente d'approbation : ${attente.prospects} prospect${attente.prospects > 1 ? "s" : ""}, appel ${attente.appelId ?? "?"}, à approuver dans la décision de cette tâche.`,
+            issueDe(courantes, rangPorte(gabarit)), attente.appelId ?? undefined,
+          );
           return;
         }
         const essais = precedents + 1;
@@ -615,7 +646,12 @@ export function creerExecuteur(deps: DepsExecuteur) {
         const reussis = (Array.isArray(objet(exporte?.sortie).reussis) ? (objet(exporte?.sortie).reussis as string[]) : []);
         const absents: string[] = [];
         for (const id of reussis) if (!(await ec.deps.crm.confirme(m.companyId, m.id, id))) absents.push(id);
-        if (absents.length > 0) return effetAmbigu(m, g.rang, { raison: "absents_du_crm", absents });
+        if (absents.length > 0) {
+          // Un export dont l'issue est ambiguë n'est pas « absent » : à réconcilier, jamais réécrit.
+          let ambigu = false;
+          for (const id of absents) if (await ec.deps.crm.ambigu?.(m.companyId, m.id, id)) ambigu = true;
+          return effetAmbigu(m, g.rang, { raison: ambigu ? "export_a_reconcilier" : "absents_du_crm", absents });
+        }
         await termine({ verifies: reussis.length });
       } else return effetAmbigu(m, g.rang, { raison: "etape_code_inconnue", action: g.action ?? null });
     }

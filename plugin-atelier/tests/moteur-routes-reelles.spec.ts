@@ -189,7 +189,7 @@ describe("export CRM de production de WF-01 par la vraie route", () => {
       lireExportCrmParCle: async (companyId: string, c: string) => exports.find((e) => e.companyId === companyId && e.cleIdempotence === c) ?? null,
       insererExportCrm: async (e: Record<string, unknown>) => void exports.push(e),
       // Filtrées par service et par mode, comme le SQL.
-      prospectDansExportNonRefuse: async (companyId: string, id: string, service: string, mode: string) => exports.some((e) => e.companyId === companyId && e.service === service && e.mode === mode && e.etat !== "refusee" && (e.prospectIds as string[]).includes(id)),
+      prospectDansExportNonRefuse: async (companyId: string, id: string, service: string, mode: string, issueId: string) => exports.some((e) => e.companyId === companyId && e.service === service && e.mode === mode && e.etat !== "refusee" && (banc.t.diffusions.find((d) => d.id === e.diffusionId)?.etat !== "preparee" || e.issueId !== issueId) && (e.prospectIds as string[]).includes(id)),
       prospectExportConfirme: async (companyId: string, id: string, service: string, mode: string) => exports.some((e) => e.companyId === companyId && e.service === service && e.mode === mode && (e.prospectIds as string[]).includes(id) && ["simulee", "confirmee"].includes(String(banc.t.diffusions.find((d) => d.id === e.diffusionId)?.etat))),
       lireAppelParEmpreinte: async (_c: string, _i: string, rev: string, empreinte: string) => appels.find((a) => a.revisionId === rev && a.empreinte === empreinte) ?? null,
       insererAppel: async (a: Record<string, unknown>) => void appels.push({ ...a, creeLe: banc.horloge() }),
@@ -276,7 +276,7 @@ describe("export CRM de production de WF-01 par la vraie route", () => {
     const m = monterExport();
     m.banc.decision({ portee: PORTEE_MODIFIER_CRM });
     const r = await m.passe([P1, P2]);
-    expect(r).toEqual({ reussis: [P1, P2], echecs: [], attente: null });
+    expect(r).toEqual({ reussis: [P1, P2], echecs: [], attente: null, execution: null, blocage: null });
     expect(m.banc.t.diffusions).toHaveLength(1);
     expect(m.banc.t.diffusions[0]).toMatchObject({ action: "modifier_crm", etat: "simulee" });
     expect(m.exports).toHaveLength(1);
@@ -285,7 +285,7 @@ describe("export CRM de production de WF-01 par la vraie route", () => {
     expect(await m.crm.existe(SOC, MISSION_WF01, P1)).toBe(true);
     expect(await m.crm.confirme(SOC, MISSION_WF01, P2)).toBe(true);
     expect(await m.crm.existe(SOC, MISSION_WF01, P4)).toBe(false);
-    expect(await m.passe([P1, P2])).toEqual({ reussis: [P1, P2], echecs: [], attente: null });
+    expect(await m.passe([P1, P2])).toEqual({ reussis: [P1, P2], echecs: [], attente: null, execution: null, blocage: null });
     expect(m.banc.t.diffusions).toHaveLength(1);
     expect(m.exports).toHaveLength(1);
   });
@@ -322,7 +322,7 @@ describe("export CRM de production de WF-01 par la vraie route", () => {
   it("un prospect marqué par une opposition : jamais de refus pour ce motif, il est exporté avec les autres", async () => {
     const m = monterExport({ oppositionSur: 2 });
     m.banc.decision({ portee: PORTEE_MODIFIER_CRM });
-    expect(await m.passe([P1, P2])).toEqual({ reussis: [P1, P2], echecs: [], attente: null });
+    expect(await m.passe([P1, P2])).toEqual({ reussis: [P1, P2], echecs: [], attente: null, execution: null, blocage: null });
     expect(m.exports).toHaveLength(1);
     expect(m.banc.t.journal.map((j) => j.type)).not.toContain("prospects.export_refusee");
   });
