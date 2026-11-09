@@ -1583,14 +1583,44 @@ class ConsignesGP12(unittest.TestCase):
         self.assertIn("une seule recherche suffit", marketing)
 
     def test_documents_bureautiques_par_la_fabrique(self):
-        # P1-3 (part sans décision laissée par GP6) : les trois détenteurs marketing ont la fabrique, pas de shell.
+        # P1-3 (part sans décision laissée par GP6) : les quatre détenteurs marketing ont la fabrique, pas de shell.
         skill = self.texte("organisation/skills/documents-bureautiques/SKILL.md")
-        self.assertIn("Si tu as l'outil `fabriquer_document` (Stratège, Contenus, Mesure), tu ne lances ni `python3` ni `soffice`", skill)
+        self.assertIn("Si tu as l'outil `fabriquer_document` (Stratège, Contenus, Mesure, Prospection), tu ne lances ni `python3` ni `soffice`", skill)
         self.assertIn("`etat_fabrication`", skill)
         reg = bo.registres()[0]
         for a in reg["agents"]:
             if "documents-bureautiques" in a["competences"]:
-                self.assertIn(a["slug"], {"stratege", "contenus", "mesure"})
+                self.assertIn(a["slug"], {"stratege", "contenus", "mesure", "prospection"})
+
+    def test_roles_qui_livrent_rendent_word_powerpoint_excel(self):
+        # #63 : un agent à qui sa consigne ne cite pas l'outil ne s'en sert pas.
+        agents = {a["slug"]: a for a in bo.registres()[0]["agents"]}
+        for slug in ("stratege", "contenus", "mesure", "prospection"):
+            self.assertIn("documents-bureautiques", agents[slug]["competences"], slug)
+            outils = agents[slug]["outils"]
+            autorises = set(outils["recherche"]) | set(outils["mutation"])
+            self.assertIn(bo.OUTILS_CLIENT_FABRIQUE["document"], autorises, slug)
+            self.assertIn(bo.OUTILS_CLIENT_FABRIQUE["etat"], autorises, slug)
+            consigne = self.texte(f"organisation/agents/{slug}/AGENTS.md").split(bo.MARQUEUR_CONSIGNES_COMMUNES)[0]
+            for attendu in ("Word", "PowerPoint", "Excel", "`fabriquer_document`"):
+                self.assertIn(attendu, consigne, slug)
+
+    def test_fichier_de_prospection_sans_coordonnee(self):
+        # #63 : la fabrique écrit sur le disque en clair ; la liste avec coordonnées reste l'export humain (#60).
+        consigne = self.texte("organisation/agents/prospection/AGENTS.md").split(bo.MARQUEUR_CONSIGNES_COMMUNES)[0]
+        # Dans la phrase même de l'outil : la mention ailleurs dans la consigne ne compte pas.
+        self.assertRegex(consigne, r"Une synthèse[^.]*`fabriquer_document`[^.]*sans aucune coordonnée \(téléphone, courriel, adresse, nom de personne\)[^.]*vue Prospects\.")
+
+    def test_fabrique_passe_avant_le_script_et_tache_ouverte_jusqu_au_commentaire(self):
+        # #63 : un agent qui clôt tôt laisse une tâche terminée sans fichier si la fabrique échoue ensuite.
+        skill = self.texte("organisation/skills/documents-bureautiques/SKILL.md")
+        self.assertIn("passe avant la précédente", skill)
+        self.assertIn("Ne clos pas la tâche avant le commentaire", skill)
+        self.assertIn("aucune formule", skill)
+        # Ce que le skill promet est bien ce que la remise écrit.
+        remise = self.texte("plugin-atelier/src/serveur/fabrique-remise.ts")
+        self.assertIn("[page Livrables]", remise)
+        self.assertIn("a échoué", remise)
 
 
 class RestesDH1(unittest.TestCase):
@@ -1650,7 +1680,7 @@ class RestesDH1(unittest.TestCase):
         # DOC-A15 : registres modifiés sans changement de version ni de date (agents.json 1.14.0 le 01/11 : mention IA hors du rendu).
         agents = json.loads((RACINE / "organisation/registre/agents.json").read_text(encoding="utf-8"))
         services = json.loads((RACINE / "organisation/registre/services.json").read_text(encoding="utf-8"))
-        self.assertEqual((agents["version"], agents["dateVersion"]), ("1.17.0", "2026-11-08"))  # consignes sans la liste (#17), fusion du 08/11
+        self.assertEqual((agents["version"], agents["dateVersion"]), ("1.18.0", "2026-11-09"))  # documents-bureautiques à prospection (#63)
         self.assertEqual((services["version"], services["dateVersion"]), ("1.3.0", "2026-11-07"))
 
     def test_rotation_de_session_du_coordinateur(self):
@@ -1940,7 +1970,7 @@ class DecisionsUsine(unittest.TestCase):
         "gestion-projets/reporting-comites", "qualite/revue-direction", "ressources-humaines/indicateurs-rh")
 
     def test_p13_documents_bureautiques_retire_aux_agents_sans_fabrique(self):
-        # Décision : retirer le skill aux 43 agents sans shell ni fabrique ; Stratège, Contenus et Mesure le gardent.
+        # Décision : retirer le skill aux 43 agents sans shell ni fabrique ; Stratège, Contenus, Mesure et Prospection l'ont.
         self.assertEqual(len(set(self.SANS_FABRIQUE)), 43)
         for chemin in self.SANS_FABRIQUE:
             svc, slug = chemin.split("/")
@@ -1948,7 +1978,7 @@ class DecisionsUsine(unittest.TestCase):
             self.assertTrue(fichier.is_file(), chemin)
             self.assertNotIn("documents-bureautiques", bo.competences_entete(fichier.read_text(encoding="utf-8"), svc, slug), chemin)
         agents = {a["slug"]: a for a in bo.registres()[0]["agents"]}
-        for slug in ("stratege", "contenus", "mesure"):
+        for slug in ("stratege", "contenus", "mesure", "prospection"):
             self.assertIn("documents-bureautiques", agents[slug]["competences"], slug)
             self.assertIn('  - "documents-bureautiques"', (bo.ORGA / "agents" / slug / "AGENTS.md").read_text(encoding="utf-8"), slug)
 

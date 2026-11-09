@@ -318,6 +318,11 @@ export const FICHES_AGENTS_MARKETING: readonly FicheAgentMarketing[] = [
         "sert": "Rédige un message LinkedIn court qui demande à une personne si elle accepte un échange téléphonique et, si elle le souhaite, son numéro."
       },
       {
+        "cle": "documents-bureautiques",
+        "nom": "Documents bureautiques (Word, Excel, PowerPoint, PDF)",
+        "sert": "Produit et relit de vrais fichiers Word, Excel, PowerPoint et PDF avec des outils libres (python-docx, openpyxl, python-pptx, LibreOffice sans affichage, pypdf) : gabarit et styles nommés, contenu séparé de la mise en forme, contrôle du rendu par conversion en PDF, accessibilité (titres, textes de remplacement, contraste, langue) et relecture d'un fichier reçu."
+      },
+      {
         "cle": "memoire-para",
         "nom": "Mémoire en fichiers (méthode PARA)",
         "sert": "Tient la mémoire persistante de l'agent en fichiers, selon la méthode PARA (graphe de connaissances, notes du jour, savoir tacite), dans son dossier de mémoire (chemin donné par la section « Ta mémoire » de ses consignes), avec la source et la date de chaque fait."

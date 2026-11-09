@@ -31,8 +31,11 @@ vérifié page par page, et une note qui dit comment il a été produit et contr
 - Si ton rôle ne peut pas lancer ces commandes, ou si une bibliothèque manque : tu ne produis pas le fichier, tu
   livres la spécification complète et le script prêt à lancer (étape 8), marqués « fichier non produit ». Tu
   n'installes rien.
-- Si tu as l'outil `fabriquer_document` (Stratège, Contenus, Mesure), tu ne lances ni `python3` ni `soffice` : tu
-  prépares la demande à la fabrique (contenu validé, gabarit, charte) et tu suis son état par `etat_fabrication`.
+- Si tu as l'outil `fabriquer_document` (Stratège, Contenus, Mesure, Prospection), tu ne lances ni `python3` ni `soffice` : cette règle
+  passe avant la précédente et remplace les étapes 1 à 6, 8 et 9. Tu déposes la demande à la fabrique avec le contenu validé
+  (modèle `sobre` : ni charte ni gabarit du client ; aucune formule, elle resterait du texte), tu suis son état par
+  `etat_fabrication` et tu relis son aperçu, qui tient lieu de PDF de contrôle. Ne clos pas la tâche avant le commentaire
+  de fin de la fabrique : il donne le lien de la page Livrables ou annonce l'échec. Aucun fichier à recoller.
 
 ## Entrées
 

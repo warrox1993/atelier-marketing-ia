@@ -72,8 +72,8 @@ Une étape ne démarre que si la précédente a livré sa sortie, validée. Dans
 
 Compétences d'appui : guide d'entretien client avec `entretien-client-sans-biais` (un humain mène l'entretien) et analyse
 de ses comptes rendus avec `analyse-jobs-a-faire` ; catégories d'entrée de la cible avec `points-entree-categorie` ; chaque
-affirmation sur le marché, un concurrent ou une règle avec `recherche-sourcee` ; document de stratégie en fichier Word ou
-PDF avec `documents-bureautiques`.
+affirmation sur le marché, un concurrent ou une règle avec `recherche-sourcee` ; document de stratégie en Word, PowerPoint, Excel ou
+PDF : `fabriquer_document` (`documents-bureautiques`).
 
 Retours arrière : un test de canal échoue, retour à l'étape 6 ; les messages ne prennent sur aucun canal, retour au
 positionnement ; les demandes arrivent sans se transformer, retour à l'offre et au parcours ; un fait nouveau signalé par la

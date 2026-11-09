@@ -4,7 +4,7 @@ Document de référence pour l'installateur et pour le client. Il décrit commen
 qui peut parler à qui, quelles compétences existent et comment doter un client de ces services.
 
 <!-- genere:chiffres -->
-Chiffres recalculés depuis `organisation/registre/services.json` (version 1.3.0 du 2026-11-07), `organisation/registre/agents.json` (version 1.17.0 du 2026-11-08), les consignes `AGENTS.md` et `organisation/skills/*/SKILL.md`, par `python3 -I scripts/tests/tester-documentation.py --ecrire` ; le même test échoue dès qu'ils ne correspondent plus au dépôt.
+Chiffres recalculés depuis `organisation/registre/services.json` (version 1.3.0 du 2026-11-07), `organisation/registre/agents.json` (version 1.18.0 du 2026-11-09), les consignes `AGENTS.md` et `organisation/skills/*/SKILL.md`, par `python3 -I scripts/tests/tester-documentation.py --ecrire` ; le même test échoue dès qu'ils ne correspondent plus au dépôt.
 
 - 30 services : le marketing, la Direction et 28 autres ; service public : Observatoire (tout flux qui le touche exige l'approbation humaine).
 - 234 agents qui ont un fichier de consignes : 16 au marketing (registre `agents.json`) et 218 dans les 29 autres services. Le Gardien des connexions, agent natif sans modèle créé par le système, s'y ajoute et n'a pas de dossier de consignes.

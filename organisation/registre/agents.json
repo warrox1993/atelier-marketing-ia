@@ -1,7 +1,7 @@
 {
   "schema": "atelier/registre-agents/v1",
-  "version": "1.17.0",
-  "dateVersion": "2026-11-08",
+  "version": "1.18.0",
+  "dateVersion": "2026-11-09",
   "description": "Registre canonique des quinze agents marketing de l'Atelier et de l'agent déterministe « Porte de contrôle » (deterministe: true, adaptateur process, aucun modèle). Source unique : le fichier .paperclip.yaml et l'en-tête des AGENTS.md en sont générés par « python3 -I scripts/bootstrap-organisation.py generer ». Les noms courts (champ nom) portent leurs accents : l'identifiant (slug) d'un agent en est dérivé en retirant les accents (NFKD) avant la normalisation, comme le fait le bootstrap ; le titre porte le libellé français complet.",
   "adaptateur": {
     "type": "claude_local",
@@ -415,7 +415,8 @@
         "qualification-prospects",
         "recherche-sourcee",
         "script-appel-secretariat",
-        "demande-numero-linkedin"
+        "demande-numero-linkedin",
+        "documents-bureautiques"
       ],
       "competencesObligatoires": [
         "recherche-prospects",
